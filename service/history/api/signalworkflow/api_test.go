@@ -39,12 +39,17 @@ import (
 	"go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/cluster"
+	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
+	ns "go.temporal.io/server/common/namespace"
+	persistence2 "go.temporal.io/server/common/persistence"
+	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/service/history/api"
 	"go.temporal.io/server/service/history/consts"
 	"go.temporal.io/server/service/history/shard"
+	"go.temporal.io/server/service/history/tasks"
 	"go.temporal.io/server/service/history/tests"
 	"go.temporal.io/server/service/history/workflow"
 	wcache "go.temporal.io/server/service/history/workflow/cache"
@@ -143,5 +148,76 @@ func (s *signalWorkflowSuite) TestSignalWorkflow_WorkflowCloseAttempted() {
 		s.workflowConsistencyChecker,
 	)
 	s.Nil(resp)
+	s.Error(consts.ErrWorkflowClosing, err)
+}
+
+func (s *signalWorkflowSuite) Test_ShouldInsertSourceWorkflowIntoEvent() {
+	config := tests.NewDynamicConfig()
+	shardInfo := &persistence.ShardInfo{
+		ShardId: 0,
+		RangeId: 1,
+		QueueStates: map[int32]*persistence.QueueState{
+			int32(tasks.CategoryIDArchival): {
+				ReaderStates: nil,
+				ExclusiveReaderHighWatermark: &persistence.TaskKey{
+					FireTime: timestamp.TimeNowPtrUtc(),
+				},
+			},
+		},
+	}
+	registry := &ns.StubRegistry{NS: &ns.Namespace{}}
+
+	clusterMetadata := cluster.NewMetadataForTest(cluster.NewTestClusterMetadataConfig(true, true))
+
+	stats := persistence2.MutableStateStatistics{HistoryStatistics: &persistence2.HistoryStatistics{0, 0}}
+	response := persistence2.UpdateWorkflowExecutionResponse{UpdateMutableStateStats: stats}
+	executionMgr := persistence2.NewMockExecutionManager(s.controller)
+	executionMgr.EXPECT().UpdateWorkflowExecution(gomock.Any(), gomock.Any()).Return(&response, nil)
+
+	contextConfig := shard.ContextConfigOverrides{
+		ShardInfo:        shardInfo,
+		Config:           config,
+		Registry:         registry,
+		ClusterMetadata:  clusterMetadata,
+		ExecutionManager: executionMgr,
+	}
+
+	engine := shard.NewMockEngine(s.controller)
+	engine.EXPECT().UpdateWorkflowExecution(gomock.Any(), gomock.Any()).Return(nil, nil).AnyTimes()
+	engine.EXPECT().NotifyNewTasks(gomock.Any()).Return().AnyTimes()
+	engine.EXPECT().NotifyNewHistoryEvent(gomock.Any()).Return().AnyTimes()
+
+	shardContext := shard.NewStabContext(s.controller, contextConfig, engine)
+
+	logger := log.NewTestLogger()
+	ms := workflow.InitializeMutableState(ns.NewStubNamespace(), logger, config, registry, clusterMetadata, shardContext)
+	key := definition.NewWorkflowKey("namespace-1", "workflow-1", "run-1")
+	wfContext := workflow.NewContext(config, key, logger, logger, metrics.NoopMetricsHandler)
+	wfContext.MutableState = ms
+
+	cache := wcache.NewMockCache(s.controller)
+	cache.EXPECT().GetOrCreateWorkflowExecution(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), workflow.LockPriorityHigh).
+		Return(wfContext, wcache.NoopReleaseFn, nil).AnyTimes()
+
+	checker := api.NewWorkflowConsistencyChecker(shardContext, cache)
+
+	resp, err := Invoke(
+		context.Background(),
+		&historyservice.SignalWorkflowExecutionRequest{
+			NamespaceId: tests.NamespaceID.String(),
+			SignalRequest: &workflowservice.SignalWorkflowExecutionRequest{
+				Namespace: tests.Namespace.String(),
+				WorkflowExecution: &commonpb.WorkflowExecution{
+					WorkflowId: tests.WorkflowID,
+					RunId:      tests.RunID,
+				},
+				SignalName: "signal-name",
+				Input:      nil,
+			},
+		},
+		shardContext,
+		checker,
+	)
+	s.Equal(&historyservice.SignalWorkflowExecutionResponse{}, resp)
 	s.Error(consts.ErrWorkflowClosing, err)
 }

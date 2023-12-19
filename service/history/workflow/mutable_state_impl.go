@@ -3638,13 +3638,24 @@ func (ms *MutableStateImpl) AddWorkflowExecutionSignaled(
 	header *commonpb.Header,
 	skipGenerateWorkflowTask bool,
 ) (*historypb.HistoryEvent, error) {
+	attrs := ExecutionSignaledEventAttributes{
+		SignalName:               signalName,
+		Input:                    input,
+		Identity:                 identity,
+		Header:                   header,
+		SkipGenerateWorkflowTask: skipGenerateWorkflowTask,
+	}
+	return ms.AddWorkflowExecutionSignaledEvent(attrs)
+}
+
+func (ms *MutableStateImpl) AddWorkflowExecutionSignaledEvent(attrs ExecutionSignaledEventAttributes) (*historypb.HistoryEvent, error) {
 
 	opTag := tag.WorkflowActionWorkflowSignaled
 	if err := ms.checkMutability(opTag); err != nil {
 		return nil, err
 	}
 
-	event := ms.hBuilder.AddWorkflowExecutionSignaledEvent(signalName, input, identity, header, skipGenerateWorkflowTask)
+	event := ms.hBuilder.AddWorkflowExecutionSignaledEvent(attrs)
 	if err := ms.ApplyWorkflowExecutionSignaled(event); err != nil {
 		return nil, err
 	}

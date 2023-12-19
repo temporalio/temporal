@@ -318,13 +318,14 @@ func (s *historyBuilderSuite) TestWorkflowExecutionCancelRequested() {
 
 func (s *historyBuilderSuite) TestWorkflowExecutionSignaled() {
 	signalName := "random signal name"
-	event := s.historyBuilder.AddWorkflowExecutionSignaledEvent(
-		signalName,
-		testPayloads,
-		testIdentity,
-		testHeader,
-		false,
-	)
+	attrs := ExecutionSignaledEventAttributes{
+		SignalName:               signalName,
+		Input:                    testPayloads,
+		Identity:                 testIdentity,
+		Header:                   testHeader,
+		SkipGenerateWorkflowTask: false,
+	}
+	event := s.historyBuilder.AddWorkflowExecutionSignaledEvent(attrs)
 	s.Equal(event, s.flush())
 	s.Equal(&historypb.HistoryEvent{
 		EventId:   common.BufferedEventID,
@@ -2322,13 +2323,14 @@ func (s *historyBuilderSuite) TestReorder() {
 func (s *historyBuilderSuite) TestBufferSize_Memory() {
 	s.Assert().Zero(s.historyBuilder.NumBufferedEvents())
 	s.Assert().Zero(s.historyBuilder.SizeInBytesOfBufferedEvents())
-	s.historyBuilder.AddWorkflowExecutionSignaledEvent(
-		"signal-name",
-		&commonpb.Payloads{},
-		"identity",
-		&commonpb.Header{},
-		true,
-	)
+	attrs := ExecutionSignaledEventAttributes{
+		SignalName:               "signal-name",
+		Input:                    &commonpb.Payloads{},
+		Identity:                 "identity",
+		Header:                   &commonpb.Header{},
+		SkipGenerateWorkflowTask: false,
+	}
+	s.historyBuilder.AddWorkflowExecutionSignaledEvent(attrs)
 	s.Assert().Equal(1, s.historyBuilder.NumBufferedEvents())
 	// the size of the proto  is non-deterministic, so just assert that it's non-zero, and it isn't really high
 	s.Assert().Greater(s.historyBuilder.SizeInBytesOfBufferedEvents(), 0)

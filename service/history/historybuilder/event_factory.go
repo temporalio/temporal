@@ -748,20 +748,17 @@ func (b *EventFactory) CreateMarkerRecordedEvent(
 }
 
 func (b *EventFactory) CreateWorkflowExecutionSignaledEvent(
-	signalName string,
-	input *commonpb.Payloads,
-	identity string,
-	header *commonpb.Header,
-	skipGenerateWorkflowTask bool,
+	attrs ExecutionSignaledEventAttributes,
 ) *historypb.HistoryEvent {
 	event := b.createHistoryEvent(enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_SIGNALED, b.timeSource.Now())
 	event.Attributes = &historypb.HistoryEvent_WorkflowExecutionSignaledEventAttributes{
 		WorkflowExecutionSignaledEventAttributes: &historypb.WorkflowExecutionSignaledEventAttributes{
-			SignalName:               signalName,
-			Input:                    input,
-			Identity:                 identity,
-			Header:                   header,
-			SkipGenerateWorkflowTask: skipGenerateWorkflowTask,
+			SignalName:                attrs.SignalName,
+			Input:                     attrs.Input,
+			Identity:                  attrs.Identity,
+			Header:                    attrs.Header,
+			SkipGenerateWorkflowTask:  attrs.SkipGenerateWorkflowTask,
+			ExternalWorkflowExecution: attrs.ExternalWorkflowExecution,
 		},
 	}
 	return event

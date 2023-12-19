@@ -54,6 +54,7 @@ import (
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	updatespb "go.temporal.io/server/api/update/v1"
 	"go.temporal.io/server/common"
+	clock2 "go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/failure"
@@ -1500,4 +1501,39 @@ func (s *mutableStateSuite) TestCollapseVisibilityTasks() {
 			},
 		)
 	}
+}
+
+func TestAddWorkflowExecutionSignalled_should_insert_provided_signal_source_into_event(t *testing.T) {
+	r := require.New(t)
+	ts := clock2.NewRealTimeSource()
+	builder := &HistoryBuilder{timeSource: ts}
+	info := &persistencespb.WorkflowExecutionInfo{}
+	state := &persistencespb.WorkflowExecutionState{State: enumsspb.WORKFLOW_EXECUTION_STATE_CREATED}
+
+	ms := MutableStateImpl{hBuilder: builder, executionInfo: info, executionState: state}
+	const doNotGenerate = true
+	signalingWorkflowRef := &commonpb.WorkflowExecution{WorkflowId: "Some-Workflow-Id", RunId: "Some-Run-Id"}
+	attrs := ExecutionSignaledEventAttributes{
+		SignalName:                "my signal",
+		Input:                     nil,
+		Identity:                  "identity",
+		Header:                    nil,
+		SkipGenerateWorkflowTask:  doNotGenerate,
+		ExternalWorkflowExecution: signalingWorkflowRef,
+	}
+	_, error := ms.AddWorkflowExecutionSignaledEvent(attrs)
+	r.NoError(error, "Failed to add workflow signal event")
+	r.Len(builder.memBufferBatch, 1, "expected exactly one history event, found %d", len(builder.memBufferBatch))
+
+	event := builder.memBufferBatch[0]
+
+	attributes, ok := event.Attributes.(*historypb.HistoryEvent_WorkflowExecutionSignaledEventAttributes)
+	r.True(ok, "expected WorkflowExecutionSignaledEventAttributes to be inserted into event, got %T", event.Attributes)
+	r.Equal(
+		signalingWorkflowRef,
+		attributes.WorkflowExecutionSignaledEventAttributes.ExternalWorkflowExecution,
+		"wrong workflow reference in the history event expected %+v, got %+v",
+		signalingWorkflowRef,
+		attributes.WorkflowExecutionSignaledEventAttributes.ExternalWorkflowExecution,
+	)
 }

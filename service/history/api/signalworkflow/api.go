@@ -33,6 +33,7 @@ import (
 	"go.temporal.io/server/service/history/api"
 	"go.temporal.io/server/service/history/consts"
 	"go.temporal.io/server/service/history/shard"
+	"go.temporal.io/server/service/history/workflow"
 )
 
 func Invoke(
@@ -106,12 +107,15 @@ func Invoke(
 			if request.GetRequestId() != "" {
 				mutableState.AddSignalRequested(request.GetRequestId())
 			}
-			if _, err := mutableState.AddWorkflowExecutionSignaled(
-				request.GetSignalName(),
-				request.GetInput(),
-				request.GetIdentity(),
-				request.GetHeader(),
-				request.GetSkipGenerateWorkflowTask()); err != nil {
+			attrs := workflow.ExecutionSignaledEventAttributes{
+				SignalName:                request.GetSignalName(),
+				Input:                     request.GetInput(),
+				Identity:                  request.GetIdentity(),
+				Header:                    request.GetHeader(),
+				SkipGenerateWorkflowTask:  request.GetSkipGenerateWorkflowTask(),
+				ExternalWorkflowExecution: parentExecution,
+			}
+			if _, err := mutableState.AddWorkflowExecutionSignaledEvent(attrs); err != nil {
 				return nil, err
 			}
 
