@@ -38,7 +38,7 @@ func TestWrapEventLoopFn_ReturnStreamError_ShouldStopLoop(t *testing.T) {
 	assertion := require.New(t)
 
 	done := make(chan bool)
-
+	timer := time.NewTimer(3 * time.Second)
 	go func() {
 		// Your original test code goes here
 		originalEventLoopCallCount := 0
@@ -60,7 +60,7 @@ func TestWrapEventLoopFn_ReturnStreamError_ShouldStopLoop(t *testing.T) {
 	select {
 	case <-done:
 		// Test completed within the timeout
-	case <-time.After(3 * time.Second):
+	case <-timer.C:
 		t.Fatal("Test timed out after 5 seconds")
 	}
 }
@@ -69,6 +69,7 @@ func TestWrapEventLoopFn_ReturnServiceError_ShouldRetryUntilStreamError(t *testi
 	assertion := require.New(t)
 
 	done := make(chan bool)
+	timer := time.NewTimer(3 * time.Second)
 
 	go func() {
 		// Your original test code goes here
@@ -94,7 +95,7 @@ func TestWrapEventLoopFn_ReturnServiceError_ShouldRetryUntilStreamError(t *testi
 	select {
 	case <-done:
 		// Test completed within the timeout
-	case <-time.After(3 * time.Second):
+	case <-timer.C:
 		t.Fatal("Test timed out after 5 seconds")
 	}
 }
