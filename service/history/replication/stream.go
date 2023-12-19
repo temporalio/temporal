@@ -26,8 +26,11 @@ package replication
 
 import (
 	"fmt"
+	"time"
 
 	"go.temporal.io/api/serviceerror"
+	"go.temporal.io/server/common/log"
+	"go.temporal.io/server/common/metrics"
 
 	"go.temporal.io/server/api/adminservice/v1"
 	"go.temporal.io/server/common/cluster"
@@ -55,4 +58,22 @@ func ClusterIDToClusterNameShardCount(
 		}
 	}
 	return "", 0, serviceerror.NewInternal(fmt.Sprintf("unknown cluster ID: %v", clusterID))
+}
+
+func GetErrorHandledAndRetriedEventLoop(originalEventLoop func() error, streamStopper func(), logger log.Logger, metricsHandler metrics.Handler) func() {
+	return func() {
+		defer streamStopper()
+		for {
+			err := originalEventLoop()
+			if err != nil {
+				if _, ok := err.(*StreamError); ok {
+					metricsHandler.Counter(metrics.ReplicationStreamError.Name()).Record(1)
+					return
+				}
+				time.Sleep(streamReceiverMonitorInterval)
+			} else {
+				return
+			}
+		}
+	}
 }

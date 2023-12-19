@@ -109,8 +109,8 @@ func (r *StreamReceiverImpl) Start() {
 		return
 	}
 
-	go r.sendEventLoop()
-	go r.recvEventLoop()
+	go GetErrorHandledAndRetriedEventLoop(r.sendEventLoop, r.Stop, r.logger, r.MetricsHandler)()
+	go GetErrorHandledAndRetriedEventLoop(r.recvEventLoop, r.Stop, r.logger, r.MetricsHandler)()
 
 	r.logger.Info("StreamReceiver started.")
 }
@@ -143,7 +143,7 @@ func (r *StreamReceiverImpl) Key() ClusterShardKeyPair {
 	}
 }
 
-func (r *StreamReceiverImpl) sendEventLoop() {
+func (r *StreamReceiverImpl) sendEventLoop() error {
 	var panicErr error
 	defer func() {
 		if panicErr != nil {
@@ -152,7 +152,6 @@ func (r *StreamReceiverImpl) sendEventLoop() {
 	}()
 	defer log.CapturePanic(r.logger, &panicErr)
 
-	defer r.Stop()
 	timer := time.NewTicker(r.Config.ReplicationStreamSyncStatusDuration())
 	defer timer.Stop()
 
@@ -162,15 +161,15 @@ func (r *StreamReceiverImpl) sendEventLoop() {
 			timer.Reset(r.Config.ReplicationStreamSyncStatusDuration())
 			if err := r.ackMessage(r.stream); err != nil {
 				r.logger.Error("StreamReceiver exit send loop", tag.Error(err))
-				return
+				return err
 			}
 		case <-r.shutdownChan.Channel():
-			return
+			return nil
 		}
 	}
 }
 
-func (r *StreamReceiverImpl) recvEventLoop() {
+func (r *StreamReceiverImpl) recvEventLoop() error {
 	var panicErr error
 	defer func() {
 		if panicErr != nil {
@@ -179,10 +178,10 @@ func (r *StreamReceiverImpl) recvEventLoop() {
 	}()
 	defer log.CapturePanic(r.logger, &panicErr)
 
-	defer r.Stop()
-
 	err := r.processMessages(r.stream)
+
 	r.logger.Error("StreamReceiver exit recv loop", tag.Error(err))
+	return err
 }
 
 func (r *StreamReceiverImpl) ackMessage(
