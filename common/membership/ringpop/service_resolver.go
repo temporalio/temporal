@@ -38,6 +38,7 @@ import (
 	"github.com/dgryski/go-farm"
 	"github.com/temporalio/ringpop-go/events"
 	"github.com/temporalio/ringpop-go/hashring"
+	rpmembership "github.com/temporalio/ringpop-go/membership"
 	"github.com/temporalio/ringpop-go/swim"
 
 	"go.temporal.io/server/common"
@@ -264,10 +265,9 @@ func (r *serviceResolver) refreshNoLock() (*membership.ChangedEvent, error) {
 	}
 
 	ring := newHashRing()
-	for _, addr := range addrs {
-		host := newHostInfo(addr, r.getLabelsMap())
-		ring.AddMembers(host)
-	}
+	ring.AddMembers(util.MapSlice(addrs, func(addr string) rpmembership.Member {
+		return newHostInfo(addr, r.getLabelsMap())
+	})...)
 
 	r.membersMap = newMembersMap
 	r.lastRefreshTime = time.Now().UTC()
