@@ -57,8 +57,3 @@ func (hi *hostInfo) Label(key string) (string, bool) {
 	value, ok := hi.labels[key]
 	return value, ok
 }
-
-// SetLabel sets the label.
-func (hi *hostInfo) SetLabel(key string, value string) {
-	hi.labels[key] = value
-}
