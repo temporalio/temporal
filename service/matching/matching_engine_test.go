@@ -475,12 +475,11 @@ func (s *matchingEngineSuite) TestPollWorkflowTaskQueue_GetHistoryFailure() {
 			Query:     &querypb.WorkflowQuery{QueryType: "q"},
 		},
 	}
-	wg := &sync.WaitGroup{}
-	wg.Add(1)
+	queryDoneCh := make(chan struct{})
 	go func() {
 		_, err := s.matchingEngine.QueryWorkflow(context.Background(), &query)
 		s.ErrorIs(err, fakeErr)
-		wg.Done()
+		queryDoneCh <- struct{}{}
 	}()
 
 	resp, err := s.matchingEngine.PollWorkflowTaskQueue(context.Background(), &matchingservice.PollWorkflowTaskQueueRequest{
@@ -492,7 +491,13 @@ func (s *matchingEngineSuite) TestPollWorkflowTaskQueue_GetHistoryFailure() {
 	}, metrics.NoopMetricsHandler)
 	s.NoError(err)
 	s.Equal(emptyPollWorkflowTaskQueueResponse, resp)
-	wg.Wait()
+
+	// This seems to be a flaky test. 5 seconds timeout to fail fast.
+	select {
+	case <-queryDoneCh:
+	case <-time.After(5 * time.Second):
+		s.FailNow("QueryWorkflow timed out after 5 seconds")
+	}
 }
 
 func (s *matchingEngineSuite) PollForTasksEmptyResultTest(callContext context.Context, taskType enumspb.TaskQueueType) {

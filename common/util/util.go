@@ -173,3 +173,8 @@ func Coalesce[T comparable](vals ...T) T {
 	}
 	return zero
 }
+
+// Ptr returns a pointer to a copy of v.
+func Ptr[T any](v T) *T {
+	return &v
+}
