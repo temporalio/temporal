@@ -76,6 +76,8 @@ type (
 		// so currently this will never return non-nil, except for context cancel/timeout. A
 		// future implementation might return more errors.
 		WaitUntilInitialized(context.Context) error
+		// SetDraining sets the draining state (synchronized through ringpop)
+		SetDraining(draining bool) error
 	}
 
 	// ServiceResolver provides membership information for a specific temporal service.
@@ -94,6 +96,8 @@ type (
 		MemberCount() int
 		// Members returns all known hosts available for this service.
 		Members() []HostInfo
+		// AvailableMembers returns all hosts available for this service that are accepting requests (not draining).
+		AvailableMembers() []HostInfo
 		// RequestRefresh requests that the membership information be refreshed.
 		RequestRefresh()
 	}

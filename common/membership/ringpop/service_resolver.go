@@ -60,6 +60,11 @@ const (
 	// the service can be accessed.
 	portKey = "servicePort"
 
+	// draining label is set by frontend when it starts shutting down (the same period where it
+	// would return "not serving" to grpc health checks). Data is `true` or `false` (missing
+	// means false).
+	drainingKey = "draining"
+
 	minRefreshInternal     = time.Second * 4
 	defaultRefreshInterval = time.Second * 10
 	replicaPoints          = 100
@@ -215,6 +220,20 @@ func (r *serviceResolver) Members() []membership.HostInfo {
 	_, hosts := r.ring()
 	servers := make([]membership.HostInfo, 0, len(hosts))
 	for _, host := range hosts {
+		servers = append(servers, host)
+	}
+	return servers
+}
+
+func (r *serviceResolver) AvailableMembers() []membership.HostInfo {
+	_, hosts := r.ring()
+	var servers []membership.HostInfo
+	for _, host := range hosts {
+		if drainingStr, ok := host.Label(drainingKey); ok {
+			if draining, _ := strconv.ParseBool(drainingStr); draining {
+				continue
+			}
+		}
 		servers = append(servers, host)
 	}
 	return servers

@@ -409,6 +409,15 @@ func (rpo *monitor) GetReachableMembers() ([]string, error) {
 	return rpo.rp.GetReachableMembers()
 }
 
+func (rpo *monitor) SetDraining(draining bool) error {
+	labels, err := rpo.rp.Labels()
+	if err != nil {
+		// This only happens if ringpop is not bootstrapped yet.
+		return err
+	}
+	return labels.Set(drainingKey, strconv.FormatBool(draining))
+}
+
 func replaceServicePort(address string, servicePort int) (string, error) {
 	host, _, err := net.SplitHostPort(address)
 	if err != nil {
