@@ -25,6 +25,7 @@
 package ringpop
 
 import (
+	"fmt"
 	"testing"
 	"time"
 
@@ -70,6 +71,10 @@ func (s *RpoSuite) TestMonitor() {
 	s.Nil(err, "Ringpop monitor failed to find host for key")
 	s.NotNil(host, "Ringpop monitor returned a nil host")
 
+	s.Eventually(func() bool {
+		return len(r.Members()) == 3 && len(r.AvailableMembers()) == 3
+	}, 10*time.Second, 100*time.Millisecond)
+
 	// Force refresh now and drain the notification channel
 	resolver, _ := rpm.GetResolver(serviceName)
 	s.NoError(resolver.(*serviceResolver).refresh())
@@ -79,9 +84,11 @@ func (s *RpoSuite) TestMonitor() {
 	testService.KillHost(testService.hostUUIDs[1])
 
 	timer := time.NewTimer(time.Minute)
+	defer timer.Stop()
+
 	select {
 	case e := <-listenCh:
-		timer.Stop()
+		s.T().Log("Got update")
 		s.Equal(1, len(e.HostsRemoved), "ringpop monitor event does not report the removed host")
 		s.Equal(testService.hostAddrs[1], e.HostsRemoved[0].GetAddress(), "ringpop monitor reported that a wrong host was removed")
 		s.Nil(e.HostsAdded, "Unexpected host reported to be added by ringpop monitor")
@@ -90,9 +97,30 @@ func (s *RpoSuite) TestMonitor() {
 		s.Fail("Timed out waiting for failure to be detected by ringpop")
 	}
 
-	host, err = r.Lookup("key")
-	s.Nil(err, "Ringpop monitor failed to find host for key")
-	s.NotEqual(testService.hostAddrs[1], host.GetAddress(), "Ringpop monitor assigned key to dead host")
+	for k := 0; k < 10; k++ {
+		host, err = r.Lookup(fmt.Sprintf("key%d", k))
+		s.Nil(err, "Ringpop monitor failed to find host for key")
+		s.NotEqual(testService.hostAddrs[1], host.GetAddress(), "Ringpop monitor assigned key to dead host")
+	}
+	s.Equal(2, len(r.Members()))
+	s.Equal(2, len(r.AvailableMembers()))
+
+	s.T().Log("Draining host 2")
+	testService.DrainHost(testService.hostUUIDs[2])
+
+	select {
+	case e := <-listenCh:
+		s.T().Log("Got update")
+		s.Nil(e.HostsRemoved)
+		s.Nil(e.HostsAdded)
+		s.Equal(1, len(e.HostsChanged))
+		s.Equal(testService.hostAddrs[2], e.HostsChanged[0].GetAddress())
+	case <-timer.C:
+		s.Fail("Timed out waiting for failure to be detected by ringpop")
+	}
+
+	s.Equal(2, len(r.Members()))
+	s.Equal(1, len(r.AvailableMembers()))
 
 	err = r.RemoveListener("test-listener")
 	s.Nil(err, "RemoveListener() failed")
