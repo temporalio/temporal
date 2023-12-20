@@ -161,7 +161,7 @@ func (rpo *monitor) Start() {
 		rpo.logger.Fatal("unable to get ring pop labels", tag.Error(err))
 	}
 
-	if err = labels.Set(rolePort, strconv.Itoa(rpo.services[rpo.serviceName])); err != nil {
+	if err = labels.Set(portKey, strconv.Itoa(rpo.services[rpo.serviceName])); err != nil {
 		rpo.logger.Fatal("unable to set ring pop ServicePort label", tag.Error(err))
 	}
 

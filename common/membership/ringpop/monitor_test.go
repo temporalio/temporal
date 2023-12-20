@@ -32,6 +32,7 @@ import (
 
 	"go.temporal.io/server/common/membership"
 	"go.temporal.io/server/common/primitives"
+	"go.temporal.io/server/common/util"
 
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
@@ -84,6 +85,7 @@ func (s *RpoSuite) TestMonitor() {
 		s.Equal(1, len(e.HostsRemoved), "ringpop monitor event does not report the removed host")
 		s.Equal(testService.hostAddrs[1], e.HostsRemoved[0].GetAddress(), "ringpop monitor reported that a wrong host was removed")
 		s.Nil(e.HostsAdded, "Unexpected host reported to be added by ringpop monitor")
+		s.Nil(e.HostsChanged, "Unexpected host reported to be changed by ringpop monitor")
 	case <-timer.C:
 		s.Fail("Timed out waiting for failure to be detected by ringpop")
 	}
@@ -113,12 +115,15 @@ func (s *RpoSuite) TestCompareMembers() {
 
 func (s *RpoSuite) verifyMemberDiff(curr []string, new []string, expectedDiff []string) {
 	resolver := &serviceResolver{}
-	currMembers := make(map[string]struct{}, len(curr))
+	currMembers := make(map[string]*hostInfo, len(curr))
 	for _, m := range curr {
-		currMembers[m] = struct{}{}
+		currMembers[m] = newHostInfo(m, nil)
 	}
-	resolver.membersMap = currMembers
-	newMembers, event := resolver.compareMembers(new)
+	resolver.ringAndHosts.Store(ringAndHosts{
+		hosts: currMembers,
+	})
+	newHosts := util.MapSlice(new, func(addr string) *hostInfo { return newHostInfo(addr, nil) })
+	newMembers, event := resolver.compareMembers(newHosts)
 	s.ElementsMatch(new, maps.Keys(newMembers))
 	s.Equal(expectedDiff != nil, event != nil)
 	if event != nil {
@@ -128,6 +133,9 @@ func (s *RpoSuite) verifyMemberDiff(curr []string, new []string, expectedDiff []
 		}
 		for _, a := range event.HostsRemoved {
 			diff = append(diff, "-"+a.GetAddress())
+		}
+		for _, a := range event.HostsChanged {
+			diff = append(diff, "~"+a.GetAddress())
 		}
 		s.ElementsMatch(expectedDiff, diff)
 	}

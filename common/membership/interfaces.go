@@ -53,6 +53,7 @@ type (
 	ChangedEvent struct {
 		HostsAdded   []HostInfo
 		HostsRemoved []HostInfo
+		HostsChanged []HostInfo
 	}
 
 	// Monitor provides membership information for all temporal services.
