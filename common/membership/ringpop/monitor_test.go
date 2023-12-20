@@ -127,18 +127,50 @@ func (s *RpoSuite) verifyMemberDiff(curr []string, new []string, expectedDiff []
 	s.ElementsMatch(new, maps.Keys(newMembers))
 	s.Equal(expectedDiff != nil, event != nil)
 	if event != nil {
-		var diff []string
-		for _, a := range event.HostsAdded {
-			diff = append(diff, "+"+a.GetAddress())
-		}
-		for _, a := range event.HostsRemoved {
-			diff = append(diff, "-"+a.GetAddress())
-		}
-		for _, a := range event.HostsChanged {
-			diff = append(diff, "~"+a.GetAddress())
-		}
-		s.ElementsMatch(expectedDiff, diff)
+		s.ElementsMatch(expectedDiff, eventToString(event))
 	}
+}
+
+func (s *RpoSuite) TestCompareMembersWithDraining() {
+	resolver := &serviceResolver{}
+	currMembers := map[string]*hostInfo{
+		"a": newHostInfo("a", nil),
+		"b": newHostInfo("b", nil),
+		"c": newHostInfo("c", nil),
+	}
+	resolver.ringAndHosts.Store(ringAndHosts{
+		hosts: currMembers,
+	})
+	newMembers, event := resolver.compareMembers([]*hostInfo{
+		newHostInfo("a", nil),
+		newHostInfo("b", map[string]string{drainingKey: "true"}),
+		newHostInfo("c", nil),
+	})
+	s.NotNil(newMembers)
+	s.Equal(map[string]string{drainingKey: "true"}, newMembers["b"].labels)
+	s.Equal("b[D]", newMembers["b"].summary())
+	s.NotNil(event)
+	s.ElementsMatch([]string{"~b"}, eventToString(event))
+
+	resolver.ringAndHosts.Store(ringAndHosts{
+		hosts: newMembers,
+	})
+	s.Equal(3, len(resolver.Members()))
+	s.Equal(2, len(resolver.AvailableMembers()))
+}
+
+func eventToString(event *membership.ChangedEvent) []string {
+	var diff []string
+	for _, a := range event.HostsAdded {
+		diff = append(diff, "+"+a.GetAddress())
+	}
+	for _, a := range event.HostsRemoved {
+		diff = append(diff, "-"+a.GetAddress())
+	}
+	for _, a := range event.HostsChanged {
+		diff = append(diff, "~"+a.GetAddress())
+	}
+	return diff
 }
 
 func drainChannel[T any](ch <-chan T) {
