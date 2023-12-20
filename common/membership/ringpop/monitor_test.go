@@ -176,7 +176,7 @@ func (s *RpoSuite) TestCompareMembersWithDraining() {
 	})
 	s.NotNil(newMembers)
 	s.Equal(map[string]string{drainingKey: "true"}, newMembers["b"].labels)
-	s.Equal("b[D]", newMembers["b"].summary())
+	s.Equal("b[draining=true]", newMembers["b"].summary())
 	s.NotNil(event)
 	s.ElementsMatch([]string{"~b"}, eventToString(event))
 

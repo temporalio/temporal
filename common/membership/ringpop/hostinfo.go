@@ -27,7 +27,6 @@ package ringpop
 
 import (
 	"fmt"
-	"strconv"
 
 	"github.com/dgryski/go-farm"
 	rpmembership "github.com/temporalio/ringpop-go/membership"
@@ -78,13 +77,7 @@ func (hi *hostInfo) summary() string {
 		switch k {
 		case roleKey, portKey:
 			// skip these, they can be determined from context
-		case drainingKey:
-			if draining, _ := strconv.ParseBool(v); draining {
-				s += "[D]"
-			}
-		// add more shorthands here
 		default:
-			// fall back to verbose string
 			s += fmt.Sprintf("[%s=%s]", k, v)
 		}
 	}
