@@ -132,7 +132,7 @@ func (s *streamBasedReplicationTestSuite) SetupTest() {
 
 }
 
-func (s *streamBasedReplicationTestSuite) TestReplicateHistoryEvents() {
+func (s *streamBasedReplicationTestSuite) TestReplicateHistoryEvents_ForceReplicationScenario() {
 	ctx := context.Background()
 	ctx, cancel := context.WithTimeout(ctx, testTimeout)
 	defer cancel()

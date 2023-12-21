@@ -41,15 +41,18 @@ import (
 	historypb "go.temporal.io/api/history/v1"
 	replicationpb "go.temporal.io/api/replication/v1"
 	"go.temporal.io/api/workflowservice/v1"
+	"go.temporal.io/sdk/workflow"
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	historyspb "go.temporal.io/server/api/history/v1"
 	repicationpb "go.temporal.io/server/api/replication/v1"
 	replicationspb "go.temporal.io/server/api/replication/v1"
+	"go.temporal.io/server/client"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence/serialization"
 	"go.temporal.io/server/common/persistence/versionhistory"
 	"go.temporal.io/server/common/testing/protorequire"
+	"go.temporal.io/server/service/history/replication"
 	"google.golang.org/protobuf/types/known/durationpb"
 	"gopkg.in/yaml.v3"
 
@@ -76,6 +79,7 @@ type (
 		namespaceID                 namespace.ID
 		standByTaskID               int64
 		autoIncrementTaskID         int64
+		passiveClusterName          string
 
 		controller      *gomock.Controller
 		passtiveCluster *tests.TestCluster
@@ -91,9 +95,10 @@ func TestNDCReplicationTaskBatching(t *testing.T) {
 }
 
 func (s *NDCReplicationTaskBatchingTestSuite) SetupSuite() {
-	s.logger = log.NewTestLogger()
+	s.logger = log.NewNoopLogger()
 	s.serializer = serialization.NewSerializer()
 	s.testClusterFactory = tests.NewTestClusterFactory()
+	s.passiveClusterName = "cluster-b"
 
 	fileName := "../testdata/ndc_clusters.yaml"
 	if tests.TestFlags.TestClusterConfigFile != "" {
@@ -119,6 +124,7 @@ func (s *NDCReplicationTaskBatchingTestSuite) SetupSuite() {
 	s.controller = gomock.NewController(s.T())
 	mockActiveStreamClient := adminservicemock.NewMockAdminService_StreamWorkflowReplicationMessagesClient(s.controller)
 
+	// below is to mock stream client, so we can directly put replication tasks into passive cluster without involving active cluster
 	mockActiveStreamClient.EXPECT().Send(gomock.Any()).Return(nil).AnyTimes()
 	mockActiveStreamClient.EXPECT().Recv().DoAndReturn(func() (*adminservice.StreamWorkflowReplicationMessagesResponse, error) {
 		return s.GetReplicationMessagesMock()
@@ -132,9 +138,8 @@ func (s *NDCReplicationTaskBatchingTestSuite) SetupSuite() {
 	}
 	passiveClusterConfig.MockAdminClient = s.mockAdminClient
 
-	passiveClusterConfig.ClusterMetadata.MasterClusterName = "cluster-b"
+	passiveClusterConfig.ClusterMetadata.MasterClusterName = s.passiveClusterName
 	delete(passiveClusterConfig.ClusterMetadata.ClusterInformation, "cluster-c") //ndc_clusters.yaml has 3 clusters, but we only need 2 for this test
-
 	cluster, err := s.testClusterFactory.NewCluster(s.T(), passiveClusterConfig, log.With(s.logger, tag.ClusterName(clusterName[0])))
 	s.Require().NoError(err)
 	s.passtiveCluster = cluster
@@ -156,9 +161,9 @@ func (s *NDCReplicationTaskBatchingTestSuite) SetupTest() {
 	s.ProtoAssertions = protorequire.New(s.T())
 }
 
-func (s *NDCReplicationTaskBatchingTestSuite) TestAbc() {
+func (s *NDCReplicationTaskBatchingTestSuite) TestHistoryReplicationTaskAndThenRetrieve() {
 	versions := []int64{1, 1, 21, 31, 301, 401, 601, 501, 801, 1001, 901, 701, 1101}
-
+	executions := make(map[workflow.Execution][]*historypb.History)
 	for _, version := range versions {
 		workflowID := "replication-message-test" + uuid.New()
 		runID := uuid.New()
@@ -173,7 +178,7 @@ func (s *NDCReplicationTaskBatchingTestSuite) TestAbc() {
 			}
 			historyBatch = append(historyBatch, historyEvents)
 
-			s.standByReplicationTasksChan <- s.createHistoryEventReplicationTaskFromHistoryEventBatch(
+			s.standByReplicationTasksChan <- s.createHistoryEventReplicationTaskFromHistoryEventBatch( // supply history replication task one by one
 				s.namespaceID.String(),
 				workflowID,
 				runID,
@@ -181,11 +186,55 @@ func (s *NDCReplicationTaskBatchingTestSuite) TestAbc() {
 				nil,
 				s.eventBatchesToVersionHistory(nil, historyBatch).Items,
 			)
-
 		}
+		execution := workflow.Execution{
+			ID:    workflowID,
+			RunID: runID,
+		}
+		executions[execution] = historyBatch
 	}
+	time.Sleep(5 * time.Second) // 5 seconds is enough for the history replication task to be processed and applied to passive cluster
 
-	time.Sleep(10 * time.Second)
+	for execution, historyBatch := range executions {
+		s.assertHistoryEvents(context.Background(), s.namespaceID.String(), execution, historyBatch)
+	}
+}
+
+func (s *NDCReplicationTaskBatchingTestSuite) assertHistoryEvents(
+	ctx context.Context,
+	namespaceId string,
+	execution workflow.Execution,
+	historyBatch []*historypb.History,
+) {
+	mockClientBean := client.NewMockBean(s.controller)
+	mockClientBean.
+		EXPECT().
+		GetRemoteAdminClient(s.passiveClusterName).
+		Return(s.passtiveCluster.GetAdminClient(), nil).
+		AnyTimes()
+
+	serializer := serialization.NewSerializer()
+	passiveClusterFetcher := replication.NewHistoryPaginatedFetcher(
+		nil,
+		mockClientBean,
+		serializer,
+		nil,
+		s.logger,
+	)
+
+	passiveIterator := passiveClusterFetcher.GetSingleWorkflowHistoryPaginatedIterator(
+		ctx, s.passiveClusterName, namespace.ID(namespaceId), execution.ID, execution.RunID, 0, 1, 0, 0)
+
+	index := 0
+	for passiveIterator.HasNext() {
+		s.True(passiveIterator.HasNext())
+		passiveBatch, err := passiveIterator.Next()
+		s.NoError(err)
+		inputEvents := historyBatch[index].Events
+		index++
+		inputBatch, _ := s.serializer.SerializeEvents(inputEvents, enumspb.ENCODING_TYPE_PROTO3)
+		s.Equal(inputBatch, passiveBatch.RawEventBatch)
+	}
 }
 
 func (s *NDCReplicationTaskBatchingTestSuite) registerNamespace() {
