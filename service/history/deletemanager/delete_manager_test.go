@@ -27,7 +27,6 @@ package deletemanager
 import (
 	"context"
 	"testing"
-	"time"
 
 	"github.com/golang/mock/gomock"
 	"github.com/stretchr/testify/require"
@@ -128,8 +127,6 @@ func (s *deleteManagerWorkflowSuite) TestDeleteDeletedWorkflowExecution() {
 			RunID:       tests.RunID,
 		},
 		[]byte{22, 8, 78},
-		time.Time{},
-		time.Time{},
 		closeExecutionVisibilityTaskID,
 		&stage,
 	).Return(nil)
@@ -170,8 +167,6 @@ func (s *deleteManagerWorkflowSuite) TestDeleteDeletedWorkflowExecution_Error() 
 			RunID:       tests.RunID,
 		},
 		[]byte{22, 8, 78},
-		time.Time{},
-		time.Time{},
 		closeExecutionVisibilityTaskID,
 		&stage,
 	).Return(serviceerror.NewInternal("test error"))
@@ -211,8 +206,6 @@ func (s *deleteManagerWorkflowSuite) TestDeleteWorkflowExecution_OpenWorkflow() 
 			RunID:       tests.RunID,
 		},
 		[]byte{22, 8, 78},
-		time.Time{},
-		time.Time{},
 		closeExecutionVisibilityTaskID,
 		&stage,
 	).Return(nil)
