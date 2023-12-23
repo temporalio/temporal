@@ -609,6 +609,7 @@ message RefreshWorkflowTasksResponse {
 message GenerateLastHistoryReplicationTasksRequest {
     string namespace_id = 1;
     temporal.api.common.v1.WorkflowExecution execution = 2;
+    bool allow_zombie = 3;
 }
 
 message GenerateLastHistoryReplicationTasksResponse {

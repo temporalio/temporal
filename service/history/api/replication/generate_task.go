@@ -27,6 +27,7 @@ package replication
 import (
 	"context"
 
+	enumsspb "go.temporal.io/server/api/enums/v1"
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/namespace"
@@ -66,11 +67,18 @@ func GenerateTask(
 	defer func() { wfContext.GetReleaseFn()(retError) }()
 
 	mutableState := wfContext.GetMutableState()
+	state, _ := mutableState.GetWorkflowStateStatus()
+	if !request.AllowZombie && state == enumsspb.WORKFLOW_EXECUTION_STATE_ZOMBIE {
+		return &historyservice.GenerateLastHistoryReplicationTasksResponse{
+			StateTransitionCount: 0,
+			HistoryLength:        0,
+		}, nil
+	}
+
 	replicationTasks, stateTransitionCount, err := mutableState.GenerateMigrationTasks()
 	if err != nil {
 		return nil, err
 	}
-
 	err = shard.AddTasks(ctx, &persistence.AddHistoryTasksRequest{
 		ShardID: shard.GetShardID(),
 		// RangeID is set by shard
@@ -84,10 +92,8 @@ func GenerateTask(
 	if err != nil {
 		return nil, err
 	}
-
-	historyLength := max(mutableState.GetNextEventID()-1, 0)
 	return &historyservice.GenerateLastHistoryReplicationTasksResponse{
 		StateTransitionCount: stateTransitionCount,
-		HistoryLength:        historyLength,
+		HistoryLength:        max(mutableState.GetNextEventID()-1, 0),
 	}, nil
 }
