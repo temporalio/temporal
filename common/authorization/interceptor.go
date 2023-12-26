@@ -236,14 +236,14 @@ func (a *Interceptor) Authorize(ctx context.Context, claims *Claims, ct *CallTar
 
 	startTime := time.Now().UTC()
 	result, err := a.authorizer.Authorize(ctx, claims, ct)
-	mh.Timer(metrics.ServiceAuthorizationLatency.GetMetricName()).Record(time.Since(startTime))
+	mh.Timer(metrics.ServiceAuthorizationLatency.Name()).Record(time.Since(startTime))
 	if err != nil {
-		mh.Counter(metrics.ServiceErrAuthorizeFailedCounter.GetMetricName()).Record(1)
+		mh.Counter(metrics.ServiceErrAuthorizeFailedCounter.Name()).Record(1)
 		a.logger.Error("Authorization error", tag.Error(err))
 		return errUnauthorized // return a generic error to the caller without disclosing details
 	}
 	if result.Decision != DecisionAllow {
-		mh.Counter(metrics.ServiceErrUnauthorizedCounter.GetMetricName()).Record(1)
+		mh.Counter(metrics.ServiceErrUnauthorizedCounter.Name()).Record(1)
 		// if a reason is included in the result, include it in the error message
 		if result.Reason != "" {
 			return serviceerror.NewPermissionDenied(RequestUnauthorized, result.Reason)

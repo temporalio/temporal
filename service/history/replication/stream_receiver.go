@@ -109,8 +109,8 @@ func (r *StreamReceiverImpl) Start() {
 		return
 	}
 
-	go r.sendEventLoop()
-	go r.recvEventLoop()
+	go WrapEventLoop(r.sendEventLoop, r.Stop, r.logger, r.MetricsHandler, r.clientShardKey, r.serverShardKey, streamReceiverMonitorInterval)
+	go WrapEventLoop(r.recvEventLoop, r.Stop, r.logger, r.MetricsHandler, r.clientShardKey, r.serverShardKey, streamReceiverMonitorInterval)
 
 	r.logger.Info("StreamReceiver started.")
 }
@@ -143,8 +143,15 @@ func (r *StreamReceiverImpl) Key() ClusterShardKeyPair {
 	}
 }
 
-func (r *StreamReceiverImpl) sendEventLoop() {
-	defer r.Stop()
+func (r *StreamReceiverImpl) sendEventLoop() error {
+	var panicErr error
+	defer func() {
+		if panicErr != nil {
+			r.MetricsHandler.Counter(metrics.ReplicationStreamPanic.Name()).Record(1)
+		}
+	}()
+	defer log.CapturePanic(r.logger, &panicErr)
+
 	timer := time.NewTicker(r.Config.ReplicationStreamSyncStatusDuration())
 	defer timer.Stop()
 
@@ -154,19 +161,27 @@ func (r *StreamReceiverImpl) sendEventLoop() {
 			timer.Reset(r.Config.ReplicationStreamSyncStatusDuration())
 			if err := r.ackMessage(r.stream); err != nil {
 				r.logger.Error("StreamReceiver exit send loop", tag.Error(err))
-				return
+				return err
 			}
 		case <-r.shutdownChan.Channel():
-			return
+			return nil
 		}
 	}
 }
 
-func (r *StreamReceiverImpl) recvEventLoop() {
-	defer r.Stop()
+func (r *StreamReceiverImpl) recvEventLoop() error {
+	var panicErr error
+	defer func() {
+		if panicErr != nil {
+			r.MetricsHandler.Counter(metrics.ReplicationStreamPanic.Name()).Record(1)
+		}
+	}()
+	defer log.CapturePanic(r.logger, &panicErr)
 
 	err := r.processMessages(r.stream)
+
 	r.logger.Error("StreamReceiver exit recv loop", tag.Error(err))
+	return err
 }
 
 func (r *StreamReceiverImpl) ackMessage(
@@ -185,15 +200,14 @@ func (r *StreamReceiverImpl) ackMessage(
 			},
 		},
 	}); err != nil {
-		r.logger.Error("StreamReceiver unable to send message, err", tag.Error(err))
 		return err
 	}
-	r.MetricsHandler.Histogram(metrics.ReplicationTasksRecvBacklog.GetMetricName(), metrics.ReplicationTasksRecvBacklog.GetMetricUnit()).Record(
+	r.MetricsHandler.Histogram(metrics.ReplicationTasksRecvBacklog.Name(), metrics.ReplicationTasksRecvBacklog.Unit()).Record(
 		int64(size),
 		metrics.FromClusterIDTag(r.serverShardKey.ClusterID),
 		metrics.ToClusterIDTag(r.clientShardKey.ClusterID),
 	)
-	r.MetricsHandler.Counter(metrics.ReplicationTasksSend.GetMetricName()).Record(
+	r.MetricsHandler.Counter(metrics.ReplicationTasksSend.Name()).Record(
 		int64(1),
 		metrics.FromClusterIDTag(r.clientShardKey.ClusterID),
 		metrics.ToClusterIDTag(r.serverShardKey.ClusterID),
@@ -213,12 +227,10 @@ func (r *StreamReceiverImpl) processMessages(
 
 	streamRespChen, err := stream.Recv()
 	if err != nil {
-		r.logger.Error("StreamReceiver unable to recv message, err", tag.Error(err))
 		return err
 	}
 	for streamResp := range streamRespChen {
 		if streamResp.Err != nil {
-			r.logger.Error("StreamReceiver recv stream encountered unexpected err", tag.Error(streamResp.Err))
 			return streamResp.Err
 		}
 		tasks := r.taskConverter.Convert(

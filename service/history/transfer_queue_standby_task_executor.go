@@ -612,9 +612,9 @@ func (t *transferQueueStandbyTaskExecutor) fetchHistoryFromRemote(
 	}
 
 	scope := t.metricHandler.WithTags(metrics.OperationTag(metrics.HistoryRereplicationByTransferTaskScope))
-	scope.Counter(metrics.ClientRequests.GetMetricName()).Record(1)
+	scope.Counter(metrics.ClientRequests.Name()).Record(1)
 	startTime := time.Now().UTC()
-	defer func() { scope.Timer(metrics.ClientLatency.GetMetricName()).Record(time.Since(startTime)) }()
+	defer func() { scope.Timer(metrics.ClientLatency.Name()).Record(time.Since(startTime)) }()
 
 	if resendInfo.lastEventID == common.EmptyEventID || resendInfo.lastEventVersion == common.EmptyVersion {
 		t.logger.Error("Error re-replicating history from remote: transferQueueStandbyProcessor encountered empty historyResendInfo.",

@@ -154,7 +154,7 @@ func (a *archiver) Archive(ctx context.Context, request *Request) (res *Response
 			logger.Warn("failed to archive workflow", tag.Error(err))
 		}
 
-		metricsScope.Timer(metrics.ArchiverArchiveLatency.GetMetricName()).
+		metricsScope.Timer(metrics.ArchiverArchiveLatency.Name()).
 			Record(time.Since(start), metrics.StringTag("status", status))
 	}(time.Now())
 
@@ -286,6 +286,6 @@ func (a *archiver) recordArchiveTargetResult(logger log.Logger, startTime time.T
 		metrics.StringTag("target", string(target)),
 		metrics.StringTag("status", status),
 	}
-	latency := metrics.ArchiverArchiveTargetLatency.GetMetricName()
+	latency := metrics.ArchiverArchiveTargetLatency.Name()
 	a.metricsHandler.Timer(latency).Record(duration, tags...)
 }

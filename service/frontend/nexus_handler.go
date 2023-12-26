@@ -90,8 +90,8 @@ func (c *operationContext) capturePanicAndRecordMetrics(errPtr *error) {
 		*errPtr = err
 	}
 
-	c.metricsHandler.Counter(metrics.NexusRequests.GetMetricName()).Record(1)
-	c.metricsHandler.Histogram(metrics.NexusLatencyHistogram.GetMetricName(), metrics.Milliseconds).Record(time.Since(c.requestStartTime).Milliseconds())
+	c.metricsHandler.Counter(metrics.NexusRequests.Name()).Record(1)
+	c.metricsHandler.Histogram(metrics.NexusLatencyHistogram.Name(), metrics.Milliseconds).Record(time.Since(c.requestStartTime).Milliseconds())
 
 	for _, fn := range c.cleanupFunctions {
 		fn()
@@ -177,7 +177,7 @@ func (h *nexusHandler) getOperationContext(ctx context.Context, method string) (
 
 	var err error
 	if oc.namespace, err = h.namespaceRegistry.GetNamespace(namespace.Name(nc.namespaceName)); err != nil {
-		oc.metricsHandler.Counter(metrics.NexusRequests.GetMetricName()).Record(
+		oc.metricsHandler.Counter(metrics.NexusRequests.Name()).Record(
 			1,
 			metrics.NexusOutcomeTag("namespace_not_found"),
 		)

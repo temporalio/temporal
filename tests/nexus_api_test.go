@@ -52,14 +52,14 @@ import (
 
 var op = nexus.NewOperationReference[string, string]("my-operation")
 
-func (s *clientFunctionalSuite) mustToPayload(v any) *commonpb.Payload {
+func (s *ClientFunctionalSuite) mustToPayload(v any) *commonpb.Payload {
 	conv := converter.GetDefaultDataConverter()
 	payload, err := conv.ToPayload(v)
 	s.NoError(err)
 	return payload
 }
 
-func (s *clientFunctionalSuite) TestNexusStartOperation_WithNamespaceAndTaskQueue_Outcomes() {
+func (s *ClientFunctionalSuite) TestNexusStartOperation_WithNamespaceAndTaskQueue_Outcomes() {
 	type testcase struct {
 		outcome   string
 		handler   func(*workflowservice.PollNexusTaskQueueResponse) (*nexuspb.Response, *nexuspb.HandlerError)
@@ -202,7 +202,7 @@ func (s *clientFunctionalSuite) TestNexusStartOperation_WithNamespaceAndTaskQueu
 	}
 }
 
-func (s *clientFunctionalSuite) TestNexusStartOperation_WithNamespaceAndTaskQueue_NamespaceNotFound() {
+func (s *ClientFunctionalSuite) TestNexusStartOperation_WithNamespaceAndTaskQueue_NamespaceNotFound() {
 	// Also use this test to verify that namespaces are unescaped in the path.
 	taskQueue := s.randomizeStr("task-queue")
 	namespace := "namespace not/found"
@@ -225,7 +225,7 @@ func (s *clientFunctionalSuite) TestNexusStartOperation_WithNamespaceAndTaskQueu
 	s.Equal(int64(1), snap["nexus_requests"][0].Value)
 }
 
-func (s *clientFunctionalSuite) TestNexusStartOperation_WithNamespaceAndTaskQueue_NamespaceTooLong() {
+func (s *ClientFunctionalSuite) TestNexusStartOperation_WithNamespaceAndTaskQueue_NamespaceTooLong() {
 	taskQueue := s.randomizeStr("task-queue")
 
 	var namespace string
@@ -251,7 +251,7 @@ func (s *clientFunctionalSuite) TestNexusStartOperation_WithNamespaceAndTaskQueu
 	s.Equal(1, len(snap["nexus_request_preprocess_errors"]))
 }
 
-func (s *clientFunctionalSuite) TestNexusStartOperation_WithNamespaceAndTaskQueue_Forbidden() {
+func (s *ClientFunctionalSuite) TestNexusStartOperation_WithNamespaceAndTaskQueue_Forbidden() {
 	type testcase struct {
 		name           string
 		onAuthorize    func(context.Context, *authorization.Claims, *authorization.CallTarget) (authorization.Result, error)
@@ -319,7 +319,7 @@ func (s *clientFunctionalSuite) TestNexusStartOperation_WithNamespaceAndTaskQueu
 	}
 }
 
-func (s *clientFunctionalSuite) TestNexusStartOperation_WithNamespaceAndTaskQueue_Claims() {
+func (s *ClientFunctionalSuite) TestNexusStartOperation_WithNamespaceAndTaskQueue_Claims() {
 	type testcase struct {
 		name      string
 		header    nexus.Header
@@ -401,7 +401,7 @@ func (s *clientFunctionalSuite) TestNexusStartOperation_WithNamespaceAndTaskQueu
 		})
 	}
 }
-func (s *clientFunctionalSuite) TestNexusCancelOperation_WithNamespaceAndTaskQueue_Outcomes() {
+func (s *ClientFunctionalSuite) TestNexusCancelOperation_WithNamespaceAndTaskQueue_Outcomes() {
 	type testcase struct {
 		outcome   string
 		handler   func(*workflowservice.PollNexusTaskQueueResponse) (*nexuspb.Response, *nexuspb.HandlerError)
@@ -496,7 +496,7 @@ func (s *clientFunctionalSuite) TestNexusCancelOperation_WithNamespaceAndTaskQue
 	}
 }
 
-func (s *clientFunctionalSuite) TestNexusStartOperation_WithNamespaceAndTaskQueue_SupportsVersioning() {
+func (s *ClientFunctionalSuite) TestNexusStartOperation_WithNamespaceAndTaskQueue_SupportsVersioning() {
 	ctx, cancel := context.WithCancel(NewContext())
 	defer cancel()
 	taskQueue := s.randomizeStr("task-queue")
@@ -532,7 +532,7 @@ func (s *clientFunctionalSuite) TestNexusStartOperation_WithNamespaceAndTaskQueu
 	s.ErrorIs(err, context.DeadlineExceeded)
 }
 
-func (s *clientFunctionalSuite) TestNexus_RespondNexusTaskMethods_VerifiesTaskTokenMatchesRequestNamespace() {
+func (s *ClientFunctionalSuite) TestNexus_RespondNexusTaskMethods_VerifiesTaskTokenMatchesRequestNamespace() {
 	ctx := NewContext()
 
 	tt := tokenspb.NexusTask{
@@ -560,15 +560,15 @@ func (s *clientFunctionalSuite) TestNexus_RespondNexusTaskMethods_VerifiesTaskTo
 	s.ErrorContains(err, "Operation requested with a token from a different namespace.")
 }
 
-func (s *clientFunctionalSuite) echoNexusTaskPoller(ctx context.Context, taskQueue string) {
+func (s *ClientFunctionalSuite) echoNexusTaskPoller(ctx context.Context, taskQueue string) {
 	s.nexusTaskPoller(ctx, taskQueue, nexusEchoHandler)
 }
 
-func (s *clientFunctionalSuite) nexusTaskPoller(ctx context.Context, taskQueue string, handler func(*workflowservice.PollNexusTaskQueueResponse) (*nexuspb.Response, *nexuspb.HandlerError)) {
+func (s *ClientFunctionalSuite) nexusTaskPoller(ctx context.Context, taskQueue string, handler func(*workflowservice.PollNexusTaskQueueResponse) (*nexuspb.Response, *nexuspb.HandlerError)) {
 	s.versionedNexusTaskPoller(ctx, taskQueue, "", handler)
 }
 
-func (s *clientFunctionalSuite) versionedNexusTaskPoller(ctx context.Context, taskQueue, buildID string, handler func(*workflowservice.PollNexusTaskQueueResponse) (*nexuspb.Response, *nexuspb.HandlerError)) {
+func (s *ClientFunctionalSuite) versionedNexusTaskPoller(ctx context.Context, taskQueue, buildID string, handler func(*workflowservice.PollNexusTaskQueueResponse) (*nexuspb.Response, *nexuspb.HandlerError)) {
 	var vc *commonpb.WorkerVersionCapabilities
 
 	if buildID != "" {
@@ -586,6 +586,9 @@ func (s *clientFunctionalSuite) versionedNexusTaskPoller(ctx context.Context, ta
 		},
 		WorkerVersionCapabilities: vc,
 	})
+	if err != nil {
+		return
+	}
 	// If the context is canceled, the test is written in a way that it doesn't expect the poll to be unblocked.
 	if ctx.Err() != nil {
 		return

@@ -44,6 +44,7 @@ import (
 	"go.temporal.io/api/serviceerror"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	updatepb "go.temporal.io/api/update/v1"
+	workflowpb "go.temporal.io/api/workflow/v1"
 	"google.golang.org/protobuf/types/known/durationpb"
 	"google.golang.org/protobuf/types/known/timestamppb"
 
@@ -133,7 +134,7 @@ func (s *mutableStateSuite) TearDownTest() {
 	s.mockShard.StopForTest()
 }
 
-func (s *mutableStateSuite) TestTransientWorkflowTaskCompletionFirstBatchReplicated_ReplicateWorkflowTaskCompleted() {
+func (s *mutableStateSuite) TestTransientWorkflowTaskCompletionFirstBatchApplied_ApplyWorkflowTaskCompleted() {
 	version := int64(12)
 	runID := uuid.New()
 	s.mutableState = TestGlobalMutableState(
@@ -144,7 +145,7 @@ func (s *mutableStateSuite) TestTransientWorkflowTaskCompletionFirstBatchReplica
 		runID,
 	)
 
-	newWorkflowTaskScheduleEvent, newWorkflowTaskStartedEvent := s.prepareTransientWorkflowTaskCompletionFirstBatchReplicated(version, runID)
+	newWorkflowTaskScheduleEvent, newWorkflowTaskStartedEvent := s.prepareTransientWorkflowTaskCompletionFirstBatchApplied(version, runID)
 
 	newWorkflowTaskCompletedEvent := &historypb.HistoryEvent{
 		Version:   version,
@@ -160,12 +161,12 @@ func (s *mutableStateSuite) TestTransientWorkflowTaskCompletionFirstBatchReplica
 	s.mutableState.SetHistoryBuilder(NewImmutableHistoryBuilder([]*historypb.HistoryEvent{
 		newWorkflowTaskCompletedEvent,
 	}))
-	err := s.mutableState.ReplicateWorkflowTaskCompletedEvent(newWorkflowTaskCompletedEvent)
+	err := s.mutableState.ApplyWorkflowTaskCompletedEvent(newWorkflowTaskCompletedEvent)
 	s.NoError(err)
 	s.Equal(0, s.mutableState.hBuilder.NumBufferedEvents())
 }
 
-func (s *mutableStateSuite) TestTransientWorkflowTaskCompletionFirstBatchReplicated_FailoverWorkflowTaskTimeout() {
+func (s *mutableStateSuite) TestTransientWorkflowTaskCompletionFirstBatchApplied_FailoverWorkflowTaskTimeout() {
 	version := int64(12)
 	runID := uuid.New()
 	s.mutableState = TestGlobalMutableState(
@@ -176,7 +177,7 @@ func (s *mutableStateSuite) TestTransientWorkflowTaskCompletionFirstBatchReplica
 		runID,
 	)
 
-	newWorkflowTaskScheduleEvent, _ := s.prepareTransientWorkflowTaskCompletionFirstBatchReplicated(version, runID)
+	newWorkflowTaskScheduleEvent, _ := s.prepareTransientWorkflowTaskCompletionFirstBatchApplied(version, runID)
 
 	newWorkflowTask := s.mutableState.GetWorkflowTaskByID(newWorkflowTaskScheduleEvent.GetEventId())
 	s.NotNil(newWorkflowTask)
@@ -188,7 +189,7 @@ func (s *mutableStateSuite) TestTransientWorkflowTaskCompletionFirstBatchReplica
 	s.Equal(0, s.mutableState.hBuilder.NumBufferedEvents())
 }
 
-func (s *mutableStateSuite) TestTransientWorkflowTaskCompletionFirstBatchReplicated_FailoverWorkflowTaskFailed() {
+func (s *mutableStateSuite) TestTransientWorkflowTaskCompletionFirstBatchApplied_FailoverWorkflowTaskFailed() {
 	version := int64(12)
 	runID := uuid.New()
 	s.mutableState = TestGlobalMutableState(
@@ -199,7 +200,7 @@ func (s *mutableStateSuite) TestTransientWorkflowTaskCompletionFirstBatchReplica
 		runID,
 	)
 
-	newWorkflowTaskScheduleEvent, _ := s.prepareTransientWorkflowTaskCompletionFirstBatchReplicated(version, runID)
+	newWorkflowTaskScheduleEvent, _ := s.prepareTransientWorkflowTaskCompletionFirstBatchApplied(version, runID)
 
 	newWorkflowTask := s.mutableState.GetWorkflowTaskByID(newWorkflowTaskScheduleEvent.GetEventId())
 	s.NotNil(newWorkflowTask)
@@ -411,8 +412,8 @@ func (s *mutableStateSuite) TestTransientWorkflowTaskSchedule_CurrentVersionChan
 		version,
 		runID,
 	)
-	_, _ = s.prepareTransientWorkflowTaskCompletionFirstBatchReplicated(version, runID)
-	err := s.mutableState.ReplicateWorkflowTaskFailedEvent()
+	_, _ = s.prepareTransientWorkflowTaskCompletionFirstBatchApplied(version, runID)
+	err := s.mutableState.ApplyWorkflowTaskFailedEvent()
 	s.NoError(err)
 
 	err = s.mutableState.UpdateCurrentVersion(version+1, true)
@@ -444,8 +445,8 @@ func (s *mutableStateSuite) TestTransientWorkflowTaskStart_CurrentVersionChanged
 		version,
 		runID,
 	)
-	_, _ = s.prepareTransientWorkflowTaskCompletionFirstBatchReplicated(version, runID)
-	err := s.mutableState.ReplicateWorkflowTaskFailedEvent()
+	_, _ = s.prepareTransientWorkflowTaskCompletionFirstBatchApplied(version, runID)
+	err := s.mutableState.ApplyWorkflowTaskFailedEvent()
 	s.NoError(err)
 
 	versionHistories := s.mutableState.GetExecutionInfo().GetVersionHistories()
@@ -518,7 +519,7 @@ func (s *mutableStateSuite) TestSanitizedMutableState() {
 	}
 }
 
-func (s *mutableStateSuite) prepareTransientWorkflowTaskCompletionFirstBatchReplicated(version int64, runID string) (*historypb.HistoryEvent, *historypb.HistoryEvent) {
+func (s *mutableStateSuite) prepareTransientWorkflowTaskCompletionFirstBatchApplied(version int64, runID string) (*historypb.HistoryEvent, *historypb.HistoryEvent) {
 	namespaceID := tests.NamespaceID
 	execution := &commonpb.WorkflowExecution{
 		WorkflowId: "some random workflow ID",
@@ -597,7 +598,7 @@ func (s *mutableStateSuite) prepareTransientWorkflowTaskCompletionFirstBatchRepl
 		},
 		workflowStartEvent,
 	)
-	err := s.mutableState.ReplicateWorkflowExecutionStartedEvent(
+	err := s.mutableState.ApplyWorkflowExecutionStartedEvent(
 		nil,
 		execution,
 		uuid.New(),
@@ -606,7 +607,7 @@ func (s *mutableStateSuite) prepareTransientWorkflowTaskCompletionFirstBatchRepl
 	s.Nil(err)
 
 	// setup transient workflow task
-	wt, err := s.mutableState.ReplicateWorkflowTaskScheduledEvent(
+	wt, err := s.mutableState.ApplyWorkflowTaskScheduledEvent(
 		workflowTaskScheduleEvent.GetVersion(),
 		workflowTaskScheduleEvent.GetEventId(),
 		workflowTaskScheduleEvent.GetWorkflowTaskScheduledEventAttributes().GetTaskQueue(),
@@ -619,7 +620,7 @@ func (s *mutableStateSuite) prepareTransientWorkflowTaskCompletionFirstBatchRepl
 	s.Nil(err)
 	s.NotNil(wt)
 
-	wt, err = s.mutableState.ReplicateWorkflowTaskStartedEvent(nil,
+	wt, err = s.mutableState.ApplyWorkflowTaskStartedEvent(nil,
 		workflowTaskStartedEvent.GetVersion(),
 		workflowTaskScheduleEvent.GetEventId(),
 		workflowTaskStartedEvent.GetEventId(),
@@ -631,7 +632,7 @@ func (s *mutableStateSuite) prepareTransientWorkflowTaskCompletionFirstBatchRepl
 	s.Nil(err)
 	s.NotNil(wt)
 
-	err = s.mutableState.ReplicateWorkflowTaskFailedEvent()
+	err = s.mutableState.ApplyWorkflowTaskFailedEvent()
 	s.Nil(err)
 
 	workflowTaskAttempt = int32(123)
@@ -660,7 +661,7 @@ func (s *mutableStateSuite) prepareTransientWorkflowTaskCompletionFirstBatchRepl
 	}
 	eventID++
 
-	wt, err = s.mutableState.ReplicateWorkflowTaskScheduledEvent(
+	wt, err = s.mutableState.ApplyWorkflowTaskScheduledEvent(
 		newWorkflowTaskScheduleEvent.GetVersion(),
 		newWorkflowTaskScheduleEvent.GetEventId(),
 		newWorkflowTaskScheduleEvent.GetWorkflowTaskScheduledEventAttributes().GetTaskQueue(),
@@ -673,7 +674,7 @@ func (s *mutableStateSuite) prepareTransientWorkflowTaskCompletionFirstBatchRepl
 	s.Nil(err)
 	s.NotNil(wt)
 
-	wt, err = s.mutableState.ReplicateWorkflowTaskStartedEvent(nil,
+	wt, err = s.mutableState.ApplyWorkflowTaskStartedEvent(nil,
 		newWorkflowTaskStartedEvent.GetVersion(),
 		newWorkflowTaskScheduleEvent.GetEventId(),
 		newWorkflowTaskStartedEvent.GetEventId(),
@@ -899,7 +900,7 @@ func (s *mutableStateSuite) TestUpdateInfos() {
 		"expected 1 completed update + 2 accepted in mutation")
 }
 
-func (s *mutableStateSuite) TestReplicateActivityTaskStartedEvent() {
+func (s *mutableStateSuite) TestApplyActivityTaskStartedEvent() {
 	state := s.buildWorkflowMutableState()
 
 	var err error
@@ -921,7 +922,7 @@ func (s *mutableStateSuite) TestReplicateActivityTaskStartedEvent() {
 		ScheduledEventId: scheduledEventID,
 		RequestId:        requestID,
 	}
-	err = s.mutableState.ReplicateActivityTaskStartedEvent(&historypb.HistoryEvent{
+	err = s.mutableState.ApplyActivityTaskStartedEvent(&historypb.HistoryEvent{
 		EventId:   eventID,
 		EventTime: timestamppb.New(now),
 		Version:   version,
@@ -1139,7 +1140,7 @@ func (s *mutableStateSuite) TestRetryActivity_TruncateRetryableFailure() {
 	s.Equal(activityFailure.GetMessage(), activityInfo.RetryLastFailure.Cause.GetMessage())
 }
 
-func (s *mutableStateSuite) TestTrackBuildIdFromCompletion() {
+func (s *mutableStateSuite) TestUpdateBuildIdsSearchAttribute() {
 	versioned := func(buildId string) *commonpb.WorkerVersionStamp {
 		return &commonpb.WorkerVersionStamp{BuildId: buildId, UseVersioning: true}
 	}
@@ -1176,43 +1177,145 @@ func (s *mutableStateSuite) TestTrackBuildIdFromCompletion() {
 			s.NoError(err)
 
 			// Max 0
-			err = s.mutableState.trackBuildIdFromCompletion(c.stamp("0.1"), 4, WorkflowTaskCompletionLimits{MaxResetPoints: 0, MaxSearchAttributeValueSize: 0})
+			err = s.mutableState.updateBuildIdsSearchAttribute(c.stamp("0.1"), 4, 0)
 			s.NoError(err)
 			s.Equal([]string{}, s.getBuildIdsFromMutableState())
-			s.Equal([]string{}, s.getResetPointsBinaryChecksumsFromMutableState())
 
-			err = s.mutableState.trackBuildIdFromCompletion(c.stamp("0.1"), 4, WorkflowTaskCompletionLimits{MaxResetPoints: 2, MaxSearchAttributeValueSize: 40})
+			err = s.mutableState.updateBuildIdsSearchAttribute(c.stamp("0.1"), 4, 40)
 			s.NoError(err)
 			s.Equal(c.searchAttribute("0.1"), s.getBuildIdsFromMutableState())
-			s.Equal([]string{"0.1"}, s.getResetPointsBinaryChecksumsFromMutableState())
 
 			// Add the same build ID
-			err = s.mutableState.trackBuildIdFromCompletion(c.stamp("0.1"), 4, WorkflowTaskCompletionLimits{MaxResetPoints: 2, MaxSearchAttributeValueSize: 40})
+			err = s.mutableState.updateBuildIdsSearchAttribute(c.stamp("0.1"), 4, 40)
 			s.NoError(err)
 			s.Equal(c.searchAttribute("0.1"), s.getBuildIdsFromMutableState())
-			s.Equal([]string{"0.1"}, s.getResetPointsBinaryChecksumsFromMutableState())
 
-			err = s.mutableState.trackBuildIdFromCompletion(c.stamp("0.2"), 4, WorkflowTaskCompletionLimits{MaxResetPoints: 2, MaxSearchAttributeValueSize: 40})
+			err = s.mutableState.updateBuildIdsSearchAttribute(c.stamp("0.2"), 4, 40)
 			s.NoError(err)
 			s.Equal(c.searchAttribute("0.1", "0.2"), s.getBuildIdsFromMutableState())
-			s.Equal([]string{"0.1", "0.2"}, s.getResetPointsBinaryChecksumsFromMutableState())
 
 			// Limit applies
-			err = s.mutableState.trackBuildIdFromCompletion(c.stamp("0.3"), 4, WorkflowTaskCompletionLimits{MaxResetPoints: 2, MaxSearchAttributeValueSize: 40})
+			err = s.mutableState.updateBuildIdsSearchAttribute(c.stamp("0.3"), 4, 40)
 			s.NoError(err)
 			s.Equal(c.searchAttribute("0.2", "0.3"), s.getBuildIdsFromMutableState())
-			s.Equal([]string{"0.2", "0.3"}, s.getResetPointsBinaryChecksumsFromMutableState())
 		})
 	}
 }
 
-func (s *mutableStateSuite) getBuildIdsFromMutableState() []string {
-	searchAttributes := s.mutableState.executionInfo.SearchAttributes
-	if searchAttributes == nil {
-		return []string{}
+func (s *mutableStateSuite) TestAddResetPointFromCompletion() {
+	dbState := s.buildWorkflowMutableState()
+	var err error
+	s.mutableState, err = NewMutableStateFromDB(s.mockShard, s.mockEventsCache, s.logger, tests.LocalNamespaceEntry, dbState, 123)
+	s.NoError(err)
+
+	s.Nil(s.cleanedResetPoints().GetPoints())
+
+	s.mutableState.addResetPointFromCompletion("checksum1", "buildid1", 32, 10)
+	p1 := &workflowpb.ResetPointInfo{
+		BuildId:                      "buildid1",
+		BinaryChecksum:               "checksum1",
+		RunId:                        s.mutableState.executionState.RunId,
+		FirstWorkflowTaskCompletedId: 32,
+	}
+	s.Equal([]*workflowpb.ResetPointInfo{p1}, s.cleanedResetPoints().GetPoints())
+
+	// new checksum + buildid
+	s.mutableState.addResetPointFromCompletion("checksum2", "buildid2", 35, 10)
+	p2 := &workflowpb.ResetPointInfo{
+		BuildId:                      "buildid2",
+		BinaryChecksum:               "checksum2",
+		RunId:                        s.mutableState.executionState.RunId,
+		FirstWorkflowTaskCompletedId: 35,
+	}
+	s.Equal([]*workflowpb.ResetPointInfo{p1, p2}, s.cleanedResetPoints().GetPoints())
+
+	// same checksum + buildid, does not add new point
+	s.mutableState.addResetPointFromCompletion("checksum2", "buildid2", 42, 10)
+	s.Equal([]*workflowpb.ResetPointInfo{p1, p2}, s.cleanedResetPoints().GetPoints())
+
+	// back to 1, does not add new point
+	s.mutableState.addResetPointFromCompletion("checksum1", "buildid1", 48, 10)
+	s.Equal([]*workflowpb.ResetPointInfo{p1, p2}, s.cleanedResetPoints().GetPoints())
+
+	// buildid changes
+	s.mutableState.addResetPointFromCompletion("checksum2", "buildid3", 53, 10)
+	p3 := &workflowpb.ResetPointInfo{
+		BuildId:                      "buildid3",
+		BinaryChecksum:               "checksum2",
+		RunId:                        s.mutableState.executionState.RunId,
+		FirstWorkflowTaskCompletedId: 53,
+	}
+	s.Equal([]*workflowpb.ResetPointInfo{p1, p2, p3}, s.cleanedResetPoints().GetPoints())
+
+	// limit to 3, p1 gets dropped
+	s.mutableState.addResetPointFromCompletion("checksum2", "buildid4", 55, 3)
+	p4 := &workflowpb.ResetPointInfo{
+		BuildId:                      "buildid4",
+		BinaryChecksum:               "checksum2",
+		RunId:                        s.mutableState.executionState.RunId,
+		FirstWorkflowTaskCompletedId: 55,
+	}
+	s.Equal([]*workflowpb.ResetPointInfo{p2, p3, p4}, s.cleanedResetPoints().GetPoints())
+}
+
+func (s *mutableStateSuite) TestRolloverAutoResetPointsWithExpiringTime() {
+	runId1 := uuid.New()
+	runId2 := uuid.New()
+	runId3 := uuid.New()
+
+	retention := 3 * time.Hour
+	base := time.Now()
+	t1 := timestamppb.New(base)
+	now := timestamppb.New(base.Add(1 * time.Hour))
+	t2 := timestamppb.New(base.Add(2 * time.Hour))
+	t3 := timestamppb.New(base.Add(4 * time.Hour))
+
+	points := []*workflowpb.ResetPointInfo{
+		&workflowpb.ResetPointInfo{
+			BuildId:                      "buildid1",
+			RunId:                        runId1,
+			FirstWorkflowTaskCompletedId: 32,
+			ExpireTime:                   t1,
+		},
+		&workflowpb.ResetPointInfo{
+			BuildId:                      "buildid2",
+			RunId:                        runId1,
+			FirstWorkflowTaskCompletedId: 63,
+			ExpireTime:                   t1,
+		},
+		&workflowpb.ResetPointInfo{
+			BuildId:                      "buildid3",
+			RunId:                        runId2,
+			FirstWorkflowTaskCompletedId: 94,
+			ExpireTime:                   t2,
+		},
+		&workflowpb.ResetPointInfo{
+			BuildId:                      "buildid4",
+			RunId:                        runId3,
+			FirstWorkflowTaskCompletedId: 125,
+		},
 	}
 
-	payload, found := searchAttributes[searchattribute.BuildIds]
+	newPoints := rolloverAutoResetPointsWithExpiringTime(&workflowpb.ResetPoints{Points: points}, runId3, now.AsTime(), retention)
+	expected := []*workflowpb.ResetPointInfo{
+		&workflowpb.ResetPointInfo{
+			BuildId:                      "buildid3",
+			RunId:                        runId2,
+			FirstWorkflowTaskCompletedId: 94,
+			ExpireTime:                   t2,
+		},
+		&workflowpb.ResetPointInfo{
+			BuildId:                      "buildid4",
+			RunId:                        runId3,
+			FirstWorkflowTaskCompletedId: 125,
+			ExpireTime:                   t3,
+		},
+	}
+	s.Equal(expected, newPoints.Points)
+}
+
+func (s *mutableStateSuite) getBuildIdsFromMutableState() []string {
+	payload, found := s.mutableState.executionInfo.SearchAttributes[searchattribute.BuildIds]
 	if !found {
 		return []string{}
 	}
@@ -1223,13 +1326,14 @@ func (s *mutableStateSuite) getBuildIdsFromMutableState() []string {
 	return buildIDs
 }
 
-func (s *mutableStateSuite) getResetPointsBinaryChecksumsFromMutableState() []string {
-	resetPoints := s.mutableState.executionInfo.GetAutoResetPoints().GetPoints()
-	binaryChecksums := make([]string, len(resetPoints))
-	for i, point := range resetPoints {
-		binaryChecksums[i] = point.GetBinaryChecksum()
+// return reset points minus a few fields that are hard to check for equality
+func (s *mutableStateSuite) cleanedResetPoints() *workflowpb.ResetPoints {
+	out := common.CloneProto(s.mutableState.executionInfo.GetAutoResetPoints())
+	for _, point := range out.GetPoints() {
+		point.CreateTime = nil // current time
+		point.ExpireTime = nil
 	}
-	return binaryChecksums
+	return out
 }
 
 func (s *mutableStateSuite) TestCollapseVisibilityTasks() {

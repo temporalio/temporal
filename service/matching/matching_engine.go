@@ -105,6 +105,7 @@ type (
 	pollMetadata struct {
 		ratePerSecond             *float64
 		workerVersionCapabilities *commonpb.WorkerVersionCapabilities
+		forwardedFrom             string
 	}
 
 	namespaceUpdateLocks struct {
@@ -504,16 +505,15 @@ pollLoop:
 		}
 		pollMetadata := &pollMetadata{
 			workerVersionCapabilities: request.WorkerVersionCapabilities,
+			forwardedFrom:             req.GetForwardedSource(),
 		}
-		task, err := e.getTask(pollerCtx, taskQueue, stickyInfo, pollMetadata)
+		task, err := e.pollTask(pollerCtx, taskQueue, stickyInfo, pollMetadata)
 		if err != nil {
 			if err == errNoTasks {
 				return emptyPollWorkflowTaskQueueResponse, nil
 			}
 			return nil, err
 		}
-
-		e.emitForwardedSourceStats(opMetrics, task.isForwarded(), req.GetForwardedSource())
 
 		if task.isStarted() {
 			// tasks received from remote are already started. So, simply forward the response
@@ -683,19 +683,18 @@ pollLoop:
 		pollerCtx = context.WithValue(pollerCtx, identityKey, request.GetIdentity())
 		pollMetadata := &pollMetadata{
 			workerVersionCapabilities: request.WorkerVersionCapabilities,
+			forwardedFrom:             req.GetForwardedSource(),
 		}
 		if request.TaskQueueMetadata != nil && request.TaskQueueMetadata.MaxTasksPerSecond != nil {
 			pollMetadata.ratePerSecond = &request.TaskQueueMetadata.MaxTasksPerSecond.Value
 		}
-		task, err := e.getTask(pollerCtx, taskQueue, stickyInfo, pollMetadata)
+		task, err := e.pollTask(pollerCtx, taskQueue, stickyInfo, pollMetadata)
 		if err != nil {
 			if err == errNoTasks {
 				return emptyPollActivityTaskQueueResponse, nil
 			}
 			return nil, err
 		}
-
-		e.emitForwardedSourceStats(opMetrics, task.isForwarded(), req.GetForwardedSource())
 
 		if task.isStarted() {
 			// tasks received from remote are already started. So, simply forward the response
@@ -815,7 +814,7 @@ func (e *matchingEngineImpl) RespondQueryTaskCompleted(
 	opMetrics metrics.Handler,
 ) error {
 	if err := e.deliverQueryResult(request.GetTaskId(), &queryResult{workerResponse: request}); err != nil {
-		opMetrics.Counter(metrics.RespondQueryTaskFailedPerTaskQueueCounter.GetMetricName()).Record(1)
+		opMetrics.Counter(metrics.RespondQueryTaskFailedPerTaskQueueCounter.Name()).Record(1)
 		return err
 	}
 	return nil
@@ -1049,6 +1048,8 @@ func (e *matchingEngineImpl) GetTaskQueueUserData(
 		var cancel context.CancelFunc
 		ctx, cancel = newChildContext(ctx, e.config.GetUserDataLongPollTimeout(), returnEmptyTaskTimeBudget)
 		defer cancel()
+		// mark alive so that it doesn't unload while a child partition is doing a long poll
+		tqMgr.MarkAlive()
 	}
 
 	for {
@@ -1312,15 +1313,13 @@ pollLoop:
 		pollMetadata := &pollMetadata{
 			workerVersionCapabilities: request.WorkerVersionCapabilities,
 		}
-		task, err := e.getTask(pollerCtx, taskQueue, normalStickyInfo, pollMetadata)
+		task, err := e.pollTask(pollerCtx, taskQueue, normalStickyInfo, pollMetadata)
 		if err != nil {
 			if errors.Is(err, errNoTasks) {
 				return &matchingservice.PollNexusTaskQueueResponse{}, nil
 			}
 			return nil, err
 		}
-
-		e.emitForwardedSourceStats(opMetrics, task.isForwarded(), req.GetForwardedSource())
 
 		if task.isStarted() {
 			// tasks received from remote are already started. So, simply forward the response
@@ -1350,7 +1349,7 @@ pollLoop:
 func (e *matchingEngineImpl) RespondNexusTaskCompleted(ctx context.Context, request *matchingservice.RespondNexusTaskCompletedRequest, opMetrics metrics.Handler) (*matchingservice.RespondNexusTaskCompletedResponse, error) {
 	resultCh, ok := e.lockableNexusResultMap.pop(request.GetTaskId())
 	if !ok {
-		opMetrics.Counter(metrics.RespondNexusTaskFailedPerTaskQueueCounter.GetMetricName()).Record(1)
+		opMetrics.Counter(metrics.RespondNexusTaskFailedPerTaskQueueCounter.Name()).Record(1)
 		return nil, serviceerror.NewNotFound("nexus task not found or already expired")
 	}
 	resultCh <- &nexusResult{
@@ -1363,7 +1362,7 @@ func (e *matchingEngineImpl) RespondNexusTaskCompleted(ctx context.Context, requ
 func (e *matchingEngineImpl) RespondNexusTaskFailed(ctx context.Context, request *matchingservice.RespondNexusTaskFailedRequest, opMetrics metrics.Handler) (*matchingservice.RespondNexusTaskFailedResponse, error) {
 	resultCh, ok := e.lockableNexusResultMap.pop(request.GetTaskId())
 	if !ok {
-		opMetrics.Counter(metrics.RespondNexusTaskFailedPerTaskQueueCounter.GetMetricName()).Record(1)
+		opMetrics.Counter(metrics.RespondNexusTaskFailedPerTaskQueueCounter.Name()).Record(1)
 		return nil, serviceerror.NewNotFound("nexus task not found or already expired")
 	}
 	resultCh <- &nexusResult{
@@ -1415,7 +1414,7 @@ func (e *matchingEngineImpl) getAllPartitions(
 	return partitionKeys, nil
 }
 
-func (e *matchingEngineImpl) getTask(
+func (e *matchingEngineImpl) pollTask(
 	ctx context.Context,
 	origTaskQueue *taskQueueID,
 	stickyInfo stickyInfo,
@@ -1453,7 +1452,7 @@ func (e *matchingEngineImpl) getTask(
 		defer baseTqm.UpdatePollerInfo(pollerIdentity(identity), pollMetadata)
 	}
 
-	return tqm.GetTask(ctx, pollMetadata)
+	return tqm.PollTask(ctx, pollMetadata)
 }
 
 func (e *matchingEngineImpl) unloadTaskQueue(unloadTQM taskQueueManager) {
@@ -1491,7 +1490,7 @@ func (e *matchingEngineImpl) updateTaskQueueGauge(tqm taskQueueManager, delta in
 		ns = nsEntry.Name()
 	}
 
-	e.metricsHandler.Gauge(metrics.LoadedTaskQueueGauge.GetMetricName()).Record(
+	e.metricsHandler.Gauge(metrics.LoadedTaskQueueGauge.Name()).Record(
 		float64(newCount),
 		metrics.NamespaceTag(ns.String()),
 		metrics.TaskTypeTag(countKey.taskType.String()),
@@ -1532,7 +1531,7 @@ func (e *matchingEngineImpl) createPollWorkflowTaskQueueResponse(
 		serializedToken, _ = e.tokenSerializer.Serialize(taskToken)
 		if task.responseC == nil {
 			ct := timestamp.TimeValue(task.event.Data.CreateTime)
-			metricsHandler.Timer(metrics.AsyncMatchLatencyPerTaskQueue.GetMetricName()).Record(time.Since(ct))
+			metricsHandler.Timer(metrics.AsyncMatchLatencyPerTaskQueue.Name()).Record(time.Since(ct))
 		}
 	}
 
@@ -1567,7 +1566,7 @@ func (e *matchingEngineImpl) createPollActivityTaskQueueResponse(
 	}
 	if task.responseC == nil {
 		ct := timestamp.TimeValue(task.event.Data.CreateTime)
-		metricsHandler.Timer(metrics.AsyncMatchLatencyPerTaskQueue.GetMetricName()).Record(time.Since(ct))
+		metricsHandler.Timer(metrics.AsyncMatchLatencyPerTaskQueue.Name()).Record(time.Since(ct))
 	}
 
 	taskToken := tasktoken.NewActivityTaskToken(
@@ -1637,24 +1636,6 @@ func (e *matchingEngineImpl) recordActivityTaskStarted(
 		RequestId:         uuid.New(),
 		PollRequest:       pollReq,
 	})
-}
-
-func (e *matchingEngineImpl) emitForwardedSourceStats(
-	metricsHandler metrics.Handler,
-	isTaskForwarded bool,
-	pollForwardedSource string,
-) {
-	isPollForwarded := len(pollForwardedSource) > 0
-	switch {
-	case isTaskForwarded && isPollForwarded:
-		metricsHandler.Counter(metrics.RemoteToRemoteMatchPerTaskQueueCounter.GetMetricName()).Record(1)
-	case isTaskForwarded:
-		metricsHandler.Counter(metrics.RemoteToLocalMatchPerTaskQueueCounter.GetMetricName()).Record(1)
-	case isPollForwarded:
-		metricsHandler.Counter(metrics.LocalToRemoteMatchPerTaskQueueCounter.GetMetricName()).Record(1)
-	default:
-		metricsHandler.Counter(metrics.LocalToLocalMatchPerTaskQueueCounter.GetMetricName()).Record(1)
-	}
 }
 
 func (m *lockableResultMap[T]) put(key string, value chan T) {

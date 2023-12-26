@@ -39,7 +39,7 @@ import (
 	"go.temporal.io/server/tests"
 )
 
-func (s *nDCFunctionalTestSuite) TestReplicationMessageDLQ() {
+func (s *NDCFunctionalTestSuite) TestReplicationMessageDLQ() {
 	s.T().SkipNow()
 
 	var shardID int32 = 1

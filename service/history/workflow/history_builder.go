@@ -1571,7 +1571,7 @@ func (b *HistoryBuilder) emitInorderedBufferedEvents(bufferedEvents []*historypb
 	}
 
 	if inorderedEventsCount > 0 && b.metricsHandler != nil {
-		b.metricsHandler.Counter(metrics.InorderBufferedEventsCounter.GetMetricName()).Record(inorderedEventsCount)
+		b.metricsHandler.Counter(metrics.InorderBufferedEventsCounter.Name()).Record(inorderedEventsCount)
 	}
 }
 

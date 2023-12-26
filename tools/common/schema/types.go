@@ -41,12 +41,14 @@ type (
 		DBName        string
 		TargetVersion string
 		SchemaDir     string
+		SchemaName    string
 		IsDryRun      bool
 	}
 	// SetupConfig holds the config
 	// params need by the SetupTask
 	SetupConfig struct {
 		SchemaFilePath    string
+		SchemaName        string
 		InitialVersion    string
 		Overwrite         bool // overwrite previous data
 		DisableVersioning bool // do not use schema versioning
@@ -69,6 +71,8 @@ type (
 		WriteSchemaUpdateLog(oldVersion string, newVersion string, manifestMD5 string, desc string) error
 		// Close gracefully closes the client object
 		Close()
+		// Type gives the type of db (e.g. "cassandra", "sql")
+		Type() string
 	}
 )
 
@@ -105,6 +109,8 @@ const (
 	CLIOptTargetVersion = "version"
 	// CLIOptSchemaDir is the cli option for schema directory
 	CLIOptSchemaDir = "schema-dir"
+	// CLIOptSchemaName is the cli option for which pre-embedded schema to use
+	CLIOptSchemaName = "schema-name"
 	// CLIOptReplicationFactor is the cli option for replication factor
 	CLIOptReplicationFactor = "replication-factor"
 	// CLIOptDatacenter is the cli option for NetworkTopologyStrategy datacenter
@@ -150,6 +156,8 @@ const (
 	CLIFlagTargetVersion = CLIOptTargetVersion + ", v"
 	// CLIFlagSchemaDir is the cli flag for schema directory
 	CLIFlagSchemaDir = CLIOptSchemaDir + ", d"
+	// CLIFlagSchemaName is the cli flag that says which pre-embedded schema to use
+	CLIFlagSchemaName = CLIOptSchemaName + ", s"
 	// CLIFlagReplicationFactor is the cli flag for replication factor
 	CLIFlagReplicationFactor = CLIOptReplicationFactor + ", rf"
 	// CLIFlagDatacenter is the cli option for NetworkTopologyStrategy datacenter

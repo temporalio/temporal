@@ -70,6 +70,7 @@ type (
 	FunctionalTestBase struct {
 		suite.Suite
 
+		testClusterFactory     TestClusterFactory
 		testCluster            *TestCluster
 		testClusterConfig      *TestClusterConfig
 		engine                 FrontendClient
@@ -108,6 +109,7 @@ func WithFxOptionsForService(serviceName primitives.ServiceName, options ...fx.O
 }
 
 func (s *FunctionalTestBase) setupSuite(defaultClusterConfigFile string, options ...Option) {
+	s.testClusterFactory = NewTestClusterFactory()
 	s.checkTestShard()
 
 	params := ApplyTestClusterParams(options)
@@ -148,7 +150,7 @@ func (s *FunctionalTestBase) setupSuite(defaultClusterConfigFile string, options
 		s.httpAPIAddress = TestFlags.FrontendHTTPAddr
 	} else {
 		s.Logger.Info("Running functional test against test cluster")
-		cluster, err := NewCluster(s.T(), clusterConfig, s.Logger)
+		cluster, err := s.testClusterFactory.NewCluster(s.T(), clusterConfig, s.Logger)
 		s.Require().NoError(err)
 		s.testCluster = cluster
 		s.engine = s.testCluster.GetFrontendClient()

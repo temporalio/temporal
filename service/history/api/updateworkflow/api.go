@@ -211,7 +211,20 @@ func Invoke(
 		}
 
 		if err != nil {
-			return nil, err
+			shardCtx.GetLogger().Warn("Unable to add WorkflowTask directly to matching.",
+				tag.WorkflowNamespace(req.Request.Namespace),
+				tag.WorkflowNamespaceID(wfKey.NamespaceID),
+				tag.WorkflowID(wfKey.WorkflowID),
+				tag.WorkflowRunID(wfKey.RunID),
+				tag.Error(err))
+
+			// Intentionally just log error here and don't return it to the client.
+			// If adding speculative WT to matching failed with error,
+			// this error can't be handled outside of WF lock and can't be returned to the client (because it is not a client error).
+			// This speculative WT will be timed out in tasks.SpeculativeWorkflowTaskScheduleToStartTimeout (5) seconds,
+			// and new normal WT will be scheduled.
+			// If subsequent attempt succeeds within current context timeout, caller of this API will get a valid response.
+			err = nil
 		}
 	}
 

@@ -146,7 +146,7 @@ func (adh *AdminHandler) getWorkflowExecutionRawHistoryV2(
 
 	pageToken.PersistenceToken = rawHistoryResponse.NextPageToken
 	size := rawHistoryResponse.Size
-	adh.metricsHandler.Histogram(metrics.HistorySize.GetMetricName(), metrics.HistorySize.GetMetricUnit()).Record(
+	adh.metricsHandler.Histogram(metrics.HistorySize.Name(), metrics.HistorySize.Unit()).Record(
 		int64(size),
 		metrics.NamespaceTag(ns.Name().String()),
 		metrics.OperationTag(metrics.AdminGetWorkflowExecutionRawHistoryV2Scope),

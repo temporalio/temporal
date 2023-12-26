@@ -42,7 +42,6 @@ import (
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/backoff"
 	"go.temporal.io/server/common/collection"
-	"go.temporal.io/server/common/convert"
 	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/headers"
@@ -51,6 +50,7 @@ import (
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence"
+	"go.temporal.io/server/common/util"
 	"go.temporal.io/server/service/history/configs"
 	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/tasks"
@@ -266,13 +266,13 @@ func (p *ackMgrImpl) GetTasks(
 	}
 
 	// Note this is a very rough indicator of how much the remote DC is behind on this shard.
-	p.metricsHandler.Histogram(metrics.ReplicationTasksLag.GetMetricName(), metrics.ReplicationTasksLag.GetMetricUnit()).Record(
+	p.metricsHandler.Histogram(metrics.ReplicationTasksLag.Name(), metrics.ReplicationTasksLag.Unit()).Record(
 		maxTaskID-lastTaskID,
 		metrics.TargetClusterTag(pollingCluster),
 		metrics.OperationTag(metrics.ReplicationTaskFetcherScope),
 	)
 
-	p.metricsHandler.Histogram(metrics.ReplicationTasksFetched.GetMetricName(), metrics.ReplicationTasksFetched.GetMetricUnit()).
+	p.metricsHandler.Histogram(metrics.ReplicationTasksFetched.Name(), metrics.ReplicationTasksFetched.Unit()).
 		Record(int64(len(replicationTasks)))
 
 	replicationEventTime := timestamppb.New(p.shardContext.GetTimeSource().Now())
@@ -425,7 +425,7 @@ func (p *ackMgrImpl) taskIDsRange(
 
 	p.Lock()
 	defer p.Unlock()
-	defer func() { p.maxTaskID = convert.Int64Ptr(maxTaskID) }()
+	defer func() { p.maxTaskID = util.Ptr(maxTaskID) }()
 
 	now := p.shardContext.GetTimeSource().Now()
 	if p.sanityCheckTime.IsZero() || p.sanityCheckTime.Before(now) {

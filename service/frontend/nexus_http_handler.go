@@ -76,7 +76,7 @@ func NewNexusHTTPHandler(
 		namespaceConcurrencyLimitInterceptor: namespaceConcurrencyLimitIntercptor,
 		rateLimitInterceptor:                 rateLimitInterceptor,
 		enabled:                              serviceConfig.EnableNexusHTTPHandler,
-		preprocessErrorCounter:               metricsHandler.Counter(metrics.NexusRequestPreProcessErrors.GetMetricName()).Record,
+		preprocessErrorCounter:               metricsHandler.Counter(metrics.NexusRequestPreProcessErrors.Name()).Record,
 		nexusHandler: nexus.NewHTTPHandler(nexus.HandlerOptions{
 			Handler: &nexusHandler{
 				logger:            logger,

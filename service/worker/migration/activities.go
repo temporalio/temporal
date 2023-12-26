@@ -222,7 +222,7 @@ func (a *activities) checkReplicationOnce(ctx context.Context, waitRequest waitR
 	}
 
 	// emit metrics about how many shards are ready
-	a.metricsHandler.Gauge(metrics.CatchUpReadyShardCountGauge.GetMetricName()).Record(
+	a.metricsHandler.Gauge(metrics.CatchUpReadyShardCountGauge.Name()).Record(
 		float64(readyShardCount),
 		metrics.OperationTag(metrics.MigrationWorkflowScope),
 		metrics.TargetClusterTag(waitRequest.RemoteCluster))
@@ -300,7 +300,7 @@ func (a *activities) checkHandoverOnce(ctx context.Context, waitRequest waitHand
 	}
 
 	// emit metrics about how many shards are ready
-	a.metricsHandler.Gauge(metrics.HandoverReadyShardCountGauge.GetMetricName()).Record(
+	a.metricsHandler.Gauge(metrics.HandoverReadyShardCountGauge.Name()).Record(
 		float64(readyShardCount),
 		metrics.OperationTag(metrics.MigrationWorkflowScope),
 		metrics.TargetClusterTag(waitRequest.RemoteCluster),
@@ -428,7 +428,7 @@ func (a *activities) GenerateReplicationTasks(ctx context.Context, request *gene
 
 	start := time.Now()
 	defer func() {
-		a.forceReplicationMetricsHandler.Timer(metrics.GenerateReplicationTasksLatency.GetMetricName()).Record(time.Since(start))
+		a.forceReplicationMetricsHandler.Timer(metrics.GenerateReplicationTasksLatency.Name()).Record(time.Since(start))
 	}()
 
 	startIndex := 0
@@ -582,7 +582,7 @@ func (a *activities) checkSkipWorkflowExecution(
 		if isNotFoundServiceError(err) {
 			// The outstanding workflow execution may be deleted (due to retention) on source cluster after replication tasks were generated.
 			// Since retention runs on both source/target clusters, such execution may also be deleted (hence not found) from target cluster.
-			a.forceReplicationMetricsHandler.Counter(metrics.EncounterNotFoundWorkflowCount.GetMetricName()).Record(1)
+			a.forceReplicationMetricsHandler.Counter(metrics.EncounterNotFoundWorkflowCount.Name()).Record(1)
 			return verifyResult{
 				status: skipped,
 				reason: reasonWorkflowNotFound,
@@ -597,7 +597,7 @@ func (a *activities) checkSkipWorkflowExecution(
 	// Zombie workflow should be a transient state. However, if there is Zombie workflow on the source cluster,
 	// it is skipped to avoid such workflow being processed on the target cluster.
 	if resp.GetDatabaseMutableState().GetExecutionState().GetState() == enumsspb.WORKFLOW_EXECUTION_STATE_ZOMBIE {
-		a.forceReplicationMetricsHandler.Counter(metrics.EncounterZombieWorkflowCount.GetMetricName()).Record(1)
+		a.forceReplicationMetricsHandler.Counter(metrics.EncounterZombieWorkflowCount.Name()).Record(1)
 		a.logger.Info("createReplicationTasks skip Zombie workflow", tags...)
 		return verifyResult{
 			status: skipped,
@@ -609,7 +609,7 @@ func (a *activities) checkSkipWorkflowExecution(
 	if closeTime := resp.GetDatabaseMutableState().GetExecutionInfo().GetCloseTime(); closeTime != nil && ns != nil && ns.Retention() > 0 {
 		deleteTime := closeTime.AsTime().Add(ns.Retention())
 		if deleteTime.Before(time.Now()) {
-			a.forceReplicationMetricsHandler.Counter(metrics.EncounterPassRetentionWorkflowCount.GetMetricName()).Record(1)
+			a.forceReplicationMetricsHandler.Counter(metrics.EncounterPassRetentionWorkflowCount.Name()).Record(1)
 			return verifyResult{
 				status: skipped,
 				reason: reasonWorkflowCloseToRetention,
@@ -635,17 +635,17 @@ func (a *activities) verifySingleReplicationTask(
 		Namespace: request.Namespace,
 		Execution: we,
 	})
-	a.forceReplicationMetricsHandler.Timer(metrics.VerifyDescribeMutableStateLatency.GetMetricName()).Record(time.Since(s))
+	a.forceReplicationMetricsHandler.Timer(metrics.VerifyDescribeMutableStateLatency.Name()).Record(time.Since(s))
 
 	switch err.(type) {
 	case nil:
-		a.forceReplicationMetricsHandler.WithTags(metrics.NamespaceTag(request.Namespace)).Counter(metrics.VerifyReplicationTaskSuccess.GetMetricName()).Record(1)
+		a.forceReplicationMetricsHandler.WithTags(metrics.NamespaceTag(request.Namespace)).Counter(metrics.VerifyReplicationTaskSuccess.Name()).Record(1)
 		return verifyResult{
 			status: verified,
 		}, nil
 
 	case *serviceerror.NotFound:
-		a.forceReplicationMetricsHandler.WithTags(metrics.NamespaceTag(request.Namespace)).Counter(metrics.VerifyReplicationTaskNotFound.GetMetricName()).Record(1)
+		a.forceReplicationMetricsHandler.WithTags(metrics.NamespaceTag(request.Namespace)).Counter(metrics.VerifyReplicationTaskNotFound.Name()).Record(1)
 		// Calling checkSkipWorkflowExecution for every NotFound is sub-optimal as most common case to skip is workfow being deleted due to retention.
 		// A better solution is to only check the existence for workflow which is close to retention period.
 		return a.checkSkipWorkflowExecution(ctx, request, we, ns)
@@ -657,7 +657,7 @@ func (a *activities) verifySingleReplicationTask(
 
 	default:
 		a.forceReplicationMetricsHandler.WithTags(metrics.NamespaceTag(request.Namespace), metrics.ServiceErrorTypeTag(err)).
-			Counter(metrics.VerifyReplicationTaskFailed.GetMetricName()).Record(1)
+			Counter(metrics.VerifyReplicationTaskFailed.Name()).Record(1)
 
 		return verifyResult{
 			status: notVerified,
@@ -682,7 +682,7 @@ func (a *activities) verifyReplicationTasks(
 		}
 
 		heartbeat(*details)
-		a.forceReplicationMetricsHandler.Timer(metrics.VerifyReplicationTasksLatency.GetMetricName()).Record(time.Since(start))
+		a.forceReplicationMetricsHandler.Timer(metrics.VerifyReplicationTasksLatency.Name()).Record(time.Since(start))
 	}()
 
 	for ; details.NextIndex < len(request.Executions); details.NextIndex++ {

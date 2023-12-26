@@ -70,6 +70,8 @@ const (
 	// Don't put possibly-overlapping runs (from SCHEDULE_OVERLAP_POLICY_ALLOW_ALL) in
 	// RunningWorkflows.
 	DontTrackOverlapping = 3
+	// start time in backfill is inclusive rather than exclusive
+	InclusiveBackfillStartTime = 4
 )
 
 const (
@@ -200,8 +202,8 @@ var (
 		MaxBufferSize:                     1000,
 		AllowZeroSleep:                    true,
 		ReuseTimer:                        true,
-		NextTimeCacheV2Size:               14, // see note below
-		Version:                           DontTrackOverlapping,
+		NextTimeCacheV2Size:               14,                   // see note below
+		Version:                           DontTrackOverlapping, // TODO: upgrade to InclusiveBackfillStartTime
 	}
 
 	// Note on NextTimeCacheV2Size: This value must be > FutureActionCountForList. Each
@@ -389,8 +391,17 @@ func (s *scheduler) processPatch(patch *schedpb.SchedulePatch) {
 	}
 
 	for _, bfr := range patch.BackfillRequest {
+		startTime := timestamp.TimeValue(bfr.GetStartTime())
+
+		// In previous versions the backfill start time was exclusive, ie when
+		// the start time of the backfill matched the schedule's spec, it would
+		// not be executed. This new version makes it inclusive instead.
+		if s.hasMinVersion(InclusiveBackfillStartTime) {
+			startTime = startTime.Add(-1 * time.Millisecond)
+		}
+
 		s.processTimeRange(
-			timestamp.TimeValue(bfr.GetStartTime()),
+			startTime,
 			timestamp.TimeValue(bfr.GetEndTime()),
 			bfr.GetOverlapPolicy(),
 			true,
@@ -543,7 +554,7 @@ func (s *scheduler) processTimeRange(
 		}
 		if !manual && t2.Sub(t1) > catchupWindow {
 			s.logger.Warn("Schedule missed catchup window", "now", t2, "time", t1)
-			s.metrics.Counter(metrics.ScheduleMissedCatchupWindow.GetMetricName()).Inc(1)
+			s.metrics.Counter(metrics.ScheduleMissedCatchupWindow.Name()).Inc(1)
 			s.Info.MissedCatchupWindow++
 			continue
 		}
@@ -920,7 +931,7 @@ func (s *scheduler) addStart(nominalTime, actualTime time.Time, overlapPolicy en
 	s.logger.Debug("addStart", "start-time", nominalTime, "actual-start-time", actualTime, "overlap-policy", overlapPolicy, "manual", manual)
 	if s.tweakables.MaxBufferSize > 0 && len(s.State.BufferedStarts) >= s.tweakables.MaxBufferSize {
 		s.logger.Warn("Buffer too large", "start-time", nominalTime, "overlap-policy", overlapPolicy, "manual", manual)
-		s.metrics.Counter(metrics.ScheduleBufferOverruns.GetMetricName()).Inc(1)
+		s.metrics.Counter(metrics.ScheduleBufferOverruns.Name()).Inc(1)
 		s.Info.BufferDropped += 1
 		return
 	}
@@ -982,14 +993,14 @@ func (s *scheduler) processBuffer() bool {
 			metrics.ScheduleActionTypeTag: metrics.ScheduleActionStartWorkflow})
 		if err != nil {
 			s.logger.Error("Failed to start workflow", "error", err)
-			metricsWithTag.Counter(metrics.ScheduleActionErrors.GetMetricName()).Inc(1)
+			metricsWithTag.Counter(metrics.ScheduleActionErrors.Name()).Inc(1)
 			// TODO: we could put this back in the buffer and retry (after a delay) up until
 			// the catchup window. of course, it's unlikely that this workflow would be making
 			// progress while we're unable to start a new one, so maybe it's not that valuable.
 			tryAgain = true
 			continue
 		}
-		metricsWithTag.Counter(metrics.ScheduleActionSuccess.GetMetricName()).Inc(1)
+		metricsWithTag.Counter(metrics.ScheduleActionSuccess.Name()).Inc(1)
 		nonOverlapping := start == action.nonOverlappingStart
 		s.recordAction(result, nonOverlapping)
 	}
@@ -1091,7 +1102,7 @@ func (s *scheduler) startWorkflow(
 		var appErr *temporal.ApplicationError
 		var details rateLimitedDetails
 		if errors.As(err, &appErr) && appErr.Type() == rateLimitedErrorType && appErr.Details(&details) == nil {
-			s.metrics.Counter(metrics.ScheduleRateLimited.GetMetricName()).Inc(1)
+			s.metrics.Counter(metrics.ScheduleRateLimited.Name()).Inc(1)
 			workflow.Sleep(s.ctx, details.Delay)
 			req.CompletedRateLimitSleep = true // only use rate limiter once
 			continue
@@ -1190,7 +1201,7 @@ func (s *scheduler) cancelWorkflow(ex *commonpb.WorkflowExecution) {
 	err := workflow.ExecuteLocalActivity(ctx, s.a.CancelWorkflow, areq).Get(s.ctx, nil)
 	if err != nil {
 		s.logger.Error("cancel workflow failed", "workflow", ex.WorkflowId, "error", err)
-		s.metrics.Counter(metrics.ScheduleCancelWorkflowErrors.GetMetricName()).Inc(1)
+		s.metrics.Counter(metrics.ScheduleCancelWorkflowErrors.Name()).Inc(1)
 	}
 	// Note: the local activity has completed (or failed) here but the workflow might take time
 	// to close since a cancel is only a request.
@@ -1208,7 +1219,7 @@ func (s *scheduler) terminateWorkflow(ex *commonpb.WorkflowExecution) {
 	err := workflow.ExecuteLocalActivity(ctx, s.a.TerminateWorkflow, areq).Get(s.ctx, nil)
 	if err != nil {
 		s.logger.Error("terminate workflow failed", "workflow", ex.WorkflowId, "error", err)
-		s.metrics.Counter(metrics.ScheduleTerminateWorkflowErrors.GetMetricName()).Inc(1)
+		s.metrics.Counter(metrics.ScheduleTerminateWorkflowErrors.Name()).Inc(1)
 	}
 	// Note: the local activity has completed (or failed) here but we'll still wait until we
 	// observe the workflow close (with a watcher) to start the next one.

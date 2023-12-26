@@ -70,7 +70,7 @@ func newWorkflowTaskStateMachine(
 	}
 }
 
-func (m *workflowTaskStateMachine) ReplicateWorkflowTaskScheduledEvent(
+func (m *workflowTaskStateMachine) ApplyWorkflowTaskScheduledEvent(
 	version int64,
 	scheduledEventID int64,
 	taskQueue *taskqueuepb.TaskQueue,
@@ -113,7 +113,7 @@ func (m *workflowTaskStateMachine) ReplicateWorkflowTaskScheduledEvent(
 	return workflowTask, nil
 }
 
-func (m *workflowTaskStateMachine) ReplicateTransientWorkflowTaskScheduled() (*WorkflowTaskInfo, error) {
+func (m *workflowTaskStateMachine) ApplyTransientWorkflowTaskScheduled() (*WorkflowTaskInfo, error) {
 	// When workflow task fails/timeout it gets removed from mutable state, but attempt count is incremented.
 	// If attempt count was incremented and now is greater than 1, then next workflow task should be created as transient.
 	// This method will do it only if there is no other workflow task and next workflow task should be transient.
@@ -131,12 +131,12 @@ func (m *workflowTaskStateMachine) ReplicateTransientWorkflowTaskScheduled() (*W
 	//   then AddWorkflowTaskStartedEvent will handle the correction of ScheduledEventID,
 	//   and set the attempt to 1 (convert transient workflow task to normal workflow task).
 	//   2. If no failover happen during the lifetime of this transient workflow task
-	//   then ReplicateWorkflowTaskScheduledEvent will overwrite everything
+	//   then ApplyWorkflowTaskScheduledEvent will overwrite everything
 	//   including the workflow task ScheduledEventID.
 	//
 	// Regarding workflow task timeout calculation:
 	//   1. Attempt will be set to 1, so we still use default workflow task timeout.
-	//   2. ReplicateWorkflowTaskScheduledEvent will overwrite everything including WorkflowTaskTimeout.
+	//   2. ApplyWorkflowTaskScheduledEvent will overwrite everything including WorkflowTaskTimeout.
 	workflowTask := &WorkflowTaskInfo{
 		Version:             m.ms.GetCurrentVersion(),
 		ScheduledEventID:    m.ms.GetNextEventID(),
@@ -158,7 +158,7 @@ func (m *workflowTaskStateMachine) ReplicateTransientWorkflowTaskScheduled() (*W
 	return workflowTask, nil
 }
 
-func (m *workflowTaskStateMachine) ReplicateWorkflowTaskStartedEvent(
+func (m *workflowTaskStateMachine) ApplyWorkflowTaskStartedEvent(
 	workflowTask *WorkflowTaskInfo,
 	version int64,
 	scheduledEventID int64,
@@ -175,7 +175,7 @@ func (m *workflowTaskStateMachine) ReplicateWorkflowTaskStartedEvent(
 		if workflowTask == nil {
 			return nil, serviceerror.NewInternal(fmt.Sprintf("unable to find workflow task: %v", scheduledEventID))
 		}
-		// Transient workflow task events are not replicated but attempt count in mutable state
+		// Transient workflow task events are not applied but attempt count in mutable state
 		// can be updated from previous workflow task failed/timeout event.
 		// During replication, "active" side will send 2 batches:
 		//   1. WorkflowTaskScheduledEvent and WorkflowTaskStartedEvent
@@ -210,19 +210,19 @@ func (m *workflowTaskStateMachine) ReplicateWorkflowTaskStartedEvent(
 	return workflowTask, nil
 }
 
-func (m *workflowTaskStateMachine) ReplicateWorkflowTaskCompletedEvent(
+func (m *workflowTaskStateMachine) ApplyWorkflowTaskCompletedEvent(
 	event *historypb.HistoryEvent,
 ) error {
 	m.beforeAddWorkflowTaskCompletedEvent()
 	return m.afterAddWorkflowTaskCompletedEvent(event, WorkflowTaskCompletionLimits{math.MaxInt32, math.MaxInt32})
 }
 
-func (m *workflowTaskStateMachine) ReplicateWorkflowTaskFailedEvent() error {
+func (m *workflowTaskStateMachine) ApplyWorkflowTaskFailedEvent() error {
 	m.failWorkflowTask(true)
 	return nil
 }
 
-func (m *workflowTaskStateMachine) ReplicateWorkflowTaskTimedOutEvent(
+func (m *workflowTaskStateMachine) ApplyWorkflowTaskTimedOutEvent(
 	timeoutType enumspb.TimeoutType,
 ) error {
 	incrementAttempt := true
@@ -265,7 +265,7 @@ func (m *workflowTaskStateMachine) AddWorkflowTaskScheduleToStartTimeoutEvent(
 		common.EmptyEventID,
 		enumspb.TIMEOUT_TYPE_SCHEDULE_TO_START,
 	)
-	if err := m.ReplicateWorkflowTaskTimedOutEvent(enumspb.TIMEOUT_TYPE_SCHEDULE_TO_START); err != nil {
+	if err := m.ApplyWorkflowTaskTimedOutEvent(enumspb.TIMEOUT_TYPE_SCHEDULE_TO_START); err != nil {
 		return nil, err
 	}
 	return event, nil
@@ -340,7 +340,7 @@ func (m *workflowTaskStateMachine) AddWorkflowTaskScheduledEventAsHeartbeat(
 		scheduledEventID = m.ms.GetNextEventID()
 	}
 
-	workflowTask, err := m.ReplicateWorkflowTaskScheduledEvent(
+	workflowTask, err := m.ApplyWorkflowTaskScheduledEvent(
 		m.ms.GetCurrentVersion(),
 		scheduledEventID,
 		taskQueue,
@@ -355,17 +355,13 @@ func (m *workflowTaskStateMachine) AddWorkflowTaskScheduledEventAsHeartbeat(
 	}
 
 	// TODO merge active & passive task generation
-	// Always bypass task generation for speculative workflow task.
 	if !bypassTaskGeneration {
-		generateTimeoutTaskOnly := false
 		if workflowTask.Type == enumsspb.WORKFLOW_TASK_TYPE_SPECULATIVE {
-			generateTimeoutTaskOnly = true
+			err = m.ms.taskGenerator.GenerateScheduleSpeculativeWorkflowTaskTasks(workflowTask)
+		} else {
+			err = m.ms.taskGenerator.GenerateScheduleWorkflowTaskTasks(scheduledEventID)
 		}
-
-		if err := m.ms.taskGenerator.GenerateScheduleWorkflowTaskTasks(
-			scheduledEventID,
-			generateTimeoutTaskOnly,
-		); err != nil {
+		if err != nil {
 			return nil, err
 		}
 	}
@@ -486,7 +482,7 @@ func (m *workflowTaskStateMachine) AddWorkflowTaskStartedEvent(
 		startedEventID = startedEvent.GetEventId()
 	}
 
-	workflowTask, err := m.ReplicateWorkflowTaskStartedEvent(
+	workflowTask, err := m.ApplyWorkflowTaskStartedEvent(
 		workflowTask, m.ms.GetCurrentVersion(), scheduledEventID, startedEventID, requestID, startTime,
 		suggestContinueAsNew, historySizeBytes,
 	)
@@ -511,22 +507,24 @@ func (m *workflowTaskStateMachine) skipWorkflowTaskCompletedEvent(workflowTaskTy
 		// If worker returned commands, they will be converted to events, which must follow by WorkflowTaskCompletedEvent.
 		return false
 	}
-	if len(request.GetMessages()) == 0 {
-		// If both commands & messages are empty, then this is heartbeat response.
+
+	if request.GetForceCreateNewWorkflowTask() {
+		// If ForceCreateNewWorkflowTask is set to true, then this is a heartbeat response.
 		// New WT will be created as Normal and WorkflowTaskCompletedEvent for this WT is also must be written.
-		// In the future, if we decide not to write heartbeat WT to the history, this check should be removed,
+		// In the future, if we decide not to write heartbeat of speculative WT to the history, this check should be removed,
 		// and extra logic should be added to create next WT as Speculative. Currently, new heartbeat WT is always created as Normal.
 		return false
 	}
 
-	onlyUpdateRejectionMessages := true
 	for _, message := range request.Messages {
 		if !message.GetBody().MessageIs((*updatepb.Rejection)(nil)) {
-			onlyUpdateRejectionMessages = false
-			break
+			return false
 		}
 	}
-	return onlyUpdateRejectionMessages
+
+	// Speculative WT can be dropped when response contains only rejection messages.
+	// Empty messages list is equivalent to only rejection messages because server will reject all sent updates (if any).
+	return true
 }
 func (m *workflowTaskStateMachine) AddWorkflowTaskCompletedEvent(
 	workflowTask *WorkflowTaskInfo,
@@ -636,7 +634,7 @@ func (m *workflowTaskStateMachine) AddWorkflowTaskFailedEvent(
 		)
 	}
 
-	if err := m.ReplicateWorkflowTaskFailedEvent(); err != nil {
+	if err := m.ApplyWorkflowTaskFailedEvent(); err != nil {
 		return nil, err
 	}
 
@@ -693,7 +691,7 @@ func (m *workflowTaskStateMachine) AddWorkflowTaskTimedOutEvent(
 		)
 	}
 
-	if err := m.ReplicateWorkflowTaskTimedOutEvent(enumspb.TIMEOUT_TYPE_START_TO_CLOSE); err != nil {
+	if err := m.ApplyWorkflowTaskTimedOutEvent(enumspb.TIMEOUT_TYPE_START_TO_CLOSE); err != nil {
 		return nil, err
 	}
 	return event, nil
@@ -915,17 +913,29 @@ func (m *workflowTaskStateMachine) afterAddWorkflowTaskCompletedEvent(
 	attrs := event.GetWorkflowTaskCompletedEventAttributes()
 	m.ms.executionInfo.LastWorkflowTaskStartedEventId = attrs.GetStartedEventId()
 	m.ms.executionInfo.WorkerVersionStamp = attrs.GetWorkerVersion()
-	if err := m.ms.trackBuildIdFromCompletion(attrs.GetWorkerVersion(), event.GetEventId(), limits); err != nil {
+	addedResetPoint := m.ms.addResetPointFromCompletion(
+		attrs.GetBinaryChecksum(),
+		attrs.GetWorkerVersion().GetBuildId(),
+		event.GetEventId(),
+		limits.MaxResetPoints,
+	)
+	if err := m.ms.updateBuildIdsSearchAttribute(attrs.GetWorkerVersion(), event.GetEventId(), limits.MaxSearchAttributeValueSize); err != nil {
 		return err
 	}
-	return m.ms.addBinaryCheckSumIfNotExists(event, limits.MaxResetPoints)
+	if addedResetPoint && len(attrs.GetBinaryChecksum()) > 0 {
+		if err := m.ms.updateBinaryChecksumSearchAttribute(); err != nil {
+			return err
+		}
+	}
+	return nil
+
 }
 
 func (m *workflowTaskStateMachine) emitWorkflowTaskAttemptStats(
 	attempt int32,
 ) {
 	namespaceName := m.ms.GetNamespaceEntry().Name().String()
-	m.ms.metricsHandler.Histogram(metrics.WorkflowTaskAttempt.GetMetricName(), metrics.WorkflowTaskAttempt.GetMetricUnit()).
+	m.ms.metricsHandler.Histogram(metrics.WorkflowTaskAttempt.Name(), metrics.WorkflowTaskAttempt.Unit()).
 		Record(int64(attempt), metrics.NamespaceTag(namespaceName))
 	if attempt >= int32(m.ms.shard.GetConfig().WorkflowTaskCriticalAttempts()) {
 		m.ms.shard.GetThrottledLogger().Warn("Critical attempts processing workflow task",
@@ -946,7 +956,7 @@ func (m *workflowTaskStateMachine) getStartToCloseTimeout(
 	// always use default timeout as it will either be completely overwritten by
 	// a replicated workflow schedule event from active cluster, or if used, it's
 	// attempt will be reset to 1.
-	// Check ReplicateTransientWorkflowTaskScheduled for details.
+	// Check ApplyTransientWorkflowTaskScheduled for details.
 
 	if defaultTimeout == nil {
 		defaultTimeout = durationpb.New(0)
@@ -1015,7 +1025,7 @@ func (m *workflowTaskStateMachine) convertSpeculativeWorkflowTaskToNormal() erro
 	}
 
 	if wt.StartedEventID != common.EmptyEventID {
-		// If WT is has started then started event is written to the history and
+		// If WT is started then started event is written to the history and
 		// timeout timer task (for START_TO_CLOSE timeout) is created.
 
 		_ = m.ms.hBuilder.AddWorkflowTaskStartedEvent(
@@ -1034,9 +1044,8 @@ func (m *workflowTaskStateMachine) convertSpeculativeWorkflowTaskToNormal() erro
 			return err
 		}
 	} else {
-		if err := m.ms.taskGenerator.GenerateScheduleWorkflowTaskTasks(
-			scheduledEvent.EventId,
-			true, // Only generate SCHEDULE_TO_START timeout timer task, but not a transfer task which push WT to matching because WT was already pushed to matching.
+		if err := m.ms.taskGenerator.GenerateScheduleSpeculativeWorkflowTaskTasks(
+			wt,
 		); err != nil {
 			return err
 		}

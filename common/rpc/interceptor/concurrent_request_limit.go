@@ -123,7 +123,7 @@ func (ni *ConcurrentRequestLimitInterceptor) Allow(
 	count := atomic.AddInt32(counter, int32(token))
 	cleanup := func() { atomic.AddInt32(counter, -int32(token)) }
 
-	mh.Gauge(metrics.ServicePendingRequests.GetMetricName()).Record(float64(count))
+	mh.Gauge(metrics.ServicePendingRequests.Name()).Record(float64(count))
 
 	// frontend.namespaceCount is applied per poller type temporarily to prevent
 	// one poller type to take all token waiting in the long poll.

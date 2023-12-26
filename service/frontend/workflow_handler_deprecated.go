@@ -500,7 +500,6 @@ func (wh *WorkflowHandler) getRawHistory(
 	transientWorkflowTaskInfo *historyspb.TransientWorkflowTaskInfo,
 	branchToken []byte,
 ) ([]*commonpb.DataBlob, []byte, error) {
-	var rawHistory []*commonpb.DataBlob
 	shardID := common.WorkflowIDToHistoryShard(namespaceID.String(), execution.GetWorkflowId(), wh.config.NumHistoryShards)
 
 	resp, err := wh.persistenceExecutionManager.ReadRawHistoryBranch(ctx, &persistence.ReadHistoryBranchRequest{
@@ -515,16 +514,10 @@ func (wh *WorkflowHandler) getRawHistory(
 		return nil, nil, err
 	}
 
-	for _, data := range resp.HistoryEventBlobs {
-		rawHistory = append(rawHistory, &commonpb.DataBlob{
-			EncodingType: data.EncodingType,
-			Data:         data.Data,
-		})
-	}
-
+	rawHistory := resp.HistoryEventBlobs
 	if len(resp.NextPageToken) == 0 && transientWorkflowTaskInfo != nil {
 		if err := wh.validateTransientWorkflowTaskEvents(nextEventID, transientWorkflowTaskInfo); err != nil {
-			metricsHandler.Counter(metrics.ServiceErrIncompleteHistoryCounter.GetMetricName()).Record(1)
+			metricsHandler.Counter(metrics.ServiceErrIncompleteHistoryCounter.Name()).Record(1)
 			wh.logger.Error("getHistory error",
 				tag.WorkflowNamespaceID(namespaceID.String()),
 				tag.WorkflowID(execution.GetWorkflowId()),
@@ -538,10 +531,7 @@ func (wh *WorkflowHandler) getRawHistory(
 			if err != nil {
 				return nil, nil, err
 			}
-			rawHistory = append(rawHistory, &commonpb.DataBlob{
-				EncodingType: enumspb.ENCODING_TYPE_PROTO3,
-				Data:         blob.Data,
-			})
+			rawHistory = append(rawHistory, blob)
 		}
 	}
 
@@ -592,7 +582,7 @@ func (wh *WorkflowHandler) getHistory(
 		return nil, nil, err
 	}
 
-	metricsHandler.Histogram(metrics.HistorySize.GetMetricName(), metrics.HistorySize.GetMetricUnit()).Record(int64(size))
+	metricsHandler.Histogram(metrics.HistorySize.Name(), metrics.HistorySize.Unit()).Record(int64(size))
 
 	isLastPage := len(nextPageToken) == 0
 	if err := wh.verifyHistoryIsComplete(
@@ -602,7 +592,7 @@ func (wh *WorkflowHandler) getHistory(
 		isFirstPage,
 		isLastPage,
 		int(pageSize)); err != nil {
-		metricsHandler.Counter(metrics.ServiceErrIncompleteHistoryCounter.GetMetricName()).Record(1)
+		metricsHandler.Counter(metrics.ServiceErrIncompleteHistoryCounter.Name()).Record(1)
 		wh.logger.Error("getHistory: incomplete history",
 			tag.WorkflowNamespaceID(namespaceID.String()),
 			tag.WorkflowID(execution.GetWorkflowId()),
@@ -612,7 +602,7 @@ func (wh *WorkflowHandler) getHistory(
 
 	if len(nextPageToken) == 0 && transientWorkflowTaskInfo != nil {
 		if err := wh.validateTransientWorkflowTaskEvents(nextEventID, transientWorkflowTaskInfo); err != nil {
-			metricsHandler.Counter(metrics.ServiceErrIncompleteHistoryCounter.GetMetricName()).Record(1)
+			metricsHandler.Counter(metrics.ServiceErrIncompleteHistoryCounter.Name()).Record(1)
 			wh.logger.Error("getHistory error",
 				tag.WorkflowNamespaceID(namespaceID.String()),
 				tag.WorkflowID(execution.GetWorkflowId()),
@@ -671,7 +661,7 @@ func (wh *WorkflowHandler) getHistoryReverse(
 		return nil, nil, 0, err
 	}
 
-	metricsHandler.Histogram(metrics.HistorySize.GetMetricName(), metrics.HistorySize.GetMetricUnit()).Record(int64(size))
+	metricsHandler.Histogram(metrics.HistorySize.Name(), metrics.HistorySize.Unit()).Record(int64(size))
 
 	if err := wh.processOutgoingSearchAttributes(historyEvents, namespace); err != nil {
 		return nil, nil, 0, err

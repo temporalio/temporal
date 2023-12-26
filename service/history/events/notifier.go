@@ -202,7 +202,7 @@ func (notifier *NotifierImpl) dispatchHistoryEventNotification(event *Notificati
 
 	startTime := time.Now().UTC()
 	defer func() {
-		notifier.metricsHandler.Timer(metrics.HistoryEventNotificationFanoutLatency.GetMetricName()).Record(time.Since(startTime))
+		notifier.metricsHandler.Timer(metrics.HistoryEventNotificationFanoutLatency.Name()).Record(time.Since(startTime))
 	}()
 	_, _, _ = notifier.eventsPubsubs.GetAndDo(identifier, func(key interface{}, value interface{}) error {
 		subscribers := value.(map[string]chan *Notification)
@@ -227,19 +227,19 @@ func (notifier *NotifierImpl) enqueueHistoryEventNotification(event *Notificatio
 	default:
 		// in case the channel is already filled with message
 		// this can be caused by high load
-		notifier.metricsHandler.Counter(metrics.HistoryEventNotificationFailDeliveryCount.GetMetricName()).Record(1)
+		notifier.metricsHandler.Counter(metrics.HistoryEventNotificationFailDeliveryCount.Name()).Record(1)
 	}
 }
 
 func (notifier *NotifierImpl) dequeueHistoryEventNotifications() {
 	for {
 		// send out metrics about the current number of messages in flight
-		notifier.metricsHandler.Gauge(metrics.HistoryEventNotificationInFlightMessageGauge.GetMetricName()).Record(float64(len(notifier.eventsChan)))
+		notifier.metricsHandler.Gauge(metrics.HistoryEventNotificationInFlightMessageGauge.Name()).Record(float64(len(notifier.eventsChan)))
 		select {
 		case event := <-notifier.eventsChan:
 			// send out metrics about message processing delay
 			timeelapsed := time.Since(event.Timestamp)
-			notifier.metricsHandler.Timer(metrics.HistoryEventNotificationQueueingLatency.GetMetricName()).Record(timeelapsed)
+			notifier.metricsHandler.Timer(metrics.HistoryEventNotificationQueueingLatency.Name()).Record(timeelapsed)
 
 			notifier.dispatchHistoryEventNotification(event)
 		case <-notifier.closeChan:

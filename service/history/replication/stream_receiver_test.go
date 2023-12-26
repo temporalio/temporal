@@ -205,6 +205,14 @@ func (s *streamReceiverSuite) TestProcessMessage_Err() {
 	s.Error(err)
 }
 
+func (s *streamReceiverSuite) TestSendEventLoop_Panic_Captured() {
+	s.streamReceiver.sendEventLoop() // should not cause panic
+}
+
+func (s *streamReceiverSuite) TestRecvEventLoop_Panic_Captured() {
+	s.streamReceiver.recvEventLoop() // should not cause panic
+}
+
 func (s *mockStream) Send(
 	req *adminservice.StreamWorkflowReplicationMessagesRequest,
 ) error {

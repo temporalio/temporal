@@ -97,20 +97,6 @@ func Invoke(
 	executionInfo := mutableState.GetExecutionInfo()
 	executionState := mutableState.GetExecutionState()
 
-	resetPoints := &workflowpb.ResetPoints{
-		Points: make([]*workflowpb.ResetPointInfo, len(executionInfo.AutoResetPoints.GetPoints())),
-	}
-	for i, p := range executionInfo.AutoResetPoints.GetPoints() {
-		resetPoints.Points[i] = &workflowpb.ResetPointInfo{
-			BinaryChecksum:               p.BinaryChecksum,
-			RunId:                        p.RunId,
-			FirstWorkflowTaskCompletedId: p.FirstWorkflowTaskCompletedId,
-			CreateTime:                   p.CreateTime,
-			ExpireTime:                   p.ExpireTime,
-			Resettable:                   p.Resettable,
-		}
-	}
-
 	result := &historyservice.DescribeWorkflowExecutionResponse{
 		ExecutionConfig: &workflowpb.WorkflowExecutionConfig{
 			TaskQueue: &taskqueuepb.TaskQueue{
@@ -132,7 +118,7 @@ func Invoke(
 			HistoryLength: mutableState.GetNextEventID() - common.FirstEventID,
 			ExecutionTime: executionInfo.ExecutionTime,
 			// Memo and SearchAttributes are set below
-			AutoResetPoints:      resetPoints,
+			AutoResetPoints:      common.CloneProto(executionInfo.AutoResetPoints),
 			TaskQueue:            executionInfo.TaskQueue,
 			StateTransitionCount: executionInfo.StateTransitionCount,
 			HistorySizeBytes:     executionInfo.GetExecutionStats().GetHistorySize(),

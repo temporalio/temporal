@@ -130,6 +130,7 @@ type (
 		healthServer                    *health.Server
 		overrides                       *Overrides
 		membershipMonitor               membership.Monitor
+		healthInterceptor               *interceptor.HealthInterceptor
 
 		// DEPRECATED
 		persistenceExecutionManager persistence.ExecutionManager
@@ -158,6 +159,7 @@ func NewWorkflowHandler(
 	healthServer *health.Server,
 	timeSource clock.TimeSource,
 	membershipMonitor membership.Monitor,
+	healthInterceptor *interceptor.HealthInterceptor,
 ) *WorkflowHandler {
 
 	handler := &WorkflowHandler{
@@ -202,6 +204,7 @@ func NewWorkflowHandler(
 		healthServer:      healthServer,
 		overrides:         NewOverrides(),
 		membershipMonitor: membershipMonitor,
+		healthInterceptor: healthInterceptor,
 	}
 
 	return handler
@@ -219,6 +222,7 @@ func (wh *WorkflowHandler) Start() {
 		go func() {
 			_ = wh.membershipMonitor.WaitUntilInitialized(context.Background())
 			wh.healthServer.SetServingStatus(WorkflowServiceName, healthpb.HealthCheckResponse_SERVING)
+			wh.healthInterceptor.SetHealthy(true)
 			wh.logger.Info("Frontend is now healthy")
 		}()
 	}
@@ -232,6 +236,7 @@ func (wh *WorkflowHandler) Stop() {
 		common.DaemonStatusStopped,
 	) {
 		wh.healthServer.SetServingStatus(WorkflowServiceName, healthpb.HealthCheckResponse_NOT_SERVING)
+		wh.healthInterceptor.SetHealthy(false)
 	}
 }
 
@@ -737,7 +742,7 @@ func (wh *WorkflowHandler) RespondWorkflowTaskFailed(
 			tag.WorkflowID(taskToken.GetWorkflowId()),
 			tag.WorkflowRunID(taskToken.GetRunId()),
 		)
-		wh.metricsScope(ctx).Counter(metrics.ServiceErrNonDeterministicCounter.GetMetricName()).Record(1)
+		wh.metricsScope(ctx).Counter(metrics.ServiceErrNonDeterministicCounter.Name()).Record(1)
 	}
 
 	_, err = wh.historyClient.RespondWorkflowTaskFailed(ctx, &historyservice.RespondWorkflowTaskFailedRequest{
@@ -3455,8 +3460,18 @@ func (wh *WorkflowHandler) StartBatchOperation(
 	case *workflowservice.StartBatchOperationRequest_ResetOperation:
 		identity = op.ResetOperation.GetIdentity()
 		operationType = batcher.BatchTypeReset
-		resetParams.ResetType = op.ResetOperation.GetResetType()
-		resetParams.ResetReapplyType = op.ResetOperation.GetResetReapplyType()
+		if op.ResetOperation.Options != nil {
+			encoded, err := op.ResetOperation.Options.Marshal()
+			if err != nil {
+				return nil, err
+			}
+			resetParams.ResetOptions = encoded
+		} else {
+			// TODO: remove support for old fields later
+			resetParams.ResetType = op.ResetOperation.GetResetType()
+			resetParams.ResetReapplyType = op.ResetOperation.GetResetReapplyType()
+		}
+
 	default:
 		return nil, serviceerror.NewInvalidArgument(fmt.Sprintf("The operation type %T is not supported", op))
 	}
