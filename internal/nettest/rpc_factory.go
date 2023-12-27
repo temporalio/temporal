@@ -84,8 +84,13 @@ func (f *RPCFactory) CreateInternodeGRPCConnection(rpcAddress string) *grpc.Clie
 }
 
 func (f *RPCFactory) dial(rpcAddress string) *grpc.ClientConn {
+	ctx := f.contextFactory()
+	// check context error here since grpc 1.60.1 DialContext doesn't error if context is already canceled.
+	if err := ctx.Err(); err != nil {
+		panic(err)
+	}
 	conn, err := grpc.DialContext(
-		f.contextFactory(),
+		ctx,
 		rpcAddress,
 		grpc.WithContextDialer(func(ctx context.Context, s string) (net.Conn, error) {
 			return f.listener.Connect(ctx.Done())
