@@ -25,6 +25,7 @@
 package ndc
 
 import (
+	"fmt"
 	"time"
 
 	workflowspb "go.temporal.io/server/api/workflow/v1"
@@ -66,6 +67,7 @@ type (
 		getVersionHistory() *historyspb.VersionHistory
 		isWorkflowReset() bool
 
+		skipDuplicatedEvents(skipIndex int) error
 		splitTask() (replicationTask, replicationTask, error)
 	}
 
@@ -332,6 +334,31 @@ func (t *replicationTaskImpl) isWorkflowReset() bool {
 	default:
 		return false
 	}
+}
+
+func (t *replicationTaskImpl) skipDuplicatedEvents(index int) error {
+	if index == 0 {
+		return nil
+	}
+	if index >= len(t.events) || index < 0 {
+		return serviceerror.NewInvalidArgument(fmt.Sprintf("Invalid skip index: Length=%v, skipIndex=%v", len(t.events), index))
+	}
+	t.events = t.events[index:]
+	t.firstEvent = t.events[0][0]
+	lastBlob := t.events[len(t.events)-1]
+	t.lastEvent = lastBlob[len(lastBlob)-1]
+
+	eventTime := time.Time{}
+	for _, events := range t.events {
+		for _, event := range events {
+			eventTime = util.MaxTime(eventTime, timestamp.TimeValue(event.GetEventTime()))
+		}
+	}
+	for _, event := range t.newEvents {
+		eventTime = util.MaxTime(eventTime, timestamp.TimeValue(event.GetEventTime()))
+	}
+	t.eventTime = eventTime
+	return nil
 }
 
 func (t *replicationTaskImpl) splitTask() (_ replicationTask, _ replicationTask, _ error) {
