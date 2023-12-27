@@ -29,9 +29,9 @@ import (
 	"sync"
 	"time"
 
-	"github.com/gogo/status"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 
 	"go.temporal.io/server/api/matchingservice/v1"
 	"go.temporal.io/server/common"
