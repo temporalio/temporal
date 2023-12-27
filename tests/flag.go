@@ -53,7 +53,7 @@ func init() {
 
 func UsingSQLAdvancedVisibility() bool {
 	switch TestFlags.PersistenceDriver {
-	case mysql.PluginNameV8, postgresql.PluginNameV12, postgresql.PluginNameV12PGX, sqlite.PluginName:
+	case mysql.PluginName, postgresql.PluginName, postgresql.PluginNamePGX, sqlite.PluginName:
 		return true
 	default:
 		return false

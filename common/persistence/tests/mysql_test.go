@@ -145,39 +145,39 @@ func TestMySQLTaskQueueTaskSuite(t *testing.T) {
 	suite.Run(t, s)
 }
 
-func TestMySQL8VisibilityPersistenceSuite(t *testing.T) {
+func TestMySQLVisibilityPersistenceSuite(t *testing.T) {
 	s := &VisibilityPersistenceSuite{
-		TestBase: persistencetests.NewTestBaseWithSQL(persistencetests.GetMySQL8TestClusterOption()),
+		TestBase: persistencetests.NewTestBaseWithSQL(persistencetests.GetMySQLTestClusterOption()),
 	}
 	suite.Run(t, s)
 }
 
 // TODO: Merge persistence-tests into the tests directory.
 
-func TestMySQL8HistoryV2PersistenceSuite(t *testing.T) {
+func TestMySQLHistoryV2PersistenceSuite(t *testing.T) {
 	s := new(persistencetests.HistoryV2PersistenceSuite)
-	s.TestBase = persistencetests.NewTestBaseWithSQL(persistencetests.GetMySQL8TestClusterOption())
+	s.TestBase = persistencetests.NewTestBaseWithSQL(persistencetests.GetMySQLTestClusterOption())
 	s.TestBase.Setup(nil)
 	suite.Run(t, s)
 }
 
-func TestMySQL8MetadataPersistenceSuiteV2(t *testing.T) {
+func TestMySQLMetadataPersistenceSuiteV2(t *testing.T) {
 	s := new(persistencetests.MetadataPersistenceSuiteV2)
-	s.TestBase = persistencetests.NewTestBaseWithSQL(persistencetests.GetMySQL8TestClusterOption())
+	s.TestBase = persistencetests.NewTestBaseWithSQL(persistencetests.GetMySQLTestClusterOption())
 	s.TestBase.Setup(nil)
 	suite.Run(t, s)
 }
 
-func TestMySQL8QueuePersistence(t *testing.T) {
+func TestMySQLQueuePersistence(t *testing.T) {
 	s := new(persistencetests.QueuePersistenceSuite)
-	s.TestBase = persistencetests.NewTestBaseWithSQL(persistencetests.GetMySQL8TestClusterOption())
+	s.TestBase = persistencetests.NewTestBaseWithSQL(persistencetests.GetMySQLTestClusterOption())
 	s.TestBase.Setup(nil)
 	suite.Run(t, s)
 }
 
-func TestMySQL8ClusterMetadataPersistence(t *testing.T) {
+func TestMySQLClusterMetadataPersistence(t *testing.T) {
 	s := new(persistencetests.ClusterMetadataManagerSuite)
-	s.TestBase = persistencetests.NewTestBaseWithSQL(persistencetests.GetMySQL8TestClusterOption())
+	s.TestBase = persistencetests.NewTestBaseWithSQL(persistencetests.GetMySQLTestClusterOption())
 	s.TestBase.Setup(nil)
 	suite.Run(t, s)
 }

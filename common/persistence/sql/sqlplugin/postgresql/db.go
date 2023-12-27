@@ -108,7 +108,7 @@ func (pdb *db) Close() error {
 
 // PluginName returns the name of the mysql plugin
 func (pdb *db) PluginName() string {
-	return PluginNameV12
+	return PluginName
 }
 
 // DbName returns the name of the database

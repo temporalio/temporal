@@ -75,7 +75,7 @@ func (s *VisibilityManagerSuite) SetupTest() {
 
 	s.controller = gomock.NewController(s.T())
 	s.visibilityStore = store.NewMockVisibilityStore(s.controller)
-	s.visibilityStore.EXPECT().GetName().Return(mysql.PluginNameV8).AnyTimes()
+	s.visibilityStore.EXPECT().GetName().Return(mysql.PluginName).AnyTimes()
 	s.visibilityStore.EXPECT().GetIndexName().Return("test-index-name").AnyTimes()
 	s.metricsHandler = metrics.NewMockHandler(s.controller)
 	s.visibilityManager = newVisibilityManager(
