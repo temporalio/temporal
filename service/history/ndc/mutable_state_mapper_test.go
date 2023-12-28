@@ -25,6 +25,7 @@
 package ndc
 
 import (
+	"context"
 	"testing"
 
 	"github.com/golang/mock/gomock"
@@ -119,7 +120,7 @@ func (s *mutableStateMapperSuite) TestGetOrCreateHistoryBranch_ValidEventBatch_N
 	s.mockBranchMgr.EXPECT().
 		GetOrCreate(gomock.Any(), gomock.Any(), int64(11), gomock.Any()).Return(true, int32(0), nil).Times(1)
 
-	_, out, err := s.mutableStateMapper.GetOrCreateHistoryBranch(nil, nil, nil, task)
+	_, out, err := s.mutableStateMapper.GetOrCreateHistoryBranch(context.Background(), nil, nil, task)
 	s.NoError(err)
 	s.Equal(int32(0), out.BranchIndex)
 	s.Equal(0, out.EventsApplyIndex)
@@ -162,7 +163,7 @@ func (s *mutableStateMapperSuite) TestGetOrCreateHistoryBranch_ValidEventBatch_F
 		GetOrCreate(gomock.Any(), gomock.Any(), int64(11), gomock.Any()).Return(false, int32(0), nil).Times(1)
 	s.mockBranchMgr.EXPECT().
 		GetOrCreate(gomock.Any(), gomock.Any(), int64(13), gomock.Any()).Return(true, int32(0), nil).Times(1)
-	_, out, err := s.mutableStateMapper.GetOrCreateHistoryBranch(nil, nil, nil, task)
+	_, out, err := s.mutableStateMapper.GetOrCreateHistoryBranch(context.Background(), nil, nil, task)
 	s.NoError(err)
 	s.Equal(int32(0), out.BranchIndex)
 	s.Equal(1, out.EventsApplyIndex)
@@ -205,7 +206,7 @@ func (s *mutableStateMapperSuite) TestGetOrCreateHistoryBranch_ValidEventBatch_A
 		GetOrCreate(gomock.Any(), gomock.Any(), int64(11), gomock.Any()).Return(false, int32(0), nil).Times(1)
 	s.mockBranchMgr.EXPECT().
 		GetOrCreate(gomock.Any(), gomock.Any(), int64(13), gomock.Any()).Return(false, int32(0), nil).Times(1)
-	_, out, err := s.mutableStateMapper.GetOrCreateHistoryBranch(nil, nil, nil, task)
+	_, out, err := s.mutableStateMapper.GetOrCreateHistoryBranch(context.Background(), nil, nil, task)
 	s.NoError(err)
 	s.Equal(int32(0), out.BranchIndex)
 	s.Equal(1, out.EventsApplyIndex)
