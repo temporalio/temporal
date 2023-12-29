@@ -173,8 +173,7 @@ message GetWorkflowExecutionRawHistoryV2Response {
 }
 
 message GetWorkflowExecutionRawHistoryRequest {
-  reserved 1;
-  string namespace_id = 9;
+  string namespace_id = 1;
   temporal.api.common.v1.WorkflowExecution execution = 2;
   int64 start_event_id = 3;
   int64 start_event_version = 4;

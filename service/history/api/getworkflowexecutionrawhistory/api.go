@@ -226,16 +226,7 @@ func setRequestDefaultValueAndGetTargetVersionHistory(
 		return nil, err
 	}
 
-	if req.GetStartEventId() == common.EmptyEventID || req.GetStartEventVersion() == common.EmptyVersion {
-		// If start event is not set, get the events from the first event
-		req.StartEventId = common.FirstEventID
-		req.StartEventVersion = firstItem.GetVersion()
-	}
-	if req.GetEndEventId() == common.EmptyEventID || req.GetEndEventVersion() == common.EmptyVersion {
-		// If end event is not set, get the events until the end event
-		req.EndEventId = lastItem.GetEventId()
-		req.EndEventVersion = lastItem.GetVersion()
-	}
+	setDefaultStartAndEndEvent(req, firstItem, lastItem)
 
 	if req.GetStartEventId() < 0 {
 		return nil, consts.ErrInvalidFirstNextEventCombination
@@ -284,4 +275,21 @@ func setRequestDefaultValueAndGetTargetVersionHistory(
 	}
 
 	return targetBranch, nil
+}
+
+func setDefaultStartAndEndEvent(
+	req *adminservice.GetWorkflowExecutionRawHistoryRequest,
+	firstItem *historyspb.VersionHistoryItem,
+	lastItem *historyspb.VersionHistoryItem,
+) {
+	if req.GetStartEventId() == common.EmptyEventID || req.GetStartEventVersion() == common.EmptyVersion {
+		// If start event is not set, get the events from the first event
+		req.StartEventId = common.FirstEventID
+		req.StartEventVersion = firstItem.GetVersion()
+	}
+	if req.GetEndEventId() == common.EmptyEventID || req.GetEndEventVersion() == common.EmptyVersion {
+		// If end event is not set, get the events until the end event
+		req.EndEventId = lastItem.GetEventId()
+		req.EndEventVersion = lastItem.GetVersion()
+	}
 }
