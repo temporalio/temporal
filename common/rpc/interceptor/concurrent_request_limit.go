@@ -32,6 +32,7 @@ import (
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/api/workflowservice/v1"
+	"go.temporal.io/server/common/api"
 	"go.temporal.io/server/common/quotas"
 	"google.golang.org/grpc"
 
@@ -89,7 +90,7 @@ func (ni *ConcurrentRequestLimitInterceptor) Intercept(
 	info *grpc.UnaryServerInfo,
 	handler grpc.UnaryHandler,
 ) (interface{}, error) {
-	_, methodName := SplitMethodName(info.FullMethod)
+	methodName := api.MethodName(info.FullMethod)
 	// token will default to 0
 	token := ni.tokens[methodName]
 
@@ -109,7 +110,7 @@ func (ni *ConcurrentRequestLimitInterceptor) Intercept(
 		defer atomic.AddInt32(counter, -int32(token))
 
 		handler := GetMetricsHandlerFromContext(ctx, ni.logger)
-		handler.Gauge(metrics.ServicePendingRequests.Name()).Record(float64(count))
+		metrics.ServicePendingRequests.With(handler).Record(float64(count))
 
 		// frontend.namespaceCount is applied per poller type temporarily to prevent
 		// one poller type to take all token waiting in the long poll.

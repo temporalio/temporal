@@ -143,20 +143,6 @@ func (mr *MockExecutableTaskMockRecorder) GetNamespaceInfo(ctx, namespaceID inte
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetNamespaceInfo", reflect.TypeOf((*MockExecutableTask)(nil).GetNamespaceInfo), ctx, namespaceID)
 }
 
-// Import mocks base method.
-func (m *MockExecutableTask) Import(ctx context.Context, remoteCluster string, workflowKey definition.WorkflowKey, startEventId, startEventVersion, endEventId, endEventVersion int64) error {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "Import", ctx, remoteCluster, workflowKey, startEventId, startEventVersion, endEventId, endEventVersion)
-	ret0, _ := ret[0].(error)
-	return ret0
-}
-
-// Import indicates an expected call of Import.
-func (mr *MockExecutableTaskMockRecorder) Import(ctx, remoteCluster, workflowKey, startEventId, startEventVersion, endEventId, endEventVersion interface{}) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Import", reflect.TypeOf((*MockExecutableTask)(nil).Import), ctx, remoteCluster, workflowKey, startEventId, startEventVersion, endEventId, endEventVersion)
-}
-
 // IsRetryableError mocks base method.
 func (m *MockExecutableTask) IsRetryableError(err error) bool {
 	m.ctrl.T.Helper()

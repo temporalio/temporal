@@ -36,3 +36,7 @@ var (
 func ObserveCompletion(b *bool) updateOpt {
 	return withCompletionCallback(func() { *b = true })
 }
+
+func (u *Update) NeedToSend(includeAlreadySent bool) bool { return u.needToSend(includeAlreadySent) }
+
+func (u *Update) IsSent() bool { return u.isSent() }

@@ -35,6 +35,22 @@ type (
 		description string
 		unit        MetricUnit
 	}
+
+	histogramDefinition struct {
+		metricDefinition
+	}
+
+	counterDefinition struct {
+		metricDefinition
+	}
+
+	gaugeDefinition struct {
+		metricDefinition
+	}
+
+	timerDefinition struct {
+		metricDefinition
+	}
 )
 
 // MetricUnit supported values
@@ -53,22 +69,38 @@ func (md metricDefinition) Unit() MetricUnit {
 	return md.unit
 }
 
-func NewTimerDef(name string, opts ...Option) metricDefinition {
-	return globalRegistry.register(name, append(opts, WithUnit(Milliseconds))...)
+func NewTimerDef(name string, opts ...Option) timerDefinition {
+	return timerDefinition{globalRegistry.register(name, append(opts, WithUnit(Milliseconds))...)}
 }
 
-func NewBytesHistogramDef(name string, opts ...Option) metricDefinition {
-	return globalRegistry.register(name, append(opts, WithUnit(Bytes))...)
+func NewBytesHistogramDef(name string, opts ...Option) histogramDefinition {
+	return histogramDefinition{globalRegistry.register(name, append(opts, WithUnit(Bytes))...)}
 }
 
-func NewDimensionlessHistogramDef(name string, opts ...Option) metricDefinition {
-	return globalRegistry.register(name, append(opts, WithUnit(Dimensionless))...)
+func NewDimensionlessHistogramDef(name string, opts ...Option) histogramDefinition {
+	return histogramDefinition{globalRegistry.register(name, append(opts, WithUnit(Dimensionless))...)}
 }
 
-func NewCounterDef(name string, opts ...Option) metricDefinition {
-	return globalRegistry.register(name, opts...)
+func NewCounterDef(name string, opts ...Option) counterDefinition {
+	return counterDefinition{globalRegistry.register(name, opts...)}
 }
 
-func NewGaugeDef(name string, opts ...Option) metricDefinition {
-	return globalRegistry.register(name, opts...)
+func NewGaugeDef(name string, opts ...Option) gaugeDefinition {
+	return gaugeDefinition{globalRegistry.register(name, opts...)}
+}
+
+func (d histogramDefinition) With(handler Handler) HistogramIface {
+	return handler.Histogram(d.name, d.unit)
+}
+
+func (d counterDefinition) With(handler Handler) CounterIface {
+	return handler.Counter(d.name)
+}
+
+func (d gaugeDefinition) With(handler Handler) GaugeIface {
+	return handler.Gauge(d.name)
+}
+
+func (d timerDefinition) With(handler Handler) TimerIface {
+	return handler.Timer(d.name)
 }

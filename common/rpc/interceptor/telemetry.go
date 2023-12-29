@@ -144,11 +144,11 @@ func (ti *TelemetryInterceptor) UnaryIntercept(
 	info *grpc.UnaryServerInfo,
 	handler grpc.UnaryHandler,
 ) (interface{}, error) {
-	_, methodName := SplitMethodName(info.FullMethod)
+	methodName := api.MethodName(info.FullMethod)
 	metricsHandler, logTags := ti.unaryMetricsHandlerLogTags(req, info.FullMethod, methodName)
 
 	ctx = context.WithValue(ctx, metricsCtxKey, metricsHandler)
-	metricsHandler.Counter(metrics.ServiceRequests.Name()).Record(1)
+	metrics.ServiceRequests.With(metricsHandler).Record(1)
 
 	startTime := time.Now().UTC()
 	userLatencyDuration := time.Duration(0)
@@ -187,7 +187,7 @@ func (ti *TelemetryInterceptor) StreamIntercept(
 	info *grpc.StreamServerInfo,
 	handler grpc.StreamHandler,
 ) error {
-	_, methodName := SplitMethodName(info.FullMethod)
+	methodName := api.MethodName(info.FullMethod)
 	metricsHandler, logTags := ti.streamMetricsHandlerLogTags(info.FullMethod, methodName)
 	metricsHandler.Counter(metrics.ServiceRequests.Name()).Record(1)
 

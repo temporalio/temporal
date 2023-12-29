@@ -207,7 +207,7 @@ func (c *QueryConverter) convertWhereString(queryString string) (*queryParams, e
 	sql := "select * from table1 " + where
 	stmt, err := sqlparser.Parse(sql)
 	if err != nil {
-		return nil, err
+		return nil, query.NewConverterError("%s: %v", query.MalformedSqlQueryErrMessage, err)
 	}
 
 	selectStmt, _ := stmt.(*sqlparser.Select)

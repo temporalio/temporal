@@ -70,6 +70,8 @@ const (
 	// Don't put possibly-overlapping runs (from SCHEDULE_OVERLAP_POLICY_ALLOW_ALL) in
 	// RunningWorkflows.
 	DontTrackOverlapping = 3
+	// start time in backfill is inclusive rather than exclusive
+	InclusiveBackfillStartTime = 4
 )
 
 const (
@@ -200,8 +202,8 @@ var (
 		MaxBufferSize:                     1000,
 		AllowZeroSleep:                    true,
 		ReuseTimer:                        true,
-		NextTimeCacheV2Size:               14, // see note below
-		Version:                           DontTrackOverlapping,
+		NextTimeCacheV2Size:               14,                   // see note below
+		Version:                           DontTrackOverlapping, // TODO: upgrade to InclusiveBackfillStartTime
 	}
 
 	// Note on NextTimeCacheV2Size: This value must be > FutureActionCountForList. Each
@@ -389,8 +391,17 @@ func (s *scheduler) processPatch(patch *schedpb.SchedulePatch) {
 	}
 
 	for _, bfr := range patch.BackfillRequest {
+		startTime := timestamp.TimeValue(bfr.GetStartTime())
+
+		// In previous versions the backfill start time was exclusive, ie when
+		// the start time of the backfill matched the schedule's spec, it would
+		// not be executed. This new version makes it inclusive instead.
+		if s.hasMinVersion(InclusiveBackfillStartTime) {
+			startTime = startTime.Add(-1 * time.Millisecond)
+		}
+
 		s.processTimeRange(
-			timestamp.TimeValue(bfr.GetStartTime()),
+			startTime,
 			timestamp.TimeValue(bfr.GetEndTime()),
 			bfr.GetOverlapPolicy(),
 			true,

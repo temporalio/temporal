@@ -32,5 +32,7 @@ import (
 
 func main() {
 	app := tdbg.NewCliApp()
-	_ = app.Run(os.Args)
+	if err := app.Run(os.Args); err != nil {
+		os.Exit(1)
+	}
 }

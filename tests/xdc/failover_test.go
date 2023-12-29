@@ -69,34 +69,34 @@ import (
 )
 
 type (
-	functionalClustersTestSuite struct {
+	FunctionalClustersTestSuite struct {
 		xdcBaseSuite
 	}
 )
 
 func TestFuncClustersTestSuite(t *testing.T) {
 	flag.Parse()
-	suite.Run(t, new(functionalClustersTestSuite))
+	suite.Run(t, new(FunctionalClustersTestSuite))
 }
 
-func (s *functionalClustersTestSuite) SetupSuite() {
+func (s *FunctionalClustersTestSuite) SetupSuite() {
 	s.setupSuite([]string{"integ_active", "integ_standby"})
 }
 
-func (s *functionalClustersTestSuite) SetupTest() {
+func (s *FunctionalClustersTestSuite) SetupTest() {
 	s.setupTest()
 }
 
-func (s *functionalClustersTestSuite) TearDownSuite() {
+func (s *FunctionalClustersTestSuite) TearDownSuite() {
 	s.tearDownSuite()
 }
 
-func (s *functionalClustersTestSuite) decodePayloadsString(ps *commonpb.Payloads) (r string) {
+func (s *FunctionalClustersTestSuite) decodePayloadsString(ps *commonpb.Payloads) (r string) {
 	s.NoError(payloads.Decode(ps, &r))
 	return
 }
 
-func (s *functionalClustersTestSuite) TestNamespaceFailover() {
+func (s *FunctionalClustersTestSuite) TestNamespaceFailover() {
 	namespace := "test-namespace-for-fail-over-" + common.GenerateRandomString(5)
 	client1 := s.cluster1.GetFrontendClient() // active
 	regReq := &workflowservice.RegisterNamespaceRequest{
@@ -171,7 +171,7 @@ func (s *functionalClustersTestSuite) TestNamespaceFailover() {
 	s.NotNil(we.GetRunId())
 }
 
-func (s *functionalClustersTestSuite) TestSimpleWorkflowFailover() {
+func (s *FunctionalClustersTestSuite) TestSimpleWorkflowFailover() {
 	namespaceName := "test-simple-workflow-failover-" + common.GenerateRandomString(5)
 	client1 := s.cluster1.GetFrontendClient() // active
 	regReq := &workflowservice.RegisterNamespaceRequest{
@@ -452,7 +452,7 @@ func (s *functionalClustersTestSuite) TestSimpleWorkflowFailover() {
 	s.True(eventsReplicated)
 }
 
-func (s *functionalClustersTestSuite) TestStickyWorkflowTaskFailover() {
+func (s *FunctionalClustersTestSuite) TestStickyWorkflowTaskFailover() {
 	namespace := "test-sticky-workflow-task-workflow-failover-" + common.GenerateRandomString(5)
 	client1 := s.cluster1.GetFrontendClient() // active
 	regReq := &workflowservice.RegisterNamespaceRequest{
@@ -602,7 +602,7 @@ func (s *functionalClustersTestSuite) TestStickyWorkflowTaskFailover() {
 	s.True(workflowCompleted)
 }
 
-func (s *functionalClustersTestSuite) TestStartWorkflowExecution_Failover_WorkflowIDReusePolicy() {
+func (s *FunctionalClustersTestSuite) TestStartWorkflowExecution_Failover_WorkflowIDReusePolicy() {
 	namespaceName := "test-start-workflow-failover-ID-reuse-policy" + common.GenerateRandomString(5)
 	client1 := s.cluster1.GetFrontendClient() // active
 	regReq := &workflowservice.RegisterNamespaceRequest{
@@ -725,7 +725,7 @@ func (s *functionalClustersTestSuite) TestStartWorkflowExecution_Failover_Workfl
 	s.Equal(2, workflowCompleteTimes)
 }
 
-func (s *functionalClustersTestSuite) TestTerminateFailover() {
+func (s *FunctionalClustersTestSuite) TestTerminateFailover() {
 	namespace := "test-terminate-workflow-failover-" + common.GenerateRandomString(5)
 	client1 := s.cluster1.GetFrontendClient() // active
 	regReq := &workflowservice.RegisterNamespaceRequest{
@@ -896,7 +896,7 @@ GetHistoryLoop2:
 	s.True(eventsReplicated)
 }
 
-func (s *functionalClustersTestSuite) TestResetWorkflowFailover() {
+func (s *FunctionalClustersTestSuite) TestResetWorkflowFailover() {
 	namespace := "test-reset-workflow-failover-" + common.GenerateRandomString(5)
 	client1 := s.cluster1.GetFrontendClient() // active
 	regReq := &workflowservice.RegisterNamespaceRequest{
@@ -1053,7 +1053,7 @@ func (s *functionalClustersTestSuite) TestResetWorkflowFailover() {
 	s.Equal(enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_COMPLETED, events[len(events)-1].GetEventType())
 }
 
-func (s *functionalClustersTestSuite) TestContinueAsNewFailover() {
+func (s *FunctionalClustersTestSuite) TestContinueAsNewFailover() {
 	namespace := "test-continueAsNew-workflow-failover-" + common.GenerateRandomString(5)
 	client1 := s.cluster1.GetFrontendClient() // active
 	regReq := &workflowservice.RegisterNamespaceRequest{
@@ -1177,7 +1177,7 @@ func (s *functionalClustersTestSuite) TestContinueAsNewFailover() {
 	s.Equal(previousRunID, lastRunStartedEvent.GetWorkflowExecutionStartedEventAttributes().GetContinuedExecutionRunId())
 }
 
-func (s *functionalClustersTestSuite) TestSignalFailover() {
+func (s *FunctionalClustersTestSuite) TestSignalFailover() {
 	namespace := "test-signal-workflow-failover-" + common.GenerateRandomString(5)
 	client1 := s.cluster1.GetFrontendClient() // active
 	regReq := &workflowservice.RegisterNamespaceRequest{
@@ -1380,7 +1380,7 @@ func (s *functionalClustersTestSuite) TestSignalFailover() {
 	s.True(eventsReplicated)
 }
 
-func (s *functionalClustersTestSuite) TestUserTimerFailover() {
+func (s *FunctionalClustersTestSuite) TestUserTimerFailover() {
 	namespace := "test-user-timer-workflow-failover-" + common.GenerateRandomString(5)
 	client1 := s.cluster1.GetFrontendClient() // active
 	regReq := &workflowservice.RegisterNamespaceRequest{
@@ -1538,7 +1538,7 @@ func (s *functionalClustersTestSuite) TestUserTimerFailover() {
 	}
 }
 
-func (s *functionalClustersTestSuite) TestForceWorkflowTaskClose_WithClusterReconnect() {
+func (s *FunctionalClustersTestSuite) TestForceWorkflowTaskClose_WithClusterReconnect() {
 	namespace := "test-force-workflow-task-close-" + common.GenerateRandomString(5)
 	client1 := s.cluster1.GetFrontendClient() // active
 	regReq := &workflowservice.RegisterNamespaceRequest{
@@ -1690,7 +1690,7 @@ func (s *functionalClustersTestSuite) TestForceWorkflowTaskClose_WithClusterReco
 	s.NoError(err)
 }
 
-func (s *functionalClustersTestSuite) TestTransientWorkflowTaskFailover() {
+func (s *FunctionalClustersTestSuite) TestTransientWorkflowTaskFailover() {
 	namespace := "test-transient-workflow-task-workflow-failover-" + common.GenerateRandomString(5)
 	client1 := s.cluster1.GetFrontendClient() // active
 	regReq := &workflowservice.RegisterNamespaceRequest{
@@ -1791,13 +1791,13 @@ func (s *functionalClustersTestSuite) TestTransientWorkflowTaskFailover() {
 
 	// for failover transient workflow task, it is guaranteed that the transient workflow task
 	// after the failover has attempt 1
-	// for details see ReplicateTransientWorkflowTaskScheduled
+	// for details see ApplyTransientWorkflowTaskScheduled
 	_, err = poller2.PollAndProcessWorkflowTask(tests.WithExpectedAttemptCount(1))
 	s.NoError(err)
 	s.True(workflowFinished)
 }
 
-func (s *functionalClustersTestSuite) TestCronWorkflowStartAndFailover() {
+func (s *FunctionalClustersTestSuite) TestCronWorkflowStartAndFailover() {
 	namespace := "test-cron-workflow-start-and-failover-" + common.GenerateRandomString(5)
 	client1 := s.cluster1.GetFrontendClient() // active
 	regReq := &workflowservice.RegisterNamespaceRequest{
@@ -1887,7 +1887,7 @@ func (s *functionalClustersTestSuite) TestCronWorkflowStartAndFailover() {
 	s.NoError(err)
 }
 
-func (s *functionalClustersTestSuite) TestCronWorkflowCompleteAndFailover() {
+func (s *FunctionalClustersTestSuite) TestCronWorkflowCompleteAndFailover() {
 	namespace := "test-cron-workflow-complete-and-failover-" + common.GenerateRandomString(5)
 	client1 := s.cluster1.GetFrontendClient() // active
 	regReq := &workflowservice.RegisterNamespaceRequest{
@@ -1994,7 +1994,7 @@ func (s *functionalClustersTestSuite) TestCronWorkflowCompleteAndFailover() {
 	s.NoError(err)
 }
 
-func (s *functionalClustersTestSuite) TestWorkflowRetryStartAndFailover() {
+func (s *FunctionalClustersTestSuite) TestWorkflowRetryStartAndFailover() {
 	namespace := "test-workflow-retry-start-and-failover-" + common.GenerateRandomString(5)
 	client1 := s.cluster1.GetFrontendClient() // active
 	regReq := &workflowservice.RegisterNamespaceRequest{
@@ -2091,7 +2091,7 @@ func (s *functionalClustersTestSuite) TestWorkflowRetryStartAndFailover() {
 	s.Equal(int32(2), events[0].GetWorkflowExecutionStartedEventAttributes().GetAttempt())
 }
 
-func (s *functionalClustersTestSuite) TestWorkflowRetryFailAndFailover() {
+func (s *FunctionalClustersTestSuite) TestWorkflowRetryFailAndFailover() {
 	namespace := "test-workflow-retry-fail-and-failover-" + common.GenerateRandomString(5)
 	client1 := s.cluster1.GetFrontendClient() // active
 	regReq := &workflowservice.RegisterNamespaceRequest{
@@ -2196,7 +2196,7 @@ func (s *functionalClustersTestSuite) TestWorkflowRetryFailAndFailover() {
 	s.Equal(int32(2), events[0].GetWorkflowExecutionStartedEventAttributes().GetAttempt())
 }
 
-func (s *functionalClustersTestSuite) TestActivityHeartbeatFailover() {
+func (s *FunctionalClustersTestSuite) TestActivityHeartbeatFailover() {
 	namespace := "test-activity-heartbeat-workflow-failover-" + common.GenerateRandomString(5)
 	s.registerNamespace(namespace, true)
 
@@ -2312,7 +2312,7 @@ func (s *functionalClustersTestSuite) TestActivityHeartbeatFailover() {
 // 	common.PrettyPrintHistory(history, s.logger)
 // }
 
-func (s *functionalClustersTestSuite) TestLocalNamespaceMigration() {
+func (s *FunctionalClustersTestSuite) TestLocalNamespaceMigration() {
 	testCtx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
 	defer cancel()
 
@@ -2667,7 +2667,7 @@ func (s *functionalClustersTestSuite) TestLocalNamespaceMigration() {
 	verify(workflowID7, run7.GetRunID())
 }
 
-func (s *functionalClustersTestSuite) TestForceMigration_ClosedWorkflow() {
+func (s *FunctionalClustersTestSuite) TestForceMigration_ClosedWorkflow() {
 	testCtx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
 	defer cancel()
 
@@ -2791,7 +2791,7 @@ func (s *functionalClustersTestSuite) TestForceMigration_ClosedWorkflow() {
 	s.Equal(enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED, descResp.GetWorkflowExecutionInfo().Status)
 }
 
-func (s *functionalClustersTestSuite) TestForceMigration_ResetWorkflow() {
+func (s *FunctionalClustersTestSuite) TestForceMigration_ResetWorkflow() {
 	testCtx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
 	defer cancel()
 
@@ -2896,7 +2896,7 @@ func (s *functionalClustersTestSuite) TestForceMigration_ResetWorkflow() {
 	verifyHistory(workflowID, resp.GetRunId())
 }
 
-func (s *functionalClustersTestSuite) getHistory(client tests.FrontendClient, namespace string, execution *commonpb.WorkflowExecution) []*historypb.HistoryEvent {
+func (s *FunctionalClustersTestSuite) getHistory(client tests.FrontendClient, namespace string, execution *commonpb.WorkflowExecution) []*historypb.HistoryEvent {
 	historyResponse, err := client.GetWorkflowExecutionHistory(tests.NewContext(), &workflowservice.GetWorkflowExecutionHistoryRequest{
 		Namespace:       namespace,
 		Execution:       execution,
@@ -2918,7 +2918,7 @@ func (s *functionalClustersTestSuite) getHistory(client tests.FrontendClient, na
 	return events
 }
 
-func (s *functionalClustersTestSuite) failover(
+func (s *FunctionalClustersTestSuite) failover(
 	namespace string,
 	targetCluster string,
 	targetFailoverVersion int64,
@@ -2943,7 +2943,7 @@ func (s *functionalClustersTestSuite) failover(
 	time.Sleep(cacheRefreshInterval)
 }
 
-func (s *functionalClustersTestSuite) registerNamespace(namespace string, isGlobalNamespace bool) {
+func (s *FunctionalClustersTestSuite) registerNamespace(namespace string, isGlobalNamespace bool) {
 	clusters := s.clusterReplicationConfig()
 	if !isGlobalNamespace {
 		clusters = s.clusterReplicationConfig()[0:1]
@@ -2971,7 +2971,7 @@ func (s *functionalClustersTestSuite) registerNamespace(namespace string, isGlob
 	s.Equal(isGlobalNamespace, resp.IsGlobalNamespace)
 }
 
-func (s *functionalClustersTestSuite) newClientAndWorker(hostport, namespace, taskqueue, identity string) (sdkclient.Client, sdkworker.Worker) {
+func (s *FunctionalClustersTestSuite) newClientAndWorker(hostport, namespace, taskqueue, identity string) (sdkclient.Client, sdkworker.Worker) {
 	sdkClient1, err := sdkclient.Dial(sdkclient.Options{
 		HostPort:  hostport,
 		Namespace: namespace,

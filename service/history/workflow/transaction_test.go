@@ -35,10 +35,10 @@ import (
 	"go.temporal.io/api/serviceerror"
 
 	persistencespb "go.temporal.io/server/api/persistence/v1"
-	"go.temporal.io/server/common/convert"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence"
+	"go.temporal.io/server/common/util"
 	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/tests"
 )
@@ -158,7 +158,7 @@ func (s *transactionSuite) TestUpdateWorkflowExecution_NotifyTaskWhenFailed() {
 			},
 		},
 		[]*persistence.WorkflowEvents{},
-		convert.Int64Ptr(0),
+		util.Ptr(int64(0)),
 		&persistence.WorkflowSnapshot{},
 		[]*persistence.WorkflowEvents{},
 	)
@@ -188,10 +188,10 @@ func (s *transactionSuite) TestConflictResolveWorkflowExecution_NotifyTaskWhenFa
 			},
 		},
 		[]*persistence.WorkflowEvents{},
-		convert.Int64Ptr(0),
+		util.Ptr(int64(0)),
 		&persistence.WorkflowSnapshot{},
 		[]*persistence.WorkflowEvents{},
-		convert.Int64Ptr(0),
+		util.Ptr(int64(0)),
 		&persistence.WorkflowMutation{},
 		[]*persistence.WorkflowEvents{},
 	)

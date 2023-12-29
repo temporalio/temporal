@@ -32,6 +32,7 @@ import (
 
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/environment"
+	dbschemas "go.temporal.io/server/schema"
 	"go.temporal.io/server/tools/common/schema"
 )
 
@@ -171,6 +172,11 @@ func buildCLIOptions() *cli.App {
 					Name:  schema.CLIFlagSchemaFile,
 					Usage: "path to the .cql schema file; if un-specified, will just setup versioning tables",
 				},
+				cli.StringFlag{
+					Name: schema.CLIFlagSchemaName,
+					Usage: fmt.Sprintf("name of embedded schema directory with .cql file, one of: %v",
+						dbschemas.PathsByDB("cassandra")),
+				},
 				cli.BoolFlag{
 					Name:  schema.CLIFlagDisableVersioning,
 					Usage: "disable setup of schema versioning",
@@ -196,6 +202,11 @@ func buildCLIOptions() *cli.App {
 				cli.StringFlag{
 					Name:  schema.CLIFlagSchemaDir,
 					Usage: "path to directory containing versioned schema",
+				},
+				cli.StringFlag{
+					Name: schema.CLIFlagSchemaName,
+					Usage: fmt.Sprintf("name of embedded versioned schema, one of: %v",
+						dbschemas.PathsByDB("cassandra")),
 				},
 			},
 			Action: func(c *cli.Context) {

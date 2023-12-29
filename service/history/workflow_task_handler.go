@@ -39,6 +39,8 @@ import (
 	"go.temporal.io/api/workflowservice/v1"
 	"google.golang.org/protobuf/proto"
 
+	"go.temporal.io/server/common/definition"
+
 	"go.temporal.io/server/common/tasktoken"
 	"go.temporal.io/server/internal/effect"
 	"go.temporal.io/server/internal/protocol"
@@ -209,6 +211,58 @@ func (handler *workflowTaskHandlerImpl) handleCommands(
 	}
 
 	return mutations, nil
+}
+
+func (handler *workflowTaskHandlerImpl) rejectUnprocessedUpdates(
+	ctx context.Context,
+	workflowTaskScheduledEventID int64,
+	wtHeartbeat bool,
+	wfKey definition.WorkflowKey,
+	workerIdentity string,
+) error {
+
+	// If server decided to fail WT (instead of completing), don't reject updates.
+	// New WT will be created, and it will deliver these updates again to the worker.
+	// Worker will do full history replay, and updates should be delivered again.
+	if handler.workflowTaskFailedCause != nil {
+		return nil
+	}
+
+	// If WT is a heartbeat WT, then it doesn't have to have messages.
+	if wtHeartbeat {
+		return nil
+	}
+
+	// If worker has just completed workflow with one of the WF completion command,
+	// then it might skip processing some updates. In this case, it doesn't indicate old SDK or bug.
+	// All unprocessed updates will be rejected with "workflow is closing" reason though.
+	if !handler.mutableState.IsWorkflowExecutionRunning() {
+		return nil
+	}
+
+	rejectedUpdateIDs, err := handler.updateRegistry.RejectUnprocessed(
+		ctx,
+		workflow.WithEffects(handler.effects, handler.mutableState))
+
+	if err != nil {
+		return err
+	}
+
+	if len(rejectedUpdateIDs) > 0 {
+		handler.logger.Warn(
+			"Workflow task completed w/o processing updates.",
+			tag.WorkflowNamespaceID(wfKey.NamespaceID),
+			tag.WorkflowID(wfKey.WorkflowID),
+			tag.WorkflowRunID(wfKey.RunID),
+			tag.WorkflowEventID(workflowTaskScheduledEventID),
+			tag.NewStringTag("worker-identity", workerIdentity),
+			tag.NewStringsTag("update-ids", rejectedUpdateIDs),
+		)
+	}
+
+	// At this point there must not be any updates in a Sent state.
+	// All updates which were sent on this WT are processed by worker or rejected by server.
+	return nil
 }
 
 //revive:disable:cyclomatic grandfathered

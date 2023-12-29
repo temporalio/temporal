@@ -35,12 +35,12 @@ import (
 	enumspb "go.temporal.io/api/enums/v1"
 	historypb "go.temporal.io/api/history/v1"
 	"go.temporal.io/api/serviceerror"
+	enumsspb "go.temporal.io/server/api/enums/v1"
 
 	"go.temporal.io/server/api/adminservice/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/cluster"
-	"go.temporal.io/server/common/convert"
 	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/locks"
 	"go.temporal.io/server/common/log"
@@ -48,6 +48,7 @@ import (
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence"
+	"go.temporal.io/server/common/util"
 	"go.temporal.io/server/service/history/configs"
 	"go.temporal.io/server/service/history/consts"
 	"go.temporal.io/server/service/history/shard"
@@ -640,6 +641,7 @@ func (c *ContextImpl) UpdateWorkflowExecutionWithNew(
 	emitWorkflowHistoryStats(
 		c.metricsHandler,
 		c.GetNamespace(shardContext),
+		c.MutableState.GetExecutionState().State,
 		int(c.MutableState.GetExecutionInfo().ExecutionStats.HistorySize),
 		int(c.MutableState.GetNextEventID()-1),
 	)
@@ -1038,16 +1040,20 @@ func emitStateTransitionCount(
 	if mutableState == nil {
 		return
 	}
-
 	namespaceEntry := mutableState.GetNamespaceEntry()
-	metricsHandler.Histogram(
-		metrics.StateTransitionCount.Name(),
-		metrics.StateTransitionCount.Unit(),
-	).Record(
-		mutableState.GetExecutionInfo().StateTransitionCount,
+	handler := metricsHandler.WithTags(
 		metrics.NamespaceTag(namespaceEntry.Name().String()),
-		metrics.NamespaceStateTag(namespaceState(clusterMetadata, convert.Int64Ptr(mutableState.GetCurrentVersion()))),
+		metrics.NamespaceStateTag(namespaceState(clusterMetadata, util.Ptr(mutableState.GetCurrentVersion()))),
 	)
+	metrics.StateTransitionCount.With(handler).Record(
+		mutableState.GetExecutionInfo().StateTransitionCount,
+	)
+	if mutableState.GetExecutionState().State == enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED {
+		metrics.StateTransitionCount.With(handler).Record(
+			mutableState.GetExecutionInfo().StateTransitionCount,
+			metrics.OperationTag(metrics.WorkflowCompletionStatsScope),
+		)
+	}
 }
 
 const (
@@ -1085,5 +1091,5 @@ func MutableStateFailoverVersion(
 	if mutableState == nil {
 		return nil
 	}
-	return convert.Int64Ptr(mutableState.GetCurrentVersion())
+	return util.Ptr(mutableState.GetCurrentVersion())
 }

@@ -34,8 +34,8 @@ import (
 
 	"github.com/temporalio/sqlparser"
 
-	"go.temporal.io/server/common/convert"
 	"go.temporal.io/server/common/primitives/timestamp"
+	"go.temporal.io/server/common/util"
 )
 
 type (
@@ -163,7 +163,7 @@ func (p *queryParser) convertComparisonExpr(compExpr *sqlparser.ComparisonExpr, 
 		if parsedQuery.workflowTypeName != nil {
 			return fmt.Errorf("can not query %s multiple times", WorkflowTypeName)
 		}
-		parsedQuery.workflowTypeName = convert.StringPtr(val)
+		parsedQuery.workflowTypeName = util.Ptr(val)
 	case WorkflowID:
 		val, err := extractStringValue(valStr)
 		if err != nil {
@@ -175,7 +175,7 @@ func (p *queryParser) convertComparisonExpr(compExpr *sqlparser.ComparisonExpr, 
 		if parsedQuery.workflowID != nil {
 			return fmt.Errorf("can not query %s multiple times", WorkflowID)
 		}
-		parsedQuery.workflowID = convert.StringPtr(val)
+		parsedQuery.workflowID = util.Ptr(val)
 	case CloseTime:
 		timestamp, err := convertToTime(valStr)
 		if err != nil {
@@ -213,7 +213,7 @@ func (p *queryParser) convertComparisonExpr(compExpr *sqlparser.ComparisonExpr, 
 		default:
 			return fmt.Errorf("invalid value for %s: %s", SearchPrecision, val)
 		}
-		parsedQuery.searchPrecision = convert.StringPtr(val)
+		parsedQuery.searchPrecision = util.Ptr(val)
 
 	default:
 		return fmt.Errorf("unknown filter name: %s", colNameStr)

@@ -30,6 +30,7 @@ import (
 
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
+	"go.temporal.io/server/common/api"
 	"go.temporal.io/server/common/headers"
 	"google.golang.org/grpc"
 
@@ -73,7 +74,7 @@ func (ni *NamespaceRateLimitInterceptor) Intercept(
 	info *grpc.UnaryServerInfo,
 	handler grpc.UnaryHandler,
 ) (interface{}, error) {
-	_, methodName := SplitMethodName(info.FullMethod)
+	methodName := api.MethodName(info.FullMethod)
 	token, ok := ni.tokens[methodName]
 	if !ok {
 		token = NamespaceRateLimitDefaultToken

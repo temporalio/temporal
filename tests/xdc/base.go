@@ -56,6 +56,9 @@ type (
 		protorequire.ProtoAssertions
 		clusterNames []string
 		suite.Suite
+
+		testClusterFactory tests.TestClusterFactory
+
 		cluster1               *tests.TestCluster
 		cluster2               *tests.TestCluster
 		logger                 log.Logger
@@ -74,7 +77,10 @@ func (s *xdcBaseSuite) clusterReplicationConfig() []*replicationpb.ClusterReplic
 }
 
 func (s *xdcBaseSuite) setupSuite(clusterNames []string, opts ...tests.Option) {
+	s.testClusterFactory = tests.NewTestClusterFactory()
+
 	params := tests.ApplyTestClusterParams(opts)
+
 	s.clusterNames = clusterNames
 	if s.logger == nil {
 		s.logger = log.NewTestLogger()
@@ -109,11 +115,11 @@ func (s *xdcBaseSuite) setupSuite(clusterNames []string, opts ...tests.Option) {
 		clusterConfigs[i].ServiceFxOptions = params.ServiceOptions
 	}
 
-	c, err := tests.NewCluster(s.T(), clusterConfigs[0], log.With(s.logger, tag.ClusterName(s.clusterNames[0])))
+	c, err := s.testClusterFactory.NewCluster(s.T(), clusterConfigs[0], log.With(s.logger, tag.ClusterName(s.clusterNames[0])))
 	s.Require().NoError(err)
 	s.cluster1 = c
 
-	c, err = tests.NewCluster(s.T(), clusterConfigs[1], log.With(s.logger, tag.ClusterName(s.clusterNames[1])))
+	c, err = s.testClusterFactory.NewCluster(s.T(), clusterConfigs[1], log.With(s.logger, tag.ClusterName(s.clusterNames[1])))
 	s.Require().NoError(err)
 	s.cluster2 = c
 

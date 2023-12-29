@@ -875,6 +875,7 @@ var (
 	WorkflowTerminateCount                = NewCounterDef("workflow_terminate")
 	WorkflowContinuedAsNewCount           = NewCounterDef("workflow_continued_as_new")
 	ReplicationStreamPanic                = NewCounterDef("replication_stream_panic")
+	ReplicationStreamError                = NewCounterDef("replication_stream_error")
 	ReplicationTasksSend                  = NewCounterDef("replication_tasks_send")
 	ReplicationTasksRecv                  = NewCounterDef("replication_tasks_recv")
 	ReplicationTasksRecvBacklog           = NewDimensionlessHistogramDef("replication_tasks_recv_backlog")

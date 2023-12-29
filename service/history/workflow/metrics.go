@@ -26,6 +26,7 @@ package workflow
 
 import (
 	enumspb "go.temporal.io/api/enums/v1"
+	enumsspb "go.temporal.io/server/api/enums/v1"
 
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
@@ -35,13 +36,20 @@ import (
 func emitWorkflowHistoryStats(
 	metricsHandler metrics.Handler,
 	namespace namespace.Name,
+	state enumsspb.WorkflowExecutionState,
 	historySize int,
 	historyCount int,
 ) {
+	handler := metricsHandler.WithTags(metrics.NamespaceTag(namespace.String()))
+	executionScope := handler.WithTags(metrics.OperationTag(metrics.ExecutionStatsScope))
+	metrics.HistorySize.With(executionScope).Record(int64(historySize))
+	metrics.HistoryCount.With(executionScope).Record(int64(historyCount))
 
-	executionScope := metricsHandler.WithTags(metrics.OperationTag(metrics.ExecutionStatsScope), metrics.NamespaceTag(namespace.String()))
-	executionScope.Histogram(metrics.HistorySize.Name(), metrics.HistorySize.Unit()).Record(int64(historySize))
-	executionScope.Histogram(metrics.HistoryCount.Name(), metrics.HistoryCount.Unit()).Record(int64(historyCount))
+	if state == enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED {
+		completionScope := handler.WithTags(metrics.OperationTag(metrics.WorkflowCompletionStatsScope))
+		metrics.HistorySize.With(completionScope).Record(int64(historySize))
+		metrics.HistoryCount.With(completionScope).Record(int64(historyCount))
+	}
 }
 
 func emitMutableStateStatus(
