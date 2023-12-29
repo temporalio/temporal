@@ -3291,14 +3291,15 @@ func (s *FunctionalSuite) TestUpdateWorkflow_ScheduledSpeculativeWorkflowTask_Te
 }
 
 func (s *FunctionalSuite) TestUpdateWorkflow_CompleteWorkflow_TerminateUpdate() {
-	testCases := []struct {
+	type testCase struct {
 		Name          string
 		Description   string
 		UpdateErr     string
 		UpdateFailure string
 		Commands      func(tv *testvars.TestVars) []*commandpb.Command
 		Messages      func(tv *testvars.TestVars, updRequestMsg *protocolpb.Message) []*protocolpb.Message
-	}{
+	}
+	testCases := []testCase{
 		{
 			Name:          "requested",
 			Description:   "update in stateRequested must be rejected by server with server generated rejection failure",
@@ -3394,7 +3395,7 @@ func (s *FunctionalSuite) TestUpdateWorkflow_CompleteWorkflow_TerminateUpdate() 
 			s.NoError(err)
 
 			updateResultCh := make(chan struct{})
-			go func() {
+			go func(tc testCase) {
 				resp, err1 := s.sendUpdate(tv, "1")
 
 				if tc.UpdateErr != "" {
@@ -3412,7 +3413,7 @@ func (s *FunctionalSuite) TestUpdateWorkflow_CompleteWorkflow_TerminateUpdate() 
 				}
 
 				updateResultCh <- struct{}{}
-			}()
+			}(tc) // To prevent capturing of tc range value by reference.
 
 			// Complete workflow.
 			_, err = poller.PollAndProcessWorkflowTask()
