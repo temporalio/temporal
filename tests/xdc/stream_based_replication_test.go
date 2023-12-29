@@ -196,7 +196,7 @@ func (s *streamBasedReplicationTestSuite) importTestEvents(
 
 func (s *streamBasedReplicationTestSuite) waitUntilNamespaceReplicated(
 	ctx context.Context,
-	namespace string,
+	namespaceName string,
 ) error {
 	ticker := time.NewTicker(1 * time.Second)
 	defer ticker.Stop()
@@ -205,7 +205,7 @@ func (s *streamBasedReplicationTestSuite) waitUntilNamespaceReplicated(
 		select {
 		case <-ticker.C:
 			_, err := s.cluster2.GetFrontendClient().DescribeNamespace(ctx, &workflowservice.DescribeNamespaceRequest{
-				Namespace: namespace,
+				Namespace: namespaceName,
 			})
 			if err != nil {
 				continue
