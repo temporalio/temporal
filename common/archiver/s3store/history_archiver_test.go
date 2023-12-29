@@ -53,9 +53,9 @@ import (
 	"go.temporal.io/server/common/archiver"
 	"go.temporal.io/server/common/archiver/s3store/mocks"
 	"go.temporal.io/server/common/codec"
-	"go.temporal.io/server/common/convert"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
+	"go.temporal.io/server/common/util"
 )
 
 const (
@@ -170,7 +170,7 @@ func setupFsEmulation(s3cli *mocks.MockS3API) {
 			var nextContinuationToken *string
 			if len(objects) > start+maxKeys {
 				isTruncated = true
-				nextContinuationToken = convert.StringPtr(fmt.Sprintf("%d", start+maxKeys))
+				nextContinuationToken = util.Ptr(fmt.Sprintf("%d", start+maxKeys))
 				objects = objects[start : start+maxKeys]
 			} else {
 				objects = objects[start:]
@@ -186,7 +186,7 @@ func setupFsEmulation(s3cli *mocks.MockS3API) {
 
 			if len(commonPrefixes) > start+maxKeys {
 				isTruncated = true
-				nextContinuationToken = convert.StringPtr(fmt.Sprintf("%d", start+maxKeys))
+				nextContinuationToken = util.Ptr(fmt.Sprintf("%d", start+maxKeys))
 				commonPrefixes = commonPrefixes[start : start+maxKeys]
 			} else if len(commonPrefixes) > 0 {
 				commonPrefixes = commonPrefixes[start:]

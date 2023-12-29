@@ -37,16 +37,15 @@ import (
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/api/workflow/v1"
 
-	"go.temporal.io/server/common/searchattribute"
-	"go.temporal.io/server/common/testing/protorequire"
-
 	archiverspb "go.temporal.io/server/api/archiver/v1"
 	"go.temporal.io/server/common/archiver"
 	"go.temporal.io/server/common/archiver/gcloud/connector"
-	"go.temporal.io/server/common/convert"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/primitives/timestamp"
+	"go.temporal.io/server/common/searchattribute"
+	"go.temporal.io/server/common/testing/protorequire"
+	"go.temporal.io/server/common/util"
 )
 
 const (
@@ -271,9 +270,9 @@ func (s *visibilityArchiverSuite) TestQuery_Success_NoNextPageToken() {
 	mockParser.EXPECT().Parse(gomock.Any()).Return(&parsedQuery{
 		closeTime:       closeTime,
 		searchPrecision: &dayPrecision,
-		workflowType:    convert.StringPtr("MobileOnlyWorkflow::processMobileOnly"),
-		workflowID:      convert.StringPtr(testWorkflowID),
-		runID:           convert.StringPtr(testRunID),
+		workflowType:    util.Ptr("MobileOnlyWorkflow::processMobileOnly"),
+		workflowID:      util.Ptr(testWorkflowID),
+		runID:           util.Ptr(testRunID),
 	}, nil)
 	visibilityArchiver.queryParser = mockParser
 	request := &archiver.QueryVisibilityRequest{
@@ -314,9 +313,9 @@ func (s *visibilityArchiverSuite) TestQuery_Success_SmallPageSize() {
 	mockParser.EXPECT().Parse(gomock.Any()).Return(&parsedQuery{
 		closeTime:       closeTime,
 		searchPrecision: &dayPrecision,
-		workflowType:    convert.StringPtr("MobileOnlyWorkflow::processMobileOnly"),
-		workflowID:      convert.StringPtr(testWorkflowID),
-		runID:           convert.StringPtr(testRunID),
+		workflowType:    util.Ptr("MobileOnlyWorkflow::processMobileOnly"),
+		workflowID:      util.Ptr(testWorkflowID),
+		runID:           util.Ptr(testRunID),
 	}, nil).AnyTimes()
 	visibilityArchiver.queryParser = mockParser
 	request := &archiver.QueryVisibilityRequest{

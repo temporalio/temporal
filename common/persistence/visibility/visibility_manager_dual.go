@@ -32,14 +32,14 @@ import (
 )
 
 type (
-	visibilityManagerDual struct {
+	VisibilityManagerDual struct {
 		visibilityManager          manager.VisibilityManager
 		secondaryVisibilityManager manager.VisibilityManager
 		managerSelector            managerSelector
 	}
 )
 
-var _ manager.VisibilityManager = (*visibilityManagerDual)(nil)
+var _ manager.VisibilityManager = (*VisibilityManagerDual)(nil)
 
 // NewVisibilityManagerDual create a visibility manager that operate on multiple manager
 // implementations based on dynamic config.
@@ -47,28 +47,36 @@ func NewVisibilityManagerDual(
 	visibilityManager manager.VisibilityManager,
 	secondaryVisibilityManager manager.VisibilityManager,
 	managerSelector managerSelector,
-) *visibilityManagerDual {
-	return &visibilityManagerDual{
+) *VisibilityManagerDual {
+	return &VisibilityManagerDual{
 		visibilityManager:          visibilityManager,
 		secondaryVisibilityManager: secondaryVisibilityManager,
 		managerSelector:            managerSelector,
 	}
 }
 
-func (v *visibilityManagerDual) Close() {
+func (v *VisibilityManagerDual) GetPrimaryVisibility() manager.VisibilityManager {
+	return v.visibilityManager
+}
+
+func (v *VisibilityManagerDual) GetSecondaryVisibility() manager.VisibilityManager {
+	return v.secondaryVisibilityManager
+}
+
+func (v *VisibilityManagerDual) Close() {
 	v.visibilityManager.Close()
 	v.secondaryVisibilityManager.Close()
 }
 
-func (v *visibilityManagerDual) GetReadStoreName(nsName namespace.Name) string {
+func (v *VisibilityManagerDual) GetReadStoreName(nsName namespace.Name) string {
 	return v.managerSelector.readManager(nsName).GetReadStoreName(nsName)
 }
 
-func (v *visibilityManagerDual) GetStoreNames() []string {
+func (v *VisibilityManagerDual) GetStoreNames() []string {
 	return append(v.visibilityManager.GetStoreNames(), v.secondaryVisibilityManager.GetStoreNames()...)
 }
 
-func (v *visibilityManagerDual) HasStoreName(stName string) bool {
+func (v *VisibilityManagerDual) HasStoreName(stName string) bool {
 	for _, sn := range v.GetStoreNames() {
 		if sn == stName {
 			return true
@@ -77,11 +85,11 @@ func (v *visibilityManagerDual) HasStoreName(stName string) bool {
 	return false
 }
 
-func (v *visibilityManagerDual) GetIndexName() string {
+func (v *VisibilityManagerDual) GetIndexName() string {
 	return v.visibilityManager.GetIndexName()
 }
 
-func (v *visibilityManagerDual) ValidateCustomSearchAttributes(
+func (v *VisibilityManagerDual) ValidateCustomSearchAttributes(
 	searchAttributes map[string]any,
 ) (map[string]any, error) {
 	ms, err := v.managerSelector.writeManagers()
@@ -97,7 +105,7 @@ func (v *visibilityManagerDual) ValidateCustomSearchAttributes(
 	return searchAttributes, nil
 }
 
-func (v *visibilityManagerDual) RecordWorkflowExecutionStarted(
+func (v *VisibilityManagerDual) RecordWorkflowExecutionStarted(
 	ctx context.Context,
 	request *manager.RecordWorkflowExecutionStartedRequest,
 ) error {
@@ -114,7 +122,7 @@ func (v *visibilityManagerDual) RecordWorkflowExecutionStarted(
 	return nil
 }
 
-func (v *visibilityManagerDual) RecordWorkflowExecutionClosed(
+func (v *VisibilityManagerDual) RecordWorkflowExecutionClosed(
 	ctx context.Context,
 	request *manager.RecordWorkflowExecutionClosedRequest,
 ) error {
@@ -131,7 +139,7 @@ func (v *visibilityManagerDual) RecordWorkflowExecutionClosed(
 	return nil
 }
 
-func (v *visibilityManagerDual) UpsertWorkflowExecution(
+func (v *VisibilityManagerDual) UpsertWorkflowExecution(
 	ctx context.Context,
 	request *manager.UpsertWorkflowExecutionRequest,
 ) error {
@@ -148,7 +156,7 @@ func (v *visibilityManagerDual) UpsertWorkflowExecution(
 	return nil
 }
 
-func (v *visibilityManagerDual) DeleteWorkflowExecution(
+func (v *VisibilityManagerDual) DeleteWorkflowExecution(
 	ctx context.Context,
 	request *manager.VisibilityDeleteWorkflowExecutionRequest,
 ) error {
@@ -165,77 +173,77 @@ func (v *visibilityManagerDual) DeleteWorkflowExecution(
 	return nil
 }
 
-func (v *visibilityManagerDual) ListOpenWorkflowExecutions(
+func (v *VisibilityManagerDual) ListOpenWorkflowExecutions(
 	ctx context.Context,
 	request *manager.ListWorkflowExecutionsRequest,
 ) (*manager.ListWorkflowExecutionsResponse, error) {
 	return v.managerSelector.readManager(request.Namespace).ListOpenWorkflowExecutions(ctx, request)
 }
 
-func (v *visibilityManagerDual) ListClosedWorkflowExecutions(
+func (v *VisibilityManagerDual) ListClosedWorkflowExecutions(
 	ctx context.Context,
 	request *manager.ListWorkflowExecutionsRequest,
 ) (*manager.ListWorkflowExecutionsResponse, error) {
 	return v.managerSelector.readManager(request.Namespace).ListClosedWorkflowExecutions(ctx, request)
 }
 
-func (v *visibilityManagerDual) ListOpenWorkflowExecutionsByType(
+func (v *VisibilityManagerDual) ListOpenWorkflowExecutionsByType(
 	ctx context.Context,
 	request *manager.ListWorkflowExecutionsByTypeRequest,
 ) (*manager.ListWorkflowExecutionsResponse, error) {
 	return v.managerSelector.readManager(request.Namespace).ListOpenWorkflowExecutionsByType(ctx, request)
 }
 
-func (v *visibilityManagerDual) ListClosedWorkflowExecutionsByType(
+func (v *VisibilityManagerDual) ListClosedWorkflowExecutionsByType(
 	ctx context.Context,
 	request *manager.ListWorkflowExecutionsByTypeRequest,
 ) (*manager.ListWorkflowExecutionsResponse, error) {
 	return v.managerSelector.readManager(request.Namespace).ListClosedWorkflowExecutionsByType(ctx, request)
 }
 
-func (v *visibilityManagerDual) ListOpenWorkflowExecutionsByWorkflowID(
+func (v *VisibilityManagerDual) ListOpenWorkflowExecutionsByWorkflowID(
 	ctx context.Context,
 	request *manager.ListWorkflowExecutionsByWorkflowIDRequest,
 ) (*manager.ListWorkflowExecutionsResponse, error) {
 	return v.managerSelector.readManager(request.Namespace).ListOpenWorkflowExecutionsByWorkflowID(ctx, request)
 }
 
-func (v *visibilityManagerDual) ListClosedWorkflowExecutionsByWorkflowID(
+func (v *VisibilityManagerDual) ListClosedWorkflowExecutionsByWorkflowID(
 	ctx context.Context,
 	request *manager.ListWorkflowExecutionsByWorkflowIDRequest,
 ) (*manager.ListWorkflowExecutionsResponse, error) {
 	return v.managerSelector.readManager(request.Namespace).ListClosedWorkflowExecutionsByWorkflowID(ctx, request)
 }
 
-func (v *visibilityManagerDual) ListClosedWorkflowExecutionsByStatus(
+func (v *VisibilityManagerDual) ListClosedWorkflowExecutionsByStatus(
 	ctx context.Context,
 	request *manager.ListClosedWorkflowExecutionsByStatusRequest,
 ) (*manager.ListWorkflowExecutionsResponse, error) {
 	return v.managerSelector.readManager(request.Namespace).ListClosedWorkflowExecutionsByStatus(ctx, request)
 }
 
-func (v *visibilityManagerDual) ListWorkflowExecutions(
+func (v *VisibilityManagerDual) ListWorkflowExecutions(
 	ctx context.Context,
 	request *manager.ListWorkflowExecutionsRequestV2,
 ) (*manager.ListWorkflowExecutionsResponse, error) {
 	return v.managerSelector.readManager(request.Namespace).ListWorkflowExecutions(ctx, request)
 }
 
-func (v *visibilityManagerDual) ScanWorkflowExecutions(
+func (v *VisibilityManagerDual) ScanWorkflowExecutions(
 	ctx context.Context,
 	request *manager.ListWorkflowExecutionsRequestV2,
 ) (*manager.ListWorkflowExecutionsResponse, error) {
 	return v.managerSelector.readManager(request.Namespace).ScanWorkflowExecutions(ctx, request)
 }
 
-func (v *visibilityManagerDual) CountWorkflowExecutions(
+func (v *VisibilityManagerDual) CountWorkflowExecutions(
 	ctx context.Context,
 	request *manager.CountWorkflowExecutionsRequest,
 ) (*manager.CountWorkflowExecutionsResponse, error) {
 	return v.managerSelector.readManager(request.Namespace).CountWorkflowExecutions(ctx, request)
 }
 
-func (v *visibilityManagerDual) GetWorkflowExecution(
+func (v *VisibilityManagerDual) GetWorkflowExecution(
 	ctx context.Context,
 	request *manager.GetWorkflowExecutionRequest,
 ) (*manager.GetWorkflowExecutionResponse, error) {

@@ -34,9 +34,11 @@ import (
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	failurepb "go.temporal.io/api/failure/v1"
+	protocolpb "go.temporal.io/api/protocol/v1"
 	"go.temporal.io/api/serviceerror"
 	updatepb "go.temporal.io/api/update/v1"
 	"go.temporal.io/api/workflowservice/v1"
+
 	clockspb "go.temporal.io/server/api/clock/v1"
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/common/definition"
@@ -244,6 +246,7 @@ func TestPollOutcome(t *testing.T) {
 
 		evStore := mockUpdateEventStore{}
 		require.NoError(t, upd.OnMessage(context.TODO(), &reqMsg, evStore))
+		upd.Send(context.TODO(), false, &protocolpb.Message_EventId{EventId: 2208}, evStore)
 		require.NoError(t, upd.OnMessage(context.TODO(), &rejMsg, evStore))
 
 		require.NoError(t, <-errCh)

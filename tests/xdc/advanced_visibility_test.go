@@ -56,9 +56,6 @@ import (
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/payload"
 	"go.temporal.io/server/common/payloads"
-	"go.temporal.io/server/common/persistence/sql/sqlplugin/mysql"
-	"go.temporal.io/server/common/persistence/sql/sqlplugin/postgresql"
-	"go.temporal.io/server/common/persistence/sql/sqlplugin/sqlite"
 	"go.temporal.io/server/common/searchattribute"
 	"go.temporal.io/server/common/testing/protorequire"
 	"go.temporal.io/server/common/worker_versioning"
@@ -107,13 +104,12 @@ func (s *AdvVisCrossDCTestSuite) SetupSuite() {
 	s.testClusterFactory = tests.NewTestClusterFactory()
 
 	var fileName string
-	switch tests.TestFlags.PersistenceDriver {
-	case mysql.PluginNameV8, postgresql.PluginNameV12, postgresql.PluginNameV12PGX, sqlite.PluginName:
+	if tests.UsingSQLAdvancedVisibility() {
 		// NOTE: can't use xdc_clusters.yaml here because it somehow interferes with the other xDC tests.
 		fileName = "../testdata/xdc_adv_vis_clusters.yaml"
 		s.isElasticsearchEnabled = false
 		s.logger.Info(fmt.Sprintf("Running xDC advanced visibility test with %s/%s persistence", tests.TestFlags.PersistenceType, tests.TestFlags.PersistenceDriver))
-	default:
+	} else {
 		fileName = "../testdata/xdc_adv_vis_es_clusters.yaml"
 		s.isElasticsearchEnabled = true
 		s.logger.Info("Running xDC advanced visibility test with Elasticsearch persistence")
@@ -318,38 +314,35 @@ func (s *AdvVisCrossDCTestSuite) TestSearchAttributes() {
 	time.Sleep(waitForESToSettle)
 
 	testListResult = func(client tests.FrontendClient, lr *workflowservice.ListWorkflowExecutionsRequest) {
-		verified := false
-		for i := 0; i < numOfRetry; i++ {
+		s.Eventually(func() bool {
 			resp, err := client.ListWorkflowExecutions(tests.NewContext(), lr)
 			s.NoError(err)
-			if len(resp.GetExecutions()) == 1 {
-				execution := resp.GetExecutions()[0]
-				retrievedSearchAttr := execution.SearchAttributes
-				if retrievedSearchAttr != nil && len(retrievedSearchAttr.GetIndexedFields()) == 3 {
-					fields := retrievedSearchAttr.GetIndexedFields()
-					searchValBytes := fields[s.testSearchAttributeKey]
-					var searchVal string
-					payload.Decode(searchValBytes, &searchVal)
-					s.Equal("another string", searchVal)
-
-					searchValBytes2 := fields["CustomIntField"]
-					var searchVal2 int
-					payload.Decode(searchValBytes2, &searchVal2)
-					s.Equal(123, searchVal2)
-
-					buildIdsBytes := fields[searchattribute.BuildIds]
-					var buildIds []string
-					err = payload.Decode(buildIdsBytes, &buildIds)
-					s.NoError(err)
-					s.Equal([]string{worker_versioning.UnversionedSearchAttribute}, buildIds)
-
-					verified = true
-					break
-				}
+			if len(resp.GetExecutions()) != 1 {
+				return false
 			}
-			time.Sleep(waitTimeInMs * time.Millisecond)
-		}
-		s.True(verified)
+			fields := resp.GetExecutions()[0].SearchAttributes.GetIndexedFields()
+			if len(fields) != 3 {
+				return false
+			}
+
+			searchValBytes := fields[s.testSearchAttributeKey]
+			var searchVal string
+			payload.Decode(searchValBytes, &searchVal)
+			s.Equal("another string", searchVal)
+
+			searchValBytes2 := fields["CustomIntField"]
+			var searchVal2 int
+			payload.Decode(searchValBytes2, &searchVal2)
+			s.Equal(123, searchVal2)
+
+			buildIdsBytes := fields[searchattribute.BuildIds]
+			var buildIds []string
+			err = payload.Decode(buildIdsBytes, &buildIds)
+			s.NoError(err)
+			s.Equal([]string{worker_versioning.UnversionedSearchAttribute}, buildIds)
+
+			return true
+		}, waitTimeInMs*time.Millisecond*numOfRetry, waitTimeInMs*time.Millisecond)
 	}
 
 	saListRequest = &workflowservice.ListWorkflowExecutionsRequest{

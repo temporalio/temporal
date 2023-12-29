@@ -1251,8 +1251,6 @@ func (s *workflowSuite) TestBackfillInclusiveStartEnd() {
 	currentTweakablePolicies.Version = InclusiveBackfillStartTime
 	defer func() { currentTweakablePolicies.Version = currentVersion }()
 
-	backfillTime := timestamppb.New(time.Date(2022, 5, 31, 19, 17, 0, 0, time.UTC))
-
 	s.runAcrossContinue(
 		[]workflowRun{
 			// if start and end time were not inclusive, this backfill run would not exist
@@ -1274,12 +1272,22 @@ func (s *workflowSuite) TestBackfillInclusiveStartEnd() {
 			{
 				at: time.Date(2022, 6, 1, 0, 5, 0, 0, time.UTC),
 				f: func() {
+					triggerBackfillTime := time.Date(2022, 5, 31, 19, 17, 0, 0, time.UTC)
+					triggerBackfill := &schedpb.BackfillRequest{
+						StartTime:     timestamppb.New(triggerBackfillTime),
+						EndTime:       timestamppb.New(triggerBackfillTime),
+						OverlapPolicy: enumspb.SCHEDULE_OVERLAP_POLICY_BUFFER_ALL,
+					}
+
+					ignoreBackfillTime := triggerBackfillTime.Add(500 * time.Millisecond)
+					ignoreBackfill := &schedpb.BackfillRequest{
+						StartTime:     timestamppb.New(ignoreBackfillTime),
+						EndTime:       timestamppb.New(ignoreBackfillTime),
+						OverlapPolicy: enumspb.SCHEDULE_OVERLAP_POLICY_BUFFER_ALL,
+					}
+
 					s.env.SignalWorkflow(SignalNamePatch, &schedpb.SchedulePatch{
-						BackfillRequest: []*schedpb.BackfillRequest{{
-							StartTime:     backfillTime,
-							EndTime:       backfillTime,
-							OverlapPolicy: enumspb.SCHEDULE_OVERLAP_POLICY_BUFFER_ALL,
-						}},
+						BackfillRequest: []*schedpb.BackfillRequest{triggerBackfill, ignoreBackfill},
 					})
 				},
 			},

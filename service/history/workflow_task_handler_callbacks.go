@@ -39,6 +39,7 @@ import (
 	"go.temporal.io/api/serviceerror"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	"go.temporal.io/api/workflowservice/v1"
+
 	"go.temporal.io/server/common/dynamicconfig"
 
 	enumsspb "go.temporal.io/server/api/enums/v1"
@@ -230,7 +231,7 @@ func (handler *workflowTaskHandlerCallbacksImpl) handleWorkflowTaskStarted(
 			if workflowTask.StartedEventID != common.EmptyEventID {
 				// If workflow task is started as part of the current request scope then return a positive response
 				if workflowTask.RequestID == requestID {
-					resp, err = handler.createRecordWorkflowTaskStartedResponse(mutableState, workflowContext.GetUpdateRegistry(ctx), workflowTask, req.PollRequest.GetIdentity())
+					resp, err = handler.createRecordWorkflowTaskStartedResponse(ctx, mutableState, workflowContext.GetUpdateRegistry(ctx), workflowTask, req.PollRequest.GetIdentity(), false)
 					if err != nil {
 						return nil, err
 					}
@@ -286,7 +287,7 @@ func (handler *workflowTaskHandlerCallbacksImpl) handleWorkflowTaskStarted(
 				metrics.TaskQueueTypeTag(enumspb.TASK_QUEUE_TYPE_WORKFLOW),
 			)
 
-			resp, err = handler.createRecordWorkflowTaskStartedResponse(mutableState, workflowContext.GetUpdateRegistry(ctx), workflowTask, req.PollRequest.GetIdentity())
+			resp, err = handler.createRecordWorkflowTaskStartedResponse(ctx, mutableState, workflowContext.GetUpdateRegistry(ctx), workflowTask, req.PollRequest.GetIdentity(), false)
 			if err != nil {
 				return nil, err
 			}
@@ -470,21 +471,29 @@ func (handler *workflowTaskHandlerCallbacksImpl) handleWorkflowTaskCompleted(
 			metrics.OperationTag(metrics.HistoryRespondWorkflowTaskCompletedScope))
 	}
 
-	workflowTaskHeartbeating := request.GetForceCreateNewWorkflowTask() && len(request.Commands) == 0 && len(request.Messages) == 0
-	var workflowTaskHeartbeatTimeout bool
+	var wtHeartbeatTimedOut bool
 	var completedEvent *historypb.HistoryEvent
-	var responseMutations []workflowTaskResponseMutation
 
-	if workflowTaskHeartbeating {
-		namespace := namespaceEntry.Name()
-		timeout := handler.config.WorkflowTaskHeartbeatTimeout(namespace.String())
-		origSchedTime := currentWorkflowTask.OriginalScheduledTime
-		if origSchedTime.UnixNano() > 0 && handler.timeSource.Now().After(origSchedTime.Add(timeout)) {
-			workflowTaskHeartbeatTimeout = true
+	// SDKs set ForceCreateNewWorkflowTask flag to true when they are doing WT heartbeats.
+	// In a mean time, there might be pending commands and messages on the worker side.
+	// If those commands/messages are sent on the heartbeat WT it means that WF is making progress.
+	// WT heartbeat timeout is applicable only when WF doesn't make any progress and does heartbeats only.
+	checkWTHeartbeatTimeout := request.GetForceCreateNewWorkflowTask() && len(request.Commands) == 0 && len(request.Messages) == 0
+
+	if checkWTHeartbeatTimeout {
+		// WorkflowTaskHeartbeatTimeout is a total duration for which workflow is allowed to send continuous heartbeats.
+		// Default is 30 minutes.
+		// Heartbeat duration is computed between now and OriginalScheduledTime, which is set when WT is scheduled and
+		// carried over to the consequence WTs if they are heartbeat WTs.
+		// After this timeout is expired, WT is timed out (although this specific WT doesn't)
+		// and new WT will be scheduled on non-sticky task queue (see ClearStickyTaskQueue call bellow).
+		wtHeartbeatTimeoutDuration := handler.config.WorkflowTaskHeartbeatTimeout(nsName)
+		if currentWorkflowTask.OriginalScheduledTime.UnixNano() > 0 &&
+			handler.timeSource.Now().After(currentWorkflowTask.OriginalScheduledTime.Add(wtHeartbeatTimeoutDuration)) {
 
 			scope := handler.metricsHandler.WithTags(
 				metrics.OperationTag(metrics.HistoryRespondWorkflowTaskCompletedScope),
-				metrics.NamespaceTag(namespace.String()),
+				metrics.NamespaceTag(nsName),
 			)
 			scope.Counter(metrics.WorkflowTaskHeartbeatTimeoutCounter.Name()).Record(1)
 			completedEvent, err = ms.AddWorkflowTaskTimedOutEvent(currentWorkflowTask)
@@ -492,13 +501,11 @@ func (handler *workflowTaskHandlerCallbacksImpl) handleWorkflowTaskCompleted(
 				return nil, err
 			}
 			ms.ClearStickyTaskQueue()
-		} else {
-			completedEvent, err = ms.AddWorkflowTaskCompletedEvent(currentWorkflowTask, request, limits)
-			if err != nil {
-				return nil, err
-			}
+			wtHeartbeatTimedOut = true
 		}
-	} else {
+	}
+	// WT wasn't timed out (due to too many heartbeats), therefore WTCompleted event should be created.
+	if !wtHeartbeatTimedOut {
 		completedEvent, err = ms.AddWorkflowTaskCompletedEvent(currentWorkflowTask, request, limits)
 		if err != nil {
 			return nil, err
@@ -523,6 +530,7 @@ func (handler *workflowTaskHandlerCallbacksImpl) handleWorkflowTaskCompleted(
 		wtFailedCause               *workflowTaskFailedCause
 		activityNotStartedCancelled bool
 		newMutableState             workflow.MutableState
+		responseMutations           []workflowTaskResponseMutation
 	)
 	// hasBufferedEvents indicates if there are any buffered events which should generate a new workflow task
 	hasBufferedEvents := ms.HasBufferedEvents()
@@ -580,6 +588,20 @@ func (handler *workflowTaskHandlerCallbacksImpl) handleWorkflowTaskCompleted(
 				request.Messages,
 				func(msg *protocolpb.Message) string { return msg.Id },
 			),
+		); err != nil {
+			return nil, err
+		}
+
+		// Worker must respond with Update Accepted or Update Rejected message on every Update Requested
+		// message that were delivered on specific WT, when completing this WT.
+		// If worker ignored the update request (old SDK or SDK bug), then server rejects this update.
+		// Otherwise, this update will be delivered (and new WT created) again and again.
+		if err = workflowTaskHandler.rejectUnprocessedUpdates(
+			ctx,
+			currentWorkflowTask.ScheduledEventID,
+			request.GetForceCreateNewWorkflowTask(),
+			weContext.GetWorkflowKey(),
+			request.GetIdentity(),
 		); err != nil {
 			return nil, err
 		}
@@ -646,7 +668,11 @@ func (handler *workflowTaskHandlerCallbacksImpl) handleWorkflowTaskCompleted(
 			bufferedEventShouldCreateNewTask ||
 			activityNotStartedCancelled {
 			newWorkflowTaskType = enumsspb.WORKFLOW_TASK_TYPE_NORMAL
-		} else if weContext.UpdateRegistry(ctx).HasOutgoing() {
+
+			// There shouldn't be any sent updates in the registry because
+			// all sent but not processed updates were rejected by server.
+			// Therefore, it doesn't matter if to includeAlreadySent or not.
+		} else if weContext.UpdateRegistry(ctx).HasOutgoingMessages(true) {
 			if completedEvent == nil || ms.GetNextEventID() == completedEvent.GetEventId()+1 {
 				newWorkflowTaskType = enumsspb.WORKFLOW_TASK_TYPE_SPECULATIVE
 			} else {
@@ -668,7 +694,9 @@ func (handler *workflowTaskHandlerCallbacksImpl) handleWorkflowTaskCompleted(
 	// Speculative workflow task will be created after mutable state is persisted.
 	if newWorkflowTaskType == enumsspb.WORKFLOW_TASK_TYPE_NORMAL {
 		var newWTErr error
-		if workflowTaskHeartbeating && !workflowTaskHeartbeatTimeout {
+		// If we checked WT heartbeat timeout before and WT wasn't timed out,
+		// then OriginalScheduledTime needs to be carried over to the new WT.
+		if checkWTHeartbeatTimeout && !wtHeartbeatTimedOut {
 			newWorkflowTask, newWTErr = ms.AddWorkflowTaskScheduledEventAsHeartbeat(
 				bypassTaskGeneration,
 				timestamppb.New(currentWorkflowTask.OriginalScheduledTime),
@@ -781,9 +809,9 @@ func (handler *workflowTaskHandlerCallbacksImpl) handleWorkflowTaskCompleted(
 		}
 	}
 
-	handler.handleBufferedQueries(ms, req.GetCompleteRequest().GetQueryResults(), newWorkflowTask != nil, namespaceEntry, workflowTaskHeartbeating)
+	handler.handleBufferedQueries(ms, req.GetCompleteRequest().GetQueryResults(), newWorkflowTask != nil, namespaceEntry)
 
-	if workflowTaskHeartbeatTimeout {
+	if wtHeartbeatTimedOut {
 		// at this point, update is successful, but we still return an error to client so that the worker will give up this workflow
 		// release workflow lock with nil error to prevent mutable state from being cleared and reloaded
 		workflowContext.GetReleaseFn()(nil)
@@ -798,7 +826,7 @@ func (handler *workflowTaskHandlerCallbacksImpl) handleWorkflowTaskCompleted(
 
 	resp := &historyservice.RespondWorkflowTaskCompletedResponse{}
 	if request.GetReturnNewWorkflowTask() && newWorkflowTask != nil {
-		resp.StartedResponse, err = handler.createRecordWorkflowTaskStartedResponse(ms, weContext.UpdateRegistry(ctx), newWorkflowTask, request.GetIdentity())
+		resp.StartedResponse, err = handler.createRecordWorkflowTaskStartedResponse(ctx, ms, weContext.UpdateRegistry(ctx), newWorkflowTask, request.GetIdentity(), request.GetForceCreateNewWorkflowTask())
 		if err != nil {
 			return nil, err
 		}
@@ -867,10 +895,12 @@ func (handler *workflowTaskHandlerCallbacksImpl) verifyFirstWorkflowTaskSchedule
 }
 
 func (handler *workflowTaskHandlerCallbacksImpl) createRecordWorkflowTaskStartedResponse(
+	ctx context.Context,
 	ms workflow.MutableState,
 	updateRegistry update.Registry,
 	workflowTask *workflow.WorkflowTaskInfo,
 	identity string,
+	wtHeartbeat bool,
 ) (*historyservice.RecordWorkflowTaskStartedResponse, error) {
 
 	response := &historyservice.RecordWorkflowTaskStartedResponse{}
@@ -917,7 +947,12 @@ func (handler *workflowTaskHandlerCallbacksImpl) createRecordWorkflowTaskStarted
 		}
 	}
 
-	response.Messages = updateRegistry.ReadOutgoingMessages(workflowTask.StartedEventID)
+	// If there are updates in the registry which were already sent to worker but still
+	// are not processed and not rejected by server, it means that WT that was used to
+	// deliver those updates failed, got timed out, or got lost.
+	// Resend these updates if this is not a heartbeat WT (includeAlreadySent = !wtHeartbeat).
+	// Heartbeat WT delivers only new updates that come while this WT was running (similar to queries and buffered events).
+	response.Messages = updateRegistry.Send(ctx, !wtHeartbeat, workflowTask.StartedEventID, workflow.WithEffects(effect.Immediate(ctx), ms))
 
 	if workflowTask.Type == enumsspb.WORKFLOW_TASK_TYPE_SPECULATIVE && len(response.GetMessages()) == 0 {
 		return nil, serviceerror.NewNotFound("No messages for speculative workflow task.")
@@ -1143,7 +1178,7 @@ func (handler *workflowTaskHandlerCallbacksImpl) withNewWorkflowTask(
 	)
 }
 
-func (handler *workflowTaskHandlerCallbacksImpl) handleBufferedQueries(ms workflow.MutableState, queryResults map[string]*querypb.WorkflowQueryResult, createNewWorkflowTask bool, namespaceEntry *namespace.Namespace, workflowTaskHeartbeating bool) {
+func (handler *workflowTaskHandlerCallbacksImpl) handleBufferedQueries(ms workflow.MutableState, queryResults map[string]*querypb.WorkflowQueryResult, createNewWorkflowTask bool, namespaceEntry *namespace.Namespace) {
 	queryRegistry := ms.GetQueryRegistry()
 	if !queryRegistry.HasBufferedQuery() {
 		return
@@ -1157,12 +1192,6 @@ func (handler *workflowTaskHandlerCallbacksImpl) handleBufferedQueries(ms workfl
 		metrics.OperationTag(metrics.HistoryRespondWorkflowTaskCompletedScope),
 		metrics.NamespaceTag(namespaceEntry.Name().String()),
 		metrics.CommandTypeTag("ConsistentQuery"))
-
-	// if its a heartbeat workflow task it means local activities may still be running on the worker
-	// which were started by an external event which happened before the query
-	if workflowTaskHeartbeating {
-		return
-	}
 
 	sizeLimitError := handler.config.BlobSizeLimitError(namespaceName.String())
 	sizeLimitWarn := handler.config.BlobSizeLimitWarn(namespaceName.String())
