@@ -33,12 +33,10 @@ import (
 	"github.com/pborman/uuid"
 	"github.com/stretchr/testify/suite"
 	commonpb "go.temporal.io/api/common/v1"
-	"go.temporal.io/api/enums/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	historypb "go.temporal.io/api/history/v1"
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/api/workflowservice/v1"
-	"go.temporal.io/server/api/adminservice/v1"
 	historyspb "go.temporal.io/server/api/history/v1"
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/client"
@@ -49,7 +47,6 @@ import (
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence/serialization"
-	"go.temporal.io/server/common/persistence/versionhistory"
 	"go.temporal.io/server/common/primitives"
 	test "go.temporal.io/server/common/testing"
 	"go.temporal.io/server/service/history/replication"
@@ -97,7 +94,7 @@ func (s *streamBasedReplicationTestSuite) SetupSuite() {
 	)
 	ctx := context.Background()
 	s.namespaceName = "replication-test"
-	s.cluster1.GetFrontendClient().RegisterNamespace(ctx, &workflowservice.RegisterNamespaceRequest{
+	_, err := s.cluster1.GetFrontendClient().RegisterNamespace(ctx, &workflowservice.RegisterNamespaceRequest{
 		Namespace: s.namespaceName,
 		Clusters:  s.clusterReplicationConfig(),
 		// The first cluster is the active cluster.
@@ -107,7 +104,8 @@ func (s *streamBasedReplicationTestSuite) SetupSuite() {
 		// This is a required parameter.
 		WorkflowExecutionRetentionPeriod: durationpb.New(time.Hour * 24),
 	})
-	err := s.waitUntilNamespaceReplicated(ctx, s.namespaceName)
+	s.Require().NoError(err)
+	err = s.waitUntilNamespaceReplicated(ctx, s.namespaceName)
 	s.Require().NoError(err)
 
 	nsRes, _ := s.cluster1.GetFrontendClient().DescribeNamespace(ctx, &workflowservice.DescribeNamespaceRequest{
@@ -128,8 +126,6 @@ func (s *streamBasedReplicationTestSuite) TearDownSuite() {
 
 func (s *streamBasedReplicationTestSuite) SetupTest() {
 	s.setupTest()
-	// Register a namespace.
-
 }
 
 func (s *streamBasedReplicationTestSuite) TestReplicateHistoryEvents_ForceReplicationScenario() {
@@ -182,7 +178,8 @@ func (s *streamBasedReplicationTestSuite) importTestEvents(
 			historyBatch = append(historyBatch, historyEvents)
 		}
 
-		versionHistory := s.eventBatchesToVersionHistory(nil, historyBatch)
+		versionHistory, err := EventBatchesToVersionHistory(nil, historyBatch)
+		s.NoError(err)
 		s.importEvents(
 			workflowID,
 			runID,
@@ -195,35 +192,6 @@ func (s *streamBasedReplicationTestSuite) importTestEvents(
 		executions = append(executions, &commonpb.WorkflowExecution{WorkflowId: workflowID, RunId: runID})
 	}
 	return executions
-}
-
-func (s *streamBasedReplicationTestSuite) waitUntilWorkflowReplicated(
-	ctx context.Context,
-	namespace string,
-	workflowId string,
-	runId string,
-) error {
-	ticker := time.NewTicker(1 * time.Second)
-	defer ticker.Stop()
-
-	for {
-		select {
-		case <-ticker.C:
-			res, err := s.cluster2.GetAdminClient().DescribeMutableState(ctx, &adminservice.DescribeMutableStateRequest{
-				Namespace: namespace,
-				Execution: &commonpb.WorkflowExecution{
-					WorkflowId: workflowId,
-					RunId:      runId,
-				},
-			})
-			if err != nil {
-				return err
-			}
-			if res.GetDatabaseMutableState().GetExecutionState().GetStatus() != enums.WORKFLOW_EXECUTION_STATUS_RUNNING {
-				return nil
-			}
-		}
-	}
 }
 
 func (s *streamBasedReplicationTestSuite) waitUntilNamespaceReplicated(
@@ -289,6 +257,7 @@ func (s *streamBasedReplicationTestSuite) assertHistoryEvents(
 		s.Equal(batch1.VersionHistory.Items, batch2.VersionHistory.Items)
 		s.Equal(batch1.RawEventBatch, batch2.RawEventBatch)
 	}
+	s.False(iterator2.HasNext())
 	return nil
 }
 
@@ -352,28 +321,4 @@ func (s *streamBasedReplicationTestSuite) importEvents(
 	resp, err := historyClient.ImportWorkflowExecution(context.Background(), req)
 	s.NoError(err, "Failed to import history event")
 	s.Nil(resp.Token)
-}
-
-func (s *streamBasedReplicationTestSuite) eventBatchesToVersionHistory(
-	versionHistory *historyspb.VersionHistory,
-	eventBatches []*historypb.History,
-) *historyspb.VersionHistory {
-
-	// TODO temporary code to generate version history
-	//  we should generate version as part of modeled based testing
-	if versionHistory == nil {
-		versionHistory = versionhistory.NewVersionHistory(nil, nil)
-	}
-	for _, batch := range eventBatches {
-		for _, event := range batch.Events {
-			err := versionhistory.AddOrUpdateVersionHistoryItem(versionHistory,
-				versionhistory.NewVersionHistoryItem(
-					event.GetEventId(),
-					event.GetVersion(),
-				))
-			s.NoError(err)
-		}
-	}
-
-	return versionHistory
 }

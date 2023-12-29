@@ -45,14 +45,13 @@ import (
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	historyspb "go.temporal.io/server/api/history/v1"
 	repicationpb "go.temporal.io/server/api/replication/v1"
-	replicationspb "go.temporal.io/server/api/replication/v1"
 	"go.temporal.io/server/client"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence/serialization"
-	"go.temporal.io/server/common/persistence/versionhistory"
 	"go.temporal.io/server/common/testing/protorequire"
 	"go.temporal.io/server/service/history/replication"
+	"go.temporal.io/server/tests/xdc"
 	"google.golang.org/protobuf/types/known/durationpb"
 	"gopkg.in/yaml.v3"
 
@@ -73,7 +72,7 @@ type (
 		suite.Suite
 
 		testClusterFactory          tests.TestClusterFactory
-		standByReplicationTasksChan chan *replicationspb.ReplicationTask
+		standByReplicationTasksChan chan *repicationpb.ReplicationTask
 		mockAdminClient             map[string]adminservice.AdminServiceClient
 		namespace                   namespace.Name
 		namespaceID                 namespace.ID
@@ -129,7 +128,7 @@ func (s *NDCReplicationTaskBatchingTestSuite) SetupSuite() {
 	mockActiveStreamClient.EXPECT().Recv().DoAndReturn(func() (*adminservice.StreamWorkflowReplicationMessagesResponse, error) {
 		return s.GetReplicationMessagesMock()
 	}).AnyTimes()
-	s.standByReplicationTasksChan = make(chan *replicationspb.ReplicationTask, 100)
+	s.standByReplicationTasksChan = make(chan *repicationpb.ReplicationTask, 100)
 
 	mockActiveClient := adminservicemock.NewMockAdminServiceClient(s.controller)
 	mockActiveClient.EXPECT().StreamWorkflowReplicationMessages(gomock.Any()).Return(mockActiveStreamClient, nil).AnyTimes()
@@ -139,7 +138,7 @@ func (s *NDCReplicationTaskBatchingTestSuite) SetupSuite() {
 	passiveClusterConfig.MockAdminClient = s.mockAdminClient
 
 	passiveClusterConfig.ClusterMetadata.MasterClusterName = s.passiveClusterName
-	delete(passiveClusterConfig.ClusterMetadata.ClusterInformation, "cluster-c") //ndc_clusters.yaml has 3 clusters, but we only need 2 for this test
+	delete(passiveClusterConfig.ClusterMetadata.ClusterInformation, "cluster-c") // ndc_clusters.yaml has 3 clusters, but we only need 2 for this test
 	cluster, err := s.testClusterFactory.NewCluster(s.T(), passiveClusterConfig, log.With(s.logger, tag.ClusterName(clusterName[0])))
 	s.Require().NoError(err)
 	s.passtiveCluster = cluster
@@ -177,14 +176,15 @@ func (s *NDCReplicationTaskBatchingTestSuite) TestHistoryReplicationTaskAndThenR
 				historyEvents.Events = append(historyEvents.Events, event.GetData().(*historypb.HistoryEvent))
 			}
 			historyBatch = append(historyBatch, historyEvents)
-
+			history, err := xdc.EventBatchesToVersionHistory(nil, historyBatch)
+			s.NoError(err)
 			s.standByReplicationTasksChan <- s.createHistoryEventReplicationTaskFromHistoryEventBatch( // supply history replication task one by one
 				s.namespaceID.String(),
 				workflowID,
 				runID,
 				historyEvents.Events,
 				nil,
-				s.eventBatchesToVersionHistory(nil, historyBatch).Items,
+				history.Items,
 			)
 		}
 		execution := workflow.Execution{
@@ -270,7 +270,7 @@ func (s *NDCReplicationTaskBatchingTestSuite) GetReplicationMessagesMock() (*adm
 	task := <-s.standByReplicationTasksChan
 	taskID := atomic.AddInt64(&s.standByTaskID, 1)
 	task.SourceTaskId = taskID
-	tasks := []*replicationspb.ReplicationTask{task}
+	tasks := []*repicationpb.ReplicationTask{task}
 
 	replicationMessage := &repicationpb.WorkflowReplicationMessages{
 		ReplicationTasks:       tasks,
@@ -291,7 +291,7 @@ func (s *NDCReplicationTaskBatchingTestSuite) createHistoryEventReplicationTaskF
 	events []*historypb.HistoryEvent,
 	newRunEvents []*historypb.HistoryEvent,
 	versionHistoryItems []*historyspb.VersionHistoryItem,
-) *replicationspb.ReplicationTask {
+) *repicationpb.ReplicationTask {
 	eventBlob, err := s.serializer.SerializeEvents(events, enumspb.ENCODING_TYPE_PROTO3)
 	var newRunEventBlob *commonpb.DataBlob
 	if newRunEvents != nil {
@@ -300,10 +300,10 @@ func (s *NDCReplicationTaskBatchingTestSuite) createHistoryEventReplicationTaskF
 	}
 	s.NoError(err)
 	taskType := enumsspb.REPLICATION_TASK_TYPE_HISTORY_V2_TASK
-	replicationTask := &replicationspb.ReplicationTask{
+	replicationTask := &repicationpb.ReplicationTask{
 		TaskType: taskType,
-		Attributes: &replicationspb.ReplicationTask_HistoryTaskAttributes{
-			HistoryTaskAttributes: &replicationspb.HistoryTaskAttributes{
+		Attributes: &repicationpb.ReplicationTask_HistoryTaskAttributes{
+			HistoryTaskAttributes: &repicationpb.HistoryTaskAttributes{
 				NamespaceId:         namespaceId,
 				WorkflowId:          workflowId,
 				RunId:               runId,
@@ -313,25 +313,4 @@ func (s *NDCReplicationTaskBatchingTestSuite) createHistoryEventReplicationTaskF
 			}},
 	}
 	return replicationTask
-}
-
-func (s *NDCReplicationTaskBatchingTestSuite) eventBatchesToVersionHistory(
-	versionHistory *historyspb.VersionHistory,
-	eventBatches []*historypb.History,
-) *historyspb.VersionHistory {
-	if versionHistory == nil {
-		versionHistory = versionhistory.NewVersionHistory(nil, nil)
-	}
-	for _, batch := range eventBatches {
-		for _, event := range batch.Events {
-			err := versionhistory.AddOrUpdateVersionHistoryItem(versionHistory,
-				versionhistory.NewVersionHistoryItem(
-					event.GetEventId(),
-					event.GetVersion(),
-				))
-			s.NoError(err)
-		}
-	}
-
-	return versionHistory
 }

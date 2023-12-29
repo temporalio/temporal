@@ -35,7 +35,10 @@ import (
 
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
+	historypb "go.temporal.io/api/history/v1"
 	replicationpb "go.temporal.io/api/replication/v1"
+	historyspb "go.temporal.io/server/api/history/v1"
+	"go.temporal.io/server/common/persistence/versionhistory"
 	"gopkg.in/yaml.v3"
 
 	"go.temporal.io/server/api/adminservice/v1"
@@ -153,4 +156,30 @@ func (s *xdcBaseSuite) setupTest() {
 	// Have to define our overridden assertions in the test setup. If we did it earlier, s.T() will return nil
 	s.Assertions = require.New(s.T())
 	s.ProtoAssertions = protorequire.New(s.T())
+}
+
+func EventBatchesToVersionHistory(
+	versionHistory *historyspb.VersionHistory,
+	eventBatches []*historypb.History,
+) (*historyspb.VersionHistory, error) {
+
+	// TODO temporary code to generate version history
+	//  we should generate version as part of modeled based testing
+	if versionHistory == nil {
+		versionHistory = versionhistory.NewVersionHistory(nil, nil)
+	}
+	for _, batch := range eventBatches {
+		for _, event := range batch.Events {
+			err := versionhistory.AddOrUpdateVersionHistoryItem(versionHistory,
+				versionhistory.NewVersionHistoryItem(
+					event.GetEventId(),
+					event.GetVersion(),
+				))
+			if err != nil {
+				return nil, err
+			}
+		}
+	}
+
+	return versionHistory, nil
 }
