@@ -1036,10 +1036,11 @@ func (s *activityReplicatorStateSuite) TestSyncActivity_ActivityFound_Zombie() {
 	s.mockMutableState.EXPECT().GetActivityInfo(scheduledEventID).Return(&persistencespb.ActivityInfo{
 		Version: version,
 	}, true)
+
 	s.mockMutableState.EXPECT().UpdateActivityInfo(&historyservice.ActivitySyncInfo{
 		Version:          version,
 		ScheduledEventId: scheduledEventID,
-		ScheduledTime:    &now,
+		ScheduledTime:    timestamppb.New(now),
 		VersionHistory:   incomingVersionHistory,
 	}, false).Return(nil)
 	s.mockMutableState.EXPECT().GetPendingActivityInfos().Return(map[int64]*persistencespb.ActivityInfo{})
@@ -1128,7 +1129,7 @@ func (s *activityReplicatorStateSuite) TestSyncActivities_ActivityFound_Zombie()
 				Version:          version,
 				ScheduledEventId: scheduledEventID,
 				VersionHistory:   incomingVersionHistory,
-				ScheduledTime:    &now,
+				ScheduledTime:    timestamppb.New(now),
 			},
 		},
 	}
@@ -1145,7 +1146,7 @@ func (s *activityReplicatorStateSuite) TestSyncActivities_ActivityFound_Zombie()
 	s.mockMutableState.EXPECT().UpdateActivityInfo(&historyservice.ActivitySyncInfo{
 		Version:          version,
 		ScheduledEventId: scheduledEventID,
-		ScheduledTime:    &now,
+		ScheduledTime:    timestamppb.New(now),
 		VersionHistory:   incomingVersionHistory,
 	}, false).Return(nil)
 	s.mockMutableState.EXPECT().GetPendingActivityInfos().Return(map[int64]*persistencespb.ActivityInfo{})
@@ -1247,7 +1248,7 @@ func (s *activityReplicatorStateSuite) TestSyncActivity_ActivityFound_NonZombie(
 	s.mockMutableState.EXPECT().UpdateActivityInfo(&historyservice.ActivitySyncInfo{
 		Version:          version,
 		ScheduledEventId: scheduledEventID,
-		ScheduledTime:    &now,
+		ScheduledTime:    timestamppb.New(now),
 		VersionHistory:   incomingVersionHistory,
 	}, false).Return(nil)
 	s.mockMutableState.EXPECT().GetPendingActivityInfos().Return(map[int64]*persistencespb.ActivityInfo{})
@@ -1337,7 +1338,7 @@ func (s *activityReplicatorStateSuite) TestSyncActivities_ActivityFound_NonZombi
 				Version:          version,
 				ScheduledEventId: scheduledEventID,
 				VersionHistory:   incomingVersionHistory,
-				ScheduledTime:    &now,
+				ScheduledTime:    timestamppb.New(now),
 			},
 		},
 	}
@@ -1354,7 +1355,7 @@ func (s *activityReplicatorStateSuite) TestSyncActivities_ActivityFound_NonZombi
 	s.mockMutableState.EXPECT().UpdateActivityInfo(&historyservice.ActivitySyncInfo{
 		Version:          version,
 		ScheduledEventId: scheduledEventID,
-		ScheduledTime:    &now,
+		ScheduledTime:    timestamppb.New(now),
 		VersionHistory:   incomingVersionHistory,
 	}, false).Return(nil)
 	s.mockMutableState.EXPECT().GetPendingActivityInfos().Return(map[int64]*persistencespb.ActivityInfo{})

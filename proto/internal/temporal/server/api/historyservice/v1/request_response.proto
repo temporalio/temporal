@@ -476,10 +476,10 @@ message SyncActivitiesRequest {
 message ActivitySyncInfo {
     int64 version = 1;
     int64 scheduled_event_id = 2;
-    google.protobuf.Timestamp scheduled_time = 3 [(gogoproto.stdtime) = true];
+    google.protobuf.Timestamp scheduled_time = 3;
     int64 started_event_id = 4;
-    google.protobuf.Timestamp started_time = 5 [(gogoproto.stdtime) = true];
-    google.protobuf.Timestamp last_heartbeat_time = 6 [(gogoproto.stdtime) = true];
+    google.protobuf.Timestamp started_time = 5 ;
+    google.protobuf.Timestamp last_heartbeat_time = 6;
     temporal.api.common.v1.Payloads details = 7;
     int32 attempt = 8;
     temporal.api.failure.v1.Failure last_failure = 9;

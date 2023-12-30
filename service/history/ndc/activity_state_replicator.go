@@ -149,7 +149,6 @@ func (r *ActivityStateReplicatorImpl) SyncActivityState(
 			LastFailure:        request.LastFailure,
 			LastWorkerIdentity: request.LastWorkerIdentity,
 			VersionHistory:     request.VersionHistory,
-			BaseExecutionInfo:  request.BaseExecutionInfo,
 		},
 	)
 	if err != nil {
@@ -157,6 +156,13 @@ func (r *ActivityStateReplicatorImpl) SyncActivityState(
 	}
 	if !applied {
 		return nil
+	}
+
+	// passive logic need to explicitly call create timer
+	if _, err := workflow.NewTimerSequence(
+		mutableState,
+	).CreateNextActivityTimer(); err != nil {
+		return err
 	}
 
 	updateMode := persistence.UpdateWorkflowModeUpdateCurrent
