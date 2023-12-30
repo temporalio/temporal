@@ -178,7 +178,7 @@ func (s *streamBasedReplicationTestSuite) importTestEvents(
 			historyBatch = append(historyBatch, historyEvents)
 		}
 
-		versionHistory, err := EventBatchesToVersionHistory(nil, historyBatch)
+		versionHistory, err := tests.EventBatchesToVersionHistory(nil, historyBatch)
 		s.NoError(err)
 		s.importEvents(
 			workflowID,

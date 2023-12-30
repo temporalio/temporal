@@ -51,7 +51,6 @@ import (
 	"go.temporal.io/server/common/persistence/serialization"
 	"go.temporal.io/server/common/testing/protorequire"
 	"go.temporal.io/server/service/history/replication"
-	"go.temporal.io/server/tests/xdc"
 	"google.golang.org/protobuf/types/known/durationpb"
 	"gopkg.in/yaml.v3"
 
@@ -176,7 +175,7 @@ func (s *NDCReplicationTaskBatchingTestSuite) TestHistoryReplicationTaskAndThenR
 				historyEvents.Events = append(historyEvents.Events, event.GetData().(*historypb.HistoryEvent))
 			}
 			historyBatch = append(historyBatch, historyEvents)
-			history, err := xdc.EventBatchesToVersionHistory(nil, historyBatch)
+			history, err := tests.EventBatchesToVersionHistory(nil, historyBatch)
 			s.NoError(err)
 			s.standByReplicationTasksChan <- s.createHistoryEventReplicationTaskFromHistoryEventBatch( // supply history replication task one by one
 				s.namespaceID.String(),
