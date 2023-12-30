@@ -1249,13 +1249,13 @@ func (ms *MutableStateImpl) UpdateActivityProgress(
 
 // UpdateActivityInfo applies the necessary activity information
 func (ms *MutableStateImpl) UpdateActivityInfo(
-	request *historyservice.SyncActivityRequest,
+	incomingActivityInfo *historyservice.ActivitySyncInfo,
 	resetActivityTimerTaskStatus bool,
 ) error {
-	ai, ok := ms.pendingActivityInfoIDs[request.GetScheduledEventId()]
+	ai, ok := ms.pendingActivityInfoIDs[incomingActivityInfo.GetScheduledEventId()]
 	if !ok {
 		ms.logError(
-			fmt.Sprintf("unable to find activity event ID: %v in mutable state", request.GetScheduledEventId()),
+			fmt.Sprintf("unable to find activity event ID: %v in mutable state", incomingActivityInfo.GetScheduledEventId()),
 			tag.ErrorTypeInvalidMutableStateAction,
 		)
 		return ErrMissingActivityInfo
@@ -1263,19 +1263,19 @@ func (ms *MutableStateImpl) UpdateActivityInfo(
 
 	ms.approximateSize -= ai.Size()
 
-	ai.Version = request.GetVersion()
-	ai.ScheduledTime = request.GetScheduledTime()
-	ai.StartedEventId = request.GetStartedEventId()
-	ai.LastHeartbeatUpdateTime = request.GetLastHeartbeatTime()
+	ai.Version = incomingActivityInfo.GetVersion()
+	ai.ScheduledTime = incomingActivityInfo.GetScheduledTime()
+	ai.StartedEventId = incomingActivityInfo.GetStartedEventId()
+	ai.LastHeartbeatUpdateTime = incomingActivityInfo.GetLastHeartbeatTime()
 	if ai.StartedEventId == common.EmptyEventID {
 		ai.StartedTime = nil
 	} else {
-		ai.StartedTime = request.GetStartedTime()
+		ai.StartedTime = incomingActivityInfo.GetStartedTime()
 	}
-	ai.LastHeartbeatDetails = request.GetDetails()
-	ai.Attempt = request.GetAttempt()
-	ai.RetryLastWorkerIdentity = request.GetLastWorkerIdentity()
-	ai.RetryLastFailure = request.GetLastFailure()
+	ai.LastHeartbeatDetails = incomingActivityInfo.GetDetails()
+	ai.Attempt = incomingActivityInfo.GetAttempt()
+	ai.RetryLastWorkerIdentity = incomingActivityInfo.GetLastWorkerIdentity()
+	ai.RetryLastFailure = incomingActivityInfo.LastFailure
 
 	if resetActivityTimerTaskStatus {
 		ai.TimerTaskStatus = TimerTaskStatusNone
