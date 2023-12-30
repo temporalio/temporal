@@ -45,6 +45,7 @@ import (
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/membership"
 	"go.temporal.io/server/common/primitives"
+	"go.temporal.io/server/common/util"
 )
 
 const (
@@ -61,10 +62,6 @@ const (
 	defaultRefreshInterval = time.Second * 10
 	replicaPoints          = 100
 )
-
-type membershipManager interface {
-	AddListener()
-}
 
 type serviceResolver struct {
 	service     primitives.ServiceName
@@ -152,6 +149,19 @@ func (r *serviceResolver) Lookup(key string) (membership.HostInfo, error) {
 	}
 
 	return newHostInfo(addr, r.getLabelsMap()), nil
+}
+
+func (r *serviceResolver) LookupN(key string, n int) []membership.HostInfo {
+	if n <= 0 {
+		return nil
+	}
+	addresses := r.ring().LookupN(key, n)
+	if len(addresses) == 0 {
+		r.RequestRefresh()
+		return nil
+	}
+	labels := r.getLabelsMap()
+	return util.MapSlice(addresses, func(address string) membership.HostInfo { return newHostInfo(address, labels) })
 }
 
 func (r *serviceResolver) AddListener(

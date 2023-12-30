@@ -33,6 +33,7 @@ import (
 	"github.com/stretchr/testify/suite"
 	"go.temporal.io/server/common/headers"
 	"go.temporal.io/server/common/quotas"
+	"go.temporal.io/server/common/testing/temporalapi"
 	"golang.org/x/exp/slices"
 
 	"go.temporal.io/api/workflowservice/v1"
@@ -92,11 +93,10 @@ func (s *quotasSuite) TestRequestPrioritiesOrdered() {
 
 func (s *quotasSuite) TestCallOriginDefined() {
 	var service workflowservice.WorkflowServiceServer
-	t := reflect.TypeOf(&service).Elem()
-	definedAPIs := make(map[string]struct{}, t.NumMethod())
-	for i := 0; i < t.NumMethod(); i++ {
-		definedAPIs[t.Method(i).Name] = struct{}{}
-	}
+	definedAPIs := make(map[string]struct{})
+	temporalapi.WalkExportedMethods(&service, func(m reflect.Method) {
+		definedAPIs[m.Name] = struct{}{}
+	})
 
 	for api := range APITypeCallOriginPriorityOverride {
 		_, ok := definedAPIs[api]

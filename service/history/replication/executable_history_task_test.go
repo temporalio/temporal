@@ -39,6 +39,7 @@ import (
 	"go.temporal.io/api/serviceerror"
 
 	"go.temporal.io/server/common/definition"
+	"go.temporal.io/server/common/testing/protorequire"
 
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	"go.temporal.io/server/api/history/v1"
@@ -325,24 +326,28 @@ func (s *executableHistoryTaskSuite) TestBatchWith_Success() {
 
 func (s *executableHistoryTaskSuite) TestBatchWith_EventNotConsecutive_BatchFailed() {
 	currentTask, incomingTask := s.generateTwoBatchableTasks()
-	currentTask.eventsDesResponse.events = []*historypb.HistoryEvent{
+	currentTask.eventsDesResponse.events = [][]*historypb.HistoryEvent{
 		{
-			EventId: 101,
-			Version: 3,
-		},
-		{
-			EventId: 102,
-			Version: 3,
-		},
-		{
-			EventId: 103,
-			Version: 3,
+			{
+				EventId: 101,
+				Version: 3,
+			},
+			{
+				EventId: 102,
+				Version: 3,
+			},
+			{
+				EventId: 103,
+				Version: 3,
+			},
 		},
 	}
-	incomingTask.eventsDesResponse.events = []*historypb.HistoryEvent{
+	incomingTask.eventsDesResponse.events = [][]*historypb.HistoryEvent{
 		{
-			EventId: 105,
-			Version: 3,
+			{
+				EventId: 105,
+				Version: 3,
+			},
 		},
 	}
 	_, success := currentTask.BatchWith(incomingTask)
@@ -351,24 +356,28 @@ func (s *executableHistoryTaskSuite) TestBatchWith_EventNotConsecutive_BatchFail
 
 func (s *executableHistoryTaskSuite) TestBatchWith_EventVersionNotMatch_BatchFailed() {
 	currentTask, incomingTask := s.generateTwoBatchableTasks()
-	currentTask.eventsDesResponse.events = []*historypb.HistoryEvent{
+	currentTask.eventsDesResponse.events = [][]*historypb.HistoryEvent{
 		{
-			EventId: 101,
-			Version: 3,
-		},
-		{
-			EventId: 102,
-			Version: 3,
-		},
-		{
-			EventId: 103,
-			Version: 3,
+			{
+				EventId: 101,
+				Version: 3,
+			},
+			{
+				EventId: 102,
+				Version: 3,
+			},
+			{
+				EventId: 103,
+				Version: 3,
+			},
 		},
 	}
-	incomingTask.eventsDesResponse.events = []*historypb.HistoryEvent{
+	incomingTask.eventsDesResponse.events = [][]*historypb.HistoryEvent{
 		{
-			EventId: 104,
-			Version: 4,
+			{
+				EventId: 104,
+				Version: 4,
+			},
 		},
 	}
 	_, success := currentTask.BatchWith(incomingTask)
@@ -414,32 +423,36 @@ func (s *executableHistoryTaskSuite) TestBatchWith_CurrentTaskHasNewRunEvents_Ba
 }
 
 func (s *executableHistoryTaskSuite) generateTwoBatchableTasks() (*ExecutableHistoryTask, *ExecutableHistoryTask) {
-	currentEvent := []*historypb.HistoryEvent{
+	currentEvent := [][]*historypb.HistoryEvent{
 		{
-			EventId: 101,
-			Version: 3,
-		},
-		{
-			EventId: 102,
-			Version: 3,
-		},
-		{
-			EventId: 103,
-			Version: 3,
+			{
+				EventId: 101,
+				Version: 3,
+			},
+			{
+				EventId: 102,
+				Version: 3,
+			},
+			{
+				EventId: 103,
+				Version: 3,
+			},
 		},
 	}
-	incomingEvent := []*historypb.HistoryEvent{
+	incomingEvent := [][]*historypb.HistoryEvent{
 		{
-			EventId: 104,
-			Version: 3,
-		},
-		{
-			EventId: 105,
-			Version: 3,
-		},
-		{
-			EventId: 106,
-			Version: 3,
+			{
+				EventId: 104,
+				Version: 3,
+			},
+			{
+				EventId: 105,
+				Version: 3,
+			},
+			{
+				EventId: 106,
+				Version: 3,
+			},
 		},
 	}
 	currentVersionHistoryItems := []*history.VersionHistoryItem{
@@ -476,20 +489,24 @@ func (s *executableHistoryTaskSuite) generateTwoBatchableTasks() (*ExecutableHis
 	s.Equal(sourceTaskId, resultHistoryTask.TaskID())
 	s.Equal(incomingVersionHistoryItems, resultHistoryTask.versionHistoryItems)
 	expectedBatchedEvents := append(currentEvent, incomingEvent...)
-	s.Equal(expectedBatchedEvents, resultHistoryTask.eventsDesResponse.events)
+
+	s.Equal(len(resultHistoryTask.eventsDesResponse.events), len(expectedBatchedEvents))
+	for i := range expectedBatchedEvents {
+		protorequire.ProtoSliceEqual(s.T(), expectedBatchedEvents[i], resultHistoryTask.eventsDesResponse.events[i])
+	}
 	s.Nil(resultHistoryTask.eventsDesResponse.newRunEvents)
 	return currentTask, incomingTask
 }
 
 func (s *executableHistoryTaskSuite) buildExecutableHistoryTask(
-	events []*historypb.HistoryEvent,
+	events [][]*historypb.HistoryEvent,
 	newRunEvents []*historypb.HistoryEvent,
 	taskId int64,
 	versionHistoryItems []*history.VersionHistoryItem,
 	workflowKey definition.WorkflowKey,
 	sourceCluster string,
 ) *ExecutableHistoryTask {
-	eventsBlob, _ := s.eventSerializer.SerializeEvents(events, enumspb.ENCODING_TYPE_PROTO3)
+	eventsBlob, _ := s.eventSerializer.SerializeEvents(events[0], enumspb.ENCODING_TYPE_PROTO3)
 	newRunEventsBlob, _ := s.eventSerializer.SerializeEvents(newRunEvents, enumspb.ENCODING_TYPE_PROTO3)
 	replicationTaskAttribute := &replicationspb.HistoryTaskAttributes{
 		WorkflowId:          workflowKey.WorkflowID,

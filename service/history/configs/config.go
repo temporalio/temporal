@@ -86,6 +86,7 @@ type Config struct {
 	RangeSizeBits                  uint
 	AcquireShardInterval           dynamicconfig.DurationPropertyFn
 	AcquireShardConcurrency        dynamicconfig.IntPropertyFn
+	ShardIOConcurrency             dynamicconfig.IntPropertyFn
 	ShardLingerOwnershipCheckQPS   dynamicconfig.IntPropertyFn
 	ShardLingerTimeLimit           dynamicconfig.DurationPropertyFn
 	ShardOwnershipAssertionEnabled dynamicconfig.BoolPropertyFn
@@ -222,8 +223,8 @@ type Config struct {
 	// Workflow task settings
 	// DefaultWorkflowTaskTimeout the default workflow task timeout
 	DefaultWorkflowTaskTimeout dynamicconfig.DurationPropertyFnWithNamespaceFilter
-	// WorkflowTaskHeartbeatTimeout is to timeout behavior of: RespondWorkflowTaskComplete with ForceCreateNewWorkflowTask == true without any commands
-	// So that workflow task will be scheduled to another worker(by clear stickyness)
+	// WorkflowTaskHeartbeatTimeout is to timeout behavior of: RespondWorkflowTaskComplete with ForceCreateNewWorkflowTask == true
+	// without any commands or messages. After this timeout workflow task will be scheduled to another worker(by clear stickyness).
 	WorkflowTaskHeartbeatTimeout dynamicconfig.DurationPropertyFnWithNamespaceFilter
 	WorkflowTaskCriticalAttempts dynamicconfig.IntPropertyFn
 	WorkflowTaskRetryMaxInterval dynamicconfig.DurationPropertyFn
@@ -378,6 +379,7 @@ func NewConfig(
 		RangeSizeBits:                  20, // 20 bits for sequencer, 2^20 sequence number for any range
 		AcquireShardInterval:           dc.GetDurationProperty(dynamicconfig.AcquireShardInterval, time.Minute),
 		AcquireShardConcurrency:        dc.GetIntProperty(dynamicconfig.AcquireShardConcurrency, 10),
+		ShardIOConcurrency:             dc.GetIntProperty(dynamicconfig.ShardIOConcurrency, 1),
 		ShardLingerOwnershipCheckQPS:   dc.GetIntProperty(dynamicconfig.ShardLingerOwnershipCheckQPS, 4),
 		ShardLingerTimeLimit:           dc.GetDurationProperty(dynamicconfig.ShardLingerTimeLimit, 0),
 		ShardOwnershipAssertionEnabled: dc.GetBoolProperty(dynamicconfig.ShardOwnershipAssertionEnabled, true),

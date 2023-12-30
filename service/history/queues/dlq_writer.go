@@ -30,6 +30,10 @@ import (
 	"fmt"
 
 	"go.temporal.io/server/common/cluster"
+	"go.temporal.io/server/common/log"
+	"go.temporal.io/server/common/log/tag"
+	"go.temporal.io/server/common/metrics"
+	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/service/history/tasks"
 )
@@ -37,8 +41,11 @@ import (
 type (
 	// DLQWriter can be used to write tasks to the DLQ.
 	DLQWriter struct {
-		dlqWriter       QueueWriter
-		clusterMetadata cluster.Metadata
+		dlqWriter         QueueWriter
+		clusterMetadata   cluster.Metadata
+		metricsHandler    metrics.Handler
+		logger            log.SnTaggedLogger
+		namespaceRegistry namespace.Registry
 	}
 	// QueueWriter is a subset of persistence.HistoryTaskQueueManager.
 	QueueWriter interface {
@@ -60,10 +67,13 @@ var (
 )
 
 // NewDLQWriter returns a DLQ which will write to the given QueueWriter.
-func NewDLQWriter(w QueueWriter, m cluster.Metadata) *DLQWriter {
+func NewDLQWriter(w QueueWriter, m cluster.Metadata, h metrics.Handler, l log.SnTaggedLogger, r namespace.Registry) *DLQWriter {
 	return &DLQWriter{
-		dlqWriter:       w,
-		clusterMetadata: m,
+		dlqWriter:         w,
+		clusterMetadata:   m,
+		metricsHandler:    h,
+		logger:            l,
+		namespaceRegistry: r,
 	}
 }
 
@@ -89,7 +99,7 @@ func (q *DLQWriter) WriteTaskToDLQ(ctx context.Context, sourceCluster, targetClu
 	}
 	numShards := int(info.ShardCount)
 	shardID := tasks.GetShardIDForTask(task, numShards)
-	_, err = q.dlqWriter.EnqueueTask(ctx, &persistence.EnqueueTaskRequest{
+	resp, err := q.dlqWriter.EnqueueTask(ctx, &persistence.EnqueueTaskRequest{
 		QueueType:     queueKey.QueueType,
 		SourceCluster: queueKey.SourceCluster,
 		TargetCluster: queueKey.TargetCluster,
@@ -99,5 +109,24 @@ func (q *DLQWriter) WriteTaskToDLQ(ctx context.Context, sourceCluster, targetClu
 	if err != nil {
 		return fmt.Errorf("%w: %v", ErrSendTaskToDLQ, err)
 	}
+	q.metricsHandler.Counter(metrics.DLQWrites.Name()).Record(1)
+	ns, err := q.namespaceRegistry.GetNamespaceByID(namespace.ID(task.GetNamespaceID()))
+	var namespaceTag tag.Tag
+	if err != nil {
+		q.logger.Warn("Failed to get namespace name while trying to write a task to DLQ",
+			tag.WorkflowNamespace(task.GetNamespaceID()),
+			tag.Error(err),
+		)
+		namespaceTag = tag.WorkflowNamespaceID(task.GetNamespaceID())
+	} else {
+		namespaceTag = tag.WorkflowNamespace(string(ns.Name()))
+	}
+	q.logger.Warn("Task enqueued to DLQ",
+		tag.DLQMessageID(resp.Metadata.ID),
+		tag.SourceCluster(sourceCluster),
+		tag.TargetCluster(targetCluster),
+		tag.TaskType(task.GetType()),
+		namespaceTag,
+	)
 	return nil
 }

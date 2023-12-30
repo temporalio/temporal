@@ -32,6 +32,9 @@ import (
 	"github.com/golang/mock/gomock"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"go.temporal.io/server/common/log"
+	"go.temporal.io/server/common/metrics"
+	"go.temporal.io/server/common/namespace"
 
 	enumspb "go.temporal.io/server/api/enums/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
@@ -101,8 +104,10 @@ func TestNewDLQWriterAdapter(t *testing.T) {
 					ShardCount: 1,
 				},
 			}).AnyTimes()
+			namespaceRegistry := namespace.NewMockRegistry(controller)
+			namespaceRegistry.EXPECT().GetNamespaceByID(gomock.Any()).Return(&namespace.Namespace{}, nil).AnyTimes()
 			writer := replication.NewDLQWriterAdapter(
-				queues.NewDLQWriter(queueWriter, clusterMetadata),
+				queues.NewDLQWriter(queueWriter, clusterMetadata, metrics.NoopMetricsHandler, log.NewTestLogger(), namespaceRegistry),
 				taskSerializer,
 				"test-current-cluster",
 			)

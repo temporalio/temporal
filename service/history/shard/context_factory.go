@@ -31,6 +31,7 @@ import (
 	"go.temporal.io/server/common/archiver"
 	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/cluster"
+	"go.temporal.io/server/common/config"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/membership"
 	"go.temporal.io/server/common/metrics"
@@ -59,6 +60,7 @@ type (
 		ClientBean                  client.Bean
 		ClusterMetadata             cluster.Metadata
 		Config                      *configs.Config
+		PersistenceConfig           config.Persistence
 		EngineFactory               EngineFactory
 		HistoryClient               resource.HistoryClient
 		HistoryServiceResolver      membership.ServiceResolver
@@ -95,6 +97,7 @@ func (c *contextFactoryImpl) CreateContext(
 		shardID,
 		c.EngineFactory,
 		c.Config,
+		c.PersistenceConfig,
 		closeCallback,
 		c.Logger,
 		c.ThrottledLogger,

@@ -108,7 +108,7 @@ func GetOffsetForListQueues(
 	if err != nil {
 		return 0, fmt.Errorf(
 			"%w: %q: %v",
-			ErrInvalidReadQueueMessagesNextPageToken,
+			ErrInvalidListQueuesNextPageToken,
 			nextPageToken,
 			err,
 		)

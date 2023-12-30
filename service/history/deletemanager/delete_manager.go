@@ -52,14 +52,14 @@ type (
 		AddDeleteWorkflowExecutionTask(
 			ctx context.Context,
 			nsID namespace.ID,
-			we commonpb.WorkflowExecution,
+			we *commonpb.WorkflowExecution,
 			ms workflow.MutableState,
 			workflowClosedVersion int64,
 		) error
 		DeleteWorkflowExecution(
 			ctx context.Context,
 			nsID namespace.ID,
-			we commonpb.WorkflowExecution,
+			we *commonpb.WorkflowExecution,
 			weCtx workflow.Context,
 			ms workflow.MutableState,
 			forceDeleteFromOpenVisibility bool,
@@ -68,7 +68,7 @@ type (
 		DeleteWorkflowExecutionByRetention(
 			ctx context.Context,
 			nsID namespace.ID,
-			we commonpb.WorkflowExecution,
+			we *commonpb.WorkflowExecution,
 			weCtx workflow.Context,
 			ms workflow.MutableState,
 			stage *tasks.DeleteWorkflowExecutionStage,
@@ -109,7 +109,7 @@ func NewDeleteManager(
 func (m *DeleteManagerImpl) AddDeleteWorkflowExecutionTask(
 	ctx context.Context,
 	nsID namespace.ID,
-	we commonpb.WorkflowExecution,
+	we *commonpb.WorkflowExecution,
 	ms workflow.MutableState,
 	workflowClosedVersion int64,
 ) error {
@@ -139,7 +139,7 @@ func (m *DeleteManagerImpl) AddDeleteWorkflowExecutionTask(
 func (m *DeleteManagerImpl) DeleteWorkflowExecution(
 	ctx context.Context,
 	nsID namespace.ID,
-	we commonpb.WorkflowExecution,
+	we *commonpb.WorkflowExecution,
 	weCtx workflow.Context,
 	ms workflow.MutableState,
 	forceDeleteFromOpenVisibility bool,
@@ -152,7 +152,7 @@ func (m *DeleteManagerImpl) DeleteWorkflowExecution(
 func (m *DeleteManagerImpl) DeleteWorkflowExecutionByRetention(
 	ctx context.Context,
 	nsID namespace.ID,
-	we commonpb.WorkflowExecution,
+	we *commonpb.WorkflowExecution,
 	weCtx workflow.Context,
 	ms workflow.MutableState,
 	stage *tasks.DeleteWorkflowExecutionStage,
@@ -164,7 +164,7 @@ func (m *DeleteManagerImpl) DeleteWorkflowExecutionByRetention(
 func (m *DeleteManagerImpl) deleteWorkflowExecutionInternal(
 	ctx context.Context,
 	namespaceID namespace.ID,
-	we commonpb.WorkflowExecution,
+	we *commonpb.WorkflowExecution,
 	weCtx workflow.Context,
 	ms workflow.MutableState,
 	forceDeleteFromOpenVisibility bool, //revive:disable-line:flag-parameter
@@ -179,14 +179,14 @@ func (m *DeleteManagerImpl) deleteWorkflowExecutionInternal(
 
 	// These two fields are needed for cassandra standard visibility.
 	// TODO (alex): Remove them when cassandra standard visibility is removed.
-	var startTime *time.Time
-	var closeTime *time.Time
+	var startTime time.Time
+	var closeTime time.Time
 	if m.visibilityManager.HasStoreName(cassandra.CassandraPersistenceName) {
 		// There are cases when workflow execution is closed but visibility is not updated and still open.
 		// This happens, for example, when workflow execution is deleted right from CloseExecutionTask.
 		// Therefore, force to delete from open visibility regardless of execution state.
 		if forceDeleteFromOpenVisibility || ms.GetExecutionState().State != enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED {
-			startTime = ms.GetExecutionInfo().GetStartTime()
+			startTime = ms.GetExecutionInfo().GetStartTime().AsTime()
 		} else {
 			closeTime, err = ms.GetWorkflowCloseTime(ctx)
 			if err != nil {
@@ -214,6 +214,6 @@ func (m *DeleteManagerImpl) deleteWorkflowExecutionInternal(
 	// Clear workflow execution context here to prevent further readers to get stale copy of non-exiting workflow execution.
 	weCtx.Clear()
 
-	metricsHandler.Counter(metrics.WorkflowCleanupDeleteCount.GetMetricName()).Record(1)
+	metricsHandler.Counter(metrics.WorkflowCleanupDeleteCount.Name()).Record(1)
 	return nil
 }

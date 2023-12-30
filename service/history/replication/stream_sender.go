@@ -102,8 +102,8 @@ func (s *StreamSenderImpl) Start() {
 		return
 	}
 
-	go func() { _ = s.sendEventLoop() }()
-	go func() { _ = s.recvEventLoop() }()
+	go WrapEventLoop(s.sendEventLoop, s.Stop, s.logger, s.metrics, s.clientShardKey, s.serverShardKey, streamReceiverMonitorInterval)
+	go WrapEventLoop(s.recvEventLoop, s.Stop, s.logger, s.metrics, s.clientShardKey, s.serverShardKey, streamReceiverMonitorInterval)
 
 	s.logger.Info("StreamSender started.")
 }
@@ -136,7 +136,17 @@ func (s *StreamSenderImpl) Key() ClusterShardKeyPair {
 	}
 }
 
-func (s *StreamSenderImpl) recvEventLoop() error {
+func (s *StreamSenderImpl) recvEventLoop() (retErr error) {
+	var panicErr error
+	defer func() {
+		if panicErr != nil {
+			retErr = panicErr
+			s.metrics.Counter(metrics.ReplicationStreamPanic.Name()).Record(1)
+		}
+	}()
+
+	defer log.CapturePanic(s.logger, &panicErr)
+
 	defer s.Stop()
 
 	for !s.shutdownChan.IsShutdown() {
@@ -151,7 +161,7 @@ func (s *StreamSenderImpl) recvEventLoop() error {
 				s.logger.Error("StreamSender unable to handle SyncReplicationState", tag.Error(err))
 				return err
 			}
-			s.metrics.Counter(metrics.ReplicationTasksRecv.GetMetricName()).Record(
+			s.metrics.Counter(metrics.ReplicationTasksRecv.Name()).Record(
 				int64(1),
 				metrics.FromClusterIDTag(s.clientShardKey.ClusterID),
 				metrics.ToClusterIDTag(s.serverShardKey.ClusterID),
@@ -168,8 +178,17 @@ func (s *StreamSenderImpl) recvEventLoop() error {
 	return nil
 }
 
-func (s *StreamSenderImpl) sendEventLoop() error {
+func (s *StreamSenderImpl) sendEventLoop() (retErr error) {
 	defer s.Stop()
+	var panicErr error
+	defer func() {
+		if panicErr != nil {
+			retErr = panicErr
+			s.metrics.Counter(metrics.ReplicationStreamPanic.Name()).Record(1)
+		}
+	}()
+
+	defer log.CapturePanic(s.logger, &panicErr)
 
 	newTaskNotificationChan, subscriberID := s.historyEngine.SubscribeReplicationNotification()
 	defer s.historyEngine.UnsubscribeReplicationNotification(subscriberID)
@@ -224,7 +243,7 @@ func (s *StreamSenderImpl) recvSyncReplicationState(
 	return s.shardContext.UpdateRemoteReaderInfo(
 		readerID,
 		inclusiveLowWatermark-1,
-		*inclusiveLowWatermarkTime,
+		inclusiveLowWatermarkTime.AsTime(),
 	)
 }
 
@@ -248,7 +267,7 @@ func (s *StreamSenderImpl) sendCatchUp() (int64, error) {
 			catchupBeginInclusiveWatermark = readerState.Scopes[0].Range.InclusiveMin.TaskId
 		}
 	}
-	catchupEndExclusiveWatermark := s.shardContext.GetImmediateQueueExclusiveHighReadWatermark().TaskID
+	catchupEndExclusiveWatermark := s.shardContext.GetQueueExclusiveHighReadWatermark(tasks.CategoryReplication).TaskID
 	if err := s.sendTasks(
 		catchupBeginInclusiveWatermark,
 		catchupEndExclusiveWatermark,
@@ -265,7 +284,7 @@ func (s *StreamSenderImpl) sendLive(
 	for {
 		select {
 		case <-newTaskNotificationChan:
-			endExclusiveWatermark := s.shardContext.GetImmediateQueueExclusiveHighReadWatermark().TaskID
+			endExclusiveWatermark := s.shardContext.GetQueueExclusiveHighReadWatermark(tasks.CategoryReplication).TaskID
 			if err := s.sendTasks(
 				beginInclusiveWatermark,
 				endExclusiveWatermark,
@@ -343,7 +362,7 @@ Loop:
 		}); err != nil {
 			return err
 		}
-		s.metrics.Counter(metrics.ReplicationTasksSend.GetMetricName()).Record(
+		s.metrics.Counter(metrics.ReplicationTasksSend.Name()).Record(
 			int64(1),
 			metrics.FromClusterIDTag(s.serverShardKey.ClusterID),
 			metrics.ToClusterIDTag(s.clientShardKey.ClusterID),

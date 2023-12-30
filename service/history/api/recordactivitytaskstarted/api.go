@@ -77,7 +77,7 @@ func Invoke(
 			// First check to see if cache needs to be refreshed as we could potentially have stale workflow execution in
 			// some extreme cassandra failure cases.
 			if !isRunning && scheduledEventID >= mutableState.GetNextEventID() {
-				taggedMetrics.Counter(metrics.StaleMutableStateCounter.GetMetricName()).Record(1)
+				taggedMetrics.Counter(metrics.StaleMutableStateCounter.Name()).Record(1)
 				return nil, consts.ErrStaleState
 			}
 
@@ -118,7 +118,7 @@ func Invoke(
 				return nil, err
 			}
 
-			scheduleToStartLatency := ai.GetStartedTime().Sub(*ai.GetScheduledTime())
+			scheduleToStartLatency := ai.GetStartedTime().AsTime().Sub(ai.GetScheduledTime().AsTime())
 			namespaceName := namespaceEntry.Name()
 			taskQueueName := ai.GetTaskQueue()
 
@@ -127,7 +127,7 @@ func Invoke(
 				namespaceName.String(),
 				taskQueueName,
 				enumspb.TASK_QUEUE_KIND_NORMAL,
-			).Timer(metrics.TaskScheduleToStartLatency.GetMetricName()).Record(
+			).Timer(metrics.TaskScheduleToStartLatency.Name()).Record(
 				scheduleToStartLatency,
 				metrics.TaskQueueTypeTag(enumspb.TASK_QUEUE_TYPE_ACTIVITY),
 			)

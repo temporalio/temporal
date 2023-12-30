@@ -98,7 +98,7 @@ func (s *session) refresh() {
 		s.logger.Warn("gocql wrapper: did not refresh gocql session because the last refresh was too close",
 			tag.NewDurationTag("min_refresh_interval_seconds", sessionRefreshMinInternal))
 		handler := s.metricsHandler.WithTags(metrics.FailureTag(refreshThrottleTagValue))
-		handler.Counter(metrics.CassandraSessionRefreshFailures.GetMetricName()).Record(1)
+		handler.Counter(metrics.CassandraSessionRefreshFailures.Name()).Record(1)
 		return
 	}
 
@@ -106,7 +106,7 @@ func (s *session) refresh() {
 	if err != nil {
 		s.logger.Error("gocql wrapper: unable to refresh gocql session", tag.Error(err))
 		handler := s.metricsHandler.WithTags(metrics.FailureTag(refreshErrorTagValue))
-		handler.Counter(metrics.CassandraSessionRefreshFailures.GetMetricName()).Record(1)
+		handler.Counter(metrics.CassandraSessionRefreshFailures.Name()).Record(1)
 		return
 	}
 
@@ -127,7 +127,7 @@ func initSession(
 	}
 	start := time.Now()
 	defer func() {
-		metricsHandler.Timer(metrics.CassandraInitSessionLatency.GetMetricName()).Record(time.Since(start))
+		metricsHandler.Timer(metrics.CassandraInitSessionLatency.Name()).Record(time.Since(start))
 	}()
 	return cluster.CreateSession()
 }

@@ -380,6 +380,21 @@ func (c *retryableClient) IsWorkflowTaskValid(
 	return resp, err
 }
 
+func (c *retryableClient) ListQueues(
+	ctx context.Context,
+	request *historyservice.ListQueuesRequest,
+	opts ...grpc.CallOption,
+) (*historyservice.ListQueuesResponse, error) {
+	var resp *historyservice.ListQueuesResponse
+	op := func(ctx context.Context) error {
+		var err error
+		resp, err = c.client.ListQueues(ctx, request, opts...)
+		return err
+	}
+	err := backoff.ThrottleRetryContext(ctx, op, c.policy, c.isRetryable)
+	return resp, err
+}
+
 func (c *retryableClient) MergeDLQMessages(
 	ctx context.Context,
 	request *historyservice.MergeDLQMessagesRequest,

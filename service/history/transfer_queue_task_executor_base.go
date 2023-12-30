@@ -32,6 +32,7 @@ import (
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
+	"google.golang.org/protobuf/types/known/durationpb"
 
 	"go.temporal.io/server/api/matchingservice/v1"
 	taskqueuespb "go.temporal.io/server/api/taskqueue/v1"
@@ -115,7 +116,7 @@ func newTransferQueueTaskExecutorBase(
 func (t *transferQueueTaskExecutorBase) pushActivity(
 	ctx context.Context,
 	task *tasks.ActivityTask,
-	activityScheduleToStartTimeout *time.Duration,
+	activityScheduleToStartTimeout time.Duration,
 	directive *taskqueuespb.TaskVersionDirective,
 ) error {
 	_, err := t.matchingRawClient.AddActivityTask(ctx, &matchingservice.AddActivityTaskRequest{
@@ -129,7 +130,7 @@ func (t *transferQueueTaskExecutorBase) pushActivity(
 			Kind: enumspb.TASK_QUEUE_KIND_NORMAL,
 		},
 		ScheduledEventId:       task.ScheduledEventID,
-		ScheduleToStartTimeout: activityScheduleToStartTimeout,
+		ScheduleToStartTimeout: durationpb.New(activityScheduleToStartTimeout),
 		Clock:                  vclock.NewVectorClock(t.shardContext.GetClusterMetadata().GetClusterID(), t.shardContext.GetShardID(), task.TaskID),
 		VersionDirective:       directive,
 	})
@@ -146,9 +147,13 @@ func (t *transferQueueTaskExecutorBase) pushWorkflowTask(
 	ctx context.Context,
 	task *tasks.WorkflowTask,
 	taskqueue *taskqueuepb.TaskQueue,
-	workflowTaskScheduleToStartTimeout *time.Duration,
+	workflowTaskScheduleToStartTimeout time.Duration,
 	directive *taskqueuespb.TaskVersionDirective,
 ) error {
+	var sst *durationpb.Duration
+	if workflowTaskScheduleToStartTimeout > 0 {
+		sst = durationpb.New(workflowTaskScheduleToStartTimeout)
+	}
 	_, err := t.matchingRawClient.AddWorkflowTask(ctx, &matchingservice.AddWorkflowTaskRequest{
 		NamespaceId: task.NamespaceID,
 		Execution: &commonpb.WorkflowExecution{
@@ -157,7 +162,7 @@ func (t *transferQueueTaskExecutorBase) pushWorkflowTask(
 		},
 		TaskQueue:              taskqueue,
 		ScheduledEventId:       task.ScheduledEventID,
-		ScheduleToStartTimeout: workflowTaskScheduleToStartTimeout,
+		ScheduleToStartTimeout: sst,
 		Clock:                  vclock.NewVectorClock(t.shardContext.GetClusterMetadata().GetClusterID(), t.shardContext.GetShardID(), task.TaskID),
 		VersionDirective:       directive,
 	})
@@ -197,7 +202,7 @@ func (t *transferQueueTaskExecutorBase) deleteExecution(
 		ctx,
 		t.shardContext,
 		namespace.ID(task.GetNamespaceID()),
-		workflowExecution,
+		&workflowExecution,
 		workflow.LockPriorityLow,
 	)
 	if err != nil {
@@ -243,7 +248,7 @@ func (t *transferQueueTaskExecutorBase) deleteExecution(
 	return t.workflowDeleteManager.DeleteWorkflowExecution(
 		ctx,
 		namespace.ID(task.GetNamespaceID()),
-		workflowExecution,
+		&workflowExecution,
 		weCtx,
 		mutableState,
 		forceDeleteFromOpenVisibility,

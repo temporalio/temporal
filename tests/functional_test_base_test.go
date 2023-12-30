@@ -27,53 +27,9 @@ package tests
 import (
 	"testing"
 
-	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
-	"go.uber.org/fx"
-
-	"go.temporal.io/server/common/primitives"
 )
 
-type functionalTestBaseSuite struct {
-	*require.Assertions
-	FunctionalTestBase
-	frontendServiceName primitives.ServiceName
-	matchingServiceName primitives.ServiceName
-	historyServiceName  primitives.ServiceName
-	workerServiceName   primitives.ServiceName
-}
-
-func (s *functionalTestBaseSuite) SetupSuite() {
-	s.setupSuite("testdata/cluster.yaml",
-		WithFxOptionsForService(primitives.FrontendService, fx.Populate(&s.frontendServiceName)),
-		WithFxOptionsForService(primitives.MatchingService, fx.Populate(&s.matchingServiceName)),
-		WithFxOptionsForService(primitives.HistoryService, fx.Populate(&s.historyServiceName)),
-		WithFxOptionsForService(primitives.WorkerService, fx.Populate(&s.workerServiceName)),
-	)
-
-}
-
-func (s *functionalTestBaseSuite) TearDownSuite() {
-	s.tearDownSuite()
-}
-
-func (s *functionalTestBaseSuite) TestWithFxOptionsForService() {
-	// This test works by using the WithFxOptionsForService option to obtain the ServiceName from the graph, and then
-	// it verifies that the ServiceName is correct. It does this because we are targeting the fx.App for a particular
-	// service, so we'll know our fx options were provided to the right service if, when we use them to get the current
-	// service name, it matches the target service. A more realistic example would use the option to obtain an actual
-	// useful object like a history shard controller, or do some graph modifications with fx.Decorate.
-
-	s.Equal(primitives.FrontendService, s.frontendServiceName)
-	s.Equal(primitives.MatchingService, s.matchingServiceName)
-	s.Equal(primitives.HistoryService, s.historyServiceName)
-	s.Equal(primitives.WorkerService, s.workerServiceName)
-}
-
-func (s *functionalTestBaseSuite) SetupTest() {
-	s.Assertions = require.New(s.T())
-}
-
 func TestFunctionalTestBaseSuite(t *testing.T) {
-	suite.Run(t, new(functionalTestBaseSuite))
+	suite.Run(t, new(FunctionalTestBaseSuite))
 }

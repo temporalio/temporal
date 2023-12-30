@@ -27,22 +27,24 @@
 package elasticsearch
 
 import (
-	"github.com/xwb1989/sqlparser"
+	"github.com/temporalio/sqlparser"
 
 	"go.temporal.io/server/common/persistence/visibility/store/query"
 )
 
 var allowedComparisonOperators = map[string]struct{}{
-	sqlparser.EqualStr:        {},
-	sqlparser.NotEqualStr:     {},
-	sqlparser.GreaterThanStr:  {},
-	sqlparser.GreaterEqualStr: {},
-	sqlparser.LessThanStr:     {},
-	sqlparser.LessEqualStr:    {},
-	sqlparser.LikeStr:         {},
-	sqlparser.NotLikeStr:      {},
-	sqlparser.InStr:           {},
-	sqlparser.NotInStr:        {},
+	sqlparser.EqualStr:         {},
+	sqlparser.NotEqualStr:      {},
+	sqlparser.GreaterThanStr:   {},
+	sqlparser.GreaterEqualStr:  {},
+	sqlparser.LessThanStr:      {},
+	sqlparser.LessEqualStr:     {},
+	sqlparser.LikeStr:          {},
+	sqlparser.NotLikeStr:       {},
+	sqlparser.InStr:            {},
+	sqlparser.NotInStr:         {},
+	sqlparser.StartsWithStr:    {},
+	sqlparser.NotStartsWithStr: {},
 }
 
 func newQueryConverter(

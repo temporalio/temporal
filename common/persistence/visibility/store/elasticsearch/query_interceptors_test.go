@@ -117,7 +117,7 @@ func (s *QueryInterceptorSuite) TestStatusProcessFunc() {
 		returnErr bool
 	}{
 		{value: "Completed", returnErr: false},
-		{value: "Running", returnErr: false},
+		{value: "WORKFLOW_EXECUTION_STATUS_RUNNING", returnErr: false},
 		{value: "1", returnErr: false},
 		{value: "", returnErr: false},
 		{value: "100", returnErr: false},

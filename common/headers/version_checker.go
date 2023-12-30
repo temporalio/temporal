@@ -47,7 +47,9 @@ const (
 	ClientNameCLI           = "temporal-cli"
 	ClientNameUI            = "temporal-ui"
 
-	ServerVersion = "1.22.0"
+	// ServerVersion value can be changed by the create-tag Github workflow.
+	// If you change the var name or move it, be sure to update the workflow.
+	ServerVersion = "1.23.0"
 
 	// SupportedServerVersions is used by CLI and inter role communication.
 	SupportedServerVersions = ">=1.0.0 <2.0.0"

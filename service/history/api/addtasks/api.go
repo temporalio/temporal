@@ -43,7 +43,7 @@ type (
 	// TaskDeserializer is a trimmed version of [go.temporal.io/server/common/persistence/serialization.Serializer] that
 	// requires only the DeserializeTask method.
 	TaskDeserializer interface {
-		DeserializeTask(category tasks.Category, blob commonpb.DataBlob) (tasks.Task, error)
+		DeserializeTask(category tasks.Category, blob *commonpb.DataBlob) (tasks.Task, error)
 	}
 )
 
@@ -97,7 +97,7 @@ func Invoke(
 			))
 		}
 
-		deserializedTask, err := deserializer.DeserializeTask(category, *task.Blob)
+		deserializedTask, err := deserializer.DeserializeTask(category, task.Blob)
 		if err != nil {
 			return nil, err
 		}

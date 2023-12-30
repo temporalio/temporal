@@ -35,6 +35,7 @@ import (
 	"github.com/stretchr/testify/suite"
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
+	"google.golang.org/protobuf/types/known/timestamppb"
 
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	historyspb "go.temporal.io/server/api/history/v1"
@@ -266,7 +267,7 @@ func (s *activityReplicatorStateSuite) TestActivity_SameVersion_SameAttempt_Loca
 	localActivityInfo := &persistencespb.ActivityInfo{
 		Version:                 version,
 		Attempt:                 attempt,
-		LastHeartbeatUpdateTime: timestamp.TimePtr(lastHeartbeatTime.Add(time.Second)),
+		LastHeartbeatUpdateTime: timestamppb.New(lastHeartbeatTime.Add(time.Second)),
 	}
 
 	apply := s.nDCActivityStateReplicator.testActivity(
@@ -285,7 +286,7 @@ func (s *activityReplicatorStateSuite) TestActivity_SameVersion_SameAttempt_Inco
 	localActivityInfo := &persistencespb.ActivityInfo{
 		Version:                 version,
 		Attempt:                 attempt,
-		LastHeartbeatUpdateTime: timestamp.TimePtr(lastHeartbeatTime.Add(-time.Second)),
+		LastHeartbeatUpdateTime: timestamppb.New(lastHeartbeatTime.Add(-time.Second)),
 	}
 
 	apply := s.nDCActivityStateReplicator.testActivity(
@@ -1022,7 +1023,7 @@ func (s *activityReplicatorStateSuite) TestSyncActivity_ActivityFound_Zombie() {
 		RunId:            runID,
 		Version:          version,
 		ScheduledEventId: scheduledEventID,
-		ScheduledTime:    &now,
+		ScheduledTime:    timestamppb.New(now),
 		VersionHistory:   incomingVersionHistory,
 	}
 
@@ -1035,7 +1036,7 @@ func (s *activityReplicatorStateSuite) TestSyncActivity_ActivityFound_Zombie() {
 	s.mockMutableState.EXPECT().GetActivityInfo(scheduledEventID).Return(&persistencespb.ActivityInfo{
 		Version: version,
 	}, true)
-	s.mockMutableState.EXPECT().ReplicateActivityInfo(&historyservice.ActivitySyncInfo{
+	s.mockMutableState.EXPECT().UpdateActivityInfo(&historyservice.ActivitySyncInfo{
 		Version:          version,
 		ScheduledEventId: scheduledEventID,
 		ScheduledTime:    &now,
@@ -1141,7 +1142,7 @@ func (s *activityReplicatorStateSuite) TestSyncActivities_ActivityFound_Zombie()
 	s.mockMutableState.EXPECT().GetActivityInfo(scheduledEventID).Return(&persistencespb.ActivityInfo{
 		Version: version,
 	}, true)
-	s.mockMutableState.EXPECT().ReplicateActivityInfo(&historyservice.ActivitySyncInfo{
+	s.mockMutableState.EXPECT().UpdateActivityInfo(&historyservice.ActivitySyncInfo{
 		Version:          version,
 		ScheduledEventId: scheduledEventID,
 		ScheduledTime:    &now,
@@ -1230,7 +1231,7 @@ func (s *activityReplicatorStateSuite) TestSyncActivity_ActivityFound_NonZombie(
 		RunId:            runID,
 		Version:          version,
 		ScheduledEventId: scheduledEventID,
-		ScheduledTime:    &now,
+		ScheduledTime:    timestamppb.New(now),
 		VersionHistory:   incomingVersionHistory,
 	}
 
@@ -1243,7 +1244,7 @@ func (s *activityReplicatorStateSuite) TestSyncActivity_ActivityFound_NonZombie(
 	s.mockMutableState.EXPECT().GetActivityInfo(scheduledEventID).Return(&persistencespb.ActivityInfo{
 		Version: version,
 	}, true)
-	s.mockMutableState.EXPECT().ReplicateActivityInfo(&historyservice.ActivitySyncInfo{
+	s.mockMutableState.EXPECT().UpdateActivityInfo(&historyservice.ActivitySyncInfo{
 		Version:          version,
 		ScheduledEventId: scheduledEventID,
 		ScheduledTime:    &now,
@@ -1350,7 +1351,7 @@ func (s *activityReplicatorStateSuite) TestSyncActivities_ActivityFound_NonZombi
 	s.mockMutableState.EXPECT().GetActivityInfo(scheduledEventID).Return(&persistencespb.ActivityInfo{
 		Version: version,
 	}, true)
-	s.mockMutableState.EXPECT().ReplicateActivityInfo(&historyservice.ActivitySyncInfo{
+	s.mockMutableState.EXPECT().UpdateActivityInfo(&historyservice.ActivitySyncInfo{
 		Version:          version,
 		ScheduledEventId: scheduledEventID,
 		ScheduledTime:    &now,

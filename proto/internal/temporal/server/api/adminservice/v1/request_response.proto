@@ -1,3 +1,5 @@
+// The MIT License
+//
 // Copyright (c) 2019 Temporal Technologies, Inc.
 //
 // Permission is hereby granted, free of charge, to any person obtaining a copy
@@ -25,8 +27,6 @@ option go_package = "go.temporal.io/server/api/adminservice/v1;adminservice";
 
 import "google/protobuf/timestamp.proto";
 import "google/protobuf/duration.proto";
-
-import "dependencies/gogoproto/gogo.proto";
 
 import "temporal/api/enums/v1/common.proto";
 import "temporal/api/enums/v1/task_queue.proto";
@@ -116,7 +116,8 @@ message GetShardResponse {
 
 message ListHistoryTasksRequest {
   int32 shard_id = 1;
-  temporal.server.api.enums.v1.TaskCategory category = 2;
+  // The task category. See tasks.TaskCategoryRegistry for more.
+  int32 category = 2;
   temporal.server.api.history.v1.TaskRange task_range = 3;
   int32 batch_size = 4;
   bytes next_page_token = 5;
@@ -133,15 +134,16 @@ message Task {
   string run_id = 3;
   int64 task_id = 4;
   temporal.server.api.enums.v1.TaskType task_type = 5;
-  google.protobuf.Timestamp fire_time = 6 [(gogoproto.stdtime) = true];
+  google.protobuf.Timestamp fire_time = 6;
   int64 version = 7;
 }
 
 message RemoveTaskRequest {
   int32 shard_id = 1;
-  temporal.server.api.enums.v1.TaskCategory category = 2;
+  // The task category. See tasks.TaskCategoryRegistry for more.
+  int32 category = 2;
   int64 task_id = 3;
-  google.protobuf.Timestamp visibility_time = 4 [(gogoproto.stdtime) = true];
+  google.protobuf.Timestamp visibility_time = 4;
 }
 
 message RemoveTaskResponse {
@@ -292,13 +294,13 @@ message RemoveRemoteClusterResponse {
 message ListClusterMembersRequest {
   // (-- api-linter: core::0140::prepositions=disabled
   //     aip.dev/not-precedent: "within" is used to indicate a time range. --)
-  google.protobuf.Duration last_heartbeat_within = 1 [(gogoproto.stdduration) = true];
+  google.protobuf.Duration last_heartbeat_within = 1;
   string rpc_address = 2;
   string host_id = 3;
   temporal.server.api.enums.v1.ClusterMemberRole role = 4;
   // (-- api-linter: core::0140::prepositions=disabled
   //     aip.dev/not-precedent: "after" is used to indicate a time range. --)
-  google.protobuf.Timestamp session_started_after_time = 5 [(gogoproto.stdtime) = true];
+  google.protobuf.Timestamp session_started_after_time = 5;
   int32 page_size = 6;
   bytes next_page_token = 7;
 }
@@ -478,8 +480,8 @@ message DescribeDLQJobResponse {
   temporal.server.api.common.v1.HistoryDLQKey dlq_key = 1;
   temporal.server.api.enums.v1.DLQOperationType operation_type = 2;
   temporal.server.api.enums.v1.DLQOperationState operation_state = 3;
-  google.protobuf.Timestamp start_time = 4 [(gogoproto.stdtime) = true];
-  google.protobuf.Timestamp end_time = 5 [(gogoproto.stdtime) = true];
+  google.protobuf.Timestamp start_time = 4;
+  google.protobuf.Timestamp end_time = 5;
   // max_message_id is the ID of the last message(inclusive) to be processed as part of this job.
   int64 max_message_id = 6;
   // last_processed_message_id is the ID of the last message that has been processed.
@@ -517,3 +519,17 @@ message AddTasksRequest {
 
 message AddTasksResponse {}
 
+message ListQueuesRequest {
+  int32 queue_type = 1;
+  int32 page_size = 2;
+  bytes next_page_token = 3;
+}
+
+message ListQueuesResponse {
+  message QueueInfo {
+    string queue_name = 1;
+    int64 message_count = 2;
+  }
+  repeated QueueInfo queues = 1;
+  bytes next_page_token = 2;
+}

@@ -31,8 +31,6 @@ import (
 	"fmt"
 	"hash/crc32"
 
-	"github.com/gogo/protobuf/proto"
-
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 )
@@ -41,11 +39,15 @@ import (
 // a derived checksum not being equal to expected checksum
 var ErrMismatch = errors.New("checksum mismatch error")
 
+type Marshaler interface {
+	Marshal() ([]byte, error)
+}
+
 // GenerateCRC32 generates an IEEE crc32 checksum on the
 // serilized byte array of the given thrift object. The
 // serialization proto used will be of type thriftRW
 func GenerateCRC32(
-	payload proto.Marshaler,
+	payload Marshaler,
 	payloadVersion int32,
 ) (*persistencespb.Checksum, error) {
 
@@ -68,7 +70,7 @@ func GenerateCRC32(
 // given thrift object matches the specified expected checksum
 // Return ErrMismatch when checksums mismatch
 func Verify(
-	payload proto.Marshaler,
+	payload Marshaler,
 	checksum *persistencespb.Checksum,
 ) error {
 

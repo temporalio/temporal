@@ -444,7 +444,7 @@ func (r *transactionMgrImpl) LoadWorkflow(
 		ctx,
 		r.shardContext,
 		namespaceID,
-		commonpb.WorkflowExecution{
+		&commonpb.WorkflowExecution{
 			WorkflowId: workflowID,
 			RunId:      runID,
 		},

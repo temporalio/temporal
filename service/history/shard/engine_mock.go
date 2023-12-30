@@ -466,7 +466,7 @@ func (mr *MockEngineMockRecorder) ReapplyEvents(ctx, namespaceUUID, workflowID, 
 }
 
 // RebuildMutableState mocks base method.
-func (m *MockEngine) RebuildMutableState(ctx context.Context, namespaceUUID namespace.ID, execution common.WorkflowExecution) error {
+func (m *MockEngine) RebuildMutableState(ctx context.Context, namespaceUUID namespace.ID, execution *common.WorkflowExecution) error {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "RebuildMutableState", ctx, namespaceUUID, execution)
 	ret0, _ := ret[0].(error)
@@ -540,7 +540,7 @@ func (mr *MockEngineMockRecorder) RecordWorkflowTaskStarted(ctx, request interfa
 }
 
 // RefreshWorkflowTasks mocks base method.
-func (m *MockEngine) RefreshWorkflowTasks(ctx context.Context, namespaceUUID namespace.ID, execution common.WorkflowExecution) error {
+func (m *MockEngine) RefreshWorkflowTasks(ctx context.Context, namespaceUUID namespace.ID, execution *common.WorkflowExecution) error {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "RefreshWorkflowTasks", ctx, namespaceUUID, execution)
 	ret0, _ := ret[0].(error)

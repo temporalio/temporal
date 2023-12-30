@@ -28,6 +28,7 @@ import (
 	"bytes"
 	"context"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -73,7 +74,7 @@ func TestParseDLQMessages(t *testing.T) {
 					},
 					Payload: &commonspb.HistoryTask{
 						ShardId: 34,
-						Blob:    &blob,
+						Blob:    blob,
 					},
 				},
 				},
@@ -85,7 +86,9 @@ func TestParseDLQMessages(t *testing.T) {
 		params.ClientFactory = client
 		params.Writer = &b
 	})
-	err = app.Run([]string{
+	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+	t.Cleanup(cancel)
+	err = app.RunContext(ctx, []string{
 		"tdbg",
 		"--" + tdbg.FlagYes,
 		"dlq",

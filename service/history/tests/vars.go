@@ -66,7 +66,8 @@ var (
 		&persistencespb.NamespaceConfig{
 			Retention: timestamp.DurationFromDays(1),
 			BadBinaries: &namespacepb.BadBinaries{
-				Binaries: map[string]*namespacepb.BadBinaryInfo{},
+				Binaries: map[string]*namespacepb.BadBinaryInfo{
+					"lololol": nil},
 			},
 		},
 		cluster.TestCurrentClusterName,

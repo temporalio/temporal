@@ -32,6 +32,7 @@ import (
 
 	"github.com/golang/mock/gomock"
 	"github.com/pborman/uuid"
+	"google.golang.org/protobuf/types/known/timestamppb"
 
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
@@ -45,7 +46,6 @@ import (
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/persistence/versionhistory"
 	"go.temporal.io/server/common/persistence/visibility/store/standard/cassandra"
-	"go.temporal.io/server/common/primitives/timestamp"
 )
 
 // DEPRECATED: DO NOT MODIFY UNLESS ALSO APPLIED TO ./service/history/historyEngine_test.go
@@ -469,7 +469,7 @@ func (s *adminHandlerSuite) TestDeleteWorkflowExecution_CassandraVisibilityBacke
 		NextEventId: 12,
 		ExecutionInfo: &persistencespb.WorkflowExecutionInfo{
 			CompletionEventBatchId: 10,
-			StartTime:              timestamp.TimePtr(time.Now()),
+			StartTime:              timestamppb.New(time.Now()),
 			VersionHistories: &historyspb.VersionHistories{
 				CurrentVersionHistoryIndex: 0,
 				Histories: []*historyspb.VersionHistory{
@@ -520,20 +520,20 @@ func (s *adminHandlerSuite) TestDeleteWorkflowExecution_CassandraVisibilityBacke
 				EventId:   10,
 				EventType: enumspb.EVENT_TYPE_WORKFLOW_TASK_COMPLETED,
 				Version:   version,
-				EventTime: timestamp.TimePtr(closeTime.Add(-time.Millisecond)),
+				EventTime: timestamppb.New(closeTime.Add(-time.Millisecond)),
 			},
 			{
 				EventId:   11,
 				EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_COMPLETED,
 				Version:   version,
-				EventTime: timestamp.TimePtr(closeTime),
+				EventTime: timestamppb.New(closeTime),
 			},
 		},
 	}, nil)
 	s.mockHistoryClient.EXPECT().DeleteWorkflowVisibilityRecord(gomock.Any(), &historyservice.DeleteWorkflowVisibilityRecordRequest{
 		NamespaceId:       s.namespaceID.String(),
 		Execution:         &execution,
-		WorkflowCloseTime: timestamp.TimePtr(closeTime),
+		WorkflowCloseTime: timestamppb.New(closeTime),
 	}).Return(&historyservice.DeleteWorkflowVisibilityRecordResponse{}, nil)
 	s.mockExecutionMgr.EXPECT().DeleteCurrentWorkflowExecution(gomock.Any(), gomock.Any()).Return(nil)
 	s.mockExecutionMgr.EXPECT().DeleteWorkflowExecution(gomock.Any(), gomock.Any()).Return(nil)

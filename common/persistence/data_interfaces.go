@@ -34,6 +34,8 @@ import (
 	"time"
 
 	"github.com/pborman/uuid"
+	"google.golang.org/protobuf/types/known/timestamppb"
+
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	historypb "go.temporal.io/api/history/v1"
@@ -953,7 +955,7 @@ type (
 	// HistoryBranchDetail contains detailed information of a branch
 	HistoryBranchDetail struct {
 		BranchInfo *persistencespb.HistoryBranch
-		ForkTime   *time.Time
+		ForkTime   *timestamppb.Timestamp
 		Info       string
 	}
 
@@ -997,13 +999,13 @@ type (
 
 	// GetClusterMetadataResponse is the response to GetClusterMetadata
 	GetClusterMetadataResponse struct {
-		persistencespb.ClusterMetadata
+		*persistencespb.ClusterMetadata
 		Version int64
 	}
 
 	// SaveClusterMetadataRequest is the request to SaveClusterMetadata
 	SaveClusterMetadataRequest struct {
-		persistencespb.ClusterMetadata
+		*persistencespb.ClusterMetadata
 		Version int64
 	}
 
@@ -1217,6 +1219,7 @@ type (
 		// CreateQueue must return an ErrQueueAlreadyExists if the queue already exists.
 		CreateQueue(ctx context.Context, request *CreateQueueRequest) (*CreateQueueResponse, error)
 		DeleteTasks(ctx context.Context, request *DeleteTasksRequest) (*DeleteTasksResponse, error)
+		ListQueues(ctx context.Context, request *ListQueuesRequest) (*ListQueuesResponse, error)
 	}
 
 	HistoryTaskQueueManagerImpl struct {
@@ -1291,6 +1294,17 @@ type (
 
 	DeleteTasksResponse struct {
 		MessagesDeleted int64
+	}
+
+	ListQueuesRequest struct {
+		QueueType     QueueV2Type
+		PageSize      int
+		NextPageToken []byte
+	}
+
+	ListQueuesResponse struct {
+		Queues        []QueueInfo
+		NextPageToken []byte
 	}
 )
 

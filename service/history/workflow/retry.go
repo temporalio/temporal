@@ -30,6 +30,10 @@ import (
 	"time"
 
 	"github.com/pborman/uuid"
+	"golang.org/x/exp/slices"
+	"google.golang.org/protobuf/types/known/durationpb"
+	"google.golang.org/protobuf/types/known/timestamppb"
+
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	failurepb "go.temporal.io/api/failure/v1"
@@ -37,7 +41,6 @@ import (
 	"go.temporal.io/api/serviceerror"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	"go.temporal.io/api/workflowservice/v1"
-	"golang.org/x/exp/slices"
 
 	"go.temporal.io/server/api/clock/v1"
 	"go.temporal.io/server/api/historyservice/v1"
@@ -54,36 +57,39 @@ func getBackoffInterval(
 	now time.Time,
 	currentAttempt int32,
 	maxAttempts int32,
-	initInterval *time.Duration,
-	maxInterval *time.Duration,
-	expirationTime *time.Time,
+	initInterval *durationpb.Duration,
+	maxInterval *durationpb.Duration,
+	expirationTime *timestamppb.Timestamp,
 	backoffCoefficient float64,
 	failure *failurepb.Failure,
 	nonRetryableTypes []string,
 ) (time.Duration, enumspb.RetryState) {
 
+	if !isRetryable(failure, nonRetryableTypes) {
+		return backoff.NoBackoff, enumspb.RETRY_STATE_NON_RETRYABLE_FAILURE
+	}
+
+	return nextBackoffInterval(now, currentAttempt, maxAttempts, initInterval, maxInterval, expirationTime, backoffCoefficient)
+}
+
+func nextBackoffInterval(
+	now time.Time,
+	currentAttempt int32,
+	maxAttempts int32,
+	initInterval *durationpb.Duration,
+	maxInterval *durationpb.Duration,
+	expirationTime *timestamppb.Timestamp,
+	backoffCoefficient float64,
+) (time.Duration, enumspb.RetryState) {
 	// TODO remove below checks, most are already set with correct values
 	if currentAttempt < 1 {
 		currentAttempt = 1
 	}
 
-	if initInterval == nil {
-		initInterval = timestamp.DurationPtr(time.Duration(0))
-	}
-
-	if maxInterval != nil && *maxInterval == 0 {
-		maxInterval = nil
-	}
-
-	if expirationTime != nil && expirationTime.IsZero() {
+	if expirationTime != nil && expirationTime.AsTime().IsZero() {
 		expirationTime = nil
 	}
 	// TODO remove above checks, most are already set with correct values
-
-	if !isRetryable(failure, nonRetryableTypes) {
-		return backoff.NoBackoff, enumspb.RETRY_STATE_NON_RETRYABLE_FAILURE
-	}
-
 	// currentAttempt starts from 1.
 	// maxAttempts is the total attempts, including initial (non-retry) attempt.
 	// At this point we are about to make next attempt and all calculations in this func are for this next attempt.
@@ -95,18 +101,16 @@ func getBackoffInterval(
 		return backoff.NoBackoff, enumspb.RETRY_STATE_MAXIMUM_ATTEMPTS_REACHED
 	}
 
-	interval := time.Duration(int64(float64(initInterval.Nanoseconds()) * math.Pow(backoffCoefficient, float64(currentAttempt-1))))
-	if maxInterval != nil && (interval <= 0 || interval > *maxInterval) {
-		interval = *maxInterval
-	} else if maxInterval == nil && interval <= 0 {
+	interval := time.Duration(int64(float64(initInterval.AsDuration().Nanoseconds()) * math.Pow(backoffCoefficient, float64(currentAttempt-1))))
+	if maxInterval.AsDuration() == 0 && interval <= 0 {
 		return backoff.NoBackoff, enumspb.RETRY_STATE_TIMEOUT
-		// } else {
-		// maxInterval != nil && (0 < interval && interval <= *maxInterval)
-		// or
-		// maxInterval == nil && interval > 0
 	}
 
-	if expirationTime != nil && now.Add(interval).After(*expirationTime) {
+	if maxInterval.AsDuration() != 0 && (interval <= 0 || interval > maxInterval.AsDuration()) {
+		interval = maxInterval.AsDuration()
+	}
+
+	if expirationTime != nil && now.Add(interval).After(expirationTime.AsTime()) {
 		return backoff.NoBackoff, enumspb.RETRY_STATE_TIMEOUT
 	}
 	return interval, enumspb.RETRY_STATE_IN_PROGRESS
@@ -209,7 +213,7 @@ func SetupNewWorkflowForRetryOrCron(
 		Name: workflowType,
 	}
 
-	var taskTimeout *time.Duration
+	var taskTimeout *durationpb.Duration
 	if timestamp.DurationValue(startAttr.GetWorkflowTaskTimeout()) == 0 {
 		taskTimeout = previousExecutionInfo.DefaultWorkflowTaskTimeout
 	} else {
@@ -257,17 +261,17 @@ func SetupNewWorkflowForRetryOrCron(
 		ContinuedFailure:       failure,
 		ContinueAsNewInitiator: initiator,
 		// enforce minimal interval between runs to prevent tight loop continue as new spin.
-		FirstWorkflowTaskBackoff: previousMutableState.ContinueAsNewMinBackoff(&backoffInterval),
+		FirstWorkflowTaskBackoff: previousMutableState.ContinueAsNewMinBackoff(durationpb.New(backoffInterval)),
 		Attempt:                  attempt,
 		SourceVersionStamp:       sourceVersionStamp,
 	}
 	workflowTimeoutTime := timestamp.TimeValue(previousExecutionInfo.WorkflowExecutionExpirationTime)
 	if !workflowTimeoutTime.IsZero() {
-		req.WorkflowExecutionExpirationTime = &workflowTimeoutTime
+		req.WorkflowExecutionExpirationTime = timestamppb.New(workflowTimeoutTime)
 	}
 
 	event, err := newMutableState.AddWorkflowExecutionStartedEventWithOptions(
-		newExecution,
+		&newExecution,
 		req,
 		previousExecutionInfo.AutoResetPoints,
 		previousMutableState.GetExecutionState().GetRunId(),

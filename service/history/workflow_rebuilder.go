@@ -97,7 +97,7 @@ func (r *workflowRebuilderImpl) rebuild(
 		ctx,
 		r.shard,
 		namespace.ID(workflowKey.NamespaceID),
-		commonpb.WorkflowExecution{
+		&commonpb.WorkflowExecution{
 			WorkflowId: workflowKey.WorkflowID,
 			RunId:      workflowKey.RunID,
 		},

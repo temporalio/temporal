@@ -37,13 +37,13 @@ import (
 	enumspb "go.temporal.io/api/enums/v1"
 	historypb "go.temporal.io/api/history/v1"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
+	"google.golang.org/protobuf/types/known/durationpb"
 
 	historyspb "go.temporal.io/server/api/history/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/collection"
-	"go.temporal.io/server/common/convert"
 	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/namespace"
@@ -51,6 +51,9 @@ import (
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/persistence/versionhistory"
 	"go.temporal.io/server/common/primitives/timestamp"
+	"go.temporal.io/server/common/testing/protomock"
+	"go.temporal.io/server/common/testing/protorequire"
+	"go.temporal.io/server/common/util"
 	"go.temporal.io/server/service/history/events"
 	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/tests"
@@ -61,6 +64,7 @@ type (
 	stateRebuilderSuite struct {
 		suite.Suite
 		*require.Assertions
+		protorequire.ProtoAssertions
 
 		controller          *gomock.Controller
 		mockShard           *shard.ContextTest
@@ -88,6 +92,7 @@ func TestStateRebuilderSuite(t *testing.T) {
 
 func (s *stateRebuilderSuite) SetupTest() {
 	s.Assertions = require.New(s.T())
+	s.ProtoAssertions = protorequire.New(s.T())
 
 	s.controller = gomock.NewController(s.T())
 	s.mockTaskRefresher = workflow.NewMockTaskRefresher(s.controller)
@@ -154,10 +159,10 @@ func (s *stateRebuilderSuite) TestApplyEvents() {
 		gomock.Any(),
 		s.namespaceID,
 		requestID,
-		commonpb.WorkflowExecution{
+		protomock.Eq(&commonpb.WorkflowExecution{
 			WorkflowId: s.workflowID,
 			RunId:      s.runID,
-		},
+		}),
 		[][]*historypb.HistoryEvent{events},
 		[]*historypb.HistoryEvent(nil),
 	).Return(nil, nil)
@@ -274,9 +279,9 @@ func (s *stateRebuilderSuite) TestRebuild() {
 			WorkflowType:             &commonpb.WorkflowType{Name: "some random workflow type"},
 			TaskQueue:                &taskqueuepb.TaskQueue{Name: "some random workflow type"},
 			Input:                    payloads.EncodeString("some random input"),
-			WorkflowExecutionTimeout: timestamp.DurationPtr(123 * time.Second),
-			WorkflowRunTimeout:       timestamp.DurationPtr(233 * time.Second),
-			WorkflowTaskTimeout:      timestamp.DurationPtr(45 * time.Second),
+			WorkflowExecutionTimeout: durationpb.New(123 * time.Second),
+			WorkflowRunTimeout:       durationpb.New(233 * time.Second),
+			WorkflowTaskTimeout:      durationpb.New(45 * time.Second),
 			Identity:                 "some random identity",
 		}},
 	}}
@@ -345,7 +350,7 @@ func (s *stateRebuilderSuite) TestRebuild() {
 		definition.NewWorkflowKey(s.namespaceID.String(), s.workflowID, s.runID),
 		branchToken,
 		lastEventID,
-		convert.Int64Ptr(version),
+		util.Ptr(version),
 		definition.NewWorkflowKey(targetNamespaceID.String(), targetWorkflowID, targetRunID),
 		targetBranchToken,
 		requestID,
@@ -357,7 +362,7 @@ func (s *stateRebuilderSuite) TestRebuild() {
 	s.Equal(targetWorkflowID, rebuildExecutionInfo.WorkflowId)
 	s.Equal(targetRunID, rebuildMutableState.GetExecutionState().RunId)
 	s.Equal(int64(historySize1+historySize2), rebuiltHistorySize)
-	s.Equal(versionhistory.NewVersionHistories(
+	s.ProtoEqual(versionhistory.NewVersionHistories(
 		versionhistory.NewVersionHistory(
 			targetBranchToken,
 			[]*historyspb.VersionHistoryItem{versionhistory.NewVersionHistoryItem(lastEventID, version)},

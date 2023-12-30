@@ -34,18 +34,17 @@ import (
 	"reflect"
 	"time"
 
-	"github.com/gogo/protobuf/proto"
-	"github.com/gogo/status"
-	"github.com/grpc-ecosystem/grpc-gateway/runtime"
-	"go.temporal.io/api/proxy"
-	"go.temporal.io/api/serviceerror"
-	"go.temporal.io/api/workflowservice/v1"
+	"github.com/grpc-ecosystem/grpc-gateway/v2/runtime"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/credentials"
 	"google.golang.org/grpc/metadata"
 	"google.golang.org/grpc/peer"
+	"google.golang.org/grpc/status"
+	"google.golang.org/protobuf/proto"
 
+	"go.temporal.io/api/serviceerror"
+	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/server/common/config"
 	"go.temporal.io/server/common/headers"
 	"go.temporal.io/server/common/log"
@@ -131,14 +130,14 @@ func NewHTTPAPIServer(
 
 	// Build 4 possible marshalers in order based on content type
 	opts := []runtime.ServeMuxOption{
-		runtime.WithMarshalerOption("application/json+pretty+no-payload-shorthand", h.newMarshaler("  ", true)),
-		runtime.WithMarshalerOption("application/json+no-payload-shorthand", h.newMarshaler("", true)),
-		runtime.WithMarshalerOption("application/json+pretty", h.newMarshaler("  ", false)),
-		runtime.WithMarshalerOption(runtime.MIMEWildcard, h.newMarshaler("", false)),
+		runtime.WithMarshalerOption(newTemporalProtoMarshaler("  ", false)),
+		runtime.WithMarshalerOption(newTemporalProtoMarshaler("", false)),
+		runtime.WithMarshalerOption(newTemporalProtoMarshaler("  ", true)),
+		runtime.WithMarshalerOption(newTemporalProtoMarshaler("", true)),
 	}
 
 	// Set Temporal service error handler
-	opts = append(opts, runtime.WithProtoErrorHandler(h.errorHandler))
+	opts = append(opts, runtime.WithErrorHandler(h.errorHandler))
 
 	// Match headers w/ default
 	h.matchAdditionalHeaders = map[string]bool{}
@@ -280,7 +279,7 @@ func (h *HTTPAPIServer) errorHandler(
 	// this time.
 
 	s := serviceerror.ToStatus(err)
-	w.Header().Set("Content-Type", marshaler.ContentType())
+	w.Header().Set("Content-Type", marshaler.ContentType(struct{}{}))
 
 	buf, merr := marshaler.Marshal(s.Proto())
 	if merr != nil {
@@ -293,21 +292,6 @@ func (h *HTTPAPIServer) errorHandler(
 
 	w.WriteHeader(runtime.HTTPStatusFromCode(s.Code()))
 	_, _ = w.Write(buf)
-}
-
-func (h *HTTPAPIServer) newMarshaler(indent string, disablePayloadShorthand bool) runtime.Marshaler {
-	marshalOpts := proxy.JSONPBMarshalerOptions{
-		Indent:                  indent,
-		DisablePayloadShorthand: disablePayloadShorthand,
-	}
-	unmarshalOpts := proxy.JSONPBUnmarshalerOptions{DisablePayloadShorthand: disablePayloadShorthand}
-	if m, err := proxy.NewJSONPBMarshaler(marshalOpts); err != nil {
-		panic(err)
-	} else if u, err := proxy.NewJSONPBUnmarshaler(unmarshalOpts); err != nil {
-		panic(err)
-	} else {
-		return proxy.NewGRPCGatewayJSONPBMarshaler(m, u)
-	}
 }
 
 func (h *HTTPAPIServer) incomingHeaderMatcher(headerName string) (string, bool) {
@@ -386,7 +370,7 @@ func newInlineClientConn(
 	return &inlineClientConn{
 		methods:           methods,
 		interceptor:       chainUnaryServerInterceptors(interceptors),
-		requestsCounter:   metricsHandler.Counter(metrics.HTTPServiceRequests.GetMetricName()),
+		requestsCounter:   metricsHandler.Counter(metrics.HTTPServiceRequests.Name()),
 		namespaceRegistry: namespaceRegistry,
 	}
 }

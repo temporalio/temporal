@@ -47,12 +47,12 @@ import (
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence"
-	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/service/history/configs"
 	"go.temporal.io/server/service/history/events"
 	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/tests"
 	"go.temporal.io/server/service/history/workflow"
+	"google.golang.org/protobuf/types/known/durationpb"
 )
 
 func TestMutableStateImpl_ForceFlushBufferedEvents(t *testing.T) {
@@ -159,7 +159,7 @@ func (c *mutationTestCase) startWorkflowExecution(
 	t.Helper()
 
 	_, err := ms.AddWorkflowExecutionStartedEvent(
-		commonpb.WorkflowExecution{
+		&commonpb.WorkflowExecution{
 			WorkflowId: "694B31C3-1FDC-4C9E-87BC-747D539BF0CD",
 			RunId:      "3E1836B8-8692-440D-9495-45D9EABDED6B",
 		},
@@ -169,8 +169,8 @@ func (c *mutationTestCase) startWorkflowExecution(
 			StartRequest: &workflowservice.StartWorkflowExecutionRequest{
 				WorkflowType:        &commonpb.WorkflowType{Name: "workflow-type"},
 				TaskQueue:           &taskqueuepb.TaskQueue{Name: "task-queue-name"},
-				WorkflowRunTimeout:  timestamp.DurationPtr(200 * time.Second),
-				WorkflowTaskTimeout: timestamp.DurationPtr(1 * time.Second),
+				WorkflowRunTimeout:  durationpb.New(200 * time.Second),
+				WorkflowTaskTimeout: durationpb.New(1 * time.Second),
 			},
 		},
 	)

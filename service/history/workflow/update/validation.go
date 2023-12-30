@@ -25,8 +25,8 @@
 package update
 
 import (
-	"github.com/gogo/protobuf/proto"
 	updatepb "go.temporal.io/api/update/v1"
+	"google.golang.org/protobuf/proto"
 )
 
 func notZero[T comparable](v T, label string, msg proto.Message) func() error {

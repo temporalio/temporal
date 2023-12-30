@@ -56,6 +56,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"go.temporal.io/api/enums/v1"
+	"google.golang.org/protobuf/types/known/durationpb"
 
 	"go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common/archiver"
@@ -63,7 +64,6 @@ import (
 	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/namespace"
-	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/service/history/configs"
 	"go.temporal.io/server/service/history/tasks"
 	"go.temporal.io/server/service/history/tests"
@@ -215,7 +215,7 @@ func TestTaskGeneratorImpl_GenerateWorkflowCloseTasks(t *testing.T) {
 			namespaceRegistry := namespace.NewMockRegistry(ctrl)
 
 			namespaceConfig := &persistence.NamespaceConfig{
-				Retention:             &p.Retention,
+				Retention:             durationpb.New(p.Retention),
 				HistoryArchivalUri:    "test:///history/archival/",
 				VisibilityArchivalUri: "test:///visibility/archival",
 			}
@@ -282,7 +282,7 @@ func TestTaskGeneratorImpl_GenerateWorkflowCloseTasks(t *testing.T) {
 			}).AnyTimes()
 
 			taskGenerator := NewTaskGenerator(namespaceRegistry, mutableState, cfg, archivalMetadata)
-			err := taskGenerator.GenerateWorkflowCloseTasks(timestamp.TimePtr(p.CloseEventTime), p.DeleteAfterClose)
+			err := taskGenerator.GenerateWorkflowCloseTasks(p.CloseEventTime, p.DeleteAfterClose)
 			require.NoError(t, err)
 
 			var (

@@ -795,7 +795,7 @@ func (s *visibilityStore) buildSearchParametersV2(
 	if len(queryParams.Sorter) > 0 {
 		// If params.Sorter is not empty, then it's using custom order by.
 		s.metricsHandler.WithTags(metrics.NamespaceTag(request.Namespace.String())).
-			Counter(metrics.ElasticsearchCustomOrderByClauseCount.GetMetricName()).Record(1)
+			Counter(metrics.ElasticsearchCustomOrderByClauseCount.Name()).Record(1)
 	}
 
 	searchParams.Sorter, err = getFieldSorter(queryParams.Sorter)
@@ -1010,7 +1010,10 @@ func (s *visibilityStore) serializePageToken(token *visibilityPageToken) ([]byte
 	return data, nil
 }
 
-func (s *visibilityStore) generateESDoc(request *store.InternalVisibilityRequestBase, visibilityTaskKey string) (map[string]interface{}, error) {
+func (s *visibilityStore) generateESDoc(
+	request *store.InternalVisibilityRequestBase,
+	visibilityTaskKey string,
+) (map[string]interface{}, error) {
 	doc := map[string]interface{}{
 		searchattribute.VisibilityTaskKey: visibilityTaskKey,
 		searchattribute.NamespaceID:       request.NamespaceID,
@@ -1023,6 +1026,13 @@ func (s *visibilityStore) generateESDoc(request *store.InternalVisibilityRequest
 		searchattribute.TaskQueue:         request.TaskQueue,
 	}
 
+	if request.ParentWorkflowID != nil {
+		doc[searchattribute.ParentWorkflowID] = *request.ParentWorkflowID
+	}
+	if request.ParentRunID != nil {
+		doc[searchattribute.ParentRunID] = *request.ParentRunID
+	}
+
 	if len(request.Memo.GetData()) > 0 {
 		doc[searchattribute.Memo] = request.Memo.GetData()
 		doc[searchattribute.MemoEncoding] = request.Memo.GetEncodingType().String()
@@ -1030,13 +1040,13 @@ func (s *visibilityStore) generateESDoc(request *store.InternalVisibilityRequest
 
 	typeMap, err := s.searchAttributesProvider.GetSearchAttributes(s.index, false)
 	if err != nil {
-		s.metricsHandler.Counter(metrics.ElasticsearchDocumentGenerateFailuresCount.GetMetricName()).Record(1)
+		s.metricsHandler.Counter(metrics.ElasticsearchDocumentGenerateFailuresCount.Name()).Record(1)
 		return nil, serviceerror.NewUnavailable(fmt.Sprintf("Unable to read search attribute types: %v", err))
 	}
 
 	searchAttributes, err := searchattribute.Decode(request.SearchAttributes, &typeMap, true)
 	if err != nil {
-		s.metricsHandler.Counter(metrics.ElasticsearchDocumentGenerateFailuresCount.GetMetricName()).Record(1)
+		s.metricsHandler.Counter(metrics.ElasticsearchDocumentGenerateFailuresCount.Name()).Record(1)
 		return nil, serviceerror.NewInternal(fmt.Sprintf("Unable to decode search attributes: %v", err))
 	}
 	// This is to prevent existing tasks to fail indefinitely.
@@ -1061,7 +1071,7 @@ func (s *visibilityStore) generateESDoc(request *store.InternalVisibilityRequest
 
 func (s *visibilityStore) parseESDoc(docID string, docSource json.RawMessage, saTypeMap searchattribute.NameTypeMap, namespace namespace.Name) (*store.InternalWorkflowExecutionInfo, error) {
 	logParseError := func(fieldName string, fieldValue interface{}, err error, docID string) error {
-		s.metricsHandler.Counter(metrics.ElasticsearchDocumentParseFailuresCount.GetMetricName()).Record(1)
+		s.metricsHandler.Counter(metrics.ElasticsearchDocumentParseFailuresCount.Name()).Record(1)
 		return serviceerror.NewInternal(fmt.Sprintf("Unable to parse Elasticsearch document(%s) %q field value %q: %v", docID, fieldName, fieldValue, err))
 	}
 
@@ -1070,7 +1080,7 @@ func (s *visibilityStore) parseESDoc(docID string, docSource json.RawMessage, sa
 	// Very important line. See finishParseJSONValue bellow.
 	d.UseNumber()
 	if err := d.Decode(&sourceMap); err != nil {
-		s.metricsHandler.Counter(metrics.ElasticsearchDocumentParseFailuresCount.GetMetricName()).Record(1)
+		s.metricsHandler.Counter(metrics.ElasticsearchDocumentParseFailuresCount.Name()).Record(1)
 		return nil, serviceerror.NewInternal(fmt.Sprintf("Unable to unmarshal JSON from Elasticsearch document(%s): %v", docID, err))
 	}
 
@@ -1111,7 +1121,7 @@ func (s *visibilityStore) parseESDoc(docID string, docSource json.RawMessage, sa
 			if errors.Is(err, searchattribute.ErrInvalidName) {
 				continue
 			}
-			s.metricsHandler.Counter(metrics.ElasticsearchDocumentParseFailuresCount.GetMetricName()).Record(1)
+			s.metricsHandler.Counter(metrics.ElasticsearchDocumentParseFailuresCount.Name()).Record(1)
 			return nil, serviceerror.NewInternal(fmt.Sprintf("Unable to get type for Elasticsearch document(%s) field %q: %v", docID, fieldName, err))
 		}
 
@@ -1136,13 +1146,21 @@ func (s *visibilityStore) parseESDoc(docID string, docSource json.RawMessage, sa
 		case searchattribute.TaskQueue:
 			record.TaskQueue = fieldValueParsed.(string)
 		case searchattribute.ExecutionStatus:
-			record.Status = enumspb.WorkflowExecutionStatus(enumspb.WorkflowExecutionStatus_value[fieldValueParsed.(string)])
+			status, err := enumspb.WorkflowExecutionStatusFromString(fieldValueParsed.(string))
+			if err != nil {
+				return nil, logParseError(fieldName, fieldValueParsed.(string), err, docID)
+			}
+			record.Status = status
 		case searchattribute.HistoryLength:
 			record.HistoryLength = fieldValueParsed.(int64)
 		case searchattribute.StateTransitionCount:
 			record.StateTransitionCount = fieldValueParsed.(int64)
 		case searchattribute.HistorySizeBytes:
 			record.HistorySizeBytes = fieldValueParsed.(int64)
+		case searchattribute.ParentWorkflowID:
+			record.ParentWorkflowID = fieldValueParsed.(string)
+		case searchattribute.ParentRunID:
+			record.ParentRunID = fieldValueParsed.(string)
 		default:
 			// All custom and predefined search attributes are handled here.
 			if customSearchAttributes == nil {
@@ -1156,7 +1174,7 @@ func (s *visibilityStore) parseESDoc(docID string, docSource json.RawMessage, sa
 		var err error
 		record.SearchAttributes, err = searchattribute.Encode(customSearchAttributes, &saTypeMap)
 		if err != nil {
-			s.metricsHandler.Counter(metrics.ElasticsearchDocumentParseFailuresCount.GetMetricName()).Record(1)
+			s.metricsHandler.Counter(metrics.ElasticsearchDocumentParseFailuresCount.Name()).Record(1)
 			return nil, serviceerror.NewInternal(fmt.Sprintf("Unable to encode custom search attributes of Elasticsearch document(%s): %v", docID, err))
 		}
 		aliasedSas, err := searchattribute.AliasFields(s.searchAttributesMapperProvider, record.SearchAttributes, namespace.String())
@@ -1172,7 +1190,7 @@ func (s *visibilityStore) parseESDoc(docID string, docSource json.RawMessage, sa
 	if memoEncoding != "" {
 		record.Memo = persistence.NewDataBlob(memo, memoEncoding)
 	} else if memo != nil {
-		s.metricsHandler.Counter(metrics.ElasticsearchDocumentParseFailuresCount.GetMetricName()).Record(1)
+		s.metricsHandler.Counter(metrics.ElasticsearchDocumentParseFailuresCount.Name()).Record(1)
 		return nil, serviceerror.NewInternal(fmt.Sprintf("%q field is missing in Elasticsearch document(%s)", searchattribute.MemoEncoding, docID))
 	}
 

@@ -36,6 +36,7 @@ import (
 	replicationpb "go.temporal.io/api/replication/v1"
 	commonspb "go.temporal.io/server/api/common/v1"
 	"google.golang.org/grpc/metadata"
+	"google.golang.org/protobuf/types/known/timestamppb"
 
 	"go.temporal.io/server/api/adminservice/v1"
 	"go.temporal.io/server/api/historyservice/v1"
@@ -98,6 +99,8 @@ const (
 type (
 	// AdminHandler - gRPC handler interface for adminservice
 	AdminHandler struct {
+		adminservice.UnsafeAdminServiceServer
+
 		status int32
 
 		logger                     log.Logger
@@ -865,7 +868,7 @@ func toAdminTask(tasks []tasks.Task) []*adminservice.Task {
 			RunId:       task.GetRunID(),
 			TaskId:      task.GetTaskID(),
 			TaskType:    task.GetType(),
-			FireTime:    timestamp.TimePtr(task.GetKey().FireTime),
+			FireTime:    timestamppb.New(task.GetKey().FireTime),
 			Version:     task.GetVersion(),
 		})
 	}
@@ -1055,7 +1058,7 @@ func (adh *AdminHandler) ListClusters(
 
 	var clusterMetadataList []*persistencespb.ClusterMetadata
 	for _, clusterResp := range resp.ClusterMetadata {
-		clusterMetadataList = append(clusterMetadataList, &clusterResp.ClusterMetadata)
+		clusterMetadataList = append(clusterMetadataList, clusterResp.ClusterMetadata)
 	}
 	return &adminservice.ListClustersResponse{
 		Clusters:      clusterMetadataList,
@@ -1080,12 +1083,12 @@ func (adh *AdminHandler) ListClusterMembers(
 	heartbitRef := request.GetLastHeartbeatWithin()
 	var heartbit time.Duration
 	if heartbitRef != nil {
-		heartbit = *heartbitRef
+		heartbit = heartbitRef.AsDuration()
 	}
 	startedTimeRef := request.GetSessionStartedAfterTime()
 	var startedTime time.Time
 	if startedTimeRef != nil {
-		startedTime = *startedTimeRef
+		startedTime = startedTimeRef.AsTime()
 	}
 
 	resp, err := metadataMgr.GetClusterMembers(ctx, &persistence.GetClusterMembersRequest{
@@ -1108,9 +1111,9 @@ func (adh *AdminHandler) ListClusterMembers(
 			HostId:           member.HostID.String(),
 			RpcAddress:       member.RPCAddress.String(),
 			RpcPort:          int32(member.RPCPort),
-			SessionStartTime: &member.SessionStart,
-			LastHeartbitTime: &member.LastHeartbeat,
-			RecordExpiryTime: &member.RecordExpiry,
+			SessionStartTime: timestamppb.New(member.SessionStart),
+			LastHeartbitTime: timestamppb.New(member.LastHeartbeat),
+			RecordExpiryTime: timestamppb.New(member.RecordExpiry),
 		})
 	}
 
@@ -1161,7 +1164,7 @@ func (adh *AdminHandler) AddOrUpdateRemoteCluster(
 	}
 
 	applied, err := clusterMetadataMrg.SaveClusterMetadata(ctx, &persistence.SaveClusterMetadataRequest{
-		ClusterMetadata: persistencespb.ClusterMetadata{
+		ClusterMetadata: &persistencespb.ClusterMetadata{
 			ClusterName:              resp.GetClusterName(),
 			HistoryShardCount:        resp.GetHistoryShardCount(),
 			ClusterId:                resp.GetClusterId(),
@@ -1955,6 +1958,32 @@ func (adh *AdminHandler) AddTasks(
 		return nil, err
 	}
 	return &adminservice.AddTasksResponse{}, nil
+}
+
+func (adh *AdminHandler) ListQueues(
+	ctx context.Context,
+	request *adminservice.ListQueuesRequest,
+) (*adminservice.ListQueuesResponse, error) {
+	historyServiceRequest := &historyservice.ListQueuesRequest{
+		QueueType:     request.QueueType,
+		PageSize:      request.PageSize,
+		NextPageToken: request.NextPageToken,
+	}
+	resp, err := adh.historyClient.ListQueues(ctx, historyServiceRequest)
+	if err != nil {
+		return nil, err
+	}
+	queues := make([]*adminservice.ListQueuesResponse_QueueInfo, len(resp.Queues))
+	for i, queue := range resp.Queues {
+		queues[i] = &adminservice.ListQueuesResponse_QueueInfo{
+			QueueName:    queue.QueueName,
+			MessageCount: queue.MessageCount,
+		}
+	}
+	return &adminservice.ListQueuesResponse{
+		Queues:        queues,
+		NextPageToken: resp.NextPageToken,
+	}, nil
 }
 
 func (adh *AdminHandler) getDLQWorkflowID(key *persistence.QueueKey) string {

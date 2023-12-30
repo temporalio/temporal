@@ -32,6 +32,7 @@ import (
 
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
+	"google.golang.org/protobuf/types/known/timestamppb"
 
 	"go.temporal.io/server/api/matchingservice/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
@@ -474,12 +475,12 @@ func (db *taskQueueDB) setUserDataForNonOwningPartition(userData *persistencespb
 	db.setUserDataLocked(userData)
 }
 
-func (db *taskQueueDB) expiryTime() *time.Time {
+func (db *taskQueueDB) expiryTime() *timestamppb.Timestamp {
 	switch db.taskQueueKind {
 	case enumspb.TASK_QUEUE_KIND_NORMAL:
 		return nil
 	case enumspb.TASK_QUEUE_KIND_STICKY:
-		return timestamp.TimePtr(time.Now().UTC().Add(stickyTaskQueueTTL))
+		return timestamppb.New(time.Now().UTC().Add(stickyTaskQueueTTL))
 	default:
 		panic(fmt.Sprintf("taskQueueDB encountered unknown task kind: %v", db.taskQueueKind))
 	}

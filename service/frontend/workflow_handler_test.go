@@ -49,6 +49,8 @@ import (
 	"go.temporal.io/api/workflowservice/v1"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/health"
+	"google.golang.org/protobuf/types/known/durationpb"
+	"google.golang.org/protobuf/types/known/timestamppb"
 
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/api/historyservicemock/v1"
@@ -71,6 +73,7 @@ import (
 	"go.temporal.io/server/common/primitives"
 	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/common/resourcetest"
+	"go.temporal.io/server/common/rpc/interceptor"
 	"go.temporal.io/server/common/searchattribute"
 	"go.temporal.io/server/service/worker/batcher"
 )
@@ -163,6 +166,8 @@ func (s *workflowHandlerSuite) TearDownTest() {
 
 func (s *workflowHandlerSuite) getWorkflowHandler(config *Config) *WorkflowHandler {
 	s.mockVisibilityMgr.EXPECT().GetIndexName().Return(esIndexName).AnyTimes()
+	healthInterceptor := interceptor.NewHealthInterceptor()
+	healthInterceptor.SetHealthy(true)
 	return NewWorkflowHandler(
 		config,
 		s.mockProducer,
@@ -184,6 +189,7 @@ func (s *workflowHandlerSuite) getWorkflowHandler(config *Config) *WorkflowHandl
 		health.NewServer(),
 		clock.NewRealTimeSource(),
 		s.mockResource.GetMembershipMonitor(),
+		healthInterceptor,
 	)
 }
 
@@ -202,8 +208,8 @@ func (s *workflowHandlerSuite) TestDisableListVisibilityByFilter() {
 	listRequest := &workflowservice.ListOpenWorkflowExecutionsRequest{
 		Namespace: testNamespace.String(),
 		StartTimeFilter: &filterpb.StartTimeFilter{
-			EarliestTime: timestamp.TimePtr(time.Time{}),
-			LatestTime:   timestamp.TimePtr(time.Now().UTC()),
+			EarliestTime: nil,
+			LatestTime:   timestamppb.New(time.Now().UTC()),
 		},
 		Filters: &workflowservice.ListOpenWorkflowExecutionsRequest_ExecutionFilter{ExecutionFilter: &filterpb.WorkflowExecutionFilter{
 			WorkflowId: "wid",
@@ -225,8 +231,8 @@ func (s *workflowHandlerSuite) TestDisableListVisibilityByFilter() {
 	listRequest2 := &workflowservice.ListClosedWorkflowExecutionsRequest{
 		Namespace: testNamespace.String(),
 		StartTimeFilter: &filterpb.StartTimeFilter{
-			EarliestTime: timestamp.TimePtr(time.Time{}),
-			LatestTime:   timestamp.TimePtr(time.Now().UTC()),
+			EarliestTime: nil,
+			LatestTime:   timestamppb.New(time.Now().UTC()),
 		},
 		Filters: &workflowservice.ListClosedWorkflowExecutionsRequest_ExecutionFilter{ExecutionFilter: &filterpb.WorkflowExecutionFilter{
 			WorkflowId: "wid",
@@ -304,13 +310,13 @@ func (s *workflowHandlerSuite) TestStartWorkflowExecution_Failed_NamespaceNotSet
 		TaskQueue: &taskqueuepb.TaskQueue{
 			Name: "task-queue",
 		},
-		WorkflowExecutionTimeout: timestamp.DurationPtr(1 * time.Second),
-		WorkflowRunTimeout:       timestamp.DurationPtr(1 * time.Second),
-		WorkflowTaskTimeout:      timestamp.DurationPtr(1 * time.Second),
+		WorkflowExecutionTimeout: durationpb.New(1 * time.Second),
+		WorkflowRunTimeout:       durationpb.New(1 * time.Second),
+		WorkflowTaskTimeout:      durationpb.New(1 * time.Second),
 		RetryPolicy: &commonpb.RetryPolicy{
-			InitialInterval:    timestamp.DurationPtr(1 * time.Second),
+			InitialInterval:    durationpb.New(1 * time.Second),
 			BackoffCoefficient: 2,
-			MaximumInterval:    timestamp.DurationPtr(2 * time.Second),
+			MaximumInterval:    durationpb.New(2 * time.Second),
 			MaximumAttempts:    1,
 		},
 		RequestId: uuid.New(),
@@ -334,13 +340,13 @@ func (s *workflowHandlerSuite) TestStartWorkflowExecution_Failed_WorkflowIdNotSe
 		TaskQueue: &taskqueuepb.TaskQueue{
 			Name: "task-queue",
 		},
-		WorkflowExecutionTimeout: timestamp.DurationPtr(1 * time.Second),
-		WorkflowRunTimeout:       timestamp.DurationPtr(1 * time.Second),
-		WorkflowTaskTimeout:      timestamp.DurationPtr(1 * time.Second),
+		WorkflowExecutionTimeout: durationpb.New(1 * time.Second),
+		WorkflowRunTimeout:       durationpb.New(1 * time.Second),
+		WorkflowTaskTimeout:      durationpb.New(1 * time.Second),
 		RetryPolicy: &commonpb.RetryPolicy{
-			InitialInterval:    timestamp.DurationPtr(1 * time.Second),
+			InitialInterval:    durationpb.New(1 * time.Second),
 			BackoffCoefficient: 2,
-			MaximumInterval:    timestamp.DurationPtr(2 * time.Second),
+			MaximumInterval:    durationpb.New(2 * time.Second),
 			MaximumAttempts:    1,
 		},
 		RequestId: uuid.New(),
@@ -364,13 +370,13 @@ func (s *workflowHandlerSuite) TestStartWorkflowExecution_Failed_WorkflowTypeNot
 		TaskQueue: &taskqueuepb.TaskQueue{
 			Name: "task-queue",
 		},
-		WorkflowExecutionTimeout: timestamp.DurationPtr(1 * time.Second),
-		WorkflowRunTimeout:       timestamp.DurationPtr(1 * time.Second),
-		WorkflowTaskTimeout:      timestamp.DurationPtr(1 * time.Second),
+		WorkflowExecutionTimeout: durationpb.New(1 * time.Second),
+		WorkflowRunTimeout:       durationpb.New(1 * time.Second),
+		WorkflowTaskTimeout:      durationpb.New(1 * time.Second),
 		RetryPolicy: &commonpb.RetryPolicy{
-			InitialInterval:    timestamp.DurationPtr(1 * time.Second),
+			InitialInterval:    durationpb.New(1 * time.Second),
 			BackoffCoefficient: 2,
-			MaximumInterval:    timestamp.DurationPtr(2 * time.Second),
+			MaximumInterval:    durationpb.New(2 * time.Second),
 			MaximumAttempts:    1,
 		},
 		RequestId: uuid.New(),
@@ -395,9 +401,9 @@ func (s *workflowHandlerSuite) TestStartWorkflowExecution_Failed_TaskQueueNotSet
 			Name: "",
 		},
 		RetryPolicy: &commonpb.RetryPolicy{
-			InitialInterval:    timestamp.DurationPtr(1 * time.Second),
+			InitialInterval:    durationpb.New(1 * time.Second),
 			BackoffCoefficient: 2,
-			MaximumInterval:    timestamp.DurationPtr(2 * time.Second),
+			MaximumInterval:    durationpb.New(2 * time.Second),
 			MaximumAttempts:    1,
 		},
 		RequestId: uuid.New(),
@@ -421,12 +427,12 @@ func (s *workflowHandlerSuite) TestStartWorkflowExecution_Failed_InvalidExecutio
 		TaskQueue: &taskqueuepb.TaskQueue{
 			Name: "task-queue",
 		},
-		WorkflowExecutionTimeout: timestamp.DurationPtr(time.Duration(-1) * time.Second),
-		WorkflowRunTimeout:       timestamp.DurationPtr(1 * time.Second),
+		WorkflowExecutionTimeout: durationpb.New(time.Duration(-1) * time.Second),
+		WorkflowRunTimeout:       durationpb.New(1 * time.Second),
 		RetryPolicy: &commonpb.RetryPolicy{
-			InitialInterval:    timestamp.DurationPtr(1 * time.Second),
+			InitialInterval:    durationpb.New(1 * time.Second),
 			BackoffCoefficient: 2,
-			MaximumInterval:    timestamp.DurationPtr(2 * time.Second),
+			MaximumInterval:    durationpb.New(2 * time.Second),
 			MaximumAttempts:    1,
 		},
 		RequestId: uuid.New(),
@@ -450,12 +456,12 @@ func (s *workflowHandlerSuite) TestStartWorkflowExecution_Failed_InvalidRunTimeo
 		TaskQueue: &taskqueuepb.TaskQueue{
 			Name: "task-queue",
 		},
-		WorkflowExecutionTimeout: timestamp.DurationPtr(1 * time.Second),
-		WorkflowRunTimeout:       timestamp.DurationPtr(time.Duration(-1) * time.Second),
+		WorkflowExecutionTimeout: durationpb.New(1 * time.Second),
+		WorkflowRunTimeout:       durationpb.New(time.Duration(-1) * time.Second),
 		RetryPolicy: &commonpb.RetryPolicy{
-			InitialInterval:    timestamp.DurationPtr(1 * time.Second),
+			InitialInterval:    durationpb.New(1 * time.Second),
 			BackoffCoefficient: 2,
-			MaximumInterval:    timestamp.DurationPtr(2 * time.Second),
+			MaximumInterval:    durationpb.New(2 * time.Second),
 			MaximumAttempts:    1,
 		},
 		RequestId: uuid.New(),
@@ -479,8 +485,8 @@ func (s *workflowHandlerSuite) TestStartWorkflowExecution_EnsureNonNilRetryPolic
 		TaskQueue: &taskqueuepb.TaskQueue{
 			Name: "task-queue",
 		},
-		WorkflowExecutionTimeout: timestamp.DurationPtr(1 * time.Second),
-		WorkflowRunTimeout:       timestamp.DurationPtr(time.Duration(-1) * time.Second),
+		WorkflowExecutionTimeout: durationpb.New(1 * time.Second),
+		WorkflowRunTimeout:       durationpb.New(time.Duration(-1) * time.Second),
 		RetryPolicy:              &commonpb.RetryPolicy{},
 		RequestId:                uuid.New(),
 	}
@@ -488,8 +494,8 @@ func (s *workflowHandlerSuite) TestStartWorkflowExecution_EnsureNonNilRetryPolic
 	s.Error(err)
 	s.Equal(&commonpb.RetryPolicy{
 		BackoffCoefficient: 2.0,
-		InitialInterval:    timestamp.DurationPtr(time.Second),
-		MaximumInterval:    timestamp.DurationPtr(100 * time.Second),
+		InitialInterval:    durationpb.New(time.Second),
+		MaximumInterval:    durationpb.New(100 * time.Second),
 	}, startWorkflowExecutionRequest.RetryPolicy)
 }
 
@@ -507,8 +513,8 @@ func (s *workflowHandlerSuite) TestStartWorkflowExecution_EnsureNilRetryPolicyNo
 		TaskQueue: &taskqueuepb.TaskQueue{
 			Name: "task-queue",
 		},
-		WorkflowExecutionTimeout: timestamp.DurationPtr(1 * time.Second),
-		WorkflowRunTimeout:       timestamp.DurationPtr(time.Duration(-1) * time.Second),
+		WorkflowExecutionTimeout: durationpb.New(1 * time.Second),
+		WorkflowRunTimeout:       durationpb.New(time.Duration(-1) * time.Second),
 		RequestId:                uuid.New(),
 	}
 	_, err := wh.StartWorkflowExecution(context.Background(), startWorkflowExecutionRequest)
@@ -530,13 +536,13 @@ func (s *workflowHandlerSuite) TestStartWorkflowExecution_Failed_InvalidTaskTime
 		TaskQueue: &taskqueuepb.TaskQueue{
 			Name: "task-queue",
 		},
-		WorkflowExecutionTimeout: timestamp.DurationPtr(1 * time.Second),
-		WorkflowRunTimeout:       timestamp.DurationPtr(1 * time.Second),
-		WorkflowTaskTimeout:      timestamp.DurationPtr(time.Duration(-1) * time.Second),
+		WorkflowExecutionTimeout: durationpb.New(1 * time.Second),
+		WorkflowRunTimeout:       durationpb.New(1 * time.Second),
+		WorkflowTaskTimeout:      durationpb.New(time.Duration(-1) * time.Second),
 		RetryPolicy: &commonpb.RetryPolicy{
-			InitialInterval:    timestamp.DurationPtr(1 * time.Second),
+			InitialInterval:    durationpb.New(1 * time.Second),
 			BackoffCoefficient: 2,
-			MaximumInterval:    timestamp.DurationPtr(2 * time.Second),
+			MaximumInterval:    durationpb.New(2 * time.Second),
 			MaximumAttempts:    1,
 		},
 		RequestId: uuid.New(),
@@ -560,18 +566,18 @@ func (s *workflowHandlerSuite) TestStartWorkflowExecution_Failed_CronAndStartDel
 		TaskQueue: &taskqueuepb.TaskQueue{
 			Name: "task-queue",
 		},
-		WorkflowExecutionTimeout: timestamp.DurationPtr(1 * time.Second),
-		WorkflowRunTimeout:       timestamp.DurationPtr(1 * time.Second),
-		WorkflowTaskTimeout:      timestamp.DurationPtr(time.Duration(-1) * time.Second),
+		WorkflowExecutionTimeout: durationpb.New(1 * time.Second),
+		WorkflowRunTimeout:       durationpb.New(1 * time.Second),
+		WorkflowTaskTimeout:      durationpb.New(time.Duration(-1) * time.Second),
 		RetryPolicy: &commonpb.RetryPolicy{
-			InitialInterval:    timestamp.DurationPtr(1 * time.Second),
+			InitialInterval:    durationpb.New(1 * time.Second),
 			BackoffCoefficient: 2,
-			MaximumInterval:    timestamp.DurationPtr(2 * time.Second),
+			MaximumInterval:    durationpb.New(2 * time.Second),
 			MaximumAttempts:    1,
 		},
 		RequestId:          uuid.New(),
 		CronSchedule:       "dummy-cron-schedule",
-		WorkflowStartDelay: timestamp.DurationPtr(10 * time.Second),
+		WorkflowStartDelay: durationpb.New(10 * time.Second),
 	}
 	_, err := wh.StartWorkflowExecution(context.Background(), startWorkflowExecutionRequest)
 	s.ErrorIs(err, errCronAndStartDelaySet)
@@ -591,17 +597,17 @@ func (s *workflowHandlerSuite) TestStartWorkflowExecution_Failed_InvalidStartDel
 		TaskQueue: &taskqueuepb.TaskQueue{
 			Name: "task-queue",
 		},
-		WorkflowExecutionTimeout: timestamp.DurationPtr(1 * time.Second),
-		WorkflowRunTimeout:       timestamp.DurationPtr(1 * time.Second),
-		WorkflowTaskTimeout:      timestamp.DurationPtr(time.Duration(-1) * time.Second),
+		WorkflowExecutionTimeout: durationpb.New(1 * time.Second),
+		WorkflowRunTimeout:       durationpb.New(1 * time.Second),
+		WorkflowTaskTimeout:      durationpb.New(time.Duration(-1) * time.Second),
 		RetryPolicy: &commonpb.RetryPolicy{
-			InitialInterval:    timestamp.DurationPtr(1 * time.Second),
+			InitialInterval:    durationpb.New(1 * time.Second),
 			BackoffCoefficient: 2,
-			MaximumInterval:    timestamp.DurationPtr(2 * time.Second),
+			MaximumInterval:    durationpb.New(2 * time.Second),
 			MaximumAttempts:    1,
 		},
 		RequestId:          uuid.New(),
-		WorkflowStartDelay: timestamp.DurationPtr(-10 * time.Second),
+		WorkflowStartDelay: durationpb.New(-10 * time.Second),
 	}
 	_, err := wh.StartWorkflowExecution(context.Background(), startWorkflowExecutionRequest)
 	s.ErrorIs(err, errInvalidWorkflowStartDelaySeconds)
@@ -1414,7 +1420,7 @@ func (s *workflowHandlerSuite) TestGetSearchAttributes() {
 
 func (s *workflowHandlerSuite) TestDescribeWorkflowExecution_RunningStatus() {
 	wh := s.getWorkflowHandler(s.newConfig())
-	now := timestamp.TimePtr(time.Now())
+	now := timestamppb.New(time.Now())
 
 	s.mockNamespaceCache.EXPECT().GetNamespaceID(gomock.Any()).Return(
 		s.testNamespaceID,
@@ -1450,7 +1456,7 @@ func (s *workflowHandlerSuite) TestDescribeWorkflowExecution_RunningStatus() {
 
 func (s *workflowHandlerSuite) TestDescribeWorkflowExecution_CompletedStatus() {
 	wh := s.getWorkflowHandler(s.newConfig())
-	now := timestamp.TimePtr(time.Now())
+	now := timestamppb.New(time.Now())
 
 	s.mockNamespaceCache.EXPECT().GetNamespaceID(gomock.Any()).Return(
 		s.testNamespaceID,
@@ -2147,7 +2153,7 @@ func (s *workflowHandlerSuite) TestDescribeBatchOperation_CompletedStatus() {
 	jobID := uuid.New()
 	config := s.newConfig()
 	wh := s.getWorkflowHandler(config)
-	now := timestamp.TimePtr(time.Now())
+	now := timestamppb.New(time.Now())
 	s.mockNamespaceCache.EXPECT().GetNamespaceID(gomock.Any()).Return(namespaceID, nil).AnyTimes()
 	s.Run("StatsNotInMemo", func() {
 		s.mockHistoryClient.EXPECT().DescribeWorkflowExecution(gomock.Any(), gomock.Any()).DoAndReturn(
@@ -2241,7 +2247,7 @@ func (s *workflowHandlerSuite) TestDescribeBatchOperation_RunningStatus() {
 	jobID := uuid.New()
 	config := s.newConfig()
 	wh := s.getWorkflowHandler(config)
-	now := timestamp.TimePtr(time.Now())
+	now := timestamppb.New(time.Now())
 	s.mockNamespaceCache.EXPECT().GetNamespaceID(gomock.Any()).Return(namespaceID, nil).AnyTimes()
 	s.mockHistoryClient.EXPECT().DescribeWorkflowExecution(gomock.Any(), gomock.Any()).DoAndReturn(
 		func(
@@ -2302,7 +2308,7 @@ func (s *workflowHandlerSuite) TestDescribeBatchOperation_FailedStatus() {
 	jobID := uuid.New()
 	config := s.newConfig()
 	wh := s.getWorkflowHandler(config)
-	now := timestamp.TimePtr(time.Now())
+	now := timestamppb.New(time.Now())
 	s.mockNamespaceCache.EXPECT().GetNamespaceID(gomock.Any()).Return(namespaceID, nil).AnyTimes()
 	s.mockHistoryClient.EXPECT().DescribeWorkflowExecution(gomock.Any(), gomock.Any()).DoAndReturn(
 		func(
@@ -2367,7 +2373,7 @@ func (s *workflowHandlerSuite) TestListBatchOperations() {
 	jobID := uuid.New()
 	config := s.newConfig()
 	wh := s.getWorkflowHandler(config)
-	now := timestamp.TimePtr(time.Now())
+	now := timestamppb.New(time.Now())
 	s.mockNamespaceCache.EXPECT().GetNamespaceID(gomock.Any()).Return(namespaceID, nil).AnyTimes()
 	s.mockVisibilityMgr.EXPECT().GetReadStoreName(testNamespace).Return("").AnyTimes()
 	s.mockVisibilityMgr.EXPECT().ListWorkflowExecutions(gomock.Any(), gomock.Any()).DoAndReturn(
@@ -2484,7 +2490,7 @@ func registerNamespaceRequest(
 		Namespace:                        "test-namespace",
 		Description:                      "test-description",
 		OwnerEmail:                       "test-owner-email",
-		WorkflowExecutionRetentionPeriod: timestamp.DurationPtr(10 * time.Hour * 24),
+		WorkflowExecutionRetentionPeriod: durationpb.New(10 * time.Hour * 24),
 		Clusters: []*replicationpb.ClusterReplicationConfig{
 			{
 				ClusterName: cluster.TestCurrentClusterName,

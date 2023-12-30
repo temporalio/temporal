@@ -33,6 +33,7 @@ import (
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
+	"google.golang.org/protobuf/types/known/durationpb"
 )
 
 type (
@@ -202,9 +203,9 @@ func (tv *TestVars) WithWorkerIdentity(identity string, key ...string) *TestVars
 
 // ----------- Generic methods ------------
 
-func (tv *TestVars) InfiniteTimeout() *time.Duration {
+func (tv *TestVars) InfiniteTimeout() *durationpb.Duration {
 	t := 10 * time.Hour
-	return &t
+	return durationpb.New(t)
 }
 
 func (tv *TestVars) Any() string {

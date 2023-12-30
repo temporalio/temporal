@@ -6,17 +6,21 @@
 [go-report-image]: https://goreportcard.com/badge/github.com/temporalio/temporal
 [go-report-url]: https://goreportcard.com/report/github.com/temporalio/temporal
 
-# Temporal  
+# Temporal
 
-Temporal is a microservice orchestration platform which enables developers to build scalable applications without sacrificing productivity or reliability.
-Temporal server executes units of application logic, Workflows, in a resilient manner that automatically handles intermittent failures, and retries failed operations.
+Temporal is a durable execution platform that enables developers to build scalable applications without sacrificing productivity or reliability.
+The Temporal server executes units of application logic called Workflows in a resilient manner that automatically handles intermittent failures, and retries failed operations.
 
-Temporal is a mature technology, a fork of Uber's Cadence.
-Temporal is being developed by [Temporal Technologies](https://temporal.io/), a startup by the creators of Cadence.
+Temporal is a mature technology that originated as a fork of Uber's Cadence.
+It is developed by [Temporal Technologies](https://temporal.io/), a startup by the creators of Cadence.
 
-[![image](https://user-images.githubusercontent.com/12602502/136433917-98abe0d7-4f81-4f97-9b11-62b331c76608.png)](http://www.youtube.com/watch?v=f-18XztyN6c "Temporal")
+[![image](https://github.com/temporalio/temporal/assets/251288/693d18b5-01de-4a3b-b47b-96347b84f610)](https://youtu.be/wIpz4ioK0gI 'Getting to know Temporal')
 
-Learn more about Temporal at [docs.temporal.io](https://docs.temporal.io).
+Learn more:
+
+- [Courses](https://learn.temporal.io/courses/temporal_101/)
+- [Docs](https://docs.temporal.io)
+- Internal architecture: [docs/](./docs/README.md)
 
 ## Getting Started
 
@@ -55,7 +59,7 @@ This repository contains the source code of the Temporal server. To implement Wo
 
 ## Contributing
 
-We'd love your help in making Temporal great. Please review our [contribution guide](CONTRIBUTING.md).
+We'd love your help in making Temporal great. Please review the [internal architecture docs](./docs/README.md) and our [contribution guide](CONTRIBUTING.md).
 
 If you'd like to work on or propose a new feature, first peruse [feature requests](https://community.temporal.io/c/feature-requests/6) and our [proposals repo](https://github.com/temporalio/proposals) to discover existing active and accepted proposals.
 

@@ -208,7 +208,7 @@ func TestPersistUnknownBuildId_Merge(t *testing.T) {
 					mkBuildId("1", clock),
 					mkBuildId("1.1", nextClock),
 				},
-				BecameDefaultTimestamp: &nextClock,
+				BecameDefaultTimestamp: nextClock,
 			},
 		},
 	}

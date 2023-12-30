@@ -85,6 +85,8 @@ type (
 		Memo                 *commonpb.DataBlob
 		TaskQueue            string
 		SearchAttributes     *commonpb.SearchAttributes
+		ParentWorkflowID     string
+		ParentRunID          string
 	}
 
 	// InternalListWorkflowExecutionsResponse is response from ListWorkflowExecutions
@@ -114,6 +116,8 @@ type (
 		Memo             *commonpb.DataBlob
 		TaskQueue        string
 		SearchAttributes *commonpb.SearchAttributes
+		ParentWorkflowID *string
+		ParentRunID      *string
 	}
 
 	// InternalRecordWorkflowExecutionStartedRequest request to RecordWorkflowExecutionStarted

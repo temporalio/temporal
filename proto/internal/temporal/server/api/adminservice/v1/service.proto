@@ -1,3 +1,5 @@
+// The MIT License
+//
 // Copyright (c) 2019 Temporal Technologies, Inc.
 //
 // Permission is hereby granted, free of charge, to any person obtaining a copy
@@ -164,5 +166,7 @@ service AdminService {
     rpc CancelDLQJob (CancelDLQJobRequest) returns (CancelDLQJobResponse) {}
 
     rpc AddTasks (AddTasksRequest) returns (AddTasksResponse) {}
+
+    rpc ListQueues (ListQueuesRequest) returns (ListQueuesResponse) {}
 }
 

@@ -33,9 +33,11 @@ import (
 	historypb "go.temporal.io/api/history/v1"
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/api/workflowservice/v1"
+	"google.golang.org/protobuf/types/known/timestamppb"
 
 	"go.temporal.io/server/api/historyservice/v1"
 
+	"go.temporal.io/server/common/persistence/visibility/manager"
 	"go.temporal.io/server/common/tasktoken"
 
 	"go.temporal.io/server/common"
@@ -63,6 +65,7 @@ type Starter struct {
 	shardContext               shard.Context
 	workflowConsistencyChecker api.WorkflowConsistencyChecker
 	tokenSerializer            common.TaskTokenSerializer
+	visibilityManager          manager.VisibilityManager
 	request                    *historyservice.StartWorkflowExecutionRequest
 	namespace                  *namespace.Namespace
 }
@@ -91,6 +94,7 @@ func NewStarter(
 	shardContext shard.Context,
 	workflowConsistencyChecker api.WorkflowConsistencyChecker,
 	tokenSerializer common.TaskTokenSerializer,
+	visibilityManager manager.VisibilityManager,
 	request *historyservice.StartWorkflowExecutionRequest,
 ) (*Starter, error) {
 	namespaceEntry, err := api.GetActiveNamespace(shardContext, namespace.ID(request.GetNamespaceId()))
@@ -101,6 +105,7 @@ func NewStarter(
 		shardContext:               shardContext,
 		workflowConsistencyChecker: workflowConsistencyChecker,
 		tokenSerializer:            tokenSerializer,
+		visibilityManager:          visibilityManager,
 		request:                    request,
 		namespace:                  namespaceEntry,
 	}, nil
@@ -118,7 +123,7 @@ func (s *Starter) prepare(ctx context.Context) error {
 	}
 
 	if request.RequestEagerExecution {
-		metricsHandler.Counter(metrics.WorkflowEagerExecutionCounter.GetMetricName()).Record(
+		metricsHandler.Counter(metrics.WorkflowEagerExecutionCounter.Name()).Record(
 			1,
 			metrics.NamespaceTag(s.namespace.Name().String()),
 			metrics.TaskQueueTag(request.TaskQueue.Name),
@@ -130,7 +135,7 @@ func (s *Starter) prepare(ctx context.Context) error {
 			s.recordEagerDenied(eagerStartDeniedReasonDynamicConfigDisabled)
 			request.RequestEagerExecution = false
 		}
-		if s.request.FirstWorkflowTaskBackoff != nil && *s.request.FirstWorkflowTaskBackoff > 0 {
+		if s.request.FirstWorkflowTaskBackoff != nil && s.request.FirstWorkflowTaskBackoff.AsDuration() > 0 {
 			s.recordEagerDenied(eagerStartDeniedReasonFirstWorkflowTaskBackoff)
 			request.RequestEagerExecution = false
 		}
@@ -140,7 +145,7 @@ func (s *Starter) prepare(ctx context.Context) error {
 
 func (s *Starter) recordEagerDenied(reason eagerStartDeniedReason) {
 	metricsHandler := s.shardContext.GetMetricsHandler()
-	metricsHandler.Counter(metrics.WorkflowEagerExecutionDeniedCounter.GetMetricName()).Record(
+	metricsHandler.Counter(metrics.WorkflowEagerExecutionDeniedCounter.Name()).Record(
 		1,
 		metrics.NamespaceTag(s.namespace.Name().String()),
 		metrics.TaskQueueTag(s.request.StartRequest.TaskQueue.Name),
@@ -445,7 +450,7 @@ func (s *Starter) getMutableStateInfo(ctx context.Context, runID string) (*mutab
 		ctx,
 		s.shardContext,
 		s.namespace.ID(),
-		commonpb.WorkflowExecution{WorkflowId: s.request.StartRequest.WorkflowId, RunId: runID},
+		&commonpb.WorkflowExecution{WorkflowId: s.request.StartRequest.WorkflowId, RunId: runID},
 		workflow.LockPriorityHigh,
 	)
 	if err != nil {
@@ -541,6 +546,11 @@ func (s *Starter) generateResponse(
 			RunId: runID,
 		}, nil
 	}
+
+	if err := api.ProcessOutgoingSearchAttributes(s.shardContext, historyEvents, s.namespace.ID(), s.visibilityManager); err != nil {
+		return nil, err
+	}
+
 	clock, err := shardCtx.NewVectorClock()
 	if err != nil {
 		return nil, err
@@ -552,7 +562,7 @@ func (s *Starter) generateResponse(
 		runID,
 		workflowTaskInfo.ScheduledEventID,
 		workflowTaskInfo.StartedEventID,
-		workflowTaskInfo.StartedTime,
+		timestamppb.New(workflowTaskInfo.StartedTime),
 		workflowTaskInfo.Attempt,
 		clock,
 		workflowTaskInfo.Version,
@@ -576,8 +586,8 @@ func (s *Starter) generateResponse(
 			History:                    &historypb.History{Events: historyEvents},
 			NextPageToken:              nil,
 			WorkflowExecutionTaskQueue: workflowTaskInfo.TaskQueue,
-			ScheduledTime:              workflowTaskInfo.ScheduledTime,
-			StartedTime:                workflowTaskInfo.StartedTime,
+			ScheduledTime:              timestamppb.New(workflowTaskInfo.ScheduledTime),
+			StartedTime:                timestamppb.New(workflowTaskInfo.StartedTime),
 		},
 	}, nil
 }

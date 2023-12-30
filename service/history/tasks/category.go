@@ -26,8 +26,6 @@ package tasks
 
 import (
 	"strconv"
-
-	enumsspb "go.temporal.io/server/api/enums/v1"
 )
 
 type (
@@ -40,13 +38,15 @@ type (
 	CategoryType int
 )
 
+// WARNING: These IDS are persisted in the database. Do not change them.
+
 const (
-	CategoryIDTransfer    = int(enumsspb.TASK_CATEGORY_TRANSFER)
-	CategoryIDTimer       = int(enumsspb.TASK_CATEGORY_TIMER)
-	CategoryIDReplication = int(enumsspb.TASK_CATEGORY_REPLICATION)
-	CategoryIDVisibility  = int(enumsspb.TASK_CATEGORY_VISIBILITY)
-	CategoryIDArchival    = int(enumsspb.TASK_CATEGORY_ARCHIVAL)
-	CategoryIDMemoryTimer = int(enumsspb.TASK_CATEGORY_MEMORY_TIMER)
+	CategoryIDTransfer    = 1
+	CategoryIDTimer       = 2
+	CategoryIDReplication = 3
+	CategoryIDVisibility  = 4
+	CategoryIDArchival    = 5
+	CategoryIDMemoryTimer = 6
 )
 
 const (

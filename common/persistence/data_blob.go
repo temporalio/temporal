@@ -36,14 +36,14 @@ func NewDataBlob(data []byte, encodingTypeStr string) *commonpb.DataBlob {
 		return nil
 	}
 
-	encodingType, ok := enumspb.EncodingType_value[encodingTypeStr]
-	if !ok {
+	encodingType, err := enumspb.EncodingTypeFromString(encodingTypeStr)
+	if err != nil {
 		// encodingTypeStr not valid, an error will be returned on deserialization
-		encodingType = int32(enumspb.ENCODING_TYPE_UNSPECIFIED)
+		encodingType = enumspb.ENCODING_TYPE_UNSPECIFIED
 	}
 
 	return &commonpb.DataBlob{
 		Data:         data,
-		EncodingType: enumspb.EncodingType(encodingType),
+		EncodingType: encodingType,
 	}
 }

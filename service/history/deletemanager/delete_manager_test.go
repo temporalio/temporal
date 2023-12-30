@@ -34,6 +34,7 @@ import (
 	"github.com/stretchr/testify/suite"
 	commonpb "go.temporal.io/api/common/v1"
 	"go.temporal.io/api/serviceerror"
+	"google.golang.org/protobuf/types/known/timestamppb"
 
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
@@ -119,7 +120,7 @@ func (s *deleteManagerWorkflowSuite) TestDeleteDeletedWorkflowExecution() {
 	mockMutableState.EXPECT().GetCurrentBranchToken().Return([]byte{22, 8, 78}, nil)
 	mockMutableState.EXPECT().GetExecutionState().Return(&persistencespb.WorkflowExecutionState{State: enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED})
 	closeTime := time.Date(1978, 8, 22, 1, 2, 3, 4, time.UTC)
-	mockMutableState.EXPECT().GetWorkflowCloseTime(gomock.Any()).Return(&closeTime, nil)
+	mockMutableState.EXPECT().GetWorkflowCloseTime(gomock.Any()).Return(closeTime, nil)
 	closeExecutionVisibilityTaskID := int64(39)
 	mockMutableState.EXPECT().GetExecutionInfo().Return(&persistencespb.WorkflowExecutionInfo{
 		CloseVisibilityTaskId: closeExecutionVisibilityTaskID,
@@ -134,8 +135,8 @@ func (s *deleteManagerWorkflowSuite) TestDeleteDeletedWorkflowExecution() {
 			RunID:       tests.RunID,
 		},
 		[]byte{22, 8, 78},
-		nil,
-		&closeTime,
+		time.Time{},
+		closeTime,
 		closeExecutionVisibilityTaskID,
 		&stage,
 	).Return(nil)
@@ -144,7 +145,7 @@ func (s *deleteManagerWorkflowSuite) TestDeleteDeletedWorkflowExecution() {
 	err := s.deleteManager.DeleteWorkflowExecution(
 		context.Background(),
 		tests.NamespaceID,
-		we,
+		&we,
 		mockWeCtx,
 		mockMutableState,
 		false,
@@ -165,7 +166,7 @@ func (s *deleteManagerWorkflowSuite) TestDeleteDeletedWorkflowExecution_Error() 
 	mockMutableState.EXPECT().GetCurrentBranchToken().Return([]byte{22, 8, 78}, nil)
 	mockMutableState.EXPECT().GetExecutionState().Return(&persistencespb.WorkflowExecutionState{State: enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED})
 	closeTime := time.Date(1978, 8, 22, 1, 2, 3, 4, time.UTC)
-	mockMutableState.EXPECT().GetWorkflowCloseTime(gomock.Any()).Return(&closeTime, nil)
+	mockMutableState.EXPECT().GetWorkflowCloseTime(gomock.Any()).Return(closeTime, nil)
 	closeExecutionVisibilityTaskID := int64(39)
 	mockMutableState.EXPECT().GetExecutionInfo().MinTimes(1).Return(&persistencespb.WorkflowExecutionInfo{
 		CloseVisibilityTaskId: closeExecutionVisibilityTaskID,
@@ -180,8 +181,8 @@ func (s *deleteManagerWorkflowSuite) TestDeleteDeletedWorkflowExecution_Error() 
 			RunID:       tests.RunID,
 		},
 		[]byte{22, 8, 78},
-		nil,
-		&closeTime,
+		time.Time{},
+		closeTime,
 		closeExecutionVisibilityTaskID,
 		&stage,
 	).Return(serviceerror.NewInternal("test error"))
@@ -189,7 +190,7 @@ func (s *deleteManagerWorkflowSuite) TestDeleteDeletedWorkflowExecution_Error() 
 	err := s.deleteManager.DeleteWorkflowExecution(
 		context.Background(),
 		tests.NamespaceID,
-		we,
+		&we,
 		mockWeCtx,
 		mockMutableState,
 		false,
@@ -203,7 +204,7 @@ func (s *deleteManagerWorkflowSuite) TestDeleteWorkflowExecution_OpenWorkflow() 
 		WorkflowId: tests.WorkflowID,
 		RunId:      tests.RunID,
 	}
-	now := time.Now()
+	now := time.Now().UTC()
 
 	s.mockVisibilityManager.EXPECT().HasStoreName(cassandra.CassandraPersistenceName).Return(true)
 	mockWeCtx := workflow.NewMockContext(s.controller)
@@ -211,7 +212,7 @@ func (s *deleteManagerWorkflowSuite) TestDeleteWorkflowExecution_OpenWorkflow() 
 	closeExecutionVisibilityTaskID := int64(39)
 	mockMutableState.EXPECT().GetCurrentBranchToken().Return([]byte{22, 8, 78}, nil)
 	mockMutableState.EXPECT().GetExecutionInfo().MinTimes(1).Return(&persistencespb.WorkflowExecutionInfo{
-		StartTime:             &now,
+		StartTime:             timestamppb.New(now),
 		CloseVisibilityTaskId: closeExecutionVisibilityTaskID,
 	})
 	stage := tasks.DeleteWorkflowExecutionStageNone
@@ -224,8 +225,8 @@ func (s *deleteManagerWorkflowSuite) TestDeleteWorkflowExecution_OpenWorkflow() 
 			RunID:       tests.RunID,
 		},
 		[]byte{22, 8, 78},
-		&now,
-		nil,
+		now,
+		time.Time{},
 		closeExecutionVisibilityTaskID,
 		&stage,
 	).Return(nil)
@@ -234,7 +235,7 @@ func (s *deleteManagerWorkflowSuite) TestDeleteWorkflowExecution_OpenWorkflow() 
 	err := s.deleteManager.DeleteWorkflowExecution(
 		context.Background(),
 		tests.NamespaceID,
-		we,
+		&we,
 		mockWeCtx,
 		mockMutableState,
 		true,

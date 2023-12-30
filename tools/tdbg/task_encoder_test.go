@@ -32,13 +32,15 @@ import (
 	"strconv"
 	"testing"
 
-	"github.com/gogo/protobuf/proto"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"google.golang.org/protobuf/proto"
+
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
-	"go.temporal.io/server/api/adminservice/v1"
 
+	"go.temporal.io/server/api/adminservice/v1"
+	enumsspb "go.temporal.io/server/api/enums/v1"
 	"go.temporal.io/server/common/persistence/serialization"
 	"go.temporal.io/server/service/history/tasks"
 	"go.temporal.io/server/tools/tdbg"
@@ -68,7 +70,7 @@ func ExampleTaskBlobEncoder() {
 		params.TaskBlobEncoder = tdbg.TaskBlobEncoderFn(func(
 			writer io.Writer,
 			taskCategoryID int,
-			blob commonpb.DataBlob,
+			blob *commonpb.DataBlob,
 		) error {
 			if taskCategoryID == customCategory.ID() {
 				_, err := writer.Write(append([]byte("hello, "), blob.Data...))
@@ -121,7 +123,7 @@ func TestPredefinedTasks(t *testing.T) {
 	serializer := serialization.NewTaskSerializer()
 	expectedTaskTypes := make([]string, len(historyTasks))
 	for i, task := range historyTasks {
-		expectedTaskTypes[i] = task.GetType().String()
+		expectedTaskTypes[i] = enumsspb.TaskType_name[int32(task.GetType())]
 		blob, err := serializer.SerializeTask(task)
 		require.NoError(t, err)
 		err = encoder.Encode(&buf, task.GetCategory().ID(), blob)
@@ -136,7 +138,7 @@ func TestPredefinedTasks(t *testing.T) {
 	}
 
 	// Test an unsupported task category.
-	err := encoder.Encode(io.Discard, -1, commonpb.DataBlob{})
+	err := encoder.Encode(io.Discard, -1, &commonpb.DataBlob{})
 	require.Error(t, err)
 	assert.ErrorContains(t, err, "unsupported task category")
 }
@@ -145,7 +147,7 @@ func TestPredefinedTasks(t *testing.T) {
 func TestProtoTaskBlobEncoder_DeserializeFailed(t *testing.T) {
 	t.Parallel()
 	encoder := tdbg.NewProtoTaskBlobEncoder(faultyDeserializer{})
-	err := encoder.Encode(io.Discard, 0, commonpb.DataBlob{})
+	err := encoder.Encode(io.Discard, 0, &commonpb.DataBlob{})
 	require.Error(t, err)
 	assert.ErrorContains(t, err, "failed to deserialize task blob")
 }
@@ -154,16 +156,16 @@ func TestProtoTaskBlobEncoder_DeserializeFailed(t *testing.T) {
 func TestProtoTaskBlobEncoder_WriteFailed(t *testing.T) {
 	t.Parallel()
 	encoder := tdbg.NewProtoTaskBlobEncoder(nilDeserializer{})
-	err := encoder.Encode(faultyWriter{}, 0, commonpb.DataBlob{})
+	err := encoder.Encode(faultyWriter{}, 0, &commonpb.DataBlob{})
 	require.Error(t, err)
-	assert.ErrorContains(t, err, "failed to marshal task blob")
+	assert.ErrorContains(t, err, "failed to write marshalled task blob")
 }
 
-func (t nilDeserializer) Deserialize(int, commonpb.DataBlob) (proto.Message, error) {
+func (t nilDeserializer) Deserialize(int, *commonpb.DataBlob) (proto.Message, error) {
 	return nil, nil
 }
 
-func (f faultyDeserializer) Deserialize(int, commonpb.DataBlob) (proto.Message, error) {
+func (f faultyDeserializer) Deserialize(int, *commonpb.DataBlob) (proto.Message, error) {
 	return nil, assert.AnError
 }
 

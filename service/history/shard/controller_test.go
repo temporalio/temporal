@@ -39,6 +39,7 @@ import (
 	"github.com/golang/mock/gomock"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
+	"google.golang.org/protobuf/types/known/timestamppb"
 
 	"go.temporal.io/server/api/enums/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
@@ -763,7 +764,7 @@ func (s *controllerSuite) TestShardLingerTimeout() {
 	s.False(shard.IsValid())
 
 	s.Equal(float64(1), s.readMetricsCounter(
-		metrics.ShardLingerTimeouts.GetMetricName(),
+		metrics.ShardLingerTimeouts.Name(),
 		metrics.OperationTag(metrics.HistoryShardControllerScope)))
 }
 
@@ -935,7 +936,7 @@ func (s *controllerSuite) queueStates() map[int32]*persistencespb.QueueState {
 		int32(tasks.CategoryTransfer.ID()): {
 			ReaderStates: nil,
 			ExclusiveReaderHighWatermark: &persistencespb.TaskKey{
-				FireTime: &tasks.DefaultFireTime,
+				FireTime: timestamppb.New(tasks.DefaultFireTime),
 				TaskId:   rand.Int63(),
 			},
 		},
@@ -953,11 +954,11 @@ func (s *controllerSuite) queueStates() map[int32]*persistencespb.QueueState {
 						{
 							Range: &persistencespb.QueueSliceRange{
 								InclusiveMin: &persistencespb.TaskKey{
-									FireTime: &tasks.DefaultFireTime,
+									FireTime: timestamppb.New(tasks.DefaultFireTime),
 									TaskId:   1000,
 								},
 								ExclusiveMax: &persistencespb.TaskKey{
-									FireTime: &tasks.DefaultFireTime,
+									FireTime: timestamppb.New(tasks.DefaultFireTime),
 									TaskId:   2000,
 								},
 							},

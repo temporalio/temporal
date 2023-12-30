@@ -29,17 +29,24 @@ import (
 	"testing"
 	"time"
 
+	"github.com/golang/mock/gomock"
 	"github.com/stretchr/testify/require"
 	commonpb "go.temporal.io/api/common/v1"
+	enumspb "go.temporal.io/api/enums/v1"
 	failurepb "go.temporal.io/api/failure/v1"
+	protocolpb "go.temporal.io/api/protocol/v1"
 	"go.temporal.io/api/serviceerror"
 	updatepb "go.temporal.io/api/update/v1"
 	"go.temporal.io/api/workflowservice/v1"
+
 	clockspb "go.temporal.io/server/api/clock/v1"
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/common/definition"
+	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/service/history/api"
 	"go.temporal.io/server/service/history/api/pollupdate"
+	"go.temporal.io/server/service/history/shard"
+	"go.temporal.io/server/service/history/tests"
 	"go.temporal.io/server/service/history/workflow"
 	wcache "go.temporal.io/server/service/history/workflow/cache"
 	"go.temporal.io/server/service/history/workflow/update"
@@ -61,6 +68,7 @@ type (
 		api.WorkflowContext
 		GetUpdateRegistryFunc func(context.Context) update.Registry
 		GetReleaseFnFunc      func() wcache.ReleaseCacheFunc
+		GetWorkflowKeyFunc    func() definition.WorkflowKey
 	}
 
 	mockReg struct {
@@ -94,16 +102,27 @@ func (m mockAPICtx) GetUpdateRegistry(ctx context.Context) update.Registry {
 	return m.GetUpdateRegistryFunc(ctx)
 }
 
+func (m mockAPICtx) GetWorkflowKey() definition.WorkflowKey {
+	return m.GetWorkflowKeyFunc()
+}
+
 func (m mockReg) Find(ctx context.Context, updateID string) (*update.Update, bool) {
 	return m.FindFunc(ctx, updateID)
 }
 
 func TestPollOutcome(t *testing.T) {
+	namespaceId := t.Name() + "-namespace-id"
+	workflowId := t.Name() + "-workflow-id"
+	runId := t.Name() + "-run-id"
+	updateID := t.Name() + "-update-id"
 	reg := mockReg{}
 	apiCtx := mockAPICtx{
 		GetReleaseFnFunc: func() wcache.ReleaseCacheFunc { return func(error) {} },
 		GetUpdateRegistryFunc: func(context.Context) update.Registry {
 			return reg
+		},
+		GetWorkflowKeyFunc: func() definition.WorkflowKey {
+			return definition.WorkflowKey{NamespaceID: namespaceId, WorkflowID: workflowId, RunID: runId}
 		},
 	}
 	wfcc := mockWFConsistencyChecker{
@@ -118,15 +137,27 @@ func TestPollOutcome(t *testing.T) {
 		},
 	}
 
-	updateID := t.Name() + "-update-id"
+	serverImposedTimeout := 10 * time.Millisecond
+	mockController := gomock.NewController(t)
+	mockNamespaceRegistry := namespace.NewMockRegistry(mockController)
+	mockNamespaceRegistry.EXPECT().GetNamespaceByID(gomock.Any()).Return(tests.GlobalNamespaceEntry, nil).AnyTimes()
+	shardContext := shard.NewMockContext(mockController)
+	mockConfig := tests.NewDynamicConfig()
+	mockConfig.LongPollExpirationInterval = func(_ string) time.Duration { return serverImposedTimeout }
+	shardContext.EXPECT().GetConfig().Return(mockConfig).AnyTimes()
+	shardContext.EXPECT().GetNamespaceRegistry().Return(mockNamespaceRegistry).AnyTimes()
+
 	req := historyservice.PollWorkflowExecutionUpdateRequest{
 		Request: &workflowservice.PollWorkflowExecutionUpdateRequest{
 			UpdateRef: &updatepb.UpdateRef{
 				WorkflowExecution: &commonpb.WorkflowExecution{
-					WorkflowId: t.Name() + "-workflow-id",
-					RunId:      t.Name() + "-run-id",
+					WorkflowId: workflowId,
+					RunId:      runId,
 				},
 				UpdateId: updateID,
+			},
+			WaitPolicy: &updatepb.WaitPolicy{
+				LifecycleStage: enumspb.UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_COMPLETED,
 			},
 		},
 	}
@@ -135,18 +166,58 @@ func TestPollOutcome(t *testing.T) {
 		reg.FindFunc = func(ctx context.Context, updateID string) (*update.Update, bool) {
 			return nil, false
 		}
-		_, err := pollupdate.Invoke(context.TODO(), &req, wfcc)
+		_, err := pollupdate.Invoke(context.TODO(), &req, shardContext, wfcc)
 		var notfound *serviceerror.NotFound
 		require.ErrorAs(t, err, &notfound)
 	})
-	t.Run("future timeout", func(t *testing.T) {
+	t.Run("context deadline expiry before server-imposed deadline expiry", func(t *testing.T) {
 		reg.FindFunc = func(ctx context.Context, updateID string) (*update.Update, bool) {
 			return update.New(updateID), true
 		}
-		ctx, cncl := context.WithTimeout(context.Background(), 5*time.Millisecond)
+		ctx, cncl := context.WithTimeout(context.Background(), serverImposedTimeout/2)
 		defer cncl()
-		_, err := pollupdate.Invoke(ctx, &req, wfcc)
+		_, err := pollupdate.Invoke(ctx, &req, shardContext, wfcc)
 		require.Error(t, err)
+	})
+	t.Run("context deadline expiry after server-imposed deadline expiry", func(t *testing.T) {
+		reg.FindFunc = func(ctx context.Context, updateID string) (*update.Update, bool) {
+			return update.New(updateID), true
+		}
+		ctx, cncl := context.WithTimeout(context.Background(), serverImposedTimeout*2)
+		defer cncl()
+		resp, err := pollupdate.Invoke(ctx, &req, shardContext, wfcc)
+		require.NoError(t, err)
+		require.Nil(t, resp.GetResponse().Outcome)
+		require.Equal(t, enumspb.UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_UNSPECIFIED, resp.Response.GetStage())
+	})
+	t.Run("non-blocking poll with omitted/unspecified wait policy", func(t *testing.T) {
+		for _, req := range []*historyservice.PollWorkflowExecutionUpdateRequest{{
+			Request: &workflowservice.PollWorkflowExecutionUpdateRequest{
+				UpdateRef: req.Request.UpdateRef,
+			},
+		}, {
+			Request: &workflowservice.PollWorkflowExecutionUpdateRequest{
+				UpdateRef: &updatepb.UpdateRef{
+					WorkflowExecution: &commonpb.WorkflowExecution{
+						WorkflowId: workflowId,
+						RunId:      runId,
+					},
+					UpdateId: updateID,
+				},
+				WaitPolicy: &updatepb.WaitPolicy{
+					LifecycleStage: enumspb.UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_UNSPECIFIED,
+				},
+			},
+		}} {
+			reg.FindFunc = func(ctx context.Context, updateID string) (*update.Update, bool) {
+				return update.New(updateID), true
+			}
+			resp, err := pollupdate.Invoke(context.Background(), req, shardContext, wfcc)
+			require.NoError(t, err)
+			require.True(t, len(resp.GetResponse().UpdateRef.GetWorkflowExecution().RunId) > 0)
+			require.Nil(t, resp.GetResponse().Outcome)
+			require.Equal(t, enumspb.UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_ADMITTED, resp.Response.GetStage())
+		}
 	})
 	t.Run("get an outcome", func(t *testing.T) {
 		upd := update.New(updateID)
@@ -168,17 +239,19 @@ func TestPollOutcome(t *testing.T) {
 		errCh := make(chan error, 1)
 		respCh := make(chan *historyservice.PollWorkflowExecutionUpdateResponse, 1)
 		go func() {
-			resp, err := pollupdate.Invoke(context.TODO(), &req, wfcc)
+			resp, err := pollupdate.Invoke(context.TODO(), &req, shardContext, wfcc)
 			errCh <- err
 			respCh <- resp
 		}()
 
 		evStore := mockUpdateEventStore{}
 		require.NoError(t, upd.OnMessage(context.TODO(), &reqMsg, evStore))
+		upd.Send(context.TODO(), false, &protocolpb.Message_EventId{EventId: 2208}, evStore)
 		require.NoError(t, upd.OnMessage(context.TODO(), &rejMsg, evStore))
 
 		require.NoError(t, <-errCh)
 		resp := <-respCh
 		require.Equal(t, &wantOutcome, resp.GetResponse().Outcome)
+		require.Equal(t, enumspb.UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_COMPLETED, resp.Response.GetStage())
 	})
 }

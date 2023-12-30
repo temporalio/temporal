@@ -27,15 +27,14 @@
 package archiver
 
 import (
-	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
 
-	"github.com/gogo/protobuf/jsonpb"
-	"github.com/gogo/protobuf/proto"
 	historypb "go.temporal.io/api/history/v1"
 	"go.temporal.io/api/serviceerror"
+	"google.golang.org/protobuf/encoding/protojson"
+	"google.golang.org/protobuf/proto"
 
 	archiverspb "go.temporal.io/server/api/archiver/v1"
 	"go.temporal.io/server/common"
@@ -248,16 +247,14 @@ type (
 	}
 
 	jsonSizeEstimator struct {
-		marshaler jsonpb.Marshaler
 	}
 )
 
 func (e *jsonSizeEstimator) EstimateSize(v interface{}) (int, error) {
-	// jsonpb must be used for proto structs.
+	// protojson must be used for proto structs.
 	if protoMessage, ok := v.(proto.Message); ok {
-		var buf bytes.Buffer
-		err := e.marshaler.Marshal(&buf, protoMessage)
-		return buf.Len(), err
+		bs, err := protojson.Marshal(protoMessage)
+		return len(bs), err
 	}
 
 	data, err := json.Marshal(v)

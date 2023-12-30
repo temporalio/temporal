@@ -46,6 +46,8 @@ import (
 type (
 	// Handler - gRPC handler interface for matchingservice
 	Handler struct {
+		matchingservice.UnsafeMatchingServiceServer
+
 		engine            Engine
 		config            *Config
 		metricsHandler    metrics.Handler
@@ -149,7 +151,7 @@ func (h *Handler) AddActivityTask(
 
 	syncMatch, err := h.engine.AddActivityTask(ctx, request)
 	if syncMatch {
-		opMetrics.Timer(metrics.SyncMatchLatencyPerTaskQueue.GetMetricName()).Record(time.Since(startT))
+		opMetrics.Timer(metrics.SyncMatchLatencyPerTaskQueue.Name()).Record(time.Since(startT))
 	}
 
 	return &matchingservice.AddActivityTaskResponse{}, err
@@ -174,7 +176,7 @@ func (h *Handler) AddWorkflowTask(
 
 	syncMatch, err := h.engine.AddWorkflowTask(ctx, request)
 	if syncMatch {
-		opMetrics.Timer(metrics.SyncMatchLatencyPerTaskQueue.GetMetricName()).Record(time.Since(startT))
+		opMetrics.Timer(metrics.SyncMatchLatencyPerTaskQueue.Name()).Record(time.Since(startT))
 	}
 	return &matchingservice.AddWorkflowTaskResponse{}, err
 }
@@ -371,8 +373,8 @@ func (h *Handler) namespaceName(id namespace.ID) namespace.Name {
 }
 
 func (h *Handler) reportForwardedPerTaskQueueCounter(opMetrics metrics.Handler, namespaceId namespace.ID) {
-	opMetrics.Counter(metrics.ForwardedPerTaskQueueCounter.GetMetricName()).Record(1)
-	h.metricsHandler.Counter(metrics.MatchingClientForwardedCounter.GetMetricName()).
+	opMetrics.Counter(metrics.ForwardedPerTaskQueueCounter.Name()).Record(1)
+	h.metricsHandler.Counter(metrics.MatchingClientForwardedCounter.Name()).
 		Record(
 			1,
 			metrics.OperationTag(metrics.MatchingAddWorkflowTaskScope),

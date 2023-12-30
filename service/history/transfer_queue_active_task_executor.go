@@ -219,7 +219,7 @@ func (t *transferQueueActiveTaskExecutor) processActivityTask(
 	// release the context lock since we no longer need mutable state and
 	// the rest of logic is making RPC call, which takes time.
 	release(nil)
-	return t.pushActivity(ctx, task, &timeout, directive)
+	return t.pushActivity(ctx, task, timeout, directive)
 }
 
 func (t *transferQueueActiveTaskExecutor) processWorkflowTask(
@@ -270,7 +270,7 @@ func (t *transferQueueActiveTaskExecutor) processWorkflowTask(
 	// which will call history back (with RecordWorkflowTaskStarted), and it will try to get workflow lock again.
 	release(nil)
 
-	err = t.pushWorkflowTask(ctx, transferTask, taskQueue, scheduleToStartTimeout, directive)
+	err = t.pushWorkflowTask(ctx, transferTask, taskQueue, scheduleToStartTimeout.AsDuration(), directive)
 
 	if _, ok := err.(*serviceerrors.StickyWorkerUnavailable); ok {
 		// sticky worker is unavailable, switch to original normal task queue
@@ -285,7 +285,7 @@ func (t *transferQueueActiveTaskExecutor) processWorkflowTask(
 		// There is no need to reset sticky, because if this task is picked by new worker, the new worker will reset
 		// the sticky queue to a new one. However, if worker is completely down, that schedule_to_start timeout task
 		// will re-create a new non-sticky task and reset sticky.
-		err = t.pushWorkflowTask(ctx, transferTask, taskQueue, scheduleToStartTimeout, directive)
+		err = t.pushWorkflowTask(ctx, transferTask, taskQueue, scheduleToStartTimeout.AsDuration(), directive)
 	}
 	return err
 }
@@ -388,7 +388,7 @@ func (t *transferQueueActiveTaskExecutor) processCloseExecution(
 	err = t.processParentClosePolicy(
 		ctx,
 		namespaceName.String(),
-		workflowExecution,
+		&workflowExecution,
 		children,
 	)
 
@@ -964,7 +964,7 @@ func (t *transferQueueActiveTaskExecutor) processResetWorkflow(
 			t.shardContext,
 			t.cache,
 			namespace.ID(task.NamespaceID),
-			commonpb.WorkflowExecution{
+			&commonpb.WorkflowExecution{
 				WorkflowId: task.WorkflowID,
 				RunId:      resetPoint.GetRunId(),
 			},
@@ -1416,7 +1416,7 @@ func (t *transferQueueActiveTaskExecutor) resetWorkflow(
 	case *serviceerror.NotFound, *serviceerror.NamespaceNotFound:
 		// This means the reset point is corrupted and not retry able.
 		// There must be a bug in our system that we must fix.(for example, history is not the same in active/passive)
-		t.metricHandler.Counter(metrics.AutoResetPointCorruptionCounter.GetMetricName()).Record(
+		t.metricHandler.Counter(metrics.AutoResetPointCorruptionCounter.Name()).Record(
 			1,
 			metrics.OperationTag(metrics.TransferQueueProcessorScope),
 		)
@@ -1433,7 +1433,7 @@ func (t *transferQueueActiveTaskExecutor) resetWorkflow(
 func (t *transferQueueActiveTaskExecutor) processParentClosePolicy(
 	ctx context.Context,
 	parentNamespaceName string,
-	parentExecution commonpb.WorkflowExecution,
+	parentExecution *commonpb.WorkflowExecution,
 	childInfos map[int64]*persistencespb.ChildExecutionInfo,
 ) error {
 	if len(childInfos) == 0 {
@@ -1488,16 +1488,16 @@ func (t *transferQueueActiveTaskExecutor) processParentClosePolicy(
 	}
 
 	for _, childInfo := range childInfos {
-		err := t.applyParentClosePolicy(ctx, &parentExecution, childInfo)
+		err := t.applyParentClosePolicy(ctx, parentExecution, childInfo)
 		switch err.(type) {
 		case nil:
-			scope.Counter(metrics.ParentClosePolicyProcessorSuccess.GetMetricName()).Record(1)
+			scope.Counter(metrics.ParentClosePolicyProcessorSuccess.Name()).Record(1)
 		case *serviceerror.NotFound:
 			// If child execution is deleted there is nothing to close.
 		case *serviceerror.NamespaceNotFound:
 			// If child namespace is deleted there is nothing to close.
 		default:
-			scope.Counter(metrics.ParentClosePolicyProcessorFailures.GetMetricName()).Record(1)
+			scope.Counter(metrics.ParentClosePolicyProcessorFailures.Name()).Record(1)
 			return err
 		}
 	}

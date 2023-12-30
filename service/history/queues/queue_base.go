@@ -26,7 +26,6 @@ package queues
 
 import (
 	"context"
-	"fmt"
 	"sync"
 	"time"
 
@@ -288,19 +287,7 @@ func (p *queueBase) FailoverNamespace(
 }
 
 func (p *queueBase) processNewRange() {
-	var newMaxKey tasks.Key
-	switch categoryType := p.category.Type(); categoryType {
-	case tasks.CategoryTypeImmediate:
-		newMaxKey = p.shard.GetImmediateQueueExclusiveHighReadWatermark()
-	case tasks.CategoryTypeScheduled:
-		var err error
-		if newMaxKey, err = p.shard.UpdateScheduledQueueExclusiveHighReadWatermark(); err != nil {
-			p.logger.Error("Unable to process new range", tag.Error(err))
-			return
-		}
-	default:
-		panic(fmt.Sprintf("Unknown task category type: %v", categoryType.String()))
-	}
+	newMaxKey := p.shard.GetQueueExclusiveHighReadWatermark(p.category)
 
 	reader, err := p.readerGroup.GetOrCreateReader(DefaultReaderId)
 	if err != nil {
@@ -357,11 +344,11 @@ func (p *queueBase) checkpoint() {
 			newExclusiveDeletionHighWatermark = tasks.MinKey(newExclusiveDeletionHighWatermark, scopes[0].Range.InclusiveMin)
 		}
 	}
-	p.metricsHandler.Histogram(metrics.QueueReaderCountHistogram.GetMetricName(), metrics.QueueReaderCountHistogram.GetMetricUnit()).
+	p.metricsHandler.Histogram(metrics.QueueReaderCountHistogram.Name(), metrics.QueueReaderCountHistogram.Unit()).
 		Record(int64(len(readerScopes)))
-	p.metricsHandler.Histogram(metrics.QueueSliceCountHistogram.GetMetricName(), metrics.QueueSliceCountHistogram.GetMetricUnit()).
+	p.metricsHandler.Histogram(metrics.QueueSliceCountHistogram.Name(), metrics.QueueSliceCountHistogram.Unit()).
 		Record(int64(p.monitor.GetTotalSliceCount()))
-	p.metricsHandler.Histogram(metrics.PendingTasksCounter.GetMetricName(), metrics.PendingTasksCounter.GetMetricUnit()).
+	p.metricsHandler.Histogram(metrics.PendingTasksCounter.Name(), metrics.PendingTasksCounter.Unit()).
 		Record(int64(p.monitor.GetTotalPendingTaskCount()))
 
 	p.updateReaderProgress(readerScopes)
@@ -372,7 +359,7 @@ func (p *queueBase) checkpoint() {
 	//
 	// Emit metric before the deletion watermark comparison so we have the emit even if there's no task
 	// for the queue.
-	p.metricsHandler.Counter(metrics.TaskBatchCompleteCounter.GetMetricName()).Record(1)
+	p.metricsHandler.Counter(metrics.TaskBatchCompleteCounter.Name()).Record(1)
 	if newExclusiveDeletionHighWatermark.CompareTo(p.exclusiveDeletionHighWatermark) > 0 ||
 		(p.updateShardRangeID() && newExclusiveDeletionHighWatermark.CompareTo(tasks.MinimumKey) > 0) {
 		// When shard rangeID is updated, perform range completion again in case the underlying persistence implementation
@@ -472,7 +459,7 @@ func (p *queueBase) rangeCompleteTasks(
 func (p *queueBase) updateQueueState(
 	readerScopes map[int64][]Scope,
 ) error {
-	p.metricsHandler.Counter(metrics.AckLevelUpdateCounter.GetMetricName()).Record(1)
+	p.metricsHandler.Counter(metrics.AckLevelUpdateCounter.Name()).Record(1)
 	for readerID, scopes := range readerScopes {
 		if len(scopes) == 0 {
 			delete(readerScopes, readerID)
@@ -484,7 +471,7 @@ func (p *queueBase) updateQueueState(
 		exclusiveReaderHighWatermark: p.nonReadableScope.Range.InclusiveMin,
 	}))
 	if err != nil {
-		p.metricsHandler.Counter(metrics.AckLevelUpdateFailedCounter.GetMetricName()).Record(1)
+		p.metricsHandler.Counter(metrics.AckLevelUpdateFailedCounter.Name()).Record(1)
 		p.logger.Error("Error updating queue state", tag.Error(err), tag.OperationFailed)
 	}
 	return err

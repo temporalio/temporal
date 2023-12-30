@@ -35,11 +35,11 @@ import (
 	enumspb "go.temporal.io/api/enums/v1"
 	historypb "go.temporal.io/api/history/v1"
 	"go.temporal.io/api/serviceerror"
+	"google.golang.org/protobuf/types/known/timestamppb"
 
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/collection"
-	"go.temporal.io/server/common/convert"
 	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/failure"
 	"go.temporal.io/server/common/log"
@@ -47,6 +47,7 @@ import (
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/primitives/timestamp"
+	"go.temporal.io/server/common/util"
 	"go.temporal.io/server/service/history/consts"
 	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/workflow"
@@ -298,7 +299,7 @@ func (r *workflowResetterImpl) prepareResetWorkflow(
 	}
 
 	if err := r.failInflightActivity(
-		*resetMutableState.GetExecutionInfo().StartTime,
+		resetMutableState.GetExecutionInfo().StartTime.AsTime(),
 		resetMutableState,
 		resetReason,
 	); err != nil {
@@ -427,7 +428,7 @@ func (r *workflowResetterImpl) replayResetWorkflow(
 		),
 		baseBranchToken,
 		baseRebuildLastEventID,
-		convert.Int64Ptr(baseRebuildLastEventVersion),
+		util.Ptr(baseRebuildLastEventVersion),
 		definition.NewWorkflowKey(
 			namespaceID.String(),
 			workflowID,
@@ -512,7 +513,7 @@ func (r *workflowResetterImpl) failInflightActivity(
 		case common.EmptyEventID:
 			// activity not started, noop
 			// override the activity time to now
-			ai.ScheduledTime = timestamp.TimePtr(now)
+			ai.ScheduledTime = timestamppb.New(now)
 			if err := mutableState.UpdateActivity(ai); err != nil {
 				return err
 			}
@@ -615,7 +616,7 @@ func (r *workflowResetterImpl) reapplyContinueAsNewWorkflowEvents(
 			ctx,
 			r.shardContext,
 			namespaceID,
-			commonpb.WorkflowExecution{
+			&commonpb.WorkflowExecution{
 				WorkflowId: workflowID,
 				RunId:      runID,
 			},

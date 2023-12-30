@@ -102,7 +102,7 @@ func (a *LocalActivities) CountExecutionsAdvVisibilityActivity(ctx context.Conte
 	}
 	resp, err := a.visibilityManager.CountWorkflowExecutions(ctx, req)
 	if err != nil {
-		a.metricsHandler.Counter(metrics.CountExecutionsFailuresCount.GetMetricName()).Record(1)
+		a.metricsHandler.Counter(metrics.CountExecutionsFailuresCount.Name()).Record(1)
 		a.logger.Error("Unable to count workflow executions.", tag.WorkflowNamespace(nsName.String()), tag.Error(err))
 		return 0, err
 	}
@@ -124,7 +124,7 @@ func (a *Activities) EnsureNoExecutionsAdvVisibilityActivity(ctx context.Context
 	}
 	resp, err := a.visibilityManager.CountWorkflowExecutions(ctx, req)
 	if err != nil {
-		a.metricsHandler.Counter(metrics.CountExecutionsFailuresCount.GetMetricName()).Record(1)
+		a.metricsHandler.Counter(metrics.CountExecutionsFailuresCount.Name()).Record(1)
 		a.logger.Error("Unable to count workflow executions.", tag.WorkflowNamespace(nsName.String()), tag.Error(err))
 		return err
 	}
@@ -136,7 +136,7 @@ func (a *Activities) EnsureNoExecutionsAdvVisibilityActivity(ctx context.Context
 		if activity.HasHeartbeatDetails(ctx) && activityInfo.Attempt > 7 {
 			var previousAttemptCount int
 			if err := activity.GetHeartbeatDetails(ctx, &previousAttemptCount); err != nil {
-				a.metricsHandler.Counter(metrics.CountExecutionsFailuresCount.GetMetricName()).Record(1)
+				a.metricsHandler.Counter(metrics.CountExecutionsFailuresCount.Name()).Record(1)
 				a.logger.Error("Unable to get previous heartbeat details.", tag.WorkflowNamespace(nsName.String()), tag.Error(err))
 				return err
 			}
@@ -177,7 +177,7 @@ func (a *Activities) EnsureNoExecutionsStdVisibilityActivity(ctx context.Context
 	}
 	resp, err := a.visibilityManager.ListWorkflowExecutions(ctx, req)
 	if err != nil {
-		a.metricsHandler.Counter(metrics.ListExecutionsFailuresCount.GetMetricName()).Record(1)
+		a.metricsHandler.Counter(metrics.ListExecutionsFailuresCount.Name()).Record(1)
 		a.logger.Error("Unable to count workflow executions using list.", tag.WorkflowNamespace(nsName.String()), tag.Error(err))
 		return err
 	}
@@ -200,12 +200,12 @@ func (a *LocalActivities) DeleteNamespaceActivity(ctx context.Context, nsID name
 
 	err := a.metadataManager.DeleteNamespaceByName(ctx, deleteNamespaceRequest)
 	if err != nil {
-		a.metricsHandler.Counter(metrics.DeleteNamespaceFailuresCount.GetMetricName()).Record(1)
+		a.metricsHandler.Counter(metrics.DeleteNamespaceFailuresCount.Name()).Record(1)
 		a.logger.Error("Unable to delete namespace from persistence.", tag.WorkflowNamespace(nsName.String()), tag.Error(err))
 		return err
 	}
 
-	a.metricsHandler.Counter(metrics.DeleteNamespaceSuccessCount.GetMetricName()).Record(1)
+	a.metricsHandler.Counter(metrics.DeleteNamespaceSuccessCount.Name()).Record(1)
 	a.logger.Info("Namespace is deleted.", tag.WorkflowNamespace(nsName.String()), tag.WorkflowNamespaceID(nsID.String()))
 	return nil
 }

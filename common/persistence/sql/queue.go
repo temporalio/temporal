@@ -70,7 +70,7 @@ func (q *sqlQueue) Init(
 
 func (q *sqlQueue) EnqueueMessage(
 	ctx context.Context,
-	blob commonpb.DataBlob,
+	blob *commonpb.DataBlob,
 ) error {
 	err := q.txExecute(ctx, "EnqueueMessage", func(tx sqlplugin.Tx) error {
 		lastMessageID, err := tx.GetLastEnqueuedMessageIDForUpdate(ctx, q.queueType)
@@ -185,7 +185,7 @@ func (q *sqlQueue) GetAckLevels(
 
 func (q *sqlQueue) EnqueueMessageToDLQ(
 	ctx context.Context,
-	blob commonpb.DataBlob,
+	blob *commonpb.DataBlob,
 ) (int64, error) {
 	var lastMessageID int64
 	err := q.txExecute(ctx, "EnqueueMessageToDLQ", func(tx sqlplugin.Tx) error {
@@ -402,7 +402,7 @@ func (q *sqlQueue) initializeDLQMetadata(
 func newQueueRow(
 	queueType persistence.QueueType,
 	messageID int64,
-	blob commonpb.DataBlob,
+	blob *commonpb.DataBlob,
 ) sqlplugin.QueueMessageRow {
 
 	return sqlplugin.QueueMessageRow{

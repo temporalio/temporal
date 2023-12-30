@@ -1,3 +1,5 @@
+// The MIT License
+//
 // Copyright (c) 2020 Temporal Technologies, Inc.
 //
 // Permission is hereby granted, free of charge, to any person obtaining a copy
@@ -26,8 +28,6 @@ option go_package = "go.temporal.io/server/api/persistence/v1;persistence";
 import "google/protobuf/duration.proto";
 import "google/protobuf/timestamp.proto";
 
-import "dependencies/gogoproto/gogo.proto";
-
 import "temporal/api/enums/v1/namespace.proto";
 import "temporal/api/namespace/v1/message.proto";
 
@@ -39,7 +39,7 @@ message NamespaceDetail {
     int64 config_version = 4;
     int64 failover_notification_version = 5;
     int64 failover_version = 6;
-    google.protobuf.Timestamp failover_end_time = 7 [(gogoproto.stdtime) = true];
+    google.protobuf.Timestamp failover_end_time = 7;
 }
 
 message NamespaceInfo {
@@ -52,7 +52,7 @@ message NamespaceInfo {
 }
 
 message NamespaceConfig {
-    google.protobuf.Duration retention = 1 [(gogoproto.stdduration) = true];
+    google.protobuf.Duration retention = 1;
     string archival_bucket = 2;
     temporal.api.namespace.v1.BadBinaries bad_binaries = 3;
     temporal.api.enums.v1.ArchivalState history_archival_state = 4;
@@ -71,6 +71,6 @@ message NamespaceReplicationConfig {
 
 // Represents a historical replication status of a Namespace
 message FailoverStatus {
-    google.protobuf.Timestamp failover_time = 1 [(gogoproto.stdtime) = true];
+    google.protobuf.Timestamp failover_time = 1;
     int64 failover_version = 2;
 }

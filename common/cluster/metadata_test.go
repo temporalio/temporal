@@ -189,7 +189,7 @@ func (s *metadataSuite) Test_RefreshClusterMetadata_Success() {
 			ClusterMetadata: []*persistence.GetClusterMetadataResponse{
 				{
 					// No change and not include in callback
-					ClusterMetadata: persistencespb.ClusterMetadata{
+					ClusterMetadata: &persistencespb.ClusterMetadata{
 						ClusterName:            s.clusterName,
 						IsConnectionEnabled:    true,
 						InitialFailoverVersion: 1,
@@ -200,7 +200,7 @@ func (s *metadataSuite) Test_RefreshClusterMetadata_Success() {
 				},
 				{
 					// Updated, included in callback
-					ClusterMetadata: persistencespb.ClusterMetadata{
+					ClusterMetadata: &persistencespb.ClusterMetadata{
 						ClusterName:            s.thirdClusterName,
 						IsConnectionEnabled:    true,
 						InitialFailoverVersion: 1,
@@ -212,7 +212,7 @@ func (s *metadataSuite) Test_RefreshClusterMetadata_Success() {
 				},
 				{
 					// Newly added, included in callback
-					ClusterMetadata: persistencespb.ClusterMetadata{
+					ClusterMetadata: &persistencespb.ClusterMetadata{
 						ClusterName:            id,
 						IsConnectionEnabled:    true,
 						InitialFailoverVersion: 2,
@@ -241,7 +241,7 @@ func (s *metadataSuite) Test_ListAllClusterMetadataFromDB_Success() {
 		&persistence.ListClusterMetadataResponse{
 			ClusterMetadata: []*persistence.GetClusterMetadataResponse{
 				{
-					ClusterMetadata: persistencespb.ClusterMetadata{
+					ClusterMetadata: &persistencespb.ClusterMetadata{
 						ClusterName:            s.clusterName,
 						IsConnectionEnabled:    true,
 						InitialFailoverVersion: 1,
@@ -260,7 +260,7 @@ func (s *metadataSuite) Test_ListAllClusterMetadataFromDB_Success() {
 		&persistence.ListClusterMetadataResponse{
 			ClusterMetadata: []*persistence.GetClusterMetadataResponse{
 				{
-					ClusterMetadata: persistencespb.ClusterMetadata{
+					ClusterMetadata: &persistencespb.ClusterMetadata{
 						ClusterName:            newClusterName,
 						IsConnectionEnabled:    true,
 						InitialFailoverVersion: 2,

@@ -33,7 +33,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/xwb1989/sqlparser"
+	"github.com/temporalio/sqlparser"
 	enumspb "go.temporal.io/api/enums/v1"
 
 	"go.temporal.io/server/common/convert"
@@ -154,7 +154,7 @@ func (p *queryParser) convertComparisonExpr(compExpr *sqlparser.ComparisonExpr, 
 			parsedQuery.emptyResult = true
 			return nil
 		}
-		parsedQuery.workflowID = convert.StringPtr(val)
+		parsedQuery.workflowID = util.Ptr(val)
 	case RunID:
 		val, err := extractStringValue(valStr)
 		if err != nil {
@@ -167,7 +167,7 @@ func (p *queryParser) convertComparisonExpr(compExpr *sqlparser.ComparisonExpr, 
 			parsedQuery.emptyResult = true
 			return nil
 		}
-		parsedQuery.runID = convert.StringPtr(val)
+		parsedQuery.runID = util.Ptr(val)
 	case WorkflowType:
 		val, err := extractStringValue(valStr)
 		if err != nil {
@@ -180,7 +180,7 @@ func (p *queryParser) convertComparisonExpr(compExpr *sqlparser.ComparisonExpr, 
 			parsedQuery.emptyResult = true
 			return nil
 		}
-		parsedQuery.workflowTypeName = convert.StringPtr(val)
+		parsedQuery.workflowTypeName = util.Ptr(val)
 	case ExecutionStatus:
 		val, err := extractStringValue(valStr)
 		if err != nil {

@@ -73,7 +73,7 @@ type (
 	VisibilityRequestBase struct {
 		NamespaceID      namespace.ID
 		Namespace        namespace.Name // namespace.Name is not persisted.
-		Execution        commonpb.WorkflowExecution
+		Execution        *commonpb.WorkflowExecution
 		WorkflowTypeName string
 		StartTime        time.Time
 		Status           enumspb.WorkflowExecutionStatus
@@ -83,6 +83,7 @@ type (
 		Memo             *commonpb.Memo
 		TaskQueue        string
 		SearchAttributes *commonpb.SearchAttributes
+		ParentExecution  *commonpb.WorkflowExecution
 	}
 
 	// RecordWorkflowExecutionStartedRequest is used to add a record of a newly started execution
@@ -177,8 +178,8 @@ type (
 		RunID       string
 		WorkflowID  string
 		TaskID      int64
-		StartTime   *time.Time // if start time is not empty, delete record from open_execution for cassandra db
-		CloseTime   *time.Time // if end time is not empty, delete record from closed_execution for cassandra db
+		StartTime   time.Time // if start time is not empty, delete record from open_execution for cassandra db
+		CloseTime   time.Time // if end time is not empty, delete record from closed_execution for cassandra db
 	}
 
 	// GetWorkflowExecutionRequest is request from GetWorkflowExecution
@@ -187,8 +188,8 @@ type (
 		Namespace   namespace.Name // namespace.Name is not persisted
 		RunID       string
 		WorkflowID  string
-		StartTime   *time.Time // if start time is not empty, search record from open_execution for cassandra db
-		CloseTime   *time.Time // if end time is not empty, search record from closed_execution for cassandra db
+		StartTime   time.Time // if start time is not empty, search record from open_execution for cassandra db
+		CloseTime   time.Time // if end time is not empty, search record from closed_execution for cassandra db
 	}
 
 	// GetWorkflowExecutionResponse is response to GetWorkflowExecution

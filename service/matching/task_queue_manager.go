@@ -121,10 +121,10 @@ type (
 		// match with a poller. When that fails, task will be written to database and later
 		// asynchronously matched with a poller
 		AddTask(ctx context.Context, params addTaskParams) (syncMatch bool, err error)
-		// GetTask blocks waiting for a task Returns error when context deadline is exceeded
+		// PollTask blocks waiting for a task Returns error when context deadline is exceeded
 		// maxDispatchPerSecond is the max rate at which tasks are allowed to be dispatched
 		// from this task queue to pollers
-		GetTask(ctx context.Context, pollMetadata *pollMetadata) (*internalTask, error)
+		PollTask(ctx context.Context, pollMetadata *pollMetadata) (*internalTask, error)
 		// MarkAlive updates the liveness timer to keep this taskQueueManager alive.
 		MarkAlive()
 		// SpoolTask spools a task to persistence to be matched asynchronously when a poller is available.
@@ -303,7 +303,7 @@ func (c *taskQueueManagerImpl) signalIfFatal(err error) bool {
 	}
 	var condfail *persistence.ConditionFailedError
 	if errors.As(err, &condfail) {
-		c.taggedMetricsHandler.Counter(metrics.ConditionFailedErrorPerTaskQueueCounter.GetMetricName()).Record(1)
+		c.taggedMetricsHandler.Counter(metrics.ConditionFailedErrorPerTaskQueueCounter.Name()).Record(1)
 		c.skipFinalUpdate.Store(true)
 		c.unloadFromEngine()
 		return true
@@ -328,7 +328,7 @@ func (c *taskQueueManagerImpl) Start() {
 		c.goroGroup.Go(c.fetchUserData)
 	}
 	c.logger.Info("", tag.LifeCycleStarted)
-	c.taggedMetricsHandler.Counter(metrics.TaskQueueStartedCounter.GetMetricName()).Record(1)
+	c.taggedMetricsHandler.Counter(metrics.TaskQueueStartedCounter.Name()).Record(1)
 }
 
 func (c *taskQueueManagerImpl) Stop() {
@@ -360,7 +360,7 @@ func (c *taskQueueManagerImpl) Stop() {
 	// Set user data state on stop to wake up anyone blocked on the user data changed channel.
 	c.db.setUserDataState(userDataClosed)
 	c.logger.Info("", tag.LifeCycleStopped)
-	c.taggedMetricsHandler.Counter(metrics.TaskQueueStoppedCounter.GetMetricName()).Record(1)
+	c.taggedMetricsHandler.Counter(metrics.TaskQueueStoppedCounter.Name()).Record(1)
 	// This may call Stop again, but the status check above makes that a no-op.
 	c.unloadFromEngine()
 }
@@ -429,7 +429,7 @@ func (c *taskQueueManagerImpl) AddTask(
 	// TODO: make this work for versioned queues too
 	if c.QueueID().IsRoot() && c.QueueID().VersionSet() == "" && !c.HasPollerAfter(time.Now().Add(-noPollerThreshold)) {
 		// Only checks recent pollers in the root partition
-		c.taggedMetricsHandler.Counter(metrics.NoRecentPollerTasksPerTaskQueueCounter.GetMetricName()).Record(1)
+		c.taggedMetricsHandler.Counter(metrics.NoRecentPollerTasksPerTaskQueueCounter.Name()).Record(1)
 	}
 
 	taskInfo := params.taskInfo
@@ -478,11 +478,11 @@ func (c *taskQueueManagerImpl) SpoolTask(params addTaskParams) error {
 	return err
 }
 
-// GetTask blocks waiting for a task.
+// PollTask blocks waiting for a task.
 // Returns error when context deadline is exceeded
 // maxDispatchPerSecond is the max rate at which tasks are allowed
 // to be dispatched from this task queue to pollers
-func (c *taskQueueManagerImpl) GetTask(
+func (c *taskQueueManagerImpl) PollTask(
 	ctx context.Context,
 	pollMetadata *pollMetadata,
 ) (*internalTask, error) {
@@ -909,12 +909,12 @@ func (c *taskQueueManagerImpl) RedirectToVersionedQueueForAdd(ctx context.Contex
 
 func (c *taskQueueManagerImpl) recordUnknownBuildPoll(buildId string) {
 	c.logger.Warn("unknown build id in poll", tag.BuildId(buildId))
-	c.taggedMetricsHandler.Counter(metrics.UnknownBuildPollsCounter.GetMetricName()).Record(1)
+	c.taggedMetricsHandler.Counter(metrics.UnknownBuildPollsCounter.Name()).Record(1)
 }
 
 func (c *taskQueueManagerImpl) recordUnknownBuildTask(buildId string) {
 	c.logger.Warn("unknown build id in task", tag.BuildId(buildId))
-	c.taggedMetricsHandler.Counter(metrics.UnknownBuildTasksCounter.GetMetricName()).Record(1)
+	c.taggedMetricsHandler.Counter(metrics.UnknownBuildTasksCounter.Name()).Record(1)
 }
 
 func (c *taskQueueManagerImpl) callerInfoContext(ctx context.Context) context.Context {

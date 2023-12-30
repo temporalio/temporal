@@ -1,3 +1,5 @@
+// The MIT License
+//
 // Copyright (c) 2019 Temporal Technologies, Inc.
 //
 // Permission is hereby granted, free of charge, to any person obtaining a copy
@@ -323,6 +325,10 @@ service HistoryService {
 
     rpc DeleteDLQTasks (DeleteDLQTasksRequest) returns (DeleteDLQTasksResponse) {
     }
+
+    rpc ListQueues (ListQueuesRequest) returns (ListQueuesResponse) {
+    }
+
     // The AddTasks API is used to add history tasks to a shard. The first use-case for this API is the DLQ. When we are
     // unable to process history tasks, we add them to a DLQ. When they need to be retried, we take them out of the DLQ
     // and add them back using this API. We expose this via an API instead of doing this in the history engine because

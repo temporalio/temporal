@@ -88,6 +88,14 @@ func (s *simpleResolver) Lookup(key string) (membership.HostInfo, error) {
 	return s.hostInfos[idx], nil
 }
 
+func (s *simpleResolver) LookupN(key string, _ int) []membership.HostInfo {
+	info, err := s.Lookup(key)
+	if err != nil {
+		return []membership.HostInfo{}
+	}
+	return []membership.HostInfo{info}
+}
+
 func (s *simpleResolver) AddListener(name string, notifyChannel chan<- *membership.ChangedEvent) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()

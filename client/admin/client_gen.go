@@ -273,6 +273,16 @@ func (c *clientImpl) ListHistoryTasks(
 	return c.client.ListHistoryTasks(ctx, request, opts...)
 }
 
+func (c *clientImpl) ListQueues(
+	ctx context.Context,
+	request *adminservice.ListQueuesRequest,
+	opts ...grpc.CallOption,
+) (*adminservice.ListQueuesResponse, error) {
+	ctx, cancel := c.createContext(ctx)
+	defer cancel()
+	return c.client.ListQueues(ctx, request, opts...)
+}
+
 func (c *clientImpl) MergeDLQMessages(
 	ctx context.Context,
 	request *adminservice.MergeDLQMessagesRequest,

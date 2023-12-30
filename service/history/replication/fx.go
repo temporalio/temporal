@@ -60,6 +60,7 @@ var Module = fx.Provide(
 	eagerNamespaceRefresherProvider,
 	sequentialTaskQueueFactoryProvider,
 	dlqWriterAdapterProvider,
+	historyPaginatedFetcherProvider,
 	newDLQWriterToggle,
 )
 
@@ -83,6 +84,21 @@ func eagerNamespaceRefresherProvider(
 		),
 		clusterMetadata.GetCurrentClusterName(),
 		metricsHandler,
+	)
+}
+func historyPaginatedFetcherProvider(
+	config *configs.Config,
+	namespaceRegistry namespace.Registry,
+	clientBean client.Bean,
+	serializer serialization.Serializer,
+	logger log.Logger,
+) HistoryPaginatedFetcher {
+	return NewHistoryPaginatedFetcher(
+		namespaceRegistry,
+		clientBean,
+		serializer,
+		config.StandbyTaskReReplicationContextTimeout,
+		logger,
 	)
 }
 
@@ -175,6 +191,7 @@ func ndcHistoryResenderProvider(
 		namespaceRegistry,
 		clientBean,
 		func(ctx context.Context, request *historyservice.ReplicateEventsV2Request) error {
+			// use HistoryEventsHandler.HandleHistoryEvents(...) instead
 			_, err := clientBean.GetHistoryClient().ReplicateEventsV2(ctx, request)
 			return err
 		},

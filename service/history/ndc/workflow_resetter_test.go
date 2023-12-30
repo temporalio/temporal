@@ -37,12 +37,12 @@ import (
 	enumspb "go.temporal.io/api/enums/v1"
 	historypb "go.temporal.io/api/history/v1"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
+	"google.golang.org/protobuf/types/known/timestamppb"
 
 	historyspb "go.temporal.io/server/api/history/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/collection"
-	"go.temporal.io/server/common/convert"
 	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/failure"
 	"go.temporal.io/server/common/log"
@@ -50,7 +50,7 @@ import (
 	"go.temporal.io/server/common/payloads"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/persistence/versionhistory"
-	"go.temporal.io/server/common/primitives/timestamp"
+	"go.temporal.io/server/common/util"
 	"go.temporal.io/server/service/history/consts"
 	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/tests"
@@ -204,7 +204,7 @@ func (s *workflowResetterSuite) TestPersistToDB_CurrentTerminated() {
 		int64(0),
 		currentMutation,
 		currentEventsSeq,
-		convert.Int64Ptr(0),
+		util.Ptr(int64(0)),
 		resetSnapshot,
 		resetEventsSeq,
 	).Return(currentNewEventsSize, resetNewEventsSize, nil)
@@ -306,7 +306,7 @@ func (s *workflowResetterSuite) TestReplayResetWorkflow() {
 		),
 		baseBranchToken,
 		baseRebuildLastEventID,
-		convert.Int64Ptr(baseRebuildLastEventVersion),
+		util.Ptr(baseRebuildLastEventVersion),
 		definition.NewWorkflowKey(
 			s.namespaceID.String(),
 			s.workflowID,
@@ -459,7 +459,7 @@ func (s *workflowResetterSuite) TestFailInflightActivity() {
 	activity1 := &persistencespb.ActivityInfo{
 		Version:              12,
 		ScheduledEventId:     123,
-		ScheduledTime:        timestamp.TimePtr(now.Add(-10 * time.Second)),
+		ScheduledTime:        timestamppb.New(now.Add(-10 * time.Second)),
 		StartedEventId:       124,
 		LastHeartbeatDetails: payloads.EncodeString("some random activity 1 details"),
 		StartedIdentity:      "some random activity 1 started identity",
@@ -467,7 +467,7 @@ func (s *workflowResetterSuite) TestFailInflightActivity() {
 	activity2 := &persistencespb.ActivityInfo{
 		Version:          12,
 		ScheduledEventId: 456,
-		ScheduledTime:    timestamp.TimePtr(now.Add(-10 * time.Second)),
+		ScheduledTime:    timestamppb.New(now.Add(-10 * time.Second)),
 		StartedEventId:   common.EmptyEventID,
 	}
 	mutableState.EXPECT().GetPendingActivityInfos().Return(map[int64]*persistencespb.ActivityInfo{
@@ -486,7 +486,7 @@ func (s *workflowResetterSuite) TestFailInflightActivity() {
 	mutableState.EXPECT().UpdateActivity(&persistencespb.ActivityInfo{
 		Version:          activity2.Version,
 		ScheduledEventId: activity2.ScheduledEventId,
-		ScheduledTime:    timestamp.TimePtr(now),
+		ScheduledTime:    timestamppb.New(now),
 		StartedEventId:   activity2.StartedEventId,
 	}).Return(nil)
 

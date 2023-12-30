@@ -33,7 +33,6 @@ import (
 	"go.temporal.io/api/serviceerror"
 	"golang.org/x/exp/slices"
 
-	"github.com/gogo/protobuf/proto"
 	"github.com/golang/mock/gomock"
 	"github.com/pborman/uuid"
 	"github.com/stretchr/testify/assert"
@@ -42,6 +41,8 @@ import (
 	namespacepb "go.temporal.io/api/namespace/v1"
 	replicationpb "go.temporal.io/api/replication/v1"
 	"go.temporal.io/api/workflowservice/v1"
+	"google.golang.org/protobuf/types/known/durationpb"
+	"google.golang.org/protobuf/types/known/timestamppb"
 
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common/archiver"
@@ -53,7 +54,7 @@ import (
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence"
-	"go.temporal.io/server/common/primitives/timestamp"
+	"go.temporal.io/server/common/testing/protoassert"
 )
 
 type (
@@ -198,11 +199,11 @@ func (s *namespaceHandlerCommonSuite) TestMergeBadBinaries_Overriding() {
 		}, now,
 	)
 
-	assert.True(s.T(), proto.Equal(&out, &namespacepb.BadBinaries{
+	protoassert.ProtoEqual(s.T(), &out, &namespacepb.BadBinaries{
 		Binaries: map[string]*namespacepb.BadBinaryInfo{
-			"k0": {Reason: "reason2", CreateTime: &now},
+			"k0": {Reason: "reason2", CreateTime: timestamppb.New(now)},
 		},
-	}))
+	})
 }
 
 func (s *namespaceHandlerCommonSuite) TestMergeBadBinaries_Adding() {
@@ -218,7 +219,7 @@ func (s *namespaceHandlerCommonSuite) TestMergeBadBinaries_Adding() {
 	expected := namespacepb.BadBinaries{
 		Binaries: map[string]*namespacepb.BadBinaryInfo{
 			"k0": {Reason: "reason0"},
-			"k1": {Reason: "reason2", CreateTime: &now},
+			"k1": {Reason: "reason2", CreateTime: timestamppb.New(now)},
 		},
 	}
 	assert.Equal(s.T(), out.String(), expected.String())
@@ -235,12 +236,12 @@ func (s *namespaceHandlerCommonSuite) TestMergeBadBinaries_Merging() {
 		}, now,
 	)
 
-	assert.True(s.T(), proto.Equal(&out, &namespacepb.BadBinaries{
+	protoassert.ProtoEqual(s.T(), &out, &namespacepb.BadBinaries{
 		Binaries: map[string]*namespacepb.BadBinaryInfo{
-			"k0": {Reason: "reason1", CreateTime: &now},
-			"k1": {Reason: "reason2", CreateTime: &now},
+			"k0": {Reason: "reason1", CreateTime: timestamppb.New(now)},
+			"k1": {Reason: "reason2", CreateTime: timestamppb.New(now)},
 		},
-	}))
+	})
 }
 
 func (s *namespaceHandlerCommonSuite) TestMergeBadBinaries_Nil() {
@@ -252,12 +253,12 @@ func (s *namespaceHandlerCommonSuite) TestMergeBadBinaries_Nil() {
 		}, now,
 	)
 
-	assert.True(s.T(), proto.Equal(&out, &namespacepb.BadBinaries{
+	protoassert.ProtoEqual(s.T(), &out, &namespacepb.BadBinaries{
 		Binaries: map[string]*namespacepb.BadBinaryInfo{
-			"k0": {Reason: "reason1", CreateTime: &now},
-			"k1": {Reason: "reason2", CreateTime: &now},
+			"k0": {Reason: "reason1", CreateTime: timestamppb.New(now)},
+			"k1": {Reason: "reason2", CreateTime: timestamppb.New(now)},
 		},
-	}))
+	})
 }
 
 func (s *namespaceHandlerCommonSuite) TestListNamespace() {
@@ -283,7 +284,7 @@ func (s *namespaceHandlerCommonSuite) TestListNamespace() {
 			Data:        data1,
 		},
 		Config: &persistencespb.NamespaceConfig{
-			Retention: timestamp.DurationPtr(retention1),
+			Retention: durationpb.New(retention1),
 		},
 		ReplicationConfig: &persistencespb.NamespaceReplicationConfig{
 			ActiveClusterName: cluster1,
@@ -304,7 +305,7 @@ func (s *namespaceHandlerCommonSuite) TestListNamespace() {
 			Data:        data2,
 		},
 		Config: &persistencespb.NamespaceConfig{
-			Retention: timestamp.DurationPtr(retention2),
+			Retention: durationpb.New(retention2),
 		},
 		ReplicationConfig: &persistencespb.NamespaceReplicationConfig{
 			ActiveClusterName: cluster2,
@@ -385,7 +386,7 @@ func (s *namespaceHandlerCommonSuite) TestListNamespace() {
 func (s *namespaceHandlerCommonSuite) TestRegisterNamespace_WithOneCluster() {
 	const namespace = "namespace-to-register"
 	clusterName := "cluster1"
-	retention := timestamp.DurationPtr(10 * 24 * time.Hour)
+	retention := durationpb.New(10 * 24 * time.Hour)
 	registerRequest := &workflowservice.RegisterNamespaceRequest{
 		Namespace:                        namespace,
 		Description:                      namespace,
@@ -423,7 +424,7 @@ func (s *namespaceHandlerCommonSuite) TestRegisterNamespace_WithTwoCluster() {
 	const namespace = "namespace-to-register"
 	clusterName := "cluster1"
 	clusterName2 := "cluster2"
-	retention := timestamp.DurationPtr(10 * 24 * time.Hour)
+	retention := durationpb.New(10 * 24 * time.Hour)
 	registerRequest := &workflowservice.RegisterNamespaceRequest{
 		Namespace:                        namespace,
 		Description:                      namespace,
@@ -492,7 +493,7 @@ func (s *namespaceHandlerCommonSuite) TestRegisterNamespace_InvalidRetentionPeri
 		registerRequest := &workflowservice.RegisterNamespaceRequest{
 			Namespace:                        "random namespace name",
 			Description:                      "random namespace name",
-			WorkflowExecutionRetentionPeriod: &invalidDuration,
+			WorkflowExecutionRetentionPeriod: durationpb.New(invalidDuration),
 			IsGlobalNamespace:                false,
 		}
 		resp, err := s.handler.RegisterNamespace(context.Background(), registerRequest)
@@ -505,7 +506,7 @@ func (s *namespaceHandlerCommonSuite) TestRegisterNamespace_InvalidRetentionPeri
 		registerRequest := &workflowservice.RegisterNamespaceRequest{
 			Namespace:                        "random namespace name",
 			Description:                      "random namespace name",
-			WorkflowExecutionRetentionPeriod: &invalidDuration,
+			WorkflowExecutionRetentionPeriod: durationpb.New(invalidDuration),
 			IsGlobalNamespace:                true,
 		}
 		resp, err := s.handler.RegisterNamespace(context.Background(), registerRequest)
@@ -539,7 +540,7 @@ func (s *namespaceHandlerCommonSuite) TestUpdateNamespace_InvalidRetentionPeriod
 		updateRequest := &workflowservice.UpdateNamespaceRequest{
 			Namespace: namespace,
 			Config: &namespacepb.NamespaceConfig{
-				WorkflowExecutionRetentionTtl: timestamp.DurationPtr(invalidDuration),
+				WorkflowExecutionRetentionTtl: durationpb.New(invalidDuration),
 			},
 		}
 		resp, err := s.handler.UpdateNamespace(context.Background(), updateRequest)
@@ -661,7 +662,7 @@ func (s *namespaceHandlerCommonSuite) TestUpdateNamespace_UpdateActiveClusterWit
 				State:             enumspb.REPLICATION_STATE_HANDOVER,
 				FailoverHistory: []*persistencespb.FailoverStatus{
 					{
-						FailoverTime:    timestamp.TimePtr(update1Time),
+						FailoverTime:    timestamppb.New(update1Time),
 						FailoverVersion: 2,
 					},
 				},
@@ -735,7 +736,7 @@ func (s *namespaceHandlerCommonSuite) TestUpdateNamespace_ChangeActiveClusterWit
 				Clusters:          []string{clusterName1, clusterName2},
 				FailoverHistory: []*persistencespb.FailoverStatus{
 					{
-						FailoverTime:    timestamp.TimePtr(update1Time),
+						FailoverTime:    timestamppb.New(update1Time),
 						FailoverVersion: 2,
 					},
 				},
@@ -770,23 +771,23 @@ func (s *namespaceHandlerCommonSuite) TestUpdateNamespace_UpdateActiveCluster_Li
 	clusterName2 := "cluster2"
 	failoverHistory := []*persistencespb.FailoverStatus{
 		{
-			FailoverTime:    timestamp.TimePtr(update1Time),
+			FailoverTime:    timestamppb.New(update1Time),
 			FailoverVersion: int64(2),
 		},
 		{
-			FailoverTime:    timestamp.TimePtr(update1Time),
+			FailoverTime:    timestamppb.New(update1Time),
 			FailoverVersion: int64(11),
 		},
 		{
-			FailoverTime:    timestamp.TimePtr(update1Time),
+			FailoverTime:    timestamppb.New(update1Time),
 			FailoverVersion: int64(12),
 		},
 		{
-			FailoverTime:    timestamp.TimePtr(update1Time),
+			FailoverTime:    timestamppb.New(update1Time),
 			FailoverVersion: int64(21),
 		},
 		{
-			FailoverTime:    timestamp.TimePtr(update1Time),
+			FailoverTime:    timestamppb.New(update1Time),
 			FailoverVersion: int64(22),
 		},
 	}
@@ -830,7 +831,7 @@ func (s *namespaceHandlerCommonSuite) TestUpdateNamespace_UpdateActiveCluster_Li
 	}, nil)
 	sizeLimitedFailoverHistory := slices.Clone(failoverHistory)
 	sizeLimitedFailoverHistory = append(sizeLimitedFailoverHistory, &persistencespb.FailoverStatus{
-		FailoverTime:    timestamp.TimePtr(update1Time),
+		FailoverTime:    timestamppb.New(update1Time),
 		FailoverVersion: 32,
 	})
 	sizeLimitedFailoverHistory = sizeLimitedFailoverHistory[0:]
@@ -885,7 +886,7 @@ func (s *namespaceHandlerCommonSuite) TestRegisterLocalNamespace_InvalidGlobalNa
 		Namespace:                        namespace,
 		Description:                      description,
 		OwnerEmail:                       email,
-		WorkflowExecutionRetentionPeriod: &retention,
+		WorkflowExecutionRetentionPeriod: durationpb.New(retention),
 		Clusters:                         clusters,
 		ActiveClusterName:                activeClusterName,
 		Data:                             data,
@@ -924,7 +925,7 @@ func (s *namespaceHandlerCommonSuite) TestRegisterLocalNamespace_InvalidCluster(
 		Namespace:                        namespace,
 		Description:                      description,
 		OwnerEmail:                       email,
-		WorkflowExecutionRetentionPeriod: &retention,
+		WorkflowExecutionRetentionPeriod: durationpb.New(retention),
 		Clusters:                         clusters,
 		ActiveClusterName:                activeClusterName,
 		Data:                             data,
@@ -937,7 +938,7 @@ func (s *namespaceHandlerCommonSuite) TestRegisterLocalNamespace_InvalidCluster(
 
 func (s *namespaceHandlerCommonSuite) TestRegisterLocalNamespace_AllDefault() {
 	namespace := s.getRandomNamespace()
-	retention := timestamp.DurationPtr(time.Hour)
+	retention := durationpb.New(time.Hour)
 	s.mockClusterMetadata.EXPECT().IsGlobalNamespaceEnabled().Return(false).AnyTimes()
 	s.mockClusterMetadata.EXPECT().IsMasterCluster().Return(true).AnyTimes()
 	s.mockClusterMetadata.EXPECT().GetAllClusterInfo().Return(map[string]cluster.ClusterInformation{
@@ -975,7 +976,7 @@ func (s *namespaceHandlerCommonSuite) TestRegisterLocalNamespace_NoDefault() {
 	namespace := s.getRandomNamespace()
 	description := "some random description"
 	email := "some random email"
-	retention := timestamp.DurationPtr(7 * time.Hour * 24)
+	retention := durationpb.New(7 * time.Hour * 24)
 	activeClusterName := cluster.TestCurrentClusterName
 	clusters := []*replicationpb.ClusterReplicationConfig{
 		{
@@ -1057,7 +1058,7 @@ func (s *namespaceHandlerCommonSuite) TestUpdateLocalNamespace_NoAttrSet() {
 				Data:        data,
 			},
 			Config: &persistencespb.NamespaceConfig{
-				Retention: &retention,
+				Retention: durationpb.New(retention),
 			},
 			ReplicationConfig: &persistencespb.NamespaceReplicationConfig{
 				ActiveClusterName: cluster.TestCurrentClusterName,
@@ -1077,7 +1078,7 @@ func (s *namespaceHandlerCommonSuite) TestUpdateLocalNamespace_AllAttrSet() {
 	namespace := s.getRandomNamespace()
 	description := "some random description"
 	email := "some random email"
-	retention := timestamp.DurationPtr(7 * time.Hour * 24)
+	retention := durationpb.New(7 * time.Hour * 24)
 	activeClusterName := cluster.TestCurrentClusterName
 	data := map[string]string{"some random key": "some random value"}
 	version := int64(100)
@@ -1161,7 +1162,7 @@ func (s *namespaceHandlerCommonSuite) TestUpdateLocalNamespace_AllAttrSet() {
 
 func (s *namespaceHandlerCommonSuite) TestRegisterGlobalNamespace_AllDefault() {
 	namespace := s.getRandomNamespace()
-	retention := timestamp.DurationPtr(24 * time.Hour)
+	retention := durationpb.New(24 * time.Hour)
 	s.mockProducer.EXPECT().Publish(gomock.Any(), gomock.Any()).Return(nil).Times(0)
 	s.mockClusterMetadata.EXPECT().IsGlobalNamespaceEnabled().Return(true).AnyTimes()
 	s.mockClusterMetadata.EXPECT().IsMasterCluster().Return(true).AnyTimes()
@@ -1200,7 +1201,7 @@ func (s *namespaceHandlerCommonSuite) TestRegisterGlobalNamespace_AllDefault() {
 
 func (s *namespaceHandlerCommonSuite) TestRegisterGlobalNamespace_NoDefault() {
 	namespace := s.getRandomNamespace()
-	retention := timestamp.DurationPtr(24 * time.Hour)
+	retention := durationpb.New(24 * time.Hour)
 	description := "description"
 	email := "email"
 	clusters := []*replicationpb.ClusterReplicationConfig{
@@ -1291,7 +1292,7 @@ func (s *namespaceHandlerCommonSuite) TestUpdateGlobalNamespace_NoAttrSet() {
 				Data:        data,
 			},
 			Config: &persistencespb.NamespaceConfig{
-				Retention: &retention,
+				Retention: durationpb.New(retention),
 			},
 			ReplicationConfig: &persistencespb.NamespaceReplicationConfig{
 				ActiveClusterName: cluster.TestCurrentClusterName,
@@ -1312,7 +1313,7 @@ func (s *namespaceHandlerCommonSuite) TestUpdateGlobalNamespace_AllAttrSet() {
 	namespace := s.getRandomNamespace()
 	description := "some random description"
 	email := "some random email"
-	retention := timestamp.DurationPtr(7 * time.Hour * 24)
+	retention := durationpb.New(7 * time.Hour * 24)
 	data := map[string]string{"some random key": "some random value"}
 	version := int64(100)
 	nid := uuid.New()
@@ -1389,7 +1390,7 @@ func (s *namespaceHandlerCommonSuite) TestUpdateGlobalNamespace_AllAttrSet() {
 
 func (s *namespaceHandlerCommonSuite) TestRegisterLocalNamespace_NotMaster() {
 	namespace := s.getRandomNamespace()
-	retention := timestamp.DurationPtr(time.Hour)
+	retention := durationpb.New(time.Hour)
 	s.mockClusterMetadata.EXPECT().IsGlobalNamespaceEnabled().Return(false).AnyTimes()
 	s.mockClusterMetadata.EXPECT().IsMasterCluster().Return(false).AnyTimes()
 	s.mockClusterMetadata.EXPECT().GetAllClusterInfo().Return(map[string]cluster.ClusterInformation{
@@ -1427,7 +1428,7 @@ func (s *namespaceHandlerCommonSuite) TestUpdateLocalNamespace_NotMaster() {
 	namespace := s.getRandomNamespace()
 	description := "some random description"
 	email := "some random email"
-	retention := timestamp.DurationPtr(7 * time.Hour * 24)
+	retention := durationpb.New(7 * time.Hour * 24)
 	activeClusterName := cluster.TestCurrentClusterName
 	data := map[string]string{"some random key": "some random value"}
 	version := int64(100)
@@ -1505,7 +1506,7 @@ func (s *namespaceHandlerCommonSuite) TestUpdateLocalNamespace_NotMaster() {
 
 func (s *namespaceHandlerCommonSuite) TestRegisterGlobalNamespace_NotMaster() {
 	namespace := s.getRandomNamespace()
-	retention := timestamp.DurationPtr(24 * time.Hour)
+	retention := durationpb.New(24 * time.Hour)
 	s.mockClusterMetadata.EXPECT().IsGlobalNamespaceEnabled().Return(true).AnyTimes()
 	s.mockClusterMetadata.EXPECT().IsMasterCluster().Return(false).AnyTimes()
 
@@ -1522,7 +1523,7 @@ func (s *namespaceHandlerCommonSuite) TestUpdateGlobalNamespace_NotMaster() {
 	namespace := s.getRandomNamespace()
 	description := "some random description"
 	email := "some random email"
-	retention := timestamp.DurationPtr(7 * time.Hour * 24)
+	retention := durationpb.New(7 * time.Hour * 24)
 	data := map[string]string{"some random key": "some random value"}
 	version := int64(100)
 	nid := uuid.New()
@@ -1647,7 +1648,7 @@ func (s *namespaceHandlerCommonSuite) TestFailoverGlobalNamespace_NotMaster() {
 				Clusters:          []string{clusterName1, clusterName2},
 				FailoverHistory: []*persistencespb.FailoverStatus{
 					{
-						FailoverTime:    timestamp.TimePtr(update1Time),
+						FailoverTime:    timestamppb.New(update1Time),
 						FailoverVersion: 2,
 					},
 				},

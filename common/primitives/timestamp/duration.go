@@ -26,36 +26,38 @@ package timestamp
 
 import (
 	"time"
+
+	"google.golang.org/protobuf/types/known/durationpb"
 )
 
-func DurationPtr(td time.Duration) *time.Duration {
-	return &td
+func DurationPtr(td time.Duration) *durationpb.Duration {
+	return durationpb.New(td)
 }
 
-func DurationFromSeconds(s int64) *time.Duration {
+func DurationFromSeconds(s int64) *durationpb.Duration {
 	return durationMultipleOf(s, time.Second)
 }
 
-func DurationFromMinutes(m int64) *time.Duration {
+func DurationFromMinutes(m int64) *durationpb.Duration {
 	return durationMultipleOf(m, time.Minute)
 }
 
-func DurationFromHours(h int64) *time.Duration {
+func DurationFromHours(h int64) *durationpb.Duration {
 	return durationMultipleOf(h, time.Hour)
 }
 
-func DurationFromDays(d int32) *time.Duration {
+func DurationFromDays(d int32) *durationpb.Duration {
 	return durationMultipleOf(int64(d), time.Hour*24)
 }
 
-func durationMultipleOf(amt int64, mult time.Duration) *time.Duration {
+func durationMultipleOf(amt int64, mult time.Duration) *durationpb.Duration {
 	return DurationPtr(time.Duration(amt) * mult)
 }
 
-func DaysFromDuration(duration *time.Duration) int {
-	return int(duration.Hours() / 24)
+func DaysFromDuration(duration *durationpb.Duration) int {
+	return int(duration.AsDuration().Hours() / 24)
 }
 
-func DaysInt32FromDuration(duration *time.Duration) int32 {
+func DaysInt32FromDuration(duration *durationpb.Duration) int32 {
 	return int32(DaysFromDuration(duration))
 }

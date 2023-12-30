@@ -34,6 +34,9 @@ import (
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/suite"
+	"google.golang.org/protobuf/types/known/durationpb"
+	"google.golang.org/protobuf/types/known/timestamppb"
+
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	failurepb "go.temporal.io/api/failure/v1"
@@ -46,7 +49,6 @@ import (
 	schedspb "go.temporal.io/server/api/schedule/v1"
 	"go.temporal.io/server/common/payload"
 	"go.temporal.io/server/common/payloads"
-	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/common/searchattribute"
 )
 
@@ -150,7 +152,7 @@ func (s *workflowSuite) expectStart(f func(req *schedspb.StartWorkflowRequest) (
 			if resp == nil && err == nil { // fill in defaults so callers can be more concise
 				resp = &schedspb.StartWorkflowResponse{
 					RunId:         uuid.NewString(),
-					RealStartTime: timestamp.TimePtr(s.env.Now()),
+					RealStartTime: timestamppb.New(s.env.Now()),
 				}
 			}
 
@@ -211,7 +213,7 @@ func (s *workflowSuite) setupMocksForWorkflows(runs []workflowRun, state *runAcr
 				state.started[req.Request.WorkflowId] = s.now()
 				return &schedspb.StartWorkflowResponse{
 					RunId:         uuid.NewString(),
-					RealStartTime: timestamp.TimePtr(time.Now()),
+					RealStartTime: timestamppb.New(time.Now()),
 				}, nil
 			})
 		// set up short-poll watchers
@@ -307,7 +309,7 @@ func (s *workflowSuite) runAcrossContinue(
 
 			startTime = s.now()
 			startArgs = nil
-			s.NoError(payloads.Decode(canErr.Input, &startArgs))
+			s.Require().NoError(payloads.Decode(canErr.Input, &startArgs))
 		}
 		// check starts that we actually got
 		s.Require().Equal(len(runs), len(state.started))
@@ -338,7 +340,7 @@ func (s *workflowSuite) TestStart() {
 	s.run(&schedpb.Schedule{
 		Spec: &schedpb.ScheduleSpec{
 			Interval: []*schedpb.IntervalSpec{{
-				Interval: timestamp.DurationPtr(55 * time.Minute),
+				Interval: durationpb.New(55 * time.Minute),
 			}},
 		},
 	}, 2)
@@ -373,7 +375,7 @@ func (s *workflowSuite) TestInitialPatch() {
 		Schedule: &schedpb.Schedule{
 			Spec: &schedpb.ScheduleSpec{
 				Interval: []*schedpb.IntervalSpec{{
-					Interval: timestamp.DurationPtr(55 * time.Minute),
+					Interval: durationpb.New(55 * time.Minute),
 				}},
 			},
 			Action: s.defaultAction("myid"),
@@ -429,7 +431,7 @@ func (s *workflowSuite) TestCatchupWindow() {
 			},
 			Action: s.defaultAction("myid"),
 			Policies: &schedpb.SchedulePolicies{
-				CatchupWindow: timestamp.DurationPtr(1 * time.Hour),
+				CatchupWindow: durationpb.New(1 * time.Hour),
 			},
 		},
 		State: &schedspb.InternalState{
@@ -438,7 +440,7 @@ func (s *workflowSuite) TestCatchupWindow() {
 			ScheduleId:    "myschedule",
 			ConflictToken: InitialConflictToken,
 			// workflow "woke up" after 6 hours
-			LastProcessedTime: timestamp.TimePtr(time.Date(2022, 5, 31, 18, 0, 0, 0, time.UTC)),
+			LastProcessedTime: timestamppb.New(time.Date(2022, 5, 31, 18, 0, 0, 0, time.UTC)),
 		},
 	})
 	s.True(s.env.IsWorkflowCompleted())
@@ -472,7 +474,7 @@ func (s *workflowSuite) TestCatchupWindowWhilePaused() {
 			},
 			Action: s.defaultAction("myid"),
 			Policies: &schedpb.SchedulePolicies{
-				CatchupWindow: timestamp.DurationPtr(1 * time.Hour),
+				CatchupWindow: durationpb.New(1 * time.Hour),
 			},
 			State: &schedpb.ScheduleState{
 				Paused: true,
@@ -484,7 +486,7 @@ func (s *workflowSuite) TestCatchupWindowWhilePaused() {
 			ScheduleId:    "myschedule",
 			ConflictToken: InitialConflictToken,
 			// workflow "woke up" after 6 hours
-			LastProcessedTime: timestamp.TimePtr(time.Date(2022, 5, 31, 18, 0, 0, 0, time.UTC)),
+			LastProcessedTime: timestamppb.New(time.Date(2022, 5, 31, 18, 0, 0, 0, time.UTC)),
 		},
 	})
 	s.True(s.env.IsWorkflowCompleted())
@@ -530,7 +532,7 @@ func (s *workflowSuite) TestOverlapSkip() {
 		&schedpb.Schedule{
 			Spec: &schedpb.ScheduleSpec{
 				Interval: []*schedpb.IntervalSpec{{
-					Interval: timestamp.DurationPtr(5 * time.Minute),
+					Interval: durationpb.New(5 * time.Minute),
 				}},
 			},
 			Policies: &schedpb.SchedulePolicies{
@@ -609,7 +611,7 @@ func (s *workflowSuite) TestOverlapBufferOne() {
 		&schedpb.Schedule{
 			Spec: &schedpb.ScheduleSpec{
 				Interval: []*schedpb.IntervalSpec{{
-					Interval: timestamp.DurationPtr(5 * time.Minute),
+					Interval: durationpb.New(5 * time.Minute),
 				}},
 			},
 			Policies: &schedpb.SchedulePolicies{
@@ -674,7 +676,7 @@ func (s *workflowSuite) TestOverlapBufferAll() {
 		&schedpb.Schedule{
 			Spec: &schedpb.ScheduleSpec{
 				Interval: []*schedpb.IntervalSpec{{
-					Interval: timestamp.DurationPtr(5 * time.Minute),
+					Interval: durationpb.New(5 * time.Minute),
 				}},
 			},
 			Policies: &schedpb.SchedulePolicies{
@@ -752,7 +754,7 @@ func (s *workflowSuite) TestBufferLimit() {
 		&schedpb.Schedule{
 			Spec: &schedpb.ScheduleSpec{
 				Interval: []*schedpb.IntervalSpec{{
-					Interval: timestamp.DurationPtr(5 * time.Minute),
+					Interval: durationpb.New(5 * time.Minute),
 				}},
 			},
 			Policies: &schedpb.SchedulePolicies{
@@ -799,7 +801,7 @@ func (s *workflowSuite) TestOverlapCancel() {
 	s.run(&schedpb.Schedule{
 		Spec: &schedpb.ScheduleSpec{
 			Interval: []*schedpb.IntervalSpec{{
-				Interval: timestamp.DurationPtr(55 * time.Minute),
+				Interval: durationpb.New(55 * time.Minute),
 			}},
 		},
 		Policies: &schedpb.SchedulePolicies{
@@ -850,7 +852,7 @@ func (s *workflowSuite) TestOverlapTerminate() {
 	s.run(&schedpb.Schedule{
 		Spec: &schedpb.ScheduleSpec{
 			Interval: []*schedpb.IntervalSpec{{
-				Interval: timestamp.DurationPtr(55 * time.Minute),
+				Interval: durationpb.New(55 * time.Minute),
 			}},
 		},
 		Policies: &schedpb.SchedulePolicies{
@@ -898,7 +900,7 @@ func (s *workflowSuite) TestOverlapAllowAll() {
 		&schedpb.Schedule{
 			Spec: &schedpb.ScheduleSpec{
 				Interval: []*schedpb.IntervalSpec{{
-					Interval: timestamp.DurationPtr(5 * time.Minute),
+					Interval: durationpb.New(5 * time.Minute),
 				}},
 			},
 			Policies: &schedpb.SchedulePolicies{
@@ -941,7 +943,7 @@ func (s *workflowSuite) TestFailedStart() {
 	s.run(&schedpb.Schedule{
 		Spec: &schedpb.ScheduleSpec{
 			Interval: []*schedpb.IntervalSpec{{
-				Interval: timestamp.DurationPtr(5 * time.Minute),
+				Interval: durationpb.New(5 * time.Minute),
 			}},
 		},
 	}, 4)
@@ -1011,7 +1013,7 @@ func (s *workflowSuite) TestLastCompletionResultAndContinuedFailure() {
 	s.run(&schedpb.Schedule{
 		Spec: &schedpb.ScheduleSpec{
 			Interval: []*schedpb.IntervalSpec{{
-				Interval: timestamp.DurationPtr(5 * time.Minute),
+				Interval: durationpb.New(5 * time.Minute),
 			}},
 		},
 		Policies: &schedpb.SchedulePolicies{
@@ -1047,7 +1049,7 @@ func (s *workflowSuite) TestOnlyStartForAllowAll() {
 	s.run(&schedpb.Schedule{
 		Spec: &schedpb.ScheduleSpec{
 			Interval: []*schedpb.IntervalSpec{{
-				Interval: timestamp.DurationPtr(5 * time.Minute),
+				Interval: durationpb.New(5 * time.Minute),
 			}},
 		},
 		Policies: &schedpb.SchedulePolicies{
@@ -1092,7 +1094,7 @@ func (s *workflowSuite) TestPauseOnFailure() {
 	s.run(&schedpb.Schedule{
 		Spec: &schedpb.ScheduleSpec{
 			Interval: []*schedpb.IntervalSpec{{
-				Interval: timestamp.DurationPtr(5 * time.Minute),
+				Interval: durationpb.New(5 * time.Minute),
 			}},
 		},
 		Policies: &schedpb.SchedulePolicies{
@@ -1165,7 +1167,7 @@ func (s *workflowSuite) TestTriggerImmediate() {
 		&schedpb.Schedule{
 			Spec: &schedpb.ScheduleSpec{
 				Interval: []*schedpb.IntervalSpec{{
-					Interval: timestamp.DurationPtr(55 * time.Minute),
+					Interval: durationpb.New(55 * time.Minute),
 				}},
 			},
 			Policies: &schedpb.SchedulePolicies{
@@ -1216,10 +1218,76 @@ func (s *workflowSuite) TestBackfill() {
 				f: func() {
 					s.env.SignalWorkflow(SignalNamePatch, &schedpb.SchedulePatch{
 						BackfillRequest: []*schedpb.BackfillRequest{{
-							StartTime:     timestamp.TimePtr(time.Date(2022, 5, 31, 0, 0, 0, 0, time.UTC)),
-							EndTime:       timestamp.TimePtr(time.Date(2022, 6, 1, 0, 0, 0, 0, time.UTC)),
+							StartTime:     timestamppb.New(time.Date(2022, 5, 31, 0, 0, 0, 0, time.UTC)),
+							EndTime:       timestamppb.New(time.Date(2022, 6, 1, 0, 0, 0, 0, time.UTC)),
 							OverlapPolicy: enumspb.SCHEDULE_OVERLAP_POLICY_BUFFER_ALL,
 						}},
+					})
+				},
+			},
+			{
+				at:         time.Date(2022, 7, 31, 19, 6, 0, 0, time.UTC),
+				finishTest: true,
+			},
+		},
+		&schedpb.Schedule{
+			Spec: &schedpb.ScheduleSpec{
+				Calendar: []*schedpb.CalendarSpec{{
+					Minute:     "*/17",
+					Hour:       "19",
+					DayOfMonth: "31",
+				}},
+			},
+			Policies: &schedpb.SchedulePolicies{
+				OverlapPolicy: enumspb.SCHEDULE_OVERLAP_POLICY_SKIP,
+			},
+		},
+	)
+}
+
+func (s *workflowSuite) TestBackfillInclusiveStartEnd() {
+	// TODO: remove once default version is InclusiveBackfillStartTime
+	currentVersion := currentTweakablePolicies.Version
+	currentTweakablePolicies.Version = InclusiveBackfillStartTime
+	defer func() { currentTweakablePolicies.Version = currentVersion }()
+
+	s.runAcrossContinue(
+		[]workflowRun{
+			// if start and end time were not inclusive, this backfill run would not exist
+			{
+				id:     "myid-2022-05-31T19:17:00Z",
+				start:  time.Date(2022, 6, 1, 0, 5, 0, 0, time.UTC),
+				end:    time.Date(2022, 6, 1, 0, 9, 0, 0, time.UTC),
+				result: enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED,
+			},
+			// this is the scheduled one
+			{
+				id:     "myid-2022-07-31T19:00:00Z",
+				start:  time.Date(2022, 7, 31, 19, 0, 0, 0, time.UTC),
+				end:    time.Date(2022, 7, 31, 19, 5, 0, 0, time.UTC),
+				result: enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED,
+			},
+		},
+		[]delayedCallback{
+			{
+				at: time.Date(2022, 6, 1, 0, 5, 0, 0, time.UTC),
+				f: func() {
+					triggerBackfillTime := time.Date(2022, 5, 31, 19, 17, 0, 0, time.UTC)
+					triggerBackfill := &schedpb.BackfillRequest{
+						StartTime:     timestamppb.New(triggerBackfillTime),
+						EndTime:       timestamppb.New(triggerBackfillTime),
+						OverlapPolicy: enumspb.SCHEDULE_OVERLAP_POLICY_BUFFER_ALL,
+					}
+
+					ignoreBackfillTime := triggerBackfillTime.Add(500 * time.Millisecond)
+					ignoreBackfill := &schedpb.BackfillRequest{
+						StartTime:     timestamppb.New(ignoreBackfillTime),
+						EndTime:       timestamppb.New(ignoreBackfillTime),
+						OverlapPolicy: enumspb.SCHEDULE_OVERLAP_POLICY_BUFFER_ALL,
+					}
+
+					s.env.SignalWorkflow(SignalNamePatch, &schedpb.SchedulePatch{
+						BackfillRequest: []*schedpb.BackfillRequest{triggerBackfill, ignoreBackfill},
 					})
 				},
 			},
@@ -1307,7 +1375,7 @@ func (s *workflowSuite) TestPause() {
 		&schedpb.Schedule{
 			Spec: &schedpb.ScheduleSpec{
 				Interval: []*schedpb.IntervalSpec{{
-					Interval: timestamp.DurationPtr(3 * time.Minute),
+					Interval: durationpb.New(3 * time.Minute),
 				}},
 			},
 			Policies: &schedpb.SchedulePolicies{
@@ -1365,7 +1433,7 @@ func (s *workflowSuite) TestUpdate() {
 						Schedule: &schedpb.Schedule{
 							Spec: &schedpb.ScheduleSpec{
 								Interval: []*schedpb.IntervalSpec{{
-									Interval: timestamp.DurationPtr(5 * time.Minute),
+									Interval: durationpb.New(5 * time.Minute),
 								}},
 							},
 							Policies: &schedpb.SchedulePolicies{
@@ -1394,7 +1462,7 @@ func (s *workflowSuite) TestUpdate() {
 		&schedpb.Schedule{
 			Spec: &schedpb.ScheduleSpec{
 				Interval: []*schedpb.IntervalSpec{{
-					Interval: timestamp.DurationPtr(3 * time.Minute),
+					Interval: durationpb.New(3 * time.Minute),
 				}},
 			},
 			Policies: &schedpb.SchedulePolicies{
@@ -1434,7 +1502,7 @@ func (s *workflowSuite) TestUpdateNotRetroactive() {
 						Schedule: &schedpb.Schedule{
 							Spec: &schedpb.ScheduleSpec{
 								Interval: []*schedpb.IntervalSpec{{
-									Interval: timestamp.DurationPtr(20 * time.Second),
+									Interval: durationpb.New(20 * time.Second),
 								}},
 							},
 							Action: s.defaultAction("newid"),
@@ -1450,7 +1518,7 @@ func (s *workflowSuite) TestUpdateNotRetroactive() {
 		&schedpb.Schedule{
 			Spec: &schedpb.ScheduleSpec{
 				Interval: []*schedpb.IntervalSpec{{
-					Interval: timestamp.DurationPtr(1 * time.Hour),
+					Interval: durationpb.New(1 * time.Hour),
 				}},
 			},
 		},
@@ -1505,7 +1573,7 @@ func (s *workflowSuite) TestLimitedActions() {
 	s.run(&schedpb.Schedule{
 		Spec: &schedpb.ScheduleSpec{
 			Interval: []*schedpb.IntervalSpec{{
-				Interval: timestamp.DurationPtr(3 * time.Minute),
+				Interval: durationpb.New(3 * time.Minute),
 			}},
 		},
 		State: &schedpb.ScheduleState{
@@ -1566,8 +1634,8 @@ func (s *workflowSuite) TestLotsOfIterations() {
 			f: func() {
 				s.env.SignalWorkflow(SignalNamePatch, &schedpb.SchedulePatch{
 					BackfillRequest: []*schedpb.BackfillRequest{{
-						StartTime:     timestamp.TimePtr(callBackRangeStartTime),
-						EndTime:       timestamp.TimePtr(callBackRangeStartTime.Add(time.Duration(maxRuns) * time.Hour)),
+						StartTime:     timestamppb.New(callBackRangeStartTime),
+						EndTime:       timestamppb.New(callBackRangeStartTime.Add(time.Duration(maxRuns) * time.Hour)),
 						OverlapPolicy: enumspb.SCHEDULE_OVERLAP_POLICY_BUFFER_ALL,
 					}},
 				})
@@ -1619,7 +1687,7 @@ func (s *workflowSuite) TestExitScheduleWorkflowWhenNoActions() {
 		Schedule: &schedpb.Schedule{
 			Spec: &schedpb.ScheduleSpec{
 				Interval: []*schedpb.IntervalSpec{{
-					Interval: timestamp.DurationPtr(15 * time.Minute),
+					Interval: durationpb.New(15 * time.Minute),
 				}},
 			},
 			State: &schedpb.ScheduleState{
@@ -1724,7 +1792,7 @@ func (s *workflowSuite) TestCANByIterations() {
 	s.run(&schedpb.Schedule{
 		Spec: &schedpb.ScheduleSpec{
 			Interval: []*schedpb.IntervalSpec{{
-				Interval: timestamp.DurationPtr(5 * time.Minute),
+				Interval: durationpb.New(5 * time.Minute),
 			}},
 		},
 		Policies: &schedpb.SchedulePolicies{
@@ -1760,7 +1828,7 @@ func (s *workflowSuite) TestCANBySuggested() {
 	s.run(&schedpb.Schedule{
 		Spec: &schedpb.ScheduleSpec{
 			Interval: []*schedpb.IntervalSpec{{
-				Interval: timestamp.DurationPtr(5 * time.Minute),
+				Interval: durationpb.New(5 * time.Minute),
 			}},
 		},
 		Policies: &schedpb.SchedulePolicies{
@@ -1796,7 +1864,7 @@ func (s *workflowSuite) TestCANBySignal() {
 	s.run(&schedpb.Schedule{
 		Spec: &schedpb.ScheduleSpec{
 			Interval: []*schedpb.IntervalSpec{{
-				Interval: timestamp.DurationPtr(5 * time.Minute),
+				Interval: durationpb.New(5 * time.Minute),
 			}},
 		},
 		Policies: &schedpb.SchedulePolicies{

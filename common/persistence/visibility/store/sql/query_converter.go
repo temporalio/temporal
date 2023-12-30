@@ -31,7 +31,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/xwb1989/sqlparser"
+	"github.com/temporalio/sqlparser"
 
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/server/common/namespace"
@@ -79,6 +79,15 @@ type (
 	}
 )
 
+const (
+	// Default escape char is set explicitly to '!' for two reasons:
+	// 1. SQLite doesn't have a default escape char;
+	// 2. MySQL requires to escape the backslack char unlike SQLite and PostgreSQL.
+	// Thus, in order to avoid having specific code for each DB, it's better to
+	// set the escape char to a simpler char that doesn't require escaping.
+	defaultLikeEscapeChar = '!'
+)
+
 var (
 	// strings.Replacer takes a sequence of old to new replacements
 	escapeCharMap = []string{
@@ -100,6 +109,8 @@ var (
 		sqlparser.GreaterEqualStr,
 		sqlparser.InStr,
 		sqlparser.NotInStr,
+		sqlparser.StartsWithStr,
+		sqlparser.NotStartsWithStr,
 	}
 
 	supportedKeyworkListOperators = []string{
@@ -120,6 +131,8 @@ var (
 		enumspb.INDEXED_VALUE_TYPE_INT,
 		enumspb.INDEXED_VALUE_TYPE_KEYWORD,
 	}
+
+	defaultLikeEscapeExpr = newUnsafeSQLString(string(defaultLikeEscapeChar))
 )
 
 func newQueryConverterInternal(
@@ -194,7 +207,7 @@ func (c *QueryConverter) convertWhereString(queryString string) (*queryParams, e
 	sql := "select * from table1 " + where
 	stmt, err := sqlparser.Parse(sql)
 	if err != nil {
-		return nil, err
+		return nil, query.NewConverterError("%s: %v", query.MalformedSqlQueryErrMessage, err)
 	}
 
 	selectStmt, _ := stmt.(*sqlparser.Select)
@@ -372,6 +385,7 @@ func (c *QueryConverter) convertComparisonExpr(exprRef *sqlparser.Expr) error {
 	if err != nil {
 		return err
 	}
+
 	switch saColNameExpr.valueType {
 	case enumspb.INDEXED_VALUE_TYPE_KEYWORD_LIST:
 		newExpr, err := c.convertKeywordListComparisonExpr(expr)
@@ -386,6 +400,27 @@ func (c *QueryConverter) convertComparisonExpr(exprRef *sqlparser.Expr) error {
 		}
 		*exprRef = newExpr
 	}
+
+	switch expr.Operator {
+	case sqlparser.StartsWithStr, sqlparser.NotStartsWithStr:
+		valueExpr, ok := expr.Right.(*unsafeSQLString)
+		if !ok {
+			return query.NewConverterError(
+				"%s: right-hand side of '%s' must be a literal string (got: %v)",
+				query.InvalidExpressionErrMessage,
+				expr.Operator,
+				sqlparser.String(expr.Right),
+			)
+		}
+		if expr.Operator == sqlparser.StartsWithStr {
+			expr.Operator = sqlparser.LikeStr
+		} else {
+			expr.Operator = sqlparser.NotLikeStr
+		}
+		expr.Escape = defaultLikeEscapeExpr
+		valueExpr.Val = escapeLikeValueForPrefixSearch(valueExpr.Val, defaultLikeEscapeChar)
+	}
+
 	return nil
 }
 
@@ -585,10 +620,10 @@ func (c *QueryConverter) parseSQLVal(
 		case int64:
 			status = v
 		case string:
-			code, ok := enumspb.WorkflowExecutionStatus_value[v]
-			if !ok {
+			code, err := enumspb.WorkflowExecutionStatusFromString(v)
+			if err != nil {
 				return nil, query.NewConverterError(
-					"%s: invalid execution status value '%s'",
+					"%s: invalid ExecutionStatus value '%s'",
 					query.InvalidExpressionErrMessage,
 					v,
 				)
@@ -648,6 +683,18 @@ func (c *QueryConverter) convertIsExpr(exprRef *sqlparser.Expr) error {
 		)
 	}
 	return nil
+}
+
+func escapeLikeValueForPrefixSearch(in string, escape byte) string {
+	sb := strings.Builder{}
+	for _, c := range in {
+		if c == '%' || c == '_' || c == rune(escape) {
+			sb.WriteByte(escape)
+		}
+		sb.WriteRune(c)
+	}
+	sb.WriteByte('%')
+	return sb.String()
 }
 
 func isSupportedOperator(supportedOperators []string, operator string) bool {

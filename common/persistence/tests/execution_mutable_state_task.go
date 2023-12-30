@@ -31,12 +31,13 @@ import (
 	"testing"
 	"time"
 
-	"github.com/gogo/protobuf/proto"
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
+	"google.golang.org/protobuf/proto"
+	"google.golang.org/protobuf/types/known/timestamppb"
 
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common"
@@ -47,7 +48,6 @@ import (
 	"go.temporal.io/server/common/persistence"
 	p "go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/persistence/serialization"
-	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/service/history/tasks"
 )
 
@@ -717,7 +717,7 @@ func newTestSerializer(
 
 func (s *testSerializer) SerializeTask(
 	task tasks.Task,
-) (commonpb.DataBlob, error) {
+) (*commonpb.DataBlob, error) {
 	if fakeTask, ok := task.(*tasks.FakeTask); ok {
 		data, err := proto.Marshal(&persistencespb.TransferTaskInfo{
 			NamespaceId:    fakeTask.WorkflowKey.NamespaceID,
@@ -726,12 +726,12 @@ func (s *testSerializer) SerializeTask(
 			TaskType:       fakeTask.GetType(),
 			Version:        fakeTask.Version,
 			TaskId:         fakeTask.TaskID,
-			VisibilityTime: timestamp.TimePtr(fakeTask.VisibilityTimestamp),
+			VisibilityTime: timestamppb.New(fakeTask.VisibilityTimestamp),
 		})
 		if err != nil {
-			return commonpb.DataBlob{}, err
+			return nil, err
 		}
-		return commonpb.DataBlob{
+		return &commonpb.DataBlob{
 			Data:         data,
 			EncodingType: enumspb.ENCODING_TYPE_PROTO3,
 		}, nil
@@ -742,7 +742,7 @@ func (s *testSerializer) SerializeTask(
 
 func (s *testSerializer) DeserializeTask(
 	category tasks.Category,
-	blob commonpb.DataBlob,
+	blob *commonpb.DataBlob,
 ) (tasks.Task, error) {
 	categoryID := category.ID()
 	if categoryID != fakeImmediateTaskCategory.ID() &&
@@ -762,7 +762,7 @@ func (s *testSerializer) DeserializeTask(
 			taskInfo.RunId,
 		),
 		category,
-		*taskInfo.VisibilityTime,
+		taskInfo.VisibilityTime.AsTime(),
 	)
 	fakeTask.SetTaskID(taskInfo.TaskId)
 

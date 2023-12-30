@@ -32,7 +32,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/gogo/protobuf/types"
 	"github.com/golang/mock/gomock"
 	"github.com/pborman/uuid"
 	"github.com/stretchr/testify/assert"
@@ -42,6 +41,7 @@ import (
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
 	"google.golang.org/grpc"
+	"google.golang.org/protobuf/types/known/emptypb"
 
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	"go.temporal.io/server/api/historyservice/v1"
@@ -175,8 +175,9 @@ func TestDeliverBufferTasks_DisableUserData_SendsDefaultToUnversioned(t *testing
 
 	tlm.taskReader.taskBuffer <- &persistencespb.AllocatedTaskInfo{
 		Data: &persistencespb.TaskInfo{
+			CreateTime: timestamp.TimePtr(time.Now().UTC()),
 			VersionDirective: &taskqueue.TaskVersionDirective{
-				Value: &taskqueue.TaskVersionDirective_UseDefault{UseDefault: &types.Empty{}},
+				Value: &taskqueue.TaskVersionDirective_UseDefault{UseDefault: &emptypb.Empty{}},
 			},
 		},
 	}
@@ -307,8 +308,10 @@ func TestForeignPartitionOwnerCausesUnload(t *testing.T) {
 	// without a poller to consume the one task ID from the reserved block.
 	sync, err := tqm.AddTask(context.TODO(), addTaskParams{
 		execution: &commonpb.WorkflowExecution{},
-		taskInfo:  &persistencespb.TaskInfo{},
-		source:    enumsspb.TASK_SOURCE_HISTORY})
+		taskInfo: &persistencespb.TaskInfo{
+			CreateTime: timestamp.TimePtr(time.Now().UTC()),
+		},
+		source: enumsspb.TASK_SOURCE_HISTORY})
 	require.False(t, sync)
 	require.NoError(t, err)
 
@@ -319,8 +322,10 @@ func TestForeignPartitionOwnerCausesUnload(t *testing.T) {
 
 	sync, err = tqm.AddTask(context.TODO(), addTaskParams{
 		execution: &commonpb.WorkflowExecution{},
-		taskInfo:  &persistencespb.TaskInfo{},
-		source:    enumsspb.TASK_SOURCE_HISTORY,
+		taskInfo: &persistencespb.TaskInfo{
+			CreateTime: timestamp.TimePtr(time.Now().UTC()),
+		},
+		source: enumsspb.TASK_SOURCE_HISTORY,
 	})
 	require.NoError(t, err)
 	require.False(t, sync)
@@ -349,8 +354,10 @@ func TestReaderSignaling(t *testing.T) {
 
 	sync, err := tqm.AddTask(context.TODO(), addTaskParams{
 		execution: &commonpb.WorkflowExecution{},
-		taskInfo:  &persistencespb.TaskInfo{},
-		source:    enumsspb.TASK_SOURCE_HISTORY})
+		taskInfo: &persistencespb.TaskInfo{
+			CreateTime: timestamp.TimePtr(time.Now().UTC()),
+		},
+		source: enumsspb.TASK_SOURCE_HISTORY})
 	require.NoError(t, err)
 	require.False(t, sync)
 	require.Len(t, readerNotifications, 1,
@@ -362,20 +369,22 @@ func TestReaderSignaling(t *testing.T) {
 
 	sync, err = tqm.AddTask(context.TODO(), addTaskParams{
 		execution: &commonpb.WorkflowExecution{},
-		taskInfo:  &persistencespb.TaskInfo{},
-		source:    enumsspb.TASK_SOURCE_HISTORY})
+		taskInfo: &persistencespb.TaskInfo{
+			CreateTime: timestamp.TimePtr(time.Now().UTC()),
+		},
+		source: enumsspb.TASK_SOURCE_HISTORY})
 	require.NoError(t, err)
 	require.True(t, sync)
 	require.Len(t, readerNotifications, 0,
 		"Sync match should not signal taskReader")
 }
 
-// runOneShotPoller spawns a goroutine to call tqm.GetTask on the provided tqm.
+// runOneShotPoller spawns a goroutine to call tqm.PollTask on the provided tqm.
 // The second return value is a channel of either error or *internalTask.
 func runOneShotPoller(ctx context.Context, tqm taskQueueManager) (*goro.Handle, chan interface{}) {
 	out := make(chan interface{}, 1)
 	handle := goro.NewHandle(ctx).Go(func(ctx context.Context) error {
-		task, err := tqm.GetTask(ctx, &pollMetadata{ratePerSecond: &rpsInf})
+		task, err := tqm.PollTask(ctx, &pollMetadata{ratePerSecond: &rpsInf})
 		if task == nil {
 			out <- err
 			return nil
@@ -384,7 +393,7 @@ func runOneShotPoller(ctx context.Context, tqm taskQueueManager) (*goro.Handle, 
 		out <- task
 		return nil
 	})
-	// tqm.GetTask() needs some time to attach the goro started above to the
+	// tqm.PollTask() needs some time to attach the goro started above to the
 	// internal task channel. Sorry for this but it appears unavoidable.
 	time.Sleep(10 * time.Millisecond)
 	return handle, out
@@ -565,8 +574,10 @@ func TestAddTaskStandby(t *testing.T) {
 
 	addTaskParam := addTaskParams{
 		execution: &commonpb.WorkflowExecution{},
-		taskInfo:  &persistencespb.TaskInfo{},
-		source:    enumsspb.TASK_SOURCE_HISTORY,
+		taskInfo: &persistencespb.TaskInfo{
+			CreateTime: timestamp.TimePtr(time.Now().UTC()),
+		},
+		source: enumsspb.TASK_SOURCE_HISTORY,
 	}
 
 	syncMatch, err := tlm.AddTask(context.Background(), addTaskParam)

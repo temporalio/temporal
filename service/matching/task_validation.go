@@ -130,7 +130,7 @@ func (v *taskValidatorImpl) preValidateActive(
 		if task.Data.CreateTime != nil {
 			v.lastValidatedTaskInfo = taskValidationInfo{
 				taskID:         task.TaskId,
-				validationTime: *task.Data.CreateTime, // task is valid when created
+				validationTime: task.Data.CreateTime.AsTime(), // task is valid when created
 			}
 		} else {
 			v.lastValidatedTaskInfo = taskValidationInfo{
@@ -154,7 +154,7 @@ func (v *taskValidatorImpl) preValidatePassive(
 		if task.Data.CreateTime != nil {
 			v.lastValidatedTaskInfo = taskValidationInfo{
 				taskID:         task.TaskId,
-				validationTime: *task.Data.CreateTime, // task is valid when created
+				validationTime: task.Data.CreateTime.AsTime(), // task is valid when created
 			}
 		} else {
 			v.lastValidatedTaskInfo = taskValidationInfo{

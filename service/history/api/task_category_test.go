@@ -32,7 +32,6 @@ import (
 	"go.temporal.io/api/serviceerror"
 	"google.golang.org/grpc/codes"
 
-	enumspb "go.temporal.io/server/api/enums/v1"
 	"go.temporal.io/server/service/history/api"
 	"go.temporal.io/server/service/history/tasks"
 )
@@ -41,11 +40,11 @@ func TestGetTaskCategory(t *testing.T) {
 	t.Parallel()
 
 	registry := tasks.NewDefaultTaskCategoryRegistry()
-	category, err := api.GetTaskCategory(int(enumspb.TASK_CATEGORY_TRANSFER), registry)
+	category, err := api.GetTaskCategory(tasks.CategoryIDTransfer, registry)
 	require.NoError(t, err)
-	assert.Equal(t, int(enumspb.TASK_CATEGORY_TRANSFER), category.ID())
+	assert.Equal(t, tasks.CategoryIDTransfer, category.ID())
 
-	_, err = api.GetTaskCategory(int(enumspb.TASK_CATEGORY_UNSPECIFIED), registry)
+	_, err = api.GetTaskCategory(0, registry)
 	require.Error(t, err)
 	assert.ErrorContains(t, err, "0")
 	assert.Equal(t, codes.InvalidArgument, serviceerror.ToStatus(err).Code())

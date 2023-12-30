@@ -36,6 +36,7 @@ import (
 	"go.temporal.io/server/api/matchingservice/v1"
 	"go.temporal.io/server/common/headers"
 	"go.temporal.io/server/common/quotas"
+	"go.temporal.io/server/common/testing/temporalapi"
 )
 
 type (
@@ -78,12 +79,10 @@ func (s *quotasSuite) TestAPIPrioritiesOrdered() {
 
 func (s *quotasSuite) TestAPIs() {
 	var service matchingservice.MatchingServiceServer
-	t := reflect.TypeOf(&service).Elem()
-	apiToPriority := make(map[string]int, t.NumMethod())
-	for i := 0; i < t.NumMethod(); i++ {
-		apiName := t.Method(i).Name
-		apiToPriority[apiName] = APIToPriority[apiName]
-	}
+	apiToPriority := make(map[string]int)
+	temporalapi.WalkExportedMethods(&service, func(m reflect.Method) {
+		apiToPriority[m.Name] = APIToPriority[m.Name]
+	})
 	s.Equal(apiToPriority, APIToPriority)
 }
 

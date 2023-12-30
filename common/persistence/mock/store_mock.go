@@ -1239,7 +1239,7 @@ func (mr *MockQueueMockRecorder) DeleteMessagesBefore(ctx, messageID interface{}
 }
 
 // EnqueueMessage mocks base method.
-func (m *MockQueue) EnqueueMessage(ctx context.Context, blob common.DataBlob) error {
+func (m *MockQueue) EnqueueMessage(ctx context.Context, blob *common.DataBlob) error {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "EnqueueMessage", ctx, blob)
 	ret0, _ := ret[0].(error)
@@ -1253,7 +1253,7 @@ func (mr *MockQueueMockRecorder) EnqueueMessage(ctx, blob interface{}) *gomock.C
 }
 
 // EnqueueMessageToDLQ mocks base method.
-func (m *MockQueue) EnqueueMessageToDLQ(ctx context.Context, blob common.DataBlob) (int64, error) {
+func (m *MockQueue) EnqueueMessageToDLQ(ctx context.Context, blob *common.DataBlob) (int64, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "EnqueueMessageToDLQ", ctx, blob)
 	ret0, _ := ret[0].(int64)

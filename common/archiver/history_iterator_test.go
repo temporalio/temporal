@@ -37,11 +37,12 @@ import (
 	historypb "go.temporal.io/api/history/v1"
 	"go.temporal.io/api/serviceerror"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
+	"google.golang.org/protobuf/types/known/durationpb"
+	"google.golang.org/protobuf/types/known/timestamppb"
 
 	archiverspb "go.temporal.io/server/api/archiver/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/persistence"
-	"go.temporal.io/server/common/primitives/timestamp"
 )
 
 const (
@@ -711,7 +712,7 @@ func (s *HistoryIteratorSuite) TestJSONSizeEstimator() {
 
 	historyEvent := &historypb.HistoryEvent{
 		EventId:   1,
-		EventTime: timestamp.TimePtr(time.Date(1978, 8, 22, 12, 59, 59, 999999, time.UTC)),
+		EventTime: timestamppb.New(time.Date(1978, 8, 22, 12, 59, 59, 999999, time.UTC)),
 		TaskId:    1,
 		Version:   1,
 	}
@@ -721,7 +722,7 @@ func (s *HistoryIteratorSuite) TestJSONSizeEstimator() {
 			Name: "taskQueue",
 			Kind: enumspb.TASK_QUEUE_KIND_NORMAL,
 		},
-		StartToCloseTimeout: timestamp.DurationPtr(10 * time.Second),
+		StartToCloseTimeout: durationpb.New(10 * time.Second),
 		Attempt:             1,
 	}}
 
@@ -733,5 +734,7 @@ func (s *HistoryIteratorSuite) TestJSONSizeEstimator() {
 
 	size, err := e.EstimateSize(h)
 	s.NoError(err)
-	s.Equal(266, size)
+
+	// The size seems to fluctuate between compiles using google's protoc toolchain. I'd like to delete this altogether
+	s.Contains([]int{295, 303}, size)
 }

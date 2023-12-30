@@ -186,7 +186,7 @@ func (s *executableSuite) TestExecute_InMemoryNoUserLatency_SingleAttempt() {
 			s.mockExecutor.EXPECT().Execute(gomock.Any(), executable).Do(func(ctx context.Context, taskInfo interface{}) {
 				metrics.ContextCounterAdd(
 					ctx,
-					metrics.HistoryWorkflowExecutionCacheLatency.GetMetricName(),
+					metrics.HistoryWorkflowExecutionCacheLatency.Name(),
 					int64(userLatency),
 				)
 
@@ -213,7 +213,7 @@ func (s *executableSuite) TestExecute_InMemoryNoUserLatency_SingleAttempt() {
 				capture := s.metricsHandler.StartCapture()
 				executable.Ack()
 				snapshot := capture.Snapshot()
-				recordings := snapshot[metrics.TaskLatency.GetMetricName()]
+				recordings := snapshot[metrics.TaskLatency.Name()]
 				s.Len(recordings, 1)
 				actualAttemptNoUserLatency, ok := recordings[0].Value.(time.Duration)
 				s.True(ok)
@@ -255,7 +255,7 @@ func (s *executableSuite) TestExecute_InMemoryNoUserLatency_MultipleAttempts() {
 		s.mockExecutor.EXPECT().Execute(gomock.Any(), executable).Do(func(ctx context.Context, taskInfo interface{}) {
 			metrics.ContextCounterAdd(
 				ctx,
-				metrics.HistoryWorkflowExecutionCacheLatency.GetMetricName(),
+				metrics.HistoryWorkflowExecutionCacheLatency.Name(),
 				int64(userLatencies[i]),
 			)
 
@@ -281,7 +281,7 @@ func (s *executableSuite) TestExecute_InMemoryNoUserLatency_MultipleAttempts() {
 			capture := s.metricsHandler.StartCapture()
 			executable.Ack()
 			snapshot := capture.Snapshot()
-			recordings := snapshot[metrics.TaskLatency.GetMetricName()]
+			recordings := snapshot[metrics.TaskLatency.Name()]
 			s.Len(recordings, 1)
 			actualInMemoryNoUserLatency, ok := recordings[0].Value.(time.Duration)
 			s.True(ok)
@@ -357,7 +357,7 @@ func (s *executableSuite) TestExecuteHandleErr_ResetAttempt() {
 func (s *executableSuite) TestExecuteHandleErr_Corrupted() {
 	queueWriter := &queuestest.FakeQueueWriter{}
 	executable := s.newTestExecutable(func(p *params) {
-		p.dlqWriter = queues.NewDLQWriter(queueWriter, s.mockClusterMetadata)
+		p.dlqWriter = queues.NewDLQWriter(queueWriter, s.mockClusterMetadata, metrics.NoopMetricsHandler, log.NewTestLogger(), s.mockNamespaceRegistry)
 		p.dlqEnabled = func() bool {
 			return false
 		}
@@ -377,7 +377,7 @@ func (s *executableSuite) TestExecuteHandleErr_Corrupted() {
 func (s *executableSuite) TestExecute_DLQ() {
 	queueWriter := &queuestest.FakeQueueWriter{}
 	executable := s.newTestExecutable(func(p *params) {
-		p.dlqWriter = queues.NewDLQWriter(queueWriter, s.mockClusterMetadata)
+		p.dlqWriter = queues.NewDLQWriter(queueWriter, s.mockClusterMetadata, metrics.NoopMetricsHandler, log.NewTestLogger(), s.mockNamespaceRegistry)
 		p.dlqEnabled = func() bool {
 			return true
 		}
@@ -399,7 +399,7 @@ func (s *executableSuite) TestExecute_DLQThenDisable() {
 	queueWriter := &queuestest.FakeQueueWriter{}
 	dlqEnabled := true
 	executable := s.newTestExecutable(func(p *params) {
-		p.dlqWriter = queues.NewDLQWriter(queueWriter, s.mockClusterMetadata)
+		p.dlqWriter = queues.NewDLQWriter(queueWriter, s.mockClusterMetadata, metrics.NoopMetricsHandler, log.NewTestLogger(), s.mockNamespaceRegistry)
 		p.dlqEnabled = func() bool {
 			return dlqEnabled
 		}
@@ -421,7 +421,7 @@ func (s *executableSuite) TestExecute_DLQThenDisable() {
 func (s *executableSuite) TestExecute_DLQFailThenRetry() {
 	queueWriter := &queuestest.FakeQueueWriter{}
 	executable := s.newTestExecutable(func(p *params) {
-		p.dlqWriter = queues.NewDLQWriter(queueWriter, s.mockClusterMetadata)
+		p.dlqWriter = queues.NewDLQWriter(queueWriter, s.mockClusterMetadata, metrics.NoopMetricsHandler, log.NewTestLogger(), s.mockNamespaceRegistry)
 		p.dlqEnabled = func() bool {
 			return true
 		}
