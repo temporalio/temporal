@@ -88,6 +88,7 @@ type (
 		ReplicateWorkflowState(ctx context.Context, request *historyservice.ReplicateWorkflowStateRequest) error
 		SyncShardStatus(ctx context.Context, request *historyservice.SyncShardStatusRequest) error
 		SyncActivity(ctx context.Context, request *historyservice.SyncActivityRequest) error
+		SyncActivities(ctx context.Context, request *historyservice.SyncActivitiesRequest) error
 		GetReplicationMessages(ctx context.Context, pollingCluster string, ackMessageID int64, ackTimestamp time.Time, queryMessageID int64) (*replicationspb.ReplicationMessages, error)
 		GetDLQReplicationMessages(ctx context.Context, taskInfos []*replicationspb.ReplicationTaskInfo) ([]*replicationspb.ReplicationTask, error)
 		QueryWorkflow(ctx context.Context, request *historyservice.QueryWorkflowRequest) (*historyservice.QueryWorkflowResponse, error)

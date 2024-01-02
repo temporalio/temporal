@@ -234,7 +234,7 @@ type (
 		IsResourceDuplicated(resourceDedupKey definition.DeduplicationID) bool
 		IsWorkflowPendingOnWorkflowTaskBackoff() bool
 		UpdateDuplicatedResource(resourceDedupKey definition.DeduplicationID)
-		UpdateActivityInfo(*historyservice.SyncActivityRequest, bool) error
+		UpdateActivityInfo(*historyservice.ActivitySyncInfo, bool) error
 		ApplyActivityTaskCancelRequestedEvent(*historypb.HistoryEvent) error
 		ApplyActivityTaskCanceledEvent(*historypb.HistoryEvent) error
 		ApplyActivityTaskCompletedEvent(*historypb.HistoryEvent) error

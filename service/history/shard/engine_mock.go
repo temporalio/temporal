@@ -842,6 +842,20 @@ func (mr *MockEngineMockRecorder) SubscribeReplicationNotification() *gomock.Cal
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SubscribeReplicationNotification", reflect.TypeOf((*MockEngine)(nil).SubscribeReplicationNotification))
 }
 
+// SyncActivities mocks base method.
+func (m *MockEngine) SyncActivities(ctx context.Context, request *historyservice.SyncActivitiesRequest) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "SyncActivities", ctx, request)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// SyncActivities indicates an expected call of SyncActivities.
+func (mr *MockEngineMockRecorder) SyncActivities(ctx, request interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SyncActivities", reflect.TypeOf((*MockEngine)(nil).SyncActivities), ctx, request)
+}
+
 // SyncActivity mocks base method.
 func (m *MockEngine) SyncActivity(ctx context.Context, request *historyservice.SyncActivityRequest) error {
 	m.ctrl.T.Helper()
