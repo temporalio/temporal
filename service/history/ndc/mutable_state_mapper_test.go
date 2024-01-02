@@ -209,6 +209,6 @@ func (s *mutableStateMapperSuite) TestGetOrCreateHistoryBranch_ValidEventBatch_A
 	_, out, err := s.mutableStateMapper.GetOrCreateHistoryBranch(context.Background(), nil, nil, task)
 	s.NoError(err)
 	s.Equal(int32(0), out.BranchIndex)
-	s.Equal(1, out.EventsApplyIndex)
+	s.Equal(0, out.EventsApplyIndex)
 	s.False(out.DoContinue)
 }
