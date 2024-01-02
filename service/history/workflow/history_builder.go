@@ -1312,10 +1312,10 @@ func (b *HistoryBuilder) assignTaskIDs(
 	}
 
 	taskIDPointer := 0
-	height := len(dbEventsBatches)
-	for i := 0; i < height; i++ {
-		width := len(dbEventsBatches[i])
-		for j := 0; j < width; j++ {
+	totalBatches := len(dbEventsBatches)
+	for i := 0; i < totalBatches; i++ {
+		eventsInBatch := len(dbEventsBatches[i])
+		for j := 0; j < eventsInBatch; j++ {
 			dbEventsBatches[i][j].TaskId = taskIDs[taskIDPointer]
 			taskIDPointer++
 		}
