@@ -359,6 +359,26 @@ func (t *MatcherTestSuite) TestSyncMatchFailure() {
 	t.False(syncMatch)
 }
 
+func (t *MatcherTestSuite) TestQueryNoPoller() {
+	task := newInternalQueryTask(uuid.New(), &matchingservice.QueryWorkflowRequest{})
+
+	t.client.EXPECT().QueryWorkflow(gomock.Any(), gomock.Any(), gomock.Any()).Do(
+		func(ctx context.Context, req *matchingservice.QueryWorkflowRequest, arg2 ...interface{}) {
+			time.Sleep(10 * time.Millisecond)
+			task.forwardedFrom = req.GetForwardedSource()
+			resp, err := t.rootMatcher.OfferQuery(ctx, task)
+			t.Nil(resp)
+			t.Assert().Error(err, errNoRecentPoller)
+		},
+	).Return(nil, errNoRecentPoller)
+
+	time.Sleep(10 * time.Millisecond)
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+	_, err := t.matcher.OfferQuery(ctx, task)
+	cancel()
+	t.Error(err, errNoRecentPoller)
+}
+
 func (t *MatcherTestSuite) TestQueryLocalSyncMatch() {
 	// force disable remote forwarding
 	<-t.fwdr.AddReqTokenC()

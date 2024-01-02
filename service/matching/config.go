@@ -70,6 +70,7 @@ type (
 		GetUserDataLongPollTimeout        dynamicconfig.DurationPropertyFn
 		BacklogNegligibleAge              dynamicconfig.DurationPropertyFnWithTaskQueueInfoFilters
 		MaxWaitForPollerBeforeFwd         dynamicconfig.DurationPropertyFnWithTaskQueueInfoFilters
+		QueryPollerUnavailableWindow      dynamicconfig.DurationPropertyFn
 
 		// Time to hold a poll request before returning an empty response if there are no tasks
 		LongPollExpirationInterval dynamicconfig.DurationPropertyFnWithTaskQueueInfoFilters
@@ -106,10 +107,11 @@ type (
 
 	taskQueueConfig struct {
 		forwarderConfig
-		SyncMatchWaitDuration     func() time.Duration
-		BacklogNegligibleAge      func() time.Duration
-		MaxWaitForPollerBeforeFwd func() time.Duration
-		TestDisableSyncMatch      func() bool
+		SyncMatchWaitDuration        func() time.Duration
+		BacklogNegligibleAge         func() time.Duration
+		MaxWaitForPollerBeforeFwd    func() time.Duration
+		QueryPollerUnavailableWindow func() time.Duration
+		TestDisableSyncMatch         func() bool
 		// Time to hold a poll request before returning an empty response if there are no tasks
 		LongPollExpirationInterval func() time.Duration
 		RangeSize                  int64
@@ -199,6 +201,7 @@ func NewConfig(
 		GetUserDataLongPollTimeout:            dc.GetDurationProperty(dynamicconfig.MatchingGetUserDataLongPollTimeout, 5*time.Minute),
 		BacklogNegligibleAge:                  dc.GetDurationPropertyFilteredByTaskQueueInfo(dynamicconfig.MatchingBacklogNegligibleAge, 24*365*10*time.Hour),
 		MaxWaitForPollerBeforeFwd:             dc.GetDurationPropertyFilteredByTaskQueueInfo(dynamicconfig.MatchingMaxWaitForPollerBeforeFwd, 200*time.Millisecond),
+		QueryPollerUnavailableWindow:          dc.GetDurationProperty(dynamicconfig.QueryPollerUnavailableWindow, 20*time.Second),
 
 		AdminNamespaceToPartitionDispatchRate:          dc.GetFloatPropertyFilteredByNamespace(dynamicconfig.AdminMatchingNamespaceToPartitionDispatchRate, 10000),
 		AdminNamespaceTaskqueueToPartitionDispatchRate: dc.GetFloatPropertyFilteredByTaskQueueInfo(dynamicconfig.AdminMatchingNamespaceTaskqueueToPartitionDispatchRate, 1000),
@@ -239,6 +242,9 @@ func newTaskQueueConfig(id *taskQueueID, config *Config, namespace namespace.Nam
 		},
 		MaxWaitForPollerBeforeFwd: func() time.Duration {
 			return config.MaxWaitForPollerBeforeFwd(namespace.String(), taskQueueName, taskType)
+		},
+		QueryPollerUnavailableWindow: func() time.Duration {
+			return config.QueryPollerUnavailableWindow()
 		},
 		TestDisableSyncMatch: config.TestDisableSyncMatch,
 		LoadUserData: func() bool {

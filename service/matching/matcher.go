@@ -79,7 +79,8 @@ const (
 
 var (
 	// Sentinel error to redirect while blocked in matcher.
-	errInterrupted = errors.New("interrupted offer")
+	errInterrupted    = errors.New("interrupted offer")
+	errNoRecentPoller = errors.New("no worker polling for task")
 )
 
 // newTaskMatcher returns a task matcher instance. The returned instance can be used by task producers and consumers to
@@ -232,6 +233,10 @@ func (tm *TaskMatcher) OfferQuery(ctx context.Context, task *internalTask) (*mat
 	fwdrTokenC := tm.fwdrAddReqTokenC()
 
 	for {
+		if fwdrTokenC == nil && tm.timeSinceLastPoll() > tm.config.QueryPollerUnavailableWindow() {
+			return nil, errNoRecentPoller
+		}
+
 		select {
 		case tm.queryTaskC <- task:
 			<-task.responseC
@@ -303,7 +308,7 @@ forLoop:
 			// and they are all stuck in the wrong (root) partition. (Note that since
 			// frontend balanced the number of pending pollers per partition this only
 			// becomes an issue when the pollers are fewer than the partitions)
-			lp := time.Since(time.Unix(0, tm.lastPoller.Load()))
+			lp := tm.timeSinceLastPoll()
 			maxWaitForLocalPoller := tm.config.MaxWaitForPollerBeforeFwd()
 			if lp < maxWaitForLocalPoller {
 				fwdTokenC = nil
@@ -620,4 +625,8 @@ func (tm *TaskMatcher) emitForwardedSourceStats(
 	default:
 		tm.metricsHandler.Counter(metrics.LocalToLocalMatchPerTaskQueueCounter.Name()).Record(1)
 	}
+}
+
+func (tm *TaskMatcher) timeSinceLastPoll() time.Duration {
+	return time.Since(time.Unix(0, tm.lastPoller.Load()))
 }
