@@ -151,7 +151,7 @@ func (e *ExecutableHistoryTask) Execute() error {
 	if err != nil {
 		return err
 	}
-
+	// use HistoryEventsHandler.HandleHistoryEvents(...) instead
 	return engine.ReplicateHistoryEvents(
 		ctx,
 		e.WorkflowKey,

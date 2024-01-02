@@ -234,50 +234,50 @@ type (
 		IsResourceDuplicated(resourceDedupKey definition.DeduplicationID) bool
 		IsWorkflowPendingOnWorkflowTaskBackoff() bool
 		UpdateDuplicatedResource(resourceDedupKey definition.DeduplicationID)
-		ReplicateActivityInfo(*historyservice.SyncActivityRequest, bool) error
-		ReplicateActivityTaskCancelRequestedEvent(*historypb.HistoryEvent) error
-		ReplicateActivityTaskCanceledEvent(*historypb.HistoryEvent) error
-		ReplicateActivityTaskCompletedEvent(*historypb.HistoryEvent) error
-		ReplicateActivityTaskFailedEvent(*historypb.HistoryEvent) error
-		ReplicateActivityTaskScheduledEvent(int64, *historypb.HistoryEvent) (*persistencespb.ActivityInfo, error)
-		ReplicateActivityTaskStartedEvent(*historypb.HistoryEvent) error
-		ReplicateActivityTaskTimedOutEvent(*historypb.HistoryEvent) error
-		ReplicateChildWorkflowExecutionCanceledEvent(*historypb.HistoryEvent) error
-		ReplicateChildWorkflowExecutionCompletedEvent(*historypb.HistoryEvent) error
-		ReplicateChildWorkflowExecutionFailedEvent(*historypb.HistoryEvent) error
-		ReplicateChildWorkflowExecutionStartedEvent(*historypb.HistoryEvent, *clockspb.VectorClock) error
-		ReplicateChildWorkflowExecutionTerminatedEvent(*historypb.HistoryEvent) error
-		ReplicateChildWorkflowExecutionTimedOutEvent(*historypb.HistoryEvent) error
-		ReplicateWorkflowTaskCompletedEvent(*historypb.HistoryEvent) error
-		ReplicateWorkflowTaskFailedEvent() error
-		ReplicateWorkflowTaskScheduledEvent(int64, int64, *taskqueuepb.TaskQueue, *durationpb.Duration, int32, *timestamppb.Timestamp, *timestamppb.Timestamp, enumsspb.WorkflowTaskType) (*WorkflowTaskInfo, error)
-		ReplicateWorkflowTaskStartedEvent(*WorkflowTaskInfo, int64, int64, int64, string, time.Time, bool, int64) (*WorkflowTaskInfo, error)
-		ReplicateWorkflowTaskTimedOutEvent(enumspb.TimeoutType) error
-		ReplicateExternalWorkflowExecutionCancelRequested(*historypb.HistoryEvent) error
-		ReplicateExternalWorkflowExecutionSignaled(*historypb.HistoryEvent) error
-		ReplicateRequestCancelExternalWorkflowExecutionFailedEvent(*historypb.HistoryEvent) error
-		ReplicateRequestCancelExternalWorkflowExecutionInitiatedEvent(int64, *historypb.HistoryEvent, string) (*persistencespb.RequestCancelInfo, error)
-		ReplicateSignalExternalWorkflowExecutionFailedEvent(*historypb.HistoryEvent) error
-		ReplicateSignalExternalWorkflowExecutionInitiatedEvent(int64, *historypb.HistoryEvent, string) (*persistencespb.SignalInfo, error)
-		ReplicateStartChildWorkflowExecutionFailedEvent(*historypb.HistoryEvent) error
-		ReplicateStartChildWorkflowExecutionInitiatedEvent(int64, *historypb.HistoryEvent, string) (*persistencespb.ChildExecutionInfo, error)
-		ReplicateTimerCanceledEvent(*historypb.HistoryEvent) error
-		ReplicateTimerFiredEvent(*historypb.HistoryEvent) error
-		ReplicateTimerStartedEvent(*historypb.HistoryEvent) (*persistencespb.TimerInfo, error)
-		ReplicateTransientWorkflowTaskScheduled() (*WorkflowTaskInfo, error)
-		ReplicateWorkflowPropertiesModifiedEvent(*historypb.HistoryEvent)
-		ReplicateUpsertWorkflowSearchAttributesEvent(*historypb.HistoryEvent)
-		ReplicateWorkflowExecutionCancelRequestedEvent(*historypb.HistoryEvent) error
-		ReplicateWorkflowExecutionCanceledEvent(int64, *historypb.HistoryEvent) error
-		ReplicateWorkflowExecutionCompletedEvent(int64, *historypb.HistoryEvent) error
-		ReplicateWorkflowExecutionContinuedAsNewEvent(int64, *historypb.HistoryEvent) error
-		ReplicateWorkflowExecutionFailedEvent(int64, *historypb.HistoryEvent) error
-		ReplicateWorkflowExecutionSignaled(*historypb.HistoryEvent) error
-		ReplicateWorkflowExecutionStartedEvent(*clockspb.VectorClock, *commonpb.WorkflowExecution, string, *historypb.HistoryEvent) error
-		ReplicateWorkflowExecutionTerminatedEvent(int64, *historypb.HistoryEvent) error
-		ReplicateWorkflowExecutionTimedoutEvent(int64, *historypb.HistoryEvent) error
-		ReplicateWorkflowExecutionUpdateAcceptedEvent(*historypb.HistoryEvent) error
-		ReplicateWorkflowExecutionUpdateCompletedEvent(event *historypb.HistoryEvent, batchID int64) error
+		UpdateActivityInfo(*historyservice.ActivitySyncInfo, bool) error
+		ApplyActivityTaskCancelRequestedEvent(*historypb.HistoryEvent) error
+		ApplyActivityTaskCanceledEvent(*historypb.HistoryEvent) error
+		ApplyActivityTaskCompletedEvent(*historypb.HistoryEvent) error
+		ApplyActivityTaskFailedEvent(*historypb.HistoryEvent) error
+		ApplyActivityTaskScheduledEvent(int64, *historypb.HistoryEvent) (*persistencespb.ActivityInfo, error)
+		ApplyActivityTaskStartedEvent(*historypb.HistoryEvent) error
+		ApplyActivityTaskTimedOutEvent(*historypb.HistoryEvent) error
+		ApplyChildWorkflowExecutionCanceledEvent(*historypb.HistoryEvent) error
+		ApplyChildWorkflowExecutionCompletedEvent(*historypb.HistoryEvent) error
+		ApplyChildWorkflowExecutionFailedEvent(*historypb.HistoryEvent) error
+		ApplyChildWorkflowExecutionStartedEvent(*historypb.HistoryEvent, *clockspb.VectorClock) error
+		ApplyChildWorkflowExecutionTerminatedEvent(*historypb.HistoryEvent) error
+		ApplyChildWorkflowExecutionTimedOutEvent(*historypb.HistoryEvent) error
+		ApplyWorkflowTaskCompletedEvent(*historypb.HistoryEvent) error
+		ApplyWorkflowTaskFailedEvent() error
+		ApplyWorkflowTaskScheduledEvent(int64, int64, *taskqueuepb.TaskQueue, *durationpb.Duration, int32, *timestamppb.Timestamp, *timestamppb.Timestamp, enumsspb.WorkflowTaskType) (*WorkflowTaskInfo, error)
+		ApplyWorkflowTaskStartedEvent(*WorkflowTaskInfo, int64, int64, int64, string, time.Time, bool, int64) (*WorkflowTaskInfo, error)
+		ApplyWorkflowTaskTimedOutEvent(enumspb.TimeoutType) error
+		ApplyExternalWorkflowExecutionCancelRequested(*historypb.HistoryEvent) error
+		ApplyExternalWorkflowExecutionSignaled(*historypb.HistoryEvent) error
+		ApplyRequestCancelExternalWorkflowExecutionFailedEvent(*historypb.HistoryEvent) error
+		ApplyRequestCancelExternalWorkflowExecutionInitiatedEvent(int64, *historypb.HistoryEvent, string) (*persistencespb.RequestCancelInfo, error)
+		ApplySignalExternalWorkflowExecutionFailedEvent(*historypb.HistoryEvent) error
+		ApplySignalExternalWorkflowExecutionInitiatedEvent(int64, *historypb.HistoryEvent, string) (*persistencespb.SignalInfo, error)
+		ApplyStartChildWorkflowExecutionFailedEvent(*historypb.HistoryEvent) error
+		ApplyStartChildWorkflowExecutionInitiatedEvent(int64, *historypb.HistoryEvent, string) (*persistencespb.ChildExecutionInfo, error)
+		ApplyTimerCanceledEvent(*historypb.HistoryEvent) error
+		ApplyTimerFiredEvent(*historypb.HistoryEvent) error
+		ApplyTimerStartedEvent(*historypb.HistoryEvent) (*persistencespb.TimerInfo, error)
+		ApplyTransientWorkflowTaskScheduled() (*WorkflowTaskInfo, error)
+		ApplyWorkflowPropertiesModifiedEvent(*historypb.HistoryEvent)
+		ApplyUpsertWorkflowSearchAttributesEvent(*historypb.HistoryEvent)
+		ApplyWorkflowExecutionCancelRequestedEvent(*historypb.HistoryEvent) error
+		ApplyWorkflowExecutionCanceledEvent(int64, *historypb.HistoryEvent) error
+		ApplyWorkflowExecutionCompletedEvent(int64, *historypb.HistoryEvent) error
+		ApplyWorkflowExecutionContinuedAsNewEvent(int64, *historypb.HistoryEvent) error
+		ApplyWorkflowExecutionFailedEvent(int64, *historypb.HistoryEvent) error
+		ApplyWorkflowExecutionSignaled(*historypb.HistoryEvent) error
+		ApplyWorkflowExecutionStartedEvent(*clockspb.VectorClock, *commonpb.WorkflowExecution, string, *historypb.HistoryEvent) error
+		ApplyWorkflowExecutionTerminatedEvent(int64, *historypb.HistoryEvent) error
+		ApplyWorkflowExecutionTimedoutEvent(int64, *historypb.HistoryEvent) error
+		ApplyWorkflowExecutionUpdateAcceptedEvent(*historypb.HistoryEvent) error
+		ApplyWorkflowExecutionUpdateCompletedEvent(event *historypb.HistoryEvent, batchID int64) error
 		SetCurrentBranchToken(branchToken []byte) error
 		SetHistoryBuilder(hBuilder *HistoryBuilder)
 		SetHistoryTree(ctx context.Context, executionTimeout *durationpb.Duration, runTimeout *durationpb.Duration, treeID string) error

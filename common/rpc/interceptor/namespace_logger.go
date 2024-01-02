@@ -31,6 +31,7 @@ import (
 
 	"google.golang.org/grpc"
 
+	"go.temporal.io/server/common/api"
 	"go.temporal.io/server/common/authorization"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
@@ -62,7 +63,7 @@ func (nli *NamespaceLogInterceptor) Intercept(
 ) (interface{}, error) {
 
 	if nli.logger != nil {
-		_, methodName := SplitMethodName(info.FullMethod)
+		methodName := api.MethodName(info.FullMethod)
 		namespace := MustGetNamespaceName(nli.namespaceRegistry, req)
 		tlsInfo := authorization.TLSInfoFormContext(ctx)
 		var serverName string

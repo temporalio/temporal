@@ -34,6 +34,7 @@ import (
 	"google.golang.org/grpc/metadata"
 
 	"go.temporal.io/server/client"
+	"go.temporal.io/server/common/api"
 	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/config"
@@ -183,7 +184,7 @@ func (i *RedirectionInterceptor) Intercept(
 		return handler(ctx, req)
 	}
 
-	_, methodName := interceptor.SplitMethodName(info.FullMethod)
+	methodName := api.MethodName(info.FullMethod)
 	if _, ok := localAPIResponses[methodName]; ok {
 		return i.handleLocalAPIInvocation(ctx, req, handler, methodName)
 	}

@@ -38,7 +38,7 @@ import (
 
 	"github.com/pborman/uuid"
 	"github.com/stretchr/testify/require"
-	"go.temporal.io/api/batch/v1"
+	batchpb "go.temporal.io/api/batch/v1"
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	historypb "go.temporal.io/api/history/v1"
@@ -59,6 +59,8 @@ import (
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/rpc"
+	"go.temporal.io/server/common/searchattribute"
+	"go.temporal.io/server/common/worker_versioning"
 )
 
 type (
@@ -819,25 +821,18 @@ func (s *ClientFunctionalSuite) TestStickyAutoReset() {
 
 	// wait until wf started and sticky is set
 	var stickyQueue string
-	for i := 0; i < 5; i++ {
+	s.Eventually(func() bool {
 		ms, err := s.adminClient.DescribeMutableState(ctx, &adminservice.DescribeMutableStateRequest{
 			Namespace: s.namespace,
 			Execution: &commonpb.WorkflowExecution{
 				WorkflowId: future.GetID(),
 			},
 		})
-
 		s.NoError(err)
 		stickyQueue = ms.DatabaseMutableState.ExecutionInfo.StickyTaskQueue
 		// verify workflow has sticky task queue
-		if stickyQueue == "" {
-			// wait until we see sticky task queue is set
-			time.Sleep(time.Second)
-			continue
-		}
-	}
-	s.NotEmpty(stickyQueue)
-	s.NotEqual(stickyQueue, s.taskQueue)
+		return stickyQueue != "" && stickyQueue != s.taskQueue
+	}, 5*time.Second, 200*time.Millisecond)
 
 	// stop worker
 	s.worker.Stop()
@@ -1008,22 +1003,18 @@ func (s *ClientFunctionalSuite) Test_StickyWorkerRestartWorkflowTask() {
 			s.NotNil(workflowRun)
 			s.True(workflowRun.GetRunID() != "")
 
-			findFirstWorkflowTaskCompleted := false
-		WaitForFirstWorkflowTaskComplete:
-			for i := 0; i < 10; i++ {
+			s.Eventually(func() bool {
 				// wait until first workflow task completed (so we know sticky is set on workflow)
 				iter := s.sdkClient.GetWorkflowHistory(ctx, id, "", false, enumspb.HISTORY_EVENT_FILTER_TYPE_ALL_EVENT)
 				for iter.HasNext() {
 					evt, err := iter.Next()
 					s.NoError(err)
 					if evt.GetEventType() == enumspb.EVENT_TYPE_WORKFLOW_TASK_COMPLETED {
-						findFirstWorkflowTaskCompleted = true
-						break WaitForFirstWorkflowTaskComplete
+						return true
 					}
 				}
-				time.Sleep(time.Second)
-			}
-			s.True(findFirstWorkflowTaskCompleted)
+				return false
+			}, 10*time.Second, 200*time.Millisecond)
 
 			// stop old worker
 			oldWorker.Stop()
@@ -1542,7 +1533,7 @@ func (s *ClientFunctionalSuite) TestBatchSignal() {
 	_, err = s.sdkClient.WorkflowService().StartBatchOperation(context.Background(), &workflowservice.StartBatchOperationRequest{
 		Namespace: s.namespace,
 		Operation: &workflowservice.StartBatchOperationRequest_SignalOperation{
-			SignalOperation: &batch.BatchOperationSignal{
+			SignalOperation: &batchpb.BatchOperationSignal{
 				Signal: "my-signal",
 				Input:  inputPayloads,
 			},
@@ -1566,15 +1557,13 @@ func (s *ClientFunctionalSuite) TestBatchSignal() {
 }
 
 func (s *ClientFunctionalSuite) TestBatchReset() {
-
-	var count int32
+	var count atomic.Int32
 
 	activityFn := func(ctx context.Context) (int32, error) {
-		val := atomic.LoadInt32(&count)
-		if val == 0 {
-			return 0, temporal.NewApplicationError("some random error", "", false, nil)
+		if val := count.Load(); val != 0 {
+			return val, nil
 		}
-		return val, nil
+		return 0, temporal.NewApplicationError("some random error", "", false, nil)
 	}
 	workflowFn := func(ctx workflow.Context) (int, error) {
 		ao := workflow.ActivityOptions{
@@ -1585,10 +1574,7 @@ func (s *ClientFunctionalSuite) TestBatchReset() {
 
 		var result int
 		err := workflow.ExecuteActivity(ctx, activityFn).Get(ctx, &result)
-		if err != nil {
-			return 0, err
-		}
-		return result, nil
+		return result, err
 	}
 	s.worker.RegisterWorkflow(workflowFn)
 	s.worker.RegisterActivity(activityFn)
@@ -1605,12 +1591,12 @@ func (s *ClientFunctionalSuite) TestBatchReset() {
 	err = workflowRun.Get(context.Background(), &result)
 	s.Error(err)
 
-	atomic.AddInt32(&count, 1)
+	count.Add(1)
 
 	_, err = s.sdkClient.WorkflowService().StartBatchOperation(context.Background(), &workflowservice.StartBatchOperationRequest{
 		Namespace: s.namespace,
 		Operation: &workflowservice.StartBatchOperationRequest_ResetOperation{
-			ResetOperation: &batch.BatchOperationReset{
+			ResetOperation: &batchpb.BatchOperationReset{
 				ResetType: enumspb.RESET_TYPE_FIRST_WORKFLOW_TASK,
 			},
 		},
@@ -1625,16 +1611,177 @@ func (s *ClientFunctionalSuite) TestBatchReset() {
 	})
 	s.NoError(err)
 
-	// wait for signal to be processed
-	time.Sleep(5 * time.Second)
+	// latest run should complete successfully
+	s.Eventually(func() bool {
+		workflowRun = s.sdkClient.GetWorkflow(context.Background(), workflowRun.GetID(), "")
+		err = workflowRun.Get(context.Background(), &result)
+		return err == nil && result == 1
+	}, 5*time.Second, 200*time.Millisecond)
+}
 
-	// get the latest run
-	workflowRun = s.sdkClient.GetWorkflow(context.Background(), workflowRun.GetID(), "")
+func (s *ClientFunctionalSuite) TestBatchResetByBuildId() {
+	if !UsingSQLAdvancedVisibility() {
+		s.T().Skip("Test requires advanced visibility")
+	}
 
-	err = workflowRun.Get(context.Background(), &result)
+	tq := s.randomizeStr(s.T().Name())
+	buildPrefix := uuid.New()[:6] + "-"
+	v1 := buildPrefix + "v1"
+	v2 := buildPrefix + "v2"
+	v3 := buildPrefix + "v3"
+
+	var act1count, act2count, act3count, badcount atomic.Int32
+	act1 := func() error { act1count.Add(1); return nil }
+	act2 := func() error { act2count.Add(1); return nil }
+	act3 := func() error { act3count.Add(1); return nil }
+	badact := func() error { badcount.Add(1); return nil }
+
+	wf1 := func(ctx workflow.Context) (string, error) {
+		ao := workflow.WithActivityOptions(ctx, workflow.ActivityOptions{ScheduleToCloseTimeout: 5 * time.Second})
+
+		s.NoError(workflow.ExecuteActivity(ao, "act1").Get(ctx, nil))
+
+		workflow.GetSignalChannel(ctx, "wait").Receive(ctx, nil)
+
+		return "done 1!", nil
+	}
+
+	wf2 := func(ctx workflow.Context) (string, error) {
+		ao := workflow.WithActivityOptions(ctx, workflow.ActivityOptions{ScheduleToCloseTimeout: 5 * time.Second})
+
+		s.NoError(workflow.ExecuteActivity(ao, "act1").Get(ctx, nil))
+
+		workflow.GetSignalChannel(ctx, "wait").Receive(ctx, nil)
+
+		// same as wf1 up to here
+
+		// run act2
+		s.NoError(workflow.ExecuteActivity(ao, "act2").Get(ctx, nil))
+
+		// now do something bad in a loop.
+		// (we want something that's visible in history, not just failing workflow tasks,
+		// otherwise we wouldn't need a reset to "fix" it, just a new build would be enough.)
+		for i := 0; i < 1000; i++ {
+			s.NoError(workflow.ExecuteActivity(ao, "badact").Get(ctx, nil))
+			workflow.Sleep(ctx, time.Second)
+		}
+
+		return "done 2!", nil
+	}
+
+	wf3 := func(ctx workflow.Context) (string, error) {
+		ao := workflow.WithActivityOptions(ctx, workflow.ActivityOptions{ScheduleToCloseTimeout: 5 * time.Second})
+
+		s.NoError(workflow.ExecuteActivity(ao, "act1").Get(ctx, nil))
+
+		workflow.GetSignalChannel(ctx, "wait").Receive(ctx, nil)
+
+		s.NoError(workflow.ExecuteActivity(ao, "act2").Get(ctx, nil))
+
+		// same as wf2 up to here
+
+		// instead of calling badact, do something different to force a non-determinism error
+		// (the change of activity type below isn't enough)
+		workflow.Sleep(ctx, time.Second)
+
+		// call act3 once
+		s.NoError(workflow.ExecuteActivity(ao, "act3").Get(ctx, nil))
+
+		return "done 3!", nil
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+
+	w1 := worker.New(s.sdkClient, tq, worker.Options{BuildID: v1})
+	w1.RegisterWorkflowWithOptions(wf1, workflow.RegisterOptions{Name: "wf"})
+	w1.RegisterActivityWithOptions(act1, activity.RegisterOptions{Name: "act1"})
+	s.NoError(w1.Start())
+
+	run, err := s.sdkClient.ExecuteWorkflow(ctx, sdkclient.StartWorkflowOptions{TaskQueue: tq}, "wf")
+	s.NoError(err)
+	ex := &commonpb.WorkflowExecution{WorkflowId: run.GetID(), RunId: run.GetRunID()}
+	// wait for first wft and first activity to complete
+	s.Eventually(func() bool { return len(s.getHistory(s.namespace, ex)) >= 10 }, 5*time.Second, 100*time.Millisecond)
+
+	w1.Stop()
+
+	// should see one run of act1
+	s.Equal(int32(1), act1count.Load())
+
+	w2 := worker.New(s.sdkClient, tq, worker.Options{BuildID: v2})
+	w2.RegisterWorkflowWithOptions(wf2, workflow.RegisterOptions{Name: "wf"})
+	w2.RegisterActivityWithOptions(act1, activity.RegisterOptions{Name: "act1"})
+	w2.RegisterActivityWithOptions(act2, activity.RegisterOptions{Name: "act2"})
+	w2.RegisterActivityWithOptions(badact, activity.RegisterOptions{Name: "badact"})
+	s.NoError(w2.Start())
+	defer w2.Stop()
+
+	// unblock the workflow
+	s.NoError(s.sdkClient.SignalWorkflow(ctx, run.GetID(), run.GetRunID(), "wait", nil))
+
+	// wait until we see three calls to badact
+	s.Eventually(func() bool { return badcount.Load() >= 3 }, 10*time.Second, 200*time.Millisecond)
+
+	// at this point act2 should have been invokved once also
+	s.Equal(int32(1), act2count.Load())
+
+	w2.Stop()
+
+	w3 := worker.New(s.sdkClient, tq, worker.Options{BuildID: v3})
+	w3.RegisterWorkflowWithOptions(wf3, workflow.RegisterOptions{Name: "wf"})
+	w3.RegisterActivityWithOptions(act1, activity.RegisterOptions{Name: "act1"})
+	w3.RegisterActivityWithOptions(act2, activity.RegisterOptions{Name: "act2"})
+	w3.RegisterActivityWithOptions(act3, activity.RegisterOptions{Name: "act3"})
+	w3.RegisterActivityWithOptions(badact, activity.RegisterOptions{Name: "badact"})
+	s.NoError(w3.Start())
+	defer w3.Stop()
+
+	// but v3 is not quite compatible, the workflow should be blocked on non-determinism errors for now.
+	waitCtx, cancel := context.WithTimeout(ctx, 2*time.Second)
+	defer cancel()
+	s.Error(run.Get(waitCtx, nil))
+
+	// wait for it to appear in visibility
+	query := fmt.Sprintf(`%s = "%s" and %s = "%s"`,
+		searchattribute.ExecutionStatus, "Running",
+		searchattribute.BuildIds, worker_versioning.UnversionedBuildIdSearchAttribute(v2))
+	s.Eventually(func() bool {
+		resp, err := s.engine.ListWorkflowExecutions(ctx, &workflowservice.ListWorkflowExecutionsRequest{
+			Namespace: s.namespace,
+			Query:     query,
+		})
+		return err == nil && len(resp.Executions) == 1
+	}, 10*time.Second, 500*time.Millisecond)
+
+	// reset it using v2 as the bad build id
+	_, err = s.engine.StartBatchOperation(context.Background(), &workflowservice.StartBatchOperationRequest{
+		Namespace:       s.namespace,
+		VisibilityQuery: query,
+		JobId:           uuid.New(),
+		Reason:          "test",
+		Operation: &workflowservice.StartBatchOperationRequest_ResetOperation{
+			ResetOperation: &batchpb.BatchOperationReset{
+				Options: &commonpb.ResetOptions{
+					Target: &commonpb.ResetOptions_BuildId{
+						BuildId: v2,
+					},
+				},
+			},
+		},
+	})
 	s.NoError(err)
 
-	s.Equal(1, result)
+	// now it can complete on v3. (need to loop since runid will be resolved early and we need
+	// to re-resolve to pick up the new run instead of the terminated one)
+	s.Eventually(func() bool {
+		var out string
+		return s.sdkClient.GetWorkflow(ctx, run.GetID(), "").Get(ctx, &out) == nil && out == "done 3!"
+	}, 10*time.Second, 200*time.Millisecond)
+
+	s.Equal(int32(1), act1count.Load()) // we should not see an addition run of act1
+	s.Equal(int32(2), act2count.Load()) // we should see an addition run of act2 (reset point was before it)
+	s.Equal(int32(1), act3count.Load()) // we should see one run of act3
 }
 
 func (s *ClientFunctionalSuite) Test_FinishWorkflowWithDeferredCommands() {

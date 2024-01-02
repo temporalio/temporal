@@ -56,9 +56,6 @@ import (
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/payload"
 	"go.temporal.io/server/common/payloads"
-	"go.temporal.io/server/common/persistence/sql/sqlplugin/mysql"
-	"go.temporal.io/server/common/persistence/sql/sqlplugin/postgresql"
-	"go.temporal.io/server/common/persistence/sql/sqlplugin/sqlite"
 	"go.temporal.io/server/common/searchattribute"
 	"go.temporal.io/server/common/testing/protorequire"
 	"go.temporal.io/server/common/worker_versioning"
@@ -107,13 +104,12 @@ func (s *AdvVisCrossDCTestSuite) SetupSuite() {
 	s.testClusterFactory = tests.NewTestClusterFactory()
 
 	var fileName string
-	switch tests.TestFlags.PersistenceDriver {
-	case mysql.PluginNameV8, postgresql.PluginNameV12, postgresql.PluginNameV12PGX, sqlite.PluginName:
+	if tests.UsingSQLAdvancedVisibility() {
 		// NOTE: can't use xdc_clusters.yaml here because it somehow interferes with the other xDC tests.
 		fileName = "../testdata/xdc_adv_vis_clusters.yaml"
 		s.isElasticsearchEnabled = false
 		s.logger.Info(fmt.Sprintf("Running xDC advanced visibility test with %s/%s persistence", tests.TestFlags.PersistenceType, tests.TestFlags.PersistenceDriver))
-	default:
+	} else {
 		fileName = "../testdata/xdc_adv_vis_es_clusters.yaml"
 		s.isElasticsearchEnabled = true
 		s.logger.Info("Running xDC advanced visibility test with Elasticsearch persistence")
