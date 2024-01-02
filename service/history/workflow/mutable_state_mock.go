@@ -2720,7 +2720,7 @@ func (mr *MockMutableStateMockRecorder) UpdateActivity(arg0 interface{}) *gomock
 }
 
 // UpdateActivityInfo mocks base method.
-func (m *MockMutableState) UpdateActivityInfo(arg0 *v111.SyncActivityRequest, arg1 bool) error {
+func (m *MockMutableState) UpdateActivityInfo(arg0 *v111.ActivitySyncInfo, arg1 bool) error {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "UpdateActivityInfo", arg0, arg1)
 	ret0, _ := ret[0].(error)
