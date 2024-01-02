@@ -30,8 +30,6 @@ import (
 	"github.com/pborman/uuid"
 
 	commonpb "go.temporal.io/api/common/v1"
-	"go.temporal.io/api/serviceerror"
-
 	"go.temporal.io/server/api/adminservice/v1"
 	historyspb "go.temporal.io/server/api/history/v1"
 	"go.temporal.io/server/api/historyservice/v1"
@@ -134,7 +132,7 @@ func Invoke(
 		ShardID:       shardID,
 	})
 	if err != nil {
-		if _, isNotFound := err.(*serviceerror.NotFound); isNotFound {
+		if common.IsNotFoundError(err) {
 			// when no events can be returned from DB, DB layer will return
 			// EntityNotExistsError, this API shall return empty response
 			return &historyservice.GetWorkflowExecutionRawHistoryResponse{
