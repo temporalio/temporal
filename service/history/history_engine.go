@@ -669,6 +669,13 @@ func (e *historyEngineImpl) SyncActivity(
 	return e.nDCActivityStateReplicator.SyncActivityState(ctx, request)
 }
 
+func (e *historyEngineImpl) SyncActivities(
+	ctx context.Context,
+	request *historyservice.SyncActivitiesRequest,
+) (retError error) {
+	return e.nDCActivityStateReplicator.SyncActivitiesState(ctx, request)
+}
+
 // ReplicateWorkflowState is an experimental method to replicate workflow state. This should not expose outside of history service role.
 func (e *historyEngineImpl) ReplicateWorkflowState(
 	ctx context.Context,

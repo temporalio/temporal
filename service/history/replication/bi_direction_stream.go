@@ -81,6 +81,11 @@ type (
 		channel         chan StreamResp[Resp]
 		streamingClient BiDirectionStreamClient[Req, Resp]
 	}
+
+	StreamError struct {
+		Message string
+		cause   error
+	}
 )
 
 func NewBiDirectionStream[Req any, Resp any](
@@ -109,11 +114,11 @@ func (s *BiDirectionStreamImpl[Req, Resp]) Send(
 	defer s.Unlock()
 
 	if err := s.lazyInitLocked(); err != nil {
-		return err
+		return NewStreamError("BiDirectionStream send initialize error", err)
 	}
 	if err := s.streamingClient.Send(request); err != nil {
 		s.closeLocked()
-		return err
+		return NewStreamError("BiDirectionStream send error", err)
 	}
 	return nil
 }
@@ -123,7 +128,7 @@ func (s *BiDirectionStreamImpl[Req, Resp]) Recv() (<-chan StreamResp[Resp], erro
 	defer s.Unlock()
 
 	if err := s.lazyInitLocked(); err != nil {
-		return nil, err
+		return nil, NewStreamError("BiDirectionStream recv initialize error", err)
 	}
 	return s.channel, nil
 
@@ -192,9 +197,20 @@ func (s *BiDirectionStreamImpl[Req, Resp]) recvLoop() {
 			var errResp Resp
 			s.channel <- StreamResp[Resp]{
 				Resp: errResp,
-				Err:  err,
+				Err:  NewStreamError("BiDirectionStream recv error", err),
 			}
 			return
 		}
+	}
+}
+
+func (e *StreamError) Error() string {
+	return fmt.Sprintf("StreamError: %s | GRPC Error: %v", e.Message, e.cause)
+}
+
+func NewStreamError(message string, err error) *StreamError {
+	return &StreamError{
+		Message: message,
+		cause:   err,
 	}
 }
