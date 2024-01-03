@@ -75,8 +75,9 @@ type (
 		RejectUnprocessed(ctx context.Context, eventStore EventStore) ([]string, error)
 
 		// CancelIncomplete cancels all incomplete updates in the registry:
-		//  - updates in stateAdmitted, stateRequested, and stateSent are rejected,
-		//  - updates in stateAccepted completes with error.
+		//   - updates in stateAdmitted, stateRequested, or stateSent are rejected,
+		//   - updates in stateAccepted are ignored (see CancelIncomplete() in update.go for details),
+		//   - updates in stateCompleted are ignored.
 		CancelIncomplete(ctx context.Context, reason CancelReason, eventStore EventStore) error
 
 		// Len observes the number of incomplete updates in this Registry.
