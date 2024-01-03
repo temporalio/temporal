@@ -929,6 +929,22 @@ func (adh *AdminHandler) DescribeHistoryHost(ctx context.Context, request *admin
 	}, err
 }
 
+func (adh *AdminHandler) GetWorkflowExecutionRawHistory(
+	ctx context.Context,
+	request *adminservice.GetWorkflowExecutionRawHistoryRequest,
+) (_ *adminservice.GetWorkflowExecutionRawHistoryResponse, retError error) {
+	defer log.CapturePanic(adh.logger, &retError)
+	response, err := adh.historyClient.GetWorkflowExecutionRawHistory(ctx,
+		&historyservice.GetWorkflowExecutionRawHistoryRequest{
+			NamespaceId: request.NamespaceId,
+			Request:     request,
+		})
+	if err != nil {
+		return nil, err
+	}
+	return response.Response, nil
+}
+
 // GetWorkflowExecutionRawHistoryV2 - retrieves the history of workflow execution
 func (adh *AdminHandler) GetWorkflowExecutionRawHistoryV2(ctx context.Context, request *adminservice.GetWorkflowExecutionRawHistoryV2Request) (_ *adminservice.GetWorkflowExecutionRawHistoryV2Response, retError error) {
 	defer log.CapturePanic(adh.logger, &retError)

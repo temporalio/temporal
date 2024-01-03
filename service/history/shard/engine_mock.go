@@ -292,6 +292,21 @@ func (mr *MockEngineMockRecorder) GetWorkflowExecutionHistoryReverse(ctx, reques
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetWorkflowExecutionHistoryReverse", reflect.TypeOf((*MockEngine)(nil).GetWorkflowExecutionHistoryReverse), ctx, request)
 }
 
+// GetWorkflowExecutionRawHistory mocks base method.
+func (m *MockEngine) GetWorkflowExecutionRawHistory(ctx context.Context, request *historyservice.GetWorkflowExecutionRawHistoryRequest) (*historyservice.GetWorkflowExecutionRawHistoryResponse, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetWorkflowExecutionRawHistory", ctx, request)
+	ret0, _ := ret[0].(*historyservice.GetWorkflowExecutionRawHistoryResponse)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// GetWorkflowExecutionRawHistory indicates an expected call of GetWorkflowExecutionRawHistory.
+func (mr *MockEngineMockRecorder) GetWorkflowExecutionRawHistory(ctx, request interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetWorkflowExecutionRawHistory", reflect.TypeOf((*MockEngine)(nil).GetWorkflowExecutionRawHistory), ctx, request)
+}
+
 // GetWorkflowExecutionRawHistoryV2 mocks base method.
 func (m *MockEngine) GetWorkflowExecutionRawHistoryV2(ctx context.Context, request *historyservice.GetWorkflowExecutionRawHistoryV2Request) (*historyservice.GetWorkflowExecutionRawHistoryV2Response, error) {
 	m.ctrl.T.Helper()

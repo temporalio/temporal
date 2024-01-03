@@ -762,6 +762,15 @@ message GetWorkflowExecutionRawHistoryV2Response {
     temporal.server.api.adminservice.v1.GetWorkflowExecutionRawHistoryV2Response response = 1;
 }
 
+message GetWorkflowExecutionRawHistoryRequest {
+    string namespace_id = 1;
+    temporal.server.api.adminservice.v1.GetWorkflowExecutionRawHistoryRequest request = 2;
+}
+
+message GetWorkflowExecutionRawHistoryResponse {
+    temporal.server.api.adminservice.v1.GetWorkflowExecutionRawHistoryResponse response = 1;
+}
+
 message ForceDeleteWorkflowExecutionRequest {
     string namespace_id = 1;
     temporal.server.api.adminservice.v1.DeleteWorkflowExecutionRequest request = 2;
