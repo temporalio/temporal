@@ -925,7 +925,7 @@ func TestCompletedWorkflow(t *testing.T) {
 		require.NoError(t, err)
 		require.Equal(t, enumspb.UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_COMPLETED, status.Stage)
 		require.Equal(t, "Workflow Update is rejected because Workflow Execution is completed.", status.Outcome.GetFailure().GetMessage())
-		require.Equal(t, "TerminatedUpdate", status.Outcome.GetFailure().GetApplicationFailureInfo().Type)
+		require.Equal(t, "CanceledUpdate", status.Outcome.GetFailure().GetApplicationFailureInfo().Type)
 	})
 
 	t.Run("accept", func(t *testing.T) {
@@ -941,7 +941,7 @@ func TestCompletedWorkflow(t *testing.T) {
 		require.NoError(t, err)
 		require.Equal(t, enumspb.UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_COMPLETED, status.Stage)
 		require.Equal(t, "Workflow Update is rejected because Workflow Execution is completed.", status.Outcome.GetFailure().GetMessage())
-		require.Equal(t, "TerminatedUpdate", status.Outcome.GetFailure().GetApplicationFailureInfo().Type)
+		require.Equal(t, "CanceledUpdate", status.Outcome.GetFailure().GetApplicationFailureInfo().Type)
 	})
 
 	t.Run("reject", func(t *testing.T) {

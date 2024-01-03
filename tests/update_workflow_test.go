@@ -3290,7 +3290,7 @@ func (s *FunctionalSuite) TestUpdateWorkflow_ScheduledSpeculativeWorkflowTask_Te
 	s.EqualValues(5, msResp.GetDatabaseMutableState().GetExecutionInfo().GetCompletionEventBatchId(), "completion_event_batch_id should point to WFTerminated event")
 }
 
-func (s *FunctionalSuite) TestUpdateWorkflow_CompleteWorkflow_TerminateUpdate() {
+func (s *FunctionalSuite) TestUpdateWorkflow_CompleteWorkflow_CancelUpdate() {
 	type testCase struct {
 		Name          string
 		Description   string

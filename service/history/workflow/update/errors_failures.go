@@ -43,7 +43,7 @@ var (
 		Message: "Workflow Update is rejected because Workflow Execution is terminated.",
 		Source:  "Server",
 		FailureInfo: &failurepb.Failure_ApplicationFailureInfo{ApplicationFailureInfo: &failurepb.ApplicationFailureInfo{
-			Type:         "TerminatedUpdate",
+			Type:         "CanceledUpdate",
 			NonRetryable: true,
 		}},
 	}
@@ -51,7 +51,7 @@ var (
 		Message: "Workflow Update is rejected because Workflow Execution is completed.",
 		Source:  "Server",
 		FailureInfo: &failurepb.Failure_ApplicationFailureInfo{ApplicationFailureInfo: &failurepb.ApplicationFailureInfo{
-			Type:         "TerminatedUpdate",
+			Type:         "CanceledUpdate",
 			NonRetryable: true,
 		}},
 	}

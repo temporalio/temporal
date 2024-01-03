@@ -607,7 +607,7 @@ func (handler *workflowTaskHandlerCallbacksImpl) handleWorkflowTaskCompleted(
 		}
 
 		if !ms.IsWorkflowExecutionRunning() {
-			// If workflow competed itself with one of the completion command, terminate all incomplete updates in the registry.
+			// If workflow competed itself with one of the completion command, cancel all incomplete updates in the registry.
 			// Because all unprocessed updates were already rejected, incomplete updates in the registry are:
 			// - updates that were received while this WT was running,
 			// - updates that were accepted but not completed by this WT.
