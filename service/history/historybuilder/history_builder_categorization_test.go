@@ -1,6 +1,6 @@
 // The MIT License
 //
-// Copyright (c) 2023 Temporal Technologies Inc.  All rights reserved.
+// Copyright (c) 2024 Temporal Technologies Inc.  All rights reserved.
 //
 // Copyright (c) 2020 Uber Technologies, Inc.
 //
@@ -22,7 +22,7 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-package workflow
+package historybuilder
 
 import (
 	"testing"
@@ -68,7 +68,7 @@ func (h StubHandler) Histogram(_ string, _ metrics.MetricUnit) metrics.Histogram
 func (h StubHandler) Stop(_ log.Logger) {}
 
 func TestHistoryBuilder_IsDirty(t *testing.T) {
-	hb := HistoryBuilder{}
+	hb := HistoryBuilder{HistoryEventsStore: HistoryEventsStore{}}
 	if hb.IsDirty() {
 		t.Fatal("newly created history is dirty")
 	}
@@ -142,7 +142,10 @@ func TestHistoryBuilder_AddWorkflowExecutionStartedEvent(t *testing.T) {
 //nolint:revive
 func TestHistoryBuilder_FlushBufferToCurrentBatch(t *testing.T) {
 	t.Run("when no events in dbBufferBatch or meBufferBatch will return scheduledIDToStartedID", func(t *testing.T) {
-		hb := HistoryBuilder{scheduledIDToStartedID: make(map[int64]int64)}
+		hb := HistoryBuilder{
+			HistoryEventsStore{scheduledIDToStartedID: make(map[int64]int64)},
+			PBEventFactory{},
+		}
 		hb.scheduledIDToStartedID[71] = 42
 
 		schedlued := hb.FlushBufferToCurrentBatch()

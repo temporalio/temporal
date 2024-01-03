@@ -55,6 +55,7 @@ import (
 	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/common/testing/protomock"
 	"go.temporal.io/server/service/history/events"
+	"go.temporal.io/server/service/history/historybuilder"
 	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/tests"
 )
@@ -155,7 +156,7 @@ func (s *stateBuilderSuite) mockUpdateVersion(events ...*historypb.HistoryEvent)
 	}
 	s.mockTaskGenerator.EXPECT().GenerateActivityTimerTasks().Return(nil)
 	s.mockTaskGenerator.EXPECT().GenerateUserTimerTasks().Return(nil)
-	s.mockMutableState.EXPECT().SetHistoryBuilder(NewImmutableHistoryBuilder(events))
+	s.mockMutableState.EXPECT().SetHistoryBuilder(historybuilder.NewImmutableHistoryBuilder(events))
 }
 
 func (s *stateBuilderSuite) toHistory(eventss ...*historypb.HistoryEvent) [][]*historypb.HistoryEvent {
