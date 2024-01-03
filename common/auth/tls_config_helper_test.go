@@ -156,8 +156,6 @@ func Test_NewTLSConfig(t *testing.T) {
 }
 
 func Test_ConnectToTLSServerWithCA(t *testing.T) {
-	t.Skip("expired test certificate")
-
 	// setup server
 	h := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		fmt.Fprintln(w, "Hello World")
@@ -258,8 +256,6 @@ func Test_ConnectToTLSServerWithCA(t *testing.T) {
 }
 
 func Test_ConnectToTLSServerWithClientCertificate(t *testing.T) {
-	t.Skip("expired test certificate")
-
 	// setup server
 	h := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		fmt.Fprintln(w, "Hello World")
