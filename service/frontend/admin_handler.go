@@ -28,6 +28,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io"
 	"net"
 	"strings"
 	"sync/atomic"
@@ -1708,7 +1709,10 @@ func (adh *AdminHandler) StreamWorkflowReplicationMessages(
 						Messages: attr.Messages,
 					},
 				}); err != nil {
-					logger.Info("AdminStreamReplicationMessages server -> client encountered error", tag.Error(err))
+					if err != io.EOF {
+						logger.Info("AdminStreamReplicationMessages server -> client encountered error", tag.Error(err))
+
+					}
 					return
 				}
 			default:
