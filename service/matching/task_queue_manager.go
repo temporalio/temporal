@@ -54,7 +54,6 @@ import (
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence"
-	serviceerrors "go.temporal.io/server/common/serviceerror"
 	"go.temporal.io/server/common/tqname"
 	"go.temporal.io/server/internal/goro"
 )
@@ -439,9 +438,7 @@ func (c *taskQueueManagerImpl) AddTask(
 		return false, err
 	}
 
-	// If this is the versioned task dlq, skip sync match since we know we have no pollers.
-	isDlq := c.taskQueueID.VersionSet() == dlqVersionSet
-	if namespaceEntry.ActiveInCluster(c.clusterMeta.GetCurrentClusterName()) && !isDlq {
+	if namespaceEntry.ActiveInCluster(c.clusterMeta.GetCurrentClusterName()) {
 		syncMatch, err := c.trySyncMatch(ctx, params)
 		if syncMatch {
 			return syncMatch, err
@@ -840,25 +837,6 @@ func (c *taskQueueManagerImpl) RedirectToVersionedQueueForAdd(ctx context.Contex
 	// Have to look up versioning data.
 	userData, userDataChanged, err := c.GetUserData()
 	if err != nil {
-		if errors.Is(err, errUserDataDisabled) {
-			// When user data disabled, send "default" tasks to unversioned queue.
-			if buildId == "" {
-				return c, userDataChanged, nil
-			}
-			// Send versioned sticky back to regular queue so they can go in the dlq.
-			if c.kind == enumspb.TASK_QUEUE_KIND_STICKY {
-				return nil, nil, serviceerrors.NewStickyWorkerUnavailable()
-			}
-			// Send versioned tasks to dlq.
-			newId := newTaskQueueIDWithVersionSet(c.taskQueueID, dlqVersionSet)
-			// If we're called by QueryWorkflow, then we technically don't need to load the dlq
-			// tqm here. But it's not a big deal if we do.
-			tqm, err := c.engine.getTaskQueueManager(ctx, newId, c.stickyInfo, true)
-			if err != nil {
-				return nil, nil, err
-			}
-			return tqm, userDataChanged, nil
-		}
 		return nil, nil, err
 	}
 	data := userData.GetData().GetVersioningData()
@@ -929,26 +907,8 @@ func (c *taskQueueManagerImpl) newIOContext() (context.Context, context.CancelFu
 
 func (c *taskQueueManagerImpl) loadUserData(ctx context.Context) error {
 	ctx = c.callerInfoContext(ctx)
-
-	hasLoadedUserData := false
-
-	for ctx.Err() == nil {
-		if !c.config.LoadUserData() {
-			// if disabled, mark disabled and ready
-			c.SetUserDataState(userDataDisabled, nil)
-			hasLoadedUserData = false // load again if re-enabled
-		} else if !hasLoadedUserData {
-			// otherwise try to load from db once
-			err := c.db.loadUserData(ctx)
-			c.SetUserDataState(userDataEnabled, err)
-			hasLoadedUserData = err == nil
-		} else {
-			// if already loaded, set enabled
-			c.SetUserDataState(userDataEnabled, nil)
-		}
-		common.InterruptibleSleep(ctx, c.config.GetUserDataLongPollTimeout())
-	}
-
+	err := c.db.loadUserData(ctx)
+	c.SetUserDataState(userDataEnabled, err)
 	return nil
 }
 
@@ -1000,20 +960,7 @@ func (c *taskQueueManagerImpl) fetchUserData(ctx context.Context) error {
 	hasFetchedUserData := false
 
 	op := func(ctx context.Context) error {
-		if !c.config.LoadUserData() {
-			// if disabled, mark disabled and ready, but allow retries so that we notice if
-			// it's re-enabled
-			c.SetUserDataState(userDataDisabled, nil)
-			return errUserDataDisabled
-		}
-
-		knownUserData, _, err := c.GetUserData()
-		if err != nil {
-			// Start with a non-long poll after re-enabling after disable, so that we don't have to wait the
-			// full long poll interval before calling SetUserDataStatus to enable again.
-			// Leave knownUserData as nil and GetVersion will return 0.
-			hasFetchedUserData = false
-		}
+		knownUserData, _, _ := c.GetUserData()
 
 		callCtx, cancel := context.WithTimeout(ctx, c.config.GetUserDataLongPollTimeout())
 		defer cancel()
@@ -1027,16 +974,12 @@ func (c *taskQueueManagerImpl) fetchUserData(ctx context.Context) error {
 		})
 		if err != nil {
 			var unimplErr *serviceerror.Unimplemented
-			var failedPrecondErr *serviceerror.FailedPrecondition
 			if errors.As(err, &unimplErr) {
 				// This might happen during a deployment. The older version couldn't have had any user data,
 				// so we act as if it just returned an empty response and set ourselves ready.
 				// Return the error so that we backoff with retry, and do not set hasFetchedUserData so that
 				// we don't do a long poll next time.
 				c.SetUserDataState(userDataEnabled, nil)
-			} else if errors.As(err, &failedPrecondErr) {
-				// This means the parent has the LoadUserData switch turned off. Act like our switch is off also.
-				c.SetUserDataState(userDataDisabled, nil)
 			}
 			return err
 		}

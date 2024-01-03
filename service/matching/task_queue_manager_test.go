@@ -36,12 +36,10 @@ import (
 	"github.com/pborman/uuid"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"github.com/uber-go/tally/v4"
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
 	"google.golang.org/grpc"
-	"google.golang.org/protobuf/types/known/emptypb"
 
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	"go.temporal.io/server/api/historyservice/v1"
@@ -49,13 +47,11 @@ import (
 	"go.temporal.io/server/api/matchingservice/v1"
 	"go.temporal.io/server/api/matchingservicemock/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
-	"go.temporal.io/server/api/taskqueue/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/backoff"
 	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
-	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/persistence/visibility/manager"
@@ -121,77 +117,6 @@ func TestDeliverBufferTasks_NoPollers(t *testing.T) {
 	}
 	tlm.taskReader.gorogrp.Go(tlm.taskReader.dispatchBufferedTasks)
 	time.Sleep(100 * time.Millisecond) // let go routine run first and block on tasksForPoll
-	tlm.taskReader.gorogrp.Cancel()
-	tlm.taskReader.gorogrp.Wait()
-}
-
-func TestDeliverBufferTasks_DisableUserData_SendsVersionedToDlq(t *testing.T) {
-	t.Parallel()
-
-	controller := gomock.NewController(t)
-	defer controller.Finish()
-
-	tlm := mustCreateTestTaskQueueManager(t, controller)
-	tlm.config.LoadUserData = dynamicconfig.GetBoolPropertyFn(false)
-
-	scope := tally.NewTestScope("test", nil)
-	tlm.metricsHandler = metrics.NewTallyMetricsHandler(metrics.ClientConfig{}, scope)
-
-	tlm.taskReader.taskBuffer <- &persistencespb.AllocatedTaskInfo{
-		Data: &persistencespb.TaskInfo{
-			VersionDirective: &taskqueue.TaskVersionDirective{
-				Value: &taskqueue.TaskVersionDirective_BuildId{BuildId: "asdf"},
-			},
-		},
-	}
-
-	tlm.SetInitializedError(nil)
-	tlm.SetUserDataState(userDataDisabled, nil)
-	tlm.taskReader.gorogrp.Go(tlm.taskReader.dispatchBufferedTasks)
-
-	time.Sleep(taskReaderOfferThrottleWait)
-
-	// should be no retries
-	// TODO: this test could eventually be improved to check which tqm the task got redirected to.
-	// for now, this is tested better by integration tests.
-	errCount := scope.Snapshot().Counters()["test.buffer_throttle_count+"]
-	require.Nil(t, errCount)
-
-	tlm.taskReader.gorogrp.Cancel()
-	tlm.taskReader.gorogrp.Wait()
-}
-
-func TestDeliverBufferTasks_DisableUserData_SendsDefaultToUnversioned(t *testing.T) {
-	t.Parallel()
-
-	controller := gomock.NewController(t)
-	defer controller.Finish()
-
-	tlm := mustCreateTestTaskQueueManager(t, controller)
-	tlm.config.LoadUserData = dynamicconfig.GetBoolPropertyFn(false)
-
-	scope := tally.NewTestScope("test", nil)
-	tlm.metricsHandler = metrics.NewTallyMetricsHandler(metrics.ClientConfig{}, scope)
-
-	tlm.taskReader.taskBuffer <- &persistencespb.AllocatedTaskInfo{
-		Data: &persistencespb.TaskInfo{
-			CreateTime: timestamp.TimePtr(time.Now().UTC()),
-			VersionDirective: &taskqueue.TaskVersionDirective{
-				Value: &taskqueue.TaskVersionDirective_UseDefault{UseDefault: &emptypb.Empty{}},
-			},
-		},
-	}
-
-	tlm.SetInitializedError(nil)
-	tlm.SetUserDataState(userDataDisabled, nil)
-	tlm.taskReader.gorogrp.Go(tlm.taskReader.dispatchBufferedTasks)
-
-	time.Sleep(taskReaderOfferThrottleWait)
-
-	// should be no retries
-	errCount := scope.Snapshot().Counters()["test.buffer_throttle_count+"]
-	require.Nil(t, errCount)
-
 	tlm.taskReader.gorogrp.Cancel()
 	tlm.taskReader.gorogrp.Wait()
 }
@@ -670,115 +595,6 @@ func TestUserData_LoadOnInit(t *testing.T) {
 	tq.Stop()
 }
 
-func TestUserData_DontLoadWhenDisabled(t *testing.T) {
-	t.Parallel()
-
-	controller := gomock.NewController(t)
-	defer controller.Finish()
-	ctx := context.Background()
-	tqId, err := newTaskQueueIDWithPartition(defaultNamespaceId, defaultRootTqID, enumspb.TASK_QUEUE_TYPE_WORKFLOW, 0)
-	require.NoError(t, err)
-	tqCfg := defaultTqmTestOpts(controller)
-	tqCfg.tqId = tqId
-
-	data1 := &persistencespb.VersionedTaskQueueUserData{
-		Version: 1,
-		Data:    mkUserData(1),
-	}
-
-	tq := mustCreateTestTaskQueueManagerWithConfig(t, controller, tqCfg)
-	tq.config.LoadUserData = dynamicconfig.GetBoolPropertyFn(false)
-
-	require.NoError(t, tq.engine.taskManager.UpdateTaskQueueUserData(context.Background(),
-		&persistence.UpdateTaskQueueUserDataRequest{
-			NamespaceID: defaultNamespaceId.String(),
-			TaskQueue:   defaultRootTqID,
-			UserData:    data1,
-		}))
-
-	tq.Start()
-	require.NoError(t, tq.WaitUntilInitialized(ctx))
-	userData, _, err := tq.GetUserData()
-	require.Nil(t, userData)
-	require.Equal(t, err, errUserDataDisabled)
-	tq.Stop()
-}
-
-func TestUserData_LoadDisableEnable(t *testing.T) {
-	t.Parallel()
-
-	controller := gomock.NewController(t)
-	defer controller.Finish()
-	ctx := context.Background()
-	tqId, err := newTaskQueueIDWithPartition(defaultNamespaceId, defaultRootTqID, enumspb.TASK_QUEUE_TYPE_WORKFLOW, 0)
-	require.NoError(t, err)
-	tqCfg := defaultTqmTestOpts(controller)
-	tqCfg.tqId = tqId
-
-	data1 := &persistencespb.VersionedTaskQueueUserData{
-		Version: 1,
-		Data:    mkUserData(1),
-	}
-
-	loadUserData := make(chan bool)
-
-	tq := mustCreateTestTaskQueueManagerWithConfig(t, controller, tqCfg)
-	tq.config.GetUserDataLongPollTimeout = dynamicconfig.GetDurationPropertyFn(10 * time.Millisecond)
-	tq.config.LoadUserData = func() bool { return <-loadUserData }
-
-	require.NoError(t, tq.engine.taskManager.UpdateTaskQueueUserData(context.Background(),
-		&persistence.UpdateTaskQueueUserDataRequest{
-			NamespaceID: defaultNamespaceId.String(),
-			TaskQueue:   defaultRootTqID,
-			UserData:    data1,
-		}))
-	data1.Version++
-
-	tq.Start()
-
-	loadUserData <- true
-	time.Sleep(100 * time.Millisecond)
-
-	require.NoError(t, tq.WaitUntilInitialized(ctx))
-	userData, _, err := tq.GetUserData()
-	require.NoError(t, err)
-	require.Equal(t, data1, userData)
-
-	loadUserData <- false
-	time.Sleep(100 * time.Millisecond)
-
-	userData, _, err = tq.GetUserData()
-	require.Equal(t, err, errUserDataDisabled)
-	require.Nil(t, userData)
-
-	// check engine-level rpc also
-	_, err = tq.engine.GetTaskQueueUserData(context.Background(), &matchingservice.GetTaskQueueUserDataRequest{
-		NamespaceId:   tqId.namespaceID.String(),
-		TaskQueue:     tqId.FullName(),
-		TaskQueueType: tqId.taskType,
-	})
-	var failedPrecondition *serviceerror.FailedPrecondition
-	require.True(t, errors.As(err, &failedPrecondition))
-
-	// updated in db without going through tqm (this shouldn't happen but lets us test that it re-reads)
-	require.NoError(t, tq.engine.taskManager.UpdateTaskQueueUserData(context.Background(),
-		&persistence.UpdateTaskQueueUserDataRequest{
-			NamespaceID: defaultNamespaceId.String(),
-			TaskQueue:   defaultRootTqID,
-			UserData:    data1,
-		}))
-	data1.Version++
-
-	loadUserData <- true
-	time.Sleep(100 * time.Millisecond)
-
-	userData, _, err = tq.GetUserData()
-	require.NoError(t, err)
-	require.Equal(t, data1, userData)
-
-	tq.Stop()
-}
-
 func TestUserData_LoadOnInit_OnlyOnceWhenNoData(t *testing.T) {
 	t.Parallel()
 
@@ -924,122 +740,6 @@ func TestUserData_FetchesAndFetchesAgain(t *testing.T) {
 	userData, _, err := tq.GetUserData()
 	require.NoError(t, err)
 	require.Equal(t, data2, userData)
-	tq.Stop()
-}
-
-func TestUserData_FetchDisableEnable(t *testing.T) {
-	t.Parallel()
-
-	controller := gomock.NewController(t)
-	defer controller.Finish()
-	// note: using activity here
-	tqId, err := newTaskQueueIDWithPartition(defaultNamespaceId, defaultRootTqID, enumspb.TASK_QUEUE_TYPE_ACTIVITY, 1)
-	require.NoError(t, err)
-	tqCfg := defaultTqmTestOpts(controller)
-	tqCfg.tqId = tqId
-
-	loadUserData := make(chan bool)
-
-	tq := mustCreateTestTaskQueueManagerWithConfig(t, controller, tqCfg)
-	tq.config.GetUserDataMinWaitTime = 10 * time.Millisecond // fetch again quickly
-	tq.config.GetUserDataRetryPolicy = backoff.NewExponentialRetryPolicy(10 * time.Millisecond).WithMaximumInterval(10 * time.Millisecond)
-	tq.config.LoadUserData = func() bool { return <-loadUserData }
-
-	data1 := &persistencespb.VersionedTaskQueueUserData{
-		Version: 1,
-		Data:    mkUserData(1),
-	}
-	data2 := &persistencespb.VersionedTaskQueueUserData{
-		Version: 2,
-		Data:    mkUserData(2),
-	}
-	data3 := &persistencespb.VersionedTaskQueueUserData{
-		Version: 3,
-		Data:    mkUserData(3),
-	}
-
-	tqCfg.matchingClientMock.EXPECT().GetTaskQueueUserData(
-		gomock.Any(),
-		&matchingservice.GetTaskQueueUserDataRequest{
-			NamespaceId:              defaultNamespaceId.String(),
-			TaskQueue:                defaultRootTqID,
-			TaskQueueType:            enumspb.TASK_QUEUE_TYPE_WORKFLOW,
-			LastKnownUserDataVersion: 0,
-			WaitNewData:              false, // first is not long poll
-		}).
-		Return(&matchingservice.GetTaskQueueUserDataResponse{
-			TaskQueueHasUserData: true,
-			UserData:             data1,
-		}, nil)
-
-	tqCfg.matchingClientMock.EXPECT().GetTaskQueueUserData(
-		gomock.Any(),
-		&matchingservice.GetTaskQueueUserDataRequest{
-			NamespaceId:              defaultNamespaceId.String(),
-			TaskQueue:                defaultRootTqID,
-			TaskQueueType:            enumspb.TASK_QUEUE_TYPE_WORKFLOW,
-			LastKnownUserDataVersion: 1,
-			WaitNewData:              true, // second is long poll
-		}).
-		Return(&matchingservice.GetTaskQueueUserDataResponse{
-			TaskQueueHasUserData: true,
-			UserData:             data2,
-		}, nil)
-
-	// after enabling again:
-
-	tqCfg.matchingClientMock.EXPECT().GetTaskQueueUserData(
-		gomock.Any(),
-		&matchingservice.GetTaskQueueUserDataRequest{
-			NamespaceId:              defaultNamespaceId.String(),
-			TaskQueue:                defaultRootTqID,
-			TaskQueueType:            enumspb.TASK_QUEUE_TYPE_WORKFLOW,
-			LastKnownUserDataVersion: 0, // sends zero for first request after re-enabling
-			WaitNewData:              false,
-		}).
-		Return(&matchingservice.GetTaskQueueUserDataResponse{
-			TaskQueueHasUserData: true,
-			UserData:             data3,
-		}, nil)
-
-	tqCfg.matchingClientMock.EXPECT().GetTaskQueueUserData(
-		gomock.Any(),
-		&matchingservice.GetTaskQueueUserDataRequest{
-			NamespaceId:              defaultNamespaceId.String(),
-			TaskQueue:                defaultRootTqID,
-			TaskQueueType:            enumspb.TASK_QUEUE_TYPE_WORKFLOW,
-			LastKnownUserDataVersion: 3,
-			WaitNewData:              true,
-		}).
-		Return(nil, serviceerror.NewUnavailable("hold on")).AnyTimes()
-
-	tq.Start()
-
-	loadUserData <- true
-	loadUserData <- true
-	time.Sleep(100 * time.Millisecond)
-
-	userData, _, err := tq.GetUserData()
-	require.NoError(t, err)
-	require.Equal(t, data2, userData)
-
-	loadUserData <- false
-	time.Sleep(100 * time.Millisecond)
-
-	// should have fetched twice but now user data is disabled
-	userData, _, err = tq.GetUserData()
-	require.Nil(t, userData)
-	require.Equal(t, err, errUserDataDisabled)
-
-	// enable again
-	loadUserData <- true
-	time.Sleep(100 * time.Millisecond)
-
-	// should be available again with data3
-	userData, _, err = tq.GetUserData()
-	require.NoError(t, err)
-	require.Equal(t, data3, userData)
-
 	tq.Stop()
 }
 
@@ -1363,22 +1063,4 @@ func TestUserData_UpdateOnNonRootFails(t *testing.T) {
 	})
 	require.Error(t, err)
 	require.ErrorIs(t, err, errUserDataNoMutateNonRoot)
-}
-
-func TestUserData_DontFetchWhenDisabled(t *testing.T) {
-	t.Parallel()
-
-	ctx := context.Background()
-	controller := gomock.NewController(t)
-	defer controller.Finish()
-	taskQueueId, err := newTaskQueueIDWithPartition(defaultNamespaceId, defaultRootTqID, enumspb.TASK_QUEUE_TYPE_WORKFLOW, 1)
-	require.NoError(t, err)
-	tqCfg := defaultTqmTestOpts(controller)
-	tqCfg.tqId = taskQueueId
-	mgr := mustCreateTestTaskQueueManagerWithConfig(t, controller, tqCfg)
-	tqCfg.matchingClientMock.EXPECT().GetTaskQueueUserData(gomock.Any(), gomock.Any()).Times(0)
-	mgr.config.LoadUserData = dynamicconfig.GetBoolPropertyFn(false)
-	mgr.Start()
-	err = mgr.WaitUntilInitialized(ctx)
-	require.NoError(t, err)
 }

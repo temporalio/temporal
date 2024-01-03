@@ -133,11 +133,6 @@ type (
 		// partition qps = AdminNamespaceTaskQueueToPartitionDispatchRate(namespace, task_queue)
 		AdminNamespaceTaskQueueToPartitionDispatchRate func() float64
 
-		// If set to false, matching does not load user data from DB for root partitions or fetch it via RPC from the
-		// root. When disabled, features that rely on user data (e.g. worker versioning) will essentially be disabled.
-		// See the documentation for constants.MatchingLoadUserData for the implications on versioning.
-		LoadUserData func() bool
-
 		// Retry policy for fetching user data from root partition. Should retry forever.
 		GetUserDataRetryPolicy backoff.RetryPolicy
 	}
@@ -241,9 +236,6 @@ func newTaskQueueConfig(id *taskQueueID, config *Config, namespace namespace.Nam
 			return config.MaxWaitForPollerBeforeFwd(namespace.String(), taskQueueName, taskType)
 		},
 		TestDisableSyncMatch: config.TestDisableSyncMatch,
-		LoadUserData: func() bool {
-			return config.LoadUserData(namespace.String(), taskQueueName, taskType)
-		},
 		LongPollExpirationInterval: func() time.Duration {
 			return config.LongPollExpirationInterval(namespace.String(), taskQueueName, taskType)
 		},

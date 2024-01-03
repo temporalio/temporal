@@ -762,8 +762,6 @@ func (e *matchingEngineImpl) QueryWorkflow(
 	tqm, _, err := baseTqm.RedirectToVersionedQueueForAdd(ctx, queryRequest.VersionDirective)
 	if err != nil {
 		return nil, err
-	} else if tqm.QueueID().VersionSet() == dlqVersionSet {
-		return nil, serviceerror.NewFailedPrecondition("Operations on versioned workflows are disabled")
 	}
 
 	taskID := uuid.New()
@@ -1268,10 +1266,6 @@ func (e *matchingEngineImpl) pollTask(
 
 	tqm, err := baseTqm.RedirectToVersionedQueueForPoll(ctx, pollMetadata.workerVersionCapabilities)
 	if err != nil {
-		if errors.Is(err, errUserDataDisabled) {
-			// Rewrite to nicer error message
-			err = serviceerror.NewFailedPrecondition("Operations on versioned workflows are disabled")
-		}
 		return nil, err
 	}
 
