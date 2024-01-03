@@ -25,8 +25,6 @@
 package metrics
 
 import (
-	"errors"
-	"fmt"
 	"strconv"
 	"strings"
 
@@ -253,21 +251,6 @@ func VisibilityPluginNameTag(value string) Tag {
 // VersionedTag represents whether a loaded task queue manager represents a specific version set.
 func VersionedTag(versioned bool) Tag {
 	return &tagImpl{key: versionedTagName, value: strconv.FormatBool(versioned)}
-}
-
-func errorType(err error) string {
-	// There isn't a better way to do this as the type is private, but it obscures the actual error's type
-	// so it's worth unwrapping
-	errType := fmt.Sprintf("%T", err)
-	for errType == "*fmt.wrapError" {
-		underlying := errors.Unwrap(err)
-		if underlying == nil {
-			break
-		}
-		errType = fmt.Sprintf("%T", underlying)
-		err = underlying
-	}
-	return errType
 }
 
 func ServiceErrorTypeTag(err error) Tag {
