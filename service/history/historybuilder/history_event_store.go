@@ -34,7 +34,7 @@ import (
 	"go.temporal.io/server/common/metrics"
 )
 
-type HistoryEventsStore struct {
+type EventStore struct {
 	state           HistoryBuilderState
 	timeSource      clock.TimeSource
 	taskIDGenerator TaskIDGenerator
@@ -60,24 +60,24 @@ type HistoryEventsStore struct {
 	metricsHandler metrics.Handler
 }
 
-func (b *HistoryEventsStore) IsDirty() bool {
+func (b *EventStore) IsDirty() bool {
 	return len(b.memEventsBatches) > 0 ||
 		len(b.memLatestBatch) > 0 ||
 		len(b.memBufferBatch) > 0 ||
 		len(b.scheduledIDToStartedID) > 0
 }
 
-func (b *HistoryEventsStore) AllocateEventID() int64 {
+func (b *EventStore) AllocateEventID() int64 {
 	result := b.nextEventID
 	b.nextEventID++
 	return result
 }
 
-func (b *HistoryEventsStore) NextEventID() int64 {
+func (b *EventStore) NextEventID() int64 {
 	return b.nextEventID
 }
 
-func (b *HistoryEventsStore) appendEvents(
+func (b *EventStore) appendEvents(
 	event *historypb.HistoryEvent,
 ) (*historypb.HistoryEvent, int64) {
 	b.assertMutable()
@@ -100,12 +100,12 @@ func (b *HistoryEventsStore) appendEvents(
 	return event, batchID
 }
 
-func (b *HistoryEventsStore) HasBufferEvents() bool {
+func (b *EventStore) HasBufferEvents() bool {
 	return len(b.dbBufferBatch) > 0 || len(b.memBufferBatch) > 0
 }
 
 // HasAnyBufferedEvent returns true if there is at least one buffered event that matches the provided filter.
-func (b *HistoryEventsStore) HasAnyBufferedEvent(filter BufferedEventFilter) bool {
+func (b *EventStore) HasAnyBufferedEvent(filter BufferedEventFilter) bool {
 	for _, event := range b.memBufferBatch {
 		if filter(event) {
 			return true
@@ -119,11 +119,11 @@ func (b *HistoryEventsStore) HasAnyBufferedEvent(filter BufferedEventFilter) boo
 	return false
 }
 
-func (b *HistoryEventsStore) NumBufferedEvents() int {
+func (b *EventStore) NumBufferedEvents() int {
 	return len(b.dbBufferBatch) + len(b.memBufferBatch)
 }
 
-func (b *HistoryEventsStore) SizeInBytesOfBufferedEvents() int {
+func (b *EventStore) SizeInBytesOfBufferedEvents() int {
 	size := 0
 	for _, ev := range b.dbBufferBatch {
 		size += proto.Size(ev)
@@ -134,7 +134,7 @@ func (b *HistoryEventsStore) SizeInBytesOfBufferedEvents() int {
 	return size
 }
 
-func (b *HistoryEventsStore) FlushBufferToCurrentBatch() map[int64]int64 {
+func (b *EventStore) FlushBufferToCurrentBatch() map[int64]int64 {
 	if len(b.dbBufferBatch) == 0 && len(b.memBufferBatch) == 0 {
 		return b.scheduledIDToStartedID
 	}
@@ -173,7 +173,7 @@ func (b *HistoryEventsStore) FlushBufferToCurrentBatch() map[int64]int64 {
 	return b.scheduledIDToStartedID
 }
 
-func (b *HistoryEventsStore) FlushAndCreateNewBatch() {
+func (b *EventStore) FlushAndCreateNewBatch() {
 	b.assertNotSealed()
 	if len(b.memLatestBatch) == 0 {
 		return
@@ -183,7 +183,7 @@ func (b *HistoryEventsStore) FlushAndCreateNewBatch() {
 	b.memLatestBatch = nil
 }
 
-func (b *HistoryEventsStore) Finish(
+func (b *EventStore) Finish(
 	flushBufferEvent bool,
 ) (*HistoryMutation, error) {
 	defer func() {
@@ -222,7 +222,7 @@ func (b *HistoryEventsStore) Finish(
 	}, nil
 }
 
-func (b *HistoryEventsStore) assignTaskIDs(
+func (b *EventStore) assignTaskIDs(
 	dbEventsBatches [][]*historypb.HistoryEvent,
 ) error {
 	b.assertNotSealed()
@@ -252,19 +252,19 @@ func (b *HistoryEventsStore) assignTaskIDs(
 	return nil
 }
 
-func (b *HistoryEventsStore) assertMutable() {
+func (b *EventStore) assertMutable() {
 	if b.state != HistoryBuilderStateMutable {
 		panic("history builder is mutated while not in mutable state")
 	}
 }
 
-func (b *HistoryEventsStore) assertNotSealed() {
+func (b *EventStore) assertNotSealed() {
 	if b.state == HistoryBuilderStateSealed {
 		panic("history builder is in sealed state")
 	}
 }
 
-func (b *HistoryEventsStore) bufferEvent(
+func (b *EventStore) bufferEvent(
 	eventType enumspb.EventType,
 ) bool {
 	switch eventType {
@@ -321,7 +321,7 @@ func (b *HistoryEventsStore) bufferEvent(
 	}
 }
 
-func (b *HistoryEventsStore) finishEvent(
+func (b *EventStore) finishEvent(
 	eventType enumspb.EventType,
 ) bool {
 	switch eventType {
@@ -340,7 +340,7 @@ func (b *HistoryEventsStore) finishEvent(
 }
 
 //nolint:revive
-func (b *HistoryEventsStore) wireEventIDs(
+func (b *EventStore) wireEventIDs(
 	bufferEvents []*historypb.HistoryEvent,
 ) {
 	for _, event := range bufferEvents {
@@ -408,7 +408,7 @@ func (b *HistoryEventsStore) wireEventIDs(
 //  * HasActivityFinishEvent
 //  * hasActivityFinishEvent
 
-func (b *HistoryEventsStore) reorderBuffer(
+func (b *EventStore) reorderBuffer(
 	bufferEvents []*historypb.HistoryEvent,
 ) []*historypb.HistoryEvent {
 	b.emitInorderedBufferedEvents(bufferEvents)
@@ -434,7 +434,7 @@ func (b *HistoryEventsStore) reorderBuffer(
 	return append(reorderEvents, reorderBuffer...)
 }
 
-func (b *HistoryEventsStore) emitInorderedBufferedEvents(bufferedEvents []*historypb.HistoryEvent) {
+func (b *EventStore) emitInorderedBufferedEvents(bufferedEvents []*historypb.HistoryEvent) {
 	completedActivities := make(map[int64]struct{})
 	completedChildWorkflows := make(map[int64]struct{})
 	var inorderedEventsCount int64
@@ -475,7 +475,7 @@ func (b *HistoryEventsStore) emitInorderedBufferedEvents(bufferedEvents []*histo
 	}
 }
 
-func (b *HistoryEventsStore) HasActivityFinishEvent(
+func (b *EventStore) HasActivityFinishEvent(
 	scheduledEventID int64,
 ) bool {
 
@@ -531,7 +531,7 @@ func hasActivityFinishEvent(
 	return false
 }
 
-func (b *HistoryEventsStore) GetAndRemoveTimerFireEvent(
+func (b *EventStore) GetAndRemoveTimerFireEvent(
 	timerID string,
 ) *historypb.HistoryEvent {
 	var timerFireEvent *historypb.HistoryEvent

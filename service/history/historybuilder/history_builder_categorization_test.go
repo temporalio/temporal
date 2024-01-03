@@ -68,7 +68,7 @@ func (h StubHandler) Histogram(_ string, _ metrics.MetricUnit) metrics.Histogram
 func (h StubHandler) Stop(_ log.Logger) {}
 
 func TestHistoryBuilder_IsDirty(t *testing.T) {
-	hb := HistoryBuilder{HistoryEventsStore: HistoryEventsStore{}}
+	hb := HistoryBuilder{EventStore: EventStore{}}
 	if hb.IsDirty() {
 		t.Fatal("newly created history is dirty")
 	}
@@ -143,8 +143,8 @@ func TestHistoryBuilder_AddWorkflowExecutionStartedEvent(t *testing.T) {
 func TestHistoryBuilder_FlushBufferToCurrentBatch(t *testing.T) {
 	t.Run("when no events in dbBufferBatch or meBufferBatch will return scheduledIDToStartedID", func(t *testing.T) {
 		hb := HistoryBuilder{
-			HistoryEventsStore{scheduledIDToStartedID: make(map[int64]int64)},
-			PBEventFactory{},
+			EventStore{scheduledIDToStartedID: make(map[int64]int64)},
+			EventFactory{},
 		}
 		hb.scheduledIDToStartedID[71] = 42
 
