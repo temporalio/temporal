@@ -31,6 +31,7 @@ import (
 	"sync"
 
 	"go.temporal.io/api/serviceerror"
+	"go.temporal.io/server/common/log/tag"
 
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
@@ -58,6 +59,7 @@ type (
 	BiDirectionStreamClient[Req any, Resp any] interface {
 		Send(Req) error
 		Recv() (Resp, error)
+		CloseSend() error
 	}
 	BiDirectionStream[Req any, Resp any] interface {
 		Send(Req) error
@@ -71,7 +73,6 @@ type (
 	}
 	BiDirectionStreamImpl[Req any, Resp any] struct {
 		ctx            context.Context
-		cancel         context.CancelFunc
 		clientProvider BiDirectionStreamClientProvider[Req, Resp]
 		metricsHandler metrics.Handler
 		logger         log.Logger
@@ -93,10 +94,8 @@ func NewBiDirectionStream[Req any, Resp any](
 	metricsHandler metrics.Handler,
 	logger log.Logger,
 ) *BiDirectionStreamImpl[Req, Resp] {
-	ctx, cancel := context.WithCancel(context.Background())
 	return &BiDirectionStreamImpl[Req, Resp]{
-		ctx:            ctx,
-		cancel:         cancel,
+		ctx:            context.Background(),
 		clientProvider: clientProvider,
 		metricsHandler: metricsHandler,
 		logger:         logger,
@@ -152,7 +151,12 @@ func (s *BiDirectionStreamImpl[Req, Resp]) closeLocked() {
 		return
 	}
 	s.status = streamStatusClosed
-	s.cancel()
+	if s.streamingClient != nil {
+		err := s.streamingClient.CloseSend() // if there is error, the stream is also closed
+		if err != nil {
+			s.logger.Error("BiDirectionStream close error", tag.Error(err))
+		}
+	}
 }
 
 func (s *BiDirectionStreamImpl[Req, Resp]) lazyInitLocked() error {
