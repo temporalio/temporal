@@ -905,6 +905,81 @@ func TestWaitLifecycleStage(t *testing.T) {
 	})
 }
 
+func TestCompletedWorkflow(t *testing.T) {
+	var (
+		ctx     = context.Background()
+		effects = effect.Immediate(ctx)
+
+		meta = updatepb.Meta{UpdateId: t.Name() + "-update-id"}
+		req  = updatepb.Request{Meta: &meta, Input: &updatepb.Input{Name: t.Name()}}
+
+		store = mockEventStore{Controller: effects}
+	)
+
+	t.Run("request", func(t *testing.T) {
+		upd := update.New(meta.UpdateId)
+		err := upd.OnMessage(ctx, &req, false, store)
+		require.NoError(t, err)
+
+		status, err := upd.WaitOutcome(ctx)
+		require.NoError(t, err)
+		require.Equal(t, enumspb.UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_COMPLETED, status.Stage)
+		require.Equal(t, "Workflow Update is rejected because Workflow Execution is completed.", status.Outcome.GetFailure().GetMessage())
+		require.Equal(t, "TerminatedUpdate", status.Outcome.GetFailure().GetApplicationFailureInfo().Type)
+	})
+
+	t.Run("accept", func(t *testing.T) {
+		upd := update.New(meta.UpdateId)
+		_ = upd.OnMessage(ctx, &req, true, store)
+		upd.Send(ctx, false, &protocolpb.Message_EventId{EventId: testSequencingEventID}, store)
+
+		acpt := updatepb.Acceptance{AcceptedRequestSequencingEventId: 2208}
+		err := upd.OnMessage(ctx, &acpt, false, store)
+		require.NoError(t, err)
+
+		status, err := upd.WaitOutcome(ctx)
+		require.NoError(t, err)
+		require.Equal(t, enumspb.UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_COMPLETED, status.Stage)
+		require.Equal(t, "Workflow Update is rejected because Workflow Execution is completed.", status.Outcome.GetFailure().GetMessage())
+		require.Equal(t, "TerminatedUpdate", status.Outcome.GetFailure().GetApplicationFailureInfo().Type)
+	})
+
+	t.Run("reject", func(t *testing.T) {
+		upd := update.New(meta.UpdateId)
+		_ = upd.OnMessage(ctx, &req, true, store)
+		upd.Send(ctx, false, &protocolpb.Message_EventId{EventId: testSequencingEventID}, store)
+
+		rej := updatepb.Rejection{
+			RejectedRequest: &req,
+			Failure:         &failurepb.Failure{Message: "An intentional failure"},
+		}
+		err := upd.OnMessage(ctx, &rej, false, store)
+		require.NoError(t, err)
+
+		status, err := upd.WaitOutcome(ctx)
+		require.NoError(t, err)
+		require.Equal(t, enumspb.UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_COMPLETED, status.Stage)
+		require.Equal(t, "An intentional failure", status.Outcome.GetFailure().GetMessage())
+	})
+
+	t.Run("complete", func(t *testing.T) {
+		upd := update.NewAccepted(meta.UpdateId, testAcceptedEventID)
+
+		resp := updatepb.Response{Meta: &meta, Outcome: successOutcome(t, "success!")}
+		err := upd.OnMessage(ctx, &resp, false, store)
+		require.NoError(t, err)
+
+		status, err := upd.WaitOutcome(ctx)
+		require.Error(t, err)
+
+		var canceled *serviceerror.Canceled
+		require.ErrorAs(t, err, &canceled,
+			"expected Canceled error when workflow is completed and update is in Accepted state")
+		require.Equal(t, "Workflow Update is cancelled because Workflow Execution is completed.", err.Error())
+		require.Nil(t, status.Outcome)
+	})
+}
+
 func mustMarshalAny(t *testing.T, pb proto.Message) *anypb.Any {
 	t.Helper()
 	var a anypb.Any

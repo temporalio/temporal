@@ -569,3 +569,85 @@ func TestRejectUnprocessed(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, rejectedIDs, 0, "rejected updates shouldn't be rejected again")
 }
+
+func TestCancelIncomplete(t *testing.T) {
+	var (
+		ctx          = context.Background()
+		evStore      = mockEventStore{Controller: effect.Immediate(ctx)}
+		reg          = update.NewRegistry(func() update.Store { return emptyUpdateStore })
+		sequencingID = &protocolpb.Message_EventId{EventId: testSequencingEventID}
+	)
+	updateID1, updateID2, updateID3, updateID4, updateID5 := t.Name()+"-update-id-1", t.Name()+"-update-id-2", t.Name()+"-update-id-3", t.Name()+"-update-id-4", t.Name()+"-update-id-5"
+	upd1, _, _ := reg.FindOrCreate(ctx, updateID1)
+
+	upd2, _, _ := reg.FindOrCreate(ctx, updateID2)
+	_ = upd2.OnMessage(ctx, &updatepb.Request{
+		Meta:  &updatepb.Meta{UpdateId: updateID2},
+		Input: &updatepb.Input{Name: t.Name() + "-update-func"},
+	}, true, evStore)
+
+	upd3, _, _ := reg.FindOrCreate(ctx, updateID3)
+	_ = upd3.OnMessage(ctx, &updatepb.Request{
+		Meta:  &updatepb.Meta{UpdateId: updateID3},
+		Input: &updatepb.Input{Name: t.Name() + "-update-func"},
+	}, true, evStore)
+	upd3.Send(ctx, false, sequencingID, evStore)
+
+	req4 := &updatepb.Request{
+		Meta:  &updatepb.Meta{UpdateId: updateID4},
+		Input: &updatepb.Input{Name: t.Name() + "-update-func"},
+	}
+	upd4, _, _ := reg.FindOrCreate(ctx, updateID4)
+	_ = upd4.OnMessage(ctx, req4, true, evStore)
+	upd4.Send(ctx, false, sequencingID, evStore)
+	_ = upd4.OnMessage(ctx, &updatepb.Acceptance{
+		AcceptedRequest: req4,
+	}, true, evStore)
+
+	req5 := &updatepb.Request{
+		Meta:  &updatepb.Meta{UpdateId: updateID5},
+		Input: &updatepb.Input{Name: t.Name() + "-update-func"},
+	}
+	upd5, _, _ := reg.FindOrCreate(ctx, updateID5)
+	_ = upd5.OnMessage(ctx, req5, true, evStore)
+	upd5.Send(ctx, false, sequencingID, evStore)
+	_ = upd5.OnMessage(ctx, &updatepb.Acceptance{
+		AcceptedRequest: req4,
+	}, true, evStore)
+	_ = upd5.OnMessage(
+		ctx,
+		&updatepb.Response{Meta: &updatepb.Meta{UpdateId: updateID5}, Outcome: successOutcome(t, "update completed")},
+		true,
+		evStore)
+
+	err := reg.CancelIncomplete(ctx, update.CancelReasonWorkflowCompleted, evStore)
+	require.NoError(t, err)
+
+	status, err := upd1.WaitOutcome(ctx)
+	require.NoError(t, err)
+	require.Equal(t, enumspb.UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_COMPLETED, status.Stage)
+	require.Equal(t, "Workflow Update is rejected because Workflow Execution is completed.", status.Outcome.GetFailure().GetMessage())
+
+	status, err = upd2.WaitOutcome(ctx)
+	require.NoError(t, err)
+	require.Equal(t, enumspb.UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_COMPLETED, status.Stage)
+	require.Equal(t, "Workflow Update is rejected because Workflow Execution is completed.", status.Outcome.GetFailure().GetMessage())
+
+	status, err = upd3.WaitOutcome(ctx)
+	require.NoError(t, err)
+	require.Equal(t, enumspb.UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_COMPLETED, status.Stage)
+	require.Equal(t, "Workflow Update is rejected because Workflow Execution is completed.", status.Outcome.GetFailure().GetMessage())
+
+	status, err = upd4.WaitOutcome(ctx)
+	var canceled *serviceerror.Canceled
+	require.ErrorAs(t, err, &canceled,
+		"expected Canceled error when workflow is completed and update is in Accepted state")
+	require.Equal(t, "Workflow Update is cancelled because Workflow Execution is completed.", err.Error())
+	require.Nil(t, status.Outcome)
+
+	status, err = upd5.WaitOutcome(ctx)
+	require.NoError(t, err)
+	require.Equal(t, enumspb.UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_COMPLETED, status.Stage)
+	require.Nil(t, status.Outcome.GetFailure())
+	require.NotNil(t, status.Outcome.GetSuccess())
+}
