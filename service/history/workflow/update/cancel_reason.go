@@ -47,14 +47,3 @@ func (r CancelReason) RejectionFailure() *failurepb.Failure {
 		panic("unknown cancel reason")
 	}
 }
-
-func (r CancelReason) Error() error {
-	switch r {
-	case CancelReasonWorkflowCompleted:
-		return completedWorkflowErr
-	case CancelReasonWorkflowTerminated:
-		return terminatedWorkflowErr
-	default:
-		panic("unknown cancel reason")
-	}
-}

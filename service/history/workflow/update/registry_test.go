@@ -28,6 +28,7 @@ import (
 	"context"
 	"fmt"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/require"
 	enumspb "go.temporal.io/api/enums/v1"
@@ -638,11 +639,11 @@ func TestCancelIncomplete(t *testing.T) {
 	require.Equal(t, enumspb.UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_COMPLETED, status.Stage)
 	require.Equal(t, "Workflow Update is rejected because Workflow Execution is completed.", status.Outcome.GetFailure().GetMessage())
 
-	status, err = upd4.WaitOutcome(ctx)
-	var canceled *serviceerror.Canceled
-	require.ErrorAs(t, err, &canceled,
-		"expected Canceled error when workflow is completed and update is in Accepted state")
-	require.Equal(t, "Workflow Update is cancelled because Workflow Execution is completed.", err.Error())
+	oneMsCtx, cancel := context.WithTimeout(ctx, 1*time.Millisecond)
+	defer cancel()
+	status, err = upd4.WaitOutcome(oneMsCtx)
+	require.ErrorIs(t, err, context.DeadlineExceeded,
+		"expected DeadlineExceeded error when workflow is completed and update is in Accepted state")
 	require.Nil(t, status.Outcome)
 
 	status, err = upd5.WaitOutcome(ctx)

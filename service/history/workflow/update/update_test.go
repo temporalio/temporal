@@ -969,13 +969,13 @@ func TestCompletedWorkflow(t *testing.T) {
 		err := upd.OnMessage(ctx, &resp, false, store)
 		require.NoError(t, err)
 
-		status, err := upd.WaitOutcome(ctx)
+		oneMsCtx, cancel := context.WithTimeout(ctx, 1*time.Millisecond)
+		defer cancel()
+		status, err := upd.WaitOutcome(oneMsCtx)
 		require.Error(t, err)
 
-		var canceled *serviceerror.Canceled
-		require.ErrorAs(t, err, &canceled,
-			"expected Canceled error when workflow is completed and update is in Accepted state")
-		require.Equal(t, "Workflow Update is cancelled because Workflow Execution is completed.", err.Error())
+		require.ErrorIs(t, err, context.DeadlineExceeded,
+			"expected DeadlineExceeded error when workflow is completed and update is in Accepted state")
 		require.Nil(t, status.Outcome)
 	})
 }

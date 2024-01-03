@@ -3310,8 +3310,8 @@ func (s *FunctionalSuite) TestUpdateWorkflow_CompleteWorkflow_CancelUpdate() {
 		},
 		{
 			Name:          "accepted",
-			Description:   "update in stateAccepted must got an error because there is no way for workflow to completed it and already accepted update can't be rejected",
-			UpdateErr:     "Workflow Update is cancelled because Workflow Execution is completed.",
+			Description:   "update in stateAccepted must got an error because there is no way for workflow to complete it and already accepted update can't be rejected",
+			UpdateErr:     "context deadline exceeded",
 			UpdateFailure: "",
 			Commands:      func(tv *testvars.TestVars) []*commandpb.Command { return s.acceptUpdateCommands(tv, "1") },
 			Messages: func(tv *testvars.TestVars, updRequestMsg *protocolpb.Message) []*protocolpb.Message {
@@ -3396,7 +3396,20 @@ func (s *FunctionalSuite) TestUpdateWorkflow_CompleteWorkflow_CancelUpdate() {
 
 			updateResultCh := make(chan struct{})
 			go func(tc testCase) {
-				resp, err1 := s.sendUpdate(tv, "1")
+				halfSecondTimeoutCtx, cancel := context.WithTimeout(NewContext(), 500*time.Millisecond)
+				defer cancel()
+
+				resp, err1 := s.engine.UpdateWorkflowExecution(halfSecondTimeoutCtx, &workflowservice.UpdateWorkflowExecutionRequest{
+					Namespace:         s.namespace,
+					WorkflowExecution: tv.WorkflowExecution(),
+					Request: &updatepb.Request{
+						Meta: &updatepb.Meta{UpdateId: tv.UpdateID("1")},
+						Input: &updatepb.Input{
+							Name: tv.Any(),
+							Args: payloads.EncodeString(tv.Any()),
+						},
+					},
+				})
 
 				if tc.UpdateErr != "" {
 					assert.Error(s.T(), err1, tc.Description)

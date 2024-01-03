@@ -84,7 +84,7 @@ type (
 		// accessed only while holding workflow lock
 		id              string
 		state           state
-		request         *anypb.Any // of type *updatepb.Request, nil when not in stateRequested
+		request         *anypb.Any // of type *updatepb.Request, nil when not in stateRequested or stateSent.
 		acceptedEventID int64
 		onComplete      func()
 		instrumentation *instrumentation
@@ -508,24 +508,25 @@ func (u *Update) isIncomplete() bool {
 }
 
 // CancelIncomplete cancels update if it wasn't completed yet:
-//   - if in stateAdmitted, stateRequested, and stateSent -> reject,
-//   - if in stateAccepted -> complete with error.
+//   - if in stateAdmitted, stateRequested, or stateSent -> reject,
+//   - if in stateAccepted -> do nothing,
+//   - if in stateCompleted -> do nothing.
 func (u *Update) CancelIncomplete(ctx context.Context, reason CancelReason, eventStore EventStore) error {
 	if u.state.Matches(stateSet(stateAdmitted | stateProvisionallyRequested | stateRequested | stateProvisionallySent | stateSent)) {
 		return u.reject(ctx, reason.RejectionFailure(), eventStore)
 	}
 
-	if u.state.Matches(stateSet(stateProvisionallyAccepted | stateAccepted)) {
-		u.setState(stateProvisionallyCompleted)
-		eventStore.OnAfterCommit(func(context.Context) {
-			u.request = nil
-			u.setState(stateCompleted)
-			u.outcome.(*future.FutureImpl[*updatepb.Outcome]).Set(nil, reason.Error())
-			u.onComplete()
-		})
-	}
+	// Updates in stateProvisionallyAccepted and stateAccepted can't be rejected by server
+	// because they are already accepted by worker. It would be nice to complete them with error
+	// and notify API caller with specific error but this will lead to inconsistency between
+	// update registry and event store (update completed event is missing for completed update).
+	// Another approach is to add one more stateCanceled, set it here, and set update outcome
+	// with error. But this will require to do the same for every workflow completion event because
+	// after history replay of completed workflow all accepted updates must be switched to stateCanceled.
+	// So updates in stateProvisionallyAccepted and stateAccepted are ignored. They stay in the registry
+	// as is, even after workflow completes and API caller gets timeout error.
 
-	// For stateProvisionallyCompleted and stateCompleted do nothing.
+	// Updates in stateProvisionallyCompleted and stateCompleted are skipped due to nature of this method.
 	return nil
 }
 

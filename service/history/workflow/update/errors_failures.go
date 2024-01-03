@@ -26,7 +26,6 @@ package update
 
 import (
 	failurepb "go.temporal.io/api/failure/v1"
-	"go.temporal.io/api/serviceerror"
 )
 
 var (
@@ -55,7 +54,4 @@ var (
 			NonRetryable: true,
 		}},
 	}
-
-	terminatedWorkflowErr = serviceerror.NewCanceled("Workflow Update is cancelled because Workflow Execution is terminated.")
-	completedWorkflowErr  = serviceerror.NewCanceled("Workflow Update is cancelled because Workflow Execution is completed.")
 )

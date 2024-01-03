@@ -3592,7 +3592,7 @@ func (ms *MutableStateImpl) ApplyWorkflowExecutionUpdateCompletedEvent(
 	} else {
 		ui := updatespb.UpdateInfo{
 			Value: &updatespb.UpdateInfo_Completion{
-				Completion: &updatespb.CompletionInfo{EventId: event.EventId},
+				Completion: &updatespb.CompletionInfo{EventId: event.EventId}, // TODO (alex): why EventBatchID is not set here?
 			},
 		}
 		ms.executionInfo.UpdateInfos[updateID] = &ui
