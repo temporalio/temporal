@@ -170,7 +170,7 @@ func GetOrPollMutableState(
 				response.CurrentBranchToken = latestVersionHistory.GetBranchToken()
 				response.VersionHistories = event.VersionHistories
 				if !versionhistory.ContainsVersionHistoryItem(latestVersionHistory, request.VersionHistoryItem) {
-					logItem, err := versionhistory.GetLastVersionHistoryItem(currentVersionHistory)
+					logItem, err := versionhistory.GetLastVersionHistoryItem(latestVersionHistory)
 					if err != nil {
 						return nil, err
 					}

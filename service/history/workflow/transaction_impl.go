@@ -37,6 +37,7 @@ import (
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence"
+	"go.temporal.io/server/common/persistence/versionhistory"
 	"go.temporal.io/server/service/history/events"
 	"go.temporal.io/server/service/history/shard"
 )
@@ -620,7 +621,7 @@ func NotifyNewHistorySnapshotEvent(
 		lastWorkflowTaskStartEventID,
 		workflowState,
 		workflowStatus,
-		executionInfo.VersionHistories,
+		versionhistory.CopyVersionHistories(executionInfo.VersionHistories),
 	))
 	return nil
 }
@@ -659,7 +660,7 @@ func NotifyNewHistoryMutationEvent(
 		lastWorkflowTaskStartEventID,
 		workflowState,
 		workflowStatus,
-		executionInfo.VersionHistories,
+		versionhistory.CopyVersionHistories(executionInfo.VersionHistories),
 	))
 	return nil
 }
