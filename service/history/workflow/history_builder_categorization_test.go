@@ -473,6 +473,250 @@ func TestHistoryBuilder_NumBufferedEvents(t *testing.T) {
 	})
 }
 
+func TestHistoryBuilder_AddDifferentEvents_WorkflowFinishEvents(t *testing.T) {
+	sut := newSUT()
+	assertWorkflowFinished := func(t *testing.T, s sutTestingAdapter) {
+		t.Helper()
+		if s.workflowFinished == false {
+			t.Errorf("expected workflow to be finished")
+		}
+	}
+	assertWorkflowNotFinished := func(t *testing.T, s sutTestingAdapter) {
+		t.Helper()
+		if s.workflowFinished {
+			t.Errorf("expected workflow not to be finished")
+		}
+	}
+	usecase := []struct {
+		description string
+		action      func(...eventConfig) *historypb.HistoryEvent
+		assertion   func(*testing.T, sutTestingAdapter)
+	}{
+		{
+			"When AddWorkflowExecutionStartedEvent ",
+			sut.AddWorkflowExecutionStartedEvent,
+			assertWorkflowNotFinished,
+		},
+		{
+			"When WorkflowTaskScheduledEvent added ",
+			sut.AddWorkflowTaskScheduledEvent,
+			assertWorkflowNotFinished,
+		},
+		{
+			"When WorkflowTaskStartedEvent added ",
+			sut.AddWorkflowTaskStartedEvent,
+			assertWorkflowNotFinished,
+		},
+		{
+			"When WorkflowTaskCompletedEvent added it will be placed in memLatestBatch",
+			sut.AddWorkflowTaskCompletedEvent,
+			assertWorkflowNotFinished,
+		},
+		{
+			"When WorkflowTaskTimedOutEvent added it will be placed in memLatestBatch",
+			sut.AddWorkflowTaskTimedOutEvent,
+			assertWorkflowNotFinished,
+		},
+		{
+			"When WorkflowTaskFailedEvent added it will be placed in memLatestBatch",
+			sut.AddWorkflowTaskFailedEvent,
+			assertWorkflowNotFinished,
+		},
+		{
+			"When ActivityTaskScheduledEvent added it will be placed in memLatestBatch",
+			sut.AddActivityTaskScheduledEvent,
+			assertWorkflowNotFinished,
+		},
+		{
+			"When ActivityTaskStartedEvent added it will be placed in memBuffer",
+			sut.AddActivityTaskStartedEvent,
+			assertWorkflowNotFinished,
+		},
+		{
+			"When AddActivityTaskCompletedEvent added it will be placed in memBuffer",
+			sut.AddActivityTaskCompletedEvent,
+			assertWorkflowNotFinished,
+		},
+		{
+			"When ActivityTaskFailedEvent added it will be placed in memBuffer",
+			sut.AddActivityTaskFailedEvent,
+			assertWorkflowNotFinished,
+		},
+		{
+			"When ActivityTaskTimedOutEvent added it will be placed in memBuffer",
+			sut.AddActivityTaskTimedOutEvent,
+			assertWorkflowNotFinished,
+		},
+		{
+			"When CompletedWorkflowEvent added it will be placed in memLatestBatch",
+			sut.AddCompletedWorkflowEvent,
+			assertWorkflowFinished,
+		},
+		{
+			"When FailWorkflowEvent added it will be placed in memLatestBatch",
+			sut.AddFailWorkflowEvent,
+			assertWorkflowFinished,
+		},
+		{
+			"When TimeoutWorkflowEvent added it will be placed in memLatestBatch",
+			sut.AddTimeoutWorkflowEvent,
+			assertWorkflowFinished,
+		},
+		{
+			"When WorkflowExecutionTerminatedEvent added it will be placed in memLatestBatch",
+			sut.AddWorkflowExecutionTerminatedEvent,
+			assertWorkflowFinished,
+		},
+		{
+			"When WorkflowExecutionUpdateAcceptedEvent added it will be placed in memLatestBatch",
+			sut.AddWorkflowExecutionUpdateAcceptedEvent,
+			assertWorkflowNotFinished,
+		},
+		{
+			"When WorkflowExecutionUpdateCompletedEvent added it will be placed in memLatestBatch",
+			sut.AddWorkflowExecutionUpdateCompletedEvent,
+			assertWorkflowNotFinished,
+		},
+		{
+			"When ContinuedAsNewEvent added it will be placed in memLatestBatch",
+			sut.AddContinuedAsNewEvent,
+			assertWorkflowFinished,
+		},
+		{
+			"When TimerStartedEvent added it will be placed in memLatestBatch",
+			sut.AddTimerStartedEvent,
+			assertWorkflowNotFinished,
+		},
+		{
+			"When TimerFiredEvent added it will be placed in memBuffer",
+			sut.AddTimerFiredEvent,
+			assertWorkflowNotFinished,
+		},
+		{
+			"When ActivityTaskCancelRequestedEvent added it will be placed in memLatestBatch",
+			sut.AddActivityTaskCancelRequestedEvent,
+			assertWorkflowNotFinished,
+		},
+		{
+			"When  ActivityTaskCanceledEvent added it will be placed in memBuffer",
+			sut.AddActivityTaskCanceledEvent,
+			assertWorkflowNotFinished,
+		},
+		{
+			"When  TimerCanceledEvent added it will be placed in memLatestBatch",
+			sut.AddTimerCanceledEvent,
+			assertWorkflowNotFinished,
+		},
+		{
+			"When WorkflowExecutionCancelRequestedEvent added it will be placed in memBuffer",
+			sut.AddWorkflowExecutionCancelRequestedEvent,
+			assertWorkflowNotFinished,
+		},
+		{
+			"When WorkflowExecutionCanceledEvent added it will be placed in memLatestBatch",
+			sut.AddWorkflowExecutionCanceledEvent,
+			assertWorkflowFinished,
+		},
+		{
+			"When RequestCancelExternalWorkflowExecutionInitiatedEvent added it will be placed in memLatestBatch",
+			sut.AddRequestCancelExternalWorkflowExecutionInitiatedEvent,
+			assertWorkflowNotFinished,
+		},
+		{
+			"When RequestCancelExternalWorkflowExecutionFailedEvent added it will be placed in MemBuffer",
+			sut.AddRequestCancelExternalWorkflowExecutionFailedEvent,
+			assertWorkflowNotFinished,
+		},
+		{
+			"When ExternalWorkflowExecutionCancelRequested added it will be placed in MemBuffer",
+			sut.AddExternalWorkflowExecutionCancelRequested,
+			assertWorkflowNotFinished,
+		},
+		{
+			"When SignalExternalWorkflowExecutionInitiatedEvent added it will be placed in memLatestBatch",
+			sut.AddSignalExternalWorkflowExecutionInitiatedEvent,
+			assertWorkflowNotFinished,
+		},
+		{
+			"When UpsertWorkflowSearchAttributesEvent added it will be placed in memLatestBatch",
+			sut.AddUpsertWorkflowSearchAttributesEvent,
+			assertWorkflowNotFinished,
+		},
+		{
+			"When WorkflowPropertiesModifiedEvent added it will be placed in memLatestBatch",
+			sut.AddWorkflowPropertiesModifiedEvent,
+			assertWorkflowNotFinished,
+		},
+		{
+			"When SignalExternalWorkflowExecutionFailedEvent added it will be placed in MemBuffer",
+			sut.AddSignalExternalWorkflowExecutionFailedEvent,
+			assertWorkflowNotFinished,
+		},
+		{
+			"When ExternalWorkflowExecutionSignaled added it will be placed in MemBuffer",
+			sut.AddExternalWorkflowExecutionSignaled,
+			assertWorkflowNotFinished,
+		},
+		{
+			"When MarkerRecordedEvent added it will be placed in memLatestBatch",
+			sut.AddMarkerRecordedEvent,
+			assertWorkflowNotFinished,
+		},
+		{
+			"When WorkflowExecutionSignaledEvent added it will be placed in MemBuffer",
+			sut.AddWorkflowExecutionSignaledEvent,
+			assertWorkflowNotFinished,
+		},
+		{
+			"When StartChildWorkflowExecutionInitiatedEvent added it will be placed in memLatestBatch",
+			sut.AddStartChildWorkflowExecutionInitiatedEvent,
+			assertWorkflowNotFinished,
+		},
+		{
+			"When ChildWorkflowExecutionStartedEvent added it will be placed in MemBuffer",
+			sut.AddChildWorkflowExecutionStartedEvent,
+			assertWorkflowNotFinished,
+		},
+		{
+			"When StartChildWorkflowExecutionFailedEvent added it will be placed in MemBuffer",
+			sut.AddStartChildWorkflowExecutionFailedEvent,
+			assertWorkflowNotFinished,
+		},
+		{
+			"When ChildWorkflowExecutionCompletedEvent added it will be placed in MemBuffer",
+			sut.AddChildWorkflowExecutionCompletedEvent,
+			assertWorkflowNotFinished,
+		},
+		{
+			"When ChildWorkflowExecutionFailedEvent added it will be placed in MemBuffer",
+			sut.AddChildWorkflowExecutionFailedEvent,
+			assertWorkflowNotFinished,
+		},
+		{
+			"When ChildWorkflowExecutionCanceledEvent added it will be placed in MemBuffer",
+			sut.AddChildWorkflowExecutionCanceledEvent,
+			assertWorkflowNotFinished,
+		},
+		{
+			"When ChildWorkflowExecutionTerminatedEvent added it will be placed in MemBuffer",
+			sut.AddChildWorkflowExecutionTerminatedEvent,
+			assertWorkflowNotFinished,
+		},
+		{
+			"When ChildWorkflowExecutionTimedOutEvent added it will be placed in MemBuffer",
+			sut.AddChildWorkflowExecutionTimedOutEvent,
+			assertWorkflowNotFinished,
+		},
+	}
+	for _, uc := range usecase {
+		t.Run(uc.description, func(t *testing.T) {
+			sut.ResetHistoryBuilder()
+			uc.action()
+			uc.assertion(t, sut)
+		})
+	}
+}
+
 func TestHistoryBuilder_AddDifferentEvents(t *testing.T) {
 	sut := newSUT()
 	usecase := []struct {
