@@ -284,7 +284,7 @@ func (handler *workflowTaskHandlerImpl) handleCommand(
 		return handler.handleCommandScheduleActivity(ctx, command.GetScheduleActivityTaskCommandAttributes())
 
 	case enumspb.COMMAND_TYPE_COMPLETE_WORKFLOW_EXECUTION:
-		return nil, handler.handleCommandCompleteWorkflow(ctx, command.GetCompleteWorkflowExecutionCommandAttributes(), msgs)
+		return nil, handler.handleCommandCompleteWorkflow(ctx, command.GetCompleteWorkflowExecutionCommandAttributes())
 
 	case enumspb.COMMAND_TYPE_FAIL_WORKFLOW_EXECUTION:
 		return nil, handler.handleCommandFailWorkflow(ctx, command.GetFailWorkflowExecutionCommandAttributes())
@@ -630,15 +630,7 @@ func (handler *workflowTaskHandlerImpl) handleCommandStartTimer(
 func (handler *workflowTaskHandlerImpl) handleCommandCompleteWorkflow(
 	ctx context.Context,
 	attr *commandpb.CompleteWorkflowExecutionCommandAttributes,
-	msgs *collection.IndexedTakeList[string, *protocolpb.Message],
 ) error {
-
-	for _, msg := range msgs.TakeRemaining() {
-		err := handler.handleMessage(ctx, msg)
-		if err != nil || handler.stopProcessing {
-			return err
-		}
-	}
 
 	handler.metricsHandler.Counter(metrics.CommandTypeCompleteWorkflowCounter.Name()).Record(1)
 
