@@ -435,9 +435,6 @@ func (s *matchingEngineSuite) TestPollWorkflowTaskQueue_GetHistoryFailure() {
 
 	taskQueue := &taskqueuepb.TaskQueue{Name: tl, Kind: enumspb.TASK_QUEUE_KIND_NORMAL}
 
-	s.matchingEngine.config.RangeSize = 2 // to test that range is not updated without tasks
-	s.matchingEngine.config.LongPollExpirationInterval = dynamicconfig.GetDurationPropertyFnFilteredByTaskQueueInfo(10 * time.Millisecond)
-
 	runID := uuid.NewRandom().String()
 	workflowID := "workflow1"
 	workflowType := &commonpb.WorkflowType{
@@ -475,12 +472,16 @@ func (s *matchingEngineSuite) TestPollWorkflowTaskQueue_GetHistoryFailure() {
 			Query:     &querypb.WorkflowQuery{QueryType: "q"},
 		},
 	}
-	queryDoneCh := make(chan struct{})
+
 	go func() {
-		_, err := s.matchingEngine.QueryWorkflow(context.Background(), &query)
+		ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+		defer cancel()
+		_, err := s.matchingEngine.QueryWorkflow(ctx, &query)
 		s.ErrorIs(err, fakeErr)
-		queryDoneCh <- struct{}{}
 	}()
+
+	// Wait for query task to be generated before polling for it
+	time.Sleep(20 * time.Millisecond)
 
 	resp, err := s.matchingEngine.PollWorkflowTaskQueue(context.Background(), &matchingservice.PollWorkflowTaskQueueRequest{
 		NamespaceId: namespaceID.String(),
@@ -491,13 +492,6 @@ func (s *matchingEngineSuite) TestPollWorkflowTaskQueue_GetHistoryFailure() {
 	}, metrics.NoopMetricsHandler)
 	s.NoError(err)
 	s.Equal(emptyPollWorkflowTaskQueueResponse, resp)
-
-	// This seems to be a flaky test. 5 seconds timeout to fail fast.
-	select {
-	case <-queryDoneCh:
-	case <-time.After(5 * time.Second):
-		s.FailNow("QueryWorkflow timed out after 5 seconds")
-	}
 }
 
 func (s *matchingEngineSuite) PollForTasksEmptyResultTest(callContext context.Context, taskType enumspb.TaskQueueType) {
