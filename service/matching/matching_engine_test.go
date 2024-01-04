@@ -473,25 +473,30 @@ func (s *matchingEngineSuite) TestPollWorkflowTaskQueue_GetHistoryFailure() {
 		},
 	}
 
+	queryDone := false
 	go func() {
 		ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 		defer cancel()
 		_, err := s.matchingEngine.QueryWorkflow(ctx, &query)
+		queryDone = true
 		s.ErrorIs(err, fakeErr)
 	}()
 
-	// Wait for query task to be generated before polling for it
-	time.Sleep(20 * time.Millisecond)
-
-	resp, err := s.matchingEngine.PollWorkflowTaskQueue(context.Background(), &matchingservice.PollWorkflowTaskQueueRequest{
-		NamespaceId: namespaceID.String(),
-		PollRequest: &workflowservice.PollWorkflowTaskQueueRequest{
-			TaskQueue: taskQueue,
-			Identity:  identity,
+	s.Eventually(
+		func() bool {
+			resp, err := s.matchingEngine.PollWorkflowTaskQueue(context.Background(), &matchingservice.PollWorkflowTaskQueueRequest{
+				NamespaceId: namespaceID.String(),
+				PollRequest: &workflowservice.PollWorkflowTaskQueueRequest{
+					TaskQueue: taskQueue,
+					Identity:  identity,
+				},
+			}, metrics.NoopMetricsHandler)
+			s.NoError(err)
+			s.Equal(emptyPollWorkflowTaskQueueResponse, resp)
+			return queryDone
 		},
-	}, metrics.NoopMetricsHandler)
-	s.NoError(err)
-	s.Equal(emptyPollWorkflowTaskQueueResponse, resp)
+		2*time.Second,
+		50*time.Millisecond)
 }
 
 func (s *matchingEngineSuite) PollForTasksEmptyResultTest(callContext context.Context, taskType enumspb.TaskQueueType) {
