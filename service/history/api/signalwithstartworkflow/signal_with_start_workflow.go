@@ -99,7 +99,7 @@ func startAndSignalWorkflow(
 	if err != nil {
 		return "", err
 	}
-	if err := api.ValidateSignal(
+	if err = api.ValidateSignal(
 		ctx,
 		shard,
 		newWorkflowContext.GetMutableState(),
@@ -109,46 +109,48 @@ func startAndSignalWorkflow(
 		return "", err
 	}
 
-	casPredicate, currentWorkflowMutationFn, err := startAndSignalWorkflowActionFn(
+	workflowUpdateFn, err := createWorkflowUpdateFunction(
 		currentWorkflowContext,
-		signalWithStartRequest.WorkflowIdReusePolicy,
+		signalWithStartRequest.GetWorkflowIdReusePolicy(),
 		runID,
 	)
 	if err != nil {
 		return "", err
 	}
-
-	if currentWorkflowMutationFn != nil {
-		if err := startAndSignalWithCurrentWorkflow(
+	if workflowUpdateFn != nil {
+		if err = startAndSignalWithCurrentWorkflow(
 			ctx,
 			shard,
 			currentWorkflowContext,
-			currentWorkflowMutationFn,
+			workflowUpdateFn,
 			newWorkflowContext,
 		); err != nil {
 			return "", err
 		}
 		return runID, nil
+	} else {
+		snapshot, err := takeMutableStateSnapshot(currentWorkflowContext)
+		if err != nil {
+			return "", err
+		}
+		return startAndSignalWithoutCurrentWorkflow(
+			ctx,
+			shard,
+			snapshot,
+			newWorkflowContext,
+			signalWithStartRequest.RequestId,
+		)
 	}
-
-	return startAndSignalWithoutCurrentWorkflow(
-		ctx,
-		shard,
-		casPredicate,
-		newWorkflowContext,
-		signalWithStartRequest.RequestId,
-	)
 }
 
-func startAndSignalWorkflowActionFn(
+func createWorkflowUpdateFunction(
 	currentWorkflowContext api.WorkflowContext,
 	workflowIDReusePolicy enumspb.WorkflowIdReusePolicy,
 	newRunID string,
-) (*api.CreateWorkflowCASPredicate, api.UpdateWorkflowActionFunc, error) {
+) (api.UpdateWorkflowActionFunc, error) {
 	if currentWorkflowContext == nil {
-		return nil, nil, nil
+		return nil, nil
 	}
-
 	currentExecutionState := currentWorkflowContext.GetMutableState().GetExecutionState()
 	currentExecutionUpdateAction, err := api.ApplyWorkflowIDReusePolicy(
 		currentExecutionState.CreateRequestId,
@@ -159,22 +161,23 @@ func startAndSignalWorkflowActionFn(
 		newRunID,
 		workflowIDReusePolicy,
 	)
-	if err != nil {
-		return nil, nil, err
-	}
-	if currentExecutionUpdateAction != nil {
-		return nil, currentExecutionUpdateAction, nil
-	}
+	return currentExecutionUpdateAction, err
+}
 
+func takeMutableStateSnapshot(currentWorkflowContext api.WorkflowContext) (*api.MutableStateSnapshot, error) {
+	if currentWorkflowContext == nil {
+		return nil, nil
+	}
+	currentExecutionState := currentWorkflowContext.GetMutableState().GetExecutionState()
 	currentLastWriteVersion, err := currentWorkflowContext.GetMutableState().GetLastWriteVersion()
 	if err != nil {
-		return nil, nil, err
+		return nil, err
 	}
-	casPredicate := &api.CreateWorkflowCASPredicate{
+	snapshot := &api.MutableStateSnapshot{
 		RunID:            currentExecutionState.RunId,
 		LastWriteVersion: currentLastWriteVersion,
 	}
-	return casPredicate, nil, nil
+	return snapshot, nil
 }
 
 func startAndSignalWithCurrentWorkflow(
@@ -203,7 +206,7 @@ func startAndSignalWithCurrentWorkflow(
 func startAndSignalWithoutCurrentWorkflow(
 	ctx context.Context,
 	shardContext shard.Context,
-	casPredicate *api.CreateWorkflowCASPredicate,
+	mutableStateSnapshot *api.MutableStateSnapshot,
 	newWorkflowContext api.WorkflowContext,
 	requestID string,
 ) (string, error) {
@@ -220,11 +223,16 @@ func startAndSignalWithoutCurrentWorkflow(
 	createMode := persistence.CreateWorkflowModeBrandNew
 	prevRunID := ""
 	prevLastWriteVersion := int64(0)
-	if casPredicate != nil {
+	if mutableStateSnapshot != nil {
 		createMode = persistence.CreateWorkflowModeUpdateCurrent
-		prevRunID = casPredicate.RunID
-		prevLastWriteVersion = casPredicate.LastWriteVersion
-		if err := api.NewWorkflowVersionCheck(shardContext, casPredicate.LastWriteVersion, newWorkflowContext.GetMutableState()); err != nil {
+		prevRunID = mutableStateSnapshot.RunID
+		prevLastWriteVersion = mutableStateSnapshot.LastWriteVersion
+		err = api.NewWorkflowVersionCheck(
+			shardContext,
+			mutableStateSnapshot.LastWriteVersion,
+			newWorkflowContext.GetMutableState(),
+		)
+		if err != nil {
 			return "", err
 		}
 	}

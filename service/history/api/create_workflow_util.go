@@ -48,7 +48,7 @@ import (
 )
 
 type (
-	CreateWorkflowCASPredicate struct {
+	MutableStateSnapshot struct {
 		RunID            string
 		LastWriteVersion int64
 	}
