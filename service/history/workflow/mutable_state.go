@@ -52,6 +52,7 @@ import (
 	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence"
+	"go.temporal.io/server/service/history/historybuilder"
 	"go.temporal.io/server/service/history/tasks"
 )
 
@@ -213,7 +214,7 @@ type (
 		IsTransientWorkflowTask() bool
 		ClearTransientWorkflowTask() error
 		HasBufferedEvents() bool
-		HasAnyBufferedEvent(filter BufferedEventFilter) bool
+		HasAnyBufferedEvent(filter historybuilder.BufferedEventFilter) bool
 		HasStartedWorkflowTask() bool
 		HasParentExecution() bool
 		HasPendingWorkflowTask() bool
@@ -279,7 +280,7 @@ type (
 		ApplyWorkflowExecutionUpdateAcceptedEvent(*historypb.HistoryEvent) error
 		ApplyWorkflowExecutionUpdateCompletedEvent(event *historypb.HistoryEvent, batchID int64) error
 		SetCurrentBranchToken(branchToken []byte) error
-		SetHistoryBuilder(hBuilder *HistoryBuilder)
+		SetHistoryBuilder(hBuilder *historybuilder.HistoryBuilder)
 		SetHistoryTree(ctx context.Context, executionTimeout *durationpb.Duration, runTimeout *durationpb.Duration, treeID string) error
 		SetBaseWorkflow(
 			baseRunID string,
