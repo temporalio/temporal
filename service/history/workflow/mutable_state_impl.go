@@ -74,6 +74,7 @@ import (
 	"go.temporal.io/server/service/history/configs"
 	"go.temporal.io/server/service/history/consts"
 	"go.temporal.io/server/service/history/events"
+	"go.temporal.io/server/service/history/historybuilder"
 	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/tasks"
 )
@@ -147,7 +148,7 @@ type (
 		executionInfo  *persistencespb.WorkflowExecutionInfo // Workflow mutable state info.
 		executionState *persistencespb.WorkflowExecutionState
 
-		hBuilder *HistoryBuilder
+		hBuilder *historybuilder.HistoryBuilder
 
 		// In-memory only attributes
 		currentVersion int64
@@ -278,7 +279,7 @@ func NewMutableState(
 		Status: enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING}
 	s.approximateSize += s.executionState.Size()
 
-	s.hBuilder = NewMutableHistoryBuilder(
+	s.hBuilder = historybuilder.New(
 		s.timeSource,
 		s.shard.GenerateTaskIDs,
 		s.currentVersion,
@@ -362,7 +363,7 @@ func NewMutableStateFromDB(
 	mutableState.approximateSize += dbRecord.ExecutionInfo.Size() - mutableState.executionInfo.Size()
 	mutableState.executionInfo = dbRecord.ExecutionInfo
 
-	mutableState.hBuilder = NewMutableHistoryBuilder(
+	mutableState.hBuilder = historybuilder.New(
 		mutableState.timeSource,
 		mutableState.shard.GenerateTaskIDs,
 		common.EmptyVersion,
@@ -515,7 +516,7 @@ func (ms *MutableStateImpl) SetCurrentBranchToken(
 	return nil
 }
 
-func (ms *MutableStateImpl) SetHistoryBuilder(hBuilder *HistoryBuilder) {
+func (ms *MutableStateImpl) SetHistoryBuilder(hBuilder *historybuilder.HistoryBuilder) {
 	ms.hBuilder = hBuilder
 }
 
@@ -583,7 +584,7 @@ func (ms *MutableStateImpl) UpdateCurrentVersion(
 		ms.currentVersion = version
 	}
 
-	ms.hBuilder = NewMutableHistoryBuilder(
+	ms.hBuilder = historybuilder.New(
 		ms.timeSource,
 		ms.shard.GenerateTaskIDs,
 		ms.currentVersion,
@@ -1528,7 +1529,7 @@ func (ms *MutableStateImpl) HasBufferedEvents() bool {
 }
 
 // HasAnyBufferedEvent returns true if there is at least one buffered event that matches the provided filter.
-func (ms *MutableStateImpl) HasAnyBufferedEvent(filter BufferedEventFilter) bool {
+func (ms *MutableStateImpl) HasAnyBufferedEvent(filter historybuilder.BufferedEventFilter) bool {
 	return ms.hBuilder.HasAnyBufferedEvent(filter)
 }
 
@@ -4660,7 +4661,7 @@ func (ms *MutableStateImpl) cleanupTransaction(
 	ms.nextEventIDInDB = ms.GetNextEventID()
 	// ms.dbRecordVersion remains the same
 
-	ms.hBuilder = NewMutableHistoryBuilder(
+	ms.hBuilder = historybuilder.New(
 		ms.timeSource,
 		ms.shard.GenerateTaskIDs,
 		ms.GetCurrentVersion(),

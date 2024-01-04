@@ -127,6 +127,7 @@ func (s *NDCReplicationTaskBatchingTestSuite) SetupSuite() {
 	mockActiveStreamClient.EXPECT().Recv().DoAndReturn(func() (*adminservice.StreamWorkflowReplicationMessagesResponse, error) {
 		return s.GetReplicationMessagesMock()
 	}).AnyTimes()
+	mockActiveStreamClient.EXPECT().CloseSend().Return(nil).AnyTimes()
 	s.standByReplicationTasksChan = make(chan *repicationpb.ReplicationTask, 100)
 
 	mockActiveClient := adminservicemock.NewMockAdminServiceClient(s.controller)
