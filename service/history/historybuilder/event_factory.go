@@ -41,10 +41,16 @@ import (
 
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/common"
+	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/namespace"
 )
 
-func (b *EventFactory) BuildWorkflowExecutionStartedEvent(
+type EventFactory struct {
+	timeSource clock.TimeSource
+	version    int64
+}
+
+func (b *EventFactory) CreateWorkflowExecutionStartedEvent(
 	startTime time.Time,
 	request *historyservice.StartWorkflowExecutionRequest,
 	resetPoints *workflowpb.ResetPoints,
@@ -52,7 +58,7 @@ func (b *EventFactory) BuildWorkflowExecutionStartedEvent(
 	firstRunID string,
 	originalRunID string,
 ) *historypb.HistoryEvent {
-	event := b.createNewHistoryEvent(enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_STARTED, startTime)
+	event := b.createHistoryEvent(enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_STARTED, startTime)
 	req := request.StartRequest
 	attributes := &historypb.WorkflowExecutionStartedEventAttributes{
 		WorkflowType:                    req.WorkflowType,
@@ -94,13 +100,13 @@ func (b *EventFactory) BuildWorkflowExecutionStartedEvent(
 	return event
 }
 
-func (b *EventFactory) BuildWorkflowTaskScheduledEvent(
+func (b *EventFactory) CreateWorkflowTaskScheduledEvent(
 	taskQueue *taskqueuepb.TaskQueue,
 	startToCloseTimeout *durationpb.Duration,
 	attempt int32,
 	scheduleTime time.Time,
 ) *historypb.HistoryEvent {
-	event := b.createNewHistoryEvent(enumspb.EVENT_TYPE_WORKFLOW_TASK_SCHEDULED, scheduleTime)
+	event := b.createHistoryEvent(enumspb.EVENT_TYPE_WORKFLOW_TASK_SCHEDULED, scheduleTime)
 	event.Attributes = &historypb.HistoryEvent_WorkflowTaskScheduledEventAttributes{
 		WorkflowTaskScheduledEventAttributes: &historypb.WorkflowTaskScheduledEventAttributes{
 			TaskQueue:           taskQueue,
@@ -112,7 +118,7 @@ func (b *EventFactory) BuildWorkflowTaskScheduledEvent(
 	return event
 }
 
-func (b *EventFactory) BuildWorkflowTaskStartedEvent(
+func (b *EventFactory) CreateWorkflowTaskStartedEvent(
 	scheduledEventID int64,
 	requestID string,
 	identity string,
@@ -120,7 +126,7 @@ func (b *EventFactory) BuildWorkflowTaskStartedEvent(
 	suggestContinueAsNew bool,
 	historySizeBytes int64,
 ) *historypb.HistoryEvent {
-	event := b.createNewHistoryEvent(enumspb.EVENT_TYPE_WORKFLOW_TASK_STARTED, startTime)
+	event := b.createHistoryEvent(enumspb.EVENT_TYPE_WORKFLOW_TASK_STARTED, startTime)
 	event.Attributes = &historypb.HistoryEvent_WorkflowTaskStartedEventAttributes{
 		WorkflowTaskStartedEventAttributes: &historypb.WorkflowTaskStartedEventAttributes{
 			ScheduledEventId:     scheduledEventID,
@@ -134,7 +140,7 @@ func (b *EventFactory) BuildWorkflowTaskStartedEvent(
 	return event
 }
 
-func (b *EventFactory) BuildWorkflowTaskCompletedEvent(
+func (b *EventFactory) CreateWorkflowTaskCompletedEvent(
 	scheduledEventID int64,
 	startedEventID int64,
 	identity string,
@@ -143,7 +149,7 @@ func (b *EventFactory) BuildWorkflowTaskCompletedEvent(
 	sdkMetadata *sdkpb.WorkflowTaskCompletedMetadata,
 	meteringMetadata *commonpb.MeteringMetadata,
 ) *historypb.HistoryEvent {
-	event := b.createNewHistoryEvent(enumspb.EVENT_TYPE_WORKFLOW_TASK_COMPLETED, b.timeSource.Now())
+	event := b.createHistoryEvent(enumspb.EVENT_TYPE_WORKFLOW_TASK_COMPLETED, b.timeSource.Now())
 	event.Attributes = &historypb.HistoryEvent_WorkflowTaskCompletedEventAttributes{
 		WorkflowTaskCompletedEventAttributes: &historypb.WorkflowTaskCompletedEventAttributes{
 			ScheduledEventId: scheduledEventID,
@@ -159,12 +165,12 @@ func (b *EventFactory) BuildWorkflowTaskCompletedEvent(
 	return event
 }
 
-func (b *EventFactory) BuildWorkflowTaskTimedOutEvent(
+func (b *EventFactory) CreateWorkflowTaskTimedOutEvent(
 	scheduledEventID int64,
 	startedEventID int64,
 	timeoutType enumspb.TimeoutType,
 ) *historypb.HistoryEvent {
-	event := b.createNewHistoryEvent(enumspb.EVENT_TYPE_WORKFLOW_TASK_TIMED_OUT, b.timeSource.Now())
+	event := b.createHistoryEvent(enumspb.EVENT_TYPE_WORKFLOW_TASK_TIMED_OUT, b.timeSource.Now())
 	event.Attributes = &historypb.HistoryEvent_WorkflowTaskTimedOutEventAttributes{
 		WorkflowTaskTimedOutEventAttributes: &historypb.WorkflowTaskTimedOutEventAttributes{
 			ScheduledEventId: scheduledEventID,
@@ -176,7 +182,7 @@ func (b *EventFactory) BuildWorkflowTaskTimedOutEvent(
 	return event
 }
 
-func (b *EventFactory) BuildWorkflowTaskFailedEvent(
+func (b *EventFactory) CreateWorkflowTaskFailedEvent(
 	scheduledEventID int64,
 	startedEventID int64,
 	cause enumspb.WorkflowTaskFailedCause,
@@ -187,7 +193,7 @@ func (b *EventFactory) BuildWorkflowTaskFailedEvent(
 	forkEventVersion int64,
 	checksum string,
 ) *historypb.HistoryEvent {
-	event := b.createNewHistoryEvent(enumspb.EVENT_TYPE_WORKFLOW_TASK_FAILED, b.timeSource.Now())
+	event := b.createHistoryEvent(enumspb.EVENT_TYPE_WORKFLOW_TASK_FAILED, b.timeSource.Now())
 	event.Attributes = &historypb.HistoryEvent_WorkflowTaskFailedEventAttributes{
 		WorkflowTaskFailedEventAttributes: &historypb.WorkflowTaskFailedEventAttributes{
 			ScheduledEventId: scheduledEventID,
@@ -204,11 +210,11 @@ func (b *EventFactory) BuildWorkflowTaskFailedEvent(
 	return event
 }
 
-func (b *EventFactory) BuildActivityTaskScheduledEvent(
+func (b *EventFactory) CreateActivityTaskScheduledEvent(
 	workflowTaskCompletedEventID int64,
 	command *commandpb.ScheduleActivityTaskCommandAttributes,
 ) *historypb.HistoryEvent {
-	event := b.createNewHistoryEvent(enumspb.EVENT_TYPE_ACTIVITY_TASK_SCHEDULED, b.timeSource.Now())
+	event := b.createHistoryEvent(enumspb.EVENT_TYPE_ACTIVITY_TASK_SCHEDULED, b.timeSource.Now())
 	event.Attributes = &historypb.HistoryEvent_ActivityTaskScheduledEventAttributes{
 		ActivityTaskScheduledEventAttributes: &historypb.ActivityTaskScheduledEventAttributes{
 			WorkflowTaskCompletedEventId: workflowTaskCompletedEventID,
@@ -228,14 +234,14 @@ func (b *EventFactory) BuildActivityTaskScheduledEvent(
 	return event
 }
 
-func (b *EventFactory) BuildActivityTaskStartedEvent(
+func (b *EventFactory) CreateActivityTaskStartedEvent(
 	scheduledEventID int64,
 	attempt int32,
 	requestID string,
 	identity string,
 	lastFailure *failurepb.Failure,
 ) *historypb.HistoryEvent {
-	event := b.createNewHistoryEvent(enumspb.EVENT_TYPE_ACTIVITY_TASK_STARTED, b.timeSource.Now())
+	event := b.createHistoryEvent(enumspb.EVENT_TYPE_ACTIVITY_TASK_STARTED, b.timeSource.Now())
 	event.Attributes = &historypb.HistoryEvent_ActivityTaskStartedEventAttributes{
 		ActivityTaskStartedEventAttributes: &historypb.ActivityTaskStartedEventAttributes{
 			ScheduledEventId: scheduledEventID,
@@ -248,13 +254,13 @@ func (b *EventFactory) BuildActivityTaskStartedEvent(
 	return event
 }
 
-func (b *EventFactory) BuildActivityTaskCompletedEvent(
+func (b *EventFactory) CreateActivityTaskCompletedEvent(
 	scheduledEventID int64,
 	startedEventID int64,
 	identity string,
 	result *commonpb.Payloads,
 ) *historypb.HistoryEvent {
-	event := b.createNewHistoryEvent(enumspb.EVENT_TYPE_ACTIVITY_TASK_COMPLETED, b.timeSource.Now())
+	event := b.createHistoryEvent(enumspb.EVENT_TYPE_ACTIVITY_TASK_COMPLETED, b.timeSource.Now())
 	event.Attributes = &historypb.HistoryEvent_ActivityTaskCompletedEventAttributes{
 		ActivityTaskCompletedEventAttributes: &historypb.ActivityTaskCompletedEventAttributes{
 			ScheduledEventId: scheduledEventID,
@@ -266,14 +272,14 @@ func (b *EventFactory) BuildActivityTaskCompletedEvent(
 	return event
 }
 
-func (b *EventFactory) BuildActivityTaskFailedEvent(
+func (b *EventFactory) CreateActivityTaskFailedEvent(
 	scheduledEventID int64,
 	startedEventID int64,
 	failure *failurepb.Failure,
 	retryState enumspb.RetryState,
 	identity string,
 ) *historypb.HistoryEvent {
-	event := b.createNewHistoryEvent(enumspb.EVENT_TYPE_ACTIVITY_TASK_FAILED, b.timeSource.Now())
+	event := b.createHistoryEvent(enumspb.EVENT_TYPE_ACTIVITY_TASK_FAILED, b.timeSource.Now())
 	event.Attributes = &historypb.HistoryEvent_ActivityTaskFailedEventAttributes{
 		ActivityTaskFailedEventAttributes: &historypb.ActivityTaskFailedEventAttributes{
 			ScheduledEventId: scheduledEventID,
@@ -286,13 +292,13 @@ func (b *EventFactory) BuildActivityTaskFailedEvent(
 	return event
 }
 
-func (b *EventFactory) BuildActivityTaskTimedOutEvent(
+func (b *EventFactory) CreateActivityTaskTimedOutEvent(
 	scheduledEventID int64,
 	startedEventID int64,
 	timeoutFailure *failurepb.Failure,
 	retryState enumspb.RetryState,
 ) *historypb.HistoryEvent {
-	event := b.createNewHistoryEvent(enumspb.EVENT_TYPE_ACTIVITY_TASK_TIMED_OUT, b.timeSource.Now())
+	event := b.createHistoryEvent(enumspb.EVENT_TYPE_ACTIVITY_TASK_TIMED_OUT, b.timeSource.Now())
 	event.Attributes = &historypb.HistoryEvent_ActivityTaskTimedOutEventAttributes{
 		ActivityTaskTimedOutEventAttributes: &historypb.ActivityTaskTimedOutEventAttributes{
 			ScheduledEventId: scheduledEventID,
@@ -304,12 +310,12 @@ func (b *EventFactory) BuildActivityTaskTimedOutEvent(
 	return event
 }
 
-func (b *EventFactory) BuildCompletedWorkflowEvent(
+func (b *EventFactory) CreateCompletedWorkflowEvent(
 	workflowTaskCompletedEventID int64,
 	command *commandpb.CompleteWorkflowExecutionCommandAttributes,
 	newExecutionRunID string,
 ) *historypb.HistoryEvent {
-	event := b.createNewHistoryEvent(enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_COMPLETED, b.timeSource.Now())
+	event := b.createHistoryEvent(enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_COMPLETED, b.timeSource.Now())
 	event.Attributes = &historypb.HistoryEvent_WorkflowExecutionCompletedEventAttributes{
 		WorkflowExecutionCompletedEventAttributes: &historypb.WorkflowExecutionCompletedEventAttributes{
 			WorkflowTaskCompletedEventId: workflowTaskCompletedEventID,
@@ -320,13 +326,13 @@ func (b *EventFactory) BuildCompletedWorkflowEvent(
 	return event
 }
 
-func (b *EventFactory) BuildFailWorkflowEvent(
+func (b *EventFactory) CreateFailWorkflowEvent(
 	workflowTaskCompletedEventID int64,
 	retryState enumspb.RetryState,
 	command *commandpb.FailWorkflowExecutionCommandAttributes,
 	newExecutionRunID string,
 ) *historypb.HistoryEvent {
-	event := b.createNewHistoryEvent(enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_FAILED, b.timeSource.Now())
+	event := b.createHistoryEvent(enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_FAILED, b.timeSource.Now())
 	event.Attributes = &historypb.HistoryEvent_WorkflowExecutionFailedEventAttributes{
 		WorkflowExecutionFailedEventAttributes: &historypb.WorkflowExecutionFailedEventAttributes{
 			WorkflowTaskCompletedEventId: workflowTaskCompletedEventID,
@@ -338,11 +344,11 @@ func (b *EventFactory) BuildFailWorkflowEvent(
 	return event
 }
 
-func (b *EventFactory) BuildTimeoutWorkflowEvent(
+func (b *EventFactory) CreateTimeoutWorkflowEvent(
 	retryState enumspb.RetryState,
 	newExecutionRunID string,
 ) *historypb.HistoryEvent {
-	event := b.createNewHistoryEvent(enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_TIMED_OUT, b.timeSource.Now())
+	event := b.createHistoryEvent(enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_TIMED_OUT, b.timeSource.Now())
 	event.Attributes = &historypb.HistoryEvent_WorkflowExecutionTimedOutEventAttributes{
 		WorkflowExecutionTimedOutEventAttributes: &historypb.WorkflowExecutionTimedOutEventAttributes{
 			RetryState:        retryState,
@@ -352,12 +358,12 @@ func (b *EventFactory) BuildTimeoutWorkflowEvent(
 	return event
 }
 
-func (b *EventFactory) BuildWorkflowExecutionTerminatedEvent(
+func (b *EventFactory) CreateWorkflowExecutionTerminatedEvent(
 	reason string,
 	details *commonpb.Payloads,
 	identity string,
 ) *historypb.HistoryEvent {
-	event := b.createNewHistoryEvent(enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_TERMINATED, b.timeSource.Now())
+	event := b.createHistoryEvent(enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_TERMINATED, b.timeSource.Now())
 	event.Attributes = &historypb.HistoryEvent_WorkflowExecutionTerminatedEventAttributes{
 		WorkflowExecutionTerminatedEventAttributes: &historypb.WorkflowExecutionTerminatedEventAttributes{
 			Reason:   reason,
@@ -368,13 +374,13 @@ func (b *EventFactory) BuildWorkflowExecutionTerminatedEvent(
 	return event
 }
 
-func (b *EventFactory) BuildWorkflowExecutionUpdateAcceptedEvent(
+func (b *EventFactory) CreateWorkflowExecutionUpdateAcceptedEvent(
 	protocolInstanceID string,
 	acceptedRequestMessageId string,
 	acceptedRequestSequencingEventId int64,
 	acceptedRequest *updatepb.Request,
 ) *historypb.HistoryEvent {
-	event := b.createNewHistoryEvent(enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_UPDATE_ACCEPTED, b.timeSource.Now())
+	event := b.createHistoryEvent(enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_UPDATE_ACCEPTED, b.timeSource.Now())
 	event.Attributes = &historypb.HistoryEvent_WorkflowExecutionUpdateAcceptedEventAttributes{
 		WorkflowExecutionUpdateAcceptedEventAttributes: &historypb.WorkflowExecutionUpdateAcceptedEventAttributes{
 			ProtocolInstanceId:               protocolInstanceID,
@@ -386,11 +392,11 @@ func (b *EventFactory) BuildWorkflowExecutionUpdateAcceptedEvent(
 	return event
 }
 
-func (b *EventFactory) BuildWorkflowExecutionUpdateCompletedEvent(
+func (b *EventFactory) CreateWorkflowExecutionUpdateCompletedEvent(
 	acceptedEventID int64,
 	updResp *updatepb.Response,
 ) *historypb.HistoryEvent {
-	event := b.createNewHistoryEvent(enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_UPDATE_COMPLETED, b.timeSource.Now())
+	event := b.createHistoryEvent(enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_UPDATE_COMPLETED, b.timeSource.Now())
 	event.Attributes = &historypb.HistoryEvent_WorkflowExecutionUpdateCompletedEventAttributes{
 		WorkflowExecutionUpdateCompletedEventAttributes: &historypb.WorkflowExecutionUpdateCompletedEventAttributes{
 			AcceptedEventId: acceptedEventID,
@@ -401,12 +407,12 @@ func (b *EventFactory) BuildWorkflowExecutionUpdateCompletedEvent(
 	return event
 }
 
-func (b EventFactory) BuildContinuedAsNewEvent(
+func (b EventFactory) CreateContinuedAsNewEvent(
 	workflowTaskCompletedEventID int64,
 	newRunID string,
 	command *commandpb.ContinueAsNewWorkflowExecutionCommandAttributes,
 ) *historypb.HistoryEvent {
-	event := b.createNewHistoryEvent(enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_CONTINUED_AS_NEW, b.timeSource.Now())
+	event := b.createHistoryEvent(enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_CONTINUED_AS_NEW, b.timeSource.Now())
 	attributes := &historypb.WorkflowExecutionContinuedAsNewEventAttributes{
 		WorkflowTaskCompletedEventId: workflowTaskCompletedEventID,
 		NewExecutionRunId:            newRunID,
@@ -430,11 +436,11 @@ func (b EventFactory) BuildContinuedAsNewEvent(
 	return event
 }
 
-func (b *EventFactory) BuildTimerStartedEvent(
+func (b *EventFactory) CreateTimerStartedEvent(
 	workflowTaskCompletedEventID int64,
 	command *commandpb.StartTimerCommandAttributes,
 ) *historypb.HistoryEvent {
-	event := b.createNewHistoryEvent(enumspb.EVENT_TYPE_TIMER_STARTED, b.timeSource.Now())
+	event := b.createHistoryEvent(enumspb.EVENT_TYPE_TIMER_STARTED, b.timeSource.Now())
 	event.Attributes = &historypb.HistoryEvent_TimerStartedEventAttributes{
 		TimerStartedEventAttributes: &historypb.TimerStartedEventAttributes{
 			WorkflowTaskCompletedEventId: workflowTaskCompletedEventID,
@@ -445,8 +451,8 @@ func (b *EventFactory) BuildTimerStartedEvent(
 	return event
 }
 
-func (b *EventFactory) BuildTimerFiredEvent(startedEventID int64, timerID string) *historypb.HistoryEvent {
-	event := b.createNewHistoryEvent(enumspb.EVENT_TYPE_TIMER_FIRED, b.timeSource.Now())
+func (b *EventFactory) CreateTimerFiredEvent(startedEventID int64, timerID string) *historypb.HistoryEvent {
+	event := b.createHistoryEvent(enumspb.EVENT_TYPE_TIMER_FIRED, b.timeSource.Now())
 	event.Attributes = &historypb.HistoryEvent_TimerFiredEventAttributes{
 		TimerFiredEventAttributes: &historypb.TimerFiredEventAttributes{
 			TimerId:        timerID,
@@ -456,11 +462,11 @@ func (b *EventFactory) BuildTimerFiredEvent(startedEventID int64, timerID string
 	return event
 }
 
-func (b *EventFactory) BuildActivityTaskCancelRequestedEvent(
+func (b *EventFactory) CreateActivityTaskCancelRequestedEvent(
 	workflowTaskCompletedEventID int64,
 	scheduledEventID int64,
 ) *historypb.HistoryEvent {
-	event := b.createNewHistoryEvent(enumspb.EVENT_TYPE_ACTIVITY_TASK_CANCEL_REQUESTED, b.timeSource.Now())
+	event := b.createHistoryEvent(enumspb.EVENT_TYPE_ACTIVITY_TASK_CANCEL_REQUESTED, b.timeSource.Now())
 	event.Attributes = &historypb.HistoryEvent_ActivityTaskCancelRequestedEventAttributes{
 		ActivityTaskCancelRequestedEventAttributes: &historypb.ActivityTaskCancelRequestedEventAttributes{
 			WorkflowTaskCompletedEventId: workflowTaskCompletedEventID,
@@ -470,14 +476,14 @@ func (b *EventFactory) BuildActivityTaskCancelRequestedEvent(
 	return event
 }
 
-func (b *EventFactory) BuildActivityTaskCanceledEvent(
+func (b *EventFactory) CreateActivityTaskCanceledEvent(
 	scheduledEventID int64,
 	startedEventID int64,
 	latestCancelRequestedEventID int64,
 	details *commonpb.Payloads,
 	identity string,
 ) *historypb.HistoryEvent {
-	event := b.createNewHistoryEvent(enumspb.EVENT_TYPE_ACTIVITY_TASK_CANCELED, b.timeSource.Now())
+	event := b.createHistoryEvent(enumspb.EVENT_TYPE_ACTIVITY_TASK_CANCELED, b.timeSource.Now())
 	event.Attributes = &historypb.HistoryEvent_ActivityTaskCanceledEventAttributes{
 		ActivityTaskCanceledEventAttributes: &historypb.ActivityTaskCanceledEventAttributes{
 			ScheduledEventId:             scheduledEventID,
@@ -490,13 +496,13 @@ func (b *EventFactory) BuildActivityTaskCanceledEvent(
 	return event
 }
 
-func (b *EventFactory) BuildTimerCanceledEvent(
+func (b *EventFactory) CreateTimerCanceledEvent(
 	workflowTaskCompletedEventID int64,
 	startedEventID int64,
 	timerID string,
 	identity string,
 ) *historypb.HistoryEvent {
-	event := b.createNewHistoryEvent(enumspb.EVENT_TYPE_TIMER_CANCELED, b.timeSource.Now())
+	event := b.createHistoryEvent(enumspb.EVENT_TYPE_TIMER_CANCELED, b.timeSource.Now())
 	event.Attributes = &historypb.HistoryEvent_TimerCanceledEventAttributes{
 		TimerCanceledEventAttributes: &historypb.TimerCanceledEventAttributes{
 			WorkflowTaskCompletedEventId: workflowTaskCompletedEventID,
@@ -508,8 +514,8 @@ func (b *EventFactory) BuildTimerCanceledEvent(
 	return event
 }
 
-func (b *EventFactory) BuildWorkflowExecutionCancelRequestedEvent(request *historyservice.RequestCancelWorkflowExecutionRequest) *historypb.HistoryEvent {
-	event := b.createNewHistoryEvent(enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_CANCEL_REQUESTED, b.timeSource.Now())
+func (b *EventFactory) CreateWorkflowExecutionCancelRequestedEvent(request *historyservice.RequestCancelWorkflowExecutionRequest) *historypb.HistoryEvent {
+	event := b.createHistoryEvent(enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_CANCEL_REQUESTED, b.timeSource.Now())
 	event.Attributes = &historypb.HistoryEvent_WorkflowExecutionCancelRequestedEventAttributes{
 		WorkflowExecutionCancelRequestedEventAttributes: &historypb.WorkflowExecutionCancelRequestedEventAttributes{
 			Cause:                     request.CancelRequest.Reason,
@@ -521,11 +527,11 @@ func (b *EventFactory) BuildWorkflowExecutionCancelRequestedEvent(request *histo
 	return event
 }
 
-func (b *EventFactory) BuildWorkflowExecutionCanceledEvent(
+func (b *EventFactory) CreateWorkflowExecutionCanceledEvent(
 	workflowTaskCompletedEventID int64,
 	command *commandpb.CancelWorkflowExecutionCommandAttributes,
 ) *historypb.HistoryEvent {
-	event := b.createNewHistoryEvent(enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_CANCELED, b.timeSource.Now())
+	event := b.createHistoryEvent(enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_CANCELED, b.timeSource.Now())
 	event.Attributes = &historypb.HistoryEvent_WorkflowExecutionCanceledEventAttributes{
 		WorkflowExecutionCanceledEventAttributes: &historypb.WorkflowExecutionCanceledEventAttributes{
 			WorkflowTaskCompletedEventId: workflowTaskCompletedEventID,
@@ -535,12 +541,12 @@ func (b *EventFactory) BuildWorkflowExecutionCanceledEvent(
 	return event
 }
 
-func (b *EventFactory) BuildRequestCancelExternalWorkflowExecutionInitiatedEvent(
+func (b *EventFactory) CreateRequestCancelExternalWorkflowExecutionInitiatedEvent(
 	workflowTaskCompletedEventID int64,
 	command *commandpb.RequestCancelExternalWorkflowExecutionCommandAttributes,
 	targetNamespaceID namespace.ID,
 ) *historypb.HistoryEvent {
-	event := b.createNewHistoryEvent(
+	event := b.createHistoryEvent(
 		enumspb.EVENT_TYPE_REQUEST_CANCEL_EXTERNAL_WORKFLOW_EXECUTION_INITIATED,
 		b.timeSource.Now(),
 	)
@@ -561,7 +567,7 @@ func (b *EventFactory) BuildRequestCancelExternalWorkflowExecutionInitiatedEvent
 	return event
 }
 
-func (b *EventFactory) BuildRequestCancelExternalWorkflowExecutionFailedEvent(
+func (b *EventFactory) CreateRequestCancelExternalWorkflowExecutionFailedEvent(
 	workflowTaskCompletedEventID int64,
 	initiatedEventID int64,
 	targetNamespace namespace.Name,
@@ -570,7 +576,7 @@ func (b *EventFactory) BuildRequestCancelExternalWorkflowExecutionFailedEvent(
 	runID string,
 	cause enumspb.CancelExternalWorkflowExecutionFailedCause,
 ) *historypb.HistoryEvent {
-	event := b.createNewHistoryEvent(
+	event := b.createHistoryEvent(
 		enumspb.EVENT_TYPE_REQUEST_CANCEL_EXTERNAL_WORKFLOW_EXECUTION_FAILED,
 		b.timeSource.Now(),
 	)
@@ -591,14 +597,14 @@ func (b *EventFactory) BuildRequestCancelExternalWorkflowExecutionFailedEvent(
 	return event
 }
 
-func (b *EventFactory) BuildExternalWorkflowExecutionCancelRequested(
+func (b *EventFactory) CreateExternalWorkflowExecutionCancelRequested(
 	initiatedEventID int64,
 	targetNamespace namespace.Name,
 	targetNamespaceID namespace.ID,
 	workflowID string,
 	runID string,
 ) *historypb.HistoryEvent {
-	event := b.createNewHistoryEvent(
+	event := b.createHistoryEvent(
 		enumspb.EVENT_TYPE_EXTERNAL_WORKFLOW_EXECUTION_CANCEL_REQUESTED,
 		b.timeSource.Now(),
 	)
@@ -616,12 +622,12 @@ func (b *EventFactory) BuildExternalWorkflowExecutionCancelRequested(
 	return event
 }
 
-func (b *EventFactory) BuildSignalExternalWorkflowExecutionInitiatedEvent(
+func (b *EventFactory) CreateSignalExternalWorkflowExecutionInitiatedEvent(
 	workflowTaskCompletedEventID int64,
 	command *commandpb.SignalExternalWorkflowExecutionCommandAttributes,
 	targetNamespaceID namespace.ID,
 ) *historypb.HistoryEvent {
-	event := b.createNewHistoryEvent(
+	event := b.createHistoryEvent(
 		enumspb.EVENT_TYPE_SIGNAL_EXTERNAL_WORKFLOW_EXECUTION_INITIATED,
 		b.timeSource.Now(),
 	)
@@ -644,11 +650,11 @@ func (b *EventFactory) BuildSignalExternalWorkflowExecutionInitiatedEvent(
 	return event
 }
 
-func (b *EventFactory) BuildUpsertWorkflowSearchAttributesEvent(
+func (b *EventFactory) CreateUpsertWorkflowSearchAttributesEvent(
 	workflowTaskCompletedEventID int64,
 	command *commandpb.UpsertWorkflowSearchAttributesCommandAttributes,
 ) *historypb.HistoryEvent {
-	event := b.createNewHistoryEvent(enumspb.EVENT_TYPE_UPSERT_WORKFLOW_SEARCH_ATTRIBUTES, b.timeSource.Now())
+	event := b.createHistoryEvent(enumspb.EVENT_TYPE_UPSERT_WORKFLOW_SEARCH_ATTRIBUTES, b.timeSource.Now())
 	event.Attributes = &historypb.HistoryEvent_UpsertWorkflowSearchAttributesEventAttributes{
 		UpsertWorkflowSearchAttributesEventAttributes: &historypb.UpsertWorkflowSearchAttributesEventAttributes{
 			WorkflowTaskCompletedEventId: workflowTaskCompletedEventID,
@@ -658,11 +664,11 @@ func (b *EventFactory) BuildUpsertWorkflowSearchAttributesEvent(
 	return event
 }
 
-func (b *EventFactory) BuildWorkflowPropertiesModifiedEvent(
+func (b *EventFactory) CreateWorkflowPropertiesModifiedEvent(
 	workflowTaskCompletedEventID int64,
 	command *commandpb.ModifyWorkflowPropertiesCommandAttributes,
 ) *historypb.HistoryEvent {
-	event := b.createNewHistoryEvent(enumspb.EVENT_TYPE_WORKFLOW_PROPERTIES_MODIFIED, b.timeSource.Now())
+	event := b.createHistoryEvent(enumspb.EVENT_TYPE_WORKFLOW_PROPERTIES_MODIFIED, b.timeSource.Now())
 	event.Attributes = &historypb.HistoryEvent_WorkflowPropertiesModifiedEventAttributes{
 		WorkflowPropertiesModifiedEventAttributes: &historypb.WorkflowPropertiesModifiedEventAttributes{
 			WorkflowTaskCompletedEventId: workflowTaskCompletedEventID,
@@ -672,7 +678,7 @@ func (b *EventFactory) BuildWorkflowPropertiesModifiedEvent(
 	return event
 }
 
-func (b *EventFactory) BuildSignalExternalWorkflowExecutionFailedEvent(
+func (b *EventFactory) CreateSignalExternalWorkflowExecutionFailedEvent(
 	workflowTaskCompletedEventID int64,
 	initiatedEventID int64,
 	targetNamespace namespace.Name,
@@ -682,7 +688,7 @@ func (b *EventFactory) BuildSignalExternalWorkflowExecutionFailedEvent(
 	control string,
 	cause enumspb.SignalExternalWorkflowExecutionFailedCause,
 ) *historypb.HistoryEvent {
-	event := b.createNewHistoryEvent(enumspb.EVENT_TYPE_SIGNAL_EXTERNAL_WORKFLOW_EXECUTION_FAILED, b.timeSource.Now())
+	event := b.createHistoryEvent(enumspb.EVENT_TYPE_SIGNAL_EXTERNAL_WORKFLOW_EXECUTION_FAILED, b.timeSource.Now())
 	event.Attributes = &historypb.HistoryEvent_SignalExternalWorkflowExecutionFailedEventAttributes{
 		SignalExternalWorkflowExecutionFailedEventAttributes: &historypb.SignalExternalWorkflowExecutionFailedEventAttributes{
 			WorkflowTaskCompletedEventId: workflowTaskCompletedEventID,
@@ -700,7 +706,7 @@ func (b *EventFactory) BuildSignalExternalWorkflowExecutionFailedEvent(
 	return event
 }
 
-func (b *EventFactory) BuildExternalWorkflowExecutionSignaled(
+func (b *EventFactory) CreateExternalWorkflowExecutionSignaled(
 	initiatedEventID int64,
 	targetNamespace namespace.Name,
 	targetNamespaceID namespace.ID,
@@ -708,7 +714,7 @@ func (b *EventFactory) BuildExternalWorkflowExecutionSignaled(
 	runID string,
 	control string,
 ) *historypb.HistoryEvent {
-	event := b.createNewHistoryEvent(enumspb.EVENT_TYPE_EXTERNAL_WORKFLOW_EXECUTION_SIGNALED, b.timeSource.Now())
+	event := b.createHistoryEvent(enumspb.EVENT_TYPE_EXTERNAL_WORKFLOW_EXECUTION_SIGNALED, b.timeSource.Now())
 	event.Attributes = &historypb.HistoryEvent_ExternalWorkflowExecutionSignaledEventAttributes{
 		ExternalWorkflowExecutionSignaledEventAttributes: &historypb.ExternalWorkflowExecutionSignaledEventAttributes{
 			InitiatedEventId: initiatedEventID,
@@ -724,11 +730,11 @@ func (b *EventFactory) BuildExternalWorkflowExecutionSignaled(
 	return event
 }
 
-func (b *EventFactory) BuildMarkerRecordedEvent(
+func (b *EventFactory) CreateMarkerRecordedEvent(
 	workflowTaskCompletedEventID int64,
 	command *commandpb.RecordMarkerCommandAttributes,
 ) *historypb.HistoryEvent {
-	event := b.createNewHistoryEvent(enumspb.EVENT_TYPE_MARKER_RECORDED, b.timeSource.Now())
+	event := b.createHistoryEvent(enumspb.EVENT_TYPE_MARKER_RECORDED, b.timeSource.Now())
 	event.Attributes = &historypb.HistoryEvent_MarkerRecordedEventAttributes{
 		MarkerRecordedEventAttributes: &historypb.MarkerRecordedEventAttributes{
 			MarkerName:                   command.MarkerName,
@@ -741,14 +747,14 @@ func (b *EventFactory) BuildMarkerRecordedEvent(
 	return event
 }
 
-func (b *EventFactory) BuildWorkflowExecutionSignaledEvent(
+func (b *EventFactory) CreateWorkflowExecutionSignaledEvent(
 	signalName string,
 	input *commonpb.Payloads,
 	identity string,
 	header *commonpb.Header,
 	skipGenerateWorkflowTask bool,
 ) *historypb.HistoryEvent {
-	event := b.createNewHistoryEvent(enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_SIGNALED, b.timeSource.Now())
+	event := b.createHistoryEvent(enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_SIGNALED, b.timeSource.Now())
 	event.Attributes = &historypb.HistoryEvent_WorkflowExecutionSignaledEventAttributes{
 		WorkflowExecutionSignaledEventAttributes: &historypb.WorkflowExecutionSignaledEventAttributes{
 			SignalName:               signalName,
@@ -761,12 +767,12 @@ func (b *EventFactory) BuildWorkflowExecutionSignaledEvent(
 	return event
 }
 
-func (b *EventFactory) BuildStartChildWorkflowExecutionInitiatedEvent(
+func (b *EventFactory) CreateStartChildWorkflowExecutionInitiatedEvent(
 	workflowTaskCompletedEventID int64,
 	command *commandpb.StartChildWorkflowExecutionCommandAttributes,
 	targetNamespaceID namespace.ID,
 ) *historypb.HistoryEvent {
-	event := b.createNewHistoryEvent(enumspb.EVENT_TYPE_START_CHILD_WORKFLOW_EXECUTION_INITIATED, b.timeSource.Now())
+	event := b.createHistoryEvent(enumspb.EVENT_TYPE_START_CHILD_WORKFLOW_EXECUTION_INITIATED, b.timeSource.Now())
 	event.Attributes = &historypb.HistoryEvent_StartChildWorkflowExecutionInitiatedEventAttributes{
 		StartChildWorkflowExecutionInitiatedEventAttributes: &historypb.StartChildWorkflowExecutionInitiatedEventAttributes{
 			WorkflowTaskCompletedEventId: workflowTaskCompletedEventID,
@@ -793,7 +799,7 @@ func (b *EventFactory) BuildStartChildWorkflowExecutionInitiatedEvent(
 	return event
 }
 
-func (b *EventFactory) BuildChildWorkflowExecutionStartedEvent(
+func (b *EventFactory) CreateChildWorkflowExecutionStartedEvent(
 	initiatedID int64,
 	targetNamespace namespace.Name,
 	targetNamespaceID namespace.ID,
@@ -801,7 +807,7 @@ func (b *EventFactory) BuildChildWorkflowExecutionStartedEvent(
 	workflowType *commonpb.WorkflowType,
 	header *commonpb.Header,
 ) *historypb.HistoryEvent {
-	event := b.createNewHistoryEvent(enumspb.EVENT_TYPE_CHILD_WORKFLOW_EXECUTION_STARTED, b.timeSource.Now())
+	event := b.createHistoryEvent(enumspb.EVENT_TYPE_CHILD_WORKFLOW_EXECUTION_STARTED, b.timeSource.Now())
 	event.Attributes = &historypb.HistoryEvent_ChildWorkflowExecutionStartedEventAttributes{
 		ChildWorkflowExecutionStartedEventAttributes: &historypb.ChildWorkflowExecutionStartedEventAttributes{
 			InitiatedEventId:  initiatedID,
@@ -815,7 +821,7 @@ func (b *EventFactory) BuildChildWorkflowExecutionStartedEvent(
 	return event
 }
 
-func (b *EventFactory) BuildStartChildWorkflowExecutionFailedEvent(
+func (b *EventFactory) CreateStartChildWorkflowExecutionFailedEvent(
 	workflowTaskCompletedEventID int64,
 	initiatedID int64,
 	cause enumspb.StartChildWorkflowExecutionFailedCause,
@@ -825,7 +831,7 @@ func (b *EventFactory) BuildStartChildWorkflowExecutionFailedEvent(
 	workflowType *commonpb.WorkflowType,
 	control string,
 ) *historypb.HistoryEvent {
-	event := b.createNewHistoryEvent(enumspb.EVENT_TYPE_START_CHILD_WORKFLOW_EXECUTION_FAILED, b.timeSource.Now())
+	event := b.createHistoryEvent(enumspb.EVENT_TYPE_START_CHILD_WORKFLOW_EXECUTION_FAILED, b.timeSource.Now())
 	event.Attributes = &historypb.HistoryEvent_StartChildWorkflowExecutionFailedEventAttributes{
 		StartChildWorkflowExecutionFailedEventAttributes: &historypb.StartChildWorkflowExecutionFailedEventAttributes{
 			WorkflowTaskCompletedEventId: workflowTaskCompletedEventID,
@@ -841,7 +847,7 @@ func (b *EventFactory) BuildStartChildWorkflowExecutionFailedEvent(
 	return event
 }
 
-func (b *EventFactory) BuildChildWorkflowExecutionCompletedEvent(
+func (b *EventFactory) CreateChildWorkflowExecutionCompletedEvent(
 	initiatedID int64,
 	startedEventID int64,
 	targetNamespace namespace.Name,
@@ -850,7 +856,7 @@ func (b *EventFactory) BuildChildWorkflowExecutionCompletedEvent(
 	workflowType *commonpb.WorkflowType,
 	result *commonpb.Payloads,
 ) *historypb.HistoryEvent {
-	event := b.createNewHistoryEvent(enumspb.EVENT_TYPE_CHILD_WORKFLOW_EXECUTION_COMPLETED, b.timeSource.Now())
+	event := b.createHistoryEvent(enumspb.EVENT_TYPE_CHILD_WORKFLOW_EXECUTION_COMPLETED, b.timeSource.Now())
 	event.Attributes = &historypb.HistoryEvent_ChildWorkflowExecutionCompletedEventAttributes{
 		ChildWorkflowExecutionCompletedEventAttributes: &historypb.ChildWorkflowExecutionCompletedEventAttributes{
 			InitiatedEventId:  initiatedID,
@@ -865,7 +871,7 @@ func (b *EventFactory) BuildChildWorkflowExecutionCompletedEvent(
 	return event
 }
 
-func (b *EventFactory) BuildChildWorkflowExecutionFailedEvent(
+func (b *EventFactory) CreateChildWorkflowExecutionFailedEvent(
 	initiatedID int64,
 	startedEventID int64,
 	targetNamespace namespace.Name,
@@ -875,7 +881,7 @@ func (b *EventFactory) BuildChildWorkflowExecutionFailedEvent(
 	failure *failurepb.Failure,
 	retryState enumspb.RetryState,
 ) *historypb.HistoryEvent {
-	event := b.createNewHistoryEvent(enumspb.EVENT_TYPE_CHILD_WORKFLOW_EXECUTION_FAILED, b.timeSource.Now())
+	event := b.createHistoryEvent(enumspb.EVENT_TYPE_CHILD_WORKFLOW_EXECUTION_FAILED, b.timeSource.Now())
 	event.Attributes = &historypb.HistoryEvent_ChildWorkflowExecutionFailedEventAttributes{
 		ChildWorkflowExecutionFailedEventAttributes: &historypb.ChildWorkflowExecutionFailedEventAttributes{
 			InitiatedEventId:  initiatedID,
@@ -891,7 +897,7 @@ func (b *EventFactory) BuildChildWorkflowExecutionFailedEvent(
 	return event
 }
 
-func (b *EventFactory) BuildChildWorkflowExecutionCanceledEvent(
+func (b *EventFactory) CreateChildWorkflowExecutionCanceledEvent(
 	initiatedID int64,
 	startedEventID int64,
 	targetNamespace namespace.Name,
@@ -900,7 +906,7 @@ func (b *EventFactory) BuildChildWorkflowExecutionCanceledEvent(
 	workflowType *commonpb.WorkflowType,
 	details *commonpb.Payloads,
 ) *historypb.HistoryEvent {
-	event := b.createNewHistoryEvent(enumspb.EVENT_TYPE_CHILD_WORKFLOW_EXECUTION_CANCELED, b.timeSource.Now())
+	event := b.createHistoryEvent(enumspb.EVENT_TYPE_CHILD_WORKFLOW_EXECUTION_CANCELED, b.timeSource.Now())
 	event.Attributes = &historypb.HistoryEvent_ChildWorkflowExecutionCanceledEventAttributes{
 		ChildWorkflowExecutionCanceledEventAttributes: &historypb.ChildWorkflowExecutionCanceledEventAttributes{
 			InitiatedEventId:  initiatedID,
@@ -915,7 +921,7 @@ func (b *EventFactory) BuildChildWorkflowExecutionCanceledEvent(
 	return event
 }
 
-func (b *EventFactory) BuildChildWorkflowExecutionTerminatedEvent(
+func (b *EventFactory) CreateChildWorkflowExecutionTerminatedEvent(
 	initiatedID int64,
 	startedEventID int64,
 	targetNamespace namespace.Name,
@@ -923,7 +929,7 @@ func (b *EventFactory) BuildChildWorkflowExecutionTerminatedEvent(
 	execution *commonpb.WorkflowExecution,
 	workflowType *commonpb.WorkflowType,
 ) *historypb.HistoryEvent {
-	event := b.createNewHistoryEvent(enumspb.EVENT_TYPE_CHILD_WORKFLOW_EXECUTION_TERMINATED, b.timeSource.Now())
+	event := b.createHistoryEvent(enumspb.EVENT_TYPE_CHILD_WORKFLOW_EXECUTION_TERMINATED, b.timeSource.Now())
 	event.Attributes = &historypb.HistoryEvent_ChildWorkflowExecutionTerminatedEventAttributes{
 		ChildWorkflowExecutionTerminatedEventAttributes: &historypb.ChildWorkflowExecutionTerminatedEventAttributes{
 			InitiatedEventId:  initiatedID,
@@ -937,7 +943,7 @@ func (b *EventFactory) BuildChildWorkflowExecutionTerminatedEvent(
 	return event
 }
 
-func (b *EventFactory) BuildChildWorkflowExecutionTimedOutEvent(
+func (b *EventFactory) CreateChildWorkflowExecutionTimedOutEvent(
 	initiatedID int64,
 	startedEventID int64,
 	targetNamespace namespace.Name,
@@ -946,7 +952,7 @@ func (b *EventFactory) BuildChildWorkflowExecutionTimedOutEvent(
 	workflowType *commonpb.WorkflowType,
 	retryState enumspb.RetryState,
 ) *historypb.HistoryEvent {
-	event := b.createNewHistoryEvent(enumspb.EVENT_TYPE_CHILD_WORKFLOW_EXECUTION_TIMED_OUT, b.timeSource.Now())
+	event := b.createHistoryEvent(enumspb.EVENT_TYPE_CHILD_WORKFLOW_EXECUTION_TIMED_OUT, b.timeSource.Now())
 	event.Attributes = &historypb.HistoryEvent_ChildWorkflowExecutionTimedOutEventAttributes{
 		ChildWorkflowExecutionTimedOutEventAttributes: &historypb.ChildWorkflowExecutionTimedOutEventAttributes{
 			InitiatedEventId:  initiatedID,
@@ -961,7 +967,7 @@ func (b *EventFactory) BuildChildWorkflowExecutionTimedOutEvent(
 	return event
 }
 
-func (b *EventFactory) createNewHistoryEvent(
+func (b *EventFactory) createHistoryEvent(
 	eventType enumspb.EventType,
 	time time.Time,
 ) *historypb.HistoryEvent {

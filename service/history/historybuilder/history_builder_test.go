@@ -149,7 +149,7 @@ func (s *historyBuilderSuite) SetupTest() {
 	s.mockTimeSource = clock.NewEventTimeSource()
 	s.mockTimeSource.Update(s.now)
 
-	s.historyBuilder = NewMutableHistoryBuilder(
+	s.historyBuilder = New(
 		s.mockTimeSource,
 		s.taskIDGenerator,
 		s.version,
@@ -1669,8 +1669,8 @@ func (s *historyBuilderSuite) testAppendFlushFinishEventWithoutBufferSingleBatch
 		TaskId:    common.EmptyEventTaskID,
 	}
 
-	s.historyBuilder.appendEvents(event1)
-	s.historyBuilder.appendEvents(event2)
+	s.historyBuilder.add(event1)
+	s.historyBuilder.add(event2)
 	historyMutation, err := s.historyBuilder.Finish(flushBuffer)
 	s.NoError(err)
 	s.assertEventIDTaskID(historyMutation)
@@ -1732,18 +1732,18 @@ func (s *historyBuilderSuite) testAppendFlushFinishEventWithoutBufferMultiBatch(
 	}
 
 	// 1st batch
-	s.historyBuilder.appendEvents(event11)
-	s.historyBuilder.appendEvents(event12)
+	s.historyBuilder.add(event11)
+	s.historyBuilder.add(event12)
 	s.historyBuilder.FlushAndCreateNewBatch()
 
 	// 2nd batch
-	s.historyBuilder.appendEvents(event21)
-	s.historyBuilder.appendEvents(event22)
+	s.historyBuilder.add(event21)
+	s.historyBuilder.add(event22)
 	s.historyBuilder.FlushAndCreateNewBatch()
 
 	// 3rd batch
-	s.historyBuilder.appendEvents(event31)
-	s.historyBuilder.appendEvents(event32)
+	s.historyBuilder.add(event31)
+	s.historyBuilder.add(event32)
 	s.historyBuilder.FlushAndCreateNewBatch()
 
 	historyMutation, err := s.historyBuilder.Finish(flushBuffer)
@@ -1780,8 +1780,8 @@ func (s *historyBuilderSuite) TestAppendFlushFinishEvent_WithBuffer_WithoutDBBuf
 		TaskId:    common.EmptyEventTaskID,
 	}
 
-	s.historyBuilder.appendEvents(event1)
-	s.historyBuilder.appendEvents(event2)
+	s.historyBuilder.add(event1)
+	s.historyBuilder.add(event2)
 	historyMutation, err := s.historyBuilder.Finish(false)
 	s.NoError(err)
 	s.assertEventIDTaskID(historyMutation)
@@ -1812,8 +1812,8 @@ func (s *historyBuilderSuite) TestAppendFlushFinishEvent_WithBuffer_WithoutDBBuf
 		TaskId:    common.EmptyEventTaskID,
 	}
 
-	s.historyBuilder.appendEvents(event1)
-	s.historyBuilder.appendEvents(event2)
+	s.historyBuilder.add(event1)
+	s.historyBuilder.add(event2)
 	historyMutation, err := s.historyBuilder.Finish(true)
 	s.NoError(err)
 	s.assertEventIDTaskID(historyMutation)
@@ -1909,8 +1909,8 @@ func (s *historyBuilderSuite) TestAppendFlushFinishEvent_WithBuffer_WithDBBuffer
 		TaskId:    common.EmptyEventTaskID,
 	}
 
-	s.historyBuilder.appendEvents(event1)
-	s.historyBuilder.appendEvents(event2)
+	s.historyBuilder.add(event1)
+	s.historyBuilder.add(event2)
 	historyMutation, err := s.historyBuilder.Finish(false)
 	s.NoError(err)
 	s.assertEventIDTaskID(historyMutation)
@@ -1946,8 +1946,8 @@ func (s *historyBuilderSuite) TestAppendFlushFinishEvent_WithBuffer_WithDBBuffer
 		TaskId:    common.EmptyEventTaskID,
 	}
 
-	s.historyBuilder.appendEvents(event1)
-	s.historyBuilder.appendEvents(event2)
+	s.historyBuilder.add(event1)
+	s.historyBuilder.add(event2)
 	historyMutation, err := s.historyBuilder.Finish(true)
 	s.NoError(err)
 	s.assertEventIDTaskID(historyMutation)
@@ -2095,7 +2095,7 @@ func (s *historyBuilderSuite) testWireEventIDs(
 	startEvent *historypb.HistoryEvent,
 	finishEvent *historypb.HistoryEvent,
 ) {
-	s.historyBuilder = NewMutableHistoryBuilder(
+	s.historyBuilder = New(
 		s.mockTimeSource,
 		s.taskIDGenerator,
 		s.version,
@@ -2142,7 +2142,7 @@ func (s *historyBuilderSuite) testWireEventIDs(
 }
 
 func (s *historyBuilderSuite) TestHasBufferEvent() {
-	historyBuilder := NewMutableHistoryBuilder(
+	historyBuilder := New(
 		s.mockTimeSource,
 		s.taskIDGenerator,
 		s.version,

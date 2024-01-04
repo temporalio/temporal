@@ -169,7 +169,7 @@ func (s *mutableStateSuite) TestTransientWorkflowTaskCompletionFirstBatchApplied
 			Identity:         "some random identity",
 		}},
 	}
-	s.mutableState.SetHistoryBuilder(historybuilder.NewImmutableHistoryBuilder([]*historypb.HistoryEvent{
+	s.mutableState.SetHistoryBuilder(historybuilder.NewImmutable([]*historypb.HistoryEvent{
 		newWorkflowTaskCompletedEvent,
 	}))
 	err := s.mutableState.ApplyWorkflowTaskCompletedEvent(newWorkflowTaskCompletedEvent)
@@ -697,7 +697,7 @@ func (s *mutableStateSuite) prepareTransientWorkflowTaskCompletionFirstBatchAppl
 	s.Nil(err)
 	s.NotNil(wt)
 
-	s.mutableState.SetHistoryBuilder(historybuilder.NewImmutableHistoryBuilder([]*historypb.HistoryEvent{
+	s.mutableState.SetHistoryBuilder(historybuilder.NewImmutable([]*historypb.HistoryEvent{
 		newWorkflowTaskScheduleEvent,
 		newWorkflowTaskStartedEvent,
 	}))

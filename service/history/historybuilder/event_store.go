@@ -77,7 +77,7 @@ func (b *EventStore) NextEventID() int64 {
 	return b.nextEventID
 }
 
-func (b *EventStore) appendEvents(
+func (b *EventStore) add(
 	event *historypb.HistoryEvent,
 ) (*historypb.HistoryEvent, int64) {
 	b.assertMutable()
@@ -105,14 +105,14 @@ func (b *EventStore) HasBufferEvents() bool {
 }
 
 // HasAnyBufferedEvent returns true if there is at least one buffered event that matches the provided filter.
-func (b *EventStore) HasAnyBufferedEvent(filter BufferedEventFilter) bool {
+func (b *EventStore) HasAnyBufferedEvent(predicate BufferedEventFilter) bool {
 	for _, event := range b.memBufferBatch {
-		if filter(event) {
+		if predicate(event) {
 			return true
 		}
 	}
 	for _, event := range b.dbBufferBatch {
-		if filter(event) {
+		if predicate(event) {
 			return true
 		}
 	}

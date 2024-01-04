@@ -279,7 +279,7 @@ func NewMutableState(
 		Status: enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING}
 	s.approximateSize += s.executionState.Size()
 
-	s.hBuilder = historybuilder.NewMutableHistoryBuilder(
+	s.hBuilder = historybuilder.New(
 		s.timeSource,
 		s.shard.GenerateTaskIDs,
 		s.currentVersion,
@@ -363,7 +363,7 @@ func NewMutableStateFromDB(
 	mutableState.approximateSize += dbRecord.ExecutionInfo.Size() - mutableState.executionInfo.Size()
 	mutableState.executionInfo = dbRecord.ExecutionInfo
 
-	mutableState.hBuilder = historybuilder.NewMutableHistoryBuilder(
+	mutableState.hBuilder = historybuilder.New(
 		mutableState.timeSource,
 		mutableState.shard.GenerateTaskIDs,
 		common.EmptyVersion,
@@ -584,7 +584,7 @@ func (ms *MutableStateImpl) UpdateCurrentVersion(
 		ms.currentVersion = version
 	}
 
-	ms.hBuilder = historybuilder.NewMutableHistoryBuilder(
+	ms.hBuilder = historybuilder.New(
 		ms.timeSource,
 		ms.shard.GenerateTaskIDs,
 		ms.currentVersion,
@@ -4661,7 +4661,7 @@ func (ms *MutableStateImpl) cleanupTransaction(
 	ms.nextEventIDInDB = ms.GetNextEventID()
 	// ms.dbRecordVersion remains the same
 
-	ms.hBuilder = historybuilder.NewMutableHistoryBuilder(
+	ms.hBuilder = historybuilder.New(
 		ms.timeSource,
 		ms.shard.GenerateTaskIDs,
 		ms.GetCurrentVersion(),

@@ -118,7 +118,7 @@ func (b *MutableStateRebuilderImpl) ApplyEvents(
 	if err := taskGenerator.GenerateUserTimerTasks(); err != nil {
 		return nil, err
 	}
-	b.mutableState.SetHistoryBuilder(historybuilder.NewImmutableHistoryBuilder(history...))
+	b.mutableState.SetHistoryBuilder(historybuilder.NewImmutable(history...))
 	return newMutableState, nil
 }
 
