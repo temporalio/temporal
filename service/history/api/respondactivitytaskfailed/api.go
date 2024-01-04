@@ -89,18 +89,18 @@ func Invoke(
 					return nil, err0
 				}
 			}
-			ai, isRunning := mutableState.GetActivityInfo(scheduledEventID)
+			ai, activityRunning := mutableState.GetActivityInfo(scheduledEventID)
 
 			// First check to see if cache needs to be refreshed as we could potentially have stale workflow execution in
 			// some extreme cassandra failure cases.
-			if !isRunning && scheduledEventID >= mutableState.GetNextEventID() {
+			if !activityRunning && scheduledEventID >= mutableState.GetNextEventID() {
 				shard.GetMetricsHandler().Counter(metrics.StaleMutableStateCounter.Name()).Record(
 					1,
 					metrics.OperationTag(metrics.HistoryRespondActivityTaskFailedScope))
 				return nil, consts.ErrStaleState
 			}
 
-			if !isRunning ||
+			if !activityRunning ||
 				ai.StartedEventId == common.EmptyEventID ||
 				(token.GetScheduledEventId() != common.EmptyEventID && token.Attempt != ai.Attempt) ||
 				(token.GetVersion() != common.EmptyVersion && token.Version != ai.Version) {
