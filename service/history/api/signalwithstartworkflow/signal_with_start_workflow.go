@@ -128,19 +128,18 @@ func startAndSignalWorkflow(
 			return "", err
 		}
 		return runID, nil
-	} else {
-		snapshot, err := takeMutableStateSnapshot(currentWorkflowContext)
-		if err != nil {
-			return "", err
-		}
-		return startAndSignalWithoutCurrentWorkflow(
-			ctx,
-			shard,
-			snapshot,
-			newWorkflowContext,
-			signalWithStartRequest.RequestId,
-		)
 	}
+	snapshot, err := takeMutableStateSnapshot(currentWorkflowContext)
+	if err != nil {
+		return "", err
+	}
+	return startAndSignalWithoutCurrentWorkflow(
+		ctx,
+		shard,
+		snapshot,
+		newWorkflowContext,
+		signalWithStartRequest.RequestId,
+	)
 }
 
 func createWorkflowUpdateFunction(
