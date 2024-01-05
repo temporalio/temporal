@@ -22,41 +22,54 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-package replication
+package eventhandler
 
 import (
-	"go.temporal.io/server/common/persistence/serialization"
-	"go.temporal.io/server/service/history/replication/eventhandler"
+	"go.temporal.io/server/service/history/replication"
 	"go.uber.org/fx"
 
-	"go.temporal.io/server/client"
 	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/log"
-	"go.temporal.io/server/common/metrics"
-	"go.temporal.io/server/common/namespace"
-	ctasks "go.temporal.io/server/common/tasks"
-	"go.temporal.io/server/common/xdc"
-	"go.temporal.io/server/service/history/configs"
+	"go.temporal.io/server/common/persistence/serialization"
 	"go.temporal.io/server/service/history/shard"
 )
 
-type (
-	ProcessToolBox struct {
-		fx.In
-
-		Config                  *configs.Config
-		ClusterMetadata         cluster.Metadata
-		ClientBean              client.Bean
-		ShardController         shard.Controller
-		NamespaceCache          namespace.Registry
-		EagerNamespaceRefresher EagerNamespaceRefresher
-		NDCHistoryResender      xdc.NDCHistoryResender
-		TaskScheduler           ctasks.Scheduler[TrackableExecutableTask]
-		MetricsHandler          metrics.Handler
-		Logger                  log.Logger
-		EventSerializer         serialization.Serializer
-		DLQWriter               DLQWriter
-		HistoryPaginatedFetcher HistoryPaginatedFetcher
-		HistoryEventsHandler    eventhandler.HistoryEventsHandler
-	}
+var Module = fx.Provide(
+	localEventHandlerProvider,
+	remoteEventHandlerProvider,
+	historyEventsHandlerProvider,
 )
+
+func remoteEventHandlerProvider(
+	shardController shard.Controller,
+) RemoteGeneratedEventsHandler {
+	return NewRemoteGeneratedEventsHandler(shardController)
+}
+
+func localEventHandlerProvider(
+	clusterMetadata cluster.Metadata,
+	shardController shard.Controller,
+	logger log.Logger,
+	eventSerializer serialization.Serializer,
+	historyPaginatedFetcher replication.HistoryPaginatedFetcher,
+) LocalGeneratedEventsHandler {
+	return NewLocalEventsHandler(
+		clusterMetadata,
+		shardController,
+		logger,
+		eventSerializer,
+		historyPaginatedFetcher,
+	)
+}
+
+func historyEventsHandlerProvider(
+	clusterMetadata cluster.Metadata,
+	localHandler LocalGeneratedEventsHandler,
+	remoteHandler RemoteGeneratedEventsHandler,
+) HistoryEventsHandler {
+	return &historyEventsHandlerImpl{
+		clusterMetadata,
+		localHandler,
+		remoteHandler,
+	}
+}

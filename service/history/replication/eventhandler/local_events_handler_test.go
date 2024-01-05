@@ -79,7 +79,7 @@ func (s *localEventsHandlerSuite) SetupTest() {
 		s.shardController,
 		s.logger,
 		s.eventSerializer,
-		replication.NewMockHistoryPaginatedFetcher(s.controller),
+		s.testProcessToolBox.remoteHistoryFetcher,
 	)
 }
 
