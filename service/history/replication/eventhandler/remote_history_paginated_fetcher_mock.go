@@ -26,7 +26,7 @@
 // Source: remote_history_paginated_fetcher.go
 
 // Package replication is a generated GoMock package.
-package replication
+package eventhandler
 
 import (
 	context "context"

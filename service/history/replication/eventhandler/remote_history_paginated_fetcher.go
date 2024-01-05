@@ -22,7 +22,7 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-package replication
+package eventhandler
 
 import (
 	"context"
@@ -89,7 +89,6 @@ func NewHistoryPaginatedFetcher(
 	rereplicationTimeout dynamicconfig.DurationPropertyFnWithNamespaceIDFilter,
 	logger log.Logger,
 ) *HistoryPaginatedFetcherImpl {
-
 	return &HistoryPaginatedFetcherImpl{
 		namespaceRegistry:    namespaceRegistry,
 		clientBean:           clientBean,

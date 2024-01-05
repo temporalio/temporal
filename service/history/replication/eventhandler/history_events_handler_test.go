@@ -55,7 +55,7 @@ type (
 		shardController         *shard.MockController
 		namespaceCache          *namespace.MockRegistry
 		ndcHistoryResender      *xdc.MockNDCHistoryResender
-		remoteHistoryFetcher    *replication.MockHistoryPaginatedFetcher
+		remoteHistoryFetcher    *MockHistoryPaginatedFetcher
 		metricsHandler          metrics.Handler
 		logger                  log.Logger
 		sourceCluster           string
@@ -85,7 +85,7 @@ func initializeToolBox(ctrl *gomock.Controller) (testProcessToolBox, replication
 		shardController:         shard.NewMockController(ctrl),
 		namespaceCache:          namespace.NewMockRegistry(ctrl),
 		ndcHistoryResender:      xdc.NewMockNDCHistoryResender(ctrl),
-		remoteHistoryFetcher:    replication.NewMockHistoryPaginatedFetcher(ctrl),
+		remoteHistoryFetcher:    NewMockHistoryPaginatedFetcher(ctrl),
 		metricsHandler:          metrics.NoopMetricsHandler,
 		logger:                  log.NewNoopLogger(),
 		sourceCluster:           "some cluster",

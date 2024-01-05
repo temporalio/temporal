@@ -294,22 +294,22 @@ func (s *localEventsHandlerSuite) TestHandleHistoryEvents_LocalOnly_ImportAllLoc
 		EncodingType: enumspb.ENCODING_TYPE_PROTO3,
 		Data:         []byte{1, 1, 0},
 	}
-	historyBatch1 := replication.HistoryBatch{
+	historyBatch1 := HistoryBatch{
 		RawEventBatch:  dataBlob1,
 		VersionHistory: versionHistory,
 	}
-	historyBatch2 := replication.HistoryBatch{
+	historyBatch2 := HistoryBatch{
 		RawEventBatch:  dataBlob2,
 		VersionHistory: versionHistory,
 	}
 
 	times := 0
-	fetcher := collection.NewPagingIterator(func(paginationToken []byte) ([]replication.HistoryBatch, []byte, error) {
+	fetcher := collection.NewPagingIterator(func(paginationToken []byte) ([]HistoryBatch, []byte, error) {
 		if times < historyImportBlobSize {
 			times++
-			return []replication.HistoryBatch{historyBatch1}, []byte{1, 1, 0}, nil
+			return []HistoryBatch{historyBatch1}, []byte{1, 1, 0}, nil
 		}
-		return []replication.HistoryBatch{historyBatch2}, nil, nil
+		return []HistoryBatch{historyBatch2}, nil, nil
 	})
 
 	batch := serializeEvents(s.EventSerializer, initialHistoryEvents)

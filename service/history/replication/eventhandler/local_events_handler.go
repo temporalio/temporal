@@ -40,7 +40,6 @@ import (
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence/serialization"
 	"go.temporal.io/server/common/persistence/versionhistory"
-	"go.temporal.io/server/service/history/replication"
 	"go.temporal.io/server/service/history/shard"
 )
 
@@ -67,7 +66,7 @@ type (
 		shardController         shard.Controller
 		logger                  log.Logger
 		eventSerializer         serialization.Serializer
-		historyPaginatedFetcher replication.HistoryPaginatedFetcher
+		historyPaginatedFetcher HistoryPaginatedFetcher
 	}
 )
 
@@ -76,7 +75,7 @@ func NewLocalEventsHandler(
 	shardController shard.Controller,
 	logger log.Logger,
 	eventSerializer serialization.Serializer,
-	historyPaginatedFetcher replication.HistoryPaginatedFetcher,
+	historyPaginatedFetcher HistoryPaginatedFetcher,
 ) LocalGeneratedEventsHandler {
 	return &localEventsHandlerImpl{
 		clusterMetadata:         clusterMetadata,
