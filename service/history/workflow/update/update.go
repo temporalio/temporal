@@ -293,7 +293,9 @@ func (u *Update) OnMessage(
 
 	// If workflow was completed while processing this WFT, then only Rejection messages can be processed,
 	// because they don't create new events in the history. All other updates must be cancelled.
-	if _, isRejection := msg.(*updatepb.Rejection); !isWorkflowRunning && !isRejection {
+	_, isRejection := msg.(*updatepb.Rejection)
+	shouldCancel := !(isWorkflowRunning || isRejection)
+	if shouldCancel {
 		return u.CancelIncomplete(ctx, CancelReasonWorkflowCompleted, eventStore)
 	}
 

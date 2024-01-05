@@ -3310,7 +3310,7 @@ func (s *FunctionalSuite) TestUpdateWorkflow_CompleteWorkflow_CancelUpdate() {
 		},
 		{
 			Name:          "accepted",
-			Description:   "update in stateAccepted must got an error because there is no way for workflow to complete it and already accepted update can't be rejected",
+			Description:   "update in stateAccepted must get an error because there is no way for workflow to complete it and already accepted update can't be rejected",
 			UpdateErr:     "context deadline exceeded",
 			UpdateFailure: "",
 			Commands:      func(tv *testvars.TestVars) []*commandpb.Command { return s.acceptUpdateCommands(tv, "1") },

@@ -916,7 +916,7 @@ func TestCompletedWorkflow(t *testing.T) {
 		store = mockEventStore{Controller: effects}
 	)
 
-	t.Run("request", func(t *testing.T) {
+	t.Run("new update is rejected if workflow is completed", func(t *testing.T) {
 		upd := update.New(meta.UpdateId)
 		err := upd.OnMessage(ctx, &req, false, store)
 		require.NoError(t, err)
@@ -928,7 +928,7 @@ func TestCompletedWorkflow(t *testing.T) {
 		require.Equal(t, "CanceledUpdate", status.Outcome.GetFailure().GetApplicationFailureInfo().Type)
 	})
 
-	t.Run("accept", func(t *testing.T) {
+	t.Run("sent update is rejected if completed workflow tries to accept it", func(t *testing.T) {
 		upd := update.New(meta.UpdateId)
 		_ = upd.OnMessage(ctx, &req, true, store)
 		upd.Send(ctx, false, &protocolpb.Message_EventId{EventId: testSequencingEventID}, store)
@@ -944,7 +944,7 @@ func TestCompletedWorkflow(t *testing.T) {
 		require.Equal(t, "CanceledUpdate", status.Outcome.GetFailure().GetApplicationFailureInfo().Type)
 	})
 
-	t.Run("reject", func(t *testing.T) {
+	t.Run("sent update is rejected with user rejection if completed workflow rejects it", func(t *testing.T) {
 		upd := update.New(meta.UpdateId)
 		_ = upd.OnMessage(ctx, &req, true, store)
 		upd.Send(ctx, false, &protocolpb.Message_EventId{EventId: testSequencingEventID}, store)
@@ -962,7 +962,7 @@ func TestCompletedWorkflow(t *testing.T) {
 		require.Equal(t, "An intentional failure", status.Outcome.GetFailure().GetMessage())
 	})
 
-	t.Run("complete", func(t *testing.T) {
+	t.Run("accepted update is timed out if completed workflow completes it", func(t *testing.T) {
 		upd := update.NewAccepted(meta.UpdateId, testAcceptedEventID)
 
 		resp := updatepb.Response{Meta: &meta, Outcome: successOutcome(t, "success!")}

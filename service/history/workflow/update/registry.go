@@ -201,7 +201,7 @@ func (r *registry) Find(ctx context.Context, id string) (*Update, bool) {
 //   - updates in stateAccepted are ignored (see CancelIncomplete() in update.go for details),
 //   - updates in stateCompleted are ignored.
 func (r *registry) CancelIncomplete(ctx context.Context, reason CancelReason, eventStore EventStore) error {
-	incompleteUpdates := r.enumerate(func(u *Update) bool { return u.isIncomplete() })
+	incompleteUpdates := r.filter(func(u *Update) bool { return u.isIncomplete() })
 	for _, upd := range incompleteUpdates {
 		if err := upd.CancelIncomplete(ctx, reason, eventStore); err != nil {
 			return err
@@ -220,7 +220,7 @@ func (r *registry) RejectUnprocessed(
 
 	// Iterate over updates in the registry while holding read lock.
 	// Call to reject() bellow will acquire write lock, thus it needs to be done outside the read lock.
-	updatesToReject := r.enumerate(func(u *Update) bool { return u.isSent() })
+	updatesToReject := r.filter(func(u *Update) bool { return u.isSent() })
 
 	if len(updatesToReject) == 0 {
 		return nil, nil
@@ -344,15 +344,15 @@ func (r *registry) findLocked(ctx context.Context, id string) (*Update, bool) {
 	), true
 }
 
-// enumerate returns a slice of all updates in the registry for which the
-// provided filter function returns true. The registry is locked for reading
+// filter returns a slice of all updates in the registry for which the
+// provided predicate function returns true. The registry is locked for reading
 // while enumerating over the map. Resulted slice can be iterated w/o holding a lock.
-func (r *registry) enumerate(filter func(u *Update) bool) []*Update {
+func (r *registry) filter(predicate func(u *Update) bool) []*Update {
 	var res []*Update
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 	for _, upd := range r.updates {
-		if filter(upd) {
+		if predicate(upd) {
 			res = append(res, upd)
 		}
 	}
