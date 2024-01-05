@@ -27,6 +27,7 @@ package session
 import (
 	"crypto/tls"
 	"crypto/x509"
+	"database/sql"
 	"fmt"
 	"os"
 	"strings"
@@ -85,7 +86,12 @@ func createConnection(
 		return nil, err
 	}
 
-	db, err := sqlx.Connect(driverName, buildDSN(cfg, resolver))
+	var db *sqlx.DB
+	if cfg.DBConnector != nil {
+		db = sqlx.NewDb(sql.OpenDB(*cfg.DBConnector), driverName)
+	} else {
+		db, err = sqlx.Connect(driverName, buildDSN(cfg, resolver))
+	}
 	if err != nil {
 		return nil, err
 	}

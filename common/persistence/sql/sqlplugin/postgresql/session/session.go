@@ -25,6 +25,7 @@
 package session
 
 import (
+	"database/sql"
 	"fmt"
 	"net/url"
 	"strings"
@@ -38,7 +39,8 @@ import (
 )
 
 const (
-	dsnFmt = "postgres://%v:%v@%v/%v?%v"
+	dsnFmt     = "postgres://%v:%v@%v/%v?%v"
+	driverName = "postgres"
 )
 
 const (
@@ -79,9 +81,15 @@ func createConnection(
 	d driver.Driver,
 	resolver resolver.ServiceResolver,
 ) (*sqlx.DB, error) {
-	db, err := d.CreateConnection(buildDSN(cfg, resolver))
-	if err != nil {
-		return nil, err
+	var db *sqlx.DB
+	if cfg.DBConnector != nil {
+		db = sqlx.NewDb(sql.OpenDB(*cfg.DBConnector), driverName)
+	} else {
+		var err error
+		db, err = d.CreateConnection(buildDSN(cfg, resolver))
+		if err != nil {
+			return nil, err
+		}
 	}
 	if cfg.MaxConns > 0 {
 		db.SetMaxOpenConns(cfg.MaxConns)
