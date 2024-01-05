@@ -160,7 +160,6 @@ func (h *localEventsHandlerImpl) importEvents(
 	endEventVersion int64,
 	token []byte,
 ) error {
-	// Todo: change this to use inclusive/inclusive api once it is available
 	historyIterator := h.historyPaginatedFetcher.GetSingleWorkflowHistoryPaginatedIterator(
 		ctx,
 		remoteCluster,

@@ -136,22 +136,24 @@ func (e *ExecutableHistoryTask) Execute() error {
 	ctx, cancel := newTaskContext(namespaceName)
 	defer cancel()
 
+	shardContext, err := e.ShardController.GetShardByNamespaceWorkflow(
+		namespace.ID(e.NamespaceID),
+		e.WorkflowID,
+	)
+	if err != nil {
+		return err
+	}
+	engine, err := shardContext.GetEngine(ctx)
+	if err != nil {
+		return err
+	}
 	events, newRunEvents, err := e.getDeserializedEvents()
 	if err != nil {
 		return err
 	}
 	// use HistoryEventsHandler.HandleHistoryEvents(...) instead
-	//return engine.ReplicateHistoryEvents(
-	//	ctx,
-	//	e.WorkflowKey,
-	//	e.baseExecutionInfo,
-	//	e.versionHistoryItems,
-	//	events,
-	//	newRunEvents,
-	//)
-	return e.ProcessToolBox.HistoryEventsHandler.HandleHistoryEvents(
+	return engine.ReplicateHistoryEvents(
 		ctx,
-		e.SourceClusterName(),
 		e.WorkflowKey,
 		e.baseExecutionInfo,
 		e.versionHistoryItems,

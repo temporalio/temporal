@@ -36,7 +36,6 @@ import (
 	historyspb "go.temporal.io/server/api/history/v1"
 	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/namespace"
-	"go.temporal.io/server/service/history/replication"
 	"go.temporal.io/server/service/history/shard"
 )
 
@@ -44,9 +43,8 @@ type (
 	futureEventsHandlerSuite struct {
 		suite.Suite
 		*require.Assertions
-		controller *gomock.Controller
-		testProcessToolBox
-		replication.ProcessToolBox
+		controller      *gomock.Controller
+		shardController *shard.MockController
 
 		futureEventHandler RemoteGeneratedEventsHandler
 	}
@@ -67,7 +65,7 @@ func (s *futureEventsHandlerSuite) TearDownSuite() {
 
 func (s *futureEventsHandlerSuite) SetupTest() {
 	s.controller = gomock.NewController(s.T())
-	s.testProcessToolBox, s.ProcessToolBox = initializeToolBox(s.controller)
+	s.shardController = shard.NewMockController(s.controller)
 	s.futureEventHandler = NewRemoteGeneratedEventsHandler(
 		s.shardController,
 	)

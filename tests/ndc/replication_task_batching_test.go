@@ -227,7 +227,6 @@ func (s *NDCReplicationTaskBatchingTestSuite) assertHistoryEvents(
 
 	index := 0
 	for passiveIterator.HasNext() {
-		println("fetching")
 		s.True(passiveIterator.HasNext())
 		passiveBatch, err := passiveIterator.Next()
 		s.NoError(err)

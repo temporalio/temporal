@@ -119,9 +119,7 @@ func (s *executableTaskSuite) SetupTest() {
 			MetricsHandler:          s.metricsHandler,
 			Logger:                  s.logger,
 			EagerNamespaceRefresher: s.eagerNamespaceRefresher,
-
 			DLQWriter:               NoopDLQWriter{},
-			HistoryPaginatedFetcher: s.remoteHistoryFetcher,
 		},
 		rand.Int63(),
 		"metrics-tag",

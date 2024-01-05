@@ -50,6 +50,7 @@ const (
 
 type (
 	// HistoryPaginatedFetcher is the interface for fetching history from remote cluster
+	// Start and End event ID is inclusive.
 	HistoryPaginatedFetcher interface {
 		GetSingleWorkflowHistoryPaginatedIterator(
 			ctx context.Context,
