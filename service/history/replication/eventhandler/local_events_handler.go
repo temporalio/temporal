@@ -33,9 +33,12 @@ import (
 	"go.temporal.io/api/serviceerror"
 	historyspb "go.temporal.io/server/api/history/v1"
 	"go.temporal.io/server/api/historyservice/v1"
+	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/definition"
+	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/namespace"
+	"go.temporal.io/server/common/persistence/serialization"
 	"go.temporal.io/server/common/persistence/versionhistory"
 	"go.temporal.io/server/service/history/replication"
 	"go.temporal.io/server/service/history/shard"
@@ -60,17 +63,31 @@ type (
 	}
 
 	localEventsHandlerImpl struct {
-		replication.ProcessToolBox
+		clusterMetadata         cluster.Metadata
+		shardController         shard.Controller
+		logger                  log.Logger
+		eventSerializer         serialization.Serializer
+		historyPaginatedFetcher replication.HistoryPaginatedFetcher
 	}
 )
 
-func NewLocalEventsHandler(toolBox replication.ProcessToolBox) LocalGeneratedEventsHandler {
+func NewLocalEventsHandler(
+	clusterMetadata cluster.Metadata,
+	shardController shard.Controller,
+	logger log.Logger,
+	eventSerializer serialization.Serializer,
+	historyPaginatedFetcher replication.HistoryPaginatedFetcher,
+) LocalGeneratedEventsHandler {
 	return &localEventsHandlerImpl{
-		toolBox,
+		clusterMetadata:         clusterMetadata,
+		shardController:         shardController,
+		logger:                  logger,
+		eventSerializer:         eventSerializer,
+		historyPaginatedFetcher: historyPaginatedFetcher,
 	}
 }
 
-// HandleLocalEvents current implementation is using Import API which requires transactional importing.
+// HandleLocalGeneratedHistoryEvents current implementation is using Import API which requires transactional importing.
 // So when this API is called, it will try to import all local history events in one transaction.
 // i.e. From version history, local events are [1,100]. When this API is called with events[10,11], it will try to import
 // [10,11] and if success, it will fetch [12,100] from source cluster and also import them, then commit the transaction.
@@ -81,7 +98,7 @@ func (h *localEventsHandlerImpl) HandleLocalGeneratedHistoryEvents(
 	versionHistoryItems []*historyspb.VersionHistoryItem,
 	localEvents [][]*historypb.HistoryEvent,
 ) error {
-	shardContext, err := h.ShardController.GetShardByNamespaceWorkflow(namespace.ID(workflowKey.NamespaceID), workflowKey.WorkflowID)
+	shardContext, err := h.shardController.GetShardByNamespaceWorkflow(namespace.ID(workflowKey.NamespaceID), workflowKey.WorkflowID)
 	if err != nil {
 		return err
 	}
@@ -93,7 +110,7 @@ func (h *localEventsHandlerImpl) HandleLocalGeneratedHistoryEvents(
 	localEventsBlobs := make([]*common.DataBlob, len(localEvents))
 
 	for index, batch := range localEvents {
-		blob, err := h.EventSerializer.SerializeEvents(batch, enumspb.ENCODING_TYPE_PROTO3)
+		blob, err := h.eventSerializer.SerializeEvents(batch, enumspb.ENCODING_TYPE_PROTO3)
 		if err != nil {
 			return err
 		}
@@ -107,7 +124,7 @@ func (h *localEventsHandlerImpl) HandleLocalGeneratedHistoryEvents(
 		return nil
 	}
 
-	localVersionHistory, _ := versionhistory.SplitVersionHistoryByLastLocalGeneratedItem(versionHistoryItems, h.ClusterMetadata.GetClusterID(), h.ClusterMetadata.GetFailoverVersionIncrement())
+	localVersionHistory, _ := versionhistory.SplitVersionHistoryByLastLocalGeneratedItem(versionHistoryItems, h.clusterMetadata.GetClusterID(), h.clusterMetadata.GetFailoverVersionIncrement())
 
 	lastBatch := localEvents[len(localEvents)-1]
 	lastLocalEvent := lastBatch[len(lastBatch)-1]
@@ -145,7 +162,7 @@ func (h *localEventsHandlerImpl) importEvents(
 	token []byte,
 ) error {
 	// Todo: change this to use inclusive/inclusive api once it is available
-	historyIterator := h.ProcessToolBox.HistoryPaginatedFetcher.GetSingleWorkflowHistoryPaginatedIterator(
+	historyIterator := h.historyPaginatedFetcher.GetSingleWorkflowHistoryPaginatedIterator(
 		ctx,
 		remoteCluster,
 		namespace.ID(workflowKey.NamespaceID),
@@ -164,7 +181,7 @@ func (h *localEventsHandlerImpl) importEvents(
 	for historyIterator.HasNext() {
 		batch, err := historyIterator.Next()
 		if err != nil {
-			h.Logger.Error("failed to get history events",
+			h.logger.Error("failed to get history events",
 				tag.WorkflowNamespaceID(workflowKey.NamespaceID),
 				tag.WorkflowID(workflowKey.WorkflowID),
 				tag.WorkflowRunID(workflowKey.RunID),
@@ -201,7 +218,7 @@ func (h *localEventsHandlerImpl) importEvents(
 	blobs = []*common.DataBlob{}
 	response, err := h.invokeImportWorkflowExecutionCall(ctx, engine, workflowKey, blobs, versionHistory, token)
 	if err != nil || len(response.Token) != 0 {
-		h.Logger.Error("failed to commit import action",
+		h.logger.Error("failed to commit import action",
 			tag.WorkflowNamespaceID(workflowKey.NamespaceID),
 			tag.WorkflowID(workflowKey.WorkflowID),
 			tag.WorkflowRunID(workflowKey.RunID),
@@ -231,7 +248,7 @@ func (h *localEventsHandlerImpl) invokeImportWorkflowExecutionCall(
 	}
 	response, err := historyEngine.ImportWorkflowExecution(ctx, request)
 	if err != nil {
-		h.Logger.Error("failed to import events",
+		h.logger.Error("failed to import events",
 			tag.WorkflowNamespaceID(workflowKey.NamespaceID),
 			tag.WorkflowID(workflowKey.WorkflowID),
 			tag.WorkflowRunID(workflowKey.RunID),

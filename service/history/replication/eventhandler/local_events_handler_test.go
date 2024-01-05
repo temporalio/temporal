@@ -75,7 +75,11 @@ func (s *localEventsHandlerSuite) SetupTest() {
 	s.controller = gomock.NewController(s.T())
 	s.testProcessToolBox, s.ProcessToolBox = initializeToolBox(s.controller)
 	s.localEventsHandler = NewLocalEventsHandler(
-		s.ProcessToolBox,
+		s.clusterMetadata,
+		s.shardController,
+		s.logger,
+		s.eventSerializer,
+		replication.NewMockHistoryPaginatedFetcher(s.controller),
 	)
 }
 

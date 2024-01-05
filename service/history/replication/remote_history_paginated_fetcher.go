@@ -190,7 +190,7 @@ func (n *HistoryPaginatedFetcherImpl) getHistory(
 	endEventVersion int64,
 	token []byte,
 	pageSize int32,
-) (*adminservice.GetWorkflowExecutionRawHistoryV2Response, error) {
+) (*adminservice.GetWorkflowExecutionRawHistoryResponse, error) {
 
 	logger := log.With(n.logger, tag.WorkflowRunID(runID))
 
@@ -202,7 +202,7 @@ func (n *HistoryPaginatedFetcherImpl) getHistory(
 		return nil, err
 	}
 
-	response, err := adminClient.GetWorkflowExecutionRawHistoryV2(ctx, &adminservice.GetWorkflowExecutionRawHistoryV2Request{
+	response, err := adminClient.GetWorkflowExecutionRawHistory(ctx, &adminservice.GetWorkflowExecutionRawHistoryRequest{
 		NamespaceId: namespaceID.String(),
 		Execution: &commonpb.WorkflowExecution{
 			WorkflowId: workflowID,

@@ -68,8 +68,8 @@ func (s *futureEventsHandlerSuite) TearDownSuite() {
 func (s *futureEventsHandlerSuite) SetupTest() {
 	s.controller = gomock.NewController(s.T())
 	s.testProcessToolBox, s.ProcessToolBox = initializeToolBox(s.controller)
-	s.futureEventHandler = NewFutureEventsHandler(
-		s.ProcessToolBox,
+	s.futureEventHandler = NewRemoteGeneratedEventsHandler(
+		s.shardController,
 	)
 }
 

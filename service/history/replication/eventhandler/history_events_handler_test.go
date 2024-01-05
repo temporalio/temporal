@@ -129,7 +129,7 @@ func (s *historyEventHandlerSuite) SetupTest() {
 	s.localEventsHandler = NewMockLocalGeneratedEventsHandler(s.controller)
 	s.remoteEventHandler = NewMockRemoteGeneratedEventsHandler(s.controller)
 	s.historyEventHandler = &historyEventsHandlerImpl{
-		s.ProcessToolBox,
+		s.clusterMetadata,
 		s.localEventsHandler,
 		s.remoteEventHandler,
 	}
