@@ -2727,7 +2727,7 @@ func (s *FunctionalSuite) TestUpdateWorkflow_StartToCloseTimeoutSpeculativeWorkf
 			// Emulate slow worker: sleep more than WT timeout.
 			time.Sleep(1*time.Second + 100*time.Millisecond)
 			// This doesn't matter because WT times out before update is applied.
-			return s.acceptUpdateCommands(tv, "1"), nil
+			return s.acceptCompleteUpdateCommands(tv, "1"), nil
 		case 3:
 			// Speculative WT timed out and retried as normal WT.
 			s.EqualHistory(`
@@ -2740,7 +2740,7 @@ func (s *FunctionalSuite) TestUpdateWorkflow_StartToCloseTimeoutSpeculativeWorkf
   7 WorkflowTaskTimedOut
   8 WorkflowTaskScheduled {"Attempt":2 } // Transient WT.
   9 WorkflowTaskStarted`, history)
-			commands := append(s.acceptUpdateCommands(tv, "1"),
+			commands := append(s.acceptCompleteUpdateCommands(tv, "1"),
 				&commandpb.Command{
 					CommandType: enumspb.COMMAND_TYPE_COMPLETE_WORKFLOW_EXECUTION,
 					Attributes:  &commandpb.Command_CompleteWorkflowExecutionCommandAttributes{CompleteWorkflowExecutionCommandAttributes: &commandpb.CompleteWorkflowExecutionCommandAttributes{}},
