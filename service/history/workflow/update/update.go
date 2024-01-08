@@ -84,7 +84,7 @@ type (
 		// accessed only while holding workflow lock
 		id              string
 		state           state
-		request         *anypb.Any // of type *updatepb.Request, nil when not in stateRequested
+		request         *anypb.Any // of type *updatepb.Request, nil when not in stateRequested or stateSent.
 		acceptedEventID int64
 		onComplete      func()
 		instrumentation *instrumentation
@@ -276,6 +276,7 @@ func (u *Update) WaitAccepted(ctx context.Context) (UpdateStatus, error) {
 func (u *Update) OnMessage(
 	ctx context.Context,
 	msg proto.Message,
+	isWorkflowRunning bool,
 	eventStore EventStore,
 ) error {
 	if msg == nil {
@@ -289,6 +290,15 @@ func (u *Update) OnMessage(
 			return err
 		}
 	}
+
+	// If workflow was completed while processing this WFT, then only Rejection messages can be processed,
+	// because they don't create new events in the history. All other updates must be cancelled.
+	_, isRejection := msg.(*updatepb.Rejection)
+	shouldCancel := !(isWorkflowRunning || isRejection)
+	if shouldCancel {
+		return u.CancelIncomplete(ctx, CancelReasonWorkflowCompleted, eventStore)
+	}
+
 	switch body := msg.(type) {
 	case *updatepb.Request:
 		return u.onRequestMsg(ctx, body, eventStore)
@@ -371,7 +381,7 @@ func (u *Update) Send(
 
 // isSent checks if update was sent to worker.
 func (u *Update) isSent() bool {
-	return u.state.Matches(stateSet(stateSent))
+	return u.state.Matches(stateSet(stateProvisionallySent | stateSent))
 }
 
 // outgoingMessageID returns the ID of the message that is used to Send the Update to the worker.
@@ -491,6 +501,34 @@ func (u *Update) onResponseMsg(
 		u.onComplete()
 	})
 	eventStore.OnAfterRollback(func(context.Context) { u.setState(prevState) })
+	return nil
+}
+
+// isIncomplete checks if update is already completed (rejected or processed).
+func (u *Update) isIncomplete() bool {
+	return !u.state.Matches(stateSet(stateProvisionallyCompleted | stateCompleted))
+}
+
+// CancelIncomplete cancels update if it wasn't completed yet:
+//   - if in stateAdmitted, stateRequested, or stateSent -> reject,
+//   - if in stateAccepted -> do nothing,
+//   - if in stateCompleted -> do nothing.
+func (u *Update) CancelIncomplete(ctx context.Context, reason CancelReason, eventStore EventStore) error {
+	if u.state.Matches(stateSet(stateAdmitted | stateProvisionallyRequested | stateRequested | stateProvisionallySent | stateSent)) {
+		return u.reject(ctx, reason.RejectionFailure(), eventStore)
+	}
+
+	// Updates in stateProvisionallyAccepted and stateAccepted can't be rejected by server
+	// because they are already accepted by worker. It would be nice to complete them with error
+	// and notify API caller with specific error but this will lead to inconsistency between
+	// update registry and event store (update completed event is missing for completed update).
+	// Another approach is to add one more stateCanceled, set it here, and set update outcome
+	// with error. But this will require to do the same for every workflow completion event because
+	// after history replay of completed workflow all accepted updates must be switched to stateCanceled.
+	// So updates in stateProvisionallyAccepted and stateAccepted are ignored. They stay in the registry
+	// as is, even after workflow completes and API caller gets timeout error.
+
+	// Updates in stateProvisionallyCompleted and stateCompleted are skipped due to nature of this method.
 	return nil
 }
 

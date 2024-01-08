@@ -28,6 +28,7 @@ import (
 	"context"
 	"fmt"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/require"
 	enumspb "go.temporal.io/api/enums/v1"
@@ -117,7 +118,7 @@ func TestHasOutgoingMessages(t *testing.T) {
 		Meta:  &updatepb.Meta{UpdateId: updateID},
 		Input: &updatepb.Input{Name: "not_empty"},
 	}
-	require.NoError(t, upd.OnMessage(ctx, &req, evStore))
+	require.NoError(t, upd.OnMessage(ctx, &req, true, evStore))
 	require.True(t, reg.HasOutgoingMessages(false))
 
 	msg := reg.Send(ctx, false, testSequencingEventID, evStore)
@@ -129,7 +130,7 @@ func TestHasOutgoingMessages(t *testing.T) {
 		AcceptedRequest: &req,
 	}
 
-	err = upd.OnMessage(ctx, &acptReq, evStore)
+	err = upd.OnMessage(ctx, &acptReq, true, evStore)
 	require.NoError(t, err)
 	require.False(t, reg.HasOutgoingMessages(false))
 	require.False(t, reg.HasOutgoingMessages(true))
@@ -247,6 +248,7 @@ func TestUpdateRemovalFromRegistry(t *testing.T) {
 	err = upd.OnMessage(
 		ctx,
 		&updatepb.Response{Meta: &meta, Outcome: outcome},
+		true,
 		evStore,
 	)
 
@@ -278,7 +280,7 @@ func TestSendMessageGathering(t *testing.T) {
 	err = upd1.OnMessage(ctx, &updatepb.Request{
 		Meta:  &updatepb.Meta{UpdateId: updateID1},
 		Input: &updatepb.Input{Name: t.Name() + "-update-func"},
-	}, evStore)
+	}, true, evStore)
 	require.NoError(t, err)
 
 	msgs = reg.Send(ctx, false, wftStartedEventID, evStore)
@@ -299,7 +301,7 @@ func TestSendMessageGathering(t *testing.T) {
 	err = upd2.OnMessage(ctx, &updatepb.Request{
 		Meta:  &updatepb.Meta{UpdateId: updateID2},
 		Input: &updatepb.Input{Name: t.Name() + "-update-func"},
-	}, evStore)
+	}, true, evStore)
 	require.NoError(t, err)
 
 	msgs = reg.Send(ctx, false, wftStartedEventID, evStore)
@@ -353,7 +355,7 @@ func TestInFlightLimit(t *testing.T) {
 		Meta:  &updatepb.Meta{UpdateId: "update1"},
 		Input: &updatepb.Input{Name: "not_empty"},
 	}
-	require.NoError(t, upd1.OnMessage(ctx, &req, evStore))
+	require.NoError(t, upd1.OnMessage(ctx, &req, true, evStore))
 
 	_ = upd1.Send(ctx, false, sequencingID, evStore)
 
@@ -371,7 +373,7 @@ func TestInFlightLimit(t *testing.T) {
 			Message: "intentional failure in " + t.Name(),
 		},
 	}
-	require.NoError(t, upd1.OnMessage(ctx, &rej, evStore))
+	require.NoError(t, upd1.OnMessage(ctx, &rej, true, evStore))
 	require.Equal(t, 0, reg.Len(),
 		"completed update should have been removed from registry")
 
@@ -433,7 +435,7 @@ func TestTotalLimit(t *testing.T) {
 		Meta:  &updatepb.Meta{UpdateId: "update1"},
 		Input: &updatepb.Input{Name: "not_empty"},
 	}
-	require.NoError(t, upd1.OnMessage(ctx, &req, evStore))
+	require.NoError(t, upd1.OnMessage(ctx, &req, true, evStore))
 
 	_ = upd1.Send(ctx, false, sequencingID, evStore)
 
@@ -451,7 +453,7 @@ func TestTotalLimit(t *testing.T) {
 			Message: "intentional failure in " + t.Name(),
 		},
 	}
-	require.NoError(t, upd1.OnMessage(ctx, &rej, evStore))
+	require.NoError(t, upd1.OnMessage(ctx, &rej, true, evStore))
 
 	t.Run("try to admit next after completing previous", func(t *testing.T) {
 		_, existed, err = reg.FindOrCreate(ctx, "update2")
@@ -532,12 +534,12 @@ func TestRejectUnprocessed(t *testing.T) {
 	err = upd1.OnMessage(ctx, &updatepb.Request{
 		Meta:  &updatepb.Meta{UpdateId: updateID1},
 		Input: &updatepb.Input{Name: t.Name() + "-update-func"},
-	}, evStore)
+	}, true, evStore)
 	require.NoError(t, err)
 	err = upd2.OnMessage(ctx, &updatepb.Request{
 		Meta:  &updatepb.Meta{UpdateId: updateID2},
 		Input: &updatepb.Input{Name: t.Name() + "-update-func"},
-	}, evStore)
+	}, true, evStore)
 	require.NoError(t, err)
 
 	rejectedIDs, err = reg.RejectUnprocessed(ctx, evStore)
@@ -555,7 +557,7 @@ func TestRejectUnprocessed(t *testing.T) {
 	err = upd3.OnMessage(ctx, &updatepb.Request{
 		Meta:  &updatepb.Meta{UpdateId: updateID3},
 		Input: &updatepb.Input{Name: t.Name() + "-update-func"},
-	}, evStore)
+	}, true, evStore)
 	require.NoError(t, err)
 	upd2.Send(ctx, false, sequencingID, evStore)
 	upd3.Send(ctx, false, sequencingID, evStore)
@@ -567,4 +569,86 @@ func TestRejectUnprocessed(t *testing.T) {
 	rejectedIDs, err = reg.RejectUnprocessed(ctx, evStore)
 	require.NoError(t, err)
 	require.Len(t, rejectedIDs, 0, "rejected updates shouldn't be rejected again")
+}
+
+func TestCancelIncomplete(t *testing.T) {
+	var (
+		ctx          = context.Background()
+		evStore      = mockEventStore{Controller: effect.Immediate(ctx)}
+		reg          = update.NewRegistry(func() update.Store { return emptyUpdateStore })
+		sequencingID = &protocolpb.Message_EventId{EventId: testSequencingEventID}
+	)
+	updateID1, updateID2, updateID3, updateID4, updateID5 := t.Name()+"-update-id-1", t.Name()+"-update-id-2", t.Name()+"-update-id-3", t.Name()+"-update-id-4", t.Name()+"-update-id-5"
+	updAdmitted, _, _ := reg.FindOrCreate(ctx, updateID1)
+
+	updRequested, _, _ := reg.FindOrCreate(ctx, updateID2)
+	_ = updRequested.OnMessage(ctx, &updatepb.Request{
+		Meta:  &updatepb.Meta{UpdateId: updateID2},
+		Input: &updatepb.Input{Name: t.Name() + "-update-func"},
+	}, true, evStore)
+
+	updSent, _, _ := reg.FindOrCreate(ctx, updateID3)
+	_ = updSent.OnMessage(ctx, &updatepb.Request{
+		Meta:  &updatepb.Meta{UpdateId: updateID3},
+		Input: &updatepb.Input{Name: t.Name() + "-update-func"},
+	}, true, evStore)
+	updSent.Send(ctx, false, sequencingID, evStore)
+
+	msgRequest4 := &updatepb.Request{
+		Meta:  &updatepb.Meta{UpdateId: updateID4},
+		Input: &updatepb.Input{Name: t.Name() + "-update-func"},
+	}
+	updAccepted, _, _ := reg.FindOrCreate(ctx, updateID4)
+	_ = updAccepted.OnMessage(ctx, msgRequest4, true, evStore)
+	updAccepted.Send(ctx, false, sequencingID, evStore)
+	_ = updAccepted.OnMessage(ctx, &updatepb.Acceptance{
+		AcceptedRequest: msgRequest4,
+	}, true, evStore)
+
+	msgRequest5 := &updatepb.Request{
+		Meta:  &updatepb.Meta{UpdateId: updateID5},
+		Input: &updatepb.Input{Name: t.Name() + "-update-func"},
+	}
+	updCompleted, _, _ := reg.FindOrCreate(ctx, updateID5)
+	_ = updCompleted.OnMessage(ctx, msgRequest5, true, evStore)
+	updCompleted.Send(ctx, false, sequencingID, evStore)
+	_ = updCompleted.OnMessage(ctx, &updatepb.Acceptance{
+		AcceptedRequest: msgRequest4,
+	}, true, evStore)
+	_ = updCompleted.OnMessage(
+		ctx,
+		&updatepb.Response{Meta: &updatepb.Meta{UpdateId: updateID5}, Outcome: successOutcome(t, "update completed")},
+		true,
+		evStore)
+
+	err := reg.CancelIncomplete(ctx, update.CancelReasonWorkflowCompleted, evStore)
+	require.NoError(t, err)
+
+	status, err := updAdmitted.WaitOutcome(ctx)
+	require.NoError(t, err)
+	require.Equal(t, enumspb.UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_COMPLETED, status.Stage)
+	require.Equal(t, "Workflow Update is rejected because Workflow Execution is completed.", status.Outcome.GetFailure().GetMessage())
+
+	status, err = updRequested.WaitOutcome(ctx)
+	require.NoError(t, err)
+	require.Equal(t, enumspb.UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_COMPLETED, status.Stage)
+	require.Equal(t, "Workflow Update is rejected because Workflow Execution is completed.", status.Outcome.GetFailure().GetMessage())
+
+	status, err = updSent.WaitOutcome(ctx)
+	require.NoError(t, err)
+	require.Equal(t, enumspb.UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_COMPLETED, status.Stage)
+	require.Equal(t, "Workflow Update is rejected because Workflow Execution is completed.", status.Outcome.GetFailure().GetMessage())
+
+	oneMsCtx, cancel := context.WithTimeout(ctx, 1*time.Millisecond)
+	defer cancel()
+	status, err = updAccepted.WaitOutcome(oneMsCtx)
+	require.ErrorIs(t, err, context.DeadlineExceeded,
+		"expected DeadlineExceeded error when workflow is completed and update is in Accepted state")
+	require.Nil(t, status.Outcome)
+
+	status, err = updCompleted.WaitOutcome(ctx)
+	require.NoError(t, err)
+	require.Equal(t, enumspb.UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_COMPLETED, status.Stage)
+	require.Nil(t, status.Outcome.GetFailure())
+	require.NotNil(t, status.Outcome.GetSuccess())
 }
