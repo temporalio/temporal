@@ -293,6 +293,7 @@ func convertToExecutionInfo(record *archiverspb.VisibilityRecord, saTypeMap sear
 		},
 		StartTime:        record.StartTime,
 		ExecutionTime:    record.ExecutionTime,
+		CancelRequested:  record.CancelRequested,
 		CloseTime:        record.CloseTime,
 		Status:           record.Status,
 		HistoryLength:    record.HistoryLength,

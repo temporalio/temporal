@@ -364,6 +364,7 @@ func (p *visibilityManagerImpl) convertInternalWorkflowExecutionInfo(
 		},
 		StartTime:        timestamppb.New(internalExecution.StartTime),
 		ExecutionTime:    timestamppb.New(internalExecution.ExecutionTime),
+		CancelRequested:  internalExecution.CancelRequested,
 		Memo:             memo,
 		SearchAttributes: internalExecution.SearchAttributes,
 		TaskQueue:        internalExecution.TaskQueue,

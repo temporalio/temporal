@@ -87,6 +87,7 @@ type (
 		SearchAttributes     *commonpb.SearchAttributes
 		ParentWorkflowID     string
 		ParentRunID          string
+		CancelRequested      bool
 	}
 
 	// InternalListWorkflowExecutionsResponse is response from ListWorkflowExecutions
