@@ -34,42 +34,16 @@ import (
 	"github.com/stretchr/testify/suite"
 	historypb "go.temporal.io/api/history/v1"
 	historyspb "go.temporal.io/server/api/history/v1"
-	"go.temporal.io/server/client"
 	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/definition"
-	"go.temporal.io/server/common/log"
-	"go.temporal.io/server/common/metrics"
-	"go.temporal.io/server/common/namespace"
-	"go.temporal.io/server/common/persistence/serialization"
-	"go.temporal.io/server/common/xdc"
-	"go.temporal.io/server/service/history/configs"
-	"go.temporal.io/server/service/history/replication"
-	"go.temporal.io/server/service/history/shard"
-	"go.temporal.io/server/service/history/tests"
 )
 
 type (
-	testProcessToolBox struct {
-		clusterMetadata         *cluster.MockMetadata
-		clientBean              *client.MockBean
-		shardController         *shard.MockController
-		namespaceCache          *namespace.MockRegistry
-		ndcHistoryResender      *xdc.MockNDCHistoryResender
-		remoteHistoryFetcher    *replication.MockHistoryPaginatedFetcher
-		metricsHandler          metrics.Handler
-		logger                  log.Logger
-		sourceCluster           string
-		eagerNamespaceRefresher *replication.MockEagerNamespaceRefresher
-		config                  *configs.Config
-		eventSerializer         serialization.Serializer
-	}
 	historyEventHandlerSuite struct {
 		suite.Suite
 		*require.Assertions
-		controller *gomock.Controller
-
-		testProcessToolBox
-		replication.ProcessToolBox
+		controller      *gomock.Controller
+		clusterMetadata *cluster.MockMetadata
 
 		localEventsHandler *MockLocalGeneratedEventsHandler
 		remoteEventHandler *MockRemoteGeneratedEventsHandler
@@ -77,38 +51,6 @@ type (
 		historyEventHandler *historyEventsHandlerImpl
 	}
 )
-
-func initializeToolBox(ctrl *gomock.Controller) (testProcessToolBox, replication.ProcessToolBox) {
-	testToolBox := testProcessToolBox{
-		clusterMetadata:         cluster.NewMockMetadata(ctrl),
-		clientBean:              client.NewMockBean(ctrl),
-		shardController:         shard.NewMockController(ctrl),
-		namespaceCache:          namespace.NewMockRegistry(ctrl),
-		ndcHistoryResender:      xdc.NewMockNDCHistoryResender(ctrl),
-		remoteHistoryFetcher:    replication.NewMockHistoryPaginatedFetcher(ctrl),
-		metricsHandler:          metrics.NoopMetricsHandler,
-		logger:                  log.NewNoopLogger(),
-		sourceCluster:           "some cluster",
-		eagerNamespaceRefresher: replication.NewMockEagerNamespaceRefresher(ctrl),
-		config:                  tests.NewDynamicConfig(),
-		eventSerializer:         serialization.NewSerializer(),
-	}
-	toolBox := replication.ProcessToolBox{
-		Config:                  testToolBox.config,
-		ClusterMetadata:         testToolBox.clusterMetadata,
-		ClientBean:              testToolBox.clientBean,
-		ShardController:         testToolBox.shardController,
-		NamespaceCache:          testToolBox.namespaceCache,
-		NDCHistoryResender:      testToolBox.ndcHistoryResender,
-		MetricsHandler:          testToolBox.metricsHandler,
-		Logger:                  testToolBox.logger,
-		EagerNamespaceRefresher: testToolBox.eagerNamespaceRefresher,
-		EventSerializer:         testToolBox.eventSerializer,
-		DLQWriter:               replication.NoopDLQWriter{},
-		HistoryPaginatedFetcher: testToolBox.remoteHistoryFetcher,
-	}
-	return testToolBox, toolBox
-}
 
 func TestHistoryEventHandlerSuite(t *testing.T) {
 	s := new(historyEventHandlerSuite)
@@ -125,11 +67,11 @@ func (s *historyEventHandlerSuite) TearDownSuite() {
 
 func (s *historyEventHandlerSuite) SetupTest() {
 	s.controller = gomock.NewController(s.T())
-	s.testProcessToolBox, s.ProcessToolBox = initializeToolBox(s.controller)
+	s.clusterMetadata = cluster.NewMockMetadata(s.controller)
 	s.localEventsHandler = NewMockLocalGeneratedEventsHandler(s.controller)
 	s.remoteEventHandler = NewMockRemoteGeneratedEventsHandler(s.controller)
 	s.historyEventHandler = &historyEventsHandlerImpl{
-		s.ProcessToolBox,
+		s.clusterMetadata,
 		s.localEventsHandler,
 		s.remoteEventHandler,
 	}

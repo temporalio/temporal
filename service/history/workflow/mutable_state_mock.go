@@ -53,6 +53,7 @@ import (
 	definition "go.temporal.io/server/common/definition"
 	namespace "go.temporal.io/server/common/namespace"
 	persistence "go.temporal.io/server/common/persistence"
+	historybuilder "go.temporal.io/server/service/history/historybuilder"
 	tasks "go.temporal.io/server/service/history/tasks"
 	durationpb "google.golang.org/protobuf/types/known/durationpb"
 	timestamppb "google.golang.org/protobuf/types/known/timestamppb"
@@ -2321,7 +2322,7 @@ func (mr *MockMutableStateMockRecorder) HadOrHasWorkflowTask() *gomock.Call {
 }
 
 // HasAnyBufferedEvent mocks base method.
-func (m *MockMutableState) HasAnyBufferedEvent(filter BufferedEventFilter) bool {
+func (m *MockMutableState) HasAnyBufferedEvent(filter historybuilder.BufferedEventFilter) bool {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "HasAnyBufferedEvent", filter)
 	ret0, _ := ret[0].(bool)
@@ -2612,7 +2613,7 @@ func (mr *MockMutableStateMockRecorder) SetCurrentBranchToken(branchToken interf
 }
 
 // SetHistoryBuilder mocks base method.
-func (m *MockMutableState) SetHistoryBuilder(hBuilder *HistoryBuilder) {
+func (m *MockMutableState) SetHistoryBuilder(hBuilder *historybuilder.HistoryBuilder) {
 	m.ctrl.T.Helper()
 	m.ctrl.Call(m, "SetHistoryBuilder", hBuilder)
 }
@@ -2720,7 +2721,7 @@ func (mr *MockMutableStateMockRecorder) UpdateActivity(arg0 interface{}) *gomock
 }
 
 // UpdateActivityInfo mocks base method.
-func (m *MockMutableState) UpdateActivityInfo(arg0 *v111.SyncActivityRequest, arg1 bool) error {
+func (m *MockMutableState) UpdateActivityInfo(arg0 *v111.ActivitySyncInfo, arg1 bool) error {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "UpdateActivityInfo", arg0, arg1)
 	ret0, _ := ret[0].(error)

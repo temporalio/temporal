@@ -465,7 +465,26 @@ message SyncActivityRequest {
     string last_worker_identity = 13;
     temporal.server.api.history.v1.VersionHistory version_history = 14;
     temporal.server.api.workflow.v1.BaseExecutionInfo base_execution_info = 15;
+}
 
+message SyncActivitiesRequest {
+    string namespace_id = 1;
+    string workflow_id = 2;
+    string run_id = 3;
+    repeated ActivitySyncInfo activities_info = 4;
+}
+message ActivitySyncInfo {
+    int64 version = 1;
+    int64 scheduled_event_id = 2;
+    google.protobuf.Timestamp scheduled_time = 3;
+    int64 started_event_id = 4;
+    google.protobuf.Timestamp started_time = 5 ;
+    google.protobuf.Timestamp last_heartbeat_time = 6;
+    temporal.api.common.v1.Payloads details = 7;
+    int32 attempt = 8;
+    temporal.api.failure.v1.Failure last_failure = 9;
+    string last_worker_identity = 10;
+    temporal.server.api.history.v1.VersionHistory version_history = 11;
 }
 
 message SyncActivityResponse {
@@ -741,6 +760,15 @@ message GetWorkflowExecutionRawHistoryV2Request {
 
 message GetWorkflowExecutionRawHistoryV2Response {
     temporal.server.api.adminservice.v1.GetWorkflowExecutionRawHistoryV2Response response = 1;
+}
+
+message GetWorkflowExecutionRawHistoryRequest {
+    string namespace_id = 1;
+    temporal.server.api.adminservice.v1.GetWorkflowExecutionRawHistoryRequest request = 2;
+}
+
+message GetWorkflowExecutionRawHistoryResponse {
+    temporal.server.api.adminservice.v1.GetWorkflowExecutionRawHistoryResponse response = 1;
 }
 
 message ForceDeleteWorkflowExecutionRequest {

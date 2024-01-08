@@ -87,7 +87,7 @@ func Invoke(
 			return nil, err
 		}
 
-		pageToken = api.GeneratePaginationToken(request, response.GetVersionHistories())
+		pageToken = api.GeneratePaginationTokenV2Request(request, response.GetVersionHistories())
 	} else {
 		pageToken, err = api.DeserializeRawHistoryToken(req.NextPageToken)
 		if err != nil {
@@ -106,7 +106,7 @@ func Invoke(
 		}
 	}
 
-	if err := api.ValidatePaginationToken(
+	if err := api.ValidatePaginationTokenV2Request(
 		request,
 		pageToken,
 	); err != nil {
