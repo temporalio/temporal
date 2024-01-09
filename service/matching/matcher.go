@@ -236,7 +236,7 @@ func (tm *TaskMatcher) OfferQuery(ctx context.Context, task *internalTask) (*mat
 	if deadline, ok := ctx.Deadline(); ok && fwdrTokenC == nil {
 		// Create a timeout for 90% time of the actual timeout. This is so that we have an opportunity to customize the
 		// "context deadline exceeded" error when user is querying a workflow without having started the workers.
-		noPollerTimeout := time.Until(deadline)*90/100
+		noPollerTimeout := time.Until(deadline) * 90 / 100
 		noPollerCtx, cancel := context.WithTimeout(ctx, noPollerTimeout)
 		noPollerCtxC = noPollerCtx.Done()
 		defer cancel()
