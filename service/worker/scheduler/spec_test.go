@@ -39,19 +39,22 @@ import (
 type specSuite struct {
 	suite.Suite
 	protorequire.ProtoAssertions
+
+	specBuilder *SpecBuilder
 }
 
 func TestSpec(t *testing.T) {
 	suite.Run(t, new(specSuite))
 }
 
-func (s *specSuite) Setuptest() {
+func (s *specSuite) SetupTest() {
 	s.ProtoAssertions = protorequire.New(s.T())
+	s.specBuilder = NewSpecBuilder()
 }
 
 func (s *specSuite) checkSequenceRaw(spec *schedpb.ScheduleSpec, start time.Time, seq ...time.Time) {
 	s.T().Helper()
-	cs, err := NewCompiledSpec(spec)
+	cs, err := s.specBuilder.NewCompiledSpec(spec)
 	s.NoError(err)
 	for _, exp := range seq {
 		next := cs.rawNextTime(start)
@@ -62,7 +65,7 @@ func (s *specSuite) checkSequenceRaw(spec *schedpb.ScheduleSpec, start time.Time
 
 func (s *specSuite) checkSequenceFull(jitterSeed string, spec *schedpb.ScheduleSpec, start time.Time, seq ...time.Time) {
 	s.T().Helper()
-	cs, err := NewCompiledSpec(spec)
+	cs, err := s.specBuilder.NewCompiledSpec(spec)
 	s.NoError(err)
 	for _, exp := range seq {
 		result := cs.getNextTime(jitterSeed, start)
