@@ -383,7 +383,7 @@ func (s *scheduler) now() time.Time {
 }
 
 func (s *scheduler) processPatch(patch *schedpb.SchedulePatch) {
-	s.logger.Debug("Schedule patch", "patch", patch.String())
+	s.logger.Debug("Schedule patch")
 
 	if trigger := patch.TriggerImmediately; trigger != nil {
 		now := s.now()
@@ -717,7 +717,7 @@ func (s *scheduler) processUpdate(req *schedspb.FullUpdateRequest) {
 		return
 	}
 
-	s.logger.Debug("Schedule update", "new-schedule", req.Schedule.String())
+	s.logger.Debug("Schedule update")
 
 	s.Schedule.Spec = req.Schedule.GetSpec()
 	s.Schedule.Action = req.Schedule.GetAction()
