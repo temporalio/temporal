@@ -6,11 +6,11 @@ require (
 	cloud.google.com/go/storage v1.30.1
 	github.com/aws/aws-sdk-go v1.44.289
 	github.com/blang/semver/v4 v4.0.0
-	github.com/brianvoe/gofakeit/v6 v6.22.0
 	github.com/cactus/go-statsd-client/v5 v5.0.0
 	github.com/dgryski/go-farm v0.0.0-20200201041132-a6ae2369ad13
 	github.com/emirpasic/gods v1.18.1
 	github.com/fatih/color v1.15.0
+	github.com/go-faker/faker/v4 v4.2.0
 	github.com/go-sql-driver/mysql v1.5.0
 	github.com/gocql/gocql v1.5.2
 	github.com/golang-jwt/jwt/v4 v4.5.0
