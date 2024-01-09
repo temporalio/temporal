@@ -80,7 +80,7 @@ const (
 var (
 	// Sentinel error to redirect while blocked in matcher.
 	errInterrupted    = errors.New("interrupted offer")
-	errNoRecentPoller = errors.New("no worker polling for task")
+	errNoRecentPoller = errors.New("no poller has need been for this task recently, probably the worker is down")
 )
 
 // newTaskMatcher returns a task matcher instance. The returned instance can be used by task producers and consumers to
@@ -231,12 +231,18 @@ func (tm *TaskMatcher) OfferQuery(ctx context.Context, task *internalTask) (*mat
 	}
 
 	fwdrTokenC := tm.fwdrAddReqTokenC()
+	var noPollerCtxC <-chan struct{}
+
+	if deadline, ok := ctx.Deadline(); ok && fwdrTokenC == nil {
+		// Create a timeout for 90% time of the actual timeout. This is so that we have an opportunity to customize the
+		// "context deadline exceeded" error when user is querying a workflow without having started the workers.
+		noPollerTimeout := time.Until(deadline)*90/100
+		noPollerCtx, cancel := context.WithTimeout(ctx, noPollerTimeout)
+		noPollerCtxC = noPollerCtx.Done()
+		defer cancel()
+	}
 
 	for {
-		if fwdrTokenC == nil && tm.timeSinceLastPoll() > tm.config.QueryPollerUnavailableWindow() {
-			return nil, errNoRecentPoller
-		}
-
 		select {
 		case tm.queryTaskC <- task:
 			<-task.responseC
@@ -254,6 +260,13 @@ func (tm *TaskMatcher) OfferQuery(ctx context.Context, task *internalTask) (*mat
 				continue
 			}
 			return nil, err
+		case <-noPollerCtxC:
+			// only error if there has not been a recent poller. Otherwise, let it wait for the remaining time
+			// hopping for a match, or ultimately returning the default CDE error.
+			if tm.timeSinceLastPoll() > tm.config.QueryPollerUnavailableWindow() {
+				return nil, errNoRecentPoller
+			}
+			continue
 		case <-ctx.Done():
 			return nil, ctx.Err()
 		}

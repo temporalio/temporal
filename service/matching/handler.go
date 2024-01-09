@@ -26,10 +26,13 @@ package matching
 
 import (
 	"context"
+	"errors"
 	"sync"
 	"time"
 
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 
 	"go.temporal.io/server/api/matchingservice/v1"
 	"go.temporal.io/server/common"
@@ -251,7 +254,11 @@ func (h *Handler) QueryWorkflow(
 		h.reportForwardedPerTaskQueueCounter(opMetrics, namespace.ID(request.GetNamespaceId()))
 	}
 
-	return h.engine.QueryWorkflow(ctx, request)
+	resp, err := h.engine.QueryWorkflow(ctx, request)
+	if errors.Is(err, errNoRecentPoller) {
+		return nil, status.Error(codes.DeadlineExceeded, err.Error())
+	}
+	return resp, err
 }
 
 // RespondQueryTaskCompleted responds a query task completed
