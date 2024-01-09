@@ -109,7 +109,7 @@ func startAndSignalWorkflow(
 		return "", err
 	}
 
-	workflowUpdateFn, err := createWorkflowUpdateFunction(
+	currentWorkflowUpdateFn, err := createWorkflowUpdateFunction(
 		currentWorkflowContext,
 		signalWithStartRequest.GetWorkflowIdReusePolicy(),
 		runID,
@@ -117,12 +117,12 @@ func startAndSignalWorkflow(
 	if err != nil {
 		return "", err
 	}
-	if workflowUpdateFn != nil {
+	if currentWorkflowUpdateFn != nil {
 		if err = startAndSignalWithCurrentWorkflow(
 			ctx,
 			shard,
 			currentWorkflowContext,
-			workflowUpdateFn,
+			currentWorkflowUpdateFn,
 			newWorkflowContext,
 		); err != nil {
 			return "", err
