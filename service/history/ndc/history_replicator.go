@@ -297,6 +297,10 @@ func (r *HistoryReplicatorImpl) doApplyEvents(
 					metrics.OperationTag(metrics.ReplicateHistoryEventsScope))
 				return nil
 			}
+			err = task.skipDuplicatedEvents(prepareHistoryBranchOut.EventsApplyIndex)
+			if err != nil {
+				return err
+			}
 
 			mutableState, isRebuilt, err := r.mutableStateMapper.GetOrRebuildCurrentMutableState(
 				ctx,

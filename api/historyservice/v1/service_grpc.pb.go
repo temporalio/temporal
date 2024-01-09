@@ -96,6 +96,7 @@ const (
 	HistoryService_GetWorkflowExecutionHistory_FullMethodName            = "/temporal.server.api.historyservice.v1.HistoryService/GetWorkflowExecutionHistory"
 	HistoryService_GetWorkflowExecutionHistoryReverse_FullMethodName     = "/temporal.server.api.historyservice.v1.HistoryService/GetWorkflowExecutionHistoryReverse"
 	HistoryService_GetWorkflowExecutionRawHistoryV2_FullMethodName       = "/temporal.server.api.historyservice.v1.HistoryService/GetWorkflowExecutionRawHistoryV2"
+	HistoryService_GetWorkflowExecutionRawHistory_FullMethodName         = "/temporal.server.api.historyservice.v1.HistoryService/GetWorkflowExecutionRawHistory"
 	HistoryService_ForceDeleteWorkflowExecution_FullMethodName           = "/temporal.server.api.historyservice.v1.HistoryService/ForceDeleteWorkflowExecution"
 	HistoryService_GetDLQTasks_FullMethodName                            = "/temporal.server.api.historyservice.v1.HistoryService/GetDLQTasks"
 	HistoryService_DeleteDLQTasks_FullMethodName                         = "/temporal.server.api.historyservice.v1.HistoryService/DeleteDLQTasks"
@@ -291,6 +292,7 @@ type HistoryServiceClient interface {
 	GetWorkflowExecutionHistory(ctx context.Context, in *GetWorkflowExecutionHistoryRequest, opts ...grpc.CallOption) (*GetWorkflowExecutionHistoryResponse, error)
 	GetWorkflowExecutionHistoryReverse(ctx context.Context, in *GetWorkflowExecutionHistoryReverseRequest, opts ...grpc.CallOption) (*GetWorkflowExecutionHistoryReverseResponse, error)
 	GetWorkflowExecutionRawHistoryV2(ctx context.Context, in *GetWorkflowExecutionRawHistoryV2Request, opts ...grpc.CallOption) (*GetWorkflowExecutionRawHistoryV2Response, error)
+	GetWorkflowExecutionRawHistory(ctx context.Context, in *GetWorkflowExecutionRawHistoryRequest, opts ...grpc.CallOption) (*GetWorkflowExecutionRawHistoryResponse, error)
 	ForceDeleteWorkflowExecution(ctx context.Context, in *ForceDeleteWorkflowExecutionRequest, opts ...grpc.CallOption) (*ForceDeleteWorkflowExecutionResponse, error)
 	GetDLQTasks(ctx context.Context, in *GetDLQTasksRequest, opts ...grpc.CallOption) (*GetDLQTasksResponse, error)
 	DeleteDLQTasks(ctx context.Context, in *DeleteDLQTasksRequest, opts ...grpc.CallOption) (*DeleteDLQTasksResponse, error)
@@ -822,6 +824,15 @@ func (c *historyServiceClient) GetWorkflowExecutionRawHistoryV2(ctx context.Cont
 	return out, nil
 }
 
+func (c *historyServiceClient) GetWorkflowExecutionRawHistory(ctx context.Context, in *GetWorkflowExecutionRawHistoryRequest, opts ...grpc.CallOption) (*GetWorkflowExecutionRawHistoryResponse, error) {
+	out := new(GetWorkflowExecutionRawHistoryResponse)
+	err := c.cc.Invoke(ctx, HistoryService_GetWorkflowExecutionRawHistory_FullMethodName, in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 func (c *historyServiceClient) ForceDeleteWorkflowExecution(ctx context.Context, in *ForceDeleteWorkflowExecutionRequest, opts ...grpc.CallOption) (*ForceDeleteWorkflowExecutionResponse, error) {
 	out := new(ForceDeleteWorkflowExecutionResponse)
 	err := c.cc.Invoke(ctx, HistoryService_ForceDeleteWorkflowExecution_FullMethodName, in, out, opts...)
@@ -1055,6 +1066,7 @@ type HistoryServiceServer interface {
 	GetWorkflowExecutionHistory(context.Context, *GetWorkflowExecutionHistoryRequest) (*GetWorkflowExecutionHistoryResponse, error)
 	GetWorkflowExecutionHistoryReverse(context.Context, *GetWorkflowExecutionHistoryReverseRequest) (*GetWorkflowExecutionHistoryReverseResponse, error)
 	GetWorkflowExecutionRawHistoryV2(context.Context, *GetWorkflowExecutionRawHistoryV2Request) (*GetWorkflowExecutionRawHistoryV2Response, error)
+	GetWorkflowExecutionRawHistory(context.Context, *GetWorkflowExecutionRawHistoryRequest) (*GetWorkflowExecutionRawHistoryResponse, error)
 	ForceDeleteWorkflowExecution(context.Context, *ForceDeleteWorkflowExecutionRequest) (*ForceDeleteWorkflowExecutionResponse, error)
 	GetDLQTasks(context.Context, *GetDLQTasksRequest) (*GetDLQTasksResponse, error)
 	DeleteDLQTasks(context.Context, *DeleteDLQTasksRequest) (*DeleteDLQTasksResponse, error)
@@ -1236,6 +1248,9 @@ func (UnimplementedHistoryServiceServer) GetWorkflowExecutionHistoryReverse(cont
 }
 func (UnimplementedHistoryServiceServer) GetWorkflowExecutionRawHistoryV2(context.Context, *GetWorkflowExecutionRawHistoryV2Request) (*GetWorkflowExecutionRawHistoryV2Response, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method GetWorkflowExecutionRawHistoryV2 not implemented")
+}
+func (UnimplementedHistoryServiceServer) GetWorkflowExecutionRawHistory(context.Context, *GetWorkflowExecutionRawHistoryRequest) (*GetWorkflowExecutionRawHistoryResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method GetWorkflowExecutionRawHistory not implemented")
 }
 func (UnimplementedHistoryServiceServer) ForceDeleteWorkflowExecution(context.Context, *ForceDeleteWorkflowExecutionRequest) (*ForceDeleteWorkflowExecutionResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method ForceDeleteWorkflowExecution not implemented")
@@ -2245,6 +2260,24 @@ func _HistoryService_GetWorkflowExecutionRawHistoryV2_Handler(srv interface{}, c
 	return interceptor(ctx, in, info, handler)
 }
 
+func _HistoryService_GetWorkflowExecutionRawHistory_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(GetWorkflowExecutionRawHistoryRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(HistoryServiceServer).GetWorkflowExecutionRawHistory(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: HistoryService_GetWorkflowExecutionRawHistory_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(HistoryServiceServer).GetWorkflowExecutionRawHistory(ctx, req.(*GetWorkflowExecutionRawHistoryRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 func _HistoryService_ForceDeleteWorkflowExecution_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
 	in := new(ForceDeleteWorkflowExecutionRequest)
 	if err := dec(in); err != nil {
@@ -2553,6 +2586,10 @@ var HistoryService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "GetWorkflowExecutionRawHistoryV2",
 			Handler:    _HistoryService_GetWorkflowExecutionRawHistoryV2_Handler,
+		},
+		{
+			MethodName: "GetWorkflowExecutionRawHistory",
+			Handler:    _HistoryService_GetWorkflowExecutionRawHistory_Handler,
 		},
 		{
 			MethodName: "ForceDeleteWorkflowExecution",

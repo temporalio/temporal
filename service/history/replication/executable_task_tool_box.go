@@ -26,6 +26,7 @@ package replication
 
 import (
 	"go.temporal.io/server/common/persistence/serialization"
+	"go.temporal.io/server/service/history/replication/eventhandler"
 	"go.uber.org/fx"
 
 	"go.temporal.io/server/client"
@@ -55,6 +56,6 @@ type (
 		Logger                  log.Logger
 		EventSerializer         serialization.Serializer
 		DLQWriter               DLQWriter
-		HistoryPaginatedFetcher HistoryPaginatedFetcher
+		HistoryEventsHandler    eventhandler.HistoryEventsHandler
 	}
 )
