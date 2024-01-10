@@ -230,3 +230,7 @@ type MutableStateWithEffects struct {
 	MutableState
 	effect.Controller
 }
+
+func (mse MutableStateWithEffects) CanAddEvent() bool {
+	return mse.MutableState.IsWorkflowExecutionRunning()
+}
