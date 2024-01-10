@@ -139,7 +139,7 @@ type (
 		// This cache is used to store time results after batching getNextTime queries
 		// in a single SideEffect
 		nextTimeCacheV1 map[time.Time]getNextTimeResult
-		nextTimeCacheV2 nextTimeCacheV2
+		nextTimeCacheV2 *schedspb.NextTimeCache
 	}
 
 	tweakablePolicies struct {
@@ -167,7 +167,8 @@ type (
 		// history for TestReplays using generate_history.sh.
 	}
 
-	nextTimeCacheV2 struct {
+	// this is for backwards compatibility; current code serializes cache as proto
+	jsonNextTimeCacheV2 struct {
 		Version   SchedulerWorkflowVersion
 		Start     time.Time           // start time that the results were calculated from
 		Results   []getNextTimeResult // results of getNextTime in sequence
@@ -355,7 +356,7 @@ func (s *scheduler) ensureFields() {
 func (s *scheduler) compileSpec() {
 	// if spec changes invalidate current cache
 	s.nextTimeCacheV1 = nil
-	s.nextTimeCacheV2.clear()
+	s.nextTimeCacheV2 = nil
 
 	cspec, err := s.specBuilder.NewCompiledSpec(s.Schedule.Spec)
 	if err != nil {
@@ -460,8 +461,9 @@ func (s *scheduler) getNextTimeV2(cacheBase, after time.Time) getNextTimeResult 
 
 	// Asking for a time before the cache, need to refill.
 	// Also if version changed (so we can fix a bug immediately).
-	if after.Before(s.nextTimeCacheV2.Start) ||
-		s.nextTimeCacheV2.Version != s.tweakables.Version {
+	if s.nextTimeCacheV2 == nil ||
+		after.Before(s.nextTimeCacheV2.StartTime.AsTime()) ||
+		SchedulerWorkflowVersion(s.nextTimeCacheV2.Version) != s.tweakables.Version {
 		s.fillNextTimeCacheV2(cacheBase)
 	}
 
@@ -470,13 +472,21 @@ func (s *scheduler) getNextTimeV2(cacheBase, after time.Time) getNextTimeResult 
 	// too far in the past, we ignore it and fill the cache from after.
 	for try := 1; try <= 3; try++ {
 		// Results covers a contiguous time range so we can search in it
-		for _, result := range s.nextTimeCacheV2.Results {
-			if result.Next.After(after) {
-				return result
+		cache := s.nextTimeCacheV2
+		start := cache.StartTime.AsTime()
+		afterOffset := int64(after.Sub(start))
+		for i, nextOffset := range cache.NextTimes {
+			if nextOffset > afterOffset {
+				next := start.Add(time.Duration(nextOffset))
+				nominal := next
+				if i < len(cache.NominalTimes) && cache.NominalTimes[i] != 0 {
+					nominal = start.Add(time.Duration(cache.NominalTimes[i]))
+				}
+				return getNextTimeResult{Nominal: nominal, Next: next}
 			}
 		}
 		// Ran off end: if completed, then we're done
-		if s.nextTimeCacheV2.Completed {
+		if cache.Completed {
 			return getNextTimeResult{}
 		}
 		// Otherwise refill from base
@@ -493,22 +503,55 @@ func (s *scheduler) getNextTimeV2(cacheBase, after time.Time) getNextTimeResult 
 
 func (s *scheduler) fillNextTimeCacheV2(start time.Time) {
 	// Clear value so we can Get into it
-	s.nextTimeCacheV2.clear()
+	s.nextTimeCacheV2 = nil
 	// Run this logic in a SideEffect so that we can fix bugs there without breaking
 	// existing schedule workflows.
-	panicIfErr(workflow.SideEffect(s.ctx, func(ctx workflow.Context) interface{} {
-		cache := nextTimeCacheV2{Version: s.tweakables.Version, Start: start}
-		for t := start; len(cache.Results) < s.tweakables.NextTimeCacheV2Size; {
+	val := workflow.SideEffect(s.ctx, func(ctx workflow.Context) interface{} {
+		cache := &schedspb.NextTimeCache{
+			Version:      int64(s.tweakables.Version),
+			StartTime:    timestamppb.New(start),
+			NextTimes:    make([]int64, 0, s.tweakables.NextTimeCacheV2Size),
+			NominalTimes: make([]int64, 0, s.tweakables.NextTimeCacheV2Size),
+		}
+		for t := start; len(cache.NextTimes) < s.tweakables.NextTimeCacheV2Size; {
 			next := s.cspec.getNextTime(s.jitterSeed(), t)
 			if next.Next.IsZero() {
 				cache.Completed = true
 				break
 			}
-			cache.Results = append(cache.Results, next)
+			// Only include this if it's not equal to Next, otherwise default to Next
+			if !next.Nominal.Equal(next.Next) {
+				cache.NominalTimes = cache.NominalTimes[0:len(cache.NextTimes)]
+				cache.NominalTimes = append(cache.NominalTimes, int64(next.Nominal.Sub(start)))
+			}
+			cache.NextTimes = append(cache.NextTimes, int64(next.Next.Sub(start)))
 			t = next.Next
 		}
 		return cache
-	}).Get(&s.nextTimeCacheV2))
+	})
+	// Previous versions of this workflow returned a json-encoded value here. This will attempt
+	// to unmarshal it into a proto struct. We want this to fail so we can convert it manually,
+	// but it might not. To be sure, check StartTime also (the field names differ between json
+	// and proto so json.Unmarshal will never fill in StartTime).
+	if val.Get(&s.nextTimeCacheV2) == nil && s.nextTimeCacheV2.GetStartTime() != nil {
+		return
+	}
+	// Try as json value
+	var jsonVal jsonNextTimeCacheV2
+	if val.Get(&jsonVal) != nil || jsonVal.Start.IsZero() {
+		panic("could not decode next time cache as proto or json")
+	}
+	s.nextTimeCacheV2 = &schedspb.NextTimeCache{
+		Version:      int64(jsonVal.Version),
+		StartTime:    timestamppb.New(jsonVal.Start),
+		NextTimes:    make([]int64, len(jsonVal.Results)),
+		NominalTimes: make([]int64, len(jsonVal.Results)),
+		Completed:    jsonVal.Completed,
+	}
+	for i, res := range jsonVal.Results {
+		s.nextTimeCacheV2.NextTimes[i] = int64(res.Next.Sub(jsonVal.Start))
+		s.nextTimeCacheV2.NominalTimes[i] = int64(res.Nominal.Sub(jsonVal.Start))
+	}
 }
 
 func (s *scheduler) getNextTime(after time.Time) getNextTimeResult {
@@ -1271,10 +1314,6 @@ func (s *scheduler) newUUIDString() string {
 
 func (s *scheduler) hasMinVersion(version SchedulerWorkflowVersion) bool {
 	return s.tweakables.Version >= version
-}
-
-func (c *nextTimeCacheV2) clear() {
-	*c = nextTimeCacheV2{}
 }
 
 func panicIfErr(err error) {
