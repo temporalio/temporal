@@ -26,18 +26,18 @@ package client
 
 import (
 	"fmt"
+	"math"
 	"math/rand"
 	"sort"
 	"sync"
+	"sync/atomic"
 	"time"
-
-	"go.uber.org/atomic"
 )
 
 type (
 	DefaultErrorGenerator struct {
 		sync.Mutex
-		rate          atomic.Float64  // chance for error to be returned
+		rate          atomic.Uint64   // chance for error to be returned
 		r             *rand.Rand      // rand is not thread-safe
 		faultMetadata []FaultMetadata //
 		faultWeights  []FaultWeight
@@ -92,7 +92,7 @@ func calculateErrorRates(rate float64, weights []FaultWeight) []FaultMetadata {
 }
 
 func (p *DefaultErrorGenerator) Rate() float64 {
-	return p.rate.Load()
+	return math.Float64frombits(p.rate.Load())
 }
 
 func (p *DefaultErrorGenerator) UpdateRate(rate float64) {
@@ -109,12 +109,12 @@ func (p *DefaultErrorGenerator) UpdateRate(rate float64) {
 	p.Lock()
 	defer p.Unlock()
 
-	p.rate.Store(rate)
+	p.rate.Store(math.Float64bits(rate))
 	p.faultMetadata = newFaultMetadata
 }
 
 func (p *DefaultErrorGenerator) UpdateWeights(errorWeights []FaultWeight) {
-	updatedRates := calculateErrorRates(p.rate.Load(), errorWeights)
+	updatedRates := calculateErrorRates(math.Float64frombits(p.rate.Load()), errorWeights)
 	p.Lock()
 	defer p.Unlock()
 	p.faultMetadata = updatedRates
@@ -138,13 +138,13 @@ func (p *DefaultErrorGenerator) Generate() error {
 	p.Lock()
 	defer p.Unlock()
 
-	if roll := p.r.Float64(); roll < p.rate.Load() {
+	if roll := p.r.Float64(); roll < math.Float64frombits(p.rate.Load()) {
 		var result error
 		for _, fm := range p.faultMetadata {
 			if roll < fm.threshold {
 				msg := fmt.Sprintf(
 					"FaultInjectionGenerator. rate %f, roll: %f, treshold: %f",
-					p.rate.Load(),
+					math.Float64frombits(p.rate.Load()),
 					roll,
 					fm.threshold,
 				)
