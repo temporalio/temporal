@@ -32,10 +32,6 @@ import (
 
 	commonpb "go.temporal.io/api/common/v1"
 	"go.temporal.io/api/serviceerror"
-	historyspb "go.temporal.io/server/api/history/v1"
-	"go.temporal.io/server/common/persistence/versionhistory"
-	"go.temporal.io/server/service/history/shard"
-
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/backoff"
@@ -57,11 +53,6 @@ const (
 	taskStateCancelled = int32(ctasks.TaskStateCancelled)
 	taskStateAcked     = int32(ctasks.TaskStateAcked)
 	taskStateNacked    = int32(ctasks.TaskStateNacked)
-)
-
-const (
-	historyImportBlobSize = 16
-	historyImportPageSize = 256 * 1024 // 256K
 )
 
 const (
@@ -100,15 +91,6 @@ type (
 			retryErr *serviceerrors.RetryReplication,
 			remainingAttempt int,
 		) (bool, error)
-		Import(
-			ctx context.Context,
-			remoteCluster string,
-			workflowKey definition.WorkflowKey,
-			startEventId int64,
-			startEventVersion int64,
-			endEventId int64,
-			endEventVersion int64,
-		) error
 		DeleteWorkflow(
 			ctx context.Context,
 			workflowKey definition.WorkflowKey,
@@ -452,106 +434,6 @@ FilterLoop:
 	return namespaceEntry.Name().String(), shouldProcessTask, nil
 }
 
-func (e *ExecutableTaskImpl) Import(
-	ctx context.Context,
-	remoteCluster string,
-	workflowKey definition.WorkflowKey,
-	startEventId int64,
-	startEventVersion int64,
-	endEventId int64,
-	endEventVersion int64,
-) error {
-	e.MetricsHandler.Counter(metrics.ClientRequests.Name()).Record(
-		1,
-		metrics.OperationTag(e.metricsTag+"Import"),
-	)
-	startTime := time.Now().UTC()
-	defer func() {
-		e.MetricsHandler.Timer(metrics.ClientLatency.Name()).Record(
-			time.Since(startTime),
-			metrics.OperationTag(e.metricsTag+"Import"),
-		)
-	}()
-
-	historyIterator := e.ProcessToolBox.HistoryPaginatedFetcher.GetSingleWorkflowHistoryPaginatedIterator(
-		ctx,
-		remoteCluster,
-		namespace.ID(workflowKey.NamespaceID),
-		workflowKey.WorkflowID,
-		workflowKey.RunID,
-		startEventId,
-		startEventVersion,
-		endEventId,
-		endEventVersion,
-	)
-
-	shardContext, err := e.ShardController.GetShardByNamespaceWorkflow(
-		namespace.ID(workflowKey.NamespaceID),
-		workflowKey.WorkflowID,
-	)
-	if err != nil {
-		return err
-	}
-	engine, err := shardContext.GetEngine(ctx)
-	if err != nil {
-		return err
-	}
-
-	var token []byte
-	blobs := []*commonpb.DataBlob{}
-	blobSize := 0
-	var versionHistory *historyspb.VersionHistory
-
-	for historyIterator.HasNext() {
-		batch, err := historyIterator.Next()
-		if err != nil {
-			e.Logger.Error("failed to get history events",
-				tag.WorkflowNamespaceID(workflowKey.NamespaceID),
-				tag.WorkflowID(workflowKey.WorkflowID),
-				tag.WorkflowRunID(workflowKey.RunID),
-				tag.Error(err))
-			return err
-		}
-
-		if versionHistory != nil && !versionhistory.IsVersionHistoryItemsInSameBranch(versionHistory.Items, batch.VersionHistory.Items) {
-			return serviceerror.NewInternal("History Branch changed during importing")
-		}
-		versionHistory = batch.VersionHistory
-
-		blobSize++
-		blobs = append(blobs, batch.RawEventBatch)
-		if blobSize >= historyImportBlobSize || len(blobs) >= historyImportPageSize {
-			returnedToken, err := e.invokeImportWorkflowExecutionCall(ctx, engine, workflowKey.NamespaceID, workflowKey.WorkflowID, workflowKey.RunID, blobs, versionHistory, token)
-			if err != nil {
-				return err
-			}
-			blobs = []*commonpb.DataBlob{}
-			blobSize = 0
-			token = returnedToken
-		}
-	}
-	if len(blobs) != 0 {
-		returnedToken, err := e.invokeImportWorkflowExecutionCall(ctx, engine, workflowKey.NamespaceID, workflowKey.WorkflowID, workflowKey.RunID, blobs, versionHistory, token)
-		if err != nil {
-			return err
-		}
-		token = returnedToken
-	}
-
-	// call with empty event blob to commit the import
-	blobs = []*commonpb.DataBlob{}
-	returnedToken, err := e.invokeImportWorkflowExecutionCall(ctx, engine, workflowKey.NamespaceID, workflowKey.WorkflowID, workflowKey.RunID, blobs, versionHistory, token)
-	if err != nil || len(returnedToken) != 0 {
-		e.Logger.Error("failed to commit import action",
-			tag.WorkflowNamespaceID(workflowKey.NamespaceID),
-			tag.WorkflowID(workflowKey.WorkflowID),
-			tag.WorkflowRunID(workflowKey.RunID),
-			tag.Error(err))
-		return serviceerror.NewInternal("Failed to commit import transaction")
-	}
-	return nil
-}
-
 func newTaskContext(
 	namespaceName string,
 ) (context.Context, context.CancelFunc) {
@@ -561,36 +443,4 @@ func newTaskContext(
 	)
 	ctx = headers.SetCallerName(ctx, namespaceName)
 	return context.WithTimeout(ctx, applyReplicationTimeout)
-}
-
-func (e *ExecutableTaskImpl) invokeImportWorkflowExecutionCall(
-	ctx context.Context,
-	historyEngine shard.Engine,
-	namespaceId string,
-	workflowId string,
-	runId string,
-	historyBatches []*commonpb.DataBlob,
-	versionHistory *historyspb.VersionHistory,
-	token []byte,
-) ([]byte, error) {
-	request := &historyservice.ImportWorkflowExecutionRequest{
-		NamespaceId: namespaceId,
-		Execution: &commonpb.WorkflowExecution{
-			WorkflowId: workflowId,
-			RunId:      runId,
-		},
-		HistoryBatches: historyBatches,
-		VersionHistory: versionHistory,
-		Token:          token,
-	}
-	response, err := historyEngine.ImportWorkflowExecution(ctx, request)
-	if err != nil {
-		e.Logger.Error("failed to import events",
-			tag.WorkflowNamespaceID(namespaceId),
-			tag.WorkflowID(workflowId),
-			tag.WorkflowRunID(runId),
-			tag.Error(err))
-		return nil, err
-	}
-	return response.Token, nil
 }

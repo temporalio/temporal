@@ -111,6 +111,7 @@ func (s *streamReceiverMonitorSuite) SetupTest() {
 			},
 		},
 	}, nil).AnyTimes()
+	streamClient.EXPECT().CloseSend().Return(nil).AnyTimes()
 	adminClient := adminservicemock.NewMockAdminServiceClient(s.controller)
 	adminClient.EXPECT().StreamWorkflowReplicationMessages(gomock.Any()).Return(streamClient, nil).AnyTimes()
 	s.clientBean.EXPECT().GetRemoteAdminClient(cluster.TestAlternativeClusterName).Return(adminClient, nil).AnyTimes()

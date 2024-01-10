@@ -437,7 +437,8 @@ const (
 	MatchingLoadUserData = "matching.loadUserData"
 	// MatchingUpdateAckInterval is the interval for update ack
 	MatchingUpdateAckInterval = "matching.updateAckInterval"
-	// MatchingMaxTaskQueueIdleTime is the time after which an idle task queue will be unloaded
+	// MatchingMaxTaskQueueIdleTime is the time after which an idle task queue will be unloaded.
+	// Note: this should be greater than matching.longPollExpirationInterval and matching.getUserDataLongPollTimeout.
 	MatchingMaxTaskQueueIdleTime = "matching.maxTaskQueueIdleTime"
 	// MatchingOutstandingTaskAppendsThreshold is the threshold for outstanding task appends
 	MatchingOutstandingTaskAppendsThreshold = "matching.outstandingTaskAppendsThreshold"
@@ -943,6 +944,8 @@ const (
 	WorkerPerNamespaceWorkerCount = "worker.perNamespaceWorkerCount"
 	// WorkerPerNamespaceWorkerOptions are SDK worker options for per-namespace worker
 	WorkerPerNamespaceWorkerOptions = "worker.perNamespaceWorkerOptions"
+	// WorkerPerNamespaceWorkerStartRate controls how fast per-namespace workers can be started (workers/second).
+	WorkerPerNamespaceWorkerStartRate = "worker.perNamespaceWorkerStartRate"
 	// WorkerEnableScheduler controls whether to start the worker for scheduled workflows
 	WorkerEnableScheduler = "worker.enableScheduler"
 	// WorkerStickyCacheSize controls the sticky cache size for SDK workers on worker nodes

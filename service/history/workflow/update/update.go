@@ -29,15 +29,15 @@ import (
 	"fmt"
 	"time"
 
-	"google.golang.org/protobuf/proto"
-	"google.golang.org/protobuf/types/known/anypb"
-
 	enumspb "go.temporal.io/api/enums/v1"
 	failurepb "go.temporal.io/api/failure/v1"
 	historypb "go.temporal.io/api/history/v1"
 	protocolpb "go.temporal.io/api/protocol/v1"
 	"go.temporal.io/api/serviceerror"
 	updatepb "go.temporal.io/api/update/v1"
+	"google.golang.org/protobuf/proto"
+	"google.golang.org/protobuf/types/known/anypb"
+
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/future"
 	"go.temporal.io/server/internal/effect"
@@ -84,7 +84,7 @@ type (
 		// accessed only while holding workflow lock
 		id              string
 		state           state
-		request         *anypb.Any // of type *updatepb.Request, nil when not in stateRequested
+		request         *anypb.Any // of type *updatepb.Request, nil when not in stateRequested or stateSent.
 		acceptedEventID int64
 		onComplete      func()
 		instrumentation *instrumentation
@@ -276,6 +276,7 @@ func (u *Update) WaitAccepted(ctx context.Context) (UpdateStatus, error) {
 func (u *Update) OnMessage(
 	ctx context.Context,
 	msg proto.Message,
+	isWorkflowRunning bool,
 	eventStore EventStore,
 ) error {
 	if msg == nil {
@@ -289,6 +290,15 @@ func (u *Update) OnMessage(
 			return err
 		}
 	}
+
+	// If workflow was completed while processing this WFT, then only Rejection messages can be processed,
+	// because they don't create new events in the history. All other updates must be cancelled.
+	_, isRejection := msg.(*updatepb.Rejection)
+	shouldCancel := !(isWorkflowRunning || isRejection)
+	if shouldCancel {
+		return u.CancelIncomplete(ctx, CancelReasonWorkflowCompleted, eventStore)
+	}
+
 	switch body := msg.(type) {
 	case *updatepb.Request:
 		return u.onRequestMsg(ctx, body, eventStore)
@@ -301,30 +311,6 @@ func (u *Update) OnMessage(
 	default:
 		return invalidArgf("Message type %T not supported", body)
 	}
-}
-
-// ReadOutgoingMessages loads any outbound messages from this Update state
-// machine into the output slice provided.
-func (u *Update) ReadOutgoingMessages(out *[]*protocolpb.Message, sequencingID *protocolpb.Message_EventId) {
-	if u.state != stateRequested {
-		// Update only sends messages to the workflow when it is in
-		// stateRequested
-		return
-	}
-
-	reqMessage := &protocolpb.Message{
-		ProtocolInstanceId: u.id,
-		Id:                 u.outgoingMessageID(),
-		SequencingId:       sequencingID,
-		Body:               u.request,
-	}
-
-	*out = append(*out, reqMessage)
-}
-
-// outgoingMessageID returns the ID of the message that is used to send the Update to the worker.
-func (u *Update) outgoingMessageID() string {
-	return u.id + "/request"
 }
 
 // onRequestMsg works if the Update is in any state but if the state is anything
@@ -356,7 +342,54 @@ func (u *Update) onRequestMsg(
 	return nil
 }
 
-// onAcceptanceMsg expects the Update to be in stateRequested and returns an
+// needToSend returns true if outgoing message can be generated for current update state.
+// If includeAlreadySent is set to true then it will return true even if update was already sent but not processed by worker.
+func (u *Update) needToSend(includeAlreadySent bool) bool {
+	if includeAlreadySent {
+		return u.state.Matches(stateSet(stateRequested | stateProvisionallySent | stateSent))
+	}
+	return u.state.Matches(stateSet(stateRequested))
+}
+
+// Send moves update from stateRequested to stateSent and returns the message to be sent to worker.
+// If update is not in expected stateRequested, Send does nothing and returns nil.
+// If includeAlreadySent is set to true then Send will return message even if update was already sent but not processed by worker.
+// Note: once update moved to stateSent it never moves back to stateRequested.
+func (u *Update) Send(
+	_ context.Context,
+	includeAlreadySent bool,
+	sequencingID *protocolpb.Message_EventId,
+	eventStore EventStore,
+) *protocolpb.Message {
+	if !u.needToSend(includeAlreadySent) {
+		return nil
+	}
+
+	if u.state == stateRequested {
+		u.setState(stateProvisionallySent)
+		eventStore.OnAfterCommit(func(context.Context) { u.setState(stateSent) })
+		eventStore.OnAfterRollback(func(context.Context) { u.setState(stateRequested) })
+	}
+
+	return &protocolpb.Message{
+		ProtocolInstanceId: u.id,
+		Id:                 u.outgoingMessageID(),
+		SequencingId:       sequencingID,
+		Body:               u.request,
+	}
+}
+
+// isSent checks if update was sent to worker.
+func (u *Update) isSent() bool {
+	return u.state.Matches(stateSet(stateProvisionallySent | stateSent))
+}
+
+// outgoingMessageID returns the ID of the message that is used to Send the Update to the worker.
+func (u *Update) outgoingMessageID() string {
+	return u.id + "/request"
+}
+
+// onAcceptanceMsg expects the Update to be in stateSent and returns an
 // error if it finds otherwise. An event is written to the provided EventStore
 // and on commit the accepted future is completed and the Update transitions to
 // stateAccepted.
@@ -365,7 +398,7 @@ func (u *Update) onAcceptanceMsg(
 	acpt *updatepb.Acceptance,
 	eventStore EventStore,
 ) error {
-	if err := u.checkState(acpt, stateRequested); err != nil {
+	if err := u.checkState(acpt, stateSent); err != nil {
 		return err
 	}
 	if err := validateAcceptanceMsg(acpt); err != nil {
@@ -395,12 +428,12 @@ func (u *Update) onAcceptanceMsg(
 	})
 	eventStore.OnAfterRollback(func(context.Context) {
 		u.acceptedEventID = common.EmptyEventID
-		u.setState(stateRequested)
+		u.setState(stateSent)
 	})
 	return nil
 }
 
-// onRejectionMsg expects the Update state to be stateRequested and returns
+// onRejectionMsg expects the Update state to be stateSent and returns
 // an error otherwise. On commit of buffered effects the state
 // machine transitions to stateCompleted and the accepted and outcome futures
 // are both completed with the failurepb.Failure value from the
@@ -410,25 +443,34 @@ func (u *Update) onRejectionMsg(
 	rej *updatepb.Rejection,
 	eventStore EventStore,
 ) error {
-	if err := u.checkState(rej, stateRequested); err != nil {
+	if err := u.checkState(rej, stateSent); err != nil {
 		return err
 	}
 	if err := validateRejectionMsg(rej); err != nil {
 		return err
 	}
 	u.instrumentation.CountRejectionMsg()
+	return u.reject(ctx, rej.Failure, eventStore)
+}
+
+// reject an update with provided failure.
+func (u *Update) reject(
+	_ context.Context,
+	rejectionFailure *failurepb.Failure,
+	eventStore EventStore,
+) error {
 	u.setState(stateProvisionallyCompleted)
 	eventStore.OnAfterCommit(func(context.Context) {
 		u.request = nil
 		u.setState(stateCompleted)
 		outcome := updatepb.Outcome{
-			Value: &updatepb.Outcome_Failure{Failure: rej.Failure},
+			Value: &updatepb.Outcome_Failure{Failure: rejectionFailure},
 		}
-		u.accepted.(*future.FutureImpl[*failurepb.Failure]).Set(rej.Failure, nil)
+		u.accepted.(*future.FutureImpl[*failurepb.Failure]).Set(rejectionFailure, nil)
 		u.outcome.(*future.FutureImpl[*updatepb.Outcome]).Set(&outcome, nil)
 		u.onComplete()
 	})
-	eventStore.OnAfterRollback(func(context.Context) { u.setState(stateRequested) })
+	eventStore.OnAfterRollback(func(context.Context) { u.setState(stateSent) })
 	return nil
 }
 
@@ -462,13 +504,32 @@ func (u *Update) onResponseMsg(
 	return nil
 }
 
-func (u *Update) hasBeenSeenByWorkflowExecution() bool {
-	const unseen = stateAdmitted | stateProvisionallyRequested | stateRequested
-	return !u.state.Matches(stateSet(unseen))
+// isIncomplete checks if update is already completed (rejected or processed).
+func (u *Update) isIncomplete() bool {
+	return !u.state.Matches(stateSet(stateProvisionallyCompleted | stateCompleted))
 }
 
-func (u *Update) hasOutgoingMessage() bool {
-	return u.state == stateRequested
+// CancelIncomplete cancels update if it wasn't completed yet:
+//   - if in stateAdmitted, stateRequested, or stateSent -> reject,
+//   - if in stateAccepted -> do nothing,
+//   - if in stateCompleted -> do nothing.
+func (u *Update) CancelIncomplete(ctx context.Context, reason CancelReason, eventStore EventStore) error {
+	if u.state.Matches(stateSet(stateAdmitted | stateProvisionallyRequested | stateRequested | stateProvisionallySent | stateSent)) {
+		return u.reject(ctx, reason.RejectionFailure(), eventStore)
+	}
+
+	// Updates in stateProvisionallyAccepted and stateAccepted can't be rejected by server
+	// because they are already accepted by worker. It would be nice to complete them with error
+	// and notify API caller with specific error but this will lead to inconsistency between
+	// update registry and event store (update completed event is missing for completed update).
+	// Another approach is to add one more stateCanceled, set it here, and set update outcome
+	// with error. But this will require to do the same for every workflow completion event because
+	// after history replay of completed workflow all accepted updates must be switched to stateCanceled.
+	// So updates in stateProvisionallyAccepted and stateAccepted are ignored. They stay in the registry
+	// as is, even after workflow completes and API caller gets timeout error.
+
+	// Updates in stateProvisionallyCompleted and stateCompleted are skipped due to nature of this method.
+	return nil
 }
 
 func (u *Update) checkState(msg proto.Message, expected state) error {
@@ -484,8 +545,7 @@ func (u *Update) checkStateSet(msg proto.Message, allowed stateSet) error {
 		"received %T message while in state %q", msg, u.state)
 }
 
-// setState assigns the current state to a new value returning the original
-// value.
+// setState assigns the current state to a new value returning the original value.
 func (u *Update) setState(newState state) state {
 	prevState := u.state
 	u.state = newState

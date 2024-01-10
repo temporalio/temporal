@@ -74,6 +74,7 @@ import (
 	"go.temporal.io/server/service/history/configs"
 	"go.temporal.io/server/service/history/consts"
 	"go.temporal.io/server/service/history/events"
+	"go.temporal.io/server/service/history/historybuilder"
 	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/tasks"
 )
@@ -147,7 +148,7 @@ type (
 		executionInfo  *persistencespb.WorkflowExecutionInfo // Workflow mutable state info.
 		executionState *persistencespb.WorkflowExecutionState
 
-		hBuilder *HistoryBuilder
+		hBuilder *historybuilder.HistoryBuilder
 
 		// In-memory only attributes
 		currentVersion int64
@@ -278,7 +279,7 @@ func NewMutableState(
 		Status: enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING}
 	s.approximateSize += s.executionState.Size()
 
-	s.hBuilder = NewMutableHistoryBuilder(
+	s.hBuilder = historybuilder.New(
 		s.timeSource,
 		s.shard.GenerateTaskIDs,
 		s.currentVersion,
@@ -362,7 +363,7 @@ func NewMutableStateFromDB(
 	mutableState.approximateSize += dbRecord.ExecutionInfo.Size() - mutableState.executionInfo.Size()
 	mutableState.executionInfo = dbRecord.ExecutionInfo
 
-	mutableState.hBuilder = NewMutableHistoryBuilder(
+	mutableState.hBuilder = historybuilder.New(
 		mutableState.timeSource,
 		mutableState.shard.GenerateTaskIDs,
 		common.EmptyVersion,
@@ -515,7 +516,7 @@ func (ms *MutableStateImpl) SetCurrentBranchToken(
 	return nil
 }
 
-func (ms *MutableStateImpl) SetHistoryBuilder(hBuilder *HistoryBuilder) {
+func (ms *MutableStateImpl) SetHistoryBuilder(hBuilder *historybuilder.HistoryBuilder) {
 	ms.hBuilder = hBuilder
 }
 
@@ -583,7 +584,7 @@ func (ms *MutableStateImpl) UpdateCurrentVersion(
 		ms.currentVersion = version
 	}
 
-	ms.hBuilder = NewMutableHistoryBuilder(
+	ms.hBuilder = historybuilder.New(
 		ms.timeSource,
 		ms.shard.GenerateTaskIDs,
 		ms.currentVersion,
@@ -1249,13 +1250,13 @@ func (ms *MutableStateImpl) UpdateActivityProgress(
 
 // UpdateActivityInfo applies the necessary activity information
 func (ms *MutableStateImpl) UpdateActivityInfo(
-	request *historyservice.SyncActivityRequest,
+	incomingActivityInfo *historyservice.ActivitySyncInfo,
 	resetActivityTimerTaskStatus bool,
 ) error {
-	ai, ok := ms.pendingActivityInfoIDs[request.GetScheduledEventId()]
+	ai, ok := ms.pendingActivityInfoIDs[incomingActivityInfo.GetScheduledEventId()]
 	if !ok {
 		ms.logError(
-			fmt.Sprintf("unable to find activity event ID: %v in mutable state", request.GetScheduledEventId()),
+			fmt.Sprintf("unable to find activity event ID: %v in mutable state", incomingActivityInfo.GetScheduledEventId()),
 			tag.ErrorTypeInvalidMutableStateAction,
 		)
 		return ErrMissingActivityInfo
@@ -1263,19 +1264,19 @@ func (ms *MutableStateImpl) UpdateActivityInfo(
 
 	ms.approximateSize -= ai.Size()
 
-	ai.Version = request.GetVersion()
-	ai.ScheduledTime = request.GetScheduledTime()
-	ai.StartedEventId = request.GetStartedEventId()
-	ai.LastHeartbeatUpdateTime = request.GetLastHeartbeatTime()
+	ai.Version = incomingActivityInfo.GetVersion()
+	ai.ScheduledTime = incomingActivityInfo.GetScheduledTime()
+	ai.StartedEventId = incomingActivityInfo.GetStartedEventId()
+	ai.LastHeartbeatUpdateTime = incomingActivityInfo.GetLastHeartbeatTime()
 	if ai.StartedEventId == common.EmptyEventID {
 		ai.StartedTime = nil
 	} else {
-		ai.StartedTime = request.GetStartedTime()
+		ai.StartedTime = incomingActivityInfo.GetStartedTime()
 	}
-	ai.LastHeartbeatDetails = request.GetDetails()
-	ai.Attempt = request.GetAttempt()
-	ai.RetryLastWorkerIdentity = request.GetLastWorkerIdentity()
-	ai.RetryLastFailure = request.GetLastFailure()
+	ai.LastHeartbeatDetails = incomingActivityInfo.GetDetails()
+	ai.Attempt = incomingActivityInfo.GetAttempt()
+	ai.RetryLastWorkerIdentity = incomingActivityInfo.GetLastWorkerIdentity()
+	ai.RetryLastFailure = incomingActivityInfo.LastFailure
 
 	if resetActivityTimerTaskStatus {
 		ai.TimerTaskStatus = TimerTaskStatusNone
@@ -1528,7 +1529,7 @@ func (ms *MutableStateImpl) HasBufferedEvents() bool {
 }
 
 // HasAnyBufferedEvent returns true if there is at least one buffered event that matches the provided filter.
-func (ms *MutableStateImpl) HasAnyBufferedEvent(filter BufferedEventFilter) bool {
+func (ms *MutableStateImpl) HasAnyBufferedEvent(filter historybuilder.BufferedEventFilter) bool {
 	return ms.hBuilder.HasAnyBufferedEvent(filter)
 }
 
@@ -3589,6 +3590,9 @@ func (ms *MutableStateImpl) ApplyWorkflowExecutionUpdateCompletedEvent(
 		}
 		sizeDelta = ui.Size() - sizeBefore
 	} else {
+		// TODO (alex): this should never happened because UpdateInfo should always be created before
+		// with UpdateAccepted event which MUST preceded UpdateCompleted event.
+		// Better to return error here!
 		ui := updatespb.UpdateInfo{
 			Value: &updatespb.UpdateInfo_Completion{
 				Completion: &updatespb.CompletionInfo{EventId: event.EventId},
@@ -4660,7 +4664,7 @@ func (ms *MutableStateImpl) cleanupTransaction(
 	ms.nextEventIDInDB = ms.GetNextEventID()
 	// ms.dbRecordVersion remains the same
 
-	ms.hBuilder = NewMutableHistoryBuilder(
+	ms.hBuilder = historybuilder.New(
 		ms.timeSource,
 		ms.shard.GenerateTaskIDs,
 		ms.GetCurrentVersion(),

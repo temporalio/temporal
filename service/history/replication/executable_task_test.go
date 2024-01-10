@@ -36,13 +36,10 @@ import (
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	commonpb "go.temporal.io/api/common/v1"
-	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
-	historyspb "go.temporal.io/server/api/history/v1"
-	"go.temporal.io/server/common/collection"
-	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/service/history/configs"
+	"go.temporal.io/server/service/history/replication/eventhandler"
 	"go.temporal.io/server/service/history/tests"
 
 	"go.temporal.io/server/api/historyservice/v1"
@@ -71,7 +68,7 @@ type (
 		shardController         *shard.MockController
 		namespaceCache          *namespace.MockRegistry
 		ndcHistoryResender      *xdc.MockNDCHistoryResender
-		remoteHistoryFetcher    *MockHistoryPaginatedFetcher
+		remoteHistoryFetcher    *eventhandler.MockHistoryPaginatedFetcher
 		metricsHandler          metrics.Handler
 		logger                  log.Logger
 		sourceCluster           string
@@ -107,7 +104,7 @@ func (s *executableTaskSuite) SetupTest() {
 	s.sourceCluster = "some cluster"
 	s.eagerNamespaceRefresher = NewMockEagerNamespaceRefresher(s.controller)
 	s.config = tests.NewDynamicConfig()
-	s.remoteHistoryFetcher = NewMockHistoryPaginatedFetcher(s.controller)
+	s.remoteHistoryFetcher = eventhandler.NewMockHistoryPaginatedFetcher(s.controller)
 
 	creationTime := time.Unix(0, rand.Int63())
 	receivedTime := creationTime.Add(time.Duration(rand.Int63()))
@@ -122,9 +119,7 @@ func (s *executableTaskSuite) SetupTest() {
 			MetricsHandler:          s.metricsHandler,
 			Logger:                  s.logger,
 			EagerNamespaceRefresher: s.eagerNamespaceRefresher,
-
 			DLQWriter:               NoopDLQWriter{},
-			HistoryPaginatedFetcher: s.remoteHistoryFetcher,
 		},
 		rand.Int63(),
 		"metrics-tag",
@@ -483,136 +478,6 @@ func (s *executableTaskSuite) TestResend_Error() {
 	doContinue, err := s.task.Resend(context.Background(), remoteCluster, resendErr, ResendAttempt)
 	s.Error(err)
 	s.False(doContinue)
-}
-
-func (s *executableTaskSuite) TestImport_Success() {
-	remoteCluster := cluster.TestAlternativeClusterName
-	namespaceId := uuid.NewString()
-	workflowId := uuid.NewString()
-	runId := uuid.NewString()
-	startEventId := rand.Int63()
-	startEventVersion := rand.Int63()
-	endEventId := rand.Int63()
-	endEventVersion := rand.Int63()
-
-	versionHistory := &historyspb.VersionHistory{
-		BranchToken: []byte{1, 0, 1},
-		Items: []*historyspb.VersionHistoryItem{
-			{EventId: 3, Version: 0},
-			{EventId: 5, Version: 4},
-			{EventId: 7, Version: 6},
-			{EventId: 9, Version: 10},
-		},
-	}
-	dataBlob1 := &commonpb.DataBlob{
-		EncodingType: enumspb.ENCODING_TYPE_PROTO3,
-		Data:         []byte{1, 0, 1},
-	}
-	dataBlob2 := &commonpb.DataBlob{
-		EncodingType: enumspb.ENCODING_TYPE_PROTO3,
-		Data:         []byte{1, 1, 0},
-	}
-	historyBatch1 := historyBatch{
-		RawEventBatch:  dataBlob1,
-		VersionHistory: versionHistory,
-	}
-	historyBatch2 := historyBatch{
-		RawEventBatch:  dataBlob2,
-		VersionHistory: versionHistory,
-	}
-
-	// in total, historyImportBlobSize + 1 batches returned. So the expected call to ImportWorkflowExecution API is:
-	// 1. ImportWorkflowExecution with event[0, historyImportBlobSize), inside the iteration
-	// 2. ImportWorkflowExecution with event[historyImportBlobSize], outside the loop
-	// 3. ImportWorkflowExecution to commit the import
-	times := 0
-	fetcher := collection.NewPagingIterator(func(paginationToken []byte) ([]historyBatch, []byte, error) {
-		if times < historyImportBlobSize {
-			times++
-			return []historyBatch{historyBatch1}, []byte{1, 1, 0}, nil
-		}
-		return []historyBatch{historyBatch2}, nil, nil
-	})
-
-	s.remoteHistoryFetcher.EXPECT().GetSingleWorkflowHistoryPaginatedIterator(
-		gomock.Any(),
-		remoteCluster,
-		namespace.ID(namespaceId),
-		workflowId,
-		runId,
-		startEventId,
-		startEventVersion,
-		endEventId,
-		endEventVersion,
-	).Return(fetcher)
-
-	shardContext := shard.NewMockContext(s.controller)
-	engine := shard.NewMockEngine(s.controller)
-	s.shardController.EXPECT().GetShardByNamespaceWorkflow(
-		namespace.ID(namespaceId),
-		workflowId,
-	).Return(shardContext, nil).Times(1)
-	shardContext.EXPECT().GetEngine(gomock.Any()).Return(engine, nil).Times(1)
-	returnToken1 := []byte{1, 0, 0, 1}
-	returnToken2 := []byte{1, 0, 0, 1, 1, 1, 1, 0}
-
-	expectedBlob1 := []*commonpb.DataBlob{}
-	for i := 0; i < historyImportBlobSize; i++ {
-		expectedBlob1 = append(expectedBlob1, dataBlob1)
-	}
-	gomock.InOrder(
-		engine.EXPECT().ImportWorkflowExecution(gomock.Any(), &historyservice.ImportWorkflowExecutionRequest{
-			NamespaceId: namespaceId,
-			Execution: &commonpb.WorkflowExecution{
-				WorkflowId: workflowId,
-				RunId:      runId,
-			},
-			HistoryBatches: expectedBlob1,
-			VersionHistory: versionHistory,
-			Token:          nil,
-		}).Return(&historyservice.ImportWorkflowExecutionResponse{
-			Token: returnToken1,
-		}, nil).Times(1),
-		engine.EXPECT().ImportWorkflowExecution(gomock.Any(), &historyservice.ImportWorkflowExecutionRequest{
-			NamespaceId: namespaceId,
-			Execution: &commonpb.WorkflowExecution{
-				WorkflowId: workflowId,
-				RunId:      runId,
-			},
-			HistoryBatches: []*commonpb.DataBlob{dataBlob2},
-			VersionHistory: versionHistory,
-			Token:          returnToken1,
-		}).Return(&historyservice.ImportWorkflowExecutionResponse{
-			Token: returnToken2,
-		}, nil).Times(1),
-		engine.EXPECT().ImportWorkflowExecution(gomock.Any(), &historyservice.ImportWorkflowExecutionRequest{
-			NamespaceId: namespaceId,
-			Execution: &commonpb.WorkflowExecution{
-				WorkflowId: workflowId,
-				RunId:      runId,
-			},
-			HistoryBatches: []*commonpb.DataBlob{},
-			VersionHistory: versionHistory,
-			Token:          returnToken2,
-		}).Return(&historyservice.ImportWorkflowExecutionResponse{
-			Token: nil,
-		}, nil).Times(1),
-	)
-
-	err := s.task.Import(
-		context.Background(),
-		remoteCluster,
-		definition.WorkflowKey{
-			NamespaceID: namespaceId,
-			WorkflowID:  workflowId,
-			RunID:       runId,
-		},
-		startEventId,
-		startEventVersion,
-		endEventId,
-		endEventVersion,
-	)
-	s.Nil(err)
 }
 
 func (s *executableTaskSuite) TestGetNamespaceInfo_Process() {

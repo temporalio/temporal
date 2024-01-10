@@ -441,6 +441,26 @@ func (mr *MockAdminServiceClientMockRecorder) GetTaskQueueTasks(ctx, in interfac
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetTaskQueueTasks", reflect.TypeOf((*MockAdminServiceClient)(nil).GetTaskQueueTasks), varargs...)
 }
 
+// GetWorkflowExecutionRawHistory mocks base method.
+func (m *MockAdminServiceClient) GetWorkflowExecutionRawHistory(ctx context.Context, in *adminservice.GetWorkflowExecutionRawHistoryRequest, opts ...grpc.CallOption) (*adminservice.GetWorkflowExecutionRawHistoryResponse, error) {
+	m.ctrl.T.Helper()
+	varargs := []interface{}{ctx, in}
+	for _, a := range opts {
+		varargs = append(varargs, a)
+	}
+	ret := m.ctrl.Call(m, "GetWorkflowExecutionRawHistory", varargs...)
+	ret0, _ := ret[0].(*adminservice.GetWorkflowExecutionRawHistoryResponse)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// GetWorkflowExecutionRawHistory indicates an expected call of GetWorkflowExecutionRawHistory.
+func (mr *MockAdminServiceClientMockRecorder) GetWorkflowExecutionRawHistory(ctx, in interface{}, opts ...interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	varargs := append([]interface{}{ctx, in}, opts...)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetWorkflowExecutionRawHistory", reflect.TypeOf((*MockAdminServiceClient)(nil).GetWorkflowExecutionRawHistory), varargs...)
+}
+
 // GetWorkflowExecutionRawHistoryV2 mocks base method.
 func (m *MockAdminServiceClient) GetWorkflowExecutionRawHistoryV2(ctx context.Context, in *adminservice.GetWorkflowExecutionRawHistoryV2Request, opts ...grpc.CallOption) (*adminservice.GetWorkflowExecutionRawHistoryV2Response, error) {
 	m.ctrl.T.Helper()
@@ -1244,6 +1264,21 @@ func (m *MockAdminServiceServer) GetTaskQueueTasks(arg0 context.Context, arg1 *a
 func (mr *MockAdminServiceServerMockRecorder) GetTaskQueueTasks(arg0, arg1 interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetTaskQueueTasks", reflect.TypeOf((*MockAdminServiceServer)(nil).GetTaskQueueTasks), arg0, arg1)
+}
+
+// GetWorkflowExecutionRawHistory mocks base method.
+func (m *MockAdminServiceServer) GetWorkflowExecutionRawHistory(arg0 context.Context, arg1 *adminservice.GetWorkflowExecutionRawHistoryRequest) (*adminservice.GetWorkflowExecutionRawHistoryResponse, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetWorkflowExecutionRawHistory", arg0, arg1)
+	ret0, _ := ret[0].(*adminservice.GetWorkflowExecutionRawHistoryResponse)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// GetWorkflowExecutionRawHistory indicates an expected call of GetWorkflowExecutionRawHistory.
+func (mr *MockAdminServiceServerMockRecorder) GetWorkflowExecutionRawHistory(arg0, arg1 interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetWorkflowExecutionRawHistory", reflect.TypeOf((*MockAdminServiceServer)(nil).GetWorkflowExecutionRawHistory), arg0, arg1)
 }
 
 // GetWorkflowExecutionRawHistoryV2 mocks base method.

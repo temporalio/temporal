@@ -34,13 +34,13 @@ import (
 	"go.temporal.io/api/serviceerror"
 
 	"go.temporal.io/server/common"
-	"go.temporal.io/server/common/convert"
 	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/persistence/versionhistory"
 	serviceerrors "go.temporal.io/server/common/serviceerror"
+	"go.temporal.io/server/common/util"
 	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/workflow"
 )
@@ -142,7 +142,7 @@ func (r *resetterImpl) resetWorkflow(
 		),
 		baseBranchToken,
 		baseLastEventID,
-		convert.Int64Ptr(baseLastEventVersion),
+		util.Ptr(baseLastEventVersion),
 		definition.NewWorkflowKey(
 			r.namespaceID.String(),
 			r.workflowID,
