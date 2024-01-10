@@ -71,11 +71,56 @@ message CompatibleVersionSet {
     temporal.server.api.clock.v1.HybridLogicalClock became_default_timestamp = 4;
 }
 
+message RampByPercentage {
+    // Acceptable range is [0,100].
+    float ramp_percentage = 1;
+}
+
+message RampByWorkerRatio {
+}
+
+// An internal representation of temporal.api.taskqueue.v1.BuildIdAssignmentRule
+message AssignmentRule {
+    string target_build_id = 1;
+    string hint_filter = 2;
+    // Only terminal Build IDs can have a ramp
+    oneof ramp {
+        RampByPercentage percentage_ramp = 3;
+        RampByWorkerRatio worker_ratio_ramp = 4;
+    }
+    // (-- api-linter: core::0142::time-field-type=disabled
+    //     aip.dev/not-precedent: Using HLC instead of wall clock. --)
+    temporal.server.api.clock.v1.HybridLogicalClock create_timestamp = 5;
+    // (-- api-linter: core::0142::time-field-type=disabled
+    //     aip.dev/not-precedent: Using HLC instead of wall clock. --)
+    temporal.server.api.clock.v1.HybridLogicalClock delete_timestamp = 6;
+}
+
+// An internal representation of temporal.api.taskqueue.v1.CompatibleBuildIdRedirectRule
+message RedirectRule {
+    string source_build_id = 1;
+    string target_build_id = 2;
+    // Only the last redirect rule in a chain can have a ramp.
+    oneof ramp {
+        RampByWorkerRatio worker_ratio_ramp = 3;
+    }
+    // (-- api-linter: core::0142::time-field-type=disabled
+    //     aip.dev/not-precedent: Using HLC instead of wall clock. --)
+    temporal.server.api.clock.v1.HybridLogicalClock create_timestamp = 5;
+    // (-- api-linter: core::0142::time-field-type=disabled
+    //     aip.dev/not-precedent: Using HLC instead of wall clock. --)
+    temporal.server.api.clock.v1.HybridLogicalClock delete_timestamp = 6;
+}
+
 // Holds all the data related to worker versioning for a task queue.
 // Backwards-incompatible changes cannot be made, as this would make existing stored data unreadable.
 message VersioningData {
     // All the incompatible version sets, unordered except for the last element, which is considered the set "default".
     repeated CompatibleVersionSet version_sets = 1;
+    // Ordered list of assignment rules. Also contains recently-deleted rules.
+    repeated AssignmentRule assignment_rules = 2;
+    // Unordered list of redirect rules. Also contains recently-deleted rules.
+    repeated RedirectRule redirect_rules = 3;
 }
 
 // Container for all persistent user provided data for a task queue.
