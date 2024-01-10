@@ -151,9 +151,21 @@ func (e *ExecutableHistoryTask) Execute() error {
 	if err != nil {
 		return err
 	}
-	// use HistoryEventsHandler.HandleHistoryEvents(...) instead
-	return engine.ReplicateHistoryEvents(
+
+	if !e.Config.EnableReplicateLocalGeneratedEvent() {
+		return engine.ReplicateHistoryEvents(
+			ctx,
+			e.WorkflowKey,
+			e.baseExecutionInfo,
+			e.versionHistoryItems,
+			events,
+			newRunEvents,
+		)
+	}
+
+	return e.HistoryEventsHandler.HandleHistoryEvents(
 		ctx,
+		e.SourceClusterName(),
 		e.WorkflowKey,
 		e.baseExecutionInfo,
 		e.versionHistoryItems,
