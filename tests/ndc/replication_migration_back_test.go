@@ -168,8 +168,8 @@ func (s *ReplicationMigrationBackTestSuite) TestHistoryReplication_MigrationBack
 	version := int64(2) // this version has to point to passive cluster to trigger migration back case
 	runId1 := uuid.New()
 	runId2 := uuid.New()
-	run1Slices := s.getEventSlices(version, -10) // run1 is older than run2
-	run2Slices := s.getEventSlices(version, 0)
+	run1Slices := s.getEventSlices(version, 0) // run1 is older than run2
+	run2Slices := s.getEventSlices(version, 10)
 
 	history, err := tests.EventBatchesToVersionHistory(
 		nil,
