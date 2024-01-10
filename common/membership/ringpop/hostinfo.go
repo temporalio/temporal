@@ -27,6 +27,7 @@ package ringpop
 
 import (
 	"fmt"
+	"math/bits"
 
 	"github.com/dgryski/go-farm"
 	rpmembership "github.com/temporalio/ringpop-go/membership"
@@ -92,7 +93,7 @@ func checksumLabels(labels map[string]string) uint64 {
 		vfp := farm.Fingerprint64([]byte(v))
 		// use xor to combine different labels so that it comes out the same with any iteration
 		// order, without needing to sort.
-		c ^= 5*kfp + 7*vfp
+		c ^= kfp + bits.RotateLeft64(vfp, 3)
 	}
 	return c
 }
