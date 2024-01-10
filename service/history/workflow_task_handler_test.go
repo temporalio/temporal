@@ -258,6 +258,7 @@ func TestCommandProtocolMessage(t *testing.T) {
 		tc.ms.EXPECT().GetExecutionInfo().AnyTimes().Return(&persistencespb.WorkflowExecutionInfo{})
 		tc.ms.EXPECT().GetExecutionState().AnyTimes().Return(&persistencespb.WorkflowExecutionState{})
 		tc.ms.EXPECT().GetUpdateOutcome(gomock.Any(), updateID).Return(nil, serviceerror.NewNotFound(""))
+		tc.ms.EXPECT().IsWorkflowExecutionRunning().AnyTimes().Return(true)
 
 		t.Log("create the expected protocol instance")
 		_, _, err := tc.updates.FindOrCreate(context.Background(), updateID)
@@ -294,6 +295,7 @@ func TestCommandProtocolMessage(t *testing.T) {
 		tc.ms.EXPECT().GetExecutionInfo().AnyTimes().Return(&persistencespb.WorkflowExecutionInfo{})
 		tc.ms.EXPECT().GetExecutionState().AnyTimes().Return(&persistencespb.WorkflowExecutionState{})
 		tc.ms.EXPECT().GetUpdateOutcome(gomock.Any(), updateID).Return(nil, serviceerror.NewNotFound(""))
+		tc.ms.EXPECT().IsWorkflowExecutionRunning().AnyTimes().Return(true)
 
 		t.Log("create the expected protocol instance")
 		_, _, err := tc.updates.FindOrCreate(context.Background(), updateID)

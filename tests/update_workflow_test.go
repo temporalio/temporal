@@ -2727,7 +2727,7 @@ func (s *FunctionalSuite) TestUpdateWorkflow_StartToCloseTimeoutSpeculativeWorkf
 			// Emulate slow worker: sleep more than WT timeout.
 			time.Sleep(1*time.Second + 100*time.Millisecond)
 			// This doesn't matter because WT times out before update is applied.
-			return s.acceptUpdateCommands(tv, "1"), nil
+			return s.acceptCompleteUpdateCommands(tv, "1"), nil
 		case 3:
 			// Speculative WT timed out and retried as normal WT.
 			s.EqualHistory(`
@@ -2740,7 +2740,7 @@ func (s *FunctionalSuite) TestUpdateWorkflow_StartToCloseTimeoutSpeculativeWorkf
   7 WorkflowTaskTimedOut
   8 WorkflowTaskScheduled {"Attempt":2 } // Transient WT.
   9 WorkflowTaskStarted`, history)
-			commands := append(s.acceptUpdateCommands(tv, "1"),
+			commands := append(s.acceptCompleteUpdateCommands(tv, "1"),
 				&commandpb.Command{
 					CommandType: enumspb.COMMAND_TYPE_COMPLETE_WORKFLOW_EXECUTION,
 					Attributes:  &commandpb.Command_CompleteWorkflowExecutionCommandAttributes{CompleteWorkflowExecutionCommandAttributes: &commandpb.CompleteWorkflowExecutionCommandAttributes{}},
@@ -3290,33 +3290,52 @@ func (s *FunctionalSuite) TestUpdateWorkflow_ScheduledSpeculativeWorkflowTask_Te
 	s.EqualValues(5, msResp.GetDatabaseMutableState().GetExecutionInfo().GetCompletionEventBatchId(), "completion_event_batch_id should point to WFTerminated event")
 }
 
-func (s *FunctionalSuite) TestUpdateWorkflow_CompleteWorkflow_TerminateUpdate() {
-	testCases := []struct {
-		Name         string
-		UpdateErrMsg string
-		Commands     func(tv *testvars.TestVars) []*commandpb.Command
-		Messages     func(tv *testvars.TestVars, updRequestMsg *protocolpb.Message) []*protocolpb.Message
-	}{
+func (s *FunctionalSuite) TestUpdateWorkflow_CompleteWorkflow_CancelUpdate() {
+	type testCase struct {
+		Name          string
+		Description   string
+		UpdateErr     string
+		UpdateFailure string
+		Commands      func(tv *testvars.TestVars) []*commandpb.Command
+		Messages      func(tv *testvars.TestVars, updRequestMsg *protocolpb.Message) []*protocolpb.Message
+	}
+	testCases := []testCase{
 		{
-			Name:         "requested",
-			UpdateErrMsg: "update has been terminated",
-			Commands:     func(_ *testvars.TestVars) []*commandpb.Command { return nil },
-			Messages:     func(_ *testvars.TestVars, _ *protocolpb.Message) []*protocolpb.Message { return nil },
+			Name:          "requested",
+			Description:   "update in stateRequested must be rejected by server with server generated rejection failure",
+			UpdateErr:     "",
+			UpdateFailure: "Workflow Update is rejected because Workflow Execution is completed.",
+			Commands:      func(_ *testvars.TestVars) []*commandpb.Command { return nil },
+			Messages:      func(_ *testvars.TestVars, _ *protocolpb.Message) []*protocolpb.Message { return nil },
 		},
 		{
-			Name:         "accepted",
-			UpdateErrMsg: "update has been terminated",
-			Commands:     func(tv *testvars.TestVars) []*commandpb.Command { return s.acceptUpdateCommands(tv, "1") },
+			Name:          "accepted",
+			Description:   "update in stateAccepted must get an error because there is no way for workflow to complete it and already accepted update can't be rejected",
+			UpdateErr:     "context deadline exceeded",
+			UpdateFailure: "",
+			Commands:      func(tv *testvars.TestVars) []*commandpb.Command { return s.acceptUpdateCommands(tv, "1") },
 			Messages: func(tv *testvars.TestVars, updRequestMsg *protocolpb.Message) []*protocolpb.Message {
 				return s.acceptUpdateMessages(tv, updRequestMsg, "1")
 			},
 		},
 		{
-			Name:         "completed",
-			UpdateErrMsg: "",
-			Commands:     func(tv *testvars.TestVars) []*commandpb.Command { return s.acceptCompleteUpdateCommands(tv, "1") },
+			Name:          "completed",
+			Description:   "completed update must not be affected by workflow completion",
+			UpdateErr:     "",
+			UpdateFailure: "",
+			Commands:      func(tv *testvars.TestVars) []*commandpb.Command { return s.acceptCompleteUpdateCommands(tv, "1") },
 			Messages: func(tv *testvars.TestVars, updRequestMsg *protocolpb.Message) []*protocolpb.Message {
 				return s.acceptCompleteUpdateMessages(tv, updRequestMsg, "1")
+			},
+		},
+		{
+			Name:          "rejected",
+			Description:   "rejected update must be rejected with rejection from workflow",
+			UpdateErr:     "",
+			UpdateFailure: "update rejected", // Rejection from workflow.
+			Commands:      func(tv *testvars.TestVars) []*commandpb.Command { return nil },
+			Messages: func(tv *testvars.TestVars, updRequestMsg *protocolpb.Message) []*protocolpb.Message {
+				return s.rejectUpdateMessages(tv, updRequestMsg, "1")
 			},
 		},
 	}
@@ -3376,7 +3395,7 @@ func (s *FunctionalSuite) TestUpdateWorkflow_CompleteWorkflow_TerminateUpdate() 
 			s.NoError(err)
 
 			updateResultCh := make(chan struct{})
-			go func(updateErrMsg string) {
+			go func(tc testCase) {
 				halfSecondTimeoutCtx, cancel := context.WithTimeout(NewContext(), 500*time.Millisecond)
 				defer cancel()
 
@@ -3386,22 +3405,28 @@ func (s *FunctionalSuite) TestUpdateWorkflow_CompleteWorkflow_TerminateUpdate() 
 					Request: &updatepb.Request{
 						Meta: &updatepb.Meta{UpdateId: tv.UpdateID("1")},
 						Input: &updatepb.Input{
-							Name: tv.HandlerName(),
-							Args: payloads.EncodeString(tv.String("args", "1")),
+							Name: tv.Any(),
+							Args: payloads.EncodeString(tv.Any()),
 						},
 					},
 				})
 
-				if updateErrMsg == "" {
-					s.NoError(err1)
-					s.NotNil(resp)
+				if tc.UpdateErr != "" {
+					assert.Error(s.T(), err1, tc.Description)
+					assert.Contains(s.T(), err1.Error(), tc.UpdateErr, tc.Description)
 				} else {
-					s.Error(err1)
-					s.True(common.IsContextDeadlineExceededErr(err1))
-					s.Nil(resp)
+					assert.NoError(s.T(), err1, tc.Description)
 				}
+
+				if tc.UpdateFailure != "" {
+					assert.NotNil(s.T(), resp.GetOutcome().GetFailure(), tc.Description)
+					assert.Contains(s.T(), resp.GetOutcome().GetFailure().GetMessage(), tc.UpdateFailure, tc.Description)
+				} else {
+					assert.Nil(s.T(), resp.GetOutcome().GetFailure(), tc.Description)
+				}
+
 				updateResultCh <- struct{}{}
-			}(tc.UpdateErrMsg)
+			}(tc) // To prevent capturing of tc range value by reference.
 
 			// Complete workflow.
 			_, err = poller.PollAndProcessWorkflowTask()
@@ -5169,7 +5194,7 @@ func (s *FunctionalSuite) TestUpdateWorkflow_NewSpeculativeWorkflowTask_WorkerSk
 	s.NoError(err)
 	updateResp := res.NewTask
 	updateResult := <-updateResultCh
-	s.Equal("Update wasn't processed by worker. Probably, Workflow Update is not supported by the worker.", updateResult.GetOutcome().GetFailure().GetMessage())
+	s.Equal("Workflow Update is rejected because it wasn't processed by worker. Probably, Workflow Update is not supported by the worker.", updateResult.GetOutcome().GetFailure().GetMessage())
 	s.EqualValues(3, updateResp.ResetHistoryEventId)
 
 	// Process 3rd WT which completes 2nd update and workflow.

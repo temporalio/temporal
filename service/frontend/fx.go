@@ -67,12 +67,14 @@ import (
 	"go.temporal.io/server/service"
 	"go.temporal.io/server/service/frontend/configs"
 	"go.temporal.io/server/service/history/tasks"
+	"go.temporal.io/server/service/worker/scheduler"
 )
 
 type FEReplicatorNamespaceReplicationQueue persistence.NamespaceReplicationQueue
 
 var Module = fx.Options(
 	resource.Module,
+	scheduler.Module,
 	fx.Provide(dynamicconfig.NewCollection),
 	fx.Provide(ConfigProvider),
 	fx.Provide(NamespaceLogInterceptorProvider),
@@ -611,6 +613,7 @@ func HandlerProvider(
 	healthServer *health.Server,
 	membershipMonitor membership.Monitor,
 	healthInterceptor *interceptor.HealthInterceptor,
+	scheduleSpecBuilder *scheduler.SpecBuilder,
 ) Handler {
 	wfHandler := NewWorkflowHandler(
 		serviceConfig,
@@ -634,6 +637,7 @@ func HandlerProvider(
 		timeSource,
 		membershipMonitor,
 		healthInterceptor,
+		scheduleSpecBuilder,
 	)
 	return wfHandler
 }

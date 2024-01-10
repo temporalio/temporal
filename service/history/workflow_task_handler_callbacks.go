@@ -606,6 +606,23 @@ func (handler *workflowTaskHandlerCallbacksImpl) handleWorkflowTaskCompleted(
 			return nil, err
 		}
 
+		if !ms.IsWorkflowExecutionRunning() {
+			// If workflow competed itself with one of the completion command, cancel all incomplete updates in the registry.
+			// Because all unprocessed updates were already rejected, incomplete updates in the registry are:
+			// - updates that were received while this WT was running,
+			// - updates that were accepted but not completed by this WT.
+			err = weContext.UpdateRegistry(ctx).CancelIncomplete(ctx, update.CancelReasonWorkflowCompleted, workflow.WithEffects(&effects, ms))
+			if err != nil {
+				// Just log error here because it is more important to complete workflow than canceling updates.
+				handler.logger.Warn("Unable to cancel incomplete updates while completing the workflow.",
+					tag.WorkflowNamespaceID(weContext.GetWorkflowKey().NamespaceID),
+					tag.WorkflowID(weContext.GetWorkflowKey().WorkflowID),
+					tag.WorkflowRunID(weContext.GetWorkflowKey().RunID),
+					tag.WorkflowEventID(currentWorkflowTask.ScheduledEventID),
+					tag.Error(err))
+			}
+		}
+
 		// set the vars used by following logic
 		// further refactor should also clean up the vars used below
 		wtFailedCause = workflowTaskHandler.workflowTaskFailedCause

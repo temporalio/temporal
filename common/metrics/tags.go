@@ -25,7 +25,6 @@
 package metrics
 
 import (
-	"fmt"
 	"strconv"
 	"strings"
 
@@ -64,7 +63,6 @@ const (
 	totalMetricSuffix = "_total"
 	tagExcludedValue  = "_tag_excluded_"
 
-	getType     = "%T"
 	errorPrefix = "*"
 )
 
@@ -256,7 +254,7 @@ func VersionedTag(versioned bool) Tag {
 }
 
 func ServiceErrorTypeTag(err error) Tag {
-	return &tagImpl{key: ErrorTypeTagName, value: strings.TrimPrefix(fmt.Sprintf(getType, err), errorPrefix)}
+	return &tagImpl{key: ErrorTypeTagName, value: strings.TrimPrefix(errorType(err), errorPrefix)}
 }
 
 func NexusOutcomeTag(outcome string) Tag {

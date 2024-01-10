@@ -114,7 +114,11 @@ type (
 		logger  sdklog.Logger
 		metrics sdkclient.MetricsHandler
 
-		cspec *CompiledSpec
+		// SpecBuilder is technically a non-deterministic dependency, but it's safe as
+		// long as we only call methods on cspec inside of SideEffect (or in a query
+		// without modifying state).
+		specBuilder *SpecBuilder
+		cspec       *CompiledSpec
 
 		tweakables tweakablePolicies
 
@@ -217,12 +221,17 @@ var (
 )
 
 func SchedulerWorkflow(ctx workflow.Context, args *schedspb.StartScheduleArgs) error {
+	return schedulerWorkflowWithSpecBuilder(ctx, args, NewSpecBuilder())
+}
+
+func schedulerWorkflowWithSpecBuilder(ctx workflow.Context, args *schedspb.StartScheduleArgs, specBuilder *SpecBuilder) error {
 	scheduler := &scheduler{
 		StartScheduleArgs: args,
 		ctx:               ctx,
 		a:                 nil,
 		logger:            sdklog.With(workflow.GetLogger(ctx), "wf-namespace", args.State.Namespace, "schedule-id", args.State.ScheduleId),
 		metrics:           workflow.GetMetricsHandler(ctx).WithTags(map[string]string{"namespace": args.State.Namespace}),
+		specBuilder:       specBuilder,
 	}
 	return scheduler.run()
 }
@@ -348,7 +357,7 @@ func (s *scheduler) compileSpec() {
 	s.nextTimeCacheV1 = nil
 	s.nextTimeCacheV2.clear()
 
-	cspec, err := NewCompiledSpec(s.Schedule.Spec)
+	cspec, err := s.specBuilder.NewCompiledSpec(s.Schedule.Spec)
 	if err != nil {
 		if s.logger != nil {
 			s.logger.Error("Invalid schedule", "error", err)
@@ -383,7 +392,7 @@ func (s *scheduler) now() time.Time {
 }
 
 func (s *scheduler) processPatch(patch *schedpb.SchedulePatch) {
-	s.logger.Debug("Schedule patch", "patch", patch.String())
+	s.logger.Debug("Schedule patch")
 
 	if trigger := patch.TriggerImmediately; trigger != nil {
 		now := s.now()
@@ -717,7 +726,7 @@ func (s *scheduler) processUpdate(req *schedspb.FullUpdateRequest) {
 		return
 	}
 
-	s.logger.Debug("Schedule update", "new-schedule", req.Schedule.String())
+	s.logger.Debug("Schedule update")
 
 	s.Schedule.Spec = req.Schedule.GetSpec()
 	s.Schedule.Action = req.Schedule.GetAction()
@@ -1274,12 +1283,13 @@ func panicIfErr(err error) {
 	}
 }
 
-func GetListInfoFromStartArgs(args *schedspb.StartScheduleArgs, now time.Time) *schedpb.ScheduleListInfo {
+func GetListInfoFromStartArgs(args *schedspb.StartScheduleArgs, now time.Time, specBuilder *SpecBuilder) *schedpb.ScheduleListInfo {
 	// Create a scheduler outside of workflow context with just the fields we need to call
 	// getListInfo. Note that this does not take into account InitialPatch.
 	s := &scheduler{
 		StartScheduleArgs: args,
 		tweakables:        currentTweakablePolicies,
+		specBuilder:       specBuilder,
 	}
 	s.ensureFields()
 	s.compileSpec()

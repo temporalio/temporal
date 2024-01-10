@@ -39,6 +39,7 @@ import (
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/service/history/configs"
+	"go.temporal.io/server/service/history/replication/eventhandler"
 	"go.temporal.io/server/service/history/tests"
 
 	"go.temporal.io/server/api/historyservice/v1"
@@ -67,7 +68,7 @@ type (
 		shardController         *shard.MockController
 		namespaceCache          *namespace.MockRegistry
 		ndcHistoryResender      *xdc.MockNDCHistoryResender
-		remoteHistoryFetcher    *MockHistoryPaginatedFetcher
+		remoteHistoryFetcher    *eventhandler.MockHistoryPaginatedFetcher
 		metricsHandler          metrics.Handler
 		logger                  log.Logger
 		sourceCluster           string
@@ -103,7 +104,7 @@ func (s *executableTaskSuite) SetupTest() {
 	s.sourceCluster = "some cluster"
 	s.eagerNamespaceRefresher = NewMockEagerNamespaceRefresher(s.controller)
 	s.config = tests.NewDynamicConfig()
-	s.remoteHistoryFetcher = NewMockHistoryPaginatedFetcher(s.controller)
+	s.remoteHistoryFetcher = eventhandler.NewMockHistoryPaginatedFetcher(s.controller)
 
 	creationTime := time.Unix(0, rand.Int63())
 	receivedTime := creationTime.Add(time.Duration(rand.Int63()))
@@ -118,9 +119,7 @@ func (s *executableTaskSuite) SetupTest() {
 			MetricsHandler:          s.metricsHandler,
 			Logger:                  s.logger,
 			EagerNamespaceRefresher: s.eagerNamespaceRefresher,
-
 			DLQWriter:               NoopDLQWriter{},
-			HistoryPaginatedFetcher: s.remoteHistoryFetcher,
 		},
 		rand.Int63(),
 		"metrics-tag",
