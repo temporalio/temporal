@@ -134,7 +134,7 @@ func (t *fakeTimer) Reset(d time.Duration) bool {
 		d = 0
 	}
 
-	wasDone := t.done
+	wasActive := !t.done
 	t.deadline = t.timeSource.now.Add(d)
 	if t.done {
 		t.done = false
@@ -142,7 +142,7 @@ func (t *fakeTimer) Reset(d time.Duration) bool {
 		t.timeSource.timers = append(t.timeSource.timers, t)
 	}
 	t.timeSource.fireTimers()
-	return !wasDone
+	return wasActive
 }
 
 // Stop the timer. Returns true if the timer was active.
