@@ -30,7 +30,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/brianvoe/gofakeit/v6"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	enumspb "go.temporal.io/api/enums/v1"
@@ -41,6 +40,7 @@ import (
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/payloads"
+	"go.temporal.io/server/common/testing/fakedata"
 	"go.temporal.io/server/common/testing/protorequire"
 )
 
@@ -184,7 +184,7 @@ func (s *temporalSerializerSuite) TestSerializeShardInfo_EmptyMapSlice() {
 
 func (s *temporalSerializerSuite) TestSerializeShardInfo_Random() {
 	var shardInfo persistencespb.ShardInfo
-	err := gofakeit.Struct(&shardInfo)
+	err := fakedata.FakeStruct(&shardInfo)
 	s.NoError(err)
 
 	blob, err := s.serializer.ShardInfoToBlob(&shardInfo, enumspb.ENCODING_TYPE_PROTO3)
