@@ -29,8 +29,10 @@ package sdk
 import (
 	"context"
 	"crypto/tls"
+	"errors"
 	"sync"
 
+	"go.temporal.io/api/serviceerror"
 	sdkclient "go.temporal.io/sdk/client"
 	sdklog "go.temporal.io/sdk/log"
 	sdkworker "go.temporal.io/sdk/worker"
@@ -123,7 +125,11 @@ func (f *clientFactory) GetSystemClient() sdkclient.Client {
 			}
 			f.systemSdkClient = sdkClient
 			return nil
-		}, common.CreateSdkClientFactoryRetryPolicy(), common.IsContextDeadlineExceededErr)
+		}, common.CreateSdkClientFactoryRetryPolicy(), func(err error) bool {
+			// note err is wrapped by sdk
+			var unavail *serviceerror.Unavailable
+			return common.IsContextDeadlineExceededErr(err) || errors.As(err, &unavail)
+		})
 		if err != nil {
 			f.logger.Fatal("error creating sdk client", tag.Error(err))
 		}

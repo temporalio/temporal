@@ -73,8 +73,10 @@ import (
 	"go.temporal.io/server/common/primitives"
 	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/common/resourcetest"
+	"go.temporal.io/server/common/rpc/interceptor"
 	"go.temporal.io/server/common/searchattribute"
 	"go.temporal.io/server/service/worker/batcher"
+	"go.temporal.io/server/service/worker/scheduler"
 )
 
 const (
@@ -165,6 +167,8 @@ func (s *workflowHandlerSuite) TearDownTest() {
 
 func (s *workflowHandlerSuite) getWorkflowHandler(config *Config) *WorkflowHandler {
 	s.mockVisibilityMgr.EXPECT().GetIndexName().Return(esIndexName).AnyTimes()
+	healthInterceptor := interceptor.NewHealthInterceptor()
+	healthInterceptor.SetHealthy(true)
 	return NewWorkflowHandler(
 		config,
 		s.mockProducer,
@@ -186,6 +190,8 @@ func (s *workflowHandlerSuite) getWorkflowHandler(config *Config) *WorkflowHandl
 		health.NewServer(),
 		clock.NewRealTimeSource(),
 		s.mockResource.GetMembershipMonitor(),
+		healthInterceptor,
+		scheduler.NewSpecBuilder(),
 	)
 }
 

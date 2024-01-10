@@ -32,9 +32,9 @@ import (
 	"github.com/stretchr/testify/assert"
 	enumspb "go.temporal.io/api/enums/v1"
 
-	"go.temporal.io/server/common/convert"
 	"go.temporal.io/server/common/persistence/sql/sqlplugin"
 	"go.temporal.io/server/common/searchattribute"
+	"go.temporal.io/server/common/util"
 )
 
 var startTimeFrom = time.Now().Add(-time.Hour)
@@ -44,12 +44,12 @@ var startTimeRangeFilter = fmt.Sprintf(`StartTime BETWEEN "%v" AND "%v"`, startT
 var supportedQuery = map[string]*sqlplugin.VisibilitySelectFilter{
 	"":                   {},
 	startTimeRangeFilter: {MinTime: &startTimeFrom, MaxTime: &startTimeTo},
-	`WorkflowId = "abc"`: {WorkflowID: convert.StringPtr("abc")},
-	`WorkflowId = "abc" AND ` + startTimeRangeFilter:          {WorkflowID: convert.StringPtr("abc"), MinTime: &startTimeFrom, MaxTime: &startTimeTo},
-	startTimeRangeFilter + ` AND WorkflowId = "abc"`:          {WorkflowID: convert.StringPtr("abc"), MinTime: &startTimeFrom, MaxTime: &startTimeTo},
-	`WorkflowType = "abc"`:                                    {WorkflowTypeName: convert.StringPtr("abc")},
-	`WorkflowType = "abc" AND ` + startTimeRangeFilter:        {WorkflowTypeName: convert.StringPtr("abc"), MinTime: &startTimeFrom, MaxTime: &startTimeTo},
-	startTimeRangeFilter + ` AND WorkflowType = "abc"`:        {WorkflowTypeName: convert.StringPtr("abc"), MinTime: &startTimeFrom, MaxTime: &startTimeTo},
+	`WorkflowId = "abc"`: {WorkflowID: util.Ptr("abc")},
+	`WorkflowId = "abc" AND ` + startTimeRangeFilter:          {WorkflowID: util.Ptr("abc"), MinTime: &startTimeFrom, MaxTime: &startTimeTo},
+	startTimeRangeFilter + ` AND WorkflowId = "abc"`:          {WorkflowID: util.Ptr("abc"), MinTime: &startTimeFrom, MaxTime: &startTimeTo},
+	`WorkflowType = "abc"`:                                    {WorkflowTypeName: util.Ptr("abc")},
+	`WorkflowType = "abc" AND ` + startTimeRangeFilter:        {WorkflowTypeName: util.Ptr("abc"), MinTime: &startTimeFrom, MaxTime: &startTimeTo},
+	startTimeRangeFilter + ` AND WorkflowType = "abc"`:        {WorkflowTypeName: util.Ptr("abc"), MinTime: &startTimeFrom, MaxTime: &startTimeTo},
 	`ExecutionStatus = "Running"`:                             {Status: int32(enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING)},
 	`ExecutionStatus = "Running" AND ` + startTimeRangeFilter: {Status: int32(enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING), MinTime: &startTimeFrom, MaxTime: &startTimeTo},
 	startTimeRangeFilter + ` AND ExecutionStatus = "Running"`: {Status: int32(enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING), MinTime: &startTimeFrom, MaxTime: &startTimeTo},

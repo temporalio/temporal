@@ -22,7 +22,7 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-package replication
+package eventhandler
 
 import (
 	"context"
@@ -46,10 +46,11 @@ const (
 	resendContextTimeout = 30 * time.Second
 )
 
-//go:generate mockgen -copyright_file ../../../LICENSE -package $GOPACKAGE -source $GOFILE -destination remote_history_paginated_fetcher_mock.go
+//go:generate mockgen -copyright_file ../../../../LICENSE -package $GOPACKAGE -source $GOFILE -destination remote_history_paginated_fetcher_mock.go
 
 type (
 	// HistoryPaginatedFetcher is the interface for fetching history from remote cluster
+	// Start and End event ID is inclusive.
 	HistoryPaginatedFetcher interface {
 		GetSingleWorkflowHistoryPaginatedIterator(
 			ctx context.Context,
@@ -61,7 +62,7 @@ type (
 			startEventVersion int64,
 			endEventID int64,
 			endEventVersion int64,
-		) collection.Iterator[historyBatch]
+		) collection.Iterator[HistoryBatch]
 	}
 
 	HistoryPaginatedFetcherImpl struct {
@@ -72,7 +73,7 @@ type (
 		logger               log.Logger
 	}
 
-	historyBatch struct {
+	HistoryBatch struct {
 		VersionHistory *historyspb.VersionHistory
 		RawEventBatch  *commonpb.DataBlob
 	}
@@ -89,7 +90,6 @@ func NewHistoryPaginatedFetcher(
 	rereplicationTimeout dynamicconfig.DurationPropertyFnWithNamespaceIDFilter,
 	logger log.Logger,
 ) *HistoryPaginatedFetcherImpl {
-
 	return &HistoryPaginatedFetcherImpl{
 		namespaceRegistry:    namespaceRegistry,
 		clientBean:           clientBean,
@@ -109,7 +109,7 @@ func (n *HistoryPaginatedFetcherImpl) GetSingleWorkflowHistoryPaginatedIterator(
 	startEventVersion int64,
 	endEventID int64,
 	endEventVersion int64,
-) collection.Iterator[historyBatch] {
+) collection.Iterator[HistoryBatch] {
 
 	resendCtx := context.Background()
 	var cancel context.CancelFunc
@@ -145,9 +145,9 @@ func (n *HistoryPaginatedFetcherImpl) getPaginationFn(
 	startEventVersion int64,
 	endEventID int64,
 	endEventVersion int64,
-) collection.PaginationFn[historyBatch] {
+) collection.PaginationFn[HistoryBatch] {
 
-	return func(paginationToken []byte) ([]historyBatch, []byte, error) {
+	return func(paginationToken []byte) ([]HistoryBatch, []byte, error) {
 
 		response, err := n.getHistory(
 			ctx,
@@ -165,10 +165,10 @@ func (n *HistoryPaginatedFetcherImpl) getPaginationFn(
 		if err != nil {
 			return nil, nil, err
 		}
-		batches := make([]historyBatch, 0, len(response.GetHistoryBatches()))
+		batches := make([]HistoryBatch, 0, len(response.GetHistoryBatches()))
 		versionHistory := response.GetVersionHistory()
 		for _, history := range response.GetHistoryBatches() {
-			batch := historyBatch{
+			batch := HistoryBatch{
 				VersionHistory: versionHistory,
 				RawEventBatch:  history,
 			}
@@ -190,7 +190,7 @@ func (n *HistoryPaginatedFetcherImpl) getHistory(
 	endEventVersion int64,
 	token []byte,
 	pageSize int32,
-) (*adminservice.GetWorkflowExecutionRawHistoryV2Response, error) {
+) (*adminservice.GetWorkflowExecutionRawHistoryResponse, error) {
 
 	logger := log.With(n.logger, tag.WorkflowRunID(runID))
 
@@ -202,7 +202,7 @@ func (n *HistoryPaginatedFetcherImpl) getHistory(
 		return nil, err
 	}
 
-	response, err := adminClient.GetWorkflowExecutionRawHistoryV2(ctx, &adminservice.GetWorkflowExecutionRawHistoryV2Request{
+	response, err := adminClient.GetWorkflowExecutionRawHistory(ctx, &adminservice.GetWorkflowExecutionRawHistoryRequest{
 		NamespaceId: namespaceID.String(),
 		Execution: &commonpb.WorkflowExecution{
 			WorkflowId: workflowID,

@@ -102,8 +102,8 @@ func (s *StreamSenderImpl) Start() {
 		return
 	}
 
-	go func() { _ = s.sendEventLoop() }()
-	go func() { _ = s.recvEventLoop() }()
+	go WrapEventLoop(s.sendEventLoop, s.Stop, s.logger, s.metrics, s.clientShardKey, s.serverShardKey, streamReceiverMonitorInterval)
+	go WrapEventLoop(s.recvEventLoop, s.Stop, s.logger, s.metrics, s.clientShardKey, s.serverShardKey, streamReceiverMonitorInterval)
 
 	s.logger.Info("StreamSender started.")
 }

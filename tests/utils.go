@@ -22,16 +22,36 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-package interceptor
+package tests
 
-import "strings"
+import (
+	historypb "go.temporal.io/api/history/v1"
+	historyspb "go.temporal.io/server/api/history/v1"
+	"go.temporal.io/server/common/persistence/versionhistory"
+)
 
-func SplitMethodName(
-	fullMethodName string,
-) (string, string) {
-	fullMethodName = strings.TrimPrefix(fullMethodName, "/") // remove leading slash
-	if i := strings.Index(fullMethodName, "/"); i >= 0 {
-		return fullMethodName[:i], fullMethodName[i+1:]
+func EventBatchesToVersionHistory(
+	versionHistory *historyspb.VersionHistory,
+	eventBatches []*historypb.History,
+) (*historyspb.VersionHistory, error) {
+
+	// TODO temporary code to generate version history
+	//  we should generate version as part of modeled based testing
+	if versionHistory == nil {
+		versionHistory = versionhistory.NewVersionHistory(nil, nil)
 	}
-	return "unknown", "unknown"
+	for _, batch := range eventBatches {
+		for _, event := range batch.Events {
+			err := versionhistory.AddOrUpdateVersionHistoryItem(versionHistory,
+				versionhistory.NewVersionHistoryItem(
+					event.GetEventId(),
+					event.GetVersion(),
+				))
+			if err != nil {
+				return nil, err
+			}
+		}
+	}
+
+	return versionHistory, nil
 }

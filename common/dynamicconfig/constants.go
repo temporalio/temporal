@@ -437,7 +437,8 @@ const (
 	MatchingLoadUserData = "matching.loadUserData"
 	// MatchingUpdateAckInterval is the interval for update ack
 	MatchingUpdateAckInterval = "matching.updateAckInterval"
-	// MatchingMaxTaskQueueIdleTime is the time after which an idle task queue will be unloaded
+	// MatchingMaxTaskQueueIdleTime is the time after which an idle task queue will be unloaded.
+	// Note: this should be greater than matching.longPollExpirationInterval and matching.getUserDataLongPollTimeout.
 	MatchingMaxTaskQueueIdleTime = "matching.maxTaskQueueIdleTime"
 	// MatchingOutstandingTaskAppendsThreshold is the threshold for outstanding task appends
 	MatchingOutstandingTaskAppendsThreshold = "matching.outstandingTaskAppendsThreshold"

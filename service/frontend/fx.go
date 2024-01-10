@@ -66,12 +66,14 @@ import (
 	"go.temporal.io/server/service"
 	"go.temporal.io/server/service/frontend/configs"
 	"go.temporal.io/server/service/history/tasks"
+	"go.temporal.io/server/service/worker/scheduler"
 )
 
 type FEReplicatorNamespaceReplicationQueue persistence.NamespaceReplicationQueue
 
 var Module = fx.Options(
 	resource.Module,
+	scheduler.Module,
 	fx.Provide(dynamicconfig.NewCollection),
 	fx.Provide(ConfigProvider),
 	fx.Provide(NamespaceLogInterceptorProvider),
@@ -79,6 +81,7 @@ var Module = fx.Options(
 	fx.Provide(TelemetryInterceptorProvider),
 	fx.Provide(RetryableInterceptorProvider),
 	fx.Provide(RateLimitInterceptorProvider),
+	fx.Provide(interceptor.NewHealthInterceptor),
 	fx.Provide(NamespaceCountLimitInterceptorProvider),
 	fx.Provide(NamespaceValidatorInterceptorProvider),
 	fx.Provide(NamespaceRateLimitInterceptorProvider),
@@ -155,6 +158,7 @@ func GrpcServerOptionsProvider(
 	redirectionInterceptor *RedirectionInterceptor,
 	telemetryInterceptor *interceptor.TelemetryInterceptor,
 	retryableInterceptor *interceptor.RetryableInterceptor,
+	healthInterceptor *interceptor.HealthInterceptor,
 	rateLimitInterceptor *interceptor.RateLimitInterceptor,
 	traceInterceptor telemetry.ServerTraceInterceptor,
 	sdkVersionInterceptor *interceptor.SDKVersionInterceptor,
@@ -207,6 +211,7 @@ func GrpcServerOptionsProvider(
 			cfg.Global.Authorization.AuthHeaderName,
 			cfg.Global.Authorization.AuthExtraHeaderName,
 		),
+		healthInterceptor.Intercept,
 		namespaceValidatorInterceptor.StateValidationIntercept,
 		namespaceCountLimiterInterceptor.Intercept,
 		namespaceRateLimiterInterceptor.Intercept,
@@ -595,6 +600,8 @@ func HandlerProvider(
 	archivalMetadata archiver.ArchivalMetadata,
 	healthServer *health.Server,
 	membershipMonitor membership.Monitor,
+	healthInterceptor *interceptor.HealthInterceptor,
+	scheduleSpecBuilder *scheduler.SpecBuilder,
 ) Handler {
 	wfHandler := NewWorkflowHandler(
 		serviceConfig,
@@ -617,6 +624,8 @@ func HandlerProvider(
 		healthServer,
 		timeSource,
 		membershipMonitor,
+		healthInterceptor,
+		scheduleSpecBuilder,
 	)
 	return wfHandler
 }
