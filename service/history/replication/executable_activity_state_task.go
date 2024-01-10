@@ -242,7 +242,7 @@ func (e *ExecutableActivityStateTask) MarkPoisonPill() error {
 }
 
 func (e *ExecutableActivityStateTask) BatchWith(incomingTask BatchableTask) (TrackableExecutableTask, bool) {
-	if !e.batchable {
+	if !e.batchable || !incomingTask.CanBatch() {
 		return nil, false
 	}
 	e.batchLock.Lock()
@@ -251,7 +251,7 @@ func (e *ExecutableActivityStateTask) BatchWith(incomingTask BatchableTask) (Tra
 	if !e.batchable || !incomingTask.CanBatch() {
 		return nil, false
 	}
-
+	
 	incomingActivityTask, err := e.validateIncomingBatchTask(incomingTask)
 	if err != nil {
 		return nil, false
