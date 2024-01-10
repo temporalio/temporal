@@ -159,7 +159,11 @@ func (s *ReplicationMigrationBackTestSuite) SetupTest() {
 	s.ProtoAssertions = protorequire.New(s.T())
 }
 
-func (s *ReplicationMigrationBackTestSuite) TestHistoryReplicationTaskAndThenRetrieve() {
+// Test scenario: simulate workflowId that has 2 different runs and workflows are replicating into passive cluster.
+// The workflow history events' version is passive cluster. Without the support of migration back,
+// workflow replication will fail. While with support of migration back, workflow replication will succeed and
+// both run will exist in passive cluster and in a completed status.
+func (s *ReplicationMigrationBackTestSuite) TestHistoryReplication_MigrationBackCase() {
 	workflowId := "ndc-test-migration-back"
 	version := int64(2) // this version has to point to passive cluster to trigger migration back case
 	runId1 := uuid.New()
@@ -171,6 +175,7 @@ func (s *ReplicationMigrationBackTestSuite) TestHistoryReplicationTaskAndThenRet
 		nil,
 		[]*historypb.History{{Events: run1Slices[0]}, {Events: run1Slices[1]}, {Events: run1Slices[2]}},
 	)
+	// when handle migration back case, passive will need to fetch the history from active cluster
 	s.mockActiveGetRawHistoryApiCalls(workflowId, runId1, run1Slices, history, version)
 	s.mockActiveGetRawHistoryApiCalls(workflowId, runId2, run2Slices, history, version)
 
