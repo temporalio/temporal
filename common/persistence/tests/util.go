@@ -28,7 +28,6 @@ import (
 	"math/rand"
 	"time"
 
-	"github.com/brianvoe/gofakeit/v6"
 	"github.com/google/uuid"
 	commonpb "go.temporal.io/api/common/v1"
 	historypb "go.temporal.io/api/history/v1"
@@ -43,6 +42,7 @@ import (
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	p "go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/shuffle"
+	"go.temporal.io/server/common/testing/fakedata"
 	"go.temporal.io/server/service/history/tasks"
 )
 
@@ -51,7 +51,7 @@ func RandomShardInfo(
 	rangeID int64,
 ) *persistencespb.ShardInfo {
 	var shardInfo persistencespb.ShardInfo
-	_ = gofakeit.Struct(&shardInfo)
+	_ = fakedata.FakeStruct(&shardInfo)
 	shardInfo.ShardId = shardID
 	shardInfo.RangeId = rangeID
 	return &shardInfo
@@ -154,7 +154,7 @@ func RandomExecutionInfo(
 	lastWriteVersion int64,
 ) *persistencespb.WorkflowExecutionInfo {
 	var executionInfo persistencespb.WorkflowExecutionInfo
-	_ = gofakeit.Struct(&executionInfo)
+	_ = fakedata.FakeStruct(&executionInfo)
 	executionInfo.NamespaceId = namespaceID
 	executionInfo.WorkflowId = workflowID
 	executionInfo.VersionHistories = RandomVersionHistory(lastWriteVersion)
@@ -205,52 +205,38 @@ func RandomInt64SignalInfoMap() map[int64]*persistencespb.SignalInfo {
 }
 
 func RandomActivityInfo() *persistencespb.ActivityInfo {
-	// cannot use gofakeit due to RetryLastFailure is of type Failure
-	// and Failure can contain another Failure -> stack overflow
-	return &persistencespb.ActivityInfo{
-		Version:                rand.Int63(),
-		ScheduledEventBatchId:  rand.Int63(),
-		ScheduledTime:          RandomTime(),
-		StartedEventId:         rand.Int63(),
-		StartedTime:            RandomTime(),
-		ActivityId:             uuid.New().String(),
-		RequestId:              uuid.New().String(),
-		ScheduleToStartTimeout: RandomDuration(),
-		ScheduleToCloseTimeout: RandomDuration(),
-		StartToCloseTimeout:    RandomDuration(),
-		HeartbeatTimeout:       RandomDuration(),
-
-		// other fields omitted, above should be enough for tests
-	}
+	var activityInfo persistencespb.ActivityInfo
+	_ = fakedata.FakeStruct(&activityInfo)
+	return &activityInfo
 }
 
 func RandomTimerInfo() *persistencespb.TimerInfo {
 	var timerInfo persistencespb.TimerInfo
-	_ = gofakeit.Struct(&timerInfo)
+	_ = fakedata.FakeStruct(&timerInfo)
 	return &timerInfo
 }
 
 func RandomChildExecutionInfo() *persistencespb.ChildExecutionInfo {
 	var childExecutionInfo persistencespb.ChildExecutionInfo
-	_ = gofakeit.Struct(&childExecutionInfo)
+	_ = fakedata.FakeStruct(&childExecutionInfo)
 	return &childExecutionInfo
 }
 
 func RandomRequestCancelInfo() *persistencespb.RequestCancelInfo {
 	var requestCancelInfo persistencespb.RequestCancelInfo
-	_ = gofakeit.Struct(&requestCancelInfo)
+	_ = fakedata.FakeStruct(&requestCancelInfo)
 	return &requestCancelInfo
 }
 
 func RandomSignalInfo() *persistencespb.SignalInfo {
 	var signalInfo persistencespb.SignalInfo
-	_ = gofakeit.Struct(&signalInfo)
+	_ = fakedata.FakeStruct(&signalInfo)
 	return &signalInfo
 }
 
 func RandomHistoryEvent() *historypb.HistoryEvent {
 	var historyEvent historypb.HistoryEvent
-	_ = gofakeit.Struct(&historyEvent)
+	_ = fakedata.FakeStruct(&historyEvent)
 	return &historyEvent
 }
 
@@ -273,7 +259,7 @@ func RandomStringPayloadMap() map[string]*commonpb.Payload {
 
 func RandomPayload() *commonpb.Payload {
 	var payload commonpb.Payload
-	_ = gofakeit.Struct(&payload)
+	_ = fakedata.FakeStruct(&payload)
 	return &payload
 }
 

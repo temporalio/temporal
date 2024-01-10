@@ -166,7 +166,10 @@ func parseSystemSearchAttributeValues(name string, value any) (any, error) {
 		}
 	case searchattribute.ExecutionStatus:
 		if status, isNumber := value.(int64); isNumber {
-			value = enumspb.WorkflowExecutionStatus_name[int32(status)]
+			if _, ok := enumspb.WorkflowExecutionStatus_name[int32(status)]; !ok {
+				return nil, query.NewConverterError("invalid value for search attribute %s: %v", name, value)
+			}
+			value = enumspb.WorkflowExecutionStatus(status).String()
 		}
 	case searchattribute.ExecutionDuration:
 		if durationStr, isString := value.(string); isString {
