@@ -862,6 +862,8 @@ const (
 	EnableEagerNamespaceRefresher = "history.EnableEagerNamespaceRefresher"
 	// EnableReplicationTaskBatching is a feature flag for batching replicate history event task
 	EnableReplicationTaskBatching = "history.EnableReplicationTaskBatching"
+	// EnableReplicateLocalGeneratedEvents is a feature flag for replicating locally generated events
+	EnableReplicateLocalGeneratedEvents = "history.EnableReplicateLocalGeneratedEvents"
 
 	// keys for worker
 
