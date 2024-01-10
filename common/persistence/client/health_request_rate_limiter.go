@@ -48,8 +48,8 @@ const (
 type (
 	HealthRequestRateLimiterImpl struct {
 		enabled    atomic.Bool
-		params     DynamicRateLimitingParams  // dynamic config map
-		curOptions dynamicRateLimitingOptions // current dynamic config values (updated on refresh)
+		params     DynamicRateLimitingParams                  // dynamic config map
+		curOptions atomic.Pointer[dynamicRateLimitingOptions] // current dynamic config values (updated on refresh)
 
 		rateLimiter   *quotas.RateLimiterImpl
 		healthSignals persistence.HealthSignalAggregator
@@ -59,7 +59,7 @@ type (
 		rateFn           quotas.RateFn
 		rateToBurstRatio float64
 
-		curRateMultiplier float64
+		curRateMultiplier atomic.Pointer[float64]
 
 		metricsHandler metrics.Handler
 		logger         log.Logger
@@ -95,17 +95,19 @@ func NewHealthRequestRateLimiterImpl(
 	logger log.Logger,
 ) *HealthRequestRateLimiterImpl {
 	limiter := &HealthRequestRateLimiterImpl{
-		enabled:           atomic.Bool{},
-		rateLimiter:       quotas.NewRateLimiter(rateFn(), int(DefaultRateBurstRatio*rateFn())),
-		healthSignals:     healthSignals,
-		rateFn:            rateFn,
-		params:            params,
-		refreshTimer:      time.NewTicker(DefaultRefreshInterval),
-		rateToBurstRatio:  DefaultRateBurstRatio,
-		curRateMultiplier: DefaultInitialRateMultiplier,
-		metricsHandler:    metricsHandler,
-		logger:            logger,
+		enabled:          atomic.Bool{},
+		rateLimiter:      quotas.NewRateLimiter(rateFn(), int(DefaultRateBurstRatio*rateFn())),
+		healthSignals:    healthSignals,
+		rateFn:           rateFn,
+		params:           params,
+		refreshTimer:     time.NewTicker(DefaultRefreshInterval),
+		rateToBurstRatio: DefaultRateBurstRatio,
+		metricsHandler:   metricsHandler,
+		logger:           logger,
 	}
+	curRateMultiplier := new(float64)
+	*curRateMultiplier = DefaultInitialRateMultiplier
+	limiter.curRateMultiplier.Store(curRateMultiplier)
 	limiter.refreshDynamicParams()
 	return limiter
 }
@@ -149,19 +151,34 @@ func (rl *HealthRequestRateLimiterImpl) maybeRefresh() {
 }
 
 func (rl *HealthRequestRateLimiterImpl) refreshRate() {
+	curOptions := *rl.curOptions.Load()
+	curRateMultiplier := *rl.curRateMultiplier.Load()
 	if rl.latencyThresholdExceeded() || rl.errorThresholdExceeded() {
 		// limit exceeded, do backoff
-		rl.curRateMultiplier = math.Max(rl.curOptions.RateMultiMin, rl.curRateMultiplier-rl.curOptions.RateBackoffStepSize)
-		rl.metricsHandler.Gauge(metrics.DynamicRateLimiterMultiplier.Name()).Record(rl.curRateMultiplier)
-		rl.logger.Info("Health threshold exceeded, reducing rate limit.", tag.NewFloat64("newMulti", rl.curRateMultiplier), tag.NewFloat64("newRate", rl.rateLimiter.Rate()), tag.NewFloat64("latencyAvg", rl.healthSignals.AverageLatency()), tag.NewFloat64("errorRatio", rl.healthSignals.ErrorRatio()))
-	} else if rl.curRateMultiplier < rl.curOptions.RateMultiMax {
+		curRateMultiplier = math.Max(curOptions.RateMultiMin, curRateMultiplier-curOptions.RateBackoffStepSize)
+		rl.metricsHandler.Gauge(metrics.DynamicRateLimiterMultiplier.Name()).Record(curRateMultiplier)
+		rl.logger.Info(
+			"Health threshold exceeded, reducing rate limit.",
+			tag.NewFloat64("newMulti", curRateMultiplier),
+			tag.NewFloat64("newRate", rl.rateLimiter.Rate()),
+			tag.NewFloat64("latencyAvg", rl.healthSignals.AverageLatency()),
+			tag.NewFloat64("errorRatio", rl.healthSignals.ErrorRatio()),
+		)
+	} else if curRateMultiplier < curOptions.RateMultiMax {
 		// already doing backoff and under thresholds, increase limit
-		rl.curRateMultiplier = math.Min(rl.curOptions.RateMultiMax, rl.curRateMultiplier+rl.curOptions.RateIncreaseStepSize)
-		rl.metricsHandler.Gauge(metrics.DynamicRateLimiterMultiplier.Name()).Record(rl.curRateMultiplier)
-		rl.logger.Info("System healthy, increasing rate limit.", tag.NewFloat64("newMulti", rl.curRateMultiplier), tag.NewFloat64("newRate", rl.rateLimiter.Rate()), tag.NewFloat64("latencyAvg", rl.healthSignals.AverageLatency()), tag.NewFloat64("errorRatio", rl.healthSignals.ErrorRatio()))
+		curRateMultiplier = math.Min(curOptions.RateMultiMax, curRateMultiplier+curOptions.RateIncreaseStepSize)
+		rl.metricsHandler.Gauge(metrics.DynamicRateLimiterMultiplier.Name()).Record(curRateMultiplier)
+		rl.logger.Info(
+			"System healthy, increasing rate limit.",
+			tag.NewFloat64("newMulti", curRateMultiplier),
+			tag.NewFloat64("newRate", rl.rateLimiter.Rate()),
+			tag.NewFloat64("latencyAvg", rl.healthSignals.AverageLatency()),
+			tag.NewFloat64("errorRatio", rl.healthSignals.ErrorRatio()),
+		)
 	}
+	rl.curRateMultiplier.Store(&curRateMultiplier)
 	// Always set rate to pickup changes to underlying rate limit dynamic config
-	rl.rateLimiter.SetRPS(rl.curRateMultiplier * rl.rateFn())
+	rl.rateLimiter.SetRPS(curRateMultiplier * rl.rateFn())
 	rl.rateLimiter.SetBurst(int(rl.rateToBurstRatio * rl.rateFn()))
 }
 
@@ -182,12 +199,13 @@ func (rl *HealthRequestRateLimiterImpl) refreshDynamicParams() {
 	}
 
 	rl.enabled.Store(options.Enabled)
-	rl.curOptions = options
+	rl.curOptions.Store(&options)
 }
 
 func (rl *HealthRequestRateLimiterImpl) updateRefreshTimer() {
-	if len(rl.curOptions.RefreshInterval) > 0 {
-		if refreshDuration, err := timestamp.ParseDurationDefaultSeconds(rl.curOptions.RefreshInterval); err != nil {
+	curOptions := *rl.curOptions.Load()
+	if len(curOptions.RefreshInterval) > 0 {
+		if refreshDuration, err := timestamp.ParseDurationDefaultSeconds(curOptions.RefreshInterval); err != nil {
 			rl.logger.Warn("Error parsing dynamic rate limit refreshInterval timestamp. Using previous value.", tag.Error(err))
 		} else {
 			rl.refreshTimer.Reset(refreshDuration)
@@ -196,9 +214,11 @@ func (rl *HealthRequestRateLimiterImpl) updateRefreshTimer() {
 }
 
 func (rl *HealthRequestRateLimiterImpl) latencyThresholdExceeded() bool {
-	return rl.curOptions.LatencyThreshold > 0 && rl.healthSignals.AverageLatency() > rl.curOptions.LatencyThreshold
+	curOptions := *rl.curOptions.Load()
+	return curOptions.LatencyThreshold > 0 && rl.healthSignals.AverageLatency() > curOptions.LatencyThreshold
 }
 
 func (rl *HealthRequestRateLimiterImpl) errorThresholdExceeded() bool {
-	return rl.curOptions.ErrorThreshold > 0 && rl.healthSignals.ErrorRatio() > rl.curOptions.ErrorThreshold
+	curOptions := *rl.curOptions.Load()
+	return curOptions.ErrorThreshold > 0 && rl.healthSignals.ErrorRatio() > curOptions.ErrorThreshold
 }
