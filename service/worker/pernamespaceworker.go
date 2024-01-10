@@ -571,6 +571,10 @@ func (w *perNamespaceWorker) stopWorkerAndResetTimer() {
 
 	w.stopWorkerLocked()
 	w.retrier.Reset()
+	// Note that we only reset reserved here, not in stopWorkerLocked: if we did it there, we
+	// would take a rate limiter token on each retry after failure. Failure to start the worker
+	// means we probably didn't do any polls yet, which is the main reason for the rate limit,
+	// so this it's okay to use only the backoff timer in that case.
 	w.reserved = false
 	if w.retryTimer != nil {
 		w.retryTimer.Stop()

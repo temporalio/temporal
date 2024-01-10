@@ -27,7 +27,6 @@ package worker
 import (
 	"errors"
 	"fmt"
-	"sync/atomic"
 	"testing"
 	"time"
 
@@ -506,7 +505,8 @@ func (s *perNsWorkerManagerSuite) TestRateLimit() {
 	s.manager.startLimiter = mockLimiter
 
 	// try to start 100 workers
-	// rate limiter will allow 10, then 10 more after 0.2s, then no more for 10s
+	// rate limiter will allow 10, then 10 more after a short delay, then no more for 10s
+	delay := 50 * time.Millisecond
 	for i := 0; i < 100; i++ {
 		res := quotas.NewMockReservation(s.controller)
 		mockLimiter.EXPECT().Reserve().Return(res)
@@ -514,7 +514,7 @@ func (s *perNsWorkerManagerSuite) TestRateLimit() {
 		case 2:
 			res.EXPECT().Delay().Return(0 * time.Millisecond)
 		case 6:
-			res.EXPECT().Delay().Return(200 * time.Millisecond)
+			res.EXPECT().Delay().Return(delay)
 		default:
 			res.EXPECT().Delay().Return(10 * time.Second)
 		}
@@ -528,19 +528,34 @@ func (s *perNsWorkerManagerSuite) TestRateLimit() {
 	wkr := mocksdk.NewMockWorker(s.controller)
 	s.cfactory.EXPECT().NewClient(gomock.Any()).Return(cli).AnyTimes()
 	s.cfactory.EXPECT().NewWorker(gomock.Any(), gomock.Any(), gomock.Any()).Return(wkr).AnyTimes()
-	var starts atomic.Int32
-	wkr.EXPECT().Start().Do(func() { starts.Add(1) }).AnyTimes()
+	starts := make(chan struct{}, 100)
+	wkr.EXPECT().Start().Do(func() { starts <- struct{}{} }).AnyTimes()
 
 	for i := 0; i < 100; i++ {
 		ns := testns(fmt.Sprintf("test-%d", i), enumspb.NAMESPACE_STATE_REGISTERED)
 		s.manager.namespaceCallback(ns, false)
 	}
 
-	time.Sleep(100 * time.Millisecond)
-	s.Equal(10, int(starts.Load()), "should be 10 started immediately")
+	start := time.Now()
+	for i := 0; i < 10; i++ {
+		<-starts
+	}
+	select {
+	case <-starts:
+		s.Fail("should be no more starts yet")
+	default:
+	}
+	s.Less(time.Since(start), delay, "should be 10 started immediately")
 
-	time.Sleep(200 * time.Millisecond)
-	s.Equal(20, int(starts.Load()), "should be 20 started later")
+	for i := 0; i < 10; i++ {
+		<-starts
+	}
+	select {
+	case <-starts:
+		s.Fail("should be no more starts yet")
+	default:
+	}
+	s.Greater(time.Since(start), delay, "should be 10 more started later")
 
 	wkr.EXPECT().Stop().AnyTimes()
 	cli.EXPECT().Close().AnyTimes()
