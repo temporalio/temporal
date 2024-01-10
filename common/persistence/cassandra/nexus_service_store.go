@@ -60,21 +60,6 @@ const (
 	templateDeleteIncomingServiceQuery         = `DELETE FROM nexus_incoming_services WHERE partition = 0 AND type = ? AND service_id = ? IF EXISTS`
 )
 
-var (
-	ErrTableVersionConflict = &p.ConditionFailedError{
-		Msg: "nexus incoming services table version mismatch",
-	}
-	ErrNexusIncomingServiceVersionConflict = &p.ConditionFailedError{
-		Msg: "nexus incoming service version mismatch",
-	}
-	ErrNexusIncomingServiceNotFound = &p.ConditionFailedError{
-		Msg: "nexus incoming service not found",
-	}
-	ErrNonPositiveListNexusIncomingServicesPageSize = &p.InvalidPersistenceRequestError{
-		Msg: "received non-positive page size for listing Nexus incoming services",
-	}
-)
-
 type (
 	NexusServiceStore struct {
 		session gocql.Session
@@ -162,7 +147,7 @@ func (s *NexusServiceStore) CreateOrUpdateNexusIncomingService(
 		}
 		if currentTableVersion != request.LastKnownTableVersion {
 			return fmt.Errorf("%w. provided table version: %v current table version: %v",
-				ErrTableVersionConflict,
+				p.ErrTableVersionConflict,
 				request.LastKnownTableVersion,
 				currentTableVersion)
 		}
@@ -173,7 +158,7 @@ func (s *NexusServiceStore) CreateOrUpdateNexusIncomingService(
 		}
 		if currentServiceVersion != request.Service.Version {
 			return fmt.Errorf("%w. provided service version: %v current service version: %v",
-				ErrNexusIncomingServiceVersionConflict,
+				p.ErrNexusIncomingServiceVersionConflict,
 				request.Service.Version,
 				currentServiceVersion)
 		}
@@ -190,10 +175,6 @@ func (s *NexusServiceStore) ListNexusIncomingServices(
 	ctx context.Context,
 	request *p.InternalListNexusIncomingServicesRequest,
 ) (*p.InternalListNexusIncomingServicesResponse, error) {
-	if request.PageSize <= 0 {
-		return nil, ErrNonPositiveListNexusIncomingServicesPageSize
-	}
-
 	if request.LastKnownTableVersion == unknownTableVersion {
 		return s.listFirstPageWithVersion(ctx, request)
 	}
@@ -227,7 +208,7 @@ func (s *NexusServiceStore) ListNexusIncomingServices(
 	if request.LastKnownTableVersion != currentTableVersion {
 		// If table has been updated during pagination, throw error to indicate caller must start over
 		return nil, fmt.Errorf("%w. provided table version: %v current table version: %v",
-			ErrTableVersionConflict,
+			p.ErrTableVersionConflict,
 			request.LastKnownTableVersion,
 			currentTableVersion)
 	}
@@ -270,13 +251,13 @@ func (s *NexusServiceStore) DeleteNexusIncomingService(
 		}
 		if currentTableVersion != request.LastKnownTableVersion {
 			return fmt.Errorf("%w. provided table version: %v current table version: %v",
-				ErrTableVersionConflict,
+				p.ErrTableVersionConflict,
 				request.LastKnownTableVersion,
 				currentTableVersion)
 		}
 
 		return fmt.Errorf("%w. provided serviceID: %v",
-			ErrNexusIncomingServiceNotFound,
+			p.ErrNexusIncomingServiceNotFound,
 			request.ServiceID)
 	}
 

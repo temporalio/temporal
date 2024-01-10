@@ -1068,6 +1068,7 @@ type (
 
 	// ListNexusIncomingServicesRequest is the request to ListNexusIncomingServices
 	ListNexusIncomingServicesRequest struct {
+		PageSize int
 	}
 
 	// ListNexusIncomingServicesResponse is the response to ListNexusIncomingServices
