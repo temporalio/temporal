@@ -44,6 +44,7 @@ import (
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence/versionhistory"
 	"go.temporal.io/server/common/primitives/timestamp"
+	"go.temporal.io/server/service/history/historybuilder"
 	"go.temporal.io/server/service/history/shard"
 )
 
@@ -117,7 +118,7 @@ func (b *MutableStateRebuilderImpl) ApplyEvents(
 	if err := taskGenerator.GenerateUserTimerTasks(); err != nil {
 		return nil, err
 	}
-	b.mutableState.SetHistoryBuilder(NewImmutableHistoryBuilder(history...))
+	b.mutableState.SetHistoryBuilder(historybuilder.NewImmutable(history...))
 	return newMutableState, nil
 }
 

@@ -28,6 +28,7 @@ import (
 	"context"
 
 	"go.temporal.io/server/service/history/queues"
+	"go.temporal.io/server/service/history/replication/eventhandler"
 	"go.uber.org/fx"
 
 	"go.temporal.io/server/common/metrics"
@@ -60,8 +61,11 @@ var Module = fx.Provide(
 	eagerNamespaceRefresherProvider,
 	sequentialTaskQueueFactoryProvider,
 	dlqWriterAdapterProvider,
-	historyPaginatedFetcherProvider,
 	newDLQWriterToggle,
+	historyPaginatedFetcherProvider,
+	remoteEventHandlerProvider,
+	localEventHandlerProvider,
+	historyEventsHandlerProvider,
 )
 
 func eagerNamespaceRefresherProvider(
@@ -84,21 +88,6 @@ func eagerNamespaceRefresherProvider(
 		),
 		clusterMetadata.GetCurrentClusterName(),
 		metricsHandler,
-	)
-}
-func historyPaginatedFetcherProvider(
-	config *configs.Config,
-	namespaceRegistry namespace.Registry,
-	clientBean client.Bean,
-	serializer serialization.Serializer,
-	logger log.Logger,
-) HistoryPaginatedFetcher {
-	return NewHistoryPaginatedFetcher(
-		namespaceRegistry,
-		clientBean,
-		serializer,
-		config.StandbyTaskReReplicationContextTimeout,
-		logger,
 	)
 }
 
@@ -207,4 +196,53 @@ func dlqWriterAdapterProvider(
 	clusterMetadata cluster.Metadata,
 ) *DLQWriterAdapter {
 	return NewDLQWriterAdapter(dlqWriter, taskSerializer, clusterMetadata.GetCurrentClusterName())
+}
+func remoteEventHandlerProvider(
+	shardController shard.Controller,
+) eventhandler.RemoteGeneratedEventsHandler {
+	return eventhandler.NewRemoteGeneratedEventsHandler(shardController)
+}
+
+func localEventHandlerProvider(
+	clusterMetadata cluster.Metadata,
+	shardController shard.Controller,
+	logger log.Logger,
+	eventSerializer serialization.Serializer,
+	historyPaginatedFetcher eventhandler.HistoryPaginatedFetcher,
+) eventhandler.LocalGeneratedEventsHandler {
+	return eventhandler.NewLocalEventsHandler(
+		clusterMetadata,
+		shardController,
+		logger,
+		eventSerializer,
+		historyPaginatedFetcher,
+	)
+}
+
+func historyEventsHandlerProvider(
+	clusterMetadata cluster.Metadata,
+	localHandler eventhandler.LocalGeneratedEventsHandler,
+	remoteHandler eventhandler.RemoteGeneratedEventsHandler,
+) eventhandler.HistoryEventsHandler {
+	return eventhandler.NewHistoryEventsHandler(
+		clusterMetadata,
+		localHandler,
+		remoteHandler,
+	)
+}
+
+func historyPaginatedFetcherProvider(
+	namespaceRegistry namespace.Registry,
+	clientBean client.Bean,
+	serializer serialization.Serializer,
+	config *configs.Config,
+	logger log.Logger,
+) eventhandler.HistoryPaginatedFetcher {
+	return eventhandler.NewHistoryPaginatedFetcher(
+		namespaceRegistry,
+		clientBean,
+		serializer,
+		config.StandbyTaskReReplicationContextTimeout,
+		logger,
+	)
 }

@@ -223,6 +223,16 @@ func (c *clientImpl) GetTaskQueueTasks(
 	return c.client.GetTaskQueueTasks(ctx, request, opts...)
 }
 
+func (c *clientImpl) GetWorkflowExecutionRawHistory(
+	ctx context.Context,
+	request *adminservice.GetWorkflowExecutionRawHistoryRequest,
+	opts ...grpc.CallOption,
+) (*adminservice.GetWorkflowExecutionRawHistoryResponse, error) {
+	ctx, cancel := c.createContext(ctx)
+	defer cancel()
+	return c.client.GetWorkflowExecutionRawHistory(ctx, request, opts...)
+}
+
 func (c *clientImpl) GetWorkflowExecutionRawHistoryV2(
 	ctx context.Context,
 	request *adminservice.GetWorkflowExecutionRawHistoryV2Request,

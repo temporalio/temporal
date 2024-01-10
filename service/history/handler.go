@@ -2092,6 +2092,33 @@ func (h *Handler) GetWorkflowExecutionHistoryReverse(
 	return engine.GetWorkflowExecutionHistoryReverse(ctx, request)
 }
 
+func (h *Handler) GetWorkflowExecutionRawHistory(
+	ctx context.Context,
+	request *historyservice.GetWorkflowExecutionRawHistoryRequest,
+) (_ *historyservice.GetWorkflowExecutionRawHistoryResponse, retErr error) {
+	defer log.CapturePanic(h.logger, &retErr)
+	h.startWG.Wait()
+
+	if h.isStopped() {
+		return nil, errShuttingDown
+	}
+
+	shardContext, err := h.controller.GetShardByNamespaceWorkflow(
+		namespace.ID(request.GetNamespaceId()),
+		request.GetRequest().GetExecution().GetWorkflowId(),
+	)
+	if err != nil {
+		return nil, h.convertError(err)
+	}
+
+	engine, err := shardContext.GetEngine(ctx)
+	if err != nil {
+		return nil, h.convertError(err)
+	}
+
+	return engine.GetWorkflowExecutionRawHistory(ctx, request)
+}
+
 func (h *Handler) GetWorkflowExecutionRawHistoryV2(
 	ctx context.Context,
 	request *historyservice.GetWorkflowExecutionRawHistoryV2Request,

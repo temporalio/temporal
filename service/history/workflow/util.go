@@ -150,7 +150,10 @@ func TimeoutWorkflow(
 }
 
 func TerminateWorkflow(
+	// ctx context.Context,
 	mutableState MutableState,
+	// effects *effect.Buffer,
+	// updateRegistry update.Registry,
 	terminateReason string,
 	terminateDetails *commonpb.Payloads,
 	terminateIdentity string,
@@ -187,6 +190,9 @@ func TerminateWorkflow(
 		terminateIdentity,
 		deleteAfterTerminate,
 	)
+
+	// err = updateRegistry.CancelIncomplete(ctx, update.CancelReasonWorkflowTerminated, WithEffects(effects, mutableState))
+
 	return err
 }
 

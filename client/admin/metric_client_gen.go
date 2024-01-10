@@ -299,6 +299,20 @@ func (c *metricClient) GetTaskQueueTasks(
 	return c.client.GetTaskQueueTasks(ctx, request, opts...)
 }
 
+func (c *metricClient) GetWorkflowExecutionRawHistory(
+	ctx context.Context,
+	request *adminservice.GetWorkflowExecutionRawHistoryRequest,
+	opts ...grpc.CallOption,
+) (_ *adminservice.GetWorkflowExecutionRawHistoryResponse, retError error) {
+
+	metricsHandler, startTime := c.startMetricsRecording(ctx, "AdminClientGetWorkflowExecutionRawHistory")
+	defer func() {
+		c.finishMetricsRecording(metricsHandler, startTime, retError)
+	}()
+
+	return c.client.GetWorkflowExecutionRawHistory(ctx, request, opts...)
+}
+
 func (c *metricClient) GetWorkflowExecutionRawHistoryV2(
 	ctx context.Context,
 	request *adminservice.GetWorkflowExecutionRawHistoryV2Request,
