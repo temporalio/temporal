@@ -69,6 +69,7 @@ type (
 			resp *updatepb.Response,
 		) (*historypb.HistoryEvent, error)
 
+		// CanAddEvent returns true if an event can be added to the EventStore.
 		CanAddEvent() bool
 	}
 

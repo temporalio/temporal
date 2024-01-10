@@ -232,5 +232,6 @@ type MutableStateWithEffects struct {
 }
 
 func (mse MutableStateWithEffects) CanAddEvent() bool {
+	// Event can be added to the history if workflow is still running.
 	return mse.MutableState.IsWorkflowExecutionRunning()
 }
