@@ -51,6 +51,12 @@ func (e *event) AssertFiredOnce(msg string) {
 	assert.Equal(e.t, 1, e.count, msg)
 }
 
+// AssertFired asserts that the callback was triggered a certain number of times.
+func (e *event) AssertFired(n int, msg string) {
+	e.t.Helper()
+	assert.Equal(e.t, n, e.count, msg)
+}
+
 // AssertNotFired asserts that the callback was not triggered.
 func (e *event) AssertNotFired(msg string) {
 	e.t.Helper()
@@ -127,11 +133,10 @@ func TestEventTimeSource_AfterFunc_Reset(t *testing.T) {
 	source.Advance(1)
 	ev1.AssertFiredOnce("The reset timer should fire after its new deadline")
 
-	// Reset the first timer and advance the time source past the new deadline to verify that the timer does not fire
-	// again.
+	// Reset the first timer and advance the time source past the new deadline to verify that the timer fires again.
 	assert.False(t, timer.Reset(1), "`Reset` should return false if the timer was already stopped")
 	source.Advance(1)
-	ev1.AssertFiredOnce("The timer should never fire twice, even if it was reset")
+	ev1.AssertFired(2, "The timer should fire again")
 }
 
 func TestEventTimeSource_AfterFunc_Stop(t *testing.T) {

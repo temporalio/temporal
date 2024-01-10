@@ -76,6 +76,7 @@ import (
 	"go.temporal.io/server/common/rpc/interceptor"
 	"go.temporal.io/server/common/searchattribute"
 	"go.temporal.io/server/service/worker/batcher"
+	"go.temporal.io/server/service/worker/scheduler"
 )
 
 const (
@@ -190,6 +191,7 @@ func (s *workflowHandlerSuite) getWorkflowHandler(config *Config) *WorkflowHandl
 		clock.NewRealTimeSource(),
 		s.mockResource.GetMembershipMonitor(),
 		healthInterceptor,
+		scheduler.NewSpecBuilder(),
 	)
 }
 
