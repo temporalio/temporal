@@ -51,6 +51,7 @@ import (
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/primitives"
 	"go.temporal.io/server/common/primitives/timestamp"
+	"go.temporal.io/server/common/quotas"
 	"go.temporal.io/server/common/resource"
 	"go.temporal.io/server/common/sdk"
 	"go.temporal.io/server/common/util"
@@ -91,6 +92,7 @@ type (
 		components        []workercommon.PerNSWorkerComponent
 		initialRetry      time.Duration
 		thisClusterName   string
+		startLimiter      quotas.RateLimiter
 
 		membershipChangedCh chan *membership.ChangedEvent
 
@@ -106,6 +108,7 @@ type (
 		ns           *namespace.Namespace
 		retrier      backoff.Retrier
 		retryTimer   *time.Timer
+		reserved     bool // whether startLimiter.Reserve was already called
 		componentSet string
 		client       sdkclient.Client
 		worker       sdkworker.Worker
@@ -128,6 +131,8 @@ type (
 		Total int
 		Local int
 	}
+
+	errRetryAfter time.Duration
 )
 
 var (
@@ -146,6 +151,7 @@ func NewPerNamespaceWorkerManager(params perNamespaceWorkerManagerInitParams) *p
 		components:          params.Components,
 		initialRetry:        1 * time.Second,
 		thisClusterName:     params.ClusterMetadata.GetCurrentClusterName(),
+		startLimiter:        quotas.NewDefaultOutgoingRateLimiter(quotas.RateFn(params.Config.PerNamespaceWorkerStartRate)),
 		membershipChangedCh: make(chan *membership.ChangedEvent),
 		workers:             make(map[namespace.ID]*perNamespaceWorker),
 	}
@@ -377,12 +383,21 @@ func (w *perNamespaceWorker) handleError(err error) {
 		w.logger.Error("bug: handleError found existing timer")
 		return
 	}
-	sleep := w.retrier.NextBackOff()
-	if sleep < 0 {
-		w.logger.Error("Failed to start sdk worker, out of retries", tag.Error(err))
-		return
+
+	var sleep time.Duration
+
+	if retryAfter, ok := err.(errRetryAfter); ok {
+		// asked for an explicit delay due to rate limit, use that
+		sleep = time.Duration(retryAfter)
+	} else {
+		sleep = w.retrier.NextBackOff()
+		if sleep < 0 {
+			w.logger.Error("Failed to start sdk worker, out of retries", tag.Error(err))
+			return
+		}
+		w.logger.Warn("Failed to start sdk worker", tag.Error(err), tag.NewDurationTag("sleep", sleep))
 	}
-	w.logger.Warn("Failed to start sdk worker", tag.Error(err), tag.NewDurationTag("sleep", sleep))
+
 	w.retryTimer = time.AfterFunc(sleep, func() {
 		w.lock.Lock()
 		w.retryTimer = nil
@@ -444,6 +459,15 @@ func (w *perNamespaceWorker) tryRefresh(ns *namespace.Namespace) error {
 		// no change in set of components enabled, leave existing running
 		return nil
 	}
+
+	// ask rate limiter if we can start now
+	if !w.reserved {
+		w.reserved = true
+		if delay := w.wm.startLimiter.Reserve().Delay(); delay > 0 {
+			return errRetryAfter(delay)
+		}
+	}
+
 	// set of components changed, need to recreate worker. first stop old one
 	w.stopWorkerLocked()
 
@@ -547,6 +571,11 @@ func (w *perNamespaceWorker) stopWorkerAndResetTimer() {
 
 	w.stopWorkerLocked()
 	w.retrier.Reset()
+	// Note that we only reset reserved here, not in stopWorkerLocked: if we did it there, we
+	// would take a rate limiter token on each retry after failure. Failure to start the worker
+	// means we probably didn't do any polls yet, which is the main reason for the rate limit,
+	// so this it's okay to use only the backoff timer in that case.
+	w.reserved = false
 	if w.retryTimer != nil {
 		w.retryTimer.Stop()
 		w.retryTimer = nil
@@ -563,4 +592,8 @@ func (w *perNamespaceWorker) stopWorkerLocked() {
 		w.client = nil
 	}
 	w.componentSet = ""
+}
+
+func (e errRetryAfter) Error() string {
+	return fmt.Sprintf("<delay %v>", time.Duration(e))
 }

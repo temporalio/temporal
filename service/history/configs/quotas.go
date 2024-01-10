@@ -90,6 +90,7 @@ var (
 		"/temporal.server.api.historyservice.v1.HistoryService/StreamWorkflowReplicationMessages":      1,
 		"/temporal.server.api.historyservice.v1.HistoryService/GetWorkflowExecutionHistory":            1,
 		"/temporal.server.api.historyservice.v1.HistoryService/GetWorkflowExecutionHistoryReverse":     1,
+		"/temporal.server.api.historyservice.v1.HistoryService/GetWorkflowExecutionRawHistory":         1,
 		"/temporal.server.api.historyservice.v1.HistoryService/GetWorkflowExecutionRawHistoryV2":       1,
 		"/temporal.server.api.historyservice.v1.HistoryService/ForceDeleteWorkflowExecution":           1,
 		"/temporal.server.api.historyservice.v1.HistoryService/GetDLQTasks":                            1,

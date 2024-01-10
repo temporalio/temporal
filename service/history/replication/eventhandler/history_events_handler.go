@@ -31,9 +31,9 @@ import (
 	"go.temporal.io/api/serviceerror"
 	historyspb "go.temporal.io/server/api/history/v1"
 	workflowpb "go.temporal.io/server/api/workflow/v1"
+	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/persistence/versionhistory"
-	"go.temporal.io/server/service/history/replication"
 )
 
 //go:generate mockgen -copyright_file ../../../../LICENSE -package $GOPACKAGE -source $GOFILE -destination history_events_handler_mock.go
@@ -64,15 +64,19 @@ type (
 	}
 
 	historyEventsHandlerImpl struct {
-		replication.ProcessToolBox
+		clusterMetadata     cluster.Metadata
 		localEventsHandler  LocalGeneratedEventsHandler
 		remoteEventsHandler RemoteGeneratedEventsHandler
 	}
 )
 
-func NewHistoryEventsHandler(toolBox replication.ProcessToolBox, localHandler LocalGeneratedEventsHandler, remoteHandler RemoteGeneratedEventsHandler) HistoryEventsHandler {
+func NewHistoryEventsHandler(
+	clusterMetadata cluster.Metadata,
+	localHandler LocalGeneratedEventsHandler,
+	remoteHandler RemoteGeneratedEventsHandler,
+) HistoryEventsHandler {
 	return &historyEventsHandlerImpl{
-		toolBox,
+		clusterMetadata,
 		localHandler,
 		remoteHandler,
 	}
@@ -130,7 +134,7 @@ func (h *historyEventsHandlerImpl) splitBatchesToLocalAndRemote(
 			return nil, nil, serviceerror.NewInvalidArgument("Empty batch")
 		}
 	}
-	localVersionHistory, _ := versionhistory.SplitVersionHistoryByLastLocalGeneratedItem(versionHistoryItems, h.ClusterMetadata.GetClusterID(), h.ClusterMetadata.GetFailoverVersionIncrement())
+	localVersionHistory, _ := versionhistory.SplitVersionHistoryByLastLocalGeneratedItem(versionHistoryItems, h.clusterMetadata.GetClusterID(), h.clusterMetadata.GetFailoverVersionIncrement())
 	if len(localVersionHistory) == 0 {
 		return nil, eventsBatches, nil
 	}

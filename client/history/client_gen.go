@@ -318,6 +318,26 @@ func (c *clientImpl) GetWorkflowExecutionHistoryReverse(
 	return response, nil
 }
 
+func (c *clientImpl) GetWorkflowExecutionRawHistory(
+	ctx context.Context,
+	request *historyservice.GetWorkflowExecutionRawHistoryRequest,
+	opts ...grpc.CallOption,
+) (*historyservice.GetWorkflowExecutionRawHistoryResponse, error) {
+	shardID := c.shardIDFromWorkflowID(request.NamespaceId, request.GetRequest().GetExecution().GetWorkflowId())
+	var response *historyservice.GetWorkflowExecutionRawHistoryResponse
+	op := func(ctx context.Context, client historyservice.HistoryServiceClient) error {
+		var err error
+		ctx, cancel := c.createContext(ctx)
+		defer cancel()
+		response, err = client.GetWorkflowExecutionRawHistory(ctx, request, opts...)
+		return err
+	}
+	if err := c.executeWithRedirect(ctx, shardID, op); err != nil {
+		return nil, err
+	}
+	return response, nil
+}
+
 func (c *clientImpl) GetWorkflowExecutionRawHistoryV2(
 	ctx context.Context,
 	request *historyservice.GetWorkflowExecutionRawHistoryV2Request,

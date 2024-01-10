@@ -39,17 +39,19 @@ import (
 type RPCFactory struct {
 	listener       *PipeListener
 	contextFactory func() context.Context
+	dialOptions    []grpc.DialOption
 }
 
 var _ common.RPCFactory = (*RPCFactory)(nil)
 
 // NewRPCFactory creates a new RPCFactory backed by a PipeListener.
-func NewRPCFactory(listener *PipeListener) *RPCFactory {
+func NewRPCFactory(listener *PipeListener, dialOptions ...grpc.DialOption) *RPCFactory {
 	return &RPCFactory{
 		listener: listener,
 		contextFactory: func() context.Context {
 			return context.Background()
 		},
+		dialOptions: dialOptions,
 	}
 }
 
@@ -84,18 +86,16 @@ func (f *RPCFactory) CreateInternodeGRPCConnection(rpcAddress string) *grpc.Clie
 }
 
 func (f *RPCFactory) dial(rpcAddress string) *grpc.ClientConn {
-	ctx := f.contextFactory()
-	// check context error here since grpc 1.60.1 DialContext doesn't error if context is already canceled.
-	if err := ctx.Err(); err != nil {
-		panic(err)
-	}
-	conn, err := grpc.DialContext(
-		ctx,
-		rpcAddress,
+	dialOptions := append(f.dialOptions,
 		grpc.WithContextDialer(func(ctx context.Context, s string) (net.Conn, error) {
 			return f.listener.Connect(ctx.Done())
 		}),
 		grpc.WithTransportCredentials(insecure.NewCredentials()),
+	)
+	conn, err := grpc.DialContext(
+		f.contextFactory(),
+		rpcAddress,
+		dialOptions...,
 	)
 	if err != nil {
 		panic(err)

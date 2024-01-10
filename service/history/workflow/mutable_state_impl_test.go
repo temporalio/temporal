@@ -67,6 +67,7 @@ import (
 	"go.temporal.io/server/common/worker_versioning"
 	"go.temporal.io/server/service/history/configs"
 	"go.temporal.io/server/service/history/events"
+	"go.temporal.io/server/service/history/historybuilder"
 	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/tasks"
 	"go.temporal.io/server/service/history/tests"
@@ -86,6 +87,16 @@ type (
 		logger       log.Logger
 		testScope    tally.TestScope
 	}
+)
+
+var (
+	testPayload = &commonpb.Payload{
+		Metadata: map[string][]byte{
+			"random metadata key": []byte("random metadata value"),
+		},
+		Data: []byte("random data"),
+	}
+	testPayloads = &commonpb.Payloads{Payloads: []*commonpb.Payload{testPayload}}
 )
 
 func TestMutableStateSuite(t *testing.T) {
@@ -158,7 +169,7 @@ func (s *mutableStateSuite) TestTransientWorkflowTaskCompletionFirstBatchApplied
 			Identity:         "some random identity",
 		}},
 	}
-	s.mutableState.SetHistoryBuilder(NewImmutableHistoryBuilder([]*historypb.HistoryEvent{
+	s.mutableState.SetHistoryBuilder(historybuilder.NewImmutable([]*historypb.HistoryEvent{
 		newWorkflowTaskCompletedEvent,
 	}))
 	err := s.mutableState.ApplyWorkflowTaskCompletedEvent(newWorkflowTaskCompletedEvent)
@@ -686,7 +697,7 @@ func (s *mutableStateSuite) prepareTransientWorkflowTaskCompletionFirstBatchAppl
 	s.Nil(err)
 	s.NotNil(wt)
 
-	s.mutableState.SetHistoryBuilder(NewImmutableHistoryBuilder([]*historypb.HistoryEvent{
+	s.mutableState.SetHistoryBuilder(historybuilder.NewImmutable([]*historypb.HistoryEvent{
 		newWorkflowTaskScheduleEvent,
 		newWorkflowTaskStartedEvent,
 	}))
