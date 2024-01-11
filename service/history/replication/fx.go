@@ -27,6 +27,9 @@ package replication
 import (
 	"context"
 
+	historypb "go.temporal.io/api/history/v1"
+	historyspb "go.temporal.io/server/api/history/v1"
+	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/service/history/queues"
 	"go.temporal.io/server/service/history/replication/eventhandler"
 	"go.uber.org/fx"
@@ -34,7 +37,6 @@ import (
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/persistence"
 
-	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/client"
 	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/log"
@@ -175,14 +177,42 @@ func ndcHistoryResenderProvider(
 	clientBean client.Bean,
 	serializer serialization.Serializer,
 	logger log.Logger,
+	shardController shard.Controller,
 ) xdc.NDCHistoryResender {
 	return xdc.NewNDCHistoryResender(
 		namespaceRegistry,
 		clientBean,
-		func(ctx context.Context, request *historyservice.ReplicateEventsV2Request) error {
-			// use HistoryEventsHandler.HandleHistoryEvents(...) instead
-			_, err := clientBean.GetHistoryClient().ReplicateEventsV2(ctx, request)
-			return err
+		func(
+			ctx context.Context,
+			namespaceId namespace.ID,
+			workflowId string,
+			runId string,
+			events []*historypb.HistoryEvent,
+			versionHistory []*historyspb.VersionHistoryItem,
+		) error {
+			shardContext, err := shardController.GetShardByNamespaceWorkflow(
+				namespaceId,
+				workflowId,
+			)
+			if err != nil {
+				return err
+			}
+			engine, err := shardContext.GetEngine(ctx)
+			if err != nil {
+				return err
+			}
+			return engine.ReplicateHistoryEvents(
+				ctx,
+				definition.WorkflowKey{
+					NamespaceID: namespaceId.String(),
+					WorkflowID:  workflowId,
+					RunID:       runId,
+				},
+				nil,
+				versionHistory,
+				[][]*historypb.HistoryEvent{events},
+				nil,
+			)
 		},
 		serializer,
 		config.StandbyTaskReReplicationContextTimeout,

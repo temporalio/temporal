@@ -31,6 +31,7 @@ import (
 	"time"
 
 	commonpb "go.temporal.io/api/common/v1"
+	historypb "go.temporal.io/api/history/v1"
 
 	"go.temporal.io/server/api/adminservice/v1"
 	historyspb "go.temporal.io/server/api/history/v1"
@@ -52,8 +53,14 @@ const (
 type (
 	// nDCHistoryReplicationFn provides the functionality to deliver replication raw history request to history
 	// the provided func should be thread safe
-	nDCHistoryReplicationFn func(ctx context.Context, request *historyservice.ReplicateEventsV2Request) error
-
+	nDCHistoryReplicationFn func(
+		ctx context.Context,
+		namespaceId namespace.ID,
+		workflowId string,
+		runId string,
+		events []*historypb.HistoryEvent,
+		versionHistory []*historyspb.VersionHistoryItem,
+	) error
 	// NDCHistoryResender is the interface for resending history events to remote
 	NDCHistoryResender interface {
 		// SendSingleWorkflowHistory sends multiple run IDs's history events to remote
@@ -156,15 +163,18 @@ func (n *NDCHistoryResenderImpl) SendSingleWorkflowHistory(
 				tag.Error(err))
 			return err
 		}
-
-		replicationRequest := n.createReplicationRawRequest(
+		events, err := n.serializer.DeserializeEvents(batch.rawEventBatch)
+		if err != nil {
+			return err
+		}
+		err = n.ApplyReplicateFn(
+			ctx,
 			namespaceID,
 			workflowID,
 			runID,
-			batch.rawEventBatch,
-			batch.versionHistory.GetItems())
-
-		err = n.sendReplicationRawRequest(resendCtx, replicationRequest)
+			events,
+			batch.versionHistory.Items,
+		)
 		if err != nil {
 			n.logger.Error("failed to replicate events",
 				tag.WorkflowNamespaceID(namespaceID.String()),
@@ -241,14 +251,18 @@ func (n *NDCHistoryResenderImpl) createReplicationRawRequest(
 	return request
 }
 
-func (n *NDCHistoryResenderImpl) sendReplicationRawRequest(
+func (n *NDCHistoryResenderImpl) ApplyReplicateFn(
 	ctx context.Context,
-	request *historyservice.ReplicateEventsV2Request,
+	namespaceId namespace.ID,
+	workflowId string,
+	runId string,
+	events []*historypb.HistoryEvent,
+	versionHistory []*historyspb.VersionHistoryItem,
 ) error {
-
 	ctx, cancel := context.WithTimeout(ctx, resendContextTimeout)
 	defer cancel()
-	return n.historyReplicationFn(ctx, request)
+
+	return n.historyReplicationFn(ctx, namespaceId, workflowId, runId, events, versionHistory)
 }
 
 func (n *NDCHistoryResenderImpl) getHistory(
