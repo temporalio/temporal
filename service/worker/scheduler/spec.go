@@ -298,7 +298,7 @@ func (cs *CompiledSpec) getNextTime(jitterSeed string, after time.Time) getNextT
 	isExcluded := func(t time.Time) bool {
 		return t.IsZero() || cs.excluded(t)
 	}
-	passEndTime := func(t time.Time) bool {
+	pastEndTime := func(t time.Time) bool {
 		return cs.spec.EndTime != nil && t.After(cs.spec.EndTime.AsTime())
 	}
 	var nominal time.Time
@@ -306,7 +306,7 @@ func (cs *CompiledSpec) getNextTime(jitterSeed string, after time.Time) getNextT
 		nominal = cs.rawNextTime(after)
 		after = nominal
 
-		if nominal.IsZero() || passEndTime(nominal) {
+		if nominal.IsZero() || pastEndTime(nominal) {
 			return getNextTimeResult{}
 		}
 	}
