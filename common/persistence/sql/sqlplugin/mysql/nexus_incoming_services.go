@@ -1,8 +1,6 @@
 // The MIT License
 //
-// Copyright (c) 2020 Temporal Technologies Inc.  All rights reserved.
-//
-// Copyright (c) 2020 Uber Technologies, Inc.
+// Copyright (c) 2024 Temporal Technologies Inc.  All rights reserved.
 //
 // Permission is hereby granted, free of charge, to any person obtaining a copy
 // of this software and associated documentation files (the "Software"), to deal
@@ -33,19 +31,15 @@ import (
 	"go.temporal.io/server/common/persistence/sql/sqlplugin"
 )
 
-func (mdb *db) InitializeNexusTableVersion(
-	ctx context.Context,
-	tableType int,
-) error {
-	return serviceerror.NewUnimplemented("InitializeNexusTableVersion is not implemented for MySQL plugin")
+func (mdb *db) InitializeNexusIncomingServicesTableVersion(ctx context.Context) error {
+	return serviceerror.NewUnimplemented("InitializeNexusIncomingServicesTableVersion is not implemented for MySQL plugin")
 }
 
-func (mdb *db) IncrementNexusTableVersion(
+func (mdb *db) IncrementNexusIncomingServicesTableVersion(
 	ctx context.Context,
-	tableType int,
 	lastKnownTableVersion int64,
 ) error {
-	return serviceerror.NewUnimplemented("IncrementNexusTableVersion is not implemented for MySQL plugin")
+	return serviceerror.NewUnimplemented("IncrementNexusIncomingServicesTableVersion is not implemented for MySQL plugin")
 }
 
 func (mdb *db) InsertIntoNexusIncomingServices(

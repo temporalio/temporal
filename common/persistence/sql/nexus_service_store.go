@@ -1,8 +1,6 @@
 // The MIT License
 //
-// Copyright (c) 2020 Temporal Technologies Inc.  All rights reserved.
-//
-// Copyright (c) 2020 Uber Technologies, Inc.
+// Copyright (c) 2024 Temporal Technologies Inc.  All rights reserved.
 //
 // Permission is hereby granted, free of charge, to any person obtaining a copy
 // of this software and associated documentation files (the "Software"), to deal
@@ -32,6 +30,7 @@ import (
 	"go.temporal.io/api/serviceerror"
 
 	"go.temporal.io/server/common/log"
+	"go.temporal.io/server/common/log/tag"
 	p "go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/persistence/sql/sqlplugin"
 	"go.temporal.io/server/common/primitives"
@@ -69,14 +68,15 @@ func (s *sqlNexusIncomingServiceStore) CreateOrUpdateNexusIncomingService(
 		// Upsert table version row
 		var err error
 		if request.LastKnownTableVersion == 0 {
-			err = tx.InitializeNexusTableVersion(ctx, sqlplugin.IncomingTableType)
+			err = tx.InitializeNexusIncomingServicesTableVersion(ctx)
 		} else {
-			err = tx.IncrementNexusTableVersion(ctx, sqlplugin.IncomingTableType, request.LastKnownTableVersion)
+			err = tx.IncrementNexusIncomingServicesTableVersion(ctx, request.LastKnownTableVersion)
 		}
 		if s.Db.IsDupEntryError(err) {
 			return &p.ConditionFailedError{Msg: err.Error()}
 		}
 		if err != nil {
+			s.logger.Error("error during CreateOrUpdateNexusIncomingService", tag.Error(err))
 			return err
 		}
 
@@ -119,12 +119,13 @@ func (s *sqlNexusIncomingServiceStore) ListNexusIncomingServices(
 		LastServiceID:         lastServiceID,
 		Limit:                 request.PageSize,
 	})
-	if errors.Is(err, p.ErrNexusIncomingServiceVersionConflict) {
-		// On table version conflict, return current table version and appropriate error
-		return &p.InternalListNexusIncomingServicesResponse{TableVersion: resp.CurrentTableVersion}, err
-	}
 	if err != nil {
+		if errors.Is(err, p.ErrNexusIncomingServiceVersionConflict) {
+			// On table version conflict, return current table version and appropriate error
+			return &p.InternalListNexusIncomingServicesResponse{TableVersion: resp.CurrentTableVersion}, err
+		}
 		// For all other errors, operation failed so return Unavailable error
+		s.logger.Error("ListNexusIncomingServices operation failed", tag.Error(err))
 		return nil, serviceerror.NewUnavailable(fmt.Sprintf("ListNexusIncmoingServices operation failed: %v", err))
 	}
 
@@ -134,6 +135,7 @@ func (s *sqlNexusIncomingServiceStore) ListNexusIncomingServices(
 			LastServiceID: resp.Entries[request.PageSize-1].ServiceID,
 		})
 		if err != nil {
+			s.logger.Error("error serializing next page token during ListNexusIncomingServices", tag.Error(err))
 			return nil, serviceerror.NewInternal(err.Error())
 		}
 	}
@@ -162,19 +164,22 @@ func (s *sqlNexusIncomingServiceStore) DeleteNexusIncomingService(
 	}
 
 	retErr = s.txExecute(ctx, "DeleteNexusIncomingService", func(tx sqlplugin.Tx) error {
-		err := tx.IncrementNexusTableVersion(ctx, sqlplugin.IncomingTableType, request.LastKnownTableVersion)
+		err := tx.IncrementNexusIncomingServicesTableVersion(ctx, request.LastKnownTableVersion)
 		if err != nil {
-			return serviceerror.NewUnavailable(err.Error())
+			s.logger.Error("error incrementing Nexus incoming services table version during DeleteNexusIncomingService call", tag.Error(err))
+			return serviceerror.NewInternal(err.Error())
 		}
 
 		result, err := tx.DeleteFromNexusIncomingServices(ctx, serviceID)
 		if err != nil {
+			s.logger.Error("DeleteNexusIncomingService operation failed", tag.Error(err))
 			return serviceerror.NewUnavailable(err.Error())
 		}
 
 		nRows, err := result.RowsAffected()
 		if err != nil {
-			return serviceerror.NewUnavailable(fmt.Sprintf("rowsAffected returned error:%v", err))
+			s.logger.Error("error getting RowsAffected during DeleteNexusIncomingService", tag.Error(err))
+			return serviceerror.NewUnavailable(fmt.Sprintf("rowsAffected returned error: %v", err))
 		}
 		if nRows != 1 {
 			return &p.ConditionFailedError{

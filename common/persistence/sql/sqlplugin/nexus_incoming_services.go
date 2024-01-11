@@ -1,8 +1,6 @@
 // The MIT License
 //
-// Copyright (c) 2020 Temporal Technologies Inc.  All rights reserved.
-//
-// Copyright (c) 2020 Uber Technologies, Inc.
+// Copyright (c) 2024 Temporal Technologies Inc.  All rights reserved.
 //
 // Permission is hereby granted, free of charge, to any person obtaining a copy
 // of this software and associated documentation files (the "Software"), to deal
@@ -29,11 +27,6 @@ import (
 	"database/sql"
 )
 
-const (
-	IncomingTableType = iota
-	OutgoingTableType
-)
-
 type (
 	NexusIncomingServicesRow struct {
 		ServiceID    []byte
@@ -58,15 +51,10 @@ type (
 		VersionedBlob
 	}
 
-	// NexusServicesTableVersions is the SQL persistence interface for creating and updating rows
-	// containing the versions of other Nexus service tables
-	NexusServicesTableVersions interface {
-		InitializeNexusTableVersion(ctx context.Context, tableType int) error
-		IncrementNexusTableVersion(ctx context.Context, tableType int, lastKnownTableVersion int64) error
-	}
-
 	// NexusIncomingServices is the SQL persistence interface for incoming Nexus services
 	NexusIncomingServices interface {
+		InitializeNexusIncomingServicesTableVersion(ctx context.Context) error
+		IncrementNexusIncomingServicesTableVersion(ctx context.Context, lastKnownTableVersion int64) error
 		InsertIntoNexusIncomingServices(ctx context.Context, row *NexusIncomingServicesRow) error
 		UpdateNexusIncomingService(ctx context.Context, row *NexusIncomingServicesRow) error
 		ListNexusIncomingServices(ctx context.Context, request *ListNexusIncomingServicesRequest) (*ListNexusIncomingServicesResponse, error)

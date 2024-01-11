@@ -70,7 +70,6 @@ type (
 		MatchingTask
 		MatchingTaskQueue
 
-		NexusServicesTableVersions
 		NexusIncomingServices
 
 		HistoryNode
