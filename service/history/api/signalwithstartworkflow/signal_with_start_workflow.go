@@ -109,7 +109,7 @@ func startAndSignalWorkflow(
 		return "", err
 	}
 
-	currentWorkflowUpdateFn, err := createWorkflowUpdateFunction(
+	workflowMutationFn, err := createWorkflowMutationFunction(
 		currentWorkflowContext,
 		signalWithStartRequest.GetWorkflowIdReusePolicy(),
 		runID,
@@ -117,32 +117,32 @@ func startAndSignalWorkflow(
 	if err != nil {
 		return "", err
 	}
-	if currentWorkflowUpdateFn != nil {
+	if workflowMutationFn != nil {
 		if err = startAndSignalWithCurrentWorkflow(
 			ctx,
 			shard,
 			currentWorkflowContext,
-			currentWorkflowUpdateFn,
+			workflowMutationFn,
 			newWorkflowContext,
 		); err != nil {
 			return "", err
 		}
 		return runID, nil
 	}
-	snapshot, err := takeMutableStateSnapshot(currentWorkflowContext)
+	vrid, err := createVersionedRunID(currentWorkflowContext)
 	if err != nil {
 		return "", err
 	}
 	return startAndSignalWithoutCurrentWorkflow(
 		ctx,
 		shard,
-		snapshot,
+		vrid,
 		newWorkflowContext,
 		signalWithStartRequest.RequestId,
 	)
 }
 
-func createWorkflowUpdateFunction(
+func createWorkflowMutationFunction(
 	currentWorkflowContext api.WorkflowContext,
 	workflowIDReusePolicy enumspb.WorkflowIdReusePolicy,
 	newRunID string,
@@ -151,7 +151,7 @@ func createWorkflowUpdateFunction(
 		return nil, nil
 	}
 	currentExecutionState := currentWorkflowContext.GetMutableState().GetExecutionState()
-	currentExecutionUpdateAction, err := api.ApplyWorkflowIDReusePolicy(
+	workflowMutationFunc, err := api.CreteWorkflowMutationFunction(
 		currentExecutionState.CreateRequestId,
 		currentExecutionState.RunId,
 		currentExecutionState.State,
@@ -160,10 +160,10 @@ func createWorkflowUpdateFunction(
 		newRunID,
 		workflowIDReusePolicy,
 	)
-	return currentExecutionUpdateAction, err
+	return workflowMutationFunc, err
 }
 
-func takeMutableStateSnapshot(currentWorkflowContext api.WorkflowContext) (*api.MutableStateSnapshot, error) {
+func createVersionedRunID(currentWorkflowContext api.WorkflowContext) (*api.VersionedRunID, error) {
 	if currentWorkflowContext == nil {
 		return nil, nil
 	}
@@ -172,11 +172,11 @@ func takeMutableStateSnapshot(currentWorkflowContext api.WorkflowContext) (*api.
 	if err != nil {
 		return nil, err
 	}
-	snapshot := &api.MutableStateSnapshot{
+	snapshot := api.VersionedRunID{
 		RunID:            currentExecutionState.RunId,
 		LastWriteVersion: currentLastWriteVersion,
 	}
-	return snapshot, nil
+	return &snapshot, nil
 }
 
 func startAndSignalWithCurrentWorkflow(
@@ -205,7 +205,7 @@ func startAndSignalWithCurrentWorkflow(
 func startAndSignalWithoutCurrentWorkflow(
 	ctx context.Context,
 	shardContext shard.Context,
-	mutableStateSnapshot *api.MutableStateSnapshot,
+	mutableStateSnapshot *api.VersionedRunID,
 	newWorkflowContext api.WorkflowContext,
 	requestID string,
 ) (string, error) {

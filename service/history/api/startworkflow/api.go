@@ -335,7 +335,7 @@ func (s *Starter) applyWorkflowIDReusePolicy(
 	creationParams *creationParams,
 ) (*historyservice.StartWorkflowExecutionResponse, error) {
 	workflowID := s.request.StartRequest.WorkflowId
-	prevExecutionUpdateAction, err := api.ApplyWorkflowIDReusePolicy(
+	prevExecutionUpdateAction, err := api.CreteWorkflowMutationFunction(
 		currentWorkflowConditionFailed.RequestID,
 		currentWorkflowConditionFailed.RunID,
 		currentWorkflowConditionFailed.State,

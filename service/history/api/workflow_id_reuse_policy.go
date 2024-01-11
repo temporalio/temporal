@@ -36,12 +36,12 @@ import (
 	"go.temporal.io/server/service/history/workflow"
 )
 
-// ApplyWorkflowIDReusePolicy returns updateWorkflowActionFunc
+// CreteWorkflowMutationFunction returns updateWorkflowActionFunc
 // for updating the previous execution and an error if the situation is
 // not allowed by the workflowIDReusePolicy.
 // Both result may be nil, if the case is to allow and no update is needed
 // for the previous execution.
-func ApplyWorkflowIDReusePolicy(
+func CreteWorkflowMutationFunction(
 	prevStartRequestID,
 	prevRunID string,
 	prevState enumsspb.WorkflowExecutionState,

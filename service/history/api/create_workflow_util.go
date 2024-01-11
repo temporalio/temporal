@@ -48,7 +48,7 @@ import (
 )
 
 type (
-	MutableStateSnapshot struct {
+	VersionedRunID struct {
 		RunID            string
 		LastWriteVersion int64
 	}
