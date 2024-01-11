@@ -172,11 +172,11 @@ func createVersionedRunID(currentWorkflowContext api.WorkflowContext) (*api.Vers
 	if err != nil {
 		return nil, err
 	}
-	snapshot := api.VersionedRunID{
+	id := api.VersionedRunID{
 		RunID:            currentExecutionState.RunId,
 		LastWriteVersion: currentLastWriteVersion,
 	}
-	return &snapshot, nil
+	return &id, nil
 }
 
 func startAndSignalWithCurrentWorkflow(
