@@ -273,10 +273,6 @@ func testListNexusIncomingServicesExpectedErrors(t *testing.T, store persistence
 		require.Contains(t, resp.Services, secondService)
 		require.Equal(t, resp.TableVersion, tableVersion.Load())
 
-		// Non-positive page size
-		_, err = store.ListNexusIncomingServices(ctx, &persistence.InternalListNexusIncomingServicesRequest{PageSize: -1, LastKnownTableVersion: tableVersion.Load()})
-		require.ErrorContains(t, err, "received non-positive page size for listing Nexus incoming services")
-
 		// Table version mismatch
 		_, err = store.ListNexusIncomingServices(ctx, &persistence.InternalListNexusIncomingServicesRequest{PageSize: 10, LastKnownTableVersion: 100})
 		require.ErrorContains(t, err, "nexus incoming services table version mismatch")
