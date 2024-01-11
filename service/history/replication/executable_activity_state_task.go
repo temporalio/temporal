@@ -26,7 +26,6 @@ package replication
 
 import (
 	"context"
-	"sync"
 	"time"
 
 	"go.temporal.io/api/serviceerror"
@@ -52,7 +51,6 @@ type (
 		req *historyservice.SyncActivityRequest
 
 		// following fields are used only for batching functionality
-		batchLock     sync.Mutex
 		batchable     bool
 		activityInfos []*historyservice.ActivitySyncInfo
 	}
@@ -245,12 +243,6 @@ func (e *ExecutableActivityStateTask) BatchWith(incomingTask BatchableTask) (Tra
 	if !e.batchable || !incomingTask.CanBatch() {
 		return nil, false
 	}
-	e.batchLock.Lock()
-	defer e.batchLock.Unlock()
-
-	if !e.batchable || !incomingTask.CanBatch() {
-		return nil, false
-	}
 
 	incomingActivityTask, err := e.validateIncomingBatchTask(incomingTask)
 	if err != nil {
@@ -281,13 +273,9 @@ func (e *ExecutableActivityStateTask) validateIncomingBatchTask(incomingTask Bat
 }
 
 func (e *ExecutableActivityStateTask) CanBatch() bool {
-	e.batchLock.Lock()
-	defer e.batchLock.Unlock()
 	return e.batchable
 }
 
 func (e *ExecutableActivityStateTask) MarkUnbatchable() {
-	e.batchLock.Lock()
-	defer e.batchLock.Unlock()
 	e.batchable = false
 }

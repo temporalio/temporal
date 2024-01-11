@@ -62,7 +62,6 @@ type (
 		deserializeLock   sync.Mutex
 		eventsDesResponse *eventsDeserializeResponse
 
-		batchLock sync.Mutex
 		batchable bool
 	}
 	eventsDeserializeResponse struct {
@@ -321,12 +320,6 @@ func (e *ExecutableHistoryTask) getDeserializedEvents() (_ [][]*historypb.Histor
 }
 
 func (e *ExecutableHistoryTask) BatchWith(incomingTask BatchableTask) (TrackableExecutableTask, bool) {
-	if !e.batchable {
-		return nil, false
-	}
-	e.batchLock.Lock()
-	defer e.batchLock.Unlock()
-
 	if !e.batchable || !incomingTask.CanBatch() {
 		return nil, false
 	}
@@ -471,13 +464,9 @@ func (e *ExecutableHistoryTask) checkEvents(incomingEventBatches [][]*historypb.
 }
 
 func (e *ExecutableHistoryTask) CanBatch() bool {
-	e.batchLock.Lock()
-	defer e.batchLock.Unlock()
 	return e.batchable
 }
 
 func (e *ExecutableHistoryTask) MarkUnbatchable() {
-	e.batchLock.Lock()
-	defer e.batchLock.Unlock()
 	e.batchable = false
 }
