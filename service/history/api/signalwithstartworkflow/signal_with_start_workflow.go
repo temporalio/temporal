@@ -151,7 +151,7 @@ func createWorkflowMutationFunction(
 		return nil, nil
 	}
 	currentExecutionState := currentWorkflowContext.GetMutableState().GetExecutionState()
-	workflowMutationFunc, err := api.CreteWorkflowMutationFunction(
+	workflowMutationFunc, err := api.ApplyWorkflowIDReusePolicy(
 		currentExecutionState.CreateRequestId,
 		currentExecutionState.RunId,
 		currentExecutionState.State,
