@@ -82,7 +82,7 @@ const (
 var (
 	// Sentinel error to redirect while blocked in matcher.
 	errInterrupted    = errors.New("interrupted offer")
-	errNoRecentPoller = status.Error(codes.DeadlineExceeded, "no poller seen for task queue recently, worker may be down")
+	errNoRecentPoller = status.Error(codes.FailedPrecondition, "no poller seen for task queue recently, worker may be down")
 )
 
 // newTaskMatcher returns a task matcher instance. The returned instance can be used by task producers and consumers to
