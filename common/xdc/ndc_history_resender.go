@@ -35,7 +35,6 @@ import (
 
 	"go.temporal.io/server/api/adminservice/v1"
 	historyspb "go.temporal.io/server/api/history/v1"
-	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/client"
 	"go.temporal.io/server/common/collection"
 	"go.temporal.io/server/common/dynamicconfig"
@@ -229,26 +228,6 @@ func (n *NDCHistoryResenderImpl) getPaginationFn(
 		}
 		return batches, response.NextPageToken, nil
 	}
-}
-
-func (n *NDCHistoryResenderImpl) createReplicationRawRequest(
-	namespaceID namespace.ID,
-	workflowID string,
-	runID string,
-	historyBlob *commonpb.DataBlob,
-	versionHistoryItems []*historyspb.VersionHistoryItem,
-) *historyservice.ReplicateEventsV2Request {
-
-	request := &historyservice.ReplicateEventsV2Request{
-		NamespaceId: namespaceID.String(),
-		WorkflowExecution: &commonpb.WorkflowExecution{
-			WorkflowId: workflowID,
-			RunId:      runID,
-		},
-		Events:              historyBlob,
-		VersionHistoryItems: versionHistoryItems,
-	}
-	return request
 }
 
 func (n *NDCHistoryResenderImpl) ApplyReplicateFn(
