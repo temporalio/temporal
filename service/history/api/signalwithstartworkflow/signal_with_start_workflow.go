@@ -205,7 +205,7 @@ func startAndSignalWithCurrentWorkflow(
 func startAndSignalWithoutCurrentWorkflow(
 	ctx context.Context,
 	shardContext shard.Context,
-	mutableStateSnapshot *api.VersionedRunID,
+	vrid *api.VersionedRunID,
 	newWorkflowContext api.WorkflowContext,
 	requestID string,
 ) (string, error) {
@@ -222,13 +222,13 @@ func startAndSignalWithoutCurrentWorkflow(
 	createMode := persistence.CreateWorkflowModeBrandNew
 	prevRunID := ""
 	prevLastWriteVersion := int64(0)
-	if mutableStateSnapshot != nil {
+	if vrid != nil {
 		createMode = persistence.CreateWorkflowModeUpdateCurrent
-		prevRunID = mutableStateSnapshot.RunID
-		prevLastWriteVersion = mutableStateSnapshot.LastWriteVersion
+		prevRunID = vrid.RunID
+		prevLastWriteVersion = vrid.LastWriteVersion
 		err = api.NewWorkflowVersionCheck(
 			shardContext,
-			mutableStateSnapshot.LastWriteVersion,
+			vrid.LastWriteVersion,
 			newWorkflowContext.GetMutableState(),
 		)
 		if err != nil {
