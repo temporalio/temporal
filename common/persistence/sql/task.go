@@ -28,7 +28,6 @@ import (
 	"bytes"
 	"context"
 	"database/sql"
-	"encoding/json"
 	"fmt"
 	"math"
 
@@ -390,7 +389,7 @@ func (m *sqlTaskManager) GetTasks(
 	inclusiveMinTaskID := request.InclusiveMinTaskID
 	exclusiveMaxTaskID := request.ExclusiveMaxTaskID
 	if len(request.NextPageToken) != 0 {
-		token, err := deserializeMatchingTaskPageToken(request.NextPageToken)
+		token, err := deserializePageTokenJson[matchingTaskPageToken](request.NextPageToken)
 		if err != nil {
 			return nil, err
 		}
@@ -418,7 +417,7 @@ func (m *sqlTaskManager) GetTasks(
 	if len(rows) == request.PageSize {
 		nextTaskID := rows[len(rows)-1].TaskID + 1
 		if nextTaskID < exclusiveMaxTaskID {
-			token, err := serializeMatchingTaskPageToken(&matchingTaskPageToken{
+			token, err := serializePageTokenJson(&matchingTaskPageToken{
 				TaskID: nextTaskID,
 			})
 			if err != nil {
@@ -550,7 +549,7 @@ func (m *sqlTaskManager) ListTaskQueueUserDataEntries(ctx context.Context, reque
 
 	lastQueueName := ""
 	if len(request.NextPageToken) != 0 {
-		token, err := deserializeUserDataListNextPageToken(request.NextPageToken)
+		token, err := deserializePageTokenJson[userDataListNextPageToken](request.NextPageToken)
 		if err != nil {
 			return nil, err
 		}
@@ -568,7 +567,7 @@ func (m *sqlTaskManager) ListTaskQueueUserDataEntries(ctx context.Context, reque
 
 	var nextPageToken []byte
 	if len(rows) == request.PageSize {
-		nextPageToken, err = serializeUserDataListNextPageToken(&userDataListNextPageToken{LastTaskQueueName: rows[request.PageSize-1].TaskQueueName})
+		nextPageToken, err = serializePageTokenJson(&userDataListNextPageToken{LastTaskQueueName: rows[request.PageSize-1].TaskQueueName})
 		if err != nil {
 			return nil, serviceerror.NewInternal(err.Error())
 		}
@@ -657,30 +656,6 @@ type matchingTaskPageToken struct {
 	TaskID int64
 }
 
-func serializeMatchingTaskPageToken(token *matchingTaskPageToken) ([]byte, error) {
-	return json.Marshal(token)
-}
-
-func deserializeMatchingTaskPageToken(payload []byte) (*matchingTaskPageToken, error) {
-	var token matchingTaskPageToken
-	if err := json.Unmarshal(payload, &token); err != nil {
-		return nil, err
-	}
-	return &token, nil
-}
-
 type userDataListNextPageToken struct {
 	LastTaskQueueName string
-}
-
-func serializeUserDataListNextPageToken(token *userDataListNextPageToken) ([]byte, error) {
-	return json.Marshal(token)
-}
-
-func deserializeUserDataListNextPageToken(payload []byte) (*userDataListNextPageToken, error) {
-	var token userDataListNextPageToken
-	if err := json.Unmarshal(payload, &token); err != nil {
-		return nil, err
-	}
-	return &token, nil
 }

@@ -30,6 +30,21 @@ import (
 	"go.temporal.io/api/serviceerror"
 )
 
+var (
+	ErrTableVersionConflict = &ConditionFailedError{
+		Msg: "nexus incoming services table version mismatch",
+	}
+	ErrNexusIncomingServiceVersionConflict = &ConditionFailedError{
+		Msg: "nexus incoming service version mismatch",
+	}
+	ErrNexusIncomingServiceNotFound = &ConditionFailedError{
+		Msg: "nexus incoming service not found",
+	}
+	ErrNonPositiveListNexusIncomingServicesPageSize = &InvalidPersistenceRequestError{
+		Msg: "received non-positive page size for listing Nexus incoming services",
+	}
+)
+
 type (
 	nexusServiceManagerImpl struct {
 		persistence NexusServiceStore
@@ -65,6 +80,10 @@ func (m *nexusServiceManagerImpl) ListNexusIncomingServices(
 	ctx context.Context,
 	request *ListNexusIncomingServicesRequest,
 ) (*ListNexusIncomingServicesResponse, error) {
+	if request.PageSize <= 0 {
+		return nil, ErrNonPositiveListNexusIncomingServicesPageSize
+	}
+
 	return nil, serviceerror.NewUnimplemented("NexusServiceManager.ListNexusIncomingServices() is unimplemented")
 }
 

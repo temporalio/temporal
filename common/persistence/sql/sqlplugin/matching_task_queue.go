@@ -86,12 +86,6 @@ type (
 		BuildID     string
 	}
 
-	VersionedBlob struct {
-		Version      int64
-		Data         []byte
-		DataEncoding string
-	}
-
 	ListTaskQueueUserDataEntriesRequest struct {
 		NamespaceID       []byte
 		LastTaskQueueName string

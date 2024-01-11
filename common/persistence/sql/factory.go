@@ -28,8 +28,6 @@ import (
 	"fmt"
 	"sync"
 
-	"go.temporal.io/api/serviceerror"
-
 	"go.temporal.io/server/common/config"
 	"go.temporal.io/server/common/log"
 	p "go.temporal.io/server/common/persistence"
@@ -152,7 +150,11 @@ func (f *Factory) NewQueueV2() (p.QueueV2, error) {
 
 // NewNexusServiceStore returns a new NexusServiceStore
 func (f *Factory) NewNexusServiceStore() (p.NexusServiceStore, error) {
-	return nil, serviceerror.NewUnimplemented("SQL NexusServiceStore has not been implemented")
+	conn, err := f.mainDBConn.Get()
+	if err != nil {
+		return nil, err
+	}
+	return NewSqlNexusIncomingServiceStore(conn, f.logger)
 }
 
 // Close closes the factory
