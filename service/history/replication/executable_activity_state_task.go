@@ -251,7 +251,7 @@ func (e *ExecutableActivityStateTask) BatchWith(incomingTask BatchableTask) (Tra
 	if !e.batchable || !incomingTask.CanBatch() {
 		return nil, false
 	}
-	
+
 	incomingActivityTask, err := e.validateIncomingBatchTask(incomingTask)
 	if err != nil {
 		return nil, false

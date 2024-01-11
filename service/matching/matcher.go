@@ -38,6 +38,8 @@ import (
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/common/quotas"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 )
 
 // TaskMatcher matches a task producer with a task consumer
@@ -80,7 +82,7 @@ const (
 var (
 	// Sentinel error to redirect while blocked in matcher.
 	errInterrupted    = errors.New("interrupted offer")
-	errNoRecentPoller = errors.New("no poller seen for task queue recently, worker may be down")
+	errNoRecentPoller = status.Error(codes.DeadlineExceeded, "no poller seen for task queue recently, worker may be down")
 )
 
 // newTaskMatcher returns a task matcher instance. The returned instance can be used by task producers and consumers to
@@ -234,9 +236,9 @@ func (tm *TaskMatcher) OfferQuery(ctx context.Context, task *internalTask) (*mat
 	var noPollerCtxC <-chan struct{}
 
 	if deadline, ok := ctx.Deadline(); ok && fwdrTokenC == nil {
-		// Create a timeout for 90% time of the actual timeout. This is so that we have an opportunity to customize the
-		// "context deadline exceeded" error when user is querying a workflow without having started the workers.
-		noPollerTimeout := time.Until(deadline) * 90 / 100
+		// Reserving 1sec to customize the timeout error if user is querying a workflow
+		// without having started the workers.
+		noPollerTimeout := time.Until(deadline) - time.Second
 		noPollerCtx, cancel := context.WithTimeout(ctx, noPollerTimeout)
 		noPollerCtxC = noPollerCtx.Done()
 		defer cancel()

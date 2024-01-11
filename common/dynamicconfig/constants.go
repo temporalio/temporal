@@ -470,7 +470,7 @@ const (
 	// MatchingMaxWaitForPollerBeforeFwd in presence of a non-negligible backlog, we resume forwarding tasks if the
 	// duration since last poll exceeds this threshold.
 	MatchingMaxWaitForPollerBeforeFwd = "matching.maxWaitForPollerBeforeFwd"
-	// QueryPollerUnavailableWindow WF Query tasks are immediately rejected if no poller has been seen within the window
+	// QueryPollerUnavailableWindow WF Queries are rejected after a while if no poller has been seen within the window
 	QueryPollerUnavailableWindow = "matching.queryPollerUnavailableWindow"
 
 	// for matching testing only:

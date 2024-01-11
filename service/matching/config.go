@@ -243,10 +243,8 @@ func newTaskQueueConfig(id *taskQueueID, config *Config, namespace namespace.Nam
 		MaxWaitForPollerBeforeFwd: func() time.Duration {
 			return config.MaxWaitForPollerBeforeFwd(namespace.String(), taskQueueName, taskType)
 		},
-		QueryPollerUnavailableWindow: func() time.Duration {
-			return config.QueryPollerUnavailableWindow()
-		},
-		TestDisableSyncMatch: config.TestDisableSyncMatch,
+		QueryPollerUnavailableWindow: config.QueryPollerUnavailableWindow,
+		TestDisableSyncMatch:         config.TestDisableSyncMatch,
 		LoadUserData: func() bool {
 			return config.LoadUserData(namespace.String(), taskQueueName, taskType)
 		},
