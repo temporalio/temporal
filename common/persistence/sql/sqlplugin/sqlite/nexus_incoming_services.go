@@ -42,6 +42,10 @@ func (mdb *db) IncrementNexusIncomingServicesTableVersion(
 	return serviceerror.NewUnimplemented("IncrementNexusIncomingServicesTableVersion is not implemented for SQLite plugin")
 }
 
+func (mdb *db) GetNexusIncomingServicesTableVersion(ctx context.Context) (int64, error) {
+	return 0, serviceerror.NewUnimplemented("GetNexusIncomingServicesTableVersion is not implemented for SQLite plugin")
+}
+
 func (mdb *db) InsertIntoNexusIncomingServices(
 	ctx context.Context,
 	row *sqlplugin.NexusIncomingServicesRow,
@@ -59,7 +63,7 @@ func (mdb *db) UpdateNexusIncomingService(
 func (mdb *db) ListNexusIncomingServices(
 	ctx context.Context,
 	request *sqlplugin.ListNexusIncomingServicesRequest,
-) (*sqlplugin.ListNexusIncomingServicesResponse, error) {
+) ([]sqlplugin.NexusIncomingServicesRow, error) {
 	return nil, serviceerror.NewUnimplemented("ListNexusIncomingServices is not implemented for SQLite plugin")
 }
 

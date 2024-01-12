@@ -36,23 +36,19 @@ type (
 	}
 
 	ListNexusIncomingServicesRequest struct {
-		LastKnownTableVersion int64
-		LastServiceID         []byte
-		Limit                 int
-	}
-
-	ListNexusIncomingServicesResponse struct {
-		CurrentTableVersion int64
-		Entries             []NexusIncomingServicesRow
+		LastServiceID []byte
+		Limit         int
 	}
 
 	// NexusIncomingServices is the SQL persistence interface for incoming Nexus services
 	NexusIncomingServices interface {
 		InitializeNexusIncomingServicesTableVersion(ctx context.Context) error
 		IncrementNexusIncomingServicesTableVersion(ctx context.Context, lastKnownTableVersion int64) error
+		GetNexusIncomingServicesTableVersion(ctx context.Context) (int64, error)
+
 		InsertIntoNexusIncomingServices(ctx context.Context, row *NexusIncomingServicesRow) error
 		UpdateNexusIncomingService(ctx context.Context, row *NexusIncomingServicesRow) error
-		ListNexusIncomingServices(ctx context.Context, request *ListNexusIncomingServicesRequest) (*ListNexusIncomingServicesResponse, error)
+		ListNexusIncomingServices(ctx context.Context, request *ListNexusIncomingServicesRequest) ([]NexusIncomingServicesRow, error)
 		DeleteFromNexusIncomingServices(ctx context.Context, serviceID []byte) (sql.Result, error)
 	}
 )
