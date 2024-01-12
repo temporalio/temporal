@@ -37,6 +37,7 @@ import (
 	enumspb "go.temporal.io/api/enums/v1"
 	historypb "go.temporal.io/api/history/v1"
 	"go.temporal.io/api/serviceerror"
+	"go.temporal.io/server/service/history/tests"
 
 	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/testing/protorequire"
@@ -155,6 +156,7 @@ func (s *executableHistoryTaskSuite) SetupTest() {
 		EagerNamespaceRefresher: s.eagerNamespaceRefresher,
 		EventSerializer:         s.eventSerializer,
 		DLQWriter:               NewExecutionManagerDLQWriter(s.mockExecutionManager),
+		Config:                  tests.NewDynamicConfig(),
 	}
 	s.task = NewExecutableHistoryTask(
 		s.processToolBox,

@@ -125,3 +125,17 @@ message TerminateWorkflowRequest {
     temporal.api.common.v1.WorkflowExecution execution = 5;
     string reason = 6;
 }
+
+message NextTimeCache {
+    // workflow logic version (invalidate when changed)
+    int64 version = 1;
+    // start time that the results were calculated from
+    google.protobuf.Timestamp start_time = 2;
+    // next_times and nominal_times are a series of timestamp pairs, encoded as a nanosecond
+    // offset from start_time. next_times has one value for each time in the cache.
+    // nominal_times may have up to the same number of values, but it may also be shorter (or
+    // empty), if the corresponding nominal time is equal to the next time.
+    repeated int64 next_times = 3;
+    repeated int64 nominal_times = 4;
+    bool completed = 5;
+}

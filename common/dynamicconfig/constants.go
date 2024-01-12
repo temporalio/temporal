@@ -862,6 +862,8 @@ const (
 	EnableEagerNamespaceRefresher = "history.EnableEagerNamespaceRefresher"
 	// EnableReplicationTaskBatching is a feature flag for batching replicate history event task
 	EnableReplicationTaskBatching = "history.EnableReplicationTaskBatching"
+	// EnableReplicateLocalGeneratedEvents is a feature flag for replicating locally generated events
+	EnableReplicateLocalGeneratedEvents = "history.EnableReplicateLocalGeneratedEvents"
 
 	// keys for worker
 
@@ -944,6 +946,8 @@ const (
 	WorkerPerNamespaceWorkerCount = "worker.perNamespaceWorkerCount"
 	// WorkerPerNamespaceWorkerOptions are SDK worker options for per-namespace worker
 	WorkerPerNamespaceWorkerOptions = "worker.perNamespaceWorkerOptions"
+	// WorkerPerNamespaceWorkerStartRate controls how fast per-namespace workers can be started (workers/second).
+	WorkerPerNamespaceWorkerStartRate = "worker.perNamespaceWorkerStartRate"
 	// WorkerEnableScheduler controls whether to start the worker for scheduled workflows
 	WorkerEnableScheduler = "worker.enableScheduler"
 	// WorkerStickyCacheSize controls the sticky cache size for SDK workers on worker nodes

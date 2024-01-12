@@ -110,6 +110,7 @@ type (
 		EnableParentClosePolicyWorker         dynamicconfig.BoolPropertyFn
 		PerNamespaceWorkerCount               dynamicconfig.IntPropertyFnWithNamespaceFilter
 		PerNamespaceWorkerOptions             dynamicconfig.MapPropertyFnWithNamespaceFilter
+		PerNamespaceWorkerStartRate           dynamicconfig.FloatPropertyFn
 
 		VisibilityPersistenceMaxReadQPS   dynamicconfig.IntPropertyFn
 		VisibilityPersistenceMaxWriteQPS  dynamicconfig.IntPropertyFn
@@ -300,6 +301,10 @@ func NewConfig(
 		PerNamespaceWorkerOptions: dc.GetMapPropertyFnWithNamespaceFilter(
 			dynamicconfig.WorkerPerNamespaceWorkerOptions,
 			map[string]any{},
+		),
+		PerNamespaceWorkerStartRate: dc.GetFloat64Property(
+			dynamicconfig.WorkerPerNamespaceWorkerOptions,
+			10.0,
 		),
 		ThrottledLogRPS: dc.GetIntProperty(
 			dynamicconfig.WorkerThrottledLogRPS,

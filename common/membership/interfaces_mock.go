@@ -103,6 +103,20 @@ func (mr *MockMonitorMockRecorder) GetResolver(service interface{}) *gomock.Call
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetResolver", reflect.TypeOf((*MockMonitor)(nil).GetResolver), service)
 }
 
+// SetDraining mocks base method.
+func (m *MockMonitor) SetDraining(draining bool) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "SetDraining", draining)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// SetDraining indicates an expected call of SetDraining.
+func (mr *MockMonitorMockRecorder) SetDraining(draining interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SetDraining", reflect.TypeOf((*MockMonitor)(nil).SetDraining), draining)
+}
+
 // Start mocks base method.
 func (m *MockMonitor) Start() {
 	m.ctrl.T.Helper()
@@ -164,6 +178,20 @@ func (m *MockServiceResolver) AddListener(name string, notifyChannel chan<- *Cha
 func (mr *MockServiceResolverMockRecorder) AddListener(name, notifyChannel interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "AddListener", reflect.TypeOf((*MockServiceResolver)(nil).AddListener), name, notifyChannel)
+}
+
+// AvailableMembers mocks base method.
+func (m *MockServiceResolver) AvailableMembers() []HostInfo {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "AvailableMembers")
+	ret0, _ := ret[0].([]HostInfo)
+	return ret0
+}
+
+// AvailableMembers indicates an expected call of AvailableMembers.
+func (mr *MockServiceResolverMockRecorder) AvailableMembers() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "AvailableMembers", reflect.TypeOf((*MockServiceResolver)(nil).AvailableMembers))
 }
 
 // Lookup mocks base method.
