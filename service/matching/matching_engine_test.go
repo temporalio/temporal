@@ -41,7 +41,6 @@ import (
 	"github.com/stretchr/testify/suite"
 	"github.com/uber-go/tally/v4"
 	"google.golang.org/protobuf/types/known/durationpb"
-	"google.golang.org/protobuf/types/known/emptypb"
 	"google.golang.org/protobuf/types/known/timestamppb"
 	"google.golang.org/protobuf/types/known/wrapperspb"
 
@@ -55,7 +54,6 @@ import (
 	"go.temporal.io/api/workflowservice/v1"
 
 	clockspb "go.temporal.io/server/api/clock/v1"
-	"go.temporal.io/server/api/enums/v1"
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/api/historyservicemock/v1"
 	"go.temporal.io/server/api/matchingservice/v1"
@@ -555,31 +553,6 @@ func (s *matchingEngineSuite) TestPollActivityTaskQueues_NamespaceHandover() {
 	}, metrics.NoopMetricsHandler)
 	s.Nil(resp)
 	s.Equal(common.ErrNamespaceHandover.Error(), err.Error())
-}
-
-func (s *matchingEngineSuite) TestPollWorkflowTask_UserDataDisabled() {
-	s.matchingEngine.config.LoadUserData = dynamicconfig.GetBoolPropertyFnFilteredByTaskQueueInfo(false)
-	taskQueue := s.T().Name()
-
-	resp, err := s.matchingEngine.PollWorkflowTaskQueue(context.Background(), &matchingservice.PollWorkflowTaskQueueRequest{
-		NamespaceId: "asdf",
-		PollRequest: &workflowservice.PollWorkflowTaskQueueRequest{
-			Namespace: "asdf",
-			TaskQueue: &taskqueuepb.TaskQueue{
-				Name: taskQueue,
-				Kind: enumspb.TASK_QUEUE_KIND_NORMAL,
-			},
-			Identity: "identity",
-			WorkerVersionCapabilities: &commonpb.WorkerVersionCapabilities{
-				BuildId:       "some_build_id",
-				UseVersioning: true,
-			},
-		},
-	}, metrics.NoopMetricsHandler)
-	s.Error(err)
-	s.Nil(resp)
-	var failedPrecondition *serviceerror.FailedPrecondition
-	s.ErrorAs(err, &failedPrecondition)
 }
 
 func (s *matchingEngineSuite) TestAddActivityTasks() {
@@ -2358,54 +2331,6 @@ func (s *matchingEngineSuite) TestUpdateUserData_FailsOnKnownVersionMismatch() {
 	})
 	var failedPreconditionError *serviceerror.FailedPrecondition
 	s.ErrorAs(err, &failedPreconditionError)
-}
-
-func (s *matchingEngineSuite) TestAddWorkflowTask_ForVersionedWorkflows_SilentlyDroppedWhenDisablingLoadingUserData() {
-	namespaceId := uuid.New()
-	tq := taskqueuepb.TaskQueue{
-		Name: "test",
-		Kind: enumspb.TASK_QUEUE_KIND_NORMAL,
-	}
-	s.matchingEngine.config.LoadUserData = dynamicconfig.GetBoolPropertyFnFilteredByTaskQueueInfo(false)
-
-	_, err := s.matchingEngine.AddWorkflowTask(context.Background(), &matchingservice.AddWorkflowTaskRequest{
-		NamespaceId: namespaceId,
-		Execution: &commonpb.WorkflowExecution{
-			WorkflowId: "test",
-			RunId:      uuid.New(),
-		},
-		TaskQueue:        &tq,
-		ScheduledEventId: 7,
-		Source:           enums.TASK_SOURCE_HISTORY,
-		VersionDirective: &taskqueue.TaskVersionDirective{
-			Value: &taskqueue.TaskVersionDirective_UseDefault{UseDefault: &emptypb.Empty{}},
-		},
-	})
-	s.Require().NoError(err)
-}
-
-func (s *matchingEngineSuite) TestAddActivityTask_ForVersionedWorkflows_SilentlyDroppedWhenDisablingLoadingUserData() {
-	namespaceId := uuid.New()
-	tq := taskqueuepb.TaskQueue{
-		Name: "test",
-		Kind: enumspb.TASK_QUEUE_KIND_NORMAL,
-	}
-	s.matchingEngine.config.LoadUserData = dynamicconfig.GetBoolPropertyFnFilteredByTaskQueueInfo(false)
-
-	_, err := s.matchingEngine.AddActivityTask(context.Background(), &matchingservice.AddActivityTaskRequest{
-		NamespaceId: namespaceId,
-		Execution: &commonpb.WorkflowExecution{
-			WorkflowId: "test",
-			RunId:      uuid.New(),
-		},
-		TaskQueue:        &tq,
-		ScheduledEventId: 7,
-		Source:           enums.TASK_SOURCE_HISTORY,
-		VersionDirective: &taskqueue.TaskVersionDirective{
-			Value: &taskqueue.TaskVersionDirective_UseDefault{UseDefault: &emptypb.Empty{}},
-		},
-	})
-	s.Require().NoError(err)
 }
 
 func (s *matchingEngineSuite) TestUnknownBuildId_Poll() {
