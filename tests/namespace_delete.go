@@ -160,6 +160,64 @@ func (s *namespaceTestSuite) Test_NamespaceDelete_Empty() {
 	s.NoError(err)
 }
 
+func (s *namespaceTestSuite) Test_NamespaceDelete_OverrideDelay() {
+	ctx, cancel := rpc.NewContextWithTimeoutAndVersionHeaders(10000 * time.Second)
+	defer cancel()
+
+	dc := s.cluster.host.dcClient
+	dc.OverrideValue(s.T(), dynamicconfig.DeleteNamespaceNamespaceDeleteDelay, time.Hour)
+	defer func() {
+		dc.RemoveOverride(dynamicconfig.DeleteNamespaceNamespaceDeleteDelay)
+	}()
+
+	retention := 24 * time.Hour
+	_, err := s.frontendClient.RegisterNamespace(ctx, &workflowservice.RegisterNamespaceRequest{
+		Namespace:                        "ns_name_san_diego",
+		Description:                      "Namespace to delete",
+		WorkflowExecutionRetentionPeriod: durationpb.New(retention),
+		HistoryArchivalState:             enumspb.ARCHIVAL_STATE_DISABLED,
+		VisibilityArchivalState:          enumspb.ARCHIVAL_STATE_DISABLED,
+	})
+	s.NoError(err)
+
+	descResp, err := s.frontendClient.DescribeNamespace(ctx, &workflowservice.DescribeNamespaceRequest{
+		Namespace: "ns_name_san_diego",
+	})
+	s.NoError(err)
+	nsID := descResp.GetNamespaceInfo().GetId()
+
+	delResp, err := s.operatorClient.DeleteNamespace(ctx, &operatorservice.DeleteNamespaceRequest{
+		Namespace:            "ns_name_san_diego",
+		NamespaceDeleteDelay: durationpb.New(0),
+	})
+	s.NoError(err)
+	s.Equal("ns_name_san_diego-deleted-"+nsID[:5], delResp.GetDeletedNamespace())
+
+	descResp2, err := s.frontendClient.DescribeNamespace(ctx, &workflowservice.DescribeNamespaceRequest{
+		Id: nsID,
+	})
+	s.NoError(err)
+	s.Equal(enumspb.NAMESPACE_STATE_DELETED, descResp2.GetNamespaceInfo().GetState())
+
+	namespaceExistsOp := func() error {
+		_, err := s.frontendClient.DescribeNamespace(ctx, &workflowservice.DescribeNamespaceRequest{
+			Id: nsID,
+		})
+		var notFound *serviceerror.NamespaceNotFound
+		if errors.As(err, &notFound) {
+			return nil
+		}
+		return errors.New("namespace still exists")
+	}
+
+	namespaceExistsPolicy := backoff.NewExponentialRetryPolicy(time.Second).
+		WithBackoffCoefficient(1).
+		WithExpirationInterval(30 * time.Second)
+
+	err = backoff.ThrottleRetry(namespaceExistsOp, namespaceExistsPolicy, func(_ error) bool { return true })
+	s.NoError(err)
+}
+
 func (s *namespaceTestSuite) Test_NamespaceDelete_Empty_WithID() {
 	ctx, cancel := rpc.NewContextWithTimeoutAndVersionHeaders(10000 * time.Second)
 	defer cancel()
