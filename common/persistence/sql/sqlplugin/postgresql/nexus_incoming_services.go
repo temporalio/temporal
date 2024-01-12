@@ -158,7 +158,7 @@ func (pdb *db) listNexusIncomingServicesFirstPage(
 	}
 
 	response := getListNexusIncomingServicesResponse(rows)
-	if response.CurrentTableVersion != 0 && response.CurrentTableVersion != request.LastKnownTableVersion {
+	if request.LastKnownTableVersion != 0 && response.CurrentTableVersion != request.LastKnownTableVersion {
 		return response, persistence.ErrNexusTableVersionConflict
 	}
 
