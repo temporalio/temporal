@@ -383,6 +383,20 @@ func (c *metricClient) ListTaskQueuePartitions(
 	return c.client.ListTaskQueuePartitions(ctx, request, opts...)
 }
 
+func (c *metricClient) ListWorkerVersioningRules(
+	ctx context.Context,
+	request *workflowservice.ListWorkerVersioningRulesRequest,
+	opts ...grpc.CallOption,
+) (_ *workflowservice.ListWorkerVersioningRulesResponse, retError error) {
+
+	metricsHandler, startTime := c.startMetricsRecording(ctx, "FrontendClientListWorkerVersioningRules")
+	defer func() {
+		c.finishMetricsRecording(metricsHandler, startTime, retError)
+	}()
+
+	return c.client.ListWorkerVersioningRules(ctx, request, opts...)
+}
+
 func (c *metricClient) ListWorkflowExecutions(
 	ctx context.Context,
 	request *workflowservice.ListWorkflowExecutionsRequest,
@@ -815,6 +829,20 @@ func (c *metricClient) UpdateWorkerBuildIdCompatibility(
 	}()
 
 	return c.client.UpdateWorkerBuildIdCompatibility(ctx, request, opts...)
+}
+
+func (c *metricClient) UpdateWorkerVersioningRules(
+	ctx context.Context,
+	request *workflowservice.UpdateWorkerVersioningRulesRequest,
+	opts ...grpc.CallOption,
+) (_ *workflowservice.UpdateWorkerVersioningRulesResponse, retError error) {
+
+	metricsHandler, startTime := c.startMetricsRecording(ctx, "FrontendClientUpdateWorkerVersioningRules")
+	defer func() {
+		c.finishMetricsRecording(metricsHandler, startTime, retError)
+	}()
+
+	return c.client.UpdateWorkerVersioningRules(ctx, request, opts...)
 }
 
 func (c *metricClient) UpdateWorkflowExecution(

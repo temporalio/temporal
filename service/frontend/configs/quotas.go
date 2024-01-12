@@ -85,6 +85,7 @@ var (
 		"PollWorkflowExecutionUpdate":        3,
 		"GetWorkflowExecutionHistoryReverse": 3,
 		"GetWorkerBuildIdCompatibility":      3,
+		"ListWorkerVersioningRules":          3,
 		"GetWorkerTaskReachability":          3,
 		"DeleteWorkflowExecution":            3,
 
@@ -114,6 +115,7 @@ var (
 		"RegisterNamespace":                1,
 		"UpdateNamespace":                  1,
 		"UpdateWorkerBuildIdCompatibility": 2,
+		"UpdateWorkerVersioningRules":      2,
 	}
 
 	NamespaceReplicationInducingAPIPrioritiesOrdered = []int{0, 1, 2}

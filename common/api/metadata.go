@@ -122,6 +122,8 @@ var (
 		"ListSchedules":                      MethodMetadata{Scope: ScopeNamespace, Access: AccessReadOnly},
 		"UpdateWorkerBuildIdCompatibility":   MethodMetadata{Scope: ScopeNamespace, Access: AccessWrite},
 		"GetWorkerBuildIdCompatibility":      MethodMetadata{Scope: ScopeNamespace, Access: AccessReadOnly},
+		"UpdateWorkerVersioningRules":        MethodMetadata{Scope: ScopeNamespace, Access: AccessWrite},
+		"ListWorkerVersioningRules":          MethodMetadata{Scope: ScopeNamespace, Access: AccessReadOnly},
 		"GetWorkerTaskReachability":          MethodMetadata{Scope: ScopeNamespace, Access: AccessReadOnly},
 		"UpdateWorkflowExecution":            MethodMetadata{Scope: ScopeNamespace, Access: AccessWrite},
 		"PollWorkflowExecutionUpdate":        MethodMetadata{Scope: ScopeNamespace, Access: AccessReadOnly},

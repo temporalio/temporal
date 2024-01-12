@@ -3301,6 +3301,14 @@ func (wh *WorkflowHandler) GetWorkerBuildIdCompatibility(ctx context.Context, re
 	return matchingResponse.Response, err
 }
 
+func (wh *WorkflowHandler) UpdateWorkerVersioningRules(context.Context, *workflowservice.UpdateWorkerVersioningRulesRequest) (*workflowservice.UpdateWorkerVersioningRulesResponse, error) {
+	return nil, serviceerror.NewUnimplemented("not implemented")
+}
+
+func (wh *WorkflowHandler) ListWorkerVersioningRules(context.Context, *workflowservice.ListWorkerVersioningRulesRequest) (*workflowservice.ListWorkerVersioningRulesResponse, error) {
+	return nil, serviceerror.NewUnimplemented("not implemented")
+}
+
 func (wh *WorkflowHandler) GetWorkerTaskReachability(ctx context.Context, request *workflowservice.GetWorkerTaskReachabilityRequest) (_ *workflowservice.GetWorkerTaskReachabilityResponse, retError error) {
 	defer log.CapturePanic(wh.logger, &retError)
 
