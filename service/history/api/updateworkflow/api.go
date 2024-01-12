@@ -26,6 +26,7 @@ package updateworkflow
 
 import (
 	"context"
+	"errors"
 	"time"
 
 	commonpb "go.temporal.io/api/common/v1"
@@ -125,7 +126,7 @@ func Invoke(
 			if upd, alreadyExisted, err = updateReg.FindOrCreate(ctx, updateID); err != nil {
 				return nil, err
 			}
-			if err = upd.OnMessage(ctx, req.GetRequest().GetRequest(), workflow.WithEffects(effect.Immediate(ctx), ms)); err != nil {
+			if err = upd.Request(ctx, req.GetRequest().GetRequest(), workflow.WithEffects(effect.Immediate(ctx), ms)); err != nil {
 				return nil, err
 			}
 
@@ -192,6 +193,21 @@ func Invoke(
 	// (including any mutable state fields) outside of this func after workflow lock is released.
 	// It is important to release workflow lock before calling matching.
 	if err != nil {
+		// If update is received while WFT is running, it will be waiting for the next WFT.
+		// And if that running WFT completes workflow, then update is rejected (see CancelIncomplete).
+		// Special handling for consts.ErrWorkflowCompleted here is needed to keep parity with this.
+		// I.e. if update is received and workflow was completed, or is about to be completed,
+		// then update is consistently rejected (instead of returning error in some cases).
+		if errors.Is(err, consts.ErrWorkflowCompleted) {
+			rejectionResp := createResponse(
+				wfKey,
+				req,
+				&updatepb.Outcome{
+					Value: &updatepb.Outcome_Failure{Failure: update.CancelReasonWorkflowCompleted.RejectionFailure()},
+				},
+				enumspb.UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_COMPLETED)
+			return rejectionResp, err
+		}
 		return nil, err
 	}
 
@@ -240,20 +256,7 @@ func Invoke(
 	if err != nil {
 		return nil, err
 	}
-	resp := &historyservice.UpdateWorkflowExecutionResponse{
-		Response: &workflowservice.UpdateWorkflowExecutionResponse{
-			UpdateRef: &updatepb.UpdateRef{
-				WorkflowExecution: &commonpb.WorkflowExecution{
-					WorkflowId: wfKey.WorkflowID,
-					RunId:      wfKey.RunID,
-				},
-				UpdateId: req.GetRequest().GetRequest().GetMeta().GetUpdateId(),
-			},
-			Outcome: status.Outcome,
-			Stage:   status.Stage,
-		},
-	}
-
+	resp := createResponse(wfKey, req, status.Outcome, status.Stage)
 	return resp, nil
 }
 
@@ -291,4 +294,25 @@ func addWorkflowTaskToMatching(
 	}
 
 	return nil
+}
+
+func createResponse(
+	wfKey definition.WorkflowKey,
+	req *historyservice.UpdateWorkflowExecutionRequest,
+	outcome *updatepb.Outcome,
+	stage enumspb.UpdateWorkflowExecutionLifecycleStage,
+) *historyservice.UpdateWorkflowExecutionResponse {
+	return &historyservice.UpdateWorkflowExecutionResponse{
+		Response: &workflowservice.UpdateWorkflowExecutionResponse{
+			UpdateRef: &updatepb.UpdateRef{
+				WorkflowExecution: &commonpb.WorkflowExecution{
+					WorkflowId: wfKey.WorkflowID,
+					RunId:      wfKey.RunID,
+				},
+				UpdateId: req.GetRequest().GetRequest().GetMeta().GetUpdateId(),
+			},
+			Outcome: outcome,
+			Stage:   stage,
+		},
+	}
 }

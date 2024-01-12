@@ -27,15 +27,14 @@ package standard
 import (
 	"time"
 
+	enumspb "go.temporal.io/api/enums/v1"
+
 	"go.temporal.io/server/common/namespace"
-	"go.temporal.io/server/common/searchattribute"
-
-	"go.temporal.io/api/enums/v1"
-
-	"go.temporal.io/server/common/convert"
 	"go.temporal.io/server/common/persistence/sql/sqlplugin"
 	"go.temporal.io/server/common/persistence/visibility/store/elasticsearch"
 	"go.temporal.io/server/common/persistence/visibility/store/query"
+	"go.temporal.io/server/common/searchattribute"
+	"go.temporal.io/server/common/util"
 )
 
 var allowedFilters = []string{
@@ -91,20 +90,20 @@ func (vi *valuesInterceptor) Values(name string, values ...interface{}) ([]inter
 	case searchattribute.WorkflowID:
 		values, err := vi.nextInterceptor.Values(name, values...)
 		if err == nil {
-			vi.filter.WorkflowID = convert.StringPtr(values[0].(string))
+			vi.filter.WorkflowID = util.Ptr(values[0].(string))
 		}
 		return values, err
 	case searchattribute.WorkflowType:
 		values, err := vi.nextInterceptor.Values(name, values...)
 		if err == nil {
-			vi.filter.WorkflowTypeName = convert.StringPtr(values[0].(string))
+			vi.filter.WorkflowTypeName = util.Ptr(values[0].(string))
 		}
 		return values, err
 	case searchattribute.ExecutionStatus:
 		values, err := vi.nextInterceptor.Values(name, values...)
 		if err == nil {
 			statusStr := values[0].(string)
-			e, err := enums.WorkflowExecutionStatusFromString(statusStr)
+			e, err := enumspb.WorkflowExecutionStatusFromString(statusStr)
 			if err != nil {
 				return nil, query.NewConverterError("invalid ExecutionStatus %q", statusStr)
 			}

@@ -40,7 +40,6 @@ import (
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/collection"
-	"go.temporal.io/server/common/convert"
 	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/failure"
 	"go.temporal.io/server/common/log"
@@ -48,6 +47,7 @@ import (
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/primitives/timestamp"
+	"go.temporal.io/server/common/util"
 	"go.temporal.io/server/service/history/consts"
 	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/workflow"
@@ -428,7 +428,7 @@ func (r *workflowResetterImpl) replayResetWorkflow(
 		),
 		baseBranchToken,
 		baseRebuildLastEventID,
-		convert.Int64Ptr(baseRebuildLastEventVersion),
+		util.Ptr(baseRebuildLastEventVersion),
 		definition.NewWorkflowKey(
 			namespaceID.String(),
 			workflowID,

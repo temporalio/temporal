@@ -39,6 +39,8 @@ import (
 	"go.temporal.io/api/workflowservice/v1"
 	"google.golang.org/protobuf/proto"
 
+	"go.temporal.io/server/common/definition"
+
 	"go.temporal.io/server/common/tasktoken"
 	"go.temporal.io/server/internal/effect"
 	"go.temporal.io/server/internal/protocol"
@@ -189,12 +191,16 @@ func (handler *workflowTaskHandlerImpl) handleCommands(
 		}
 	}
 
-	if handler.mutableState.IsWorkflowExecutionRunning() {
-		for _, msg := range msgs.TakeRemaining() {
-			err := handler.handleMessage(ctx, msg)
-			if err != nil || handler.stopProcessing {
-				return nil, err
-			}
+	// For every update.Acceptance and update.Respond (i.e. update completion) messages
+	// there should be a corresponding PROTOCOL_MESSAGE command. These messages are processed together
+	// with this command and, at this point, should be processed already.
+	// Therefore, remaining messages should be only update.Rejection.
+	// However, PROTOCOL_MESSAGE command is not required by server. If it is not present,
+	// update.Acceptance and update.Respond messages will be processed after all commands in order they are in request.
+	for _, msg := range msgs.TakeRemaining() {
+		err := handler.handleMessage(ctx, msg)
+		if err != nil || handler.stopProcessing {
+			return nil, err
 		}
 	}
 
@@ -209,6 +215,58 @@ func (handler *workflowTaskHandlerImpl) handleCommands(
 	}
 
 	return mutations, nil
+}
+
+func (handler *workflowTaskHandlerImpl) rejectUnprocessedUpdates(
+	ctx context.Context,
+	workflowTaskScheduledEventID int64,
+	wtHeartbeat bool,
+	wfKey definition.WorkflowKey,
+	workerIdentity string,
+) error {
+
+	// If server decided to fail WT (instead of completing), don't reject updates.
+	// New WT will be created, and it will deliver these updates again to the worker.
+	// Worker will do full history replay, and updates should be delivered again.
+	if handler.workflowTaskFailedCause != nil {
+		return nil
+	}
+
+	// If WT is a heartbeat WT, then it doesn't have to have messages.
+	if wtHeartbeat {
+		return nil
+	}
+
+	// If worker has just completed workflow with one of the WF completion command,
+	// then it might skip processing some updates. In this case, it doesn't indicate old SDK or bug.
+	// All unprocessed updates will be rejected with "workflow is closing" reason though.
+	if !handler.mutableState.IsWorkflowExecutionRunning() {
+		return nil
+	}
+
+	rejectedUpdateIDs, err := handler.updateRegistry.RejectUnprocessed(
+		ctx,
+		workflow.WithEffects(handler.effects, handler.mutableState))
+
+	if err != nil {
+		return err
+	}
+
+	if len(rejectedUpdateIDs) > 0 {
+		handler.logger.Warn(
+			"Workflow task completed w/o processing updates.",
+			tag.WorkflowNamespaceID(wfKey.NamespaceID),
+			tag.WorkflowID(wfKey.WorkflowID),
+			tag.WorkflowRunID(wfKey.RunID),
+			tag.WorkflowEventID(workflowTaskScheduledEventID),
+			tag.NewStringTag("worker-identity", workerIdentity),
+			tag.NewStringsTag("update-ids", rejectedUpdateIDs),
+		)
+	}
+
+	// At this point there must not be any updates in a Sent state.
+	// All updates which were sent on this WT are processed by worker or rejected by server.
+	return nil
 }
 
 //revive:disable:cyclomatic grandfathered
@@ -226,7 +284,7 @@ func (handler *workflowTaskHandlerImpl) handleCommand(
 		return handler.handleCommandScheduleActivity(ctx, command.GetScheduleActivityTaskCommandAttributes())
 
 	case enumspb.COMMAND_TYPE_COMPLETE_WORKFLOW_EXECUTION:
-		return nil, handler.handleCommandCompleteWorkflow(ctx, command.GetCompleteWorkflowExecutionCommandAttributes(), msgs)
+		return nil, handler.handleCommandCompleteWorkflow(ctx, command.GetCompleteWorkflowExecutionCommandAttributes())
 
 	case enumspb.COMMAND_TYPE_FAIL_WORKFLOW_EXECUTION:
 		return nil, handler.handleCommandFailWorkflow(ctx, command.GetFailWorkflowExecutionCommandAttributes())
@@ -297,7 +355,11 @@ func (handler *workflowTaskHandlerImpl) handleMessage(
 				enumspb.WORKFLOW_TASK_FAILED_CAUSE_BAD_UPDATE_WORKFLOW_EXECUTION_MESSAGE,
 				serviceerror.NewNotFound(fmt.Sprintf("update %q not found", message.ProtocolInstanceId)))
 		}
-		if err := upd.OnMessage(ctx, message, workflow.WithEffects(handler.effects, handler.mutableState)); err != nil {
+
+		if err := upd.OnProtocolMessage(
+			ctx,
+			message,
+			workflow.WithEffects(handler.effects, handler.mutableState)); err != nil {
 			return handler.failWorkflowTaskOnInvalidArgument(
 				enumspb.WORKFLOW_TASK_FAILED_CAUSE_BAD_UPDATE_WORKFLOW_EXECUTION_MESSAGE, err)
 		}
@@ -571,23 +633,13 @@ func (handler *workflowTaskHandlerImpl) handleCommandStartTimer(
 func (handler *workflowTaskHandlerImpl) handleCommandCompleteWorkflow(
 	ctx context.Context,
 	attr *commandpb.CompleteWorkflowExecutionCommandAttributes,
-	msgs *collection.IndexedTakeList[string, *protocolpb.Message],
 ) error {
-
-	for _, msg := range msgs.TakeRemaining() {
-		err := handler.handleMessage(ctx, msg)
-		if err != nil || handler.stopProcessing {
-			return err
-		}
-	}
 
 	handler.metricsHandler.Counter(metrics.CommandTypeCompleteWorkflowCounter.Name()).Record(1)
 
 	if handler.hasBufferedEvents {
 		return handler.failWorkflowTask(enumspb.WORKFLOW_TASK_FAILED_CAUSE_UNHANDLED_COMMAND, nil)
 	}
-
-	handler.updateRegistry.TerminateUpdates(ctx, workflow.WithEffects(handler.effects, handler.mutableState))
 
 	if err := handler.validateCommandAttr(
 		func() (enumspb.WorkflowTaskFailedCause, error) {
@@ -646,8 +698,6 @@ func (handler *workflowTaskHandlerImpl) handleCommandFailWorkflow(
 	if handler.hasBufferedEvents {
 		return handler.failWorkflowTask(enumspb.WORKFLOW_TASK_FAILED_CAUSE_UNHANDLED_COMMAND, nil)
 	}
-
-	handler.updateRegistry.TerminateUpdates(ctx, workflow.WithEffects(handler.effects, handler.mutableState))
 
 	if err := handler.validateCommandAttr(
 		func() (enumspb.WorkflowTaskFailedCause, error) {
@@ -751,8 +801,6 @@ func (handler *workflowTaskHandlerImpl) handleCommandCancelWorkflow(
 		return handler.failWorkflowTask(enumspb.WORKFLOW_TASK_FAILED_CAUSE_UNHANDLED_COMMAND, nil)
 	}
 
-	handler.updateRegistry.TerminateUpdates(ctx, workflow.WithEffects(handler.effects, handler.mutableState))
-
 	if err := handler.validateCommandAttr(
 		func() (enumspb.WorkflowTaskFailedCause, error) {
 			return handler.attrValidator.validateCancelWorkflowExecutionAttributes(attr)
@@ -855,8 +903,6 @@ func (handler *workflowTaskHandlerImpl) handleCommandContinueAsNewWorkflow(
 	if handler.hasBufferedEvents {
 		return handler.failWorkflowTask(enumspb.WORKFLOW_TASK_FAILED_CAUSE_UNHANDLED_COMMAND, nil)
 	}
-
-	handler.updateRegistry.TerminateUpdates(ctx, workflow.WithEffects(handler.effects, handler.mutableState))
 
 	namespaceName := handler.mutableState.GetNamespaceEntry().Name()
 

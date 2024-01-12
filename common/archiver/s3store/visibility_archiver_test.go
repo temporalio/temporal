@@ -38,24 +38,22 @@ import (
 	"github.com/golang/mock/gomock"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
+	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
+	workflowpb "go.temporal.io/api/workflow/v1"
 	"google.golang.org/protobuf/types/known/timestamppb"
-
-	"go.temporal.io/server/common/searchattribute"
 
 	archiverspb "go.temporal.io/server/api/archiver/v1"
 	"go.temporal.io/server/common/archiver"
 	"go.temporal.io/server/common/archiver/s3store/mocks"
 	"go.temporal.io/server/common/codec"
-	"go.temporal.io/server/common/convert"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/payload"
 	"go.temporal.io/server/common/primitives/timestamp"
-
-	commonpb "go.temporal.io/api/common/v1"
-	workflowpb "go.temporal.io/api/workflow/v1"
+	"go.temporal.io/server/common/searchattribute"
+	"go.temporal.io/server/common/util"
 )
 
 type visibilityArchiverSuite struct {
@@ -274,9 +272,9 @@ func (s *visibilityArchiverSuite) TestQuery_Success_DirectoryNotExist() {
 	visibilityArchiver := s.newTestVisibilityArchiver()
 	mockParser := NewMockQueryParser(s.controller)
 	mockParser.EXPECT().Parse(gomock.Any()).Return(&parsedQuery{
-		workflowID:      convert.StringPtr(testWorkflowID),
+		workflowID:      util.Ptr(testWorkflowID),
 		closeTime:       &time.Time{},
-		searchPrecision: convert.StringPtr(PrecisionSecond),
+		searchPrecision: util.Ptr(PrecisionSecond),
 	}, nil)
 	visibilityArchiver.queryParser = mockParser
 	request := &archiver.QueryVisibilityRequest{
@@ -295,9 +293,9 @@ func (s *visibilityArchiverSuite) TestQuery_Success_NoNextPageToken() {
 	visibilityArchiver := s.newTestVisibilityArchiver()
 	mockParser := NewMockQueryParser(s.controller)
 	mockParser.EXPECT().Parse(gomock.Any()).Return(&parsedQuery{
-		closeTime:       ptr(time.Unix(0, int64(1*time.Hour)).UTC()),
-		searchPrecision: convert.StringPtr(PrecisionHour),
-		workflowID:      convert.StringPtr(testWorkflowID),
+		closeTime:       util.Ptr(time.Unix(0, int64(1*time.Hour)).UTC()),
+		searchPrecision: util.Ptr(PrecisionHour),
+		workflowID:      util.Ptr(testWorkflowID),
 	}, nil)
 	visibilityArchiver.queryParser = mockParser
 	request := &archiver.QueryVisibilityRequest{
@@ -321,9 +319,9 @@ func (s *visibilityArchiverSuite) TestQuery_Success_SmallPageSize() {
 	visibilityArchiver := s.newTestVisibilityArchiver()
 	mockParser := NewMockQueryParser(s.controller)
 	mockParser.EXPECT().Parse(gomock.Any()).Return(&parsedQuery{
-		closeTime:       ptr(time.Unix(0, 0).UTC()),
-		searchPrecision: convert.StringPtr(PrecisionDay),
-		workflowID:      convert.StringPtr(testWorkflowID),
+		closeTime:       util.Ptr(time.Unix(0, 0).UTC()),
+		searchPrecision: util.Ptr(PrecisionDay),
+		workflowID:      util.Ptr(testWorkflowID),
 	}, nil).AnyTimes()
 	visibilityArchiver.queryParser = mockParser
 	request := &archiver.QueryVisibilityRequest{
@@ -537,9 +535,9 @@ func (s *visibilityArchiverSuite) TestArchiveAndQueryPrecisions() {
 	for i, testData := range precisionTests {
 		mockParser := NewMockQueryParser(s.controller)
 		mockParser.EXPECT().Parse(gomock.Any()).Return(&parsedQuery{
-			closeTime:       ptr(time.Date(2000, 1, testData.day, testData.hour, testData.minute, testData.second, 0, time.UTC)),
-			searchPrecision: convert.StringPtr(testData.precision),
-			workflowID:      convert.StringPtr(testWorkflowID),
+			closeTime:       util.Ptr(time.Date(2000, 1, testData.day, testData.hour, testData.minute, testData.second, 0, time.UTC)),
+			searchPrecision: util.Ptr(testData.precision),
+			workflowID:      util.Ptr(testWorkflowID),
 		}, nil).AnyTimes()
 		visibilityArchiver.queryParser = mockParser
 
@@ -550,9 +548,9 @@ func (s *visibilityArchiverSuite) TestArchiveAndQueryPrecisions() {
 
 		mockParser = NewMockQueryParser(s.controller)
 		mockParser.EXPECT().Parse(gomock.Any()).Return(&parsedQuery{
-			startTime:       ptr(time.Date(2000, 1, testData.day, testData.hour, testData.minute, testData.second, 0, time.UTC)),
-			searchPrecision: convert.StringPtr(testData.precision),
-			workflowID:      convert.StringPtr(testWorkflowID),
+			startTime:       util.Ptr(time.Date(2000, 1, testData.day, testData.hour, testData.minute, testData.second, 0, time.UTC)),
+			searchPrecision: util.Ptr(testData.precision),
+			workflowID:      util.Ptr(testWorkflowID),
 		}, nil).AnyTimes()
 		visibilityArchiver.queryParser = mockParser
 
@@ -563,9 +561,9 @@ func (s *visibilityArchiverSuite) TestArchiveAndQueryPrecisions() {
 
 		mockParser = NewMockQueryParser(s.controller)
 		mockParser.EXPECT().Parse(gomock.Any()).Return(&parsedQuery{
-			closeTime:        ptr(time.Date(2000, 1, testData.day, testData.hour, testData.minute, testData.second, 0, time.UTC)),
-			searchPrecision:  convert.StringPtr(testData.precision),
-			workflowTypeName: convert.StringPtr(testWorkflowTypeName),
+			closeTime:        util.Ptr(time.Date(2000, 1, testData.day, testData.hour, testData.minute, testData.second, 0, time.UTC)),
+			searchPrecision:  util.Ptr(testData.precision),
+			workflowTypeName: util.Ptr(testWorkflowTypeName),
 		}, nil).AnyTimes()
 		visibilityArchiver.queryParser = mockParser
 
@@ -576,9 +574,9 @@ func (s *visibilityArchiverSuite) TestArchiveAndQueryPrecisions() {
 
 		mockParser = NewMockQueryParser(s.controller)
 		mockParser.EXPECT().Parse(gomock.Any()).Return(&parsedQuery{
-			startTime:        ptr(time.Date(2000, 1, testData.day, testData.hour, testData.minute, testData.second, 0, time.UTC)),
-			searchPrecision:  convert.StringPtr(testData.precision),
-			workflowTypeName: convert.StringPtr(testWorkflowTypeName),
+			startTime:        util.Ptr(time.Date(2000, 1, testData.day, testData.hour, testData.minute, testData.second, 0, time.UTC)),
+			searchPrecision:  util.Ptr(testData.precision),
+			workflowTypeName: util.Ptr(testWorkflowTypeName),
 		}, nil).AnyTimes()
 		visibilityArchiver.queryParser = mockParser
 
@@ -600,7 +598,7 @@ func (s *visibilityArchiverSuite) TestArchiveAndQuery() {
 
 	mockParser := NewMockQueryParser(s.controller)
 	mockParser.EXPECT().Parse(gomock.Any()).Return(&parsedQuery{
-		workflowID: convert.StringPtr(testWorkflowID),
+		workflowID: util.Ptr(testWorkflowID),
 	}, nil).AnyTimes()
 	visibilityArchiver.queryParser = mockParser
 	request := &archiver.QueryVisibilityRequest{
@@ -631,7 +629,7 @@ func (s *visibilityArchiverSuite) TestArchiveAndQuery() {
 
 	mockParser = NewMockQueryParser(s.controller)
 	mockParser.EXPECT().Parse(gomock.Any()).Return(&parsedQuery{
-		workflowTypeName: convert.StringPtr(testWorkflowTypeName),
+		workflowTypeName: util.Ptr(testWorkflowTypeName),
 	}, nil).AnyTimes()
 	visibilityArchiver.queryParser = mockParser
 	request = &archiver.QueryVisibilityRequest{
