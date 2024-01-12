@@ -151,6 +151,7 @@ func (s *quotasSuite) TestExecutionAPIs() {
 		"PollActivityTaskQueue":         {},
 		"GetWorkerBuildIdCompatibility": {},
 		"GetWorkerTaskReachability":     {},
+		"ListWorkerVersioningRules":     {},
 		"DeleteWorkflowExecution":       {},
 
 		"ResetStickyTaskQueue":    {},
@@ -198,6 +199,7 @@ func (s *quotasSuite) TestNamespaceReplicationInducingAPIs() {
 		"RegisterNamespace":                {},
 		"UpdateNamespace":                  {},
 		"UpdateWorkerBuildIdCompatibility": {},
+		"UpdateWorkerVersioningRules":      {},
 	}
 
 	var service workflowservice.WorkflowServiceServer
