@@ -47,19 +47,11 @@ import (
 const (
 	initialRangeID     = 1 // Id of the first range of a new task queue
 	stickyTaskQueueTTL = 24 * time.Hour
-
-	// "Version set id" for the dlq for versioned tasks. This won't match any real version set
-	// since those are based on hashes of build ids.
-	dlqVersionSet = "dlq"
 )
 
 const (
 	// userDataEnabled is the default state: user data is enabled.
 	userDataEnabled userDataState = iota
-	// userDataDisabled means user data is disabled due to the LoadUserData dynamic config
-	// being turned off on this node or the parent node. This should cause GetUserData to
-	// return a FailedPrecondition error.
-	userDataDisabled
 	// userDataSpecificVersion means this tqm/db is for a specific version set, which doesn't
 	// have its own user data and it should not be used. This should cause GetUserData to
 	// return an Internal error (access would indicate a bug).
@@ -97,8 +89,6 @@ var (
 	// This is an internal error when requesting user data on a TQM created for a specific
 	// version set. This indicates a bug in the server since nothing should be using this data.
 	errNoUserDataOnVersionedTQM = serviceerror.NewInternal("should not get user data on versioned tqm")
-
-	errUserDataDisabled = serviceerror.NewFailedPrecondition("Task queue user data operations are disabled")
 
 	errTaskQueueClosed = serviceerror.NewUnavailable("task queue closed")
 )
@@ -339,10 +329,6 @@ func (db *taskQueueDB) getUserDataLocked() (*persistencespb.VersionedTaskQueueUs
 	switch db.userDataState {
 	case userDataEnabled:
 		return db.userData, db.userDataChanged, nil
-	case userDataDisabled:
-		// return userDataChanged even with an error here so that a blocking wait can be
-		// interrupted when user data is enabled again.
-		return nil, db.userDataChanged, errUserDataDisabled
 	case userDataSpecificVersion:
 		return nil, nil, errNoUserDataOnVersionedTQM
 	case userDataClosed:

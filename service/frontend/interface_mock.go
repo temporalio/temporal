@@ -449,6 +449,21 @@ func (mr *MockHandlerMockRecorder) ListTaskQueuePartitions(arg0, arg1 interface{
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ListTaskQueuePartitions", reflect.TypeOf((*MockHandler)(nil).ListTaskQueuePartitions), arg0, arg1)
 }
 
+// ListWorkerVersioningRules mocks base method.
+func (m *MockHandler) ListWorkerVersioningRules(arg0 context.Context, arg1 *v10.ListWorkerVersioningRulesRequest) (*v10.ListWorkerVersioningRulesResponse, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "ListWorkerVersioningRules", arg0, arg1)
+	ret0, _ := ret[0].(*v10.ListWorkerVersioningRulesResponse)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// ListWorkerVersioningRules indicates an expected call of ListWorkerVersioningRules.
+func (mr *MockHandlerMockRecorder) ListWorkerVersioningRules(arg0, arg1 interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ListWorkerVersioningRules", reflect.TypeOf((*MockHandler)(nil).ListWorkerVersioningRules), arg0, arg1)
+}
+
 // ListWorkflowExecutions mocks base method.
 func (m *MockHandler) ListWorkflowExecutions(arg0 context.Context, arg1 *v10.ListWorkflowExecutionsRequest) (*v10.ListWorkflowExecutionsResponse, error) {
 	m.ctrl.T.Helper()
@@ -936,6 +951,21 @@ func (m *MockHandler) UpdateWorkerBuildIdCompatibility(arg0 context.Context, arg
 func (mr *MockHandlerMockRecorder) UpdateWorkerBuildIdCompatibility(arg0, arg1 interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdateWorkerBuildIdCompatibility", reflect.TypeOf((*MockHandler)(nil).UpdateWorkerBuildIdCompatibility), arg0, arg1)
+}
+
+// UpdateWorkerVersioningRules mocks base method.
+func (m *MockHandler) UpdateWorkerVersioningRules(arg0 context.Context, arg1 *v10.UpdateWorkerVersioningRulesRequest) (*v10.UpdateWorkerVersioningRulesResponse, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "UpdateWorkerVersioningRules", arg0, arg1)
+	ret0, _ := ret[0].(*v10.UpdateWorkerVersioningRulesResponse)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// UpdateWorkerVersioningRules indicates an expected call of UpdateWorkerVersioningRules.
+func (mr *MockHandlerMockRecorder) UpdateWorkerVersioningRules(arg0, arg1 interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdateWorkerVersioningRules", reflect.TypeOf((*MockHandler)(nil).UpdateWorkerVersioningRules), arg0, arg1)
 }
 
 // UpdateWorkflowExecution mocks base method.
