@@ -193,8 +193,6 @@ func GrpcServerOptionsProvider(
 		namespaceLogInterceptor.Intercept, // TODO: Deprecate this with a outer custom interceptor
 		grpc.UnaryServerInterceptor(traceInterceptor),
 		metrics.NewServerMetricsContextInjectorInterceptor(),
-		redirectionInterceptor.Intercept,
-		telemetryInterceptor.UnaryIntercept,
 		authorization.NewAuthorizationInterceptor(
 			claimMapper,
 			authorizer,
@@ -202,6 +200,8 @@ func GrpcServerOptionsProvider(
 			logger,
 			audienceGetter,
 		),
+		redirectionInterceptor.Intercept,
+		telemetryInterceptor.UnaryIntercept,
 		namespaceValidatorInterceptor.StateValidationIntercept,
 		namespaceCountLimiterInterceptor.Intercept,
 		namespaceRateLimiterInterceptor.Intercept,
