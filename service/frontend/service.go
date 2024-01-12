@@ -390,6 +390,7 @@ func (s *Service) Stop() {
 
 	s.logger.Info("ShutdownHandler: Updating gRPC health status to ShuttingDown")
 	s.healthServer.Shutdown()
+	s.membershipMonitor.SetDraining(true)
 
 	s.logger.Info("ShutdownHandler: Waiting for others to discover I am unhealthy")
 	time.Sleep(failureDetectionTime)
