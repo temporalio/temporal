@@ -283,6 +283,16 @@ func (c *clientImpl) ListTaskQueuePartitions(
 	return c.client.ListTaskQueuePartitions(ctx, request, opts...)
 }
 
+func (c *clientImpl) ListWorkerVersioningRules(
+	ctx context.Context,
+	request *workflowservice.ListWorkerVersioningRulesRequest,
+	opts ...grpc.CallOption,
+) (*workflowservice.ListWorkerVersioningRulesResponse, error) {
+	ctx, cancel := c.createContext(ctx)
+	defer cancel()
+	return c.client.ListWorkerVersioningRules(ctx, request, opts...)
+}
+
 func (c *clientImpl) ListWorkflowExecutions(
 	ctx context.Context,
 	request *workflowservice.ListWorkflowExecutionsRequest,
@@ -591,6 +601,16 @@ func (c *clientImpl) UpdateWorkerBuildIdCompatibility(
 	ctx, cancel := c.createContext(ctx)
 	defer cancel()
 	return c.client.UpdateWorkerBuildIdCompatibility(ctx, request, opts...)
+}
+
+func (c *clientImpl) UpdateWorkerVersioningRules(
+	ctx context.Context,
+	request *workflowservice.UpdateWorkerVersioningRulesRequest,
+	opts ...grpc.CallOption,
+) (*workflowservice.UpdateWorkerVersioningRulesResponse, error) {
+	ctx, cancel := c.createContext(ctx)
+	defer cancel()
+	return c.client.UpdateWorkerVersioningRules(ctx, request, opts...)
 }
 
 func (c *clientImpl) UpdateWorkflowExecution(

@@ -410,6 +410,21 @@ func (c *retryableClient) ListTaskQueuePartitions(
 	return resp, err
 }
 
+func (c *retryableClient) ListWorkerVersioningRules(
+	ctx context.Context,
+	request *workflowservice.ListWorkerVersioningRulesRequest,
+	opts ...grpc.CallOption,
+) (*workflowservice.ListWorkerVersioningRulesResponse, error) {
+	var resp *workflowservice.ListWorkerVersioningRulesResponse
+	op := func(ctx context.Context) error {
+		var err error
+		resp, err = c.client.ListWorkerVersioningRules(ctx, request, opts...)
+		return err
+	}
+	err := backoff.ThrottleRetryContext(ctx, op, c.policy, c.isRetryable)
+	return resp, err
+}
+
 func (c *retryableClient) ListWorkflowExecutions(
 	ctx context.Context,
 	request *workflowservice.ListWorkflowExecutionsRequest,
@@ -869,6 +884,21 @@ func (c *retryableClient) UpdateWorkerBuildIdCompatibility(
 	op := func(ctx context.Context) error {
 		var err error
 		resp, err = c.client.UpdateWorkerBuildIdCompatibility(ctx, request, opts...)
+		return err
+	}
+	err := backoff.ThrottleRetryContext(ctx, op, c.policy, c.isRetryable)
+	return resp, err
+}
+
+func (c *retryableClient) UpdateWorkerVersioningRules(
+	ctx context.Context,
+	request *workflowservice.UpdateWorkerVersioningRulesRequest,
+	opts ...grpc.CallOption,
+) (*workflowservice.UpdateWorkerVersioningRulesResponse, error) {
+	var resp *workflowservice.UpdateWorkerVersioningRulesResponse
+	op := func(ctx context.Context) error {
+		var err error
+		resp, err = c.client.UpdateWorkerVersioningRules(ctx, request, opts...)
 		return err
 	}
 	err := backoff.ThrottleRetryContext(ctx, op, c.policy, c.isRetryable)
