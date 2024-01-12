@@ -207,7 +207,7 @@ func (s *namespaceTestSuite) Test_NamespaceDelete_OverrideDelay() {
 		if errors.As(err, &notFound) {
 			return nil
 		}
-		return errors.New("namespace still exists")
+		return errors.New("namespace still exists") // nolint:goerr113
 	}
 
 	namespaceExistsPolicy := backoff.NewExponentialRetryPolicy(time.Second).
