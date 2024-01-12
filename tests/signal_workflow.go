@@ -1563,7 +1563,6 @@ func (s *FunctionalSuite) TestSignalWithStartWorkflow() {
 	s.ProtoEqual(signalInput, signalEvent.GetWorkflowExecutionSignaledEventAttributes().Input)
 	s.Equal(identity, signalEvent.GetWorkflowExecutionSignaledEventAttributes().Identity)
 
-	// Assert visibility is correct
 	listOpenRequest := &workflowservice.ListOpenWorkflowExecutionsRequest{
 		Namespace:       s.namespace,
 		MaximumPageSize: 100,
@@ -1571,13 +1570,23 @@ func (s *FunctionalSuite) TestSignalWithStartWorkflow() {
 			EarliestTime: nil,
 			LatestTime:   timestamppb.New(time.Now().UTC()),
 		},
-		Filters: &workflowservice.ListOpenWorkflowExecutionsRequest_ExecutionFilter{ExecutionFilter: &filterpb.WorkflowExecutionFilter{
-			WorkflowId: id,
-		}},
+		Filters: &workflowservice.ListOpenWorkflowExecutionsRequest_ExecutionFilter{
+			ExecutionFilter: &filterpb.WorkflowExecutionFilter{
+				WorkflowId: id,
+			},
+		},
 	}
-	listResp, err := s.engine.ListOpenWorkflowExecutions(NewContext(), listOpenRequest)
-	s.NoError(err)
-	s.Equal(1, len(listResp.Executions))
+
+	// Assert visibility is correct
+	s.Eventually(
+		func() bool {
+			listResp, err := s.engine.ListOpenWorkflowExecutions(NewContext(), listOpenRequest)
+			s.NoError(err)
+			return len(listResp.Executions) == 1
+		},
+		waitForESToSettle,
+		100*time.Millisecond,
+	)
 
 	// Terminate workflow execution and assert visibility is correct
 	_, err = s.engine.TerminateWorkflowExecution(NewContext(), &workflowservice.TerminateWorkflowExecutionRequest{
@@ -1591,15 +1600,15 @@ func (s *FunctionalSuite) TestSignalWithStartWorkflow() {
 	})
 	s.NoError(err)
 
-	for i := 0; i < 10; i++ { // retry
-		listResp, err = s.engine.ListOpenWorkflowExecutions(NewContext(), listOpenRequest)
-		s.NoError(err)
-		if len(listResp.Executions) == 0 {
-			break
-		}
-		time.Sleep(100 * time.Millisecond)
-	}
-	s.Equal(0, len(listResp.Executions))
+	s.Eventually(
+		func() bool {
+			listResp, err := s.engine.ListOpenWorkflowExecutions(NewContext(), listOpenRequest)
+			s.NoError(err)
+			return len(listResp.Executions) == 0
+		},
+		waitForESToSettle,
+		100*time.Millisecond,
+	)
 
 	listClosedRequest := &workflowservice.ListClosedWorkflowExecutionsRequest{
 		Namespace:       s.namespace,
