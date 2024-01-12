@@ -141,7 +141,7 @@ dispatchLoop:
 
 				// if task is still valid (truly valid or unable to verify if task is valid)
 				tr.taggedMetricsHandler().Counter(metrics.BufferThrottlePerTaskQueueCounter.Name()).Record(1)
-				if !errors.Is(err, errUserDataDisabled) && !errors.Is(err, context.DeadlineExceeded) && !errors.Is(err, context.Canceled) {
+				if !errors.Is(err, context.DeadlineExceeded) && !errors.Is(err, context.Canceled) {
 					// Don't log here if encounters missing user data error when dispatch a versioned task.
 					tr.throttledLogger().Error("taskReader: unexpected error dispatching task", tag.Error(err))
 				}
