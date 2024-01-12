@@ -471,23 +471,8 @@ func (s *scheduler) getNextTimeV2(cacheBase, after time.Time) getNextTimeResult 
 	// the second is refilled from cacheBase, and the third is if cacheBase was set
 	// too far in the past, we ignore it and fill the cache from after.
 	for try := 1; try <= 3; try++ {
-		// Results covers a contiguous time range so we can search in it
-		cache := s.nextTimeCacheV2
-		start := cache.StartTime.AsTime()
-		afterOffset := int64(after.Sub(start))
-		for i, nextOffset := range cache.NextTimes {
-			if nextOffset > afterOffset {
-				next := start.Add(time.Duration(nextOffset))
-				nominal := next
-				if i < len(cache.NominalTimes) && cache.NominalTimes[i] != 0 {
-					nominal = start.Add(time.Duration(cache.NominalTimes[i]))
-				}
-				return getNextTimeResult{Nominal: nominal, Next: next}
-			}
-		}
-		// Ran off end: if completed, then we're done
-		if cache.Completed {
-			return getNextTimeResult{}
+		if res, ok := searchCache(s.nextTimeCacheV2, after); ok {
+			return res
 		}
 		// Otherwise refill from base
 		s.fillNextTimeCacheV2(cacheBase)
@@ -499,6 +484,27 @@ func (s *scheduler) getNextTimeV2(cacheBase, after time.Time) getNextTimeResult 
 	// This should never happen unless there's a bug.
 	s.logger.Error("getNextTimeV2: time not found in cache", "after", after)
 	return getNextTimeResult{}
+}
+
+func searchCache(cache *schedspb.NextTimeCache, after time.Time) (getNextTimeResult, bool) {
+	// The cache covers a contiguous time range so we can do a linear search in it.
+	start := cache.StartTime.AsTime()
+	afterOffset := int64(after.Sub(start))
+	for i, nextOffset := range cache.NextTimes {
+		if nextOffset > afterOffset {
+			next := start.Add(time.Duration(nextOffset))
+			nominal := next
+			if i < len(cache.NominalTimes) && cache.NominalTimes[i] != 0 {
+				nominal = start.Add(time.Duration(cache.NominalTimes[i]))
+			}
+			return getNextTimeResult{Nominal: nominal, Next: next}, true
+		}
+	}
+	// Ran off end: if completed, then we're done
+	if cache.Completed {
+		return getNextTimeResult{}, true
+	}
+	return getNextTimeResult{}, false
 }
 
 func (s *scheduler) fillNextTimeCacheV2(start time.Time) {
