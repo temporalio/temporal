@@ -163,63 +163,6 @@ func (s *sqlNexusIncomingServiceStore) ListNexusIncomingServices(
 	return &response, retErr
 }
 
-//func (s *sqlNexusIncomingServiceStore) ListNexusIncomingServices(
-//	ctx context.Context,
-//	request *p.InternalListNexusIncomingServicesRequest,
-//) (*p.InternalListNexusIncomingServicesResponse, error) {
-//	lastServiceID := make([]byte, 0)
-//	if len(request.NextPageToken) > 0 {
-//		token, err := deserializePageTokenJson[listIncomingServicesNextPageToken](request.NextPageToken)
-//		if err != nil {
-//			return nil, err
-//		}
-//		lastServiceID = token.LastServiceID
-//	}
-//
-//	resp, err := s.Db.ListNexusIncomingServices(ctx, &sqlplugin.ListNexusIncomingServicesRequest{
-//		LastKnownTableVersion: request.LastKnownTableVersion,
-//		LastServiceID:         lastServiceID,
-//		Limit:                 request.PageSize,
-//	})
-//	var curTableVersion int64
-//	if resp != nil {
-//		curTableVersion = resp.CurrentTableVersion
-//	}
-//	if err != nil {
-//		if errors.Is(err, p.ErrNexusIncomingServiceVersionConflict) {
-//			// On table version conflict, return current table version and appropriate error
-//			return &p.InternalListNexusIncomingServicesResponse{TableVersion: curTableVersion}, err
-//		}
-//		// For all other errors, operation failed so return Unavailable error
-//		s.logger.Error("ListNexusIncomingServices operation failed", tag.Error(err))
-//		return nil, serviceerror.NewUnavailable(fmt.Sprintf("ListNexusIncmoingServices operation failed: %v", err))
-//	}
-//
-//	var nextPageToken []byte
-//	if len(resp.Entries) == request.PageSize {
-//		nextPageToken, err = serializePageTokenJson(&listIncomingServicesNextPageToken{
-//			LastServiceID: resp.Entries[request.PageSize-1].ServiceID,
-//		})
-//		if err != nil {
-//			s.logger.Error("error serializing next page token during ListNexusIncomingServices", tag.Error(err))
-//			return nil, serviceerror.NewInternal(err.Error())
-//		}
-//	}
-//
-//	services := make([]p.InternalNexusIncomingService, len(resp.Entries))
-//	for i, entry := range resp.Entries {
-//		services[i].ServiceID = primitives.UUIDString(entry.ServiceID)
-//		services[i].Version = entry.Version
-//		services[i].Data = p.NewDataBlob(entry.Data, entry.DataEncoding)
-//	}
-//
-//	return &p.InternalListNexusIncomingServicesResponse{
-//		TableVersion:  curTableVersion,
-//		Services:      services,
-//		NextPageToken: nextPageToken,
-//	}, nil
-//}
-
 func (s *sqlNexusIncomingServiceStore) DeleteNexusIncomingService(
 	ctx context.Context,
 	request *p.InternalDeleteNexusIncomingServiceRequest,
