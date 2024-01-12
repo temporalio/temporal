@@ -25,6 +25,7 @@ package mysql
 import (
 	"context"
 	"database/sql"
+	"errors"
 
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/persistence/sql/sqlplugin"
@@ -33,14 +34,12 @@ import (
 const (
 	createIncomingServicesTableVersionQry    = `INSERT INTO nexus_services_table_versions(service_type, version) VALUES(0, 1)`
 	incrementIncomingServicesTableVersionQry = `UPDATE nexus_services_table_versions SET version = ? WHERE service_type = 0 AND version = ?`
+	getIncomingServicesTableVersionQry       = `SELECT version FROM nexus_services_table_versions WHERE service_type = 0 LIMIT 1`
 
 	createIncomingServiceQry = `INSERT INTO nexus_incoming_services(service_id, data, data_encoding, version) VALUES (?, ?, ?, 1)`
 	updateIncomingServiceQry = `UPDATE nexus_incoming_services SET data = ?, data_encoding = ?, version = ? WHERE service_id = ? AND version = ?`
 	deleteIncomingServiceQry = `DELETE FROM nexus_incoming_services WHERE service_id = ?`
-
-	listIncomingServicesQryBase         = `(SELECT null AS service_id, null AS data, "" AS data_encoding, version FROM nexus_services_table_versions WHERE service_type = 0 LIMIT 1) UNION (SELECT service_id, data, data_encoding, version FROM nexus_incoming_services`
-	listIncomingServicesFirstPageQry    = listIncomingServicesQryBase + ` LIMIT ?)`
-	listIncomingServicesNonFirstPageQry = listIncomingServicesQryBase + ` WHERE EXISTS(SELECT * FROM nexus_services_table_versions WHERE service_type = 0 AND version = ?) AND service_id > ? LIMIT ?)`
+	getIncomingServicesQry   = `SELECT service_id, data, data_encoding, version FROM nexus_incoming_services WHERE service_id > ? LIMIT ?`
 )
 
 func (mdb *db) InitializeNexusIncomingServicesTableVersion(ctx context.Context) error {
@@ -77,7 +76,12 @@ func (mdb *db) IncrementNexusIncomingServicesTableVersion(
 }
 
 func (mdb *db) GetNexusIncomingServicesTableVersion(ctx context.Context) (int64, error) {
-	return 0, nil
+	version := int64(-1)
+	err := mdb.conn.GetContext(ctx, &version, getIncomingServicesTableVersionQry)
+	if errors.Is(err, sql.ErrNoRows) {
+		return 0, nil
+	}
+	return version, err
 }
 
 func (mdb *db) InsertIntoNexusIncomingServices(
@@ -141,71 +145,7 @@ func (mdb *db) ListNexusIncomingServices(
 	ctx context.Context,
 	request *sqlplugin.ListNexusIncomingServicesRequest,
 ) ([]sqlplugin.NexusIncomingServicesRow, error) {
-	return nil, nil
+	var rows []sqlplugin.NexusIncomingServicesRow
+	err := mdb.conn.SelectContext(ctx, &rows, getIncomingServicesQry, request.LastServiceID, request.Limit)
+	return rows, err
 }
-
-//func (mdb *db) ListNexusIncomingServices(
-//	ctx context.Context,
-//	request *sqlplugin.ListNexusIncomingServicesRequest,
-//) (*sqlplugin.ListNexusIncomingServicesResponse, error) {
-//	if request.LastKnownTableVersion == 0 {
-//		return mdb.listNexusIncomingServicesFirstPage(ctx, request)
-//	}
-//	return mdb.listNexusIncomingServicesNonFirstPage(ctx, request)
-//}
-//
-//func (mdb *db) listNexusIncomingServicesFirstPage(
-//	ctx context.Context,
-//	request *sqlplugin.ListNexusIncomingServicesRequest,
-//) (*sqlplugin.ListNexusIncomingServicesResponse, error) {
-//	var rows []sqlplugin.NexusIncomingServicesRow
-//	err := mdb.conn.SelectContext(
-//		ctx,
-//		&rows,
-//		listIncomingServicesFirstPageQry,
-//		request.Limit)
-//	if err != nil {
-//		return nil, err
-//	}
-//
-//	if len(rows) < 1 {
-//		// If no error and no rows returned, then no services have been inserted yet
-//		// and table version hasn't been initialized
-//		return &sqlplugin.ListNexusIncomingServicesResponse{
-//			CurrentTableVersion: 0,
-//			Entries:             nil,
-//		}, nil
-//	}
-//
-//	return &sqlplugin.ListNexusIncomingServicesResponse{
-//		CurrentTableVersion: rows[0].Version,
-//		Entries:             rows[1:],
-//	}, nil
-//}
-//
-//func (mdb *db) listNexusIncomingServicesNonFirstPage(
-//	ctx context.Context,
-//	request *sqlplugin.ListNexusIncomingServicesRequest,
-//) (*sqlplugin.ListNexusIncomingServicesResponse, error) {
-//	var rows []sqlplugin.NexusIncomingServicesRow
-//	err := mdb.conn.SelectContext(
-//		ctx,
-//		&rows,
-//		listIncomingServicesNonFirstPageQry,
-//		request.LastKnownTableVersion,
-//		request.LastServiceID,
-//		request.Limit)
-//	if err != nil {
-//		return nil, err
-//	}
-//	if len(rows) == 1 && rows[0].Version != request.LastKnownTableVersion {
-//		return &sqlplugin.ListNexusIncomingServicesResponse{
-//			CurrentTableVersion: rows[0].Version,
-//		}, persistence.ErrNexusTableVersionConflict
-//	}
-//
-//	return &sqlplugin.ListNexusIncomingServicesResponse{
-//		CurrentTableVersion: rows[0].Version,
-//		Entries:             rows[1:],
-//	}, nil
-//}
