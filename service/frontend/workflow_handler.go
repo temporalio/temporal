@@ -2345,6 +2345,9 @@ func (wh *WorkflowHandler) QueryWorkflow(ctx context.Context, request *workflows
 	}
 	hResponse, err := wh.historyClient.QueryWorkflow(ctx, req)
 	if err != nil {
+		if common.IsContextDeadlineExceededErr(err) {
+			return nil, serviceerror.NewDeadlineExceeded("query timed out before a worker could process it")
+		}
 		return nil, err
 	}
 	return hResponse.GetResponse(), nil
