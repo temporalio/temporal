@@ -119,7 +119,10 @@ func (s *sqlNexusIncomingServiceStore) ListNexusIncomingServices(
 		LastServiceID:         lastServiceID,
 		Limit:                 request.PageSize,
 	})
-	curTableVersion := resp.CurrentTableVersion
+	var curTableVersion int64
+	if resp != nil {
+		curTableVersion = resp.CurrentTableVersion
+	}
 	if err != nil {
 		if errors.Is(err, p.ErrNexusIncomingServiceVersionConflict) {
 			// On table version conflict, return current table version and appropriate error
