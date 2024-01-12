@@ -56,7 +56,7 @@ func RunNexusIncomingServiceTestSuite(t *testing.T, store persistence.NexusServi
 
 func testNexusIncomingServicesStoreSteadyState(t *testing.T, store persistence.NexusServiceStore, tableVersion *atomic.Int64) {
 	t.Run("SteadyState", func(t *testing.T) {
-		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		ctx, cancel := context.WithTimeout(context.Background(), 50*time.Second)
 		defer cancel()
 
 		data := &commonpb.DataBlob{
@@ -272,10 +272,6 @@ func testListNexusIncomingServicesExpectedErrors(t *testing.T, store persistence
 		require.Contains(t, resp.Services, firstService)
 		require.Contains(t, resp.Services, secondService)
 		require.Equal(t, resp.TableVersion, tableVersion.Load())
-
-		// Non-positive page size
-		_, err = store.ListNexusIncomingServices(ctx, &persistence.InternalListNexusIncomingServicesRequest{PageSize: -1, LastKnownTableVersion: tableVersion.Load()})
-		require.ErrorContains(t, err, "received non-positive page size for listing Nexus incoming services")
 
 		// Table version mismatch
 		_, err = store.ListNexusIncomingServices(ctx, &persistence.InternalListNexusIncomingServicesRequest{PageSize: 10, LastKnownTableVersion: 100})

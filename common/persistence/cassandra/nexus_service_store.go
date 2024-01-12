@@ -147,7 +147,7 @@ func (s *NexusServiceStore) CreateOrUpdateNexusIncomingService(
 		}
 		if currentTableVersion != request.LastKnownTableVersion {
 			return fmt.Errorf("%w. provided table version: %v current table version: %v",
-				p.ErrTableVersionConflict,
+				p.ErrNexusTableVersionConflict,
 				request.LastKnownTableVersion,
 				currentTableVersion)
 		}
@@ -208,7 +208,7 @@ func (s *NexusServiceStore) ListNexusIncomingServices(
 	if request.LastKnownTableVersion != currentTableVersion {
 		// If table has been updated during pagination, throw error to indicate caller must start over
 		return nil, fmt.Errorf("%w. provided table version: %v current table version: %v",
-			p.ErrTableVersionConflict,
+			p.ErrNexusTableVersionConflict,
 			request.LastKnownTableVersion,
 			currentTableVersion)
 	}
@@ -251,7 +251,7 @@ func (s *NexusServiceStore) DeleteNexusIncomingService(
 		}
 		if currentTableVersion != request.LastKnownTableVersion {
 			return fmt.Errorf("%w. provided table version: %v current table version: %v",
-				p.ErrTableVersionConflict,
+				p.ErrNexusTableVersionConflict,
 				request.LastKnownTableVersion,
 				currentTableVersion)
 		}

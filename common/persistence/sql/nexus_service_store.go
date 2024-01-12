@@ -42,7 +42,7 @@ type (
 	}
 
 	listIncomingServicesNextPageToken struct {
-		LastServiceID string
+		LastServiceID []byte
 	}
 )
 
@@ -93,7 +93,7 @@ func (s *sqlNexusIncomingServiceStore) CreateOrUpdateNexusIncomingService(
 			err = tx.UpdateNexusIncomingService(ctx, &row)
 		}
 		if s.Db.IsDupEntryError(err) {
-			return &p.ConditionFailedError{Msg: err.Error()}
+			return p.ErrNexusIncomingServiceVersionConflict
 		}
 
 		return err
@@ -105,7 +105,7 @@ func (s *sqlNexusIncomingServiceStore) ListNexusIncomingServices(
 	ctx context.Context,
 	request *p.InternalListNexusIncomingServicesRequest,
 ) (*p.InternalListNexusIncomingServicesResponse, error) {
-	lastServiceID := ""
+	lastServiceID := make([]byte, 0)
 	if len(request.NextPageToken) > 0 {
 		token, err := deserializePageTokenJson[listIncomingServicesNextPageToken](request.NextPageToken)
 		if err != nil {
@@ -119,10 +119,11 @@ func (s *sqlNexusIncomingServiceStore) ListNexusIncomingServices(
 		LastServiceID:         lastServiceID,
 		Limit:                 request.PageSize,
 	})
+	curTableVersion := resp.CurrentTableVersion
 	if err != nil {
 		if errors.Is(err, p.ErrNexusIncomingServiceVersionConflict) {
 			// On table version conflict, return current table version and appropriate error
-			return &p.InternalListNexusIncomingServicesResponse{TableVersion: resp.CurrentTableVersion}, err
+			return &p.InternalListNexusIncomingServicesResponse{TableVersion: curTableVersion}, err
 		}
 		// For all other errors, operation failed so return Unavailable error
 		s.logger.Error("ListNexusIncomingServices operation failed", tag.Error(err))
@@ -142,13 +143,13 @@ func (s *sqlNexusIncomingServiceStore) ListNexusIncomingServices(
 
 	services := make([]p.InternalNexusIncomingService, len(resp.Entries))
 	for i, entry := range resp.Entries {
-		services[i].ServiceID = entry.ServiceID
+		services[i].ServiceID = primitives.UUIDString(entry.ServiceID)
 		services[i].Version = entry.Version
 		services[i].Data = p.NewDataBlob(entry.Data, entry.DataEncoding)
 	}
 
 	return &p.InternalListNexusIncomingServicesResponse{
-		TableVersion:  resp.CurrentTableVersion,
+		TableVersion:  curTableVersion,
 		Services:      services,
 		NextPageToken: nextPageToken,
 	}, nil
@@ -182,9 +183,7 @@ func (s *sqlNexusIncomingServiceStore) DeleteNexusIncomingService(
 			return serviceerror.NewUnavailable(fmt.Sprintf("rowsAffected returned error: %v", err))
 		}
 		if nRows != 1 {
-			return &p.ConditionFailedError{
-				Msg: fmt.Sprintf("delete failed: %v rows affected instead of 1", nRows),
-			}
+			return p.ErrNexusIncomingServiceNotFound
 		}
 
 		return nil

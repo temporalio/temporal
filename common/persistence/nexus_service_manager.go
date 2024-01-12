@@ -31,7 +31,7 @@ import (
 )
 
 var (
-	ErrTableVersionConflict = &ConditionFailedError{
+	ErrNexusTableVersionConflict = &ConditionFailedError{
 		Msg: "nexus incoming services table version mismatch",
 	}
 	ErrNexusIncomingServiceVersionConflict = &ConditionFailedError{

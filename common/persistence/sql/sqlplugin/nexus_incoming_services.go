@@ -37,18 +37,13 @@ type (
 
 	ListNexusIncomingServicesRequest struct {
 		LastKnownTableVersion int64
-		LastServiceID         string
+		LastServiceID         []byte
 		Limit                 int
 	}
 
 	ListNexusIncomingServicesResponse struct {
 		CurrentTableVersion int64
-		Entries             []NexusIncomingServicesEntry
-	}
-
-	NexusIncomingServicesEntry struct {
-		ServiceID string
-		VersionedBlob
+		Entries             []NexusIncomingServicesRow
 	}
 
 	// NexusIncomingServices is the SQL persistence interface for incoming Nexus services
