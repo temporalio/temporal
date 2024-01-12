@@ -138,21 +138,19 @@ func (p *DefaultErrorGenerator) Generate() error {
 	p.Lock()
 	defer p.Unlock()
 
-	if roll := p.r.Float64(); roll < math.Float64frombits(p.rate.Load()) {
-		var result error
+	rate := math.Float64frombits(p.rate.Load())
+	if roll := p.r.Float64(); roll < rate {
 		for _, fm := range p.faultMetadata {
 			if roll < fm.threshold {
 				msg := fmt.Sprintf(
 					"FaultInjectionGenerator. rate %f, roll: %f, treshold: %f",
-					math.Float64frombits(p.rate.Load()),
+					rate,
 					roll,
 					fm.threshold,
 				)
-				result = fm.errFactory(msg)
-				break
+				return fm.errFactory(msg)
 			}
 		}
-		return result
 	}
 	return nil
 }

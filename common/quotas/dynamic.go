@@ -121,10 +121,7 @@ func NewMutableRateBurst(
 	rate float64,
 	burst int,
 ) *MutableRateBurstImpl {
-	d := &MutableRateBurstImpl{
-		rate:  atomic.Uint64{},
-		burst: atomic.Int64{},
-	}
+	d := &MutableRateBurstImpl{}
 	d.SetRPS(rate)
 	d.SetBurst(burst)
 
