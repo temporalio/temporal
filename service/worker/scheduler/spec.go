@@ -295,14 +295,11 @@ func (cs *CompiledSpec) getNextTime(jitterSeed string, after time.Time) getNextT
 		after = cs.spec.StartTime.AsTime().Add(-time.Second)
 	}
 
-	isExcluded := func(t time.Time) bool {
-		return t.IsZero() || cs.excluded(t)
-	}
 	pastEndTime := func(t time.Time) bool {
 		return cs.spec.EndTime != nil && t.After(cs.spec.EndTime.AsTime())
 	}
 	var nominal time.Time
-	for isExcluded(nominal) {
+	for nominal.IsZero() || cs.excluded(nominal) {
 		nominal = cs.rawNextTime(after)
 		after = nominal
 
