@@ -39,8 +39,8 @@ const (
 	stateAdmitted state = 1 << iota
 	stateProvisionallyRequested
 	stateRequested
-	stateSent
 	stateProvisionallySent
+	stateSent
 	stateProvisionallyAccepted
 	stateAccepted
 	stateProvisionallyCompleted

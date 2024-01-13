@@ -856,8 +856,11 @@ func (s *ScheduleFunctionalSuite) TestNextTimeCache() {
 	for _, e := range events {
 		if marker := e.GetMarkerRecordedEventAttributes(); marker.GetMarkerName() == "SideEffect" {
 			sideEffects++
-			if p, ok := marker.Details["data"]; ok && strings.Contains(payloads.ToString(p), `"Next"`) {
-				nextTimeSideEffects++
+			if p, ok := marker.Details["data"]; ok && len(p.Payloads) == 1 {
+				if string(p.Payloads[0].Metadata["messageType"]) == "temporal.server.api.schedule.v1.NextTimeCache" ||
+					strings.Contains(payloads.ToString(p), `"Next"`) {
+					nextTimeSideEffects++
+				}
 			}
 		}
 	}

@@ -38,6 +38,8 @@ import (
 	"go.temporal.io/api/serviceerror"
 	updatepb "go.temporal.io/api/update/v1"
 	"go.temporal.io/api/workflowservice/v1"
+	"go.temporal.io/server/common/testing/protorequire"
+	"google.golang.org/protobuf/types/known/anypb"
 
 	clockspb "go.temporal.io/server/api/clock/v1"
 	"go.temporal.io/server/api/historyservice/v1"
@@ -83,6 +85,7 @@ type (
 
 func (mockUpdateEventStore) OnAfterCommit(f func(context.Context))   { f(context.TODO()) }
 func (mockUpdateEventStore) OnAfterRollback(f func(context.Context)) {}
+func (mockUpdateEventStore) CanAddEvent() bool                       { return true }
 
 func (m mockWFConsistencyChecker) GetWorkflowContext(
 	ctx context.Context,
@@ -230,11 +233,15 @@ func TestPollOutcome(t *testing.T) {
 		}
 		fail := failurepb.Failure{Message: "intentional failure in " + t.Name()}
 		wantOutcome := updatepb.Outcome{Value: &updatepb.Outcome_Failure{Failure: &fail}}
-		rejMsg := updatepb.Rejection{
+
+		rejBody := &updatepb.Rejection{
 			RejectedRequestMessageId: updateID + "/request",
 			RejectedRequest:          &reqMsg,
 			Failure:                  &fail,
 		}
+		var rejBodyAny anypb.Any
+		require.NoError(t, rejBodyAny.MarshalFrom(rejBody))
+		rejMsg := protocolpb.Message{Body: &rejBodyAny}
 
 		errCh := make(chan error, 1)
 		respCh := make(chan *historyservice.PollWorkflowExecutionUpdateResponse, 1)
@@ -245,13 +252,13 @@ func TestPollOutcome(t *testing.T) {
 		}()
 
 		evStore := mockUpdateEventStore{}
-		require.NoError(t, upd.OnMessage(context.TODO(), &reqMsg, evStore))
+		require.NoError(t, upd.Request(context.TODO(), &reqMsg, evStore))
 		upd.Send(context.TODO(), false, &protocolpb.Message_EventId{EventId: 2208}, evStore)
-		require.NoError(t, upd.OnMessage(context.TODO(), &rejMsg, evStore))
+		require.NoError(t, upd.OnProtocolMessage(context.TODO(), &rejMsg, evStore))
 
 		require.NoError(t, <-errCh)
 		resp := <-respCh
-		require.Equal(t, &wantOutcome, resp.GetResponse().Outcome)
+		protorequire.ProtoEqual(t, &wantOutcome, resp.GetResponse().Outcome)
 		require.Equal(t, enumspb.UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_COMPLETED, resp.Response.GetStage())
 	})
 }

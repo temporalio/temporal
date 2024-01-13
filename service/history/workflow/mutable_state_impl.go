@@ -3590,6 +3590,9 @@ func (ms *MutableStateImpl) ApplyWorkflowExecutionUpdateCompletedEvent(
 		}
 		sizeDelta = ui.Size() - sizeBefore
 	} else {
+		// TODO (alex): this should never happened because UpdateInfo should always be created before
+		// with UpdateAccepted event which MUST preceded UpdateCompleted event.
+		// Better to return error here!
 		ui := updatespb.UpdateInfo{
 			Value: &updatespb.UpdateInfo_Completion{
 				Completion: &updatespb.CompletionInfo{EventId: event.EventId},

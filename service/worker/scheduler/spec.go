@@ -35,6 +35,7 @@ import (
 	schedpb "go.temporal.io/api/schedule/v1"
 
 	"go.temporal.io/server/common"
+	"go.temporal.io/server/common/cache"
 	"go.temporal.io/server/common/primitives/timestamp"
 )
 
@@ -50,16 +51,38 @@ type (
 		Nominal time.Time // scheduled time before adding jitter
 		Next    time.Time // scheduled time after adding jitter
 	}
+
+	SpecBuilder struct {
+		// locationCache is a cache for the results of time.LoadLocation. That function accesses
+		// the filesystem and is relatively slow. We assume that it returns a semantically
+		// equivalent value for the same location name. This isn't strictly true, for example if
+		// the time zone database is changed while the process is running. To handle that, we
+		// expire entries after a day. Note that we cache negative results also.
+		locationCache cache.Cache
+	}
+
+	locationAndError struct {
+		loc *time.Location
+		err error
+	}
 )
 
-func NewCompiledSpec(spec *schedpb.ScheduleSpec) (*CompiledSpec, error) {
+func NewSpecBuilder() *SpecBuilder {
+	return &SpecBuilder{
+		locationCache: cache.New(1000, &cache.Options{
+			TTL: 24 * time.Hour,
+		}),
+	}
+}
+
+func (b *SpecBuilder) NewCompiledSpec(spec *schedpb.ScheduleSpec) (*CompiledSpec, error) {
 	spec, err := canonicalizeSpec(spec)
 	if err != nil {
 		return nil, err
 	}
 
 	// load timezone
-	tz, err := loadTimezone(spec)
+	tz, err := b.loadTimezone(spec)
 	if err != nil {
 		return nil, err
 	}
@@ -242,11 +265,20 @@ func validateInterval(i *schedpb.IntervalSpec) error {
 	return nil
 }
 
-func loadTimezone(spec *schedpb.ScheduleSpec) (*time.Location, error) {
+func (b *SpecBuilder) loadTimezone(spec *schedpb.ScheduleSpec) (*time.Location, error) {
 	if spec.TimezoneData != nil {
 		return time.LoadLocationFromTZData(spec.TimezoneName, spec.TimezoneData)
 	}
-	return time.LoadLocation(spec.TimezoneName)
+
+	if cached, ok := b.locationCache.Get(spec.TimezoneName).(*locationAndError); ok {
+		return cached.loc, cached.err
+	}
+	loc, err := time.LoadLocation(spec.TimezoneName)
+	b.locationCache.Put(spec.TimezoneName, &locationAndError{
+		loc: loc,
+		err: err,
+	})
+	return loc, err
 }
 
 func (cs *CompiledSpec) CanonicalForm() *schedpb.ScheduleSpec {

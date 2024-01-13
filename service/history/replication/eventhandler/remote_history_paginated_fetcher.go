@@ -22,7 +22,7 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-package replication
+package eventhandler
 
 import (
 	"context"
@@ -46,10 +46,11 @@ const (
 	resendContextTimeout = 30 * time.Second
 )
 
-//go:generate mockgen -copyright_file ../../../LICENSE -package $GOPACKAGE -source $GOFILE -destination remote_history_paginated_fetcher_mock.go
+//go:generate mockgen -copyright_file ../../../../LICENSE -package $GOPACKAGE -source $GOFILE -destination remote_history_paginated_fetcher_mock.go
 
 type (
 	// HistoryPaginatedFetcher is the interface for fetching history from remote cluster
+	// Start and End event ID is inclusive.
 	HistoryPaginatedFetcher interface {
 		GetSingleWorkflowHistoryPaginatedIterator(
 			ctx context.Context,
@@ -89,7 +90,6 @@ func NewHistoryPaginatedFetcher(
 	rereplicationTimeout dynamicconfig.DurationPropertyFnWithNamespaceIDFilter,
 	logger log.Logger,
 ) *HistoryPaginatedFetcherImpl {
-
 	return &HistoryPaginatedFetcherImpl{
 		namespaceRegistry:    namespaceRegistry,
 		clientBean:           clientBean,
@@ -190,7 +190,7 @@ func (n *HistoryPaginatedFetcherImpl) getHistory(
 	endEventVersion int64,
 	token []byte,
 	pageSize int32,
-) (*adminservice.GetWorkflowExecutionRawHistoryV2Response, error) {
+) (*adminservice.GetWorkflowExecutionRawHistoryResponse, error) {
 
 	logger := log.With(n.logger, tag.WorkflowRunID(runID))
 
@@ -202,7 +202,7 @@ func (n *HistoryPaginatedFetcherImpl) getHistory(
 		return nil, err
 	}
 
-	response, err := adminClient.GetWorkflowExecutionRawHistoryV2(ctx, &adminservice.GetWorkflowExecutionRawHistoryV2Request{
+	response, err := adminClient.GetWorkflowExecutionRawHistory(ctx, &adminservice.GetWorkflowExecutionRawHistoryRequest{
 		NamespaceId: namespaceID.String(),
 		Execution: &commonpb.WorkflowExecution{
 			WorkflowId: workflowID,

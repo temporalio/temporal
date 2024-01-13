@@ -609,6 +609,11 @@ func NumberDeleted(n int) ZapTag {
 	return NewInt("number-deleted", n)
 }
 
+// NumberChanged returns tag for NumberChanged
+func NumberChanged(n int) ZapTag {
+	return NewInt("number-changed", n)
+}
+
 // TimerTaskStatus returns tag for TimerTaskStatus
 func TimerTaskStatus(timerTaskStatus int32) ZapTag {
 	return NewInt32("timer-task-status", timerTaskStatus)

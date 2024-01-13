@@ -40,9 +40,9 @@ import (
 	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/collection"
 	"go.temporal.io/server/common/definition"
+	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence/serialization"
-	"go.temporal.io/server/service/history/replication"
 	"go.temporal.io/server/service/history/shard"
 )
 
@@ -50,9 +50,12 @@ type (
 	localEventsHandlerSuite struct {
 		suite.Suite
 		*require.Assertions
-		controller *gomock.Controller
-		testProcessToolBox
-		replication.ProcessToolBox
+		controller           *gomock.Controller
+		clusterMetadata      *cluster.MockMetadata
+		shardController      *shard.MockController
+		logger               log.Logger
+		eventSerializer      serialization.Serializer
+		remoteHistoryFetcher *MockHistoryPaginatedFetcher
 
 		localEventsHandler LocalGeneratedEventsHandler
 	}
@@ -73,9 +76,18 @@ func (s *localEventsHandlerSuite) TearDownSuite() {
 
 func (s *localEventsHandlerSuite) SetupTest() {
 	s.controller = gomock.NewController(s.T())
-	s.testProcessToolBox, s.ProcessToolBox = initializeToolBox(s.controller)
+	s.clusterMetadata = cluster.NewMockMetadata(s.controller)
+	s.shardController = shard.NewMockController(s.controller)
+	s.logger = log.NewNoopLogger()
+	s.eventSerializer = serialization.NewSerializer()
+	s.remoteHistoryFetcher = NewMockHistoryPaginatedFetcher(s.controller)
+
 	s.localEventsHandler = NewLocalEventsHandler(
-		s.ProcessToolBox,
+		s.clusterMetadata,
+		s.shardController,
+		s.logger,
+		s.eventSerializer,
+		s.remoteHistoryFetcher,
 	)
 }
 
@@ -125,7 +137,7 @@ func (s *localEventsHandlerSuite) TestHandleLocalHistoryEvents_AlreadyExist() {
 		workflowId,
 	).Return(shardContext, nil).Times(1)
 	shardContext.EXPECT().GetEngine(gomock.Any()).Return(engine, nil).Times(1)
-	batch := serializeEvents(s.EventSerializer, historyEvents)
+	batch := serializeEvents(s.eventSerializer, historyEvents)
 
 	request := &historyservice.ImportWorkflowExecutionRequest{
 		NamespaceId: namespaceId,
@@ -290,25 +302,25 @@ func (s *localEventsHandlerSuite) TestHandleHistoryEvents_LocalOnly_ImportAllLoc
 		EncodingType: enumspb.ENCODING_TYPE_PROTO3,
 		Data:         []byte{1, 1, 0},
 	}
-	historyBatch1 := replication.HistoryBatch{
+	historyBatch1 := HistoryBatch{
 		RawEventBatch:  dataBlob1,
 		VersionHistory: versionHistory,
 	}
-	historyBatch2 := replication.HistoryBatch{
+	historyBatch2 := HistoryBatch{
 		RawEventBatch:  dataBlob2,
 		VersionHistory: versionHistory,
 	}
 
 	times := 0
-	fetcher := collection.NewPagingIterator(func(paginationToken []byte) ([]replication.HistoryBatch, []byte, error) {
+	fetcher := collection.NewPagingIterator(func(paginationToken []byte) ([]HistoryBatch, []byte, error) {
 		if times < historyImportBlobSize {
 			times++
-			return []replication.HistoryBatch{historyBatch1}, []byte{1, 1, 0}, nil
+			return []HistoryBatch{historyBatch1}, []byte{1, 1, 0}, nil
 		}
-		return []replication.HistoryBatch{historyBatch2}, nil, nil
+		return []HistoryBatch{historyBatch2}, nil, nil
 	})
 
-	batch := serializeEvents(s.EventSerializer, initialHistoryEvents)
+	batch := serializeEvents(s.eventSerializer, initialHistoryEvents)
 	returnToken1 := []byte{1, 0, 0, 1, 1, 1, 1, 0}
 	returnToken2 := []byte{1, 0, 0, 1, 1, 1, 1, 1}
 	returnToken3 := []byte{1, 1, 0, 1, 1, 1, 1, 1}
