@@ -65,7 +65,7 @@ func newTaskReader(tlMgr *taskQueueManagerImpl) *taskReader {
 	return &taskReader{
 		status:        common.DaemonStatusInitialized,
 		tlMgr:         tlMgr,
-		taskValidator: newTaskValidator(tlMgr.newIOContext, tlMgr.clusterMeta, tlMgr.namespaceRegistry, tlMgr.engine.historyClient),
+		taskValidator: newTaskValidator(tlMgr.newIOContext, tlMgr.clusterMeta, tlMgr.namespaceRegistry, tlMgr.partitionMgr.engine.historyClient),
 		notifyC:       make(chan struct{}, 1),
 		// we always dequeue the head of the buffer and try to dispatch it to a poller
 		// so allocate one less than desired target buffer size
@@ -133,7 +133,7 @@ dispatchLoop:
 				}
 
 				taskCtx, cancel := context.WithTimeout(ctx, taskReaderOfferTimeout)
-				err := tr.tlMgr.engine.DispatchSpooledTask(taskCtx, task, tr.tlMgr.taskQueueID, tr.tlMgr.stickyInfo)
+				err := tr.tlMgr.partitionMgr.engine.DispatchSpooledTask(taskCtx, task, tr.tlMgr.taskQueueID, tr.tlMgr.partitionMgr.stickyInfo)
 				cancel()
 				if err == nil {
 					continue dispatchLoop

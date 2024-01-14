@@ -157,7 +157,7 @@ func newMatchingEngine(
 	return &matchingEngineImpl{
 		taskManager:          taskMgr,
 		historyClient:        mockHistoryClient,
-		taskQueues:           make(map[taskQueueID]taskQueueManager),
+		taskQueues:           make(map[taskQueueID]taskQueuePartitionManager),
 		taskQueueCount:       make(map[taskQueueCounterKey]int),
 		lockableQueryTaskMap: lockableQueryTaskMap{queryTaskMap: make(map[string]chan *queryResult)},
 		logger:               logger,
@@ -291,14 +291,14 @@ func (s *matchingEngineSuite) TestOnlyUnloadMatchingInstance() {
 		namespace.ID(uuid.New()),
 		"makeToast",
 		enumspb.TASK_QUEUE_TYPE_ACTIVITY)
-	tqm, err := s.matchingEngine.getTaskQueueManager(
+	tqm, err := s.matchingEngine.getTaskQueuePartitionManager(
 		context.Background(),
 		queueID,
 		normalStickyInfo,
 		true)
 	s.Require().NoError(err)
 
-	tqm2, err := newTaskQueueManager(
+	tqm2, err := newTaskQueuePartitionManager(
 		s.matchingEngine,
 		queueID, // same queueID as above
 		normalStickyInfo,
@@ -307,18 +307,18 @@ func (s *matchingEngineSuite) TestOnlyUnloadMatchingInstance() {
 	s.Require().NoError(err)
 
 	// try to unload a different tqm instance with the same taskqueue ID
-	s.matchingEngine.unloadTaskQueue(tqm2)
+	s.matchingEngine.unloadTaskQueuePartition(tqm2)
 
-	got, err := s.matchingEngine.getTaskQueueManager(
+	got, err := s.matchingEngine.getTaskQueuePartitionManager(
 		context.Background(), queueID, normalStickyInfo, true)
 	s.Require().NoError(err)
 	s.Require().Same(tqm, got,
-		"Unload call with non-matching taskQueueManager should not cause unload")
+		"Unload call with non-matching taskQueuePartitionManager should not cause unload")
 
 	// this time unload the right tqm
-	s.matchingEngine.unloadTaskQueue(tqm)
+	s.matchingEngine.unloadTaskQueuePartition(tqm)
 
-	got, err = s.matchingEngine.getTaskQueueManager(
+	got, err = s.matchingEngine.getTaskQueuePartitionManager(
 		context.Background(), queueID, normalStickyInfo, true)
 	s.Require().NoError(err)
 	s.Require().NotSame(tqm, got,
@@ -664,6 +664,7 @@ func (s *matchingEngineSuite) TestQueryWorkflowDoesNotLoadSticky() {
 	s.Equal(0, len(s.matchingEngine.taskQueues))
 }
 
+// TODO: this unit test does not seem to belong to matchingEngine, move it to the right place
 func (s *matchingEngineSuite) TestTaskWriterShutdown() {
 	s.matchingEngine.config.RangeSize = 300 // override to low number for the test
 
@@ -680,7 +681,7 @@ func (s *matchingEngineSuite) TestTaskWriterShutdown() {
 	execution := &commonpb.WorkflowExecution{RunId: runID, WorkflowId: workflowID}
 
 	tlID := newTestTaskQueueID(namespaceID, tl, enumspb.TASK_QUEUE_TYPE_ACTIVITY)
-	tlm, err := s.matchingEngine.getTaskQueueManager(context.Background(), tlID, normalStickyInfo, true)
+	tlm, err := s.matchingEngine.getTaskQueuePartitionManager(context.Background(), tlID, normalStickyInfo, true)
 	s.Nil(err)
 
 	addRequest := matchingservice.AddActivityTaskRequest{
@@ -691,7 +692,7 @@ func (s *matchingEngineSuite) TestTaskWriterShutdown() {
 	}
 
 	// stop the task writer explicitly
-	tlmImpl := tlm.(*taskQueueManagerImpl)
+	tlmImpl := tlm.(*taskQueuePartitionManagerImpl).defaultQueue.(*taskQueueManagerImpl)
 	tlmImpl.taskWriter.Stop()
 
 	// now attempt to add a task
@@ -820,6 +821,7 @@ func (s *matchingEngineSuite) TestAddThenConsumeActivities() {
 	s.True(expectedRange <= s.taskManager.getTaskQueueManager(tlID).rangeID)
 }
 
+// TODO: this unit test does not seem to belong to matchingEngine, move it to the right place
 func (s *matchingEngineSuite) TestSyncMatchActivities() {
 	// Set a short long poll expiration so that we don't have to wait too long for 0 throttling cases
 	s.matchingEngine.config.LongPollExpirationInterval = dynamicconfig.GetDurationPropertyFnFilteredByTaskQueueInfo(2 * time.Second)
@@ -843,10 +845,11 @@ func (s *matchingEngineSuite) TestSyncMatchActivities() {
 
 	var err error
 	s.taskManager.getTaskQueueManager(tlID).rangeID = initialRangeID
-	mgr, err := newTaskQueueManager(s.matchingEngine, tlID, normalStickyInfo, s.matchingEngine.config)
+	mgr, err := newTaskQueuePartitionManager(s.matchingEngine, tlID, normalStickyInfo, s.matchingEngine.config)
 	s.NoError(err)
 
-	mgrImpl, ok := mgr.(*taskQueueManagerImpl)
+
+	mgrImpl, ok := mgr.(*taskQueuePartitionManagerImpl).defaultQueue.(*taskQueueManagerImpl)
 	s.True(ok)
 
 	mgrImpl.matcher.config.MinTaskThrottlingBurstSize = func() int { return 0 }
@@ -1061,10 +1064,11 @@ func (s *matchingEngineSuite) concurrentPublishConsumeActivities(
 
 	s.taskManager.getTaskQueueManager(tlID).rangeID = initialRangeID
 	var err error
-	mgr, err := newTaskQueueManager(s.matchingEngine, tlID, normalStickyInfo, s.matchingEngine.config)
+	mgr, err := newTaskQueuePartitionManager(s.matchingEngine, tlID, normalStickyInfo, s.matchingEngine.config)
 	s.NoError(err)
 
-	mgrImpl := mgr.(*taskQueueManagerImpl)
+
+	mgrImpl := mgr.(*taskQueuePartitionManagerImpl).defaultQueue.(*taskQueueManagerImpl)
 	mgrImpl.matcher.config.MinTaskThrottlingBurstSize = func() int { return 0 }
 	mgrImpl.matcher.rateLimiter = quotas.NewRateLimiter(
 		defaultTaskDispatchRPS,
@@ -1752,8 +1756,8 @@ func (s *matchingEngineSuite) TestTaskQueueManagerGetTaskBatch() {
 		s.NoError(err)
 	}
 
-	tlMgr, ok := s.matchingEngine.taskQueues[*tlID].(*taskQueueManagerImpl)
-	s.True(ok, "taskQueueManger doesn't implement taskQueueManager interface")
+	tlMgr, ok := s.matchingEngine.taskQueues[*tlID].(*taskQueuePartitionManagerImpl).defaultQueue.(*taskQueueManagerImpl)
+	s.True(ok, "taskQueueManger doesn't implement taskQueuePartitionManager interface")
 	s.EqualValues(taskCount, s.taskManager.getTaskCount(tlID))
 
 	// wait until all tasks are read by the task pump and enqueued into the in-memory buffer
@@ -1823,10 +1827,11 @@ func (s *matchingEngineSuite) TestTaskQueueManagerGetTaskBatch_ReadBatchDone() {
 	const maxReadLevel = int64(120)
 	config := defaultTestConfig()
 	config.RangeSize = rangeSize
-	tlMgr0, err := newTaskQueueManager(s.matchingEngine, tlID, normalStickyInfo, config)
+	tlMgr0, err := newTaskQueuePartitionManager(s.matchingEngine, tlID, normalStickyInfo, config)
 	s.NoError(err)
 
-	tlMgr, ok := tlMgr0.(*taskQueueManagerImpl)
+
+	tlMgr, ok := tlMgr0.(*taskQueuePartitionManagerImpl).defaultQueue.(*taskQueueManagerImpl)
 	s.True(ok)
 
 	tlMgr.Start()
@@ -1860,7 +1865,7 @@ func (s *matchingEngineSuite) TestTaskQueueManager_CyclingBehavior() {
 	for i := 0; i < 4; i++ {
 		prevGetTasksCount := s.taskManager.getGetTasksCount(tlID)
 
-		tlMgr, err := newTaskQueueManager(s.matchingEngine, tlID, normalStickyInfo, config)
+		tlMgr, err := newTaskQueuePartitionManager(s.matchingEngine, tlID, normalStickyInfo, config)
 		s.NoError(err)
 
 		tlMgr.Start()
@@ -1921,7 +1926,7 @@ func (s *matchingEngineSuite) TestTaskExpiryAndCompletion() {
 			s.NoError(err)
 		}
 
-		tlMgr, ok := s.matchingEngine.taskQueues[*tlID].(*taskQueueManagerImpl)
+		tlMgr, ok := s.matchingEngine.taskQueues[*tlID].(*taskQueuePartitionManagerImpl).defaultQueue.(*taskQueueManagerImpl)
 		s.True(ok, "failed to load task queue")
 		s.EqualValues(taskCount, s.taskManager.getTaskCount(tlID))
 
@@ -2484,20 +2489,20 @@ func (s *matchingEngineSuite) TestUnknownBuildId_Demoted_Match() {
 	// tries to load base for dispatching.
 	id := newTestTaskQueueID(namespaceId, tq, enumspb.TASK_QUEUE_TYPE_WORKFLOW)
 	verId := newTaskQueueIDWithVersionSet(id, hashBuildId(unknown))
-	verTqm, err := s.matchingEngine.getTaskQueueManager(ctx, verId, normalStickyInfo, false)
+	verTqm, err := s.matchingEngine.getTaskQueuePartitionManager(ctx, verId, normalStickyInfo, false)
 	s.NoError(err)
 	s.NotNil(verTqm)
-	s.matchingEngine.unloadTaskQueue(verTqm)
+	s.matchingEngine.unloadTaskQueuePartition(verTqm)
 	// wait for taskReader goroutines to exit
-	verTqm.(*taskQueueManagerImpl).taskReader.gorogrp.Wait()
+	verTqm.(*taskQueuePartitionManagerImpl).defaultQueue.(*taskQueueManagerImpl).taskReader.gorogrp.Wait()
 
 	// unload base
-	baseTqm, err := s.matchingEngine.getTaskQueueManager(ctx, id, normalStickyInfo, false)
+	baseTqm, err := s.matchingEngine.getTaskQueuePartitionManager(ctx, id, normalStickyInfo, false)
 	s.NoError(err)
 	s.NotNil(baseTqm)
-	s.matchingEngine.unloadTaskQueue(baseTqm)
+	s.matchingEngine.unloadTaskQueuePartition(baseTqm)
 	// wait for taskReader goroutines to exit
-	baseTqm.(*taskQueueManagerImpl).taskReader.gorogrp.Wait()
+	baseTqm.(*taskQueuePartitionManagerImpl).defaultQueue.(*taskQueueManagerImpl).taskReader.gorogrp.Wait()
 
 	// both are now unloaded. change versioning data to merge unknown into another set.
 	clock := hlc.Zero(1)
