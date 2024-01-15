@@ -1252,11 +1252,11 @@ func (e *matchingEngineImpl) unloadTaskQueuePartition(unloadTQM taskQueuePartiti
 	foundTQM, ok := e.taskQueues[*queueID]
 	if !ok || foundTQM != unloadTQM {
 		e.taskQueuesLock.Unlock()
+		foundTQM.Stop()
 		return
 	}
 	delete(e.taskQueues, *queueID)
 	e.taskQueuesLock.Unlock()
-	// This may call unloadTaskQueuePartition again but that's okay, the next call will not find it.
 	foundTQM.Stop()
 	e.updateTaskQueueGauge(foundTQM, false, -1)
 }

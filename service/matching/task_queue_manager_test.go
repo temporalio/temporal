@@ -346,8 +346,10 @@ func createTestTaskQueueManagerWithConfig(
 	testOpts *tqmTestOpts,
 	opts ...taskQueueManagerOpt,
 ) (*taskQueueManagerImpl, error) {
-	pm := createTestTaskQueuePartitionManagerWithConfig(controller, testOpts)
+	pm := createTestTaskQueuePartitionManager(controller, testOpts)
 	tlMgr, err := newTaskQueueManager(pm, testOpts.tqId, opts...)
+	pm.defaultQueue = tlMgr
+	pm.db = tlMgr.db
 	if err != nil {
 		return nil, err
 	}

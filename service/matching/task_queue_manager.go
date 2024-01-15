@@ -110,7 +110,7 @@ type (
 	UserDataUpdateFunc func(*persistencespb.TaskQueueUserData) (*persistencespb.TaskQueueUserData, bool, error)
 
 	taskQueueManager interface {
-		Start() bool
+		Start()
 		Stop()
 		WaitUntilInitialized(context.Context) error
 		// AddTask adds a task to the task queue. This method will first attempt a synchronous
@@ -164,9 +164,6 @@ type (
 		pollerHistory    *pollerHistory
 		currentPolls     atomic.Int64
 		initializedError *future.FutureImpl[struct{}]
-		// userDataReady is fulfilled once versioning data is fetched from the root partition. If this TQ is
-		// the root partition, it is fulfilled as soon as it is fetched from db.
-		userDataReady *future.FutureImpl[struct{}]
 		// skipFinalUpdate controls behavior on Stop: if it's false, we try to write one final
 		// update before unloading
 		skipFinalUpdate atomic.Bool
@@ -211,6 +208,7 @@ func newTaskQueueManager(
 	taggedMetricsHandler := partitionMgr.taggedMetricsHandler.WithTags(metrics.OperationTag(metrics.MatchingTaskQueueMgrScope), metrics.TaskQueueTypeTag(taskQueue.taskType))
 	tlMgr := &taskQueueManagerImpl{
 		status:               common.DaemonStatusInitialized,
+		partitionMgr: partitionMgr,
 		namespaceRegistry:    e.namespaceRegistry,
 		matchingClient:       e.matchingRawClient,
 		metricsHandler:       e.metricsHandler,
@@ -224,7 +222,6 @@ func newTaskQueueManager(
 		config:               config,
 		taggedMetricsHandler: taggedMetricsHandler,
 		initializedError:     future.NewFuture[struct{}](),
-		userDataReady:        future.NewFuture[struct{}](),
 	}
 	// TODO: move this to partition manager
 	// poller history is only kept for the base task queue manager
@@ -272,22 +269,23 @@ func (c *taskQueueManagerImpl) signalIfFatal(err error) bool {
 	return false
 }
 
-func (c *taskQueueManagerImpl) Start() bool {
+func (c *taskQueueManagerImpl) Start() {
 	if !atomic.CompareAndSwapInt32(
 		&c.status,
 		common.DaemonStatusInitialized,
 		common.DaemonStatusStarted,
 	) {
-		return false
+		return
 	}
 	c.liveness.Start()
 	c.taskWriter.Start()
 	c.taskReader.Start()
 	c.logger.Info("", tag.LifeCycleStarted)
 	c.taggedMetricsHandler.Counter(metrics.TaskQueueStartedCounter.Name()).Record(1)
-	return true
 }
 
+// Stop does not unload the queue from its partition. It is intended to be called by the partition manager when
+// unloading a queues. For stopping and unloading a queue call unloadFromPartitionManager instead.
 func (c *taskQueueManagerImpl) Stop() {
 	if !atomic.CompareAndSwapInt32(
 		&c.status,
@@ -317,8 +315,6 @@ func (c *taskQueueManagerImpl) Stop() {
 	c.db.setUserDataState(userDataClosed)
 	c.logger.Info("", tag.LifeCycleStopped)
 	c.taggedMetricsHandler.Counter(metrics.TaskQueueStoppedCounter.Name()).Record(1)
-	// This may call Stop again, but the status check above makes that a no-op.
-	c.unloadFromPartitionManager()
 }
 
 // managesSpecificVersionSet returns true if this is a tqm for a specific version set in the build-id-based versioning
@@ -339,34 +335,11 @@ func (c *taskQueueManagerImpl) SetInitializedError(err error) {
 	}
 }
 
-// Sets user data enabled/disabled and marks the future ready (if it's not ready yet).
-// userDataState controls whether GetUserData return an error, and which.
-// futureError is the error to set on the ready future. If this is non-nil, the task queue will
-// be unloaded.
-// Note that this must only be called from a single goroutine since the Ready/Set sequence is
-// potentially racy otherwise.
-func (c *taskQueueManagerImpl) SetUserDataState(userDataState userDataState, futureError error) {
-	// Always set state enabled/disabled even if we're not setting the future since we only set
-	// the future once but the enabled/disabled state may change over time.
-	c.db.setUserDataState(userDataState)
-
-	if !c.userDataReady.Ready() {
-		c.userDataReady.Set(struct{}{}, futureError)
-		if futureError != nil {
-			// We can't recover from here without starting over, so unload the whole task queue.
-			// Skip final update since we never initialized.
-			c.skipFinalUpdate.Store(true)
-			c.unloadFromPartitionManager()
-		}
-	}
-}
-
 func (c *taskQueueManagerImpl) WaitUntilInitialized(ctx context.Context) error {
 	_, err := c.initializedError.Get(ctx)
 	if err != nil {
 		return err
 	}
-	_, err = c.userDataReady.Get(ctx)
 	return err
 }
 

@@ -36,6 +36,7 @@ import (
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/api/historyservicemock/v1"
+	"go.temporal.io/server/common/future"
 	"google.golang.org/grpc"
 
 	"go.temporal.io/server/api/matchingservice/v1"
@@ -48,7 +49,7 @@ import (
 	"go.temporal.io/server/common/persistence/visibility/manager"
 )
 
-func createTestTaskQueuePartitionManagerWithConfig(controller *gomock.Controller, testOpts *tqmTestOpts, ) *taskQueuePartitionManagerImpl {
+func createTestTaskQueuePartitionManager(controller *gomock.Controller, testOpts *tqmTestOpts, ) *taskQueuePartitionManagerImpl {
 	logger := log.NewTestLogger()
 	ns := namespace.Name("ns-name")
 	tm := newTestTaskManager(logger)
@@ -70,21 +71,25 @@ func createTestTaskQueuePartitionManagerWithConfig(controller *gomock.Controller
 		logger: logger,
 		matchingClient: me.matchingRawClient,
 		taggedMetricsHandler: me.metricsHandler,
-		db: newTaskQueueDB(me.taskManager, me.matchingRawClient, defaultNamespaceId, testOpts.tqId, normalStickyInfo.kind, logger),
+		userDataReady:        future.NewFuture[struct{}](),
 	}
 
 	me.taskQueues[*testOpts.tqId] = pm
 	return pm
 }
 
-func mustCreateTaskQueuePartitionManagerWithConfig(
+func createTestTaskQueuePartitionManagerWithDefaultQueue(
 	t *testing.T,
 	controller *gomock.Controller,
 	testOpts *tqmTestOpts,
 ) *taskQueuePartitionManagerImpl {
 	t.Helper()
-	tq := createTestTaskQueuePartitionManagerWithConfig(controller, testOpts)
-	return tq
+	pm := createTestTaskQueuePartitionManager(controller, testOpts)
+	dq, err := newTaskQueueManager(pm, pm.taskQueueID)
+	require.NoError(t, err)
+	pm.defaultQueue = dq
+	pm.db = dq.db
+	return pm
 }
 
 func TestUserData_LoadOnInit(t *testing.T) {
@@ -103,7 +108,7 @@ func TestUserData_LoadOnInit(t *testing.T) {
 		Data:    mkUserData(1),
 	}
 
-	tq := mustCreateTaskQueuePartitionManagerWithConfig(t, controller, tqCfg)
+	tq := createTestTaskQueuePartitionManagerWithDefaultQueue(t, controller, tqCfg)
 
 	require.NoError(t, tq.engine.taskManager.UpdateTaskQueueUserData(context.Background(),
 		&persistence.UpdateTaskQueueUserDataRequest{
@@ -132,7 +137,7 @@ func TestUserData_LoadOnInit_OnlyOnceWhenNoData(t *testing.T) {
 	tqCfg := defaultTqmTestOpts(controller)
 	tqCfg.tqId = tqId
 
-	tq := mustCreateTaskQueuePartitionManagerWithConfig(t, controller, tqCfg)
+	tq := createTestTaskQueuePartitionManagerWithDefaultQueue(t, controller, tqCfg)
 	tm := tq.engine.taskManager.(*testTaskManager)
 
 	require.Equal(t, 0, tm.getGetUserDataCount(tqId))
@@ -187,7 +192,7 @@ func TestUserData_FetchesOnInit(t *testing.T) {
 			UserData:             data1,
 		}, nil)
 
-	tq := mustCreateTaskQueuePartitionManagerWithConfig(t, controller, tqCfg)
+	tq := createTestTaskQueuePartitionManagerWithDefaultQueue(t, controller, tqCfg)
 	tq.config.GetUserDataMinWaitTime = 10 * time.Second // only one fetch
 
 	tq.Start()
@@ -258,7 +263,7 @@ func TestUserData_FetchesAndFetchesAgain(t *testing.T) {
 		}).
 		Return(nil, serviceerror.NewUnavailable("hold on")).AnyTimes()
 
-	tq := mustCreateTaskQueuePartitionManagerWithConfig(t, controller, tqCfg)
+	tq := createTestTaskQueuePartitionManagerWithDefaultQueue(t, controller, tqCfg)
 	tq.config.GetUserDataMinWaitTime = 10 * time.Millisecond // fetch again quickly
 	tq.Start()
 	time.Sleep(100 * time.Millisecond)
@@ -318,7 +323,7 @@ func TestUserData_RetriesFetchOnUnavailable(t *testing.T) {
 			}, nil
 		})
 
-	tq := mustCreateTaskQueuePartitionManagerWithConfig(t, controller, tqCfg)
+	tq := createTestTaskQueuePartitionManagerWithDefaultQueue(t, controller, tqCfg)
 	tq.config.GetUserDataMinWaitTime = 10 * time.Second // wait on success
 	tq.config.GetUserDataRetryPolicy = backoff.NewExponentialRetryPolicy(50 * time.Millisecond).
 		WithMaximumInterval(50 * time.Millisecond) // faster retry on failure
@@ -392,7 +397,7 @@ func TestUserData_RetriesFetchOnUnImplemented(t *testing.T) {
 			}, nil
 		})
 
-	tq := mustCreateTaskQueuePartitionManagerWithConfig(t, controller, tqCfg)
+	tq := createTestTaskQueuePartitionManagerWithDefaultQueue(t, controller, tqCfg)
 	tq.config.GetUserDataMinWaitTime = 10 * time.Second // wait on success
 	tq.config.GetUserDataRetryPolicy = backoff.NewExponentialRetryPolicy(50 * time.Millisecond).
 		WithMaximumInterval(50 * time.Millisecond) // faster retry on failure
@@ -450,7 +455,7 @@ func TestUserData_FetchesUpTree(t *testing.T) {
 			UserData:             data1,
 		}, nil)
 
-	tq := mustCreateTaskQueuePartitionManagerWithConfig(t, controller, tqCfg)
+	tq := createTestTaskQueuePartitionManagerWithDefaultQueue(t, controller, tqCfg)
 	tq.config.GetUserDataMinWaitTime = 10 * time.Second // wait on success
 	tq.Start()
 	require.NoError(t, tq.WaitUntilInitialized(ctx))
@@ -491,7 +496,7 @@ func TestUserData_FetchesActivityToWorkflow(t *testing.T) {
 			UserData:             data1,
 		}, nil)
 
-	tq := mustCreateTaskQueuePartitionManagerWithConfig(t, controller, tqCfg)
+	tq := createTestTaskQueuePartitionManagerWithDefaultQueue(t, controller, tqCfg)
 	tq.config.GetUserDataMinWaitTime = 10 * time.Second // wait on success
 	tq.Start()
 	require.NoError(t, tq.WaitUntilInitialized(ctx))
@@ -573,7 +578,7 @@ func TestUserData_UpdateOnNonRootFails(t *testing.T) {
 	require.NoError(t, err)
 	tqCfg := defaultTqmTestOpts(controller)
 	tqCfg.tqId = subTqId
-	subTq := mustCreateTaskQueuePartitionManagerWithConfig(t, controller, tqCfg)
+	subTq := createTestTaskQueuePartitionManagerWithDefaultQueue(t, controller, tqCfg)
 	err = subTq.UpdateUserData(ctx, UserDataUpdateOptions{}, func(data *persistencespb.TaskQueueUserData) (*persistencespb.TaskQueueUserData, bool, error) {
 		return data, false, nil
 	})
@@ -584,7 +589,7 @@ func TestUserData_UpdateOnNonRootFails(t *testing.T) {
 	require.NoError(t, err)
 	actTqCfg := defaultTqmTestOpts(controller)
 	actTqCfg.tqId = actTqId
-	actTq := mustCreateTaskQueuePartitionManagerWithConfig(t, controller, actTqCfg)
+	actTq := createTestTaskQueuePartitionManagerWithDefaultQueue(t, controller, actTqCfg)
 	err = actTq.UpdateUserData(ctx, UserDataUpdateOptions{}, func(data *persistencespb.TaskQueueUserData) (*persistencespb.TaskQueueUserData, bool, error) {
 		return data, false, nil
 	})

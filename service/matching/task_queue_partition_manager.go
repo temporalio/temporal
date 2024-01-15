@@ -28,7 +28,6 @@ import (
 	"context"
 	"errors"
 	"sync"
-	"sync/atomic"
 	"time"
 
 	commonpb "go.temporal.io/api/common/v1"
@@ -91,6 +90,13 @@ type (
 	// Represents a single partition of a (user-level) Task Queue in memory state. Under the hood, each Task Queue 
 	// partition is made of one or more DB-level queues. There is always a default DB queue. For
 	// versioned TQs, there is an additional DB queue for each Build ID.
+	// Currently, the liveness of a partition manager is tied to its default queue. More specifically:
+	//  - If the default queue dies, all the other queues are also stopped and the whole partition is unloaded from
+	//    matching engine.
+	//  - Any requests sent to the partition keeps the default queue alive, even if it's served by a versioned queue.
+	//  - If a versioned queue dies, we only unload that specific queue from the partition.
+	//  - This behavior is subject to optimizations in the future: for versioned queues, keeping the default queue
+	//    loaded all the time may be suboptimal.
 	taskQueuePartitionManagerImpl struct {
 		engine      *matchingEngineImpl
 		taskQueueID *taskQueueID
@@ -102,8 +108,7 @@ type (
 		// dbQueueManager, once taskQueueManager is dissolved completely and all the implementation is moved to either
 		// taskQueuePartitionManager or dbQueueManager.
 		defaultQueue taskQueueManager
-		// used for non-sticky versioned queues (one for each version). The key is either a Build ID or a VersionSet ID.
-		// In the latter case, the version set id is prefixed with "VS-".
+		// used for non-sticky versioned queues (one for each version)
 		versionedQueues map[string]taskQueueManager
 		versionedQueuesLock    sync.RWMutex // locks mutation of versionedQueues
 		db                   *taskQueueDB
@@ -115,9 +120,6 @@ type (
 		// userDataReady is fulfilled once versioning data is fetched from the root partition. If this TQ is
 		// the root partition, it is fulfilled as soon as it is fetched from db.
 		userDataReady *future.FutureImpl[struct{}]
-		// skipFinalUpdate controls behavior on Stop: if it's false, we try to write one final
-		// update before unloading
-		skipFinalUpdate atomic.Bool
 	}
 )
 
@@ -161,6 +163,8 @@ func newTaskQueuePartitionManager(
 		logger: logger,
 		matchingClient: e.matchingRawClient,
 		taggedMetricsHandler: taggedMetricsHandler,
+		userDataReady:        future.NewFuture[struct{}](),
+		versionedQueues: make(map[string]taskQueueManager),
 	}
 
 	defaultQ, err := newTaskQueueManager(pm, taskQueue)
@@ -175,22 +179,31 @@ func newTaskQueuePartitionManager(
 }
 
 func (pm *taskQueuePartitionManagerImpl) Start() {
-	if !pm.defaultQueue.Start() {
-		return
-	}
 	if pm.db.DbStoresUserData() {
 		pm.goroGroup.Go(pm.loadUserData)
 	} else {
 		pm.goroGroup.Go(pm.fetchUserData)
 	}
+	pm.defaultQueue.Start()
 }
 
+// Stop does not unload the partition from matching engine. It is intended to be called by matching engine when
+// unloading the partition. For stopping and unloading a partition call unloadFromEngine instead.
 func (pm *taskQueuePartitionManagerImpl) Stop() {
+	pm.versionedQueuesLock.Lock()
+	defer pm.versionedQueuesLock.Unlock()
+	for _, vq := range pm.versionedQueues {
+		vq.Stop()
+	}
 	pm.defaultQueue.Stop()
 	pm.goroGroup.Cancel()
 }
 
 func (pm *taskQueuePartitionManagerImpl) WaitUntilInitialized(ctx context.Context) error {
+	_, err := pm.userDataReady.Get(ctx)
+	if err != nil {
+		return err
+	}
 	return pm.defaultQueue.WaitUntilInitialized(ctx)
 }
 
@@ -198,6 +211,8 @@ func (pm *taskQueuePartitionManagerImpl) AddTask(
 	ctx context.Context,
 	params addTaskParams,
 ) (bool, error) {
+	// default queue should stay alive even if requests go to other queues
+	pm.MarkAlive()
 	// We don't need the userDataChanged channel here because:
 	// - if we sync match, we're done
 	// - if we spool to db, we'll re-resolve when it comes out of the db
@@ -216,6 +231,8 @@ func (pm *taskQueuePartitionManagerImpl) PollTask(
 	ctx context.Context,
 	pollMetadata *pollMetadata,
 ) (*internalTask, error) {
+	// default queue should stay alive even if requests go to other queues
+	pm.MarkAlive()
 	// We don't need the userDataChanged channel here because:
 	// - if we sync match, we're done
 	// - if we spool to db, we'll re-resolve when it comes out of the db
@@ -325,7 +342,7 @@ func (pm *taskQueuePartitionManagerImpl) String() string {
 }
 
 func (pm *taskQueuePartitionManagerImpl) QueueID() *taskQueueID {
-	return pm.defaultQueue.QueueID()
+	return pm.taskQueueID
 }
 
 func (pm *taskQueuePartitionManagerImpl) TaskQueueKind() enumspb.TaskQueueKind {
@@ -346,25 +363,23 @@ func (pm *taskQueuePartitionManagerImpl) unloadDbQueue(unloadedDbq taskQueueMana
 	version := unloadedDbq.QueueID().VersionSet()
 	if version == "" {
 		// this is the default queue, unload the whole partition if it is not healthy
-		if pm.defaultQueue != unloadedDbq {
-			return
+		if pm.defaultQueue == unloadedDbq {
+			pm.unloadFromEngine()
 		}
-		pm.unloadFromEngine()
-		pm.defaultQueue = nil
-	} else {
-		pm.versionedQueuesLock.Lock()
-		foundDbq, ok := pm.versionedQueues[version]
-		if !ok || foundDbq != unloadedDbq {
-			pm.versionedQueuesLock.Unlock()
-			return
-		}
-		delete(pm.versionedQueues, version)
-		pm.versionedQueuesLock.Unlock()
-		pm.engine.updateTaskQueueGauge(pm, true, -1)
+		return
 	}
 
-	// This may call unloadDbQueue again but that's okay, the next call will not find it.
+	pm.versionedQueuesLock.Lock()
+	foundDbq, ok := pm.versionedQueues[version]
+	if !ok || foundDbq != unloadedDbq {
+		pm.versionedQueuesLock.Unlock()
+		unloadedDbq.Stop()
+		return
+	}
+	delete(pm.versionedQueues, version)
+	pm.versionedQueuesLock.Unlock()
 	unloadedDbq.Stop()
+	pm.engine.updateTaskQueueGauge(pm, true, -1)
 }
 
 func (pm *taskQueuePartitionManagerImpl) unloadFromEngine() {
@@ -385,9 +400,6 @@ func (pm *taskQueuePartitionManagerImpl) SetUserDataState(userDataState userData
 	if !pm.userDataReady.Ready() {
 		pm.userDataReady.Set(struct{}{}, futureError)
 		if futureError != nil {
-			// We can't recover from here without starting over, so unload the whole task queue.
-			// Skip final update since we never initialized.
-			pm.skipFinalUpdate.Store(true)
 			pm.unloadFromEngine()
 		}
 	}
@@ -500,22 +512,6 @@ func (pm *taskQueuePartitionManagerImpl) fetchUserData(ctx context.Context) erro
 	return ctx.Err()
 }
 
-func (pm *taskQueuePartitionManagerImpl) getVersionSetQueue(
-	ctx context.Context,
-	versionSetId string,
-	create bool,
-) (taskQueueManager, error) {
-	return pm.getVersionedQueue(ctx, "VS-"+versionSetId, create)
-}
-
-func (pm *taskQueuePartitionManagerImpl) getBuildIdQueue(
-	ctx context.Context,
-	buildId string,
-	create bool,
-) (taskQueueManager, error) {
-	return pm.getVersionedQueue(ctx, buildId, create)
-}
-
 func (pm *taskQueuePartitionManagerImpl) getVersionedQueue(
 	ctx context.Context,
 	version string,
@@ -551,7 +547,7 @@ func (pm *taskQueuePartitionManagerImpl) getVersionedQueueNoWait(
 		vq, ok = pm.versionedQueues[version]
 		if !ok {
 			var err error
-			vq, err = newTaskQueueManager(pm, pm.taskQueueID)
+			vq, err = newTaskQueueManager(pm, newTaskQueueIDWithVersionSet(pm.taskQueueID, version))
 			if err != nil {
 				pm.versionedQueuesLock.Unlock()
 				return nil, err
@@ -602,7 +598,7 @@ func (pm *taskQueuePartitionManagerImpl) redirectToVersionedQueueForPoll(
 	}
 	pm.loadDemotedSetIds(demotedSetIds)
 
-	return pm.getVersionSetQueue(ctx, primarySetId, true)
+	return pm.getVersionedQueue(ctx, primarySetId, true)
 }
 
 func (pm *taskQueuePartitionManagerImpl) loadDemotedSetIds(demotedSetIds []string) {
@@ -611,8 +607,7 @@ func (pm *taskQueuePartitionManagerImpl) loadDemotedSetIds(demotedSetIds []strin
 	// Also mark them alive, so that their liveness will be roughly synchronized.
 	// TODO: once we know a demoted set id has no more tasks, we can remove it from versioning data
 	for _, demotedSetId := range demotedSetIds {
-		newId := newTaskQueueIDWithVersionSet(pm.taskQueueID, demotedSetId)
-		tqm, _ := pm.engine.getTaskQueuePartitionManagerNoWait(newId, pm.stickyInfo, true)
+		tqm, _ := pm.getVersionedQueueNoWait(demotedSetId, true)
 		if tqm != nil {
 			tqm.MarkAlive()
 		}
@@ -673,7 +668,7 @@ func (pm *taskQueuePartitionManagerImpl) redirectToVersionedQueueForAdd(
 		}
 	}
 
-	return pm.getVersionSetQueue(ctx, versionSet, true)
+	return pm.getVersionedQueue(ctx, versionSet, true)
 }
 
 func (pm *taskQueuePartitionManagerImpl) recordUnknownBuildPoll(buildId string) {

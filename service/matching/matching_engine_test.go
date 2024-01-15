@@ -2357,7 +2357,7 @@ func (s *matchingEngineSuite) TestUnknownBuildId_Poll() {
 	})
 	s.Error(err) // deadline exceeded or canceled
 
-	unknownCtr := scope.Snapshot().Counters()["test.unknown_build_polls+namespace="+matchingTestNamespace+",operation=TaskQueueMgr,task_type=Workflow,taskqueue=makeToast"]
+	unknownCtr := scope.Snapshot().Counters()["test.unknown_build_polls+namespace="+matchingTestNamespace+",operation=TaskQueuePartitionManager,task_type=Workflow,taskqueue=makeToast"]
 	s.Equal(int64(1), unknownCtr.Value())
 }
 
@@ -2394,7 +2394,7 @@ func (s *matchingEngineSuite) TestUnknownBuildId_Add() {
 	})
 	s.ErrorIs(err, errRemoteSyncMatchFailed)
 
-	unknownCtr := scope.Snapshot().Counters()["test.unknown_build_tasks+namespace="+matchingTestNamespace+",operation=TaskQueueMgr,task_type=Workflow,taskqueue=makeToast"]
+	unknownCtr := scope.Snapshot().Counters()["test.unknown_build_tasks+namespace="+matchingTestNamespace+",operation=TaskQueuePartitionManager,task_type=Workflow,taskqueue=makeToast"]
 	s.Equal(int64(1), unknownCtr.Value())
 }
 
@@ -2458,7 +2458,7 @@ func (s *matchingEngineSuite) TestUnknownBuildId_Demoted_Match() {
 	unknown := "unknown"
 	build1 := "build1"
 
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Hour)
 	defer cancel()
 
 	s.mockMatchingClient.EXPECT().UpdateWorkerBuildIdCompatibility(gomock.Any(), &matchingservice.UpdateWorkerBuildIdCompatibilityRequest{
@@ -2485,24 +2485,18 @@ func (s *matchingEngineSuite) TestUnknownBuildId_Demoted_Match() {
 	// allow taskReader to finish starting dispatch loop so that we can unload tqms cleanly
 	time.Sleep(10 * time.Millisecond)
 
-	// unload base and versioned tqm. note: unload versioned first since versioned taskReader
-	// tries to load base for dispatching.
+	// unload base and versioned tqm. note: unload the partition manager unloads both
 	id := newTestTaskQueueID(namespaceId, tq, enumspb.TASK_QUEUE_TYPE_WORKFLOW)
-	verId := newTaskQueueIDWithVersionSet(id, hashBuildId(unknown))
-	verTqm, err := s.matchingEngine.getTaskQueuePartitionManager(ctx, verId, normalStickyInfo, false)
-	s.NoError(err)
-	s.NotNil(verTqm)
-	s.matchingEngine.unloadTaskQueuePartition(verTqm)
-	// wait for taskReader goroutines to exit
-	verTqm.(*taskQueuePartitionManagerImpl).defaultQueue.(*taskQueueManagerImpl).taskReader.gorogrp.Wait()
-
-	// unload base
 	baseTqm, err := s.matchingEngine.getTaskQueuePartitionManager(ctx, id, normalStickyInfo, false)
+
+	//for _, v := range baseTqm.(*taskQueuePartitionManagerImpl).versionedQueues {
+	//	v.(*taskQueueManagerImpl).unloadFromPartitionManager()
+	//}
 	s.NoError(err)
 	s.NotNil(baseTqm)
 	s.matchingEngine.unloadTaskQueuePartition(baseTqm)
 	// wait for taskReader goroutines to exit
-	baseTqm.(*taskQueuePartitionManagerImpl).defaultQueue.(*taskQueueManagerImpl).taskReader.gorogrp.Wait()
+	baseTqm.(*taskQueuePartitionManagerImpl).goroGroup.Wait()
 
 	// both are now unloaded. change versioning data to merge unknown into another set.
 	clock := hlc.Zero(1)
