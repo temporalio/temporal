@@ -63,8 +63,6 @@ type (
 		// maxDispatchPerSecond is the max rate at which tasks are allowed to be dispatched
 		// from this task queue to pollers
 		PollTask(ctx context.Context, pollMetadata *pollMetadata) (*internalTask, error)
-		// MarkAlive updates the liveness timer to keep this taskQueueManager alive.
-		MarkAlive()
 		// DispatchSpooledTask dispatches a task to a poller. When there are no pollers to pick
 		// up the task, this method will return error. Task will not be persisted to db
 		DispatchSpooledTask(ctx context.Context, task *internalTask) error
@@ -76,7 +74,6 @@ type (
 		// UpdateUserData updates user data for this task queue and replicates across clusters if necessary.
 		// Extra care should be taken to avoid mutating the existing data in the update function.
 		UpdateUserData(ctx context.Context, options UserDataUpdateOptions, updateFn UserDataUpdateFunc) error
-		UpdatePollerInfo(pollerIdentity, *pollMetadata)
 		GetAllPollerInfo() []*taskqueuepb.PollerInfo
 		HasPollerAfter(accessTime time.Time) bool
 		// DescribeTaskQueue returns information about the target task queue
@@ -210,25 +207,15 @@ func (pm *taskQueuePartitionManagerImpl) AddTask(
 	ctx context.Context,
 	params addTaskParams,
 ) (bool, error) {
-	dbq := pm.defaultQueue
-
-	directive := params.taskInfo.VersionDirective
-	if directive.GetValue() != nil {
-		// default queue should stay alive even if requests go to other queues
-		pm.MarkAlive()
-		// We don't need the userDataChanged channel here because:
-		// - if we sync match, we're done
-		// - if we spool to db, we'll re-resolve when it comes out of the db
-		userData, _, err := pm.GetUserData()
-		if err != nil {
-			return false, err
-		}
-		dbq, err = pm.redirectToVersionSetQueueForAdd(ctx, directive, userData)
-		if err != nil {
-			return false, err
-		}
+	dbq, err := pm.getDbQueueForAdd(ctx, params.taskInfo.VersionDirective)
+	if err != nil {
+		return false, err
 	}
 
+	if pm.defaultQueue != dbq {
+		// default queue should stay alive even if requests go to other queues
+		pm.defaultQueue.MarkAlive()
+	}
 	return dbq.AddTask(ctx, params)
 }
 
@@ -239,7 +226,7 @@ func (pm *taskQueuePartitionManagerImpl) PollTask(
 	dbq := pm.defaultQueue
 	if pollMetadata.workerVersionCapabilities.GetUseVersioning() {
 		// default queue should stay alive even if requests go to other queues
-		pm.MarkAlive()
+		pm.defaultQueue.MarkAlive()
 		// We don't need the userDataChanged channel here because:
 		// - if we sync match, we're done
 		// - if we spool to db, we'll re-resolve when it comes out of the db
@@ -252,11 +239,13 @@ func (pm *taskQueuePartitionManagerImpl) PollTask(
 			return nil, err
 		}
 	}
-	return dbq.PollTask(ctx, pollMetadata)
-}
 
-func (pm *taskQueuePartitionManagerImpl) MarkAlive() {
-	pm.defaultQueue.MarkAlive()
+	if identity, ok := ctx.Value(identityKey).(string); ok && identity != "" {
+		pm.defaultQueue.UpdatePollerInfo(pollerIdentity(identity), pollMetadata)
+		// update timestamp when long poll ends
+		defer pm.defaultQueue.UpdatePollerInfo(pollerIdentity(identity), pollMetadata)
+	}
+	return dbq.PollTask(ctx, pollMetadata)
 }
 
 func (pm *taskQueuePartitionManagerImpl) DispatchSpooledTask(
@@ -293,12 +282,24 @@ func (pm *taskQueuePartitionManagerImpl) DispatchQueryTask(
 	taskID string,
 	request *matchingservice.QueryWorkflowRequest,
 ) (*matchingservice.QueryWorkflowResponse, error) {
-	return pm.defaultQueue.DispatchQueryTask(ctx, taskID, request)
+	dbq, err := pm.getDbQueueForAdd(ctx, request.VersionDirective)
+	if err != nil {
+		return nil, err
+	}
+
+	if pm.defaultQueue != dbq {
+		// default queue should stay alive even if requests go to other queues
+		pm.defaultQueue.MarkAlive()
+	}
+
+	return dbq.DispatchQueryTask(ctx, taskID, request)
 }
 
 // GetUserData returns the user data for the task queue if any.
 // Note: can return nil value with no error.
 func (pm *taskQueuePartitionManagerImpl) GetUserData() (*persistencespb.VersionedTaskQueueUserData, <-chan struct{}, error) {
+	// mark alive so that it doesn't unload while a child partition is doing a long poll
+	pm.defaultQueue.MarkAlive()
 	return pm.db.GetUserData()
 }
 
@@ -331,10 +332,6 @@ func (pm *taskQueuePartitionManagerImpl) UpdateUserData(ctx context.Context, opt
 		return serviceerror.NewUnavailable("storing task queue user data succeeded but publishing to the namespace replication queue failed, please try again")
 	}
 	return err
-}
-
-func (pm *taskQueuePartitionManagerImpl) UpdatePollerInfo(id pollerIdentity, pollMetadata *pollMetadata) {
-	pm.defaultQueue.UpdatePollerInfo(id, pollMetadata)
 }
 
 // GetAllPollerInfo returns all pollers that polled from this taskqueue in last few minutes
@@ -618,6 +615,28 @@ func (pm *taskQueuePartitionManagerImpl) loadDemotedSetIds(demotedSetIds []strin
 			tqm.MarkAlive()
 		}
 	}
+}
+
+func (pm *taskQueuePartitionManagerImpl) getDbQueueForAdd(
+	ctx context.Context,
+	directive *taskqueuespb.TaskVersionDirective,
+) (taskQueueManager, error) {
+	if directive.GetValue() == nil {
+		return pm.defaultQueue, nil
+	}
+
+	// We don't need the userDataChanged channel here because:
+	// - if we sync match, we're done
+	// - if we spool to db, we'll re-resolve when it comes out of the db
+	userData, _, err := pm.GetUserData()
+	if err != nil {
+		return nil, err
+	}
+	dbq, err := pm.redirectToVersionSetQueueForAdd(ctx, directive, userData)
+	if err != nil {
+		return nil, err
+	}
+	return dbq, nil
 }
 
 func (pm *taskQueuePartitionManagerImpl) redirectToVersionSetQueueForAdd(

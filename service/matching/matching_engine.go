@@ -1000,8 +1000,6 @@ func (e *matchingEngineImpl) GetTaskQueueUserData(
 		var cancel context.CancelFunc
 		ctx, cancel = newChildContext(ctx, e.config.GetUserDataLongPollTimeout(), returnEmptyTaskTimeBudget)
 		defer cancel()
-		// mark alive so that it doesn't unload while a child partition is doing a long poll
-		tqMgr.MarkAlive()
 	}
 
 	for {
@@ -1236,13 +1234,6 @@ func (e *matchingEngineImpl) pollTask(
 		e.pollMap.add(pollerID, cancel)
 		defer e.pollMap.remove(pollerID)
 	}
-
-	if identity, ok := ctx.Value(identityKey).(string); ok && identity != "" {
-		tqm.UpdatePollerInfo(pollerIdentity(identity), pollMetadata)
-		// update timestamp when long poll ends
-		defer tqm.UpdatePollerInfo(pollerIdentity(identity), pollMetadata)
-	}
-
 	return tqm.PollTask(ctx, pollMetadata)
 }
 
