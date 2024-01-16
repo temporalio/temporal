@@ -1252,7 +1252,7 @@ func (e *matchingEngineImpl) unloadTaskQueuePartition(unloadTQM taskQueuePartiti
 	foundTQM, ok := e.taskQueues[*queueID]
 	if !ok || foundTQM != unloadTQM {
 		e.taskQueuesLock.Unlock()
-		foundTQM.Stop()
+		unloadTQM.Stop()
 		return
 	}
 	delete(e.taskQueues, *queueID)

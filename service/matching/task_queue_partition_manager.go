@@ -72,7 +72,7 @@ type (
 		// if dispatched to local poller then nil and nil is returned.
 		DispatchQueryTask(ctx context.Context, taskID string, request *matchingservice.QueryWorkflowRequest) (*matchingservice.QueryWorkflowResponse, error)
 		// GetUserData returns the versioned user data for this task queue
-		GetUserData() (*persistencespb.VersionedTaskQueueUserData, chan struct{}, error)
+		GetUserData() (*persistencespb.VersionedTaskQueueUserData, <-chan struct{}, error)
 		// UpdateUserData updates user data for this task queue and replicates across clusters if necessary.
 		// Extra care should be taken to avoid mutating the existing data in the update function.
 		UpdateUserData(ctx context.Context, options UserDataUpdateOptions, updateFn UserDataUpdateFunc) error
@@ -211,19 +211,25 @@ func (pm *taskQueuePartitionManagerImpl) AddTask(
 	ctx context.Context,
 	params addTaskParams,
 ) (bool, error) {
-	// default queue should stay alive even if requests go to other queues
-	pm.MarkAlive()
-	// We don't need the userDataChanged channel here because:
-	// - if we sync match, we're done
-	// - if we spool to db, we'll re-resolve when it comes out of the db
-	userData, _, err := pm.GetUserData()
-	if err != nil {
-		return false, err
+	dbq := pm.defaultQueue
+
+	directive := params.taskInfo.VersionDirective
+	if directive.GetValue() != nil {
+		// default queue should stay alive even if requests go to other queues
+		pm.MarkAlive()
+		// We don't need the userDataChanged channel here because:
+		// - if we sync match, we're done
+		// - if we spool to db, we'll re-resolve when it comes out of the db
+		userData, _, err := pm.GetUserData()
+		if err != nil {
+			return false, err
+		}
+		dbq, err = pm.redirectToVersionSetQueueForAdd(ctx, directive, userData)
+		if err != nil {
+			return false, err
+		}
 	}
-	dbq, err := pm.redirectToVersionedQueueForAdd(ctx, params.taskInfo.VersionDirective, userData)
-	if err != nil {
-		return false, err
-	}
+
 	return dbq.AddTask(ctx, params)
 }
 
@@ -231,18 +237,21 @@ func (pm *taskQueuePartitionManagerImpl) PollTask(
 	ctx context.Context,
 	pollMetadata *pollMetadata,
 ) (*internalTask, error) {
-	// default queue should stay alive even if requests go to other queues
-	pm.MarkAlive()
-	// We don't need the userDataChanged channel here because:
-	// - if we sync match, we're done
-	// - if we spool to db, we'll re-resolve when it comes out of the db
-	userData, _, err := pm.GetUserData()
-	if err != nil {
-		return nil, err
-	}
-	dbq, err := pm.redirectToVersionedQueueForPoll(ctx, pollMetadata.workerVersionCapabilities, userData)
-	if err != nil {
-		return nil, err
+	dbq := pm.defaultQueue
+	if pollMetadata.workerVersionCapabilities.GetUseVersioning() {
+		// default queue should stay alive even if requests go to other queues
+		pm.MarkAlive()
+		// We don't need the userDataChanged channel here because:
+		// - if we sync match, we're done
+		// - if we spool to db, we'll re-resolve when it comes out of the db
+		userData, _, err := pm.GetUserData()
+		if err != nil {
+			return nil, err
+		}
+		dbq, err = pm.redirectToVersionSetQueueForPoll(ctx, pollMetadata.workerVersionCapabilities, userData)
+		if err != nil {
+			return nil, err
+		}
 	}
 	return dbq.PollTask(ctx, pollMetadata)
 }
@@ -260,15 +269,20 @@ func (pm *taskQueuePartitionManagerImpl) DispatchSpooledTask(
 	directive := taskInfo.GetVersionDirective()
 	// Redirect and re-resolve if we're blocked in matcher and user data changes.
 	for {
-		userData, userDataChanged, err := pm.GetUserData()
-		if err != nil {
-			return err
+		dbq := pm.defaultQueue
+		var userDataChanged <-chan struct{}
+		if directive.GetValue() != nil {
+			userData, userDataCh, err := pm.GetUserData()
+			userDataChanged = userDataCh
+			if err != nil {
+				return err
+			}
+			dbq, err = pm.redirectToVersionSetQueueForAdd(ctx, directive, userData)
+			if err != nil {
+				return err
+			}
 		}
-		dbq, err := pm.redirectToVersionedQueueForAdd(ctx, directive, userData)
-		if err != nil {
-			return err
-		}
-		err = dbq.DispatchSpooledTask(ctx, task, userDataChanged)
+		err := dbq.DispatchSpooledTask(ctx, task, userDataChanged)
 		if err != errInterrupted { // nolint:goerr113
 			return err
 		}
@@ -285,7 +299,7 @@ func (pm *taskQueuePartitionManagerImpl) DispatchQueryTask(
 
 // GetUserData returns the user data for the task queue if any.
 // Note: can return nil value with no error.
-func (pm *taskQueuePartitionManagerImpl) GetUserData() (*persistencespb.VersionedTaskQueueUserData, chan struct{}, error) {
+func (pm *taskQueuePartitionManagerImpl) GetUserData() (*persistencespb.VersionedTaskQueueUserData, <-chan struct{}, error) {
 	return pm.db.GetUserData()
 }
 
@@ -564,17 +578,11 @@ func (pm *taskQueuePartitionManagerImpl) getVersionedQueueNoWait(
 	return vq, nil
 }
 
-func (pm *taskQueuePartitionManagerImpl) redirectToVersionedQueueForPoll(
+func (pm *taskQueuePartitionManagerImpl) redirectToVersionSetQueueForPoll(
 	ctx context.Context,
 	caps *commonpb.WorkerVersionCapabilities,
 	userData *persistencespb.VersionedTaskQueueUserData,
 ) (taskQueueManager, error) {
-	if !caps.GetUseVersioning() {
-		// Either this task queue is versioned, or there are still some workflows running on
-		// the "unversioned" set.
-		return pm.defaultQueue, nil
-	}
-
 	data := userData.GetData().GetVersioningData()
 
 	if pm.kind == enumspb.TASK_QUEUE_KIND_STICKY {
@@ -614,7 +622,7 @@ func (pm *taskQueuePartitionManagerImpl) loadDemotedSetIds(demotedSetIds []strin
 	}
 }
 
-func (pm *taskQueuePartitionManagerImpl) redirectToVersionedQueueForAdd(
+func (pm *taskQueuePartitionManagerImpl) redirectToVersionSetQueueForAdd(
 	ctx context.Context,
 	directive *taskqueuespb.TaskVersionDirective,
 	userData *persistencespb.VersionedTaskQueueUserData,

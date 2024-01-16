@@ -1765,9 +1765,9 @@ func (s *matchingEngineSuite) TestTaskQueueManagerGetTaskBatch() {
 	expectedBufSize := min(cap(tlMgr.taskReader.taskBuffer), taskCount)
 	s.True(s.awaitCondition(func() bool { return len(tlMgr.taskReader.taskBuffer) == expectedBufSize }, time.Second))
 
-	// stop all goroutines that read / write tasks in the background
+	// unload the queue and stop all goroutines that read / write tasks in the background
 	// remainder of this test works with the in-memory buffer
-	tlMgr.Stop()
+	tlMgr.unloadFromPartitionManager()
 
 	// setReadLevel should NEVER be called without updating ackManager.outstandingTasks
 	// This is only for unit test purpose
@@ -1871,7 +1871,7 @@ func (s *matchingEngineSuite) TestTaskQueueManager_CyclingBehavior() {
 		tlMgr.Start()
 		// tlMgr.taskWriter startup is async so give it time to complete
 		time.Sleep(100 * time.Millisecond)
-		tlMgr.Stop()
+		tlMgr.(*taskQueuePartitionManagerImpl).unloadFromEngine()
 
 		getTasksCount := s.taskManager.getGetTasksCount(tlID) - prevGetTasksCount
 		s.LessOrEqual(getTasksCount, 1)
@@ -2458,7 +2458,7 @@ func (s *matchingEngineSuite) TestUnknownBuildId_Demoted_Match() {
 	unknown := "unknown"
 	build1 := "build1"
 
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Hour)
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
 	s.mockMatchingClient.EXPECT().UpdateWorkerBuildIdCompatibility(gomock.Any(), &matchingservice.UpdateWorkerBuildIdCompatibilityRequest{

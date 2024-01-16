@@ -127,7 +127,7 @@ type (
 		SpoolTask(params addTaskParams) error
 		// DispatchSpooledTask dispatches a task to a poller. When there are no pollers to pick
 		// up the task, this method will return error. Task will not be persisted to db
-		DispatchSpooledTask(ctx context.Context, task *internalTask, userDataChanged chan struct{}) error
+		DispatchSpooledTask(ctx context.Context, task *internalTask, userDataChanged <-chan struct{}) error
 		// DispatchQueryTask will dispatch query to local or remote poller. If forwarded then result or error is returned,
 		// if dispatched to local poller then nil and nil is returned.
 		DispatchQueryTask(ctx context.Context, taskID string, request *matchingservice.QueryWorkflowRequest) (*matchingservice.QueryWorkflowResponse, error)
@@ -454,7 +454,7 @@ func (c *taskQueueManagerImpl) MarkAlive() {
 func (c *taskQueueManagerImpl) DispatchSpooledTask(
 	ctx context.Context,
 	task *internalTask,
-	userDataChanged chan struct{},
+	userDataChanged <-chan struct{},
 ) error {
 	return c.matcher.MustOffer(ctx, task, userDataChanged)
 }
