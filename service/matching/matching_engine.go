@@ -314,7 +314,7 @@ func (e *matchingEngineImpl) getTaskQueuePartitionManagerNoWait(
 
 		if !ok {
 			tqm.Start()
-			e.updateTaskQueueGauge(tqm, false,1)
+			e.updateTaskQueueGauge(tqm, false, 1)
 		}
 	}
 	return tqm, nil

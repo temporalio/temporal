@@ -133,6 +133,7 @@ dispatchLoop:
 				}
 
 				taskCtx, cancel := context.WithTimeout(ctx, taskReaderOfferTimeout)
+				// TODO: why it goes back all the way to engine level? can it just call on partitionMgr?
 				err := tr.tlMgr.partitionMgr.engine.DispatchSpooledTask(taskCtx, task, tr.tlMgr.taskQueueID, tr.tlMgr.partitionMgr.stickyInfo)
 				cancel()
 				if err == nil {

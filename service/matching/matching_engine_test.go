@@ -848,7 +848,6 @@ func (s *matchingEngineSuite) TestSyncMatchActivities() {
 	mgr, err := newTaskQueuePartitionManager(s.matchingEngine, tlID, normalStickyInfo, s.matchingEngine.config)
 	s.NoError(err)
 
-
 	mgrImpl, ok := mgr.(*taskQueuePartitionManagerImpl).defaultQueue.(*taskQueueManagerImpl)
 	s.True(ok)
 
@@ -1066,7 +1065,6 @@ func (s *matchingEngineSuite) concurrentPublishConsumeActivities(
 	var err error
 	mgr, err := newTaskQueuePartitionManager(s.matchingEngine, tlID, normalStickyInfo, s.matchingEngine.config)
 	s.NoError(err)
-
 
 	mgrImpl := mgr.(*taskQueuePartitionManagerImpl).defaultQueue.(*taskQueueManagerImpl)
 	mgrImpl.matcher.config.MinTaskThrottlingBurstSize = func() int { return 0 }
@@ -1830,7 +1828,6 @@ func (s *matchingEngineSuite) TestTaskQueueManagerGetTaskBatch_ReadBatchDone() {
 	tlMgr0, err := newTaskQueuePartitionManager(s.matchingEngine, tlID, normalStickyInfo, config)
 	s.NoError(err)
 
-
 	tlMgr, ok := tlMgr0.(*taskQueuePartitionManagerImpl).defaultQueue.(*taskQueueManagerImpl)
 	s.True(ok)
 
@@ -2488,10 +2485,6 @@ func (s *matchingEngineSuite) TestUnknownBuildId_Demoted_Match() {
 	// unload base and versioned tqm. note: unload the partition manager unloads both
 	id := newTestTaskQueueID(namespaceId, tq, enumspb.TASK_QUEUE_TYPE_WORKFLOW)
 	baseTqm, err := s.matchingEngine.getTaskQueuePartitionManager(ctx, id, normalStickyInfo, false)
-
-	//for _, v := range baseTqm.(*taskQueuePartitionManagerImpl).versionedQueues {
-	//	v.(*taskQueueManagerImpl).unloadFromPartitionManager()
-	//}
 	s.NoError(err)
 	s.NotNil(baseTqm)
 	s.matchingEngine.unloadTaskQueuePartition(baseTqm)

@@ -142,9 +142,9 @@ type (
 
 	// Single task queue in memory state
 	taskQueueManagerImpl struct {
-		status       int32
-		partitionMgr *taskQueuePartitionManagerImpl
-		taskQueueID  *taskQueueID
+		status               int32
+		partitionMgr         *taskQueuePartitionManagerImpl
+		taskQueueID          *taskQueueID
 		config               *taskQueueConfig
 		db                   *taskQueueDB
 		taskWriter           *taskWriter
@@ -208,7 +208,7 @@ func newTaskQueueManager(
 	taggedMetricsHandler := partitionMgr.taggedMetricsHandler.WithTags(metrics.OperationTag(metrics.MatchingTaskQueueMgrScope), metrics.TaskQueueTypeTag(taskQueue.taskType))
 	tlMgr := &taskQueueManagerImpl{
 		status:               common.DaemonStatusInitialized,
-		partitionMgr: partitionMgr,
+		partitionMgr:         partitionMgr,
 		namespaceRegistry:    e.namespaceRegistry,
 		matchingClient:       e.matchingRawClient,
 		metricsHandler:       e.metricsHandler,

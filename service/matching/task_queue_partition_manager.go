@@ -87,7 +87,7 @@ type (
 		LongPollExpirationInterval() time.Duration
 	}
 
-	// Represents a single partition of a (user-level) Task Queue in memory state. Under the hood, each Task Queue 
+	// Represents a single partition of a (user-level) Task Queue in memory state. Under the hood, each Task Queue
 	// partition is made of one or more DB-level queues. There is always a default DB queue. For
 	// versioned TQs, there is an additional DB queue for each Build ID.
 	// Currently, the liveness of a partition manager is tied to its default queue. More specifically:
@@ -102,20 +102,20 @@ type (
 		taskQueueID *taskQueueID
 		stickyInfo
 		namespaceName namespace.Name
-		config               *taskQueueConfig
+		config        *taskQueueConfig
 		// this is the default (unversioned) DB queue. As of now, some of the matters related to the whole TQ partition
 		// is delegated to the defaultQueue. The plan is to eventually rename taskQueueManager to dbQueueManager and
 		// bring all the partition-level logic to taskQueuePartitionManager.
 		defaultQueue taskQueueManager
 		// used for non-sticky versioned queues (one for each version)
-		versionedQueues map[string]taskQueueManager
-		versionedQueuesLock    sync.RWMutex // locks mutation of versionedQueues
+		versionedQueues      map[string]taskQueueManager
+		versionedQueuesLock  sync.RWMutex // locks mutation of versionedQueues
 		db                   *taskQueueDB
 		namespaceRegistry    namespace.Registry
 		logger               log.Logger
 		matchingClient       matchingservice.MatchingServiceClient
 		taggedMetricsHandler metrics.Handler // namespace/taskqueue tagged metric scope
-		goroGroup        goro.Group
+		goroGroup            goro.Group
 		// userDataReady is fulfilled once versioning data is fetched from the root partition. If this TQ is
 		// the root partition, it is fulfilled as soon as it is fetched from db.
 		userDataReady *future.FutureImpl[struct{}]
@@ -154,16 +154,16 @@ func newTaskQueuePartitionManager(
 	)
 
 	pm := &taskQueuePartitionManagerImpl{
-		engine:       e,
-		taskQueueID:  taskQueue,
-		stickyInfo:   stickyInfo,
-		config:       taskQueueConfig,
-		namespaceRegistry: e.namespaceRegistry,
-		logger: logger,
-		matchingClient: e.matchingRawClient,
+		engine:               e,
+		taskQueueID:          taskQueue,
+		stickyInfo:           stickyInfo,
+		config:               taskQueueConfig,
+		namespaceRegistry:    e.namespaceRegistry,
+		logger:               logger,
+		matchingClient:       e.matchingRawClient,
 		taggedMetricsHandler: taggedMetricsHandler,
 		userDataReady:        future.NewFuture[struct{}](),
-		versionedQueues: make(map[string]taskQueueManager),
+		versionedQueues:      make(map[string]taskQueueManager),
 	}
 
 	defaultQ, err := newTaskQueueManager(pm, taskQueue)
@@ -370,7 +370,6 @@ func (pm *taskQueuePartitionManagerImpl) callerInfoContext(ctx context.Context) 
 	ns, _ := pm.namespaceRegistry.GetNamespaceName(pm.taskQueueID.namespaceID)
 	return headers.SetCallerInfo(ctx, headers.NewBackgroundCallerInfo(ns.String()))
 }
-
 
 func (pm *taskQueuePartitionManagerImpl) unloadDbQueue(unloadedDbq taskQueueManager) {
 	version := unloadedDbq.QueueID().VersionSet()

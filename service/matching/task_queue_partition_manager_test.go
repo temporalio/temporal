@@ -49,7 +49,7 @@ import (
 	"go.temporal.io/server/common/persistence/visibility/manager"
 )
 
-func createTestTaskQueuePartitionManager(controller *gomock.Controller, testOpts *tqmTestOpts, ) *taskQueuePartitionManagerImpl {
+func createTestTaskQueuePartitionManager(controller *gomock.Controller, testOpts *tqmTestOpts) *taskQueuePartitionManagerImpl {
 	logger := log.NewTestLogger()
 	ns := namespace.Name("ns-name")
 	tm := newTestTaskManager(logger)
@@ -63,13 +63,13 @@ func createTestTaskQueuePartitionManager(controller *gomock.Controller, testOpts
 	mockHistoryClient.EXPECT().IsActivityTaskValid(gomock.Any(), gomock.Any()).Return(&historyservice.IsActivityTaskValidResponse{IsValid: true}, nil).AnyTimes()
 	me := newMatchingEngine(testOpts.config, tm, mockHistoryClient, logger, mockNamespaceCache, testOpts.matchingClientMock, mockVisibilityManager)
 	pm := &taskQueuePartitionManagerImpl{
-		engine:       me,
-		taskQueueID:  testOpts.tqId,
-		stickyInfo:   normalStickyInfo,
-		config:       newTaskQueueConfig(testOpts.tqId, me.config, ns),
-		namespaceRegistry: me.namespaceRegistry,
-		logger: logger,
-		matchingClient: me.matchingRawClient,
+		engine:               me,
+		taskQueueID:          testOpts.tqId,
+		stickyInfo:           normalStickyInfo,
+		config:               newTaskQueueConfig(testOpts.tqId, me.config, ns),
+		namespaceRegistry:    me.namespaceRegistry,
+		logger:               logger,
+		matchingClient:       me.matchingRawClient,
 		taggedMetricsHandler: me.metricsHandler,
 		userDataReady:        future.NewFuture[struct{}](),
 	}

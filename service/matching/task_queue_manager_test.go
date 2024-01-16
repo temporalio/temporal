@@ -339,8 +339,6 @@ func mustCreateTestTaskQueueManagerWithConfig(
 	return tqm
 }
 
-
-
 func createTestTaskQueueManagerWithConfig(
 	controller *gomock.Controller,
 	testOpts *tqmTestOpts,
