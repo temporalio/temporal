@@ -104,9 +104,8 @@ type (
 		namespaceName namespace.Name
 		config               *taskQueueConfig
 		// this is the default (unversioned) DB queue. As of now, some of the matters related to the whole TQ partition
-		// is delegated to the defaultQueue. The plan is to eventually turn defaultQueue also into a 
-		// dbQueueManager, once taskQueueManager is dissolved completely and all the implementation is moved to either
-		// taskQueuePartitionManager or dbQueueManager.
+		// is delegated to the defaultQueue. The plan is to eventually rename taskQueueManager to dbQueueManager and
+		// bring all the partition-level logic to taskQueuePartitionManager.
 		defaultQueue taskQueueManager
 		// used for non-sticky versioned queues (one for each version)
 		versionedQueues map[string]taskQueueManager
