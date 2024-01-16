@@ -822,7 +822,7 @@ func (c *temporalImpl) overrideHistoryDynamicConfig(t *testing.T, client *dcClie
 	client.OverrideValue(t, dynamicconfig.ReplicationTaskProcessorStartWait, time.Nanosecond)
 
 	if c.esConfig != nil {
-		client.OverrideValue(t, dynamicconfig.AdvancedVisibilityWritingMode, visibility.SecondaryVisibilityWritingModeDual)
+		client.OverrideValue(t, dynamicconfig.SecondaryVisibilityWritingMode, visibility.SecondaryVisibilityWritingModeDual)
 	}
 	if c.historyConfig.HistoryCountLimitWarn != 0 {
 		client.OverrideValue(t, dynamicconfig.HistoryCountLimitWarn, c.historyConfig.HistoryCountLimitWarn)
