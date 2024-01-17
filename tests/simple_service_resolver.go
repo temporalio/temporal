@@ -130,5 +130,9 @@ func (s *simpleResolver) Members() []membership.HostInfo {
 	return s.hostInfos
 }
 
+func (s *simpleResolver) AvailableMembers() []membership.HostInfo {
+	return s.Members()
+}
+
 func (s *simpleResolver) RequestRefresh() {
 }

@@ -176,6 +176,15 @@ func (c *testCluster) GetSeedNode() string {
 	return c.seedNode
 }
 
+// DrainHost marks the given host draining
+func (c *testCluster) DrainHost(hostID string) {
+	for i, uuid := range c.hostUUIDs {
+		if uuid == hostID {
+			c.rings[i].SetDraining(true)
+		}
+	}
+}
+
 // KillHost kills the given host within the cluster
 func (c *testCluster) KillHost(hostID string) {
 	for i := 0; i < len(c.hostUUIDs); i++ {

@@ -101,7 +101,9 @@ func testDialer(t *testing.T, target string, dial func(rpcFactory *nettest.RPCFa
 	t.Run("ContextCanceled", func(t *testing.T) {
 		t.Parallel()
 
-		rpcFactory := newRPCFactory()
+		// NOTE: we need to force the dial to block until the connection is established
+		// or else dial won't see that the context has been cancelled
+		rpcFactory := newRPCFactory(grpc.WithBlock())
 		rpcFactory.SetContextFactory(func() context.Context {
 			ctx, cancel := context.WithCancel(context.Background())
 			cancel()
@@ -114,6 +116,6 @@ func testDialer(t *testing.T, target string, dial func(rpcFactory *nettest.RPCFa
 	})
 }
 
-func newRPCFactory() *nettest.RPCFactory {
-	return nettest.NewRPCFactory(nettest.NewListener(nettest.NewPipe()))
+func newRPCFactory(dialOptions ...grpc.DialOption) *nettest.RPCFactory {
+	return nettest.NewRPCFactory(nettest.NewListener(nettest.NewPipe()), dialOptions...)
 }

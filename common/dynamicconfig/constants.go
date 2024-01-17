@@ -38,24 +38,6 @@ const (
 
 	// keys for system
 
-	// DEPRECATED: the following block of configs are deprecated and replaced by the next block of configs
-	// StandardVisibilityPersistenceMaxReadQPS is the max QPC system host can query standard visibility DB (SQL or Cassandra) for read.
-	StandardVisibilityPersistenceMaxReadQPS = "system.standardVisibilityPersistenceMaxReadQPS"
-	// StandardVisibilityPersistenceMaxWriteQPS is the max QPC system host can query standard visibility DB (SQL or Cassandra) for write.
-	StandardVisibilityPersistenceMaxWriteQPS = "system.standardVisibilityPersistenceMaxWriteQPS"
-	// AdvancedVisibilityPersistenceMaxReadQPS is the max QPC system host can query advanced visibility DB (Elasticsearch) for read.
-	AdvancedVisibilityPersistenceMaxReadQPS = "system.advancedVisibilityPersistenceMaxReadQPS"
-	// AdvancedVisibilityPersistenceMaxWriteQPS is the max QPC system host can query advanced visibility DB (Elasticsearch) for write.
-	AdvancedVisibilityPersistenceMaxWriteQPS = "system.advancedVisibilityPersistenceMaxWriteQPS"
-	// AdvancedVisibilityWritingMode is key for how to write to advanced visibility
-	AdvancedVisibilityWritingMode = "system.advancedVisibilityWritingMode"
-	// EnableWriteToSecondaryAdvancedVisibility is the config to enable write to secondary visibility for Elasticsearch
-	EnableWriteToSecondaryAdvancedVisibility = "system.enableWriteToSecondaryAdvancedVisibility"
-	// EnableReadVisibilityFromES is key for enable read from Elasticsearch
-	EnableReadVisibilityFromES = "system.enableReadVisibilityFromES"
-	// EnableReadFromSecondaryAdvancedVisibility is the config to enable read from secondary Elasticsearch
-	EnableReadFromSecondaryAdvancedVisibility = "system.enableReadFromSecondaryAdvancedVisibility"
-
 	// VisibilityPersistenceMaxReadQPS is the max QPC system host can query visibility DB for read.
 	VisibilityPersistenceMaxReadQPS = "system.visibilityPersistenceMaxReadQPS"
 	// VisibilityPersistenceMaxWriteQPS is the max QPC system host can query visibility DB for write.
@@ -437,7 +419,8 @@ const (
 	MatchingLoadUserData = "matching.loadUserData"
 	// MatchingUpdateAckInterval is the interval for update ack
 	MatchingUpdateAckInterval = "matching.updateAckInterval"
-	// MatchingMaxTaskQueueIdleTime is the time after which an idle task queue will be unloaded
+	// MatchingMaxTaskQueueIdleTime is the time after which an idle task queue will be unloaded.
+	// Note: this should be greater than matching.longPollExpirationInterval and matching.getUserDataLongPollTimeout.
 	MatchingMaxTaskQueueIdleTime = "matching.maxTaskQueueIdleTime"
 	// MatchingOutstandingTaskAppendsThreshold is the threshold for outstanding task appends
 	MatchingOutstandingTaskAppendsThreshold = "matching.outstandingTaskAppendsThreshold"
@@ -469,6 +452,8 @@ const (
 	// MatchingMaxWaitForPollerBeforeFwd in presence of a non-negligible backlog, we resume forwarding tasks if the
 	// duration since last poll exceeds this threshold.
 	MatchingMaxWaitForPollerBeforeFwd = "matching.maxWaitForPollerBeforeFwd"
+	// QueryPollerUnavailableWindow WF Queries are rejected after a while if no poller has been seen within the window
+	QueryPollerUnavailableWindow = "matching.queryPollerUnavailableWindow"
 
 	// for matching testing only:
 
@@ -861,6 +846,8 @@ const (
 	EnableEagerNamespaceRefresher = "history.EnableEagerNamespaceRefresher"
 	// EnableReplicationTaskBatching is a feature flag for batching replicate history event task
 	EnableReplicationTaskBatching = "history.EnableReplicationTaskBatching"
+	// EnableReplicateLocalGeneratedEvents is a feature flag for replicating locally generated events
+	EnableReplicateLocalGeneratedEvents = "history.EnableReplicateLocalGeneratedEvents"
 
 	// keys for worker
 
@@ -943,6 +930,8 @@ const (
 	WorkerPerNamespaceWorkerCount = "worker.perNamespaceWorkerCount"
 	// WorkerPerNamespaceWorkerOptions are SDK worker options for per-namespace worker
 	WorkerPerNamespaceWorkerOptions = "worker.perNamespaceWorkerOptions"
+	// WorkerPerNamespaceWorkerStartRate controls how fast per-namespace workers can be started (workers/second).
+	WorkerPerNamespaceWorkerStartRate = "worker.perNamespaceWorkerStartRate"
 	// WorkerEnableScheduler controls whether to start the worker for scheduled workflows
 	WorkerEnableScheduler = "worker.enableScheduler"
 	// WorkerStickyCacheSize controls the sticky cache size for SDK workers on worker nodes

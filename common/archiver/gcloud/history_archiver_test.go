@@ -42,9 +42,9 @@ import (
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/archiver"
 	"go.temporal.io/server/common/archiver/gcloud/connector"
-	"go.temporal.io/server/common/convert"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
+	"go.temporal.io/server/common/util"
 )
 
 const (
@@ -506,7 +506,7 @@ func (h *historyArchiverSuite) TestGet_Success_UseProvidedVersion() {
 		WorkflowID:           testWorkflowID,
 		RunID:                testRunID,
 		PageSize:             testPageSize,
-		CloseFailoverVersion: convert.Int64Ptr(-25),
+		CloseFailoverVersion: util.Ptr(int64(-25)),
 	}
 
 	response, err := historyArchiver.Get(ctx, h.testArchivalURI, request)

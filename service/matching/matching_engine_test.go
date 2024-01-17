@@ -34,6 +34,7 @@ import (
 	"time"
 
 	"github.com/emirpasic/gods/maps/treemap"
+	godsutils "github.com/emirpasic/gods/utils"
 	"github.com/golang/mock/gomock"
 	"github.com/pborman/uuid"
 	"github.com/stretchr/testify/require"
@@ -424,74 +425,6 @@ func (s *matchingEngineSuite) TestPollWorkflowTaskQueues() {
 
 	s.Nil(err)
 	s.Equal(expectedResp, resp)
-}
-
-func (s *matchingEngineSuite) TestPollWorkflowTaskQueue_GetHistoryFailure() {
-	namespaceID := namespace.ID(uuid.New())
-	tl := "makeToast"
-	identity := "selfDrivingToaster"
-	fakeErr := serviceerror.NewDataLoss("fake data loss error")
-
-	taskQueue := &taskqueuepb.TaskQueue{Name: tl, Kind: enumspb.TASK_QUEUE_KIND_NORMAL}
-
-	s.matchingEngine.config.RangeSize = 2 // to test that range is not updated without tasks
-	s.matchingEngine.config.LongPollExpirationInterval = dynamicconfig.GetDurationPropertyFnFilteredByTaskQueueInfo(10 * time.Millisecond)
-
-	runID := uuid.NewRandom().String()
-	workflowID := "workflow1"
-	workflowType := &commonpb.WorkflowType{
-		Name: "workflow",
-	}
-	execution := &commonpb.WorkflowExecution{RunId: runID, WorkflowId: workflowID}
-	scheduledEventID := int64(0)
-
-	// History service is using mock
-	s.mockHistoryClient.EXPECT().GetMutableState(gomock.Any(), gomock.Any(), gomock.Any()).DoAndReturn(
-		func(ctx context.Context, taskRequest *historyservice.GetMutableStateRequest, arg2 ...interface{}) (*historyservice.GetMutableStateResponse, error) {
-			s.logger.Debug("Mock Received GetMutableState")
-			response := &historyservice.GetMutableStateResponse{
-				PreviousStartedEventId: scheduledEventID,
-				NextEventId:            scheduledEventID + 1,
-				WorkflowType:           workflowType,
-				TaskQueue:              taskQueue,
-				StickyTaskQueue:        &taskqueuepb.TaskQueue{Name: "makeToast-sticky", Kind: enumspb.TASK_QUEUE_KIND_STICKY},
-				CurrentBranchToken:     nil,
-			}
-			return response, nil
-		}).AnyTimes()
-	s.mockHistoryClient.EXPECT().GetWorkflowExecutionHistory(gomock.Any(), gomock.Any(), gomock.Any()).DoAndReturn(
-		func(ctx context.Context, taskRequest *historyservice.GetWorkflowExecutionHistoryRequest, arg2 ...interface{}) (*historyservice.GetWorkflowExecutionHistoryResponse, error) {
-			s.logger.Debug("Mock Received GetWorkflowExecutionHistoryRequest")
-			return nil, fakeErr
-		}).AnyTimes()
-
-	query := matchingservice.QueryWorkflowRequest{
-		NamespaceId: namespaceID.String(),
-		TaskQueue:   taskQueue,
-		QueryRequest: &workflowservice.QueryWorkflowRequest{
-			Namespace: "ns",
-			Execution: execution,
-			Query:     &querypb.WorkflowQuery{QueryType: "q"},
-		},
-	}
-	wg := &sync.WaitGroup{}
-	wg.Add(1)
-	go func() {
-		_, err := s.matchingEngine.QueryWorkflow(context.Background(), &query)
-		s.ErrorIs(err, fakeErr)
-		wg.Done()
-	}()
-
-	resp, err := s.matchingEngine.PollWorkflowTaskQueue(context.Background(), &matchingservice.PollWorkflowTaskQueueRequest{
-		NamespaceId: namespaceID.String(),
-		PollRequest: &workflowservice.PollWorkflowTaskQueueRequest{
-			TaskQueue: taskQueue,
-			Identity:  identity,
-		},
-	}, metrics.NoopMetricsHandler)
-	s.NoError(err)
-	s.Equal(emptyPollWorkflowTaskQueueResponse, resp)
-	wg.Wait()
 }
 
 func (s *matchingEngineSuite) PollForTasksEmptyResultTest(callContext context.Context, taskType enumspb.TaskQueueType) {
@@ -2802,21 +2735,8 @@ func (m *testTaskQueueManager) RangeID() int64 {
 	return m.rangeID
 }
 
-func Int64Comparator(a, b interface{}) int {
-	aAsserted := a.(int64)
-	bAsserted := b.(int64)
-	switch {
-	case aAsserted > bAsserted:
-		return 1
-	case aAsserted < bAsserted:
-		return -1
-	default:
-		return 0
-	}
-}
-
 func newTestTaskQueueManager() *testTaskQueueManager {
-	return &testTaskQueueManager{tasks: treemap.NewWith(Int64Comparator)}
+	return &testTaskQueueManager{tasks: treemap.NewWith(godsutils.Int64Comparator)}
 }
 
 func newTestTaskQueueID(namespaceID namespace.ID, name string, taskType enumspb.TaskQueueType) *taskQueueID {
@@ -3141,7 +3061,7 @@ func validateTimeRange(t time.Time, expectedDuration time.Duration) bool {
 }
 
 func defaultTestConfig() *Config {
-	config := NewConfig(dynamicconfig.NewNoopCollection(), false, false)
+	config := NewConfig(dynamicconfig.NewNoopCollection())
 	config.LongPollExpirationInterval = dynamicconfig.GetDurationPropertyFnFilteredByTaskQueueInfo(100 * time.Millisecond)
 	config.MaxTaskDeleteBatchSize = dynamicconfig.GetIntPropertyFilteredByTaskQueueInfo(1)
 	config.FrontendAccessHistoryFraction = dynamicconfig.GetFloatPropertyFn(1.0)

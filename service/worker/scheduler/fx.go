@@ -31,6 +31,7 @@ import (
 	sdkworker "go.temporal.io/sdk/worker"
 	"go.temporal.io/sdk/workflow"
 
+	schedspb "go.temporal.io/server/api/schedule/v1"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
@@ -47,6 +48,7 @@ const (
 
 type (
 	workerComponent struct {
+		specBuilder              *SpecBuilder // workflow dep
 		activityDeps             activityDeps
 		enabledForNs             dynamicconfig.BoolPropertyFnWithNamespaceFilter
 		globalNSStartWorkflowRPS dynamicconfig.FloatPropertyFnWithNamespaceFilter
@@ -68,14 +70,17 @@ type (
 
 var Module = fx.Options(
 	fx.Provide(NewResult),
+	fx.Provide(NewSpecBuilder),
 )
 
 func NewResult(
 	dcCollection *dynamicconfig.Collection,
+	specBuilder *SpecBuilder,
 	params activityDeps,
 ) fxResult {
 	return fxResult{
 		Component: &workerComponent{
+			specBuilder:  specBuilder,
 			activityDeps: params,
 			enabledForNs: dcCollection.GetBoolPropertyFnWithNamespaceFilter(
 				dynamicconfig.WorkerEnableScheduler, true),
@@ -92,7 +97,10 @@ func (s *workerComponent) DedicatedWorkerOptions(ns *namespace.Namespace) *worke
 }
 
 func (s *workerComponent) Register(registry sdkworker.Registry, ns *namespace.Namespace, details workercommon.RegistrationDetails) {
-	registry.RegisterWorkflowWithOptions(SchedulerWorkflow, workflow.RegisterOptions{Name: WorkflowType})
+	wfFunc := func(ctx workflow.Context, args *schedspb.StartScheduleArgs) error {
+		return schedulerWorkflowWithSpecBuilder(ctx, args, s.specBuilder)
+	}
+	registry.RegisterWorkflowWithOptions(wfFunc, workflow.RegisterOptions{Name: WorkflowType})
 	registry.RegisterActivity(s.activities(ns.Name(), ns.ID(), details))
 }
 

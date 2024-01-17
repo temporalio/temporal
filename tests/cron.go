@@ -475,8 +475,14 @@ func (s *ClientFunctionalSuite) TestCronWorkflowCompletionStates() {
 	ts = time.Now()
 
 	// let first run finish, then check execution and history of second run
-	time.Sleep(500 * time.Millisecond)
-	exec = s.listOpenWorkflowExecutions(startTs, time.Now(), id, 1)[0]
+	s.Eventually(
+		func() bool {
+			exec = s.listOpenWorkflowExecutions(startTs, time.Now(), id, 1)[0]
+			return exec.GetExecution().GetRunId() != firstRunID
+		},
+		targetBackoffDuration+tolerance,
+		250*time.Millisecond,
+	)
 	s.Equal(enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING, exec.GetStatus())
 	lastEvent = s.getLastEvent(s.namespace, exec.GetExecution())
 	s.Equal(enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_STARTED, lastEvent.GetEventType())
@@ -509,7 +515,8 @@ func (s *ClientFunctionalSuite) TestCronWorkflowCompletionStates() {
 	s.DurationNear(time.Since(ts), targetBackoffDuration, tolerance)
 
 	// let fifth run finish and sixth get scheduled
-	time.Sleep(500 * time.Millisecond)
+	_ = s.listClosedWorkflowExecutions(startTs, time.Now().Add(targetBackoffDuration), id, 5)
+	_ = s.listOpenWorkflowExecutions(startTs, time.Now().Add(targetBackoffDuration), id, 1)
 	// then terminate
 	s.NoError(s.sdkClient.TerminateWorkflow(ctx, id, "", "test is over"))
 
@@ -561,42 +568,67 @@ func (s *ClientFunctionalSuite) TestCronWorkflowCompletionStates() {
 
 func (s *ClientFunctionalSuite) listOpenWorkflowExecutions(start, end time.Time, id string, expectedNumber int) []*workflowpb.WorkflowExecutionInfo {
 	s.T().Helper()
-	for i := 0; i < 20; i++ {
-		resp, err := s.sdkClient.ListOpenWorkflow(NewContext(), &workflowservice.ListOpenWorkflowExecutionsRequest{
-			Namespace:       s.namespace,
-			MaximumPageSize: int32(2 * expectedNumber),
-			StartTimeFilter: &filterpb.StartTimeFilter{EarliestTime: timestamppb.New(start), LatestTime: timestamppb.New(end)},
-			Filters: &workflowservice.ListOpenWorkflowExecutionsRequest_ExecutionFilter{ExecutionFilter: &filterpb.WorkflowExecutionFilter{
-				WorkflowId: id,
-			}},
-		})
-		s.NoError(err)
-		if len(resp.GetExecutions()) == expectedNumber {
-			return resp.GetExecutions()
-		}
-		time.Sleep(250 * time.Millisecond)
-	}
-	s.FailNow("didn't get expected number")
-	panic("unreached")
+	var resp *workflowservice.ListOpenWorkflowExecutionsResponse
+	s.Eventuallyf(
+		func() bool {
+			var err error
+			resp, err = s.sdkClient.ListOpenWorkflow(
+				NewContext(), &workflowservice.ListOpenWorkflowExecutionsRequest{
+					Namespace:       s.namespace,
+					MaximumPageSize: int32(2 * expectedNumber),
+					StartTimeFilter: &filterpb.StartTimeFilter{
+						EarliestTime: timestamppb.New(start),
+						LatestTime:   timestamppb.New(end),
+					},
+					Filters: &workflowservice.ListOpenWorkflowExecutionsRequest_ExecutionFilter{
+						ExecutionFilter: &filterpb.WorkflowExecutionFilter{
+							WorkflowId: id,
+						},
+					},
+				},
+			)
+			s.NoError(err)
+			return len(resp.GetExecutions()) == expectedNumber
+		},
+		waitForESToSettle,
+		100*time.Millisecond,
+		"timeout expecting %d executions, found %d",
+		expectedNumber,
+		len(resp.GetExecutions()),
+	)
+	return resp.GetExecutions()
 }
 
 func (s *ClientFunctionalSuite) listClosedWorkflowExecutions(start, end time.Time, id string, expectedNumber int) []*workflowpb.WorkflowExecutionInfo {
 	s.T().Helper()
-	for i := 0; i < 20; i++ {
-		resp, err := s.sdkClient.ListClosedWorkflow(NewContext(), &workflowservice.ListClosedWorkflowExecutionsRequest{
-			Namespace:       s.namespace,
-			MaximumPageSize: int32(2 * expectedNumber),
-			StartTimeFilter: &filterpb.StartTimeFilter{EarliestTime: timestamppb.New(start), LatestTime: timestamppb.New(end)},
-			Filters: &workflowservice.ListClosedWorkflowExecutionsRequest_ExecutionFilter{ExecutionFilter: &filterpb.WorkflowExecutionFilter{
-				WorkflowId: id,
-			}},
-		})
-		s.NoError(err)
-		if len(resp.GetExecutions()) == expectedNumber {
-			return resp.GetExecutions()
-		}
-		time.Sleep(250 * time.Millisecond)
-	}
-	s.FailNow("didn't get expected number")
-	panic("unreached")
+	var resp *workflowservice.ListClosedWorkflowExecutionsResponse
+	s.Eventuallyf(
+		func() bool {
+			var err error
+			resp, err = s.sdkClient.ListClosedWorkflow(
+				NewContext(),
+				&workflowservice.ListClosedWorkflowExecutionsRequest{
+					Namespace:       s.namespace,
+					MaximumPageSize: int32(2 * expectedNumber),
+					StartTimeFilter: &filterpb.StartTimeFilter{
+						EarliestTime: timestamppb.New(start),
+						LatestTime:   timestamppb.New(end),
+					},
+					Filters: &workflowservice.ListClosedWorkflowExecutionsRequest_ExecutionFilter{
+						ExecutionFilter: &filterpb.WorkflowExecutionFilter{
+							WorkflowId: id,
+						},
+					},
+				},
+			)
+			s.NoError(err)
+			return len(resp.GetExecutions()) == expectedNumber
+		},
+		waitForESToSettle,
+		100*time.Millisecond,
+		"timeout expecting %d executions, found %d",
+		expectedNumber,
+		len(resp.GetExecutions()),
+	)
+	return resp.GetExecutions()
 }
