@@ -405,7 +405,7 @@ func (c *temporalImpl) startFrontend(hosts map[primitives.ServiceName][]string, 
 	}
 	if c.esConfig != nil {
 		esDataStoreName := "es-visibility"
-		persistenceConfig.AdvancedVisibilityStore = esDataStoreName
+		persistenceConfig.VisibilityStore = esDataStoreName
 		persistenceConfig.DataStores[esDataStoreName] = config.DataStore{
 			Elasticsearch: c.esConfig,
 		}
@@ -505,7 +505,7 @@ func (c *temporalImpl) startHistory(
 		}
 		if c.esConfig != nil {
 			esDataStoreName := "es-visibility"
-			persistenceConfig.AdvancedVisibilityStore = esDataStoreName
+			persistenceConfig.VisibilityStore = esDataStoreName
 			persistenceConfig.DataStores[esDataStoreName] = config.DataStore{
 				Elasticsearch: c.esConfig,
 			}
@@ -605,7 +605,7 @@ func (c *temporalImpl) startMatching(hosts map[primitives.ServiceName][]string, 
 	}
 	if c.esConfig != nil {
 		esDataStoreName := "es-visibility"
-		persistenceConfig.AdvancedVisibilityStore = esDataStoreName
+		persistenceConfig.VisibilityStore = esDataStoreName
 		persistenceConfig.DataStores[esDataStoreName] = config.DataStore{
 			Elasticsearch: c.esConfig,
 		}
@@ -690,7 +690,7 @@ func (c *temporalImpl) startWorker(hosts map[primitives.ServiceName][]string, st
 	}
 	if c.esConfig != nil {
 		esDataStoreName := "es-visibility"
-		persistenceConfig.AdvancedVisibilityStore = esDataStoreName
+		persistenceConfig.VisibilityStore = esDataStoreName
 		persistenceConfig.DataStores[esDataStoreName] = config.DataStore{
 			Elasticsearch: c.esConfig,
 		}
