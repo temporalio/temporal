@@ -43,7 +43,6 @@ import (
 
 	"go.temporal.io/server/api/adminservice/v1"
 	"go.temporal.io/server/common"
-	"go.temporal.io/server/common/backoff"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/persistence"
@@ -65,10 +64,6 @@ type (
 		clusterConfig *TestClusterConfig
 		logger        log.Logger
 	}
-)
-
-var (
-	namespaceStillExistsErr = errors.New("namespace still exists")
 )
 
 func dynamicConfig() map[dynamicconfig.Key]interface{} {
@@ -144,24 +139,17 @@ func (s *namespaceTestSuite) Test_NamespaceDelete_Empty() {
 	})
 	s.NoError(err)
 	s.Equal(enumspb.NAMESPACE_STATE_DELETED, descResp2.GetNamespaceInfo().GetState())
-
-	namespaceExistsOp := func() error {
+	s.Eventually(func() bool {
 		_, err := s.frontendClient.DescribeNamespace(ctx, &workflowservice.DescribeNamespaceRequest{
 			Id: nsID,
 		})
 		var notFound *serviceerror.NamespaceNotFound
-		if errors.As(err, &notFound) {
-			return nil
+		if !errors.As(err, &notFound) {
+			return false
 		}
-		return namespaceStillExistsErr
-	}
 
-	namespaceExistsPolicy := backoff.NewExponentialRetryPolicy(time.Second).
-		WithBackoffCoefficient(1).
-		WithExpirationInterval(30 * time.Second)
-
-	err = backoff.ThrottleRetry(namespaceExistsOp, namespaceExistsPolicy, func(_ error) bool { return true })
-	s.NoError(err)
+		return true
+	}, 20*time.Second, time.Second)
 }
 
 func (s *namespaceTestSuite) Test_NamespaceDelete_OverrideDelay() {
@@ -246,24 +234,17 @@ func (s *namespaceTestSuite) Test_NamespaceDelete_Empty_WithID() {
 	})
 	s.NoError(err)
 	s.Equal(enumspb.NAMESPACE_STATE_DELETED, descResp2.GetNamespaceInfo().GetState())
-
-	namespaceExistsOp := func() error {
+	s.Eventually(func() bool {
 		_, err := s.frontendClient.DescribeNamespace(ctx, &workflowservice.DescribeNamespaceRequest{
 			Id: nsID,
 		})
 		var notFound *serviceerror.NamespaceNotFound
-		if errors.As(err, &notFound) {
-			return nil
+		if !errors.As(err, &notFound) {
+			return false
 		}
-		return namespaceStillExistsErr
-	}
 
-	namespaceExistsPolicy := backoff.NewExponentialRetryPolicy(time.Second).
-		WithBackoffCoefficient(1).
-		WithExpirationInterval(30 * time.Second)
-
-	err = backoff.ThrottleRetry(namespaceExistsOp, namespaceExistsPolicy, func(_ error) bool { return true })
-	s.NoError(err)
+		return true
+	}, 20*time.Second, time.Second)
 }
 
 func (s *namespaceTestSuite) Test_NamespaceDelete_WithNameAndID() {
