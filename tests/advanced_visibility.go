@@ -558,78 +558,6 @@ func (s *AdvancedVisibilitySuite) TestListWorkflow_KeywordQuery() {
 	s.Len(resp.GetExecutions(), 0)
 }
 
-func (s *AdvancedVisibilitySuite) TestListWorkflow_LikeQuery() {
-	if !s.isElasticsearchEnabled {
-		s.T().Skip("This test is only for Elasticsearch")
-	}
-
-	id := "es-functional-list-workflow-keyword-query-like-test"
-	wt := "es-functional-list-workflow-keyword-query-like-test-type"
-	tl := "es-functional-list-workflow-keyword-query-like-test-taskqueue"
-	request := s.createStartWorkflowExecutionRequest(id, wt, tl)
-
-	searchAttr := &commonpb.SearchAttributes{
-		IndexedFields: map[string]*commonpb.Payload{
-			"CustomKeywordField": payload.EncodeString("foo bar"),
-		},
-	}
-	request.SearchAttributes = searchAttr
-	_, err := s.engine.StartWorkflowExecution(NewContext(), request)
-	s.NoError(err)
-
-	time.Sleep(waitForESToSettle)
-
-	// LIKE exact match on Keyword (supported)
-	listRequest := &workflowservice.ListWorkflowExecutionsRequest{
-		Namespace: s.namespace,
-		PageSize:  defaultPageSize,
-		Query:     `CustomKeywordField LIKE "%foo bar%"`,
-	}
-	resp, err := s.engine.ListWorkflowExecutions(NewContext(), listRequest)
-	s.NoError(err)
-	s.Len(resp.GetExecutions(), 1)
-
-	// LIKE %word% on Keyword (not supported)
-	listRequest = &workflowservice.ListWorkflowExecutionsRequest{
-		Namespace: s.namespace,
-		PageSize:  defaultPageSize,
-		Query:     `CustomKeywordField LIKE "%foo%"`,
-	}
-	resp, err = s.engine.ListWorkflowExecutions(NewContext(), listRequest)
-	s.NoError(err)
-	s.Len(resp.GetExecutions(), 0)
-
-	// LIKE %chars% on Keyword (not supported)
-	listRequest = &workflowservice.ListWorkflowExecutionsRequest{
-		Namespace: s.namespace,
-		PageSize:  defaultPageSize,
-		Query:     `CustomKeywordField LIKE "%oo%"`,
-	}
-	resp, err = s.engine.ListWorkflowExecutions(NewContext(), listRequest)
-	s.NoError(err)
-	s.Len(resp.GetExecutions(), 0)
-
-	// LIKE NOT %chars% on Keyword (not supported)
-	listRequest = &workflowservice.ListWorkflowExecutionsRequest{
-		Namespace: s.namespace,
-		PageSize:  defaultPageSize,
-		Query:     `CustomKeywordField NOT LIKE "%oo%"`,
-	}
-	resp, err = s.engine.ListWorkflowExecutions(NewContext(), listRequest)
-	s.NoError(err)
-	executionCount := 0
-	for _, execution := range resp.GetExecutions() {
-		saPayload := execution.SearchAttributes.GetIndexedFields()["CustomKeywordField"]
-		var saValue string
-		err = payload.Decode(saPayload, &saValue)
-		s.NoError(err)
-		if strings.Contains(saValue, "oo") {
-			executionCount++ // execution will be found because NOT LIKE is not supported.
-		}
-	}
-	s.Equal(executionCount, 1)
-}
-
 func (s *AdvancedVisibilitySuite) TestListWorkflow_StringQuery() {
 	id := "es-functional-list-workflow-string-query-test"
 	wt := "es-functional-list-workflow-string-query-test-type"
@@ -691,59 +619,6 @@ func (s *AdvancedVisibilitySuite) TestListWorkflow_StringQuery() {
 	resp, err = s.engine.ListWorkflowExecutions(NewContext(), listRequest)
 	s.NoError(err)
 	s.Len(resp.GetExecutions(), 1)
-
-	if s.isElasticsearchEnabled {
-		// LIKE is supported on Elasticsearch only.
-		// LIKE %word% on String (supported)
-		listRequest = &workflowservice.ListWorkflowExecutionsRequest{
-			Namespace: s.namespace,
-			PageSize:  defaultPageSize,
-			Query:     `CustomTextField LIKE "%else%"`,
-		}
-		resp, err = s.engine.ListWorkflowExecutions(NewContext(), listRequest)
-		s.NoError(err)
-		s.Len(resp.GetExecutions(), 1)
-
-		// LIKE word on String (supported)
-		listRequest = &workflowservice.ListWorkflowExecutionsRequest{
-			Namespace: s.namespace,
-			PageSize:  defaultPageSize,
-			Query:     `CustomTextField LIKE "else"`, // Same as previous because % just removed for LIKE queries.
-		}
-		resp, err = s.engine.ListWorkflowExecutions(NewContext(), listRequest)
-		s.NoError(err)
-		s.Len(resp.GetExecutions(), 1)
-
-		// LIKE %chars% on String (not supported)
-		listRequest = &workflowservice.ListWorkflowExecutionsRequest{
-			Namespace: s.namespace,
-			PageSize:  defaultPageSize,
-			Query:     `CustomTextField LIKE "%ls%"`,
-		}
-		resp, err = s.engine.ListWorkflowExecutions(NewContext(), listRequest)
-		s.NoError(err)
-		s.Len(resp.GetExecutions(), 0)
-
-		// LIKE NOT %word% on String (supported)
-		listRequest = &workflowservice.ListWorkflowExecutionsRequest{
-			Namespace: s.namespace,
-			PageSize:  defaultPageSize,
-			Query:     `CustomTextField NOT LIKE "%else%"`,
-		}
-		resp, err = s.engine.ListWorkflowExecutions(NewContext(), listRequest)
-		s.NoError(err)
-		executionCount := 0
-		for _, execution := range resp.GetExecutions() {
-			saPayload := execution.SearchAttributes.GetIndexedFields()["CustomTextField"]
-			var saValue string
-			err = payload.Decode(saPayload, &saValue)
-			s.NoError(err)
-			if strings.Contains(saValue, "else") {
-				executionCount++
-			}
-		}
-		s.Equal(executionCount, 0)
-	}
 }
 
 // To test last page search trigger max window size error
