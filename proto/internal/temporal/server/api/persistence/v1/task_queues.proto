@@ -77,6 +77,7 @@ message AssignmentRule {
     // (-- api-linter: core::0142::time-field-type=disabled
     //     aip.dev/not-precedent: Using HLC instead of wall clock. --)
     temporal.server.api.clock.v1.HybridLogicalClock create_timestamp = 2;
+    //  when delete_timestamp is present the rule should be treated as deleted
     // (-- api-linter: core::0142::time-field-type=disabled
     //     aip.dev/not-precedent: Using HLC instead of wall clock. --)
     temporal.server.api.clock.v1.HybridLogicalClock delete_timestamp = 3;
@@ -87,6 +88,7 @@ message RedirectRule {
     // (-- api-linter: core::0142::time-field-type=disabled
     //     aip.dev/not-precedent: Using HLC instead of wall clock. --)
     temporal.server.api.clock.v1.HybridLogicalClock create_timestamp = 2;
+    //  when delete_timestamp is present the rule should be treated as deleted
     // (-- api-linter: core::0142::time-field-type=disabled
     //     aip.dev/not-precedent: Using HLC instead of wall clock. --)
     temporal.server.api.clock.v1.HybridLogicalClock delete_timestamp = 3;
