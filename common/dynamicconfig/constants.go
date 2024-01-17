@@ -38,24 +38,6 @@ const (
 
 	// keys for system
 
-	// DEPRECATED: the following block of configs are deprecated and replaced by the next block of configs
-	// StandardVisibilityPersistenceMaxReadQPS is the max QPC system host can query standard visibility DB (SQL or Cassandra) for read.
-	StandardVisibilityPersistenceMaxReadQPS = "system.standardVisibilityPersistenceMaxReadQPS"
-	// StandardVisibilityPersistenceMaxWriteQPS is the max QPC system host can query standard visibility DB (SQL or Cassandra) for write.
-	StandardVisibilityPersistenceMaxWriteQPS = "system.standardVisibilityPersistenceMaxWriteQPS"
-	// AdvancedVisibilityPersistenceMaxReadQPS is the max QPC system host can query advanced visibility DB (Elasticsearch) for read.
-	AdvancedVisibilityPersistenceMaxReadQPS = "system.advancedVisibilityPersistenceMaxReadQPS"
-	// AdvancedVisibilityPersistenceMaxWriteQPS is the max QPC system host can query advanced visibility DB (Elasticsearch) for write.
-	AdvancedVisibilityPersistenceMaxWriteQPS = "system.advancedVisibilityPersistenceMaxWriteQPS"
-	// AdvancedVisibilityWritingMode is key for how to write to advanced visibility
-	AdvancedVisibilityWritingMode = "system.advancedVisibilityWritingMode"
-	// EnableWriteToSecondaryAdvancedVisibility is the config to enable write to secondary visibility for Elasticsearch
-	EnableWriteToSecondaryAdvancedVisibility = "system.enableWriteToSecondaryAdvancedVisibility"
-	// EnableReadVisibilityFromES is key for enable read from Elasticsearch
-	EnableReadVisibilityFromES = "system.enableReadVisibilityFromES"
-	// EnableReadFromSecondaryAdvancedVisibility is the config to enable read from secondary Elasticsearch
-	EnableReadFromSecondaryAdvancedVisibility = "system.enableReadFromSecondaryAdvancedVisibility"
-
 	// VisibilityPersistenceMaxReadQPS is the max QPC system host can query visibility DB for read.
 	VisibilityPersistenceMaxReadQPS = "system.visibilityPersistenceMaxReadQPS"
 	// VisibilityPersistenceMaxWriteQPS is the max QPC system host can query visibility DB for write.

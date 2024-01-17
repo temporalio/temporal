@@ -70,7 +70,7 @@ func TestMatcherSuite(t *testing.T) {
 func (t *MatcherTestSuite) SetupTest() {
 	t.controller = gomock.NewController(t.T())
 	t.client = matchingservicemock.NewMockMatchingServiceClient(t.controller)
-	cfg := NewConfig(dynamicconfig.NewNoopCollection(), false, false)
+	cfg := NewConfig(dynamicconfig.NewNoopCollection())
 	cfg.BacklogNegligibleAge = dynamicconfig.GetDurationPropertyFnFilteredByTaskQueueInfo(5 * time.Second)
 	cfg.MaxWaitForPollerBeforeFwd = dynamicconfig.GetDurationPropertyFnFilteredByTaskQueueInfo(5 * time.Millisecond)
 
