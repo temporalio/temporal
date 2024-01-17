@@ -272,6 +272,11 @@ func (e *ExecutableTaskImpl) emitFinishMetrics(
 		nsTag,
 	)
 	e.MetricsHandler.Timer(metrics.ReplicationLatency.Name()).Record(
+		now.Sub(e.taskCreationTime),
+		metrics.OperationTag(e.metricsTag),
+		nsTag,
+	)
+	e.MetricsHandler.Timer(metrics.ReplicationTaskReceiveLatency.Name()).Record(
 		e.taskReceivedTime.Sub(e.taskCreationTime),
 		metrics.OperationTag(e.metricsTag),
 		nsTag,
