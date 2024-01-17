@@ -608,6 +608,11 @@ func (h *OperatorHandlerImpl) DeleteNamespace(
 		return nil, errUnableDeleteSystemNamespace
 	}
 
+	namespaceDeleteDelay := h.config.DeleteNamespaceNamespaceDeleteDelay()
+	if request.NamespaceDeleteDelay != nil {
+		namespaceDeleteDelay = request.NamespaceDeleteDelay.AsDuration()
+	}
+
 	// Execute workflow.
 	wfParams := deletenamespace.DeleteNamespaceWorkflowParams{
 		Namespace:   namespace.Name(request.GetNamespace()),
@@ -618,7 +623,7 @@ func (h *OperatorHandlerImpl) DeleteNamespace(
 			PagesPerExecution:                    h.config.DeleteNamespacePagesPerExecution(),
 			ConcurrentDeleteExecutionsActivities: h.config.DeleteNamespaceConcurrentDeleteExecutionsActivities(),
 		},
-		NamespaceDeleteDelay: h.config.DeleteNamespaceNamespaceDeleteDelay(),
+		NamespaceDeleteDelay: namespaceDeleteDelay,
 	}
 
 	sdkClient := h.sdkClientFactory.GetSystemClient()
