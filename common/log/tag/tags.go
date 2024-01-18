@@ -300,6 +300,14 @@ func WorkflowTaskQueueName(taskQueueName string) ZapTag {
 	return NewStringTag("wf-task-queue-name", taskQueueName)
 }
 
+// WorkerBuildId returns tag for worker build ID
+func WorkerBuildId(buildId string) ZapTag {
+	if buildId == "" {
+		buildId = "_unversioned_"
+	}
+	return NewStringTag("worker-build-id", buildId)
+}
+
 // size limit
 
 // BlobSize returns tag for BlobSize
