@@ -420,19 +420,6 @@ func (e *matchingEngineImpl) AddActivityTask(
 	})
 }
 
-func (e *matchingEngineImpl) DispatchSpooledTask(
-	ctx context.Context,
-	task *internalTask,
-	taskQueue *taskQueueID,
-	stickyInfo stickyInfo,
-) error {
-	tqm, err := e.getTaskQueuePartitionManager(ctx, taskQueue, stickyInfo, true)
-	if err != nil {
-		return err
-	}
-	return tqm.DispatchSpooledTask(ctx, task)
-}
-
 // PollWorkflowTaskQueue tries to get the workflow task using exponential backoff.
 func (e *matchingEngineImpl) PollWorkflowTaskQueue(
 	ctx context.Context,
