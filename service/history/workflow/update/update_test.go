@@ -143,13 +143,17 @@ func TestRequestSendAcceptComplete(t *testing.T) {
 	// accepted, and finally completed
 	t.Parallel()
 	var (
-		ctx          = context.Background()
-		completed    = false
-		effects      = effect.Buffer{}
-		invalidArg   *serviceerror.InvalidArgument
-		meta         = updatepb.Meta{UpdateId: t.Name() + "-update-id"}
-		req          = updatepb.Request{Meta: &meta, Input: &updatepb.Input{Name: t.Name()}}
-		acpt         = protocolpb.Message{Body: mustMarshalAny(t, &updatepb.Acceptance{AcceptedRequestSequencingEventId: 2208})}
+		ctx        = context.Background()
+		completed  = false
+		effects    = effect.Buffer{}
+		invalidArg *serviceerror.InvalidArgument
+		meta       = updatepb.Meta{UpdateId: t.Name() + "-update-id"}
+		req        = updatepb.Request{Meta: &meta, Input: &updatepb.Input{Name: t.Name()}}
+		acpt       = protocolpb.Message{Body: mustMarshalAny(t, &updatepb.Acceptance{
+			AcceptedRequestMessageId:         "random",
+			AcceptedRequestSequencingEventId: 2208,
+			AcceptedRequest:                  &req,
+		})}
 		resp         = protocolpb.Message{Body: mustMarshalAny(t, &updatepb.Response{Meta: &meta, Outcome: successOutcome(t, "success!")})}
 		sequencingID = &protocolpb.Message_EventId{EventId: testSequencingEventID}
 
@@ -441,13 +445,17 @@ func TestAcceptanceAndResponseInSameMessageBatch(t *testing.T) {
 	// an intermediate call to apply pending effects
 	t.Parallel()
 	var (
-		ctx          = context.Background()
-		completed    = false
-		effects      = effect.Buffer{}
-		store        = mockEventStore{Controller: &effects}
-		meta         = updatepb.Meta{UpdateId: t.Name() + "-update-id"}
-		req          = updatepb.Request{Meta: &meta, Input: &updatepb.Input{Name: t.Name()}}
-		acpt         = protocolpb.Message{Body: mustMarshalAny(t, &updatepb.Acceptance{AcceptedRequest: &req, AcceptedRequestMessageId: "x"})}
+		ctx       = context.Background()
+		completed = false
+		effects   = effect.Buffer{}
+		store     = mockEventStore{Controller: &effects}
+		meta      = updatepb.Meta{UpdateId: t.Name() + "-update-id"}
+		req       = updatepb.Request{Meta: &meta, Input: &updatepb.Input{Name: t.Name()}}
+		acpt      = protocolpb.Message{Body: mustMarshalAny(t, &updatepb.Acceptance{
+			AcceptedRequestMessageId:         "x",
+			AcceptedRequestSequencingEventId: testSequencingEventID,
+			AcceptedRequest:                  &req,
+		})}
 		resp         = protocolpb.Message{Body: mustMarshalAny(t, &updatepb.Response{Meta: &meta, Outcome: successOutcome(t, "success!")})}
 		upd          = update.New(meta.UpdateId, update.ObserveCompletion(&completed))
 		sequencingID = &protocolpb.Message_EventId{EventId: testSequencingEventID}
@@ -558,14 +566,18 @@ func TestDoubleRollback(t *testing.T) {
 	// state.
 	t.Parallel()
 	var (
-		ctx          = context.Background()
-		completed    = false
-		effects      = effect.Buffer{}
-		store        = mockEventStore{Controller: &effects}
-		reqMsgID     = t.Name() + "-req-msg-id"
-		meta         = updatepb.Meta{UpdateId: t.Name() + "-update-id"}
-		req          = updatepb.Request{Meta: &meta, Input: &updatepb.Input{Name: t.Name()}}
-		acpt         = protocolpb.Message{Body: mustMarshalAny(t, &updatepb.Acceptance{AcceptedRequest: &req, AcceptedRequestMessageId: reqMsgID})}
+		ctx       = context.Background()
+		completed = false
+		effects   = effect.Buffer{}
+		store     = mockEventStore{Controller: &effects}
+		reqMsgID  = t.Name() + "-req-msg-id"
+		meta      = updatepb.Meta{UpdateId: t.Name() + "-update-id"}
+		req       = updatepb.Request{Meta: &meta, Input: &updatepb.Input{Name: t.Name()}}
+		acpt      = protocolpb.Message{Body: mustMarshalAny(t, &updatepb.Acceptance{
+			AcceptedRequestMessageId:         reqMsgID,
+			AcceptedRequestSequencingEventId: testSequencingEventID,
+			AcceptedRequest:                  &req,
+		})}
 		resp         = protocolpb.Message{Body: mustMarshalAny(t, &updatepb.Response{Meta: &meta, Outcome: successOutcome(t, "success!")})}
 		sequencingID = &protocolpb.Message_EventId{EventId: testSequencingEventID}
 	)
@@ -698,8 +710,9 @@ func TestAcceptEventIDInCompletedEvent(t *testing.T) {
 			Input: &updatepb.Input{Name: "not_empty"},
 		}
 		acpt = protocolpb.Message{Body: mustMarshalAny(t, &updatepb.Acceptance{
-			AcceptedRequestMessageId: "not empty",
-			AcceptedRequest:          &req,
+			AcceptedRequestMessageId:         "not empty",
+			AcceptedRequest:                  &req,
+			AcceptedRequestSequencingEventId: testSequencingEventID,
 		})}
 		resp = protocolpb.Message{Body: mustMarshalAny(t, &updatepb.Response{
 			Meta:    &updatepb.Meta{UpdateId: updateID},
@@ -748,8 +761,12 @@ func TestWaitLifecycleStage(t *testing.T) {
 		effects   = effect.Buffer{}
 		meta      = updatepb.Meta{UpdateId: t.Name() + "-update-id"}
 		req       = updatepb.Request{Meta: &meta, Input: &updatepb.Input{Name: t.Name()}}
-		acpt      = protocolpb.Message{Body: mustMarshalAny(t, &updatepb.Acceptance{AcceptedRequestSequencingEventId: 2208})}
-		rej       = protocolpb.Message{Body: mustMarshalAny(t, &updatepb.Rejection{
+		acpt      = protocolpb.Message{Body: mustMarshalAny(t, &updatepb.Acceptance{
+			AcceptedRequestMessageId:         "random",
+			AcceptedRequestSequencingEventId: 2208,
+			AcceptedRequest:                  &req,
+		})}
+		rej = protocolpb.Message{Body: mustMarshalAny(t, &updatepb.Rejection{
 			RejectedRequest: &req,
 			Failure:         &failurepb.Failure{Message: "An intentional failure"},
 		})}
