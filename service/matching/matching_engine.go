@@ -132,7 +132,7 @@ type (
 		visibilityManager    manager.VisibilityManager
 		metricsHandler       metrics.Handler
 		taskQueuesLock       sync.RWMutex // locks mutation of taskQueues
-		taskQueues           map[taskQueueID]taskQueueManager
+		taskQueues           map[taskQueueID]taskQueuePartitionManager
 		taskQueueCountLock   sync.Mutex
 		taskQueueCount       map[taskQueueCounterKey]int // per-namespace task queue counter
 		config               *Config
@@ -197,7 +197,7 @@ func NewEngine(
 		timeSource:                clock.NewRealTimeSource(), // No need to mock this at the moment
 		visibilityManager:         visibilityManager,
 		metricsHandler:            metricsHandler.WithTags(metrics.OperationTag(metrics.MatchingEngineScope)),
-		taskQueues:                make(map[taskQueueID]taskQueueManager),
+		taskQueues:                make(map[taskQueueID]taskQueuePartitionManager),
 		taskQueueCount:            make(map[taskQueueCounterKey]int),
 		config:                    config,
 		lockableQueryTaskMap:      lockableQueryTaskMap{queryTaskMap: make(map[string]chan *queryResult)},
@@ -231,10 +231,10 @@ func (e *matchingEngineImpl) Stop() {
 	}
 }
 
-func (e *matchingEngineImpl) getTaskQueues(maxCount int) (lists []taskQueueManager) {
+func (e *matchingEngineImpl) getTaskQueues(maxCount int) (lists []taskQueuePartitionManager) {
 	e.taskQueuesLock.RLock()
 	defer e.taskQueuesLock.RUnlock()
-	lists = make([]taskQueueManager, 0, len(e.taskQueues))
+	lists = make([]taskQueuePartitionManager, 0, len(e.taskQueues))
 	count := 0
 	for _, tlMgr := range e.taskQueues {
 		lists = append(lists, tlMgr)
@@ -255,24 +255,24 @@ func (e *matchingEngineImpl) String() string {
 	return buf.String()
 }
 
-// Returns taskQueueManager for a task queue. If not already cached, and create is true, tries
+// Returns taskQueuePartitionManager for a task queue. If not already cached, and create is true, tries
 // to get new range from DB and create one. This blocks (up to the context deadline) for the
 // task queue to be initialized.
 //
 // Note that stickyInfo is not used as part of the task queue identity. That means that if
-// getTaskQueueManager is called twice with the same taskQueue but different stickyInfo, the
-// properties of the taskQueueManager will depend on which call came first. In general, we can
+// getTaskQueuePartitionManager is called twice with the same taskQueue but different stickyInfo, the
+// properties of the taskQueuePartitionManager will depend on which call came first. In general, we can
 // rely on kind being the same for all calls now, but normalName was a later addition to the
 // protocol and is not always set consistently. normalName is only required when using
 // versioning, and SDKs that support versioning will always set it. The current server version
 // will also set it when adding tasks from history. So that particular inconsistency is okay.
-func (e *matchingEngineImpl) getTaskQueueManager(
+func (e *matchingEngineImpl) getTaskQueuePartitionManager(
 	ctx context.Context,
 	taskQueue *taskQueueID,
 	stickyInfo stickyInfo,
 	create bool,
-) (taskQueueManager, error) {
-	tqm, err := e.getTaskQueueManagerNoWait(taskQueue, stickyInfo, create)
+) (taskQueuePartitionManager, error) {
+	tqm, err := e.getTaskQueuePartitionManagerNoWait(taskQueue, stickyInfo, create)
 	if err != nil || tqm == nil {
 		return nil, err
 	}
@@ -282,14 +282,14 @@ func (e *matchingEngineImpl) getTaskQueueManager(
 	return tqm, nil
 }
 
-// Returns taskQueueManager for a task queue. If not already cached, and create is true, tries
+// Returns taskQueuePartitionManager for a task queue. If not already cached, and create is true, tries
 // to get new range from DB and create one. This does not block for the task queue to be
 // initialized.
-func (e *matchingEngineImpl) getTaskQueueManagerNoWait(
+func (e *matchingEngineImpl) getTaskQueuePartitionManagerNoWait(
 	taskQueue *taskQueueID,
 	stickyInfo stickyInfo,
 	create bool,
-) (taskQueueManager, error) {
+) (taskQueuePartitionManager, error) {
 	e.taskQueuesLock.RLock()
 	tqm, ok := e.taskQueues[*taskQueue]
 	e.taskQueuesLock.RUnlock()
@@ -303,7 +303,7 @@ func (e *matchingEngineImpl) getTaskQueueManagerNoWait(
 		tqm, ok = e.taskQueues[*taskQueue]
 		if !ok {
 			var err error
-			tqm, err = newTaskQueueManager(e, taskQueue, stickyInfo, e.config)
+			tqm, err = newTaskQueuePartitionManager(e, taskQueue, stickyInfo, e.config)
 			if err != nil {
 				e.taskQueuesLock.Unlock()
 				return nil, err
@@ -314,14 +314,14 @@ func (e *matchingEngineImpl) getTaskQueueManagerNoWait(
 
 		if !ok {
 			tqm.Start()
-			e.updateTaskQueueGauge(tqm, 1)
+			e.updateTaskQueueGauge(tqm, false, 1)
 		}
 	}
 	return tqm, nil
 }
 
 // For use in tests
-func (e *matchingEngineImpl) updateTaskQueue(taskQueue *taskQueueID, mgr taskQueueManager) {
+func (e *matchingEngineImpl) updateTaskQueue(taskQueue *taskQueueID, mgr taskQueuePartitionManager) {
 	e.taskQueuesLock.Lock()
 	defer e.taskQueuesLock.Unlock()
 	e.taskQueues[*taskQueue] = mgr
@@ -343,19 +343,11 @@ func (e *matchingEngineImpl) AddWorkflowTask(
 
 	sticky := stickyInfo.kind == enumspb.TASK_QUEUE_KIND_STICKY
 	// do not load sticky task queue if it is not already loaded, which means it has no poller.
-	baseTqm, err := e.getTaskQueueManager(ctx, origTaskQueue, stickyInfo, !sticky)
+	tqm, err := e.getTaskQueuePartitionManager(ctx, origTaskQueue, stickyInfo, !sticky)
 	if err != nil {
 		return false, err
-	} else if sticky && !stickyWorkerAvailable(baseTqm) {
+	} else if sticky && !stickyWorkerAvailable(tqm) {
 		return false, serviceerrors.NewStickyWorkerUnavailable()
-	}
-
-	// We don't need the userDataChanged channel here because:
-	// - if we sync match or sticky worker unavailable, we're done
-	// - if we spool to db, we'll re-resolve when it comes out of the db
-	tqm, _, err := baseTqm.RedirectToVersionedQueueForAdd(ctx, addRequest.VersionDirective)
-	if err != nil {
-		return false, err
 	}
 
 	// This needs to move to history see - https://go.temporal.io/server/issues/181
@@ -381,7 +373,6 @@ func (e *matchingEngineImpl) AddWorkflowTask(
 		taskInfo:      taskInfo,
 		source:        addRequest.GetSource(),
 		forwardedFrom: addRequest.GetForwardedSource(),
-		baseTqm:       baseTqm,
 	})
 }
 
@@ -399,14 +390,7 @@ func (e *matchingEngineImpl) AddActivityTask(
 		return false, err
 	}
 
-	baseTqm, err := e.getTaskQueueManager(ctx, origTaskQueue, stickyInfo, true)
-	if err != nil {
-		return false, err
-	}
-	// We don't need the userDataChanged channel here because:
-	// - if we sync match, we're done
-	// - if we spool to db, we'll re-resolve when it comes out of the db
-	tqm, _, err := baseTqm.RedirectToVersionedQueueForAdd(ctx, addRequest.VersionDirective)
+	tqm, err := e.getTaskQueuePartitionManager(ctx, origTaskQueue, stickyInfo, true)
 	if err != nil {
 		return false, err
 	}
@@ -433,41 +417,7 @@ func (e *matchingEngineImpl) AddActivityTask(
 		taskInfo:      taskInfo,
 		source:        addRequest.GetSource(),
 		forwardedFrom: addRequest.GetForwardedSource(),
-		baseTqm:       baseTqm,
 	})
-}
-
-func (e *matchingEngineImpl) DispatchSpooledTask(
-	ctx context.Context,
-	task *internalTask,
-	origTaskQueue *taskQueueID,
-	stickyInfo stickyInfo,
-) error {
-	taskInfo := task.event.GetData()
-	// This task came from taskReader so task.event is always set here.
-	directive := taskInfo.GetVersionDirective()
-	// If this came from a versioned queue, ignore the version and re-resolve, in case we're
-	// going to the default and the default changed.
-	unversionedOrigTaskQueue := newTaskQueueIDWithVersionSet(origTaskQueue, "")
-	// Redirect and re-resolve if we're blocked in matcher and user data changes.
-	for {
-		// If normal queue: always load the base tqm to get versioning data.
-		// If sticky queue: sticky is not versioned, so if we got here (by taskReader calling this),
-		// the queue is already loaded.
-		// So we can always use true here.
-		baseTqm, err := e.getTaskQueueManager(ctx, unversionedOrigTaskQueue, stickyInfo, true)
-		if err != nil {
-			return err
-		}
-		tqm, userDataChanged, err := baseTqm.RedirectToVersionedQueueForAdd(ctx, directive)
-		if err != nil {
-			return err
-		}
-		err = tqm.DispatchSpooledTask(ctx, task, userDataChanged)
-		if err != errInterrupted { // nolint:goerr113
-			return err
-		}
-	}
 }
 
 // PollWorkflowTaskQueue tries to get the workflow task using exponential backoff.
@@ -750,18 +700,11 @@ func (e *matchingEngineImpl) QueryWorkflow(
 
 	sticky := stickyInfo.kind == enumspb.TASK_QUEUE_KIND_STICKY
 	// do not load sticky task queue if it is not already loaded, which means it has no poller.
-	baseTqm, err := e.getTaskQueueManager(ctx, origTaskQueue, stickyInfo, !sticky)
+	tqm, err := e.getTaskQueuePartitionManager(ctx, origTaskQueue, stickyInfo, !sticky)
 	if err != nil {
 		return nil, err
-	} else if sticky && !stickyWorkerAvailable(baseTqm) {
+	} else if sticky && !stickyWorkerAvailable(tqm) {
 		return nil, serviceerrors.NewStickyWorkerUnavailable()
-	}
-
-	// We don't need the userDataChanged channel here because we either do this sync (local or remote)
-	// or fail with a relatively short timeout.
-	tqm, _, err := baseTqm.RedirectToVersionedQueueForAdd(ctx, queryRequest.VersionDirective)
-	if err != nil {
-		return nil, err
 	}
 
 	taskID := uuid.New()
@@ -840,7 +783,7 @@ func (e *matchingEngineImpl) DescribeTaskQueue(
 	if err != nil {
 		return nil, err
 	}
-	tlMgr, err := e.getTaskQueueManager(ctx, taskQueue, stickyInfo, true)
+	tlMgr, err := e.getTaskQueuePartitionManager(ctx, taskQueue, stickyInfo, true)
 	if err != nil {
 		return nil, err
 	}
@@ -908,7 +851,7 @@ func (e *matchingEngineImpl) UpdateWorkerBuildIdCompatibility(
 	if err != nil {
 		return nil, err
 	}
-	tqMgr, err := e.getTaskQueueManager(ctx, taskQueue, normalStickyInfo, true)
+	tqMgr, err := e.getTaskQueuePartitionManager(ctx, taskQueue, normalStickyInfo, true)
 	if err != nil {
 		return nil, err
 	}
@@ -1001,7 +944,7 @@ func (e *matchingEngineImpl) GetWorkerBuildIdCompatibility(
 	if err != nil {
 		return nil, err
 	}
-	tqMgr, err := e.getTaskQueueManager(ctx, taskQueue, normalStickyInfo, true)
+	tqMgr, err := e.getTaskQueuePartitionManager(ctx, taskQueue, normalStickyInfo, true)
 	if err != nil {
 		if _, ok := err.(*serviceerror.NotFound); ok {
 			return &matchingservice.GetWorkerBuildIdCompatibilityResponse{}, nil
@@ -1026,7 +969,7 @@ func (e *matchingEngineImpl) GetTaskQueueUserData(
 	if err != nil {
 		return nil, err
 	}
-	tqMgr, err := e.getTaskQueueManager(ctx, taskQueue, normalStickyInfo, true)
+	tqMgr, err := e.getTaskQueuePartitionManager(ctx, taskQueue, normalStickyInfo, true)
 	if err != nil {
 		return nil, err
 	}
@@ -1088,7 +1031,7 @@ func (e *matchingEngineImpl) ApplyTaskQueueUserDataReplicationEvent(
 	if err != nil {
 		return nil, err
 	}
-	tqMgr, err := e.getTaskQueueManager(ctx, taskQueue, normalStickyInfo, true)
+	tqMgr, err := e.getTaskQueuePartitionManager(ctx, taskQueue, normalStickyInfo, true)
 	if err != nil {
 		return nil, err
 	}
@@ -1162,14 +1105,14 @@ func (e *matchingEngineImpl) ForceUnloadTaskQueue(
 	if err != nil {
 		return nil, err
 	}
-	tqm, err := e.getTaskQueueManager(ctx, taskQueue, normalStickyInfo, false)
+	tqm, err := e.getTaskQueuePartitionManager(ctx, taskQueue, normalStickyInfo, false)
 	if err != nil {
 		return nil, err
 	}
 	if tqm == nil {
 		return &matchingservice.ForceUnloadTaskQueueResponse{WasLoaded: false}, nil
 	}
-	e.unloadTaskQueue(tqm)
+	e.unloadTaskQueuePartition(tqm)
 	return &matchingservice.ForceUnloadTaskQueueResponse{WasLoaded: true}, nil
 }
 
@@ -1259,12 +1202,7 @@ func (e *matchingEngineImpl) pollTask(
 	stickyInfo stickyInfo,
 	pollMetadata *pollMetadata,
 ) (*internalTask, error) {
-	baseTqm, err := e.getTaskQueueManager(ctx, origTaskQueue, stickyInfo, true)
-	if err != nil {
-		return nil, err
-	}
-
-	tqm, err := baseTqm.RedirectToVersionedQueueForPoll(ctx, pollMetadata.workerVersionCapabilities)
+	tqm, err := e.getTaskQueuePartitionManager(ctx, origTaskQueue, stickyInfo, true)
 	if err != nil {
 		return nil, err
 	}
@@ -1273,45 +1211,38 @@ func (e *matchingEngineImpl) pollTask(
 	// reached, instead of emptyTask, context timeout error is returned to the frontend by the rpc stack,
 	// which counts against our SLO. By shortening the timeout by a very small amount, the emptyTask can be
 	// returned to the handler before a context timeout error is generated.
-	ctx, cancel := newChildContext(ctx, baseTqm.LongPollExpirationInterval(), returnEmptyTaskTimeBudget)
+	ctx, cancel := newChildContext(ctx, tqm.LongPollExpirationInterval(), returnEmptyTaskTimeBudget)
 	defer cancel()
 
 	if pollerID, ok := ctx.Value(pollerIDKey).(string); ok && pollerID != "" {
 		e.pollMap.add(pollerID, cancel)
 		defer e.pollMap.remove(pollerID)
 	}
-
-	if identity, ok := ctx.Value(identityKey).(string); ok && identity != "" {
-		baseTqm.UpdatePollerInfo(pollerIdentity(identity), pollMetadata)
-		// update timestamp when long poll ends
-		defer baseTqm.UpdatePollerInfo(pollerIdentity(identity), pollMetadata)
-	}
-
 	return tqm.PollTask(ctx, pollMetadata)
 }
 
-func (e *matchingEngineImpl) unloadTaskQueue(unloadTQM taskQueueManager) {
+func (e *matchingEngineImpl) unloadTaskQueuePartition(unloadTQM taskQueuePartitionManager) {
 	queueID := unloadTQM.QueueID()
 	e.taskQueuesLock.Lock()
 	foundTQM, ok := e.taskQueues[*queueID]
 	if !ok || foundTQM != unloadTQM {
 		e.taskQueuesLock.Unlock()
+		unloadTQM.Stop()
 		return
 	}
 	delete(e.taskQueues, *queueID)
 	e.taskQueuesLock.Unlock()
-	// This may call unloadTaskQueue again but that's okay, the next call will not find it.
 	foundTQM.Stop()
-	e.updateTaskQueueGauge(foundTQM, -1)
+	e.updateTaskQueueGauge(foundTQM, false, -1)
 }
 
-func (e *matchingEngineImpl) updateTaskQueueGauge(tqm taskQueueManager, delta int) {
+func (e *matchingEngineImpl) updateTaskQueueGauge(tqm taskQueuePartitionManager, versioned bool, delta int) {
 	id := tqm.QueueID()
 	countKey := taskQueueCounterKey{
 		namespaceID: id.namespaceID,
 		taskType:    id.taskType,
 		kind:        tqm.TaskQueueKind(),
-		versioned:   id.VersionSet() != "",
+		versioned:   versioned,
 	}
 
 	e.taskQueueCountLock.Lock()
@@ -1552,6 +1483,6 @@ func (e *matchingEngineImpl) reviveBuildId(ns *namespace.Namespace, taskQueue st
 
 // We use a very short timeout for considering a sticky worker available, since tasks can also
 // be processed on the normal queue.
-func stickyWorkerAvailable(tqm taskQueueManager) bool {
+func stickyWorkerAvailable(tqm taskQueuePartitionManager) bool {
 	return tqm != nil && tqm.HasPollerAfter(time.Now().Add(-stickyPollerUnavailableWindow))
 }

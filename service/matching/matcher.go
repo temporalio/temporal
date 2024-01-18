@@ -260,7 +260,7 @@ func (tm *TaskMatcher) OfferQuery(ctx context.Context, task *internalTask) (*mat
 // The passed in context MUST NOT have a deadline associated with it
 // Note that calling MustOffer is the only way that matcher knows there are spooled tasks in the
 // backlog, in absence of a pending MustOffer call, the forwarding logic assumes that backlog is empty.
-func (tm *TaskMatcher) MustOffer(ctx context.Context, task *internalTask, interruptCh chan struct{}) error {
+func (tm *TaskMatcher) MustOffer(ctx context.Context, task *internalTask, interruptCh <-chan struct{}) error {
 	tm.registerBacklogTask(task)
 	defer tm.unregisterBacklogTask(task)
 

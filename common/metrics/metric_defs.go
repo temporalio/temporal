@@ -469,6 +469,8 @@ const (
 	MatchingAddWorkflowTaskScope = "AddWorkflowTask"
 	// MatchingTaskQueueMgrScope is the metrics scope for matching.TaskQueueManager component
 	MatchingTaskQueueMgrScope = "TaskQueueMgr"
+	// MatchingTaskQueuePartitionManagerScope is the metrics scope for matching.TaskQueuePartitionManager component
+	MatchingTaskQueuePartitionManagerScope = "TaskQueuePartitionManager"
 	// MatchingEngineScope is the metrics scope for matchingEngine component
 	MatchingEngineScope = "MatchingEngine"
 	// MatchingQueryWorkflowScope tracks AddWorkflowTask API calls received by service

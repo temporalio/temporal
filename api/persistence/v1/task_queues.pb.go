@@ -278,6 +278,8 @@ type AssignmentRule struct {
 	//
 	//	aip.dev/not-precedent: Using HLC instead of wall clock. --)
 	CreateTimestamp *v1.HybridLogicalClock `protobuf:"bytes,2,opt,name=create_timestamp,json=createTimestamp,proto3" json:"create_timestamp,omitempty"`
+	//	when delete_timestamp is present the rule should be treated as deleted
+	//
 	// (-- api-linter: core::0142::time-field-type=disabled
 	//
 	//	aip.dev/not-precedent: Using HLC instead of wall clock. --)
@@ -347,6 +349,8 @@ type RedirectRule struct {
 	//
 	//	aip.dev/not-precedent: Using HLC instead of wall clock. --)
 	CreateTimestamp *v1.HybridLogicalClock `protobuf:"bytes,2,opt,name=create_timestamp,json=createTimestamp,proto3" json:"create_timestamp,omitempty"`
+	//	when delete_timestamp is present the rule should be treated as deleted
+	//
 	// (-- api-linter: core::0142::time-field-type=disabled
 	//
 	//	aip.dev/not-precedent: Using HLC instead of wall clock. --)
