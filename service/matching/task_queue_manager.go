@@ -90,7 +90,6 @@ type (
 		taskInfo      *persistencespb.TaskInfo
 		source        enumsspb.TaskSource
 		forwardedFrom string
-		baseTqm       taskQueuePartitionManager
 	}
 
 	stickyInfo struct {
@@ -200,12 +199,11 @@ func newTaskQueueManager(
 	e := partitionMgr.engine
 	config := partitionMgr.config
 	db := newTaskQueueDB(e.taskManager, e.matchingRawClient, taskQueue.namespaceID, taskQueue, partitionMgr.kind, e.logger)
-	logger := log.With(partitionMgr.logger, tag.WorkflowTaskQueueName(taskQueue.FullName()))
-	throttledLogger := log.With(e.throttledLogger,
-		tag.WorkflowTaskQueueName(taskQueue.FullName()),
-		tag.WorkflowTaskQueueType(taskQueue.taskType),
-		tag.WorkflowNamespace(partitionMgr.namespaceName.String()))
-	taggedMetricsHandler := partitionMgr.taggedMetricsHandler.WithTags(metrics.OperationTag(metrics.MatchingTaskQueueMgrScope), metrics.TaskQueueTypeTag(taskQueue.taskType))
+	logger := log.With(partitionMgr.logger, tag.WorkerBuildId(taskQueue.VersionSet()))
+	throttledLogger := log.With(partitionMgr.throttledLogger, tag.WorkerBuildId(taskQueue.VersionSet()))
+	taggedMetricsHandler := partitionMgr.taggedMetricsHandler.WithTags(
+		metrics.OperationTag(metrics.MatchingTaskQueueMgrScope),
+		metrics.WorkerBuildIdTag(taskQueue.VersionSet()))
 	tlMgr := &taskQueueManagerImpl{
 		status:               common.DaemonStatusInitialized,
 		partitionMgr:         partitionMgr,
@@ -337,9 +335,6 @@ func (c *taskQueueManagerImpl) SetInitializedError(err error) {
 
 func (c *taskQueueManagerImpl) WaitUntilInitialized(ctx context.Context) error {
 	_, err := c.initializedError.Get(ctx)
-	if err != nil {
-		return err
-	}
 	return err
 }
 
@@ -389,7 +384,7 @@ func (c *taskQueueManagerImpl) AddTask(
 	// specific queues could cause them to get stuck behind "compatible" tasks when they should be able to progress
 	// independently.
 	if taskInfo.VersionDirective.GetUseDefault() != nil {
-		err = c.SpoolTask(params)
+		err = c.partitionMgr.defaultQueue.SpoolTask(params)
 	} else {
 		err = c.SpoolTask(params)
 	}

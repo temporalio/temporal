@@ -71,6 +71,8 @@ type (
 		DispatchQueryTask(ctx context.Context, taskID string, request *matchingservice.QueryWorkflowRequest) (*matchingservice.QueryWorkflowResponse, error)
 		// GetUserData returns the versioned user data for this task queue
 		GetUserData() (*persistencespb.VersionedTaskQueueUserData, <-chan struct{}, error)
+		// MarkAlive updates the liveness timer to keep this partition manager alive.
+		MarkAlive()
 		// UpdateUserData updates user data for this task queue and replicates across clusters if necessary.
 		// Extra care should be taken to avoid mutating the existing data in the update function.
 		UpdateUserData(ctx context.Context, options UserDataUpdateOptions, updateFn UserDataUpdateFunc) error
@@ -110,6 +112,7 @@ type (
 		db                   *taskQueueDB
 		namespaceRegistry    namespace.Registry
 		logger               log.Logger
+		throttledLogger      log.ThrottledLogger
 		matchingClient       matchingservice.MatchingServiceClient
 		taggedMetricsHandler metrics.Handler // namespace/taskqueue tagged metric scope
 		goroGroup            goro.Group
@@ -143,6 +146,10 @@ func newTaskQueuePartitionManager(
 		tag.WorkflowTaskQueueName(taskQueue.FullName()),
 		tag.WorkflowTaskQueueType(taskQueue.taskType),
 		tag.WorkflowNamespace(nsName.String()))
+	throttledLogger := log.With(e.throttledLogger,
+		tag.WorkflowTaskQueueName(taskQueue.FullName()),
+		tag.WorkflowTaskQueueType(taskQueue.taskType),
+		tag.WorkflowNamespace(nsName.String()))
 	taggedMetricsHandler := metrics.GetPerTaskQueueScope(
 		e.metricsHandler.WithTags(metrics.OperationTag(metrics.MatchingTaskQueuePartitionManagerScope), metrics.TaskQueueTypeTag(taskQueue.taskType)),
 		nsName.String(),
@@ -157,6 +164,7 @@ func newTaskQueuePartitionManager(
 		config:               taskQueueConfig,
 		namespaceRegistry:    e.namespaceRegistry,
 		logger:               logger,
+		throttledLogger:      throttledLogger,
 		matchingClient:       e.matchingRawClient,
 		taggedMetricsHandler: taggedMetricsHandler,
 		userDataReady:        future.NewFuture[struct{}](),
@@ -193,6 +201,10 @@ func (pm *taskQueuePartitionManagerImpl) Stop() {
 	}
 	pm.defaultQueue.Stop()
 	pm.goroGroup.Cancel()
+}
+
+func (pm *taskQueuePartitionManagerImpl) MarkAlive() {
+	pm.defaultQueue.MarkAlive()
 }
 
 func (pm *taskQueuePartitionManagerImpl) WaitUntilInitialized(ctx context.Context) error {
@@ -298,8 +310,6 @@ func (pm *taskQueuePartitionManagerImpl) DispatchQueryTask(
 // GetUserData returns the user data for the task queue if any.
 // Note: can return nil value with no error.
 func (pm *taskQueuePartitionManagerImpl) GetUserData() (*persistencespb.VersionedTaskQueueUserData, <-chan struct{}, error) {
-	// mark alive so that it doesn't unload while a child partition is doing a long poll
-	pm.defaultQueue.MarkAlive()
 	return pm.db.GetUserData()
 }
 
@@ -632,11 +642,7 @@ func (pm *taskQueuePartitionManagerImpl) getDbQueueForAdd(
 	if err != nil {
 		return nil, err
 	}
-	dbq, err := pm.redirectToVersionSetQueueForAdd(ctx, directive, userData)
-	if err != nil {
-		return nil, err
-	}
-	return dbq, nil
+	return pm.redirectToVersionSetQueueForAdd(ctx, directive, userData)
 }
 
 func (pm *taskQueuePartitionManagerImpl) redirectToVersionSetQueueForAdd(

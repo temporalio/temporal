@@ -53,6 +53,7 @@ const (
 	commandType    = "commandType"
 	serviceName    = "service_name"
 	actionType     = "action_type"
+	workerBuildId  = "worker-build-id"
 	// Generic reason tag can be used anywhere a reason is needed.
 	reason = "reason"
 	// See server.api.enums.v1.ReplicationTaskType
@@ -160,6 +161,13 @@ func TaskQueueTag(value string) Tag {
 
 func TaskQueueTypeTag(tqType enumspb.TaskQueueType) Tag {
 	return &tagImpl{key: TaskTypeTagName, value: tqType.String()}
+}
+
+func WorkerBuildIdTag(buildId string) Tag {
+	if buildId == "" {
+		buildId = "_unversioned_"
+	}
+	return &tagImpl{key: workerBuildId, value: buildId}
 }
 
 // WorkflowTypeTag returns a new workflow type tag.

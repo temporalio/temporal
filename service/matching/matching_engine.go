@@ -373,7 +373,6 @@ func (e *matchingEngineImpl) AddWorkflowTask(
 		taskInfo:      taskInfo,
 		source:        addRequest.GetSource(),
 		forwardedFrom: addRequest.GetForwardedSource(),
-		baseTqm:       tqm,
 	})
 }
 
@@ -418,20 +417,16 @@ func (e *matchingEngineImpl) AddActivityTask(
 		taskInfo:      taskInfo,
 		source:        addRequest.GetSource(),
 		forwardedFrom: addRequest.GetForwardedSource(),
-		baseTqm:       tqm,
 	})
 }
 
 func (e *matchingEngineImpl) DispatchSpooledTask(
 	ctx context.Context,
 	task *internalTask,
-	origTaskQueue *taskQueueID,
+	taskQueue *taskQueueID,
 	stickyInfo stickyInfo,
 ) error {
-	// If this came from a versioned queue, ignore the version and re-resolve, in case we're
-	// going to the default and the default changed.
-	unversionedOrigTaskQueue := newTaskQueueIDWithVersionSet(origTaskQueue, "")
-	tqm, err := e.getTaskQueuePartitionManager(ctx, unversionedOrigTaskQueue, stickyInfo, true)
+	tqm, err := e.getTaskQueuePartitionManager(ctx, taskQueue, stickyInfo, true)
 	if err != nil {
 		return err
 	}
@@ -1000,6 +995,8 @@ func (e *matchingEngineImpl) GetTaskQueueUserData(
 		var cancel context.CancelFunc
 		ctx, cancel = newChildContext(ctx, e.config.GetUserDataLongPollTimeout(), returnEmptyTaskTimeBudget)
 		defer cancel()
+		// mark alive so that it doesn't unload while a child partition is doing a long poll
+		tqMgr.MarkAlive()
 	}
 
 	for {
