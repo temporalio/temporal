@@ -51,7 +51,7 @@ type (
 		status        int32
 		taskBuffer    chan *persistencespb.AllocatedTaskInfo // tasks loaded from persistence
 		notifyC       chan struct{}                          // Used as signal to notify pump of new tasks
-		tlMgr         *taskQueueManagerImpl
+		tlMgr         *dbQueueManagerImpl
 		taskValidator taskValidator
 		gorogrp       goro.Group
 
@@ -61,7 +61,7 @@ type (
 	}
 )
 
-func newTaskReader(tlMgr *taskQueueManagerImpl) *taskReader {
+func newTaskReader(tlMgr *dbQueueManagerImpl) *taskReader {
 	return &taskReader{
 		status:        common.DaemonStatusInitialized,
 		tlMgr:         tlMgr,
@@ -125,7 +125,7 @@ dispatchLoop:
 			}
 			task := newInternalTask(taskInfo, tr.tlMgr.completeTask, enumsspb.TASK_SOURCE_DB_BACKLOG, "", false)
 			for ctx.Err() == nil {
-				if !tr.taskValidator.maybeValidate(taskInfo, tr.tlMgr.taskQueueID.taskType) {
+				if !tr.taskValidator.maybeValidate(taskInfo, tr.tlMgr.dbQueue.TaskType()) {
 					task.finish(nil)
 					tr.taggedMetricsHandler().Counter(metrics.ExpiredTasksPerTaskQueueCounter.Name()).Record(1)
 					// Don't try to set read level here because it may have been advanced already.

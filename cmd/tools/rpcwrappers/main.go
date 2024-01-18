@@ -35,11 +35,10 @@ import (
 
 	"go.temporal.io/api/taskqueue/v1"
 	"go.temporal.io/api/workflowservice/v1"
-	"golang.org/x/exp/slices"
-
 	"go.temporal.io/server/api/adminservice/v1"
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/api/matchingservice/v1"
+	"golang.org/x/exp/slices"
 )
 
 type (
@@ -256,7 +255,14 @@ func makeGetMatchingClient(reqType reflect.Type) string {
 				tq.path = fmt.Sprintf("&taskqueuepb.TaskQueue{Name: %s}", tq.path)
 			}
 		}
-		return fmt.Sprintf("client, err := c.getClientForTaskqueue(%s, %s, %s)", nsID.path, tq.path, tqt.path)
+
+		return fmt.Sprintf(
+			`tqPrtn, err := tqid.FromProto(%s, %s, %s)
+	if err != nil {
+		return nil, err
+	}
+	client, err := c.getClientForTaskQueuePartition(tqPrtn)`,
+			tq.path, nsID.path, tqt.path)
 	}
 
 	panic("I don't know how to get a client from a " + t.String())
@@ -388,6 +394,7 @@ import (
 	enumspb "go.temporal.io/api/enums/v1"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	"{{.ServicePackagePath}}"
+	"go.temporal.io/server/common/tqid"
 	"google.golang.org/grpc"
 )
 `)

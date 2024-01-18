@@ -34,6 +34,7 @@ import (
 
 	"github.com/dgryski/go-farm"
 	"github.com/stretchr/testify/require"
+	"go.temporal.io/server/common/tqid"
 	"google.golang.org/protobuf/types/known/durationpb"
 
 	commandpb "go.temporal.io/api/command/v1"
@@ -53,7 +54,6 @@ import (
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log/tag"
-	"go.temporal.io/server/common/tqname"
 )
 
 type VersioningIntegSuite struct {
@@ -66,7 +66,7 @@ type VersioningIntegSuite struct {
 
 const (
 	partitionTreeDegree = 3
-	longPollTime        = 5 * time.Second
+	longPollTime        = 10 * time.Second
 	// use > 2 pollers by default to expose more timing situations
 	numPollers = 4
 )
@@ -1659,7 +1659,7 @@ func (s *VersioningIntegSuite) addCompatibleBuildId(ctx context.Context, tq, new
 }
 
 // waitForPropagation waits for all partitions of tq to mention newBuildId in their versioning data (in any position).
-func (s *VersioningIntegSuite) waitForPropagation(ctx context.Context, tq, newBuildId string) {
+func (s *VersioningIntegSuite) waitForPropagation(ctx context.Context, taskQueue, newBuildId string) {
 	v, ok := s.testCluster.host.dcClient.getRawValue(dynamicconfig.MatchingNumTaskqueueReadPartitions)
 	s.True(ok, "versioning tests require setting explicit number of partitions")
 	partCount, ok := v.(int)
@@ -1677,16 +1677,16 @@ func (s *VersioningIntegSuite) waitForPropagation(ctx context.Context, tq, newBu
 	nsId := s.getNamespaceID(s.namespace)
 	s.Eventually(func() bool {
 		for pt := range remaining {
-			partName, err := tqname.FromBaseName(tq)
+			taskQueue, err := tqid.FromBaseName("", taskQueue)
 			s.NoError(err)
-			partName = partName.WithPartition(pt.part)
+			partition := taskQueue.NormalPartition(0, pt.part)
 			// Use lower-level GetTaskQueueUserData instead of GetWorkerBuildIdCompatibility
 			// here so that we can target activity queues.
 			res, err := s.testCluster.host.matchingClient.GetTaskQueueUserData(
 				ctx,
 				&matchingservice.GetTaskQueueUserDataRequest{
 					NamespaceId:   nsId,
-					TaskQueue:     partName.FullName(),
+					TaskQueue:     partition.RpcName(),
 					TaskQueueType: pt.tp,
 				})
 			s.NoError(err)

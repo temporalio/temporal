@@ -48,7 +48,7 @@ import (
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/primitives/timestamp"
-	"go.temporal.io/server/common/tqname"
+	"go.temporal.io/server/common/tqid"
 )
 
 type (
@@ -1054,16 +1054,16 @@ func (m *workflowTaskStateMachine) convertSpeculativeWorkflowTaskToNormal() erro
 	return nil
 }
 
-func cleanTaskQueue(tq *taskqueuepb.TaskQueue) *taskqueuepb.TaskQueue {
-	if tq == nil {
-		return tq
+func cleanTaskQueue(proto *taskqueuepb.TaskQueue) *taskqueuepb.TaskQueue {
+	if proto == nil {
+		return proto
 	}
-	name, err := tqname.Parse(tq.Name)
+	prtn, err := tqid.FromProto(proto, "", 0)
 	if err != nil {
-		return tq
+		return proto
 	}
 
-	cleanTq := common.CloneProto(tq)
-	cleanTq.Name = name.BaseNameString()
+	cleanTq := common.CloneProto(proto)
+	cleanTq.Name = prtn.TaskQueue().Name()
 	return cleanTq
 }

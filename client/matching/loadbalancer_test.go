@@ -30,17 +30,33 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	enumspb "go.temporal.io/api/enums/v1"
-	"go.temporal.io/server/common/tqname"
+	"go.temporal.io/server/common/tqid"
 )
+
+func TestTQLoadBalancerMapping(t *testing.T) {
+	lb := &defaultLoadBalancer{
+		lock:         sync.RWMutex{},
+		taskQueueLBs: make(map[taskQueueKey]*tqLoadBalancer),
+	}
+
+	taskQueue, err := tqid.FromBaseName("fake-namespace-id", "fake-taskqueue")
+	assert.NoError(t, err)
+
+	tqlb := lb.getTaskQueueLoadBalancer(taskQueue, enumspb.TASK_QUEUE_TYPE_WORKFLOW)
+
+	taskQueueClone := *taskQueue
+	tqlb2 := lb.getTaskQueueLoadBalancer(&taskQueueClone, enumspb.TASK_QUEUE_TYPE_WORKFLOW)
+	assert.Equal(t, tqlb2, tqlb, "mapping should be based on content, not the pointer value")
+
+	tqlb3 := lb.getTaskQueueLoadBalancer(taskQueue, enumspb.TASK_QUEUE_TYPE_ACTIVITY)
+	assert.NotEqual(t, tqlb3, tqlb, "separate load LB should be created for each task type")
+}
 
 func TestTQLoadBalancer(t *testing.T) {
 	partitionCount := 4
-	key := taskQueueKey{
-		NamespaceID: "fake-namespace-id",
-		Name:        mustParseTQName("fake-taskqueue"),
-		Type:        enumspb.TASK_QUEUE_TYPE_ACTIVITY,
-	}
-	tqlb := newTaskQueueLoadBalancer(key)
+	taskQueue, err := tqid.FromBaseName("fake-namespace-id", "fake-taskqueue")
+	assert.NoError(t, err)
+	tqlb := newTaskQueueLoadBalancer(taskQueueKey{*taskQueue, enumspb.TASK_QUEUE_TYPE_ACTIVITY})
 
 	// pick 4 times, each partition picked would have one poller
 	tqlb.pickReadPartition(partitionCount, -1)
@@ -64,16 +80,13 @@ func TestTQLoadBalancer(t *testing.T) {
 
 func TestTQLoadBalancerForce(t *testing.T) {
 	partitionCount := 4
-	key := taskQueueKey{
-		NamespaceID: "fake-namespace-id",
-		Name:        mustParseTQName("fake-taskqueue"),
-		Type:        enumspb.TASK_QUEUE_TYPE_ACTIVITY,
-	}
-	tqlb := newTaskQueueLoadBalancer(key)
+	taskQueue, err := tqid.FromBaseName("fake-namespace-id", "fake-taskqueue")
+	assert.NoError(t, err)
+	tqlb := newTaskQueueLoadBalancer(taskQueueKey{*taskQueue, enumspb.TASK_QUEUE_TYPE_ACTIVITY})
 
 	// pick 4 times, each partition picked would have one poller
 	p1 := tqlb.pickReadPartition(partitionCount, 1)
-	assert.Equal(t, 1, p1.partitionID)
+	assert.Equal(t, 1, p1.TQPartition.PartitionID())
 	assert.Equal(t, 1, maxPollerCount(tqlb))
 	tqlb.pickReadPartition(partitionCount, 1)
 	assert.Equal(t, 2, maxPollerCount(tqlb))
@@ -99,12 +112,9 @@ func TestTQLoadBalancerForce(t *testing.T) {
 func TestLoadBalancerConcurrent(t *testing.T) {
 	wg := &sync.WaitGroup{}
 	partitionCount := 4
-	key := taskQueueKey{
-		NamespaceID: "fake-namespace-id",
-		Name:        mustParseTQName("fake-taskqueue"),
-		Type:        enumspb.TASK_QUEUE_TYPE_ACTIVITY,
-	}
-	tqlb := newTaskQueueLoadBalancer(key)
+	taskQueue, err := tqid.FromBaseName("fake-namespace-id", "fake-taskqueue")
+	assert.NoError(t, err)
+	tqlb := newTaskQueueLoadBalancer(taskQueueKey{*taskQueue, enumspb.TASK_QUEUE_TYPE_ACTIVITY})
 
 	concurrentCount := 10 * partitionCount
 	wg.Add(concurrentCount)
@@ -125,12 +135,9 @@ func TestLoadBalancerConcurrent(t *testing.T) {
 
 func TestLoadBalancer_ReducedPartitionCount(t *testing.T) {
 	partitionCount := 2
-	key := taskQueueKey{
-		NamespaceID: "fake-namespace-id",
-		Name:        mustParseTQName("fake-taskqueue"),
-		Type:        enumspb.TASK_QUEUE_TYPE_ACTIVITY,
-	}
-	tqlb := newTaskQueueLoadBalancer(key)
+	taskQueue, err := tqid.FromBaseName("fake-namespace-id", "fake-taskqueue")
+	assert.NoError(t, err)
+	tqlb := newTaskQueueLoadBalancer(taskQueueKey{*taskQueue, enumspb.TASK_QUEUE_TYPE_ACTIVITY})
 	p1 := tqlb.pickReadPartition(partitionCount, -1)
 	p2 := tqlb.pickReadPartition(partitionCount, -1)
 	assert.Equal(t, 1, maxPollerCount(tqlb))
@@ -165,14 +172,6 @@ func TestLoadBalancer_ReducedPartitionCount(t *testing.T) {
 	assert.Equal(t, 1, maxPollerCount(tqlb))
 	tqlb.pickReadPartition(partitionCount, -1)
 	assert.Equal(t, 2, maxPollerCount(tqlb))
-}
-
-func mustParseTQName(baseName string) tqname.Name {
-	n, err := tqname.Parse(baseName)
-	if err != nil {
-		panic(err)
-	}
-	return n
 }
 
 func maxPollerCount(tqlb *tqLoadBalancer) int {

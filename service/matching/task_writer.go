@@ -65,9 +65,9 @@ type (
 	// taskWriter writes tasks sequentially to persistence
 	taskWriter struct {
 		status       int32
-		tlMgr        *taskQueueManagerImpl
+		tlMgr        *dbQueueManagerImpl
 		config       *taskQueueConfig
-		taskQueueID  *taskQueueID
+		dbQueue      *DBTaskQueue
 		appendCh     chan *writeTaskRequest
 		taskIDBlock  taskIDBlock
 		maxReadLevel int64
@@ -86,13 +86,13 @@ var (
 )
 
 func newTaskWriter(
-	tlMgr *taskQueueManagerImpl,
+	tlMgr *dbQueueManagerImpl,
 ) *taskWriter {
 	return &taskWriter{
 		status:       common.DaemonStatusInitialized,
 		tlMgr:        tlMgr,
 		config:       tlMgr.config,
-		taskQueueID:  tlMgr.taskQueueID,
+		dbQueue:      tlMgr.dbQueue,
 		appendCh:     make(chan *writeTaskRequest, tlMgr.config.OutstandingTaskAppendsThreshold()),
 		taskIDBlock:  noTaskIDs,
 		maxReadLevel: noTaskIDs.start - 1,
@@ -213,8 +213,8 @@ func (w *taskWriter) appendTasks(
 		w.logger.Error("Persistent store operation failure",
 			tag.StoreOperationCreateTask,
 			tag.Error(err),
-			tag.WorkflowTaskQueueName(w.taskQueueID.FullName()),
-			tag.WorkflowTaskQueueType(w.taskQueueID.taskType))
+			tag.WorkflowTaskQueueName(w.dbQueue.PersistenceName()),
+			tag.WorkflowTaskQueueType(w.dbQueue.TaskType()))
 		return nil, err
 	}
 	return resp, nil
