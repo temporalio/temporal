@@ -238,7 +238,7 @@ func newTaskQueueManager(
 	var fwdr *Forwarder
 	if tlMgr.isFowardingAllowed(taskQueue, partitionMgr.kind) {
 		// Forward without version set, the target will resolve the correct version set from
-		// the build id itself. TODO: check if we still need this here after tqm refactoring
+		// the build id itself. TODO: move forwarder to partition manager, no need to have one per db queue
 		forwardTaskQueue := newTaskQueueIDWithVersionSet(taskQueue, "")
 		fwdr = newForwarder(&config.forwarderConfig, forwardTaskQueue, partitionMgr.kind, e.matchingRawClient)
 	}
