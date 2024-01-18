@@ -91,7 +91,7 @@ func TestCommandProtocolMessage(t *testing.T) {
 		var effects effect.Buffer
 		config := configs.NewConfig(
 			dynamicconfig.NewCollection(
-				dynamicconfig.StaticClient(out.conf), logger), 1, false, false)
+				dynamicconfig.StaticClient(out.conf), logger), 1)
 		mockMeta := persistence.NewMockMetadataManager(gomock.NewController(t))
 		nsReg := namespace.NewRegistry(
 			mockMeta,

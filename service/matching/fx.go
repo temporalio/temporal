@@ -71,11 +71,7 @@ func ConfigProvider(
 	dc *dynamicconfig.Collection,
 	persistenceConfig config.Persistence,
 ) *Config {
-	return NewConfig(
-		dc,
-		persistenceConfig.StandardVisibilityConfigExist(),
-		persistenceConfig.AdvancedVisibilityConfigExist(),
-	)
+	return NewConfig(dc)
 }
 
 func RetryableInterceptorProvider() *interceptor.RetryableInterceptor {
