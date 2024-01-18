@@ -49,6 +49,8 @@ var errorCases = map[string]string{
 	"select * from a where zz(k=2)":          query.NotSupportedErrMessage,
 	"select * from a group by k, m":          query.NotSupportedErrMessage,
 	"select * from a group by k order by id": query.NotSupportedErrMessage,
+	"select * from a where a like '%a%'":     "operator 'like' not allowed in comparison expression",
+	"select * from a where a not like '%a%'": "operator 'not like' not allowed in comparison expression",
 	"invalid query":                          query.MalformedSqlQueryErrMessage,
 	"select * from a where  a= 1 and multi_match(zz=1, query='this is a test', fields=(title,title.origin), type=phrase)": query.NotSupportedErrMessage,
 }
@@ -74,9 +76,7 @@ var supportedWhereCases = map[string]string{
 	"id > 1 or (process_id = 0)":                   `{"bool":{"should":[{"range":{"id":{"from":1,"include_lower":false,"include_upper":true,"to":null}}},{"match":{"process_id":{"query":0}}}]}}`,
 	"id in (1,2,3,4)":                              `{"bool":{"filter":{"terms":{"id":[1,2,3,4]}}}}`,
 	"a = 'text'":                                   `{"bool":{"filter":{"match":{"a":{"query":"text"}}}}}`,
-	"a LiKE '%a%'":                                 `{"bool":{"filter":{"match":{"a":{"query":"a"}}}}}`,
 	"`by` = 1":                                     `{"bool":{"filter":{"match":{"by":{"query":1}}}}}`,
-	"id not like '%aaa%'":                          `{"bool":{"must_not":{"match":{"id":{"query":"aaa"}}}}}`,
 	"id not IN (1, 2,3)":                           `{"bool":{"must_not":{"terms":{"id":[1,2,3]}}}}`,
 	"id iS not null":                               `{"bool":{"filter":{"exists":{"field":"id"}}}}`,
 	"id is NULL":                                   `{"bool":{"must_not":{"exists":{"field":"id"}}}}`,
