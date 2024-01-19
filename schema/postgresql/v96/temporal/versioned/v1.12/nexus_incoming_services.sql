@@ -7,9 +7,9 @@ CREATE TABLE nexus_incoming_services (
     PRIMARY KEY (service_id)
 );
 
--- Stores the version of Nexus services tables as a whole. Should only be one row per Nexus service type.
-CREATE TABLE nexus_services_table_versions (
-    service_type    INT NOT NULL,       -- Enum for which table this row contains the version of (e.g. Incoming)
-    version         BIGINT NOT NULL,    -- Version of the referenced table
-    PRIMARY KEY (service_type)
+-- Stores the version of Nexus incoming services table as a whole
+CREATE TABLE nexus_incoming_services_table_version (
+    id      INT NOT NULL PRIMARY KEY DEFAULT 0,
+    version BIGINT NOT NULL,                -- Version of the nexus_incoming_services table
+    CONSTRAINT only_one_row CHECK (id = 0)  -- Restrict the table to a single row since it will only be used for incoming services
 );

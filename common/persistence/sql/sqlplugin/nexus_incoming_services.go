@@ -42,12 +42,12 @@ type (
 
 	// NexusIncomingServices is the SQL persistence interface for incoming Nexus services
 	NexusIncomingServices interface {
-		InitializeNexusIncomingServicesTableVersion(ctx context.Context) error
-		IncrementNexusIncomingServicesTableVersion(ctx context.Context, lastKnownTableVersion int64) error
+		InitializeNexusIncomingServicesTableVersion(ctx context.Context) (sql.Result, error)
+		IncrementNexusIncomingServicesTableVersion(ctx context.Context, lastKnownTableVersion int64) (sql.Result, error)
 		GetNexusIncomingServicesTableVersion(ctx context.Context) (int64, error)
 
-		InsertIntoNexusIncomingServices(ctx context.Context, row *NexusIncomingServicesRow) error
-		UpdateNexusIncomingService(ctx context.Context, row *NexusIncomingServicesRow) error
+		InsertIntoNexusIncomingServices(ctx context.Context, row *NexusIncomingServicesRow) (sql.Result, error)
+		UpdateNexusIncomingService(ctx context.Context, row *NexusIncomingServicesRow) (sql.Result, error)
 		ListNexusIncomingServices(ctx context.Context, request *ListNexusIncomingServicesRequest) ([]NexusIncomingServicesRow, error)
 		DeleteFromNexusIncomingServices(ctx context.Context, serviceID []byte) (sql.Result, error)
 	}

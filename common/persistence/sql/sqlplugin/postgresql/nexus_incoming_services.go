@@ -27,14 +27,13 @@ import (
 	"database/sql"
 	"errors"
 
-	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/persistence/sql/sqlplugin"
 )
 
 const (
-	createIncomingServicesTableVersionQry    = `INSERT INTO nexus_services_table_versions(service_type, version) VALUES(0, 1)`
-	incrementIncomingServicesTableVersionQry = `UPDATE nexus_services_table_versions SET version = $1 WHERE service_type = 0 AND version = $2`
-	getIncomingServicesTableVersionQry       = `SELECT version FROM nexus_services_table_versions WHERE service_type = 0 LIMIT 1`
+	createIncomingServicesTableVersionQry    = `INSERT INTO nexus_incoming_services_table_version(version) VALUES(1)`
+	incrementIncomingServicesTableVersionQry = `UPDATE nexus_incoming_services_table_version SET version = $1 WHERE version = $2`
+	getIncomingServicesTableVersionQry       = `SELECT version FROM nexus_incoming_services_table_version`
 
 	createIncomingServiceQry = `INSERT INTO nexus_incoming_services(service_id, data, data_encoding, version) VALUES ($1, $2, $3, 1)`
 	updateIncomingServiceQry = `UPDATE nexus_incoming_services SET data = $1, data_encoding = $2, version = $3 WHERE service_id = $4 AND version = $5`
@@ -42,43 +41,21 @@ const (
 	getIncomingServicesQry   = `SELECT service_id, data, data_encoding, version FROM nexus_incoming_services WHERE service_id > $1 ORDER BY service_id LIMIT $2`
 )
 
-func (pdb *db) InitializeNexusIncomingServicesTableVersion(ctx context.Context) error {
-	result, err := pdb.conn.ExecContext(ctx, createIncomingServicesTableVersionQry)
-	if err != nil {
-		return err
-	}
-	nRows, err := result.RowsAffected()
-	if err != nil {
-		return err
-	}
-	if nRows != 1 {
-		return persistence.ErrNexusTableVersionConflict
-	}
-	return nil
+func (pdb *db) InitializeNexusIncomingServicesTableVersion(ctx context.Context) (sql.Result, error) {
+	return pdb.conn.ExecContext(ctx, createIncomingServicesTableVersionQry)
 }
 
 func (pdb *db) IncrementNexusIncomingServicesTableVersion(
 	ctx context.Context,
 	lastKnownTableVersion int64,
-) error {
-	result, err := pdb.conn.ExecContext(ctx, incrementIncomingServicesTableVersionQry, lastKnownTableVersion+1, lastKnownTableVersion)
-	if err != nil {
-		return err
-	}
-	nRows, err := result.RowsAffected()
-	if err != nil {
-		return err
-	}
-	if nRows != 1 {
-		return persistence.ErrNexusTableVersionConflict
-	}
-	return nil
+) (sql.Result, error) {
+	return pdb.conn.ExecContext(ctx, incrementIncomingServicesTableVersionQry, lastKnownTableVersion+1, lastKnownTableVersion)
 }
 
 func (pdb *db) GetNexusIncomingServicesTableVersion(
 	ctx context.Context,
 ) (int64, error) {
-	version := int64(-1)
+	var version int64
 	err := pdb.conn.GetContext(ctx, &version, getIncomingServicesTableVersionQry)
 	if errors.Is(err, sql.ErrNoRows) {
 		return 0, nil
@@ -89,31 +66,20 @@ func (pdb *db) GetNexusIncomingServicesTableVersion(
 func (pdb *db) InsertIntoNexusIncomingServices(
 	ctx context.Context,
 	row *sqlplugin.NexusIncomingServicesRow,
-) error {
-	result, err := pdb.conn.ExecContext(
+) (sql.Result, error) {
+	return pdb.conn.ExecContext(
 		ctx,
 		createIncomingServiceQry,
 		row.ServiceID,
 		row.Data,
 		row.DataEncoding)
-	if err != nil {
-		return err
-	}
-	nRows, err := result.RowsAffected()
-	if err != nil {
-		return err
-	}
-	if nRows != 1 {
-		return persistence.ErrNexusTableVersionConflict
-	}
-	return err
 }
 
 func (pdb *db) UpdateNexusIncomingService(
 	ctx context.Context,
 	row *sqlplugin.NexusIncomingServicesRow,
-) error {
-	result, err := pdb.conn.ExecContext(
+) (sql.Result, error) {
+	return pdb.conn.ExecContext(
 		ctx,
 		updateIncomingServiceQry,
 		row.Data,
@@ -121,19 +87,6 @@ func (pdb *db) UpdateNexusIncomingService(
 		row.Version+1,
 		row.ServiceID,
 		row.Version)
-	if err != nil {
-		return err
-	}
-
-	nRows, err := result.RowsAffected()
-	if err != nil {
-		return err
-	}
-	if nRows != 1 {
-		return persistence.ErrNexusIncomingServiceVersionConflict
-	}
-
-	return nil
 }
 
 func (pdb *db) DeleteFromNexusIncomingServices(

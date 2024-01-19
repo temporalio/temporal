@@ -1,7 +1,7 @@
 {
   "CurrVersion": "0.4",
   "MinCompatibleVersion": "0.1",
-  "Description": "add storage for Nexus incoming service records and create nexus_incoming_services and nexus_services_table_versions tables",
+  "Description": "add storage for Nexus incoming service records and create nexus_incoming_services and nexus_incoming_services_table_version tables",
   "SchemaUpdateCqlFiles": [
     "nexus_incoming_services.sql"
   ]

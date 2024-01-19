@@ -24,7 +24,7 @@ package sql
 
 import (
 	"context"
-	"errors"
+	"database/sql"
 	"fmt"
 
 	"go.temporal.io/api/serviceerror"
@@ -34,6 +34,10 @@ import (
 	p "go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/persistence/sql/sqlplugin"
 	"go.temporal.io/server/common/primitives"
+)
+
+var (
+	emptyServiceID = make([]byte, 0)
 )
 
 type (
@@ -66,12 +70,15 @@ func (s *sqlNexusIncomingServiceStore) CreateOrUpdateNexusIncomingService(
 
 	retErr = s.txExecute(ctx, "CreateOrUpdateNexusIncomingService", func(tx sqlplugin.Tx) error {
 		// Upsert table version row
+		var result sql.Result
 		var err error
 		if request.LastKnownTableVersion == 0 {
-			err = tx.InitializeNexusIncomingServicesTableVersion(ctx)
+			result, err = tx.InitializeNexusIncomingServicesTableVersion(ctx)
 		} else {
-			err = tx.IncrementNexusIncomingServicesTableVersion(ctx, request.LastKnownTableVersion)
+			result, err = tx.IncrementNexusIncomingServicesTableVersion(ctx, request.LastKnownTableVersion)
 		}
+
+		err = checkTableVersionUpdateResult(result, err)
 		if s.Db.IsDupEntryError(err) {
 			return &p.ConditionFailedError{Msg: err.Error()}
 		}
@@ -88,10 +95,11 @@ func (s *sqlNexusIncomingServiceStore) CreateOrUpdateNexusIncomingService(
 			DataEncoding: request.Service.Data.EncodingType.String(),
 		}
 		if request.Service.Version == 0 {
-			err = tx.InsertIntoNexusIncomingServices(ctx, &row)
+			result, err = tx.InsertIntoNexusIncomingServices(ctx, &row)
 		} else {
-			err = tx.UpdateNexusIncomingService(ctx, &row)
+			result, err = tx.UpdateNexusIncomingService(ctx, &row)
 		}
+		err = checkServiceUpdateResult(result, err)
 		if s.Db.IsDupEntryError(err) {
 			return p.ErrNexusIncomingServiceVersionConflict
 		}
@@ -105,7 +113,7 @@ func (s *sqlNexusIncomingServiceStore) ListNexusIncomingServices(
 	ctx context.Context,
 	request *p.InternalListNexusIncomingServicesRequest,
 ) (*p.InternalListNexusIncomingServicesResponse, error) {
-	lastServiceID := make([]byte, 0)
+	lastServiceID := emptyServiceID
 	if len(request.NextPageToken) > 0 {
 		token, err := deserializePageTokenJson[listIncomingServicesNextPageToken](request.NextPageToken)
 		if err != nil {
@@ -135,10 +143,7 @@ func (s *sqlNexusIncomingServiceStore) ListNexusIncomingServices(
 	})
 
 	if retErr != nil {
-		if errors.Is(retErr, p.ErrNexusTableVersionConflict) {
-			return &response, retErr
-		}
-		return nil, retErr
+		return &response, retErr
 	}
 
 	var nextPageToken []byte
@@ -173,13 +178,14 @@ func (s *sqlNexusIncomingServiceStore) DeleteNexusIncomingService(
 	}
 
 	retErr = s.txExecute(ctx, "DeleteNexusIncomingService", func(tx sqlplugin.Tx) error {
-		err := tx.IncrementNexusIncomingServicesTableVersion(ctx, request.LastKnownTableVersion)
+		result, err := tx.IncrementNexusIncomingServicesTableVersion(ctx, request.LastKnownTableVersion)
+		err = checkTableVersionUpdateResult(result, err)
 		if err != nil {
 			s.logger.Error("error incrementing Nexus incoming services table version during DeleteNexusIncomingService call", tag.Error(err))
 			return serviceerror.NewInternal(err.Error())
 		}
 
-		result, err := tx.DeleteFromNexusIncomingServices(ctx, serviceID)
+		result, err = tx.DeleteFromNexusIncomingServices(ctx, serviceID)
 		if err != nil {
 			s.logger.Error("DeleteNexusIncomingService operation failed", tag.Error(err))
 			return serviceerror.NewUnavailable(err.Error())
@@ -197,4 +203,34 @@ func (s *sqlNexusIncomingServiceStore) DeleteNexusIncomingService(
 		return nil
 	})
 	return retErr
+}
+
+func checkTableVersionUpdateResult(result sql.Result, pluginErr error) error {
+	if pluginErr != nil {
+		return pluginErr
+	}
+
+	nRows, err := result.RowsAffected()
+	if err != nil {
+		return err
+	}
+	if nRows != 1 {
+		return p.ErrNexusTableVersionConflict
+	}
+	return nil
+}
+
+func checkServiceUpdateResult(result sql.Result, pluginErr error) error {
+	if pluginErr != nil {
+		return pluginErr
+	}
+
+	nRows, err := result.RowsAffected()
+	if err != nil {
+		return err
+	}
+	if nRows != 1 {
+		return p.ErrNexusIncomingServiceVersionConflict
+	}
+	return nil
 }
