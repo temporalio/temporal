@@ -57,6 +57,7 @@ import (
 	"go.temporal.io/server/common/membership/ringpop"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
+	"go.temporal.io/server/common/nexus"
 	"go.temporal.io/server/common/persistence"
 	persistenceClient "go.temporal.io/server/common/persistence/client"
 	"go.temporal.io/server/common/persistence/serialization"
@@ -107,6 +108,12 @@ var Module = fx.Options(
 	fx.Provide(fx.Annotate(
 		func(p namespace.Registry) common.Pingable { return p },
 		fx.ResultTags(`group:"deadlockDetectorRoots"`),
+	)),
+	fx.Provide(NexusIncomingServiceRegistryProvider),
+	nexus.IncomingServiceRegistryLifetimeHooksModule,
+	fx.Provide(fx.Annotate(
+		func(p nexus.IncomingServiceRegistry) common.Pingable { return p },
+		fx.ResultTags(`group:"deadlockDetectorRoots"`), //TODO: this might be overkill?
 	)),
 	fx.Provide(serialization.NewSerializer),
 	fx.Provide(HistoryBootstrapContainerProvider),
@@ -217,6 +224,17 @@ func NamespaceRegistryProvider(
 		metricsHandler,
 		logger,
 	)
+}
+
+func NexusIncomingServiceRegistryProvider(
+	nexusServiceManager persistence.NexusServiceManager,
+	metricsHandler metrics.Handler,
+	logger log.SnTaggedLogger,
+) nexus.IncomingServiceRegistry {
+	return nexus.NewIncomingServiceRegistry(
+		nexusServiceManager,
+		metricsHandler,
+		logger)
 }
 
 func ClientFactoryProvider(

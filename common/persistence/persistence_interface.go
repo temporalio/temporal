@@ -739,6 +739,10 @@ type (
 		RecordExpiry time.Time
 	}
 
+	///////////
+	// TODO: determine whether these internal structs are necessary. most are copies from data_interfaces structs
+	///////////
+
 	// InternalNexusIncomingService is the internal representation of an incoming Nexus service
 	InternalNexusIncomingService struct {
 		ServiceID string

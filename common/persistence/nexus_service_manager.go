@@ -1,8 +1,6 @@
 // The MIT License
 //
-// Copyright (c) 2020 Temporal Technologies Inc.  All rights reserved.
-//
-// Copyright (c) 2020 Uber Technologies, Inc.
+// Copyright (c) 2024 Temporal Technologies Inc.  All rights reserved.
 //
 // Permission is hereby granted, free of charge, to any person obtaining a copy
 // of this software and associated documentation files (the "Software"), to deal
@@ -27,7 +25,11 @@ package persistence
 import (
 	"context"
 
-	"go.temporal.io/api/serviceerror"
+	"github.com/google/uuid"
+	enumspb "go.temporal.io/api/enums/v1"
+
+	"go.temporal.io/server/api/persistence/v1"
+	"go.temporal.io/server/common/persistence/serialization"
 )
 
 var (
@@ -48,10 +50,9 @@ var (
 type (
 	nexusServiceManagerImpl struct {
 		persistence NexusServiceStore
+		serializer  serialization.Serializer
 	}
 )
-
-var _ NexusServiceManager = (*nexusServiceManagerImpl)(nil)
 
 func NewNexusServiceManager(
 	persistence NexusServiceStore,
@@ -69,13 +70,6 @@ func (m *nexusServiceManagerImpl) Close() {
 	m.persistence.Close()
 }
 
-func (m *nexusServiceManagerImpl) GetNexusIncomingService(
-	ctx context.Context,
-	request *GetNexusIncomingServiceRequest,
-) (*GetNexusIncomingServiceResponse, error) {
-	return nil, serviceerror.NewUnimplemented("NexusServiceManager.GetNexusIncomingService() is unimplemented")
-}
-
 func (m *nexusServiceManagerImpl) ListNexusIncomingServices(
 	ctx context.Context,
 	request *ListNexusIncomingServicesRequest,
@@ -84,19 +78,77 @@ func (m *nexusServiceManagerImpl) ListNexusIncomingServices(
 		return nil, ErrNonPositiveListNexusIncomingServicesPageSize
 	}
 
-	return nil, serviceerror.NewUnimplemented("NexusServiceManager.ListNexusIncomingServices() is unimplemented")
-}
+	result := &ListNexusIncomingServicesResponse{}
 
-func (m *nexusServiceManagerImpl) CreateOrUpdateNexusIncomingService(
-	ctx context.Context,
-	request *CreateOrUpdateNexusIncomingServiceRequest,
-) error {
-	return serviceerror.NewUnimplemented("NexusServiceManager.CreateOrUpdateNexusIncomingService() is unimplemented")
+	resp, err := m.persistence.ListNexusIncomingServices(ctx, &InternalListNexusIncomingServicesRequest{ // TODO: this request and response are just a copy of the request and response params. should simplify
+		PageSize:              request.PageSize,
+		NextPageToken:         request.NextPageToken,
+		LastKnownTableVersion: request.LastKnownTableVersion,
+	})
+	// TODO: this logic looks duplicated with store-level logic
+	if resp != nil {
+		result.TableVersion = resp.TableVersion
+	}
+	if err != nil {
+		return result, err
+	}
+
+	services := make([]*persistence.VersionedNexusIncomingService, len(resp.Services))
+	for i := range services {
+		service, err := m.serializer.NexusIncomingServiceDataFromBlob(resp.Services[i].Data)
+		if err != nil {
+			// TODO: improve error handling here
+			return result, err
+		}
+		services[i] = &persistence.VersionedNexusIncomingService{
+			Version: resp.Services[i].Version,
+			Service: service, // TODO: fix serialization / data types
+		}
+	}
+
+	result.NextPageToken = resp.NextPageToken
+	result.Services = services
+
+	return result, nil
 }
 
 func (m *nexusServiceManagerImpl) DeleteNexusIncomingService(
 	ctx context.Context,
 	request *DeleteNexusIncomingServiceRequest,
 ) error {
-	return serviceerror.NewUnimplemented("NexusServiceManager.DeleteNexusIncomingService() is unimplemented")
+	return m.persistence.DeleteNexusIncomingService(ctx, &InternalDeleteNexusIncomingServiceRequest{
+		LastKnownTableVersion: request.LastKnownTableVersion,
+		ServiceID:             request.ID,
+	})
+}
+
+func (m *nexusServiceManagerImpl) CreateOrUpdateNexusIncomingService(
+	ctx context.Context,
+	request *CreateOrUpdateNexusIncomingServiceRequest,
+) (*CreateOrUpdateNexusIncomingServiceResponse, error) {
+	if request.Service.Version == 0 {
+		request.Service.Service.Id = uuid.NewString()
+	}
+
+	serviceDataBlob, err := m.serializer.NexusIncomingServiceDataToBlob(request.Service.Service.Data, enumspb.ENCODING_TYPE_PROTO3)
+	if err != nil {
+		return nil, err
+	}
+
+	err = m.persistence.CreateOrUpdateNexusIncomingService(ctx, &InternalCreateOrUpdateNexusIncomingServiceRequest{
+		LastKnownTableVersion: request.LastKnownTableVersion,
+		Service: InternalNexusIncomingService{
+			ServiceID: request.Service.Service.Id,
+			Version:   request.Service.Version,
+			Data:      serviceDataBlob,
+		},
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	return &CreateOrUpdateNexusIncomingServiceResponse{
+		ServiceID: request.Service.Service.Id,
+		Version:   request.Service.Version + 1,
+	}, nil
 }

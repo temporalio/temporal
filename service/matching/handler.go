@@ -30,8 +30,6 @@ import (
 	"time"
 
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
-	"google.golang.org/grpc/codes"
-	"google.golang.org/grpc/status"
 
 	"go.temporal.io/server/api/matchingservice/v1"
 	"go.temporal.io/server/common"
@@ -40,6 +38,7 @@ import (
 	"go.temporal.io/server/common/membership"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
+	"go.temporal.io/server/common/nexus"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/persistence/visibility/manager"
 	"go.temporal.io/server/common/resource"
@@ -79,6 +78,7 @@ func NewHandler(
 	matchingServiceResolver membership.ServiceResolver,
 	metricsHandler metrics.Handler,
 	namespaceRegistry namespace.Registry,
+	incomingServiceRegistry nexus.IncomingServiceRegistry,
 	clusterMetadata cluster.Metadata,
 	namespaceReplicationQueue persistence.NamespaceReplicationQueue,
 	visibilityManager manager.VisibilityManager,
@@ -97,6 +97,7 @@ func NewHandler(
 			throttledLogger,
 			metricsHandler,
 			namespaceRegistry,
+			incomingServiceRegistry,
 			matchingServiceResolver,
 			clusterMetadata,
 			namespaceReplicationQueue,
@@ -415,20 +416,24 @@ func (h *Handler) RespondNexusTaskFailed(ctx context.Context, request *matchings
 	return h.engine.RespondNexusTaskFailed(ctx, request, opMetrics)
 }
 
-func (h *Handler) CreateOrUpdateNexusService(ctx context.Context, request *matchingservice.CreateOrUpdateNexusServiceRequest) (*matchingservice.CreateOrUpdateNexusServiceResponse, error) {
-	return nil, status.Error(codes.Unimplemented, "unimplemented")
+func (h *Handler) CreateOrUpdateNexusService(ctx context.Context, request *matchingservice.CreateOrUpdateNexusServiceRequest) (_ *matchingservice.CreateOrUpdateNexusServiceResponse, retErr error) {
+	defer log.CapturePanic(h.logger, &retErr)
+	return h.engine.CreateOrUpdateNexusIncomingService(ctx, request)
 }
 
-func (h *Handler) DeleteNexusService(ctx context.Context, request *matchingservice.DeleteNexusServiceRequest) (*matchingservice.DeleteNexusServiceResponse, error) {
-	return nil, status.Error(codes.Unimplemented, "unimplemented")
+func (h *Handler) DeleteNexusService(ctx context.Context, request *matchingservice.DeleteNexusServiceRequest) (_ *matchingservice.DeleteNexusServiceResponse, retErr error) {
+	defer log.CapturePanic(h.logger, &retErr)
+	return h.engine.DeleteNexusIncomingService(ctx, request)
 }
 
-func (h *Handler) GetNexusService(ctx context.Context, request *matchingservice.GetNexusServiceRequest) (*matchingservice.GetNexusServiceResponse, error) {
-	return nil, status.Error(codes.Unimplemented, "unimplemented")
+func (h *Handler) GetNexusService(ctx context.Context, request *matchingservice.GetNexusServiceRequest) (_ *matchingservice.GetNexusServiceResponse, retErr error) {
+	defer log.CapturePanic(h.logger, &retErr)
+	return h.engine.GetNexusIncomingService(ctx, request)
 }
 
-func (h *Handler) ListNexusServices(ctx context.Context, request *matchingservice.ListNexusServicesRequest) (*matchingservice.ListNexusServicesResponse, error) {
-	return nil, status.Error(codes.Unimplemented, "unimplemented")
+func (h *Handler) ListNexusServices(ctx context.Context, request *matchingservice.ListNexusServicesRequest) (_ *matchingservice.ListNexusServicesResponse, retErr error) {
+	defer log.CapturePanic(h.logger, &retErr)
+	return h.engine.ListNexusIncomingServices(ctx, request)
 }
 
 func (h *Handler) namespaceName(id namespace.ID) namespace.Name {

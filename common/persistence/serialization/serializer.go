@@ -111,6 +111,9 @@ type (
 
 		SerializeTask(task tasks.Task) (*commonpb.DataBlob, error)
 		DeserializeTask(category tasks.Category, blob *commonpb.DataBlob) (tasks.Task, error)
+
+		NexusIncomingServiceDataToBlob(info *persistencespb.NexusIncomingServiceData, encodingType enumspb.EncodingType) (*commonpb.DataBlob, error)
+		NexusIncomingServiceDataFromBlob(data *commonpb.DataBlob) (*persistencespb.NexusIncomingServiceData, error)
 	}
 
 	// SerializationError is an error type for serialization
@@ -516,6 +519,15 @@ func (t *serializerImpl) ReplicationTaskToBlob(replicationTask *replicationspb.R
 
 func (t *serializerImpl) ReplicationTaskFromBlob(data *commonpb.DataBlob) (*replicationspb.ReplicationTask, error) {
 	result := &replicationspb.ReplicationTask{}
+	return result, ProtoDecodeBlob(data, result)
+}
+
+func (t *serializerImpl) NexusIncomingServiceDataToBlob(info *persistencespb.NexusIncomingServiceData, encodingType enumspb.EncodingType) (*commonpb.DataBlob, error) {
+	return ProtoEncodeBlob(info, encodingType)
+}
+
+func (t *serializerImpl) NexusIncomingServiceDataFromBlob(data *commonpb.DataBlob) (*persistencespb.NexusIncomingServiceData, error) {
+	result := &persistencespb.NexusIncomingServiceData{}
 	return result, ProtoDecodeBlob(data, result)
 }
 
