@@ -837,6 +837,157 @@ func (e *matchingEngineImpl) listTaskQueuePartitions(request *matchingservice.Li
 	return partitionHostInfo, nil
 }
 
+func (e *matchingEngineImpl) UpdateWorkerVersioningRules(
+	ctx context.Context,
+	req *workflowservice.UpdateWorkerVersioningRulesRequest,
+) (*workflowservice.UpdateWorkerVersioningRulesResponse, error) {
+	ns, err := e.namespaceRegistry.GetNamespace(namespace.Name(req.GetNamespace()))
+	if err != nil {
+		return nil, err
+	}
+
+	taskQueue, err := newTaskQueueID(ns.ID(), req.GetTaskQueue(), enumspb.TASK_QUEUE_TYPE_WORKFLOW)
+	if err != nil {
+		return nil, err
+	}
+
+	tqMgr, err := e.getTaskQueuePartitionManager(ctx, taskQueue, normalStickyInfo, true)
+	if err != nil {
+		return nil, err
+	}
+
+	updateOptions := UserDataUpdateOptions{}
+	operationCreatedTombstones := false
+
+	// todo: possibly do some limit checking here? does that prevent a race maybe?
+	switch req.GetOperation().(type) {
+	case *workflowservice.UpdateWorkerVersioningRulesRequest_InsertAssignmentRule:
+		// todo: possibly check the task queue limits
+	case *workflowservice.UpdateWorkerVersioningRulesRequest_InsertCompatibleRedirectRule:
+		// todo: possibly check the task queue limits
+	}
+
+	err = tqMgr.UpdateUserData(ctx, updateOptions, func(data *persistencespb.TaskQueueUserData) (*persistencespb.TaskQueueUserData, bool, error) {
+		clk := data.GetClock()
+		if clk == nil {
+			tmp := hlc.Zero(e.clusterMeta.GetClusterID())
+			clk = tmp
+		}
+		updatedClock := hlc.Next(clk, e.timeSource)
+		var versioningData *persistencespb.VersioningData
+		var err error
+
+		switch req.GetOperation().(type) {
+		case *workflowservice.UpdateWorkerVersioningRulesRequest_InsertAssignmentRule:
+			versioningData, err = InsertAssignmentRule(
+				updatedClock,
+				data.GetVersioningData(),
+				req.GetInsertAssignmentRule(),
+				e.config.VersionCompatibleSetLimitPerQueue(ns.Name().String()),
+				e.config.VersionBuildIdLimitPerQueue(ns.Name().String()),
+			)
+			if err != nil {
+				// operation can't be completed due to limits. no action, do not replicate, report error
+				return nil, false, err
+			}
+		case *workflowservice.UpdateWorkerVersioningRulesRequest_ReplaceAssignmentRule:
+			versioningData, err = ReplaceAssignmentRule(
+				updatedClock,
+				data.GetVersioningData(),
+				req.GetReplaceAssignmentRule(),
+			)
+			if err != nil {
+				// operation can't be completed due to limits. no action, do not replicate, report error
+				return nil, false, err
+			}
+		case *workflowservice.UpdateWorkerVersioningRulesRequest_DeleteAssignmentRule:
+			versioningData, err = DeleteAssignmentRule(
+				updatedClock,
+				data.GetVersioningData(),
+				req.GetDeleteAssignmentRule(),
+			)
+			if err != nil {
+				// operation can't be completed due to limits. no action, do not replicate, report error
+				return nil, false, err
+			}
+			if ns.ReplicationPolicy() == namespace.ReplicationPolicyMultiCluster {
+				operationCreatedTombstones = true
+			} else { // todo: figure out if this is the right thing to do with tombstones
+				// We don't need to keep the tombstones around if we're not replicating them.
+				versioningData = ClearTombstones(versioningData)
+			}
+		case *workflowservice.UpdateWorkerVersioningRulesRequest_InsertCompatibleRedirectRule:
+			versioningData, err = InsertCompatibleRedirectRule(
+				updatedClock,
+				data.GetVersioningData(),
+				req.GetInsertCompatibleRedirectRule(),
+				e.config.VersionCompatibleSetLimitPerQueue(ns.Name().String()),
+				e.config.VersionBuildIdLimitPerQueue(ns.Name().String()),
+			)
+			if err != nil {
+				// operation can't be completed due to limits. no action, do not replicate, report error
+				return nil, false, err
+			}
+		case *workflowservice.UpdateWorkerVersioningRulesRequest_ReplaceCompatibleRedirectRule:
+			versioningData, err = ReplaceCompatibleRedirectRule(
+				updatedClock,
+				data.GetVersioningData(),
+				req.GetReplaceCompatibleRedirectRule(),
+			)
+			if err != nil {
+				// operation can't be completed due to limits. no action, do not replicate, report error
+				return nil, false, err
+			}
+		case *workflowservice.UpdateWorkerVersioningRulesRequest_DeleteCompatibleRedirectRule:
+			versioningData, err = DeleteCompatibleRedirectRule(
+				updatedClock,
+				data.GetVersioningData(),
+				req.GetDeleteCompatibleRedirectRule(),
+			)
+			if err != nil {
+				// operation can't be completed due to limits. no action, do not replicate, report error
+				return nil, false, err
+			}
+			if ns.ReplicationPolicy() == namespace.ReplicationPolicyMultiCluster {
+				operationCreatedTombstones = true
+			} else { // todo: figure out if this is the right thing to do with tombstones
+				// We don't need to keep the tombstones around if we're not replicating them.
+				versioningData = ClearTombstones(versioningData)
+			}
+		case *workflowservice.UpdateWorkerVersioningRulesRequest_CommitBuildId_:
+			// todo: not sure here
+		}
+		// Avoid mutation
+		ret := common.CloneProto(data)
+		ret.Clock = updatedClock
+		ret.VersioningData = versioningData
+		return ret, true, nil
+	})
+
+	if err != nil {
+		return nil, err
+	}
+
+	// todo: figure out correct tombstone behavior
+	// Only clear tombstones after they have been replicated.
+	if operationCreatedTombstones {
+		err = tqMgr.UpdateUserData(ctx, UserDataUpdateOptions{}, func(data *persistencespb.TaskQueueUserData) (*persistencespb.TaskQueueUserData, bool, error) {
+			updatedClock := hlc.Next(data.GetClock(), e.timeSource)
+			// Avoid mutation
+			ret := common.CloneProto(data)
+			ret.Clock = updatedClock
+			ret.VersioningData = ClearTombstones(data.VersioningData)
+			return ret, false, nil // Do not replicate the deletion of tombstones
+		})
+		if err != nil {
+			return nil, err
+		}
+	}
+
+	cT := req.GetConflictToken() // todo
+	return &workflowservice.UpdateWorkerVersioningRulesResponse{ConflictToken: cT}, nil
+}
+
 func (e *matchingEngineImpl) UpdateWorkerBuildIdCompatibility(
 	ctx context.Context,
 	req *matchingservice.UpdateWorkerBuildIdCompatibilityRequest,

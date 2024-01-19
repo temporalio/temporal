@@ -89,6 +89,18 @@ service MatchingService {
     // Fetch user data for a task queue, this request should always be routed to the node holding the root partition of the workflow task queue.
     rpc GetTaskQueueUserData (GetTaskQueueUserDataRequest) returns (GetTaskQueueUserDataResponse) {}
 
+    // Allows updating the Build ID assignment and redirect rules for a given Task Queue.
+    // (-- api-linter: core::0127::http-annotation=disabled
+    //     aip.dev/not-precedent: We do yet expose versioning API to HTTP. --)
+    rpc UpdateWorkerVersioningRules (UpdateWorkerVersioningRulesRequest) returns (UpdateWorkerVersioningRulesResponse) {}
+
+    // Fetches the Build ID assignment and redirect rules for a Task Queue
+    rpc ListWorkerVersioningRules (ListWorkerVersioningRulesRequest) returns (ListWorkerVersioningRulesResponse) {
+        option (google.api.http) = {
+            get: "/api/v1/namespaces/{namespace}/task-queues/{task_queue}/worker-versioning-rules"
+        };
+    }
+
     // Apply a user data replication event.
     rpc ApplyTaskQueueUserDataReplicationEvent (ApplyTaskQueueUserDataReplicationEventRequest) returns (ApplyTaskQueueUserDataReplicationEventResponse) {}
 

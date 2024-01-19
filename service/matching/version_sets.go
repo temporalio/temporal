@@ -71,7 +71,7 @@ func ToBuildIdOrderingResponse(data *persistencespb.VersioningData, maxSets int)
 	return &workflowservice.GetWorkerBuildIdCompatibilityResponse{MajorVersionSets: versionSets}
 }
 
-func checkLimits(g *persistencespb.VersioningData, maxSets, maxBuildIds int) error {
+func checkVersionSetLimits(g *persistencespb.VersioningData, maxSets, maxBuildIds int) error {
 	sets := g.GetVersionSets()
 	if maxSets > 0 && len(sets) > maxSets {
 		return serviceerror.NewFailedPrecondition(fmt.Sprintf("update would exceed number of compatible version sets permitted in namespace dynamic config (%v/%v)", len(sets), maxSets))
@@ -199,15 +199,15 @@ func UpdateVersionSets(clock *hlc.Clock, data *persistencespb.VersioningData, re
 	} else {
 		data = common.CloneProto(data)
 	}
-	data, err := updateImpl(clock, data, req)
+	data, err := updateVersionSetImpl(clock, data, req)
 	if err != nil {
 		return nil, err
 	}
-	return data, checkLimits(data, maxSets, maxBuildIds)
+	return data, checkVersionSetLimits(data, maxSets, maxBuildIds)
 }
 
 //nolint:revive // cyclomatic complexity
-func updateImpl(timestamp *hlc.Clock, data *persistencespb.VersioningData, req *workflowservice.UpdateWorkerBuildIdCompatibilityRequest) (*persistencespb.VersioningData, error) {
+func updateVersionSetImpl(timestamp *hlc.Clock, data *persistencespb.VersioningData, req *workflowservice.UpdateWorkerBuildIdCompatibilityRequest) (*persistencespb.VersioningData, error) {
 	// First find if the targeted version is already in the sets
 	targetedVersion := extractTargetedVersion(req)
 	targetSetIdx, versionInSetIdx := worker_versioning.FindBuildId(data, targetedVersion)
