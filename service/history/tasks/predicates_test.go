@@ -149,6 +149,39 @@ func (s *predicatesSuite) TestTypePredicate_Equals() {
 	s.False(p.Equals(predicates.Universal[Task]()))
 }
 
+func (s *predicatesSuite) TestDestinationPredicate_Test() {
+	destinations := []string{uuid.New(), uuid.New()}
+
+	p := NewDestinationPredicate(destinations)
+	for _, dest := range destinations {
+		mockTask := FakeDestinationTask{NewMockTask(s.controller), dest}
+		s.True(p.Test(mockTask))
+	}
+
+	mockTask := FakeDestinationTask{NewMockTask(s.controller), uuid.New()}
+	s.False(p.Test(mockTask))
+}
+
+func (s *predicatesSuite) TestDestinationPredicate_Equals() {
+	destinations := []string{uuid.New(), uuid.New()}
+
+	p := NewDestinationPredicate(destinations)
+
+	s.True(p.Equals(p))
+	s.True(p.Equals(NewDestinationPredicate(destinations)))
+	rand.Shuffle(
+		len(destinations),
+		func(i, j int) {
+			destinations[i], destinations[j] = destinations[j], destinations[i]
+		},
+	)
+	s.True(p.Equals(NewDestinationPredicate(destinations)))
+
+	s.False(p.Equals(NewDestinationPredicate([]string{uuid.New(), uuid.New()})))
+	s.False(p.Equals(NewTypePredicate([]enumsspb.TaskType{enumsspb.TASK_TYPE_ACTIVITY_RETRY_TIMER})))
+	s.False(p.Equals(predicates.Universal[Task]()))
+}
+
 func (s *predicatesSuite) TestAndPredicates() {
 	testCases := []struct {
 		predicateA     Predicate
@@ -171,6 +204,11 @@ func (s *predicatesSuite) TestAndPredicates() {
 			expectedResult: NewTypePredicate([]enumsspb.TaskType{
 				enumsspb.TASK_TYPE_ACTIVITY_TIMEOUT,
 			}),
+		},
+		{
+			predicateA:     NewDestinationPredicate([]string{"dest1", "dest2"}),
+			predicateB:     NewDestinationPredicate([]string{"dest2", "dest3"}),
+			expectedResult: NewDestinationPredicate([]string{"dest2"}),
 		},
 		{
 			predicateA:     NewNamespacePredicate([]string{"namespace1", "namespace2"}),
@@ -219,6 +257,11 @@ func (s *predicatesSuite) TestOrPredicates() {
 				enumsspb.TASK_TYPE_ACTIVITY_TIMEOUT,
 				enumsspb.TASK_TYPE_DELETE_HISTORY_EVENT,
 			}),
+		},
+		{
+			predicateA:     NewDestinationPredicate([]string{"dest1", "dest2"}),
+			predicateB:     NewDestinationPredicate([]string{"dest2", "dest3"}),
+			expectedResult: NewDestinationPredicate([]string{"dest1", "dest2", "dest3"}),
 		},
 		{
 			predicateA:     NewNamespacePredicate([]string{"namespace1", "namespace2"}),

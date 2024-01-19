@@ -1,6 +1,6 @@
 // The MIT License
 //
-// Copyright (c) 2021 Temporal Technologies, Inc.
+// Copyright (c) 2024 Temporal Technologies Inc.  All rights reserved.
 //
 // Permission is hereby granted, free of charge, to any person obtaining a copy
 // of this software and associated documentation files (the "Software"), to deal
@@ -20,20 +20,13 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-syntax = "proto3";
+package tasks
 
-package temporal.server.api.enums.v1;
+type FakeDestinationTask struct {
+	Task
+	Destination string
+}
 
-option go_package = "go.temporal.io/server/api/enums/v1;enums";
-
-enum PredicateType {
-    PREDICATE_TYPE_UNSPECIFIED = 0;
-    PREDICATE_TYPE_UNIVERSAL = 1;
-    PREDICATE_TYPE_EMPTY = 2;
-    PREDICATE_TYPE_AND = 3;
-    PREDICATE_TYPE_OR = 4;
-    PREDICATE_TYPE_NOT = 5;
-    PREDICATE_TYPE_NAMESPACE_ID = 6;
-    PREDICATE_TYPE_TASK_TYPE = 7;
-    PREDICATE_TYPE_DESTINATION = 8;
+func (t FakeDestinationTask) GetDestination() string {
+	return t.Destination
 }

@@ -214,6 +214,7 @@ func (f *transferQueueFactory) CreateQueue(
 			MaxReaderCount:                      f.Config.QueueMaxReaderCount,
 		},
 		f.HostReaderRateLimiter,
+		queues.GrouperNamespaceID{},
 		logger,
 		metricsHandler,
 		factory,
