@@ -98,6 +98,7 @@ func (s *streamSenderSuite) SetupTest() {
 		s.shardContext,
 		s.historyEngine,
 		s.taskConverter,
+		"target_cluster",
 		s.clientShardKey,
 		s.serverShardKey,
 	)

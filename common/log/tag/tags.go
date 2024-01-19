@@ -731,6 +731,14 @@ func TargetCluster(targetCluster string) ZapTag {
 	return NewStringTag("xdc-target-cluster", targetCluster)
 }
 
+func SourceShardID(shardID int32) ZapTag {
+	return NewInt32("xdc-source-shard-id", shardID)
+}
+
+func TargetShardID(shardID int32) ZapTag {
+	return NewInt32("xdc-target-shard-id", shardID)
+}
+
 // PrevActiveCluster returns tag for PrevActiveCluster
 func PrevActiveCluster(prevActiveCluster string) ZapTag {
 	return NewStringTag("xdc-prev-active-cluster", prevActiveCluster)

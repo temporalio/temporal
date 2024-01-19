@@ -337,7 +337,7 @@ func NewConfig(
 	cfg := &Config{
 		NumberOfShards: numberOfShards,
 
-		EnableReplicationStream: dc.GetBoolProperty(dynamicconfig.EnableReplicationStream, false),
+		EnableReplicationStream: dc.GetBoolProperty(dynamicconfig.EnableReplicationStream, true),
 		HistoryReplicationDLQV2: dc.GetBoolProperty(dynamicconfig.EnableHistoryReplicationDLQV2, false),
 
 		RPS:                                   dc.GetIntProperty(dynamicconfig.HistoryRPS, 3000),

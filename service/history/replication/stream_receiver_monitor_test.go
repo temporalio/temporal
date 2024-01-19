@@ -380,6 +380,7 @@ func (s *streamReceiverMonitorSuite) TestDoReconcileInboundStreams_Reactivate() 
 
 func (s *streamReceiverMonitorSuite) TestDoReconcileOutboundStreams_Add() {
 	s.clusterMetadata.EXPECT().GetAllClusterInfo().Return(cluster.TestAllClusterInfo).AnyTimes()
+	s.clusterMetadata.EXPECT().ClusterNameForFailoverVersion(true, gomock.Any()).Return("some cluster name").AnyTimes()
 
 	clientKey := NewClusterShardKey(int32(cluster.TestCurrentClusterInitialFailoverVersion), rand.Int31())
 	serverKey := NewClusterShardKey(int32(cluster.TestAlternativeClusterInitialFailoverVersion), rand.Int31())
@@ -437,6 +438,7 @@ func (s *streamReceiverMonitorSuite) TestDoReconcileOutboundStreams_Remove() {
 
 func (s *streamReceiverMonitorSuite) TestDoReconcileOutboundStreams_Reactivate() {
 	s.clusterMetadata.EXPECT().GetAllClusterInfo().Return(cluster.TestAllClusterInfo).AnyTimes()
+	s.clusterMetadata.EXPECT().ClusterNameForFailoverVersion(true, gomock.Any()).Return("some cluster name").AnyTimes()
 
 	clientKey := NewClusterShardKey(int32(cluster.TestCurrentClusterInitialFailoverVersion), rand.Int31())
 	serverKey := NewClusterShardKey(int32(cluster.TestAlternativeClusterInitialFailoverVersion), rand.Int31())
