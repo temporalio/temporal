@@ -220,9 +220,9 @@ func GrpcServerOptionsProvider(
 		namespaceLogInterceptor.Intercept, // TODO: Deprecate this with a outer custom interceptor
 		grpc.UnaryServerInterceptor(traceInterceptor),
 		metrics.NewServerMetricsContextInjectorInterceptor(),
+		authInterceptor.Intercept,
 		redirectionInterceptor.Intercept,
 		telemetryInterceptor.UnaryIntercept,
-		authInterceptor.Intercept,
 		healthInterceptor.Intercept,
 		namespaceValidatorInterceptor.StateValidationIntercept,
 		namespaceCountLimiterInterceptor.Intercept,
@@ -259,8 +259,6 @@ func ConfigProvider(
 	return NewConfig(
 		dc,
 		persistenceConfig.NumHistoryShards,
-		persistenceConfig.StandardVisibilityConfigExist(),
-		persistenceConfig.AdvancedVisibilityConfigExist(),
 	)
 }
 

@@ -144,8 +144,6 @@ func ConfigProvider(
 	return NewConfig(
 		dc,
 		persistenceConfig,
-		persistenceConfig.StandardVisibilityConfigExist(),
-		persistenceConfig.AdvancedVisibilityConfigExist(),
 	)
 }
 

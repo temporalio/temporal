@@ -74,3 +74,7 @@ func (s *simpleMonitor) GetReachableMembers() ([]string, error) {
 func (s *simpleMonitor) WaitUntilInitialized(_ context.Context) error {
 	return nil
 }
+
+func (s *simpleMonitor) SetDraining(draining bool) error {
+	return nil
+}

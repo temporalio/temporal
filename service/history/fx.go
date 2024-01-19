@@ -168,8 +168,6 @@ func ConfigProvider(
 	return configs.NewConfig(
 		dc,
 		persistenceConfig.NumHistoryShards,
-		persistenceConfig.StandardVisibilityConfigExist(),
-		persistenceConfig.AdvancedVisibilityConfigExist(),
 	)
 }
 

@@ -48,7 +48,7 @@ import (
 )
 
 type (
-	CreateWorkflowCASPredicate struct {
+	VersionedRunID struct {
 		RunID            string
 		LastWriteVersion int64
 	}

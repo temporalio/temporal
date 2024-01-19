@@ -138,7 +138,7 @@ func (s *selectedAPIsForwardingRedirectionPolicySuite) SetupTest() {
 
 	logger := log.NewTestLogger()
 
-	s.mockConfig = NewConfig(dynamicconfig.NewCollection(dynamicconfig.NewNoopClient(), logger), 0, true, false)
+	s.mockConfig = NewConfig(dynamicconfig.NewCollection(dynamicconfig.NewNoopClient(), logger), 0)
 	s.mockClusterMetadata.EXPECT().IsGlobalNamespaceEnabled().Return(true).AnyTimes()
 	s.policy = NewSelectedAPIsForwardingPolicy(
 		s.currentClusterName,

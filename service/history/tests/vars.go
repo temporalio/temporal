@@ -182,7 +182,7 @@ var (
 
 func NewDynamicConfig() *configs.Config {
 	dc := dynamicconfig.NewNoopCollection()
-	config := configs.NewConfig(dc, 1, true, false)
+	config := configs.NewConfig(dc, 1)
 	// reduce the duration of long poll to increase test speed
 	config.LongPollExpirationInterval = dc.GetDurationPropertyFilteredByNamespace(dynamicconfig.HistoryLongPollExpirationInterval, 10*time.Second)
 	config.EnableActivityEagerExecution = dynamicconfig.GetBoolPropertyFnFilteredByNamespace(true)
