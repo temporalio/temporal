@@ -883,8 +883,7 @@ func (e *matchingEngineImpl) UpdateWorkerVersioningRules(
 				updatedClock,
 				data.GetVersioningData(),
 				req.GetInsertAssignmentRule(),
-				e.config.VersionCompatibleSetLimitPerQueue(ns.Name().String()),
-				e.config.VersionBuildIdLimitPerQueue(ns.Name().String()),
+				e.config.VersionAssignmentRuleLimitPerQueue(ns.Name().String()),
 			)
 			if err != nil {
 				// operation can't be completed due to limits. no action, do not replicate, report error
@@ -921,8 +920,7 @@ func (e *matchingEngineImpl) UpdateWorkerVersioningRules(
 				updatedClock,
 				data.GetVersioningData(),
 				req.GetInsertCompatibleRedirectRule(),
-				e.config.VersionCompatibleSetLimitPerQueue(ns.Name().String()),
-				e.config.VersionBuildIdLimitPerQueue(ns.Name().String()),
+				e.config.VersionCompatibleRedirectRuleLimitPerQueue(ns.Name().String()),
 			)
 			if err != nil {
 				// operation can't be completed due to limits. no action, do not replicate, report error

@@ -1,31 +1,36 @@
 package matching
 
 import (
+	"fmt"
+	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/api/workflowservice/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common"
 	hlc "go.temporal.io/server/common/clock/hybrid_logical_clock"
+	"slices"
 )
 
-func InsertAssignmentRule(clock *hlc.Clock, data *persistencespb.VersioningData, req *workflowservice.UpdateWorkerVersioningRulesRequest_InsertBuildIdAssignmentRule, maxSets, maxBuildIds int) (*persistencespb.VersioningData, error) {
+func InsertAssignmentRule(clock *hlc.Clock, data *persistencespb.VersioningData, req *workflowservice.UpdateWorkerVersioningRulesRequest_InsertBuildIdAssignmentRule, maxARs int) (*persistencespb.VersioningData, error) {
 	if data == nil {
 		data = &persistencespb.VersioningData{AssignmentRules: make([]*persistencespb.AssignmentRule, 0)}
 	} else {
 		data = common.CloneProto(data)
 	}
-	data, err := updateAssignmentRuleImpl(clock, data, req)
-	if err != nil {
-		return nil, err
+	persistenceAR := persistencespb.AssignmentRule{
+		Rule:            req.GetRule(),
+		CreateTimestamp: clock,
+		DeleteTimestamp: nil,
 	}
-	return data, checkAssignmentRuleLimits(data, maxSets, maxBuildIds)
-}
-
-func updateAssignmentRuleImpl(timestamp *hlc.Clock, data *persistencespb.VersioningData, req *workflowservice.UpdateWorkerVersioningRulesRequest_InsertBuildIdAssignmentRule) (*persistencespb.VersioningData, error) {
-	return nil, nil
+	slices.Insert(data.AssignmentRules, int(req.GetRuleIndex()), &persistenceAR)
+	return data, checkAssignmentRuleLimits(data, maxARs)
 }
 
 // returns false if there is no room for the new AssignmentRule
-func checkAssignmentRuleLimits(g *persistencespb.VersioningData, maxSets, maxBuildIds int) error {
+func checkAssignmentRuleLimits(g *persistencespb.VersioningData, maxARs int) error {
+	rules := g.GetAssignmentRules()
+	if maxARs > 0 && len(rules) > maxARs {
+		return serviceerror.NewFailedPrecondition(fmt.Sprintf("update would exceed number of compatible version sets permitted in namespace dynamic config (%v/%v)", len(rules), maxARs))
+	}
 	return nil
 }
 
@@ -37,7 +42,7 @@ func DeleteAssignmentRule(clock *hlc.Clock, data *persistencespb.VersioningData,
 	return nil, nil
 }
 
-func InsertCompatibleRedirectRule(clock *hlc.Clock, data *persistencespb.VersioningData, req *workflowservice.UpdateWorkerVersioningRulesRequest_AddCompatibleBuildIdRedirectRule, maxSets, maxBuildIds int) (*persistencespb.VersioningData, error) {
+func InsertCompatibleRedirectRule(clock *hlc.Clock, data *persistencespb.VersioningData, req *workflowservice.UpdateWorkerVersioningRulesRequest_AddCompatibleBuildIdRedirectRule, maxCRRs int) (*persistencespb.VersioningData, error) {
 	if data == nil {
 		data = &persistencespb.VersioningData{AssignmentRules: make([]*persistencespb.AssignmentRule, 0)}
 	} else {
