@@ -348,7 +348,7 @@ CREATE TABLE nexus_incoming_services (
 
 -- Stores the version of Nexus incoming services table as a whole
 CREATE TABLE nexus_incoming_services_table_version (
-    service_type    ENUM('incoming') NOT NULL,  -- Using an ENUM with a single value as the primary key ensures this table will only ever have one row
-    version         BIGINT NOT NULL,            -- Version of the nexus_incoming_services table
-    PRIMARY KEY (service_type)
+    id      INT NOT NULL DEFAULT 0 CHECK (id = 0),  -- Restrict the table to a single row since it will only be used for incoming services
+    version BIGINT NOT NULL,                        -- Version of the nexus_incoming_services table
+    PRIMARY KEY (id)
 );

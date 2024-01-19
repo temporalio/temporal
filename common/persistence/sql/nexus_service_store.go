@@ -78,7 +78,7 @@ func (s *sqlNexusIncomingServiceStore) CreateOrUpdateNexusIncomingService(
 			result, err = tx.IncrementNexusIncomingServicesTableVersion(ctx, request.LastKnownTableVersion)
 		}
 
-		err = checkTableVersionUpdateResult(result, err)
+		err = checkUpdateResult(result, err, p.ErrNexusTableVersionConflict)
 		if s.Db.IsDupEntryError(err) {
 			return &p.ConditionFailedError{Msg: err.Error()}
 		}
@@ -99,7 +99,7 @@ func (s *sqlNexusIncomingServiceStore) CreateOrUpdateNexusIncomingService(
 		} else {
 			result, err = tx.UpdateNexusIncomingService(ctx, &row)
 		}
-		err = checkServiceUpdateResult(result, err)
+		err = checkUpdateResult(result, err, p.ErrNexusIncomingServiceVersionConflict)
 		if s.Db.IsDupEntryError(err) {
 			return p.ErrNexusIncomingServiceVersionConflict
 		}
@@ -179,7 +179,7 @@ func (s *sqlNexusIncomingServiceStore) DeleteNexusIncomingService(
 
 	retErr = s.txExecute(ctx, "DeleteNexusIncomingService", func(tx sqlplugin.Tx) error {
 		result, err := tx.IncrementNexusIncomingServicesTableVersion(ctx, request.LastKnownTableVersion)
-		err = checkTableVersionUpdateResult(result, err)
+		err = checkUpdateResult(result, err, p.ErrNexusTableVersionConflict)
 		if err != nil {
 			s.logger.Error("error incrementing Nexus incoming services table version during DeleteNexusIncomingService call", tag.Error(err))
 			return serviceerror.NewInternal(err.Error())
@@ -205,7 +205,7 @@ func (s *sqlNexusIncomingServiceStore) DeleteNexusIncomingService(
 	return retErr
 }
 
-func checkTableVersionUpdateResult(result sql.Result, pluginErr error) error {
+func checkUpdateResult(result sql.Result, pluginErr error, conflictErr error) error {
 	if pluginErr != nil {
 		return pluginErr
 	}
@@ -215,22 +215,7 @@ func checkTableVersionUpdateResult(result sql.Result, pluginErr error) error {
 		return err
 	}
 	if nRows != 1 {
-		return p.ErrNexusTableVersionConflict
-	}
-	return nil
-}
-
-func checkServiceUpdateResult(result sql.Result, pluginErr error) error {
-	if pluginErr != nil {
-		return pluginErr
-	}
-
-	nRows, err := result.RowsAffected()
-	if err != nil {
-		return err
-	}
-	if nRows != 1 {
-		return p.ErrNexusIncomingServiceVersionConflict
+		return conflictErr
 	}
 	return nil
 }
