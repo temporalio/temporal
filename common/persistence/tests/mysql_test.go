@@ -25,6 +25,7 @@
 package tests
 
 import (
+	"sync/atomic"
 	"testing"
 
 	"github.com/stretchr/testify/suite"
@@ -622,4 +623,19 @@ func TestMySQLQueueV2(t *testing.T) {
 	testData, tearDown := setUpMySQLTest(t)
 	t.Cleanup(tearDown)
 	RunQueueV2TestSuiteForSQL(t, testData.Factory)
+}
+
+func TestMySQLNexusIncomingServicePersistence(t *testing.T) {
+	testData, tearDown := setUpMySQLTest(t)
+	defer tearDown()
+
+	store, err := testData.Factory.NewNexusServiceStore()
+	if err != nil {
+		t.Fatalf("unable to create MySQL NexusIncomingServiceStore: %v", err)
+	}
+
+	tableVersion := atomic.Int64{}
+	t.Run("Generic", func(t *testing.T) {
+		RunNexusIncomingServiceTestSuite(t, store, &tableVersion)
+	})
 }

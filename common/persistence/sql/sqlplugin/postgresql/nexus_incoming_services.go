@@ -25,47 +25,82 @@ package postgresql
 import (
 	"context"
 	"database/sql"
-
-	"go.temporal.io/api/serviceerror"
+	"errors"
 
 	"go.temporal.io/server/common/persistence/sql/sqlplugin"
 )
 
-func (pdb *db) InitializeNexusIncomingServicesTableVersion(ctx context.Context) error {
-	return serviceerror.NewUnimplemented("InitializeNexusIncomingServicesTableVersion is not implemented for PostgreSQL plugin")
+const (
+	createIncomingServicesTableVersionQry    = `INSERT INTO nexus_incoming_services_table_version(version) VALUES(1)`
+	incrementIncomingServicesTableVersionQry = `UPDATE nexus_incoming_services_table_version SET version = $1 WHERE version = $2`
+	getIncomingServicesTableVersionQry       = `SELECT version FROM nexus_incoming_services_table_version`
+
+	createIncomingServiceQry = `INSERT INTO nexus_incoming_services(service_id, data, data_encoding, version) VALUES ($1, $2, $3, 1)`
+	updateIncomingServiceQry = `UPDATE nexus_incoming_services SET data = $1, data_encoding = $2, version = $3 WHERE service_id = $4 AND version = $5`
+	deleteIncomingServiceQry = `DELETE FROM nexus_incoming_services WHERE service_id = $1`
+	getIncomingServicesQry   = `SELECT service_id, data, data_encoding, version FROM nexus_incoming_services WHERE service_id > $1 ORDER BY service_id LIMIT $2`
+)
+
+func (pdb *db) InitializeNexusIncomingServicesTableVersion(ctx context.Context) (sql.Result, error) {
+	return pdb.conn.ExecContext(ctx, createIncomingServicesTableVersionQry)
 }
 
 func (pdb *db) IncrementNexusIncomingServicesTableVersion(
 	ctx context.Context,
 	lastKnownTableVersion int64,
-) error {
-	return serviceerror.NewUnimplemented("IncrementNexusIncomingServicesTableVersion is not implemented for PostgreSQL plugin")
+) (sql.Result, error) {
+	return pdb.conn.ExecContext(ctx, incrementIncomingServicesTableVersionQry, lastKnownTableVersion+1, lastKnownTableVersion)
+}
+
+func (pdb *db) GetNexusIncomingServicesTableVersion(
+	ctx context.Context,
+) (int64, error) {
+	var version int64
+	err := pdb.conn.GetContext(ctx, &version, getIncomingServicesTableVersionQry)
+	if errors.Is(err, sql.ErrNoRows) {
+		return 0, nil
+	}
+	return version, err
 }
 
 func (pdb *db) InsertIntoNexusIncomingServices(
 	ctx context.Context,
 	row *sqlplugin.NexusIncomingServicesRow,
-) error {
-	return serviceerror.NewUnimplemented("InsertIntoNexusIncomingServices is not implemented for PostgreSQL plugin")
+) (sql.Result, error) {
+	return pdb.conn.ExecContext(
+		ctx,
+		createIncomingServiceQry,
+		row.ServiceID,
+		row.Data,
+		row.DataEncoding)
 }
 
 func (pdb *db) UpdateNexusIncomingService(
 	ctx context.Context,
 	row *sqlplugin.NexusIncomingServicesRow,
-) error {
-	return serviceerror.NewUnimplemented("UpdateNexusIncomingService is not implemented for PostgreSQL plugin")
-}
-
-func (pdb *db) ListNexusIncomingServices(
-	ctx context.Context,
-	request *sqlplugin.ListNexusIncomingServicesRequest,
-) (*sqlplugin.ListNexusIncomingServicesResponse, error) {
-	return nil, serviceerror.NewUnimplemented("ListNexusIncomingServices is not implemented for PostgreSQL plugin")
+) (sql.Result, error) {
+	return pdb.conn.ExecContext(
+		ctx,
+		updateIncomingServiceQry,
+		row.Data,
+		row.DataEncoding,
+		row.Version+1,
+		row.ServiceID,
+		row.Version)
 }
 
 func (pdb *db) DeleteFromNexusIncomingServices(
 	ctx context.Context,
 	serviceID []byte,
 ) (sql.Result, error) {
-	return nil, serviceerror.NewUnimplemented("DeleteFromNexusIncomingServices is not implemented for PostgreSQL plugin")
+	return pdb.conn.ExecContext(ctx, deleteIncomingServiceQry, serviceID)
+}
+
+func (pdb *db) ListNexusIncomingServices(
+	ctx context.Context,
+	request *sqlplugin.ListNexusIncomingServicesRequest,
+) ([]sqlplugin.NexusIncomingServicesRow, error) {
+	var rows []sqlplugin.NexusIncomingServicesRow
+	err := pdb.conn.SelectContext(ctx, &rows, getIncomingServicesQry, request.LastServiceID, request.Limit)
+	return rows, err
 }

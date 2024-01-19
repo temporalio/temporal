@@ -629,6 +629,12 @@ func (p *PostgreSQLSuite) TestPGQueueV2() {
 	RunQueueV2TestSuiteForSQL(p.T(), testData.Factory)
 }
 
+func (p *PostgreSQLSuite) TestPostgreSQLNexusIncomingServicePersistence() {
+	testData, tearDown := setUpPostgreSQLTest(p.T(), p.pluginName)
+	p.T().Cleanup(tearDown)
+	RunNexusIncomingServiceTestSuiteForSQL(p.T(), testData.Factory)
+}
+
 func TestPQ(t *testing.T) {
 	s := &PostgreSQLSuite{pluginName: "postgres12"}
 	suite.Run(t, s)

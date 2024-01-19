@@ -36,6 +36,7 @@ import (
 	"go.temporal.io/api/enums/v1"
 
 	"go.temporal.io/server/common/persistence"
+	"go.temporal.io/server/common/persistence/sql"
 )
 
 func RunNexusIncomingServiceTestSuite(t *testing.T, store persistence.NexusServiceStore, tableVersion *atomic.Int64) {
@@ -51,6 +52,15 @@ func RunNexusIncomingServiceTestSuite(t *testing.T, store persistence.NexusServi
 	})
 	t.Run("TestDeleteNexusIncomingServiceExpectedErrors", func(t *testing.T) {
 		testDeleteNexusIncomingServiceExpectedErrors(t, store, tableVersion)
+	})
+}
+
+func RunNexusIncomingServiceTestSuiteForSQL(t *testing.T, factory *sql.Factory) {
+	tableVersion := atomic.Int64{}
+	t.Run("Generic", func(t *testing.T) {
+		store, err := factory.NewNexusServiceStore()
+		require.NoError(t, err)
+		RunNexusIncomingServiceTestSuite(t, store, &tableVersion)
 	})
 }
 
