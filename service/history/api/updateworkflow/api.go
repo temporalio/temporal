@@ -126,7 +126,7 @@ func Invoke(
 			if upd, alreadyExisted, err = updateReg.FindOrCreate(ctx, updateID); err != nil {
 				return nil, err
 			}
-			if err = upd.OnMessage(ctx, req.GetRequest().GetRequest(), ms.IsWorkflowExecutionRunning(), workflow.WithEffects(effect.Immediate(ctx), ms)); err != nil {
+			if err = upd.Request(ctx, req.GetRequest().GetRequest(), workflow.WithEffects(effect.Immediate(ctx), ms)); err != nil {
 				return nil, err
 			}
 

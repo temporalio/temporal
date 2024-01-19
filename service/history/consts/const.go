@@ -27,7 +27,6 @@ package consts
 import (
 	"errors"
 
-	"go.temporal.io/api/enums/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
 
@@ -100,9 +99,9 @@ var (
 	// ErrWorkflowTaskStateInconsistent is error indicating workflow task state is inconsistent, for example there was no workflow task scheduled but buffered events are present.
 	ErrWorkflowTaskStateInconsistent = serviceerror.NewUnavailable("Workflow task state is inconsistent.")
 	// ErrResourceExhaustedBusyWorkflow is an error indicating workflow resource is exhausted and should not be retried by service handler and client
-	ErrResourceExhaustedBusyWorkflow = serviceerror.NewResourceExhausted(enums.RESOURCE_EXHAUSTED_CAUSE_BUSY_WORKFLOW, "Workflow is busy.")
+	ErrResourceExhaustedBusyWorkflow = serviceerror.NewResourceExhausted(enumspb.RESOURCE_EXHAUSTED_CAUSE_BUSY_WORKFLOW, "Workflow is busy.")
 	// ErrResourceExhaustedAPSLimit is an error indicating user has reached their action per second limit
-	ErrResourceExhaustedAPSLimit = serviceerror.NewResourceExhausted(enums.RESOURCE_EXHAUSTED_CAUSE_APS_LIMIT, "Action per second limit exceeded.")
+	ErrResourceExhaustedAPSLimit = serviceerror.NewResourceExhausted(enumspb.RESOURCE_EXHAUSTED_CAUSE_APS_LIMIT, "Action per second limit exceeded.")
 	// ErrWorkflowClosedBeforeWorkflowTaskStarted is an error indicating workflow execution was closed before WorkflowTaskStarted event
 	ErrWorkflowClosedBeforeWorkflowTaskStarted = serviceerror.NewWorkflowNotReady("Workflow execution closed before WorkflowTaskStarted event")
 

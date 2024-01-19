@@ -136,49 +136,57 @@ func (s *FunctionalSuite) TestVisibility() {
 	openCount := 0
 
 	var historyLength int64
-	for i := 0; i < 10; i++ {
-		resp, err3 := s.engine.ListClosedWorkflowExecutions(NewContext(), &workflowservice.ListClosedWorkflowExecutionsRequest{
-			Namespace:       s.namespace,
-			MaximumPageSize: 100,
-			StartTimeFilter: startFilter,
-			Filters: &workflowservice.ListClosedWorkflowExecutionsRequest_TypeFilter{
-				TypeFilter: &filterpb.WorkflowTypeFilter{
-					Name: wt,
+	s.Eventually(
+		func() bool {
+			resp, err3 := s.engine.ListClosedWorkflowExecutions(NewContext(), &workflowservice.ListClosedWorkflowExecutionsRequest{
+				Namespace:       s.namespace,
+				MaximumPageSize: 100,
+				StartTimeFilter: startFilter,
+				Filters: &workflowservice.ListClosedWorkflowExecutionsRequest_TypeFilter{
+					TypeFilter: &filterpb.WorkflowTypeFilter{
+						Name: wt,
+					},
 				},
-			},
-		})
-		s.NoError(err3)
-		closedCount = len(resp.Executions)
-		if closedCount == 1 {
-			historyLength = resp.Executions[0].HistoryLength
-			s.Nil(resp.NextPageToken)
-			break
-		}
-		s.Logger.Info("Closed WorkflowExecution is not yet visible")
-		time.Sleep(100 * time.Millisecond)
-	}
+			})
+			s.NoError(err3)
+			closedCount = len(resp.Executions)
+			if closedCount == 1 {
+				historyLength = resp.Executions[0].HistoryLength
+				s.Nil(resp.NextPageToken)
+				return true
+			}
+			s.Logger.Info("Closed WorkflowExecution is not yet visible")
+			return false
+		},
+		waitForESToSettle,
+		100*time.Millisecond,
+	)
 	s.Equal(1, closedCount)
 	s.Equal(int64(5), historyLength)
 
-	for i := 0; i < 10; i++ {
-		resp, err4 := s.engine.ListOpenWorkflowExecutions(NewContext(), &workflowservice.ListOpenWorkflowExecutionsRequest{
-			Namespace:       s.namespace,
-			MaximumPageSize: 100,
-			StartTimeFilter: startFilter,
-			Filters: &workflowservice.ListOpenWorkflowExecutionsRequest_TypeFilter{
-				TypeFilter: &filterpb.WorkflowTypeFilter{
-					Name: wt,
+	s.Eventually(
+		func() bool {
+			resp, err4 := s.engine.ListOpenWorkflowExecutions(NewContext(), &workflowservice.ListOpenWorkflowExecutionsRequest{
+				Namespace:       s.namespace,
+				MaximumPageSize: 100,
+				StartTimeFilter: startFilter,
+				Filters: &workflowservice.ListOpenWorkflowExecutionsRequest_TypeFilter{
+					TypeFilter: &filterpb.WorkflowTypeFilter{
+						Name: wt,
+					},
 				},
-			},
-		})
-		s.NoError(err4)
-		openCount = len(resp.Executions)
-		if openCount == 1 {
-			s.Nil(resp.NextPageToken)
-			break
-		}
-		s.Logger.Info("Open WorkflowExecution is not yet visible")
-		time.Sleep(100 * time.Millisecond)
-	}
+			})
+			s.NoError(err4)
+			openCount = len(resp.Executions)
+			if openCount == 1 {
+				s.Nil(resp.NextPageToken)
+				return true
+			}
+			s.Logger.Info("Open WorkflowExecution is not yet visible")
+			return false
+		},
+		waitForESToSettle,
+		100*time.Millisecond,
+	)
 	s.Equal(1, openCount)
 }

@@ -38,6 +38,8 @@ import (
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/common/quotas"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 )
 
 // TaskMatcher matches a task producer with a task consumer
@@ -79,7 +81,8 @@ const (
 
 var (
 	// Sentinel error to redirect while blocked in matcher.
-	errInterrupted = errors.New("interrupted offer")
+	errInterrupted    = errors.New("interrupted offer")
+	errNoRecentPoller = status.Error(codes.FailedPrecondition, "no poller seen for task queue recently, worker may be down")
 )
 
 // newTaskMatcher returns a task matcher instance. The returned instance can be used by task producers and consumers to
@@ -234,6 +237,16 @@ func syncOfferTask[T any](
 	}
 
 	fwdrTokenC := tm.fwdrAddReqTokenC()
+	var noPollerCtxC <-chan struct{}
+
+	if deadline, ok := ctx.Deadline(); ok && fwdrTokenC == nil {
+		// Reserving 1sec to customize the timeout error if user is querying a workflow
+		// without having started the workers.
+		noPollerTimeout := time.Until(deadline) - time.Second
+		noPollerCtx, cancel := context.WithTimeout(ctx, noPollerTimeout)
+		noPollerCtxC = noPollerCtx.Done()
+		defer cancel()
+	}
 
 	for {
 		select {
@@ -253,6 +266,14 @@ func syncOfferTask[T any](
 				continue
 			}
 			return t, err
+		case <-noPollerCtxC:
+			// only error if there has not been a recent poller. Otherwise, let it wait for the remaining time
+			// hopping for a match, or ultimately returning the default CDE error.
+			// TODO: rename this to clarify it applies to nexus tasks and queries.
+			if tm.timeSinceLastPoll() > tm.config.QueryPollerUnavailableWindow() {
+				return t, errNoRecentPoller
+			}
+			continue
 		case <-ctx.Done():
 			return t, ctx.Err()
 		}
@@ -321,7 +342,7 @@ forLoop:
 			// and they are all stuck in the wrong (root) partition. (Note that since
 			// frontend balanced the number of pending pollers per partition this only
 			// becomes an issue when the pollers are fewer than the partitions)
-			lp := time.Since(time.Unix(0, tm.lastPoller.Load()))
+			lp := tm.timeSinceLastPoll()
 			maxWaitForLocalPoller := tm.config.MaxWaitForPollerBeforeFwd()
 			if lp < maxWaitForLocalPoller {
 				fwdTokenC = nil
@@ -638,4 +659,8 @@ func (tm *TaskMatcher) emitForwardedSourceStats(
 	default:
 		tm.metricsHandler.Counter(metrics.LocalToLocalMatchPerTaskQueueCounter.Name()).Record(1)
 	}
+}
+
+func (tm *TaskMatcher) timeSinceLastPoll() time.Duration {
+	return time.Since(time.Unix(0, tm.lastPoller.Load()))
 }

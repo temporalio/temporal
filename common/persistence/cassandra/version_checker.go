@@ -48,7 +48,7 @@ func VerifyCompatibleVersion(
 	if err := checkMainKeyspace(cfg, r); err != nil {
 		return err
 	}
-	if cfg.StandardVisibilityConfigExist() {
+	if cfg.VisibilityConfigExist() {
 		return checkVisibilityKeyspace(cfg, r)
 	}
 	return nil
