@@ -531,6 +531,14 @@ func (e *executableImpl) SetScheduledTime(t time.Time) {
 	e.scheduledTime = t
 }
 
+// GetDestination returns the embedded task's destination if it exists. Defaults to an empty string.
+func (e *executableImpl) GetDestination() string {
+	if t, ok := e.Task.(tasks.HasDestination); ok {
+		return t.GetDestination()
+	}
+	return ""
+}
+
 func (e *executableImpl) shouldResubmitOnNack(attempt int, err error) bool {
 	// this is an optimization for skipping rescheduler and retry the task sooner.
 	// this is useful for errors like workflow busy, which doesn't have to wait for
