@@ -161,6 +161,8 @@ message WorkflowExecutionInfo {
 
     // index of update IDs and pointers to associated history events.
     map<string, temporal.server.api.update.v1.UpdateInfo> update_infos = 79;
+    // Map of callback ID to callback info.
+    map<string, CallbackInfo> callbacks = 80;
 }
 
 message ExecutionStats {
@@ -255,6 +257,9 @@ message TimerTaskInfo {
     bytes branch_token = 12;
     // If this is true, we can bypass archival before deleting. Only defined for DeleteHistoryEventTasks.
     bool already_archived = 13;
+    // If task_type is CALLBACK_BACKOFF, this field contains the key of the mutable state WorkflowExecutionInfo callback
+    // map.
+    string callback_id = 14;
 }
 
 
@@ -266,6 +271,21 @@ message ArchivalTaskInfo {
     temporal.server.api.enums.v1.TaskType task_type = 5;
     int64 version = 6;
     google.protobuf.Timestamp visibility_time = 7;
+}
+
+// serialized callback task
+message CallbackTaskInfo {
+    string namespace_id = 1;
+    string workflow_id = 2;
+    string run_id = 3;
+    temporal.server.api.enums.v1.TaskType task_type = 4;
+    int64 version = 5;
+    int64 task_id = 6;
+    google.protobuf.Timestamp visibility_time = 7;
+    // The key in the mutable state WorkflowExecutionInfo callback map.
+    string callback_id = 8;
+    string destination_address = 9;
+    int32 schedule_attempt = 10;
 }
 
 // activity_map column
@@ -367,3 +387,10 @@ message Checksum {
     bytes value = 3;
 }
 
+message CallbackInfo {
+    // The namespace failover version at the time this callback info was updated.
+    int64 version = 1;
+    // ID of this callback, used as a key in the mutable state map.
+    string id = 2;
+    temporal.api.workflow.v1.CallbackInfo public_info = 3;
+}
