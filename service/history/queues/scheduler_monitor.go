@@ -195,8 +195,7 @@ func (m *schedulerMonitor) emitMetric(
 		totalLatency = totalLatency / time.Duration(stats.numStarted) * time.Duration(m.options.aggregationCount)
 	}
 
-	stats.taggedMetricsHandler.Timer(metrics.QueueScheduleLatency.Name()).Record(totalLatency)
-
+	metrics.QueueScheduleLatency.With(stats.taggedMetricsHandler).Record(totalLatency)
 	m.resetStats(stats)
 }
 

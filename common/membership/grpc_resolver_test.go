@@ -51,12 +51,12 @@ func TestGRPCBuilder(t *testing.T) {
 	sr := NewMockServiceResolver(ctrl)
 
 	// On the first call to [ServiceResolver.Members], return an empty list of members
-	sr.EXPECT().Members().Return([]HostInfo{})
+	sr.EXPECT().AvailableMembers().Return([]HostInfo{})
 	// Once our resolver registers a listener to membership changes, get a hold of the channel it's listening on.
 	sr.EXPECT().AddListener(gomock.Any(), gomock.Any()).Do(func(_ string, ch chan<- *ChangedEvent) {
 		// Return a single member on the next call to [ServiceResolver.Members]. This simulates a temporary network
 		// partition where we can't find any hosts for the frontend for a short period of time, but then we get a host.
-		sr.EXPECT().Members().Return([]HostInfo{
+		sr.EXPECT().AvailableMembers().Return([]HostInfo{
 			NewHostInfoFromAddress("localhost:1234"),
 		}).MinTimes(1) // MinTimes(1) because we don't control when ResolveNow is called
 

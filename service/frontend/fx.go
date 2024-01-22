@@ -200,8 +200,6 @@ func GrpcServerOptionsProvider(
 		namespaceLogInterceptor.Intercept, // TODO: Deprecate this with a outer custom interceptor
 		grpc.UnaryServerInterceptor(traceInterceptor),
 		metrics.NewServerMetricsContextInjectorInterceptor(),
-		redirectionInterceptor.Intercept,
-		telemetryInterceptor.UnaryIntercept,
 		authorization.NewAuthorizationInterceptor(
 			claimMapper,
 			authorizer,
@@ -211,6 +209,8 @@ func GrpcServerOptionsProvider(
 			cfg.Global.Authorization.AuthHeaderName,
 			cfg.Global.Authorization.AuthExtraHeaderName,
 		),
+		redirectionInterceptor.Intercept,
+		telemetryInterceptor.UnaryIntercept,
 		healthInterceptor.Intercept,
 		namespaceValidatorInterceptor.StateValidationIntercept,
 		namespaceCountLimiterInterceptor.Intercept,
@@ -247,8 +247,6 @@ func ConfigProvider(
 	return NewConfig(
 		dc,
 		persistenceConfig.NumHistoryShards,
-		persistenceConfig.StandardVisibilityConfigExist(),
-		persistenceConfig.AdvancedVisibilityConfigExist(),
 	)
 }
 

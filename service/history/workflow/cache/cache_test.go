@@ -425,7 +425,7 @@ func (s *workflowCacheSuite) TestHistoryCache_CacheLatencyMetricContext() {
 	s.cache = NewHostLevelCache(s.mockShard.GetConfig())
 
 	ctx := metrics.AddMetricsContext(context.Background())
-	_, currentRelease, err := s.cache.GetOrCreateCurrentWorkflowExecution(
+	currentRelease, err := s.cache.GetOrCreateCurrentWorkflowExecution(
 		ctx,
 		s.mockShard,
 		tests.NamespaceID,

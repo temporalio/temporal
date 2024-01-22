@@ -2028,6 +2028,7 @@ func (h *Handler) StreamWorkflowReplicationMessages(
 			clientClusterName,
 			replication.NewClusterShardKey(clientClusterShardID.ClusterID, clientClusterShardID.ShardID),
 		),
+		clientClusterName,
 		replication.NewClusterShardKey(clientClusterShardID.ClusterID, clientClusterShardID.ShardID),
 		replication.NewClusterShardKey(serverClusterShardID.ClusterID, serverClusterShardID.ShardID),
 	)

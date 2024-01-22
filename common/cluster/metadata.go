@@ -300,6 +300,9 @@ func (m *metadataImpl) IsMasterCluster() bool {
 }
 
 func (m *metadataImpl) GetClusterID() int64 {
+	m.clusterLock.RLock()
+	defer m.clusterLock.RUnlock()
+
 	info, ok := m.clusterInfo[m.currentClusterName]
 	if !ok {
 		panic(fmt.Sprintf(

@@ -38,24 +38,6 @@ const (
 
 	// keys for system
 
-	// DEPRECATED: the following block of configs are deprecated and replaced by the next block of configs
-	// StandardVisibilityPersistenceMaxReadQPS is the max QPC system host can query standard visibility DB (SQL or Cassandra) for read.
-	StandardVisibilityPersistenceMaxReadQPS = "system.standardVisibilityPersistenceMaxReadQPS"
-	// StandardVisibilityPersistenceMaxWriteQPS is the max QPC system host can query standard visibility DB (SQL or Cassandra) for write.
-	StandardVisibilityPersistenceMaxWriteQPS = "system.standardVisibilityPersistenceMaxWriteQPS"
-	// AdvancedVisibilityPersistenceMaxReadQPS is the max QPC system host can query advanced visibility DB (Elasticsearch) for read.
-	AdvancedVisibilityPersistenceMaxReadQPS = "system.advancedVisibilityPersistenceMaxReadQPS"
-	// AdvancedVisibilityPersistenceMaxWriteQPS is the max QPC system host can query advanced visibility DB (Elasticsearch) for write.
-	AdvancedVisibilityPersistenceMaxWriteQPS = "system.advancedVisibilityPersistenceMaxWriteQPS"
-	// AdvancedVisibilityWritingMode is key for how to write to advanced visibility
-	AdvancedVisibilityWritingMode = "system.advancedVisibilityWritingMode"
-	// EnableWriteToSecondaryAdvancedVisibility is the config to enable write to secondary visibility for Elasticsearch
-	EnableWriteToSecondaryAdvancedVisibility = "system.enableWriteToSecondaryAdvancedVisibility"
-	// EnableReadVisibilityFromES is key for enable read from Elasticsearch
-	EnableReadVisibilityFromES = "system.enableReadVisibilityFromES"
-	// EnableReadFromSecondaryAdvancedVisibility is the config to enable read from secondary Elasticsearch
-	EnableReadFromSecondaryAdvancedVisibility = "system.enableReadFromSecondaryAdvancedVisibility"
-
 	// VisibilityPersistenceMaxReadQPS is the max QPC system host can query visibility DB for read.
 	VisibilityPersistenceMaxReadQPS = "system.visibilityPersistenceMaxReadQPS"
 	// VisibilityPersistenceMaxWriteQPS is the max QPC system host can query visibility DB for write.
@@ -68,6 +50,8 @@ const (
 	VisibilityDisableOrderByClause = "system.visibilityDisableOrderByClause"
 	// VisibilityEnableManualPagination is the config to enable manual pagination for Elasticsearch
 	VisibilityEnableManualPagination = "system.visibilityEnableManualPagination"
+	// VisibilityAllowList is the config to allow list of values for regular types
+	VisibilityAllowList = "system.visibilityAllowList"
 
 	// HistoryArchivalState is key for the state of history archival
 	HistoryArchivalState = "system.historyArchivalState"
@@ -470,6 +454,8 @@ const (
 	// MatchingMaxWaitForPollerBeforeFwd in presence of a non-negligible backlog, we resume forwarding tasks if the
 	// duration since last poll exceeds this threshold.
 	MatchingMaxWaitForPollerBeforeFwd = "matching.maxWaitForPollerBeforeFwd"
+	// QueryPollerUnavailableWindow WF Queries are rejected after a while if no poller has been seen within the window
+	QueryPollerUnavailableWindow = "matching.queryPollerUnavailableWindow"
 
 	// for matching testing only:
 

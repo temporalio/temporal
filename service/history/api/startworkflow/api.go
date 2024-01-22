@@ -198,7 +198,7 @@ func (s *Starter) Invoke(
 func (s *Starter) lockCurrentWorkflowExecution(
 	ctx context.Context,
 ) (cache.ReleaseCacheFunc, error) {
-	_, currentRelease, err := s.workflowConsistencyChecker.GetWorkflowCache().GetOrCreateCurrentWorkflowExecution(
+	currentRelease, err := s.workflowConsistencyChecker.GetWorkflowCache().GetOrCreateCurrentWorkflowExecution(
 		ctx,
 		s.shardContext,
 		s.namespace.ID(),

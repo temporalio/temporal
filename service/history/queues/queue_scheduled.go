@@ -135,6 +135,7 @@ func NewScheduledQueue(
 			options,
 			hostRateLimiter,
 			readerCompletionFn,
+			GrouperNamespaceID{},
 			logger,
 			metricsHandler,
 		),
@@ -211,7 +212,7 @@ func (p *scheduledQueue) processEventLoop() {
 		case <-p.shutdownCh:
 			return
 		case <-p.newTimerCh:
-			p.metricsHandler.Counter(metrics.NewTimerNotifyCounter.Name()).Record(1)
+			metrics.NewTimerNotifyCounter.With(p.metricsHandler).Record(1)
 			p.processNewTime()
 		case <-p.lookAheadCh:
 			p.lookAheadTask()
