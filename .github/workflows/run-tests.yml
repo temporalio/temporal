@@ -23,7 +23,11 @@ env:
 jobs:
   misc-checks:
     name: Misc checks
-    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        runs-on: [ubuntu-latest]
+    runs-on: ${{ matrix.runs-on }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -48,8 +52,8 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest]
-    runs-on: ${{ matrix.os }}
+        runs-on: [ubuntu-latest]
+    runs-on: ${{ matrix.runs-on }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -61,12 +65,9 @@ jobs:
           go-version-file: 'go.mod'
           check-latest: true
 
-      - name: Run unit tests
-        uses: nick-fields/retry@v2
-        with:
-          timeout_minutes: 20
-          max_attempts: 2
-          command: make unit-test-coverage
+      - name: Run unit test
+        timeout-minutes: 15
+        run: make unit-test-coverage
 
   integration-test:
     name: Integration test
@@ -74,8 +75,8 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest]
-    runs-on: ${{ matrix.os }}
+        runs-on: [ubuntu-latest]
+    runs-on: ${{ matrix.runs-on }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -91,12 +92,9 @@ jobs:
         run: |
           docker-compose -f ${{ env.DOCKER_COMPOSE_FILE }} up -d cassandra mysql postgresql
 
-      - name: Run integration tests
-        uses: nick-fields/retry@v2
-        with:
-          timeout_minutes: 20
-          max_attempts: 2
-          command: make integration-test-coverage
+      - name: Run integration test
+        timeout-minutes: 15
+        run: make integration-test-coverage
 
       - name: Tear down docker compose
         if: ${{ always() }}
@@ -109,7 +107,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest]
+        runs-on: [ubuntu-latest]
         name: [cass_es, cass_es8, sqlite, mysql, mysql8, postgres, postgres_pgx, postgres12, postgres12_pgx]
         shard_index: [0, 1, 2]
         include:
@@ -149,9 +147,12 @@ jobs:
             persistence_type: sql
             persistence_driver: postgres12_pgx
             containers: [postgresql]
-    runs-on: ${{ matrix.os }}
+    runs-on: ${{ matrix.runs-on }}
     env:
       TEST_TOTAL_SHARDS: 3
+      TEST_SHARD_INDEX: ${{ matrix.shard_index }}
+      PERSISTENCE_TYPE: ${{ matrix.persistence_type }}
+      PERSISTENCE_DRIVER: ${{ matrix.persistence_driver }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -168,16 +169,9 @@ jobs:
         run: |
           docker-compose -f ${{ env.DOCKER_COMPOSE_FILE }} up -d ${{ join(matrix.containers, ' ') }}
 
-      - name: Run functional tests
-        uses: nick-fields/retry@v2
-        with:
-          timeout_minutes: 15
-          max_attempts: 2
-          command: make functional-test-coverage
-        env:
-          TEST_SHARD_INDEX: ${{ matrix.shard_index }}
-          PERSISTENCE_TYPE: ${{ matrix.persistence_type }}
-          PERSISTENCE_DRIVER: ${{ matrix.persistence_driver }}
+      - name: Run functional test
+        timeout-minutes: 15
+        run: make functional-test-coverage
 
       - name: Tear down docker compose
         if: ${{ always() }}
@@ -190,7 +184,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest]
+        runs-on: [ubuntu-latest]
         name: [cass_es, cass_es8, mysql, mysql8, postgres, postgres_pgx, postgres12, postgres12_pgx]
         include:
           - name: cass_es
@@ -225,7 +219,10 @@ jobs:
             persistence_type: sql
             persistence_driver: postgres12_pgx
             containers: [postgresql]
-    runs-on: ${{ matrix.os }}
+    runs-on: ${{ matrix.runs-on }}
+    env:
+      PERSISTENCE_TYPE: ${{ matrix.persistence_type }}
+      PERSISTENCE_DRIVER: ${{ matrix.persistence_driver }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -243,14 +240,8 @@ jobs:
           docker-compose -f ${{ env.DOCKER_COMPOSE_FILE }} up -d ${{ join(matrix.containers, ' ') }}
 
       - name: Run functional test xdc
-        uses: nick-fields/retry@v2
-        with:
-          timeout_minutes: 15
-          max_attempts: 2
-          command: make functional-test-xdc-coverage
-        env:
-          PERSISTENCE_TYPE: ${{ matrix.persistence_type }}
-          PERSISTENCE_DRIVER: ${{ matrix.persistence_driver }}
+        timeout-minutes: 15
+        run: make functional-test-xdc-coverage
 
       - name: Tear down docker compose
         if: ${{ always() }}
@@ -263,7 +254,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest]
+        runs-on: [ubuntu-latest]
         name: [cass_es, cass_es8, mysql, mysql8, postgres, postgres_pgx, postgres12, postgres12_pgx]
         include:
           - name: cass_es
@@ -298,7 +289,10 @@ jobs:
             persistence_type: sql
             persistence_driver: postgres12_pgx
             containers: [postgresql]
-    runs-on: ${{ matrix.os }}
+    runs-on: ${{ matrix.runs-on }}
+    env:
+      PERSISTENCE_TYPE: ${{ matrix.persistence_type }}
+      PERSISTENCE_DRIVER: ${{ matrix.persistence_driver }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -316,14 +310,8 @@ jobs:
           docker-compose -f ${{ env.DOCKER_COMPOSE_FILE }} up -d ${{ join(matrix.containers, ' ') }}
 
       - name: Run functional test ndc
-        uses: nick-fields/retry@v2
-        with:
-          timeout_minutes: 15
-          max_attempts: 2
-          command: make functional-test-ndc-coverage
-        env:
-          PERSISTENCE_TYPE: ${{ matrix.persistence_type }}
-          PERSISTENCE_DRIVER: ${{ matrix.persistence_driver }}
+        timeout-minutes: 15
+        run: make functional-test-ndc-coverage
 
       - name: Tear down docker compose
         if: ${{ always() }}
