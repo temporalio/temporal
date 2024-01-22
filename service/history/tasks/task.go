@@ -31,6 +31,7 @@ import (
 
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	"go.temporal.io/server/common"
+	"go.temporal.io/server/common/definition"
 )
 
 type (
@@ -53,6 +54,14 @@ type (
 	// HasDestination must be implemented by all tasks used in multi-destination queues.
 	HasDestination interface {
 		GetDestination() string
+	}
+
+	// PartialTask is a task that is generated without a workflow key or version.
+	// The missing fields are meant to be filled in by mutable state.
+	PartialTask interface {
+		Task
+		SetWorkflowKey(definition.WorkflowKey)
+		SetVersion(int64)
 	}
 )
 
