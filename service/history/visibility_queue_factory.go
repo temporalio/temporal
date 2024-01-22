@@ -166,6 +166,7 @@ func (f *visibilityQueueFactory) CreateQueue(
 			MaxReaderCount:                      f.Config.QueueMaxReaderCount,
 		},
 		f.HostReaderRateLimiter,
+		queues.GrouperNamespaceID{},
 		logger,
 		metricsHandler,
 		factory,

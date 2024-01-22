@@ -48,7 +48,7 @@ type (
 		visibilityManager                 manager.VisibilityManager
 
 		// allowList allows list of values when it's not keyword list type.
-		allowList bool
+		allowList dynamicconfig.BoolPropertyFnWithNamespaceFilter
 	}
 )
 
@@ -60,7 +60,7 @@ func NewValidator(
 	searchAttributesSizeOfValueLimit dynamicconfig.IntPropertyFnWithNamespaceFilter,
 	searchAttributesTotalSizeLimit dynamicconfig.IntPropertyFnWithNamespaceFilter,
 	visibilityManager manager.VisibilityManager,
-	allowList bool,
+	allowList dynamicconfig.BoolPropertyFnWithNamespaceFilter,
 ) *Validator {
 	return &Validator{
 		searchAttributesProvider:          searchAttributesProvider,
@@ -126,7 +126,7 @@ func (v *Validator) Validate(searchAttributes *commonpb.SearchAttributes, namesp
 			)
 		}
 
-		saValue, err := DecodeValue(saPayload, saType, v.allowList)
+		saValue, err := DecodeValue(saPayload, saType, v.allowList(namespace))
 		if err != nil {
 			var invalidValue interface{}
 			if err = payload.Decode(saPayload, &invalidValue); err != nil {

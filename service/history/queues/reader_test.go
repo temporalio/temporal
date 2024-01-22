@@ -191,7 +191,7 @@ func (s *readerSuite) TestMergeSlices() {
 	incomingScopes := NewRandomScopes(rand.Intn(10))
 	incomingSlices := make([]Slice, 0, len(incomingScopes))
 	for _, incomingScope := range incomingScopes {
-		incomingSlices = append(incomingSlices, NewSlice(nil, s.executableFactory, s.monitor, incomingScope))
+		incomingSlices = append(incomingSlices, NewSlice(nil, s.executableFactory, s.monitor, incomingScope, GrouperNamespaceID{}))
 	}
 
 	reader.MergeSlices(incomingSlices...)
@@ -218,7 +218,7 @@ func (s *readerSuite) TestAppendSlices() {
 	incomingScopes := scopes[totalScopes/2:]
 	incomingSlices := make([]Slice, 0, len(incomingScopes))
 	for _, incomingScope := range incomingScopes {
-		incomingSlices = append(incomingSlices, NewSlice(nil, s.executableFactory, s.monitor, incomingScope))
+		incomingSlices = append(incomingSlices, NewSlice(nil, s.executableFactory, s.monitor, incomingScope, GrouperNamespaceID{}))
 	}
 
 	reader.AppendSlices(incomingSlices...)
@@ -501,7 +501,7 @@ func (s *readerSuite) newTestReader(
 ) *ReaderImpl {
 	slices := make([]Slice, 0, len(scopes))
 	for _, scope := range scopes {
-		slice := NewSlice(paginationFnProvider, s.executableFactory, s.monitor, scope)
+		slice := NewSlice(paginationFnProvider, s.executableFactory, s.monitor, scope, GrouperNamespaceID{})
 		slices = append(slices, slice)
 	}
 

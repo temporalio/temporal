@@ -102,6 +102,7 @@ func (s *streamReceiverSuite) SetupTest() {
 		Logger:          log.NewTestLogger(),
 		DLQWriter:       NoopDLQWriter{},
 	}
+	s.clusterMetadata.EXPECT().ClusterNameForFailoverVersion(true, gomock.Any()).Return("some-cluster-name").AnyTimes()
 	s.streamReceiver = NewStreamReceiver(
 		processToolBox,
 		NewExecutableTaskConverter(processToolBox),
