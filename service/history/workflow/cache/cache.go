@@ -64,7 +64,7 @@ type (
 			namespaceID namespace.ID,
 			workflowID string,
 			lockPriority workflow.LockPriority,
-		) (workflow.Context, ReleaseCacheFunc, error)
+		) (ReleaseCacheFunc, error)
 
 		GetOrCreateWorkflowExecution(
 			ctx context.Context,
@@ -143,10 +143,10 @@ func (c *CacheImpl) GetOrCreateCurrentWorkflowExecution(
 	namespaceID namespace.ID,
 	workflowID string,
 	lockPriority workflow.LockPriority,
-) (workflow.Context, ReleaseCacheFunc, error) {
+) (ReleaseCacheFunc, error) {
 
 	if err := c.validateWorkflowID(workflowID); err != nil {
-		return nil, nil, err
+		return nil, err
 	}
 
 	handler := shardContext.GetMetricsHandler().WithTags(
@@ -163,7 +163,7 @@ func (c *CacheImpl) GetOrCreateCurrentWorkflowExecution(
 		RunId: "",
 	}
 
-	weCtx, weReleaseFn, err := c.getOrCreateWorkflowExecutionInternal(
+	_, weReleaseFn, err := c.getOrCreateWorkflowExecutionInternal(
 		ctx,
 		shardContext,
 		namespaceID,
@@ -175,7 +175,7 @@ func (c *CacheImpl) GetOrCreateCurrentWorkflowExecution(
 
 	metrics.ContextCounterAdd(ctx, metrics.HistoryWorkflowExecutionCacheLatency.Name(), time.Since(start).Nanoseconds())
 
-	return weCtx, weReleaseFn, err
+	return weReleaseFn, err
 }
 
 func (c *CacheImpl) GetOrCreateWorkflowExecution(
