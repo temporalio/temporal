@@ -663,6 +663,29 @@ const (
 	// TransferQueueMaxReaderCount is the max number of readers in one multi-cursor transfer queue
 	TransferQueueMaxReaderCount = "history.transferQueueMaxReaderCount"
 
+	// CallbackTaskBatchSize is batch size for callbackQueueFactory
+	CallbackTaskBatchSize = "history.callbackTaskBatchSize"
+	// CallbackProcessorMaxPollRPS is max poll rate per second for callbackQueueFactory
+	CallbackProcessorMaxPollRPS = "history.callbackProcessorMaxPollRPS"
+	// CallbackProcessorMaxPollHostRPS is max poll rate per second for all callbackQueueFactory on a host
+	CallbackProcessorMaxPollHostRPS = "history.callbackProcessorMaxPollHostRPS"
+	// CallbackProcessorUpdateShardTaskCount is update shard count for callbackQueueFactory
+	CallbackProcessorUpdateShardTaskCount = "history.callbackProcessorUpdateShardTaskCount"
+	// CallbackProcessorMaxPollInterval max poll interval for callbackQueueFactory
+	CallbackProcessorMaxPollInterval = "history.callbackProcessorMaxPollInterval"
+	// CallbackProcessorMaxPollIntervalJitterCoefficient is the max poll interval jitter coefficient
+	CallbackProcessorMaxPollIntervalJitterCoefficient = "history.callbackProcessorMaxPollIntervalJitterCoefficient"
+	// CallbackProcessorUpdateAckInterval is update interval for callbackQueueFactory
+	CallbackProcessorUpdateAckInterval = "history.callbackProcessorUpdateAckInterval"
+	// CallbackProcessorUpdateAckIntervalJitterCoefficient is the update interval jitter coefficient
+	CallbackProcessorUpdateAckIntervalJitterCoefficient = "history.callbackProcessorUpdateAckIntervalJitterCoefficient"
+	// CallbackProcessorPollBackoffInterval is the poll backoff interval if task redispatcher's size exceeds limit for callbackQueueFactory
+	CallbackProcessorPollBackoffInterval = "history.callbackProcessorPollBackoffInterval"
+	// CallbackQueueMaxReaderCount is the max number of readers in one multi-cursor callback queue
+	CallbackQueueMaxReaderCount = "history.callbackQueueMaxReaderCount"
+	// CallbackTaskTimeout is the timeout for executing a single callback task.
+	CallbackTaskTimeout = "history.callbackTaskTimeout"
+
 	// VisibilityTaskBatchSize is batch size for visibilityQueueProcessor
 	VisibilityTaskBatchSize = "history.visibilityTaskBatchSize"
 	// VisibilityProcessorMaxPollRPS is max poll rate per second for visibilityQueueProcessor

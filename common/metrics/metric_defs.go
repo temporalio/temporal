@@ -211,6 +211,12 @@ const (
 	PersistenceRangeCompleteVisibilityTasksScope = "RangeCompleteVisibilityTasks"
 	// PersistenceGetReplicationTaskScope tracks GetReplicationTask calls made by service to persistence layer
 	PersistenceGetArchivalTasksScope = "GetArchivalTasks"
+	// PersistenceGetCallbackTasksScope tracks GetCallbackTasks calls made by service to persistence layer
+	PersistenceGetCallbackTasksScope = "GetCallbackTasks"
+	// PersistenceCompleteCallbackTasksScope tracks CompleteCallbackTasks calls made by service to persistence layer
+	PersistenceCompleteCallbackTasksScope = "CompleteCallbackTasks"
+	// PersistenceRangeCompleteCallbackTasksScope tracks RangeCompleteCallbackTasks calls made by service to persistence layer
+	PersistenceRangeCompleteCallbackTasksScope = "RangeCompleteCallbackTasks"
 	// PersistenceCompleteArchivalTaskScope tracks CompleteArchivalTasks calls made by service to persistence layer
 	PersistenceCompleteArchivalTaskScope = "CompleteArchivalTask"
 	// PersistenceRangeCompleteArchivalTasksScope tracks CompleteArchivalTasks calls made by service to persistence layer
@@ -461,6 +467,8 @@ const (
 	OperationArchivalQueueProcessorScope = "ArchivalQueueProcessor"
 	// OperationMemoryScheduledQueueProcessorScope is a scope for memory scheduled queue processor.
 	OperationMemoryScheduledQueueProcessorScope = "MemoryScheduledQueueProcessor"
+	// OperationCallbackQueueProcessorScope is a scope for the callback queue processor.
+	OperationCallbackQueueProcessorScope = "CallbackQueueProcessor"
 )
 
 // Matching Scope
