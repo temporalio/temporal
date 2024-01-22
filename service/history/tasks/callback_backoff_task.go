@@ -34,7 +34,6 @@ type CallbackBackoffTask struct {
 	definition.WorkflowKey
 	VisibilityTimestamp time.Time
 	TaskID              int64
-	EventID             int64
 	Version             int64
 	// Key in mutable state's callback map.
 	CallbackID string
