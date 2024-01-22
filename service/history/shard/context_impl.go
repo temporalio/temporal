@@ -1684,6 +1684,10 @@ func (s *ContextImpl) notifyQueueProcessor() {
 	now := s.timeSource.Now()
 	fakeTasks := make(map[tasks.Category][]tasks.Task)
 	for _, category := range s.taskCategoryRegistry.GetCategories() {
+		// TODO: remove this as soon as we've implemented the callback queue processor.
+		if category == tasks.CategoryCallback {
+			continue
+		}
 		fakeTasks[category] = []tasks.Task{tasks.NewFakeTask(definition.WorkflowKey{}, category, now)}
 	}
 
