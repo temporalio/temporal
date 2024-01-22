@@ -47,56 +47,17 @@ func (adapter) SetState(data *persistencespb.CallbackInfo, state enumspb.Callbac
 	data.PublicInfo.State = state
 }
 
-func (adapter) OnTransition(data *persistencespb.CallbackInfo, from, to enumspb.CallbackState, env statemachines.Environment) {
-	// TODO: consider moving this into the "framework".
-	data.Version = env.GetVersion()
+func (adapter) OnTransition(data *persistencespb.CallbackInfo, from, to enumspb.CallbackState, env statemachines.Environment) error {
+	// TODO: consider moving version handling into the "framework".
+	data.NamespaceFailoverVersion = env.GetNamespaceFailoverVersion()
+	data.TransitionCount++
+
 	if from == enumspb.CALLBACK_STATE_SCHEDULED {
 		// Reset all of previous attempt's information.
 		data.PublicInfo.Attempt++
 		data.PublicInfo.LastAttemptCompleteTime = timestamppb.New(env.GetCurrentTime())
 		data.PublicInfo.LastAttemptFailure = nil
-	}
-
-}
-
-// EventMarkedReady is triggered when a callback is triggered but is not yet ready to be scheduled, e.g. it is
-// waiting for another callback to complete.
-type EventMarkedReady struct{}
-
-var TransitionMarkedReady = statemachines.Transition[*persistencespb.CallbackInfo, enumspb.CallbackState, EventMarkedReady]{
-	Adapter: adapter{},
-	Src:     []enumspb.CallbackState{enumspb.CALLBACK_STATE_STANDBY},
-	Dst:     enumspb.CALLBACK_STATE_READY,
-}
-
-// EventBlocked is triggered when a triggered callback cannot be scheduled due to a large backlog for the
-// callback's namespace and destination.
-type EventBlocked struct{}
-
-var TransitionBlocked = statemachines.Transition[*persistencespb.CallbackInfo, enumspb.CallbackState, EventBlocked]{
-	Adapter: adapter{},
-	Src: []enumspb.CallbackState{
-		enumspb.CALLBACK_STATE_STANDBY,
-		enumspb.CALLBACK_STATE_READY,
-		enumspb.CALLBACK_STATE_BACKING_OFF,
-	},
-	Dst: enumspb.CALLBACK_STATE_BLOCKED,
-}
-
-// EventScheduled is triggered when the callback is meant to be scheduled, either immediately after triggering
-// or after backing off from a previous attempt.
-type EventScheduled struct{}
-
-var TransitionScheduled = statemachines.Transition[*persistencespb.CallbackInfo, enumspb.CallbackState, EventScheduled]{
-	Adapter: adapter{},
-	Src: []enumspb.CallbackState{
-		enumspb.CALLBACK_STATE_BLOCKED,
-		enumspb.CALLBACK_STATE_STANDBY,
-		enumspb.CALLBACK_STATE_READY,
-		enumspb.CALLBACK_STATE_BACKING_OFF,
-	},
-	Dst: enumspb.CALLBACK_STATE_SCHEDULED,
-	After: func(data *persistencespb.CallbackInfo, _ EventScheduled, env statemachines.Environment) error {
+	} else if to == enumspb.CALLBACK_STATE_SCHEDULED {
 		data.PublicInfo.NextAttemptScheduleTime = nil
 
 		var destination string
@@ -113,11 +74,30 @@ var TransitionScheduled = statemachines.Transition[*persistencespb.CallbackInfo,
 
 		env.Schedule(&tasks.CallbackTask{
 			CallbackID:         data.Id,
-			Attempt:            data.PublicInfo.Attempt,
+			TransitionCount:    data.TransitionCount,
 			DestinationAddress: destination,
 		})
-		return nil
-	},
+	}
+	return nil
+}
+
+// EventScheduled is triggered when the callback is meant to be scheduled for the first time - when its Trigger
+// condition is met.
+type EventScheduled struct{}
+
+var TransitionScheduled = statemachines.Transition[*persistencespb.CallbackInfo, enumspb.CallbackState, EventScheduled]{
+	Adapter: adapter{},
+	Src:     []enumspb.CallbackState{enumspb.CALLBACK_STATE_STANDBY},
+	Dst:     enumspb.CALLBACK_STATE_SCHEDULED,
+}
+
+// EventRescheduled is triggered when the callback is meant to be rescheduled after backing off from a previous attempt.
+type EventRescheduled struct{}
+
+var TransitionRescheduled = statemachines.Transition[*persistencespb.CallbackInfo, enumspb.CallbackState, EventRescheduled]{
+	Adapter: adapter{},
+	Src:     []enumspb.CallbackState{enumspb.CALLBACK_STATE_BACKING_OFF},
+	Dst:     enumspb.CALLBACK_STATE_SCHEDULED,
 }
 
 // EventAttemptFailed is triggered when an attempt is failed with a retryable error.
@@ -143,7 +123,7 @@ var TransitionAttemptFailed = statemachines.Transition[*persistencespb.CallbackI
 		}
 		env.Schedule(&tasks.CallbackBackoffTask{
 			CallbackID:          data.Id,
-			Attempt:             data.PublicInfo.Attempt,
+			TransitionCount:     data.TransitionCount,
 			VisibilityTimestamp: nextAttemptScheduleTime,
 		})
 		return nil

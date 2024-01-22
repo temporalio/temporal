@@ -257,9 +257,13 @@ message TimerTaskInfo {
     bytes branch_token = 12;
     // If this is true, we can bypass archival before deleting. Only defined for DeleteHistoryEventTasks.
     bool already_archived = 13;
-    // If task_type is CALLBACK_BACKOFF, this field contains the key of the mutable state WorkflowExecutionInfo callback
-    // map.
-    string callback_id = 14;
+
+    // If task addresses a sub-statemachine (e.g. callback), this field contains the addressable ID of the corresponding
+    // state machine for lookup in mutable state.
+    string sub_statemachine_id = 14;
+    // If task addresses a sub-statemachine, this field contains the number of transitions on the corresponding state
+    // machine object. Used to verify that a task is not referencing a stale state or that the task itself is not stale.
+    int32 sub_statemachine_transition_count = 15;
 }
 
 
@@ -279,13 +283,16 @@ message CallbackTaskInfo {
     string workflow_id = 2;
     string run_id = 3;
     temporal.server.api.enums.v1.TaskType task_type = 4;
+    // Namespace failover version at the time this task was scheduled.
     int64 version = 5;
     int64 task_id = 6;
     google.protobuf.Timestamp visibility_time = 7;
+    // Number of transitions on the corresponding callback object. Used to verify that a task
+    // is not referencing a stale callback object or that the task itself is not stale.
+    int32 transition_count = 8;
     // The key in the mutable state WorkflowExecutionInfo callback map.
-    string callback_id = 8;
-    string destination_address = 9;
-    int32 schedule_attempt = 10;
+    string callback_id = 9;
+    string destination_address = 10;
 }
 
 // activity_map column
@@ -389,8 +396,12 @@ message Checksum {
 
 message CallbackInfo {
     // The namespace failover version at the time this callback info was updated.
-    int64 version = 1;
+    // Used for conflict resolution when syncing state across clusters.
+    int64 namespace_failover_version = 1;
+    // Number of transitions on this callback object. Used to verify that a task
+    // is not referencing a stale callback object or that the task itself is not stale.
+    int32 transition_count = 2;
     // ID of this callback, used as a key in the mutable state map.
-    string id = 2;
-    temporal.api.workflow.v1.CallbackInfo public_info = 3;
+    string id = 3;
+    temporal.api.workflow.v1.CallbackInfo public_info = 4;
 }

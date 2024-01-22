@@ -38,6 +38,7 @@ import (
 
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	"go.temporal.io/server/api/matchingservice/v1"
+	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/backoff"
 	"go.temporal.io/server/common/definition"
@@ -49,6 +50,7 @@ import (
 	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/common/resource"
 	"go.temporal.io/server/common/worker_versioning"
+	"go.temporal.io/server/service/history/callbacks"
 	"go.temporal.io/server/service/history/configs"
 	"go.temporal.io/server/service/history/consts"
 	"go.temporal.io/server/service/history/deletemanager"
@@ -131,6 +133,8 @@ func (t *timerQueueActiveTaskExecutor) Execute(
 		err = t.executeWorkflowBackoffTimerTask(ctx, task)
 	case *tasks.DeleteHistoryEventTask:
 		err = t.executeDeleteHistoryEventTask(ctx, task)
+	case *tasks.CallbackBackoffTask:
+		err = t.executeCallbackBackoffTask(ctx, task)
 	default:
 		err = errUnknownTimerTask
 	}
@@ -155,7 +159,7 @@ func (t *timerQueueActiveTaskExecutor) executeUserTimerTimeoutTask(
 	}
 	defer func() { release(retError) }()
 
-	mutableState, err := loadMutableStateForTimerTask(ctx, t.shardContext, weContext, task, t.metricHandler, t.logger)
+	mutableState, err := loadMutableStateForTimerTask(ctx, t.shardContext, weContext, task, t.metricsHandler, t.logger)
 	if err != nil {
 		return err
 	}
@@ -216,7 +220,7 @@ func (t *timerQueueActiveTaskExecutor) executeActivityTimeoutTask(
 	}
 	defer func() { release(retError) }()
 
-	mutableState, err := loadMutableStateForTimerTask(ctx, t.shardContext, weContext, task, t.metricHandler, t.logger)
+	mutableState, err := loadMutableStateForTimerTask(ctx, t.shardContext, weContext, task, t.metricsHandler, t.logger)
 	if err != nil {
 		return err
 	}
@@ -316,7 +320,7 @@ func (t *timerQueueActiveTaskExecutor) executeWorkflowTaskTimeoutTask(
 	}
 	defer func() { release(retError) }()
 
-	mutableState, err := loadMutableStateForTimerTask(ctx, t.shardContext, weContext, task, t.metricHandler, t.logger)
+	mutableState, err := loadMutableStateForTimerTask(ctx, t.shardContext, weContext, task, t.metricsHandler, t.logger)
 	if err != nil {
 		return err
 	}
@@ -395,7 +399,7 @@ func (t *timerQueueActiveTaskExecutor) executeWorkflowBackoffTimerTask(
 	}
 	defer func() { release(retError) }()
 
-	mutableState, err := loadMutableStateForTimerTask(ctx, t.shardContext, weContext, task, t.metricHandler, t.logger)
+	mutableState, err := loadMutableStateForTimerTask(ctx, t.shardContext, weContext, task, t.metricsHandler, t.logger)
 	if err != nil {
 		return err
 	}
@@ -404,17 +408,17 @@ func (t *timerQueueActiveTaskExecutor) executeWorkflowBackoffTimerTask(
 	}
 
 	if task.WorkflowBackoffType == enumsspb.WORKFLOW_BACKOFF_TYPE_RETRY {
-		t.metricHandler.Counter(metrics.WorkflowRetryBackoffTimerCount.Name()).Record(
+		t.metricsHandler.Counter(metrics.WorkflowRetryBackoffTimerCount.Name()).Record(
 			1,
 			metrics.OperationTag(metrics.TimerActiveTaskWorkflowBackoffTimerScope),
 		)
 	} else if task.WorkflowBackoffType == enumsspb.WORKFLOW_BACKOFF_TYPE_CRON {
-		t.metricHandler.Counter(metrics.WorkflowCronBackoffTimerCount.Name()).Record(
+		t.metricsHandler.Counter(metrics.WorkflowCronBackoffTimerCount.Name()).Record(
 			1,
 			metrics.OperationTag(metrics.TimerActiveTaskWorkflowBackoffTimerScope),
 		)
 	} else if task.WorkflowBackoffType == enumsspb.WORKFLOW_BACKOFF_TYPE_DELAY_START {
-		t.metricHandler.Counter(metrics.WorkflowDelayedStartBackoffTimerCount.Name()).Record(
+		t.metricsHandler.Counter(metrics.WorkflowDelayedStartBackoffTimerCount.Name()).Record(
 			1,
 			metrics.OperationTag(metrics.TimerActiveTaskWorkflowBackoffTimerScope),
 		)
@@ -442,7 +446,7 @@ func (t *timerQueueActiveTaskExecutor) executeActivityRetryTimerTask(
 	}
 	defer func() { release(retError) }()
 
-	mutableState, err := loadMutableStateForTimerTask(ctx, t.shardContext, weContext, task, t.metricHandler, t.logger)
+	mutableState, err := loadMutableStateForTimerTask(ctx, t.shardContext, weContext, task, t.metricsHandler, t.logger)
 	if err != nil {
 		return err
 	}
@@ -517,7 +521,7 @@ func (t *timerQueueActiveTaskExecutor) executeWorkflowTimeoutTask(
 	}
 	defer func() { release(retError) }()
 
-	mutableState, err := loadMutableStateForTimerTask(ctx, t.shardContext, weContext, task, t.metricHandler, t.logger)
+	mutableState, err := loadMutableStateForTimerTask(ctx, t.shardContext, weContext, task, t.metricsHandler, t.logger)
 	if err != nil {
 		return err
 	}
@@ -629,6 +633,37 @@ func (t *timerQueueActiveTaskExecutor) executeWorkflowTimeoutTask(
 	)
 }
 
+func (t *timerQueueActiveTaskExecutor) executeCallbackBackoffTask(ctx context.Context, task *tasks.CallbackBackoffTask) (retErr error) {
+	ctx, cancel := context.WithTimeout(ctx, taskTimeout)
+	defer cancel()
+
+	var callback *persistencespb.CallbackInfo
+	wfCtx, release, ms, err := t.getValidatedMutableStateForTask(
+		ctx, task, func(ms workflow.MutableState) error {
+			var err error
+			callback, err = t.validateCallbackTask(ms, task)
+			return err
+		},
+	)
+	if err != nil {
+		return nil
+	}
+	defer func() { release(retErr) }()
+
+	if err := callbacks.TransitionRescheduled.Apply(callback, callbacks.EventRescheduled{}, ms); err != nil {
+		return err
+	}
+	if ms.GetExecutionInfo().CloseTime == nil {
+		// This is here to bring attention to future implementors of callbacks triggered on open workflows.
+		return queues.NewUnprocessableTaskError("triggered safeguard preventing from mutating closed workflows")
+	}
+	// Can't use UpdateWorkflowExecutionAsActive since it updates the current run, and we are operating on closed
+	// workflows.
+	// When we support workflow-update callbacks, we'll need to revisit this code.
+	return wfCtx.SubmitClosedWorkflowSnapshot(ctx, t.shardContext, workflow.TransactionPolicyActive)
+
+}
+
 func (t *timerQueueActiveTaskExecutor) getTimerSequence(
 	mutableState workflow.MutableState,
 ) workflow.TimerSequence {
@@ -661,7 +696,7 @@ func (t *timerQueueActiveTaskExecutor) emitTimeoutMetricScopeWithNamespaceTag(
 	if err != nil {
 		return
 	}
-	metricsScope := t.metricHandler.WithTags(
+	metricsScope := t.metricsHandler.WithTags(
 		metrics.OperationTag(operation),
 		metrics.NamespaceTag(namespaceEntry.Name().String()),
 	)

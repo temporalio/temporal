@@ -1166,7 +1166,7 @@ func (s *TaskSerializer) callbackTaskToProto(task *tasks.CallbackTask) *persiste
 		VisibilityTime:     timestamppb.New(task.VisibilityTimestamp),
 		CallbackId:         task.CallbackID,
 		DestinationAddress: task.DestinationAddress,
-		ScheduleAttempt:    task.Attempt,
+		TransitionCount:    task.TransitionCount,
 	}
 }
 
@@ -1193,21 +1193,21 @@ func (s *TaskSerializer) callbackTaskFromProto(task *persistencespb.CallbackTask
 		TaskID:              task.TaskId,
 		CallbackID:          task.CallbackId,
 		DestinationAddress:  task.DestinationAddress,
-		Attempt:             task.ScheduleAttempt,
+		TransitionCount:     task.TransitionCount,
 	}
 }
 
 func (s *TaskSerializer) callbackBackoffTaskToProto(task *tasks.CallbackBackoffTask) *persistencespb.TimerTaskInfo {
 	return &persistencespb.TimerTaskInfo{
-		NamespaceId:     task.WorkflowKey.NamespaceID,
-		WorkflowId:      task.WorkflowKey.WorkflowID,
-		RunId:           task.WorkflowKey.RunID,
-		TaskType:        enumsspb.TASK_TYPE_CALLBACK_BACKOFF,
-		Version:         task.Version,
-		TaskId:          task.TaskID,
-		VisibilityTime:  timestamppb.New(task.VisibilityTimestamp),
-		CallbackId:      task.CallbackID,
-		ScheduleAttempt: task.Attempt,
+		NamespaceId:                    task.WorkflowKey.NamespaceID,
+		WorkflowId:                     task.WorkflowKey.WorkflowID,
+		RunId:                          task.WorkflowKey.RunID,
+		TaskType:                       enumsspb.TASK_TYPE_CALLBACK_BACKOFF,
+		Version:                        task.Version,
+		TaskId:                         task.TaskID,
+		VisibilityTime:                 timestamppb.New(task.VisibilityTimestamp),
+		SubStatemachineId:              task.CallbackID,
+		SubStatemachineTransitionCount: task.TransitionCount,
 	}
 }
 
@@ -1221,7 +1221,7 @@ func (s *TaskSerializer) callbackBackoffTaskFromProto(task *persistencespb.Timer
 		VisibilityTimestamp: task.GetVisibilityTime().AsTime(),
 		Version:             task.Version,
 		TaskID:              task.TaskId,
-		CallbackID:          task.CallbackId,
-		Attempt:             task.ScheduleAttempt,
+		CallbackID:          task.SubStatemachineId,
+		TransitionCount:     task.SubStatemachineTransitionCount,
 	}
 }

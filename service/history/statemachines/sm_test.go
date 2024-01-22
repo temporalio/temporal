@@ -56,11 +56,12 @@ func (adapter) SetState(d *data, s state) {
 	d.state = s
 }
 
-func (adapter) OnTransition(d *data, from, to state, env statemachines.Environment) {
+func (adapter) OnTransition(d *data, from, to state, env statemachines.Environment) error {
 	d.transitions = append(d.transitions, struct {
 		from state
 		to   state
 	}{from, to})
+	return nil
 }
 
 var transition = statemachines.Transition[*data, state, event]{

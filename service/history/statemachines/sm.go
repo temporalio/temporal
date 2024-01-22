@@ -42,8 +42,8 @@ type Task interface {
 
 // Environment for executing state machine transitions.
 type Environment interface {
-	// GetVersion returns the current cluster failover version.
-	GetVersion() int64
+	// GetNamespaceFailoverVersion returns the current namespace failover version.
+	GetNamespaceFailoverVersion() int64
 	// Schedule schedules a partial task. WorkflowKey and Version is set by the Environment.
 	Schedule(task Task)
 	// GetCurrentTime returns the current time.
@@ -65,8 +65,8 @@ func (m *MockEnvironment) GetCurrentTime() time.Time {
 	return m.CurrentTime
 }
 
-// GetVersion implements Environment.
-func (m *MockEnvironment) GetVersion() int64 {
+// GetNamespaceFailoverVersion implements Environment.
+func (m *MockEnvironment) GetNamespaceFailoverVersion() int64 {
 	return m.Version
 }
 
@@ -113,7 +113,9 @@ func (t Transition[T, S, E]) Apply(data T, event E, env Environment) error {
 	}
 	t.Adapter.SetState(data, t.Dst)
 	if transitioner, canTransition := t.Adapter.(Transitioner[T, S]); canTransition {
-		transitioner.OnTransition(data, prevState, t.Dst, env)
+		if err := transitioner.OnTransition(data, prevState, t.Dst, env); err != nil {
+			return err
+		}
 	}
 	if t.After != nil {
 		if err := t.After(data, event, env); err != nil {
@@ -133,5 +135,5 @@ type Adapter[T any, S comparable] interface {
 type Transitioner[T any, S comparable] interface {
 	// Transition hook, applied between the transition's Before and After hooks. Data will have already transitioned
 	// to the new state.
-	OnTransition(data T, from S, to S, env Environment)
+	OnTransition(data T, from S, to S, env Environment) error
 }

@@ -372,7 +372,7 @@ func (s *taskSerializerSuite) TestCallbackTask() {
 		Version:             rand.Int63(),
 		DestinationAddress:  "destination",
 		CallbackID:          "callback-id",
-		Attempt:             3,
+		TransitionCount:     3,
 	}
 	s.Assert().Equal(tasks.CategoryCallback, task.GetCategory())
 	s.Assert().Equal(enumsspb.TASK_TYPE_CALLBACK, task.GetType())
@@ -387,7 +387,7 @@ func (s *taskSerializerSuite) TestCallbackBackoffTask() {
 		TaskID:              rand.Int63(),
 		Version:             rand.Int63(),
 		CallbackID:          "callback-id",
-		Attempt:             3,
+		TransitionCount:     3,
 	}
 	s.Assert().Equal(tasks.CategoryTimer, task.GetCategory())
 	s.Assert().Equal(enumsspb.TASK_TYPE_CALLBACK_BACKOFF, task.GetType())

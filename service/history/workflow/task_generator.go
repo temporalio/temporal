@@ -33,6 +33,7 @@ import (
 	enumspb "go.temporal.io/api/enums/v1"
 	historypb "go.temporal.io/api/history/v1"
 	"go.temporal.io/api/serviceerror"
+	workflowpb "go.temporal.io/api/workflow/v1"
 
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
@@ -41,6 +42,7 @@ import (
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence/versionhistory"
 	"go.temporal.io/server/common/primitives/timestamp"
+	"go.temporal.io/server/service/history/callbacks"
 	"go.temporal.io/server/service/history/configs"
 	"go.temporal.io/server/service/history/tasks"
 )
@@ -155,6 +157,9 @@ func (r *TaskGeneratorImpl) GenerateWorkflowCloseTasks(
 	closedTime time.Time,
 	deleteAfterClose bool,
 ) error {
+	if err := r.processCloseCallbacks(); err != nil {
+		return err
+	}
 
 	currentVersion := r.mutableState.GetCurrentVersion()
 
@@ -219,6 +224,32 @@ func (r *TaskGeneratorImpl) GenerateWorkflowCloseTasks(
 	}
 
 	r.mutableState.AddTasks(closeTasks...)
+
+	return nil
+}
+
+// processCloseCallbacks triggers "WorkflowClosed" callbacks, applying the state machine transition that schedules
+// callback tasks.
+func (r *TaskGeneratorImpl) processCloseCallbacks() error {
+	ms := r.mutableState
+	completed := ms.GetExecutionState().GetState() == enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED
+	continuedAsNew := ms.GetExecutionState().GetStatus() == enumspb.WORKFLOW_EXECUTION_STATUS_CONTINUED_AS_NEW
+	if !completed || continuedAsNew {
+		return nil
+	}
+	for _, cb := range ms.GetExecutionInfo().GetCallbacks() {
+		// Only try to trigger "WorkflowClosed" callbacks.
+		if _, ok := cb.PublicInfo.Trigger.Variant.(*workflowpb.CallbackInfo_Trigger_WorkflowClosed); !ok {
+			continue
+		}
+		// Only schedule callbacks in the standby state.
+		if cb.PublicInfo.State != enumspb.CALLBACK_STATE_STANDBY {
+			continue
+		}
+		if err := callbacks.TransitionScheduled.Apply(cb, callbacks.EventScheduled{}, ms); err != nil {
+			return err
+		}
+	}
 	return nil
 }
 
