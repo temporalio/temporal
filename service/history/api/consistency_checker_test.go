@@ -279,7 +279,6 @@ func (s *workflowConsistencyCheckerSuite) TestGetCurrentRunID_Success() {
 	ctx := context.Background()
 	shardOwnershipAsserted := false
 
-	wfContext := workflow.NewMockContext(s.controller)
 	released := false
 	releaseFn := func(err error) { released = true }
 
@@ -289,7 +288,7 @@ func (s *workflowConsistencyCheckerSuite) TestGetCurrentRunID_Success() {
 		namespace.ID(s.namespaceID),
 		s.workflowID,
 		workflow.LockPriorityHigh,
-	).Return(wfContext, releaseFn, nil)
+	).Return(releaseFn, nil)
 	s.shardContext.EXPECT().GetCurrentExecution(
 		ctx,
 		&persistence.GetCurrentExecutionRequest{
@@ -309,7 +308,6 @@ func (s *workflowConsistencyCheckerSuite) TestGetCurrentRunID_NotFound_Ownership
 	ctx := context.Background()
 	shardOwnershipAsserted := false
 
-	wfContext := workflow.NewMockContext(s.controller)
 	released := false
 	releaseFn := func(err error) { released = true }
 
@@ -319,7 +317,7 @@ func (s *workflowConsistencyCheckerSuite) TestGetCurrentRunID_NotFound_Ownership
 		namespace.ID(s.namespaceID),
 		s.workflowID,
 		workflow.LockPriorityHigh,
-	).Return(wfContext, releaseFn, nil)
+	).Return(releaseFn, nil)
 	s.shardContext.EXPECT().GetCurrentExecution(
 		ctx,
 		&persistence.GetCurrentExecutionRequest{
@@ -340,7 +338,6 @@ func (s *workflowConsistencyCheckerSuite) TestGetCurrentRunID_NotFound_Ownership
 	ctx := context.Background()
 	shardOwnershipAsserted := false
 
-	wfContext := workflow.NewMockContext(s.controller)
 	released := false
 	releaseFn := func(err error) { released = true }
 
@@ -350,7 +347,7 @@ func (s *workflowConsistencyCheckerSuite) TestGetCurrentRunID_NotFound_Ownership
 		namespace.ID(s.namespaceID),
 		s.workflowID,
 		workflow.LockPriorityHigh,
-	).Return(wfContext, releaseFn, nil)
+	).Return(releaseFn, nil)
 	s.shardContext.EXPECT().GetCurrentExecution(
 		ctx,
 		&persistence.GetCurrentExecutionRequest{
@@ -371,7 +368,6 @@ func (s *workflowConsistencyCheckerSuite) TestGetCurrentRunID_Error() {
 	ctx := context.Background()
 	shardOwnershipAsserted := false
 
-	wfContext := workflow.NewMockContext(s.controller)
 	released := false
 	releaseFn := func(err error) { released = true }
 
@@ -381,7 +377,7 @@ func (s *workflowConsistencyCheckerSuite) TestGetCurrentRunID_Error() {
 		namespace.ID(s.namespaceID),
 		s.workflowID,
 		workflow.LockPriorityHigh,
-	).Return(wfContext, releaseFn, nil)
+	).Return(releaseFn, nil)
 	s.shardContext.EXPECT().GetCurrentExecution(
 		ctx,
 		&persistence.GetCurrentExecutionRequest{
