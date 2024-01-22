@@ -34,8 +34,11 @@ import (
 	"sync/atomic"
 	"time"
 
+	commonpb "go.temporal.io/api/common/v1"
+	historypb "go.temporal.io/api/history/v1"
 	replicationpb "go.temporal.io/api/replication/v1"
 	commonspb "go.temporal.io/server/api/common/v1"
+	historyspb "go.temporal.io/server/api/history/v1"
 	"google.golang.org/grpc/metadata"
 	"google.golang.org/protobuf/types/known/timestamppb"
 
@@ -1529,8 +1532,28 @@ func (adh *AdminHandler) ResendReplicationTasks(
 	resender := xdc.NewNDCHistoryResender(
 		adh.namespaceRegistry,
 		adh.clientBean,
-		func(ctx context.Context, request *historyservice.ReplicateEventsV2Request) error {
-			_, err1 := adh.historyClient.ReplicateEventsV2(ctx, request)
+		func(
+			ctx context.Context,
+			namespaceId namespace.ID,
+			workflowId string,
+			runId string,
+			events []*historypb.HistoryEvent,
+			versionHistory []*historyspb.VersionHistoryItem,
+		) error {
+			historyBlob, err1 := adh.eventSerializer.SerializeEvents(events, enumspb.ENCODING_TYPE_PROTO3)
+			if err1 != nil {
+				return err1
+			}
+			replicateRequest := &historyservice.ReplicateEventsV2Request{
+				NamespaceId: namespaceId.String(),
+				WorkflowExecution: &commonpb.WorkflowExecution{
+					WorkflowId: workflowId,
+					RunId:      runId,
+				},
+				Events:              historyBlob,
+				VersionHistoryItems: versionHistory,
+			}
+			_, err1 = adh.historyClient.ReplicateEventsV2(ctx, replicateRequest)
 			return err1
 		},
 		adh.eventSerializer,
