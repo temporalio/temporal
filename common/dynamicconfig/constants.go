@@ -456,6 +456,8 @@ const (
 	MatchingMaxWaitForPollerBeforeFwd = "matching.maxWaitForPollerBeforeFwd"
 	// QueryPollerUnavailableWindow WF Queries are rejected after a while if no poller has been seen within the window
 	QueryPollerUnavailableWindow = "matching.queryPollerUnavailableWindow"
+	// MatchingListNexusServicesLongPollTimeout is the max length of long polls for ListNexusIncomingServices calls between partitions.
+	MatchingListNexusServicesLongPollTimeout = "matching.listNexusServicesLongPollTimeout"
 
 	// for matching testing only:
 

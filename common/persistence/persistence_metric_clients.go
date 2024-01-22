@@ -1279,19 +1279,6 @@ func (p *nexusServicePersistenceClient) Close() {
 	p.persistence.Close()
 }
 
-func (p *nexusServicePersistenceClient) GetNexusIncomingService(
-	ctx context.Context,
-	request *GetNexusIncomingServiceRequest,
-) (_ *GetNexusIncomingServiceResponse, retErr error) {
-	caller := headers.GetCallerInfo(ctx).CallerName
-	startTime := time.Now().UTC()
-	defer func() {
-		p.healthSignals.Record(CallerSegmentMissing, caller, time.Since(startTime), retErr)
-		p.recordRequestMetrics(metrics.PersistenceGetNexusIncomingServiceScope, caller, time.Since(startTime), retErr)
-	}()
-	return p.persistence.GetNexusIncomingService(ctx, request)
-}
-
 func (p *nexusServicePersistenceClient) ListNexusIncomingServices(
 	ctx context.Context,
 	request *ListNexusIncomingServicesRequest,
@@ -1308,7 +1295,7 @@ func (p *nexusServicePersistenceClient) ListNexusIncomingServices(
 func (p *nexusServicePersistenceClient) CreateOrUpdateNexusIncomingService(
 	ctx context.Context,
 	request *CreateOrUpdateNexusIncomingServiceRequest,
-) (retErr error) {
+) (_ *CreateOrUpdateNexusIncomingServiceResponse, retErr error) {
 	caller := headers.GetCallerInfo(ctx).CallerName
 	startTime := time.Now().UTC()
 	defer func() {

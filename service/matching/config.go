@@ -94,6 +94,8 @@ type (
 
 		LoadUserData dynamicconfig.BoolPropertyFnWithTaskQueueInfoFilters
 
+		ListNexusServicesLongPollTimeout dynamicconfig.DurationPropertyFn
+
 		// FrontendAccessHistoryFraction is an interim flag across 2 minor releases and will be removed once fully enabled.
 		FrontendAccessHistoryFraction dynamicconfig.FloatPropertyFn
 	}
@@ -209,6 +211,8 @@ func NewConfig(
 		EnableReadFromSecondaryVisibility: visibility.GetEnableReadFromSecondaryVisibilityConfig(dc),
 		VisibilityDisableOrderByClause:    dc.GetBoolPropertyFnWithNamespaceFilter(dynamicconfig.VisibilityDisableOrderByClause, true),
 		VisibilityEnableManualPagination:  dc.GetBoolPropertyFnWithNamespaceFilter(dynamicconfig.VisibilityEnableManualPagination, true),
+
+		ListNexusServicesLongPollTimeout: dc.GetDurationProperty(dynamicconfig.MatchingListNexusServicesLongPollTimeout, 5*time.Minute-10*time.Second),
 
 		FrontendAccessHistoryFraction: dc.GetFloat64Property(dynamicconfig.FrontendAccessHistoryFraction, 0.0),
 	}

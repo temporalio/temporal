@@ -44,9 +44,11 @@ import (
 	"go.temporal.io/api/serviceerror"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	"go.temporal.io/api/workflowservice/v1"
+
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/api/matchingservice/v1"
 	taskqueuespb "go.temporal.io/server/api/taskqueue/v1"
+	"go.temporal.io/server/common/nexus"
 
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
@@ -115,25 +117,26 @@ type (
 
 	// Implements matching.Engine
 	matchingEngineImpl struct {
-		status             int32
-		taskManager        persistence.TaskManager
-		historyClient      resource.HistoryClient
-		matchingRawClient  resource.MatchingRawClient
-		tokenSerializer    common.TaskTokenSerializer
-		historySerializer  serialization.Serializer
-		logger             log.Logger
-		throttledLogger    log.ThrottledLogger
-		namespaceRegistry  namespace.Registry
-		keyResolver        membership.ServiceResolver
-		clusterMeta        cluster.Metadata
-		timeSource         clock.TimeSource
-		visibilityManager  manager.VisibilityManager
-		metricsHandler     metrics.Handler
-		taskQueuesLock     sync.RWMutex // locks mutation of taskQueues
-		taskQueues         map[taskQueueID]taskQueueManager
-		taskQueueCountLock sync.Mutex
-		taskQueueCount     map[taskQueueCounterKey]int // per-namespace task queue counter
-		config             *Config
+		status                  int32
+		taskManager             persistence.TaskManager
+		historyClient           resource.HistoryClient
+		matchingRawClient       resource.MatchingRawClient
+		tokenSerializer         common.TaskTokenSerializer
+		historySerializer       serialization.Serializer
+		logger                  log.Logger
+		throttledLogger         log.ThrottledLogger
+		namespaceRegistry       namespace.Registry
+		incomingServiceRegistry nexus.IncomingServiceRegistry
+		keyResolver             membership.ServiceResolver
+		clusterMeta             cluster.Metadata
+		timeSource              clock.TimeSource
+		visibilityManager       manager.VisibilityManager
+		metricsHandler          metrics.Handler
+		taskQueuesLock          sync.RWMutex // locks mutation of taskQueues
+		taskQueues              map[taskQueueID]taskQueueManager
+		taskQueueCountLock      sync.Mutex
+		taskQueueCount          map[taskQueueCounterKey]int // per-namespace task queue counter
+		config                  *Config
 		// lockableQueryResultMap maps query TaskID (which is a UUID generated in QueryWorkflow() call) to a channel
 		// that QueryWorkflow() will block on. The channel is unblocked either by worker sending response through
 		// RespondQueryTaskCompleted() or through an internal service error causing temporal to be unable to dispatch
@@ -182,6 +185,7 @@ func NewEngine(
 	throttledLogger log.ThrottledLogger,
 	metricsHandler metrics.Handler,
 	namespaceRegistry namespace.Registry,
+	incomingServiceRegistry nexus.IncomingServiceRegistry,
 	resolver membership.ServiceResolver,
 	clusterMeta cluster.Metadata,
 	namespaceReplicationQueue persistence.NamespaceReplicationQueue,
@@ -198,6 +202,7 @@ func NewEngine(
 		logger:                    log.With(logger, tag.ComponentMatchingEngine),
 		throttledLogger:           log.With(throttledLogger, tag.ComponentMatchingEngine),
 		namespaceRegistry:         namespaceRegistry,
+		incomingServiceRegistry:   incomingServiceRegistry,
 		keyResolver:               resolver,
 		clusterMeta:               clusterMeta,
 		timeSource:                clock.NewRealTimeSource(), // No need to mock this at the moment
@@ -1370,6 +1375,83 @@ func (e *matchingEngineImpl) RespondNexusTaskFailed(ctx context.Context, request
 		internalError:        nil,
 	}
 	return &matchingservice.RespondNexusTaskFailedResponse{}, nil
+}
+
+func (e *matchingEngineImpl) CreateOrUpdateNexusService(ctx context.Context, request *matchingservice.CreateOrUpdateNexusServiceRequest) (*matchingservice.CreateOrUpdateNexusServiceResponse, error) {
+	service, err := e.incomingServiceRegistry.CreateOrUpdateService(ctx, request.Service)
+	if err != nil {
+		return nil, err
+	}
+	return &matchingservice.CreateOrUpdateNexusServiceResponse{ServiceVersion: service.Version}, nil
+}
+
+func (e *matchingEngineImpl) DeleteNexusService(ctx context.Context, request *matchingservice.DeleteNexusServiceRequest) (*matchingservice.DeleteNexusServiceResponse, error) {
+	err := e.incomingServiceRegistry.DeleteService(ctx, request.Name)
+	if err != nil {
+		return nil, err
+	}
+	return &matchingservice.DeleteNexusServiceResponse{}, nil
+}
+
+func (e *matchingEngineImpl) GetNexusService(ctx context.Context, request *matchingservice.GetNexusServiceRequest) (*matchingservice.GetNexusServiceResponse, error) {
+	service, err := e.incomingServiceRegistry.GetService(request.Name)
+	if err != nil {
+		return nil, err
+	}
+	return &matchingservice.GetNexusServiceResponse{Service: service}, nil
+}
+
+func (e *matchingEngineImpl) ListNexusServices(ctx context.Context, request *matchingservice.ListNexusServicesRequest) (*matchingservice.ListNexusServicesResponse, error) {
+	listRequest := &persistence.ListNexusIncomingServicesRequest{
+		PageSize:              request.PageSize,
+		NextPageToken:         request.NextPageToken,
+		LastKnownTableVersion: request.LastKnownTableVersion,
+	}
+
+	tableVers := request.LastKnownTableVersion
+	// TODO: negative tableVers handling
+
+	if request.Wait {
+		var cancel context.CancelFunc
+		ctx, cancel = newChildContext(ctx, e.config.ListNexusServicesLongPollTimeout(), returnEmptyTaskTimeBudget)
+		defer cancel()
+	}
+
+	for {
+		resp := &matchingservice.ListNexusServicesResponse{}
+		listResp, tableVersChanged, err := e.incomingServiceRegistry.ListServices(ctx, listRequest)
+		if listResp != nil {
+			resp.TableVersion = listResp.TableVersion
+		}
+		if err != nil {
+			return resp, err
+		}
+
+		if request.Wait && listResp.TableVersion == tableVers {
+			// long-poll: wait for data to change/appear
+			select {
+			case <-ctx.Done():
+				resp.TableVersion = listResp.TableVersion
+				return resp, nil
+			case <-tableVersChanged:
+				continue
+			}
+		}
+
+		if listResp != nil {
+			resp.TableVersion = listResp.TableVersion
+			if listResp.TableVersion < tableVers {
+				// This is highly unlikely but may happen due to an edge case in during ownership transfer.
+				// We rely on client retries in this case to let the system eventually self-heal.
+				return resp, serviceerror.NewInvalidArgument(
+					"requested Nexus incoming services for table version greater than known version")
+			}
+			resp.NextPageToken = listResp.NextPageToken
+			resp.Services = listResp.Services
+		}
+
+		return resp, nil
+	}
 }
 
 func (e *matchingEngineImpl) getNamespaceUpdateLocks(namespaceId string) *namespaceUpdateLocks {

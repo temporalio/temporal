@@ -1,8 +1,6 @@
 // The MIT License
 //
-// Copyright (c) 2020 Temporal Technologies Inc.  All rights reserved.
-//
-// Copyright (c) 2020 Uber Technologies, Inc.
+// Copyright (c) 2024 Temporal Technologies Inc.  All rights reserved.
 //
 // Permission is hereby granted, free of charge, to any person obtaining a copy
 // of this software and associated documentation files (the "Software"), to deal
@@ -27,7 +25,10 @@ package persistence
 import (
 	"context"
 
-	"go.temporal.io/api/serviceerror"
+	enumspb "go.temporal.io/api/enums/v1"
+
+	persistencepb "go.temporal.io/server/api/persistence/v1"
+	"go.temporal.io/server/common/persistence/serialization"
 )
 
 var (
@@ -48,16 +49,17 @@ var (
 type (
 	nexusServiceManagerImpl struct {
 		persistence NexusServiceStore
+		serializer  serialization.Serializer
 	}
 )
 
-var _ NexusServiceManager = (*nexusServiceManagerImpl)(nil)
-
 func NewNexusServiceManager(
 	persistence NexusServiceStore,
+	serializer serialization.Serializer,
 ) NexusServiceManager {
 	return &nexusServiceManagerImpl{
 		persistence: persistence,
+		serializer:  serializer,
 	}
 }
 
@@ -69,11 +71,45 @@ func (m *nexusServiceManagerImpl) Close() {
 	m.persistence.Close()
 }
 
-func (m *nexusServiceManagerImpl) GetNexusIncomingService(
+func (m *nexusServiceManagerImpl) CreateOrUpdateNexusIncomingService(
 	ctx context.Context,
-	request *GetNexusIncomingServiceRequest,
-) (*GetNexusIncomingServiceResponse, error) {
-	return nil, serviceerror.NewUnimplemented("NexusServiceManager.GetNexusIncomingService() is unimplemented")
+	request *CreateOrUpdateNexusIncomingServiceRequest,
+) (*CreateOrUpdateNexusIncomingServiceResponse, error) {
+	serviceData := &persistencepb.NexusIncomingServiceData{
+		Name:        request.Service.Name,
+		NamespaceId: request.Service.Namespace,
+		TaskQueue:   request.Service.TaskQueue,
+		Metadata:    request.Service.Metadata,
+	}
+	serviceBlob, err := m.serializer.NexusIncomingServiceDataToBlob(serviceData, enumspb.ENCODING_TYPE_PROTO3)
+	if err != nil {
+		return nil, err
+	}
+
+	internalRequest := &InternalCreateOrUpdateNexusIncomingServiceRequest{
+		LastKnownTableVersion: request.LastKnownTableVersion,
+		Service: InternalNexusIncomingService{
+			ServiceID: request.ServiceID,
+			Version:   request.Service.Version,
+			Data:      serviceBlob,
+		},
+	}
+	service, err := m.persistence.CreateOrUpdateNexusIncomingService(ctx, internalRequest)
+	if err != nil {
+		return nil, err
+	}
+
+	return &CreateOrUpdateNexusIncomingServiceResponse{Service: service}, nil
+}
+
+func (m *nexusServiceManagerImpl) DeleteNexusIncomingService(
+	ctx context.Context,
+	request *DeleteNexusIncomingServiceRequest,
+) error {
+	return m.persistence.DeleteNexusIncomingService(ctx, &InternalDeleteNexusIncomingServiceRequest{
+		LastKnownTableVersion: request.LastKnownTableVersion,
+		ServiceID:             request.ServiceID,
+	})
 }
 
 func (m *nexusServiceManagerImpl) ListNexusIncomingServices(
@@ -84,19 +120,36 @@ func (m *nexusServiceManagerImpl) ListNexusIncomingServices(
 		return nil, ErrNonPositiveListNexusIncomingServicesPageSize
 	}
 
-	return nil, serviceerror.NewUnimplemented("NexusServiceManager.ListNexusIncomingServices() is unimplemented")
-}
+	result := &ListNexusIncomingServicesResponse{}
+	resp, err := m.persistence.ListNexusIncomingServices(ctx, &InternalListNexusIncomingServicesRequest{
+		LastKnownTableVersion: request.LastKnownTableVersion,
+		NextPageToken:         request.NextPageToken,
+		PageSize:              request.PageSize,
+	})
+	if resp != nil {
+		result.TableVersion = resp.TableVersion
+	}
+	if err != nil {
+		return result, nil
+	}
 
-func (m *nexusServiceManagerImpl) CreateOrUpdateNexusIncomingService(
-	ctx context.Context,
-	request *CreateOrUpdateNexusIncomingServiceRequest,
-) error {
-	return serviceerror.NewUnimplemented("NexusServiceManager.CreateOrUpdateNexusIncomingService() is unimplemented")
-}
+	services := make([]*persistencepb.VersionedNexusIncomingService, len(resp.Services))
+	for i, service := range resp.Services {
+		serviceData, err := m.serializer.NexusIncomingServiceDataFromBlob(service.Data)
+		if err != nil {
+			return result, err
+		}
+		services[i] = &persistencepb.VersionedNexusIncomingService{
+			Version: service.Version,
+			Service: &persistencepb.NexusIncomingService{
+				Id:   service.ServiceID,
+				Data: serviceData,
+			},
+		}
+	}
 
-func (m *nexusServiceManagerImpl) DeleteNexusIncomingService(
-	ctx context.Context,
-	request *DeleteNexusIncomingServiceRequest,
-) error {
-	return serviceerror.NewUnimplemented("NexusServiceManager.DeleteNexusIncomingService() is unimplemented")
+	result.Services = services
+	result.NextPageToken = resp.NextPageToken
+
+	return result, nil
 }
