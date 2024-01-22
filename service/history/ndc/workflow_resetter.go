@@ -72,7 +72,7 @@ type (
 			currentWorkflow Workflow,
 			resetReason string,
 			additionalReapplyEvents []*historypb.HistoryEvent,
-			resetReapplyType enumspb.ResetReapplyType,
+			resetReapplyExcludeTypes []enumspb.ResetReapplyExcludeType,
 		) error
 	}
 
@@ -125,7 +125,7 @@ func (r *workflowResetterImpl) ResetWorkflow(
 	currentWorkflow Workflow,
 	resetReason string,
 	additionalReapplyEvents []*historypb.HistoryEvent,
-	resetReapplyType enumspb.ResetReapplyType,
+	resetReapplyExcludeTypes []enumspb.ResetReapplyExcludeType,
 ) (retError error) {
 
 	namespaceEntry, err := r.namespaceRegistry.GetNamespaceByID(namespaceID)
@@ -164,6 +164,7 @@ func (r *workflowResetterImpl) ResetWorkflow(
 				baseBranchToken,
 				baseRebuildLastEventID+1,
 				baseNextEventID,
+				resetReapplyExcludeTypes,
 			)
 			if err != nil {
 				return err
@@ -171,7 +172,7 @@ func (r *workflowResetterImpl) ResetWorkflow(
 
 			if lastVisitedRunID == currentMutableState.GetExecutionState().RunId {
 				for _, event := range currentWorkflowEventsSeq {
-					if err := r.reapplyEvents(resetMutableState, event.Events); err != nil {
+					if err := r.reapplyEvents(resetMutableState, event.Events, resetReapplyExcludeTypes); err != nil {
 						return err
 					}
 				}
@@ -189,6 +190,7 @@ func (r *workflowResetterImpl) ResetWorkflow(
 				baseBranchToken,
 				baseRebuildLastEventID+1,
 				baseNextEventID,
+				resetReapplyExcludeTypes,
 			)
 			return err
 		}
@@ -212,13 +214,11 @@ func (r *workflowResetterImpl) ResetWorkflow(
 	}
 	defer func() { resetWorkflow.GetReleaseFn()(retError) }()
 
-	if err := r.reapplyEventsToResetWorkflow(
-		ctx,
-		resetWorkflow.GetMutableState(),
-		resetReapplyType,
-		reapplyEventsFn,
-		additionalReapplyEvents,
-	); err != nil {
+	resetMS := resetWorkflow.GetMutableState()
+	if err := reapplyEventsFn(ctx, resetMS); err != nil {
+		return err
+	}
+	if err := r.reapplyEvents(resetMS, additionalReapplyEvents, nil); err != nil {
 		return err
 	}
 
@@ -307,30 +307,6 @@ func (r *workflowResetterImpl) prepareResetWorkflow(
 	}
 
 	return resetWorkflow, nil
-}
-
-func (r *workflowResetterImpl) reapplyEventsToResetWorkflow(
-	ctx context.Context,
-	resetMutableState workflow.MutableState,
-	resetReapplyType enumspb.ResetReapplyType,
-	reapplyEventsApplier workflowResetReapplyEventsFn,
-	additionalReapplyEvents []*historypb.HistoryEvent,
-) error {
-	switch resetReapplyType {
-	case enumspb.RESET_REAPPLY_TYPE_SIGNAL:
-		if err := reapplyEventsApplier(
-			ctx,
-			resetMutableState,
-		); err != nil {
-			return err
-		}
-	case enumspb.RESET_REAPPLY_TYPE_NONE:
-		// noop
-	default:
-		panic(fmt.Sprintf("unknown reset reapply type: %v", resetReapplyType))
-	}
-
-	return r.reapplyEvents(resetMutableState, additionalReapplyEvents)
 }
 
 func (r *workflowResetterImpl) persistToDB(
@@ -585,6 +561,7 @@ func (r *workflowResetterImpl) reapplyContinueAsNewWorkflowEvents(
 	baseBranchToken []byte,
 	baseRebuildNextEventID int64,
 	baseNextEventID int64,
+	resetReapplyExcludeTypes []enumspb.ResetReapplyExcludeType,
 ) (string, error) {
 
 	// TODO change this logic to fetching all workflow [baseWorkflow, currentWorkflow]
@@ -599,6 +576,7 @@ func (r *workflowResetterImpl) reapplyContinueAsNewWorkflowEvents(
 		baseRebuildNextEventID,
 		baseNextEventID,
 		baseBranchToken,
+		resetReapplyExcludeTypes,
 	)
 	switch err.(type) {
 	case nil:
@@ -655,6 +633,7 @@ func (r *workflowResetterImpl) reapplyContinueAsNewWorkflowEvents(
 			common.FirstEventID,
 			nextWorkflowNextEventID,
 			nextWorkflowBranchToken,
+			resetReapplyExcludeTypes,
 		)
 		switch err.(type) {
 		case nil:
@@ -676,6 +655,7 @@ func (r *workflowResetterImpl) reapplyWorkflowEvents(
 	firstEventID int64,
 	nextEventID int64,
 	branchToken []byte,
+	resetReapplyExcludeTypes []enumspb.ResetReapplyExcludeType,
 ) (string, error) {
 
 	// TODO change this logic to fetching all workflow [baseWorkflow, currentWorkflow]
@@ -698,7 +678,7 @@ func (r *workflowResetterImpl) reapplyWorkflowEvents(
 			return "", err
 		}
 		lastEvents = batch.Events
-		if err := r.reapplyEvents(mutableState, lastEvents); err != nil {
+		if err := r.reapplyEvents(mutableState, lastEvents, resetReapplyExcludeTypes); err != nil {
 			return "", err
 		}
 	}
@@ -715,11 +695,22 @@ func (r *workflowResetterImpl) reapplyWorkflowEvents(
 func (r *workflowResetterImpl) reapplyEvents(
 	mutableState workflow.MutableState,
 	events []*historypb.HistoryEvent,
+	resetReapplyExcludeTypes []enumspb.ResetReapplyExcludeType,
 ) error {
+	excludeSignal := false
+	for _, e := range resetReapplyExcludeTypes {
+		if e == enumspb.RESET_REAPPLY_EXCLUDE_TYPE_SIGNAL {
+			excludeSignal = true
+
+		}
+	}
 
 	for _, event := range events {
 		switch event.GetEventType() {
 		case enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_SIGNALED:
+			if excludeSignal {
+				continue
+			}
 			attr := event.GetWorkflowExecutionSignaledEventAttributes()
 			if _, err := mutableState.AddWorkflowExecutionSignaled(
 				attr.GetSignalName(),
