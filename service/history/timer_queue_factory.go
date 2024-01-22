@@ -91,7 +91,7 @@ func NewTimerQueueFactory(
 					params.Config.PersistenceMaxQPS,
 					timerQueuePersistenceMaxRPSRatio,
 				),
-				int64(params.Config.QueueMaxReaderCount()),
+				int64(params.Config.TimerQueueMaxReaderCount()),
 			),
 		},
 	}
@@ -240,7 +240,7 @@ func (f *timerQueueFactory) CreateQueue(
 			MaxPollIntervalJitterCoefficient:    f.Config.TimerProcessorMaxPollIntervalJitterCoefficient,
 			CheckpointInterval:                  f.Config.TimerProcessorUpdateAckInterval,
 			CheckpointIntervalJitterCoefficient: f.Config.TimerProcessorUpdateAckIntervalJitterCoefficient,
-			MaxReaderCount:                      f.Config.QueueMaxReaderCount,
+			MaxReaderCount:                      f.Config.TimerQueueMaxReaderCount,
 		},
 		f.HostReaderRateLimiter,
 		logger,
