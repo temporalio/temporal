@@ -133,17 +133,23 @@ func GetSecondaryVisibilityWritingModeConfig(
 	return dynamicconfig.GetStringPropertyFn(SecondaryVisibilityWritingModeOff)
 }
 
-func AllowListForValidation(storeNames []string) bool {
+func AllowListForValidation(
+	storeNames []string,
+	allowList dynamicconfig.BoolPropertyFnWithNamespaceFilter,
+) dynamicconfig.BoolPropertyFnWithNamespaceFilter {
 	if len(storeNames) == 0 {
-		return false
+		return dynamicconfig.GetBoolPropertyFnFilteredByNamespace(false)
 	}
 
 	switch storeNames[0] {
 	case mysql.PluginNameV8, postgresql.PluginNameV12, postgresql.PluginNameV12PGX, sqlite.PluginName:
 		// Advanced visibility with SQL DB don't support list of values
-		return false
+		return dynamicconfig.GetBoolPropertyFnFilteredByNamespace(false)
+	case mysql.PluginName, postgresql.PluginName, postgresql.PluginNamePGX:
+		// Standard visibility with SQL DB don't support list of values, but pass validation
+		return dynamicconfig.GetBoolPropertyFnFilteredByNamespace(true)
 	default:
-		// Otherwise, enable for backward compatibility.
-		return true
+		// Otherwise (ES), check dynamic config
+		return allowList
 	}
 }
