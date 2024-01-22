@@ -120,6 +120,8 @@ func GetTimerTaskEventID(
 		eventID = common.FirstEventID
 	case *DeleteHistoryEventTask:
 		eventID = common.FirstEventID
+	case *CallbackBackoffTask:
+		eventID = common.FirstEventID
 	case *FakeTask:
 		// no-op
 	default:
