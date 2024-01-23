@@ -54,6 +54,7 @@ type (
 	// the provided func should be thread safe
 	nDCHistoryReplicationFn func(
 		ctx context.Context,
+		sourceClusterName string,
 		namespaceId namespace.ID,
 		workflowId string,
 		runId string,
@@ -168,6 +169,7 @@ func (n *NDCHistoryResenderImpl) SendSingleWorkflowHistory(
 		}
 		err = n.ApplyReplicateFn(
 			ctx,
+			remoteClusterName,
 			namespaceID,
 			workflowID,
 			runID,
@@ -232,6 +234,7 @@ func (n *NDCHistoryResenderImpl) getPaginationFn(
 
 func (n *NDCHistoryResenderImpl) ApplyReplicateFn(
 	ctx context.Context,
+	sourceClusterName string,
 	namespaceId namespace.ID,
 	workflowId string,
 	runId string,
@@ -241,7 +244,7 @@ func (n *NDCHistoryResenderImpl) ApplyReplicateFn(
 	ctx, cancel := context.WithTimeout(ctx, resendContextTimeout)
 	defer cancel()
 
-	return n.historyReplicationFn(ctx, namespaceId, workflowId, runId, events, versionHistory)
+	return n.historyReplicationFn(ctx, sourceClusterName, namespaceId, workflowId, runId, events, versionHistory)
 }
 
 func (n *NDCHistoryResenderImpl) getHistory(
