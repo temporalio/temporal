@@ -43,6 +43,10 @@ type CallbackBackoffTask struct {
 
 var _ Task = (*CallbackBackoffTask)(nil)
 
+func (t *CallbackBackoffTask) SetWorkflowKey(key definition.WorkflowKey) {
+	t.WorkflowKey = key
+}
+
 func (t *CallbackBackoffTask) GetKey() Key {
 	return NewKey(t.VisibilityTimestamp, t.TaskID)
 }

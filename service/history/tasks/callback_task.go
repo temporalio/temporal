@@ -47,6 +47,10 @@ type CallbackTask struct {
 var _ HasDestination = (*CallbackTask)(nil)
 var _ Task = (*CallbackTask)(nil)
 
+func (t *CallbackTask) SetWorkflowKey(key definition.WorkflowKey) {
+	t.WorkflowKey = key
+}
+
 func (t *CallbackTask) GetDestination() string {
 	return t.DestinationAddress
 }
