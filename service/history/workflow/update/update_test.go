@@ -152,7 +152,6 @@ func TestRequestSendAcceptComplete(t *testing.T) {
 		acpt       = protocolpb.Message{Body: mustMarshalAny(t, &updatepb.Acceptance{
 			AcceptedRequestMessageId:         "random",
 			AcceptedRequestSequencingEventId: 2208,
-			AcceptedRequest:                  &req,
 		})}
 		resp         = protocolpb.Message{Body: mustMarshalAny(t, &updatepb.Response{Meta: &meta, Outcome: successOutcome(t, "success!")})}
 		sequencingID = &protocolpb.Message_EventId{EventId: testSequencingEventID}
@@ -535,18 +534,6 @@ func TestMessageValidation(t *testing.T) {
 		)
 		require.ErrorAs(t, err, &invalidArg)
 		require.ErrorContains(t, err, "invalid *update.Acceptance: accepted_request_message_id is not set")
-
-		err = upd.OnProtocolMessage(
-			ctx,
-			&protocolpb.Message{Body: mustMarshalAny(t, &updatepb.Acceptance{
-				AcceptedRequestSequencingEventId: testSequencingEventID,
-				AcceptedRequestMessageId:         "random",
-			})},
-			store,
-		)
-		require.ErrorAs(t, err, &invalidArg)
-		require.ErrorContains(t, err, "invalid *update.Acceptance: accepted_request is not set")
-
 	})
 	t.Run("invalid response msg", func(t *testing.T) {
 		upd := update.NewAccepted("", testAcceptedEventID)
@@ -576,7 +563,6 @@ func TestDoubleRollback(t *testing.T) {
 		acpt      = protocolpb.Message{Body: mustMarshalAny(t, &updatepb.Acceptance{
 			AcceptedRequestMessageId:         reqMsgID,
 			AcceptedRequestSequencingEventId: testSequencingEventID,
-			AcceptedRequest:                  &req,
 		})}
 		resp         = protocolpb.Message{Body: mustMarshalAny(t, &updatepb.Response{Meta: &meta, Outcome: successOutcome(t, "success!")})}
 		sequencingID = &protocolpb.Message_EventId{EventId: testSequencingEventID}
@@ -764,7 +750,6 @@ func TestWaitLifecycleStage(t *testing.T) {
 		acpt      = protocolpb.Message{Body: mustMarshalAny(t, &updatepb.Acceptance{
 			AcceptedRequestMessageId:         "random",
 			AcceptedRequestSequencingEventId: 2208,
-			AcceptedRequest:                  &req,
 		})}
 		rej = protocolpb.Message{Body: mustMarshalAny(t, &updatepb.Rejection{
 			RejectedRequest: &req,
