@@ -41,7 +41,7 @@ type CallbackBackoffTask struct {
 	Attempt int32
 }
 
-var _ PartialTask = (*CallbackBackoffTask)(nil)
+var _ Task = (*CallbackBackoffTask)(nil)
 
 func (t *CallbackBackoffTask) SetWorkflowKey(key definition.WorkflowKey) {
 	t.WorkflowKey = key

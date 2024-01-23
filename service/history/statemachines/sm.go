@@ -28,15 +28,24 @@ import (
 	"slices"
 	"time"
 
+	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/service/history/tasks"
 )
+
+// Task is a [tasks.Task] that is generated without a workflow key or version.
+// The missing fields are meant to be filled in by the environment (e.g. mutable state).
+type Task interface {
+	tasks.Task
+	SetWorkflowKey(definition.WorkflowKey)
+	SetVersion(int64)
+}
 
 // Environment for executing state machine transitions.
 type Environment interface {
 	// GetVersion returns the current cluster failover version.
 	GetVersion() int64
 	// Schedule schedules a partial task. WorkflowKey and Version is set by the Environment.
-	Schedule(task tasks.PartialTask)
+	Schedule(task Task)
 	// GetCurrentTime returns the current time.
 	GetCurrentTime() time.Time
 }
@@ -48,7 +57,7 @@ type MockEnvironment struct {
 	// The version to return in GetVersion.
 	Version int64
 	// Tasks scheduled in this environment are appended to this slice.
-	ScheduledTasks []tasks.Task
+	ScheduledTasks []Task
 }
 
 // GetCurrentTime implements Environment.
@@ -62,7 +71,7 @@ func (m *MockEnvironment) GetVersion() int64 {
 }
 
 // Schedule implements Environment.
-func (m *MockEnvironment) Schedule(task tasks.PartialTask) {
+func (m *MockEnvironment) Schedule(task Task) {
 	m.ScheduledTasks = append(m.ScheduledTasks, task)
 }
 

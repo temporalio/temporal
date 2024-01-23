@@ -104,11 +104,11 @@ var TransitionScheduled = statemachines.Transition[*persistencespb.CallbackInfo,
 		case *commonpb.Callback_Nexus_:
 			u, err := url.Parse(data.PublicInfo.Callback.GetNexus().Url)
 			if err != nil {
-				return fmt.Errorf("failed to parse URL: %v", &data.PublicInfo)
+				return fmt.Errorf("failed to parse URL: %v", &data.PublicInfo) // nolint:goerr113
 			}
 			destination = u.Host
 		default:
-			return fmt.Errorf("unsupported callback variant %v", v)
+			return fmt.Errorf("unsupported callback variant %v", v) // nolint:goerr113
 		}
 
 		env.Schedule(&tasks.CallbackTask{
