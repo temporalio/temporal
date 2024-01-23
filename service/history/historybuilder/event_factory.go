@@ -50,6 +50,15 @@ type EventFactory struct {
 	version    int64
 }
 
+type ExecutionSignaledEventAttributes struct {
+	SignalName                string
+	Input                     *commonpb.Payloads
+	Identity                  string
+	Header                    *commonpb.Header
+	SkipGenerateWorkflowTask  bool
+	ExternalWorkflowExecution *commonpb.WorkflowExecution
+}
+
 func (b *EventFactory) CreateWorkflowExecutionStartedEvent(
 	startTime time.Time,
 	request *historyservice.StartWorkflowExecutionRequest,
@@ -748,17 +757,22 @@ func (b *EventFactory) CreateMarkerRecordedEvent(
 }
 
 func (b *EventFactory) CreateWorkflowExecutionSignaledEvent(
-	attrs ExecutionSignaledEventAttributes,
+	signalName string,
+	input *commonpb.Payloads,
+	identity string,
+	header *commonpb.Header,
+	skipGenerateWorkflowTask bool,
+	externalWorkflowExecution *commonpb.WorkflowExecution,
 ) *historypb.HistoryEvent {
 	event := b.createHistoryEvent(enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_SIGNALED, b.timeSource.Now())
 	event.Attributes = &historypb.HistoryEvent_WorkflowExecutionSignaledEventAttributes{
 		WorkflowExecutionSignaledEventAttributes: &historypb.WorkflowExecutionSignaledEventAttributes{
-			SignalName:                attrs.SignalName,
-			Input:                     attrs.Input,
-			Identity:                  attrs.Identity,
-			Header:                    attrs.Header,
-			SkipGenerateWorkflowTask:  attrs.SkipGenerateWorkflowTask,
-			ExternalWorkflowExecution: attrs.ExternalWorkflowExecution,
+			SignalName:                signalName,
+			Input:                     input,
+			Identity:                  identity,
+			Header:                    header,
+			SkipGenerateWorkflowTask:  skipGenerateWorkflowTask,
+			ExternalWorkflowExecution: externalWorkflowExecution,
 		},
 	}
 	return event
