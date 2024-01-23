@@ -65,7 +65,6 @@ const (
 func newWorkflowTaskStateMachine(
 	ms *MutableStateImpl,
 ) *workflowTaskStateMachine {
-	// refactor: make sure we get interface here, all the functions implemented for FSM will have to operate through interface only
 	return &workflowTaskStateMachine{
 		ms: ms,
 	}

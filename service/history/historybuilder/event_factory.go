@@ -50,15 +50,6 @@ type EventFactory struct {
 	version    int64
 }
 
-type ExecutionSignaledEventAttributes struct {
-	SignalName                string
-	Input                     *commonpb.Payloads
-	Identity                  string
-	Header                    *commonpb.Header
-	SkipGenerateWorkflowTask  bool
-	ExternalWorkflowExecution *commonpb.WorkflowExecution
-}
-
 func (b *EventFactory) CreateWorkflowExecutionStartedEvent(
 	startTime time.Time,
 	request *historyservice.StartWorkflowExecutionRequest,
