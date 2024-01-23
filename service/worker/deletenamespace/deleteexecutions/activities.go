@@ -41,6 +41,10 @@ import (
 	"go.temporal.io/server/common/quotas"
 )
 
+const (
+	allWorkflowQuery = `TemporalNamespaceDivision = "__never_used__"`
+)
+
 type (
 	Activities struct {
 		visibilityManager manager.VisibilityManager
@@ -134,6 +138,7 @@ func (a *Activities) DeleteExecutionsActivity(ctx context.Context, params Delete
 		Namespace:     params.Namespace,
 		PageSize:      params.ListPageSize,
 		NextPageToken: params.NextPageToken,
+		Query:         allWorkflowQuery,
 	}
 	resp, err := a.visibilityManager.ListWorkflowExecutions(ctx, req)
 	if err != nil {
