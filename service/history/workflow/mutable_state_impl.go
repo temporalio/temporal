@@ -4216,14 +4216,13 @@ func (ms *MutableStateImpl) ApplyChildWorkflowExecutionTimedOutEvent(
 func (ms *MutableStateImpl) RetryActivity(
 	ai *persistencespb.ActivityInfo,
 	failure *failurepb.Failure,
-	delay RequestedDelay,
 ) (enumspb.RetryState, error) {
 
 	opTag := tag.WorkflowActionActivityTaskRetry
 	if err := ms.checkMutability(opTag); err != nil {
 		return enumspb.RETRY_STATE_INTERNAL_SERVER_ERROR, err
 	}
-	activityVisitor := newActivityVisitor(ai, failure, ms.timeSource, delay)
+	activityVisitor := newActivityVisitor(ai, failure, ms.timeSource)
 	if state := activityVisitor.State(); state != enumspb.RETRY_STATE_IN_PROGRESS {
 		return state, nil
 	}

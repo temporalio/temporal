@@ -27,7 +27,6 @@ package workflow
 import (
 	"time"
 
-	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	failurepb "go.temporal.io/api/failure/v1"
 	"google.golang.org/protobuf/types/known/durationpb"
@@ -55,7 +54,7 @@ type retryableActivityVisitor struct {
 	ai                *persistence.ActivityInfo
 	nextScheduledTime time.Time
 	timesource        clock.TimeSource
-	delay             RequestedDelay
+	nextRetryDelay    *time.Duration
 	state             enumspb.RetryState
 }
 
@@ -63,7 +62,6 @@ func newActivityVisitor(
 	ai *persistence.ActivityInfo,
 	failure *failurepb.Failure,
 	timesource clock.TimeSource,
-	delay RequestedDelay,
 ) ActivityVisitor {
 	if !ai.HasRetryPolicy {
 		return &nonRetryableActivityVisitor{state: enumspb.RETRY_STATE_RETRY_POLICY_NOT_SET}
@@ -77,6 +75,8 @@ func newActivityVisitor(
 	}
 
 	now := timesource.Now()
+	delay := nextRetryDelayFrom(failure)
+
 	backoff, retryState := nextBackoffInterval(
 		now,
 		ai.Attempt,
@@ -92,7 +92,13 @@ func newActivityVisitor(
 	}
 
 	nextScheduledTime := now.Add(backoff)
-	visitor := &retryableActivityVisitor{ai: ai, timesource: timesource, delay: delay, nextScheduledTime: nextScheduledTime, state: retryState}
+	visitor := &retryableActivityVisitor{
+		ai:                ai,
+		timesource:        timesource,
+		nextRetryDelay:    delay,
+		nextScheduledTime: nextScheduledTime,
+		state:             retryState,
+	}
 	return visitor
 }
 
@@ -118,17 +124,31 @@ func (ra *retryableActivityVisitor) UpdateActivityInfo(ai *persistence.ActivityI
 	ai.TimerTaskStatus = TimerTaskStatusNone
 	ai.RetryLastWorkerIdentity = ai.StartedIdentity
 	ai.RetryLastFailure = failure
-	if ra.delay.Interval != nil {
-		ai.ActivityRequests = &commonpb.ActivityRequests{NextRetryDelay: durationpb.New(*ra.delay.Interval)}
+	if ra.nextRetryDelay != nil {
+		ai.NextRetryDelay = durationpb.New(*ra.nextRetryDelay)
 	}
 	return ai
 }
 
-func makeBackoffAlgorithm(delay RequestedDelay) BackoffCalculatorAlgorithmFunc {
+func makeBackoffAlgorithm(requestedDelay *time.Duration) BackoffCalculatorAlgorithmFunc {
 	return func(duration *durationpb.Duration, coefficient float64, currentAttempt int32) time.Duration {
-		if delay.Interval != nil {
-			return *delay.Interval
+		if requestedDelay != nil {
+			return *requestedDelay
 		}
 		return ExponentialBackoffAlgorithm(duration, coefficient, currentAttempt)
 	}
+}
+
+func nextRetryDelayFrom(failure *failurepb.Failure) *time.Duration {
+	var delay *time.Duration
+	afi, ok := failure.GetFailureInfo().(*failurepb.Failure_ApplicationFailureInfo)
+	if !ok {
+		return delay
+	}
+	p := afi.ApplicationFailureInfo.GetNextRetryDelay()
+	if p != nil {
+		d := p.AsDuration()
+		delay = &d
+	}
+	return delay
 }

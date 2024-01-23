@@ -39,7 +39,6 @@ import (
 	"go.temporal.io/server/service/history/api"
 	"go.temporal.io/server/service/history/consts"
 	"go.temporal.io/server/service/history/shard"
-	"go.temporal.io/server/service/history/workflow"
 )
 
 func Invoke(
@@ -120,8 +119,7 @@ func Invoke(
 
 			postActions := &api.UpdateWorkflowAction{}
 			failure := request.GetFailure()
-			delay := workflow.RequestedDelay{Interval: nextRetryDelayFrom(request)}
-			retryState, err := mutableState.RetryActivity(ai, failure, delay)
+			retryState, err := mutableState.RetryActivity(ai, failure)
 			if err != nil {
 				return nil, err
 			}
@@ -153,14 +151,4 @@ func Invoke(
 		)
 	}
 	return &historyservice.RespondActivityTaskFailedResponse{}, err
-}
-
-func nextRetryDelayFrom(request *workflowservice.RespondActivityTaskFailedRequest) *time.Duration {
-	p := request.GetActivityRequests().GetNextRetryDelay()
-	var delay *time.Duration
-	if p != nil {
-		d := p.AsDuration()
-		delay = &d
-	}
-	return delay
 }

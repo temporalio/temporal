@@ -135,7 +135,7 @@ func (s *retryActivitySuite) TestRetryActivity_when_activity_has_no_retry_policy
 	s.activity.HasRetryPolicy = false
 	s.onActivityCreate.activitySize = s.activity.Size()
 
-	state, err := s.mutableState.RetryActivity(s.activity, s.failure, RequestedDelay{})
+	state, err := s.mutableState.RetryActivity(s.activity, s.failure)
 
 	s.NoError(err, "activity which has no retry policy should not be retried but it failed")
 	s.Equal(enumspb.RETRY_STATE_RETRY_POLICY_NOT_SET, state)
@@ -147,7 +147,7 @@ func (s *retryActivitySuite) TestRetryActivity_when_activity_has_pending_cancel_
 	s.activity.CancelRequested = true
 	s.onActivityCreate.activitySize = s.activity.Size()
 
-	state, err := s.mutableState.RetryActivity(s.activity, s.failure, RequestedDelay{})
+	state, err := s.mutableState.RetryActivity(s.activity, s.failure)
 
 	s.NoError(err, "activity which has no retry policy should not be retried but it failed")
 	s.Equal(enumspb.RETRY_STATE_CANCEL_REQUESTED, state)
@@ -162,9 +162,8 @@ func (s *retryActivitySuite) TestRetryActivity_should_be_scheduled_when_next_bac
 
 	s.mutableState.timeSource = s.timeSource
 
-	// s.nextBackoffStub.onNextCallReturn(time.Second, enumspb.RETRY_STATE_IN_PROGRESS)
-	second := time.Second
-	_, err := s.mutableState.RetryActivity(s.activity, s.failure, RequestedDelay{&second})
+	// second := time.Second
+	_, err := s.mutableState.RetryActivity(s.activity, s.failure)
 	s.NoError(err)
 	s.Equal(s.onActivityCreate.mutableStateApproximateSize-s.onActivityCreate.activitySize+s.activity.Size(), s.mutableState.approximateSize)
 	s.Equal(s.activity.Version, s.mutableState.currentVersion)
@@ -180,7 +179,7 @@ func (s *retryActivitySuite) TestRetryActivity_when_no_next_backoff_interval_sho
 	s.mutableState.timeSource = s.timeSource
 	s.moveClockBeyondActivityExpirationTime()
 
-	state, err := s.mutableState.RetryActivity(s.activity, s.failure, RequestedDelay{})
+	state, err := s.mutableState.RetryActivity(s.activity, s.failure)
 
 	s.NoError(err)
 	s.Equal(enumspb.RETRY_STATE_TIMEOUT, state, "wrong state")
@@ -202,7 +201,7 @@ func (s *retryActivitySuite) TestRetryActivity_when_task_can_not_be_generated_sh
 	s.mutableState.taskGenerator = taskGeneratorMock
 
 	s.nextBackoffStub.onNextCallReturn(time.Second, enumspb.RETRY_STATE_IN_PROGRESS)
-	state, err := s.mutableState.RetryActivity(s.activity, s.failure, RequestedDelay{})
+	state, err := s.mutableState.RetryActivity(s.activity, s.failure)
 	s.Error(err, e.Error())
 	s.Equal(
 		enumspb.RETRY_STATE_INTERNAL_SERVER_ERROR,
@@ -216,7 +215,7 @@ func (s *retryActivitySuite) TestRetryActivity_when_task_can_not_be_generated_sh
 func (s *retryActivitySuite) TestRetryActivity_when_workflow_is_not_mutable_should_fail() {
 	s.mutableState.executionState.State = enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED
 
-	state, err := s.mutableState.RetryActivity(s.activity, s.failure, RequestedDelay{})
+	state, err := s.mutableState.RetryActivity(s.activity, s.failure)
 
 	s.Error(ErrWorkflowFinished, err.Error(), "when workflow finished should get error stating it")
 	s.Equal(enumspb.RETRY_STATE_INTERNAL_SERVER_ERROR, state)
@@ -231,7 +230,7 @@ func (s *retryActivitySuite) TestRetryActivity_when_failure_in_list_of_not_retry
 	s.activity.RetryNonRetryableErrorTypes = []string{"application-failure-type"}
 	s.onActivityCreate.activitySize = s.activity.Size()
 
-	state, err := s.mutableState.RetryActivity(s.activity, s.failure, RequestedDelay{})
+	state, err := s.mutableState.RetryActivity(s.activity, s.failure)
 
 	s.NoError(err)
 	s.Equal(enumspb.RETRY_STATE_NON_RETRYABLE_FAILURE, state, "wrong state want NON_RETRYABLE_FAILURE got %v", state)
