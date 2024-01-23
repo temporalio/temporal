@@ -220,7 +220,12 @@ func NewClusterWithPersistenceTestBaseFactory(t *testing.T, options *TestCluster
 		indexName string
 		esClient  esclient.Client
 	)
-	if options.ESConfig != nil {
+	if !UsingSQLAdvancedVisibility() && options.ESConfig != nil {
+		// Randomize index name to avoid cross tests interference.
+		for k, v := range options.ESConfig.Indices {
+			options.ESConfig.Indices[k] = fmt.Sprintf("%v-%v", v, uuid.New())
+		}
+
 		err := setupIndex(options.ESConfig, logger)
 		if err != nil {
 			return nil, err
@@ -234,6 +239,7 @@ func NewClusterWithPersistenceTestBaseFactory(t *testing.T, options *TestCluster
 			return nil, err
 		}
 	} else {
+		options.ESConfig = nil
 		storeConfig := pConfig.DataStores[pConfig.VisibilityStore]
 		if storeConfig.SQL != nil {
 			switch storeConfig.SQL.PluginName {
@@ -471,7 +477,7 @@ func (tc *TestCluster) SetFaultInjectionRate(rate float64) {
 func (tc *TestCluster) TearDownCluster() error {
 	errs := tc.host.Stop()
 	tc.testBase.TearDownWorkflowStore()
-	if tc.host.esConfig != nil {
+	if !UsingSQLAdvancedVisibility() && tc.host.esConfig != nil {
 		if err := deleteIndex(tc.host.esConfig, tc.host.logger); err != nil {
 			errs = multierr.Combine(errs, err)
 		}

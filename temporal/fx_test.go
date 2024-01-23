@@ -43,7 +43,7 @@ import (
 
 func TestInitCurrentClusterMetadataRecord(t *testing.T) {
 	configDir := path.Join(testutils.GetRepoRootDirectory(), "config")
-	cfg, err := config.LoadConfig("development-cass", configDir, "")
+	cfg, err := config.LoadConfig("development-cass-es", configDir, "")
 	require.NoError(t, err)
 	controller := gomock.NewController(t)
 
@@ -105,7 +105,7 @@ func TestUpdateCurrentClusterMetadataRecord(t *testing.T) {
 
 func TestOverwriteCurrentClusterMetadataWithDBRecord(t *testing.T) {
 	configDir := path.Join(testutils.GetRepoRootDirectory(), "config")
-	cfg, err := config.LoadConfig("development-cass", configDir, "")
+	cfg, err := config.LoadConfig("development-cass-es", configDir, "")
 	require.NoError(t, err)
 
 	dbRecord := &persistence.GetClusterMetadataResponse{
