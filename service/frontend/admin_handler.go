@@ -939,7 +939,10 @@ func (adh *AdminHandler) GetWorkflowExecutionRawHistoryV2(ctx context.Context, r
 		return nil, err
 	}
 
-	if dynamicconfig.AccessHistory(adh.config.AccessHistoryFraction, adh.metricsHandler.WithTags(metrics.OperationTag(metrics.AdminGetWorkflowExecutionRawHistoryV2Tag))) {
+	if dynamicconfig.AccessHistory(
+		adh.config.AccessHistoryFraction,
+		adh.metricsHandler.WithTags(metrics.OperationTag(metrics.AdminGetWorkflowExecutionRawHistoryV2Tag)),
+	) {
 		response, err := adh.historyClient.GetWorkflowExecutionRawHistoryV2(ctx,
 			&historyservice.GetWorkflowExecutionRawHistoryV2Request{
 				NamespaceId: request.NamespaceId,
@@ -1590,7 +1593,10 @@ func (adh *AdminHandler) DeleteWorkflowExecution(
 		return nil, err
 	}
 
-	if dynamicconfig.AccessHistory(adh.config.AccessHistoryFraction, adh.metricsHandler.WithTags(metrics.OperationTag(metrics.AdminDeleteWorkflowExecutionTag))) {
+	if dynamicconfig.AccessHistory(
+		adh.config.AdminDeleteAccessHistoryFraction,
+		adh.metricsHandler.WithTags(metrics.OperationTag(metrics.AdminDeleteWorkflowExecutionTag)),
+	) {
 		response, err := adh.historyClient.ForceDeleteWorkflowExecution(ctx,
 			&historyservice.ForceDeleteWorkflowExecutionRequest{
 				NamespaceId: namespaceID.String(),
