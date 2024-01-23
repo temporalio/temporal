@@ -42,5 +42,7 @@ frontend.workerVersioningWorkflowAPIs:
   - value: true
 frontend.accessHistoryFraction:
   - value: 1.0
+frontend.adminDeleteAccessHistoryFraction:
+  - value: 1.0
 frontend.enableNexusHTTPHandler:
   - value: true

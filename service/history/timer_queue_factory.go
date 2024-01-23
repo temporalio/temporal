@@ -27,9 +27,12 @@ package history
 import (
 	"context"
 
+	historypb "go.temporal.io/api/history/v1"
+	historyspb "go.temporal.io/server/api/history/v1"
+	"go.temporal.io/server/common/definition"
+	"go.temporal.io/server/common/namespace"
 	"go.uber.org/fx"
 
-	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/client"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
@@ -88,7 +91,7 @@ func NewTimerQueueFactory(
 					params.Config.PersistenceMaxQPS,
 					timerQueuePersistenceMaxRPSRatio,
 				),
-				int64(params.Config.QueueMaxReaderCount()),
+				int64(params.Config.TimerQueueMaxReaderCount()),
 			),
 		},
 	}
@@ -151,12 +154,30 @@ func (f *timerQueueFactory) CreateQueue(
 		xdc.NewNDCHistoryResender(
 			shard.GetNamespaceRegistry(),
 			f.ClientBean,
-			func(ctx context.Context, request *historyservice.ReplicateEventsV2Request) error {
+			func(
+				ctx context.Context,
+				namespaceId namespace.ID,
+				workflowId string,
+				runId string,
+				events []*historypb.HistoryEvent,
+				versionHistory []*historyspb.VersionHistoryItem,
+			) error {
 				engine, err := shard.GetEngine(ctx)
 				if err != nil {
 					return err
 				}
-				return engine.ReplicateEventsV2(ctx, request)
+				return engine.ReplicateHistoryEvents(
+					ctx,
+					definition.WorkflowKey{
+						NamespaceID: namespaceId.String(),
+						WorkflowID:  workflowId,
+						RunID:       runId,
+					},
+					nil,
+					versionHistory,
+					[][]*historypb.HistoryEvent{events},
+					nil,
+				)
 			},
 			shard.GetPayloadSerializer(),
 			f.Config.StandbyTaskReReplicationContextTimeout,
@@ -219,7 +240,7 @@ func (f *timerQueueFactory) CreateQueue(
 			MaxPollIntervalJitterCoefficient:    f.Config.TimerProcessorMaxPollIntervalJitterCoefficient,
 			CheckpointInterval:                  f.Config.TimerProcessorUpdateAckInterval,
 			CheckpointIntervalJitterCoefficient: f.Config.TimerProcessorUpdateAckIntervalJitterCoefficient,
-			MaxReaderCount:                      f.Config.QueueMaxReaderCount,
+			MaxReaderCount:                      f.Config.TimerQueueMaxReaderCount,
 		},
 		f.HostReaderRateLimiter,
 		logger,

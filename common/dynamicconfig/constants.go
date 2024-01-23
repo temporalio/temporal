@@ -353,7 +353,12 @@ const (
 	FrontendEnableBatcher = "frontend.enableBatcher"
 	// FrontendAccessHistoryFraction (0.0~1.0) is the fraction of history operations that are sent to the history
 	// service using the new RPCs. The remaining access history via the existing implementation.
-	FrontendAccessHistoryFraction = "frontend.accessHistoryFraction" // TODO: remove once migration complete
+	// TODO: remove once migration completes.
+	FrontendAccessHistoryFraction = "frontend.accessHistoryFraction"
+	// FrontendAdminDeleteAccessHistoryFraction (0.0~1.0) is the fraction of admin DeleteWorkflowExecution requests
+	// that are sent to the history service using the new RPCs. The remaining access history via the existing implementation.
+	// TODO: remove once migration completes.
+	FrontendAdminDeleteAccessHistoryFraction = "frontend.adminDeleteAccessHistoryFraction"
 
 	// FrontendEnableUpdateWorkflowExecution enables UpdateWorkflowExecution API in the frontend.
 	// The UpdateWorkflowExecution API has gone through rigorous testing efforts but this config's default is `false` until the
@@ -575,8 +580,6 @@ const (
 	// limit should not be hit and task unloading should happen once critical count is exceeded. But
 	// since queue action is async, we need this hard limit.
 	QueuePendingTaskMaxCount = "history.queuePendingTasksMaxCount"
-	// QueueMaxReaderCount is the max number of readers in one multi-cursor queue
-	QueueMaxReaderCount = "history.queueMaxReaderCount"
 	// ContinueAsNewMinInterval is the minimal interval between continue_as_new executions.
 	// This is needed to prevent tight loop continue_as_new spin. Default is 1s.
 	ContinueAsNewMinInterval = "history.continueAsNewMinInterval"
@@ -629,6 +632,8 @@ const (
 	TimerProcessorPollBackoffInterval = "history.timerProcessorPollBackoffInterval"
 	// TimerProcessorMaxTimeShift is the max shift timer processor can have
 	TimerProcessorMaxTimeShift = "history.timerProcessorMaxTimeShift"
+	// TimerQueueMaxReaderCount is the max number of readers in one multi-cursor timer queue
+	TimerQueueMaxReaderCount = "history.timerQueueMaxReaderCount"
 	// RetentionTimerJitterDuration is a time duration jitter to distribute timer from T0 to T0 + jitter duration
 	RetentionTimerJitterDuration = "history.retentionTimerJitterDuration"
 
@@ -665,6 +670,8 @@ const (
 	TransferProcessorPollBackoffInterval = "history.transferProcessorPollBackoffInterval"
 	// TransferProcessorEnsureCloseBeforeDelete means we ensure the execution is closed before we delete it
 	TransferProcessorEnsureCloseBeforeDelete = "history.transferProcessorEnsureCloseBeforeDelete"
+	// TransferQueueMaxReaderCount is the max number of readers in one multi-cursor transfer queue
+	TransferQueueMaxReaderCount = "history.transferQueueMaxReaderCount"
 
 	// VisibilityTaskBatchSize is batch size for visibilityQueueProcessor
 	VisibilityTaskBatchSize = "history.visibilityTaskBatchSize"
@@ -696,6 +703,8 @@ const (
 	// close task has been processed. Must use Elasticsearch as visibility store, otherwise workflow
 	// data (eg: search attributes) will be lost after workflow is closed.
 	VisibilityProcessorEnableCloseWorkflowCleanup = "history.visibilityProcessorEnableCloseWorkflowCleanup"
+	// VisibilityQueueMaxReaderCount is the max number of readers in one multi-cursor visibility queue
+	VisibilityQueueMaxReaderCount = "history.visibilityQueueMaxReaderCount"
 
 	// ArchivalTaskBatchSize is batch size for archivalQueueProcessor
 	ArchivalTaskBatchSize = "history.archivalTaskBatchSize"
@@ -721,6 +730,8 @@ const (
 	ArchivalProcessorArchiveDelay = "history.archivalProcessorArchiveDelay"
 	// ArchivalBackendMaxRPS is the maximum rate of requests per second to the archival backend
 	ArchivalBackendMaxRPS = "history.archivalBackendMaxRPS"
+	// ArchivalQueueMaxReaderCount is the max number of readers in one multi-cursor archival queue
+	ArchivalQueueMaxReaderCount = "history.archivalQueueMaxReaderCount"
 
 	// WorkflowExecutionMaxInFlightUpdates is the max number of updates that can be in-flight (admitted but not yet completed) for any given workflow execution.
 	WorkflowExecutionMaxInFlightUpdates = "history.maxInFlightUpdates"
