@@ -27,7 +27,9 @@ package history
 import (
 	"context"
 	"fmt"
+	"strings"
 
+	"github.com/pborman/uuid"
 	"google.golang.org/protobuf/types/known/timestamppb"
 
 	commandpb "go.temporal.io/api/command/v1"
@@ -387,6 +389,8 @@ func (handler *workflowTaskHandlerCallbacksImpl) handleWorkflowTaskCompleted(
 	ctx context.Context,
 	req *historyservice.RespondWorkflowTaskCompletedRequest,
 ) (_ *historyservice.RespondWorkflowTaskCompletedResponse, retError error) {
+	traceID := uuid.New()
+
 	namespaceEntry, err := api.GetActiveNamespace(handler.shardContext, namespace.ID(req.GetNamespaceId()))
 	if err != nil {
 		return nil, err
@@ -437,7 +441,11 @@ func (handler *workflowTaskHandlerCallbacksImpl) handleWorkflowTaskCompleted(
 		return nil, serviceerror.NewNotFound("Workflow task not found.")
 	}
 
-	defer func() { workflowContext.GetReleaseFn()(retError) }()
+	defer func() {
+		handler.logger.Info("QQQ About to release WF lock", tag.WorkflowID(token.GetWorkflowId()), tag.WorkflowRunID(token.GetRunId()), tag.NewStringTag("trace-id", traceID))
+		workflowContext.GetReleaseFn()(retError)
+		handler.logger.Info("QQQ Released WF lock", tag.WorkflowID(token.GetWorkflowId()), tag.WorkflowRunID(token.GetRunId()), tag.NewStringTag("trace-id", traceID))
+	}()
 
 	var effects effect.Buffer
 	defer func() {
@@ -449,9 +457,13 @@ func (handler *workflowTaskHandlerCallbacksImpl) handleWorkflowTaskCompleted(
 		// about the way this function exits so while we have this defer here
 		// there is _also_ code to call effects.Cancel at key points.
 		if retError != nil {
+			handler.logger.Info("QQQ About to cancel effects", tag.WorkflowID(token.GetWorkflowId()), tag.WorkflowRunID(token.GetRunId()), tag.NewStringTag("trace-id", traceID), tag.NewInt("cancels-len", effects.CancelsLen()), tag.NewInt("effects-len", effects.EffectsLen()))
 			effects.Cancel(ctx)
+			handler.logger.Info("QQQ Cancelled effects", tag.WorkflowID(token.GetWorkflowId()), tag.WorkflowRunID(token.GetRunId()), tag.NewStringTag("trace-id", traceID), tag.NewInt("cancels-len", effects.CancelsLen()), tag.NewInt("effects-len", effects.EffectsLen()))
 		}
+		handler.logger.Info("QQQ About to apply effects", tag.WorkflowID(token.GetWorkflowId()), tag.WorkflowRunID(token.GetRunId()), tag.NewStringTag("trace-id", traceID), tag.NewInt("cancels-len", effects.CancelsLen()), tag.NewInt("effects-len", effects.EffectsLen()))
 		effects.Apply(ctx)
+		handler.logger.Info("QQQ Applied effects", tag.WorkflowID(token.GetWorkflowId()), tag.WorkflowRunID(token.GetRunId()), tag.NewStringTag("trace-id", traceID), tag.NewInt("cancels-len", effects.CancelsLen()), tag.NewInt("effects-len", effects.EffectsLen()))
 	}()
 
 	// It's an error if the workflow has used versioning in the past but this task has no versioning info.
@@ -638,7 +650,9 @@ func (handler *workflowTaskHandlerCallbacksImpl) handleWorkflowTaskCompleted(
 
 	wtFailedShouldCreateNewTask := false
 	if wtFailedCause != nil {
+		handler.logger.Info("QQQ About to cancel effects due to wfFailedCause is not nil", tag.WorkflowID(token.GetWorkflowId()), tag.WorkflowRunID(token.GetRunId()), tag.NewStringTag("trace-id", traceID), tag.NewInt("cancels-len", effects.CancelsLen()), tag.NewInt("effects-len", effects.EffectsLen()))
 		effects.Cancel(ctx)
+		handler.logger.Info("QQQ Cancelled effects due to wfFailedCause is not nil", tag.WorkflowID(token.GetWorkflowId()), tag.WorkflowRunID(token.GetRunId()), tag.NewStringTag("trace-id", traceID), tag.NewInt("cancels-len", effects.CancelsLen()), tag.NewInt("effects-len", effects.EffectsLen()))
 		handler.metricsHandler.Counter(metrics.FailedWorkflowTasksCounter.Name()).Record(
 			1,
 			metrics.OperationTag(metrics.HistoryRespondWorkflowTaskCompletedScope))
@@ -772,7 +786,9 @@ func (handler *workflowTaskHandlerCallbacksImpl) handleWorkflowTaskCompleted(
 	}
 
 	if updateErr != nil {
+		handler.logger.Info("QQQ About to cancel effects due to updateErr is not nil", tag.WorkflowID(token.GetWorkflowId()), tag.WorkflowRunID(token.GetRunId()), tag.NewStringTag("trace-id", traceID), tag.NewInt("cancels-len", effects.CancelsLen()), tag.NewInt("effects-len", effects.EffectsLen()))
 		effects.Cancel(ctx)
+		handler.logger.Info("QQQ Cancelled effects due to updateErr is not nil", tag.WorkflowID(token.GetWorkflowId()), tag.WorkflowRunID(token.GetRunId()), tag.NewStringTag("trace-id", traceID), tag.NewInt("cancels-len", effects.CancelsLen()), tag.NewInt("effects-len", effects.EffectsLen()))
 		if persistence.IsConflictErr(updateErr) {
 			handler.metricsHandler.Counter(metrics.ConcurrencyUpdateFailureCounter.Name()).Record(
 				1,
@@ -970,6 +986,12 @@ func (handler *workflowTaskHandlerCallbacksImpl) createRecordWorkflowTaskStarted
 	// Resend these updates if this is not a heartbeat WT (includeAlreadySent = !wtHeartbeat).
 	// Heartbeat WT delivers only new updates that come while this WT was running (similar to queries and buffered events).
 	response.Messages = updateRegistry.Send(ctx, !wtHeartbeat, workflowTask.StartedEventID, workflow.WithEffects(effect.Immediate(ctx), ms))
+
+	var sb strings.Builder
+	for i, m := range response.Messages {
+		sb.WriteString(fmt.Sprintf("%d: pid=%s id=%s body=%s;", i, m.ProtocolInstanceId, m.Id, m.Body.String()))
+	}
+	handler.logger.Info("QQQ Messages to send", tag.NewStringTag("messages", sb.String()))
 
 	if workflowTask.Type == enumsspb.WORKFLOW_TASK_TYPE_SPECULATIVE && len(response.GetMessages()) == 0 {
 		return nil, serviceerror.NewNotFound("No messages for speculative workflow task.")
