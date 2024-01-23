@@ -178,6 +178,7 @@ func ndcHistoryResenderProvider(
 	serializer serialization.Serializer,
 	logger log.Logger,
 	shardController shard.Controller,
+	historyReplicationEventHandler eventhandler.HistoryEventsHandler,
 ) xdc.NDCHistoryResender {
 	return xdc.NewNDCHistoryResender(
 		namespaceRegistry,
@@ -191,6 +192,22 @@ func ndcHistoryResenderProvider(
 			events []*historypb.HistoryEvent,
 			versionHistory []*historyspb.VersionHistoryItem,
 		) error {
+			if config.EnableReplicateLocalGeneratedEvent() {
+				return historyReplicationEventHandler.HandleHistoryEvents(
+					ctx,
+					sourceClusterName,
+					definition.WorkflowKey{
+						NamespaceID: namespaceId.String(),
+						WorkflowID:  workflowId,
+						RunID:       runId,
+					},
+					nil,
+					versionHistory,
+					[][]*historypb.HistoryEvent{events},
+					nil,
+				)
+			}
+
 			shardContext, err := shardController.GetShardByNamespaceWorkflow(
 				namespaceId,
 				workflowId,
