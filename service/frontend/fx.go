@@ -66,12 +66,14 @@ import (
 	"go.temporal.io/server/service"
 	"go.temporal.io/server/service/frontend/configs"
 	"go.temporal.io/server/service/history/tasks"
+	"go.temporal.io/server/service/worker/scheduler"
 )
 
 type FEReplicatorNamespaceReplicationQueue persistence.NamespaceReplicationQueue
 
 var Module = fx.Options(
 	resource.Module,
+	scheduler.Module,
 	fx.Provide(dynamicconfig.NewCollection),
 	fx.Provide(ConfigProvider),
 	fx.Provide(NamespaceLogInterceptorProvider),
@@ -198,8 +200,6 @@ func GrpcServerOptionsProvider(
 		namespaceLogInterceptor.Intercept, // TODO: Deprecate this with a outer custom interceptor
 		grpc.UnaryServerInterceptor(traceInterceptor),
 		metrics.NewServerMetricsContextInjectorInterceptor(),
-		redirectionInterceptor.Intercept,
-		telemetryInterceptor.UnaryIntercept,
 		authorization.NewAuthorizationInterceptor(
 			claimMapper,
 			authorizer,
@@ -209,6 +209,8 @@ func GrpcServerOptionsProvider(
 			cfg.Global.Authorization.AuthHeaderName,
 			cfg.Global.Authorization.AuthExtraHeaderName,
 		),
+		redirectionInterceptor.Intercept,
+		telemetryInterceptor.UnaryIntercept,
 		healthInterceptor.Intercept,
 		namespaceValidatorInterceptor.StateValidationIntercept,
 		namespaceCountLimiterInterceptor.Intercept,
@@ -245,8 +247,6 @@ func ConfigProvider(
 	return NewConfig(
 		dc,
 		persistenceConfig.NumHistoryShards,
-		persistenceConfig.StandardVisibilityConfigExist(),
-		persistenceConfig.AdvancedVisibilityConfigExist(),
 	)
 }
 
@@ -599,6 +599,7 @@ func HandlerProvider(
 	healthServer *health.Server,
 	membershipMonitor membership.Monitor,
 	healthInterceptor *interceptor.HealthInterceptor,
+	scheduleSpecBuilder *scheduler.SpecBuilder,
 ) Handler {
 	wfHandler := NewWorkflowHandler(
 		serviceConfig,
@@ -622,6 +623,7 @@ func HandlerProvider(
 		timeSource,
 		membershipMonitor,
 		healthInterceptor,
+		scheduleSpecBuilder,
 	)
 	return wfHandler
 }

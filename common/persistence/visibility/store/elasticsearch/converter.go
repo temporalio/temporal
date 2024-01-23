@@ -39,8 +39,6 @@ var allowedComparisonOperators = map[string]struct{}{
 	sqlparser.GreaterEqualStr:  {},
 	sqlparser.LessThanStr:      {},
 	sqlparser.LessEqualStr:     {},
-	sqlparser.LikeStr:          {},
-	sqlparser.NotLikeStr:       {},
 	sqlparser.InStr:            {},
 	sqlparser.NotInStr:         {},
 	sqlparser.StartsWithStr:    {},

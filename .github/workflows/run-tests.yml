@@ -1,0 +1,356 @@
+name: All Tests
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+      - release/**
+
+  workflow_dispatch:
+    inputs:
+      commit:
+        description: "Commit SHA"
+        required: true
+
+concurrency: # Auto-cancel existing runs in the PR when a new commit is pushed
+  group: run-tests-${{ github.head_ref || github.run_id }}
+  cancel-in-progress: true
+
+env:
+  COMMIT: ${{ github.event.inputs.commit || github.sha }}
+  DOCKER_COMPOSE_FILE: ./develop/github/docker-compose.yml
+  TEMPORAL_VERSION_CHECK_DISABLED: 1
+
+jobs:
+  misc-checks:
+    name: Misc checks
+    strategy:
+      fail-fast: false
+      matrix:
+        runs-on: [ubuntu-latest]
+    runs-on: ${{ matrix.runs-on }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          ref: ${{ env.COMMIT }}
+          submodules: true
+
+      - uses: actions/setup-go@v4
+        with:
+          go-version-file: 'go.mod'
+          check-latest: true
+
+      - uses: arduino/setup-protoc@v2
+
+      - run: make ci-build-misc
+
+      - run: make build-tests
+
+  cache-docker-images:
+    name: Cache Docker images
+    strategy:
+      fail-fast: false
+      matrix:
+        runs-on: [ubuntu-latest]
+    runs-on: ${{ matrix.runs-on }}
+    steps:
+      - uses: ScribeMD/docker-cache@0.3.7
+        with:
+          key: docker-${{ runner.os }}-${{ hashFiles(env.DOCKER_COMPOSE_FILE) }}
+
+      - uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          ref: ${{ env.COMMIT }}
+
+      - run: docker-compose -f ${{ env.DOCKER_COMPOSE_FILE }} pull
+
+  unit-test:
+    name: Unit test
+    needs: misc-checks
+    strategy:
+      fail-fast: false
+      matrix:
+        runs-on: [ubuntu-latest]
+    runs-on: ${{ matrix.runs-on }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          ref: ${{ env.COMMIT }}
+
+      - uses: actions/setup-go@v4
+        with:
+          go-version-file: 'go.mod'
+          check-latest: true
+
+      - name: Run unit test
+        timeout-minutes: 15
+        run: make unit-test-coverage
+
+  integration-test:
+    name: Integration test
+    needs: [misc-checks, cache-docker-images]
+    strategy:
+      fail-fast: false
+      matrix:
+        runs-on: [ubuntu-latest]
+    runs-on: ${{ matrix.runs-on }}
+    steps:
+      - uses: ScribeMD/docker-cache@0.3.7
+        with:
+          key: docker-${{ runner.os }}-${{ hashFiles(env.DOCKER_COMPOSE_FILE) }}
+
+      - uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          ref: ${{ env.COMMIT }}
+
+      - uses: actions/setup-go@v4
+        with:
+          go-version-file: 'go.mod'
+          check-latest: true
+
+      - name: Start containerized dependencies
+        run: |
+          docker-compose -f ${{ env.DOCKER_COMPOSE_FILE }} up -d cassandra mysql postgresql
+
+      - name: Run integration test
+        timeout-minutes: 15
+        run: make integration-test-coverage
+
+      - name: Tear down docker compose
+        if: ${{ always() }}
+        run: |
+          docker-compose -f ${{ env.DOCKER_COMPOSE_FILE }} down -v
+
+  functional-test:
+    name: Functional test
+    needs: [misc-checks, cache-docker-images]
+    strategy:
+      fail-fast: false
+      matrix:
+        runs-on: [ubuntu-latest]
+        name: [cass_es, cass_es8, sqlite, mysql, mysql8, postgres, postgres_pgx, postgres12, postgres12_pgx]
+        shard_index: [0, 1, 2]
+        include:
+          - name: cass_es
+            persistence_type: nosql
+            persistence_driver: cassandra
+            containers: [cassandra, elasticsearch]
+          - name: cass_es8
+            persistence_type: nosql
+            persistence_driver: cassandra
+            containers: [cassandra, elasticsearch8]
+          - name: sqlite
+            persistence_type: sql
+            persistence_driver: sqlite
+            containers: []
+          - name: mysql
+            persistence_type: sql
+            persistence_driver: mysql
+            containers: [mysql, elasticsearch]
+          - name: mysql8
+            persistence_type: sql
+            persistence_driver: mysql8
+            containers: [mysql]
+          - name: postgres
+            persistence_type: sql
+            persistence_driver: postgres
+            containers: [postgresql, elasticsearch]
+          - name: postgres_pgx
+            persistence_type: sql
+            persistence_driver: postgres_pgx
+            containers: [postgresql, elasticsearch]
+          - name: postgres12
+            persistence_type: sql
+            persistence_driver: postgres12
+            containers: [postgresql]
+          - name: postgres12_pgx
+            persistence_type: sql
+            persistence_driver: postgres12_pgx
+            containers: [postgresql]
+    runs-on: ${{ matrix.runs-on }}
+    env:
+      TEST_TOTAL_SHARDS: 3
+      TEST_SHARD_INDEX: ${{ matrix.shard_index }}
+      PERSISTENCE_TYPE: ${{ matrix.persistence_type }}
+      PERSISTENCE_DRIVER: ${{ matrix.persistence_driver }}
+    steps:
+      - uses: ScribeMD/docker-cache@0.3.7
+        with:
+          key: docker-${{ runner.os }}-${{ hashFiles(env.DOCKER_COMPOSE_FILE) }}
+
+      - uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          ref: ${{ env.COMMIT }}
+
+      - uses: actions/setup-go@v4
+        with:
+          go-version-file: 'go.mod'
+          check-latest: true
+
+      - name: Start containerized dependencies
+        if: ${{ toJson(matrix.containers) != '[]' }}
+        run: |
+          docker-compose -f ${{ env.DOCKER_COMPOSE_FILE }} up -d ${{ join(matrix.containers, ' ') }}
+
+      - name: Run functional test
+        timeout-minutes: 15
+        run: make functional-test-coverage
+
+      - name: Tear down docker compose
+        if: ${{ always() }}
+        run: |
+          docker-compose -f ${{ env.DOCKER_COMPOSE_FILE }} down -v
+
+  functional-test-xdc:
+    name: Functional test xdc
+    needs: [misc-checks, cache-docker-images]
+    strategy:
+      fail-fast: false
+      matrix:
+        runs-on: [ubuntu-latest]
+        name: [cass_es, cass_es8, mysql, mysql8, postgres, postgres_pgx, postgres12, postgres12_pgx]
+        include:
+          - name: cass_es
+            persistence_type: nosql
+            persistence_driver: elasticsearch
+            containers: [cassandra, elasticsearch]
+          - name: cass_es8
+            persistence_type: nosql
+            persistence_driver: elasticsearch
+            containers: [cassandra, elasticsearch8]
+          - name: mysql
+            persistence_type: sql
+            persistence_driver: mysql
+            containers: [mysql, elasticsearch]
+          - name: mysql8
+            persistence_type: sql
+            persistence_driver: mysql8
+            containers: [mysql]
+          - name: postgres
+            persistence_type: sql
+            persistence_driver: postgres12
+            containers: [postgresql, elasticsearch]
+          - name: postgres_pgx
+            persistence_type: sql
+            persistence_driver: postgres12_pgx
+            containers: [postgresql, elasticsearch]
+          - name: postgres12
+            persistence_type: sql
+            persistence_driver: postgres12
+            containers: [postgresql]
+          - name: postgres12_pgx
+            persistence_type: sql
+            persistence_driver: postgres12_pgx
+            containers: [postgresql]
+    runs-on: ${{ matrix.runs-on }}
+    env:
+      PERSISTENCE_TYPE: ${{ matrix.persistence_type }}
+      PERSISTENCE_DRIVER: ${{ matrix.persistence_driver }}
+    steps:
+      - uses: ScribeMD/docker-cache@0.3.7
+        with:
+          key: docker-${{ runner.os }}-${{ hashFiles(env.DOCKER_COMPOSE_FILE) }}
+
+      - uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          ref: ${{ env.COMMIT }}
+
+      - uses: actions/setup-go@v4
+        with:
+          go-version-file: 'go.mod'
+          check-latest: true
+
+      - name: Start containerized dependencies
+        if: ${{ toJson(matrix.containers) != '[]' }}
+        run: |
+          docker-compose -f ${{ env.DOCKER_COMPOSE_FILE }} up -d ${{ join(matrix.containers, ' ') }}
+
+      - name: Run functional test xdc
+        timeout-minutes: 15
+        run: make functional-test-xdc-coverage
+
+      - name: Tear down docker compose
+        if: ${{ always() }}
+        run: |
+          docker-compose -f ${{ env.DOCKER_COMPOSE_FILE }} down -v
+
+  functional-test-ndc:
+    name: Functional test ndc
+    needs: [misc-checks, cache-docker-images]
+    strategy:
+      fail-fast: false
+      matrix:
+        runs-on: [ubuntu-latest]
+        name: [cass_es, cass_es8, mysql, mysql8, postgres, postgres_pgx, postgres12, postgres12_pgx]
+        include:
+          - name: cass_es
+            persistence_type: nosql
+            persistence_driver: elasticsearch
+            containers: [cassandra, elasticsearch]
+          - name: cass_es8
+            persistence_type: nosql
+            persistence_driver: elasticsearch
+            containers: [cassandra, elasticsearch8]
+          - name: mysql
+            persistence_type: sql
+            persistence_driver: mysql
+            containers: [mysql, elasticsearch]
+          - name: mysql8
+            persistence_type: sql
+            persistence_driver: mysql8
+            containers: [mysql]
+          - name: postgres
+            persistence_type: sql
+            persistence_driver: postgres12
+            containers: [postgresql, elasticsearch]
+          - name: postgres_pgx
+            persistence_type: sql
+            persistence_driver: postgres12_pgx
+            containers: [postgresql, elasticsearch]
+          - name: postgres12
+            persistence_type: sql
+            persistence_driver: postgres12
+            containers: [postgresql]
+          - name: postgres12_pgx
+            persistence_type: sql
+            persistence_driver: postgres12_pgx
+            containers: [postgresql]
+    runs-on: ${{ matrix.runs-on }}
+    env:
+      PERSISTENCE_TYPE: ${{ matrix.persistence_type }}
+      PERSISTENCE_DRIVER: ${{ matrix.persistence_driver }}
+    steps:
+      - uses: ScribeMD/docker-cache@0.3.7
+        with:
+          key: docker-${{ runner.os }}-${{ hashFiles(env.DOCKER_COMPOSE_FILE) }}
+
+      - uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          ref: ${{ env.COMMIT }}
+
+      - uses: actions/setup-go@v4
+        with:
+          go-version-file: 'go.mod'
+          check-latest: true
+
+      - name: Start containerized dependencies
+        if: ${{ toJson(matrix.containers) != '[]' }}
+        run: |
+          docker-compose -f ${{ env.DOCKER_COMPOSE_FILE }} up -d ${{ join(matrix.containers, ' ') }}
+
+      - name: Run functional test ndc
+        timeout-minutes: 15
+        run: make functional-test-ndc-coverage
+
+      - name: Tear down docker compose
+        if: ${{ always() }}
+        run: |
+          docker-compose -f ${{ env.DOCKER_COMPOSE_FILE }} down -v

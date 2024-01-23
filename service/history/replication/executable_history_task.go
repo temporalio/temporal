@@ -62,7 +62,6 @@ type (
 		deserializeLock   sync.Mutex
 		eventsDesResponse *eventsDeserializeResponse
 
-		batchLock sync.Mutex
 		batchable bool
 	}
 	eventsDeserializeResponse struct {
@@ -151,9 +150,21 @@ func (e *ExecutableHistoryTask) Execute() error {
 	if err != nil {
 		return err
 	}
-	// use HistoryEventsHandler.HandleHistoryEvents(...) instead
-	return engine.ReplicateHistoryEvents(
+
+	if !e.Config.EnableReplicateLocalGeneratedEvent() {
+		return engine.ReplicateHistoryEvents(
+			ctx,
+			e.WorkflowKey,
+			e.baseExecutionInfo,
+			e.versionHistoryItems,
+			events,
+			newRunEvents,
+		)
+	}
+
+	return e.HistoryEventsHandler.HandleHistoryEvents(
 		ctx,
+		e.SourceClusterName(),
 		e.WorkflowKey,
 		e.baseExecutionInfo,
 		e.versionHistoryItems,
@@ -309,12 +320,6 @@ func (e *ExecutableHistoryTask) getDeserializedEvents() (_ [][]*historypb.Histor
 }
 
 func (e *ExecutableHistoryTask) BatchWith(incomingTask BatchableTask) (TrackableExecutableTask, bool) {
-	if !e.batchable {
-		return nil, false
-	}
-	e.batchLock.Lock()
-	defer e.batchLock.Unlock()
-
 	if !e.batchable || !incomingTask.CanBatch() {
 		return nil, false
 	}
@@ -459,13 +464,9 @@ func (e *ExecutableHistoryTask) checkEvents(incomingEventBatches [][]*historypb.
 }
 
 func (e *ExecutableHistoryTask) CanBatch() bool {
-	e.batchLock.Lock()
-	defer e.batchLock.Unlock()
 	return e.batchable
 }
 
 func (e *ExecutableHistoryTask) MarkUnbatchable() {
-	e.batchLock.Lock()
-	defer e.batchLock.Unlock()
 	e.batchable = false
 }

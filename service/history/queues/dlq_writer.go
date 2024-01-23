@@ -109,7 +109,7 @@ func (q *DLQWriter) WriteTaskToDLQ(ctx context.Context, sourceCluster, targetClu
 	if err != nil {
 		return fmt.Errorf("%w: %v", ErrSendTaskToDLQ, err)
 	}
-	q.metricsHandler.Counter(metrics.DLQWrites.Name()).Record(1)
+	metrics.DLQWrites.With(q.metricsHandler).Record(1)
 	ns, err := q.namespaceRegistry.GetNamespaceByID(namespace.ID(task.GetNamespaceID()))
 	var namespaceTag tag.Tag
 	if err != nil {

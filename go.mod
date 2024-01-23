@@ -6,11 +6,11 @@ require (
 	cloud.google.com/go/storage v1.30.1
 	github.com/aws/aws-sdk-go v1.44.289
 	github.com/blang/semver/v4 v4.0.0
-	github.com/brianvoe/gofakeit/v6 v6.22.0
 	github.com/cactus/go-statsd-client/v5 v5.0.0
 	github.com/dgryski/go-farm v0.0.0-20200201041132-a6ae2369ad13
 	github.com/emirpasic/gods v1.18.1
 	github.com/fatih/color v1.15.0
+	github.com/go-faker/faker/v4 v4.2.0
 	github.com/go-sql-driver/mysql v1.5.0
 	github.com/gocql/gocql v1.5.2
 	github.com/golang-jwt/jwt/v4 v4.5.0
@@ -41,6 +41,8 @@ require (
 	go.opentelemetry.io/otel/metric v1.19.0
 	go.opentelemetry.io/otel/sdk v1.19.0
 	go.opentelemetry.io/otel/sdk/metric v1.19.0
+	go.temporal.io/api v1.26.1-0.20240112213355-856278c03cec
+	go.temporal.io/sdk v1.25.2-0.20240108174654-c1744ee2c8cb
 	go.temporal.io/api v1.26.1-0.20240116230500-406a5810b501
 	go.temporal.io/sdk v1.25.2-0.20240123002209-94a5f5f81f98
 	go.temporal.io/version v0.3.0
@@ -136,6 +138,12 @@ require (
 	google.golang.org/genproto v0.0.0-20240116215550-a9fa1716bcac // indirect
 	google.golang.org/genproto/googleapis/api v0.0.0-20240116215550-a9fa1716bcac // indirect
 	google.golang.org/genproto/googleapis/rpc v0.0.0-20240116215550-a9fa1716bcac // indirect
+	google.golang.org/protobuf v1.32.0
+	golang.org/x/tools v0.16.0 // indirect
+	google.golang.org/appengine v1.6.8 // indirect
+	google.golang.org/genproto v0.0.0-20240108191215-35c7eff3a6b1 // indirect
+	google.golang.org/genproto/googleapis/api v0.0.0-20240108191215-35c7eff3a6b1 // indirect
+	google.golang.org/genproto/googleapis/rpc v0.0.0-20240108191215-35c7eff3a6b1 // indirect
 	google.golang.org/protobuf v1.32.0
 	gopkg.in/inf.v0 v0.9.1 // indirect
 	lukechampine.com/uint128 v1.3.0 // indirect

@@ -70,7 +70,7 @@ func TestMatcherSuite(t *testing.T) {
 func (t *MatcherTestSuite) SetupTest() {
 	t.controller = gomock.NewController(t.T())
 	t.client = matchingservicemock.NewMockMatchingServiceClient(t.controller)
-	cfg := NewConfig(dynamicconfig.NewNoopCollection(), false, false)
+	cfg := NewConfig(dynamicconfig.NewNoopCollection())
 	cfg.BacklogNegligibleAge = dynamicconfig.GetDurationPropertyFnFilteredByTaskQueueInfo(5 * time.Second)
 	cfg.MaxWaitForPollerBeforeFwd = dynamicconfig.GetDurationPropertyFnFilteredByTaskQueueInfo(5 * time.Millisecond)
 
@@ -357,6 +357,94 @@ func (t *MatcherTestSuite) TestSyncMatchFailure() {
 	t.NotNil(req)
 	t.NoError(err)
 	t.False(syncMatch)
+}
+
+func (t *MatcherTestSuite) TestQueryNoCurrentPollersButRecentPollers() {
+	t.client.EXPECT().PollWorkflowTaskQueue(gomock.Any(), gomock.Any(), gomock.Any()).Do(
+		func(arg0 context.Context, arg1 *matchingservice.PollWorkflowTaskQueueRequest, arg2 ...interface{}) {
+			_, err := t.rootMatcher.PollForQuery(arg0, &pollMetadata{})
+			t.Assert().Error(err, context.DeadlineExceeded)
+		},
+	).Return(nil, context.DeadlineExceeded).AnyTimes()
+
+	// make a poll that expires
+	ctx, cancel := context.WithTimeout(context.Background(), time.Millisecond)
+	_, err := t.matcher.PollForQuery(ctx, &pollMetadata{})
+	t.Assert().Error(err, context.DeadlineExceeded)
+	cancel()
+
+	// send query and expect generic DeadlineExceeded error
+	task := newInternalQueryTask(uuid.New(), &matchingservice.QueryWorkflowRequest{})
+	t.client.EXPECT().QueryWorkflow(gomock.Any(), gomock.Any(), gomock.Any()).Do(
+		func(ctx context.Context, req *matchingservice.QueryWorkflowRequest, arg2 ...interface{}) {
+			task.forwardedFrom = req.GetForwardedSource()
+			resp, err := t.rootMatcher.OfferQuery(ctx, task)
+			t.Nil(resp)
+			t.Assert().Error(err, context.DeadlineExceeded)
+		},
+	).Return(nil, context.DeadlineExceeded)
+
+	ctx, cancel = context.WithTimeout(context.Background(), time.Millisecond*10)
+	_, err = t.matcher.OfferQuery(ctx, task)
+	cancel()
+	t.Error(err, context.DeadlineExceeded)
+}
+
+func (t *MatcherTestSuite) TestQueryNoRecentPoller() {
+	t.client.EXPECT().PollWorkflowTaskQueue(gomock.Any(), gomock.Any(), gomock.Any()).Do(
+		func(arg0 context.Context, arg1 *matchingservice.PollWorkflowTaskQueueRequest, arg2 ...interface{}) {
+			_, err := t.rootMatcher.PollForQuery(arg0, &pollMetadata{})
+			t.Assert().Error(err, context.DeadlineExceeded)
+		},
+	).Return(nil, context.DeadlineExceeded).AnyTimes()
+
+	// make a poll that expires
+	ctx, cancel := context.WithTimeout(context.Background(), time.Millisecond)
+	_, err := t.matcher.PollForQuery(ctx, &pollMetadata{})
+	t.Assert().Error(err, context.DeadlineExceeded)
+	cancel()
+
+	// wait 10ms after the poll
+	time.Sleep(time.Millisecond * 10)
+
+	// set the window to 5ms
+	t.cfg.QueryPollerUnavailableWindow = func() time.Duration {
+		return time.Millisecond * 5
+	}
+
+	// make the query and expect errNoRecentPoller
+	task := newInternalQueryTask(uuid.New(), &matchingservice.QueryWorkflowRequest{})
+	t.client.EXPECT().QueryWorkflow(gomock.Any(), gomock.Any(), gomock.Any()).Do(
+		func(ctx context.Context, req *matchingservice.QueryWorkflowRequest, arg2 ...interface{}) {
+			task.forwardedFrom = req.GetForwardedSource()
+			resp, err := t.rootMatcher.OfferQuery(ctx, task)
+			t.Nil(resp)
+			t.Assert().Error(err, errNoRecentPoller)
+		},
+	).Return(nil, errNoRecentPoller)
+
+	ctx, cancel = context.WithTimeout(context.Background(), time.Millisecond*10)
+	_, err = t.matcher.OfferQuery(ctx, task)
+	cancel()
+	t.Error(err, errNoRecentPoller)
+}
+
+func (t *MatcherTestSuite) TestQueryNoPollerAtAll() {
+	task := newInternalQueryTask(uuid.New(), &matchingservice.QueryWorkflowRequest{})
+
+	t.client.EXPECT().QueryWorkflow(gomock.Any(), gomock.Any(), gomock.Any()).Do(
+		func(ctx context.Context, req *matchingservice.QueryWorkflowRequest, arg2 ...interface{}) {
+			task.forwardedFrom = req.GetForwardedSource()
+			resp, err := t.rootMatcher.OfferQuery(ctx, task)
+			t.Nil(resp)
+			t.Assert().Error(err, errNoRecentPoller)
+		},
+	).Return(nil, errNoRecentPoller)
+
+	ctx, cancel := context.WithTimeout(context.Background(), time.Millisecond*10)
+	_, err := t.matcher.OfferQuery(ctx, task)
+	cancel()
+	t.Error(err, errNoRecentPoller)
 }
 
 func (t *MatcherTestSuite) TestQueryLocalSyncMatch() {

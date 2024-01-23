@@ -50,3 +50,11 @@ jobs:
       version: v1.17.0
       version-is-repo-ref: false
       docker-image-artifact-name: temporal-server-docker
+
+  feature-tests-dotnet:
+    needs: build-docker-image
+    uses: temporalio/features/.github/workflows/dotnet.yaml@main
+    with:
+      version: 1.0.0
+      version-is-repo-ref: false
+      docker-image-artifact-name: temporal-server-docker

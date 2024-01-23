@@ -161,7 +161,7 @@ func (rpo *monitor) Start() {
 		rpo.logger.Fatal("unable to get ring pop labels", tag.Error(err))
 	}
 
-	if err = labels.Set(rolePort, strconv.Itoa(rpo.services[rpo.serviceName])); err != nil {
+	if err = labels.Set(portKey, strconv.Itoa(rpo.services[rpo.serviceName])); err != nil {
 		rpo.logger.Fatal("unable to set ring pop ServicePort label", tag.Error(err))
 	}
 
@@ -407,6 +407,15 @@ func (rpo *monitor) GetResolver(service primitives.ServiceName) (membership.Serv
 
 func (rpo *monitor) GetReachableMembers() ([]string, error) {
 	return rpo.rp.GetReachableMembers()
+}
+
+func (rpo *monitor) SetDraining(draining bool) error {
+	labels, err := rpo.rp.Labels()
+	if err != nil {
+		// This only happens if ringpop is not bootstrapped yet.
+		return err
+	}
+	return labels.Set(drainingKey, strconv.FormatBool(draining))
 }
 
 func replaceServicePort(address string, servicePort int) (string, error) {

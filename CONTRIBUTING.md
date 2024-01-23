@@ -20,7 +20,6 @@ This doc is for contributors to Temporal Server (hopefully that's you!)
 
 ### Runtime (server and tests) prerequisites
 * [docker](https://docs.docker.com/engine/install/)
-* [docker-compose](https://docs.docker.com/compose/install/)
 
 > Note: it is possible to run Temporal server without a `docker`. If for some reason (for example, performance on macOS)
 > you want to run dependencies on the host OS, please follow the [doc](develop/docs/run_dependencies_host.md).
@@ -55,7 +54,7 @@ We defined three categories of tests.
 * Integration test: Those tests cover the integration between the server and the dependencies (Cassandra, SQL, ES etc.). 
 * Functional test: Those tests cover the E2E functionality of Temporal server. They are all under ./tests directory.
 
-Integration and functional tests require runtime dependencies. They can be run with `start-dependencies` target (uses `docker-compose` internally). Open new terminal window and run:
+Integration and functional tests require runtime dependencies. They can be run with `start-dependencies` target (uses `docker compose` internally). Open new terminal window and run:
 ```bash
 make start-dependencies
 ```
@@ -94,13 +93,13 @@ for example:
 go test -v github.com/temporalio/temporal/common/persistence -run TestCassandraPersistenceSuite -testify.m TestPersistenceStartWorkflow
 ```
 
-When you are done, don't forget to stop `docker-compose` (with `Ctrl+C`) and clean up all dependencies:
+When you are done, don't forget to stop `docker compose` (with `Ctrl+C`) and clean up all dependencies:
 ```bash
 make stop-dependencies
 ```
 
 ## Run Temporal Server locally
-First start runtime dependencies. They can be run with `start-dependencies` target (uses `docker-compose` internally). Open new terminal window and run:
+First start runtime dependencies. They can be run with `start-dependencies` target (uses `docker compose` internally). Open new terminal window and run:
 ```bash
 make start-dependencies
 ```

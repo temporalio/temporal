@@ -40,6 +40,10 @@ import (
 	"google.golang.org/protobuf/types/known/durationpb"
 )
 
+const (
+	waitForPersistence = 10 * time.Second
+)
+
 func (s *FunctionalSuite) Test_DeleteWorkflowExecution_Competed() {
 	id := "functional-delete-workflow-completed-test"
 	wt := "functional-delete-workflow-completed-test-type"
@@ -97,23 +101,27 @@ func (s *FunctionalSuite) Test_DeleteWorkflowExecution_Competed() {
 
 	// Verify that workflow is completed and visibility is updated.
 	for _, we := range wes {
-		executionsCount := 0
-		for i := 0; i < 10; i++ {
-			visibilityResponse, err := s.engine.ListWorkflowExecutions(NewContext(), &workflowservice.ListWorkflowExecutionsRequest{
-				Namespace:     s.namespace,
-				PageSize:      1,
-				NextPageToken: nil,
-				Query:         fmt.Sprintf("WorkflowId='%s'", we.WorkflowId),
-			})
-			s.NoError(err)
-			if len(visibilityResponse.Executions) != 1 || visibilityResponse.Executions[0].Status != enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED {
-				time.Sleep(100 * time.Millisecond)
-			} else {
-				executionsCount = len(visibilityResponse.Executions)
-				break
-			}
-		}
-		s.Equal(1, executionsCount)
+		s.Eventually(
+			func() bool {
+				visibilityResponse, err := s.engine.ListWorkflowExecutions(
+					NewContext(),
+					&workflowservice.ListWorkflowExecutionsRequest{
+						Namespace:     s.namespace,
+						PageSize:      1,
+						NextPageToken: nil,
+						Query:         fmt.Sprintf("WorkflowId='%s'", we.WorkflowId),
+					},
+				)
+				s.NoError(err)
+				if len(visibilityResponse.Executions) == 1 &&
+					visibilityResponse.Executions[0].Status == enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED {
+					return true
+				}
+				return false
+			},
+			waitForESToSettle,
+			100*time.Millisecond,
+		)
 	}
 
 	// Delete workflow executions.
@@ -129,50 +137,63 @@ func (s *FunctionalSuite) Test_DeleteWorkflowExecution_Competed() {
 	}
 
 	for _, we := range wes {
-		executionDeleted := false
-		for i := 0; i < 10; i++ {
-			// Check execution is deleted.
-			describeResponse, err := s.engine.DescribeWorkflowExecution(NewContext(), &workflowservice.DescribeWorkflowExecutionRequest{
+		s.Eventually(
+			func() bool {
+				// Check execution is deleted.
+				describeResponse, err := s.engine.DescribeWorkflowExecution(
+					NewContext(),
+					&workflowservice.DescribeWorkflowExecutionRequest{
+						Namespace: s.namespace,
+						Execution: we,
+					},
+				)
+				if err == nil {
+					s.Logger.Warn("Execution not deleted yet")
+					return false
+				}
+				var notFoundErr *serviceerror.NotFound
+				s.ErrorAs(err, &notFoundErr)
+				s.Nil(describeResponse)
+				return true
+			},
+			waitForPersistence,
+			100*time.Millisecond,
+		)
+
+		// Check history is deleted.
+		historyResponse, err := s.engine.GetWorkflowExecutionHistory(
+			NewContext(),
+			&workflowservice.GetWorkflowExecutionHistoryRequest{
 				Namespace: s.namespace,
 				Execution: we,
-			})
-			if err == nil {
-				s.Logger.Warn("Execution not deleted yet")
-				time.Sleep(2 * time.Second)
-				continue
-			}
-			var notFoundErr *serviceerror.NotFound
-			s.ErrorAs(err, &notFoundErr)
-			s.Nil(describeResponse)
+			},
+		)
+		var invalidArgumentErr *serviceerror.InvalidArgument
+		s.ErrorAs(err, &invalidArgumentErr)
+		s.Nil(historyResponse)
 
-			// Check history is deleted.
-			historyResponse, err := s.engine.GetWorkflowExecutionHistory(NewContext(), &workflowservice.GetWorkflowExecutionHistoryRequest{
-				Namespace: s.namespace,
-				Execution: we,
-			})
-			var invalidArgumentErr *serviceerror.InvalidArgument
-			s.ErrorAs(err, &invalidArgumentErr)
-			s.Nil(historyResponse)
-
-			// Check visibility is updated.
-			visibilityResponse, err := s.engine.ListWorkflowExecutions(NewContext(), &workflowservice.ListWorkflowExecutionsRequest{
-				Namespace:     s.namespace,
-				PageSize:      1,
-				NextPageToken: nil,
-				Query:         fmt.Sprintf("WorkflowId='%s'", we.WorkflowId),
-			})
-			s.NoError(err)
-			if len(visibilityResponse.Executions) != 0 {
-				time.Sleep(2 * time.Second)
-				s.Logger.Warn("Visibility is not deleted yet")
-				continue
-			}
-			s.Equal(0, len(visibilityResponse.Executions))
-
-			executionDeleted = true
-			break
-		}
-		s.True(executionDeleted)
+		s.Eventually(
+			func() bool {
+				// Check visibility is updated.
+				visibilityResponse, err := s.engine.ListWorkflowExecutions(
+					NewContext(),
+					&workflowservice.ListWorkflowExecutionsRequest{
+						Namespace:     s.namespace,
+						PageSize:      1,
+						NextPageToken: nil,
+						Query:         fmt.Sprintf("WorkflowId='%s'", we.WorkflowId),
+					},
+				)
+				s.NoError(err)
+				if len(visibilityResponse.Executions) != 0 {
+					s.Logger.Warn("Visibility is not deleted yet")
+					return false
+				}
+				return true
+			},
+			waitForESToSettle,
+			100*time.Millisecond,
+		)
 	}
 }
 
@@ -209,23 +230,24 @@ func (s *FunctionalSuite) Test_DeleteWorkflowExecution_Running() {
 
 	// Verify that workflow is running and visibility is updated.
 	for _, we := range wes {
-		executionsCount := 0
-		for i := 0; i < 10; i++ {
-			visibilityResponse, err := s.engine.ListWorkflowExecutions(NewContext(), &workflowservice.ListWorkflowExecutionsRequest{
-				Namespace:     s.namespace,
-				PageSize:      1,
-				NextPageToken: nil,
-				Query:         fmt.Sprintf("WorkflowId='%s'", we.WorkflowId),
-			})
-			s.NoError(err)
-			if len(visibilityResponse.Executions) != 1 || visibilityResponse.Executions[0].Status != enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING {
-				time.Sleep(100 * time.Millisecond)
-			} else {
-				executionsCount = len(visibilityResponse.Executions)
-				break
-			}
-		}
-		s.Equal(1, executionsCount)
+		s.Eventually(
+			func() bool {
+				visibilityResponse, err := s.engine.ListWorkflowExecutions(
+					NewContext(),
+					&workflowservice.ListWorkflowExecutionsRequest{
+						Namespace:     s.namespace,
+						PageSize:      1,
+						NextPageToken: nil,
+						Query:         fmt.Sprintf("WorkflowId='%s'", we.WorkflowId),
+					},
+				)
+				s.NoError(err)
+				return len(visibilityResponse.Executions) == 1 &&
+					visibilityResponse.Executions[0].Status == enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING
+			},
+			waitForESToSettle,
+			100*time.Millisecond,
+		)
 	}
 
 	// Delete workflow executions.
@@ -241,50 +263,63 @@ func (s *FunctionalSuite) Test_DeleteWorkflowExecution_Running() {
 	}
 
 	for _, we := range wes {
-		executionDeleted := false
-		for i := 0; i < 10; i++ {
-			// Check execution is deleted.
-			describeResponse, err := s.engine.DescribeWorkflowExecution(NewContext(), &workflowservice.DescribeWorkflowExecutionRequest{
+		s.Eventually(
+			func() bool {
+				// Check execution is deleted.
+				describeResponse, err := s.engine.DescribeWorkflowExecution(
+					NewContext(),
+					&workflowservice.DescribeWorkflowExecutionRequest{
+						Namespace: s.namespace,
+						Execution: we,
+					},
+				)
+				if err == nil {
+					s.Logger.Warn("Execution not deleted yet")
+					return false
+				}
+				var notFoundErr *serviceerror.NotFound
+				s.ErrorAs(err, &notFoundErr)
+				s.Nil(describeResponse)
+				return true
+			},
+			waitForPersistence,
+			100*time.Millisecond,
+		)
+
+		// Check history is deleted.
+		historyResponse, err := s.engine.GetWorkflowExecutionHistory(
+			NewContext(),
+			&workflowservice.GetWorkflowExecutionHistoryRequest{
 				Namespace: s.namespace,
 				Execution: we,
-			})
-			if err == nil {
-				s.Logger.Warn("Execution not deleted yet")
-				time.Sleep(2 * time.Second)
-				continue
-			}
-			var notFoundErr *serviceerror.NotFound
-			s.ErrorAs(err, &notFoundErr)
-			s.Nil(describeResponse)
+			},
+		)
+		var invalidArgumentErr *serviceerror.InvalidArgument
+		s.ErrorAs(err, &invalidArgumentErr)
+		s.Nil(historyResponse)
 
-			// Check history is deleted.
-			historyResponse, err := s.engine.GetWorkflowExecutionHistory(NewContext(), &workflowservice.GetWorkflowExecutionHistoryRequest{
-				Namespace: s.namespace,
-				Execution: we,
-			})
-			var invalidArgumentErr *serviceerror.InvalidArgument
-			s.ErrorAs(err, &invalidArgumentErr)
-			s.Nil(historyResponse)
-
-			// Check visibility is updated.
-			visibilityResponse, err := s.engine.ListWorkflowExecutions(NewContext(), &workflowservice.ListWorkflowExecutionsRequest{
-				Namespace:     s.namespace,
-				PageSize:      1,
-				NextPageToken: nil,
-				Query:         fmt.Sprintf("WorkflowId='%s'", we.WorkflowId),
-			})
-			s.NoError(err)
-			if len(visibilityResponse.Executions) != 0 {
-				time.Sleep(2 * time.Second)
-				s.Logger.Warn("Visibility is not deleted yet")
-				continue
-			}
-			s.Equal(0, len(visibilityResponse.Executions))
-
-			executionDeleted = true
-			break
-		}
-		s.True(executionDeleted)
+		s.Eventually(
+			func() bool {
+				// Check visibility is updated.
+				visibilityResponse, err := s.engine.ListWorkflowExecutions(
+					NewContext(),
+					&workflowservice.ListWorkflowExecutionsRequest{
+						Namespace:     s.namespace,
+						PageSize:      1,
+						NextPageToken: nil,
+						Query:         fmt.Sprintf("WorkflowId='%s'", we.WorkflowId),
+					},
+				)
+				s.NoError(err)
+				if len(visibilityResponse.Executions) != 0 {
+					s.Logger.Warn("Visibility is not deleted yet")
+					return false
+				}
+				return true
+			},
+			waitForESToSettle,
+			100*time.Millisecond,
+		)
 	}
 }
 
@@ -321,23 +356,24 @@ func (s *FunctionalSuite) Test_DeleteWorkflowExecution_RunningWithTerminate() {
 
 	// Verify that workflow is running and visibility is updated.
 	for _, we := range wes {
-		executionsCount := 0
-		for i := 0; i < 10; i++ {
-			visibilityResponse, err := s.engine.ListWorkflowExecutions(NewContext(), &workflowservice.ListWorkflowExecutionsRequest{
-				Namespace:     s.namespace,
-				PageSize:      1,
-				NextPageToken: nil,
-				Query:         fmt.Sprintf("WorkflowId='%s'", we.WorkflowId),
-			})
-			s.NoError(err)
-			if len(visibilityResponse.Executions) != 1 || visibilityResponse.Executions[0].Status != enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING {
-				time.Sleep(100 * time.Millisecond)
-			} else {
-				executionsCount = len(visibilityResponse.Executions)
-				break
-			}
-		}
-		s.Equal(1, executionsCount)
+		s.Eventually(
+			func() bool {
+				visibilityResponse, err := s.engine.ListWorkflowExecutions(
+					NewContext(),
+					&workflowservice.ListWorkflowExecutionsRequest{
+						Namespace:     s.namespace,
+						PageSize:      1,
+						NextPageToken: nil,
+						Query:         fmt.Sprintf("WorkflowId='%s'", we.WorkflowId),
+					},
+				)
+				s.NoError(err)
+				return len(visibilityResponse.Executions) == 1 &&
+					visibilityResponse.Executions[0].Status == enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING
+			},
+			waitForESToSettle,
+			100*time.Millisecond,
+		)
 	}
 
 	// Terminate and delete workflow executions.
@@ -361,49 +397,62 @@ func (s *FunctionalSuite) Test_DeleteWorkflowExecution_RunningWithTerminate() {
 	}
 
 	for _, we := range wes {
-		executionDeleted := false
-		for i := 0; i < 10; i++ {
-			// Check execution is deleted.
-			describeResponse, err := s.engine.DescribeWorkflowExecution(NewContext(), &workflowservice.DescribeWorkflowExecutionRequest{
+		s.Eventually(
+			func() bool {
+				// Check execution is deleted.
+				describeResponse, err := s.engine.DescribeWorkflowExecution(
+					NewContext(),
+					&workflowservice.DescribeWorkflowExecutionRequest{
+						Namespace: s.namespace,
+						Execution: we,
+					},
+				)
+				if err == nil {
+					s.Logger.Warn("Execution not deleted yet")
+					return false
+				}
+				var notFoundErr *serviceerror.NotFound
+				s.ErrorAs(err, &notFoundErr)
+				s.Nil(describeResponse)
+				return true
+			},
+			waitForPersistence,
+			1*time.Second,
+		)
+
+		// Check history is deleted.
+		historyResponse, err := s.engine.GetWorkflowExecutionHistory(
+			NewContext(),
+			&workflowservice.GetWorkflowExecutionHistoryRequest{
 				Namespace: s.namespace,
 				Execution: we,
-			})
-			if err == nil {
-				s.Logger.Warn("Execution not deleted yet")
-				time.Sleep(2 * time.Second)
-				continue
-			}
-			var notFoundErr *serviceerror.NotFound
-			s.ErrorAs(err, &notFoundErr)
-			s.Nil(describeResponse)
+			},
+		)
+		var invalidArgumentErr *serviceerror.InvalidArgument
+		s.ErrorAs(err, &invalidArgumentErr)
+		s.Nil(historyResponse)
 
-			// Check history is deleted.
-			historyResponse, err := s.engine.GetWorkflowExecutionHistory(NewContext(), &workflowservice.GetWorkflowExecutionHistoryRequest{
-				Namespace: s.namespace,
-				Execution: we,
-			})
-			var invalidArgumentErr *serviceerror.InvalidArgument
-			s.ErrorAs(err, &invalidArgumentErr)
-			s.Nil(historyResponse)
-
-			// Check visibility is updated.
-			visibilityResponse, err := s.engine.ListWorkflowExecutions(NewContext(), &workflowservice.ListWorkflowExecutionsRequest{
-				Namespace:     s.namespace,
-				PageSize:      1,
-				NextPageToken: nil,
-				Query:         fmt.Sprintf("WorkflowId='%s'", we.WorkflowId),
-			})
-			s.NoError(err)
-			if len(visibilityResponse.Executions) != 0 {
-				time.Sleep(2 * time.Second)
-				s.Logger.Warn("Visibility is not deleted yet")
-				continue
-			}
-			s.Equal(0, len(visibilityResponse.Executions))
-
-			executionDeleted = true
-			break
-		}
-		s.True(executionDeleted)
+		s.Eventually(
+			func() bool {
+				// Check visibility is updated.
+				visibilityResponse, err := s.engine.ListWorkflowExecutions(
+					NewContext(),
+					&workflowservice.ListWorkflowExecutionsRequest{
+						Namespace:     s.namespace,
+						PageSize:      1,
+						NextPageToken: nil,
+						Query:         fmt.Sprintf("WorkflowId='%s'", we.WorkflowId),
+					},
+				)
+				s.NoError(err)
+				if len(visibilityResponse.Executions) != 0 {
+					s.Logger.Warn("Visibility is not deleted yet")
+					return false
+				}
+				return true
+			},
+			waitForESToSettle,
+			100*time.Millisecond,
+		)
 	}
 }

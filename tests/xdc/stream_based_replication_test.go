@@ -49,7 +49,7 @@ import (
 	"go.temporal.io/server/common/persistence/serialization"
 	"go.temporal.io/server/common/primitives"
 	test "go.temporal.io/server/common/testing"
-	"go.temporal.io/server/service/history/replication"
+	"go.temporal.io/server/service/history/replication/eventhandler"
 	"go.temporal.io/server/tests"
 	"go.uber.org/fx"
 	"google.golang.org/protobuf/types/known/durationpb"
@@ -230,14 +230,14 @@ func (s *streamBasedReplicationTestSuite) assertHistoryEvents(
 	mockClientBean.EXPECT().GetRemoteAdminClient("cluster2").Return(s.cluster2.GetAdminClient(), nil).AnyTimes()
 
 	serializer := serialization.NewSerializer()
-	cluster1Fetcher := replication.NewHistoryPaginatedFetcher(
+	cluster1Fetcher := eventhandler.NewHistoryPaginatedFetcher(
 		nil,
 		mockClientBean,
 		serializer,
 		nil,
 		s.logger,
 	)
-	cluster2Fetcher := replication.NewHistoryPaginatedFetcher(
+	cluster2Fetcher := eventhandler.NewHistoryPaginatedFetcher(
 		nil,
 		mockClientBean,
 		serializer,

@@ -213,28 +213,34 @@ SignalLoop:
 	s.Equal(enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_TERMINATED, lastEvent.GetEventType())
 
 	// verify visibility is correctly processed from open to close
-	isCloseCorrect := false
-	for i := 0; i < 10; i++ {
-		resp, err1 := s.engine.ListClosedWorkflowExecutions(NewContext(), &workflowservice.ListClosedWorkflowExecutionsRequest{
-			Namespace:       s.namespace,
-			MaximumPageSize: 100,
-			StartTimeFilter: &filterpb.StartTimeFilter{
-				EarliestTime: nil,
-				LatestTime:   timestamppb.New(time.Now().UTC()),
-			},
-			Filters: &workflowservice.ListClosedWorkflowExecutionsRequest_ExecutionFilter{ExecutionFilter: &filterpb.WorkflowExecutionFilter{
-				WorkflowId: id,
-			}},
-		})
-		s.NoError(err1)
-		if len(resp.Executions) == 1 {
-			isCloseCorrect = true
-			break
-		}
-		s.Logger.Info("Closed WorkflowExecution is not yet visible")
-		time.Sleep(100 * time.Millisecond)
-	}
-	s.True(isCloseCorrect)
+	s.Eventually(
+		func() bool {
+			resp, err1 := s.engine.ListClosedWorkflowExecutions(
+				NewContext(),
+				&workflowservice.ListClosedWorkflowExecutionsRequest{
+					Namespace:       s.namespace,
+					MaximumPageSize: 100,
+					StartTimeFilter: &filterpb.StartTimeFilter{
+						EarliestTime: nil,
+						LatestTime:   timestamppb.New(time.Now().UTC()),
+					},
+					Filters: &workflowservice.ListClosedWorkflowExecutionsRequest_ExecutionFilter{
+						ExecutionFilter: &filterpb.WorkflowExecutionFilter{
+							WorkflowId: id,
+						},
+					},
+				},
+			)
+			s.NoError(err1)
+			if len(resp.Executions) == 1 {
+				return true
+			}
+			s.Logger.Info("Closed WorkflowExecution is not yet visible")
+			return false
+		},
+		waitForESToSettle,
+		100*time.Millisecond,
+	)
 }
 
 func (s *SizeLimitFunctionalSuite) TestWorkflowFailed_PayloadSizeTooLarge() {
@@ -464,28 +470,34 @@ func (s *SizeLimitFunctionalSuite) TestTerminateWorkflowCausedByMsSizeLimit() {
 	s.Equal(enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_TERMINATED, lastEvent.GetEventType())
 
 	// verify visibility is correctly processed from open to close
-	isCloseCorrect := false
-	for i := 0; i < 10; i++ {
-		resp, err1 := s.engine.ListClosedWorkflowExecutions(NewContext(), &workflowservice.ListClosedWorkflowExecutionsRequest{
-			Namespace:       s.namespace,
-			MaximumPageSize: 100,
-			StartTimeFilter: &filterpb.StartTimeFilter{
-				EarliestTime: nil,
-				LatestTime:   timestamppb.New(time.Now().UTC()),
-			},
-			Filters: &workflowservice.ListClosedWorkflowExecutionsRequest_ExecutionFilter{ExecutionFilter: &filterpb.WorkflowExecutionFilter{
-				WorkflowId: id,
-			}},
-		})
-		s.NoError(err1)
-		if len(resp.Executions) == 1 {
-			isCloseCorrect = true
-			break
-		}
-		s.Logger.Info("Closed WorkflowExecution is not yet visible")
-		time.Sleep(100 * time.Millisecond)
-	}
-	s.True(isCloseCorrect)
+	s.Eventually(
+		func() bool {
+			resp, err1 := s.engine.ListClosedWorkflowExecutions(
+				NewContext(),
+				&workflowservice.ListClosedWorkflowExecutionsRequest{
+					Namespace:       s.namespace,
+					MaximumPageSize: 100,
+					StartTimeFilter: &filterpb.StartTimeFilter{
+						EarliestTime: nil,
+						LatestTime:   timestamppb.New(time.Now().UTC()),
+					},
+					Filters: &workflowservice.ListClosedWorkflowExecutionsRequest_ExecutionFilter{
+						ExecutionFilter: &filterpb.WorkflowExecutionFilter{
+							WorkflowId: id,
+						},
+					},
+				},
+			)
+			s.NoError(err1)
+			if len(resp.Executions) == 1 {
+				return true
+			}
+			s.Logger.Info("Closed WorkflowExecution is not yet visible")
+			return false
+		},
+		waitForESToSettle,
+		100*time.Millisecond,
+	)
 }
 
 func (s *SizeLimitFunctionalSuite) TestTerminateWorkflowCausedByHistorySizeLimit() {
@@ -559,26 +571,32 @@ SignalLoop:
 	s.Equal(enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_TERMINATED, lastEvent.GetEventType())
 
 	// verify visibility is correctly processed from open to close
-	isCloseCorrect := false
-	for i := 0; i < 10; i++ {
-		resp, err1 := s.engine.ListClosedWorkflowExecutions(NewContext(), &workflowservice.ListClosedWorkflowExecutionsRequest{
-			Namespace:       s.namespace,
-			MaximumPageSize: 100,
-			StartTimeFilter: &filterpb.StartTimeFilter{
-				EarliestTime: nil,
-				LatestTime:   timestamppb.New(time.Now().UTC()),
-			},
-			Filters: &workflowservice.ListClosedWorkflowExecutionsRequest_ExecutionFilter{ExecutionFilter: &filterpb.WorkflowExecutionFilter{
-				WorkflowId: id,
-			}},
-		})
-		s.NoError(err1)
-		if len(resp.Executions) == 1 {
-			isCloseCorrect = true
-			break
-		}
-		s.Logger.Info("Closed WorkflowExecution is not yet visible")
-		time.Sleep(100 * time.Millisecond)
-	}
-	s.True(isCloseCorrect)
+	s.Eventually(
+		func() bool {
+			resp, err1 := s.engine.ListClosedWorkflowExecutions(
+				NewContext(),
+				&workflowservice.ListClosedWorkflowExecutionsRequest{
+					Namespace:       s.namespace,
+					MaximumPageSize: 100,
+					StartTimeFilter: &filterpb.StartTimeFilter{
+						EarliestTime: nil,
+						LatestTime:   timestamppb.New(time.Now().UTC()),
+					},
+					Filters: &workflowservice.ListClosedWorkflowExecutionsRequest_ExecutionFilter{
+						ExecutionFilter: &filterpb.WorkflowExecutionFilter{
+							WorkflowId: id,
+						},
+					},
+				},
+			)
+			s.NoError(err1)
+			if len(resp.Executions) == 1 {
+				return true
+			}
+			s.Logger.Info("Closed WorkflowExecution is not yet visible")
+			return false
+		},
+		waitForESToSettle,
+		100*time.Millisecond,
+	)
 }

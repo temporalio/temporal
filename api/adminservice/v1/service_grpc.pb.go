@@ -51,6 +51,7 @@ const (
 	AdminService_ListHistoryTasks_FullMethodName                  = "/temporal.server.api.adminservice.v1.AdminService/ListHistoryTasks"
 	AdminService_RemoveTask_FullMethodName                        = "/temporal.server.api.adminservice.v1.AdminService/RemoveTask"
 	AdminService_GetWorkflowExecutionRawHistoryV2_FullMethodName  = "/temporal.server.api.adminservice.v1.AdminService/GetWorkflowExecutionRawHistoryV2"
+	AdminService_GetWorkflowExecutionRawHistory_FullMethodName    = "/temporal.server.api.adminservice.v1.AdminService/GetWorkflowExecutionRawHistory"
 	AdminService_GetReplicationMessages_FullMethodName            = "/temporal.server.api.adminservice.v1.AdminService/GetReplicationMessages"
 	AdminService_GetNamespaceReplicationMessages_FullMethodName   = "/temporal.server.api.adminservice.v1.AdminService/GetNamespaceReplicationMessages"
 	AdminService_GetDLQReplicationMessages_FullMethodName         = "/temporal.server.api.adminservice.v1.AdminService/GetDLQReplicationMessages"
@@ -104,6 +105,9 @@ type AdminServiceClient interface {
 	// StartEventId defines the beginning of the event to fetch. The first event is inclusive.
 	// EndEventId and EndEventVersion defines the end of the event to fetch. The end event is exclusive.
 	GetWorkflowExecutionRawHistoryV2(ctx context.Context, in *GetWorkflowExecutionRawHistoryV2Request, opts ...grpc.CallOption) (*GetWorkflowExecutionRawHistoryV2Response, error)
+	// StartEventId defines the beginning of the event to fetch. The first event is inclusive.
+	// EndEventId and EndEventVersion defines the end of the event to fetch. The end event is inclusive.
+	GetWorkflowExecutionRawHistory(ctx context.Context, in *GetWorkflowExecutionRawHistoryRequest, opts ...grpc.CallOption) (*GetWorkflowExecutionRawHistoryResponse, error)
 	// GetReplicationMessages returns new replication tasks since the read level provided in the token.
 	GetReplicationMessages(ctx context.Context, in *GetReplicationMessagesRequest, opts ...grpc.CallOption) (*GetReplicationMessagesResponse, error)
 	// GetNamespaceReplicationMessages returns new namespace replication tasks since last retrieved task Id.
@@ -246,6 +250,15 @@ func (c *adminServiceClient) RemoveTask(ctx context.Context, in *RemoveTaskReque
 func (c *adminServiceClient) GetWorkflowExecutionRawHistoryV2(ctx context.Context, in *GetWorkflowExecutionRawHistoryV2Request, opts ...grpc.CallOption) (*GetWorkflowExecutionRawHistoryV2Response, error) {
 	out := new(GetWorkflowExecutionRawHistoryV2Response)
 	err := c.cc.Invoke(ctx, AdminService_GetWorkflowExecutionRawHistoryV2_FullMethodName, in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *adminServiceClient) GetWorkflowExecutionRawHistory(ctx context.Context, in *GetWorkflowExecutionRawHistoryRequest, opts ...grpc.CallOption) (*GetWorkflowExecutionRawHistoryResponse, error) {
+	out := new(GetWorkflowExecutionRawHistoryResponse)
+	err := c.cc.Invoke(ctx, AdminService_GetWorkflowExecutionRawHistory_FullMethodName, in, out, opts...)
 	if err != nil {
 		return nil, err
 	}
@@ -549,6 +562,9 @@ type AdminServiceServer interface {
 	// StartEventId defines the beginning of the event to fetch. The first event is inclusive.
 	// EndEventId and EndEventVersion defines the end of the event to fetch. The end event is exclusive.
 	GetWorkflowExecutionRawHistoryV2(context.Context, *GetWorkflowExecutionRawHistoryV2Request) (*GetWorkflowExecutionRawHistoryV2Response, error)
+	// StartEventId defines the beginning of the event to fetch. The first event is inclusive.
+	// EndEventId and EndEventVersion defines the end of the event to fetch. The end event is inclusive.
+	GetWorkflowExecutionRawHistory(context.Context, *GetWorkflowExecutionRawHistoryRequest) (*GetWorkflowExecutionRawHistoryResponse, error)
 	// GetReplicationMessages returns new replication tasks since the read level provided in the token.
 	GetReplicationMessages(context.Context, *GetReplicationMessagesRequest) (*GetReplicationMessagesResponse, error)
 	// GetNamespaceReplicationMessages returns new namespace replication tasks since last retrieved task Id.
@@ -639,6 +655,9 @@ func (UnimplementedAdminServiceServer) RemoveTask(context.Context, *RemoveTaskRe
 }
 func (UnimplementedAdminServiceServer) GetWorkflowExecutionRawHistoryV2(context.Context, *GetWorkflowExecutionRawHistoryV2Request) (*GetWorkflowExecutionRawHistoryV2Response, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method GetWorkflowExecutionRawHistoryV2 not implemented")
+}
+func (UnimplementedAdminServiceServer) GetWorkflowExecutionRawHistory(context.Context, *GetWorkflowExecutionRawHistoryRequest) (*GetWorkflowExecutionRawHistoryResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method GetWorkflowExecutionRawHistory not implemented")
 }
 func (UnimplementedAdminServiceServer) GetReplicationMessages(context.Context, *GetReplicationMessagesRequest) (*GetReplicationMessagesResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method GetReplicationMessages not implemented")
@@ -895,6 +914,24 @@ func _AdminService_GetWorkflowExecutionRawHistoryV2_Handler(srv interface{}, ctx
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
 		return srv.(AdminServiceServer).GetWorkflowExecutionRawHistoryV2(ctx, req.(*GetWorkflowExecutionRawHistoryV2Request))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _AdminService_GetWorkflowExecutionRawHistory_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(GetWorkflowExecutionRawHistoryRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(AdminServiceServer).GetWorkflowExecutionRawHistory(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: AdminService_GetWorkflowExecutionRawHistory_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(AdminServiceServer).GetWorkflowExecutionRawHistory(ctx, req.(*GetWorkflowExecutionRawHistoryRequest))
 	}
 	return interceptor(ctx, in, info, handler)
 }
@@ -1453,6 +1490,10 @@ var AdminService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "GetWorkflowExecutionRawHistoryV2",
 			Handler:    _AdminService_GetWorkflowExecutionRawHistoryV2_Handler,
+		},
+		{
+			MethodName: "GetWorkflowExecutionRawHistory",
+			Handler:    _AdminService_GetWorkflowExecutionRawHistory_Handler,
 		},
 		{
 			MethodName: "GetReplicationMessages",

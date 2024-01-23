@@ -68,6 +68,9 @@ type (
 			acceptedEventID int64,
 			resp *updatepb.Response,
 		) (*historypb.HistoryEvent, error)
+
+		// CanAddEvent returns true if an event can be added to the EventStore.
+		CanAddEvent() bool
 	}
 
 	// Update is a state machine for the update protocol. It reads and writes
@@ -262,63 +265,12 @@ func (u *Update) WaitAccepted(ctx context.Context) (UpdateStatus, error) {
 	return UpdateStatus{enumspb.UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_ACCEPTED, nil}, nil
 }
 
-// OnMessage delivers a message to the Update state machine. The proto.Message
-// parameter is expected to be one of *updatepb.Request, *updatepb.Response,
-// *updatepb.Rejection, *updatepb.Acceptance, or a *protocolpb.Message whose
-// Body field contains an instance from the same list. Writes to the EventStore
-// occur synchronously but externally observable effects on this Update (e.g.
-// emitting an Outcome or an Accepted) are registered with the EventStore to be
-// applied after the durable updates are committed. If the EventStore rolls back
-// its effects, this state machine does the same.
-//
-// If you modify the state machine please update the diagram in
-// service/history/workflow/update/README.md.
-func (u *Update) OnMessage(
-	ctx context.Context,
-	msg proto.Message,
-	isWorkflowRunning bool,
-	eventStore EventStore,
-) error {
-	if msg == nil {
-		return invalidArgf("Update %q received nil message", u.id)
-	}
-
-	if protocolMsg, ok := msg.(*protocolpb.Message); ok {
-		var err error
-		msg, err = protocolMsg.Body.UnmarshalNew()
-		if err != nil {
-			return err
-		}
-	}
-
-	// If workflow was completed while processing this WFT, then only Rejection messages can be processed,
-	// because they don't create new events in the history. All other updates must be cancelled.
-	_, isRejection := msg.(*updatepb.Rejection)
-	shouldCancel := !(isWorkflowRunning || isRejection)
-	if shouldCancel {
-		return u.CancelIncomplete(ctx, CancelReasonWorkflowCompleted, eventStore)
-	}
-
-	switch body := msg.(type) {
-	case *updatepb.Request:
-		return u.onRequestMsg(ctx, body, eventStore)
-	case *updatepb.Acceptance:
-		return u.onAcceptanceMsg(ctx, body, eventStore)
-	case *updatepb.Rejection:
-		return u.onRejectionMsg(ctx, body, eventStore)
-	case *updatepb.Response:
-		return u.onResponseMsg(ctx, body, eventStore)
-	default:
-		return invalidArgf("Message type %T not supported", body)
-	}
-}
-
-// onRequestMsg works if the Update is in any state but if the state is anything
+// Request works if the Update is in any state but if the state is anything
 // other than stateAdmitted then it just early returns a nil error. This
 // effectively gives us update request deduplication by update ID. If the Update
 // is in stateAdmitted then it builds a protocolpb.Message that will be sent on
 // ensuing calls to PollOutgoingMessages until the update is accepted.
-func (u *Update) onRequestMsg(
+func (u *Update) Request(
 	ctx context.Context,
 	req *updatepb.Request,
 	eventStore EventStore,
@@ -329,6 +281,11 @@ func (u *Update) onRequestMsg(
 	if err := validateRequestMsg(u.id, req); err != nil {
 		return err
 	}
+
+	if !eventStore.CanAddEvent() {
+		return u.CancelIncomplete(ctx, CancelReasonWorkflowCompleted, eventStore)
+	}
+
 	u.instrumentation.CountRequestMsg()
 	// Marshal update request here to return InvalidArgument to the API caller if it can't be marshaled.
 	reqAny, err := anypb.New(req)
@@ -340,6 +297,55 @@ func (u *Update) onRequestMsg(
 	eventStore.OnAfterCommit(func(context.Context) { u.setState(stateRequested) })
 	eventStore.OnAfterRollback(func(context.Context) { u.setState(stateAdmitted) })
 	return nil
+}
+
+// OnProtocolMessage delivers a message to the Update state machine. The Body field of
+// *protocolpb.Message parameter is expected to be one of *updatepb.Response,
+// *updatepb.Rejection, *updatepb.Acceptance. Writes to the EventStore
+// occur synchronously but externally observable effects on this Update (e.g.
+// emitting an Outcome or an Accepted) are registered with the EventStore to be
+// applied after the durable updates are committed. If the EventStore rolls back
+// its effects, this state machine does the same.
+//
+// If you modify the state machine please update the diagram in
+// service/history/workflow/update/README.md.
+func (u *Update) OnProtocolMessage(
+	ctx context.Context,
+	protocolMsg *protocolpb.Message,
+	eventStore EventStore,
+) error {
+	if protocolMsg == nil {
+		return invalidArgf("Update %q received nil message", u.id)
+	}
+
+	if protocolMsg.Body == nil {
+		return invalidArgf("Update %q received message with nil body", u.id)
+	}
+
+	body, err := protocolMsg.Body.UnmarshalNew()
+	if err != nil {
+		return err
+	}
+
+	// If no new events can be added to the event store (e.g. workflow is completed),
+	// then only Rejection messages can be processed, because they don't create new events in the history.
+	// All other message types cancel incomplete update.
+	_, isRejection := body.(*updatepb.Rejection)
+	shouldCancel := !(eventStore.CanAddEvent() || isRejection)
+	if shouldCancel {
+		return u.CancelIncomplete(ctx, CancelReasonWorkflowCompleted, eventStore)
+	}
+
+	switch updMsg := body.(type) {
+	case *updatepb.Acceptance:
+		return u.onAcceptanceMsg(ctx, updMsg, eventStore)
+	case *updatepb.Rejection:
+		return u.onRejectionMsg(ctx, updMsg, eventStore)
+	case *updatepb.Response:
+		return u.onResponseMsg(ctx, updMsg, eventStore)
+	default:
+		return invalidArgf("Message type %T not supported", body)
+	}
 }
 
 // needToSend returns true if outgoing message can be generated for current update state.
@@ -406,6 +412,12 @@ func (u *Update) onAcceptanceMsg(
 	}
 	u.instrumentation.CountAcceptanceMsg()
 
+	// AcceptedRequest is not sent back by the worker to the server.
+	// Instead, the server store it in update registry and use it to generate event.
+	// There are at least two scenarios when getting it from the worker would make sense:
+	// 1. If validation handler on worker side mutates original request and accepts it.
+	//   Then server should store this mutated request but not original one.
+	// 2. To support scenario when update acceptance message is processed even if registry is lost.
 	acceptedRequest := &updatepb.Request{}
 	if err := u.request.UnmarshalTo(acceptedRequest); err != nil {
 		return internalErrorf("unable to unmarshal original request: %v", err)

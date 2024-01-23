@@ -8,4 +8,4 @@ if [ -z "$aws_sdk" ]; then
   exit 1
 fi
 
-mockgen -copyright_file ../../../../LICENSE -package "$GOPACKAGE" -source "${aws_sdk}/service/s3/s3iface/interface.go" | grep -v "^// Source: .*" > S3API.go
+mockgen -copyright_file ../../../../LICENSE -package "$GOPACKAGE" -source "${aws_sdk}/service/s3/s3iface/interface.go" | grep -v "^// Source: .*" > s3api.go

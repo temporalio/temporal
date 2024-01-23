@@ -131,6 +131,7 @@ type (
 		overrides                       *Overrides
 		membershipMonitor               membership.Monitor
 		healthInterceptor               *interceptor.HealthInterceptor
+		scheduleSpecBuilder             *scheduler.SpecBuilder
 
 		// DEPRECATED
 		persistenceExecutionManager persistence.ExecutionManager
@@ -160,6 +161,7 @@ func NewWorkflowHandler(
 	timeSource clock.TimeSource,
 	membershipMonitor membership.Monitor,
 	healthInterceptor *interceptor.HealthInterceptor,
+	scheduleSpecBuilder *scheduler.SpecBuilder,
 ) *WorkflowHandler {
 
 	handler := &WorkflowHandler{
@@ -198,13 +200,17 @@ func NewWorkflowHandler(
 			config.SearchAttributesSizeOfValueLimit,
 			config.SearchAttributesTotalSizeLimit,
 			visibilityMrg,
-			visibility.AllowListForValidation(visibilityMrg.GetStoreNames()),
+			visibility.AllowListForValidation(
+				visibilityMrg.GetStoreNames(),
+				config.VisibilityAllowList,
+			),
 		),
-		archivalMetadata:  archivalMetadata,
-		healthServer:      healthServer,
-		overrides:         NewOverrides(),
-		membershipMonitor: membershipMonitor,
-		healthInterceptor: healthInterceptor,
+		archivalMetadata:    archivalMetadata,
+		healthServer:        healthServer,
+		overrides:           NewOverrides(),
+		membershipMonitor:   membershipMonitor,
+		healthInterceptor:   healthInterceptor,
+		scheduleSpecBuilder: scheduleSpecBuilder,
 	}
 
 	return handler
@@ -2342,6 +2348,9 @@ func (wh *WorkflowHandler) QueryWorkflow(ctx context.Context, request *workflows
 	}
 	hResponse, err := wh.historyClient.QueryWorkflow(ctx, req)
 	if err != nil {
+		if common.IsContextDeadlineExceededErr(err) {
+			return nil, serviceerror.NewDeadlineExceeded("query timed out before a worker could process it")
+		}
 		return nil, err
 	}
 	return hResponse.GetResponse(), nil
@@ -4057,7 +4066,7 @@ func (wh *WorkflowHandler) canonicalizeScheduleSpec(schedule *schedpb.Schedule) 
 	if schedule.Spec == nil {
 		schedule.Spec = &schedpb.ScheduleSpec{}
 	}
-	compiledSpec, err := scheduler.NewCompiledSpec(schedule.Spec)
+	compiledSpec, err := wh.scheduleSpecBuilder.NewCompiledSpec(schedule.Spec)
 	if err != nil {
 		return serviceerror.NewInvalidArgument(fmt.Sprintf("Invalid schedule spec: %v", err))
 	}
@@ -4118,7 +4127,7 @@ func (wh *WorkflowHandler) cleanScheduleMemo(memo *commonpb.Memo) *commonpb.Memo
 
 // This mutates request (but idempotent so safe for retries)
 func (wh *WorkflowHandler) addInitialScheduleMemo(request *workflowservice.CreateScheduleRequest, args *schedspb.StartScheduleArgs) {
-	info := scheduler.GetListInfoFromStartArgs(args, time.Now().UTC())
+	info := scheduler.GetListInfoFromStartArgs(args, time.Now().UTC(), wh.scheduleSpecBuilder)
 	infoBytes, err := info.Marshal()
 	if err != nil {
 		wh.logger.Error("encoding initial schedule memo failed", tag.Error(err))

@@ -485,16 +485,16 @@ install-schema-xdc: temporal-cassandra-tool
 DOCKER_COMPOSE_FILES     := -f ./develop/docker-compose/docker-compose.yml -f ./develop/docker-compose/docker-compose.$(GOOS).yml
 DOCKER_COMPOSE_CDC_FILES := -f ./develop/docker-compose/docker-compose.cdc.yml -f ./develop/docker-compose/docker-compose.cdc.$(GOOS).yml
 start-dependencies:
-	docker-compose $(DOCKER_COMPOSE_FILES) up
+	docker compose $(DOCKER_COMPOSE_FILES) up
 
 stop-dependencies:
-	docker-compose $(DOCKER_COMPOSE_FILES) down
+	docker compose $(DOCKER_COMPOSE_FILES) down
 
 start-dependencies-cdc:
-	docker-compose $(DOCKER_COMPOSE_FILES) $(DOCKER_COMPOSE_CDC_FILES) up
+	docker compose $(DOCKER_COMPOSE_FILES) $(DOCKER_COMPOSE_CDC_FILES) up
 
 stop-dependencies-cdc:
-	docker-compose $(DOCKER_COMPOSE_FILES) $(DOCKER_COMPOSE_CDC_FILES) down
+	docker compose $(DOCKER_COMPOSE_FILES) $(DOCKER_COMPOSE_CDC_FILES) down
 
 start: temporal-server
 	./temporal-server --env development-cass --allow-no-auth start

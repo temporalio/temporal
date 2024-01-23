@@ -30,16 +30,19 @@ import (
 	"sync/atomic"
 	"time"
 
-	"go.temporal.io/server/api/historyservice/v1"
+	historypb "go.temporal.io/api/history/v1"
+	historyspb "go.temporal.io/server/api/history/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/client"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/backoff"
 	"go.temporal.io/server/common/cluster"
+	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/headers"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
+	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/persistence/serialization"
 	"go.temporal.io/server/common/xdc"
@@ -105,9 +108,27 @@ func NewTaskProcessorManager(
 		resender: xdc.NewNDCHistoryResender(
 			shard.GetNamespaceRegistry(),
 			clientBean,
-			func(ctx context.Context, request *historyservice.ReplicateEventsV2Request) error {
-				_, err := clientBean.GetHistoryClient().ReplicateEventsV2(ctx, request)
-				return err
+			func(
+				ctx context.Context,
+				sourceClusterName string,
+				namespaceId namespace.ID,
+				workflowId string,
+				runId string,
+				events []*historypb.HistoryEvent,
+				versionHistory []*historyspb.VersionHistoryItem,
+			) error {
+				return engine.ReplicateHistoryEvents(
+					ctx,
+					definition.WorkflowKey{
+						NamespaceID: namespaceId.String(),
+						WorkflowID:  workflowId,
+						RunID:       runId,
+					},
+					nil,
+					versionHistory,
+					[][]*historypb.HistoryEvent{events},
+					nil,
+				)
 			},
 			shard.GetPayloadSerializer(),
 			shard.GetConfig().StandbyTaskReReplicationContextTimeout,
