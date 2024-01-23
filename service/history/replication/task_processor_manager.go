@@ -110,6 +110,7 @@ func NewTaskProcessorManager(
 			clientBean,
 			func(
 				ctx context.Context,
+				sourceClusterName string,
 				namespaceId namespace.ID,
 				workflowId string,
 				runId string,

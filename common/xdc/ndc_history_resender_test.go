@@ -201,6 +201,7 @@ func (s *nDCHistoryResenderSuite) TestSendSingleWorkflowHistory() {
 		s.mockClientBean,
 		func(
 			ctx context.Context,
+			sourceClusterName string,
 			namespaceId namespace.ID,
 			workflowId string,
 			runId string,
@@ -267,6 +268,7 @@ func (s *nDCHistoryResenderSuite) TestGetHistory() {
 		s.mockClientBean,
 		func(
 			ctx context.Context,
+			sourceClusterName string,
 			namespaceId namespace.ID,
 			workflowId string,
 			runId string,
