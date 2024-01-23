@@ -351,7 +351,12 @@ const (
 	FrontendEnableBatcher = "frontend.enableBatcher"
 	// FrontendAccessHistoryFraction (0.0~1.0) is the fraction of history operations that are sent to the history
 	// service using the new RPCs. The remaining access history via the existing implementation.
-	FrontendAccessHistoryFraction = "frontend.accessHistoryFraction" // TODO: remove once migration complete
+	// TODO: remove once migration completes.
+	FrontendAccessHistoryFraction = "frontend.accessHistoryFraction"
+	// FrontendAdminDeleteAccessHistoryFraction (0.0~1.0) is the fraction of admin DeleteWorkflowExecution requests
+	// that are sent to the history service using the new RPCs. The remaining access history via the existing implementation.
+	// TODO: remove once migration completes.
+	FrontendAdminDeleteAccessHistoryFraction = "frontend.adminDeleteAccessHistoryFraction"
 
 	// FrontendEnableUpdateWorkflowExecution enables UpdateWorkflowExecution API in the frontend.
 	// The UpdateWorkflowExecution API has gone through rigorous testing efforts but this config's default is `false` until the
