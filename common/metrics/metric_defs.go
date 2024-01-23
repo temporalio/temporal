@@ -1066,6 +1066,10 @@ var (
 		"schedule_terminate_workflow_errors",
 		WithDescription("The number of times a schedule got an error trying to terminate a previous run"),
 	)
+	ScheduleActionDelay = NewTimerDef(
+		"schedule_action_delay",
+		WithDescription("Delay between when scheduled actions should/actually happen"),
+	)
 
 	// Force replication
 	EncounterZombieWorkflowCount        = NewCounterDef("encounter_zombie_workflow_count")
