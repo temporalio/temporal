@@ -412,6 +412,12 @@ func (u *Update) onAcceptanceMsg(
 	}
 	u.instrumentation.CountAcceptanceMsg()
 
+	// AcceptedRequest is not sent back by the worker to the server.
+	// Instead, the server store it in update registry and use it to generate event.
+	// There are at least two scenarios when getting it from the worker would make sense:
+	// 1. If validation handler on worker side mutates original request and accepts it.
+	//   Then server should store this mutated request but not original one.
+	// 2. To support scenario when update acceptance message is processed even if registry is lost.
 	acceptedRequest := &updatepb.Request{}
 	if err := u.request.UnmarshalTo(acceptedRequest); err != nil {
 		return internalErrorf("unable to unmarshal original request: %v", err)
