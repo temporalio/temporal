@@ -114,6 +114,7 @@ func (a *LocalActivities) GetNextPageTokenActivity(ctx context.Context, params G
 		Namespace:     params.Namespace,
 		PageSize:      params.PageSize,
 		NextPageToken: params.NextPageToken,
+		Query:         allWorkflowQuery,
 	}
 
 	resp, err := a.visibilityManager.ListWorkflowExecutions(ctx, req)
