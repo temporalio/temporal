@@ -2630,6 +2630,55 @@ func (s *matchingEngineSuite) TestUnknownBuildId_Demoted_Match() {
 	task.finish(nil)
 }
 
+func (s *matchingEngineSuite) TestUnloadOnMembershipChange() {
+	// need to create a new engine for this test to customize mockServiceResolver
+	s.mockServiceResolver = membership.NewMockServiceResolver(s.controller)
+	s.mockServiceResolver.EXPECT().AddListener(gomock.Any(), gomock.Any()).AnyTimes()
+	s.mockServiceResolver.EXPECT().RemoveListener(gomock.Any()).AnyTimes()
+
+	self := s.mockHostInfoProvider.HostInfo()
+	other := membership.NewHostInfoFromAddress("other")
+
+	config := defaultTestConfig()
+	config.MembershipUnloadDelay = dynamicconfig.GetDurationPropertyFn(10 * time.Millisecond)
+	e := s.newMatchingEngine(config, s.taskManager)
+	e.Start()
+	defer e.Stop()
+
+	tq1 := newTestTaskQueueID(namespace.ID(uuid.New()), "makeToast", enumspb.TASK_QUEUE_TYPE_WORKFLOW)
+	tq2 := newTestTaskQueueID(namespace.ID(uuid.New()), "makeToast", enumspb.TASK_QUEUE_TYPE_ACTIVITY)
+
+	_, err := e.getTaskQueueManager(context.Background(), tq1, normalStickyInfo, true)
+	s.NoError(err)
+	_, err = e.getTaskQueueManager(context.Background(), tq2, normalStickyInfo, true)
+	s.NoError(err)
+
+	s.Equal(2, len(e.getTaskQueues(1000)))
+
+	// signal membership changed and give time for loop to wake up
+	s.mockServiceResolver.EXPECT().Lookup(tq1.routingKey()).Return(self, nil)
+	s.mockServiceResolver.EXPECT().Lookup(tq2.routingKey()).Return(self, nil)
+	e.membershipChangedCh <- nil
+	time.Sleep(50 * time.Millisecond)
+	s.Equal(2, len(e.getTaskQueues(1000)), "nothing should be unloaded yet")
+
+	// signal again but tq2 doesn't belong to us anymore
+	s.mockServiceResolver.EXPECT().Lookup(tq1.routingKey()).Return(self, nil)
+	s.mockServiceResolver.EXPECT().Lookup(tq2.routingKey()).Return(other, nil).Times(2)
+	e.membershipChangedCh <- nil
+	s.Eventually(func() bool {
+		return len(e.getTaskQueues(1000)) == 1
+	}, 100*time.Millisecond, 10*time.Millisecond, "tq2 should have been unloaded")
+
+	isLoaded := func(tq *taskQueueID) bool {
+		tqm, err := e.getTaskQueueManager(context.Background(), tq, normalStickyInfo, false)
+		s.NoError(err)
+		return tqm != nil
+	}
+	s.True(isLoaded(tq1))
+	s.False(isLoaded(tq2))
+}
+
 func (s *matchingEngineSuite) setupRecordActivityTaskStartedMock(tlName string) {
 	activityTypeName := "activity1"
 	activityID := "activityId1"
