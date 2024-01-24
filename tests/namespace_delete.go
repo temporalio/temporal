@@ -66,12 +66,6 @@ type (
 	}
 )
 
-func dynamicConfig() map[dynamicconfig.Key]interface{} {
-	return map[dynamicconfig.Key]interface{}{
-		dynamicconfig.DeleteNamespaceDeleteActivityRPS: 1000,
-	}
-}
-
 func (s *namespaceTestSuite) SetupSuite() {
 	checkTestShard(s.T())
 
@@ -91,7 +85,9 @@ func (s *namespaceTestSuite) SetupSuite() {
 		s.logger.Info("Running delete namespace tests with Elasticsearch persistence")
 	}
 
-	s.clusterConfig.DynamicConfigOverrides = dynamicConfig()
+	s.clusterConfig.DynamicConfigOverrides = map[dynamicconfig.Key]interface{}{
+		dynamicconfig.DeleteNamespaceDeleteActivityRPS: 1000,
+	}
 
 	cluster, err := s.testClusterFactory.NewCluster(s.T(), s.clusterConfig, s.logger)
 	s.Require().NoError(err)
