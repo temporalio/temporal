@@ -105,6 +105,7 @@ func (namespaceReplicator *namespaceReplicatorImpl) HandleTransmissionTask(
 			NamespaceOperation: namespaceOperation,
 			Id:                 info.Id,
 			Info: &namespacepb.NamespaceInfo{
+
 				Name:        info.Name,
 				State:       info.State,
 				Description: info.Description,

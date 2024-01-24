@@ -130,10 +130,10 @@ func (h *namespaceReplicationTaskExecutorImpl) shouldProcessTask(ctx context.Con
 	})
 	switch err.(type) {
 	case nil:
-		if resp.Namespace.Info.Id != task.GetInfo().GetId() {
+		if resp.Namespace.Info.GetId() != task.GetId() {
 			h.logger.Error(
 				"namespace replication encountered UUID collision processing NamespaceCreationReplicationTask",
-				tag.WorkflowNamespaceIDs(map[string]struct{}{resp.Namespace.Info.Id: {}, task.GetId(): {}}),
+				tag.WorkflowNamespaceIDs(map[string]struct{}{resp.Namespace.Info.Id: {}, task.GetId(): {}, task.Info.GetId(): {}}),
 				tag.NewErrorTag(err))
 			return false, ErrNameUUIDCollision
 		}
@@ -198,9 +198,9 @@ func (h *namespaceReplicationTaskExecutorImpl) handleNamespaceCreationReplicatio
 		})
 		switch getErr.(type) {
 		case nil:
-			if resp.Namespace.Info.Id != task.GetInfo().GetId() {
+			if resp.Namespace.Info.Id != task.GetId() {
 				h.logger.Error("namespace replication encountered UUID collision during NamespaceCreationReplicationTask",
-					tag.WorkflowNamespaceIDs(map[string]struct{}{resp.Namespace.Info.Id: {}, task.GetId(): {}}),
+					tag.WorkflowNamespaceIDs(map[string]struct{}{resp.Namespace.Info.Id: {}, task.GetId(): {}, task.Info.GetId(): {}}),
 					tag.NewErrorTag(err))
 				return ErrNameUUIDCollision
 			}
