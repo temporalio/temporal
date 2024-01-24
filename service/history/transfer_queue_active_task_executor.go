@@ -1418,7 +1418,7 @@ func (t *transferQueueActiveTaskExecutor) resetWorkflow(
 		// There must be a bug in our system that we must fix.(for example, history is not the same in active/passive)
 		t.metricHandler.Counter(metrics.AutoResetPointCorruptionCounter.Name()).Record(
 			1,
-			metrics.OperationTag(metrics.TransferQueueProcessorScope),
+			metrics.OperationTag(metrics.OperationTransferQueueProcessorScope),
 		)
 		logger.Error("Auto-Reset workflow failed and not retryable. The reset point is corrupted.", tag.Error(err))
 		return nil
