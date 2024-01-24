@@ -85,7 +85,7 @@ func loadMutableStateForTransferTask(
 		wfContext,
 		transferTask,
 		getTransferTaskEventIDAndRetryable,
-		metricsHandler.WithTags(metrics.OperationTag(metrics.TransferQueueProcessorScope)),
+		metricsHandler.WithTags(metrics.OperationTag(metrics.OperationTransferQueueProcessorScope)),
 		logger,
 	)
 	if err != nil {
@@ -131,7 +131,7 @@ func loadMutableStateForTimerTask(
 		wfContext,
 		timerTask,
 		getTimerTaskEventIDAndRetryable,
-		metricsHandler.WithTags(metrics.OperationTag(metrics.TimerQueueProcessorScope)),
+		metricsHandler.WithTags(metrics.OperationTag(metrics.OperationTimerQueueProcessorScope)),
 		logger,
 	)
 }

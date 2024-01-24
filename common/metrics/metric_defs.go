@@ -388,13 +388,9 @@ const (
 	// HistoryCacheGetOrCreateCurrentScope is the scope used by history cache
 	HistoryCacheGetOrCreateCurrentScope = "CacheGetOrCreateCurrent"
 
-	// TransferQueueProcessorScope is the scope used by all metric emitted by transfer queue processor
-	TransferQueueProcessorScope = "TransferQueueProcessor"
 	// TransferActiveTaskCloseExecutionScope is the scope used for close execution task processing by transfer queue processor
 	TransferActiveTaskCloseExecutionScope = "TransferActiveTaskCloseExecution"
 
-	// TimerQueueProcessorScope is the scope used by all metric emitted by timer queue processor
-	TimerQueueProcessorScope = "TimerQueueProcessor"
 	// TimerActiveTaskActivityTimeoutScope is the scope used by metric emitted by timer queue processor for processing activity timeouts
 	TimerActiveTaskActivityTimeoutScope = "TimerActiveTaskActivityTimeout"
 	// TimerActiveTaskWorkflowTaskTimeoutScope is the scope used by metric emitted by timer queue processor for processing workflow task timeouts
