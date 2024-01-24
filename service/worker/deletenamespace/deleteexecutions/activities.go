@@ -42,7 +42,7 @@ import (
 )
 
 const (
-	allWorkflowQuery = `TemporalNamespaceDivision = "__never_used__"`
+	allWorkflowQuery = `TemporalNamespaceDivision != "__never_used__"`
 )
 
 type (
