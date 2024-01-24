@@ -73,6 +73,8 @@ func dynamicConfig() map[dynamicconfig.Key]interface{} {
 }
 
 func (s *namespaceTestSuite) SetupSuite() {
+	checkTestShard(s.T())
+
 	s.logger = log.NewTestLogger()
 	s.testClusterFactory = NewTestClusterFactory()
 
