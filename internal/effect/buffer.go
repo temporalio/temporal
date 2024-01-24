@@ -50,11 +50,11 @@ func (b *Buffer) OnAfterRollback(effect func(context.Context)) {
 // Apply invokes the buffered effect functions in the order that they were added
 // to this Buffer.
 func (b *Buffer) Apply(ctx context.Context) {
+	b.cancels = nil
 	for _, effect := range b.effects {
 		effect(ctx)
 	}
 	b.effects = nil
-	b.cancels = nil
 }
 
 // Cancel invokes the buffered rollback functions in the reverse of the order
@@ -65,5 +65,4 @@ func (b *Buffer) Cancel(ctx context.Context) {
 		b.cancels[i](ctx)
 	}
 	b.cancels = nil
-	b.effects = nil
 }
