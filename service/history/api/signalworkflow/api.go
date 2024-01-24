@@ -48,7 +48,7 @@ func Invoke(
 	namespaceID := namespaceEntry.ID()
 
 	request := req.SignalRequest
-	parentExecution := req.ExternalWorkflowExecution
+	externalWorkflowExecution := req.ExternalWorkflowExecution
 	childWorkflowOnly := req.GetChildWorkflowOnly()
 
 	err = api.GetAndUpdateWorkflowWithNew(
@@ -96,8 +96,8 @@ func Invoke(
 			if childWorkflowOnly {
 				parentWorkflowID := executionInfo.ParentWorkflowId
 				parentRunID := executionInfo.ParentRunId
-				if parentExecution.GetWorkflowId() != parentWorkflowID ||
-					parentExecution.GetRunId() != parentRunID {
+				if externalWorkflowExecution.GetWorkflowId() != parentWorkflowID ||
+					externalWorkflowExecution.GetRunId() != parentRunID {
 					releaseFn(nil)
 					return nil, consts.ErrWorkflowParent
 				}
@@ -112,7 +112,7 @@ func Invoke(
 				request.GetIdentity(),
 				request.GetHeader(),
 				request.GetSkipGenerateWorkflowTask(),
-				parentExecution,
+				externalWorkflowExecution,
 			)
 			if err != nil {
 				return nil, err
