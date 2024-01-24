@@ -248,3 +248,14 @@ func CleanupRuleTombstones(versioningData *persistencepb.VersioningData, retenti
 	})
 	return modifiedData
 }
+
+func FindAssignmentBuildId(rules []*persistencepb.AssignmentRule) string {
+	for _, r := range rules {
+		if r.GetDeleteTimestamp() != nil {
+			continue
+		}
+		// TODO: implement filter and ramp
+		return r.GetRule().GetTargetBuildId()
+	}
+	return ""
+}

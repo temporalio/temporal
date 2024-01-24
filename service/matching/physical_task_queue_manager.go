@@ -178,7 +178,7 @@ func withIDBlockAllocator(ibl idBlockAllocator) taskQueueManagerOpt {
 	}
 }
 
-func newTaskQueueManager(
+func newPhysicalTaskQueueManager(
 	partitionMgr *taskQueuePartitionManagerImpl,
 	queue *PhysicalTaskQueueKey,
 	opts ...taskQueueManagerOpt,

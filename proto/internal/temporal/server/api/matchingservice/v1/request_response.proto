@@ -123,6 +123,8 @@ message AddWorkflowTaskRequest {
 }
 
 message AddWorkflowTaskResponse {
+    // When present, it means that the task is spooled to a versioned queue of this build ID
+    string assigned_build_id = 1;
 }
 
 message AddActivityTaskRequest {
@@ -143,6 +145,8 @@ message AddActivityTaskRequest {
 }
 
 message AddActivityTaskResponse {
+    // When present, it means that the task is spooled to a versioned queue of this build ID
+    string assigned_build_id = 1;
 }
 
 message QueryWorkflowRequest {

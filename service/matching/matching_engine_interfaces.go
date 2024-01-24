@@ -36,8 +36,8 @@ type (
 	Engine interface {
 		Start()
 		Stop()
-		AddWorkflowTask(ctx context.Context, addRequest *matchingservice.AddWorkflowTaskRequest) (syncMatch bool, err error)
-		AddActivityTask(ctx context.Context, addRequest *matchingservice.AddActivityTaskRequest) (syncMatch bool, err error)
+		AddWorkflowTask(ctx context.Context, addRequest *matchingservice.AddWorkflowTaskRequest) (buildId string, syncMatch bool, err error)
+		AddActivityTask(ctx context.Context, addRequest *matchingservice.AddActivityTaskRequest) (buildId string, syncMatch bool, err error)
 		PollWorkflowTaskQueue(ctx context.Context, request *matchingservice.PollWorkflowTaskQueueRequest, opMetrics metrics.Handler) (*matchingservice.PollWorkflowTaskQueueResponse, error)
 		PollActivityTaskQueue(ctx context.Context, request *matchingservice.PollActivityTaskQueueRequest, opMetrics metrics.Handler) (*matchingservice.PollActivityTaskQueueResponse, error)
 		QueryWorkflow(ctx context.Context, request *matchingservice.QueryWorkflowRequest) (*matchingservice.QueryWorkflowResponse, error)

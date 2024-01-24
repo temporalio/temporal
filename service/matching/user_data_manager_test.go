@@ -49,7 +49,7 @@ func createUserDataManager(
 	t *testing.T,
 	controller *gomock.Controller,
 	testOpts *tqmTestOpts,
-) *userDataManager {
+) *userDataManagerImpl {
 	t.Helper()
 
 	logger := log.NewTestLogger()

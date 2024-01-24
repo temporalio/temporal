@@ -52,6 +52,7 @@ type TaskVersionDirective struct {
 
 	// Default (if value is not present) is "unversioned":
 	// Use the unversioned task queue, even if the task queue has versioning data.
+	// Absent value means the task is the non-starting task of an unversioned execution so it should remain unversioned.
 	//
 	// Types that are assignable to Value:
 	//
@@ -121,12 +122,14 @@ type TaskVersionDirective_UseDefault struct {
 	// If use_default is present, the task should be assigned the default
 	// version for the task queue. This will typically be set for the first
 	// workflow task in a workflow.
+	// WV2: this means we should consult Assignment rules to determine the build ID
 	UseDefault *emptypb.Empty `protobuf:"bytes,1,opt,name=use_default,json=useDefault,proto3,oneof"`
 }
 
 type TaskVersionDirective_BuildId struct {
 	// If build_id is present, use the default version in the compatible set
 	// containing this build id.
+	// WV2: this means the task is already assigned to `build_id`
 	BuildId string `protobuf:"bytes,2,opt,name=build_id,json=buildId,proto3,oneof"`
 }
 

@@ -31,6 +31,7 @@ import (
 
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
+	"go.temporal.io/api/serviceerror"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	"go.temporal.io/server/api/matchingservice/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
@@ -51,7 +52,9 @@ type (
 		// AddTask adds a task to the task queue. This method will first attempt a synchronous
 		// match with a poller. When that fails, task will be written to database and later
 		// asynchronously matched with a poller
-		AddTask(ctx context.Context, params addTaskParams) (syncMatch bool, err error)
+		// Returns the build ID assigned to the task according to the assignment rules (if any),
+		// and a boolean indicating if sync-match happened or not.
+		AddTask(ctx context.Context, params addTaskParams) (buildId string, syncMatch bool, err error)
 		// PollTask blocks waiting for a task Returns error when context deadline is exceeded
 		// maxDispatchPerSecond is the max rate at which tasks are allowed to be dispatched
 		// from this task queue to pollers
@@ -62,7 +65,7 @@ type (
 		// DispatchQueryTask will dispatch query to local or remote poller. If forwarded then result or error is returned,
 		// if dispatched to local poller then nil and nil is returned.
 		DispatchQueryTask(ctx context.Context, taskID string, request *matchingservice.QueryWorkflowRequest) (*matchingservice.QueryWorkflowResponse, error)
-		GetUserDataManager() *userDataManager
+		GetUserDataManager() userDataManager
 		MarkAlive()
 		GetAllPollerInfo() []*taskqueuepb.PollerInfo
 		HasPollerAfter(accessTime time.Time) bool
@@ -94,7 +97,7 @@ type (
 		// used for non-sticky versioned queues (one for each version)
 		versionedQueues      map[string]physicalTaskQueueManager
 		versionedQueuesLock  sync.RWMutex // locks mutation of versionedQueues
-		userDataManager      *userDataManager
+		userDataManager      userDataManager
 		namespaceRegistry    namespace.Registry
 		logger               log.Logger
 		throttledLogger      log.ThrottledLogger
@@ -108,14 +111,14 @@ var _ taskQueuePartitionManager = (*taskQueuePartitionManagerImpl)(nil)
 func newTaskQueuePartitionManager(
 	e *matchingEngineImpl,
 	partition tqid.Partition,
-	config *Config,
-) (taskQueuePartitionManager, error) {
+	tqConfig *taskQueueConfig,
+	userDataManager userDataManager,
+) (*taskQueuePartitionManagerImpl, error) {
 	namespaceEntry, err := e.namespaceRegistry.GetNamespaceByID(partition.NamespaceId())
 	if err != nil {
 		return nil, err
 	}
 	nsName := namespaceEntry.Name()
-	taskQueueConfig := newTaskQueueConfig(partition.TaskQueue(), config, nsName)
 
 	logger := log.With(e.logger,
 		tag.WorkflowTaskQueueName(partition.RpcName()),
@@ -137,17 +140,17 @@ func newTaskQueuePartitionManager(
 	pm := &taskQueuePartitionManagerImpl{
 		engine:               e,
 		partition:            partition,
-		config:               taskQueueConfig,
+		config:               tqConfig,
 		namespaceRegistry:    e.namespaceRegistry,
 		logger:               logger,
 		throttledLogger:      throttledLogger,
 		matchingClient:       e.matchingRawClient,
 		taggedMetricsHandler: taggedMetricsHandler,
 		versionedQueues:      make(map[string]physicalTaskQueueManager),
-		userDataManager:      newUserDataManager(e.taskManager, e.matchingRawClient, partition, taskQueueConfig, e.logger, e.namespaceRegistry),
+		userDataManager:      userDataManager,
 	}
 
-	defaultQ, err := newTaskQueueManager(pm, UnversionedQueueKey(partition))
+	defaultQ, err := newPhysicalTaskQueueManager(pm, UnversionedQueueKey(partition))
 	if err != nil {
 		return nil, err
 	}
@@ -188,10 +191,13 @@ func (pm *taskQueuePartitionManagerImpl) WaitUntilInitialized(ctx context.Contex
 func (pm *taskQueuePartitionManagerImpl) AddTask(
 	ctx context.Context,
 	params addTaskParams,
-) (bool, error) {
-	pq, err := pm.getPhysicalQueueForAdd(ctx, params.taskInfo.VersionDirective)
+) (buildId string, syncMatched bool, err error) {
+	// We don't need the userDataChanged channel here because:
+	// - if we sync match, we're done
+	// - if we spool to db, we'll re-resolve when it comes out of the db
+	pq, _, err := pm.getPhysicalQueueForAdd(ctx, params.taskInfo.VersionDirective)
 	if err != nil {
-		return false, err
+		return "", false, err
 	}
 
 	if pm.defaultQueue != pq {
@@ -204,7 +210,8 @@ func (pm *taskQueuePartitionManagerImpl) AddTask(
 		pm.taggedMetricsHandler.Counter(metrics.NoRecentPollerTasksPerTaskQueueCounter.Name()).Record(1)
 	}
 
-	return pq.AddTask(ctx, params)
+	syncMatched, err = pq.AddTask(ctx, params)
+	return pq.QueueKey().BuildId(), syncMatched, err
 }
 
 func (pm *taskQueuePartitionManagerImpl) PollTask(
@@ -215,14 +222,34 @@ func (pm *taskQueuePartitionManagerImpl) PollTask(
 	if pollMetadata.workerVersionCapabilities.GetUseVersioning() {
 		// default queue should stay alive even if requests go to other queues
 		pm.defaultQueue.MarkAlive()
-		// We don't need the userDataChanged channel here because:
-		// - if we sync match, we're done
-		// - if we spool to db, we'll re-resolve when it comes out of the db
+
 		userData, _, err := pm.userDataManager.GetUserData()
 		if err != nil {
 			return nil, err
 		}
-		dbq, err = pm.redirectToVersionSetQueueForPoll(ctx, pollMetadata.workerVersionCapabilities, userData)
+
+		versioningData := userData.GetData().GetVersioningData()
+
+		buildId := pollMetadata.workerVersionCapabilities.GetBuildId()
+		if buildId == "" {
+			return nil, serviceerror.NewInvalidArgument("build ID must be provided when using worker versioning")
+		}
+
+		var versionSet string
+		if versioningData.GetVersionSets() != nil {
+			versionSet, err = pm.getVersionSetForPoll(pollMetadata.workerVersionCapabilities, versioningData)
+			if err != nil {
+				return nil, err
+			}
+		}
+
+		// use version set if found, otherwise assume user is using new API
+		if versionSet != "" {
+			dbq, err = pm.getVersionedQueue(ctx, versionSet, "", true)
+		} else {
+			dbq, err = pm.getVersionedQueue(ctx, "", buildId, true)
+		}
+
 		if err != nil {
 			return nil, err
 		}
@@ -245,20 +272,11 @@ func (pm *taskQueuePartitionManagerImpl) DispatchSpooledTask(
 	directive := taskInfo.GetVersionDirective()
 	// Redirect and re-resolve if we're blocked in matcher and user data changes.
 	for {
-		dbq := pm.defaultQueue
-		var userDataChanged <-chan struct{}
-		if directive.GetValue() != nil {
-			userData, userDataCh, err := pm.userDataManager.GetUserData()
-			userDataChanged = userDataCh
-			if err != nil {
-				return err
-			}
-			dbq, err = pm.redirectToVersionSetQueueForAdd(ctx, directive, userData)
-			if err != nil {
-				return err
-			}
+		pq, userDataChanged, err := pm.getPhysicalQueueForAdd(ctx, directive)
+		if err != nil {
+			return err
 		}
-		err := dbq.DispatchSpooledTask(ctx, task, userDataChanged)
+		err = pq.DispatchSpooledTask(ctx, task, userDataChanged)
 		if err != errInterrupted { // nolint:goerr113
 			return err
 		}
@@ -270,20 +288,20 @@ func (pm *taskQueuePartitionManagerImpl) DispatchQueryTask(
 	taskID string,
 	request *matchingservice.QueryWorkflowRequest,
 ) (*matchingservice.QueryWorkflowResponse, error) {
-	dbq, err := pm.getPhysicalQueueForAdd(ctx, request.VersionDirective)
+	pq, _, err := pm.getPhysicalQueueForAdd(ctx, request.VersionDirective)
 	if err != nil {
 		return nil, err
 	}
 
-	if pm.defaultQueue != dbq {
+	if pm.defaultQueue != pq {
 		// default queue should stay alive even if requests go to other queues
 		pm.defaultQueue.MarkAlive()
 	}
 
-	return dbq.DispatchQueryTask(ctx, taskID, request)
+	return pq.DispatchQueryTask(ctx, taskID, request)
 }
 
-func (pm *taskQueuePartitionManagerImpl) GetUserDataManager() *userDataManager {
+func (pm *taskQueuePartitionManagerImpl) GetUserDataManager() userDataManager {
 	return pm.userDataManager
 }
 
@@ -348,12 +366,14 @@ func (pm *taskQueuePartitionManagerImpl) unloadFromEngine() {
 	pm.engine.unloadTaskQueuePartition(pm)
 }
 
+// Pass either versionSet or build ID
 func (pm *taskQueuePartitionManagerImpl) getVersionedQueue(
 	ctx context.Context,
-	version string,
+	versionSet string,
+	buildId string,
 	create bool,
 ) (physicalTaskQueueManager, error) {
-	tqm, err := pm.getVersionedQueueNoWait(version, create)
+	tqm, err := pm.getVersionedQueueNoWait(versionSet, buildId, create)
 	if err != nil || tqm == nil {
 		return nil, err
 	}
@@ -366,12 +386,18 @@ func (pm *taskQueuePartitionManagerImpl) getVersionedQueue(
 // Returns taskQueuePartitionManager for a task queue. If not already cached, and create is true, tries
 // to get new range from DB and create one. This does not block for the task queue to be
 // initialized.
+// Pass either versionSet or build ID
 func (pm *taskQueuePartitionManagerImpl) getVersionedQueueNoWait(
-	version string,
+	versionSet string,
+	buildId string,
 	create bool,
 ) (physicalTaskQueueManager, error) {
+	key := versionSet
+	if buildId != "" {
+		key = buildId
+	}
 	pm.versionedQueuesLock.RLock()
-	vq, ok := pm.versionedQueues[version]
+	vq, ok := pm.versionedQueues[key]
 	pm.versionedQueuesLock.RUnlock()
 	if !ok {
 		if !create {
@@ -380,15 +406,21 @@ func (pm *taskQueuePartitionManagerImpl) getVersionedQueueNoWait(
 
 		// If it gets here, write lock and check again in case a task queue is created between the two locks
 		pm.versionedQueuesLock.Lock()
-		vq, ok = pm.versionedQueues[version]
+		vq, ok = pm.versionedQueues[key]
 		if !ok {
 			var err error
-			vq, err = newTaskQueueManager(pm, VersionSetQueueKey(pm.partition, version))
+			var dbq *PhysicalTaskQueueKey
+			if buildId != "" {
+				dbq = BuildIdQueueKey(pm.partition, buildId)
+			} else {
+				dbq = VersionSetQueueKey(pm.partition, versionSet)
+			}
+			vq, err = newPhysicalTaskQueueManager(pm, dbq)
 			if err != nil {
 				pm.versionedQueuesLock.Unlock()
 				return nil, err
 			}
-			pm.versionedQueues[version] = vq
+			pm.versionedQueues[key] = vq
 		}
 		pm.versionedQueuesLock.Unlock()
 
@@ -400,35 +432,27 @@ func (pm *taskQueuePartitionManagerImpl) getVersionedQueueNoWait(
 	return vq, nil
 }
 
-func (pm *taskQueuePartitionManagerImpl) redirectToVersionSetQueueForPoll(
-	ctx context.Context,
+func (pm *taskQueuePartitionManagerImpl) getVersionSetForPoll(
 	caps *commonpb.WorkerVersionCapabilities,
-	userData *persistencespb.VersionedTaskQueueUserData,
-) (physicalTaskQueueManager, error) {
-	data := userData.GetData().GetVersioningData()
-
+	versioningData *persistencespb.VersioningData,
+) (string, error) {
 	if pm.partition.Kind() == enumspb.TASK_QUEUE_KIND_STICKY {
 		// In the sticky case we don't redirect, but we may kick off this worker if there's a newer one.
-		unknownBuild, err := checkVersionForStickyPoll(data, caps)
-		if err != nil {
-			return nil, err
-		}
-		if unknownBuild {
-			pm.recordUnknownBuildPoll(caps.BuildId)
-		}
-		return pm.defaultQueue, nil
+		_, err := checkVersionForStickyPoll(versioningData, caps)
+		return "", err
 	}
 
-	primarySetId, demotedSetIds, unknownBuild, err := lookupVersionSetForPoll(data, caps)
+	primarySetId, demotedSetIds, unknownBuild, err := lookupVersionSetForPoll(versioningData, caps)
 	if err != nil {
-		return nil, err
+		return "", err
 	}
 	if unknownBuild {
-		pm.recordUnknownBuildPoll(caps.BuildId)
+		// if the build ID is unknown, we assume user is using the new API
+		return "", nil
 	}
 	pm.loadDemotedSetIds(demotedSetIds)
 
-	return pm.getVersionedQueue(ctx, primarySetId, true)
+	return primarySetId, nil
 }
 
 func (pm *taskQueuePartitionManagerImpl) loadDemotedSetIds(demotedSetIds []string) {
@@ -437,7 +461,7 @@ func (pm *taskQueuePartitionManagerImpl) loadDemotedSetIds(demotedSetIds []strin
 	// Also mark them alive, so that their liveness will be roughly synchronized.
 	// TODO: once we know a demoted set id has no more tasks, we can remove it from versioning data
 	for _, demotedSetId := range demotedSetIds {
-		tqm, _ := pm.getVersionedQueueNoWait(demotedSetId, true)
+		tqm, _ := pm.getVersionedQueueNoWait(demotedSetId, "", true)
 		if tqm != nil {
 			tqm.MarkAlive()
 		}
@@ -447,26 +471,58 @@ func (pm *taskQueuePartitionManagerImpl) loadDemotedSetIds(demotedSetIds []strin
 func (pm *taskQueuePartitionManagerImpl) getPhysicalQueueForAdd(
 	ctx context.Context,
 	directive *taskqueuespb.TaskVersionDirective,
-) (physicalTaskQueueManager, error) {
+) (physicalTaskQueueManager, <-chan struct{}, error) {
 	if directive.GetValue() == nil {
-		return pm.defaultQueue, nil
+		// This means the tasks is a middle task belonging to an unversioned execution. Keep using unversioned.
+		return pm.defaultQueue, nil, nil
 	}
 
-	// We don't need the userDataChanged channel here because:
-	// - if we sync match, we're done
-	// - if we spool to db, we'll re-resolve when it comes out of the db
-	userData, _, err := pm.userDataManager.GetUserData()
+	userData, userDataChanged, err := pm.userDataManager.GetUserData()
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
-	return pm.redirectToVersionSetQueueForAdd(ctx, directive, userData)
+
+	data := userData.GetData().GetVersioningData()
+
+	var buildId string
+	var versionSet string
+	switch dir := directive.GetValue().(type) {
+	case *taskqueuespb.TaskVersionDirective_UseDefault:
+		// Need to assign build ID. Assignment rules take precedence, fallback to version sets if no matching rule is found
+		if len(data.GetAssignmentRules()) > 0 {
+			buildId = FindAssignmentBuildId(data.GetAssignmentRules())
+		}
+		if buildId == "" {
+			versionSet, err = pm.getVersionSetForAdd(directive, data)
+			if err != nil {
+				return nil, nil, err
+			}
+		}
+	case *taskqueuespb.TaskVersionDirective_BuildId:
+		// Already assigned, need to stay in the same version set or build ID. If TQ has version sets, first try to
+		// redirect to the version set based on the build ID. If the build ID does not belong to any version set,
+		// assume user wants to use the new API
+		if len(data.GetVersionSets()) > 0 {
+			versionSet, err = pm.getVersionSetForAdd(directive, data)
+			if err != nil {
+				return nil, nil, err
+			}
+		}
+		if versionSet == "" {
+			buildId = dir.BuildId
+		}
+	}
+
+	if buildId == "" && versionSet == "" {
+		// We could not find a buildId for assignment, using the unversioned queue
+		return pm.defaultQueue, userDataChanged, nil
+	}
+
+	dbq, err := pm.getVersionedQueue(ctx, versionSet, buildId, true)
+	return dbq, userDataChanged, err
 }
 
-func (pm *taskQueuePartitionManagerImpl) redirectToVersionSetQueueForAdd(
-	ctx context.Context,
-	directive *taskqueuespb.TaskVersionDirective,
-	userData *persistencespb.VersionedTaskQueueUserData,
-) (physicalTaskQueueManager, error) {
+func (pm *taskQueuePartitionManagerImpl) getVersionSetForAdd(directive *taskqueuespb.TaskVersionDirective, data *persistencespb.VersioningData) (string, error) {
 	var buildId string
 	switch dir := directive.GetValue().(type) {
 	case *taskqueuespb.TaskVersionDirective_UseDefault:
@@ -475,48 +531,40 @@ func (pm *taskQueuePartitionManagerImpl) redirectToVersionSetQueueForAdd(
 		buildId = dir.BuildId
 	default:
 		// Unversioned task, leave on unversioned queue.
-		return pm.defaultQueue, nil
+		return "", nil
 	}
-
-	data := userData.GetData().GetVersioningData()
 
 	if pm.partition.Kind() == enumspb.TASK_QUEUE_KIND_STICKY {
 		// In the sticky case we don't redirect, but we may kick off this worker if there's a newer one.
 		unknownBuild, err := checkVersionForStickyAdd(data, buildId)
 		if err != nil {
-			return nil, err
+			return "", err
 		}
 		if unknownBuild {
-			pm.recordUnknownBuildTask(buildId)
-			// Don't bother persisting the unknown build id in this case: sticky tasks have a
-			// short timeout, so it doesn't matter if they get lost.
+			// this could happen in two scenarios:
+			// - task queue is switching to the new versioning API and the build ID is not registered in version sets.
+			// - task queue is still using the old API but a failover happened before verisoning data fully propagate.
+			// the second case is unlikely, and we do not support it anymore considering the old API is deprecated.
+			return "", nil
 		}
-		return pm.defaultQueue, nil
 	}
 
 	versionSet, unknownBuild, err := lookupVersionSetForAdd(data, buildId)
 	if err == errEmptyVersioningData { // nolint:goerr113
 		// default was requested for an unversioned queue
-		return pm.defaultQueue, nil
+		return "", nil
 	} else if err != nil {
-		return nil, err
+		return "", err
 	}
 	if unknownBuild {
-		pm.recordUnknownBuildTask(buildId)
-		// Send rpc to root partition to persist the unknown build id before we return success.
-		_, err = pm.matchingClient.UpdateWorkerBuildIdCompatibility(ctx, &matchingservice.UpdateWorkerBuildIdCompatibilityRequest{
-			NamespaceId: pm.partition.NamespaceId().String(),
-			TaskQueue:   pm.partition.TaskQueue().Family().TaskQueue(enumspb.TASK_QUEUE_TYPE_WORKFLOW).RootPartition().RpcName(),
-			Operation: &matchingservice.UpdateWorkerBuildIdCompatibilityRequest_PersistUnknownBuildId{
-				PersistUnknownBuildId: buildId,
-			},
-		})
-		if err != nil {
-			return nil, err
-		}
+		// this could happen in two scenarios:
+		// - task queue is switching to the new versioning API and the build ID is not registered in version sets.
+		// - task queue is still using the old API but a failover happened before verisoning data fully propagate.
+		// the second case is unlikely, and we do not support it anymore considering the old API is deprecated.
+		return "", nil
 	}
 
-	return pm.getVersionedQueue(ctx, versionSet, true)
+	return versionSet, nil
 }
 
 func (pm *taskQueuePartitionManagerImpl) recordUnknownBuildPoll(buildId string) {
