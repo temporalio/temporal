@@ -103,7 +103,7 @@ type StubContext struct {
 	engine Engine
 }
 
-func NewStabContext(
+func NewStubContext(
 	ctrl *gomock.Controller,
 	overrides ContextConfigOverrides,
 	engine Engine,
