@@ -1537,6 +1537,7 @@ func (adh *AdminHandler) ResendReplicationTasks(
 		adh.clientBean,
 		func(
 			ctx context.Context,
+			sourceClusterName string,
 			namespaceId namespace.ID,
 			workflowId string,
 			runId string,

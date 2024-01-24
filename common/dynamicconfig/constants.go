@@ -616,10 +616,6 @@ const (
 	TimerProcessorUpdateAckInterval = "history.timerProcessorUpdateAckInterval"
 	// TimerProcessorUpdateAckIntervalJitterCoefficient is the update interval jitter coefficient
 	TimerProcessorUpdateAckIntervalJitterCoefficient = "history.timerProcessorUpdateAckIntervalJitterCoefficient"
-	// TimerProcessorCompleteTimerInterval is complete timer interval for timer processor
-	TimerProcessorCompleteTimerInterval = "history.timerProcessorCompleteTimerInterval"
-	// TimerProcessorFailoverMaxPollRPS is max poll rate per second for timer processor
-	TimerProcessorFailoverMaxPollRPS = "history.timerProcessorFailoverMaxPollRPS"
 	// TimerProcessorMaxPollRPS is max poll rate per second for timer processor
 	TimerProcessorMaxPollRPS = "history.timerProcessorMaxPollRPS"
 	// TimerProcessorMaxPollHostRPS is max poll rate per second for all timer processor on a host
@@ -642,8 +638,6 @@ const (
 
 	// TransferTaskBatchSize is batch size for transferQueueProcessor
 	TransferTaskBatchSize = "history.transferTaskBatchSize"
-	// TransferProcessorFailoverMaxPollRPS is max poll rate per second for transferQueueProcessor
-	TransferProcessorFailoverMaxPollRPS = "history.transferProcessorFailoverMaxPollRPS"
 	// TransferProcessorMaxPollRPS is max poll rate per second for transferQueueProcessor
 	TransferProcessorMaxPollRPS = "history.transferProcessorMaxPollRPS"
 	// TransferProcessorMaxPollHostRPS is max poll rate per second for all transferQueueProcessor on a host
@@ -654,8 +648,6 @@ const (
 	TransferProcessorSchedulerActiveRoundRobinWeights = "history.transferProcessorSchedulerActiveRoundRobinWeights"
 	// TransferProcessorSchedulerStandbyRoundRobinWeights is the priority round robin weights used by transfer task scheduler for standby namespaces
 	TransferProcessorSchedulerStandbyRoundRobinWeights = "history.transferProcessorSchedulerStandbyRoundRobinWeights"
-	// TransferProcessorUpdateShardTaskCount is update shard count for transferQueueProcessor
-	TransferProcessorUpdateShardTaskCount = "history.transferProcessorUpdateShardTaskCount"
 	// TransferProcessorMaxPollInterval max poll interval for transferQueueProcessor
 	TransferProcessorMaxPollInterval = "history.transferProcessorMaxPollInterval"
 	// TransferProcessorMaxPollIntervalJitterCoefficient is the max poll interval jitter coefficient
@@ -664,8 +656,6 @@ const (
 	TransferProcessorUpdateAckInterval = "history.transferProcessorUpdateAckInterval"
 	// TransferProcessorUpdateAckIntervalJitterCoefficient is the update interval jitter coefficient
 	TransferProcessorUpdateAckIntervalJitterCoefficient = "history.transferProcessorUpdateAckIntervalJitterCoefficient"
-	// TransferProcessorCompleteTransferInterval is complete timer interval for transferQueueProcessor
-	TransferProcessorCompleteTransferInterval = "history.transferProcessorCompleteTransferInterval"
 	// TransferProcessorPollBackoffInterval is the poll backoff interval if task redispatcher's size exceeds limit for transferQueueProcessor
 	TransferProcessorPollBackoffInterval = "history.transferProcessorPollBackoffInterval"
 	// TransferProcessorEnsureCloseBeforeDelete means we ensure the execution is closed before we delete it
@@ -693,8 +683,6 @@ const (
 	VisibilityProcessorUpdateAckInterval = "history.visibilityProcessorUpdateAckInterval"
 	// VisibilityProcessorUpdateAckIntervalJitterCoefficient is the update interval jitter coefficient
 	VisibilityProcessorUpdateAckIntervalJitterCoefficient = "history.visibilityProcessorUpdateAckIntervalJitterCoefficient"
-	// VisibilityProcessorCompleteTaskInterval is complete timer interval for visibilityQueueProcessor
-	VisibilityProcessorCompleteTaskInterval = "history.visibilityProcessorCompleteTaskInterval"
 	// VisibilityProcessorPollBackoffInterval is the poll backoff interval if task redispatcher's size exceeds limit for visibilityQueueProcessor
 	VisibilityProcessorPollBackoffInterval = "history.visibilityProcessorPollBackoffInterval"
 	// VisibilityProcessorEnsureCloseBeforeDelete means we ensure the visibility of an execution is closed before we delete its visibility records
@@ -742,20 +730,10 @@ const (
 	ReplicatorTaskBatchSize = "history.replicatorTaskBatchSize"
 	// ReplicatorMaxSkipTaskCount is maximum number of tasks that can be skipped during tasks pagination due to not meeting filtering conditions (e.g. missed namespace).
 	ReplicatorMaxSkipTaskCount = "history.replicatorMaxSkipTaskCount"
-	// ReplicatorTaskWorkerCount is number of worker for ReplicatorProcessor
-	ReplicatorTaskWorkerCount = "history.replicatorTaskWorkerCount"
-	// ReplicatorProcessorMaxPollRPS is max poll rate per second for ReplicatorProcessor
-	ReplicatorProcessorMaxPollRPS = "history.replicatorProcessorMaxPollRPS"
 	// ReplicatorProcessorMaxPollInterval is max poll interval for ReplicatorProcessor
 	ReplicatorProcessorMaxPollInterval = "history.replicatorProcessorMaxPollInterval"
 	// ReplicatorProcessorMaxPollIntervalJitterCoefficient is the max poll interval jitter coefficient
 	ReplicatorProcessorMaxPollIntervalJitterCoefficient = "history.replicatorProcessorMaxPollIntervalJitterCoefficient"
-	// ReplicatorProcessorUpdateAckInterval is update interval for ReplicatorProcessor
-	ReplicatorProcessorUpdateAckInterval = "history.replicatorProcessorUpdateAckInterval"
-	// ReplicatorProcessorUpdateAckIntervalJitterCoefficient is the update interval jitter coefficient
-	ReplicatorProcessorUpdateAckIntervalJitterCoefficient = "history.replicatorProcessorUpdateAckIntervalJitterCoefficient"
-	// ReplicatorProcessorEnablePriorityTaskProcessor indicates whether priority task processor should be used for ReplicatorProcessor
-	ReplicatorProcessorEnablePriorityTaskProcessor = "history.replicatorProcessorEnablePriorityTaskProcessor"
 	// MaximumBufferedEventsBatch is the maximum permissible number of buffered events for any given mutable state.
 	MaximumBufferedEventsBatch = "history.maximumBufferedEventsBatch"
 	// MaximumBufferedEventsSizeInBytes is the maximum permissible size of all buffered events for any given mutable
@@ -841,8 +819,6 @@ const (
 	ReplicationTaskProcessorHostQPS = "history.ReplicationTaskProcessorHostQPS"
 	// ReplicationTaskProcessorShardQPS is the qps of task processing rate limiter on shard level
 	ReplicationTaskProcessorShardQPS = "history.ReplicationTaskProcessorShardQPS"
-	// ReplicationBypassCorruptedData is the flag to bypass corrupted workflow data in source cluster
-	ReplicationBypassCorruptedData = "history.ReplicationBypassCorruptedData"
 	// ReplicationEnableDLQMetrics is the flag to emit DLQ metrics
 	ReplicationEnableDLQMetrics = "history.ReplicationEnableDLQMetrics"
 	// HistoryTaskDLQEnabled enables the history task DLQ. This applies to internal tasks like transfer and timer tasks.
