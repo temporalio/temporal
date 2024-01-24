@@ -72,7 +72,7 @@ const (
 
 	// Query clause that mentions TemporalNamespaceDivision to disable special handling of that
 	// search attribute in visibility.
-	matchAnyNamespaceDivision = TemporalNamespaceDivision + ` != "__never_used__"`
+	matchAnyNamespaceDivision = TemporalNamespaceDivision + ` IS NULL OR ` + TemporalNamespaceDivision + ` IS NOT NULL`
 )
 
 var (
