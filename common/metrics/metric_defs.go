@@ -386,7 +386,7 @@ const (
 	// HistoryCacheGetOrCreateScope is the scope used by history cache
 	HistoryCacheGetOrCreateScope = "HistoryCacheGetOrCreate"
 	// HistoryCacheGetOrCreateCurrentScope is the scope used by history cache
-	HistoryCacheGetOrCreateCurrentScope = "CacheGetOrCreateCurrent"
+	HistoryCacheGetOrCreateCurrentScope = "HistoryCacheGetOrCreateCurrent"
 
 	// TransferQueueProcessorScope is the scope used by all metric emitted by transfer queue processor
 	TransferQueueProcessorScope = "TransferQueueProcessor"
