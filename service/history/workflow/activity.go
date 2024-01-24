@@ -124,9 +124,6 @@ func (ra *retryableActivityVisitor) UpdateActivityInfo(ai *persistence.ActivityI
 	ai.TimerTaskStatus = TimerTaskStatusNone
 	ai.RetryLastWorkerIdentity = ai.StartedIdentity
 	ai.RetryLastFailure = failure
-	if ra.nextRetryDelay != nil {
-		ai.NextRetryDelay = durationpb.New(*ra.nextRetryDelay)
-	}
 	return ai
 }
 
