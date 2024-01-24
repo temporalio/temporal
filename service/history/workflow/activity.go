@@ -42,7 +42,7 @@ type RequestedDelay struct {
 }
 
 type ActivityVisitor interface {
-	UpdateActivityInfo(ai *persistence.ActivityInfo, version int64, failure *failurepb.Failure) *persistence.ActivityInfo
+	UpdateActivityInfo(ai *persistence.ActivityInfo, version int64, attempt int32, failure *failurepb.Failure) *persistence.ActivityInfo
 	State() enumspb.RetryState
 }
 
@@ -102,7 +102,7 @@ func newActivityVisitor(
 	return visitor
 }
 
-func (nra *nonRetryableActivityVisitor) UpdateActivityInfo(ai *persistence.ActivityInfo, _ int64, _ *failurepb.Failure) *persistence.ActivityInfo {
+func (nra *nonRetryableActivityVisitor) UpdateActivityInfo(ai *persistence.ActivityInfo, _ int64, _ int32, _ *failurepb.Failure) *persistence.ActivityInfo {
 	return ai
 }
 
@@ -114,8 +114,8 @@ func (ra *retryableActivityVisitor) State() enumspb.RetryState {
 	return ra.state
 }
 
-func (ra *retryableActivityVisitor) UpdateActivityInfo(ai *persistence.ActivityInfo, version int64, failure *failurepb.Failure) *persistence.ActivityInfo {
-	ai.Attempt++
+func (ra *retryableActivityVisitor) UpdateActivityInfo(ai *persistence.ActivityInfo, version int64, attempt int32, failure *failurepb.Failure) *persistence.ActivityInfo {
+	ai.Attempt = attempt
 	ai.Version = version
 	ai.ScheduledTime = timestamppb.New(ra.nextScheduledTime)
 	ai.StartedEventId = common.EmptyEventID
