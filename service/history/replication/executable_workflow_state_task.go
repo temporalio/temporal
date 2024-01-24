@@ -110,7 +110,7 @@ func (e *ExecutableWorkflowStateTask) Execute() error {
 			tag.WorkflowRunID(e.RunID),
 			tag.TaskID(e.ExecutableTask.TaskID()),
 		)
-		e.MetricsHandler.Counter(metrics.ReplicationTasksSkipped.GetMetricName()).Record(
+		e.MetricsHandler.Counter(metrics.ReplicationTasksSkipped.Name()).Record(
 			1,
 			metrics.OperationTag(metrics.SyncWorkflowStateTaskScope),
 			metrics.NamespaceTag(namespaceName),

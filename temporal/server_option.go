@@ -36,6 +36,7 @@ import (
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
 	persistenceclient "go.temporal.io/server/common/persistence/client"
+	"go.temporal.io/server/common/persistence/visibility"
 	"go.temporal.io/server/common/primitives"
 	"go.temporal.io/server/common/resolver"
 	"go.temporal.io/server/common/rpc/encryption"
@@ -152,6 +153,12 @@ func WithDynamicConfigClient(c dynamicconfig.Client) ServerOption {
 func WithCustomDataStoreFactory(customFactory persistenceclient.AbstractDataStoreFactory) ServerOption {
 	return applyFunc(func(s *serverOptions) {
 		s.customDataStoreFactory = customFactory
+	})
+}
+
+func WithCustomVisibilityStoreFactory(customFactory visibility.VisibilityStoreFactory) ServerOption {
+	return applyFunc(func(s *serverOptions) {
+		s.customVisibilityStoreFactory = customFactory
 	})
 }
 

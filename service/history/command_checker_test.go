@@ -38,6 +38,7 @@ import (
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
+	"google.golang.org/protobuf/types/known/durationpb"
 
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common"
@@ -50,7 +51,6 @@ import (
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/payloads"
 	"go.temporal.io/server/common/persistence/visibility/manager"
-	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/common/searchattribute"
 	"go.temporal.io/server/service/history/configs"
 	"go.temporal.io/server/service/history/tests"
@@ -145,7 +145,7 @@ func (s *commandAttrValidatorSuite) SetupTest() {
 			config.SearchAttributesSizeOfValueLimit,
 			config.SearchAttributesTotalSizeLimit,
 			s.mockVisibilityManager,
-			false,
+			dynamicconfig.GetBoolPropertyFnFilteredByNamespace(false),
 		))
 }
 
@@ -171,23 +171,23 @@ func (s *commandAttrValidatorSuite) TestValidateSignalExternalWorkflowExecutionA
 	var attributes *commandpb.SignalExternalWorkflowExecutionCommandAttributes
 
 	fc, err := s.validator.validateSignalExternalWorkflowExecutionAttributes(s.testNamespaceID, s.testTargetNamespaceID, attributes)
-	s.EqualError(err, "SignalExternalWorkflowExecutionCommandAttributes is not set on command.")
+	s.EqualError(err, "SignalExternalWorkflowExecutionCommandAttributes is not set on SignalExternalWorkflowExecutionCommand.")
 	s.Equal(enumspb.WORKFLOW_TASK_FAILED_CAUSE_BAD_SIGNAL_WORKFLOW_EXECUTION_ATTRIBUTES, fc)
 
 	attributes = &commandpb.SignalExternalWorkflowExecutionCommandAttributes{}
 	fc, err = s.validator.validateSignalExternalWorkflowExecutionAttributes(s.testNamespaceID, s.testTargetNamespaceID, attributes)
-	s.EqualError(err, "Execution is nil on command.")
+	s.EqualError(err, "Execution is not set on SignalExternalWorkflowExecutionCommand.")
 	s.Equal(enumspb.WORKFLOW_TASK_FAILED_CAUSE_BAD_SIGNAL_WORKFLOW_EXECUTION_ATTRIBUTES, fc)
 
 	attributes.Execution = &commonpb.WorkflowExecution{}
 	attributes.Execution.WorkflowId = "workflow-id"
 	fc, err = s.validator.validateSignalExternalWorkflowExecutionAttributes(s.testNamespaceID, s.testTargetNamespaceID, attributes)
-	s.EqualError(err, "SignalName is not set on command.")
+	s.EqualError(err, "SignalName is not set on SignalExternalWorkflowExecutionCommand. WorkflowId=workflow-id Namespace= RunId=")
 	s.Equal(enumspb.WORKFLOW_TASK_FAILED_CAUSE_BAD_SIGNAL_WORKFLOW_EXECUTION_ATTRIBUTES, fc)
 
 	attributes.Execution.RunId = "run-id"
 	fc, err = s.validator.validateSignalExternalWorkflowExecutionAttributes(s.testNamespaceID, s.testTargetNamespaceID, attributes)
-	s.EqualError(err, "Invalid RunId set on command.")
+	s.EqualError(err, "Invalid RunId set on SignalExternalWorkflowExecutionCommand. WorkflowId=workflow-id Namespace= RunId=run-id SignalName=")
 	attributes.Execution.RunId = tests.RunID
 	s.Equal(enumspb.WORKFLOW_TASK_FAILED_CAUSE_BAD_SIGNAL_WORKFLOW_EXECUTION_ATTRIBUTES, fc)
 
@@ -207,17 +207,17 @@ func (s *commandAttrValidatorSuite) TestValidateUpsertWorkflowSearchAttributes()
 	var attributes *commandpb.UpsertWorkflowSearchAttributesCommandAttributes
 
 	fc, err := s.validator.validateUpsertWorkflowSearchAttributes(namespace, attributes)
-	s.EqualError(err, "UpsertWorkflowSearchAttributesCommandAttributes is not set on command.")
+	s.EqualError(err, "UpsertWorkflowSearchAttributesCommandAttributes is not set on UpsertWorkflowSearchAttributesCommand.")
 	s.Equal(enumspb.WORKFLOW_TASK_FAILED_CAUSE_BAD_SEARCH_ATTRIBUTES, fc)
 
 	attributes = &commandpb.UpsertWorkflowSearchAttributesCommandAttributes{}
 	fc, err = s.validator.validateUpsertWorkflowSearchAttributes(namespace, attributes)
-	s.EqualError(err, "SearchAttributes is not set on command.")
+	s.EqualError(err, "SearchAttributes is not set on UpsertWorkflowSearchAttributesCommand.")
 	s.Equal(enumspb.WORKFLOW_TASK_FAILED_CAUSE_BAD_SEARCH_ATTRIBUTES, fc)
 
 	attributes.SearchAttributes = &commonpb.SearchAttributes{}
 	fc, err = s.validator.validateUpsertWorkflowSearchAttributes(namespace, attributes)
-	s.EqualError(err, "IndexedFields is empty on command.")
+	s.EqualError(err, "IndexedFields is not set on UpsertWorkflowSearchAttributesCommand.")
 	s.Equal(enumspb.WORKFLOW_TASK_FAILED_CAUSE_BAD_SEARCH_ATTRIBUTES, fc)
 
 	saPayload, err := searchattribute.EncodeValue("bytes", enumspb.INDEXED_VALUE_TYPE_KEYWORD)
@@ -239,15 +239,15 @@ func (s *commandAttrValidatorSuite) TestValidateContinueAsNewWorkflowExecutionAt
 		// workflow type name and task queue name should be retrieved from existing workflow info
 
 		// WorkflowRunTimeout should be shorten to execution timeout
-		WorkflowRunTimeout: timestamp.DurationPtr(executionTimeout * 2),
+		WorkflowRunTimeout: durationpb.New(executionTimeout * 2),
 		// WorkflowTaskTimeout should be shorten to max workflow task timeout
-		WorkflowTaskTimeout: timestamp.DurationPtr(common.MaxWorkflowTaskStartToCloseTimeout * 2),
+		WorkflowTaskTimeout: durationpb.New(common.MaxWorkflowTaskStartToCloseTimeout * 2),
 	}
 
 	executionInfo := &persistencespb.WorkflowExecutionInfo{
 		WorkflowTypeName:         workflowTypeName,
 		TaskQueue:                taskQueue,
-		WorkflowExecutionTimeout: timestamp.DurationPtr(executionTimeout),
+		WorkflowExecutionTimeout: durationpb.New(executionTimeout),
 	}
 
 	fc, err := s.validator.validateContinueAsNewWorkflowExecutionAttributes(
@@ -260,8 +260,8 @@ func (s *commandAttrValidatorSuite) TestValidateContinueAsNewWorkflowExecutionAt
 
 	s.Equal(workflowTypeName, attributes.GetWorkflowType().GetName())
 	s.Equal(taskQueue, attributes.GetTaskQueue().GetName())
-	s.Equal(executionTimeout, *attributes.GetWorkflowRunTimeout())
-	s.Equal(common.MaxWorkflowTaskStartToCloseTimeout, *attributes.GetWorkflowTaskTimeout())
+	s.Equal(executionTimeout, attributes.GetWorkflowRunTimeout().AsDuration())
+	s.Equal(common.MaxWorkflowTaskStartToCloseTimeout, attributes.GetWorkflowTaskTimeout().AsDuration())
 }
 
 func (s *commandAttrValidatorSuite) TestValidateModifyWorkflowProperties() {
@@ -269,13 +269,13 @@ func (s *commandAttrValidatorSuite) TestValidateModifyWorkflowProperties() {
 	var attributes *commandpb.ModifyWorkflowPropertiesCommandAttributes
 
 	fc, err := s.validator.validateModifyWorkflowProperties(namespace, attributes)
-	s.EqualError(err, "ModifyWorkflowPropertiesCommandAttributes is not set on command.")
+	s.EqualError(err, "ModifyWorkflowPropertiesCommandAttributes is not set on ModifyWorkflowPropertiesCommand.")
 	s.Equal(enumspb.WORKFLOW_TASK_FAILED_CAUSE_BAD_MODIFY_WORKFLOW_PROPERTIES_ATTRIBUTES, fc)
 
 	// test attributes has at least one non-nil attribute
 	attributes = &commandpb.ModifyWorkflowPropertiesCommandAttributes{}
 	fc, err = s.validator.validateModifyWorkflowProperties(namespace, attributes)
-	s.EqualError(err, "ModifyWorkflowPropertiesCommandAttributes attributes are all nil.")
+	s.EqualError(err, "UpsertedMemo is not set on ModifyWorkflowPropertiesCommand.")
 	s.Equal(enumspb.WORKFLOW_TASK_FAILED_CAUSE_BAD_MODIFY_WORKFLOW_PROPERTIES_ATTRIBUTES, fc)
 
 	// test UpsertedMemo cannot be an empty map
@@ -283,7 +283,7 @@ func (s *commandAttrValidatorSuite) TestValidateModifyWorkflowProperties() {
 		UpsertedMemo: &commonpb.Memo{},
 	}
 	fc, err = s.validator.validateModifyWorkflowProperties(namespace, attributes)
-	s.EqualError(err, "UpsertedMemo.Fields is empty on command.")
+	s.EqualError(err, "UpsertedMemo.Fields is not set on ModifyWorkflowPropertiesCommand.")
 	s.Equal(enumspb.WORKFLOW_TASK_FAILED_CAUSE_BAD_MODIFY_WORKFLOW_PROPERTIES_ATTRIBUTES, fc)
 }
 
@@ -664,67 +664,67 @@ func (s *commandAttrValidatorSuite) TestValidateActivityRetryPolicy() {
 			name:  "override non-set policy",
 			input: nil,
 			want: &commonpb.RetryPolicy{
-				InitialInterval:    timestamp.DurationPtr(1 * time.Second),
+				InitialInterval:    durationpb.New(1 * time.Second),
 				BackoffCoefficient: 2,
-				MaximumInterval:    timestamp.DurationPtr(100 * time.Second),
+				MaximumInterval:    durationpb.New(100 * time.Second),
 				MaximumAttempts:    0,
 			},
 		},
 		{
 			name: "do not override fully set policy",
 			input: &commonpb.RetryPolicy{
-				InitialInterval:    timestamp.DurationPtr(5 * time.Second),
+				InitialInterval:    durationpb.New(5 * time.Second),
 				BackoffCoefficient: 10,
-				MaximumInterval:    timestamp.DurationPtr(20 * time.Second),
+				MaximumInterval:    durationpb.New(20 * time.Second),
 				MaximumAttempts:    8,
 			},
 			want: &commonpb.RetryPolicy{
-				InitialInterval:    timestamp.DurationPtr(5 * time.Second),
+				InitialInterval:    durationpb.New(5 * time.Second),
 				BackoffCoefficient: 10,
-				MaximumInterval:    timestamp.DurationPtr(20 * time.Second),
+				MaximumInterval:    durationpb.New(20 * time.Second),
 				MaximumAttempts:    8,
 			},
 		},
 		{
 			name: "partial override of fields",
 			input: &commonpb.RetryPolicy{
-				InitialInterval:    timestamp.DurationPtr(0 * time.Second),
+				InitialInterval:    durationpb.New(0 * time.Second),
 				BackoffCoefficient: 1.2,
-				MaximumInterval:    timestamp.DurationPtr(0 * time.Second),
+				MaximumInterval:    durationpb.New(0 * time.Second),
 				MaximumAttempts:    7,
 			},
 			want: &commonpb.RetryPolicy{
-				InitialInterval:    timestamp.DurationPtr(1 * time.Second),
+				InitialInterval:    durationpb.New(1 * time.Second),
 				BackoffCoefficient: 1.2,
-				MaximumInterval:    timestamp.DurationPtr(100 * time.Second),
+				MaximumInterval:    durationpb.New(100 * time.Second),
 				MaximumAttempts:    7,
 			},
 		},
 		{
 			name: "set expected max interval if only init interval set",
 			input: &commonpb.RetryPolicy{
-				InitialInterval: timestamp.DurationPtr(3 * time.Second),
-				MaximumInterval: timestamp.DurationPtr(0 * time.Second),
+				InitialInterval: durationpb.New(3 * time.Second),
+				MaximumInterval: durationpb.New(0 * time.Second),
 			},
 			want: &commonpb.RetryPolicy{
-				InitialInterval:    timestamp.DurationPtr(3 * time.Second),
+				InitialInterval:    durationpb.New(3 * time.Second),
 				BackoffCoefficient: 2,
-				MaximumInterval:    timestamp.DurationPtr(300 * time.Second),
+				MaximumInterval:    durationpb.New(300 * time.Second),
 				MaximumAttempts:    0,
 			},
 		},
 		{
 			name: "override all defaults",
 			input: &commonpb.RetryPolicy{
-				InitialInterval:    timestamp.DurationPtr(0 * time.Second),
+				InitialInterval:    durationpb.New(0 * time.Second),
 				BackoffCoefficient: 0,
-				MaximumInterval:    timestamp.DurationPtr(0 * time.Second),
+				MaximumInterval:    durationpb.New(0 * time.Second),
 				MaximumAttempts:    0,
 			},
 			want: &commonpb.RetryPolicy{
-				InitialInterval:    timestamp.DurationPtr(1 * time.Second),
+				InitialInterval:    durationpb.New(1 * time.Second),
 				BackoffCoefficient: 2,
-				MaximumInterval:    timestamp.DurationPtr(100 * time.Second),
+				MaximumInterval:    durationpb.New(100 * time.Second),
 				MaximumAttempts:    0,
 			},
 		},

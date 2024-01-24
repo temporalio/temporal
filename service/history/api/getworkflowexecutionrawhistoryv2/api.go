@@ -87,7 +87,7 @@ func Invoke(
 			return nil, err
 		}
 
-		pageToken = api.GeneratePaginationToken(request, response.GetVersionHistories())
+		pageToken = api.GeneratePaginationTokenV2Request(request, response.GetVersionHistories())
 	} else {
 		pageToken, err = api.DeserializeRawHistoryToken(req.NextPageToken)
 		if err != nil {
@@ -106,7 +106,7 @@ func Invoke(
 		}
 	}
 
-	if err := api.ValidatePaginationToken(
+	if err := api.ValidatePaginationTokenV2Request(
 		request,
 		pageToken,
 	); err != nil {
@@ -157,7 +157,7 @@ func Invoke(
 	pageToken.PersistenceToken = rawHistoryResponse.NextPageToken
 	size := rawHistoryResponse.Size
 	metricsHandler := interceptor.GetMetricsHandlerFromContext(ctx, shardContext.GetLogger()).WithTags(metrics.OperationTag(metrics.HistoryGetWorkflowExecutionRawHistoryV2Scope))
-	metricsHandler.Histogram(metrics.HistorySize.GetMetricName(), metrics.HistorySize.GetMetricUnit()).Record(
+	metricsHandler.Histogram(metrics.HistorySize.Name(), metrics.HistorySize.Unit()).Record(
 		int64(size),
 		metrics.NamespaceTag(ns.Name().String()),
 		metrics.OperationTag(metrics.AdminGetWorkflowExecutionRawHistoryV2Scope),

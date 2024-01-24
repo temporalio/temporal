@@ -29,6 +29,7 @@ import (
 	"fmt"
 
 	"github.com/pborman/uuid"
+	"google.golang.org/protobuf/types/known/durationpb"
 
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
@@ -406,17 +407,17 @@ func (t *timerQueueActiveTaskExecutor) executeWorkflowBackoffTimerTask(
 	}
 
 	if task.WorkflowBackoffType == enumsspb.WORKFLOW_BACKOFF_TYPE_RETRY {
-		t.metricHandler.Counter(metrics.WorkflowRetryBackoffTimerCount.GetMetricName()).Record(
+		t.metricHandler.Counter(metrics.WorkflowRetryBackoffTimerCount.Name()).Record(
 			1,
 			metrics.OperationTag(metrics.TimerActiveTaskWorkflowBackoffTimerScope),
 		)
 	} else if task.WorkflowBackoffType == enumsspb.WORKFLOW_BACKOFF_TYPE_CRON {
-		t.metricHandler.Counter(metrics.WorkflowCronBackoffTimerCount.GetMetricName()).Record(
+		t.metricHandler.Counter(metrics.WorkflowCronBackoffTimerCount.Name()).Record(
 			1,
 			metrics.OperationTag(metrics.TimerActiveTaskWorkflowBackoffTimerScope),
 		)
 	} else if task.WorkflowBackoffType == enumsspb.WORKFLOW_BACKOFF_TYPE_DELAY_START {
-		t.metricHandler.Counter(metrics.WorkflowDelayedStartBackoffTimerCount.GetMetricName()).Record(
+		t.metricHandler.Counter(metrics.WorkflowDelayedStartBackoffTimerCount.Name()).Record(
 			1,
 			metrics.OperationTag(metrics.TimerActiveTaskWorkflowBackoffTimerScope),
 		)
@@ -498,7 +499,7 @@ func (t *timerQueueActiveTaskExecutor) executeActivityRetryTimerTask(
 		},
 		TaskQueue:              taskQueue,
 		ScheduledEventId:       task.EventID,
-		ScheduleToStartTimeout: timestamp.DurationPtr(scheduleToStartTimeout),
+		ScheduleToStartTimeout: durationpb.New(scheduleToStartTimeout),
 		Clock:                  vclock.NewVectorClock(t.shardContext.GetClusterMetadata().GetClusterID(), t.shardContext.GetShardID(), task.TaskID),
 		VersionDirective:       directive,
 	})
@@ -541,8 +542,8 @@ func (t *timerQueueActiveTaskExecutor) executeWorkflowTimeoutTask(
 	retryState := enumspb.RETRY_STATE_TIMEOUT
 	initiator := enumspb.CONTINUE_AS_NEW_INITIATOR_UNSPECIFIED
 
-	wfExpTime := timestamp.TimeValue(mutableState.GetExecutionInfo().WorkflowExecutionExpirationTime)
-	if wfExpTime.IsZero() || wfExpTime.After(t.shardContext.GetTimeSource().Now()) {
+	wfExpTime := mutableState.GetExecutionInfo().WorkflowExecutionExpirationTime
+	if wfExpTime == nil || wfExpTime.AsTime().IsZero() || wfExpTime.AsTime().After(t.shardContext.GetTimeSource().Now()) {
 		backoffInterval, retryState = mutableState.GetRetryBackoffDuration(timeoutFailure)
 		if backoffInterval != backoff.NoBackoff {
 			// We have a retry policy and we should retry.
@@ -669,12 +670,12 @@ func (t *timerQueueActiveTaskExecutor) emitTimeoutMetricScopeWithNamespaceTag(
 	)
 	switch timerType {
 	case enumspb.TIMEOUT_TYPE_SCHEDULE_TO_START:
-		metricsScope.Counter(metrics.ScheduleToStartTimeoutCounter.GetMetricName()).Record(1)
+		metricsScope.Counter(metrics.ScheduleToStartTimeoutCounter.Name()).Record(1)
 	case enumspb.TIMEOUT_TYPE_SCHEDULE_TO_CLOSE:
-		metricsScope.Counter(metrics.ScheduleToCloseTimeoutCounter.GetMetricName()).Record(1)
+		metricsScope.Counter(metrics.ScheduleToCloseTimeoutCounter.Name()).Record(1)
 	case enumspb.TIMEOUT_TYPE_START_TO_CLOSE:
-		metricsScope.Counter(metrics.StartToCloseTimeoutCounter.GetMetricName()).Record(1)
+		metricsScope.Counter(metrics.StartToCloseTimeoutCounter.Name()).Record(1)
 	case enumspb.TIMEOUT_TYPE_HEARTBEAT:
-		metricsScope.Counter(metrics.HeartbeatTimeoutCounter.GetMetricName()).Record(1)
+		metricsScope.Counter(metrics.HeartbeatTimeoutCounter.Name()).Record(1)
 	}
 }

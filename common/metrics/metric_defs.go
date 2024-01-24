@@ -325,7 +325,8 @@ const (
 const (
 	// AdminGetWorkflowExecutionRawHistoryV2Scope is the metric scope for admin.GetWorkflowExecutionRawHistoryScope
 	AdminGetWorkflowExecutionRawHistoryV2Scope = "AdminGetWorkflowExecutionRawHistoryV2"
-
+	// AdminGetWorkflowExecutionRawHistoryScope is the metric scope for admin.GetWorkflowExecutionRawHistoryScope
+	AdminGetWorkflowExecutionRawHistoryScope = "AdminGetWorkflowExecutionRawHistory"
 	// OperatorAddSearchAttributesScope is the metric scope for operator.AddSearchAttributes
 	OperatorAddSearchAttributesScope = "OperatorAddSearchAttributes"
 	// OperatorDeleteNamespaceScope is the metric scope for operator.OperatorDeleteNamespace
@@ -354,6 +355,8 @@ const (
 	HistoryRespondActivityTaskFailedScope = "RespondActivityTaskFailed"
 	// HistoryRespondActivityTaskCanceledScope tracks RespondActivityTaskCanceled API calls received by service
 	HistoryRespondActivityTaskCanceledScope = "RespondActivityTaskCanceled"
+	// HistoryGetWorkflowExecutionRawHistoryScope tracks GetWorkflowExecutionRawHistoryV2Scope API calls received by service
+	HistoryGetWorkflowExecutionRawHistoryScope = "GetWorkflowExecutionRawHistory"
 	// HistoryGetWorkflowExecutionRawHistoryV2Scope tracks GetWorkflowExecutionRawHistoryV2Scope API calls received by service
 	HistoryGetWorkflowExecutionRawHistoryV2Scope = "GetWorkflowExecutionRawHistoryV2"
 	// HistoryGetHistoryScope tracks GetHistoryScope API calls received by service
@@ -383,15 +386,11 @@ const (
 	// HistoryCacheGetOrCreateScope is the scope used by history cache
 	HistoryCacheGetOrCreateScope = "HistoryCacheGetOrCreate"
 	// HistoryCacheGetOrCreateCurrentScope is the scope used by history cache
-	HistoryCacheGetOrCreateCurrentScope = "CacheGetOrCreateCurrent"
+	HistoryCacheGetOrCreateCurrentScope = "HistoryCacheGetOrCreateCurrent"
 
-	// TransferQueueProcessorScope is the scope used by all metric emitted by transfer queue processor
-	TransferQueueProcessorScope = "TransferQueueProcessor"
 	// TransferActiveTaskCloseExecutionScope is the scope used for close execution task processing by transfer queue processor
 	TransferActiveTaskCloseExecutionScope = "TransferActiveTaskCloseExecution"
 
-	// TimerQueueProcessorScope is the scope used by all metric emitted by timer queue processor
-	TimerQueueProcessorScope = "TimerQueueProcessor"
 	// TimerActiveTaskActivityTimeoutScope is the scope used by metric emitted by timer queue processor for processing activity timeouts
 	TimerActiveTaskActivityTimeoutScope = "TimerActiveTaskActivityTimeout"
 	// TimerActiveTaskWorkflowTaskTimeoutScope is the scope used by metric emitted by timer queue processor for processing workflow task timeouts
@@ -606,8 +605,10 @@ var (
 	ServiceAuthorizationLatency              = NewTimerDef("service_authorization_latency")
 	EventBlobSize                            = NewBytesHistogramDef("event_blob_size")
 	LockRequests                             = NewCounterDef("lock_requests")
-	LockFailures                             = NewCounterDef("lock_failures")
 	LockLatency                              = NewTimerDef("lock_latency")
+	SemaphoreRequests                        = NewCounterDef("semaphore_requests")
+	SemaphoreFailures                        = NewCounterDef("semaphore_failures")
+	SemaphoreLatency                         = NewTimerDef("semaphore_latency")
 	ClientRequests                           = NewCounterDef(
 		"client_requests",
 		WithDescription("The number of requests sent by the client to an individual service, keyed by `service_role` and `operation`."),
@@ -869,6 +870,8 @@ var (
 	WorkflowTimeoutCount                  = NewCounterDef("workflow_timeout")
 	WorkflowTerminateCount                = NewCounterDef("workflow_terminate")
 	WorkflowContinuedAsNewCount           = NewCounterDef("workflow_continued_as_new")
+	ReplicationStreamPanic                = NewCounterDef("replication_stream_panic")
+	ReplicationStreamError                = NewCounterDef("replication_stream_error")
 	ReplicationTasksSend                  = NewCounterDef("replication_tasks_send")
 	ReplicationTasksRecv                  = NewCounterDef("replication_tasks_recv")
 	ReplicationTasksRecvBacklog           = NewDimensionlessHistogramDef("replication_tasks_recv_backlog")
@@ -881,6 +884,7 @@ var (
 	// ReplicationTasksFetched records the number of tasks fetched by the poller.
 	ReplicationTasksFetched                        = NewDimensionlessHistogramDef("replication_tasks_fetched")
 	ReplicationLatency                             = NewTimerDef("replication_latency")
+	ReplicationTaskTransmissionLatency             = NewTimerDef("replication_task_transmission_latency")
 	ReplicationDLQFailed                           = NewCounterDef("replication_dlq_enqueue_failed")
 	ReplicationDLQMaxLevelGauge                    = NewGaugeDef("replication_dlq_max_level")
 	ReplicationDLQAckLevelGauge                    = NewGaugeDef("replication_dlq_ack_level")
@@ -921,6 +925,7 @@ var (
 	DDClusterMetadataCallbackLockLatency = NewTimerDef("dd_cluster_metadata_callback_lock_latency")
 	DDShardControllerLockLatency         = NewTimerDef("dd_shard_controller_lock_latency")
 	DDShardLockLatency                   = NewTimerDef("dd_shard_lock_latency")
+	DDShardIOSemaphoreLatency            = NewTimerDef("dd_shard_io_semaphore_latency")
 	DDNamespaceRegistryLockLatency       = NewTimerDef("dd_namespace_registry_lock_latency")
 
 	// Matching
@@ -931,6 +936,7 @@ var (
 	PollSuccessPerTaskQueueCounter            = NewCounterDef("poll_success")
 	PollTimeoutPerTaskQueueCounter            = NewCounterDef("poll_timeouts")
 	PollSuccessWithSyncPerTaskQueueCounter    = NewCounterDef("poll_success_sync")
+	PollLatencyPerTaskQueue                   = NewTimerDef("poll_latency")
 	LeaseRequestPerTaskQueueCounter           = NewCounterDef("lease_requests")
 	LeaseFailurePerTaskQueueCounter           = NewCounterDef("lease_failures")
 	ConditionFailedErrorPerTaskQueueCounter   = NewCounterDef("condition_failed_errors")
@@ -953,6 +959,7 @@ var (
 	NoRecentPollerTasksPerTaskQueueCounter    = NewCounterDef("no_poller_tasks")
 	UnknownBuildPollsCounter                  = NewCounterDef("unknown_build_polls")
 	UnknownBuildTasksCounter                  = NewCounterDef("unknown_build_tasks")
+	TaskDispatchLatencyPerTaskQueue           = NewTimerDef("task_dispatch_latency")
 
 	// Worker
 	ExecutorTasksDoneCount                          = NewCounterDef("executor_done")
@@ -1054,6 +1061,10 @@ var (
 	ScheduleTerminateWorkflowErrors = NewCounterDef(
 		"schedule_terminate_workflow_errors",
 		WithDescription("The number of times a schedule got an error trying to terminate a previous run"),
+	)
+	ScheduleActionDelay = NewTimerDef(
+		"schedule_action_delay",
+		WithDescription("Delay between when scheduled actions should/actually happen"),
 	)
 
 	// Force replication

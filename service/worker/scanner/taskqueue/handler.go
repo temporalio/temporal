@@ -31,7 +31,6 @@ import (
 
 	"go.temporal.io/server/common/log/tag"
 	p "go.temporal.io/server/common/persistence"
-	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/service/matching"
 	"go.temporal.io/server/service/worker/scanner/executor"
 )
@@ -107,8 +106,7 @@ func (s *Scavenger) tryDeleteTaskQueue(key *p.TaskQueueKey, state *taskQueueStat
 		return // avoid deleting our own task queue
 	}
 
-	lastUpdated := timestamp.TimeValue(state.lastUpdated)
-	delta := time.Now().UTC().Sub(lastUpdated)
+	delta := time.Now().UTC().Sub(state.lastUpdated)
 	if delta < taskQueueGracePeriod {
 		return
 	}

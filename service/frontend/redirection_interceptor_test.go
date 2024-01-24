@@ -48,6 +48,7 @@ import (
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/primitives/timestamp"
+	"go.temporal.io/server/common/testing/temporalapi"
 )
 
 type (
@@ -85,12 +86,7 @@ func (s *redirectionInterceptorSuite) SetupTest() {
 	s.clusterMetadata.EXPECT().GetCurrentClusterName().Return(cluster.TestCurrentClusterName).AnyTimes()
 
 	s.redirector = NewRedirectionInterceptor(
-		NewConfig(
-			dynamicconfig.NewNoopCollection(),
-			1,
-			true,
-			false,
-		),
+		NewConfig(dynamicconfig.NewNoopCollection(), 1),
 		s.namespaceCache,
 		config.DCRedirectionPolicy{
 			Policy: DCRedirectionPolicyAllAPIsForwarding,
@@ -189,9 +185,9 @@ func (s *redirectionInterceptorSuite) TestAPIResultMapping() {
 	var service workflowservice.WorkflowServiceServer
 	t := reflect.TypeOf(&service).Elem()
 	expectedAPIs := make(map[string]interface{}, t.NumMethod())
-	for i := 0; i < t.NumMethod(); i++ {
-		expectedAPIs[t.Method(i).Name] = t.Method(i).Type.Out(0)
-	}
+	temporalapi.WalkExportedMethods(&service, func(m reflect.Method) {
+		expectedAPIs[m.Name] = m.Type.Out(0)
+	})
 
 	actualAPIs := make(map[string]interface{})
 	for api, respAllocFn := range localAPIResponses {

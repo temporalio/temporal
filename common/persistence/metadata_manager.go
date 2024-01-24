@@ -30,13 +30,13 @@ import (
 	enumspb "go.temporal.io/api/enums/v1"
 	namespacepb "go.temporal.io/api/namespace/v1"
 	"go.temporal.io/api/serviceerror"
+	"google.golang.org/protobuf/types/known/durationpb"
 
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/persistence/serialization"
 	"go.temporal.io/server/common/primitives"
-	"go.temporal.io/server/common/primitives/timestamp"
 )
 
 type (
@@ -252,7 +252,7 @@ func (m *metadataManagerImpl) InitializeSystemNamespaces(
 				Owner:       "temporal-core@temporal.io",
 			},
 			Config: &persistencespb.NamespaceConfig{
-				Retention:               timestamp.DurationPtr(primitives.SystemNamespaceRetention),
+				Retention:               durationpb.New(primitives.SystemNamespaceRetention),
 				HistoryArchivalState:    enumspb.ARCHIVAL_STATE_DISABLED,
 				VisibilityArchivalState: enumspb.ARCHIVAL_STATE_DISABLED,
 			},

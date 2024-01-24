@@ -64,7 +64,7 @@ func (e *executableTaskConverterImpl) Convert(
 ) []TrackableExecutableTask {
 	tasks := make([]TrackableExecutableTask, len(replicationTasks))
 	for index, replicationTask := range replicationTasks {
-		e.processToolBox.MetricsHandler.Counter(metrics.ReplicationTasksRecv.GetMetricName()).Record(
+		e.processToolBox.MetricsHandler.Counter(metrics.ReplicationTasksRecv.Name()).Record(
 			int64(1),
 			metrics.FromClusterIDTag(serverShardKey.ClusterID),
 			metrics.ToClusterIDTag(clientShardKey.ClusterID),
@@ -81,7 +81,7 @@ func (e *executableTaskConverterImpl) convertOne(
 ) TrackableExecutableTask {
 	var taskCreationTime time.Time
 	if replicationTask.VisibilityTime != nil {
-		taskCreationTime = *replicationTask.VisibilityTime
+		taskCreationTime = replicationTask.VisibilityTime.AsTime()
 	} else {
 		taskCreationTime = time.Now().UTC()
 	}

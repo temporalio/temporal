@@ -29,8 +29,8 @@ import (
 
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
-
-	"go.temporal.io/server/common/primitives/timestamp"
+	"google.golang.org/protobuf/types/known/durationpb"
+	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
 type (
@@ -127,9 +127,9 @@ func NewDurationTag(key string, value time.Duration) ZapTag {
 	}
 }
 
-func NewDurationPtrTag(key string, value *time.Duration) ZapTag {
+func NewDurationPtrTag(key string, value *durationpb.Duration) ZapTag {
 	return ZapTag{
-		field: zap.Duration(key, timestamp.DurationValue(value)),
+		field: zap.Duration(key, value.AsDuration()),
 	}
 }
 
@@ -139,9 +139,9 @@ func NewTimeTag(key string, value time.Time) ZapTag {
 	}
 }
 
-func NewTimePtrTag(key string, value *time.Time) ZapTag {
+func NewTimePtrTag(key string, value *timestamppb.Timestamp) ZapTag {
 	return ZapTag{
-		field: zap.Time(key, timestamp.TimeValue(value)),
+		field: zap.Time(key, value.AsTime()),
 	}
 }
 

@@ -176,7 +176,7 @@ func (c *WorkflowConsistencyCheckerImpl) getWorkflowContextValidatedByClock(
 		ctx,
 		c.shardContext,
 		namespace.ID(workflowKey.NamespaceID),
-		commonpb.WorkflowExecution{
+		&commonpb.WorkflowExecution{
 			WorkflowId: workflowKey.WorkflowID,
 			RunId:      workflowKey.RunID,
 		},
@@ -211,7 +211,7 @@ func (c *WorkflowConsistencyCheckerImpl) getWorkflowContextValidatedByCheck(
 		ctx,
 		c.shardContext,
 		namespace.ID(workflowKey.NamespaceID),
-		commonpb.WorkflowExecution{
+		&commonpb.WorkflowExecution{
 			WorkflowId: workflowKey.WorkflowID,
 			RunId:      workflowKey.RunID,
 		},
@@ -310,7 +310,7 @@ func (c *WorkflowConsistencyCheckerImpl) getCurrentRunID(
 	lockPriority workflow.LockPriority,
 ) (runID string, retErr error) {
 	if c.shardContext.GetConfig().EnableAPIGetCurrentRunIDLock() {
-		_, release, err := c.workflowCache.GetOrCreateCurrentWorkflowExecution(
+		currentRelease, err := c.workflowCache.GetOrCreateCurrentWorkflowExecution(
 			ctx,
 			c.shardContext,
 			namespace.ID(namespaceID),
@@ -320,7 +320,7 @@ func (c *WorkflowConsistencyCheckerImpl) getCurrentRunID(
 		if err != nil {
 			return "", err
 		}
-		defer release(retErr)
+		defer currentRelease(retErr)
 	}
 
 	resp, err := c.shardContext.GetCurrentExecution(

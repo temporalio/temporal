@@ -66,7 +66,8 @@ var (
 		&persistencespb.NamespaceConfig{
 			Retention: timestamp.DurationFromDays(1),
 			BadBinaries: &namespacepb.BadBinaries{
-				Binaries: map[string]*namespacepb.BadBinaryInfo{},
+				Binaries: map[string]*namespacepb.BadBinaryInfo{
+					"lololol": nil},
 			},
 		},
 		cluster.TestCurrentClusterName,
@@ -181,7 +182,7 @@ var (
 
 func NewDynamicConfig() *configs.Config {
 	dc := dynamicconfig.NewNoopCollection()
-	config := configs.NewConfig(dc, 1, true, false)
+	config := configs.NewConfig(dc, 1)
 	// reduce the duration of long poll to increase test speed
 	config.LongPollExpirationInterval = dc.GetDurationPropertyFilteredByNamespace(dynamicconfig.HistoryLongPollExpirationInterval, 10*time.Second)
 	config.EnableActivityEagerExecution = dynamicconfig.GetBoolPropertyFnFilteredByNamespace(true)

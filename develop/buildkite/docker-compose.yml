@@ -2,7 +2,7 @@ version: "3.5"
 
 services:
   cassandra:
-    image: cassandra:3.11
+    image: cassandra:3.11.15
     networks:
       services-network:
         aliases:

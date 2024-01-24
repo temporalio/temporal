@@ -34,6 +34,8 @@ import (
 	"time"
 
 	"github.com/pborman/uuid"
+	"google.golang.org/protobuf/types/known/timestamppb"
+
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	historypb "go.temporal.io/api/history/v1"
@@ -953,7 +955,7 @@ type (
 	// HistoryBranchDetail contains detailed information of a branch
 	HistoryBranchDetail struct {
 		BranchInfo *persistencespb.HistoryBranch
-		ForkTime   *time.Time
+		ForkTime   *timestamppb.Timestamp
 		Info       string
 	}
 
@@ -997,13 +999,13 @@ type (
 
 	// GetClusterMetadataResponse is the response to GetClusterMetadata
 	GetClusterMetadataResponse struct {
-		persistencespb.ClusterMetadata
+		*persistencespb.ClusterMetadata
 		Version int64
 	}
 
 	// SaveClusterMetadataRequest is the request to SaveClusterMetadata
 	SaveClusterMetadataRequest struct {
-		persistencespb.ClusterMetadata
+		*persistencespb.ClusterMetadata
 		Version int64
 	}
 
@@ -1301,7 +1303,7 @@ type (
 	}
 
 	ListQueuesResponse struct {
-		QueueNames    []string
+		Queues        []QueueInfo
 		NextPageToken []byte
 	}
 )

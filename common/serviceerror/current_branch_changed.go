@@ -25,8 +25,8 @@
 package serviceerror
 
 import (
-	"github.com/gogo/status"
 	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 
 	"go.temporal.io/server/api/errordetails/v1"
 )

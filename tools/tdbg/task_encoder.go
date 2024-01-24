@@ -28,11 +28,11 @@ import (
 	"fmt"
 	"io"
 
-	"github.com/gogo/protobuf/jsonpb"
-	"github.com/gogo/protobuf/proto"
 	commonpb "go.temporal.io/api/common/v1"
 	"go.temporal.io/server/common/persistence/serialization"
 	"go.temporal.io/server/service/history/tasks"
+	"google.golang.org/protobuf/encoding/protojson"
+	"google.golang.org/protobuf/proto"
 )
 
 type (
@@ -42,22 +42,22 @@ type (
 	// - Option objects modify Params.
 	// - Params contain a TaskBlobEncoder.
 	// - TaskBlobEncoder is implemented by ProtoTaskBlobEncoder.
-	// - ProtoTaskBlobEncoder uses jsonpb to marshal [proto.Message] objects from a TaskBlobProtoDeserializer.
+	// - ProtoTaskBlobEncoder uses protojson to marshal [proto.Message] objects from a TaskBlobProtoDeserializer.
 	// - TaskBlobProtoDeserializer is implemented by the stock PredefinedTaskBlobDeserializer.
 	// - PredefinedTaskBlobDeserializer deserializes [commonpb.DataBlob] objects into [proto.Message] objects.
 	TaskBlobEncoder interface {
-		Encode(writer io.Writer, taskCategoryID int, blob commonpb.DataBlob) error
+		Encode(writer io.Writer, taskCategoryID int, blob *commonpb.DataBlob) error
 	}
 	// TaskBlobEncoderFn implements TaskBlobEncoder by calling a function.
-	TaskBlobEncoderFn func(writer io.Writer, taskCategoryID int, blob commonpb.DataBlob) error
+	TaskBlobEncoderFn func(writer io.Writer, taskCategoryID int, blob *commonpb.DataBlob) error
 	// TaskBlobProtoDeserializer is used to deserialize task blobs into proto messages. This makes it easier to create
 	// an encoder if your tasks are all backed by protos. We separate this from the encoder because we don't want the
 	// encoder to be tied to protos as the wire format.
 	TaskBlobProtoDeserializer interface {
-		Deserialize(taskCategoryID int, blob commonpb.DataBlob) (proto.Message, error)
+		Deserialize(taskCategoryID int, blob *commonpb.DataBlob) (proto.Message, error)
 	}
 	// ProtoTaskBlobEncoder is a TaskBlobEncoder that uses a TaskBlobProtoDeserializer to deserialize the blob into a
-	// proto message, and then uses jsonpb to marshal the proto message into a human-readable format.
+	// proto message, and then uses protojson to marshal the proto message into a human-readable format.
 	ProtoTaskBlobEncoder struct {
 		deserializer TaskBlobProtoDeserializer
 	}
@@ -68,11 +68,10 @@ type (
 )
 
 var (
-	jsonpbMarshaler = jsonpb.Marshaler{
-		EnumsAsInts:  false, // It's ok to use strings because this is for human consumption.
-		EmitDefaults: true,  // We want to see all fields clearly even if they have the default value.
-		Indent:       "  ",  // Indent with two spaces to pretty-print.
-		OrigName:     true,  // The proto field names are more JSON-esque than the Go field names.
+	jsonpbMarshaler = protojson.MarshalOptions{
+		UseEnumNumbers: false, // It's ok to use strings because this is for human consumption.
+		Indent:         "  ",  // Indent with two spaces to pretty-print.
+		UseProtoNames:  true,  // The proto field names are more JSON-esque than the Go field names.
 	}
 )
 
@@ -90,7 +89,7 @@ func NewPredefinedTaskBlobDeserializer() PredefinedTaskBlobDeserializer {
 }
 
 // Deserialize a task blob from one of the server's predefined task categories into a proto message.
-func (d PredefinedTaskBlobDeserializer) Deserialize(categoryID int, blob commonpb.DataBlob) (proto.Message, error) {
+func (d PredefinedTaskBlobDeserializer) Deserialize(categoryID int, blob *commonpb.DataBlob) (proto.Message, error) {
 	switch categoryID {
 	case tasks.CategoryIDTransfer:
 		return serialization.TransferTaskInfoFromBlob(blob.Data, blob.EncodingType.String())
@@ -108,20 +107,24 @@ func (d PredefinedTaskBlobDeserializer) Deserialize(categoryID int, blob commonp
 }
 
 // Encode a blob for a given task category to a human-readable format by deserializing the blob into a proto message and
-// then pretty-printing it using jsonpb.
-func (e *ProtoTaskBlobEncoder) Encode(writer io.Writer, categoryID int, blob commonpb.DataBlob) error {
+// then pretty-printing it using protojson.
+func (e *ProtoTaskBlobEncoder) Encode(writer io.Writer, categoryID int, blob *commonpb.DataBlob) error {
 	message, err := e.deserializer.Deserialize(categoryID, blob)
 	if err != nil {
 		return fmt.Errorf("failed to deserialize task blob: %w", err)
 	}
-	err = jsonpbMarshaler.Marshal(writer, message)
+	bs, err := jsonpbMarshaler.Marshal(message)
 	if err != nil {
 		return fmt.Errorf("failed to marshal task blob: %w", err)
+	}
+	_, err = writer.Write(bs)
+	if err != nil {
+		return fmt.Errorf("failed to write marshalled task blob: %w", err)
 	}
 	return nil
 }
 
 // Encode the task by calling the function.
-func (e TaskBlobEncoderFn) Encode(writer io.Writer, taskCategoryID int, blob commonpb.DataBlob) error {
+func (e TaskBlobEncoderFn) Encode(writer io.Writer, taskCategoryID int, blob *commonpb.DataBlob) error {
 	return e(writer, taskCategoryID, blob)
 }

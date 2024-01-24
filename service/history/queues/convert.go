@@ -28,11 +28,11 @@ import (
 	"fmt"
 
 	"golang.org/x/exp/maps"
+	"google.golang.org/protobuf/types/known/timestamppb"
 
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common/predicates"
-	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/service/history/tasks"
 )
 
@@ -114,7 +114,7 @@ func ToPersistenceTaskKey(
 	key tasks.Key,
 ) *persistencespb.TaskKey {
 	return &persistencespb.TaskKey{
-		FireTime: timestamp.TimePtr(key.FireTime),
+		FireTime: timestamppb.New(key.FireTime),
 		TaskId:   key.TaskID,
 	}
 }
@@ -122,7 +122,7 @@ func ToPersistenceTaskKey(
 func FromPersistenceTaskKey(
 	key *persistencespb.TaskKey,
 ) tasks.Key {
-	return tasks.NewKey(timestamp.TimeValue(key.FireTime), key.TaskId)
+	return tasks.NewKey(key.FireTime.AsTime(), key.TaskId)
 }
 
 func ToPersistencePredicate(
@@ -143,6 +143,8 @@ func ToPersistencePredicate(
 		return ToPersistenceNamespaceIDPredicate(predicate)
 	case *tasks.TypePredicate:
 		return ToPersistenceTaskTypePredicate(predicate)
+	case *tasks.DestinationPredicate:
+		return ToPersistenceDestinationPredicate(predicate)
 	default:
 		panic(fmt.Sprintf("unknown task predicate type: %T", predicate))
 	}
@@ -166,6 +168,8 @@ func FromPersistencePredicate(
 		return FromPersistenceNamespaceIDPredicate(predicate.GetNamespaceIdPredicateAttributes())
 	case enumsspb.PREDICATE_TYPE_TASK_TYPE:
 		return FromPersistenceTaskTypePredicate(predicate.GetTaskTypePredicateAttributes())
+	case enumsspb.PREDICATE_TYPE_DESTINATION:
+		return FromPersistenceDestinationPredicate(predicate.GetDestinationPredicateAttributes())
 	default:
 		panic(fmt.Sprintf("unknown persistence task predicate type: %v", predicate.GetPredicateType()))
 	}
@@ -314,4 +318,23 @@ func FromPersistenceTaskTypePredicate(
 	attributes *persistencespb.TaskTypePredicateAttributes,
 ) tasks.Predicate {
 	return tasks.NewTypePredicate(attributes.TaskTypes)
+}
+
+func ToPersistenceDestinationPredicate(
+	taskDestinationPredicate *tasks.DestinationPredicate,
+) *persistencespb.Predicate {
+	return &persistencespb.Predicate{
+		PredicateType: enumsspb.PREDICATE_TYPE_DESTINATION,
+		Attributes: &persistencespb.Predicate_DestinationPredicateAttributes{
+			DestinationPredicateAttributes: &persistencespb.DestinationPredicateAttributes{
+				Destinations: maps.Keys(taskDestinationPredicate.Destinations),
+			},
+		},
+	}
+}
+
+func FromPersistenceDestinationPredicate(
+	attributes *persistencespb.DestinationPredicateAttributes,
+) tasks.Predicate {
+	return tasks.NewDestinationPredicate(attributes.Destinations)
 }

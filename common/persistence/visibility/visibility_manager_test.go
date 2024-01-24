@@ -37,7 +37,6 @@ import (
 
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/namespace"
-	"go.temporal.io/server/common/primitives/timestamp"
 
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
@@ -98,7 +97,7 @@ func (s *VisibilityManagerSuite) TestRecordWorkflowExecutionStarted() {
 		VisibilityRequestBase: &manager.VisibilityRequestBase{
 			NamespaceID:      testNamespaceUUID,
 			Namespace:        testNamespace,
-			Execution:        testWorkflowExecution,
+			Execution:        &testWorkflowExecution,
 			WorkflowTypeName: testWorkflowTypeName,
 			StartTime:        time.Now().UTC(),
 		},
@@ -123,7 +122,7 @@ func (s *VisibilityManagerSuite) TestRecordWorkflowExecutionClosed() {
 		VisibilityRequestBase: &manager.VisibilityRequestBase{
 			NamespaceID:      testNamespaceUUID,
 			Namespace:        testNamespace,
-			Execution:        testWorkflowExecution,
+			Execution:        &testWorkflowExecution,
 			WorkflowTypeName: testWorkflowTypeName,
 			Status:           enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED,
 		},
@@ -310,7 +309,7 @@ func (s *VisibilityManagerSuite) TestGetWorkflowExecution() {
 		Namespace:   testNamespace,
 		RunID:       testWorkflowExecution.RunId,
 		WorkflowID:  testWorkflowExecution.WorkflowId,
-		CloseTime:   timestamp.TimePtr(time.Now()),
+		CloseTime:   time.Now(),
 	}
 	s.visibilityStore.EXPECT().GetWorkflowExecution(gomock.Any(), gomock.Any()).Return(
 		&store.InternalGetWorkflowExecutionResponse{},

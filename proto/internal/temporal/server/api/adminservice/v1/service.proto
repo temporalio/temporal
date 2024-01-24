@@ -1,3 +1,5 @@
+// The MIT License
+//
 // Copyright (c) 2019 Temporal Technologies, Inc.
 //
 // Permission is hereby granted, free of charge, to any person obtaining a copy
@@ -62,6 +64,11 @@ service AdminService {
     // StartEventId defines the beginning of the event to fetch. The first event is inclusive.
     // EndEventId and EndEventVersion defines the end of the event to fetch. The end event is exclusive.
     rpc GetWorkflowExecutionRawHistoryV2 (GetWorkflowExecutionRawHistoryV2Request) returns (GetWorkflowExecutionRawHistoryV2Response) {
+    }
+
+    // StartEventId defines the beginning of the event to fetch. The first event is inclusive.
+    // EndEventId and EndEventVersion defines the end of the event to fetch. The end event is inclusive.
+    rpc GetWorkflowExecutionRawHistory (GetWorkflowExecutionRawHistoryRequest) returns (GetWorkflowExecutionRawHistoryResponse) {
     }
 
     // GetReplicationMessages returns new replication tasks since the read level provided in the token.

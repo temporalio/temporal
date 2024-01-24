@@ -207,7 +207,7 @@ func (c *QueryConverter) convertWhereString(queryString string) (*queryParams, e
 	sql := "select * from table1 " + where
 	stmt, err := sqlparser.Parse(sql)
 	if err != nil {
-		return nil, err
+		return nil, query.NewConverterError("%s: %v", query.MalformedSqlQueryErrMessage, err)
 	}
 
 	selectStmt, _ := stmt.(*sqlparser.Select)
@@ -620,10 +620,10 @@ func (c *QueryConverter) parseSQLVal(
 		case int64:
 			status = v
 		case string:
-			code, ok := enumspb.WorkflowExecutionStatus_value[v]
-			if !ok {
+			code, err := enumspb.WorkflowExecutionStatusFromString(v)
+			if err != nil {
 				return nil, query.NewConverterError(
-					"%s: invalid execution status value '%s'",
+					"%s: invalid ExecutionStatus value '%s'",
 					query.InvalidExpressionErrMessage,
 					v,
 				)

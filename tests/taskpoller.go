@@ -41,6 +41,7 @@ import (
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/sdk/temporal"
+	"google.golang.org/protobuf/types/known/durationpb"
 
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/log"
@@ -314,7 +315,7 @@ Loop:
 				Commands:  commands,
 				StickyAttributes: &taskqueuepb.StickyExecutionAttributes{
 					WorkerTaskQueue:        p.StickyTaskQueue,
-					ScheduleToStartTimeout: &p.StickyScheduleToStartTimeout,
+					ScheduleToStartTimeout: durationpb.New(p.StickyScheduleToStartTimeout),
 				},
 				ReturnNewWorkflowTask:      true,
 				ForceCreateNewWorkflowTask: opts.ForceNewWorkflowTask,
@@ -397,7 +398,7 @@ func (p *TaskPoller) HandlePartialWorkflowTask(response *workflowservice.PollWor
 			Messages:  workerToServerMessages,
 			StickyAttributes: &taskqueuepb.StickyExecutionAttributes{
 				WorkerTaskQueue:        p.StickyTaskQueue,
-				ScheduleToStartTimeout: &p.StickyScheduleToStartTimeout,
+				ScheduleToStartTimeout: durationpb.New(p.StickyScheduleToStartTimeout),
 			},
 			ReturnNewWorkflowTask:      true,
 			ForceCreateNewWorkflowTask: forceCreateNewWorkflowTask,

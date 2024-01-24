@@ -273,7 +273,7 @@ func (m *metadataImpl) GetPingChecks() []common.PingCheck {
 				m.clusterLock.Unlock()
 				return nil
 			},
-			MetricsName: metrics.DDClusterMetadataLockLatency.GetMetricName(),
+			MetricsName: metrics.DDClusterMetadataLockLatency.Name(),
 		},
 		{
 			Name: "cluster metadata callback lock",
@@ -286,7 +286,7 @@ func (m *metadataImpl) GetPingChecks() []common.PingCheck {
 				m.clusterCallbackLock.Unlock()
 				return nil
 			},
-			MetricsName: metrics.DDClusterMetadataCallbackLockLatency.GetMetricName(),
+			MetricsName: metrics.DDClusterMetadataCallbackLockLatency.Name(),
 		},
 	}
 }
@@ -300,6 +300,9 @@ func (m *metadataImpl) IsMasterCluster() bool {
 }
 
 func (m *metadataImpl) GetClusterID() int64 {
+	m.clusterLock.RLock()
+	defer m.clusterLock.RUnlock()
+
 	info, ok := m.clusterInfo[m.currentClusterName]
 	if !ok {
 		panic(fmt.Sprintf(

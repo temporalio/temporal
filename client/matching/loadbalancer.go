@@ -49,7 +49,7 @@ type (
 		// performed
 		PickWritePartition(
 			namespaceID namespace.ID,
-			taskQueue taskqueuepb.TaskQueue,
+			taskQueue *taskqueuepb.TaskQueue,
 			taskQueueType enumspb.TaskQueueType,
 			forwardedFrom string,
 		) string
@@ -59,7 +59,7 @@ type (
 		// forwardedFrom is non-empty, no load balancing should be done.
 		PickReadPartition(
 			namespaceID namespace.ID,
-			taskQueue taskqueuepb.TaskQueue,
+			taskQueue *taskqueuepb.TaskQueue,
 			taskQueueType enumspb.TaskQueueType,
 			forwardedFrom string,
 		) *pollToken
@@ -116,7 +116,7 @@ func NewLoadBalancer(
 
 func (lb *defaultLoadBalancer) PickWritePartition(
 	namespaceID namespace.ID,
-	taskQueue taskqueuepb.TaskQueue,
+	taskQueue *taskqueuepb.TaskQueue,
 	taskQueueType enumspb.TaskQueueType,
 	forwardedFrom string,
 ) string {
@@ -148,7 +148,7 @@ func (lb *defaultLoadBalancer) PickWritePartition(
 // Caller is responsible to call pollToken.Release() after complete the poll.
 func (lb *defaultLoadBalancer) PickReadPartition(
 	namespaceID namespace.ID,
-	taskQueue taskqueuepb.TaskQueue,
+	taskQueue *taskqueuepb.TaskQueue,
 	taskQueueType enumspb.TaskQueueType,
 	forwardedFrom string,
 ) *pollToken {
@@ -202,7 +202,6 @@ func (lb *defaultLoadBalancer) getTaskQueueLoadBalancer(
 func newTaskQueueLoadBalancer(key taskQueueKey) *tqLoadBalancer {
 	return &tqLoadBalancer{
 		taskQueue: key,
-		lock:      sync.Mutex{},
 	}
 }
 
@@ -247,13 +246,13 @@ func (b *tqLoadBalancer) pickReadPartitionWithFewestPolls(partitionCount int) in
 
 // caller to ensure that lock is obtained before call this function
 func (b *tqLoadBalancer) ensurePartitionCountLocked(partitionCount int) {
-	if len(b.pollerCounts) == int(partitionCount) {
+	if len(b.pollerCounts) == partitionCount {
 		return
 	}
 
-	if len(b.pollerCounts) < int(partitionCount) {
+	if len(b.pollerCounts) < partitionCount {
 		// add more partition entries
-		for i := len(b.pollerCounts); i < int(partitionCount); i++ {
+		for i := len(b.pollerCounts); i < partitionCount; i++ {
 			b.pollerCounts = append(b.pollerCounts, 0)
 		}
 	} else {

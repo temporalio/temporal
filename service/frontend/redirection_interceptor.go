@@ -34,6 +34,7 @@ import (
 	"google.golang.org/grpc/metadata"
 
 	"go.temporal.io/server/client"
+	"go.temporal.io/server/common/api"
 	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/config"
@@ -46,8 +47,8 @@ import (
 
 const (
 	dcRedirectionContextHeaderName = "xdc-redirection"
-
-	dcRedirectionMetricsPrefix = "DCRedirection"
+	dcRedirectionApiHeaderName     = "xdc-redirection-api"
+	dcRedirectionMetricsPrefix     = "DCRedirection"
 )
 
 var (
@@ -183,7 +184,7 @@ func (i *RedirectionInterceptor) Intercept(
 		return handler(ctx, req)
 	}
 
-	_, methodName := interceptor.SplitMethodName(info.FullMethod)
+	methodName := api.MethodName(info.FullMethod)
 	if _, ok := localAPIResponses[methodName]; ok {
 		return i.handleLocalAPIInvocation(ctx, req, handler, methodName)
 	}
@@ -242,6 +243,7 @@ func (i *RedirectionInterceptor) handleRedirectAPIInvocation(
 				return err
 			}
 			resp = respCtorFn()
+			ctx = metadata.AppendToOutgoingContext(ctx, dcRedirectionApiHeaderName, "true")
 			err = remoteClient.Invoke(ctx, info.FullMethod, req, resp)
 			if err != nil {
 				return err
@@ -265,10 +267,10 @@ func (i *RedirectionInterceptor) afterCall(
 	retError error,
 ) {
 	metricsHandler = metricsHandler.WithTags(metrics.TargetClusterTag(clusterName))
-	metricsHandler.Counter(metrics.ClientRedirectionRequests.GetMetricName()).Record(1)
-	metricsHandler.Timer(metrics.ClientRedirectionLatency.GetMetricName()).Record(i.timeSource.Now().Sub(startTime))
+	metricsHandler.Counter(metrics.ClientRedirectionRequests.Name()).Record(1)
+	metricsHandler.Timer(metrics.ClientRedirectionLatency.Name()).Record(i.timeSource.Now().Sub(startTime))
 	if retError != nil {
-		metricsHandler.Counter(metrics.ClientRedirectionFailures.GetMetricName()).Record(1)
+		metricsHandler.Counter(metrics.ClientRedirectionFailures.Name()).Record(1)
 	}
 }
 

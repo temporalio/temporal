@@ -343,7 +343,6 @@ func testCassandraQueueV2(t *testing.T, cluster *cassandra.TestCluster) {
 		testCassandraQueueV2ConcurrentConflicts(t, cluster)
 	})
 	t.Run("MultiplePartitions", func(t *testing.T) {
-		t.Parallel()
 		testCassandraQueueV2MultiplePartitions(t, cluster)
 	})
 }
@@ -383,6 +382,10 @@ func testCassandraQueueV2QueryErrors(t *testing.T, cluster *cassandra.TestCluste
 	t.Run("EnqueueMessageGetMaxMessageIDQuery", func(t *testing.T) {
 		t.Parallel()
 		testCassandraQueueV2ErrEnqueueMessageGetMaxMessageIDQuery(t, cluster)
+	})
+	t.Run("ListQueuesGetMaxMessageIDQuery", func(t *testing.T) {
+		t.Parallel()
+		testCassandraQueueV2ErrListQueuesGetMaxMessageIDQuery(t, cluster)
 	})
 	t.Run("RangeDeleteMessagesGetMaxMessageIDQuery", func(t *testing.T) {
 		t.Parallel()
@@ -458,6 +461,29 @@ func testCassandraQueueV2ErrEnqueueMessageGetMaxMessageIDQuery(t *testing.T, clu
 	assert.ErrorContains(t, err, "QueueV2GetMaxMessageID")
 }
 
+func testCassandraQueueV2ErrListQueuesGetMaxMessageIDQuery(t *testing.T, cluster *cassandra.TestCluster) {
+	q := newQueueV2Store(failingSession{
+		Session:        cluster.GetSession(),
+		failingQueries: []string{cassandra.TemplateGetMaxMessageIDQuery},
+	})
+	ctx := context.Background()
+	queueType := persistence.QueueTypeHistoryDLQ
+	queueName := "test-queue-" + t.Name()
+	_, err := q.CreateQueue(ctx, &persistence.InternalCreateQueueRequest{
+		QueueType: queueType,
+		QueueName: queueName,
+	})
+	require.NoError(t, err)
+	_, err = q.ListQueues(ctx, &persistence.InternalListQueuesRequest{
+		QueueType: queueType,
+		PageSize:  100,
+	})
+	require.Error(t, err)
+	assert.ErrorAs(t, err, new(*serviceerror.Unavailable))
+	assert.ErrorContains(t, err, assert.AnError.Error())
+	assert.ErrorContains(t, err, "QueueV2GetMaxMessageID")
+}
+
 func testCassandraQueueV2MultiplePartitions(t *testing.T, cluster *cassandra.TestCluster) {
 	t.Run("RangeDeleteMessages", func(t *testing.T) {
 		t.Parallel()
@@ -466,6 +492,10 @@ func testCassandraQueueV2MultiplePartitions(t *testing.T, cluster *cassandra.Tes
 	t.Run("ReadMessages", func(t *testing.T) {
 		t.Parallel()
 		testCassandraQueueV2MultiplePartitionsReadMessages(t, cluster)
+	})
+	t.Run("ListQueues", func(t *testing.T) {
+		t.Parallel()
+		testCassandraQueueV2MultiplePartitionsListQueues(t, cluster)
 	})
 }
 
@@ -683,7 +713,8 @@ func testCassandraQueueV2ErrInvalidPayloadEncodingType(t *testing.T, cluster *ca
 
 	session := cluster.GetSession()
 	q := newQueueV2Store(session)
-	queueType := persistence.QueueTypeHistoryNormal
+	// Using a different QueueType so that ListQueue tests are not failing because of corrupt queue metadata.
+	queueType := persistence.QueueV2Type(3)
 	queueName := "test-queue-" + t.Name()
 	err := session.Query(
 		cassandra.TemplateCreateQueueQuery,
@@ -698,6 +729,16 @@ func testCassandraQueueV2ErrInvalidPayloadEncodingType(t *testing.T, cluster *ca
 		QueueType: queueType,
 		QueueName: queueName,
 		PageSize:  1,
+	})
+	require.Error(t, err)
+	assert.ErrorAs(t, err, new(*serialization.UnknownEncodingTypeError))
+	assert.ErrorContains(t, err, "bad-encoding-type")
+	assert.ErrorContains(t, err, strconv.Itoa(int(queueType)))
+	assert.ErrorContains(t, err, queueName)
+
+	_, err = q.ListQueues(context.Background(), &persistence.InternalListQueuesRequest{
+		QueueType: queueType,
+		PageSize:  100,
 	})
 	require.Error(t, err)
 	assert.ErrorAs(t, err, new(*serialization.UnknownEncodingTypeError))
@@ -1019,6 +1060,26 @@ func testCassandraQueueV2MultiplePartitionsReadMessages(t *testing.T, cluster *c
 		QueueType: queueType,
 		QueueName: queueName,
 		PageSize:  1,
+	})
+	require.Error(t, err)
+	assert.ErrorContains(t, err, "partitions")
+}
+
+func testCassandraQueueV2MultiplePartitionsListQueues(t *testing.T, cluster *cassandra.TestCluster) {
+	// Manually insert a row into the queues table that has multiple partitions and then verify that we gracefully
+	// handle the error when we try to list queues.
+
+	session := cluster.GetSession()
+	logger := &testLogger{}
+	q := newQueueV2Store(session, func(params *testQueueParams) {
+		params.logger = logger
+	})
+	queueType := persistence.QueueTypeHistoryNormal
+	queueName := "test-queue-" + t.Name()
+	insertQueueMetadataWithMultiplePartitions(t, session, queueType, queueName)
+	_, err := q.ListQueues(context.Background(), &persistence.InternalListQueuesRequest{
+		QueueType: queueType,
+		PageSize:  100,
 	})
 	require.Error(t, err)
 	assert.ErrorContains(t, err, "partitions")

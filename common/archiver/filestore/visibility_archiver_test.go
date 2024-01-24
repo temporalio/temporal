@@ -39,17 +39,17 @@ import (
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
 	workflowpb "go.temporal.io/api/workflow/v1"
-
-	"go.temporal.io/server/common/searchattribute"
+	"google.golang.org/protobuf/types/known/timestamppb"
 
 	archiverspb "go.temporal.io/server/api/archiver/v1"
 	"go.temporal.io/server/common/archiver"
 	"go.temporal.io/server/common/codec"
 	"go.temporal.io/server/common/config"
-	"go.temporal.io/server/common/convert"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/payload"
 	"go.temporal.io/server/common/primitives/timestamp"
+	"go.temporal.io/server/common/searchattribute"
+	"go.temporal.io/server/common/util"
 	"go.temporal.io/server/tests/testutils"
 )
 
@@ -176,7 +176,7 @@ func (s *visibilityArchiverSuite) TestArchive_Success() {
 		WorkflowId:       testWorkflowID,
 		RunId:            testRunID,
 		WorkflowTypeName: testWorkflowTypeName,
-		StartTime:        timestamp.TimePtr(closeTimestamp.Add(-time.Hour)),
+		StartTime:        timestamppb.New(closeTimestamp.AsTime().Add(-time.Hour)),
 		ExecutionTime:    nil, // workflow without backoff
 		CloseTime:        closeTimestamp,
 		Status:           enumspb.WORKFLOW_EXECUTION_STATUS_FAILED,
@@ -195,7 +195,7 @@ func (s *visibilityArchiverSuite) TestArchive_Success() {
 	err = visibilityArchiver.Archive(context.Background(), URI, request)
 	s.NoError(err)
 
-	expectedFilename := constructVisibilityFilename(closeTimestamp, testRunID)
+	expectedFilename := constructVisibilityFilename(closeTimestamp.AsTime(), testRunID)
 	filepath := path.Join(dir, testNamespaceID, expectedFilename)
 	s.assertFileExists(filepath)
 
@@ -239,7 +239,7 @@ func (s *visibilityArchiverSuite) TestMatchQuery() {
 			query: &parsedQuery{
 				earliestCloseTime: time.Unix(0, 1000),
 				latestCloseTime:   time.Unix(0, 12345),
-				workflowID:        convert.StringPtr("random workflowID"),
+				workflowID:        util.Ptr("random workflowID"),
 			},
 			record: &archiverspb.VisibilityRecord{
 				CloseTime: timestamp.UnixOrZeroTimePtr(2000),
@@ -250,8 +250,8 @@ func (s *visibilityArchiverSuite) TestMatchQuery() {
 			query: &parsedQuery{
 				earliestCloseTime: time.Unix(0, 1000),
 				latestCloseTime:   time.Unix(0, 12345),
-				workflowID:        convert.StringPtr("random workflowID"),
-				runID:             convert.StringPtr("random runID"),
+				workflowID:        util.Ptr("random workflowID"),
+				runID:             util.Ptr("random runID"),
 			},
 			record: &archiverspb.VisibilityRecord{
 				CloseTime:        timestamp.UnixOrZeroTimePtr(12345),
@@ -265,7 +265,7 @@ func (s *visibilityArchiverSuite) TestMatchQuery() {
 			query: &parsedQuery{
 				earliestCloseTime: time.Unix(0, 1000),
 				latestCloseTime:   time.Unix(0, 12345),
-				workflowTypeName:  convert.StringPtr("some random type name"),
+				workflowTypeName:  util.Ptr("some random type name"),
 			},
 			record: &archiverspb.VisibilityRecord{
 				CloseTime: timestamp.UnixOrZeroTimePtr(12345),
@@ -276,7 +276,7 @@ func (s *visibilityArchiverSuite) TestMatchQuery() {
 			query: &parsedQuery{
 				earliestCloseTime: time.Unix(0, 1000),
 				latestCloseTime:   time.Unix(0, 12345),
-				workflowTypeName:  convert.StringPtr("some random type name"),
+				workflowTypeName:  util.Ptr("some random type name"),
 				status:            toWorkflowExecutionStatusPtr(enumspb.WORKFLOW_EXECUTION_STATUS_CONTINUED_AS_NEW),
 			},
 			record: &archiverspb.VisibilityRecord{
@@ -412,7 +412,7 @@ func (s *visibilityArchiverSuite) TestQuery_Success_NoNextPageToken() {
 	mockParser.EXPECT().Parse(gomock.Any()).Return(&parsedQuery{
 		earliestCloseTime: time.Unix(0, 1),
 		latestCloseTime:   time.Unix(0, 10001),
-		workflowID:        convert.StringPtr(testWorkflowID),
+		workflowID:        util.Ptr(testWorkflowID),
 	}, nil)
 	visibilityArchiver.queryParser = mockParser
 	request := &archiver.QueryVisibilityRequest{
@@ -659,7 +659,7 @@ func (s *visibilityArchiverSuite) setupVisibilityDirectory() {
 func (s *visibilityArchiverSuite) writeVisibilityRecordForQueryTest(record *archiverspb.VisibilityRecord) {
 	data, err := encode(record)
 	s.Require().NoError(err)
-	filename := constructVisibilityFilename(record.CloseTime, record.GetRunId())
+	filename := constructVisibilityFilename(record.CloseTime.AsTime(), record.GetRunId())
 	s.Require().NoError(os.MkdirAll(path.Join(s.testQueryDirectory, record.GetNamespaceId()), testDirMode))
 	err = writeFile(path.Join(s.testQueryDirectory, record.GetNamespaceId(), filename), data, testFileMode)
 	s.Require().NoError(err)

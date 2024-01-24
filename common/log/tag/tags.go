@@ -30,10 +30,10 @@ import (
 	"time"
 
 	enumspb "go.temporal.io/api/enums/v1"
+	"google.golang.org/protobuf/types/known/timestamppb"
 
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	"go.temporal.io/server/common/primitives"
-	"go.temporal.io/server/common/primitives/timestamp"
 )
 
 // All logging tags are defined in this file.
@@ -81,11 +81,6 @@ func ClusterName(clusterName string) ZapTag {
 // Timestamp returns tag for Timestamp
 func Timestamp(timestamp time.Time) ZapTag {
 	return NewTimeTag("timestamp", timestamp)
-}
-
-// TimestampPtr returns tag for TimestampPtr
-func TimestampPtr(t *time.Time) ZapTag {
-	return NewTimeTag("timestamp", timestamp.TimeValue(t))
 }
 
 // ==========  Workflow tags defined here: ( wf is short for workflow) ==========
@@ -178,8 +173,8 @@ func WorkflowTaskTimeoutSeconds(s int64) ZapTag {
 }
 
 // WorkflowTaskTimeoutSeconds returns tag for WorkflowTaskTimeoutSeconds
-func WorkflowTaskTimeout(s *time.Duration) ZapTag {
-	return NewDurationPtrTag("workflow-task-timeout", s)
+func WorkflowTaskTimeout(s time.Duration) ZapTag {
+	return NewDurationTag("workflow-task-timeout", s)
 }
 
 // QueryID returns tag for QueryID
@@ -227,8 +222,8 @@ func WorkflowStartedEventID(startedEventID int64) ZapTag {
 }
 
 // WorkflowStartedTimestamp returns tag for WorkflowStartedTimestamp
-func WorkflowStartedTimestamp(t *time.Time) ZapTag {
-	return NewTimePtrTag("wf-started-timestamp", t)
+func WorkflowStartedTimestamp(t time.Time) ZapTag {
+	return NewTimeTag("wf-started-timestamp", t)
 }
 
 // WorkflowInitiatedID returns tag for WorkflowInitiatedID
@@ -614,9 +609,18 @@ func NumberDeleted(n int) ZapTag {
 	return NewInt("number-deleted", n)
 }
 
+// NumberChanged returns tag for NumberChanged
+func NumberChanged(n int) ZapTag {
+	return NewInt("number-changed", n)
+}
+
 // TimerTaskStatus returns tag for TimerTaskStatus
 func TimerTaskStatus(timerTaskStatus int32) ZapTag {
 	return NewInt32("timer-task-status", timerTaskStatus)
+}
+
+func DLQMessageID(dlqMessageID int64) ZapTag {
+	return NewInt64("dlq-message-id", dlqMessageID)
 }
 
 // retry
@@ -727,6 +731,14 @@ func TargetCluster(targetCluster string) ZapTag {
 	return NewStringTag("xdc-target-cluster", targetCluster)
 }
 
+func SourceShardID(shardID int32) ZapTag {
+	return NewInt32("xdc-source-shard-id", shardID)
+}
+
+func TargetShardID(shardID int32) ZapTag {
+	return NewInt32("xdc-target-shard-id", shardID)
+}
+
 // PrevActiveCluster returns tag for PrevActiveCluster
 func PrevActiveCluster(prevActiveCluster string) ZapTag {
 	return NewStringTag("xdc-prev-active-cluster", prevActiveCluster)
@@ -816,8 +828,8 @@ func ArchivalRequestCloseFailoverVersion(requestCloseFailoverVersion int64) ZapT
 }
 
 // ArchivalRequestCloseTimestamp returns tag for RequestCloseTimestamp
-func ArchivalRequestCloseTimestamp(requestCloseTimeStamp *time.Time) ZapTag {
-	return NewTimeTag("archival-request-close-timestamp", timestamp.TimeValue(requestCloseTimeStamp))
+func ArchivalRequestCloseTimestamp(requestCloseTimeStamp *timestamppb.Timestamp) ZapTag {
+	return NewTimeTag("archival-request-close-timestamp", requestCloseTimeStamp.AsTime())
 }
 
 // ArchivalRequestStatus returns tag for RequestStatus

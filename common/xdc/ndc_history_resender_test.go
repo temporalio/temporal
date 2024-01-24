@@ -36,11 +36,11 @@ import (
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	historypb "go.temporal.io/api/history/v1"
+	"google.golang.org/protobuf/types/known/timestamppb"
 
 	"go.temporal.io/server/api/adminservice/v1"
 	"go.temporal.io/server/api/adminservicemock/v1"
 	historyspb "go.temporal.io/server/api/history/v1"
-	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/api/historyservicemock/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/client"
@@ -50,7 +50,6 @@ import (
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence/serialization"
 	"go.temporal.io/server/common/primitives/timestamp"
-	serviceerrors "go.temporal.io/server/common/serviceerror"
 )
 
 type (
@@ -70,8 +69,6 @@ type (
 
 		serializer serialization.Serializer
 		logger     log.Logger
-
-		rereplicator *NDCHistoryResenderImpl
 	}
 )
 
@@ -119,18 +116,6 @@ func (s *nDCHistoryResenderSuite) SetupTest() {
 	s.mockNamespaceCache.EXPECT().GetNamespaceByID(s.namespaceID).Return(namespaceEntry, nil).AnyTimes()
 	s.mockNamespaceCache.EXPECT().GetNamespace(s.namespace).Return(namespaceEntry, nil).AnyTimes()
 	s.serializer = serialization.NewSerializer()
-
-	s.rereplicator = NewNDCHistoryResender(
-		s.mockNamespaceCache,
-		s.mockClientBean,
-		func(ctx context.Context, request *historyservice.ReplicateEventsV2Request) error {
-			_, err := s.mockHistoryClient.ReplicateEventsV2(ctx, request)
-			return err
-		},
-		serialization.NewSerializer(),
-		nil,
-		s.logger,
-	)
 }
 
 func (s *nDCHistoryResenderSuite) TearDownTest() {
@@ -148,13 +133,13 @@ func (s *nDCHistoryResenderSuite) TestSendSingleWorkflowHistory() {
 		{
 			EventId:   2,
 			Version:   123,
-			EventTime: timestamp.TimePtr(time.Now().UTC()),
+			EventTime: timestamppb.New(time.Now().UTC()),
 			EventType: enumspb.EVENT_TYPE_WORKFLOW_TASK_SCHEDULED,
 		},
 		{
 			EventId:   3,
 			Version:   123,
-			EventTime: timestamp.TimePtr(time.Now().UTC()),
+			EventTime: timestamppb.New(time.Now().UTC()),
 			EventType: enumspb.EVENT_TYPE_WORKFLOW_TASK_STARTED,
 		},
 	}
@@ -210,19 +195,28 @@ func (s *nDCHistoryResenderSuite) TestSendSingleWorkflowHistory() {
 		},
 	}, nil)
 
-	s.mockHistoryClient.EXPECT().ReplicateEventsV2(
-		gomock.Any(),
-		&historyservice.ReplicateEventsV2Request{
-			NamespaceId: s.namespaceID.String(),
-			WorkflowExecution: &commonpb.WorkflowExecution{
-				WorkflowId: workflowID,
-				RunId:      runID,
-			},
-			VersionHistoryItems: versionHistoryItems,
-			Events:              blob,
-		}).Return(nil, nil).Times(2)
+	functionCalled := false
+	rereplicator := NewNDCHistoryResender(
+		s.mockNamespaceCache,
+		s.mockClientBean,
+		func(
+			ctx context.Context,
+			sourceClusterName string,
+			namespaceId namespace.ID,
+			workflowId string,
+			runId string,
+			events []*historypb.HistoryEvent,
+			versionHistory []*historyspb.VersionHistoryItem,
+		) error {
+			functionCalled = true
+			return nil
+		},
+		serialization.NewSerializer(),
+		nil,
+		s.logger,
+	)
 
-	err := s.rereplicator.SendSingleWorkflowHistory(
+	err := rereplicator.SendSingleWorkflowHistory(
 		context.Background(),
 		cluster.TestCurrentClusterName,
 		s.namespaceID,
@@ -233,98 +227,8 @@ func (s *nDCHistoryResenderSuite) TestSendSingleWorkflowHistory() {
 		common.EmptyEventID,
 		common.EmptyVersion,
 	)
-
+	s.True(functionCalled)
 	s.Nil(err)
-}
-
-func (s *nDCHistoryResenderSuite) TestCreateReplicateRawEventsRequest() {
-	workflowID := "some random workflow ID"
-	runID := uuid.New()
-	blob := &commonpb.DataBlob{
-		EncodingType: enumspb.ENCODING_TYPE_PROTO3,
-		Data:         []byte("some random history blob"),
-	}
-	versionHistoryItems := []*historyspb.VersionHistoryItem{
-		{
-			EventId: 1,
-			Version: 1,
-		},
-	}
-
-	s.Equal(&historyservice.ReplicateEventsV2Request{
-		NamespaceId: s.namespaceID.String(),
-		WorkflowExecution: &commonpb.WorkflowExecution{
-			WorkflowId: workflowID,
-			RunId:      runID,
-		},
-		VersionHistoryItems: versionHistoryItems,
-		Events:              blob,
-	}, s.rereplicator.createReplicationRawRequest(
-		s.namespaceID,
-		workflowID,
-		runID,
-		blob,
-		versionHistoryItems))
-}
-
-func (s *nDCHistoryResenderSuite) TestSendReplicationRawRequest() {
-	workflowID := "some random workflow ID"
-	runID := uuid.New()
-	item := &historyspb.VersionHistoryItem{
-		EventId: 1,
-		Version: 1,
-	}
-	request := &historyservice.ReplicateEventsV2Request{
-		NamespaceId: s.namespaceID.String(),
-		WorkflowExecution: &commonpb.WorkflowExecution{
-			WorkflowId: workflowID,
-			RunId:      runID,
-		},
-		Events: &commonpb.DataBlob{
-			EncodingType: enumspb.ENCODING_TYPE_PROTO3,
-			Data:         []byte("some random history blob"),
-		},
-		VersionHistoryItems: []*historyspb.VersionHistoryItem{item},
-	}
-
-	s.mockHistoryClient.EXPECT().ReplicateEventsV2(gomock.Any(), request).Return(nil, nil)
-	err := s.rereplicator.sendReplicationRawRequest(context.Background(), request)
-	s.Nil(err)
-}
-
-func (s *nDCHistoryResenderSuite) TestSendReplicationRawRequest_Err() {
-	workflowID := "some random workflow ID"
-	runID := uuid.New()
-	item := &historyspb.VersionHistoryItem{
-		EventId: 1,
-		Version: 1,
-	}
-	request := &historyservice.ReplicateEventsV2Request{
-		NamespaceId: s.namespaceID.String(),
-		WorkflowExecution: &commonpb.WorkflowExecution{
-			WorkflowId: workflowID,
-			RunId:      runID,
-		},
-		Events: &commonpb.DataBlob{
-			EncodingType: enumspb.ENCODING_TYPE_PROTO3,
-			Data:         []byte("some random history blob"),
-		},
-		VersionHistoryItems: []*historyspb.VersionHistoryItem{item},
-	}
-	retryErr := serviceerrors.NewRetryReplication(
-		"",
-		s.namespaceID.String(),
-		workflowID,
-		runID,
-		common.EmptyEventID,
-		common.EmptyVersion,
-		common.EmptyEventID,
-		common.EmptyVersion,
-	)
-
-	s.mockHistoryClient.EXPECT().ReplicateEventsV2(gomock.Any(), request).Return(nil, retryErr)
-	err := s.rereplicator.sendReplicationRawRequest(context.Background(), request)
-	s.Equal(retryErr, err)
 }
 
 func (s *nDCHistoryResenderSuite) TestGetHistory() {
@@ -359,7 +263,25 @@ func (s *nDCHistoryResenderSuite) TestGetHistory() {
 		NextPageToken:     nextTokenIn,
 	}).Return(response, nil)
 
-	out, err := s.rereplicator.getHistory(
+	rereplicator := NewNDCHistoryResender(
+		s.mockNamespaceCache,
+		s.mockClientBean,
+		func(
+			ctx context.Context,
+			sourceClusterName string,
+			namespaceId namespace.ID,
+			workflowId string,
+			runId string,
+			events []*historypb.HistoryEvent,
+			versionHistory []*historyspb.VersionHistoryItem,
+		) error {
+			return nil
+		},
+		serialization.NewSerializer(),
+		nil,
+		s.logger,
+	)
+	out, err := rereplicator.getHistory(
 		context.Background(),
 		cluster.TestCurrentClusterName,
 		s.namespaceID,

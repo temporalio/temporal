@@ -266,11 +266,10 @@ func (t *visibilityQueueTaskExecutor) processCloseExecution(
 		return err
 	}
 
-	wfCloseTimePtr, err := mutableState.GetWorkflowCloseTime(ctx)
+	wfCloseTime, err := mutableState.GetWorkflowCloseTime(ctx)
 	if err != nil {
 		return err
 	}
-	wfCloseTime := timestamp.TimeValue(wfCloseTimePtr)
 	historyLength := mutableState.GetNextEventID() - 1
 	executionInfo := mutableState.GetExecutionInfo()
 	stateTransitionCount := executionInfo.GetStateTransitionCount()
@@ -363,7 +362,7 @@ func (t *visibilityQueueTaskExecutor) getVisibilityRequestBase(
 	return &manager.VisibilityRequestBase{
 		NamespaceID: namespaceEntry.ID(),
 		Namespace:   namespaceEntry.Name(),
-		Execution: commonpb.WorkflowExecution{
+		Execution: &commonpb.WorkflowExecution{
 			WorkflowId: task.GetWorkflowID(),
 			RunId:      task.GetRunID(),
 		},

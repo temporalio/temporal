@@ -259,7 +259,7 @@ func (r *registry) GetPingChecks() []common.PingCheck {
 				r.cacheLock.Unlock()
 				return nil
 			},
-			MetricsName: metrics.DDNamespaceRegistryLockLatency.GetMetricName(),
+			MetricsName: metrics.DDNamespaceRegistryLockLatency.Name(),
 		},
 	}
 }

@@ -157,7 +157,7 @@ func (q *memoryScheduledQueue) processQueueLoop() {
 				}
 				q.nextTaskTimer.Reset(newTask.GetVisibilityTime().Sub(q.timeSource.Now()))
 			}
-			q.metricsHandler.Counter(metrics.NewTimerNotifyCounter.GetMetricName()).Record(1)
+			metrics.NewTimerNotifyCounter.With(q.metricsHandler).Record(1)
 		case <-q.nextTaskTimer.C:
 			taskToExecute := q.taskQueue.Remove()
 			// Skip tasks which are already canceled. Majority of the tasks in the queue should be cancelled already.

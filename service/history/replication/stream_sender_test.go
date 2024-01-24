@@ -33,6 +33,7 @@ import (
 	"github.com/golang/mock/gomock"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
+	"google.golang.org/protobuf/types/known/timestamppb"
 
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	"go.temporal.io/server/api/historyservice/v1"
@@ -43,7 +44,6 @@ import (
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/persistence"
-	"go.temporal.io/server/common/primitives/timestamp"
 	serviceerrors "go.temporal.io/server/common/serviceerror"
 	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/tasks"
@@ -98,6 +98,7 @@ func (s *streamSenderSuite) SetupTest() {
 		s.shardContext,
 		s.historyEngine,
 		s.taskConverter,
+		"target_cluster",
 		s.clientShardKey,
 		s.serverShardKey,
 	)
@@ -114,7 +115,7 @@ func (s *streamSenderSuite) TestRecvSyncReplicationState_Success() {
 	)
 	replicationState := &replicationspb.SyncReplicationState{
 		InclusiveLowWatermark:     rand.Int63(),
-		InclusiveLowWatermarkTime: timestamp.TimePtr(time.Unix(0, rand.Int63())),
+		InclusiveLowWatermarkTime: timestamppb.New(time.Unix(0, rand.Int63())),
 	}
 
 	s.shardContext.EXPECT().UpdateReplicationQueueReaderState(
@@ -139,7 +140,7 @@ func (s *streamSenderSuite) TestRecvSyncReplicationState_Success() {
 	s.shardContext.EXPECT().UpdateRemoteReaderInfo(
 		readerID,
 		replicationState.InclusiveLowWatermark-1,
-		*replicationState.InclusiveLowWatermarkTime,
+		replicationState.InclusiveLowWatermarkTime.AsTime(),
 	).Return(nil)
 
 	err := s.streamSender.recvSyncReplicationState(replicationState)
@@ -153,7 +154,7 @@ func (s *streamSenderSuite) TestRecvSyncReplicationState_Error() {
 	)
 	replicationState := &replicationspb.SyncReplicationState{
 		InclusiveLowWatermark:     rand.Int63(),
-		InclusiveLowWatermarkTime: timestamp.TimePtr(time.Unix(0, rand.Int63())),
+		InclusiveLowWatermarkTime: timestamppb.New(time.Unix(0, rand.Int63())),
 	}
 
 	var ownershipLost error
@@ -218,7 +219,7 @@ func (s *streamSenderSuite) TestSendCatchUp() {
 			},
 		},
 	}, true)
-	s.shardContext.EXPECT().GetImmediateQueueExclusiveHighReadWatermark().Return(
+	s.shardContext.EXPECT().GetQueueExclusiveHighReadWatermark(tasks.CategoryReplication).Return(
 		tasks.NewImmediateKey(endExclusiveWatermark),
 	)
 
@@ -251,10 +252,10 @@ func (s *streamSenderSuite) TestSendLive() {
 	watermark2 := watermark1 + 1 + rand.Int63n(100)
 
 	gomock.InOrder(
-		s.shardContext.EXPECT().GetImmediateQueueExclusiveHighReadWatermark().Return(
+		s.shardContext.EXPECT().GetQueueExclusiveHighReadWatermark(tasks.CategoryReplication).Return(
 			tasks.NewImmediateKey(watermark1),
 		),
-		s.shardContext.EXPECT().GetImmediateQueueExclusiveHighReadWatermark().Return(
+		s.shardContext.EXPECT().GetQueueExclusiveHighReadWatermark(tasks.CategoryReplication).Return(
 			tasks.NewImmediateKey(watermark2),
 		),
 	)
@@ -355,11 +356,11 @@ func (s *streamSenderSuite) TestSendTasks_WithTasks() {
 	item2 := tasks.NewMockTask(s.controller)
 	task0 := &replicationspb.ReplicationTask{
 		SourceTaskId:   beginInclusiveWatermark,
-		VisibilityTime: timestamp.TimePtr(time.Unix(0, rand.Int63())),
+		VisibilityTime: timestamppb.New(time.Unix(0, rand.Int63())),
 	}
 	task2 := &replicationspb.ReplicationTask{
 		SourceTaskId:   beginInclusiveWatermark + 2,
-		VisibilityTime: timestamp.TimePtr(time.Unix(0, rand.Int63())),
+		VisibilityTime: timestamppb.New(time.Unix(0, rand.Int63())),
 	}
 
 	iter := collection.NewPagingIterator[tasks.Task](
@@ -407,4 +408,18 @@ func (s *streamSenderSuite) TestSendTasks_WithTasks() {
 		endExclusiveWatermark,
 	)
 	s.NoError(err)
+}
+
+func (s *streamSenderSuite) TestSendEventLoop_Panic_ShouldCaptureAsError() {
+	s.historyEngine.EXPECT().SubscribeReplicationNotification().Do(func() {
+		panic("panic")
+	})
+	err := s.streamSender.sendEventLoop()
+	s.Error(err) // panic is captured as error
+}
+
+func (s *streamSenderSuite) TestRecvEventLoop_Panic_ShouldCaptureAsError() {
+	s.streamSender.shutdownChan = nil // mimic nil pointer panic
+	err := s.streamSender.recvEventLoop()
+	s.Error(err) // panic is captured as error
 }

@@ -91,7 +91,7 @@ type (
 	) resetter
 
 	EventBlobs struct {
-		CurrentRunEvents commonpb.DataBlob
+		CurrentRunEvents *commonpb.DataBlob
 		NewRunEvents     *commonpb.DataBlob
 	}
 
@@ -257,7 +257,7 @@ func (r *HistoryReplicatorImpl) doApplyEvents(
 		ctx,
 		r.shardContext,
 		task.getNamespaceID(),
-		*task.getExecution(),
+		task.getExecution(),
 		workflow.LockPriorityHigh,
 	)
 	if err != nil {
@@ -292,10 +292,14 @@ func (r *HistoryReplicatorImpl) doApplyEvents(
 			if err != nil {
 				return err
 			} else if !prepareHistoryBranchOut.DoContinue {
-				r.metricsHandler.Counter(metrics.DuplicateReplicationEventsCounter.GetMetricName()).Record(
+				r.metricsHandler.Counter(metrics.DuplicateReplicationEventsCounter.Name()).Record(
 					1,
 					metrics.OperationTag(metrics.ReplicateHistoryEventsScope))
 				return nil
+			}
+			err = task.skipDuplicatedEvents(prepareHistoryBranchOut.EventsApplyIndex)
+			if err != nil {
+				return err
 			}
 
 			mutableState, isRebuilt, err := r.mutableStateMapper.GetOrRebuildCurrentMutableState(

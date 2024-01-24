@@ -35,6 +35,7 @@ import (
 	"github.com/pborman/uuid"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
+	"google.golang.org/protobuf/types/known/timestamppb"
 
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
@@ -46,8 +47,8 @@ import (
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/persistence/serialization"
 	"go.temporal.io/server/common/predicates"
-	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/common/quotas"
+	"go.temporal.io/server/common/testing/protorequire"
 	"go.temporal.io/server/service/history/configs"
 	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/tasks"
@@ -58,6 +59,7 @@ type (
 	queueBaseSuite struct {
 		suite.Suite
 		*require.Assertions
+		protorequire.ProtoAssertions
 
 		controller      *gomock.Controller
 		mockScheduler   *MockScheduler
@@ -97,6 +99,7 @@ func TestQueueBaseSuite(t *testing.T) {
 
 func (s *queueBaseSuite) SetupTest() {
 	s.Assertions = require.New(s.T())
+	s.ProtoAssertions = protorequire.New(s.T())
 
 	s.controller = gomock.NewController(s.T())
 	s.mockScheduler = NewMockScheduler(s.controller)
@@ -140,8 +143,8 @@ func (s *queueBaseSuite) TestNewProcessBase_WithPreviousState_RestoreSucceed() {
 				Scopes: []*persistencespb.QueueSliceScope{
 					{
 						Range: &persistencespb.QueueSliceRange{
-							InclusiveMin: &persistencespb.TaskKey{FireTime: timestamp.TimePtr(tasks.DefaultFireTime), TaskId: 1000},
-							ExclusiveMax: &persistencespb.TaskKey{FireTime: timestamp.TimePtr(tasks.DefaultFireTime), TaskId: 2000},
+							InclusiveMin: &persistencespb.TaskKey{FireTime: timestamppb.New(tasks.DefaultFireTime), TaskId: 1000},
+							ExclusiveMax: &persistencespb.TaskKey{FireTime: timestamppb.New(tasks.DefaultFireTime), TaskId: 2000},
 						},
 						Predicate: &persistencespb.Predicate{
 							PredicateType: enumsspb.PREDICATE_TYPE_UNIVERSAL,
@@ -150,8 +153,8 @@ func (s *queueBaseSuite) TestNewProcessBase_WithPreviousState_RestoreSucceed() {
 					},
 					{
 						Range: &persistencespb.QueueSliceRange{
-							InclusiveMin: &persistencespb.TaskKey{FireTime: timestamp.TimePtr(tasks.DefaultFireTime), TaskId: 2000},
-							ExclusiveMax: &persistencespb.TaskKey{FireTime: timestamp.TimePtr(tasks.DefaultFireTime), TaskId: 3000},
+							InclusiveMin: &persistencespb.TaskKey{FireTime: timestamppb.New(tasks.DefaultFireTime), TaskId: 2000},
+							ExclusiveMax: &persistencespb.TaskKey{FireTime: timestamppb.New(tasks.DefaultFireTime), TaskId: 3000},
 						},
 						Predicate: &persistencespb.Predicate{
 							PredicateType: enumsspb.PREDICATE_TYPE_TASK_TYPE,
@@ -168,8 +171,8 @@ func (s *queueBaseSuite) TestNewProcessBase_WithPreviousState_RestoreSucceed() {
 				Scopes: []*persistencespb.QueueSliceScope{
 					{
 						Range: &persistencespb.QueueSliceRange{
-							InclusiveMin: &persistencespb.TaskKey{FireTime: timestamp.TimePtr(tasks.DefaultFireTime), TaskId: 2000},
-							ExclusiveMax: &persistencespb.TaskKey{FireTime: timestamp.TimePtr(tasks.DefaultFireTime), TaskId: 3000},
+							InclusiveMin: &persistencespb.TaskKey{FireTime: timestamppb.New(tasks.DefaultFireTime), TaskId: 2000},
+							ExclusiveMax: &persistencespb.TaskKey{FireTime: timestamppb.New(tasks.DefaultFireTime), TaskId: 3000},
 						},
 						Predicate: &persistencespb.Predicate{
 							PredicateType: enumsspb.PREDICATE_TYPE_NAMESPACE_ID,
@@ -183,7 +186,7 @@ func (s *queueBaseSuite) TestNewProcessBase_WithPreviousState_RestoreSucceed() {
 				},
 			},
 		},
-		ExclusiveReaderHighWatermark: &persistencespb.TaskKey{FireTime: timestamp.TimePtr(tasks.DefaultFireTime), TaskId: 4000},
+		ExclusiveReaderHighWatermark: &persistencespb.TaskKey{FireTime: timestamppb.New(tasks.DefaultFireTime), TaskId: 4000},
 	}
 
 	mockShard := shard.NewTestContext(
@@ -209,7 +212,7 @@ func (s *queueBaseSuite) TestNewProcessBase_WithPreviousState_RestoreSucceed() {
 		exclusiveReaderHighWatermark: base.nonReadableScope.Range.InclusiveMin,
 	}
 
-	s.Equal(persistenceState, ToPersistenceQueueState(queueState))
+	s.ProtoEqual(persistenceState, ToPersistenceQueueState(queueState))
 }
 
 func (s *queueBaseSuite) TestNewProcessBase_WithPreviousState_RestoreFailed() {
@@ -219,8 +222,8 @@ func (s *queueBaseSuite) TestNewProcessBase_WithPreviousState_RestoreFailed() {
 				Scopes: []*persistencespb.QueueSliceScope{
 					{
 						Range: &persistencespb.QueueSliceRange{
-							InclusiveMin: &persistencespb.TaskKey{FireTime: timestamp.TimePtr(tasks.DefaultFireTime), TaskId: 1000},
-							ExclusiveMax: &persistencespb.TaskKey{FireTime: timestamp.TimePtr(tasks.DefaultFireTime), TaskId: 2000},
+							InclusiveMin: &persistencespb.TaskKey{FireTime: timestamppb.New(tasks.DefaultFireTime), TaskId: 1000},
+							ExclusiveMax: &persistencespb.TaskKey{FireTime: timestamppb.New(tasks.DefaultFireTime), TaskId: 2000},
 						},
 						Predicate: &persistencespb.Predicate{
 							PredicateType: enumsspb.PREDICATE_TYPE_UNIVERSAL,
@@ -233,8 +236,8 @@ func (s *queueBaseSuite) TestNewProcessBase_WithPreviousState_RestoreFailed() {
 				Scopes: []*persistencespb.QueueSliceScope{
 					{
 						Range: &persistencespb.QueueSliceRange{
-							InclusiveMin: &persistencespb.TaskKey{FireTime: timestamp.TimePtr(tasks.DefaultFireTime), TaskId: 500},
-							ExclusiveMax: &persistencespb.TaskKey{FireTime: timestamp.TimePtr(tasks.DefaultFireTime), TaskId: 1000},
+							InclusiveMin: &persistencespb.TaskKey{FireTime: timestamppb.New(tasks.DefaultFireTime), TaskId: 500},
+							ExclusiveMax: &persistencespb.TaskKey{FireTime: timestamppb.New(tasks.DefaultFireTime), TaskId: 1000},
 						},
 						Predicate: &persistencespb.Predicate{
 							PredicateType: enumsspb.PREDICATE_TYPE_UNIVERSAL,
@@ -244,7 +247,7 @@ func (s *queueBaseSuite) TestNewProcessBase_WithPreviousState_RestoreFailed() {
 				},
 			},
 		},
-		ExclusiveReaderHighWatermark: &persistencespb.TaskKey{FireTime: timestamp.TimePtr(tasks.DefaultFireTime), TaskId: 4000},
+		ExclusiveReaderHighWatermark: &persistencespb.TaskKey{FireTime: timestamppb.New(tasks.DefaultFireTime), TaskId: 4000},
 	}
 
 	mockShard := shard.NewTestContext(
@@ -704,6 +707,7 @@ func (s *queueBaseSuite) newQueueBase(
 		s.options,
 		s.rateLimiter,
 		NoopReaderCompletionFn,
+		GrouperNamespaceID{},
 		s.logger,
 		s.metricsHandler,
 	)

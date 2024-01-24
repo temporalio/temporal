@@ -227,8 +227,7 @@ func (r *reschedulerImpl) reschedule() {
 	r.Lock()
 	defer r.Unlock()
 
-	r.metricsHandler.Histogram(metrics.TaskReschedulerPendingTasks.GetMetricName(), metrics.TaskReschedulerPendingTasks.GetMetricUnit()).Record(int64(r.numExecutables))
-
+	metrics.TaskReschedulerPendingTasks.With(r.metricsHandler).Record(int64(r.numExecutables))
 	now := r.timeSource.Now()
 	for _, pq := range r.pqMap {
 		for !pq.IsEmpty() {

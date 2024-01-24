@@ -34,6 +34,7 @@ import (
 	"go.temporal.io/api/serviceerror"
 	versionpb "go.temporal.io/api/version/v1"
 	"go.temporal.io/version/check"
+	"google.golang.org/protobuf/types/known/timestamppb"
 
 	"go.temporal.io/server/common/headers"
 	"go.temporal.io/server/common/metrics"
@@ -112,11 +113,11 @@ func (vc *VersionChecker) performVersionCheck(
 ) {
 	startTime := time.Now().UTC()
 	defer func() {
-		vc.metricsHandler.Timer(metrics.VersionCheckLatency.GetMetricName()).Record(time.Since(startTime))
+		vc.metricsHandler.Timer(metrics.VersionCheckLatency.Name()).Record(time.Since(startTime))
 	}()
 	metadata, err := vc.clusterMetadataManager.GetCurrentClusterMetadata(ctx)
 	if err != nil {
-		vc.metricsHandler.Counter(metrics.VersionCheckFailedCount.GetMetricName()).Record(1)
+		vc.metricsHandler.Counter(metrics.VersionCheckFailedCount.Name()).Record(1)
 		return
 	}
 
@@ -126,26 +127,26 @@ func (vc *VersionChecker) performVersionCheck(
 
 	req, err := vc.createVersionCheckRequest(metadata)
 	if err != nil {
-		vc.metricsHandler.Counter(metrics.VersionCheckFailedCount.GetMetricName()).Record(1)
+		vc.metricsHandler.Counter(metrics.VersionCheckFailedCount.Name()).Record(1)
 		return
 	}
 	resp, err := vc.getVersionInfo(req)
 	if err != nil {
-		vc.metricsHandler.Counter(metrics.VersionCheckRequestFailedCount.GetMetricName()).Record(1)
-		vc.metricsHandler.Counter(metrics.VersionCheckFailedCount.GetMetricName()).Record(1)
+		vc.metricsHandler.Counter(metrics.VersionCheckRequestFailedCount.Name()).Record(1)
+		vc.metricsHandler.Counter(metrics.VersionCheckFailedCount.Name()).Record(1)
 		return
 	}
 	err = vc.saveVersionInfo(ctx, resp)
 	if err != nil {
-		vc.metricsHandler.Counter(metrics.VersionCheckFailedCount.GetMetricName()).Record(1)
+		vc.metricsHandler.Counter(metrics.VersionCheckFailedCount.Name()).Record(1)
 		return
 	}
-	vc.metricsHandler.Counter(metrics.VersionCheckSuccessCount.GetMetricName()).Record(1)
+	vc.metricsHandler.Counter(metrics.VersionCheckSuccessCount.Name()).Record(1)
 }
 
 func isUpdateNeeded(metadata *persistence.GetClusterMetadataResponse) bool {
 	return metadata.VersionInfo == nil || (metadata.VersionInfo.LastUpdateTime != nil &&
-		metadata.VersionInfo.LastUpdateTime.Before(time.Now().Add(-time.Hour)))
+		metadata.VersionInfo.LastUpdateTime.AsTime().Before(time.Now().Add(-time.Hour)))
 }
 
 func (vc *VersionChecker) createVersionCheckRequest(metadata *persistence.GetClusterMetadataResponse) (*check.VersionCheckRequest, error) {
@@ -195,7 +196,7 @@ func toVersionInfo(resp *check.VersionCheckResponse) (*versionpb.VersionInfo, er
 				Recommended:    convertReleaseInfo(product.Recommended),
 				Instructions:   product.Instructions,
 				Alerts:         convertAlerts(product.Alerts),
-				LastUpdateTime: timestamp.TimePtr(time.Now().UTC()),
+				LastUpdateTime: timestamppb.New(time.Now().UTC()),
 			}, nil
 		}
 	}

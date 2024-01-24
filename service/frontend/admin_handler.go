@@ -28,14 +28,19 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io"
 	"net"
 	"strings"
 	"sync/atomic"
 	"time"
 
+	commonpb "go.temporal.io/api/common/v1"
+	historypb "go.temporal.io/api/history/v1"
 	replicationpb "go.temporal.io/api/replication/v1"
 	commonspb "go.temporal.io/server/api/common/v1"
+	historyspb "go.temporal.io/server/api/history/v1"
 	"google.golang.org/grpc/metadata"
+	"google.golang.org/protobuf/types/known/timestamppb"
 
 	"go.temporal.io/server/api/adminservice/v1"
 	"go.temporal.io/server/api/historyservice/v1"
@@ -98,6 +103,8 @@ const (
 type (
 	// AdminHandler - gRPC handler interface for adminservice
 	AdminHandler struct {
+		adminservice.UnsafeAdminServiceServer
+
 		status int32
 
 		logger                     log.Logger
@@ -865,7 +872,7 @@ func toAdminTask(tasks []tasks.Task) []*adminservice.Task {
 			RunId:       task.GetRunID(),
 			TaskId:      task.GetTaskID(),
 			TaskType:    task.GetType(),
-			FireTime:    timestamp.TimePtr(task.GetKey().FireTime),
+			FireTime:    timestamppb.New(task.GetKey().FireTime),
 			Version:     task.GetVersion(),
 		})
 	}
@@ -926,6 +933,22 @@ func (adh *AdminHandler) DescribeHistoryHost(ctx context.Context, request *admin
 	}, err
 }
 
+func (adh *AdminHandler) GetWorkflowExecutionRawHistory(
+	ctx context.Context,
+	request *adminservice.GetWorkflowExecutionRawHistoryRequest,
+) (_ *adminservice.GetWorkflowExecutionRawHistoryResponse, retError error) {
+	defer log.CapturePanic(adh.logger, &retError)
+	response, err := adh.historyClient.GetWorkflowExecutionRawHistory(ctx,
+		&historyservice.GetWorkflowExecutionRawHistoryRequest{
+			NamespaceId: request.NamespaceId,
+			Request:     request,
+		})
+	if err != nil {
+		return nil, err
+	}
+	return response.Response, nil
+}
+
 // GetWorkflowExecutionRawHistoryV2 - retrieves the history of workflow execution
 func (adh *AdminHandler) GetWorkflowExecutionRawHistoryV2(ctx context.Context, request *adminservice.GetWorkflowExecutionRawHistoryV2Request) (_ *adminservice.GetWorkflowExecutionRawHistoryV2Response, retError error) {
 	defer log.CapturePanic(adh.logger, &retError)
@@ -936,7 +959,10 @@ func (adh *AdminHandler) GetWorkflowExecutionRawHistoryV2(ctx context.Context, r
 		return nil, err
 	}
 
-	if dynamicconfig.AccessHistory(adh.config.AccessHistoryFraction, adh.metricsHandler.WithTags(metrics.OperationTag(metrics.AdminGetWorkflowExecutionRawHistoryV2Tag))) {
+	if dynamicconfig.AccessHistory(
+		adh.config.AccessHistoryFraction,
+		adh.metricsHandler.WithTags(metrics.OperationTag(metrics.AdminGetWorkflowExecutionRawHistoryV2Tag)),
+	) {
 		response, err := adh.historyClient.GetWorkflowExecutionRawHistoryV2(ctx,
 			&historyservice.GetWorkflowExecutionRawHistoryV2Request{
 				NamespaceId: request.NamespaceId,
@@ -1055,7 +1081,7 @@ func (adh *AdminHandler) ListClusters(
 
 	var clusterMetadataList []*persistencespb.ClusterMetadata
 	for _, clusterResp := range resp.ClusterMetadata {
-		clusterMetadataList = append(clusterMetadataList, &clusterResp.ClusterMetadata)
+		clusterMetadataList = append(clusterMetadataList, clusterResp.ClusterMetadata)
 	}
 	return &adminservice.ListClustersResponse{
 		Clusters:      clusterMetadataList,
@@ -1080,12 +1106,12 @@ func (adh *AdminHandler) ListClusterMembers(
 	heartbitRef := request.GetLastHeartbeatWithin()
 	var heartbit time.Duration
 	if heartbitRef != nil {
-		heartbit = *heartbitRef
+		heartbit = heartbitRef.AsDuration()
 	}
 	startedTimeRef := request.GetSessionStartedAfterTime()
 	var startedTime time.Time
 	if startedTimeRef != nil {
-		startedTime = *startedTimeRef
+		startedTime = startedTimeRef.AsTime()
 	}
 
 	resp, err := metadataMgr.GetClusterMembers(ctx, &persistence.GetClusterMembersRequest{
@@ -1108,9 +1134,9 @@ func (adh *AdminHandler) ListClusterMembers(
 			HostId:           member.HostID.String(),
 			RpcAddress:       member.RPCAddress.String(),
 			RpcPort:          int32(member.RPCPort),
-			SessionStartTime: &member.SessionStart,
-			LastHeartbitTime: &member.LastHeartbeat,
-			RecordExpiryTime: &member.RecordExpiry,
+			SessionStartTime: timestamppb.New(member.SessionStart),
+			LastHeartbitTime: timestamppb.New(member.LastHeartbeat),
+			RecordExpiryTime: timestamppb.New(member.RecordExpiry),
 		})
 	}
 
@@ -1161,7 +1187,7 @@ func (adh *AdminHandler) AddOrUpdateRemoteCluster(
 	}
 
 	applied, err := clusterMetadataMrg.SaveClusterMetadata(ctx, &persistence.SaveClusterMetadataRequest{
-		ClusterMetadata: persistencespb.ClusterMetadata{
+		ClusterMetadata: &persistencespb.ClusterMetadata{
 			ClusterName:              resp.GetClusterName(),
 			HistoryShardCount:        resp.GetHistoryShardCount(),
 			ClusterId:                resp.GetClusterId(),
@@ -1509,8 +1535,29 @@ func (adh *AdminHandler) ResendReplicationTasks(
 	resender := xdc.NewNDCHistoryResender(
 		adh.namespaceRegistry,
 		adh.clientBean,
-		func(ctx context.Context, request *historyservice.ReplicateEventsV2Request) error {
-			_, err1 := adh.historyClient.ReplicateEventsV2(ctx, request)
+		func(
+			ctx context.Context,
+			sourceClusterName string,
+			namespaceId namespace.ID,
+			workflowId string,
+			runId string,
+			events []*historypb.HistoryEvent,
+			versionHistory []*historyspb.VersionHistoryItem,
+		) error {
+			historyBlob, err1 := adh.eventSerializer.SerializeEvents(events, enumspb.ENCODING_TYPE_PROTO3)
+			if err1 != nil {
+				return err1
+			}
+			replicateRequest := &historyservice.ReplicateEventsV2Request{
+				NamespaceId: namespaceId.String(),
+				WorkflowExecution: &commonpb.WorkflowExecution{
+					WorkflowId: workflowId,
+					RunId:      runId,
+				},
+				Events:              historyBlob,
+				VersionHistoryItems: versionHistory,
+			}
+			_, err1 = adh.historyClient.ReplicateEventsV2(ctx, replicateRequest)
 			return err1
 		},
 		adh.eventSerializer,
@@ -1587,7 +1634,10 @@ func (adh *AdminHandler) DeleteWorkflowExecution(
 		return nil, err
 	}
 
-	if dynamicconfig.AccessHistory(adh.config.AccessHistoryFraction, adh.metricsHandler.WithTags(metrics.OperationTag(metrics.AdminDeleteWorkflowExecutionTag))) {
+	if dynamicconfig.AccessHistory(
+		adh.config.AdminDeleteAccessHistoryFraction,
+		adh.metricsHandler.WithTags(metrics.OperationTag(metrics.AdminDeleteWorkflowExecutionTag)),
+	) {
 		response, err := adh.historyClient.ForceDeleteWorkflowExecution(ctx,
 			&historyservice.ForceDeleteWorkflowExecutionRequest{
 				NamespaceId: namespaceID.String(),
@@ -1705,7 +1755,10 @@ func (adh *AdminHandler) StreamWorkflowReplicationMessages(
 						Messages: attr.Messages,
 					},
 				}); err != nil {
-					logger.Info("AdminStreamReplicationMessages server -> client encountered error", tag.Error(err))
+					if err != io.EOF {
+						logger.Info("AdminStreamReplicationMessages server -> client encountered error", tag.Error(err))
+
+					}
 					return
 				}
 			default:
@@ -1970,8 +2023,15 @@ func (adh *AdminHandler) ListQueues(
 	if err != nil {
 		return nil, err
 	}
+	queues := make([]*adminservice.ListQueuesResponse_QueueInfo, len(resp.Queues))
+	for i, queue := range resp.Queues {
+		queues[i] = &adminservice.ListQueuesResponse_QueueInfo{
+			QueueName:    queue.QueueName,
+			MessageCount: queue.MessageCount,
+		}
+	}
 	return &adminservice.ListQueuesResponse{
-		QueueNames:    resp.QueueNames,
+		Queues:        queues,
 		NextPageToken: resp.NextPageToken,
 	}, nil
 }

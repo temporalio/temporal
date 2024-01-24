@@ -1,3 +1,5 @@
+// The MIT License
+//
 // Copyright (c) 2020 Temporal Technologies, Inc.
 //
 // Permission is hereby granted, free of charge, to any person obtaining a copy
@@ -26,8 +28,6 @@ option go_package = "go.temporal.io/server/api/cli/v1;cli";
 
 import "google/protobuf/timestamp.proto";
 
-import "dependencies/gogoproto/gogo.proto";
-
 import "temporal/api/common/v1/message.proto";
 import "temporal/api/enums/v1/workflow.proto";
 import "temporal/api/workflow/v1/message.proto";
@@ -43,13 +43,13 @@ message DescribeWorkflowExecutionResponse {
 message WorkflowExecutionInfo {
     temporal.api.common.v1.WorkflowExecution execution = 1;
     temporal.api.common.v1.WorkflowType type = 2;
-    google.protobuf.Timestamp start_time = 3 [(gogoproto.stdtime) = true];
-    google.protobuf.Timestamp close_time = 4 [(gogoproto.stdtime) = true];
+    google.protobuf.Timestamp start_time = 3;
+    google.protobuf.Timestamp close_time = 4;
     temporal.api.enums.v1.WorkflowExecutionStatus status = 5;
     int64 history_length = 6;
     string parent_namespace_id = 7;
     temporal.api.common.v1.WorkflowExecution parent_execution = 8;
-    google.protobuf.Timestamp execution_time = 9 [(gogoproto.stdtime) = true];
+    google.protobuf.Timestamp execution_time = 9;
     temporal.api.common.v1.Memo memo = 10;
     SearchAttributes search_attributes = 11;
     temporal.api.workflow.v1.ResetPoints auto_reset_points = 12;
@@ -63,12 +63,12 @@ message PendingActivityInfo {
     temporal.api.common.v1.ActivityType activity_type = 2;
     temporal.api.enums.v1.PendingActivityState state = 3;
     string heartbeat_details = 4;
-    google.protobuf.Timestamp last_heartbeat_time = 5 [(gogoproto.stdtime) = true];
-    google.protobuf.Timestamp last_started_time = 6 [(gogoproto.stdtime) = true];
+    google.protobuf.Timestamp last_heartbeat_time = 5;
+    google.protobuf.Timestamp last_started_time = 6;
     int32 attempt = 7;
     int32 maximum_attempts = 8;
-    google.protobuf.Timestamp scheduled_time = 9 [(gogoproto.stdtime) = true];
-    google.protobuf.Timestamp expiration_time = 10 [(gogoproto.stdtime) = true];
+    google.protobuf.Timestamp scheduled_time = 9;
+    google.protobuf.Timestamp expiration_time = 10;
     Failure last_failure = 11;
     string last_worker_identity = 12;
 }

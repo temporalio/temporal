@@ -206,10 +206,18 @@ func (c *mockStreamClient) Recv() (int, error) {
 	return resp, nil
 }
 
+func (c *mockStreamClient) CloseSend() error {
+	return nil
+}
+
 func (c *mockStreamErrClient) Send(_ int) error {
 	return c.sendErr
 }
 
 func (c *mockStreamErrClient) Recv() (int, error) {
 	return 0, c.recvErr
+}
+
+func (c *mockStreamErrClient) CloseSend() error {
+	return nil
 }

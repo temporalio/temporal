@@ -44,9 +44,9 @@ type (
 		suite.Suite
 		*require.Assertions
 
-		rangeID int64
+		rangeID       int64
+		rangeSizeBits uint
 
-		rangeSizeBits  uint
 		mockTimeSource *clock.EventTimeSource
 
 		generator *taskKeyGenerator
@@ -62,7 +62,7 @@ func (s *taskKeyGeneratorSuite) SetupTest() {
 	s.Assertions = require.New(s.T())
 
 	s.rangeID = 1
-	s.rangeSizeBits = 3 // 2 << 3 = 8 tasks per range
+	s.rangeSizeBits = 3 // 1 << 3 = 8 tasks per range
 	s.mockTimeSource = clock.NewEventTimeSource()
 	s.generator = newTaskKeyGenerator(
 		s.rangeSizeBits,

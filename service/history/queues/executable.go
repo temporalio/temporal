@@ -244,18 +244,18 @@ func (e *executableImpl) Execute() (retErr error) {
 		}
 
 		attemptUserLatency := time.Duration(0)
-		if duration, ok := metrics.ContextCounterGet(ctx, metrics.HistoryWorkflowExecutionCacheLatency.GetMetricName()); ok {
+		if duration, ok := metrics.ContextCounterGet(ctx, metrics.HistoryWorkflowExecutionCacheLatency.Name()); ok {
 			attemptUserLatency = time.Duration(duration)
 		}
 
 		attemptLatency := e.timeSource.Now().Sub(startTime)
 		e.attemptNoUserLatency = attemptLatency - attemptUserLatency
 		// emit total attempt latency so that we know how much time a task will occpy a worker goroutine
-		e.taggedMetricsHandler.Timer(metrics.TaskProcessingLatency.GetMetricName()).Record(attemptLatency)
+		metrics.TaskProcessingLatency.With(e.taggedMetricsHandler).Record(attemptLatency)
 
 		priorityTaggedProvider := e.taggedMetricsHandler.WithTags(metrics.TaskPriorityTag(e.priority.String()))
-		priorityTaggedProvider.Counter(metrics.TaskRequests.GetMetricName()).Record(1)
-		priorityTaggedProvider.Timer(metrics.TaskScheduleLatency.GetMetricName()).Record(e.scheduleLatency)
+		metrics.TaskRequests.With(priorityTaggedProvider).Record(1)
+		metrics.TaskScheduleLatency.With(priorityTaggedProvider).Record(e.scheduleLatency)
 
 		if retErr == nil {
 			e.inMemoryNoUserLatency += e.scheduleLatency + e.attemptNoUserLatency
@@ -315,7 +315,7 @@ func (e *executableImpl) HandleErr(err error) (retErr error) {
 
 			e.attempt++
 			if e.attempt > taskCriticalLogMetricAttempts {
-				e.taggedMetricsHandler.Histogram(metrics.TaskAttempt.GetMetricName(), metrics.TaskAttempt.GetMetricUnit()).Record(int64(e.attempt))
+				metrics.TaskAttempt.With(e.taggedMetricsHandler).Record(int64(e.attempt))
 				e.logger.Error("Critical error processing task, retrying.", tag.Attempt(int32(e.attempt)), tag.Error(err), tag.OperationCritical)
 			}
 		}
@@ -328,7 +328,7 @@ func (e *executableImpl) HandleErr(err error) (retErr error) {
 				err = consts.ErrResourceExhaustedAPSLimit
 			}
 			e.resourceExhaustedCount++
-			e.taggedMetricsHandler.Counter(metrics.TaskThrottledCounter.GetMetricName()).Record(1)
+			metrics.TaskThrottledCounter.With(e.taggedMetricsHandler).Record(1)
 			return err
 		}
 
@@ -346,32 +346,32 @@ func (e *executableImpl) HandleErr(err error) (retErr error) {
 	}
 
 	if err == consts.ErrDependencyTaskNotCompleted {
-		e.taggedMetricsHandler.Counter(metrics.TasksDependencyTaskNotCompleted.GetMetricName()).Record(1)
+		metrics.TasksDependencyTaskNotCompleted.With(e.taggedMetricsHandler).Record(1)
 		return err
 	}
 
 	if err == consts.ErrTaskRetry {
-		e.taggedMetricsHandler.Counter(metrics.TaskStandbyRetryCounter.GetMetricName()).Record(1)
+		metrics.TaskStandbyRetryCounter.With(e.taggedMetricsHandler).Record(1)
 		return err
 	}
 
 	if errors.Is(err, consts.ErrResourceExhaustedBusyWorkflow) {
-		e.taggedMetricsHandler.Counter(metrics.TaskWorkflowBusyCounter.GetMetricName()).Record(1)
+		metrics.TaskWorkflowBusyCounter.With(e.taggedMetricsHandler).Record(1)
 		return err
 	}
 
 	if err == consts.ErrTaskDiscarded {
-		e.taggedMetricsHandler.Counter(metrics.TaskDiscarded.GetMetricName()).Record(1)
+		metrics.TaskDiscarded.With(e.taggedMetricsHandler).Record(1)
 		return nil
 	}
 
 	if err == consts.ErrTaskVersionMismatch {
-		e.taggedMetricsHandler.Counter(metrics.TaskVersionMisMatch.GetMetricName()).Record(1)
+		metrics.TaskVersionMisMatch.With(e.taggedMetricsHandler).Record(1)
 		return nil
 	}
 
 	if err.Error() == consts.ErrNamespaceHandover.Error() {
-		e.taggedMetricsHandler.Counter(metrics.TaskNamespaceHandoverCounter.GetMetricName()).Record(1)
+		metrics.TaskNamespaceHandoverCounter.With(e.taggedMetricsHandler).Record(1)
 		err = consts.ErrNamespaceHandover
 		return err
 	}
@@ -379,7 +379,7 @@ func (e *executableImpl) HandleErr(err error) (retErr error) {
 	if _, ok := err.(*serviceerror.NamespaceNotActive); ok {
 		// error is expected when there's namespace failover,
 		// so don't count it into task failures.
-		e.taggedMetricsHandler.Counter(metrics.TaskNotActiveCounter.GetMetricName()).Record(1)
+		metrics.TaskNotActiveCounter.With(e.taggedMetricsHandler).Record(1)
 		return err
 	}
 
@@ -388,7 +388,7 @@ func (e *executableImpl) HandleErr(err error) (retErr error) {
 		errors.As(err, new(*serialization.UnknownEncodingTypeError)) {
 		// likely due to data corruption, emit logs, metrics & drop the task by return nil so that
 		// task will be marked as completed, or send it to the DLQ if that is enabled.
-		e.taggedMetricsHandler.Counter(metrics.TaskCorruptionCounter.GetMetricName()).Record(1)
+		metrics.TaskCorruptionCounter.With(e.taggedMetricsHandler).Record(1)
 		if e.dlqEnabled() {
 			e.logger.Error("Marking task as terminally failed, will send to DLQ", tag.Error(err))
 			e.terminalFailureCause = err
@@ -398,7 +398,7 @@ func (e *executableImpl) HandleErr(err error) (retErr error) {
 		return nil
 	}
 
-	e.taggedMetricsHandler.Counter(metrics.TaskFailures.GetMetricName()).Record(1)
+	metrics.TaskFailures.With(e.taggedMetricsHandler).Record(1)
 
 	e.logger.Error("Fail to process task", tag.Error(err), tag.LifeCycleProcessingFailed)
 	return err
@@ -447,17 +447,16 @@ func (e *executableImpl) Ack() {
 
 	e.state = ctasks.TaskStateAcked
 
-	e.taggedMetricsHandler.Timer(metrics.TaskLoadLatency.GetMetricName()).Record(
+	metrics.TaskLoadLatency.With(e.taggedMetricsHandler).Record(
 		e.loadTime.Sub(e.GetVisibilityTime()),
 		metrics.QueueReaderIDTag(e.readerID),
 	)
-	e.taggedMetricsHandler.Histogram(metrics.TaskAttempt.GetMetricName(), metrics.TaskAttempt.GetMetricUnit()).Record(int64(e.attempt))
+	metrics.TaskAttempt.With(e.taggedMetricsHandler).Record(int64(e.attempt))
 
 	priorityTaggedProvider := e.taggedMetricsHandler.WithTags(metrics.TaskPriorityTag(e.lowestPriority.String()))
-	priorityTaggedProvider.Timer(metrics.TaskLatency.GetMetricName()).Record(e.inMemoryNoUserLatency)
-
-	readerIDTaggedProvider := priorityTaggedProvider.WithTags(metrics.QueueReaderIDTag(e.readerID))
-	readerIDTaggedProvider.Timer(metrics.TaskQueueLatency.GetMetricName()).Record(time.Since(e.GetVisibilityTime()))
+	metrics.TaskLatency.With(priorityTaggedProvider).Record(e.inMemoryNoUserLatency)
+	metrics.TaskQueueLatency.With(priorityTaggedProvider.WithTags(metrics.QueueReaderIDTag(e.readerID))).
+		Record(time.Since(e.GetVisibilityTime()))
 }
 
 func (e *executableImpl) Nack(err error) {
@@ -530,6 +529,14 @@ func (e *executableImpl) GetScheduledTime() time.Time {
 
 func (e *executableImpl) SetScheduledTime(t time.Time) {
 	e.scheduledTime = t
+}
+
+// GetDestination returns the embedded task's destination if it exists. Defaults to an empty string.
+func (e *executableImpl) GetDestination() string {
+	if t, ok := e.Task.(tasks.HasDestination); ok {
+		return t.GetDestination()
+	}
+	return ""
 }
 
 func (e *executableImpl) shouldResubmitOnNack(attempt int, err error) bool {

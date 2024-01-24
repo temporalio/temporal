@@ -127,7 +127,7 @@ persistence:
                     keyFile: {{ default .Env.SQL_CERT_KEY "" }}
                     enableHostVerification: {{ default .Env.SQL_HOST_VERIFICATION "false" }}
                     serverName: {{ default .Env.SQL_HOST_NAME "" }}
-        {{- else if eq $db "postgresql" "postgres" "postgres12" }}
+        {{- else if eq $db "postgresql" "postgres" "postgres12" "postgres12_pgx" }}
         {{- $db := replace $db "postgresql" "postgres" 1 }}
         default:
             sql:

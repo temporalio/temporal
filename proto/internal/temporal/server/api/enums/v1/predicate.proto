@@ -1,3 +1,5 @@
+// The MIT License
+//
 // Copyright (c) 2021 Temporal Technologies, Inc.
 //
 // Permission is hereby granted, free of charge, to any person obtaining a copy
@@ -33,4 +35,5 @@ enum PredicateType {
     PREDICATE_TYPE_NOT = 5;
     PREDICATE_TYPE_NAMESPACE_ID = 6;
     PREDICATE_TYPE_TASK_TYPE = 7;
+    PREDICATE_TYPE_DESTINATION = 8;
 }

@@ -121,7 +121,7 @@ func TestDLQWriter_ErrGetNamespaceName(t *testing.T) {
 	assert.Equal(t, logger.records[0].tags[1].Value(), errorMsg)
 	assert.Contains(t, logger.records[1].msg, "Task enqueued to DLQ")
 	snapshot := capture.Snapshot()
-	recordings := snapshot[metrics.DLQWrites.GetMetricName()]
+	recordings := snapshot[metrics.DLQWrites.Name()]
 	assert.Len(t, recordings, 1)
 	counter, ok := recordings[0].Value.(int64)
 	assert.True(t, ok)
@@ -165,8 +165,9 @@ func TestDLQWriter_Ok(t *testing.T) {
 	assert.Equal(t, expectedShardID, request.SourceShardID)
 	assert.NotEmpty(t, logger.records)
 	assert.Contains(t, logger.records[0].msg, "Task enqueued to DLQ")
+	assert.Contains(t, logger.records[0].tags, tag.DLQMessageID(0))
 	snapshot := capture.Snapshot()
-	recordings := snapshot[metrics.DLQWrites.GetMetricName()]
+	recordings := snapshot[metrics.DLQWrites.Name()]
 	assert.Len(t, recordings, 1)
 	counter, ok := recordings[0].Value.(int64)
 	assert.True(t, ok)

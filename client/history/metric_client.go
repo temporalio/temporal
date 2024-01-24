@@ -81,7 +81,7 @@ func (c *metricClient) startMetricsRecording(
 ) (metrics.Handler, time.Time) {
 	caller := headers.GetCallerInfo(ctx).CallerName
 	metricsHandler := c.metricsHandler.WithTags(metrics.OperationTag(operation), metrics.NamespaceTag(caller), metrics.ServiceRoleTag(metrics.HistoryRoleTagValue))
-	metricsHandler.Counter(metrics.ClientRequests.GetMetricName()).Record(1)
+	metrics.ClientRequests.With(metricsHandler).Record(1)
 	return metricsHandler, time.Now().UTC()
 }
 
@@ -103,7 +103,7 @@ func (c *metricClient) finishMetricsRecording(
 		default:
 			c.throttledLogger.Info("history client encountered error", tag.Error(err), tag.ErrorType(err))
 		}
-		metricsHandler.Counter(metrics.ClientFailures.GetMetricName()).Record(1, metrics.ServiceErrorTypeTag(err))
+		metrics.ClientFailures.With(metricsHandler).Record(1, metrics.ServiceErrorTypeTag(err))
 	}
-	metricsHandler.Timer(metrics.ClientLatency.GetMetricName()).Record(time.Since(startTime))
+	metrics.ClientLatency.With(metricsHandler).Record(time.Since(startTime))
 }

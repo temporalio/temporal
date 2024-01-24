@@ -6,6 +6,8 @@ on: # rebuild any PRs and main branch changes
     branches:
       - main
 
+permissions: read-all
+
 concurrency: # Auto-cancel existing runs in the PR when a new commit is pushed
   group: ${{ github.head_ref || github.run_id }}
   cancel-in-progress: true
@@ -29,8 +31,8 @@ jobs:
     needs: build-docker-image
     uses: temporalio/features/.github/workflows/go.yaml@main
     with:
-      version: v1.21.0
-      version-is-repo-ref: false
+      version: f9d73bfdf7c8d3ec0311306140fbfafa7fb6f9cf
+      version-is-repo-ref: true
       docker-image-artifact-name: temporal-server-docker
 
   feature-tests-python:
@@ -46,5 +48,13 @@ jobs:
     uses: temporalio/features/.github/workflows/java.yaml@main
     with:
       version: v1.17.0
+      version-is-repo-ref: false
+      docker-image-artifact-name: temporal-server-docker
+
+  feature-tests-dotnet:
+    needs: build-docker-image
+    uses: temporalio/features/.github/workflows/dotnet.yaml@main
+    with:
+      version: 1.0.0
       version-is-repo-ref: false
       docker-image-artifact-name: temporal-server-docker

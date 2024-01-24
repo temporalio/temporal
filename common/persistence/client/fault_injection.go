@@ -332,7 +332,7 @@ func (q *FaultInjectionQueue) Init(
 
 func (q *FaultInjectionQueue) EnqueueMessage(
 	ctx context.Context,
-	blob commonpb.DataBlob,
+	blob *commonpb.DataBlob,
 ) error {
 	if err := q.ErrorGenerator.Generate(); err != nil {
 		return err
@@ -382,7 +382,7 @@ func (q *FaultInjectionQueue) GetAckLevels(
 
 func (q *FaultInjectionQueue) EnqueueMessageToDLQ(
 	ctx context.Context,
-	blob commonpb.DataBlob,
+	blob *commonpb.DataBlob,
 ) (int64, error) {
 	if err := q.ErrorGenerator.Generate(); err != nil {
 		return 0, err

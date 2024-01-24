@@ -49,11 +49,16 @@ type (
 		definition.WorkflowKey
 		ExecutableTask
 		req *historyservice.SyncActivityRequest
+
+		// following fields are used only for batching functionality
+		batchable     bool
+		activityInfos []*historyservice.ActivitySyncInfo
 	}
 )
 
 var _ ctasks.Task = (*ExecutableActivityStateTask)(nil)
 var _ TrackableExecutableTask = (*ExecutableActivityStateTask)(nil)
+var _ BatchableTask = (*ExecutableActivityStateTask)(nil)
 
 func NewExecutableActivityStateTask(
 	processToolBox ProcessToolBox,
@@ -91,6 +96,21 @@ func NewExecutableActivityStateTask(
 			BaseExecutionInfo:  task.BaseExecutionInfo,
 			VersionHistory:     task.VersionHistory,
 		},
+
+		batchable: true,
+		activityInfos: append(make([]*historyservice.ActivitySyncInfo, 0, 1), &historyservice.ActivitySyncInfo{
+			Version:            task.Version,
+			ScheduledEventId:   task.ScheduledEventId,
+			ScheduledTime:      task.ScheduledTime,
+			StartedEventId:     task.StartedEventId,
+			StartedTime:        task.StartedTime,
+			LastHeartbeatTime:  task.LastHeartbeatTime,
+			Details:            task.Details,
+			Attempt:            task.Attempt,
+			LastFailure:        task.LastFailure,
+			LastWorkerIdentity: task.LastWorkerIdentity,
+			VersionHistory:     task.VersionHistory,
+		}),
 	}
 }
 
@@ -116,7 +136,7 @@ func (e *ExecutableActivityStateTask) Execute() error {
 			tag.WorkflowRunID(e.RunID),
 			tag.TaskID(e.ExecutableTask.TaskID()),
 		)
-		e.MetricsHandler.Counter(metrics.ReplicationTasksSkipped.GetMetricName()).Record(
+		e.MetricsHandler.Counter(metrics.ReplicationTasksSkipped.Name()).Record(
 			1,
 			metrics.OperationTag(metrics.SyncActivityTaskScope),
 			metrics.NamespaceTag(namespaceName),
@@ -137,6 +157,15 @@ func (e *ExecutableActivityStateTask) Execute() error {
 	if err != nil {
 		return err
 	}
+	if e.Config.EnableReplicationTaskBatching() {
+		return engine.SyncActivities(ctx, &historyservice.SyncActivitiesRequest{
+			NamespaceId:    e.NamespaceID,
+			WorkflowId:     e.WorkflowID,
+			RunId:          e.RunID,
+			ActivitiesInfo: e.activityInfos,
+		})
+	}
+
 	return engine.SyncActivity(ctx, e.req)
 }
 
@@ -208,4 +237,45 @@ func (e *ExecutableActivityStateTask) MarkPoisonPill() error {
 	defer cancel()
 
 	return writeTaskToDLQ(ctx, e.DLQWriter, shardContext, e.SourceClusterName(), replicationTaskInfo)
+}
+
+func (e *ExecutableActivityStateTask) BatchWith(incomingTask BatchableTask) (TrackableExecutableTask, bool) {
+	if !e.batchable || !incomingTask.CanBatch() {
+		return nil, false
+	}
+
+	incomingActivityTask, err := e.validateIncomingBatchTask(incomingTask)
+	if err != nil {
+		return nil, false
+	}
+	return &ExecutableActivityStateTask{
+		ProcessToolBox: e.ProcessToolBox,
+		WorkflowKey:    e.WorkflowKey,
+		ExecutableTask: e.ExecutableTask,
+		batchable:      true,
+		activityInfos:  append(e.activityInfos, incomingActivityTask.activityInfos...),
+	}, true
+}
+
+func (e *ExecutableActivityStateTask) validateIncomingBatchTask(incomingTask BatchableTask) (*ExecutableActivityStateTask, error) {
+	if incomingTask == nil {
+		return nil, serviceerror.NewInvalidArgument("Batch task is nil")
+	}
+	incomingActivityTask, isActivityTask := incomingTask.(*ExecutableActivityStateTask)
+	if !isActivityTask {
+		return nil, serviceerror.NewInvalidArgument("Unsupported Batch type")
+	}
+	if e.WorkflowKey != incomingActivityTask.WorkflowKey {
+		return nil, serviceerror.NewInvalidArgument("WorkflowKey mismatch")
+	}
+
+	return incomingActivityTask, nil
+}
+
+func (e *ExecutableActivityStateTask) CanBatch() bool {
+	return e.batchable
+}
+
+func (e *ExecutableActivityStateTask) MarkUnbatchable() {
+	e.batchable = false
 }

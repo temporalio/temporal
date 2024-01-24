@@ -53,6 +53,7 @@ type (
 	ChangedEvent struct {
 		HostsAdded   []HostInfo
 		HostsRemoved []HostInfo
+		HostsChanged []HostInfo
 	}
 
 	// Monitor provides membership information for all temporal services.
@@ -75,6 +76,8 @@ type (
 		// so currently this will never return non-nil, except for context cancel/timeout. A
 		// future implementation might return more errors.
 		WaitUntilInitialized(context.Context) error
+		// SetDraining sets the draining state (synchronized through ringpop)
+		SetDraining(draining bool) error
 	}
 
 	// ServiceResolver provides membership information for a specific temporal service.
@@ -82,6 +85,9 @@ type (
 	ServiceResolver interface {
 		// Lookup looks up the host that currently owns the resource identified by the given key.
 		Lookup(key string) (HostInfo, error)
+		// LookupN looks n hosts that owns the resource identified by the given key, if n greater than total number
+		// of hosts total number of hosts will be returned
+		LookupN(key string, n int) []HostInfo
 		// AddListener adds a listener which will get notified on the given channel whenever membership changes.
 		AddListener(name string, notifyChannel chan<- *ChangedEvent) error
 		// RemoveListener removes a listener for this service.
@@ -90,6 +96,8 @@ type (
 		MemberCount() int
 		// Members returns all known hosts available for this service.
 		Members() []HostInfo
+		// AvailableMembers returns all hosts available for this service that are accepting requests (not draining).
+		AvailableMembers() []HostInfo
 		// RequestRefresh requests that the membership information be refreshed.
 		RequestRefresh()
 	}

@@ -32,6 +32,7 @@ import (
 	"go.temporal.io/api/serviceerror"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	workflowpb "go.temporal.io/api/workflow/v1"
+	"google.golang.org/protobuf/types/known/timestamppb"
 
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	"go.temporal.io/server/api/historyservice/v1"
@@ -40,7 +41,6 @@ import (
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence/visibility/manager"
-	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/service/history/api"
 	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/workflow"
@@ -97,20 +97,6 @@ func Invoke(
 	executionInfo := mutableState.GetExecutionInfo()
 	executionState := mutableState.GetExecutionState()
 
-	resetPoints := &workflowpb.ResetPoints{
-		Points: make([]*workflowpb.ResetPointInfo, len(executionInfo.AutoResetPoints.GetPoints())),
-	}
-	for i, p := range executionInfo.AutoResetPoints.GetPoints() {
-		resetPoints.Points[i] = &workflowpb.ResetPointInfo{
-			BinaryChecksum:               p.BinaryChecksum,
-			RunId:                        p.RunId,
-			FirstWorkflowTaskCompletedId: p.FirstWorkflowTaskCompletedId,
-			CreateTime:                   p.CreateTime,
-			ExpireTime:                   p.ExpireTime,
-			Resettable:                   p.Resettable,
-		}
-	}
-
 	result := &historyservice.DescribeWorkflowExecutionResponse{
 		ExecutionConfig: &workflowpb.WorkflowExecutionConfig{
 			TaskQueue: &taskqueuepb.TaskQueue{
@@ -132,7 +118,7 @@ func Invoke(
 			HistoryLength: mutableState.GetNextEventID() - common.FirstEventID,
 			ExecutionTime: executionInfo.ExecutionTime,
 			// Memo and SearchAttributes are set below
-			AutoResetPoints:      resetPoints,
+			AutoResetPoints:      common.CloneProto(executionInfo.AutoResetPoints),
 			TaskQueue:            executionInfo.TaskQueue,
 			StateTransitionCount: executionInfo.StateTransitionCount,
 			HistorySizeBytes:     executionInfo.GetExecutionStats().GetHistorySize(),
@@ -155,7 +141,7 @@ func Invoke(
 		if err != nil {
 			return nil, err
 		}
-		result.WorkflowExecutionInfo.CloseTime = closeTime
+		result.WorkflowExecutionInfo.CloseTime = timestamppb.New(closeTime)
 	}
 
 	for _, ai := range mutableState.GetPendingActivityInfos() {
@@ -169,7 +155,7 @@ func Invoke(
 		} else {
 			p.State = enumspb.PENDING_ACTIVITY_STATE_SCHEDULED
 		}
-		if !timestamp.TimeValue(ai.LastHeartbeatUpdateTime).IsZero() {
+		if ai.LastHeartbeatUpdateTime != nil && !ai.LastHeartbeatUpdateTime.AsTime().IsZero() {
 			p.LastHeartbeatTime = ai.LastHeartbeatUpdateTime
 			p.HeartbeatDetails = ai.LastHeartbeatDetails
 		}
@@ -215,13 +201,13 @@ func Invoke(
 	if pendingWorkflowTask := mutableState.GetPendingWorkflowTask(); pendingWorkflowTask != nil {
 		result.PendingWorkflowTask = &workflowpb.PendingWorkflowTaskInfo{
 			State:                 enumspb.PENDING_WORKFLOW_TASK_STATE_SCHEDULED,
-			ScheduledTime:         pendingWorkflowTask.ScheduledTime,
-			OriginalScheduledTime: pendingWorkflowTask.OriginalScheduledTime,
+			ScheduledTime:         timestamppb.New(pendingWorkflowTask.ScheduledTime),
+			OriginalScheduledTime: timestamppb.New(pendingWorkflowTask.OriginalScheduledTime),
 			Attempt:               pendingWorkflowTask.Attempt,
 		}
 		if pendingWorkflowTask.StartedEventID != common.EmptyEventID {
 			result.PendingWorkflowTask.State = enumspb.PENDING_WORKFLOW_TASK_STATE_STARTED
-			result.PendingWorkflowTask.StartedTime = pendingWorkflowTask.StartedTime
+			result.PendingWorkflowTask.StartedTime = timestamppb.New(pendingWorkflowTask.StartedTime)
 		}
 	}
 

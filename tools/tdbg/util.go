@@ -28,6 +28,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"os"
 	"reflect"
 	"regexp"
@@ -36,10 +37,10 @@ import (
 	"time"
 
 	"github.com/fatih/color"
-	"github.com/gogo/protobuf/proto"
 	"github.com/olekukonko/tablewriter"
 	"github.com/urfave/cli/v2"
 	"go.temporal.io/api/workflowservice/v1"
+	"google.golang.org/protobuf/proto"
 
 	"go.temporal.io/server/common/codec"
 	"go.temporal.io/server/common/collection"
@@ -195,7 +196,7 @@ func newContextWithTimeout(c *cli.Context, timeout time.Duration) (context.Conte
 		timeout = time.Duration(c.Int(FlagContextTimeout)) * time.Second
 	}
 
-	return context.WithTimeout(context.Background(), timeout)
+	return context.WithTimeout(c.Context, timeout)
 }
 
 func StringToEnum(search string, candidates map[string]int32) (int32, error) {
@@ -230,7 +231,7 @@ func paginate[V any](c *cli.Context, paginationFn collection.PaginationFn[V], pa
 		pageItems = append(pageItems, item)
 		if len(pageItems) == pageSize || !iter.HasNext() {
 			if isTableView {
-				if err := printTable(pageItems); err != nil {
+				if err := printTable(pageItems, os.Stdout); err != nil {
 					return err
 				}
 			} else {
@@ -247,7 +248,9 @@ func paginate[V any](c *cli.Context, paginationFn collection.PaginationFn[V], pa
 	return nil
 }
 
-func printTable(items []interface{}) error {
+var exportRgx = regexp.MustCompile("^[A-Z]")
+
+func printTable(items []interface{}, writer io.Writer) error {
 	if len(items) == 0 {
 		return nil
 	}
@@ -260,10 +263,12 @@ func printTable(items []interface{}) error {
 	var fields []string
 	t := e.Type()
 	for i := 0; i < e.NumField(); i++ {
-		fields = append(fields, t.Field(i).Name)
+		if exportRgx.MatchString(t.Field(i).Name) {
+			fields = append(fields, t.Field(i).Name)
+		}
 	}
 
-	table := tablewriter.NewWriter(os.Stdout)
+	table := tablewriter.NewWriter(writer)
 	table.SetBorder(false)
 	table.SetColumnSeparator("|")
 	table.SetHeader(fields)

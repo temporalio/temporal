@@ -32,6 +32,7 @@ import (
 
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
+	"google.golang.org/protobuf/types/known/timestamppb"
 
 	"go.temporal.io/server/common/convert"
 	"go.temporal.io/server/common/log"
@@ -406,10 +407,10 @@ func (d *MatchingTaskStore) CreateTasks(
 	return &p.CreateTasksResponse{}, nil
 }
 
-func GetTaskTTL(expireTime *time.Time) int64 {
+func GetTaskTTL(expireTime *timestamppb.Timestamp) int64 {
 	var ttl int64 = 0
-	if expireTime != nil {
-		expiryTtl := convert.Int64Ceil(time.Until(timestamp.TimeValue(expireTime)).Seconds())
+	if expireTime != nil && !expireTime.AsTime().IsZero() {
+		expiryTtl := convert.Int64Ceil(time.Until(expireTime.AsTime()).Seconds())
 
 		// 0 means no ttl, we dont want that.
 		// Todo: Come back and correctly ignore expired in-memory tasks before persisting

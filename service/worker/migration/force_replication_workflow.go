@@ -89,7 +89,7 @@ type (
 	}
 
 	listWorkflowsResponse struct {
-		Executions    []commonpb.WorkflowExecution
+		Executions    []*commonpb.WorkflowExecution
 		NextPageToken []byte
 		Error         error
 
@@ -100,7 +100,7 @@ type (
 
 	generateReplicationTasksRequest struct {
 		NamespaceID string
-		Executions  []commonpb.WorkflowExecution
+		Executions  []*commonpb.WorkflowExecution
 		RPS         float64
 	}
 
@@ -110,7 +110,7 @@ type (
 		TargetClusterEndpoint string
 		TargetClusterName     string
 		VerifyInterval        time.Duration `validate:"gte=0"`
-		Executions            []commonpb.WorkflowExecution
+		Executions            []*commonpb.WorkflowExecution
 	}
 
 	verifyReplicationTasksResponse struct{}
@@ -383,7 +383,7 @@ func enqueueReplicationTasks(ctx workflow.Context, workflowExecutionsCh workflow
 	actx := workflow.WithActivityOptions(ctx, ao)
 	var a *activities
 	var futures []workflow.Future
-	var workflowExecutions []commonpb.WorkflowExecution
+	var workflowExecutions []*commonpb.WorkflowExecution
 	var lastActivityErr error
 
 	for workflowExecutionsCh.Receive(ctx, &workflowExecutions) {

@@ -45,6 +45,7 @@ import (
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/cluster"
+	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
@@ -136,7 +137,7 @@ func (s *WorkflowTaskHandlerCallbackSuite) SetupTest() {
 			config.SearchAttributesSizeOfValueLimit,
 			config.SearchAttributesTotalSizeLimit,
 			mockShard.Resource.VisibilityManager,
-			false,
+			dynamicconfig.GetBoolPropertyFnFilteredByNamespace(false),
 		),
 		workflowConsistencyChecker: api.NewWorkflowConsistencyChecker(mockShard, workflowCache),
 	}
@@ -173,7 +174,7 @@ func (s *WorkflowTaskHandlerCallbackSuite) TestVerifyFirstWorkflowTaskScheduled_
 	}
 
 	ms := workflow.TestGlobalMutableState(s.workflowTaskHandlerCallback.shardContext, s.mockEventsCache, s.logger, tests.Version, tests.RunID)
-	addWorkflowExecutionStartedEvent(ms, commonpb.WorkflowExecution{
+	addWorkflowExecutionStartedEvent(ms, &commonpb.WorkflowExecution{
 		WorkflowId: tests.WorkflowID,
 		RunId:      tests.RunID,
 	}, "wType", "testTaskQueue", payloads.EncodeString("input"), 25*time.Second, 20*time.Second, 200*time.Second, "identity")
@@ -203,7 +204,7 @@ func (s *WorkflowTaskHandlerCallbackSuite) TestVerifyFirstWorkflowTaskScheduled_
 	}
 
 	ms := workflow.TestGlobalMutableState(s.workflowTaskHandlerCallback.shardContext, s.mockEventsCache, s.logger, tests.Version, tests.RunID)
-	addWorkflowExecutionStartedEvent(ms, commonpb.WorkflowExecution{
+	addWorkflowExecutionStartedEvent(ms, &commonpb.WorkflowExecution{
 		WorkflowId: tests.WorkflowID,
 		RunId:      tests.RunID,
 	}, "wType", "testTaskQueue", payloads.EncodeString("input"), 25*time.Second, 20*time.Second, 200*time.Second, "identity")
@@ -231,7 +232,7 @@ func (s *WorkflowTaskHandlerCallbackSuite) TestVerifyFirstWorkflowTaskScheduled_
 	}
 
 	ms := workflow.TestGlobalMutableState(s.workflowTaskHandlerCallback.shardContext, s.mockEventsCache, s.logger, tests.Version, tests.RunID)
-	addWorkflowExecutionStartedEvent(ms, commonpb.WorkflowExecution{
+	addWorkflowExecutionStartedEvent(ms, &commonpb.WorkflowExecution{
 		WorkflowId: tests.WorkflowID,
 		RunId:      tests.RunID,
 	}, "wType", "testTaskQueue", payloads.EncodeString("input"), 25*time.Second, 20*time.Second, 200*time.Second, "identity")
@@ -255,7 +256,7 @@ func (s *WorkflowTaskHandlerCallbackSuite) TestVerifyFirstWorkflowTaskScheduled_
 	}
 
 	ms := workflow.TestGlobalMutableState(s.workflowTaskHandlerCallback.shardContext, s.mockEventsCache, s.logger, tests.Version, tests.RunID)
-	addWorkflowExecutionStartedEvent(ms, commonpb.WorkflowExecution{
+	addWorkflowExecutionStartedEvent(ms, &commonpb.WorkflowExecution{
 		WorkflowId: tests.WorkflowID,
 		RunId:      tests.RunID,
 	}, "wType", "testTaskQueue", payloads.EncodeString("input"), 25*time.Second, 20*time.Second, 200*time.Second, "identity")
@@ -272,19 +273,11 @@ func (s *WorkflowTaskHandlerCallbackSuite) TestVerifyFirstWorkflowTaskScheduled_
 	s.NoError(err)
 }
 
-func (s *WorkflowTaskHandlerCallbackSuite) TestHandleBufferedQueries_HeartbeatWorkflowTask() {
-	queryRegistry, mockMutableState := s.setupBufferedQueriesMocks()
-	s.assertQueryCounts(queryRegistry, 10, 0, 0, 0)
-	queryResults := s.constructQueryResults(queryRegistry.GetBufferedIDs()[0:5], 10)
-	s.workflowTaskHandlerCallback.handleBufferedQueries(mockMutableState, queryResults, false, tests.GlobalNamespaceEntry, true)
-	s.assertQueryCounts(queryRegistry, 10, 0, 0, 0)
-}
-
 func (s *WorkflowTaskHandlerCallbackSuite) TestHandleBufferedQueries_NewWorkflowTask() {
 	queryRegistry, mockMutableState := s.setupBufferedQueriesMocks()
 	s.assertQueryCounts(queryRegistry, 10, 0, 0, 0)
 	queryResults := s.constructQueryResults(queryRegistry.GetBufferedIDs()[0:5], 10)
-	s.workflowTaskHandlerCallback.handleBufferedQueries(mockMutableState, queryResults, true, tests.GlobalNamespaceEntry, false)
+	s.workflowTaskHandlerCallback.handleBufferedQueries(mockMutableState, queryResults, true, tests.GlobalNamespaceEntry)
 	s.assertQueryCounts(queryRegistry, 5, 5, 0, 0)
 }
 
@@ -292,7 +285,7 @@ func (s *WorkflowTaskHandlerCallbackSuite) TestHandleBufferedQueries_NoNewWorkfl
 	queryRegistry, mockMutableState := s.setupBufferedQueriesMocks()
 	s.assertQueryCounts(queryRegistry, 10, 0, 0, 0)
 	queryResults := s.constructQueryResults(queryRegistry.GetBufferedIDs()[0:5], 10)
-	s.workflowTaskHandlerCallback.handleBufferedQueries(mockMutableState, queryResults, false, tests.GlobalNamespaceEntry, false)
+	s.workflowTaskHandlerCallback.handleBufferedQueries(mockMutableState, queryResults, false, tests.GlobalNamespaceEntry)
 	s.assertQueryCounts(queryRegistry, 0, 5, 5, 0)
 }
 
@@ -303,7 +296,7 @@ func (s *WorkflowTaskHandlerCallbackSuite) TestHandleBufferedQueries_QueryTooLar
 	queryResults := s.constructQueryResults(bufferedIDs[0:5], 10)
 	largeQueryResults := s.constructQueryResults(bufferedIDs[5:10], 10*1024*1024)
 	maps.Copy(queryResults, largeQueryResults)
-	s.workflowTaskHandlerCallback.handleBufferedQueries(mockMutableState, queryResults, false, tests.GlobalNamespaceEntry, false)
+	s.workflowTaskHandlerCallback.handleBufferedQueries(mockMutableState, queryResults, false, tests.GlobalNamespaceEntry)
 	s.assertQueryCounts(queryRegistry, 0, 5, 0, 5)
 }
 

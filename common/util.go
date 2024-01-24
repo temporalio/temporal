@@ -34,11 +34,14 @@ import (
 	"time"
 
 	"github.com/dgryski/go-farm"
-	"github.com/gogo/protobuf/proto"
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/api/workflowservice/v1"
+	"google.golang.org/protobuf/encoding/prototext"
+	"google.golang.org/protobuf/proto"
+	"google.golang.org/protobuf/types/known/durationpb"
+	"google.golang.org/protobuf/types/known/timestamppb"
 
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/api/matchingservice/v1"
@@ -469,7 +472,8 @@ func PrettyPrint[T proto.Message](msgs []T, header ...string) {
 	}
 	_, _ = sb.WriteString("--------------------------------------------------------------------------\n")
 	for _, m := range msgs {
-		_ = proto.MarshalText(&sb, m)
+		bs, _ := prototext.Marshal(m)
+		sb.Write(bs)
 	}
 	fmt.Print(sb.String())
 }
@@ -536,11 +540,11 @@ func EnsureRetryPolicyDefaults(originalPolicy *commonpb.RetryPolicy, defaultSett
 	}
 
 	if timestamp.DurationValue(originalPolicy.GetInitialInterval()) == 0 {
-		originalPolicy.InitialInterval = timestamp.DurationPtr(defaultSettings.InitialInterval)
+		originalPolicy.InitialInterval = durationpb.New(defaultSettings.InitialInterval)
 	}
 
 	if timestamp.DurationValue(originalPolicy.GetMaximumInterval()) == 0 {
-		originalPolicy.MaximumInterval = timestamp.DurationPtr(time.Duration(defaultSettings.MaximumIntervalCoefficient) * timestamp.DurationValue(originalPolicy.GetInitialInterval()))
+		originalPolicy.MaximumInterval = durationpb.New(time.Duration(defaultSettings.MaximumIntervalCoefficient) * timestamp.DurationValue(originalPolicy.GetInitialInterval()))
 	}
 
 	if originalPolicy.GetBackoffCoefficient() == 0 {
@@ -579,8 +583,8 @@ func ValidateRetryPolicy(policy *commonpb.RetryPolicy) error {
 	for _, nrt := range policy.NonRetryableErrorTypes {
 		if strings.HasPrefix(nrt, TimeoutFailureTypePrefix) {
 			timeoutTypeValue := nrt[len(TimeoutFailureTypePrefix):]
-			timeoutType, ok := enumspb.TimeoutType_value[timeoutTypeValue]
-			if !ok || enumspb.TimeoutType(timeoutType) == enumspb.TIMEOUT_TYPE_UNSPECIFIED {
+			timeoutType, err := enumspb.TimeoutTypeFromString(timeoutTypeValue)
+			if err != nil || enumspb.TimeoutType(timeoutType) == enumspb.TIMEOUT_TYPE_UNSPECIFIED {
 				return serviceerror.NewInvalidArgument(fmt.Sprintf("Invalid timeout type value: %v.", timeoutTypeValue))
 			}
 		}
@@ -652,7 +656,7 @@ func CreateHistoryStartWorkflowRequest(
 		ContinueAsNewInitiator:   enumspb.CONTINUE_AS_NEW_INITIATOR_UNSPECIFIED,
 		Attempt:                  1,
 		ParentExecutionInfo:      parentExecutionInfo,
-		FirstWorkflowTaskBackoff: backoff.GetBackoffForNextScheduleNonNegative(startRequest.GetCronSchedule(), now, now),
+		FirstWorkflowTaskBackoff: durationpb.New(backoff.GetBackoffForNextScheduleNonNegative(startRequest.GetCronSchedule(), now, now)),
 		ContinuedFailure:         startRequest.ContinuedFailure,
 		LastCompletionResult:     startRequest.LastCompletionResult,
 	}
@@ -661,7 +665,7 @@ func CreateHistoryStartWorkflowRequest(
 
 	if timestamp.DurationValue(startRequest.GetWorkflowExecutionTimeout()) > 0 {
 		deadline := now.Add(timestamp.DurationValue(startRequest.GetWorkflowExecutionTimeout()))
-		histRequest.WorkflowExecutionExpirationTime = timestamp.TimePtr(deadline.Round(time.Millisecond))
+		histRequest.WorkflowExecutionExpirationTime = timestamppb.New(deadline.Round(time.Millisecond))
 	}
 
 	// CronSchedule and WorkflowStartDelay should not both be set on the same request
@@ -690,7 +694,7 @@ func CheckEventBlobSizeLimit(
 	blobSizeViolationOperationTag tag.ZapTag,
 ) error {
 
-	metricsHandler.Histogram(metrics.EventBlobSize.GetMetricName(), metrics.EventBlobSize.GetMetricUnit()).Record(int64(actualSize))
+	metrics.EventBlobSize.With(metricsHandler).Record(int64(actualSize))
 	if actualSize > warnLimit {
 		if logger != nil {
 			logger.Warn("Blob data size exceeds the warning limit.",
@@ -797,7 +801,7 @@ func OverrideWorkflowTaskTimeout(
 	return min(taskStartToCloseTimeout, workflowRunTimeout)
 }
 
-// CloneProto is a generic typed version of proto.Clone from gogoproto.
+// CloneProto is a generic typed version of proto.Clone from proto.
 func CloneProto[T proto.Message](v T) T {
 	return proto.Clone(v).(T)
 }

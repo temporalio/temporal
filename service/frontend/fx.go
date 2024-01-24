@@ -66,12 +66,14 @@ import (
 	"go.temporal.io/server/service"
 	"go.temporal.io/server/service/frontend/configs"
 	"go.temporal.io/server/service/history/tasks"
+	"go.temporal.io/server/service/worker/scheduler"
 )
 
 type FEReplicatorNamespaceReplicationQueue persistence.NamespaceReplicationQueue
 
 var Module = fx.Options(
 	resource.Module,
+	scheduler.Module,
 	fx.Provide(dynamicconfig.NewCollection),
 	fx.Provide(ConfigProvider),
 	fx.Provide(NamespaceLogInterceptorProvider),
@@ -79,6 +81,7 @@ var Module = fx.Options(
 	fx.Provide(TelemetryInterceptorProvider),
 	fx.Provide(RetryableInterceptorProvider),
 	fx.Provide(RateLimitInterceptorProvider),
+	fx.Provide(interceptor.NewHealthInterceptor),
 	fx.Provide(NamespaceCountLimitInterceptorProvider),
 	fx.Provide(NamespaceValidatorInterceptorProvider),
 	fx.Provide(NamespaceRateLimitInterceptorProvider),
@@ -155,6 +158,7 @@ func GrpcServerOptionsProvider(
 	redirectionInterceptor *RedirectionInterceptor,
 	telemetryInterceptor *interceptor.TelemetryInterceptor,
 	retryableInterceptor *interceptor.RetryableInterceptor,
+	healthInterceptor *interceptor.HealthInterceptor,
 	rateLimitInterceptor *interceptor.RateLimitInterceptor,
 	traceInterceptor telemetry.ServerTraceInterceptor,
 	sdkVersionInterceptor *interceptor.SDKVersionInterceptor,
@@ -196,8 +200,6 @@ func GrpcServerOptionsProvider(
 		namespaceLogInterceptor.Intercept, // TODO: Deprecate this with a outer custom interceptor
 		grpc.UnaryServerInterceptor(traceInterceptor),
 		metrics.NewServerMetricsContextInjectorInterceptor(),
-		redirectionInterceptor.Intercept,
-		telemetryInterceptor.UnaryIntercept,
 		authorization.NewAuthorizationInterceptor(
 			claimMapper,
 			authorizer,
@@ -207,6 +209,9 @@ func GrpcServerOptionsProvider(
 			cfg.Global.Authorization.AuthHeaderName,
 			cfg.Global.Authorization.AuthExtraHeaderName,
 		),
+		redirectionInterceptor.Intercept,
+		telemetryInterceptor.UnaryIntercept,
+		healthInterceptor.Intercept,
 		namespaceValidatorInterceptor.StateValidationIntercept,
 		namespaceCountLimiterInterceptor.Intercept,
 		namespaceRateLimiterInterceptor.Intercept,
@@ -242,8 +247,6 @@ func ConfigProvider(
 	return NewConfig(
 		dc,
 		persistenceConfig.NumHistoryShards,
-		persistenceConfig.StandardVisibilityConfigExist(),
-		persistenceConfig.AdvancedVisibilityConfigExist(),
 	)
 }
 
@@ -434,6 +437,7 @@ func PersistenceRateLimitingParamsProvider(
 func VisibilityManagerProvider(
 	logger log.Logger,
 	persistenceConfig *config.Persistence,
+	customVisibilityStoreFactory visibility.VisibilityStoreFactory,
 	metricsHandler metrics.Handler,
 	serviceConfig *Config,
 	esClient esclient.Client,
@@ -444,6 +448,7 @@ func VisibilityManagerProvider(
 	return visibility.NewManager(
 		*persistenceConfig,
 		persistenceServiceResolver,
+		customVisibilityStoreFactory,
 		esClient,
 		nil, // frontend visibility never write
 		saProvider,
@@ -544,7 +549,6 @@ func OperatorHandlerProvider(
 	sdkClientFactory sdk.ClientFactory,
 	metricsHandler metrics.Handler,
 	visibilityMgr manager.VisibilityManager,
-	saProvider searchattribute.Provider,
 	saManager searchattribute.Manager,
 	healthServer *health.Server,
 	historyClient resource.HistoryClient,
@@ -559,7 +563,6 @@ func OperatorHandlerProvider(
 		sdkClientFactory,
 		metricsHandler,
 		visibilityMgr,
-		saProvider,
 		saManager,
 		healthServer,
 		historyClient,
@@ -595,6 +598,8 @@ func HandlerProvider(
 	archivalMetadata archiver.ArchivalMetadata,
 	healthServer *health.Server,
 	membershipMonitor membership.Monitor,
+	healthInterceptor *interceptor.HealthInterceptor,
+	scheduleSpecBuilder *scheduler.SpecBuilder,
 ) Handler {
 	wfHandler := NewWorkflowHandler(
 		serviceConfig,
@@ -617,6 +622,8 @@ func HandlerProvider(
 		healthServer,
 		timeSource,
 		membershipMonitor,
+		healthInterceptor,
+		scheduleSpecBuilder,
 	)
 	return wfHandler
 }

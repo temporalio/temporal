@@ -834,7 +834,7 @@ func (s *queryConverterSuite) TestParseSQLVal() {
 			},
 			retValue: nil,
 			err: query.NewConverterError(
-				"%s: invalid execution status value '%s'",
+				"%s: invalid ExecutionStatus value '%s'",
 				query.InvalidExpressionErrMessage,
 				"Foo",
 			),

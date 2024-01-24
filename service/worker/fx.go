@@ -144,8 +144,6 @@ func ConfigProvider(
 	return NewConfig(
 		dc,
 		persistenceConfig,
-		persistenceConfig.StandardVisibilityConfigExist(),
-		persistenceConfig.AdvancedVisibilityConfigExist(),
 	)
 }
 
@@ -153,6 +151,7 @@ func VisibilityManagerProvider(
 	logger log.Logger,
 	metricsHandler metrics.Handler,
 	persistenceConfig *config.Persistence,
+	customVisibilityStoreFactory visibility.VisibilityStoreFactory,
 	serviceConfig *Config,
 	esClient esclient.Client,
 	persistenceServiceResolver resolver.ServiceResolver,
@@ -162,6 +161,7 @@ func VisibilityManagerProvider(
 	return visibility.NewManager(
 		*persistenceConfig,
 		persistenceServiceResolver,
+		customVisibilityStoreFactory,
 		esClient,
 		nil, // worker visibility never write
 		saProvider,

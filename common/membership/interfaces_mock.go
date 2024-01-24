@@ -103,6 +103,20 @@ func (mr *MockMonitorMockRecorder) GetResolver(service interface{}) *gomock.Call
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetResolver", reflect.TypeOf((*MockMonitor)(nil).GetResolver), service)
 }
 
+// SetDraining mocks base method.
+func (m *MockMonitor) SetDraining(draining bool) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "SetDraining", draining)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// SetDraining indicates an expected call of SetDraining.
+func (mr *MockMonitorMockRecorder) SetDraining(draining interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SetDraining", reflect.TypeOf((*MockMonitor)(nil).SetDraining), draining)
+}
+
 // Start mocks base method.
 func (m *MockMonitor) Start() {
 	m.ctrl.T.Helper()
@@ -166,6 +180,20 @@ func (mr *MockServiceResolverMockRecorder) AddListener(name, notifyChannel inter
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "AddListener", reflect.TypeOf((*MockServiceResolver)(nil).AddListener), name, notifyChannel)
 }
 
+// AvailableMembers mocks base method.
+func (m *MockServiceResolver) AvailableMembers() []HostInfo {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "AvailableMembers")
+	ret0, _ := ret[0].([]HostInfo)
+	return ret0
+}
+
+// AvailableMembers indicates an expected call of AvailableMembers.
+func (mr *MockServiceResolverMockRecorder) AvailableMembers() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "AvailableMembers", reflect.TypeOf((*MockServiceResolver)(nil).AvailableMembers))
+}
+
 // Lookup mocks base method.
 func (m *MockServiceResolver) Lookup(key string) (HostInfo, error) {
 	m.ctrl.T.Helper()
@@ -179,6 +207,20 @@ func (m *MockServiceResolver) Lookup(key string) (HostInfo, error) {
 func (mr *MockServiceResolverMockRecorder) Lookup(key interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Lookup", reflect.TypeOf((*MockServiceResolver)(nil).Lookup), key)
+}
+
+// LookupN mocks base method.
+func (m *MockServiceResolver) LookupN(key string, n int) []HostInfo {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "LookupN", key, n)
+	ret0, _ := ret[0].([]HostInfo)
+	return ret0
+}
+
+// LookupN indicates an expected call of LookupN.
+func (mr *MockServiceResolverMockRecorder) LookupN(key, n interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "LookupN", reflect.TypeOf((*MockServiceResolver)(nil).LookupN), key, n)
 }
 
 // MemberCount mocks base method.

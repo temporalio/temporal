@@ -31,6 +31,7 @@ import (
 	"time"
 
 	enumspb "go.temporal.io/api/enums/v1"
+	"google.golang.org/protobuf/types/known/timestamppb"
 
 	carchiver "go.temporal.io/server/common/archiver"
 	"go.temporal.io/server/common/log"
@@ -127,7 +128,7 @@ func (e *archivalQueueTaskExecutor) processArchiveExecutionTask(ctx context.Cont
 			return err
 		}
 	}
-	return e.addDeletionTask(ctx, logger, task, request.CloseTime)
+	return e.addDeletionTask(ctx, logger, task, request.CloseTime.AsTime())
 }
 
 // getArchiveTaskRequest returns an archival request for the given archive execution task.
@@ -173,7 +174,7 @@ func (e *archivalQueueTaskExecutor) getArchiveTaskRequest(
 		visibilityURIString := namespaceEntry.VisibilityArchivalState().URI
 		visibilityURI, err = carchiver.NewURI(visibilityURIString)
 		if err != nil {
-			e.metricsHandler.Counter(metrics.ArchivalTaskInvalidURI.GetMetricName()).Record(
+			e.metricsHandler.Counter(metrics.ArchivalTaskInvalidURI.Name()).Record(
 				1,
 				metrics.NamespaceTag(namespaceName.String()),
 				metrics.FailureTag(metrics.InvalidVisibilityURITagValue),
@@ -191,7 +192,7 @@ func (e *archivalQueueTaskExecutor) getArchiveTaskRequest(
 		historyURIString := namespaceEntry.HistoryArchivalState().URI
 		historyURI, err = carchiver.NewURI(historyURIString)
 		if err != nil {
-			e.metricsHandler.Counter(metrics.ArchivalTaskInvalidURI.GetMetricName()).Record(
+			e.metricsHandler.Counter(metrics.ArchivalTaskInvalidURI.Name()).Record(
 				1,
 				metrics.NamespaceTag(namespaceName.String()),
 				metrics.FailureTag(metrics.InvalidHistoryURITagValue),
@@ -225,7 +226,7 @@ func (e *archivalQueueTaskExecutor) getArchiveTaskRequest(
 		WorkflowTypeName:     executionInfo.GetWorkflowTypeName(),
 		StartTime:            executionInfo.GetStartTime(),
 		ExecutionTime:        executionInfo.GetExecutionTime(),
-		CloseTime:            closeTime,
+		CloseTime:            timestamppb.New(closeTime),
 		Status:               executionState.Status,
 		HistoryLength:        nextEventID - 1,
 		Memo:                 workflowAttributes.Memo,
@@ -241,7 +242,7 @@ func (e *archivalQueueTaskExecutor) addDeletionTask(
 	ctx context.Context,
 	logger log.Logger,
 	task *tasks.ArchiveExecutionTask,
-	closeTime *time.Time,
+	closeTime time.Time,
 ) error {
 	mutableState, err := e.loadAndVersionCheckMutableState(ctx, logger, task)
 	if err != nil {
@@ -257,7 +258,7 @@ func (e *archivalQueueTaskExecutor) addDeletionTask(
 		e.shardContext.GetConfig(),
 		e.shardContext.GetArchivalMetadata(),
 	)
-	err = taskGenerator.GenerateDeleteHistoryEventTask(*closeTime)
+	err = taskGenerator.GenerateDeleteHistoryEventTask(closeTime)
 	if err != nil {
 		return err
 	}

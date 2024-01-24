@@ -168,8 +168,6 @@ func ConfigProvider(
 	return configs.NewConfig(
 		dc,
 		persistenceConfig.NumHistoryShards,
-		persistenceConfig.StandardVisibilityConfigExist(),
-		persistenceConfig.AdvancedVisibilityConfigExist(),
 	)
 }
 
@@ -253,6 +251,7 @@ func VisibilityManagerProvider(
 	logger log.Logger,
 	metricsHandler metrics.Handler,
 	persistenceConfig *config.Persistence,
+	customVisibilityStoreFactory visibility.VisibilityStoreFactory,
 	esProcessorConfig *elasticsearch.ProcessorConfig,
 	serviceConfig *configs.Config,
 	esClient esclient.Client,
@@ -263,6 +262,7 @@ func VisibilityManagerProvider(
 	return visibility.NewManager(
 		*persistenceConfig,
 		persistenceServiceResolver,
+		customVisibilityStoreFactory,
 		esClient,
 		esProcessorConfig,
 		saProvider,

@@ -42,7 +42,9 @@ import (
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/api/workflowservice/v1"
+	"google.golang.org/protobuf/types/known/timestamppb"
 
+	"go.temporal.io/api/temporalproto"
 	"go.temporal.io/server/common/debug"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/metrics"
@@ -50,8 +52,8 @@ import (
 	"go.temporal.io/server/common/persistence/visibility/manager"
 	"go.temporal.io/server/common/persistence/visibility/store/elasticsearch/client"
 	"go.temporal.io/server/common/persistence/visibility/store/query"
-	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/common/searchattribute"
+	"go.temporal.io/server/common/testing/protorequire"
 )
 
 type (
@@ -59,6 +61,7 @@ type (
 		suite.Suite
 		// override suite.Suite.Assertions with require.Assertions; this means that s.NotNil(nil) will stop the test, not merely log an error
 		*require.Assertions
+		protorequire.ProtoAssertions
 		controller                         *gomock.Controller
 		visibilityStore                    *visibilityStore
 		mockESClient                       *client.MockClient
@@ -86,8 +89,8 @@ var (
 	}
 	errTestESSearch = errors.New("ES error")
 
-	filterOpen              = fmt.Sprintf("map[term:map[ExecutionStatus:%s]", enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING.String())
-	filterCloseRE           = fmt.Sprintf(`must_not:\[?map\[term:map\[ExecutionStatus:%s\]\]`, enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING.String())
+	filterOpen              = fmt.Sprintf("map[term:map[ExecutionStatus:%s]", enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING)
+	filterCloseRE           = fmt.Sprintf(`must_not:\[?map\[term:map\[ExecutionStatus:%s\]\]`, enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING)
 	filterByType            = fmt.Sprintf("map[term:map[WorkflowType:%s]", testWorkflowType)
 	filterByWID             = fmt.Sprintf("map[term:map[WorkflowId:%s]", testWorkflowID)
 	filterByExecutionStatus = fmt.Sprintf("map[term:map[ExecutionStatus:%s]", testStatus.String())
@@ -119,6 +122,7 @@ func TestESVisibilitySuite(t *testing.T) {
 func (s *ESVisibilitySuite) SetupTest() {
 	// Have to define our overridden assertions in the test setup. If we did it earlier, s.T() will return nil
 	s.Assertions = require.New(s.T())
+	s.ProtoAssertions = protorequire.New(s.T())
 
 	esProcessorAckTimeout := dynamicconfig.GetDurationPropertyFn(1 * time.Minute * debug.TimeoutMultiplier)
 	visibilityDisableOrderByClause := dynamicconfig.GetBoolPropertyFnFilteredByNamespace(false)
@@ -499,7 +503,7 @@ func (s *ESVisibilitySuite) TestBuildSearchParametersV2() {
 	request.Query = `Order bY WorkflowId`
 	boolQuery = elastic.NewBoolQuery().Filter(matchNamespaceQuery).MustNot(namespaceDivisionExists)
 	s.mockMetricsHandler.EXPECT().WithTags(metrics.NamespaceTag(request.Namespace.String())).Return(s.mockMetricsHandler)
-	s.mockMetricsHandler.EXPECT().Counter(metrics.ElasticsearchCustomOrderByClauseCount.GetMetricName()).Return(metrics.NoopCounterMetricFunc)
+	s.mockMetricsHandler.EXPECT().Counter(metrics.ElasticsearchCustomOrderByClauseCount.Name()).Return(metrics.NoopCounterMetricFunc)
 	p, err = s.visibilityStore.buildSearchParametersV2(request, s.visibilityStore.getListFieldSorter)
 	s.NoError(err)
 	s.Equal(&client.SearchParameters{
@@ -534,7 +538,7 @@ func (s *ESVisibilitySuite) TestBuildSearchParametersV2() {
 	// test with Scan API with custom sort
 	request.Query = `Order bY WorkflowId`
 	s.mockMetricsHandler.EXPECT().WithTags(metrics.NamespaceTag(request.Namespace.String())).Return(s.mockMetricsHandler)
-	s.mockMetricsHandler.EXPECT().Counter(metrics.ElasticsearchCustomOrderByClauseCount.GetMetricName()).Return(metrics.NoopCounterMetricFunc)
+	s.mockMetricsHandler.EXPECT().Counter(metrics.ElasticsearchCustomOrderByClauseCount.Name()).Return(metrics.NoopCounterMetricFunc)
 	p, err = s.visibilityStore.buildSearchParametersV2(request, s.visibilityStore.getScanFieldSorter)
 	s.Error(err)
 	s.Nil(p)
@@ -964,7 +968,7 @@ func (s *ESVisibilitySuite) TestParseESDoc() {
 
 	// test for error case
 	docSource = []byte(`corrupted data`)
-	s.mockMetricsHandler.EXPECT().Counter(metrics.ElasticsearchDocumentParseFailuresCount.GetMetricName()).Return(metrics.NoopCounterMetricFunc)
+	s.mockMetricsHandler.EXPECT().Counter(metrics.ElasticsearchDocumentParseFailuresCount.Name()).Return(metrics.NoopCounterMetricFunc)
 	info, err = s.visibilityStore.parseESDoc("", docSource, searchattribute.TestNameTypeMap, testNamespace)
 	s.Error(err)
 	s.Nil(info)
@@ -1414,14 +1418,14 @@ func (s *ESVisibilitySuite) TestCountWorkflowExecutions_GroupBy() {
 	resp, err := s.visibilityStore.CountWorkflowExecutions(context.Background(), request)
 	s.NoError(err)
 	payload1, _ := searchattribute.EncodeValue(
-		enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED.String(),
+		enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED,
 		enumspb.INDEXED_VALUE_TYPE_KEYWORD,
 	)
 	payload2, _ := searchattribute.EncodeValue(
-		enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING.String(),
+		enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
 		enumspb.INDEXED_VALUE_TYPE_KEYWORD,
 	)
-	s.Equal(
+	s.True(temporalproto.DeepEqual(
 		&manager.CountWorkflowExecutionsResponse{
 			Count: 110,
 			Groups: []*workflowservice.CountWorkflowExecutionsResponse_AggregationGroup{
@@ -1435,7 +1439,7 @@ func (s *ESVisibilitySuite) TestCountWorkflowExecutions_GroupBy() {
 				},
 			},
 		},
-		resp,
+		resp),
 	)
 
 	// test only allowed to group by a single field
@@ -1455,11 +1459,11 @@ func (s *ESVisibilitySuite) TestCountWorkflowExecutions_GroupBy() {
 
 func (s *ESVisibilitySuite) TestCountGroupByWorkflowExecutions() {
 	statusCompletedPayload, _ := searchattribute.EncodeValue(
-		enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED.String(),
+		enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED,
 		enumspb.INDEXED_VALUE_TYPE_KEYWORD,
 	)
 	statusRunningPayload, _ := searchattribute.EncodeValue(
-		enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING.String(),
+		enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
 		enumspb.INDEXED_VALUE_TYPE_KEYWORD,
 	)
 	wfType1Payload, _ := searchattribute.EncodeValue("wf-type-1", enumspb.INDEXED_VALUE_TYPE_KEYWORD)
@@ -1731,13 +1735,13 @@ func (s *ESVisibilitySuite) TestCountGroupByWorkflowExecutions() {
 				Return(tc.mockResponse, nil)
 			resp, err := s.visibilityStore.countGroupByWorkflowExecutions(context.Background(), searchParams)
 			s.NoError(err)
-			s.Equal(tc.response, resp)
+			s.True(temporalproto.DeepEqual(tc.response, resp))
 		})
 	}
 }
 
 func (s *ESVisibilitySuite) TestGetWorkflowExecution() {
-	now := timestamp.TimePtr(time.Now())
+	now := timestamppb.New(time.Now())
 	s.mockESClient.EXPECT().Get(gomock.Any(), testIndex, gomock.Any()).DoAndReturn(
 		func(ctx context.Context, index string, docID string) (*elastic.GetResult, error) {
 			s.Equal(testIndex, index)
@@ -1761,7 +1765,7 @@ func (s *ESVisibilitySuite) TestGetWorkflowExecution() {
 		Namespace:   testNamespace,
 		WorkflowID:  testWorkflowID,
 		RunID:       testRunID,
-		CloseTime:   now,
+		CloseTime:   now.AsTime(),
 	}
 	_, err := s.visibilityStore.GetWorkflowExecution(context.Background(), request)
 	s.NoError(err)

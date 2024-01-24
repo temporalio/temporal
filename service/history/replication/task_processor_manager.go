@@ -30,16 +30,19 @@ import (
 	"sync/atomic"
 	"time"
 
-	"go.temporal.io/server/api/historyservice/v1"
+	historypb "go.temporal.io/api/history/v1"
+	historyspb "go.temporal.io/server/api/history/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/client"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/backoff"
 	"go.temporal.io/server/common/cluster"
+	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/headers"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
+	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/persistence/serialization"
 	"go.temporal.io/server/common/xdc"
@@ -105,9 +108,27 @@ func NewTaskProcessorManager(
 		resender: xdc.NewNDCHistoryResender(
 			shard.GetNamespaceRegistry(),
 			clientBean,
-			func(ctx context.Context, request *historyservice.ReplicateEventsV2Request) error {
-				_, err := clientBean.GetHistoryClient().ReplicateEventsV2(ctx, request)
-				return err
+			func(
+				ctx context.Context,
+				sourceClusterName string,
+				namespaceId namespace.ID,
+				workflowId string,
+				runId string,
+				events []*historypb.HistoryEvent,
+				versionHistory []*historyspb.VersionHistoryItem,
+			) error {
+				return engine.ReplicateHistoryEvents(
+					ctx,
+					definition.WorkflowKey{
+						NamespaceID: namespaceId.String(),
+						WorkflowID:  workflowId,
+						RunID:       runId,
+					},
+					nil,
+					versionHistory,
+					[][]*historypb.HistoryEvent{events},
+					nil,
+				)
 			},
 			shard.GetPayloadSerializer(),
 			shard.GetConfig().StandbyTaskReReplicationContextTimeout,
@@ -248,7 +269,7 @@ func (r *taskProcessorManagerImpl) completeReplicationTaskLoop() {
 		case <-cleanupTimer.C:
 			if err := r.cleanupReplicationTasks(); err != nil {
 				r.logger.Error("Failed to clean up replication messages.", tag.Error(err))
-				r.metricsHandler.Counter(metrics.ReplicationTaskCleanupFailure.GetMetricName()).Record(
+				r.metricsHandler.Counter(metrics.ReplicationTaskCleanupFailure.Name()).Record(
 					1,
 					metrics.OperationTag(metrics.ReplicationTaskCleanupScope),
 				)
@@ -283,7 +304,7 @@ func (r *taskProcessorManagerImpl) cleanupReplicationTasks() error {
 	allClusterInfo := clusterMetadata.GetAllClusterInfo()
 	currentClusterName := clusterMetadata.GetCurrentClusterName()
 
-	minAckedTaskID := r.shard.GetImmediateQueueExclusiveHighReadWatermark().TaskID - 1
+	minAckedTaskID := r.shard.GetQueueExclusiveHighReadWatermark(tasks.CategoryReplication).TaskID - 1
 	queueStates, ok := r.shard.GetQueueState(tasks.CategoryReplication)
 	if !ok {
 		queueStates = &persistencespb.QueueState{
@@ -309,12 +330,12 @@ func (r *taskProcessorManagerImpl) cleanupReplicationTasks() error {
 	}
 
 	r.logger.Debug("cleaning up replication task queue", tag.ReadLevel(minAckedTaskID))
-	r.metricsHandler.Counter(metrics.ReplicationTaskCleanupCount.GetMetricName()).Record(
+	r.metricsHandler.Counter(metrics.ReplicationTaskCleanupCount.Name()).Record(
 		1,
 		metrics.OperationTag(metrics.ReplicationTaskCleanupScope),
 	)
-	r.metricsHandler.Histogram(metrics.ReplicationTasksLag.GetMetricName(), metrics.ReplicationTasksLag.GetMetricUnit()).Record(
-		r.shard.GetImmediateQueueExclusiveHighReadWatermark().Prev().TaskID-minAckedTaskID,
+	r.metricsHandler.Histogram(metrics.ReplicationTasksLag.Name(), metrics.ReplicationTasksLag.Unit()).Record(
+		r.shard.GetQueueExclusiveHighReadWatermark(tasks.CategoryReplication).Prev().TaskID-minAckedTaskID,
 		metrics.TargetClusterTag(currentClusterName),
 		metrics.OperationTag(metrics.ReplicationTaskCleanupScope),
 	)
@@ -369,7 +390,7 @@ func (r *taskProcessorManagerImpl) checkReplicationDLQSize() {
 			return
 		}
 		if !isEmpty {
-			r.metricsHandler.Counter(metrics.ReplicationNonEmptyDLQCount.GetMetricName()).Record(1, metrics.OperationTag(metrics.ReplicationDLQStatsScope))
+			r.metricsHandler.Counter(metrics.ReplicationNonEmptyDLQCount.Name()).Record(1, metrics.OperationTag(metrics.ReplicationDLQStatsScope))
 			break
 		}
 	}

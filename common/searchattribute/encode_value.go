@@ -55,9 +55,11 @@ func DecodeValue(
 	allowList bool,
 ) (any, error) {
 	if t == enumspb.INDEXED_VALUE_TYPE_UNSPECIFIED {
-		t = enumspb.IndexedValueType(
-			enumspb.IndexedValueType_value[string(value.Metadata[MetadataType])],
-		)
+		var err error
+		t, err = enumspb.IndexedValueTypeFromString(string(value.Metadata[MetadataType]))
+		if err != nil {
+			return nil, fmt.Errorf("%w: %v", ErrInvalidType, t)
+		}
 	}
 
 	switch t {

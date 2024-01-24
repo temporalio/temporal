@@ -55,6 +55,7 @@ type (
 		// this is for overriding the behavior in unit tests
 		// since we don't really want to run the action in Mitigator unit tests
 		actionRunner actionRunner
+		grouper      Grouper
 	}
 )
 
@@ -64,6 +65,7 @@ func newMitigator(
 	logger log.Logger,
 	metricsHandler metrics.Handler,
 	maxReaderCount dynamicconfig.IntPropertyFn,
+	grouper Grouper,
 ) *mitigatorImpl {
 	return &mitigatorImpl{
 		readerGroup:    readerGroup,
@@ -73,6 +75,7 @@ func newMitigator(
 		maxReaderCount: maxReaderCount,
 
 		actionRunner: runAction,
+		grouper:      grouper,
 	}
 }
 
@@ -87,6 +90,7 @@ func (m *mitigatorImpl) Mitigate(alert Alert) {
 			alert.AlertAttributesQueuePendingTaskCount,
 			m.monitor,
 			m.maxReaderCount(),
+			m.grouper,
 		)
 	case AlertTypeReaderStuck:
 		action = newReaderStuckAction(
@@ -123,11 +127,11 @@ func runAction(
 	logger log.Logger,
 ) error {
 	metricsHandler = metricsHandler.WithTags(metrics.QueueActionTag(action.Name()))
-	metricsHandler.Counter(metrics.QueueActionCounter.GetMetricName()).Record(1)
+	metrics.QueueActionCounter.With(metricsHandler).Record(1)
 
 	if err := action.Run(readerGroup); err != nil {
 		logger.Error("Queue action failed", tag.Error(err))
-		metricsHandler.Counter(metrics.QueueActionFailures.GetMetricName()).Record(1)
+		metrics.QueueActionFailures.With(metricsHandler).Record(1)
 		return err
 	}
 

@@ -491,18 +491,18 @@ func (v *visibilityStore) DeleteWorkflowExecution(
 	request *manager.VisibilityDeleteWorkflowExecutionRequest,
 ) error {
 	var query commongocql.Query
-	if request.StartTime != nil {
+	if !request.StartTime.IsZero() {
 		query = v.session.Query(templateDeleteWorkflowExecutionStarted,
 			request.NamespaceID.String(),
 			namespacePartition,
-			persistence.UnixMilliseconds(*request.StartTime),
+			persistence.UnixMilliseconds(request.StartTime),
 			request.RunID,
 		).WithContext(ctx)
-	} else if request.CloseTime != nil {
+	} else if !request.CloseTime.IsZero() {
 		query = v.session.Query(templateDeleteWorkflowExecutionClosed,
 			request.NamespaceID.String(),
 			namespacePartition,
-			persistence.UnixMilliseconds(*request.CloseTime),
+			persistence.UnixMilliseconds(request.CloseTime),
 			request.RunID,
 		).WithContext(ctx)
 	} else {
@@ -540,12 +540,12 @@ func (v *visibilityStore) GetWorkflowExecution(
 	ctx context.Context,
 	request *manager.GetWorkflowExecutionRequest,
 ) (*store.InternalGetWorkflowExecutionResponse, error) {
-	if request.StartTime == nil && request.CloseTime == nil {
+	if request.StartTime.IsZero() && request.CloseTime.IsZero() {
 		return nil, store.OperationNotSupportedErr
 	}
 	var wfexecution *store.InternalWorkflowExecutionInfo
 	var err error
-	if request.CloseTime != nil {
+	if !request.CloseTime.IsZero() {
 		wfexecution, err = v.getClosedWorkflowExecution(ctx, request)
 	} else {
 		wfexecution, err = v.getOpenWorkflowExecution(ctx, request)
@@ -562,14 +562,14 @@ func (v *visibilityStore) getOpenWorkflowExecution(
 	ctx context.Context,
 	request *manager.GetWorkflowExecutionRequest,
 ) (*store.InternalWorkflowExecutionInfo, error) {
-	if request.StartTime == nil {
+	if request.StartTime.IsZero() {
 		return nil, store.OperationNotSupportedErr
 	}
 	query := v.session.Query(
 		templateGetOpenWorkflowExecutionByRunID,
 		request.NamespaceID.String(),
 		namespacePartition,
-		persistence.UnixMilliseconds(*request.StartTime),
+		persistence.UnixMilliseconds(request.StartTime),
 		request.RunID,
 	).Consistency(v.lowConslevel).WithContext(ctx)
 	iter := query.PageSize(1).Iter()
@@ -581,14 +581,14 @@ func (v *visibilityStore) getClosedWorkflowExecution(
 	ctx context.Context,
 	request *manager.GetWorkflowExecutionRequest,
 ) (*store.InternalWorkflowExecutionInfo, error) {
-	if request.CloseTime == nil {
+	if request.CloseTime.IsZero() {
 		return nil, store.OperationNotSupportedErr
 	}
 	query := v.session.Query(
 		templateGetClosedWorkflowExecutionByRunID,
 		request.NamespaceID.String(),
 		namespacePartition,
-		persistence.UnixMilliseconds(*request.CloseTime),
+		persistence.UnixMilliseconds(request.CloseTime),
 		request.RunID,
 	).Consistency(v.lowConslevel).WithContext(ctx)
 	iter := query.PageSize(1).Iter()

@@ -52,8 +52,9 @@ type (
 	}
 
 	PrepareHistoryBranchOut struct {
-		DoContinue  bool
-		BranchIndex int32
+		DoContinue       bool  // whether to continue applying events
+		BranchIndex      int32 // branch index on version histories
+		EventsApplyIndex int   // index of events that should start applying from
 	}
 
 	GetOrRebuildMutableStateIn struct {
@@ -110,17 +111,33 @@ func (m *MutableStateMapperImpl) GetOrCreateHistoryBranch(
 ) (workflow.MutableState, PrepareHistoryBranchOut, error) {
 	branchMgr := m.newBranchMgr(wfContext, mutableState, task.getLogger())
 	incomingVersionHistory := task.getVersionHistory()
-	doContinue, versionHistoryIndex, err := branchMgr.GetOrCreate(
-		ctx,
-		incomingVersionHistory,
-		task.getFirstEvent().GetEventId(),
-		task.getFirstEvent().GetVersion(),
-	)
+	eventBatches := task.getEvents()
+	eventBatchApplyIndex := 0
+	doContinue := false
+	var versionHistoryIndex int32
+	var err error
+	for index, eventBatch := range eventBatches {
+		doContinueCurrentBatch, versionHistoryIndexCurrentBatch, errCurrentBatch := branchMgr.GetOrCreate(
+			ctx,
+			incomingVersionHistory,
+			eventBatch[0].GetEventId(),
+			eventBatch[0].GetVersion(),
+		)
+		if doContinueCurrentBatch || errCurrentBatch != nil {
+			eventBatchApplyIndex = index
+			doContinue = doContinueCurrentBatch
+			err = errCurrentBatch
+			versionHistoryIndex = versionHistoryIndexCurrentBatch
+			break
+		}
+	}
+
 	switch err.(type) {
 	case nil:
 		return mutableState, PrepareHistoryBranchOut{
-			DoContinue:  doContinue,
-			BranchIndex: versionHistoryIndex,
+			DoContinue:       doContinue,
+			BranchIndex:      versionHistoryIndex,
+			EventsApplyIndex: eventBatchApplyIndex,
 		}, nil
 	case *serviceerrors.RetryReplication:
 		// replication message can arrive out of order
@@ -221,7 +238,7 @@ func (m *MutableStateMapperImpl) ApplyEvents(
 		ctx,
 		task.getNamespaceID(),
 		uuid.New().String(),
-		*task.getExecution(),
+		task.getExecution(),
 		task.getEvents(),
 		task.getNewEvents(),
 	)
