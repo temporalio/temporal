@@ -2760,7 +2760,7 @@ func (wh *WorkflowHandler) DescribeSchedule(ctx context.Context, request *workfl
 
 	err = wh.annotateSearchAttributesOfScheduledWorkflow(&queryResponse, request.GetNamespace())
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("describe schedule:%w", err)
 	}
 	// Search attributes in the Action are already in external ("aliased") form. Do not alias them here.
 
@@ -2831,7 +2831,7 @@ func (wh *WorkflowHandler) annotateSearchAttributesOfScheduledWorkflow(
 	}
 	annotatedAttributes, err := wh.createAnnotatedSearchAttributesFromNewWorkflow(ei, nsName)
 	if err != nil {
-		return err
+		return fmt.Errorf("annotate search attributes:%w", err)
 	}
 	ei.SearchAttributes = annotatedAttributes
 	return nil
@@ -2859,9 +2859,12 @@ func (wh *WorkflowHandler) createAnnotatedSearchAttributesFromNewWorkflow(
 		nsName,
 	)
 	if err != nil {
-		return nil, fmt.Errorf("describe scheduler:%w", err)
+		return nil, fmt.Errorf("create annotations:%w", err)
 	}
 	saTypeMap, err := wh.saProvider.GetSearchAttributes(wh.visibilityMrg.GetIndexName(), false)
+	if err != nil {
+		return nil, fmt.Errorf("create annotations:%w", err)
+	}
 	searchattribute.ApplyTypeMap(unaliasedSearchAttrs, saTypeMap)
 	annotatedAttributes, err := searchattribute.AliasFields(
 		wh.saMapperProvider,
@@ -2869,7 +2872,7 @@ func (wh *WorkflowHandler) createAnnotatedSearchAttributesFromNewWorkflow(
 		nsName,
 	)
 	if err != nil {
-		return nil, fmt.Errorf("decribe scheduler:%w", err)
+		return nil, fmt.Errorf("create annotations:%w", err)
 	}
 	return annotatedAttributes, nil
 }
