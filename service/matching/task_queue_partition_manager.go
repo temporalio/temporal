@@ -220,9 +220,6 @@ func (pm *taskQueuePartitionManagerImpl) PollTask(
 ) (*internalTask, error) {
 	dbq := pm.defaultQueue
 	if pollMetadata.workerVersionCapabilities.GetUseVersioning() {
-		// default queue should stay alive even if requests go to other queues
-		pm.defaultQueue.MarkAlive()
-
 		userData, _, err := pm.userDataManager.GetUserData()
 		if err != nil {
 			return nil, err
@@ -230,24 +227,33 @@ func (pm *taskQueuePartitionManagerImpl) PollTask(
 
 		versioningData := userData.GetData().GetVersioningData()
 
-		buildId := pollMetadata.workerVersionCapabilities.GetBuildId()
-		if buildId == "" {
-			return nil, serviceerror.NewInvalidArgument("build ID must be provided when using worker versioning")
-		}
-
-		var versionSet string
-		if versioningData.GetVersionSets() != nil {
-			versionSet, err = pm.getVersionSetForPoll(pollMetadata.workerVersionCapabilities, versioningData)
-			if err != nil {
-				return nil, err
-			}
-		}
-
-		// use version set if found, otherwise assume user is using new API
-		if versionSet != "" {
-			dbq, err = pm.getVersionedQueue(ctx, versionSet, "", true)
+		if pm.partition.Kind() == enumspb.TASK_QUEUE_KIND_STICKY {
+			// In the sticky case we always use the unversioned queue
+			// For the old API, we may kick off this worker if there's a newer one.
+			_, err = checkVersionForStickyPoll(versioningData, pollMetadata.workerVersionCapabilities)
 		} else {
-			dbq, err = pm.getVersionedQueue(ctx, "", buildId, true)
+			// default queue should stay alive even if requests go to other queues
+			pm.defaultQueue.MarkAlive()
+
+			buildId := pollMetadata.workerVersionCapabilities.GetBuildId()
+			if buildId == "" {
+				return nil, serviceerror.NewInvalidArgument("build ID must be provided when using worker versioning")
+			}
+
+			var versionSet string
+			if versioningData.GetVersionSets() != nil {
+				versionSet, err = pm.getVersionSetForPoll(pollMetadata.workerVersionCapabilities, versioningData)
+				if err != nil {
+					return nil, err
+				}
+			}
+
+			// use version set if found, otherwise assume user is using new API
+			if versionSet != "" {
+				dbq, err = pm.getVersionedQueue(ctx, versionSet, "", true)
+			} else {
+				dbq, err = pm.getVersionedQueue(ctx, "", buildId, true)
+			}
 		}
 
 		if err != nil {
@@ -373,6 +379,9 @@ func (pm *taskQueuePartitionManagerImpl) getVersionedQueue(
 	buildId string,
 	create bool,
 ) (physicalTaskQueueManager, error) {
+	if pm.partition.Kind() == enumspb.TASK_QUEUE_KIND_STICKY {
+		panic("versioned queues can't be used in sticky partitions")
+	}
 	tqm, err := pm.getVersionedQueueNoWait(versionSet, buildId, create)
 	if err != nil || tqm == nil {
 		return nil, err
@@ -436,12 +445,6 @@ func (pm *taskQueuePartitionManagerImpl) getVersionSetForPoll(
 	caps *commonpb.WorkerVersionCapabilities,
 	versioningData *persistencespb.VersioningData,
 ) (string, error) {
-	if pm.partition.Kind() == enumspb.TASK_QUEUE_KIND_STICKY {
-		// In the sticky case we don't redirect, but we may kick off this worker if there's a newer one.
-		_, err := checkVersionForStickyPoll(versioningData, caps)
-		return "", err
-	}
-
 	primarySetId, demotedSetIds, unknownBuild, err := lookupVersionSetForPoll(versioningData, caps)
 	if err != nil {
 		return "", err
@@ -483,6 +486,20 @@ func (pm *taskQueuePartitionManagerImpl) getPhysicalQueueForAdd(
 	}
 
 	data := userData.GetData().GetVersioningData()
+
+	if pm.partition.Kind() == enumspb.TASK_QUEUE_KIND_STICKY {
+		// We may kick off this worker if there's a new default build ID in the version set.
+		// unknownBuild flag is ignored because we don't have any special logic for it anymore. unknown build can
+		// happen in two scenarios:
+		// - task queue is switching to the new versioning API and the build ID is not registered in version sets.
+		// - task queue is still using the old API but a failover happened before verisoning data fully propagate.
+		// the second case is unlikely, and we do not support it anymore considering the old API is deprecated.
+		_, err := checkVersionForStickyAdd(data, directive.GetBuildId())
+		if err != nil {
+			return nil, nil, err
+		}
+		return pm.defaultQueue, userDataChanged, nil
+	}
 
 	var buildId string
 	var versionSet string
@@ -532,21 +549,6 @@ func (pm *taskQueuePartitionManagerImpl) getVersionSetForAdd(directive *taskqueu
 	default:
 		// Unversioned task, leave on unversioned queue.
 		return "", nil
-	}
-
-	if pm.partition.Kind() == enumspb.TASK_QUEUE_KIND_STICKY {
-		// In the sticky case we don't redirect, but we may kick off this worker if there's a newer one.
-		unknownBuild, err := checkVersionForStickyAdd(data, buildId)
-		if err != nil {
-			return "", err
-		}
-		if unknownBuild {
-			// this could happen in two scenarios:
-			// - task queue is switching to the new versioning API and the build ID is not registered in version sets.
-			// - task queue is still using the old API but a failover happened before verisoning data fully propagate.
-			// the second case is unlikely, and we do not support it anymore considering the old API is deprecated.
-			return "", nil
-		}
 	}
 
 	versionSet, unknownBuild, err := lookupVersionSetForAdd(data, buildId)
