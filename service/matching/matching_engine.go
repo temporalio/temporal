@@ -876,7 +876,6 @@ func (e *matchingEngineImpl) UpdateWorkerVersioningRules(
 		updatedClock := hlc.Next(clk, e.timeSource)
 		var versioningData *persistencespb.VersioningData
 		var err error
-
 		switch req.GetOperation().(type) {
 		case *workflowservice.UpdateWorkerVersioningRulesRequest_InsertAssignmentRule:
 			versioningData, err = InsertAssignmentRule(
@@ -885,30 +884,18 @@ func (e *matchingEngineImpl) UpdateWorkerVersioningRules(
 				req.GetInsertAssignmentRule(),
 				e.config.VersionAssignmentRuleLimitPerQueue(ns.Name().String()),
 			)
-			if err != nil {
-				// operation can't be completed due to limits. no action, do not replicate, report error
-				return nil, false, err
-			}
 		case *workflowservice.UpdateWorkerVersioningRulesRequest_ReplaceAssignmentRule:
 			versioningData, err = ReplaceAssignmentRule(
 				updatedClock,
 				data.GetVersioningData(),
 				req.GetReplaceAssignmentRule(),
 			)
-			if err != nil {
-				// operation can't be completed due to limits. no action, do not replicate, report error
-				return nil, false, err
-			}
 		case *workflowservice.UpdateWorkerVersioningRulesRequest_DeleteAssignmentRule:
 			versioningData, err = DeleteAssignmentRule(
 				updatedClock,
 				data.GetVersioningData(),
 				req.GetDeleteAssignmentRule(),
 			)
-			if err != nil {
-				// operation can't be completed due to limits. no action, do not replicate, report error
-				return nil, false, err
-			}
 			if ns.ReplicationPolicy() == namespace.ReplicationPolicyMultiCluster {
 				operationCreatedTombstones = true
 			} else { // todo: figure out if this is the right thing to do with tombstones
@@ -922,20 +909,12 @@ func (e *matchingEngineImpl) UpdateWorkerVersioningRules(
 				req.GetInsertCompatibleRedirectRule(),
 				e.config.VersionCompatibleRedirectRuleLimitPerQueue(ns.Name().String()),
 			)
-			if err != nil {
-				// operation can't be completed due to limits. no action, do not replicate, report error
-				return nil, false, err
-			}
 		case *workflowservice.UpdateWorkerVersioningRulesRequest_ReplaceCompatibleRedirectRule:
 			versioningData, err = ReplaceCompatibleRedirectRule(
 				updatedClock,
 				data.GetVersioningData(),
 				req.GetReplaceCompatibleRedirectRule(),
 			)
-			if err != nil {
-				// operation can't be completed due to limits. no action, do not replicate, report error
-				return nil, false, err
-			}
 		case *workflowservice.UpdateWorkerVersioningRulesRequest_DeleteCompatibleRedirectRule:
 			versioningData, err = DeleteCompatibleRedirectRule(
 				updatedClock,
@@ -954,6 +933,10 @@ func (e *matchingEngineImpl) UpdateWorkerVersioningRules(
 			}
 		case *workflowservice.UpdateWorkerVersioningRulesRequest_CommitBuildId_:
 			// todo: not sure here
+		}
+		if err != nil {
+			// operation can't be completed due to limits. no action, do not replicate, report error
+			return nil, false, err
 		}
 		// Avoid mutation
 		ret := common.CloneProto(data)
