@@ -207,6 +207,15 @@ const (
 	// BuildIdScavengerVisibilityRPS is the rate limit for visibility calls from the build id scavenger
 	BuildIdScavenengerVisibilityRPS = "worker.buildIdScavengerVisibilityRPS"
 
+	// keys for cross-service nexus options
+
+	// NexusListServicesLongPollTimeout is the max length of long polls for ListNexusIncomingServices calls between partitions.
+	NexusListServicesLongPollTimeout = "nexus.listServicesLongPollTimeout"
+	// NexusListServicesMinWaitTime is the minimum amount of time to wait between ListNexusIncomingServices calls.
+	NexusListServicesMinWaitTime = "nexus.listServicesMinWaitTime"
+	// NexusListServicesPageSize is the page size for ListNexusIncomingServices calls.
+	NexusListServicesPageSize = "nexus.listServicesPageSize"
+
 	// keys for frontend
 
 	// FrontendPersistenceMaxQPS is the max qps frontend host can query DB
@@ -456,8 +465,6 @@ const (
 	MatchingMaxWaitForPollerBeforeFwd = "matching.maxWaitForPollerBeforeFwd"
 	// QueryPollerUnavailableWindow WF Queries are rejected after a while if no poller has been seen within the window
 	QueryPollerUnavailableWindow = "matching.queryPollerUnavailableWindow"
-	// MatchingListNexusServicesLongPollTimeout is the max length of long polls for ListNexusIncomingServices calls between partitions.
-	MatchingListNexusServicesLongPollTimeout = "matching.listNexusServicesLongPollTimeout"
 
 	// for matching testing only:
 

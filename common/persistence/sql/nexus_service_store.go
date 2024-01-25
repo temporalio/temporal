@@ -63,7 +63,7 @@ func (s *sqlNexusIncomingServiceStore) CreateOrUpdateNexusIncomingService(
 	ctx context.Context,
 	request *p.InternalCreateOrUpdateNexusIncomingServiceRequest,
 ) error {
-	serviceID, retErr := primitives.ParseUUID(request.Service.ServiceID)
+	serviceID, retErr := primitives.ParseUUID(request.Service.ID)
 	if retErr != nil {
 		return serviceerror.NewInternal(fmt.Sprintf("unable to parse service ID as UUID: %v", retErr))
 	}
@@ -111,7 +111,7 @@ func (s *sqlNexusIncomingServiceStore) CreateOrUpdateNexusIncomingService(
 
 func (s *sqlNexusIncomingServiceStore) ListNexusIncomingServices(
 	ctx context.Context,
-	request *p.InternalListNexusIncomingServicesRequest,
+	request *p.ListNexusIncomingServicesRequest,
 ) (*p.InternalListNexusIncomingServicesResponse, error) {
 	lastServiceID := emptyServiceID
 	if len(request.NextPageToken) > 0 {
@@ -160,7 +160,7 @@ func (s *sqlNexusIncomingServiceStore) ListNexusIncomingServices(
 
 	response.Services = make([]p.InternalNexusIncomingService, len(rows))
 	for i, row := range rows {
-		response.Services[i].ServiceID = primitives.UUIDString(row.ServiceID)
+		response.Services[i].ID = primitives.UUIDString(row.ServiceID)
 		response.Services[i].Version = row.Version
 		response.Services[i].Data = p.NewDataBlob(row.Data, row.DataEncoding)
 	}
@@ -170,7 +170,7 @@ func (s *sqlNexusIncomingServiceStore) ListNexusIncomingServices(
 
 func (s *sqlNexusIncomingServiceStore) DeleteNexusIncomingService(
 	ctx context.Context,
-	request *p.InternalDeleteNexusIncomingServiceRequest,
+	request *p.DeleteNexusIncomingServiceRequest,
 ) error {
 	serviceID, retErr := primitives.ParseUUID(request.ServiceID)
 	if retErr != nil {

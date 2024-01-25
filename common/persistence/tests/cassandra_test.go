@@ -1273,8 +1273,8 @@ func testCassandraNexusIncomingServiceStoreConcurrentCreate(t *testing.T, store 
 			err := store.CreateOrUpdateNexusIncomingService(ctx, &persistence.InternalCreateOrUpdateNexusIncomingServiceRequest{
 				LastKnownTableVersion: requestTableVersion,
 				Service: persistence.InternalNexusIncomingService{
-					ServiceID: serviceID,
-					Version:   0,
+					ID:      serviceID,
+					Version: 0,
 					Data: &commonpb.DataBlob{
 						Data:         []byte("some dummy service data"),
 						EncodingType: enums.ENCODING_TYPE_PROTO3,
@@ -1301,8 +1301,8 @@ func testCassandraNexusIncomingServiceStoreConcurrentUpdate(t *testing.T, store 
 	defer cancel()
 
 	service := persistence.InternalNexusIncomingService{
-		ServiceID: uuid.NewString(),
-		Version:   0,
+		ID:      uuid.NewString(),
+		Version: 0,
 		Data: &commonpb.DataBlob{
 			Data:         []byte("some dummy service data"),
 			EncodingType: enums.ENCODING_TYPE_PROTO3,
@@ -1351,8 +1351,8 @@ func testCassandraNexusIncomingServiceStoreConcurrentCreateAndUpdate(t *testing.
 	defer cancel()
 
 	firstService := persistence.InternalNexusIncomingService{
-		ServiceID: uuid.NewString(),
-		Version:   0,
+		ID:      uuid.NewString(),
+		Version: 0,
 		Data: &commonpb.DataBlob{
 			Data:         []byte("some dummy service data"),
 			EncodingType: enums.ENCODING_TYPE_PROTO3,
@@ -1380,8 +1380,8 @@ func testCassandraNexusIncomingServiceStoreConcurrentCreateAndUpdate(t *testing.
 		createErr = store.CreateOrUpdateNexusIncomingService(ctx, &persistence.InternalCreateOrUpdateNexusIncomingServiceRequest{
 			LastKnownTableVersion: requestTableVersion,
 			Service: persistence.InternalNexusIncomingService{
-				ServiceID: uuid.NewString(),
-				Version:   0,
+				ID:      uuid.NewString(),
+				Version: 0,
 				Data: &commonpb.DataBlob{
 					Data:         []byte("some dummy service data"),
 					EncodingType: enums.ENCODING_TYPE_PROTO3,
@@ -1421,8 +1421,8 @@ func testCassandraNexusIncomingServiceStoreConcurrentUpdateAndDelete(t *testing.
 	defer cancel()
 
 	service := persistence.InternalNexusIncomingService{
-		ServiceID: uuid.NewString(),
-		Version:   0,
+		ID:      uuid.NewString(),
+		Version: 0,
 		Data: &commonpb.DataBlob{
 			Data:         []byte("some dummy service data"),
 			EncodingType: enums.ENCODING_TYPE_PROTO3,
@@ -1459,9 +1459,9 @@ func testCassandraNexusIncomingServiceStoreConcurrentUpdateAndDelete(t *testing.
 	// Concurrently delete the service
 	go func() {
 		<-starter
-		deleteErr = store.DeleteNexusIncomingService(ctx, &persistence.InternalDeleteNexusIncomingServiceRequest{
+		deleteErr = store.DeleteNexusIncomingService(ctx, &persistence.DeleteNexusIncomingServiceRequest{
 			LastKnownTableVersion: requestTableVersion,
-			ServiceID:             service.ServiceID,
+			ServiceID:             service.ID,
 		})
 		if deleteErr != nil {
 			tableVersion.Add(1)
@@ -1493,7 +1493,7 @@ func newNexusIncomingServiceStore(session gocql.Session, opts ...func(params *te
 func assertNexusIncomingServicesTableVersion(t *testing.T, expected int64, store persistence.NexusServiceStore) {
 	t.Helper()
 
-	resp, err := store.ListNexusIncomingServices(context.Background(), &persistence.InternalListNexusIncomingServicesRequest{
+	resp, err := store.ListNexusIncomingServices(context.Background(), &persistence.ListNexusIncomingServicesRequest{
 		LastKnownTableVersion: 0,
 		PageSize:              1,
 	})

@@ -84,6 +84,7 @@ var (
 		"client.frontend.PollActivityTaskQueue":          true,
 		"client.frontend.PollWorkflowTaskQueue":          true,
 		"client.matching.GetTaskQueueUserData":           true,
+		"client.matching.ListNexusServices":              true,
 	}
 	largeTimeoutContext = map[string]bool{
 		"client.admin.GetReplicationMessages": true,
@@ -256,10 +257,10 @@ func makeGetMatchingClient(reqType reflect.Type) string {
 		"GetNexusServiceRequest",
 		"ListNexusServicesRequest",
 		"DeleteNexusServiceRequest":
-		// Always route these requests to the same matching node by namespace.
+		// Always route these requests to the same matching node by constant key.
 		tq = fieldWithPath{path: "&taskqueuepb.TaskQueue{Name: \"not-applicable\"}"}
 		tqt = fieldWithPath{path: "enumspb.TASK_QUEUE_TYPE_UNSPECIFIED"}
-		nsID = fieldWithPath{path: `"not-applicable"`}
+		nsID = fieldWithPath{path: `"_system_nexus_incoming_services_owner"`}
 	default:
 		tq = findOneNestedField(t, "TaskQueue", "request", 2)
 		tqt = findOneNestedField(t, "TaskQueueType", "request", 2)

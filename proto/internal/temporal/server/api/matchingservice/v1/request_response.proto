@@ -388,7 +388,7 @@ message CreateOrUpdateNexusServiceRequest {
 }
 
 message CreateOrUpdateNexusServiceResponse {
-    int64 service_version = 1;
+    temporal.server.api.persistence.v1.VersionedNexusIncomingService service = 1;
 }
 
 // (-- api-linter: core::0131::request-name-behavior=disabled

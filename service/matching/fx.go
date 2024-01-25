@@ -35,6 +35,7 @@ import (
 	"go.temporal.io/server/common/membership"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
+	"go.temporal.io/server/common/nexus"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/persistence/visibility"
 	"go.temporal.io/server/common/persistence/visibility/manager"
@@ -187,6 +188,7 @@ func HandlerProvider(
 	matchingServiceResolver membership.ServiceResolver,
 	metricsHandler metrics.Handler,
 	namespaceRegistry namespace.Registry,
+	incomingServiceRegistry nexus.IncomingServiceRegistry,
 	clusterMetadata cluster.Metadata,
 	namespaceReplicationQueue TaskQueueReplicatorNamespaceReplicationQueue,
 	visibilityManager manager.VisibilityManager,
@@ -201,6 +203,7 @@ func HandlerProvider(
 		matchingServiceResolver,
 		metricsHandler,
 		namespaceRegistry,
+		incomingServiceRegistry,
 		clusterMetadata,
 		namespaceReplicationQueue,
 		visibilityManager,

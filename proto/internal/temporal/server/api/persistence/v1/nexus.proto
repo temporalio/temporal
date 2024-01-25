@@ -43,30 +43,25 @@ message NexusServiceMetadataValue {
     temporal.server.api.clock.v1.HybridLogicalClock state_update_timestamp = 3;
 }
 
-message NexusIncomingServiceData {
-    // Name of this service.
-    string name = 1;
-    // UUID of the namespace to dispatch service requests to.
-    bytes namespace_id = 2;
-    // Task queue to dispatch service requests to.
-    string task_queue = 3;
-    // Arbitrary user provided data. For use in the authorizer.
-    map<string, NexusServiceMetadataValue> metadata = 4;
-}
-
 message NexusIncomingService {
     // The last recorded cluster-local Hybrid Logical Clock timestamp for _this_ service.
     // Updated whenever the service is directly updated due to a user action but not when applying replication events.
     // The clock is referenced when new timestamps are generated to ensure it produces monotonically increasing
     // timestamps.
     temporal.server.api.clock.v1.HybridLogicalClock clock = 1;
-    // UUID of this service.
-    string id = 2;
-    NexusIncomingServiceData data = 3;
+    // Name of this service.
+    string name = 2;
+    // UUID of the namespace to dispatch service requests to.
+    string namespace_id = 3;
+    // Task queue to dispatch service requests to.
+    string task_queue = 4;
+    // Arbitrary user provided data. For use in the authorizer.
+    map<string, NexusServiceMetadataValue> metadata = 5;
 }
 
-// Container for a version and a NexusIncomingService.
+// Container for a version, an ID, and a NexusIncomingService.
 message VersionedNexusIncomingService {
     int64 version = 1;
-    NexusIncomingService service = 2;
+    string id = 2;
+    NexusIncomingService service_info = 3;
 }

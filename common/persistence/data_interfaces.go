@@ -1061,7 +1061,7 @@ type (
 
 	// ListNexusIncomingServicesRequest is the request to ListNexusIncomingServices
 	ListNexusIncomingServicesRequest struct {
-		PageSize              int32
+		PageSize              int
 		NextPageToken         []byte
 		LastKnownTableVersion int64
 	}

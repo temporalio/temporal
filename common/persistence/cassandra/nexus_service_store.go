@@ -96,7 +96,7 @@ func (s *NexusServiceStore) CreateOrUpdateNexusIncomingService(
 	if request.Service.Version == 0 {
 		batch.Query(templateCreateIncomingServiceQuery,
 			rowTypeIncomingNexusService,
-			request.Service.ServiceID,
+			request.Service.ID,
 			request.Service.Data.Data,
 			request.Service.Data.EncodingType.String(),
 			1,
@@ -107,7 +107,7 @@ func (s *NexusServiceStore) CreateOrUpdateNexusIncomingService(
 			request.Service.Data.EncodingType.String(),
 			request.Service.Version+1,
 			rowTypeIncomingNexusService,
-			request.Service.ServiceID,
+			request.Service.ID,
 			request.Service.Version,
 		)
 	}
@@ -173,7 +173,7 @@ func (s *NexusServiceStore) CreateOrUpdateNexusIncomingService(
 
 func (s *NexusServiceStore) ListNexusIncomingServices(
 	ctx context.Context,
-	request *p.InternalListNexusIncomingServicesRequest,
+	request *p.ListNexusIncomingServicesRequest,
 ) (*p.InternalListNexusIncomingServicesResponse, error) {
 	if request.LastKnownTableVersion == unknownTableVersion {
 		return s.listFirstPageWithVersion(ctx, request)
@@ -218,7 +218,7 @@ func (s *NexusServiceStore) ListNexusIncomingServices(
 
 func (s *NexusServiceStore) DeleteNexusIncomingService(
 	ctx context.Context,
-	request *p.InternalDeleteNexusIncomingServiceRequest,
+	request *p.DeleteNexusIncomingServiceRequest,
 ) error {
 	batch := s.session.NewBatch(gocql.LoggedBatch).WithContext(ctx)
 
@@ -266,7 +266,7 @@ func (s *NexusServiceStore) DeleteNexusIncomingService(
 
 func (s *NexusServiceStore) listFirstPageWithVersion(
 	ctx context.Context,
-	request *p.InternalListNexusIncomingServicesRequest,
+	request *p.ListNexusIncomingServicesRequest,
 ) (*p.InternalListNexusIncomingServicesResponse, error) {
 	response := &p.InternalListNexusIncomingServicesResponse{}
 
@@ -342,9 +342,9 @@ func (s *NexusServiceStore) getServiceList(iter gocql.Iter) ([]p.InternalNexusIn
 		}
 
 		services = append(services, p.InternalNexusIncomingService{
-			ServiceID: gocql.UUIDToString(serviceID),
-			Version:   version,
-			Data:      p.NewDataBlob(data, dataEncoding),
+			ID:      gocql.UUIDToString(serviceID),
+			Version: version,
+			Data:    p.NewDataBlob(data, dataEncoding),
 		})
 
 		row = make(map[string]interface{})

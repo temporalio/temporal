@@ -24,18 +24,27 @@ package nexus
 
 import (
 	"context"
+	"errors"
 	"sync"
 	"sync/atomic"
+	"time"
 
+	"github.com/google/uuid"
 	"go.temporal.io/api/nexus/v1"
 
+	"go.temporal.io/server/api/matchingservice/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
-	"go.temporal.io/server/common/cache"
+	"go.temporal.io/server/common"
+	"go.temporal.io/server/common/backoff"
+	"go.temporal.io/server/common/dynamicconfig"
+	"go.temporal.io/server/common/future"
 	"go.temporal.io/server/common/headers"
 	"go.temporal.io/server/common/log"
-	"go.temporal.io/server/common/log/tag"
+	"go.temporal.io/server/common/membership"
 	"go.temporal.io/server/common/metrics"
 	p "go.temporal.io/server/common/persistence"
+	"go.temporal.io/server/common/primitives"
+	"go.temporal.io/server/internal/goro"
 )
 
 const (
@@ -45,56 +54,70 @@ const (
 	stopping
 )
 
-const (
-	cacheMaxSize = 64 * 1024
-	cacheTTL     = 0 // 0 means infinity
-)
-
-var (
-	cacheOpts = &cache.Options{
-		TTL: cacheTTL,
-	}
-)
-
 type (
 	IncomingServiceRegistry interface {
 		Start()
 		Stop()
+		WaitUntilInitialized(ctx context.Context) error
 		CreateOrUpdateService(ctx context.Context, service *nexus.IncomingService) (*persistencespb.VersionedNexusIncomingService, error)
 		DeleteService(ctx context.Context, name string) error
 		GetService(name string) (*persistencespb.VersionedNexusIncomingService, error)
-		GetServiceID(name string) (string, error)
 		ListServices(ctx context.Context, request *p.ListNexusIncomingServicesRequest) (*p.ListNexusIncomingServicesResponse, chan struct{}, error)
+	}
+
+	IncomingServiceRegistryConfig struct {
+		ListServicesLongPollTimeout dynamicconfig.DurationPropertyFn
+		ListServicesMinWaitTime     dynamicconfig.DurationPropertyFn
+		ListServicesRetryPolicy     backoff.RetryPolicy
+		ListServicesPageSize        dynamicconfig.IntPropertyFn
 	}
 
 	registry struct {
 		status int32
 
-		sync.RWMutex    // protects curTableVersion, serviceNameToID, and servicesByID
-		curTableVersion int64
-		serviceNameToID cache.Cache
-		servicesByID    cache.Cache
+		sync.RWMutex          // protects curTableVersion, and servicesByName
+		curTableVersion int64 //TODO: maybe make this atomic
+		servicesByName  map[string]*persistencespb.VersionedNexusIncomingService
 
 		tableVersionChanged chan struct{}
 
-		persistence    p.NexusServiceManager
+		refreshPoller    *goro.Handle
+		serviceDataReady *future.FutureImpl[struct{}]
+
+		config IncomingServiceRegistryConfig
+		client *incomingServiceClient
+
 		metricsHandler metrics.Handler
 		logger         log.Logger
 	}
 )
 
 func NewIncomingServiceRegistry(
+	config IncomingServiceRegistryConfig,
+	serviceName primitives.ServiceName,
+	hostInfoProvider membership.HostInfoProvider,
+	matchingServiceResolver membership.ServiceResolver,
+	matchingClient matchingservice.MatchingServiceClient,
 	persistence p.NexusServiceManager,
 	metricsHandler metrics.Handler,
 	logger log.Logger,
 ) IncomingServiceRegistry {
+	client := newNexusIncomingServiceClient(
+		serviceName,
+		hostInfoProvider,
+		matchingServiceResolver,
+		matchingClient,
+		persistence,
+		logger)
+
 	return &registry{
-		persistence:         persistence,
+		config:              config,
+		client:              client,
 		metricsHandler:      metricsHandler,
 		logger:              logger,
-		serviceNameToID:     cache.New(cacheMaxSize, cacheOpts),
-		servicesByID:        cache.New(cacheMaxSize, cacheOpts),
+		servicesByName:      make(map[string]*persistencespb.VersionedNexusIncomingService),
 		tableVersionChanged: make(chan struct{}),
+		serviceDataReady:    future.NewFuture[struct{}](),
 	}
 }
 
@@ -104,16 +127,14 @@ func (r *registry) Start() {
 	}
 	defer atomic.StoreInt32(&r.status, running)
 
-	// initialize the cache by initial scan
-	ctx := headers.SetCallerInfo(
+	r.client.Start()
+
+	refreshCtx := headers.SetCallerInfo(
 		context.Background(),
 		headers.SystemBackgroundCallerInfo,
 	)
 
-	err := r.loadServices(ctx)
-	if err != nil {
-		r.logger.Fatal("unable to initialize Nexus incoming service registry cache", tag.Error(err))
-	}
+	r.refreshPoller = goro.NewHandle(refreshCtx).Go(r.refreshServices)
 }
 
 func (r *registry) Stop() {
@@ -121,69 +142,67 @@ func (r *registry) Stop() {
 		return
 	}
 	defer atomic.StoreInt32(&r.status, stopped)
+
+	r.refreshPoller.Cancel()
+	<-r.refreshPoller.Done()
+
+	r.client.Stop()
 }
 
-func (r *registry) loadServices(ctx context.Context) error {
-	resp, err := r.persistence.ListNexusIncomingServices(ctx, &p.ListNexusIncomingServicesRequest{
-		LastKnownTableVersion: 0,
-	})
-	if err != nil {
-		return err
-	}
-
-	r.Lock()
-	defer r.Unlock()
-
-	r.curTableVersion = resp.TableVersion
-	for _, service := range resp.Services {
-		r.servicesByID.Put(service.Service.Id, service)
-		r.serviceNameToID.Put(service.Service.Data.Name, service.Service.Id)
-	}
-
-	return nil
+func (r *registry) WaitUntilInitialized(ctx context.Context) error {
+	_, err := r.serviceDataReady.Get(ctx)
+	return err
 }
 
 func (r *registry) CreateOrUpdateService(ctx context.Context, service *nexus.IncomingService) (*persistencespb.VersionedNexusIncomingService, error) {
-	r.Lock()
-	defer r.Unlock()
+	var serviceID string
+	currentServiceRecord, err := r.GetService(service.Name)
+	if err != nil {
+		if service.Version == 0 {
+			serviceID = uuid.NewString()
+		} else {
+			return nil, err // TODO: error handling. this means trying to create service with a name that already exists
+		}
+	} else {
+		serviceID = currentServiceRecord.Id
+	}
 
-	resp, err := r.persistence.CreateOrUpdateNexusIncomingService(ctx, &p.CreateOrUpdateNexusIncomingServiceRequest{
+	versioned, err := r.client.CreateOrUpdateNexusIncomingService(ctx, &p.CreateOrUpdateNexusIncomingServiceRequest{
 		LastKnownTableVersion: r.curTableVersion,
+		ServiceID:             serviceID,
 		Service:               service,
 	})
 	if err != nil {
 		return nil, err
 	}
 
-	r.curTableVersion++
-	r.servicesByID.Put(resp.Service.Service.Id, resp.Service)
-	r.serviceNameToID.Put(resp.Service.Service.Id, resp.Service.Service.Data.Name)
-	close(r.tableVersionChanged)
-	r.tableVersionChanged = make(chan struct{})
-
-	return resp.Service, err
-}
-
-func (r *registry) DeleteService(ctx context.Context, name string) error {
 	r.Lock()
 	defer r.Unlock()
 
-	serviceID, ok := r.serviceNameToID.Get(name).(string)
-	if !ok {
-		return nil //TODO: error handling
-	}
+	r.curTableVersion++
+	r.servicesByName[versioned.ServiceInfo.Name] = versioned
+	close(r.tableVersionChanged)
+	r.tableVersionChanged = make(chan struct{})
 
-	err := r.persistence.DeleteNexusIncomingService(ctx, &p.DeleteNexusIncomingServiceRequest{
-		LastKnownTableVersion: r.curTableVersion,
-		ServiceID:             serviceID,
-	})
+	return versioned, nil
+}
+
+func (r *registry) DeleteService(ctx context.Context, name string) error {
+	service, err := r.GetService(name)
 	if err != nil {
 		return err
 	}
 
+	err = r.client.DeleteNexusIncomingService(ctx, r.curTableVersion, service.Id, name)
+	if err != nil {
+		return err
+	}
+
+	r.Lock()
+	defer r.Unlock()
+
 	r.curTableVersion++
-	r.servicesByID.Delete(serviceID)
-	r.serviceNameToID.Delete(name)
+	delete(r.servicesByName, name)
 	close(r.tableVersionChanged)
 	r.tableVersionChanged = make(chan struct{})
 
@@ -194,29 +213,12 @@ func (r *registry) GetService(name string) (*persistencespb.VersionedNexusIncomi
 	r.RLock()
 	defer r.RUnlock()
 
-	serviceID, ok := r.serviceNameToID.Get(name).(string)
-	if !ok {
-		return nil, nil // TODO: error handling
-	}
-
-	service, ok := r.servicesByID.Get(serviceID).(*persistencespb.VersionedNexusIncomingService)
+	service, ok := r.servicesByName[name]
 	if !ok {
 		return nil, nil // TODO: error handling
 	}
 
 	return service, nil
-}
-
-func (r *registry) GetServiceID(name string) (string, error) {
-	r.RLock()
-	defer r.RUnlock()
-
-	id, ok := r.serviceNameToID.Get(name).(string)
-	if !ok {
-		return "", nil // TODO: error handling
-	}
-
-	return id, nil
 }
 
 func (r *registry) ListServices(ctx context.Context, request *p.ListNexusIncomingServicesRequest) (*p.ListNexusIncomingServicesResponse, chan struct{}, error) {
@@ -225,8 +227,10 @@ func (r *registry) ListServices(ctx context.Context, request *p.ListNexusIncomin
 
 	services, err := r.listServicesLocked()
 	if err != nil {
-		return nil, nil, err
+		return nil, nil, err //TODO: error handling
 	}
+
+	// TODO: how to handle fallback to persistence from here?
 
 	resp := &p.ListNexusIncomingServicesResponse{
 		TableVersion: r.curTableVersion,
@@ -237,21 +241,121 @@ func (r *registry) ListServices(ctx context.Context, request *p.ListNexusIncomin
 }
 
 func (r *registry) listServicesLocked() ([]*persistencespb.VersionedNexusIncomingService, error) {
-	// TODO: how to handle pagination when reading from cache
+	// TODO: how to handle pagination when reading from memory
 
-	services := make([]*persistencespb.VersionedNexusIncomingService, r.servicesByID.Size())
+	services := make([]*persistencespb.VersionedNexusIncomingService, len(r.servicesByName))
 
-	itr := r.servicesByID.Iterator()
-	defer itr.Close()
-
-	for i := range services {
-		entry := itr.Next()
-		service, ok := entry.Value().(*persistencespb.VersionedNexusIncomingService)
-		if !ok {
-			return nil, nil // TODO: error handling
-		}
-		services[i] = service
+	idx := 0
+	for _, service := range r.servicesByName {
+		services[idx] = service
+		idx++
 	}
 
 	return services, nil
+}
+
+func (r *registry) setServiceDataReady(err error) {
+	if !r.serviceDataReady.Ready() {
+		r.serviceDataReady.Set(struct{}{}, err)
+	}
+}
+
+func (r *registry) refreshServices(ctx context.Context) error {
+
+	// currentPageToken is the most recently returned page token from ListNexusServices.
+	// It is used in combination with r.curTableVersion to determine whether to do a long poll or a simple get.
+	var currentPageToken []byte
+
+	fetchFn := func(ctx context.Context) error {
+		callCtx, cancel := context.WithTimeout(ctx, r.config.ListServicesLongPollTimeout())
+		defer cancel()
+
+		shouldWait := currentPageToken == nil && r.curTableVersion != 0
+
+		resp, err := r.client.ListNexusIncomingServices(callCtx, &matchingservice.ListNexusServicesRequest{
+			LastKnownTableVersion: r.curTableVersion,
+			NextPageToken:         currentPageToken,
+			PageSize:              int32(r.config.ListServicesPageSize()),
+			Wait:                  shouldWait,
+		})
+
+		if err != nil {
+			if errors.Is(err, p.ErrNexusTableVersionConflict) {
+				r.invalidateServiceData()
+				currentPageToken = nil
+			} else {
+				// TODO: error handling, esp if table ownership changes or owner is unavailable
+				r.setServiceDataReady(err) // TODO: validate this is correct
+				return err
+			}
+		}
+
+		// If we got no error and no response, then this is the owning partition and our in-memory
+		// view should be correct, so no need to update.
+		// TODO: need to be absolutely sure of this logic
+		if resp != nil {
+			if currentPageToken == nil {
+				// Got first page, need to replace in-memory service data
+				r.setServiceData(resp.TableVersion, resp.Services)
+			} else {
+				// Got non-first page, add services to in-memory service data. Table version should not have changed.
+				r.appendServices(resp.Services)
+			}
+			currentPageToken = resp.NextPageToken
+		}
+		r.setServiceDataReady(nil)
+		return nil
+	}
+
+	minWaitTime := r.config.ListServicesMinWaitTime()
+
+	for ctx.Err() == nil {
+		start := time.Now()
+		_ = backoff.ThrottleRetryContext(ctx, fetchFn, r.config.ListServicesRetryPolicy, nil)
+		elapsed := time.Since(start)
+
+		// In general, we want to start a new call immediately on completion of the previous
+		// one. But if the remote is broken and returns success immediately, we might end up
+		// spinning. So enforce a minimum wait time that increases as long as we keep getting
+		// very fast replies.
+		if elapsed < minWaitTime {
+			common.InterruptibleSleep(ctx, minWaitTime-elapsed)
+			// Don't let this get near our call timeout, otherwise we can't tell the difference
+			// between a fast reply and a timeout.
+			minWaitTime = min(minWaitTime*2, r.config.ListServicesLongPollTimeout()/2)
+		} else {
+			minWaitTime = r.config.ListServicesMinWaitTime()
+		}
+	}
+
+	return ctx.Err()
+}
+
+func (r *registry) invalidateServiceData() {
+	r.Lock()
+	defer r.Unlock()
+	r.curTableVersion = 0
+	r.servicesByName = nil
+}
+
+func (r *registry) setServiceData(tableVersion int64, services []*persistencespb.VersionedNexusIncomingService) {
+	servicesByName := make(map[string]*persistencespb.VersionedNexusIncomingService, len(services))
+
+	for _, service := range services {
+		servicesByName[service.ServiceInfo.Name] = service
+	}
+
+	r.Lock()
+	defer r.Unlock()
+	r.curTableVersion = tableVersion
+	r.servicesByName = servicesByName
+}
+
+func (r *registry) appendServices(services []*persistencespb.VersionedNexusIncomingService) {
+	r.Lock()
+	defer r.Unlock()
+
+	for _, service := range services {
+		r.servicesByName[service.ServiceInfo.Name] = service
+	}
 }

@@ -73,7 +73,7 @@ func (c *clientImpl) CreateOrUpdateNexusService(
 	opts ...grpc.CallOption,
 ) (*matchingservice.CreateOrUpdateNexusServiceResponse, error) {
 
-	client, err := c.getClientForTaskqueue("not-applicable", &taskqueuepb.TaskQueue{Name: "not-applicable"}, enumspb.TASK_QUEUE_TYPE_UNSPECIFIED)
+	client, err := c.getClientForTaskqueue("_system_nexus_incoming_services_owner", &taskqueuepb.TaskQueue{Name: "not-applicable"}, enumspb.TASK_QUEUE_TYPE_UNSPECIFIED)
 	if err != nil {
 		return nil, err
 	}
@@ -88,7 +88,7 @@ func (c *clientImpl) DeleteNexusService(
 	opts ...grpc.CallOption,
 ) (*matchingservice.DeleteNexusServiceResponse, error) {
 
-	client, err := c.getClientForTaskqueue("not-applicable", &taskqueuepb.TaskQueue{Name: "not-applicable"}, enumspb.TASK_QUEUE_TYPE_UNSPECIFIED)
+	client, err := c.getClientForTaskqueue("_system_nexus_incoming_services_owner", &taskqueuepb.TaskQueue{Name: "not-applicable"}, enumspb.TASK_QUEUE_TYPE_UNSPECIFIED)
 	if err != nil {
 		return nil, err
 	}
@@ -163,7 +163,7 @@ func (c *clientImpl) GetNexusService(
 	opts ...grpc.CallOption,
 ) (*matchingservice.GetNexusServiceResponse, error) {
 
-	client, err := c.getClientForTaskqueue("not-applicable", &taskqueuepb.TaskQueue{Name: "not-applicable"}, enumspb.TASK_QUEUE_TYPE_UNSPECIFIED)
+	client, err := c.getClientForTaskqueue("_system_nexus_incoming_services_owner", &taskqueuepb.TaskQueue{Name: "not-applicable"}, enumspb.TASK_QUEUE_TYPE_UNSPECIFIED)
 	if err != nil {
 		return nil, err
 	}
@@ -208,11 +208,11 @@ func (c *clientImpl) ListNexusServices(
 	opts ...grpc.CallOption,
 ) (*matchingservice.ListNexusServicesResponse, error) {
 
-	client, err := c.getClientForTaskqueue("not-applicable", &taskqueuepb.TaskQueue{Name: "not-applicable"}, enumspb.TASK_QUEUE_TYPE_UNSPECIFIED)
+	client, err := c.getClientForTaskqueue("_system_nexus_incoming_services_owner", &taskqueuepb.TaskQueue{Name: "not-applicable"}, enumspb.TASK_QUEUE_TYPE_UNSPECIFIED)
 	if err != nil {
 		return nil, err
 	}
-	ctx, cancel := c.createContext(ctx)
+	ctx, cancel := c.createLongPollContext(ctx)
 	defer cancel()
 	return client.ListNexusServices(ctx, request, opts...)
 }

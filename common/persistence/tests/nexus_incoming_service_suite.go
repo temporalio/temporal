@@ -75,13 +75,13 @@ func testNexusIncomingServicesStoreSteadyState(t *testing.T, store persistence.N
 		}
 
 		// List when table is empty
-		resp, err := store.ListNexusIncomingServices(ctx, &persistence.InternalListNexusIncomingServicesRequest{PageSize: 10})
+		resp, err := store.ListNexusIncomingServices(ctx, &persistence.ListNexusIncomingServicesRequest{PageSize: 10})
 		require.NoError(t, err)
 		require.Len(t, resp.Services, 0)
 		require.Equal(t, tableVersion.Load(), resp.TableVersion)
 
 		// Create a service
-		firstService := persistence.InternalNexusIncomingService{ServiceID: uuid.NewString(), Version: 0, Data: data}
+		firstService := persistence.InternalNexusIncomingService{ID: uuid.NewString(), Version: 0, Data: data}
 		err = store.CreateOrUpdateNexusIncomingService(ctx, &persistence.InternalCreateOrUpdateNexusIncomingServiceRequest{
 			LastKnownTableVersion: tableVersion.Load(),
 			Service:               firstService,
@@ -91,13 +91,13 @@ func testNexusIncomingServicesStoreSteadyState(t *testing.T, store persistence.N
 		firstService.Version++
 
 		// List one
-		resp, err = store.ListNexusIncomingServices(ctx, &persistence.InternalListNexusIncomingServicesRequest{PageSize: 10})
+		resp, err = store.ListNexusIncomingServices(ctx, &persistence.ListNexusIncomingServicesRequest{PageSize: 10})
 		require.NoError(t, err)
 		require.Contains(t, resp.Services, firstService)
 		require.Equal(t, resp.TableVersion, tableVersion.Load())
 
 		// Create a second service
-		secondService := persistence.InternalNexusIncomingService{ServiceID: uuid.NewString(), Version: 0, Data: data}
+		secondService := persistence.InternalNexusIncomingService{ID: uuid.NewString(), Version: 0, Data: data}
 		err = store.CreateOrUpdateNexusIncomingService(ctx, &persistence.InternalCreateOrUpdateNexusIncomingServiceRequest{
 			LastKnownTableVersion: tableVersion.Load(),
 			Service:               secondService,
@@ -107,7 +107,7 @@ func testNexusIncomingServicesStoreSteadyState(t *testing.T, store persistence.N
 		secondService.Version++
 
 		// List multiple
-		resp, err = store.ListNexusIncomingServices(ctx, &persistence.InternalListNexusIncomingServicesRequest{PageSize: 10})
+		resp, err = store.ListNexusIncomingServices(ctx, &persistence.ListNexusIncomingServicesRequest{PageSize: 10})
 		require.NoError(t, err)
 		require.Contains(t, resp.Services, firstService)
 		require.Contains(t, resp.Services, secondService)
@@ -117,7 +117,7 @@ func testNexusIncomingServicesStoreSteadyState(t *testing.T, store persistence.N
 		thirdServiceID := uuid.New().String()
 		err = store.CreateOrUpdateNexusIncomingService(ctx, &persistence.InternalCreateOrUpdateNexusIncomingServiceRequest{
 			LastKnownTableVersion: tableVersion.Load(),
-			Service:               persistence.InternalNexusIncomingService{ServiceID: thirdServiceID, Data: data},
+			Service:               persistence.InternalNexusIncomingService{ID: thirdServiceID, Data: data},
 		})
 		require.NoError(t, err)
 		tableVersion.Add(1)
@@ -125,20 +125,20 @@ func testNexusIncomingServicesStoreSteadyState(t *testing.T, store persistence.N
 		// Update a service
 		err = store.CreateOrUpdateNexusIncomingService(ctx, &persistence.InternalCreateOrUpdateNexusIncomingServiceRequest{
 			LastKnownTableVersion: tableVersion.Load(),
-			Service:               persistence.InternalNexusIncomingService{ServiceID: thirdServiceID, Version: 1, Data: data},
+			Service:               persistence.InternalNexusIncomingService{ID: thirdServiceID, Version: 1, Data: data},
 		})
 		require.NoError(t, err)
 		tableVersion.Add(1)
 
 		// List in pages (page 1)
-		resp, err = store.ListNexusIncomingServices(ctx, &persistence.InternalListNexusIncomingServicesRequest{PageSize: 2})
+		resp, err = store.ListNexusIncomingServices(ctx, &persistence.ListNexusIncomingServicesRequest{PageSize: 2})
 		require.NoError(t, err)
 		require.Len(t, resp.Services, 2)
 		require.Equal(t, resp.TableVersion, tableVersion.Load())
 		require.NotNil(t, resp.NextPageToken)
 
 		// List in pages (page 2)
-		resp, err = store.ListNexusIncomingServices(ctx, &persistence.InternalListNexusIncomingServicesRequest{
+		resp, err = store.ListNexusIncomingServices(ctx, &persistence.ListNexusIncomingServicesRequest{
 			PageSize:              2,
 			NextPageToken:         resp.NextPageToken,
 			LastKnownTableVersion: resp.TableVersion,
@@ -149,15 +149,15 @@ func testNexusIncomingServicesStoreSteadyState(t *testing.T, store persistence.N
 		require.Nil(t, resp.NextPageToken)
 
 		// Delete a service
-		err = store.DeleteNexusIncomingService(ctx, &persistence.InternalDeleteNexusIncomingServiceRequest{
-			ServiceID:             firstService.ServiceID,
+		err = store.DeleteNexusIncomingService(ctx, &persistence.DeleteNexusIncomingServiceRequest{
+			ServiceID:             firstService.ID,
 			LastKnownTableVersion: tableVersion.Load(),
 		})
 		require.NoError(t, err)
 		tableVersion.Add(1)
 
 		// List services with table version
-		resp, err = store.ListNexusIncomingServices(ctx, &persistence.InternalListNexusIncomingServicesRequest{
+		resp, err = store.ListNexusIncomingServices(ctx, &persistence.ListNexusIncomingServicesRequest{
 			PageSize:              10,
 			NextPageToken:         nil,
 			LastKnownTableVersion: tableVersion.Load(),
@@ -166,13 +166,13 @@ func testNexusIncomingServicesStoreSteadyState(t *testing.T, store persistence.N
 		require.Len(t, resp.Services, 2)
 
 		// Delete remaining services
-		err = store.DeleteNexusIncomingService(ctx, &persistence.InternalDeleteNexusIncomingServiceRequest{
-			ServiceID:             secondService.ServiceID,
+		err = store.DeleteNexusIncomingService(ctx, &persistence.DeleteNexusIncomingServiceRequest{
+			ServiceID:             secondService.ID,
 			LastKnownTableVersion: tableVersion.Load(),
 		})
 		require.NoError(t, err)
 		tableVersion.Add(1)
-		err = store.DeleteNexusIncomingService(ctx, &persistence.InternalDeleteNexusIncomingServiceRequest{
+		err = store.DeleteNexusIncomingService(ctx, &persistence.DeleteNexusIncomingServiceRequest{
 			ServiceID:             thirdServiceID,
 			LastKnownTableVersion: tableVersion.Load(),
 		})
@@ -180,7 +180,7 @@ func testNexusIncomingServicesStoreSteadyState(t *testing.T, store persistence.N
 		tableVersion.Add(1)
 
 		// List services when table empty and expected version non-zero
-		resp, err = store.ListNexusIncomingServices(ctx, &persistence.InternalListNexusIncomingServicesRequest{
+		resp, err = store.ListNexusIncomingServices(ctx, &persistence.ListNexusIncomingServicesRequest{
 			PageSize:              10,
 			NextPageToken:         nil,
 			LastKnownTableVersion: tableVersion.Load(),
@@ -204,7 +204,7 @@ func testCreateOrUpdateNexusIncomingServiceExpectedErrors(t *testing.T, store pe
 		serviceID := uuid.New().String()
 		err := store.CreateOrUpdateNexusIncomingService(ctx, &persistence.InternalCreateOrUpdateNexusIncomingServiceRequest{
 			LastKnownTableVersion: tableVersion.Load(),
-			Service:               persistence.InternalNexusIncomingService{ServiceID: serviceID, Version: 0, Data: data},
+			Service:               persistence.InternalNexusIncomingService{ID: serviceID, Version: 0, Data: data},
 		})
 		require.NoError(t, err)
 		tableVersion.Add(1)
@@ -212,7 +212,7 @@ func testCreateOrUpdateNexusIncomingServiceExpectedErrors(t *testing.T, store pe
 		// Valid update
 		err = store.CreateOrUpdateNexusIncomingService(ctx, &persistence.InternalCreateOrUpdateNexusIncomingServiceRequest{
 			LastKnownTableVersion: tableVersion.Load(),
-			Service:               persistence.InternalNexusIncomingService{ServiceID: serviceID, Version: 1, Data: data},
+			Service:               persistence.InternalNexusIncomingService{ID: serviceID, Version: 1, Data: data},
 		})
 		require.NoError(t, err)
 		tableVersion.Add(1)
@@ -220,28 +220,28 @@ func testCreateOrUpdateNexusIncomingServiceExpectedErrors(t *testing.T, store pe
 		// Create request (version=0) when service already exists
 		err = store.CreateOrUpdateNexusIncomingService(ctx, &persistence.InternalCreateOrUpdateNexusIncomingServiceRequest{
 			LastKnownTableVersion: tableVersion.Load(),
-			Service:               persistence.InternalNexusIncomingService{ServiceID: serviceID, Version: 0, Data: data},
+			Service:               persistence.InternalNexusIncomingService{ID: serviceID, Version: 0, Data: data},
 		})
 		require.ErrorContains(t, err, "nexus incoming service version mismatch")
 
 		// Update request version mismatch
 		err = store.CreateOrUpdateNexusIncomingService(ctx, &persistence.InternalCreateOrUpdateNexusIncomingServiceRequest{
 			LastKnownTableVersion: tableVersion.Load(),
-			Service:               persistence.InternalNexusIncomingService{ServiceID: serviceID, Version: 10, Data: data},
+			Service:               persistence.InternalNexusIncomingService{ID: serviceID, Version: 10, Data: data},
 		})
 		require.ErrorContains(t, err, "nexus incoming service version mismatch")
 
 		// Create request table version mismatch
 		err = store.CreateOrUpdateNexusIncomingService(ctx, &persistence.InternalCreateOrUpdateNexusIncomingServiceRequest{
 			LastKnownTableVersion: 10,
-			Service:               persistence.InternalNexusIncomingService{ServiceID: uuid.NewString(), Version: 0, Data: data},
+			Service:               persistence.InternalNexusIncomingService{ID: uuid.NewString(), Version: 0, Data: data},
 		})
 		require.ErrorContains(t, err, "nexus incoming services table version mismatch")
 
 		// Update request table version mismatch
 		err = store.CreateOrUpdateNexusIncomingService(ctx, &persistence.InternalCreateOrUpdateNexusIncomingServiceRequest{
 			LastKnownTableVersion: 10,
-			Service:               persistence.InternalNexusIncomingService{ServiceID: serviceID, Version: 2, Data: data},
+			Service:               persistence.InternalNexusIncomingService{ID: serviceID, Version: 2, Data: data},
 		})
 		require.ErrorContains(t, err, "nexus incoming services table version mismatch")
 	})
@@ -258,7 +258,7 @@ func testListNexusIncomingServicesExpectedErrors(t *testing.T, store persistence
 		}
 
 		// Create two services
-		firstService := persistence.InternalNexusIncomingService{ServiceID: uuid.NewString(), Version: 0, Data: data}
+		firstService := persistence.InternalNexusIncomingService{ID: uuid.NewString(), Version: 0, Data: data}
 		err := store.CreateOrUpdateNexusIncomingService(ctx, &persistence.InternalCreateOrUpdateNexusIncomingServiceRequest{
 			LastKnownTableVersion: tableVersion.Load(),
 			Service:               firstService,
@@ -267,7 +267,7 @@ func testListNexusIncomingServicesExpectedErrors(t *testing.T, store persistence
 		tableVersion.Add(1)
 		firstService.Version = 1
 
-		secondService := persistence.InternalNexusIncomingService{ServiceID: uuid.NewString(), Version: 0, Data: data}
+		secondService := persistence.InternalNexusIncomingService{ID: uuid.NewString(), Version: 0, Data: data}
 		err = store.CreateOrUpdateNexusIncomingService(ctx, &persistence.InternalCreateOrUpdateNexusIncomingServiceRequest{
 			LastKnownTableVersion: tableVersion.Load(),
 			Service:               secondService,
@@ -277,14 +277,14 @@ func testListNexusIncomingServicesExpectedErrors(t *testing.T, store persistence
 		secondService.Version = 1
 
 		// Valid list
-		resp, err := store.ListNexusIncomingServices(ctx, &persistence.InternalListNexusIncomingServicesRequest{PageSize: 10, LastKnownTableVersion: tableVersion.Load()})
+		resp, err := store.ListNexusIncomingServices(ctx, &persistence.ListNexusIncomingServicesRequest{PageSize: 10, LastKnownTableVersion: tableVersion.Load()})
 		require.NoError(t, err)
 		require.Contains(t, resp.Services, firstService)
 		require.Contains(t, resp.Services, secondService)
 		require.Equal(t, resp.TableVersion, tableVersion.Load())
 
 		// Table version mismatch
-		_, err = store.ListNexusIncomingServices(ctx, &persistence.InternalListNexusIncomingServicesRequest{PageSize: 10, LastKnownTableVersion: 100})
+		_, err = store.ListNexusIncomingServices(ctx, &persistence.ListNexusIncomingServicesRequest{PageSize: 10, LastKnownTableVersion: 100})
 		require.ErrorContains(t, err, "nexus incoming services table version mismatch")
 	})
 }
@@ -303,27 +303,27 @@ func testDeleteNexusIncomingServiceExpectedErrors(t *testing.T, store persistenc
 		serviceID := uuid.New().String()
 		err := store.CreateOrUpdateNexusIncomingService(ctx, &persistence.InternalCreateOrUpdateNexusIncomingServiceRequest{
 			LastKnownTableVersion: tableVersion.Load(),
-			Service:               persistence.InternalNexusIncomingService{ServiceID: serviceID, Version: 0, Data: data},
+			Service:               persistence.InternalNexusIncomingService{ID: serviceID, Version: 0, Data: data},
 		})
 		require.NoError(t, err)
 		tableVersion.Add(1)
 
 		// Table version mismatch
-		err = store.DeleteNexusIncomingService(ctx, &persistence.InternalDeleteNexusIncomingServiceRequest{
+		err = store.DeleteNexusIncomingService(ctx, &persistence.DeleteNexusIncomingServiceRequest{
 			ServiceID:             serviceID,
 			LastKnownTableVersion: 100,
 		})
 		require.ErrorContains(t, err, "nexus incoming services table version mismatch")
 
 		// Delete non-existent service
-		err = store.DeleteNexusIncomingService(ctx, &persistence.InternalDeleteNexusIncomingServiceRequest{
+		err = store.DeleteNexusIncomingService(ctx, &persistence.DeleteNexusIncomingServiceRequest{
 			ServiceID:             uuid.NewString(),
 			LastKnownTableVersion: tableVersion.Load(),
 		})
 		require.ErrorContains(t, err, "nexus incoming service not found")
 
 		// Valid delete
-		err = store.DeleteNexusIncomingService(ctx, &persistence.InternalDeleteNexusIncomingServiceRequest{
+		err = store.DeleteNexusIncomingService(ctx, &persistence.DeleteNexusIncomingServiceRequest{
 			ServiceID:             serviceID,
 			LastKnownTableVersion: tableVersion.Load(),
 		})

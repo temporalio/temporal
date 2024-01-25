@@ -109,6 +109,7 @@ var Module = fx.Options(
 		func(p namespace.Registry) common.Pingable { return p },
 		fx.ResultTags(`group:"deadlockDetectorRoots"`),
 	)),
+	fx.Provide(NexusIncomingServiceRegistryConfigProvider),
 	fx.Provide(NexusIncomingServiceRegistryProvider),
 	nexus.IncomingServiceRegistryLifetimeHooksModule,
 	fx.Provide(serialization.NewSerializer),
@@ -222,16 +223,41 @@ func NamespaceRegistryProvider(
 	)
 }
 
+func NexusIncomingServiceRegistryConfigProvider(
+	dc *dynamicconfig.Collection,
+) nexus.IncomingServiceRegistryConfig {
+	return nexus.IncomingServiceRegistryConfig{
+		ListServicesLongPollTimeout: dc.GetDurationProperty(dynamicconfig.NexusListServicesLongPollTimeout, 5*time.Minute-10*time.Second),
+		ListServicesMinWaitTime:     dc.GetDurationProperty(dynamicconfig.NexusListServicesMinWaitTime, 1*time.Second),
+		ListServicesRetryPolicy:     common.CreateMatchingClientRetryPolicy(),
+		ListServicesPageSize:        dc.GetIntProperty(dynamicconfig.NexusListServicesPageSize, 100),
+	}
+}
+
 func NexusIncomingServiceRegistryProvider(
-	nexusServiceManager persistence.NexusServiceManager,
+	config nexus.IncomingServiceRegistryConfig,
+	serviceName primitives.ServiceName,
+	hostInfoProvider membership.HostInfoProvider,
+	monitor membership.Monitor,
+	matchingClient MatchingRawClient,
+	manager persistence.NexusServiceManager,
 	metricsHandler metrics.Handler,
-	logger log.SnTaggedLogger,
-) nexus.IncomingServiceRegistry {
+	logger log.Logger,
+) (nexus.IncomingServiceRegistry, error) {
+	matchingServiceResolver, err := monitor.GetResolver(primitives.MatchingService)
+	if err != nil {
+		return nil, err
+	}
 	return nexus.NewIncomingServiceRegistry(
-		nexusServiceManager,
+		config,
+		serviceName,
+		hostInfoProvider,
+		matchingServiceResolver,
+		matchingClient,
+		manager,
 		metricsHandler,
 		logger,
-	)
+	), nil
 }
 
 func ClientFactoryProvider(

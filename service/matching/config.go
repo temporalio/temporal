@@ -212,7 +212,7 @@ func NewConfig(
 		VisibilityDisableOrderByClause:    dc.GetBoolPropertyFnWithNamespaceFilter(dynamicconfig.VisibilityDisableOrderByClause, true),
 		VisibilityEnableManualPagination:  dc.GetBoolPropertyFnWithNamespaceFilter(dynamicconfig.VisibilityEnableManualPagination, true),
 
-		ListNexusServicesLongPollTimeout: dc.GetDurationProperty(dynamicconfig.MatchingListNexusServicesLongPollTimeout, 5*time.Minute-10*time.Second),
+		ListNexusServicesLongPollTimeout: dc.GetDurationProperty(dynamicconfig.NexusListServicesLongPollTimeout, 5*time.Minute-10*time.Second),
 
 		FrontendAccessHistoryFraction: dc.GetFloat64Property(dynamicconfig.FrontendAccessHistoryFraction, 0.0),
 	}

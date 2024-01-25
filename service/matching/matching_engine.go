@@ -1382,7 +1382,7 @@ func (e *matchingEngineImpl) CreateOrUpdateNexusService(ctx context.Context, req
 	if err != nil {
 		return nil, err
 	}
-	return &matchingservice.CreateOrUpdateNexusServiceResponse{ServiceVersion: service.Version}, nil
+	return &matchingservice.CreateOrUpdateNexusServiceResponse{Service: service}, nil
 }
 
 func (e *matchingEngineImpl) DeleteNexusService(ctx context.Context, request *matchingservice.DeleteNexusServiceRequest) (*matchingservice.DeleteNexusServiceResponse, error) {
@@ -1403,7 +1403,7 @@ func (e *matchingEngineImpl) GetNexusService(ctx context.Context, request *match
 
 func (e *matchingEngineImpl) ListNexusServices(ctx context.Context, request *matchingservice.ListNexusServicesRequest) (*matchingservice.ListNexusServicesResponse, error) {
 	listRequest := &persistence.ListNexusIncomingServicesRequest{
-		PageSize:              request.PageSize,
+		PageSize:              int(request.PageSize),
 		NextPageToken:         request.NextPageToken,
 		LastKnownTableVersion: request.LastKnownTableVersion,
 	}

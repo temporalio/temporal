@@ -26,6 +26,7 @@ import (
 	"context"
 
 	enumspb "go.temporal.io/api/enums/v1"
+	"go.temporal.io/api/nexus/v1"
 
 	persistencepb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common/persistence/serialization"
@@ -75,13 +76,9 @@ func (m *nexusServiceManagerImpl) CreateOrUpdateNexusIncomingService(
 	ctx context.Context,
 	request *CreateOrUpdateNexusIncomingServiceRequest,
 ) (*CreateOrUpdateNexusIncomingServiceResponse, error) {
-	serviceData := &persistencepb.NexusIncomingServiceData{
-		Name:        request.Service.Name,
-		NamespaceId: request.Service.Namespace,
-		TaskQueue:   request.Service.TaskQueue,
-		Metadata:    request.Service.Metadata,
-	}
-	serviceBlob, err := m.serializer.NexusIncomingServiceDataToBlob(serviceData, enumspb.ENCODING_TYPE_PROTO3)
+	versioned := toVersionedServiceRecord(request.ServiceID, request.Service)
+
+	serviceBlob, err := m.serializer.NexusIncomingServiceToBlob(versioned.ServiceInfo, enumspb.ENCODING_TYPE_PROTO3)
 	if err != nil {
 		return nil, err
 	}
@@ -89,27 +86,26 @@ func (m *nexusServiceManagerImpl) CreateOrUpdateNexusIncomingService(
 	internalRequest := &InternalCreateOrUpdateNexusIncomingServiceRequest{
 		LastKnownTableVersion: request.LastKnownTableVersion,
 		Service: InternalNexusIncomingService{
-			ServiceID: request.ServiceID,
-			Version:   request.Service.Version,
-			Data:      serviceBlob,
+			ID:      request.ServiceID,
+			Version: request.Service.Version,
+			Data:    serviceBlob,
 		},
 	}
-	service, err := m.persistence.CreateOrUpdateNexusIncomingService(ctx, internalRequest)
+
+	err = m.persistence.CreateOrUpdateNexusIncomingService(ctx, internalRequest)
 	if err != nil {
 		return nil, err
 	}
 
-	return &CreateOrUpdateNexusIncomingServiceResponse{Service: service}, nil
+	versioned.Version++
+	return &CreateOrUpdateNexusIncomingServiceResponse{Service: versioned}, nil
 }
 
 func (m *nexusServiceManagerImpl) DeleteNexusIncomingService(
 	ctx context.Context,
 	request *DeleteNexusIncomingServiceRequest,
 ) error {
-	return m.persistence.DeleteNexusIncomingService(ctx, &InternalDeleteNexusIncomingServiceRequest{
-		LastKnownTableVersion: request.LastKnownTableVersion,
-		ServiceID:             request.ServiceID,
-	})
+	return m.persistence.DeleteNexusIncomingService(ctx, request)
 }
 
 func (m *nexusServiceManagerImpl) ListNexusIncomingServices(
@@ -121,30 +117,25 @@ func (m *nexusServiceManagerImpl) ListNexusIncomingServices(
 	}
 
 	result := &ListNexusIncomingServicesResponse{}
-	resp, err := m.persistence.ListNexusIncomingServices(ctx, &InternalListNexusIncomingServicesRequest{
-		LastKnownTableVersion: request.LastKnownTableVersion,
-		NextPageToken:         request.NextPageToken,
-		PageSize:              request.PageSize,
-	})
+	resp, err := m.persistence.ListNexusIncomingServices(ctx, request)
 	if resp != nil {
+		// Always return current table version, if we got one.
 		result.TableVersion = resp.TableVersion
 	}
 	if err != nil {
-		return result, nil
+		return result, err
 	}
 
 	services := make([]*persistencepb.VersionedNexusIncomingService, len(resp.Services))
 	for i, service := range resp.Services {
-		serviceData, err := m.serializer.NexusIncomingServiceDataFromBlob(service.Data)
+		serviceInfo, err := m.serializer.NexusIncomingServiceFromBlob(service.Data)
 		if err != nil {
 			return result, err
 		}
 		services[i] = &persistencepb.VersionedNexusIncomingService{
-			Version: service.Version,
-			Service: &persistencepb.NexusIncomingService{
-				Id:   service.ServiceID,
-				Data: serviceData,
-			},
+			Version:     service.Version,
+			Id:          service.ID,
+			ServiceInfo: serviceInfo,
 		}
 	}
 
@@ -152,4 +143,16 @@ func (m *nexusServiceManagerImpl) ListNexusIncomingServices(
 	result.NextPageToken = resp.NextPageToken
 
 	return result, nil
+}
+
+func toVersionedServiceRecord(serviceID string, service *nexus.IncomingService) *persistencepb.VersionedNexusIncomingService {
+	return &persistencepb.VersionedNexusIncomingService{
+		Version: service.Version,
+		Id:      serviceID,
+		ServiceInfo: &persistencepb.NexusIncomingService{
+			Name:        service.Name,
+			NamespaceId: service.Namespace,
+			TaskQueue:   service.TaskQueue,
+			//Metadata:    service.Metadata, //TODO: fix this
+		}}
 }
