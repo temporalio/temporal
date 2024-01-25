@@ -30,7 +30,7 @@ func checkARConditions(g *persistencespb.VersioningData, maxARs int, force bool)
 	return serviceerror.NewFailedPrecondition("update breaks requirement that at least one assignment rule must have no ramp or hint")
 }
 
-func InsertAssignmentRule(clock *hlc.Clock, data *persistencespb.VersioningData, req *workflowservice.UpdateWorkerVersioningRulesRequest_InsertBuildIdAssignmentRule, maxARs int) (*persistencespb.VersioningData, error) {
+func InsertAssignmentRule(timestamp *hlc.Clock, data *persistencespb.VersioningData, req *workflowservice.UpdateWorkerVersioningRulesRequest_InsertBuildIdAssignmentRule, maxARs int) (*persistencespb.VersioningData, error) {
 	if data == nil {
 		data = &persistencespb.VersioningData{AssignmentRules: make([]*persistencespb.AssignmentRule, 0)}
 	} else {
@@ -41,14 +41,14 @@ func InsertAssignmentRule(clock *hlc.Clock, data *persistencespb.VersioningData,
 	}
 	persistenceAR := persistencespb.AssignmentRule{
 		Rule:            req.GetRule(),
-		CreateTimestamp: clock, // todo: should this be a newly instantiated clock instance, or is this fine?
+		CreateTimestamp: timestamp,
 		DeleteTimestamp: nil,
 	}
 	slices.Insert(data.GetAssignmentRules(), int(req.GetRuleIndex()), &persistenceAR)
 	return data, checkARConditions(data, maxARs, false)
 }
 
-func ReplaceAssignmentRule(clock *hlc.Clock, data *persistencespb.VersioningData, req *workflowservice.UpdateWorkerVersioningRulesRequest_ReplaceBuildIdAssignmentRule) (*persistencespb.VersioningData, error) {
+func ReplaceAssignmentRule(timestamp *hlc.Clock, data *persistencespb.VersioningData, req *workflowservice.UpdateWorkerVersioningRulesRequest_ReplaceBuildIdAssignmentRule) (*persistencespb.VersioningData, error) {
 	if data == nil {
 		return nil, serviceerror.NewInvalidArgument("data cannot be nil for a replace call")
 	} else {
@@ -61,14 +61,14 @@ func ReplaceAssignmentRule(clock *hlc.Clock, data *persistencespb.VersioningData
 	}
 	persistenceAR := persistencespb.AssignmentRule{
 		Rule:            req.GetRule(),
-		CreateTimestamp: clock, // todo
+		CreateTimestamp: timestamp,
 		DeleteTimestamp: nil,
 	}
 	slices.Replace(data.AssignmentRules, idx, idx+1, &persistenceAR)
 	return data, checkARConditions(data, 0, req.GetForce())
 }
 
-func DeleteAssignmentRule(clock *hlc.Clock, data *persistencespb.VersioningData, req *workflowservice.UpdateWorkerVersioningRulesRequest_DeleteBuildIdAssignmentRule) (*persistencespb.VersioningData, error) {
+func DeleteAssignmentRule(timestamp *hlc.Clock, data *persistencespb.VersioningData, req *workflowservice.UpdateWorkerVersioningRulesRequest_DeleteBuildIdAssignmentRule) (*persistencespb.VersioningData, error) {
 	if data == nil {
 		return nil, serviceerror.NewInvalidArgument("data cannot be nil for a delete call")
 	} else {
@@ -108,7 +108,7 @@ func isCyclic(rules []*persistencespb.RedirectRule) bool {
 	return true
 }
 
-func InsertCompatibleRedirectRule(clock *hlc.Clock, data *persistencespb.VersioningData, req *workflowservice.UpdateWorkerVersioningRulesRequest_AddCompatibleBuildIdRedirectRule, maxCRRs int) (*persistencespb.VersioningData, error) {
+func InsertCompatibleRedirectRule(timestamp *hlc.Clock, data *persistencespb.VersioningData, req *workflowservice.UpdateWorkerVersioningRulesRequest_AddCompatibleBuildIdRedirectRule, maxCRRs int) (*persistencespb.VersioningData, error) {
 	if data == nil {
 		data = &persistencespb.VersioningData{RedirectRules: make([]*persistencespb.RedirectRule, 0)}
 	} else {
@@ -116,7 +116,7 @@ func InsertCompatibleRedirectRule(clock *hlc.Clock, data *persistencespb.Version
 	}
 	persistenceCRR := persistencespb.RedirectRule{
 		Rule:            req.GetRule(),
-		CreateTimestamp: clock, // todo: should this be a newly instantiated clock instance, or is this fine?
+		CreateTimestamp: timestamp,
 		DeleteTimestamp: nil,
 	}
 	src := req.GetRule().GetSourceBuildId()
@@ -132,7 +132,7 @@ func InsertCompatibleRedirectRule(clock *hlc.Clock, data *persistencespb.Version
 	return data, checkCRRConditions(data, maxCRRs)
 }
 
-func ReplaceCompatibleRedirectRule(clock *hlc.Clock, data *persistencespb.VersioningData, req *workflowservice.UpdateWorkerVersioningRulesRequest_ReplaceCompatibleBuildIdRedirectRule) (*persistencespb.VersioningData, error) {
+func ReplaceCompatibleRedirectRule(timestamp *hlc.Clock, data *persistencespb.VersioningData, req *workflowservice.UpdateWorkerVersioningRulesRequest_ReplaceCompatibleBuildIdRedirectRule) (*persistencespb.VersioningData, error) {
 	if data == nil {
 		return nil, serviceerror.NewInvalidArgument("data cannot be nil for a replace call")
 	} else {
@@ -141,7 +141,7 @@ func ReplaceCompatibleRedirectRule(clock *hlc.Clock, data *persistencespb.Versio
 	rules := data.GetRedirectRules()
 	persistenceCRR := persistencespb.RedirectRule{
 		Rule:            req.GetRule(),
-		CreateTimestamp: clock, // todo: should this be a newly instantiated clock instance, or is this fine?
+		CreateTimestamp: timestamp,
 		DeleteTimestamp: nil,
 	}
 	src := req.GetRule().GetSourceBuildId()
@@ -158,7 +158,7 @@ func ReplaceCompatibleRedirectRule(clock *hlc.Clock, data *persistencespb.Versio
 	return data, checkCRRConditions(data, 0)
 }
 
-func DeleteCompatibleRedirectRule(clock *hlc.Clock, data *persistencespb.VersioningData, req *workflowservice.UpdateWorkerVersioningRulesRequest_DeleteCompatibleBuildIdRedirectRule) (*persistencespb.VersioningData, error) {
+func DeleteCompatibleRedirectRule(timestamp *hlc.Clock, data *persistencespb.VersioningData, req *workflowservice.UpdateWorkerVersioningRulesRequest_DeleteCompatibleBuildIdRedirectRule) (*persistencespb.VersioningData, error) {
 	if data == nil {
 		return nil, serviceerror.NewInvalidArgument("data cannot be nil for a delete call")
 	} else {
