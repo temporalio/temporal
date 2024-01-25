@@ -2603,7 +2603,7 @@ func (wh *WorkflowHandler) CreateSchedule(ctx context.Context, request *workflow
 
 	err = wh.validateScheduledWorkflowSearchAttributes(request, namespaceName)
 	if err != nil {
-		return nil, fmt.Errorf("validating scheduled workflow search attributes:%v", err)
+		return nil, fmt.Errorf("validating scheduled workflow search attributes:%w", err)
 	}
 
 	inputPayloads, err := sdk.PreferProtoDataConverter.ToPayloads(input)
