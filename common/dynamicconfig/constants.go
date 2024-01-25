@@ -206,7 +206,7 @@ const (
 	// number will fail with a FailedPrecondition error.
 	VersionRedirectRuleLimitPerQueue = "limit.versionRedirectRuleLimitPerQueue"
 	// VersionDeletedRuleRetentionTime is the length of time that deleted Version Assignment Rules and Version
-	// Redirect Rules will be kept in the DB (noted by their DeleteTimestamp). After this time, they will be deleted.
+	// Deleted Redirect Rules will be kept in the DB (with DeleteTimestamp). After this time, the tombstones are deleted.
 	VersionDeletedRuleRetentionTime = "limit.versionCompatibleRedirectRuleLimitPerQueue"
 	// ReachabilityTaskQueueScanLimit limits the number of task queues to scan when responding to a
 	// GetWorkerTaskReachability query.

@@ -856,7 +856,7 @@ func (e *matchingEngineImpl) UpdateWorkerVersioningRules(
 		return nil, err
 	}
 
-	// todo carly: do we need to update updateOptions.TaskQueueLimitPerBuildId or updateOptions.KnownVersion like in lines 1009-1015?
+	// todo carly: do we need to update updateOptions.TaskQueueLimitPerBuildId or updateOptions.KnownVersion like in UpdateWorkerBuildIdCompatibility?
 	updateOptions := UserDataUpdateOptions{}
 
 	err = tqMgr.UpdateUserData(ctx, updateOptions, func(data *persistencespb.TaskQueueUserData) (*persistencespb.TaskQueueUserData, bool, error) {
