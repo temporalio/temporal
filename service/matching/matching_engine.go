@@ -856,16 +856,8 @@ func (e *matchingEngineImpl) UpdateWorkerVersioningRules(
 		return nil, err
 	}
 
+	// todo carly: do we need to update updateOptions.TaskQueueLimitPerBuildId or updateOptions.KnownVersion like in lines 1009-1015?
 	updateOptions := UserDataUpdateOptions{}
-	operationCreatedTombstones := false
-
-	// todo: possibly do some limit checking here? does that prevent a race maybe?
-	switch req.GetOperation().(type) {
-	case *workflowservice.UpdateWorkerVersioningRulesRequest_InsertAssignmentRule:
-		// todo: possibly check the task queue limits
-	case *workflowservice.UpdateWorkerVersioningRulesRequest_InsertCompatibleRedirectRule:
-		// todo: possibly check the task queue limits
-	}
 
 	err = tqMgr.UpdateUserData(ctx, updateOptions, func(data *persistencespb.TaskQueueUserData) (*persistencespb.TaskQueueUserData, bool, error) {
 		clk := data.GetClock()
@@ -875,7 +867,6 @@ func (e *matchingEngineImpl) UpdateWorkerVersioningRules(
 		}
 		updatedClock := hlc.Next(clk, e.timeSource)
 		var versioningData *persistencespb.VersioningData
-		var err error
 		switch req.GetOperation().(type) {
 		case *workflowservice.UpdateWorkerVersioningRulesRequest_InsertAssignmentRule:
 			versioningData, err = InsertAssignmentRule(
@@ -896,18 +887,12 @@ func (e *matchingEngineImpl) UpdateWorkerVersioningRules(
 				data.GetVersioningData(),
 				req.GetDeleteAssignmentRule(),
 			)
-			if ns.ReplicationPolicy() == namespace.ReplicationPolicyMultiCluster {
-				operationCreatedTombstones = true
-			} else { // todo: figure out if this is the right thing to do with tombstones
-				// We don't need to keep the tombstones around if we're not replicating them.
-				versioningData = ClearTombstones(versioningData)
-			}
 		case *workflowservice.UpdateWorkerVersioningRulesRequest_InsertCompatibleRedirectRule:
 			versioningData, err = InsertCompatibleRedirectRule(
 				updatedClock,
 				data.GetVersioningData(),
 				req.GetInsertCompatibleRedirectRule(),
-				e.config.VersionCompatibleRedirectRuleLimitPerQueue(ns.Name().String()),
+				e.config.VersionRedirectRuleLimitPerQueue(ns.Name().String()),
 			)
 		case *workflowservice.UpdateWorkerVersioningRulesRequest_ReplaceCompatibleRedirectRule:
 			versioningData, err = ReplaceCompatibleRedirectRule(
@@ -921,22 +906,16 @@ func (e *matchingEngineImpl) UpdateWorkerVersioningRules(
 				data.GetVersioningData(),
 				req.GetDeleteCompatibleRedirectRule(),
 			)
-			if err != nil {
-				// operation can't be completed due to limits. no action, do not replicate, report error
-				return nil, false, err
-			}
-			if ns.ReplicationPolicy() == namespace.ReplicationPolicyMultiCluster {
-				operationCreatedTombstones = true
-			} else { // todo: figure out if this is the right thing to do with tombstones
-				// We don't need to keep the tombstones around if we're not replicating them.
-				versioningData = ClearTombstones(versioningData)
-			}
 		case *workflowservice.UpdateWorkerVersioningRulesRequest_CommitBuildId_:
-			// todo: not sure here
+			// todo carly: later PR
 		}
 		if err != nil {
 			// operation can't be completed due to limits. no action, do not replicate, report error
 			return nil, false, err
+		}
+		// No need to keep tombstones around for replication
+		if ns.ReplicationPolicy() != namespace.ReplicationPolicyMultiCluster {
+			versioningData = CleanupRuleTombstones(versioningData, e.config.VersionDeletedRuleRetentionTime(ns.Name().String()))
 		}
 		// Avoid mutation
 		ret := common.CloneProto(data)
@@ -949,15 +928,16 @@ func (e *matchingEngineImpl) UpdateWorkerVersioningRules(
 		return nil, err
 	}
 
-	// todo: figure out correct tombstone behavior
-	// Only clear tombstones after they have been replicated.
-	if operationCreatedTombstones {
+	// Only clear tombstones after they have been replicated. This is only really an issue if
+	// VersionDeletedRuleRetentionTime is a very short duration, but technically it can be 0s.
+	// todo carly: understand why doing this separately allows for correct replication. also ask why not to replicate the deletion of tombstones
+	if ns.ReplicationPolicy() == namespace.ReplicationPolicyMultiCluster {
 		err = tqMgr.UpdateUserData(ctx, UserDataUpdateOptions{}, func(data *persistencespb.TaskQueueUserData) (*persistencespb.TaskQueueUserData, bool, error) {
 			updatedClock := hlc.Next(data.GetClock(), e.timeSource)
 			// Avoid mutation
 			ret := common.CloneProto(data)
 			ret.Clock = updatedClock
-			ret.VersioningData = ClearTombstones(data.VersioningData)
+			ret.VersioningData = CleanupRuleTombstones(data.VersioningData, e.config.VersionDeletedRuleRetentionTime(ns.Name().String()))
 			return ret, false, nil // Do not replicate the deletion of tombstones
 		})
 		if err != nil {
@@ -965,8 +945,8 @@ func (e *matchingEngineImpl) UpdateWorkerVersioningRules(
 		}
 	}
 
-	cT := req.GetConflictToken() // todo
-	return &workflowservice.UpdateWorkerVersioningRulesResponse{ConflictToken: cT}, nil
+	// todo carly: understand what is supposed to be done with the conflict token
+	return &workflowservice.UpdateWorkerVersioningRulesResponse{ConflictToken: req.GetConflictToken()}, nil
 }
 
 func (e *matchingEngineImpl) UpdateWorkerBuildIdCompatibility(
