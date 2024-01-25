@@ -707,6 +707,7 @@ func (s *queueBaseSuite) newQueueBase(
 		s.options,
 		s.rateLimiter,
 		NoopReaderCompletionFn,
+		GrouperNamespaceID{},
 		s.logger,
 		s.metricsHandler,
 	)

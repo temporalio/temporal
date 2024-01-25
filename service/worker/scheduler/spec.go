@@ -295,20 +295,17 @@ func (cs *CompiledSpec) getNextTime(jitterSeed string, after time.Time) getNextT
 		after = cs.spec.StartTime.AsTime().Add(-time.Second)
 	}
 
+	pastEndTime := func(t time.Time) bool {
+		return cs.spec.EndTime != nil && t.After(cs.spec.EndTime.AsTime())
+	}
 	var nominal time.Time
-	for {
+	for nominal.IsZero() || cs.excluded(nominal) {
 		nominal = cs.rawNextTime(after)
+		after = nominal
 
-		if nominal.IsZero() || (cs.spec.EndTime != nil && nominal.After(cs.spec.EndTime.AsTime())) {
+		if nominal.IsZero() || pastEndTime(nominal) {
 			return getNextTimeResult{}
 		}
-
-		// check against excludes
-		if !cs.excluded(nominal) {
-			break
-		}
-
-		after = nominal
 	}
 
 	maxJitter := timestamp.DurationValue(cs.spec.Jitter)

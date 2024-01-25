@@ -211,6 +211,12 @@ const (
 	PersistenceRangeCompleteVisibilityTasksScope = "RangeCompleteVisibilityTasks"
 	// PersistenceGetReplicationTaskScope tracks GetReplicationTask calls made by service to persistence layer
 	PersistenceGetArchivalTasksScope = "GetArchivalTasks"
+	// PersistenceGetCallbackTasksScope tracks GetCallbackTasks calls made by service to persistence layer
+	PersistenceGetCallbackTasksScope = "GetCallbackTasks"
+	// PersistenceCompleteCallbackTasksScope tracks CompleteCallbackTasks calls made by service to persistence layer
+	PersistenceCompleteCallbackTasksScope = "CompleteCallbackTasks"
+	// PersistenceRangeCompleteCallbackTasksScope tracks RangeCompleteCallbackTasks calls made by service to persistence layer
+	PersistenceRangeCompleteCallbackTasksScope = "RangeCompleteCallbackTasks"
 	// PersistenceCompleteArchivalTaskScope tracks CompleteArchivalTasks calls made by service to persistence layer
 	PersistenceCompleteArchivalTaskScope = "CompleteArchivalTask"
 	// PersistenceRangeCompleteArchivalTasksScope tracks CompleteArchivalTasks calls made by service to persistence layer
@@ -396,15 +402,11 @@ const (
 	// HistoryCacheGetOrCreateScope is the scope used by history cache
 	HistoryCacheGetOrCreateScope = "HistoryCacheGetOrCreate"
 	// HistoryCacheGetOrCreateCurrentScope is the scope used by history cache
-	HistoryCacheGetOrCreateCurrentScope = "CacheGetOrCreateCurrent"
+	HistoryCacheGetOrCreateCurrentScope = "HistoryCacheGetOrCreateCurrent"
 
-	// TransferQueueProcessorScope is the scope used by all metric emitted by transfer queue processor
-	TransferQueueProcessorScope = "TransferQueueProcessor"
 	// TransferActiveTaskCloseExecutionScope is the scope used for close execution task processing by transfer queue processor
 	TransferActiveTaskCloseExecutionScope = "TransferActiveTaskCloseExecution"
 
-	// TimerQueueProcessorScope is the scope used by all metric emitted by timer queue processor
-	TimerQueueProcessorScope = "TimerQueueProcessor"
 	// TimerActiveTaskActivityTimeoutScope is the scope used by metric emitted by timer queue processor for processing activity timeouts
 	TimerActiveTaskActivityTimeoutScope = "TimerActiveTaskActivityTimeout"
 	// TimerActiveTaskWorkflowTaskTimeoutScope is the scope used by metric emitted by timer queue processor for processing workflow task timeouts
@@ -465,6 +467,8 @@ const (
 	OperationArchivalQueueProcessorScope = "ArchivalQueueProcessor"
 	// OperationMemoryScheduledQueueProcessorScope is a scope for memory scheduled queue processor.
 	OperationMemoryScheduledQueueProcessorScope = "MemoryScheduledQueueProcessor"
+	// OperationCallbackQueueProcessorScope is a scope for the callback queue processor.
+	OperationCallbackQueueProcessorScope = "CallbackQueueProcessor"
 )
 
 // Matching Scope
@@ -1094,6 +1098,10 @@ var (
 	ScheduleTerminateWorkflowErrors = NewCounterDef(
 		"schedule_terminate_workflow_errors",
 		WithDescription("The number of times a schedule got an error trying to terminate a previous run"),
+	)
+	ScheduleActionDelay = NewTimerDef(
+		"schedule_action_delay",
+		WithDescription("Delay between when scheduled actions should/actually happen"),
 	)
 
 	// Force replication

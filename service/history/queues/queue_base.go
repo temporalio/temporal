@@ -90,6 +90,7 @@ type (
 		timeSource     clock.TimeSource
 		monitor        *monitorImpl
 		mitigator      *mitigatorImpl
+		grouper        Grouper
 		logger         log.Logger
 		metricsHandler metrics.Handler
 
@@ -132,6 +133,7 @@ func newQueueBase(
 	options *Options,
 	hostReaderRateLimiter quotas.RequestRateLimiter,
 	completionFn ReaderCompletionFn,
+	grouper Grouper,
 	logger log.Logger,
 	metricsHandler metrics.Handler,
 ) *queueBase {
@@ -194,7 +196,7 @@ func newQueueBase(
 
 		slices := make([]Slice, 0, len(scopes))
 		for _, scope := range scopes {
-			slices = append(slices, NewSlice(paginationFnProvider, executableFactory, monitor, scope))
+			slices = append(slices, NewSlice(paginationFnProvider, executableFactory, monitor, scope, grouper))
 		}
 		if _, err := readerGroup.NewReader(readerID, slices...); err != nil {
 			// we are not able to re-create the scopes & readers we previously have
@@ -219,7 +221,7 @@ func newQueueBase(
 		readerGroup = NewReaderGroup(shard.GetShardID(), shard.GetOwner(), category, readerInitializer, shard.GetExecutionManager())
 	}
 
-	mitigator := newMitigator(readerGroup, monitor, logger, metricsHandler, options.MaxReaderCount)
+	mitigator := newMitigator(readerGroup, monitor, logger, metricsHandler, options.MaxReaderCount, grouper)
 
 	return &queueBase{
 		shard: shard,
@@ -234,6 +236,7 @@ func newQueueBase(
 		timeSource:     shard.GetTimeSource(),
 		monitor:        monitor,
 		mitigator:      mitigator,
+		grouper:        grouper,
 		logger:         logger,
 		metricsHandler: metricsHandler,
 
@@ -304,6 +307,7 @@ func (p *queueBase) processNewRange() {
 			p.executableFactory,
 			p.monitor,
 			newReadScope,
+			p.grouper,
 		))
 	}
 

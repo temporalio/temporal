@@ -127,7 +127,9 @@ func TestHasOutgoingMessages(t *testing.T) {
 	require.True(t, reg.HasOutgoingMessages(true))
 
 	acptReq := protocolpb.Message{Body: mustMarshalAny(t, &updatepb.Acceptance{
-		AcceptedRequest: &req,
+		AcceptedRequestMessageId:         "random",
+		AcceptedRequestSequencingEventId: testSequencingEventID,
+		AcceptedRequest:                  &req,
 	})}
 
 	err = upd.OnProtocolMessage(ctx, &acptReq, evStore)
@@ -601,7 +603,9 @@ func TestCancelIncomplete(t *testing.T) {
 	_ = updAccepted.Request(ctx, msgRequest4, evStore)
 	updAccepted.Send(ctx, false, sequencingID, evStore)
 	_ = updAccepted.OnProtocolMessage(ctx, &protocolpb.Message{Body: mustMarshalAny(t, &updatepb.Acceptance{
-		AcceptedRequest: msgRequest4,
+		AcceptedRequestMessageId:         "random",
+		AcceptedRequestSequencingEventId: testSequencingEventID,
+		AcceptedRequest:                  msgRequest4,
 	})}, evStore)
 
 	msgRequest5 := &updatepb.Request{
@@ -612,7 +616,9 @@ func TestCancelIncomplete(t *testing.T) {
 	_ = updCompleted.Request(ctx, msgRequest5, evStore)
 	updCompleted.Send(ctx, false, sequencingID, evStore)
 	_ = updCompleted.OnProtocolMessage(ctx, &protocolpb.Message{Body: mustMarshalAny(t, &updatepb.Acceptance{
-		AcceptedRequest: msgRequest4,
+		AcceptedRequestMessageId:         "random",
+		AcceptedRequestSequencingEventId: testSequencingEventID,
+		AcceptedRequest:                  msgRequest4,
 	})}, evStore)
 	_ = updCompleted.OnProtocolMessage(
 		ctx,

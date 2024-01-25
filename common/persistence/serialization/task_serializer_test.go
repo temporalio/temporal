@@ -364,6 +364,37 @@ func (s *taskSerializerSuite) TestArchiveExecutionTask() {
 	s.assertEqualTasks(task)
 }
 
+func (s *taskSerializerSuite) TestCallbackTask() {
+	task := &tasks.CallbackTask{
+		WorkflowKey:         s.workflowKey,
+		VisibilityTimestamp: time.Unix(0, 0).UTC(), // go == compare for location as well which is striped during marshaling/unmarshaling
+		TaskID:              rand.Int63(),
+		Version:             rand.Int63(),
+		DestinationAddress:  "destination",
+		CallbackID:          "callback-id",
+		Attempt:             3,
+	}
+	s.Assert().Equal(tasks.CategoryCallback, task.GetCategory())
+	s.Assert().Equal(enumsspb.TASK_TYPE_CALLBACK, task.GetType())
+
+	s.assertEqualTasks(task)
+}
+
+func (s *taskSerializerSuite) TestCallbackBackoffTask() {
+	task := &tasks.CallbackBackoffTask{
+		WorkflowKey:         s.workflowKey,
+		VisibilityTimestamp: time.Unix(0, 0).UTC(), // go == compare for location as well which is striped during marshaling/unmarshaling
+		TaskID:              rand.Int63(),
+		Version:             rand.Int63(),
+		CallbackID:          "callback-id",
+		Attempt:             3,
+	}
+	s.Assert().Equal(tasks.CategoryTimer, task.GetCategory())
+	s.Assert().Equal(enumsspb.TASK_TYPE_CALLBACK_BACKOFF, task.GetType())
+
+	s.assertEqualTasks(task)
+}
+
 func (s *taskSerializerSuite) assertEqualTasks(
 	task tasks.Task,
 ) {

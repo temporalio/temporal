@@ -135,6 +135,7 @@ func NewScheduledQueue(
 			options,
 			hostRateLimiter,
 			readerCompletionFn,
+			GrouperNamespaceID{},
 			logger,
 			metricsHandler,
 		),

@@ -71,7 +71,7 @@ func (s *searchAttributesValidatorSuite) TestSearchAttributesValidate() {
 		dynamicconfig.GetIntPropertyFilteredByNamespace(sizeOfValueLimit),
 		dynamicconfig.GetIntPropertyFilteredByNamespace(sizeOfTotalLimit),
 		s.mockVisibilityManager,
-		true,
+		dynamicconfig.GetBoolPropertyFnFilteredByNamespace(true),
 	)
 
 	namespace := "namespace"
@@ -148,7 +148,7 @@ func (s *searchAttributesValidatorSuite) TestSearchAttributesValidate_Mapper() {
 		dynamicconfig.GetIntPropertyFilteredByNamespace(sizeOfValueLimit),
 		dynamicconfig.GetIntPropertyFilteredByNamespace(sizeOfTotalLimit),
 		s.mockVisibilityManager,
-		false,
+		dynamicconfig.GetBoolPropertyFnFilteredByNamespace(false),
 	)
 
 	namespace := "test-namespace"
@@ -211,7 +211,7 @@ func (s *searchAttributesValidatorSuite) TestSearchAttributesValidateSize() {
 		dynamicconfig.GetIntPropertyFilteredByNamespace(sizeOfValueLimit),
 		dynamicconfig.GetIntPropertyFilteredByNamespace(sizeOfTotalLimit),
 		s.mockVisibilityManager,
-		false,
+		dynamicconfig.GetBoolPropertyFnFilteredByNamespace(false),
 	)
 
 	namespace := "namespace"
@@ -250,7 +250,7 @@ func (s *searchAttributesValidatorSuite) TestSearchAttributesValidateSize_Mapper
 		dynamicconfig.GetIntPropertyFilteredByNamespace(sizeOfValueLimit),
 		dynamicconfig.GetIntPropertyFilteredByNamespace(sizeOfTotalLimit),
 		s.mockVisibilityManager,
-		false,
+		dynamicconfig.GetBoolPropertyFnFilteredByNamespace(false),
 	)
 
 	namespace := "test-namespace"

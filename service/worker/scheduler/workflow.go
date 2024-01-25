@@ -1185,6 +1185,11 @@ func (s *scheduler) startWorkflow(
 			return nil, err
 		}
 
+		if !start.Manual {
+			// record metric only for _scheduled_ actions, not trigger/backfill, otherwise it's not meaningful
+			s.metrics.Timer(metrics.ScheduleActionDelay.Name()).Record(res.RealStartTime.AsTime().Sub(start.ActualTime.AsTime()))
+		}
+
 		return &schedpb.ScheduleActionResult{
 			ScheduleTime: start.ActualTime,
 			ActualTime:   res.RealStartTime,
