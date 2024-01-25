@@ -23,8 +23,9 @@ func checkAssignmentConditions(g *persistencepb.VersioningData, maxARs int, forc
 	if force == true {
 		return nil
 	}
-	rules := g.GetAssignmentRules()
+	rules := slices.Clone(g.GetAssignmentRules())
 	if maxARs > 0 && len(rules) > maxARs {
+		// todo carly: should the max # of rules count rules that have been deleted but not yet cleaned up from the db?
 		return serviceerror.NewFailedPrecondition(fmt.Sprintf("update exceeds number of assignment rules permitted in namespace dynamic config (%v/%v)", len(rules), maxARs))
 	}
 	foundUnfiltered := false
@@ -142,12 +143,12 @@ func checkRedirectConditions(g *persistencepb.VersioningData, maxRRs int) error 
 
 // trimRedirectRules attempts to trim the DAG of redirect rules. It returns the number of rules it was able to delete.
 func trimRedirectRules(rules []*persistencepb.RedirectRule) int {
-	// todo: redirect rule PR
+	// todo carly: redirect rule PR
 	return 0
 }
 
 func isCyclic(rules []*persistencepb.RedirectRule) bool {
-	// todo: redirect rule PR
+	// todo carly: redirect rule PR
 	return true
 }
 

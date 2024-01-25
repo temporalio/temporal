@@ -154,7 +154,9 @@ func hashBuildId(buildID string) string {
 
 func shallowCloneVersioningData(data *persistencespb.VersioningData) *persistencespb.VersioningData {
 	return &persistencespb.VersioningData{
-		VersionSets: slices.Clone(data.GetVersionSets()),
+		VersionSets:     slices.Clone(data.GetVersionSets()),
+		AssignmentRules: slices.Clone(data.GetAssignmentRules()),
+		RedirectRules:   slices.Clone(data.GetRedirectRules()),
 	}
 }
 
