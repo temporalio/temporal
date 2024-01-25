@@ -856,14 +856,26 @@ func (e *matchingEngineImpl) UpdateWorkerVersioningRules(
 		return nil, err
 	}
 
-	// todo carly: do we need to update updateOptions.TaskQueueLimitPerBuildId or updateOptions.KnownVersion like in UpdateWorkerBuildIdCompatibility?
+	// we don't set updateOptions.TaskQueueLimitPerBuildId, because the Versioning Rule limits will be checked separately
+	// we don't set updateOptions.KnownVersion, because we handle external API call ordering with conflictToken
 	updateOptions := UserDataUpdateOptions{}
+	cT := req.GetConflictToken()
 
 	err = tqMgr.UpdateUserData(ctx, updateOptions, func(data *persistencespb.TaskQueueUserData) (*persistencespb.TaskQueueUserData, bool, error) {
 		clk := data.GetClock()
 		if clk == nil {
 			tmp := hlc.Zero(e.clusterMeta.GetClusterID())
 			clk = tmp
+		} else {
+			prevCT, err := clk.Marshal()
+			if err != nil {
+				return nil, false, err
+			}
+			if !bytes.Equal(cT, prevCT) {
+				return nil, false, serviceerror.NewFailedPrecondition(
+					fmt.Sprintf("provided conflict token %v does not match existing one %v", cT, prevCT),
+				)
+			}
 		}
 		updatedClock := hlc.Next(clk, e.timeSource)
 		var versioningData *persistencespb.VersioningData
@@ -910,13 +922,14 @@ func (e *matchingEngineImpl) UpdateWorkerVersioningRules(
 			// todo carly: later PR
 		}
 		if err != nil {
-			// operation can't be completed due to limits. no action, do not replicate, report error
+			// operation can't be completed due to failed validation. no action, do not replicate, report error
 			return nil, false, err
 		}
-		// No need to keep tombstones around for replication
-		if ns.ReplicationPolicy() != namespace.ReplicationPolicyMultiCluster {
-			versioningData = CleanupRuleTombstones(versioningData, e.config.VersionDeletedRuleRetentionTime(ns.Name().String()))
+		if cT, err = updatedClock.Marshal(); err != nil {
+			return nil, false, serviceerror.NewInternal("error generating next conflict token")
 		}
+		// We can replicate tombstone cleanup, because it's just based on DeletionTimestamp, so no need to only do it locally
+		versioningData = CleanupRuleTombstones(versioningData, e.config.VersionDeletedRuleRetentionTime(ns.Name().String()))
 		// Avoid mutation
 		ret := common.CloneProto(data)
 		ret.Clock = updatedClock
@@ -928,25 +941,7 @@ func (e *matchingEngineImpl) UpdateWorkerVersioningRules(
 		return nil, err
 	}
 
-	// Only clear tombstones after they have been replicated. This is only really an issue if
-	// VersionDeletedRuleRetentionTime is a very short duration, but technically it can be 0s.
-	// todo carly: understand why doing this separately allows for correct replication. also ask why not to replicate the deletion of tombstones
-	if ns.ReplicationPolicy() == namespace.ReplicationPolicyMultiCluster {
-		err = tqMgr.UpdateUserData(ctx, UserDataUpdateOptions{}, func(data *persistencespb.TaskQueueUserData) (*persistencespb.TaskQueueUserData, bool, error) {
-			updatedClock := hlc.Next(data.GetClock(), e.timeSource)
-			// Avoid mutation
-			ret := common.CloneProto(data)
-			ret.Clock = updatedClock
-			ret.VersioningData = CleanupRuleTombstones(data.VersioningData, e.config.VersionDeletedRuleRetentionTime(ns.Name().String()))
-			return ret, false, nil // Do not replicate the deletion of tombstones
-		})
-		if err != nil {
-			return nil, err
-		}
-	}
-
-	// todo carly: understand what is supposed to be done with the conflict token
-	return &workflowservice.UpdateWorkerVersioningRulesResponse{ConflictToken: req.GetConflictToken()}, nil
+	return &workflowservice.UpdateWorkerVersioningRulesResponse{ConflictToken: cT}, nil
 }
 
 func (e *matchingEngineImpl) UpdateWorkerBuildIdCompatibility(
