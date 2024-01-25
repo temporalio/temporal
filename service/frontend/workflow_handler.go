@@ -2600,6 +2600,12 @@ func (wh *WorkflowHandler) CreateSchedule(ctx context.Context, request *workflow
 			ConflictToken: scheduler.InitialConflictToken,
 		},
 	}
+
+	err = wh.validateScheduledWorkflowSearchAttributes(request, namespaceName)
+	if err != nil {
+		return nil, fmt.Errorf("validating scheduled workflow search attributes:%v", err)
+	}
+
 	inputPayloads, err := sdk.PreferProtoDataConverter.ToPayloads(input)
 	if err != nil {
 		return nil, err
@@ -2629,6 +2635,27 @@ func (wh *WorkflowHandler) CreateSchedule(ctx context.Context, request *workflow
 	return &workflowservice.CreateScheduleResponse{
 		ConflictToken: token,
 	}, nil
+}
+
+func (wh *WorkflowHandler) validateScheduledWorkflowSearchAttributes(
+	request *workflowservice.CreateScheduleRequest,
+	namespaceName namespace.Name,
+) error {
+
+	scheduledAction := request.GetSchedule().GetAction().GetAction()
+	if scheduledAction == nil {
+		panic("no scheduled workflow")
+	}
+	action, ok := scheduledAction.(*schedpb.ScheduleAction_StartWorkflow)
+	if !ok {
+		panic(scheduledAction)
+	}
+	searchAttributes := action.StartWorkflow.SearchAttributes
+	unaliased, err := searchattribute.UnaliasFields(wh.saMapperProvider, searchAttributes, namespaceName.String())
+	if err != nil {
+		return err
+	}
+	return wh.validateSearchAttributes(unaliased, namespaceName)
 }
 
 // Validates inner start workflow request. Note that this can mutate search attributes if present.
