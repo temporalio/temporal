@@ -513,7 +513,7 @@ func (t *timerQueueStandbyTaskExecutor) fetchHistoryFromRemote(
 	}
 
 	scope := t.metricHandler.WithTags(metrics.OperationTag(metrics.HistoryRereplicationByTimerTaskScope))
-	scope.Counter(metrics.ClientRequests.Name()).Record(1)
+	metrics.ClientRequests.With(scope).Record(1)
 	startTime := time.Now()
 	defer func() { scope.Timer(metrics.ClientLatency.Name()).Record(time.Since(startTime)) }()
 

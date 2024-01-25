@@ -348,6 +348,7 @@ func (s *Service) Start() {
 		tag.ComponentWorker,
 	)
 
+	//TODO -> New Metric definition
 	s.metricsHandler.Counter(metrics.RestartCount).Record(1)
 
 	s.clusterMetadata.Start()

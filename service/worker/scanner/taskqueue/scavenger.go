@@ -131,7 +131,7 @@ func (s *Scavenger) Start() {
 	s.stopWG.Add(1)
 	s.executor.Start()
 	go s.run()
-	s.metricsHandler.Counter(metrics.StartedCount.Name()).Record(1)
+	metrics.StartedCount.With(s.metricsHandler).Record(1)
 	s.logger.Info("Taskqueue scavenger started")
 }
 
@@ -140,7 +140,7 @@ func (s *Scavenger) Stop() {
 	if !atomic.CompareAndSwapInt32(&s.status, common.DaemonStatusStarted, common.DaemonStatusStopped) {
 		return
 	}
-	s.metricsHandler.Counter(metrics.StoppedCount.Name()).Record(1)
+	metrics.StoppedCount.With(s.metricsHandler).Record(1)
 	s.logger.Info("Taskqueue scavenger stopping")
 	s.lifecycleCancel()
 	close(s.stopC)

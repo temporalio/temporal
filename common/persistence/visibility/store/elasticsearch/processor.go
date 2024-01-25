@@ -197,7 +197,7 @@ func (p *processorImpl) Add(request *client.BulkableRequest, visibilityTaskKey s
 		}
 
 		p.logger.Warn("Skipping duplicate ES request for visibility task key.", tag.Key(visibilityTaskKey), tag.ESDocID(request.ID), tag.Value(request.Doc), tag.NewDurationTag("interval-between-duplicates", newFuture.createdAt.Sub(existingFuture.createdAt)))
-		p.metricsHandler.Counter(metrics.ElasticsearchBulkProcessorDuplicateRequest.Name()).Record(1)
+		metrics.ElasticsearchBulkProcessorDuplicateRequest.With(p.metricsHandler).Record(1)
 		newFuture = existingFuture
 		return nil
 	})
@@ -210,7 +210,7 @@ func (p *processorImpl) Add(request *client.BulkableRequest, visibilityTaskKey s
 
 // bulkBeforeAction is triggered before bulk processor commit
 func (p *processorImpl) bulkBeforeAction(_ int64, requests []elastic.BulkableRequest) {
-	p.metricsHandler.Counter(metrics.ElasticsearchBulkProcessorRequests.Name()).Record(int64(len(requests)))
+	metrics.ElasticsearchBulkProcessorRequests.With(p.metricsHandler).Record(int64(len(requests)))
 	p.metricsHandler.Histogram(metrics.ElasticsearchBulkProcessorBulkSize.Name(), metrics.ElasticsearchBulkProcessorBulkSize.Unit()).
 		Record(int64(len(requests)))
 
@@ -246,7 +246,7 @@ func (p *processorImpl) bulkAfterAction(_ int64, requests []elastic.BulkableRequ
 				logRequests.WriteString(request.String())
 				logRequests.WriteRune('\n')
 			}
-			p.metricsHandler.Counter(metrics.ElasticsearchBulkProcessorFailures.Name()).Record(1, metrics.HttpStatusTag(httpStatus))
+			metrics.ElasticsearchBulkProcessorFailures.With(p.metricsHandler).Record(1, metrics.HttpStatusTag(httpStatus))
 			visibilityTaskKey := p.extractVisibilityTaskKey(request)
 			if visibilityTaskKey == "" {
 				continue
@@ -276,7 +276,7 @@ func (p *processorImpl) bulkAfterAction(_ int64, requests []elastic.BulkableRequ
 				tag.Key(visibilityTaskKey),
 				tag.ESDocID(docID),
 				tag.ESRequest(request.String()))
-			p.metricsHandler.Counter(metrics.ElasticsearchBulkProcessorCorruptedData.Name()).Record(1)
+			metrics.ElasticsearchBulkProcessorCorruptedData.With(p.metricsHandler).Record(1)
 			p.notifyResult(visibilityTaskKey, false)
 			continue
 		}
@@ -288,7 +288,7 @@ func (p *processorImpl) bulkAfterAction(_ int64, requests []elastic.BulkableRequ
 				tag.Key(visibilityTaskKey),
 				tag.ESDocID(docID),
 				tag.ESRequest(request.String()))
-			p.metricsHandler.Counter(metrics.ElasticsearchBulkProcessorFailures.Name()).Record(1, metrics.HttpStatusTag(responseItem.Status))
+			metrics.ElasticsearchBulkProcessorFailures.With(p.metricsHandler).Record(1, metrics.HttpStatusTag(responseItem.Status))
 			p.notifyResult(visibilityTaskKey, false)
 			continue
 		}
@@ -334,7 +334,7 @@ func (p *processorImpl) extractVisibilityTaskKey(request elastic.BulkableRequest
 	req, err := request.Source()
 	if err != nil {
 		p.logger.Error("Unable to get ES request source.", tag.Error(err), tag.ESRequest(request.String()))
-		p.metricsHandler.Counter(metrics.ElasticsearchBulkProcessorCorruptedData.Name()).Record(1)
+		metrics.ElasticsearchBulkProcessorCorruptedData.With(p.metricsHandler).Record(1)
 		return ""
 	}
 
@@ -342,14 +342,14 @@ func (p *processorImpl) extractVisibilityTaskKey(request elastic.BulkableRequest
 		var body map[string]interface{}
 		if err = json.Unmarshal([]byte(req[1]), &body); err != nil {
 			p.logger.Error("Unable to unmarshal ES request body.", tag.Error(err))
-			p.metricsHandler.Counter(metrics.ElasticsearchBulkProcessorCorruptedData.Name()).Record(1)
+			metrics.ElasticsearchBulkProcessorCorruptedData.With(p.metricsHandler).Record(1)
 			return ""
 		}
 
 		k, ok := body[searchattribute.VisibilityTaskKey]
 		if !ok {
 			p.logger.Error("Unable to extract VisibilityTaskKey from ES request.", tag.ESRequest(request.String()))
-			p.metricsHandler.Counter(metrics.ElasticsearchBulkProcessorCorruptedData.Name()).Record(1)
+			metrics.ElasticsearchBulkProcessorCorruptedData.With(p.metricsHandler).Record(1)
 			return ""
 		}
 		return k.(string)
@@ -362,7 +362,7 @@ func (p *processorImpl) extractDocID(request elastic.BulkableRequest) string {
 	req, err := request.Source()
 	if err != nil {
 		p.logger.Error("Unable to get ES request source.", tag.Error(err), tag.ESRequest(request.String()))
-		p.metricsHandler.Counter(metrics.ElasticsearchBulkProcessorCorruptedData.Name()).Record(1)
+		metrics.ElasticsearchBulkProcessorCorruptedData.With(p.metricsHandler).Record(1)
 
 		return ""
 	}
@@ -370,7 +370,7 @@ func (p *processorImpl) extractDocID(request elastic.BulkableRequest) string {
 	var body map[string]map[string]interface{}
 	if err = json.Unmarshal([]byte(req[0]), &body); err != nil {
 		p.logger.Error("Unable to unmarshal ES request body.", tag.Error(err), tag.ESRequest(request.String()))
-		p.metricsHandler.Counter(metrics.ElasticsearchBulkProcessorCorruptedData.Name()).Record(1)
+		metrics.ElasticsearchBulkProcessorCorruptedData.With(p.metricsHandler).Record(1)
 		return ""
 	}
 
@@ -383,7 +383,7 @@ func (p *processorImpl) extractDocID(request elastic.BulkableRequest) string {
 	}
 
 	p.logger.Error("Unable to extract _id from ES request.", tag.ESRequest(request.String()))
-	p.metricsHandler.Counter(metrics.ElasticsearchBulkProcessorCorruptedData.Name()).Record(1)
+	metrics.ElasticsearchBulkProcessorCorruptedData.With(p.metricsHandler).Record(1)
 	return ""
 }
 

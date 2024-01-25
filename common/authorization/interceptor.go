@@ -146,12 +146,12 @@ func (a *interceptor) Interceptor(
 			Request:   req,
 		}, handler)
 		if err != nil {
-			handler.Counter(metrics.ServiceErrAuthorizeFailedCounter.Name()).Record(1)
+			metrics.ServiceErrAuthorizeFailedCounter.With(handler).Record(1)
 			a.logAuthError(err)
 			return nil, errUnauthorized // return a generic error to the caller without disclosing details
 		}
 		if result.Decision != DecisionAllow {
-			handler.Counter(metrics.ServiceErrUnauthorizedCounter.Name()).Record(1)
+			metrics.ServiceErrUnauthorizedCounter.With(handler).Record(1)
 			// if a reason is included in the result, include it in the error message
 			if result.Reason != "" {
 				return nil, serviceerror.NewPermissionDenied(RequestUnauthorized, result.Reason)

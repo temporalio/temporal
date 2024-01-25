@@ -353,6 +353,7 @@ func (s *Service) Start() {
 	reflection.Register(s.server)
 
 	// must start resource first
+	//TODO -> New Metric definition
 	s.metricsHandler.Counter(metrics.RestartCount).Record(1)
 
 	s.versionChecker.Start()

@@ -100,9 +100,9 @@ func (v *visibilityArchiver) Archive(ctx context.Context, URI archiver.URI, requ
 		handler.Timer(metrics.ServiceLatency.Name()).Record(time.Since(startTime))
 		if err != nil {
 			if isRetryableError(err) {
-				handler.Counter(metrics.VisibilityArchiverArchiveTransientErrorCount.Name()).Record(1)
+				metrics.VisibilityArchiverArchiveTransientErrorCount.With(handler).Record(1)
 			} else {
-				handler.Counter(metrics.VisibilityArchiverArchiveNonRetryableErrorCount.Name()).Record(1)
+				metrics.VisibilityArchiverArchiveNonRetryableErrorCount.With(handler).Record(1)
 				if featureCatalog.NonRetryableError != nil {
 					err = featureCatalog.NonRetryableError()
 				}
@@ -146,7 +146,7 @@ func (v *visibilityArchiver) Archive(ctx context.Context, URI archiver.URI, requ
 		return errRetryable
 	}
 
-	handler.Counter(metrics.VisibilityArchiveSuccessCount.Name()).Record(1)
+	metrics.VisibilityArchiveSuccessCount.With(handler).Record(1)
 	return nil
 }
 

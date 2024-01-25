@@ -117,7 +117,7 @@ func (vc *VersionChecker) performVersionCheck(
 	}()
 	metadata, err := vc.clusterMetadataManager.GetCurrentClusterMetadata(ctx)
 	if err != nil {
-		vc.metricsHandler.Counter(metrics.VersionCheckFailedCount.Name()).Record(1)
+		metrics.VersionCheckFailedCount.With(vc.metricsHandler).Record(1)
 		return
 	}
 
@@ -127,21 +127,21 @@ func (vc *VersionChecker) performVersionCheck(
 
 	req, err := vc.createVersionCheckRequest(metadata)
 	if err != nil {
-		vc.metricsHandler.Counter(metrics.VersionCheckFailedCount.Name()).Record(1)
+		metrics.VersionCheckFailedCount.With(vc.metricsHandler).Record(1)
 		return
 	}
 	resp, err := vc.getVersionInfo(req)
 	if err != nil {
-		vc.metricsHandler.Counter(metrics.VersionCheckRequestFailedCount.Name()).Record(1)
-		vc.metricsHandler.Counter(metrics.VersionCheckFailedCount.Name()).Record(1)
+		metrics.VersionCheckRequestFailedCount.With(vc.metricsHandler).Record(1)
+		metrics.VersionCheckFailedCount.With(vc.metricsHandler).Record(1)
 		return
 	}
 	err = vc.saveVersionInfo(ctx, resp)
 	if err != nil {
-		vc.metricsHandler.Counter(metrics.VersionCheckFailedCount.Name()).Record(1)
+		metrics.VersionCheckFailedCount.With(vc.metricsHandler).Record(1)
 		return
 	}
-	vc.metricsHandler.Counter(metrics.VersionCheckSuccessCount.Name()).Record(1)
+	metrics.VersionCheckSuccessCount.With(vc.metricsHandler).Record(1)
 }
 
 func isUpdateNeeded(metadata *persistence.GetClusterMetadataResponse) bool {

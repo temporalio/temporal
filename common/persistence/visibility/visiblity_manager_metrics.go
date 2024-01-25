@@ -241,7 +241,7 @@ func (m *visibilityManagerMetrics) GetWorkflowExecution(
 
 func (m *visibilityManagerMetrics) tagScope(operation string) (metrics.Handler, time.Time) {
 	taggedHandler := m.metricHandler.WithTags(metrics.OperationTag(operation), m.visibilityPluginNameMetricsTag)
-	taggedHandler.Counter(metrics.VisibilityPersistenceRequests.Name()).Record(1)
+	metrics.VisibilityPersistenceRequests.With(taggedHandler).Record(1)
 	return taggedHandler, time.Now().UTC()
 }
 
@@ -250,8 +250,7 @@ func (m *visibilityManagerMetrics) updateErrorMetric(handler metrics.Handler, er
 		return nil
 	}
 
-	handler.Counter(metrics.VisibilityPersistenceErrorWithType.Name()).Record(1, metrics.ServiceErrorTypeTag(err))
-
+	metrics.VisibilityPersistenceErrorWithType.With(handler).Record(1, metrics.ServiceErrorTypeTag(err))
 	switch err := err.(type) {
 	case *serviceerror.InvalidArgument,
 		*persistence.TimeoutError,
@@ -260,10 +259,10 @@ func (m *visibilityManagerMetrics) updateErrorMetric(handler metrics.Handler, er
 		// no-op
 
 	case *serviceerror.ResourceExhausted:
-		handler.Counter(metrics.VisibilityPersistenceResourceExhausted.Name()).Record(1, metrics.ResourceExhaustedCauseTag(err.Cause))
+		metrics.VisibilityPersistenceResourceExhausted.With(handler).Record(1, metrics.ResourceExhaustedCauseTag(err.Cause))
 	default:
 		m.logger.Error("Operation failed with an error.", tag.Error(err))
-		handler.Counter(metrics.VisibilityPersistenceFailures.Name()).Record(1)
+		metrics.VisibilityPersistenceFailures.With(handler).Record(1)
 	}
 
 	return err

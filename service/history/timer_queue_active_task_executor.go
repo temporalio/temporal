@@ -407,17 +407,17 @@ func (t *timerQueueActiveTaskExecutor) executeWorkflowBackoffTimerTask(
 	}
 
 	if task.WorkflowBackoffType == enumsspb.WORKFLOW_BACKOFF_TYPE_RETRY {
-		t.metricHandler.Counter(metrics.WorkflowRetryBackoffTimerCount.Name()).Record(
+		metrics.WorkflowRetryBackoffTimerCount.With(t.metricHandler).Record(
 			1,
 			metrics.OperationTag(metrics.TimerActiveTaskWorkflowBackoffTimerScope),
 		)
 	} else if task.WorkflowBackoffType == enumsspb.WORKFLOW_BACKOFF_TYPE_CRON {
-		t.metricHandler.Counter(metrics.WorkflowCronBackoffTimerCount.Name()).Record(
+		metrics.WorkflowCronBackoffTimerCount.With(t.metricHandler).Record(
 			1,
 			metrics.OperationTag(metrics.TimerActiveTaskWorkflowBackoffTimerScope),
 		)
 	} else if task.WorkflowBackoffType == enumsspb.WORKFLOW_BACKOFF_TYPE_DELAY_START {
-		t.metricHandler.Counter(metrics.WorkflowDelayedStartBackoffTimerCount.Name()).Record(
+		metrics.WorkflowDelayedStartBackoffTimerCount.With(t.metricHandler).Record(
 			1,
 			metrics.OperationTag(metrics.TimerActiveTaskWorkflowBackoffTimerScope),
 		)
@@ -670,12 +670,12 @@ func (t *timerQueueActiveTaskExecutor) emitTimeoutMetricScopeWithNamespaceTag(
 	)
 	switch timerType {
 	case enumspb.TIMEOUT_TYPE_SCHEDULE_TO_START:
-		metricsScope.Counter(metrics.ScheduleToStartTimeoutCounter.Name()).Record(1)
+		metrics.ScheduleToStartTimeoutCounter.With(metricsScope).Record(1)
 	case enumspb.TIMEOUT_TYPE_SCHEDULE_TO_CLOSE:
-		metricsScope.Counter(metrics.ScheduleToCloseTimeoutCounter.Name()).Record(1)
+		metrics.ScheduleToCloseTimeoutCounter.With(metricsScope).Record(1)
 	case enumspb.TIMEOUT_TYPE_START_TO_CLOSE:
-		metricsScope.Counter(metrics.StartToCloseTimeoutCounter.Name()).Record(1)
+		metrics.StartToCloseTimeoutCounter.With(metricsScope).Record(1)
 	case enumspb.TIMEOUT_TYPE_HEARTBEAT:
-		metricsScope.Counter(metrics.HeartbeatTimeoutCounter.Name()).Record(1)
+		metrics.HeartbeatTimeoutCounter.With(metricsScope).Record(1)
 	}
 }
