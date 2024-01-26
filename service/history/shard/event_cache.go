@@ -42,7 +42,7 @@ import (
 )
 
 type (
-	EventKey struct {
+	EventsCacheKey struct {
 		NamespaceID namespace.ID
 		WorkflowID  string
 		RunID       string
@@ -50,10 +50,10 @@ type (
 		Version     int64
 	}
 
-	Cache interface {
-		GetEvent(ctx context.Context, shardContext Context, key EventKey, firstEventID int64, branchToken []byte) (*historypb.HistoryEvent, error)
-		PutEvent(shardContext Context, key EventKey, event *historypb.HistoryEvent)
-		DeleteEvent(shardContext Context, key EventKey)
+	EventsCache interface {
+		GetEvent(ctx context.Context, shardContext Context, key EventsCacheKey, firstEventID int64, branchToken []byte) (*historypb.HistoryEvent, error)
+		PutEvent(shardContext Context, key EventsCacheKey, event *historypb.HistoryEvent)
+		DeleteEvent(shardContext Context, key EventsCacheKey)
 	}
 
 	CacheImpl struct {
@@ -64,14 +64,14 @@ type (
 	historyEventCacheItemImpl struct {
 		event *historypb.HistoryEvent
 	}
-	NewEventsCacheFn func(config *configs.Config) Cache
+	NewEventsCacheFn func(config *configs.Config) EventsCache
 )
 
 var (
 	errEventNotFoundInBatch = serviceerror.NewInternal("History event not found within expected batch")
 )
 
-var _ Cache = (*CacheImpl)(nil)
+var _ EventsCache = (*CacheImpl)(nil)
 
 func NewHostLevelEventsCache(
 	config *configs.Config,
@@ -101,7 +101,7 @@ func NewEventsCache(
 	}
 }
 
-func (e *CacheImpl) validateKey(shardContext Context, key EventKey) bool {
+func (e *CacheImpl) validateKey(shardContext Context, key EventsCacheKey) bool {
 	if len(key.NamespaceID) == 0 || len(key.WorkflowID) == 0 || len(key.RunID) == 0 || key.EventID < common.FirstEventID {
 		// This is definitely a bug, but just warn and don't crash so we can find anywhere this happens.
 		shardContext.GetLogger().Warn("one or more ids is invalid in event cache",
@@ -114,7 +114,7 @@ func (e *CacheImpl) validateKey(shardContext Context, key EventKey) bool {
 	return true
 }
 
-func (e *CacheImpl) GetEvent(ctx context.Context, shardContext Context, key EventKey, firstEventID int64, branchToken []byte) (*historypb.HistoryEvent, error) {
+func (e *CacheImpl) GetEvent(ctx context.Context, shardContext Context, key EventsCacheKey, firstEventID int64, branchToken []byte) (*historypb.HistoryEvent, error) {
 	handler := shardContext.GetMetricsHandler().WithTags(
 		metrics.StringTag(metrics.CacheTypeTagName, metrics.EventsCacheTypeTagValue),
 		metrics.OperationTag(metrics.EventsCacheGetEventScope),
@@ -137,7 +137,7 @@ func (e *CacheImpl) GetEvent(ctx context.Context, shardContext Context, key Even
 	event, err := e.getHistoryEventFromStore(ctx, shardContext, key, firstEventID, branchToken)
 	if err != nil {
 		handler.Counter(metrics.CacheFailures.Name()).Record(1)
-		shardContext.GetLogger().Error("Cache unable to retrieve event from store",
+		shardContext.GetLogger().Error("EventsCache unable to retrieve event from store",
 			tag.Error(err),
 			tag.WorkflowID(key.WorkflowID),
 			tag.WorkflowRunID(key.RunID),
@@ -153,7 +153,7 @@ func (e *CacheImpl) GetEvent(ctx context.Context, shardContext Context, key Even
 	return event, nil
 }
 
-func (e *CacheImpl) PutEvent(shardContext Context, key EventKey, event *historypb.HistoryEvent) {
+func (e *CacheImpl) PutEvent(shardContext Context, key EventsCacheKey, event *historypb.HistoryEvent) {
 	handler := shardContext.GetMetricsHandler().WithTags(
 		metrics.StringTag(metrics.CacheTypeTagName, metrics.EventsCacheTypeTagValue),
 		metrics.OperationTag(metrics.EventsCachePutEventScope),
@@ -168,7 +168,7 @@ func (e *CacheImpl) PutEvent(shardContext Context, key EventKey, event *historyp
 	e.put(key, event)
 }
 
-func (e *CacheImpl) DeleteEvent(shardContext Context, key EventKey) {
+func (e *CacheImpl) DeleteEvent(shardContext Context, key EventsCacheKey) {
 	handler := shardContext.GetMetricsHandler().WithTags(
 		metrics.StringTag(metrics.CacheTypeTagName, metrics.EventsCacheTypeTagValue),
 		metrics.OperationTag(metrics.EventsCacheDeleteEventScope),
@@ -184,7 +184,7 @@ func (e *CacheImpl) DeleteEvent(shardContext Context, key EventKey) {
 func (e *CacheImpl) getHistoryEventFromStore(
 	ctx context.Context,
 	shardContext Context,
-	key EventKey,
+	key EventsCacheKey,
 	firstEventID int64,
 	branchToken []byte,
 ) (*historypb.HistoryEvent, error) {
@@ -228,7 +228,7 @@ func (e *CacheImpl) getHistoryEventFromStore(
 	return nil, errEventNotFoundInBatch
 }
 
-func (e *CacheImpl) put(key EventKey, event *historypb.HistoryEvent) interface{} {
+func (e *CacheImpl) put(key EventsCacheKey, event *historypb.HistoryEvent) interface{} {
 	return e.Put(key, newHistoryEventCacheItem(event))
 }
 

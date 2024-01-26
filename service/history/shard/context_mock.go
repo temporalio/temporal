@@ -309,10 +309,10 @@ func (mr *MockContextMockRecorder) GetEngine(ctx interface{}) *gomock.Call {
 }
 
 // GetEventsCache mocks base method.
-func (m *MockContext) GetEventsCache() Cache {
+func (m *MockContext) GetEventsCache() EventsCache {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "GetEventsCache")
-	ret0, _ := ret[0].(Cache)
+	ret0, _ := ret[0].(EventsCache)
 	return ret0
 }
 
@@ -1009,10 +1009,10 @@ func (mr *MockControllableContextMockRecorder) GetEngine(ctx interface{}) *gomoc
 }
 
 // GetEventsCache mocks base method.
-func (m *MockControllableContext) GetEventsCache() Cache {
+func (m *MockControllableContext) GetEventsCache() EventsCache {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "GetEventsCache")
-	ret0, _ := ret[0].(Cache)
+	ret0, _ := ret[0].(EventsCache)
 	return ret0
 }
 

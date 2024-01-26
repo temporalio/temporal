@@ -600,7 +600,7 @@ func (s *mutableStateSuite) prepareTransientWorkflowTaskCompletionFirstBatchAppl
 
 	s.mockEventsCache.EXPECT().PutEvent(
 		s.mockShard,
-		shard.EventKey{
+		shard.EventsCacheKey{
 			NamespaceID: namespaceID,
 			WorkflowID:  execution.GetWorkflowId(),
 			RunID:       execution.GetRunId(),
@@ -839,7 +839,7 @@ func (s *mutableStateSuite) buildWorkflowMutableState() *persistencespb.Workflow
 
 func (s *mutableStateSuite) TestUpdateInfos() {
 	ctx := context.Background()
-	cacheStore := map[shard.EventKey]*historypb.HistoryEvent{}
+	cacheStore := map[shard.EventsCacheKey]*historypb.HistoryEvent{}
 	dbstate := s.buildWorkflowMutableState()
 	var err error
 	s.mutableState, err = NewMutableStateFromDB(

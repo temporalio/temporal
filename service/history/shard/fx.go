@@ -38,7 +38,7 @@ import (
 )
 
 var Module = fx.Options(
-	fx.Provide(func(config *configs.Config) Cache {
+	fx.Provide(func(config *configs.Config) EventsCache {
 		return NewHostLevelEventsCache(config, false)
 	}),
 	fx.Provide(NewCacheFnProvider),
@@ -101,7 +101,7 @@ func initLazyLoadedOwnershipBasedQuotaScaler(
 
 // NewCacheFnProvider provide a NewEventsCacheFn that can be used to create new workflow cache.
 func NewCacheFnProvider() NewEventsCacheFn {
-	return func(config *configs.Config) Cache {
+	return func(config *configs.Config) EventsCache {
 		return NewShardLevelEventsCache(config, false)
 	}
 }

@@ -76,7 +76,7 @@ type (
 		ThrottledLogger             log.ThrottledLogger
 		TimeSource                  clock.TimeSource
 		TaskCategoryRegistry        tasks.TaskCategoryRegistry
-		EventsCache                 Cache
+		EventsCache                 EventsCache
 		NewEventsCacheFn            NewEventsCacheFn
 	}
 

@@ -127,7 +127,7 @@ type (
 		mockSearchAttributesProvider       *searchattribute.MockProvider
 		mockSearchAttributesMapperProvider *searchattribute.MockMapperProvider
 
-		eventsCache shard.Cache
+		eventsCache shard.EventsCache
 		config      *configs.Config
 	}
 )

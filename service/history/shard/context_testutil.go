@@ -122,7 +122,7 @@ func NewStubContext(
 	return result
 }
 
-func newTestContext(t *resourcetest.Test, eventsCache Cache, config ContextConfigOverrides) *ContextImpl {
+func newTestContext(t *resourcetest.Test, eventsCache EventsCache, config ContextConfigOverrides) *ContextImpl {
 	hostInfoProvider := t.GetHostInfoProvider()
 	lifecycleCtx, lifecycleCancel := context.WithCancel(context.Background())
 	if config.ShardInfo.QueueStates == nil {
@@ -193,7 +193,7 @@ func (s *ContextTest) SetEngineForTesting(engine Engine) {
 }
 
 // SetEventsCacheForTesting sets s.eventsCache. Only used by tests.
-func (s *ContextTest) SetEventsCacheForTesting(c Cache) {
+func (s *ContextTest) SetEventsCacheForTesting(c EventsCache) {
 	// for testing only, will only be called immediately after initialization
 	s.eventsCache = c
 }

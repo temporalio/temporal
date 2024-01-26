@@ -106,7 +106,7 @@ type (
 		stringRepr          string
 		executionManager    persistence.ExecutionManager
 		metricsHandler      metrics.Handler
-		eventsCache         Cache
+		eventsCache         EventsCache
 		closeCallback       CloseCallback
 		config              *configs.Config
 		contextTaggedLogger log.Logger
@@ -1099,7 +1099,7 @@ func (s *ContextImpl) GetConfig() *configs.Config {
 	return s.config
 }
 
-func (s *ContextImpl) GetEventsCache() Cache {
+func (s *ContextImpl) GetEventsCache() EventsCache {
 	// constant from initialization (except for tests), no need for locks
 	return s.eventsCache
 }

@@ -66,7 +66,7 @@ type (
 	StateRebuilderImpl struct {
 		shard             shard.Context
 		namespaceRegistry namespace.Registry
-		eventsCache       shard.Cache
+		eventsCache       shard.EventsCache
 		clusterMetadata   cluster.Metadata
 		executionMgr      persistence.ExecutionManager
 		taskRefresher     workflow.TaskRefresher

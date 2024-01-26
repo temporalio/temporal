@@ -36,43 +36,43 @@ import (
 	v1 "go.temporal.io/api/history/v1"
 )
 
-// MockCache is a mock of Cache interface.
-type MockCache struct {
+// MockEventsCache is a mock of EventsCache interface.
+type MockEventsCache struct {
 	ctrl     *gomock.Controller
-	recorder *MockCacheMockRecorder
+	recorder *MockEventsCacheMockRecorder
 }
 
-// MockCacheMockRecorder is the mock recorder for MockCache.
-type MockCacheMockRecorder struct {
-	mock *MockCache
+// MockEventsCacheMockRecorder is the mock recorder for MockEventsCache.
+type MockEventsCacheMockRecorder struct {
+	mock *MockEventsCache
 }
 
-// NewMockCache creates a new mock instance.
-func NewMockCache(ctrl *gomock.Controller) *MockCache {
-	mock := &MockCache{ctrl: ctrl}
-	mock.recorder = &MockCacheMockRecorder{mock}
+// NewMockEventsCache creates a new mock instance.
+func NewMockEventsCache(ctrl *gomock.Controller) *MockEventsCache {
+	mock := &MockEventsCache{ctrl: ctrl}
+	mock.recorder = &MockEventsCacheMockRecorder{mock}
 	return mock
 }
 
 // EXPECT returns an object that allows the caller to indicate expected use.
-func (m *MockCache) EXPECT() *MockCacheMockRecorder {
+func (m *MockEventsCache) EXPECT() *MockEventsCacheMockRecorder {
 	return m.recorder
 }
 
 // DeleteEvent mocks base method.
-func (m *MockCache) DeleteEvent(shardContext Context, key EventKey) {
+func (m *MockEventsCache) DeleteEvent(shardContext Context, key EventsCacheKey) {
 	m.ctrl.T.Helper()
 	m.ctrl.Call(m, "DeleteEvent", shardContext, key)
 }
 
 // DeleteEvent indicates an expected call of DeleteEvent.
-func (mr *MockCacheMockRecorder) DeleteEvent(shardContext, key interface{}) *gomock.Call {
+func (mr *MockEventsCacheMockRecorder) DeleteEvent(shardContext, key interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DeleteEvent", reflect.TypeOf((*MockCache)(nil).DeleteEvent), shardContext, key)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DeleteEvent", reflect.TypeOf((*MockEventsCache)(nil).DeleteEvent), shardContext, key)
 }
 
 // GetEvent mocks base method.
-func (m *MockCache) GetEvent(ctx context.Context, shardContext Context, key EventKey, firstEventID int64, branchToken []byte) (*v1.HistoryEvent, error) {
+func (m *MockEventsCache) GetEvent(ctx context.Context, shardContext Context, key EventsCacheKey, firstEventID int64, branchToken []byte) (*v1.HistoryEvent, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "GetEvent", ctx, shardContext, key, firstEventID, branchToken)
 	ret0, _ := ret[0].(*v1.HistoryEvent)
@@ -81,19 +81,19 @@ func (m *MockCache) GetEvent(ctx context.Context, shardContext Context, key Even
 }
 
 // GetEvent indicates an expected call of GetEvent.
-func (mr *MockCacheMockRecorder) GetEvent(ctx, shardContext, key, firstEventID, branchToken interface{}) *gomock.Call {
+func (mr *MockEventsCacheMockRecorder) GetEvent(ctx, shardContext, key, firstEventID, branchToken interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetEvent", reflect.TypeOf((*MockCache)(nil).GetEvent), ctx, shardContext, key, firstEventID, branchToken)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetEvent", reflect.TypeOf((*MockEventsCache)(nil).GetEvent), ctx, shardContext, key, firstEventID, branchToken)
 }
 
 // PutEvent mocks base method.
-func (m *MockCache) PutEvent(shardContext Context, key EventKey, event *v1.HistoryEvent) {
+func (m *MockEventsCache) PutEvent(shardContext Context, key EventsCacheKey, event *v1.HistoryEvent) {
 	m.ctrl.T.Helper()
 	m.ctrl.Call(m, "PutEvent", shardContext, key, event)
 }
 
 // PutEvent indicates an expected call of PutEvent.
-func (mr *MockCacheMockRecorder) PutEvent(shardContext, key, event interface{}) *gomock.Call {
+func (mr *MockEventsCacheMockRecorder) PutEvent(shardContext, key, event interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "PutEvent", reflect.TypeOf((*MockCache)(nil).PutEvent), shardContext, key, event)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "PutEvent", reflect.TypeOf((*MockEventsCache)(nil).PutEvent), shardContext, key, event)
 }

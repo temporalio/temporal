@@ -42,7 +42,7 @@ import (
 
 func TestLocalMutableState(
 	shard shard.Context,
-	eventsCache shard.Cache,
+	eventsCache shard.EventsCache,
 	ns *namespace.Namespace,
 	logger log.Logger,
 	runID string,
@@ -58,14 +58,14 @@ func TestLocalMutableState(
 // NewMapEventCache is a functional event cache mock that wraps a simple Go map
 func NewMapEventCache(
 	t *testing.T,
-	m map[shard.EventKey]*historypb.HistoryEvent,
-) shard.Cache {
+	m map[shard.EventsCacheKey]*historypb.HistoryEvent,
+) shard.EventsCache {
 	cache := shard.NewMockCache(gomock.NewController(t))
 	cache.EXPECT().DeleteEvent(gomock.Any(), gomock.Any()).AnyTimes().Do(
-		func(shardContext shard.Context, k shard.EventKey) { delete(m, k) },
+		func(shardContext shard.Context, k shard.EventsCacheKey) { delete(m, k) },
 	)
 	cache.EXPECT().PutEvent(gomock.Any(), gomock.Any(), gomock.Any()).AnyTimes().Do(
-		func(shardContext shard.Context, k shard.EventKey, event *historypb.HistoryEvent) {
+		func(shardContext shard.Context, k shard.EventsCacheKey, event *historypb.HistoryEvent) {
 			m[k] = event
 		},
 	)
@@ -75,7 +75,7 @@ func NewMapEventCache(
 			func(
 				_ context.Context,
 				_ shard.Context,
-				key shard.EventKey,
+				key shard.EventsCacheKey,
 				_ int64,
 				_ []byte,
 			) (*historypb.HistoryEvent, error) {
@@ -90,7 +90,7 @@ func NewMapEventCache(
 
 func TestGlobalMutableState(
 	shard shard.Context,
-	eventsCache shard.Cache,
+	eventsCache shard.EventsCache,
 	logger log.Logger,
 	version int64,
 	runID string,

@@ -61,7 +61,7 @@ type (
 		GetNamespaceRegistry() namespace.Registry
 		GetClusterMetadata() cluster.Metadata
 		GetConfig() *configs.Config
-		GetEventsCache() Cache
+		GetEventsCache() EventsCache
 		GetLogger() log.Logger
 		GetThrottledLogger() log.Logger
 		GetMetricsHandler() metrics.Handler

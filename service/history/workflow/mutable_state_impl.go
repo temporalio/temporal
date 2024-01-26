@@ -192,7 +192,7 @@ type (
 
 		shard           shard.Context
 		clusterMetadata cluster.Metadata
-		eventsCache     shard.Cache
+		eventsCache     shard.EventsCache
 		config          *configs.Config
 		timeSource      clock.TimeSource
 		logger          log.Logger
@@ -204,7 +204,7 @@ var _ MutableState = (*MutableStateImpl)(nil)
 
 func NewMutableState(
 	shard shard.Context,
-	eventsCache shard.Cache,
+	eventsCache shard.EventsCache,
 	logger log.Logger,
 	namespaceEntry *namespace.Namespace,
 	startTime time.Time,
@@ -294,7 +294,7 @@ func NewMutableState(
 
 func NewMutableStateFromDB(
 	shard shard.Context,
-	eventsCache shard.Cache,
+	eventsCache shard.EventsCache,
 	logger log.Logger,
 	namespaceEntry *namespace.Namespace,
 	dbRecord *persistencespb.WorkflowMutableState,
@@ -399,7 +399,7 @@ func NewMutableStateFromDB(
 
 func NewSanitizedMutableState(
 	shard shard.Context,
-	eventsCache shard.Cache,
+	eventsCache shard.EventsCache,
 	logger log.Logger,
 	namespaceEntry *namespace.Namespace,
 	mutableStateRecord *persistencespb.WorkflowMutableState,
@@ -750,7 +750,7 @@ func (ms *MutableStateImpl) GetUpdateOutcome(
 	if err != nil {
 		return nil, err
 	}
-	eventKey := shard.EventKey{
+	eventKey := shard.EventsCacheKey{
 		NamespaceID: namespace.ID(ms.executionInfo.NamespaceId),
 		WorkflowID:  ms.executionInfo.WorkflowId,
 		RunID:       ms.executionState.RunId,
@@ -785,7 +785,7 @@ func (ms *MutableStateImpl) GetActivityScheduledEvent(
 	event, err := ms.eventsCache.GetEvent(
 		ctx,
 		ms.shard,
-		shard.EventKey{
+		shard.EventsCacheKey{
 			NamespaceID: namespace.ID(ms.executionInfo.NamespaceId),
 			WorkflowID:  ms.executionInfo.WorkflowId,
 			RunID:       ms.executionState.RunId,
@@ -886,7 +886,7 @@ func (ms *MutableStateImpl) GetChildExecutionInitiatedEvent(
 	event, err := ms.eventsCache.GetEvent(
 		ctx,
 		ms.shard,
-		shard.EventKey{
+		shard.EventsCacheKey{
 			NamespaceID: namespace.ID(ms.executionInfo.NamespaceId),
 			WorkflowID:  ms.executionInfo.WorkflowId,
 			RunID:       ms.executionState.RunId,
@@ -933,7 +933,7 @@ func (ms *MutableStateImpl) GetRequesteCancelExternalInitiatedEvent(
 	event, err := ms.eventsCache.GetEvent(
 		ctx,
 		ms.shard,
-		shard.EventKey{
+		shard.EventsCacheKey{
 			NamespaceID: namespace.ID(ms.executionInfo.NamespaceId),
 			WorkflowID:  ms.executionInfo.WorkflowId,
 			RunID:       ms.executionState.RunId,
@@ -1011,7 +1011,7 @@ func (ms *MutableStateImpl) GetSignalExternalInitiatedEvent(
 	event, err := ms.eventsCache.GetEvent(
 		ctx,
 		ms.shard,
-		shard.EventKey{
+		shard.EventsCacheKey{
 			NamespaceID: namespace.ID(ms.executionInfo.NamespaceId),
 			WorkflowID:  ms.executionInfo.WorkflowId,
 			RunID:       ms.executionState.RunId,
@@ -1053,7 +1053,7 @@ func (ms *MutableStateImpl) GetCompletionEvent(
 	event, err := ms.eventsCache.GetEvent(
 		ctx,
 		ms.shard,
-		shard.EventKey{
+		shard.EventsCacheKey{
 			NamespaceID: namespace.ID(ms.executionInfo.NamespaceId),
 			WorkflowID:  ms.executionInfo.WorkflowId,
 			RunID:       ms.executionState.RunId,
@@ -1107,7 +1107,7 @@ func (ms *MutableStateImpl) GetStartEvent(
 	event, err := ms.eventsCache.GetEvent(
 		ctx,
 		ms.shard,
-		shard.EventKey{
+		shard.EventsCacheKey{
 			NamespaceID: namespace.ID(ms.executionInfo.NamespaceId),
 			WorkflowID:  ms.executionInfo.WorkflowId,
 			RunID:       ms.executionState.RunId,
@@ -1223,7 +1223,7 @@ func (ms *MutableStateImpl) writeEventToCache(
 	// disposition lookups can be fast
 	ms.eventsCache.PutEvent(
 		ms.shard,
-		shard.EventKey{
+		shard.EventsCacheKey{
 			NamespaceID: namespace.ID(ms.executionInfo.NamespaceId),
 			WorkflowID:  ms.executionInfo.WorkflowId,
 			RunID:       ms.executionState.RunId,
