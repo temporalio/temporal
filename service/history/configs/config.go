@@ -153,6 +153,7 @@ type Config struct {
 	TransferQueueMaxReaderCount                         dynamicconfig.IntPropertyFn
 
 	// CallbackQueueProcessor settings
+	CallbackProcessorEnabled                            dynamicconfig.BoolPropertyFn
 	CallbackTaskBatchSize                               dynamicconfig.IntPropertyFn
 	CallbackProcessorMaxPollRPS                         dynamicconfig.IntPropertyFn
 	CallbackProcessorMaxPollHostRPS                     dynamicconfig.IntPropertyFn

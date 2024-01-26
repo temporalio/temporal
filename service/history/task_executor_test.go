@@ -94,14 +94,12 @@ func (s *taskExecutorSuite) SetupTest() {
 		config,
 		s.timeSource,
 	)
-	s.mockShard.SetEventsCacheForTesting(events.NewEventsCache(
-		s.mockShard.GetShardID(),
-		s.mockShard.GetConfig().EventsCacheMaxSizeBytes(),
-		s.mockShard.GetConfig().EventsCacheTTL(),
+	s.mockShard.SetEventsCacheForTesting(events.NewHostLevelEventsCache(
 		s.mockShard.GetExecutionManager(),
-		false,
-		s.mockShard.GetLogger(),
+		s.mockShard.GetConfig(),
 		s.mockShard.GetMetricsHandler(),
+		s.mockShard.GetLogger(),
+		false,
 	))
 	s.workflowCache = wcache.NewHostLevelCache(s.mockShard.GetConfig())
 

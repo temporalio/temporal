@@ -409,6 +409,8 @@ func (p *executionPersistenceClient) GetHistoryTasks(
 		operation = metrics.PersistenceGetReplicationTasksScope
 	case tasks.CategoryIDArchival:
 		operation = metrics.PersistenceGetArchivalTasksScope
+	case tasks.CategoryIDCallback:
+		operation = metrics.PersistenceGetCallbackTasksScope
 	default:
 		return nil, serviceerror.NewInternal(fmt.Sprintf("unknown task category type: %v", request.TaskCategory))
 	}
@@ -438,6 +440,8 @@ func (p *executionPersistenceClient) CompleteHistoryTask(
 		operation = metrics.PersistenceCompleteReplicationTaskScope
 	case tasks.CategoryIDArchival:
 		operation = metrics.PersistenceCompleteArchivalTaskScope
+	case tasks.CategoryIDCallback:
+		operation = metrics.PersistenceCompleteCallbackTasksScope
 	default:
 		return serviceerror.NewInternal(fmt.Sprintf("unknown task category type: %v", request.TaskCategory))
 	}
@@ -467,6 +471,8 @@ func (p *executionPersistenceClient) RangeCompleteHistoryTasks(
 		operation = metrics.PersistenceRangeCompleteReplicationTasksScope
 	case tasks.CategoryIDArchival:
 		operation = metrics.PersistenceRangeCompleteArchivalTasksScope
+	case tasks.CategoryIDCallback:
+		operation = metrics.PersistenceRangeCompleteCallbackTasksScope
 	default:
 		return serviceerror.NewInternal(fmt.Sprintf("unknown task category type: %v", request.TaskCategory))
 	}

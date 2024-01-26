@@ -345,6 +345,8 @@ const (
 	FrontendEnableSchedules = "frontend.enableSchedules"
 	// FrontendEnableNexusHTTPHandler enables serving Nexus HTTP requests in the frontend.
 	FrontendEnableNexusHTTPHandler = "frontend.enableNexusHTTPHandler"
+	// FrontendEnableCallbackAttachment enables attaching callbacks to workflows.
+	FrontendEnableCallbackAttachment = "frontend.enableCallbackAttachment"
 	// FrontendMaxConcurrentBatchOperationPerNamespace is the max concurrent batch operation job count per namespace
 	FrontendMaxConcurrentBatchOperationPerNamespace = "frontend.MaxConcurrentBatchOperationPerNamespace"
 	// FrontendMaxExecutionCountBatchOperationPerNamespace is the max execution count batch operation supports per namespace
@@ -667,6 +669,8 @@ const (
 	// TransferQueueMaxReaderCount is the max number of readers in one multi-cursor transfer queue
 	TransferQueueMaxReaderCount = "history.transferQueueMaxReaderCount"
 
+	// CallbackProcessorEnabled enables starting the callback queue processor.
+	CallbackProcessorEnabled = "history.callbackProcessorEnabled"
 	// CallbackTaskBatchSize is batch size for callbackQueueFactory
 	CallbackTaskBatchSize = "history.callbackTaskBatchSize"
 	// CallbackProcessorMaxPollRPS is max poll rate per second for callbackQueueFactory

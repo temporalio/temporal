@@ -59,7 +59,7 @@ type callbackQueueActiveTaskExecutor struct {
 	config            *configs.Config
 	payloadSerializer commonnexus.PayloadSerializer
 	clusterName       string
-	callerProvider    func(namespaceID, destination string) HTTPCaller
+	callerProvider    func(queues.NamespaceIDAndDestination) HTTPCaller
 }
 
 var _ queues.Executor = &callbackQueueActiveTaskExecutor{}
@@ -70,7 +70,7 @@ func newCallbackQueueActiveTaskExecutor(
 	logger log.Logger,
 	metricsHandler metrics.Handler,
 	config *configs.Config,
-	callerProvider func(namespaceID, destination string) HTTPCaller,
+	callerProvider func(queues.NamespaceIDAndDestination) HTTPCaller,
 ) *callbackQueueActiveTaskExecutor {
 	return &callbackQueueActiveTaskExecutor{
 		taskExecutor: taskExecutor{
@@ -221,7 +221,7 @@ func (t *callbackQueueActiveTaskExecutor) processNexusCallbackTask(ctx context.C
 		return serviceerror.NewInternal(fmt.Sprintf("failed to construct Nexus request: %v", err))
 	}
 
-	caller := t.callerProvider(task.NamespaceID, task.DestinationAddress)
+	caller := t.callerProvider(queues.NamespaceIDAndDestination{NamespaceID: task.NamespaceID, Destination: task.DestinationAddress})
 	response, callErr := caller(request)
 	var callback *persistencespb.CallbackInfo
 	wfCtx, release, ms, err := t.getValidatedMutableStateForTask(
