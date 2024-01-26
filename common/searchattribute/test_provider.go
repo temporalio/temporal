@@ -126,3 +126,7 @@ func (t *TestMapper) GetFieldName(alias string, namespace string) (string, error
 func NewTestMapperProvider(customMapper Mapper) MapperProvider {
 	return NewMapperProvider(customMapper, nil, NewTestProvider(), false)
 }
+
+func NewNameTypeMapStub(attributes map[string]enumspb.IndexedValueType) NameTypeMap {
+	return NameTypeMap{customSearchAttributes: attributes}
+}

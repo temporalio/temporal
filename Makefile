@@ -40,7 +40,9 @@ PERSISTENCE_DRIVER ?= cassandra
 TEMPORAL_DB ?= temporal
 VISIBILITY_DB ?= temporal_visibility
 
-override TEST_TAG := -tags utest $(TEST_TAG)
+ifdef TEST_TAG
+override TEST_TAG := -tags $(TEST_TAG)
+endif
 
 export TEST_TOTAL_SHARDS ?= $(BUILDKITE_PARALLEL_JOB_COUNT)
 export TEST_SHARD_INDEX ?= $(BUILDKITE_PARALLEL_JOB)
