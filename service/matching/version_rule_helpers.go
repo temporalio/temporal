@@ -21,34 +21,30 @@ import (
 // - If there existed an "unfiltered" assigment rule (which can accept any build id), at least one must still exist
 // - To override the unfiltered assignment rule requirement, the user can specify force = true
 func checkAssignmentConditions(g *persistencepb.VersioningData, maxARs int, force, hadUnfiltered bool) error {
-	rules := slices.Clone(g.GetAssignmentRules())
-	if maxARs > 0 && countActiveAR(rules) > maxARs {
-		return serviceerror.NewFailedPrecondition(fmt.Sprintf("update exceeds number of assignment rules permitted in namespace dynamic config (%v/%v)", len(rules), maxARs))
+	activeRules := getActiveRules(slices.Clone(g.GetAssignmentRules()))
+	if cnt := len(activeRules); maxARs > 0 && cnt > maxARs {
+		return serviceerror.NewFailedPrecondition(fmt.Sprintf("update exceeds number of assignment rules permitted in namespace (%v/%v)", cnt, maxARs))
 	}
-	if tbid, ok := isInVersionSet(rules, g.GetVersionSets()); ok {
+	if tbid, ok := isInVersionSet(activeRules, g.GetVersionSets()); ok {
 		return serviceerror.NewFailedPrecondition(fmt.Sprintf("update breaks requirement, target build id %s is already a member of version set", tbid))
 	}
 	if force == true {
 		return nil
 	}
-	if hadUnfiltered && !hasUnfiltered(rules) {
+	if hadUnfiltered && !containsUnfiltered(activeRules) {
 		return serviceerror.NewFailedPrecondition("update breaks requirement that at least one assignment rule must have no ramp or hint")
 	}
 	return nil
 }
 
-func countActiveAR(rules []*persistencepb.AssignmentRule) int {
-	cnt := 0
-	for _, rule := range rules {
-		if rule.DeleteTimestamp == nil {
-			cnt++
-		}
-	}
-	return cnt
+func getActiveRules(rules []*persistencepb.AssignmentRule) []*persistencepb.AssignmentRule {
+	return util.FilterSlice(rules, func(ar *persistencepb.AssignmentRule) bool {
+		return ar.DeleteTimestamp == nil
+	})
 }
 
-// hasUnfiltered returns true if there exists an assignment rule with no hint, no worker ratio ramp, and no ramp percentage, or a ramp percentage of 100
-func hasUnfiltered(rules []*persistencepb.AssignmentRule) bool {
+// containsUnfiltered returns true if there exists an assignment rule with no hint, no worker ratio ramp, and no ramp percentage, or a ramp percentage of 100
+func containsUnfiltered(rules []*persistencepb.AssignmentRule) bool {
 	isUnfiltered := func(ar *taskqueue.BuildIdAssignmentRule) bool {
 		percentageRamp := ar.GetPercentageRamp()
 		return ar.GetHintFilter() == "" &&
@@ -58,7 +54,7 @@ func hasUnfiltered(rules []*persistencepb.AssignmentRule) bool {
 	found := false
 	for _, rule := range rules {
 		ar := rule.GetRule()
-		if rule.DeleteTimestamp == nil && isUnfiltered(ar) {
+		if isUnfiltered(ar) {
 			found = true
 		}
 	}
@@ -70,12 +66,10 @@ func isInVersionSet(rules []*persistencepb.AssignmentRule, sets []*persistencepb
 	for _, rule := range rules {
 		ar := rule.GetRule()
 		tbid := ar.GetTargetBuildId()
-		if rule.DeleteTimestamp == nil {
-			for _, set := range sets {
-				for _, bid := range set.BuildIds {
-					if bid.GetId() == tbid {
-						return tbid, true
-					}
+		for _, set := range sets {
+			for _, bid := range set.BuildIds {
+				if bid.GetId() == tbid {
+					return tbid, true
 				}
 			}
 		}
@@ -103,13 +97,13 @@ func InsertAssignmentRule(timestamp *hlc.Clock,
 	req *workflowservice.UpdateWorkerVersioningRulesRequest_InsertBuildIdAssignmentRule,
 	maxARs int,
 	hadUnfiltered bool) (*persistencepb.VersioningData, error) {
+	if req.GetRuleIndex() < 0 {
+		return nil, serviceerror.NewInvalidArgument("rule index cannot be negative")
+	}
 	if data == nil {
 		data = &persistencepb.VersioningData{AssignmentRules: make([]*persistencepb.AssignmentRule, 0)}
 	} else {
 		data = common.CloneProto(data)
-	}
-	if req.GetRuleIndex() < 0 {
-		return nil, serviceerror.NewInvalidArgument("rule index cannot be negative")
 	}
 	persistenceAR := persistencepb.AssignmentRule{
 		Rule:            req.GetRule(),
@@ -117,7 +111,14 @@ func InsertAssignmentRule(timestamp *hlc.Clock,
 		DeleteTimestamp: nil,
 	}
 	rules := data.GetAssignmentRules()
-	slices.Insert(rules, given2ActualIdx(req.GetRuleIndex(), rules), &persistenceAR)
+
+	if actualIdx := given2ActualIdx(req.GetRuleIndex(), rules); actualIdx < 0 {
+		// given index was too large, insert at end
+		rules = append(rules, &persistenceAR)
+	} else {
+		slices.Insert(rules, actualIdx, &persistenceAR)
+	}
+
 	return data, checkAssignmentConditions(data, maxARs, false, hadUnfiltered)
 }
 
@@ -130,7 +131,7 @@ func ReplaceAssignmentRule(timestamp *hlc.Clock,
 	idx := req.GetRuleIndex()
 	actualIdx := given2ActualIdx(idx, rules)
 	if actualIdx < 0 {
-		return nil, serviceerror.NewInvalidArgument(fmt.Sprintf("rule index %d is out of bounds for assignment rule list of length %d", idx, countActiveAR(rules)))
+		return nil, serviceerror.NewInvalidArgument(fmt.Sprintf("rule index %d is out of bounds for assignment rule list of length %d", idx, len(getActiveRules(rules))))
 	}
 	persistenceAR := persistencepb.AssignmentRule{
 		Rule:            req.GetRule(),
@@ -150,7 +151,7 @@ func DeleteAssignmentRule(timestamp *hlc.Clock,
 	idx := req.GetRuleIndex()
 	actualIdx := given2ActualIdx(idx, rules)
 	if actualIdx < 0 {
-		return nil, serviceerror.NewInvalidArgument(fmt.Sprintf("rule index %d is out of bounds for assignment rule list of length %d", idx, countActiveAR(rules)))
+		return nil, serviceerror.NewInvalidArgument(fmt.Sprintf("rule index %d is out of bounds for assignment rule list of length %d", idx, len(getActiveRules(rules))))
 	}
 	rule := rules[actualIdx]
 	rule.DeleteTimestamp = timestamp
