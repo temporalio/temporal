@@ -17,58 +17,77 @@ import (
 
 // checkAssignmentConditions returns an error if the new set of assignment rules don't meet the following requirements:
 // - No more rules than dynamicconfig.VersionAssignmentRuleLimitPerQueue
-// - Once assignment rules have been added, there must always be at least one "unfiltered" assignment rule, which can accept any build id
 // - No assignment rule's TargetBuildId can be a member of an existing version set
-func checkAssignmentConditions(g *persistencepb.VersioningData, maxARs int, force bool) error {
+// - If there existed an "unfiltered" assigment rule (which can accept any build id), at least one must still exist
+// - To override the unfiltered assignment rule requirement, the user can specify force = true
+func checkAssignmentConditions(g *persistencepb.VersioningData, maxARs int, force, hadUnfiltered bool) error {
+	rules := slices.Clone(g.GetAssignmentRules())
+	if maxARs > 0 && countActiveAR(rules) > maxARs {
+		return serviceerror.NewFailedPrecondition(fmt.Sprintf("update exceeds number of assignment rules permitted in namespace dynamic config (%v/%v)", len(rules), maxARs))
+	}
+	if tbid, ok := isInVersionSet(rules, g.GetVersionSets()); ok {
+		return serviceerror.NewFailedPrecondition(fmt.Sprintf("update breaks requirement, target build id %s is already a member of version set", tbid))
+	}
 	if force == true {
 		return nil
 	}
-	rules := slices.Clone(g.GetAssignmentRules())
-	if maxARs > 0 && len(rules) > maxARs {
-		// todo carly: should the max # of rules count rules that have been deleted but not yet cleaned up from the db?
-		return serviceerror.NewFailedPrecondition(fmt.Sprintf("update exceeds number of assignment rules permitted in namespace dynamic config (%v/%v)", len(rules), maxARs))
-	}
-	foundUnfiltered := false
-	for _, dbRule := range rules {
-		rule := dbRule.GetRule()
-		if dbRule.DeleteTimestamp == nil && isUnfiltered(rule) {
-			foundUnfiltered = true
-		}
-		tbid := rule.GetTargetBuildId()
-		if dbRule.DeleteTimestamp == nil && isInVersionSet(tbid, g.GetVersionSets()) {
-			return serviceerror.NewFailedPrecondition(fmt.Sprintf("update breaks requirement, target build id %s is already a member of version set", tbid))
-		}
-	}
-	if !foundUnfiltered {
+	if hadUnfiltered && !hasUnfiltered(rules) {
 		return serviceerror.NewFailedPrecondition("update breaks requirement that at least one assignment rule must have no ramp or hint")
 	}
 	return nil
 }
 
-// isUnfiltered returns true if the assignment rule has no hint, no worker ratio ramp, and no ramp percentage, or a ramp percentage of 100
-func isUnfiltered(ar *taskqueue.BuildIdAssignmentRule) bool {
-	percentageRamp := ar.GetPercentageRamp()
-	return ar.GetHintFilter() == "" &&
-		ar.GetWorkerRatioRamp() == nil &&
-		(percentageRamp == nil || (percentageRamp != nil && percentageRamp.RampPercentage == 100))
+func countActiveAR(rules []*persistencepb.AssignmentRule) int {
+	cnt := 0
+	for _, rule := range rules {
+		if rule.DeleteTimestamp == nil {
+			cnt++
+		}
+	}
+	return cnt
 }
 
-// isInVersionSet returns true if the build id is in any of the listed version sets
-func isInVersionSet(tbid string, sets []*persistencepb.CompatibleVersionSet) bool {
-	for _, set := range sets {
-		for _, bid := range set.BuildIds {
-			if bid.GetId() == tbid {
-				return true
+// hasUnfiltered returns true if there exists an assignment rule with no hint, no worker ratio ramp, and no ramp percentage, or a ramp percentage of 100
+func hasUnfiltered(rules []*persistencepb.AssignmentRule) bool {
+	isUnfiltered := func(ar *taskqueue.BuildIdAssignmentRule) bool {
+		percentageRamp := ar.GetPercentageRamp()
+		return ar.GetHintFilter() == "" &&
+			ar.GetWorkerRatioRamp() == nil &&
+			(percentageRamp == nil || (percentageRamp != nil && percentageRamp.RampPercentage == 100))
+	}
+	found := false
+	for _, rule := range rules {
+		ar := rule.GetRule()
+		if rule.DeleteTimestamp == nil && isUnfiltered(ar) {
+			found = true
+		}
+	}
+	return found
+}
+
+// isInVersionSet returns true if the target build id of any assignment rule is in any of the listed version sets
+func isInVersionSet(rules []*persistencepb.AssignmentRule, sets []*persistencepb.CompatibleVersionSet) (string, bool) {
+	for _, rule := range rules {
+		ar := rule.GetRule()
+		tbid := ar.GetTargetBuildId()
+		if rule.DeleteTimestamp == nil {
+			for _, set := range sets {
+				for _, bid := range set.BuildIds {
+					if bid.GetId() == tbid {
+						return tbid, true
+					}
+				}
 			}
 		}
 	}
-	return false
+	return "", false
 }
 
 func InsertAssignmentRule(timestamp *hlc.Clock,
 	data *persistencepb.VersioningData,
 	req *workflowservice.UpdateWorkerVersioningRulesRequest_InsertBuildIdAssignmentRule,
-	maxARs int) (*persistencepb.VersioningData, error) {
+	maxARs int,
+	hadUnfiltered bool) (*persistencepb.VersioningData, error) {
 	if data == nil {
 		data = &persistencepb.VersioningData{AssignmentRules: make([]*persistencepb.AssignmentRule, 0)}
 	} else {
@@ -83,12 +102,13 @@ func InsertAssignmentRule(timestamp *hlc.Clock,
 		DeleteTimestamp: nil,
 	}
 	slices.Insert(data.GetAssignmentRules(), int(req.GetRuleIndex()), &persistenceAR)
-	return data, checkAssignmentConditions(data, maxARs, false)
+	return data, checkAssignmentConditions(data, maxARs, false, hadUnfiltered)
 }
 
 func ReplaceAssignmentRule(timestamp *hlc.Clock,
 	data *persistencepb.VersioningData,
-	req *workflowservice.UpdateWorkerVersioningRulesRequest_ReplaceBuildIdAssignmentRule) (*persistencepb.VersioningData, error) {
+	req *workflowservice.UpdateWorkerVersioningRulesRequest_ReplaceBuildIdAssignmentRule,
+	hadUnfiltered bool) (*persistencepb.VersioningData, error) {
 	if data == nil {
 		return nil, serviceerror.NewInvalidArgument("data cannot be nil for a replace call")
 	} else {
@@ -105,12 +125,13 @@ func ReplaceAssignmentRule(timestamp *hlc.Clock,
 		DeleteTimestamp: nil,
 	}
 	slices.Replace(data.AssignmentRules, idx, idx+1, &persistenceAR)
-	return data, checkAssignmentConditions(data, 0, req.GetForce())
+	return data, checkAssignmentConditions(data, 0, req.GetForce(), hadUnfiltered)
 }
 
 func DeleteAssignmentRule(timestamp *hlc.Clock,
 	data *persistencepb.VersioningData,
-	req *workflowservice.UpdateWorkerVersioningRulesRequest_DeleteBuildIdAssignmentRule) (*persistencepb.VersioningData, error) {
+	req *workflowservice.UpdateWorkerVersioningRulesRequest_DeleteBuildIdAssignmentRule,
+	hadUnfiltered bool) (*persistencepb.VersioningData, error) {
 	if data == nil {
 		return nil, serviceerror.NewInvalidArgument("data cannot be nil for a delete call")
 	} else {
@@ -123,111 +144,45 @@ func DeleteAssignmentRule(timestamp *hlc.Clock,
 	}
 	rule := rules[idx]
 	rule.DeleteTimestamp = timestamp
-	return data, checkAssignmentConditions(data, 0, req.GetForce())
+	return data, checkAssignmentConditions(data, 0, req.GetForce(), hadUnfiltered)
 }
 
 // checkRedirectConditions returns an error if there is no room for the new Redirect Rule, or if it causes the
 // queue to fail the other requirements
 func checkRedirectConditions(g *persistencepb.VersioningData, maxRRs int) error {
-	rules := g.GetRedirectRules()
-	if maxRRs > 0 && len(rules) > maxRRs {
-		if trimRedirectRules(rules) < 1 {
-			return serviceerror.NewFailedPrecondition(fmt.Sprintf("update would exceed number of redirect rules permitted in namespace dynamic config (%v/%v)", len(rules), maxRRs))
-		}
-	}
-	if isCyclic(rules) {
-		return serviceerror.NewFailedPrecondition("update breaks requirement that at least one assignment rule must have no ramp or hint")
-	}
 	return nil
+}
+
+func countActiveRR(rules []*persistencepb.RedirectRule) int {
+	return 0
 }
 
 // trimRedirectRules attempts to trim the DAG of redirect rules. It returns the number of rules it was able to delete.
 func trimRedirectRules(rules []*persistencepb.RedirectRule) int {
-	// todo carly: redirect rule PR
 	return 0
 }
 
 func isCyclic(rules []*persistencepb.RedirectRule) bool {
-	// todo carly: redirect rule PR
-	return true
+	return false
 }
 
 func InsertCompatibleRedirectRule(timestamp *hlc.Clock,
 	data *persistencepb.VersioningData,
 	req *workflowservice.UpdateWorkerVersioningRulesRequest_AddCompatibleBuildIdRedirectRule,
 	maxRRs int) (*persistencepb.VersioningData, error) {
-	if data == nil {
-		data = &persistencepb.VersioningData{RedirectRules: make([]*persistencepb.RedirectRule, 0)}
-	} else {
-		data = common.CloneProto(data)
-	}
-	persistenceCRR := persistencepb.RedirectRule{
-		Rule:            req.GetRule(),
-		CreateTimestamp: timestamp,
-		DeleteTimestamp: nil,
-	}
-	src := req.GetRule().GetSourceBuildId()
-	rules := data.GetRedirectRules()
-	for _, rule := range rules {
-		if rule.GetRule().GetSourceBuildId() == src {
-			return nil, serviceerror.NewAlreadyExist(fmt.Sprintf(
-				"there can only be one redirect rule per distinct source ID. source %s already redirects to target %s", src, rule.GetRule().GetTargetBuildId(),
-			))
-		}
-	}
-	slices.Insert(data.GetRedirectRules(), 0, &persistenceCRR)
-	return data, checkRedirectConditions(data, maxRRs)
+	return nil, nil
 }
 
 func ReplaceCompatibleRedirectRule(timestamp *hlc.Clock,
 	data *persistencepb.VersioningData,
 	req *workflowservice.UpdateWorkerVersioningRulesRequest_ReplaceCompatibleBuildIdRedirectRule) (*persistencepb.VersioningData, error) {
-	if data == nil {
-		return nil, serviceerror.NewInvalidArgument("data cannot be nil for a replace call")
-	} else {
-		data = common.CloneProto(data)
-	}
-	rules := data.GetRedirectRules()
-	persistenceRR := persistencepb.RedirectRule{
-		Rule:            req.GetRule(),
-		CreateTimestamp: timestamp,
-		DeleteTimestamp: nil,
-	}
-	src := req.GetRule().GetSourceBuildId()
-	found := false
-	for i, rule := range rules {
-		if rule.GetRule().GetSourceBuildId() == src {
-			found = true
-			slices.Replace(rules, i, i+1, &persistenceRR)
-		}
-	}
-	if !found {
-		return nil, serviceerror.NewNotFound(fmt.Sprintf("no rule found with source Build ID %s", src))
-	}
-	return data, checkRedirectConditions(data, 0)
+	return nil, nil
 }
 
 func DeleteCompatibleRedirectRule(timestamp *hlc.Clock,
 	data *persistencepb.VersioningData,
 	req *workflowservice.UpdateWorkerVersioningRulesRequest_DeleteCompatibleBuildIdRedirectRule) (*persistencepb.VersioningData, error) {
-	if data == nil {
-		return nil, serviceerror.NewInvalidArgument("data cannot be nil for a delete call")
-	} else {
-		data = common.CloneProto(data)
-	}
-	rules := data.GetRedirectRules()
-	src := req.GetSourceBuildId()
-	found := false
-	for _, rule := range rules {
-		if rule.GetRule().GetSourceBuildId() == src {
-			found = true
-			rule.DeleteTimestamp = timestamp
-		}
-	}
-	if !found {
-		return nil, serviceerror.NewNotFound(fmt.Sprintf("no rule found with source Build ID %s", src))
-	}
-	return data, checkRedirectConditions(data, 0)
+	return nil, nil
 }
 
 // CleanupRuleTombstones clears all deleted rules from versioning data if the rule was deleted more than

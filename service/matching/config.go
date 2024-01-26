@@ -194,7 +194,7 @@ func NewConfig(
 		VersionCompatibleSetLimitPerQueue:     dc.GetIntPropertyFilteredByNamespace(dynamicconfig.VersionCompatibleSetLimitPerQueue, 10),
 		VersionBuildIdLimitPerQueue:           dc.GetIntPropertyFilteredByNamespace(dynamicconfig.VersionBuildIdLimitPerQueue, 100),
 		VersionAssignmentRuleLimitPerQueue:    dc.GetIntPropertyFilteredByNamespace(dynamicconfig.VersionAssignmentRuleLimitPerQueue, 100),
-		VersionRedirectRuleLimitPerQueue:      dc.GetIntPropertyFilteredByNamespace(dynamicconfig.VersionRedirectRuleLimitPerQueue, 100),
+		VersionRedirectRuleLimitPerQueue:      dc.GetIntPropertyFilteredByNamespace(dynamicconfig.VersionRedirectRuleLimitPerQueue, 500),
 		VersionDeletedRuleRetentionTime:       dc.GetDurationPropertyFilteredByNamespace(dynamicconfig.VersionDeletedRuleRetentionTime, 14*24*time.Hour),
 		TaskQueueLimitPerBuildId:              dc.GetIntPropertyFilteredByNamespace(dynamicconfig.TaskQueuesPerBuildIdLimit, 20),
 		GetUserDataLongPollTimeout:            dc.GetDurationProperty(dynamicconfig.MatchingGetUserDataLongPollTimeout, 5*time.Minute-10*time.Second),
