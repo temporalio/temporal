@@ -40,9 +40,7 @@ PERSISTENCE_DRIVER ?= cassandra
 TEMPORAL_DB ?= temporal
 VISIBILITY_DB ?= temporal_visibility
 
-ifdef TEST_TAG
-override TEST_TAG := -tags $(TEST_TAG)
-endif
+override TEST_TAG := -tags utest $(TEST_TAG)
 
 export TEST_TOTAL_SHARDS ?= $(BUILDKITE_PARALLEL_JOB_COUNT)
 export TEST_SHARD_INDEX ?= $(BUILDKITE_PARALLEL_JOB)
@@ -305,7 +303,7 @@ build-tests:
 
 unit-test: clean-test-results
 	@printf $(COLOR) "Run unit tests..."
-	@go test $(UNIT_TEST_DIRS) -timeout=$(TEST_TIMEOUT) -tags utest $(TEST_TAG) $(TEST_ARGS) 2>&1 | tee -a test.log
+	@go test $(UNIT_TEST_DIRS) -timeout=$(TEST_TIMEOUT) $(TEST_TAG) $(TEST_ARGS) 2>&1 | tee -a test.log
 	@! grep -q "^--- FAIL" test.log
 
 integration-test: clean-test-results
