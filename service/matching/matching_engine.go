@@ -864,8 +864,7 @@ func (e *matchingEngineImpl) UpdateWorkerVersioningRules(
 	err = tqMgr.UpdateUserData(ctx, updateOptions, func(data *persistencespb.TaskQueueUserData) (*persistencespb.TaskQueueUserData, bool, error) {
 		clk := data.GetClock()
 		if clk == nil {
-			tmp := hlc.Zero(e.clusterMeta.GetClusterID())
-			clk = tmp
+clk = hlc.Zero(e.clusterMeta.GetClusterID())
 		} else {
 			prevCT, err := clk.Marshal()
 			if err != nil {
