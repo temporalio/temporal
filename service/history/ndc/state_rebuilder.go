@@ -44,7 +44,6 @@ import (
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/persistence/versionhistory"
-	"go.temporal.io/server/service/history/events"
 	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/workflow"
 )
@@ -67,7 +66,7 @@ type (
 	StateRebuilderImpl struct {
 		shard             shard.Context
 		namespaceRegistry namespace.Registry
-		eventsCache       events.Cache
+		eventsCache       shard.Cache
 		clusterMetadata   cluster.Metadata
 		executionMgr      persistence.ExecutionManager
 		taskRefresher     workflow.TaskRefresher

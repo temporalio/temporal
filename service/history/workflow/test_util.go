@@ -36,14 +36,13 @@ import (
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/namespace"
-	"go.temporal.io/server/service/history/events"
 	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/tests"
 )
 
 func TestLocalMutableState(
 	shard shard.Context,
-	eventsCache events.Cache,
+	eventsCache shard.Cache,
 	ns *namespace.Namespace,
 	logger log.Logger,
 	runID string,
@@ -59,23 +58,24 @@ func TestLocalMutableState(
 // NewMapEventCache is a functional event cache mock that wraps a simple Go map
 func NewMapEventCache(
 	t *testing.T,
-	m map[events.EventKey]*historypb.HistoryEvent,
-) events.Cache {
-	cache := events.NewMockCache(gomock.NewController(t))
-	cache.EXPECT().DeleteEvent(gomock.Any()).AnyTimes().Do(
-		func(k events.EventKey) { delete(m, k) },
+	m map[shard.EventKey]*historypb.HistoryEvent,
+) shard.Cache {
+	cache := shard.NewMockCache(gomock.NewController(t))
+	cache.EXPECT().DeleteEvent(gomock.Any(), gomock.Any()).AnyTimes().Do(
+		func(shardContext shard.Context, k shard.EventKey) { delete(m, k) },
 	)
-	cache.EXPECT().PutEvent(gomock.Any(), gomock.Any()).AnyTimes().Do(
-		func(k events.EventKey, event *historypb.HistoryEvent) {
+	cache.EXPECT().PutEvent(gomock.Any(), gomock.Any(), gomock.Any()).AnyTimes().Do(
+		func(shardContext shard.Context, k shard.EventKey, event *historypb.HistoryEvent) {
 			m[k] = event
 		},
 	)
-	cache.EXPECT().GetEvent(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).
+	cache.EXPECT().GetEvent(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).
 		AnyTimes().
 		DoAndReturn(
 			func(
 				_ context.Context,
-				key events.EventKey,
+				_ shard.Context,
+				key shard.EventKey,
 				_ int64,
 				_ []byte,
 			) (*historypb.HistoryEvent, error) {
@@ -90,7 +90,7 @@ func NewMapEventCache(
 
 func TestGlobalMutableState(
 	shard shard.Context,
-	eventsCache events.Cache,
+	eventsCache shard.Cache,
 	logger log.Logger,
 	version int64,
 	runID string,

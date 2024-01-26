@@ -31,10 +31,6 @@ import (
 
 	historypb "go.temporal.io/api/history/v1"
 
-	"go.temporal.io/server/common"
-	serviceerrors "go.temporal.io/server/common/serviceerror"
-	"go.temporal.io/server/service/history/events"
-
 	"github.com/golang/mock/gomock"
 	"github.com/pborman/uuid"
 	"github.com/stretchr/testify/require"
@@ -42,6 +38,8 @@ import (
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
+	"go.temporal.io/server/common"
+	serviceerrors "go.temporal.io/server/common/serviceerror"
 
 	"go.temporal.io/server/api/adminservice/v1"
 	"go.temporal.io/server/api/adminservicemock/v1"
@@ -67,7 +65,7 @@ type (
 
 		controller            *gomock.Controller
 		mockShard             *shard.ContextTest
-		mockEventCache        *events.MockCache
+		mockEventCache        *shard.MockCache
 		mockWorkflowCache     *wcache.MockCache
 		mockNamespaceCache    *namespace.MockRegistry
 		mockRemoteAdminClient *adminservicemock.MockAdminServiceClient
@@ -215,8 +213,8 @@ func (s *workflowReplicatorSuite) Test_ApplyWorkflowState_BrandNew() {
 			WorkflowExecutionTerminatedEventAttributes: &historypb.WorkflowExecutionTerminatedEventAttributes{},
 		},
 	}
-	s.mockEventCache.EXPECT().GetEvent(gomock.Any(), gomock.Any(), common.FirstEventID, gomock.Any()).Return(fakeStartHistory, nil).AnyTimes()
-	s.mockEventCache.EXPECT().GetEvent(gomock.Any(), gomock.Any(), completionEventBatchId, gomock.Any()).Return(fakeCompletionEvent, nil).AnyTimes()
+	s.mockEventCache.EXPECT().GetEvent(gomock.Any(), gomock.Any(), gomock.Any(), common.FirstEventID, gomock.Any()).Return(fakeStartHistory, nil).AnyTimes()
+	s.mockEventCache.EXPECT().GetEvent(gomock.Any(), gomock.Any(), gomock.Any(), completionEventBatchId, gomock.Any()).Return(fakeCompletionEvent, nil).AnyTimes()
 	err = s.workflowStateReplicator.SyncWorkflowState(context.Background(), request)
 	s.NoError(err)
 }
@@ -382,8 +380,8 @@ func (s *workflowReplicatorSuite) Test_ApplyWorkflowState_Ancestors() {
 			WorkflowExecutionTerminatedEventAttributes: &historypb.WorkflowExecutionTerminatedEventAttributes{},
 		},
 	}
-	s.mockEventCache.EXPECT().GetEvent(gomock.Any(), gomock.Any(), common.FirstEventID, gomock.Any()).Return(fakeStartHistory, nil).AnyTimes()
-	s.mockEventCache.EXPECT().GetEvent(gomock.Any(), gomock.Any(), completionEventBatchId, gomock.Any()).Return(fakeCompletionEvent, nil).AnyTimes()
+	s.mockEventCache.EXPECT().GetEvent(gomock.Any(), gomock.Any(), gomock.Any(), common.FirstEventID, gomock.Any()).Return(fakeStartHistory, nil).AnyTimes()
+	s.mockEventCache.EXPECT().GetEvent(gomock.Any(), gomock.Any(), gomock.Any(), completionEventBatchId, gomock.Any()).Return(fakeCompletionEvent, nil).AnyTimes()
 	err = s.workflowStateReplicator.SyncWorkflowState(context.Background(), request)
 	s.NoError(err)
 }

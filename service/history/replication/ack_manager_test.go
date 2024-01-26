@@ -46,7 +46,6 @@ import (
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/util"
-	"go.temporal.io/server/service/history/events"
 	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/tasks"
 	"go.temporal.io/server/service/history/tests"
@@ -305,14 +304,9 @@ func (s *ackManagerSuite) TestGetTasks_SecondPersistenceErrorReturnsPartialResul
 		NextPageToken:       nil,
 	}).Return(tasksResponse, nil)
 
-	eventsCache := events.NewEventsCache(
-		s.mockShard.GetShardID(),
-		s.mockShard.GetConfig().EventsCacheMaxSizeBytes(),
-		s.mockShard.GetConfig().EventsCacheTTL(),
-		s.mockShard.GetExecutionManager(),
+	eventsCache := shard.NewHostLevelEventsCache(
+		s.mockShard.GetConfig(),
 		false,
-		s.mockShard.GetLogger(),
-		s.mockShard.GetMetricsHandler(),
 	)
 	ms := workflow.TestLocalMutableState(s.mockShard, eventsCache, tests.GlobalNamespaceEntry, log.NewTestLogger(), tests.RunID)
 	ei := ms.GetExecutionInfo()
@@ -356,14 +350,9 @@ func (s *ackManagerSuite) TestGetTasks_FullPage() {
 		NextPageToken:       nil,
 	}).Return(tasksResponse, nil)
 
-	eventsCache := events.NewEventsCache(
-		s.mockShard.GetShardID(),
-		s.mockShard.GetConfig().EventsCacheMaxSizeBytes(),
-		s.mockShard.GetConfig().EventsCacheTTL(),
-		s.mockShard.GetExecutionManager(),
+	eventsCache := shard.NewHostLevelEventsCache(
+		s.mockShard.GetConfig(),
 		false,
-		s.mockShard.GetLogger(),
-		s.mockShard.GetMetricsHandler(),
 	)
 	ms := workflow.TestLocalMutableState(s.mockShard, eventsCache, tests.GlobalNamespaceEntry, log.NewTestLogger(), tests.RunID)
 	ei := ms.GetExecutionInfo()
@@ -407,14 +396,9 @@ func (s *ackManagerSuite) TestGetTasks_PartialPage() {
 		NextPageToken:       nil,
 	}).Return(tasksResponse, nil)
 
-	eventsCache := events.NewEventsCache(
-		s.mockShard.GetShardID(),
-		s.mockShard.GetConfig().EventsCacheMaxSizeBytes(),
-		s.mockShard.GetConfig().EventsCacheTTL(),
-		s.mockShard.GetExecutionManager(),
+	eventsCache := shard.NewHostLevelEventsCache(
+		s.mockShard.GetConfig(),
 		false,
-		s.mockShard.GetLogger(),
-		s.mockShard.GetMetricsHandler(),
 	)
 	ms := workflow.TestLocalMutableState(s.mockShard, eventsCache, tests.GlobalNamespaceEntry, log.NewTestLogger(), tests.RunID)
 	ei := ms.GetExecutionInfo()
@@ -495,14 +479,9 @@ func (s *ackManagerSuite) TestGetTasks_FilterNamespace() {
 		NextPageToken:       []byte{22, 8, 78}, // previous token
 	}).Return(tasksResponse3, nil)
 
-	eventsCache := events.NewEventsCache(
-		s.mockShard.GetShardID(),
-		s.mockShard.GetConfig().EventsCacheMaxSizeBytes(),
-		s.mockShard.GetConfig().EventsCacheTTL(),
-		s.mockShard.GetExecutionManager(),
+	eventsCache := shard.NewHostLevelEventsCache(
+		s.mockShard.GetConfig(),
 		false,
-		s.mockShard.GetLogger(),
-		s.mockShard.GetMetricsHandler(),
 	)
 	ms := workflow.TestLocalMutableState(s.mockShard, eventsCache, tests.GlobalNamespaceEntry, log.NewTestLogger(), tests.RunID)
 	ei := ms.GetExecutionInfo()

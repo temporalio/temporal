@@ -54,7 +54,6 @@ import (
 	"go.temporal.io/server/common/persistence/versionhistory"
 	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/common/testing/protomock"
-	"go.temporal.io/server/service/history/events"
 	"go.temporal.io/server/service/history/historybuilder"
 	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/tests"
@@ -67,7 +66,7 @@ type (
 
 		controller          *gomock.Controller
 		mockShard           *shard.ContextTest
-		mockEventsCache     *events.MockCache
+		mockEventsCache     *shard.MockCache
 		mockNamespaceCache  *namespace.MockRegistry
 		mockTaskGenerator   *MockTaskGenerator
 		mockMutableState    *MockMutableState
@@ -123,7 +122,7 @@ func (s *stateBuilderSuite) SetupTest() {
 	s.mockEventsCache = s.mockShard.MockEventsCache
 	s.mockClusterMetadata.EXPECT().GetCurrentClusterName().Return(cluster.TestCurrentClusterName).AnyTimes()
 	s.mockClusterMetadata.EXPECT().IsGlobalNamespaceEnabled().Return(true).AnyTimes()
-	s.mockEventsCache.EXPECT().PutEvent(gomock.Any(), gomock.Any()).AnyTimes()
+	s.mockEventsCache.EXPECT().PutEvent(gomock.Any(), gomock.Any(), gomock.Any()).AnyTimes()
 
 	s.logger = s.mockShard.GetLogger()
 	s.executionInfo = &persistencespb.WorkflowExecutionInfo{

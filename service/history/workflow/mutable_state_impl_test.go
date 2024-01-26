@@ -66,7 +66,6 @@ import (
 	"go.temporal.io/server/common/tqname"
 	"go.temporal.io/server/common/worker_versioning"
 	"go.temporal.io/server/service/history/configs"
-	"go.temporal.io/server/service/history/events"
 	"go.temporal.io/server/service/history/historybuilder"
 	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/tasks"
@@ -81,7 +80,7 @@ type (
 		controller      *gomock.Controller
 		mockConfig      *configs.Config
 		mockShard       *shard.ContextTest
-		mockEventsCache *events.MockCache
+		mockEventsCache *shard.MockCache
 
 		mutableState *MutableStateImpl
 		logger       log.Logger
@@ -116,7 +115,7 @@ func (s *mutableStateSuite) SetupTest() {
 	s.Assertions = require.New(s.T())
 
 	s.controller = gomock.NewController(s.T())
-	s.mockEventsCache = events.NewMockCache(s.controller)
+	s.mockEventsCache = shard.NewMockCache(s.controller)
 
 	s.mockConfig = tests.NewDynamicConfig()
 	s.mockShard = shard.NewTestContext(
@@ -600,7 +599,8 @@ func (s *mutableStateSuite) prepareTransientWorkflowTaskCompletionFirstBatchAppl
 	eventID++
 
 	s.mockEventsCache.EXPECT().PutEvent(
-		events.EventKey{
+		s.mockShard,
+		shard.EventKey{
 			NamespaceID: namespaceID,
 			WorkflowID:  execution.GetWorkflowId(),
 			RunID:       execution.GetRunId(),
@@ -839,7 +839,7 @@ func (s *mutableStateSuite) buildWorkflowMutableState() *persistencespb.Workflow
 
 func (s *mutableStateSuite) TestUpdateInfos() {
 	ctx := context.Background()
-	cacheStore := map[events.EventKey]*historypb.HistoryEvent{}
+	cacheStore := map[shard.EventKey]*historypb.HistoryEvent{}
 	dbstate := s.buildWorkflowMutableState()
 	var err error
 	s.mutableState, err = NewMutableStateFromDB(
@@ -951,7 +951,7 @@ func (s *mutableStateSuite) TestApplyActivityTaskStartedEvent() {
 }
 
 func (s *mutableStateSuite) TestTotalEntitiesCount() {
-	s.mockEventsCache.EXPECT().PutEvent(gomock.Any(), gomock.Any()).AnyTimes()
+	s.mockEventsCache.EXPECT().PutEvent(s.mockShard, gomock.Any(), gomock.Any()).AnyTimes()
 
 	// scheduling, starting & completing workflow task is omitted here
 
@@ -1093,7 +1093,7 @@ func (s *mutableStateSuite) TestSpeculativeWorkflowTaskNotPersisted() {
 }
 
 func (s *mutableStateSuite) TestRetryActivity_TruncateRetryableFailure() {
-	s.mockEventsCache.EXPECT().PutEvent(gomock.Any(), gomock.Any()).AnyTimes()
+	s.mockEventsCache.EXPECT().PutEvent(gomock.Any(), gomock.Any(), gomock.Any()).AnyTimes()
 
 	// scheduling, starting & completing workflow task is omitted here
 

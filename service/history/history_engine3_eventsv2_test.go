@@ -78,7 +78,7 @@ type (
 		mockTxProcessor         *queues.MockQueue
 		mockTimerProcessor      *queues.MockQueue
 		mockVisibilityProcessor *queues.MockQueue
-		mockEventsCache         *events.MockCache
+		mockEventsCache         *shard.MockCache
 		mockNamespaceCache      *namespace.MockRegistry
 		mockClusterMetadata     *cluster.MockMetadata
 		workflowCache           wcache.Cache
@@ -137,7 +137,7 @@ func (s *engine3Suite) SetupTest() {
 	s.mockClusterMetadata.EXPECT().IsGlobalNamespaceEnabled().Return(false).AnyTimes()
 	s.mockClusterMetadata.EXPECT().GetCurrentClusterName().Return(cluster.TestCurrentClusterName).AnyTimes()
 	s.mockClusterMetadata.EXPECT().ClusterNameForFailoverVersion(false, common.EmptyVersion).Return(cluster.TestCurrentClusterName).AnyTimes()
-	s.mockEventsCache.EXPECT().PutEvent(gomock.Any(), gomock.Any()).AnyTimes()
+	s.mockEventsCache.EXPECT().PutEvent(gomock.Any(), gomock.Any(), gomock.Any()).AnyTimes()
 	s.workflowCache = wcache.NewHostLevelCache(s.mockShard.GetConfig())
 	s.mockVisibilityManager.EXPECT().GetIndexName().Return("").AnyTimes()
 	s.mockVisibilityManager.EXPECT().

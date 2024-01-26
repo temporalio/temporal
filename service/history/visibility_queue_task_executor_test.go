@@ -124,14 +124,9 @@ func (s *visibilityQueueTaskExecutorSuite) SetupTest() {
 		},
 		config,
 	)
-	s.mockShard.SetEventsCacheForTesting(events.NewEventsCache(
-		s.mockShard.GetShardID(),
-		s.mockShard.GetConfig().EventsCacheMaxSizeBytes(),
-		s.mockShard.GetConfig().EventsCacheTTL(),
-		s.mockShard.GetExecutionManager(),
+	s.mockShard.SetEventsCacheForTesting(shard.NewHostLevelEventsCache(
+		s.mockShard.GetConfig(),
 		false,
-		s.mockShard.GetLogger(),
-		s.mockShard.GetMetricsHandler(),
 	))
 	s.mockShard.Resource.TimeSource = s.timeSource
 

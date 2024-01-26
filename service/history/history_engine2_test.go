@@ -95,7 +95,7 @@ type (
 		mockVisibilityProcessor  *queues.MockQueue
 		mockArchivalProcessor    *queues.MockQueue
 		mockMemoryScheduledQueue *queues.MockQueue
-		mockEventsCache          *events.MockCache
+		mockEventsCache          *shard.MockCache
 		mockNamespaceCache       *namespace.MockRegistry
 		mockClusterMetadata      *cluster.MockMetadata
 		mockVisibilityManager    *manager.MockVisibilityManager
@@ -165,7 +165,7 @@ func (s *engine2Suite) SetupTest() {
 	s.mockNamespaceCache.EXPECT().GetNamespaceByID(tests.NamespaceID).Return(tests.GlobalNamespaceEntry, nil).AnyTimes()
 	s.mockNamespaceCache.EXPECT().GetNamespaceByID(tests.ParentNamespaceID).Return(tests.GlobalParentNamespaceEntry, nil).AnyTimes()
 	s.mockNamespaceCache.EXPECT().GetNamespace(tests.ChildNamespace).Return(tests.GlobalChildNamespaceEntry, nil).AnyTimes()
-	s.mockEventsCache.EXPECT().PutEvent(gomock.Any(), gomock.Any()).AnyTimes()
+	s.mockEventsCache.EXPECT().PutEvent(gomock.Any(), gomock.Any(), gomock.Any()).AnyTimes()
 	s.mockClusterMetadata.EXPECT().GetClusterID().Return(tests.Version).AnyTimes()
 	s.mockClusterMetadata.EXPECT().IsVersionFromSameCluster(tests.Version, tests.Version).Return(true).AnyTimes()
 	s.mockClusterMetadata.EXPECT().IsGlobalNamespaceEnabled().Return(false).AnyTimes()
@@ -705,7 +705,8 @@ func (s *engine2Suite) TestRecordActivityTaskStartedSuccess() {
 
 	s.mockEventsCache.EXPECT().GetEvent(
 		gomock.Any(),
-		events.EventKey{
+		gomock.Any(),
+		shard.EventKey{
 			NamespaceID: namespaceID,
 			WorkflowID:  workflowExecution.GetWorkflowId(),
 			RunID:       workflowExecution.GetRunId(),
@@ -1853,7 +1854,7 @@ func (s *engine2Suite) TestRecordChildExecutionCompleted_MissingChildStartedEven
 	wfMs = workflow.TestCloneToProto(ms)
 	gwmsResponse = &persistence.GetWorkflowExecutionResponse{State: wfMs}
 	s.mockExecutionMgr.EXPECT().GetWorkflowExecution(gomock.Any(), gomock.Any()).Return(gwmsResponse, nil)
-	s.mockEventsCache.EXPECT().GetEvent(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Return(initiatedEvent, nil)
+	s.mockEventsCache.EXPECT().GetEvent(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Return(initiatedEvent, nil)
 	s.mockExecutionMgr.EXPECT().UpdateWorkflowExecution(gomock.Any(), gomock.Any()).Return(tests.UpdateWorkflowExecutionResponse, nil)
 	_, err := s.historyEngine.RecordChildExecutionCompleted(metrics.AddMetricsContext(context.Background()), request)
 	s.NoError(err)
@@ -2094,7 +2095,8 @@ func (s *engine2Suite) TestRefreshWorkflowTasks() {
 	s.mockExecutionMgr.EXPECT().AddHistoryTasks(gomock.Any(), gomock.Any()).Return(nil)
 	s.mockEventsCache.EXPECT().GetEvent(
 		gomock.Any(),
-		events.EventKey{
+		gomock.Any(),
+		shard.EventKey{
 			NamespaceID: tests.NamespaceID,
 			WorkflowID:  execution.GetWorkflowId(),
 			RunID:       execution.GetRunId(),
@@ -2106,7 +2108,8 @@ func (s *engine2Suite) TestRefreshWorkflowTasks() {
 	).Return(startEvent, nil).AnyTimes()
 	s.mockEventsCache.EXPECT().GetEvent(
 		gomock.Any(),
-		events.EventKey{
+		gomock.Any(),
+		shard.EventKey{
 			NamespaceID: tests.NamespaceID,
 			WorkflowID:  execution.GetWorkflowId(),
 			RunID:       execution.GetRunId(),
