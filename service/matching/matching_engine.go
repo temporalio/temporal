@@ -864,7 +864,7 @@ func (e *matchingEngineImpl) UpdateWorkerVersioningRules(
 	err = tqMgr.UpdateUserData(ctx, updateOptions, func(data *persistencespb.TaskQueueUserData) (*persistencespb.TaskQueueUserData, bool, error) {
 		clk := data.GetClock()
 		if clk == nil {
-clk = hlc.Zero(e.clusterMeta.GetClusterID())
+			clk = hlc.Zero(e.clusterMeta.GetClusterID())
 		} else {
 			prevCT, err := clk.Marshal()
 			if err != nil {
@@ -885,7 +885,7 @@ clk = hlc.Zero(e.clusterMeta.GetClusterID())
 				updatedClock,
 				data.GetVersioningData(),
 				req.GetInsertAssignmentRule(),
-				e.config.VersionAssignmentRuleLimitPerQueue(ns.Name().String()),
+				e.config.AssignmentRuleLimitPerQueue(ns.Name().String()),
 				hadUnfiltered,
 			)
 		case *workflowservice.UpdateWorkerVersioningRulesRequest_ReplaceAssignmentRule:
@@ -907,7 +907,7 @@ clk = hlc.Zero(e.clusterMeta.GetClusterID())
 				updatedClock,
 				data.GetVersioningData(),
 				req.GetInsertCompatibleRedirectRule(),
-				e.config.VersionRedirectRuleLimitPerQueue(ns.Name().String()),
+				e.config.RedirectRuleLimitPerQueue(ns.Name().String()),
 			)
 		case *workflowservice.UpdateWorkerVersioningRulesRequest_ReplaceCompatibleRedirectRule:
 			versioningData, err = ReplaceCompatibleRedirectRule(
@@ -932,7 +932,7 @@ clk = hlc.Zero(e.clusterMeta.GetClusterID())
 			return nil, false, serviceerror.NewInternal("error generating next conflict token")
 		}
 		// We can replicate tombstone cleanup, because it's just based on DeletionTimestamp, so no need to only do it locally
-		versioningData = CleanupRuleTombstones(versioningData, e.config.VersionDeletedRuleRetentionTime(ns.Name().String()))
+		versioningData = CleanupRuleTombstones(versioningData, e.config.DeletedRuleRetentionTime(ns.Name().String()))
 		// Avoid mutation
 		ret := common.CloneProto(data)
 		ret.Clock = updatedClock

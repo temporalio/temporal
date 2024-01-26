@@ -197,17 +197,17 @@ const (
 	// task queue. Update requests which would cause the versioning data to exceed this number will fail with a
 	// FailedPrecondition error.
 	VersionBuildIdLimitPerQueue = "limit.versionBuildIdLimitPerQueue"
-	// VersionAssignmentRuleLimitPerQueue is the max number of Build ID assignment rules allowed to be defined in the
+	// AssignmentRuleLimitPerQueue is the max number of Build ID assignment rules allowed to be defined in the
 	// versioning data for a task queue. Update requests which would cause the versioning data to exceed this number
 	// will fail with a FailedPrecondition error.
-	VersionAssignmentRuleLimitPerQueue = "limit.versionAssignmentRuleLimitPerQueue"
-	// VersionRedirectRuleLimitPerQueue is the max number of compatible redirect rules allowed to be defined
+	AssignmentRuleLimitPerQueue = "limit.wv.AssignmentRuleLimitPerQueue"
+	// RedirectRuleLimitPerQueue is the max number of compatible redirect rules allowed to be defined
 	// in the versioning data for a task queue. Update requests which would cause the versioning data to exceed this
 	// number will fail with a FailedPrecondition error.
-	VersionRedirectRuleLimitPerQueue = "limit.versionRedirectRuleLimitPerQueue"
-	// VersionDeletedRuleRetentionTime is the length of time that deleted Version Assignment Rules and 
+	RedirectRuleLimitPerQueue = "limit.wv.RedirectRuleLimitPerQueue"
+	// MatchingDeletedRuleRetentionTime is the length of time that deleted Version Assignment Rules and
 	// Deleted Redirect Rules will be kept in the DB (with DeleteTimestamp). After this time, the tombstones are deleted at the next time update of versioning data for the task queue.
-	VersionDeletedRuleRetentionTime = "limit.VersionDeletedRuleRetentionTime"
+	MatchingDeletedRuleRetentionTime = "matching.wv.DeletedRuleRetentionTime"
 	// ReachabilityTaskQueueScanLimit limits the number of task queues to scan when responding to a
 	// GetWorkerTaskReachability query.
 	ReachabilityTaskQueueScanLimit = "limit.reachabilityTaskQueueScan"

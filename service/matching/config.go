@@ -54,25 +54,25 @@ type (
 
 		// taskQueueManager configuration
 
-		RangeSize                          int64
-		GetTasksBatchSize                  dynamicconfig.IntPropertyFnWithTaskQueueInfoFilters
-		UpdateAckInterval                  dynamicconfig.DurationPropertyFnWithTaskQueueInfoFilters
-		MaxTaskQueueIdleTime               dynamicconfig.DurationPropertyFnWithTaskQueueInfoFilters
-		NumTaskqueueWritePartitions        dynamicconfig.IntPropertyFnWithTaskQueueInfoFilters
-		NumTaskqueueReadPartitions         dynamicconfig.IntPropertyFnWithTaskQueueInfoFilters
-		ForwarderMaxOutstandingPolls       dynamicconfig.IntPropertyFnWithTaskQueueInfoFilters
-		ForwarderMaxOutstandingTasks       dynamicconfig.IntPropertyFnWithTaskQueueInfoFilters
-		ForwarderMaxRatePerSecond          dynamicconfig.IntPropertyFnWithTaskQueueInfoFilters
-		ForwarderMaxChildrenPerNode        dynamicconfig.IntPropertyFnWithTaskQueueInfoFilters
-		VersionCompatibleSetLimitPerQueue  dynamicconfig.IntPropertyFnWithNamespaceFilter
-		VersionBuildIdLimitPerQueue        dynamicconfig.IntPropertyFnWithNamespaceFilter
-		VersionAssignmentRuleLimitPerQueue dynamicconfig.IntPropertyFnWithNamespaceFilter
-		VersionRedirectRuleLimitPerQueue   dynamicconfig.IntPropertyFnWithNamespaceFilter
-		VersionDeletedRuleRetentionTime    dynamicconfig.DurationPropertyFnWithNamespaceFilter
-		TaskQueueLimitPerBuildId           dynamicconfig.IntPropertyFnWithNamespaceFilter
-		GetUserDataLongPollTimeout         dynamicconfig.DurationPropertyFn
-		BacklogNegligibleAge               dynamicconfig.DurationPropertyFnWithTaskQueueInfoFilters
-		MaxWaitForPollerBeforeFwd          dynamicconfig.DurationPropertyFnWithTaskQueueInfoFilters
+		RangeSize                         int64
+		GetTasksBatchSize                 dynamicconfig.IntPropertyFnWithTaskQueueInfoFilters
+		UpdateAckInterval                 dynamicconfig.DurationPropertyFnWithTaskQueueInfoFilters
+		MaxTaskQueueIdleTime              dynamicconfig.DurationPropertyFnWithTaskQueueInfoFilters
+		NumTaskqueueWritePartitions       dynamicconfig.IntPropertyFnWithTaskQueueInfoFilters
+		NumTaskqueueReadPartitions        dynamicconfig.IntPropertyFnWithTaskQueueInfoFilters
+		ForwarderMaxOutstandingPolls      dynamicconfig.IntPropertyFnWithTaskQueueInfoFilters
+		ForwarderMaxOutstandingTasks      dynamicconfig.IntPropertyFnWithTaskQueueInfoFilters
+		ForwarderMaxRatePerSecond         dynamicconfig.IntPropertyFnWithTaskQueueInfoFilters
+		ForwarderMaxChildrenPerNode       dynamicconfig.IntPropertyFnWithTaskQueueInfoFilters
+		VersionCompatibleSetLimitPerQueue dynamicconfig.IntPropertyFnWithNamespaceFilter
+		VersionBuildIdLimitPerQueue       dynamicconfig.IntPropertyFnWithNamespaceFilter
+		AssignmentRuleLimitPerQueue       dynamicconfig.IntPropertyFnWithNamespaceFilter
+		RedirectRuleLimitPerQueue         dynamicconfig.IntPropertyFnWithNamespaceFilter
+		DeletedRuleRetentionTime          dynamicconfig.DurationPropertyFnWithNamespaceFilter
+		TaskQueueLimitPerBuildId          dynamicconfig.IntPropertyFnWithNamespaceFilter
+		GetUserDataLongPollTimeout        dynamicconfig.DurationPropertyFn
+		BacklogNegligibleAge              dynamicconfig.DurationPropertyFnWithTaskQueueInfoFilters
+		MaxWaitForPollerBeforeFwd         dynamicconfig.DurationPropertyFnWithTaskQueueInfoFilters
 
 		// Time to hold a poll request before returning an empty response if there are no tasks
 		LongPollExpirationInterval dynamicconfig.DurationPropertyFnWithTaskQueueInfoFilters
@@ -193,9 +193,9 @@ func NewConfig(
 		ShutdownDrainDuration:                 dc.GetDurationProperty(dynamicconfig.MatchingShutdownDrainDuration, 0*time.Second),
 		VersionCompatibleSetLimitPerQueue:     dc.GetIntPropertyFilteredByNamespace(dynamicconfig.VersionCompatibleSetLimitPerQueue, 10),
 		VersionBuildIdLimitPerQueue:           dc.GetIntPropertyFilteredByNamespace(dynamicconfig.VersionBuildIdLimitPerQueue, 100),
-		VersionAssignmentRuleLimitPerQueue:    dc.GetIntPropertyFilteredByNamespace(dynamicconfig.VersionAssignmentRuleLimitPerQueue, 100),
-		VersionRedirectRuleLimitPerQueue:      dc.GetIntPropertyFilteredByNamespace(dynamicconfig.VersionRedirectRuleLimitPerQueue, 500),
-		VersionDeletedRuleRetentionTime:       dc.GetDurationPropertyFilteredByNamespace(dynamicconfig.VersionDeletedRuleRetentionTime, 14*24*time.Hour),
+		AssignmentRuleLimitPerQueue:           dc.GetIntPropertyFilteredByNamespace(dynamicconfig.AssignmentRuleLimitPerQueue, 100),
+		RedirectRuleLimitPerQueue:             dc.GetIntPropertyFilteredByNamespace(dynamicconfig.RedirectRuleLimitPerQueue, 500),
+		DeletedRuleRetentionTime:              dc.GetDurationPropertyFilteredByNamespace(dynamicconfig.MatchingDeletedRuleRetentionTime, 14*24*time.Hour),
 		TaskQueueLimitPerBuildId:              dc.GetIntPropertyFilteredByNamespace(dynamicconfig.TaskQueuesPerBuildIdLimit, 20),
 		GetUserDataLongPollTimeout:            dc.GetDurationProperty(dynamicconfig.MatchingGetUserDataLongPollTimeout, 5*time.Minute-10*time.Second),
 		BacklogNegligibleAge:                  dc.GetDurationPropertyFilteredByTaskQueueInfo(dynamicconfig.MatchingBacklogNegligibleAge, 24*365*10*time.Hour),
