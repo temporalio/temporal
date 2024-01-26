@@ -72,7 +72,6 @@ import (
 	"go.temporal.io/server/common/util"
 	"go.temporal.io/server/service/history/configs"
 	"go.temporal.io/server/service/history/consts"
-	"go.temporal.io/server/service/history/events"
 	"go.temporal.io/server/service/history/tasks"
 	"go.temporal.io/server/service/history/vclock"
 )
@@ -107,7 +106,7 @@ type (
 		stringRepr          string
 		executionManager    persistence.ExecutionManager
 		metricsHandler      metrics.Handler
-		eventsCache         events.Cache
+		eventsCache         Cache
 		closeCallback       CloseCallback
 		config              *configs.Config
 		contextTaggedLogger log.Logger
@@ -1100,7 +1099,7 @@ func (s *ContextImpl) GetConfig() *configs.Config {
 	return s.config
 }
 
-func (s *ContextImpl) GetEventsCache() events.Cache {
+func (s *ContextImpl) GetEventsCache() Cache {
 	// constant from initialization (except for tests), no need for locks
 	return s.eventsCache
 }
@@ -2068,16 +2067,6 @@ func newContext(
 			return shardContext.renewRangeLocked(false)
 		},
 	)
-	shardContext.eventsCache = events.NewEventsCache(
-		shardContext.GetShardID(),
-		shardContext.GetConfig().EventsCacheMaxSizeBytes(),
-		shardContext.GetConfig().EventsCacheTTL(),
-		shardContext.GetExecutionManager(),
-		false,
-		shardContext.GetLogger(),
-		shardContext.GetMetricsHandler(),
-	)
-
 	return shardContext, nil
 }
 

@@ -66,7 +66,7 @@ type (
 		suite.Suite
 
 		controller       *gomock.Controller
-		mockEventsCache  *events.MockCache
+		mockEventsCache  *shard.MockCache
 		mockExecutionMgr *persistence.MockExecutionManager
 
 		logger log.Logger
@@ -114,7 +114,7 @@ func (s *WorkflowTaskHandlerCallbackSuite) SetupTest() {
 		AnyTimes()
 
 	s.mockEventsCache = mockShard.MockEventsCache
-	s.mockEventsCache.EXPECT().PutEvent(gomock.Any(), gomock.Any()).AnyTimes()
+	s.mockEventsCache.EXPECT().PutEvent(gomock.Any(), gomock.Any(), gomock.Any()).AnyTimes()
 	s.logger = mockShard.GetLogger()
 
 	workflowCache := wcache.NewHostLevelCache(mockShard.GetConfig())

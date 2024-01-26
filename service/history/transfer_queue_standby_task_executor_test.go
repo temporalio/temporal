@@ -66,7 +66,6 @@ import (
 	"go.temporal.io/server/common/persistence/visibility/manager"
 	"go.temporal.io/server/common/xdc"
 	"go.temporal.io/server/service/history/consts"
-	"go.temporal.io/server/service/history/events"
 	"go.temporal.io/server/service/history/queues"
 	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/tasks"
@@ -142,14 +141,9 @@ func (s *transferQueueStandbyTaskExecutorSuite) SetupTest() {
 		config,
 		s.timeSource,
 	)
-	s.mockShard.SetEventsCacheForTesting(events.NewEventsCache(
-		s.mockShard.GetShardID(),
-		s.mockShard.GetConfig().EventsCacheMaxSizeBytes(),
-		s.mockShard.GetConfig().EventsCacheTTL(),
-		s.mockShard.GetExecutionManager(),
+	s.mockShard.SetEventsCacheForTesting(shard.NewHostLevelEventsCache(
+		s.mockShard.GetConfig(),
 		false,
-		s.mockShard.GetLogger(),
-		s.mockShard.GetMetricsHandler(),
 	))
 
 	s.mockHistoryClient = s.mockShard.Resource.HistoryClient

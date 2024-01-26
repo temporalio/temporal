@@ -76,6 +76,8 @@ type (
 		ThrottledLogger             log.ThrottledLogger
 		TimeSource                  clock.TimeSource
 		TaskCategoryRegistry        tasks.TaskCategoryRegistry
+		EventsCache                 Cache
+		NewEventsCacheFn            NewEventsCacheFn
 	}
 
 	contextFactoryImpl struct {
@@ -116,6 +118,11 @@ func (c *contextFactoryImpl) CreateContext(
 		c.HostInfoProvider,
 		c.TaskCategoryRegistry,
 	)
+	if shard.GetConfig().EnableHostLevelEventsCache() {
+		shard.eventsCache = c.EventsCache
+	} else {
+		shard.eventsCache = c.NewEventsCacheFn(shard.GetConfig())
+	}
 	if err != nil {
 		return nil, err
 	}

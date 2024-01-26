@@ -112,6 +112,7 @@ func NewTestController(
 		ThrottledLogger:             resource.GetThrottledLogger(),
 		TimeSource:                  resource.GetTimeSource(),
 		TaskCategoryRegistry:        tasks.NewDefaultTaskCategoryRegistry(),
+		NewEventsCacheFn:            NewCacheFnProvider(),
 	})
 
 	return ControllerProvider(

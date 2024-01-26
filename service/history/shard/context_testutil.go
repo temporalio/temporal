@@ -41,7 +41,6 @@ import (
 	"go.temporal.io/server/common/primitives"
 	"go.temporal.io/server/common/resourcetest"
 	"go.temporal.io/server/service/history/configs"
-	"go.temporal.io/server/service/history/events"
 	"go.temporal.io/server/service/history/tasks"
 )
 
@@ -50,7 +49,7 @@ type ContextTest struct {
 
 	Resource *resourcetest.Test
 
-	MockEventsCache *events.MockCache
+	MockEventsCache *MockCache
 }
 
 var _ Context = (*ContextTest)(nil)
@@ -74,7 +73,7 @@ func NewTestContext(
 	config *configs.Config,
 ) *ContextTest {
 	resourceTest := resourcetest.NewTest(ctrl, primitives.HistoryService)
-	eventsCache := events.NewMockCache(ctrl)
+	eventsCache := NewMockCache(ctrl)
 	shard := newTestContext(
 		resourceTest,
 		eventsCache,
@@ -109,7 +108,7 @@ func NewStubContext(
 	engine Engine,
 ) *StubContext {
 	resourceTest := resourcetest.NewTest(ctrl, primitives.HistoryService)
-	eventsCache := events.NewMockCache(ctrl)
+	eventsCache := NewMockCache(ctrl)
 	shard := newTestContext(resourceTest, eventsCache, overrides)
 
 	result := &StubContext{
@@ -123,7 +122,7 @@ func NewStubContext(
 	return result
 }
 
-func newTestContext(t *resourcetest.Test, eventsCache events.Cache, config ContextConfigOverrides) *ContextImpl {
+func newTestContext(t *resourcetest.Test, eventsCache Cache, config ContextConfigOverrides) *ContextImpl {
 	hostInfoProvider := t.GetHostInfoProvider()
 	lifecycleCtx, lifecycleCancel := context.WithCancel(context.Background())
 	if config.ShardInfo.QueueStates == nil {
@@ -194,7 +193,7 @@ func (s *ContextTest) SetEngineForTesting(engine Engine) {
 }
 
 // SetEventsCacheForTesting sets s.eventsCache. Only used by tests.
-func (s *ContextTest) SetEventsCacheForTesting(c events.Cache) {
+func (s *ContextTest) SetEventsCacheForTesting(c Cache) {
 	// for testing only, will only be called immediately after initialization
 	s.eventsCache = c
 }
