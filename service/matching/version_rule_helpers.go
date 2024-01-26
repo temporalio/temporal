@@ -101,6 +101,7 @@ func InsertAssignmentRule(timestamp *hlc.Clock,
 		CreateTimestamp: timestamp,
 		DeleteTimestamp: nil,
 	}
+	// todo carly: calculate correct insert location
 	slices.Insert(data.GetAssignmentRules(), int(req.GetRuleIndex()), &persistenceAR)
 	return data, checkAssignmentConditions(data, maxARs, false, hadUnfiltered)
 }
@@ -109,11 +110,7 @@ func ReplaceAssignmentRule(timestamp *hlc.Clock,
 	data *persistencepb.VersioningData,
 	req *workflowservice.UpdateWorkerVersioningRulesRequest_ReplaceBuildIdAssignmentRule,
 	hadUnfiltered bool) (*persistencepb.VersioningData, error) {
-	if data == nil {
-		return nil, serviceerror.NewInvalidArgument("data cannot be nil for a replace call")
-	} else {
-		data = common.CloneProto(data)
-	}
+	data = common.CloneProto(data)
 	rules := data.GetAssignmentRules()
 	idx := int(req.GetRuleIndex())
 	if len(rules) > idx+1 {
@@ -124,6 +121,7 @@ func ReplaceAssignmentRule(timestamp *hlc.Clock,
 		CreateTimestamp: timestamp,
 		DeleteTimestamp: nil,
 	}
+	// todo carly: calculate correct insert location
 	slices.Replace(data.AssignmentRules, idx, idx+1, &persistenceAR)
 	return data, checkAssignmentConditions(data, 0, req.GetForce(), hadUnfiltered)
 }
@@ -132,11 +130,7 @@ func DeleteAssignmentRule(timestamp *hlc.Clock,
 	data *persistencepb.VersioningData,
 	req *workflowservice.UpdateWorkerVersioningRulesRequest_DeleteBuildIdAssignmentRule,
 	hadUnfiltered bool) (*persistencepb.VersioningData, error) {
-	if data == nil {
-		return nil, serviceerror.NewInvalidArgument("data cannot be nil for a delete call")
-	} else {
-		data = common.CloneProto(data)
-	}
+	data = common.CloneProto(data)
 	rules := data.GetAssignmentRules()
 	idx := int(req.GetRuleIndex())
 	if len(rules) > idx+1 {
