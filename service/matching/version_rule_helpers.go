@@ -83,6 +83,21 @@ func isInVersionSet(rules []*persistencepb.AssignmentRule, sets []*persistencepb
 	return "", false
 }
 
+// given2ActualIdx takes in the user-given index, which only counts active assignment rules, and converts it to the
+// actual index of that rule in the assignment rule list, which includes deleted rules.
+// A negative return value means index out of bounds.
+func given2ActualIdx(idx int32, rules []*persistencepb.AssignmentRule) int {
+	for i, rule := range rules {
+		if rule.DeleteTimestamp == nil {
+			if idx == 0 {
+				return i
+			}
+			idx--
+		}
+	}
+	return -1
+}
+
 func InsertAssignmentRule(timestamp *hlc.Clock,
 	data *persistencepb.VersioningData,
 	req *workflowservice.UpdateWorkerVersioningRulesRequest_InsertBuildIdAssignmentRule,
@@ -101,8 +116,8 @@ func InsertAssignmentRule(timestamp *hlc.Clock,
 		CreateTimestamp: timestamp,
 		DeleteTimestamp: nil,
 	}
-	// todo carly: calculate correct insert location
-	slices.Insert(data.GetAssignmentRules(), int(req.GetRuleIndex()), &persistenceAR)
+	rules := data.GetAssignmentRules()
+	slices.Insert(rules, given2ActualIdx(req.GetRuleIndex(), rules), &persistenceAR)
 	return data, checkAssignmentConditions(data, maxARs, false, hadUnfiltered)
 }
 
@@ -112,17 +127,17 @@ func ReplaceAssignmentRule(timestamp *hlc.Clock,
 	hadUnfiltered bool) (*persistencepb.VersioningData, error) {
 	data = common.CloneProto(data)
 	rules := data.GetAssignmentRules()
-	idx := int(req.GetRuleIndex())
-	if len(rules) > idx+1 {
-		return nil, serviceerror.NewInvalidArgument(fmt.Sprintf("rule index %d is out of bounds for assignment rule list of length %d", idx, len(rules)))
+	idx := req.GetRuleIndex()
+	actualIdx := given2ActualIdx(idx, rules)
+	if actualIdx < 0 {
+		return nil, serviceerror.NewInvalidArgument(fmt.Sprintf("rule index %d is out of bounds for assignment rule list of length %d", idx, countActiveAR(rules)))
 	}
 	persistenceAR := persistencepb.AssignmentRule{
 		Rule:            req.GetRule(),
 		CreateTimestamp: timestamp,
 		DeleteTimestamp: nil,
 	}
-	// todo carly: calculate correct insert location
-	slices.Replace(data.AssignmentRules, idx, idx+1, &persistenceAR)
+	slices.Replace(data.AssignmentRules, actualIdx, actualIdx+1, &persistenceAR)
 	return data, checkAssignmentConditions(data, 0, req.GetForce(), hadUnfiltered)
 }
 
@@ -132,11 +147,12 @@ func DeleteAssignmentRule(timestamp *hlc.Clock,
 	hadUnfiltered bool) (*persistencepb.VersioningData, error) {
 	data = common.CloneProto(data)
 	rules := data.GetAssignmentRules()
-	idx := int(req.GetRuleIndex())
-	if len(rules) > idx+1 {
-		return nil, serviceerror.NewInvalidArgument(fmt.Sprintf("rule index %d is out of bounds for assignment rule list of length %d", idx, len(rules)))
+	idx := req.GetRuleIndex()
+	actualIdx := given2ActualIdx(idx, rules)
+	if actualIdx < 0 {
+		return nil, serviceerror.NewInvalidArgument(fmt.Sprintf("rule index %d is out of bounds for assignment rule list of length %d", idx, countActiveAR(rules)))
 	}
-	rule := rules[idx]
+	rule := rules[actualIdx]
 	rule.DeleteTimestamp = timestamp
 	return data, checkAssignmentConditions(data, 0, req.GetForce(), hadUnfiltered)
 }
