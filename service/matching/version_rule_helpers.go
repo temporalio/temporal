@@ -18,7 +18,7 @@ import (
 // checkAssignmentConditions returns an error if the new set of assignment rules don't meet the following requirements:
 // - No more rules than dynamicconfig.VersionAssignmentRuleLimitPerQueue
 // - No assignment rule's TargetBuildId can be a member of an existing version set
-// - If there existed an "unfiltered" assigment rule (which can accept any build id), at least one must still exist
+// - If there existed an "unfiltered" assigment rule (which can accept any task), at least one must still exist
 // - To override the unfiltered assignment rule requirement, the user can specify force = true
 func checkAssignmentConditions(g *persistencepb.VersioningData, maxARs int, force, hadUnfiltered bool) error {
 	rules := slices.Clone(g.GetAssignmentRules())
