@@ -1263,7 +1263,9 @@ func testCassandraNexusIncomingServiceStoreConcurrentCreate(t *testing.T, store 
 	starter := make(chan struct{})
 
 	serviceID := uuid.NewString()
-	var createErrors []error
+
+	createErrors := make(chan error, numConcurrentRequests)
+	defer close(createErrors)
 
 	requestTableVersion := tableVersion.Load()
 
@@ -1281,7 +1283,7 @@ func testCassandraNexusIncomingServiceStoreConcurrentCreate(t *testing.T, store 
 					}},
 			})
 			if err != nil {
-				createErrors = append(createErrors, err)
+				createErrors <- err
 			} else {
 				tableVersion.Add(1)
 			}
@@ -1292,7 +1294,7 @@ func testCassandraNexusIncomingServiceStoreConcurrentCreate(t *testing.T, store 
 	close(starter)
 	wg.Wait()
 
-	require.Len(t, createErrors, numConcurrentRequests-1)
+	require.Lenf(t, createErrors, numConcurrentRequests-1, "exactly 1 create request should succeed")
 	assertNexusIncomingServicesTableVersion(t, tableVersion.Load(), store)
 }
 
@@ -1309,11 +1311,11 @@ func testCassandraNexusIncomingServiceStoreConcurrentUpdate(t *testing.T, store 
 		}}
 
 	// Create a service
-	err := store.CreateOrUpdateNexusIncomingService(ctx, &persistence.InternalCreateOrUpdateNexusIncomingServiceRequest{
+	createErr := store.CreateOrUpdateNexusIncomingService(ctx, &persistence.InternalCreateOrUpdateNexusIncomingServiceRequest{
 		LastKnownTableVersion: tableVersion.Load(),
 		Service:               service,
 	})
-	require.NoError(t, err)
+	require.NoError(t, createErr)
 	tableVersion.Add(1)
 	service.Version++
 
@@ -1321,7 +1323,9 @@ func testCassandraNexusIncomingServiceStoreConcurrentUpdate(t *testing.T, store 
 	wg := sync.WaitGroup{}
 	wg.Add(numConcurrentRequests)
 	starter := make(chan struct{})
-	var updateErrors []error
+
+	updateErrors := make(chan error, numConcurrentRequests)
+	defer close(updateErrors)
 
 	for i := 0; i < numConcurrentRequests; i++ {
 		go func() {
@@ -1331,7 +1335,7 @@ func testCassandraNexusIncomingServiceStoreConcurrentUpdate(t *testing.T, store 
 				Service:               service,
 			})
 			if err != nil {
-				updateErrors = append(updateErrors, err)
+				updateErrors <- err
 			} else {
 				tableVersion.Add(1)
 			}
@@ -1342,7 +1346,7 @@ func testCassandraNexusIncomingServiceStoreConcurrentUpdate(t *testing.T, store 
 	close(starter)
 	wg.Wait()
 
-	require.Len(t, updateErrors, numConcurrentRequests-1)
+	require.Lenf(t, updateErrors, numConcurrentRequests-1, "exactly 1 update request should succeed")
 	assertNexusIncomingServicesTableVersion(t, tableVersion.Load(), store)
 }
 
