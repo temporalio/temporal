@@ -100,6 +100,10 @@ func InsertAssignmentRule(timestamp *hlc.Clock,
 	if req.GetRuleIndex() < 0 {
 		return nil, serviceerror.NewInvalidArgument("rule index cannot be negative")
 	}
+	rule := req.GetRule()
+	if ramp := rule.GetPercentageRamp(); ramp != nil && (ramp.RampPercentage < 0 || ramp.RampPercentage >= 100) {
+		return nil, serviceerror.NewInvalidArgument("ramp percentage must be in range [0, 100)")
+	}
 	if data == nil {
 		data = &persistencepb.VersioningData{AssignmentRules: make([]*persistencepb.AssignmentRule, 0)}
 	} else {
