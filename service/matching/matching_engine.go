@@ -452,7 +452,7 @@ pollLoop:
 		}
 		task, err := e.pollTask(pollerCtx, taskQueue, stickyInfo, pollMetadata)
 		if err != nil {
-			if err == errNoTasks {
+			if errors.Is(err, errNoTasks) {
 				return emptyPollWorkflowTaskQueueResponse, nil
 			}
 			return nil, err
@@ -633,7 +633,7 @@ pollLoop:
 		}
 		task, err := e.pollTask(pollerCtx, taskQueue, stickyInfo, pollMetadata)
 		if err != nil {
-			if err == errNoTasks {
+			if errors.Is(err, errNoTasks) {
 				return emptyPollActivityTaskQueueResponse, nil
 			}
 			return nil, err
