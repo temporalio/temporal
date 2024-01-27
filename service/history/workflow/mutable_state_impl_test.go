@@ -80,7 +80,7 @@ type (
 		controller      *gomock.Controller
 		mockConfig      *configs.Config
 		mockShard       *shard.ContextTest
-		mockEventsCache *shard.MockCache
+		mockEventsCache *shard.MockEventsCache
 
 		mutableState *MutableStateImpl
 		logger       log.Logger
@@ -115,7 +115,7 @@ func (s *mutableStateSuite) SetupTest() {
 	s.Assertions = require.New(s.T())
 
 	s.controller = gomock.NewController(s.T())
-	s.mockEventsCache = shard.NewMockCache(s.controller)
+	s.mockEventsCache = shard.NewMockEventsCache(s.controller)
 
 	s.mockConfig = tests.NewDynamicConfig()
 	s.mockShard = shard.NewTestContext(

@@ -49,7 +49,7 @@ type ContextTest struct {
 
 	Resource *resourcetest.Test
 
-	MockEventsCache *MockCache
+	MockEventsCache *MockEventsCache
 }
 
 var _ Context = (*ContextTest)(nil)
@@ -73,7 +73,7 @@ func NewTestContext(
 	config *configs.Config,
 ) *ContextTest {
 	resourceTest := resourcetest.NewTest(ctrl, primitives.HistoryService)
-	eventsCache := NewMockCache(ctrl)
+	eventsCache := NewMockEventsCache(ctrl)
 	shard := newTestContext(
 		resourceTest,
 		eventsCache,
@@ -108,7 +108,7 @@ func NewStubContext(
 	engine Engine,
 ) *StubContext {
 	resourceTest := resourcetest.NewTest(ctrl, primitives.HistoryService)
-	eventsCache := NewMockCache(ctrl)
+	eventsCache := NewMockEventsCache(ctrl)
 	shard := newTestContext(resourceTest, eventsCache, overrides)
 
 	result := &StubContext{

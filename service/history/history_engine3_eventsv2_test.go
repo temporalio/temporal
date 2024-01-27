@@ -78,7 +78,7 @@ type (
 		mockTxProcessor         *queues.MockQueue
 		mockTimerProcessor      *queues.MockQueue
 		mockVisibilityProcessor *queues.MockQueue
-		mockEventsCache         *shard.MockCache
+		mockEventsCache         *shard.MockEventsCache
 		mockNamespaceCache      *namespace.MockRegistry
 		mockClusterMetadata     *cluster.MockMetadata
 		workflowCache           wcache.Cache

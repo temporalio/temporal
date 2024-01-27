@@ -217,7 +217,7 @@ func (c *mutationTestCase) createMutableState(t *testing.T, nsEntry *namespace.N
 
 	startTime := time.Time{}
 	logger := log.NewNoopLogger()
-	eventsCache := shard.NewMockCache(ctrl)
+	eventsCache := shard.NewMockEventsCache(ctrl)
 	eventsCache.EXPECT().PutEvent(gomock.Any(), gomock.Any(), gomock.Any()).AnyTimes()
 
 	ms := workflow.NewMutableState(

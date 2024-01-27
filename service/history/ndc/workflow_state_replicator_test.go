@@ -65,7 +65,7 @@ type (
 
 		controller            *gomock.Controller
 		mockShard             *shard.ContextTest
-		mockEventCache        *shard.MockCache
+		mockEventCache        *shard.MockEventsCache
 		mockWorkflowCache     *wcache.MockCache
 		mockNamespaceCache    *namespace.MockRegistry
 		mockRemoteAdminClient *adminservicemock.MockAdminServiceClient

@@ -95,7 +95,7 @@ type (
 		mockVisibilityProcessor  *queues.MockQueue
 		mockArchivalProcessor    *queues.MockQueue
 		mockMemoryScheduledQueue *queues.MockQueue
-		mockEventsCache          *shard.MockCache
+		mockEventsCache          *shard.MockEventsCache
 		mockNamespaceCache       *namespace.MockRegistry
 		mockClusterMetadata      *cluster.MockMetadata
 		mockVisibilityManager    *manager.MockVisibilityManager
