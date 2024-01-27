@@ -92,6 +92,14 @@ func given2ActualIdx(idx int32, rules []*persistencepb.AssignmentRule) int {
 	return -1
 }
 
+// validRamp returns true if the percentage ramp is within [0, 100), or if the ramp is nil
+func validRamp(ramp *taskqueue.RampByPercentage) bool {
+	if ramp == nil {
+		return true
+	}
+	return ramp.RampPercentage >= 0 && ramp.RampPercentage < 100
+}
+
 func InsertAssignmentRule(timestamp *hlc.Clock,
 	data *persistencepb.VersioningData,
 	req *workflowservice.UpdateWorkerVersioningRulesRequest_InsertBuildIdAssignmentRule,
@@ -101,7 +109,7 @@ func InsertAssignmentRule(timestamp *hlc.Clock,
 		return nil, serviceerror.NewInvalidArgument("rule index cannot be negative")
 	}
 	rule := req.GetRule()
-	if ramp := rule.GetPercentageRamp(); ramp != nil && (ramp.RampPercentage < 0 || ramp.RampPercentage >= 100) {
+	if ramp := rule.GetPercentageRamp(); !validRamp(ramp) {
 		return nil, serviceerror.NewInvalidArgument("ramp percentage must be in range [0, 100)")
 	}
 	if data == nil {
@@ -132,7 +140,7 @@ func ReplaceAssignmentRule(timestamp *hlc.Clock,
 	hadUnfiltered bool) (*persistencepb.VersioningData, error) {
 	data = common.CloneProto(data)
 	rule := req.GetRule()
-	if ramp := rule.GetPercentageRamp(); ramp != nil && (ramp.RampPercentage < 0 || ramp.RampPercentage >= 100) {
+	if ramp := rule.GetPercentageRamp(); !validRamp(ramp) {
 		return nil, serviceerror.NewInvalidArgument("ramp percentage must be in range [0, 100)")
 	}
 	rules := data.GetAssignmentRules()

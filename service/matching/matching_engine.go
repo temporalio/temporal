@@ -877,7 +877,7 @@ func (e *matchingEngineImpl) UpdateWorkerVersioningRules(
 			}
 		}
 		updatedClock := hlc.Next(clk, e.timeSource)
-		hadUnfiltered := hasUnfiltered(data.GetVersioningData().GetAssignmentRules())
+		hadUnfiltered := containsUnfiltered(data.GetVersioningData().GetAssignmentRules())
 		var versioningData *persistencespb.VersioningData
 		switch req.GetOperation().(type) {
 		case *workflowservice.UpdateWorkerVersioningRulesRequest_InsertAssignmentRule:
