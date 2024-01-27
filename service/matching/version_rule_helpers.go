@@ -110,7 +110,7 @@ func InsertAssignmentRule(timestamp *hlc.Clock,
 		data = common.CloneProto(data)
 	}
 	persistenceAR := persistencepb.AssignmentRule{
-		Rule:            req.GetRule(),
+		Rule:            rule,
 		CreateTimestamp: timestamp,
 		DeleteTimestamp: nil,
 	}
@@ -131,6 +131,10 @@ func ReplaceAssignmentRule(timestamp *hlc.Clock,
 	req *workflowservice.UpdateWorkerVersioningRulesRequest_ReplaceBuildIdAssignmentRule,
 	hadUnfiltered bool) (*persistencepb.VersioningData, error) {
 	data = common.CloneProto(data)
+	rule := req.GetRule()
+	if ramp := rule.GetPercentageRamp(); ramp != nil && (ramp.RampPercentage < 0 || ramp.RampPercentage >= 100) {
+		return nil, serviceerror.NewInvalidArgument("ramp percentage must be in range [0, 100)")
+	}
 	rules := data.GetAssignmentRules()
 	idx := req.GetRuleIndex()
 	actualIdx := given2ActualIdx(idx, rules)
@@ -138,7 +142,7 @@ func ReplaceAssignmentRule(timestamp *hlc.Clock,
 		return nil, serviceerror.NewInvalidArgument(fmt.Sprintf("rule index %d is out of bounds for assignment rule list of length %d", idx, len(getActiveRules(rules))))
 	}
 	persistenceAR := persistencepb.AssignmentRule{
-		Rule:            req.GetRule(),
+		Rule:            rule,
 		CreateTimestamp: timestamp,
 		DeleteTimestamp: nil,
 	}
