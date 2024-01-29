@@ -1322,9 +1322,10 @@ func (s *workflowSuite) TestBackfillInclusiveStartEnd() {
 
 func (s *workflowSuite) TestHugeBackfillAllowAll() {
 	// TODO: remove once default version is IncrementalBackfill
-	currentVersion := currentTweakablePolicies.Version
+	prevTweakables := currentTweakablePolicies
 	currentTweakablePolicies.Version = IncrementalBackfill
-	defer func() { currentTweakablePolicies.Version = currentVersion }()
+	currentTweakablePolicies.MaxBufferSize = 30 // make smaller for testing
+	defer func() { currentTweakablePolicies = prevTweakables }()
 
 	// This has been run for up to 5000, but it takes a very long time. Run only 100 normally.
 	const backfillRuns = 100
