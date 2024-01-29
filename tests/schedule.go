@@ -306,7 +306,23 @@ func (s *ScheduleFunctionalSuite) TestBasics() {
 	s.WithinRange(ex0StartTime, createTime, time.Now())
 	s.True(ex0StartTime.UnixNano()%int64(5*time.Second) == 0)
 
-	// list workflows with namespace division (implementation details here, not public api)
+	// list with QueryWithAnyNamespaceDivision, we should see the scheduler workflow
+
+	wfResp, err = s.engine.ListWorkflowExecutions(NewContext(), &workflowservice.ListWorkflowExecutionsRequest{
+		Namespace: s.namespace,
+		PageSize:  5,
+		Query:     searchattribute.QueryWithAnyNamespaceDivision(`ExecutionStatus = "Running"`),
+	})
+	s.NoError(err)
+	count := 0
+	for _, ex := range wfResp.Executions {
+		if ex.Type.Name == scheduler.WorkflowType {
+			count++
+		}
+	}
+	s.EqualValues(1, count, "should see scheduler workflow")
+
+	// list workflows with an exact match on namespace division (implementation details here, not public api)
 
 	wfResp, err = s.engine.ListWorkflowExecutions(NewContext(), &workflowservice.ListWorkflowExecutionsRequest{
 		Namespace: s.namespace,

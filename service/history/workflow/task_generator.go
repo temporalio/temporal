@@ -35,6 +35,7 @@ import (
 	"go.temporal.io/api/serviceerror"
 
 	enumsspb "go.temporal.io/server/api/enums/v1"
+	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common/archiver"
 	"go.temporal.io/server/common/backoff"
 	"go.temporal.io/server/common/namespace"
@@ -76,7 +77,8 @@ type (
 			event *historypb.HistoryEvent,
 		) error
 		GenerateActivityRetryTasks(
-			activityScheduledEventID int64,
+			activity *persistencespb.ActivityInfo,
+			nextAttempt int32,
 		) error
 		GenerateChildWorkflowTasks(
 			event *historypb.HistoryEvent,
@@ -462,21 +464,16 @@ func (r *TaskGeneratorImpl) GenerateActivityTasks(
 }
 
 func (r *TaskGeneratorImpl) GenerateActivityRetryTasks(
-	activityScheduledEventID int64,
+	activity *persistencespb.ActivityInfo,
+	nextAttempt int32,
 ) error {
-
-	ai, ok := r.mutableState.GetActivityInfo(activityScheduledEventID)
-	if !ok {
-		return serviceerror.NewInternal(fmt.Sprintf("it could be a bug, cannot get pending activity: %v", activityScheduledEventID))
-	}
-
 	r.mutableState.AddTasks(&tasks.ActivityRetryTimerTask{
 		// TaskID is set by shard
 		WorkflowKey:         r.mutableState.GetWorkflowKey(),
-		Version:             ai.Version,
-		VisibilityTimestamp: ai.ScheduledTime.AsTime(),
-		EventID:             ai.ScheduledEventId,
-		Attempt:             ai.Attempt,
+		Version:             activity.Version,
+		VisibilityTimestamp: activity.ScheduledTime.AsTime(),
+		EventID:             activity.ScheduledEventId,
+		Attempt:             nextAttempt,
 	})
 	return nil
 }

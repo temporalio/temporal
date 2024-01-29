@@ -35,7 +35,6 @@ import (
 	historypb "go.temporal.io/api/history/v1"
 	"go.temporal.io/api/serviceerror"
 
-	enumsspb "go.temporal.io/server/api/enums/v1"
 	"go.temporal.io/server/api/historyservice/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common"
@@ -45,7 +44,6 @@ import (
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/persistence/versionhistory"
 	"go.temporal.io/server/common/persistence/visibility/manager"
-	"go.temporal.io/server/common/persistence/visibility/store/standard/cassandra"
 )
 
 func Invoke(
@@ -80,7 +78,6 @@ func Invoke(
 	var warnings []string
 	var branchTokens [][]byte
 	var startTime, closeTime time.Time
-	cassVisBackend := persistenceVisibilityMgr.HasStoreName(cassandra.CassandraPersistenceName)
 
 	resp, err := persistenceExecutionMgr.GetWorkflowExecution(ctx, &persistence.GetWorkflowExecutionRequest{
 		ShardID:     shardID,
@@ -105,45 +102,22 @@ func Invoke(
 		for _, historyItem := range histories {
 			branchTokens = append(branchTokens, historyItem.GetBranchToken())
 		}
-
-		if cassVisBackend {
-			if resp.State.ExecutionState.State != enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED {
-				if executionInfo.StartTime != nil {
-					startTime = executionInfo.StartTime.AsTime()
-				}
-			} else if executionInfo.GetCloseTime() != nil {
-				if executionInfo.CloseTime != nil {
-					closeTime = executionInfo.CloseTime.AsTime()
-				}
-			} else {
-				completionEvent, err := getWorkflowCompletionEvent(ctx, shardID, resp.State, persistenceExecutionMgr)
-				if err != nil {
-					warnMsg := "Unable to load workflow completion event, will skip deleting visibility record"
-					logger.Warn(warnMsg, tag.Error(err))
-					warnings = append(warnings, fmt.Sprintf("%s. Error: %v", warnMsg, err.Error()))
-				} else if completionEvent.EventTime != nil {
-					closeTime = completionEvent.EventTime.AsTime()
-				}
-			}
-		}
 	}
 
-	if !cassVisBackend || (!startTime.IsZero() || !closeTime.IsZero()) {
-		// if using cass visibility, then either start or close time should be non-nil
-		// NOTE: the deletion is best effort, for sql and cassandra visibility implementation,
-		// we can't guarantee there's no update or record close request for this workflow since
-		// visibility queue processing is async. Operator can call this api again to delete visibility
-		// record again if this happens.
-		if err := persistenceVisibilityMgr.DeleteWorkflowExecution(ctx, &manager.VisibilityDeleteWorkflowExecutionRequest{
-			NamespaceID: namespace.ID(request.GetNamespaceId()),
-			WorkflowID:  execution.GetWorkflowId(),
-			RunID:       execution.GetRunId(),
-			TaskID:      math.MaxInt64,
-			StartTime:   startTime,
-			CloseTime:   closeTime,
-		}); err != nil {
-			return nil, err
-		}
+	// if using cass visibility, then either start or close time should be non-nil
+	// NOTE: the deletion is best effort, for sql visibility implementation,
+	// we can't guarantee there's no update or record close request for this workflow since
+	// visibility queue processing is async. Operator can call this api again to delete visibility
+	// record again if this happens.
+	if err := persistenceVisibilityMgr.DeleteWorkflowExecution(ctx, &manager.VisibilityDeleteWorkflowExecutionRequest{
+		NamespaceID: namespace.ID(request.GetNamespaceId()),
+		WorkflowID:  execution.GetWorkflowId(),
+		RunID:       execution.GetRunId(),
+		TaskID:      math.MaxInt64,
+		StartTime:   startTime,
+		CloseTime:   closeTime,
+	}); err != nil {
+		return nil, err
 	}
 
 	if err := persistenceExecutionMgr.DeleteCurrentWorkflowExecution(ctx, &persistence.DeleteCurrentWorkflowExecutionRequest{
