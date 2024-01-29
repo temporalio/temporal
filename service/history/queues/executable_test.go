@@ -435,6 +435,7 @@ func (s *executableSuite) TestExecute_SendToDLQAfterMaxAttemptsDLQDisabled() {
 		ExecutionErr:        errors.New("some random error"),
 	})
 	s.Error(executable.Execute())
+	s.Error(executable.HandleErr(err))
 	s.Len(queueWriter.EnqueueTaskRequests, 0)
 }
 
