@@ -386,22 +386,17 @@ func (s *executableSuite) TestExecute_SendToDLQAfterMaxAttempts() {
 			return 2
 		}
 	})
-
-	// Attempt 1
 	s.mockExecutor.EXPECT().Execute(gomock.Any(), executable).Return(queues.ExecuteResponse{
 		ExecutionMetricTags: nil,
 		ExecutedAsActive:    false,
 		ExecutionErr:        errors.New("some random error"),
-	})
+	}).Times(2)
+
+	// Attempt 1
 	err := executable.Execute()
 	s.Error(executable.HandleErr(err))
 
 	// Attempt 2
-	s.mockExecutor.EXPECT().Execute(gomock.Any(), executable).Return(queues.ExecuteResponse{
-		ExecutionMetricTags: nil,
-		ExecutedAsActive:    false,
-		ExecutionErr:        errors.New("some random error"),
-	})
 	err = executable.Execute()
 	err2 := executable.HandleErr(err)
 	s.ErrorIs(err2, queues.ErrTerminalTaskFailure)
@@ -410,7 +405,7 @@ func (s *executableSuite) TestExecute_SendToDLQAfterMaxAttempts() {
 	s.Len(queueWriter.EnqueueTaskRequests, 1)
 }
 
-func (s *executableSuite) TestExecute_SendToDLQAfterMaxAttemptsDLQDisabled() {
+func (s *executableSuite) TestExecute_DontSendToDLQAfterMaxAttemptsIfDLQDisabled() {
 	queueWriter := &queuestest.FakeQueueWriter{}
 	executable := s.newTestExecutable(func(p *params) {
 		p.dlqWriter = queues.NewDLQWriter(queueWriter, s.mockClusterMetadata, metrics.NoopMetricsHandler, log.NewTestLogger(), s.mockNamespaceRegistry)
