@@ -228,7 +228,32 @@ message UpdateWorkerBuildIdCompatibilityRequest {
         string persist_unknown_build_id = 5;
     }
 }
+
 message UpdateWorkerBuildIdCompatibilityResponse {}
+
+message UpdateWorkerVersioningRulesRequest {
+    oneof request {
+        temporal.api.workflowservice.v1.UpdateWorkerVersioningRulesRequest public_request = 1;
+    }
+}
+
+message UpdateWorkerVersioningRulesResponse {
+    oneof response {
+        temporal.api.workflowservice.v1.UpdateWorkerVersioningRulesResponse public_response = 1;
+    }
+}
+
+message ListWorkerVersioningRulesRequest {
+    oneof request {
+        temporal.api.workflowservice.v1.ListWorkerVersioningRulesRequest public_request = 1;
+    }
+}
+
+message ListWorkerVersioningRulesResponse {
+    oneof response {
+        temporal.api.workflowservice.v1.ListWorkerVersioningRulesResponse public_response = 1;
+    }
+}
 
 message GetWorkerBuildIdCompatibilityRequest {
     string namespace_id = 1;
