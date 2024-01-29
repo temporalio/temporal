@@ -57,7 +57,7 @@ func TestLimiterLogic(t *testing.T) {
 	nextTask, ok := lim.dequeue()
 	require.True(t, ok)
 	require.Equal(t, task, nextTask)
-	nextTask, ok = lim.dequeue()
+	_, ok = lim.dequeue()
 	require.False(t, ok)
 	lim.release()
 	lim.release()
