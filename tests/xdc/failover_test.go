@@ -2313,6 +2313,10 @@ func (s *FunctionalClustersTestSuite) TestActivityHeartbeatFailover() {
 // }
 
 func (s *FunctionalClustersTestSuite) TestLocalNamespaceMigration() {
+	if !tests.UsingSQLAdvancedVisibility() {
+		s.T().Skip("Test requires advanced visibility")
+	}
+
 	testCtx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
 	defer cancel()
 
@@ -2668,6 +2672,10 @@ func (s *FunctionalClustersTestSuite) TestLocalNamespaceMigration() {
 }
 
 func (s *FunctionalClustersTestSuite) TestForceMigration_ClosedWorkflow() {
+	if !tests.UsingSQLAdvancedVisibility() {
+		s.T().Skip("Test requires advanced visibility")
+	}
+
 	testCtx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
 	defer cancel()
 
@@ -2792,6 +2800,10 @@ func (s *FunctionalClustersTestSuite) TestForceMigration_ClosedWorkflow() {
 }
 
 func (s *FunctionalClustersTestSuite) TestForceMigration_ResetWorkflow() {
+	if !tests.UsingSQLAdvancedVisibility() {
+		s.T().Skip("Test requires advanced visibility")
+	}
+
 	testCtx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
 	defer cancel()
 
