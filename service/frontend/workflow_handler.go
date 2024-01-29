@@ -2760,7 +2760,7 @@ func (wh *WorkflowHandler) DescribeSchedule(ctx context.Context, request *workfl
 
 	err = wh.annotateSearchAttributesOfScheduledWorkflow(&queryResponse, request.GetNamespace())
 	if err != nil {
-		return nil, fmt.Errorf("describe schedule:%w", err)
+		return nil, fmt.Errorf("describe schedule: %w", err)
 	}
 	// Search attributes in the Action are already in external ("aliased") form. Do not alias them here.
 
