@@ -9,6 +9,14 @@
   historyconfig:
     numhistoryshards: 1
     numhistoryhosts: 1
+  esconfig:
+    version: "${ES_VERSION}"
+    url:
+      scheme: "http"
+      host: "${ES_SEEDS}:9200"
+    indices:
+      visibility: temporal_visibility_v1_xdc_test_active
+
 - clustermetadata:
     enableGlobalNamespace: true
     failoverVersionIncrement: 10
@@ -20,3 +28,10 @@
   historyconfig:
     numhistoryshards: 1
     numhistoryhosts: 1
+  esconfig:
+    version: "${ES_VERSION}"
+    url:
+      scheme: "http"
+      host: "${ES_SEEDS}:9200"
+    indices:
+      visibility: temporal_visibility_v1_xdc_test_standby

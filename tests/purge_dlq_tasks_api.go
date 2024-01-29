@@ -82,7 +82,7 @@ func (q *faultyDLQ) DeleteTasks(
 func (s *PurgeDLQTasksSuite) SetupSuite() {
 	s.Assertions = require.New(s.T())
 	s.setupSuite(
-		"testdata/cluster.yaml",
+		"testdata/es_cluster.yaml",
 		WithFxOptionsForService(primitives.HistoryService,
 			fx.Decorate(func(manager persistence.HistoryTaskQueueManager) persistence.HistoryTaskQueueManager {
 				s.dlq = &faultyDLQ{HistoryTaskQueueManager: manager}

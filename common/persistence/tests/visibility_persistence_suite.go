@@ -49,7 +49,6 @@ import (
 	"go.temporal.io/server/common/persistence/sql/sqlplugin/postgresql"
 	"go.temporal.io/server/common/persistence/visibility"
 	"go.temporal.io/server/common/persistence/visibility/manager"
-	"go.temporal.io/server/common/persistence/visibility/store/standard/cassandra"
 	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/common/resolver"
 	"go.temporal.io/server/common/searchattribute"
@@ -786,7 +785,7 @@ func (s *VisibilityPersistenceSuite) TestAdvancedVisibilityPagination() {
 
 func (s *VisibilityPersistenceSuite) TestCountWorkflowExecutions() {
 	switch s.VisibilityMgr.GetStoreNames()[0] {
-	case mysql.PluginName, postgresql.PluginName, postgresql.PluginNamePGX, cassandra.CassandraPersistenceName:
+	case mysql.PluginName, postgresql.PluginName, postgresql.PluginNamePGX:
 		s.T().Skip("Not supported by standard visibility")
 	}
 
@@ -818,7 +817,7 @@ func (s *VisibilityPersistenceSuite) TestCountWorkflowExecutions() {
 
 func (s *VisibilityPersistenceSuite) TestCountGroupByWorkflowExecutions() {
 	switch s.VisibilityMgr.GetStoreNames()[0] {
-	case mysql.PluginName, postgresql.PluginName, postgresql.PluginNamePGX, cassandra.CassandraPersistenceName:
+	case mysql.PluginName, postgresql.PluginName, postgresql.PluginNamePGX:
 		s.T().Skip("Not supported by standard visibility")
 	}
 
