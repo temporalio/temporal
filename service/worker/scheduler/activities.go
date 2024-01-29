@@ -34,15 +34,18 @@ import (
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	failurepb "go.temporal.io/api/failure/v1"
+	historypb "go.temporal.io/api/history/v1"
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/sdk/activity"
 	"go.temporal.io/sdk/temporal"
+	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/timestamppb"
 
 	"go.temporal.io/server/api/historyservice/v1"
 	schedspb "go.temporal.io/server/api/schedule/v1"
 	"go.temporal.io/server/common"
+	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/quotas"
@@ -64,6 +67,8 @@ type (
 		Delay time.Duration
 	}
 )
+
+const maxResultSize = 2 * 1024 * 1024
 
 var (
 	errTryAgain   = errors.New("try again")
@@ -162,21 +167,9 @@ func (a *activities) tryWatchWorkflow(ctx context.Context, req *schedspb.WatchWo
 		return nil, errWrongChain
 	}
 
-	makeResponse := func(result *commonpb.Payloads, failure *failurepb.Failure) *schedspb.WatchWorkflowResponse {
-		res := &schedspb.WatchWorkflowResponse{Status: pollRes.WorkflowStatus}
-		if result != nil {
-			res.ResultFailure = &schedspb.WatchWorkflowResponse_Result{Result: result}
-		} else if failure != nil {
-			res.ResultFailure = &schedspb.WatchWorkflowResponse_Failure{Failure: failure}
-		}
-		return res
-	}
-
+	rb := newResponseBuilder(req, pollRes.WorkflowStatus, a.Logger)
 	if pollRes.WorkflowStatus == enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING {
-		if req.LongPoll {
-			return nil, errTryAgain // not closed yet, just try again
-		}
-		return makeResponse(nil, nil), nil
+		return rb.Build(nil)
 	}
 
 	// get last event from history
@@ -201,43 +194,7 @@ func (a *activities) tryWatchWorkflow(ctx context.Context, req *schedspb.WatchWo
 	}
 	lastEvent := events[0]
 
-	switch pollRes.WorkflowStatus {
-	case enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED:
-		if attrs := lastEvent.GetWorkflowExecutionCompletedEventAttributes(); attrs == nil {
-			return nil, errNoAttrs
-		} else if len(attrs.NewExecutionRunId) > 0 {
-			// this shouldn't happen because we don't allow old-cron workflows as scheduled, but follow it anyway
-			return nil, errFollow(attrs.NewExecutionRunId)
-		} else {
-			return makeResponse(attrs.Result, nil), nil
-		}
-	case enumspb.WORKFLOW_EXECUTION_STATUS_FAILED:
-		if attrs := lastEvent.GetWorkflowExecutionFailedEventAttributes(); attrs == nil {
-			return nil, errNoAttrs
-		} else if len(attrs.NewExecutionRunId) > 0 {
-			return nil, errFollow(attrs.NewExecutionRunId)
-		} else {
-			return makeResponse(nil, attrs.Failure), nil
-		}
-	case enumspb.WORKFLOW_EXECUTION_STATUS_CANCELED, enumspb.WORKFLOW_EXECUTION_STATUS_TERMINATED:
-		return makeResponse(nil, nil), nil
-	case enumspb.WORKFLOW_EXECUTION_STATUS_CONTINUED_AS_NEW:
-		if attrs := lastEvent.GetWorkflowExecutionContinuedAsNewEventAttributes(); attrs == nil {
-			return nil, errNoAttrs
-		} else {
-			return nil, errFollow(attrs.NewExecutionRunId)
-		}
-	case enumspb.WORKFLOW_EXECUTION_STATUS_TIMED_OUT:
-		if attrs := lastEvent.GetWorkflowExecutionTimedOutEventAttributes(); attrs == nil {
-			return nil, errNoAttrs
-		} else if len(attrs.NewExecutionRunId) > 0 {
-			return nil, errFollow(attrs.NewExecutionRunId)
-		} else {
-			return makeResponse(nil, nil), nil
-		}
-	}
-
-	return nil, errors.New("unknown workflow status")
+	return rb.Build(lastEvent) // a.MakeResponse(pollRes, lastEvent, req)
 }
 
 func (a *activities) WatchWorkflow(ctx context.Context, req *schedspb.WatchWorkflowRequest) (*schedspb.WatchWorkflowResponse, error) {
@@ -325,4 +282,82 @@ func translateError(err error, msgPrefix string) error {
 		return temporal.NewApplicationErrorWithCause(message, errType(err), err)
 	}
 	return temporal.NewNonRetryableApplicationError(message, errType(err), err)
+}
+
+type responseBuilder struct {
+	request        *schedspb.WatchWorkflowRequest
+	workflowStatus enumspb.WorkflowExecutionStatus
+	logger         log.Logger
+}
+
+func newResponseBuilder(
+	request *schedspb.WatchWorkflowRequest,
+	workflowStatus enumspb.WorkflowExecutionStatus,
+	logger log.Logger,
+) responseBuilder {
+	return responseBuilder{request: request, workflowStatus: workflowStatus, logger: logger}
+}
+
+func (r responseBuilder) Build(event *historypb.HistoryEvent) (*schedspb.WatchWorkflowResponse, error) {
+	switch r.workflowStatus {
+	case enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING:
+		if r.request.LongPoll {
+			return nil, errTryAgain // not closed yet, just try again
+		}
+		return r.makeResponse(nil, nil), nil
+	case enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED:
+		if attrs := event.GetWorkflowExecutionCompletedEventAttributes(); attrs == nil {
+			return nil, errNoAttrs
+		} else if len(attrs.NewExecutionRunId) > 0 {
+			// this shouldn't happen because we don't allow old-cron workflows as scheduled, but follow it anyway
+			return nil, errFollow(attrs.NewExecutionRunId)
+		} else {
+			result := attrs.Result
+			if proto.Size(result) > maxResultSize {
+				r.logger.Error(
+
+					fmt.Sprintf("result dropped due to its size %d", proto.Size(result)),
+					tag.WorkflowID(r.request.Execution.WorkflowId))
+				result = nil
+			}
+			return r.makeResponse(result, nil), nil
+		}
+	case enumspb.WORKFLOW_EXECUTION_STATUS_FAILED:
+		if attrs := event.GetWorkflowExecutionFailedEventAttributes(); attrs == nil {
+			return nil, errNoAttrs
+		} else if len(attrs.NewExecutionRunId) > 0 {
+			return nil, errFollow(attrs.NewExecutionRunId)
+		} else {
+			return r.makeResponse(nil, attrs.Failure), nil
+		}
+	case enumspb.WORKFLOW_EXECUTION_STATUS_CANCELED, enumspb.WORKFLOW_EXECUTION_STATUS_TERMINATED:
+		return r.makeResponse(nil, nil), nil
+	case enumspb.WORKFLOW_EXECUTION_STATUS_CONTINUED_AS_NEW:
+		if attrs := event.GetWorkflowExecutionContinuedAsNewEventAttributes(); attrs == nil {
+			return nil, errNoAttrs
+		} else {
+			return nil, errFollow(attrs.NewExecutionRunId)
+		}
+	case enumspb.WORKFLOW_EXECUTION_STATUS_TIMED_OUT:
+		if attrs := event.GetWorkflowExecutionTimedOutEventAttributes(); attrs == nil {
+			return nil, errNoAttrs
+		} else if len(attrs.NewExecutionRunId) > 0 {
+			return nil, errFollow(attrs.NewExecutionRunId)
+		} else {
+			return r.makeResponse(nil, nil), nil
+		}
+	}
+
+	return nil, errors.New("unknown workflow status")
+}
+
+func (r responseBuilder) makeResponse(result *commonpb.Payloads, failure *failurepb.Failure) *schedspb.
+	WatchWorkflowResponse {
+	res := &schedspb.WatchWorkflowResponse{Status: r.workflowStatus}
+	if result != nil {
+		res.ResultFailure = &schedspb.WatchWorkflowResponse_Result{Result: result}
+	} else if failure != nil {
+		res.ResultFailure = &schedspb.WatchWorkflowResponse_Failure{Failure: failure}
+	}
+	return res
 }
