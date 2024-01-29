@@ -626,6 +626,20 @@ func (mr *MockIntegrationTestsClientMockRecorder) IndexPutTemplate(ctx, template
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "IndexPutTemplate", reflect.TypeOf((*MockIntegrationTestsClient)(nil).IndexPutTemplate), ctx, templateName, bodyString)
 }
 
+// Ping mocks base method.
+func (m *MockIntegrationTestsClient) Ping(ctx context.Context) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "Ping", ctx)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// Ping indicates an expected call of Ping.
+func (mr *MockIntegrationTestsClientMockRecorder) Ping(ctx interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Ping", reflect.TypeOf((*MockIntegrationTestsClient)(nil).Ping), ctx)
+}
+
 // PutMapping mocks base method.
 func (m *MockIntegrationTestsClient) PutMapping(ctx context.Context, index string, mapping map[string]v1.IndexedValueType) (bool, error) {
 	m.ctrl.T.Helper()
