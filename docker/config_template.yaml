@@ -40,40 +40,6 @@ persistence:
                         advertised-hostname: {{ default .Env.CASSANDRA_ADDRESS_TRANSLATOR_OPTIONS "" }}
                     {{- end }}
                 {{- end }}
-        visibility:
-            cassandra:
-                {{ $visibility_seeds_default := default .Env.CASSANDRA_SEEDS "" }}
-                {{ $visibility_seeds := default .Env.VISIBILITY_CASSANDRA_SEEDS $visibility_seeds_default }}
-                {{ $visibility_port_default := default .Env.CASSANDRA_PORT "9042" }}
-                {{ $visibility_port := default .Env.VISIBILITY_CASSANDRA_PORT $visibility_port_default }}
-                {{ $visibility_user_default := default .Env.CASSANDRA_USER "" }}
-                {{ $visibility_user := default .Env.VISIBILITY_CASSANDRA_USER $visibility_user_default }}
-                {{ $visibility_pwd_default := default .Env.CASSANDRA_PASSWORD "" }}
-                {{ $visibility_pwd := default .Env.VISIBILITY_CASSANDRA_PASSWORD $visibility_pwd_default }}
-                hosts: "{{ $visibility_seeds }}"
-                keyspace: "{{ default .Env.VISIBILITY_KEYSPACE "temporal_visibility" }}"
-                user: "{{ $visibility_user }}"
-                password: "{{ $visibility_pwd }}"
-                port: {{ $visibility_port }}
-                maxConns: {{ default .Env.CASSANDRA_MAX_CONNS "10" }}
-                tls:
-                    enabled: {{ default .Env.CASSANDRA_TLS_ENABLED "false" }}
-                    caFile: {{ default .Env.CASSANDRA_CA "" }}
-                    certFile: {{ default .Env.CASSANDRA_CERT "" }}
-                    keyFile: {{ default .Env.CASSANDRA_CERT_KEY "" }}
-                    caData: {{ default .Env.CASSANDRA_CA_DATA "" }}
-                    certData: {{ default .Env.CASSANDRA_CERT_DATA "" }}
-                    keyData: {{ default .Env.CASSANDRA_CERT_KEY_DATA "" }}
-                    enableHostVerification: {{ default .Env.CASSANDRA_HOST_VERIFICATION "false" }}
-                    serverName: {{ default .Env.CASSANDRA_HOST_NAME "" }}
-                {{- if .Env.CASSANDRA_ADDRESS_TRANSLATOR }}
-                addressTranslator:
-                    translator: {{ default .Env.CASSANDRA_ADDRESS_TRANSLATOR "" }}
-                    {{- if .Env.CASSANDRA_ADDRESS_TRANSLATOR_OPTIONS }}
-                    options:
-                        advertised-hostname: {{ default .Env.CASSANDRA_ADDRESS_TRANSLATOR_OPTIONS "" }}
-                    {{- end }}
-                {{- end }}
         {{- else if eq $db "mysql" "mysql8" }}
         default:
             sql:

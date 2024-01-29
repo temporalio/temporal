@@ -57,7 +57,6 @@ import (
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/persistence/serialization"
 	"go.temporal.io/server/common/persistence/visibility/manager"
-	"go.temporal.io/server/common/persistence/visibility/store/standard/cassandra"
 	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/common/searchattribute"
 	serviceerrors "go.temporal.io/server/common/serviceerror"
@@ -1891,12 +1890,7 @@ func (h *Handler) DeleteWorkflowVisibilityRecord(
 		return nil, errWorkflowExecutionNotSet
 	}
 
-	// If at least one visibility store is Cassandra, then either start or close time should be non-nil.
-	if h.persistenceVisibilityManager.HasStoreName(cassandra.CassandraPersistenceName) && request.WorkflowStartTime == nil && request.WorkflowCloseTime == nil {
-		return nil, &serviceerror.InvalidArgument{Message: "workflow start and close time not specified when deleting cassandra based visibility record"}
-	}
-
-	// NOTE: the deletion is best effort, for sql and cassandra visibility implementation,
+	// NOTE: the deletion is best effort, for sql visibility implementation,
 	// we can't guarantee there's no update or record close request for this workflow since
 	// visibility queue processing is async. Operator can call this api (through admin workflow
 	// delete) again to delete again if this happens.

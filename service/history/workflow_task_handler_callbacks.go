@@ -451,7 +451,6 @@ func (handler *workflowTaskHandlerCallbacksImpl) handleWorkflowTaskCompleted(
 		if retError != nil {
 			effects.Cancel(ctx)
 		}
-		effects.Apply(ctx)
 	}()
 
 	// It's an error if the workflow has used versioning in the past but this task has no versioning info.
@@ -763,9 +762,9 @@ func (handler *workflowTaskHandlerCallbacksImpl) handleWorkflowTaskCompleted(
 			newMutableState,
 		)
 	} else {
-		// If completedEvent is not nil (which it means that WT wasn't speculative)
-		// OR new WT is normal, then mutable state is persisted.
-		// Otherwise, (both old and new WT are speculative) mutable state is updated in memory only but not persisted.
+		// If completedEvent is not nil (which means that this WT wasn't speculative)
+		// OR new WT is normal, then mutable state needs to be persisted.
+		// Otherwise, (both current and new WT are speculative) mutable state is updated in memory only but not persisted.
 		if completedEvent != nil || newWorkflowTaskType == enumsspb.WORKFLOW_TASK_TYPE_NORMAL {
 			updateErr = weContext.UpdateWorkflowExecutionAsActive(ctx, handler.shardContext)
 		}
@@ -808,6 +807,10 @@ func (handler *workflowTaskHandlerCallbacksImpl) handleWorkflowTaskCompleted(
 
 		return nil, updateErr
 	}
+
+	// If mutable state was persisted successfully (or persistence was skipped),
+	// then effects needs to be applied immediately to keep registry and mutable state in sync.
+	effects.Apply(ctx)
 
 	// Create speculative workflow task after mutable state is persisted.
 	if newWorkflowTaskType == enumsspb.WORKFLOW_TASK_TYPE_SPECULATIVE {

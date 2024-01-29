@@ -138,7 +138,7 @@ func (s *AddTasksSuite) SetupSuite() {
 	// tests, but this is called before SetupTest, and the s.T() value will change when SetupTest is called.
 	s.Assertions = require.New(s.T())
 	// Set up the test cluster and register our executable wrapper.
-	s.setupSuite("testdata/cluster.yaml",
+	s.setupSuite("testdata/es_cluster.yaml",
 		WithFxOptionsForService(
 			primitives.HistoryService,
 			fx.Provide(
