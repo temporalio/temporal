@@ -837,6 +837,7 @@ const (
 	HistoryTaskDLQEnabled = "history.TaskDLQEnabled"
 	// HistoryAttemptsBeforeSendingTaskToDlq is the number of task execution attempts before sending the task to DLQ.
 	HistoryAttemptsBeforeSendingTaskToDlq = "history.AttemptsBeforeSendingTaskToDLQ"
+
 	// ReplicationStreamSyncStatusDuration sync replication status duration
 	ReplicationStreamSyncStatusDuration = "history.ReplicationStreamSyncStatusDuration"
 	// ReplicationStreamMinReconnectDuration minimal replication stream reconnection duration
