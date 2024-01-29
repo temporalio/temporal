@@ -88,6 +88,7 @@ type (
 
 var (
 	ErrTerminalTaskFailure = errors.New("original task failed and this task is now to send the original to the DLQ")
+	ErrMaxAttempts         = errors.New("task failed after maximum attempts")
 
 	// reschedulePolicy is the policy for determine reschedule backoff duration
 	// across multiple submissions to scheduler
@@ -132,21 +133,23 @@ type (
 		metricsHandler    metrics.Handler
 		dlqWriter         *DLQWriter
 
-		readerID               int64
-		loadTime               time.Time
-		scheduledTime          time.Time
-		scheduleLatency        time.Duration
-		attemptNoUserLatency   time.Duration
-		inMemoryNoUserLatency  time.Duration
-		lastActiveness         bool
-		resourceExhaustedCount int // does NOT include consts.ErrResourceExhaustedBusyWorkflow
-		taggedMetricsHandler   metrics.Handler
-		dlqEnabled             dynamicconfig.BoolPropertyFn
-		terminalFailureCause   error
+		readerID                   int64
+		loadTime                   time.Time
+		scheduledTime              time.Time
+		scheduleLatency            time.Duration
+		attemptNoUserLatency       time.Duration
+		inMemoryNoUserLatency      time.Duration
+		lastActiveness             bool
+		resourceExhaustedCount     int // does NOT include consts.ErrResourceExhaustedBusyWorkflow
+		taggedMetricsHandler       metrics.Handler
+		dlqEnabled                 dynamicconfig.BoolPropertyFn
+		terminalFailureCause       error
+		attemptsBeforeSendingToDlq dynamicconfig.IntPropertyFn
 	}
 	ExecutableParams struct {
-		DLQEnabled dynamicconfig.BoolPropertyFn
-		DLQWriter  *DLQWriter
+		DLQEnabled                 dynamicconfig.BoolPropertyFn
+		DLQWriter                  *DLQWriter
+		AttemptsBeforeSendingToDlq dynamicconfig.IntPropertyFn
 	}
 	ExecutableOption func(*ExecutableParams)
 )
@@ -170,6 +173,9 @@ func NewExecutable(
 			return false
 		},
 		DLQWriter: nil,
+		AttemptsBeforeSendingToDlq: func() int {
+			return 0
+		},
 	}
 	for _, opt := range opts {
 		opt(&params)
@@ -193,10 +199,11 @@ func NewExecutable(
 				return tasks.Tags(task)
 			},
 		),
-		metricsHandler:       metricsHandler,
-		taggedMetricsHandler: metricsHandler,
-		dlqWriter:            params.DLQWriter,
-		dlqEnabled:           params.DLQEnabled,
+		metricsHandler:             metricsHandler,
+		taggedMetricsHandler:       metricsHandler,
+		dlqWriter:                  params.DLQWriter,
+		dlqEnabled:                 params.DLQEnabled,
+		attemptsBeforeSendingToDlq: params.AttemptsBeforeSendingToDlq,
 	}
 	executable.updatePriority()
 	return executable
@@ -396,6 +403,12 @@ func (e *executableImpl) HandleErr(err error) (retErr error) {
 		}
 		e.logger.Error("Drop task due to serialization error", tag.Error(err))
 		return nil
+	}
+
+	if e.attempt >= e.attemptsBeforeSendingToDlq() && e.dlqEnabled() {
+		e.logger.Error("Marking task as terminally failed after maximum number of attempts, will send to DLQ", tag.Attempt(int32(e.attempt)), tag.Error(err))
+		e.terminalFailureCause = fmt.Errorf("%w: %w", ErrMaxAttempts, err)
+		return fmt.Errorf("%w: %w", ErrTerminalTaskFailure, e.terminalFailureCause)
 	}
 
 	metrics.TaskFailures.With(e.taggedMetricsHandler).Record(1)

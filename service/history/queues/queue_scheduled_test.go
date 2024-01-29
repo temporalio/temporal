@@ -143,6 +143,9 @@ func (s *scheduledQueueSuite) SetupTest() {
 		func() bool {
 			return false
 		},
+		func() int {
+			return 0
+		},
 	)
 	s.scheduledQueue = NewScheduledQueue(
 		s.mockShard,

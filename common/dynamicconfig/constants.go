@@ -835,7 +835,8 @@ const (
 	// HistoryTaskDLQEnabled enables the history task DLQ. This applies to internal tasks like transfer and timer tasks.
 	// Do not turn this on if you aren't using Cassandra as the history task DLQ is not implemented for other databases.
 	HistoryTaskDLQEnabled = "history.TaskDLQEnabled"
-
+	// HistoryAttemptsBeforeSendingTaskToDlq is the number of task execution attempts before sending the task to DLQ.
+	HistoryAttemptsBeforeSendingTaskToDlq = "history.AttemptsBeforeSendingTaskToDLQ"
 	// ReplicationStreamSyncStatusDuration sync replication status duration
 	ReplicationStreamSyncStatusDuration = "history.ReplicationStreamSyncStatusDuration"
 	// ReplicationStreamMinReconnectDuration minimal replication stream reconnection duration

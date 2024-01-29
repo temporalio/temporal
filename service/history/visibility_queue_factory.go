@@ -141,6 +141,7 @@ func (f *visibilityQueueFactory) CreateQueue(
 		metricsHandler,
 		f.DLQWriter,
 		f.Config.TaskDLQEnabled,
+		f.Config.AttemptsBeforeSendingTaskToDLQ,
 	)
 	return queues.NewImmediateQueue(
 		shard,
