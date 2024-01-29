@@ -389,9 +389,11 @@ func (e *executableImpl) HandleErr(err error) (retErr error) {
 	}
 
 	// TODO: expand on the errors that should be considered terminal
-	if _, ok := err.(TerminalTaskError); ok {
-		// likely due to data corruption, emit logs, metrics & drop the task by return nil so that
-		// task will be marked as completed, or send it to the DLQ if that is enabled.
+	var te TerminalTaskError
+	if errors.As(err, &te) {
+		// Terminal errors are likely due to data corruption.
+		// Drop the task by returning nil so that task will be marked as completed,
+		// or send it to the DLQ if that is enabled.
 		metrics.TaskCorruptionCounter.With(e.taggedMetricsHandler).Record(1)
 		if e.dlqEnabled() {
 			e.logger.Error("Marking task as terminally failed, will send to DLQ", tag.Error(err))
