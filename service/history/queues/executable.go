@@ -389,8 +389,7 @@ func (e *executableImpl) HandleErr(err error) (retErr error) {
 	}
 
 	// TODO: expand on the errors that should be considered terminal
-	var te TerminalTaskError
-	if errors.As(err, &te) {
+	if errors.As(err, new(TerminalTaskError)) {
 		// Terminal errors are likely due to data corruption.
 		// Drop the task by returning nil so that task will be marked as completed,
 		// or send it to the DLQ if that is enabled.
