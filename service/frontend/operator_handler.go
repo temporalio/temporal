@@ -40,6 +40,7 @@ import (
 	"golang.org/x/exp/maps"
 	"google.golang.org/grpc/health"
 	healthpb "google.golang.org/grpc/health/grpc_health_v1"
+	"google.golang.org/protobuf/types/known/anypb"
 
 	"go.temporal.io/server/api/adminservice/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
@@ -833,7 +834,7 @@ func (h *OperatorHandlerImpl) CreateOrUpdateNexusIncomingService(ctx context.Con
 		return nil, err
 	}
 	return &operatorservice.CreateOrUpdateNexusIncomingServiceResponse{
-		Service: persistedIncomingServiceToPublicProto(service),
+		Service: h.persistedIncomingServiceToPublicProto(service),
 	}, nil
 }
 
@@ -853,7 +854,7 @@ func (h *OperatorHandlerImpl) GetNexusIncomingService(ctx context.Context, reque
 		return nil, err
 	}
 	return &operatorservice.GetNexusIncomingServiceResponse{
-		Service: persistedIncomingServiceToPublicProto(service),
+		Service: h.persistedIncomingServiceToPublicProto(service),
 	}, nil
 }
 
@@ -869,7 +870,7 @@ func (h *OperatorHandlerImpl) ListNexusIncomingServices(ctx context.Context, req
 
 	services := make([]*nexuspb.IncomingService, len(resp.Services))
 	for i, service := range resp.Services {
-		services[i] = persistedIncomingServiceToPublicProto(service)
+		services[i] = h.persistedIncomingServiceToPublicProto(service)
 	}
 
 	return &operatorservice.ListNexusIncomingServicesResponse{
@@ -878,12 +879,22 @@ func (h *OperatorHandlerImpl) ListNexusIncomingServices(ctx context.Context, req
 	}, nil
 }
 
-func persistedIncomingServiceToPublicProto(service *persistencespb.VersionedNexusIncomingService) *nexuspb.IncomingService {
+func (h *OperatorHandlerImpl) persistedIncomingServiceToPublicProto(service *persistencespb.VersionedNexusIncomingService) *nexuspb.IncomingService {
+	metadata := make(map[string]*anypb.Any, len(service.ServiceInfo.Metadata))
+	for k, v := range service.ServiceInfo.Metadata {
+		value, err := anypb.New(v)
+		if err != nil {
+			h.logger.Error("error marshalling nexus incoming service metadata value", tag.Error(err))
+			continue
+		}
+		metadata[k] = value
+	}
+
 	return &nexuspb.IncomingService{
 		Version:   service.Version,
 		Name:      service.ServiceInfo.Name,
 		Namespace: service.ServiceInfo.NamespaceId,
 		TaskQueue: service.ServiceInfo.TaskQueue,
-		Metadata:  service.ServiceInfo.Metadata, // TODO: fix me
+		Metadata:  metadata,
 	}
 }

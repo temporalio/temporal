@@ -29,6 +29,8 @@ import (
 	"go.temporal.io/api/nexus/v1"
 
 	persistencepb "go.temporal.io/server/api/persistence/v1"
+	"go.temporal.io/server/common/log"
+	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/persistence/serialization"
 )
 
@@ -51,16 +53,19 @@ type (
 	nexusServiceManagerImpl struct {
 		persistence NexusServiceStore
 		serializer  serialization.Serializer
+		logger      log.Logger
 	}
 )
 
 func NewNexusServiceManager(
 	persistence NexusServiceStore,
 	serializer serialization.Serializer,
+	logger log.Logger,
 ) NexusServiceManager {
 	return &nexusServiceManagerImpl{
 		persistence: persistence,
 		serializer:  serializer,
+		logger:      logger,
 	}
 }
 
@@ -76,7 +81,7 @@ func (m *nexusServiceManagerImpl) CreateOrUpdateNexusIncomingService(
 	ctx context.Context,
 	request *CreateOrUpdateNexusIncomingServiceRequest,
 ) (*CreateOrUpdateNexusIncomingServiceResponse, error) {
-	versioned := toVersionedServiceRecord(request.ServiceID, request.Service)
+	versioned := m.toVersionedServiceRecord(request.ServiceID, request.Service)
 
 	serviceBlob, err := m.serializer.NexusIncomingServiceToBlob(versioned.ServiceInfo, enumspb.ENCODING_TYPE_PROTO3)
 	if err != nil {
@@ -145,7 +150,20 @@ func (m *nexusServiceManagerImpl) ListNexusIncomingServices(
 	return result, nil
 }
 
-func toVersionedServiceRecord(serviceID string, service *nexus.IncomingService) *persistencepb.VersionedNexusIncomingService {
+func (m *nexusServiceManagerImpl) toVersionedServiceRecord(
+	serviceID string,
+	service *nexus.IncomingService,
+) *persistencepb.VersionedNexusIncomingService {
+	metadata := make(map[string]*persistencepb.NexusServiceMetadataValue, len(service.Metadata))
+	for k, v := range service.Metadata {
+		value := &persistencepb.NexusServiceMetadataValue{}
+		if err := v.UnmarshalTo(value); err != nil {
+			m.logger.Error("unable to unmarshal nexus incoming service metadata value", tag.Error(err))
+			continue
+		}
+		metadata[k] = value
+	}
+
 	return &persistencepb.VersionedNexusIncomingService{
 		Version: service.Version,
 		Id:      serviceID,
@@ -153,6 +171,6 @@ func toVersionedServiceRecord(serviceID string, service *nexus.IncomingService) 
 			Name:        service.Name,
 			NamespaceId: service.Namespace,
 			TaskQueue:   service.TaskQueue,
-			Metadata:    service.Metadata, // TODO: fix me
+			Metadata:    metadata,
 		}}
 }
