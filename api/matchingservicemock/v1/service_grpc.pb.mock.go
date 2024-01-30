@@ -260,6 +260,26 @@ func (mr *MockMatchingServiceClientMockRecorder) ListTaskQueuePartitions(ctx, in
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ListTaskQueuePartitions", reflect.TypeOf((*MockMatchingServiceClient)(nil).ListTaskQueuePartitions), varargs...)
 }
 
+// ListWorkerVersioningRules mocks base method.
+func (m *MockMatchingServiceClient) ListWorkerVersioningRules(ctx context.Context, in *matchingservice.ListWorkerVersioningRulesRequest, opts ...grpc.CallOption) (*matchingservice.ListWorkerVersioningRulesResponse, error) {
+	m.ctrl.T.Helper()
+	varargs := []interface{}{ctx, in}
+	for _, a := range opts {
+		varargs = append(varargs, a)
+	}
+	ret := m.ctrl.Call(m, "ListWorkerVersioningRules", varargs...)
+	ret0, _ := ret[0].(*matchingservice.ListWorkerVersioningRulesResponse)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// ListWorkerVersioningRules indicates an expected call of ListWorkerVersioningRules.
+func (mr *MockMatchingServiceClientMockRecorder) ListWorkerVersioningRules(ctx, in interface{}, opts ...interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	varargs := append([]interface{}{ctx, in}, opts...)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ListWorkerVersioningRules", reflect.TypeOf((*MockMatchingServiceClient)(nil).ListWorkerVersioningRules), varargs...)
+}
+
 // PollActivityTaskQueue mocks base method.
 func (m *MockMatchingServiceClient) PollActivityTaskQueue(ctx context.Context, in *matchingservice.PollActivityTaskQueueRequest, opts ...grpc.CallOption) (*matchingservice.PollActivityTaskQueueResponse, error) {
 	m.ctrl.T.Helper()
@@ -398,6 +418,26 @@ func (mr *MockMatchingServiceClientMockRecorder) UpdateWorkerBuildIdCompatibilit
 	mr.mock.ctrl.T.Helper()
 	varargs := append([]interface{}{ctx, in}, opts...)
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdateWorkerBuildIdCompatibility", reflect.TypeOf((*MockMatchingServiceClient)(nil).UpdateWorkerBuildIdCompatibility), varargs...)
+}
+
+// UpdateWorkerVersioningRules mocks base method.
+func (m *MockMatchingServiceClient) UpdateWorkerVersioningRules(ctx context.Context, in *matchingservice.UpdateWorkerVersioningRulesRequest, opts ...grpc.CallOption) (*matchingservice.UpdateWorkerVersioningRulesResponse, error) {
+	m.ctrl.T.Helper()
+	varargs := []interface{}{ctx, in}
+	for _, a := range opts {
+		varargs = append(varargs, a)
+	}
+	ret := m.ctrl.Call(m, "UpdateWorkerVersioningRules", varargs...)
+	ret0, _ := ret[0].(*matchingservice.UpdateWorkerVersioningRulesResponse)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// UpdateWorkerVersioningRules indicates an expected call of UpdateWorkerVersioningRules.
+func (mr *MockMatchingServiceClientMockRecorder) UpdateWorkerVersioningRules(ctx, in interface{}, opts ...interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	varargs := append([]interface{}{ctx, in}, opts...)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdateWorkerVersioningRules", reflect.TypeOf((*MockMatchingServiceClient)(nil).UpdateWorkerVersioningRules), varargs...)
 }
 
 // MockMatchingServiceServer is a mock of MatchingServiceServer interface.
@@ -573,6 +613,21 @@ func (mr *MockMatchingServiceServerMockRecorder) ListTaskQueuePartitions(arg0, a
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ListTaskQueuePartitions", reflect.TypeOf((*MockMatchingServiceServer)(nil).ListTaskQueuePartitions), arg0, arg1)
 }
 
+// ListWorkerVersioningRules mocks base method.
+func (m *MockMatchingServiceServer) ListWorkerVersioningRules(arg0 context.Context, arg1 *matchingservice.ListWorkerVersioningRulesRequest) (*matchingservice.ListWorkerVersioningRulesResponse, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "ListWorkerVersioningRules", arg0, arg1)
+	ret0, _ := ret[0].(*matchingservice.ListWorkerVersioningRulesResponse)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// ListWorkerVersioningRules indicates an expected call of ListWorkerVersioningRules.
+func (mr *MockMatchingServiceServerMockRecorder) ListWorkerVersioningRules(arg0, arg1 interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ListWorkerVersioningRules", reflect.TypeOf((*MockMatchingServiceServer)(nil).ListWorkerVersioningRules), arg0, arg1)
+}
+
 // PollActivityTaskQueue mocks base method.
 func (m *MockMatchingServiceServer) PollActivityTaskQueue(arg0 context.Context, arg1 *matchingservice.PollActivityTaskQueueRequest) (*matchingservice.PollActivityTaskQueueResponse, error) {
 	m.ctrl.T.Helper()
@@ -676,6 +731,21 @@ func (m *MockMatchingServiceServer) UpdateWorkerBuildIdCompatibility(arg0 contex
 func (mr *MockMatchingServiceServerMockRecorder) UpdateWorkerBuildIdCompatibility(arg0, arg1 interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdateWorkerBuildIdCompatibility", reflect.TypeOf((*MockMatchingServiceServer)(nil).UpdateWorkerBuildIdCompatibility), arg0, arg1)
+}
+
+// UpdateWorkerVersioningRules mocks base method.
+func (m *MockMatchingServiceServer) UpdateWorkerVersioningRules(arg0 context.Context, arg1 *matchingservice.UpdateWorkerVersioningRulesRequest) (*matchingservice.UpdateWorkerVersioningRulesResponse, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "UpdateWorkerVersioningRules", arg0, arg1)
+	ret0, _ := ret[0].(*matchingservice.UpdateWorkerVersioningRulesResponse)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// UpdateWorkerVersioningRules indicates an expected call of UpdateWorkerVersioningRules.
+func (mr *MockMatchingServiceServerMockRecorder) UpdateWorkerVersioningRules(arg0, arg1 interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdateWorkerVersioningRules", reflect.TypeOf((*MockMatchingServiceServer)(nil).UpdateWorkerVersioningRules), arg0, arg1)
 }
 
 // mustEmbedUnimplementedMatchingServiceServer mocks base method.

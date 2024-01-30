@@ -1615,6 +1615,201 @@ func (*UpdateWorkerBuildIdCompatibilityResponse) Descriptor() ([]byte, []int) {
 	return file_temporal_server_api_matchingservice_v1_request_response_proto_rawDescGZIP(), []int{19}
 }
 
+type ListWorkerVersioningRulesRequest struct {
+	state         protoimpl.MessageState
+	sizeCache     protoimpl.SizeCache
+	unknownFields protoimpl.UnknownFields
+
+	Request *v1.ListWorkerVersioningRulesRequest `protobuf:"bytes,1,opt,name=request,proto3" json:"request,omitempty"`
+}
+
+func (x *ListWorkerVersioningRulesRequest) Reset() {
+	*x = ListWorkerVersioningRulesRequest{}
+	if protoimpl.UnsafeEnabled {
+		mi := &file_temporal_server_api_matchingservice_v1_request_response_proto_msgTypes[20]
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		ms.StoreMessageInfo(mi)
+	}
+}
+
+func (x *ListWorkerVersioningRulesRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ListWorkerVersioningRulesRequest) ProtoMessage() {}
+
+func (x *ListWorkerVersioningRulesRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_temporal_server_api_matchingservice_v1_request_response_proto_msgTypes[20]
+	if protoimpl.UnsafeEnabled && x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ListWorkerVersioningRulesRequest.ProtoReflect.Descriptor instead.
+func (*ListWorkerVersioningRulesRequest) Descriptor() ([]byte, []int) {
+	return file_temporal_server_api_matchingservice_v1_request_response_proto_rawDescGZIP(), []int{20}
+}
+
+func (x *ListWorkerVersioningRulesRequest) GetRequest() *v1.ListWorkerVersioningRulesRequest {
+	if x != nil {
+		return x.Request
+	}
+	return nil
+}
+
+type ListWorkerVersioningRulesResponse struct {
+	state         protoimpl.MessageState
+	sizeCache     protoimpl.SizeCache
+	unknownFields protoimpl.UnknownFields
+
+	Response *v1.ListWorkerVersioningRulesResponse `protobuf:"bytes,1,opt,name=response,proto3" json:"response,omitempty"`
+}
+
+func (x *ListWorkerVersioningRulesResponse) Reset() {
+	*x = ListWorkerVersioningRulesResponse{}
+	if protoimpl.UnsafeEnabled {
+		mi := &file_temporal_server_api_matchingservice_v1_request_response_proto_msgTypes[21]
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		ms.StoreMessageInfo(mi)
+	}
+}
+
+func (x *ListWorkerVersioningRulesResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ListWorkerVersioningRulesResponse) ProtoMessage() {}
+
+func (x *ListWorkerVersioningRulesResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_temporal_server_api_matchingservice_v1_request_response_proto_msgTypes[21]
+	if protoimpl.UnsafeEnabled && x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ListWorkerVersioningRulesResponse.ProtoReflect.Descriptor instead.
+func (*ListWorkerVersioningRulesResponse) Descriptor() ([]byte, []int) {
+	return file_temporal_server_api_matchingservice_v1_request_response_proto_rawDescGZIP(), []int{21}
+}
+
+func (x *ListWorkerVersioningRulesResponse) GetResponse() *v1.ListWorkerVersioningRulesResponse {
+	if x != nil {
+		return x.Response
+	}
+	return nil
+}
+
+// (-- api-linter: core::0134::request-mask-required=disabled
+//
+//	aip.dev/not-precedent: UpdateWorkerVersioningRulesRequest doesn't follow Google API format --)
+//
+// (-- api-linter: core::0134::request-resource-required=disabled
+//
+//	aip.dev/not-precedent: UpdateWorkerVersioningRulesRequest RPC doesn't follow Google API format. --)
+type UpdateWorkerVersioningRulesRequest struct {
+	state         protoimpl.MessageState
+	sizeCache     protoimpl.SizeCache
+	unknownFields protoimpl.UnknownFields
+
+	Request *v1.UpdateWorkerVersioningRulesRequest `protobuf:"bytes,1,opt,name=request,proto3" json:"request,omitempty"`
+}
+
+func (x *UpdateWorkerVersioningRulesRequest) Reset() {
+	*x = UpdateWorkerVersioningRulesRequest{}
+	if protoimpl.UnsafeEnabled {
+		mi := &file_temporal_server_api_matchingservice_v1_request_response_proto_msgTypes[22]
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		ms.StoreMessageInfo(mi)
+	}
+}
+
+func (x *UpdateWorkerVersioningRulesRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*UpdateWorkerVersioningRulesRequest) ProtoMessage() {}
+
+func (x *UpdateWorkerVersioningRulesRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_temporal_server_api_matchingservice_v1_request_response_proto_msgTypes[22]
+	if protoimpl.UnsafeEnabled && x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use UpdateWorkerVersioningRulesRequest.ProtoReflect.Descriptor instead.
+func (*UpdateWorkerVersioningRulesRequest) Descriptor() ([]byte, []int) {
+	return file_temporal_server_api_matchingservice_v1_request_response_proto_rawDescGZIP(), []int{22}
+}
+
+func (x *UpdateWorkerVersioningRulesRequest) GetRequest() *v1.UpdateWorkerVersioningRulesRequest {
+	if x != nil {
+		return x.Request
+	}
+	return nil
+}
+
+type UpdateWorkerVersioningRulesResponse struct {
+	state         protoimpl.MessageState
+	sizeCache     protoimpl.SizeCache
+	unknownFields protoimpl.UnknownFields
+
+	Response *v1.UpdateWorkerVersioningRulesResponse `protobuf:"bytes,1,opt,name=response,proto3" json:"response,omitempty"`
+}
+
+func (x *UpdateWorkerVersioningRulesResponse) Reset() {
+	*x = UpdateWorkerVersioningRulesResponse{}
+	if protoimpl.UnsafeEnabled {
+		mi := &file_temporal_server_api_matchingservice_v1_request_response_proto_msgTypes[23]
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		ms.StoreMessageInfo(mi)
+	}
+}
+
+func (x *UpdateWorkerVersioningRulesResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*UpdateWorkerVersioningRulesResponse) ProtoMessage() {}
+
+func (x *UpdateWorkerVersioningRulesResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_temporal_server_api_matchingservice_v1_request_response_proto_msgTypes[23]
+	if protoimpl.UnsafeEnabled && x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use UpdateWorkerVersioningRulesResponse.ProtoReflect.Descriptor instead.
+func (*UpdateWorkerVersioningRulesResponse) Descriptor() ([]byte, []int) {
+	return file_temporal_server_api_matchingservice_v1_request_response_proto_rawDescGZIP(), []int{23}
+}
+
+func (x *UpdateWorkerVersioningRulesResponse) GetResponse() *v1.UpdateWorkerVersioningRulesResponse {
+	if x != nil {
+		return x.Response
+	}
+	return nil
+}
+
 type GetWorkerBuildIdCompatibilityRequest struct {
 	state         protoimpl.MessageState
 	sizeCache     protoimpl.SizeCache
@@ -1627,7 +1822,7 @@ type GetWorkerBuildIdCompatibilityRequest struct {
 func (x *GetWorkerBuildIdCompatibilityRequest) Reset() {
 	*x = GetWorkerBuildIdCompatibilityRequest{}
 	if protoimpl.UnsafeEnabled {
-		mi := &file_temporal_server_api_matchingservice_v1_request_response_proto_msgTypes[20]
+		mi := &file_temporal_server_api_matchingservice_v1_request_response_proto_msgTypes[24]
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		ms.StoreMessageInfo(mi)
 	}
@@ -1640,7 +1835,7 @@ func (x *GetWorkerBuildIdCompatibilityRequest) String() string {
 func (*GetWorkerBuildIdCompatibilityRequest) ProtoMessage() {}
 
 func (x *GetWorkerBuildIdCompatibilityRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_temporal_server_api_matchingservice_v1_request_response_proto_msgTypes[20]
+	mi := &file_temporal_server_api_matchingservice_v1_request_response_proto_msgTypes[24]
 	if protoimpl.UnsafeEnabled && x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1653,7 +1848,7 @@ func (x *GetWorkerBuildIdCompatibilityRequest) ProtoReflect() protoreflect.Messa
 
 // Deprecated: Use GetWorkerBuildIdCompatibilityRequest.ProtoReflect.Descriptor instead.
 func (*GetWorkerBuildIdCompatibilityRequest) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_matchingservice_v1_request_response_proto_rawDescGZIP(), []int{20}
+	return file_temporal_server_api_matchingservice_v1_request_response_proto_rawDescGZIP(), []int{24}
 }
 
 func (x *GetWorkerBuildIdCompatibilityRequest) GetNamespaceId() string {
@@ -1681,7 +1876,7 @@ type GetWorkerBuildIdCompatibilityResponse struct {
 func (x *GetWorkerBuildIdCompatibilityResponse) Reset() {
 	*x = GetWorkerBuildIdCompatibilityResponse{}
 	if protoimpl.UnsafeEnabled {
-		mi := &file_temporal_server_api_matchingservice_v1_request_response_proto_msgTypes[21]
+		mi := &file_temporal_server_api_matchingservice_v1_request_response_proto_msgTypes[25]
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		ms.StoreMessageInfo(mi)
 	}
@@ -1694,7 +1889,7 @@ func (x *GetWorkerBuildIdCompatibilityResponse) String() string {
 func (*GetWorkerBuildIdCompatibilityResponse) ProtoMessage() {}
 
 func (x *GetWorkerBuildIdCompatibilityResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_temporal_server_api_matchingservice_v1_request_response_proto_msgTypes[21]
+	mi := &file_temporal_server_api_matchingservice_v1_request_response_proto_msgTypes[25]
 	if protoimpl.UnsafeEnabled && x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1707,7 +1902,7 @@ func (x *GetWorkerBuildIdCompatibilityResponse) ProtoReflect() protoreflect.Mess
 
 // Deprecated: Use GetWorkerBuildIdCompatibilityResponse.ProtoReflect.Descriptor instead.
 func (*GetWorkerBuildIdCompatibilityResponse) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_matchingservice_v1_request_response_proto_rawDescGZIP(), []int{21}
+	return file_temporal_server_api_matchingservice_v1_request_response_proto_rawDescGZIP(), []int{25}
 }
 
 func (x *GetWorkerBuildIdCompatibilityResponse) GetResponse() *v1.GetWorkerBuildIdCompatibilityResponse {
@@ -1741,7 +1936,7 @@ type GetTaskQueueUserDataRequest struct {
 func (x *GetTaskQueueUserDataRequest) Reset() {
 	*x = GetTaskQueueUserDataRequest{}
 	if protoimpl.UnsafeEnabled {
-		mi := &file_temporal_server_api_matchingservice_v1_request_response_proto_msgTypes[22]
+		mi := &file_temporal_server_api_matchingservice_v1_request_response_proto_msgTypes[26]
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		ms.StoreMessageInfo(mi)
 	}
@@ -1754,7 +1949,7 @@ func (x *GetTaskQueueUserDataRequest) String() string {
 func (*GetTaskQueueUserDataRequest) ProtoMessage() {}
 
 func (x *GetTaskQueueUserDataRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_temporal_server_api_matchingservice_v1_request_response_proto_msgTypes[22]
+	mi := &file_temporal_server_api_matchingservice_v1_request_response_proto_msgTypes[26]
 	if protoimpl.UnsafeEnabled && x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1767,7 +1962,7 @@ func (x *GetTaskQueueUserDataRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetTaskQueueUserDataRequest.ProtoReflect.Descriptor instead.
 func (*GetTaskQueueUserDataRequest) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_matchingservice_v1_request_response_proto_rawDescGZIP(), []int{22}
+	return file_temporal_server_api_matchingservice_v1_request_response_proto_rawDescGZIP(), []int{26}
 }
 
 func (x *GetTaskQueueUserDataRequest) GetNamespaceId() string {
@@ -1820,7 +2015,7 @@ type GetTaskQueueUserDataResponse struct {
 func (x *GetTaskQueueUserDataResponse) Reset() {
 	*x = GetTaskQueueUserDataResponse{}
 	if protoimpl.UnsafeEnabled {
-		mi := &file_temporal_server_api_matchingservice_v1_request_response_proto_msgTypes[23]
+		mi := &file_temporal_server_api_matchingservice_v1_request_response_proto_msgTypes[27]
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		ms.StoreMessageInfo(mi)
 	}
@@ -1833,7 +2028,7 @@ func (x *GetTaskQueueUserDataResponse) String() string {
 func (*GetTaskQueueUserDataResponse) ProtoMessage() {}
 
 func (x *GetTaskQueueUserDataResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_temporal_server_api_matchingservice_v1_request_response_proto_msgTypes[23]
+	mi := &file_temporal_server_api_matchingservice_v1_request_response_proto_msgTypes[27]
 	if protoimpl.UnsafeEnabled && x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1846,7 +2041,7 @@ func (x *GetTaskQueueUserDataResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetTaskQueueUserDataResponse.ProtoReflect.Descriptor instead.
 func (*GetTaskQueueUserDataResponse) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_matchingservice_v1_request_response_proto_rawDescGZIP(), []int{23}
+	return file_temporal_server_api_matchingservice_v1_request_response_proto_rawDescGZIP(), []int{27}
 }
 
 func (x *GetTaskQueueUserDataResponse) GetTaskQueueHasUserData() bool {
@@ -1876,7 +2071,7 @@ type ApplyTaskQueueUserDataReplicationEventRequest struct {
 func (x *ApplyTaskQueueUserDataReplicationEventRequest) Reset() {
 	*x = ApplyTaskQueueUserDataReplicationEventRequest{}
 	if protoimpl.UnsafeEnabled {
-		mi := &file_temporal_server_api_matchingservice_v1_request_response_proto_msgTypes[24]
+		mi := &file_temporal_server_api_matchingservice_v1_request_response_proto_msgTypes[28]
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		ms.StoreMessageInfo(mi)
 	}
@@ -1889,7 +2084,7 @@ func (x *ApplyTaskQueueUserDataReplicationEventRequest) String() string {
 func (*ApplyTaskQueueUserDataReplicationEventRequest) ProtoMessage() {}
 
 func (x *ApplyTaskQueueUserDataReplicationEventRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_temporal_server_api_matchingservice_v1_request_response_proto_msgTypes[24]
+	mi := &file_temporal_server_api_matchingservice_v1_request_response_proto_msgTypes[28]
 	if protoimpl.UnsafeEnabled && x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1902,7 +2097,7 @@ func (x *ApplyTaskQueueUserDataReplicationEventRequest) ProtoReflect() protorefl
 
 // Deprecated: Use ApplyTaskQueueUserDataReplicationEventRequest.ProtoReflect.Descriptor instead.
 func (*ApplyTaskQueueUserDataReplicationEventRequest) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_matchingservice_v1_request_response_proto_rawDescGZIP(), []int{24}
+	return file_temporal_server_api_matchingservice_v1_request_response_proto_rawDescGZIP(), []int{28}
 }
 
 func (x *ApplyTaskQueueUserDataReplicationEventRequest) GetNamespaceId() string {
@@ -1935,7 +2130,7 @@ type ApplyTaskQueueUserDataReplicationEventResponse struct {
 func (x *ApplyTaskQueueUserDataReplicationEventResponse) Reset() {
 	*x = ApplyTaskQueueUserDataReplicationEventResponse{}
 	if protoimpl.UnsafeEnabled {
-		mi := &file_temporal_server_api_matchingservice_v1_request_response_proto_msgTypes[25]
+		mi := &file_temporal_server_api_matchingservice_v1_request_response_proto_msgTypes[29]
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		ms.StoreMessageInfo(mi)
 	}
@@ -1948,7 +2143,7 @@ func (x *ApplyTaskQueueUserDataReplicationEventResponse) String() string {
 func (*ApplyTaskQueueUserDataReplicationEventResponse) ProtoMessage() {}
 
 func (x *ApplyTaskQueueUserDataReplicationEventResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_temporal_server_api_matchingservice_v1_request_response_proto_msgTypes[25]
+	mi := &file_temporal_server_api_matchingservice_v1_request_response_proto_msgTypes[29]
 	if protoimpl.UnsafeEnabled && x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1961,7 +2156,7 @@ func (x *ApplyTaskQueueUserDataReplicationEventResponse) ProtoReflect() protoref
 
 // Deprecated: Use ApplyTaskQueueUserDataReplicationEventResponse.ProtoReflect.Descriptor instead.
 func (*ApplyTaskQueueUserDataReplicationEventResponse) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_matchingservice_v1_request_response_proto_rawDescGZIP(), []int{25}
+	return file_temporal_server_api_matchingservice_v1_request_response_proto_rawDescGZIP(), []int{29}
 }
 
 type GetBuildIdTaskQueueMappingRequest struct {
@@ -1976,7 +2171,7 @@ type GetBuildIdTaskQueueMappingRequest struct {
 func (x *GetBuildIdTaskQueueMappingRequest) Reset() {
 	*x = GetBuildIdTaskQueueMappingRequest{}
 	if protoimpl.UnsafeEnabled {
-		mi := &file_temporal_server_api_matchingservice_v1_request_response_proto_msgTypes[26]
+		mi := &file_temporal_server_api_matchingservice_v1_request_response_proto_msgTypes[30]
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		ms.StoreMessageInfo(mi)
 	}
@@ -1989,7 +2184,7 @@ func (x *GetBuildIdTaskQueueMappingRequest) String() string {
 func (*GetBuildIdTaskQueueMappingRequest) ProtoMessage() {}
 
 func (x *GetBuildIdTaskQueueMappingRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_temporal_server_api_matchingservice_v1_request_response_proto_msgTypes[26]
+	mi := &file_temporal_server_api_matchingservice_v1_request_response_proto_msgTypes[30]
 	if protoimpl.UnsafeEnabled && x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2002,7 +2197,7 @@ func (x *GetBuildIdTaskQueueMappingRequest) ProtoReflect() protoreflect.Message 
 
 // Deprecated: Use GetBuildIdTaskQueueMappingRequest.ProtoReflect.Descriptor instead.
 func (*GetBuildIdTaskQueueMappingRequest) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_matchingservice_v1_request_response_proto_rawDescGZIP(), []int{26}
+	return file_temporal_server_api_matchingservice_v1_request_response_proto_rawDescGZIP(), []int{30}
 }
 
 func (x *GetBuildIdTaskQueueMappingRequest) GetNamespaceId() string {
@@ -2030,7 +2225,7 @@ type GetBuildIdTaskQueueMappingResponse struct {
 func (x *GetBuildIdTaskQueueMappingResponse) Reset() {
 	*x = GetBuildIdTaskQueueMappingResponse{}
 	if protoimpl.UnsafeEnabled {
-		mi := &file_temporal_server_api_matchingservice_v1_request_response_proto_msgTypes[27]
+		mi := &file_temporal_server_api_matchingservice_v1_request_response_proto_msgTypes[31]
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		ms.StoreMessageInfo(mi)
 	}
@@ -2043,7 +2238,7 @@ func (x *GetBuildIdTaskQueueMappingResponse) String() string {
 func (*GetBuildIdTaskQueueMappingResponse) ProtoMessage() {}
 
 func (x *GetBuildIdTaskQueueMappingResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_temporal_server_api_matchingservice_v1_request_response_proto_msgTypes[27]
+	mi := &file_temporal_server_api_matchingservice_v1_request_response_proto_msgTypes[31]
 	if protoimpl.UnsafeEnabled && x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2056,7 +2251,7 @@ func (x *GetBuildIdTaskQueueMappingResponse) ProtoReflect() protoreflect.Message
 
 // Deprecated: Use GetBuildIdTaskQueueMappingResponse.ProtoReflect.Descriptor instead.
 func (*GetBuildIdTaskQueueMappingResponse) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_matchingservice_v1_request_response_proto_rawDescGZIP(), []int{27}
+	return file_temporal_server_api_matchingservice_v1_request_response_proto_rawDescGZIP(), []int{31}
 }
 
 func (x *GetBuildIdTaskQueueMappingResponse) GetTaskQueues() []string {
@@ -2079,7 +2274,7 @@ type ForceUnloadTaskQueueRequest struct {
 func (x *ForceUnloadTaskQueueRequest) Reset() {
 	*x = ForceUnloadTaskQueueRequest{}
 	if protoimpl.UnsafeEnabled {
-		mi := &file_temporal_server_api_matchingservice_v1_request_response_proto_msgTypes[28]
+		mi := &file_temporal_server_api_matchingservice_v1_request_response_proto_msgTypes[32]
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		ms.StoreMessageInfo(mi)
 	}
@@ -2092,7 +2287,7 @@ func (x *ForceUnloadTaskQueueRequest) String() string {
 func (*ForceUnloadTaskQueueRequest) ProtoMessage() {}
 
 func (x *ForceUnloadTaskQueueRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_temporal_server_api_matchingservice_v1_request_response_proto_msgTypes[28]
+	mi := &file_temporal_server_api_matchingservice_v1_request_response_proto_msgTypes[32]
 	if protoimpl.UnsafeEnabled && x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2105,7 +2300,7 @@ func (x *ForceUnloadTaskQueueRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ForceUnloadTaskQueueRequest.ProtoReflect.Descriptor instead.
 func (*ForceUnloadTaskQueueRequest) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_matchingservice_v1_request_response_proto_rawDescGZIP(), []int{28}
+	return file_temporal_server_api_matchingservice_v1_request_response_proto_rawDescGZIP(), []int{32}
 }
 
 func (x *ForceUnloadTaskQueueRequest) GetNamespaceId() string {
@@ -2140,7 +2335,7 @@ type ForceUnloadTaskQueueResponse struct {
 func (x *ForceUnloadTaskQueueResponse) Reset() {
 	*x = ForceUnloadTaskQueueResponse{}
 	if protoimpl.UnsafeEnabled {
-		mi := &file_temporal_server_api_matchingservice_v1_request_response_proto_msgTypes[29]
+		mi := &file_temporal_server_api_matchingservice_v1_request_response_proto_msgTypes[33]
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		ms.StoreMessageInfo(mi)
 	}
@@ -2153,7 +2348,7 @@ func (x *ForceUnloadTaskQueueResponse) String() string {
 func (*ForceUnloadTaskQueueResponse) ProtoMessage() {}
 
 func (x *ForceUnloadTaskQueueResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_temporal_server_api_matchingservice_v1_request_response_proto_msgTypes[29]
+	mi := &file_temporal_server_api_matchingservice_v1_request_response_proto_msgTypes[33]
 	if protoimpl.UnsafeEnabled && x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2166,7 +2361,7 @@ func (x *ForceUnloadTaskQueueResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ForceUnloadTaskQueueResponse.ProtoReflect.Descriptor instead.
 func (*ForceUnloadTaskQueueResponse) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_matchingservice_v1_request_response_proto_rawDescGZIP(), []int{29}
+	return file_temporal_server_api_matchingservice_v1_request_response_proto_rawDescGZIP(), []int{33}
 }
 
 func (x *ForceUnloadTaskQueueResponse) GetWasLoaded() bool {
@@ -2202,7 +2397,7 @@ type UpdateTaskQueueUserDataRequest struct {
 func (x *UpdateTaskQueueUserDataRequest) Reset() {
 	*x = UpdateTaskQueueUserDataRequest{}
 	if protoimpl.UnsafeEnabled {
-		mi := &file_temporal_server_api_matchingservice_v1_request_response_proto_msgTypes[30]
+		mi := &file_temporal_server_api_matchingservice_v1_request_response_proto_msgTypes[34]
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		ms.StoreMessageInfo(mi)
 	}
@@ -2215,7 +2410,7 @@ func (x *UpdateTaskQueueUserDataRequest) String() string {
 func (*UpdateTaskQueueUserDataRequest) ProtoMessage() {}
 
 func (x *UpdateTaskQueueUserDataRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_temporal_server_api_matchingservice_v1_request_response_proto_msgTypes[30]
+	mi := &file_temporal_server_api_matchingservice_v1_request_response_proto_msgTypes[34]
 	if protoimpl.UnsafeEnabled && x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2228,7 +2423,7 @@ func (x *UpdateTaskQueueUserDataRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use UpdateTaskQueueUserDataRequest.ProtoReflect.Descriptor instead.
 func (*UpdateTaskQueueUserDataRequest) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_matchingservice_v1_request_response_proto_rawDescGZIP(), []int{30}
+	return file_temporal_server_api_matchingservice_v1_request_response_proto_rawDescGZIP(), []int{34}
 }
 
 func (x *UpdateTaskQueueUserDataRequest) GetNamespaceId() string {
@@ -2275,7 +2470,7 @@ type UpdateTaskQueueUserDataResponse struct {
 func (x *UpdateTaskQueueUserDataResponse) Reset() {
 	*x = UpdateTaskQueueUserDataResponse{}
 	if protoimpl.UnsafeEnabled {
-		mi := &file_temporal_server_api_matchingservice_v1_request_response_proto_msgTypes[31]
+		mi := &file_temporal_server_api_matchingservice_v1_request_response_proto_msgTypes[35]
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		ms.StoreMessageInfo(mi)
 	}
@@ -2288,7 +2483,7 @@ func (x *UpdateTaskQueueUserDataResponse) String() string {
 func (*UpdateTaskQueueUserDataResponse) ProtoMessage() {}
 
 func (x *UpdateTaskQueueUserDataResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_temporal_server_api_matchingservice_v1_request_response_proto_msgTypes[31]
+	mi := &file_temporal_server_api_matchingservice_v1_request_response_proto_msgTypes[35]
 	if protoimpl.UnsafeEnabled && x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2301,7 +2496,7 @@ func (x *UpdateTaskQueueUserDataResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use UpdateTaskQueueUserDataResponse.ProtoReflect.Descriptor instead.
 func (*UpdateTaskQueueUserDataResponse) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_matchingservice_v1_request_response_proto_rawDescGZIP(), []int{31}
+	return file_temporal_server_api_matchingservice_v1_request_response_proto_rawDescGZIP(), []int{35}
 }
 
 type ReplicateTaskQueueUserDataRequest struct {
@@ -2317,7 +2512,7 @@ type ReplicateTaskQueueUserDataRequest struct {
 func (x *ReplicateTaskQueueUserDataRequest) Reset() {
 	*x = ReplicateTaskQueueUserDataRequest{}
 	if protoimpl.UnsafeEnabled {
-		mi := &file_temporal_server_api_matchingservice_v1_request_response_proto_msgTypes[32]
+		mi := &file_temporal_server_api_matchingservice_v1_request_response_proto_msgTypes[36]
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		ms.StoreMessageInfo(mi)
 	}
@@ -2330,7 +2525,7 @@ func (x *ReplicateTaskQueueUserDataRequest) String() string {
 func (*ReplicateTaskQueueUserDataRequest) ProtoMessage() {}
 
 func (x *ReplicateTaskQueueUserDataRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_temporal_server_api_matchingservice_v1_request_response_proto_msgTypes[32]
+	mi := &file_temporal_server_api_matchingservice_v1_request_response_proto_msgTypes[36]
 	if protoimpl.UnsafeEnabled && x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2343,7 +2538,7 @@ func (x *ReplicateTaskQueueUserDataRequest) ProtoReflect() protoreflect.Message 
 
 // Deprecated: Use ReplicateTaskQueueUserDataRequest.ProtoReflect.Descriptor instead.
 func (*ReplicateTaskQueueUserDataRequest) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_matchingservice_v1_request_response_proto_rawDescGZIP(), []int{32}
+	return file_temporal_server_api_matchingservice_v1_request_response_proto_rawDescGZIP(), []int{36}
 }
 
 func (x *ReplicateTaskQueueUserDataRequest) GetNamespaceId() string {
@@ -2376,7 +2571,7 @@ type ReplicateTaskQueueUserDataResponse struct {
 func (x *ReplicateTaskQueueUserDataResponse) Reset() {
 	*x = ReplicateTaskQueueUserDataResponse{}
 	if protoimpl.UnsafeEnabled {
-		mi := &file_temporal_server_api_matchingservice_v1_request_response_proto_msgTypes[33]
+		mi := &file_temporal_server_api_matchingservice_v1_request_response_proto_msgTypes[37]
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		ms.StoreMessageInfo(mi)
 	}
@@ -2389,7 +2584,7 @@ func (x *ReplicateTaskQueueUserDataResponse) String() string {
 func (*ReplicateTaskQueueUserDataResponse) ProtoMessage() {}
 
 func (x *ReplicateTaskQueueUserDataResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_temporal_server_api_matchingservice_v1_request_response_proto_msgTypes[33]
+	mi := &file_temporal_server_api_matchingservice_v1_request_response_proto_msgTypes[37]
 	if protoimpl.UnsafeEnabled && x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2402,7 +2597,7 @@ func (x *ReplicateTaskQueueUserDataResponse) ProtoReflect() protoreflect.Message
 
 // Deprecated: Use ReplicateTaskQueueUserDataResponse.ProtoReflect.Descriptor instead.
 func (*ReplicateTaskQueueUserDataResponse) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_matchingservice_v1_request_response_proto_rawDescGZIP(), []int{33}
+	return file_temporal_server_api_matchingservice_v1_request_response_proto_rawDescGZIP(), []int{37}
 }
 
 // Apply request from public API.
@@ -2417,7 +2612,7 @@ type UpdateWorkerBuildIdCompatibilityRequest_ApplyPublicRequest struct {
 func (x *UpdateWorkerBuildIdCompatibilityRequest_ApplyPublicRequest) Reset() {
 	*x = UpdateWorkerBuildIdCompatibilityRequest_ApplyPublicRequest{}
 	if protoimpl.UnsafeEnabled {
-		mi := &file_temporal_server_api_matchingservice_v1_request_response_proto_msgTypes[35]
+		mi := &file_temporal_server_api_matchingservice_v1_request_response_proto_msgTypes[39]
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		ms.StoreMessageInfo(mi)
 	}
@@ -2430,7 +2625,7 @@ func (x *UpdateWorkerBuildIdCompatibilityRequest_ApplyPublicRequest) String() st
 func (*UpdateWorkerBuildIdCompatibilityRequest_ApplyPublicRequest) ProtoMessage() {}
 
 func (x *UpdateWorkerBuildIdCompatibilityRequest_ApplyPublicRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_temporal_server_api_matchingservice_v1_request_response_proto_msgTypes[35]
+	mi := &file_temporal_server_api_matchingservice_v1_request_response_proto_msgTypes[39]
 	if protoimpl.UnsafeEnabled && x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2468,7 +2663,7 @@ type UpdateWorkerBuildIdCompatibilityRequest_RemoveBuildIds struct {
 func (x *UpdateWorkerBuildIdCompatibilityRequest_RemoveBuildIds) Reset() {
 	*x = UpdateWorkerBuildIdCompatibilityRequest_RemoveBuildIds{}
 	if protoimpl.UnsafeEnabled {
-		mi := &file_temporal_server_api_matchingservice_v1_request_response_proto_msgTypes[36]
+		mi := &file_temporal_server_api_matchingservice_v1_request_response_proto_msgTypes[40]
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		ms.StoreMessageInfo(mi)
 	}
@@ -2481,7 +2676,7 @@ func (x *UpdateWorkerBuildIdCompatibilityRequest_RemoveBuildIds) String() string
 func (*UpdateWorkerBuildIdCompatibilityRequest_RemoveBuildIds) ProtoMessage() {}
 
 func (x *UpdateWorkerBuildIdCompatibilityRequest_RemoveBuildIds) ProtoReflect() protoreflect.Message {
-	mi := &file_temporal_server_api_matchingservice_v1_request_response_proto_msgTypes[36]
+	mi := &file_temporal_server_api_matchingservice_v1_request_response_proto_msgTypes[40]
 	if protoimpl.UnsafeEnabled && x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2983,134 +3178,168 @@ var file_temporal_server_api_matchingservice_v1_request_response_proto_rawDesc =
 	0x69, 0x6f, 0x6e, 0x22, 0x2a, 0x0a, 0x28, 0x55, 0x70, 0x64, 0x61, 0x74, 0x65, 0x57, 0x6f, 0x72,
 	0x6b, 0x65, 0x72, 0x42, 0x75, 0x69, 0x6c, 0x64, 0x49, 0x64, 0x43, 0x6f, 0x6d, 0x70, 0x61, 0x74,
 	0x69, 0x62, 0x69, 0x6c, 0x69, 0x74, 0x79, 0x52, 0x65, 0x73, 0x70, 0x6f, 0x6e, 0x73, 0x65, 0x22,
-	0xaa, 0x01, 0x0a, 0x24, 0x47, 0x65, 0x74, 0x57, 0x6f, 0x72, 0x6b, 0x65, 0x72, 0x42, 0x75, 0x69,
-	0x6c, 0x64, 0x49, 0x64, 0x43, 0x6f, 0x6d, 0x70, 0x61, 0x74, 0x69, 0x62, 0x69, 0x6c, 0x69, 0x74,
-	0x79, 0x52, 0x65, 0x71, 0x75, 0x65, 0x73, 0x74, 0x12, 0x21, 0x0a, 0x0c, 0x6e, 0x61, 0x6d, 0x65,
-	0x73, 0x70, 0x61, 0x63, 0x65, 0x5f, 0x69, 0x64, 0x18, 0x01, 0x20, 0x01, 0x28, 0x09, 0x52, 0x0b,
-	0x6e, 0x61, 0x6d, 0x65, 0x73, 0x70, 0x61, 0x63, 0x65, 0x49, 0x64, 0x12, 0x5f, 0x0a, 0x07, 0x72,
-	0x65, 0x71, 0x75, 0x65, 0x73, 0x74, 0x18, 0x02, 0x20, 0x01, 0x28, 0x0b, 0x32, 0x45, 0x2e, 0x74,
-	0x65, 0x6d, 0x70, 0x6f, 0x72, 0x61, 0x6c, 0x2e, 0x61, 0x70, 0x69, 0x2e, 0x77, 0x6f, 0x72, 0x6b,
-	0x66, 0x6c, 0x6f, 0x77, 0x73, 0x65, 0x72, 0x76, 0x69, 0x63, 0x65, 0x2e, 0x76, 0x31, 0x2e, 0x47,
-	0x65, 0x74, 0x57, 0x6f, 0x72, 0x6b, 0x65, 0x72, 0x42, 0x75, 0x69, 0x6c, 0x64, 0x49, 0x64, 0x43,
-	0x6f, 0x6d, 0x70, 0x61, 0x74, 0x69, 0x62, 0x69, 0x6c, 0x69, 0x74, 0x79, 0x52, 0x65, 0x71, 0x75,
-	0x65, 0x73, 0x74, 0x52, 0x07, 0x72, 0x65, 0x71, 0x75, 0x65, 0x73, 0x74, 0x22, 0x8b, 0x01, 0x0a,
-	0x25, 0x47, 0x65, 0x74, 0x57, 0x6f, 0x72, 0x6b, 0x65, 0x72, 0x42, 0x75, 0x69, 0x6c, 0x64, 0x49,
-	0x64, 0x43, 0x6f, 0x6d, 0x70, 0x61, 0x74, 0x69, 0x62, 0x69, 0x6c, 0x69, 0x74, 0x79, 0x52, 0x65,
-	0x73, 0x70, 0x6f, 0x6e, 0x73, 0x65, 0x12, 0x62, 0x0a, 0x08, 0x72, 0x65, 0x73, 0x70, 0x6f, 0x6e,
-	0x73, 0x65, 0x18, 0x01, 0x20, 0x01, 0x28, 0x0b, 0x32, 0x46, 0x2e, 0x74, 0x65, 0x6d, 0x70, 0x6f,
+	0x7f, 0x0a, 0x20, 0x4c, 0x69, 0x73, 0x74, 0x57, 0x6f, 0x72, 0x6b, 0x65, 0x72, 0x56, 0x65, 0x72,
+	0x73, 0x69, 0x6f, 0x6e, 0x69, 0x6e, 0x67, 0x52, 0x75, 0x6c, 0x65, 0x73, 0x52, 0x65, 0x71, 0x75,
+	0x65, 0x73, 0x74, 0x12, 0x5b, 0x0a, 0x07, 0x72, 0x65, 0x71, 0x75, 0x65, 0x73, 0x74, 0x18, 0x01,
+	0x20, 0x01, 0x28, 0x0b, 0x32, 0x41, 0x2e, 0x74, 0x65, 0x6d, 0x70, 0x6f, 0x72, 0x61, 0x6c, 0x2e,
+	0x61, 0x70, 0x69, 0x2e, 0x77, 0x6f, 0x72, 0x6b, 0x66, 0x6c, 0x6f, 0x77, 0x73, 0x65, 0x72, 0x76,
+	0x69, 0x63, 0x65, 0x2e, 0x76, 0x31, 0x2e, 0x4c, 0x69, 0x73, 0x74, 0x57, 0x6f, 0x72, 0x6b, 0x65,
+	0x72, 0x56, 0x65, 0x72, 0x73, 0x69, 0x6f, 0x6e, 0x69, 0x6e, 0x67, 0x52, 0x75, 0x6c, 0x65, 0x73,
+	0x52, 0x65, 0x71, 0x75, 0x65, 0x73, 0x74, 0x52, 0x07, 0x72, 0x65, 0x71, 0x75, 0x65, 0x73, 0x74,
+	0x22, 0x83, 0x01, 0x0a, 0x21, 0x4c, 0x69, 0x73, 0x74, 0x57, 0x6f, 0x72, 0x6b, 0x65, 0x72, 0x56,
+	0x65, 0x72, 0x73, 0x69, 0x6f, 0x6e, 0x69, 0x6e, 0x67, 0x52, 0x75, 0x6c, 0x65, 0x73, 0x52, 0x65,
+	0x73, 0x70, 0x6f, 0x6e, 0x73, 0x65, 0x12, 0x5e, 0x0a, 0x08, 0x72, 0x65, 0x73, 0x70, 0x6f, 0x6e,
+	0x73, 0x65, 0x18, 0x01, 0x20, 0x01, 0x28, 0x0b, 0x32, 0x42, 0x2e, 0x74, 0x65, 0x6d, 0x70, 0x6f,
 	0x72, 0x61, 0x6c, 0x2e, 0x61, 0x70, 0x69, 0x2e, 0x77, 0x6f, 0x72, 0x6b, 0x66, 0x6c, 0x6f, 0x77,
-	0x73, 0x65, 0x72, 0x76, 0x69, 0x63, 0x65, 0x2e, 0x76, 0x31, 0x2e, 0x47, 0x65, 0x74, 0x57, 0x6f,
+	0x73, 0x65, 0x72, 0x76, 0x69, 0x63, 0x65, 0x2e, 0x76, 0x31, 0x2e, 0x4c, 0x69, 0x73, 0x74, 0x57,
+	0x6f, 0x72, 0x6b, 0x65, 0x72, 0x56, 0x65, 0x72, 0x73, 0x69, 0x6f, 0x6e, 0x69, 0x6e, 0x67, 0x52,
+	0x75, 0x6c, 0x65, 0x73, 0x52, 0x65, 0x73, 0x70, 0x6f, 0x6e, 0x73, 0x65, 0x52, 0x08, 0x72, 0x65,
+	0x73, 0x70, 0x6f, 0x6e, 0x73, 0x65, 0x22, 0x83, 0x01, 0x0a, 0x22, 0x55, 0x70, 0x64, 0x61, 0x74,
+	0x65, 0x57, 0x6f, 0x72, 0x6b, 0x65, 0x72, 0x56, 0x65, 0x72, 0x73, 0x69, 0x6f, 0x6e, 0x69, 0x6e,
+	0x67, 0x52, 0x75, 0x6c, 0x65, 0x73, 0x52, 0x65, 0x71, 0x75, 0x65, 0x73, 0x74, 0x12, 0x5d, 0x0a,
+	0x07, 0x72, 0x65, 0x71, 0x75, 0x65, 0x73, 0x74, 0x18, 0x01, 0x20, 0x01, 0x28, 0x0b, 0x32, 0x43,
+	0x2e, 0x74, 0x65, 0x6d, 0x70, 0x6f, 0x72, 0x61, 0x6c, 0x2e, 0x61, 0x70, 0x69, 0x2e, 0x77, 0x6f,
+	0x72, 0x6b, 0x66, 0x6c, 0x6f, 0x77, 0x73, 0x65, 0x72, 0x76, 0x69, 0x63, 0x65, 0x2e, 0x76, 0x31,
+	0x2e, 0x55, 0x70, 0x64, 0x61, 0x74, 0x65, 0x57, 0x6f, 0x72, 0x6b, 0x65, 0x72, 0x56, 0x65, 0x72,
+	0x73, 0x69, 0x6f, 0x6e, 0x69, 0x6e, 0x67, 0x52, 0x75, 0x6c, 0x65, 0x73, 0x52, 0x65, 0x71, 0x75,
+	0x65, 0x73, 0x74, 0x52, 0x07, 0x72, 0x65, 0x71, 0x75, 0x65, 0x73, 0x74, 0x22, 0x87, 0x01, 0x0a,
+	0x23, 0x55, 0x70, 0x64, 0x61, 0x74, 0x65, 0x57, 0x6f, 0x72, 0x6b, 0x65, 0x72, 0x56, 0x65, 0x72,
+	0x73, 0x69, 0x6f, 0x6e, 0x69, 0x6e, 0x67, 0x52, 0x75, 0x6c, 0x65, 0x73, 0x52, 0x65, 0x73, 0x70,
+	0x6f, 0x6e, 0x73, 0x65, 0x12, 0x60, 0x0a, 0x08, 0x72, 0x65, 0x73, 0x70, 0x6f, 0x6e, 0x73, 0x65,
+	0x18, 0x01, 0x20, 0x01, 0x28, 0x0b, 0x32, 0x44, 0x2e, 0x74, 0x65, 0x6d, 0x70, 0x6f, 0x72, 0x61,
+	0x6c, 0x2e, 0x61, 0x70, 0x69, 0x2e, 0x77, 0x6f, 0x72, 0x6b, 0x66, 0x6c, 0x6f, 0x77, 0x73, 0x65,
+	0x72, 0x76, 0x69, 0x63, 0x65, 0x2e, 0x76, 0x31, 0x2e, 0x55, 0x70, 0x64, 0x61, 0x74, 0x65, 0x57,
+	0x6f, 0x72, 0x6b, 0x65, 0x72, 0x56, 0x65, 0x72, 0x73, 0x69, 0x6f, 0x6e, 0x69, 0x6e, 0x67, 0x52,
+	0x75, 0x6c, 0x65, 0x73, 0x52, 0x65, 0x73, 0x70, 0x6f, 0x6e, 0x73, 0x65, 0x52, 0x08, 0x72, 0x65,
+	0x73, 0x70, 0x6f, 0x6e, 0x73, 0x65, 0x22, 0xaa, 0x01, 0x0a, 0x24, 0x47, 0x65, 0x74, 0x57, 0x6f,
 	0x72, 0x6b, 0x65, 0x72, 0x42, 0x75, 0x69, 0x6c, 0x64, 0x49, 0x64, 0x43, 0x6f, 0x6d, 0x70, 0x61,
-	0x74, 0x69, 0x62, 0x69, 0x6c, 0x69, 0x74, 0x79, 0x52, 0x65, 0x73, 0x70, 0x6f, 0x6e, 0x73, 0x65,
-	0x52, 0x08, 0x72, 0x65, 0x73, 0x70, 0x6f, 0x6e, 0x73, 0x65, 0x22, 0x91, 0x02, 0x0a, 0x1b, 0x47,
-	0x65, 0x74, 0x54, 0x61, 0x73, 0x6b, 0x51, 0x75, 0x65, 0x75, 0x65, 0x55, 0x73, 0x65, 0x72, 0x44,
-	0x61, 0x74, 0x61, 0x52, 0x65, 0x71, 0x75, 0x65, 0x73, 0x74, 0x12, 0x21, 0x0a, 0x0c, 0x6e, 0x61,
-	0x6d, 0x65, 0x73, 0x70, 0x61, 0x63, 0x65, 0x5f, 0x69, 0x64, 0x18, 0x01, 0x20, 0x01, 0x28, 0x09,
-	0x52, 0x0b, 0x6e, 0x61, 0x6d, 0x65, 0x73, 0x70, 0x61, 0x63, 0x65, 0x49, 0x64, 0x12, 0x1d, 0x0a,
-	0x0a, 0x74, 0x61, 0x73, 0x6b, 0x5f, 0x71, 0x75, 0x65, 0x75, 0x65, 0x18, 0x02, 0x20, 0x01, 0x28,
-	0x09, 0x52, 0x09, 0x74, 0x61, 0x73, 0x6b, 0x51, 0x75, 0x65, 0x75, 0x65, 0x12, 0x4c, 0x0a, 0x0f,
-	0x74, 0x61, 0x73, 0x6b, 0x5f, 0x71, 0x75, 0x65, 0x75, 0x65, 0x5f, 0x74, 0x79, 0x70, 0x65, 0x18,
-	0x05, 0x20, 0x01, 0x28, 0x0e, 0x32, 0x24, 0x2e, 0x74, 0x65, 0x6d, 0x70, 0x6f, 0x72, 0x61, 0x6c,
-	0x2e, 0x61, 0x70, 0x69, 0x2e, 0x65, 0x6e, 0x75, 0x6d, 0x73, 0x2e, 0x76, 0x31, 0x2e, 0x54, 0x61,
-	0x73, 0x6b, 0x51, 0x75, 0x65, 0x75, 0x65, 0x54, 0x79, 0x70, 0x65, 0x52, 0x0d, 0x74, 0x61, 0x73,
-	0x6b, 0x51, 0x75, 0x65, 0x75, 0x65, 0x54, 0x79, 0x70, 0x65, 0x12, 0x3e, 0x0a, 0x1c, 0x6c, 0x61,
-	0x73, 0x74, 0x5f, 0x6b, 0x6e, 0x6f, 0x77, 0x6e, 0x5f, 0x75, 0x73, 0x65, 0x72, 0x5f, 0x64, 0x61,
-	0x74, 0x61, 0x5f, 0x76, 0x65, 0x72, 0x73, 0x69, 0x6f, 0x6e, 0x18, 0x03, 0x20, 0x01, 0x28, 0x03,
-	0x52, 0x18, 0x6c, 0x61, 0x73, 0x74, 0x4b, 0x6e, 0x6f, 0x77, 0x6e, 0x55, 0x73, 0x65, 0x72, 0x44,
-	0x61, 0x74, 0x61, 0x56, 0x65, 0x72, 0x73, 0x69, 0x6f, 0x6e, 0x12, 0x22, 0x0a, 0x0d, 0x77, 0x61,
-	0x69, 0x74, 0x5f, 0x6e, 0x65, 0x77, 0x5f, 0x64, 0x61, 0x74, 0x61, 0x18, 0x04, 0x20, 0x01, 0x28,
-	0x08, 0x52, 0x0b, 0x77, 0x61, 0x69, 0x74, 0x4e, 0x65, 0x77, 0x44, 0x61, 0x74, 0x61, 0x22, 0xb3,
-	0x01, 0x0a, 0x1c, 0x47, 0x65, 0x74, 0x54, 0x61, 0x73, 0x6b, 0x51, 0x75, 0x65, 0x75, 0x65, 0x55,
-	0x73, 0x65, 0x72, 0x44, 0x61, 0x74, 0x61, 0x52, 0x65, 0x73, 0x70, 0x6f, 0x6e, 0x73, 0x65, 0x12,
-	0x36, 0x0a, 0x18, 0x74, 0x61, 0x73, 0x6b, 0x5f, 0x71, 0x75, 0x65, 0x75, 0x65, 0x5f, 0x68, 0x61,
-	0x73, 0x5f, 0x75, 0x73, 0x65, 0x72, 0x5f, 0x64, 0x61, 0x74, 0x61, 0x18, 0x01, 0x20, 0x01, 0x28,
-	0x08, 0x52, 0x14, 0x74, 0x61, 0x73, 0x6b, 0x51, 0x75, 0x65, 0x75, 0x65, 0x48, 0x61, 0x73, 0x55,
-	0x73, 0x65, 0x72, 0x44, 0x61, 0x74, 0x61, 0x12, 0x5b, 0x0a, 0x09, 0x75, 0x73, 0x65, 0x72, 0x5f,
-	0x64, 0x61, 0x74, 0x61, 0x18, 0x02, 0x20, 0x01, 0x28, 0x0b, 0x32, 0x3e, 0x2e, 0x74, 0x65, 0x6d,
-	0x70, 0x6f, 0x72, 0x61, 0x6c, 0x2e, 0x73, 0x65, 0x72, 0x76, 0x65, 0x72, 0x2e, 0x61, 0x70, 0x69,
-	0x2e, 0x70, 0x65, 0x72, 0x73, 0x69, 0x73, 0x74, 0x65, 0x6e, 0x63, 0x65, 0x2e, 0x76, 0x31, 0x2e,
-	0x56, 0x65, 0x72, 0x73, 0x69, 0x6f, 0x6e, 0x65, 0x64, 0x54, 0x61, 0x73, 0x6b, 0x51, 0x75, 0x65,
-	0x75, 0x65, 0x55, 0x73, 0x65, 0x72, 0x44, 0x61, 0x74, 0x61, 0x52, 0x08, 0x75, 0x73, 0x65, 0x72,
-	0x44, 0x61, 0x74, 0x61, 0x22, 0xc5, 0x01, 0x0a, 0x2d, 0x41, 0x70, 0x70, 0x6c, 0x79, 0x54, 0x61,
-	0x73, 0x6b, 0x51, 0x75, 0x65, 0x75, 0x65, 0x55, 0x73, 0x65, 0x72, 0x44, 0x61, 0x74, 0x61, 0x52,
-	0x65, 0x70, 0x6c, 0x69, 0x63, 0x61, 0x74, 0x69, 0x6f, 0x6e, 0x45, 0x76, 0x65, 0x6e, 0x74, 0x52,
-	0x65, 0x71, 0x75, 0x65, 0x73, 0x74, 0x12, 0x21, 0x0a, 0x0c, 0x6e, 0x61, 0x6d, 0x65, 0x73, 0x70,
-	0x61, 0x63, 0x65, 0x5f, 0x69, 0x64, 0x18, 0x01, 0x20, 0x01, 0x28, 0x09, 0x52, 0x0b, 0x6e, 0x61,
-	0x6d, 0x65, 0x73, 0x70, 0x61, 0x63, 0x65, 0x49, 0x64, 0x12, 0x1d, 0x0a, 0x0a, 0x74, 0x61, 0x73,
-	0x6b, 0x5f, 0x71, 0x75, 0x65, 0x75, 0x65, 0x18, 0x02, 0x20, 0x01, 0x28, 0x09, 0x52, 0x09, 0x74,
-	0x61, 0x73, 0x6b, 0x51, 0x75, 0x65, 0x75, 0x65, 0x12, 0x52, 0x0a, 0x09, 0x75, 0x73, 0x65, 0x72,
-	0x5f, 0x64, 0x61, 0x74, 0x61, 0x18, 0x03, 0x20, 0x01, 0x28, 0x0b, 0x32, 0x35, 0x2e, 0x74, 0x65,
-	0x6d, 0x70, 0x6f, 0x72, 0x61, 0x6c, 0x2e, 0x73, 0x65, 0x72, 0x76, 0x65, 0x72, 0x2e, 0x61, 0x70,
-	0x69, 0x2e, 0x70, 0x65, 0x72, 0x73, 0x69, 0x73, 0x74, 0x65, 0x6e, 0x63, 0x65, 0x2e, 0x76, 0x31,
-	0x2e, 0x54, 0x61, 0x73, 0x6b, 0x51, 0x75, 0x65, 0x75, 0x65, 0x55, 0x73, 0x65, 0x72, 0x44, 0x61,
-	0x74, 0x61, 0x52, 0x08, 0x75, 0x73, 0x65, 0x72, 0x44, 0x61, 0x74, 0x61, 0x22, 0x30, 0x0a, 0x2e,
+	0x74, 0x69, 0x62, 0x69, 0x6c, 0x69, 0x74, 0x79, 0x52, 0x65, 0x71, 0x75, 0x65, 0x73, 0x74, 0x12,
+	0x21, 0x0a, 0x0c, 0x6e, 0x61, 0x6d, 0x65, 0x73, 0x70, 0x61, 0x63, 0x65, 0x5f, 0x69, 0x64, 0x18,
+	0x01, 0x20, 0x01, 0x28, 0x09, 0x52, 0x0b, 0x6e, 0x61, 0x6d, 0x65, 0x73, 0x70, 0x61, 0x63, 0x65,
+	0x49, 0x64, 0x12, 0x5f, 0x0a, 0x07, 0x72, 0x65, 0x71, 0x75, 0x65, 0x73, 0x74, 0x18, 0x02, 0x20,
+	0x01, 0x28, 0x0b, 0x32, 0x45, 0x2e, 0x74, 0x65, 0x6d, 0x70, 0x6f, 0x72, 0x61, 0x6c, 0x2e, 0x61,
+	0x70, 0x69, 0x2e, 0x77, 0x6f, 0x72, 0x6b, 0x66, 0x6c, 0x6f, 0x77, 0x73, 0x65, 0x72, 0x76, 0x69,
+	0x63, 0x65, 0x2e, 0x76, 0x31, 0x2e, 0x47, 0x65, 0x74, 0x57, 0x6f, 0x72, 0x6b, 0x65, 0x72, 0x42,
+	0x75, 0x69, 0x6c, 0x64, 0x49, 0x64, 0x43, 0x6f, 0x6d, 0x70, 0x61, 0x74, 0x69, 0x62, 0x69, 0x6c,
+	0x69, 0x74, 0x79, 0x52, 0x65, 0x71, 0x75, 0x65, 0x73, 0x74, 0x52, 0x07, 0x72, 0x65, 0x71, 0x75,
+	0x65, 0x73, 0x74, 0x22, 0x8b, 0x01, 0x0a, 0x25, 0x47, 0x65, 0x74, 0x57, 0x6f, 0x72, 0x6b, 0x65,
+	0x72, 0x42, 0x75, 0x69, 0x6c, 0x64, 0x49, 0x64, 0x43, 0x6f, 0x6d, 0x70, 0x61, 0x74, 0x69, 0x62,
+	0x69, 0x6c, 0x69, 0x74, 0x79, 0x52, 0x65, 0x73, 0x70, 0x6f, 0x6e, 0x73, 0x65, 0x12, 0x62, 0x0a,
+	0x08, 0x72, 0x65, 0x73, 0x70, 0x6f, 0x6e, 0x73, 0x65, 0x18, 0x01, 0x20, 0x01, 0x28, 0x0b, 0x32,
+	0x46, 0x2e, 0x74, 0x65, 0x6d, 0x70, 0x6f, 0x72, 0x61, 0x6c, 0x2e, 0x61, 0x70, 0x69, 0x2e, 0x77,
+	0x6f, 0x72, 0x6b, 0x66, 0x6c, 0x6f, 0x77, 0x73, 0x65, 0x72, 0x76, 0x69, 0x63, 0x65, 0x2e, 0x76,
+	0x31, 0x2e, 0x47, 0x65, 0x74, 0x57, 0x6f, 0x72, 0x6b, 0x65, 0x72, 0x42, 0x75, 0x69, 0x6c, 0x64,
+	0x49, 0x64, 0x43, 0x6f, 0x6d, 0x70, 0x61, 0x74, 0x69, 0x62, 0x69, 0x6c, 0x69, 0x74, 0x79, 0x52,
+	0x65, 0x73, 0x70, 0x6f, 0x6e, 0x73, 0x65, 0x52, 0x08, 0x72, 0x65, 0x73, 0x70, 0x6f, 0x6e, 0x73,
+	0x65, 0x22, 0x91, 0x02, 0x0a, 0x1b, 0x47, 0x65, 0x74, 0x54, 0x61, 0x73, 0x6b, 0x51, 0x75, 0x65,
+	0x75, 0x65, 0x55, 0x73, 0x65, 0x72, 0x44, 0x61, 0x74, 0x61, 0x52, 0x65, 0x71, 0x75, 0x65, 0x73,
+	0x74, 0x12, 0x21, 0x0a, 0x0c, 0x6e, 0x61, 0x6d, 0x65, 0x73, 0x70, 0x61, 0x63, 0x65, 0x5f, 0x69,
+	0x64, 0x18, 0x01, 0x20, 0x01, 0x28, 0x09, 0x52, 0x0b, 0x6e, 0x61, 0x6d, 0x65, 0x73, 0x70, 0x61,
+	0x63, 0x65, 0x49, 0x64, 0x12, 0x1d, 0x0a, 0x0a, 0x74, 0x61, 0x73, 0x6b, 0x5f, 0x71, 0x75, 0x65,
+	0x75, 0x65, 0x18, 0x02, 0x20, 0x01, 0x28, 0x09, 0x52, 0x09, 0x74, 0x61, 0x73, 0x6b, 0x51, 0x75,
+	0x65, 0x75, 0x65, 0x12, 0x4c, 0x0a, 0x0f, 0x74, 0x61, 0x73, 0x6b, 0x5f, 0x71, 0x75, 0x65, 0x75,
+	0x65, 0x5f, 0x74, 0x79, 0x70, 0x65, 0x18, 0x05, 0x20, 0x01, 0x28, 0x0e, 0x32, 0x24, 0x2e, 0x74,
+	0x65, 0x6d, 0x70, 0x6f, 0x72, 0x61, 0x6c, 0x2e, 0x61, 0x70, 0x69, 0x2e, 0x65, 0x6e, 0x75, 0x6d,
+	0x73, 0x2e, 0x76, 0x31, 0x2e, 0x54, 0x61, 0x73, 0x6b, 0x51, 0x75, 0x65, 0x75, 0x65, 0x54, 0x79,
+	0x70, 0x65, 0x52, 0x0d, 0x74, 0x61, 0x73, 0x6b, 0x51, 0x75, 0x65, 0x75, 0x65, 0x54, 0x79, 0x70,
+	0x65, 0x12, 0x3e, 0x0a, 0x1c, 0x6c, 0x61, 0x73, 0x74, 0x5f, 0x6b, 0x6e, 0x6f, 0x77, 0x6e, 0x5f,
+	0x75, 0x73, 0x65, 0x72, 0x5f, 0x64, 0x61, 0x74, 0x61, 0x5f, 0x76, 0x65, 0x72, 0x73, 0x69, 0x6f,
+	0x6e, 0x18, 0x03, 0x20, 0x01, 0x28, 0x03, 0x52, 0x18, 0x6c, 0x61, 0x73, 0x74, 0x4b, 0x6e, 0x6f,
+	0x77, 0x6e, 0x55, 0x73, 0x65, 0x72, 0x44, 0x61, 0x74, 0x61, 0x56, 0x65, 0x72, 0x73, 0x69, 0x6f,
+	0x6e, 0x12, 0x22, 0x0a, 0x0d, 0x77, 0x61, 0x69, 0x74, 0x5f, 0x6e, 0x65, 0x77, 0x5f, 0x64, 0x61,
+	0x74, 0x61, 0x18, 0x04, 0x20, 0x01, 0x28, 0x08, 0x52, 0x0b, 0x77, 0x61, 0x69, 0x74, 0x4e, 0x65,
+	0x77, 0x44, 0x61, 0x74, 0x61, 0x22, 0xb3, 0x01, 0x0a, 0x1c, 0x47, 0x65, 0x74, 0x54, 0x61, 0x73,
+	0x6b, 0x51, 0x75, 0x65, 0x75, 0x65, 0x55, 0x73, 0x65, 0x72, 0x44, 0x61, 0x74, 0x61, 0x52, 0x65,
+	0x73, 0x70, 0x6f, 0x6e, 0x73, 0x65, 0x12, 0x36, 0x0a, 0x18, 0x74, 0x61, 0x73, 0x6b, 0x5f, 0x71,
+	0x75, 0x65, 0x75, 0x65, 0x5f, 0x68, 0x61, 0x73, 0x5f, 0x75, 0x73, 0x65, 0x72, 0x5f, 0x64, 0x61,
+	0x74, 0x61, 0x18, 0x01, 0x20, 0x01, 0x28, 0x08, 0x52, 0x14, 0x74, 0x61, 0x73, 0x6b, 0x51, 0x75,
+	0x65, 0x75, 0x65, 0x48, 0x61, 0x73, 0x55, 0x73, 0x65, 0x72, 0x44, 0x61, 0x74, 0x61, 0x12, 0x5b,
+	0x0a, 0x09, 0x75, 0x73, 0x65, 0x72, 0x5f, 0x64, 0x61, 0x74, 0x61, 0x18, 0x02, 0x20, 0x01, 0x28,
+	0x0b, 0x32, 0x3e, 0x2e, 0x74, 0x65, 0x6d, 0x70, 0x6f, 0x72, 0x61, 0x6c, 0x2e, 0x73, 0x65, 0x72,
+	0x76, 0x65, 0x72, 0x2e, 0x61, 0x70, 0x69, 0x2e, 0x70, 0x65, 0x72, 0x73, 0x69, 0x73, 0x74, 0x65,
+	0x6e, 0x63, 0x65, 0x2e, 0x76, 0x31, 0x2e, 0x56, 0x65, 0x72, 0x73, 0x69, 0x6f, 0x6e, 0x65, 0x64,
+	0x54, 0x61, 0x73, 0x6b, 0x51, 0x75, 0x65, 0x75, 0x65, 0x55, 0x73, 0x65, 0x72, 0x44, 0x61, 0x74,
+	0x61, 0x52, 0x08, 0x75, 0x73, 0x65, 0x72, 0x44, 0x61, 0x74, 0x61, 0x22, 0xc5, 0x01, 0x0a, 0x2d,
 	0x41, 0x70, 0x70, 0x6c, 0x79, 0x54, 0x61, 0x73, 0x6b, 0x51, 0x75, 0x65, 0x75, 0x65, 0x55, 0x73,
 	0x65, 0x72, 0x44, 0x61, 0x74, 0x61, 0x52, 0x65, 0x70, 0x6c, 0x69, 0x63, 0x61, 0x74, 0x69, 0x6f,
-	0x6e, 0x45, 0x76, 0x65, 0x6e, 0x74, 0x52, 0x65, 0x73, 0x70, 0x6f, 0x6e, 0x73, 0x65, 0x22, 0x61,
-	0x0a, 0x21, 0x47, 0x65, 0x74, 0x42, 0x75, 0x69, 0x6c, 0x64, 0x49, 0x64, 0x54, 0x61, 0x73, 0x6b,
-	0x51, 0x75, 0x65, 0x75, 0x65, 0x4d, 0x61, 0x70, 0x70, 0x69, 0x6e, 0x67, 0x52, 0x65, 0x71, 0x75,
-	0x65, 0x73, 0x74, 0x12, 0x21, 0x0a, 0x0c, 0x6e, 0x61, 0x6d, 0x65, 0x73, 0x70, 0x61, 0x63, 0x65,
-	0x5f, 0x69, 0x64, 0x18, 0x01, 0x20, 0x01, 0x28, 0x09, 0x52, 0x0b, 0x6e, 0x61, 0x6d, 0x65, 0x73,
-	0x70, 0x61, 0x63, 0x65, 0x49, 0x64, 0x12, 0x19, 0x0a, 0x08, 0x62, 0x75, 0x69, 0x6c, 0x64, 0x5f,
-	0x69, 0x64, 0x18, 0x02, 0x20, 0x01, 0x28, 0x09, 0x52, 0x07, 0x62, 0x75, 0x69, 0x6c, 0x64, 0x49,
-	0x64, 0x22, 0x45, 0x0a, 0x22, 0x47, 0x65, 0x74, 0x42, 0x75, 0x69, 0x6c, 0x64, 0x49, 0x64, 0x54,
-	0x61, 0x73, 0x6b, 0x51, 0x75, 0x65, 0x75, 0x65, 0x4d, 0x61, 0x70, 0x70, 0x69, 0x6e, 0x67, 0x52,
-	0x65, 0x73, 0x70, 0x6f, 0x6e, 0x73, 0x65, 0x12, 0x1f, 0x0a, 0x0b, 0x74, 0x61, 0x73, 0x6b, 0x5f,
-	0x71, 0x75, 0x65, 0x75, 0x65, 0x73, 0x18, 0x01, 0x20, 0x03, 0x28, 0x09, 0x52, 0x0a, 0x74, 0x61,
-	0x73, 0x6b, 0x51, 0x75, 0x65, 0x75, 0x65, 0x73, 0x22, 0xad, 0x01, 0x0a, 0x1b, 0x46, 0x6f, 0x72,
-	0x63, 0x65, 0x55, 0x6e, 0x6c, 0x6f, 0x61, 0x64, 0x54, 0x61, 0x73, 0x6b, 0x51, 0x75, 0x65, 0x75,
-	0x65, 0x52, 0x65, 0x71, 0x75, 0x65, 0x73, 0x74, 0x12, 0x21, 0x0a, 0x0c, 0x6e, 0x61, 0x6d, 0x65,
-	0x73, 0x70, 0x61, 0x63, 0x65, 0x5f, 0x69, 0x64, 0x18, 0x01, 0x20, 0x01, 0x28, 0x09, 0x52, 0x0b,
-	0x6e, 0x61, 0x6d, 0x65, 0x73, 0x70, 0x61, 0x63, 0x65, 0x49, 0x64, 0x12, 0x1d, 0x0a, 0x0a, 0x74,
-	0x61, 0x73, 0x6b, 0x5f, 0x71, 0x75, 0x65, 0x75, 0x65, 0x18, 0x02, 0x20, 0x01, 0x28, 0x09, 0x52,
-	0x09, 0x74, 0x61, 0x73, 0x6b, 0x51, 0x75, 0x65, 0x75, 0x65, 0x12, 0x4c, 0x0a, 0x0f, 0x74, 0x61,
-	0x73, 0x6b, 0x5f, 0x71, 0x75, 0x65, 0x75, 0x65, 0x5f, 0x74, 0x79, 0x70, 0x65, 0x18, 0x03, 0x20,
-	0x01, 0x28, 0x0e, 0x32, 0x24, 0x2e, 0x74, 0x65, 0x6d, 0x70, 0x6f, 0x72, 0x61, 0x6c, 0x2e, 0x61,
-	0x70, 0x69, 0x2e, 0x65, 0x6e, 0x75, 0x6d, 0x73, 0x2e, 0x76, 0x31, 0x2e, 0x54, 0x61, 0x73, 0x6b,
-	0x51, 0x75, 0x65, 0x75, 0x65, 0x54, 0x79, 0x70, 0x65, 0x52, 0x0d, 0x74, 0x61, 0x73, 0x6b, 0x51,
-	0x75, 0x65, 0x75, 0x65, 0x54, 0x79, 0x70, 0x65, 0x22, 0x3d, 0x0a, 0x1c, 0x46, 0x6f, 0x72, 0x63,
-	0x65, 0x55, 0x6e, 0x6c, 0x6f, 0x61, 0x64, 0x54, 0x61, 0x73, 0x6b, 0x51, 0x75, 0x65, 0x75, 0x65,
-	0x52, 0x65, 0x73, 0x70, 0x6f, 0x6e, 0x73, 0x65, 0x12, 0x1d, 0x0a, 0x0a, 0x77, 0x61, 0x73, 0x5f,
-	0x6c, 0x6f, 0x61, 0x64, 0x65, 0x64, 0x18, 0x01, 0x20, 0x01, 0x28, 0x08, 0x52, 0x09, 0x77, 0x61,
-	0x73, 0x4c, 0x6f, 0x61, 0x64, 0x65, 0x64, 0x22, 0x93, 0x02, 0x0a, 0x1e, 0x55, 0x70, 0x64, 0x61,
-	0x74, 0x65, 0x54, 0x61, 0x73, 0x6b, 0x51, 0x75, 0x65, 0x75, 0x65, 0x55, 0x73, 0x65, 0x72, 0x44,
-	0x61, 0x74, 0x61, 0x52, 0x65, 0x71, 0x75, 0x65, 0x73, 0x74, 0x12, 0x21, 0x0a, 0x0c, 0x6e, 0x61,
+	0x6e, 0x45, 0x76, 0x65, 0x6e, 0x74, 0x52, 0x65, 0x71, 0x75, 0x65, 0x73, 0x74, 0x12, 0x21, 0x0a,
+	0x0c, 0x6e, 0x61, 0x6d, 0x65, 0x73, 0x70, 0x61, 0x63, 0x65, 0x5f, 0x69, 0x64, 0x18, 0x01, 0x20,
+	0x01, 0x28, 0x09, 0x52, 0x0b, 0x6e, 0x61, 0x6d, 0x65, 0x73, 0x70, 0x61, 0x63, 0x65, 0x49, 0x64,
+	0x12, 0x1d, 0x0a, 0x0a, 0x74, 0x61, 0x73, 0x6b, 0x5f, 0x71, 0x75, 0x65, 0x75, 0x65, 0x18, 0x02,
+	0x20, 0x01, 0x28, 0x09, 0x52, 0x09, 0x74, 0x61, 0x73, 0x6b, 0x51, 0x75, 0x65, 0x75, 0x65, 0x12,
+	0x52, 0x0a, 0x09, 0x75, 0x73, 0x65, 0x72, 0x5f, 0x64, 0x61, 0x74, 0x61, 0x18, 0x03, 0x20, 0x01,
+	0x28, 0x0b, 0x32, 0x35, 0x2e, 0x74, 0x65, 0x6d, 0x70, 0x6f, 0x72, 0x61, 0x6c, 0x2e, 0x73, 0x65,
+	0x72, 0x76, 0x65, 0x72, 0x2e, 0x61, 0x70, 0x69, 0x2e, 0x70, 0x65, 0x72, 0x73, 0x69, 0x73, 0x74,
+	0x65, 0x6e, 0x63, 0x65, 0x2e, 0x76, 0x31, 0x2e, 0x54, 0x61, 0x73, 0x6b, 0x51, 0x75, 0x65, 0x75,
+	0x65, 0x55, 0x73, 0x65, 0x72, 0x44, 0x61, 0x74, 0x61, 0x52, 0x08, 0x75, 0x73, 0x65, 0x72, 0x44,
+	0x61, 0x74, 0x61, 0x22, 0x30, 0x0a, 0x2e, 0x41, 0x70, 0x70, 0x6c, 0x79, 0x54, 0x61, 0x73, 0x6b,
+	0x51, 0x75, 0x65, 0x75, 0x65, 0x55, 0x73, 0x65, 0x72, 0x44, 0x61, 0x74, 0x61, 0x52, 0x65, 0x70,
+	0x6c, 0x69, 0x63, 0x61, 0x74, 0x69, 0x6f, 0x6e, 0x45, 0x76, 0x65, 0x6e, 0x74, 0x52, 0x65, 0x73,
+	0x70, 0x6f, 0x6e, 0x73, 0x65, 0x22, 0x61, 0x0a, 0x21, 0x47, 0x65, 0x74, 0x42, 0x75, 0x69, 0x6c,
+	0x64, 0x49, 0x64, 0x54, 0x61, 0x73, 0x6b, 0x51, 0x75, 0x65, 0x75, 0x65, 0x4d, 0x61, 0x70, 0x70,
+	0x69, 0x6e, 0x67, 0x52, 0x65, 0x71, 0x75, 0x65, 0x73, 0x74, 0x12, 0x21, 0x0a, 0x0c, 0x6e, 0x61,
 	0x6d, 0x65, 0x73, 0x70, 0x61, 0x63, 0x65, 0x5f, 0x69, 0x64, 0x18, 0x01, 0x20, 0x01, 0x28, 0x09,
-	0x52, 0x0b, 0x6e, 0x61, 0x6d, 0x65, 0x73, 0x70, 0x61, 0x63, 0x65, 0x49, 0x64, 0x12, 0x1d, 0x0a,
-	0x0a, 0x74, 0x61, 0x73, 0x6b, 0x5f, 0x71, 0x75, 0x65, 0x75, 0x65, 0x18, 0x02, 0x20, 0x01, 0x28,
-	0x09, 0x52, 0x09, 0x74, 0x61, 0x73, 0x6b, 0x51, 0x75, 0x65, 0x75, 0x65, 0x12, 0x5b, 0x0a, 0x09,
-	0x75, 0x73, 0x65, 0x72, 0x5f, 0x64, 0x61, 0x74, 0x61, 0x18, 0x03, 0x20, 0x01, 0x28, 0x0b, 0x32,
-	0x3e, 0x2e, 0x74, 0x65, 0x6d, 0x70, 0x6f, 0x72, 0x61, 0x6c, 0x2e, 0x73, 0x65, 0x72, 0x76, 0x65,
-	0x72, 0x2e, 0x61, 0x70, 0x69, 0x2e, 0x70, 0x65, 0x72, 0x73, 0x69, 0x73, 0x74, 0x65, 0x6e, 0x63,
-	0x65, 0x2e, 0x76, 0x31, 0x2e, 0x56, 0x65, 0x72, 0x73, 0x69, 0x6f, 0x6e, 0x65, 0x64, 0x54, 0x61,
+	0x52, 0x0b, 0x6e, 0x61, 0x6d, 0x65, 0x73, 0x70, 0x61, 0x63, 0x65, 0x49, 0x64, 0x12, 0x19, 0x0a,
+	0x08, 0x62, 0x75, 0x69, 0x6c, 0x64, 0x5f, 0x69, 0x64, 0x18, 0x02, 0x20, 0x01, 0x28, 0x09, 0x52,
+	0x07, 0x62, 0x75, 0x69, 0x6c, 0x64, 0x49, 0x64, 0x22, 0x45, 0x0a, 0x22, 0x47, 0x65, 0x74, 0x42,
+	0x75, 0x69, 0x6c, 0x64, 0x49, 0x64, 0x54, 0x61, 0x73, 0x6b, 0x51, 0x75, 0x65, 0x75, 0x65, 0x4d,
+	0x61, 0x70, 0x70, 0x69, 0x6e, 0x67, 0x52, 0x65, 0x73, 0x70, 0x6f, 0x6e, 0x73, 0x65, 0x12, 0x1f,
+	0x0a, 0x0b, 0x74, 0x61, 0x73, 0x6b, 0x5f, 0x71, 0x75, 0x65, 0x75, 0x65, 0x73, 0x18, 0x01, 0x20,
+	0x03, 0x28, 0x09, 0x52, 0x0a, 0x74, 0x61, 0x73, 0x6b, 0x51, 0x75, 0x65, 0x75, 0x65, 0x73, 0x22,
+	0xad, 0x01, 0x0a, 0x1b, 0x46, 0x6f, 0x72, 0x63, 0x65, 0x55, 0x6e, 0x6c, 0x6f, 0x61, 0x64, 0x54,
+	0x61, 0x73, 0x6b, 0x51, 0x75, 0x65, 0x75, 0x65, 0x52, 0x65, 0x71, 0x75, 0x65, 0x73, 0x74, 0x12,
+	0x21, 0x0a, 0x0c, 0x6e, 0x61, 0x6d, 0x65, 0x73, 0x70, 0x61, 0x63, 0x65, 0x5f, 0x69, 0x64, 0x18,
+	0x01, 0x20, 0x01, 0x28, 0x09, 0x52, 0x0b, 0x6e, 0x61, 0x6d, 0x65, 0x73, 0x70, 0x61, 0x63, 0x65,
+	0x49, 0x64, 0x12, 0x1d, 0x0a, 0x0a, 0x74, 0x61, 0x73, 0x6b, 0x5f, 0x71, 0x75, 0x65, 0x75, 0x65,
+	0x18, 0x02, 0x20, 0x01, 0x28, 0x09, 0x52, 0x09, 0x74, 0x61, 0x73, 0x6b, 0x51, 0x75, 0x65, 0x75,
+	0x65, 0x12, 0x4c, 0x0a, 0x0f, 0x74, 0x61, 0x73, 0x6b, 0x5f, 0x71, 0x75, 0x65, 0x75, 0x65, 0x5f,
+	0x74, 0x79, 0x70, 0x65, 0x18, 0x03, 0x20, 0x01, 0x28, 0x0e, 0x32, 0x24, 0x2e, 0x74, 0x65, 0x6d,
+	0x70, 0x6f, 0x72, 0x61, 0x6c, 0x2e, 0x61, 0x70, 0x69, 0x2e, 0x65, 0x6e, 0x75, 0x6d, 0x73, 0x2e,
+	0x76, 0x31, 0x2e, 0x54, 0x61, 0x73, 0x6b, 0x51, 0x75, 0x65, 0x75, 0x65, 0x54, 0x79, 0x70, 0x65,
+	0x52, 0x0d, 0x74, 0x61, 0x73, 0x6b, 0x51, 0x75, 0x65, 0x75, 0x65, 0x54, 0x79, 0x70, 0x65, 0x22,
+	0x3d, 0x0a, 0x1c, 0x46, 0x6f, 0x72, 0x63, 0x65, 0x55, 0x6e, 0x6c, 0x6f, 0x61, 0x64, 0x54, 0x61,
+	0x73, 0x6b, 0x51, 0x75, 0x65, 0x75, 0x65, 0x52, 0x65, 0x73, 0x70, 0x6f, 0x6e, 0x73, 0x65, 0x12,
+	0x1d, 0x0a, 0x0a, 0x77, 0x61, 0x73, 0x5f, 0x6c, 0x6f, 0x61, 0x64, 0x65, 0x64, 0x18, 0x01, 0x20,
+	0x01, 0x28, 0x08, 0x52, 0x09, 0x77, 0x61, 0x73, 0x4c, 0x6f, 0x61, 0x64, 0x65, 0x64, 0x22, 0x93,
+	0x02, 0x0a, 0x1e, 0x55, 0x70, 0x64, 0x61, 0x74, 0x65, 0x54, 0x61, 0x73, 0x6b, 0x51, 0x75, 0x65,
+	0x75, 0x65, 0x55, 0x73, 0x65, 0x72, 0x44, 0x61, 0x74, 0x61, 0x52, 0x65, 0x71, 0x75, 0x65, 0x73,
+	0x74, 0x12, 0x21, 0x0a, 0x0c, 0x6e, 0x61, 0x6d, 0x65, 0x73, 0x70, 0x61, 0x63, 0x65, 0x5f, 0x69,
+	0x64, 0x18, 0x01, 0x20, 0x01, 0x28, 0x09, 0x52, 0x0b, 0x6e, 0x61, 0x6d, 0x65, 0x73, 0x70, 0x61,
+	0x63, 0x65, 0x49, 0x64, 0x12, 0x1d, 0x0a, 0x0a, 0x74, 0x61, 0x73, 0x6b, 0x5f, 0x71, 0x75, 0x65,
+	0x75, 0x65, 0x18, 0x02, 0x20, 0x01, 0x28, 0x09, 0x52, 0x09, 0x74, 0x61, 0x73, 0x6b, 0x51, 0x75,
+	0x65, 0x75, 0x65, 0x12, 0x5b, 0x0a, 0x09, 0x75, 0x73, 0x65, 0x72, 0x5f, 0x64, 0x61, 0x74, 0x61,
+	0x18, 0x03, 0x20, 0x01, 0x28, 0x0b, 0x32, 0x3e, 0x2e, 0x74, 0x65, 0x6d, 0x70, 0x6f, 0x72, 0x61,
+	0x6c, 0x2e, 0x73, 0x65, 0x72, 0x76, 0x65, 0x72, 0x2e, 0x61, 0x70, 0x69, 0x2e, 0x70, 0x65, 0x72,
+	0x73, 0x69, 0x73, 0x74, 0x65, 0x6e, 0x63, 0x65, 0x2e, 0x76, 0x31, 0x2e, 0x56, 0x65, 0x72, 0x73,
+	0x69, 0x6f, 0x6e, 0x65, 0x64, 0x54, 0x61, 0x73, 0x6b, 0x51, 0x75, 0x65, 0x75, 0x65, 0x55, 0x73,
+	0x65, 0x72, 0x44, 0x61, 0x74, 0x61, 0x52, 0x08, 0x75, 0x73, 0x65, 0x72, 0x44, 0x61, 0x74, 0x61,
+	0x12, 0x26, 0x0a, 0x0f, 0x62, 0x75, 0x69, 0x6c, 0x64, 0x5f, 0x69, 0x64, 0x73, 0x5f, 0x61, 0x64,
+	0x64, 0x65, 0x64, 0x18, 0x04, 0x20, 0x03, 0x28, 0x09, 0x52, 0x0d, 0x62, 0x75, 0x69, 0x6c, 0x64,
+	0x49, 0x64, 0x73, 0x41, 0x64, 0x64, 0x65, 0x64, 0x12, 0x2a, 0x0a, 0x11, 0x62, 0x75, 0x69, 0x6c,
+	0x64, 0x5f, 0x69, 0x64, 0x73, 0x5f, 0x72, 0x65, 0x6d, 0x6f, 0x76, 0x65, 0x64, 0x18, 0x05, 0x20,
+	0x03, 0x28, 0x09, 0x52, 0x0f, 0x62, 0x75, 0x69, 0x6c, 0x64, 0x49, 0x64, 0x73, 0x52, 0x65, 0x6d,
+	0x6f, 0x76, 0x65, 0x64, 0x22, 0x21, 0x0a, 0x1f, 0x55, 0x70, 0x64, 0x61, 0x74, 0x65, 0x54, 0x61,
 	0x73, 0x6b, 0x51, 0x75, 0x65, 0x75, 0x65, 0x55, 0x73, 0x65, 0x72, 0x44, 0x61, 0x74, 0x61, 0x52,
-	0x08, 0x75, 0x73, 0x65, 0x72, 0x44, 0x61, 0x74, 0x61, 0x12, 0x26, 0x0a, 0x0f, 0x62, 0x75, 0x69,
-	0x6c, 0x64, 0x5f, 0x69, 0x64, 0x73, 0x5f, 0x61, 0x64, 0x64, 0x65, 0x64, 0x18, 0x04, 0x20, 0x03,
-	0x28, 0x09, 0x52, 0x0d, 0x62, 0x75, 0x69, 0x6c, 0x64, 0x49, 0x64, 0x73, 0x41, 0x64, 0x64, 0x65,
-	0x64, 0x12, 0x2a, 0x0a, 0x11, 0x62, 0x75, 0x69, 0x6c, 0x64, 0x5f, 0x69, 0x64, 0x73, 0x5f, 0x72,
-	0x65, 0x6d, 0x6f, 0x76, 0x65, 0x64, 0x18, 0x05, 0x20, 0x03, 0x28, 0x09, 0x52, 0x0f, 0x62, 0x75,
-	0x69, 0x6c, 0x64, 0x49, 0x64, 0x73, 0x52, 0x65, 0x6d, 0x6f, 0x76, 0x65, 0x64, 0x22, 0x21, 0x0a,
-	0x1f, 0x55, 0x70, 0x64, 0x61, 0x74, 0x65, 0x54, 0x61, 0x73, 0x6b, 0x51, 0x75, 0x65, 0x75, 0x65,
-	0x55, 0x73, 0x65, 0x72, 0x44, 0x61, 0x74, 0x61, 0x52, 0x65, 0x73, 0x70, 0x6f, 0x6e, 0x73, 0x65,
-	0x22, 0xb9, 0x01, 0x0a, 0x21, 0x52, 0x65, 0x70, 0x6c, 0x69, 0x63, 0x61, 0x74, 0x65, 0x54, 0x61,
-	0x73, 0x6b, 0x51, 0x75, 0x65, 0x75, 0x65, 0x55, 0x73, 0x65, 0x72, 0x44, 0x61, 0x74, 0x61, 0x52,
-	0x65, 0x71, 0x75, 0x65, 0x73, 0x74, 0x12, 0x21, 0x0a, 0x0c, 0x6e, 0x61, 0x6d, 0x65, 0x73, 0x70,
-	0x61, 0x63, 0x65, 0x5f, 0x69, 0x64, 0x18, 0x01, 0x20, 0x01, 0x28, 0x09, 0x52, 0x0b, 0x6e, 0x61,
-	0x6d, 0x65, 0x73, 0x70, 0x61, 0x63, 0x65, 0x49, 0x64, 0x12, 0x1d, 0x0a, 0x0a, 0x74, 0x61, 0x73,
-	0x6b, 0x5f, 0x71, 0x75, 0x65, 0x75, 0x65, 0x18, 0x02, 0x20, 0x01, 0x28, 0x09, 0x52, 0x09, 0x74,
-	0x61, 0x73, 0x6b, 0x51, 0x75, 0x65, 0x75, 0x65, 0x12, 0x52, 0x0a, 0x09, 0x75, 0x73, 0x65, 0x72,
-	0x5f, 0x64, 0x61, 0x74, 0x61, 0x18, 0x03, 0x20, 0x01, 0x28, 0x0b, 0x32, 0x35, 0x2e, 0x74, 0x65,
-	0x6d, 0x70, 0x6f, 0x72, 0x61, 0x6c, 0x2e, 0x73, 0x65, 0x72, 0x76, 0x65, 0x72, 0x2e, 0x61, 0x70,
-	0x69, 0x2e, 0x70, 0x65, 0x72, 0x73, 0x69, 0x73, 0x74, 0x65, 0x6e, 0x63, 0x65, 0x2e, 0x76, 0x31,
-	0x2e, 0x54, 0x61, 0x73, 0x6b, 0x51, 0x75, 0x65, 0x75, 0x65, 0x55, 0x73, 0x65, 0x72, 0x44, 0x61,
-	0x74, 0x61, 0x52, 0x08, 0x75, 0x73, 0x65, 0x72, 0x44, 0x61, 0x74, 0x61, 0x22, 0x24, 0x0a, 0x22,
-	0x52, 0x65, 0x70, 0x6c, 0x69, 0x63, 0x61, 0x74, 0x65, 0x54, 0x61, 0x73, 0x6b, 0x51, 0x75, 0x65,
-	0x75, 0x65, 0x55, 0x73, 0x65, 0x72, 0x44, 0x61, 0x74, 0x61, 0x52, 0x65, 0x73, 0x70, 0x6f, 0x6e,
-	0x73, 0x65, 0x42, 0x3e, 0x5a, 0x3c, 0x67, 0x6f, 0x2e, 0x74, 0x65, 0x6d, 0x70, 0x6f, 0x72, 0x61,
-	0x6c, 0x2e, 0x69, 0x6f, 0x2f, 0x73, 0x65, 0x72, 0x76, 0x65, 0x72, 0x2f, 0x61, 0x70, 0x69, 0x2f,
-	0x6d, 0x61, 0x74, 0x63, 0x68, 0x69, 0x6e, 0x67, 0x73, 0x65, 0x72, 0x76, 0x69, 0x63, 0x65, 0x2f,
-	0x76, 0x31, 0x3b, 0x6d, 0x61, 0x74, 0x63, 0x68, 0x69, 0x6e, 0x67, 0x73, 0x65, 0x72, 0x76, 0x69,
-	0x63, 0x65, 0x62, 0x06, 0x70, 0x72, 0x6f, 0x74, 0x6f, 0x33,
+	0x65, 0x73, 0x70, 0x6f, 0x6e, 0x73, 0x65, 0x22, 0xb9, 0x01, 0x0a, 0x21, 0x52, 0x65, 0x70, 0x6c,
+	0x69, 0x63, 0x61, 0x74, 0x65, 0x54, 0x61, 0x73, 0x6b, 0x51, 0x75, 0x65, 0x75, 0x65, 0x55, 0x73,
+	0x65, 0x72, 0x44, 0x61, 0x74, 0x61, 0x52, 0x65, 0x71, 0x75, 0x65, 0x73, 0x74, 0x12, 0x21, 0x0a,
+	0x0c, 0x6e, 0x61, 0x6d, 0x65, 0x73, 0x70, 0x61, 0x63, 0x65, 0x5f, 0x69, 0x64, 0x18, 0x01, 0x20,
+	0x01, 0x28, 0x09, 0x52, 0x0b, 0x6e, 0x61, 0x6d, 0x65, 0x73, 0x70, 0x61, 0x63, 0x65, 0x49, 0x64,
+	0x12, 0x1d, 0x0a, 0x0a, 0x74, 0x61, 0x73, 0x6b, 0x5f, 0x71, 0x75, 0x65, 0x75, 0x65, 0x18, 0x02,
+	0x20, 0x01, 0x28, 0x09, 0x52, 0x09, 0x74, 0x61, 0x73, 0x6b, 0x51, 0x75, 0x65, 0x75, 0x65, 0x12,
+	0x52, 0x0a, 0x09, 0x75, 0x73, 0x65, 0x72, 0x5f, 0x64, 0x61, 0x74, 0x61, 0x18, 0x03, 0x20, 0x01,
+	0x28, 0x0b, 0x32, 0x35, 0x2e, 0x74, 0x65, 0x6d, 0x70, 0x6f, 0x72, 0x61, 0x6c, 0x2e, 0x73, 0x65,
+	0x72, 0x76, 0x65, 0x72, 0x2e, 0x61, 0x70, 0x69, 0x2e, 0x70, 0x65, 0x72, 0x73, 0x69, 0x73, 0x74,
+	0x65, 0x6e, 0x63, 0x65, 0x2e, 0x76, 0x31, 0x2e, 0x54, 0x61, 0x73, 0x6b, 0x51, 0x75, 0x65, 0x75,
+	0x65, 0x55, 0x73, 0x65, 0x72, 0x44, 0x61, 0x74, 0x61, 0x52, 0x08, 0x75, 0x73, 0x65, 0x72, 0x44,
+	0x61, 0x74, 0x61, 0x22, 0x24, 0x0a, 0x22, 0x52, 0x65, 0x70, 0x6c, 0x69, 0x63, 0x61, 0x74, 0x65,
+	0x54, 0x61, 0x73, 0x6b, 0x51, 0x75, 0x65, 0x75, 0x65, 0x55, 0x73, 0x65, 0x72, 0x44, 0x61, 0x74,
+	0x61, 0x52, 0x65, 0x73, 0x70, 0x6f, 0x6e, 0x73, 0x65, 0x42, 0x3e, 0x5a, 0x3c, 0x67, 0x6f, 0x2e,
+	0x74, 0x65, 0x6d, 0x70, 0x6f, 0x72, 0x61, 0x6c, 0x2e, 0x69, 0x6f, 0x2f, 0x73, 0x65, 0x72, 0x76,
+	0x65, 0x72, 0x2f, 0x61, 0x70, 0x69, 0x2f, 0x6d, 0x61, 0x74, 0x63, 0x68, 0x69, 0x6e, 0x67, 0x73,
+	0x65, 0x72, 0x76, 0x69, 0x63, 0x65, 0x2f, 0x76, 0x31, 0x3b, 0x6d, 0x61, 0x74, 0x63, 0x68, 0x69,
+	0x6e, 0x67, 0x73, 0x65, 0x72, 0x76, 0x69, 0x63, 0x65, 0x62, 0x06, 0x70, 0x72, 0x6f, 0x74, 0x6f,
+	0x33,
 }
 
 var (
@@ -3125,7 +3354,7 @@ func file_temporal_server_api_matchingservice_v1_request_response_proto_rawDescG
 	return file_temporal_server_api_matchingservice_v1_request_response_proto_rawDescData
 }
 
-var file_temporal_server_api_matchingservice_v1_request_response_proto_msgTypes = make([]protoimpl.MessageInfo, 37)
+var file_temporal_server_api_matchingservice_v1_request_response_proto_msgTypes = make([]protoimpl.MessageInfo, 41)
 var file_temporal_server_api_matchingservice_v1_request_response_proto_goTypes = []interface{}{
 	(*PollWorkflowTaskQueueRequest)(nil),                   // 0: temporal.server.api.matchingservice.v1.PollWorkflowTaskQueueRequest
 	(*PollWorkflowTaskQueueResponse)(nil),                  // 1: temporal.server.api.matchingservice.v1.PollWorkflowTaskQueueResponse
@@ -3147,123 +3376,135 @@ var file_temporal_server_api_matchingservice_v1_request_response_proto_goTypes =
 	(*ListTaskQueuePartitionsResponse)(nil),                // 17: temporal.server.api.matchingservice.v1.ListTaskQueuePartitionsResponse
 	(*UpdateWorkerBuildIdCompatibilityRequest)(nil),        // 18: temporal.server.api.matchingservice.v1.UpdateWorkerBuildIdCompatibilityRequest
 	(*UpdateWorkerBuildIdCompatibilityResponse)(nil),       // 19: temporal.server.api.matchingservice.v1.UpdateWorkerBuildIdCompatibilityResponse
-	(*GetWorkerBuildIdCompatibilityRequest)(nil),           // 20: temporal.server.api.matchingservice.v1.GetWorkerBuildIdCompatibilityRequest
-	(*GetWorkerBuildIdCompatibilityResponse)(nil),          // 21: temporal.server.api.matchingservice.v1.GetWorkerBuildIdCompatibilityResponse
-	(*GetTaskQueueUserDataRequest)(nil),                    // 22: temporal.server.api.matchingservice.v1.GetTaskQueueUserDataRequest
-	(*GetTaskQueueUserDataResponse)(nil),                   // 23: temporal.server.api.matchingservice.v1.GetTaskQueueUserDataResponse
-	(*ApplyTaskQueueUserDataReplicationEventRequest)(nil),  // 24: temporal.server.api.matchingservice.v1.ApplyTaskQueueUserDataReplicationEventRequest
-	(*ApplyTaskQueueUserDataReplicationEventResponse)(nil), // 25: temporal.server.api.matchingservice.v1.ApplyTaskQueueUserDataReplicationEventResponse
-	(*GetBuildIdTaskQueueMappingRequest)(nil),              // 26: temporal.server.api.matchingservice.v1.GetBuildIdTaskQueueMappingRequest
-	(*GetBuildIdTaskQueueMappingResponse)(nil),             // 27: temporal.server.api.matchingservice.v1.GetBuildIdTaskQueueMappingResponse
-	(*ForceUnloadTaskQueueRequest)(nil),                    // 28: temporal.server.api.matchingservice.v1.ForceUnloadTaskQueueRequest
-	(*ForceUnloadTaskQueueResponse)(nil),                   // 29: temporal.server.api.matchingservice.v1.ForceUnloadTaskQueueResponse
-	(*UpdateTaskQueueUserDataRequest)(nil),                 // 30: temporal.server.api.matchingservice.v1.UpdateTaskQueueUserDataRequest
-	(*UpdateTaskQueueUserDataResponse)(nil),                // 31: temporal.server.api.matchingservice.v1.UpdateTaskQueueUserDataResponse
-	(*ReplicateTaskQueueUserDataRequest)(nil),              // 32: temporal.server.api.matchingservice.v1.ReplicateTaskQueueUserDataRequest
-	(*ReplicateTaskQueueUserDataResponse)(nil),             // 33: temporal.server.api.matchingservice.v1.ReplicateTaskQueueUserDataResponse
-	nil, // 34: temporal.server.api.matchingservice.v1.PollWorkflowTaskQueueResponse.QueriesEntry
-	(*UpdateWorkerBuildIdCompatibilityRequest_ApplyPublicRequest)(nil), // 35: temporal.server.api.matchingservice.v1.UpdateWorkerBuildIdCompatibilityRequest.ApplyPublicRequest
-	(*UpdateWorkerBuildIdCompatibilityRequest_RemoveBuildIds)(nil),     // 36: temporal.server.api.matchingservice.v1.UpdateWorkerBuildIdCompatibilityRequest.RemoveBuildIds
-	(*v1.PollWorkflowTaskQueueRequest)(nil),                            // 37: temporal.api.workflowservice.v1.PollWorkflowTaskQueueRequest
-	(*v11.WorkflowExecution)(nil),                                      // 38: temporal.api.common.v1.WorkflowExecution
-	(*v11.WorkflowType)(nil),                                           // 39: temporal.api.common.v1.WorkflowType
-	(*v12.WorkflowQuery)(nil),                                          // 40: temporal.api.query.v1.WorkflowQuery
-	(*v13.TransientWorkflowTaskInfo)(nil),                              // 41: temporal.server.api.history.v1.TransientWorkflowTaskInfo
-	(*v14.TaskQueue)(nil),                                              // 42: temporal.api.taskqueue.v1.TaskQueue
-	(*timestamppb.Timestamp)(nil),                                      // 43: google.protobuf.Timestamp
-	(*v15.Message)(nil),                                                // 44: temporal.api.protocol.v1.Message
-	(*v16.History)(nil),                                                // 45: temporal.api.history.v1.History
-	(*v1.PollActivityTaskQueueRequest)(nil),                            // 46: temporal.api.workflowservice.v1.PollActivityTaskQueueRequest
-	(*v11.ActivityType)(nil),                                           // 47: temporal.api.common.v1.ActivityType
-	(*v11.Payloads)(nil),                                               // 48: temporal.api.common.v1.Payloads
-	(*durationpb.Duration)(nil),                                        // 49: google.protobuf.Duration
-	(*v11.Header)(nil),                                                 // 50: temporal.api.common.v1.Header
-	(v17.TaskSource)(0),                                                // 51: temporal.server.api.enums.v1.TaskSource
-	(*v18.VectorClock)(nil),                                            // 52: temporal.server.api.clock.v1.VectorClock
-	(*v19.TaskVersionDirective)(nil),                                   // 53: temporal.server.api.taskqueue.v1.TaskVersionDirective
-	(*v1.QueryWorkflowRequest)(nil),                                    // 54: temporal.api.workflowservice.v1.QueryWorkflowRequest
-	(*v12.QueryRejected)(nil),                                          // 55: temporal.api.query.v1.QueryRejected
-	(*v1.RespondQueryTaskCompletedRequest)(nil),                        // 56: temporal.api.workflowservice.v1.RespondQueryTaskCompletedRequest
-	(v110.TaskQueueType)(0),                                            // 57: temporal.api.enums.v1.TaskQueueType
-	(*v1.DescribeTaskQueueRequest)(nil),                                // 58: temporal.api.workflowservice.v1.DescribeTaskQueueRequest
-	(*v14.PollerInfo)(nil),                                             // 59: temporal.api.taskqueue.v1.PollerInfo
-	(*v14.TaskQueueStatus)(nil),                                        // 60: temporal.api.taskqueue.v1.TaskQueueStatus
-	(*v14.TaskQueuePartitionMetadata)(nil),                             // 61: temporal.api.taskqueue.v1.TaskQueuePartitionMetadata
-	(*v1.GetWorkerBuildIdCompatibilityRequest)(nil),                    // 62: temporal.api.workflowservice.v1.GetWorkerBuildIdCompatibilityRequest
-	(*v1.GetWorkerBuildIdCompatibilityResponse)(nil),                   // 63: temporal.api.workflowservice.v1.GetWorkerBuildIdCompatibilityResponse
-	(*v111.VersionedTaskQueueUserData)(nil),                            // 64: temporal.server.api.persistence.v1.VersionedTaskQueueUserData
-	(*v111.TaskQueueUserData)(nil),                                     // 65: temporal.server.api.persistence.v1.TaskQueueUserData
-	(*v1.UpdateWorkerBuildIdCompatibilityRequest)(nil),                 // 66: temporal.api.workflowservice.v1.UpdateWorkerBuildIdCompatibilityRequest
+	(*ListWorkerVersioningRulesRequest)(nil),               // 20: temporal.server.api.matchingservice.v1.ListWorkerVersioningRulesRequest
+	(*ListWorkerVersioningRulesResponse)(nil),              // 21: temporal.server.api.matchingservice.v1.ListWorkerVersioningRulesResponse
+	(*UpdateWorkerVersioningRulesRequest)(nil),             // 22: temporal.server.api.matchingservice.v1.UpdateWorkerVersioningRulesRequest
+	(*UpdateWorkerVersioningRulesResponse)(nil),            // 23: temporal.server.api.matchingservice.v1.UpdateWorkerVersioningRulesResponse
+	(*GetWorkerBuildIdCompatibilityRequest)(nil),           // 24: temporal.server.api.matchingservice.v1.GetWorkerBuildIdCompatibilityRequest
+	(*GetWorkerBuildIdCompatibilityResponse)(nil),          // 25: temporal.server.api.matchingservice.v1.GetWorkerBuildIdCompatibilityResponse
+	(*GetTaskQueueUserDataRequest)(nil),                    // 26: temporal.server.api.matchingservice.v1.GetTaskQueueUserDataRequest
+	(*GetTaskQueueUserDataResponse)(nil),                   // 27: temporal.server.api.matchingservice.v1.GetTaskQueueUserDataResponse
+	(*ApplyTaskQueueUserDataReplicationEventRequest)(nil),  // 28: temporal.server.api.matchingservice.v1.ApplyTaskQueueUserDataReplicationEventRequest
+	(*ApplyTaskQueueUserDataReplicationEventResponse)(nil), // 29: temporal.server.api.matchingservice.v1.ApplyTaskQueueUserDataReplicationEventResponse
+	(*GetBuildIdTaskQueueMappingRequest)(nil),              // 30: temporal.server.api.matchingservice.v1.GetBuildIdTaskQueueMappingRequest
+	(*GetBuildIdTaskQueueMappingResponse)(nil),             // 31: temporal.server.api.matchingservice.v1.GetBuildIdTaskQueueMappingResponse
+	(*ForceUnloadTaskQueueRequest)(nil),                    // 32: temporal.server.api.matchingservice.v1.ForceUnloadTaskQueueRequest
+	(*ForceUnloadTaskQueueResponse)(nil),                   // 33: temporal.server.api.matchingservice.v1.ForceUnloadTaskQueueResponse
+	(*UpdateTaskQueueUserDataRequest)(nil),                 // 34: temporal.server.api.matchingservice.v1.UpdateTaskQueueUserDataRequest
+	(*UpdateTaskQueueUserDataResponse)(nil),                // 35: temporal.server.api.matchingservice.v1.UpdateTaskQueueUserDataResponse
+	(*ReplicateTaskQueueUserDataRequest)(nil),              // 36: temporal.server.api.matchingservice.v1.ReplicateTaskQueueUserDataRequest
+	(*ReplicateTaskQueueUserDataResponse)(nil),             // 37: temporal.server.api.matchingservice.v1.ReplicateTaskQueueUserDataResponse
+	nil, // 38: temporal.server.api.matchingservice.v1.PollWorkflowTaskQueueResponse.QueriesEntry
+	(*UpdateWorkerBuildIdCompatibilityRequest_ApplyPublicRequest)(nil), // 39: temporal.server.api.matchingservice.v1.UpdateWorkerBuildIdCompatibilityRequest.ApplyPublicRequest
+	(*UpdateWorkerBuildIdCompatibilityRequest_RemoveBuildIds)(nil),     // 40: temporal.server.api.matchingservice.v1.UpdateWorkerBuildIdCompatibilityRequest.RemoveBuildIds
+	(*v1.PollWorkflowTaskQueueRequest)(nil),                            // 41: temporal.api.workflowservice.v1.PollWorkflowTaskQueueRequest
+	(*v11.WorkflowExecution)(nil),                                      // 42: temporal.api.common.v1.WorkflowExecution
+	(*v11.WorkflowType)(nil),                                           // 43: temporal.api.common.v1.WorkflowType
+	(*v12.WorkflowQuery)(nil),                                          // 44: temporal.api.query.v1.WorkflowQuery
+	(*v13.TransientWorkflowTaskInfo)(nil),                              // 45: temporal.server.api.history.v1.TransientWorkflowTaskInfo
+	(*v14.TaskQueue)(nil),                                              // 46: temporal.api.taskqueue.v1.TaskQueue
+	(*timestamppb.Timestamp)(nil),                                      // 47: google.protobuf.Timestamp
+	(*v15.Message)(nil),                                                // 48: temporal.api.protocol.v1.Message
+	(*v16.History)(nil),                                                // 49: temporal.api.history.v1.History
+	(*v1.PollActivityTaskQueueRequest)(nil),                            // 50: temporal.api.workflowservice.v1.PollActivityTaskQueueRequest
+	(*v11.ActivityType)(nil),                                           // 51: temporal.api.common.v1.ActivityType
+	(*v11.Payloads)(nil),                                               // 52: temporal.api.common.v1.Payloads
+	(*durationpb.Duration)(nil),                                        // 53: google.protobuf.Duration
+	(*v11.Header)(nil),                                                 // 54: temporal.api.common.v1.Header
+	(v17.TaskSource)(0),                                                // 55: temporal.server.api.enums.v1.TaskSource
+	(*v18.VectorClock)(nil),                                            // 56: temporal.server.api.clock.v1.VectorClock
+	(*v19.TaskVersionDirective)(nil),                                   // 57: temporal.server.api.taskqueue.v1.TaskVersionDirective
+	(*v1.QueryWorkflowRequest)(nil),                                    // 58: temporal.api.workflowservice.v1.QueryWorkflowRequest
+	(*v12.QueryRejected)(nil),                                          // 59: temporal.api.query.v1.QueryRejected
+	(*v1.RespondQueryTaskCompletedRequest)(nil),                        // 60: temporal.api.workflowservice.v1.RespondQueryTaskCompletedRequest
+	(v110.TaskQueueType)(0),                                            // 61: temporal.api.enums.v1.TaskQueueType
+	(*v1.DescribeTaskQueueRequest)(nil),                                // 62: temporal.api.workflowservice.v1.DescribeTaskQueueRequest
+	(*v14.PollerInfo)(nil),                                             // 63: temporal.api.taskqueue.v1.PollerInfo
+	(*v14.TaskQueueStatus)(nil),                                        // 64: temporal.api.taskqueue.v1.TaskQueueStatus
+	(*v14.TaskQueuePartitionMetadata)(nil),                             // 65: temporal.api.taskqueue.v1.TaskQueuePartitionMetadata
+	(*v1.ListWorkerVersioningRulesRequest)(nil),                        // 66: temporal.api.workflowservice.v1.ListWorkerVersioningRulesRequest
+	(*v1.ListWorkerVersioningRulesResponse)(nil),                       // 67: temporal.api.workflowservice.v1.ListWorkerVersioningRulesResponse
+	(*v1.UpdateWorkerVersioningRulesRequest)(nil),                      // 68: temporal.api.workflowservice.v1.UpdateWorkerVersioningRulesRequest
+	(*v1.UpdateWorkerVersioningRulesResponse)(nil),                     // 69: temporal.api.workflowservice.v1.UpdateWorkerVersioningRulesResponse
+	(*v1.GetWorkerBuildIdCompatibilityRequest)(nil),                    // 70: temporal.api.workflowservice.v1.GetWorkerBuildIdCompatibilityRequest
+	(*v1.GetWorkerBuildIdCompatibilityResponse)(nil),                   // 71: temporal.api.workflowservice.v1.GetWorkerBuildIdCompatibilityResponse
+	(*v111.VersionedTaskQueueUserData)(nil),                            // 72: temporal.server.api.persistence.v1.VersionedTaskQueueUserData
+	(*v111.TaskQueueUserData)(nil),                                     // 73: temporal.server.api.persistence.v1.TaskQueueUserData
+	(*v1.UpdateWorkerBuildIdCompatibilityRequest)(nil),                 // 74: temporal.api.workflowservice.v1.UpdateWorkerBuildIdCompatibilityRequest
 }
 var file_temporal_server_api_matchingservice_v1_request_response_proto_depIdxs = []int32{
-	37, // 0: temporal.server.api.matchingservice.v1.PollWorkflowTaskQueueRequest.poll_request:type_name -> temporal.api.workflowservice.v1.PollWorkflowTaskQueueRequest
-	38, // 1: temporal.server.api.matchingservice.v1.PollWorkflowTaskQueueResponse.workflow_execution:type_name -> temporal.api.common.v1.WorkflowExecution
-	39, // 2: temporal.server.api.matchingservice.v1.PollWorkflowTaskQueueResponse.workflow_type:type_name -> temporal.api.common.v1.WorkflowType
-	40, // 3: temporal.server.api.matchingservice.v1.PollWorkflowTaskQueueResponse.query:type_name -> temporal.api.query.v1.WorkflowQuery
-	41, // 4: temporal.server.api.matchingservice.v1.PollWorkflowTaskQueueResponse.transient_workflow_task:type_name -> temporal.server.api.history.v1.TransientWorkflowTaskInfo
-	42, // 5: temporal.server.api.matchingservice.v1.PollWorkflowTaskQueueResponse.workflow_execution_task_queue:type_name -> temporal.api.taskqueue.v1.TaskQueue
-	43, // 6: temporal.server.api.matchingservice.v1.PollWorkflowTaskQueueResponse.scheduled_time:type_name -> google.protobuf.Timestamp
-	43, // 7: temporal.server.api.matchingservice.v1.PollWorkflowTaskQueueResponse.started_time:type_name -> google.protobuf.Timestamp
-	34, // 8: temporal.server.api.matchingservice.v1.PollWorkflowTaskQueueResponse.queries:type_name -> temporal.server.api.matchingservice.v1.PollWorkflowTaskQueueResponse.QueriesEntry
-	44, // 9: temporal.server.api.matchingservice.v1.PollWorkflowTaskQueueResponse.messages:type_name -> temporal.api.protocol.v1.Message
-	45, // 10: temporal.server.api.matchingservice.v1.PollWorkflowTaskQueueResponse.history:type_name -> temporal.api.history.v1.History
-	46, // 11: temporal.server.api.matchingservice.v1.PollActivityTaskQueueRequest.poll_request:type_name -> temporal.api.workflowservice.v1.PollActivityTaskQueueRequest
-	38, // 12: temporal.server.api.matchingservice.v1.PollActivityTaskQueueResponse.workflow_execution:type_name -> temporal.api.common.v1.WorkflowExecution
-	47, // 13: temporal.server.api.matchingservice.v1.PollActivityTaskQueueResponse.activity_type:type_name -> temporal.api.common.v1.ActivityType
-	48, // 14: temporal.server.api.matchingservice.v1.PollActivityTaskQueueResponse.input:type_name -> temporal.api.common.v1.Payloads
-	43, // 15: temporal.server.api.matchingservice.v1.PollActivityTaskQueueResponse.scheduled_time:type_name -> google.protobuf.Timestamp
-	49, // 16: temporal.server.api.matchingservice.v1.PollActivityTaskQueueResponse.schedule_to_close_timeout:type_name -> google.protobuf.Duration
-	43, // 17: temporal.server.api.matchingservice.v1.PollActivityTaskQueueResponse.started_time:type_name -> google.protobuf.Timestamp
-	49, // 18: temporal.server.api.matchingservice.v1.PollActivityTaskQueueResponse.start_to_close_timeout:type_name -> google.protobuf.Duration
-	49, // 19: temporal.server.api.matchingservice.v1.PollActivityTaskQueueResponse.heartbeat_timeout:type_name -> google.protobuf.Duration
-	43, // 20: temporal.server.api.matchingservice.v1.PollActivityTaskQueueResponse.current_attempt_scheduled_time:type_name -> google.protobuf.Timestamp
-	48, // 21: temporal.server.api.matchingservice.v1.PollActivityTaskQueueResponse.heartbeat_details:type_name -> temporal.api.common.v1.Payloads
-	39, // 22: temporal.server.api.matchingservice.v1.PollActivityTaskQueueResponse.workflow_type:type_name -> temporal.api.common.v1.WorkflowType
-	50, // 23: temporal.server.api.matchingservice.v1.PollActivityTaskQueueResponse.header:type_name -> temporal.api.common.v1.Header
-	38, // 24: temporal.server.api.matchingservice.v1.AddWorkflowTaskRequest.execution:type_name -> temporal.api.common.v1.WorkflowExecution
-	42, // 25: temporal.server.api.matchingservice.v1.AddWorkflowTaskRequest.task_queue:type_name -> temporal.api.taskqueue.v1.TaskQueue
-	49, // 26: temporal.server.api.matchingservice.v1.AddWorkflowTaskRequest.schedule_to_start_timeout:type_name -> google.protobuf.Duration
-	51, // 27: temporal.server.api.matchingservice.v1.AddWorkflowTaskRequest.source:type_name -> temporal.server.api.enums.v1.TaskSource
-	52, // 28: temporal.server.api.matchingservice.v1.AddWorkflowTaskRequest.clock:type_name -> temporal.server.api.clock.v1.VectorClock
-	53, // 29: temporal.server.api.matchingservice.v1.AddWorkflowTaskRequest.version_directive:type_name -> temporal.server.api.taskqueue.v1.TaskVersionDirective
-	38, // 30: temporal.server.api.matchingservice.v1.AddActivityTaskRequest.execution:type_name -> temporal.api.common.v1.WorkflowExecution
-	42, // 31: temporal.server.api.matchingservice.v1.AddActivityTaskRequest.task_queue:type_name -> temporal.api.taskqueue.v1.TaskQueue
-	49, // 32: temporal.server.api.matchingservice.v1.AddActivityTaskRequest.schedule_to_start_timeout:type_name -> google.protobuf.Duration
-	51, // 33: temporal.server.api.matchingservice.v1.AddActivityTaskRequest.source:type_name -> temporal.server.api.enums.v1.TaskSource
-	52, // 34: temporal.server.api.matchingservice.v1.AddActivityTaskRequest.clock:type_name -> temporal.server.api.clock.v1.VectorClock
-	53, // 35: temporal.server.api.matchingservice.v1.AddActivityTaskRequest.version_directive:type_name -> temporal.server.api.taskqueue.v1.TaskVersionDirective
-	42, // 36: temporal.server.api.matchingservice.v1.QueryWorkflowRequest.task_queue:type_name -> temporal.api.taskqueue.v1.TaskQueue
-	54, // 37: temporal.server.api.matchingservice.v1.QueryWorkflowRequest.query_request:type_name -> temporal.api.workflowservice.v1.QueryWorkflowRequest
-	53, // 38: temporal.server.api.matchingservice.v1.QueryWorkflowRequest.version_directive:type_name -> temporal.server.api.taskqueue.v1.TaskVersionDirective
-	48, // 39: temporal.server.api.matchingservice.v1.QueryWorkflowResponse.query_result:type_name -> temporal.api.common.v1.Payloads
-	55, // 40: temporal.server.api.matchingservice.v1.QueryWorkflowResponse.query_rejected:type_name -> temporal.api.query.v1.QueryRejected
-	42, // 41: temporal.server.api.matchingservice.v1.RespondQueryTaskCompletedRequest.task_queue:type_name -> temporal.api.taskqueue.v1.TaskQueue
-	56, // 42: temporal.server.api.matchingservice.v1.RespondQueryTaskCompletedRequest.completed_request:type_name -> temporal.api.workflowservice.v1.RespondQueryTaskCompletedRequest
-	57, // 43: temporal.server.api.matchingservice.v1.CancelOutstandingPollRequest.task_queue_type:type_name -> temporal.api.enums.v1.TaskQueueType
-	42, // 44: temporal.server.api.matchingservice.v1.CancelOutstandingPollRequest.task_queue:type_name -> temporal.api.taskqueue.v1.TaskQueue
-	58, // 45: temporal.server.api.matchingservice.v1.DescribeTaskQueueRequest.desc_request:type_name -> temporal.api.workflowservice.v1.DescribeTaskQueueRequest
-	59, // 46: temporal.server.api.matchingservice.v1.DescribeTaskQueueResponse.pollers:type_name -> temporal.api.taskqueue.v1.PollerInfo
-	60, // 47: temporal.server.api.matchingservice.v1.DescribeTaskQueueResponse.task_queue_status:type_name -> temporal.api.taskqueue.v1.TaskQueueStatus
-	42, // 48: temporal.server.api.matchingservice.v1.ListTaskQueuePartitionsRequest.task_queue:type_name -> temporal.api.taskqueue.v1.TaskQueue
-	61, // 49: temporal.server.api.matchingservice.v1.ListTaskQueuePartitionsResponse.activity_task_queue_partitions:type_name -> temporal.api.taskqueue.v1.TaskQueuePartitionMetadata
-	61, // 50: temporal.server.api.matchingservice.v1.ListTaskQueuePartitionsResponse.workflow_task_queue_partitions:type_name -> temporal.api.taskqueue.v1.TaskQueuePartitionMetadata
-	35, // 51: temporal.server.api.matchingservice.v1.UpdateWorkerBuildIdCompatibilityRequest.apply_public_request:type_name -> temporal.server.api.matchingservice.v1.UpdateWorkerBuildIdCompatibilityRequest.ApplyPublicRequest
-	36, // 52: temporal.server.api.matchingservice.v1.UpdateWorkerBuildIdCompatibilityRequest.remove_build_ids:type_name -> temporal.server.api.matchingservice.v1.UpdateWorkerBuildIdCompatibilityRequest.RemoveBuildIds
-	62, // 53: temporal.server.api.matchingservice.v1.GetWorkerBuildIdCompatibilityRequest.request:type_name -> temporal.api.workflowservice.v1.GetWorkerBuildIdCompatibilityRequest
-	63, // 54: temporal.server.api.matchingservice.v1.GetWorkerBuildIdCompatibilityResponse.response:type_name -> temporal.api.workflowservice.v1.GetWorkerBuildIdCompatibilityResponse
-	57, // 55: temporal.server.api.matchingservice.v1.GetTaskQueueUserDataRequest.task_queue_type:type_name -> temporal.api.enums.v1.TaskQueueType
-	64, // 56: temporal.server.api.matchingservice.v1.GetTaskQueueUserDataResponse.user_data:type_name -> temporal.server.api.persistence.v1.VersionedTaskQueueUserData
-	65, // 57: temporal.server.api.matchingservice.v1.ApplyTaskQueueUserDataReplicationEventRequest.user_data:type_name -> temporal.server.api.persistence.v1.TaskQueueUserData
-	57, // 58: temporal.server.api.matchingservice.v1.ForceUnloadTaskQueueRequest.task_queue_type:type_name -> temporal.api.enums.v1.TaskQueueType
-	64, // 59: temporal.server.api.matchingservice.v1.UpdateTaskQueueUserDataRequest.user_data:type_name -> temporal.server.api.persistence.v1.VersionedTaskQueueUserData
-	65, // 60: temporal.server.api.matchingservice.v1.ReplicateTaskQueueUserDataRequest.user_data:type_name -> temporal.server.api.persistence.v1.TaskQueueUserData
-	40, // 61: temporal.server.api.matchingservice.v1.PollWorkflowTaskQueueResponse.QueriesEntry.value:type_name -> temporal.api.query.v1.WorkflowQuery
-	66, // 62: temporal.server.api.matchingservice.v1.UpdateWorkerBuildIdCompatibilityRequest.ApplyPublicRequest.request:type_name -> temporal.api.workflowservice.v1.UpdateWorkerBuildIdCompatibilityRequest
-	63, // [63:63] is the sub-list for method output_type
-	63, // [63:63] is the sub-list for method input_type
-	63, // [63:63] is the sub-list for extension type_name
-	63, // [63:63] is the sub-list for extension extendee
-	0,  // [0:63] is the sub-list for field type_name
+	41, // 0: temporal.server.api.matchingservice.v1.PollWorkflowTaskQueueRequest.poll_request:type_name -> temporal.api.workflowservice.v1.PollWorkflowTaskQueueRequest
+	42, // 1: temporal.server.api.matchingservice.v1.PollWorkflowTaskQueueResponse.workflow_execution:type_name -> temporal.api.common.v1.WorkflowExecution
+	43, // 2: temporal.server.api.matchingservice.v1.PollWorkflowTaskQueueResponse.workflow_type:type_name -> temporal.api.common.v1.WorkflowType
+	44, // 3: temporal.server.api.matchingservice.v1.PollWorkflowTaskQueueResponse.query:type_name -> temporal.api.query.v1.WorkflowQuery
+	45, // 4: temporal.server.api.matchingservice.v1.PollWorkflowTaskQueueResponse.transient_workflow_task:type_name -> temporal.server.api.history.v1.TransientWorkflowTaskInfo
+	46, // 5: temporal.server.api.matchingservice.v1.PollWorkflowTaskQueueResponse.workflow_execution_task_queue:type_name -> temporal.api.taskqueue.v1.TaskQueue
+	47, // 6: temporal.server.api.matchingservice.v1.PollWorkflowTaskQueueResponse.scheduled_time:type_name -> google.protobuf.Timestamp
+	47, // 7: temporal.server.api.matchingservice.v1.PollWorkflowTaskQueueResponse.started_time:type_name -> google.protobuf.Timestamp
+	38, // 8: temporal.server.api.matchingservice.v1.PollWorkflowTaskQueueResponse.queries:type_name -> temporal.server.api.matchingservice.v1.PollWorkflowTaskQueueResponse.QueriesEntry
+	48, // 9: temporal.server.api.matchingservice.v1.PollWorkflowTaskQueueResponse.messages:type_name -> temporal.api.protocol.v1.Message
+	49, // 10: temporal.server.api.matchingservice.v1.PollWorkflowTaskQueueResponse.history:type_name -> temporal.api.history.v1.History
+	50, // 11: temporal.server.api.matchingservice.v1.PollActivityTaskQueueRequest.poll_request:type_name -> temporal.api.workflowservice.v1.PollActivityTaskQueueRequest
+	42, // 12: temporal.server.api.matchingservice.v1.PollActivityTaskQueueResponse.workflow_execution:type_name -> temporal.api.common.v1.WorkflowExecution
+	51, // 13: temporal.server.api.matchingservice.v1.PollActivityTaskQueueResponse.activity_type:type_name -> temporal.api.common.v1.ActivityType
+	52, // 14: temporal.server.api.matchingservice.v1.PollActivityTaskQueueResponse.input:type_name -> temporal.api.common.v1.Payloads
+	47, // 15: temporal.server.api.matchingservice.v1.PollActivityTaskQueueResponse.scheduled_time:type_name -> google.protobuf.Timestamp
+	53, // 16: temporal.server.api.matchingservice.v1.PollActivityTaskQueueResponse.schedule_to_close_timeout:type_name -> google.protobuf.Duration
+	47, // 17: temporal.server.api.matchingservice.v1.PollActivityTaskQueueResponse.started_time:type_name -> google.protobuf.Timestamp
+	53, // 18: temporal.server.api.matchingservice.v1.PollActivityTaskQueueResponse.start_to_close_timeout:type_name -> google.protobuf.Duration
+	53, // 19: temporal.server.api.matchingservice.v1.PollActivityTaskQueueResponse.heartbeat_timeout:type_name -> google.protobuf.Duration
+	47, // 20: temporal.server.api.matchingservice.v1.PollActivityTaskQueueResponse.current_attempt_scheduled_time:type_name -> google.protobuf.Timestamp
+	52, // 21: temporal.server.api.matchingservice.v1.PollActivityTaskQueueResponse.heartbeat_details:type_name -> temporal.api.common.v1.Payloads
+	43, // 22: temporal.server.api.matchingservice.v1.PollActivityTaskQueueResponse.workflow_type:type_name -> temporal.api.common.v1.WorkflowType
+	54, // 23: temporal.server.api.matchingservice.v1.PollActivityTaskQueueResponse.header:type_name -> temporal.api.common.v1.Header
+	42, // 24: temporal.server.api.matchingservice.v1.AddWorkflowTaskRequest.execution:type_name -> temporal.api.common.v1.WorkflowExecution
+	46, // 25: temporal.server.api.matchingservice.v1.AddWorkflowTaskRequest.task_queue:type_name -> temporal.api.taskqueue.v1.TaskQueue
+	53, // 26: temporal.server.api.matchingservice.v1.AddWorkflowTaskRequest.schedule_to_start_timeout:type_name -> google.protobuf.Duration
+	55, // 27: temporal.server.api.matchingservice.v1.AddWorkflowTaskRequest.source:type_name -> temporal.server.api.enums.v1.TaskSource
+	56, // 28: temporal.server.api.matchingservice.v1.AddWorkflowTaskRequest.clock:type_name -> temporal.server.api.clock.v1.VectorClock
+	57, // 29: temporal.server.api.matchingservice.v1.AddWorkflowTaskRequest.version_directive:type_name -> temporal.server.api.taskqueue.v1.TaskVersionDirective
+	42, // 30: temporal.server.api.matchingservice.v1.AddActivityTaskRequest.execution:type_name -> temporal.api.common.v1.WorkflowExecution
+	46, // 31: temporal.server.api.matchingservice.v1.AddActivityTaskRequest.task_queue:type_name -> temporal.api.taskqueue.v1.TaskQueue
+	53, // 32: temporal.server.api.matchingservice.v1.AddActivityTaskRequest.schedule_to_start_timeout:type_name -> google.protobuf.Duration
+	55, // 33: temporal.server.api.matchingservice.v1.AddActivityTaskRequest.source:type_name -> temporal.server.api.enums.v1.TaskSource
+	56, // 34: temporal.server.api.matchingservice.v1.AddActivityTaskRequest.clock:type_name -> temporal.server.api.clock.v1.VectorClock
+	57, // 35: temporal.server.api.matchingservice.v1.AddActivityTaskRequest.version_directive:type_name -> temporal.server.api.taskqueue.v1.TaskVersionDirective
+	46, // 36: temporal.server.api.matchingservice.v1.QueryWorkflowRequest.task_queue:type_name -> temporal.api.taskqueue.v1.TaskQueue
+	58, // 37: temporal.server.api.matchingservice.v1.QueryWorkflowRequest.query_request:type_name -> temporal.api.workflowservice.v1.QueryWorkflowRequest
+	57, // 38: temporal.server.api.matchingservice.v1.QueryWorkflowRequest.version_directive:type_name -> temporal.server.api.taskqueue.v1.TaskVersionDirective
+	52, // 39: temporal.server.api.matchingservice.v1.QueryWorkflowResponse.query_result:type_name -> temporal.api.common.v1.Payloads
+	59, // 40: temporal.server.api.matchingservice.v1.QueryWorkflowResponse.query_rejected:type_name -> temporal.api.query.v1.QueryRejected
+	46, // 41: temporal.server.api.matchingservice.v1.RespondQueryTaskCompletedRequest.task_queue:type_name -> temporal.api.taskqueue.v1.TaskQueue
+	60, // 42: temporal.server.api.matchingservice.v1.RespondQueryTaskCompletedRequest.completed_request:type_name -> temporal.api.workflowservice.v1.RespondQueryTaskCompletedRequest
+	61, // 43: temporal.server.api.matchingservice.v1.CancelOutstandingPollRequest.task_queue_type:type_name -> temporal.api.enums.v1.TaskQueueType
+	46, // 44: temporal.server.api.matchingservice.v1.CancelOutstandingPollRequest.task_queue:type_name -> temporal.api.taskqueue.v1.TaskQueue
+	62, // 45: temporal.server.api.matchingservice.v1.DescribeTaskQueueRequest.desc_request:type_name -> temporal.api.workflowservice.v1.DescribeTaskQueueRequest
+	63, // 46: temporal.server.api.matchingservice.v1.DescribeTaskQueueResponse.pollers:type_name -> temporal.api.taskqueue.v1.PollerInfo
+	64, // 47: temporal.server.api.matchingservice.v1.DescribeTaskQueueResponse.task_queue_status:type_name -> temporal.api.taskqueue.v1.TaskQueueStatus
+	46, // 48: temporal.server.api.matchingservice.v1.ListTaskQueuePartitionsRequest.task_queue:type_name -> temporal.api.taskqueue.v1.TaskQueue
+	65, // 49: temporal.server.api.matchingservice.v1.ListTaskQueuePartitionsResponse.activity_task_queue_partitions:type_name -> temporal.api.taskqueue.v1.TaskQueuePartitionMetadata
+	65, // 50: temporal.server.api.matchingservice.v1.ListTaskQueuePartitionsResponse.workflow_task_queue_partitions:type_name -> temporal.api.taskqueue.v1.TaskQueuePartitionMetadata
+	39, // 51: temporal.server.api.matchingservice.v1.UpdateWorkerBuildIdCompatibilityRequest.apply_public_request:type_name -> temporal.server.api.matchingservice.v1.UpdateWorkerBuildIdCompatibilityRequest.ApplyPublicRequest
+	40, // 52: temporal.server.api.matchingservice.v1.UpdateWorkerBuildIdCompatibilityRequest.remove_build_ids:type_name -> temporal.server.api.matchingservice.v1.UpdateWorkerBuildIdCompatibilityRequest.RemoveBuildIds
+	66, // 53: temporal.server.api.matchingservice.v1.ListWorkerVersioningRulesRequest.request:type_name -> temporal.api.workflowservice.v1.ListWorkerVersioningRulesRequest
+	67, // 54: temporal.server.api.matchingservice.v1.ListWorkerVersioningRulesResponse.response:type_name -> temporal.api.workflowservice.v1.ListWorkerVersioningRulesResponse
+	68, // 55: temporal.server.api.matchingservice.v1.UpdateWorkerVersioningRulesRequest.request:type_name -> temporal.api.workflowservice.v1.UpdateWorkerVersioningRulesRequest
+	69, // 56: temporal.server.api.matchingservice.v1.UpdateWorkerVersioningRulesResponse.response:type_name -> temporal.api.workflowservice.v1.UpdateWorkerVersioningRulesResponse
+	70, // 57: temporal.server.api.matchingservice.v1.GetWorkerBuildIdCompatibilityRequest.request:type_name -> temporal.api.workflowservice.v1.GetWorkerBuildIdCompatibilityRequest
+	71, // 58: temporal.server.api.matchingservice.v1.GetWorkerBuildIdCompatibilityResponse.response:type_name -> temporal.api.workflowservice.v1.GetWorkerBuildIdCompatibilityResponse
+	61, // 59: temporal.server.api.matchingservice.v1.GetTaskQueueUserDataRequest.task_queue_type:type_name -> temporal.api.enums.v1.TaskQueueType
+	72, // 60: temporal.server.api.matchingservice.v1.GetTaskQueueUserDataResponse.user_data:type_name -> temporal.server.api.persistence.v1.VersionedTaskQueueUserData
+	73, // 61: temporal.server.api.matchingservice.v1.ApplyTaskQueueUserDataReplicationEventRequest.user_data:type_name -> temporal.server.api.persistence.v1.TaskQueueUserData
+	61, // 62: temporal.server.api.matchingservice.v1.ForceUnloadTaskQueueRequest.task_queue_type:type_name -> temporal.api.enums.v1.TaskQueueType
+	72, // 63: temporal.server.api.matchingservice.v1.UpdateTaskQueueUserDataRequest.user_data:type_name -> temporal.server.api.persistence.v1.VersionedTaskQueueUserData
+	73, // 64: temporal.server.api.matchingservice.v1.ReplicateTaskQueueUserDataRequest.user_data:type_name -> temporal.server.api.persistence.v1.TaskQueueUserData
+	44, // 65: temporal.server.api.matchingservice.v1.PollWorkflowTaskQueueResponse.QueriesEntry.value:type_name -> temporal.api.query.v1.WorkflowQuery
+	74, // 66: temporal.server.api.matchingservice.v1.UpdateWorkerBuildIdCompatibilityRequest.ApplyPublicRequest.request:type_name -> temporal.api.workflowservice.v1.UpdateWorkerBuildIdCompatibilityRequest
+	67, // [67:67] is the sub-list for method output_type
+	67, // [67:67] is the sub-list for method input_type
+	67, // [67:67] is the sub-list for extension type_name
+	67, // [67:67] is the sub-list for extension extendee
+	0,  // [0:67] is the sub-list for field type_name
 }
 
 func init() { file_temporal_server_api_matchingservice_v1_request_response_proto_init() }
@@ -3513,7 +3754,7 @@ func file_temporal_server_api_matchingservice_v1_request_response_proto_init() {
 			}
 		}
 		file_temporal_server_api_matchingservice_v1_request_response_proto_msgTypes[20].Exporter = func(v interface{}, i int) interface{} {
-			switch v := v.(*GetWorkerBuildIdCompatibilityRequest); i {
+			switch v := v.(*ListWorkerVersioningRulesRequest); i {
 			case 0:
 				return &v.state
 			case 1:
@@ -3525,7 +3766,7 @@ func file_temporal_server_api_matchingservice_v1_request_response_proto_init() {
 			}
 		}
 		file_temporal_server_api_matchingservice_v1_request_response_proto_msgTypes[21].Exporter = func(v interface{}, i int) interface{} {
-			switch v := v.(*GetWorkerBuildIdCompatibilityResponse); i {
+			switch v := v.(*ListWorkerVersioningRulesResponse); i {
 			case 0:
 				return &v.state
 			case 1:
@@ -3537,7 +3778,7 @@ func file_temporal_server_api_matchingservice_v1_request_response_proto_init() {
 			}
 		}
 		file_temporal_server_api_matchingservice_v1_request_response_proto_msgTypes[22].Exporter = func(v interface{}, i int) interface{} {
-			switch v := v.(*GetTaskQueueUserDataRequest); i {
+			switch v := v.(*UpdateWorkerVersioningRulesRequest); i {
 			case 0:
 				return &v.state
 			case 1:
@@ -3549,7 +3790,7 @@ func file_temporal_server_api_matchingservice_v1_request_response_proto_init() {
 			}
 		}
 		file_temporal_server_api_matchingservice_v1_request_response_proto_msgTypes[23].Exporter = func(v interface{}, i int) interface{} {
-			switch v := v.(*GetTaskQueueUserDataResponse); i {
+			switch v := v.(*UpdateWorkerVersioningRulesResponse); i {
 			case 0:
 				return &v.state
 			case 1:
@@ -3561,7 +3802,7 @@ func file_temporal_server_api_matchingservice_v1_request_response_proto_init() {
 			}
 		}
 		file_temporal_server_api_matchingservice_v1_request_response_proto_msgTypes[24].Exporter = func(v interface{}, i int) interface{} {
-			switch v := v.(*ApplyTaskQueueUserDataReplicationEventRequest); i {
+			switch v := v.(*GetWorkerBuildIdCompatibilityRequest); i {
 			case 0:
 				return &v.state
 			case 1:
@@ -3573,7 +3814,7 @@ func file_temporal_server_api_matchingservice_v1_request_response_proto_init() {
 			}
 		}
 		file_temporal_server_api_matchingservice_v1_request_response_proto_msgTypes[25].Exporter = func(v interface{}, i int) interface{} {
-			switch v := v.(*ApplyTaskQueueUserDataReplicationEventResponse); i {
+			switch v := v.(*GetWorkerBuildIdCompatibilityResponse); i {
 			case 0:
 				return &v.state
 			case 1:
@@ -3585,7 +3826,7 @@ func file_temporal_server_api_matchingservice_v1_request_response_proto_init() {
 			}
 		}
 		file_temporal_server_api_matchingservice_v1_request_response_proto_msgTypes[26].Exporter = func(v interface{}, i int) interface{} {
-			switch v := v.(*GetBuildIdTaskQueueMappingRequest); i {
+			switch v := v.(*GetTaskQueueUserDataRequest); i {
 			case 0:
 				return &v.state
 			case 1:
@@ -3597,7 +3838,7 @@ func file_temporal_server_api_matchingservice_v1_request_response_proto_init() {
 			}
 		}
 		file_temporal_server_api_matchingservice_v1_request_response_proto_msgTypes[27].Exporter = func(v interface{}, i int) interface{} {
-			switch v := v.(*GetBuildIdTaskQueueMappingResponse); i {
+			switch v := v.(*GetTaskQueueUserDataResponse); i {
 			case 0:
 				return &v.state
 			case 1:
@@ -3609,7 +3850,7 @@ func file_temporal_server_api_matchingservice_v1_request_response_proto_init() {
 			}
 		}
 		file_temporal_server_api_matchingservice_v1_request_response_proto_msgTypes[28].Exporter = func(v interface{}, i int) interface{} {
-			switch v := v.(*ForceUnloadTaskQueueRequest); i {
+			switch v := v.(*ApplyTaskQueueUserDataReplicationEventRequest); i {
 			case 0:
 				return &v.state
 			case 1:
@@ -3621,7 +3862,7 @@ func file_temporal_server_api_matchingservice_v1_request_response_proto_init() {
 			}
 		}
 		file_temporal_server_api_matchingservice_v1_request_response_proto_msgTypes[29].Exporter = func(v interface{}, i int) interface{} {
-			switch v := v.(*ForceUnloadTaskQueueResponse); i {
+			switch v := v.(*ApplyTaskQueueUserDataReplicationEventResponse); i {
 			case 0:
 				return &v.state
 			case 1:
@@ -3633,7 +3874,7 @@ func file_temporal_server_api_matchingservice_v1_request_response_proto_init() {
 			}
 		}
 		file_temporal_server_api_matchingservice_v1_request_response_proto_msgTypes[30].Exporter = func(v interface{}, i int) interface{} {
-			switch v := v.(*UpdateTaskQueueUserDataRequest); i {
+			switch v := v.(*GetBuildIdTaskQueueMappingRequest); i {
 			case 0:
 				return &v.state
 			case 1:
@@ -3645,7 +3886,7 @@ func file_temporal_server_api_matchingservice_v1_request_response_proto_init() {
 			}
 		}
 		file_temporal_server_api_matchingservice_v1_request_response_proto_msgTypes[31].Exporter = func(v interface{}, i int) interface{} {
-			switch v := v.(*UpdateTaskQueueUserDataResponse); i {
+			switch v := v.(*GetBuildIdTaskQueueMappingResponse); i {
 			case 0:
 				return &v.state
 			case 1:
@@ -3657,7 +3898,7 @@ func file_temporal_server_api_matchingservice_v1_request_response_proto_init() {
 			}
 		}
 		file_temporal_server_api_matchingservice_v1_request_response_proto_msgTypes[32].Exporter = func(v interface{}, i int) interface{} {
-			switch v := v.(*ReplicateTaskQueueUserDataRequest); i {
+			switch v := v.(*ForceUnloadTaskQueueRequest); i {
 			case 0:
 				return &v.state
 			case 1:
@@ -3669,7 +3910,19 @@ func file_temporal_server_api_matchingservice_v1_request_response_proto_init() {
 			}
 		}
 		file_temporal_server_api_matchingservice_v1_request_response_proto_msgTypes[33].Exporter = func(v interface{}, i int) interface{} {
-			switch v := v.(*ReplicateTaskQueueUserDataResponse); i {
+			switch v := v.(*ForceUnloadTaskQueueResponse); i {
+			case 0:
+				return &v.state
+			case 1:
+				return &v.sizeCache
+			case 2:
+				return &v.unknownFields
+			default:
+				return nil
+			}
+		}
+		file_temporal_server_api_matchingservice_v1_request_response_proto_msgTypes[34].Exporter = func(v interface{}, i int) interface{} {
+			switch v := v.(*UpdateTaskQueueUserDataRequest); i {
 			case 0:
 				return &v.state
 			case 1:
@@ -3681,7 +3934,7 @@ func file_temporal_server_api_matchingservice_v1_request_response_proto_init() {
 			}
 		}
 		file_temporal_server_api_matchingservice_v1_request_response_proto_msgTypes[35].Exporter = func(v interface{}, i int) interface{} {
-			switch v := v.(*UpdateWorkerBuildIdCompatibilityRequest_ApplyPublicRequest); i {
+			switch v := v.(*UpdateTaskQueueUserDataResponse); i {
 			case 0:
 				return &v.state
 			case 1:
@@ -3693,6 +3946,42 @@ func file_temporal_server_api_matchingservice_v1_request_response_proto_init() {
 			}
 		}
 		file_temporal_server_api_matchingservice_v1_request_response_proto_msgTypes[36].Exporter = func(v interface{}, i int) interface{} {
+			switch v := v.(*ReplicateTaskQueueUserDataRequest); i {
+			case 0:
+				return &v.state
+			case 1:
+				return &v.sizeCache
+			case 2:
+				return &v.unknownFields
+			default:
+				return nil
+			}
+		}
+		file_temporal_server_api_matchingservice_v1_request_response_proto_msgTypes[37].Exporter = func(v interface{}, i int) interface{} {
+			switch v := v.(*ReplicateTaskQueueUserDataResponse); i {
+			case 0:
+				return &v.state
+			case 1:
+				return &v.sizeCache
+			case 2:
+				return &v.unknownFields
+			default:
+				return nil
+			}
+		}
+		file_temporal_server_api_matchingservice_v1_request_response_proto_msgTypes[39].Exporter = func(v interface{}, i int) interface{} {
+			switch v := v.(*UpdateWorkerBuildIdCompatibilityRequest_ApplyPublicRequest); i {
+			case 0:
+				return &v.state
+			case 1:
+				return &v.sizeCache
+			case 2:
+				return &v.unknownFields
+			default:
+				return nil
+			}
+		}
+		file_temporal_server_api_matchingservice_v1_request_response_proto_msgTypes[40].Exporter = func(v interface{}, i int) interface{} {
 			switch v := v.(*UpdateWorkerBuildIdCompatibilityRequest_RemoveBuildIds); i {
 			case 0:
 				return &v.state
@@ -3716,7 +4005,7 @@ func file_temporal_server_api_matchingservice_v1_request_response_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: file_temporal_server_api_matchingservice_v1_request_response_proto_rawDesc,
 			NumEnums:      0,
-			NumMessages:   37,
+			NumMessages:   41,
 			NumExtensions: 0,
 			NumServices:   0,
 		},

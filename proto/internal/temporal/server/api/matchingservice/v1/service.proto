@@ -25,6 +25,8 @@ syntax = "proto3";
 package temporal.server.api.matchingservice.v1;
 option go_package = "go.temporal.io/server/api/matchingservice/v1;matchingservice";
 
+import "google/api/annotations.proto";
+
 import "temporal/server/api/matchingservice/v1/request_response.proto";
 
 // MatchingService API is exposed to provide support for polling from long running applications.
@@ -90,11 +92,15 @@ service MatchingService {
     rpc GetTaskQueueUserData (GetTaskQueueUserDataRequest) returns (GetTaskQueueUserDataResponse) {}
 
     // Allows updating the Build ID assignment and redirect rules for a given Task Queue.
-    // (-- api-linter: core::0127::http-annotation=disabled
-    //     aip.dev/not-precedent: We do yet expose versioning API to HTTP. --)
+    // (-- api-linter: core::0134::method-signature=disabled
+    //     aip.dev/not-precedent: UpdateWorkerVersioningRulesRequest RPC doesn't follow Google API format. --)
+    // (-- api-linter: core::0134::response-message-name=disabled
+    //     aip.dev/not-precedent: UpdateWorkerVersioningRulesRequest RPC doesn't follow Google API format. --)
     rpc UpdateWorkerVersioningRules (UpdateWorkerVersioningRulesRequest) returns (UpdateWorkerVersioningRulesResponse) {}
 
     // Fetches the Build ID assignment and redirect rules for a Task Queue
+    // (-- api-linter: core::0127::resource-name-extraction=disabled
+    //     aip.dev/not-precedent: ListWorkerVersioningRulesRequest RPC doesn't follow Google API format. --)
     rpc ListWorkerVersioningRules (ListWorkerVersioningRulesRequest) returns (ListWorkerVersioningRulesResponse) {
         option (google.api.http) = {
             get: "/api/v1/namespaces/{namespace}/task-queues/{task_queue}/worker-versioning-rules"

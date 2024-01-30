@@ -947,6 +947,13 @@ func (e *matchingEngineImpl) UpdateWorkerVersioningRules(
 	return &workflowservice.UpdateWorkerVersioningRulesResponse{ConflictToken: cT}, nil
 }
 
+func (e *matchingEngineImpl) ListWorkerVersioningRules(
+	ctx context.Context,
+	request *workflowservice.ListWorkerVersioningRulesRequest,
+) (*workflowservice.ListWorkerVersioningRulesResponse, error) {
+	return nil, nil
+}
+
 func (e *matchingEngineImpl) UpdateWorkerBuildIdCompatibility(
 	ctx context.Context,
 	req *matchingservice.UpdateWorkerBuildIdCompatibilityRequest,
