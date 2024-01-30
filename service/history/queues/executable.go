@@ -88,7 +88,7 @@ type (
 	// TerminalErrors are errors which cannot be retried and should not be scheduled again.
 	// Tasks should be enqueued to a DLQ immediately if an error implements this interface.
 	TerminalTaskError interface {
-		IsTerminalTaskError()
+		IsTerminalTaskError() bool
 	}
 )
 
@@ -412,8 +412,10 @@ func (e *executableImpl) HandleErr(err error) (retErr error) {
 		metrics.TaskInternalErrorCounter.With(e.taggedMetricsHandler).Record(1)
 	}
 
-	// TODO: expand on the errors that should be considered terminal
-	if errors.As(err, new(TerminalTaskError)) || (e.dlqInternalErrors() && isInternalError) {
+	// We do actually check that this returns true just in case someone decides to implement it
+	// on a non-terminal error type and return false
+	var terr TerminalTaskError
+	if (errors.As(err, &terr) && terr.IsTerminalTaskError()) || (e.dlqInternalErrors() && isInternalError) {
 		// Terminal errors are likely due to data corruption.
 		// Drop the task by returning nil so that task will be marked as completed,
 		// or send it to the DLQ if that is enabled.

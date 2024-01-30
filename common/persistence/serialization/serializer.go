@@ -297,7 +297,7 @@ func (e *UnknownEncodingTypeError) Error() string {
 
 // IsTerminalTaskError informs our task processing subsystem that it is impossible
 // to retry this error
-func (e *UnknownEncodingTypeError) IsTerminalTaskError() {}
+func (e *UnknownEncodingTypeError) IsTerminalTaskError() bool { return true }
 
 // NewSerializationError returns a SerializationError
 func NewSerializationError(
@@ -339,7 +339,7 @@ func (e *DeserializationError) Unwrap() error {
 
 // IsTerminalTaskError informs our task processing subsystem that it is impossible to
 // retry this error and that the task should be sent to a DLQ
-func (e *DeserializationError) IsTerminalTaskError() {}
+func (e *DeserializationError) IsTerminalTaskError() bool { return true }
 
 func (t *serializerImpl) ShardInfoToBlob(info *persistencespb.ShardInfo, encodingType enumspb.EncodingType) (*commonpb.DataBlob, error) {
 	return ProtoEncodeBlob(info, encodingType)
