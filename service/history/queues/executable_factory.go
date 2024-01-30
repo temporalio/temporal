@@ -108,7 +108,7 @@ func (f *executableFactoryImpl) NewExecutable(task tasks.Task, readerID int64) E
 		func(params *ExecutableParams) {
 			params.DLQEnabled = f.dlqEnabled
 			params.DLQWriter = f.dlqWriter
-			params.AttemptsBeforeSendingToDlq = f.attemptsBeforeSendingToDlq
+			params.MaxUnexpectedErrorAttempts = f.attemptsBeforeSendingToDlq
 		},
 	)
 }

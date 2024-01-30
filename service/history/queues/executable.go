@@ -30,6 +30,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"math"
 	"runtime/debug"
 	"sync"
 	"time"
@@ -133,24 +134,24 @@ type (
 		metricsHandler    metrics.Handler
 		dlqWriter         *DLQWriter
 
-		readerID                    int64
-		loadTime                    time.Time
-		scheduledTime               time.Time
-		scheduleLatency             time.Duration
-		attemptNoUserLatency        time.Duration
-		inMemoryNoUserLatency       time.Duration
-		lastActiveness              bool
-		resourceExhaustedCount      int // does NOT include consts.ErrResourceExhaustedBusyWorkflow
-		taggedMetricsHandler        metrics.Handler
-		dlqEnabled                  dynamicconfig.BoolPropertyFn
-		terminalFailureCause        error
-		attemptsWithUnexpectedError int
-		attemptsBeforeSendingToDlq  dynamicconfig.IntPropertyFn
+		readerID                   int64
+		loadTime                   time.Time
+		scheduledTime              time.Time
+		scheduleLatency            time.Duration
+		attemptNoUserLatency       time.Duration
+		inMemoryNoUserLatency      time.Duration
+		lastActiveness             bool
+		resourceExhaustedCount     int // does NOT include consts.ErrResourceExhaustedBusyWorkflow
+		taggedMetricsHandler       metrics.Handler
+		dlqEnabled                 dynamicconfig.BoolPropertyFn
+		terminalFailureCause       error
+		unexpectedErrorAttempts    int
+		maxUnexpectedErrorAttempts dynamicconfig.IntPropertyFn
 	}
 	ExecutableParams struct {
 		DLQEnabled                 dynamicconfig.BoolPropertyFn
 		DLQWriter                  *DLQWriter
-		AttemptsBeforeSendingToDlq dynamicconfig.IntPropertyFn
+		MaxUnexpectedErrorAttempts dynamicconfig.IntPropertyFn
 	}
 	ExecutableOption func(*ExecutableParams)
 )
@@ -174,8 +175,8 @@ func NewExecutable(
 			return false
 		},
 		DLQWriter: nil,
-		AttemptsBeforeSendingToDlq: func() int {
-			return 0
+		MaxUnexpectedErrorAttempts: func() int {
+			return math.MaxInt
 		},
 	}
 	for _, opt := range opts {
@@ -204,7 +205,7 @@ func NewExecutable(
 		taggedMetricsHandler:       metricsHandler,
 		dlqWriter:                  params.DLQWriter,
 		dlqEnabled:                 params.DLQEnabled,
-		attemptsBeforeSendingToDlq: params.AttemptsBeforeSendingToDlq,
+		maxUnexpectedErrorAttempts: params.MaxUnexpectedErrorAttempts,
 	}
 	executable.updatePriority()
 	return executable
@@ -406,17 +407,17 @@ func (e *executableImpl) HandleErr(err error) (retErr error) {
 		return nil
 	}
 
-	e.attemptsWithUnexpectedError++
-	if e.attemptsWithUnexpectedError >= e.attemptsBeforeSendingToDlq() && e.dlqEnabled() {
+	e.unexpectedErrorAttempts++
+	metrics.TaskFailures.With(e.taggedMetricsHandler).Record(1)
+	e.logger.Error("Fail to process task", tag.Error(err), tag.AttemptWithUnexpectedError(int32(e.unexpectedErrorAttempts)), tag.LifeCycleProcessingFailed)
+
+	if e.unexpectedErrorAttempts >= e.maxUnexpectedErrorAttempts() && e.dlqEnabled() {
 		e.logger.Error("Marking task as terminally failed after maximum number of attempts with unexpected errors, will send to DLQ",
-			tag.Attempt(int32(e.attemptsWithUnexpectedError)), tag.Error(err))
+			tag.Attempt(int32(e.unexpectedErrorAttempts)), tag.Error(err))
 		e.terminalFailureCause = fmt.Errorf("%w: %w", ErrMaxAttempts, err)
 		return fmt.Errorf("%w: %w", ErrTerminalTaskFailure, e.terminalFailureCause)
 	}
 
-	metrics.TaskFailures.With(e.taggedMetricsHandler).Record(1)
-
-	e.logger.Error("Fail to process task", tag.Error(err), tag.AttemptWithUnexpectedError(e.attemptsWithUnexpectedError), tag.LifeCycleProcessingFailed)
 	return err
 }
 

@@ -27,6 +27,7 @@ package queues
 import (
 	"context"
 	"errors"
+	"math"
 	"math/rand"
 	"testing"
 	"time"
@@ -697,7 +698,7 @@ func (s *queueBaseSuite) newQueueBase(
 			return false
 		},
 		func() int {
-			return 0
+			return math.MaxInt
 		},
 	)
 	return newQueueBase(

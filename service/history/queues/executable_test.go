@@ -28,6 +28,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"math"
 	"testing"
 	"time"
 
@@ -74,7 +75,7 @@ type (
 		dlqWriter                  *queues.DLQWriter
 		dlqEnabled                 dynamicconfig.BoolPropertyFn
 		priorityAssigner           queues.PriorityAssigner
-		attemptsBeforeSendingToDlq dynamicconfig.IntPropertyFn
+		maxUnexpectedErrorAttempts dynamicconfig.IntPropertyFn
 	}
 	option func(*params)
 )
@@ -382,7 +383,7 @@ func (s *executableSuite) TestExecute_SendToDLQAfterMaxAttempts() {
 		p.dlqEnabled = func() bool {
 			return true
 		}
-		p.attemptsBeforeSendingToDlq = func() int {
+		p.maxUnexpectedErrorAttempts = func() int {
 			return 2
 		}
 	})
@@ -412,7 +413,7 @@ func (s *executableSuite) TestExecute_DontSendToDLQAfterMaxAttemptsDLQDisabled()
 		p.dlqEnabled = func() bool {
 			return false
 		}
-		p.attemptsBeforeSendingToDlq = func() int {
+		p.maxUnexpectedErrorAttempts = func() int {
 			return 1
 		}
 	})
@@ -430,7 +431,7 @@ func (s *executableSuite) TestExecute_DontSendToDLQAfterMaxAttemptsDLQDisabled()
 	// Attempt 2
 	s.Error(executable.Execute())
 	s.Error(executable.HandleErr(err))
-	s.Len(queueWriter.EnqueueTaskRequests, 0)
+	s.Empty(queueWriter.EnqueueTaskRequests)
 }
 
 func (s *executableSuite) TestExecute_DontSendToDLQAfterMaxAttemptsExpectedError() {
@@ -440,7 +441,7 @@ func (s *executableSuite) TestExecute_DontSendToDLQAfterMaxAttemptsExpectedError
 		p.dlqEnabled = func() bool {
 			return true
 		}
-		p.attemptsBeforeSendingToDlq = func() int {
+		p.maxUnexpectedErrorAttempts = func() int {
 			return 1
 		}
 	})
@@ -458,7 +459,36 @@ func (s *executableSuite) TestExecute_DontSendToDLQAfterMaxAttemptsExpectedError
 	// Attempt 2
 	s.Error(executable.Execute())
 	s.Error(executable.HandleErr(err))
-	s.Len(queueWriter.EnqueueTaskRequests, 0)
+	s.Empty(queueWriter.EnqueueTaskRequests)
+}
+
+func (s *executableSuite) TestExecute_SendToDLQAfterMaxAttemptsThenDisable() {
+	queueWriter := &queuestest.FakeQueueWriter{}
+	dlqEnabled := true
+	executable := s.newTestExecutable(func(p *params) {
+		p.dlqWriter = queues.NewDLQWriter(queueWriter, s.mockClusterMetadata, metrics.NoopMetricsHandler, log.NewTestLogger(), s.mockNamespaceRegistry)
+		p.dlqEnabled = func() bool {
+			return dlqEnabled
+		}
+		p.maxUnexpectedErrorAttempts = func() int {
+			return 1
+		}
+	})
+	s.mockExecutor.EXPECT().Execute(gomock.Any(), executable).Return(queues.ExecuteResponse{
+		ExecutionMetricTags: nil,
+		ExecutedAsActive:    false,
+		ExecutionErr:        errors.New("some random error"),
+	}).Times(1)
+
+	err := executable.Execute()
+	err2 := executable.HandleErr(err)
+
+	s.ErrorIs(err2, queues.ErrTerminalTaskFailure)
+	s.ErrorIs(err2, queues.ErrMaxAttempts)
+
+	dlqEnabled = false
+	s.NoError(executable.Execute())
+	s.Empty(queueWriter.EnqueueTaskRequests)
 }
 
 func (s *executableSuite) TestExecute_DLQ() {
@@ -694,8 +724,8 @@ func (s *executableSuite) newTestExecutable(opts ...option) queues.Executable {
 			return false
 		},
 		priorityAssigner: queues.NewNoopPriorityAssigner(),
-		attemptsBeforeSendingToDlq: func() int {
-			return 0
+		maxUnexpectedErrorAttempts: func() int {
+			return math.MaxInt
 		},
 	}
 	for _, opt := range opts {
@@ -724,7 +754,7 @@ func (s *executableSuite) newTestExecutable(opts ...option) queues.Executable {
 		func(params *queues.ExecutableParams) {
 			params.DLQEnabled = p.dlqEnabled
 			params.DLQWriter = p.dlqWriter
-			params.AttemptsBeforeSendingToDlq = p.attemptsBeforeSendingToDlq
+			params.MaxUnexpectedErrorAttempts = p.maxUnexpectedErrorAttempts
 		},
 	)
 }
