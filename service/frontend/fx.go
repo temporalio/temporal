@@ -48,6 +48,7 @@ import (
 	"go.temporal.io/server/common/membership"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
+	"go.temporal.io/server/common/nexus"
 	"go.temporal.io/server/common/persistence"
 	persistenceClient "go.temporal.io/server/common/persistence/client"
 	"go.temporal.io/server/common/persistence/serialization"
@@ -562,6 +563,7 @@ func OperatorHandlerProvider(
 	metricsHandler metrics.Handler,
 	visibilityMgr manager.VisibilityManager,
 	saManager searchattribute.Manager,
+	incomingServiceRegistry nexus.IncomingServiceRegistry,
 	healthServer *health.Server,
 	historyClient resource.HistoryClient,
 	clusterMetadataManager persistence.ClusterMetadataManager,
@@ -576,6 +578,7 @@ func OperatorHandlerProvider(
 		metricsHandler,
 		visibilityMgr,
 		saManager,
+		incomingServiceRegistry,
 		healthServer,
 		historyClient,
 		clusterMetadataManager,

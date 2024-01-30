@@ -83,8 +83,8 @@ type (
 		refreshPoller    *goro.Handle
 		serviceDataReady *future.FutureImpl[struct{}]
 
-		owningService primitives.ServiceName // the service that owns this registry instance
-		config        IncomingServiceRegistryConfig
+		hostService primitives.ServiceName // the Temporal service that this registry instance is on
+		config      IncomingServiceRegistryConfig
 
 		matchingClient matchingservice.MatchingServiceClient
 		persistence    p.NexusServiceManager
@@ -103,7 +103,7 @@ func NewIncomingServiceRegistry(
 	logger log.Logger,
 ) IncomingServiceRegistry {
 	return &registry{
-		owningService:       owningService,
+		hostService:         owningService,
 		config:              config,
 		matchingClient:      matchingClient,
 		persistence:         persistence,
@@ -126,7 +126,7 @@ func (r *registry) Start() {
 		headers.SystemBackgroundCallerInfo,
 	)
 
-	if r.owningService == primitives.MatchingService {
+	if r.hostService == primitives.MatchingService {
 		r.refreshPoller = goro.NewHandle(refreshCtx).Go(r.loadServices)
 	} else {
 		r.refreshPoller = goro.NewHandle(refreshCtx).Go(r.fetchServices)
@@ -167,7 +167,7 @@ func (r *registry) CreateOrUpdateService(ctx context.Context, service *nexus.Inc
 	}
 
 	var updated *persistencespb.VersionedNexusIncomingService
-	if r.owningService == primitives.MatchingService {
+	if r.hostService == primitives.MatchingService {
 		updated, err = r.persistCreateOrUpdate(ctx, curService.Id, service)
 	} else {
 		updated, err = r.forwardCreateOrUpdate(ctx, service)
@@ -218,7 +218,7 @@ func (r *registry) DeleteService(ctx context.Context, name string) error {
 		return p.ErrNexusIncomingServiceNotFound
 	}
 
-	if r.owningService == primitives.MatchingService {
+	if r.hostService == primitives.MatchingService {
 		err = r.persistDelete(ctx, service.Id)
 	} else {
 		err = r.forwardDelete(ctx, name)

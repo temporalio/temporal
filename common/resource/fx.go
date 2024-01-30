@@ -237,27 +237,19 @@ func NexusIncomingServiceRegistryConfigProvider(
 func NexusIncomingServiceRegistryProvider(
 	config nexus.IncomingServiceRegistryConfig,
 	serviceName primitives.ServiceName,
-	hostInfoProvider membership.HostInfoProvider,
-	monitor membership.Monitor,
 	matchingClient MatchingRawClient,
 	manager persistence.NexusServiceManager,
 	metricsHandler metrics.Handler,
 	logger log.Logger,
-) (nexus.IncomingServiceRegistry, error) {
-	matchingServiceResolver, err := monitor.GetResolver(primitives.MatchingService)
-	if err != nil {
-		return nil, err
-	}
+) nexus.IncomingServiceRegistry {
 	return nexus.NewIncomingServiceRegistry(
-		config,
 		serviceName,
-		hostInfoProvider,
-		matchingServiceResolver,
+		config,
 		matchingClient,
 		manager,
 		metricsHandler,
 		logger,
-	), nil
+	)
 }
 
 func ClientFactoryProvider(
