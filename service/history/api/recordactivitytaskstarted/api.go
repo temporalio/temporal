@@ -77,7 +77,7 @@ func Invoke(
 			// First check to see if cache needs to be refreshed as we could potentially have stale workflow execution in
 			// some extreme cassandra failure cases.
 			if !isRunning && scheduledEventID >= mutableState.GetNextEventID() {
-				taggedMetrics.Counter(metrics.StaleMutableStateCounter.Name()).Record(1)
+				metrics.StaleMutableStateCounter.With(taggedMetrics).Record(1)
 				return nil, consts.ErrStaleState
 			}
 

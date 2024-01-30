@@ -123,7 +123,7 @@ func (s *Starter) prepare(ctx context.Context) error {
 	}
 
 	if request.RequestEagerExecution {
-		metricsHandler.Counter(metrics.WorkflowEagerExecutionCounter.Name()).Record(
+		metrics.WorkflowEagerExecutionCounter.With(metricsHandler).Record(
 			1,
 			metrics.NamespaceTag(s.namespace.Name().String()),
 			metrics.TaskQueueTag(request.TaskQueue.Name),
@@ -145,7 +145,7 @@ func (s *Starter) prepare(ctx context.Context) error {
 
 func (s *Starter) recordEagerDenied(reason eagerStartDeniedReason) {
 	metricsHandler := s.shardContext.GetMetricsHandler()
-	metricsHandler.Counter(metrics.WorkflowEagerExecutionDeniedCounter.Name()).Record(
+	metrics.WorkflowEagerExecutionDeniedCounter.With(metricsHandler).Record(
 		1,
 		metrics.NamespaceTag(s.namespace.Name().String()),
 		metrics.TaskQueueTag(s.request.StartRequest.TaskQueue.Name),
