@@ -66,7 +66,7 @@ type (
 		suite.Suite
 
 		controller       *gomock.Controller
-		mockEventsCache  *shard.MockEventsCache
+		mockEventsCache  *events.MockCache
 		mockExecutionMgr *persistence.MockExecutionManager
 
 		logger log.Logger

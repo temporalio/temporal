@@ -29,6 +29,7 @@ import (
 	"time"
 
 	commonpb "go.temporal.io/api/common/v1"
+	"go.temporal.io/server/service/history/events"
 
 	"go.temporal.io/server/api/adminservice/v1"
 	clockspb "go.temporal.io/server/api/clock/v1"
@@ -61,7 +62,7 @@ type (
 		GetNamespaceRegistry() namespace.Registry
 		GetClusterMetadata() cluster.Metadata
 		GetConfig() *configs.Config
-		GetEventsCache() EventsCache
+		GetEventsCache() events.Cache
 		GetLogger() log.Logger
 		GetThrottledLogger() log.Logger
 		GetMetricsHandler() metrics.Handler

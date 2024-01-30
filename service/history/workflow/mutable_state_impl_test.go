@@ -45,6 +45,7 @@ import (
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	updatepb "go.temporal.io/api/update/v1"
 	workflowpb "go.temporal.io/api/workflow/v1"
+	"go.temporal.io/server/service/history/events"
 	"google.golang.org/protobuf/types/known/durationpb"
 	"google.golang.org/protobuf/types/known/timestamppb"
 
@@ -80,7 +81,7 @@ type (
 		controller      *gomock.Controller
 		mockConfig      *configs.Config
 		mockShard       *shard.ContextTest
-		mockEventsCache *shard.MockEventsCache
+		mockEventsCache *events.MockCache
 
 		mutableState *MutableStateImpl
 		logger       log.Logger
@@ -115,7 +116,7 @@ func (s *mutableStateSuite) SetupTest() {
 	s.Assertions = require.New(s.T())
 
 	s.controller = gomock.NewController(s.T())
-	s.mockEventsCache = shard.NewMockEventsCache(s.controller)
+	s.mockEventsCache = events.NewMockCache(s.controller)
 
 	s.mockConfig = tests.NewDynamicConfig()
 	s.mockShard = shard.NewTestContext(
@@ -599,8 +600,8 @@ func (s *mutableStateSuite) prepareTransientWorkflowTaskCompletionFirstBatchAppl
 	eventID++
 
 	s.mockEventsCache.EXPECT().PutEvent(
-		s.mockShard,
-		shard.EventsCacheKey{
+		s.mockShard.GetShardID(),
+		events.Key{
 			NamespaceID: namespaceID,
 			WorkflowID:  execution.GetWorkflowId(),
 			RunID:       execution.GetRunId(),
@@ -839,7 +840,7 @@ func (s *mutableStateSuite) buildWorkflowMutableState() *persistencespb.Workflow
 
 func (s *mutableStateSuite) TestUpdateInfos() {
 	ctx := context.Background()
-	cacheStore := map[shard.EventsCacheKey]*historypb.HistoryEvent{}
+	cacheStore := map[events.Key]*historypb.HistoryEvent{}
 	dbstate := s.buildWorkflowMutableState()
 	var err error
 	s.mutableState, err = NewMutableStateFromDB(
@@ -951,7 +952,7 @@ func (s *mutableStateSuite) TestApplyActivityTaskStartedEvent() {
 }
 
 func (s *mutableStateSuite) TestTotalEntitiesCount() {
-	s.mockEventsCache.EXPECT().PutEvent(s.mockShard, gomock.Any(), gomock.Any()).AnyTimes()
+	s.mockEventsCache.EXPECT().PutEvent(s.mockShard.GetShardID(), gomock.Any(), gomock.Any()).AnyTimes()
 
 	// scheduling, starting & completing workflow task is omitted here
 

@@ -95,7 +95,7 @@ type (
 		mockVisibilityProcessor  *queues.MockQueue
 		mockArchivalProcessor    *queues.MockQueue
 		mockMemoryScheduledQueue *queues.MockQueue
-		mockEventsCache          *shard.MockEventsCache
+		mockEventsCache          *events.MockCache
 		mockNamespaceCache       *namespace.MockRegistry
 		mockClusterMetadata      *cluster.MockMetadata
 		mockVisibilityManager    *manager.MockVisibilityManager
@@ -706,7 +706,7 @@ func (s *engine2Suite) TestRecordActivityTaskStartedSuccess() {
 	s.mockEventsCache.EXPECT().GetEvent(
 		gomock.Any(),
 		gomock.Any(),
-		shard.EventsCacheKey{
+		events.Key{
 			NamespaceID: namespaceID,
 			WorkflowID:  workflowExecution.GetWorkflowId(),
 			RunID:       workflowExecution.GetRunId(),
@@ -2096,7 +2096,7 @@ func (s *engine2Suite) TestRefreshWorkflowTasks() {
 	s.mockEventsCache.EXPECT().GetEvent(
 		gomock.Any(),
 		gomock.Any(),
-		shard.EventsCacheKey{
+		events.Key{
 			NamespaceID: tests.NamespaceID,
 			WorkflowID:  execution.GetWorkflowId(),
 			RunID:       execution.GetRunId(),
@@ -2109,7 +2109,7 @@ func (s *engine2Suite) TestRefreshWorkflowTasks() {
 	s.mockEventsCache.EXPECT().GetEvent(
 		gomock.Any(),
 		gomock.Any(),
-		shard.EventsCacheKey{
+		events.Key{
 			NamespaceID: tests.NamespaceID,
 			WorkflowID:  execution.GetWorkflowId(),
 			RunID:       execution.GetRunId(),

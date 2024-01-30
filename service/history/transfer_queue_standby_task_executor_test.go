@@ -40,6 +40,7 @@ import (
 	"go.temporal.io/api/serviceerror"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	"go.temporal.io/api/workflowservice/v1"
+	"go.temporal.io/server/service/history/events"
 	"google.golang.org/protobuf/types/known/durationpb"
 
 	"go.temporal.io/server/api/adminservicemock/v1"
@@ -141,8 +142,11 @@ func (s *transferQueueStandbyTaskExecutorSuite) SetupTest() {
 		config,
 		s.timeSource,
 	)
-	s.mockShard.SetEventsCacheForTesting(shard.NewHostLevelEventsCache(
+	s.mockShard.SetEventsCacheForTesting(events.NewHostLevelEventsCache(
+		s.mockShard.GetExecutionManager(),
 		s.mockShard.GetConfig(),
+		s.mockShard.GetMetricsHandler(),
+		s.mockShard.GetLogger(),
 		false,
 	))
 

@@ -22,7 +22,7 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-package shard
+package events
 
 import (
 	"context"
@@ -51,7 +51,6 @@ type (
 
 		controller           *gomock.Controller
 		mockExecutionManager *persistence.MockExecutionManager
-		mockShardContext     *MockContext
 
 		logger log.Logger
 
@@ -78,13 +77,9 @@ func (s *eventsCacheSuite) SetupTest() {
 
 	s.controller = gomock.NewController(s.T())
 	s.mockExecutionManager = persistence.NewMockExecutionManager(s.controller)
-	s.mockShardContext = NewMockContext(s.controller)
 
 	s.logger = log.NewTestLogger()
 	s.cache = s.newTestEventsCache()
-	s.mockShardContext.EXPECT().GetMetricsHandler().Return(metrics.NoopMetricsHandler).AnyTimes()
-	s.mockShardContext.EXPECT().GetLogger().Return(s.logger).AnyTimes()
-	s.mockShardContext.EXPECT().GetExecutionManager().Return(s.mockExecutionManager).AnyTimes()
 }
 
 func (s *eventsCacheSuite) TearDownTest() {
@@ -97,7 +92,10 @@ func (s *eventsCacheSuite) newTestEventsCache() *CacheImpl {
 		EventsCacheMaxSizeBytes: dc.GetIntPropertyFn(32),
 	}
 	return NewHostLevelEventsCache(
+		s.mockExecutionManager,
 		&config,
+		metrics.NoopMetricsHandler,
+		s.logger,
 		false,
 	)
 }
@@ -107,6 +105,7 @@ func (s *eventsCacheSuite) TestEventsCacheHitSuccess() {
 	workflowID := "events-cache-hit-success-workflow-id"
 	runID := "events-cache-hit-success-run-id"
 	eventID := int64(23)
+	shardID := int32(10)
 	event := &historypb.HistoryEvent{
 		EventId:    eventID,
 		EventType:  enumspb.EVENT_TYPE_ACTIVITY_TASK_STARTED,
@@ -114,13 +113,13 @@ func (s *eventsCacheSuite) TestEventsCacheHitSuccess() {
 	}
 
 	s.cache.PutEvent(
-		s.mockShardContext,
-		EventsCacheKey{namespaceID, workflowID, runID, eventID, common.EmptyVersion},
+		shardID,
+		Key{namespaceID, workflowID, runID, eventID, common.EmptyVersion},
 		event)
 	actualEvent, err := s.cache.GetEvent(
 		context.Background(),
-		s.mockShardContext,
-		EventsCacheKey{namespaceID, workflowID, runID, eventID, common.EmptyVersion},
+		shardID,
+		Key{namespaceID, workflowID, runID, eventID, common.EmptyVersion},
 		eventID, nil)
 	s.Nil(err)
 	s.Equal(event, actualEvent)
@@ -162,7 +161,6 @@ func (s *eventsCacheSuite) TestEventsCacheMissMultiEventsBatchV2Success() {
 	}
 
 	shardID := int32(10)
-	s.mockShardContext.EXPECT().GetShardID().Return(int32(10)).AnyTimes()
 	s.mockExecutionManager.EXPECT().ReadHistoryBranch(gomock.Any(), &persistence.ReadHistoryBranchRequest{
 		BranchToken:   []byte("store_token"),
 		MinEventID:    event1.GetEventId(),
@@ -176,13 +174,13 @@ func (s *eventsCacheSuite) TestEventsCacheMissMultiEventsBatchV2Success() {
 	}, nil)
 
 	s.cache.PutEvent(
-		s.mockShardContext,
-		EventsCacheKey{namespaceID, workflowID, runID, event2.GetEventId(), common.EmptyVersion},
+		shardID,
+		Key{namespaceID, workflowID, runID, event2.GetEventId(), common.EmptyVersion},
 		event2)
 	actualEvent, err := s.cache.GetEvent(
 		context.Background(),
-		s.mockShardContext,
-		EventsCacheKey{namespaceID, workflowID, runID, event6.GetEventId(), common.EmptyVersion},
+		shardID,
+		Key{namespaceID, workflowID, runID, event6.GetEventId(), common.EmptyVersion},
 		event1.GetEventId(), []byte("store_token"))
 	s.Nil(err)
 	s.Equal(event6, actualEvent)
@@ -194,7 +192,6 @@ func (s *eventsCacheSuite) TestEventsCacheMissV2Failure() {
 	runID := "events-cache-miss-failure-run-id"
 
 	shardID := int32(10)
-	s.mockShardContext.EXPECT().GetShardID().Return(int32(10)).AnyTimes()
 	expectedErr := errors.New("persistence call failed")
 	s.mockExecutionManager.EXPECT().ReadHistoryBranch(gomock.Any(), &persistence.ReadHistoryBranchRequest{
 		BranchToken:   []byte("store_token"),
@@ -207,8 +204,8 @@ func (s *eventsCacheSuite) TestEventsCacheMissV2Failure() {
 
 	actualEvent, err := s.cache.GetEvent(
 		context.Background(),
-		s.mockShardContext,
-		EventsCacheKey{namespaceID, workflowID, runID, int64(14), common.EmptyVersion},
+		shardID,
+		Key{namespaceID, workflowID, runID, int64(14), common.EmptyVersion},
 		int64(11), []byte("store_token"))
 	s.Nil(actualEvent)
 	s.Equal(expectedErr, err)
@@ -230,7 +227,6 @@ func (s *eventsCacheSuite) TestEventsCacheDisableSuccess() {
 	}
 
 	shardID := int32(10)
-	s.mockShardContext.EXPECT().GetShardID().Return(int32(10)).AnyTimes()
 	s.mockExecutionManager.EXPECT().ReadHistoryBranch(gomock.Any(), &persistence.ReadHistoryBranchRequest{
 		BranchToken:   []byte("store_token"),
 		MinEventID:    event2.GetEventId(),
@@ -244,18 +240,18 @@ func (s *eventsCacheSuite) TestEventsCacheDisableSuccess() {
 	}, nil)
 
 	s.cache.PutEvent(
-		s.mockShardContext,
-		EventsCacheKey{namespaceID, workflowID, runID, event1.GetEventId(), common.EmptyVersion},
+		shardID,
+		Key{namespaceID, workflowID, runID, event1.GetEventId(), common.EmptyVersion},
 		event1)
 	s.cache.PutEvent(
-		s.mockShardContext,
-		EventsCacheKey{namespaceID, workflowID, runID, event2.GetEventId(), common.EmptyVersion},
+		shardID,
+		Key{namespaceID, workflowID, runID, event2.GetEventId(), common.EmptyVersion},
 		event2)
 	s.cache.disabled = true
 	actualEvent, err := s.cache.GetEvent(
 		context.Background(),
-		s.mockShardContext,
-		EventsCacheKey{namespaceID, workflowID, runID, event2.GetEventId(), common.EmptyVersion},
+		shardID,
+		Key{namespaceID, workflowID, runID, event2.GetEventId(), common.EmptyVersion},
 		event2.GetEventId(), []byte("store_token"))
 	s.Nil(err)
 	s.Equal(event2, actualEvent)
@@ -268,7 +264,6 @@ func (s *eventsCacheSuite) TestEventsCacheGetCachesResult() {
 	branchToken := []byte("store_token")
 
 	shardID := int32(10)
-	s.mockShardContext.EXPECT().GetShardID().Return(int32(10)).AnyTimes()
 	event1 := &historypb.HistoryEvent{
 		EventId:   14,
 		EventType: enumspb.EVENT_TYPE_ACTIVITY_TASK_STARTED,
@@ -287,14 +282,14 @@ func (s *eventsCacheSuite) TestEventsCacheGetCachesResult() {
 
 	gotEvent1, _ := s.cache.GetEvent(
 		context.Background(),
-		s.mockShardContext,
-		EventsCacheKey{namespaceID, workflowID, runID, int64(14), common.EmptyVersion},
+		shardID,
+		Key{namespaceID, workflowID, runID, int64(14), common.EmptyVersion},
 		int64(11), branchToken)
 	s.Equal(gotEvent1, event1)
 	gotEvent2, _ := s.cache.GetEvent(
 		context.Background(),
-		s.mockShardContext,
-		EventsCacheKey{namespaceID, workflowID, runID, int64(14), common.EmptyVersion},
+		shardID,
+		Key{namespaceID, workflowID, runID, int64(14), common.EmptyVersion},
 		int64(11), branchToken)
 	s.Equal(gotEvent2, event1)
 }
@@ -306,7 +301,6 @@ func (s *eventsCacheSuite) TestEventsCacheInvalidKey() {
 	branchToken := []byte("store_token")
 
 	shardID := int32(10)
-	s.mockShardContext.EXPECT().GetShardID().Return(int32(10)).AnyTimes()
 	event1 := &historypb.HistoryEvent{
 		EventId:   14,
 		EventType: enumspb.EVENT_TYPE_ACTIVITY_TASK_STARTED,
@@ -324,20 +318,20 @@ func (s *eventsCacheSuite) TestEventsCacheInvalidKey() {
 	}, nil).Times(2) // will be called twice since the key is invalid
 
 	s.cache.PutEvent(
-		s.mockShardContext,
-		EventsCacheKey{namespaceID, workflowID, runID, event1.EventId, common.EmptyVersion},
+		shardID,
+		Key{namespaceID, workflowID, runID, event1.EventId, common.EmptyVersion},
 		event1)
 
 	gotEvent1, _ := s.cache.GetEvent(
 		context.Background(),
-		s.mockShardContext,
-		EventsCacheKey{namespaceID, workflowID, runID, int64(14), common.EmptyVersion},
+		shardID,
+		Key{namespaceID, workflowID, runID, int64(14), common.EmptyVersion},
 		int64(11), branchToken)
 	s.Equal(gotEvent1, event1)
 	gotEvent2, _ := s.cache.GetEvent(
 		context.Background(),
-		s.mockShardContext,
-		EventsCacheKey{namespaceID, workflowID, runID, int64(14), common.EmptyVersion},
+		shardID,
+		Key{namespaceID, workflowID, runID, int64(14), common.EmptyVersion},
 		int64(11), branchToken)
 	s.Equal(gotEvent2, event1)
 }

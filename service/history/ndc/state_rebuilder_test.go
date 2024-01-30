@@ -37,6 +37,7 @@ import (
 	enumspb "go.temporal.io/api/enums/v1"
 	historypb "go.temporal.io/api/history/v1"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
+	"go.temporal.io/server/service/history/events"
 	"google.golang.org/protobuf/types/known/durationpb"
 
 	historyspb "go.temporal.io/server/api/history/v1"
@@ -67,7 +68,7 @@ type (
 
 		controller          *gomock.Controller
 		mockShard           *shard.ContextTest
-		mockEventsCache     *shard.MockEventsCache
+		mockEventsCache     *events.MockCache
 		mockTaskRefresher   *workflow.MockTaskRefresher
 		mockNamespaceCache  *namespace.MockRegistry
 		mockClusterMetadata *cluster.MockMetadata

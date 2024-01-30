@@ -36,6 +36,7 @@ import (
 	"github.com/stretchr/testify/suite"
 	commonpb "go.temporal.io/api/common/v1"
 	"go.temporal.io/api/serviceerror"
+	"go.temporal.io/server/service/history/events"
 
 	historyspb "go.temporal.io/server/api/history/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
@@ -304,8 +305,11 @@ func (s *ackManagerSuite) TestGetTasks_SecondPersistenceErrorReturnsPartialResul
 		NextPageToken:       nil,
 	}).Return(tasksResponse, nil)
 
-	eventsCache := shard.NewHostLevelEventsCache(
+	eventsCache := events.NewHostLevelEventsCache(
+		s.mockShard.GetExecutionManager(),
 		s.mockShard.GetConfig(),
+		s.mockShard.GetMetricsHandler(),
+		s.mockShard.GetLogger(),
 		false,
 	)
 	ms := workflow.TestLocalMutableState(s.mockShard, eventsCache, tests.GlobalNamespaceEntry, log.NewTestLogger(), tests.RunID)
@@ -350,8 +354,11 @@ func (s *ackManagerSuite) TestGetTasks_FullPage() {
 		NextPageToken:       nil,
 	}).Return(tasksResponse, nil)
 
-	eventsCache := shard.NewHostLevelEventsCache(
+	eventsCache := events.NewHostLevelEventsCache(
+		s.mockShard.GetExecutionManager(),
 		s.mockShard.GetConfig(),
+		s.mockShard.GetMetricsHandler(),
+		s.mockShard.GetLogger(),
 		false,
 	)
 	ms := workflow.TestLocalMutableState(s.mockShard, eventsCache, tests.GlobalNamespaceEntry, log.NewTestLogger(), tests.RunID)
@@ -396,8 +403,11 @@ func (s *ackManagerSuite) TestGetTasks_PartialPage() {
 		NextPageToken:       nil,
 	}).Return(tasksResponse, nil)
 
-	eventsCache := shard.NewHostLevelEventsCache(
+	eventsCache := events.NewHostLevelEventsCache(
+		s.mockShard.GetExecutionManager(),
 		s.mockShard.GetConfig(),
+		s.mockShard.GetMetricsHandler(),
+		s.mockShard.GetLogger(),
 		false,
 	)
 	ms := workflow.TestLocalMutableState(s.mockShard, eventsCache, tests.GlobalNamespaceEntry, log.NewTestLogger(), tests.RunID)
@@ -479,8 +489,11 @@ func (s *ackManagerSuite) TestGetTasks_FilterNamespace() {
 		NextPageToken:       []byte{22, 8, 78}, // previous token
 	}).Return(tasksResponse3, nil)
 
-	eventsCache := shard.NewHostLevelEventsCache(
+	eventsCache := events.NewHostLevelEventsCache(
+		s.mockShard.GetExecutionManager(),
 		s.mockShard.GetConfig(),
+		s.mockShard.GetMetricsHandler(),
+		s.mockShard.GetLogger(),
 		false,
 	)
 	ms := workflow.TestLocalMutableState(s.mockShard, eventsCache, tests.GlobalNamespaceEntry, log.NewTestLogger(), tests.RunID)

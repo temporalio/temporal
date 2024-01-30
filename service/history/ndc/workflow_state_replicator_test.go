@@ -30,6 +30,7 @@ import (
 	"time"
 
 	historypb "go.temporal.io/api/history/v1"
+	"go.temporal.io/server/service/history/events"
 
 	"github.com/golang/mock/gomock"
 	"github.com/pborman/uuid"
@@ -65,7 +66,7 @@ type (
 
 		controller            *gomock.Controller
 		mockShard             *shard.ContextTest
-		mockEventCache        *shard.MockEventsCache
+		mockEventCache        *events.MockCache
 		mockWorkflowCache     *wcache.MockCache
 		mockNamespaceCache    *namespace.MockRegistry
 		mockRemoteAdminClient *adminservicemock.MockAdminServiceClient

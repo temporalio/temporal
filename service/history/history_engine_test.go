@@ -127,7 +127,7 @@ type (
 		mockSearchAttributesProvider       *searchattribute.MockProvider
 		mockSearchAttributesMapperProvider *searchattribute.MockMapperProvider
 
-		eventsCache shard.EventsCache
+		eventsCache events.Cache
 		config      *configs.Config
 	}
 )
@@ -179,8 +179,11 @@ func (s *engineSuite) SetupTest() {
 	s.workflowCache = wcache.NewHostLevelCache(s.mockShard.GetConfig())
 	s.mockShard.Resource.ShardMgr.EXPECT().AssertShardOwnership(gomock.Any(), gomock.Any()).AnyTimes()
 
-	s.eventsCache = shard.NewHostLevelEventsCache(
+	s.eventsCache = events.NewHostLevelEventsCache(
+		s.mockShard.GetExecutionManager(),
 		s.mockShard.GetConfig(),
+		s.mockShard.GetMetricsHandler(),
+		s.mockShard.GetLogger(),
 		false,
 	)
 	s.mockShard.SetEventsCacheForTesting(s.eventsCache)

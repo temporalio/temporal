@@ -36,13 +36,14 @@ import (
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/namespace"
+	"go.temporal.io/server/service/history/events"
 	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/tests"
 )
 
 func TestLocalMutableState(
 	shard shard.Context,
-	eventsCache shard.EventsCache,
+	eventsCache events.Cache,
 	ns *namespace.Namespace,
 	logger log.Logger,
 	runID string,
@@ -58,14 +59,14 @@ func TestLocalMutableState(
 // NewMapEventCache is a functional event cache mock that wraps a simple Go map
 func NewMapEventCache(
 	t *testing.T,
-	m map[shard.EventsCacheKey]*historypb.HistoryEvent,
-) shard.EventsCache {
-	cache := shard.NewMockEventsCache(gomock.NewController(t))
+	m map[events.Key]*historypb.HistoryEvent,
+) events.Cache {
+	cache := events.NewMockCache(gomock.NewController(t))
 	cache.EXPECT().DeleteEvent(gomock.Any(), gomock.Any()).AnyTimes().Do(
-		func(shardContext shard.Context, k shard.EventsCacheKey) { delete(m, k) },
+		func(shardID int32, k events.Key) { delete(m, k) },
 	)
 	cache.EXPECT().PutEvent(gomock.Any(), gomock.Any(), gomock.Any()).AnyTimes().Do(
-		func(shardContext shard.Context, k shard.EventsCacheKey, event *historypb.HistoryEvent) {
+		func(shardID int32, k events.Key, event *historypb.HistoryEvent) {
 			m[k] = event
 		},
 	)
@@ -74,8 +75,8 @@ func NewMapEventCache(
 		DoAndReturn(
 			func(
 				_ context.Context,
-				_ shard.Context,
-				key shard.EventsCacheKey,
+				_ int32,
+				key events.Key,
 				_ int64,
 				_ []byte,
 			) (*historypb.HistoryEvent, error) {
@@ -90,7 +91,7 @@ func NewMapEventCache(
 
 func TestGlobalMutableState(
 	shard shard.Context,
-	eventsCache shard.EventsCache,
+	eventsCache events.Cache,
 	logger log.Logger,
 	version int64,
 	runID string,

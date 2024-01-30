@@ -37,6 +37,7 @@ import (
 	commonpb "go.temporal.io/api/common/v1"
 	"go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
+	"go.temporal.io/server/service/history/events"
 	"golang.org/x/exp/maps"
 	"golang.org/x/sync/semaphore"
 	"google.golang.org/protobuf/types/known/timestamppb"
@@ -106,7 +107,7 @@ type (
 		stringRepr          string
 		executionManager    persistence.ExecutionManager
 		metricsHandler      metrics.Handler
-		eventsCache         EventsCache
+		eventsCache         events.Cache
 		closeCallback       CloseCallback
 		config              *configs.Config
 		contextTaggedLogger log.Logger
@@ -1099,7 +1100,7 @@ func (s *ContextImpl) GetConfig() *configs.Config {
 	return s.config
 }
 
-func (s *ContextImpl) GetEventsCache() EventsCache {
+func (s *ContextImpl) GetEventsCache() events.Cache {
 	// constant from initialization (except for tests), no need for locks
 	return s.eventsCache
 }

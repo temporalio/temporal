@@ -48,6 +48,7 @@ import (
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/service/history/configs"
+	"go.temporal.io/server/service/history/events"
 	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/tests"
 	"go.temporal.io/server/service/history/workflow"
@@ -217,7 +218,7 @@ func (c *mutationTestCase) createMutableState(t *testing.T, nsEntry *namespace.N
 
 	startTime := time.Time{}
 	logger := log.NewNoopLogger()
-	eventsCache := shard.NewMockEventsCache(ctrl)
+	eventsCache := events.NewMockCache(ctrl)
 	eventsCache.EXPECT().PutEvent(gomock.Any(), gomock.Any(), gomock.Any()).AnyTimes()
 
 	ms := workflow.NewMutableState(

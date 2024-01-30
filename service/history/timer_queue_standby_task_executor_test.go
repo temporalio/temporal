@@ -145,8 +145,11 @@ func (s *timerQueueStandbyTaskExecutorSuite) SetupTest() {
 		config,
 		s.timeSource,
 	)
-	s.mockShard.SetEventsCacheForTesting(shard.NewHostLevelEventsCache(
+	s.mockShard.SetEventsCacheForTesting(events.NewHostLevelEventsCache(
+		s.mockShard.GetExecutionManager(),
 		s.mockShard.GetConfig(),
+		s.mockShard.GetMetricsHandler(),
+		s.mockShard.GetLogger(),
 		false,
 	))
 

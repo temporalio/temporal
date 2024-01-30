@@ -51,6 +51,7 @@ import (
 	serialization "go.temporal.io/server/common/persistence/serialization"
 	searchattribute "go.temporal.io/server/common/searchattribute"
 	configs "go.temporal.io/server/service/history/configs"
+	"go.temporal.io/server/service/history/events"
 	tasks "go.temporal.io/server/service/history/tasks"
 )
 
@@ -309,10 +310,10 @@ func (mr *MockContextMockRecorder) GetEngine(ctx interface{}) *gomock.Call {
 }
 
 // GetEventsCache mocks base method.
-func (m *MockContext) GetEventsCache() EventsCache {
+func (m *MockContext) GetEventsCache() events.Cache {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "GetEventsCache")
-	ret0, _ := ret[0].(EventsCache)
+	ret0, _ := ret[0].(events.Cache)
 	return ret0
 }
 
@@ -1009,10 +1010,10 @@ func (mr *MockControllableContextMockRecorder) GetEngine(ctx interface{}) *gomoc
 }
 
 // GetEventsCache mocks base method.
-func (m *MockControllableContext) GetEventsCache() EventsCache {
+func (m *MockControllableContext) GetEventsCache() events.Cache {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "GetEventsCache")
-	ret0, _ := ret[0].(EventsCache)
+	ret0, _ := ret[0].(events.Cache)
 	return ret0
 }
 

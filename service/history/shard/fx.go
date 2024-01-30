@@ -28,6 +28,9 @@ import (
 	"context"
 	"sync/atomic"
 
+	"go.temporal.io/server/common/metrics"
+	"go.temporal.io/server/common/persistence"
+	"go.temporal.io/server/service/history/events"
 	"go.uber.org/fx"
 
 	"go.temporal.io/server/common"
@@ -38,8 +41,8 @@ import (
 )
 
 var Module = fx.Options(
-	fx.Provide(func(config *configs.Config) EventsCache {
-		return NewHostLevelEventsCache(config, false)
+	fx.Provide(func(executionManager persistence.ExecutionManager, config *configs.Config, handler metrics.Handler, logger log.Logger) events.Cache {
+		return events.NewHostLevelEventsCache(executionManager, config, handler, logger, false)
 	}),
 	fx.Provide(NewCacheFnProvider),
 	fx.Provide(
@@ -100,8 +103,8 @@ func initLazyLoadedOwnershipBasedQuotaScaler(
 }
 
 // NewCacheFnProvider provide a NewEventsCacheFn that can be used to create new workflow cache.
-func NewCacheFnProvider() NewEventsCacheFn {
-	return func(config *configs.Config) EventsCache {
-		return NewShardLevelEventsCache(config, false)
+func NewCacheFnProvider() events.NewEventsCacheFn {
+	return func(executionManager persistence.ExecutionManager, config *configs.Config, handler metrics.Handler, logger log.Logger) events.Cache {
+		return events.NewShardLevelEventsCache(executionManager, config, handler, logger, false)
 	}
 }
