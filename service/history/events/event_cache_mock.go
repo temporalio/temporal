@@ -60,7 +60,7 @@ func (m *MockCache) EXPECT() *MockCacheMockRecorder {
 }
 
 // DeleteEvent mocks base method.
-func (m *MockCache) DeleteEvent(shardID int32, key Key) {
+func (m *MockCache) DeleteEvent(shardID int32, key EventKey) {
 	m.ctrl.T.Helper()
 	m.ctrl.Call(m, "DeleteEvent", shardID, key)
 }
@@ -72,7 +72,7 @@ func (mr *MockCacheMockRecorder) DeleteEvent(shardID, key interface{}) *gomock.C
 }
 
 // GetEvent mocks base method.
-func (m *MockCache) GetEvent(ctx context.Context, shardID int32, key Key, firstEventID int64, branchToken []byte) (*v1.HistoryEvent, error) {
+func (m *MockCache) GetEvent(ctx context.Context, shardID int32, key EventKey, firstEventID int64, branchToken []byte) (*v1.HistoryEvent, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "GetEvent", ctx, shardID, key, firstEventID, branchToken)
 	ret0, _ := ret[0].(*v1.HistoryEvent)
@@ -87,7 +87,7 @@ func (mr *MockCacheMockRecorder) GetEvent(ctx, shardID, key, firstEventID, branc
 }
 
 // PutEvent mocks base method.
-func (m *MockCache) PutEvent(shardID int32, key Key, event *v1.HistoryEvent) {
+func (m *MockCache) PutEvent(shardID int32, key EventKey, event *v1.HistoryEvent) {
 	m.ctrl.T.Helper()
 	m.ctrl.Call(m, "PutEvent", shardID, key, event)
 }

@@ -751,7 +751,7 @@ func (ms *MutableStateImpl) GetUpdateOutcome(
 	if err != nil {
 		return nil, err
 	}
-	eventKey := events.Key{
+	eventKey := events.EventKey{
 		NamespaceID: namespace.ID(ms.executionInfo.NamespaceId),
 		WorkflowID:  ms.executionInfo.WorkflowId,
 		RunID:       ms.executionState.RunId,
@@ -786,7 +786,7 @@ func (ms *MutableStateImpl) GetActivityScheduledEvent(
 	event, err := ms.eventsCache.GetEvent(
 		ctx,
 		ms.shard.GetShardID(),
-		events.Key{
+		events.EventKey{
 			NamespaceID: namespace.ID(ms.executionInfo.NamespaceId),
 			WorkflowID:  ms.executionInfo.WorkflowId,
 			RunID:       ms.executionState.RunId,
@@ -887,7 +887,7 @@ func (ms *MutableStateImpl) GetChildExecutionInitiatedEvent(
 	event, err := ms.eventsCache.GetEvent(
 		ctx,
 		ms.shard.GetShardID(),
-		events.Key{
+		events.EventKey{
 			NamespaceID: namespace.ID(ms.executionInfo.NamespaceId),
 			WorkflowID:  ms.executionInfo.WorkflowId,
 			RunID:       ms.executionState.RunId,
@@ -934,7 +934,7 @@ func (ms *MutableStateImpl) GetRequesteCancelExternalInitiatedEvent(
 	event, err := ms.eventsCache.GetEvent(
 		ctx,
 		ms.shard.GetShardID(),
-		events.Key{
+		events.EventKey{
 			NamespaceID: namespace.ID(ms.executionInfo.NamespaceId),
 			WorkflowID:  ms.executionInfo.WorkflowId,
 			RunID:       ms.executionState.RunId,
@@ -1012,7 +1012,7 @@ func (ms *MutableStateImpl) GetSignalExternalInitiatedEvent(
 	event, err := ms.eventsCache.GetEvent(
 		ctx,
 		ms.shard.GetShardID(),
-		events.Key{
+		events.EventKey{
 			NamespaceID: namespace.ID(ms.executionInfo.NamespaceId),
 			WorkflowID:  ms.executionInfo.WorkflowId,
 			RunID:       ms.executionState.RunId,
@@ -1054,7 +1054,7 @@ func (ms *MutableStateImpl) GetCompletionEvent(
 	event, err := ms.eventsCache.GetEvent(
 		ctx,
 		ms.shard.GetShardID(),
-		events.Key{
+		events.EventKey{
 			NamespaceID: namespace.ID(ms.executionInfo.NamespaceId),
 			WorkflowID:  ms.executionInfo.WorkflowId,
 			RunID:       ms.executionState.RunId,
@@ -1108,7 +1108,7 @@ func (ms *MutableStateImpl) GetStartEvent(
 	event, err := ms.eventsCache.GetEvent(
 		ctx,
 		ms.shard.GetShardID(),
-		events.Key{
+		events.EventKey{
 			NamespaceID: namespace.ID(ms.executionInfo.NamespaceId),
 			WorkflowID:  ms.executionInfo.WorkflowId,
 			RunID:       ms.executionState.RunId,
@@ -1224,7 +1224,7 @@ func (ms *MutableStateImpl) writeEventToCache(
 	// disposition lookups can be fast
 	ms.eventsCache.PutEvent(
 		ms.shard.GetShardID(),
-		events.Key{
+		events.EventKey{
 			NamespaceID: namespace.ID(ms.executionInfo.NamespaceId),
 			WorkflowID:  ms.executionInfo.WorkflowId,
 			RunID:       ms.executionState.RunId,

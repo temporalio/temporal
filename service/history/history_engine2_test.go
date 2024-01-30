@@ -706,7 +706,7 @@ func (s *engine2Suite) TestRecordActivityTaskStartedSuccess() {
 	s.mockEventsCache.EXPECT().GetEvent(
 		gomock.Any(),
 		gomock.Any(),
-		events.Key{
+		events.EventKey{
 			NamespaceID: namespaceID,
 			WorkflowID:  workflowExecution.GetWorkflowId(),
 			RunID:       workflowExecution.GetRunId(),
@@ -2096,7 +2096,7 @@ func (s *engine2Suite) TestRefreshWorkflowTasks() {
 	s.mockEventsCache.EXPECT().GetEvent(
 		gomock.Any(),
 		gomock.Any(),
-		events.Key{
+		events.EventKey{
 			NamespaceID: tests.NamespaceID,
 			WorkflowID:  execution.GetWorkflowId(),
 			RunID:       execution.GetRunId(),
@@ -2109,7 +2109,7 @@ func (s *engine2Suite) TestRefreshWorkflowTasks() {
 	s.mockEventsCache.EXPECT().GetEvent(
 		gomock.Any(),
 		gomock.Any(),
-		events.Key{
+		events.EventKey{
 			NamespaceID: tests.NamespaceID,
 			WorkflowID:  execution.GetWorkflowId(),
 			RunID:       execution.GetRunId(),

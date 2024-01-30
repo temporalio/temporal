@@ -22,7 +22,7 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-//go:generate mockgen -copyright_file ../../../LICENSE -package $GOPACKAGE -source $GOFILE -destination cache_mock.go
+//go:generate mockgen -copyright_file ../../../LICENSE -package $GOPACKAGE -source $GOFILE -destination event_cache_mock.go
 
 package events
 
@@ -43,7 +43,7 @@ import (
 )
 
 type (
-	Key struct {
+	EventKey struct {
 		NamespaceID namespace.ID
 		WorkflowID  string
 		RunID       string
@@ -52,9 +52,9 @@ type (
 	}
 
 	Cache interface {
-		GetEvent(ctx context.Context, shardID int32, key Key, firstEventID int64, branchToken []byte) (*historypb.HistoryEvent, error)
-		PutEvent(shardID int32, key Key, event *historypb.HistoryEvent)
-		DeleteEvent(shardID int32, key Key)
+		GetEvent(ctx context.Context, shardID int32, key EventKey, firstEventID int64, branchToken []byte) (*historypb.HistoryEvent, error)
+		PutEvent(shardID int32, key EventKey, event *historypb.HistoryEvent)
+		DeleteEvent(shardID int32, key EventKey)
 	}
 
 	CacheImpl struct {
@@ -117,7 +117,7 @@ func NewEventsCache(
 	}
 }
 
-func (e *CacheImpl) validateKey(shardID int32, key Key) bool {
+func (e *CacheImpl) validateKey(shardID int32, key EventKey) bool {
 	if len(key.NamespaceID) == 0 || len(key.WorkflowID) == 0 || len(key.RunID) == 0 || key.EventID < common.FirstEventID {
 		// This is definitely a bug, but just warn and don't crash so we can find anywhere this happens.
 		e.logger.Warn("one or more ids is invalid in event cache",
@@ -131,7 +131,7 @@ func (e *CacheImpl) validateKey(shardID int32, key Key) bool {
 	return true
 }
 
-func (e *CacheImpl) GetEvent(ctx context.Context, shardID int32, key Key, firstEventID int64, branchToken []byte) (*historypb.HistoryEvent, error) {
+func (e *CacheImpl) GetEvent(ctx context.Context, shardID int32, key EventKey, firstEventID int64, branchToken []byte) (*historypb.HistoryEvent, error) {
 	handler := e.metricsHandler.WithTags(
 		metrics.StringTag(metrics.CacheTypeTagName, metrics.EventsCacheTypeTagValue),
 		metrics.OperationTag(metrics.EventsCacheGetEventScope),
@@ -171,7 +171,7 @@ func (e *CacheImpl) GetEvent(ctx context.Context, shardID int32, key Key, firstE
 	return event, nil
 }
 
-func (e *CacheImpl) PutEvent(shardID int32, key Key, event *historypb.HistoryEvent) {
+func (e *CacheImpl) PutEvent(shardID int32, key EventKey, event *historypb.HistoryEvent) {
 	handler := e.metricsHandler.WithTags(
 		metrics.StringTag(metrics.CacheTypeTagName, metrics.EventsCacheTypeTagValue),
 		metrics.OperationTag(metrics.EventsCachePutEventScope),
@@ -186,7 +186,7 @@ func (e *CacheImpl) PutEvent(shardID int32, key Key, event *historypb.HistoryEve
 	e.put(key, event)
 }
 
-func (e *CacheImpl) DeleteEvent(shardID int32, key Key) {
+func (e *CacheImpl) DeleteEvent(shardID int32, key EventKey) {
 	handler := e.metricsHandler.WithTags(
 		metrics.StringTag(metrics.CacheTypeTagName, metrics.EventsCacheTypeTagValue),
 		metrics.OperationTag(metrics.EventsCacheDeleteEventScope),
@@ -202,7 +202,7 @@ func (e *CacheImpl) DeleteEvent(shardID int32, key Key) {
 func (e *CacheImpl) getHistoryEventFromStore(
 	ctx context.Context,
 	shardID int32,
-	key Key,
+	key EventKey,
 	firstEventID int64,
 	branchToken []byte,
 ) (*historypb.HistoryEvent, error) {
@@ -250,7 +250,7 @@ func (e *CacheImpl) getHistoryEventFromStore(
 	return nil, errEventNotFoundInBatch
 }
 
-func (e *CacheImpl) put(key Key, event *historypb.HistoryEvent) interface{} {
+func (e *CacheImpl) put(key EventKey, event *historypb.HistoryEvent) interface{} {
 	return e.Put(key, newHistoryEventCacheItem(event))
 }
 
