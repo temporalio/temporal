@@ -33,6 +33,7 @@ import (
 	"os"
 	"path"
 	"testing"
+	"time"
 
 	"github.com/pborman/uuid"
 	"go.uber.org/fx"
@@ -45,6 +46,7 @@ import (
 	"go.temporal.io/server/common/archiver"
 	"go.temporal.io/server/common/archiver/filestore"
 	"go.temporal.io/server/common/archiver/provider"
+	"go.temporal.io/server/common/backoff"
 	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/config"
 	"go.temporal.io/server/common/dynamicconfig"
@@ -335,9 +337,24 @@ func NewClusterWithPersistenceTestBaseFactory(t *testing.T, options *TestCluster
 }
 
 func setupIndex(esConfig *esclient.Config, logger log.Logger) error {
-	esClient, err := esclient.NewFunctionalTestsClient(esConfig, logger)
+	var esClient esclient.IntegrationTestsClient
+	op := func() error {
+		var err error
+		esClient, err = esclient.NewFunctionalTestsClient(esConfig, logger)
+		if err != nil {
+			return err
+		}
+
+		return esClient.Ping(context.TODO())
+	}
+
+	err := backoff.ThrottleRetry(
+		op,
+		backoff.NewExponentialRetryPolicy(time.Second).WithExpirationInterval(time.Minute),
+		nil,
+	)
 	if err != nil {
-		return err
+		logger.Fatal("Failed to connect to elasticsearch", tag.Error(err))
 	}
 
 	exists, err := esClient.IndexExists(context.Background(), esConfig.GetVisibilityIndex())

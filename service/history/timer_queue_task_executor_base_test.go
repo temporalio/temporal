@@ -91,6 +91,7 @@ func (s *timerQueueTaskExecutorBaseSuite) SetupTest() {
 		config,
 	)
 	s.testShardContext.Resource.ClusterMetadata.EXPECT().GetCurrentClusterName().Return(cluster.TestCurrentClusterName).AnyTimes()
+	s.testShardContext.Resource.ClusterMetadata.EXPECT().GetClusterID().Return(cluster.TestCurrentClusterInitialFailoverVersion).AnyTimes()
 
 	s.timerQueueTaskExecutorBase = newTimerQueueTaskExecutorBase(
 		s.testShardContext,
