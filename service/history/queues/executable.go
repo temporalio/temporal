@@ -416,7 +416,7 @@ func (e *executableImpl) HandleErr(err error) (retErr error) {
 
 	metrics.TaskFailures.With(e.taggedMetricsHandler).Record(1)
 
-	e.logger.Error("Fail to process task", tag.Error(err), tag.LifeCycleProcessingFailed)
+	e.logger.Error("Fail to process task", tag.Error(err), tag.AttemptWithUnexpectedError(e.attemptsWithUnexpectedError), tag.LifeCycleProcessingFailed)
 	return err
 }
 
