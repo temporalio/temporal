@@ -409,7 +409,7 @@ func (e *executableImpl) HandleErr(err error) (retErr error) {
 
 	e.unexpectedErrorAttempts++
 	metrics.TaskFailures.With(e.taggedMetricsHandler).Record(1)
-	e.logger.Error("Fail to process task", tag.Error(err), tag.AttemptWithUnexpectedError(int32(e.unexpectedErrorAttempts)), tag.LifeCycleProcessingFailed)
+	e.logger.Error("Fail to process task", tag.Error(err), tag.UnexpectedErrorAttempts(int32(e.unexpectedErrorAttempts)), tag.LifeCycleProcessingFailed)
 
 	if e.unexpectedErrorAttempts >= e.maxUnexpectedErrorAttempts() && e.dlqEnabled() {
 		e.logger.Error("Marking task as terminally failed after maximum number of attempts with unexpected errors, will send to DLQ",
