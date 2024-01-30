@@ -292,7 +292,7 @@ func (r *HistoryReplicatorImpl) doApplyEvents(
 			if err != nil {
 				return err
 			} else if !prepareHistoryBranchOut.DoContinue {
-				r.metricsHandler.Counter(metrics.DuplicateReplicationEventsCounter.Name()).Record(
+				metrics.DuplicateReplicationEventsCounter.With(r.metricsHandler).Record(
 					1,
 					metrics.OperationTag(metrics.ReplicateHistoryEventsScope))
 				return nil

@@ -136,7 +136,7 @@ func (e *ExecutableActivityStateTask) Execute() error {
 			tag.WorkflowRunID(e.RunID),
 			tag.TaskID(e.ExecutableTask.TaskID()),
 		)
-		e.MetricsHandler.Counter(metrics.ReplicationTasksSkipped.Name()).Record(
+		metrics.ReplicationTasksSkipped.With(e.MetricsHandler).Record(
 			1,
 			metrics.OperationTag(metrics.SyncActivityTaskScope),
 			metrics.NamespaceTag(namespaceName),

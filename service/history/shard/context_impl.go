@@ -1275,10 +1275,9 @@ Loop:
 					tag.ShardQueueAcks(category.Name(), minTaskKey.TaskID),
 				)
 			}
-			metricsHandler.Histogram(
-				metrics.ShardInfoImmediateQueueLagHistogram.Name(),
-				metrics.ShardInfoImmediateQueueLagHistogram.Unit(),
-			).Record(lag, metrics.TaskCategoryTag(category.Name()))
+			metrics.ShardInfoImmediateQueueLagHistogram.
+				With(metricsHandler).
+				Record(lag, metrics.TaskCategoryTag(category.Name()))
 
 		case tasks.CategoryTypeScheduled:
 			minTaskKey := getMinTaskKey(queueState)

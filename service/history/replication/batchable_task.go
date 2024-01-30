@@ -89,7 +89,7 @@ func (w *batchedTask) MarkPoisonPill() error {
 }
 
 func (w *batchedTask) Ack() {
-	w.metricsHandler.Gauge(metrics.BatchableTaskBatchCount.Name()).Record(
+	metrics.BatchableTaskBatchCount.With(w.metricsHandler).Record(
 		float64(len(w.individualTasks)),
 	)
 	w.callIndividual(TrackableExecutableTask.Ack)
