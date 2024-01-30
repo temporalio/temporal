@@ -1402,6 +1402,10 @@ func (e *matchingEngineImpl) GetNexusService(ctx context.Context, request *match
 }
 
 func (e *matchingEngineImpl) ListNexusServices(ctx context.Context, request *matchingservice.ListNexusServicesRequest) (*matchingservice.ListNexusServicesResponse, error) {
+	if request.LastKnownTableVersion < 0 {
+		return nil, persistence.ErrNonPositiveListNexusIncomingServicesPageSize
+	}
+
 	listRequest := &persistence.ListNexusIncomingServicesRequest{
 		PageSize:              int(request.PageSize),
 		NextPageToken:         request.NextPageToken,
@@ -1409,7 +1413,6 @@ func (e *matchingEngineImpl) ListNexusServices(ctx context.Context, request *mat
 	}
 
 	tableVers := request.LastKnownTableVersion
-	// TODO: negative tableVers handling
 
 	if request.Wait {
 		var cancel context.CancelFunc
@@ -1419,7 +1422,7 @@ func (e *matchingEngineImpl) ListNexusServices(ctx context.Context, request *mat
 
 	for {
 		resp := &matchingservice.ListNexusServicesResponse{}
-		listResp, tableVersChanged, err := e.incomingServiceRegistry.ListServices(ctx, listRequest)
+		listResp, tableVersChanged, err := e.incomingServiceRegistry.ListServices(listRequest)
 		if listResp != nil {
 			resp.TableVersion = listResp.TableVersion
 		}

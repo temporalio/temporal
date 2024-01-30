@@ -260,7 +260,7 @@ func makeGetMatchingClient(reqType reflect.Type) string {
 		// Always route these requests to the same matching node by constant key.
 		tq = fieldWithPath{path: "&taskqueuepb.TaskQueue{Name: \"not-applicable\"}"}
 		tqt = fieldWithPath{path: "enumspb.TASK_QUEUE_TYPE_UNSPECIFIED"}
-		nsID = fieldWithPath{path: `"_system_nexus_incoming_services_owner"`}
+		nsID = fieldWithPath{path: `"not-applicable"`}
 	default:
 		tq = findOneNestedField(t, "TaskQueue", "request", 2)
 		tqt = findOneNestedField(t, "TaskQueueType", "request", 2)

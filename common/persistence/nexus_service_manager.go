@@ -153,6 +153,6 @@ func toVersionedServiceRecord(serviceID string, service *nexus.IncomingService) 
 			Name:        service.Name,
 			NamespaceId: service.Namespace,
 			TaskQueue:   service.TaskQueue,
-			//Metadata:    service.Metadata, //TODO: fix this
+			Metadata:    service.Metadata, // TODO: fix me
 		}}
 }
