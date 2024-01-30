@@ -2825,13 +2825,13 @@ func (wh *WorkflowHandler) annotateSearchAttributesOfScheduledWorkflow(
 	queryResponse *schedspb.DescribeResponse,
 	nsName string,
 ) error {
-	ei, err := wh.getScheduledWorkflowExecutionInfoFrom(queryResponse)
-	if err != nil {
-		return err
+	ei := wh.getScheduledWorkflowExecutionInfoFrom(queryResponse)
+	if ei == nil {
+		return nil
 	}
-	annotatedAttributes, err := wh.createAnnotatedSearchAttributesFromNewWorkflow(ei, nsName)
+	annotatedAttributes, err := wh.annotateSearchAttributes(ei.GetSearchAttributes(), nsName)
 	if err != nil {
-		return fmt.Errorf("annotate search attributes:%w", err)
+		return fmt.Errorf("annotate search attributes: %w", err)
 	}
 	ei.SearchAttributes = annotatedAttributes
 	return nil
@@ -2839,31 +2839,30 @@ func (wh *WorkflowHandler) annotateSearchAttributesOfScheduledWorkflow(
 
 func (wh *WorkflowHandler) getScheduledWorkflowExecutionInfoFrom(
 	queryResponse *schedspb.DescribeResponse,
-) (*workflowpb.NewWorkflowExecutionInfo, error) {
+) *workflowpb.NewWorkflowExecutionInfo {
 	action := queryResponse.GetSchedule().GetAction().GetAction()
 	startWorkflowAction, ok := action.(*schedpb.ScheduleAction_StartWorkflow)
 	if !ok {
-		return nil, serviceerror.NewInvalidArgument("unsupported action kind")
+		return nil
 	}
-	newWorkflowExecutionInfo := startWorkflowAction.StartWorkflow
-	return newWorkflowExecutionInfo, nil
+	return startWorkflowAction.StartWorkflow
 }
 
-func (wh *WorkflowHandler) createAnnotatedSearchAttributesFromNewWorkflow(
-	executionInfo *workflowpb.NewWorkflowExecutionInfo,
+func (wh *WorkflowHandler) annotateSearchAttributes(
+	searchAttributes *commonpb.SearchAttributes,
 	nsName string,
 ) (*commonpb.SearchAttributes, error) {
 	unaliasedSearchAttrs, err := searchattribute.UnaliasFields(
 		wh.saMapperProvider,
-		executionInfo.GetSearchAttributes(),
+		searchAttributes,
 		nsName,
 	)
 	if err != nil {
-		return nil, fmt.Errorf("create annotations:%w", err)
+		return nil, fmt.Errorf("create annotations: %w", err)
 	}
 	saTypeMap, err := wh.saProvider.GetSearchAttributes(wh.visibilityMrg.GetIndexName(), false)
 	if err != nil {
-		return nil, fmt.Errorf("create annotations:%w", err)
+		return nil, fmt.Errorf("create annotations: %w", err)
 	}
 	searchattribute.ApplyTypeMap(unaliasedSearchAttrs, saTypeMap)
 	annotatedAttributes, err := searchattribute.AliasFields(
@@ -2872,7 +2871,7 @@ func (wh *WorkflowHandler) createAnnotatedSearchAttributesFromNewWorkflow(
 		nsName,
 	)
 	if err != nil {
-		return nil, fmt.Errorf("create annotations:%w", err)
+		return nil, fmt.Errorf("create annotations: %w", err)
 	}
 	return annotatedAttributes, nil
 }

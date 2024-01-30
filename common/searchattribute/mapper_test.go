@@ -144,12 +144,13 @@ func Test_UnaliasFields(t *testing.T) {
 	sa = &commonpb.SearchAttributes{
 		IndexedFields: nil,
 	}
-	sa, err = UnaliasFields(mapperProvider, sa, "error-namespace")
+	sb, err := UnaliasFields(mapperProvider, sa, "error-namespace")
 	assert.NoError(t, err)
-	assert.Nil(t, sa)
-	sa, err = UnaliasFields(mapperProvider, sa, "unknown-namespace")
+	assert.Equal(t, sa, sb, "when there is nothin to unalias should return received attributes")
+
+	sb, err = UnaliasFields(mapperProvider, sa, "unknown-namespace")
 	assert.NoError(t, err)
-	assert.Nil(t, sa)
+	assert.Equal(t, sa, sb, "when there is nothin to unalias should return received attributes")
 
 	// Pass through aliases are not substituted.
 	sa = &commonpb.SearchAttributes{
@@ -157,7 +158,7 @@ func Test_UnaliasFields(t *testing.T) {
 			"pass-through": {Data: []byte("data1")},
 		},
 	}
-	sa, err = UnaliasFields(mapperProvider, sa, "test-namespace")
+	sb, err = UnaliasFields(mapperProvider, sa, "test-namespace")
 	assert.NoError(t, err)
-	assert.Nil(t, sa)
+	assert.Equal(t, sb, sb, "when there is nothin to unalias should return received attributes")
 }
