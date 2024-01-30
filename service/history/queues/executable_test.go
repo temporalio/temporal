@@ -405,7 +405,7 @@ func (s *executableSuite) TestExecute_SendToDLQAfterMaxAttempts() {
 	s.Len(queueWriter.EnqueueTaskRequests, 1)
 }
 
-func (s *executableSuite) TestExecute_DontSendToDLQAfterMaxAttemptsIfDLQDisabled() {
+func (s *executableSuite) TestExecute_DontSendToDLQAfterMaxAttemptsDLQDisabled() {
 	queueWriter := &queuestest.FakeQueueWriter{}
 	executable := s.newTestExecutable(func(p *params) {
 		p.dlqWriter = queues.NewDLQWriter(queueWriter, s.mockClusterMetadata, metrics.NoopMetricsHandler, log.NewTestLogger(), s.mockNamespaceRegistry)
@@ -429,6 +429,34 @@ func (s *executableSuite) TestExecute_DontSendToDLQAfterMaxAttemptsIfDLQDisabled
 		ExecutedAsActive:    false,
 		ExecutionErr:        errors.New("some random error"),
 	})
+	s.Error(executable.Execute())
+	s.Error(executable.HandleErr(err))
+	s.Len(queueWriter.EnqueueTaskRequests, 0)
+}
+
+func (s *executableSuite) TestExecute_DontSendToDLQAfterMaxAttemptsExpectedError() {
+	queueWriter := &queuestest.FakeQueueWriter{}
+	executable := s.newTestExecutable(func(p *params) {
+		p.dlqWriter = queues.NewDLQWriter(queueWriter, s.mockClusterMetadata, metrics.NoopMetricsHandler, log.NewTestLogger(), s.mockNamespaceRegistry)
+		p.dlqEnabled = func() bool {
+			return true
+		}
+		p.attemptsBeforeSendingToDlq = func() int {
+			return 1
+		}
+	})
+
+	s.mockExecutor.EXPECT().Execute(gomock.Any(), executable).Return(queues.ExecuteResponse{
+		ExecutionMetricTags: nil,
+		ExecutedAsActive:    false,
+		ExecutionErr:        serviceerror.NewResourceExhausted(enumspb.RESOURCE_EXHAUSTED_CAUSE_BUSY_WORKFLOW, "test"),
+	}).Times(2)
+
+	// Attempt 1
+	err := executable.Execute()
+	s.Error(executable.HandleErr(err))
+
+	// Attempt 2
 	s.Error(executable.Execute())
 	s.Error(executable.HandleErr(err))
 	s.Len(queueWriter.EnqueueTaskRequests, 0)

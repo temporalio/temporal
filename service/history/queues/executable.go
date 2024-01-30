@@ -133,18 +133,19 @@ type (
 		metricsHandler    metrics.Handler
 		dlqWriter         *DLQWriter
 
-		readerID                   int64
-		loadTime                   time.Time
-		scheduledTime              time.Time
-		scheduleLatency            time.Duration
-		attemptNoUserLatency       time.Duration
-		inMemoryNoUserLatency      time.Duration
-		lastActiveness             bool
-		resourceExhaustedCount     int // does NOT include consts.ErrResourceExhaustedBusyWorkflow
-		taggedMetricsHandler       metrics.Handler
-		dlqEnabled                 dynamicconfig.BoolPropertyFn
-		terminalFailureCause       error
-		attemptsBeforeSendingToDlq dynamicconfig.IntPropertyFn
+		readerID                    int64
+		loadTime                    time.Time
+		scheduledTime               time.Time
+		scheduleLatency             time.Duration
+		attemptNoUserLatency        time.Duration
+		inMemoryNoUserLatency       time.Duration
+		lastActiveness              bool
+		resourceExhaustedCount      int // does NOT include consts.ErrResourceExhaustedBusyWorkflow
+		taggedMetricsHandler        metrics.Handler
+		dlqEnabled                  dynamicconfig.BoolPropertyFn
+		terminalFailureCause        error
+		attemptsWithUnexpectedError int
+		attemptsBeforeSendingToDlq  dynamicconfig.IntPropertyFn
 	}
 	ExecutableParams struct {
 		DLQEnabled                 dynamicconfig.BoolPropertyFn
@@ -405,8 +406,10 @@ func (e *executableImpl) HandleErr(err error) (retErr error) {
 		return nil
 	}
 
-	if e.attempt >= e.attemptsBeforeSendingToDlq() && e.dlqEnabled() {
-		e.logger.Error("Marking task as terminally failed after maximum number of attempts, will send to DLQ", tag.Attempt(int32(e.attempt)), tag.Error(err))
+	e.attemptsWithUnexpectedError++
+	if e.attemptsWithUnexpectedError >= e.attemptsBeforeSendingToDlq() && e.dlqEnabled() {
+		e.logger.Error("Marking task as terminally failed after maximum number of attempts with unexpected errors, will send to DLQ",
+			tag.Attempt(int32(e.attemptsWithUnexpectedError)), tag.Error(err))
 		e.terminalFailureCause = fmt.Errorf("%w: %w", ErrMaxAttempts, err)
 		return fmt.Errorf("%w: %w", ErrTerminalTaskFailure, e.terminalFailureCause)
 	}
