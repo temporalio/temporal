@@ -914,7 +914,7 @@ func (handler *workflowTaskHandlerImpl) handleCommandContinueAsNewWorkflow(
 	if err != nil {
 		return handler.failWorkflowTaskOnInvalidArgument(enumspb.WORKFLOW_TASK_FAILED_CAUSE_BAD_SEARCH_ATTRIBUTES, err)
 	}
-	if unaliasedSas != nil {
+	if unaliasedSas != attr.GetSearchAttributes() {
 		// Create a copy of the `attr` to avoid modification of original `attr`,
 		// which can be needed again in case of retry.
 		newAttr := common.CloneProto(attr)
@@ -1032,7 +1032,7 @@ func (handler *workflowTaskHandlerImpl) handleCommandStartChildWorkflow(
 	if err != nil {
 		return handler.failWorkflowTaskOnInvalidArgument(enumspb.WORKFLOW_TASK_FAILED_CAUSE_BAD_SEARCH_ATTRIBUTES, err)
 	}
-	if unaliasedSas != nil {
+	if unaliasedSas != attr.GetSearchAttributes() {
 		// Create a copy of the `attr` to avoid modification of original `attr`,
 		// which can be needed again in case of retry.
 		newAttr := common.CloneProto(attr)
@@ -1183,7 +1183,7 @@ func (handler *workflowTaskHandlerImpl) handleCommandUpsertWorkflowSearchAttribu
 	if err != nil {
 		return handler.failWorkflowTaskOnInvalidArgument(enumspb.WORKFLOW_TASK_FAILED_CAUSE_BAD_SEARCH_ATTRIBUTES, err)
 	}
-	if unaliasedSas != nil {
+	if unaliasedSas != attr.GetSearchAttributes() {
 		// Create a copy of the `attr` to avoid modification of original `attr`,
 		// which can be needed again in case of retry.
 		newAttr := common.CloneProto(attr)

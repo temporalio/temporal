@@ -4225,7 +4225,7 @@ func (wh *WorkflowHandler) unaliasStartWorkflowExecutionRequestSearchAttributes(
 	if err != nil {
 		return nil, err
 	}
-	if unaliasedSas == nil {
+	if unaliasedSas == request.GetSearchAttributes() {
 		return request, nil
 	}
 
@@ -4240,7 +4240,7 @@ func (wh *WorkflowHandler) unaliasSignalWithStartWorkflowExecutionRequestSearchA
 	if err != nil {
 		return nil, err
 	}
-	if unaliasedSas == nil {
+	if unaliasedSas == request.GetSearchAttributes() {
 		return request, nil
 	}
 
@@ -4256,7 +4256,7 @@ func (wh *WorkflowHandler) unaliasCreateScheduleRequestSearchAttributes(request 
 		return nil, err
 	}
 
-	if unaliasedSas == nil {
+	if unaliasedSas == request.GetSearchAttributes() {
 		return request, nil
 	}
 

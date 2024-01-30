@@ -29,6 +29,7 @@ package searchattribute
 import (
 	commonpb "go.temporal.io/api/common/v1"
 	"go.temporal.io/api/serviceerror"
+
 	"go.temporal.io/server/common/namespace"
 )
 
@@ -219,7 +220,7 @@ func UnaliasFields(
 
 	// If no alias was mapped, return nil to save on clone operation on caller side.
 	if !mapped {
-		return nil, nil
+		return searchAttributes, nil
 	}
 
 	return &commonpb.SearchAttributes{IndexedFields: newIndexedFields}, nil
