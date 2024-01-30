@@ -132,7 +132,7 @@ func (h *historyArchiver) Archive(
 	featureCatalog := archiver.GetFeatureCatalog(opts...)
 	startTime := time.Now().UTC()
 	defer func() {
-		handler.Timer(metrics.ServiceLatency.Name()).Record(time.Since(startTime))
+		metrics.ServiceLatency.With(handler).Record(time.Since(startTime))
 		if err != nil {
 			if common.IsPersistenceTransientError(err) || isRetryableError(err) {
 				metrics.HistoryArchiverArchiveTransientErrorCount.With(handler).Record(1)

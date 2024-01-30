@@ -159,7 +159,7 @@ func (ti *TelemetryInterceptor) UnaryIntercept(
 		if noUserLatency < 0 {
 			noUserLatency = 0
 		}
-		metricsHandler.Timer(metrics.ServiceLatencyNoUserLatency.Name()).Record(noUserLatency)
+		metrics.ServiceLatencyNoUserLatency.With(metricsHandler).Record(noUserLatency)
 	}()
 
 	resp, err := handler(ctx, req)
@@ -167,7 +167,7 @@ func (ti *TelemetryInterceptor) UnaryIntercept(
 	if val, ok := metrics.ContextCounterGet(ctx, metrics.HistoryWorkflowExecutionCacheLatency.Name()); ok {
 		userLatencyDuration = time.Duration(val)
 		startTime.Add(userLatencyDuration)
-		metricsHandler.Timer(metrics.ServiceLatencyUserLatency.Name()).Record(userLatencyDuration)
+		metrics.ServiceLatencyUserLatency.With(metricsHandler).Record(userLatencyDuration)
 	}
 
 	if err != nil {

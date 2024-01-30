@@ -97,7 +97,7 @@ func (v *visibilityArchiver) Archive(ctx context.Context, URI archiver.URI, requ
 	featureCatalog := archiver.GetFeatureCatalog(opts...)
 	startTime := time.Now().UTC()
 	defer func() {
-		handler.Timer(metrics.ServiceLatency.Name()).Record(time.Since(startTime))
+		metrics.ServiceLatency.With(handler).Record(time.Since(startTime))
 		if err != nil {
 			if isRetryableError(err) {
 				metrics.VisibilityArchiverArchiveTransientErrorCount.With(handler).Record(1)

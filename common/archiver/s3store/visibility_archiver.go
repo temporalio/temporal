@@ -116,7 +116,7 @@ func (v *visibilityArchiver) Archive(
 	logger := archiver.TagLoggerWithArchiveVisibilityRequestAndURI(v.container.Logger, request, URI.String())
 	archiveFailReason := ""
 	defer func() {
-		handler.Timer(metrics.ServiceLatency.Name()).Record(time.Since(startTime))
+		metrics.ServiceLatency.With(handler).Record(time.Since(startTime))
 		if err != nil {
 			if isRetryableError(err) {
 				metrics.VisibilityArchiverArchiveTransientErrorCount.With(handler).Record(1)
