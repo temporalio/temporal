@@ -184,7 +184,7 @@ func (f *archivalQueueFactory) newScheduledQueue(shard shard.Context, executor q
 		metricsHandler,
 		f.DLQWriter,
 		f.Config.TaskDLQEnabled,
-		f.Config.AttemptsBeforeSendingTaskToDLQ,
+		f.Config.TaskDLQUnexpectedErrorAttempts,
 	)
 	return queues.NewScheduledQueue(
 		shard,

@@ -106,7 +106,7 @@ type Config struct {
 	QueueMaxReaderCount              dynamicconfig.IntPropertyFn
 
 	TaskDLQEnabled                 dynamicconfig.BoolPropertyFn
-	AttemptsBeforeSendingTaskToDLQ dynamicconfig.IntPropertyFn
+	TaskDLQUnexpectedErrorAttempts dynamicconfig.IntPropertyFn
 
 	TaskSchedulerEnableRateLimiter           dynamicconfig.BoolPropertyFn
 	TaskSchedulerEnableRateLimiterShadowMode dynamicconfig.BoolPropertyFn
@@ -399,7 +399,7 @@ func NewConfig(
 		QueueMaxReaderCount:              dc.GetIntProperty(dynamicconfig.QueueMaxReaderCount, 2),
 
 		TaskDLQEnabled:                 dc.GetBoolProperty(dynamicconfig.HistoryTaskDLQEnabled, true),
-		AttemptsBeforeSendingTaskToDLQ: dc.GetIntProperty(dynamicconfig.HistoryTaskDLQUnexpectedErrorAttempts, 100),
+		TaskDLQUnexpectedErrorAttempts: dc.GetIntProperty(dynamicconfig.HistoryTaskDLQUnexpectedErrorAttempts, 100),
 
 		TaskSchedulerEnableRateLimiter:           dc.GetBoolProperty(dynamicconfig.TaskSchedulerEnableRateLimiter, false),
 		TaskSchedulerEnableRateLimiterShadowMode: dc.GetBoolProperty(dynamicconfig.TaskSchedulerEnableRateLimiterShadowMode, true),

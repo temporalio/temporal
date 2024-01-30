@@ -217,7 +217,7 @@ func (f *timerQueueFactory) CreateQueue(
 		metricsHandler,
 		f.DLQWriter,
 		f.Config.TaskDLQEnabled,
-		f.Config.AttemptsBeforeSendingTaskToDLQ,
+		f.Config.TaskDLQUnexpectedErrorAttempts,
 	)
 	return queues.NewScheduledQueue(
 		shard,
