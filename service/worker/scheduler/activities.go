@@ -76,6 +76,7 @@ var (
 	errNoEvents   = errors.New("GetEvents didn't return any events")
 	errNoAttrs    = errors.New("last event did not have correct attrs")
 	errBlocked    = errors.New("rate limiter doesn't allow any progress")
+	errUnkownFlow = errors.New("unknown workflow status")
 )
 
 func (e errFollow) Error() string { return string(e) }
@@ -315,7 +316,6 @@ func (r responseBuilder) Build(event *historypb.HistoryEvent) (*schedspb.WatchWo
 			result := attrs.Result
 			if proto.Size(result) > maxResultSize {
 				r.logger.Error(
-
 					fmt.Sprintf("result dropped due to its size %d", proto.Size(result)),
 					tag.WorkflowID(r.request.Execution.WorkflowId))
 				result = nil
@@ -347,8 +347,7 @@ func (r responseBuilder) Build(event *historypb.HistoryEvent) (*schedspb.WatchWo
 			return r.makeResponse(nil, nil), nil
 		}
 	}
-
-	return nil, errors.New("unknown workflow status")
+	return nil, errUnkownFlow
 }
 
 func (r responseBuilder) makeResponse(result *commonpb.Payloads, failure *failurepb.Failure) *schedspb.
