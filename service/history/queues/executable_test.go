@@ -421,14 +421,13 @@ func (s *executableSuite) TestExecute_DontSendToDLQAfterMaxAttemptsDLQDisabled()
 		ExecutionMetricTags: nil,
 		ExecutedAsActive:    false,
 		ExecutionErr:        errors.New("some random error"),
-	})
+	}).Times(2)
+
+	// Attempt 1
 	err := executable.Execute()
 	s.Error(executable.HandleErr(err))
-	s.mockExecutor.EXPECT().Execute(gomock.Any(), executable).Return(queues.ExecuteResponse{
-		ExecutionMetricTags: nil,
-		ExecutedAsActive:    false,
-		ExecutionErr:        errors.New("some random error"),
-	})
+
+	// Attempt 2
 	s.Error(executable.Execute())
 	s.Error(executable.HandleErr(err))
 	s.Len(queueWriter.EnqueueTaskRequests, 0)
