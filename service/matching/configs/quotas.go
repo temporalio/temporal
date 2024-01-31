@@ -54,6 +54,8 @@ var (
 		"ForceUnloadTaskQueue":                   1,
 		"UpdateTaskQueueUserData":                1,
 		"ReplicateTaskQueueUserData":             1,
+		"UpdateWorkerVersioningRules":            1,
+		"ListWorkerVersioningRules":              1,
 	}
 
 	APIPrioritiesOrdered = []int{0, 1}

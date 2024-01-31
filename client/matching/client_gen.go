@@ -157,6 +157,21 @@ func (c *clientImpl) ListTaskQueuePartitions(
 	return client.ListTaskQueuePartitions(ctx, request, opts...)
 }
 
+func (c *clientImpl) ListWorkerVersioningRules(
+	ctx context.Context,
+	request *matchingservice.ListWorkerVersioningRulesRequest,
+	opts ...grpc.CallOption,
+) (*matchingservice.ListWorkerVersioningRulesResponse, error) {
+
+	client, err := c.getClientForTaskqueue(request.GetNamespaceId(), &taskqueuepb.TaskQueue{Name: request.GetTaskQueue()}, enumspb.TASK_QUEUE_TYPE_WORKFLOW)
+	if err != nil {
+		return nil, err
+	}
+	ctx, cancel := c.createContext(ctx)
+	defer cancel()
+	return client.ListWorkerVersioningRules(ctx, request, opts...)
+}
+
 func (c *clientImpl) ReplicateTaskQueueUserData(
 	ctx context.Context,
 	request *matchingservice.ReplicateTaskQueueUserDataRequest,
@@ -215,4 +230,19 @@ func (c *clientImpl) UpdateWorkerBuildIdCompatibility(
 	ctx, cancel := c.createContext(ctx)
 	defer cancel()
 	return client.UpdateWorkerBuildIdCompatibility(ctx, request, opts...)
+}
+
+func (c *clientImpl) UpdateWorkerVersioningRules(
+	ctx context.Context,
+	request *matchingservice.UpdateWorkerVersioningRulesRequest,
+	opts ...grpc.CallOption,
+) (*matchingservice.UpdateWorkerVersioningRulesResponse, error) {
+
+	client, err := c.getClientForTaskqueue(request.GetNamespaceId(), &taskqueuepb.TaskQueue{Name: request.GetTaskQueue()}, enumspb.TASK_QUEUE_TYPE_WORKFLOW)
+	if err != nil {
+		return nil, err
+	}
+	ctx, cancel := c.createContext(ctx)
+	defer cancel()
+	return client.UpdateWorkerVersioningRules(ctx, request, opts...)
 }
