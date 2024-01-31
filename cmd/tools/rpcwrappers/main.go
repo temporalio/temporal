@@ -223,14 +223,7 @@ func makeGetMatchingClient(reqType reflect.Type) string {
 	// this magically figures out how to get a MatchingServiceClient from a request
 	t := reqType.Elem() // we know it's a pointer
 
-	var nsID fieldWithPath
-	switch t.Name() {
-	case "ListWorkerVersioningRulesRequest",
-		"UpdateWorkerVersioningRulesRequest":
-		nsID = findOneNestedField(t, "Namespace", "request", 2)
-	default:
-		nsID = findOneNestedField(t, "NamespaceId", "request", 1)
-	}
+	nsID := findOneNestedField(t, "NamespaceId", "request", 1)
 
 	var tq, tqt fieldWithPath
 	switch t.Name() {

@@ -163,7 +163,7 @@ func (c *clientImpl) ListWorkerVersioningRules(
 	opts ...grpc.CallOption,
 ) (*matchingservice.ListWorkerVersioningRulesResponse, error) {
 
-	client, err := c.getClientForTaskqueue(request.GetRequest().GetNamespace(), &taskqueuepb.TaskQueue{Name: request.GetRequest().GetTaskQueue()}, enumspb.TASK_QUEUE_TYPE_WORKFLOW)
+	client, err := c.getClientForTaskqueue(request.GetNamespaceId(), &taskqueuepb.TaskQueue{Name: request.GetTaskQueue()}, enumspb.TASK_QUEUE_TYPE_WORKFLOW)
 	if err != nil {
 		return nil, err
 	}
@@ -238,7 +238,7 @@ func (c *clientImpl) UpdateWorkerVersioningRules(
 	opts ...grpc.CallOption,
 ) (*matchingservice.UpdateWorkerVersioningRulesResponse, error) {
 
-	client, err := c.getClientForTaskqueue(request.GetRequest().GetNamespace(), &taskqueuepb.TaskQueue{Name: request.GetRequest().GetTaskQueue()}, enumspb.TASK_QUEUE_TYPE_WORKFLOW)
+	client, err := c.getClientForTaskqueue(request.GetNamespaceId(), &taskqueuepb.TaskQueue{Name: request.GetTaskQueue()}, enumspb.TASK_QUEUE_TYPE_WORKFLOW)
 	if err != nil {
 		return nil, err
 	}

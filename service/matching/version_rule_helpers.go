@@ -67,11 +67,12 @@ func getActiveRules(rules []*persistencepb.AssignmentRule) []*persistencepb.Assi
 	})
 }
 
-// containsUnfiltered returns true if there exists an assignment rule with no hint, no worker ratio ramp, and no ramp percentage, or a ramp percentage of 100
+// containsUnfiltered returns true if there exists an assignment rule with no filter expression,
+// no worker ratio ramp, and no ramp percentage, or a ramp percentage of 100
 func containsUnfiltered(rules []*persistencepb.AssignmentRule) bool {
 	isUnfiltered := func(ar *taskqueue.BuildIdAssignmentRule) bool {
 		percentageRamp := ar.GetPercentageRamp()
-		return ar.GetHintFilter() == "" &&
+		return ar.GetFilterExpression() == "" &&
 			ar.GetWorkerRatioRamp() == nil &&
 			(percentageRamp == nil || (percentageRamp != nil && percentageRamp.RampPercentage == 100))
 	}
