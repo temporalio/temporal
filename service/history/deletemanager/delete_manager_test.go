@@ -34,9 +34,7 @@ import (
 	"github.com/stretchr/testify/suite"
 	commonpb "go.temporal.io/api/common/v1"
 	"go.temporal.io/api/serviceerror"
-	"google.golang.org/protobuf/types/known/timestamppb"
 
-	enumsspb "go.temporal.io/server/api/enums/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/cluster"
@@ -44,7 +42,6 @@ import (
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence/visibility/manager"
-	"go.temporal.io/server/common/persistence/visibility/store/standard/cassandra"
 	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/tasks"
 	"go.temporal.io/server/service/history/tests"
@@ -114,13 +111,9 @@ func (s *deleteManagerWorkflowSuite) TestDeleteDeletedWorkflowExecution() {
 		RunId:      tests.RunID,
 	}
 
-	s.mockVisibilityManager.EXPECT().HasStoreName(cassandra.CassandraPersistenceName).Return(true)
 	mockWeCtx := workflow.NewMockContext(s.controller)
 	mockMutableState := workflow.NewMockMutableState(s.controller)
 	mockMutableState.EXPECT().GetCurrentBranchToken().Return([]byte{22, 8, 78}, nil)
-	mockMutableState.EXPECT().GetExecutionState().Return(&persistencespb.WorkflowExecutionState{State: enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED})
-	closeTime := time.Date(1978, 8, 22, 1, 2, 3, 4, time.UTC)
-	mockMutableState.EXPECT().GetWorkflowCloseTime(gomock.Any()).Return(closeTime, nil)
 	closeExecutionVisibilityTaskID := int64(39)
 	mockMutableState.EXPECT().GetExecutionInfo().Return(&persistencespb.WorkflowExecutionInfo{
 		CloseVisibilityTaskId: closeExecutionVisibilityTaskID,
@@ -136,7 +129,7 @@ func (s *deleteManagerWorkflowSuite) TestDeleteDeletedWorkflowExecution() {
 		},
 		[]byte{22, 8, 78},
 		time.Time{},
-		closeTime,
+		time.Time{},
 		closeExecutionVisibilityTaskID,
 		&stage,
 	).Return(nil)
@@ -160,13 +153,9 @@ func (s *deleteManagerWorkflowSuite) TestDeleteDeletedWorkflowExecution_Error() 
 		RunId:      tests.RunID,
 	}
 
-	s.mockVisibilityManager.EXPECT().HasStoreName(cassandra.CassandraPersistenceName).Return(true)
 	mockWeCtx := workflow.NewMockContext(s.controller)
 	mockMutableState := workflow.NewMockMutableState(s.controller)
 	mockMutableState.EXPECT().GetCurrentBranchToken().Return([]byte{22, 8, 78}, nil)
-	mockMutableState.EXPECT().GetExecutionState().Return(&persistencespb.WorkflowExecutionState{State: enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED})
-	closeTime := time.Date(1978, 8, 22, 1, 2, 3, 4, time.UTC)
-	mockMutableState.EXPECT().GetWorkflowCloseTime(gomock.Any()).Return(closeTime, nil)
 	closeExecutionVisibilityTaskID := int64(39)
 	mockMutableState.EXPECT().GetExecutionInfo().MinTimes(1).Return(&persistencespb.WorkflowExecutionInfo{
 		CloseVisibilityTaskId: closeExecutionVisibilityTaskID,
@@ -182,7 +171,7 @@ func (s *deleteManagerWorkflowSuite) TestDeleteDeletedWorkflowExecution_Error() 
 		},
 		[]byte{22, 8, 78},
 		time.Time{},
-		closeTime,
+		time.Time{},
 		closeExecutionVisibilityTaskID,
 		&stage,
 	).Return(serviceerror.NewInternal("test error"))
@@ -204,15 +193,12 @@ func (s *deleteManagerWorkflowSuite) TestDeleteWorkflowExecution_OpenWorkflow() 
 		WorkflowId: tests.WorkflowID,
 		RunId:      tests.RunID,
 	}
-	now := time.Now().UTC()
 
-	s.mockVisibilityManager.EXPECT().HasStoreName(cassandra.CassandraPersistenceName).Return(true)
 	mockWeCtx := workflow.NewMockContext(s.controller)
 	mockMutableState := workflow.NewMockMutableState(s.controller)
 	closeExecutionVisibilityTaskID := int64(39)
 	mockMutableState.EXPECT().GetCurrentBranchToken().Return([]byte{22, 8, 78}, nil)
 	mockMutableState.EXPECT().GetExecutionInfo().MinTimes(1).Return(&persistencespb.WorkflowExecutionInfo{
-		StartTime:             timestamppb.New(now),
 		CloseVisibilityTaskId: closeExecutionVisibilityTaskID,
 	})
 	stage := tasks.DeleteWorkflowExecutionStageNone
@@ -225,7 +211,7 @@ func (s *deleteManagerWorkflowSuite) TestDeleteWorkflowExecution_OpenWorkflow() 
 			RunID:       tests.RunID,
 		},
 		[]byte{22, 8, 78},
-		now,
+		time.Time{},
 		time.Time{},
 		closeExecutionVisibilityTaskID,
 		&stage,

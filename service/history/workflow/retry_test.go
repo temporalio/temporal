@@ -32,10 +32,11 @@ import (
 	"github.com/stretchr/testify/assert"
 	enumspb "go.temporal.io/api/enums/v1"
 	failurepb "go.temporal.io/api/failure/v1"
-	"go.temporal.io/server/common/failure"
-	"go.temporal.io/server/common/number"
 	"google.golang.org/protobuf/types/known/durationpb"
 	"google.golang.org/protobuf/types/known/timestamppb"
+
+	"go.temporal.io/server/common/failure"
+	"go.temporal.io/server/common/number"
 
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/backoff"
@@ -214,6 +215,7 @@ func Test_nextBackoffInterval(t *testing.T) {
 			doNotCare(maxInterval(10*time.Second)),
 			doNotCare(expirationIn(30*time.Second)),
 			doNotCare[float64](2),
+			ExponentialBackoffAlgorithm,
 		)
 		assert.Equal(t, initialDelay, interval)
 		assert.Equal(t, enumspb.RETRY_STATE_IN_PROGRESS, retryState)
@@ -231,6 +233,7 @@ func Test_nextBackoffInterval(t *testing.T) {
 			doNotCare(maxInterval(10*time.Second)),
 			doNotCare(expirationIn(30*time.Second)),
 			doNotCare[float64](2),
+			ExponentialBackoffAlgorithm,
 		)
 		assert.Equal(t, initialDelay, interval)
 		assert.Equal(t, enumspb.RETRY_STATE_IN_PROGRESS, retryState)
@@ -248,6 +251,7 @@ func Test_nextBackoffInterval(t *testing.T) {
 			doNotCare(maxInterval(200*time.Second)),
 			doNotCare(expirationIn(600*time.Second)),
 			3,
+			ExponentialBackoffAlgorithm,
 		)
 		assert.Equal(t, initialDelay*pow(3, int32(attempt)-1), interval)
 		assert.Equal(t, enumspb.RETRY_STATE_IN_PROGRESS, retryState)
@@ -263,6 +267,7 @@ func Test_nextBackoffInterval(t *testing.T) {
 			maxInterval(maxBackoff),
 			doNotCare(expirationIn(600*time.Second)),
 			doNotCare[float64](2),
+			ExponentialBackoffAlgorithm,
 		)
 		assert.Equal(t, maxBackoff, interval)
 		assert.Equal(t, enumspb.RETRY_STATE_IN_PROGRESS, retryState)
@@ -277,6 +282,7 @@ func Test_nextBackoffInterval(t *testing.T) {
 			doNotCare(maxInterval(10*time.Second)),
 			doNotCare(expirationIn(600*time.Second)),
 			doNotCare[float64](2),
+			ExponentialBackoffAlgorithm,
 		)
 		assert.Equal(t, backoff.NoBackoff, interval)
 		assert.Equal(t, enumspb.RETRY_STATE_MAXIMUM_ATTEMPTS_REACHED, retryState)
@@ -292,6 +298,7 @@ func Test_nextBackoffInterval(t *testing.T) {
 			doNotCare(maxInterval(30*time.Minute)),
 			doNotCare(expirationIn(60*time.Minute)),
 			2,
+			ExponentialBackoffAlgorithm,
 		)
 		assert.Equal(t, initialDelay*pow(2, 10-1), interval)
 		assert.Equal(t, enumspb.RETRY_STATE_IN_PROGRESS, retryState)
@@ -307,6 +314,7 @@ func Test_nextBackoffInterval(t *testing.T) {
 			maxInterval(30*time.Minute),
 			expirationIn(1*time.Minute),
 			2,
+			ExponentialBackoffAlgorithm,
 		)
 		assert.Equal(t, backoff.NoBackoff, interval)
 		assert.Equal(t, enumspb.RETRY_STATE_TIMEOUT, retryState)
@@ -322,6 +330,7 @@ func Test_nextBackoffInterval(t *testing.T) {
 			maxInterval(30*time.Minute),
 			expirationIn(0),
 			2,
+			ExponentialBackoffAlgorithm,
 		)
 		assert.Equal(t, backoff.NoBackoff, interval)
 		assert.Equal(t, enumspb.RETRY_STATE_TIMEOUT, retryState)

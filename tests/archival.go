@@ -64,7 +64,7 @@ type ArchivalSuite struct {
 }
 
 func (s *ArchivalSuite) SetupSuite() {
-	s.setupSuite("testdata/cluster.yaml")
+	s.setupSuite("testdata/es_cluster.yaml")
 }
 
 func (s *ArchivalSuite) TearDownSuite() {

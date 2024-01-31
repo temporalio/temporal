@@ -396,6 +396,12 @@ func (c *clientImpl) Delete(ctx context.Context, indexName string, docID string,
 	return err
 }
 
+// Ping returns whether or not the elastic search cluster is available
+func (c *clientImpl) Ping(ctx context.Context) error {
+	_, _, err := c.esClient.Ping(c.url.String()).Do(ctx)
+	return err
+}
+
 func getLoggerOptions(logLevel string, logger log.Logger) []elastic.ClientOptionFunc {
 	switch {
 	case strings.EqualFold(logLevel, "trace"):

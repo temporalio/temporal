@@ -106,7 +106,11 @@ func newError(errName string, errRate float64, methodName string) error {
 	case "ShardOwnershipLost":
 		return &persistence.ShardOwnershipLostError{Msg: fmt.Sprintf("%s: persistence.ShardOwnershipLostError", header)}
 	case "DeadlineExceeded":
+		// Real persistence store never returns context.DeadlineExceeded error. It returns persistence.TimeoutError instead.
+		// Therefor "DeadlineExceeded" shouldn't be used with fault injection. Use "Timeout" instead.
 		return fmt.Errorf("%s: %w", header, context.DeadlineExceeded)
+	case "Timeout":
+		return &persistence.TimeoutError{Msg: fmt.Sprintf("%s: persistence.TimeoutError", header)}
 	case "ResourceExhausted":
 		return serviceerror.NewResourceExhausted(enumspb.RESOURCE_EXHAUSTED_CAUSE_SYSTEM_OVERLOADED, fmt.Sprintf("%s: serviceerror.ResourceExhausted", header))
 	case "Unavailable":

@@ -175,6 +175,10 @@ func (s *UserDataReplicationTestSuite) TestUserDataIsReplicatedFromPassiveToActi
 }
 
 func (s *UserDataReplicationTestSuite) TestUserDataEntriesAreReplicatedOnDemand() {
+	if !tests.UsingSQLAdvancedVisibility() {
+		s.T().Skip("Test requires advanced visibility")
+	}
+
 	ctx := tests.NewContext()
 	namespace := s.T().Name() + "-" + common.GenerateRandomString(5)
 	activeFrontendClient := s.cluster1.GetFrontendClient()
