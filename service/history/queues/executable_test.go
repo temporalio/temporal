@@ -401,7 +401,6 @@ func (s *executableSuite) TestExecute_SendToDLQAfterMaxAttempts() {
 	err = executable.Execute()
 	err2 := executable.HandleErr(err)
 	s.ErrorIs(err2, queues.ErrTerminalTaskFailure)
-	s.ErrorAs(err2, new(*queues.MaxAttemptsExhaustedError))
 	s.NoError(executable.Execute())
 	s.Len(queueWriter.EnqueueTaskRequests, 1)
 }
@@ -515,7 +514,6 @@ func (s *executableSuite) TestExecute_SendToDLQAfterMaxAttemptsThenDisable() {
 	err2 := executable.HandleErr(err)
 
 	s.ErrorIs(err2, queues.ErrTerminalTaskFailure)
-	s.ErrorAs(err2, new(*queues.MaxAttemptsExhaustedError))
 
 	dlqEnabled = false
 	s.ErrorIs(executable.Execute(), execError)

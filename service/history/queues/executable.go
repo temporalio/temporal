@@ -85,10 +85,6 @@ type (
 		Wrap(delegate Executor) Executor
 	}
 
-	MaxAttemptsExhaustedError struct {
-		wrappedErr error
-	}
-
 	// TerminalErrors are errors which cannot be retried and should not be scheduled again.
 	// Tasks should be enqueued to a DLQ immediately if an error implements this interface.
 	TerminalTaskError interface {
@@ -219,23 +215,6 @@ func NewExecutable(
 	return executable
 }
 
-func (e *MaxAttemptsExhaustedError) Error() string {
-	return fmt.Sprintf("task failed after maximum attempts: %v", e.wrappedErr)
-}
-
-func (e *MaxAttemptsExhaustedError) Unwrap() error {
-	return e.wrappedErr
-}
-
-// NewMaxAttemptsExhaustedError returns a MaxAttemptsExhaustedError
-func NewMaxAttemptsExhaustedError(
-	err error,
-) error {
-	return &MaxAttemptsExhaustedError{
-		wrappedErr: err,
-	}
-}
-
 func (e *executableImpl) Execute() (retErr error) {
 
 	startTime := e.timeSource.Now()
@@ -300,10 +279,8 @@ func (e *executableImpl) Execute() (retErr error) {
 
 	if e.terminalFailureCause != nil {
 		if !e.dlqEnabled() {
-			// Do not drop tasks that exhausted unexpectedErrorAttempts
-			var maxAttemptsExhaustedError *MaxAttemptsExhaustedError
-			if errors.As(e.terminalFailureCause, &maxAttemptsExhaustedError) {
-				return errors.Unwrap(e.terminalFailureCause)
+			if !errors.As(e.terminalFailureCause, new(TerminalTaskError)) {
+				return e.terminalFailureCause
 			} else {
 				e.logger.Warn(
 					"Dropping task with terminal failure because DLQ was disabled",
@@ -447,7 +424,7 @@ func (e *executableImpl) HandleErr(err error) (retErr error) {
 		// Keep this message in sync with the log line mentioned in Investigation section of develop/docs/dlq.md
 		e.logger.Error("Marking task as terminally failed, will send to DLQ. Maximum number of attempts with unexpected errors",
 			tag.Attempt(int32(e.unexpectedErrorAttempts)), tag.Error(err))
-		e.terminalFailureCause = NewMaxAttemptsExhaustedError(err)
+		e.terminalFailureCause = err
 		return fmt.Errorf("%w: %w", ErrTerminalTaskFailure, e.terminalFailureCause)
 	}
 
