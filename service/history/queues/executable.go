@@ -281,13 +281,12 @@ func (e *executableImpl) Execute() (retErr error) {
 		if !e.dlqEnabled() {
 			if !errors.As(e.terminalFailureCause, new(TerminalTaskError)) {
 				return e.terminalFailureCause
-			} else {
-				e.logger.Warn(
-					"Dropping task with terminal failure because DLQ was disabled",
-					tag.Error(e.terminalFailureCause),
-				)
-				return nil
 			}
+			e.logger.Warn(
+				"Dropping task with terminal failure because DLQ was disabled",
+				tag.Error(e.terminalFailureCause),
+			)
+			return nil
 		}
 		err := e.dlqWriter.WriteTaskToDLQ(
 			ctx,
