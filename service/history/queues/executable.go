@@ -425,6 +425,7 @@ func (e *executableImpl) HandleErr(err error) (retErr error) {
 		// task will be marked as completed, or send it to the DLQ if that is enabled.
 		metrics.TaskCorruptionCounter.With(e.taggedMetricsHandler).Record(1)
 		if e.dlqEnabled() {
+			// Keep this message in sync with the log line mentioned in Investigation section of develop/docs/dlq.md
 			e.logger.Error("Marking task as terminally failed, will send to DLQ", tag.Error(err))
 			e.terminalFailureCause = err
 			return fmt.Errorf("%w: %v", ErrTerminalTaskFailure, err)
@@ -438,7 +439,8 @@ func (e *executableImpl) HandleErr(err error) (retErr error) {
 	e.logger.Error("Fail to process task", tag.Error(err), tag.UnexpectedErrorAttempts(int32(e.unexpectedErrorAttempts)), tag.LifeCycleProcessingFailed)
 
 	if e.unexpectedErrorAttempts >= e.maxUnexpectedErrorAttempts() && e.dlqEnabled() {
-		e.logger.Error("Marking task as terminally failed after maximum number of attempts with unexpected errors, will send to DLQ",
+		// Keep this message in sync with the log line mentioned in Investigation section of develop/docs/dlq.md
+		e.logger.Error("Marking task as terminally failed, will send to DLQ. Maximum number of attempts with unexpected errors",
 			tag.Attempt(int32(e.unexpectedErrorAttempts)), tag.Error(err))
 		e.terminalFailureCause = NewMaxAttemptsExhaustedError(err)
 		return fmt.Errorf("%w: %w", ErrTerminalTaskFailure, e.terminalFailureCause)
