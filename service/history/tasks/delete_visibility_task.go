@@ -40,10 +40,6 @@ type (
 		TaskID                         int64
 		Version                        int64
 		CloseExecutionVisibilityTaskID int64
-		// These two fields are needed for cassandra standard visibility.
-		// TODO (alex): Remove them when cassandra standard visibility is removed.
-		StartTime time.Time
-		CloseTime time.Time
 	}
 )
 
