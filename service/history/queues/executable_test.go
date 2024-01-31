@@ -401,7 +401,7 @@ func (s *executableSuite) TestExecute_SendToDLQAfterMaxAttempts() {
 	err = executable.Execute()
 	err2 := executable.HandleErr(err)
 	s.ErrorIs(err2, queues.ErrTerminalTaskFailure)
-	s.ErrorIs(err2, queues.ErrMaxAttempts)
+	s.ErrorAs(err2, new(*queues.MaxAttemptsExhaustedError))
 	s.NoError(executable.Execute())
 	s.Len(queueWriter.EnqueueTaskRequests, 1)
 }
@@ -462,6 +462,36 @@ func (s *executableSuite) TestExecute_DontSendToDLQAfterMaxAttemptsExpectedError
 	s.Empty(queueWriter.EnqueueTaskRequests)
 }
 
+func (s *executableSuite) TestExecute_SendToDLQAfterMaxAttemptsThenDisableDropCorruption() {
+	queueWriter := &queuestest.FakeQueueWriter{}
+	dlqEnabled := true
+	executable := s.newTestExecutable(func(p *params) {
+		p.dlqWriter = queues.NewDLQWriter(queueWriter, s.mockClusterMetadata, metrics.NoopMetricsHandler, log.NewTestLogger(), s.mockNamespaceRegistry)
+		p.dlqEnabled = func() bool {
+			return dlqEnabled
+		}
+		p.maxUnexpectedErrorAttempts = func() int {
+			return 1
+		}
+	})
+	execError := serialization.NewDeserializationError(enumspb.ENCODING_TYPE_PROTO3, errors.New("random error"))
+	s.mockExecutor.EXPECT().Execute(gomock.Any(), executable).Return(queues.ExecuteResponse{
+		ExecutionMetricTags: nil,
+		ExecutedAsActive:    false,
+		ExecutionErr:        execError,
+	}).Times(1)
+
+	err := executable.Execute()
+	err2 := executable.HandleErr(err)
+
+	s.ErrorIs(err2, queues.ErrTerminalTaskFailure)
+	s.Contains(err2.Error(), execError.Error())
+
+	dlqEnabled = false
+	s.NoError(executable.Execute())
+	s.Empty(queueWriter.EnqueueTaskRequests)
+}
+
 func (s *executableSuite) TestExecute_SendToDLQAfterMaxAttemptsThenDisable() {
 	queueWriter := &queuestest.FakeQueueWriter{}
 	dlqEnabled := true
@@ -474,20 +504,21 @@ func (s *executableSuite) TestExecute_SendToDLQAfterMaxAttemptsThenDisable() {
 			return 1
 		}
 	})
+	execError := errors.New("some random error")
 	s.mockExecutor.EXPECT().Execute(gomock.Any(), executable).Return(queues.ExecuteResponse{
 		ExecutionMetricTags: nil,
 		ExecutedAsActive:    false,
-		ExecutionErr:        errors.New("some random error"),
+		ExecutionErr:        execError,
 	}).Times(1)
 
 	err := executable.Execute()
 	err2 := executable.HandleErr(err)
 
 	s.ErrorIs(err2, queues.ErrTerminalTaskFailure)
-	s.ErrorIs(err2, queues.ErrMaxAttempts)
+	s.ErrorAs(err2, new(*queues.MaxAttemptsExhaustedError))
 
 	dlqEnabled = false
-	s.NoError(executable.Execute())
+	s.ErrorIs(executable.Execute(), execError)
 	s.Empty(queueWriter.EnqueueTaskRequests)
 }
 

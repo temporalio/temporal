@@ -85,11 +85,14 @@ type (
 	ExecutorWrapper interface {
 		Wrap(delegate Executor) Executor
 	}
+
+	MaxAttemptsExhaustedError struct {
+		wrappedErr error
+	}
 )
 
 var (
 	ErrTerminalTaskFailure = errors.New("original task failed and this task is now to send the original to the DLQ")
-	ErrMaxAttempts         = errors.New("task failed after maximum attempts")
 
 	// reschedulePolicy is the policy for determine reschedule backoff duration
 	// across multiple submissions to scheduler
@@ -211,6 +214,23 @@ func NewExecutable(
 	return executable
 }
 
+func (e *MaxAttemptsExhaustedError) Error() string {
+	return fmt.Sprintf("task failed after maximum attempts: %v", e.wrappedErr)
+}
+
+func (e *MaxAttemptsExhaustedError) Unwrap() error {
+	return e.wrappedErr
+}
+
+// NewMaxAttemptsExhaustedError returns a MaxAttemptsExhaustedError
+func NewMaxAttemptsExhaustedError(
+	err error,
+) error {
+	return &MaxAttemptsExhaustedError{
+		wrappedErr: err,
+	}
+}
+
 func (e *executableImpl) Execute() (retErr error) {
 
 	startTime := e.timeSource.Now()
@@ -275,11 +295,17 @@ func (e *executableImpl) Execute() (retErr error) {
 
 	if e.terminalFailureCause != nil {
 		if !e.dlqEnabled() {
-			e.logger.Warn(
-				"Dropping task with terminal failure because DLQ was disabled",
-				tag.Error(e.terminalFailureCause),
-			)
-			return nil
+			// Do not drop tasks that exhausted unexpectedErrorAttempts
+			var maxAttemptsExhaustedError *MaxAttemptsExhaustedError
+			if errors.As(e.terminalFailureCause, &maxAttemptsExhaustedError) {
+				return errors.Unwrap(e.terminalFailureCause)
+			} else {
+				e.logger.Warn(
+					"Dropping task with terminal failure because DLQ was disabled",
+					tag.Error(e.terminalFailureCause),
+				)
+				return nil
+			}
 		}
 		err := e.dlqWriter.WriteTaskToDLQ(
 			ctx,
@@ -414,7 +440,7 @@ func (e *executableImpl) HandleErr(err error) (retErr error) {
 	if e.unexpectedErrorAttempts >= e.maxUnexpectedErrorAttempts() && e.dlqEnabled() {
 		e.logger.Error("Marking task as terminally failed after maximum number of attempts with unexpected errors, will send to DLQ",
 			tag.Attempt(int32(e.unexpectedErrorAttempts)), tag.Error(err))
-		e.terminalFailureCause = fmt.Errorf("%w: %w", ErrMaxAttempts, err)
+		e.terminalFailureCause = NewMaxAttemptsExhaustedError(err)
 		return fmt.Errorf("%w: %w", ErrTerminalTaskFailure, e.terminalFailureCause)
 	}
 
