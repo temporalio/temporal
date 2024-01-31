@@ -389,16 +389,12 @@ ci-coverage-report: $(SUMMARY_COVER_PROFILE) coverage-report
 	@goveralls -coverprofile=$(SUMMARY_COVER_PROFILE) -service=buildkite || true
 
 ##### Schema #####
-install-schema: temporal-cassandra-tool
+install-schema-cass-es: temporal-cassandra-tool install-schema-es
 	@printf $(COLOR) "Install Cassandra schema..."
 	./temporal-cassandra-tool drop -k $(TEMPORAL_DB) -f
 	./temporal-cassandra-tool create -k $(TEMPORAL_DB) --rf 1
 	./temporal-cassandra-tool -k $(TEMPORAL_DB) setup-schema -v 0.0
 	./temporal-cassandra-tool -k $(TEMPORAL_DB) update-schema -d ./schema/cassandra/temporal/versioned
-	./temporal-cassandra-tool drop -k $(VISIBILITY_DB) -f
-	./temporal-cassandra-tool create -k $(VISIBILITY_DB) --rf 1
-	./temporal-cassandra-tool -k $(VISIBILITY_DB) setup-schema -v 0.0
-	./temporal-cassandra-tool -k $(VISIBILITY_DB) update-schema -d ./schema/cassandra/visibility/versioned
 
 install-schema-mysql: temporal-sql-tool
 	@printf $(COLOR) "Install MySQL schema..."
@@ -485,22 +481,24 @@ install-schema-xdc: temporal-cassandra-tool
 DOCKER_COMPOSE_FILES     := -f ./develop/docker-compose/docker-compose.yml -f ./develop/docker-compose/docker-compose.$(GOOS).yml
 DOCKER_COMPOSE_CDC_FILES := -f ./develop/docker-compose/docker-compose.cdc.yml -f ./develop/docker-compose/docker-compose.cdc.$(GOOS).yml
 start-dependencies:
-	docker-compose $(DOCKER_COMPOSE_FILES) up
+	docker compose $(DOCKER_COMPOSE_FILES) up
 
 stop-dependencies:
-	docker-compose $(DOCKER_COMPOSE_FILES) down
+	docker compose $(DOCKER_COMPOSE_FILES) down
 
 start-dependencies-cdc:
-	docker-compose $(DOCKER_COMPOSE_FILES) $(DOCKER_COMPOSE_CDC_FILES) up
+	docker compose $(DOCKER_COMPOSE_FILES) $(DOCKER_COMPOSE_CDC_FILES) up
 
 stop-dependencies-cdc:
-	docker-compose $(DOCKER_COMPOSE_FILES) $(DOCKER_COMPOSE_CDC_FILES) down
+	docker compose $(DOCKER_COMPOSE_FILES) $(DOCKER_COMPOSE_CDC_FILES) down
 
-start: temporal-server
-	./temporal-server --env development-cass --allow-no-auth start
+start: start-sqlite
 
-start-es: temporal-server
+start-cass-es: temporal-server
 	./temporal-server --env development-cass-es --allow-no-auth start
+
+start-es-fi: temporal-server
+	./temporal-server --env development-cass-es-fi --allow-no-auth start
 
 start-mysql: temporal-server
 	./temporal-server --env development-mysql --allow-no-auth start

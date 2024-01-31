@@ -79,7 +79,7 @@ func NewVisibilityQueueFactory(
 					params.Config.PersistenceMaxQPS,
 					visibilityQueuePersistenceMaxRPSRatio,
 				),
-				int64(params.Config.QueueMaxReaderCount()),
+				int64(params.Config.VisibilityQueueMaxReaderCount()),
 			),
 		},
 	}
@@ -164,7 +164,7 @@ func (f *visibilityQueueFactory) CreateQueue(
 			MaxPollIntervalJitterCoefficient:    f.Config.VisibilityProcessorMaxPollIntervalJitterCoefficient,
 			CheckpointInterval:                  f.Config.VisibilityProcessorUpdateAckInterval,
 			CheckpointIntervalJitterCoefficient: f.Config.VisibilityProcessorUpdateAckIntervalJitterCoefficient,
-			MaxReaderCount:                      f.Config.QueueMaxReaderCount,
+			MaxReaderCount:                      f.Config.VisibilityQueueMaxReaderCount,
 		},
 		f.HostReaderRateLimiter,
 		queues.GrouperNamespaceID{},

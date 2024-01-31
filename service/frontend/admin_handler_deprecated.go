@@ -29,14 +29,12 @@ import (
 	"fmt"
 
 	"github.com/pborman/uuid"
-	"google.golang.org/protobuf/types/known/timestamppb"
 
 	commonpb "go.temporal.io/api/common/v1"
 	historypb "go.temporal.io/api/history/v1"
 	"go.temporal.io/api/serviceerror"
 
 	"go.temporal.io/server/api/adminservice/v1"
-	enumsspb "go.temporal.io/server/api/enums/v1"
 	historyspb "go.temporal.io/server/api/history/v1"
 	"go.temporal.io/server/api/historyservice/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
@@ -48,7 +46,6 @@ import (
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/persistence/versionhistory"
-	"go.temporal.io/server/common/persistence/visibility/store/standard/cassandra"
 )
 
 // DEPRECATED: DO NOT MODIFY UNLESS ALSO APPLIED TO ./service/history/api/getworkflowexecutionrawhistoryv2/api.go
@@ -205,8 +202,6 @@ func (adh *AdminHandler) deleteWorkflowExecution(
 
 	var warnings []string
 	var branchTokens [][]byte
-	var startTime, closeTime *timestamppb.Timestamp
-	cassVisBackend := adh.visibilityMgr.HasStoreName(cassandra.CassandraPersistenceName)
 
 	resp, err := adh.persistenceExecutionManager.GetWorkflowExecution(ctx, &persistence.GetWorkflowExecutionRequest{
 		ShardID:     shardID,
@@ -220,7 +215,7 @@ func (adh *AdminHandler) deleteWorkflowExecution(
 		}
 		// continue to deletion
 		warnMsg := "Unable to load mutable state when deleting workflow execution, " +
-			"will skip deleting workflow history and cassandra visibility record"
+			"will skip deleting workflow history and visibility record"
 		logger.Warn(warnMsg, tag.Error(err))
 		warnings = append(warnings, fmt.Sprintf("%s. Error: %v", warnMsg, err.Error()))
 	} else {
@@ -231,39 +226,17 @@ func (adh *AdminHandler) deleteWorkflowExecution(
 		for _, historyItem := range histories {
 			branchTokens = append(branchTokens, historyItem.GetBranchToken())
 		}
-
-		if cassVisBackend {
-			if resp.State.ExecutionState.State != enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED {
-				startTime = executionInfo.GetStartTime()
-			} else if executionInfo.GetCloseTime() != nil {
-				closeTime = executionInfo.GetCloseTime()
-			} else {
-				completionEvent, err := adh.getWorkflowCompletionEvent(ctx, shardID, resp.State)
-				if err != nil {
-					warnMsg := "Unable to load workflow completion event, will skip deleting visibility record"
-					adh.logger.Warn(warnMsg, tag.Error(err))
-					warnings = append(warnings, fmt.Sprintf("%s. Error: %v", warnMsg, err.Error()))
-				} else {
-					closeTime = completionEvent.GetEventTime()
-				}
-			}
-		}
 	}
 
-	if !cassVisBackend || (startTime != nil || closeTime != nil) {
-		// if using cass visibility, then either start or close time should be non-nil
-		// NOTE: the deletion is best effort, for sql and cassandra visibility implementation,
-		// we can't guarantee there's no update or record close request for this workflow since
-		// visibility queue processing is async. Operator can call this api again to delete visibility
-		// record again if this happens.
-		if _, err := adh.historyClient.DeleteWorkflowVisibilityRecord(ctx, &historyservice.DeleteWorkflowVisibilityRecordRequest{
-			NamespaceId:       namespaceID.String(),
-			Execution:         execution,
-			WorkflowStartTime: startTime,
-			WorkflowCloseTime: closeTime,
-		}); err != nil {
-			return nil, err
-		}
+	// NOTE: the deletion is best effort, for sql visibility implementation,
+	// we can't guarantee there's no update or record close request for this workflow since
+	// visibility queue processing is async. Operator can call this api again to delete visibility
+	// record again if this happens.
+	if _, err := adh.historyClient.DeleteWorkflowVisibilityRecord(ctx, &historyservice.DeleteWorkflowVisibilityRecordRequest{
+		NamespaceId: namespaceID.String(),
+		Execution:   execution,
+	}); err != nil {
+		return nil, err
 	}
 
 	if err := adh.persistenceExecutionManager.DeleteCurrentWorkflowExecution(ctx, &persistence.DeleteCurrentWorkflowExecutionRequest{

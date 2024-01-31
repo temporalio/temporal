@@ -48,7 +48,6 @@ import (
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
-	"go.temporal.io/server/common/persistence/serialization"
 	ctasks "go.temporal.io/server/common/tasks"
 	"go.temporal.io/server/common/util"
 	"go.temporal.io/server/service/history/consts"
@@ -88,6 +87,12 @@ type (
 
 	MaxAttemptsExhaustedError struct {
 		wrappedErr error
+	}
+
+	// TerminalErrors are errors which cannot be retried and should not be scheduled again.
+	// Tasks should be enqueued to a DLQ immediately if an error implements this interface.
+	TerminalTaskError interface {
+		IsTerminalTaskError()
 	}
 )
 
@@ -419,10 +424,10 @@ func (e *executableImpl) HandleErr(err error) (retErr error) {
 	}
 
 	// TODO: expand on the errors that should be considered terminal
-	if errors.As(err, new(*serialization.DeserializationError)) ||
-		errors.As(err, new(*serialization.UnknownEncodingTypeError)) {
-		// likely due to data corruption, emit logs, metrics & drop the task by return nil so that
-		// task will be marked as completed, or send it to the DLQ if that is enabled.
+	if errors.As(err, new(TerminalTaskError)) {
+		// Terminal errors are likely due to data corruption.
+		// Drop the task by returning nil so that task will be marked as completed,
+		// or send it to the DLQ if that is enabled.
 		metrics.TaskCorruptionCounter.With(e.taggedMetricsHandler).Record(1)
 		if e.dlqEnabled() {
 			// Keep this message in sync with the log line mentioned in Investigation section of develop/docs/dlq.md
@@ -430,7 +435,7 @@ func (e *executableImpl) HandleErr(err error) (retErr error) {
 			e.terminalFailureCause = err
 			return fmt.Errorf("%w: %v", ErrTerminalTaskFailure, err)
 		}
-		e.logger.Error("Drop task due to serialization error", tag.Error(err))
+		e.logger.Error("Dropping task due to terminal error", tag.Error(err))
 		return nil
 	}
 

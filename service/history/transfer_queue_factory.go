@@ -93,7 +93,7 @@ func NewTransferQueueFactory(
 					params.Config.PersistenceMaxQPS,
 					transferQueuePersistenceMaxRPSRatio,
 				),
-				int64(params.Config.QueueMaxReaderCount()),
+				int64(params.Config.TransferQueueMaxReaderCount()),
 			),
 		},
 	}
@@ -152,6 +152,7 @@ func (f *transferQueueFactory) CreateQueue(
 			f.ClientBean,
 			func(
 				ctx context.Context,
+				sourceClusterName string,
 				namespaceId namespace.ID,
 				workflowId string,
 				runId string,
@@ -233,7 +234,7 @@ func (f *transferQueueFactory) CreateQueue(
 			MaxPollIntervalJitterCoefficient:    f.Config.TransferProcessorMaxPollIntervalJitterCoefficient,
 			CheckpointInterval:                  f.Config.TransferProcessorUpdateAckInterval,
 			CheckpointIntervalJitterCoefficient: f.Config.TransferProcessorUpdateAckIntervalJitterCoefficient,
-			MaxReaderCount:                      f.Config.QueueMaxReaderCount,
+			MaxReaderCount:                      f.Config.TransferQueueMaxReaderCount,
 		},
 		f.HostReaderRateLimiter,
 		queues.GrouperNamespaceID{},
