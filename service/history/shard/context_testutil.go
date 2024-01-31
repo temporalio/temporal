@@ -29,7 +29,6 @@ import (
 	"fmt"
 
 	"github.com/golang/mock/gomock"
-
 	"golang.org/x/sync/semaphore"
 
 	"go.temporal.io/server/api/historyservice/v1"
