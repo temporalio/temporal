@@ -50,6 +50,7 @@ func SignalWithStartWorkflow(
 	signalWithStartRequest *workflowservice.SignalWithStartWorkflowExecutionRequest,
 ) (string, error) {
 
+	// workflow is running and restart was not requested
 	if currentWorkflowContext != nil &&
 		currentWorkflowContext.GetMutableState().IsWorkflowExecutionRunning() &&
 		signalWithStartRequest.WorkflowIdReusePolicy != enumspb.WORKFLOW_ID_REUSE_POLICY_TERMINATE_IF_RUNNING {
@@ -65,7 +66,7 @@ func SignalWithStartWorkflow(
 		}
 		return currentWorkflowContext.GetWorkflowKey().RunID, nil
 	}
-
+	// else, either workflow is not running or restart requested
 	return startAndSignalWorkflow(
 		ctx,
 		shard,

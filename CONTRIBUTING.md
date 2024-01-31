@@ -104,13 +104,15 @@ First start runtime dependencies. They can be run with `start-dependencies` targ
 make start-dependencies
 ```
 
-then create database schema:
-```bash
-make install-schema
-```
-and then run the server:
+then run the server:
 ```bash
 make start
+```
+
+This will start the server using SQLite as database. If you want to run with Cassandra and Elasticsearch, then run these commands:
+```bash
+make install-schema-cass-es
+make start-cass-es
 ```
 
 Now you can create default namespace with Temporal CLI:

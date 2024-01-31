@@ -1492,6 +1492,7 @@ func (s *sutTestingAdapter) AddWorkflowExecutionSignaledEvent(_ ...eventConfig) 
 		"identity-1",
 		nil,
 		false,
+		nil,
 	)
 }
 

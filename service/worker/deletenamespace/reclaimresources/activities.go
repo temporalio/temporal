@@ -40,6 +40,7 @@ import (
 	"go.temporal.io/server/common/persistence/sql/sqlplugin/sqlite"
 	"go.temporal.io/server/common/persistence/visibility/manager"
 	"go.temporal.io/server/common/persistence/visibility/store/elasticsearch"
+	"go.temporal.io/server/common/searchattribute"
 	"go.temporal.io/server/service/worker/deletenamespace/errors"
 )
 
@@ -174,6 +175,7 @@ func (a *Activities) EnsureNoExecutionsStdVisibilityActivity(ctx context.Context
 		NamespaceID: nsID,
 		Namespace:   nsName,
 		PageSize:    1,
+		Query:       searchattribute.QueryWithAnyNamespaceDivision(""),
 	}
 	resp, err := a.visibilityManager.ListWorkflowExecutions(ctx, req)
 	if err != nil {

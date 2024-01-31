@@ -56,7 +56,7 @@ func (s *FunctionalSuite) SetupSuite() {
 		dynamicconfig.RetentionTimerJitterDuration: time.Second,
 		dynamicconfig.EnableEagerWorkflowStart:     true,
 	}
-	s.setupSuite("testdata/cluster.yaml")
+	s.setupSuite("testdata/es_cluster.yaml")
 }
 
 func (s *FunctionalSuite) TearDownSuite() {

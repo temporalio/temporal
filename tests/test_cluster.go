@@ -33,6 +33,7 @@ import (
 	"os"
 	"path"
 	"testing"
+	"time"
 
 	"github.com/pborman/uuid"
 	"go.uber.org/fx"
@@ -45,6 +46,7 @@ import (
 	"go.temporal.io/server/common/archiver"
 	"go.temporal.io/server/common/archiver/filestore"
 	"go.temporal.io/server/common/archiver/provider"
+	"go.temporal.io/server/common/backoff"
 	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/config"
 	"go.temporal.io/server/common/dynamicconfig"
@@ -220,7 +222,12 @@ func NewClusterWithPersistenceTestBaseFactory(t *testing.T, options *TestCluster
 		indexName string
 		esClient  esclient.Client
 	)
-	if options.ESConfig != nil {
+	if !UsingSQLAdvancedVisibility() && options.ESConfig != nil {
+		// Randomize index name to avoid cross tests interference.
+		for k, v := range options.ESConfig.Indices {
+			options.ESConfig.Indices[k] = fmt.Sprintf("%v-%v", v, uuid.New())
+		}
+
 		err := setupIndex(options.ESConfig, logger)
 		if err != nil {
 			return nil, err
@@ -234,6 +241,7 @@ func NewClusterWithPersistenceTestBaseFactory(t *testing.T, options *TestCluster
 			return nil, err
 		}
 	} else {
+		options.ESConfig = nil
 		storeConfig := pConfig.DataStores[pConfig.VisibilityStore]
 		if storeConfig.SQL != nil {
 			switch storeConfig.SQL.PluginName {
@@ -329,9 +337,24 @@ func NewClusterWithPersistenceTestBaseFactory(t *testing.T, options *TestCluster
 }
 
 func setupIndex(esConfig *esclient.Config, logger log.Logger) error {
-	esClient, err := esclient.NewFunctionalTestsClient(esConfig, logger)
+	var esClient esclient.IntegrationTestsClient
+	op := func() error {
+		var err error
+		esClient, err = esclient.NewFunctionalTestsClient(esConfig, logger)
+		if err != nil {
+			return err
+		}
+
+		return esClient.Ping(context.TODO())
+	}
+
+	err := backoff.ThrottleRetry(
+		op,
+		backoff.NewExponentialRetryPolicy(time.Second).WithExpirationInterval(time.Minute),
+		nil,
+	)
 	if err != nil {
-		return err
+		logger.Fatal("Failed to connect to elasticsearch", tag.Error(err))
 	}
 
 	exists, err := esClient.IndexExists(context.Background(), esConfig.GetVisibilityIndex())
@@ -471,7 +494,7 @@ func (tc *TestCluster) SetFaultInjectionRate(rate float64) {
 func (tc *TestCluster) TearDownCluster() error {
 	errs := tc.host.Stop()
 	tc.testBase.TearDownWorkflowStore()
-	if tc.host.esConfig != nil {
+	if !UsingSQLAdvancedVisibility() && tc.host.esConfig != nil {
 		if err := deleteIndex(tc.host.esConfig, tc.host.logger); err != nil {
 			errs = multierr.Combine(errs, err)
 		}

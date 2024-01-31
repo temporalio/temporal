@@ -221,8 +221,6 @@ func (s *contextSuite) TestDeleteWorkflowExecution_Success() {
 		context.Background(),
 		workflowKey,
 		branchToken,
-		time.Time{},
-		time.Time{},
 		0,
 		&stage,
 	)
@@ -247,8 +245,6 @@ func (s *contextSuite) TestDeleteWorkflowExecution_Continue_Success() {
 		context.Background(),
 		workflowKey,
 		branchToken,
-		time.Time{},
-		time.Time{},
 		0,
 		&stage,
 	)
@@ -262,8 +258,6 @@ func (s *contextSuite) TestDeleteWorkflowExecution_Continue_Success() {
 		context.Background(),
 		workflowKey,
 		branchToken,
-		time.Time{},
-		time.Time{},
 		0,
 		&stage,
 	)
@@ -276,8 +270,6 @@ func (s *contextSuite) TestDeleteWorkflowExecution_Continue_Success() {
 		context.Background(),
 		workflowKey,
 		branchToken,
-		time.Time{},
-		time.Time{},
 		0,
 		&stage,
 	)
@@ -301,8 +293,6 @@ func (s *contextSuite) TestDeleteWorkflowExecution_ErrorAndContinue_Success() {
 		context.Background(),
 		workflowKey,
 		branchToken,
-		time.Time{},
-		time.Time{},
 		0,
 		&stage,
 	)
@@ -315,8 +305,6 @@ func (s *contextSuite) TestDeleteWorkflowExecution_ErrorAndContinue_Success() {
 		context.Background(),
 		workflowKey,
 		branchToken,
-		time.Time{},
-		time.Time{},
 		0,
 		&stage,
 	)
@@ -329,8 +317,6 @@ func (s *contextSuite) TestDeleteWorkflowExecution_ErrorAndContinue_Success() {
 		context.Background(),
 		workflowKey,
 		branchToken,
-		time.Time{},
-		time.Time{},
 		0,
 		&stage,
 	)
@@ -342,8 +328,6 @@ func (s *contextSuite) TestDeleteWorkflowExecution_ErrorAndContinue_Success() {
 		context.Background(),
 		workflowKey,
 		branchToken,
-		time.Time{},
-		time.Time{},
 		0,
 		&stage,
 	)
@@ -366,8 +350,6 @@ func (s *contextSuite) TestDeleteWorkflowExecution_DeleteVisibilityTaskNotificti
 		context.Background(),
 		workflowKey,
 		branchToken,
-		time.Time{},
-		time.Time{},
 		0,
 		&stage,
 	)
@@ -382,8 +364,6 @@ func (s *contextSuite) TestDeleteWorkflowExecution_DeleteVisibilityTaskNotificti
 		context.Background(),
 		workflowKey,
 		branchToken,
-		time.Time{},
-		time.Time{},
 		0,
 		&stage,
 	)

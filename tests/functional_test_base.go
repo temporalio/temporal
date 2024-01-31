@@ -36,6 +36,7 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
+	"testing"
 	"time"
 
 	"github.com/dgryski/go-farm"
@@ -109,8 +110,9 @@ func WithFxOptionsForService(serviceName primitives.ServiceName, options ...fx.O
 }
 
 func (s *FunctionalTestBase) setupSuite(defaultClusterConfigFile string, options ...Option) {
+	checkTestShard(s.T())
+
 	s.testClusterFactory = NewTestClusterFactory()
-	s.checkTestShard()
 
 	params := ApplyTestClusterParams(options)
 
@@ -195,31 +197,32 @@ func (s *FunctionalTestBase) setupLogger() {
 }
 
 // checkTestShard supports test sharding based on environment variables.
-func (s *FunctionalTestBase) checkTestShard() {
+func checkTestShard(t *testing.T) {
 	totalStr := os.Getenv("TEST_TOTAL_SHARDS")
 	indexStr := os.Getenv("TEST_SHARD_INDEX")
 	if totalStr == "" || indexStr == "" {
 		return
 	}
 	total, err := strconv.Atoi(totalStr)
-	s.NoError(err)
-	s.GreaterOrEqual(total, 1)
+	if err != nil || total < 1 {
+		t.Fatal("Couldn't convert TEST_TOTAL_SHARDS")
+	}
 	index, err := strconv.Atoi(indexStr)
-	s.NoError(err)
-	s.GreaterOrEqual(index, 0)
-	s.Less(index, total)
+	if err != nil || index < 0 || index >= total {
+		t.Fatal("Couldn't convert TEST_SHARD_INDEX")
+	}
 
 	// This was determined empirically to distribute our existing test names + run times
 	// reasonably well. This can be adjusted from time to time.
 	// For parallelism 4, use 11. For 3, use 26. For 2, use 20.
 	const salt = "-salt-26"
 
-	nameToHash := s.T().Name() + salt
+	nameToHash := t.Name() + salt
 	testIndex := int(farm.Fingerprint32([]byte(nameToHash))) % total
 	if testIndex != index {
-		s.T().Skipf("Skipping %s in test shard %d/%d (it runs in %d)", s.T().Name(), index, total, testIndex)
+		t.Skipf("Skipping %s in test shard %d/%d (it runs in %d)", t.Name(), index+1, total, testIndex+1)
 	}
-	s.T().Logf("Running %s in test shard %d/%d", s.T().Name(), index, total)
+	t.Logf("Running %s in test shard %d/%d", t.Name(), index+1, total)
 }
 
 // GetTestClusterConfig return test cluster config
