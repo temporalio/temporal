@@ -1901,8 +1901,6 @@ func (h *Handler) DeleteWorkflowVisibilityRecord(
 		WorkflowID:  request.Execution.GetWorkflowId(),
 		RunID:       request.Execution.GetRunId(),
 		TaskID:      math.MaxInt64,
-		StartTime:   request.GetWorkflowStartTime().AsTime(),
-		CloseTime:   request.GetWorkflowCloseTime().AsTime(),
 	})
 	if err != nil {
 		return nil, h.convertError(err)
