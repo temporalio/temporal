@@ -28,7 +28,6 @@ import (
 	"context"
 	"fmt"
 	"math"
-	"time"
 
 	"go.temporal.io/server/api/adminservice/v1"
 
@@ -77,7 +76,6 @@ func Invoke(
 
 	var warnings []string
 	var branchTokens [][]byte
-	var startTime, closeTime time.Time
 
 	resp, err := persistenceExecutionMgr.GetWorkflowExecution(ctx, &persistence.GetWorkflowExecutionRequest{
 		ShardID:     shardID,
@@ -91,7 +89,7 @@ func Invoke(
 		}
 		// continue to deletion
 		warnMsg := "Unable to load mutable state when deleting workflow execution, " +
-			"will skip deleting workflow history and cassandra visibility record"
+			"will skip deleting workflow history and visibility record"
 		logger.Warn(warnMsg, tag.Error(err))
 		warnings = append(warnings, fmt.Sprintf("%s. Error: %v", warnMsg, err.Error()))
 	} else {
@@ -104,7 +102,6 @@ func Invoke(
 		}
 	}
 
-	// if using cass visibility, then either start or close time should be non-nil
 	// NOTE: the deletion is best effort, for sql visibility implementation,
 	// we can't guarantee there's no update or record close request for this workflow since
 	// visibility queue processing is async. Operator can call this api again to delete visibility
@@ -114,8 +111,6 @@ func Invoke(
 		WorkflowID:  execution.GetWorkflowId(),
 		RunID:       execution.GetRunId(),
 		TaskID:      math.MaxInt64,
-		StartTime:   startTime,
-		CloseTime:   closeTime,
 	}); err != nil {
 		return nil, err
 	}
