@@ -2640,7 +2640,7 @@ func (mr *MockMutableStateMockRecorder) SetHistoryBuilder(hBuilder interface{}) 
 }
 
 // SetHistoryTree mocks base method.
-func (m *MockMutableState) SetHistoryTree(executionTimeout *durationpb.Duration, runTimeout *durationpb.Duration, treeID string) error {
+func (m *MockMutableState) SetHistoryTree(executionTimeout, runTimeout *durationpb.Duration, treeID string) error {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "SetHistoryTree", executionTimeout, runTimeout, treeID)
 	ret0, _ := ret[0].(error)
@@ -2648,9 +2648,9 @@ func (m *MockMutableState) SetHistoryTree(executionTimeout *durationpb.Duration,
 }
 
 // SetHistoryTree indicates an expected call of SetHistoryTree.
-func (mr *MockMutableStateMockRecorder) SetHistoryTree(ctx, executionTimeout, runTimeout, treeID interface{}) *gomock.Call {
+func (mr *MockMutableStateMockRecorder) SetHistoryTree(executionTimeout, runTimeout, treeID interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SetHistoryTree", reflect.TypeOf((*MockMutableState)(nil).SetHistoryTree), ctx, executionTimeout, runTimeout, treeID)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SetHistoryTree", reflect.TypeOf((*MockMutableState)(nil).SetHistoryTree), executionTimeout, runTimeout, treeID)
 }
 
 // SetSpeculativeWorkflowTaskTimeoutTask mocks base method.
