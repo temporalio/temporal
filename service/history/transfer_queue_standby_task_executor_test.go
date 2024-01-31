@@ -40,7 +40,6 @@ import (
 	"go.temporal.io/api/serviceerror"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	"go.temporal.io/api/workflowservice/v1"
-	"go.temporal.io/server/service/history/events"
 	"google.golang.org/protobuf/types/known/durationpb"
 
 	"go.temporal.io/server/api/adminservicemock/v1"
@@ -67,6 +66,7 @@ import (
 	"go.temporal.io/server/common/persistence/visibility/manager"
 	"go.temporal.io/server/common/xdc"
 	"go.temporal.io/server/service/history/consts"
+	"go.temporal.io/server/service/history/events"
 	"go.temporal.io/server/service/history/queues"
 	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/tasks"

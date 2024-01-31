@@ -29,7 +29,7 @@ import (
 	"fmt"
 
 	"github.com/golang/mock/gomock"
-	"go.temporal.io/server/service/history/events"
+
 	"golang.org/x/sync/semaphore"
 
 	"go.temporal.io/server/api/historyservice/v1"
@@ -42,6 +42,7 @@ import (
 	"go.temporal.io/server/common/primitives"
 	"go.temporal.io/server/common/resourcetest"
 	"go.temporal.io/server/service/history/configs"
+	"go.temporal.io/server/service/history/events"
 	"go.temporal.io/server/service/history/tasks"
 )
 

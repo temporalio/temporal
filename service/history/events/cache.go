@@ -32,6 +32,7 @@ import (
 
 	historypb "go.temporal.io/api/history/v1"
 	"go.temporal.io/api/serviceerror"
+
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/cache"
 	"go.temporal.io/server/common/log"
@@ -53,8 +54,8 @@ type (
 
 	Cache interface {
 		GetEvent(ctx context.Context, shardID int32, key EventKey, firstEventID int64, branchToken []byte) (*historypb.HistoryEvent, error)
-		PutEvent(shardID int32, key EventKey, event *historypb.HistoryEvent)
-		DeleteEvent(shardID int32, key EventKey)
+		PutEvent(key EventKey, event *historypb.HistoryEvent)
+		DeleteEvent(key EventKey)
 	}
 
 	CacheImpl struct {
@@ -99,7 +100,7 @@ func NewShardLevelEventsCache(
 
 func NewEventsCache(
 	executionManager persistence.ExecutionManager,
-	handler metrics.Handler,
+	metricsHandler metrics.Handler,
 	logger log.Logger,
 	maxSize int,
 	ttl time.Duration,
@@ -111,17 +112,16 @@ func NewEventsCache(
 	return &CacheImpl{
 		Cache:            cache.New(maxSize, opts),
 		executionManager: executionManager,
-		metricsHandler:   handler,
+		metricsHandler:   metricsHandler.WithTags(metrics.StringTag(metrics.CacheTypeTagName, metrics.EventsCacheTypeTagValue)),
 		logger:           logger,
 		disabled:         disabled,
 	}
 }
 
-func (e *CacheImpl) validateKey(shardID int32, key EventKey) bool {
+func (e *CacheImpl) validateKey(key EventKey) bool {
 	if len(key.NamespaceID) == 0 || len(key.WorkflowID) == 0 || len(key.RunID) == 0 || key.EventID < common.FirstEventID {
 		// This is definitely a bug, but just warn and don't crash so we can find anywhere this happens.
 		e.logger.Warn("one or more ids is invalid in event cache",
-			tag.ShardID(shardID),
 			tag.WorkflowID(key.WorkflowID),
 			tag.WorkflowRunID(key.RunID),
 			tag.WorkflowNamespaceID(key.NamespaceID.String()),
@@ -132,15 +132,12 @@ func (e *CacheImpl) validateKey(shardID int32, key EventKey) bool {
 }
 
 func (e *CacheImpl) GetEvent(ctx context.Context, shardID int32, key EventKey, firstEventID int64, branchToken []byte) (*historypb.HistoryEvent, error) {
-	handler := e.metricsHandler.WithTags(
-		metrics.StringTag(metrics.CacheTypeTagName, metrics.EventsCacheTypeTagValue),
-		metrics.OperationTag(metrics.EventsCacheGetEventScope),
-	)
+	handler := e.metricsHandler.WithTags(metrics.OperationTag(metrics.EventsCacheGetEventScope))
 	metrics.CacheRequests.With(handler).Record(1)
 	startTime := time.Now().UTC()
 	defer func() { metrics.CacheLatency.With(handler).Record(time.Since(startTime)) }()
 
-	validKey := e.validateKey(shardID, key)
+	validKey := e.validateKey(key)
 
 	// Test hook for disabling cache
 	if !e.disabled {
@@ -155,7 +152,6 @@ func (e *CacheImpl) GetEvent(ctx context.Context, shardID int32, key EventKey, f
 	if err != nil {
 		handler.Counter(metrics.CacheFailures.Name()).Record(1)
 		e.logger.Error("Cache unable to retrieve event from store",
-			//tag.ShardID(shardID),
 			tag.Error(err),
 			tag.WorkflowID(key.WorkflowID),
 			tag.WorkflowRunID(key.RunID),
@@ -171,31 +167,25 @@ func (e *CacheImpl) GetEvent(ctx context.Context, shardID int32, key EventKey, f
 	return event, nil
 }
 
-func (e *CacheImpl) PutEvent(shardID int32, key EventKey, event *historypb.HistoryEvent) {
-	handler := e.metricsHandler.WithTags(
-		metrics.StringTag(metrics.CacheTypeTagName, metrics.EventsCacheTypeTagValue),
-		metrics.OperationTag(metrics.EventsCachePutEventScope),
-	)
+func (e *CacheImpl) PutEvent(key EventKey, event *historypb.HistoryEvent) {
+	handler := e.metricsHandler.WithTags(metrics.OperationTag(metrics.EventsCachePutEventScope))
 	metrics.CacheRequests.With(handler).Record(1)
 	startTime := time.Now().UTC()
 	defer func() { metrics.CacheLatency.With(handler).Record(time.Since(startTime)) }()
 
-	if !e.validateKey(shardID, key) {
+	if !e.validateKey(key) {
 		return
 	}
 	e.put(key, event)
 }
 
-func (e *CacheImpl) DeleteEvent(shardID int32, key EventKey) {
-	handler := e.metricsHandler.WithTags(
-		metrics.StringTag(metrics.CacheTypeTagName, metrics.EventsCacheTypeTagValue),
-		metrics.OperationTag(metrics.EventsCacheDeleteEventScope),
-	)
+func (e *CacheImpl) DeleteEvent(key EventKey) {
+	handler := e.metricsHandler.WithTags(metrics.OperationTag(metrics.EventsCacheDeleteEventScope))
 	metrics.CacheRequests.With(handler).Record(1)
 	startTime := time.Now().UTC()
 	defer func() { metrics.CacheLatency.With(handler).Record(time.Since(startTime)) }()
 
-	e.validateKey(shardID, key) // just for log message, delete anyway
+	e.validateKey(key) // just for log message, delete anyway
 	e.Delete(key)
 }
 
@@ -207,10 +197,7 @@ func (e *CacheImpl) getHistoryEventFromStore(
 	branchToken []byte,
 ) (*historypb.HistoryEvent, error) {
 
-	handler := e.metricsHandler.WithTags(
-		metrics.StringTag(metrics.CacheTypeTagName, metrics.EventsCacheTypeTagValue),
-		metrics.OperationTag(metrics.EventsCacheGetFromStoreScope),
-	)
+	handler := e.metricsHandler.WithTags(metrics.OperationTag(metrics.EventsCacheGetFromStoreScope))
 	metrics.CacheRequests.With(handler).Record(1)
 	startTime := time.Now().UTC()
 	defer func() { metrics.CacheLatency.With(handler).Record(time.Since(startTime)) }()
@@ -229,7 +216,6 @@ func (e *CacheImpl) getHistoryEventFromStore(
 	case *serviceerror.DataLoss:
 		// log event
 		e.logger.Error("encounter data loss event",
-			tag.ShardID(shardID),
 			tag.WorkflowNamespaceID(key.NamespaceID.String()),
 			tag.WorkflowID(key.WorkflowID),
 			tag.WorkflowRunID(key.RunID))

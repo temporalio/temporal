@@ -60,15 +60,15 @@ func (m *MockCache) EXPECT() *MockCacheMockRecorder {
 }
 
 // DeleteEvent mocks base method.
-func (m *MockCache) DeleteEvent(shardID int32, key EventKey) {
+func (m *MockCache) DeleteEvent(key EventKey) {
 	m.ctrl.T.Helper()
-	m.ctrl.Call(m, "DeleteEvent", shardID, key)
+	m.ctrl.Call(m, "DeleteEvent", key)
 }
 
 // DeleteEvent indicates an expected call of DeleteEvent.
-func (mr *MockCacheMockRecorder) DeleteEvent(shardID, key interface{}) *gomock.Call {
+func (mr *MockCacheMockRecorder) DeleteEvent(key interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DeleteEvent", reflect.TypeOf((*MockCache)(nil).DeleteEvent), shardID, key)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DeleteEvent", reflect.TypeOf((*MockCache)(nil).DeleteEvent), key)
 }
 
 // GetEvent mocks base method.
@@ -87,13 +87,13 @@ func (mr *MockCacheMockRecorder) GetEvent(ctx, shardID, key, firstEventID, branc
 }
 
 // PutEvent mocks base method.
-func (m *MockCache) PutEvent(shardID int32, key EventKey, event *v1.HistoryEvent) {
+func (m *MockCache) PutEvent(key EventKey, event *v1.HistoryEvent) {
 	m.ctrl.T.Helper()
-	m.ctrl.Call(m, "PutEvent", shardID, key, event)
+	m.ctrl.Call(m, "PutEvent", key, event)
 }
 
 // PutEvent indicates an expected call of PutEvent.
-func (mr *MockCacheMockRecorder) PutEvent(shardID, key, event interface{}) *gomock.Call {
+func (mr *MockCacheMockRecorder) PutEvent(key, event interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "PutEvent", reflect.TypeOf((*MockCache)(nil).PutEvent), shardID, key, event)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "PutEvent", reflect.TypeOf((*MockCache)(nil).PutEvent), key, event)
 }

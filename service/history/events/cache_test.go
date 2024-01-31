@@ -35,8 +35,9 @@ import (
 	"github.com/stretchr/testify/suite"
 	enumspb "go.temporal.io/api/enums/v1"
 	historypb "go.temporal.io/api/history/v1"
+
 	"go.temporal.io/server/common"
-	dc "go.temporal.io/server/common/dynamicconfig"
+	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
@@ -88,8 +89,8 @@ func (s *eventsCacheSuite) TearDownTest() {
 
 func (s *eventsCacheSuite) newTestEventsCache() *CacheImpl {
 	config := configs.Config{
-		EventsCacheTTL:          dc.GetDurationPropertyFn(time.Minute),
-		EventsCacheMaxSizeBytes: dc.GetIntPropertyFn(32),
+		EventsCacheTTL:          dynamicconfig.GetDurationPropertyFn(time.Minute),
+		EventsCacheMaxSizeBytes: dynamicconfig.GetIntPropertyFn(32),
 	}
 	return NewHostLevelEventsCache(
 		s.mockExecutionManager,
@@ -113,7 +114,6 @@ func (s *eventsCacheSuite) TestEventsCacheHitSuccess() {
 	}
 
 	s.cache.PutEvent(
-		shardID,
 		EventKey{namespaceID, workflowID, runID, eventID, common.EmptyVersion},
 		event)
 	actualEvent, err := s.cache.GetEvent(
@@ -174,7 +174,6 @@ func (s *eventsCacheSuite) TestEventsCacheMissMultiEventsBatchV2Success() {
 	}, nil)
 
 	s.cache.PutEvent(
-		shardID,
 		EventKey{namespaceID, workflowID, runID, event2.GetEventId(), common.EmptyVersion},
 		event2)
 	actualEvent, err := s.cache.GetEvent(
@@ -240,11 +239,9 @@ func (s *eventsCacheSuite) TestEventsCacheDisableSuccess() {
 	}, nil)
 
 	s.cache.PutEvent(
-		shardID,
 		EventKey{namespaceID, workflowID, runID, event1.GetEventId(), common.EmptyVersion},
 		event1)
 	s.cache.PutEvent(
-		shardID,
 		EventKey{namespaceID, workflowID, runID, event2.GetEventId(), common.EmptyVersion},
 		event2)
 	s.cache.disabled = true
@@ -318,7 +315,6 @@ func (s *eventsCacheSuite) TestEventsCacheInvalidKey() {
 	}, nil).Times(2) // will be called twice since the key is invalid
 
 	s.cache.PutEvent(
-		shardID,
 		EventKey{namespaceID, workflowID, runID, event1.EventId, common.EmptyVersion},
 		event1)
 

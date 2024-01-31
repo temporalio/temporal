@@ -1223,7 +1223,6 @@ func (ms *MutableStateImpl) writeEventToCache(
 	// For Update Accepted/Completed event: store it in here so that Update
 	// disposition lookups can be fast
 	ms.eventsCache.PutEvent(
-		ms.shard.GetShardID(),
 		events.EventKey{
 			NamespaceID: namespace.ID(ms.executionInfo.NamespaceId),
 			WorkflowID:  ms.executionInfo.WorkflowId,

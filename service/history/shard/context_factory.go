@@ -25,7 +25,6 @@
 package shard
 
 import (
-	"go.temporal.io/server/service/history/events"
 	"go.uber.org/fx"
 
 	"go.temporal.io/server/client"
@@ -42,6 +41,7 @@ import (
 	"go.temporal.io/server/common/resource"
 	"go.temporal.io/server/common/searchattribute"
 	"go.temporal.io/server/service/history/configs"
+	"go.temporal.io/server/service/history/events"
 	"go.temporal.io/server/service/history/tasks"
 )
 
@@ -122,7 +122,7 @@ func (c *contextFactoryImpl) CreateContext(
 	if shard.GetConfig().EnableHostLevelEventsCache() {
 		shard.eventsCache = c.EventsCache
 	} else {
-		shard.eventsCache = c.NewEventsCacheFn(c.PersistenceExecutionManager, c.Config, c.MetricsHandler, c.Logger)
+		shard.eventsCache = c.NewEventsCacheFn(shard.executionManager, shard.config, shard.metricsHandler, shard.contextTaggedLogger)
 	}
 	if err != nil {
 		return nil, err

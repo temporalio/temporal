@@ -62,11 +62,11 @@ func NewMapEventCache(
 	m map[events.EventKey]*historypb.HistoryEvent,
 ) events.Cache {
 	cache := events.NewMockCache(gomock.NewController(t))
-	cache.EXPECT().DeleteEvent(gomock.Any(), gomock.Any()).AnyTimes().Do(
-		func(shardID int32, k events.EventKey) { delete(m, k) },
+	cache.EXPECT().DeleteEvent(gomock.Any()).AnyTimes().Do(
+		func(k events.EventKey) { delete(m, k) },
 	)
-	cache.EXPECT().PutEvent(gomock.Any(), gomock.Any(), gomock.Any()).AnyTimes().Do(
-		func(shardID int32, k events.EventKey, event *historypb.HistoryEvent) {
+	cache.EXPECT().PutEvent(gomock.Any(), gomock.Any()).AnyTimes().Do(
+		func(k events.EventKey, event *historypb.HistoryEvent) {
 			m[k] = event
 		},
 	)
