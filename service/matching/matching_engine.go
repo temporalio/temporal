@@ -839,18 +839,23 @@ func (e *matchingEngineImpl) listTaskQueuePartitions(request *matchingservice.Li
 
 func (e *matchingEngineImpl) UpdateWorkerVersioningRules(
 	ctx context.Context,
-	req *workflowservice.UpdateWorkerVersioningRulesRequest,
-) (*workflowservice.UpdateWorkerVersioningRulesResponse, error) {
+	request *matchingservice.UpdateWorkerVersioningRulesRequest,
+) (*matchingservice.UpdateWorkerVersioningRulesResponse, error) {
+	req := request.GetRequest()
 	ns, err := e.namespaceRegistry.GetNamespace(namespace.Name(req.GetNamespace()))
 	if err != nil {
 		return nil, err
 	}
-
+	if ns.ID().String() != request.GetNamespaceId() {
+		return nil, serviceerror.NewInternal("Namespace ID does not match Namespace in wrapped command")
+	}
+	if req.GetTaskQueue() != request.GetTaskQueue() {
+		return nil, serviceerror.NewInternal("Task Queue does not match Task Queue in wrapped command")
+	}
 	taskQueue, err := newTaskQueueID(ns.ID(), req.GetTaskQueue(), enumspb.TASK_QUEUE_TYPE_WORKFLOW)
 	if err != nil {
 		return nil, err
 	}
-
 	tqMgr, err := e.getTaskQueuePartitionManager(ctx, taskQueue, normalStickyInfo, true)
 	if err != nil {
 		return nil, err
@@ -944,13 +949,13 @@ func (e *matchingEngineImpl) UpdateWorkerVersioningRules(
 		return nil, err
 	}
 
-	return &workflowservice.UpdateWorkerVersioningRulesResponse{ConflictToken: cT}, nil
+	return &matchingservice.UpdateWorkerVersioningRulesResponse{Response: &workflowservice.UpdateWorkerVersioningRulesResponse{ConflictToken: cT}}, nil
 }
 
 func (e *matchingEngineImpl) ListWorkerVersioningRules(
 	ctx context.Context,
-	request *workflowservice.ListWorkerVersioningRulesRequest,
-) (*workflowservice.ListWorkerVersioningRulesResponse, error) {
+	request *matchingservice.ListWorkerVersioningRulesRequest,
+) (*matchingservice.ListWorkerVersioningRulesResponse, error) {
 	return nil, nil
 }
 
