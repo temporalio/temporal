@@ -73,16 +73,16 @@ type (
 const (
 	eventStorageSize = 2 * 1024 * 1024
 	// I do not know the real overhead size, 100 is just a number
-	recordOverheadSize = 100
+	recordOverheadSize = 1000
 )
 
 var (
-	errTryAgain   = errors.New("try again")
-	errWrongChain = errors.New("found running workflow with wrong FirstExecutionRunId")
-	errNoEvents   = errors.New("GetEvents didn't return any events")
-	errNoAttrs    = errors.New("last event did not have correct attrs")
-	errBlocked    = errors.New("rate limiter doesn't allow any progress")
-	errUnkownFlow = errors.New("unknown workflow status")
+	errTryAgain             = errors.New("try again")
+	errWrongChain           = errors.New("found running workflow with wrong FirstExecutionRunId")
+	errNoEvents             = errors.New("GetEvents didn't return any events")
+	errNoAttrs              = errors.New("last event did not have correct attrs")
+	errBlocked              = errors.New("rate limiter doesn't allow any progress")
+	errUnkownWorkflowStatus = errors.New("unknown workflow status")
 )
 
 func (e errFollow) Error() string { return string(e) }
@@ -332,7 +332,7 @@ func (r responseBuilder) Build(event *historypb.HistoryEvent) (*schedspb.WatchWo
 			return nil, errFollow(attrs.NewExecutionRunId)
 		} else {
 			result := attrs.Result
-			if proto.Size(result) > r.resultStorageNumberSize {
+			if r.isTooBig(result) {
 				r.logger.Error(
 					fmt.Sprintf("result dropped due to its size %d", proto.Size(result)),
 					tag.WorkflowID(r.request.Execution.WorkflowId))
@@ -346,7 +346,14 @@ func (r responseBuilder) Build(event *historypb.HistoryEvent) (*schedspb.WatchWo
 		} else if len(attrs.NewExecutionRunId) > 0 {
 			return nil, errFollow(attrs.NewExecutionRunId)
 		} else {
-			return r.makeResponse(nil, attrs.Failure), nil
+			failure := attrs.Failure
+			if r.isTooBig(failure) {
+				r.logger.Error(
+					fmt.Sprintf("failure dropped due to its size %d", proto.Size(failure)),
+					tag.WorkflowID(r.request.Execution.WorkflowId))
+				failure = nil
+			}
+			return r.makeResponse(nil, failure), nil
 		}
 	case enumspb.WORKFLOW_EXECUTION_STATUS_CANCELED, enumspb.WORKFLOW_EXECUTION_STATUS_TERMINATED:
 		return r.makeResponse(nil, nil), nil
@@ -365,11 +372,14 @@ func (r responseBuilder) Build(event *historypb.HistoryEvent) (*schedspb.WatchWo
 			return r.makeResponse(nil, nil), nil
 		}
 	}
-	return nil, errUnkownFlow
+	return nil, errUnkownWorkflowStatus
 }
 
-func (r responseBuilder) makeResponse(result *commonpb.Payloads, failure *failurepb.Failure) *schedspb.
-	WatchWorkflowResponse {
+func (r responseBuilder) isTooBig(m proto.Message) bool {
+	return proto.Size(m) > r.resultStorageNumberSize
+}
+
+func (r responseBuilder) makeResponse(result *commonpb.Payloads, failure *failurepb.Failure) *schedspb.WatchWorkflowResponse {
 	res := &schedspb.WatchWorkflowResponse{Status: r.workflowStatus}
 	if result != nil {
 		res.ResultFailure = &schedspb.WatchWorkflowResponse_Result{Result: result}
