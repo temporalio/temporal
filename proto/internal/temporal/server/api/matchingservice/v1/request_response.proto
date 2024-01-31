@@ -228,7 +228,38 @@ message UpdateWorkerBuildIdCompatibilityRequest {
         string persist_unknown_build_id = 5;
     }
 }
+
 message UpdateWorkerBuildIdCompatibilityResponse {}
+
+message ListWorkerVersioningRulesRequest {
+    string namespace_id = 1;
+    string task_queue = 2;
+
+    oneof command {
+        temporal.api.workflowservice.v1.ListWorkerVersioningRulesRequest request = 3;
+    }
+}
+
+message ListWorkerVersioningRulesResponse {
+    temporal.api.workflowservice.v1.ListWorkerVersioningRulesResponse response = 1;
+}
+
+// (-- api-linter: core::0134::request-mask-required=disabled
+//     aip.dev/not-precedent: UpdateWorkerVersioningRulesRequest doesn't follow Google API format --)
+// (-- api-linter: core::0134::request-resource-required=disabled
+//     aip.dev/not-precedent: UpdateWorkerVersioningRulesRequest RPC doesn't follow Google API format. --)
+message UpdateWorkerVersioningRulesRequest {
+    string namespace_id = 1;
+    string task_queue = 2;
+
+    oneof command {
+        temporal.api.workflowservice.v1.UpdateWorkerVersioningRulesRequest request = 3;
+    }
+}
+
+message UpdateWorkerVersioningRulesResponse {
+    temporal.api.workflowservice.v1.UpdateWorkerVersioningRulesResponse response = 1;
+}
 
 message GetWorkerBuildIdCompatibilityRequest {
     string namespace_id = 1;

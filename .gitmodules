@@ -1,6 +1,6 @@
 [submodule "proto/api"]
 	path = proto/api
-	url = https://github.com/temporalio/api
+	url = ../api
 	branch = versioning-2
 [submodule "develop/docker-compose/grafana/provisioning/temporalio-dashboards"]
 	path = develop/docker-compose/grafana/provisioning/temporalio-dashboards

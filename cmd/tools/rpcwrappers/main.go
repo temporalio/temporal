@@ -224,8 +224,8 @@ func makeGetMatchingClient(reqType reflect.Type) string {
 	t := reqType.Elem() // we know it's a pointer
 
 	nsID := findOneNestedField(t, "NamespaceId", "request", 1)
-	var tq, tqt fieldWithPath
 
+	var tq, tqt fieldWithPath
 	switch t.Name() {
 	case "GetBuildIdTaskQueueMappingRequest":
 		// Pick a random node for this request, it's not associated with a specific task queue.
@@ -240,7 +240,9 @@ func makeGetMatchingClient(reqType reflect.Type) string {
 		"UpdateWorkerBuildIdCompatibilityRequest",
 		"RespondQueryTaskCompletedRequest",
 		"ListTaskQueuePartitionsRequest",
-		"ApplyTaskQueueUserDataReplicationEventRequest":
+		"ApplyTaskQueueUserDataReplicationEventRequest",
+		"ListWorkerVersioningRulesRequest",
+		"UpdateWorkerVersioningRulesRequest":
 		tq = findOneNestedField(t, "TaskQueue", "request", 2)
 		tqt = fieldWithPath{path: "enumspb.TASK_QUEUE_TYPE_WORKFLOW"}
 	default:

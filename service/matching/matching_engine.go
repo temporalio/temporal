@@ -43,10 +43,10 @@ import (
 	"go.temporal.io/api/serviceerror"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	"go.temporal.io/api/workflowservice/v1"
-	"go.temporal.io/server/api/historyservice/v1"
-	"go.temporal.io/server/api/matchingservice/v1"
 
 	enumsspb "go.temporal.io/server/api/enums/v1"
+	"go.temporal.io/server/api/historyservice/v1"
+	"go.temporal.io/server/api/matchingservice/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	replicationspb "go.temporal.io/server/api/replication/v1"
 	tokenspb "go.temporal.io/server/api/token/v1"
@@ -452,7 +452,7 @@ pollLoop:
 		}
 		task, err := e.pollTask(pollerCtx, taskQueue, stickyInfo, pollMetadata)
 		if err != nil {
-			if err == errNoTasks {
+			if errors.Is(err, errNoTasks) {
 				return emptyPollWorkflowTaskQueueResponse, nil
 			}
 			return nil, err
@@ -633,7 +633,7 @@ pollLoop:
 		}
 		task, err := e.pollTask(pollerCtx, taskQueue, stickyInfo, pollMetadata)
 		if err != nil {
-			if err == errNoTasks {
+			if errors.Is(err, errNoTasks) {
 				return emptyPollActivityTaskQueueResponse, nil
 			}
 			return nil, err
@@ -835,6 +835,123 @@ func (e *matchingEngineImpl) listTaskQueuePartitions(request *matchingservice.Li
 	}
 
 	return partitionHostInfo, nil
+}
+
+func (e *matchingEngineImpl) UpdateWorkerVersioningRules(
+	ctx context.Context,
+	req *workflowservice.UpdateWorkerVersioningRulesRequest,
+) (*workflowservice.UpdateWorkerVersioningRulesResponse, error) {
+	ns, err := e.namespaceRegistry.GetNamespace(namespace.Name(req.GetNamespace()))
+	if err != nil {
+		return nil, err
+	}
+
+	taskQueue, err := newTaskQueueID(ns.ID(), req.GetTaskQueue(), enumspb.TASK_QUEUE_TYPE_WORKFLOW)
+	if err != nil {
+		return nil, err
+	}
+
+	tqMgr, err := e.getTaskQueuePartitionManager(ctx, taskQueue, normalStickyInfo, true)
+	if err != nil {
+		return nil, err
+	}
+
+	// we don't set updateOptions.TaskQueueLimitPerBuildId, because the Versioning Rule limits will be checked separately
+	// we don't set updateOptions.KnownVersion, because we handle external API call ordering with conflictToken
+	updateOptions := UserDataUpdateOptions{}
+	cT := req.GetConflictToken()
+
+	err = tqMgr.UpdateUserData(ctx, updateOptions, func(data *persistencespb.TaskQueueUserData) (*persistencespb.TaskQueueUserData, bool, error) {
+		clk := data.GetClock()
+		if clk == nil {
+			clk = hlc.Zero(e.clusterMeta.GetClusterID())
+		} else {
+			prevCT, err := clk.Marshal()
+			if err != nil {
+				return nil, false, err
+			}
+			if !bytes.Equal(cT, prevCT) {
+				return nil, false, serviceerror.NewFailedPrecondition(
+					fmt.Sprintf("provided conflict token %v does not match existing one %v", cT, prevCT),
+				)
+			}
+		}
+		updatedClock := hlc.Next(clk, e.timeSource)
+		hadUnfiltered := containsUnfiltered(data.GetVersioningData().GetAssignmentRules())
+		var versioningData *persistencespb.VersioningData
+		switch req.GetOperation().(type) {
+		case *workflowservice.UpdateWorkerVersioningRulesRequest_InsertAssignmentRule:
+			versioningData, err = InsertAssignmentRule(
+				updatedClock,
+				data.GetVersioningData(),
+				req.GetInsertAssignmentRule(),
+				e.config.AssignmentRuleLimitPerQueue(ns.Name().String()),
+				hadUnfiltered,
+			)
+		case *workflowservice.UpdateWorkerVersioningRulesRequest_ReplaceAssignmentRule:
+			versioningData, err = ReplaceAssignmentRule(
+				updatedClock,
+				data.GetVersioningData(),
+				req.GetReplaceAssignmentRule(),
+				hadUnfiltered,
+			)
+		case *workflowservice.UpdateWorkerVersioningRulesRequest_DeleteAssignmentRule:
+			versioningData, err = DeleteAssignmentRule(
+				updatedClock,
+				data.GetVersioningData(),
+				req.GetDeleteAssignmentRule(),
+				hadUnfiltered,
+			)
+		case *workflowservice.UpdateWorkerVersioningRulesRequest_InsertCompatibleRedirectRule:
+			versioningData, err = InsertCompatibleRedirectRule(
+				updatedClock,
+				data.GetVersioningData(),
+				req.GetInsertCompatibleRedirectRule(),
+				e.config.RedirectRuleLimitPerQueue(ns.Name().String()),
+			)
+		case *workflowservice.UpdateWorkerVersioningRulesRequest_ReplaceCompatibleRedirectRule:
+			versioningData, err = ReplaceCompatibleRedirectRule(
+				updatedClock,
+				data.GetVersioningData(),
+				req.GetReplaceCompatibleRedirectRule(),
+			)
+		case *workflowservice.UpdateWorkerVersioningRulesRequest_DeleteCompatibleRedirectRule:
+			versioningData, err = DeleteCompatibleRedirectRule(
+				updatedClock,
+				data.GetVersioningData(),
+				req.GetDeleteCompatibleRedirectRule(),
+			)
+		case *workflowservice.UpdateWorkerVersioningRulesRequest_CommitBuildId_:
+			err = serviceerror.NewUnimplemented("commit build id is not yet implemented")
+		}
+		if err != nil {
+			// operation can't be completed due to failed validation. no action, do not replicate, report error
+			return nil, false, err
+		}
+		if cT, err = updatedClock.Marshal(); err != nil {
+			return nil, false, serviceerror.NewInternal("error generating next conflict token")
+		}
+		// We can replicate tombstone cleanup, because it's just based on DeletionTimestamp, so no need to only do it locally
+		versioningData = CleanupRuleTombstones(versioningData, e.config.DeletedRuleRetentionTime(ns.Name().String()))
+		// Avoid mutation
+		ret := common.CloneProto(data)
+		ret.Clock = updatedClock
+		ret.VersioningData = versioningData
+		return ret, true, nil
+	})
+
+	if err != nil {
+		return nil, err
+	}
+
+	return &workflowservice.UpdateWorkerVersioningRulesResponse{ConflictToken: cT}, nil
+}
+
+func (e *matchingEngineImpl) ListWorkerVersioningRules(
+	ctx context.Context,
+	request *workflowservice.ListWorkerVersioningRulesRequest,
+) (*workflowservice.ListWorkerVersioningRulesResponse, error) {
+	return nil, nil
 }
 
 func (e *matchingEngineImpl) UpdateWorkerBuildIdCompatibility(
