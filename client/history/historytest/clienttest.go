@@ -53,7 +53,7 @@ import (
 )
 
 // fakeTracerProvider is needed to construct a [historyserver.Handler] object.
-type fakeTracerProvider struct{
+type fakeTracerProvider struct {
 	embedded.TracerProvider
 }
 
