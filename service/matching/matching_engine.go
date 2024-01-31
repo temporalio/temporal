@@ -847,10 +847,10 @@ func (e *matchingEngineImpl) UpdateWorkerVersioningRules(
 		return nil, err
 	}
 	if ns.ID().String() != request.GetNamespaceId() {
-		return nil, serviceerror.NewInvalidArgument("Namespace ID does not match Namespace in wrapped command")
+		return nil, serviceerror.NewInternal("Namespace ID does not match Namespace in wrapped command")
 	}
 	if req.GetTaskQueue() != request.GetTaskQueue() {
-		return nil, serviceerror.NewInvalidArgument("Task Queue does not match Task Queue in wrapped command")
+		return nil, serviceerror.NewInternal("Task Queue does not match Task Queue in wrapped command")
 	}
 	taskQueue, err := newTaskQueueID(ns.ID(), req.GetTaskQueue(), enumspb.TASK_QUEUE_TYPE_WORKFLOW)
 	if err != nil {
