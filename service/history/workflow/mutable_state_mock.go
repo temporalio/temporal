@@ -2640,9 +2640,9 @@ func (mr *MockMutableStateMockRecorder) SetHistoryBuilder(hBuilder interface{}) 
 }
 
 // SetHistoryTree mocks base method.
-func (m *MockMutableState) SetHistoryTree(ctx context.Context, executionTimeout, runTimeout *durationpb.Duration, treeID string) error {
+func (m *MockMutableState) SetHistoryTree(executionTimeout *durationpb.Duration, runTimeout *durationpb.Duration, treeID string) error {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "SetHistoryTree", ctx, executionTimeout, runTimeout, treeID)
+	ret := m.ctrl.Call(m, "SetHistoryTree", executionTimeout, runTimeout, treeID)
 	ret0, _ := ret[0].(error)
 	return ret0
 }

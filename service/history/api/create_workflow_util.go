@@ -55,7 +55,6 @@ type (
 )
 
 func NewWorkflowWithSignal(
-	ctx context.Context,
 	shard shard.Context,
 	namespaceEntry *namespace.Namespace,
 	workflowID string,
@@ -64,7 +63,6 @@ func NewWorkflowWithSignal(
 	signalWithStartRequest *workflowservice.SignalWithStartWorkflowExecutionRequest,
 ) (WorkflowLease, error) {
 	newMutableState, err := CreateMutableState(
-		ctx,
 		shard,
 		namespaceEntry,
 		startRequest.StartRequest.WorkflowExecutionTimeout,
@@ -142,7 +140,6 @@ func NewWorkflowWithSignal(
 }
 
 func CreateMutableState(
-	ctx context.Context,
 	shard shard.Context,
 	namespaceEntry *namespace.Namespace,
 	executionTimeout *durationpb.Duration,
@@ -159,7 +156,7 @@ func CreateMutableState(
 		runID,
 		shard.GetTimeSource().Now(),
 	)
-	if err := newMutableState.SetHistoryTree(ctx, executionTimeout, runTimeout, runID); err != nil {
+	if err := newMutableState.SetHistoryTree(executionTimeout, runTimeout, runID); err != nil {
 		return nil, err
 	}
 	return newMutableState, nil
