@@ -1,4 +1,6 @@
-// Copyright (c) 2020 Temporal Technologies Inc.  All rights reserved.
+// The MIT License
+//
+// Copyright (c) 2024 Temporal Technologies Inc.  All rights reserved.
 //
 // Copyright (c) 2020 Uber Technologies, Inc.
 //
