@@ -317,6 +317,7 @@ func newResponseBuilder(
 	}
 }
 
+//nolint:revive
 func (r responseBuilder) Build(event *historypb.HistoryEvent) (*schedspb.WatchWorkflowResponse, error) {
 	switch r.workflowStatus {
 	case enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING:
