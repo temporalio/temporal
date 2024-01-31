@@ -40,8 +40,18 @@ import (
 )
 
 func TestDescribeScheduleAnnotatesScheduledWorkflowWithTypes(t *testing.T) {
+	makeWorkflowHandler := func(
+		visibilityManager *manager.MockVisibilityManager,
+		searchAttrProvider *searchattribute.MockProvider,
+	) WorkflowHandler {
+		h := WorkflowHandler{
+			saMapperProvider: searchattribute.NewTestMapperProvider(&searchattribute.TestMapper{Namespace: "ns"}),
+			visibilityMrg:    visibilityManager,
+			saProvider:       searchAttrProvider,
+		}
+		return h
+	}
 	controller := gomock.NewController(t)
-	defer controller.Finish()
 	visibilityManager := makeVisibilityManagerStub(controller)
 	searchAttrProvider := makeSearchAttributesProviderStub(
 		controller,
@@ -50,12 +60,13 @@ func TestDescribeScheduleAnnotatesScheduledWorkflowWithTypes(t *testing.T) {
 			"CustomBoolField":    enumspb.INDEXED_VALUE_TYPE_BOOL,
 		},
 	)
-	h := makeWorkflowHandler(visibilityManager, searchAttrProvider)
-
 	response := makeResponseWithScheduledWorkflowAttributes(
 		map[string]string{"CustomKeywordField": "keyword", "CustomBoolField": "true"})
 
+	h := makeWorkflowHandler(visibilityManager, searchAttrProvider)
+
 	err := h.annotateSearchAttributesOfScheduledWorkflow(response, "ns")
+
 	if err != nil {
 		t.Fatalf("error %v", err)
 	}
@@ -88,31 +99,19 @@ func getScheduledWorkflowSearchAttributes(response *schedspb.DescribeResponse) *
 	return response.Schedule.Action.Action.(*schedule.ScheduleAction_StartWorkflow).StartWorkflow.SearchAttributes
 }
 
-func makeWorkflowHandler(
-	visibilityManager *manager.MockVisibilityManager,
-	searchAttrProvider *searchattribute.MockProvider,
-) WorkflowHandler {
-	h := WorkflowHandler{
-		saMapperProvider: searchattribute.NewTestMapperProvider(&searchattribute.TestMapper{Namespace: "ns"}),
-		visibilityMrg:    visibilityManager,
-		saProvider:       searchAttrProvider,
-	}
-	return h
-}
-
 func makeSearchAttributesProviderStub(
 	controller *gomock.Controller,
 	custom map[string]enumspb.IndexedValueType,
 ) *searchattribute.MockProvider {
 	searchAttrProvider := searchattribute.NewMockProvider(controller)
 	nameTypeMapStub := searchattribute.NewNameTypeMapStub(custom)
-	searchAttrProvider.EXPECT().GetSearchAttributes("index", false).Return(nameTypeMapStub, nil)
+	searchAttrProvider.EXPECT().GetSearchAttributes("index", false).Return(nameTypeMapStub, nil).AnyTimes()
 	return searchAttrProvider
 }
 
 func makeVisibilityManagerStub(controller *gomock.Controller) *manager.MockVisibilityManager {
 	visibilityManager := manager.NewMockVisibilityManager(controller)
-	visibilityManager.EXPECT().GetIndexName().Return("index")
+	visibilityManager.EXPECT().GetIndexName().Return("index").AnyTimes()
 	return visibilityManager
 }
 
