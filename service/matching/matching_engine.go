@@ -842,17 +842,20 @@ func (e *matchingEngineImpl) UpdateWorkerVersioningRules(
 	request *matchingservice.UpdateWorkerVersioningRulesRequest,
 ) (*matchingservice.UpdateWorkerVersioningRulesResponse, error) {
 	req := request.GetRequest()
-	// todo: verify duplicate info matches
 	ns, err := e.namespaceRegistry.GetNamespace(namespace.Name(req.GetNamespace()))
 	if err != nil {
 		return nil, err
 	}
-
+	if ns.ID().String() != request.GetNamespaceId() {
+		return nil, serviceerror.NewInvalidArgument("Namespace ID does not match Namespace in wrapped command")
+	}
+	if req.GetTaskQueue() != request.GetTaskQueue() {
+		return nil, serviceerror.NewInvalidArgument("Task Queue does not match Task Queue in wrapped command")
+	}
 	taskQueue, err := newTaskQueueID(ns.ID(), req.GetTaskQueue(), enumspb.TASK_QUEUE_TYPE_WORKFLOW)
 	if err != nil {
 		return nil, err
 	}
-
 	tqMgr, err := e.getTaskQueuePartitionManager(ctx, taskQueue, normalStickyInfo, true)
 	if err != nil {
 		return nil, err
