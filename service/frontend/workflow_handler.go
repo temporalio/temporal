@@ -2392,7 +2392,7 @@ func (wh *WorkflowHandler) DescribeWorkflowExecution(ctx context.Context, reques
 		if err != nil {
 			return nil, err
 		}
-		if aliasedSas != nil {
+		if aliasedSas != response.GetWorkflowExecutionInfo().GetSearchAttributes() {
 			response.GetWorkflowExecutionInfo().SearchAttributes = aliasedSas
 		}
 	}
@@ -2733,7 +2733,7 @@ func (wh *WorkflowHandler) DescribeSchedule(ctx context.Context, request *workfl
 		if err != nil {
 			return nil, err
 		}
-		if aliasedSas != nil {
+		if aliasedSas != sas {
 			executionInfo.SearchAttributes = aliasedSas
 		}
 	}

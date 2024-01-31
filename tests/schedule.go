@@ -917,14 +917,14 @@ func (s *ScheduleFunctionalSuite) assertSameRecentActions(
 ) {
 	s.T().Helper()
 	if len(expected.Info.RecentActions) != len(actual.Info.RecentActions) {
-		s.T().Fatal(
+		s.T().Fatalf(
 			"RecentActions have different length expected %d, got %d",
 			len(expected.Info.RecentActions),
 			len(actual.Info.RecentActions))
 	}
 	for i := range expected.Info.RecentActions {
 		if !proto.Equal(expected.Info.RecentActions[i], actual.Info.RecentActions[i]) {
-			s.T().Error(
+			s.T().Errorf(
 				"RecentActions are differ at index %d. Expected %v, got %v",
 				i,
 				expected.Info.RecentActions[i],
