@@ -15,7 +15,7 @@ var Module = fx.Options(
 	fx.Provide(NewCacheFnProvider),
 )
 
-// NewCacheFnProvider provide a NewEventsCacheFn that can be used to create new workflow cache.
+// NewCacheFnProvider provide a NewEventsCacheFn that can be used to create new events cache.
 func NewCacheFnProvider() NewEventsCacheFn {
 	return func(executionManager persistence.ExecutionManager, config *configs.Config, handler metrics.Handler, logger log.Logger) Cache {
 		return NewShardLevelEventsCache(executionManager, config, handler, logger, false)
