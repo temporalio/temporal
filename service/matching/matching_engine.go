@@ -839,8 +839,10 @@ func (e *matchingEngineImpl) listTaskQueuePartitions(request *matchingservice.Li
 
 func (e *matchingEngineImpl) UpdateWorkerVersioningRules(
 	ctx context.Context,
-	req *workflowservice.UpdateWorkerVersioningRulesRequest,
-) (*workflowservice.UpdateWorkerVersioningRulesResponse, error) {
+	request *matchingservice.UpdateWorkerVersioningRulesRequest,
+) (*matchingservice.UpdateWorkerVersioningRulesResponse, error) {
+	req := request.GetRequest()
+	// todo: verify duplicate info matches
 	ns, err := e.namespaceRegistry.GetNamespace(namespace.Name(req.GetNamespace()))
 	if err != nil {
 		return nil, err
@@ -944,13 +946,13 @@ func (e *matchingEngineImpl) UpdateWorkerVersioningRules(
 		return nil, err
 	}
 
-	return &workflowservice.UpdateWorkerVersioningRulesResponse{ConflictToken: cT}, nil
+	return &matchingservice.UpdateWorkerVersioningRulesResponse{Response: &workflowservice.UpdateWorkerVersioningRulesResponse{ConflictToken: cT}}, nil
 }
 
 func (e *matchingEngineImpl) ListWorkerVersioningRules(
 	ctx context.Context,
-	request *workflowservice.ListWorkerVersioningRulesRequest,
-) (*workflowservice.ListWorkerVersioningRulesResponse, error) {
+	request *matchingservice.ListWorkerVersioningRulesRequest,
+) (*matchingservice.ListWorkerVersioningRulesResponse, error) {
 	return nil, nil
 }
 
