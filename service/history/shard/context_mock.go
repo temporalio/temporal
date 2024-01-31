@@ -51,7 +51,7 @@ import (
 	serialization "go.temporal.io/server/common/persistence/serialization"
 	searchattribute "go.temporal.io/server/common/searchattribute"
 	configs "go.temporal.io/server/service/history/configs"
-	"go.temporal.io/server/service/history/events"
+	events "go.temporal.io/server/service/history/events"
 	tasks "go.temporal.io/server/service/history/tasks"
 )
 
