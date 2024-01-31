@@ -45,6 +45,7 @@ import (
 	"go.temporal.io/server/api/historyservice/v1"
 	schedspb "go.temporal.io/server/api/schedule/v1"
 	"go.temporal.io/server/common"
+	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/namespace"
@@ -58,7 +59,8 @@ type (
 		namespaceID namespace.ID
 		// Rate limiter for start workflow requests. Note that the scope is all schedules in
 		// this namespace on this worker.
-		startWorkflowRateLimiter quotas.RateLimiter
+		startWorkflowRateLimiter     quotas.RateLimiter
+		singleResultStorageSizePerNs dynamicconfig.IntPropertyFnWithNamespaceFilter
 	}
 
 	errFollow string
@@ -68,7 +70,11 @@ type (
 	}
 )
 
-const maxResultSize = 2 * 1024 * 1024
+const (
+	eventStorageSize = 2 * 1024 * 1024
+	// I do not know the real overhead size, 100 is just a number
+	recordOverheadSize = 100
+)
 
 var (
 	errTryAgain   = errors.New("try again")
@@ -168,7 +174,12 @@ func (a *activities) tryWatchWorkflow(ctx context.Context, req *schedspb.WatchWo
 		return nil, errWrongChain
 	}
 
-	rb := newResponseBuilder(req, pollRes.WorkflowStatus, a.Logger)
+	rb := newResponseBuilder(
+		req,
+		pollRes.WorkflowStatus,
+		a.Logger,
+		a.singleResultStorageSizePerNs(a.namespace.String())-recordOverheadSize,
+	)
 	if pollRes.WorkflowStatus == enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING {
 		return rb.Build(nil)
 	}
@@ -286,17 +297,24 @@ func translateError(err error, msgPrefix string) error {
 }
 
 type responseBuilder struct {
-	request        *schedspb.WatchWorkflowRequest
-	workflowStatus enumspb.WorkflowExecutionStatus
-	logger         log.Logger
+	request                 *schedspb.WatchWorkflowRequest
+	workflowStatus          enumspb.WorkflowExecutionStatus
+	logger                  log.Logger
+	resultStorageNumberSize int
 }
 
 func newResponseBuilder(
 	request *schedspb.WatchWorkflowRequest,
 	workflowStatus enumspb.WorkflowExecutionStatus,
 	logger log.Logger,
+	resultStorageSize int,
 ) responseBuilder {
-	return responseBuilder{request: request, workflowStatus: workflowStatus, logger: logger}
+	return responseBuilder{
+		request:                 request,
+		workflowStatus:          workflowStatus,
+		logger:                  logger,
+		resultStorageNumberSize: resultStorageSize,
+	}
 }
 
 func (r responseBuilder) Build(event *historypb.HistoryEvent) (*schedspb.WatchWorkflowResponse, error) {
@@ -314,7 +332,7 @@ func (r responseBuilder) Build(event *historypb.HistoryEvent) (*schedspb.WatchWo
 			return nil, errFollow(attrs.NewExecutionRunId)
 		} else {
 			result := attrs.Result
-			if proto.Size(result) > maxResultSize {
+			if proto.Size(result) > r.resultStorageNumberSize {
 				r.logger.Error(
 					fmt.Sprintf("result dropped due to its size %d", proto.Size(result)),
 					tag.WorkflowID(r.request.Execution.WorkflowId))
