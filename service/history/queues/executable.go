@@ -156,6 +156,7 @@ type (
 		DLQEnabled                 dynamicconfig.BoolPropertyFn
 		DLQWriter                  *DLQWriter
 		MaxUnexpectedErrorAttempts dynamicconfig.IntPropertyFn
+		DLQInternalErrors dynamicconfig.BoolPropertyFn
 	}
 	ExecutableOption func(*ExecutableParams)
 )
@@ -181,6 +182,8 @@ func NewExecutable(
 		DLQWriter: nil,
 		MaxUnexpectedErrorAttempts: func() int {
 			return math.MaxInt
+		DLQInternalErrors: func() bool {
+			return false
 		},
 	}
 	for _, opt := range opts {
@@ -210,6 +213,7 @@ func NewExecutable(
 		dlqWriter:                  params.DLQWriter,
 		dlqEnabled:                 params.DLQEnabled,
 		maxUnexpectedErrorAttempts: params.MaxUnexpectedErrorAttempts,
+		dlqInternalErrors:    params.DLQInternalErrors,
 	}
 	executable.updatePriority()
 	return executable
@@ -353,7 +357,7 @@ func (e *executableImpl) HandleErr(err error) (retErr error) {
 	}
 	e.resourceExhaustedCount = 0
 
-	if _, isNotFound := err.(*serviceerror.NotFound); isNotFound {
+	if common.IsNotFoundError(err) {
 		return nil
 	}
 
@@ -401,7 +405,7 @@ func (e *executableImpl) HandleErr(err error) (retErr error) {
 	}
 
 	// TODO: expand on the errors that should be considered terminal
-	if errors.As(err, new(TerminalTaskError)) {
+	if errors.As(err, new(TerminalTaskError)) || (e.dlqInternalErrors() && common.IsInternalError(err)) {
 		// Terminal errors are likely due to data corruption.
 		// Drop the task by returning nil so that task will be marked as completed,
 		// or send it to the DLQ if that is enabled.

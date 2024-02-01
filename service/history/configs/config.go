@@ -106,6 +106,7 @@ type Config struct {
 
 	TaskDLQEnabled                 dynamicconfig.BoolPropertyFn
 	TaskDLQUnexpectedErrorAttempts dynamicconfig.IntPropertyFn
+	TaskDLQInternalErrors          dynamicconfig.BoolPropertyFn
 
 	TaskSchedulerEnableRateLimiter           dynamicconfig.BoolPropertyFn
 	TaskSchedulerEnableRateLimiterShadowMode dynamicconfig.BoolPropertyFn
