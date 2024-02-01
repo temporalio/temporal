@@ -1610,5 +1610,6 @@ func (s *timerQueueActiveTaskExecutorSuite) newTaskExecutable(
 		s.mockClusterMetadata,
 		nil,
 		metrics.NoopMetricsHandler,
+		func() bool { return false },
 	)
 }

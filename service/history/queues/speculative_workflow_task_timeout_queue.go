@@ -106,6 +106,7 @@ func (q SpeculativeWorkflowTaskTimeoutQueue) NotifyNewTasks(ts []tasks.Task) {
 				q.clusterMetadata,
 				q.logger,
 				q.metricsHandler,
+				func() bool { return false },
 			), wttt)
 			q.timeoutQueue.Add(executable)
 		}

@@ -142,6 +142,7 @@ func (f *visibilityQueueFactory) CreateQueue(
 			CheckpointInterval:                  f.Config.VisibilityProcessorUpdateAckInterval,
 			CheckpointIntervalJitterCoefficient: f.Config.VisibilityProcessorUpdateAckIntervalJitterCoefficient,
 			MaxReaderCount:                      f.Config.QueueMaxReaderCount,
+			DLQInternalErrors:                   f.Config.TaskDLQInternalErrors,
 		},
 		f.HostReaderRateLimiter,
 		logger,

@@ -617,5 +617,6 @@ func (s *visibilityQueueTaskExecutorSuite) newTaskExecutable(
 		s.mockShard.GetClusterMetadata(),
 		nil,
 		metrics.NoopMetricsHandler,
+		func() bool { return false },
 	)
 }

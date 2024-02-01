@@ -1505,5 +1505,6 @@ func (s *timerQueueStandbyTaskExecutorSuite) newTaskExecutable(
 		s.mockClusterMetadata,
 		nil,
 		metrics.NoopMetricsHandler,
+		func() bool { return false },
 	)
 }

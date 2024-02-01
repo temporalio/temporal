@@ -184,6 +184,7 @@ func (s *memoryScheduledQueueSuite) newSpeculativeWorkflowTaskTimeoutTestExecuta
 			nil,
 			nil,
 			nil,
+			func() bool { return false },
 		),
 		wttt,
 	)

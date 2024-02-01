@@ -200,6 +200,7 @@ func (f *timerQueueFactory) CreateQueue(
 			CheckpointInterval:                  f.Config.TimerProcessorUpdateAckInterval,
 			CheckpointIntervalJitterCoefficient: f.Config.TimerProcessorUpdateAckIntervalJitterCoefficient,
 			MaxReaderCount:                      f.Config.QueueMaxReaderCount,
+			DLQInternalErrors:                   f.Config.TaskDLQInternalErrors,
 		},
 		f.HostReaderRateLimiter,
 		logger,
