@@ -517,17 +517,14 @@ func (s *executableSuite) TestExecute_SendToDLQAfterMaxAttemptsThenDisable() {
 
 	dlqEnabled = false
 
-	// Make sure original execution error is returned
-	s.ErrorIs(executable.Execute(), execError)
-
-	// Make sure task is retried next time
+	// Make sure task is retried this time
+	execError2 := errors.New("some other random error")
 	s.mockExecutor.EXPECT().Execute(gomock.Any(), executable).Return(queues.ExecuteResponse{
 		ExecutionMetricTags: nil,
 		ExecutedAsActive:    false,
-		ExecutionErr:        execError,
+		ExecutionErr:        execError2,
 	}).Times(1)
-	s.ErrorIs(executable.Execute(), execError)
-
+	s.ErrorIs(executable.Execute(), execError2)
 	s.Empty(queueWriter.EnqueueTaskRequests)
 }
 

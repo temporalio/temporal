@@ -278,28 +278,26 @@ func (e *executableImpl) Execute() (retErr error) {
 	}()
 
 	if e.terminalFailureCause != nil {
-		if !e.dlqEnabled() {
-			if errors.As(e.terminalFailureCause, new(TerminalTaskError)) {
-				e.logger.Warn(
-					"Dropping task with terminal failure because DLQ was disabled",
-					tag.Error(e.terminalFailureCause),
-				)
-				return nil
+		if e.dlqEnabled() {
+			err := e.dlqWriter.WriteTaskToDLQ(
+				ctx,
+				e.clusterMetadata.GetCurrentClusterName(),
+				e.clusterMetadata.GetCurrentClusterName(),
+				e.GetTask(),
+			)
+			if err != nil {
+				e.logger.Error("Failed to write task to DLQ", tag.Error(err))
 			}
-			terminalErr := e.terminalFailureCause
-			e.terminalFailureCause = nil
-			return terminalErr
+			return err
 		}
-		err := e.dlqWriter.WriteTaskToDLQ(
-			ctx,
-			e.clusterMetadata.GetCurrentClusterName(),
-			e.clusterMetadata.GetCurrentClusterName(),
-			e.GetTask(),
-		)
-		if err != nil {
-			e.logger.Error("Failed to write task to DLQ", tag.Error(err))
+		if errors.As(e.terminalFailureCause, new(TerminalTaskError)) {
+			e.logger.Warn(
+				"Dropping task with terminal failure because DLQ was disabled",
+				tag.Error(e.terminalFailureCause),
+			)
+			return nil
 		}
-		return err
+		e.terminalFailureCause = nil
 	}
 
 	resp := e.executor.Execute(ctx, e)
