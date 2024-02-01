@@ -157,21 +157,6 @@ func (c *clientImpl) GetBuildIdTaskQueueMapping(
 	return client.GetBuildIdTaskQueueMapping(ctx, request, opts...)
 }
 
-func (c *clientImpl) GetNexusService(
-	ctx context.Context,
-	request *matchingservice.GetNexusServiceRequest,
-	opts ...grpc.CallOption,
-) (*matchingservice.GetNexusServiceResponse, error) {
-
-	client, err := c.getClientForTaskqueue("not-applicable", &taskqueuepb.TaskQueue{Name: "not-applicable"}, enumspb.TASK_QUEUE_TYPE_UNSPECIFIED)
-	if err != nil {
-		return nil, err
-	}
-	ctx, cancel := c.createContext(ctx)
-	defer cancel()
-	return client.GetNexusService(ctx, request, opts...)
-}
-
 func (c *clientImpl) GetTaskQueueUserData(
 	ctx context.Context,
 	request *matchingservice.GetTaskQueueUserDataRequest,
@@ -212,7 +197,7 @@ func (c *clientImpl) ListNexusServices(
 	if err != nil {
 		return nil, err
 	}
-	ctx, cancel := c.createContext(ctx)
+	ctx, cancel := c.createLongPollContext(ctx)
 	defer cancel()
 	return client.ListNexusServices(ctx, request, opts...)
 }

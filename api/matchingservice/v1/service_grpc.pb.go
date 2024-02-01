@@ -30,7 +30,6 @@ package matchingservice
 
 import (
 	context "context"
-
 	grpc "google.golang.org/grpc"
 	codes "google.golang.org/grpc/codes"
 	status "google.golang.org/grpc/status"
@@ -63,7 +62,6 @@ const (
 	MatchingService_ForceUnloadTaskQueue_FullMethodName                   = "/temporal.server.api.matchingservice.v1.MatchingService/ForceUnloadTaskQueue"
 	MatchingService_UpdateTaskQueueUserData_FullMethodName                = "/temporal.server.api.matchingservice.v1.MatchingService/UpdateTaskQueueUserData"
 	MatchingService_ReplicateTaskQueueUserData_FullMethodName             = "/temporal.server.api.matchingservice.v1.MatchingService/ReplicateTaskQueueUserData"
-	MatchingService_GetNexusService_FullMethodName                        = "/temporal.server.api.matchingservice.v1.MatchingService/GetNexusService"
 	MatchingService_CreateOrUpdateNexusService_FullMethodName             = "/temporal.server.api.matchingservice.v1.MatchingService/CreateOrUpdateNexusService"
 	MatchingService_DeleteNexusService_FullMethodName                     = "/temporal.server.api.matchingservice.v1.MatchingService/DeleteNexusService"
 	MatchingService_ListNexusServices_FullMethodName                      = "/temporal.server.api.matchingservice.v1.MatchingService/ListNexusServices"
@@ -140,8 +138,6 @@ type MatchingServiceClient interface {
 	UpdateTaskQueueUserData(ctx context.Context, in *UpdateTaskQueueUserDataRequest, opts ...grpc.CallOption) (*UpdateTaskQueueUserDataResponse, error)
 	// Replicate task queue user data across clusters, must be done via the owning node for updates in namespace.
 	ReplicateTaskQueueUserData(ctx context.Context, in *ReplicateTaskQueueUserDataRequest, opts ...grpc.CallOption) (*ReplicateTaskQueueUserDataResponse, error)
-	// Get a service by its name.
-	GetNexusService(ctx context.Context, in *GetNexusServiceRequest, opts ...grpc.CallOption) (*GetNexusServiceResponse, error)
 	// Optimistically create or update a Nexus service based on provided version.
 	// To update an existing service, get the current service record via the `GetNexusService` API, modify it and submit
 	// to this API.
@@ -367,15 +363,6 @@ func (c *matchingServiceClient) ReplicateTaskQueueUserData(ctx context.Context, 
 	return out, nil
 }
 
-func (c *matchingServiceClient) GetNexusService(ctx context.Context, in *GetNexusServiceRequest, opts ...grpc.CallOption) (*GetNexusServiceResponse, error) {
-	out := new(GetNexusServiceResponse)
-	err := c.cc.Invoke(ctx, MatchingService_GetNexusService_FullMethodName, in, out, opts...)
-	if err != nil {
-		return nil, err
-	}
-	return out, nil
-}
-
 func (c *matchingServiceClient) CreateOrUpdateNexusService(ctx context.Context, in *CreateOrUpdateNexusServiceRequest, opts ...grpc.CallOption) (*CreateOrUpdateNexusServiceResponse, error) {
 	out := new(CreateOrUpdateNexusServiceResponse)
 	err := c.cc.Invoke(ctx, MatchingService_CreateOrUpdateNexusService_FullMethodName, in, out, opts...)
@@ -474,8 +461,6 @@ type MatchingServiceServer interface {
 	UpdateTaskQueueUserData(context.Context, *UpdateTaskQueueUserDataRequest) (*UpdateTaskQueueUserDataResponse, error)
 	// Replicate task queue user data across clusters, must be done via the owning node for updates in namespace.
 	ReplicateTaskQueueUserData(context.Context, *ReplicateTaskQueueUserDataRequest) (*ReplicateTaskQueueUserDataResponse, error)
-	// Get a service by its name.
-	GetNexusService(context.Context, *GetNexusServiceRequest) (*GetNexusServiceResponse, error)
 	// Optimistically create or update a Nexus service based on provided version.
 	// To update an existing service, get the current service record via the `GetNexusService` API, modify it and submit
 	// to this API.
@@ -571,9 +556,6 @@ func (UnimplementedMatchingServiceServer) UpdateTaskQueueUserData(context.Contex
 }
 func (UnimplementedMatchingServiceServer) ReplicateTaskQueueUserData(context.Context, *ReplicateTaskQueueUserDataRequest) (*ReplicateTaskQueueUserDataResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method ReplicateTaskQueueUserData not implemented")
-}
-func (UnimplementedMatchingServiceServer) GetNexusService(context.Context, *GetNexusServiceRequest) (*GetNexusServiceResponse, error) {
-	return nil, status.Errorf(codes.Unimplemented, "method GetNexusService not implemented")
 }
 func (UnimplementedMatchingServiceServer) CreateOrUpdateNexusService(context.Context, *CreateOrUpdateNexusServiceRequest) (*CreateOrUpdateNexusServiceResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method CreateOrUpdateNexusService not implemented")
@@ -975,24 +957,6 @@ func _MatchingService_ReplicateTaskQueueUserData_Handler(srv interface{}, ctx co
 	return interceptor(ctx, in, info, handler)
 }
 
-func _MatchingService_GetNexusService_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(GetNexusServiceRequest)
-	if err := dec(in); err != nil {
-		return nil, err
-	}
-	if interceptor == nil {
-		return srv.(MatchingServiceServer).GetNexusService(ctx, in)
-	}
-	info := &grpc.UnaryServerInfo{
-		Server:     srv,
-		FullMethod: MatchingService_GetNexusService_FullMethodName,
-	}
-	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(MatchingServiceServer).GetNexusService(ctx, req.(*GetNexusServiceRequest))
-	}
-	return interceptor(ctx, in, info, handler)
-}
-
 func _MatchingService_CreateOrUpdateNexusService_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
 	in := new(CreateOrUpdateNexusServiceRequest)
 	if err := dec(in); err != nil {
@@ -1137,10 +1101,6 @@ var MatchingService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "ReplicateTaskQueueUserData",
 			Handler:    _MatchingService_ReplicateTaskQueueUserData_Handler,
-		},
-		{
-			MethodName: "GetNexusService",
-			Handler:    _MatchingService_GetNexusService_Handler,
 		},
 		{
 			MethodName: "CreateOrUpdateNexusService",

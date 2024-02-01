@@ -388,18 +388,6 @@ message CreateOrUpdateNexusServiceRequest {
 }
 
 message CreateOrUpdateNexusServiceResponse {
-}
-
-// (-- api-linter: core::0131::request-name-behavior=disabled
-//     aip.dev/not-precedent: DeleteServiceRequest RPC doesn't follow Google API format. --)
-// (-- api-linter: core::0131::request-name-reference=disabled
-//     aip.dev/not-precedent: DeleteServiceRequest RPC doesn't follow Google API format. --)
-message GetNexusServiceRequest {
-    // Name of the service to retrieve.
-    string name = 1;
-}
-
-message GetNexusServiceResponse {
     temporal.server.api.persistence.v1.VersionedNexusIncomingService service = 1;
 }
 

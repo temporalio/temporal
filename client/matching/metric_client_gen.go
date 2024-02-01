@@ -145,20 +145,6 @@ func (c *metricClient) GetBuildIdTaskQueueMapping(
 	return c.client.GetBuildIdTaskQueueMapping(ctx, request, opts...)
 }
 
-func (c *metricClient) GetNexusService(
-	ctx context.Context,
-	request *matchingservice.GetNexusServiceRequest,
-	opts ...grpc.CallOption,
-) (_ *matchingservice.GetNexusServiceResponse, retError error) {
-
-	metricsHandler, startTime := c.startMetricsRecording(ctx, "MatchingClientGetNexusService")
-	defer func() {
-		c.finishMetricsRecording(metricsHandler, startTime, retError)
-	}()
-
-	return c.client.GetNexusService(ctx, request, opts...)
-}
-
 func (c *metricClient) GetTaskQueueUserData(
 	ctx context.Context,
 	request *matchingservice.GetTaskQueueUserDataRequest,

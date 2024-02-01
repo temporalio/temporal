@@ -260,26 +260,6 @@ func (mr *MockMatchingServiceClientMockRecorder) GetBuildIdTaskQueueMapping(ctx,
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetBuildIdTaskQueueMapping", reflect.TypeOf((*MockMatchingServiceClient)(nil).GetBuildIdTaskQueueMapping), varargs...)
 }
 
-// GetNexusService mocks base method.
-func (m *MockMatchingServiceClient) GetNexusService(ctx context.Context, in *matchingservice.GetNexusServiceRequest, opts ...grpc.CallOption) (*matchingservice.GetNexusServiceResponse, error) {
-	m.ctrl.T.Helper()
-	varargs := []interface{}{ctx, in}
-	for _, a := range opts {
-		varargs = append(varargs, a)
-	}
-	ret := m.ctrl.Call(m, "GetNexusService", varargs...)
-	ret0, _ := ret[0].(*matchingservice.GetNexusServiceResponse)
-	ret1, _ := ret[1].(error)
-	return ret0, ret1
-}
-
-// GetNexusService indicates an expected call of GetNexusService.
-func (mr *MockMatchingServiceClientMockRecorder) GetNexusService(ctx, in interface{}, opts ...interface{}) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	varargs := append([]interface{}{ctx, in}, opts...)
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetNexusService", reflect.TypeOf((*MockMatchingServiceClient)(nil).GetNexusService), varargs...)
-}
-
 // GetTaskQueueUserData mocks base method.
 func (m *MockMatchingServiceClient) GetTaskQueueUserData(ctx context.Context, in *matchingservice.GetTaskQueueUserDataRequest, opts ...grpc.CallOption) (*matchingservice.GetTaskQueueUserDataResponse, error) {
 	m.ctrl.T.Helper()
@@ -731,21 +711,6 @@ func (m *MockMatchingServiceServer) GetBuildIdTaskQueueMapping(arg0 context.Cont
 func (mr *MockMatchingServiceServerMockRecorder) GetBuildIdTaskQueueMapping(arg0, arg1 interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetBuildIdTaskQueueMapping", reflect.TypeOf((*MockMatchingServiceServer)(nil).GetBuildIdTaskQueueMapping), arg0, arg1)
-}
-
-// GetNexusService mocks base method.
-func (m *MockMatchingServiceServer) GetNexusService(arg0 context.Context, arg1 *matchingservice.GetNexusServiceRequest) (*matchingservice.GetNexusServiceResponse, error) {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "GetNexusService", arg0, arg1)
-	ret0, _ := ret[0].(*matchingservice.GetNexusServiceResponse)
-	ret1, _ := ret[1].(error)
-	return ret0, ret1
-}
-
-// GetNexusService indicates an expected call of GetNexusService.
-func (mr *MockMatchingServiceServerMockRecorder) GetNexusService(arg0, arg1 interface{}) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetNexusService", reflect.TypeOf((*MockMatchingServiceServer)(nil).GetNexusService), arg0, arg1)
 }
 
 // GetTaskQueueUserData mocks base method.

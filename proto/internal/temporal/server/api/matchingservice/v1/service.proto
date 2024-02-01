@@ -126,8 +126,6 @@ service MatchingService {
     // Replicate task queue user data across clusters, must be done via the owning node for updates in namespace.
     rpc ReplicateTaskQueueUserData(ReplicateTaskQueueUserDataRequest) returns (ReplicateTaskQueueUserDataResponse) {}
 
-    // Get a service by its name.
-    rpc	GetNexusService(GetNexusServiceRequest) returns (GetNexusServiceResponse) {}
     // Optimistically create or update a Nexus service based on provided version.
     // To update an existing service, get the current service record via the `GetNexusService` API, modify it and submit
     // to this API.
