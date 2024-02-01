@@ -201,27 +201,64 @@ func DeleteAssignmentRule(timestamp *hlc.Clock,
 // checkRedirectConditions returns an error if there is no room for the new Redirect Rule, or if it causes the
 // queue to fail the other requirements
 func checkRedirectConditions(g *persistencepb.VersioningData, maxRRs int) error {
+	rules := g.GetRedirectRules()
+	if maxRRs > 0 && countActiveRR(rules) > maxRRs {
+		if trimRedirectRules(rules) < 1 {
+			return serviceerror.NewFailedPrecondition(fmt.Sprintf("update would exceed number of redirect rules permitted in namespace dynamic config (%v/%v)", len(rules), maxRRs))
+		}
+	}
+	if isCyclic(rules) {
+		return serviceerror.NewFailedPrecondition("update breaks requirement that at least one assignment rule must have no ramp or hint")
+	}
 	return nil
 }
 
 func countActiveRR(rules []*persistencepb.RedirectRule) int {
-	return 0
+	cnt := 0
+	for _, rule := range rules {
+		if rule.DeleteTimestamp == nil {
+			cnt++
+		}
+	}
+	return cnt
 }
 
 // trimRedirectRules attempts to trim the DAG of redirect rules. It returns the number of rules it was able to delete.
 func trimRedirectRules(rules []*persistencepb.RedirectRule) int {
+	// todo carly: redirect rule PR
 	return 0
 }
 
 func isCyclic(rules []*persistencepb.RedirectRule) bool {
-	return false
+	// todo carly: redirect rule PR
+	return true
 }
 
 func InsertCompatibleRedirectRule(timestamp *hlc.Clock,
 	data *persistencepb.VersioningData,
 	req *workflowservice.UpdateWorkerVersioningRulesRequest_AddCompatibleBuildIdRedirectRule,
 	maxRRs int) (*persistencepb.VersioningData, error) {
-	return nil, nil
+	if data == nil {
+		data = &persistencepb.VersioningData{RedirectRules: make([]*persistencepb.RedirectRule, 0)}
+	} else {
+		data = common.CloneProto(data)
+	}
+	persistenceCRR := persistencepb.RedirectRule{
+		Rule:            req.GetRule(),
+		CreateTimestamp: timestamp,
+		DeleteTimestamp: nil,
+	}
+	src := req.GetRule().GetSourceBuildId()
+	rules := data.GetRedirectRules()
+	for _, rule := range rules {
+		if rule.GetRule().GetSourceBuildId() == src {
+			return nil, serviceerror.NewAlreadyExist(fmt.Sprintf(
+				"there can only be one redirect rule per distinct source ID. source %s already redirects to target %s", src, rule.GetRule().GetTargetBuildId(),
+			))
+		}
+	}
+	slices.Insert(data.GetRedirectRules(), 0, &persistenceCRR)
+	return data, checkRedirectConditions(data, maxRRs)
 }
 
 func ReplaceCompatibleRedirectRule(timestamp *hlc.Clock,
