@@ -120,7 +120,7 @@ func (s *DLQSuite) SetupSuite() {
 	s.dlqTasks = make(chan tasks.Task)
 	s.failingWorkflowIDPrefix.Store("dlq-test-terminal-wfts-")
 	s.setupSuite(
-		"testdata/cluster.yaml",
+		"testdata/es_cluster.yaml",
 		WithFxOptionsForService(primitives.HistoryService,
 			fx.Populate(&s.dlq),
 			fx.Provide(

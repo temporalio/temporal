@@ -931,8 +931,6 @@ func (s *ContextImpl) DeleteWorkflowExecution(
 	ctx context.Context,
 	key definition.WorkflowKey,
 	branchToken []byte,
-	startTime time.Time,
-	closeTime time.Time,
 	closeVisibilityTaskId int64,
 	stage *tasks.DeleteWorkflowExecutionStage,
 ) (retErr error) {
@@ -1009,8 +1007,6 @@ func (s *ContextImpl) DeleteWorkflowExecution(
 							// TaskID is set by addTasks
 							WorkflowKey:                    key,
 							VisibilityTimestamp:            s.timeSource.Now(),
-							StartTime:                      startTime,
-							CloseTime:                      closeTime,
 							CloseExecutionVisibilityTaskID: closeVisibilityTaskId,
 						},
 					},

@@ -39,7 +39,6 @@ import (
 	esclient "go.temporal.io/server/common/persistence/visibility/store/elasticsearch/client"
 	"go.temporal.io/server/common/persistence/visibility/store/sql"
 	"go.temporal.io/server/common/persistence/visibility/store/standard"
-	"go.temporal.io/server/common/persistence/visibility/store/standard/cassandra"
 	standardSql "go.temporal.io/server/common/persistence/visibility/store/standard/sql"
 	"go.temporal.io/server/common/resolver"
 	"go.temporal.io/server/common/searchattribute"
@@ -276,15 +275,6 @@ func newVisibilityStoreFromDataStoreConfig(
 				metricsHandler,
 			)
 		}
-	} else if dsConfig.Cassandra != nil {
-		visStore, err = newStandardVisibilityStore(
-			dsConfig,
-			persistenceResolver,
-			searchAttributesProvider,
-			searchAttributesMapperProvider,
-			logger,
-			metricsHandler,
-		)
 	} else if dsConfig.Elasticsearch != nil {
 		visStore = newElasticsearchVisibilityStore(
 			dsConfig.Elasticsearch.GetVisibilityIndex(),
@@ -320,14 +310,7 @@ func newStandardVisibilityStore(
 		visStore store.VisibilityStore
 		err      error
 	)
-	if dsConfig.Cassandra != nil {
-		visStore, err = cassandra.NewVisibilityStore(
-			*dsConfig.Cassandra,
-			persistenceResolver,
-			logger,
-			metricsHandler,
-		)
-	} else if dsConfig.SQL != nil {
+	if dsConfig.SQL != nil {
 		visStore, err = standardSql.NewSQLVisibilityStore(
 			*dsConfig.SQL,
 			persistenceResolver,
@@ -338,7 +321,7 @@ func newStandardVisibilityStore(
 		return nil, err
 	}
 	if visStore == nil {
-		logger.Fatal("invalid config: one of cassandra or sql params must be specified for visibility store")
+		logger.Fatal("invalid config: sql params must be specified for visibility store")
 		return nil, nil
 	}
 	return standard.NewVisibilityStore(
