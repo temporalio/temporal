@@ -1075,14 +1075,13 @@ func (p *nexusServiceRateLimitedPersistenceClient) Close() {
 	p.persistence.Close()
 }
 
-func (p *nexusServiceRateLimitedPersistenceClient) GetNexusIncomingService(
+func (p *nexusServiceRateLimitedPersistenceClient) GetNexusIncomingServicesTableVersion(
 	ctx context.Context,
-	request *GetNexusIncomingServiceRequest,
-) (*GetNexusIncomingServiceResponse, error) {
-	if ok := allow(ctx, "GetNexusIncomingService", CallerSegmentMissing, p.rateLimiter); !ok {
-		return nil, ErrPersistenceLimitExceeded
+) (int64, error) {
+	if ok := allow(ctx, "ListNexusIncomingServices", CallerSegmentMissing, p.rateLimiter); !ok {
+		return 0, ErrPersistenceLimitExceeded
 	}
-	return p.persistence.GetNexusIncomingService(ctx, request)
+	return p.persistence.GetNexusIncomingServicesTableVersion(ctx)
 }
 
 func (p *nexusServiceRateLimitedPersistenceClient) ListNexusIncomingServices(
@@ -1098,9 +1097,9 @@ func (p *nexusServiceRateLimitedPersistenceClient) ListNexusIncomingServices(
 func (p *nexusServiceRateLimitedPersistenceClient) CreateOrUpdateNexusIncomingService(
 	ctx context.Context,
 	request *CreateOrUpdateNexusIncomingServiceRequest,
-) error {
+) (*CreateOrUpdateNexusIncomingServiceResponse, error) {
 	if ok := allow(ctx, "CreateOrUpdateNexusIncomingService", CallerSegmentMissing, p.rateLimiter); !ok {
-		return ErrPersistenceLimitExceeded
+		return nil, ErrPersistenceLimitExceeded
 	}
 	return p.persistence.CreateOrUpdateNexusIncomingService(ctx, request)
 }

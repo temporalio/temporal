@@ -36,7 +36,6 @@ import (
 )
 
 const (
-	unknownTableVersion   = 0
 	tableVersionServiceID = `00000000-0000-0000-0000-000000000000`
 )
 
@@ -173,9 +172,9 @@ func (s *NexusServiceStore) CreateOrUpdateNexusIncomingService(
 
 func (s *NexusServiceStore) ListNexusIncomingServices(
 	ctx context.Context,
-	request *p.InternalListNexusIncomingServicesRequest,
+	request *p.ListNexusIncomingServicesRequest,
 ) (*p.InternalListNexusIncomingServicesResponse, error) {
-	if request.LastKnownTableVersion == unknownTableVersion {
+	if request.LastKnownTableVersion == 0 {
 		return s.listFirstPageWithVersion(ctx, request)
 	}
 
@@ -218,7 +217,7 @@ func (s *NexusServiceStore) ListNexusIncomingServices(
 
 func (s *NexusServiceStore) DeleteNexusIncomingService(
 	ctx context.Context,
-	request *p.InternalDeleteNexusIncomingServiceRequest,
+	request *p.DeleteNexusIncomingServiceRequest,
 ) error {
 	batch := s.session.NewBatch(gocql.LoggedBatch).WithContext(ctx)
 
@@ -266,7 +265,7 @@ func (s *NexusServiceStore) DeleteNexusIncomingService(
 
 func (s *NexusServiceStore) listFirstPageWithVersion(
 	ctx context.Context,
-	request *p.InternalListNexusIncomingServicesRequest,
+	request *p.ListNexusIncomingServicesRequest,
 ) (*p.InternalListNexusIncomingServicesResponse, error) {
 	response := &p.InternalListNexusIncomingServicesResponse{}
 
@@ -313,7 +312,7 @@ func (s *NexusServiceStore) getTableVersion(ctx context.Context) (int64, error) 
 
 	var version int64
 	if err := query.Scan(&version); err != nil {
-		return unknownTableVersion, gocql.ConvertError("GetNexusIncomingServicesTableVersion", err)
+		return 0, gocql.ConvertError("GetNexusIncomingServicesTableVersion", err)
 	}
 
 	return version, nil

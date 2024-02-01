@@ -52,15 +52,16 @@ message NexusIncomingService {
     // Name of this service.
     string name = 2;
     // UUID of the namespace to dispatch service requests to.
-    bytes namespace_id = 3;
+    string namespace_id = 3;
     // Task queue to dispatch service requests to.
     string task_queue = 4;
     // Arbitrary user provided data. For use in the authorizer.
     map<string, NexusServiceMetadataValue> metadata = 5;
 }
 
-// Container for a version and a NexusIncomingService.
+// Container for a version, a UUID, and a NexusIncomingService.
 message VersionedNexusIncomingService {
     int64 version = 1;
-    NexusIncomingService service = 2;
+    string id = 2;
+    NexusIncomingService service_info = 3;
 }

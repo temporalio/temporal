@@ -111,7 +111,7 @@ func (s *sqlNexusIncomingServiceStore) CreateOrUpdateNexusIncomingService(
 
 func (s *sqlNexusIncomingServiceStore) ListNexusIncomingServices(
 	ctx context.Context,
-	request *p.InternalListNexusIncomingServicesRequest,
+	request *p.ListNexusIncomingServicesRequest,
 ) (*p.InternalListNexusIncomingServicesResponse, error) {
 	lastServiceID := emptyServiceID
 	if len(request.NextPageToken) > 0 {
@@ -170,7 +170,7 @@ func (s *sqlNexusIncomingServiceStore) ListNexusIncomingServices(
 
 func (s *sqlNexusIncomingServiceStore) DeleteNexusIncomingService(
 	ctx context.Context,
-	request *p.InternalDeleteNexusIncomingServiceRequest,
+	request *p.DeleteNexusIncomingServiceRequest,
 ) error {
 	serviceID, retErr := primitives.ParseUUID(request.ServiceID)
 	if retErr != nil {

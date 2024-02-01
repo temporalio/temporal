@@ -43,6 +43,7 @@ type (
 		GetNamespaceReplicationQueue() persistence.NamespaceReplicationQueue
 		GetShardManager() persistence.ShardManager
 		GetExecutionManager() persistence.ExecutionManager
+		GetNexusServiceManager() persistence.NexusServiceManager
 	}
 
 	// BeanImpl stores persistence managers
@@ -55,6 +56,7 @@ type (
 		namespaceReplicationQueue persistence.NamespaceReplicationQueue
 		shardManager              persistence.ShardManager
 		executionManager          persistence.ExecutionManager
+		nexusServiceManager       persistence.NexusServiceManager
 
 		factory  Factory
 		isClosed bool
@@ -97,6 +99,11 @@ func NewBeanFromFactory(
 		return nil, err
 	}
 
+	nexusServiceManager, err := factory.NewNexusServiceManager()
+	if err != nil {
+		return nil, err
+	}
+
 	return NewBean(
 		factory,
 		clusterMetadataMgr,
@@ -105,6 +112,7 @@ func NewBeanFromFactory(
 		namespaceReplicationQueue,
 		shardMgr,
 		executionManager,
+		nexusServiceManager,
 	), nil
 }
 
@@ -117,6 +125,7 @@ func NewBean(
 	namespaceReplicationQueue persistence.NamespaceReplicationQueue,
 	shardManager persistence.ShardManager,
 	executionManager persistence.ExecutionManager,
+	nexusServiceManager persistence.NexusServiceManager,
 ) *BeanImpl {
 	return &BeanImpl{
 		factory:                   factory,
@@ -126,6 +135,7 @@ func NewBean(
 		namespaceReplicationQueue: namespaceReplicationQueue,
 		shardManager:              shardManager,
 		executionManager:          executionManager,
+		nexusServiceManager:       nexusServiceManager,
 		isClosed:                  false,
 	}
 }
@@ -181,6 +191,13 @@ func (s *BeanImpl) GetExecutionManager() persistence.ExecutionManager {
 	return s.executionManager
 }
 
+// GetNexusServiceManager get NexusServiceManager
+func (s *BeanImpl) GetNexusServiceManager() persistence.NexusServiceManager {
+	s.RLock()
+	defer s.RUnlock()
+	return s.nexusServiceManager
+}
+
 // Close cleanup connections
 func (s *BeanImpl) Close() {
 	s.Lock()
@@ -196,6 +213,7 @@ func (s *BeanImpl) Close() {
 	s.namespaceReplicationQueue.Stop()
 	s.shardManager.Close()
 	s.executionManager.Close()
+	s.nexusServiceManager.Close()
 
 	s.factory.Close()
 	s.isClosed = true

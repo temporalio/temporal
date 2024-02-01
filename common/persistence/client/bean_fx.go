@@ -47,6 +47,7 @@ var BeanDepsModule = fx.Provide(
 	ShardManagerProvider,
 	ExecutionManagerProvider,
 	HistoryTaskQueueManagerProvider,
+	NexusServiceManagerProvider,
 )
 
 func BeanProvider(
@@ -57,6 +58,7 @@ func BeanProvider(
 	namespaceReplicationQueue persistence.NamespaceReplicationQueue,
 	shardManager persistence.ShardManager,
 	executionManager persistence.ExecutionManager,
+	nexusServiceManager persistence.NexusServiceManager,
 ) *BeanImpl {
 	return NewBean(
 		factory,
@@ -66,6 +68,7 @@ func BeanProvider(
 		namespaceReplicationQueue,
 		shardManager,
 		executionManager,
+		nexusServiceManager,
 	)
 }
 
@@ -92,6 +95,10 @@ func ExecutionManagerProvider(factory Factory) (persistence.ExecutionManager, er
 
 func HistoryTaskQueueManagerProvider(factory Factory) (persistence.HistoryTaskQueueManager, error) {
 	return factory.NewHistoryTaskQueueManager()
+}
+
+func NexusServiceManagerProvider(factory Factory) (persistence.NexusServiceManager, error) {
+	return factory.NewNexusServiceManager()
 }
 
 func BeanLifetimeHooks(

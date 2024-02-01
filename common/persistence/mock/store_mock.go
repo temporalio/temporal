@@ -1434,7 +1434,7 @@ func (mr *MockNexusServiceStoreMockRecorder) CreateOrUpdateNexusIncomingService(
 }
 
 // DeleteNexusIncomingService mocks base method.
-func (m *MockNexusServiceStore) DeleteNexusIncomingService(ctx context.Context, request *persistence.InternalDeleteNexusIncomingServiceRequest) error {
+func (m *MockNexusServiceStore) DeleteNexusIncomingService(ctx context.Context, request *persistence.DeleteNexusIncomingServiceRequest) error {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "DeleteNexusIncomingService", ctx, request)
 	ret0, _ := ret[0].(error)
@@ -1462,7 +1462,7 @@ func (mr *MockNexusServiceStoreMockRecorder) GetName() *gomock.Call {
 }
 
 // ListNexusIncomingServices mocks base method.
-func (m *MockNexusServiceStore) ListNexusIncomingServices(ctx context.Context, request *persistence.InternalListNexusIncomingServicesRequest) (*persistence.InternalListNexusIncomingServicesResponse, error) {
+func (m *MockNexusServiceStore) ListNexusIncomingServices(ctx context.Context, request *persistence.ListNexusIncomingServicesRequest) (*persistence.InternalListNexusIncomingServicesResponse, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "ListNexusIncomingServices", ctx, request)
 	ret0, _ := ret[0].(*persistence.InternalListNexusIncomingServicesResponse)

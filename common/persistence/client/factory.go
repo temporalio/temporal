@@ -231,7 +231,7 @@ func (f *factoryImpl) NewNexusServiceManager() (p.NexusServiceManager, error) {
 		return nil, err
 	}
 
-	result := p.NewNexusServiceManager(store)
+	result := p.NewNexusServiceManager(store, f.serializer, f.logger)
 	if f.ratelimiter != nil {
 		result = p.NewNexusServicePersistenceRateLimitedClient(result, f.ratelimiter, f.logger)
 	}

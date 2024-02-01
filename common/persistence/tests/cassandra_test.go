@@ -1263,7 +1263,8 @@ func testCassandraNexusIncomingServiceStoreConcurrentCreate(t *testing.T, store 
 	starter := make(chan struct{})
 
 	serviceID := uuid.NewString()
-	var createErrors []error
+	createErrors := make(chan error, numConcurrentRequests)
+	defer close(createErrors)
 
 	requestTableVersion := tableVersion.Load()
 
@@ -1281,7 +1282,7 @@ func testCassandraNexusIncomingServiceStoreConcurrentCreate(t *testing.T, store 
 					}},
 			})
 			if err != nil {
-				createErrors = append(createErrors, err)
+				createErrors <- err
 			} else {
 				tableVersion.Add(1)
 			}
@@ -1292,7 +1293,7 @@ func testCassandraNexusIncomingServiceStoreConcurrentCreate(t *testing.T, store 
 	close(starter)
 	wg.Wait()
 
-	require.Len(t, createErrors, numConcurrentRequests-1)
+	require.Len(t, createErrors, numConcurrentRequests-1, "exactly 1 create request should succeed")
 	assertNexusIncomingServicesTableVersion(t, tableVersion.Load(), store)
 }
 
@@ -1309,11 +1310,11 @@ func testCassandraNexusIncomingServiceStoreConcurrentUpdate(t *testing.T, store 
 		}}
 
 	// Create a service
-	err := store.CreateOrUpdateNexusIncomingService(ctx, &persistence.InternalCreateOrUpdateNexusIncomingServiceRequest{
+	createErr := store.CreateOrUpdateNexusIncomingService(ctx, &persistence.InternalCreateOrUpdateNexusIncomingServiceRequest{
 		LastKnownTableVersion: tableVersion.Load(),
 		Service:               service,
 	})
-	require.NoError(t, err)
+	require.NoError(t, createErr)
 	tableVersion.Add(1)
 	service.Version++
 
@@ -1321,7 +1322,9 @@ func testCassandraNexusIncomingServiceStoreConcurrentUpdate(t *testing.T, store 
 	wg := sync.WaitGroup{}
 	wg.Add(numConcurrentRequests)
 	starter := make(chan struct{})
-	var updateErrors []error
+
+	updateErrors := make(chan error, numConcurrentRequests)
+	defer close(updateErrors)
 
 	for i := 0; i < numConcurrentRequests; i++ {
 		go func() {
@@ -1331,7 +1334,7 @@ func testCassandraNexusIncomingServiceStoreConcurrentUpdate(t *testing.T, store 
 				Service:               service,
 			})
 			if err != nil {
-				updateErrors = append(updateErrors, err)
+				updateErrors <- err
 			} else {
 				tableVersion.Add(1)
 			}
@@ -1459,7 +1462,7 @@ func testCassandraNexusIncomingServiceStoreConcurrentUpdateAndDelete(t *testing.
 	// Concurrently delete the service
 	go func() {
 		<-starter
-		deleteErr = store.DeleteNexusIncomingService(ctx, &persistence.InternalDeleteNexusIncomingServiceRequest{
+		deleteErr = store.DeleteNexusIncomingService(ctx, &persistence.DeleteNexusIncomingServiceRequest{
 			LastKnownTableVersion: requestTableVersion,
 			ServiceID:             service.ServiceID,
 		})
@@ -1493,7 +1496,7 @@ func newNexusIncomingServiceStore(session gocql.Session, opts ...func(params *te
 func assertNexusIncomingServicesTableVersion(t *testing.T, expected int64, store persistence.NexusServiceStore) {
 	t.Helper()
 
-	resp, err := store.ListNexusIncomingServices(context.Background(), &persistence.InternalListNexusIncomingServicesRequest{
+	resp, err := store.ListNexusIncomingServices(context.Background(), &persistence.ListNexusIncomingServicesRequest{
 		LastKnownTableVersion: 0,
 		PageSize:              1,
 	})

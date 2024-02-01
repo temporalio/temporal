@@ -126,6 +126,20 @@ func (mr *MockBeanMockRecorder) GetNamespaceReplicationQueue() *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetNamespaceReplicationQueue", reflect.TypeOf((*MockBean)(nil).GetNamespaceReplicationQueue))
 }
 
+// GetNexusServiceManager mocks base method.
+func (m *MockBean) GetNexusServiceManager() persistence.NexusServiceManager {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetNexusServiceManager")
+	ret0, _ := ret[0].(persistence.NexusServiceManager)
+	return ret0
+}
+
+// GetNexusServiceManager indicates an expected call of GetNexusServiceManager.
+func (mr *MockBeanMockRecorder) GetNexusServiceManager() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetNexusServiceManager", reflect.TypeOf((*MockBean)(nil).GetNexusServiceManager))
+}
+
 // GetShardManager mocks base method.
 func (m *MockBean) GetShardManager() persistence.ShardManager {
 	m.ctrl.T.Helper()

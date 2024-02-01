@@ -1274,7 +1274,7 @@ func (n *FaultInjectionNexusServiceStore) Close() {
 
 func (n *FaultInjectionNexusServiceStore) ListNexusIncomingServices(
 	ctx context.Context,
-	request *persistence.InternalListNexusIncomingServicesRequest,
+	request *persistence.ListNexusIncomingServicesRequest,
 ) (*persistence.InternalListNexusIncomingServicesResponse, error) {
 	if err := n.ErrorGenerator.Generate(); err != nil {
 		return nil, err
@@ -1294,7 +1294,7 @@ func (n *FaultInjectionNexusServiceStore) CreateOrUpdateNexusIncomingService(
 
 func (n *FaultInjectionNexusServiceStore) DeleteNexusIncomingService(
 	ctx context.Context,
-	request *persistence.InternalDeleteNexusIncomingServiceRequest,
+	request *persistence.DeleteNexusIncomingServiceRequest,
 ) error {
 	if err := n.ErrorGenerator.Generate(); err != nil {
 		return err

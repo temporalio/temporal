@@ -33,6 +33,7 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/suite"
+
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	replicationspb "go.temporal.io/server/api/replication/v1"
 	"go.temporal.io/server/common"
@@ -97,6 +98,7 @@ type (
 		ClusterMetadataManager    persistence.ClusterMetadataManager
 		MetadataManager           persistence.MetadataManager
 		NamespaceReplicationQueue persistence.NamespaceReplicationQueue
+		NexusServiceManager       persistence.NexusServiceManager
 		ShardInfo                 *persistencespb.ShardInfo
 		TaskIDGenerator           TransferTaskIDGenerator
 		ClusterMetadata           cluster.Metadata
@@ -238,6 +240,9 @@ func (s *TestBase) Setup(clusterMetadataConfig *cluster.Config) {
 	s.ExecutionManager, err = factory.NewExecutionManager()
 	s.fatalOnError("NewExecutionManager", err)
 
+	s.NexusServiceManager, err = factory.NewNexusServiceManager()
+	s.fatalOnError("NewNexusServiceManager", err)
+
 	s.Factory = factory
 	s.FaultInjection = faultInjection
 
@@ -274,6 +279,7 @@ func (s *TestBase) TearDownWorkflowStore() {
 	s.ExecutionManager.Close()
 	s.ShardMgr.Close()
 	s.ExecutionManager.Close()
+	s.NexusServiceManager.Close()
 	s.NamespaceReplicationQueue.Stop()
 	s.Factory.Close()
 	s.DefaultTestCluster.TearDownTestDatabase()
