@@ -41,6 +41,7 @@ import (
 	"go.temporal.io/server/common/backoff"
 	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/cluster"
+	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/headers"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
@@ -129,6 +130,7 @@ type (
 		lastActiveness         bool
 		resourceExhaustedCount int // does NOT include consts.ErrResourceExhaustedBusyWorkflow
 		taggedMetricsHandler   metrics.Handler
+		dropInternalErrors     dynamicconfig.BoolPropertyFn
 	}
 )
 
@@ -144,7 +146,11 @@ func NewExecutable(
 	clusterMetadata cluster.Metadata,
 	logger log.Logger,
 	metricsHandler metrics.Handler,
+	dropInternalErrors dynamicconfig.BoolPropertyFn,
 ) Executable {
+	if dropInternalErrors == nil {
+		dropInternalErrors = func() bool { return false }
+	}
 	executable := &executableImpl{
 		Task:              task,
 		state:             ctasks.TaskStatePending,
@@ -166,6 +172,7 @@ func NewExecutable(
 		),
 		metricsHandler:       metricsHandler,
 		taggedMetricsHandler: metricsHandler,
+		dropInternalErrors:   dropInternalErrors,
 	}
 	executable.updatePriority()
 	return executable
@@ -340,6 +347,13 @@ func (e *executableImpl) HandleErr(err error) (retErr error) {
 		e.taggedMetricsHandler.Counter(metrics.TaskCorruptionCounter.GetMetricName()).Record(1)
 		e.logger.Error("Drop task due to serialization error", tag.Error(err))
 		return nil
+	}
+	if common.IsInternalError(err) {
+		e.logger.Error("Encountered internal error processing tasks", tag.Error(err))
+		e.taggedMetricsHandler.Counter(metrics.TaskInternalErrorCounter.GetMetricName()).Record(1)
+		if e.dropInternalErrors() {
+			return nil
+		}
 	}
 
 	e.taggedMetricsHandler.Counter(metrics.TaskFailures.GetMetricName()).Record(1)

@@ -40,6 +40,7 @@ import (
 	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/definition"
+	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/headers"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
@@ -65,6 +66,11 @@ type (
 
 		timeSource *clock.EventTimeSource
 	}
+
+	params struct {
+		dropInternalErrors dynamicconfig.BoolPropertyFn
+	}
+	option func(*params)
 )
 
 func TestExecutableSuite(t *testing.T) {
@@ -297,6 +303,34 @@ func (s *executableSuite) TestExecuteHandleErr_Corrupted() {
 	s.NoError(executable.HandleErr(err))
 }
 
+func (s *executableSuite) TestExecute_DropsInternalErrors_WhenEnabled() {
+	executable := s.newTestExecutable(func(p *params) {
+		p.dropInternalErrors = func() bool { return true }
+	})
+
+	s.mockExecutor.EXPECT().Execute(gomock.Any(), executable).DoAndReturn(
+		func(_ context.Context, _ Executable) ([]metrics.Tag, bool, error) {
+			panic(serviceerror.NewInternal("injected error"))
+		},
+	)
+
+	s.NoError(executable.HandleErr(executable.Execute()))
+}
+
+func (s *executableSuite) TestExecute_DoesntDropInternalErrors_WhenDisabled() {
+	executable := s.newTestExecutable(func(p *params) {
+		p.dropInternalErrors = func() bool { return false }
+	})
+
+	s.mockExecutor.EXPECT().Execute(gomock.Any(), executable).DoAndReturn(
+		func(_ context.Context, _ Executable) ([]metrics.Tag, bool, error) {
+			panic(serviceerror.NewInternal("injected error"))
+		},
+	)
+
+	s.Error(executable.HandleErr(executable.Execute()))
+}
+
 func (s *executableSuite) TestHandleErr_EntityNotExists() {
 	executable := s.newTestExecutable()
 
@@ -408,7 +442,13 @@ func (s *executableSuite) TestTaskCancellation() {
 	s.False(executable.IsRetryableError(errors.New("some random error")))
 }
 
-func (s *executableSuite) newTestExecutable() Executable {
+func (s *executableSuite) newTestExecutable(opts ...option) Executable {
+	p := params{
+		dropInternalErrors: func() bool { return false },
+	}
+	for _, opt := range opts {
+		opt(&p)
+	}
 	return NewExecutable(
 		DefaultReaderId,
 		tasks.NewFakeTask(
@@ -429,5 +469,6 @@ func (s *executableSuite) newTestExecutable() Executable {
 		s.mockClusterMetadata,
 		log.NewTestLogger(),
 		metrics.NoopMetricsHandler,
+		p.dropInternalErrors,
 	)
 }

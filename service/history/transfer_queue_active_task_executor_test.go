@@ -2805,5 +2805,6 @@ func (s *transferQueueActiveTaskExecutorSuite) newTaskExecutable(
 		s.mockClusterMetadata,
 		nil,
 		metrics.NoopMetricsHandler,
+		func() bool { return false },
 	)
 }

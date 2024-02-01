@@ -77,7 +77,7 @@ func (s *readerSuite) SetupTest() {
 	s.metricsHandler = metrics.NoopMetricsHandler
 
 	s.executableInitializer = func(readerID int64, t tasks.Task) Executable {
-		return NewExecutable(readerID, t, nil, nil, nil, NewNoopPriorityAssigner(), clock.NewRealTimeSource(), nil, nil, nil, metrics.NoopMetricsHandler)
+		return NewExecutable(readerID, t, nil, nil, nil, NewNoopPriorityAssigner(), clock.NewRealTimeSource(), nil, nil, nil, metrics.NoopMetricsHandler, func() bool { return false })
 	}
 	s.monitor = newMonitor(tasks.CategoryTypeScheduled, clock.NewRealTimeSource(), &MonitorOptions{
 		PendingTasksCriticalCount:   dynamicconfig.GetIntPropertyFn(1000),
