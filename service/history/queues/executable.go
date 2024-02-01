@@ -297,6 +297,7 @@ func (e *executableImpl) Execute() (retErr error) {
 			)
 			return nil
 		}
+		e.logger.Info("Retrying task with non-terminal DLQ failure because DLQ was disabled", tag.Error(e.terminalFailureCause))
 		e.terminalFailureCause = nil
 	}
 
