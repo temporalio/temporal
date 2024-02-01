@@ -118,6 +118,7 @@ func (s *interleavedWeightedRoundRobinSchedulerSuite) TestTrySubmitSchedule_Succ
 	s.True(s.scheduler.TrySubmit(mockTask))
 
 	testWaitGroup.Wait()
+	s.scheduler.Stop()
 	s.Equal(int64(0), atomic.LoadInt64(&s.scheduler.numInflightTask))
 }
 
@@ -140,6 +141,7 @@ func (s *interleavedWeightedRoundRobinSchedulerSuite) TestTrySubmitSchedule_Fail
 	s.True(s.scheduler.TrySubmit(mockTask))
 
 	testWaitGroup.Wait()
+	s.scheduler.Stop()
 	s.Equal(int64(0), atomic.LoadInt64(&s.scheduler.numInflightTask))
 }
 
@@ -178,6 +180,7 @@ func (s *interleavedWeightedRoundRobinSchedulerSuite) TestSubmitSchedule_Success
 	s.scheduler.Submit(mockTask)
 
 	testWaitGroup.Wait()
+	s.scheduler.Stop()
 	s.Equal(int64(0), atomic.LoadInt64(&s.scheduler.numInflightTask))
 }
 
@@ -317,6 +320,7 @@ func (s *interleavedWeightedRoundRobinSchedulerSuite) TestParallelSubmitSchedule
 
 	testWaitGroup.Wait()
 
+	s.scheduler.Stop()
 	s.Equal(int64(0), atomic.LoadInt64(&s.scheduler.numInflightTask))
 	s.Len(submittedTasks, numSubmitter*numTasks)
 }
