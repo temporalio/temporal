@@ -27,6 +27,7 @@ package queues
 import (
 	"context"
 	"errors"
+	"math"
 	"math/rand"
 	"testing"
 	"time"
@@ -142,6 +143,9 @@ func (s *scheduledQueueSuite) SetupTest() {
 		nil,
 		func() bool {
 			return false
+		},
+		func() int {
+			return math.MaxInt
 		},
 	)
 	s.scheduledQueue = NewScheduledQueue(

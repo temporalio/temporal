@@ -1182,7 +1182,7 @@ func (s *visibilityStore) parseESDoc(docID string, docSource json.RawMessage, sa
 			return nil, err
 		}
 
-		if aliasedSas != nil {
+		if aliasedSas != record.SearchAttributes {
 			record.SearchAttributes = aliasedSas
 		}
 	}
