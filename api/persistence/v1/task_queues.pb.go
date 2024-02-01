@@ -29,12 +29,13 @@
 package persistence
 
 import (
-	v1 "go.temporal.io/server/api/clock/v1"
-	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
-	protoimpl "google.golang.org/protobuf/runtime/protoimpl"
 	reflect "reflect"
 	"strconv"
 	sync "sync"
+
+	v1 "go.temporal.io/server/api/clock/v1"
+	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
+	protoimpl "google.golang.org/protobuf/runtime/protoimpl"
 )
 
 const (

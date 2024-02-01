@@ -190,7 +190,7 @@ func HandlerProvider(
 	clusterMetadata cluster.Metadata,
 	namespaceReplicationQueue TaskQueueReplicatorNamespaceReplicationQueue,
 	visibilityManager manager.VisibilityManager,
-	nexusServiceManager persistence.NexusServiceManager,
+	nexusServiceManager persistence.NexusIncomingServiceManager,
 ) *Handler {
 	return NewHandler(
 		config,

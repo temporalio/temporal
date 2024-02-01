@@ -29,14 +29,15 @@
 package persistence
 
 import (
+	reflect "reflect"
+	sync "sync"
+
 	v1 "go.temporal.io/api/enums/v1"
 	v11 "go.temporal.io/api/namespace/v1"
 	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
 	protoimpl "google.golang.org/protobuf/runtime/protoimpl"
 	durationpb "google.golang.org/protobuf/types/known/durationpb"
 	timestamppb "google.golang.org/protobuf/types/known/timestamppb"
-	reflect "reflect"
-	sync "sync"
 )
 
 const (

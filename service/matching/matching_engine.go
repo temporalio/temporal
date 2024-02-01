@@ -188,7 +188,7 @@ func NewEngine(
 	clusterMeta cluster.Metadata,
 	namespaceReplicationQueue persistence.NamespaceReplicationQueue,
 	visibilityManager manager.VisibilityManager,
-	nexusServiceManager persistence.NexusServiceManager,
+	nexusServiceManager persistence.NexusIncomingServiceManager,
 ) Engine {
 
 	return &matchingEngineImpl{
@@ -1376,15 +1376,15 @@ func (e *matchingEngineImpl) RespondNexusTaskFailed(ctx context.Context, request
 	return &matchingservice.RespondNexusTaskFailedResponse{}, nil
 }
 
-func (e *matchingEngineImpl) CreateOrUpdateNexusService(ctx context.Context, request *matchingservice.CreateOrUpdateNexusServiceRequest) (*matchingservice.CreateOrUpdateNexusServiceResponse, error) {
-	return e.incomingServiceManager.CreateOrUpdateNexusService(ctx, request, e.clusterMeta.GetClusterID(), e.timeSource)
+func (e *matchingEngineImpl) CreateOrUpdateNexusIncomingService(ctx context.Context, request *matchingservice.CreateOrUpdateNexusIncomingServiceRequest) (*matchingservice.CreateOrUpdateNexusIncomingServiceResponse, error) {
+	return e.incomingServiceManager.CreateOrUpdateNexusIncomingService(ctx, request, e.clusterMeta.GetClusterID(), e.timeSource)
 }
 
-func (e *matchingEngineImpl) DeleteNexusService(ctx context.Context, request *matchingservice.DeleteNexusServiceRequest) (*matchingservice.DeleteNexusServiceResponse, error) {
-	return e.incomingServiceManager.DeleteNexusService(ctx, request)
+func (e *matchingEngineImpl) DeleteNexusIncomingService(ctx context.Context, request *matchingservice.DeleteNexusIncomingServiceRequest) (*matchingservice.DeleteNexusIncomingServiceResponse, error) {
+	return e.incomingServiceManager.DeleteNexusIncomingService(ctx, request)
 }
 
-func (e *matchingEngineImpl) ListNexusServices(ctx context.Context, request *matchingservice.ListNexusServicesRequest) (*matchingservice.ListNexusServicesResponse, error) {
+func (e *matchingEngineImpl) ListNexusIncomingServices(ctx context.Context, request *matchingservice.ListNexusIncomingServicesRequest) (*matchingservice.ListNexusIncomingServicesResponse, error) {
 	if request.Wait {
 		var cancel context.CancelFunc
 		ctx, cancel = newChildContext(ctx, e.config.ListNexusIncomingServicesLongPollTimeout(), returnEmptyTaskTimeBudget)
@@ -1392,7 +1392,7 @@ func (e *matchingEngineImpl) ListNexusServices(ctx context.Context, request *mat
 	}
 
 	for {
-		resp, tableVersionChanged, err := e.incomingServiceManager.ListNexusServices(ctx, request)
+		resp, tableVersionChanged, err := e.incomingServiceManager.ListNexusIncomingServices(ctx, request)
 		if err != nil {
 			return resp, err
 		}

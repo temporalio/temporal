@@ -56,9 +56,9 @@ type (
 	// Not to be confused with persistence.NexusServiceManager which is responsible for persistence-layer
 	// CRUD APIs for Nexus incoming services.
 	incomingServiceManager interface {
-		CreateOrUpdateNexusService(ctx context.Context, request *matchingservice.CreateOrUpdateNexusServiceRequest, clusterID int64, timeSource clock.TimeSource) (*matchingservice.CreateOrUpdateNexusServiceResponse, error)
-		DeleteNexusService(ctx context.Context, request *matchingservice.DeleteNexusServiceRequest) (*matchingservice.DeleteNexusServiceResponse, error)
-		ListNexusServices(ctx context.Context, request *matchingservice.ListNexusServicesRequest) (*matchingservice.ListNexusServicesResponse, chan struct{}, error)
+		CreateOrUpdateNexusIncomingService(ctx context.Context, request *matchingservice.CreateOrUpdateNexusIncomingServiceRequest, clusterID int64, timeSource clock.TimeSource) (*matchingservice.CreateOrUpdateNexusIncomingServiceResponse, error)
+		DeleteNexusIncomingService(ctx context.Context, request *matchingservice.DeleteNexusIncomingServiceRequest) (*matchingservice.DeleteNexusIncomingServiceResponse, error)
+		ListNexusIncomingServices(ctx context.Context, request *matchingservice.ListNexusIncomingServicesRequest) (*matchingservice.ListNexusIncomingServicesResponse, chan struct{}, error)
 	}
 
 	incomingServiceManagerImpl struct {
@@ -66,22 +66,22 @@ type (
 
 		sync.RWMutex        // protects tableVersion, servicesByName, and tableVersionChanged
 		tableVersion        int64
-		servicesByName      map[string]*persistencepb.VersionedNexusIncomingService
+		servicesByName      map[string]*persistencepb.NexusIncomingServiceEntry
 		tableVersionChanged chan struct{}
 
-		persistence p.NexusServiceManager
+		persistence p.NexusIncomingServiceManager
 	}
 )
 
 func newIncomingServiceManager(
-	persistence p.NexusServiceManager,
+	persistence p.NexusIncomingServiceManager,
 ) incomingServiceManager {
 	return &incomingServiceManagerImpl{
 		persistence: persistence,
 	}
 }
 
-func (m *incomingServiceManagerImpl) CreateOrUpdateNexusService(ctx context.Context, request *matchingservice.CreateOrUpdateNexusServiceRequest, clusterID int64, timeSource clock.TimeSource) (*matchingservice.CreateOrUpdateNexusServiceResponse, error) {
+func (m *incomingServiceManagerImpl) CreateOrUpdateNexusIncomingService(ctx context.Context, request *matchingservice.CreateOrUpdateNexusIncomingServiceRequest, clusterID int64, timeSource clock.TimeSource) (*matchingservice.CreateOrUpdateNexusIncomingServiceResponse, error) {
 	if !m.hasLoadedServices.Load() {
 		// services must be loaded into memory before CreateOrUpdate, so we know whether
 		// this service name is in use and if so, what its UUID is
@@ -93,14 +93,14 @@ func (m *incomingServiceManagerImpl) CreateOrUpdateNexusService(ctx context.Cont
 	m.Lock()
 	defer m.Unlock()
 
-	previous := &persistencepb.VersionedNexusIncomingService{}
+	previous := &persistencepb.NexusIncomingServiceEntry{}
 	exists := false
 
 	previous, exists = m.servicesByName[request.Service.Name]
 	if !exists {
 		previous.Version = 0
 		previous.Id = uuid.NewString()
-		previous.ServiceInfo.Clock = hlc.Zero(clusterID)
+		previous.Service.Clock = hlc.Zero(clusterID)
 	}
 
 	if request.Service.Version != previous.Version {
@@ -108,11 +108,11 @@ func (m *incomingServiceManagerImpl) CreateOrUpdateNexusService(ctx context.Cont
 		return nil, fmt.Errorf("%w received: %v expected: %v", p.ErrNexusIncomingServiceVersionConflict, request.Service.Version, previous.Version)
 	}
 
-	versioned := nexus.IncomingServiceExternalToPersisted(request.Service, previous.Id, hlc.Next(previous.ServiceInfo.Clock, timeSource))
+	entry := nexus.IncomingServiceToEntry(request.Service, previous.Id, hlc.Next(previous.Service.Clock, timeSource))
 
 	resp, err := m.persistence.CreateOrUpdateNexusIncomingService(ctx, &p.CreateOrUpdateNexusIncomingServiceRequest{
 		LastKnownTableVersion: m.tableVersion,
-		Service:               versioned,
+		Entry:                 entry,
 	})
 	if err != nil {
 		// TODO: special handling for table version conflicts? means table ownership changed
@@ -120,14 +120,14 @@ func (m *incomingServiceManagerImpl) CreateOrUpdateNexusService(ctx context.Cont
 	}
 
 	m.tableVersion++
-	m.servicesByName[resp.Service.ServiceInfo.Name] = resp.Service
+	m.servicesByName[resp.Entry.Service.Name] = resp.Entry
 	close(m.tableVersionChanged)
 	m.tableVersionChanged = make(chan struct{})
 
-	return &matchingservice.CreateOrUpdateNexusServiceResponse{Service: resp.Service}, nil
+	return &matchingservice.CreateOrUpdateNexusIncomingServiceResponse{Entry: resp.Entry}, nil
 }
 
-func (m *incomingServiceManagerImpl) DeleteNexusService(ctx context.Context, request *matchingservice.DeleteNexusServiceRequest) (*matchingservice.DeleteNexusServiceResponse, error) {
+func (m *incomingServiceManagerImpl) DeleteNexusIncomingService(ctx context.Context, request *matchingservice.DeleteNexusIncomingServiceRequest) (*matchingservice.DeleteNexusIncomingServiceResponse, error) {
 	if !m.hasLoadedServices.Load() {
 		// services must be loaded into memory before deletion so that the service UUID can be looked up
 		if err := m.loadServices(ctx); err != nil {
@@ -157,13 +157,13 @@ func (m *incomingServiceManagerImpl) DeleteNexusService(ctx context.Context, req
 	close(m.tableVersionChanged)
 	m.tableVersionChanged = make(chan struct{})
 
-	return &matchingservice.DeleteNexusServiceResponse{}, nil
+	return &matchingservice.DeleteNexusIncomingServiceResponse{}, nil
 }
 
-// ListNexusServices returns all cached Nexus incoming services. If no services have been loaded, it first tries to
+// ListNexusIncomingServices returns all cached Nexus incoming services. If no services have been loaded, it first tries to
 // load all services from persistence.
 // TODO: currently does not support pagination. go map iteration is no deterministic, so this will require sorting first.
-func (m *incomingServiceManagerImpl) ListNexusServices(ctx context.Context, request *matchingservice.ListNexusServicesRequest) (*matchingservice.ListNexusServicesResponse, chan struct{}, error) {
+func (m *incomingServiceManagerImpl) ListNexusIncomingServices(ctx context.Context, request *matchingservice.ListNexusIncomingServicesRequest) (*matchingservice.ListNexusIncomingServicesResponse, chan struct{}, error) {
 	if !m.hasLoadedServices.Load() {
 		if err := m.loadServices(ctx); err != nil {
 			return nil, nil, fmt.Errorf("error loading nexus incoming services cache: %w", err)
@@ -177,16 +177,16 @@ func (m *incomingServiceManagerImpl) ListNexusServices(ctx context.Context, requ
 		return nil, nil, fmt.Errorf("%w received: %v expected: %v", p.ErrNexusTableVersionConflict, request.LastKnownTableVersion, m.tableVersion)
 	}
 
-	services := make([]*persistencepb.VersionedNexusIncomingService, len(m.servicesByName))
+	entries := make([]*persistencepb.NexusIncomingServiceEntry, len(m.servicesByName))
 	i := 0
 	for _, service := range m.servicesByName {
-		services[i] = service
+		entries[i] = service
 		i++
 	}
 
-	resp := &matchingservice.ListNexusServicesResponse{
+	resp := &matchingservice.ListNexusIncomingServicesResponse{
 		TableVersion: m.tableVersion,
-		Services:     services,
+		Entries:      entries,
 	}
 
 	return resp, m.tableVersionChanged, nil
@@ -202,7 +202,7 @@ func (m *incomingServiceManagerImpl) loadServices(ctx context.Context) error {
 	}
 
 	// reset cached view since we will be paging from the start
-	m.servicesByName = make(map[string]*persistencepb.VersionedNexusIncomingService)
+	m.servicesByName = make(map[string]*persistencepb.NexusIncomingServiceEntry)
 
 	finishedPaging := false
 	var pageToken []byte
@@ -219,8 +219,8 @@ func (m *incomingServiceManagerImpl) loadServices(ctx context.Context) error {
 
 		pageToken = resp.NextPageToken
 		m.tableVersion = resp.TableVersion
-		for _, service := range resp.Services {
-			m.servicesByName[service.ServiceInfo.Name] = service
+		for _, entry := range resp.Entries {
+			m.servicesByName[entry.Service.Name] = entry
 		}
 
 		finishedPaging = pageToken == nil

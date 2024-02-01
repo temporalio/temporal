@@ -30,25 +30,25 @@ import (
 	hlc "go.temporal.io/server/common/clock/hybrid_logical_clock"
 )
 
-func IncomingServiceExternalToPersisted(
+func IncomingServiceToEntry(
 	service *nexus.IncomingService,
 	id string,
 	clock *hlc.Clock,
-) *persistencepb.VersionedNexusIncomingService {
-	return &persistencepb.VersionedNexusIncomingService{
+) *persistencepb.NexusIncomingServiceEntry {
+	return &persistencepb.NexusIncomingServiceEntry{
 		Version: service.Version,
 		Id:      id,
-		ServiceInfo: &persistencepb.NexusIncomingService{
+		Service: &persistencepb.NexusIncomingService{
 			Clock:       clock,
 			Name:        service.Name,
 			NamespaceId: service.Namespace,
 			TaskQueue:   service.TaskQueue,
-			Metadata:    incomingServiceMetadataExternalToPersisted(service.Metadata, clock),
+			Metadata:    incomingServiceMetadataToPersisted(service.Metadata, clock),
 		},
 	}
 }
 
-func incomingServiceMetadataExternalToPersisted(
+func incomingServiceMetadataToPersisted(
 	metadata map[string]*anypb.Any,
 	clock *hlc.Clock,
 ) map[string]*persistencepb.NexusServiceMetadataValue {
@@ -63,19 +63,19 @@ func incomingServiceMetadataExternalToPersisted(
 	return converted
 }
 
-func IncomingServicePersistedToExternal(
-	service *persistencepb.VersionedNexusIncomingService,
+func IncomingServiceEntryToExternal(
+	service *persistencepb.NexusIncomingServiceEntry,
 ) *nexus.IncomingService {
 	return &nexus.IncomingService{
 		Version:   service.Version,
-		Name:      service.ServiceInfo.Name,
-		Namespace: service.ServiceInfo.NamespaceId,
-		TaskQueue: service.ServiceInfo.TaskQueue,
-		Metadata:  incomingServiceMetadataPersistedToExternal(service.ServiceInfo.Metadata),
+		Name:      service.Service.Name,
+		Namespace: service.Service.NamespaceId,
+		TaskQueue: service.Service.TaskQueue,
+		Metadata:  incomingServiceEntryMetadataToExternal(service.Service.Metadata),
 	}
 }
 
-func incomingServiceMetadataPersistedToExternal(
+func incomingServiceEntryMetadataToExternal(
 	metadata map[string]*persistencepb.NexusServiceMetadataValue,
 ) map[string]*anypb.Any {
 	converted := make(map[string]*anypb.Any, len(metadata))

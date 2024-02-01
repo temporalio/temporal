@@ -29,6 +29,9 @@
 package repication
 
 import (
+	reflect "reflect"
+	sync "sync"
+
 	v11 "go.temporal.io/api/common/v1"
 	v14 "go.temporal.io/api/failure/v1"
 	v12 "go.temporal.io/api/namespace/v1"
@@ -40,8 +43,6 @@ import (
 	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
 	protoimpl "google.golang.org/protobuf/runtime/protoimpl"
 	timestamppb "google.golang.org/protobuf/types/known/timestamppb"
-	reflect "reflect"
-	sync "sync"
 )
 
 const (

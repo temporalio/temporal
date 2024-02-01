@@ -378,32 +378,34 @@ message RespondNexusTaskFailedResponse {
 }
 
 // (-- api-linter: core::0133::request-resource-field=disabled
-//     aip.dev/not-precedent: CreateOrUpdateNexusService RPC doesn't follow Google API format. --)
+//     aip.dev/not-precedent: CreateOrUpdateNexusIncomingService RPC doesn't follow Google API format. --)
+// (-- api-linter: core::0133::request-resource-behavior=disabled
+//     aip.dev/not-precedent: CreateOrUpdateNexusIncomingService RPC doesn't follow Google API format. --)
 // (-- api-linter: core::0133::request-parent-required=disabled
-//     aip.dev/not-precedent: CreateOrUpdateNexusService RPC doesn't follow Google API format. --)
+//     aip.dev/not-precedent: CreateOrUpdateNexusIncomingService RPC doesn't follow Google API format. --)
 // (-- api-linter: core::0133::request-unknown-fields=disabled
-//     aip.dev/not-precedent: CreateOrUpdateNexusService RPC doesn't follow Google API format. --)
-message CreateOrUpdateNexusServiceRequest {
+//     aip.dev/not-precedent: CreateOrUpdateNexusIncomingService RPC doesn't follow Google API format. --)
+message CreateOrUpdateNexusIncomingServiceRequest {
     temporal.api.nexus.v1.IncomingService service = 1;
 }
 
-message CreateOrUpdateNexusServiceResponse {
+message CreateOrUpdateNexusIncomingServiceResponse {
     temporal.server.api.persistence.v1.NexusIncomingServiceEntry entry = 1;
 }
 
 // (-- api-linter: core::0135::request-name-behavior=disabled
-//     aip.dev/not-precedent: DeleteServiceRequest RPC doesn't follow Google API format. --)
+//     aip.dev/not-precedent: DeleteNexusIncomingServiceRequest RPC doesn't follow Google API format. --)
 // (-- api-linter: core::0135::request-name-reference=disabled
-//     aip.dev/not-precedent: DeleteServiceRequest RPC doesn't follow Google API format. --)
-message DeleteNexusServiceRequest {
+//     aip.dev/not-precedent: DeleteNexusIncomingServiceRequest RPC doesn't follow Google API format. --)
+message DeleteNexusIncomingServiceRequest {
     // Name of the service to delete.
     string name = 1;
 }
 
-message DeleteNexusServiceResponse {
+message DeleteNexusIncomingServiceResponse {
 }
 
-message ListNexusServicesRequest {
+message ListNexusIncomingServicesRequest {
     // To get the next page, pass in `ListServicesResponse.next_page_token` from the previous page's response. The token
     // will be empty if there's no other page.
     // Note: the last page may be empty if the total number of services registered is a multiple of the page size.
@@ -421,7 +423,7 @@ message ListNexusServicesRequest {
     bool wait = 4;
 }
 
-message ListNexusServicesResponse {
+message ListNexusIncomingServicesResponse {
     // Token for getting the next page.
     bytes next_page_token = 1;
     int64 table_version = 2;

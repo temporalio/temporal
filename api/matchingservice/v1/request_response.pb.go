@@ -2908,16 +2908,20 @@ func (*RespondNexusTaskFailedResponse) Descriptor() ([]byte, []int) {
 
 // (-- api-linter: core::0133::request-resource-field=disabled
 //
-//	aip.dev/not-precedent: CreateOrUpdateNexusService RPC doesn't follow Google API format. --)
+//	aip.dev/not-precedent: CreateOrUpdateNexusIncomingService RPC doesn't follow Google API format. --)
+//
+// (-- api-linter: core::0133::request-resource-behavior=disabled
+//
+//	aip.dev/not-precedent: CreateOrUpdateNexusIncomingService RPC doesn't follow Google API format. --)
 //
 // (-- api-linter: core::0133::request-parent-required=disabled
 //
-//	aip.dev/not-precedent: CreateOrUpdateNexusService RPC doesn't follow Google API format. --)
+//	aip.dev/not-precedent: CreateOrUpdateNexusIncomingService RPC doesn't follow Google API format. --)
 //
 // (-- api-linter: core::0133::request-unknown-fields=disabled
 //
-//	aip.dev/not-precedent: CreateOrUpdateNexusService RPC doesn't follow Google API format. --)
-type CreateOrUpdateNexusServiceRequest struct {
+//	aip.dev/not-precedent: CreateOrUpdateNexusIncomingService RPC doesn't follow Google API format. --)
+type CreateOrUpdateNexusIncomingServiceRequest struct {
 	state         protoimpl.MessageState
 	sizeCache     protoimpl.SizeCache
 	unknownFields protoimpl.UnknownFields
@@ -2925,8 +2929,8 @@ type CreateOrUpdateNexusServiceRequest struct {
 	Service *v112.IncomingService `protobuf:"bytes,1,opt,name=service,proto3" json:"service,omitempty"`
 }
 
-func (x *CreateOrUpdateNexusServiceRequest) Reset() {
-	*x = CreateOrUpdateNexusServiceRequest{}
+func (x *CreateOrUpdateNexusIncomingServiceRequest) Reset() {
+	*x = CreateOrUpdateNexusIncomingServiceRequest{}
 	if protoimpl.UnsafeEnabled {
 		mi := &file_temporal_server_api_matchingservice_v1_request_response_proto_msgTypes[42]
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
@@ -2934,13 +2938,13 @@ func (x *CreateOrUpdateNexusServiceRequest) Reset() {
 	}
 }
 
-func (x *CreateOrUpdateNexusServiceRequest) String() string {
+func (x *CreateOrUpdateNexusIncomingServiceRequest) String() string {
 	return protoimpl.X.MessageStringOf(x)
 }
 
-func (*CreateOrUpdateNexusServiceRequest) ProtoMessage() {}
+func (*CreateOrUpdateNexusIncomingServiceRequest) ProtoMessage() {}
 
-func (x *CreateOrUpdateNexusServiceRequest) ProtoReflect() protoreflect.Message {
+func (x *CreateOrUpdateNexusIncomingServiceRequest) ProtoReflect() protoreflect.Message {
 	mi := &file_temporal_server_api_matchingservice_v1_request_response_proto_msgTypes[42]
 	if protoimpl.UnsafeEnabled && x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
@@ -2952,19 +2956,19 @@ func (x *CreateOrUpdateNexusServiceRequest) ProtoReflect() protoreflect.Message 
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use CreateOrUpdateNexusServiceRequest.ProtoReflect.Descriptor instead.
-func (*CreateOrUpdateNexusServiceRequest) Descriptor() ([]byte, []int) {
+// Deprecated: Use CreateOrUpdateNexusIncomingServiceRequest.ProtoReflect.Descriptor instead.
+func (*CreateOrUpdateNexusIncomingServiceRequest) Descriptor() ([]byte, []int) {
 	return file_temporal_server_api_matchingservice_v1_request_response_proto_rawDescGZIP(), []int{42}
 }
 
-func (x *CreateOrUpdateNexusServiceRequest) GetService() *v112.IncomingService {
+func (x *CreateOrUpdateNexusIncomingServiceRequest) GetService() *v112.IncomingService {
 	if x != nil {
 		return x.Service
 	}
 	return nil
 }
 
-type CreateOrUpdateNexusServiceResponse struct {
+type CreateOrUpdateNexusIncomingServiceResponse struct {
 	state         protoimpl.MessageState
 	sizeCache     protoimpl.SizeCache
 	unknownFields protoimpl.UnknownFields
@@ -2972,8 +2976,8 @@ type CreateOrUpdateNexusServiceResponse struct {
 	Entry *v111.NexusIncomingServiceEntry `protobuf:"bytes,1,opt,name=entry,proto3" json:"entry,omitempty"`
 }
 
-func (x *CreateOrUpdateNexusServiceResponse) Reset() {
-	*x = CreateOrUpdateNexusServiceResponse{}
+func (x *CreateOrUpdateNexusIncomingServiceResponse) Reset() {
+	*x = CreateOrUpdateNexusIncomingServiceResponse{}
 	if protoimpl.UnsafeEnabled {
 		mi := &file_temporal_server_api_matchingservice_v1_request_response_proto_msgTypes[43]
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
@@ -2981,13 +2985,13 @@ func (x *CreateOrUpdateNexusServiceResponse) Reset() {
 	}
 }
 
-func (x *CreateOrUpdateNexusServiceResponse) String() string {
+func (x *CreateOrUpdateNexusIncomingServiceResponse) String() string {
 	return protoimpl.X.MessageStringOf(x)
 }
 
-func (*CreateOrUpdateNexusServiceResponse) ProtoMessage() {}
+func (*CreateOrUpdateNexusIncomingServiceResponse) ProtoMessage() {}
 
-func (x *CreateOrUpdateNexusServiceResponse) ProtoReflect() protoreflect.Message {
+func (x *CreateOrUpdateNexusIncomingServiceResponse) ProtoReflect() protoreflect.Message {
 	mi := &file_temporal_server_api_matchingservice_v1_request_response_proto_msgTypes[43]
 	if protoimpl.UnsafeEnabled && x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
@@ -2999,12 +3003,12 @@ func (x *CreateOrUpdateNexusServiceResponse) ProtoReflect() protoreflect.Message
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use CreateOrUpdateNexusServiceResponse.ProtoReflect.Descriptor instead.
-func (*CreateOrUpdateNexusServiceResponse) Descriptor() ([]byte, []int) {
+// Deprecated: Use CreateOrUpdateNexusIncomingServiceResponse.ProtoReflect.Descriptor instead.
+func (*CreateOrUpdateNexusIncomingServiceResponse) Descriptor() ([]byte, []int) {
 	return file_temporal_server_api_matchingservice_v1_request_response_proto_rawDescGZIP(), []int{43}
 }
 
-func (x *CreateOrUpdateNexusServiceResponse) GetEntry() *v111.NexusIncomingServiceEntry {
+func (x *CreateOrUpdateNexusIncomingServiceResponse) GetEntry() *v111.NexusIncomingServiceEntry {
 	if x != nil {
 		return x.Entry
 	}
@@ -3013,12 +3017,12 @@ func (x *CreateOrUpdateNexusServiceResponse) GetEntry() *v111.NexusIncomingServi
 
 // (-- api-linter: core::0135::request-name-behavior=disabled
 //
-//	aip.dev/not-precedent: DeleteServiceRequest RPC doesn't follow Google API format. --)
+//	aip.dev/not-precedent: DeleteNexusIncomingServiceRequest RPC doesn't follow Google API format. --)
 //
 // (-- api-linter: core::0135::request-name-reference=disabled
 //
-//	aip.dev/not-precedent: DeleteServiceRequest RPC doesn't follow Google API format. --)
-type DeleteNexusServiceRequest struct {
+//	aip.dev/not-precedent: DeleteNexusIncomingServiceRequest RPC doesn't follow Google API format. --)
+type DeleteNexusIncomingServiceRequest struct {
 	state         protoimpl.MessageState
 	sizeCache     protoimpl.SizeCache
 	unknownFields protoimpl.UnknownFields
@@ -3027,8 +3031,8 @@ type DeleteNexusServiceRequest struct {
 	Name string `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
 }
 
-func (x *DeleteNexusServiceRequest) Reset() {
-	*x = DeleteNexusServiceRequest{}
+func (x *DeleteNexusIncomingServiceRequest) Reset() {
+	*x = DeleteNexusIncomingServiceRequest{}
 	if protoimpl.UnsafeEnabled {
 		mi := &file_temporal_server_api_matchingservice_v1_request_response_proto_msgTypes[44]
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
@@ -3036,13 +3040,13 @@ func (x *DeleteNexusServiceRequest) Reset() {
 	}
 }
 
-func (x *DeleteNexusServiceRequest) String() string {
+func (x *DeleteNexusIncomingServiceRequest) String() string {
 	return protoimpl.X.MessageStringOf(x)
 }
 
-func (*DeleteNexusServiceRequest) ProtoMessage() {}
+func (*DeleteNexusIncomingServiceRequest) ProtoMessage() {}
 
-func (x *DeleteNexusServiceRequest) ProtoReflect() protoreflect.Message {
+func (x *DeleteNexusIncomingServiceRequest) ProtoReflect() protoreflect.Message {
 	mi := &file_temporal_server_api_matchingservice_v1_request_response_proto_msgTypes[44]
 	if protoimpl.UnsafeEnabled && x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
@@ -3054,26 +3058,26 @@ func (x *DeleteNexusServiceRequest) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use DeleteNexusServiceRequest.ProtoReflect.Descriptor instead.
-func (*DeleteNexusServiceRequest) Descriptor() ([]byte, []int) {
+// Deprecated: Use DeleteNexusIncomingServiceRequest.ProtoReflect.Descriptor instead.
+func (*DeleteNexusIncomingServiceRequest) Descriptor() ([]byte, []int) {
 	return file_temporal_server_api_matchingservice_v1_request_response_proto_rawDescGZIP(), []int{44}
 }
 
-func (x *DeleteNexusServiceRequest) GetName() string {
+func (x *DeleteNexusIncomingServiceRequest) GetName() string {
 	if x != nil {
 		return x.Name
 	}
 	return ""
 }
 
-type DeleteNexusServiceResponse struct {
+type DeleteNexusIncomingServiceResponse struct {
 	state         protoimpl.MessageState
 	sizeCache     protoimpl.SizeCache
 	unknownFields protoimpl.UnknownFields
 }
 
-func (x *DeleteNexusServiceResponse) Reset() {
-	*x = DeleteNexusServiceResponse{}
+func (x *DeleteNexusIncomingServiceResponse) Reset() {
+	*x = DeleteNexusIncomingServiceResponse{}
 	if protoimpl.UnsafeEnabled {
 		mi := &file_temporal_server_api_matchingservice_v1_request_response_proto_msgTypes[45]
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
@@ -3081,13 +3085,13 @@ func (x *DeleteNexusServiceResponse) Reset() {
 	}
 }
 
-func (x *DeleteNexusServiceResponse) String() string {
+func (x *DeleteNexusIncomingServiceResponse) String() string {
 	return protoimpl.X.MessageStringOf(x)
 }
 
-func (*DeleteNexusServiceResponse) ProtoMessage() {}
+func (*DeleteNexusIncomingServiceResponse) ProtoMessage() {}
 
-func (x *DeleteNexusServiceResponse) ProtoReflect() protoreflect.Message {
+func (x *DeleteNexusIncomingServiceResponse) ProtoReflect() protoreflect.Message {
 	mi := &file_temporal_server_api_matchingservice_v1_request_response_proto_msgTypes[45]
 	if protoimpl.UnsafeEnabled && x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
@@ -3099,12 +3103,12 @@ func (x *DeleteNexusServiceResponse) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use DeleteNexusServiceResponse.ProtoReflect.Descriptor instead.
-func (*DeleteNexusServiceResponse) Descriptor() ([]byte, []int) {
+// Deprecated: Use DeleteNexusIncomingServiceResponse.ProtoReflect.Descriptor instead.
+func (*DeleteNexusIncomingServiceResponse) Descriptor() ([]byte, []int) {
 	return file_temporal_server_api_matchingservice_v1_request_response_proto_rawDescGZIP(), []int{45}
 }
 
-type ListNexusServicesRequest struct {
+type ListNexusIncomingServicesRequest struct {
 	state         protoimpl.MessageState
 	sizeCache     protoimpl.SizeCache
 	unknownFields protoimpl.UnknownFields
@@ -3126,8 +3130,8 @@ type ListNexusServicesRequest struct {
 	Wait bool `protobuf:"varint,4,opt,name=wait,proto3" json:"wait,omitempty"`
 }
 
-func (x *ListNexusServicesRequest) Reset() {
-	*x = ListNexusServicesRequest{}
+func (x *ListNexusIncomingServicesRequest) Reset() {
+	*x = ListNexusIncomingServicesRequest{}
 	if protoimpl.UnsafeEnabled {
 		mi := &file_temporal_server_api_matchingservice_v1_request_response_proto_msgTypes[46]
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
@@ -3135,13 +3139,13 @@ func (x *ListNexusServicesRequest) Reset() {
 	}
 }
 
-func (x *ListNexusServicesRequest) String() string {
+func (x *ListNexusIncomingServicesRequest) String() string {
 	return protoimpl.X.MessageStringOf(x)
 }
 
-func (*ListNexusServicesRequest) ProtoMessage() {}
+func (*ListNexusIncomingServicesRequest) ProtoMessage() {}
 
-func (x *ListNexusServicesRequest) ProtoReflect() protoreflect.Message {
+func (x *ListNexusIncomingServicesRequest) ProtoReflect() protoreflect.Message {
 	mi := &file_temporal_server_api_matchingservice_v1_request_response_proto_msgTypes[46]
 	if protoimpl.UnsafeEnabled && x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
@@ -3153,40 +3157,40 @@ func (x *ListNexusServicesRequest) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use ListNexusServicesRequest.ProtoReflect.Descriptor instead.
-func (*ListNexusServicesRequest) Descriptor() ([]byte, []int) {
+// Deprecated: Use ListNexusIncomingServicesRequest.ProtoReflect.Descriptor instead.
+func (*ListNexusIncomingServicesRequest) Descriptor() ([]byte, []int) {
 	return file_temporal_server_api_matchingservice_v1_request_response_proto_rawDescGZIP(), []int{46}
 }
 
-func (x *ListNexusServicesRequest) GetNextPageToken() []byte {
+func (x *ListNexusIncomingServicesRequest) GetNextPageToken() []byte {
 	if x != nil {
 		return x.NextPageToken
 	}
 	return nil
 }
 
-func (x *ListNexusServicesRequest) GetPageSize() int32 {
+func (x *ListNexusIncomingServicesRequest) GetPageSize() int32 {
 	if x != nil {
 		return x.PageSize
 	}
 	return 0
 }
 
-func (x *ListNexusServicesRequest) GetLastKnownTableVersion() int64 {
+func (x *ListNexusIncomingServicesRequest) GetLastKnownTableVersion() int64 {
 	if x != nil {
 		return x.LastKnownTableVersion
 	}
 	return 0
 }
 
-func (x *ListNexusServicesRequest) GetWait() bool {
+func (x *ListNexusIncomingServicesRequest) GetWait() bool {
 	if x != nil {
 		return x.Wait
 	}
 	return false
 }
 
-type ListNexusServicesResponse struct {
+type ListNexusIncomingServicesResponse struct {
 	state         protoimpl.MessageState
 	sizeCache     protoimpl.SizeCache
 	unknownFields protoimpl.UnknownFields
@@ -3197,8 +3201,8 @@ type ListNexusServicesResponse struct {
 	Entries       []*v111.NexusIncomingServiceEntry `protobuf:"bytes,3,rep,name=entries,proto3" json:"entries,omitempty"`
 }
 
-func (x *ListNexusServicesResponse) Reset() {
-	*x = ListNexusServicesResponse{}
+func (x *ListNexusIncomingServicesResponse) Reset() {
+	*x = ListNexusIncomingServicesResponse{}
 	if protoimpl.UnsafeEnabled {
 		mi := &file_temporal_server_api_matchingservice_v1_request_response_proto_msgTypes[47]
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
@@ -3206,13 +3210,13 @@ func (x *ListNexusServicesResponse) Reset() {
 	}
 }
 
-func (x *ListNexusServicesResponse) String() string {
+func (x *ListNexusIncomingServicesResponse) String() string {
 	return protoimpl.X.MessageStringOf(x)
 }
 
-func (*ListNexusServicesResponse) ProtoMessage() {}
+func (*ListNexusIncomingServicesResponse) ProtoMessage() {}
 
-func (x *ListNexusServicesResponse) ProtoReflect() protoreflect.Message {
+func (x *ListNexusIncomingServicesResponse) ProtoReflect() protoreflect.Message {
 	mi := &file_temporal_server_api_matchingservice_v1_request_response_proto_msgTypes[47]
 	if protoimpl.UnsafeEnabled && x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
@@ -3224,26 +3228,26 @@ func (x *ListNexusServicesResponse) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use ListNexusServicesResponse.ProtoReflect.Descriptor instead.
-func (*ListNexusServicesResponse) Descriptor() ([]byte, []int) {
+// Deprecated: Use ListNexusIncomingServicesResponse.ProtoReflect.Descriptor instead.
+func (*ListNexusIncomingServicesResponse) Descriptor() ([]byte, []int) {
 	return file_temporal_server_api_matchingservice_v1_request_response_proto_rawDescGZIP(), []int{47}
 }
 
-func (x *ListNexusServicesResponse) GetNextPageToken() []byte {
+func (x *ListNexusIncomingServicesResponse) GetNextPageToken() []byte {
 	if x != nil {
 		return x.NextPageToken
 	}
 	return nil
 }
 
-func (x *ListNexusServicesResponse) GetTableVersion() int64 {
+func (x *ListNexusIncomingServicesResponse) GetTableVersion() int64 {
 	if x != nil {
 		return x.TableVersion
 	}
 	return 0
 }
 
-func (x *ListNexusServicesResponse) GetEntries() []*v111.NexusIncomingServiceEntry {
+func (x *ListNexusIncomingServicesResponse) GetEntries() []*v111.NexusIncomingServiceEntry {
 	if x != nil {
 		return x.Entries
 	}
@@ -4040,53 +4044,56 @@ var file_temporal_server_api_matchingservice_v1_request_response_proto_rawDesc =
 	0x52, 0x65, 0x71, 0x75, 0x65, 0x73, 0x74, 0x52, 0x07, 0x72, 0x65, 0x71, 0x75, 0x65, 0x73, 0x74,
 	0x22, 0x20, 0x0a, 0x1e, 0x52, 0x65, 0x73, 0x70, 0x6f, 0x6e, 0x64, 0x4e, 0x65, 0x78, 0x75, 0x73,
 	0x54, 0x61, 0x73, 0x6b, 0x46, 0x61, 0x69, 0x6c, 0x65, 0x64, 0x52, 0x65, 0x73, 0x70, 0x6f, 0x6e,
-	0x73, 0x65, 0x22, 0x65, 0x0a, 0x21, 0x43, 0x72, 0x65, 0x61, 0x74, 0x65, 0x4f, 0x72, 0x55, 0x70,
-	0x64, 0x61, 0x74, 0x65, 0x4e, 0x65, 0x78, 0x75, 0x73, 0x53, 0x65, 0x72, 0x76, 0x69, 0x63, 0x65,
-	0x52, 0x65, 0x71, 0x75, 0x65, 0x73, 0x74, 0x12, 0x40, 0x0a, 0x07, 0x73, 0x65, 0x72, 0x76, 0x69,
-	0x63, 0x65, 0x18, 0x01, 0x20, 0x01, 0x28, 0x0b, 0x32, 0x26, 0x2e, 0x74, 0x65, 0x6d, 0x70, 0x6f,
-	0x72, 0x61, 0x6c, 0x2e, 0x61, 0x70, 0x69, 0x2e, 0x6e, 0x65, 0x78, 0x75, 0x73, 0x2e, 0x76, 0x31,
-	0x2e, 0x49, 0x6e, 0x63, 0x6f, 0x6d, 0x69, 0x6e, 0x67, 0x53, 0x65, 0x72, 0x76, 0x69, 0x63, 0x65,
-	0x52, 0x07, 0x73, 0x65, 0x72, 0x76, 0x69, 0x63, 0x65, 0x22, 0x79, 0x0a, 0x22, 0x43, 0x72, 0x65,
-	0x61, 0x74, 0x65, 0x4f, 0x72, 0x55, 0x70, 0x64, 0x61, 0x74, 0x65, 0x4e, 0x65, 0x78, 0x75, 0x73,
-	0x53, 0x65, 0x72, 0x76, 0x69, 0x63, 0x65, 0x52, 0x65, 0x73, 0x70, 0x6f, 0x6e, 0x73, 0x65, 0x12,
-	0x53, 0x0a, 0x05, 0x65, 0x6e, 0x74, 0x72, 0x79, 0x18, 0x01, 0x20, 0x01, 0x28, 0x0b, 0x32, 0x3d,
-	0x2e, 0x74, 0x65, 0x6d, 0x70, 0x6f, 0x72, 0x61, 0x6c, 0x2e, 0x73, 0x65, 0x72, 0x76, 0x65, 0x72,
-	0x2e, 0x61, 0x70, 0x69, 0x2e, 0x70, 0x65, 0x72, 0x73, 0x69, 0x73, 0x74, 0x65, 0x6e, 0x63, 0x65,
-	0x2e, 0x76, 0x31, 0x2e, 0x4e, 0x65, 0x78, 0x75, 0x73, 0x49, 0x6e, 0x63, 0x6f, 0x6d, 0x69, 0x6e,
-	0x67, 0x53, 0x65, 0x72, 0x76, 0x69, 0x63, 0x65, 0x45, 0x6e, 0x74, 0x72, 0x79, 0x52, 0x05, 0x65,
-	0x6e, 0x74, 0x72, 0x79, 0x22, 0x2f, 0x0a, 0x19, 0x44, 0x65, 0x6c, 0x65, 0x74, 0x65, 0x4e, 0x65,
-	0x78, 0x75, 0x73, 0x53, 0x65, 0x72, 0x76, 0x69, 0x63, 0x65, 0x52, 0x65, 0x71, 0x75, 0x65, 0x73,
-	0x74, 0x12, 0x12, 0x0a, 0x04, 0x6e, 0x61, 0x6d, 0x65, 0x18, 0x01, 0x20, 0x01, 0x28, 0x09, 0x52,
-	0x04, 0x6e, 0x61, 0x6d, 0x65, 0x22, 0x1c, 0x0a, 0x1a, 0x44, 0x65, 0x6c, 0x65, 0x74, 0x65, 0x4e,
-	0x65, 0x78, 0x75, 0x73, 0x53, 0x65, 0x72, 0x76, 0x69, 0x63, 0x65, 0x52, 0x65, 0x73, 0x70, 0x6f,
-	0x6e, 0x73, 0x65, 0x22, 0xac, 0x01, 0x0a, 0x18, 0x4c, 0x69, 0x73, 0x74, 0x4e, 0x65, 0x78, 0x75,
-	0x73, 0x53, 0x65, 0x72, 0x76, 0x69, 0x63, 0x65, 0x73, 0x52, 0x65, 0x71, 0x75, 0x65, 0x73, 0x74,
-	0x12, 0x26, 0x0a, 0x0f, 0x6e, 0x65, 0x78, 0x74, 0x5f, 0x70, 0x61, 0x67, 0x65, 0x5f, 0x74, 0x6f,
-	0x6b, 0x65, 0x6e, 0x18, 0x01, 0x20, 0x01, 0x28, 0x0c, 0x52, 0x0d, 0x6e, 0x65, 0x78, 0x74, 0x50,
-	0x61, 0x67, 0x65, 0x54, 0x6f, 0x6b, 0x65, 0x6e, 0x12, 0x1b, 0x0a, 0x09, 0x70, 0x61, 0x67, 0x65,
-	0x5f, 0x73, 0x69, 0x7a, 0x65, 0x18, 0x02, 0x20, 0x01, 0x28, 0x05, 0x52, 0x08, 0x70, 0x61, 0x67,
-	0x65, 0x53, 0x69, 0x7a, 0x65, 0x12, 0x37, 0x0a, 0x18, 0x6c, 0x61, 0x73, 0x74, 0x5f, 0x6b, 0x6e,
-	0x6f, 0x77, 0x6e, 0x5f, 0x74, 0x61, 0x62, 0x6c, 0x65, 0x5f, 0x76, 0x65, 0x72, 0x73, 0x69, 0x6f,
-	0x6e, 0x18, 0x03, 0x20, 0x01, 0x28, 0x03, 0x52, 0x15, 0x6c, 0x61, 0x73, 0x74, 0x4b, 0x6e, 0x6f,
-	0x77, 0x6e, 0x54, 0x61, 0x62, 0x6c, 0x65, 0x56, 0x65, 0x72, 0x73, 0x69, 0x6f, 0x6e, 0x12, 0x12,
-	0x0a, 0x04, 0x77, 0x61, 0x69, 0x74, 0x18, 0x04, 0x20, 0x01, 0x28, 0x08, 0x52, 0x04, 0x77, 0x61,
-	0x69, 0x74, 0x22, 0xc1, 0x01, 0x0a, 0x19, 0x4c, 0x69, 0x73, 0x74, 0x4e, 0x65, 0x78, 0x75, 0x73,
-	0x53, 0x65, 0x72, 0x76, 0x69, 0x63, 0x65, 0x73, 0x52, 0x65, 0x73, 0x70, 0x6f, 0x6e, 0x73, 0x65,
-	0x12, 0x26, 0x0a, 0x0f, 0x6e, 0x65, 0x78, 0x74, 0x5f, 0x70, 0x61, 0x67, 0x65, 0x5f, 0x74, 0x6f,
-	0x6b, 0x65, 0x6e, 0x18, 0x01, 0x20, 0x01, 0x28, 0x0c, 0x52, 0x0d, 0x6e, 0x65, 0x78, 0x74, 0x50,
-	0x61, 0x67, 0x65, 0x54, 0x6f, 0x6b, 0x65, 0x6e, 0x12, 0x23, 0x0a, 0x0d, 0x74, 0x61, 0x62, 0x6c,
-	0x65, 0x5f, 0x76, 0x65, 0x72, 0x73, 0x69, 0x6f, 0x6e, 0x18, 0x02, 0x20, 0x01, 0x28, 0x03, 0x52,
-	0x0c, 0x74, 0x61, 0x62, 0x6c, 0x65, 0x56, 0x65, 0x72, 0x73, 0x69, 0x6f, 0x6e, 0x12, 0x57, 0x0a,
-	0x07, 0x65, 0x6e, 0x74, 0x72, 0x69, 0x65, 0x73, 0x18, 0x03, 0x20, 0x03, 0x28, 0x0b, 0x32, 0x3d,
-	0x2e, 0x74, 0x65, 0x6d, 0x70, 0x6f, 0x72, 0x61, 0x6c, 0x2e, 0x73, 0x65, 0x72, 0x76, 0x65, 0x72,
-	0x2e, 0x61, 0x70, 0x69, 0x2e, 0x70, 0x65, 0x72, 0x73, 0x69, 0x73, 0x74, 0x65, 0x6e, 0x63, 0x65,
-	0x2e, 0x76, 0x31, 0x2e, 0x4e, 0x65, 0x78, 0x75, 0x73, 0x49, 0x6e, 0x63, 0x6f, 0x6d, 0x69, 0x6e,
-	0x67, 0x53, 0x65, 0x72, 0x76, 0x69, 0x63, 0x65, 0x45, 0x6e, 0x74, 0x72, 0x79, 0x52, 0x07, 0x65,
-	0x6e, 0x74, 0x72, 0x69, 0x65, 0x73, 0x42, 0x3e, 0x5a, 0x3c, 0x67, 0x6f, 0x2e, 0x74, 0x65, 0x6d,
-	0x70, 0x6f, 0x72, 0x61, 0x6c, 0x2e, 0x69, 0x6f, 0x2f, 0x73, 0x65, 0x72, 0x76, 0x65, 0x72, 0x2f,
-	0x61, 0x70, 0x69, 0x2f, 0x6d, 0x61, 0x74, 0x63, 0x68, 0x69, 0x6e, 0x67, 0x73, 0x65, 0x72, 0x76,
-	0x69, 0x63, 0x65, 0x2f, 0x76, 0x31, 0x3b, 0x6d, 0x61, 0x74, 0x63, 0x68, 0x69, 0x6e, 0x67, 0x73,
-	0x65, 0x72, 0x76, 0x69, 0x63, 0x65, 0x62, 0x06, 0x70, 0x72, 0x6f, 0x74, 0x6f, 0x33,
+	0x73, 0x65, 0x22, 0x6d, 0x0a, 0x29, 0x43, 0x72, 0x65, 0x61, 0x74, 0x65, 0x4f, 0x72, 0x55, 0x70,
+	0x64, 0x61, 0x74, 0x65, 0x4e, 0x65, 0x78, 0x75, 0x73, 0x49, 0x6e, 0x63, 0x6f, 0x6d, 0x69, 0x6e,
+	0x67, 0x53, 0x65, 0x72, 0x76, 0x69, 0x63, 0x65, 0x52, 0x65, 0x71, 0x75, 0x65, 0x73, 0x74, 0x12,
+	0x40, 0x0a, 0x07, 0x73, 0x65, 0x72, 0x76, 0x69, 0x63, 0x65, 0x18, 0x01, 0x20, 0x01, 0x28, 0x0b,
+	0x32, 0x26, 0x2e, 0x74, 0x65, 0x6d, 0x70, 0x6f, 0x72, 0x61, 0x6c, 0x2e, 0x61, 0x70, 0x69, 0x2e,
+	0x6e, 0x65, 0x78, 0x75, 0x73, 0x2e, 0x76, 0x31, 0x2e, 0x49, 0x6e, 0x63, 0x6f, 0x6d, 0x69, 0x6e,
+	0x67, 0x53, 0x65, 0x72, 0x76, 0x69, 0x63, 0x65, 0x52, 0x07, 0x73, 0x65, 0x72, 0x76, 0x69, 0x63,
+	0x65, 0x22, 0x81, 0x01, 0x0a, 0x2a, 0x43, 0x72, 0x65, 0x61, 0x74, 0x65, 0x4f, 0x72, 0x55, 0x70,
+	0x64, 0x61, 0x74, 0x65, 0x4e, 0x65, 0x78, 0x75, 0x73, 0x49, 0x6e, 0x63, 0x6f, 0x6d, 0x69, 0x6e,
+	0x67, 0x53, 0x65, 0x72, 0x76, 0x69, 0x63, 0x65, 0x52, 0x65, 0x73, 0x70, 0x6f, 0x6e, 0x73, 0x65,
+	0x12, 0x53, 0x0a, 0x05, 0x65, 0x6e, 0x74, 0x72, 0x79, 0x18, 0x01, 0x20, 0x01, 0x28, 0x0b, 0x32,
+	0x3d, 0x2e, 0x74, 0x65, 0x6d, 0x70, 0x6f, 0x72, 0x61, 0x6c, 0x2e, 0x73, 0x65, 0x72, 0x76, 0x65,
+	0x72, 0x2e, 0x61, 0x70, 0x69, 0x2e, 0x70, 0x65, 0x72, 0x73, 0x69, 0x73, 0x74, 0x65, 0x6e, 0x63,
+	0x65, 0x2e, 0x76, 0x31, 0x2e, 0x4e, 0x65, 0x78, 0x75, 0x73, 0x49, 0x6e, 0x63, 0x6f, 0x6d, 0x69,
+	0x6e, 0x67, 0x53, 0x65, 0x72, 0x76, 0x69, 0x63, 0x65, 0x45, 0x6e, 0x74, 0x72, 0x79, 0x52, 0x05,
+	0x65, 0x6e, 0x74, 0x72, 0x79, 0x22, 0x37, 0x0a, 0x21, 0x44, 0x65, 0x6c, 0x65, 0x74, 0x65, 0x4e,
+	0x65, 0x78, 0x75, 0x73, 0x49, 0x6e, 0x63, 0x6f, 0x6d, 0x69, 0x6e, 0x67, 0x53, 0x65, 0x72, 0x76,
+	0x69, 0x63, 0x65, 0x52, 0x65, 0x71, 0x75, 0x65, 0x73, 0x74, 0x12, 0x12, 0x0a, 0x04, 0x6e, 0x61,
+	0x6d, 0x65, 0x18, 0x01, 0x20, 0x01, 0x28, 0x09, 0x52, 0x04, 0x6e, 0x61, 0x6d, 0x65, 0x22, 0x24,
+	0x0a, 0x22, 0x44, 0x65, 0x6c, 0x65, 0x74, 0x65, 0x4e, 0x65, 0x78, 0x75, 0x73, 0x49, 0x6e, 0x63,
+	0x6f, 0x6d, 0x69, 0x6e, 0x67, 0x53, 0x65, 0x72, 0x76, 0x69, 0x63, 0x65, 0x52, 0x65, 0x73, 0x70,
+	0x6f, 0x6e, 0x73, 0x65, 0x22, 0xb4, 0x01, 0x0a, 0x20, 0x4c, 0x69, 0x73, 0x74, 0x4e, 0x65, 0x78,
+	0x75, 0x73, 0x49, 0x6e, 0x63, 0x6f, 0x6d, 0x69, 0x6e, 0x67, 0x53, 0x65, 0x72, 0x76, 0x69, 0x63,
+	0x65, 0x73, 0x52, 0x65, 0x71, 0x75, 0x65, 0x73, 0x74, 0x12, 0x26, 0x0a, 0x0f, 0x6e, 0x65, 0x78,
+	0x74, 0x5f, 0x70, 0x61, 0x67, 0x65, 0x5f, 0x74, 0x6f, 0x6b, 0x65, 0x6e, 0x18, 0x01, 0x20, 0x01,
+	0x28, 0x0c, 0x52, 0x0d, 0x6e, 0x65, 0x78, 0x74, 0x50, 0x61, 0x67, 0x65, 0x54, 0x6f, 0x6b, 0x65,
+	0x6e, 0x12, 0x1b, 0x0a, 0x09, 0x70, 0x61, 0x67, 0x65, 0x5f, 0x73, 0x69, 0x7a, 0x65, 0x18, 0x02,
+	0x20, 0x01, 0x28, 0x05, 0x52, 0x08, 0x70, 0x61, 0x67, 0x65, 0x53, 0x69, 0x7a, 0x65, 0x12, 0x37,
+	0x0a, 0x18, 0x6c, 0x61, 0x73, 0x74, 0x5f, 0x6b, 0x6e, 0x6f, 0x77, 0x6e, 0x5f, 0x74, 0x61, 0x62,
+	0x6c, 0x65, 0x5f, 0x76, 0x65, 0x72, 0x73, 0x69, 0x6f, 0x6e, 0x18, 0x03, 0x20, 0x01, 0x28, 0x03,
+	0x52, 0x15, 0x6c, 0x61, 0x73, 0x74, 0x4b, 0x6e, 0x6f, 0x77, 0x6e, 0x54, 0x61, 0x62, 0x6c, 0x65,
+	0x56, 0x65, 0x72, 0x73, 0x69, 0x6f, 0x6e, 0x12, 0x12, 0x0a, 0x04, 0x77, 0x61, 0x69, 0x74, 0x18,
+	0x04, 0x20, 0x01, 0x28, 0x08, 0x52, 0x04, 0x77, 0x61, 0x69, 0x74, 0x22, 0xc9, 0x01, 0x0a, 0x21,
+	0x4c, 0x69, 0x73, 0x74, 0x4e, 0x65, 0x78, 0x75, 0x73, 0x49, 0x6e, 0x63, 0x6f, 0x6d, 0x69, 0x6e,
+	0x67, 0x53, 0x65, 0x72, 0x76, 0x69, 0x63, 0x65, 0x73, 0x52, 0x65, 0x73, 0x70, 0x6f, 0x6e, 0x73,
+	0x65, 0x12, 0x26, 0x0a, 0x0f, 0x6e, 0x65, 0x78, 0x74, 0x5f, 0x70, 0x61, 0x67, 0x65, 0x5f, 0x74,
+	0x6f, 0x6b, 0x65, 0x6e, 0x18, 0x01, 0x20, 0x01, 0x28, 0x0c, 0x52, 0x0d, 0x6e, 0x65, 0x78, 0x74,
+	0x50, 0x61, 0x67, 0x65, 0x54, 0x6f, 0x6b, 0x65, 0x6e, 0x12, 0x23, 0x0a, 0x0d, 0x74, 0x61, 0x62,
+	0x6c, 0x65, 0x5f, 0x76, 0x65, 0x72, 0x73, 0x69, 0x6f, 0x6e, 0x18, 0x02, 0x20, 0x01, 0x28, 0x03,
+	0x52, 0x0c, 0x74, 0x61, 0x62, 0x6c, 0x65, 0x56, 0x65, 0x72, 0x73, 0x69, 0x6f, 0x6e, 0x12, 0x57,
+	0x0a, 0x07, 0x65, 0x6e, 0x74, 0x72, 0x69, 0x65, 0x73, 0x18, 0x03, 0x20, 0x03, 0x28, 0x0b, 0x32,
+	0x3d, 0x2e, 0x74, 0x65, 0x6d, 0x70, 0x6f, 0x72, 0x61, 0x6c, 0x2e, 0x73, 0x65, 0x72, 0x76, 0x65,
+	0x72, 0x2e, 0x61, 0x70, 0x69, 0x2e, 0x70, 0x65, 0x72, 0x73, 0x69, 0x73, 0x74, 0x65, 0x6e, 0x63,
+	0x65, 0x2e, 0x76, 0x31, 0x2e, 0x4e, 0x65, 0x78, 0x75, 0x73, 0x49, 0x6e, 0x63, 0x6f, 0x6d, 0x69,
+	0x6e, 0x67, 0x53, 0x65, 0x72, 0x76, 0x69, 0x63, 0x65, 0x45, 0x6e, 0x74, 0x72, 0x79, 0x52, 0x07,
+	0x65, 0x6e, 0x74, 0x72, 0x69, 0x65, 0x73, 0x42, 0x3e, 0x5a, 0x3c, 0x67, 0x6f, 0x2e, 0x74, 0x65,
+	0x6d, 0x70, 0x6f, 0x72, 0x61, 0x6c, 0x2e, 0x69, 0x6f, 0x2f, 0x73, 0x65, 0x72, 0x76, 0x65, 0x72,
+	0x2f, 0x61, 0x70, 0x69, 0x2f, 0x6d, 0x61, 0x74, 0x63, 0x68, 0x69, 0x6e, 0x67, 0x73, 0x65, 0x72,
+	0x76, 0x69, 0x63, 0x65, 0x2f, 0x76, 0x31, 0x3b, 0x6d, 0x61, 0x74, 0x63, 0x68, 0x69, 0x6e, 0x67,
+	0x73, 0x65, 0x72, 0x76, 0x69, 0x63, 0x65, 0x62, 0x06, 0x70, 0x72, 0x6f, 0x74, 0x6f, 0x33,
 }
 
 var (
@@ -4103,55 +4110,55 @@ func file_temporal_server_api_matchingservice_v1_request_response_proto_rawDescG
 
 var file_temporal_server_api_matchingservice_v1_request_response_proto_msgTypes = make([]protoimpl.MessageInfo, 51)
 var file_temporal_server_api_matchingservice_v1_request_response_proto_goTypes = []interface{}{
-	(*PollWorkflowTaskQueueRequest)(nil),                               // 0: temporal.server.api.matchingservice.v1.PollWorkflowTaskQueueRequest
-	(*PollWorkflowTaskQueueResponse)(nil),                              // 1: temporal.server.api.matchingservice.v1.PollWorkflowTaskQueueResponse
-	(*PollActivityTaskQueueRequest)(nil),                               // 2: temporal.server.api.matchingservice.v1.PollActivityTaskQueueRequest
-	(*PollActivityTaskQueueResponse)(nil),                              // 3: temporal.server.api.matchingservice.v1.PollActivityTaskQueueResponse
-	(*AddWorkflowTaskRequest)(nil),                                     // 4: temporal.server.api.matchingservice.v1.AddWorkflowTaskRequest
-	(*AddWorkflowTaskResponse)(nil),                                    // 5: temporal.server.api.matchingservice.v1.AddWorkflowTaskResponse
-	(*AddActivityTaskRequest)(nil),                                     // 6: temporal.server.api.matchingservice.v1.AddActivityTaskRequest
-	(*AddActivityTaskResponse)(nil),                                    // 7: temporal.server.api.matchingservice.v1.AddActivityTaskResponse
-	(*QueryWorkflowRequest)(nil),                                       // 8: temporal.server.api.matchingservice.v1.QueryWorkflowRequest
-	(*QueryWorkflowResponse)(nil),                                      // 9: temporal.server.api.matchingservice.v1.QueryWorkflowResponse
-	(*RespondQueryTaskCompletedRequest)(nil),                           // 10: temporal.server.api.matchingservice.v1.RespondQueryTaskCompletedRequest
-	(*RespondQueryTaskCompletedResponse)(nil),                          // 11: temporal.server.api.matchingservice.v1.RespondQueryTaskCompletedResponse
-	(*CancelOutstandingPollRequest)(nil),                               // 12: temporal.server.api.matchingservice.v1.CancelOutstandingPollRequest
-	(*CancelOutstandingPollResponse)(nil),                              // 13: temporal.server.api.matchingservice.v1.CancelOutstandingPollResponse
-	(*DescribeTaskQueueRequest)(nil),                                   // 14: temporal.server.api.matchingservice.v1.DescribeTaskQueueRequest
-	(*DescribeTaskQueueResponse)(nil),                                  // 15: temporal.server.api.matchingservice.v1.DescribeTaskQueueResponse
-	(*ListTaskQueuePartitionsRequest)(nil),                             // 16: temporal.server.api.matchingservice.v1.ListTaskQueuePartitionsRequest
-	(*ListTaskQueuePartitionsResponse)(nil),                            // 17: temporal.server.api.matchingservice.v1.ListTaskQueuePartitionsResponse
-	(*UpdateWorkerBuildIdCompatibilityRequest)(nil),                    // 18: temporal.server.api.matchingservice.v1.UpdateWorkerBuildIdCompatibilityRequest
-	(*UpdateWorkerBuildIdCompatibilityResponse)(nil),                   // 19: temporal.server.api.matchingservice.v1.UpdateWorkerBuildIdCompatibilityResponse
-	(*GetWorkerBuildIdCompatibilityRequest)(nil),                       // 20: temporal.server.api.matchingservice.v1.GetWorkerBuildIdCompatibilityRequest
-	(*GetWorkerBuildIdCompatibilityResponse)(nil),                      // 21: temporal.server.api.matchingservice.v1.GetWorkerBuildIdCompatibilityResponse
-	(*GetTaskQueueUserDataRequest)(nil),                                // 22: temporal.server.api.matchingservice.v1.GetTaskQueueUserDataRequest
-	(*GetTaskQueueUserDataResponse)(nil),                               // 23: temporal.server.api.matchingservice.v1.GetTaskQueueUserDataResponse
-	(*ApplyTaskQueueUserDataReplicationEventRequest)(nil),              // 24: temporal.server.api.matchingservice.v1.ApplyTaskQueueUserDataReplicationEventRequest
-	(*ApplyTaskQueueUserDataReplicationEventResponse)(nil),             // 25: temporal.server.api.matchingservice.v1.ApplyTaskQueueUserDataReplicationEventResponse
-	(*GetBuildIdTaskQueueMappingRequest)(nil),                          // 26: temporal.server.api.matchingservice.v1.GetBuildIdTaskQueueMappingRequest
-	(*GetBuildIdTaskQueueMappingResponse)(nil),                         // 27: temporal.server.api.matchingservice.v1.GetBuildIdTaskQueueMappingResponse
-	(*ForceUnloadTaskQueueRequest)(nil),                                // 28: temporal.server.api.matchingservice.v1.ForceUnloadTaskQueueRequest
-	(*ForceUnloadTaskQueueResponse)(nil),                               // 29: temporal.server.api.matchingservice.v1.ForceUnloadTaskQueueResponse
-	(*UpdateTaskQueueUserDataRequest)(nil),                             // 30: temporal.server.api.matchingservice.v1.UpdateTaskQueueUserDataRequest
-	(*UpdateTaskQueueUserDataResponse)(nil),                            // 31: temporal.server.api.matchingservice.v1.UpdateTaskQueueUserDataResponse
-	(*ReplicateTaskQueueUserDataRequest)(nil),                          // 32: temporal.server.api.matchingservice.v1.ReplicateTaskQueueUserDataRequest
-	(*ReplicateTaskQueueUserDataResponse)(nil),                         // 33: temporal.server.api.matchingservice.v1.ReplicateTaskQueueUserDataResponse
-	(*DispatchNexusTaskRequest)(nil),                                   // 34: temporal.server.api.matchingservice.v1.DispatchNexusTaskRequest
-	(*DispatchNexusTaskResponse)(nil),                                  // 35: temporal.server.api.matchingservice.v1.DispatchNexusTaskResponse
-	(*PollNexusTaskQueueRequest)(nil),                                  // 36: temporal.server.api.matchingservice.v1.PollNexusTaskQueueRequest
-	(*PollNexusTaskQueueResponse)(nil),                                 // 37: temporal.server.api.matchingservice.v1.PollNexusTaskQueueResponse
-	(*RespondNexusTaskCompletedRequest)(nil),                           // 38: temporal.server.api.matchingservice.v1.RespondNexusTaskCompletedRequest
-	(*RespondNexusTaskCompletedResponse)(nil),                          // 39: temporal.server.api.matchingservice.v1.RespondNexusTaskCompletedResponse
-	(*RespondNexusTaskFailedRequest)(nil),                              // 40: temporal.server.api.matchingservice.v1.RespondNexusTaskFailedRequest
-	(*RespondNexusTaskFailedResponse)(nil),                             // 41: temporal.server.api.matchingservice.v1.RespondNexusTaskFailedResponse
-	(*CreateOrUpdateNexusServiceRequest)(nil),                          // 42: temporal.server.api.matchingservice.v1.CreateOrUpdateNexusServiceRequest
-	(*CreateOrUpdateNexusServiceResponse)(nil),                         // 43: temporal.server.api.matchingservice.v1.CreateOrUpdateNexusServiceResponse
-	(*DeleteNexusServiceRequest)(nil),                                  // 44: temporal.server.api.matchingservice.v1.DeleteNexusServiceRequest
-	(*DeleteNexusServiceResponse)(nil),                                 // 45: temporal.server.api.matchingservice.v1.DeleteNexusServiceResponse
-	(*ListNexusServicesRequest)(nil),                                   // 46: temporal.server.api.matchingservice.v1.ListNexusServicesRequest
-	(*ListNexusServicesResponse)(nil),                                  // 47: temporal.server.api.matchingservice.v1.ListNexusServicesResponse
-	nil,                                                                // 48: temporal.server.api.matchingservice.v1.PollWorkflowTaskQueueResponse.QueriesEntry
+	(*PollWorkflowTaskQueueRequest)(nil),                   // 0: temporal.server.api.matchingservice.v1.PollWorkflowTaskQueueRequest
+	(*PollWorkflowTaskQueueResponse)(nil),                  // 1: temporal.server.api.matchingservice.v1.PollWorkflowTaskQueueResponse
+	(*PollActivityTaskQueueRequest)(nil),                   // 2: temporal.server.api.matchingservice.v1.PollActivityTaskQueueRequest
+	(*PollActivityTaskQueueResponse)(nil),                  // 3: temporal.server.api.matchingservice.v1.PollActivityTaskQueueResponse
+	(*AddWorkflowTaskRequest)(nil),                         // 4: temporal.server.api.matchingservice.v1.AddWorkflowTaskRequest
+	(*AddWorkflowTaskResponse)(nil),                        // 5: temporal.server.api.matchingservice.v1.AddWorkflowTaskResponse
+	(*AddActivityTaskRequest)(nil),                         // 6: temporal.server.api.matchingservice.v1.AddActivityTaskRequest
+	(*AddActivityTaskResponse)(nil),                        // 7: temporal.server.api.matchingservice.v1.AddActivityTaskResponse
+	(*QueryWorkflowRequest)(nil),                           // 8: temporal.server.api.matchingservice.v1.QueryWorkflowRequest
+	(*QueryWorkflowResponse)(nil),                          // 9: temporal.server.api.matchingservice.v1.QueryWorkflowResponse
+	(*RespondQueryTaskCompletedRequest)(nil),               // 10: temporal.server.api.matchingservice.v1.RespondQueryTaskCompletedRequest
+	(*RespondQueryTaskCompletedResponse)(nil),              // 11: temporal.server.api.matchingservice.v1.RespondQueryTaskCompletedResponse
+	(*CancelOutstandingPollRequest)(nil),                   // 12: temporal.server.api.matchingservice.v1.CancelOutstandingPollRequest
+	(*CancelOutstandingPollResponse)(nil),                  // 13: temporal.server.api.matchingservice.v1.CancelOutstandingPollResponse
+	(*DescribeTaskQueueRequest)(nil),                       // 14: temporal.server.api.matchingservice.v1.DescribeTaskQueueRequest
+	(*DescribeTaskQueueResponse)(nil),                      // 15: temporal.server.api.matchingservice.v1.DescribeTaskQueueResponse
+	(*ListTaskQueuePartitionsRequest)(nil),                 // 16: temporal.server.api.matchingservice.v1.ListTaskQueuePartitionsRequest
+	(*ListTaskQueuePartitionsResponse)(nil),                // 17: temporal.server.api.matchingservice.v1.ListTaskQueuePartitionsResponse
+	(*UpdateWorkerBuildIdCompatibilityRequest)(nil),        // 18: temporal.server.api.matchingservice.v1.UpdateWorkerBuildIdCompatibilityRequest
+	(*UpdateWorkerBuildIdCompatibilityResponse)(nil),       // 19: temporal.server.api.matchingservice.v1.UpdateWorkerBuildIdCompatibilityResponse
+	(*GetWorkerBuildIdCompatibilityRequest)(nil),           // 20: temporal.server.api.matchingservice.v1.GetWorkerBuildIdCompatibilityRequest
+	(*GetWorkerBuildIdCompatibilityResponse)(nil),          // 21: temporal.server.api.matchingservice.v1.GetWorkerBuildIdCompatibilityResponse
+	(*GetTaskQueueUserDataRequest)(nil),                    // 22: temporal.server.api.matchingservice.v1.GetTaskQueueUserDataRequest
+	(*GetTaskQueueUserDataResponse)(nil),                   // 23: temporal.server.api.matchingservice.v1.GetTaskQueueUserDataResponse
+	(*ApplyTaskQueueUserDataReplicationEventRequest)(nil),  // 24: temporal.server.api.matchingservice.v1.ApplyTaskQueueUserDataReplicationEventRequest
+	(*ApplyTaskQueueUserDataReplicationEventResponse)(nil), // 25: temporal.server.api.matchingservice.v1.ApplyTaskQueueUserDataReplicationEventResponse
+	(*GetBuildIdTaskQueueMappingRequest)(nil),              // 26: temporal.server.api.matchingservice.v1.GetBuildIdTaskQueueMappingRequest
+	(*GetBuildIdTaskQueueMappingResponse)(nil),             // 27: temporal.server.api.matchingservice.v1.GetBuildIdTaskQueueMappingResponse
+	(*ForceUnloadTaskQueueRequest)(nil),                    // 28: temporal.server.api.matchingservice.v1.ForceUnloadTaskQueueRequest
+	(*ForceUnloadTaskQueueResponse)(nil),                   // 29: temporal.server.api.matchingservice.v1.ForceUnloadTaskQueueResponse
+	(*UpdateTaskQueueUserDataRequest)(nil),                 // 30: temporal.server.api.matchingservice.v1.UpdateTaskQueueUserDataRequest
+	(*UpdateTaskQueueUserDataResponse)(nil),                // 31: temporal.server.api.matchingservice.v1.UpdateTaskQueueUserDataResponse
+	(*ReplicateTaskQueueUserDataRequest)(nil),              // 32: temporal.server.api.matchingservice.v1.ReplicateTaskQueueUserDataRequest
+	(*ReplicateTaskQueueUserDataResponse)(nil),             // 33: temporal.server.api.matchingservice.v1.ReplicateTaskQueueUserDataResponse
+	(*DispatchNexusTaskRequest)(nil),                       // 34: temporal.server.api.matchingservice.v1.DispatchNexusTaskRequest
+	(*DispatchNexusTaskResponse)(nil),                      // 35: temporal.server.api.matchingservice.v1.DispatchNexusTaskResponse
+	(*PollNexusTaskQueueRequest)(nil),                      // 36: temporal.server.api.matchingservice.v1.PollNexusTaskQueueRequest
+	(*PollNexusTaskQueueResponse)(nil),                     // 37: temporal.server.api.matchingservice.v1.PollNexusTaskQueueResponse
+	(*RespondNexusTaskCompletedRequest)(nil),               // 38: temporal.server.api.matchingservice.v1.RespondNexusTaskCompletedRequest
+	(*RespondNexusTaskCompletedResponse)(nil),              // 39: temporal.server.api.matchingservice.v1.RespondNexusTaskCompletedResponse
+	(*RespondNexusTaskFailedRequest)(nil),                  // 40: temporal.server.api.matchingservice.v1.RespondNexusTaskFailedRequest
+	(*RespondNexusTaskFailedResponse)(nil),                 // 41: temporal.server.api.matchingservice.v1.RespondNexusTaskFailedResponse
+	(*CreateOrUpdateNexusIncomingServiceRequest)(nil),      // 42: temporal.server.api.matchingservice.v1.CreateOrUpdateNexusIncomingServiceRequest
+	(*CreateOrUpdateNexusIncomingServiceResponse)(nil),     // 43: temporal.server.api.matchingservice.v1.CreateOrUpdateNexusIncomingServiceResponse
+	(*DeleteNexusIncomingServiceRequest)(nil),              // 44: temporal.server.api.matchingservice.v1.DeleteNexusIncomingServiceRequest
+	(*DeleteNexusIncomingServiceResponse)(nil),             // 45: temporal.server.api.matchingservice.v1.DeleteNexusIncomingServiceResponse
+	(*ListNexusIncomingServicesRequest)(nil),               // 46: temporal.server.api.matchingservice.v1.ListNexusIncomingServicesRequest
+	(*ListNexusIncomingServicesResponse)(nil),              // 47: temporal.server.api.matchingservice.v1.ListNexusIncomingServicesResponse
+	nil, // 48: temporal.server.api.matchingservice.v1.PollWorkflowTaskQueueResponse.QueriesEntry
 	(*UpdateWorkerBuildIdCompatibilityRequest_ApplyPublicRequest)(nil), // 49: temporal.server.api.matchingservice.v1.UpdateWorkerBuildIdCompatibilityRequest.ApplyPublicRequest
 	(*UpdateWorkerBuildIdCompatibilityRequest_RemoveBuildIds)(nil),     // 50: temporal.server.api.matchingservice.v1.UpdateWorkerBuildIdCompatibilityRequest.RemoveBuildIds
 	(*v1.PollWorkflowTaskQueueRequest)(nil),                            // 51: temporal.api.workflowservice.v1.PollWorkflowTaskQueueRequest
@@ -4266,9 +4273,9 @@ var file_temporal_server_api_matchingservice_v1_request_response_proto_depIdxs =
 	85, // 68: temporal.server.api.matchingservice.v1.RespondNexusTaskCompletedRequest.request:type_name -> temporal.api.workflowservice.v1.RespondNexusTaskCompletedRequest
 	56, // 69: temporal.server.api.matchingservice.v1.RespondNexusTaskFailedRequest.task_queue:type_name -> temporal.api.taskqueue.v1.TaskQueue
 	86, // 70: temporal.server.api.matchingservice.v1.RespondNexusTaskFailedRequest.request:type_name -> temporal.api.workflowservice.v1.RespondNexusTaskFailedRequest
-	87, // 71: temporal.server.api.matchingservice.v1.CreateOrUpdateNexusServiceRequest.service:type_name -> temporal.api.nexus.v1.IncomingService
-	88, // 72: temporal.server.api.matchingservice.v1.CreateOrUpdateNexusServiceResponse.entry:type_name -> temporal.server.api.persistence.v1.NexusIncomingServiceEntry
-	88, // 73: temporal.server.api.matchingservice.v1.ListNexusServicesResponse.entries:type_name -> temporal.server.api.persistence.v1.NexusIncomingServiceEntry
+	87, // 71: temporal.server.api.matchingservice.v1.CreateOrUpdateNexusIncomingServiceRequest.service:type_name -> temporal.api.nexus.v1.IncomingService
+	88, // 72: temporal.server.api.matchingservice.v1.CreateOrUpdateNexusIncomingServiceResponse.entry:type_name -> temporal.server.api.persistence.v1.NexusIncomingServiceEntry
+	88, // 73: temporal.server.api.matchingservice.v1.ListNexusIncomingServicesResponse.entries:type_name -> temporal.server.api.persistence.v1.NexusIncomingServiceEntry
 	54, // 74: temporal.server.api.matchingservice.v1.PollWorkflowTaskQueueResponse.QueriesEntry.value:type_name -> temporal.api.query.v1.WorkflowQuery
 	89, // 75: temporal.server.api.matchingservice.v1.UpdateWorkerBuildIdCompatibilityRequest.ApplyPublicRequest.request:type_name -> temporal.api.workflowservice.v1.UpdateWorkerBuildIdCompatibilityRequest
 	76, // [76:76] is the sub-list for method output_type
@@ -4789,7 +4796,7 @@ func file_temporal_server_api_matchingservice_v1_request_response_proto_init() {
 			}
 		}
 		file_temporal_server_api_matchingservice_v1_request_response_proto_msgTypes[42].Exporter = func(v interface{}, i int) interface{} {
-			switch v := v.(*CreateOrUpdateNexusServiceRequest); i {
+			switch v := v.(*CreateOrUpdateNexusIncomingServiceRequest); i {
 			case 0:
 				return &v.state
 			case 1:
@@ -4801,7 +4808,7 @@ func file_temporal_server_api_matchingservice_v1_request_response_proto_init() {
 			}
 		}
 		file_temporal_server_api_matchingservice_v1_request_response_proto_msgTypes[43].Exporter = func(v interface{}, i int) interface{} {
-			switch v := v.(*CreateOrUpdateNexusServiceResponse); i {
+			switch v := v.(*CreateOrUpdateNexusIncomingServiceResponse); i {
 			case 0:
 				return &v.state
 			case 1:
@@ -4813,7 +4820,7 @@ func file_temporal_server_api_matchingservice_v1_request_response_proto_init() {
 			}
 		}
 		file_temporal_server_api_matchingservice_v1_request_response_proto_msgTypes[44].Exporter = func(v interface{}, i int) interface{} {
-			switch v := v.(*DeleteNexusServiceRequest); i {
+			switch v := v.(*DeleteNexusIncomingServiceRequest); i {
 			case 0:
 				return &v.state
 			case 1:
@@ -4825,7 +4832,7 @@ func file_temporal_server_api_matchingservice_v1_request_response_proto_init() {
 			}
 		}
 		file_temporal_server_api_matchingservice_v1_request_response_proto_msgTypes[45].Exporter = func(v interface{}, i int) interface{} {
-			switch v := v.(*DeleteNexusServiceResponse); i {
+			switch v := v.(*DeleteNexusIncomingServiceResponse); i {
 			case 0:
 				return &v.state
 			case 1:
@@ -4837,7 +4844,7 @@ func file_temporal_server_api_matchingservice_v1_request_response_proto_init() {
 			}
 		}
 		file_temporal_server_api_matchingservice_v1_request_response_proto_msgTypes[46].Exporter = func(v interface{}, i int) interface{} {
-			switch v := v.(*ListNexusServicesRequest); i {
+			switch v := v.(*ListNexusIncomingServicesRequest); i {
 			case 0:
 				return &v.state
 			case 1:
@@ -4849,7 +4856,7 @@ func file_temporal_server_api_matchingservice_v1_request_response_proto_init() {
 			}
 		}
 		file_temporal_server_api_matchingservice_v1_request_response_proto_msgTypes[47].Exporter = func(v interface{}, i int) interface{} {
-			switch v := v.(*ListNexusServicesResponse); i {
+			switch v := v.(*ListNexusIncomingServicesResponse); i {
 			case 0:
 				return &v.state
 			case 1:
