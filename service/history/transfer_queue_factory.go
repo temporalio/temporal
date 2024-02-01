@@ -193,7 +193,6 @@ func (f *transferQueueFactory) CreateQueue(
 			CheckpointInterval:                  f.Config.TransferProcessorUpdateAckInterval,
 			CheckpointIntervalJitterCoefficient: f.Config.TransferProcessorUpdateAckIntervalJitterCoefficient,
 			MaxReaderCount:                      f.Config.QueueMaxReaderCount,
-			DropInternalErrors:                  f.Config.TaskDropInternalErrors,
 		},
 		f.HostReaderRateLimiter,
 		logger,

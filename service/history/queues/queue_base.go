@@ -120,7 +120,6 @@ type (
 		CheckpointInterval                  dynamicconfig.DurationPropertyFn
 		CheckpointIntervalJitterCoefficient dynamicconfig.FloatPropertyFn
 		MaxReaderCount                      dynamicconfig.IntPropertyFn
-		DropInternalErrors                  dynamicconfig.BoolPropertyFn
 	}
 )
 
@@ -169,7 +168,7 @@ func newQueueBase(
 			shard.GetClusterMetadata(),
 			logger,
 			metricsHandler,
-			options.DropInternalErrors,
+			shard.GetConfig().TaskDropInternalErrors,
 		)
 	}
 
