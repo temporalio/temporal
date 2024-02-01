@@ -139,6 +139,9 @@ service HistoryService {
     rpc SignalWithStartWorkflowExecution (SignalWithStartWorkflowExecutionRequest) returns (SignalWithStartWorkflowExecutionResponse) {
     }
 
+    rpc MultiOperationWorkflowExecution (MultiOperationWorkflowExecutionRequest) returns (MultiOperationWorkflowExecutionResponse) {
+    }
+
     // RemoveSignalMutableState is used to remove a signal request Id that was previously recorded.  This is currently
     // used to clean execution info when signal workflow task finished.
     rpc RemoveSignalMutableState (RemoveSignalMutableStateRequest) returns (RemoveSignalMutableStateResponse) {

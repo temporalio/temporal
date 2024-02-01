@@ -25,6 +25,7 @@
 package api
 
 import (
+	"errors"
 	"fmt"
 
 	enumspb "go.temporal.io/api/enums/v1"
@@ -35,6 +36,8 @@ import (
 	"go.temporal.io/server/service/history/consts"
 	"go.temporal.io/server/service/history/workflow"
 )
+
+var ErrIgnoreWorkflowStart = errors.New("ignore Workflow start")
 
 // ApplyWorkflowIDReusePolicy returns updateWorkflowActionFunc
 // for updating the previous execution and an error if the situation is
@@ -56,7 +59,8 @@ func ApplyWorkflowIDReusePolicy(
 	switch prevState {
 	case enumsspb.WORKFLOW_EXECUTION_STATE_CREATED,
 		enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING:
-		if wfIDReusePolicy == enumspb.WORKFLOW_ID_REUSE_POLICY_TERMINATE_IF_RUNNING {
+		switch wfIDReusePolicy {
+		case enumspb.WORKFLOW_ID_REUSE_POLICY_TERMINATE_IF_RUNNING:
 			return func(workflowLease WorkflowLease) (*UpdateWorkflowAction, error) {
 				mutableState := workflowLease.GetMutableState()
 				if !mutableState.IsWorkflowExecutionRunning() {
@@ -73,10 +77,12 @@ func ApplyWorkflowIDReusePolicy(
 					false,
 				)
 			}, nil
+		case enumspb.WORKFLOW_ID_REUSE_POLICY_SKIP_IF_RUNNING:
+			return nil, ErrIgnoreWorkflowStart
+		default:
+			msg := "Workflow execution is already running. WorkflowId: %v, RunId: %v."
+			return nil, generateWorkflowAlreadyStartedError(msg, prevStartRequestID, workflowID, prevRunID)
 		}
-
-		msg := "Workflow execution is already running. WorkflowId: %v, RunId: %v."
-		return nil, generateWorkflowAlreadyStartedError(msg, prevStartRequestID, workflowID, prevRunID)
 	case enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED:
 		// previous workflow completed, proceed
 	default:

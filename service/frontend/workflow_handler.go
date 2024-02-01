@@ -421,6 +421,98 @@ func (wh *WorkflowHandler) StartWorkflowExecution(ctx context.Context, request *
 	return &workflowservice.StartWorkflowExecutionResponse{RunId: resp.GetRunId(), EagerWorkflowTask: resp.GetEagerWorkflowTask()}, nil
 }
 
+func (wh *WorkflowHandler) MultiOperationWorkflowExecution(
+	ctx context.Context,
+	request *workflowservice.MultiOperationWorkflowExecutionRequest,
+) (_ *workflowservice.MultiOperationWorkflowExecutionResponse, retError error) {
+	defer log.CapturePanic(wh.logger, &retError)
+
+	if request == nil {
+		return nil, errRequestNotSet
+	}
+
+	// TODO: all the validation stuff ...
+	// TODO: ensure it's the same Workflow ID
+
+	namespaceName := namespace.Name(request.GetNamespace())
+	namespaceID, err := wh.namespaceRegistry.GetNamespaceID(namespaceName)
+	if err != nil {
+		return nil, err
+	}
+
+	workflowId := request.Operations[0].GetStartWorkflow().WorkflowId
+
+	historyReq := &historyservice.MultiOperationWorkflowExecutionRequest{
+		NamespaceId: namespaceID.String(),
+		WorkflowId:  workflowId,
+		Operations:  make([]*historyservice.MultiOperationWorkflowExecutionRequest_Operation, len(request.Operations)),
+	}
+	for i, op := range request.Operations {
+		var opReq *historyservice.MultiOperationWorkflowExecutionRequest_Operation
+		if startReq := op.GetStartWorkflow(); startReq != nil {
+			opReq = &historyservice.MultiOperationWorkflowExecutionRequest_Operation{
+				Operation: &historyservice.MultiOperationWorkflowExecutionRequest_Operation_StartWorkflow{
+					StartWorkflow: common.CreateHistoryStartWorkflowRequest(
+						namespaceID.String(),
+						startReq,
+						nil,
+						time.Now().UTC(),
+					),
+				},
+			}
+		} else if updateReq := op.GetUpdateWorkflow(); updateReq != nil {
+			opReq = &historyservice.MultiOperationWorkflowExecutionRequest_Operation{
+				Operation: &historyservice.MultiOperationWorkflowExecutionRequest_Operation_UpdateWorkflow{
+					UpdateWorkflow: &historyservice.UpdateWorkflowExecutionRequest{
+						NamespaceId: namespaceID.String(),
+						Request:     updateReq,
+					},
+				},
+			}
+		} else {
+			// TODO
+		}
+		historyReq.Operations[i] = opReq
+	}
+
+	historyResp, err := wh.historyClient.MultiOperationWorkflowExecution(ctx, historyReq)
+	if err != nil {
+		return nil, err
+	}
+
+	resp := &workflowservice.MultiOperationWorkflowExecutionResponse{
+		Operations: make([]*workflowservice.MultiOperationWorkflowExecutionResponse_Operation, len(historyResp.Operations)),
+	}
+	for i, op := range historyResp.Operations {
+		var opResp *workflowservice.MultiOperationWorkflowExecutionResponse_Operation
+		if startResp := op.GetStartWorkflow(); startResp != nil {
+			opResp = &workflowservice.MultiOperationWorkflowExecutionResponse_Operation{
+				Operation: &workflowservice.MultiOperationWorkflowExecutionResponse_Operation_StartWorkflow{
+					StartWorkflow: &workflowservice.StartWorkflowExecutionResponse{
+						RunId:             startResp.RunId,
+						EagerWorkflowTask: startResp.EagerWorkflowTask,
+					},
+				},
+			}
+		} else if updateResp := op.GetUpdateWorkflow(); updateResp != nil {
+			opResp = &workflowservice.MultiOperationWorkflowExecutionResponse_Operation{
+				Operation: &workflowservice.MultiOperationWorkflowExecutionResponse_Operation_UpdateWorkflow{
+					UpdateWorkflow: &workflowservice.UpdateWorkflowExecutionResponse{
+						UpdateRef: updateResp.Response.UpdateRef,
+						Outcome:   updateResp.Response.Outcome,
+						Stage:     updateResp.Response.Stage,
+					},
+				},
+			}
+		} else {
+			// TODO
+		}
+		resp.Operations[i] = opResp
+	}
+
+	return resp, nil
+}
+
 // GetWorkflowExecutionHistory returns the history of specified workflow execution.  It fails with 'EntityNotExistError' if specified workflow
 // execution in unknown to the service.
 func (wh *WorkflowHandler) GetWorkflowExecutionHistory(ctx context.Context, request *workflowservice.GetWorkflowExecutionHistoryRequest) (_ *workflowservice.GetWorkflowExecutionHistoryResponse, retError error) {

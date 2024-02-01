@@ -397,6 +397,20 @@ func (c *metricClient) ListWorkflowExecutions(
 	return c.client.ListWorkflowExecutions(ctx, request, opts...)
 }
 
+func (c *metricClient) MultiOperationWorkflowExecution(
+	ctx context.Context,
+	request *workflowservice.MultiOperationWorkflowExecutionRequest,
+	opts ...grpc.CallOption,
+) (_ *workflowservice.MultiOperationWorkflowExecutionResponse, retError error) {
+
+	metricsHandler, startTime := c.startMetricsRecording(ctx, "FrontendClientMultiOperationWorkflowExecution")
+	defer func() {
+		c.finishMetricsRecording(metricsHandler, startTime, retError)
+	}()
+
+	return c.client.MultiOperationWorkflowExecution(ctx, request, opts...)
+}
+
 func (c *metricClient) PatchSchedule(
 	ctx context.Context,
 	request *workflowservice.PatchScheduleRequest,

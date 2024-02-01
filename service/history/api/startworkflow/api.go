@@ -334,6 +334,7 @@ func (s *Starter) applyWorkflowIDReusePolicy(
 	creationParams *creationParams,
 ) (*historyservice.StartWorkflowExecutionResponse, error) {
 	workflowID := s.request.StartRequest.WorkflowId
+
 	prevExecutionUpdateAction, err := api.ApplyWorkflowIDReusePolicy(
 		currentWorkflowConditionFailed.RequestID,
 		currentWorkflowConditionFailed.RunID,
@@ -343,13 +344,15 @@ func (s *Starter) applyWorkflowIDReusePolicy(
 		creationParams.runID,
 		s.request.StartRequest.GetWorkflowIdReusePolicy(),
 	)
-	if err != nil {
+	switch {
+	case errors.Is(err, api.ErrIgnoreWorkflowStart):
+		return &historyservice.StartWorkflowExecutionResponse{RunId: currentWorkflowConditionFailed.RunID}, nil
+	case err != nil:
 		return nil, err
-	}
-
-	if prevExecutionUpdateAction == nil {
+	case prevExecutionUpdateAction == nil:
 		return nil, nil
 	}
+
 	var mutableStateInfo *mutableStateInfo
 	// update prev execution and create new execution in one transaction
 	// we already validated that currentWorkflowConditionFailed.RunID is not empty,

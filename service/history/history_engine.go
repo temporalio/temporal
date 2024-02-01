@@ -33,6 +33,7 @@ import (
 	commonpb "go.temporal.io/api/common/v1"
 	historypb "go.temporal.io/api/history/v1"
 	"go.temporal.io/server/service/history/api/getworkflowexecutionrawhistory"
+	"go.temporal.io/server/service/history/api/multioperationworkflow"
 
 	historyspb "go.temporal.io/server/api/history/v1"
 	workflowpb "go.temporal.io/server/api/workflow/v1"
@@ -376,6 +377,21 @@ func (e *historyEngineImpl) StartWorkflowExecution(
 		return nil, err
 	}
 	return starter.Invoke(ctx)
+}
+
+func (e *historyEngineImpl) MultiOperationWorkflowExecution(
+	ctx context.Context,
+	request *historyservice.MultiOperationWorkflowExecutionRequest,
+) (*historyservice.MultiOperationWorkflowExecutionResponse, error) {
+	return multioperationworkflow.Invoke(
+		ctx,
+		request,
+		e.shardContext,
+		e.workflowConsistencyChecker,
+		e.tokenSerializer,
+		e.persistenceVisibilityMgr,
+		e.matchingClient,
+	)
 }
 
 // GetMutableState retrieves the mutable state of the workflow execution

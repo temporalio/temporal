@@ -150,6 +150,30 @@ message ResetStickyTaskQueueRequest {
 message ResetStickyTaskQueueResponse {
 }
 
+message MultiOperationWorkflowExecutionRequest {
+    string namespace_id = 1;
+    string workflow_id = 2;
+    repeated Operation operations = 3;
+
+    message Operation {
+        oneof operation {
+            StartWorkflowExecutionRequest start_workflow = 1;
+            UpdateWorkflowExecutionRequest update_workflow = 2;
+        }
+    }
+}
+
+message MultiOperationWorkflowExecutionResponse {
+    repeated Operation operations = 1;
+
+    message Operation {
+        oneof operation {
+            StartWorkflowExecutionResponse start_workflow = 1;
+            UpdateWorkflowExecutionResponse update_workflow = 2;
+        }
+    }
+}
+
 message RecordWorkflowTaskStartedRequest {
     string namespace_id = 1;
     temporal.api.common.v1.WorkflowExecution workflow_execution = 2;

@@ -58,6 +58,7 @@ const (
 	HistoryService_IsActivityTaskValid_FullMethodName                    = "/temporal.server.api.historyservice.v1.HistoryService/IsActivityTaskValid"
 	HistoryService_SignalWorkflowExecution_FullMethodName                = "/temporal.server.api.historyservice.v1.HistoryService/SignalWorkflowExecution"
 	HistoryService_SignalWithStartWorkflowExecution_FullMethodName       = "/temporal.server.api.historyservice.v1.HistoryService/SignalWithStartWorkflowExecution"
+	HistoryService_MultiOperationWorkflowExecution_FullMethodName        = "/temporal.server.api.historyservice.v1.HistoryService/MultiOperationWorkflowExecution"
 	HistoryService_RemoveSignalMutableState_FullMethodName               = "/temporal.server.api.historyservice.v1.HistoryService/RemoveSignalMutableState"
 	HistoryService_TerminateWorkflowExecution_FullMethodName             = "/temporal.server.api.historyservice.v1.HistoryService/TerminateWorkflowExecution"
 	HistoryService_DeleteWorkflowExecution_FullMethodName                = "/temporal.server.api.historyservice.v1.HistoryService/DeleteWorkflowExecution"
@@ -186,6 +187,7 @@ type HistoryServiceClient interface {
 	// and record WorkflowExecutionStarted and WorkflowExecutionSignaled event in case of success.
 	// It will return `WorkflowExecutionAlreadyStartedError` if start workflow failed with given policy.
 	SignalWithStartWorkflowExecution(ctx context.Context, in *SignalWithStartWorkflowExecutionRequest, opts ...grpc.CallOption) (*SignalWithStartWorkflowExecutionResponse, error)
+	MultiOperationWorkflowExecution(ctx context.Context, in *MultiOperationWorkflowExecutionRequest, opts ...grpc.CallOption) (*MultiOperationWorkflowExecutionResponse, error)
 	// RemoveSignalMutableState is used to remove a signal request Id that was previously recorded.  This is currently
 	// used to clean execution info when signal workflow task finished.
 	RemoveSignalMutableState(ctx context.Context, in *RemoveSignalMutableStateRequest, opts ...grpc.CallOption) (*RemoveSignalMutableStateResponse, error)
@@ -454,6 +456,15 @@ func (c *historyServiceClient) SignalWorkflowExecution(ctx context.Context, in *
 func (c *historyServiceClient) SignalWithStartWorkflowExecution(ctx context.Context, in *SignalWithStartWorkflowExecutionRequest, opts ...grpc.CallOption) (*SignalWithStartWorkflowExecutionResponse, error) {
 	out := new(SignalWithStartWorkflowExecutionResponse)
 	err := c.cc.Invoke(ctx, HistoryService_SignalWithStartWorkflowExecution_FullMethodName, in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *historyServiceClient) MultiOperationWorkflowExecution(ctx context.Context, in *MultiOperationWorkflowExecutionRequest, opts ...grpc.CallOption) (*MultiOperationWorkflowExecutionResponse, error) {
+	out := new(MultiOperationWorkflowExecutionResponse)
+	err := c.cc.Invoke(ctx, HistoryService_MultiOperationWorkflowExecution_FullMethodName, in, out, opts...)
 	if err != nil {
 		return nil, err
 	}
@@ -960,6 +971,7 @@ type HistoryServiceServer interface {
 	// and record WorkflowExecutionStarted and WorkflowExecutionSignaled event in case of success.
 	// It will return `WorkflowExecutionAlreadyStartedError` if start workflow failed with given policy.
 	SignalWithStartWorkflowExecution(context.Context, *SignalWithStartWorkflowExecutionRequest) (*SignalWithStartWorkflowExecutionResponse, error)
+	MultiOperationWorkflowExecution(context.Context, *MultiOperationWorkflowExecutionRequest) (*MultiOperationWorkflowExecutionResponse, error)
 	// RemoveSignalMutableState is used to remove a signal request Id that was previously recorded.  This is currently
 	// used to clean execution info when signal workflow task finished.
 	RemoveSignalMutableState(context.Context, *RemoveSignalMutableStateRequest) (*RemoveSignalMutableStateResponse, error)
@@ -1134,6 +1146,9 @@ func (UnimplementedHistoryServiceServer) SignalWorkflowExecution(context.Context
 }
 func (UnimplementedHistoryServiceServer) SignalWithStartWorkflowExecution(context.Context, *SignalWithStartWorkflowExecutionRequest) (*SignalWithStartWorkflowExecutionResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method SignalWithStartWorkflowExecution not implemented")
+}
+func (UnimplementedHistoryServiceServer) MultiOperationWorkflowExecution(context.Context, *MultiOperationWorkflowExecutionRequest) (*MultiOperationWorkflowExecutionResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method MultiOperationWorkflowExecution not implemented")
 }
 func (UnimplementedHistoryServiceServer) RemoveSignalMutableState(context.Context, *RemoveSignalMutableStateRequest) (*RemoveSignalMutableStateResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method RemoveSignalMutableState not implemented")
@@ -1564,6 +1579,24 @@ func _HistoryService_SignalWithStartWorkflowExecution_Handler(srv interface{}, c
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
 		return srv.(HistoryServiceServer).SignalWithStartWorkflowExecution(ctx, req.(*SignalWithStartWorkflowExecutionRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _HistoryService_MultiOperationWorkflowExecution_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(MultiOperationWorkflowExecutionRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(HistoryServiceServer).MultiOperationWorkflowExecution(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: HistoryService_MultiOperationWorkflowExecution_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(HistoryServiceServer).MultiOperationWorkflowExecution(ctx, req.(*MultiOperationWorkflowExecutionRequest))
 	}
 	return interceptor(ctx, in, info, handler)
 }
@@ -2438,6 +2471,10 @@ var HistoryService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "SignalWithStartWorkflowExecution",
 			Handler:    _HistoryService_SignalWithStartWorkflowExecution_Handler,
+		},
+		{
+			MethodName: "MultiOperationWorkflowExecution",
+			Handler:    _HistoryService_MultiOperationWorkflowExecution_Handler,
 		},
 		{
 			MethodName: "RemoveSignalMutableState",

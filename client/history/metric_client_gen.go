@@ -397,6 +397,20 @@ func (c *metricClient) MergeDLQMessages(
 	return c.client.MergeDLQMessages(ctx, request, opts...)
 }
 
+func (c *metricClient) MultiOperationWorkflowExecution(
+	ctx context.Context,
+	request *historyservice.MultiOperationWorkflowExecutionRequest,
+	opts ...grpc.CallOption,
+) (_ *historyservice.MultiOperationWorkflowExecutionResponse, retError error) {
+
+	metricsHandler, startTime := c.startMetricsRecording(ctx, "HistoryClientMultiOperationWorkflowExecution")
+	defer func() {
+		c.finishMetricsRecording(metricsHandler, startTime, retError)
+	}()
+
+	return c.client.MultiOperationWorkflowExecution(ctx, request, opts...)
+}
+
 func (c *metricClient) PollMutableState(
 	ctx context.Context,
 	request *historyservice.PollMutableStateRequest,

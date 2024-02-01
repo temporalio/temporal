@@ -606,6 +606,32 @@ func (h *Handler) StartWorkflowExecution(ctx context.Context, request *historyse
 	return response, nil
 }
 
+func (h *Handler) MultiOperationWorkflowExecution(
+	ctx context.Context,
+	request *historyservice.MultiOperationWorkflowExecutionRequest,
+) (*historyservice.MultiOperationWorkflowExecutionResponse, error) {
+
+	// TODO
+
+	namespaceID := namespace.ID(request.GetNamespaceId())
+	if namespaceID == "" {
+		return nil, h.convertError(errNamespaceNotSet)
+	}
+
+	workflowID := request.WorkflowId
+	shardContext, err := h.controller.GetShardByNamespaceWorkflow(namespaceID, workflowID)
+	if err != nil {
+		return nil, h.convertError(err)
+	}
+
+	engine, err := shardContext.GetEngine(ctx)
+	if err != nil {
+		return nil, h.convertError(err)
+	}
+
+	return engine.MultiOperationWorkflowExecution(ctx, request)
+}
+
 // DescribeHistoryHost returns information about the internal states of a history host
 func (h *Handler) DescribeHistoryHost(_ context.Context, _ *historyservice.DescribeHistoryHostRequest) (_ *historyservice.DescribeHistoryHostResponse, retError error) {
 	defer metrics.CapturePanic(h.logger, h.metricsHandler, &retError)

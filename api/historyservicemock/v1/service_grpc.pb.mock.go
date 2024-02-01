@@ -581,6 +581,26 @@ func (mr *MockHistoryServiceClientMockRecorder) MergeDLQMessages(ctx, in interfa
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "MergeDLQMessages", reflect.TypeOf((*MockHistoryServiceClient)(nil).MergeDLQMessages), varargs...)
 }
 
+// MultiOperationWorkflowExecution mocks base method.
+func (m *MockHistoryServiceClient) MultiOperationWorkflowExecution(ctx context.Context, in *historyservice.MultiOperationWorkflowExecutionRequest, opts ...grpc.CallOption) (*historyservice.MultiOperationWorkflowExecutionResponse, error) {
+	m.ctrl.T.Helper()
+	varargs := []interface{}{ctx, in}
+	for _, a := range opts {
+		varargs = append(varargs, a)
+	}
+	ret := m.ctrl.Call(m, "MultiOperationWorkflowExecution", varargs...)
+	ret0, _ := ret[0].(*historyservice.MultiOperationWorkflowExecutionResponse)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// MultiOperationWorkflowExecution indicates an expected call of MultiOperationWorkflowExecution.
+func (mr *MockHistoryServiceClientMockRecorder) MultiOperationWorkflowExecution(ctx, in interface{}, opts ...interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	varargs := append([]interface{}{ctx, in}, opts...)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "MultiOperationWorkflowExecution", reflect.TypeOf((*MockHistoryServiceClient)(nil).MultiOperationWorkflowExecution), varargs...)
+}
+
 // PollMutableState mocks base method.
 func (m *MockHistoryServiceClient) PollMutableState(ctx context.Context, in *historyservice.PollMutableStateRequest, opts ...grpc.CallOption) (*historyservice.PollMutableStateResponse, error) {
 	m.ctrl.T.Helper()
@@ -1809,6 +1829,21 @@ func (m *MockHistoryServiceServer) MergeDLQMessages(arg0 context.Context, arg1 *
 func (mr *MockHistoryServiceServerMockRecorder) MergeDLQMessages(arg0, arg1 interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "MergeDLQMessages", reflect.TypeOf((*MockHistoryServiceServer)(nil).MergeDLQMessages), arg0, arg1)
+}
+
+// MultiOperationWorkflowExecution mocks base method.
+func (m *MockHistoryServiceServer) MultiOperationWorkflowExecution(arg0 context.Context, arg1 *historyservice.MultiOperationWorkflowExecutionRequest) (*historyservice.MultiOperationWorkflowExecutionResponse, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "MultiOperationWorkflowExecution", arg0, arg1)
+	ret0, _ := ret[0].(*historyservice.MultiOperationWorkflowExecutionResponse)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// MultiOperationWorkflowExecution indicates an expected call of MultiOperationWorkflowExecution.
+func (mr *MockHistoryServiceServerMockRecorder) MultiOperationWorkflowExecution(arg0, arg1 interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "MultiOperationWorkflowExecution", reflect.TypeOf((*MockHistoryServiceServer)(nil).MultiOperationWorkflowExecution), arg0, arg1)
 }
 
 // PollMutableState mocks base method.

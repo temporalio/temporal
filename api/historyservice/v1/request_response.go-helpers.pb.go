@@ -325,6 +325,80 @@ func (this *ResetStickyTaskQueueResponse) Equal(that interface{}) bool {
 	return proto.Equal(this, that1)
 }
 
+// Marshal an object of type MultiOperationWorkflowExecutionRequest to the protobuf v3 wire format
+func (val *MultiOperationWorkflowExecutionRequest) Marshal() ([]byte, error) {
+	return proto.Marshal(val)
+}
+
+// Unmarshal an object of type MultiOperationWorkflowExecutionRequest from the protobuf v3 wire format
+func (val *MultiOperationWorkflowExecutionRequest) Unmarshal(buf []byte) error {
+	return proto.Unmarshal(buf, val)
+}
+
+// Size returns the size of the object, in bytes, once serialized
+func (val *MultiOperationWorkflowExecutionRequest) Size() int {
+	return proto.Size(val)
+}
+
+// Equal returns whether two MultiOperationWorkflowExecutionRequest values are equivalent by recursively
+// comparing the message's fields.
+// For more information see the documentation for
+// https://pkg.go.dev/google.golang.org/protobuf/proto#Equal
+func (this *MultiOperationWorkflowExecutionRequest) Equal(that interface{}) bool {
+	if that == nil {
+		return this == nil
+	}
+
+	var that1 *MultiOperationWorkflowExecutionRequest
+	switch t := that.(type) {
+	case *MultiOperationWorkflowExecutionRequest:
+		that1 = t
+	case MultiOperationWorkflowExecutionRequest:
+		that1 = &t
+	default:
+		return false
+	}
+
+	return proto.Equal(this, that1)
+}
+
+// Marshal an object of type MultiOperationWorkflowExecutionResponse to the protobuf v3 wire format
+func (val *MultiOperationWorkflowExecutionResponse) Marshal() ([]byte, error) {
+	return proto.Marshal(val)
+}
+
+// Unmarshal an object of type MultiOperationWorkflowExecutionResponse from the protobuf v3 wire format
+func (val *MultiOperationWorkflowExecutionResponse) Unmarshal(buf []byte) error {
+	return proto.Unmarshal(buf, val)
+}
+
+// Size returns the size of the object, in bytes, once serialized
+func (val *MultiOperationWorkflowExecutionResponse) Size() int {
+	return proto.Size(val)
+}
+
+// Equal returns whether two MultiOperationWorkflowExecutionResponse values are equivalent by recursively
+// comparing the message's fields.
+// For more information see the documentation for
+// https://pkg.go.dev/google.golang.org/protobuf/proto#Equal
+func (this *MultiOperationWorkflowExecutionResponse) Equal(that interface{}) bool {
+	if that == nil {
+		return this == nil
+	}
+
+	var that1 *MultiOperationWorkflowExecutionResponse
+	switch t := that.(type) {
+	case *MultiOperationWorkflowExecutionResponse:
+		that1 = t
+	case MultiOperationWorkflowExecutionResponse:
+		that1 = &t
+	default:
+		return false
+	}
+
+	return proto.Equal(this, that1)
+}
+
 // Marshal an object of type RecordWorkflowTaskStartedRequest to the protobuf v3 wire format
 func (val *RecordWorkflowTaskStartedRequest) Marshal() ([]byte, error) {
 	return proto.Marshal(val)
