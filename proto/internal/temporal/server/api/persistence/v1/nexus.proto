@@ -60,8 +60,8 @@ message NexusIncomingService {
 }
 
 // Container for a version, a UUID, and a NexusIncomingService.
-message VersionedNexusIncomingService {
+message NexusIncomingServiceEntry {
     int64 version = 1;
     string id = 2;
-    NexusIncomingService service_info = 3;
+    NexusIncomingService service = 3;
 }

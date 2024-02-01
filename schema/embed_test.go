@@ -34,7 +34,6 @@ func TestSchemaDirs(t *testing.T) {
 	dirs := PathsByDir("cassandra")
 	requireContains(t, []string{
 		"cassandra/temporal",
-		"cassandra/visibility",
 	}, dirs)
 
 	dirs = PathsByDir("mysql")

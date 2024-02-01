@@ -60,33 +60,33 @@ const (
 )
 
 type (
-	NexusServiceStore struct {
+	NexusIncomingServiceStore struct {
 		session gocql.Session
 		logger  log.Logger
 	}
 )
 
-func NewNexusServiceStore(
+func NewNexusIncomingServiceStore(
 	session gocql.Session,
 	logger log.Logger,
-) p.NexusServiceStore {
-	return &NexusServiceStore{
+) p.NexusIncomingServiceStore {
+	return &NexusIncomingServiceStore{
 		session: session,
 		logger:  logger,
 	}
 }
 
-func (s *NexusServiceStore) GetName() string {
+func (s *NexusIncomingServiceStore) GetName() string {
 	return cassandraPersistenceName
 }
 
-func (s *NexusServiceStore) Close() {
+func (s *NexusIncomingServiceStore) Close() {
 	if s.session != nil {
 		s.session.Close()
 	}
 }
 
-func (s *NexusServiceStore) CreateOrUpdateNexusIncomingService(
+func (s *NexusIncomingServiceStore) CreateOrUpdateNexusIncomingService(
 	ctx context.Context,
 	request *p.InternalCreateOrUpdateNexusIncomingServiceRequest,
 ) error {
@@ -170,7 +170,7 @@ func (s *NexusServiceStore) CreateOrUpdateNexusIncomingService(
 	return nil
 }
 
-func (s *NexusServiceStore) ListNexusIncomingServices(
+func (s *NexusIncomingServiceStore) ListNexusIncomingServices(
 	ctx context.Context,
 	request *p.ListNexusIncomingServicesRequest,
 ) (*p.InternalListNexusIncomingServicesResponse, error) {
@@ -215,7 +215,7 @@ func (s *NexusServiceStore) ListNexusIncomingServices(
 	return response, nil
 }
 
-func (s *NexusServiceStore) DeleteNexusIncomingService(
+func (s *NexusIncomingServiceStore) DeleteNexusIncomingService(
 	ctx context.Context,
 	request *p.DeleteNexusIncomingServiceRequest,
 ) error {
@@ -263,7 +263,7 @@ func (s *NexusServiceStore) DeleteNexusIncomingService(
 	return nil
 }
 
-func (s *NexusServiceStore) listFirstPageWithVersion(
+func (s *NexusIncomingServiceStore) listFirstPageWithVersion(
 	ctx context.Context,
 	request *p.ListNexusIncomingServicesRequest,
 ) (*p.InternalListNexusIncomingServicesResponse, error) {
@@ -307,7 +307,7 @@ func (s *NexusServiceStore) listFirstPageWithVersion(
 	return response, nil
 }
 
-func (s *NexusServiceStore) getTableVersion(ctx context.Context) (int64, error) {
+func (s *NexusIncomingServiceStore) getTableVersion(ctx context.Context) (int64, error) {
 	query := s.session.Query(templateGetTableVersion, rowTypePartitionStatus, tableVersionServiceID).WithContext(ctx)
 
 	var version int64
@@ -318,7 +318,7 @@ func (s *NexusServiceStore) getTableVersion(ctx context.Context) (int64, error) 
 	return version, nil
 }
 
-func (s *NexusServiceStore) getServiceList(iter gocql.Iter) ([]p.InternalNexusIncomingService, error) {
+func (s *NexusIncomingServiceStore) getServiceList(iter gocql.Iter) ([]p.InternalNexusIncomingService, error) {
 	var services []p.InternalNexusIncomingService
 
 	row := make(map[string]interface{})

@@ -53,7 +53,7 @@ type (
 func NewSqlNexusIncomingServiceStore(
 	db sqlplugin.DB,
 	logger log.Logger,
-) (p.NexusServiceStore, error) {
+) (p.NexusIncomingServiceStore, error) {
 	return &sqlNexusIncomingServiceStore{
 		SqlStore: NewSqlStore(db, logger),
 	}, nil

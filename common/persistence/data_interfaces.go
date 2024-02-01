@@ -1067,16 +1067,16 @@ type (
 	ListNexusIncomingServicesResponse struct {
 		TableVersion  int64
 		NextPageToken []byte
-		Services      []*persistencespb.VersionedNexusIncomingService
+		Entries       []*persistencespb.NexusIncomingServiceEntry
 	}
 
 	CreateOrUpdateNexusIncomingServiceRequest struct {
 		LastKnownTableVersion int64
-		Service               *persistencespb.VersionedNexusIncomingService
+		Entry                 *persistencespb.NexusIncomingServiceEntry
 	}
 
 	CreateOrUpdateNexusIncomingServiceResponse struct {
-		Service *persistencespb.VersionedNexusIncomingService
+		Entry *persistencespb.NexusIncomingServiceEntry
 	}
 
 	DeleteNexusIncomingServiceRequest struct {
@@ -1233,8 +1233,8 @@ type (
 		DeleteClusterMetadata(ctx context.Context, request *DeleteClusterMetadataRequest) error
 	}
 
-	// NexusServiceManager is used to manage CRUD for Nexus services
-	NexusServiceManager interface {
+	// NexusIncomingServiceManager is used to manage CRUD for Nexus services
+	NexusIncomingServiceManager interface {
 		Closeable
 		GetName() string
 		GetNexusIncomingServicesTableVersion(ctx context.Context) (int64, error)

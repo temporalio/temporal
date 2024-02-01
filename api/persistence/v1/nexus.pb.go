@@ -1,3 +1,27 @@
+// The MIT License
+//
+// Copyright (c) 2020 Temporal Technologies Inc.  All rights reserved.
+//
+// Copyright (c) 2020 Uber Technologies, Inc.
+//
+// Permission is hereby granted, free of charge, to any person obtaining a copy
+// of this software and associated documentation files (the "Software"), to deal
+// in the Software without restriction, including without limitation the rights
+// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+// copies of the Software, and to permit persons to whom the Software is
+// furnished to do so, subject to the following conditions:
+//
+// The above copyright notice and this permission notice shall be included in
+// all copies or substantial portions of the Software.
+//
+// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
+// THE SOFTWARE.
+
 // Copyright (c) 2019 Temporal Technologies, Inc.
 //
 // Permission is hereby granted, free of charge, to any person obtaining a copy
@@ -27,13 +51,14 @@
 package persistence
 
 import (
+	reflect "reflect"
+	"strconv"
+	sync "sync"
+
 	v1 "go.temporal.io/server/api/clock/v1"
 	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
 	protoimpl "google.golang.org/protobuf/runtime/protoimpl"
 	anypb "google.golang.org/protobuf/types/known/anypb"
-	reflect "reflect"
-	"strconv"
-	sync "sync"
 )
 
 const (
@@ -261,18 +286,18 @@ func (x *NexusIncomingService) GetMetadata() map[string]*NexusServiceMetadataVal
 }
 
 // Container for a version, a UUID, and a NexusIncomingService.
-type VersionedNexusIncomingService struct {
+type NexusIncomingServiceEntry struct {
 	state         protoimpl.MessageState
 	sizeCache     protoimpl.SizeCache
 	unknownFields protoimpl.UnknownFields
 
-	Version     int64                 `protobuf:"varint,1,opt,name=version,proto3" json:"version,omitempty"`
-	Id          string                `protobuf:"bytes,2,opt,name=id,proto3" json:"id,omitempty"`
-	ServiceInfo *NexusIncomingService `protobuf:"bytes,3,opt,name=service_info,json=serviceInfo,proto3" json:"service_info,omitempty"`
+	Version int64                 `protobuf:"varint,1,opt,name=version,proto3" json:"version,omitempty"`
+	Id      string                `protobuf:"bytes,2,opt,name=id,proto3" json:"id,omitempty"`
+	Service *NexusIncomingService `protobuf:"bytes,3,opt,name=service,proto3" json:"service,omitempty"`
 }
 
-func (x *VersionedNexusIncomingService) Reset() {
-	*x = VersionedNexusIncomingService{}
+func (x *NexusIncomingServiceEntry) Reset() {
+	*x = NexusIncomingServiceEntry{}
 	if protoimpl.UnsafeEnabled {
 		mi := &file_temporal_server_api_persistence_v1_nexus_proto_msgTypes[2]
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
@@ -280,13 +305,13 @@ func (x *VersionedNexusIncomingService) Reset() {
 	}
 }
 
-func (x *VersionedNexusIncomingService) String() string {
+func (x *NexusIncomingServiceEntry) String() string {
 	return protoimpl.X.MessageStringOf(x)
 }
 
-func (*VersionedNexusIncomingService) ProtoMessage() {}
+func (*NexusIncomingServiceEntry) ProtoMessage() {}
 
-func (x *VersionedNexusIncomingService) ProtoReflect() protoreflect.Message {
+func (x *NexusIncomingServiceEntry) ProtoReflect() protoreflect.Message {
 	mi := &file_temporal_server_api_persistence_v1_nexus_proto_msgTypes[2]
 	if protoimpl.UnsafeEnabled && x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
@@ -298,28 +323,28 @@ func (x *VersionedNexusIncomingService) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use VersionedNexusIncomingService.ProtoReflect.Descriptor instead.
-func (*VersionedNexusIncomingService) Descriptor() ([]byte, []int) {
+// Deprecated: Use NexusIncomingServiceEntry.ProtoReflect.Descriptor instead.
+func (*NexusIncomingServiceEntry) Descriptor() ([]byte, []int) {
 	return file_temporal_server_api_persistence_v1_nexus_proto_rawDescGZIP(), []int{2}
 }
 
-func (x *VersionedNexusIncomingService) GetVersion() int64 {
+func (x *NexusIncomingServiceEntry) GetVersion() int64 {
 	if x != nil {
 		return x.Version
 	}
 	return 0
 }
 
-func (x *VersionedNexusIncomingService) GetId() string {
+func (x *NexusIncomingServiceEntry) GetId() string {
 	if x != nil {
 		return x.Id
 	}
 	return ""
 }
 
-func (x *VersionedNexusIncomingService) GetServiceInfo() *NexusIncomingService {
+func (x *NexusIncomingServiceEntry) GetService() *NexusIncomingService {
 	if x != nil {
-		return x.ServiceInfo
+		return x.Service
 	}
 	return nil
 }
@@ -387,22 +412,21 @@ var file_temporal_server_api_persistence_v1_nexus_proto_rawDesc = []byte{
 	0x65, 0x72, 0x2e, 0x61, 0x70, 0x69, 0x2e, 0x70, 0x65, 0x72, 0x73, 0x69, 0x73, 0x74, 0x65, 0x6e,
 	0x63, 0x65, 0x2e, 0x76, 0x31, 0x2e, 0x4e, 0x65, 0x78, 0x75, 0x73, 0x53, 0x65, 0x72, 0x76, 0x69,
 	0x63, 0x65, 0x4d, 0x65, 0x74, 0x61, 0x64, 0x61, 0x74, 0x61, 0x56, 0x61, 0x6c, 0x75, 0x65, 0x52,
-	0x05, 0x76, 0x61, 0x6c, 0x75, 0x65, 0x3a, 0x02, 0x38, 0x01, 0x22, 0xa6, 0x01, 0x0a, 0x1d, 0x56,
-	0x65, 0x72, 0x73, 0x69, 0x6f, 0x6e, 0x65, 0x64, 0x4e, 0x65, 0x78, 0x75, 0x73, 0x49, 0x6e, 0x63,
-	0x6f, 0x6d, 0x69, 0x6e, 0x67, 0x53, 0x65, 0x72, 0x76, 0x69, 0x63, 0x65, 0x12, 0x18, 0x0a, 0x07,
-	0x76, 0x65, 0x72, 0x73, 0x69, 0x6f, 0x6e, 0x18, 0x01, 0x20, 0x01, 0x28, 0x03, 0x52, 0x07, 0x76,
-	0x65, 0x72, 0x73, 0x69, 0x6f, 0x6e, 0x12, 0x0e, 0x0a, 0x02, 0x69, 0x64, 0x18, 0x02, 0x20, 0x01,
-	0x28, 0x09, 0x52, 0x02, 0x69, 0x64, 0x12, 0x5b, 0x0a, 0x0c, 0x73, 0x65, 0x72, 0x76, 0x69, 0x63,
-	0x65, 0x5f, 0x69, 0x6e, 0x66, 0x6f, 0x18, 0x03, 0x20, 0x01, 0x28, 0x0b, 0x32, 0x38, 0x2e, 0x74,
-	0x65, 0x6d, 0x70, 0x6f, 0x72, 0x61, 0x6c, 0x2e, 0x73, 0x65, 0x72, 0x76, 0x65, 0x72, 0x2e, 0x61,
-	0x70, 0x69, 0x2e, 0x70, 0x65, 0x72, 0x73, 0x69, 0x73, 0x74, 0x65, 0x6e, 0x63, 0x65, 0x2e, 0x76,
-	0x31, 0x2e, 0x4e, 0x65, 0x78, 0x75, 0x73, 0x49, 0x6e, 0x63, 0x6f, 0x6d, 0x69, 0x6e, 0x67, 0x53,
-	0x65, 0x72, 0x76, 0x69, 0x63, 0x65, 0x52, 0x0b, 0x73, 0x65, 0x72, 0x76, 0x69, 0x63, 0x65, 0x49,
-	0x6e, 0x66, 0x6f, 0x42, 0x36, 0x5a, 0x34, 0x67, 0x6f, 0x2e, 0x74, 0x65, 0x6d, 0x70, 0x6f, 0x72,
-	0x61, 0x6c, 0x2e, 0x69, 0x6f, 0x2f, 0x73, 0x65, 0x72, 0x76, 0x65, 0x72, 0x2f, 0x61, 0x70, 0x69,
-	0x2f, 0x70, 0x65, 0x72, 0x73, 0x69, 0x73, 0x74, 0x65, 0x6e, 0x63, 0x65, 0x2f, 0x76, 0x31, 0x3b,
-	0x70, 0x65, 0x72, 0x73, 0x69, 0x73, 0x74, 0x65, 0x6e, 0x63, 0x65, 0x62, 0x06, 0x70, 0x72, 0x6f,
-	0x74, 0x6f, 0x33,
+	0x05, 0x76, 0x61, 0x6c, 0x75, 0x65, 0x3a, 0x02, 0x38, 0x01, 0x22, 0x99, 0x01, 0x0a, 0x19, 0x4e,
+	0x65, 0x78, 0x75, 0x73, 0x49, 0x6e, 0x63, 0x6f, 0x6d, 0x69, 0x6e, 0x67, 0x53, 0x65, 0x72, 0x76,
+	0x69, 0x63, 0x65, 0x45, 0x6e, 0x74, 0x72, 0x79, 0x12, 0x18, 0x0a, 0x07, 0x76, 0x65, 0x72, 0x73,
+	0x69, 0x6f, 0x6e, 0x18, 0x01, 0x20, 0x01, 0x28, 0x03, 0x52, 0x07, 0x76, 0x65, 0x72, 0x73, 0x69,
+	0x6f, 0x6e, 0x12, 0x0e, 0x0a, 0x02, 0x69, 0x64, 0x18, 0x02, 0x20, 0x01, 0x28, 0x09, 0x52, 0x02,
+	0x69, 0x64, 0x12, 0x52, 0x0a, 0x07, 0x73, 0x65, 0x72, 0x76, 0x69, 0x63, 0x65, 0x18, 0x03, 0x20,
+	0x01, 0x28, 0x0b, 0x32, 0x38, 0x2e, 0x74, 0x65, 0x6d, 0x70, 0x6f, 0x72, 0x61, 0x6c, 0x2e, 0x73,
+	0x65, 0x72, 0x76, 0x65, 0x72, 0x2e, 0x61, 0x70, 0x69, 0x2e, 0x70, 0x65, 0x72, 0x73, 0x69, 0x73,
+	0x74, 0x65, 0x6e, 0x63, 0x65, 0x2e, 0x76, 0x31, 0x2e, 0x4e, 0x65, 0x78, 0x75, 0x73, 0x49, 0x6e,
+	0x63, 0x6f, 0x6d, 0x69, 0x6e, 0x67, 0x53, 0x65, 0x72, 0x76, 0x69, 0x63, 0x65, 0x52, 0x07, 0x73,
+	0x65, 0x72, 0x76, 0x69, 0x63, 0x65, 0x42, 0x36, 0x5a, 0x34, 0x67, 0x6f, 0x2e, 0x74, 0x65, 0x6d,
+	0x70, 0x6f, 0x72, 0x61, 0x6c, 0x2e, 0x69, 0x6f, 0x2f, 0x73, 0x65, 0x72, 0x76, 0x65, 0x72, 0x2f,
+	0x61, 0x70, 0x69, 0x2f, 0x70, 0x65, 0x72, 0x73, 0x69, 0x73, 0x74, 0x65, 0x6e, 0x63, 0x65, 0x2f,
+	0x76, 0x31, 0x3b, 0x70, 0x65, 0x72, 0x73, 0x69, 0x73, 0x74, 0x65, 0x6e, 0x63, 0x65, 0x62, 0x06,
+	0x70, 0x72, 0x6f, 0x74, 0x6f, 0x33,
 }
 
 var (
@@ -423,7 +447,7 @@ var file_temporal_server_api_persistence_v1_nexus_proto_goTypes = []interface{}{
 	(NexusServiceMetadataValue_NexusMetadataState)(0), // 0: temporal.server.api.persistence.v1.NexusServiceMetadataValue.NexusMetadataState
 	(*NexusServiceMetadataValue)(nil),                 // 1: temporal.server.api.persistence.v1.NexusServiceMetadataValue
 	(*NexusIncomingService)(nil),                      // 2: temporal.server.api.persistence.v1.NexusIncomingService
-	(*VersionedNexusIncomingService)(nil),             // 3: temporal.server.api.persistence.v1.VersionedNexusIncomingService
+	(*NexusIncomingServiceEntry)(nil),                 // 3: temporal.server.api.persistence.v1.NexusIncomingServiceEntry
 	nil,                                               // 4: temporal.server.api.persistence.v1.NexusIncomingService.MetadataEntry
 	(*anypb.Any)(nil),                                 // 5: google.protobuf.Any
 	(*v1.HybridLogicalClock)(nil),                     // 6: temporal.server.api.clock.v1.HybridLogicalClock
@@ -434,7 +458,7 @@ var file_temporal_server_api_persistence_v1_nexus_proto_depIdxs = []int32{
 	6, // 2: temporal.server.api.persistence.v1.NexusServiceMetadataValue.state_update_timestamp:type_name -> temporal.server.api.clock.v1.HybridLogicalClock
 	6, // 3: temporal.server.api.persistence.v1.NexusIncomingService.clock:type_name -> temporal.server.api.clock.v1.HybridLogicalClock
 	4, // 4: temporal.server.api.persistence.v1.NexusIncomingService.metadata:type_name -> temporal.server.api.persistence.v1.NexusIncomingService.MetadataEntry
-	2, // 5: temporal.server.api.persistence.v1.VersionedNexusIncomingService.service_info:type_name -> temporal.server.api.persistence.v1.NexusIncomingService
+	2, // 5: temporal.server.api.persistence.v1.NexusIncomingServiceEntry.service:type_name -> temporal.server.api.persistence.v1.NexusIncomingService
 	1, // 6: temporal.server.api.persistence.v1.NexusIncomingService.MetadataEntry.value:type_name -> temporal.server.api.persistence.v1.NexusServiceMetadataValue
 	7, // [7:7] is the sub-list for method output_type
 	7, // [7:7] is the sub-list for method input_type
@@ -474,7 +498,7 @@ func file_temporal_server_api_persistence_v1_nexus_proto_init() {
 			}
 		}
 		file_temporal_server_api_persistence_v1_nexus_proto_msgTypes[2].Exporter = func(v interface{}, i int) interface{} {
-			switch v := v.(*VersionedNexusIncomingService); i {
+			switch v := v.(*NexusIncomingServiceEntry); i {
 			case 0:
 				return &v.state
 			case 1:

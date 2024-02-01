@@ -249,13 +249,6 @@ func TestCassandraTaskQueueTaskSuite(t *testing.T) {
 	suite.Run(t, s)
 }
 
-func TestCassandraVisibilityPersistence(t *testing.T) {
-	s := &VisibilityPersistenceSuite{
-		TestBase: persistencetests.NewTestBaseWithCassandra(&persistencetests.TestBaseOptions{}),
-	}
-	suite.Run(t, s)
-}
-
 func TestCassandraHistoryV2Persistence(t *testing.T) {
 	s := new(persistencetests.HistoryV2PersistenceSuite)
 	s.TestBase = persistencetests.NewTestBaseWithCassandra(&persistencetests.TestBaseOptions{})
@@ -1252,7 +1245,7 @@ func testCassandraNexusIncomingServiceStore(t *testing.T, cluster *cassandra.Tes
 	})
 }
 
-func testCassandraNexusIncomingServiceStoreConcurrentCreate(t *testing.T, store persistence.NexusServiceStore, tableVersion *atomic.Int64) {
+func testCassandraNexusIncomingServiceStoreConcurrentCreate(t *testing.T, store persistence.NexusIncomingServiceStore, tableVersion *atomic.Int64) {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
@@ -1297,7 +1290,7 @@ func testCassandraNexusIncomingServiceStoreConcurrentCreate(t *testing.T, store 
 	assertNexusIncomingServicesTableVersion(t, tableVersion.Load(), store)
 }
 
-func testCassandraNexusIncomingServiceStoreConcurrentUpdate(t *testing.T, store persistence.NexusServiceStore, tableVersion *atomic.Int64) {
+func testCassandraNexusIncomingServiceStoreConcurrentUpdate(t *testing.T, store persistence.NexusIncomingServiceStore, tableVersion *atomic.Int64) {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
@@ -1349,7 +1342,7 @@ func testCassandraNexusIncomingServiceStoreConcurrentUpdate(t *testing.T, store 
 	assertNexusIncomingServicesTableVersion(t, tableVersion.Load(), store)
 }
 
-func testCassandraNexusIncomingServiceStoreConcurrentCreateAndUpdate(t *testing.T, store persistence.NexusServiceStore, tableVersion *atomic.Int64) {
+func testCassandraNexusIncomingServiceStoreConcurrentCreateAndUpdate(t *testing.T, store persistence.NexusIncomingServiceStore, tableVersion *atomic.Int64) {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
@@ -1419,7 +1412,7 @@ func testCassandraNexusIncomingServiceStoreConcurrentCreateAndUpdate(t *testing.
 	assertNexusIncomingServicesTableVersion(t, tableVersion.Load(), store)
 }
 
-func testCassandraNexusIncomingServiceStoreConcurrentUpdateAndDelete(t *testing.T, store persistence.NexusServiceStore, tableVersion *atomic.Int64) {
+func testCassandraNexusIncomingServiceStoreConcurrentUpdateAndDelete(t *testing.T, store persistence.NexusIncomingServiceStore, tableVersion *atomic.Int64) {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
@@ -1483,17 +1476,17 @@ func testCassandraNexusIncomingServiceStoreConcurrentUpdateAndDelete(t *testing.
 	assertNexusIncomingServicesTableVersion(t, tableVersion.Load(), store)
 }
 
-func newNexusIncomingServiceStore(session gocql.Session, opts ...func(params *testQueueParams)) persistence.NexusServiceStore {
+func newNexusIncomingServiceStore(session gocql.Session, opts ...func(params *testQueueParams)) persistence.NexusIncomingServiceStore {
 	p := testQueueParams{
 		logger: log.NewTestLogger(),
 	}
 	for _, opt := range opts {
 		opt(&p)
 	}
-	return cassandra.NewNexusServiceStore(session, p.logger)
+	return cassandra.NewNexusIncomingServiceStore(session, p.logger)
 }
 
-func assertNexusIncomingServicesTableVersion(t *testing.T, expected int64, store persistence.NexusServiceStore) {
+func assertNexusIncomingServicesTableVersion(t *testing.T, expected int64, store persistence.NexusIncomingServiceStore) {
 	t.Helper()
 
 	resp, err := store.ListNexusIncomingServices(context.Background(), &persistence.ListNexusIncomingServicesRequest{

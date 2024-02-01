@@ -629,7 +629,7 @@ func TestMySQLNexusIncomingServicePersistence(t *testing.T) {
 	testData, tearDown := setUpMySQLTest(t)
 	defer tearDown()
 
-	store, err := testData.Factory.NewNexusServiceStore()
+	store, err := testData.Factory.NewNexusIncomingServiceStore()
 	if err != nil {
 		t.Fatalf("unable to create MySQL NexusIncomingServiceStore: %v", err)
 	}

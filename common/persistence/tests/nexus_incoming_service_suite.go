@@ -39,7 +39,7 @@ import (
 	"go.temporal.io/server/common/persistence/sql"
 )
 
-func RunNexusIncomingServiceTestSuite(t *testing.T, store persistence.NexusServiceStore, tableVersion *atomic.Int64) {
+func RunNexusIncomingServiceTestSuite(t *testing.T, store persistence.NexusIncomingServiceStore, tableVersion *atomic.Int64) {
 	// NB: These tests cannot be run in parallel because of concurrent updates to the table version by different tests
 	t.Run("TestNexusIncomingServicesSteadyState", func(t *testing.T) {
 		testNexusIncomingServicesStoreSteadyState(t, store, tableVersion)
@@ -58,13 +58,13 @@ func RunNexusIncomingServiceTestSuite(t *testing.T, store persistence.NexusServi
 func RunNexusIncomingServiceTestSuiteForSQL(t *testing.T, factory *sql.Factory) {
 	tableVersion := atomic.Int64{}
 	t.Run("Generic", func(t *testing.T) {
-		store, err := factory.NewNexusServiceStore()
+		store, err := factory.NewNexusIncomingServiceStore()
 		require.NoError(t, err)
 		RunNexusIncomingServiceTestSuite(t, store, &tableVersion)
 	})
 }
 
-func testNexusIncomingServicesStoreSteadyState(t *testing.T, store persistence.NexusServiceStore, tableVersion *atomic.Int64) {
+func testNexusIncomingServicesStoreSteadyState(t *testing.T, store persistence.NexusIncomingServiceStore, tableVersion *atomic.Int64) {
 	t.Run("SteadyState", func(t *testing.T) {
 		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 		defer cancel()
@@ -190,7 +190,7 @@ func testNexusIncomingServicesStoreSteadyState(t *testing.T, store persistence.N
 	})
 }
 
-func testCreateOrUpdateNexusIncomingServiceExpectedErrors(t *testing.T, store persistence.NexusServiceStore, tableVersion *atomic.Int64) {
+func testCreateOrUpdateNexusIncomingServiceExpectedErrors(t *testing.T, store persistence.NexusIncomingServiceStore, tableVersion *atomic.Int64) {
 	t.Run("ExpectedErrors", func(t *testing.T) {
 		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 		defer cancel()
@@ -247,7 +247,7 @@ func testCreateOrUpdateNexusIncomingServiceExpectedErrors(t *testing.T, store pe
 	})
 }
 
-func testListNexusIncomingServicesExpectedErrors(t *testing.T, store persistence.NexusServiceStore, tableVersion *atomic.Int64) {
+func testListNexusIncomingServicesExpectedErrors(t *testing.T, store persistence.NexusIncomingServiceStore, tableVersion *atomic.Int64) {
 	t.Run("ExpectedErrors", func(t *testing.T) {
 		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 		defer cancel()
@@ -289,7 +289,7 @@ func testListNexusIncomingServicesExpectedErrors(t *testing.T, store persistence
 	})
 }
 
-func testDeleteNexusIncomingServiceExpectedErrors(t *testing.T, store persistence.NexusServiceStore, tableVersion *atomic.Int64) {
+func testDeleteNexusIncomingServiceExpectedErrors(t *testing.T, store persistence.NexusIncomingServiceStore, tableVersion *atomic.Int64) {
 	t.Run("ExpectedErrors", func(t *testing.T) {
 		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 		defer cancel()

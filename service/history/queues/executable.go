@@ -30,6 +30,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"math"
 	"runtime/debug"
 	"sync"
 	"time"
@@ -47,7 +48,6 @@ import (
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
-	"go.temporal.io/server/common/persistence/serialization"
 	ctasks "go.temporal.io/server/common/tasks"
 	"go.temporal.io/server/common/util"
 	"go.temporal.io/server/service/history/consts"
@@ -83,6 +83,12 @@ type (
 
 	ExecutorWrapper interface {
 		Wrap(delegate Executor) Executor
+	}
+
+	// TerminalErrors are errors which cannot be retried and should not be scheduled again.
+	// Tasks should be enqueued to a DLQ immediately if an error implements this interface.
+	TerminalTaskError interface {
+		IsTerminalTaskError()
 	}
 )
 
@@ -132,21 +138,24 @@ type (
 		metricsHandler    metrics.Handler
 		dlqWriter         *DLQWriter
 
-		readerID               int64
-		loadTime               time.Time
-		scheduledTime          time.Time
-		scheduleLatency        time.Duration
-		attemptNoUserLatency   time.Duration
-		inMemoryNoUserLatency  time.Duration
-		lastActiveness         bool
-		resourceExhaustedCount int // does NOT include consts.ErrResourceExhaustedBusyWorkflow
-		taggedMetricsHandler   metrics.Handler
-		dlqEnabled             dynamicconfig.BoolPropertyFn
-		terminalFailureCause   error
+		readerID                   int64
+		loadTime                   time.Time
+		scheduledTime              time.Time
+		scheduleLatency            time.Duration
+		attemptNoUserLatency       time.Duration
+		inMemoryNoUserLatency      time.Duration
+		lastActiveness             bool
+		resourceExhaustedCount     int // does NOT include consts.ErrResourceExhaustedBusyWorkflow
+		taggedMetricsHandler       metrics.Handler
+		dlqEnabled                 dynamicconfig.BoolPropertyFn
+		terminalFailureCause       error
+		unexpectedErrorAttempts    int
+		maxUnexpectedErrorAttempts dynamicconfig.IntPropertyFn
 	}
 	ExecutableParams struct {
-		DLQEnabled dynamicconfig.BoolPropertyFn
-		DLQWriter  *DLQWriter
+		DLQEnabled                 dynamicconfig.BoolPropertyFn
+		DLQWriter                  *DLQWriter
+		MaxUnexpectedErrorAttempts dynamicconfig.IntPropertyFn
 	}
 	ExecutableOption func(*ExecutableParams)
 )
@@ -170,6 +179,9 @@ func NewExecutable(
 			return false
 		},
 		DLQWriter: nil,
+		MaxUnexpectedErrorAttempts: func() int {
+			return math.MaxInt
+		},
 	}
 	for _, opt := range opts {
 		opt(&params)
@@ -193,10 +205,11 @@ func NewExecutable(
 				return tasks.Tags(task)
 			},
 		),
-		metricsHandler:       metricsHandler,
-		taggedMetricsHandler: metricsHandler,
-		dlqWriter:            params.DLQWriter,
-		dlqEnabled:           params.DLQEnabled,
+		metricsHandler:             metricsHandler,
+		taggedMetricsHandler:       metricsHandler,
+		dlqWriter:                  params.DLQWriter,
+		dlqEnabled:                 params.DLQEnabled,
+		maxUnexpectedErrorAttempts: params.MaxUnexpectedErrorAttempts,
 	}
 	executable.updatePriority()
 	return executable
@@ -265,23 +278,27 @@ func (e *executableImpl) Execute() (retErr error) {
 	}()
 
 	if e.terminalFailureCause != nil {
-		if !e.dlqEnabled() {
+		if e.dlqEnabled() {
+			err := e.dlqWriter.WriteTaskToDLQ(
+				ctx,
+				e.clusterMetadata.GetCurrentClusterName(),
+				e.clusterMetadata.GetCurrentClusterName(),
+				e.GetTask(),
+			)
+			if err != nil {
+				e.logger.Error("Failed to write task to DLQ", tag.Error(err))
+			}
+			return err
+		}
+		if errors.As(e.terminalFailureCause, new(TerminalTaskError)) {
 			e.logger.Warn(
 				"Dropping task with terminal failure because DLQ was disabled",
 				tag.Error(e.terminalFailureCause),
 			)
 			return nil
 		}
-		err := e.dlqWriter.WriteTaskToDLQ(
-			ctx,
-			e.clusterMetadata.GetCurrentClusterName(),
-			e.clusterMetadata.GetCurrentClusterName(),
-			e.GetTask(),
-		)
-		if err != nil {
-			e.logger.Error("Failed to write task to DLQ", tag.Error(err))
-		}
-		return err
+		e.logger.Info("Retrying task with non-terminal DLQ failure because DLQ was disabled", tag.Error(e.terminalFailureCause))
+		e.terminalFailureCause = nil
 	}
 
 	resp := e.executor.Execute(ctx, e)
@@ -384,23 +401,33 @@ func (e *executableImpl) HandleErr(err error) (retErr error) {
 	}
 
 	// TODO: expand on the errors that should be considered terminal
-	if errors.As(err, new(*serialization.DeserializationError)) ||
-		errors.As(err, new(*serialization.UnknownEncodingTypeError)) {
-		// likely due to data corruption, emit logs, metrics & drop the task by return nil so that
-		// task will be marked as completed, or send it to the DLQ if that is enabled.
+	if errors.As(err, new(TerminalTaskError)) {
+		// Terminal errors are likely due to data corruption.
+		// Drop the task by returning nil so that task will be marked as completed,
+		// or send it to the DLQ if that is enabled.
 		metrics.TaskCorruptionCounter.With(e.taggedMetricsHandler).Record(1)
 		if e.dlqEnabled() {
+			// Keep this message in sync with the log line mentioned in Investigation section of develop/docs/dlq.md
 			e.logger.Error("Marking task as terminally failed, will send to DLQ", tag.Error(err))
 			e.terminalFailureCause = err
 			return fmt.Errorf("%w: %v", ErrTerminalTaskFailure, err)
 		}
-		e.logger.Error("Drop task due to serialization error", tag.Error(err))
+		e.logger.Error("Dropping task due to terminal error", tag.Error(err))
 		return nil
 	}
 
+	e.unexpectedErrorAttempts++
 	metrics.TaskFailures.With(e.taggedMetricsHandler).Record(1)
+	e.logger.Error("Fail to process task", tag.Error(err), tag.UnexpectedErrorAttempts(int32(e.unexpectedErrorAttempts)), tag.LifeCycleProcessingFailed)
 
-	e.logger.Error("Fail to process task", tag.Error(err), tag.LifeCycleProcessingFailed)
+	if e.unexpectedErrorAttempts >= e.maxUnexpectedErrorAttempts() && e.dlqEnabled() {
+		// Keep this message in sync with the log line mentioned in Investigation section of develop/docs/dlq.md
+		e.logger.Error("Marking task as terminally failed, will send to DLQ. Maximum number of attempts with unexpected errors",
+			tag.Attempt(int32(e.unexpectedErrorAttempts)), tag.Error(err))
+		e.terminalFailureCause = err
+		return fmt.Errorf("%w: %w", ErrTerminalTaskFailure, e.terminalFailureCause)
+	}
+
 	return err
 }
 

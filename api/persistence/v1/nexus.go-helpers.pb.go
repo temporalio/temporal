@@ -79,35 +79,35 @@ func (this *NexusIncomingService) Equal(that interface{}) bool {
 	return proto.Equal(this, that1)
 }
 
-// Marshal an object of type VersionedNexusIncomingService to the protobuf v3 wire format
-func (val *VersionedNexusIncomingService) Marshal() ([]byte, error) {
+// Marshal an object of type NexusIncomingServiceEntry to the protobuf v3 wire format
+func (val *NexusIncomingServiceEntry) Marshal() ([]byte, error) {
 	return proto.Marshal(val)
 }
 
-// Unmarshal an object of type VersionedNexusIncomingService from the protobuf v3 wire format
-func (val *VersionedNexusIncomingService) Unmarshal(buf []byte) error {
+// Unmarshal an object of type NexusIncomingServiceEntry from the protobuf v3 wire format
+func (val *NexusIncomingServiceEntry) Unmarshal(buf []byte) error {
 	return proto.Unmarshal(buf, val)
 }
 
 // Size returns the size of the object, in bytes, once serialized
-func (val *VersionedNexusIncomingService) Size() int {
+func (val *NexusIncomingServiceEntry) Size() int {
 	return proto.Size(val)
 }
 
-// Equal returns whether two VersionedNexusIncomingService values are equivalent by recursively
+// Equal returns whether two NexusIncomingServiceEntry values are equivalent by recursively
 // comparing the message's fields.
 // For more information see the documentation for
 // https://pkg.go.dev/google.golang.org/protobuf/proto#Equal
-func (this *VersionedNexusIncomingService) Equal(that interface{}) bool {
+func (this *NexusIncomingServiceEntry) Equal(that interface{}) bool {
 	if that == nil {
 		return this == nil
 	}
 
-	var that1 *VersionedNexusIncomingService
+	var that1 *NexusIncomingServiceEntry
 	switch t := that.(type) {
-	case *VersionedNexusIncomingService:
+	case *NexusIncomingServiceEntry:
 		that1 = t
-	case VersionedNexusIncomingService:
+	case NexusIncomingServiceEntry:
 		that1 = &t
 	default:
 		return false

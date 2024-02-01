@@ -81,10 +81,10 @@ type (
 		persistence   Queue
 	}
 
-	nexusServicePersistenceClient struct {
+	nexusIncomingServicePersistenceClient struct {
 		metricEmitter
 		healthSignals HealthSignalAggregator
-		persistence   NexusServiceManager
+		persistence   NexusIncomingServiceManager
 	}
 )
 
@@ -94,7 +94,7 @@ var _ TaskManager = (*taskPersistenceClient)(nil)
 var _ MetadataManager = (*metadataPersistenceClient)(nil)
 var _ ClusterMetadataManager = (*clusterMetadataPersistenceClient)(nil)
 var _ Queue = (*queuePersistenceClient)(nil)
-var _ NexusServiceManager = (*nexusServicePersistenceClient)(nil)
+var _ NexusIncomingServiceManager = (*nexusIncomingServicePersistenceClient)(nil)
 
 // NewShardPersistenceMetricsClient creates a client to manage shards
 func NewShardPersistenceMetricsClient(persistence ShardManager, metricsHandler metrics.Handler, healthSignals HealthSignalAggregator, logger log.Logger) ShardManager {
@@ -168,9 +168,9 @@ func NewQueuePersistenceMetricsClient(persistence Queue, metricsHandler metrics.
 	}
 }
 
-// NewNexusServicePersistenceMetricsClient creates a NexusServiceManager to manage nexus services
-func NewNexusServicePersistenceMetricsClient(persistence NexusServiceManager, metricsHandler metrics.Handler, healthSignals HealthSignalAggregator, logger log.Logger) NexusServiceManager {
-	return &nexusServicePersistenceClient{
+// NewNexusIncomingServicePersistenceMetricsClient creates a NexusIncomingServiceManager to manage nexus services
+func NewNexusIncomingServicePersistenceMetricsClient(persistence NexusIncomingServiceManager, metricsHandler metrics.Handler, healthSignals HealthSignalAggregator, logger log.Logger) NexusIncomingServiceManager {
+	return &nexusIncomingServicePersistenceClient{
 		metricEmitter: metricEmitter{
 			metricsHandler: metricsHandler,
 			logger:         logger,
@@ -1271,15 +1271,15 @@ func (p *metadataPersistenceClient) InitializeSystemNamespaces(
 	return p.persistence.InitializeSystemNamespaces(ctx, currentClusterName)
 }
 
-func (p *nexusServicePersistenceClient) GetName() string {
+func (p *nexusIncomingServicePersistenceClient) GetName() string {
 	return p.persistence.GetName()
 }
 
-func (p *nexusServicePersistenceClient) Close() {
+func (p *nexusIncomingServicePersistenceClient) Close() {
 	p.persistence.Close()
 }
 
-func (p *nexusServicePersistenceClient) GetNexusIncomingServicesTableVersion(
+func (p *nexusIncomingServicePersistenceClient) GetNexusIncomingServicesTableVersion(
 	ctx context.Context,
 ) (_ int64, retErr error) {
 	caller := headers.GetCallerInfo(ctx).CallerName
@@ -1291,7 +1291,7 @@ func (p *nexusServicePersistenceClient) GetNexusIncomingServicesTableVersion(
 	return p.persistence.GetNexusIncomingServicesTableVersion(ctx)
 }
 
-func (p *nexusServicePersistenceClient) ListNexusIncomingServices(
+func (p *nexusIncomingServicePersistenceClient) ListNexusIncomingServices(
 	ctx context.Context,
 	request *ListNexusIncomingServicesRequest,
 ) (_ *ListNexusIncomingServicesResponse, retErr error) {
@@ -1304,7 +1304,7 @@ func (p *nexusServicePersistenceClient) ListNexusIncomingServices(
 	return p.persistence.ListNexusIncomingServices(ctx, request)
 }
 
-func (p *nexusServicePersistenceClient) CreateOrUpdateNexusIncomingService(
+func (p *nexusIncomingServicePersistenceClient) CreateOrUpdateNexusIncomingService(
 	ctx context.Context,
 	request *CreateOrUpdateNexusIncomingServiceRequest,
 ) (_ *CreateOrUpdateNexusIncomingServiceResponse, retErr error) {
@@ -1317,7 +1317,7 @@ func (p *nexusServicePersistenceClient) CreateOrUpdateNexusIncomingService(
 	return p.persistence.CreateOrUpdateNexusIncomingService(ctx, request)
 }
 
-func (p *nexusServicePersistenceClient) DeleteNexusIncomingService(
+func (p *nexusIncomingServicePersistenceClient) DeleteNexusIncomingService(
 	ctx context.Context,
 	request *DeleteNexusIncomingServiceRequest,
 ) (retErr error) {
