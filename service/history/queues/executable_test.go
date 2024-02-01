@@ -516,7 +516,18 @@ func (s *executableSuite) TestExecute_SendToDLQAfterMaxAttemptsThenDisable() {
 	s.ErrorIs(err2, queues.ErrTerminalTaskFailure)
 
 	dlqEnabled = false
+
+	// Make sure original execution error is returned
 	s.ErrorIs(executable.Execute(), execError)
+
+	// Make sure task is retried next time
+	s.mockExecutor.EXPECT().Execute(gomock.Any(), executable).Return(queues.ExecuteResponse{
+		ExecutionMetricTags: nil,
+		ExecutedAsActive:    false,
+		ExecutionErr:        execError,
+	}).Times(1)
+	s.ErrorIs(executable.Execute(), execError)
+
 	s.Empty(queueWriter.EnqueueTaskRequests)
 }
 

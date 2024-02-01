@@ -286,7 +286,9 @@ func (e *executableImpl) Execute() (retErr error) {
 				)
 				return nil
 			}
-			return e.terminalFailureCause
+			terminalErr := e.terminalFailureCause
+			e.terminalFailureCause = nil
+			return terminalErr
 		}
 		err := e.dlqWriter.WriteTaskToDLQ(
 			ctx,
