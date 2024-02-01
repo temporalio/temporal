@@ -26,13 +26,14 @@ package scheduler
 
 import (
 	"fmt"
-	"reflect"
 	"testing"
 
+	"github.com/stretchr/testify/require"
 	"go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	failurepb "go.temporal.io/api/failure/v1"
 	historypb "go.temporal.io/api/history/v1"
+	"google.golang.org/protobuf/proto"
 
 	schedspb "go.temporal.io/server/api/schedule/v1"
 	"go.temporal.io/server/common/log"
@@ -289,36 +290,39 @@ func TestResponseBuilder(t *testing.T) {
 
 func assertResponseResult(t *testing.T, response *schedspb.WatchWorkflowResponse, expectedResult *common.Payloads) {
 	t.Helper()
-	if response.GetResult() != expectedResult {
-		t.Errorf("expected nil result, got %v", response.GetResult())
-	}
+	require.Truef(
+		t,
+		proto.Equal(response.GetResult(), expectedResult),
+		"incorrect response result expected %v, got %v",
+		expectedResult,
+		response.GetResult(),
+	)
 }
 
 func assertResponseIsNil(t *testing.T, response *schedspb.WatchWorkflowResponse) {
 	t.Helper()
-	if response != nil {
-		t.Errorf("expected response to be nil, got %v", response)
-	}
+	require.Nilf(t, response, "expected response to be nil, got %v", response)
 }
 
 func assertResponsePayload(t *testing.T, response *schedspb.WatchWorkflowResponse, expectedPayload []*common.Payload) {
 	t.Helper()
 	var actualPayloads = response.GetResult().GetPayloads()
-	if !reflect.DeepEqual(actualPayloads, expectedPayload) {
-		t.Errorf("expected payload %v, got %v", expectedPayload, actualPayloads)
-	}
+	require.Equal(t, expectedPayload, actualPayloads, "incorrect response payload expected %v, got %v")
 }
 
 func assertResponseStatus(t *testing.T, response *schedspb.WatchWorkflowResponse, expectedStatus enumspb.WorkflowExecutionStatus) {
 	t.Helper()
-	if response.Status != expectedStatus {
-		t.Errorf("expected response expectedStatus %v, got %v", expectedStatus, response.Status)
-	}
+	require.Equal(
+		t,
+		expectedStatus,
+		response.Status,
+		"wrong response status expected %v, got %v",
+		expectedStatus,
+		response.Status,
+	)
 }
 
 func assertError(t *testing.T, err error, expectedError error) {
 	t.Helper()
-	if err != expectedError {
-		t.Errorf("expected error %v, got %v", expectedError, err)
-	}
+	require.ErrorIsf(t, err, expectedError, "expected error %v, got %v", expectedError, err)
 }
