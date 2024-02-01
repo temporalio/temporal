@@ -527,9 +527,10 @@ func (r *ReaderImpl) submit(
 	executable Executable,
 ) {
 	now := r.timeSource.Now()
-	// Persistence layer may lose precision when persisting the task, which essentially move
-	// task fire time forward. Need to account for that when submitting the task.
-	if fireTime := executable.GetKey().FireTime.Add(persistence.ScheduledTaskMinPrecision); now.Before(fireTime) {
+	// Persistence layer may lose precision when persisting the task, which essentially moves
+	// task fire time backward. Need to account for that when submitting the task.
+	fireTime := executable.GetKey().FireTime.Add(persistence.ScheduledTaskMinPrecision)
+	if now.Before(fireTime) {
 		r.rescheduler.Add(executable, fireTime)
 		return
 	}

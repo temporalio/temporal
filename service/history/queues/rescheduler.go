@@ -38,8 +38,10 @@ import (
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
+	"go.temporal.io/server/common/persistence"
 	ctasks "go.temporal.io/server/common/tasks"
 	"go.temporal.io/server/common/timer"
+	"go.temporal.io/server/common/util"
 )
 
 const (
@@ -176,7 +178,12 @@ func (r *reschedulerImpl) Reschedule(
 		items := make([]rescheduledExecuable, 0, pq.Len())
 		for !pq.IsEmpty() {
 			rescheduled := pq.Remove()
-			rescheduled.rescheduleTime = now
+			// scheduled queue pre-fetches tasks,
+			// so we need to make sure the reschedule time is not before the task scheduled time
+			rescheduled.rescheduleTime = util.MaxTime(
+				rescheduled.executable.GetKey().FireTime.Add(persistence.ScheduledTaskMinPrecision),
+				now,
+			)
 			items = append(items, rescheduled)
 		}
 		r.pqMap[key] = r.newPriorityQueue(items)
