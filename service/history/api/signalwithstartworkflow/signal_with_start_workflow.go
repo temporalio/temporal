@@ -45,33 +45,33 @@ func SignalWithStartWorkflow(
 	ctx context.Context,
 	shard shard.Context,
 	namespaceEntry *namespace.Namespace,
-	currentWorkflowContext api.WorkflowContext,
+	currentWorkflowLease api.WorkflowLease,
 	startRequest *historyservice.StartWorkflowExecutionRequest,
 	signalWithStartRequest *workflowservice.SignalWithStartWorkflowExecutionRequest,
 ) (string, error) {
 
 	// workflow is running and restart was not requested
-	if currentWorkflowContext != nil &&
-		currentWorkflowContext.GetMutableState().IsWorkflowExecutionRunning() &&
+	if currentWorkflowLease != nil &&
+		currentWorkflowLease.GetMutableState().IsWorkflowExecutionRunning() &&
 		signalWithStartRequest.WorkflowIdReusePolicy != enumspb.WORKFLOW_ID_REUSE_POLICY_TERMINATE_IF_RUNNING {
 
 		// current workflow exists & running
 		if err := signalWorkflow(
 			ctx,
 			shard,
-			currentWorkflowContext,
+			currentWorkflowLease,
 			signalWithStartRequest,
 		); err != nil {
 			return "", err
 		}
-		return currentWorkflowContext.GetWorkflowKey().RunID, nil
+		return currentWorkflowLease.GetWorkflowKey().RunID, nil
 	}
 	// else, either workflow is not running or restart requested
 	return startAndSignalWorkflow(
 		ctx,
 		shard,
 		namespaceEntry,
-		currentWorkflowContext,
+		currentWorkflowLease,
 		startRequest,
 		signalWithStartRequest,
 	)
@@ -81,7 +81,7 @@ func startAndSignalWorkflow(
 	ctx context.Context,
 	shard shard.Context,
 	namespaceEntry *namespace.Namespace,
-	currentWorkflowContext api.WorkflowContext,
+	currentWorkflowLease api.WorkflowLease,
 	startRequest *historyservice.StartWorkflowExecutionRequest,
 	signalWithStartRequest *workflowservice.SignalWithStartWorkflowExecutionRequest,
 ) (string, error) {
@@ -111,7 +111,7 @@ func startAndSignalWorkflow(
 	}
 
 	workflowMutationFn, err := createWorkflowMutationFunction(
-		currentWorkflowContext,
+		currentWorkflowLease,
 		signalWithStartRequest.GetWorkflowIdReusePolicy(),
 		runID,
 	)
@@ -122,7 +122,7 @@ func startAndSignalWorkflow(
 		if err = startAndSignalWithCurrentWorkflow(
 			ctx,
 			shard,
-			currentWorkflowContext,
+			currentWorkflowLease,
 			workflowMutationFn,
 			newWorkflowContext,
 		); err != nil {
@@ -130,7 +130,7 @@ func startAndSignalWorkflow(
 		}
 		return runID, nil
 	}
-	vrid, err := createVersionedRunID(currentWorkflowContext)
+	vrid, err := createVersionedRunID(currentWorkflowLease)
 	if err != nil {
 		return "", err
 	}
@@ -144,32 +144,32 @@ func startAndSignalWorkflow(
 }
 
 func createWorkflowMutationFunction(
-	currentWorkflowContext api.WorkflowContext,
+	currentWorkflowLease api.WorkflowLease,
 	workflowIDReusePolicy enumspb.WorkflowIdReusePolicy,
 	newRunID string,
 ) (api.UpdateWorkflowActionFunc, error) {
-	if currentWorkflowContext == nil {
+	if currentWorkflowLease == nil {
 		return nil, nil
 	}
-	currentExecutionState := currentWorkflowContext.GetMutableState().GetExecutionState()
+	currentExecutionState := currentWorkflowLease.GetMutableState().GetExecutionState()
 	workflowMutationFunc, err := api.ApplyWorkflowIDReusePolicy(
 		currentExecutionState.CreateRequestId,
 		currentExecutionState.RunId,
 		currentExecutionState.State,
 		currentExecutionState.Status,
-		currentWorkflowContext.GetWorkflowKey().WorkflowID,
+		currentWorkflowLease.GetWorkflowKey().WorkflowID,
 		newRunID,
 		workflowIDReusePolicy,
 	)
 	return workflowMutationFunc, err
 }
 
-func createVersionedRunID(currentWorkflowContext api.WorkflowContext) (*api.VersionedRunID, error) {
-	if currentWorkflowContext == nil {
+func createVersionedRunID(currentWorkflowLease api.WorkflowLease) (*api.VersionedRunID, error) {
+	if currentWorkflowLease == nil {
 		return nil, nil
 	}
-	currentExecutionState := currentWorkflowContext.GetMutableState().GetExecutionState()
-	currentLastWriteVersion, err := currentWorkflowContext.GetMutableState().GetLastWriteVersion()
+	currentExecutionState := currentWorkflowLease.GetMutableState().GetExecutionState()
+	currentLastWriteVersion, err := currentWorkflowLease.GetMutableState().GetLastWriteVersion()
 	if err != nil {
 		return nil, err
 	}
@@ -183,14 +183,14 @@ func createVersionedRunID(currentWorkflowContext api.WorkflowContext) (*api.Vers
 func startAndSignalWithCurrentWorkflow(
 	ctx context.Context,
 	shard shard.Context,
-	currentWorkflowContext api.WorkflowContext,
+	currentWorkflowLease api.WorkflowLease,
 	currentWorkflowUpdateAction api.UpdateWorkflowActionFunc,
-	newWorkflowContext api.WorkflowContext,
+	newWorkflowContext api.WorkflowLease,
 ) error {
 	err := api.UpdateWorkflowWithNew(
 		shard,
 		ctx,
-		currentWorkflowContext,
+		currentWorkflowLease,
 		currentWorkflowUpdateAction,
 		func() (workflow.Context, workflow.MutableState, error) {
 			return newWorkflowContext.GetContext(), newWorkflowContext.GetMutableState(), nil
@@ -207,7 +207,7 @@ func startAndSignalWithoutCurrentWorkflow(
 	ctx context.Context,
 	shardContext shard.Context,
 	vrid *api.VersionedRunID,
-	newWorkflowContext api.WorkflowContext,
+	newWorkflowContext api.WorkflowLease,
 	requestID string,
 ) (string, error) {
 	newWorkflow, newWorkflowEventsSeq, err := newWorkflowContext.GetMutableState().CloseTransactionAsSnapshot(
@@ -262,7 +262,7 @@ func startAndSignalWithoutCurrentWorkflow(
 func signalWorkflow(
 	ctx context.Context,
 	shardContext shard.Context,
-	workflowContext api.WorkflowContext,
+	workflowContext api.WorkflowLease,
 	request *workflowservice.SignalWithStartWorkflowExecutionRequest,
 ) error {
 	mutableState := workflowContext.GetMutableState()

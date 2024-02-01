@@ -91,7 +91,7 @@ func Invoke(
 		nil,
 		api.BypassMutableStateConsistencyPredicate,
 		wfKey,
-		func(weCtx api.WorkflowContext) (*api.UpdateWorkflowAction, error) {
+		func(weCtx api.WorkflowLease) (*api.UpdateWorkflowAction, error) {
 			ms := weCtx.GetMutableState()
 			if !ms.IsWorkflowExecutionRunning() {
 				return nil, consts.ErrWorkflowCompleted

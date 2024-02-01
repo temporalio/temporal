@@ -87,8 +87,8 @@ func Invoke(
 				shard,
 				ctx,
 				weCtx,
-				func(workflowContext api.WorkflowContext) (*api.UpdateWorkflowAction, error) {
-					mutableState := workflowContext.GetMutableState()
+				func(workflowLease api.WorkflowLease) (*api.UpdateWorkflowAction, error) {
+					mutableState := workflowLease.GetMutableState()
 
 					return api.UpdateWorkflowWithoutWorkflowTask, workflow.TerminateWorkflow(
 						mutableState,

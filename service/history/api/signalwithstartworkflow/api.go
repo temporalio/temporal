@@ -50,8 +50,8 @@ func Invoke(
 	}
 	namespaceID := namespaceEntry.ID()
 
-	var currentWorkflowContext api.WorkflowContext
-	currentWorkflowContext, err = workflowConsistencyChecker.GetWorkflowContext(
+	var currentWorkflowLease api.WorkflowLease
+	currentWorkflowLease, err = workflowConsistencyChecker.GetWorkflowContext(
 		ctx,
 		nil,
 		api.BypassMutableStateConsistencyPredicate,
@@ -64,9 +64,9 @@ func Invoke(
 	)
 	switch err.(type) {
 	case nil:
-		defer func() { currentWorkflowContext.GetReleaseFn()(retError) }()
+		defer func() { currentWorkflowLease.GetReleaseFn()(retError) }()
 	case *serviceerror.NotFound:
-		currentWorkflowContext = nil
+		currentWorkflowLease = nil
 	default:
 		return nil, err
 	}
@@ -87,7 +87,7 @@ func Invoke(
 		ctx,
 		shard,
 		namespaceEntry,
-		currentWorkflowContext,
+		currentWorkflowLease,
 		startRequest,
 		signalWithStartRequest.SignalWithStartRequest,
 	)

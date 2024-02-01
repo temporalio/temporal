@@ -62,13 +62,13 @@ func GetAndUpdateWorkflowWithNew(
 func UpdateWorkflowWithNew(
 	shardContext shard.Context,
 	ctx context.Context,
-	workflowContext WorkflowContext,
+	workflowLease WorkflowLease,
 	action UpdateWorkflowActionFunc,
 	newWorkflowFn func() (workflow.Context, workflow.MutableState, error),
 ) (retError error) {
 
 	// conduct caller action
-	postActions, err := action(workflowContext)
+	postActions, err := action(workflowLease)
 	if err != nil {
 		return err
 	}
@@ -76,7 +76,7 @@ func UpdateWorkflowWithNew(
 		return nil
 	}
 
-	mutableState := workflowContext.GetMutableState()
+	mutableState := workflowLease.GetMutableState()
 	if postActions.CreateWorkflowTask {
 		// Create a transfer task to schedule a workflow task
 		if !mutableState.HasPendingWorkflowTask() {
@@ -103,14 +103,14 @@ func UpdateWorkflowWithNew(
 			return err
 		}
 
-		updateErr = workflowContext.GetContext().UpdateWorkflowExecutionWithNewAsActive(
+		updateErr = workflowLease.GetContext().UpdateWorkflowExecutionWithNewAsActive(
 			ctx,
 			shardContext,
 			newContext,
 			newMutableState,
 		)
 	} else {
-		updateErr = workflowContext.GetContext().UpdateWorkflowExecutionAsActive(ctx, shardContext)
+		updateErr = workflowLease.GetContext().UpdateWorkflowExecutionAsActive(ctx, shardContext)
 	}
 
 	return updateErr

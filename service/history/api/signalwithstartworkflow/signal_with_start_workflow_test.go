@@ -109,7 +109,7 @@ func (s *signalWithStartWorkflowSuite) TearDownTest() {
 
 func (s *signalWithStartWorkflowSuite) TestSignalWorkflow_WorkflowCloseAttempted() {
 	ctx := context.Background()
-	currentWorkflowContext := api.NewWorkflowContext(
+	currentWorkflowContext := api.NewWorkflowLease(
 		s.currentContext,
 		wcache.NoopReleaseFn,
 		s.currentMutableState,
@@ -130,7 +130,7 @@ func (s *signalWithStartWorkflowSuite) TestSignalWorkflow_WorkflowCloseAttempted
 
 func (s *signalWithStartWorkflowSuite) TestSignalWorkflow_Dedup() {
 	ctx := context.Background()
-	currentWorkflowContext := api.NewWorkflowContext(
+	currentWorkflowContext := api.NewWorkflowLease(
 		s.currentContext,
 		wcache.NoopReleaseFn,
 		s.currentMutableState,
@@ -151,7 +151,7 @@ func (s *signalWithStartWorkflowSuite) TestSignalWorkflow_Dedup() {
 
 func (s *signalWithStartWorkflowSuite) TestSignalWorkflow_NewWorkflowTask() {
 	ctx := context.Background()
-	currentWorkflowContext := api.NewWorkflowContext(
+	currentWorkflowContext := api.NewWorkflowLease(
 		s.currentContext,
 		wcache.NoopReleaseFn,
 		s.currentMutableState,
@@ -184,7 +184,7 @@ func (s *signalWithStartWorkflowSuite) TestSignalWorkflow_NewWorkflowTask() {
 
 func (s *signalWithStartWorkflowSuite) TestSignalWorkflow_NoNewWorkflowTask() {
 	ctx := context.Background()
-	currentWorkflowContext := api.NewWorkflowContext(
+	currentWorkflowContext := api.NewWorkflowLease(
 		s.currentContext,
 		wcache.NoopReleaseFn,
 		s.currentMutableState,

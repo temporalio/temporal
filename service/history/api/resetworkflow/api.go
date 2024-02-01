@@ -94,7 +94,7 @@ func Invoke(
 		baseRunID = currentRunID
 	}
 
-	var currentWFContext api.WorkflowContext
+	var currentWFContext api.WorkflowLease
 	if currentRunID == baseRunID {
 		currentWFContext = baseWFContext
 	} else {

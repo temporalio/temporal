@@ -147,8 +147,8 @@ func (handler *workflowTaskHandlerCallbacksImpl) handleWorkflowTaskScheduled(
 			req.WorkflowExecution.WorkflowId,
 			req.WorkflowExecution.RunId,
 		),
-		func(workflowContext api.WorkflowContext) (*api.UpdateWorkflowAction, error) {
-			mutableState := workflowContext.GetMutableState()
+		func(workflowLease api.WorkflowLease) (*api.UpdateWorkflowAction, error) {
+			mutableState := workflowLease.GetMutableState()
 			if !mutableState.IsWorkflowExecutionRunning() {
 				return nil, consts.ErrWorkflowCompleted
 			}
@@ -199,8 +199,8 @@ func (handler *workflowTaskHandlerCallbacksImpl) handleWorkflowTaskStarted(
 			req.WorkflowExecution.WorkflowId,
 			req.WorkflowExecution.RunId,
 		),
-		func(workflowContext api.WorkflowContext) (*api.UpdateWorkflowAction, error) {
-			mutableState := workflowContext.GetMutableState()
+		func(workflowLease api.WorkflowLease) (*api.UpdateWorkflowAction, error) {
+			mutableState := workflowLease.GetMutableState()
 			if !mutableState.IsWorkflowExecutionRunning() {
 				return nil, consts.ErrWorkflowCompleted
 			}
@@ -231,7 +231,7 @@ func (handler *workflowTaskHandlerCallbacksImpl) handleWorkflowTaskStarted(
 			if workflowTask.StartedEventID != common.EmptyEventID {
 				// If workflow task is started as part of the current request scope then return a positive response
 				if workflowTask.RequestID == requestID {
-					resp, err = handler.createRecordWorkflowTaskStartedResponse(ctx, mutableState, workflowContext.GetUpdateRegistry(ctx), workflowTask, req.PollRequest.GetIdentity(), false)
+					resp, err = handler.createRecordWorkflowTaskStartedResponse(ctx, mutableState, workflowLease.GetUpdateRegistry(ctx), workflowTask, req.PollRequest.GetIdentity(), false)
 					if err != nil {
 						return nil, err
 					}
@@ -287,7 +287,7 @@ func (handler *workflowTaskHandlerCallbacksImpl) handleWorkflowTaskStarted(
 				metrics.TaskQueueTypeTag(enumspb.TASK_QUEUE_TYPE_WORKFLOW),
 			)
 
-			resp, err = handler.createRecordWorkflowTaskStartedResponse(ctx, mutableState, workflowContext.GetUpdateRegistry(ctx), workflowTask, req.PollRequest.GetIdentity(), false)
+			resp, err = handler.createRecordWorkflowTaskStartedResponse(ctx, mutableState, workflowLease.GetUpdateRegistry(ctx), workflowTask, req.PollRequest.GetIdentity(), false)
 			if err != nil {
 				return nil, err
 			}
@@ -338,8 +338,8 @@ func (handler *workflowTaskHandlerCallbacksImpl) handleWorkflowTaskFailed(
 			token.WorkflowId,
 			token.RunId,
 		),
-		func(workflowContext api.WorkflowContext) (*api.UpdateWorkflowAction, error) {
-			mutableState := workflowContext.GetMutableState()
+		func(workflowLease api.WorkflowLease) (*api.UpdateWorkflowAction, error) {
+			mutableState := workflowLease.GetMutableState()
 			if !mutableState.IsWorkflowExecutionRunning() {
 				return nil, consts.ErrWorkflowCompleted
 			}
@@ -354,7 +354,7 @@ func (handler *workflowTaskHandlerCallbacksImpl) handleWorkflowTaskFailed(
 				workflowTask.Attempt != token.Attempt ||
 				(workflowTask.Version != common.EmptyVersion && token.Version != workflowTask.Version) {
 				// we have not alter mutable state yet, so release with it with nil to avoid clear MS.
-				workflowContext.GetReleaseFn()(nil)
+				workflowLease.GetReleaseFn()(nil)
 				return nil, serviceerror.NewNotFound("Workflow task not found.")
 			}
 

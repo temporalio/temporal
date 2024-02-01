@@ -75,7 +75,7 @@ type Starter struct {
 type creationParams struct {
 	workflowID           string
 	runID                string
-	workflowContext      api.WorkflowContext
+	workflowLease        api.WorkflowLease
 	workflowTaskInfo     *workflow.WorkflowTaskInfo
 	workflowSnapshot     *persistence.WorkflowSnapshot
 	workflowEventBatches []*persistence.WorkflowEvents
@@ -245,7 +245,7 @@ func (s *Starter) createNewMutableState(ctx context.Context, workflowID string, 
 	return &creationParams{
 		workflowID:           workflowID,
 		runID:                runID,
-		workflowContext:      workflowContext,
+		workflowLease:        workflowContext,
 		workflowTaskInfo:     workflowTaskInfo,
 		workflowSnapshot:     workflowSnapshot,
 		workflowEventBatches: eventBatches,
@@ -254,13 +254,13 @@ func (s *Starter) createNewMutableState(ctx context.Context, workflowID string, 
 
 // createBrandNew creates a new "brand new" execution in the executions table.
 func (s *Starter) createBrandNew(ctx context.Context, creationParams *creationParams) error {
-	return creationParams.workflowContext.GetContext().CreateWorkflowExecution(
+	return creationParams.workflowLease.GetContext().CreateWorkflowExecution(
 		ctx,
 		s.shardContext,
 		persistence.CreateWorkflowModeBrandNew,
 		"", // prevRunID
 		0,  // prevLastWriteVersion
-		creationParams.workflowContext.GetMutableState(),
+		creationParams.workflowLease.GetMutableState(),
 		creationParams.workflowSnapshot,
 		creationParams.workflowEventBatches,
 	)
@@ -299,20 +299,20 @@ func (s *Starter) createAsCurrent(
 	creationParams *creationParams,
 	currentWorkflowConditionFailed *persistence.CurrentWorkflowConditionFailedError,
 ) error {
-	return creationParams.workflowContext.GetContext().CreateWorkflowExecution(
+	return creationParams.workflowLease.GetContext().CreateWorkflowExecution(
 		ctx,
 		s.shardContext,
 		persistence.CreateWorkflowModeUpdateCurrent,
 		currentWorkflowConditionFailed.RunID,
 		currentWorkflowConditionFailed.LastWriteVersion,
-		creationParams.workflowContext.GetMutableState(),
+		creationParams.workflowLease.GetMutableState(),
 		creationParams.workflowSnapshot,
 		creationParams.workflowEventBatches,
 	)
 }
 
 func (s *Starter) verifyNamespaceActive(creationParams *creationParams, currentWorkflowConditionFailed *persistence.CurrentWorkflowConditionFailedError) error {
-	if creationParams.workflowContext.GetMutableState().GetCurrentVersion() < currentWorkflowConditionFailed.LastWriteVersion {
+	if creationParams.workflowLease.GetMutableState().GetCurrentVersion() < currentWorkflowConditionFailed.LastWriteVersion {
 		clusterMetadata := s.shardContext.GetClusterMetadata()
 		clusterName := clusterMetadata.ClusterNameForFailoverVersion(s.namespace.IsGlobalNamespace(), currentWorkflowConditionFailed.LastWriteVersion)
 		return serviceerror.NewNamespaceNotActive(
