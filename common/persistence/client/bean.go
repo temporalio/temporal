@@ -43,20 +43,20 @@ type (
 		GetNamespaceReplicationQueue() persistence.NamespaceReplicationQueue
 		GetShardManager() persistence.ShardManager
 		GetExecutionManager() persistence.ExecutionManager
-		GetNexusServiceManager() persistence.NexusServiceManager
+		GetNexusIncomingServiceManager() persistence.NexusIncomingServiceManager
 	}
 
 	// BeanImpl stores persistence managers
 	BeanImpl struct {
 		sync.RWMutex
 
-		clusterMetadataManager    persistence.ClusterMetadataManager
-		metadataManager           persistence.MetadataManager
-		taskManager               persistence.TaskManager
-		namespaceReplicationQueue persistence.NamespaceReplicationQueue
-		shardManager              persistence.ShardManager
-		executionManager          persistence.ExecutionManager
-		nexusServiceManager       persistence.NexusServiceManager
+		clusterMetadataManager      persistence.ClusterMetadataManager
+		metadataManager             persistence.MetadataManager
+		taskManager                 persistence.TaskManager
+		namespaceReplicationQueue   persistence.NamespaceReplicationQueue
+		shardManager                persistence.ShardManager
+		executionManager            persistence.ExecutionManager
+		nexusIncomingServiceManager persistence.NexusIncomingServiceManager
 
 		factory  Factory
 		isClosed bool
@@ -99,7 +99,7 @@ func NewBeanFromFactory(
 		return nil, err
 	}
 
-	nexusServiceManager, err := factory.NewNexusServiceManager()
+	nexusIncomingServiceManager, err := factory.NewNexusIncomingServiceManager()
 	if err != nil {
 		return nil, err
 	}
@@ -112,7 +112,7 @@ func NewBeanFromFactory(
 		namespaceReplicationQueue,
 		shardMgr,
 		executionManager,
-		nexusServiceManager,
+		nexusIncomingServiceManager,
 	), nil
 }
 
@@ -125,18 +125,18 @@ func NewBean(
 	namespaceReplicationQueue persistence.NamespaceReplicationQueue,
 	shardManager persistence.ShardManager,
 	executionManager persistence.ExecutionManager,
-	nexusServiceManager persistence.NexusServiceManager,
+	nexusIncomingServiceManager persistence.NexusIncomingServiceManager,
 ) *BeanImpl {
 	return &BeanImpl{
-		factory:                   factory,
-		clusterMetadataManager:    clusterMetadataManager,
-		metadataManager:           metadataManager,
-		taskManager:               taskManager,
-		namespaceReplicationQueue: namespaceReplicationQueue,
-		shardManager:              shardManager,
-		executionManager:          executionManager,
-		nexusServiceManager:       nexusServiceManager,
-		isClosed:                  false,
+		factory:                     factory,
+		clusterMetadataManager:      clusterMetadataManager,
+		metadataManager:             metadataManager,
+		taskManager:                 taskManager,
+		namespaceReplicationQueue:   namespaceReplicationQueue,
+		shardManager:                shardManager,
+		executionManager:            executionManager,
+		nexusIncomingServiceManager: nexusIncomingServiceManager,
+		isClosed:                    false,
 	}
 }
 
@@ -191,11 +191,10 @@ func (s *BeanImpl) GetExecutionManager() persistence.ExecutionManager {
 	return s.executionManager
 }
 
-// GetNexusServiceManager get NexusServiceManager
-func (s *BeanImpl) GetNexusServiceManager() persistence.NexusServiceManager {
+func (s *BeanImpl) GetNexusIncomingServiceManager() persistence.NexusIncomingServiceManager {
 	s.RLock()
 	defer s.RUnlock()
-	return s.nexusServiceManager
+	return s.nexusIncomingServiceManager
 }
 
 // Close cleanup connections
@@ -213,7 +212,7 @@ func (s *BeanImpl) Close() {
 	s.namespaceReplicationQueue.Stop()
 	s.shardManager.Close()
 	s.executionManager.Close()
-	s.nexusServiceManager.Close()
+	s.nexusIncomingServiceManager.Close()
 
 	s.factory.Close()
 	s.isClosed = true

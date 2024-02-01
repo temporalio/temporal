@@ -50,36 +50,36 @@ var (
 )
 
 type (
-	nexusServiceManagerImpl struct {
-		persistence NexusServiceStore
+	nexusIncomingServiceManagerImpl struct {
+		persistence NexusIncomingServiceStore
 		serializer  serialization.Serializer
 		logger      log.Logger
 	}
 )
 
-func NewNexusServiceManager(
-	persistence NexusServiceStore,
+func NewNexusIncomingServiceManager(
+	persistence NexusIncomingServiceStore,
 	serializer serialization.Serializer,
 	logger log.Logger,
-) NexusServiceManager {
-	return &nexusServiceManagerImpl{
+) NexusIncomingServiceManager {
+	return &nexusIncomingServiceManagerImpl{
 		persistence: persistence,
 		serializer:  serializer,
 		logger:      logger,
 	}
 }
 
-func (m *nexusServiceManagerImpl) GetName() string {
+func (m *nexusIncomingServiceManagerImpl) GetName() string {
 	return m.persistence.GetName()
 }
 
-func (m *nexusServiceManagerImpl) Close() {
+func (m *nexusIncomingServiceManagerImpl) Close() {
 	m.persistence.Close()
 }
 
 // GetNexusIncomingServicesTableVersion is a convenience method for getting the current nexus_incoming_services table
 // version by calling ListNexusIncomingServices with LastKnownTableVersion=0 and PageSize=0
-func (m *nexusServiceManagerImpl) GetNexusIncomingServicesTableVersion(ctx context.Context) (int64, error) {
+func (m *nexusIncomingServiceManagerImpl) GetNexusIncomingServicesTableVersion(ctx context.Context) (int64, error) {
 	tableVersion := int64(0)
 	resp, err := m.ListNexusIncomingServices(ctx, &ListNexusIncomingServicesRequest{
 		LastKnownTableVersion: 0,
@@ -91,7 +91,7 @@ func (m *nexusServiceManagerImpl) GetNexusIncomingServicesTableVersion(ctx conte
 	return tableVersion, err
 }
 
-func (m *nexusServiceManagerImpl) ListNexusIncomingServices(
+func (m *nexusIncomingServiceManagerImpl) ListNexusIncomingServices(
 	ctx context.Context,
 	request *ListNexusIncomingServicesRequest,
 ) (*ListNexusIncomingServicesResponse, error) {
@@ -126,7 +126,7 @@ func (m *nexusServiceManagerImpl) ListNexusIncomingServices(
 	return result, nil
 }
 
-func (m *nexusServiceManagerImpl) CreateOrUpdateNexusIncomingService(
+func (m *nexusIncomingServiceManagerImpl) CreateOrUpdateNexusIncomingService(
 	ctx context.Context,
 	request *CreateOrUpdateNexusIncomingServiceRequest,
 ) (*CreateOrUpdateNexusIncomingServiceResponse, error) {
@@ -151,7 +151,7 @@ func (m *nexusServiceManagerImpl) CreateOrUpdateNexusIncomingService(
 	return &CreateOrUpdateNexusIncomingServiceResponse{Service: request.Service}, nil
 }
 
-func (m *nexusServiceManagerImpl) DeleteNexusIncomingService(
+func (m *nexusIncomingServiceManagerImpl) DeleteNexusIncomingService(
 	ctx context.Context,
 	request *DeleteNexusIncomingServiceRequest,
 ) error {

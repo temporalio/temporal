@@ -187,8 +187,8 @@ type (
 		GetDLQAckLevels(ctx context.Context) (*InternalQueueMetadata, error)
 	}
 
-	// NexusServiceStore is a store for managing Nexus services
-	NexusServiceStore interface {
+	// NexusIncomingServiceStore is a store for managing Nexus services
+	NexusIncomingServiceStore interface {
 		Closeable
 		GetName() string
 		CreateOrUpdateNexusIncomingService(ctx context.Context, request *InternalCreateOrUpdateNexusIncomingServiceRequest) error

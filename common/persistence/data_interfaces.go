@@ -1233,8 +1233,8 @@ type (
 		DeleteClusterMetadata(ctx context.Context, request *DeleteClusterMetadataRequest) error
 	}
 
-	// NexusServiceManager is used to manage CRUD for Nexus services
-	NexusServiceManager interface {
+	// NexusIncomingServiceManager is used to manage CRUD for Nexus services
+	NexusIncomingServiceManager interface {
 		Closeable
 		GetName() string
 		GetNexusIncomingServicesTableVersion(ctx context.Context) (int64, error)

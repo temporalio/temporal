@@ -61,8 +61,8 @@ type (
 		NewClusterMetadataManager() (p.ClusterMetadataManager, error)
 		// NewHistoryTaskQueueManager returns a new manager for history task queues
 		NewHistoryTaskQueueManager() (p.HistoryTaskQueueManager, error)
-		// NewNexusServiceManager returns a new manager for nexus services
-		NewNexusServiceManager() (p.NexusServiceManager, error)
+		// NewNexusIncomingServiceManager returns a new manager for nexus services
+		NewNexusIncomingServiceManager() (p.NexusIncomingServiceManager, error)
 	}
 
 	factoryImpl struct {
@@ -225,20 +225,20 @@ func (f *factoryImpl) NewHistoryTaskQueueManager() (p.HistoryTaskQueueManager, e
 	return p.NewHistoryTaskQueueManager(q), nil
 }
 
-func (f *factoryImpl) NewNexusServiceManager() (p.NexusServiceManager, error) {
-	store, err := f.dataStoreFactory.NewNexusServiceStore()
+func (f *factoryImpl) NewNexusIncomingServiceManager() (p.NexusIncomingServiceManager, error) {
+	store, err := f.dataStoreFactory.NewNexusIncomingServiceStore()
 	if err != nil {
 		return nil, err
 	}
 
-	result := p.NewNexusServiceManager(store, f.serializer, f.logger)
+	result := p.NewNexusIncomingServiceManager(store, f.serializer, f.logger)
 	if f.ratelimiter != nil {
-		result = p.NewNexusServicePersistenceRateLimitedClient(result, f.ratelimiter, f.logger)
+		result = p.NewNexusIncomingServicePersistenceRateLimitedClient(result, f.ratelimiter, f.logger)
 	}
 	if f.metricsHandler != nil && f.healthSignals != nil {
-		result = p.NewNexusServicePersistenceMetricsClient(result, f.metricsHandler, f.healthSignals, f.logger)
+		result = p.NewNexusIncomingServicePersistenceMetricsClient(result, f.metricsHandler, f.healthSignals, f.logger)
 	}
-	result = p.NewNexusServicePersistenceRetryableClient(result, retryPolicy, IsPersistenceTransientError)
+	result = p.NewNexusIncomingServicePersistenceRetryableClient(result, retryPolicy, IsPersistenceTransientError)
 	return result, nil
 }
 
