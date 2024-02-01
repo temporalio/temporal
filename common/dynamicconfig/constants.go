@@ -822,7 +822,7 @@ const (
 	ReplicationEnableDLQMetrics = "history.ReplicationEnableDLQMetrics"
 	// HistoryTaskDLQInteralErrors causes history task processing to send tasks failing with serviceerror.Internal to
 	// the dlq (or will drop them if not enabled)
-	HistoryTaskDLQInternalErrors = "history.TaskDLQInternalErrors"
+	HistoryTaskDropInternalErrors = "history.TaskDLQInternalErrors"
 
 	// ReplicationStreamSyncStatusDuration sync replication status duration
 	ReplicationStreamSyncStatusDuration = "history.ReplicationStreamSyncStatusDuration"

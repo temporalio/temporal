@@ -130,7 +130,7 @@ type (
 		lastActiveness         bool
 		resourceExhaustedCount int // does NOT include consts.ErrResourceExhaustedBusyWorkflow
 		taggedMetricsHandler   metrics.Handler
-		dlqInternalErrors      dynamicconfig.BoolPropertyFn
+		dropInternalErrors     dynamicconfig.BoolPropertyFn
 	}
 )
 
@@ -146,10 +146,10 @@ func NewExecutable(
 	clusterMetadata cluster.Metadata,
 	logger log.Logger,
 	metricsHandler metrics.Handler,
-	dlqInternalErrors dynamicconfig.BoolPropertyFn,
+	dropInternalErrors dynamicconfig.BoolPropertyFn,
 ) Executable {
-	if dlqInternalErrors == nil {
-		dlqInternalErrors = func() bool { return false }
+	if dropInternalErrors == nil {
+		dropInternalErrors = func() bool { return false }
 	}
 	executable := &executableImpl{
 		Task:              task,
@@ -172,7 +172,7 @@ func NewExecutable(
 		),
 		metricsHandler:       metricsHandler,
 		taggedMetricsHandler: metricsHandler,
-		dlqInternalErrors:    dlqInternalErrors,
+		dropInternalErrors:   dropInternalErrors,
 	}
 	executable.updatePriority()
 	return executable
@@ -351,7 +351,7 @@ func (e *executableImpl) HandleErr(err error) (retErr error) {
 	if common.IsInternalError(err) {
 		e.logger.Error("Encountered internal error processing tasks", tag.Error(err))
 		e.taggedMetricsHandler.Counter(metrics.TaskInternalErrorCounter.GetMetricName()).Record(1)
-		if e.dlqInternalErrors() {
+		if e.dropInternalErrors() {
 			return nil
 		}
 	}

@@ -184,7 +184,7 @@ func (f *archivalQueueFactory) newScheduledQueue(shard shard.Context, executor q
 			CheckpointInterval:                  f.Config.ArchivalProcessorUpdateAckInterval,
 			CheckpointIntervalJitterCoefficient: f.Config.ArchivalProcessorUpdateAckIntervalJitterCoefficient,
 			MaxReaderCount:                      f.Config.QueueMaxReaderCount,
-			DLQInternalErrors:                   f.Config.TaskDLQInternalErrors,
+			DropInternalErrors:                  f.Config.TaskDropInternalErrors,
 		},
 		f.HostReaderRateLimiter,
 		logger,

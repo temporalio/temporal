@@ -68,7 +68,7 @@ type (
 	}
 
 	params struct {
-		dlqInternalErrors dynamicconfig.BoolPropertyFn
+		dropInternalErrors dynamicconfig.BoolPropertyFn
 	}
 	option func(*params)
 )
@@ -305,7 +305,7 @@ func (s *executableSuite) TestExecuteHandleErr_Corrupted() {
 
 func (s *executableSuite) TestExecute_DropsInternalErrors_WhenEnabled() {
 	executable := s.newTestExecutable(func(p *params) {
-		p.dlqInternalErrors = func() bool { return true }
+		p.dropInternalErrors = func() bool { return true }
 	})
 
 	s.mockExecutor.EXPECT().Execute(gomock.Any(), executable).DoAndReturn(
@@ -319,7 +319,7 @@ func (s *executableSuite) TestExecute_DropsInternalErrors_WhenEnabled() {
 
 func (s *executableSuite) TestExecute_DoesntDropInternalErrors_WhenDisabled() {
 	executable := s.newTestExecutable(func(p *params) {
-		p.dlqInternalErrors = func() bool { return false }
+		p.dropInternalErrors = func() bool { return false }
 	})
 
 	s.mockExecutor.EXPECT().Execute(gomock.Any(), executable).DoAndReturn(
@@ -444,7 +444,7 @@ func (s *executableSuite) TestTaskCancellation() {
 
 func (s *executableSuite) newTestExecutable(opts ...option) Executable {
 	p := params{
-		dlqInternalErrors: func() bool { return false },
+		dropInternalErrors: func() bool { return false },
 	}
 	for _, opt := range opts {
 		opt(&p)
@@ -469,6 +469,6 @@ func (s *executableSuite) newTestExecutable(opts ...option) Executable {
 		s.mockClusterMetadata,
 		log.NewTestLogger(),
 		metrics.NoopMetricsHandler,
-		p.dlqInternalErrors,
+		p.dropInternalErrors,
 	)
 }
