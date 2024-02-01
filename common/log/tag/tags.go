@@ -625,6 +625,11 @@ func Attempt(attempt int32) ZapTag {
 	return NewInt32("attempt", attempt)
 }
 
+// UnexpectedErrorAttempts returns tag for UnexpectedErrorAttempts
+func UnexpectedErrorAttempts(attempt int32) ZapTag {
+	return NewInt32("unexpected-error-attempts", attempt)
+}
+
 func WorkflowTaskType(wtType string) ZapTag {
 	return NewStringTag("wt-type", wtType)
 }
