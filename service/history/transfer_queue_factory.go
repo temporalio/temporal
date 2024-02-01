@@ -211,6 +211,7 @@ func (f *transferQueueFactory) CreateQueue(
 		metricsHandler,
 		f.DLQWriter,
 		f.Config.TaskDLQEnabled,
+		f.Config.TaskDLQUnexpectedErrorAttempts,
 	)
 	return queues.NewImmediateQueue(
 		shard,
