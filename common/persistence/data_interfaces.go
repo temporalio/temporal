@@ -1067,16 +1067,16 @@ type (
 	ListNexusIncomingServicesResponse struct {
 		TableVersion  int64
 		NextPageToken []byte
-		Services      []*persistencespb.VersionedNexusIncomingService
+		Entries       []*persistencespb.NexusIncomingServiceEntry
 	}
 
 	CreateOrUpdateNexusIncomingServiceRequest struct {
 		LastKnownTableVersion int64
-		Service               *persistencespb.VersionedNexusIncomingService
+		Entry                 *persistencespb.NexusIncomingServiceEntry
 	}
 
 	CreateOrUpdateNexusIncomingServiceResponse struct {
-		Service *persistencespb.VersionedNexusIncomingService
+		Entry *persistencespb.NexusIncomingServiceEntry
 	}
 
 	DeleteNexusIncomingServiceRequest struct {

@@ -400,7 +400,7 @@ message GetNexusServiceRequest {
 }
 
 message GetNexusServiceResponse {
-    temporal.server.api.persistence.v1.VersionedNexusIncomingService service = 1;
+    temporal.server.api.persistence.v1.NexusIncomingServiceEntry entry = 1;
 }
 
 // (-- api-linter: core::0135::request-name-behavior=disabled
@@ -437,5 +437,5 @@ message ListNexusServicesResponse {
     // Token for getting the next page.
     bytes next_page_token = 1;
     int64 table_version = 2;
-    repeated temporal.server.api.persistence.v1.VersionedNexusIncomingService services = 3;
+    repeated temporal.server.api.persistence.v1.NexusIncomingServiceEntry entries = 3;
 }
