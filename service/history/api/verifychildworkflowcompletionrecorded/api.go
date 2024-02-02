@@ -49,7 +49,7 @@ func Invoke(
 		return nil, err
 	}
 
-	workflowContext, err := workflowConsistencyChecker.GetWorkflowContext(
+	workflowContext, err := workflowConsistencyChecker.GetWorkflowLease(
 		ctx,
 		request.Clock,
 		// it's ok we have stale state when doing verification,

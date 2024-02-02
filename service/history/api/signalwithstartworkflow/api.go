@@ -51,7 +51,7 @@ func Invoke(
 	namespaceID := namespaceEntry.ID()
 
 	var currentWorkflowLease api.WorkflowLease
-	currentWorkflowLease, err = workflowConsistencyChecker.GetWorkflowContext(
+	currentWorkflowLease, err = workflowConsistencyChecker.GetWorkflowLease(
 		ctx,
 		nil,
 		api.BypassMutableStateConsistencyPredicate,

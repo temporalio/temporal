@@ -87,7 +87,7 @@ func (mockUpdateEventStore) OnAfterCommit(f func(context.Context))   { f(context
 func (mockUpdateEventStore) OnAfterRollback(f func(context.Context)) {}
 func (mockUpdateEventStore) CanAddEvent() bool                       { return true }
 
-func (m mockWFConsistencyChecker) GetWorkflowContext(
+func (m mockWFConsistencyChecker) GetWorkflowLease(
 	ctx context.Context,
 	clock *clockspb.VectorClock,
 	pred api.MutableStateConsistencyPredicate,

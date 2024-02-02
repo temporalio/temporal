@@ -44,7 +44,7 @@ func GetAndUpdateWorkflowWithNew(
 	shard shard.Context,
 	workflowConsistencyChecker WorkflowConsistencyChecker,
 ) (retError error) {
-	workflowContext, err := workflowConsistencyChecker.GetWorkflowContext(
+	workflowLease, err := workflowConsistencyChecker.GetWorkflowLease(
 		ctx,
 		reqClock,
 		consistencyCheckFn,
@@ -54,9 +54,9 @@ func GetAndUpdateWorkflowWithNew(
 	if err != nil {
 		return err
 	}
-	defer func() { workflowContext.GetReleaseFn()(retError) }()
+	defer func() { workflowLease.GetReleaseFn()(retError) }()
 
-	return UpdateWorkflowWithNew(shard, ctx, workflowContext, action, newWorkflowFn)
+	return UpdateWorkflowWithNew(shard, ctx, workflowLease, action, newWorkflowFn)
 }
 
 func UpdateWorkflowWithNew(

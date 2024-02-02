@@ -88,7 +88,7 @@ func startAndSignalWorkflow(
 	workflowID := signalWithStartRequest.GetWorkflowId()
 	runID := uuid.New().String()
 	// TODO(bergundy): Support eager workflow task
-	newWorkflowContext, err := api.NewWorkflowWithSignal(
+	newWorkflowLease, err := api.NewWorkflowWithSignal(
 		ctx,
 		shard,
 		namespaceEntry,
@@ -103,7 +103,7 @@ func startAndSignalWorkflow(
 	if err = api.ValidateSignal(
 		ctx,
 		shard,
-		newWorkflowContext.GetMutableState(),
+		newWorkflowLease.GetMutableState(),
 		signalWithStartRequest.GetSignalInput().Size(),
 		"SignalWithStartWorkflowExecution",
 	); err != nil {
@@ -124,7 +124,7 @@ func startAndSignalWorkflow(
 			shard,
 			currentWorkflowLease,
 			workflowMutationFn,
-			newWorkflowContext,
+			newWorkflowLease,
 		); err != nil {
 			return "", err
 		}
@@ -138,7 +138,7 @@ func startAndSignalWorkflow(
 		ctx,
 		shard,
 		vrid,
-		newWorkflowContext,
+		newWorkflowLease,
 		signalWithStartRequest.RequestId,
 	)
 }
@@ -185,7 +185,7 @@ func startAndSignalWithCurrentWorkflow(
 	shard shard.Context,
 	currentWorkflowLease api.WorkflowLease,
 	currentWorkflowUpdateAction api.UpdateWorkflowActionFunc,
-	newWorkflowContext api.WorkflowLease,
+	newWorkflowLease api.WorkflowLease,
 ) error {
 	err := api.UpdateWorkflowWithNew(
 		shard,
@@ -193,7 +193,7 @@ func startAndSignalWithCurrentWorkflow(
 		currentWorkflowLease,
 		currentWorkflowUpdateAction,
 		func() (workflow.Context, workflow.MutableState, error) {
-			return newWorkflowContext.GetContext(), newWorkflowContext.GetMutableState(), nil
+			return newWorkflowLease.GetContext(), newWorkflowLease.GetMutableState(), nil
 		},
 	)
 	if err != nil {
@@ -207,10 +207,10 @@ func startAndSignalWithoutCurrentWorkflow(
 	ctx context.Context,
 	shardContext shard.Context,
 	vrid *api.VersionedRunID,
-	newWorkflowContext api.WorkflowLease,
+	newWorkflowLease api.WorkflowLease,
 	requestID string,
 ) (string, error) {
-	newWorkflow, newWorkflowEventsSeq, err := newWorkflowContext.GetMutableState().CloseTransactionAsSnapshot(
+	newWorkflow, newWorkflowEventsSeq, err := newWorkflowLease.GetMutableState().CloseTransactionAsSnapshot(
 		workflow.TransactionPolicyActive,
 	)
 	if err != nil {
@@ -230,25 +230,25 @@ func startAndSignalWithoutCurrentWorkflow(
 		err = api.NewWorkflowVersionCheck(
 			shardContext,
 			vrid.LastWriteVersion,
-			newWorkflowContext.GetMutableState(),
+			newWorkflowLease.GetMutableState(),
 		)
 		if err != nil {
 			return "", err
 		}
 	}
-	err = newWorkflowContext.GetContext().CreateWorkflowExecution(
+	err = newWorkflowLease.GetContext().CreateWorkflowExecution(
 		ctx,
 		shardContext,
 		createMode,
 		prevRunID,
 		prevLastWriteVersion,
-		newWorkflowContext.GetMutableState(),
+		newWorkflowLease.GetMutableState(),
 		newWorkflow,
 		newWorkflowEventsSeq,
 	)
 	switch failedErr := err.(type) {
 	case nil:
-		return newWorkflowContext.GetWorkflowKey().RunID, nil
+		return newWorkflowLease.GetWorkflowKey().RunID, nil
 	case *persistence.CurrentWorkflowConditionFailedError:
 		if failedErr.RequestID == requestID {
 			return failedErr.RunID, nil

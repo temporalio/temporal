@@ -91,8 +91,8 @@ func Invoke(
 		nil,
 		api.BypassMutableStateConsistencyPredicate,
 		wfKey,
-		func(weCtx api.WorkflowLease) (*api.UpdateWorkflowAction, error) {
-			ms := weCtx.GetMutableState()
+		func(workflowLease api.WorkflowLease) (*api.UpdateWorkflowAction, error) {
+			ms := workflowLease.GetMutableState()
 			if !ms.IsWorkflowExecutionRunning() {
 				return nil, consts.ErrWorkflowCompleted
 			}
@@ -118,7 +118,7 @@ func Invoke(
 			}
 
 			updateID := req.GetRequest().GetRequest().GetMeta().GetUpdateId()
-			updateReg := weCtx.GetUpdateRegistry(ctx)
+			updateReg := workflowLease.GetUpdateRegistry(ctx)
 			var (
 				alreadyExisted bool
 				err            error

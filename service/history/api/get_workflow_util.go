@@ -216,7 +216,7 @@ func GetMutableState(
 		))
 	}
 
-	weCtx, err := workflowConsistencyChecker.GetWorkflowContext(
+	workflowLease, err := workflowConsistencyChecker.GetWorkflowLease(
 		ctx,
 		nil,
 		BypassMutableStateConsistencyPredicate,
@@ -226,9 +226,9 @@ func GetMutableState(
 	if err != nil {
 		return nil, err
 	}
-	defer func() { weCtx.GetReleaseFn()(retError) }()
+	defer func() { workflowLease.GetReleaseFn()(retError) }()
 
-	mutableState, err := weCtx.GetContext().LoadMutableState(ctx, shardContext)
+	mutableState, err := workflowLease.GetContext().LoadMutableState(ctx, shardContext)
 	if err != nil {
 		return nil, err
 	}

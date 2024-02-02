@@ -53,7 +53,7 @@ func Invoke(
 	updateRef := req.GetRequest().GetUpdateRef()
 	wfexec := updateRef.GetWorkflowExecution()
 	wfKey, upd, ok, err := func() (*definition.WorkflowKey, *update.Update, bool, error) {
-		wfctx, err := ctxLookup.GetWorkflowContext(
+		workflowLease, err := ctxLookup.GetWorkflowLease(
 			ctx,
 			nil,
 			api.BypassMutableStateConsistencyPredicate,
@@ -67,10 +67,10 @@ func Invoke(
 		if err != nil {
 			return nil, nil, false, err
 		}
-		release := wfctx.GetReleaseFn()
+		release := workflowLease.GetReleaseFn()
 		defer release(nil)
-		upd, found := wfctx.GetUpdateRegistry(ctx).Find(ctx, updateRef.UpdateId)
-		wfKey := wfctx.GetWorkflowKey()
+		upd, found := workflowLease.GetUpdateRegistry(ctx).Find(ctx, updateRef.UpdateId)
+		wfKey := workflowLease.GetWorkflowKey()
 		return &wfKey, upd, found, nil
 	}()
 	if err != nil {

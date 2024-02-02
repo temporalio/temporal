@@ -214,7 +214,7 @@ func (s *Starter) lockCurrentWorkflowExecution(
 // createNewMutableState creates a new workflow context, and closes its mutable state transaction as snapshot.
 // It returns the creationContext which can later be used to insert into the executions table.
 func (s *Starter) createNewMutableState(ctx context.Context, workflowID string, runID string) (*creationParams, error) {
-	workflowContext, err := api.NewWorkflowWithSignal(
+	workflowLease, err := api.NewWorkflowWithSignal(
 		ctx,
 		s.shardContext,
 		s.namespace,
@@ -227,7 +227,7 @@ func (s *Starter) createNewMutableState(ctx context.Context, workflowID string, 
 		return nil, err
 	}
 
-	mutableState := workflowContext.GetMutableState()
+	mutableState := workflowLease.GetMutableState()
 	workflowTaskInfo := mutableState.GetStartedWorkflowTask()
 	if s.requestEagerStart() && workflowTaskInfo == nil {
 		return nil, serviceerror.NewInternal("unexpected error: mutable state did not have a started workflow task")
@@ -245,7 +245,7 @@ func (s *Starter) createNewMutableState(ctx context.Context, workflowID string, 
 	return &creationParams{
 		workflowID:           workflowID,
 		runID:                runID,
-		workflowLease:        workflowContext,
+		workflowLease:        workflowLease,
 		workflowTaskInfo:     workflowTaskInfo,
 		workflowSnapshot:     workflowSnapshot,
 		workflowEventBatches: eventBatches,
@@ -366,7 +366,7 @@ func (s *Starter) applyWorkflowIDReusePolicy(
 		),
 		prevExecutionUpdateAction,
 		func() (workflow.Context, workflow.MutableState, error) {
-			workflowContext, err := api.NewWorkflowWithSignal(
+			workflowLease, err := api.NewWorkflowWithSignal(
 				ctx,
 				s.shardContext,
 				s.namespace,
@@ -377,12 +377,12 @@ func (s *Starter) applyWorkflowIDReusePolicy(
 			if err != nil {
 				return nil, nil, err
 			}
-			mutableState := workflowContext.GetMutableState()
+			mutableState := workflowLease.GetMutableState()
 			mutableStateInfo, err = extractMutableStateInfo(mutableState)
 			if err != nil {
 				return nil, nil, err
 			}
-			return workflowContext.GetContext(), mutableState, nil
+			return workflowLease.GetContext(), mutableState, nil
 		},
 		s.shardContext,
 		s.workflowConsistencyChecker,

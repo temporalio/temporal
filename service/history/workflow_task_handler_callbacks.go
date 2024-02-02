@@ -398,7 +398,7 @@ func (handler *workflowTaskHandlerCallbacksImpl) handleWorkflowTaskCompleted(
 		return nil, consts.ErrDeserializingToken
 	}
 
-	workflowContext, err := handler.workflowConsistencyChecker.GetWorkflowContext(
+	workflowContext, err := handler.workflowConsistencyChecker.GetWorkflowLease(
 		ctx,
 		token.Clock,
 		func(mutableState workflow.MutableState) bool {
@@ -885,7 +885,7 @@ func (handler *workflowTaskHandlerCallbacksImpl) verifyFirstWorkflowTaskSchedule
 		return err
 	}
 
-	workflowContext, err := handler.workflowConsistencyChecker.GetWorkflowContext(
+	workflowLease, err := handler.workflowConsistencyChecker.GetWorkflowLease(
 		ctx,
 		req.Clock,
 		api.BypassMutableStateConsistencyPredicate,
@@ -899,9 +899,9 @@ func (handler *workflowTaskHandlerCallbacksImpl) verifyFirstWorkflowTaskSchedule
 	if err != nil {
 		return err
 	}
-	defer func() { workflowContext.GetReleaseFn()(retError) }()
+	defer func() { workflowLease.GetReleaseFn()(retError) }()
 
-	mutableState := workflowContext.GetMutableState()
+	mutableState := workflowLease.GetMutableState()
 	if !mutableState.IsWorkflowExecutionRunning() &&
 		mutableState.GetExecutionState().State != enumsspb.WORKFLOW_EXECUTION_STATE_ZOMBIE {
 		return nil

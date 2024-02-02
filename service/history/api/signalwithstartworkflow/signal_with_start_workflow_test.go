@@ -109,7 +109,7 @@ func (s *signalWithStartWorkflowSuite) TearDownTest() {
 
 func (s *signalWithStartWorkflowSuite) TestSignalWorkflow_WorkflowCloseAttempted() {
 	ctx := context.Background()
-	currentWorkflowContext := api.NewWorkflowLease(
+	currentWorkflowLease := api.NewWorkflowLease(
 		s.currentContext,
 		wcache.NoopReleaseFn,
 		s.currentMutableState,
@@ -122,7 +122,7 @@ func (s *signalWithStartWorkflowSuite) TestSignalWorkflow_WorkflowCloseAttempted
 	err := signalWorkflow(
 		ctx,
 		s.shardContext,
-		currentWorkflowContext,
+		currentWorkflowLease,
 		request,
 	)
 	s.Error(consts.ErrWorkflowClosing, err)
@@ -130,7 +130,7 @@ func (s *signalWithStartWorkflowSuite) TestSignalWorkflow_WorkflowCloseAttempted
 
 func (s *signalWithStartWorkflowSuite) TestSignalWorkflow_Dedup() {
 	ctx := context.Background()
-	currentWorkflowContext := api.NewWorkflowLease(
+	currentWorkflowLease := api.NewWorkflowLease(
 		s.currentContext,
 		wcache.NoopReleaseFn,
 		s.currentMutableState,
@@ -143,7 +143,7 @@ func (s *signalWithStartWorkflowSuite) TestSignalWorkflow_Dedup() {
 	err := signalWorkflow(
 		ctx,
 		s.shardContext,
-		currentWorkflowContext,
+		currentWorkflowLease,
 		request,
 	)
 	s.NoError(err)
@@ -151,7 +151,7 @@ func (s *signalWithStartWorkflowSuite) TestSignalWorkflow_Dedup() {
 
 func (s *signalWithStartWorkflowSuite) TestSignalWorkflow_NewWorkflowTask() {
 	ctx := context.Background()
-	currentWorkflowContext := api.NewWorkflowLease(
+	currentWorkflowLease := api.NewWorkflowLease(
 		s.currentContext,
 		wcache.NoopReleaseFn,
 		s.currentMutableState,
@@ -176,7 +176,7 @@ func (s *signalWithStartWorkflowSuite) TestSignalWorkflow_NewWorkflowTask() {
 	err := signalWorkflow(
 		ctx,
 		s.shardContext,
-		currentWorkflowContext,
+		currentWorkflowLease,
 		request,
 	)
 	s.NoError(err)
@@ -184,7 +184,7 @@ func (s *signalWithStartWorkflowSuite) TestSignalWorkflow_NewWorkflowTask() {
 
 func (s *signalWithStartWorkflowSuite) TestSignalWorkflow_NoNewWorkflowTask() {
 	ctx := context.Background()
-	currentWorkflowContext := api.NewWorkflowLease(
+	currentWorkflowLease := api.NewWorkflowLease(
 		s.currentContext,
 		wcache.NoopReleaseFn,
 		s.currentMutableState,
@@ -207,7 +207,7 @@ func (s *signalWithStartWorkflowSuite) TestSignalWorkflow_NoNewWorkflowTask() {
 	err := signalWorkflow(
 		ctx,
 		s.shardContext,
-		currentWorkflowContext,
+		currentWorkflowLease,
 		request,
 	)
 	s.NoError(err)

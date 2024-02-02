@@ -55,7 +55,7 @@ type (
 			workflowID string,
 			lockPriority workflow.LockPriority,
 		) (string, error)
-		GetWorkflowContext(
+		GetWorkflowLease(
 			ctx context.Context,
 			reqClock *clockspb.VectorClock,
 			consistencyPredicate MutableStateConsistencyPredicate,
@@ -107,7 +107,7 @@ func (c *WorkflowConsistencyCheckerImpl) GetCurrentRunID(
 	return runID, nil
 }
 
-func (c *WorkflowConsistencyCheckerImpl) GetWorkflowContext(
+func (c *WorkflowConsistencyCheckerImpl) GetWorkflowLease(
 	ctx context.Context,
 	reqClock *clockspb.VectorClock,
 	consistencyPredicate MutableStateConsistencyPredicate,
