@@ -1058,29 +1058,30 @@ type (
 		MaxRecordsPruned int
 	}
 
-	// GetNexusIncomingServiceRequest is the request to GetNexusIncomingService
-	GetNexusIncomingServiceRequest struct {
-	}
-
-	// GetNexusIncomingServiceResponse is the response to GetNexusIncomingService
-	GetNexusIncomingServiceResponse struct {
-	}
-
-	// ListNexusIncomingServicesRequest is the request to ListNexusIncomingServices
 	ListNexusIncomingServicesRequest struct {
-		PageSize int
+		LastKnownTableVersion int64
+		NextPageToken         []byte
+		PageSize              int
 	}
 
-	// ListNexusIncomingServicesResponse is the response to ListNexusIncomingServices
 	ListNexusIncomingServicesResponse struct {
+		TableVersion  int64
+		NextPageToken []byte
+		Entries       []*persistencespb.NexusIncomingServiceEntry
 	}
 
-	// CreateOrUpdateNexusIncomingServiceRequest is the request to CreateOrUpdateNexusIncomingService
 	CreateOrUpdateNexusIncomingServiceRequest struct {
+		LastKnownTableVersion int64
+		Entry                 *persistencespb.NexusIncomingServiceEntry
 	}
 
-	// DeleteNexusIncomingServiceRequest is the request to DeleteNexusIncomingService
+	CreateOrUpdateNexusIncomingServiceResponse struct {
+		Entry *persistencespb.NexusIncomingServiceEntry
+	}
+
 	DeleteNexusIncomingServiceRequest struct {
+		LastKnownTableVersion int64
+		ServiceID             string
 	}
 
 	// Closeable is an interface for any entity that supports a close operation to release resources
@@ -1232,13 +1233,13 @@ type (
 		DeleteClusterMetadata(ctx context.Context, request *DeleteClusterMetadataRequest) error
 	}
 
-	// NexusServiceManager is used to manage CRUD for Nexus services
-	NexusServiceManager interface {
+	// NexusIncomingServiceManager is used to manage CRUD for Nexus services
+	NexusIncomingServiceManager interface {
 		Closeable
 		GetName() string
-		GetNexusIncomingService(ctx context.Context, request *GetNexusIncomingServiceRequest) (*GetNexusIncomingServiceResponse, error)
+		GetNexusIncomingServicesTableVersion(ctx context.Context) (int64, error)
 		ListNexusIncomingServices(ctx context.Context, request *ListNexusIncomingServicesRequest) (*ListNexusIncomingServicesResponse, error)
-		CreateOrUpdateNexusIncomingService(ctx context.Context, request *CreateOrUpdateNexusIncomingServiceRequest) error
+		CreateOrUpdateNexusIncomingService(ctx context.Context, request *CreateOrUpdateNexusIncomingServiceRequest) (*CreateOrUpdateNexusIncomingServiceResponse, error)
 		DeleteNexusIncomingService(ctx context.Context, request *DeleteNexusIncomingServiceRequest) error
 	}
 

@@ -187,13 +187,13 @@ type (
 		GetDLQAckLevels(ctx context.Context) (*InternalQueueMetadata, error)
 	}
 
-	// NexusServiceStore is a store for managing Nexus services
-	NexusServiceStore interface {
+	// NexusIncomingServiceStore is a store for managing Nexus services
+	NexusIncomingServiceStore interface {
 		Closeable
 		GetName() string
 		CreateOrUpdateNexusIncomingService(ctx context.Context, request *InternalCreateOrUpdateNexusIncomingServiceRequest) error
-		ListNexusIncomingServices(ctx context.Context, request *InternalListNexusIncomingServicesRequest) (*InternalListNexusIncomingServicesResponse, error)
-		DeleteNexusIncomingService(ctx context.Context, request *InternalDeleteNexusIncomingServiceRequest) error
+		ListNexusIncomingServices(ctx context.Context, request *ListNexusIncomingServicesRequest) (*InternalListNexusIncomingServicesResponse, error)
+		DeleteNexusIncomingService(ctx context.Context, request *DeleteNexusIncomingServiceRequest) error
 	}
 
 	// QueueMessage is the message that stores in the queue
@@ -739,37 +739,21 @@ type (
 		RecordExpiry time.Time
 	}
 
-	// InternalNexusIncomingService is the internal representation of an incoming Nexus service
 	InternalNexusIncomingService struct {
 		ServiceID string
 		Version   int64
 		Data      *commonpb.DataBlob
 	}
 
-	// InternalCreateOrUpdateNexusIncomingServiceRequest is the input to CreateOrUpdateNexusIncomingService
 	InternalCreateOrUpdateNexusIncomingServiceRequest struct {
 		LastKnownTableVersion int64
 		Service               InternalNexusIncomingService
 	}
 
-	// InternalListNexusIncomingServicesRequest is the request to ListNexusIncomingServices
-	InternalListNexusIncomingServicesRequest struct {
-		PageSize              int
-		NextPageToken         []byte
-		LastKnownTableVersion int64
-	}
-
-	// InternalListNexusIncomingServicesResponse is the response to ListNexusIncomingServices
 	InternalListNexusIncomingServicesResponse struct {
 		TableVersion  int64
 		NextPageToken []byte
 		Services      []InternalNexusIncomingService
-	}
-
-	// InternalDeleteNexusIncomingServiceRequest is the input to DeleteNexusIncomingService
-	InternalDeleteNexusIncomingServiceRequest struct {
-		LastKnownTableVersion int64
-		ServiceID             string
 	}
 
 	// QueueV2 is an interface for a generic FIFO queue. It should eventually replace the Queue interface. Why do we

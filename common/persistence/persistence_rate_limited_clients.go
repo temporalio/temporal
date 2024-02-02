@@ -85,9 +85,9 @@ type (
 		logger      log.Logger
 	}
 
-	nexusServiceRateLimitedPersistenceClient struct {
+	nexusIncomingServiceRateLimitedPersistenceClient struct {
 		rateLimiter quotas.RequestRateLimiter
-		persistence NexusServiceManager
+		persistence NexusIncomingServiceManager
 		logger      log.Logger
 	}
 )
@@ -98,7 +98,7 @@ var _ TaskManager = (*taskRateLimitedPersistenceClient)(nil)
 var _ MetadataManager = (*metadataRateLimitedPersistenceClient)(nil)
 var _ ClusterMetadataManager = (*clusterMetadataRateLimitedPersistenceClient)(nil)
 var _ Queue = (*queueRateLimitedPersistenceClient)(nil)
-var _ NexusServiceManager = (*nexusServiceRateLimitedPersistenceClient)(nil)
+var _ NexusIncomingServiceManager = (*nexusIncomingServiceRateLimitedPersistenceClient)(nil)
 
 // NewShardPersistenceRateLimitedClient creates a client to manage shards
 func NewShardPersistenceRateLimitedClient(persistence ShardManager, rateLimiter quotas.RequestRateLimiter, logger log.Logger) ShardManager {
@@ -154,9 +154,9 @@ func NewQueuePersistenceRateLimitedClient(persistence Queue, rateLimiter quotas.
 	}
 }
 
-// NewNexusServicePersistenceRateLimitedClient creates a NexusServiceManager to manage nexus services
-func NewNexusServicePersistenceRateLimitedClient(persistence NexusServiceManager, rateLimiter quotas.RequestRateLimiter, logger log.Logger) NexusServiceManager {
-	return &nexusServiceRateLimitedPersistenceClient{
+// NewNexusIncomingServicePersistenceRateLimitedClient creates a NexusIncomingServiceManager to manage nexus services
+func NewNexusIncomingServicePersistenceRateLimitedClient(persistence NexusIncomingServiceManager, rateLimiter quotas.RequestRateLimiter, logger log.Logger) NexusIncomingServiceManager {
+	return &nexusIncomingServiceRateLimitedPersistenceClient{
 		persistence: persistence,
 		rateLimiter: rateLimiter,
 		logger:      logger,
@@ -1067,25 +1067,24 @@ func (c *clusterMetadataRateLimitedPersistenceClient) DeleteClusterMetadata(
 	return c.persistence.DeleteClusterMetadata(ctx, request)
 }
 
-func (p *nexusServiceRateLimitedPersistenceClient) GetName() string {
+func (p *nexusIncomingServiceRateLimitedPersistenceClient) GetName() string {
 	return p.persistence.GetName()
 }
 
-func (p *nexusServiceRateLimitedPersistenceClient) Close() {
+func (p *nexusIncomingServiceRateLimitedPersistenceClient) Close() {
 	p.persistence.Close()
 }
 
-func (p *nexusServiceRateLimitedPersistenceClient) GetNexusIncomingService(
+func (p *nexusIncomingServiceRateLimitedPersistenceClient) GetNexusIncomingServicesTableVersion(
 	ctx context.Context,
-	request *GetNexusIncomingServiceRequest,
-) (*GetNexusIncomingServiceResponse, error) {
-	if ok := allow(ctx, "GetNexusIncomingService", CallerSegmentMissing, p.rateLimiter); !ok {
-		return nil, ErrPersistenceLimitExceeded
+) (int64, error) {
+	if ok := allow(ctx, "ListNexusIncomingServices", CallerSegmentMissing, p.rateLimiter); !ok {
+		return 0, ErrPersistenceLimitExceeded
 	}
-	return p.persistence.GetNexusIncomingService(ctx, request)
+	return p.persistence.GetNexusIncomingServicesTableVersion(ctx)
 }
 
-func (p *nexusServiceRateLimitedPersistenceClient) ListNexusIncomingServices(
+func (p *nexusIncomingServiceRateLimitedPersistenceClient) ListNexusIncomingServices(
 	ctx context.Context,
 	request *ListNexusIncomingServicesRequest,
 ) (*ListNexusIncomingServicesResponse, error) {
@@ -1095,17 +1094,17 @@ func (p *nexusServiceRateLimitedPersistenceClient) ListNexusIncomingServices(
 	return p.persistence.ListNexusIncomingServices(ctx, request)
 }
 
-func (p *nexusServiceRateLimitedPersistenceClient) CreateOrUpdateNexusIncomingService(
+func (p *nexusIncomingServiceRateLimitedPersistenceClient) CreateOrUpdateNexusIncomingService(
 	ctx context.Context,
 	request *CreateOrUpdateNexusIncomingServiceRequest,
-) error {
+) (*CreateOrUpdateNexusIncomingServiceResponse, error) {
 	if ok := allow(ctx, "CreateOrUpdateNexusIncomingService", CallerSegmentMissing, p.rateLimiter); !ok {
-		return ErrPersistenceLimitExceeded
+		return nil, ErrPersistenceLimitExceeded
 	}
 	return p.persistence.CreateOrUpdateNexusIncomingService(ctx, request)
 }
 
-func (p *nexusServiceRateLimitedPersistenceClient) DeleteNexusIncomingService(
+func (p *nexusIncomingServiceRateLimitedPersistenceClient) DeleteNexusIncomingService(
 	ctx context.Context,
 	request *DeleteNexusIncomingServiceRequest,
 ) error {

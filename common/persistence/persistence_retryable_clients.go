@@ -69,8 +69,8 @@ type (
 		isRetryable backoff.IsRetryable
 	}
 
-	nexusServiceRetryablePersistenceClient struct {
-		persistence NexusServiceManager
+	nexusIncomingServiceRetryablePersistenceClient struct {
+		persistence NexusIncomingServiceManager
 		policy      backoff.RetryPolicy
 		isRetryable backoff.IsRetryable
 	}
@@ -82,7 +82,7 @@ var _ TaskManager = (*taskRetryablePersistenceClient)(nil)
 var _ MetadataManager = (*metadataRetryablePersistenceClient)(nil)
 var _ ClusterMetadataManager = (*clusterMetadataRetryablePersistenceClient)(nil)
 var _ Queue = (*queueRetryablePersistenceClient)(nil)
-var _ NexusServiceManager = (*nexusServiceRetryablePersistenceClient)(nil)
+var _ NexusIncomingServiceManager = (*nexusIncomingServiceRetryablePersistenceClient)(nil)
 
 // NewShardPersistenceRetryableClient creates a client to manage shards
 func NewShardPersistenceRetryableClient(
@@ -162,13 +162,13 @@ func NewQueuePersistenceRetryableClient(
 	}
 }
 
-// NewNexusServicePersistenceRetryableClient creates a NexusServiceManager client to manage nexus services
-func NewNexusServicePersistenceRetryableClient(
-	persistence NexusServiceManager,
+// NewNexusIncomingServicePersistenceRetryableClient creates a NexusIncomingServiceManager client to manage nexus services
+func NewNexusIncomingServicePersistenceRetryableClient(
+	persistence NexusIncomingServiceManager,
 	policy backoff.RetryPolicy,
 	isRetryable backoff.IsRetryable,
-) NexusServiceManager {
-	return &nexusServiceRetryablePersistenceClient{
+) NexusIncomingServiceManager {
+	return &nexusIncomingServiceRetryablePersistenceClient{
 		persistence: persistence,
 		policy:      policy,
 		isRetryable: isRetryable,
@@ -1262,29 +1262,28 @@ func (p *queueRetryablePersistenceClient) Close() {
 	p.persistence.Close()
 }
 
-func (p *nexusServiceRetryablePersistenceClient) GetName() string {
+func (p *nexusIncomingServiceRetryablePersistenceClient) GetName() string {
 	return p.persistence.GetName()
 }
 
-func (p *nexusServiceRetryablePersistenceClient) Close() {
+func (p *nexusIncomingServiceRetryablePersistenceClient) Close() {
 	p.persistence.Close()
 }
 
-func (p *nexusServiceRetryablePersistenceClient) GetNexusIncomingService(
+func (p *nexusIncomingServiceRetryablePersistenceClient) GetNexusIncomingServicesTableVersion(
 	ctx context.Context,
-	request *GetNexusIncomingServiceRequest,
-) (*GetNexusIncomingServiceResponse, error) {
-	var response *GetNexusIncomingServiceResponse
+) (int64, error) {
+	var response int64
 	op := func(ctx context.Context) error {
 		var err error
-		response, err = p.persistence.GetNexusIncomingService(ctx, request)
+		response, err = p.persistence.GetNexusIncomingServicesTableVersion(ctx)
 		return err
 	}
 	err := backoff.ThrottleRetryContext(ctx, op, p.policy, p.isRetryable)
 	return response, err
 }
 
-func (p *nexusServiceRetryablePersistenceClient) ListNexusIncomingServices(
+func (p *nexusIncomingServiceRetryablePersistenceClient) ListNexusIncomingServices(
 	ctx context.Context,
 	request *ListNexusIncomingServicesRequest,
 ) (*ListNexusIncomingServicesResponse, error) {
@@ -1298,17 +1297,21 @@ func (p *nexusServiceRetryablePersistenceClient) ListNexusIncomingServices(
 	return response, err
 }
 
-func (p *nexusServiceRetryablePersistenceClient) CreateOrUpdateNexusIncomingService(
+func (p *nexusIncomingServiceRetryablePersistenceClient) CreateOrUpdateNexusIncomingService(
 	ctx context.Context,
 	request *CreateOrUpdateNexusIncomingServiceRequest,
-) error {
+) (*CreateOrUpdateNexusIncomingServiceResponse, error) {
+	var response *CreateOrUpdateNexusIncomingServiceResponse
 	op := func(ctx context.Context) error {
-		return p.persistence.CreateOrUpdateNexusIncomingService(ctx, request)
+		var err error
+		response, err = p.persistence.CreateOrUpdateNexusIncomingService(ctx, request)
+		return err
 	}
-	return backoff.ThrottleRetryContext(ctx, op, p.policy, p.isRetryable)
+	err := backoff.ThrottleRetryContext(ctx, op, p.policy, p.isRetryable)
+	return response, err
 }
 
-func (p *nexusServiceRetryablePersistenceClient) DeleteNexusIncomingService(
+func (p *nexusIncomingServiceRetryablePersistenceClient) DeleteNexusIncomingService(
 	ctx context.Context,
 	request *DeleteNexusIncomingServiceRequest,
 ) error {
