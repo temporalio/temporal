@@ -68,6 +68,7 @@ type (
 
 		notifyChan   chan struct{}
 		shutdownChan chan struct{}
+		shutdownWG   sync.WaitGroup
 
 		options InterleavedWeightedRoundRobinSchedulerOptions[T, K]
 
@@ -124,6 +125,7 @@ func (s *InterleavedWeightedRoundRobinScheduler[T, K]) Start() {
 
 	s.fifoScheduler.Start()
 
+	s.shutdownWG.Add(1)
 	go s.eventLoop()
 
 	s.logger.Info("interleaved weighted round robin task scheduler started")
@@ -142,6 +144,7 @@ func (s *InterleavedWeightedRoundRobinScheduler[T, K]) Stop() {
 
 	s.fifoScheduler.Stop()
 
+	s.shutdownWG.Wait()
 	s.abortTasks()
 
 	s.logger.Info("interleaved weighted round robin task scheduler stopped")
@@ -185,6 +188,8 @@ func (s *InterleavedWeightedRoundRobinScheduler[T, K]) TrySubmit(
 }
 
 func (s *InterleavedWeightedRoundRobinScheduler[T, K]) eventLoop() {
+	defer s.shutdownWG.Done()
+
 	for {
 		select {
 		case <-s.notifyChan:
