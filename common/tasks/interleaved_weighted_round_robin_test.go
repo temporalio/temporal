@@ -391,6 +391,9 @@ func (s *interleavedWeightedRoundRobinSchedulerSuite) TestUpdateWeight() {
 
 	}
 	s.Equal([]int{8, 8, 8, 8, 5, 8, 5, 8, 5, 8, 5, 8, 5, 1, 1}, channelWeights)
+
+	// set the number of pending task back
+	atomic.AddInt64(&s.scheduler.numInflightTask, -1)
 }
 
 func newTestTask(
