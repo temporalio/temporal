@@ -32,16 +32,17 @@ import (
 
 func IncomingServiceToEntry(
 	service *nexus.IncomingService,
-	id string,
+	serviceID string,
+	namespaceID string,
 	clock *hlc.Clock,
 ) *persistencepb.NexusIncomingServiceEntry {
 	return &persistencepb.NexusIncomingServiceEntry{
 		Version: service.Version,
-		Id:      id,
+		Id:      serviceID,
 		Service: &persistencepb.NexusIncomingService{
 			Clock:       clock,
 			Name:        service.Name,
-			NamespaceId: service.Namespace,
+			NamespaceId: namespaceID,
 			TaskQueue:   service.TaskQueue,
 			Metadata:    incomingServiceMetadataToPersisted(service.Metadata, clock),
 		},

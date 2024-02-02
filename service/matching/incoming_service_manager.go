@@ -29,6 +29,7 @@ import (
 	"sync/atomic"
 
 	"github.com/google/uuid"
+	nexuspb "go.temporal.io/api/nexus/v1"
 
 	"go.temporal.io/server/api/matchingservice/v1"
 	persistencepb "go.temporal.io/server/api/persistence/v1"
@@ -44,6 +45,13 @@ const (
 )
 
 type (
+	internalCreateOrUpdateRequest struct {
+		service     *nexuspb.IncomingService
+		namespaceID string
+		clusterID   int64
+		timeSource  clock.TimeSource
+	}
+
 	// incomingServiceManager manages cache and persistence access for Nexus incoming services.
 	// incomingServiceManager also contains a RWLock to enforce serial updates to prevent
 	// nexus_incoming_services table version conflicts.
@@ -56,7 +64,7 @@ type (
 	// Not to be confused with persistence.NexusServiceManager which is responsible for persistence-layer
 	// CRUD APIs for Nexus incoming services.
 	incomingServiceManager interface {
-		CreateOrUpdateNexusIncomingService(ctx context.Context, request *matchingservice.CreateOrUpdateNexusIncomingServiceRequest, clusterID int64, timeSource clock.TimeSource) (*matchingservice.CreateOrUpdateNexusIncomingServiceResponse, error)
+		CreateOrUpdateNexusIncomingService(ctx context.Context, request *internalCreateOrUpdateRequest) (*matchingservice.CreateOrUpdateNexusIncomingServiceResponse, error)
 		DeleteNexusIncomingService(ctx context.Context, request *matchingservice.DeleteNexusIncomingServiceRequest) (*matchingservice.DeleteNexusIncomingServiceResponse, error)
 		ListNexusIncomingServices(ctx context.Context, request *matchingservice.ListNexusIncomingServicesRequest) (*matchingservice.ListNexusIncomingServicesResponse, chan struct{}, error)
 	}
@@ -81,7 +89,10 @@ func newIncomingServiceManager(
 	}
 }
 
-func (m *incomingServiceManagerImpl) CreateOrUpdateNexusIncomingService(ctx context.Context, request *matchingservice.CreateOrUpdateNexusIncomingServiceRequest, clusterID int64, timeSource clock.TimeSource) (*matchingservice.CreateOrUpdateNexusIncomingServiceResponse, error) {
+func (m *incomingServiceManagerImpl) CreateOrUpdateNexusIncomingService(
+	ctx context.Context,
+	request *internalCreateOrUpdateRequest,
+) (*matchingservice.CreateOrUpdateNexusIncomingServiceResponse, error) {
 	if !m.hasLoadedServices.Load() {
 		// services must be loaded into memory before CreateOrUpdate, so we know whether
 		// this service name is in use and if so, what its UUID is
@@ -96,19 +107,19 @@ func (m *incomingServiceManagerImpl) CreateOrUpdateNexusIncomingService(ctx cont
 	previous := &persistencepb.NexusIncomingServiceEntry{}
 	exists := false
 
-	previous, exists = m.servicesByName[request.Service.Name]
+	previous, exists = m.servicesByName[request.service.Name]
 	if !exists {
 		previous.Version = 0
 		previous.Id = uuid.NewString()
-		previous.Service.Clock = hlc.Zero(clusterID)
+		previous.Service.Clock = hlc.Zero(request.clusterID)
 	}
 
-	if request.Service.Version != previous.Version {
+	if request.service.Version != previous.Version {
 		// TODO: could improve error handling. handle already exists during create and not found during update
-		return nil, fmt.Errorf("%w received: %v expected: %v", p.ErrNexusIncomingServiceVersionConflict, request.Service.Version, previous.Version)
+		return nil, fmt.Errorf("%w received: %v expected: %v", p.ErrNexusIncomingServiceVersionConflict, request.service.Version, previous.Version)
 	}
 
-	entry := nexus.IncomingServiceToEntry(request.Service, previous.Id, hlc.Next(previous.Service.Clock, timeSource))
+	entry := nexus.IncomingServiceToEntry(request.service, previous.Id, request.namespaceID, hlc.Next(previous.Service.Clock, request.timeSource))
 
 	resp, err := m.persistence.CreateOrUpdateNexusIncomingService(ctx, &p.CreateOrUpdateNexusIncomingServiceRequest{
 		LastKnownTableVersion: m.tableVersion,
@@ -119,15 +130,19 @@ func (m *incomingServiceManagerImpl) CreateOrUpdateNexusIncomingService(ctx cont
 		return nil, err
 	}
 
+	entry.Version = resp.Version
 	m.tableVersion++
-	m.servicesByName[resp.Entry.Service.Name] = resp.Entry
+	m.servicesByName[entry.Service.Name] = entry
 	close(m.tableVersionChanged)
 	m.tableVersionChanged = make(chan struct{})
 
-	return &matchingservice.CreateOrUpdateNexusIncomingServiceResponse{Entry: resp.Entry}, nil
+	return &matchingservice.CreateOrUpdateNexusIncomingServiceResponse{Entry: entry}, nil
 }
 
-func (m *incomingServiceManagerImpl) DeleteNexusIncomingService(ctx context.Context, request *matchingservice.DeleteNexusIncomingServiceRequest) (*matchingservice.DeleteNexusIncomingServiceResponse, error) {
+func (m *incomingServiceManagerImpl) DeleteNexusIncomingService(
+	ctx context.Context,
+	request *matchingservice.DeleteNexusIncomingServiceRequest,
+) (*matchingservice.DeleteNexusIncomingServiceResponse, error) {
 	if !m.hasLoadedServices.Load() {
 		// services must be loaded into memory before deletion so that the service UUID can be looked up
 		if err := m.loadServices(ctx); err != nil {
@@ -163,7 +178,10 @@ func (m *incomingServiceManagerImpl) DeleteNexusIncomingService(ctx context.Cont
 // ListNexusIncomingServices returns all cached Nexus incoming services. If no services have been loaded, it first tries to
 // load all services from persistence.
 // TODO: currently does not support pagination. go map iteration is no deterministic, so this will require sorting first.
-func (m *incomingServiceManagerImpl) ListNexusIncomingServices(ctx context.Context, request *matchingservice.ListNexusIncomingServicesRequest) (*matchingservice.ListNexusIncomingServicesResponse, chan struct{}, error) {
+func (m *incomingServiceManagerImpl) ListNexusIncomingServices(
+	ctx context.Context,
+	request *matchingservice.ListNexusIncomingServicesRequest,
+) (*matchingservice.ListNexusIncomingServicesResponse, chan struct{}, error) {
 	if !m.hasLoadedServices.Load() {
 		if err := m.loadServices(ctx); err != nil {
 			return nil, nil, fmt.Errorf("error loading nexus incoming services cache: %w", err)

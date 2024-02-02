@@ -1076,7 +1076,7 @@ type (
 	}
 
 	CreateOrUpdateNexusIncomingServiceResponse struct {
-		Entry *persistencespb.NexusIncomingServiceEntry
+		Version int64
 	}
 
 	DeleteNexusIncomingServiceRequest struct {

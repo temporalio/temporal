@@ -44,8 +44,8 @@ var (
 	ErrNexusIncomingServiceNotFound = &ConditionFailedError{
 		Msg: "nexus incoming service not found",
 	}
-	ErrNonPositiveListNexusIncomingServicesPageSize = &InvalidPersistenceRequestError{
-		Msg: "received non-positive page size for listing Nexus incoming services",
+	ErrNegativeListNexusIncomingServicesPageSize = &InvalidPersistenceRequestError{
+		Msg: "received negative page size for listing Nexus incoming services",
 	}
 )
 
@@ -96,7 +96,7 @@ func (m *nexusIncomingServiceManagerImpl) ListNexusIncomingServices(
 	request *ListNexusIncomingServicesRequest,
 ) (*ListNexusIncomingServicesResponse, error) {
 	if request.PageSize < 0 {
-		return nil, ErrNonPositiveListNexusIncomingServicesPageSize
+		return nil, ErrNegativeListNexusIncomingServicesPageSize
 	}
 
 	result := &ListNexusIncomingServicesResponse{}
@@ -147,8 +147,7 @@ func (m *nexusIncomingServiceManagerImpl) CreateOrUpdateNexusIncomingService(
 		return nil, err
 	}
 
-	request.Entry.Version++
-	return &CreateOrUpdateNexusIncomingServiceResponse{Entry: request.Entry}, nil
+	return &CreateOrUpdateNexusIncomingServiceResponse{Version: request.Entry.Version + 1}, nil
 }
 
 func (m *nexusIncomingServiceManagerImpl) DeleteNexusIncomingService(

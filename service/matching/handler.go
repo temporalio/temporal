@@ -80,7 +80,7 @@ func NewHandler(
 	clusterMetadata cluster.Metadata,
 	namespaceReplicationQueue persistence.NamespaceReplicationQueue,
 	visibilityManager manager.VisibilityManager,
-	nexusServiceManager persistence.NexusIncomingServiceManager,
+	nexusIncomingServiceManager persistence.NexusIncomingServiceManager,
 ) *Handler {
 	handler := &Handler{
 		config:          config,
@@ -100,7 +100,7 @@ func NewHandler(
 			clusterMetadata,
 			namespaceReplicationQueue,
 			visibilityManager,
-			nexusServiceManager,
+			nexusIncomingServiceManager,
 		),
 		namespaceRegistry: namespaceRegistry,
 	}

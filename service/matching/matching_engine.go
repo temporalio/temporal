@@ -188,7 +188,7 @@ func NewEngine(
 	clusterMeta cluster.Metadata,
 	namespaceReplicationQueue persistence.NamespaceReplicationQueue,
 	visibilityManager manager.VisibilityManager,
-	nexusServiceManager persistence.NexusIncomingServiceManager,
+	nexusIncomingServiceManager persistence.NexusIncomingServiceManager,
 ) Engine {
 
 	return &matchingEngineImpl{
@@ -205,7 +205,7 @@ func NewEngine(
 		clusterMeta:               clusterMeta,
 		timeSource:                clock.NewRealTimeSource(), // No need to mock this at the moment
 		visibilityManager:         visibilityManager,
-		incomingServiceManager:    newIncomingServiceManager(nexusServiceManager),
+		incomingServiceManager:    newIncomingServiceManager(nexusIncomingServiceManager),
 		metricsHandler:            metricsHandler.WithTags(metrics.OperationTag(metrics.MatchingEngineScope)),
 		taskQueues:                make(map[taskQueueID]taskQueueManager),
 		taskQueueCount:            make(map[taskQueueCounterKey]int),
@@ -1377,7 +1377,16 @@ func (e *matchingEngineImpl) RespondNexusTaskFailed(ctx context.Context, request
 }
 
 func (e *matchingEngineImpl) CreateOrUpdateNexusIncomingService(ctx context.Context, request *matchingservice.CreateOrUpdateNexusIncomingServiceRequest) (*matchingservice.CreateOrUpdateNexusIncomingServiceResponse, error) {
-	return e.incomingServiceManager.CreateOrUpdateNexusIncomingService(ctx, request, e.clusterMeta.GetClusterID(), e.timeSource)
+	namespaceID, err := e.namespaceRegistry.GetNamespaceID(namespace.Name(request.Service.Namespace))
+	if err != nil {
+		return nil, err
+	}
+	return e.incomingServiceManager.CreateOrUpdateNexusIncomingService(ctx, &internalCreateOrUpdateRequest{
+		service:     request.Service,
+		namespaceID: namespaceID.String(),
+		clusterID:   e.clusterMeta.GetClusterID(),
+		timeSource:  e.timeSource,
+	})
 }
 
 func (e *matchingEngineImpl) DeleteNexusIncomingService(ctx context.Context, request *matchingservice.DeleteNexusIncomingServiceRequest) (*matchingservice.DeleteNexusIncomingServiceResponse, error) {
