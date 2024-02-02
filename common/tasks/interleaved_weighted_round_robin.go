@@ -144,9 +144,11 @@ func (s *InterleavedWeightedRoundRobinScheduler[T, K]) Stop() {
 
 	s.fifoScheduler.Stop()
 
-	s.shutdownWG.Wait()
 	s.abortTasks()
 
+	if success := common.AwaitWaitGroup(&s.shutdownWG, time.Minute); !success {
+		s.logger.Warn("interleaved weighted round robin task scheduler timed out on shutdown.")
+	}
 	s.logger.Info("interleaved weighted round robin task scheduler stopped")
 }
 
