@@ -63,25 +63,3 @@ func incomingServiceMetadataToPersisted(
 	}
 	return converted
 }
-
-func IncomingServiceEntryToExternal(
-	service *persistencepb.NexusIncomingServiceEntry,
-) *nexus.IncomingService {
-	return &nexus.IncomingService{
-		Version:   service.Version,
-		Name:      service.Service.Name,
-		Namespace: service.Service.NamespaceId,
-		TaskQueue: service.Service.TaskQueue,
-		Metadata:  incomingServiceEntryMetadataToExternal(service.Service.Metadata),
-	}
-}
-
-func incomingServiceEntryMetadataToExternal(
-	metadata map[string]*persistencepb.NexusServiceMetadataValue,
-) map[string]*anypb.Any {
-	converted := make(map[string]*anypb.Any, len(metadata))
-	for k, v := range metadata {
-		converted[k] = v.Data
-	}
-	return converted
-}
