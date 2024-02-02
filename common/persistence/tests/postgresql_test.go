@@ -146,13 +146,6 @@ func (p *PostgreSQLSuite) TestPostgreSQLTaskQueueTaskSuite() {
 	suite.Run(p.T(), s)
 }
 
-func (p *PostgreSQLSuite) TestPostgreSQLVisibilityPersistenceSuite() {
-	s := &VisibilityPersistenceSuite{
-		TestBase: persistencetests.NewTestBaseWithSQL(persistencetests.GetPostgreSQLTestClusterOption()),
-	}
-	suite.Run(p.T(), s)
-}
-
 func (p *PostgreSQLSuite) TestPostgreSQL12VisibilityPersistenceSuite() {
 	s := &VisibilityPersistenceSuite{
 		TestBase: persistencetests.NewTestBaseWithSQL(persistencetests.GetPostgreSQL12TestClusterOption()),
@@ -161,45 +154,6 @@ func (p *PostgreSQLSuite) TestPostgreSQL12VisibilityPersistenceSuite() {
 }
 
 // TODO: Merge persistence-tests into the tests directory.
-
-func (p *PostgreSQLSuite) TestPostgreSQLHistoryV2PersistenceSuite() {
-	s := new(persistencetests.HistoryV2PersistenceSuite)
-	s.TestBase = persistencetests.NewTestBaseWithSQL(persistencetests.GetPostgreSQLTestClusterOption())
-	s.TestBase.Setup(nil)
-	suite.Run(p.T(), s)
-}
-
-func (p *PostgreSQLSuite) TestPostgreSQLMetadataPersistenceSuiteV2() {
-	s := new(persistencetests.MetadataPersistenceSuiteV2)
-	s.TestBase = persistencetests.NewTestBaseWithSQL(persistencetests.GetPostgreSQLTestClusterOption())
-	s.TestBase.Setup(nil)
-	suite.Run(p.T(), s)
-}
-
-func (p *PostgreSQLSuite) TestPostgreSQLClusterMetadataPersistence() {
-	s := new(persistencetests.ClusterMetadataManagerSuite)
-	s.TestBase = persistencetests.NewTestBaseWithSQL(persistencetests.GetPostgreSQLTestClusterOption())
-	s.TestBase.Setup(nil)
-	suite.Run(p.T(), s)
-}
-
-// TODO flaky test in buildkite
-// https://go.temporal.io/server/issues/2877
-/*
-FAIL: TestPostgreSQLQueuePersistence/TestNamespaceReplicationQueue (0.26s)
-        queuePersistenceTest.go:102:
-            	Error Trace:	queuePersistenceTest.go:102
-            	Error:      	Not equal:
-            	            	expected: 99
-            	            	actual  : 98
-            	Test:       	TestPostgreSQLQueuePersistence/TestNamespaceReplicationQueue
-*/
-// func (p *PostgreSQLSuite) TestPostgreSQLQueuePersistence() {
-// 	s := new(persistencetests.QueuePersistenceSuite)
-// 	s.TestBase = persistencetests.NewTestBaseWithSQL(persistencetests.GetPostgreSQLTestClusterOption())
-// 	s.TestBase.Setup(nil)
-// 	suite.Run(p.T(), s)
-// }
 
 func (p *PostgreSQLSuite) TestPostgreSQL12HistoryV2PersistenceSuite() {
 	s := new(persistencetests.HistoryV2PersistenceSuite)
@@ -221,6 +175,24 @@ func (p *PostgreSQLSuite) TestPostgreSQL12ClusterMetadataPersistence() {
 	s.TestBase.Setup(nil)
 	suite.Run(p.T(), s)
 }
+
+// TODO flaky test in buildkite
+// https://go.temporal.io/server/issues/2877
+/*
+FAIL: TestPostgreSQLQueuePersistence/TestNamespaceReplicationQueue (0.26s)
+        queuePersistenceTest.go:102:
+            	Error Trace:	queuePersistenceTest.go:102
+            	Error:      	Not equal:
+            	            	expected: 99
+            	            	actual  : 98
+            	Test:       	TestPostgreSQLQueuePersistence/TestNamespaceReplicationQueue
+*/
+// func (p *PostgreSQLSuite) TestPostgreSQL12QueuePersistence() {
+// 	s := new(persistencetests.QueuePersistenceSuite)
+// 	s.TestBase = persistencetests.NewTestBaseWithSQL(persistencetests.GetPostgreSQL12TestClusterOption())
+// 	s.TestBase.Setup(nil)
+// 	suite.Run(p.T(), s)
+// }
 
 // SQL store tests
 

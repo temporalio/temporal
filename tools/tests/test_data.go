@@ -28,11 +28,6 @@ const (
 	testUser     = "temporal"
 	testPassword = "temporal"
 
-	testMySQLExecutionSchemaFile        = "../../schema/mysql/v57/temporal/schema.sql"
-	testMySQLVisibilitySchemaFile       = "../../schema/mysql/v57/visibility/schema.sql"
-	testMySQLExecutionSchemaVersionDir  = "../../schema/mysql/v57/temporal/versioned"
-	testMySQLVisibilitySchemaVersionDir = "../../schema/mysql/v57/visibility/versioned"
-
 	testMySQL8ExecutionSchemaFile        = "../../schema/mysql/v8/temporal/schema.sql"
 	testMySQL8VisibilitySchemaFile       = "../../schema/mysql/v8/visibility/schema.sql"
 	testMySQL8ExecutionSchemaVersionDir  = "../../schema/mysql/v8/temporal/versioned"
@@ -70,10 +65,6 @@ CREATE TABLE current_executions(
   PRIMARY KEY (shard_id, namespace_id, workflow_id)
 );
 `
-	testPostgreSQLExecutionSchemaFile        = "../../schema/postgresql/v96/temporal/schema.sql"
-	testPostgreSQLVisibilitySchemaFile       = "../../schema/postgresql/v96/visibility/schema.sql"
-	testPostgreSQLExecutionSchemaVersionDir  = "../../schema/postgresql/v96/temporal/versioned"
-	testPostgreSQLVisibilitySchemaVersionDir = "../../schema/postgresql/v96/visibility/versioned"
 
 	testPostgreSQL12ExecutionSchemaFile        = "../../schema/postgresql/v12/temporal/schema.sql"
 	testPostgreSQL12VisibilitySchemaFile       = "../../schema/postgresql/v12/visibility/schema.sql"

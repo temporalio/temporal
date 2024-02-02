@@ -374,7 +374,7 @@ func (s *operatorHandlerSuite) Test_AddSearchAttributesInternal() {
 					"CustomAttr": enumspb.INDEXED_VALUE_TYPE_KEYWORD,
 				},
 			},
-			storeName:      mysql.PluginName,
+			storeName:      mysql.PluginNameV8,
 			expectedErrMsg: "",
 		},
 		{
