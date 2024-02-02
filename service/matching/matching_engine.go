@@ -259,29 +259,33 @@ func (e *matchingEngineImpl) watchMembership() {
 		}
 		e.taskQueuesLock.RUnlock()
 
-		for _, id := range ids {
+		ids = util.FilterSlice(ids, func(id *taskQueueID) bool {
 			owner, err := e.serviceResolver.Lookup(id.routingKey())
-			if err != nil || owner.Identity() == self {
-				continue
-			}
-			// We don't own this one anymore, but don't unload it immediately, wait a few seconds to ensure
-			// the membership update has propagated everywhere so that we won't get immediately re-loaded.
+			return err == nil && owner.Identity() != self
+		})
+
+		const batchSize = 100
+		for i := 0; i < len(ids); i += batchSize {
+			// We don't own these anymore, but don't unload them immediately, wait a few seconds to ensure
+			// the membership update has propagated everywhere so that they won't get immediately re-loaded.
 			// Note that we don't verify ownership at load time, so this is the only guard against a task
 			// queue bouncing back and forth due to long membership propagation time.
-			id := id
+			batch := ids[i:min(len(ids), i+batchSize)]
 			wait := backoff.Jitter(e.config.MembershipUnloadDelay(), 0.2)
 			time.AfterFunc(wait, func() {
 				// maybe the whole engine stopped
 				if atomic.LoadInt32(&e.status) != common.DaemonStatusStarted {
 					return
 				}
-				// maybe ownership changed again
-				owner, err := e.serviceResolver.Lookup(id.routingKey())
-				if err != nil || owner.Identity() == self {
-					return
+				for _, id := range batch {
+					// maybe ownership changed again
+					owner, err := e.serviceResolver.Lookup(id.routingKey())
+					if err != nil || owner.Identity() == self {
+						return
+					}
+					// now we can unload
+					e.unloadTaskQueueById(id, nil)
 				}
-				// now we can unload
-				e.unloadTaskQueueById(id, nil)
 			})
 		}
 	}
