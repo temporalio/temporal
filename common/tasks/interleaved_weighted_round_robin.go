@@ -289,7 +289,7 @@ func (s *InterleavedWeightedRoundRobinScheduler[T, K]) updateChannelWeightLocked
 }
 
 func (s *InterleavedWeightedRoundRobinScheduler[T, K]) dispatchTasksWithWeight() {
-	for s.hasRemainingTasks() && !s.isStopped() {
+	for s.hasRemainingTasks() {
 		if s.receiveWeightUpdateNotification() {
 			s.Lock()
 			s.updateChannelWeightLocked()
