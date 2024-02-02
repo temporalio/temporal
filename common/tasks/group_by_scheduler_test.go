@@ -23,8 +23,6 @@
 package tasks
 
 import (
-	"context"
-	"sync/atomic"
 	"testing"
 
 	"github.com/golang/mock/gomock"
@@ -32,80 +30,75 @@ import (
 	"go.temporal.io/server/common/log"
 )
 
-type allowOne struct {
-	admitted atomic.Bool
-}
-
-func (l *allowOne) Wait(ctx context.Context) error {
-	if l.admitted.CompareAndSwap(false, true) {
-		return nil
-	}
-	<-ctx.Done()
-	return ctx.Err()
-}
-
-func TestLimiterLogic(t *testing.T) {
-	lim := newLimiter[Task](LimiterOptions{
-		Concurrency: func() int { return 2 },
-		RateLimiter: &allowOne{},
-	})
-	task := &MockTask{}
-	require.True(t, lim.reserve())
-	require.True(t, lim.reserve())
-	require.False(t, lim.reserve())
-	lim.enqueue(task)
-	nextTask, ok := lim.dequeue()
-	require.True(t, ok)
-	require.Equal(t, task, nextTask)
-	_, ok = lim.dequeue()
-	require.False(t, ok)
-	lim.release()
-	lim.release()
-	require.Equal(t, 0, lim.reservations)
-}
-
 type taskWithID struct {
 	ID string
 	*MockTask
 }
 
+type bufferingNoopScheduler struct {
+	buffer  []Runnable
+	stopped bool
+	waited  bool
+}
+
+func (s *bufferingNoopScheduler) TrySubmit(r Runnable) bool {
+	if len(s.buffer) > 0 {
+		return false
+	}
+	s.buffer = append(s.buffer, r)
+	return true
+}
+
+func (s *bufferingNoopScheduler) InitiateShutdown() {
+	s.stopped = true
+}
+
+func (s *bufferingNoopScheduler) WaitShutdown() {
+	s.waited = true
+}
+
+var _ RunnableScheduler = &bufferingNoopScheduler{}
+
 func TestSchedulerLogic(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
+	scheds := make(map[string]*bufferingNoopScheduler, 0)
 	logger := log.NewMockLogger(ctrl)
 	logger.EXPECT().Debug(gomock.Any()).AnyTimes()
-	sched := NewMultiDestinationScheduler[string, taskWithID](MultiDestinationSchedulerOptions[string, taskWithID]{
+	sched := NewGroupByScheduler[string, taskWithID](GroupBySchedulerOptions[string, taskWithID]{
 		Logger: logger,
 		KeyFn:  func(t taskWithID) string { return t.ID },
-		LimiterOptionsFn: func(string) LimiterOptions {
-			return LimiterOptions{
-				Concurrency: func() int { return 2 },
-				RateLimiter: &allowOne{},
-			}
+		SchedulerFactory: func(key string) RunnableScheduler {
+			_, ok := scheds[key]
+			// Assert that the factory is only caller once per key.
+			require.False(t, ok)
+			sched := &bufferingNoopScheduler{}
+			scheds[key] = sched
+			return sched
 		},
+		RunnableFactory: func(t taskWithID) Runnable { return RunnableTask{t} },
 	})
-	// first task, key a, executes once
 	task1a := taskWithID{"a", NewMockTask(ctrl)}
-	task1a.EXPECT().Execute().Times(1)
-	task1a.EXPECT().Ack().Times(1)
-	task1a.EXPECT().HandleErr(nil).Times(1)
-	// second task, key a, accepted, rate limited
 	task2a := taskWithID{"a", NewMockTask(ctrl)}
-	task2a.EXPECT().Abort().Times(1)
-	// third task, key a, accepted, bufferred
-	task3a := taskWithID{"a", NewMockTask(ctrl)}
-	task3a.EXPECT().Abort().Times(1)
-	// fourth task, key b, executes once
+	task3b := taskWithID{"b", NewMockTask(ctrl)}
 	task4b := taskWithID{"b", NewMockTask(ctrl)}
-	task4b.EXPECT().Execute().Times(1)
-	task4b.EXPECT().Ack().Times(1)
-	task4b.EXPECT().HandleErr(nil).Times(1)
 
 	require.True(t, sched.TrySubmit(task1a))
-	require.True(t, sched.TrySubmit(task2a))
-	require.True(t, sched.TrySubmit(task3a))
-	require.True(t, sched.TrySubmit(task4b))
+	// Buffer accepts only one task.
+	require.False(t, sched.TrySubmit(task2a))
+	require.True(t, sched.TrySubmit(task3b))
 	sched.Stop()
-	// should not execute after stopped
-	require.False(t, sched.TrySubmit(task4b))
+
+	// Should abort after shutdown.
+	task4b.EXPECT().Abort().Times(1)
+	require.True(t, sched.TrySubmit(task4b))
+
+	require.Equal(t, 2, len(scheds))
+	require.Equal(t, 1, len(scheds["a"].buffer))
+	require.Equal(t, "a", scheds["a"].buffer[0].(RunnableTask).Task.(taskWithID).ID)
+	require.Equal(t, 1, len(scheds["b"].buffer))
+	require.Equal(t, "b", scheds["b"].buffer[0].(RunnableTask).Task.(taskWithID).ID)
+	// Stop shuts down all groups.
+	require.True(t, scheds["a"].stopped && scheds["b"].stopped)
+	require.True(t, scheds["a"].waited && scheds["b"].waited)
 }
