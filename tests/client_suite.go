@@ -1353,7 +1353,7 @@ func (s *ClientFunctionalSuite) Test_InvalidCommandAttribute() {
 		info := workflow.GetInfo(ctx)
 
 		var currentAttemptStartedTime time.Time
-		workflow.SideEffect(ctx, func(_ workflow.Context) interface{} {
+		err := workflow.SideEffect(ctx, func(_ workflow.Context) interface{} {
 			rpcCtx := context.Background()
 			if deadline, ok := ctx.Deadline(); ok {
 				var cancel context.CancelFunc
@@ -1371,6 +1371,9 @@ func (s *ClientFunctionalSuite) Test_InvalidCommandAttribute() {
 			}
 			return resp.PendingWorkflowTask.StartedTime.AsTime()
 		}).Get(&currentAttemptStartedTime)
+		if err != nil {
+			return err
+		}
 
 		startedTime = append(startedTime, currentAttemptStartedTime)
 		ao := workflow.ActivityOptions{} // invalid activity option without StartToClose timeout
