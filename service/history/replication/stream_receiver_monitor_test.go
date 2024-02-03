@@ -85,8 +85,6 @@ func (s *streamReceiverMonitorSuite) SetupTest() {
 		Config: configs.NewConfig(
 			dynamicconfig.NewNoopCollection(),
 			1,
-			true,
-			false,
 		),
 		ClusterMetadata: s.clusterMetadata,
 		ClientBean:      s.clientBean,
@@ -111,6 +109,7 @@ func (s *streamReceiverMonitorSuite) SetupTest() {
 			},
 		},
 	}, nil).AnyTimes()
+	streamClient.EXPECT().CloseSend().Return(nil).AnyTimes()
 	adminClient := adminservicemock.NewMockAdminServiceClient(s.controller)
 	adminClient.EXPECT().StreamWorkflowReplicationMessages(gomock.Any()).Return(streamClient, nil).AnyTimes()
 	s.clientBean.EXPECT().GetRemoteAdminClient(cluster.TestAlternativeClusterName).Return(adminClient, nil).AnyTimes()
@@ -381,6 +380,7 @@ func (s *streamReceiverMonitorSuite) TestDoReconcileInboundStreams_Reactivate() 
 
 func (s *streamReceiverMonitorSuite) TestDoReconcileOutboundStreams_Add() {
 	s.clusterMetadata.EXPECT().GetAllClusterInfo().Return(cluster.TestAllClusterInfo).AnyTimes()
+	s.clusterMetadata.EXPECT().ClusterNameForFailoverVersion(true, gomock.Any()).Return("some cluster name").AnyTimes()
 
 	clientKey := NewClusterShardKey(int32(cluster.TestCurrentClusterInitialFailoverVersion), rand.Int31())
 	serverKey := NewClusterShardKey(int32(cluster.TestAlternativeClusterInitialFailoverVersion), rand.Int31())
@@ -438,6 +438,7 @@ func (s *streamReceiverMonitorSuite) TestDoReconcileOutboundStreams_Remove() {
 
 func (s *streamReceiverMonitorSuite) TestDoReconcileOutboundStreams_Reactivate() {
 	s.clusterMetadata.EXPECT().GetAllClusterInfo().Return(cluster.TestAllClusterInfo).AnyTimes()
+	s.clusterMetadata.EXPECT().ClusterNameForFailoverVersion(true, gomock.Any()).Return("some cluster name").AnyTimes()
 
 	clientKey := NewClusterShardKey(int32(cluster.TestCurrentClusterInitialFailoverVersion), rand.Int31())
 	serverKey := NewClusterShardKey(int32(cluster.TestAlternativeClusterInitialFailoverVersion), rand.Int31())

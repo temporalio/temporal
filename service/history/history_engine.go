@@ -32,6 +32,7 @@ import (
 	"go.opentelemetry.io/otel/trace"
 	commonpb "go.temporal.io/api/common/v1"
 	historypb "go.temporal.io/api/history/v1"
+	"go.temporal.io/server/service/history/api/getworkflowexecutionrawhistory"
 
 	historyspb "go.temporal.io/server/api/history/v1"
 	workflowpb "go.temporal.io/server/api/workflow/v1"
@@ -263,7 +264,10 @@ func NewEngineWithShardContext(
 		config.SearchAttributesSizeOfValueLimit,
 		config.SearchAttributesTotalSizeLimit,
 		persistenceVisibilityMgr,
-		visibility.AllowListForValidation(persistenceVisibilityMgr.GetStoreNames()),
+		visibility.AllowListForValidation(
+			persistenceVisibilityMgr.GetStoreNames(),
+			config.VisibilityAllowList,
+		),
 	)
 
 	historyEngImpl.workflowTaskHandler = newWorkflowTaskHandlerCallback(historyEngImpl)
@@ -896,6 +900,10 @@ func (e *historyEngineImpl) GetWorkflowExecutionHistoryReverse(
 	request *historyservice.GetWorkflowExecutionHistoryReverseRequest,
 ) (_ *historyservice.GetWorkflowExecutionHistoryReverseResponse, retError error) {
 	return getworkflowexecutionhistoryreverse.Invoke(ctx, e.shardContext, e.workflowConsistencyChecker, e.eventNotifier, request, e.persistenceVisibilityMgr)
+}
+
+func (e *historyEngineImpl) GetWorkflowExecutionRawHistory(ctx context.Context, request *historyservice.GetWorkflowExecutionRawHistoryRequest) (*historyservice.GetWorkflowExecutionRawHistoryResponse, error) {
+	return getworkflowexecutionrawhistory.Invoke(ctx, e.shardContext, e.workflowConsistencyChecker, e.eventNotifier, request)
 }
 
 func (e *historyEngineImpl) GetWorkflowExecutionRawHistoryV2(

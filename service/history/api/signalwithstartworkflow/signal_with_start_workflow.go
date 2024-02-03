@@ -50,6 +50,7 @@ func SignalWithStartWorkflow(
 	signalWithStartRequest *workflowservice.SignalWithStartWorkflowExecutionRequest,
 ) (string, error) {
 
+	// workflow is running and restart was not requested
 	if currentWorkflowContext != nil &&
 		currentWorkflowContext.GetMutableState().IsWorkflowExecutionRunning() &&
 		signalWithStartRequest.WorkflowIdReusePolicy != enumspb.WORKFLOW_ID_REUSE_POLICY_TERMINATE_IF_RUNNING {
@@ -65,7 +66,7 @@ func SignalWithStartWorkflow(
 		}
 		return currentWorkflowContext.GetWorkflowKey().RunID, nil
 	}
-
+	// else, either workflow is not running or restart requested
 	return startAndSignalWorkflow(
 		ctx,
 		shard,
@@ -99,7 +100,7 @@ func startAndSignalWorkflow(
 	if err != nil {
 		return "", err
 	}
-	if err := api.ValidateSignal(
+	if err = api.ValidateSignal(
 		ctx,
 		shard,
 		newWorkflowContext.GetMutableState(),
@@ -109,48 +110,49 @@ func startAndSignalWorkflow(
 		return "", err
 	}
 
-	casPredicate, currentWorkflowMutationFn, err := startAndSignalWorkflowActionFn(
+	workflowMutationFn, err := createWorkflowMutationFunction(
 		currentWorkflowContext,
-		signalWithStartRequest.WorkflowIdReusePolicy,
+		signalWithStartRequest.GetWorkflowIdReusePolicy(),
 		runID,
 	)
 	if err != nil {
 		return "", err
 	}
-
-	if currentWorkflowMutationFn != nil {
-		if err := startAndSignalWithCurrentWorkflow(
+	if workflowMutationFn != nil {
+		if err = startAndSignalWithCurrentWorkflow(
 			ctx,
 			shard,
 			currentWorkflowContext,
-			currentWorkflowMutationFn,
+			workflowMutationFn,
 			newWorkflowContext,
 		); err != nil {
 			return "", err
 		}
 		return runID, nil
 	}
-
+	vrid, err := createVersionedRunID(currentWorkflowContext)
+	if err != nil {
+		return "", err
+	}
 	return startAndSignalWithoutCurrentWorkflow(
 		ctx,
 		shard,
-		casPredicate,
+		vrid,
 		newWorkflowContext,
 		signalWithStartRequest.RequestId,
 	)
 }
 
-func startAndSignalWorkflowActionFn(
+func createWorkflowMutationFunction(
 	currentWorkflowContext api.WorkflowContext,
 	workflowIDReusePolicy enumspb.WorkflowIdReusePolicy,
 	newRunID string,
-) (*api.CreateWorkflowCASPredicate, api.UpdateWorkflowActionFunc, error) {
+) (api.UpdateWorkflowActionFunc, error) {
 	if currentWorkflowContext == nil {
-		return nil, nil, nil
+		return nil, nil
 	}
-
 	currentExecutionState := currentWorkflowContext.GetMutableState().GetExecutionState()
-	currentExecutionUpdateAction, err := api.ApplyWorkflowIDReusePolicy(
+	workflowMutationFunc, err := api.ApplyWorkflowIDReusePolicy(
 		currentExecutionState.CreateRequestId,
 		currentExecutionState.RunId,
 		currentExecutionState.State,
@@ -159,22 +161,23 @@ func startAndSignalWorkflowActionFn(
 		newRunID,
 		workflowIDReusePolicy,
 	)
-	if err != nil {
-		return nil, nil, err
-	}
-	if currentExecutionUpdateAction != nil {
-		return nil, currentExecutionUpdateAction, nil
-	}
+	return workflowMutationFunc, err
+}
 
+func createVersionedRunID(currentWorkflowContext api.WorkflowContext) (*api.VersionedRunID, error) {
+	if currentWorkflowContext == nil {
+		return nil, nil
+	}
+	currentExecutionState := currentWorkflowContext.GetMutableState().GetExecutionState()
 	currentLastWriteVersion, err := currentWorkflowContext.GetMutableState().GetLastWriteVersion()
 	if err != nil {
-		return nil, nil, err
+		return nil, err
 	}
-	casPredicate := &api.CreateWorkflowCASPredicate{
+	id := api.VersionedRunID{
 		RunID:            currentExecutionState.RunId,
 		LastWriteVersion: currentLastWriteVersion,
 	}
-	return casPredicate, nil, nil
+	return &id, nil
 }
 
 func startAndSignalWithCurrentWorkflow(
@@ -203,7 +206,7 @@ func startAndSignalWithCurrentWorkflow(
 func startAndSignalWithoutCurrentWorkflow(
 	ctx context.Context,
 	shardContext shard.Context,
-	casPredicate *api.CreateWorkflowCASPredicate,
+	vrid *api.VersionedRunID,
 	newWorkflowContext api.WorkflowContext,
 	requestID string,
 ) (string, error) {
@@ -220,11 +223,16 @@ func startAndSignalWithoutCurrentWorkflow(
 	createMode := persistence.CreateWorkflowModeBrandNew
 	prevRunID := ""
 	prevLastWriteVersion := int64(0)
-	if casPredicate != nil {
+	if vrid != nil {
 		createMode = persistence.CreateWorkflowModeUpdateCurrent
-		prevRunID = casPredicate.RunID
-		prevLastWriteVersion = casPredicate.LastWriteVersion
-		if err := api.NewWorkflowVersionCheck(shardContext, casPredicate.LastWriteVersion, newWorkflowContext.GetMutableState()); err != nil {
+		prevRunID = vrid.RunID
+		prevLastWriteVersion = vrid.LastWriteVersion
+		err = api.NewWorkflowVersionCheck(
+			shardContext,
+			vrid.LastWriteVersion,
+			newWorkflowContext.GetMutableState(),
+		)
+		if err != nil {
 			return "", err
 		}
 	}

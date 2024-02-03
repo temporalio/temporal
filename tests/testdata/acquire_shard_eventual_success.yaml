@@ -15,3 +15,10 @@ faultinjection:
             seed: 43  # deterministically generate a deadline exceeded error followed by a success
             errors:
               DeadlineExceeded: 0.5 # 50% of the time, return a deadline exceeded error
+esconfig:
+  version: "${ES_VERSION}"
+  url:
+    scheme: "http"
+    host: "${ES_SEEDS}:9200"
+  indices:
+    visibility: temporal_visibility_v1_test

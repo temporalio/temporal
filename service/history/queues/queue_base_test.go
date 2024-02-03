@@ -27,6 +27,7 @@ package queues
 import (
 	"context"
 	"errors"
+	"math"
 	"math/rand"
 	"testing"
 	"time"
@@ -696,6 +697,12 @@ func (s *queueBaseSuite) newQueueBase(
 		func() bool {
 			return false
 		},
+		func() int {
+			return math.MaxInt
+		},
+		func() bool {
+			return false
+		},
 	)
 	return newQueueBase(
 		mockShard,
@@ -707,6 +714,7 @@ func (s *queueBaseSuite) newQueueBase(
 		s.options,
 		s.rateLimiter,
 		NoopReaderCompletionFn,
+		GrouperNamespaceID{},
 		s.logger,
 		s.metricsHandler,
 	)

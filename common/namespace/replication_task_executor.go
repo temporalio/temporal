@@ -37,6 +37,7 @@ import (
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	replicationspb "go.temporal.io/server/api/replication/v1"
 	"go.temporal.io/server/common/log"
+	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/persistence"
 )
 
@@ -130,6 +131,11 @@ func (h *namespaceReplicationTaskExecutorImpl) shouldProcessTask(ctx context.Con
 	switch err.(type) {
 	case nil:
 		if resp.Namespace.Info.Id != task.GetId() {
+			h.logger.Error(
+				"namespace replication encountered UUID collision processing namespace replication task",
+				tag.WorkflowNamespaceID(resp.Namespace.Info.Id),
+				tag.NewStringTag("Task Namespace Id", task.GetId()),
+				tag.NewStringTag("Task Namepsace Info Id", task.Info.GetId()))
 			return false, ErrNameUUIDCollision
 		}
 
@@ -194,6 +200,11 @@ func (h *namespaceReplicationTaskExecutorImpl) handleNamespaceCreationReplicatio
 		switch getErr.(type) {
 		case nil:
 			if resp.Namespace.Info.Id != task.GetId() {
+				h.logger.Error("namespace replication encountered UUID collision during NamespaceCreationReplicationTask",
+					tag.WorkflowNamespaceID(resp.Namespace.Info.Id),
+					tag.NewStringTag("Task Namespace Id", task.GetId()),
+					tag.NewStringTag("Task Namepsace Info Id", task.Info.GetId()),
+					tag.NewErrorTag(err))
 				return ErrNameUUIDCollision
 			}
 		case *serviceerror.NamespaceNotFound:
@@ -201,6 +212,11 @@ func (h *namespaceReplicationTaskExecutorImpl) handleNamespaceCreationReplicatio
 			recordExists = false
 		default:
 			// return the original err
+			h.logger.Error(
+				"namespace replication encountered error during NamespaceCreationReplicationTask",
+				tag.WorkflowNamespace(task.Info.GetName()),
+				tag.WorkflowNamespaceID(task.Info.GetId()),
+				tag.NewErrorTag(err))
 			return err
 		}
 
@@ -210,6 +226,11 @@ func (h *namespaceReplicationTaskExecutorImpl) handleNamespaceCreationReplicatio
 		switch getErr.(type) {
 		case nil:
 			if resp.Namespace.Info.Name != task.Info.GetName() {
+				h.logger.Error(
+					"namespace replication encountered name collision during NamespaceCreationReplicationTask",
+					tag.WorkflowNamespace(resp.Namespace.Info.Name),
+					tag.NewStringTag("Task Namespace Name", task.Info.GetName()),
+					tag.NewErrorTag(err))
 				return ErrNameUUIDCollision
 			}
 		case *serviceerror.NamespaceNotFound:

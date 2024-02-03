@@ -30,6 +30,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"math"
 	"runtime/debug"
 	"sync"
 	"time"
@@ -47,7 +48,6 @@ import (
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
-	"go.temporal.io/server/common/persistence/serialization"
 	ctasks "go.temporal.io/server/common/tasks"
 	"go.temporal.io/server/common/util"
 	"go.temporal.io/server/service/history/consts"
@@ -83,6 +83,12 @@ type (
 
 	ExecutorWrapper interface {
 		Wrap(delegate Executor) Executor
+	}
+
+	// TerminalErrors are errors which cannot be retried and should not be scheduled again.
+	// Tasks should be enqueued to a DLQ immediately if an error implements this interface.
+	TerminalTaskError interface {
+		IsTerminalTaskError()
 	}
 )
 
@@ -132,21 +138,26 @@ type (
 		metricsHandler    metrics.Handler
 		dlqWriter         *DLQWriter
 
-		readerID               int64
-		loadTime               time.Time
-		scheduledTime          time.Time
-		scheduleLatency        time.Duration
-		attemptNoUserLatency   time.Duration
-		inMemoryNoUserLatency  time.Duration
-		lastActiveness         bool
-		resourceExhaustedCount int // does NOT include consts.ErrResourceExhaustedBusyWorkflow
-		taggedMetricsHandler   metrics.Handler
-		dlqEnabled             dynamicconfig.BoolPropertyFn
-		terminalFailureCause   error
+		readerID                   int64
+		loadTime                   time.Time
+		scheduledTime              time.Time
+		scheduleLatency            time.Duration
+		attemptNoUserLatency       time.Duration
+		inMemoryNoUserLatency      time.Duration
+		lastActiveness             bool
+		resourceExhaustedCount     int // does NOT include consts.ErrResourceExhaustedBusyWorkflow
+		taggedMetricsHandler       metrics.Handler
+		dlqEnabled                 dynamicconfig.BoolPropertyFn
+		terminalFailureCause       error
+		unexpectedErrorAttempts    int
+		maxUnexpectedErrorAttempts dynamicconfig.IntPropertyFn
+		dlqInternalErrors          dynamicconfig.BoolPropertyFn
 	}
 	ExecutableParams struct {
-		DLQEnabled dynamicconfig.BoolPropertyFn
-		DLQWriter  *DLQWriter
+		DLQEnabled                 dynamicconfig.BoolPropertyFn
+		DLQWriter                  *DLQWriter
+		MaxUnexpectedErrorAttempts dynamicconfig.IntPropertyFn
+		DLQInternalErrors          dynamicconfig.BoolPropertyFn
 	}
 	ExecutableOption func(*ExecutableParams)
 )
@@ -170,6 +181,12 @@ func NewExecutable(
 			return false
 		},
 		DLQWriter: nil,
+		MaxUnexpectedErrorAttempts: func() int {
+			return math.MaxInt
+		},
+		DLQInternalErrors: func() bool {
+			return false
+		},
 	}
 	for _, opt := range opts {
 		opt(&params)
@@ -193,10 +210,12 @@ func NewExecutable(
 				return tasks.Tags(task)
 			},
 		),
-		metricsHandler:       metricsHandler,
-		taggedMetricsHandler: metricsHandler,
-		dlqWriter:            params.DLQWriter,
-		dlqEnabled:           params.DLQEnabled,
+		metricsHandler:             metricsHandler,
+		taggedMetricsHandler:       metricsHandler,
+		dlqWriter:                  params.DLQWriter,
+		dlqEnabled:                 params.DLQEnabled,
+		maxUnexpectedErrorAttempts: params.MaxUnexpectedErrorAttempts,
+		dlqInternalErrors:          params.DLQInternalErrors,
 	}
 	executable.updatePriority()
 	return executable
@@ -251,11 +270,11 @@ func (e *executableImpl) Execute() (retErr error) {
 		attemptLatency := e.timeSource.Now().Sub(startTime)
 		e.attemptNoUserLatency = attemptLatency - attemptUserLatency
 		// emit total attempt latency so that we know how much time a task will occpy a worker goroutine
-		e.taggedMetricsHandler.Timer(metrics.TaskProcessingLatency.Name()).Record(attemptLatency)
+		metrics.TaskProcessingLatency.With(e.taggedMetricsHandler).Record(attemptLatency)
 
 		priorityTaggedProvider := e.taggedMetricsHandler.WithTags(metrics.TaskPriorityTag(e.priority.String()))
-		priorityTaggedProvider.Counter(metrics.TaskRequests.Name()).Record(1)
-		priorityTaggedProvider.Timer(metrics.TaskScheduleLatency.Name()).Record(e.scheduleLatency)
+		metrics.TaskRequests.With(priorityTaggedProvider).Record(1)
+		metrics.TaskScheduleLatency.With(priorityTaggedProvider).Record(e.scheduleLatency)
 
 		if retErr == nil {
 			e.inMemoryNoUserLatency += e.scheduleLatency + e.attemptNoUserLatency
@@ -265,23 +284,27 @@ func (e *executableImpl) Execute() (retErr error) {
 	}()
 
 	if e.terminalFailureCause != nil {
-		if !e.dlqEnabled() {
+		if e.dlqEnabled() {
+			err := e.dlqWriter.WriteTaskToDLQ(
+				ctx,
+				e.clusterMetadata.GetCurrentClusterName(),
+				e.clusterMetadata.GetCurrentClusterName(),
+				e.GetTask(),
+			)
+			if err != nil {
+				e.logger.Error("Failed to write task to DLQ", tag.Error(err))
+			}
+			return err
+		}
+		if errors.As(e.terminalFailureCause, new(TerminalTaskError)) {
 			e.logger.Warn(
 				"Dropping task with terminal failure because DLQ was disabled",
 				tag.Error(e.terminalFailureCause),
 			)
 			return nil
 		}
-		err := e.dlqWriter.WriteTaskToDLQ(
-			ctx,
-			e.clusterMetadata.GetCurrentClusterName(),
-			e.clusterMetadata.GetCurrentClusterName(),
-			e.GetTask(),
-		)
-		if err != nil {
-			e.logger.Error("Failed to write task to DLQ", tag.Error(err))
-		}
-		return err
+		e.logger.Info("Retrying task with non-terminal DLQ failure because DLQ was disabled", tag.Error(e.terminalFailureCause))
+		e.terminalFailureCause = nil
 	}
 
 	resp := e.executor.Execute(ctx, e)
@@ -315,7 +338,7 @@ func (e *executableImpl) HandleErr(err error) (retErr error) {
 
 			e.attempt++
 			if e.attempt > taskCriticalLogMetricAttempts {
-				e.taggedMetricsHandler.Histogram(metrics.TaskAttempt.Name(), metrics.TaskAttempt.Unit()).Record(int64(e.attempt))
+				metrics.TaskAttempt.With(e.taggedMetricsHandler).Record(int64(e.attempt))
 				e.logger.Error("Critical error processing task, retrying.", tag.Attempt(int32(e.attempt)), tag.Error(err), tag.OperationCritical)
 			}
 		}
@@ -328,7 +351,7 @@ func (e *executableImpl) HandleErr(err error) (retErr error) {
 				err = consts.ErrResourceExhaustedAPSLimit
 			}
 			e.resourceExhaustedCount++
-			e.taggedMetricsHandler.Counter(metrics.TaskThrottledCounter.Name()).Record(1)
+			metrics.TaskThrottledCounter.With(e.taggedMetricsHandler).Record(1)
 			return err
 		}
 
@@ -346,32 +369,32 @@ func (e *executableImpl) HandleErr(err error) (retErr error) {
 	}
 
 	if err == consts.ErrDependencyTaskNotCompleted {
-		e.taggedMetricsHandler.Counter(metrics.TasksDependencyTaskNotCompleted.Name()).Record(1)
+		metrics.TasksDependencyTaskNotCompleted.With(e.taggedMetricsHandler).Record(1)
 		return err
 	}
 
 	if err == consts.ErrTaskRetry {
-		e.taggedMetricsHandler.Counter(metrics.TaskStandbyRetryCounter.Name()).Record(1)
+		metrics.TaskStandbyRetryCounter.With(e.taggedMetricsHandler).Record(1)
 		return err
 	}
 
 	if errors.Is(err, consts.ErrResourceExhaustedBusyWorkflow) {
-		e.taggedMetricsHandler.Counter(metrics.TaskWorkflowBusyCounter.Name()).Record(1)
+		metrics.TaskWorkflowBusyCounter.With(e.taggedMetricsHandler).Record(1)
 		return err
 	}
 
 	if err == consts.ErrTaskDiscarded {
-		e.taggedMetricsHandler.Counter(metrics.TaskDiscarded.Name()).Record(1)
+		metrics.TaskDiscarded.With(e.taggedMetricsHandler).Record(1)
 		return nil
 	}
 
 	if err == consts.ErrTaskVersionMismatch {
-		e.taggedMetricsHandler.Counter(metrics.TaskVersionMisMatch.Name()).Record(1)
+		metrics.TaskVersionMisMatch.With(e.taggedMetricsHandler).Record(1)
 		return nil
 	}
 
 	if err.Error() == consts.ErrNamespaceHandover.Error() {
-		e.taggedMetricsHandler.Counter(metrics.TaskNamespaceHandoverCounter.Name()).Record(1)
+		metrics.TaskNamespaceHandoverCounter.With(e.taggedMetricsHandler).Record(1)
 		err = consts.ErrNamespaceHandover
 		return err
 	}
@@ -379,28 +402,44 @@ func (e *executableImpl) HandleErr(err error) (retErr error) {
 	if _, ok := err.(*serviceerror.NamespaceNotActive); ok {
 		// error is expected when there's namespace failover,
 		// so don't count it into task failures.
-		e.taggedMetricsHandler.Counter(metrics.TaskNotActiveCounter.Name()).Record(1)
+		metrics.TaskNotActiveCounter.With(e.taggedMetricsHandler).Record(1)
 		return err
 	}
 
+	isInternalError := common.IsInternalError(err)
+	if isInternalError {
+		e.logger.Error("Encountered internal error processing tasks", tag.Error(err))
+		metrics.TaskInternalErrorCounter.With(e.taggedMetricsHandler).Record(1)
+	}
+
 	// TODO: expand on the errors that should be considered terminal
-	if errors.As(err, new(*serialization.DeserializationError)) ||
-		errors.As(err, new(*serialization.UnknownEncodingTypeError)) {
-		// likely due to data corruption, emit logs, metrics & drop the task by return nil so that
-		// task will be marked as completed, or send it to the DLQ if that is enabled.
-		e.taggedMetricsHandler.Counter(metrics.TaskCorruptionCounter.Name()).Record(1)
+	if errors.As(err, new(TerminalTaskError)) || (e.dlqInternalErrors() && isInternalError) {
+		// Terminal errors are likely due to data corruption.
+		// Drop the task by returning nil so that task will be marked as completed,
+		// or send it to the DLQ if that is enabled.
+		metrics.TaskCorruptionCounter.With(e.taggedMetricsHandler).Record(1)
 		if e.dlqEnabled() {
+			// Keep this message in sync with the log line mentioned in Investigation section of develop/docs/dlq.md
 			e.logger.Error("Marking task as terminally failed, will send to DLQ", tag.Error(err))
 			e.terminalFailureCause = err
 			return fmt.Errorf("%w: %v", ErrTerminalTaskFailure, err)
 		}
-		e.logger.Error("Drop task due to serialization error", tag.Error(err))
+		e.logger.Error("Dropping task due to terminal error", tag.Error(err))
 		return nil
 	}
 
-	e.taggedMetricsHandler.Counter(metrics.TaskFailures.Name()).Record(1)
+	e.unexpectedErrorAttempts++
+	metrics.TaskFailures.With(e.taggedMetricsHandler).Record(1)
+	e.logger.Error("Fail to process task", tag.Error(err), tag.UnexpectedErrorAttempts(int32(e.unexpectedErrorAttempts)), tag.LifeCycleProcessingFailed)
 
-	e.logger.Error("Fail to process task", tag.Error(err), tag.LifeCycleProcessingFailed)
+	if e.unexpectedErrorAttempts >= e.maxUnexpectedErrorAttempts() && e.dlqEnabled() {
+		// Keep this message in sync with the log line mentioned in Investigation section of develop/docs/dlq.md
+		e.logger.Error("Marking task as terminally failed, will send to DLQ. Maximum number of attempts with unexpected errors",
+			tag.Attempt(int32(e.unexpectedErrorAttempts)), tag.Error(err))
+		e.terminalFailureCause = err
+		return fmt.Errorf("%w: %w", ErrTerminalTaskFailure, e.terminalFailureCause)
+	}
+
 	return err
 }
 
@@ -447,17 +486,16 @@ func (e *executableImpl) Ack() {
 
 	e.state = ctasks.TaskStateAcked
 
-	e.taggedMetricsHandler.Timer(metrics.TaskLoadLatency.Name()).Record(
+	metrics.TaskLoadLatency.With(e.taggedMetricsHandler).Record(
 		e.loadTime.Sub(e.GetVisibilityTime()),
 		metrics.QueueReaderIDTag(e.readerID),
 	)
-	e.taggedMetricsHandler.Histogram(metrics.TaskAttempt.Name(), metrics.TaskAttempt.Unit()).Record(int64(e.attempt))
+	metrics.TaskAttempt.With(e.taggedMetricsHandler).Record(int64(e.attempt))
 
 	priorityTaggedProvider := e.taggedMetricsHandler.WithTags(metrics.TaskPriorityTag(e.lowestPriority.String()))
-	priorityTaggedProvider.Timer(metrics.TaskLatency.Name()).Record(e.inMemoryNoUserLatency)
-
-	readerIDTaggedProvider := priorityTaggedProvider.WithTags(metrics.QueueReaderIDTag(e.readerID))
-	readerIDTaggedProvider.Timer(metrics.TaskQueueLatency.Name()).Record(time.Since(e.GetVisibilityTime()))
+	metrics.TaskLatency.With(priorityTaggedProvider).Record(e.inMemoryNoUserLatency)
+	metrics.TaskQueueLatency.With(priorityTaggedProvider.WithTags(metrics.QueueReaderIDTag(e.readerID))).
+		Record(time.Since(e.GetVisibilityTime()))
 }
 
 func (e *executableImpl) Nack(err error) {
@@ -530,6 +568,14 @@ func (e *executableImpl) GetScheduledTime() time.Time {
 
 func (e *executableImpl) SetScheduledTime(t time.Time) {
 	e.scheduledTime = t
+}
+
+// GetDestination returns the embedded task's destination if it exists. Defaults to an empty string.
+func (e *executableImpl) GetDestination() string {
+	if t, ok := e.Task.(tasks.HasDestination); ok {
+		return t.GetDestination()
+	}
+	return ""
 }
 
 func (e *executableImpl) shouldResubmitOnNack(attempt int, err error) bool {

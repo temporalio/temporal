@@ -172,6 +172,24 @@ message GetWorkflowExecutionRawHistoryV2Response {
   repeated int64 history_node_ids = 4;
 }
 
+message GetWorkflowExecutionRawHistoryRequest {
+  string namespace_id = 1;
+  temporal.api.common.v1.WorkflowExecution execution = 2;
+  int64 start_event_id = 3;
+  int64 start_event_version = 4;
+  int64 end_event_id = 5;
+  int64 end_event_version = 6;
+  int32 maximum_page_size = 7;
+  bytes next_page_token = 8;
+}
+
+message GetWorkflowExecutionRawHistoryResponse {
+  bytes next_page_token = 1;
+  repeated temporal.api.common.v1.DataBlob history_batches = 2;
+  temporal.server.api.history.v1.VersionHistory version_history = 3;
+  repeated int64 history_node_ids = 4;
+}
+
 message GetReplicationMessagesRequest {
   repeated temporal.server.api.replication.v1.ReplicationToken tokens = 1;
   string cluster_name = 2;

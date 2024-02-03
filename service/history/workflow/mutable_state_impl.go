@@ -74,6 +74,7 @@ import (
 	"go.temporal.io/server/service/history/configs"
 	"go.temporal.io/server/service/history/consts"
 	"go.temporal.io/server/service/history/events"
+	"go.temporal.io/server/service/history/historybuilder"
 	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/tasks"
 )
@@ -147,7 +148,7 @@ type (
 		executionInfo  *persistencespb.WorkflowExecutionInfo // Workflow mutable state info.
 		executionState *persistencespb.WorkflowExecutionState
 
-		hBuilder *HistoryBuilder
+		hBuilder *historybuilder.HistoryBuilder
 
 		// In-memory only attributes
 		currentVersion int64
@@ -278,7 +279,7 @@ func NewMutableState(
 		Status: enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING}
 	s.approximateSize += s.executionState.Size()
 
-	s.hBuilder = NewMutableHistoryBuilder(
+	s.hBuilder = historybuilder.New(
 		s.timeSource,
 		s.shard.GenerateTaskIDs,
 		s.currentVersion,
@@ -362,7 +363,7 @@ func NewMutableStateFromDB(
 	mutableState.approximateSize += dbRecord.ExecutionInfo.Size() - mutableState.executionInfo.Size()
 	mutableState.executionInfo = dbRecord.ExecutionInfo
 
-	mutableState.hBuilder = NewMutableHistoryBuilder(
+	mutableState.hBuilder = historybuilder.New(
 		mutableState.timeSource,
 		mutableState.shard.GenerateTaskIDs,
 		common.EmptyVersion,
@@ -515,7 +516,7 @@ func (ms *MutableStateImpl) SetCurrentBranchToken(
 	return nil
 }
 
-func (ms *MutableStateImpl) SetHistoryBuilder(hBuilder *HistoryBuilder) {
+func (ms *MutableStateImpl) SetHistoryBuilder(hBuilder *historybuilder.HistoryBuilder) {
 	ms.hBuilder = hBuilder
 }
 
@@ -583,7 +584,7 @@ func (ms *MutableStateImpl) UpdateCurrentVersion(
 		ms.currentVersion = version
 	}
 
-	ms.hBuilder = NewMutableHistoryBuilder(
+	ms.hBuilder = historybuilder.New(
 		ms.timeSource,
 		ms.shard.GenerateTaskIDs,
 		ms.currentVersion,
@@ -1528,7 +1529,7 @@ func (ms *MutableStateImpl) HasBufferedEvents() bool {
 }
 
 // HasAnyBufferedEvent returns true if there is at least one buffered event that matches the provided filter.
-func (ms *MutableStateImpl) HasAnyBufferedEvent(filter BufferedEventFilter) bool {
+func (ms *MutableStateImpl) HasAnyBufferedEvent(filter historybuilder.BufferedEventFilter) bool {
 	return ms.hBuilder.HasAnyBufferedEvent(filter)
 }
 
@@ -3589,6 +3590,9 @@ func (ms *MutableStateImpl) ApplyWorkflowExecutionUpdateCompletedEvent(
 		}
 		sizeDelta = ui.Size() - sizeBefore
 	} else {
+		// TODO (alex): this should never happened because UpdateInfo should always be created before
+		// with UpdateAccepted event which MUST preceded UpdateCompleted event.
+		// Better to return error here!
 		ui := updatespb.UpdateInfo{
 			Value: &updatespb.UpdateInfo_Completion{
 				Completion: &updatespb.CompletionInfo{EventId: event.EventId},
@@ -3634,13 +3638,37 @@ func (ms *MutableStateImpl) AddWorkflowExecutionSignaled(
 	header *commonpb.Header,
 	skipGenerateWorkflowTask bool,
 ) (*historypb.HistoryEvent, error) {
+	return ms.AddWorkflowExecutionSignaledEvent(
+		signalName,
+		input,
+		identity,
+		header,
+		skipGenerateWorkflowTask,
+		nil,
+	)
+}
 
+func (ms *MutableStateImpl) AddWorkflowExecutionSignaledEvent(
+	signalName string,
+	input *commonpb.Payloads,
+	identity string,
+	header *commonpb.Header,
+	skipGenerateWorkflowTask bool,
+	externalWorkflowExecution *commonpb.WorkflowExecution,
+) (*historypb.HistoryEvent, error) {
 	opTag := tag.WorkflowActionWorkflowSignaled
 	if err := ms.checkMutability(opTag); err != nil {
 		return nil, err
 	}
 
-	event := ms.hBuilder.AddWorkflowExecutionSignaledEvent(signalName, input, identity, header, skipGenerateWorkflowTask)
+	event := ms.hBuilder.AddWorkflowExecutionSignaledEvent(
+		signalName,
+		input,
+		identity,
+		header,
+		skipGenerateWorkflowTask,
+		externalWorkflowExecution,
+	)
 	if err := ms.ApplyWorkflowExecutionSignaled(event); err != nil {
 		return nil, err
 	}
@@ -4218,57 +4246,30 @@ func (ms *MutableStateImpl) RetryActivity(
 	if err := ms.checkMutability(opTag); err != nil {
 		return enumspb.RETRY_STATE_INTERNAL_SERVER_ERROR, err
 	}
-
-	if !ai.HasRetryPolicy {
-		return enumspb.RETRY_STATE_RETRY_POLICY_NOT_SET, nil
+	activityVisitor := newActivityVisitor(ai, failure, ms.timeSource)
+	if state := activityVisitor.State(); state != enumspb.RETRY_STATE_IN_PROGRESS {
+		return state, nil
 	}
-
-	if ai.CancelRequested {
-		return enumspb.RETRY_STATE_CANCEL_REQUESTED, nil
+	nextAttempt := ai.Attempt + 1
+	if err := ms.taskGenerator.GenerateActivityRetryTasks(ai, nextAttempt); err != nil {
+		return enumspb.RETRY_STATE_INTERNAL_SERVER_ERROR, err
 	}
-
-	originalSize := 0
+	// we need to store activity info size since pendingActivityInfoIDs holds pointers to activity
+	// info and if prev found it points to the same activity info as ai, so updating ai will cause
+	// size of prev change.
+	var originalSize int
 	if prev, ok := ms.pendingActivityInfoIDs[ai.ScheduledEventId]; ok {
 		originalSize = prev.Size()
 	}
-
-	now := ms.timeSource.Now()
-
-	backoffInterval, retryState := getBackoffInterval(
-		now,
-		ai.Attempt,
-		ai.RetryMaximumAttempts,
-		ai.RetryInitialInterval,
-		ai.RetryMaximumInterval,
-		ai.RetryExpirationTime,
-		ai.RetryBackoffCoefficient,
-		failure,
-		ai.RetryNonRetryableErrorTypes,
+	ai = activityVisitor.UpdateActivityInfo(
+		ai,
+		ms.GetCurrentVersion(),
+		nextAttempt,
+		ms.truncateRetryableActivityFailure(failure),
 	)
-	if retryState != enumspb.RETRY_STATE_IN_PROGRESS {
-		return retryState, nil
-	}
-
-	// a retry is needed, update activity info for next retry
-	ai.Version = ms.GetCurrentVersion()
-	ai.Attempt++
-	ai.ScheduledTime = timestamppb.New(now.Add(backoffInterval)) // update to next schedule time
-	ai.StartedEventId = common.EmptyEventID
-	ai.RequestId = ""
-	ai.StartedTime = nil
-	ai.TimerTaskStatus = TimerTaskStatusNone
-	ai.RetryLastWorkerIdentity = ai.StartedIdentity
-	ai.RetryLastFailure = ms.truncateRetryableActivityFailure(failure)
-
-	if err := ms.taskGenerator.GenerateActivityRetryTasks(
-		ai.ScheduledEventId,
-	); err != nil {
-		return enumspb.RETRY_STATE_INTERNAL_SERVER_ERROR, err
-	}
-
+	ms.approximateSize += ai.Size() - originalSize
 	ms.updateActivityInfos[ai.ScheduledEventId] = ai
 	ms.syncActivityTasks[ai.ScheduledEventId] = struct{}{}
-	ms.approximateSize += ai.Size() - originalSize
 	return enumspb.RETRY_STATE_IN_PROGRESS, nil
 }
 
@@ -4660,7 +4661,7 @@ func (ms *MutableStateImpl) cleanupTransaction(
 	ms.nextEventIDInDB = ms.GetNextEventID()
 	// ms.dbRecordVersion remains the same
 
-	ms.hBuilder = NewMutableHistoryBuilder(
+	ms.hBuilder = historybuilder.New(
 		ms.timeSource,
 		ms.shard.GenerateTaskIDs,
 		ms.GetCurrentVersion(),

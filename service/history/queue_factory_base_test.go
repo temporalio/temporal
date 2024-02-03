@@ -131,8 +131,6 @@ func getModuleDependencies(controller *gomock.Controller, c *moduleTestCase) fx.
 	cfg := configs.NewConfig(
 		dynamicconfig.NewNoopCollection(),
 		1,
-		true,
-		false,
 	)
 	clusterMetadata := cluster.NewMockMetadata(controller)
 	clusterMetadata.EXPECT().GetCurrentClusterName().Return("module-test-cluster-name").AnyTimes()

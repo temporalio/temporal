@@ -609,6 +609,11 @@ func NumberDeleted(n int) ZapTag {
 	return NewInt("number-deleted", n)
 }
 
+// NumberChanged returns tag for NumberChanged
+func NumberChanged(n int) ZapTag {
+	return NewInt("number-changed", n)
+}
+
 // TimerTaskStatus returns tag for TimerTaskStatus
 func TimerTaskStatus(timerTaskStatus int32) ZapTag {
 	return NewInt32("timer-task-status", timerTaskStatus)
@@ -623,6 +628,11 @@ func DLQMessageID(dlqMessageID int64) ZapTag {
 // Attempt returns tag for Attempt
 func Attempt(attempt int32) ZapTag {
 	return NewInt32("attempt", attempt)
+}
+
+// UnexpectedErrorAttempts returns tag for UnexpectedErrorAttempts
+func UnexpectedErrorAttempts(attempt int32) ZapTag {
+	return NewInt32("unexpected-error-attempts", attempt)
 }
 
 func WorkflowTaskType(wtType string) ZapTag {
@@ -724,6 +734,14 @@ func SourceCluster(sourceCluster string) ZapTag {
 // TargetCluster returns tag for TargetCluster
 func TargetCluster(targetCluster string) ZapTag {
 	return NewStringTag("xdc-target-cluster", targetCluster)
+}
+
+func SourceShardID(shardID int32) ZapTag {
+	return NewInt32("xdc-source-shard-id", shardID)
+}
+
+func TargetShardID(shardID int32) ZapTag {
+	return NewInt32("xdc-target-shard-id", shardID)
 }
 
 // PrevActiveCluster returns tag for PrevActiveCluster

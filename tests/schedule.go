@@ -43,6 +43,7 @@ import (
 	"go.temporal.io/sdk/converter"
 	"go.temporal.io/sdk/worker"
 	"go.temporal.io/sdk/workflow"
+	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/durationpb"
 
 	"go.temporal.io/server/common/dynamicconfig"
@@ -244,6 +245,7 @@ func (s *ScheduleFunctionalSuite) TestBasics() {
 	s.Nil(describeResp.SearchAttributes.IndexedFields[searchattribute.BinaryChecksums])
 	s.Nil(describeResp.SearchAttributes.IndexedFields[searchattribute.BuildIds])
 	s.Equal(schMemo.Data, describeResp.Memo.Fields["schedmemo1"].Data)
+	fmt.Printf("StartWorkflowAction: %x", describeResp)
 	s.Equal(wfSAValue.Data, describeResp.Schedule.Action.GetStartWorkflow().SearchAttributes.IndexedFields[csa].Data)
 	s.Equal(wfMemo.Data, describeResp.Schedule.Action.GetStartWorkflow().Memo.Fields["wfmemo1"].Data)
 
@@ -260,25 +262,14 @@ func (s *ScheduleFunctionalSuite) TestBasics() {
 
 	// list
 
-	s.Eventually(func() bool { // wait for visibility
-		listResp, err := s.engine.ListSchedules(NewContext(), &workflowservice.ListSchedulesRequest{
-			Namespace:       s.namespace,
-			MaximumPageSize: 5,
-		})
-		if err != nil || len(listResp.Schedules) != 1 || listResp.Schedules[0].ScheduleId != sid || len(listResp.Schedules[0].GetInfo().GetRecentActions()) < 2 {
-			return false
-		}
-		s.NoError(err)
-		entry := listResp.Schedules[0]
-		s.Equal(sid, entry.ScheduleId)
-		s.Equal(schSAValue.Data, entry.SearchAttributes.IndexedFields[csa].Data)
-		s.Equal(schMemo.Data, entry.Memo.Fields["schedmemo1"].Data)
-		checkSpec(entry.Info.Spec)
-		s.Equal(wt, entry.Info.WorkflowType.Name)
-		s.False(entry.Info.Paused)
-		s.Equal(describeResp.Info.RecentActions, entry.Info.RecentActions) // 2 is below the limit where list entry might be cut off
-		return true
-	}, 10*time.Second, 1*time.Second)
+	visibilityResponse := s.getScheduleEntryFomVisibility(sid)
+	s.Equal(sid, visibilityResponse.ScheduleId)
+	s.Equal(schSAValue.Data, visibilityResponse.SearchAttributes.IndexedFields[csa].Data)
+	s.Equal(schMemo.Data, visibilityResponse.Memo.Fields["schedmemo1"].Data)
+	checkSpec(visibilityResponse.Info.Spec)
+	s.Equal(wt, visibilityResponse.Info.WorkflowType.Name)
+	s.False(visibilityResponse.Info.Paused)
+	s.assertSameRecentActions(describeResp, visibilityResponse)
 
 	// list workflows
 
@@ -306,7 +297,23 @@ func (s *ScheduleFunctionalSuite) TestBasics() {
 	s.WithinRange(ex0StartTime, createTime, time.Now())
 	s.True(ex0StartTime.UnixNano()%int64(5*time.Second) == 0)
 
-	// list workflows with namespace division (implementation details here, not public api)
+	// list with QueryWithAnyNamespaceDivision, we should see the scheduler workflow
+
+	wfResp, err = s.engine.ListWorkflowExecutions(NewContext(), &workflowservice.ListWorkflowExecutionsRequest{
+		Namespace: s.namespace,
+		PageSize:  5,
+		Query:     searchattribute.QueryWithAnyNamespaceDivision(`ExecutionStatus = "Running"`),
+	})
+	s.NoError(err)
+	count := 0
+	for _, ex := range wfResp.Executions {
+		if ex.Type.Name == scheduler.WorkflowType {
+			count++
+		}
+	}
+	s.EqualValues(1, count, "should see scheduler workflow")
+
+	// list workflows with an exact match on namespace division (implementation details here, not public api)
 
 	wfResp, err = s.engine.ListWorkflowExecutions(NewContext(), &workflowservice.ListWorkflowExecutionsRequest{
 		Namespace: s.namespace,
@@ -856,8 +863,11 @@ func (s *ScheduleFunctionalSuite) TestNextTimeCache() {
 	for _, e := range events {
 		if marker := e.GetMarkerRecordedEventAttributes(); marker.GetMarkerName() == "SideEffect" {
 			sideEffects++
-			if p, ok := marker.Details["data"]; ok && strings.Contains(payloads.ToString(p), `"Next"`) {
-				nextTimeSideEffects++
+			if p, ok := marker.Details["data"]; ok && len(p.Payloads) == 1 {
+				if string(p.Payloads[0].Metadata["messageType"]) == "temporal.server.api.schedule.v1.NextTimeCache" ||
+					strings.Contains(payloads.ToString(p), `"Next"`) {
+					nextTimeSideEffects++
+				}
 			}
 		}
 	}
@@ -883,4 +893,43 @@ func (s *ScheduleFunctionalSuite) TestNextTimeCache() {
 		Identity:   "test",
 	})
 	s.NoError(err)
+}
+
+func (s *ScheduleFunctionalSuite) getScheduleEntryFomVisibility(sid string) *schedulepb.ScheduleListEntry {
+	var slEntry *schedulepb.ScheduleListEntry
+	s.Eventually(func() bool { // wait for visibility
+		listResp, err := s.engine.ListSchedules(NewContext(), &workflowservice.ListSchedulesRequest{
+			Namespace:       s.namespace,
+			MaximumPageSize: 5,
+		})
+		if err != nil || len(listResp.Schedules) != 1 || listResp.Schedules[0].ScheduleId != sid ||
+			len(listResp.Schedules[0].GetInfo().GetRecentActions()) < 2 {
+			return false
+		}
+		slEntry = listResp.Schedules[0]
+		return true
+	}, 10*time.Second, 1*time.Second)
+	return slEntry
+}
+
+func (s *ScheduleFunctionalSuite) assertSameRecentActions(
+	expected *workflowservice.DescribeScheduleResponse, actual *schedulepb.ScheduleListEntry,
+) {
+	s.T().Helper()
+	if len(expected.Info.RecentActions) != len(actual.Info.RecentActions) {
+		s.T().Fatalf(
+			"RecentActions have different length expected %d, got %d",
+			len(expected.Info.RecentActions),
+			len(actual.Info.RecentActions))
+	}
+	for i := range expected.Info.RecentActions {
+		if !proto.Equal(expected.Info.RecentActions[i], actual.Info.RecentActions[i]) {
+			s.T().Errorf(
+				"RecentActions are differ at index %d. Expected %v, got %v",
+				i,
+				expected.Info.RecentActions[i],
+				actual.Info.RecentActions[i],
+			)
+		}
+	}
 }

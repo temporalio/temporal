@@ -299,6 +299,20 @@ func (c *metricClient) GetWorkflowExecutionHistoryReverse(
 	return c.client.GetWorkflowExecutionHistoryReverse(ctx, request, opts...)
 }
 
+func (c *metricClient) GetWorkflowExecutionRawHistory(
+	ctx context.Context,
+	request *historyservice.GetWorkflowExecutionRawHistoryRequest,
+	opts ...grpc.CallOption,
+) (_ *historyservice.GetWorkflowExecutionRawHistoryResponse, retError error) {
+
+	metricsHandler, startTime := c.startMetricsRecording(ctx, "HistoryClientGetWorkflowExecutionRawHistory")
+	defer func() {
+		c.finishMetricsRecording(metricsHandler, startTime, retError)
+	}()
+
+	return c.client.GetWorkflowExecutionRawHistory(ctx, request, opts...)
+}
+
 func (c *metricClient) GetWorkflowExecutionRawHistoryV2(
 	ctx context.Context,
 	request *historyservice.GetWorkflowExecutionRawHistoryV2Request,

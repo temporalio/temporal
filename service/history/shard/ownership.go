@@ -116,6 +116,7 @@ func (o *ownership) eventLoop(ctx context.Context) {
 			o.logger.Info("", tag.ValueRingMembershipChangedEvent,
 				tag.NumberProcessed(len(changedEvent.HostsAdded)),
 				tag.NumberDeleted(len(changedEvent.HostsRemoved)),
+				tag.NumberChanged(len(changedEvent.HostsChanged)),
 			)
 
 			o.scheduleAcquire()

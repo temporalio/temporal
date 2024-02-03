@@ -99,7 +99,6 @@ func (f *relocatableAttributesFetcher) Fetch(
 			Namespace:   mutableState.GetNamespaceEntry().Name(),
 			RunID:       executionState.GetRunId(),
 			WorkflowID:  executionInfo.GetWorkflowId(),
-			CloseTime:   executionInfo.CloseTime.AsTime(),
 		},
 	)
 	if err != nil {

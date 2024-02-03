@@ -114,7 +114,7 @@ func newQueueFactoryBase(params ArchivalQueueFactoryParams) QueueFactoryBase {
 				params.Config.PersistenceMaxQPS,
 				archivalQueuePersistenceMaxRPSRatio,
 			),
-			int64(params.Config.QueueMaxReaderCount()),
+			int64(params.Config.ArchivalQueueMaxReaderCount()),
 		),
 	}
 }
@@ -184,6 +184,8 @@ func (f *archivalQueueFactory) newScheduledQueue(shard shard.Context, executor q
 		metricsHandler,
 		f.DLQWriter,
 		f.Config.TaskDLQEnabled,
+		f.Config.TaskDLQUnexpectedErrorAttempts,
+		f.Config.TaskDLQInternalErrors,
 	)
 	return queues.NewScheduledQueue(
 		shard,
@@ -207,7 +209,7 @@ func (f *archivalQueueFactory) newScheduledQueue(shard shard.Context, executor q
 			MaxPollIntervalJitterCoefficient:    f.Config.ArchivalProcessorMaxPollIntervalJitterCoefficient,
 			CheckpointInterval:                  f.Config.ArchivalProcessorUpdateAckInterval,
 			CheckpointIntervalJitterCoefficient: f.Config.ArchivalProcessorUpdateAckIntervalJitterCoefficient,
-			MaxReaderCount:                      f.Config.QueueMaxReaderCount,
+			MaxReaderCount:                      f.Config.ArchivalQueueMaxReaderCount,
 		},
 		f.HostReaderRateLimiter,
 		logger,

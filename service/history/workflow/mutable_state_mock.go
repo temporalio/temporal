@@ -53,6 +53,7 @@ import (
 	definition "go.temporal.io/server/common/definition"
 	namespace "go.temporal.io/server/common/namespace"
 	persistence "go.temporal.io/server/common/persistence"
+	historybuilder "go.temporal.io/server/service/history/historybuilder"
 	tasks "go.temporal.io/server/service/history/tasks"
 	durationpb "google.golang.org/protobuf/types/known/durationpb"
 	timestamppb "google.golang.org/protobuf/types/known/timestamppb"
@@ -636,6 +637,21 @@ func (m *MockMutableState) AddWorkflowExecutionSignaled(signalName string, input
 func (mr *MockMutableStateMockRecorder) AddWorkflowExecutionSignaled(signalName, input, identity, header, skipGenerateWorkflowTask interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "AddWorkflowExecutionSignaled", reflect.TypeOf((*MockMutableState)(nil).AddWorkflowExecutionSignaled), signalName, input, identity, header, skipGenerateWorkflowTask)
+}
+
+// AddWorkflowExecutionSignaledEvent mocks base method.
+func (m *MockMutableState) AddWorkflowExecutionSignaledEvent(signalName string, input *v10.Payloads, identity string, header *v10.Header, skipGenerateWorkflowTask bool, externalWorkflowExecution *v10.WorkflowExecution) (*v13.HistoryEvent, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "AddWorkflowExecutionSignaledEvent", signalName, input, identity, header, skipGenerateWorkflowTask, externalWorkflowExecution)
+	ret0, _ := ret[0].(*v13.HistoryEvent)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// AddWorkflowExecutionSignaledEvent indicates an expected call of AddWorkflowExecutionSignaledEvent.
+func (mr *MockMutableStateMockRecorder) AddWorkflowExecutionSignaledEvent(signalName, input, identity, header, skipGenerateWorkflowTask, externalWorkflowExecution interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "AddWorkflowExecutionSignaledEvent", reflect.TypeOf((*MockMutableState)(nil).AddWorkflowExecutionSignaledEvent), signalName, input, identity, header, skipGenerateWorkflowTask, externalWorkflowExecution)
 }
 
 // AddWorkflowExecutionStartedEvent mocks base method.
@@ -2321,7 +2337,7 @@ func (mr *MockMutableStateMockRecorder) HadOrHasWorkflowTask() *gomock.Call {
 }
 
 // HasAnyBufferedEvent mocks base method.
-func (m *MockMutableState) HasAnyBufferedEvent(filter BufferedEventFilter) bool {
+func (m *MockMutableState) HasAnyBufferedEvent(filter historybuilder.BufferedEventFilter) bool {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "HasAnyBufferedEvent", filter)
 	ret0, _ := ret[0].(bool)
@@ -2612,7 +2628,7 @@ func (mr *MockMutableStateMockRecorder) SetCurrentBranchToken(branchToken interf
 }
 
 // SetHistoryBuilder mocks base method.
-func (m *MockMutableState) SetHistoryBuilder(hBuilder *HistoryBuilder) {
+func (m *MockMutableState) SetHistoryBuilder(hBuilder *historybuilder.HistoryBuilder) {
 	m.ctrl.T.Helper()
 	m.ctrl.Call(m, "SetHistoryBuilder", hBuilder)
 }

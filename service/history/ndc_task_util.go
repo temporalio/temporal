@@ -26,6 +26,7 @@ package history
 
 import (
 	"context"
+	"fmt"
 
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
@@ -36,9 +37,11 @@ import (
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
+	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/service/history/consts"
 	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/tasks"
+	"go.temporal.io/server/service/history/vclock"
 	"go.temporal.io/server/service/history/workflow"
 )
 
@@ -85,7 +88,7 @@ func loadMutableStateForTransferTask(
 		wfContext,
 		transferTask,
 		getTransferTaskEventIDAndRetryable,
-		metricsHandler.WithTags(metrics.OperationTag(metrics.TransferQueueProcessorScope)),
+		metricsHandler.WithTags(metrics.OperationTag(metrics.OperationTransferQueueProcessorScope)),
 		logger,
 	)
 	if err != nil {
@@ -131,7 +134,7 @@ func loadMutableStateForTimerTask(
 		wfContext,
 		timerTask,
 		getTimerTaskEventIDAndRetryable,
-		metricsHandler.WithTags(metrics.OperationTag(metrics.TimerQueueProcessorScope)),
+		metricsHandler.WithTags(metrics.OperationTag(metrics.OperationTimerQueueProcessorScope)),
 		logger,
 	)
 }
@@ -146,10 +149,22 @@ func LoadMutableStateForTask(
 	logger log.Logger,
 ) (workflow.MutableState, error) {
 
+	if err := validateTaskByClock(shardContext, task); err != nil {
+		return nil, err
+	}
+
 	mutableState, err := wfContext.LoadMutableState(ctx, shardContext)
 	if err != nil {
 		return nil, err
 	}
+
+	// TODO: With validateTaskByClock check above, we should never run into the situation where
+	// mutable state cache is stale. This is based on the assumption that shard context
+	// will never re-acquire the shard after it has been stolen.
+	// We should monitor the StaleMutableStateCounter metric and remove the logic below once we are confident.
+
+	// Validation based on eventID is not good enough as certain operation does not generate events.
+	// For example, scheduling transient workflow task, or starting activities that have retry policy.
 
 	// check to see if cache needs to be refreshed as we could potentially have stale workflow execution
 	// the exception is workflow task consistently fail
@@ -175,6 +190,32 @@ func LoadMutableStateForTask(
 		return nil, nil
 	}
 	return mutableState, nil
+}
+
+func validateTaskByClock(
+	shardContext shard.Context,
+	task tasks.Task,
+) error {
+	shardID := shardContext.GetShardID()
+	taskClock := vclock.NewVectorClock(
+		shardContext.GetClusterMetadata().GetClusterID(),
+		shardContext.GetShardID(),
+		task.GetTaskID(),
+	)
+	currentClock := shardContext.CurrentVectorClock()
+	result, err := vclock.Compare(taskClock, currentClock)
+	if err != nil {
+		return err
+	}
+	if result >= 0 {
+		shardContext.UnloadForOwnershipLost()
+		return &persistence.ShardOwnershipLostError{
+			ShardID: shardID,
+			Msg:     fmt.Sprintf("Shard: %v task clock validation failed, reloading", shardID),
+		}
+	}
+
+	return nil
 }
 
 func getTransferTaskEventIDAndRetryable(

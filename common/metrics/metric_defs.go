@@ -325,7 +325,8 @@ const (
 const (
 	// AdminGetWorkflowExecutionRawHistoryV2Scope is the metric scope for admin.GetWorkflowExecutionRawHistoryScope
 	AdminGetWorkflowExecutionRawHistoryV2Scope = "AdminGetWorkflowExecutionRawHistoryV2"
-
+	// AdminGetWorkflowExecutionRawHistoryScope is the metric scope for admin.GetWorkflowExecutionRawHistoryScope
+	AdminGetWorkflowExecutionRawHistoryScope = "AdminGetWorkflowExecutionRawHistory"
 	// OperatorAddSearchAttributesScope is the metric scope for operator.AddSearchAttributes
 	OperatorAddSearchAttributesScope = "OperatorAddSearchAttributes"
 	// OperatorDeleteNamespaceScope is the metric scope for operator.OperatorDeleteNamespace
@@ -354,6 +355,8 @@ const (
 	HistoryRespondActivityTaskFailedScope = "RespondActivityTaskFailed"
 	// HistoryRespondActivityTaskCanceledScope tracks RespondActivityTaskCanceled API calls received by service
 	HistoryRespondActivityTaskCanceledScope = "RespondActivityTaskCanceled"
+	// HistoryGetWorkflowExecutionRawHistoryScope tracks GetWorkflowExecutionRawHistoryV2Scope API calls received by service
+	HistoryGetWorkflowExecutionRawHistoryScope = "GetWorkflowExecutionRawHistory"
 	// HistoryGetWorkflowExecutionRawHistoryV2Scope tracks GetWorkflowExecutionRawHistoryV2Scope API calls received by service
 	HistoryGetWorkflowExecutionRawHistoryV2Scope = "GetWorkflowExecutionRawHistoryV2"
 	// HistoryGetHistoryScope tracks GetHistoryScope API calls received by service
@@ -383,15 +386,11 @@ const (
 	// HistoryCacheGetOrCreateScope is the scope used by history cache
 	HistoryCacheGetOrCreateScope = "HistoryCacheGetOrCreate"
 	// HistoryCacheGetOrCreateCurrentScope is the scope used by history cache
-	HistoryCacheGetOrCreateCurrentScope = "CacheGetOrCreateCurrent"
+	HistoryCacheGetOrCreateCurrentScope = "HistoryCacheGetOrCreateCurrent"
 
-	// TransferQueueProcessorScope is the scope used by all metric emitted by transfer queue processor
-	TransferQueueProcessorScope = "TransferQueueProcessor"
 	// TransferActiveTaskCloseExecutionScope is the scope used for close execution task processing by transfer queue processor
 	TransferActiveTaskCloseExecutionScope = "TransferActiveTaskCloseExecution"
 
-	// TimerQueueProcessorScope is the scope used by all metric emitted by timer queue processor
-	TimerQueueProcessorScope = "TimerQueueProcessor"
 	// TimerActiveTaskActivityTimeoutScope is the scope used by metric emitted by timer queue processor for processing activity timeouts
 	TimerActiveTaskActivityTimeoutScope = "TimerActiveTaskActivityTimeout"
 	// TimerActiveTaskWorkflowTaskTimeoutScope is the scope used by metric emitted by timer queue processor for processing workflow task timeouts
@@ -740,6 +739,7 @@ var (
 	)
 	TaskNotActiveCounter         = NewCounterDef("task_errors_not_active_counter")
 	TaskNamespaceHandoverCounter = NewCounterDef("task_errors_namespace_handover")
+	TaskInternalErrorCounter     = NewCounterDef("task_errors_internal")
 	TaskThrottledCounter         = NewCounterDef(
 		"task_errors_throttled",
 		WithDescription("The number of history task processing errors caused by resource exhausted errors, excluding workflow busy case."),
@@ -885,6 +885,7 @@ var (
 	// ReplicationTasksFetched records the number of tasks fetched by the poller.
 	ReplicationTasksFetched                        = NewDimensionlessHistogramDef("replication_tasks_fetched")
 	ReplicationLatency                             = NewTimerDef("replication_latency")
+	ReplicationTaskTransmissionLatency             = NewTimerDef("replication_task_transmission_latency")
 	ReplicationDLQFailed                           = NewCounterDef("replication_dlq_enqueue_failed")
 	ReplicationDLQMaxLevelGauge                    = NewGaugeDef("replication_dlq_max_level")
 	ReplicationDLQAckLevelGauge                    = NewGaugeDef("replication_dlq_ack_level")
@@ -1061,6 +1062,10 @@ var (
 	ScheduleTerminateWorkflowErrors = NewCounterDef(
 		"schedule_terminate_workflow_errors",
 		WithDescription("The number of times a schedule got an error trying to terminate a previous run"),
+	)
+	ScheduleActionDelay = NewTimerDef(
+		"schedule_action_delay",
+		WithDescription("Delay between when scheduled actions should/actually happen"),
 	)
 
 	// Force replication

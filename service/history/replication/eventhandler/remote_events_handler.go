@@ -32,7 +32,7 @@ import (
 	workflowpb "go.temporal.io/server/api/workflow/v1"
 	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/namespace"
-	"go.temporal.io/server/service/history/replication"
+	"go.temporal.io/server/service/history/shard"
 )
 
 //go:generate mockgen -copyright_file ../../../../LICENSE -package $GOPACKAGE -source $GOFILE -destination remote_events_handler_mock.go
@@ -50,13 +50,13 @@ type (
 	}
 
 	futureEventsHandlerImpl struct {
-		replication.ProcessToolBox
+		shardController shard.Controller
 	}
 )
 
-func NewFutureEventsHandler(toolBox replication.ProcessToolBox) RemoteGeneratedEventsHandler {
+func NewRemoteGeneratedEventsHandler(shardController shard.Controller) RemoteGeneratedEventsHandler {
 	return &futureEventsHandlerImpl{
-		toolBox,
+		shardController: shardController,
 	}
 }
 
@@ -68,7 +68,7 @@ func (f futureEventsHandlerImpl) HandleRemoteGeneratedHistoryEvents(
 	historyEvents [][]*historypb.HistoryEvent,
 	newEvents []*historypb.HistoryEvent,
 ) error {
-	shardContext, err := f.ShardController.GetShardByNamespaceWorkflow(
+	shardContext, err := f.shardController.GetShardByNamespaceWorkflow(
 		namespace.ID(workflowKey.NamespaceID),
 		workflowKey.WorkflowID,
 	)

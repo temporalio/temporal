@@ -52,6 +52,7 @@ import (
 	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence"
+	"go.temporal.io/server/service/history/historybuilder"
 	"go.temporal.io/server/service/history/tasks"
 )
 
@@ -151,6 +152,14 @@ type (
 		AddWorkflowExecutionCancelRequestedEvent(*historyservice.RequestCancelWorkflowExecutionRequest) (*historypb.HistoryEvent, error)
 		AddWorkflowExecutionCanceledEvent(int64, *commandpb.CancelWorkflowExecutionCommandAttributes) (*historypb.HistoryEvent, error)
 		AddWorkflowExecutionSignaled(signalName string, input *commonpb.Payloads, identity string, header *commonpb.Header, skipGenerateWorkflowTask bool) (*historypb.HistoryEvent, error)
+		AddWorkflowExecutionSignaledEvent(
+			signalName string,
+			input *commonpb.Payloads,
+			identity string,
+			header *commonpb.Header,
+			skipGenerateWorkflowTask bool,
+			externalWorkflowExecution *commonpb.WorkflowExecution,
+		) (*historypb.HistoryEvent, error)
 		AddWorkflowExecutionStartedEvent(*commonpb.WorkflowExecution, *historyservice.StartWorkflowExecutionRequest) (*historypb.HistoryEvent, error)
 		AddWorkflowExecutionStartedEventWithOptions(*commonpb.WorkflowExecution, *historyservice.StartWorkflowExecutionRequest, *workflowpb.ResetPoints, string, string) (*historypb.HistoryEvent, error)
 		AddWorkflowExecutionTerminatedEvent(firstEventID int64, reason string, details *commonpb.Payloads, identity string, deleteAfterTerminate bool) (*historypb.HistoryEvent, error)
@@ -213,7 +222,7 @@ type (
 		IsTransientWorkflowTask() bool
 		ClearTransientWorkflowTask() error
 		HasBufferedEvents() bool
-		HasAnyBufferedEvent(filter BufferedEventFilter) bool
+		HasAnyBufferedEvent(filter historybuilder.BufferedEventFilter) bool
 		HasStartedWorkflowTask() bool
 		HasParentExecution() bool
 		HasPendingWorkflowTask() bool
@@ -279,7 +288,7 @@ type (
 		ApplyWorkflowExecutionUpdateAcceptedEvent(*historypb.HistoryEvent) error
 		ApplyWorkflowExecutionUpdateCompletedEvent(event *historypb.HistoryEvent, batchID int64) error
 		SetCurrentBranchToken(branchToken []byte) error
-		SetHistoryBuilder(hBuilder *HistoryBuilder)
+		SetHistoryBuilder(hBuilder *historybuilder.HistoryBuilder)
 		SetHistoryTree(ctx context.Context, executionTimeout *durationpb.Duration, runTimeout *durationpb.Duration, treeID string) error
 		SetBaseWorkflow(
 			baseRunID string,

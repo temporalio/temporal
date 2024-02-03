@@ -43,17 +43,19 @@ type (
 	// ExecutableFactoryFn is a convenience type to avoid having to create a struct that implements ExecutableFactory.
 	ExecutableFactoryFn   func(readerID int64, t tasks.Task) Executable
 	executableFactoryImpl struct {
-		executor          Executor
-		scheduler         Scheduler
-		rescheduler       Rescheduler
-		priorityAssigner  PriorityAssigner
-		timeSource        clock.TimeSource
-		namespaceRegistry namespace.Registry
-		clusterMetadata   cluster.Metadata
-		logger            log.Logger
-		metricsHandler    metrics.Handler
-		dlqWriter         *DLQWriter
-		dlqEnabled        dynamicconfig.BoolPropertyFn
+		executor                   Executor
+		scheduler                  Scheduler
+		rescheduler                Rescheduler
+		priorityAssigner           PriorityAssigner
+		timeSource                 clock.TimeSource
+		namespaceRegistry          namespace.Registry
+		clusterMetadata            cluster.Metadata
+		logger                     log.Logger
+		metricsHandler             metrics.Handler
+		dlqWriter                  *DLQWriter
+		dlqEnabled                 dynamicconfig.BoolPropertyFn
+		attemptsBeforeSendingToDlq dynamicconfig.IntPropertyFn
+		dlqInternalErrors          dynamicconfig.BoolPropertyFn
 	}
 )
 
@@ -73,19 +75,23 @@ func NewExecutableFactory(
 	metricsHandler metrics.Handler,
 	dlqWriter *DLQWriter,
 	dlqEnabled dynamicconfig.BoolPropertyFn,
+	attemptsBeforeSendingToDlq dynamicconfig.IntPropertyFn,
+	dlqInternalErrors dynamicconfig.BoolPropertyFn,
 ) *executableFactoryImpl {
 	return &executableFactoryImpl{
-		executor:          executor,
-		scheduler:         scheduler,
-		rescheduler:       rescheduler,
-		priorityAssigner:  priorityAssigner,
-		timeSource:        timeSource,
-		namespaceRegistry: namespaceRegistry,
-		clusterMetadata:   clusterMetadata,
-		logger:            logger,
-		metricsHandler:    metricsHandler,
-		dlqWriter:         dlqWriter,
-		dlqEnabled:        dlqEnabled,
+		executor:                   executor,
+		scheduler:                  scheduler,
+		rescheduler:                rescheduler,
+		priorityAssigner:           priorityAssigner,
+		timeSource:                 timeSource,
+		namespaceRegistry:          namespaceRegistry,
+		clusterMetadata:            clusterMetadata,
+		logger:                     logger,
+		metricsHandler:             metricsHandler,
+		dlqWriter:                  dlqWriter,
+		dlqEnabled:                 dlqEnabled,
+		attemptsBeforeSendingToDlq: attemptsBeforeSendingToDlq,
+		dlqInternalErrors:          dlqInternalErrors,
 	}
 }
 
@@ -105,6 +111,8 @@ func (f *executableFactoryImpl) NewExecutable(task tasks.Task, readerID int64) E
 		func(params *ExecutableParams) {
 			params.DLQEnabled = f.dlqEnabled
 			params.DLQWriter = f.dlqWriter
+			params.MaxUnexpectedErrorAttempts = f.attemptsBeforeSendingToDlq
+			params.DLQInternalErrors = f.dlqInternalErrors
 		},
 	)
 }

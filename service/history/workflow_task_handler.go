@@ -191,12 +191,16 @@ func (handler *workflowTaskHandlerImpl) handleCommands(
 		}
 	}
 
-	if handler.mutableState.IsWorkflowExecutionRunning() {
-		for _, msg := range msgs.TakeRemaining() {
-			err := handler.handleMessage(ctx, msg)
-			if err != nil || handler.stopProcessing {
-				return nil, err
-			}
+	// For every update.Acceptance and update.Respond (i.e. update completion) messages
+	// there should be a corresponding PROTOCOL_MESSAGE command. These messages are processed together
+	// with this command and, at this point, should be processed already.
+	// Therefore, remaining messages should be only update.Rejection.
+	// However, PROTOCOL_MESSAGE command is not required by server. If it is not present,
+	// update.Acceptance and update.Respond messages will be processed after all commands in order they are in request.
+	for _, msg := range msgs.TakeRemaining() {
+		err := handler.handleMessage(ctx, msg)
+		if err != nil || handler.stopProcessing {
+			return nil, err
 		}
 	}
 
@@ -280,7 +284,7 @@ func (handler *workflowTaskHandlerImpl) handleCommand(
 		return handler.handleCommandScheduleActivity(ctx, command.GetScheduleActivityTaskCommandAttributes())
 
 	case enumspb.COMMAND_TYPE_COMPLETE_WORKFLOW_EXECUTION:
-		return nil, handler.handleCommandCompleteWorkflow(ctx, command.GetCompleteWorkflowExecutionCommandAttributes(), msgs)
+		return nil, handler.handleCommandCompleteWorkflow(ctx, command.GetCompleteWorkflowExecutionCommandAttributes())
 
 	case enumspb.COMMAND_TYPE_FAIL_WORKFLOW_EXECUTION:
 		return nil, handler.handleCommandFailWorkflow(ctx, command.GetFailWorkflowExecutionCommandAttributes())
@@ -351,7 +355,11 @@ func (handler *workflowTaskHandlerImpl) handleMessage(
 				enumspb.WORKFLOW_TASK_FAILED_CAUSE_BAD_UPDATE_WORKFLOW_EXECUTION_MESSAGE,
 				serviceerror.NewNotFound(fmt.Sprintf("update %q not found", message.ProtocolInstanceId)))
 		}
-		if err := upd.OnMessage(ctx, message, workflow.WithEffects(handler.effects, handler.mutableState)); err != nil {
+
+		if err := upd.OnProtocolMessage(
+			ctx,
+			message,
+			workflow.WithEffects(handler.effects, handler.mutableState)); err != nil {
 			return handler.failWorkflowTaskOnInvalidArgument(
 				enumspb.WORKFLOW_TASK_FAILED_CAUSE_BAD_UPDATE_WORKFLOW_EXECUTION_MESSAGE, err)
 		}
@@ -625,23 +633,13 @@ func (handler *workflowTaskHandlerImpl) handleCommandStartTimer(
 func (handler *workflowTaskHandlerImpl) handleCommandCompleteWorkflow(
 	ctx context.Context,
 	attr *commandpb.CompleteWorkflowExecutionCommandAttributes,
-	msgs *collection.IndexedTakeList[string, *protocolpb.Message],
 ) error {
-
-	for _, msg := range msgs.TakeRemaining() {
-		err := handler.handleMessage(ctx, msg)
-		if err != nil || handler.stopProcessing {
-			return err
-		}
-	}
 
 	handler.metricsHandler.Counter(metrics.CommandTypeCompleteWorkflowCounter.Name()).Record(1)
 
 	if handler.hasBufferedEvents {
 		return handler.failWorkflowTask(enumspb.WORKFLOW_TASK_FAILED_CAUSE_UNHANDLED_COMMAND, nil)
 	}
-
-	handler.updateRegistry.TerminateUpdates(ctx, workflow.WithEffects(handler.effects, handler.mutableState))
 
 	if err := handler.validateCommandAttr(
 		func() (enumspb.WorkflowTaskFailedCause, error) {
@@ -700,8 +698,6 @@ func (handler *workflowTaskHandlerImpl) handleCommandFailWorkflow(
 	if handler.hasBufferedEvents {
 		return handler.failWorkflowTask(enumspb.WORKFLOW_TASK_FAILED_CAUSE_UNHANDLED_COMMAND, nil)
 	}
-
-	handler.updateRegistry.TerminateUpdates(ctx, workflow.WithEffects(handler.effects, handler.mutableState))
 
 	if err := handler.validateCommandAttr(
 		func() (enumspb.WorkflowTaskFailedCause, error) {
@@ -804,8 +800,6 @@ func (handler *workflowTaskHandlerImpl) handleCommandCancelWorkflow(
 	if handler.hasBufferedEvents {
 		return handler.failWorkflowTask(enumspb.WORKFLOW_TASK_FAILED_CAUSE_UNHANDLED_COMMAND, nil)
 	}
-
-	handler.updateRegistry.TerminateUpdates(ctx, workflow.WithEffects(handler.effects, handler.mutableState))
 
 	if err := handler.validateCommandAttr(
 		func() (enumspb.WorkflowTaskFailedCause, error) {
@@ -910,8 +904,6 @@ func (handler *workflowTaskHandlerImpl) handleCommandContinueAsNewWorkflow(
 		return handler.failWorkflowTask(enumspb.WORKFLOW_TASK_FAILED_CAUSE_UNHANDLED_COMMAND, nil)
 	}
 
-	handler.updateRegistry.TerminateUpdates(ctx, workflow.WithEffects(handler.effects, handler.mutableState))
-
 	namespaceName := handler.mutableState.GetNamespaceEntry().Name()
 
 	unaliasedSas, err := searchattribute.UnaliasFields(
@@ -922,7 +914,7 @@ func (handler *workflowTaskHandlerImpl) handleCommandContinueAsNewWorkflow(
 	if err != nil {
 		return handler.failWorkflowTaskOnInvalidArgument(enumspb.WORKFLOW_TASK_FAILED_CAUSE_BAD_SEARCH_ATTRIBUTES, err)
 	}
-	if unaliasedSas != nil {
+	if unaliasedSas != attr.GetSearchAttributes() {
 		// Create a copy of the `attr` to avoid modification of original `attr`,
 		// which can be needed again in case of retry.
 		newAttr := common.CloneProto(attr)
@@ -1040,7 +1032,7 @@ func (handler *workflowTaskHandlerImpl) handleCommandStartChildWorkflow(
 	if err != nil {
 		return handler.failWorkflowTaskOnInvalidArgument(enumspb.WORKFLOW_TASK_FAILED_CAUSE_BAD_SEARCH_ATTRIBUTES, err)
 	}
-	if unaliasedSas != nil {
+	if unaliasedSas != attr.GetSearchAttributes() {
 		// Create a copy of the `attr` to avoid modification of original `attr`,
 		// which can be needed again in case of retry.
 		newAttr := common.CloneProto(attr)
@@ -1191,7 +1183,7 @@ func (handler *workflowTaskHandlerImpl) handleCommandUpsertWorkflowSearchAttribu
 	if err != nil {
 		return handler.failWorkflowTaskOnInvalidArgument(enumspb.WORKFLOW_TASK_FAILED_CAUSE_BAD_SEARCH_ATTRIBUTES, err)
 	}
-	if unaliasedSas != nil {
+	if unaliasedSas != attr.GetSearchAttributes() {
 		// Create a copy of the `attr` to avoid modification of original `attr`,
 		// which can be needed again in case of retry.
 		newAttr := common.CloneProto(attr)

@@ -90,6 +90,7 @@ type (
 		timeSource     clock.TimeSource
 		monitor        *monitorImpl
 		mitigator      *mitigatorImpl
+		grouper        Grouper
 		logger         log.Logger
 		metricsHandler metrics.Handler
 
@@ -132,6 +133,7 @@ func newQueueBase(
 	options *Options,
 	hostReaderRateLimiter quotas.RequestRateLimiter,
 	completionFn ReaderCompletionFn,
+	grouper Grouper,
 	logger log.Logger,
 	metricsHandler metrics.Handler,
 ) *queueBase {
@@ -194,7 +196,7 @@ func newQueueBase(
 
 		slices := make([]Slice, 0, len(scopes))
 		for _, scope := range scopes {
-			slices = append(slices, NewSlice(paginationFnProvider, executableFactory, monitor, scope))
+			slices = append(slices, NewSlice(paginationFnProvider, executableFactory, monitor, scope, grouper))
 		}
 		if _, err := readerGroup.NewReader(readerID, slices...); err != nil {
 			// we are not able to re-create the scopes & readers we previously have
@@ -219,7 +221,7 @@ func newQueueBase(
 		readerGroup = NewReaderGroup(shard.GetShardID(), shard.GetOwner(), category, readerInitializer, shard.GetExecutionManager())
 	}
 
-	mitigator := newMitigator(readerGroup, monitor, logger, metricsHandler, options.MaxReaderCount)
+	mitigator := newMitigator(readerGroup, monitor, logger, metricsHandler, options.MaxReaderCount, grouper)
 
 	return &queueBase{
 		shard: shard,
@@ -234,6 +236,7 @@ func newQueueBase(
 		timeSource:     shard.GetTimeSource(),
 		monitor:        monitor,
 		mitigator:      mitigator,
+		grouper:        grouper,
 		logger:         logger,
 		metricsHandler: metricsHandler,
 
@@ -304,6 +307,7 @@ func (p *queueBase) processNewRange() {
 			p.executableFactory,
 			p.monitor,
 			newReadScope,
+			p.grouper,
 		))
 	}
 
@@ -344,12 +348,9 @@ func (p *queueBase) checkpoint() {
 			newExclusiveDeletionHighWatermark = tasks.MinKey(newExclusiveDeletionHighWatermark, scopes[0].Range.InclusiveMin)
 		}
 	}
-	p.metricsHandler.Histogram(metrics.QueueReaderCountHistogram.Name(), metrics.QueueReaderCountHistogram.Unit()).
-		Record(int64(len(readerScopes)))
-	p.metricsHandler.Histogram(metrics.QueueSliceCountHistogram.Name(), metrics.QueueSliceCountHistogram.Unit()).
-		Record(int64(p.monitor.GetTotalSliceCount()))
-	p.metricsHandler.Histogram(metrics.PendingTasksCounter.Name(), metrics.PendingTasksCounter.Unit()).
-		Record(int64(p.monitor.GetTotalPendingTaskCount()))
+	metrics.QueueReaderCountHistogram.With(p.metricsHandler).Record(int64(len(readerScopes)))
+	metrics.QueueSliceCountHistogram.With(p.metricsHandler).Record(int64(p.monitor.GetTotalSliceCount()))
+	metrics.PendingTasksCounter.With(p.metricsHandler).Record(int64(p.monitor.GetTotalPendingTaskCount()))
 
 	p.updateReaderProgress(readerScopes)
 
@@ -359,7 +360,7 @@ func (p *queueBase) checkpoint() {
 	//
 	// Emit metric before the deletion watermark comparison so we have the emit even if there's no task
 	// for the queue.
-	p.metricsHandler.Counter(metrics.TaskBatchCompleteCounter.Name()).Record(1)
+	metrics.TaskBatchCompleteCounter.With(p.metricsHandler).Record(1)
 	if newExclusiveDeletionHighWatermark.CompareTo(p.exclusiveDeletionHighWatermark) > 0 ||
 		(p.updateShardRangeID() && newExclusiveDeletionHighWatermark.CompareTo(tasks.MinimumKey) > 0) {
 		// When shard rangeID is updated, perform range completion again in case the underlying persistence implementation
@@ -459,7 +460,7 @@ func (p *queueBase) rangeCompleteTasks(
 func (p *queueBase) updateQueueState(
 	readerScopes map[int64][]Scope,
 ) error {
-	p.metricsHandler.Counter(metrics.AckLevelUpdateCounter.Name()).Record(1)
+	metrics.AckLevelUpdateCounter.With(p.metricsHandler).Record(1)
 	for readerID, scopes := range readerScopes {
 		if len(scopes) == 0 {
 			delete(readerScopes, readerID)
@@ -471,7 +472,7 @@ func (p *queueBase) updateQueueState(
 		exclusiveReaderHighWatermark: p.nonReadableScope.Range.InclusiveMin,
 	}))
 	if err != nil {
-		p.metricsHandler.Counter(metrics.AckLevelUpdateFailedCounter.Name()).Record(1)
+		metrics.AckLevelUpdateFailedCounter.With(p.metricsHandler).Record(1)
 		p.logger.Error("Error updating queue state", tag.Error(err), tag.OperationFailed)
 	}
 	return err
