@@ -1352,6 +1352,10 @@ func (s *ClientFunctionalSuite) Test_InvalidCommandAttribute() {
 	workflowFn := func(ctx workflow.Context) error {
 		info := workflow.GetInfo(ctx)
 
+		// Simply record time.Now() and check if the difference between the recorded time
+		// is higher than the workflow task timeout will not work, because there is a delay
+		// between server starts the workflow task and this code is executed.
+
 		var currentAttemptStartedTime time.Time
 		err := workflow.SideEffect(ctx, func(_ workflow.Context) interface{} {
 			rpcCtx := context.Background()
