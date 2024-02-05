@@ -62,7 +62,7 @@ func NewWorkflowWithSignal(
 	runID string,
 	startRequest *historyservice.StartWorkflowExecutionRequest,
 	signalWithStartRequest *workflowservice.SignalWithStartWorkflowExecutionRequest,
-) (WorkflowContext, error) {
+) (WorkflowLease, error) {
 	newMutableState, err := CreateMutableState(
 		ctx,
 		shard,
@@ -137,7 +137,7 @@ func NewWorkflowWithSignal(
 		shard.GetThrottledLogger(),
 		shard.GetMetricsHandler(),
 	)
-	return NewWorkflowContext(newWorkflowContext, wcache.NoopReleaseFn, newMutableState), nil
+	return NewWorkflowLease(newWorkflowContext, wcache.NoopReleaseFn, newMutableState), nil
 }
 
 func CreateMutableState(
