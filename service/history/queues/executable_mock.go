@@ -509,9 +509,11 @@ func (m *MockTerminalTaskError) EXPECT() *MockTerminalTaskErrorMockRecorder {
 }
 
 // IsTerminalTaskError mocks base method.
-func (m *MockTerminalTaskError) IsTerminalTaskError() {
+func (m *MockTerminalTaskError) IsTerminalTaskError() bool {
 	m.ctrl.T.Helper()
-	m.ctrl.Call(m, "IsTerminalTaskError")
+	ret := m.ctrl.Call(m, "IsTerminalTaskError")
+	ret0, _ := ret[0].(bool)
+	return ret0
 }
 
 // IsTerminalTaskError indicates an expected call of IsTerminalTaskError.

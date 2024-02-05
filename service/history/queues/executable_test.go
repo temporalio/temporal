@@ -576,7 +576,8 @@ func (s *executableSuite) TestExecute_DoesntSendInternalErrorsToDLQ_WhenDisabled
 	s.Error(executable.HandleErr(err))
 
 	// Attempt 2
-	s.Error(executable.Execute())
+	err = executable.Execute()
+	s.Error(err)
 	s.Error(executable.HandleErr(err))
 	s.Empty(queueWriter.EnqueueTaskRequests)
 }
