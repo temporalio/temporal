@@ -106,7 +106,7 @@ func NewHostLevelCache(
 	config *configs.Config,
 ) Cache {
 	return newCache(
-		config.HistoryCacheMaxSize(),
+		config.HistoryHostLevelCacheMaxSize(),
 		config.HistoryCacheTTL(),
 		config.HistoryCacheNonUserContextLockTimeout(),
 	)
