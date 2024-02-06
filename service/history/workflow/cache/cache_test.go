@@ -183,7 +183,7 @@ func (s *workflowCacheSuite) TestHistoryCachePanic() {
 }
 
 func (s *workflowCacheSuite) TestHistoryCachePinning() {
-	s.mockShard.GetConfig().HistoryCacheMaxSize = dynamicconfig.GetIntPropertyFn(1)
+	s.mockShard.GetConfig().HistoryHostLevelCacheMaxSize = dynamicconfig.GetIntPropertyFn(1)
 	namespaceID := namespace.ID("test_namespace_id")
 	s.cache = NewHostLevelCache(s.mockShard.GetConfig())
 	we := commonpb.WorkflowExecution{
@@ -242,7 +242,7 @@ func (s *workflowCacheSuite) TestHistoryCachePinning() {
 }
 
 func (s *workflowCacheSuite) TestHistoryCacheClear() {
-	s.mockShard.GetConfig().HistoryCacheMaxSize = dynamicconfig.GetIntPropertyFn(20)
+	s.mockShard.GetConfig().HistoryHostLevelCacheMaxSize = dynamicconfig.GetIntPropertyFn(20)
 	namespaceID := namespace.ID("test_namespace_id")
 	s.cache = NewHostLevelCache(s.mockShard.GetConfig())
 	we := commonpb.WorkflowExecution{
@@ -299,7 +299,7 @@ func (s *workflowCacheSuite) TestHistoryCacheConcurrentAccess_Release() {
 	cacheMaxSize := 16
 	coroutineCount := 50
 
-	s.mockShard.GetConfig().HistoryCacheMaxSize = dynamicconfig.GetIntPropertyFn(cacheMaxSize)
+	s.mockShard.GetConfig().HistoryHostLevelCacheMaxSize = dynamicconfig.GetIntPropertyFn(cacheMaxSize)
 	s.cache = NewHostLevelCache(s.mockShard.GetConfig())
 
 	startGroup := &sync.WaitGroup{}
@@ -364,7 +364,7 @@ func (s *workflowCacheSuite) TestHistoryCacheConcurrentAccess_Pin() {
 	runIDCount := cacheMaxSize * 4
 	coroutineCount := runIDCount * 64
 
-	s.mockShard.GetConfig().HistoryCacheMaxSize = dynamicconfig.GetIntPropertyFn(cacheMaxSize)
+	s.mockShard.GetConfig().HistoryHostLevelCacheMaxSize = dynamicconfig.GetIntPropertyFn(cacheMaxSize)
 	s.mockShard.GetConfig().HistoryCacheTTL = dynamicconfig.GetDurationPropertyFn(time.Nanosecond)
 	s.cache = NewHostLevelCache(s.mockShard.GetConfig())
 
