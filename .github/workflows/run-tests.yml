@@ -354,3 +354,21 @@ jobs:
         if: ${{ always() }}
         run: |
           docker-compose -f ${{ env.DOCKER_COMPOSE_FILE }} down -v
+
+  test-status:
+    name: Test Status
+    needs:
+      - unit-test
+      - integration-test
+      - functional-test
+      - functional-test-xdc
+      - functional-test-ndc
+    runs-on: ubuntu-latest
+    if: always()
+    steps:
+      - name: Success
+        if: ${{ !(contains(needs.*.result, 'failure')) }}
+        run: exit 0
+      - name: Failure
+        if: ${{ contains(needs.*.result, 'failure') }}
+        run: exit 1
