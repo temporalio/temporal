@@ -48,7 +48,6 @@ import (
 	"go.temporal.io/server/service/history/consts"
 	"go.temporal.io/server/service/history/queues"
 	"go.temporal.io/server/service/history/tasks"
-	"go.temporal.io/server/service/history/tests"
 	"go.temporal.io/server/service/history/workflow"
 )
 
@@ -142,13 +141,13 @@ func (s *callbackQueueActiveTaskExecutorSuite) TestProcessCallbackTask_Outcomes(
 		s.T().Run(tc.name, func(t *testing.T) {
 			mutableState := s.prepareMutableStateWithCompletedWFT()
 
-			s.mockShard.Resource.ExecutionMgr.EXPECT().UpdateWorkflowExecution(gomock.Any(), gomock.Any()).DoAndReturn(func(ctx context.Context, request *persistence.UpdateWorkflowExecutionRequest) (*persistence.UpdateWorkflowExecutionResponse, error) {
-				callbacks := request.UpdateWorkflowMutation.ExecutionInfo.Callbacks
+			s.mockShard.Resource.ExecutionMgr.EXPECT().SetWorkflowExecution(gomock.Any(), gomock.Any()).DoAndReturn(func(ctx context.Context, request *persistence.SetWorkflowExecutionRequest) (*persistence.SetWorkflowExecutionResponse, error) {
+				callbacks := request.SetWorkflowSnapshot.ExecutionInfo.Callbacks
 				s.Equal(1, len(callbacks))
 				for _, cb := range callbacks {
 					tc.assertOutcome(cb)
 				}
-				return tests.UpdateWorkflowExecutionResponse, nil
+				return &persistence.SetWorkflowExecutionResponse{}, nil
 			})
 			event, err := mutableState.AddCompletedWorkflowEvent(mutableState.GetNextEventID(), &commandpb.CompleteWorkflowExecutionCommandAttributes{}, "")
 			s.NoError(err)
@@ -259,7 +258,7 @@ func (s *callbackQueueActiveTaskExecutorSuite) TestProcessCallbackTask_Completio
 			event, err := tc.mutateState(mutableState)
 			s.NoError(err)
 			s.sealMutableState(mutableState, event, 1)
-			s.mockShard.Resource.ExecutionMgr.EXPECT().UpdateWorkflowExecution(gomock.Any(), gomock.Any()).Return(tests.UpdateWorkflowExecutionResponse, nil)
+			s.mockShard.Resource.ExecutionMgr.EXPECT().SetWorkflowExecution(gomock.Any(), gomock.Any()).Return(&persistence.SetWorkflowExecutionResponse{}, nil)
 			task := mutableState.PopTasks()[tasks.CategoryCallback][0]
 			resp := s.execute(task, tc.caller)
 			s.NoError(resp.ExecutionErr)
