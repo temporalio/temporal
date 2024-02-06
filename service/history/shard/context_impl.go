@@ -1206,7 +1206,7 @@ func (s *ContextImpl) updateShardInfo(
 	updateFnLocked()
 	s.shardInfo.StolenSinceRenew = 0
 
-	now := cclock.NewRealTimeSource().Now()
+	now := s.timeSource.Now()
 	if s.lastUpdated.Add(s.config.ShardUpdateMinInterval()).After(now) {
 		s.wUnlock()
 		return nil
