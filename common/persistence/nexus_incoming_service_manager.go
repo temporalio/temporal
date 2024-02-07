@@ -38,6 +38,9 @@ var (
 	ErrNexusTableVersionConflict = &ConditionFailedError{
 		Msg: "nexus incoming services table version mismatch",
 	}
+	ErrNexusIncomingServiceAlreadyExists = &ConditionFailedError{
+		Msg: "nexus incoming service already exists",
+	}
 	ErrNexusIncomingServiceVersionConflict = &ConditionFailedError{
 		Msg: "nexus incoming service version mismatch",
 	}

@@ -23,8 +23,10 @@
 package matching
 
 import (
+	"cmp"
 	"context"
 	"fmt"
+	"slices"
 	"sync"
 	"sync/atomic"
 
@@ -35,13 +37,13 @@ import (
 	persistencepb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common/clock"
 	hlc "go.temporal.io/server/common/clock/hybrid_logical_clock"
-	"go.temporal.io/server/common/nexus"
 	p "go.temporal.io/server/common/persistence"
+	"go.temporal.io/server/common/primitives"
 )
 
 const (
 	// loadServicesPageSize is the page size to use when initially loading services from persistence
-	loadServicesPageSize = 100 // TODO: should be dynamic config?
+	loadServicesPageSize = 100
 )
 
 type (
@@ -53,7 +55,7 @@ type (
 	}
 
 	// incomingServiceManager manages cache and persistence access for Nexus incoming services.
-	// incomingServiceManager also contains a RWLock to enforce serial updates to prevent
+	// incomingServiceManager contains a RWLock to enforce serial updates to prevent
 	// nexus_incoming_services table version conflicts.
 	//
 	// incomingServiceManager should only be used within matching service because it assumes
@@ -61,19 +63,14 @@ type (
 	// There is no explicit listener for membership changes because table ownership changes
 	// will be detected by version conflicts and eventually settle through retries.
 	//
-	// Not to be confused with persistence.NexusServiceManager which is responsible for persistence-layer
-	// CRUD APIs for Nexus incoming services.
-	incomingServiceManager interface {
-		CreateOrUpdateNexusIncomingService(ctx context.Context, request *internalCreateOrUpdateRequest) (*matchingservice.CreateOrUpdateNexusIncomingServiceResponse, error)
-		DeleteNexusIncomingService(ctx context.Context, request *matchingservice.DeleteNexusIncomingServiceRequest) (*matchingservice.DeleteNexusIncomingServiceResponse, error)
-		ListNexusIncomingServices(ctx context.Context, request *matchingservice.ListNexusIncomingServicesRequest) (*matchingservice.ListNexusIncomingServicesResponse, chan struct{}, error)
-	}
-
-	incomingServiceManagerImpl struct {
+	// Not to be confused with persistence.NexusIncomingServiceManager which is responsible for
+	// persistence-layer CRUD APIs for Nexus incoming services.
+	incomingServiceManager struct {
 		hasLoadedServices atomic.Bool
 
-		sync.RWMutex        // protects tableVersion, servicesByName, and tableVersionChanged
+		sync.RWMutex        // protects tableVersion, services, servicesByName, and tableVersionChanged
 		tableVersion        int64
+		services            []*persistencepb.NexusIncomingServiceEntry // sorted by serviceID to support pagination during ListNexusIncomingServices
 		servicesByName      map[string]*persistencepb.NexusIncomingServiceEntry
 		tableVersionChanged chan struct{}
 
@@ -83,13 +80,13 @@ type (
 
 func newIncomingServiceManager(
 	persistence p.NexusIncomingServiceManager,
-) incomingServiceManager {
-	return &incomingServiceManagerImpl{
+) *incomingServiceManager {
+	return &incomingServiceManager{
 		persistence: persistence,
 	}
 }
 
-func (m *incomingServiceManagerImpl) CreateOrUpdateNexusIncomingService(
+func (m *incomingServiceManager) CreateOrUpdateNexusIncomingService(
 	ctx context.Context,
 	request *internalCreateOrUpdateRequest,
 ) (*matchingservice.CreateOrUpdateNexusIncomingServiceResponse, error) {
@@ -114,12 +111,25 @@ func (m *incomingServiceManagerImpl) CreateOrUpdateNexusIncomingService(
 		previous.Service.Clock = hlc.Zero(request.clusterID)
 	}
 
-	if request.service.Version != previous.Version {
-		// TODO: could improve error handling. handle already exists during create and not found during update
+	if request.service.Version == 0 && exists {
+		return nil, fmt.Errorf("%w service_name: %v service_version: %v", p.ErrNexusIncomingServiceAlreadyExists, previous.Service.Name, previous.Version)
+	} else if request.service.Version != 0 && !exists {
+		return nil, fmt.Errorf("%w service_name: %v", p.ErrNexusIncomingServiceNotFound, request.service.Name)
+	} else if request.service.Version != previous.Version {
 		return nil, fmt.Errorf("%w received: %v expected: %v", p.ErrNexusIncomingServiceVersionConflict, request.service.Version, previous.Version)
 	}
 
-	entry := nexus.IncomingServiceToEntry(request.service, previous.Id, request.namespaceID, hlc.Next(previous.Service.Clock, request.timeSource))
+	entry := &persistencepb.NexusIncomingServiceEntry{
+		Version: previous.Version,
+		Id:      previous.Id,
+		Service: &persistencepb.NexusIncomingService{
+			Clock:       hlc.Next(previous.Service.Clock, request.timeSource),
+			Name:        request.service.Name,
+			NamespaceId: request.namespaceID,
+			TaskQueue:   request.service.TaskQueue,
+			Metadata:    request.service.Metadata,
+		},
+	}
 
 	resp, err := m.persistence.CreateOrUpdateNexusIncomingService(ctx, &p.CreateOrUpdateNexusIncomingServiceRequest{
 		LastKnownTableVersion: m.tableVersion,
@@ -133,13 +143,26 @@ func (m *incomingServiceManagerImpl) CreateOrUpdateNexusIncomingService(
 	entry.Version = resp.Version
 	m.tableVersion++
 	m.servicesByName[entry.Service.Name] = entry
+	m.insertServiceLocked(entry)
 	close(m.tableVersionChanged)
 	m.tableVersionChanged = make(chan struct{})
 
 	return &matchingservice.CreateOrUpdateNexusIncomingServiceResponse{Entry: entry}, nil
 }
 
-func (m *incomingServiceManagerImpl) DeleteNexusIncomingService(
+func (m *incomingServiceManager) insertServiceLocked(entry *persistencepb.NexusIncomingServiceEntry) {
+	idx, found := slices.BinarySearchFunc(m.services, entry, func(a *persistencepb.NexusIncomingServiceEntry, b *persistencepb.NexusIncomingServiceEntry) int {
+		return cmp.Compare(a.Id, b.Id)
+	})
+
+	if found {
+		m.services[idx] = entry
+	} else {
+		m.services = slices.Insert(m.services, idx, entry)
+	}
+}
+
+func (m *incomingServiceManager) DeleteNexusIncomingService(
 	ctx context.Context,
 	request *matchingservice.DeleteNexusIncomingServiceRequest,
 ) (*matchingservice.DeleteNexusIncomingServiceResponse, error) {
@@ -155,7 +178,7 @@ func (m *incomingServiceManagerImpl) DeleteNexusIncomingService(
 
 	service, ok := m.servicesByName[request.Name]
 	if !ok {
-		return nil, p.ErrNexusIncomingServiceNotFound
+		return nil, fmt.Errorf("error deleting nexus incoming service with name %v: %w", request.Name, p.ErrNexusIncomingServiceNotFound)
 	}
 
 	err := m.persistence.DeleteNexusIncomingService(ctx, &p.DeleteNexusIncomingServiceRequest{
@@ -163,22 +186,21 @@ func (m *incomingServiceManagerImpl) DeleteNexusIncomingService(
 		ServiceID:             service.Id,
 	})
 	if err != nil {
-		// TODO: special handling for table version conflicts? means table ownership changed
 		return nil, err
 	}
 
 	m.tableVersion++
 	delete(m.servicesByName, request.Name)
+	m.services = slices.DeleteFunc(m.services, func(entry *persistencepb.NexusIncomingServiceEntry) bool {
+		return entry.Service.Name == request.Name
+	})
 	close(m.tableVersionChanged)
 	m.tableVersionChanged = make(chan struct{})
 
 	return &matchingservice.DeleteNexusIncomingServiceResponse{}, nil
 }
 
-// ListNexusIncomingServices returns all cached Nexus incoming services. If no services have been loaded, it first tries to
-// load all services from persistence.
-// TODO: currently does not support pagination. go map iteration is no deterministic, so this will require sorting first.
-func (m *incomingServiceManagerImpl) ListNexusIncomingServices(
+func (m *incomingServiceManager) ListNexusIncomingServices(
 	ctx context.Context,
 	request *matchingservice.ListNexusIncomingServicesRequest,
 ) (*matchingservice.ListNexusIncomingServicesResponse, chan struct{}, error) {
@@ -195,22 +217,28 @@ func (m *incomingServiceManagerImpl) ListNexusIncomingServices(
 		return nil, nil, fmt.Errorf("%w received: %v expected: %v", p.ErrNexusTableVersionConflict, request.LastKnownTableVersion, m.tableVersion)
 	}
 
-	entries := make([]*persistencepb.NexusIncomingServiceEntry, len(m.servicesByName))
-	i := 0
-	for _, service := range m.servicesByName {
-		entries[i] = service
-		i++
+	startIdx := 0
+	if request.NextPageToken != nil {
+		nextServiceID := primitives.UUIDString(request.NextPageToken)
+		startIdx = slices.IndexFunc(m.services, func(entry *persistencepb.NexusIncomingServiceEntry) bool {
+			return entry.Id == nextServiceID
+		})
+	}
+
+	endIdx := startIdx + int(request.PageSize)
+	if endIdx > len(m.services) {
+		endIdx = len(m.services)
 	}
 
 	resp := &matchingservice.ListNexusIncomingServicesResponse{
 		TableVersion: m.tableVersion,
-		Entries:      entries,
+		Entries:      m.services[startIdx:endIdx],
 	}
 
 	return resp, m.tableVersionChanged, nil
 }
 
-func (m *incomingServiceManagerImpl) loadServices(ctx context.Context) error {
+func (m *incomingServiceManager) loadServices(ctx context.Context) error {
 	m.Lock()
 	defer m.Unlock()
 
@@ -220,6 +248,7 @@ func (m *incomingServiceManagerImpl) loadServices(ctx context.Context) error {
 	}
 
 	// reset cached view since we will be paging from the start
+	m.services = []*persistencepb.NexusIncomingServiceEntry{}
 	m.servicesByName = make(map[string]*persistencepb.NexusIncomingServiceEntry)
 
 	finishedPaging := false
@@ -238,6 +267,7 @@ func (m *incomingServiceManagerImpl) loadServices(ctx context.Context) error {
 		pageToken = resp.NextPageToken
 		m.tableVersion = resp.TableVersion
 		for _, entry := range resp.Entries {
+			m.services = append(m.services, entry)
 			m.servicesByName[entry.Service.Name] = entry
 		}
 

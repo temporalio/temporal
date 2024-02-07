@@ -26,23 +26,6 @@ option go_package = "go.temporal.io/server/api/persistence/v1;persistence";
 import "temporal/server/api/clock/v1/message.proto";
 import "google/protobuf/any.proto";
 
-message NexusServiceMetadataValue {
-    enum NexusMetadataState {
-        NEXUS_METADATA_STATE_UNSPECIFIED = 0;
-        NEXUS_METADATA_STATE_PRESENT = 1;
-        NEXUS_METADATA_STATE_DELETED = 2;
-    };
-    // Arbitrary user data.
-    // (-- api-linter: core::0146::any=disabled
-    //     aip.dev/not-precedent: Meant to hold arbitrary user provided data. --)
-    google.protobuf.Any data = 1;
-    NexusMetadataState state = 2;
-    // HLC timestamp representing when this metadata state field was last updated.
-    // (-- api-linter: core::0142::time-field-type=disabled
-    //     aip.dev/not-precedent: Using HLC instead of wall clock. --)
-    temporal.server.api.clock.v1.HybridLogicalClock state_update_timestamp = 3;
-}
-
 message NexusIncomingService {
     // The last recorded cluster-local Hybrid Logical Clock timestamp for _this_ service.
     // Updated whenever the service is directly updated due to a user action but not when applying replication events.
@@ -56,7 +39,7 @@ message NexusIncomingService {
     // Task queue to dispatch service requests to.
     string task_queue = 4;
     // Arbitrary user provided data. For use in the authorizer.
-    map<string, NexusServiceMetadataValue> metadata = 5;
+    map<string, google.protobuf.Any> metadata = 5;
 }
 
 // Container for a version, a UUID, and a NexusIncomingService.
