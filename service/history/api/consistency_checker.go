@@ -55,13 +55,13 @@ type (
 			workflowID string,
 			lockPriority workflow.LockPriority,
 		) (string, error)
-		GetWorkflowContext(
+		GetWorkflowLease(
 			ctx context.Context,
 			reqClock *clockspb.VectorClock,
 			consistencyPredicate MutableStateConsistencyPredicate,
 			workflowKey definition.WorkflowKey,
 			lockPriority workflow.LockPriority,
-		) (WorkflowContext, error)
+		) (WorkflowLease, error)
 	}
 
 	WorkflowConsistencyCheckerImpl struct {
@@ -107,13 +107,13 @@ func (c *WorkflowConsistencyCheckerImpl) GetCurrentRunID(
 	return runID, nil
 }
 
-func (c *WorkflowConsistencyCheckerImpl) GetWorkflowContext(
+func (c *WorkflowConsistencyCheckerImpl) GetWorkflowLease(
 	ctx context.Context,
 	reqClock *clockspb.VectorClock,
 	consistencyPredicate MutableStateConsistencyPredicate,
 	workflowKey definition.WorkflowKey,
 	lockPriority workflow.LockPriority,
-) (WorkflowContext, error) {
+) (WorkflowLease, error) {
 	if reqClock != nil {
 		currentClock := c.shardContext.CurrentVectorClock()
 		if vclock.Comparable(reqClock, currentClock) {
@@ -158,7 +158,7 @@ func (c *WorkflowConsistencyCheckerImpl) getWorkflowContextValidatedByClock(
 	currentClock *clockspb.VectorClock,
 	workflowKey definition.WorkflowKey,
 	lockPriority workflow.LockPriority,
-) (WorkflowContext, error) {
+) (WorkflowLease, error) {
 	cmpResult, err := vclock.Compare(reqClock, currentClock)
 	if err != nil {
 		return nil, err
@@ -191,7 +191,7 @@ func (c *WorkflowConsistencyCheckerImpl) getWorkflowContextValidatedByClock(
 		release(err)
 		return nil, err
 	}
-	return NewWorkflowContext(wfContext, release, mutableState), nil
+	return NewWorkflowLease(wfContext, release, mutableState), nil
 }
 
 func (c *WorkflowConsistencyCheckerImpl) getWorkflowContextValidatedByCheck(
@@ -200,7 +200,7 @@ func (c *WorkflowConsistencyCheckerImpl) getWorkflowContextValidatedByCheck(
 	consistencyPredicate MutableStateConsistencyPredicate,
 	workflowKey definition.WorkflowKey,
 	lockPriority workflow.LockPriority,
-) (WorkflowContext, error) {
+) (WorkflowLease, error) {
 	if len(workflowKey.RunID) == 0 {
 		return nil, serviceerror.NewInternal(fmt.Sprintf(
 			"loadWorkflowContext encountered empty run ID: %v", workflowKey,
@@ -225,7 +225,7 @@ func (c *WorkflowConsistencyCheckerImpl) getWorkflowContextValidatedByCheck(
 	switch err.(type) {
 	case nil:
 		if consistencyPredicate(mutableState) {
-			return NewWorkflowContext(wfContext, release, mutableState), nil
+			return NewWorkflowLease(wfContext, release, mutableState), nil
 		}
 		wfContext.Clear()
 
@@ -234,7 +234,7 @@ func (c *WorkflowConsistencyCheckerImpl) getWorkflowContextValidatedByCheck(
 			release(err)
 			return nil, err
 		}
-		return NewWorkflowContext(wfContext, release, mutableState), nil
+		return NewWorkflowLease(wfContext, release, mutableState), nil
 	case *serviceerror.NotFound, *serviceerror.NamespaceNotFound:
 		release(err)
 		if err := assertShardOwnership(
@@ -258,7 +258,7 @@ func (c *WorkflowConsistencyCheckerImpl) getCurrentWorkflowContext(
 	namespaceID string,
 	workflowID string,
 	lockPriority workflow.LockPriority,
-) (WorkflowContext, error) {
+) (WorkflowLease, error) {
 	runID, err := c.getCurrentRunID(
 		ctx,
 		shardOwnershipAsserted,

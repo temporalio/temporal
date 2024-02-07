@@ -773,6 +773,7 @@ var (
 	)
 	TaskNotActiveCounter         = NewCounterDef("task_errors_not_active_counter")
 	TaskNamespaceHandoverCounter = NewCounterDef("task_errors_namespace_handover")
+	TaskInternalErrorCounter     = NewCounterDef("task_errors_internal")
 	TaskThrottledCounter         = NewCounterDef(
 		"task_errors_throttled",
 		WithDescription("The number of history task processing errors caused by resource exhausted errors, excluding workflow busy case."),

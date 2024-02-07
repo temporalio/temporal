@@ -63,11 +63,11 @@ type (
 			consistencyPredicate api.MutableStateConsistencyPredicate,
 			workflowKey definition.WorkflowKey,
 			lockPriority workflow.LockPriority,
-		) (api.WorkflowContext, error)
+		) (api.WorkflowLease, error)
 	}
 
 	mockAPICtx struct {
-		api.WorkflowContext
+		api.WorkflowLease
 		GetUpdateRegistryFunc func(context.Context) update.Registry
 		GetReleaseFnFunc      func() wcache.ReleaseCacheFunc
 		GetWorkflowKeyFunc    func() definition.WorkflowKey
@@ -87,13 +87,13 @@ func (mockUpdateEventStore) OnAfterCommit(f func(context.Context))   { f(context
 func (mockUpdateEventStore) OnAfterRollback(f func(context.Context)) {}
 func (mockUpdateEventStore) CanAddEvent() bool                       { return true }
 
-func (m mockWFConsistencyChecker) GetWorkflowContext(
+func (m mockWFConsistencyChecker) GetWorkflowLease(
 	ctx context.Context,
 	clock *clockspb.VectorClock,
 	pred api.MutableStateConsistencyPredicate,
 	wfKey definition.WorkflowKey,
 	prio workflow.LockPriority,
-) (api.WorkflowContext, error) {
+) (api.WorkflowLease, error) {
 	return m.GetWorkflowContextFunc(ctx, clock, pred, wfKey, prio)
 }
 
@@ -135,7 +135,7 @@ func TestPollOutcome(t *testing.T) {
 			consistencyPredicate api.MutableStateConsistencyPredicate,
 			workflowKey definition.WorkflowKey,
 			lockPriority workflow.LockPriority,
-		) (api.WorkflowContext, error) {
+		) (api.WorkflowLease, error) {
 			return apiCtx, nil
 		},
 	}

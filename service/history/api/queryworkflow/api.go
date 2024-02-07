@@ -89,7 +89,7 @@ func Invoke(
 		request.Request.Execution.WorkflowId,
 		request.Request.Execution.RunId,
 	)
-	weCtx, err := workflowConsistencyChecker.GetWorkflowContext(
+	workflowLease, err := workflowConsistencyChecker.GetWorkflowLease(
 		ctx,
 		nil,
 		api.BypassMutableStateConsistencyPredicate,
@@ -99,10 +99,10 @@ func Invoke(
 	if err != nil {
 		return nil, err
 	}
-	defer func() { weCtx.GetReleaseFn()(retError) }()
+	defer func() { workflowLease.GetReleaseFn()(retError) }()
 
 	req := request.GetRequest()
-	_, mutableStateStatus := weCtx.GetMutableState().GetWorkflowStateStatus()
+	_, mutableStateStatus := workflowLease.GetMutableState().GetWorkflowStateStatus()
 	if mutableStateStatus != enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING && req.QueryRejectCondition != enumspb.QUERY_REJECT_CONDITION_NONE {
 		notOpenReject := req.GetQueryRejectCondition() == enumspb.QUERY_REJECT_CONDITION_NOT_OPEN
 		notCompletedCleanlyReject := req.GetQueryRejectCondition() == enumspb.QUERY_REJECT_CONDITION_NOT_COMPLETED_CLEANLY && mutableStateStatus != enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED
@@ -117,7 +117,7 @@ func Invoke(
 		}
 	}
 
-	mutableState := weCtx.GetMutableState()
+	mutableState := workflowLease.GetMutableState()
 	if !mutableState.HadOrHasWorkflowTask() {
 		// workflow has no workflow task ever scheduled, this usually is due to firstWorkflowTaskBackoff (cron / retry)
 		// in this case, don't buffer the query, because it is almost certain the query will time out.
@@ -160,7 +160,7 @@ func Invoke(
 			if err != nil {
 				return nil, err
 			}
-			weCtx.GetReleaseFn()(nil)
+			workflowLease.GetReleaseFn()(nil)
 			req.Execution.RunId = msResp.Execution.RunId
 			return queryDirectlyThroughMatching(
 				ctx,
@@ -188,7 +188,7 @@ func Invoke(
 	}
 	queryID, completionCh := queryReg.BufferQuery(req.GetQuery())
 	defer queryReg.RemoveQuery(queryID)
-	weCtx.GetReleaseFn()(nil)
+	workflowLease.GetReleaseFn()(nil)
 	select {
 	case <-completionCh:
 		completionState, err := queryReg.GetCompletionState(queryID)
