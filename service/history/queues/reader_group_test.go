@@ -221,6 +221,6 @@ func (r *testReader) MergeSlices(...Slice)         { panic("not implemented") }
 func (r *testReader) AppendSlices(...Slice)        { panic("not implemented") }
 func (r *testReader) ClearSlices(SlicePredicate)   { panic("not implemented") }
 func (r *testReader) CompactSlices(SlicePredicate) { panic("not implemented") }
-func (r *testReader) ShrinkSlices()                { panic("not implemented") }
+func (r *testReader) ShrinkSlices() int            { panic("not implemented") }
 func (r *testReader) Notify()                      { panic("not implemented") }
 func (r *testReader) Pause(time.Duration)          { panic("not implemented") }

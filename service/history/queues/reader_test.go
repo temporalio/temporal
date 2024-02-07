@@ -248,7 +248,8 @@ func (s *readerSuite) TestShrinkSlices() {
 	}
 
 	reader := s.newTestReader(scopes, nil, NoopReaderCompletionFn)
-	reader.ShrinkSlices()
+	completed := reader.ShrinkSlices()
+	s.Equal(0, completed)
 
 	actualScopes := reader.Scopes()
 	s.Len(actualScopes, numScopes-len(emptyIdx))

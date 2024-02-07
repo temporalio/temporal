@@ -532,7 +532,7 @@ func (s *visibilityQueueTaskExecutorSuite) TestProcessorDeleteExecution() {
 	})
 	s.Run("MultiCursorQueue", func() {
 		const highWatermark int64 = 5
-		s.NoError(s.mockShard.SetQueueState(tasks.CategoryVisibility, &persistencespb.QueueState{
+		s.NoError(s.mockShard.SetQueueState(tasks.CategoryVisibility, 1, &persistencespb.QueueState{
 			ReaderStates: nil,
 			ExclusiveReaderHighWatermark: &persistencespb.TaskKey{
 				TaskId:   highWatermark,

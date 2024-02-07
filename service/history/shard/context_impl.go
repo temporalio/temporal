@@ -375,19 +375,21 @@ func (s *ContextImpl) GetQueueState(
 
 func (s *ContextImpl) SetQueueState(
 	category tasks.Category,
+	tasksCompleted int,
 	state *persistencespb.QueueState,
 ) error {
-	return s.updateShardInfo(func() {
-		categoryID := category.ID()
-		s.shardInfo.QueueStates[int32(categoryID)] = state
-	})
+	return s.updateShardInfo(tasksCompleted,
+		func() {
+			categoryID := category.ID()
+			s.shardInfo.QueueStates[int32(categoryID)] = state
+		})
 }
 
 func (s *ContextImpl) UpdateReplicationQueueReaderState(
 	readerID int64,
 	readerState *persistencespb.QueueReaderState,
 ) error {
-	return s.updateShardInfo(func() {
+	return s.updateShardInfo(0, func() {
 		categoryID := tasks.CategoryReplication.ID()
 		queueState, ok := s.shardInfo.QueueStates[int32(categoryID)]
 		if !ok {
@@ -460,7 +462,7 @@ func (s *ContextImpl) UpdateReplicatorDLQAckLevel(
 	sourceCluster string,
 	ackLevel int64,
 ) error {
-	if err := s.updateShardInfo(func() {
+	if err := s.updateShardInfo(0, func() {
 		s.shardInfo.ReplicationDlqAckLevel[sourceCluster] = ackLevel
 	}); err != nil {
 		return err
@@ -1196,6 +1198,7 @@ func (s *ContextImpl) renewRangeLocked(isStealing bool) error {
 }
 
 func (s *ContextImpl) updateShardInfo(
+	tasksCompleted int,
 	updateFnLocked func(),
 ) error {
 	s.wLock()
@@ -1204,13 +1207,15 @@ func (s *ContextImpl) updateShardInfo(
 		return err
 	}
 
+	s.tasksCompletedSinceLastUpdate += tasksCompleted
 	updateFnLocked()
 	s.shardInfo.StolenSinceRenew = 0
 
 	now := s.timeSource.Now()
+	notFirstUpdate := !s.lastUpdated.IsZero()
 	notEnoughTasksCompleted := s.tasksCompletedSinceLastUpdate < s.config.ShardUpdateMinTasksCompleted()
 	tooEarly := s.lastUpdated.Add(s.config.ShardUpdateMinInterval()).After(now)
-	if notEnoughTasksCompleted || tooEarly {
+	if notFirstUpdate && notEnoughTasksCompleted && tooEarly {
 		s.wUnlock()
 		return nil
 	}
@@ -1218,6 +1223,7 @@ func (s *ContextImpl) updateShardInfo(
 	// update lastUpdate here so that we don't have to grab shard lock again if UpdateShard is successful
 	previousLastUpdate := s.lastUpdated
 	s.lastUpdated = now
+	s.tasksCompletedSinceLastUpdate = 0
 
 	updatedShardInfo := trimShardInfo(s.clusterMetadata.GetAllClusterInfo(), copyShardInfo(s.shardInfo))
 	s.emitShardInfoMetricsLogsLocked(updatedShardInfo.QueueStates)
