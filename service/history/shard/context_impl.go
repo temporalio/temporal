@@ -146,9 +146,10 @@ type (
 		stopReason stopReason
 
 		// All following fields are protected by rwLock, and only valid if state >= Acquiring:
-		rwLock      sync.RWMutex
-		lastUpdated time.Time
-		shardInfo   *persistencespb.ShardInfo
+		rwLock                        sync.RWMutex
+		lastUpdated                   time.Time
+		tasksCompletedSinceLastUpdate int
+		shardInfo                     *persistencespb.ShardInfo
 
 		// All methods of the taskKeyManager, except the completionFn returned by
 		// setAndTrackTaskKeys, must be invoked within rwLock.
@@ -1207,7 +1208,9 @@ func (s *ContextImpl) updateShardInfo(
 	s.shardInfo.StolenSinceRenew = 0
 
 	now := s.timeSource.Now()
-	if s.lastUpdated.Add(s.config.ShardUpdateMinInterval()).After(now) {
+	notEnoughTasksCompleted := s.tasksCompletedSinceLastUpdate < s.config.ShardUpdateMinTasksCompleted()
+	tooEarly := s.lastUpdated.Add(s.config.ShardUpdateMinInterval()).After(now)
+	if notEnoughTasksCompleted || tooEarly {
 		s.wUnlock()
 		return nil
 	}
