@@ -137,11 +137,10 @@ func (w *batchedTask) Nack(err error) {
 }
 
 func (w *batchedTask) Reschedule() {
-	if len(w.individualTasks) == 1 {
-		w.Reschedule()
-	} else {
-		w.handleIndividualTasks()
+	for len(w.individualTasks) == 1 {
+		time.Sleep(10 * time.Millisecond)
 	}
+	w.handleIndividualTasks()
 }
 
 func (w *batchedTask) State() ctasks.State {
