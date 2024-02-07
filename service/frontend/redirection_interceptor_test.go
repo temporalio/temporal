@@ -178,6 +178,10 @@ func (s *redirectionInterceptorSuite) TestGlobalAPI() {
 		"StopBatchOperation":     {},
 		"DescribeBatchOperation": {},
 		"ListBatchOperations":    {},
+
+		"PollNexusTaskQueue":        {},
+		"RespondNexusTaskCompleted": {},
+		"RespondNexusTaskFailed":    {},
 	}, apis)
 }
 
