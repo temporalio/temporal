@@ -220,9 +220,18 @@ func (m *incomingServiceManager) ListNexusIncomingServices(
 	startIdx := 0
 	if request.NextPageToken != nil {
 		nextServiceID := primitives.UUIDString(request.NextPageToken)
-		startIdx = slices.IndexFunc(m.services, func(entry *persistencepb.NexusIncomingServiceEntry) bool {
-			return entry.Id == nextServiceID
-		})
+
+		startFound := false
+		startIdx, startFound = slices.BinarySearchFunc(
+			m.services,
+			&persistencepb.NexusIncomingServiceEntry{Id: nextServiceID},
+			func(a *persistencepb.NexusIncomingServiceEntry, b *persistencepb.NexusIncomingServiceEntry) int {
+				return cmp.Compare(a.Id, b.Id)
+			})
+
+		if !startFound {
+			return nil, nil, fmt.Errorf("could not find service indicated by nexus list incoming services next page token: %w", p.ErrNexusIncomingServiceNotFound)
+		}
 	}
 
 	endIdx := startIdx + int(request.PageSize)
@@ -230,9 +239,15 @@ func (m *incomingServiceManager) ListNexusIncomingServices(
 		endIdx = len(m.services)
 	}
 
+	var nextPageToken []byte
+	if endIdx < len(m.services) {
+		nextPageToken = []byte(m.services[endIdx].Id)
+	}
+
 	resp := &matchingservice.ListNexusIncomingServicesResponse{
-		TableVersion: m.tableVersion,
-		Entries:      m.services[startIdx:endIdx],
+		TableVersion:  m.tableVersion,
+		NextPageToken: nextPageToken,
+		Entries:       m.services[startIdx:endIdx],
 	}
 
 	return resp, m.tableVersionChanged, nil
