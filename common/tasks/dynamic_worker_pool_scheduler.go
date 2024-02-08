@@ -68,26 +68,17 @@ func NewDynamicWorkerPoolScheduler(limiter DynamicWorkerPoolLimiter) *DynamicWor
 	}
 }
 
-// dequeue a task from the pool's buffer.
-func (pool *DynamicWorkerPoolScheduler) dequeue() (task Runnable, ok bool) {
-	if elem := pool.buffer.Front(); elem != nil {
-		task := elem.Value.(Runnable)
-		pool.buffer.Remove(elem)
-		return task, true
-	}
-	return task, false
-}
-
 // InitiateShutdown aborts all buffered tasks and empties the buffer.
 func (pool *DynamicWorkerPoolScheduler) InitiateShutdown() {
 	pool.stopFn()
 	pool.mu.Lock()
-	defer pool.mu.Unlock()
-	for elem := pool.buffer.Front(); elem != nil; elem = elem.Next() {
+	// Prevent any running goroutines from picking up already aborted runnables.
+	buffer := pool.buffer
+	pool.buffer = list.New()
+	pool.mu.Unlock()
+	for elem := buffer.Front(); elem != nil; elem = elem.Next() {
 		elem.Value.(Runnable).Abort()
 	}
-	// Prevent any running goroutines from picking up already aborted runnables.
-	pool.buffer = list.New()
 }
 
 // WaitShutdown waits for all worker goroutines to complete.
@@ -96,9 +87,9 @@ func (pool *DynamicWorkerPoolScheduler) WaitShutdown() {
 }
 
 func (pool *DynamicWorkerPoolScheduler) TrySubmit(task Runnable) bool {
-	// First add to the waitgroup, then check stopCtx.Err to ensure Stop() (which first cancels the stopCtx, then waits
-	// for the waitgroup) always gets a chance to wait for submitted tasks, even when TrySubmit() and Stop() are called
-	// concurrently.
+	// First add to the waitgroup, then check stopCtx.Err to ensure InitiateShutdown() (which first cancels the stopCtx,
+	// then waits for the waitgroup) always gets a chance to wait for submitted tasks, even when TrySubmit() and Stop()
+	// are called concurrently.
 	pool.wg.Add(1)
 	if pool.stopCtx.Err() != nil {
 		// No need to reschedule this task, just abort after we've shut down.
@@ -108,23 +99,19 @@ func (pool *DynamicWorkerPoolScheduler) TrySubmit(task Runnable) bool {
 	}
 	pool.mu.Lock()
 	if pool.runningGoroutines >= pool.limiter.Concurrency() {
-		buffered := false
-		// Buffer the task to be picked up by a running worker goroutine.
-		if pool.buffer.Len() < pool.limiter.BufferSize() {
-			pool.buffer.PushBack(task)
-			buffered = true
-		}
+		enqueued := pool.tryEnqueueLocked(task)
 		pool.mu.Unlock()
 		pool.wg.Done()
-		return buffered
+		return enqueued
+	} else {
+		pool.runningGoroutines++
+		pool.mu.Unlock()
+		go pool.executeUntilBufferEmpty(task)
 	}
-	pool.runningGoroutines++
-	pool.mu.Unlock()
-	go pool.executeUntilBufferEmpty(task)
 	return true
 }
 
-// executeUntilReleased execute tasks starting from the given task using the provided limiter.
+// executeUntilBufferEmpty execute tasks starting from the given task using the provided limiter.
 // Continues as long as it has tasks to dequeue.
 func (pool *DynamicWorkerPoolScheduler) executeUntilBufferEmpty(task Runnable) {
 	defer pool.wg.Done()
@@ -132,7 +119,7 @@ func (pool *DynamicWorkerPoolScheduler) executeUntilBufferEmpty(task Runnable) {
 		task.Run(pool.stopCtx)
 
 		pool.mu.Lock()
-		nextTask, ok := pool.dequeue()
+		nextTask, ok := pool.dequeueLocked()
 		if !ok {
 			pool.runningGoroutines--
 			pool.mu.Unlock()
@@ -141,4 +128,25 @@ func (pool *DynamicWorkerPoolScheduler) executeUntilBufferEmpty(task Runnable) {
 		task = nextTask
 		pool.mu.Unlock()
 	}
+}
+
+// dequeueLocked dequeues a task from the pool's buffer. Must be called while holding the lock.
+func (pool *DynamicWorkerPoolScheduler) dequeueLocked() (task Runnable, ok bool) {
+	if elem := pool.buffer.Front(); elem != nil {
+		task := elem.Value.(Runnable)
+		pool.buffer.Remove(elem)
+		return task, true
+	}
+	return task, false
+}
+
+// tryEnqueueLocked enqueues a task into the pool's buffer if it is under capacity.
+// Returns true if the task was enqueued, otherwise returns false.
+// Must be called while holding the lock.
+func (pool *DynamicWorkerPoolScheduler) tryEnqueueLocked(task Runnable) bool {
+	if pool.buffer.Len() < pool.limiter.BufferSize() {
+		pool.buffer.PushBack(task)
+		return true
+	}
+	return false
 }
