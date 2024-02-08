@@ -118,7 +118,7 @@ func (t *timerQueueStandbyTaskExecutor) Execute(
 	case *tasks.DeleteHistoryEventTask:
 		err = t.executeDeleteHistoryEventTask(ctx, task)
 	default:
-		err = errUnknownTimerTask
+		err = queues.NewUnprocessableTaskError("unknown task type")
 	}
 
 	return queues.ExecuteResponse{

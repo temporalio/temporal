@@ -34,6 +34,7 @@ import (
 
 	gomock "github.com/golang/mock/gomock"
 	v1 "go.temporal.io/api/history/v1"
+	hsm "go.temporal.io/server/service/history/hsm"
 	tasks "go.temporal.io/server/service/history/tasks"
 )
 
@@ -157,6 +158,20 @@ func (m *MockTaskGenerator) GenerateDeleteHistoryEventTask(closeTime time.Time) 
 func (mr *MockTaskGeneratorMockRecorder) GenerateDeleteHistoryEventTask(closeTime interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GenerateDeleteHistoryEventTask", reflect.TypeOf((*MockTaskGenerator)(nil).GenerateDeleteHistoryEventTask), closeTime)
+}
+
+// GenerateDirtySubStateMachineTasks mocks base method.
+func (m *MockTaskGenerator) GenerateDirtySubStateMachineTasks(stateMachineRegistry *hsm.Registry) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GenerateDirtySubStateMachineTasks", stateMachineRegistry)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// GenerateDirtySubStateMachineTasks indicates an expected call of GenerateDirtySubStateMachineTasks.
+func (mr *MockTaskGeneratorMockRecorder) GenerateDirtySubStateMachineTasks(stateMachineRegistry interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GenerateDirtySubStateMachineTasks", reflect.TypeOf((*MockTaskGenerator)(nil).GenerateDirtySubStateMachineTasks), stateMachineRegistry)
 }
 
 // GenerateHistoryReplicationTasks mocks base method.

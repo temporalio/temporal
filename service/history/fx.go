@@ -26,6 +26,7 @@ package history
 
 import (
 	"net"
+	"net/http"
 
 	"go.uber.org/fx"
 	"google.golang.org/grpc"
@@ -33,6 +34,7 @@ import (
 
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/clock"
+	"go.temporal.io/server/common/collection"
 	"go.temporal.io/server/common/config"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
@@ -55,13 +57,18 @@ import (
 	"go.temporal.io/server/service/history/configs"
 	"go.temporal.io/server/service/history/consts"
 	"go.temporal.io/server/service/history/events"
+	"go.temporal.io/server/service/history/hsm"
+	"go.temporal.io/server/service/history/queues"
 	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/workflow"
 	"go.temporal.io/server/service/history/workflow/cache"
+
+	"go.temporal.io/server/plugins/callbacks"
 )
 
 var Module = fx.Options(
 	resource.Module,
+	fx.Provide(hsm.NewRegistry),
 	workflow.Module,
 	shard.Module,
 	events.Module,
@@ -84,7 +91,21 @@ var Module = fx.Options(
 	fx.Provide(HandlerProvider),
 	fx.Provide(ServiceProvider),
 	fx.Invoke(ServiceLifetimeHooks),
+
+	fx.Provide(CallbackExecutorOptionsProvider),
+	callbacks.Module,
 )
+
+func CallbackExecutorOptionsProvider() callbacks.ActiveExecutorOptions {
+	m := collection.NewOnceMap(func(queues.NamespaceIDAndDestination) callbacks.HTTPCaller {
+		// In the future, we'll want to support HTTP2 clients as well and inject headers and certs here.
+		client := &http.Client{}
+		return client.Do
+	})
+	return callbacks.ActiveExecutorOptions{
+		CallerProvider: m.Get,
+	}
+}
 
 func ServiceProvider(
 	grpcServerOptions []grpc.ServerOption,

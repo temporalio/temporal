@@ -26,15 +26,18 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"time"
 
 	commonpb "go.temporal.io/api/common/v1"
-	persistencespb "go.temporal.io/server/api/persistence/v1"
+	enumsspb "go.temporal.io/server/api/enums/v1"
 	"go.temporal.io/server/common"
+	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/log"
-	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
+	"go.temporal.io/server/service/history/configs"
 	"go.temporal.io/server/service/history/consts"
+	"go.temporal.io/server/service/history/hsm"
 	"go.temporal.io/server/service/history/queues"
 	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/tasks"
@@ -42,11 +45,8 @@ import (
 	wcache "go.temporal.io/server/service/history/workflow/cache"
 )
 
-// CallbackAddressingTask is a task that addresses a workflow callback.
-type CallbackAddressingTask interface {
-	tasks.Task
-	GetCallbackID() string
-	GetTransitionCount() int32
+func taskWorkflowKey(task tasks.Task) definition.WorkflowKey {
+	return definition.NewWorkflowKey(task.GetNamespaceID(), task.GetWorkflowID(), task.GetRunID())
 }
 
 func getWorkflowExecutionContextForTask(
@@ -55,25 +55,20 @@ func getWorkflowExecutionContextForTask(
 	workflowCache wcache.Cache,
 	task tasks.Task,
 ) (workflow.Context, wcache.ReleaseCacheFunc, error) {
-	return getWorkflowExecutionContext(
-		ctx,
-		shardContext,
-		workflowCache,
-		namespace.ID(task.GetNamespaceID()),
-		&commonpb.WorkflowExecution{
-			WorkflowId: task.GetWorkflowID(),
-			RunId:      task.GetRunID(),
-		},
-	)
+	return getWorkflowExecutionContext(ctx, shardContext, workflowCache, taskWorkflowKey(task))
 }
 
 func getWorkflowExecutionContext(
 	ctx context.Context,
 	shardContext shard.Context,
 	workflowCache wcache.Cache,
-	namespaceID namespace.ID,
-	execution *commonpb.WorkflowExecution,
+	key definition.WorkflowKey,
 ) (workflow.Context, wcache.ReleaseCacheFunc, error) {
+	namespaceID := namespace.ID(key.GetNamespaceID())
+	execution := &commonpb.WorkflowExecution{
+		WorkflowId: key.GetWorkflowID(),
+		RunId:      key.GetRunID(),
+	}
 	// workflowCache will automatically use short context timeout when
 	// locking workflow for all background calls, we don't need a separate context here
 	weContext, release, err := workflowCache.GetOrCreateWorkflowExecution(
@@ -95,18 +90,20 @@ type taskExecutor struct {
 	cache          wcache.Cache
 	metricsHandler metrics.Handler
 	logger         log.Logger
+	clusterName    string
+	config         *configs.Config
 }
 
 // loadAndValidateMutableState loads mutable state and validates it.
 // Propagages errors returned from validate.
-// Does **not** reload mutable state when it validate reports it is stale. Not meant to be called directly, call
+// Does **not** reload mutable state if validate reports it is stale. Not meant to be called directly, call
 // [loadAndValidateMutableState] instead.
-func (l *taskExecutor) loadAndValidateMutableStateNoReload(
+func (t *taskExecutor) loadAndValidateMutableStateNoReload(
 	ctx context.Context,
 	wfCtx workflow.Context,
 	validate func(workflow.MutableState) error,
 ) (workflow.MutableState, error) {
-	mutableState, err := wfCtx.LoadMutableState(ctx, l.shardContext)
+	mutableState, err := wfCtx.LoadMutableState(ctx, t.shardContext)
 	if err != nil {
 		return nil, err
 	}
@@ -117,12 +114,12 @@ func (l *taskExecutor) loadAndValidateMutableStateNoReload(
 // loadAndValidateMutableState loads mutable state and validates it.
 // Propagages errors returned from validate.
 // Reloads mutable state and retries if validator returns a [queues.StaleStateError].
-func (l *taskExecutor) loadAndValidateMutableState(
+func (t *taskExecutor) loadAndValidateMutableState(
 	ctx context.Context,
 	wfCtx workflow.Context,
 	validate func(workflow.MutableState) error,
 ) (workflow.MutableState, error) {
-	mutableState, err := l.loadAndValidateMutableStateNoReload(ctx, wfCtx, validate)
+	mutableState, err := t.loadAndValidateMutableStateNoReload(ctx, wfCtx, validate)
 	if err == nil {
 		return mutableState, nil
 	}
@@ -131,75 +128,47 @@ func (l *taskExecutor) loadAndValidateMutableState(
 	if !errors.As(err, &sve) {
 		return nil, err
 	}
-	l.metricsHandler.Counter(metrics.StaleMutableStateCounter.Name()).Record(1)
+	t.metricsHandler.Counter(metrics.StaleMutableStateCounter.Name()).Record(1)
 	wfCtx.Clear()
 
-	return l.loadAndValidateMutableStateNoReload(ctx, wfCtx, validate)
+	return t.loadAndValidateMutableStateNoReload(ctx, wfCtx, validate)
 }
 
-// validateTaskVersion validates task version against the given stateVersion.
-// If namespace is not a global namepace, this always returns nil.
-// The returned error is always a [queues.TaskStateMismatchError].
-func (l *taskExecutor) validateTaskVersion(
-	ns *namespace.Namespace,
-	stateVersion int64,
-	task tasks.Task,
-) error {
-	if !l.shardContext.GetClusterMetadata().IsGlobalNamespaceEnabled() {
-		return nil
+// validateStateMachineTask compares the task and associated state machine's version and transition count to detect staleness.
+func (t *taskExecutor) validateStateMachineTask(ms workflow.MutableState, ref hsm.Ref) error {
+	err := workflow.TransitionHistoryStalenessCheck(
+		ms.GetExecutionInfo().GetTransitionHistory(),
+		ref.StateMachineRef.MutableStateNamespaceFailoverVersion,
+		ref.StateMachineRef.MutableStateTransitionCount,
+	)
+	if err != nil {
+		return err
+	}
+	node, err := ms.HSM().Child(ref.StateMachinePath())
+	if err != nil {
+		return fmt.Errorf("%w: %w", queues.NewUnprocessableTaskError("node lookup failed"), err)
 	}
 
-	// the first return value is whether this task is valid for further processing
-	if !ns.IsGlobalNamespace() {
-		l.logger.Debug("NamespaceID is not global, task version check pass", tag.WorkflowNamespaceID(ns.ID().String()), tag.Task(task))
-		return nil
+	// Only check for strict equality if the ref has non zero MachineTransitionCount, which marks the task as non-concurrent.
+	if ref.StateMachineRef.MachineTransitionCount != 0 && node.TransitionCount() != ref.StateMachineRef.MachineTransitionCount {
+		return fmt.Errorf("%w: state machine transitions != task transitions", queues.ErrStaleTask)
 	}
-	if stateVersion < task.GetVersion() {
-		return queues.NewStateStaleError("state version < task version")
-	}
-	if stateVersion > task.GetVersion() {
-		return fmt.Errorf("%w: state version > task version", queues.ErrStaleTask)
-	}
-	l.logger.Debug("NamespaceID is global, task version == target version", tag.WorkflowNamespaceID(ns.ID().String()), tag.Task(task), tag.TaskVersion(task.GetVersion()))
 	return nil
 }
 
-// validateCallbackTask compares the task and associated callback's version and transition count to detect staleness.
-func (l *taskExecutor) validateCallbackTask(ms workflow.MutableState, task CallbackAddressingTask) (*persistencespb.CallbackInfo, error) {
-	ns := ms.GetNamespaceEntry()
-	callbackID := task.GetCallbackID()
-	callback, ok := ms.GetExecutionInfo().GetCallbacks()[callbackID]
-	if !ok {
-		// Some unexpected process deleted the callback from mutable state or mutable state is stale.
-		return nil, queues.NewStateStaleError(fmt.Sprintf("invalid callback ID for task: %s", callbackID))
-	}
-
-	if err := l.validateTaskVersion(ns, callback.GetNamespaceFailoverVersion(), task); err != nil {
-		return nil, err
-	}
-
-	if callback.TransitionCount < task.GetTransitionCount() {
-		return nil, queues.NewStateStaleError("callback transitions < task transitions")
-	}
-	if callback.TransitionCount > task.GetTransitionCount() {
-		return nil, fmt.Errorf("%w: callback transitions > task transitions", queues.ErrStaleTask)
-	}
-	return callback, nil
-}
-
-// getValidatedMutableStateForTask loads mutable state and validates it with the given function.
+// getValidatedMutableState loads mutable state and validates it with the given function.
 // validate must not mutate the state.
-func (l *taskExecutor) getValidatedMutableStateForTask(
+func (t *taskExecutor) getValidatedMutableState(
 	ctx context.Context,
-	task tasks.Task,
+	key definition.WorkflowKey,
 	validate func(workflow.MutableState) error,
 ) (workflow.Context, wcache.ReleaseCacheFunc, workflow.MutableState, error) {
-	wfCtx, release, err := getWorkflowExecutionContextForTask(ctx, l.shardContext, l.cache, task)
+	wfCtx, release, err := getWorkflowExecutionContext(ctx, t.shardContext, t.cache, key)
 	if err != nil {
 		return nil, nil, nil, err
 	}
 
-	ms, err := l.loadAndValidateMutableState(ctx, wfCtx, validate)
+	ms, err := t.loadAndValidateMutableState(ctx, wfCtx, validate)
 
 	if err != nil {
 		// Release now with no error to prevent mutable state from being unloaded from the cache.
@@ -207,4 +176,45 @@ func (l *taskExecutor) getValidatedMutableStateForTask(
 		return nil, nil, nil, err
 	}
 	return wfCtx, release, ms, nil
+}
+
+func (t *taskExecutor) Access(ctx context.Context, ref hsm.Ref, accessType hsm.AccessType, accessor func(*hsm.Node) error) (retErr error) {
+	wfCtx, release, ms, err := t.getValidatedMutableState(
+		ctx, ref.WorkflowKey, func(ms workflow.MutableState) error {
+			return t.validateStateMachineTask(ms, ref)
+		},
+	)
+	if err != nil {
+		return err
+	}
+	var accessed bool
+	defer func() {
+		if accessType == hsm.AccessWrite && accessed {
+			release(retErr)
+		} else {
+			release(nil)
+		}
+	}()
+	node, err := ms.HSM().Child(ref.StateMachinePath())
+	if err != nil {
+		return err
+	}
+	accessed = true
+	if err := accessor(node); err != nil {
+		return err
+	}
+	if accessType == hsm.AccessRead {
+		return nil
+	}
+
+	if ms.GetExecutionState().State == enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED {
+		// Can't use UpdateWorkflowExecutionAsActive since it updates the current run, and we are operating on closed
+		// workflows.
+		return wfCtx.SubmitClosedWorkflowSnapshot(ctx, t.shardContext, workflow.TransactionPolicyActive)
+	}
+	return wfCtx.UpdateWorkflowExecutionAsActive(ctx, t.shardContext)
+}
+
+func (t *taskExecutor) Now() time.Time {
+	return t.shardContext.GetTimeSource().Now()
 }

@@ -38,7 +38,6 @@ import (
 
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	"go.temporal.io/server/api/matchingservice/v1"
-	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/backoff"
 	"go.temporal.io/server/common/definition"
@@ -50,10 +49,10 @@ import (
 	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/common/resource"
 	"go.temporal.io/server/common/worker_versioning"
-	"go.temporal.io/server/service/history/callbacks"
 	"go.temporal.io/server/service/history/configs"
 	"go.temporal.io/server/service/history/consts"
 	"go.temporal.io/server/service/history/deletemanager"
+	"go.temporal.io/server/service/history/hsm"
 	"go.temporal.io/server/service/history/queues"
 	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/tasks"
@@ -94,7 +93,16 @@ func (t *timerQueueActiveTaskExecutor) Execute(
 	ctx context.Context,
 	executable queues.Executable,
 ) queues.ExecuteResponse {
-	taskTypeTagValue := queues.GetActiveTimerTaskTypeTagValue(executable)
+	taskTypeTagValue := "TimerActiveUnknown"
+	smRef, smt, isAStateMachineTask, err := t.stateMachineTask(executable.GetTask())
+	if err == nil {
+		if isAStateMachineTask {
+			taskTypeTagValue = "TimerActive." + smt.Type().Name
+		} else {
+			taskTypeTagValue = queues.GetActiveTimerTaskTypeTagValue(executable)
+		}
+	}
+
 	namespaceTag, replicationState := getNamespaceTagAndReplicationStateByID(
 		t.shardContext.GetNamespaceRegistry(),
 		executable.GetNamespaceID(),
@@ -103,6 +111,14 @@ func (t *timerQueueActiveTaskExecutor) Execute(
 		namespaceTag,
 		metrics.TaskTypeTag(taskTypeTagValue),
 		metrics.OperationTag(taskTypeTagValue), // for backward compatibility
+	}
+
+	if err != nil {
+		return queues.ExecuteResponse{
+			ExecutionMetricTags: metricsTags,
+			ExecutedAsActive:    true,
+			ExecutionErr:        err,
+		}
 	}
 
 	if replicationState == enumspb.REPLICATION_STATE_HANDOVER {
@@ -117,7 +133,15 @@ func (t *timerQueueActiveTaskExecutor) Execute(
 		}
 	}
 
-	var err error
+	if isAStateMachineTask {
+		err = hsm.Execute(ctx, t.shardContext.StateMachineRegistry(), t, smRef, smt)
+		return queues.ExecuteResponse{
+			ExecutionMetricTags: metricsTags,
+			ExecutedAsActive:    true,
+			ExecutionErr:        err,
+		}
+	}
+
 	switch task := executable.GetTask().(type) {
 	case *tasks.UserTimerTask:
 		err = t.executeUserTimerTimeoutTask(ctx, task)
@@ -133,10 +157,8 @@ func (t *timerQueueActiveTaskExecutor) Execute(
 		err = t.executeWorkflowBackoffTimerTask(ctx, task)
 	case *tasks.DeleteHistoryEventTask:
 		err = t.executeDeleteHistoryEventTask(ctx, task)
-	case *tasks.CallbackBackoffTask:
-		err = t.executeCallbackBackoffTask(ctx, task)
 	default:
-		err = errUnknownTimerTask
+		err = queues.NewUnprocessableTaskError("unknown task type")
 	}
 
 	return queues.ExecuteResponse{
@@ -633,37 +655,6 @@ func (t *timerQueueActiveTaskExecutor) executeWorkflowTimeoutTask(
 		),
 		newMutableState,
 	)
-}
-
-func (t *timerQueueActiveTaskExecutor) executeCallbackBackoffTask(ctx context.Context, task *tasks.CallbackBackoffTask) (retErr error) {
-	ctx, cancel := context.WithTimeout(ctx, taskTimeout)
-	defer cancel()
-
-	var callback *persistencespb.CallbackInfo
-	wfCtx, release, ms, err := t.getValidatedMutableStateForTask(
-		ctx, task, func(ms workflow.MutableState) error {
-			var err error
-			callback, err = t.validateCallbackTask(ms, task)
-			return err
-		},
-	)
-	if err != nil {
-		return nil
-	}
-	defer func() { release(retErr) }()
-
-	if err := callbacks.TransitionRescheduled.Apply(callback, callbacks.EventRescheduled{}, ms); err != nil {
-		return err
-	}
-	if ms.GetExecutionInfo().CloseTime == nil {
-		// This is here to bring attention to future implementors of callbacks triggered on open workflows.
-		return queues.NewUnprocessableTaskError("triggered safeguard preventing from mutating closed workflows")
-	}
-	// Can't use UpdateWorkflowExecutionAsActive since it updates the current run, and we are operating on closed
-	// workflows.
-	// When we support workflow-update callbacks, we'll need to revisit this code.
-	return wfCtx.SubmitClosedWorkflowSnapshot(ctx, t.shardContext, workflow.TransactionPolicyActive)
-
 }
 
 func (t *timerQueueActiveTaskExecutor) getTimerSequence(

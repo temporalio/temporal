@@ -32,12 +32,12 @@ import (
 	commonpb "go.temporal.io/api/common/v1"
 )
 
-type PayloadSerializer struct{}
+type payloadSerializer struct{}
 
 var errSerializer = errors.New("serializer error")
 
 // Deserialize implements nexus.Serializer.
-func (PayloadSerializer) Deserialize(content *nexus.Content, v any) error {
+func (payloadSerializer) Deserialize(content *nexus.Content, v any) error {
 	payloadRef, ok := v.(**commonpb.Payload)
 	if !ok {
 		return fmt.Errorf("%w: cannot deserialize into %v", errSerializer, v)
@@ -117,7 +117,7 @@ func setUnknownNexusContent(nexusHeader nexus.Header, payloadMetadata map[string
 }
 
 // Serialize implements nexus.Serializer.
-func (PayloadSerializer) Serialize(v any) (*nexus.Content, error) {
+func (payloadSerializer) Serialize(v any) (*nexus.Content, error) {
 	payload, ok := v.(*commonpb.Payload)
 	if !ok {
 		return nil, fmt.Errorf("%w: cannot serialize %v", errSerializer, v)
@@ -182,4 +182,4 @@ func xTemporalPayload(payload *commonpb.Payload) (*nexus.Content, error) {
 	}, nil
 }
 
-var _ nexus.Serializer = PayloadSerializer{}
+var PayloadSerializer nexus.Serializer = payloadSerializer{}
