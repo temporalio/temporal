@@ -32,6 +32,7 @@ import (
 	"time"
 
 	"github.com/golang/mock/gomock"
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	"google.golang.org/grpc"
@@ -635,25 +636,30 @@ func (s *localStoreRPCSuite) testServerTLSRefresh(factory *TestFactory, ca *tls.
 	defer server.Stop()
 
 	host := localhostIPv4 + ":" + port
-	tlsInfo, err := dialHelloAndGetTLSInfo(s.Suite, host, factory, factory.serverUsage)
+	tlsInfo, err := dialHelloAndGetTLSInfo(s.T(), host, factory, factory.serverUsage)
 	s.validateTLSInfo(tlsInfo, err, serialNumber) // serial number of server cert before refresh
 
 	srvrCert, err := testutils.GenerateServerCert(ca, localhostIPv4, serialNumber+100, testutils.CertFilePath(certDir), testutils.KeyFilePath(certDir))
 	s.NoError(err)
 	s.NotNil(srvrCert)
 
-	time.Sleep(time.Second * 2) // let server refresh certs
-
-	tlsInfo, err = dialHelloAndGetTLSInfo(s.Suite, host, factory, factory.serverUsage)
-	s.validateTLSInfo(tlsInfo, err, serialNumber+100) // serial number of server cert after refresh
+	// Give the server a chance to refresh certs
+	s.EventuallyWithT(func(collect *assert.CollectT) {
+		tlsInfo, err = dialHelloAndGetTLSInfo(collect, host, factory, factory.serverUsage)
+		validateTLSInfo(collect, tlsInfo, err, serialNumber+100) // serial number of server cert after refresh
+	}, time.Second*10, time.Millisecond*100)
 }
 
 func (s *localStoreRPCSuite) validateTLSInfo(tlsInfo *credentials.TLSInfo, err error, serialNumber int64) {
-	s.NoError(err)
-	s.NotNil(tlsInfo)
-	s.NotNil(tlsInfo.State.PeerCertificates)
+	validateTLSInfo(s.T(), tlsInfo, err, serialNumber)
+}
+
+func validateTLSInfo(t require.TestingT, tlsInfo *credentials.TLSInfo, err error, serialNumber int64) {
+	require.NoError(t, err)
+	require.NotNil(t, tlsInfo)
+	require.NotNil(t, tlsInfo.State.PeerCertificates)
 	sn := (*tlsInfo.State.PeerCertificates[0].SerialNumber).Int64()
-	s.Equal(serialNumber, sn)
+	require.Equal(t, serialNumber, sn)
 }
 
 func (s *localStoreRPCSuite) TestClientForceTLS() {

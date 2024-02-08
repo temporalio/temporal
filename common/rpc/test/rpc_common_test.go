@@ -31,6 +31,7 @@ import (
 	"net"
 	"strings"
 
+	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials"
@@ -135,18 +136,18 @@ func runHelloWorldMultipleDials(
 	defer server.Stop()
 
 	for i := 0; i < nDials; i++ {
-		tlsInfo, err := dialHelloAndGetTLSInfo(s, host+":"+port, clientFactory, serverFactory.serverUsage)
+		tlsInfo, err := dialHelloAndGetTLSInfo(s.T(), host+":"+port, clientFactory, serverFactory.serverUsage)
 		validator(tlsInfo, err)
 	}
 }
 
 func dialHello(s *suite.Suite, hostport string, clientFactory *TestFactory, serverType ServerUsageType) error {
-	_, err := dialHelloAndGetTLSInfo(s, hostport, clientFactory, serverType)
+	_, err := dialHelloAndGetTLSInfo(s.T(), hostport, clientFactory, serverType)
 	return err
 }
 
 func dialHelloAndGetTLSInfo(
-	s *suite.Suite,
+	t require.TestingT,
 	hostport string,
 	clientFactory *TestFactory,
 	serverType ServerUsageType,
@@ -158,19 +159,19 @@ func dialHelloAndGetTLSInfo(
 	switch serverType {
 	case Internode:
 		cfg, err = clientFactory.GetInternodeClientTlsConfig()
-		s.NoError(err)
+		require.NoError(t, err)
 	case Frontend:
 		cfg, err = clientFactory.GetFrontendClientTlsConfig()
-		s.NoError(err)
+		require.NoError(t, err)
 	case RemoteCluster:
 		host, _, err := net.SplitHostPort(hostport)
-		s.NoError(err)
+		require.NoError(t, err)
 		cfg, err = clientFactory.GetRemoteClusterClientConfig(host)
-		s.NoError(err)
+		require.NoError(t, err)
 	}
 
 	clientConn, err := rpc.Dial(hostport, cfg, logger)
-	s.NoError(err)
+	require.NoError(t, err)
 
 	client := helloworld.NewGreeterClient(clientConn)
 
@@ -181,8 +182,8 @@ func dialHelloAndGetTLSInfo(
 	tlsInfo, _ := peer.AuthInfo.(credentials.TLSInfo)
 
 	if err == nil {
-		s.NotNil(reply)
-		s.True(strings.Contains(reply.Message, request.Name))
+		require.NotNil(t, reply)
+		require.True(t, strings.Contains(reply.Message, request.Name))
 	}
 
 	_ = clientConn.Close()
