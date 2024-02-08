@@ -513,8 +513,8 @@ const (
 	HistoryCacheNonUserContextLockTimeout = "history.cacheNonUserContextLockTimeout"
 	// EnableHostHistoryCache controls if the history cache is host level
 	EnableHostHistoryCache = "history.enableHostHistoryCache"
-	// HistoryCacheShardLevelMaxSize is max size of history shard level cache
-	HistoryCacheShardLevelMaxSize = "history.shardLevelCacheMaxSize"
+	// HistoryCacheHostLevelMaxSize is max size of history host level cache
+	HistoryCacheHostLevelMaxSize = "history.hostLevelCacheMaxSize"
 	// EnableAPIGetCurrentRunIDLock controls if a lock should be acquired before getting current run ID for API requests
 	EnableAPIGetCurrentRunIDLock = "history.enableAPIGetCurrentRunIDLock"
 	// HistoryStartupMembershipJoinDelay is the duration a history instance waits
