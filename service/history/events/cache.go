@@ -85,7 +85,7 @@ func NewHostLevelEventsCache(
 	logger log.Logger,
 	disabled bool,
 ) *CacheImpl {
-	return NewEventsCache(executionManager, handler, logger, config.EventsCacheMaxSizeBytes(), config.EventsCacheTTL(), disabled)
+	return NewEventsCache(executionManager, handler, logger, config.EventsHostLevelCacheMaxSizeBytes(), config.EventsCacheTTL(), disabled)
 }
 
 func NewShardLevelEventsCache(

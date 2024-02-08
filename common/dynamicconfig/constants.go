@@ -522,10 +522,10 @@ const (
 	HistoryShutdownDrainDuration = "history.shutdownDrainDuration"
 	// XDCCacheMaxSizeBytes is max size of events cache in bytes
 	XDCCacheMaxSizeBytes = "history.xdcCacheMaxSizeBytes"
-	// EventsCacheMaxSizeBytes is max size of the host level events cache in bytes
+	// EventsCacheMaxSizeBytes is max size of the shard level events cache in bytes
 	EventsCacheMaxSizeBytes = "history.eventsCacheMaxSizeBytes"
-	// EventsShardLevelCacheMaxSizeBytes is max size of the shard level events cache in bytes
-	EventsShardLevelCacheMaxSizeBytes = "history.eventsShardLevelCacheMaxSizeBytes"
+	// EventsHostLevelCacheMaxSizeBytes is max size of the host level events cache in bytes
+	EventsHostLevelCacheMaxSizeBytes = "history.eventsHostLevelCacheMaxSizeBytes"
 	// EventsCacheTTL is TTL of events cache
 	EventsCacheTTL = "history.eventsCacheTTL"
 	// EnableHostLevelEventsCache controls if the events cache is host level

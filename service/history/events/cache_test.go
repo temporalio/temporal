@@ -89,8 +89,8 @@ func (s *eventsCacheSuite) TearDownTest() {
 
 func (s *eventsCacheSuite) newTestEventsCache() *CacheImpl {
 	config := configs.Config{
-		EventsCacheTTL:          dynamicconfig.GetDurationPropertyFn(time.Minute),
-		EventsCacheMaxSizeBytes: dynamicconfig.GetIntPropertyFn(32),
+		EventsCacheTTL:                   dynamicconfig.GetDurationPropertyFn(time.Minute),
+		EventsHostLevelCacheMaxSizeBytes: dynamicconfig.GetIntPropertyFn(32),
 	}
 	return NewHostLevelEventsCache(
 		s.mockExecutionManager,
