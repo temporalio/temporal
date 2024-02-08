@@ -37,12 +37,4 @@ var Module = fx.Options(
 	fx.Provide(func(executionManager persistence.ExecutionManager, config *configs.Config, handler metrics.Handler, logger log.Logger) Cache {
 		return NewHostLevelEventsCache(executionManager, config, handler, logger, false)
 	}),
-	fx.Provide(NewCacheFnProvider),
 )
-
-// NewCacheFnProvider provide a NewEventsCacheFn that can be used to create new events cache.
-func NewCacheFnProvider() NewEventsCacheFn {
-	return func(executionManager persistence.ExecutionManager, config *configs.Config, handler metrics.Handler, logger log.Logger) Cache {
-		return NewShardLevelEventsCache(executionManager, config, handler, logger, false)
-	}
-}

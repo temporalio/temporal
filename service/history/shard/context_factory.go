@@ -78,7 +78,6 @@ type (
 		TimeSource                  clock.TimeSource
 		TaskCategoryRegistry        tasks.TaskCategoryRegistry
 		EventsCache                 events.Cache
-		NewEventsCacheFn            events.NewEventsCacheFn
 	}
 
 	contextFactoryImpl struct {
@@ -118,12 +117,8 @@ func (c *contextFactoryImpl) CreateContext(
 		c.ArchivalMetadata,
 		c.HostInfoProvider,
 		c.TaskCategoryRegistry,
+		c.EventsCache,
 	)
-	if shard.GetConfig().EnableHostLevelEventsCache() {
-		shard.eventsCache = c.EventsCache
-	} else {
-		shard.eventsCache = c.NewEventsCacheFn(shard.executionManager, shard.config, shard.metricsHandler, shard.contextTaggedLogger)
-	}
 	if err != nil {
 		return nil, err
 	}

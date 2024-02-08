@@ -2010,6 +2010,7 @@ func newContext(
 	archivalMetadata archiver.ArchivalMetadata,
 	hostInfoProvider membership.HostInfoProvider,
 	taskCategoryRegistry tasks.TaskCategoryRegistry,
+	eventsCache events.Cache,
 ) (*ContextImpl, error) {
 	hostIdentity := hostInfoProvider.HostInfo().Identity()
 	sequenceID := atomic.AddInt64(&shardContextSequenceID, 1)
@@ -2064,6 +2065,17 @@ func newContext(
 			return shardContext.renewRangeLocked(false)
 		},
 	)
+	if shardContext.GetConfig().EnableHostLevelEventsCache() {
+		shardContext.eventsCache = eventsCache
+	} else {
+		shardContext.eventsCache = events.NewShardLevelEventsCache(
+			shardContext.executionManager,
+			shardContext.config,
+			shardContext.metricsHandler,
+			shardContext.contextTaggedLogger,
+			false,
+		)
+	}
 	return shardContext, nil
 }
 

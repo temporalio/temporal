@@ -58,7 +58,6 @@ import (
 	"go.temporal.io/server/common/resourcetest"
 	"go.temporal.io/server/internal/goro"
 	"go.temporal.io/server/service/history/configs"
-	"go.temporal.io/server/service/history/events"
 	"go.temporal.io/server/service/history/tasks"
 	"go.temporal.io/server/service/history/tests"
 )
@@ -113,7 +112,6 @@ func NewTestController(
 		ThrottledLogger:             resource.GetThrottledLogger(),
 		TimeSource:                  resource.GetTimeSource(),
 		TaskCategoryRegistry:        tasks.NewDefaultTaskCategoryRegistry(),
-		NewEventsCacheFn:            events.NewCacheFnProvider(),
 	})
 
 	return ControllerProvider(

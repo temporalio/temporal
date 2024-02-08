@@ -363,8 +363,8 @@ func NewConfig(
 		HistoryShardLevelCacheMaxSize:         dc.GetIntProperty(dynamicconfig.HistoryCacheShardLevelMaxSize, 512),
 		EnableAPIGetCurrentRunIDLock:          dc.GetBoolProperty(dynamicconfig.EnableAPIGetCurrentRunIDLock, false),
 
-		EventsCacheMaxSizeBytes:           dc.GetIntProperty(dynamicconfig.EventsCacheMaxSizeBytes, 512*1024),               // 512KB
-		EventsShardLevelCacheMaxSizeBytes: dc.GetIntProperty(dynamicconfig.EventsShardLevelCacheMaxSizeBytes, 512*512*1024), // 256MB
+		EventsCacheMaxSizeBytes:           dc.GetIntProperty(dynamicconfig.EventsCacheMaxSizeBytes, 512*512*1024),       // 256MB
+		EventsShardLevelCacheMaxSizeBytes: dc.GetIntProperty(dynamicconfig.EventsShardLevelCacheMaxSizeBytes, 512*1024), // 512KB
 		EventsCacheTTL:                    dc.GetDurationProperty(dynamicconfig.EventsCacheTTL, time.Hour),
 		EnableHostLevelEventsCache:        dc.GetBoolProperty(dynamicconfig.EnableHostLevelEventsCache, false),
 
