@@ -312,7 +312,7 @@ func (s *ackManagerSuite) TestGetTasks_SecondPersistenceErrorReturnsPartialResul
 		s.mockShard.GetLogger(),
 		false,
 	)
-	ms := workflow.TestLocalMutableState(s.mockShard, eventsCache, tests.GlobalNamespaceEntry, log.NewTestLogger(), tests.RunID)
+	ms := workflow.TestLocalMutableState(s.mockShard, eventsCache, tests.GlobalNamespaceEntry, tests.WorkflowID, tests.RunID, log.NewTestLogger())
 	ei := ms.GetExecutionInfo()
 	ei.NamespaceId = tests.NamespaceID.String()
 	ei.VersionHistories = &historyspb.VersionHistories{
@@ -361,7 +361,7 @@ func (s *ackManagerSuite) TestGetTasks_FullPage() {
 		s.mockShard.GetLogger(),
 		false,
 	)
-	ms := workflow.TestLocalMutableState(s.mockShard, eventsCache, tests.GlobalNamespaceEntry, log.NewTestLogger(), tests.RunID)
+	ms := workflow.TestLocalMutableState(s.mockShard, eventsCache, tests.GlobalNamespaceEntry, tests.WorkflowID, tests.RunID, log.NewTestLogger())
 	ei := ms.GetExecutionInfo()
 	ei.NamespaceId = tests.NamespaceID.String()
 	ei.VersionHistories = &historyspb.VersionHistories{
@@ -410,7 +410,7 @@ func (s *ackManagerSuite) TestGetTasks_PartialPage() {
 		s.mockShard.GetLogger(),
 		false,
 	)
-	ms := workflow.TestLocalMutableState(s.mockShard, eventsCache, tests.GlobalNamespaceEntry, log.NewTestLogger(), tests.RunID)
+	ms := workflow.TestLocalMutableState(s.mockShard, eventsCache, tests.GlobalNamespaceEntry, tests.WorkflowID, tests.RunID, log.NewTestLogger())
 	ei := ms.GetExecutionInfo()
 	ei.NamespaceId = tests.NamespaceID.String()
 	ei.VersionHistories = &historyspb.VersionHistories{
@@ -496,7 +496,7 @@ func (s *ackManagerSuite) TestGetTasks_FilterNamespace() {
 		s.mockShard.GetLogger(),
 		false,
 	)
-	ms := workflow.TestLocalMutableState(s.mockShard, eventsCache, tests.GlobalNamespaceEntry, log.NewTestLogger(), tests.RunID)
+	ms := workflow.TestLocalMutableState(s.mockShard, eventsCache, tests.GlobalNamespaceEntry, tests.WorkflowID, tests.RunID, log.NewTestLogger())
 	ei := ms.GetExecutionInfo()
 	ei.NamespaceId = tests.NamespaceID.String()
 	ei.VersionHistories = &historyspb.VersionHistories{
