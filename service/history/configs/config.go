@@ -81,9 +81,10 @@ type Config struct {
 	// EventsCache settings
 	// Change of these configs require shard restart
 	EventsShardLevelCacheMaxSizeBytes dynamicconfig.IntPropertyFn
-	EventsHostLevelCacheMaxSizeBytes  dynamicconfig.IntPropertyFn
 	EventsCacheTTL                    dynamicconfig.DurationPropertyFn
-	EnableHostLevelEventsCache        dynamicconfig.BoolPropertyFn
+	// Change of these configs require service restart
+	EnableHostLevelEventsCache       dynamicconfig.BoolPropertyFn
+	EventsHostLevelCacheMaxSizeBytes dynamicconfig.IntPropertyFn
 
 	// ShardController settings
 	RangeSizeBits                  uint
