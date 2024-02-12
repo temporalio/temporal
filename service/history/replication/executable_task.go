@@ -32,10 +32,8 @@ import (
 
 	commonpb "go.temporal.io/api/common/v1"
 	"go.temporal.io/api/serviceerror"
-	historyspb "go.temporal.io/server/api/history/v1"
-	"go.temporal.io/server/common/persistence/versionhistory"
-	"go.temporal.io/server/service/history/shard"
 
+	historyspb "go.temporal.io/server/api/history/v1"
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/backoff"
@@ -44,8 +42,10 @@ import (
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
+	"go.temporal.io/server/common/persistence/versionhistory"
 	serviceerrors "go.temporal.io/server/common/serviceerror"
 	ctasks "go.temporal.io/server/common/tasks"
+	"go.temporal.io/server/service/history/shard"
 )
 
 //go:generate mockgen -copyright_file ../../../LICENSE -package $GOPACKAGE -source $GOFILE -destination executable_task_mock.go
@@ -252,7 +252,7 @@ func (e *ExecutableTaskImpl) Reschedule() {
 
 func (e *ExecutableTaskImpl) IsRetryableError(err error) bool {
 	switch err.(type) {
-	case *serviceerror.InvalidArgument:
+	case *serviceerror.InvalidArgument, *serviceerror.DataLoss:
 		return false
 	default:
 		return true
@@ -373,16 +373,30 @@ func (e *ExecutableTaskImpl) Resend(
 		//  c. attempt failed due to old workflow does not exist
 		//  d. return error to resend new workflow before the branching point
 
+		if resendErr.NamespaceId == retryErr.NamespaceId &&
+			resendErr.WorkflowId == retryErr.WorkflowId &&
+			resendErr.RunId == retryErr.RunId {
+			e.Logger.Error("error resend history on the same workflow run",
+				tag.WorkflowNamespaceID(retryErr.NamespaceId),
+				tag.WorkflowID(retryErr.WorkflowId),
+				tag.WorkflowRunID(retryErr.RunId),
+				tag.NewStringTag("first-resend-error", retryErr.Error()),
+				tag.NewStringTag("second-resend-error", resendErr.Error()),
+			)
+			return false, serviceerror.NewDataLoss("failed to get requested data while resending history")
+		}
 		// handle 2nd resend error, then 1st resend error
-		if _, err := e.Resend(ctx, remoteCluster, resendErr, remainingAttempt); err == nil {
+		_, err := e.Resend(ctx, remoteCluster, resendErr, remainingAttempt)
+		if err == nil {
 			return e.Resend(ctx, remoteCluster, retryErr, remainingAttempt)
 		}
-		e.Logger.Error("error resend history for history event",
-			tag.WorkflowNamespaceID(retryErr.NamespaceId),
-			tag.WorkflowID(retryErr.WorkflowId),
-			tag.WorkflowRunID(retryErr.RunId),
-			tag.Value(retryErr),
-			tag.Error(resendErr),
+		e.Logger.Error("error resend 2nd workflow history for history event",
+			tag.WorkflowNamespaceID(resendErr.NamespaceId),
+			tag.WorkflowID(resendErr.WorkflowId),
+			tag.WorkflowRunID(resendErr.RunId),
+			tag.NewStringTag("first-resend-error", retryErr.Error()),
+			tag.NewStringTag("second-resend-error", resendErr.Error()),
+			tag.Error(err),
 		)
 		return false, resendErr
 	default:
@@ -390,8 +404,8 @@ func (e *ExecutableTaskImpl) Resend(
 			tag.WorkflowNamespaceID(retryErr.NamespaceId),
 			tag.WorkflowID(retryErr.WorkflowId),
 			tag.WorkflowRunID(retryErr.RunId),
-			tag.Value(retryErr),
-			tag.Error(resendErr),
+			tag.NewStringTag("first-resend-error", retryErr.Error()),
+			tag.NewStringTag("second-resend-error", resendErr.Error()),
 		)
 		return false, resendErr
 	}
