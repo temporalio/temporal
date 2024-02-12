@@ -208,6 +208,8 @@ func NewMutableState(
 	eventsCache events.Cache,
 	logger log.Logger,
 	namespaceEntry *namespace.Namespace,
+	workflowID string,
+	runID string,
 	startTime time.Time,
 ) *MutableStateImpl {
 	s := &MutableStateImpl{
@@ -261,6 +263,9 @@ func NewMutableState(
 	}
 
 	s.executionInfo = &persistencespb.WorkflowExecutionInfo{
+		NamespaceId: namespaceEntry.ID().String(),
+		WorkflowId:  workflowID,
+
 		WorkflowTaskVersion:          common.EmptyVersion,
 		WorkflowTaskScheduledEventId: common.EmptyEventID,
 		WorkflowTaskStartedEventId:   common.EmptyEventID,
@@ -275,8 +280,12 @@ func NewMutableState(
 		ExecutionStats:   &persistencespb.ExecutionStats{HistorySize: 0},
 	}
 	s.approximateSize += s.executionInfo.Size()
-	s.executionState = &persistencespb.WorkflowExecutionState{State: enumsspb.WORKFLOW_EXECUTION_STATE_CREATED,
-		Status: enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING}
+	s.executionState = &persistencespb.WorkflowExecutionState{
+		RunId: runID,
+
+		State:  enumsspb.WORKFLOW_EXECUTION_STATE_CREATED,
+		Status: enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
+	}
 	s.approximateSize += s.executionState.Size()
 
 	s.hBuilder = historybuilder.New(
@@ -304,7 +313,15 @@ func NewMutableStateFromDB(
 
 	// startTime will be overridden by DB record
 	startTime := time.Time{}
-	mutableState := NewMutableState(shard, eventsCache, logger, namespaceEntry, startTime)
+	mutableState := NewMutableState(
+		shard,
+		eventsCache,
+		logger,
+		namespaceEntry,
+		dbRecord.ExecutionInfo.WorkflowId,
+		dbRecord.ExecutionState.RunId,
+		startTime,
+	)
 
 	if dbRecord.ActivityInfos != nil {
 		mutableState.pendingActivityInfoIDs = dbRecord.ActivityInfos
@@ -3742,6 +3759,8 @@ func (ms *MutableStateImpl) AddContinueAsNewEvent(
 		ms.shard.GetEventsCache(),
 		ms.logger,
 		ms.namespaceEntry,
+		ms.executionInfo.WorkflowId,
+		newRunID,
 		timestamp.TimeValue(continueAsNewEvent.GetEventTime()),
 	)
 
