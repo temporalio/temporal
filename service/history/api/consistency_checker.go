@@ -294,7 +294,7 @@ func (c *WorkflowConsistencyCheckerImpl) getCurrentWorkflowContext(
 		wfContext.GetReleaseFn()(err)
 		return nil, err
 	}
-	if currentRunID == wfContext.GetWorkflowKey().RunID {
+	if currentRunID == wfContext.GetContext().GetWorkflowKey().RunID {
 		return wfContext, nil
 	}
 

@@ -64,7 +64,7 @@ func SignalWithStartWorkflow(
 		); err != nil {
 			return "", err
 		}
-		return currentWorkflowLease.GetWorkflowKey().RunID, nil
+		return currentWorkflowLease.GetContext().GetWorkflowKey().RunID, nil
 	}
 	// else, either workflow is not running or restart requested
 	return startAndSignalWorkflow(
@@ -157,7 +157,7 @@ func createWorkflowMutationFunction(
 		currentExecutionState.RunId,
 		currentExecutionState.State,
 		currentExecutionState.Status,
-		currentWorkflowLease.GetWorkflowKey().WorkflowID,
+		currentWorkflowLease.GetContext().GetWorkflowKey().WorkflowID,
 		newRunID,
 		workflowIDReusePolicy,
 	)
@@ -248,7 +248,7 @@ func startAndSignalWithoutCurrentWorkflow(
 	)
 	switch failedErr := err.(type) {
 	case nil:
-		return newWorkflowLease.GetWorkflowKey().RunID, nil
+		return newWorkflowLease.GetContext().GetWorkflowKey().RunID, nil
 	case *persistence.CurrentWorkflowConditionFailedError:
 		if failedErr.RequestID == requestID {
 			return failedErr.RunID, nil
