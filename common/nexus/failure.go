@@ -26,6 +26,7 @@ import (
 	"encoding/json"
 
 	"github.com/nexus-rpc/sdk-go/nexus"
+	failurepb "go.temporal.io/api/failure/v1"
 	nexuspb "go.temporal.io/api/nexus/v1"
 )
 
@@ -45,5 +46,14 @@ func ProtoFailureToNexusFailure(failure *nexuspb.Failure) *nexus.Failure {
 		Message:  failure.GetMessage(),
 		Metadata: failure.GetMetadata(),
 		Details:  details,
+	}
+}
+
+// APIFailureToNexusFailure converts an API proto Failure to a Nexus SDK Failure taking only the failure message to
+// avoid leaking too many details to 3rd party callers.
+// Always returns a non-nil value.
+func APIFailureToNexusFailure(failure *failurepb.Failure) *nexus.Failure {
+	return &nexus.Failure{
+		Message: failure.GetMessage(),
 	}
 }

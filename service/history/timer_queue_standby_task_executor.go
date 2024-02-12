@@ -462,7 +462,7 @@ func (t *timerQueueStandbyTaskExecutor) processTimer(
 		}
 	}()
 
-	mutableState, err := loadMutableStateForTimerTask(ctx, t.shardContext, executionContext, timerTask, t.metricHandler, t.logger)
+	mutableState, err := loadMutableStateForTimerTask(ctx, t.shardContext, executionContext, timerTask, t.metricsHandler, t.logger)
 	if err != nil {
 		return err
 	}
@@ -512,7 +512,7 @@ func (t *timerQueueStandbyTaskExecutor) fetchHistoryFromRemote(
 		return err
 	}
 
-	scope := t.metricHandler.WithTags(metrics.OperationTag(metrics.HistoryRereplicationByTimerTaskScope))
+	scope := t.metricsHandler.WithTags(metrics.OperationTag(metrics.HistoryRereplicationByTimerTaskScope))
 	scope.Counter(metrics.ClientRequests.Name()).Record(1)
 	startTime := time.Now()
 	defer func() { scope.Timer(metrics.ClientLatency.Name()).Record(time.Since(startTime)) }()

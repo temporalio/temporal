@@ -240,8 +240,8 @@ github.com/modern-go/reflect2 v0.0.0-20180701023420-4b7aa43c6742/go.mod h1:bx2lN
 github.com/modern-go/reflect2 v1.0.1/go.mod h1:bx2lNnkwVCuqBIxFjflWJWanXIb3RllmbCylyMrvgv0=
 github.com/mwitkow/go-conntrack v0.0.0-20161129095857-cc309e4a2223/go.mod h1:qRWi+5nqEBWmkhHvq77mSJWrCKwh8bxhgT7d/eI7P4U=
 github.com/mwitkow/go-conntrack v0.0.0-20190716064945-2f068394615f/go.mod h1:qRWi+5nqEBWmkhHvq77mSJWrCKwh8bxhgT7d/eI7P4U=
-github.com/nexus-rpc/sdk-go v0.0.5 h1:AVSfCqkqOkvaT/Ab0JaGDpStv0Xtb7POq5Eed+CF13M=
-github.com/nexus-rpc/sdk-go v0.0.5/go.mod h1:uBe8fX151zUW9DhXxwHjji19d6YfnNUqJ81tR3JbwHY=
+github.com/nexus-rpc/sdk-go v0.0.6 h1:WIaM2OneI/0SlNCkwZjImWElGF3z5C+Xnc/UX4xLHuc=
+github.com/nexus-rpc/sdk-go v0.0.6/go.mod h1:uBe8fX151zUW9DhXxwHjji19d6YfnNUqJ81tR3JbwHY=
 github.com/niemeyer/pretty v0.0.0-20200227124842-a10e7caefd8e/go.mod h1:zD1mROLANZcx1PVRCS0qkT7pwLkGfwJo4zjcN/Tysno=
 github.com/olekukonko/tablewriter v0.0.5 h1:P2Ga83D34wi1o9J6Wh1mRuqd4mF/x/lgBS7N7AbDhec=
 github.com/olekukonko/tablewriter v0.0.5/go.mod h1:hPp6KlRPjbx+hW8ykQs1w3UBbZlj6HuIJcUGPhkA7kY=

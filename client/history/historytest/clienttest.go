@@ -52,7 +52,9 @@ import (
 )
 
 // fakeTracerProvider is needed to construct a [historyserver.Handler] object.
-type fakeTracerProvider struct{}
+type fakeTracerProvider struct {
+	trace.TracerProvider
+}
 
 func (f fakeTracerProvider) Tracer(string, ...trace.TracerOption) trace.Tracer {
 	return nil

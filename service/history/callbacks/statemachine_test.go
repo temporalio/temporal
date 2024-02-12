@@ -38,22 +38,6 @@ import (
 	"go.temporal.io/server/service/history/tasks"
 )
 
-func TestMarkedReady(t *testing.T) {
-	env := &statemachines.MockEnvironment{
-		Version: 3,
-	}
-	info := &persistencespb.CallbackInfo{
-		PublicInfo: &workflowpb.CallbackInfo{
-			State: enumspb.CALLBACK_STATE_STANDBY,
-		},
-	}
-	err := callbacks.TransitionMarkedReady.Apply(info, callbacks.EventMarkedReady{}, env)
-	require.NoError(t, err)
-	// Use this test to verify version and state are synced.
-	require.Equal(t, int64(3), info.Version)
-	require.Equal(t, enumspb.CALLBACK_STATE_READY, info.PublicInfo.State)
-}
-
 func TestValidTransitions(t *testing.T) {
 	// Setup
 	env := &statemachines.MockEnvironment{
@@ -88,12 +72,12 @@ func TestValidTransitions(t *testing.T) {
 	// Assert backoff task is generated
 	require.Equal(t, 1, len(env.ScheduledTasks))
 	boTask := env.ScheduledTasks[0].(*tasks.CallbackBackoffTask)
-	require.Equal(t, info.PublicInfo.Attempt, boTask.Attempt)
+	require.Equal(t, info.TransitionCount, boTask.TransitionCount)
 	require.Equal(t, "ID", boTask.CallbackID)
 	require.Equal(t, info.PublicInfo.NextAttemptScheduleTime.AsTime(), boTask.VisibilityTimestamp)
 
-	// Scheduled
-	err = callbacks.TransitionScheduled.Apply(info, callbacks.EventScheduled{}, env)
+	// Rescheduled
+	err = callbacks.TransitionRescheduled.Apply(info, callbacks.EventRescheduled{}, env)
 	require.NoError(t, err)
 
 	// Assert info object is updated only where needed
@@ -106,7 +90,7 @@ func TestValidTransitions(t *testing.T) {
 	// Assert callback task is generated
 	require.Equal(t, 2, len(env.ScheduledTasks))
 	cbTask := env.ScheduledTasks[1].(*tasks.CallbackTask)
-	require.Equal(t, info.PublicInfo.Attempt, cbTask.Attempt)
+	require.Equal(t, info.TransitionCount, cbTask.TransitionCount)
 	require.Equal(t, "ID", cbTask.CallbackID)
 	require.Equal(t, "address:666", cbTask.DestinationAddress)
 
