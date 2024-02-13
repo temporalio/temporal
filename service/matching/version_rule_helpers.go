@@ -198,17 +198,16 @@ func DeleteAssignmentRule(timestamp *hlc.Clock,
 	return data, checkAssignmentConditions(data, 0, req.GetForce(), hadUnfiltered)
 }
 
-// checkRedirectConditions returns an error if there is no room for the new Redirect Rule, or if it causes the
-// queue to fail the other requirements
+// checkRedirectConditions returns an error if the new set of redirect rules don't meet the following requirements:
+// - No more rules than dynamicconfig.VersionRedirectRuleLimitPerQueue
+// - The DAG of redirect rules must not contain a cycle
 func checkRedirectConditions(g *persistencepb.VersioningData, maxRRs int) error {
 	rules := g.GetRedirectRules()
 	if maxRRs > 0 && countActiveRR(rules) > maxRRs {
-		if trimRedirectRules(rules) < 1 {
-			return serviceerror.NewFailedPrecondition(fmt.Sprintf("update would exceed number of redirect rules permitted in namespace dynamic config (%v/%v)", len(rules), maxRRs))
-		}
+		return serviceerror.NewFailedPrecondition(fmt.Sprintf("update would exceed number of redirect rules permitted in namespace dynamic config (%v/%v)", len(rules), maxRRs))
 	}
 	if isCyclic(rules) {
-		return serviceerror.NewFailedPrecondition("update breaks requirement that at least one assignment rule must have no ramp or hint")
+		return serviceerror.NewFailedPrecondition("update would break acyclic requirement")
 	}
 	return nil
 }
@@ -223,15 +222,50 @@ func countActiveRR(rules []*persistencepb.RedirectRule) int {
 	return cnt
 }
 
-// trimRedirectRules attempts to trim the DAG of redirect rules. It returns the number of rules it was able to delete.
-func trimRedirectRules(rules []*persistencepb.RedirectRule) int {
-	// todo carly: redirect rule PR
-	return 0
+// isCyclic returns true if there is a cycle in the DAG of redirect rules.
+func isCyclic(rules []*persistencepb.RedirectRule) bool {
+	dag := makeEdgeMap(rules)
+	for node := range dag {
+		visited := make(map[string]bool)
+		inStack := make(map[string]bool)
+		if dfs(node, visited, inStack, dag) {
+			return true
+		}
+	}
+	return false
 }
 
-func isCyclic(rules []*persistencepb.RedirectRule) bool {
-	// todo carly: redirect rule PR
-	return true
+func makeEdgeMap(rules []*persistencepb.RedirectRule) map[string][]string {
+	ret := make(map[string][]string)
+	for _, rule := range rules {
+		src := rule.GetRule().GetSourceBuildId()
+		dst := rule.GetRule().GetTargetBuildId()
+		list, ok := ret[src]
+		if !ok {
+			list = make([]string, 0)
+		}
+		list = append(list, dst)
+		ret[src] = list
+	}
+	return ret
+}
+
+func dfs(curr string, visited, inStack map[string]bool, nodes map[string][]string) bool {
+	if inStack[curr] {
+		return true
+	}
+	if visited[curr] {
+		return false
+	}
+	visited[curr] = true
+	inStack[curr] = true
+	for _, dst := range nodes[curr] {
+		if dfs(dst, visited, inStack, nodes) {
+			return true
+		}
+	}
+	inStack[curr] = false
+	return false
 }
 
 func InsertCompatibleRedirectRule(timestamp *hlc.Clock,
@@ -243,34 +277,54 @@ func InsertCompatibleRedirectRule(timestamp *hlc.Clock,
 	} else {
 		data = common.CloneProto(data)
 	}
-	persistenceCRR := persistencepb.RedirectRule{
-		Rule:            req.GetRule(),
-		CreateTimestamp: timestamp,
-		DeleteTimestamp: nil,
-	}
-	src := req.GetRule().GetSourceBuildId()
+	rule := req.GetRule()
+	src := rule.GetSourceBuildId()
 	rules := data.GetRedirectRules()
-	for _, rule := range rules {
-		if rule.GetRule().GetSourceBuildId() == src {
+	for _, r := range rules {
+		if r.GetDeleteTimestamp() != nil && r.GetRule().GetSourceBuildId() == src {
 			return nil, serviceerror.NewAlreadyExist(fmt.Sprintf(
-				"there can only be one redirect rule per distinct source ID. source %s already redirects to target %s", src, rule.GetRule().GetTargetBuildId(),
+				"cannot insert: source %s already redirects to target %s",
+				src, r.GetRule().GetTargetBuildId(),
 			))
 		}
 	}
-	slices.Insert(data.GetRedirectRules(), 0, &persistenceCRR)
+	persistenceCRR := persistencepb.RedirectRule{
+		Rule:            rule,
+		CreateTimestamp: timestamp,
+		DeleteTimestamp: nil,
+	}
+	data.RedirectRules = slices.Insert(rules, 0, &persistenceCRR)
 	return data, checkRedirectConditions(data, maxRRs)
 }
 
 func ReplaceCompatibleRedirectRule(timestamp *hlc.Clock,
 	data *persistencepb.VersioningData,
 	req *workflowservice.UpdateWorkerVersioningRulesRequest_ReplaceCompatibleBuildIdRedirectRule) (*persistencepb.VersioningData, error) {
-	return nil, nil
+	data = common.CloneProto(data)
+	rule := req.GetRule()
+	src := rule.GetSourceBuildId()
+	for _, r := range data.GetRedirectRules() {
+		if r.GetDeleteTimestamp() != nil && r.GetRule().GetSourceBuildId() == src {
+			r.Rule = rule
+			r.CreateTimestamp = timestamp
+			return data, checkRedirectConditions(data, 0)
+		}
+	}
+	return nil, serviceerror.NewNotFound(fmt.Sprintf("cannot replace: no redirect rule found with source ID %s", src))
 }
 
 func DeleteCompatibleRedirectRule(timestamp *hlc.Clock,
 	data *persistencepb.VersioningData,
 	req *workflowservice.UpdateWorkerVersioningRulesRequest_DeleteCompatibleBuildIdRedirectRule) (*persistencepb.VersioningData, error) {
-	return nil, nil
+	data = common.CloneProto(data)
+	src := req.GetSourceBuildId()
+	for _, r := range data.GetRedirectRules() {
+		if r.GetDeleteTimestamp() != nil && r.GetRule().GetSourceBuildId() == src {
+			r.DeleteTimestamp = timestamp
+			return data, checkRedirectConditions(data, 0)
+		}
+	}
+	return nil, serviceerror.NewNotFound(fmt.Sprintf("cannot delete: no redirect rule found with source ID %s", src))
 }
 
 // CleanupRuleTombstones clears all deleted rules from versioning data if the rule was deleted more than
