@@ -374,7 +374,7 @@ func (h *HistoryStore) GetAllHistoryTreeBranches(
 // GetHistoryTree returns all branch information of a tree
 func (h *HistoryStore) GetHistoryTree(
 	ctx context.Context,
-	request *p.GetHistoryTreeRequest,
+	request *p.InternalGetHistoryTreeRequest,
 ) (*p.InternalGetHistoryTreeResponse, error) {
 
 	treeID, err := primitives.ValidateUUID(request.TreeID)

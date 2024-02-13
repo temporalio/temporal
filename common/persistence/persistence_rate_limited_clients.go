@@ -806,18 +806,6 @@ func (p *executionRateLimitedPersistenceClient) TrimHistoryBranch(
 	return resp, err
 }
 
-// GetHistoryTree returns all branch information of a tree
-func (p *executionRateLimitedPersistenceClient) GetHistoryTree(
-	ctx context.Context,
-	request *GetHistoryTreeRequest,
-) (*GetHistoryTreeResponse, error) {
-	if ok := allow(ctx, "GetHistoryTree", request.ShardID, p.rateLimiter); !ok {
-		return nil, ErrPersistenceLimitExceeded
-	}
-	response, err := p.persistence.GetHistoryTree(ctx, request)
-	return response, err
-}
-
 func (p *executionRateLimitedPersistenceClient) GetAllHistoryTreeBranches(
 	ctx context.Context,
 	request *GetAllHistoryTreeBranchesRequest,

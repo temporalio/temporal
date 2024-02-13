@@ -466,7 +466,7 @@ func (m *sqlExecutionStore) GetAllHistoryTreeBranches(
 // GetHistoryTree returns all branch information of a tree
 func (m *sqlExecutionStore) GetHistoryTree(
 	ctx context.Context,
-	request *p.GetHistoryTreeRequest,
+	request *p.InternalGetHistoryTreeRequest,
 ) (*p.InternalGetHistoryTreeResponse, error) {
 	treeID, err := primitives.ParseUUID(request.TreeID)
 	if err != nil {

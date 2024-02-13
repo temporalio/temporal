@@ -455,7 +455,7 @@ func (m *executionManagerImpl) serializeWorkflowEventBatches(
 	xdcKVs := make(map[XDCCacheKey]XDCCacheValue, len(eventBatches))
 	workflowNewEvents := make([]*InternalAppendHistoryNodesRequest, 0, len(eventBatches))
 	for _, workflowEvents := range eventBatches {
-		newEvents, err := m.serializeWorkflowEvents(ctx, shardID, workflowEvents)
+		newEvents, err := m.serializeWorkflowEvents(shardID, workflowEvents)
 		if err != nil {
 			return nil, nil, nil, err
 		}
@@ -518,7 +518,6 @@ func (m *executionManagerImpl) DeserializeBufferedEvents( // unexport
 }
 
 func (m *executionManagerImpl) serializeWorkflowEvents(
-	ctx context.Context,
 	shardID int32,
 	workflowEvents *WorkflowEvents,
 ) (*InternalAppendHistoryNodesRequest, error) {
@@ -539,7 +538,7 @@ func (m *executionManagerImpl) serializeWorkflowEvents(
 		request.Info = BuildHistoryGarbageCleanupInfo(workflowEvents.NamespaceID, workflowEvents.WorkflowID, workflowEvents.RunID)
 	}
 
-	return m.serializeAppendHistoryNodesRequest(ctx, request)
+	return m.serializeAppendHistoryNodesRequest(request)
 }
 
 func (m *executionManagerImpl) SerializeWorkflowMutation( // unexport
