@@ -1,9 +1,11 @@
 name: All Tests
 
 on:
+  pull_request:
   push:
     branches:
       - main
+      - release/**
 
   workflow_dispatch:
     inputs:
@@ -12,7 +14,7 @@ on:
         required: true
 
 concurrency: # Auto-cancel existing runs in the PR when a new commit is pushed
-  group: ${{ github.head_ref || github.run_id }}
+  group: run-tests-${{ github.head_ref || github.run_id }}
   cancel-in-progress: true
 
 env:
@@ -23,7 +25,11 @@ env:
 jobs:
   misc-checks:
     name: Misc checks
-    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        runs-on: [ubuntu-latest]
+    runs-on: ${{ matrix.runs-on }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -42,14 +48,33 @@ jobs:
 
       - run: make build-tests
 
+  cache-docker-images:
+    name: Cache Docker images
+    strategy:
+      fail-fast: false
+      matrix:
+        runs-on: [ubuntu-latest]
+    runs-on: ${{ matrix.runs-on }}
+    steps:
+      - uses: ScribeMD/docker-cache@0.3.7
+        with:
+          key: docker-${{ runner.os }}-${{ hashFiles(env.DOCKER_COMPOSE_FILE) }}
+
+      - uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          ref: ${{ env.COMMIT }}
+
+      - run: docker-compose -f ${{ env.DOCKER_COMPOSE_FILE }} pull
+
   unit-test:
     name: Unit test
     needs: misc-checks
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest]
-    runs-on: ${{ matrix.os }}
+        runs-on: [ubuntu-latest]
+    runs-on: ${{ matrix.runs-on }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -61,22 +86,23 @@ jobs:
           go-version-file: 'go.mod'
           check-latest: true
 
-      - name: Run unit tests
-        uses: nick-fields/retry@v2
-        with:
-          timeout_minutes: 20
-          max_attempts: 2
-          command: make unit-test-coverage
+      - name: Run unit test
+        timeout-minutes: 15
+        run: make unit-test-coverage
 
   integration-test:
     name: Integration test
-    needs: misc-checks
+    needs: [misc-checks, cache-docker-images]
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest]
-    runs-on: ${{ matrix.os }}
+        runs-on: [ubuntu-latest]
+    runs-on: ${{ matrix.runs-on }}
     steps:
+      - uses: ScribeMD/docker-cache@0.3.7
+        with:
+          key: docker-${{ runner.os }}-${{ hashFiles(env.DOCKER_COMPOSE_FILE) }}
+
       - uses: actions/checkout@v4
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
@@ -91,12 +117,9 @@ jobs:
         run: |
           docker-compose -f ${{ env.DOCKER_COMPOSE_FILE }} up -d cassandra mysql postgresql
 
-      - name: Run integration tests
-        uses: nick-fields/retry@v2
-        with:
-          timeout_minutes: 20
-          max_attempts: 2
-          command: make integration-test-coverage
+      - name: Run integration test
+        timeout-minutes: 15
+        run: make integration-test-coverage
 
       - name: Tear down docker compose
         if: ${{ always() }}
@@ -105,11 +128,11 @@ jobs:
 
   functional-test:
     name: Functional test
-    needs: misc-checks
+    needs: [misc-checks, cache-docker-images]
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest]
+        runs-on: [ubuntu-latest]
         name: [cass_es, cass_es8, sqlite, mysql, mysql8, postgres, postgres_pgx, postgres12, postgres12_pgx]
         shard_index: [0, 1, 2]
         include:
@@ -149,10 +172,17 @@ jobs:
             persistence_type: sql
             persistence_driver: postgres12_pgx
             containers: [postgresql]
-    runs-on: ${{ matrix.os }}
+    runs-on: ${{ matrix.runs-on }}
     env:
       TEST_TOTAL_SHARDS: 3
+      TEST_SHARD_INDEX: ${{ matrix.shard_index }}
+      PERSISTENCE_TYPE: ${{ matrix.persistence_type }}
+      PERSISTENCE_DRIVER: ${{ matrix.persistence_driver }}
     steps:
+      - uses: ScribeMD/docker-cache@0.3.7
+        with:
+          key: docker-${{ runner.os }}-${{ hashFiles(env.DOCKER_COMPOSE_FILE) }}
+
       - uses: actions/checkout@v4
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
@@ -168,16 +198,9 @@ jobs:
         run: |
           docker-compose -f ${{ env.DOCKER_COMPOSE_FILE }} up -d ${{ join(matrix.containers, ' ') }}
 
-      - name: Run functional tests
-        uses: nick-fields/retry@v2
-        with:
-          timeout_minutes: 15
-          max_attempts: 2
-          command: make functional-test-coverage
-        env:
-          TEST_SHARD_INDEX: ${{ matrix.shard_index }}
-          PERSISTENCE_TYPE: ${{ matrix.persistence_type }}
-          PERSISTENCE_DRIVER: ${{ matrix.persistence_driver }}
+      - name: Run functional test
+        timeout-minutes: 15
+        run: make functional-test-coverage
 
       - name: Tear down docker compose
         if: ${{ always() }}
@@ -186,11 +209,11 @@ jobs:
 
   functional-test-xdc:
     name: Functional test xdc
-    needs: misc-checks
+    needs: [misc-checks, cache-docker-images]
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest]
+        runs-on: [ubuntu-latest]
         name: [cass_es, cass_es8, mysql, mysql8, postgres, postgres_pgx, postgres12, postgres12_pgx]
         include:
           - name: cass_es
@@ -225,8 +248,15 @@ jobs:
             persistence_type: sql
             persistence_driver: postgres12_pgx
             containers: [postgresql]
-    runs-on: ${{ matrix.os }}
+    runs-on: ${{ matrix.runs-on }}
+    env:
+      PERSISTENCE_TYPE: ${{ matrix.persistence_type }}
+      PERSISTENCE_DRIVER: ${{ matrix.persistence_driver }}
     steps:
+      - uses: ScribeMD/docker-cache@0.3.7
+        with:
+          key: docker-${{ runner.os }}-${{ hashFiles(env.DOCKER_COMPOSE_FILE) }}
+
       - uses: actions/checkout@v4
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
@@ -243,14 +273,8 @@ jobs:
           docker-compose -f ${{ env.DOCKER_COMPOSE_FILE }} up -d ${{ join(matrix.containers, ' ') }}
 
       - name: Run functional test xdc
-        uses: nick-fields/retry@v2
-        with:
-          timeout_minutes: 15
-          max_attempts: 2
-          command: make functional-test-xdc-coverage
-        env:
-          PERSISTENCE_TYPE: ${{ matrix.persistence_type }}
-          PERSISTENCE_DRIVER: ${{ matrix.persistence_driver }}
+        timeout-minutes: 15
+        run: make functional-test-xdc-coverage
 
       - name: Tear down docker compose
         if: ${{ always() }}
@@ -259,11 +283,11 @@ jobs:
 
   functional-test-ndc:
     name: Functional test ndc
-    needs: misc-checks
+    needs: [misc-checks, cache-docker-images]
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest]
+        runs-on: [ubuntu-latest]
         name: [cass_es, cass_es8, mysql, mysql8, postgres, postgres_pgx, postgres12, postgres12_pgx]
         include:
           - name: cass_es
@@ -298,8 +322,15 @@ jobs:
             persistence_type: sql
             persistence_driver: postgres12_pgx
             containers: [postgresql]
-    runs-on: ${{ matrix.os }}
+    runs-on: ${{ matrix.runs-on }}
+    env:
+      PERSISTENCE_TYPE: ${{ matrix.persistence_type }}
+      PERSISTENCE_DRIVER: ${{ matrix.persistence_driver }}
     steps:
+      - uses: ScribeMD/docker-cache@0.3.7
+        with:
+          key: docker-${{ runner.os }}-${{ hashFiles(env.DOCKER_COMPOSE_FILE) }}
+
       - uses: actions/checkout@v4
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
@@ -316,14 +347,8 @@ jobs:
           docker-compose -f ${{ env.DOCKER_COMPOSE_FILE }} up -d ${{ join(matrix.containers, ' ') }}
 
       - name: Run functional test ndc
-        uses: nick-fields/retry@v2
-        with:
-          timeout_minutes: 15
-          max_attempts: 2
-          command: make functional-test-ndc-coverage
-        env:
-          PERSISTENCE_TYPE: ${{ matrix.persistence_type }}
-          PERSISTENCE_DRIVER: ${{ matrix.persistence_driver }}
+        timeout-minutes: 15
+        run: make functional-test-ndc-coverage
 
       - name: Tear down docker compose
         if: ${{ always() }}
