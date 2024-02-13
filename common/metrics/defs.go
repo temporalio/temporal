@@ -77,10 +77,6 @@ func NewBytesHistogramDef(name string, opts ...Option) histogramDefinition {
 	return histogramDefinition{globalRegistry.register(name, append(opts, WithUnit(Bytes))...)}
 }
 
-func NewMillisecondsHistogramDef(name string, opts ...Option) histogramDefinition {
-	return histogramDefinition{globalRegistry.register(name, append(opts, WithUnit(Milliseconds))...)}
-}
-
 func NewDimensionlessHistogramDef(name string, opts ...Option) histogramDefinition {
 	return histogramDefinition{globalRegistry.register(name, append(opts, WithUnit(Dimensionless))...)}
 }
