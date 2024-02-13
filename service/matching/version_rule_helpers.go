@@ -67,12 +67,6 @@ func getActiveAssignmentRules(rules []*persistencepb.AssignmentRule) []*persiste
 	})
 }
 
-func getActiveRedirectRules(rules []*persistencepb.RedirectRule) []*persistencepb.RedirectRule {
-	return util.FilterSlice(rules, func(ar *persistencepb.RedirectRule) bool {
-		return ar.DeleteTimestamp == nil
-	})
-}
-
 func isUnfiltered(ar *taskqueue.BuildIdAssignmentRule) bool {
 	percentageRamp := ar.GetPercentageRamp()
 	return ar.GetFilterExpression() == "" &&
