@@ -1853,12 +1853,22 @@ func (ms *MutableStateImpl) ApplyWorkflowExecutionStartedEvent(
 	startEvent *historypb.HistoryEvent,
 ) error {
 
+	if ms.executionInfo.NamespaceId != ms.namespaceEntry.ID().String() {
+		return serviceerror.NewInternal(fmt.Sprintf("applying conflicting namespace ID: %v != %v",
+			ms.executionInfo.NamespaceId, ms.namespaceEntry.ID().String()))
+	}
+	if ms.executionInfo.WorkflowId != execution.GetWorkflowId() {
+		return serviceerror.NewInternal(fmt.Sprintf("applying conflicting workflow ID: %v != %v",
+			ms.executionInfo.WorkflowId, execution.GetWorkflowId()))
+	}
+	if ms.executionState.RunId != execution.GetRunId() {
+		return serviceerror.NewInternal(fmt.Sprintf("applying conflicting run ID: %v != %v",
+			ms.executionState.RunId, execution.GetRunId()))
+	}
+
 	ms.approximateSize -= ms.executionInfo.Size()
 	event := startEvent.GetWorkflowExecutionStartedEventAttributes()
 	ms.executionState.CreateRequestId = requestID
-	ms.executionState.RunId = execution.GetRunId()
-	ms.executionInfo.NamespaceId = ms.namespaceEntry.ID().String()
-	ms.executionInfo.WorkflowId = execution.GetWorkflowId()
 	ms.executionInfo.FirstExecutionRunId = event.GetFirstExecutionRunId()
 	ms.executionInfo.TaskQueue = event.TaskQueue.GetName()
 	ms.executionInfo.WorkflowTypeName = event.WorkflowType.GetName()
