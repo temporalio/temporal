@@ -464,11 +464,16 @@ func (m *sqlExecutionStore) GetAllHistoryTreeBranches(
 }
 
 // GetHistoryTree returns all branch information of a tree
-func (m *sqlExecutionStore) GetHistoryTree(
+func (m *sqlExecutionStore) GetHistoryTreeContainingBranch(
 	ctx context.Context,
-	request *p.InternalGetHistoryTreeRequest,
-) (*p.InternalGetHistoryTreeResponse, error) {
-	treeID, err := primitives.ParseUUID(request.TreeID)
+	request *p.InternalGetHistoryTreeContainingBranchRequest,
+) (*p.InternalGetHistoryTreeContainingBranchResponse, error) {
+	branch, err := m.GetHistoryBranchUtil().ParseHistoryBranchInfo(request.BranchToken)
+	if err != nil {
+		return nil, err
+	}
+
+	treeID, err := primitives.ParseUUID(branch.TreeId)
 	if err != nil {
 		return nil, err
 	}
@@ -478,14 +483,14 @@ func (m *sqlExecutionStore) GetHistoryTree(
 		ShardID: request.ShardID,
 	})
 	if err == sql.ErrNoRows || (err == nil && len(rows) == 0) {
-		return &p.InternalGetHistoryTreeResponse{}, nil
+		return &p.InternalGetHistoryTreeContainingBranchResponse{}, nil
 	}
 	treeInfos := make([]*commonpb.DataBlob, 0, len(rows))
 	for _, row := range rows {
 		treeInfos = append(treeInfos, p.NewDataBlob(row.Data, row.DataEncoding))
 	}
 
-	return &p.InternalGetHistoryTreeResponse{
+	return &p.InternalGetHistoryTreeContainingBranchResponse{
 		TreeInfos: treeInfos,
 	}, nil
 }
