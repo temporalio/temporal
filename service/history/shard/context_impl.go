@@ -1225,6 +1225,9 @@ func (s *ContextImpl) updateShardInfo(
 
 	// update lastUpdate here so that we don't have to grab shard lock again if UpdateShard is successful
 	previousLastUpdate := s.lastUpdated
+	metrics.TasksCompletedPerShardInfoUpdate.With(s.metricsHandler).Record(int64(s.tasksCompletedSinceLastUpdate))
+	metrics.TimeBetweenShardInfoUpdates.With(s.metricsHandler).Record(now.Sub(previousLastUpdate).Milliseconds())
+
 	s.lastUpdated = now
 	s.tasksCompletedSinceLastUpdate = 0
 
