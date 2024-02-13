@@ -785,6 +785,30 @@ func (s *contextSuite) TestUpdateShardInfo_PersistsBeforeInterval_WhenEnoughTask
 	s.Equal(3, timesCalled)
 }
 
+func (s *contextSuite) TestUpdateShardInfo_OnlyPersistsAfterInterval_WhenTaskCheckingDisabled() {
+	s.mockShard.state = contextStateAcquired
+	s.mockShardManager.EXPECT().UpdateShard(gomock.Any(), gomock.Any()).
+		Return(nil).Times(2)
+
+	// Anything less than one disables the task counting logic
+	s.mockShard.config.ShardUpdateMinTasksCompleted = func() int { return 0 }
+
+	var timesCalled int
+	callback := func() {
+		timesCalled++
+	}
+
+	// Not enough time passed and with task tracking disabled, this is ignored
+	err := s.mockShard.updateShardInfo(10000000, callback)
+	s.NoError(err)
+
+	// Time passes
+	s.timeSource.Update(time.Now().Add(s.mockShard.config.ShardUpdateMinInterval()))
+	err = s.mockShard.updateShardInfo(0, callback)
+	s.NoError(err)
+	s.Equal(2, timesCalled)
+}
+
 func (s *contextSuite) TestUpdateShardInfo_FailsUnlessShardAcquired() {
 	for _, state := range []contextState{
 		contextStateInitialized, contextStateAcquiring, contextStateStopping, contextStateStopped,

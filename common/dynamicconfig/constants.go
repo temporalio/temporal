@@ -745,8 +745,9 @@ const (
 	MaximumSignalsPerExecution = "history.maximumSignalsPerExecution"
 	// ShardUpdateMinInterval is the minimal time interval which the shard info can be updated
 	ShardUpdateMinInterval = "history.shardUpdateMinInterval"
-	// ShardUpdateMinTasksCompleted is the minimum number of tasks which must be completed before the shard info can be updated before
-	// history.shardUpdateMinInterval has passed
+	// ShardUpdateMinTasksCompleted is the minimum number of tasks which must be completed (across all queues) before the shard info can be updated.
+	// Note that once history.shardUpdateMinInterval amount of time has passed we'll update the shard info regardless of the number of tasks completed.
+	// When the this config is zero or lower we will only update shard info at most once every history.shardUpdateMinInterval.
 	ShardUpdateMinTasksCompleted = "history.shardUpdateMinTasksCompleted"
 	// ShardSyncMinInterval is the minimal time interval which the shard info should be sync to remote
 	ShardSyncMinInterval = "history.shardSyncMinInterval"

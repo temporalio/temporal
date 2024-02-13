@@ -389,6 +389,7 @@ func (s *ContextImpl) UpdateReplicationQueueReaderState(
 	readerID int64,
 	readerState *persistencespb.QueueReaderState,
 ) error {
+	// TODO(timods): Determine whether this makes sense for replication
 	return s.updateShardInfo(0, func() {
 		categoryID := tasks.CategoryReplication.ID()
 		queueState, ok := s.shardInfo.QueueStates[int32(categoryID)]
@@ -462,6 +463,7 @@ func (s *ContextImpl) UpdateReplicatorDLQAckLevel(
 	sourceCluster string,
 	ackLevel int64,
 ) error {
+	// TODO(timods): Determine whether this makes sense for replication
 	if err := s.updateShardInfo(0, func() {
 		s.shardInfo.ReplicationDlqAckLevel[sourceCluster] = ackLevel
 	}); err != nil {
@@ -1212,10 +1214,11 @@ func (s *ContextImpl) updateShardInfo(
 	s.shardInfo.StolenSinceRenew = 0
 
 	now := s.timeSource.Now()
-	notFirstUpdate := !s.lastUpdated.IsZero()
-	notEnoughTasksCompleted := s.tasksCompletedSinceLastUpdate < s.config.ShardUpdateMinTasksCompleted()
 	tooEarly := s.lastUpdated.Add(s.config.ShardUpdateMinInterval()).After(now)
-	if notFirstUpdate && notEnoughTasksCompleted && tooEarly {
+	minTasksUntilUpdate := s.config.ShardUpdateMinTasksCompleted()
+	// If ShardUpdateMinTasksCompleted is set to 0 then we only care about whether enough time has passed
+	tooFewTasksCompleted := minTasksUntilUpdate <= 0 || s.tasksCompletedSinceLastUpdate < minTasksUntilUpdate
+	if tooFewTasksCompleted && tooEarly {
 		s.wUnlock()
 		return nil
 	}
