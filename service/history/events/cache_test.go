@@ -37,12 +37,10 @@ import (
 	historypb "go.temporal.io/api/history/v1"
 
 	"go.temporal.io/server/common"
-	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence"
-	"go.temporal.io/server/service/history/configs"
 )
 
 type (
@@ -88,17 +86,12 @@ func (s *eventsCacheSuite) TearDownTest() {
 }
 
 func (s *eventsCacheSuite) newTestEventsCache() *CacheImpl {
-	config := configs.Config{
-		EventsCacheTTL:                   dynamicconfig.GetDurationPropertyFn(time.Minute),
-		EventsHostLevelCacheMaxSizeBytes: dynamicconfig.GetIntPropertyFn(32),
-	}
-	return NewHostLevelEventsCache(
-		s.mockExecutionManager,
-		&config,
+	return newEventsCache(s.mockExecutionManager,
 		metrics.NoopMetricsHandler,
 		s.logger,
-		false,
-	)
+		32,
+		time.Minute,
+		false)
 }
 
 func (s *eventsCacheSuite) TestEventsCacheHitSuccess() {
