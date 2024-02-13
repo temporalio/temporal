@@ -129,7 +129,7 @@ type (
 		clusterMeta            cluster.Metadata
 		timeSource             clock.TimeSource
 		visibilityManager      manager.VisibilityManager
-		incomingServiceManager *incomingServiceManager
+		incomingServiceManager *incomingNexusServiceManager
 		metricsHandler         metrics.Handler
 		taskQueuesLock         sync.RWMutex // locks mutation of taskQueues
 		taskQueues             map[taskQueueID]taskQueueManager
