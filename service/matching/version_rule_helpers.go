@@ -45,7 +45,7 @@ import (
 // - If there existed an "unfiltered" assigment rule (which can accept any task), at least one must still exist
 // - To override the unfiltered assignment rule requirement, the user can specify force = true
 func checkAssignmentConditions(g *persistencepb.VersioningData, maxARs int, force, hadUnfiltered bool) error {
-	activeRules := getActiveRules(slices.Clone(g.GetAssignmentRules()))
+	activeRules := getActiveAssignmentRules(slices.Clone(g.GetAssignmentRules()))
 	if cnt := len(activeRules); maxARs > 0 && cnt > maxARs {
 		return serviceerror.NewFailedPrecondition(fmt.Sprintf("update exceeds number of assignment rules permitted in namespace (%v/%v)", cnt, maxARs))
 	}
@@ -61,21 +61,28 @@ func checkAssignmentConditions(g *persistencepb.VersioningData, maxARs int, forc
 	return nil
 }
 
-func getActiveRules(rules []*persistencepb.AssignmentRule) []*persistencepb.AssignmentRule {
+func getActiveAssignmentRules(rules []*persistencepb.AssignmentRule) []*persistencepb.AssignmentRule {
 	return util.FilterSlice(rules, func(ar *persistencepb.AssignmentRule) bool {
 		return ar.DeleteTimestamp == nil
 	})
 }
 
+func getActiveRedirectRules(rules []*persistencepb.RedirectRule) []*persistencepb.RedirectRule {
+	return util.FilterSlice(rules, func(ar *persistencepb.RedirectRule) bool {
+		return ar.DeleteTimestamp == nil
+	})
+}
+
+func isUnfiltered(ar *taskqueue.BuildIdAssignmentRule) bool {
+	percentageRamp := ar.GetPercentageRamp()
+	return ar.GetFilterExpression() == "" &&
+		ar.GetWorkerRatioRamp() == nil &&
+		(percentageRamp == nil || (percentageRamp != nil && percentageRamp.RampPercentage == 100))
+}
+
 // containsUnfiltered returns true if there exists an assignment rule with no filter expression,
 // no worker ratio ramp, and no ramp percentage, or a ramp percentage of 100
 func containsUnfiltered(rules []*persistencepb.AssignmentRule) bool {
-	isUnfiltered := func(ar *taskqueue.BuildIdAssignmentRule) bool {
-		percentageRamp := ar.GetPercentageRamp()
-		return ar.GetFilterExpression() == "" &&
-			ar.GetWorkerRatioRamp() == nil &&
-			(percentageRamp == nil || (percentageRamp != nil && percentageRamp.RampPercentage == 100))
-	}
 	found := false
 	for _, rule := range rules {
 		ar := rule.GetRule()
@@ -171,7 +178,8 @@ func ReplaceAssignmentRule(timestamp *hlc.Clock,
 	idx := req.GetRuleIndex()
 	actualIdx := given2ActualIdx(idx, rules)
 	if actualIdx < 0 {
-		return nil, serviceerror.NewInvalidArgument(fmt.Sprintf("rule index %d is out of bounds for assignment rule list of length %d", idx, len(getActiveRules(rules))))
+		return nil, serviceerror.NewInvalidArgument(fmt.Sprintf(
+			"rule index %d is out of bounds for assignment rule list of length %d", idx, len(getActiveAssignmentRules(rules))))
 	}
 	persistenceAR := persistencepb.AssignmentRule{
 		Rule:            rule,
@@ -191,7 +199,8 @@ func DeleteAssignmentRule(timestamp *hlc.Clock,
 	idx := req.GetRuleIndex()
 	actualIdx := given2ActualIdx(idx, rules)
 	if actualIdx < 0 {
-		return nil, serviceerror.NewInvalidArgument(fmt.Sprintf("rule index %d is out of bounds for assignment rule list of length %d", idx, len(getActiveRules(rules))))
+		return nil, serviceerror.NewInvalidArgument(fmt.Sprintf(
+			"rule index %d is out of bounds for assignment rule list of length %d", idx, len(getActiveAssignmentRules(rules))))
 	}
 	rule := rules[actualIdx]
 	rule.DeleteTimestamp = timestamp
@@ -288,12 +297,11 @@ func InsertCompatibleRedirectRule(timestamp *hlc.Clock,
 			))
 		}
 	}
-	persistenceCRR := persistencepb.RedirectRule{
+	data.RedirectRules = slices.Insert(rules, 0, &persistencepb.RedirectRule{
 		Rule:            rule,
 		CreateTimestamp: timestamp,
 		DeleteTimestamp: nil,
-	}
-	data.RedirectRules = slices.Insert(rules, 0, &persistenceCRR)
+	})
 	return data, checkRedirectConditions(data, maxRRs)
 }
 
@@ -338,4 +346,40 @@ func CleanupRuleTombstones(versioningData *persistencepb.VersioningData, retenti
 		return rr.DeleteTimestamp == nil || (rr.DeleteTimestamp != nil && hlc.Since(rr.DeleteTimestamp) < retentionTime)
 	})
 	return modifiedData
+}
+
+// CommitBuildID makes the following changes:
+//  1. Adds an unconditional assignment rule for the target Build ID at the
+//     end of the list. An unconditional assignment rule:
+//     - Has no hint filter
+//     - Has no ramp
+//  2. Removes all previously added assignment rules to the given target
+//     Build ID (if any).
+//  3. Removes any *unconditional* assignment rule for other Build IDs.
+//  4. Removes the ramp of any incoming redirect rules to this Build ID.
+func CommitBuildID(timestamp *hlc.Clock,
+	data *persistencepb.VersioningData,
+	req *workflowservice.UpdateWorkerVersioningRulesRequest_CommitBuildId) (*persistencepb.VersioningData, error) {
+	data = common.CloneProto(data)
+	target := req.GetTargetBuildId()
+	assignmentRules := data.GetAssignmentRules()
+	for _, ar := range getActiveAssignmentRules(assignmentRules) {
+		if ar.GetRule().GetTargetBuildId() == target {
+			ar.DeleteTimestamp = timestamp
+		}
+		if isUnfiltered(ar.GetRule()) {
+			ar.DeleteTimestamp = timestamp
+		}
+	}
+	data.AssignmentRules = append(assignmentRules, &persistencepb.AssignmentRule{
+		Rule:            &taskqueue.BuildIdAssignmentRule{TargetBuildId: target},
+		CreateTimestamp: timestamp,
+	})
+	if err := checkAssignmentConditions(data, 0, false, true); err != nil {
+		return nil, err
+	}
+
+	// TODO: Removes the ramp of any incoming redirect rules to this Build ID.
+
+	return data, nil
 }

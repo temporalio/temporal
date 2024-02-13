@@ -927,7 +927,11 @@ func (e *matchingEngineImpl) UpdateWorkerVersioningRules(
 				req.GetDeleteCompatibleRedirectRule(),
 			)
 		case *workflowservice.UpdateWorkerVersioningRulesRequest_CommitBuildId_:
-			err = serviceerror.NewUnimplemented("commit build id is not yet implemented")
+			versioningData, err = CommitBuildID(
+				updatedClock,
+				data.GetVersioningData(),
+				req.GetCommitBuildId(),
+			)
 		}
 		if err != nil {
 			// operation can't be completed due to failed validation. no action, do not replicate, report error
