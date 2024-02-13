@@ -711,3 +711,75 @@ func (s *contextSuite) TestShardStopReasonCloseShard() {
 	s.False(s.mockShard.IsValid())
 	s.False(s.mockShard.stoppedForOwnershipLost())
 }
+
+func (s *contextSuite) TestUpdateShardInfo_CallbackIsInvoked_EvenWhenNotPersisted() {
+	s.mockShard.state = contextStateAcquired
+
+	var timesCalled int
+	callback := func() {
+		timesCalled++
+	}
+
+	s.mockShardManager.EXPECT().UpdateShard(gomock.Any(), gomock.Any()).
+		Return(nil).Times(1)
+	err := s.mockShard.updateShardInfo(callback)
+	s.NoError(err)
+
+	// No time has passed. This shouldn't touch the db
+	s.mockShardManager.EXPECT().UpdateShard(gomock.Any(), gomock.Any()).
+		Return(nil).Times(0)
+	err = s.mockShard.updateShardInfo(callback)
+	s.NoError(err)
+
+	s.Equal(2, timesCalled)
+}
+
+func (s *contextSuite) TestUpdateShardInfo_PersistsAfterInterval() {
+	s.mockShard.state = contextStateAcquired
+
+	// We only expect the first and third calls to updateShardInfo to hit the database
+
+	var timesCalled int
+	callback := func() {
+		timesCalled++
+	}
+
+	s.mockShardManager.EXPECT().UpdateShard(gomock.Any(), gomock.Any()).
+		Return(nil).Times(1)
+	err := s.mockShard.updateShardInfo(callback)
+	s.NoError(err)
+
+	// No time has passed: shouldn't update the database.
+	s.mockShardManager.EXPECT().UpdateShard(gomock.Any(), gomock.Any()).
+		Return(nil).Times(0)
+	err = s.mockShard.updateShardInfo(callback)
+	s.NoError(err)
+
+	s.mockShardManager.EXPECT().UpdateShard(gomock.Any(), gomock.Any()).
+		Return(nil).Times(1)
+	s.timeSource.Update(time.Now().Add(s.mockShard.config.ShardUpdateMinInterval()))
+	err = s.mockShard.updateShardInfo(callback)
+	s.NoError(err)
+	s.Equal(3, timesCalled)
+}
+
+func (s *contextSuite) TestUpdateShardInfo_FailsUnlessShardAcquired() {
+	for _, state := range []contextState{
+		contextStateInitialized, contextStateAcquiring, contextStateStopping, contextStateStopped,
+	} {
+		s.mockShard.state = state
+		s.Error(s.mockShard.updateShardInfo(func() {
+			s.Fail("Should not have called update callback when in state %v", state)
+		}))
+
+	}
+	// This is the only state we should succeed in
+	s.mockShard.state = contextStateAcquired
+	s.mockShardManager.EXPECT().UpdateShard(gomock.Any(), gomock.Any()).
+		Return(nil).Times(1)
+	var called bool
+	s.NoError(s.mockShard.updateShardInfo(func() {
+		called = true
+	}))
+	s.True(called)
+}
