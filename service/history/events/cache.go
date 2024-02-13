@@ -69,7 +69,6 @@ type (
 	historyEventCacheItemImpl struct {
 		event *historypb.HistoryEvent
 	}
-	NewEventsCacheFn func(executionManager persistence.ExecutionManager, config *configs.Config, handler metrics.Handler, logger log.Logger) Cache
 )
 
 var (
