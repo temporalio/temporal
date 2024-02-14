@@ -35,7 +35,6 @@ import (
 	commandpb "go.temporal.io/api/command/v1"
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
-	failurepb "go.temporal.io/api/failure/v1"
 	historypb "go.temporal.io/api/history/v1"
 	protocolpb "go.temporal.io/api/protocol/v1"
 	"go.temporal.io/api/serviceerror"
@@ -66,99 +65,6 @@ func (s *FunctionalSuite) startWorkflow(tv *testvars.TestVars) *testvars.TestVar
 	s.NoError(err)
 
 	return tv.WithRunID(startResp.GetRunId())
-}
-
-func (s *FunctionalSuite) acceptUpdateCommands(tv *testvars.TestVars, messageID string) []*commandpb.Command {
-	s.T().Helper()
-	return []*commandpb.Command{{
-		CommandType: enumspb.COMMAND_TYPE_PROTOCOL_MESSAGE,
-		Attributes: &commandpb.Command_ProtocolMessageCommandAttributes{ProtocolMessageCommandAttributes: &commandpb.ProtocolMessageCommandAttributes{
-			MessageId: tv.MessageID("update-accepted", messageID),
-		}},
-	}}
-}
-
-func (s *FunctionalSuite) completeUpdateCommands(tv *testvars.TestVars, messageID string) []*commandpb.Command {
-	s.T().Helper()
-	return []*commandpb.Command{
-		{
-			CommandType: enumspb.COMMAND_TYPE_PROTOCOL_MESSAGE,
-			Attributes: &commandpb.Command_ProtocolMessageCommandAttributes{ProtocolMessageCommandAttributes: &commandpb.ProtocolMessageCommandAttributes{
-				MessageId: tv.MessageID("update-completed", messageID),
-			}},
-		},
-	}
-}
-
-func (s *FunctionalSuite) acceptCompleteUpdateCommands(tv *testvars.TestVars, messageID string) []*commandpb.Command {
-	s.T().Helper()
-	return append(s.acceptUpdateCommands(tv, messageID), s.completeUpdateCommands(tv, messageID)...)
-}
-
-func (s *FunctionalSuite) acceptUpdateMessages(tv *testvars.TestVars, updRequestMsg *protocolpb.Message, messageID string) []*protocolpb.Message {
-	s.T().Helper()
-	updRequest := protoutils.UnmarshalAny[*updatepb.Request](s.T(), updRequestMsg.GetBody())
-
-	return []*protocolpb.Message{
-		{
-			Id:                 tv.MessageID("update-accepted", messageID),
-			ProtocolInstanceId: updRequest.GetMeta().GetUpdateId(),
-			SequencingId:       nil,
-			Body: protoutils.MarshalAny(s.T(), &updatepb.Acceptance{
-				AcceptedRequestMessageId:         updRequestMsg.GetId(),
-				AcceptedRequestSequencingEventId: updRequestMsg.GetEventId(),
-				AcceptedRequest:                  updRequest,
-			}),
-		},
-	}
-}
-
-func (s *FunctionalSuite) completeUpdateMessages(tv *testvars.TestVars, updRequestMsg *protocolpb.Message, messageID string) []*protocolpb.Message {
-	s.T().Helper()
-	updRequest := protoutils.UnmarshalAny[*updatepb.Request](s.T(), updRequestMsg.GetBody())
-
-	return []*protocolpb.Message{
-		{
-			Id:                 tv.MessageID("update-completed", messageID),
-			ProtocolInstanceId: updRequest.GetMeta().GetUpdateId(),
-			SequencingId:       nil,
-			Body: protoutils.MarshalAny(s.T(), &updatepb.Response{
-				Meta: updRequest.GetMeta(),
-				Outcome: &updatepb.Outcome{
-					Value: &updatepb.Outcome_Success{
-						Success: payloads.EncodeString("success-result-of-" + updRequest.GetMeta().GetUpdateId()),
-					},
-				},
-			}),
-		},
-	}
-}
-
-func (s *FunctionalSuite) acceptCompleteUpdateMessages(tv *testvars.TestVars, updRequestMsg *protocolpb.Message, messageID string) []*protocolpb.Message {
-	s.T().Helper()
-	return append(s.acceptUpdateMessages(tv, updRequestMsg, messageID), s.completeUpdateMessages(tv, updRequestMsg, messageID)...)
-}
-
-func (s *FunctionalSuite) rejectUpdateMessages(tv *testvars.TestVars, updRequestMsg *protocolpb.Message, messageID string) []*protocolpb.Message {
-	s.T().Helper()
-	updRequest := protoutils.UnmarshalAny[*updatepb.Request](s.T(), updRequestMsg.GetBody())
-
-	return []*protocolpb.Message{
-		{
-			Id:                 tv.MessageID("update-rejected", messageID),
-			ProtocolInstanceId: updRequest.GetMeta().GetUpdateId(),
-			SequencingId:       nil,
-			Body: protoutils.MarshalAny(s.T(), &updatepb.Rejection{
-				RejectedRequestMessageId:         updRequestMsg.GetId(),
-				RejectedRequestSequencingEventId: updRequestMsg.GetEventId(),
-				RejectedRequest:                  updRequest,
-				Failure: &failurepb.Failure{
-					Message:     "rejection-of-" + updRequest.GetMeta().GetUpdateId(),
-					FailureInfo: &failurepb.Failure_ApplicationFailureInfo{ApplicationFailureInfo: &failurepb.ApplicationFailureInfo{}},
-				},
-			}),
-		},
-	}
 }
 
 func (s *FunctionalSuite) sendUpdateNoError(tv *testvars.TestVars, updateID string) *workflowservice.UpdateWorkflowExecutionResponse {
@@ -236,7 +142,7 @@ func (s *FunctionalSuite) TestUpdateWorkflow_NewSpeculativeWorkflowTask_AcceptCo
   5 WorkflowTaskScheduled // Speculative WT events are not written to the history yet.
   6 WorkflowTaskStarted
 `, history)
-					return s.acceptCompleteUpdateCommands(tv, "1"), nil
+					return s.UpdateAcceptCompleteCommands(tv, "1"), nil
 				case 3:
 					s.EqualHistory(`
   7 WorkflowTaskCompleted
@@ -268,7 +174,7 @@ func (s *FunctionalSuite) TestUpdateWorkflow_NewSpeculativeWorkflowTask_AcceptCo
 					s.Equal(tv.HandlerName(), updRequest.GetInput().GetName())
 					s.EqualValues(5, updRequestMsg.GetEventId())
 
-					return s.acceptCompleteUpdateMessages(tv, updRequestMsg, "1"), nil
+					return s.UpdateAcceptCompleteMessages(tv, updRequestMsg, "1"), nil
 				case 3:
 					return nil, nil
 				default:
@@ -393,7 +299,7 @@ func (s *FunctionalSuite) TestUpdateWorkflow_NewNormalWorkflowTask_AcceptComplet
   6 WorkflowTaskScheduled // Normal WT because there is ActivityTaskScheduled(5) event after WorkflowTaskCompleted(4).
   7 WorkflowTaskStarted
 `, history)
-					return s.acceptCompleteUpdateCommands(tv, "1"), nil
+					return s.UpdateAcceptCompleteCommands(tv, "1"), nil
 				case 3:
 					s.EqualHistory(`
   8 WorkflowTaskCompleted
@@ -425,7 +331,7 @@ func (s *FunctionalSuite) TestUpdateWorkflow_NewNormalWorkflowTask_AcceptComplet
 					s.Equal(tv.HandlerName(), updRequest.GetInput().GetName())
 					s.EqualValues(6, updRequestMsg.GetEventId())
 
-					return s.acceptCompleteUpdateMessages(tv, updRequestMsg, "1"), nil
+					return s.UpdateAcceptCompleteMessages(tv, updRequestMsg, "1"), nil
 				case 3:
 					return nil, nil
 				default:
@@ -529,7 +435,7 @@ func (s *FunctionalSuite) TestUpdateWorkflow_FirstNormalScheduledWorkflowTask_Ac
   2 WorkflowTaskScheduled
   3 WorkflowTaskStarted // First normal WT. No speculative WT was created.
 `, history)
-					return s.acceptCompleteUpdateCommands(tv, "1"), nil
+					return s.UpdateAcceptCompleteCommands(tv, "1"), nil
 				case 2:
 					s.EqualHistory(`
   4 WorkflowTaskCompleted
@@ -559,7 +465,7 @@ func (s *FunctionalSuite) TestUpdateWorkflow_FirstNormalScheduledWorkflowTask_Ac
 					s.Equal(tv.HandlerName(), updRequest.GetInput().GetName())
 					s.EqualValues(2, updRequestMsg.GetEventId())
 
-					return s.acceptCompleteUpdateMessages(tv, updRequestMsg, "1"), nil
+					return s.UpdateAcceptCompleteMessages(tv, updRequestMsg, "1"), nil
 				case 2:
 					return nil, nil
 				default:
@@ -661,7 +567,7 @@ func (s *FunctionalSuite) TestUpdateWorkflow_NormalScheduledWorkflowTask_AcceptC
   5 WorkflowExecutionSignaled
   6 WorkflowTaskScheduled // This WT was already created by signal and no speculative WT was created.
   7 WorkflowTaskStarted`, history)
-					return s.acceptCompleteUpdateCommands(tv, "1"), nil
+					return s.UpdateAcceptCompleteCommands(tv, "1"), nil
 				case 3:
 					s.EqualHistory(`
   8 WorkflowTaskCompleted
@@ -694,7 +600,7 @@ func (s *FunctionalSuite) TestUpdateWorkflow_NormalScheduledWorkflowTask_AcceptC
 					s.Equal(tv.HandlerName(), updRequest.GetInput().GetName())
 					s.EqualValues(6, updRequestMsg.GetEventId())
 
-					return s.acceptCompleteUpdateMessages(tv, updRequestMsg, "1"), nil
+					return s.UpdateAcceptCompleteMessages(tv, updRequestMsg, "1"), nil
 				case 3:
 					return nil, nil
 				default:
@@ -829,7 +735,7 @@ func (s *FunctionalSuite) TestUpdateWorkflow_NewSpeculativeFromStartedWorkflowTa
 			updRequestMsg := task.Messages[0]
 			s.EqualValues(5, updRequestMsg.GetEventId())
 
-			return s.rejectUpdateMessages(tv, updRequestMsg, "1"), nil
+			return s.UpdateRejectMessages(tv, updRequestMsg, "1"), nil
 		case 3:
 			return nil, nil
 		default:
@@ -951,7 +857,7 @@ func (s *FunctionalSuite) TestUpdateWorkflow_NewNormalFromStartedWorkflowTask_Re
 			updRequestMsg := task.Messages[0]
 			s.EqualValues(6, updRequestMsg.GetEventId())
 
-			return s.rejectUpdateMessages(tv, updRequestMsg, "1"), nil
+			return s.UpdateRejectMessages(tv, updRequestMsg, "1"), nil
 		case 3:
 			return nil, nil
 		default:
@@ -1394,7 +1300,7 @@ func (s *FunctionalSuite) TestUpdateWorkflow_NewStickySpeculativeWorkflowTask_Ac
   4 WorkflowTaskCompleted
   5 WorkflowTaskScheduled // Speculative WT.
   6 WorkflowTaskStarted`, history)
-					return s.acceptCompleteUpdateCommands(tv, "1"), nil
+					return s.UpdateAcceptCompleteCommands(tv, "1"), nil
 				case 3:
 					s.EqualHistory(`
   7 WorkflowTaskCompleted
@@ -1426,7 +1332,7 @@ func (s *FunctionalSuite) TestUpdateWorkflow_NewStickySpeculativeWorkflowTask_Ac
 					s.Equal(tv.HandlerName(), updRequest.GetInput().GetName())
 					s.EqualValues(5, updRequestMsg.GetEventId())
 
-					return s.acceptCompleteUpdateMessages(tv, updRequestMsg, "1"), nil
+					return s.UpdateAcceptCompleteMessages(tv, updRequestMsg, "1"), nil
 				case 3:
 					return nil, nil
 				default:
@@ -1520,7 +1426,7 @@ func (s *FunctionalSuite) TestUpdateWorkflow_NewStickySpeculativeWorkflowTask_Ac
   5 WorkflowTaskScheduled // Speculative WT.
   6 WorkflowTaskStarted
 `, history)
-			return s.acceptCompleteUpdateCommands(tv, "1"), nil
+			return s.UpdateAcceptCompleteCommands(tv, "1"), nil
 		case 3:
 			s.EqualHistory(`
   7 WorkflowTaskCompleted
@@ -1552,7 +1458,7 @@ func (s *FunctionalSuite) TestUpdateWorkflow_NewStickySpeculativeWorkflowTask_Ac
 			s.Equal(tv.HandlerName(), updRequest.GetInput().GetName())
 			s.EqualValues(5, updRequestMsg.GetEventId())
 
-			return s.acceptCompleteUpdateMessages(tv, updRequestMsg, "1"), nil
+			return s.UpdateAcceptCompleteMessages(tv, updRequestMsg, "1"), nil
 		case 3:
 			return nil, nil
 		default:
@@ -1668,7 +1574,7 @@ func (s *FunctionalSuite) TestUpdateWorkflow_FirstNormalScheduledWorkflowTask_Re
 			s.Equal(tv.HandlerName(), updRequest.GetInput().GetName())
 			s.EqualValues(2, updRequestMsg.GetEventId())
 
-			return s.rejectUpdateMessages(tv, updRequestMsg, "1"), nil
+			return s.UpdateRejectMessages(tv, updRequestMsg, "1"), nil
 		case 2:
 			return nil, nil
 		default:
@@ -1779,7 +1685,7 @@ func (s *FunctionalSuite) TestUpdateWorkflow_NewSpeculativeWorkflowTask_Reject()
 			s.Equal(tv.HandlerName(), updRequest.GetInput().GetName())
 			s.EqualValues(5, updRequestMsg.GetEventId())
 
-			return s.rejectUpdateMessages(tv, updRequestMsg, "1"), nil
+			return s.UpdateRejectMessages(tv, updRequestMsg, "1"), nil
 		case 3:
 			return nil, nil
 		default:
@@ -1899,7 +1805,7 @@ func (s *FunctionalSuite) TestUpdateWorkflow_NewNormalWorkflowTask_Reject() {
 			s.Equal(tv.HandlerName(), updRequest.GetInput().GetName())
 			s.EqualValues(6, updRequestMsg.GetEventId())
 
-			return s.rejectUpdateMessages(tv, updRequestMsg, "1"), nil
+			return s.UpdateRejectMessages(tv, updRequestMsg, "1"), nil
 		case 3:
 			return nil, nil
 		default:
@@ -1976,7 +1882,7 @@ func (s *FunctionalSuite) TestUpdateWorkflow_1stAccept_2ndAccept_2ndComplete_1st
   1 WorkflowExecutionStarted
   2 WorkflowTaskScheduled
   3 WorkflowTaskStarted`, history)
-			return s.acceptUpdateCommands(tv, "1"), nil
+			return s.UpdateAcceptCommands(tv, "1"), nil
 		case 2:
 			s.EqualHistory(`
   1 WorkflowExecutionStarted
@@ -1986,21 +1892,21 @@ func (s *FunctionalSuite) TestUpdateWorkflow_1stAccept_2ndAccept_2ndComplete_1st
   5 WorkflowExecutionUpdateAccepted // 1st update is accepted.
   6 WorkflowTaskScheduled // New normal WT is created because of the 2nd update.
   7 WorkflowTaskStarted`, history)
-			return s.acceptUpdateCommands(tv, "2"), nil
+			return s.UpdateAcceptCommands(tv, "2"), nil
 		case 3:
 			s.EqualHistory(`
   8 WorkflowTaskCompleted
   9 WorkflowExecutionUpdateAccepted // 2nd update is accepted.
  10 WorkflowTaskScheduled
  11 WorkflowTaskStarted`, history)
-			return s.completeUpdateCommands(tv, "2"), nil
+			return s.UpdateCompleteCommands(tv, "2"), nil
 		case 4:
 			s.EqualHistory(`
  12 WorkflowTaskCompleted
  13 WorkflowExecutionUpdateCompleted // 2nd update is completed.
  14 WorkflowTaskScheduled
  15 WorkflowTaskStarted`, history)
-			return s.completeUpdateCommands(tv, "1"), nil
+			return s.UpdateCompleteCommands(tv, "1"), nil
 		case 5:
 			s.EqualHistory(`
  16 WorkflowTaskCompleted
@@ -2028,19 +1934,19 @@ func (s *FunctionalSuite) TestUpdateWorkflow_1stAccept_2ndAccept_2ndComplete_1st
 			upd1Request := protoutils.UnmarshalAny[*updatepb.Request](s.T(), upd1RequestMsg.GetBody())
 			s.Equal("args-value-of-"+tv.UpdateID("1"), decodeString(s, upd1Request.GetInput().GetArgs()))
 			s.EqualValues(2, upd1RequestMsg.GetEventId())
-			return s.acceptUpdateMessages(tv, upd1RequestMsg, "1"), nil
+			return s.UpdateAcceptMessages(tv, upd1RequestMsg, "1"), nil
 		case 2:
 			upd2RequestMsg = task.Messages[0]
 			upd2Request := protoutils.UnmarshalAny[*updatepb.Request](s.T(), upd2RequestMsg.GetBody())
 			s.Equal("args-value-of-"+tv.UpdateID("2"), decodeString(s, upd2Request.GetInput().GetArgs()))
 			s.EqualValues(6, upd2RequestMsg.GetEventId())
-			return s.acceptUpdateMessages(tv, upd2RequestMsg, "2"), nil
+			return s.UpdateAcceptMessages(tv, upd2RequestMsg, "2"), nil
 		case 3:
 			s.NotNil(upd2RequestMsg)
-			return s.completeUpdateMessages(tv, upd2RequestMsg, "2"), nil
+			return s.UpdateCompleteMessages(tv, upd2RequestMsg, "2"), nil
 		case 4:
 			s.NotNil(upd1RequestMsg)
-			return s.completeUpdateMessages(tv, upd1RequestMsg, "1"), nil
+			return s.UpdateCompleteMessages(tv, upd1RequestMsg, "1"), nil
 		case 5:
 			return nil, nil
 		default:
@@ -2148,7 +2054,7 @@ func (s *FunctionalSuite) TestUpdateWorkflow_1stAccept_2ndReject_1stComplete() {
   1 WorkflowExecutionStarted
   2 WorkflowTaskScheduled
   3 WorkflowTaskStarted`, history)
-			return s.acceptUpdateCommands(tv, "1"), nil
+			return s.UpdateAcceptCommands(tv, "1"), nil
 		case 2:
 			s.EqualHistory(`
   1 WorkflowExecutionStarted
@@ -2166,7 +2072,7 @@ func (s *FunctionalSuite) TestUpdateWorkflow_1stAccept_2ndReject_1stComplete() {
   8 WorkflowTaskCompleted
   9 WorkflowTaskScheduled
  10 WorkflowTaskStarted`, history)
-			return s.completeUpdateCommands(tv, "1"), nil
+			return s.UpdateCompleteCommands(tv, "1"), nil
 		case 4:
 			s.EqualHistory(`
  11 WorkflowTaskCompleted
@@ -2193,16 +2099,16 @@ func (s *FunctionalSuite) TestUpdateWorkflow_1stAccept_2ndReject_1stComplete() {
 			upd1Request := protoutils.UnmarshalAny[*updatepb.Request](s.T(), upd1RequestMsg.GetBody())
 			s.Equal("args-value-of-"+tv.UpdateID("1"), decodeString(s, upd1Request.GetInput().GetArgs()))
 			s.EqualValues(2, upd1RequestMsg.GetEventId())
-			return s.acceptUpdateMessages(tv, upd1RequestMsg, "1"), nil
+			return s.UpdateAcceptMessages(tv, upd1RequestMsg, "1"), nil
 		case 2:
 			upd2RequestMsg := task.Messages[0]
 			upd2Request := protoutils.UnmarshalAny[*updatepb.Request](s.T(), upd2RequestMsg.GetBody())
 			s.Equal("args-value-of-"+tv.UpdateID("2"), decodeString(s, upd2Request.GetInput().GetArgs()))
 			s.EqualValues(6, upd2RequestMsg.GetEventId())
-			return s.rejectUpdateMessages(tv, upd2RequestMsg, "2"), nil
+			return s.UpdateRejectMessages(tv, upd2RequestMsg, "2"), nil
 		case 3:
 			s.NotNil(upd1RequestMsg)
-			return s.completeUpdateMessages(tv, upd1RequestMsg, "1"), nil
+			return s.UpdateCompleteMessages(tv, upd1RequestMsg, "1"), nil
 		case 4:
 			return nil, nil
 		default:
@@ -2307,7 +2213,7 @@ func (s *FunctionalSuite) TestUpdateWorkflow_FailSpeculativeWorkflowTask() {
   5 WorkflowTaskScheduled // Speculative WT.
   6 WorkflowTaskStarted
 `, history)
-			return s.acceptUpdateCommands(tv, "1"), nil
+			return s.UpdateAcceptCommands(tv, "1"), nil
 		case 3:
 			s.Fail("should not be called because messageHandler returns error")
 			return nil, nil
@@ -2515,7 +2421,7 @@ func (s *FunctionalSuite) TestUpdateWorkflow_ConvertStartedSpeculativeWorkflowTa
 			s.EqualValues(5, updRequestMsg.GetEventId())
 
 			// Update is rejected but corresponding speculative WT will be in the history anyway, because it was converted to normal due to buffered signal.
-			return s.rejectUpdateMessages(tv, updRequestMsg, "1"), nil
+			return s.UpdateRejectMessages(tv, updRequestMsg, "1"), nil
 		case 3:
 			return nil, nil
 		default:
@@ -2629,7 +2535,7 @@ func (s *FunctionalSuite) TestUpdateWorkflow_ConvertScheduledSpeculativeWorkflow
 
 			// Update is rejected but corresponding speculative WT was already converted to normal,
 			// and will be in the history anyway.
-			return s.rejectUpdateMessages(tv, updRequestMsg, "1"), nil
+			return s.UpdateRejectMessages(tv, updRequestMsg, "1"), nil
 		case 3:
 			return nil, nil
 		default:
@@ -2736,7 +2642,7 @@ func (s *FunctionalSuite) TestUpdateWorkflow_StartToCloseTimeoutSpeculativeWorkf
 			// Emulate slow worker: sleep little more than WT timeout.
 			time.Sleep(request.WorkflowTaskTimeout.AsDuration() + 100*time.Millisecond)
 			// This doesn't matter because WT times out before update is applied.
-			return s.acceptCompleteUpdateCommands(tv, "1"), nil
+			return s.UpdateAcceptCompleteCommands(tv, "1"), nil
 		case 3:
 			// Speculative WT timed out and retried as normal WT.
 			s.EqualHistory(`
@@ -2749,7 +2655,7 @@ func (s *FunctionalSuite) TestUpdateWorkflow_StartToCloseTimeoutSpeculativeWorkf
   7 WorkflowTaskTimedOut
   8 WorkflowTaskScheduled {"Attempt":2 } // Transient WT.
   9 WorkflowTaskStarted`, history)
-			commands := append(s.acceptCompleteUpdateCommands(tv, "1"),
+			commands := append(s.UpdateAcceptCompleteCommands(tv, "1"),
 				&commandpb.Command{
 					CommandType: enumspb.COMMAND_TYPE_COMPLETE_WORKFLOW_EXECUTION,
 					Attributes:  &commandpb.Command_CompleteWorkflowExecutionCommandAttributes{CompleteWorkflowExecutionCommandAttributes: &commandpb.CompleteWorkflowExecutionCommandAttributes{}},
@@ -2772,12 +2678,12 @@ func (s *FunctionalSuite) TestUpdateWorkflow_StartToCloseTimeoutSpeculativeWorkf
 			updRequestMsg := task.Messages[0]
 
 			// This doesn't matter because WT times out before update is applied.
-			return s.acceptCompleteUpdateMessages(tv, updRequestMsg, "1"), nil
+			return s.UpdateAcceptCompleteMessages(tv, updRequestMsg, "1"), nil
 		case 3:
 			// Update is still in registry and was sent again.
 			updRequestMsg := task.Messages[0]
 
-			return s.acceptCompleteUpdateMessages(tv, updRequestMsg, "1"), nil
+			return s.UpdateAcceptCompleteMessages(tv, updRequestMsg, "1"), nil
 		default:
 			s.Failf("msgHandler called too many times", "msgHandler shouldn't be called %d times", msgHandlerCalls)
 			return nil, nil
@@ -2888,7 +2794,7 @@ func (s *FunctionalSuite) TestUpdateWorkflow_ScheduleToStartTimeoutSpeculativeWo
 		case 2:
 			updRequestMsg := task.Messages[0]
 			// Reject update, but WT still will be in the history due to timeout on sticky queue.
-			return s.rejectUpdateMessages(tv, updRequestMsg, "1"), nil
+			return s.UpdateRejectMessages(tv, updRequestMsg, "1"), nil
 		case 3:
 			return nil, nil
 		default:
@@ -3008,7 +2914,7 @@ func (s *FunctionalSuite) TestUpdateWorkflow_ScheduleToStartTimeoutSpeculativeWo
 			s.Equal(tv.HandlerName(), updRequest.GetInput().GetName())
 			s.EqualValues(7, updRequestMsg.GetEventId())
 
-			return s.rejectUpdateMessages(tv, updRequestMsg, "1"), nil
+			return s.UpdateRejectMessages(tv, updRequestMsg, "1"), nil
 		case 3:
 			return nil, nil
 		default:
@@ -3109,7 +3015,7 @@ func (s *FunctionalSuite) TestUpdateWorkflow_StartedSpeculativeWorkflowTask_Term
   4 WorkflowTaskCompleted
   5 WorkflowTaskScheduled // Speculative WT.
   6 WorkflowTaskStarted`, history)
-			return s.acceptCompleteUpdateCommands(tv, "1"), nil
+			return s.UpdateAcceptCompleteCommands(tv, "1"), nil
 		default:
 			s.Failf("wtHandler called too many times", "wtHandler shouldn't be called %d times", wtHandlerCalls)
 			return nil, nil
@@ -3124,7 +3030,7 @@ func (s *FunctionalSuite) TestUpdateWorkflow_StartedSpeculativeWorkflowTask_Term
 			return nil, nil
 		case 2:
 			updRequestMsg := task.Messages[0]
-			return s.acceptCompleteUpdateMessages(tv, updRequestMsg, "1"), nil
+			return s.UpdateAcceptCompleteMessages(tv, updRequestMsg, "1"), nil
 		default:
 			s.Failf("msgHandler called too many times", "msgHandler shouldn't be called %d times", msgHandlerCalls)
 			return nil, nil
@@ -3323,9 +3229,9 @@ func (s *FunctionalSuite) TestUpdateWorkflow_CompleteWorkflow_CancelUpdate() {
 			Description:   "update in stateAccepted must get an error because there is no way for workflow to complete it and already accepted update can't be rejected",
 			UpdateErr:     "context deadline exceeded",
 			UpdateFailure: "",
-			Commands:      func(tv *testvars.TestVars) []*commandpb.Command { return s.acceptUpdateCommands(tv, "1") },
+			Commands:      func(tv *testvars.TestVars) []*commandpb.Command { return s.UpdateAcceptCommands(tv, "1") },
 			Messages: func(tv *testvars.TestVars, updRequestMsg *protocolpb.Message) []*protocolpb.Message {
-				return s.acceptUpdateMessages(tv, updRequestMsg, "1")
+				return s.UpdateAcceptMessages(tv, updRequestMsg, "1")
 			},
 		},
 		{
@@ -3333,9 +3239,9 @@ func (s *FunctionalSuite) TestUpdateWorkflow_CompleteWorkflow_CancelUpdate() {
 			Description:   "completed update must not be affected by workflow completion",
 			UpdateErr:     "",
 			UpdateFailure: "",
-			Commands:      func(tv *testvars.TestVars) []*commandpb.Command { return s.acceptCompleteUpdateCommands(tv, "1") },
+			Commands:      func(tv *testvars.TestVars) []*commandpb.Command { return s.UpdateAcceptCompleteCommands(tv, "1") },
 			Messages: func(tv *testvars.TestVars, updRequestMsg *protocolpb.Message) []*protocolpb.Message {
-				return s.acceptCompleteUpdateMessages(tv, updRequestMsg, "1")
+				return s.UpdateAcceptCompleteMessages(tv, updRequestMsg, "1")
 			},
 		},
 		{
@@ -3345,7 +3251,7 @@ func (s *FunctionalSuite) TestUpdateWorkflow_CompleteWorkflow_CancelUpdate() {
 			UpdateFailure: "rejection-of-", // Rejection from workflow.
 			Commands:      func(tv *testvars.TestVars) []*commandpb.Command { return nil },
 			Messages: func(tv *testvars.TestVars, updRequestMsg *protocolpb.Message) []*protocolpb.Message {
-				return s.rejectUpdateMessages(tv, updRequestMsg, "1")
+				return s.UpdateRejectMessages(tv, updRequestMsg, "1")
 			},
 		},
 	}
@@ -3517,7 +3423,7 @@ func (s *FunctionalSuite) TestUpdateWorkflow_SpeculativeWorkflowTask_Heartbeat()
 			return nil, nil
 		case 3:
 			s.Empty(task.Messages)
-			return s.rejectUpdateMessages(tv, updRequestMsg, "1"), nil
+			return s.UpdateRejectMessages(tv, updRequestMsg, "1"), nil
 		case 4:
 			return nil, nil
 		default:
@@ -3740,7 +3646,7 @@ func (s *FunctionalSuite) TestUpdateWorkflow_NewStartedSpeculativeWorkflowTaskLo
 			// Close shard. NotFound error will be returned to RespondWorkflowTaskCompleted.
 			s.closeShard(tv.WorkflowID())
 
-			return s.acceptCompleteUpdateCommands(tv, "1"), nil
+			return s.UpdateAcceptCompleteCommands(tv, "1"), nil
 		case 3:
 			s.EqualHistory(`
   1 WorkflowExecutionStarted
@@ -3770,7 +3676,7 @@ func (s *FunctionalSuite) TestUpdateWorkflow_NewStartedSpeculativeWorkflowTaskLo
 			updRequestMsg := task.Messages[0]
 			s.EqualValues(5, updRequestMsg.GetEventId())
 
-			return s.acceptCompleteUpdateMessages(tv, updRequestMsg, "1"), nil
+			return s.UpdateAcceptCompleteMessages(tv, updRequestMsg, "1"), nil
 		case 3:
 			s.Empty(task.Messages, "update must be lost due to shard reload")
 			return nil, nil
@@ -3898,7 +3804,7 @@ func (s *FunctionalSuite) TestUpdateWorkflow_FirstNormalWorkflowTaskUpdateLost_B
 			updRequestMsg := task.Messages[0]
 			s.EqualValues(2, updRequestMsg.GetEventId())
 
-			return s.acceptCompleteUpdateMessages(tv, updRequestMsg, "1"), nil
+			return s.UpdateAcceptCompleteMessages(tv, updRequestMsg, "1"), nil
 		case 2:
 			s.Empty(task.Messages, "update must be lost due to shard reload")
 			return nil, nil
@@ -3993,7 +3899,7 @@ func (s *FunctionalSuite) TestUpdateWorkflow_ScheduledSpeculativeWorkflowTask_De
   5 WorkflowTaskScheduled // Speculative WT.
   6 WorkflowTaskStarted
 `, history)
-			return s.acceptCompleteUpdateCommands(tv, "1"), nil
+			return s.UpdateAcceptCompleteCommands(tv, "1"), nil
 		case 3:
 			s.EqualHistory(`
   7 WorkflowTaskCompleted
@@ -4021,7 +3927,7 @@ func (s *FunctionalSuite) TestUpdateWorkflow_ScheduledSpeculativeWorkflowTask_De
 			s.Len(task.Messages, 1, "2nd update must be deduplicated by ID")
 			updRequestMsg := task.Messages[0]
 
-			return s.acceptCompleteUpdateMessages(tv, updRequestMsg, "1"), nil
+			return s.UpdateAcceptCompleteMessages(tv, updRequestMsg, "1"), nil
 		case 3:
 			s.Empty(task.Messages, "2nd update must be deduplicated by ID")
 			return nil, nil
@@ -4125,7 +4031,7 @@ func (s *FunctionalSuite) TestUpdateWorkflow_StartedSpeculativeWorkflowTask_Dedu
   5 WorkflowTaskScheduled // Speculative WT.
   6 WorkflowTaskStarted
 `, history)
-			return s.acceptCompleteUpdateCommands(tv, "1"), nil
+			return s.UpdateAcceptCompleteCommands(tv, "1"), nil
 		case 3:
 			s.EqualHistory(`
   7 WorkflowTaskCompleted
@@ -4152,7 +4058,7 @@ func (s *FunctionalSuite) TestUpdateWorkflow_StartedSpeculativeWorkflowTask_Dedu
 		case 2:
 			s.Len(task.Messages, 1, "2nd update should not has reached server yet")
 			updRequestMsg := task.Messages[0]
-			return s.acceptCompleteUpdateMessages(tv, updRequestMsg, "1"), nil
+			return s.UpdateAcceptCompleteMessages(tv, updRequestMsg, "1"), nil
 		case 3:
 			s.Empty(task.Messages, "2nd update must be deduplicated by ID ")
 			return nil, nil
@@ -4257,7 +4163,7 @@ func (s *FunctionalSuite) TestUpdateWorkflow_CompletedSpeculativeWorkflowTask_De
   5 WorkflowTaskScheduled // Speculative WT.
   6 WorkflowTaskStarted
 `, history)
-					return s.acceptCompleteUpdateCommands(tv, "1"), nil
+					return s.UpdateAcceptCompleteCommands(tv, "1"), nil
 				case 3:
 					return []*commandpb.Command{{
 						CommandType: enumspb.COMMAND_TYPE_COMPLETE_WORKFLOW_EXECUTION,
@@ -4277,7 +4183,7 @@ func (s *FunctionalSuite) TestUpdateWorkflow_CompletedSpeculativeWorkflowTask_De
 					return nil, nil
 				case 2:
 					updRequestMsg := task.Messages[0]
-					return s.acceptCompleteUpdateMessages(tv, updRequestMsg, "1"), nil
+					return s.UpdateAcceptCompleteMessages(tv, updRequestMsg, "1"), nil
 				case 3:
 					s.Empty(task.Messages, "2nd update must be deduplicated by ID ")
 					return nil, nil
@@ -4505,8 +4411,8 @@ func (s *FunctionalSuite) TestUpdateWorkflow_StaleSpeculativeWorkflowTask_CloseS
 	_, err = s.engine.RespondWorkflowTaskCompleted(NewContext(), &workflowservice.RespondWorkflowTaskCompletedRequest{
 		Namespace: s.namespace,
 		TaskToken: wt3.TaskToken,
-		Commands:  s.acceptUpdateCommands(tv, "1"),
-		Messages:  s.acceptUpdateMessages(tv, wt3.Messages[0], "1"),
+		Commands:  s.UpdateAcceptCommands(tv, "1"),
+		Messages:  s.UpdateAcceptMessages(tv, wt3.Messages[0], "1"),
 	})
 	s.Error(err)
 	s.Contains(err.Error(), "Workflow task not found")
@@ -4516,7 +4422,7 @@ func (s *FunctionalSuite) TestUpdateWorkflow_StaleSpeculativeWorkflowTask_CloseS
 		Namespace: s.namespace,
 		TaskToken: wt4.TaskToken,
 		Commands: append(
-			s.acceptUpdateCommands(tv, "1"),
+			s.UpdateAcceptCommands(tv, "1"),
 			&commandpb.Command{
 				CommandType: enumspb.COMMAND_TYPE_SCHEDULE_ACTIVITY_TASK,
 				Attributes: &commandpb.Command_ScheduleActivityTaskCommandAttributes{ScheduleActivityTaskCommandAttributes: &commandpb.ScheduleActivityTaskCommandAttributes{
@@ -4526,7 +4432,7 @@ func (s *FunctionalSuite) TestUpdateWorkflow_StaleSpeculativeWorkflowTask_CloseS
 					ScheduleToCloseTimeout: tv.InfiniteTimeout(),
 				}},
 			}),
-		Messages: s.acceptUpdateMessages(tv, wt4.Messages[0], "1"),
+		Messages: s.UpdateAcceptMessages(tv, wt4.Messages[0], "1"),
 	})
 	s.NoError(err)
 
@@ -4674,7 +4580,7 @@ func (s *FunctionalSuite) TestUpdateWorkflow_StaleSpeculativeWorkflowTask_CloseS
 		Namespace: s.namespace,
 		TaskToken: wt3.TaskToken,
 		Commands: append(
-			s.acceptUpdateCommands(tv, "1"),
+			s.UpdateAcceptCommands(tv, "1"),
 			&commandpb.Command{
 				CommandType: enumspb.COMMAND_TYPE_SCHEDULE_ACTIVITY_TASK,
 				Attributes: &commandpb.Command_ScheduleActivityTaskCommandAttributes{ScheduleActivityTaskCommandAttributes: &commandpb.ScheduleActivityTaskCommandAttributes{
@@ -4684,7 +4590,7 @@ func (s *FunctionalSuite) TestUpdateWorkflow_StaleSpeculativeWorkflowTask_CloseS
 					ScheduleToCloseTimeout: tv.InfiniteTimeout(),
 				}},
 			}),
-		Messages: s.acceptUpdateMessages(tv, wt3.Messages[0], "1"),
+		Messages: s.UpdateAcceptMessages(tv, wt3.Messages[0], "1"),
 	})
 	s.IsType(&serviceerror.NotFound{}, err)
 
@@ -4693,7 +4599,7 @@ func (s *FunctionalSuite) TestUpdateWorkflow_StaleSpeculativeWorkflowTask_CloseS
 		Namespace: s.namespace,
 		TaskToken: wt4.TaskToken,
 		Commands: append(
-			s.acceptUpdateCommands(tv, "1"),
+			s.UpdateAcceptCommands(tv, "1"),
 			&commandpb.Command{
 				CommandType: enumspb.COMMAND_TYPE_SCHEDULE_ACTIVITY_TASK,
 				Attributes: &commandpb.Command_ScheduleActivityTaskCommandAttributes{ScheduleActivityTaskCommandAttributes: &commandpb.ScheduleActivityTaskCommandAttributes{
@@ -4703,7 +4609,7 @@ func (s *FunctionalSuite) TestUpdateWorkflow_StaleSpeculativeWorkflowTask_CloseS
 					ScheduleToCloseTimeout: tv.InfiniteTimeout(),
 				}},
 			}),
-		Messages: s.acceptUpdateMessages(tv, wt4.Messages[0], "1"),
+		Messages: s.UpdateAcceptMessages(tv, wt4.Messages[0], "1"),
 	})
 	s.NoError(err, "2nd speculative WT should be completed because it has same WT scheduled/started Id and startTime matches the accepted message is valid (same update Id)")
 
@@ -4855,7 +4761,7 @@ func (s *FunctionalSuite) TestUpdateWorkflow_StaleSpeculativeWorkflowTask_ClearM
 		Namespace: s.namespace,
 		TaskToken: wt3.TaskToken,
 		Commands: append(
-			s.acceptUpdateCommands(tv, "1"),
+			s.UpdateAcceptCommands(tv, "1"),
 			&commandpb.Command{
 				CommandType: enumspb.COMMAND_TYPE_SCHEDULE_ACTIVITY_TASK,
 				Attributes: &commandpb.Command_ScheduleActivityTaskCommandAttributes{ScheduleActivityTaskCommandAttributes: &commandpb.ScheduleActivityTaskCommandAttributes{
@@ -4865,7 +4771,7 @@ func (s *FunctionalSuite) TestUpdateWorkflow_StaleSpeculativeWorkflowTask_ClearM
 					ScheduleToCloseTimeout: tv.InfiniteTimeout(),
 				}},
 			}),
-		Messages:              s.acceptUpdateMessages(tv, wt3.Messages[0], "1"),
+		Messages:              s.UpdateAcceptMessages(tv, wt3.Messages[0], "1"),
 		ReturnNewWorkflowTask: true,
 	})
 	s.IsType(&serviceerror.NotFound{}, err)
@@ -4875,9 +4781,9 @@ func (s *FunctionalSuite) TestUpdateWorkflow_StaleSpeculativeWorkflowTask_ClearM
 		Namespace: s.namespace,
 		TaskToken: wt4.TaskToken,
 		Commands: append(
-			s.acceptUpdateCommands(tv, "1"),
+			s.UpdateAcceptCommands(tv, "1"),
 			append(
-				s.acceptUpdateCommands(tv, "2"),
+				s.UpdateAcceptCommands(tv, "2"),
 				&commandpb.Command{
 					CommandType: enumspb.COMMAND_TYPE_SCHEDULE_ACTIVITY_TASK,
 					Attributes: &commandpb.Command_ScheduleActivityTaskCommandAttributes{ScheduleActivityTaskCommandAttributes: &commandpb.ScheduleActivityTaskCommandAttributes{
@@ -4898,8 +4804,8 @@ func (s *FunctionalSuite) TestUpdateWorkflow_StaleSpeculativeWorkflowTask_ClearM
 				},
 			)...),
 		Messages: append(
-			s.acceptUpdateMessages(tv, wt4.Messages[0], "1"),
-			s.acceptUpdateMessages(tv, wt4.Messages[1], "2")...),
+			s.UpdateAcceptMessages(tv, wt4.Messages[0], "1"),
+			s.UpdateAcceptMessages(tv, wt4.Messages[1], "2")...),
 		ReturnNewWorkflowTask: true,
 	})
 	s.NoError(err)
@@ -5053,7 +4959,7 @@ func (s *FunctionalSuite) TestUpdateWorkflow_StaleSpeculativeWorkflowTask_SameSt
 		Namespace: s.namespace,
 		TaskToken: wt3.TaskToken,
 		Commands: append(
-			s.acceptUpdateCommands(tv, "1"),
+			s.UpdateAcceptCommands(tv, "1"),
 			&commandpb.Command{
 				CommandType: enumspb.COMMAND_TYPE_SCHEDULE_ACTIVITY_TASK,
 				Attributes: &commandpb.Command_ScheduleActivityTaskCommandAttributes{ScheduleActivityTaskCommandAttributes: &commandpb.ScheduleActivityTaskCommandAttributes{
@@ -5063,7 +4969,7 @@ func (s *FunctionalSuite) TestUpdateWorkflow_StaleSpeculativeWorkflowTask_SameSt
 					ScheduleToCloseTimeout: tv.InfiniteTimeout(),
 				}},
 			}),
-		Messages: s.acceptUpdateMessages(tv, wt3.Messages[0], "1"),
+		Messages: s.UpdateAcceptMessages(tv, wt3.Messages[0], "1"),
 	})
 	s.Error(err, "Must fail because start time is different.")
 	s.Contains(err.Error(), "Workflow task not found")
@@ -5073,7 +4979,7 @@ func (s *FunctionalSuite) TestUpdateWorkflow_StaleSpeculativeWorkflowTask_SameSt
 		Namespace: s.namespace,
 		TaskToken: wt4.TaskToken,
 		Commands: append(
-			s.acceptUpdateCommands(tv, "2"),
+			s.UpdateAcceptCommands(tv, "2"),
 			&commandpb.Command{
 				CommandType: enumspb.COMMAND_TYPE_SCHEDULE_ACTIVITY_TASK,
 				Attributes: &commandpb.Command_ScheduleActivityTaskCommandAttributes{ScheduleActivityTaskCommandAttributes: &commandpb.ScheduleActivityTaskCommandAttributes{
@@ -5083,7 +4989,7 @@ func (s *FunctionalSuite) TestUpdateWorkflow_StaleSpeculativeWorkflowTask_SameSt
 					ScheduleToCloseTimeout: tv.InfiniteTimeout(),
 				}},
 			}),
-		Messages: s.acceptUpdateMessages(tv, wt4.Messages[0], "2"),
+		Messages: s.UpdateAcceptMessages(tv, wt4.Messages[0], "2"),
 	})
 	s.NoError(err)
 
@@ -5139,7 +5045,7 @@ func (s *FunctionalSuite) TestUpdateWorkflow_NewSpeculativeWorkflowTask_WorkerSk
   4 WorkflowTaskCompleted // Speculative WT was dropped and history starts from 4 again.
   5 WorkflowTaskScheduled
   6 WorkflowTaskStarted`, history)
-			commands := append(s.acceptCompleteUpdateCommands(tv, "2"),
+			commands := append(s.UpdateAcceptCompleteCommands(tv, "2"),
 				&commandpb.Command{
 					CommandType: enumspb.COMMAND_TYPE_COMPLETE_WORKFLOW_EXECUTION,
 					Attributes:  &commandpb.Command_CompleteWorkflowExecutionCommandAttributes{CompleteWorkflowExecutionCommandAttributes: &commandpb.CompleteWorkflowExecutionCommandAttributes{}},
@@ -5173,7 +5079,7 @@ func (s *FunctionalSuite) TestUpdateWorkflow_NewSpeculativeWorkflowTask_WorkerSk
 
 			s.Equal("args-value-of-"+tv.UpdateID("2"), decodeString(s, updRequest.GetInput().GetArgs()))
 			s.EqualValues(5, updRequestMsg.GetEventId())
-			return s.acceptCompleteUpdateMessages(tv, updRequestMsg, "2"), nil
+			return s.UpdateAcceptCompleteMessages(tv, updRequestMsg, "2"), nil
 		default:
 			s.Failf("msgHandler called too many times", "msgHandler shouldn't be called %d times", msgHandlerCalls)
 			return nil, nil
