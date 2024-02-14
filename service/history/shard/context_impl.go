@@ -148,6 +148,7 @@ type (
 		// All following fields are protected by rwLock, and only valid if state >= Acquiring:
 		rwLock                        sync.RWMutex
 		lastUpdated                   time.Time
+		lastEmittedMetrics            time.Time
 		tasksCompletedSinceLastUpdate int
 		shardInfo                     *persistencespb.ShardInfo
 
@@ -1213,7 +1214,23 @@ func (s *ContextImpl) updateShardInfo(
 	updateFnLocked()
 	s.shardInfo.StolenSinceRenew = 0
 
+	var updatedShardInfo *persistencespb.ShardInfo
+	// There's no reason to run this operation unless we're emitting metrics or persisting to the db, and when we do both
+	// there's no reason to call it twice so we cache the return value.
+	trimShard := func() *persistencespb.ShardInfo {
+		if updatedShardInfo == nil {
+			updatedShardInfo = trimShardInfo(s.clusterMetadata.GetAllClusterInfo(), copyShardInfo(s.shardInfo))
+		}
+
+		return updatedShardInfo
+	}
+
 	now := s.timeSource.Now()
+	if now.Sub(s.lastEmittedMetrics) < s.config.ShardUpdateQueueMetricsInterval() {
+		s.emitShardInfoMetricsLogsLocked(trimShard().QueueStates)
+		s.lastEmittedMetrics = now
+	}
+
 	tooEarly := s.lastUpdated.Add(s.config.ShardUpdateMinInterval()).After(now)
 	minTasksUntilUpdate := s.config.ShardUpdateMinTasksCompleted()
 	// If ShardUpdateMinTasksCompleted is set to 0 then we only care about whether enough time has passed
@@ -1230,11 +1247,8 @@ func (s *ContextImpl) updateShardInfo(
 
 	s.lastUpdated = now
 	s.tasksCompletedSinceLastUpdate = 0
-
-	updatedShardInfo := trimShardInfo(s.clusterMetadata.GetAllClusterInfo(), copyShardInfo(s.shardInfo))
-	s.emitShardInfoMetricsLogsLocked(updatedShardInfo.QueueStates)
 	request := &persistence.UpdateShardRequest{
-		ShardInfo:       updatedShardInfo,
+		ShardInfo:       trimShard(),
 		PreviousRangeID: s.shardInfo.GetRangeId(),
 	}
 	s.wUnlock()
