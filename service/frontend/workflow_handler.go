@@ -29,6 +29,7 @@ import (
 	"encoding/binary"
 	"errors"
 	"fmt"
+	"net/url"
 	"strings"
 	"sync/atomic"
 	"time"
@@ -47,8 +48,10 @@ import (
 	updatepb "go.temporal.io/api/update/v1"
 	workflowpb "go.temporal.io/api/workflow/v1"
 	"go.temporal.io/api/workflowservice/v1"
+	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/health"
 	healthpb "google.golang.org/grpc/health/grpc_health_v1"
+	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/types/known/durationpb"
 	"google.golang.org/protobuf/types/known/timestamppb"
 
@@ -400,6 +403,24 @@ func (wh *WorkflowHandler) StartWorkflowExecution(ctx context.Context, request *
 
 	if err = wh.validateSearchAttributes(request.GetSearchAttributes(), namespaceName); err != nil {
 		return nil, err
+	}
+
+	for _, callback := range request.GetCompletionCallbacks() {
+		if !wh.config.EnableCallbackAttachment(request.GetNamespace()) {
+			return nil, status.Error(codes.InvalidArgument, "attaching workflow callbacks is disabled for this namespace")
+		}
+		if callback, ok := callback.GetVariant().(*commonpb.Callback_Nexus_); ok {
+			u, err := url.Parse(callback.Nexus.GetUrl())
+			if err != nil {
+				return nil, status.Errorf(codes.InvalidArgument, "invalid url: %v", err)
+			}
+			if !(u.Scheme == "http" || u.Scheme == "https") {
+				return nil, status.Errorf(codes.InvalidArgument, "invalid url scheme for url: %v", u)
+			}
+			// TODO: check in dynamic config that address is valid and that http is only accepted if "insecure" is
+			// allowed for address.
+			// TODO: validate callback URL length against dynamic config.
+		}
 	}
 
 	enums.SetDefaultWorkflowIdReusePolicy(&request.WorkflowIdReusePolicy)
@@ -2403,6 +2424,7 @@ func (wh *WorkflowHandler) DescribeWorkflowExecution(ctx context.Context, reques
 		PendingActivities:     response.GetPendingActivities(),
 		PendingChildren:       response.GetPendingChildren(),
 		PendingWorkflowTask:   response.GetPendingWorkflowTask(),
+		Callbacks:             response.GetCallbacks(),
 	}, nil
 }
 

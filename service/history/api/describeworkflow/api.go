@@ -228,6 +228,10 @@ func Invoke(
 	result.WorkflowExecutionInfo.SearchAttributes = &commonpb.SearchAttributes{
 		IndexedFields: clonePayloadMap(relocatableAttributes.SearchAttributes.GetIndexedFields()),
 	}
+	result.Callbacks = make([]*workflowpb.CallbackInfo, 0, len(mutableState.GetExecutionInfo().GetCallbacks()))
+	for _, callback := range mutableState.GetExecutionInfo().GetCallbacks() {
+		result.Callbacks = append(result.Callbacks, common.CloneProto(callback.PublicInfo))
+	}
 
 	return result, nil
 }

@@ -190,6 +190,9 @@ type Config struct {
 
 	// EnableNexusHTTPHandler controls whether to register a handler for Nexus HTTP requests.
 	EnableNexusHTTPHandler dynamicconfig.BoolPropertyFn
+
+	// EnableCallbackAttachment enables attaching callbacks to workflows.
+	EnableCallbackAttachment dynamicconfig.BoolPropertyFnWithNamespaceFilter
 }
 
 // NewConfig returns new service config with default values
@@ -288,7 +291,8 @@ func NewConfig(
 		AccessHistoryFraction:            dc.GetFloat64Property(dynamicconfig.FrontendAccessHistoryFraction, 0.0),
 		AdminDeleteAccessHistoryFraction: dc.GetFloat64Property(dynamicconfig.FrontendAdminDeleteAccessHistoryFraction, 0.0),
 
-		EnableNexusHTTPHandler: dc.GetBoolProperty(dynamicconfig.FrontendEnableNexusHTTPHandler, false),
+		EnableNexusHTTPHandler:   dc.GetBoolProperty(dynamicconfig.FrontendEnableNexusHTTPHandler, false),
+		EnableCallbackAttachment: dc.GetBoolPropertyFnWithNamespaceFilter(dynamicconfig.FrontendEnableCallbackAttachment, false),
 	}
 }
 

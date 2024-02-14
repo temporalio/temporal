@@ -294,7 +294,7 @@ func (s *callbackQueueActiveTaskExecutorSuite) newExecutor(caller HTTPCaller) *c
 		s.mockShard.GetLogger(),
 		s.mockShard.GetMetricsHandler(),
 		s.mockShard.GetConfig(),
-		func(namespaceID, destination string) HTTPCaller {
+		func(queues.NamespaceIDAndDestination) HTTPCaller {
 			return caller
 		},
 	)
