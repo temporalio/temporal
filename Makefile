@@ -15,10 +15,10 @@ ci-build-misc: print-go-version ci-update-tools proto bins shell-check copyright
 clean: clean-bins clean-test-results
 
 # Recompile proto files.
-proto: clean-proto buf-lint api-linter protoc goimports-proto proto-mocks copyright-proto
+proto: clean-proto buf-lint api-linter protoc service-clients goimports-proto proto-mocks copyright-proto
 
 # Update proto submodule from remote and recompile proto files.
-update-proto: clean-proto update-proto-submodule buf-lint api-linter protoc update-go-api goimports-proto proto-mocks copyright-proto gomodtidy
+update-proto: update-proto-submodule proto gomodtidy
 ########################################################################
 
 .PHONY: proto proto-mocks protoc
@@ -195,7 +195,7 @@ protoc: clean-proto $(PROTO_OUT)
 		-p go-helpers_out=$(PROTO_PATHS)
 	@mv -f "$(PROTO_OUT)/temporal/server/api/"* "$(PROTO_OUT)"
 
-# All gRPC generated service files pathes relative to PROTO_OUT.
+# All gRPC generated service files paths relative to PROTO_OUT.
 PROTO_GRPC_SERVICES = $(patsubst $(PROTO_OUT)/%,%,$(shell find $(PROTO_OUT) -name "service.pb.go" -o -name "service_grpc.pb.go"))
 service_name = $(firstword $(subst /, ,$(1)))
 mock_file_name = $(call service_name,$(1))mock/$(subst $(call service_name,$(1))/,,$(1:go=mock.go))
@@ -206,6 +206,10 @@ proto-mocks: protoc
 		@cd $(PROTO_OUT) && \
 		mockgen -copyright_file ../LICENSE -package $(call service_name,$(PROTO_GRPC_SERVICE))mock -source $(PROTO_GRPC_SERVICE) -destination $(call mock_file_name,$(PROTO_GRPC_SERVICE)) \
 	$(NEWLINE))
+
+service-clients:
+	@printf $(COLOR) "Generate service clients..."
+	@go generate ./client/...
 
 update-go-api:
 	@printf $(COLOR) "Update go.temporal.io/api@master..."
@@ -294,6 +298,10 @@ check: copyright-check lint shell-check
 clean-test-results:
 	@rm -f test.log $(TEST_OUTPUT_ROOT)/*
 	@go clean -testcache
+
+build-tests:
+	@printf $(COLOR) "Build tests..."
+	@go test -exec="true" -count=0 $(TEST_DIRS)
 
 unit-test: clean-test-results
 	@printf $(COLOR) "Run unit tests..."
@@ -538,10 +546,6 @@ update-dependencies:
 
 update-third-party-deps:
 	@GOOS=linux GOARCH=amd64 go list -deps $(FUNCTIONAL_TEST_ROOT) | sort -u | grep '^[a-z]\+\.[a-z.]\+/' | grep -v go.temporal.io > develop/buildkite/third_party_deps.txt
-
-DIAGRAMS := $(wildcard ./docs/diagrams/*.d2)
-docs-diagrams:
-	$(foreach DIAGRAM, $(DIAGRAMS), d2 --layout elk --theme 7 --dark-theme 200 $(DIAGRAM) $(NEWLINE))
 
 go-generate:
 	@printf $(COLOR) "Process go:generate directives..."
