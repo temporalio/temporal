@@ -70,11 +70,12 @@ func NewMapEventCache(
 			m[k] = event
 		},
 	)
-	cache.EXPECT().GetEvent(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).
+	cache.EXPECT().GetEvent(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).
 		AnyTimes().
 		DoAndReturn(
 			func(
 				_ context.Context,
+				_ int32,
 				key events.EventKey,
 				_ int64,
 				_ []byte,

@@ -64,6 +64,7 @@ var Module = fx.Options(
 	resource.Module,
 	workflow.Module,
 	shard.Module,
+	events.Module,
 	cache.Module,
 	archival.Module,
 	fx.Provide(dynamicconfig.NewCollection),

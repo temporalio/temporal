@@ -179,14 +179,12 @@ func (s *engineSuite) SetupTest() {
 	s.workflowCache = wcache.NewHostLevelCache(s.mockShard.GetConfig())
 	s.mockShard.Resource.ShardMgr.EXPECT().AssertShardOwnership(gomock.Any(), gomock.Any()).AnyTimes()
 
-	s.eventsCache = events.NewEventsCache(
-		s.mockShard.GetShardID(),
-		s.mockShard.GetConfig().EventsCacheMaxSizeBytes(),
-		s.mockShard.GetConfig().EventsCacheTTL(),
+	s.eventsCache = events.NewHostLevelEventsCache(
 		s.mockShard.GetExecutionManager(),
-		false,
-		s.mockShard.GetLogger(),
+		s.mockShard.GetConfig(),
 		s.mockShard.GetMetricsHandler(),
+		s.mockShard.GetLogger(),
+		false,
 	)
 	s.mockShard.SetEventsCacheForTesting(s.eventsCache)
 

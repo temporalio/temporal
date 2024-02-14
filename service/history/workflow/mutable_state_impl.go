@@ -780,7 +780,7 @@ func (ms *MutableStateImpl) GetUpdateOutcome(
 		EventID:     completion.EventId,
 		Version:     version,
 	}
-	event, err := ms.eventsCache.GetEvent(ctx, eventKey, completion.EventBatchId, currentBranchToken)
+	event, err := ms.eventsCache.GetEvent(ctx, ms.shard.GetShardID(), eventKey, completion.EventBatchId, currentBranchToken)
 	if err != nil {
 		return nil, err
 	}
@@ -807,6 +807,7 @@ func (ms *MutableStateImpl) GetActivityScheduledEvent(
 	}
 	event, err := ms.eventsCache.GetEvent(
 		ctx,
+		ms.shard.GetShardID(),
 		events.EventKey{
 			NamespaceID: namespace.ID(ms.executionInfo.NamespaceId),
 			WorkflowID:  ms.executionInfo.WorkflowId,
@@ -907,6 +908,7 @@ func (ms *MutableStateImpl) GetChildExecutionInitiatedEvent(
 	}
 	event, err := ms.eventsCache.GetEvent(
 		ctx,
+		ms.shard.GetShardID(),
 		events.EventKey{
 			NamespaceID: namespace.ID(ms.executionInfo.NamespaceId),
 			WorkflowID:  ms.executionInfo.WorkflowId,
@@ -953,6 +955,7 @@ func (ms *MutableStateImpl) GetRequesteCancelExternalInitiatedEvent(
 	}
 	event, err := ms.eventsCache.GetEvent(
 		ctx,
+		ms.shard.GetShardID(),
 		events.EventKey{
 			NamespaceID: namespace.ID(ms.executionInfo.NamespaceId),
 			WorkflowID:  ms.executionInfo.WorkflowId,
@@ -1030,6 +1033,7 @@ func (ms *MutableStateImpl) GetSignalExternalInitiatedEvent(
 	}
 	event, err := ms.eventsCache.GetEvent(
 		ctx,
+		ms.shard.GetShardID(),
 		events.EventKey{
 			NamespaceID: namespace.ID(ms.executionInfo.NamespaceId),
 			WorkflowID:  ms.executionInfo.WorkflowId,
@@ -1071,6 +1075,7 @@ func (ms *MutableStateImpl) GetCompletionEvent(
 
 	event, err := ms.eventsCache.GetEvent(
 		ctx,
+		ms.shard.GetShardID(),
 		events.EventKey{
 			NamespaceID: namespace.ID(ms.executionInfo.NamespaceId),
 			WorkflowID:  ms.executionInfo.WorkflowId,
@@ -1124,6 +1129,7 @@ func (ms *MutableStateImpl) GetStartEvent(
 
 	event, err := ms.eventsCache.GetEvent(
 		ctx,
+		ms.shard.GetShardID(),
 		events.EventKey{
 			NamespaceID: namespace.ID(ms.executionInfo.NamespaceId),
 			WorkflowID:  ms.executionInfo.WorkflowId,
