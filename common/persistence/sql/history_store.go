@@ -463,7 +463,7 @@ func (m *sqlExecutionStore) GetAllHistoryTreeBranches(
 	return response, nil
 }
 
-// GetHistoryTree returns all branch information of a tree
+// GetHistoryTreeContainingBranch returns all branch information of a tree
 func (m *sqlExecutionStore) GetHistoryTreeContainingBranch(
 	ctx context.Context,
 	request *p.InternalGetHistoryTreeContainingBranchRequest,

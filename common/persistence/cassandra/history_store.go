@@ -371,7 +371,7 @@ func (h *HistoryStore) GetAllHistoryTreeBranches(
 	return response, nil
 }
 
-// GetHistoryTree returns all branch information of a tree
+// GetHistoryTreeContainingBranch returns all branch information of a tree
 func (h *HistoryStore) GetHistoryTreeContainingBranch(
 	ctx context.Context,
 	request *p.InternalGetHistoryTreeContainingBranchRequest,
