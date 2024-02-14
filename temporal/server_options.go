@@ -74,7 +74,7 @@ type (
 		customVisibilityStoreFactory visibility.VisibilityStoreFactory
 		clientFactoryProvider        client.FactoryProvider
 		searchAttributesMapper       searchattribute.Mapper
-		customInterceptors           []grpc.UnaryServerInterceptor
+		customFrontendInterceptors   []grpc.UnaryServerInterceptor
 		metricHandler                metrics.Handler
 	}
 )

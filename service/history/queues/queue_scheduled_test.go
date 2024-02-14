@@ -147,6 +147,9 @@ func (s *scheduledQueueSuite) SetupTest() {
 		func() int {
 			return math.MaxInt
 		},
+		func() bool {
+			return false
+		},
 	)
 	s.scheduledQueue = NewScheduledQueue(
 		s.mockShard,

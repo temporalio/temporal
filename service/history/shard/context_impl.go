@@ -1206,7 +1206,7 @@ func (s *ContextImpl) updateShardInfo(
 	updateFnLocked()
 	s.shardInfo.StolenSinceRenew = 0
 
-	now := cclock.NewRealTimeSource().Now()
+	now := s.timeSource.Now()
 	if s.lastUpdated.Add(s.config.ShardUpdateMinInterval()).After(now) {
 		s.wUnlock()
 		return nil
@@ -2010,6 +2010,7 @@ func newContext(
 	archivalMetadata archiver.ArchivalMetadata,
 	hostInfoProvider membership.HostInfoProvider,
 	taskCategoryRegistry tasks.TaskCategoryRegistry,
+	eventsCache events.Cache,
 ) (*ContextImpl, error) {
 	hostIdentity := hostInfoProvider.HostInfo().Identity()
 	sequenceID := atomic.AddInt64(&shardContextSequenceID, 1)
@@ -2064,16 +2065,17 @@ func newContext(
 			return shardContext.renewRangeLocked(false)
 		},
 	)
-	shardContext.eventsCache = events.NewEventsCache(
-		shardContext.GetShardID(),
-		shardContext.GetConfig().EventsCacheMaxSizeBytes(),
-		shardContext.GetConfig().EventsCacheTTL(),
-		shardContext.GetExecutionManager(),
-		false,
-		shardContext.GetLogger(),
-		shardContext.GetMetricsHandler(),
-	)
-
+	if shardContext.GetConfig().EnableHostLevelEventsCache() {
+		shardContext.eventsCache = eventsCache
+	} else {
+		shardContext.eventsCache = events.NewShardLevelEventsCache(
+			shardContext.executionManager,
+			shardContext.config,
+			shardContext.metricsHandler,
+			shardContext.contextTaggedLogger,
+			false,
+		)
+	}
 	return shardContext, nil
 }
 
