@@ -159,10 +159,11 @@ func (m *executionManagerImpl) DeleteHistoryBranch(
 		BeginNodeId: GetBeginNodeID(branch),
 	})
 
-	// Get the entire history tree, so we know if any part of the target branch is referenced by other branches.
-	historyTreeResp, err := m.persistence.GetHistoryTree(ctx, &InternalGetHistoryTreeRequest{
-		TreeID:  branch.TreeId,
-		ShardID: request.ShardID,
+	// Get the history tree containing the branch to be delelted,
+	// so we know if any part of the target branch is referenced by other branches.
+	historyTreeResp, err := m.persistence.GetHistoryTreeContainingBranch(ctx, &InternalGetHistoryTreeContainingBranchRequest{
+		BranchToken: request.BranchToken,
+		ShardID:     request.ShardID,
 	})
 	if err != nil {
 		return err
@@ -320,7 +321,7 @@ func (m *executionManagerImpl) TrimHistoryBranch(
 }
 
 func (m *executionManagerImpl) deserializeBranchInfos(
-	historyTreeResp *InternalGetHistoryTreeResponse,
+	historyTreeResp *InternalGetHistoryTreeContainingBranchResponse,
 ) ([]*persistencespb.HistoryBranch, error) {
 	branchInfos := make([]*persistencespb.HistoryBranch, 0, len(historyTreeResp.TreeInfos))
 	for _, blob := range historyTreeResp.TreeInfos {

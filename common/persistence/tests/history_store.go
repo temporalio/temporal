@@ -50,7 +50,7 @@ import (
 
 // TODO add UT for the following
 //  * DeleteHistoryBranch
-//  * GetHistoryTree
+//  * GetHistoryTreeContainingBranch
 //  * GetAllHistoryTreeBranches
 
 type (
