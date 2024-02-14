@@ -5,8 +5,8 @@ Below we give a high-level overview of how Temporal works; other pages provide m
 **Internal services**
 
 - Frontend Service
-- [History Service](./history-service.md)
-- [Matching Service](./matching-service.md)
+- [History Service](../service/history/README.md)
+- [Matching Service](../service/matching/README.md)
 - Internal Workers Service
 
 **Workflow lifecycle**
@@ -75,8 +75,8 @@ In addition, Queries are implemented via Query Tasks, which are similar to Workf
 ## Further reading
 
 - Frontend Service
-- [History Service](./history-service.md)
-- [Matching Service](./matching-service.md)
+- [History Service](../service/history/README.md)
+- [Matching Service](../service/matching/README.md)
 - Internal Workers Service
 - [Workflow lifecycle sequence diagrams](./workflow-lifecycle.md)
 - [SDK Workers](https://github.com/temporalio/sdk-core/blob/master/ARCHITECTURE.md)
