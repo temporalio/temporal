@@ -161,7 +161,7 @@ type (
 		ForkHistoryBranch(ctx context.Context, request *InternalForkHistoryBranchRequest) error
 		// DeleteHistoryBranch removes a branch
 		DeleteHistoryBranch(ctx context.Context, request *InternalDeleteHistoryBranchRequest) error
-		// GetHistoryTreeContainingBranch returns all branch information of a tree containing the requested branch
+		// GetHistoryTreeContainingBranch returns all branch information of the tree containing the specified branch
 		GetHistoryTreeContainingBranch(ctx context.Context, request *InternalGetHistoryTreeContainingBranchRequest) (*InternalGetHistoryTreeContainingBranchResponse, error)
 		// GetAllHistoryTreeBranches returns all branches of all trees.
 		// Note that branches may be skipped or duplicated across pages if there are branches created or deleted while
