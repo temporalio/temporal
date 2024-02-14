@@ -333,33 +333,6 @@ func (p *executionPersistenceClient) ListConcreteExecutions(
 	return p.persistence.ListConcreteExecutions(ctx, request)
 }
 
-func (p *executionPersistenceClient) RegisterHistoryTaskReader(
-	ctx context.Context,
-	request *RegisterHistoryTaskReaderRequest,
-) error {
-	// hint methods won't go through persistence rate limiter
-	// so also not emitting any persistence request/error metrics
-	return p.persistence.RegisterHistoryTaskReader(ctx, request)
-}
-
-func (p *executionPersistenceClient) UnregisterHistoryTaskReader(
-	ctx context.Context,
-	request *UnregisterHistoryTaskReaderRequest,
-) {
-	// hint methods won't go through persistence rate limiter
-	// so also not emitting any persistence request/error metrics
-	p.persistence.UnregisterHistoryTaskReader(ctx, request)
-}
-
-func (p *executionPersistenceClient) UpdateHistoryTaskReaderProgress(
-	ctx context.Context,
-	request *UpdateHistoryTaskReaderProgressRequest,
-) {
-	// hint methods won't go through persistence rate limiter
-	// so also not emitting any persistence request/error metrics
-	p.persistence.UpdateHistoryTaskReaderProgress(ctx, request)
-}
-
 func (p *executionPersistenceClient) AddHistoryTasks(
 	ctx context.Context,
 	request *AddHistoryTasksRequest,

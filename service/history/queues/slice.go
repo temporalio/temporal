@@ -370,8 +370,8 @@ func (s *SliceImpl) SelectTasks(readerID int64, batchSize int) ([]Executable, er
 
 	executables := make([]Executable, 0, batchSize)
 	for len(executables) < batchSize && len(s.iterators) != 0 {
-		if s.iterators[0].HasNext(readerID) {
-			task, err := s.iterators[0].Next(readerID)
+		if s.iterators[0].HasNext() {
+			task, err := s.iterators[0].Next()
 			if err != nil {
 				s.iterators[0] = s.iterators[0].Remaining()
 				if len(executables) != 0 {

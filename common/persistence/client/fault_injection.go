@@ -621,30 +621,6 @@ func (e *FaultInjectionExecutionStore) ListConcreteExecutions(
 	return e.baseExecutionStore.ListConcreteExecutions(ctx, request)
 }
 
-func (e *FaultInjectionExecutionStore) RegisterHistoryTaskReader(
-	ctx context.Context,
-	request *persistence.RegisterHistoryTaskReaderRequest,
-) error {
-	// hint methods don't actually hint DB, so don't inject any failure
-	return e.baseExecutionStore.RegisterHistoryTaskReader(ctx, request)
-}
-
-func (e *FaultInjectionExecutionStore) UnregisterHistoryTaskReader(
-	ctx context.Context,
-	request *persistence.UnregisterHistoryTaskReaderRequest,
-) {
-	// hint methods don't actually hint DB, so don't inject any failure
-	e.baseExecutionStore.UnregisterHistoryTaskReader(ctx, request)
-}
-
-func (e *FaultInjectionExecutionStore) UpdateHistoryTaskReaderProgress(
-	ctx context.Context,
-	request *persistence.UpdateHistoryTaskReaderProgressRequest,
-) {
-	// hint methods don't actually hint DB, so don't inject any failure
-	e.baseExecutionStore.UpdateHistoryTaskReaderProgress(ctx, request)
-}
-
 func (e *FaultInjectionExecutionStore) AddHistoryTasks(
 	ctx context.Context,
 	request *persistence.InternalAddHistoryTasksRequest,
