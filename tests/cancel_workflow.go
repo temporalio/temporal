@@ -627,17 +627,17 @@ func (s *FunctionalSuite) TestImmediateChildCancellation_WorkflowTaskFailed() {
 	s.IsType(&serviceerror.InvalidArgument{}, err)
 	s.Equal(fmt.Sprintf("BadRequestCancelExternalWorkflowExecutionAttributes: Start and RequestCancel for child workflow is not allowed in same workflow task. WorkflowId=%s RunId= Namespace=%s", childWorkflowID, s.namespace), err.Error())
 
-	s.printWorkflowHistory(s.namespace, &commonpb.WorkflowExecution{
+	s.PrintHistoryEvents(s.getHistory(s.namespace, &commonpb.WorkflowExecution{
 		WorkflowId: id,
-	})
+	}))
 
 	s.Logger.Info("Process second workflow task which observes child workflow is cancelled and completes")
 	_, err = poller.PollAndProcessWorkflowTask()
 	s.NoError(err)
 
-	s.printWorkflowHistory(s.namespace, &commonpb.WorkflowExecution{
+	s.PrintHistoryEvents(s.getHistory(s.namespace, &commonpb.WorkflowExecution{
 		WorkflowId: id,
-	})
+	}))
 
 	_, err = s.engine.DescribeWorkflowExecution(NewContext(), &workflowservice.DescribeWorkflowExecutionRequest{
 		Namespace: s.namespace,
@@ -646,9 +646,9 @@ func (s *FunctionalSuite) TestImmediateChildCancellation_WorkflowTaskFailed() {
 		},
 	})
 	if err == nil {
-		s.printWorkflowHistory(s.namespace, &commonpb.WorkflowExecution{
+		s.PrintHistoryEvents(s.getHistory(s.namespace, &commonpb.WorkflowExecution{
 			WorkflowId: childWorkflowID,
-		})
+		}))
 	}
 	s.Logger.Error("Describe error", tag.Error(err))
 	s.Error(err, "Child workflow execution started instead of getting cancelled")
