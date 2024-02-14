@@ -125,7 +125,7 @@ func (s *workflowConsistencyCheckerSuite) TestGetWorkflowContextValidatedByCheck
 	).Return(wfContext, releaseFn, nil)
 	wfContext.EXPECT().LoadMutableState(ctx, s.shardContext).Return(mutableState, nil)
 
-	workflowLease, err := s.checker.getWorkflowContextValidatedByCheck(
+	workflowLease, err := s.checker.getWorkflowLeaseValidatedByCheck(
 		ctx,
 		&shardOwnershipAsserted,
 		BypassMutableStateConsistencyPredicate,
@@ -163,7 +163,7 @@ func (s *workflowConsistencyCheckerSuite) TestGetWorkflowContextValidatedByCheck
 		wfContext.EXPECT().LoadMutableState(ctx, s.shardContext).Return(mutableState2, nil),
 	)
 
-	workflowLease, err := s.checker.getWorkflowContextValidatedByCheck(
+	workflowLease, err := s.checker.getWorkflowLeaseValidatedByCheck(
 		ctx,
 		&shardOwnershipAsserted,
 		FailMutableStateConsistencyPredicate,
@@ -197,7 +197,7 @@ func (s *workflowConsistencyCheckerSuite) TestGetWorkflowContextValidatedByCheck
 
 	s.shardContext.EXPECT().AssertOwnership(ctx).Return(nil)
 
-	workflowLease, err := s.checker.getWorkflowContextValidatedByCheck(
+	workflowLease, err := s.checker.getWorkflowLeaseValidatedByCheck(
 		ctx,
 		&shardOwnershipAsserted,
 		FailMutableStateConsistencyPredicate,
@@ -231,7 +231,7 @@ func (s *workflowConsistencyCheckerSuite) TestGetWorkflowContextValidatedByCheck
 
 	s.shardContext.EXPECT().AssertOwnership(ctx).Return(&persistence.ShardOwnershipLostError{})
 
-	workflowLease, err := s.checker.getWorkflowContextValidatedByCheck(
+	workflowLease, err := s.checker.getWorkflowLeaseValidatedByCheck(
 		ctx,
 		&shardOwnershipAsserted,
 		FailMutableStateConsistencyPredicate,
@@ -263,7 +263,7 @@ func (s *workflowConsistencyCheckerSuite) TestGetWorkflowContextValidatedByCheck
 	).Return(wfContext, releaseFn, nil)
 	wfContext.EXPECT().LoadMutableState(ctx, s.shardContext).Return(nil, serviceerror.NewUnavailable(""))
 
-	workflowLease, err := s.checker.getWorkflowContextValidatedByCheck(
+	workflowLease, err := s.checker.getWorkflowLeaseValidatedByCheck(
 		ctx,
 		&shardOwnershipAsserted,
 		FailMutableStateConsistencyPredicate,

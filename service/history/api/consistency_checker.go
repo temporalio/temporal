@@ -117,7 +117,7 @@ func (c *WorkflowConsistencyCheckerImpl) GetWorkflowLease(
 	if reqClock != nil {
 		currentClock := c.shardContext.CurrentVectorClock()
 		if vclock.Comparable(reqClock, currentClock) {
-			return c.getWorkflowContextValidatedByClock(
+			return c.getWorkflowLeaseValidatedByClock(
 				ctx,
 				reqClock,
 				currentClock,
@@ -134,7 +134,7 @@ func (c *WorkflowConsistencyCheckerImpl) GetWorkflowLease(
 	// shard ownership asserted boolean keep tracks whether AssertOwnership is already caller
 	shardOwnershipAsserted := false
 	if len(workflowKey.RunID) != 0 {
-		return c.getWorkflowContextValidatedByCheck(
+		return c.getWorkflowLeaseValidatedByCheck(
 			ctx,
 			&shardOwnershipAsserted,
 			consistencyPredicate,
@@ -152,7 +152,7 @@ func (c *WorkflowConsistencyCheckerImpl) GetWorkflowLease(
 	)
 }
 
-func (c *WorkflowConsistencyCheckerImpl) getWorkflowContextValidatedByClock(
+func (c *WorkflowConsistencyCheckerImpl) getWorkflowLeaseValidatedByClock(
 	ctx context.Context,
 	reqClock *clockspb.VectorClock,
 	currentClock *clockspb.VectorClock,
@@ -194,7 +194,7 @@ func (c *WorkflowConsistencyCheckerImpl) getWorkflowContextValidatedByClock(
 	return NewWorkflowLease(wfContext, release, mutableState), nil
 }
 
-func (c *WorkflowConsistencyCheckerImpl) getWorkflowContextValidatedByCheck(
+func (c *WorkflowConsistencyCheckerImpl) getWorkflowLeaseValidatedByCheck(
 	ctx context.Context,
 	shardOwnershipAsserted *bool,
 	consistencyPredicate MutableStateConsistencyPredicate,
@@ -269,7 +269,7 @@ func (c *WorkflowConsistencyCheckerImpl) getCurrentWorkflowContext(
 	if err != nil {
 		return nil, err
 	}
-	workflowLease, err := c.getWorkflowContextValidatedByCheck(
+	workflowLease, err := c.getWorkflowLeaseValidatedByCheck(
 		ctx,
 		shardOwnershipAsserted,
 		consistencyPredicate,
