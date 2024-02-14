@@ -166,6 +166,7 @@ func (s *workflowReplicatorSuite) Test_ApplyWorkflowState_BrandNew() {
 			NextEventId: nextEventID,
 		},
 		RemoteCluster: "test",
+		NamespaceId:   namespaceID,
 	}
 	we := &commonpb.WorkflowExecution{
 		WorkflowId: s.workflowID,
@@ -271,6 +272,7 @@ func (s *workflowReplicatorSuite) Test_ApplyWorkflowState_Ancestors() {
 			NextEventId: nextEventID,
 		},
 		RemoteCluster: "test",
+		NamespaceId:   namespaceID,
 	}
 	we := &commonpb.WorkflowExecution{
 		WorkflowId: s.workflowID,
