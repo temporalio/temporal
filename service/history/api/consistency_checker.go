@@ -172,7 +172,7 @@ func (c *WorkflowConsistencyCheckerImpl) getWorkflowContextValidatedByClock(
 		}
 	}
 
-	workflowLease, release, err := c.workflowCache.GetOrCreateWorkflowExecution(
+	wfContext, release, err := c.workflowCache.GetOrCreateWorkflowExecution(
 		ctx,
 		c.shardContext,
 		namespace.ID(workflowKey.NamespaceID),
@@ -186,12 +186,12 @@ func (c *WorkflowConsistencyCheckerImpl) getWorkflowContextValidatedByClock(
 		return nil, err
 	}
 
-	mutableState, err := workflowLease.LoadMutableState(ctx, c.shardContext)
+	mutableState, err := wfContext.LoadMutableState(ctx, c.shardContext)
 	if err != nil {
 		release(err)
 		return nil, err
 	}
-	return NewWorkflowLease(workflowLease, release, mutableState), nil
+	return NewWorkflowLease(wfContext, release, mutableState), nil
 }
 
 func (c *WorkflowConsistencyCheckerImpl) getWorkflowContextValidatedByCheck(
@@ -207,7 +207,7 @@ func (c *WorkflowConsistencyCheckerImpl) getWorkflowContextValidatedByCheck(
 		))
 	}
 
-	workflowLease, release, err := c.workflowCache.GetOrCreateWorkflowExecution(
+	wfContext, release, err := c.workflowCache.GetOrCreateWorkflowExecution(
 		ctx,
 		c.shardContext,
 		namespace.ID(workflowKey.NamespaceID),
@@ -221,20 +221,20 @@ func (c *WorkflowConsistencyCheckerImpl) getWorkflowContextValidatedByCheck(
 		return nil, err
 	}
 
-	mutableState, err := workflowLease.LoadMutableState(ctx, c.shardContext)
+	mutableState, err := wfContext.LoadMutableState(ctx, c.shardContext)
 	switch err.(type) {
 	case nil:
 		if consistencyPredicate(mutableState) {
-			return NewWorkflowLease(workflowLease, release, mutableState), nil
+			return NewWorkflowLease(wfContext, release, mutableState), nil
 		}
-		workflowLease.Clear()
+		wfContext.Clear()
 
-		mutableState, err := workflowLease.LoadMutableState(ctx, c.shardContext)
+		mutableState, err := wfContext.LoadMutableState(ctx, c.shardContext)
 		if err != nil {
 			release(err)
 			return nil, err
 		}
-		return NewWorkflowLease(workflowLease, release, mutableState), nil
+		return NewWorkflowLease(wfContext, release, mutableState), nil
 	case *serviceerror.NotFound, *serviceerror.NamespaceNotFound:
 		release(err)
 		if err := assertShardOwnership(
