@@ -30,13 +30,14 @@ import (
 	"runtime"
 	"runtime/pprof"
 	"strings"
+	"testing"
 	"time"
 
 	"github.com/stretchr/testify/require"
 )
 
 // WaitGoRoutineWithFn waits for a go routine with the given function to appear within the duration.
-func WaitGoRoutineWithFn(t require.TestingT, fn any, maxDuration time.Duration) {
+func WaitGoRoutineWithFn(t testing.TB, fn any, maxDuration time.Duration) {
 	targetFnName, ok := functionNameForPC(reflect.ValueOf(fn).Pointer())
 	if !ok {
 		t.Errorf("Invalid function %#v", fn)
@@ -55,9 +56,8 @@ func WaitGoRoutineWithFn(t require.TestingT, fn any, maxDuration time.Duration) 
 				frames := runtime.CallersFrames(stackRecord.Stack())
 				for {
 					frame, more := frames.Next()
-					// fmt.Printf("%s\t%s:%d\n", frame.Function, frame.File, frame.Line)
 					if strings.Contains(frame.Function, targetFnName) {
-						// fmt.Printf("Found blocked %s function on %d attempt\n", frame.Function, attempt)
+						t.Logf("Found %s function on %d attempt\n", frame.Function, attempt)
 						return true
 					}
 					if !more {
