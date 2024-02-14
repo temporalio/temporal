@@ -417,7 +417,6 @@ func (e *executableImpl) isUnexpectedNonRetryableError(err error) bool {
 
 	isInternalError := common.IsInternalError(err)
 	if isInternalError {
-		e.logger.Error("Encountered internal error processing tasks", tag.Error(err))
 		metrics.TaskInternalErrorCounter.With(e.taggedMetricsHandler).Record(1)
 		// Only DQL/drop when configured to
 		return e.dlqInternalErrors()
@@ -471,19 +470,19 @@ func (e *executableImpl) HandleErr(err error) (retErr error) {
 		metrics.TaskCorruptionCounter.With(e.taggedMetricsHandler).Record(1)
 		if e.dlqEnabled() {
 			// Keep this message in sync with the log line mentioned in Investigation section of develop/docs/dlq.md
-			e.logger.Error("Marking task as terminally failed, will send to DLQ", tag.Error(err))
+			e.logger.Error("Marking task as terminally failed, will send to DLQ", tag.Error(err), tag.ErrorType(err))
 			e.terminalFailureCause = err
 			metrics.TaskTerminalFailures.With(e.taggedMetricsHandler).Record(1)
 			return fmt.Errorf("%w: %v", ErrTerminalTaskFailure, err)
 		}
-		e.logger.Error("Dropping task due to terminal error", tag.Error(err))
+		e.logger.Error("Dropping task due to terminal error", tag.Error(err), tag.ErrorType(err))
 		return nil
 	}
 
 	// Unexpected but retryable error
 	e.unexpectedErrorAttempts++
 	metrics.TaskFailures.With(e.taggedMetricsHandler).Record(1)
-	e.logger.Error("Fail to process task", tag.Error(err), tag.UnexpectedErrorAttempts(int32(e.unexpectedErrorAttempts)), tag.LifeCycleProcessingFailed)
+	e.logger.Error("Fail to process task", tag.Error(err), tag.ErrorType(err), tag.UnexpectedErrorAttempts(int32(e.unexpectedErrorAttempts)), tag.LifeCycleProcessingFailed)
 
 	if e.unexpectedErrorAttempts >= e.maxUnexpectedErrorAttempts() && e.dlqEnabled() {
 		// Keep this message in sync with the log line mentioned in Investigation section of develop/docs/dlq.md
