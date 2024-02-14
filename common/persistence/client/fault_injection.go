@@ -790,7 +790,7 @@ func (e *FaultInjectionExecutionStore) DeleteHistoryBranch(
 
 func (e *FaultInjectionExecutionStore) GetHistoryTree(
 	ctx context.Context,
-	request *persistence.GetHistoryTreeRequest,
+	request *persistence.InternalGetHistoryTreeRequest,
 ) (*persistence.InternalGetHistoryTreeResponse, error) {
 	if err := e.ErrorGenerator.Generate(); err != nil {
 		return nil, err
