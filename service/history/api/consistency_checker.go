@@ -172,7 +172,7 @@ func (c *WorkflowConsistencyCheckerImpl) getWorkflowContextValidatedByClock(
 		}
 	}
 
-	wfContext, release, err := c.workflowCache.GetOrCreateWorkflowExecution(
+	workflowLease, release, err := c.workflowCache.GetOrCreateWorkflowExecution(
 		ctx,
 		c.shardContext,
 		namespace.ID(workflowKey.NamespaceID),
@@ -186,12 +186,12 @@ func (c *WorkflowConsistencyCheckerImpl) getWorkflowContextValidatedByClock(
 		return nil, err
 	}
 
-	mutableState, err := wfContext.LoadMutableState(ctx, c.shardContext)
+	mutableState, err := workflowLease.LoadMutableState(ctx, c.shardContext)
 	if err != nil {
 		release(err)
 		return nil, err
 	}
-	return NewWorkflowLease(wfContext, release, mutableState), nil
+	return NewWorkflowLease(workflowLease, release, mutableState), nil
 }
 
 func (c *WorkflowConsistencyCheckerImpl) getWorkflowContextValidatedByCheck(
@@ -207,7 +207,7 @@ func (c *WorkflowConsistencyCheckerImpl) getWorkflowContextValidatedByCheck(
 		))
 	}
 
-	wfContext, release, err := c.workflowCache.GetOrCreateWorkflowExecution(
+	workflowLease, release, err := c.workflowCache.GetOrCreateWorkflowExecution(
 		ctx,
 		c.shardContext,
 		namespace.ID(workflowKey.NamespaceID),
@@ -221,20 +221,20 @@ func (c *WorkflowConsistencyCheckerImpl) getWorkflowContextValidatedByCheck(
 		return nil, err
 	}
 
-	mutableState, err := wfContext.LoadMutableState(ctx, c.shardContext)
+	mutableState, err := workflowLease.LoadMutableState(ctx, c.shardContext)
 	switch err.(type) {
 	case nil:
 		if consistencyPredicate(mutableState) {
-			return NewWorkflowLease(wfContext, release, mutableState), nil
+			return NewWorkflowLease(workflowLease, release, mutableState), nil
 		}
-		wfContext.Clear()
+		workflowLease.Clear()
 
-		mutableState, err := wfContext.LoadMutableState(ctx, c.shardContext)
+		mutableState, err := workflowLease.LoadMutableState(ctx, c.shardContext)
 		if err != nil {
 			release(err)
 			return nil, err
 		}
-		return NewWorkflowLease(wfContext, release, mutableState), nil
+		return NewWorkflowLease(workflowLease, release, mutableState), nil
 	case *serviceerror.NotFound, *serviceerror.NamespaceNotFound:
 		release(err)
 		if err := assertShardOwnership(
@@ -269,7 +269,7 @@ func (c *WorkflowConsistencyCheckerImpl) getCurrentWorkflowContext(
 	if err != nil {
 		return nil, err
 	}
-	wfContext, err := c.getWorkflowContextValidatedByCheck(
+	workflowLease, err := c.getWorkflowContextValidatedByCheck(
 		ctx,
 		shardOwnershipAsserted,
 		consistencyPredicate,
@@ -279,8 +279,8 @@ func (c *WorkflowConsistencyCheckerImpl) getCurrentWorkflowContext(
 	if err != nil {
 		return nil, err
 	}
-	if wfContext.GetMutableState().IsWorkflowExecutionRunning() {
-		return wfContext, nil
+	if workflowLease.GetMutableState().IsWorkflowExecutionRunning() {
+		return workflowLease, nil
 	}
 
 	currentRunID, err := c.getCurrentRunID(
@@ -291,14 +291,14 @@ func (c *WorkflowConsistencyCheckerImpl) getCurrentWorkflowContext(
 		lockPriority,
 	)
 	if err != nil {
-		wfContext.GetReleaseFn()(err)
+		workflowLease.GetReleaseFn()(err)
 		return nil, err
 	}
-	if currentRunID == wfContext.GetContext().GetWorkflowKey().RunID {
-		return wfContext, nil
+	if currentRunID == workflowLease.GetContext().GetWorkflowKey().RunID {
+		return workflowLease, nil
 	}
 
-	wfContext.GetReleaseFn()(nil)
+	workflowLease.GetReleaseFn()(nil)
 	return nil, consts.ErrLocateCurrentWorkflowExecution
 }
 

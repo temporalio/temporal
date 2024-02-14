@@ -125,7 +125,7 @@ func (s *workflowConsistencyCheckerSuite) TestGetWorkflowContextValidatedByCheck
 	).Return(wfContext, releaseFn, nil)
 	wfContext.EXPECT().LoadMutableState(ctx, s.shardContext).Return(mutableState, nil)
 
-	workflowContext, err := s.checker.getWorkflowContextValidatedByCheck(
+	workflowLease, err := s.checker.getWorkflowContextValidatedByCheck(
 		ctx,
 		&shardOwnershipAsserted,
 		BypassMutableStateConsistencyPredicate,
@@ -133,7 +133,7 @@ func (s *workflowConsistencyCheckerSuite) TestGetWorkflowContextValidatedByCheck
 		workflow.LockPriorityHigh,
 	)
 	s.NoError(err)
-	s.Equal(mutableState, workflowContext.GetMutableState())
+	s.Equal(mutableState, workflowLease.GetMutableState())
 	s.False(released)
 }
 
@@ -163,7 +163,7 @@ func (s *workflowConsistencyCheckerSuite) TestGetWorkflowContextValidatedByCheck
 		wfContext.EXPECT().LoadMutableState(ctx, s.shardContext).Return(mutableState2, nil),
 	)
 
-	workflowContext, err := s.checker.getWorkflowContextValidatedByCheck(
+	workflowLease, err := s.checker.getWorkflowContextValidatedByCheck(
 		ctx,
 		&shardOwnershipAsserted,
 		FailMutableStateConsistencyPredicate,
@@ -171,7 +171,7 @@ func (s *workflowConsistencyCheckerSuite) TestGetWorkflowContextValidatedByCheck
 		workflow.LockPriorityHigh,
 	)
 	s.NoError(err)
-	s.Equal(mutableState2, workflowContext.GetMutableState())
+	s.Equal(mutableState2, workflowLease.GetMutableState())
 	s.False(released)
 }
 
@@ -197,7 +197,7 @@ func (s *workflowConsistencyCheckerSuite) TestGetWorkflowContextValidatedByCheck
 
 	s.shardContext.EXPECT().AssertOwnership(ctx).Return(nil)
 
-	workflowContext, err := s.checker.getWorkflowContextValidatedByCheck(
+	workflowLease, err := s.checker.getWorkflowContextValidatedByCheck(
 		ctx,
 		&shardOwnershipAsserted,
 		FailMutableStateConsistencyPredicate,
@@ -205,7 +205,7 @@ func (s *workflowConsistencyCheckerSuite) TestGetWorkflowContextValidatedByCheck
 		workflow.LockPriorityHigh,
 	)
 	s.IsType(&serviceerror.NotFound{}, err)
-	s.Nil(workflowContext)
+	s.Nil(workflowLease)
 	s.True(released)
 }
 
@@ -231,7 +231,7 @@ func (s *workflowConsistencyCheckerSuite) TestGetWorkflowContextValidatedByCheck
 
 	s.shardContext.EXPECT().AssertOwnership(ctx).Return(&persistence.ShardOwnershipLostError{})
 
-	workflowContext, err := s.checker.getWorkflowContextValidatedByCheck(
+	workflowLease, err := s.checker.getWorkflowContextValidatedByCheck(
 		ctx,
 		&shardOwnershipAsserted,
 		FailMutableStateConsistencyPredicate,
@@ -239,7 +239,7 @@ func (s *workflowConsistencyCheckerSuite) TestGetWorkflowContextValidatedByCheck
 		workflow.LockPriorityHigh,
 	)
 	s.IsType(&persistence.ShardOwnershipLostError{}, err)
-	s.Nil(workflowContext)
+	s.Nil(workflowLease)
 	s.True(released)
 }
 
@@ -263,7 +263,7 @@ func (s *workflowConsistencyCheckerSuite) TestGetWorkflowContextValidatedByCheck
 	).Return(wfContext, releaseFn, nil)
 	wfContext.EXPECT().LoadMutableState(ctx, s.shardContext).Return(nil, serviceerror.NewUnavailable(""))
 
-	workflowContext, err := s.checker.getWorkflowContextValidatedByCheck(
+	workflowLease, err := s.checker.getWorkflowContextValidatedByCheck(
 		ctx,
 		&shardOwnershipAsserted,
 		FailMutableStateConsistencyPredicate,
@@ -271,7 +271,7 @@ func (s *workflowConsistencyCheckerSuite) TestGetWorkflowContextValidatedByCheck
 		workflow.LockPriorityHigh,
 	)
 	s.IsType(&serviceerror.Unavailable{}, err)
-	s.Nil(workflowContext)
+	s.Nil(workflowLease)
 	s.True(released)
 }
 
