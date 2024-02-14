@@ -415,21 +415,6 @@ func (mr *MockExecutionManagerMockRecorder) GetHistoryTasks(ctx, request interfa
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetHistoryTasks", reflect.TypeOf((*MockExecutionManager)(nil).GetHistoryTasks), ctx, request)
 }
 
-// GetHistoryTree mocks base method.
-func (m *MockExecutionManager) GetHistoryTree(ctx context.Context, request *GetHistoryTreeRequest) (*GetHistoryTreeResponse, error) {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "GetHistoryTree", ctx, request)
-	ret0, _ := ret[0].(*GetHistoryTreeResponse)
-	ret1, _ := ret[1].(error)
-	return ret0, ret1
-}
-
-// GetHistoryTree indicates an expected call of GetHistoryTree.
-func (mr *MockExecutionManagerMockRecorder) GetHistoryTree(ctx, request interface{}) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetHistoryTree", reflect.TypeOf((*MockExecutionManager)(nil).GetHistoryTree), ctx, request)
-}
-
 // GetName mocks base method.
 func (m *MockExecutionManager) GetName() string {
 	m.ctrl.T.Helper()

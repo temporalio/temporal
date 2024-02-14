@@ -43,14 +43,17 @@ import (
 	"go.temporal.io/api/workflowservice/v1"
 	"google.golang.org/protobuf/types/known/durationpb"
 
+	"go.temporal.io/server/api/adminservice/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/archiver"
 	"go.temporal.io/server/common/convert"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/payloads"
 	"go.temporal.io/server/common/persistence"
+	"go.temporal.io/server/common/persistence/versionhistory"
 	"go.temporal.io/server/common/primitives"
 	"go.temporal.io/server/common/searchattribute"
+	"go.temporal.io/server/common/testing/protoassert"
 )
 
 const (
@@ -58,10 +61,17 @@ const (
 	retryBackoffTime = 500 * time.Millisecond
 )
 
-type ArchivalSuite struct {
-	*require.Assertions
-	FunctionalTestBase
-}
+type (
+	ArchivalSuite struct {
+		*require.Assertions
+		FunctionalTestBase
+	}
+
+	archivalWorkflowInfo struct {
+		execution   *commonpb.WorkflowExecution
+		branchToken []byte
+	}
+)
 
 func (s *ArchivalSuite) SetupSuite() {
 	s.setupSuite("testdata/cluster.yaml")
@@ -85,15 +95,11 @@ func (s *ArchivalSuite) TestArchival_TimerQueueProcessor() {
 	taskQueue := "archival-timer-queue-processor-task-queue"
 	numActivities := 1
 	numRuns := 1
-	runID := s.startAndFinishWorkflow(workflowID, workflowType, taskQueue, s.archivalNamespace, namespaceID, numActivities, numRuns)[0]
+	workflowInfo := s.startAndFinishWorkflow(workflowID, workflowType, taskQueue, s.archivalNamespace, namespaceID, numActivities, numRuns)[0]
 
-	execution := &commonpb.WorkflowExecution{
-		WorkflowId: workflowID,
-		RunId:      runID,
-	}
-	s.True(s.isArchived(s.archivalNamespace, execution))
-	s.True(s.isHistoryDeleted(execution))
-	s.True(s.isMutableStateDeleted(namespaceID, execution))
+	s.True(s.isArchived(s.archivalNamespace, workflowInfo.execution))
+	s.True(s.isHistoryDeleted(workflowInfo))
+	s.True(s.isMutableStateDeleted(namespaceID, workflowInfo.execution))
 }
 
 func (s *ArchivalSuite) TestArchival_ContinueAsNew() {
@@ -105,16 +111,12 @@ func (s *ArchivalSuite) TestArchival_ContinueAsNew() {
 	taskQueue := "archival-continueAsNew-task-queue"
 	numActivities := 1
 	numRuns := 5
-	runIDs := s.startAndFinishWorkflow(workflowID, workflowType, taskQueue, s.archivalNamespace, namespaceID, numActivities, numRuns)
+	workflowInfos := s.startAndFinishWorkflow(workflowID, workflowType, taskQueue, s.archivalNamespace, namespaceID, numActivities, numRuns)
 
-	for _, runID := range runIDs {
-		execution := &commonpb.WorkflowExecution{
-			WorkflowId: workflowID,
-			RunId:      runID,
-		}
-		s.True(s.isArchived(s.archivalNamespace, execution))
-		s.True(s.isHistoryDeleted(execution))
-		s.True(s.isMutableStateDeleted(namespaceID, execution))
+	for _, workflowInfo := range workflowInfos {
+		s.True(s.isArchived(s.archivalNamespace, workflowInfo.execution))
+		s.True(s.isHistoryDeleted(workflowInfo))
+		s.True(s.isMutableStateDeleted(namespaceID, workflowInfo.execution))
 	}
 }
 
@@ -128,15 +130,11 @@ func (s *ArchivalSuite) TestArchival_ArchiverWorker() {
 	workflowType := "archival-archiver-worker-workflow-type"
 	taskQueue := "archival-archiver-worker-task-queue"
 	numActivities := 10
-	runID := s.startAndFinishWorkflow(workflowID, workflowType, taskQueue, s.archivalNamespace, namespaceID, numActivities, 1)[0]
+	workflowInfo := s.startAndFinishWorkflow(workflowID, workflowType, taskQueue, s.archivalNamespace, namespaceID, numActivities, 1)[0]
 
-	execution := &commonpb.WorkflowExecution{
-		WorkflowId: workflowID,
-		RunId:      runID,
-	}
-	s.True(s.isArchived(s.archivalNamespace, execution))
-	s.True(s.isHistoryDeleted(execution))
-	s.True(s.isMutableStateDeleted(namespaceID, execution))
+	s.True(s.isArchived(s.archivalNamespace, workflowInfo.execution))
+	s.True(s.isHistoryDeleted(workflowInfo))
+	s.True(s.isMutableStateDeleted(namespaceID, workflowInfo.execution))
 }
 
 func (s *ArchivalSuite) TestVisibilityArchival() {
@@ -258,20 +256,33 @@ func (s *ArchivalSuite) isArchived(namespace string, execution *commonpb.Workflo
 	return false
 }
 
-func (s *ArchivalSuite) isHistoryDeleted(execution *commonpb.WorkflowExecution) bool {
+func (s *ArchivalSuite) isHistoryDeleted(
+	workflowInfo archivalWorkflowInfo,
+) bool {
 	namespaceID := s.getNamespaceID(s.archivalNamespace)
-	shardID := common.WorkflowIDToHistoryShard(namespaceID, execution.GetWorkflowId(),
-		s.testClusterConfig.HistoryConfig.NumHistoryShards)
-	request := &persistence.GetHistoryTreeRequest{
-		TreeID:  execution.GetRunId(),
-		ShardID: shardID,
-	}
+	shardID := common.WorkflowIDToHistoryShard(
+		namespaceID,
+		workflowInfo.execution.WorkflowId,
+		s.testClusterConfig.HistoryConfig.NumHistoryShards,
+	)
+
 	for i := 0; i < retryLimit; i++ {
-		resp, err := s.testCluster.testBase.ExecutionManager.GetHistoryTree(NewContext(), request)
-		s.NoError(err)
-		if len(resp.BranchInfos) == 0 {
+		_, err := s.testCluster.testBase.ExecutionManager.ReadHistoryBranch(
+			NewContext(),
+			&persistence.ReadHistoryBranchRequest{
+				ShardID:       shardID,
+				BranchToken:   workflowInfo.branchToken,
+				MinEventID:    common.FirstEventID,
+				MaxEventID:    common.EndEventID,
+				PageSize:      1,
+				NextPageToken: nil,
+			},
+		)
+		if common.IsNotFoundError(err) {
 			return true
 		}
+
+		s.NoError(err)
 		time.Sleep(retryBackoffTime)
 	}
 	return false
@@ -297,7 +308,10 @@ func (s *ArchivalSuite) isMutableStateDeleted(namespaceID string, execution *com
 	return false
 }
 
-func (s *ArchivalSuite) startAndFinishWorkflow(id, wt, tq, namespace, namespaceID string, numActivities, numRuns int) []string {
+func (s *ArchivalSuite) startAndFinishWorkflow(
+	id, wt, tq, namespace, namespaceID string,
+	numActivities, numRuns int,
+) []archivalWorkflowInfo {
 	identity := "worker1"
 	activityName := "activity_type1"
 	workflowType := &commonpb.WorkflowType{Name: wt}
@@ -313,10 +327,10 @@ func (s *ArchivalSuite) startAndFinishWorkflow(id, wt, tq, namespace, namespaceI
 		WorkflowTaskTimeout: durationpb.New(1 * time.Second),
 		Identity:            identity,
 	}
-	we, err := s.engine.StartWorkflowExecution(NewContext(), request)
+	startResp, err := s.engine.StartWorkflowExecution(NewContext(), request)
 	s.NoError(err)
-	s.Logger.Info("StartWorkflowExecution", tag.WorkflowRunID(we.RunId))
-	runIDs := make([]string, numRuns)
+	s.Logger.Info("StartWorkflowExecution", tag.WorkflowRunID(startResp.RunId))
+	workflowInfos := make([]archivalWorkflowInfo, numRuns)
 
 	workflowComplete := false
 	activityCount := int32(numActivities)
@@ -331,7 +345,14 @@ func (s *ArchivalSuite) startAndFinishWorkflow(id, wt, tq, namespace, namespaceI
 		startedEventID int64,
 		history *historypb.History,
 	) ([]*commandpb.Command, error) {
-		runIDs[runCounter-1] = execution.GetRunId()
+		branchToken, err := s.getBranchToken(namespace, execution)
+		s.NoError(err)
+
+		workflowInfos[runCounter-1] = archivalWorkflowInfo{
+			execution:   execution,
+			branchToken: branchToken,
+		}
+
 		if activityCounter < activityCount {
 			activityCounter++
 			buf := new(bytes.Buffer)
@@ -383,8 +404,7 @@ func (s *ArchivalSuite) startAndFinishWorkflow(id, wt, tq, namespace, namespaceI
 		input *commonpb.Payloads,
 		taskToken []byte,
 	) (*commonpb.Payloads, bool, error) {
-		s.Equal(id, execution.GetWorkflowId())
-		s.Equal(runIDs[runCounter-1], execution.GetRunId())
+		protoassert.ProtoEqual(s.T(), workflowInfos[runCounter-1].execution, execution)
 		s.Equal(activityName, activityType.Name)
 		currentActivityId, _ := strconv.Atoi(activityID)
 		s.Equal(int(expectedActivityID), currentActivityId)
@@ -423,7 +443,30 @@ func (s *ArchivalSuite) startAndFinishWorkflow(id, wt, tq, namespace, namespaceI
 
 	s.True(workflowComplete)
 	for run := 1; run < numRuns; run++ {
-		s.NotEqual(runIDs[run-1], runIDs[run])
+		s.NotEqual(workflowInfos[run-1].execution, workflowInfos[run].execution)
+		s.NotEqual(workflowInfos[run-1].branchToken, workflowInfos[run].branchToken)
 	}
-	return runIDs
+	return workflowInfos
+}
+
+func (s *ArchivalSuite) getBranchToken(
+	namespace string,
+	execution *commonpb.WorkflowExecution,
+) ([]byte, error) {
+
+	descResp, err := s.adminClient.DescribeMutableState(NewContext(), &adminservice.DescribeMutableStateRequest{
+		Namespace: namespace,
+		Execution: execution,
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	versionHistories := descResp.CacheMutableState.ExecutionInfo.VersionHistories
+	currentVersionHistory, err := versionhistory.GetCurrentVersionHistory(versionHistories)
+	if err != nil {
+		return nil, err
+	}
+
+	return currentVersionHistory.GetBranchToken(), nil
 }

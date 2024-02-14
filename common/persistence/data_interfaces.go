@@ -944,24 +944,11 @@ type (
 	TrimHistoryBranchResponse struct {
 	}
 
-	// GetHistoryTreeRequest is used to retrieve branch info of a history tree
-	GetHistoryTreeRequest struct {
-		// A UUID of a tree
-		TreeID string
-		// Get data from this shard
-		ShardID int32
-	}
-
 	// HistoryBranchDetail contains detailed information of a branch
 	HistoryBranchDetail struct {
 		BranchInfo *persistencespb.HistoryBranch
 		ForkTime   *timestamppb.Timestamp
 		Info       string
-	}
-
-	// GetHistoryTreeResponse is a response to GetHistoryTreeRequest
-	GetHistoryTreeResponse struct {
-		BranchInfos []*persistencespb.HistoryBranch
 	}
 
 	// GetAllHistoryTreeBranchesRequest is a request of GetAllHistoryTreeBranches
@@ -1134,8 +1121,6 @@ type (
 		DeleteHistoryBranch(ctx context.Context, request *DeleteHistoryBranchRequest) error
 		// TrimHistoryBranch validate & trim a history branch
 		TrimHistoryBranch(ctx context.Context, request *TrimHistoryBranchRequest) (*TrimHistoryBranchResponse, error)
-		// GetHistoryTree returns all branch information of a tree
-		GetHistoryTree(ctx context.Context, request *GetHistoryTreeRequest) (*GetHistoryTreeResponse, error)
 		// GetAllHistoryTreeBranches returns all branches of all trees
 		GetAllHistoryTreeBranches(ctx context.Context, request *GetAllHistoryTreeBranchesRequest) (*GetAllHistoryTreeBranchesResponse, error)
 	}
