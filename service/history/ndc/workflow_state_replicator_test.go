@@ -30,9 +30,6 @@ import (
 	"time"
 
 	historypb "go.temporal.io/api/history/v1"
-
-	"go.temporal.io/server/common"
-	serviceerrors "go.temporal.io/server/common/serviceerror"
 	"go.temporal.io/server/service/history/events"
 
 	"github.com/golang/mock/gomock"
@@ -49,11 +46,12 @@ import (
 	historyspb "go.temporal.io/server/api/history/v1"
 	"go.temporal.io/server/api/historyservice/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
-
+	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/persistence/serialization"
+	serviceerrors "go.temporal.io/server/common/serviceerror"
 	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/tests"
 	"go.temporal.io/server/service/history/workflow"
@@ -168,6 +166,7 @@ func (s *workflowReplicatorSuite) Test_ApplyWorkflowState_BrandNew() {
 			NextEventId: nextEventID,
 		},
 		RemoteCluster: "test",
+		NamespaceId:   namespaceID,
 	}
 	we := &commonpb.WorkflowExecution{
 		WorkflowId: s.workflowID,
@@ -215,8 +214,8 @@ func (s *workflowReplicatorSuite) Test_ApplyWorkflowState_BrandNew() {
 			WorkflowExecutionTerminatedEventAttributes: &historypb.WorkflowExecutionTerminatedEventAttributes{},
 		},
 	}
-	s.mockEventCache.EXPECT().GetEvent(gomock.Any(), gomock.Any(), common.FirstEventID, gomock.Any()).Return(fakeStartHistory, nil).AnyTimes()
-	s.mockEventCache.EXPECT().GetEvent(gomock.Any(), gomock.Any(), completionEventBatchId, gomock.Any()).Return(fakeCompletionEvent, nil).AnyTimes()
+	s.mockEventCache.EXPECT().GetEvent(gomock.Any(), gomock.Any(), gomock.Any(), common.FirstEventID, gomock.Any()).Return(fakeStartHistory, nil).AnyTimes()
+	s.mockEventCache.EXPECT().GetEvent(gomock.Any(), gomock.Any(), gomock.Any(), completionEventBatchId, gomock.Any()).Return(fakeCompletionEvent, nil).AnyTimes()
 	err = s.workflowStateReplicator.SyncWorkflowState(context.Background(), request)
 	s.NoError(err)
 }
@@ -273,6 +272,7 @@ func (s *workflowReplicatorSuite) Test_ApplyWorkflowState_Ancestors() {
 			NextEventId: nextEventID,
 		},
 		RemoteCluster: "test",
+		NamespaceId:   namespaceID,
 	}
 	we := &commonpb.WorkflowExecution{
 		WorkflowId: s.workflowID,
@@ -382,8 +382,8 @@ func (s *workflowReplicatorSuite) Test_ApplyWorkflowState_Ancestors() {
 			WorkflowExecutionTerminatedEventAttributes: &historypb.WorkflowExecutionTerminatedEventAttributes{},
 		},
 	}
-	s.mockEventCache.EXPECT().GetEvent(gomock.Any(), gomock.Any(), common.FirstEventID, gomock.Any()).Return(fakeStartHistory, nil).AnyTimes()
-	s.mockEventCache.EXPECT().GetEvent(gomock.Any(), gomock.Any(), completionEventBatchId, gomock.Any()).Return(fakeCompletionEvent, nil).AnyTimes()
+	s.mockEventCache.EXPECT().GetEvent(gomock.Any(), gomock.Any(), gomock.Any(), common.FirstEventID, gomock.Any()).Return(fakeStartHistory, nil).AnyTimes()
+	s.mockEventCache.EXPECT().GetEvent(gomock.Any(), gomock.Any(), gomock.Any(), completionEventBatchId, gomock.Any()).Return(fakeCompletionEvent, nil).AnyTimes()
 	err = s.workflowStateReplicator.SyncWorkflowState(context.Background(), request)
 	s.NoError(err)
 }

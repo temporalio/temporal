@@ -1311,6 +1311,8 @@ func (handler *workflowTaskHandlerImpl) handleRetry(
 		handler.shard.GetEventsCache(),
 		handler.shard.GetLogger(),
 		handler.mutableState.GetNamespaceEntry(),
+		handler.mutableState.GetWorkflowKey().WorkflowID,
+		newRunID,
 		handler.shard.GetTimeSource().Now(),
 	)
 
@@ -1365,6 +1367,8 @@ func (handler *workflowTaskHandlerImpl) handleCron(
 		handler.shard.GetEventsCache(),
 		handler.shard.GetLogger(),
 		handler.mutableState.GetNamespaceEntry(),
+		handler.mutableState.GetWorkflowKey().WorkflowID,
+		newRunID,
 		handler.shard.GetTimeSource().Now(),
 	)
 
