@@ -41,6 +41,7 @@ import (
 	"go.temporal.io/api/serviceerror"
 	updatepb "go.temporal.io/api/update/v1"
 	"go.temporal.io/api/workflowservice/v1"
+	"go.temporal.io/server/common/testing/protoutils"
 	"go.temporal.io/server/common/testing/runtime"
 	"go.temporal.io/server/service/history/workflow/update"
 	"google.golang.org/protobuf/types/known/durationpb"
@@ -96,14 +97,14 @@ func (s *FunctionalSuite) acceptCompleteUpdateCommands(tv *testvars.TestVars, me
 
 func (s *FunctionalSuite) acceptUpdateMessages(tv *testvars.TestVars, updRequestMsg *protocolpb.Message, messageID string) []*protocolpb.Message {
 	s.T().Helper()
-	updRequest := unmarshalAny[*updatepb.Request](s, updRequestMsg.GetBody())
+	updRequest := protoutils.UnmarshalAny[*updatepb.Request](s.T(), updRequestMsg.GetBody())
 
 	return []*protocolpb.Message{
 		{
 			Id:                 tv.MessageID("update-accepted", messageID),
 			ProtocolInstanceId: updRequest.GetMeta().GetUpdateId(),
 			SequencingId:       nil,
-			Body: marshalAny(s, &updatepb.Acceptance{
+			Body: protoutils.MarshalAny(s.T(), &updatepb.Acceptance{
 				AcceptedRequestMessageId:         updRequestMsg.GetId(),
 				AcceptedRequestSequencingEventId: updRequestMsg.GetEventId(),
 				AcceptedRequest:                  updRequest,
@@ -114,14 +115,14 @@ func (s *FunctionalSuite) acceptUpdateMessages(tv *testvars.TestVars, updRequest
 
 func (s *FunctionalSuite) completeUpdateMessages(tv *testvars.TestVars, updRequestMsg *protocolpb.Message, messageID string) []*protocolpb.Message {
 	s.T().Helper()
-	updRequest := unmarshalAny[*updatepb.Request](s, updRequestMsg.GetBody())
+	updRequest := protoutils.UnmarshalAny[*updatepb.Request](s.T(), updRequestMsg.GetBody())
 
 	return []*protocolpb.Message{
 		{
 			Id:                 tv.MessageID("update-completed", messageID),
 			ProtocolInstanceId: updRequest.GetMeta().GetUpdateId(),
 			SequencingId:       nil,
-			Body: marshalAny(s, &updatepb.Response{
+			Body: protoutils.MarshalAny(s.T(), &updatepb.Response{
 				Meta: updRequest.GetMeta(),
 				Outcome: &updatepb.Outcome{
 					Value: &updatepb.Outcome_Success{
@@ -140,14 +141,14 @@ func (s *FunctionalSuite) acceptCompleteUpdateMessages(tv *testvars.TestVars, up
 
 func (s *FunctionalSuite) rejectUpdateMessages(tv *testvars.TestVars, updRequestMsg *protocolpb.Message, messageID string) []*protocolpb.Message {
 	s.T().Helper()
-	updRequest := unmarshalAny[*updatepb.Request](s, updRequestMsg.GetBody())
+	updRequest := protoutils.UnmarshalAny[*updatepb.Request](s.T(), updRequestMsg.GetBody())
 
 	return []*protocolpb.Message{
 		{
 			Id:                 tv.MessageID("update-rejected", messageID),
 			ProtocolInstanceId: updRequest.GetMeta().GetUpdateId(),
 			SequencingId:       nil,
-			Body: marshalAny(s, &updatepb.Rejection{
+			Body: protoutils.MarshalAny(s.T(), &updatepb.Rejection{
 				RejectedRequestMessageId:         updRequestMsg.GetId(),
 				RejectedRequestSequencingEventId: updRequestMsg.GetEventId(),
 				RejectedRequest:                  updRequest,
@@ -261,7 +262,7 @@ func (s *FunctionalSuite) TestUpdateWorkflow_NewSpeculativeWorkflowTask_AcceptCo
 					return nil, nil
 				case 2:
 					updRequestMsg := task.Messages[0]
-					updRequest := unmarshalAny[*updatepb.Request](s, updRequestMsg.GetBody())
+					updRequest := protoutils.UnmarshalAny[*updatepb.Request](s.T(), updRequestMsg.GetBody())
 
 					s.Equal("args-value-of-"+tv.UpdateID("1"), decodeString(s, updRequest.GetInput().GetArgs()))
 					s.Equal(tv.HandlerName(), updRequest.GetInput().GetName())
@@ -418,7 +419,7 @@ func (s *FunctionalSuite) TestUpdateWorkflow_NewNormalWorkflowTask_AcceptComplet
 					return nil, nil
 				case 2:
 					updRequestMsg := task.Messages[0]
-					updRequest := unmarshalAny[*updatepb.Request](s, updRequestMsg.GetBody())
+					updRequest := protoutils.UnmarshalAny[*updatepb.Request](s.T(), updRequestMsg.GetBody())
 
 					s.Equal("args-value-of-"+tv.UpdateID("1"), decodeString(s, updRequest.GetInput().GetArgs()))
 					s.Equal(tv.HandlerName(), updRequest.GetInput().GetName())
@@ -552,7 +553,7 @@ func (s *FunctionalSuite) TestUpdateWorkflow_FirstNormalScheduledWorkflowTask_Ac
 				switch msgHandlerCalls {
 				case 1:
 					updRequestMsg := task.Messages[0]
-					updRequest := unmarshalAny[*updatepb.Request](s, updRequestMsg.GetBody())
+					updRequest := protoutils.UnmarshalAny[*updatepb.Request](s.T(), updRequestMsg.GetBody())
 
 					s.Equal("args-value-of-"+tv.UpdateID("1"), decodeString(s, updRequest.GetInput().GetArgs()))
 					s.Equal(tv.HandlerName(), updRequest.GetInput().GetName())
@@ -687,7 +688,7 @@ func (s *FunctionalSuite) TestUpdateWorkflow_NormalScheduledWorkflowTask_AcceptC
 				case 2:
 					s.Require().True(len(task.Messages) > 0, "Task has no messages", task)
 					updRequestMsg := task.Messages[0]
-					updRequest := unmarshalAny[*updatepb.Request](s, updRequestMsg.GetBody())
+					updRequest := protoutils.UnmarshalAny[*updatepb.Request](s.T(), updRequestMsg.GetBody())
 
 					s.Equal("args-value-of-"+tv.UpdateID("1"), decodeString(s, updRequest.GetInput().GetArgs()))
 					s.Equal(tv.HandlerName(), updRequest.GetInput().GetName())
@@ -1020,13 +1021,13 @@ func (s *FunctionalSuite) TestUpdateWorkflow_ValidateWorkerMessages() {
 			Name:                     "message-update-id-not-found",
 			RespondWorkflowTaskError: "not found",
 			MessageFn: func(tv *testvars.TestVars, reqMsg *protocolpb.Message) []*protocolpb.Message {
-				updRequest := unmarshalAny[*updatepb.Request](s, reqMsg.GetBody())
+				updRequest := protoutils.UnmarshalAny[*updatepb.Request](s.T(), reqMsg.GetBody())
 				return []*protocolpb.Message{
 					{
 						Id:                 tv.MessageID("update-accepted"),
 						ProtocolInstanceId: tv.WithUpdateID("bogus-update-id").UpdateID(),
 						SequencingId:       nil,
-						Body: marshalAny(s, &updatepb.Acceptance{
+						Body: protoutils.MarshalAny(s.T(), &updatepb.Acceptance{
 							AcceptedRequestMessageId:         reqMsg.GetId(),
 							AcceptedRequestSequencingEventId: reqMsg.GetEventId(),
 							AcceptedRequest:                  updRequest,
@@ -1049,13 +1050,13 @@ func (s *FunctionalSuite) TestUpdateWorkflow_ValidateWorkerMessages() {
 			Name:                     "command-reference-missed-message",
 			RespondWorkflowTaskError: "referenced absent message ID",
 			MessageFn: func(tv *testvars.TestVars, reqMsg *protocolpb.Message) []*protocolpb.Message {
-				updRequest := unmarshalAny[*updatepb.Request](s, reqMsg.GetBody())
+				updRequest := protoutils.UnmarshalAny[*updatepb.Request](s.T(), reqMsg.GetBody())
 				return []*protocolpb.Message{
 					{
 						Id:                 tv.Any().String(),
 						ProtocolInstanceId: updRequest.GetMeta().GetUpdateId(),
 						SequencingId:       nil,
-						Body: marshalAny(s, &updatepb.Acceptance{
+						Body: protoutils.MarshalAny(s.T(), &updatepb.Acceptance{
 							AcceptedRequestMessageId:         reqMsg.GetId(),
 							AcceptedRequestSequencingEventId: reqMsg.GetEventId(),
 							AcceptedRequest:                  updRequest,
@@ -1078,13 +1079,13 @@ func (s *FunctionalSuite) TestUpdateWorkflow_ValidateWorkerMessages() {
 			Name:                     "complete-without-accept",
 			RespondWorkflowTaskError: "invalid state transition attempted",
 			MessageFn: func(tv *testvars.TestVars, reqMsg *protocolpb.Message) []*protocolpb.Message {
-				updRequest := unmarshalAny[*updatepb.Request](s, reqMsg.GetBody())
+				updRequest := protoutils.UnmarshalAny[*updatepb.Request](s.T(), reqMsg.GetBody())
 				return []*protocolpb.Message{
 					{
 						Id:                 tv.MessageID("update-completed"),
 						ProtocolInstanceId: updRequest.GetMeta().GetUpdateId(),
 						SequencingId:       nil,
-						Body: marshalAny(s, &updatepb.Response{
+						Body: protoutils.MarshalAny(s.T(), &updatepb.Response{
 							Meta: updRequest.GetMeta(),
 							Outcome: &updatepb.Outcome{
 								Value: &updatepb.Outcome_Success{
@@ -1110,13 +1111,13 @@ func (s *FunctionalSuite) TestUpdateWorkflow_ValidateWorkerMessages() {
 			Name:                     "accept-twice",
 			RespondWorkflowTaskError: "invalid state transition attempted",
 			MessageFn: func(tv *testvars.TestVars, reqMsg *protocolpb.Message) []*protocolpb.Message {
-				updRequest := unmarshalAny[*updatepb.Request](s, reqMsg.GetBody())
+				updRequest := protoutils.UnmarshalAny[*updatepb.Request](s.T(), reqMsg.GetBody())
 				return []*protocolpb.Message{
 					{
 						Id:                 tv.MessageID("update-accepted", "1"),
 						ProtocolInstanceId: updRequest.GetMeta().GetUpdateId(),
 						SequencingId:       nil,
-						Body: marshalAny(s, &updatepb.Acceptance{
+						Body: protoutils.MarshalAny(s.T(), &updatepb.Acceptance{
 							AcceptedRequestMessageId:         reqMsg.GetId(),
 							AcceptedRequestSequencingEventId: reqMsg.GetEventId(),
 							AcceptedRequest:                  updRequest,
@@ -1126,7 +1127,7 @@ func (s *FunctionalSuite) TestUpdateWorkflow_ValidateWorkerMessages() {
 						Id:                 tv.MessageID("update-accepted", "2"),
 						ProtocolInstanceId: updRequest.GetMeta().GetUpdateId(),
 						SequencingId:       nil,
-						Body: marshalAny(s, &updatepb.Acceptance{
+						Body: protoutils.MarshalAny(s.T(), &updatepb.Acceptance{
 							AcceptedRequestMessageId:         reqMsg.GetId(),
 							AcceptedRequestSequencingEventId: reqMsg.GetEventId(),
 							AcceptedRequest:                  updRequest,
@@ -1155,13 +1156,13 @@ func (s *FunctionalSuite) TestUpdateWorkflow_ValidateWorkerMessages() {
 			Name:                     "success-case",
 			RespondWorkflowTaskError: "",
 			MessageFn: func(tv *testvars.TestVars, reqMsg *protocolpb.Message) []*protocolpb.Message {
-				updRequest := unmarshalAny[*updatepb.Request](s, reqMsg.GetBody())
+				updRequest := protoutils.UnmarshalAny[*updatepb.Request](s.T(), reqMsg.GetBody())
 				return []*protocolpb.Message{
 					{
 						Id:                 tv.MessageID("update-accepted"),
 						ProtocolInstanceId: updRequest.GetMeta().GetUpdateId(),
 						SequencingId:       nil,
-						Body: marshalAny(s, &updatepb.Acceptance{
+						Body: protoutils.MarshalAny(s.T(), &updatepb.Acceptance{
 							AcceptedRequestMessageId:         reqMsg.GetId(),
 							AcceptedRequestSequencingEventId: reqMsg.GetEventId(),
 							AcceptedRequest:                  updRequest,
@@ -1171,7 +1172,7 @@ func (s *FunctionalSuite) TestUpdateWorkflow_ValidateWorkerMessages() {
 						Id:                 tv.MessageID("update-completed"),
 						ProtocolInstanceId: updRequest.GetMeta().GetUpdateId(),
 						SequencingId:       nil,
-						Body: marshalAny(s, &updatepb.Response{
+						Body: protoutils.MarshalAny(s.T(), &updatepb.Response{
 							Meta: updRequest.GetMeta(),
 							Outcome: &updatepb.Outcome{
 								Value: &updatepb.Outcome_Success{
@@ -1203,13 +1204,13 @@ func (s *FunctionalSuite) TestUpdateWorkflow_ValidateWorkerMessages() {
 			Name:                     "success-case-no-commands", // PROTOCOL_MESSAGE commands are optional.
 			RespondWorkflowTaskError: "",
 			MessageFn: func(tv *testvars.TestVars, reqMsg *protocolpb.Message) []*protocolpb.Message {
-				updRequest := unmarshalAny[*updatepb.Request](s, reqMsg.GetBody())
+				updRequest := protoutils.UnmarshalAny[*updatepb.Request](s.T(), reqMsg.GetBody())
 				return []*protocolpb.Message{
 					{
 						Id:                 tv.Any().String(),
 						ProtocolInstanceId: updRequest.GetMeta().GetUpdateId(),
 						SequencingId:       nil,
-						Body: marshalAny(s, &updatepb.Acceptance{
+						Body: protoutils.MarshalAny(s.T(), &updatepb.Acceptance{
 							AcceptedRequestMessageId:         reqMsg.GetId(),
 							AcceptedRequestSequencingEventId: reqMsg.GetEventId(),
 							AcceptedRequest:                  updRequest,
@@ -1219,7 +1220,7 @@ func (s *FunctionalSuite) TestUpdateWorkflow_ValidateWorkerMessages() {
 						Id:                 tv.Any().String(),
 						ProtocolInstanceId: updRequest.GetMeta().GetUpdateId(),
 						SequencingId:       nil,
-						Body: marshalAny(s, &updatepb.Response{
+						Body: protoutils.MarshalAny(s.T(), &updatepb.Response{
 							Meta: updRequest.GetMeta(),
 							Outcome: &updatepb.Outcome{
 								Value: &updatepb.Outcome_Success{
@@ -1235,13 +1236,13 @@ func (s *FunctionalSuite) TestUpdateWorkflow_ValidateWorkerMessages() {
 			Name:                     "invalid-command-order",
 			RespondWorkflowTaskError: "invalid state transition attempted",
 			MessageFn: func(tv *testvars.TestVars, reqMsg *protocolpb.Message) []*protocolpb.Message {
-				updRequest := unmarshalAny[*updatepb.Request](s, reqMsg.GetBody())
+				updRequest := protoutils.UnmarshalAny[*updatepb.Request](s.T(), reqMsg.GetBody())
 				return []*protocolpb.Message{
 					{
 						Id:                 tv.MessageID("update-accepted"),
 						ProtocolInstanceId: updRequest.GetMeta().GetUpdateId(),
 						SequencingId:       nil,
-						Body: marshalAny(s, &updatepb.Acceptance{
+						Body: protoutils.MarshalAny(s.T(), &updatepb.Acceptance{
 							AcceptedRequestMessageId:         reqMsg.GetId(),
 							AcceptedRequestSequencingEventId: reqMsg.GetEventId(),
 							AcceptedRequest:                  updRequest,
@@ -1251,7 +1252,7 @@ func (s *FunctionalSuite) TestUpdateWorkflow_ValidateWorkerMessages() {
 						Id:                 tv.MessageID("update-completed"),
 						ProtocolInstanceId: updRequest.GetMeta().GetUpdateId(),
 						SequencingId:       nil,
-						Body: marshalAny(s, &updatepb.Response{
+						Body: protoutils.MarshalAny(s.T(), &updatepb.Response{
 							Meta: updRequest.GetMeta(),
 							Outcome: &updatepb.Outcome{
 								Value: &updatepb.Outcome_Success{
@@ -1419,7 +1420,7 @@ func (s *FunctionalSuite) TestUpdateWorkflow_NewStickySpeculativeWorkflowTask_Ac
 					return nil, nil
 				case 2:
 					updRequestMsg := task.Messages[0]
-					updRequest := unmarshalAny[*updatepb.Request](s, updRequestMsg.GetBody())
+					updRequest := protoutils.UnmarshalAny[*updatepb.Request](s.T(), updRequestMsg.GetBody())
 
 					s.Equal("args-value-of-"+tv.UpdateID("1"), decodeString(s, updRequest.GetInput().GetArgs()))
 					s.Equal(tv.HandlerName(), updRequest.GetInput().GetName())
@@ -1545,7 +1546,7 @@ func (s *FunctionalSuite) TestUpdateWorkflow_NewStickySpeculativeWorkflowTask_Ac
 			return nil, nil
 		case 2:
 			updRequestMsg := task.Messages[0]
-			updRequest := unmarshalAny[*updatepb.Request](s, updRequestMsg.GetBody())
+			updRequest := protoutils.UnmarshalAny[*updatepb.Request](s.T(), updRequestMsg.GetBody())
 
 			s.Equal("args-value-of-"+tv.UpdateID("1"), decodeString(s, updRequest.GetInput().GetArgs()))
 			s.Equal(tv.HandlerName(), updRequest.GetInput().GetName())
@@ -1661,7 +1662,7 @@ func (s *FunctionalSuite) TestUpdateWorkflow_FirstNormalScheduledWorkflowTask_Re
 		switch msgHandlerCalls {
 		case 1:
 			updRequestMsg := task.Messages[0]
-			updRequest := unmarshalAny[*updatepb.Request](s, updRequestMsg.GetBody())
+			updRequest := protoutils.UnmarshalAny[*updatepb.Request](s.T(), updRequestMsg.GetBody())
 
 			s.Equal("args-value-of-"+tv.UpdateID("1"), decodeString(s, updRequest.GetInput().GetArgs()))
 			s.Equal(tv.HandlerName(), updRequest.GetInput().GetName())
@@ -1772,7 +1773,7 @@ func (s *FunctionalSuite) TestUpdateWorkflow_NewSpeculativeWorkflowTask_Reject()
 			return nil, nil
 		case 2:
 			updRequestMsg := task.Messages[0]
-			updRequest := unmarshalAny[*updatepb.Request](s, updRequestMsg.GetBody())
+			updRequest := protoutils.UnmarshalAny[*updatepb.Request](s.T(), updRequestMsg.GetBody())
 
 			s.Equal("args-value-of-"+tv.UpdateID("1"), decodeString(s, updRequest.GetInput().GetArgs()))
 			s.Equal(tv.HandlerName(), updRequest.GetInput().GetName())
@@ -1892,7 +1893,7 @@ func (s *FunctionalSuite) TestUpdateWorkflow_NewNormalWorkflowTask_Reject() {
 			return nil, nil
 		case 2:
 			updRequestMsg := task.Messages[0]
-			updRequest := unmarshalAny[*updatepb.Request](s, updRequestMsg.GetBody())
+			updRequest := protoutils.UnmarshalAny[*updatepb.Request](s.T(), updRequestMsg.GetBody())
 
 			s.Equal("args-value-of-"+tv.UpdateID("1"), decodeString(s, updRequest.GetInput().GetArgs()))
 			s.Equal(tv.HandlerName(), updRequest.GetInput().GetName())
@@ -2024,13 +2025,13 @@ func (s *FunctionalSuite) TestUpdateWorkflow_1stAccept_2ndAccept_2ndComplete_1st
 		switch msgHandlerCalls {
 		case 1:
 			upd1RequestMsg = task.Messages[0]
-			upd1Request := unmarshalAny[*updatepb.Request](s, upd1RequestMsg.GetBody())
+			upd1Request := protoutils.UnmarshalAny[*updatepb.Request](s.T(), upd1RequestMsg.GetBody())
 			s.Equal("args-value-of-"+tv.UpdateID("1"), decodeString(s, upd1Request.GetInput().GetArgs()))
 			s.EqualValues(2, upd1RequestMsg.GetEventId())
 			return s.acceptUpdateMessages(tv, upd1RequestMsg, "1"), nil
 		case 2:
 			upd2RequestMsg = task.Messages[0]
-			upd2Request := unmarshalAny[*updatepb.Request](s, upd2RequestMsg.GetBody())
+			upd2Request := protoutils.UnmarshalAny[*updatepb.Request](s.T(), upd2RequestMsg.GetBody())
 			s.Equal("args-value-of-"+tv.UpdateID("2"), decodeString(s, upd2Request.GetInput().GetArgs()))
 			s.EqualValues(6, upd2RequestMsg.GetEventId())
 			return s.acceptUpdateMessages(tv, upd2RequestMsg, "2"), nil
@@ -2189,13 +2190,13 @@ func (s *FunctionalSuite) TestUpdateWorkflow_1stAccept_2ndReject_1stComplete() {
 		switch msgHandlerCalls {
 		case 1:
 			upd1RequestMsg = task.Messages[0]
-			upd1Request := unmarshalAny[*updatepb.Request](s, upd1RequestMsg.GetBody())
+			upd1Request := protoutils.UnmarshalAny[*updatepb.Request](s.T(), upd1RequestMsg.GetBody())
 			s.Equal("args-value-of-"+tv.UpdateID("1"), decodeString(s, upd1Request.GetInput().GetArgs()))
 			s.EqualValues(2, upd1RequestMsg.GetEventId())
 			return s.acceptUpdateMessages(tv, upd1RequestMsg, "1"), nil
 		case 2:
 			upd2RequestMsg := task.Messages[0]
-			upd2Request := unmarshalAny[*updatepb.Request](s, upd2RequestMsg.GetBody())
+			upd2Request := protoutils.UnmarshalAny[*updatepb.Request](s.T(), upd2RequestMsg.GetBody())
 			s.Equal("args-value-of-"+tv.UpdateID("2"), decodeString(s, upd2Request.GetInput().GetArgs()))
 			s.EqualValues(6, upd2RequestMsg.GetEventId())
 			return s.rejectUpdateMessages(tv, upd2RequestMsg, "2"), nil
@@ -2350,7 +2351,7 @@ func (s *FunctionalSuite) TestUpdateWorkflow_FailSpeculativeWorkflowTask() {
 					Id:                 tv.MessageID("update-accepted", "1"),
 					ProtocolInstanceId: tv.Any().String(),
 					SequencingId:       nil,
-					Body: marshalAny(s, &updatepb.Acceptance{
+					Body: protoutils.MarshalAny(s.T(), &updatepb.Acceptance{
 						AcceptedRequestMessageId:         updRequestMsg.GetId(),
 						AcceptedRequestSequencingEventId: updRequestMsg.GetEventId(),
 						AcceptedRequest:                  nil, // must not be nil.
@@ -3001,7 +3002,7 @@ func (s *FunctionalSuite) TestUpdateWorkflow_ScheduleToStartTimeoutSpeculativeWo
 			return nil, nil
 		case 2:
 			updRequestMsg := task.Messages[0]
-			updRequest := unmarshalAny[*updatepb.Request](s, updRequestMsg.GetBody())
+			updRequest := protoutils.UnmarshalAny[*updatepb.Request](s.T(), updRequestMsg.GetBody())
 
 			s.Equal("args-value-of-"+tv.UpdateID("1"), decodeString(s, updRequest.GetInput().GetArgs()))
 			s.Equal(tv.HandlerName(), updRequest.GetInput().GetName())
@@ -5158,7 +5159,7 @@ func (s *FunctionalSuite) TestUpdateWorkflow_NewSpeculativeWorkflowTask_WorkerSk
 			return nil, nil
 		case 2:
 			updRequestMsg := task.Messages[0]
-			updRequest := unmarshalAny[*updatepb.Request](s, updRequestMsg.GetBody())
+			updRequest := protoutils.UnmarshalAny[*updatepb.Request](s.T(), updRequestMsg.GetBody())
 
 			s.Equal("args-value-of-"+tv.UpdateID("1"), decodeString(s, updRequest.GetInput().GetArgs()))
 			s.EqualValues(5, updRequestMsg.GetEventId())
@@ -5168,7 +5169,7 @@ func (s *FunctionalSuite) TestUpdateWorkflow_NewSpeculativeWorkflowTask_WorkerSk
 		case 3:
 			s.Len(task.Messages, 1)
 			updRequestMsg := task.Messages[0]
-			updRequest := unmarshalAny[*updatepb.Request](s, updRequestMsg.GetBody())
+			updRequest := protoutils.UnmarshalAny[*updatepb.Request](s.T(), updRequestMsg.GetBody())
 
 			s.Equal("args-value-of-"+tv.UpdateID("2"), decodeString(s, updRequest.GetInput().GetArgs()))
 			s.EqualValues(5, updRequestMsg.GetEventId())
