@@ -1,8 +1,7 @@
 // The MIT License
+
 //
-// Copyright (c) 2020 Temporal Technologies Inc.  All rights reserved.
-//
-// Copyright (c) 2020 Uber Technologies, Inc.
+// Copyright (c) 2024 Temporal Technologies Inc.  All rights reserved.
 //
 // Permission is hereby granted, free of charge, to any person obtaining a copy
 // of this software and associated documentation files (the "Software"), to deal
@@ -22,28 +21,39 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-package tag
+package collection
 
-import (
-	"errors"
-	"fmt"
-	"testing"
+import "sync"
 
-	"github.com/stretchr/testify/assert"
-	"go.temporal.io/api/serviceerror"
-)
+// OnceMap is a concurrent map which lazily constructs its values. Map values are initialized on-the-fly, using a
+// provided construction function only when a key is accessed for the first time.
+type OnceMap[K comparable, T any] struct {
+	mu        sync.RWMutex
+	inner     map[K]T
+	construct func(K) T
+}
 
-func TestErrorType(t *testing.T) {
-	testData := []struct {
-		err            error
-		expectedResult string
-	}{
-		{serviceerror.NewInvalidArgument(""), "serviceerror.InvalidArgument"},
-		{errors.New("test"), "errors.errorString"},
-		{fmt.Errorf("test"), "errors.errorString"},
+// NewOnceMap creates a [OnceMap] from a given construct function.
+// construct should be kept light as it is called while holding a lock on the entire map.
+func NewOnceMap[K comparable, T any](construct func(K) T) *OnceMap[K, T] {
+	return &OnceMap[K, T]{
+		construct: construct,
+		inner:     make(map[K]T, 0),
+	}
+}
+
+func (p *OnceMap[K, T]) Get(key K) T {
+	p.mu.RLock()
+	value, ok := p.inner[key]
+	p.mu.RUnlock()
+	if !ok {
+		p.mu.Lock()
+		defer p.mu.Unlock()
+		if value, ok = p.inner[key]; !ok {
+			value = p.construct(key)
+			p.inner[key] = value
+		}
 	}
 
-	for id, data := range testData {
-		assert.Equal(t, data.expectedResult, ServiceErrorType(data.err).Value().(string), "Unexpected error type in index %d", id)
-	}
+	return value
 }
