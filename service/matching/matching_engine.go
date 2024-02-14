@@ -251,6 +251,11 @@ func (e *matchingEngineImpl) watchMembership() {
 	self := e.hostInfoProvider.HostInfo().Identity()
 
 	for range e.membershipChangedCh {
+		delay := e.config.MembershipUnloadDelay()
+		if delay == 0 {
+			continue
+		}
+
 		// Check all our loaded task queues to see if we lost ownership of any of them.
 		e.taskQueuesLock.RLock()
 		ids := make([]*taskQueueID, 0, len(e.taskQueues))
@@ -271,7 +276,7 @@ func (e *matchingEngineImpl) watchMembership() {
 			// Note that we don't verify ownership at load time, so this is the only guard against a task
 			// queue bouncing back and forth due to long membership propagation time.
 			batch := ids[i:min(len(ids), i+batchSize)]
-			wait := backoff.Jitter(e.config.MembershipUnloadDelay(), 0.2)
+			wait := backoff.Jitter(delay, 0.2)
 			time.AfterFunc(wait, func() {
 				// maybe the whole engine stopped
 				if atomic.LoadInt32(&e.status) != common.DaemonStatusStarted {
