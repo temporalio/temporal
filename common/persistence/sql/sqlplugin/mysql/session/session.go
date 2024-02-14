@@ -51,8 +51,9 @@ const (
 )
 
 var dsnAttrOverrides = map[string]string{
-	"parseTime":       "true",
-	"clientFoundRows": "true",
+	"parseTime":         "true",
+	"clientFoundRows":   "true",
+	"interpolateParams": "true",
 }
 
 type Session struct {
