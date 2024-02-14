@@ -41,6 +41,8 @@ import (
 	"go.temporal.io/api/serviceerror"
 	updatepb "go.temporal.io/api/update/v1"
 	"go.temporal.io/api/workflowservice/v1"
+	"go.temporal.io/server/common/testing/runtime"
+	"go.temporal.io/server/service/history/workflow/update"
 	"google.golang.org/protobuf/types/known/durationpb"
 
 	"go.temporal.io/server/api/adminservice/v1"
@@ -723,6 +725,9 @@ func (s *FunctionalSuite) TestUpdateWorkflow_NormalScheduledWorkflowTask_AcceptC
 			go func() {
 				updateResultCh <- s.sendUpdateNoError(tv, "1")
 			}()
+			// Signal creates WFT, and it is important to wait for update to get blocked,
+			// to make sure that poll bellow won't poll just for WFT from signal.
+			runtime.WaitGoRoutineWithFn(s.T(), ((*update.Update)(nil)).WaitOutcome, 1*time.Second)
 
 			// Process update in workflow. It will be attached to existing WT.
 			res, err := poller.PollAndProcessWorkflowTask(WithRetries(1), WithForceNewWorkflowTask)
@@ -782,7 +787,7 @@ func (s *FunctionalSuite) TestUpdateWorkflow_NewSpeculativeFromStartedWorkflowTa
 				updateResultCh <- s.sendUpdateNoError(tv, "1")
 			}()
 			// To make sure that 1st update gets to the sever while WT1 is running.
-			time.Sleep(500 * time.Millisecond)
+			runtime.WaitGoRoutineWithFn(s.T(), ((*update.Update)(nil)).WaitOutcome, 1*time.Second)
 			// Completes WT with empty command list to create next WT as speculative.
 			return nil, nil
 		case 2:
@@ -899,7 +904,7 @@ func (s *FunctionalSuite) TestUpdateWorkflow_NewNormalFromStartedWorkflowTask_Re
 				updateResultCh <- s.sendUpdateNoError(tv, "1")
 			}()
 			// To make sure that 1st update gets to the sever while WT1 is running.
-			time.Sleep(500 * time.Millisecond)
+			runtime.WaitGoRoutineWithFn(s.T(), ((*update.Update)(nil)).WaitOutcome, 1*time.Second)
 			// Completes WT with update unrelated commands to prevent next WT to be speculative.
 			return []*commandpb.Command{{
 				CommandType: enumspb.COMMAND_TYPE_SCHEDULE_ACTIVITY_TASK,
@@ -1448,7 +1453,9 @@ func (s *FunctionalSuite) TestUpdateWorkflow_NewStickySpeculativeWorkflowTask_Ac
 
 			updateResultCh := make(chan *workflowservice.UpdateWorkflowExecutionResponse)
 			go func() {
-				time.Sleep(500 * time.Millisecond) // This is to make sure that next sticky poller reach to server first.
+				// This is to make sure that next sticky poller reach to server first.
+				// And when update comes, stick poller is already available.
+				time.Sleep(500 * time.Millisecond)
 				updateResultCh <- s.sendUpdateNoError(tv, "1")
 			}()
 
@@ -2649,7 +2656,8 @@ func (s *FunctionalSuite) TestUpdateWorkflow_ConvertScheduledSpeculativeWorkflow
 	go func() {
 		updateResultCh <- s.sendUpdateNoError(tv, "1")
 	}()
-	time.Sleep(500 * time.Millisecond) // This is to make sure that update gets to the server before the next Signal call.
+	// This is to make sure that update gets to the server before the next Signal call.
+	runtime.WaitGoRoutineWithFn(s.T(), ((*update.Update)(nil)).WaitOutcome, 1*time.Second)
 
 	// Send signal which will NOT be buffered because speculative WT is not started yet (only scheduled).
 	// This will persist MS and speculative WT must be converted to normal.
@@ -2724,8 +2732,8 @@ func (s *FunctionalSuite) TestUpdateWorkflow_StartToCloseTimeoutSpeculativeWorkf
   5 WorkflowTaskScheduled // Speculative WT.
   6 WorkflowTaskStarted
 `, history)
-			// Emulate slow worker: sleep more than WT timeout.
-			time.Sleep(1*time.Second + 100*time.Millisecond)
+			// Emulate slow worker: sleep little more than WT timeout.
+			time.Sleep(request.WorkflowTaskTimeout.AsDuration() + 100*time.Millisecond)
 			// This doesn't matter because WT times out before update is applied.
 			return s.acceptCompleteUpdateCommands(tv, "1"), nil
 		case 3:
@@ -3257,7 +3265,8 @@ func (s *FunctionalSuite) TestUpdateWorkflow_ScheduledSpeculativeWorkflowTask_Te
 		updateResultCh <- struct{}{}
 	}
 	go updateWorkflowFn()
-	time.Sleep(500 * time.Millisecond) // This is to make sure that update gets to the server before the next Terminate call.
+	// This is to make sure that update gets to the server before the next Terminate call.
+	runtime.WaitGoRoutineWithFn(s.T(), ((*update.Update)(nil)).WaitOutcome, 1*time.Second)
 
 	// Terminate workflow after speculative WT is scheduled but not started.
 	_, err = s.engine.TerminateWorkflowExecution(NewContext(), &workflowservice.TerminateWorkflowExecutionRequest{
@@ -4040,6 +4049,7 @@ func (s *FunctionalSuite) TestUpdateWorkflow_ScheduledSpeculativeWorkflowTask_De
 	go func() {
 		updateResultCh <- s.sendUpdateNoError(tv, "1")
 	}()
+	runtime.WaitGoRoutineWithFn(s.T(), ((*update.Update)(nil)).WaitOutcome, 1*time.Second)
 
 	// Send second update with the same ID.
 	updateResultCh2 := make(chan *workflowservice.UpdateWorkflowExecutionResponse)
@@ -4104,6 +4114,7 @@ func (s *FunctionalSuite) TestUpdateWorkflow_StartedSpeculativeWorkflowTask_Dedu
 			go func() {
 				updateResultCh2 <- s.sendUpdateNoError(tv, "1")
 			}()
+			runtime.WaitGoRoutineWithFn(s.T(), ((*update.Update)(nil)).WaitOutcome, 1*time.Second)
 
 			s.EqualHistory(`
   1 WorkflowExecutionStarted
@@ -5120,7 +5131,7 @@ func (s *FunctionalSuite) TestUpdateWorkflow_NewSpeculativeWorkflowTask_WorkerSk
 				update2ResultCh <- s.sendUpdateNoError(tv, "2")
 			}()
 			// To make sure that gets to the sever while this WT is running.
-			time.Sleep(500 * time.Millisecond)
+			runtime.WaitGoRoutineWithFn(s.T(), ((*update.Update)(nil)).WaitOutcome, 1*time.Second)
 			return nil, nil
 		case 3:
 			s.EqualHistory(`
