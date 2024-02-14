@@ -36,6 +36,7 @@ import (
 	"go.temporal.io/server/common/payloads"
 	"go.temporal.io/server/common/testing/historyrequire"
 	"go.temporal.io/server/common/testing/protorequire"
+	"go.temporal.io/server/common/testing/updateutils"
 )
 
 type (
@@ -45,6 +46,7 @@ type (
 		*require.Assertions
 		protorequire.ProtoAssertions
 		historyrequire.HistoryRequire
+		updateutils.UpdateUtils
 		FunctionalTestBase
 	}
 )
@@ -66,6 +68,7 @@ func (s *FunctionalSuite) SetupTest() {
 	s.Assertions = require.New(s.T())
 	s.ProtoAssertions = protorequire.New(s.T())
 	s.HistoryRequire = historyrequire.New(s.T())
+	s.UpdateUtils = updateutils.New(s.T())
 }
 
 func (s *FunctionalSuite) sendSignal(namespace string, execution *commonpb.WorkflowExecution, signalName string,
