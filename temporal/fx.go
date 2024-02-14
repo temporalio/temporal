@@ -902,7 +902,7 @@ var TraceExportModule = fx.Options(
 	fx.Invoke(func(log log.Logger) {
 		otel.SetErrorHandler(otel.ErrorHandlerFunc(
 			func(err error) {
-				log.Warn("OTEL error", tag.Error(err), tag.ErrorType(err))
+				log.Warn("OTEL error", tag.Error(err), tag.ServiceErrorType(err))
 			}),
 		)
 	}),

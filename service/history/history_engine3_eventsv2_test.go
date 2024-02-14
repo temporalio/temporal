@@ -42,6 +42,7 @@ import (
 	"go.temporal.io/api/serviceerror"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	"go.temporal.io/api/workflowservice/v1"
+
 	"go.temporal.io/server/api/historyservice/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 
@@ -234,7 +235,7 @@ func (s *engine3Suite) TestRecordWorkflowTaskStartedSuccessStickyEnabled() {
 	identity := "testIdentity"
 
 	ms := workflow.TestLocalMutableState(s.historyEngine.shardContext, s.mockEventsCache, tests.LocalNamespaceEntry,
-		log.NewTestLogger(), we.GetRunId())
+		we.GetWorkflowId(), we.GetRunId(), log.NewTestLogger())
 	executionInfo := ms.GetExecutionInfo()
 	executionInfo.LastUpdateTime = timestamp.TimeNowPtrUtc()
 	executionInfo.StickyTaskQueue = stickyTl
@@ -359,7 +360,7 @@ func (s *engine3Suite) TestSignalWithStartWorkflowExecution_JustSignal() {
 	}
 
 	ms := workflow.TestLocalMutableState(s.historyEngine.shardContext, s.mockEventsCache, tests.LocalNamespaceEntry,
-		log.NewTestLogger(), runID)
+		workflowID, runID, log.NewTestLogger())
 	addWorkflowExecutionStartedEvent(ms, &commonpb.WorkflowExecution{
 		WorkflowId: workflowID,
 		RunId:      runID,

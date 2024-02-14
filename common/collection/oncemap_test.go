@@ -1,8 +1,7 @@
 // The MIT License
+
 //
-// Copyright (c) 2020 Temporal Technologies Inc.  All rights reserved.
-//
-// Copyright (c) 2020 Uber Technologies, Inc.
+// Copyright (c) 2024 Temporal Technologies Inc.  All rights reserved.
 //
 // Permission is hereby granted, free of charge, to any person obtaining a copy
 // of this software and associated documentation files (the "Software"), to deal
@@ -22,28 +21,30 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-package tag
+package collection
 
 import (
-	"errors"
-	"fmt"
+	"sync/atomic"
 	"testing"
 
-	"github.com/stretchr/testify/assert"
-	"go.temporal.io/api/serviceerror"
+	"github.com/stretchr/testify/require"
 )
 
-func TestErrorType(t *testing.T) {
-	testData := []struct {
-		err            error
-		expectedResult string
-	}{
-		{serviceerror.NewInvalidArgument(""), "serviceerror.InvalidArgument"},
-		{errors.New("test"), "errors.errorString"},
-		{fmt.Errorf("test"), "errors.errorString"},
-	}
+func TestOnceMap(t *testing.T) {
+	counter := atomic.Int32{}
+	m := NewOnceMap(func(k string) int {
+		return int(counter.Add(1))
+	})
 
-	for id, data := range testData {
-		assert.Equal(t, data.expectedResult, ServiceErrorType(data.err).Value().(string), "Unexpected error type in index %d", id)
-	}
+	foo1 := m.Get("foo")
+	foo2 := m.Get("foo")
+
+	require.Equal(t, 1, foo1)
+	require.Equal(t, 1, foo2)
+
+	bar1 := m.Get("bar")
+	bar2 := m.Get("bar")
+
+	require.Equal(t, 2, bar1)
+	require.Equal(t, 2, bar2)
 }

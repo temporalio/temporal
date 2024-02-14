@@ -173,7 +173,7 @@ func (s *WorkflowTaskHandlerCallbackSuite) TestVerifyFirstWorkflowTaskScheduled_
 		},
 	}
 
-	ms := workflow.TestGlobalMutableState(s.workflowTaskHandlerCallback.shardContext, s.mockEventsCache, s.logger, tests.Version, tests.RunID)
+	ms := workflow.TestGlobalMutableState(s.workflowTaskHandlerCallback.shardContext, s.mockEventsCache, s.logger, tests.Version, tests.WorkflowID, tests.RunID)
 	addWorkflowExecutionStartedEvent(ms, &commonpb.WorkflowExecution{
 		WorkflowId: tests.WorkflowID,
 		RunId:      tests.RunID,
@@ -203,7 +203,7 @@ func (s *WorkflowTaskHandlerCallbackSuite) TestVerifyFirstWorkflowTaskScheduled_
 		},
 	}
 
-	ms := workflow.TestGlobalMutableState(s.workflowTaskHandlerCallback.shardContext, s.mockEventsCache, s.logger, tests.Version, tests.RunID)
+	ms := workflow.TestGlobalMutableState(s.workflowTaskHandlerCallback.shardContext, s.mockEventsCache, s.logger, tests.Version, tests.WorkflowID, tests.RunID)
 	addWorkflowExecutionStartedEvent(ms, &commonpb.WorkflowExecution{
 		WorkflowId: tests.WorkflowID,
 		RunId:      tests.RunID,
@@ -231,7 +231,7 @@ func (s *WorkflowTaskHandlerCallbackSuite) TestVerifyFirstWorkflowTaskScheduled_
 		},
 	}
 
-	ms := workflow.TestGlobalMutableState(s.workflowTaskHandlerCallback.shardContext, s.mockEventsCache, s.logger, tests.Version, tests.RunID)
+	ms := workflow.TestGlobalMutableState(s.workflowTaskHandlerCallback.shardContext, s.mockEventsCache, s.logger, tests.Version, tests.WorkflowID, tests.RunID)
 	addWorkflowExecutionStartedEvent(ms, &commonpb.WorkflowExecution{
 		WorkflowId: tests.WorkflowID,
 		RunId:      tests.RunID,
@@ -255,7 +255,7 @@ func (s *WorkflowTaskHandlerCallbackSuite) TestVerifyFirstWorkflowTaskScheduled_
 		},
 	}
 
-	ms := workflow.TestGlobalMutableState(s.workflowTaskHandlerCallback.shardContext, s.mockEventsCache, s.logger, tests.Version, tests.RunID)
+	ms := workflow.TestGlobalMutableState(s.workflowTaskHandlerCallback.shardContext, s.mockEventsCache, s.logger, tests.Version, tests.WorkflowID, tests.RunID)
 	addWorkflowExecutionStartedEvent(ms, &commonpb.WorkflowExecution{
 		WorkflowId: tests.WorkflowID,
 		RunId:      tests.RunID,

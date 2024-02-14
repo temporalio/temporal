@@ -255,7 +255,7 @@ func (s *transferQueueActiveTaskExecutorSuite) TestProcessActivityTask_Success()
 	workflowType := "some random workflow type"
 	taskQueueName := "some random task queue"
 
-	mutableState := workflow.TestGlobalMutableState(s.mockShard, s.mockShard.GetEventsCache(), s.logger, s.version, execution.GetRunId())
+	mutableState := workflow.TestGlobalMutableState(s.mockShard, s.mockShard.GetEventsCache(), s.logger, s.version, execution.GetWorkflowId(), execution.GetRunId())
 	_, err := mutableState.AddWorkflowExecutionStartedEvent(
 		execution,
 		&historyservice.StartWorkflowExecutionRequest{
@@ -313,7 +313,7 @@ func (s *transferQueueActiveTaskExecutorSuite) TestProcessActivityTask_Duplicati
 	workflowType := "some random workflow type"
 	taskQueueName := "some random task queue"
 
-	mutableState := workflow.TestGlobalMutableState(s.mockShard, s.mockShard.GetEventsCache(), s.logger, s.version, execution.GetRunId())
+	mutableState := workflow.TestGlobalMutableState(s.mockShard, s.mockShard.GetEventsCache(), s.logger, s.version, execution.GetWorkflowId(), execution.GetRunId())
 	_, err := mutableState.AddWorkflowExecutionStartedEvent(
 		execution,
 		&historyservice.StartWorkflowExecutionRequest{
@@ -373,7 +373,7 @@ func (s *transferQueueActiveTaskExecutorSuite) TestProcessWorkflowTask_FirstWork
 	workflowType := "some random workflow type"
 	taskQueueName := "some random task queue"
 
-	mutableState := workflow.TestGlobalMutableState(s.mockShard, s.mockShard.GetEventsCache(), s.logger, s.version, execution.GetRunId())
+	mutableState := workflow.TestGlobalMutableState(s.mockShard, s.mockShard.GetEventsCache(), s.logger, s.version, execution.GetWorkflowId(), execution.GetRunId())
 	_, err := mutableState.AddWorkflowExecutionStartedEvent(
 		execution,
 		&historyservice.StartWorkflowExecutionRequest{
@@ -424,7 +424,7 @@ func (s *transferQueueActiveTaskExecutorSuite) TestProcessWorkflowTask_NonFirstW
 	workflowType := "some random workflow type"
 	taskQueueName := "some random task queue"
 
-	mutableState := workflow.TestGlobalMutableState(s.mockShard, s.mockShard.GetEventsCache(), s.logger, s.version, execution.GetRunId())
+	mutableState := workflow.TestGlobalMutableState(s.mockShard, s.mockShard.GetEventsCache(), s.logger, s.version, execution.GetWorkflowId(), execution.GetRunId())
 	_, err := mutableState.AddWorkflowExecutionStartedEvent(
 		execution,
 		&historyservice.StartWorkflowExecutionRequest{
@@ -484,7 +484,7 @@ func (s *transferQueueActiveTaskExecutorSuite) TestProcessWorkflowTask_Sticky_No
 	stickyTaskQueueName := "some random sticky task queue"
 	stickyTaskQueueTimeout := timestamp.DurationFromSeconds(233)
 
-	mutableState := workflow.TestGlobalMutableState(s.mockShard, s.mockShard.GetEventsCache(), s.logger, s.version, execution.GetRunId())
+	mutableState := workflow.TestGlobalMutableState(s.mockShard, s.mockShard.GetEventsCache(), s.logger, s.version, execution.GetWorkflowId(), execution.GetRunId())
 	_, err := mutableState.AddWorkflowExecutionStartedEvent(
 		execution,
 		&historyservice.StartWorkflowExecutionRequest{
@@ -545,7 +545,7 @@ func (s *transferQueueActiveTaskExecutorSuite) TestProcessWorkflowTask_WorkflowT
 	stickyTaskQueueName := "some random sticky task queue"
 	stickyTaskQueueTimeout := timestamp.DurationFromSeconds(233)
 
-	mutableState := workflow.TestGlobalMutableState(s.mockShard, s.mockShard.GetEventsCache(), s.logger, s.version, execution.GetRunId())
+	mutableState := workflow.TestGlobalMutableState(s.mockShard, s.mockShard.GetEventsCache(), s.logger, s.version, execution.GetWorkflowId(), execution.GetRunId())
 	_, err := mutableState.AddWorkflowExecutionStartedEvent(
 		execution,
 		&historyservice.StartWorkflowExecutionRequest{
@@ -607,7 +607,7 @@ func (s *transferQueueActiveTaskExecutorSuite) TestProcessWorkflowTask_Duplicati
 	workflowType := "some random workflow type"
 	taskQueueName := "some random task queue"
 
-	mutableState := workflow.TestGlobalMutableState(s.mockShard, s.mockShard.GetEventsCache(), s.logger, s.version, execution.GetRunId())
+	mutableState := workflow.TestGlobalMutableState(s.mockShard, s.mockShard.GetEventsCache(), s.logger, s.version, execution.GetWorkflowId(), execution.GetRunId())
 	_, err := mutableState.AddWorkflowExecutionStartedEvent(
 		execution,
 		&historyservice.StartWorkflowExecutionRequest{
@@ -667,7 +667,7 @@ func (s *transferQueueActiveTaskExecutorSuite) TestProcessCloseExecution_HasPare
 	}
 	parentClock := vclock.NewVectorClock(rand.Int63(), rand.Int31(), rand.Int63())
 
-	mutableState := workflow.TestGlobalMutableState(s.mockShard, s.mockShard.GetEventsCache(), s.logger, s.version, execution.GetRunId())
+	mutableState := workflow.TestGlobalMutableState(s.mockShard, s.mockShard.GetEventsCache(), s.logger, s.version, execution.GetWorkflowId(), execution.GetRunId())
 	_, err := mutableState.AddWorkflowExecutionStartedEvent(
 		execution,
 		&historyservice.StartWorkflowExecutionRequest{
@@ -734,7 +734,7 @@ func (s *transferQueueActiveTaskExecutorSuite) TestProcessCloseExecution_NoParen
 	workflowType := "some random workflow type"
 	taskQueueName := "some random task queue"
 
-	mutableState := workflow.TestGlobalMutableState(s.mockShard, s.mockShard.GetEventsCache(), s.logger, s.version, execution.GetRunId())
+	mutableState := workflow.TestGlobalMutableState(s.mockShard, s.mockShard.GetEventsCache(), s.logger, s.version, execution.GetWorkflowId(), execution.GetRunId())
 	_, err := mutableState.AddWorkflowExecutionStartedEvent(
 		execution,
 		&historyservice.StartWorkflowExecutionRequest{
@@ -788,7 +788,7 @@ func (s *transferQueueActiveTaskExecutorSuite) TestProcessCloseExecution_NoParen
 	s.mockNamespaceCache.EXPECT().GetNamespace(namespace.Name("child namespace2")).Return(tests.GlobalNamespaceEntry, nil).AnyTimes()
 	s.mockNamespaceCache.EXPECT().GetNamespace(namespace.Name("child namespace3")).Return(tests.GlobalNamespaceEntry, nil).AnyTimes()
 
-	mutableState := workflow.TestGlobalMutableState(s.mockShard, s.mockShard.GetEventsCache(), s.logger, s.version, execution.GetRunId())
+	mutableState := workflow.TestGlobalMutableState(s.mockShard, s.mockShard.GetEventsCache(), s.logger, s.version, execution.GetWorkflowId(), execution.GetRunId())
 	_, err := mutableState.AddWorkflowExecutionStartedEvent(
 		execution,
 		&historyservice.StartWorkflowExecutionRequest{
@@ -939,7 +939,7 @@ func (s *transferQueueActiveTaskExecutorSuite) TestProcessCloseExecution_NoParen
 	workflowType := "some random workflow type"
 	taskQueueName := "some random task queue"
 
-	mutableState := workflow.TestGlobalMutableState(s.mockShard, s.mockShard.GetEventsCache(), s.logger, s.version, execution.GetRunId())
+	mutableState := workflow.TestGlobalMutableState(s.mockShard, s.mockShard.GetEventsCache(), s.logger, s.version, execution.GetWorkflowId(), execution.GetRunId())
 	_, err := mutableState.AddWorkflowExecutionStartedEvent(
 		execution,
 		&historyservice.StartWorkflowExecutionRequest{
@@ -1032,7 +1032,7 @@ func (s *transferQueueActiveTaskExecutorSuite) TestProcessCloseExecution_NoParen
 	workflowType := "some random workflow type"
 	taskQueueName := "some random task queue"
 
-	mutableState := workflow.TestGlobalMutableState(s.mockShard, s.mockShard.GetEventsCache(), s.logger, s.version, execution.GetRunId())
+	mutableState := workflow.TestGlobalMutableState(s.mockShard, s.mockShard.GetEventsCache(), s.logger, s.version, execution.GetWorkflowId(), execution.GetRunId())
 	_, err := mutableState.AddWorkflowExecutionStartedEvent(
 		execution,
 		&historyservice.StartWorkflowExecutionRequest{
@@ -1121,7 +1121,7 @@ func (s *transferQueueActiveTaskExecutorSuite) TestProcessCloseExecution_NoParen
 
 	s.mockNamespaceCache.EXPECT().GetNamespace(namespace.Name("child namespace1")).Return(tests.GlobalNamespaceEntry, nil).AnyTimes()
 
-	mutableState := workflow.TestGlobalMutableState(s.mockShard, s.mockShard.GetEventsCache(), s.logger, s.version, execution.GetRunId())
+	mutableState := workflow.TestGlobalMutableState(s.mockShard, s.mockShard.GetEventsCache(), s.logger, s.version, execution.GetWorkflowId(), execution.GetRunId())
 	_, err := mutableState.AddWorkflowExecutionStartedEvent(
 		execution,
 		&historyservice.StartWorkflowExecutionRequest{
@@ -1246,7 +1246,7 @@ func (s *transferQueueActiveTaskExecutorSuite) TestProcessCloseExecution_DeleteA
 	workflowType := "some random workflow type"
 	taskQueueName := "some random task queue"
 
-	mutableState := workflow.TestGlobalMutableState(s.mockShard, s.mockShard.GetEventsCache(), s.logger, s.version, execution.GetRunId())
+	mutableState := workflow.TestGlobalMutableState(s.mockShard, s.mockShard.GetEventsCache(), s.logger, s.version, execution.GetWorkflowId(), execution.GetRunId())
 	_, err := mutableState.AddWorkflowExecutionStartedEvent(
 		execution,
 		&historyservice.StartWorkflowExecutionRequest{
@@ -1308,7 +1308,7 @@ func (s *transferQueueActiveTaskExecutorSuite) TestProcessCancelExecution_Succes
 		RunId:      uuid.New(),
 	}
 
-	mutableState := workflow.TestGlobalMutableState(s.mockShard, s.mockShard.GetEventsCache(), s.logger, s.version, execution.GetRunId())
+	mutableState := workflow.TestGlobalMutableState(s.mockShard, s.mockShard.GetEventsCache(), s.logger, s.version, execution.GetWorkflowId(), execution.GetRunId())
 	_, err := mutableState.AddWorkflowExecutionStartedEvent(
 		execution,
 		&historyservice.StartWorkflowExecutionRequest{
@@ -1371,7 +1371,7 @@ func (s *transferQueueActiveTaskExecutorSuite) TestProcessCancelExecution_Failur
 		RunId:      uuid.New(),
 	}
 
-	mutableState := workflow.TestGlobalMutableState(s.mockShard, s.mockShard.GetEventsCache(), s.logger, s.version, execution.GetRunId())
+	mutableState := workflow.TestGlobalMutableState(s.mockShard, s.mockShard.GetEventsCache(), s.logger, s.version, execution.GetWorkflowId(), execution.GetRunId())
 	_, err := mutableState.AddWorkflowExecutionStartedEvent(
 		execution,
 		&historyservice.StartWorkflowExecutionRequest{
@@ -1434,7 +1434,7 @@ func (s *transferQueueActiveTaskExecutorSuite) TestProcessCancelExecution_Failur
 		RunId:      uuid.New(),
 	}
 
-	mutableState := workflow.TestGlobalMutableState(s.mockShard, s.mockShard.GetEventsCache(), s.logger, s.version, execution.GetRunId())
+	mutableState := workflow.TestGlobalMutableState(s.mockShard, s.mockShard.GetEventsCache(), s.logger, s.version, execution.GetWorkflowId(), execution.GetRunId())
 	_, err := mutableState.AddWorkflowExecutionStartedEvent(
 		execution,
 		&historyservice.StartWorkflowExecutionRequest{
@@ -1495,7 +1495,7 @@ func (s *transferQueueActiveTaskExecutorSuite) TestProcessCancelExecution_Duplic
 		RunId:      uuid.New(),
 	}
 
-	mutableState := workflow.TestGlobalMutableState(s.mockShard, s.mockShard.GetEventsCache(), s.logger, s.version, execution.GetRunId())
+	mutableState := workflow.TestGlobalMutableState(s.mockShard, s.mockShard.GetEventsCache(), s.logger, s.version, execution.GetWorkflowId(), execution.GetRunId())
 	_, err := mutableState.AddWorkflowExecutionStartedEvent(
 		execution,
 		&historyservice.StartWorkflowExecutionRequest{
@@ -1757,7 +1757,7 @@ func (s *transferQueueActiveTaskExecutorSuite) setupSignalExternalWorkflowInitia
 		Fields: map[string]*commonpb.Payload{"signal header key": payload.EncodeString("signal header value")},
 	}
 
-	mutableState := workflow.TestGlobalMutableState(s.mockShard, s.mockShard.GetEventsCache(), s.logger, s.version, execution.GetRunId())
+	mutableState := workflow.TestGlobalMutableState(s.mockShard, s.mockShard.GetEventsCache(), s.logger, s.version, execution.GetWorkflowId(), execution.GetRunId())
 	_, err := mutableState.AddWorkflowExecutionStartedEvent(
 		execution,
 		&historyservice.StartWorkflowExecutionRequest{
@@ -1820,7 +1820,7 @@ func (s *transferQueueActiveTaskExecutorSuite) TestProcessStartChildExecution_Su
 	childWorkflowType := "some random child workflow type"
 	childTaskQueueName := "some random child task queue"
 
-	mutableState := workflow.TestGlobalMutableState(s.mockShard, s.mockShard.GetEventsCache(), s.logger, s.version, execution.GetRunId())
+	mutableState := workflow.TestGlobalMutableState(s.mockShard, s.mockShard.GetEventsCache(), s.logger, s.version, execution.GetWorkflowId(), execution.GetRunId())
 	_, err := mutableState.AddWorkflowExecutionStartedEvent(
 		execution,
 		&historyservice.StartWorkflowExecutionRequest{
@@ -1926,7 +1926,7 @@ func (s *transferQueueActiveTaskExecutorSuite) TestProcessStartChildExecution_Fa
 	childWorkflowType := "some random child workflow type"
 	childTaskQueueName := "some random child task queue"
 
-	mutableState := workflow.TestGlobalMutableState(s.mockShard, s.mockShard.GetEventsCache(), s.logger, s.version, execution.GetRunId())
+	mutableState := workflow.TestGlobalMutableState(s.mockShard, s.mockShard.GetEventsCache(), s.logger, s.version, execution.GetWorkflowId(), execution.GetRunId())
 	_, err := mutableState.AddWorkflowExecutionStartedEvent(
 		execution,
 		&historyservice.StartWorkflowExecutionRequest{
@@ -2008,7 +2008,7 @@ func (s *transferQueueActiveTaskExecutorSuite) TestProcessStartChildExecution_Fa
 	childWorkflowType := "some random child workflow type"
 	childTaskQueueName := "some random child task queue"
 
-	mutableState := workflow.TestGlobalMutableState(s.mockShard, s.mockShard.GetEventsCache(), s.logger, s.version, execution.GetRunId())
+	mutableState := workflow.TestGlobalMutableState(s.mockShard, s.mockShard.GetEventsCache(), s.logger, s.version, execution.GetWorkflowId(), execution.GetRunId())
 	_, err := mutableState.AddWorkflowExecutionStartedEvent(
 		execution,
 		&historyservice.StartWorkflowExecutionRequest{
@@ -2084,7 +2084,7 @@ func (s *transferQueueActiveTaskExecutorSuite) TestProcessStartChildExecution_Su
 	childWorkflowType := "some random child workflow type"
 	childTaskQueueName := "some random child task queue"
 
-	mutableState := workflow.TestGlobalMutableState(s.mockShard, s.mockShard.GetEventsCache(), s.logger, s.version, execution.GetRunId())
+	mutableState := workflow.TestGlobalMutableState(s.mockShard, s.mockShard.GetEventsCache(), s.logger, s.version, execution.GetWorkflowId(), execution.GetRunId())
 	_, err := mutableState.AddWorkflowExecutionStartedEvent(
 		execution,
 		&historyservice.StartWorkflowExecutionRequest{
@@ -2188,7 +2188,7 @@ func (s *transferQueueActiveTaskExecutorSuite) TestProcessStartChildExecution_Du
 	childWorkflowType := "some random child workflow type"
 	childTaskQueueName := "some random child task queue"
 
-	mutableState := workflow.TestGlobalMutableState(s.mockShard, s.mockShard.GetEventsCache(), s.logger, s.version, execution.GetRunId())
+	mutableState := workflow.TestGlobalMutableState(s.mockShard, s.mockShard.GetEventsCache(), s.logger, s.version, execution.GetWorkflowId(), execution.GetRunId())
 	_, err := mutableState.AddWorkflowExecutionStartedEvent(
 		execution,
 		&historyservice.StartWorkflowExecutionRequest{
@@ -2272,7 +2272,7 @@ func (s *transferQueueActiveTaskExecutorSuite) TestProcessorStartChildExecution_
 	childWorkflowType := "some random child workflow type"
 	childTaskQueueName := "some random child task queue"
 
-	mutableState := workflow.TestGlobalMutableState(s.mockShard, s.mockShard.GetEventsCache(), s.logger, s.version, execution.GetRunId())
+	mutableState := workflow.TestGlobalMutableState(s.mockShard, s.mockShard.GetEventsCache(), s.logger, s.version, execution.GetWorkflowId(), execution.GetRunId())
 	_, err := mutableState.AddWorkflowExecutionStartedEvent(
 		execution,
 		&historyservice.StartWorkflowExecutionRequest{

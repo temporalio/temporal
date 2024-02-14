@@ -333,16 +333,7 @@ func (e *executableImpl) Execute() (retErr error) {
 	// Instead of executing it, we try to write to the DLQ if enabled, otherwise - drop it.
 	if e.terminalFailureCause != nil {
 		if e.dlqEnabled() {
-			err := e.dlqWriter.WriteTaskToDLQ(
-				ctx,
-				e.clusterMetadata.GetCurrentClusterName(),
-				e.clusterMetadata.GetCurrentClusterName(),
-				e.GetTask(),
-			)
-			if err != nil {
-				e.logger.Error("Failed to write task to DLQ", tag.Error(err))
-			}
-			return err
+			return e.writeToDLQ(ctx)
 		}
 		if errors.As(e.terminalFailureCause, new(MaybeTerminalTaskError)) {
 			e.logger.Warn(
@@ -366,6 +357,22 @@ func (e *executableImpl) Execute() (retErr error) {
 	e.lastActiveness = resp.ExecutedAsActive
 
 	return resp.ExecutionErr
+}
+
+func (e *executableImpl) writeToDLQ(ctx context.Context) error {
+	start := e.timeSource.Now()
+	err := e.dlqWriter.WriteTaskToDLQ(
+		ctx,
+		e.clusterMetadata.GetCurrentClusterName(),
+		e.clusterMetadata.GetCurrentClusterName(),
+		e.GetTask(),
+	)
+	if err != nil {
+		metrics.TaskDLQFailures.With(e.taggedMetricsHandler).Record(1)
+		e.logger.Error("Failed to write task to DLQ", tag.Error(err))
+	}
+	metrics.TaskDLQSendLatency.With(e.taggedMetricsHandler).Record(e.timeSource.Now().Sub(start))
+	return err
 }
 
 func (e *executableImpl) isSafeToDropError(err error) bool {
@@ -464,7 +471,6 @@ func (e *executableImpl) isUnexpectedNonRetryableError(err error) bool {
 
 	isInternalError := common.IsInternalError(err)
 	if isInternalError {
-		e.logger.Error("Encountered internal error processing tasks", tag.Error(err))
 		metrics.TaskInternalErrorCounter.With(e.taggedMetricsHandler).Record(1)
 		// Only DQL/drop when configured to
 		return e.dlqInternalErrors()
@@ -518,24 +524,26 @@ func (e *executableImpl) HandleErr(err error) (retErr error) {
 		metrics.TaskCorruptionCounter.With(e.taggedMetricsHandler).Record(1)
 		if e.dlqEnabled() {
 			// Keep this message in sync with the log line mentioned in Investigation section of develop/docs/dlq.md
-			e.logger.Error("Marking task as terminally failed, will send to DLQ", tag.Error(err))
+			e.logger.Error("Marking task as terminally failed, will send to DLQ", tag.Error(err), tag.ErrorType(err))
 			e.terminalFailureCause = err // <- Execute() examines this attribute on the next attempt.
+			metrics.TaskTerminalFailures.With(e.taggedMetricsHandler).Record(1)
 			return fmt.Errorf("%w: %v", ErrTerminalTaskFailure, err)
 		}
-		e.logger.Error("Dropping task due to terminal error", tag.Error(err))
+		e.logger.Error("Dropping task due to terminal error", tag.Error(err), tag.ErrorType(err))
 		return nil
 	}
 
 	// Unexpected but retryable error
 	e.unexpectedErrorAttempts++
 	metrics.TaskFailures.With(e.taggedMetricsHandler).Record(1)
-	e.logger.Error("Fail to process task", tag.Error(err), tag.UnexpectedErrorAttempts(int32(e.unexpectedErrorAttempts)), tag.LifeCycleProcessingFailed)
+	e.logger.Error("Fail to process task", tag.Error(err), tag.ErrorType(err), tag.UnexpectedErrorAttempts(int32(e.unexpectedErrorAttempts)), tag.LifeCycleProcessingFailed)
 
 	if e.unexpectedErrorAttempts >= e.maxUnexpectedErrorAttempts() && e.dlqEnabled() {
 		// Keep this message in sync with the log line mentioned in Investigation section of develop/docs/dlq.md
 		e.logger.Error("Marking task as terminally failed, will send to DLQ. Maximum number of attempts with unexpected errors",
 			tag.Attempt(int32(e.unexpectedErrorAttempts)), tag.Error(err))
 		e.terminalFailureCause = err // <- Execute() examines this attribute on the next attempt.
+		metrics.TaskTerminalFailures.With(e.taggedMetricsHandler).Record(1)
 		return fmt.Errorf("%w: %w", ErrTerminalTaskFailure, e.terminalFailureCause)
 	}
 
