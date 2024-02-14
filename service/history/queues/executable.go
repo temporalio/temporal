@@ -88,7 +88,7 @@ type (
 	// TerminalErrors are errors which cannot be retried and should not be scheduled again.
 	// Tasks should be enqueued to a DLQ immediately if an error implements this interface.
 	TerminalTaskError interface {
-		IsTerminalTaskError()
+		IsTerminalTaskError() bool
 	}
 )
 
@@ -285,16 +285,7 @@ func (e *executableImpl) Execute() (retErr error) {
 
 	if e.terminalFailureCause != nil {
 		if e.dlqEnabled() {
-			err := e.dlqWriter.WriteTaskToDLQ(
-				ctx,
-				e.clusterMetadata.GetCurrentClusterName(),
-				e.clusterMetadata.GetCurrentClusterName(),
-				e.GetTask(),
-			)
-			if err != nil {
-				e.logger.Error("Failed to write task to DLQ", tag.Error(err))
-			}
-			return err
+			return e.writeToDLQ(ctx)
 		}
 		if errors.As(e.terminalFailureCause, new(TerminalTaskError)) {
 			e.logger.Warn(
@@ -320,6 +311,123 @@ func (e *executableImpl) Execute() (retErr error) {
 	return resp.ExecutionErr
 }
 
+func (e *executableImpl) writeToDLQ(ctx context.Context) error {
+	start := e.timeSource.Now()
+	err := e.dlqWriter.WriteTaskToDLQ(
+		ctx,
+		e.clusterMetadata.GetCurrentClusterName(),
+		e.clusterMetadata.GetCurrentClusterName(),
+		e.GetTask(),
+	)
+	if err != nil {
+		metrics.TaskDLQFailures.With(e.taggedMetricsHandler).Record(1)
+		e.logger.Error("Failed to write task to DLQ", tag.Error(err))
+	}
+	metrics.TaskDLQSendLatency.With(e.taggedMetricsHandler).Record(e.timeSource.Now().Sub(start))
+	return err
+}
+
+func (e *executableImpl) isSafeToDropError(err error) bool {
+	if _, isNotFound := err.(*serviceerror.NotFound); isNotFound {
+		return true
+	}
+
+	// This means that namespace is deleted, and it is safe to drop the task (=ignore the error).
+	if _, isNotFound := err.(*serviceerror.NamespaceNotFound); isNotFound {
+		return true
+	}
+
+	if err == consts.ErrTaskDiscarded {
+		metrics.TaskDiscarded.With(e.taggedMetricsHandler).Record(1)
+		return true
+	}
+
+	if err == consts.ErrTaskVersionMismatch {
+		metrics.TaskVersionMisMatch.With(e.taggedMetricsHandler).Record(1)
+		return true
+	}
+
+	return false
+}
+
+// Returns true when the error is expected and should be retried. You're expected to return
+// an error in this case, as that possible-rewritten-error is what we'll return
+func (e *executableImpl) isExpectedRetryableError(err error) (isRetryable bool, retErr error) {
+	defer func() {
+		// This is a guard against programming mistakes. Please don't return (true, nil).
+		if isRetryable && retErr == nil {
+			retErr = err
+		}
+	}()
+
+	var resourceExhaustedErr *serviceerror.ResourceExhausted
+	if errors.As(err, &resourceExhaustedErr) {
+		if resourceExhaustedErr.Cause != enums.RESOURCE_EXHAUSTED_CAUSE_BUSY_WORKFLOW {
+			if resourceExhaustedErr.Cause == enums.RESOURCE_EXHAUSTED_CAUSE_APS_LIMIT {
+				err = consts.ErrResourceExhaustedAPSLimit
+			}
+			e.resourceExhaustedCount++
+			metrics.TaskThrottledCounter.With(e.taggedMetricsHandler).Record(1)
+			return true, err
+		}
+
+		err = consts.ErrResourceExhaustedBusyWorkflow
+	}
+	e.resourceExhaustedCount = 0
+
+	if _, ok := err.(*serviceerror.NamespaceNotActive); ok {
+		// error is expected when there's namespace failover,
+		// so don't count it into task failures.
+		metrics.TaskNotActiveCounter.With(e.taggedMetricsHandler).Record(1)
+		return true, err
+	}
+
+	if err == consts.ErrDependencyTaskNotCompleted {
+		metrics.TasksDependencyTaskNotCompleted.With(e.taggedMetricsHandler).Record(1)
+		return true, err
+	}
+
+	if err == consts.ErrTaskRetry {
+		metrics.TaskStandbyRetryCounter.With(e.taggedMetricsHandler).Record(1)
+		return true, err
+	}
+
+	if errors.Is(err, consts.ErrResourceExhaustedBusyWorkflow) {
+		metrics.TaskWorkflowBusyCounter.With(e.taggedMetricsHandler).Record(1)
+		return true, err
+	}
+
+	if err.Error() == consts.ErrNamespaceHandover.Error() {
+		metrics.TaskNamespaceHandoverCounter.With(e.taggedMetricsHandler).Record(1)
+		return true, consts.ErrNamespaceHandover
+	}
+
+	return false, nil
+}
+
+func (e *executableImpl) isUnexpectedNonRetryableError(err error) bool {
+	var terr TerminalTaskError
+	if errors.As(err, &terr) {
+		return terr.IsTerminalTaskError()
+	}
+
+	if _, isDataLoss := err.(*serviceerror.DataLoss); isDataLoss {
+		return true
+	}
+
+	isInternalError := common.IsInternalError(err)
+	if isInternalError {
+		metrics.TaskInternalErrorCounter.With(e.taggedMetricsHandler).Record(1)
+		// Only DQL/drop when configured to
+		return e.dlqInternalErrors()
+	}
+
+	return false
+}
+
+// HandleErr processes the error returned by task execution.
+//
+// Returns nil if the task should be completed, and an error if the task should be retried.
 func (e *executableImpl) HandleErr(err error) (retErr error) {
 	if err == nil {
 		return nil
@@ -344,99 +452,44 @@ func (e *executableImpl) HandleErr(err error) (retErr error) {
 		}
 	}()
 
-	var resourceExhaustedErr *serviceerror.ResourceExhausted
-	if errors.As(err, &resourceExhaustedErr) {
-		if resourceExhaustedErr.Cause != enums.RESOURCE_EXHAUSTED_CAUSE_BUSY_WORKFLOW {
-			if resourceExhaustedErr.Cause == enums.RESOURCE_EXHAUSTED_CAUSE_APS_LIMIT {
-				err = consts.ErrResourceExhaustedAPSLimit
-			}
-			e.resourceExhaustedCount++
-			metrics.TaskThrottledCounter.With(e.taggedMetricsHandler).Record(1)
-			return err
-		}
-
-		err = consts.ErrResourceExhaustedBusyWorkflow
-	}
-	e.resourceExhaustedCount = 0
-
-	if _, isNotFound := err.(*serviceerror.NotFound); isNotFound {
+	if e.isSafeToDropError(err) {
 		return nil
 	}
 
-	// This means that namespace is deleted, and it is safe to drop the task (=ignore the error).
-	if _, isNotFound := err.(*serviceerror.NamespaceNotFound); isNotFound {
-		return nil
+	if ok, rewrittenErr := e.isExpectedRetryableError(err); ok {
+		return rewrittenErr
 	}
+	// Unexpected errors handled below
+	metrics.TaskFailures.With(e.taggedMetricsHandler).Record(1)
+	e.logger.Error("Fail to process task", tag.Error(err), tag.LifeCycleProcessingFailed)
 
-	if err == consts.ErrDependencyTaskNotCompleted {
-		metrics.TasksDependencyTaskNotCompleted.With(e.taggedMetricsHandler).Record(1)
-		return err
-	}
-
-	if err == consts.ErrTaskRetry {
-		metrics.TaskStandbyRetryCounter.With(e.taggedMetricsHandler).Record(1)
-		return err
-	}
-
-	if errors.Is(err, consts.ErrResourceExhaustedBusyWorkflow) {
-		metrics.TaskWorkflowBusyCounter.With(e.taggedMetricsHandler).Record(1)
-		return err
-	}
-
-	if err == consts.ErrTaskDiscarded {
-		metrics.TaskDiscarded.With(e.taggedMetricsHandler).Record(1)
-		return nil
-	}
-
-	if err == consts.ErrTaskVersionMismatch {
-		metrics.TaskVersionMisMatch.With(e.taggedMetricsHandler).Record(1)
-		return nil
-	}
-
-	if err.Error() == consts.ErrNamespaceHandover.Error() {
-		metrics.TaskNamespaceHandoverCounter.With(e.taggedMetricsHandler).Record(1)
-		err = consts.ErrNamespaceHandover
-		return err
-	}
-
-	if _, ok := err.(*serviceerror.NamespaceNotActive); ok {
-		// error is expected when there's namespace failover,
-		// so don't count it into task failures.
-		metrics.TaskNotActiveCounter.With(e.taggedMetricsHandler).Record(1)
-		return err
-	}
-
-	isInternalError := common.IsInternalError(err)
-	if isInternalError {
-		e.logger.Error("Encountered internal error processing tasks", tag.Error(err))
-		metrics.TaskInternalErrorCounter.With(e.taggedMetricsHandler).Record(1)
-	}
-
-	// TODO: expand on the errors that should be considered terminal
-	if errors.As(err, new(TerminalTaskError)) || (e.dlqInternalErrors() && isInternalError) {
+	if e.isUnexpectedNonRetryableError(err) {
 		// Terminal errors are likely due to data corruption.
 		// Drop the task by returning nil so that task will be marked as completed,
 		// or send it to the DLQ if that is enabled.
 		metrics.TaskCorruptionCounter.With(e.taggedMetricsHandler).Record(1)
 		if e.dlqEnabled() {
 			// Keep this message in sync with the log line mentioned in Investigation section of develop/docs/dlq.md
-			e.logger.Error("Marking task as terminally failed, will send to DLQ", tag.Error(err))
+			e.logger.Error("Marking task as terminally failed, will send to DLQ", tag.Error(err), tag.ErrorType(err))
 			e.terminalFailureCause = err
+			metrics.TaskTerminalFailures.With(e.taggedMetricsHandler).Record(1)
 			return fmt.Errorf("%w: %v", ErrTerminalTaskFailure, err)
 		}
-		e.logger.Error("Dropping task due to terminal error", tag.Error(err))
+		e.logger.Error("Dropping task due to terminal error", tag.Error(err), tag.ErrorType(err))
 		return nil
 	}
 
+	// Unexpected but retryable error
 	e.unexpectedErrorAttempts++
 	metrics.TaskFailures.With(e.taggedMetricsHandler).Record(1)
-	e.logger.Error("Fail to process task", tag.Error(err), tag.UnexpectedErrorAttempts(int32(e.unexpectedErrorAttempts)), tag.LifeCycleProcessingFailed)
+	e.logger.Error("Fail to process task", tag.Error(err), tag.ErrorType(err), tag.UnexpectedErrorAttempts(int32(e.unexpectedErrorAttempts)), tag.LifeCycleProcessingFailed)
 
 	if e.unexpectedErrorAttempts >= e.maxUnexpectedErrorAttempts() && e.dlqEnabled() {
 		// Keep this message in sync with the log line mentioned in Investigation section of develop/docs/dlq.md
 		e.logger.Error("Marking task as terminally failed, will send to DLQ. Maximum number of attempts with unexpected errors",
 			tag.Attempt(int32(e.unexpectedErrorAttempts)), tag.Error(err))
 		e.terminalFailureCause = err
+		metrics.TaskTerminalFailures.With(e.taggedMetricsHandler).Record(1)
 		return fmt.Errorf("%w: %w", ErrTerminalTaskFailure, e.terminalFailureCause)
 	}
 

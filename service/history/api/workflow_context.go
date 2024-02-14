@@ -25,26 +25,17 @@
 package api
 
 import (
-	"context"
-
-	"go.temporal.io/server/common/definition"
-	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/service/history/workflow"
 	wcache "go.temporal.io/server/service/history/workflow/cache"
-	"go.temporal.io/server/service/history/workflow/update"
 )
 
-type WorkflowContext interface {
+type WorkflowLease interface {
 	GetContext() workflow.Context
 	GetMutableState() workflow.MutableState
 	GetReleaseFn() wcache.ReleaseCacheFunc
-
-	GetNamespaceEntry() *namespace.Namespace
-	GetWorkflowKey() definition.WorkflowKey
-	GetUpdateRegistry(context.Context) update.Registry
 }
 
-type WorkflowContextImpl struct {
+type workflowLease struct {
 	context      workflow.Context
 	mutableState workflow.MutableState
 	releaseFn    wcache.ReleaseCacheFunc
@@ -64,43 +55,30 @@ var (
 	}
 )
 
-type UpdateWorkflowActionFunc func(WorkflowContext) (*UpdateWorkflowAction, error)
+type UpdateWorkflowActionFunc func(WorkflowLease) (*UpdateWorkflowAction, error)
 
-var _ WorkflowContext = (*WorkflowContextImpl)(nil)
+var _ WorkflowLease = (*workflowLease)(nil)
 
-func NewWorkflowContext(
+func NewWorkflowLease(
 	context workflow.Context,
 	releaseFn wcache.ReleaseCacheFunc,
 	mutableState workflow.MutableState,
-) *WorkflowContextImpl {
-
-	return &WorkflowContextImpl{
+) WorkflowLease {
+	return &workflowLease{
 		context:      context,
 		releaseFn:    releaseFn,
 		mutableState: mutableState,
 	}
 }
 
-func (w *WorkflowContextImpl) GetContext() workflow.Context {
+func (w *workflowLease) GetContext() workflow.Context {
 	return w.context
 }
 
-func (w *WorkflowContextImpl) GetMutableState() workflow.MutableState {
+func (w *workflowLease) GetMutableState() workflow.MutableState {
 	return w.mutableState
 }
 
-func (w *WorkflowContextImpl) GetReleaseFn() wcache.ReleaseCacheFunc {
+func (w *workflowLease) GetReleaseFn() wcache.ReleaseCacheFunc {
 	return w.releaseFn
-}
-
-func (w *WorkflowContextImpl) GetNamespaceEntry() *namespace.Namespace {
-	return w.mutableState.GetNamespaceEntry()
-}
-
-func (w *WorkflowContextImpl) GetWorkflowKey() definition.WorkflowKey {
-	return w.context.GetWorkflowKey()
-}
-
-func (w *WorkflowContextImpl) GetUpdateRegistry(ctx context.Context) update.Registry {
-	return w.context.UpdateRegistry(ctx)
 }

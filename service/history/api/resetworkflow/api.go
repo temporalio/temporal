@@ -58,7 +58,7 @@ func Invoke(
 	workflowID := request.WorkflowExecution.GetWorkflowId()
 	baseRunID := request.WorkflowExecution.GetRunId()
 
-	baseWFContext, err := workflowConsistencyChecker.GetWorkflowContext(
+	baseWorkflowLease, err := workflowConsistencyChecker.GetWorkflowLease(
 		ctx,
 		nil,
 		api.BypassMutableStateConsistencyPredicate,
@@ -72,9 +72,9 @@ func Invoke(
 	if err != nil {
 		return nil, err
 	}
-	defer func() { baseWFContext.GetReleaseFn()(retError) }()
+	defer func() { baseWorkflowLease.GetReleaseFn()(retError) }()
 
-	baseMutableState := baseWFContext.GetMutableState()
+	baseMutableState := baseWorkflowLease.GetMutableState()
 	if request.GetWorkflowTaskFinishEventId() <= common.FirstEventID ||
 		request.GetWorkflowTaskFinishEventId() >= baseMutableState.GetNextEventID() {
 		return nil, serviceerror.NewInvalidArgument("Workflow task finish ID must be > 1 && <= workflow last event ID.")
@@ -94,11 +94,11 @@ func Invoke(
 		baseRunID = currentRunID
 	}
 
-	var currentWFContext api.WorkflowContext
+	var currentWorkflowLease api.WorkflowLease
 	if currentRunID == baseRunID {
-		currentWFContext = baseWFContext
+		currentWorkflowLease = baseWorkflowLease
 	} else {
-		currentWFContext, err = workflowConsistencyChecker.GetWorkflowContext(
+		currentWorkflowLease, err = workflowConsistencyChecker.GetWorkflowLease(
 			ctx,
 			nil,
 			api.BypassMutableStateConsistencyPredicate,
@@ -112,11 +112,11 @@ func Invoke(
 		if err != nil {
 			return nil, err
 		}
-		defer func() { currentWFContext.GetReleaseFn()(retError) }()
+		defer func() { currentWorkflowLease.GetReleaseFn()(retError) }()
 	}
 
 	// dedup by requestID
-	if currentWFContext.GetMutableState().GetExecutionState().CreateRequestId == request.GetRequestId() {
+	if currentWorkflowLease.GetMutableState().GetExecutionState().CreateRequestId == request.GetRequestId() {
 		shard.GetLogger().Info("Duplicated reset request",
 			tag.WorkflowID(workflowID),
 			tag.WorkflowRunID(currentRunID),
@@ -157,9 +157,9 @@ func Invoke(
 		request.GetRequestId(),
 		ndc.NewWorkflow(
 			shard.GetClusterMetadata(),
-			currentWFContext.GetContext(),
-			currentWFContext.GetMutableState(),
-			currentWFContext.GetReleaseFn(),
+			currentWorkflowLease.GetContext(),
+			currentWorkflowLease.GetMutableState(),
+			currentWorkflowLease.GetReleaseFn(),
 		),
 		request.GetReason(),
 		nil,
