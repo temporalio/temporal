@@ -153,6 +153,10 @@ update-proto-linters:
 	@go install github.com/googleapis/api-linter/cmd/api-linter@v1.32.3
 	@go install github.com/bufbuild/buf/cmd/buf@v1.6.0
 
+update-d2:
+	@printf $(COLOR) "Install d2..."
+	@go install oss.terrastruct.com/d2@v0.6.3
+
 update-tctl:
 	@printf $(COLOR) "Install/update tctl..."
 	@go install github.com/temporalio/tctl/cmd/tctl@latest
@@ -165,7 +169,7 @@ update-ui:
 	@printf $(COLOR) "Install/update temporal ui-server..."
 	@go install github.com/temporalio/ui-server/cmd/server@latest
 
-update-tools: update-goimports update-linters update-mockgen update-proto-plugins update-proto-linters update-gotestsum
+update-tools: update-goimports update-linters update-mockgen update-proto-plugins update-proto-linters update-gotestsum update-d2
 
 # update-linters is not included because in CI linters are run by github actions.
 ci-update-tools: update-goimports update-mockgen update-proto-plugins update-proto-linters update-gotestsum
@@ -546,6 +550,11 @@ update-dependencies:
 
 update-third-party-deps:
 	@GOOS=linux GOARCH=amd64 go list -deps $(FUNCTIONAL_TEST_ROOT) | sort -u | grep '^[a-z]\+\.[a-z.]\+/' | grep -v go.temporal.io > develop/buildkite/third_party_deps.txt
+
+DIAGRAMS := $(wildcard ./docs/assets/*.d2)
+update-diagrams:
+	@printf $(COLOR) "Update diagrams"
+	$(foreach DIAGRAM, $(DIAGRAMS), d2 --layout elk --theme 7 --dark-theme 200 $(DIAGRAM) $(NEWLINE))
 
 go-generate:
 	@printf $(COLOR) "Process go:generate directives..."
