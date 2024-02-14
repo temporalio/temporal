@@ -72,8 +72,8 @@ type (
 
 const (
 	eventStorageSize = 2 * 1024 * 1024
-	// I do not know the real overhead size, 100 is just a number
-	recordOverheadSize = 1000
+	// I do not know the real overhead size, 1024 is just a number
+	recordOverheadSize = 1024
 )
 
 var (
@@ -206,7 +206,7 @@ func (a *activities) tryWatchWorkflow(ctx context.Context, req *schedspb.WatchWo
 	}
 	lastEvent := events[0]
 
-	return rb.Build(lastEvent) // a.MakeResponse(pollRes, lastEvent, req)
+	return rb.Build(lastEvent)
 }
 
 func (a *activities) WatchWorkflow(ctx context.Context, req *schedspb.WatchWorkflowRequest) (*schedspb.WatchWorkflowResponse, error) {
