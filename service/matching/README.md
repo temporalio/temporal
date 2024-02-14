@@ -5,7 +5,7 @@ _[see [API definition](https://github.com/temporalio/temporal/blob/main/proto/in
 The Matching Service instances manage [Task Queues](https://docs.temporal.io/workers#task-queue).
 The Temporal Worker processes long-poll for tasks.
 
-<img src="../../docs/assets/diagrams/matching-context.svg">
+<img src="../../docs/assets/matching-context.svg">
 
 The Matching Service instance responds by sending Workflow Tasks and Activity Tasks from the requested Task Queue.
 A single Task Queue is responsible for delivering tasks relating to many Workflow Executions.
@@ -19,8 +19,8 @@ When tasks (we will say "tasks" here to mean any of query tasks, workflow tasks,
 
 The matching service and Temporal in general uses the term "queue" or "taskqueue" to refer to named task exchange points and so that nomenclature is adopted here, but tasks are not exchanged in FIFO order. This is not a problem - the Temporal system does not need FIFO task scheduling - but it may be surprising.
 
-<img src="../../docs/assets/diagrams/matching-components.svg">
+<img src="../../docs/assets/matching-components.svg">
 
-<img src="../../docs/assets/diagrams/matching-deployment.svg">
+<img src="../../docs/assets/matching-deployment.svg">
 
-<img src="../../docs/assets/diagrams/matching-partitions.svg">
+<img src="../../docs/assets/matching-partitions.svg">
