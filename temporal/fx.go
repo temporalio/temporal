@@ -124,7 +124,7 @@ type (
 		CustomVisibilityStore  visibility.VisibilityStoreFactory
 
 		SearchAttributesMapper searchattribute.Mapper
-		CustomInterceptors     []grpc.UnaryServerInterceptor `group:"frontendInterceptors"`
+		CustomInterceptors     []grpc.UnaryServerInterceptor
 		Authorizer             authorization.Authorizer
 		ClaimMapper            authorization.ClaimMapper
 		AudienceGetter         authorization.JWTAudienceMapper
@@ -354,7 +354,7 @@ type (
 		PersistenceServiceResolver resolver.ServiceResolver
 		PersistenceFactoryProvider persistenceClient.FactoryProviderFn
 		SearchAttributesMapper     searchattribute.Mapper
-		CustomInterceptors         []grpc.UnaryServerInterceptor `group:"frontendInterceptors"`
+		CustomInterceptors         []grpc.UnaryServerInterceptor
 		Authorizer                 authorization.Authorizer
 		ClaimMapper                authorization.ClaimMapper
 		DataStoreFactory           persistenceClient.AbstractDataStoreFactory
@@ -525,9 +525,7 @@ func genericFrontendServiceProvider(
 
 	app := fx.New(
 		params.GetCommonServiceOptions(serviceName),
-		fx.Provide(fx.Annotate(
-			func() []grpc.UnaryServerInterceptor { return params.CustomInterceptors },
-			fx.ParamTags(`group:"frontendInterceptors"`))),
+		fx.Supply(params.CustomInterceptors),
 		fx.Decorate(func() authorization.ClaimMapper {
 			switch serviceName {
 			case primitives.FrontendService:
