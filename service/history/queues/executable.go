@@ -285,16 +285,7 @@ func (e *executableImpl) Execute() (retErr error) {
 
 	if e.terminalFailureCause != nil {
 		if e.dlqEnabled() {
-			err := e.dlqWriter.WriteTaskToDLQ(
-				ctx,
-				e.clusterMetadata.GetCurrentClusterName(),
-				e.clusterMetadata.GetCurrentClusterName(),
-				e.GetTask(),
-			)
-			if err != nil {
-				e.logger.Error("Failed to write task to DLQ", tag.Error(err))
-			}
-			return err
+			return e.writeToDLQ(ctx)
 		}
 		if errors.As(e.terminalFailureCause, new(TerminalTaskError)) {
 			e.logger.Warn(
@@ -318,6 +309,22 @@ func (e *executableImpl) Execute() (retErr error) {
 	e.lastActiveness = resp.ExecutedAsActive
 
 	return resp.ExecutionErr
+}
+
+func (e *executableImpl) writeToDLQ(ctx context.Context) error {
+	start := e.timeSource.Now()
+	err := e.dlqWriter.WriteTaskToDLQ(
+		ctx,
+		e.clusterMetadata.GetCurrentClusterName(),
+		e.clusterMetadata.GetCurrentClusterName(),
+		e.GetTask(),
+	)
+	if err != nil {
+		metrics.TaskDLQFailures.With(e.taggedMetricsHandler).Record(1)
+		e.logger.Error("Failed to write task to DLQ", tag.Error(err))
+	}
+	metrics.TaskDLQSendLatency.With(e.taggedMetricsHandler).Record(e.timeSource.Now().Sub(start))
+	return err
 }
 
 func (e *executableImpl) isSafeToDropError(err error) bool {
@@ -466,6 +473,7 @@ func (e *executableImpl) HandleErr(err error) (retErr error) {
 			// Keep this message in sync with the log line mentioned in Investigation section of develop/docs/dlq.md
 			e.logger.Error("Marking task as terminally failed, will send to DLQ", tag.Error(err))
 			e.terminalFailureCause = err
+			metrics.TaskTerminalFailures.With(e.taggedMetricsHandler).Record(1)
 			return fmt.Errorf("%w: %v", ErrTerminalTaskFailure, err)
 		}
 		e.logger.Error("Dropping task due to terminal error", tag.Error(err))
@@ -482,6 +490,7 @@ func (e *executableImpl) HandleErr(err error) (retErr error) {
 		e.logger.Error("Marking task as terminally failed, will send to DLQ. Maximum number of attempts with unexpected errors",
 			tag.Attempt(int32(e.unexpectedErrorAttempts)), tag.Error(err))
 		e.terminalFailureCause = err
+		metrics.TaskTerminalFailures.With(e.taggedMetricsHandler).Record(1)
 		return fmt.Errorf("%w: %w", ErrTerminalTaskFailure, e.terminalFailureCause)
 	}
 
