@@ -172,7 +172,12 @@ func (s *FunctionalSuite) TestWorkflowNexusCallbacks_CarriedOverContinueAsNew() 
 	callbackAddress := fmt.Sprintf("localhost:%d", pp.MustGetFreePort())
 	s.NoError(pp.Close())
 	shutdownServer := s.runNexusCompletionHTTPServer(ch, callbackAddress)
-	defer shutdownServer() // Ignoring shutdown errors, they don't affect the test.
+	defer func() {
+		err := shutdownServer()
+		if err != nil {
+			panic(err)
+		}
+	}()
 	w.RegisterWorkflowWithOptions(wf, workflow.RegisterOptions{Name: workflowType})
 	s.NoError(w.Start())
 	defer w.Stop()
