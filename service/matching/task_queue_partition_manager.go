@@ -69,7 +69,8 @@ type (
 		// DispatchQueryTask will dispatch query to local or remote poller. If forwarded then result or error is returned,
 		// if dispatched to local poller then nil and nil is returned.
 		DispatchQueryTask(ctx context.Context, taskID string, request *matchingservice.QueryWorkflowRequest) (*matchingservice.QueryWorkflowResponse, error)
-		// GetUserData returns the versioned user data for this task queue
+		// GetUserData returns the versioned user data for this task queue and a channel that signals when the data has been updated.
+		// If there is no user data, this can return a nil value with no error.
 		GetUserData() (*persistencespb.VersionedTaskQueueUserData, <-chan struct{}, error)
 		// MarkAlive updates the liveness timer to keep this partition manager alive.
 		MarkAlive()
@@ -308,7 +309,6 @@ func (pm *taskQueuePartitionManagerImpl) DispatchQueryTask(
 }
 
 // GetUserData returns the user data for the task queue if any.
-// Note: can return nil value with no error.
 func (pm *taskQueuePartitionManagerImpl) GetUserData() (*persistencespb.VersionedTaskQueueUserData, <-chan struct{}, error) {
 	return pm.db.GetUserData()
 }

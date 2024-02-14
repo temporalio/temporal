@@ -957,7 +957,55 @@ func (e *matchingEngineImpl) ListWorkerVersioningRules(
 	ctx context.Context,
 	request *matchingservice.ListWorkerVersioningRulesRequest,
 ) (*matchingservice.ListWorkerVersioningRulesResponse, error) {
-	return &matchingservice.ListWorkerVersioningRulesResponse{Response: &workflowservice.ListWorkerVersioningRulesResponse{}}, nil
+	req := request.GetRequest()
+	ns, err := e.namespaceRegistry.GetNamespace(namespace.Name(req.GetNamespace()))
+	if err != nil {
+		return nil, err
+	}
+	if ns.ID().String() != request.GetNamespaceId() {
+		return nil, serviceerror.NewInternal("Namespace ID does not match Namespace in wrapped command")
+	}
+	if req.GetTaskQueue() != request.GetTaskQueue() {
+		return nil, serviceerror.NewInternal("Task Queue does not match Task Queue in wrapped command")
+	}
+	taskQueue, err := newTaskQueueID(ns.ID(), req.GetTaskQueue(), enumspb.TASK_QUEUE_TYPE_WORKFLOW)
+	if err != nil {
+		return nil, err
+	}
+	tqMgr, err := e.getTaskQueuePartitionManager(ctx, taskQueue, normalStickyInfo, true)
+	if err != nil {
+		return nil, err
+	}
+
+	var cT []byte
+	var assignmentRules []*taskqueuepb.TimestampedBuildIdAssignmentRule
+	var redirectRules []*taskqueuepb.TimestampedCompatibleBuildIdRedirectRule
+	data, _, err := tqMgr.GetUserData()
+	if err != nil {
+		return nil, err
+	}
+	if data == nil {
+		data = &persistencespb.VersionedTaskQueueUserData{Data: &persistencespb.TaskQueueUserData{}}
+	} else {
+		data = common.CloneProto(data)
+	}
+	clk := data.GetData().GetClock()
+	if clk == nil {
+		clk = hlc.Zero(e.clusterMeta.GetClusterID())
+	}
+	updatedClock := hlc.Next(clk, e.timeSource)
+
+	if cT, err = updatedClock.Marshal(); err != nil {
+		return nil, serviceerror.NewInternal("error generating next conflict token")
+	}
+
+	return &matchingservice.ListWorkerVersioningRulesResponse{
+		Response: &workflowservice.ListWorkerVersioningRulesResponse{
+			AssignmentRules:         assignmentRules,
+			CompatibleRedirectRules: redirectRules,
+			ConflictToken:           cT,
+		},
+	}, nil
 }
 
 func (e *matchingEngineImpl) UpdateWorkerBuildIdCompatibility(
