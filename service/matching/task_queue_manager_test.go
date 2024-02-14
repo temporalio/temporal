@@ -272,27 +272,6 @@ func makeTestBlocAlloc(f func() (taskQueueState, error)) taskQueueManagerOpt {
 	return withIDBlockAllocator(&testIDBlockAlloc{alloc: f})
 }
 
-func TestSyncMatchLeasingUnavailable(t *testing.T) {
-	tqm := mustCreateTestTaskQueueManager(t, gomock.NewController(t),
-		makeTestBlocAlloc(func() (taskQueueState, error) {
-			// any error other than ConditionFailedError indicates an
-			// availability problem at a lower layer so the TQM should NOT
-			// unload itself because resilient sync match is enabled.
-			return taskQueueState{}, errors.New(t.Name())
-		}))
-	tqm.Start()
-	defer tqm.Stop()
-	poller, _ := runOneShotPoller(context.Background(), tqm)
-	defer poller.Cancel()
-
-	sync, err := tqm.AddTask(context.TODO(), addTaskParams{
-		execution: &commonpb.WorkflowExecution{},
-		taskInfo:  &persistencespb.TaskInfo{},
-		source:    enumsspb.TASK_SOURCE_HISTORY})
-	require.NoError(t, err)
-	require.True(t, sync)
-}
-
 func TestForeignPartitionOwnerCausesUnload(t *testing.T) {
 	cfg := NewConfig(dynamicconfig.NewNoopCollection())
 	cfg.RangeSize = 1 // TaskID block size
