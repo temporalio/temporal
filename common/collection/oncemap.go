@@ -29,30 +29,30 @@ import "sync"
 // provided construction function only when a key is accessed for the first time.
 type OnceMap[K comparable, T any] struct {
 	mu        sync.RWMutex
-	pool      map[K]T
+	inner     map[K]T
 	construct func(K) T
 }
 
 // NewOnceMap creates a [OnceMap] from a given construct function.
-// construct should be kept light as is called while holding a lock on the entire map.
+// construct should be kept light as it is called while holding a lock on the entire map.
 func NewOnceMap[K comparable, T any](construct func(K) T) *OnceMap[K, T] {
 	return &OnceMap[K, T]{
 		construct: construct,
-		pool:      make(map[K]T, 0),
+		inner:     make(map[K]T, 0),
 	}
 }
 
 func (p *OnceMap[K, T]) Get(key K) T {
 	p.mu.RLock()
-	value, ok := p.pool[key]
+	value, ok := p.inner[key]
 	p.mu.RUnlock()
 	if !ok {
 		p.mu.Lock()
-		if value, ok = p.pool[key]; !ok {
+		defer p.mu.Unlock()
+		if value, ok = p.inner[key]; !ok {
 			value = p.construct(key)
-			p.pool[key] = value
+			p.inner[key] = value
 		}
-		p.mu.Unlock()
 	}
 
 	return value
