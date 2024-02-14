@@ -27,6 +27,7 @@ package shard
 import (
 	"context"
 	"fmt"
+	"sync/atomic"
 
 	"github.com/golang/mock/gomock"
 	"golang.org/x/sync/semaphore"
@@ -143,17 +144,18 @@ func newTestContext(t *resourcetest.Test, eventsCache events.Cache, config Conte
 	}
 
 	ctx := &ContextImpl{
-		shardID:             config.ShardInfo.GetShardId(),
-		owner:               config.ShardInfo.GetOwner(),
-		stringRepr:          fmt.Sprintf("Shard(%d)", config.ShardInfo.GetShardId()),
-		executionManager:    executionManager,
-		metricsHandler:      t.MetricsHandler,
-		eventsCache:         eventsCache,
-		config:              config.Config,
-		contextTaggedLogger: t.GetLogger(),
-		throttledLogger:     t.GetThrottledLogger(),
-		lifecycleCtx:        lifecycleCtx,
-		lifecycleCancel:     lifecycleCancel,
+		shardID:              config.ShardInfo.GetShardId(),
+		owner:                config.ShardInfo.GetOwner(),
+		stringRepr:           fmt.Sprintf("Shard(%d)", config.ShardInfo.GetShardId()),
+		executionManager:     executionManager,
+		metricsHandler:       t.MetricsHandler,
+		eventsCache:          eventsCache,
+		config:               config.Config,
+		contextTaggedLogger:  t.GetLogger(),
+		throttledLogger:      t.GetThrottledLogger(),
+		lifecycleCtx:         lifecycleCtx,
+		lifecycleCancel:      lifecycleCancel,
+		emittingQueueMetrics: &atomic.Bool{},
 
 		state:              contextStateAcquired,
 		engineFuture:       future.NewFuture[Engine](),
