@@ -1,0 +1,71 @@
+# https://d2lang.com
+
+Matching: {
+    style.opacity: 0
+    grid-columns: 1
+    class: service
+    style.stroke: transparent
+
+    Matching1: {
+        class: service
+        label: "Matching instance #1"
+
+        FooRoot: {
+            label: "foo"
+            class: foo
+        }
+        Foo1: {
+            label: "/_sys/foo/1"
+            class: foo
+        }
+    }
+
+    Matching2: {
+        class: service
+        label: "Matching instance #2"
+
+        BarRoot: {
+            label: "bar"
+            class: bar
+        }
+        Foo2: {
+            label: "/_sys/foo/2"
+            class: foo
+        }
+        Bar2: {
+            label: "/_sys/bar/2"
+            class: bar
+        }
+        Bar3: {
+            label: "/_sys/bar/3"
+            class: bar
+        }
+    }
+
+    Matching3: {
+        class: service
+        label: "Matching instance #3"
+
+        Bar1: {
+            label: "/_sys/bar/1"
+            class: bar
+        }
+        Foo3: {
+            label: "/_sys/foo/3"
+            class: foo
+        }
+    }
+}
+
+
+classes: {
+    service: {
+        label: ""
+        style: {
+            fill: transparent
+            stroke-dash: 3
+        }
+    }
+    foo: { style.fill: "#FEEFE5" }
+    bar: { style.fill: "#E5ECE9" }
+}
