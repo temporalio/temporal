@@ -964,7 +964,7 @@ func (mr *MockExecutionStoreMockRecorder) GetHistoryTasks(ctx, request interface
 }
 
 // GetHistoryTree mocks base method.
-func (m *MockExecutionStore) GetHistoryTree(ctx context.Context, request *persistence.GetHistoryTreeRequest) (*persistence.InternalGetHistoryTreeResponse, error) {
+func (m *MockExecutionStore) GetHistoryTree(ctx context.Context, request *persistence.InternalGetHistoryTreeRequest) (*persistence.InternalGetHistoryTreeResponse, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "GetHistoryTree", ctx, request)
 	ret0, _ := ret[0].(*persistence.InternalGetHistoryTreeResponse)

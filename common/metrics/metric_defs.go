@@ -125,9 +125,7 @@ const (
 	PersistenceDeleteHistoryBranchScope = "DeleteHistoryBranch"
 	// PersistenceTrimHistoryBranchScope tracks TrimHistoryBranch calls made by service to persistence layer
 	PersistenceTrimHistoryBranchScope = "TrimHistoryBranch"
-	// PersistenceGetHistoryTreeScope tracks GetHistoryTree calls made by service to persistence layer
-	PersistenceGetHistoryTreeScope = "GetHistoryTree"
-	// PersistenceGetAllHistoryTreeBranchesScope tracks GetHistoryTree calls made by service to persistence layer
+	// PersistenceGetAllHistoryTreeBranchesScope tracks GetAllHistoryTreeBranches calls made by service to persistence layer
 	PersistenceGetAllHistoryTreeBranchesScope = "GetAllHistoryTreeBranches"
 	// PersistenceNamespaceReplicationQueueScope is the metrics scope for namespace replication queue
 	PersistenceNamespaceReplicationQueueScope = "NamespaceReplicationQueue"

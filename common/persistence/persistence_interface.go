@@ -162,7 +162,7 @@ type (
 		// DeleteHistoryBranch removes a branch
 		DeleteHistoryBranch(ctx context.Context, request *InternalDeleteHistoryBranchRequest) error
 		// GetHistoryTree returns all branch information of a tree
-		GetHistoryTree(ctx context.Context, request *GetHistoryTreeRequest) (*InternalGetHistoryTreeResponse, error)
+		GetHistoryTree(ctx context.Context, request *InternalGetHistoryTreeRequest) (*InternalGetHistoryTreeResponse, error)
 		// GetAllHistoryTreeBranches returns all branches of all trees.
 		// Note that branches may be skipped or duplicated across pages if there are branches created or deleted while
 		// paginating through results.
@@ -638,6 +638,14 @@ type (
 		BranchID string
 		Encoding string
 		Data     []byte // HistoryTreeInfo blob
+	}
+
+	// InternalGetHistoryTreeRequest is used to retrieve branch info of a history tree
+	InternalGetHistoryTreeRequest struct {
+		// A UUID of a tree
+		TreeID string
+		// Get data from this shard
+		ShardID int32
 	}
 
 	// InternalGetHistoryTreeResponse is response to GetHistoryTree
