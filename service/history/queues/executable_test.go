@@ -663,6 +663,7 @@ func (s *executableSuite) TestExecute_DLQFailThenRetry() {
 		}
 	})
 
+	capture := s.metricsHandler.StartCapture()
 	s.mockExecutor.EXPECT().Execute(gomock.Any(), executable).DoAndReturn(
 		func(_ context.Context, _ queues.Executable) queues.ExecuteResponse {
 			panic(serialization.NewUnknownEncodingTypeError("unknownEncoding", enumspb.ENCODING_TYPE_PROTO3))
@@ -678,6 +679,10 @@ func (s *executableSuite) TestExecute_DLQFailThenRetry() {
 	queueWriter.EnqueueTaskErr = nil
 	err = executable.Execute()
 	s.NoError(err)
+	snapshot := capture.Snapshot()
+	s.Len(snapshot[metrics.TaskTerminalFailures.Name()], 1)
+	s.Len(snapshot[metrics.TaskDLQFailures.Name()], 1)
+	s.Len(snapshot[metrics.TaskDLQSendLatency.Name()], 2)
 }
 
 func (s *executableSuite) TestHandleErr_EntityNotExists() {
