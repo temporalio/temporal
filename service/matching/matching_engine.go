@@ -223,7 +223,7 @@ func (e *matchingEngineImpl) Start() {
 	}
 
 	go e.watchMembership()
-	e.serviceResolver.AddListener(e.listenerKey(), e.membershipChangedCh)
+	_ = e.serviceResolver.AddListener(e.listenerKey(), e.membershipChangedCh)
 }
 
 func (e *matchingEngineImpl) Stop() {
@@ -235,7 +235,7 @@ func (e *matchingEngineImpl) Stop() {
 		return
 	}
 
-	e.serviceResolver.RemoveListener(e.listenerKey())
+	_ = e.serviceResolver.RemoveListener(e.listenerKey())
 	close(e.membershipChangedCh)
 
 	for _, l := range e.getTaskQueues(math.MaxInt32) {
