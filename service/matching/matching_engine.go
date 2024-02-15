@@ -830,11 +830,12 @@ func (e *matchingEngineImpl) UpdateWorkerVersioningRules(
 	if req.GetTaskQueue() != request.GetTaskQueue() {
 		return nil, serviceerror.NewInternal("Task Queue does not match Task Queue in wrapped command")
 	}
-	taskQueue, err := newTaskQueueID(ns.ID(), req.GetTaskQueue(), enumspb.TASK_QUEUE_TYPE_WORKFLOW)
+
+	taskQueueFamily, err := tqid.FromFamilyName(req.GetNamespace(), req.GetTaskQueue())
 	if err != nil {
 		return nil, err
 	}
-	tqMgr, err := e.getTaskQueuePartitionManager(ctx, taskQueue, normalStickyInfo, true)
+	tqMgr, err := e.getTaskQueuePartitionManager(ctx, taskQueueFamily.TaskQueue(enumspb.TASK_QUEUE_TYPE_WORKFLOW).RootPartition(), true)
 	if err != nil {
 		return nil, err
 	}
@@ -844,7 +845,7 @@ func (e *matchingEngineImpl) UpdateWorkerVersioningRules(
 	updateOptions := UserDataUpdateOptions{}
 	cT := req.GetConflictToken()
 
-	err = tqMgr.UpdateUserData(ctx, updateOptions, func(data *persistencespb.TaskQueueUserData) (*persistencespb.TaskQueueUserData, bool, error) {
+	err = tqMgr.GetUserDataManager().UpdateUserData(ctx, updateOptions, func(data *persistencespb.TaskQueueUserData) (*persistencespb.TaskQueueUserData, bool, error) {
 		clk := data.GetClock()
 		if clk == nil {
 			clk = hlc.Zero(e.clusterMeta.GetClusterID())

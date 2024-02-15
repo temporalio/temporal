@@ -196,7 +196,11 @@ func (c *clientImpl) ListWorkerVersioningRules(
 	opts ...grpc.CallOption,
 ) (*matchingservice.ListWorkerVersioningRulesResponse, error) {
 
-	client, err := c.getClientForTaskqueue(request.GetNamespaceId(), &taskqueuepb.TaskQueue{Name: request.GetTaskQueue()}, enumspb.TASK_QUEUE_TYPE_WORKFLOW)
+	p, err := tqid.FromProto(&taskqueuepb.TaskQueue{Name: request.GetTaskQueue()}, request.GetNamespaceId(), enumspb.TASK_QUEUE_TYPE_WORKFLOW)
+	if err != nil {
+		return nil, err
+	}
+	client, err := c.getClientForTaskQueuePartition(p)
 	if err != nil {
 		return nil, err
 	}
@@ -287,7 +291,11 @@ func (c *clientImpl) UpdateWorkerVersioningRules(
 	opts ...grpc.CallOption,
 ) (*matchingservice.UpdateWorkerVersioningRulesResponse, error) {
 
-	client, err := c.getClientForTaskqueue(request.GetNamespaceId(), &taskqueuepb.TaskQueue{Name: request.GetTaskQueue()}, enumspb.TASK_QUEUE_TYPE_WORKFLOW)
+	p, err := tqid.FromProto(&taskqueuepb.TaskQueue{Name: request.GetTaskQueue()}, request.GetNamespaceId(), enumspb.TASK_QUEUE_TYPE_WORKFLOW)
+	if err != nil {
+		return nil, err
+	}
+	client, err := c.getClientForTaskQueuePartition(p)
 	if err != nil {
 		return nil, err
 	}
