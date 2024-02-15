@@ -34,6 +34,9 @@ import (
 
 	enumspb "go.temporal.io/api/enums/v1"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
+	"go.temporal.io/server/common/log"
+	"go.temporal.io/server/common/log/tag"
+	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/tqid"
 	"google.golang.org/grpc"
 
@@ -55,6 +58,8 @@ type clientImpl struct {
 	timeout         time.Duration
 	longPollTimeout time.Duration
 	clients         common.ClientCache
+	metricsHandler  metrics.Handler
+	logger          log.Logger
 	loadBalancer    LoadBalancer
 }
 
@@ -63,12 +68,16 @@ func NewClient(
 	timeout time.Duration,
 	longPollTimeout time.Duration,
 	clients common.ClientCache,
+	metricsHandler metrics.Handler,
+	logger log.Logger,
 	lb LoadBalancer,
 ) matchingservice.MatchingServiceClient {
 	return &clientImpl{
 		timeout:         timeout,
 		longPollTimeout: longPollTimeout,
 		clients:         clients,
+		metricsHandler:  metricsHandler,
+		logger:          logger,
 		loadBalancer:    lb,
 	}
 }
@@ -185,6 +194,8 @@ func (c *clientImpl) QueryWorkflow(ctx context.Context, request *matchingservice
 func (c *clientImpl) pickPartitionForWrite(proto *taskqueuepb.TaskQueue, nsid string, taskType enumspb.TaskQueueType, forwardedFrom string) (tqid.Partition, error) {
 	partition, err := tqid.FromProto(proto, nsid, taskType)
 	if err != nil {
+		c.logger.Info("invalid tq partition", tag.Error(err), tag.NewStringsTag("proto", []string{proto.String()}))
+		metrics.MatchingClientInvalidTaskQueuePartition.With(c.metricsHandler).Record(1)
 		return nil, err
 	}
 
@@ -194,7 +205,7 @@ func (c *clientImpl) pickPartitionForWrite(proto *taskqueuepb.TaskQueue, nsid st
 
 	switch p := partition.(type) {
 	case *tqid.NormalPartition:
-		return c.loadBalancer.PickWritePartition(p.NormalTaskQueue(), p.TaskType()), nil
+		return c.loadBalancer.PickWritePartition(p.TaskQueue()), nil
 	default:
 		return partition, nil
 	}
@@ -203,6 +214,8 @@ func (c *clientImpl) pickPartitionForWrite(proto *taskqueuepb.TaskQueue, nsid st
 func (c *clientImpl) pickPartitionForRead(proto *taskqueuepb.TaskQueue, nsid string, taskType enumspb.TaskQueueType, forwardedFrom string) (prtn tqid.Partition, release func(), err error) {
 	partition, err := tqid.FromProto(proto, nsid, taskType)
 	if err != nil {
+		c.logger.Info("invalid tq partition", tag.Error(err), tag.NewStringsTag("proto", []string{proto.String()}))
+		metrics.MatchingClientInvalidTaskQueuePartition.With(c.metricsHandler).Record(1)
 		return nil, nil, err
 	}
 
@@ -212,7 +225,7 @@ func (c *clientImpl) pickPartitionForRead(proto *taskqueuepb.TaskQueue, nsid str
 
 	switch p := partition.(type) {
 	case *tqid.NormalPartition:
-		token := c.loadBalancer.PickReadPartition(p.NormalTaskQueue(), p.TaskType())
+		token := c.loadBalancer.PickReadPartition(p.TaskQueue())
 		return token.TQPartition, token.Release, nil
 	default:
 		return partition, nil, nil

@@ -66,7 +66,7 @@ type VersioningIntegSuite struct {
 
 const (
 	partitionTreeDegree = 3
-	longPollTime        = 10 * time.Second
+	longPollTime        = 5 * time.Second
 	// use > 2 pollers by default to expose more timing situations
 	numPollers = 4
 )
@@ -1677,9 +1677,9 @@ func (s *VersioningIntegSuite) waitForPropagation(ctx context.Context, taskQueue
 	nsId := s.getNamespaceID(s.namespace)
 	s.Eventually(func() bool {
 		for pt := range remaining {
-			taskQueue, err := tqid.FromBaseName("", taskQueue)
+			f, err := tqid.FromFamilyName("", taskQueue)
 			s.NoError(err)
-			partition := taskQueue.NormalPartition(0, pt.part)
+			partition := f.TaskQueue(pt.tp).NormalPartition(pt.part)
 			// Use lower-level GetTaskQueueUserData instead of GetWorkerBuildIdCompatibility
 			// here so that we can target activity queues.
 			res, err := s.testCluster.host.matchingClient.GetTaskQueueUserData(
@@ -1687,7 +1687,7 @@ func (s *VersioningIntegSuite) waitForPropagation(ctx context.Context, taskQueue
 				&matchingservice.GetTaskQueueUserDataRequest{
 					NamespaceId:   nsId,
 					TaskQueue:     partition.RpcName(),
-					TaskQueueType: pt.tp,
+					TaskQueueType: partition.TaskType(),
 				})
 			s.NoError(err)
 			if containsBuildId(res.GetUserData().GetData().GetVersioningData(), newBuildId) {

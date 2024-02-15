@@ -393,8 +393,8 @@ func TestUserData_FetchesUpTree(t *testing.T) {
 	controller := gomock.NewController(t)
 	defer controller.Finish()
 	ctx := context.Background()
-	taskQueue := newTestTaskQueue(defaultNamespaceId, defaultRootTqID)
-	dbq := UnversionedDBQueue(taskQueue.NormalPartition(enumspb.TASK_QUEUE_TYPE_WORKFLOW, 31))
+	taskQueue := newTestTaskQueue(defaultNamespaceId, defaultRootTqID, enumspb.TASK_QUEUE_TYPE_WORKFLOW)
+	dbq := UnversionedDBQueue(taskQueue.NormalPartition(31))
 	tqCfg := defaultTqmTestOpts(controller)
 	tqCfg.config.ForwarderMaxChildrenPerNode = dynamicconfig.GetIntPropertyFilteredByTaskQueueInfo(3)
 	tqCfg.dbq = dbq
@@ -408,7 +408,7 @@ func TestUserData_FetchesUpTree(t *testing.T) {
 		gomock.Any(),
 		&matchingservice.GetTaskQueueUserDataRequest{
 			NamespaceId:              defaultNamespaceId,
-			TaskQueue:                taskQueue.NormalPartition(enumspb.TASK_QUEUE_TYPE_WORKFLOW, 10).RpcName(),
+			TaskQueue:                taskQueue.NormalPartition(10).RpcName(),
 			TaskQueueType:            enumspb.TASK_QUEUE_TYPE_WORKFLOW,
 			LastKnownUserDataVersion: 0,
 			WaitNewData:              false,
@@ -479,7 +479,7 @@ func TestUserData_FetchesStickyToNormal(t *testing.T) {
 	normalName := "normal-queue"
 	stickyName := uuid.New()
 
-	normalTq := newTestTaskQueue(defaultNamespaceId, normalName)
+	normalTq := newTestTaskQueue(defaultNamespaceId, normalName, enumspb.TASK_QUEUE_TYPE_WORKFLOW)
 	stickyTq := normalTq.StickyPartition(stickyName)
 	tqCfg.dbq = UnversionedDBQueue(stickyTq)
 
@@ -541,5 +541,5 @@ func TestUserData_UpdateOnNonRootFails(t *testing.T) {
 }
 
 func newTestUnversionedDBQueue(namespaceId string, name string, taskType enumspb.TaskQueueType, partition int) *DBTaskQueue {
-	return UnversionedDBQueue(newTestTaskQueue(namespaceId, name).NormalPartition(taskType, partition))
+	return UnversionedDBQueue(newTestTaskQueue(namespaceId, name, taskType).NormalPartition(partition))
 }

@@ -824,11 +824,11 @@ func (e *matchingEngineImpl) UpdateWorkerBuildIdCompatibility(
 	if err != nil {
 		return nil, err
 	}
-	taskQueue, err := tqid.FromBaseName(req.NamespaceId, req.GetTaskQueue())
+	taskQueue, err := tqid.FromFamilyName(req.NamespaceId, req.GetTaskQueue())
 	if err != nil {
 		return nil, err
 	}
-	pm, err := e.getTaskQueuePartitionManager(ctx, taskQueue.RootPartition(enumspb.TASK_QUEUE_TYPE_WORKFLOW), true)
+	pm, err := e.getTaskQueuePartitionManager(ctx, taskQueue.TaskQueue(enumspb.TASK_QUEUE_TYPE_WORKFLOW).RootPartition(), true)
 	if err != nil {
 		return nil, err
 	}
@@ -915,11 +915,11 @@ func (e *matchingEngineImpl) GetWorkerBuildIdCompatibility(
 	ctx context.Context,
 	req *matchingservice.GetWorkerBuildIdCompatibilityRequest,
 ) (*matchingservice.GetWorkerBuildIdCompatibilityResponse, error) {
-	taskQueue, err := tqid.FromBaseName(req.NamespaceId, req.Request.GetTaskQueue())
+	taskQueueFamily, err := tqid.FromFamilyName(req.NamespaceId, req.Request.GetTaskQueue())
 	if err != nil {
 		return nil, err
 	}
-	pm, err := e.getTaskQueuePartitionManager(ctx, taskQueue.RootPartition(enumspb.TASK_QUEUE_TYPE_WORKFLOW), true)
+	pm, err := e.getTaskQueuePartitionManager(ctx, taskQueueFamily.TaskQueue(enumspb.TASK_QUEUE_TYPE_WORKFLOW).RootPartition(), true)
 	if err != nil {
 		if _, ok := err.(*serviceerror.NotFound); ok {
 			return &matchingservice.GetWorkerBuildIdCompatibilityResponse{}, nil
@@ -1000,11 +1000,11 @@ func (e *matchingEngineImpl) ApplyTaskQueueUserDataReplicationEvent(
 	if err != nil {
 		return nil, err
 	}
-	taskQueue, err := tqid.FromBaseName(req.NamespaceId, req.GetTaskQueue())
+	taskQueueFamily, err := tqid.FromFamilyName(req.NamespaceId, req.GetTaskQueue())
 	if err != nil {
 		return nil, err
 	}
-	pm, err := e.getTaskQueuePartitionManager(ctx, taskQueue.RootPartition(enumspb.TASK_QUEUE_TYPE_WORKFLOW), true)
+	pm, err := e.getTaskQueuePartitionManager(ctx, taskQueueFamily.TaskQueue(enumspb.TASK_QUEUE_TYPE_WORKFLOW).RootPartition(), true)
 	if err != nil {
 		return nil, err
 	}
@@ -1073,11 +1073,11 @@ func (e *matchingEngineImpl) ForceUnloadTaskQueue(
 	ctx context.Context,
 	req *matchingservice.ForceUnloadTaskQueueRequest,
 ) (*matchingservice.ForceUnloadTaskQueueResponse, error) {
-	taskQueue, err := tqid.FromBaseName(req.NamespaceId, req.GetTaskQueue())
+	taskQueueFamily, err := tqid.FromFamilyName(req.NamespaceId, req.GetTaskQueue())
 	if err != nil {
 		return nil, err
 	}
-	pm, err := e.getTaskQueuePartitionManager(ctx, taskQueue.RootPartition(req.TaskQueueType), true)
+	pm, err := e.getTaskQueuePartitionManager(ctx, taskQueueFamily.TaskQueue(req.TaskQueueType).RootPartition(), true)
 	if err != nil {
 		return nil, err
 	}
@@ -1155,14 +1155,14 @@ func (e *matchingEngineImpl) getAllPartitions(
 	if err != nil {
 		return partitionKeys, err
 	}
-	taskQueueParsed, err := tqid.FromBaseName(namespaceID.String(), taskQueue.GetName())
+	taskQueueFamily, err := tqid.FromFamilyName(namespaceID.String(), taskQueue.GetName())
 	if err != nil {
 		return partitionKeys, err
 	}
 
-	n := e.config.NumTaskqueueWritePartitions(ns.String(), taskQueueParsed.Name(), taskQueueType)
+	n := e.config.NumTaskqueueWritePartitions(ns.String(), taskQueueFamily.Name(), taskQueueType)
 	for i := 0; i < n; i++ {
-		partitionKeys = append(partitionKeys, taskQueueParsed.NormalPartition(taskQueueType, i).RpcName())
+		partitionKeys = append(partitionKeys, taskQueueFamily.TaskQueue(taskQueueType).NormalPartition(i).RpcName())
 	}
 
 	return partitionKeys, nil

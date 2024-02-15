@@ -134,20 +134,20 @@ func TestFromProtoPartition_Normal(t *testing.T) {
 func TestFromBaseName(t *testing.T) {
 	a := assert.New(t)
 
-	p, err := FromBaseName("", "my-basic-tq-name")
+	f, err := FromFamilyName("", "my-basic-tq-name")
 	a.NoError(err)
-	a.Equal("my-basic-tq-name", p.Name())
+	a.Equal("my-basic-tq-name", f.Name())
 
-	_, err = FromBaseName("", "/_sys/my-basic-tq-name/23")
+	_, err = FromFamilyName("", "/_sys/my-basic-tq-name/23")
 	a.Error(err)
 }
 
 func TestNormalPartition(t *testing.T) {
 	a := assert.New(t)
 
-	n, err := FromBaseName("", "tq")
+	f, err := FromFamilyName("", "tq")
 	a.NoError(err)
-	p := n.NormalPartition(0, 23)
+	p := f.TaskQueue(enumspb.TASK_QUEUE_TYPE_WORKFLOW).NormalPartition(23)
 	a.Equal("tq", p.TaskQueue().Name())
 	a.Equal(23, p.PartitionID())
 	a.Equal("/_sys/tq/23", p.RpcName())
@@ -217,12 +217,12 @@ func TestParentName(t *testing.T) {
 	for _, tc := range testCases {
 		t.Run(tc.name+"#"+strconv.Itoa(tc.degree), func(t *testing.T) {
 			p := mustParseNormalPartition(t, tc.name, enumspb.TaskQueueType(rand.Intn(3)))
-			parent, err := p.Parent(tc.degree)
+			parent, err := p.ParentPartition(tc.degree)
 			if tc.output == invalid {
 				require.Equal(t, ErrNoParent, err)
 			} else {
 				require.Equal(t, tc.output, parent.RpcName())
-				require.Equal(t, p.taskType, parent.taskType)
+				require.Equal(t, p.TaskType(), parent.TaskType())
 			}
 		})
 	}
@@ -262,7 +262,7 @@ func mustParent(p Partition, n int) *NormalPartition {
 	if !ok {
 		panic("not a normal partition")
 	}
-	parent, err := normalPrtn.Parent(n)
+	parent, err := normalPrtn.ParentPartition(n)
 	if err != nil {
 		panic(err)
 	}

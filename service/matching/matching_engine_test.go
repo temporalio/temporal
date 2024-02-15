@@ -2626,19 +2626,19 @@ func (m *testTaskManager) getQueueManager(queue *DBTaskQueue) *testDBQueueManage
 }
 
 func newUnversionedRootDBQueue(namespaceId string, name string, taskType enumspb.TaskQueueType) *DBTaskQueue {
-	return UnversionedDBQueue(newTestTaskQueue(namespaceId, name).RootPartition(taskType))
+	return UnversionedDBQueue(newTestTaskQueue(namespaceId, name, taskType).RootPartition())
 }
 
 func newRootPartition(namespaceId string, name string, taskType enumspb.TaskQueueType) *tqid.NormalPartition {
-	return newTestTaskQueue(namespaceId, name).RootPartition(taskType)
+	return newTestTaskQueue(namespaceId, name, taskType).RootPartition()
 }
 
-func newTestTaskQueue(namespaceId string, name string) *tqid.TaskQueue {
-	result, err := tqid.FromBaseName(namespaceId, name)
+func newTestTaskQueue(namespaceId string, name string, taskType enumspb.TaskQueueType) *tqid.TaskQueue {
+	result, err := tqid.FromFamilyName(namespaceId, name)
 	if err != nil {
 		panic(fmt.Sprintf("newTaskQueueID failed with error %v", err))
 	}
-	return result
+	return result.TaskQueue(taskType)
 }
 
 type testDBQueueManager struct {

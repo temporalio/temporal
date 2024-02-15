@@ -38,34 +38,34 @@ func TestParseDBQueue(t *testing.T) {
 	a := assert.New(t)
 	tt := enumspb.TASK_QUEUE_TYPE_WORKFLOW
 	ns := "ns-id"
-	taskQueue, err := tqid.FromBaseName(ns, "my-basic-tq-name")
+	f, err := tqid.FromFamilyName(ns, "my-basic-tq-name")
 	assert.NoError(t, err)
-	key := dbTaskQueueKey{taskQueue.RootPartition(tt).Key(), "", ""}
+	key := dbTaskQueueKey{f.TaskQueue(tt).RootPartition().Key(), "", ""}
 
 	dbq, err := ParseDBQueue("my-basic-tq-name", ns, tt)
 	a.NoError(err)
 	a.Equal(key, dbq.key())
 	a.Equal("my-basic-tq-name", dbq.PersistenceName())
 
-	key = dbTaskQueueKey{taskQueue.NormalPartition(tt, 23).Key(), "", ""}
+	key = dbTaskQueueKey{f.TaskQueue(tt).NormalPartition(23).Key(), "", ""}
 	dbq, err = ParseDBQueue("/_sys/my-basic-tq-name/23", ns, tt)
 	a.NoError(err)
 	a.Equal(key, dbq.key())
 	a.Equal("/_sys/my-basic-tq-name/23", dbq.PersistenceName())
 
-	key = dbTaskQueueKey{taskQueue.NormalPartition(tt, 23).Key(), "verxyz", ""}
+	key = dbTaskQueueKey{f.TaskQueue(tt).NormalPartition(23).Key(), "verxyz", ""}
 	dbq, err = ParseDBQueue("/_sys/my-basic-tq-name/verxyz:23", ns, tt)
 	a.NoError(err)
-	a.Equal("my-basic-tq-name", dbq.TaskQueue().Name())
+	a.Equal("my-basic-tq-name", dbq.TaskQueueFamily().Name())
 	a.Equal(key, dbq.key())
 	a.Equal("/_sys/my-basic-tq-name/verxyz:23", dbq.PersistenceName())
 
 	buildID := "verxyz"
-	key = dbTaskQueueKey{taskQueue.NormalPartition(tt, 23).Key(), "", "verxyz"}
+	key = dbTaskQueueKey{f.TaskQueue(tt).NormalPartition(23).Key(), "", "verxyz"}
 	encodedBuildID := base64.URLEncoding.EncodeToString([]byte(buildID))
 	dbq, err = ParseDBQueue("/_sys/my-basic-tq-name/"+encodedBuildID+"#23", ns, tt)
 	a.NoError(err)
-	a.Equal("my-basic-tq-name", dbq.TaskQueue().Name())
+	a.Equal("my-basic-tq-name", dbq.TaskQueueFamily().Name())
 	a.Equal(key, dbq.key())
 	a.Equal("/_sys/my-basic-tq-name/"+encodedBuildID+"#23", dbq.PersistenceName())
 }
@@ -102,7 +102,7 @@ func TestValidPersistenceNames(t *testing.T) {
 			dbq, err := ParseDBQueue(tc.input, "", 0)
 			require.NoError(t, err)
 			require.Equal(t, tc.partition, dbq.Partition().(*tqid.NormalPartition).PartitionID())
-			require.Equal(t, tc.baseName, dbq.TaskQueue().Name())
+			require.Equal(t, tc.baseName, dbq.TaskQueueFamily().Name())
 			require.Equal(t, tc.versionSet, dbq.VersionSet())
 			require.Equal(t, tc.buildId, dbq.BuildId())
 			require.Equal(t, tc.input, dbq.PersistenceName())
@@ -136,9 +136,9 @@ func TestInvalidPersistenceNames(t *testing.T) {
 func TestVersionSetDBQueue(t *testing.T) {
 	a := assert.New(t)
 
-	taskQueue, err := tqid.FromBaseName("", "tq")
+	f, err := tqid.FromFamilyName("", "tq")
 	assert.NoError(t, err)
-	p := taskQueue.NormalPartition(0, 2)
+	p := f.TaskQueue(enumspb.TASK_QUEUE_TYPE_WORKFLOW).NormalPartition(2)
 	dbq := VersionSetDBQueue(p, "abc3")
 	a.Equal(p, dbq.Partition())
 	a.Equal("abc3", dbq.VersionSet())
@@ -148,9 +148,9 @@ func TestVersionSetDBQueue(t *testing.T) {
 func TestBuildIDDBQueue(t *testing.T) {
 	a := assert.New(t)
 
-	taskQueue, err := tqid.FromBaseName("", "tq")
+	f, err := tqid.FromFamilyName("", "tq")
 	assert.NoError(t, err)
-	p := taskQueue.NormalPartition(0, 2)
+	p := f.TaskQueue(enumspb.TASK_QUEUE_TYPE_WORKFLOW).NormalPartition(2)
 	dbq := BuildIDDBQueue(p, "abc3")
 	a.Equal(p, dbq.Partition())
 	a.Equal("", dbq.VersionSet())
@@ -160,9 +160,9 @@ func TestBuildIDDBQueue(t *testing.T) {
 func TestUnversionedDBQueue(t *testing.T) {
 	a := assert.New(t)
 
-	taskQueue, err := tqid.FromBaseName("", "tq")
+	f, err := tqid.FromFamilyName("", "tq")
 	assert.NoError(t, err)
-	p := taskQueue.NormalPartition(0, 2)
+	p := f.TaskQueue(enumspb.TASK_QUEUE_TYPE_WORKFLOW).NormalPartition(2)
 	dbq := UnversionedDBQueue(p)
 	a.Equal(p, dbq.Partition())
 	a.Equal("", dbq.VersionSet())

@@ -458,7 +458,7 @@ func (m *workflowTaskStateMachine) AddWorkflowTaskStartedEvent(
 		scheduledEvent := m.ms.hBuilder.AddWorkflowTaskScheduledEvent(
 			// taskQueue may come directly from RecordWorkflowTaskStarted from matching, which will
 			// contain a specific partition name. We only want to record the base name here.
-			cleanTaskQueue(taskQueue),
+			cleanTaskQueue(taskQueue, enumspb.TASK_QUEUE_TYPE_WORKFLOW),
 			durationpb.New(workflowTask.WorkflowTaskTimeout),
 			workflowTask.Attempt,
 			startTime,
@@ -1054,16 +1054,16 @@ func (m *workflowTaskStateMachine) convertSpeculativeWorkflowTaskToNormal() erro
 	return nil
 }
 
-func cleanTaskQueue(proto *taskqueuepb.TaskQueue) *taskqueuepb.TaskQueue {
+func cleanTaskQueue(proto *taskqueuepb.TaskQueue, taskType enumspb.TaskQueueType) *taskqueuepb.TaskQueue {
 	if proto == nil {
 		return proto
 	}
-	prtn, err := tqid.FromProto(proto, "", 0)
+	partition, err := tqid.FromProto(proto, "", taskType)
 	if err != nil {
 		return proto
 	}
 
 	cleanTq := common.CloneProto(proto)
-	cleanTq.Name = prtn.TaskQueue().Name()
+	cleanTq.Name = partition.TaskQueue().Name()
 	return cleanTq
 }

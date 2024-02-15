@@ -476,13 +476,13 @@ func (s *mutableStateSuite) TestTransientWorkflowTaskStart_CurrentVersionChanged
 	err = s.mutableState.UpdateCurrentVersion(version+1, true)
 	s.NoError(err)
 
-	name, err := tqid.FromBaseName("", "tq")
+	f, err := tqid.FromFamilyName("", "tq")
 	s.NoError(err)
 
 	_, _, err = s.mutableState.AddWorkflowTaskStartedEvent(
 		s.mutableState.GetNextEventID(),
 		uuid.New(),
-		&taskqueuepb.TaskQueue{Name: name.NormalPartition(0, 5).RpcName()},
+		&taskqueuepb.TaskQueue{Name: f.TaskQueue(enumspb.TASK_QUEUE_TYPE_WORKFLOW).NormalPartition(5).RpcName()},
 		"random identity",
 	)
 	s.NoError(err)

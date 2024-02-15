@@ -503,7 +503,7 @@ func (pm *taskQueuePartitionManagerImpl) redirectToVersionSetQueueForAdd(
 		// Send rpc to root partition to persist the unknown build id before we return success.
 		_, err = pm.matchingClient.UpdateWorkerBuildIdCompatibility(ctx, &matchingservice.UpdateWorkerBuildIdCompatibilityRequest{
 			NamespaceId: pm.partition.NamespaceID().String(),
-			TaskQueue:   pm.partition.TaskQueue().RootPartition(enumspb.TASK_QUEUE_TYPE_WORKFLOW).RpcName(),
+			TaskQueue:   pm.partition.TaskQueue().Family().TaskQueue(enumspb.TASK_QUEUE_TYPE_WORKFLOW).RootPartition().RpcName(),
 			Operation: &matchingservice.UpdateWorkerBuildIdCompatibilityRequest_PersistUnknownBuildId{
 				PersistUnknownBuildId: buildId,
 			},

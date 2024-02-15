@@ -67,9 +67,9 @@ func (t *ForwarderTestSuite) SetupTest() {
 		ForwarderMaxChildrenPerNode:  func() int { return 20 },
 		ForwarderMaxOutstandingTasks: func() int { return 1 },
 	}
-	taskQueue, err := tqid.FromBaseName("fwdr", "tl0")
+	f, err := tqid.FromFamilyName("fwdr", "tl0")
 	t.Assert().NoError(err)
-	t.partition = taskQueue.RootPartition(enumspb.TASK_QUEUE_TYPE_WORKFLOW)
+	t.partition = f.TaskQueue(enumspb.TASK_QUEUE_TYPE_WORKFLOW).RootPartition()
 	t.fwdr = newForwarder(t.cfg, t.partition, t.client)
 }
 
@@ -333,14 +333,14 @@ func (t *ForwarderTestSuite) TestMaxOutstandingConfigUpdate() {
 }
 
 func (t *ForwarderTestSuite) usingTaskqueuePartition(taskType enumspb.TaskQueueType) {
-	taskQueue, err := tqid.FromBaseName("fwdr", "tl0")
+	f, err := tqid.FromFamilyName("fwdr", "tl0")
 	t.Assert().NoError(err)
-	t.partition = taskQueue.NormalPartition(taskType, 1)
+	t.partition = f.TaskQueue(taskType).NormalPartition(1)
 	t.fwdr = newForwarder(t.cfg, t.partition, t.client)
 }
 
 func mustParent(tn *tqid.NormalPartition, n int) *tqid.NormalPartition {
-	parent, err := tn.Parent(n)
+	parent, err := tn.ParentPartition(n)
 	if err != nil {
 		panic(err)
 	}

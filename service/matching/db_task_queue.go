@@ -37,8 +37,11 @@ import (
 )
 
 const (
-	versionSetDelimiter = ":"
-	buildIdDelimiter    = "#"
+	// nonRootPartitionPrefix is the prefix for all mangled task queue names.
+	nonRootPartitionPrefix = "/_sys/"
+	partitionDelimiter     = "/"
+	versionSetDelimiter    = ":"
+	buildIdDelimiter       = "#"
 )
 
 type (
@@ -70,8 +73,8 @@ func (dbq *DBTaskQueue) NamespaceID() namespace.ID {
 	return dbq.partition.TaskQueue().NamespaceID()
 }
 
-func (dbq *DBTaskQueue) TaskQueue() *tqid.TaskQueue {
-	return dbq.partition.TaskQueue()
+func (dbq *DBTaskQueue) TaskQueueFamily() *tqid.TaskQueueFamily {
+	return dbq.partition.TaskQueue().Family()
 }
 
 func (dbq *DBTaskQueue) TaskType() enumspb.TaskQueueType {
@@ -129,7 +132,7 @@ func BuildIDDBQueue(p tqid.Partition, buildId string) *DBTaskQueue {
 //	with build ID: 		/_sys/<base name>/<build ID base64 URL encoded>;<partition id>
 //	with version set: 		/_sys/<base name>/<version set id>:<partition id>
 func (dbq *DBTaskQueue) PersistenceName() string {
-	baseName := dbq.TaskQueue().Name()
+	baseName := dbq.TaskQueueFamily().Name()
 	partitionId := 0
 
 	if p, ok := dbq.Partition().(*tqid.NormalPartition); ok {
@@ -137,12 +140,12 @@ func (dbq *DBTaskQueue) PersistenceName() string {
 	}
 
 	if len(dbq.versionSet) > 0 {
-		return fmt.Sprintf("%s%s%s%s%s%d", tqid.NonRootPartitionPrefix, baseName, tqid.PartitionDelimiter, dbq.versionSet, versionSetDelimiter, partitionId)
+		return fmt.Sprintf("%s%s%s%s%s%d", nonRootPartitionPrefix, baseName, partitionDelimiter, dbq.versionSet, versionSetDelimiter, partitionId)
 	}
 
 	if len(dbq.buildId) > 0 {
 		encodedBuildId := base64.URLEncoding.EncodeToString([]byte(dbq.buildId))
-		return fmt.Sprintf("%s%s%s%s%s%d", tqid.NonRootPartitionPrefix, baseName, tqid.PartitionDelimiter, encodedBuildId, buildIdDelimiter, partitionId)
+		return fmt.Sprintf("%s%s%s%s%s%d", nonRootPartitionPrefix, baseName, partitionDelimiter, encodedBuildId, buildIdDelimiter, partitionId)
 	}
 
 	// unversioned DB queues use the RPC name of their partition
@@ -157,12 +160,12 @@ func ParseDBQueue(persistenceName string, namespaceId string, taskType enumspb.T
 	versionSet := ""
 	buildId := ""
 
-	if strings.HasPrefix(persistenceName, tqid.NonRootPartitionPrefix) {
-		suffixOff := strings.LastIndex(persistenceName, tqid.PartitionDelimiter)
-		if suffixOff <= len(tqid.NonRootPartitionPrefix) {
+	if strings.HasPrefix(persistenceName, nonRootPartitionPrefix) {
+		suffixOff := strings.LastIndex(persistenceName, partitionDelimiter)
+		if suffixOff <= len(nonRootPartitionPrefix) {
 			return nil, fmt.Errorf("%w: %s", ErrInvalidPersistenceName, persistenceName)
 		}
-		baseName = persistenceName[len(tqid.NonRootPartitionPrefix):suffixOff]
+		baseName = persistenceName[len(nonRootPartitionPrefix):suffixOff]
 		suffix := persistenceName[suffixOff+1:]
 		var err error
 		partitionId, versionSet, buildId, err = parseSuffix(persistenceName, suffix)
@@ -171,12 +174,12 @@ func ParseDBQueue(persistenceName string, namespaceId string, taskType enumspb.T
 		}
 	}
 
-	taskQueue, err := tqid.FromBaseName(namespaceId, baseName)
+	f, err := tqid.FromFamilyName(namespaceId, baseName)
 	if err != nil {
 		return nil, err
 	}
 	return &DBTaskQueue{
-		partition:  taskQueue.NormalPartition(taskType, partitionId),
+		partition:  f.TaskQueue(taskType).NormalPartition(partitionId),
 		versionSet: versionSet,
 		buildId:    buildId,
 	}, nil
@@ -204,14 +207,6 @@ func parseSuffix(persistenceName string, suffix string) (partition int, versionS
 		return 0, "", "", fmt.Errorf("%w: %s", ErrInvalidPersistenceName, persistenceName)
 	}
 	return partition, versionSet, buildId, err
-}
-
-func (dbq *DBTaskQueue) String() string {
-	return fmt.Sprintf("DBTaskQueue(tqrtn:%q vset:%s buildId:%s)",
-		dbq.partition,
-		dbq.versionSet,
-		dbq.buildId,
-	)
 }
 
 func (dbq *DBTaskQueue) IsVersioned() bool {

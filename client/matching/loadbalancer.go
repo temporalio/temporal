@@ -28,7 +28,6 @@ import (
 	"math/rand"
 	"sync"
 
-	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/tqid"
@@ -47,7 +46,6 @@ type (
 		// performed
 		PickWritePartition(
 			taskQueue *tqid.TaskQueue,
-			taskType enumspb.TaskQueueType,
 		) *tqid.NormalPartition
 
 		// PickReadPartition returns the task queue partition to send a poller to.
@@ -55,7 +53,6 @@ type (
 		// forwardedFrom is non-empty, no load balancing should be done.
 		PickReadPartition(
 			taskQueue *tqid.TaskQueue,
-			taskType enumspb.TaskQueueType,
 		) *pollToken
 	}
 
@@ -67,19 +64,14 @@ type (
 		forceWritePartition dynamicconfig.IntPropertyFn
 
 		lock         sync.RWMutex
-		taskQueueLBs map[taskQueueKey]*tqLoadBalancer
+		taskQueueLBs map[tqid.TaskQueue]*tqLoadBalancer
 	}
 
 	// Keeps track of polls per partition. Sends a poll to the partition with the fewest polls
 	tqLoadBalancer struct {
-		taskQueueKey taskQueueKey
+		taskQueue    *tqid.TaskQueue
 		pollerCounts []int // keep track of poller count of each partition
 		lock         sync.Mutex
-	}
-
-	taskQueueKey struct {
-		TaskQueue tqid.TaskQueue
-		Type      enumspb.TaskQueueType
 	}
 
 	pollToken struct {
@@ -101,35 +93,33 @@ func NewLoadBalancer(
 		forceReadPartition:  dc.GetIntProperty(dynamicconfig.TestMatchingLBForceReadPartition, -1),
 		forceWritePartition: dc.GetIntProperty(dynamicconfig.TestMatchingLBForceWritePartition, -1),
 		lock:                sync.RWMutex{},
-		taskQueueLBs:        make(map[taskQueueKey]*tqLoadBalancer),
+		taskQueueLBs:        make(map[tqid.TaskQueue]*tqLoadBalancer),
 	}
 	return lb
 }
 
 func (lb *defaultLoadBalancer) PickWritePartition(
 	taskQueue *tqid.TaskQueue,
-	taskType enumspb.TaskQueueType,
 ) *tqid.NormalPartition {
 	if n := lb.forceWritePartition(); n >= 0 {
-		return taskQueue.NormalPartition(taskType, n)
+		return taskQueue.NormalPartition(n)
 	}
 
 	nsName, err := lb.namespaceIDToName(taskQueue.NamespaceID())
 	if err != nil {
-		return taskQueue.RootPartition(taskType)
+		return taskQueue.RootPartition()
 	}
 
-	n := max(1, lb.nWritePartitions(nsName.String(), taskQueue.Name(), taskType))
-	return taskQueue.NormalPartition(taskType, rand.Intn(n))
+	n := max(1, lb.nWritePartitions(nsName.String(), taskQueue.Name(), taskQueue.TaskType()))
+	return taskQueue.NormalPartition(rand.Intn(n))
 }
 
 // PickReadPartition picks a partition for poller to poll task from, and keeps load balanced between partitions.
 // Caller is responsible to call pollToken.Release() after complete the poll.
 func (lb *defaultLoadBalancer) PickReadPartition(
 	taskQueue *tqid.TaskQueue,
-	taskType enumspb.TaskQueueType,
 ) *pollToken {
-	tqlb := lb.getTaskQueueLoadBalancer(taskQueue, taskType)
+	tqlb := lb.getTaskQueueLoadBalancer(taskQueue)
 
 	// For read path it's safer to return global default partition count instead of root partition, when we fail to
 	// map namespace ID to name.
@@ -137,34 +127,33 @@ func (lb *defaultLoadBalancer) PickReadPartition(
 
 	namespaceName, err := lb.namespaceIDToName(taskQueue.NamespaceID())
 	if err == nil {
-		partitionCount = lb.nReadPartitions(string(namespaceName), taskQueue.Name(), taskType)
+		partitionCount = lb.nReadPartitions(string(namespaceName), taskQueue.Name(), taskQueue.TaskType())
 	}
 
 	return tqlb.pickReadPartition(partitionCount, lb.forceReadPartition())
 }
 
-func (lb *defaultLoadBalancer) getTaskQueueLoadBalancer(taskQueue *tqid.TaskQueue, taskType enumspb.TaskQueueType) *tqLoadBalancer {
-	key := taskQueueKey{*taskQueue, taskType}
+func (lb *defaultLoadBalancer) getTaskQueueLoadBalancer(tq *tqid.TaskQueue) *tqLoadBalancer {
 	lb.lock.RLock()
-	tqlb, ok := lb.taskQueueLBs[key]
+	tqlb, ok := lb.taskQueueLBs[*tq]
 	lb.lock.RUnlock()
 	if ok {
 		return tqlb
 	}
 
 	lb.lock.Lock()
-	tqlb, ok = lb.taskQueueLBs[key]
+	tqlb, ok = lb.taskQueueLBs[*tq]
 	if !ok {
-		tqlb = newTaskQueueLoadBalancer(key)
-		lb.taskQueueLBs[key] = tqlb
+		tqlb = newTaskQueueLoadBalancer(tq)
+		lb.taskQueueLBs[*tq] = tqlb
 	}
 	lb.lock.Unlock()
 	return tqlb
 }
 
-func newTaskQueueLoadBalancer(key taskQueueKey) *tqLoadBalancer {
+func newTaskQueueLoadBalancer(tq *tqid.TaskQueue) *tqLoadBalancer {
 	return &tqLoadBalancer{
-		taskQueueKey: key,
+		taskQueue: tq,
 	}
 }
 
@@ -184,7 +173,7 @@ func (b *tqLoadBalancer) pickReadPartition(partitionCount int, forcedPartition i
 	b.pollerCounts[partitionID]++
 
 	return &pollToken{
-		TQPartition: b.taskQueueKey.TaskQueue.NormalPartition(b.taskQueueKey.Type, partitionID),
+		TQPartition: b.taskQueue.NormalPartition(partitionID),
 		balancer:    b,
 	}
 }

@@ -257,11 +257,11 @@ func makeGetMatchingClient(reqType reflect.Type) string {
 		}
 
 		return fmt.Sprintf(
-			`tqPrtn, err := tqid.FromProto(%s, %s, %s)
+			`p, err := tqid.FromProto(%s, %s, %s)
 	if err != nil {
 		return nil, err
 	}
-	client, err := c.getClientForTaskQueuePartition(tqPrtn)`,
+	client, err := c.getClientForTaskQueuePartition(p)`,
 			tq.path, nsID.path, tqt.path)
 	}
 

@@ -936,6 +936,7 @@ var (
 	// Matching
 	MatchingClientForwardedCounter            = NewCounterDef("forwarded")
 	MatchingClientInvalidTaskQueueName        = NewCounterDef("invalid_task_queue_name")
+	MatchingClientInvalidTaskQueuePartition   = NewCounterDef("invalid_task_queue_partition")
 	SyncMatchLatencyPerTaskQueue              = NewTimerDef("syncmatch_latency")
 	AsyncMatchLatencyPerTaskQueue             = NewTimerDef("asyncmatch_latency")
 	PollSuccessPerTaskQueueCounter            = NewCounterDef("poll_success")

@@ -193,7 +193,7 @@ func (m *userDataManager) userDataFetchSource() (*tqid.NormalPartition, error) {
 	switch p := m.partition.(type) {
 	case *tqid.NormalPartition:
 		degree := m.config.ForwarderMaxChildrenPerNode()
-		parent, err := p.Parent(degree)
+		parent, err := p.ParentPartition(degree)
 		if err == tqid.ErrNoParent { // nolint:goerr113
 			// we're the root activity task queue, ask the root workflow task queue
 			return p, nil
@@ -209,7 +209,7 @@ func (m *userDataManager) userDataFetchSource() (*tqid.NormalPartition, error) {
 			// Older SDKs don't send the normal name. That's okay, they just can't use versioning.
 			return nil, errMissingNormalQueueName
 		}
-		return normalQ.RootPartition(enumspb.TASK_QUEUE_TYPE_WORKFLOW), nil
+		return normalQ.RootPartition(), nil
 	}
 
 }

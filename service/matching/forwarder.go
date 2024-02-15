@@ -111,7 +111,7 @@ func newForwarder(
 // ForwardTask forwards an activity or workflow task to the parent task queue partition if it exists
 func (fwdr *Forwarder) ForwardTask(ctx context.Context, task *internalTask) error {
 	degree := fwdr.cfg.ForwarderMaxChildrenPerNode()
-	target, err := fwdr.partition.Parent(degree)
+	target, err := fwdr.partition.ParentPartition(degree)
 	if err != nil {
 		return err
 	}
@@ -174,7 +174,7 @@ func (fwdr *Forwarder) ForwardQueryTask(
 	task *internalTask,
 ) (*matchingservice.QueryWorkflowResponse, error) {
 	degree := fwdr.cfg.ForwarderMaxChildrenPerNode()
-	target, err := fwdr.partition.Parent(degree)
+	target, err := fwdr.partition.ParentPartition(degree)
 	if err != nil {
 		return nil, err
 	}
@@ -196,7 +196,7 @@ func (fwdr *Forwarder) ForwardQueryTask(
 // ForwardPoll forwards a poll request to parent task queue partition if it exist
 func (fwdr *Forwarder) ForwardPoll(ctx context.Context, pollMetadata *pollMetadata) (*internalTask, error) {
 	degree := fwdr.cfg.ForwarderMaxChildrenPerNode()
-	target, err := fwdr.partition.Parent(degree)
+	target, err := fwdr.partition.ParentPartition(degree)
 	if err != nil {
 		return nil, err
 	}

@@ -31,24 +31,32 @@ import (
 	"strings"
 
 	enumspb "go.temporal.io/api/enums/v1"
+	"go.temporal.io/api/serviceerror"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	"go.temporal.io/server/common/namespace"
 )
 
 const (
-	// NonRootPartitionPrefix is the prefix for all mangled task queue names.
-	NonRootPartitionPrefix = "/_sys/"
-	PartitionDelimiter     = "/"
+	// nonRootPartitionPrefix is the prefix for all mangled task queue names.
+	nonRootPartitionPrefix = "/_sys/"
+	partitionDelimiter     = "/"
 )
 
 type (
-	// TaskQueue represents the high-level task queue that user create by explicitly providing a TaskQueue name
-	// when starting a worker or a workflow. Under the hood, a TaskQueue can be broken down to multiple sticky
-	// or normal partitions.
-	TaskQueue struct {
+	// TaskQueueFamily represents the high-level "task queue" that user creates by explicitly providing a task queue name
+	// when starting a worker or a workflow. A task queue family consists of separate TaskQueue's for different types of
+	// task.
+	TaskQueueFamily struct {
 		namespaceId namespace.ID
-		// this can be string as long as it does not start with /_sys/.
+		// this can be any string as long as it does not start with /_sys/.
 		name string
+	}
+
+	// TaskQueue represents a logical task queue for a type of tasks (e.g. Activity or Workflow). Under the hood,
+	// a TaskQueue can be broken down to multiple sticky or normal partitions.
+	TaskQueue struct {
+		family   TaskQueueFamily
+		taskType enumspb.TaskQueueType
 	}
 
 	// Partition is a sticky or normal partition of a TaskQueue.
@@ -80,12 +88,10 @@ type (
 		Key() PartitionKey
 	}
 
-	// NormalPartition a TaskQueue can have two or more normal partitions each identified by task type (activity vs
-	// workflow) and a `partitionId`. The partition with ID 0 is called a root partition. Every TaskQueue always has
-	// two root partitions, one for activities and one for workflows.
+	// NormalPartition is used to distribute load of a TaskQueue in multiple Matching instances. A normal partition is
+	// identified by `partitionId`. The partition with ID 0 is called a root partition.
 	NormalPartition struct {
 		taskQueue   *TaskQueue
-		taskType    enumspb.TaskQueueType
 		partitionId int
 	}
 
@@ -117,13 +123,13 @@ var (
 	ErrNonZeroSticky = errors.New("only sticky partitions can not have non-zero partition ID")
 )
 
-// FromBaseName takes a high-level name and returns a TaskQueue. Returns an error if name looks like a
-// mangled name.
-func FromBaseName(namespaceId string, name string) (*TaskQueue, error) {
-	if strings.HasPrefix(name, NonRootPartitionPrefix) {
-		return nil, fmt.Errorf("base name %q must not have prefix %q", name, NonRootPartitionPrefix) // nolint:goerr113
+// FromFamilyName takes a user-provided task queue name (aka family name) and returns a TaskQueueFamily. Returns an
+// error if name looks like a mangled name.
+func FromFamilyName(namespaceId string, name string) (*TaskQueueFamily, error) {
+	if strings.HasPrefix(name, nonRootPartitionPrefix) {
+		return nil, serviceerror.NewInvalidArgument("task queue family name cannot have prefix /_sys/ " + name)
 	}
-	return &TaskQueue{
+	return &TaskQueueFamily{
 		namespaceId: namespace.ID(namespaceId),
 		name:        name,
 	}, nil
@@ -138,7 +144,7 @@ func FromProto(proto *taskqueuepb.TaskQueue, namespaceId string, taskType enumsp
 	kind := proto.GetKind()
 	normalName := proto.GetNormalName()
 	if normalName != "" && kind != enumspb.TASK_QUEUE_KIND_STICKY {
-		return nil, fmt.Errorf("only sticky queues can have normal name. tq: %s, normal name: %s", baseName, normalName) // nolint:goerr113
+		return nil, serviceerror.NewInvalidArgument(fmt.Sprintf("only sticky queues can have normal name. tq: %s, normal name: %s", baseName, normalName))
 	}
 
 	switch kind {
@@ -146,27 +152,49 @@ func FromProto(proto *taskqueuepb.TaskQueue, namespaceId string, taskType enumsp
 		if partition != 0 {
 			return nil, fmt.Errorf("%w. base name: %s, normal name: %s", ErrNonZeroSticky, baseName, normalName)
 		}
-		tq := &TaskQueue{namespace.ID(namespaceId), normalName}
+		tq := &TaskQueue{TaskQueueFamily{namespace.ID(namespaceId), normalName}, taskType}
 		return tq.StickyPartition(baseName), nil
 	default:
-		tq := &TaskQueue{namespace.ID(namespaceId), baseName}
-		return tq.NormalPartition(taskType, partition), nil
+		tq := &TaskQueue{TaskQueueFamily{namespace.ID(namespaceId), baseName}, taskType}
+		return tq.NormalPartition(partition), nil
+	}
+}
+
+func (n *TaskQueueFamily) Name() string {
+	return n.name
+}
+
+func (n *TaskQueueFamily) NamespaceID() namespace.ID {
+	return n.namespaceId
+}
+
+func (n *TaskQueueFamily) TaskQueue(taskType enumspb.TaskQueueType) *TaskQueue {
+	return &TaskQueue{
+		family:   *n,
+		taskType: taskType,
 	}
 }
 
 func (n *TaskQueue) Name() string {
-	return n.name
+	return n.family.Name()
+}
+
+func (n *TaskQueue) Family() *TaskQueueFamily {
+	return &n.family
 }
 
 func (n *TaskQueue) NamespaceID() namespace.ID {
-	return n.namespaceId
+	return n.family.NamespaceID()
 }
 
-func (n *TaskQueue) NormalPartition(taskType enumspb.TaskQueueType, partitionId int) *NormalPartition {
+func (n *TaskQueue) TaskType() enumspb.TaskQueueType {
+	return n.taskType
+}
+
+func (n *TaskQueue) NormalPartition(partitionId int) *NormalPartition {
 	return &NormalPartition{
 		taskQueue:   n,
 		partitionId: partitionId,
-		taskType:    taskType,
 	}
 }
 
@@ -174,15 +202,8 @@ func (n *TaskQueue) StickyPartition(stickyName string) *StickyPartition {
 	return &StickyPartition{stickyName, n}
 }
 
-func (n *TaskQueue) RootPartition(taskType enumspb.TaskQueueType) *NormalPartition {
-	return n.NormalPartition(taskType, 0)
-}
-
-func (n *TaskQueue) String() string {
-	return fmt.Sprintf("TaskQueue(nsid:%.5s, name:%s)",
-		n.NamespaceID().String(),
-		n.Name(),
-	)
+func (n *TaskQueue) RootPartition() *NormalPartition {
+	return n.NormalPartition(0)
 }
 
 func (s *StickyPartition) StickyName() string {
@@ -190,7 +211,7 @@ func (s *StickyPartition) StickyName() string {
 }
 
 func (s *StickyPartition) TaskType() enumspb.TaskQueueType {
-	return enumspb.TASK_QUEUE_TYPE_WORKFLOW
+	return s.taskQueue.TaskType()
 }
 
 func (s *StickyPartition) Kind() enumspb.TaskQueueKind {
@@ -202,7 +223,7 @@ func (s *StickyPartition) IsSticky() bool {
 }
 
 func (s *StickyPartition) NamespaceID() namespace.ID {
-	return s.taskQueue.NamespaceID()
+	return s.taskQueue.family.NamespaceID()
 }
 
 func (s *StickyPartition) RootPartition() Partition {
@@ -229,18 +250,7 @@ func (s *StickyPartition) Key() PartitionKey {
 	}
 }
 
-func (s *StickyPartition) String() string {
-	return fmt.Sprintf("StickyPartition(sticky name: %s, tq: %s)",
-		s.StickyName(),
-		s.taskQueue,
-	)
-}
-
 func (p *NormalPartition) TaskQueue() *TaskQueue {
-	return p.taskQueue
-}
-
-func (p *NormalPartition) NormalTaskQueue() *TaskQueue {
 	return p.taskQueue
 }
 
@@ -261,29 +271,29 @@ func (p *NormalPartition) PartitionID() int {
 }
 
 func (p *NormalPartition) NamespaceID() namespace.ID {
-	return p.taskQueue.namespaceId
+	return p.taskQueue.family.namespaceId
 }
 
 func (p *NormalPartition) TaskType() enumspb.TaskQueueType {
-	return p.taskType
+	return p.taskQueue.taskType
 }
 
-// Parent returns a NormalPartition for the parent partition, using the given branching degree.
-func (p *NormalPartition) Parent(degree int) (*NormalPartition, error) {
+// ParentPartition returns a NormalPartition for the parent partition, using the given branching degree.
+func (p *NormalPartition) ParentPartition(degree int) (*NormalPartition, error) {
 	if p.IsRoot() {
 		return nil, ErrNoParent
 	} else if degree < 1 {
 		return nil, ErrInvalidDegree
 	}
 	parent := (p.partitionId+degree-1)/degree - 1
-	return p.taskQueue.NormalPartition(p.taskType, parent), nil
+	return p.taskQueue.NormalPartition(parent), nil
 }
 
 func (p *NormalPartition) RpcName() string {
 	if p.IsRoot() {
-		return p.TaskQueue().Name()
+		return p.TaskQueue().family.Name()
 	}
-	return fmt.Sprintf("%s%s%s%d", NonRootPartitionPrefix, p.TaskQueue().Name(), PartitionDelimiter, p.partitionId)
+	return nonRootPartitionPrefix + p.TaskQueue().Name() + partitionDelimiter + strconv.Itoa(p.partitionId)
 }
 
 func (p *NormalPartition) Key() PartitionKey {
@@ -295,36 +305,30 @@ func (p *NormalPartition) Key() PartitionKey {
 	}
 }
 
-func (p *NormalPartition) String() string {
-	return fmt.Sprintf("NormalPartition(prtn: %d, tq: %s)",
-		p.partitionId,
-		p.taskQueue,
-	)
-}
-
-// ParseTaskQueuePartition takes the rpc name of a task queue partition and returns a ParseTaskQueuePartition.
+// parseRpcName takes the rpc name of a task queue partition and returns a ParseTaskQueuePartition.
 // Returns an error if the given name is not a valid rpc name.
 func parseRpcName(rpcName string) (string, int, error) {
 	baseName := rpcName
 	partition := 0
 
-	if strings.HasPrefix(rpcName, NonRootPartitionPrefix) {
-		suffixOff := strings.LastIndex(rpcName, PartitionDelimiter)
-		if suffixOff <= len(NonRootPartitionPrefix) {
-			return "", 0, fmt.Errorf("invalid task queue partition name %q", rpcName) // nolint:goerr113
+	if strings.HasPrefix(rpcName, nonRootPartitionPrefix) {
+		suffixOff := strings.LastIndex(rpcName, partitionDelimiter)
+		if suffixOff <= len(nonRootPartitionPrefix) {
+			return "", 0, serviceerror.NewInvalidArgument("invalid task queue partition name " + rpcName)
+			// nolint:goerr113
 		}
-		baseName = rpcName[len(NonRootPartitionPrefix):suffixOff]
+		baseName = rpcName[len(nonRootPartitionPrefix):suffixOff]
 		suffix := rpcName[suffixOff+1:]
 
 		var err error
 		partition, err = strconv.Atoi(suffix)
 		if err != nil || partition <= 0 {
-			return "", 0, fmt.Errorf("invalid task queue partition name %q", rpcName) // nolint:goerr113
+			return "", 0, serviceerror.NewInvalidArgument("invalid task queue partition name " + rpcName)
 		}
 	}
 
-	if strings.HasPrefix(baseName, NonRootPartitionPrefix) {
-		return "", 0, fmt.Errorf("base name %q must not have prefix %q", baseName, NonRootPartitionPrefix) // nolint:goerr113
+	if strings.HasPrefix(baseName, nonRootPartitionPrefix) {
+		return "", 0, serviceerror.NewInvalidArgument("task queue family name cannot have prefix /_sys/ " + baseName)
 	}
 	return baseName, partition, nil
 }
