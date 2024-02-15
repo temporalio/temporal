@@ -89,6 +89,8 @@ const (
 
 const (
 	shardIOTimeout = 5 * time.Second * debug.TimeoutMultiplier
+	// ShardUpdateQueueMetricsInterval is the minimum amount of time between updates to a shard's queue metrics
+	queueMetricUpdateInterval = 5 * time.Minute
 
 	pendingMaxReplicationTaskID = math.MaxInt64
 )
@@ -102,19 +104,19 @@ type (
 
 	ContextImpl struct {
 		// These fields are constant:
-		shardID              int32
-		owner                string
-		stringRepr           string
-		executionManager     persistence.ExecutionManager
-		metricsHandler       metrics.Handler
-		eventsCache          events.Cache
-		closeCallback        CloseCallback
-		config               *configs.Config
-		contextTaggedLogger  log.Logger
-		throttledLogger      log.Logger
-		engineFactory        EngineFactory
-		engineFuture         *future.FutureImpl[Engine]
-		emittingQueueMetrics *atomic.Bool
+		shardID             int32
+		owner               string
+		stringRepr          string
+		executionManager    persistence.ExecutionManager
+		metricsHandler      metrics.Handler
+		eventsCache         events.Cache
+		closeCallback       CloseCallback
+		config              *configs.Config
+		contextTaggedLogger log.Logger
+		throttledLogger     log.Logger
+		engineFactory       EngineFactory
+		engineFuture        *future.FutureImpl[Engine]
+		queueMetricEmitter  sync.Once
 
 		persistenceShardManager persistence.ShardManager
 		clientBean              client.Bean
@@ -1201,9 +1203,7 @@ func (s *ContextImpl) renewRangeLocked(isStealing bool) error {
 }
 
 func (s *ContextImpl) monitorQueueMetrics() {
-	defer s.emittingQueueMetrics.CompareAndSwap(true, false)
-
-	ticker := time.NewTicker(s.config.ShardUpdateQueueMetricsInterval())
+	ticker := time.NewTicker(queueMetricUpdateInterval)
 	defer ticker.Stop()
 
 	done := s.lifecycleCtx.Done()
@@ -1213,7 +1213,6 @@ func (s *ContextImpl) monitorQueueMetrics() {
 			return
 		case <-ticker.C:
 			s.emitShardInfoMetricsLogs()
-			ticker.Reset(s.config.ShardUpdateQueueMetricsInterval())
 		}
 	}
 }
@@ -1986,9 +1985,9 @@ func (s *ContextImpl) acquireShard() {
 		// to trigger a load as queue max level can be updated to a newer value
 		s.notifyQueueProcessor()
 		// This runs until the lifecycleCtx is cancelled, so we only need to start it once
-		if s.emittingQueueMetrics.CompareAndSwap(false, true) {
+		s.queueMetricEmitter.Do(func() {
 			go s.monitorQueueMetrics()
-		}
+		})
 
 		s.updateHandoverNamespacePendingTaskID()
 
@@ -2094,7 +2093,7 @@ func newContext(
 		lifecycleCtx:            lifecycleCtx,
 		lifecycleCancel:         lifecycleCancel,
 		engineFuture:            future.NewFuture[Engine](),
-		emittingQueueMetrics:    &atomic.Bool{},
+		queueMetricEmitter:      sync.Once{},
 		ioSemaphore:             semaphore.NewWeighted(int64(ioConcurrency)),
 	}
 	shardContext.taskKeyManager = newTaskKeyManager(

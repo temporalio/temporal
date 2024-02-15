@@ -749,8 +749,6 @@ const (
 	// Note that once history.shardUpdateMinInterval amount of time has passed we'll update the shard info regardless of the number of tasks completed.
 	// When the this config is zero or lower we will only update shard info at most once every history.shardUpdateMinInterval.
 	ShardUpdateMinTasksCompleted = "history.shardUpdateMinTasksCompleted"
-	// ShardUpdateQueueMetricsInterval is the minimum amount of time between updates to a shard's queue metrics
-	ShardUpdateQueueMetricsInterval = "history.shardUpdateQueueMetricsInterval"
 	// ShardSyncMinInterval is the minimal time interval which the shard info should be sync to remote
 	ShardSyncMinInterval = "history.shardSyncMinInterval"
 	// EmitShardLagLog whether emit the shard lag log
