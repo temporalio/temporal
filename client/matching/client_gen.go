@@ -44,11 +44,11 @@ func (c *clientImpl) ApplyTaskQueueUserDataReplicationEvent(
 	opts ...grpc.CallOption,
 ) (*matchingservice.ApplyTaskQueueUserDataReplicationEventResponse, error) {
 
-	tqPrtn, err := tqid.FromProto(&taskqueuepb.TaskQueue{Name: request.GetTaskQueue()}, request.GetNamespaceId(), enumspb.TASK_QUEUE_TYPE_WORKFLOW)
+	p, err := tqid.FromProto(&taskqueuepb.TaskQueue{Name: request.GetTaskQueue()}, request.GetNamespaceId(), enumspb.TASK_QUEUE_TYPE_WORKFLOW)
 	if err != nil {
 		return nil, err
 	}
-	client, err := c.getClientForTaskQueuePartition(tqPrtn)
+	client, err := c.getClientForTaskQueuePartition(p)
 	if err != nil {
 		return nil, err
 	}
@@ -63,11 +63,11 @@ func (c *clientImpl) CancelOutstandingPoll(
 	opts ...grpc.CallOption,
 ) (*matchingservice.CancelOutstandingPollResponse, error) {
 
-	tqPrtn, err := tqid.FromProto(request.GetTaskQueue(), request.GetNamespaceId(), request.GetTaskQueueType())
+	p, err := tqid.FromProto(request.GetTaskQueue(), request.GetNamespaceId(), request.GetTaskQueueType())
 	if err != nil {
 		return nil, err
 	}
-	client, err := c.getClientForTaskQueuePartition(tqPrtn)
+	client, err := c.getClientForTaskQueuePartition(p)
 	if err != nil {
 		return nil, err
 	}
@@ -82,11 +82,11 @@ func (c *clientImpl) DescribeTaskQueue(
 	opts ...grpc.CallOption,
 ) (*matchingservice.DescribeTaskQueueResponse, error) {
 
-	tqPrtn, err := tqid.FromProto(request.GetDescRequest().GetTaskQueue(), request.GetNamespaceId(), request.GetDescRequest().GetTaskQueueType())
+	p, err := tqid.FromProto(request.GetDescRequest().GetTaskQueue(), request.GetNamespaceId(), request.GetDescRequest().GetTaskQueueType())
 	if err != nil {
 		return nil, err
 	}
-	client, err := c.getClientForTaskQueuePartition(tqPrtn)
+	client, err := c.getClientForTaskQueuePartition(p)
 	if err != nil {
 		return nil, err
 	}
@@ -101,11 +101,11 @@ func (c *clientImpl) ForceUnloadTaskQueue(
 	opts ...grpc.CallOption,
 ) (*matchingservice.ForceUnloadTaskQueueResponse, error) {
 
-	tqPrtn, err := tqid.FromProto(&taskqueuepb.TaskQueue{Name: request.GetTaskQueue()}, request.GetNamespaceId(), request.GetTaskQueueType())
+	p, err := tqid.FromProto(&taskqueuepb.TaskQueue{Name: request.GetTaskQueue()}, request.GetNamespaceId(), request.GetTaskQueueType())
 	if err != nil {
 		return nil, err
 	}
-	client, err := c.getClientForTaskQueuePartition(tqPrtn)
+	client, err := c.getClientForTaskQueuePartition(p)
 	if err != nil {
 		return nil, err
 	}
@@ -120,11 +120,11 @@ func (c *clientImpl) GetBuildIdTaskQueueMapping(
 	opts ...grpc.CallOption,
 ) (*matchingservice.GetBuildIdTaskQueueMappingResponse, error) {
 
-	tqPrtn, err := tqid.FromProto(&taskqueuepb.TaskQueue{Name: fmt.Sprintf("not-applicable-%d", rand.Int())}, request.GetNamespaceId(), enumspb.TASK_QUEUE_TYPE_UNSPECIFIED)
+	p, err := tqid.FromProto(&taskqueuepb.TaskQueue{Name: fmt.Sprintf("not-applicable-%d", rand.Int())}, request.GetNamespaceId(), enumspb.TASK_QUEUE_TYPE_UNSPECIFIED)
 	if err != nil {
 		return nil, err
 	}
-	client, err := c.getClientForTaskQueuePartition(tqPrtn)
+	client, err := c.getClientForTaskQueuePartition(p)
 	if err != nil {
 		return nil, err
 	}
@@ -139,11 +139,11 @@ func (c *clientImpl) GetTaskQueueUserData(
 	opts ...grpc.CallOption,
 ) (*matchingservice.GetTaskQueueUserDataResponse, error) {
 
-	tqPrtn, err := tqid.FromProto(&taskqueuepb.TaskQueue{Name: request.GetTaskQueue()}, request.GetNamespaceId(), request.GetTaskQueueType())
+	p, err := tqid.FromProto(&taskqueuepb.TaskQueue{Name: request.GetTaskQueue()}, request.GetNamespaceId(), request.GetTaskQueueType())
 	if err != nil {
 		return nil, err
 	}
-	client, err := c.getClientForTaskQueuePartition(tqPrtn)
+	client, err := c.getClientForTaskQueuePartition(p)
 	if err != nil {
 		return nil, err
 	}
@@ -158,11 +158,11 @@ func (c *clientImpl) GetWorkerBuildIdCompatibility(
 	opts ...grpc.CallOption,
 ) (*matchingservice.GetWorkerBuildIdCompatibilityResponse, error) {
 
-	tqPrtn, err := tqid.FromProto(&taskqueuepb.TaskQueue{Name: request.GetRequest().GetTaskQueue()}, request.GetNamespaceId(), enumspb.TASK_QUEUE_TYPE_WORKFLOW)
+	p, err := tqid.FromProto(&taskqueuepb.TaskQueue{Name: request.GetRequest().GetTaskQueue()}, request.GetNamespaceId(), enumspb.TASK_QUEUE_TYPE_WORKFLOW)
 	if err != nil {
 		return nil, err
 	}
-	client, err := c.getClientForTaskQueuePartition(tqPrtn)
+	client, err := c.getClientForTaskQueuePartition(p)
 	if err != nil {
 		return nil, err
 	}
@@ -177,11 +177,11 @@ func (c *clientImpl) ListTaskQueuePartitions(
 	opts ...grpc.CallOption,
 ) (*matchingservice.ListTaskQueuePartitionsResponse, error) {
 
-	tqPrtn, err := tqid.FromProto(request.GetTaskQueue(), request.GetNamespaceId(), enumspb.TASK_QUEUE_TYPE_WORKFLOW)
+	p, err := tqid.FromProto(request.GetTaskQueue(), request.GetNamespaceId(), enumspb.TASK_QUEUE_TYPE_WORKFLOW)
 	if err != nil {
 		return nil, err
 	}
-	client, err := c.getClientForTaskQueuePartition(tqPrtn)
+	client, err := c.getClientForTaskQueuePartition(p)
 	if err != nil {
 		return nil, err
 	}
@@ -196,11 +196,11 @@ func (c *clientImpl) ReplicateTaskQueueUserData(
 	opts ...grpc.CallOption,
 ) (*matchingservice.ReplicateTaskQueueUserDataResponse, error) {
 
-	tqPrtn, err := tqid.FromProto(&taskqueuepb.TaskQueue{Name: "not-applicable"}, request.GetNamespaceId(), enumspb.TASK_QUEUE_TYPE_UNSPECIFIED)
+	p, err := tqid.FromProto(&taskqueuepb.TaskQueue{Name: "not-applicable"}, request.GetNamespaceId(), enumspb.TASK_QUEUE_TYPE_UNSPECIFIED)
 	if err != nil {
 		return nil, err
 	}
-	client, err := c.getClientForTaskQueuePartition(tqPrtn)
+	client, err := c.getClientForTaskQueuePartition(p)
 	if err != nil {
 		return nil, err
 	}
@@ -215,11 +215,11 @@ func (c *clientImpl) RespondQueryTaskCompleted(
 	opts ...grpc.CallOption,
 ) (*matchingservice.RespondQueryTaskCompletedResponse, error) {
 
-	tqPrtn, err := tqid.FromProto(request.GetTaskQueue(), request.GetNamespaceId(), enumspb.TASK_QUEUE_TYPE_WORKFLOW)
+	p, err := tqid.FromProto(request.GetTaskQueue(), request.GetNamespaceId(), enumspb.TASK_QUEUE_TYPE_WORKFLOW)
 	if err != nil {
 		return nil, err
 	}
-	client, err := c.getClientForTaskQueuePartition(tqPrtn)
+	client, err := c.getClientForTaskQueuePartition(p)
 	if err != nil {
 		return nil, err
 	}
@@ -234,11 +234,11 @@ func (c *clientImpl) UpdateTaskQueueUserData(
 	opts ...grpc.CallOption,
 ) (*matchingservice.UpdateTaskQueueUserDataResponse, error) {
 
-	tqPrtn, err := tqid.FromProto(&taskqueuepb.TaskQueue{Name: "not-applicable"}, request.GetNamespaceId(), enumspb.TASK_QUEUE_TYPE_UNSPECIFIED)
+	p, err := tqid.FromProto(&taskqueuepb.TaskQueue{Name: "not-applicable"}, request.GetNamespaceId(), enumspb.TASK_QUEUE_TYPE_UNSPECIFIED)
 	if err != nil {
 		return nil, err
 	}
-	client, err := c.getClientForTaskQueuePartition(tqPrtn)
+	client, err := c.getClientForTaskQueuePartition(p)
 	if err != nil {
 		return nil, err
 	}
@@ -253,11 +253,11 @@ func (c *clientImpl) UpdateWorkerBuildIdCompatibility(
 	opts ...grpc.CallOption,
 ) (*matchingservice.UpdateWorkerBuildIdCompatibilityResponse, error) {
 
-	tqPrtn, err := tqid.FromProto(&taskqueuepb.TaskQueue{Name: request.GetTaskQueue()}, request.GetNamespaceId(), enumspb.TASK_QUEUE_TYPE_WORKFLOW)
+	p, err := tqid.FromProto(&taskqueuepb.TaskQueue{Name: request.GetTaskQueue()}, request.GetNamespaceId(), enumspb.TASK_QUEUE_TYPE_WORKFLOW)
 	if err != nil {
 		return nil, err
 	}
-	client, err := c.getClientForTaskQueuePartition(tqPrtn)
+	client, err := c.getClientForTaskQueuePartition(p)
 	if err != nil {
 		return nil, err
 	}
