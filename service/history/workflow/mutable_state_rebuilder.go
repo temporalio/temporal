@@ -655,6 +655,10 @@ func (b *MutableStateRebuilderImpl) applyEvents(
 				return nil, err
 			}
 
+		case enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_UPDATE_REQUESTED:
+			if err := b.mutableState.ApplyWorkflowExecutionUpdateRequestedEvent(event, firstEvent.GetEventId()); err != nil {
+				return nil, err
+			}
 		case enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_UPDATE_REJECTED:
 		case enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_UPDATE_ACCEPTED:
 			if err := b.mutableState.ApplyWorkflowExecutionUpdateAcceptedEvent(event); err != nil {

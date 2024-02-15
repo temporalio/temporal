@@ -392,6 +392,11 @@ func (b *HistoryBuilder) AddWorkflowExecutionUpdateCompletedEvent(
 	return b.EventStore.add(event)
 }
 
+func (b *HistoryBuilder) AddWorkflowExecutionUpdateRequestedEvent(request *updatepb.Request, origin enumspb.UpdateRequestedEventOrigin) (*historypb.HistoryEvent, int64) {
+	event := b.EventFactory.CreateWorkflowExecutionUpdateRequestedEvent(request, origin)
+	return b.EventStore.add(event)
+}
+
 func (b *HistoryBuilder) AddContinuedAsNewEvent(
 	workflowTaskCompletedEventID int64,
 	newRunID string,

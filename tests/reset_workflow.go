@@ -38,10 +38,13 @@ import (
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	historypb "go.temporal.io/api/history/v1"
+	protocolpb "go.temporal.io/api/protocol/v1"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
+	updatepb "go.temporal.io/api/update/v1"
 	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/payloads"
+	"go.temporal.io/server/common/testing/protoutils"
 	"go.temporal.io/server/common/testing/testvars"
 	"go.temporal.io/server/service/history/api/resetworkflow"
 )
@@ -269,11 +272,12 @@ type resetTest struct {
 	reapplyExcludeTypes []enumspb.ResetReapplyExcludeType
 	reapplyType         enumspb.ResetReapplyType
 	totalSignals        int
+	totalUpdates        int
 	wftCounter          int
 	commandsCompleted   bool
+	messagesCompleted   bool
 }
 
-// TODO(dan) FunctionalSuite.sendSignal() should use testvars
 func (t resetTest) sendSignalAndProcessWFT(poller *TaskPoller) {
 	signalRequest := &workflowservice.SignalWorkflowExecutionRequest{
 		RequestId:         uuid.New(),
@@ -289,13 +293,66 @@ func (t resetTest) sendSignalAndProcessWFT(poller *TaskPoller) {
 	t.NoError(err)
 }
 
+func (t resetTest) sendUpdateAndProcessWFT(updateId string, poller *TaskPoller) {
+	updateResponse := make(chan error)
+	pollResponse := make(chan error)
+	go func() {
+		_, err := t.FunctionalSuite.sendUpdateWaitPolicyAccepted(t.tv, updateId)
+		updateResponse <- err
+	}()
+	go func() {
+		// Blocks until the update request causes a WFT to be dispatched; then sends the update acceptance message
+		// required for the update request to return.
+		_, err := poller.PollAndProcessWorkflowTask(WithDumpHistory)
+		pollResponse <- err
+	}()
+	t.NoError(<-updateResponse)
+	t.NoError(<-pollResponse)
+}
+
+func (t *resetTest) messageHandler(_ *workflowservice.PollWorkflowTaskQueueResponse) ([]*protocolpb.Message, error) {
+
+	// Increment WFT counter here; messageHandler is invoked prior to wftHandler
+	t.wftCounter++
+
+	// There's an initial empty WFT; then come `totalUpdates` updates, followed by `totalSignals` signals, each in a
+	// separate WFT. We must accept the updates, but otherwise respond with empty messages.
+	if t.wftCounter == t.totalUpdates+t.totalSignals+1 {
+		t.messagesCompleted = true
+	}
+	if t.wftCounter > t.totalSignals+1 {
+		updateId := fmt.Sprint(t.wftCounter - t.totalSignals - 1)
+		return []*protocolpb.Message{
+			{
+				Id:                 "accept-" + updateId,
+				ProtocolInstanceId: t.tv.UpdateID(updateId),
+				Body: protoutils.MarshalAny(t.T(), &updatepb.Acceptance{
+					AcceptedRequestMessageId:         "fake-request-message-id",
+					AcceptedRequestSequencingEventId: int64(-1),
+				}),
+			},
+		}, nil
+	}
+	return []*protocolpb.Message{}, nil
+
+}
+
 func (t *resetTest) wftHandler(_ *commonpb.WorkflowExecution, _ *commonpb.WorkflowType, _ int64, _ int64, _ *historypb.History) ([]*commandpb.Command, error) {
+
 	commands := []*commandpb.Command{}
 
-	t.wftCounter++
-	// There's an initial empty WFT; then come `totalSignals` signals, each in a separate WFT. We must send
-	// COMPLETE_WORKFLOW_EXECUTION in the final WFT.
-	if t.wftCounter == t.totalSignals+1 {
+	// There's an initial empty WFT; then come `totalSignals` signals, followed by `totalUpdates` updates, each in
+	// a separate WFT. We must send COMPLETE_WORKFLOW_EXECUTION in the final WFT.
+	if t.wftCounter > t.totalSignals+1 {
+		updateId := fmt.Sprint(t.wftCounter - t.totalSignals - 1)
+		commands = append(commands, &commandpb.Command{
+			CommandType: enumspb.COMMAND_TYPE_PROTOCOL_MESSAGE,
+			Attributes: &commandpb.Command_ProtocolMessageCommandAttributes{ProtocolMessageCommandAttributes: &commandpb.ProtocolMessageCommandAttributes{
+				MessageId: "accept-" + updateId,
+			}},
+		})
+	}
+	if t.wftCounter == t.totalSignals+t.totalUpdates+1 {
 		t.commandsCompleted = true
 		commands = append(commands, &commandpb.Command{
 			CommandType: enumspb.COMMAND_TYPE_COMPLETE_WORKFLOW_EXECUTION,
@@ -325,6 +382,7 @@ func (t resetTest) reset(eventId int64) string {
 
 func (t *resetTest) run() {
 	t.totalSignals = 2
+	t.totalUpdates = 2
 	t.tv = t.FunctionalSuite.startWorkflow(t.tv)
 
 	poller := &TaskPoller{
@@ -333,6 +391,7 @@ func (t *resetTest) run() {
 		TaskQueue:           t.tv.TaskQueue(),
 		Identity:            t.tv.WorkerIdentity(),
 		WorkflowTaskHandler: t.wftHandler,
+		MessageHandler:      t.messageHandler,
 		Logger:              t.Logger,
 		T:                   t.T(),
 	}
@@ -350,7 +409,11 @@ func (t *resetTest) run() {
 	for i := 1; i <= t.totalSignals; i++ {
 		t.sendSignalAndProcessWFT(poller)
 	}
+	for i := 1; i <= t.totalUpdates; i++ {
+		t.sendUpdateAndProcessWFT(fmt.Sprint(i), poller)
+	}
 	t.True(t.commandsCompleted)
+	t.True(t.messagesCompleted)
 
 	t.EqualHistoryEvents(`
   1 WorkflowExecutionStarted
@@ -365,7 +428,15 @@ func (t *resetTest) run() {
  10 WorkflowTaskScheduled
  11 WorkflowTaskStarted
  12 WorkflowTaskCompleted
- 13 WorkflowExecutionCompleted
+ 13 WorkflowTaskScheduled
+ 14 WorkflowTaskStarted
+ 15 WorkflowTaskCompleted
+ 16 WorkflowExecutionUpdateAccepted
+ 17 WorkflowTaskScheduled
+ 18 WorkflowTaskStarted
+ 19 WorkflowTaskCompleted
+ 20 WorkflowExecutionUpdateAccepted
+ 21 WorkflowExecutionCompleted
 `, t.getHistory(t.namespace, t.tv.WorkflowExecution()))
 
 	resetToEventId := int64(4)
@@ -375,14 +446,35 @@ func (t *resetTest) run() {
 
 	resetReapplyExcludeTypes := resetworkflow.GetResetReapplyExcludeTypes(t.reapplyExcludeTypes, t.reapplyType)
 	signals := !resetReapplyExcludeTypes[enumspb.RESET_REAPPLY_EXCLUDE_TYPE_SIGNAL]
+	updates := !resetReapplyExcludeTypes[enumspb.RESET_REAPPLY_EXCLUDE_TYPE_UPDATE]
 
-	if !signals {
+	if !signals && !updates {
 		t.EqualHistoryEvents(`
   1 WorkflowExecutionStarted
   2 WorkflowTaskScheduled
   3 WorkflowTaskStarted
   4 WorkflowTaskFailed
   5 WorkflowTaskScheduled
+`, events)
+	} else if !signals && updates {
+		t.EqualHistoryEvents(`
+  1 WorkflowExecutionStarted
+  2 WorkflowTaskScheduled
+  3 WorkflowTaskStarted
+  4 WorkflowTaskFailed
+  5 WorkflowExecutionUpdateRequested
+  6 WorkflowExecutionUpdateRequested
+  7 WorkflowTaskScheduled
+`, events)
+	} else if signals && !updates {
+		t.EqualHistoryEvents(`
+  1 WorkflowExecutionStarted
+  2 WorkflowTaskScheduled
+  3 WorkflowTaskStarted
+  4 WorkflowTaskFailed
+  5 WorkflowExecutionSignaled
+  6 WorkflowExecutionSignaled
+  7 WorkflowTaskScheduled
 `, events)
 	} else {
 		t.EqualHistoryEvents(`
@@ -392,7 +484,24 @@ func (t *resetTest) run() {
   4 WorkflowTaskFailed
   5 WorkflowExecutionSignaled
   6 WorkflowExecutionSignaled
-  7 WorkflowTaskScheduled
+  7 WorkflowExecutionUpdateRequested
+  8 WorkflowExecutionUpdateRequested
+  9 WorkflowTaskScheduled
+`, events)
+		resetToEventId := int64(4)
+		newRunId := t.reset(resetToEventId)
+		t.tv = t.tv.WithRunID(newRunId)
+		events = t.getHistory(t.namespace, t.tv.WorkflowExecution())
+		t.EqualHistoryEvents(`
+  1 WorkflowExecutionStarted
+  2 WorkflowTaskScheduled
+  3 WorkflowTaskStarted
+  4 WorkflowTaskFailed
+  5 WorkflowExecutionSignaled
+  6 WorkflowExecutionSignaled
+  7 WorkflowExecutionUpdateRequested
+  8 WorkflowExecutionUpdateRequested
+  9 WorkflowTaskScheduled
 `, events)
 	}
 }
