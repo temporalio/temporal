@@ -222,7 +222,7 @@ func (r *workflowResetterImpl) ResetWorkflow(
 		return err
 	}
 
-	if err := workflow.ScheduleWorkflowTask(resetWorkflow.GetMutableState()); err != nil {
+	if err := workflow.ScheduleWorkflowTask(resetMS); err != nil {
 		return err
 	}
 
@@ -692,12 +692,14 @@ func (r *workflowResetterImpl) reapplyWorkflowEvents(
 	return nextRunID, nil
 }
 
+// TODO (dan) this function is almost identical to EventsReapplierImpl.ReapplyEvents in events_reapplier.go: unify them.
 func reapplyEvents(
 	mutableState workflow.MutableState,
 	events []*historypb.HistoryEvent,
 	resetReapplyExcludeTypes map[enumspb.ResetReapplyExcludeType]bool,
 ) error {
 	excludeSignal := resetReapplyExcludeTypes[enumspb.RESET_REAPPLY_EXCLUDE_TYPE_SIGNAL]
+	excludeUpdate := resetReapplyExcludeTypes[enumspb.RESET_REAPPLY_EXCLUDE_TYPE_UPDATE]
 	for _, event := range events {
 		switch event.GetEventType() {
 		case enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_SIGNALED:
@@ -714,8 +716,38 @@ func reapplyEvents(
 			); err != nil {
 				return err
 			}
+		case enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_UPDATE_REQUESTED:
+			if excludeUpdate {
+				continue
+			}
+			attr := event.GetWorkflowExecutionUpdateRequestedEventAttributes()
+			if _, err := mutableState.AddWorkflowExecutionUpdateRequestedEvent(
+				attr.GetRequest(),
+				attr.Origin,
+			); err != nil {
+				return err
+			}
+		case enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_UPDATE_ACCEPTED:
+			if excludeUpdate {
+				continue
+			}
+			attr := event.GetWorkflowExecutionUpdateAcceptedEventAttributes()
+			request := attr.GetAcceptedRequest()
+			if request == nil {
+				// An UpdateAccepted event lacks a request payload if and only if it is preceded by an UpdateRequested
+				// event (these always have the payload). If an UpdateAccepted event has no preceding UpdateRequested
+				// event then we reapply it (converting it to UpdateRequested on the new branch). But if there is a
+				// preceding UpdateRequested event then we do not reapply the UpdateAccepted event.
+				continue
+			}
+			if _, err := mutableState.AddWorkflowExecutionUpdateRequestedEvent(
+				request,
+				enumspb.UPDATE_REQUESTED_EVENT_ORIGIN_REAPPLY,
+			); err != nil {
+				return err
+			}
 		default:
-			// events other than signal will be ignored
+			// Other event types are not reapplied.
 		}
 	}
 	return nil

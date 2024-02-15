@@ -67,20 +67,42 @@ func NewEventsReapplier(
 	}
 }
 
+// TODO (dan) this function is almost identical to reapplyEvents in workflow_resetter.go: unify them.
 func (r *EventsReapplierImpl) ReapplyEvents(
 	ctx context.Context,
 	ms workflow.MutableState,
 	historyEvents []*historypb.HistoryEvent,
 	runID string,
 ) ([]*historypb.HistoryEvent, error) {
-
 	var reappliedEvents []*historypb.HistoryEvent
 	for _, event := range historyEvents {
 		switch event.GetEventType() {
 		case enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_SIGNALED:
 			dedupResource := definition.NewEventReappliedID(runID, event.GetEventId(), event.GetVersion())
 			if ms.IsResourceDuplicated(dedupResource) {
-				// skip already applied event
+				continue
+			}
+			reappliedEvents = append(reappliedEvents, event)
+		case enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_UPDATE_REQUESTED:
+			// Test coverage: TestNDCEventReapplicationSuite/TestReapplyEvents_AppliedEvent_Update
+			dedupResource := definition.NewEventReappliedID(runID, event.GetEventId(), event.GetVersion())
+			if ms.IsResourceDuplicated(dedupResource) {
+				continue
+			}
+			reappliedEvents = append(reappliedEvents, event)
+		case enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_UPDATE_ACCEPTED:
+			attr := event.GetWorkflowExecutionUpdateAcceptedEventAttributes()
+			request := attr.GetAcceptedRequest()
+			if request == nil {
+				// An UpdateAccepted event lacks a request payload if and only if it is preceded by an UpdateRequested
+				// event (these always have the payload). If an UpdateAccepted event has no preceding UpdateRequested
+				// event then we reapply it (converting it to UpdateRequested on the new branch). But if there is a
+				// preceding UpdateRequested event then we do not reapply the UpdateAccepted event.
+				continue
+			}
+			// Test coverage: TestNDCEventReapplicationSuite/TestReapplyEvents_AppliedEvent_Update
+			dedupResource := definition.NewEventReappliedID(runID, event.GetEventId(), event.GetVersion())
+			if ms.IsResourceDuplicated(dedupResource) {
 				continue
 			}
 			reappliedEvents = append(reappliedEvents, event)
@@ -98,16 +120,37 @@ func (r *EventsReapplierImpl) ReapplyEvents(
 
 	shouldScheduleWorkflowTask := false
 	for _, event := range reappliedEvents {
-		signal := event.GetWorkflowExecutionSignaledEventAttributes()
-		shouldScheduleWorkflowTask = shouldScheduleWorkflowTask || !signal.GetSkipGenerateWorkflowTask()
-		if _, err := ms.AddWorkflowExecutionSignaled(
-			signal.GetSignalName(),
-			signal.GetInput(),
-			signal.GetIdentity(),
-			signal.GetHeader(),
-			signal.GetSkipGenerateWorkflowTask(),
-		); err != nil {
-			return nil, err
+		switch event.GetEventType() {
+		case enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_SIGNALED:
+			signal := event.GetWorkflowExecutionSignaledEventAttributes()
+			shouldScheduleWorkflowTask = shouldScheduleWorkflowTask || !signal.GetSkipGenerateWorkflowTask()
+			if _, err := ms.AddWorkflowExecutionSignaled(
+				signal.GetSignalName(),
+				signal.GetInput(),
+				signal.GetIdentity(),
+				signal.GetHeader(),
+				signal.GetSkipGenerateWorkflowTask(),
+			); err != nil {
+				return nil, err
+			}
+		case enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_UPDATE_REQUESTED:
+			attr := event.GetWorkflowExecutionUpdateRequestedEventAttributes()
+			if _, err := ms.AddWorkflowExecutionUpdateRequestedEvent(
+				attr.GetRequest(),
+				attr.Origin,
+			); err != nil {
+				return nil, err
+			}
+			shouldScheduleWorkflowTask = true
+		case enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_UPDATE_ACCEPTED:
+			attr := event.GetWorkflowExecutionUpdateAcceptedEventAttributes()
+			if _, err := ms.AddWorkflowExecutionUpdateRequestedEvent(
+				attr.GetAcceptedRequest(),
+				enumspb.UPDATE_REQUESTED_EVENT_ORIGIN_REAPPLY,
+			); err != nil {
+				return nil, err
+			}
+			shouldScheduleWorkflowTask = true
 		}
 		deDupResource := definition.NewEventReappliedID(runID, event.GetEventId(), event.GetVersion())
 		ms.UpdateDuplicatedResource(deDupResource)
