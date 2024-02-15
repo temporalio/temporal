@@ -3735,6 +3735,54 @@ func (ms *MutableStateImpl) RejectWorkflowExecutionUpdate(_ string, _ *updatepb.
 	return nil
 }
 
+// AddWorkflowExecutionUpdateRequestedEvent adds a WorkflowExecutionUpdateRequestedEvent to in-memory history.
+func (ms *MutableStateImpl) AddWorkflowExecutionUpdateRequestedEvent(request *updatepb.Request, origin enumspb.UpdateRequestedEventOrigin) (*historypb.HistoryEvent, error) {
+	if err := ms.checkMutability(tag.WorkflowActionUpdateRequested); err != nil {
+		return nil, err
+	}
+	event, batchId := ms.hBuilder.AddWorkflowExecutionUpdateRequestedEvent(request, origin)
+	if err := ms.ApplyWorkflowExecutionUpdateRequestedEvent(event, batchId); err != nil {
+		return nil, err
+	}
+	return event, nil
+}
+
+// ApplyWorkflowExecutionUpdateRequestedEvent applies a WorkflowExecutionUpdateRequestedEvent to mutable state.
+func (ms *MutableStateImpl) ApplyWorkflowExecutionUpdateRequestedEvent(event *historypb.HistoryEvent, batchId int64) error {
+	attrs := event.GetWorkflowExecutionUpdateRequestedEventAttributes()
+	if attrs == nil {
+		return serviceerror.NewInternal("wrong event type in call to ApplyWorkflowExecutionUpdateRequestedEvent")
+	}
+	if ms.executionInfo.UpdateInfos == nil {
+		ms.executionInfo.UpdateInfos = make(map[string]*updatespb.UpdateInfo, 1)
+	}
+	updateID := attrs.GetRequest().GetMeta().GetUpdateId()
+	request := &updatespb.UpdateInfo_Request{
+		Request: &updatespb.RequestInfo{
+			Location: &updatespb.RequestInfo_HistoryPointer_{
+				HistoryPointer: &updatespb.RequestInfo_HistoryPointer{
+					EventId:      event.EventId,
+					EventBatchId: batchId,
+				},
+			},
+		},
+	}
+	var sizeDelta int
+	if ui, ok := ms.executionInfo.UpdateInfos[updateID]; ok {
+		sizeBefore := ui.Size()
+		ui.Value = request
+		sizeDelta = ui.Size() - sizeBefore
+	} else {
+		ui := updatespb.UpdateInfo{Value: request}
+		ms.executionInfo.UpdateInfos[updateID] = &ui
+		ms.executionInfo.UpdateCount++
+		sizeDelta = ui.Size() + len(updateID)
+	}
+	ms.approximateSize += sizeDelta
+	ms.writeEventToCache(event)
+	return nil
+}
+
 func (ms *MutableStateImpl) ApplyWorkflowExecutionTerminatedEvent(
 	firstEventID int64,
 	event *historypb.HistoryEvent,

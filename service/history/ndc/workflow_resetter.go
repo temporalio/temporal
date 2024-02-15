@@ -53,6 +53,7 @@ import (
 	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/workflow"
 	wcache "go.temporal.io/server/service/history/workflow/cache"
+	"go.temporal.io/server/service/history/workflow/update"
 )
 
 type (
@@ -71,6 +72,7 @@ type (
 			resetRunID string,
 			resetRequestID string,
 			currentWorkflow Workflow,
+			updateRegistry update.Registry,
 			resetReason string,
 			additionalReapplyEvents []*historypb.HistoryEvent,
 			resetReapplyExcludeTypes []enumspb.ResetReapplyExcludeType,
@@ -124,6 +126,7 @@ func (r *workflowResetterImpl) ResetWorkflow(
 	resetRunID string,
 	resetRequestID string,
 	currentWorkflow Workflow,
+	updateRegistry update.Registry,
 	resetReason string,
 	additionalReapplyEvents []*historypb.HistoryEvent,
 	resetReapplyExcludeTypes []enumspb.ResetReapplyExcludeType,
@@ -173,7 +176,7 @@ func (r *workflowResetterImpl) ResetWorkflow(
 
 			if lastVisitedRunID == currentMutableState.GetExecutionState().RunId {
 				for _, event := range currentWorkflowEventsSeq {
-					if err := reapplyEvents(resetMutableState, event.Events, resetReapplyExcludeTypes); err != nil {
+					if err := r.reapplyEvents(resetMutableState, event.Events, resetReapplyExcludeTypes); err != nil {
 						return err
 					}
 				}
@@ -219,11 +222,11 @@ func (r *workflowResetterImpl) ResetWorkflow(
 	if err := reapplyEventsFn(ctx, resetMS); err != nil {
 		return err
 	}
-	if err := reapplyEvents(resetMS, additionalReapplyEvents, nil); err != nil {
+	if err := r.reapplyEvents(resetMS, additionalReapplyEvents, nil); err != nil {
 		return err
 	}
 
-	if err := workflow.ScheduleWorkflowTask(resetWorkflow.GetMutableState()); err != nil {
+	if err := workflow.ScheduleWorkflowTask(resetMS); err != nil {
 		return err
 	}
 
@@ -679,7 +682,7 @@ func (r *workflowResetterImpl) reapplyWorkflowEvents(
 			return "", err
 		}
 		lastEvents = batch.Events
-		if err := reapplyEvents(mutableState, lastEvents, resetReapplyExcludeTypes); err != nil {
+		if err := r.reapplyEvents(mutableState, lastEvents, resetReapplyExcludeTypes); err != nil {
 			return "", err
 		}
 	}
@@ -693,15 +696,20 @@ func (r *workflowResetterImpl) reapplyWorkflowEvents(
 	return nextRunID, nil
 }
 
-func reapplyEvents(
+// TODO (dan) this function is almost identical to EventsReapplierImpl.ReapplyEvents in events_reapplier.go: unify them.
+func (r *workflowResetterImpl) reapplyEvents(
 	mutableState workflow.MutableState,
 	events []*historypb.HistoryEvent,
 	resetReapplyExcludeTypes []enumspb.ResetReapplyExcludeType,
 ) error {
 	excludeSignal := false
+	excludeUpdate := false
 	for _, e := range resetReapplyExcludeTypes {
-		if e == enumspb.RESET_REAPPLY_EXCLUDE_TYPE_SIGNAL {
+		switch e {
+		case enumspb.RESET_REAPPLY_EXCLUDE_TYPE_SIGNAL:
 			excludeSignal = true
+		case enumspb.RESET_REAPPLY_EXCLUDE_TYPE_UPDATE:
+			excludeUpdate = true
 		}
 	}
 
@@ -721,8 +729,30 @@ func reapplyEvents(
 			); err != nil {
 				return err
 			}
+		case enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_UPDATE_ACCEPTED:
+			if excludeUpdate {
+				continue
+			}
+			attr := event.GetWorkflowExecutionUpdateAcceptedEventAttributes()
+			if _, err := mutableState.AddWorkflowExecutionUpdateRequestedEvent(
+				attr.GetAcceptedRequest(),
+				enumspb.UPDATE_REQUESTED_EVENT_ORIGIN_REAPPLY,
+			); err != nil {
+				return err
+			}
+		case enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_UPDATE_REQUESTED:
+			if excludeUpdate {
+				continue
+			}
+			attr := event.GetWorkflowExecutionUpdateRequestedEventAttributes()
+			if _, err := mutableState.AddWorkflowExecutionUpdateRequestedEvent(
+				attr.GetRequest(),
+				attr.Origin,
+			); err != nil {
+				return err
+			}
 		default:
-			// events other than signal will be ignored
+			// other event types are not reapplied
 		}
 	}
 	return nil

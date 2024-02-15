@@ -134,6 +134,22 @@ func withInstrumentation(i *instrumentation) updateOpt {
 	}
 }
 
+func newRequested(id string, request *anypb.Any, opts ...updateOpt) *Update {
+	upd := &Update{
+		id:              id,
+		state:           stateRequested,
+		request:         request,
+		onComplete:      func() {},
+		instrumentation: &noopInstrumentation,
+		accepted:        future.NewFuture[*failurepb.Failure](),
+		outcome:         future.NewFuture[*updatepb.Outcome](),
+	}
+	for _, opt := range opts {
+		opt(upd)
+	}
+	return upd
+}
+
 func newAccepted(id string, acceptedEventID int64, opts ...updateOpt) *Update {
 	upd := &Update{
 		id:              id,
@@ -419,8 +435,10 @@ func (u *Update) onAcceptanceMsg(
 	//   Then server should store this mutated request but not original one.
 	// 2. To support scenario when update acceptance message is processed even if registry is lost.
 	acceptedRequest := &updatepb.Request{}
-	if err := u.request.UnmarshalTo(acceptedRequest); err != nil {
-		return internalErrorf("unable to unmarshal original request: %v", err)
+	if u.request != nil {
+		if err := u.request.UnmarshalTo(acceptedRequest); err != nil {
+			return internalErrorf("unable to unmarshal original request: %v", err)
+		}
 	}
 
 	event, err := eventStore.AddWorkflowExecutionUpdateAcceptedEvent(

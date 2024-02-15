@@ -228,6 +228,7 @@ func (s *transactionMgrSuite) TestBackfillWorkflow_CurrentWorkflow_Active_Closed
 	mutableState.EXPECT().GetNextEventID().Return(nextEventID).AnyTimes()
 	mutableState.EXPECT().GetLastWorkflowTaskStartedEventID().Return(lastWorkflowTaskStartedEventID)
 	mutableState.EXPECT().AddHistorySize(histroySize)
+	mutableState.EXPECT().VisitUpdates(gomock.Any()).Times(1)
 
 	s.mockWorkflowResetter.EXPECT().ResetWorkflow(
 		ctx,
@@ -241,6 +242,7 @@ func (s *transactionMgrSuite) TestBackfillWorkflow_CurrentWorkflow_Active_Closed
 		gomock.Any(),
 		gomock.Any(),
 		targetWorkflow,
+		gomock.Any(),
 		EventsReapplicationResetWorkflowReason,
 		workflowEvents.Events,
 		nil,
@@ -307,6 +309,7 @@ func (s *transactionMgrSuite) TestBackfillWorkflow_CurrentWorkflow_Closed_ResetF
 	mutableState.EXPECT().GetNextEventID().Return(nextEventID).AnyTimes()
 	mutableState.EXPECT().GetLastWorkflowTaskStartedEventID().Return(lastWorkflowTaskStartedEventID)
 	mutableState.EXPECT().AddHistorySize(historySize)
+	mutableState.EXPECT().VisitUpdates(gomock.Any()).Times(1)
 
 	s.mockWorkflowResetter.EXPECT().ResetWorkflow(
 		ctx,
@@ -320,6 +323,7 @@ func (s *transactionMgrSuite) TestBackfillWorkflow_CurrentWorkflow_Closed_ResetF
 		gomock.Any(),
 		gomock.Any(),
 		targetWorkflow,
+		gomock.Any(),
 		EventsReapplicationResetWorkflowReason,
 		workflowEvents.Events,
 		nil,

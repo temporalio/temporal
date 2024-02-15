@@ -162,6 +162,7 @@ func Invoke(
 			currentWorkflowLease.GetMutableState(),
 			currentWorkflowLease.GetReleaseFn(),
 		),
+		currentWorkflowLease.GetContext().UpdateRegistry(ctx),
 		request.GetReason(),
 		nil,
 		GetResetReapplyExcludeTypes(request.GetResetReapplyExcludeTypes(), request.GetResetReapplyType()),
@@ -192,10 +193,10 @@ func GetResetReapplyExcludeTypes(
 		// supported event types should not send the deprecated
 		// reset_reapply_type field (since its default value is
 		// RESET_REAPPLY_TYPE_ALL_ELIGIBLE).
-		// TODO (dan) exclude update
+		excludeSet[enumspb.RESET_REAPPLY_EXCLUDE_TYPE_UPDATE] = true
 	case enumspb.RESET_REAPPLY_TYPE_NONE:
-		// TODO (dan) exclude update
 		excludeSet[enumspb.RESET_REAPPLY_EXCLUDE_TYPE_SIGNAL] = true
+		excludeSet[enumspb.RESET_REAPPLY_EXCLUDE_TYPE_UPDATE] = true
 	}
 	for _, e := range excludeTypes {
 		excludeSet[e] = true

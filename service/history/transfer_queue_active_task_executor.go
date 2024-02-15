@@ -65,6 +65,7 @@ import (
 	"go.temporal.io/server/service/history/vclock"
 	"go.temporal.io/server/service/history/workflow"
 	wcache "go.temporal.io/server/service/history/workflow/cache"
+	"go.temporal.io/server/service/history/workflow/update"
 	"go.temporal.io/server/service/worker/parentclosepolicy"
 )
 
@@ -1401,6 +1402,7 @@ func (t *transferQueueActiveTaskExecutor) resetWorkflow(
 			currentMutableState,
 			wcache.NoopReleaseFn, // this is fine since caller will defer on release
 		),
+		update.NewRegistry(func() update.Store { return currentMutableState }), // TODO (dan)
 		reason,
 		nil,
 		nil,

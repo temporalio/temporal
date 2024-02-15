@@ -806,6 +806,7 @@ func (c *ContextImpl) ReapplyEvents(
 		for _, e := range events.Events {
 			event := e
 			switch event.GetEventType() {
+			// TODO (dan) reapply updates
 			case enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_SIGNALED:
 				reapplyEvents = append(reapplyEvents, event)
 			}

@@ -36,6 +36,7 @@ import (
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	historypb "go.temporal.io/api/history/v1"
+	"go.temporal.io/api/update/v1"
 
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common/definition"
@@ -78,7 +79,7 @@ func (s *nDCEventReapplicationSuite) TearDownTest() {
 	s.controller.Finish()
 }
 
-func (s *nDCEventReapplicationSuite) TestReapplyEvents_AppliedEvent() {
+func (s *nDCEventReapplicationSuite) TestReapplyEvents_AppliedEvent_Signal() {
 	runID := uuid.New()
 	execution := &persistencespb.WorkflowExecutionInfo{
 		NamespaceId: uuid.New(),
@@ -117,6 +118,61 @@ func (s *nDCEventReapplicationSuite) TestReapplyEvents_AppliedEvent() {
 	appliedEvent, err := s.nDCReapplication.ReapplyEvents(context.Background(), msCurrent, events, runID)
 	s.NoError(err)
 	s.Equal(1, len(appliedEvent))
+}
+
+func (s *nDCEventReapplicationSuite) TestReapplyEvents_AppliedEvent_Update() {
+	runID := uuid.New()
+	execution := &persistencespb.WorkflowExecutionInfo{
+		NamespaceId: uuid.New(),
+	}
+	for _, event := range []*historypb.HistoryEvent{
+		{
+			EventId:   105,
+			EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_UPDATE_REQUESTED,
+			Attributes: &historypb.HistoryEvent_WorkflowExecutionUpdateRequestedEventAttributes{WorkflowExecutionUpdateRequestedEventAttributes: &historypb.WorkflowExecutionUpdateRequestedEventAttributes{
+				Request: &update.Request{Input: &update.Input{Args: payloads.EncodeString("update-request-payload")}},
+				Origin:  enumspb.UPDATE_REQUESTED_EVENT_ORIGIN_REAPPLY,
+			}},
+		},
+		{
+			EventId:   105,
+			EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_UPDATE_ACCEPTED,
+			Attributes: &historypb.HistoryEvent_WorkflowExecutionUpdateAcceptedEventAttributes{WorkflowExecutionUpdateAcceptedEventAttributes: &historypb.WorkflowExecutionUpdateAcceptedEventAttributes{
+				AcceptedRequest: &update.Request{Input: &update.Input{Args: payloads.EncodeString("update-request-payload")}},
+			}},
+		},
+	} {
+
+		msCurrent := workflow.NewMockMutableState(s.controller)
+		msCurrent.EXPECT().IsWorkflowExecutionRunning().Return(true)
+		msCurrent.EXPECT().GetLastWriteVersion().Return(int64(1), nil).AnyTimes()
+		msCurrent.EXPECT().GetExecutionInfo().Return(execution).AnyTimes()
+		switch event.EventType {
+		case enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_UPDATE_REQUESTED:
+			attr := event.GetWorkflowExecutionUpdateRequestedEventAttributes()
+			msCurrent.EXPECT().AddWorkflowExecutionUpdateRequestedEvent(
+				attr.GetRequest(),
+				enumspb.UPDATE_REQUESTED_EVENT_ORIGIN_REAPPLY,
+			).Return(event, nil)
+		case enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_UPDATE_ACCEPTED:
+			attr := event.GetWorkflowExecutionUpdateAcceptedEventAttributes()
+			msCurrent.EXPECT().AddWorkflowExecutionUpdateRequestedEvent(
+				attr.GetAcceptedRequest(),
+				enumspb.UPDATE_REQUESTED_EVENT_ORIGIN_REAPPLY,
+			).Return(event, nil)
+		}
+		msCurrent.EXPECT().IsWorkflowPendingOnWorkflowTaskBackoff().Return(true)
+		dedupResource := definition.NewEventReappliedID(runID, event.GetEventId(), event.GetVersion())
+		msCurrent.EXPECT().IsResourceDuplicated(dedupResource).Return(false)
+		msCurrent.EXPECT().UpdateDuplicatedResource(dedupResource)
+		events := []*historypb.HistoryEvent{
+			{EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_STARTED},
+			event,
+		}
+		appliedEvent, err := s.nDCReapplication.ReapplyEvents(context.Background(), msCurrent, events, runID)
+		s.NoError(err)
+		s.Equal(1, len(appliedEvent))
+	}
 }
 
 func (s *nDCEventReapplicationSuite) TestReapplyEvents_Noop() {

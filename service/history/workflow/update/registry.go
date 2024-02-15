@@ -161,6 +161,15 @@ func NewRegistry(
 
 	getStoreFn().VisitUpdates(func(updID string, updInfo *updatespb.UpdateInfo) {
 		// need to eager load here so that Len and admit are correct.
+		if req := updInfo.GetRequest(); req != nil {
+			// TODO (dan): how are we making use of the event batch ID?
+			r.updates[updID] = newRequested(
+				updID,
+				nil,              // TODO(dan) at this point we have the event ID but don't have ready access to the request
+				r.remover(updID), // TODO (dan): check this is appropriate for Requested
+				withInstrumentation(&r.instrumentation),
+			)
+		}
 		if acc := updInfo.GetAcceptance(); acc != nil {
 			r.updates[updID] = newAccepted(
 				updID,
@@ -275,7 +284,7 @@ func (r *registry) Send(
 	var outgoingMessages []*protocolpb.Message
 	for _, upd := range r.updates {
 		outgoingMessage := upd.Send(ctx, includeAlreadySent, sequencingEventID, eventStore)
-		if outgoingMessage != nil {
+		if outgoingMessage != nil && outgoingMessage.Body != nil {
 			outgoingMessages = append(outgoingMessages, outgoingMessage)
 		}
 	}

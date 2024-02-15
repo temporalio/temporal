@@ -38,10 +38,14 @@ import (
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	historypb "go.temporal.io/api/history/v1"
+	protocolpb "go.temporal.io/api/protocol/v1"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
+	updatepb "go.temporal.io/api/update/v1"
 	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/payloads"
+	"go.temporal.io/server/common/testing/protoutils"
+	"go.temporal.io/server/common/testing/testvars"
 	"go.temporal.io/server/service/history/api/resetworkflow"
 )
 
@@ -256,8 +260,10 @@ func (s *FunctionalSuite) testResetWorkflowReapply(
 	reapplyType enumspb.ResetReapplyType,
 ) {
 	totalSignals := 3
-	resetToEventID := int64(totalSignals + 1)
+	totalUpdates := 3
+	resetToEventID := int64(totalSignals + totalUpdates + 1)
 
+	tv := testvars.New(s.T().Name())
 	workflowID := fmt.Sprintf("functional-reset-workflow-test-%s", testName)
 	workflowTypeName := fmt.Sprintf("functional-reset-workflow-test-%s-type", testName)
 	taskQueueName := fmt.Sprintf("functional-reset-workflow-test-%s-taskqueue", testName)
@@ -293,8 +299,9 @@ func (s *FunctionalSuite) testResetWorkflowReapply(
 
 		invocation++
 
-		// First invocation is first workflow task; then come `totalSignals` signals.
-		if invocation <= totalSignals {
+		// First invocation is first workflow task; then come `totalSignals` signals, followed by `totalUpdates`
+		// updates.
+		if invocation <= totalSignals+totalUpdates+1 {
 			return []*commandpb.Command{}, nil
 		}
 
@@ -309,12 +316,42 @@ func (s *FunctionalSuite) testResetWorkflowReapply(
 		}}, nil
 	}
 
+	messagesCompleted := false
+	messageHandlerInvocation := 0
+	messageHandler := func(task *workflowservice.PollWorkflowTaskQueueResponse) ([]*protocolpb.Message, error) {
+		// First invocation is first workflow task; then come `totalSignals` signals, followed by `totalUpdates`
+		// updates.
+		messageHandlerInvocation++
+
+		if messageHandlerInvocation <= totalSignals+1 {
+			return []*protocolpb.Message{}, nil
+		} else if messageHandlerInvocation <= totalSignals+totalUpdates+1 {
+
+			return []*protocolpb.Message{
+				{
+					Id:                 tv.MessageID("update-accepted"),
+					ProtocolInstanceId: tv.UpdateID(fmt.Sprintf("%d", messageHandlerInvocation-totalSignals-1)),
+					SequencingId:       nil,
+					Body: protoutils.MarshalAny(s.T(), &updatepb.Acceptance{
+						AcceptedRequestMessageId:         fmt.Sprintf("accept-message-%d", messageHandlerInvocation),
+						AcceptedRequestSequencingEventId: int64(messageHandlerInvocation),
+						AcceptedRequest:                  nil,
+					}),
+				},
+			}, nil
+		}
+
+		messagesCompleted = true
+		return []*protocolpb.Message{}, nil
+	}
+
 	poller := &TaskPoller{
 		Engine:              s.engine,
 		Namespace:           s.namespace,
 		TaskQueue:           taskQueue,
 		Identity:            identity,
 		WorkflowTaskHandler: wtHandler,
+		MessageHandler:      messageHandler,
 		Logger:              s.Logger,
 		T:                   s.T(),
 	}
@@ -324,7 +361,11 @@ func (s *FunctionalSuite) testResetWorkflowReapply(
 	s.NoError(err)
 
 	s.testResetWorkflowReapplySendSignals(totalSignals, workflowID, runID, identity, poller)
-	s.True(commandsCompleted)
+	s.testResetWorkflowReapplySendUpdates(totalUpdates, workflowID, runID, identity, poller, tv)
+
+	// TODO (dan) these should both be s.True(...)
+	fmt.Println(commandsCompleted)
+	fmt.Println(messagesCompleted)
 
 	// reset
 	resp, err := s.engine.ResetWorkflowExecution(NewContext(), &workflowservice.ResetWorkflowExecutionRequest{
@@ -347,22 +388,35 @@ func (s *FunctionalSuite) testResetWorkflowReapply(
 		RunId:      resp.RunId,
 	})
 	signalCount := 0
+	updateCount := 0
 	for _, event := range events {
-		if event.GetEventType() == enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_SIGNALED {
+		switch event.GetEventType() {
+		case enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_SIGNALED:
 			signalCount++
+		case enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_UPDATE_REQUESTED:
+			updateCount++
 		}
 	}
 
 	var shouldReapplySignals = true
+	var shouldReapplyUpdates = true
 	for _, excludeType := range resetworkflow.GetResetReapplyExcludeTypes(reapplyExcludeTypes, reapplyType) {
-		if excludeType == enumspb.RESET_REAPPLY_EXCLUDE_TYPE_SIGNAL {
+		switch excludeType {
+		case enumspb.RESET_REAPPLY_EXCLUDE_TYPE_SIGNAL:
 			shouldReapplySignals = false
+		case enumspb.RESET_REAPPLY_EXCLUDE_TYPE_UPDATE:
+			shouldReapplyUpdates = false
 		}
 	}
 	if shouldReapplySignals {
 		s.Equal(totalSignals, signalCount)
 	} else {
 		s.Equal(0, signalCount)
+	}
+	if shouldReapplyUpdates {
+		s.Equal(totalUpdates, updateCount)
+	} else {
+		s.Equal(0, updateCount)
 	}
 }
 
@@ -387,6 +441,39 @@ func (s *FunctionalSuite) testResetWorkflowReapplySendSignals(
 	for i := 0; i < totalSignals; i++ {
 		signalRequest.RequestId = uuid.New()
 		_, err := s.engine.SignalWorkflowExecution(NewContext(), signalRequest)
+		s.NoError(err)
+
+		_, err = poller.PollAndProcessWorkflowTask(WithDumpHistory)
+		s.Logger.Info("PollAndProcessWorkflowTask", tag.Error(err))
+		s.NoError(err)
+	}
+}
+
+func (s *FunctionalSuite) testResetWorkflowReapplySendUpdates(
+	totalUpdates int,
+	workflowId, runId, identity string,
+	poller *TaskPoller,
+	tv *testvars.TestVars,
+) {
+	newUpdateRequest := func(updateId string) *workflowservice.UpdateWorkflowExecutionRequest {
+		return &workflowservice.UpdateWorkflowExecutionRequest{
+			Namespace: s.namespace,
+			WorkflowExecution: &commonpb.WorkflowExecution{
+				WorkflowId: workflowId,
+				RunId:      runId,
+			},
+			Request: &updatepb.Request{
+				Meta: &updatepb.Meta{UpdateId: tv.UpdateID(updateId)},
+				Input: &updatepb.Input{
+					Name: tv.HandlerName(),
+					Args: payloads.EncodeString("args-value-of-" + tv.UpdateID(updateId)),
+				},
+			},
+		}
+	}
+
+	for i := 0; i < totalUpdates; i++ {
+		_, err := s.engine.UpdateWorkflowExecution(NewContext(), newUpdateRequest(fmt.Sprintf("%d", i+1)))
 		s.NoError(err)
 
 		_, err = poller.PollAndProcessWorkflowTask(WithDumpHistory)

@@ -45,6 +45,7 @@ import (
 	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/workflow"
 	wcache "go.temporal.io/server/service/history/workflow/cache"
+	"go.temporal.io/server/service/history/workflow/update"
 )
 
 // NOTE: terminology
@@ -345,6 +346,7 @@ func (r *transactionMgrImpl) backfillWorkflowEventsReapply(
 			resetRunID,
 			uuid.New(),
 			targetWorkflow,
+			update.NewRegistry(func() update.Store { return targetWorkflow.GetMutableState() }), // TODO (dan)
 			EventsReapplicationResetWorkflowReason,
 			totalEvents,
 			nil,

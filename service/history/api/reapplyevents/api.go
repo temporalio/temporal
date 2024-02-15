@@ -155,6 +155,7 @@ func Invoke(
 						mutableState,
 						wcache.NoopReleaseFn,
 					),
+					workflowLease.GetContext().UpdateRegistry(ctx),
 					ndc.EventsReapplicationResetWorkflowReason,
 					toReapplyEvents,
 					nil,
