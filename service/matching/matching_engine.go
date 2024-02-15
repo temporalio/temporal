@@ -960,7 +960,7 @@ func (e *matchingEngineImpl) ListWorkerVersioningRules(
 	ctx context.Context,
 	request *matchingservice.ListWorkerVersioningRulesRequest,
 ) (*matchingservice.ListWorkerVersioningRulesResponse, error) {
-	return nil, nil
+	return &matchingservice.ListWorkerVersioningRulesResponse{Response: &workflowservice.ListWorkerVersioningRulesResponse{}}, nil
 }
 
 func (e *matchingEngineImpl) UpdateWorkerBuildIdCompatibility(

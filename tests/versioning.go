@@ -78,13 +78,17 @@ func (s *VersioningIntegSuite) SetupSuite() {
 		dynamicconfig.MatchingForwarderMaxChildrenPerNode:        partitionTreeDegree,
 		dynamicconfig.TaskQueuesPerBuildIdLimit:                  3,
 
+		dynamicconfig.AssignmentRuleLimitPerQueue:      3,
+		dynamicconfig.RedirectRuleLimitPerQueue:        3,
+		dynamicconfig.MatchingDeletedRuleRetentionTime: 24 * time.Hour,
+
 		// Make sure we don't hit the rate limiter in tests
 		dynamicconfig.FrontendMaxNamespaceNamespaceReplicationInducingAPIsRPSPerInstance:   1000,
 		dynamicconfig.FrontendMaxNamespaceNamespaceReplicationInducingAPIsBurstPerInstance: 1000,
 		dynamicconfig.FrontendNamespaceReplicationInducingAPIsRPS:                          1000,
 
 		// The dispatch tests below rely on being able to see the effects of changing
-		// versioning data relatively quickly. In general we only promise to act on new
+		// versioning data relatively quickly. In general, we only promise to act on new
 		// versioning data "soon", i.e. after a long poll interval. We can reduce the long poll
 		// interval so that we don't have to wait so long.
 		dynamicconfig.MatchingLongPollExpirationInterval: longPollTime,
@@ -112,6 +116,23 @@ func (s *VersioningIntegSuite) SetupTest() {
 
 func (s *VersioningIntegSuite) TearDownTest() {
 	s.sdkClient.Close()
+}
+
+func (s *VersioningIntegSuite) TestBasicAssignmentRuleInsert() {
+	ctx := NewContext()
+	tq := "insert-assignment-rule-basic"
+
+	foo := s.prefixed("foo")
+	s.addNewUnfilteredAssignmentRule(ctx, tq, foo)
+
+	res2, err := s.engine.ListWorkerVersioningRules(ctx, &workflowservice.ListWorkerVersioningRulesRequest{
+		Namespace: s.namespace,
+		TaskQueue: tq,
+	})
+	s.NoError(err)
+	s.NotNil(res2)
+
+	s.Equal(foo, res2.AssignmentRules[0].GetRule().GetTargetBuildId())
 }
 
 func (s *VersioningIntegSuite) TestBasicVersionUpdate() {
@@ -1626,6 +1647,25 @@ func (s *VersioningIntegSuite) TestDescribeWorkflowExecution() {
 // Add a per test prefix to avoid hitting the namespace limit of mapped task queue per build id
 func (s *VersioningIntegSuite) prefixed(buildId string) string {
 	return fmt.Sprintf("t%x:%s", 0xffff&farm.Hash32([]byte(s.T().Name())), buildId)
+}
+
+// addNewDefaultBuildId updates build id info on a task queue with a new build id in a new default set.
+func (s *VersioningIntegSuite) addNewUnfilteredAssignmentRule(ctx context.Context, tq, newBuildId string) {
+	res, err := s.engine.UpdateWorkerVersioningRules(ctx, &workflowservice.UpdateWorkerVersioningRulesRequest{
+		Namespace:     s.namespace,
+		TaskQueue:     tq,
+		ConflictToken: nil, // todo carly
+		Operation: &workflowservice.UpdateWorkerVersioningRulesRequest_InsertAssignmentRule{
+			InsertAssignmentRule: &workflowservice.UpdateWorkerVersioningRulesRequest_InsertBuildIdAssignmentRule{
+				RuleIndex: 0,
+				Rule: &taskqueuepb.BuildIdAssignmentRule{
+					TargetBuildId: newBuildId,
+				},
+			},
+		},
+	})
+	s.NoError(err)
+	s.NotNil(res)
 }
 
 // addNewDefaultBuildId updates build id info on a task queue with a new build id in a new default set.
