@@ -242,7 +242,7 @@ func (tm *TaskMatcher) OfferQuery(ctx context.Context, task *internalTask) (*mat
 			if err == nil {
 				return resp, nil
 			}
-			if err == errForwarderSlowDown {
+			if errors.Is(err, errForwarderSlowDown) {
 				// if we are rate limited, try only local match for the
 				// remainder of the context timeout left
 				fwdrTokenC = nil

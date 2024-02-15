@@ -37,6 +37,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"go.opentelemetry.io/otel/trace"
+	"go.opentelemetry.io/otel/trace/embedded"
 	commonspb "go.temporal.io/server/api/common/v1"
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/client/history"
@@ -52,11 +53,15 @@ import (
 )
 
 // fakeTracerProvider is needed to construct a [historyserver.Handler] object.
-type fakeTracerProvider struct{}
+type fakeTracerProvider struct {
+	embedded.TracerProvider
+}
 
 func (f fakeTracerProvider) Tracer(string, ...trace.TracerOption) trace.Tracer {
 	return nil
 }
+
+var _ trace.TracerProvider = (*fakeTracerProvider)(nil)
 
 // TestClient works by doing the following:
 //  1. Enqueue some tasks

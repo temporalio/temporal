@@ -2482,9 +2482,9 @@ func (s *matchingEngineSuite) TestUnknownBuildId_Demoted_Match() {
 	baseTqm.(*taskQueuePartitionManagerImpl).userDataManager.goroGroup.Wait()
 
 	// both are now unloaded. change versioning data to merge unknown into another set.
-	clock := hlc.Zero(1)
+	clk := hlc.Zero(1)
 	userData := &persistencespb.TaskQueueUserData{
-		Clock: clock,
+		Clock: clk,
 		VersioningData: &persistencespb.VersioningData{
 			VersionSets: []*persistencespb.CompatibleVersionSet{
 				{
@@ -2492,10 +2492,10 @@ func (s *matchingEngineSuite) TestUnknownBuildId_Demoted_Match() {
 					// it works the other way too but doesn't test anything new.
 					SetIds: []string{hashBuildId(build1), hashBuildId(unknown)},
 					BuildIds: []*persistencespb.BuildId{
-						mkBuildId(unknown, clock),
-						mkBuildId(build1, clock),
+						mkBuildId(unknown, clk),
+						mkBuildId(build1, clk),
 					},
-					BecameDefaultTimestamp: clock,
+					BecameDefaultTimestamp: clk,
 				},
 			},
 		},

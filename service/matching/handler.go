@@ -298,6 +298,24 @@ func (h *Handler) ListTaskQueuePartitions(
 	return h.engine.ListTaskQueuePartitions(ctx, request)
 }
 
+// UpdateWorkerVersioningRules allows updating the Build ID assignment and redirect rules for a given Task Queue.
+func (h *Handler) UpdateWorkerVersioningRules(
+	ctx context.Context,
+	request *matchingservice.UpdateWorkerVersioningRulesRequest,
+) (_ *matchingservice.UpdateWorkerVersioningRulesResponse, retError error) {
+	defer log.CapturePanic(h.logger, &retError)
+	return h.engine.UpdateWorkerVersioningRules(ctx, request)
+}
+
+// ListWorkerVersioningRules fetches the Build ID assignment and redirect rules for a Task Queue
+func (h *Handler) ListWorkerVersioningRules(
+	ctx context.Context,
+	request *matchingservice.ListWorkerVersioningRulesRequest,
+) (_ *matchingservice.ListWorkerVersioningRulesResponse, retError error) {
+	defer log.CapturePanic(h.logger, &retError)
+	return h.engine.ListWorkerVersioningRules(ctx, request)
+}
+
 // UpdateWorkerBuildIdCompatibility allows changing the worker versioning graph for a task queue
 func (h *Handler) UpdateWorkerBuildIdCompatibility(
 	ctx context.Context,

@@ -26,7 +26,6 @@ package matching
 
 import (
 	"context"
-
 	"go.temporal.io/server/api/matchingservice/v1"
 	"go.temporal.io/server/common/metrics"
 )
@@ -53,5 +52,7 @@ type (
 		ForceUnloadTaskQueue(ctx context.Context, request *matchingservice.ForceUnloadTaskQueueRequest) (*matchingservice.ForceUnloadTaskQueueResponse, error)
 		UpdateTaskQueueUserData(ctx context.Context, request *matchingservice.UpdateTaskQueueUserDataRequest) (*matchingservice.UpdateTaskQueueUserDataResponse, error)
 		ReplicateTaskQueueUserData(ctx context.Context, request *matchingservice.ReplicateTaskQueueUserDataRequest) (*matchingservice.ReplicateTaskQueueUserDataResponse, error)
+		UpdateWorkerVersioningRules(ctx context.Context, request *matchingservice.UpdateWorkerVersioningRulesRequest) (*matchingservice.UpdateWorkerVersioningRulesResponse, error)
+		ListWorkerVersioningRules(ctx context.Context, request *matchingservice.ListWorkerVersioningRulesRequest) (*matchingservice.ListWorkerVersioningRulesResponse, error)
 	}
 )
