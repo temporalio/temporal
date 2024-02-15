@@ -25,23 +25,14 @@
 package api
 
 import (
-	"context"
-
-	"go.temporal.io/server/common/definition"
-	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/service/history/workflow"
 	wcache "go.temporal.io/server/service/history/workflow/cache"
-	"go.temporal.io/server/service/history/workflow/update"
 )
 
 type WorkflowLease interface {
 	GetContext() workflow.Context
 	GetMutableState() workflow.MutableState
 	GetReleaseFn() wcache.ReleaseCacheFunc
-
-	GetNamespaceEntry() *namespace.Namespace
-	GetWorkflowKey() definition.WorkflowKey
-	GetUpdateRegistry(context.Context) update.Registry
 }
 
 type workflowLease struct {
@@ -90,16 +81,4 @@ func (w *workflowLease) GetMutableState() workflow.MutableState {
 
 func (w *workflowLease) GetReleaseFn() wcache.ReleaseCacheFunc {
 	return w.releaseFn
-}
-
-func (w *workflowLease) GetNamespaceEntry() *namespace.Namespace {
-	return w.mutableState.GetNamespaceEntry()
-}
-
-func (w *workflowLease) GetWorkflowKey() definition.WorkflowKey {
-	return w.context.GetWorkflowKey()
-}
-
-func (w *workflowLease) GetUpdateRegistry(ctx context.Context) update.Registry {
-	return w.context.UpdateRegistry(ctx)
 }

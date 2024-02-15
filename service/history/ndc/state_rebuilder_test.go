@@ -130,7 +130,7 @@ func (s *stateRebuilderSuite) TearDownTest() {
 }
 
 func (s *stateRebuilderSuite) TestInitializeBuilders() {
-	mutableState, stateBuilder := s.nDCStateRebuilder.initializeBuilders(tests.GlobalNamespaceEntry, s.now)
+	mutableState, stateBuilder := s.nDCStateRebuilder.initializeBuilders(tests.GlobalNamespaceEntry, tests.WorkflowKey, s.now)
 	s.NotNil(mutableState)
 	s.NotNil(stateBuilder)
 	s.NotNil(mutableState.GetExecutionInfo().GetVersionHistories())

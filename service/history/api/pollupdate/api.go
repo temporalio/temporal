@@ -69,8 +69,9 @@ func Invoke(
 		}
 		release := workflowLease.GetReleaseFn()
 		defer release(nil)
-		upd, found := workflowLease.GetUpdateRegistry(ctx).Find(ctx, updateRef.UpdateId)
-		wfKey := workflowLease.GetWorkflowKey()
+		wfCtx := workflowLease.GetContext()
+		upd, found := wfCtx.UpdateRegistry(ctx).Find(ctx, updateRef.UpdateId)
+		wfKey := wfCtx.GetWorkflowKey()
 		return &wfKey, upd, found, nil
 	}()
 	if err != nil {

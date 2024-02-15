@@ -58,8 +58,6 @@ func NewDefaultTaskCategoryRegistry() *MutableTaskCategoryRegistry {
 			CategoryVisibility.ID():  CategoryVisibility,
 			CategoryReplication.ID(): CategoryReplication,
 			CategoryMemoryTimer.ID(): CategoryMemoryTimer,
-			// TODO: register this when processing is implemented:
-			// CategoryCallback.ID():    CategoryCallback,
 		},
 	}
 }

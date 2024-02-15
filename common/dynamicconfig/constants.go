@@ -345,6 +345,8 @@ const (
 	FrontendEnableSchedules = "frontend.enableSchedules"
 	// FrontendEnableNexusHTTPHandler enables serving Nexus HTTP requests in the frontend.
 	FrontendEnableNexusHTTPHandler = "frontend.enableNexusHTTPHandler"
+	// FrontendEnableCallbackAttachment enables attaching callbacks to workflows.
+	FrontendEnableCallbackAttachment = "frontend.enableCallbackAttachment"
 	// FrontendMaxConcurrentBatchOperationPerNamespace is the max concurrent batch operation job count per namespace
 	FrontendMaxConcurrentBatchOperationPerNamespace = "frontend.MaxConcurrentBatchOperationPerNamespace"
 	// FrontendMaxExecutionCountBatchOperationPerNamespace is the max execution count batch operation supports per namespace
@@ -515,8 +517,8 @@ const (
 	HistoryCacheNonUserContextLockTimeout = "history.cacheNonUserContextLockTimeout"
 	// EnableHostHistoryCache controls if the history cache is host level
 	EnableHostHistoryCache = "history.enableHostHistoryCache"
-	// HistoryCacheShardLevelMaxSize is max size of history shard level cache
-	HistoryCacheShardLevelMaxSize = "history.shardLevelCacheMaxSize"
+	// HistoryCacheHostLevelMaxSize is max size of history host level cache
+	HistoryCacheHostLevelMaxSize = "history.hostLevelCacheMaxSize"
 	// EnableAPIGetCurrentRunIDLock controls if a lock should be acquired before getting current run ID for API requests
 	EnableAPIGetCurrentRunIDLock = "history.enableAPIGetCurrentRunIDLock"
 	// HistoryStartupMembershipJoinDelay is the duration a history instance waits
@@ -526,10 +528,14 @@ const (
 	HistoryShutdownDrainDuration = "history.shutdownDrainDuration"
 	// XDCCacheMaxSizeBytes is max size of events cache in bytes
 	XDCCacheMaxSizeBytes = "history.xdcCacheMaxSizeBytes"
-	// EventsCacheMaxSizeBytes is max size of events cache in bytes
+	// EventsCacheMaxSizeBytes is max size of the shard level events cache in bytes
 	EventsCacheMaxSizeBytes = "history.eventsCacheMaxSizeBytes"
+	// EventsHostLevelCacheMaxSizeBytes is max size of the host level events cache in bytes
+	EventsHostLevelCacheMaxSizeBytes = "history.eventsHostLevelCacheMaxSizeBytes"
 	// EventsCacheTTL is TTL of events cache
 	EventsCacheTTL = "history.eventsCacheTTL"
+	// EnableHostLevelEventsCache controls if the events cache is host level
+	EnableHostLevelEventsCache = "history.enableHostLevelEventsCache"
 	// AcquireShardInterval is interval that timer used to acquire shard
 	AcquireShardInterval = "history.acquireShardInterval"
 	// AcquireShardConcurrency is number of goroutines that can be used to acquire shards in the shard controller.
@@ -665,6 +671,8 @@ const (
 	// TransferQueueMaxReaderCount is the max number of readers in one multi-cursor transfer queue
 	TransferQueueMaxReaderCount = "history.transferQueueMaxReaderCount"
 
+	// CallbackProcessorEnabled enables starting the callback queue processor.
+	CallbackProcessorEnabled = "history.callbackProcessorEnabled"
 	// CallbackTaskBatchSize is batch size for callbackQueueFactory
 	CallbackTaskBatchSize = "history.callbackTaskBatchSize"
 	// CallbackProcessorMaxPollRPS is max poll rate per second for callbackQueueFactory

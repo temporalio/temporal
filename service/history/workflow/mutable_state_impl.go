@@ -76,6 +76,7 @@ import (
 	"go.temporal.io/server/service/history/events"
 	"go.temporal.io/server/service/history/historybuilder"
 	"go.temporal.io/server/service/history/shard"
+	"go.temporal.io/server/service/history/statemachines"
 	"go.temporal.io/server/service/history/tasks"
 )
 
@@ -152,6 +153,10 @@ type (
 
 		// In-memory only attributes
 		currentVersion int64
+		// The namespace failover version at the time the current transaction started.
+		// Cached for consistency across a single transaction.
+		// This value can be used to mutate sub-statemachines after the workflow has already been closed.
+		currentTransactionNamespaceFailoverVersion int64
 		// Running approximate total size of mutable state fields (except buffered events) when written to DB in bytes.
 		// Buffered events are added to this value when calling GetApproximatePersistedSize.
 		approximateSize int
@@ -208,6 +213,8 @@ func NewMutableState(
 	eventsCache events.Cache,
 	logger log.Logger,
 	namespaceEntry *namespace.Namespace,
+	workflowID string,
+	runID string,
 	startTime time.Time,
 ) *MutableStateImpl {
 	s := &MutableStateImpl{
@@ -261,6 +268,9 @@ func NewMutableState(
 	}
 
 	s.executionInfo = &persistencespb.WorkflowExecutionInfo{
+		NamespaceId: namespaceEntry.ID().String(),
+		WorkflowId:  workflowID,
+
 		WorkflowTaskVersion:          common.EmptyVersion,
 		WorkflowTaskScheduledEventId: common.EmptyEventID,
 		WorkflowTaskStartedEventId:   common.EmptyEventID,
@@ -275,8 +285,12 @@ func NewMutableState(
 		ExecutionStats:   &persistencespb.ExecutionStats{HistorySize: 0},
 	}
 	s.approximateSize += s.executionInfo.Size()
-	s.executionState = &persistencespb.WorkflowExecutionState{State: enumsspb.WORKFLOW_EXECUTION_STATE_CREATED,
-		Status: enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING}
+	s.executionState = &persistencespb.WorkflowExecutionState{
+		RunId: runID,
+
+		State:  enumsspb.WORKFLOW_EXECUTION_STATE_CREATED,
+		Status: enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
+	}
 	s.approximateSize += s.executionState.Size()
 
 	s.hBuilder = historybuilder.New(
@@ -304,7 +318,15 @@ func NewMutableStateFromDB(
 
 	// startTime will be overridden by DB record
 	startTime := time.Time{}
-	mutableState := NewMutableState(shard, eventsCache, logger, namespaceEntry, startTime)
+	mutableState := NewMutableState(
+		shard,
+		eventsCache,
+		logger,
+		namespaceEntry,
+		dbRecord.ExecutionInfo.WorkflowId,
+		dbRecord.ExecutionState.RunId,
+		startTime,
+	)
 
 	if dbRecord.ActivityInfos != nil {
 		mutableState.pendingActivityInfoIDs = dbRecord.ActivityInfos
@@ -424,6 +446,23 @@ func NewSanitizedMutableState(
 	}
 	mutableState.currentVersion = lastWriteVersion
 	return mutableState, nil
+}
+
+// GetVersion returns the current transaction's namespace failover version.
+func (ms *MutableStateImpl) GetNamespaceFailoverVersion() int64 {
+	return ms.currentTransactionNamespaceFailoverVersion
+}
+
+// GetCurrentTime return the shard's current time for the current cluster name.
+func (ms *MutableStateImpl) GetCurrentTime() time.Time {
+	return ms.shard.GetCurrentTime(ms.shard.GetClusterMetadata().GetCurrentClusterName())
+}
+
+// Schedule a task and associate mutable state's workflow key and version.
+func (ms *MutableStateImpl) Schedule(task statemachines.Task) {
+	task.SetWorkflowKey(ms.GetWorkflowKey())
+	task.SetVersion(ms.GetNamespaceFailoverVersion())
+	ms.AddTasks(task)
 }
 
 func (ms *MutableStateImpl) CloneToProto() *persistencespb.WorkflowMutableState {
@@ -758,7 +797,7 @@ func (ms *MutableStateImpl) GetUpdateOutcome(
 		EventID:     completion.EventId,
 		Version:     version,
 	}
-	event, err := ms.eventsCache.GetEvent(ctx, eventKey, completion.EventBatchId, currentBranchToken)
+	event, err := ms.eventsCache.GetEvent(ctx, ms.shard.GetShardID(), eventKey, completion.EventBatchId, currentBranchToken)
 	if err != nil {
 		return nil, err
 	}
@@ -785,6 +824,7 @@ func (ms *MutableStateImpl) GetActivityScheduledEvent(
 	}
 	event, err := ms.eventsCache.GetEvent(
 		ctx,
+		ms.shard.GetShardID(),
 		events.EventKey{
 			NamespaceID: namespace.ID(ms.executionInfo.NamespaceId),
 			WorkflowID:  ms.executionInfo.WorkflowId,
@@ -885,6 +925,7 @@ func (ms *MutableStateImpl) GetChildExecutionInitiatedEvent(
 	}
 	event, err := ms.eventsCache.GetEvent(
 		ctx,
+		ms.shard.GetShardID(),
 		events.EventKey{
 			NamespaceID: namespace.ID(ms.executionInfo.NamespaceId),
 			WorkflowID:  ms.executionInfo.WorkflowId,
@@ -931,6 +972,7 @@ func (ms *MutableStateImpl) GetRequesteCancelExternalInitiatedEvent(
 	}
 	event, err := ms.eventsCache.GetEvent(
 		ctx,
+		ms.shard.GetShardID(),
 		events.EventKey{
 			NamespaceID: namespace.ID(ms.executionInfo.NamespaceId),
 			WorkflowID:  ms.executionInfo.WorkflowId,
@@ -1008,6 +1050,7 @@ func (ms *MutableStateImpl) GetSignalExternalInitiatedEvent(
 	}
 	event, err := ms.eventsCache.GetEvent(
 		ctx,
+		ms.shard.GetShardID(),
 		events.EventKey{
 			NamespaceID: namespace.ID(ms.executionInfo.NamespaceId),
 			WorkflowID:  ms.executionInfo.WorkflowId,
@@ -1049,6 +1092,7 @@ func (ms *MutableStateImpl) GetCompletionEvent(
 
 	event, err := ms.eventsCache.GetEvent(
 		ctx,
+		ms.shard.GetShardID(),
 		events.EventKey{
 			NamespaceID: namespace.ID(ms.executionInfo.NamespaceId),
 			WorkflowID:  ms.executionInfo.WorkflowId,
@@ -1102,6 +1146,7 @@ func (ms *MutableStateImpl) GetStartEvent(
 
 	event, err := ms.eventsCache.GetEvent(
 		ctx,
+		ms.shard.GetShardID(),
 		events.EventKey{
 			NamespaceID: namespace.ID(ms.executionInfo.NamespaceId),
 			WorkflowID:  ms.executionInfo.WorkflowId,
@@ -1830,12 +1875,22 @@ func (ms *MutableStateImpl) ApplyWorkflowExecutionStartedEvent(
 	startEvent *historypb.HistoryEvent,
 ) error {
 
+	if ms.executionInfo.NamespaceId != ms.namespaceEntry.ID().String() {
+		return serviceerror.NewInternal(fmt.Sprintf("applying conflicting namespace ID: %v != %v",
+			ms.executionInfo.NamespaceId, ms.namespaceEntry.ID().String()))
+	}
+	if ms.executionInfo.WorkflowId != execution.GetWorkflowId() {
+		return serviceerror.NewInternal(fmt.Sprintf("applying conflicting workflow ID: %v != %v",
+			ms.executionInfo.WorkflowId, execution.GetWorkflowId()))
+	}
+	if ms.executionState.RunId != execution.GetRunId() {
+		return serviceerror.NewInternal(fmt.Sprintf("applying conflicting run ID: %v != %v",
+			ms.executionState.RunId, execution.GetRunId()))
+	}
+
 	ms.approximateSize -= ms.executionInfo.Size()
 	event := startEvent.GetWorkflowExecutionStartedEventAttributes()
 	ms.executionState.CreateRequestId = requestID
-	ms.executionState.RunId = execution.GetRunId()
-	ms.executionInfo.NamespaceId = ms.namespaceEntry.ID().String()
-	ms.executionInfo.WorkflowId = execution.GetWorkflowId()
 	ms.executionInfo.FirstExecutionRunId = event.GetFirstExecutionRunId()
 	ms.executionInfo.TaskQueue = event.TaskQueue.GetName()
 	ms.executionInfo.WorkflowTypeName = event.WorkflowType.GetName()
@@ -1843,6 +1898,27 @@ func (ms *MutableStateImpl) ApplyWorkflowExecutionStartedEvent(
 	ms.executionInfo.WorkflowExecutionTimeout = event.GetWorkflowExecutionTimeout()
 	ms.executionInfo.DefaultWorkflowTaskTimeout = event.GetWorkflowTaskTimeout()
 
+	ms.executionInfo.Callbacks = make(map[string]*persistencespb.CallbackInfo, len(event.GetCompletionCallbacks()))
+	for idx, cb := range event.GetCompletionCallbacks() {
+		// Use the start event version and ID as part of the callback ID to ensure that callbacks have unique
+		// IDs that are deterministically created across clusters.
+		// TODO: consider replicating the "initiated" event and allocating a uuid there instead of relying on
+		// history event replication.
+		id := fmt.Sprintf("%d-%d-%d", startEvent.GetVersion(), startEvent.GetEventId(), idx)
+		ms.executionInfo.Callbacks[id] = &persistencespb.CallbackInfo{
+			NamespaceFailoverVersion: ms.GetNamespaceFailoverVersion(),
+			TransitionCount:          0,
+			Id:                       id,
+			PublicInfo: &workflowpb.CallbackInfo{
+				Trigger: &workflowpb.CallbackInfo_Trigger{
+					Variant: &workflowpb.CallbackInfo_Trigger_WorkflowClosed{},
+				},
+				Callback:         cb,
+				State:            enumspb.CALLBACK_STATE_STANDBY,
+				RegistrationTime: startEvent.EventTime,
+			},
+		}
+	}
 	if err := ms.UpdateWorkflowStateStatus(
 		enumsspb.WORKFLOW_EXECUTION_STATE_CREATED,
 		enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
@@ -3736,6 +3812,8 @@ func (ms *MutableStateImpl) AddContinueAsNewEvent(
 		ms.shard.GetEventsCache(),
 		ms.logger,
 		ms.namespaceEntry,
+		ms.executionInfo.WorkflowId,
+		newRunID,
 		timestamp.TimeValue(continueAsNewEvent.GetEventTime()),
 	)
 
@@ -3747,6 +3825,12 @@ func (ms *MutableStateImpl) AddContinueAsNewEvent(
 		firstRunID,
 	); err != nil {
 		return nil, nil, err
+	}
+	// Copy over close callbacks to the next execution.
+	for id, cb := range ms.executionInfo.Callbacks {
+		if _, ok := cb.PublicInfo.GetTrigger().GetVariant().(*workflowpb.CallbackInfo_Trigger_WorkflowClosed); ok {
+			newMutableState.executionInfo.Callbacks[id] = cb
+		}
 	}
 
 	if err = newMutableState.SetHistoryTree(
@@ -4407,7 +4491,8 @@ func (ms *MutableStateImpl) StartTransaction(
 		return false, err
 	}
 	ms.namespaceEntry = namespaceEntry
-	if err := ms.UpdateCurrentVersion(namespaceEntry.FailoverVersion(), false); err != nil {
+	ms.currentTransactionNamespaceFailoverVersion = namespaceEntry.FailoverVersion()
+	if err := ms.UpdateCurrentVersion(ms.currentTransactionNamespaceFailoverVersion, false); err != nil {
 		return false, err
 	}
 

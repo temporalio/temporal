@@ -40,8 +40,9 @@ type CallbackTask struct {
 	DestinationAddress string
 	// Key in mutable state's callback map.
 	CallbackID string
-	// The attempt - should match the mutable state callback info.
-	Attempt int32
+	// The number of callback transitions - should match the mutable state callback info.
+	// Used as an indicator for stale mutable state cache or task.
+	TransitionCount int32
 }
 
 var _ HasDestination = (*CallbackTask)(nil)
@@ -53,6 +54,14 @@ func (t *CallbackTask) SetWorkflowKey(key definition.WorkflowKey) {
 
 func (t *CallbackTask) GetDestination() string {
 	return t.DestinationAddress
+}
+
+func (t *CallbackTask) GetTransitionCount() int32 {
+	return t.TransitionCount
+}
+
+func (t *CallbackTask) GetCallbackID() string {
+	return t.CallbackID
 }
 
 func (t *CallbackTask) GetKey() Key {
