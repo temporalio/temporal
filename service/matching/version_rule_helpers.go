@@ -39,93 +39,6 @@ import (
 	"go.temporal.io/server/common/util"
 )
 
-// checkAssignmentConditions returns an error if the new set of assignment rules don't meet the following requirements:
-// - No more rules than dynamicconfig.VersionAssignmentRuleLimitPerQueue
-// - No assignment rule's TargetBuildId can be a member of an existing version set
-// - If there existed an "unfiltered" assigment rule (which can accept any task), at least one must still exist
-// - To override the unfiltered assignment rule requirement, the user can specify force = true
-func checkAssignmentConditions(g *persistencepb.VersioningData, maxARs int, force, hadUnfiltered bool) error {
-	activeRules := getActiveAssignmentRules(slices.Clone(g.GetAssignmentRules()))
-	if cnt := len(activeRules); maxARs > 0 && cnt > maxARs {
-		return serviceerror.NewFailedPrecondition(fmt.Sprintf("update exceeds number of assignment rules permitted in namespace (%v/%v)", cnt, maxARs))
-	}
-	if tbid, ok := isInVersionSet(activeRules, g.GetVersionSets()); ok {
-		return serviceerror.NewFailedPrecondition(fmt.Sprintf("update breaks requirement, target build id %s is already a member of version set", tbid))
-	}
-	if force == true {
-		return nil
-	}
-	if hadUnfiltered && !containsUnfiltered(activeRules) {
-		return serviceerror.NewFailedPrecondition("update breaks requirement that at least one assignment rule must have no ramp or hint")
-	}
-	return nil
-}
-
-func getActiveAssignmentRules(rules []*persistencepb.AssignmentRule) []*persistencepb.AssignmentRule {
-	return util.FilterSlice(rules, func(ar *persistencepb.AssignmentRule) bool {
-		return ar.DeleteTimestamp == nil
-	})
-}
-
-func isUnfiltered(ar *taskqueue.BuildIdAssignmentRule) bool {
-	percentageRamp := ar.GetPercentageRamp()
-	return ar.GetFilterExpression() == "" &&
-		ar.GetWorkerRatioRamp() == nil &&
-		(percentageRamp == nil || (percentageRamp != nil && percentageRamp.RampPercentage == 100))
-}
-
-// containsUnfiltered returns true if there exists an assignment rule with no filter expression,
-// no worker ratio ramp, and no ramp percentage, or a ramp percentage of 100
-func containsUnfiltered(rules []*persistencepb.AssignmentRule) bool {
-	found := false
-	for _, rule := range rules {
-		ar := rule.GetRule()
-		if isUnfiltered(ar) {
-			found = true
-		}
-	}
-	return found
-}
-
-// isInVersionSet returns true if the target build id of any assignment rule is in any of the listed version sets
-func isInVersionSet(rules []*persistencepb.AssignmentRule, sets []*persistencepb.CompatibleVersionSet) (string, bool) {
-	for _, rule := range rules {
-		ar := rule.GetRule()
-		tbid := ar.GetTargetBuildId()
-		for _, set := range sets {
-			for _, bid := range set.BuildIds {
-				if bid.GetId() == tbid {
-					return tbid, true
-				}
-			}
-		}
-	}
-	return "", false
-}
-
-// given2ActualIdx takes in the user-given index, which only counts active assignment rules, and converts it to the
-// actual index of that rule in the assignment rule list, which includes deleted rules.
-// A negative return value means index out of bounds.
-func given2ActualIdx(idx int32, rules []*persistencepb.AssignmentRule) int {
-	for i, rule := range rules {
-		if rule.DeleteTimestamp == nil {
-			if idx == 0 {
-				return i
-			}
-			idx--
-		}
-	}
-	return -1
-}
-
-// validRamp returns true if the percentage ramp is within [0, 100), or if the ramp is nil
-func validRamp(ramp *taskqueue.RampByPercentage) bool {
-	if ramp == nil {
-		return true
-	}
-	return ramp.RampPercentage >= 0 && ramp.RampPercentage < 100
-}
-
 func InsertAssignmentRule(timestamp *hlc.Clock,
 	data *persistencepb.VersioningData,
 	req *workflowservice.UpdateWorkerVersioningRulesRequest_InsertBuildIdAssignmentRule,
@@ -199,76 +112,6 @@ func DeleteAssignmentRule(timestamp *hlc.Clock,
 	rule := rules[actualIdx]
 	rule.DeleteTimestamp = timestamp
 	return data, checkAssignmentConditions(data, 0, req.GetForce(), hadUnfiltered)
-}
-
-// checkRedirectConditions returns an error if the new set of redirect rules don't meet the following requirements:
-// - No more rules than dynamicconfig.VersionRedirectRuleLimitPerQueue
-// - The DAG of redirect rules must not contain a cycle
-func checkRedirectConditions(g *persistencepb.VersioningData, maxRRs int) error {
-	rules := g.GetRedirectRules()
-	if maxRRs > 0 && countActiveRR(rules) > maxRRs {
-		return serviceerror.NewFailedPrecondition(fmt.Sprintf("update would exceed number of redirect rules permitted in namespace dynamic config (%v/%v)", len(rules), maxRRs))
-	}
-	if isCyclic(rules) {
-		return serviceerror.NewFailedPrecondition("update would break acyclic requirement")
-	}
-	return nil
-}
-
-func countActiveRR(rules []*persistencepb.RedirectRule) int {
-	cnt := 0
-	for _, rule := range rules {
-		if rule.DeleteTimestamp == nil {
-			cnt++
-		}
-	}
-	return cnt
-}
-
-// isCyclic returns true if there is a cycle in the DAG of redirect rules.
-func isCyclic(rules []*persistencepb.RedirectRule) bool {
-	dag := makeEdgeMap(rules)
-	for node := range dag {
-		visited := make(map[string]bool)
-		inStack := make(map[string]bool)
-		if dfs(node, visited, inStack, dag) {
-			return true
-		}
-	}
-	return false
-}
-
-func makeEdgeMap(rules []*persistencepb.RedirectRule) map[string][]string {
-	ret := make(map[string][]string)
-	for _, rule := range rules {
-		src := rule.GetRule().GetSourceBuildId()
-		dst := rule.GetRule().GetTargetBuildId()
-		list, ok := ret[src]
-		if !ok {
-			list = make([]string, 0)
-		}
-		list = append(list, dst)
-		ret[src] = list
-	}
-	return ret
-}
-
-func dfs(curr string, visited, inStack map[string]bool, nodes map[string][]string) bool {
-	if inStack[curr] {
-		return true
-	}
-	if visited[curr] {
-		return false
-	}
-	visited[curr] = true
-	inStack[curr] = true
-	for _, dst := range nodes[curr] {
-		if dfs(dst, visited, inStack, nodes) {
-			return true
-		}
-	}
-	inStack[curr] = false
-	return false
 }
 
 func InsertCompatibleRedirectRule(timestamp *hlc.Clock,
@@ -372,4 +215,166 @@ func CommitBuildID(timestamp *hlc.Clock,
 		return nil, err
 	}
 	return data, nil
+}
+
+// checkAssignmentConditions returns an error if the new set of assignment rules don't meet the following requirements:
+// - No more rules than dynamicconfig.VersionAssignmentRuleLimitPerQueue
+// - If there existed an "unfiltered" assigment rule (which can accept any task), at least one must still exist
+// - To override the unfiltered assignment rule requirement, the user can specify force = true
+func checkAssignmentConditions(g *persistencepb.VersioningData, maxARs int, force, hadUnfiltered bool) error {
+	activeRules := getActiveAssignmentRules(slices.Clone(g.GetAssignmentRules()))
+	if cnt := len(activeRules); maxARs > 0 && cnt > maxARs {
+		return serviceerror.NewFailedPrecondition(fmt.Sprintf("update exceeds number of assignment rules permitted in namespace (%v/%v)", cnt, maxARs))
+	}
+	if tbid, ok := isInVersionSet(activeRules, g.GetVersionSets()); ok {
+		return serviceerror.NewFailedPrecondition(fmt.Sprintf("update breaks requirement, target build id %s is already a member of version set", tbid))
+	}
+	if force == true {
+		return nil
+	}
+	if hadUnfiltered && !containsUnfiltered(activeRules) {
+		return serviceerror.NewFailedPrecondition("update breaks requirement that at least one assignment rule must have no ramp or hint")
+	}
+	return nil
+}
+
+// checkRedirectConditions returns an error if the new set of redirect rules don't meet the following requirements:
+// - No more rules than dynamicconfig.VersionRedirectRuleLimitPerQueue
+// - The DAG of redirect rules must not contain a cycle
+func checkRedirectConditions(g *persistencepb.VersioningData, maxRRs int) error {
+	activeRules := getActiveRedirectRules(slices.Clone(g.GetRedirectRules()))
+	if maxRRs > 0 && countActiveRR(activeRules) > maxRRs {
+		return serviceerror.NewFailedPrecondition(fmt.Sprintf("update would exceed number of redirect rules permitted in namespace dynamic config (%v/%v)", len(rules), maxRRs))
+	}
+	if isCyclic(activeRules) {
+		return serviceerror.NewFailedPrecondition("update would break acyclic requirement")
+	}
+	return nil
+}
+
+func getActiveAssignmentRules(rules []*persistencepb.AssignmentRule) []*persistencepb.AssignmentRule {
+	return util.FilterSlice(rules, func(ar *persistencepb.AssignmentRule) bool {
+		return ar.DeleteTimestamp == nil
+	})
+}
+
+func getActiveRedirectRules(rules []*persistencepb.RedirectRule) []*persistencepb.RedirectRule {
+	return util.FilterSlice(rules, func(rr *persistencepb.RedirectRule) bool {
+		return rr.DeleteTimestamp == nil
+	})
+}
+
+func isUnfiltered(ar *taskqueue.BuildIdAssignmentRule) bool {
+	percentageRamp := ar.GetPercentageRamp()
+	return ar.GetFilterExpression() == "" &&
+		ar.GetWorkerRatioRamp() == nil &&
+		(percentageRamp == nil || (percentageRamp != nil && percentageRamp.RampPercentage == 100))
+}
+
+// containsUnfiltered returns true if there exists an assignment rule with no filter expression,
+// no worker ratio ramp, and no ramp percentage, or a ramp percentage of 100
+func containsUnfiltered(rules []*persistencepb.AssignmentRule) bool {
+	found := false
+	for _, rule := range rules {
+		ar := rule.GetRule()
+		if isUnfiltered(ar) {
+			found = true
+		}
+	}
+	return found
+}
+
+// isInVersionSet returns true if the target build id of any assignment rule is in any of the listed version sets
+func isInVersionSet(rules []*persistencepb.AssignmentRule, sets []*persistencepb.CompatibleVersionSet) (string, bool) {
+	for _, rule := range rules {
+		ar := rule.GetRule()
+		tbid := ar.GetTargetBuildId()
+		for _, set := range sets {
+			for _, bid := range set.BuildIds {
+				if bid.GetId() == tbid {
+					return tbid, true
+				}
+			}
+		}
+	}
+	return "", false
+}
+
+// given2ActualIdx takes in the user-given index, which only counts active assignment rules, and converts it to the
+// actual index of that rule in the assignment rule list, which includes deleted rules.
+// A negative return value means index out of bounds.
+func given2ActualIdx(idx int32, rules []*persistencepb.AssignmentRule) int {
+	for i, rule := range rules {
+		if rule.DeleteTimestamp == nil {
+			if idx == 0 {
+				return i
+			}
+			idx--
+		}
+	}
+	return -1
+}
+
+// validRamp returns true if the percentage ramp is within [0, 100), or if the ramp is nil
+func validRamp(ramp *taskqueue.RampByPercentage) bool {
+	if ramp == nil {
+		return true
+	}
+	return ramp.RampPercentage >= 0 && ramp.RampPercentage < 100
+}
+
+func countActiveRR(rules []*persistencepb.RedirectRule) int {
+	cnt := 0
+	for _, rule := range rules {
+		if rule.DeleteTimestamp == nil {
+			cnt++
+		}
+	}
+	return cnt
+}
+
+// isCyclic returns true if there is a cycle in the DAG of redirect rules.
+func isCyclic(rules []*persistencepb.RedirectRule) bool {
+	dag := makeEdgeMap(rules)
+	for node := range dag {
+		visited := make(map[string]bool)
+		inStack := make(map[string]bool)
+		if dfs(node, visited, inStack, dag) {
+			return true
+		}
+	}
+	return false
+}
+
+func makeEdgeMap(rules []*persistencepb.RedirectRule) map[string][]string {
+	ret := make(map[string][]string)
+	for _, rule := range rules {
+		src := rule.GetRule().GetSourceBuildId()
+		dst := rule.GetRule().GetTargetBuildId()
+		list, ok := ret[src]
+		if !ok {
+			list = make([]string, 0)
+		}
+		list = append(list, dst)
+		ret[src] = list
+	}
+	return ret
+}
+
+func dfs(curr string, visited, inStack map[string]bool, nodes map[string][]string) bool {
+	if inStack[curr] {
+		return true
+	}
+	if visited[curr] {
+		return false
+	}
+	visited[curr] = true
+	inStack[curr] = true
+	for _, dst := range nodes[curr] {
+		if dfs(dst, visited, inStack, nodes) {
+			return true
+		}
+	}
+	inStack[curr] = false
+	return false
 }
