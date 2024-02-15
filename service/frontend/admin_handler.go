@@ -49,7 +49,6 @@ import (
 	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/primitives"
 	"go.temporal.io/server/common/util"
-	"go.temporal.io/server/service/history/api"
 	"go.temporal.io/server/service/worker/dlq"
 
 	"github.com/pborman/uuid"
@@ -1856,9 +1855,9 @@ func (adh *AdminHandler) PurgeDLQTasks(
 		WorkflowType: dlq.WorkflowTypeDelete,
 		DeleteParams: dlq.DeleteParams{
 			Key: dlq.Key{
-				TaskCategoryID: key.Category.ID(),
-				SourceCluster:  key.SourceCluster,
-				TargetCluster:  key.TargetCluster,
+				TaskCategoryID: key.taskCategoryID,
+				SourceCluster:  key.sourceCluster,
+				TargetCluster:  key.targetCluster,
 			},
 			MaxMessageID: request.InclusiveMaxTaskMetadata.MessageId,
 		},
@@ -1891,9 +1890,9 @@ func (adh *AdminHandler) MergeDLQTasks(ctx context.Context, request *adminservic
 		WorkflowType: dlq.WorkflowTypeMerge,
 		MergeParams: dlq.MergeParams{
 			Key: dlq.Key{
-				TaskCategoryID: key.Category.ID(),
-				SourceCluster:  key.SourceCluster,
-				TargetCluster:  key.TargetCluster,
+				TaskCategoryID: key.taskCategoryID,
+				SourceCluster:  key.sourceCluster,
+				TargetCluster:  key.targetCluster,
 			},
 			MaxMessageID: request.InclusiveMaxTaskMetadata.MessageId,
 			BatchSize:    int(request.BatchSize), // Let the workflow code validate and set the default value if needed.
@@ -2036,28 +2035,36 @@ func (adh *AdminHandler) ListQueues(
 	}, nil
 }
 
-func (adh *AdminHandler) getDLQWorkflowID(key *persistence.QueueKey) string {
-	return fmt.Sprintf("manage-dlq-tasks-%s", key.GetQueueName())
+func (adh *AdminHandler) getDLQWorkflowID(key historyDLQKey) string {
+	return fmt.Sprintf(
+		"manage-dlq-tasks-%s",
+		persistence.GetHistoryTaskQueueName(
+			key.taskCategoryID,
+			key.sourceCluster,
+			key.targetCluster,
+		),
+	)
 }
 
-func (adh *AdminHandler) parseDLQKey(key *commonspb.HistoryDLQKey) (*persistence.QueueKey, error) {
-	category, err := api.GetTaskCategory(int(key.TaskCategory), adh.taskCategoryRegistry)
-	if err != nil {
-		return nil, err
-	}
+type historyDLQKey struct {
+	taskCategoryID int
+	sourceCluster  string
+	targetCluster  string
+}
+
+func (adh *AdminHandler) parseDLQKey(key *commonspb.HistoryDLQKey) (historyDLQKey, error) {
 	sourceCluster := key.SourceCluster
 	if len(sourceCluster) == 0 {
-		return nil, errSourceClusterNotSet
+		return historyDLQKey{}, errSourceClusterNotSet
 	}
 	targetCluster := key.TargetCluster
 	if len(targetCluster) == 0 {
-		return nil, errTargetClusterNotSet
+		return historyDLQKey{}, errTargetClusterNotSet
 	}
-	return &persistence.QueueKey{
-		QueueType:     persistence.QueueTypeHistoryDLQ,
-		Category:      category,
-		SourceCluster: sourceCluster,
-		TargetCluster: key.TargetCluster,
+	return historyDLQKey{
+		taskCategoryID: int(key.TaskCategory),
+		sourceCluster:  sourceCluster,
+		targetCluster:  targetCluster,
 	}, nil
 }
 
