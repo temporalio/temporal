@@ -194,9 +194,11 @@ func (c *clientImpl) QueryWorkflow(ctx context.Context, request *matchingservice
 func (c *clientImpl) pickPartitionForWrite(proto *taskqueuepb.TaskQueue, nsid string, taskType enumspb.TaskQueueType, forwardedFrom string) (tqid.Partition, error) {
 	partition, err := tqid.FromProto(proto, nsid, taskType)
 	if err != nil {
+		// We preserve the old logic (not returning error in case of invalid proto info) until it's verified that
+		// clients are not sending invalid names.
 		c.logger.Info("invalid tq partition", tag.Error(err), tag.NewStringsTag("proto", []string{proto.String()}))
 		metrics.MatchingClientInvalidTaskQueuePartition.With(c.metricsHandler).Record(1)
-		return nil, err
+		return tqid.UnsafeTaskQueueFamily(nsid, proto.GetName()).TaskQueue(taskType).RootPartition(), nil
 	}
 
 	if forwardedFrom != "" || !partition.IsRoot() {
@@ -214,9 +216,11 @@ func (c *clientImpl) pickPartitionForWrite(proto *taskqueuepb.TaskQueue, nsid st
 func (c *clientImpl) pickPartitionForRead(proto *taskqueuepb.TaskQueue, nsid string, taskType enumspb.TaskQueueType, forwardedFrom string) (prtn tqid.Partition, release func(), err error) {
 	partition, err := tqid.FromProto(proto, nsid, taskType)
 	if err != nil {
+		// We preserve the old logic (not returning error in case of invalid proto info) until it's verified that
+		// clients are not sending invalid names.
 		c.logger.Info("invalid tq partition", tag.Error(err), tag.NewStringsTag("proto", []string{proto.String()}))
 		metrics.MatchingClientInvalidTaskQueuePartition.With(c.metricsHandler).Record(1)
-		return nil, nil, err
+		return tqid.UnsafeTaskQueueFamily(nsid, proto.GetName()).TaskQueue(taskType).RootPartition(), nil, nil
 	}
 
 	if forwardedFrom != "" || !partition.IsRoot() {

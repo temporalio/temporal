@@ -135,6 +135,11 @@ func FromFamilyName(namespaceId string, name string) (*TaskQueueFamily, error) {
 	}, nil
 }
 
+// UnsafeTaskQueueFamily should be avoided as much as possible. Use FromFamilyName instead as it validates the tq name.
+func UnsafeTaskQueueFamily(namespaceId string, name string) *TaskQueueFamily {
+	return &TaskQueueFamily{namespace.ID(namespaceId), name}
+}
+
 func FromProto(proto *taskqueuepb.TaskQueue, namespaceId string, taskType enumspb.TaskQueueType) (Partition, error) {
 	baseName, partition, err := parseRpcName(proto.GetName())
 	if err != nil {
