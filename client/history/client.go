@@ -299,6 +299,30 @@ func (c *clientImpl) ListQueues(
 	return historyClient.ListQueues(ctx, in, opts...)
 }
 
+func (c *clientImpl) ListTasks(
+	ctx context.Context,
+	in *historyservice.ListTasksRequest,
+	opts ...grpc.CallOption,
+) (*historyservice.ListTasksResponse, error) {
+	// Depth of the shardId field is 2 which is not supported by the rpcwrapper generator.
+	// Simply changing the maxDepth for ShardId	field in the rpcwrapper generator will
+	// cause the generation logic for other methods to find more than one routing fields.
+
+	shardID := in.Request.GetShardId()
+	var response *historyservice.ListTasksResponse
+	op := func(ctx context.Context, client historyservice.HistoryServiceClient) error {
+		var err error
+		ctx, cancel := c.createContext(ctx)
+		defer cancel()
+		response, err = client.ListTasks(ctx, in, opts...)
+		return err
+	}
+	if err := c.executeWithRedirect(ctx, shardID, op); err != nil {
+		return nil, err
+	}
+	return response, nil
+}
+
 // getAnyClient returns an arbitrary client by looking up a client by a sequentially increasing shard ID. This is useful
 // for history APIs that are shard-agnostic (e.g. namespace or DLQ v2 APIs).
 func (c *clientImpl) getAnyClient(apiName string) (historyservice.HistoryServiceClient, error) {
