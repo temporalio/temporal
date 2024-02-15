@@ -611,17 +611,19 @@ var (
 		"client_requests",
 		WithDescription("The number of requests sent by the client to an individual service, keyed by `service_role` and `operation`."),
 	)
-	ClientFailures               = NewCounterDef("client_errors")
-	ClientLatency                = NewTimerDef("client_latency")
-	ClientRedirectionRequests    = NewCounterDef("client_redirection_requests")
-	ClientRedirectionFailures    = NewCounterDef("client_redirection_errors")
-	ClientRedirectionLatency     = NewTimerDef("client_redirection_latency")
-	StateTransitionCount         = NewDimensionlessHistogramDef("state_transition_count")
-	HistorySize                  = NewBytesHistogramDef("history_size")
-	HistoryCount                 = NewDimensionlessHistogramDef("history_count")
-	SearchAttributesSize         = NewBytesHistogramDef("search_attributes_size")
-	MemoSize                     = NewBytesHistogramDef("memo_size")
-	TooManyPendingChildWorkflows = NewCounterDef(
+	ClientFailures                   = NewCounterDef("client_errors")
+	ClientLatency                    = NewTimerDef("client_latency")
+	ClientRedirectionRequests        = NewCounterDef("client_redirection_requests")
+	ClientRedirectionFailures        = NewCounterDef("client_redirection_errors")
+	ClientRedirectionLatency         = NewTimerDef("client_redirection_latency")
+	StateTransitionCount             = NewDimensionlessHistogramDef("state_transition_count")
+	HistorySize                      = NewBytesHistogramDef("history_size")
+	HistoryCount                     = NewDimensionlessHistogramDef("history_count")
+	TasksCompletedPerShardInfoUpdate = NewDimensionlessHistogramDef("tasks_per_shardinfo_update")
+	TimeBetweenShardInfoUpdates      = NewTimerDef("time_between_shardinfo_update")
+	SearchAttributesSize             = NewBytesHistogramDef("search_attributes_size")
+	MemoSize                         = NewBytesHistogramDef("memo_size")
+	TooManyPendingChildWorkflows     = NewCounterDef(
 		"wf_too_many_pending_child_workflows",
 		WithDescription("The number of Workflow Tasks failed because they would cause the limit on the number of pending child workflows to be exceeded. See https://t.mp/limits for more information."),
 	)

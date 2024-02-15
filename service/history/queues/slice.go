@@ -49,7 +49,7 @@ type (
 		CanMergeWithSlice(Slice) bool
 		MergeWithSlice(Slice) []Slice
 		CompactWithSlice(Slice) Slice
-		ShrinkScope()
+		ShrinkScope() int
 		SelectTasks(readerID int64, batchSize int) ([]Executable, error)
 		MoreTasks() bool
 		TaskStats() TaskStats
@@ -309,19 +309,21 @@ func (s *SliceImpl) CompactWithSlice(slice Slice) Slice {
 	)
 }
 
-func (s *SliceImpl) ShrinkScope() {
+func (s *SliceImpl) ShrinkScope() int {
 	s.stateSanityCheck()
 
-	s.shrinkRange()
+	tasksCompleted := s.shrinkRange()
 	s.shrinkPredicate()
 
 	// shrinkRange shrinks the executableTracker, which may remove tracked pending executables. Set the
 	// pending task count to reflect that.
 	s.monitor.SetSlicePendingTaskCount(s, len(s.executableTracker.pendingExecutables))
+
+	return tasksCompleted
 }
 
-func (s *SliceImpl) shrinkRange() {
-	minPendingTaskKey := s.executableTracker.shrink()
+func (s *SliceImpl) shrinkRange() int {
+	minPendingTaskKey, tasksCompleted := s.executableTracker.shrink()
 
 	minIteratorKey := tasks.MaximumKey
 	if len(s.iterators) != 0 {
@@ -337,6 +339,8 @@ func (s *SliceImpl) shrinkRange() {
 	}
 
 	s.scope.Range.InclusiveMin = newRangeMin
+
+	return tasksCompleted
 }
 
 func (s *SliceImpl) shrinkPredicate() {

@@ -165,6 +165,9 @@ type Config struct {
 
 	// ShardUpdateMinInterval is the minimum time interval within which the shard info can be updated.
 	ShardUpdateMinInterval dynamicconfig.DurationPropertyFn
+	// ShardUpdateMinTasksCompleted is the minimum number of tasks which must be completed before the shard info can be updated before
+	// history.shardUpdateMinInterval has passed
+	ShardUpdateMinTasksCompleted dynamicconfig.IntPropertyFn
 	// ShardSyncMinInterval is the minimum time interval within which the shard info can be synced to the remote.
 	ShardSyncMinInterval            dynamicconfig.DurationPropertyFn
 	ShardSyncTimerJitterCoefficient dynamicconfig.FloatPropertyFn
@@ -452,6 +455,7 @@ func NewConfig(
 		MaximumBufferedEventsSizeInBytes: dc.GetIntProperty(dynamicconfig.MaximumBufferedEventsSizeInBytes, 2*1024*1024),
 		MaximumSignalsPerExecution:       dc.GetIntPropertyFilteredByNamespace(dynamicconfig.MaximumSignalsPerExecution, 10000),
 		ShardUpdateMinInterval:           dc.GetDurationProperty(dynamicconfig.ShardUpdateMinInterval, 5*time.Minute),
+		ShardUpdateMinTasksCompleted:     dc.GetIntProperty(dynamicconfig.ShardUpdateMinTasksCompleted, 1000),
 		ShardSyncMinInterval:             dc.GetDurationProperty(dynamicconfig.ShardSyncMinInterval, 5*time.Minute),
 		ShardSyncTimerJitterCoefficient:  dc.GetFloat64Property(dynamicconfig.TransferProcessorMaxPollIntervalJitterCoefficient, 0.15),
 

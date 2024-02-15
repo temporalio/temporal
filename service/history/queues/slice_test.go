@@ -374,7 +374,7 @@ func (s *sliceSuite) TestShrinkScope_ShrinkRange() {
 		slice.pendingExecutables[executable.GetKey()] = executable
 	}
 
-	slice.ShrinkScope()
+	s.Equal(numAcked, slice.ShrinkScope())
 	s.Len(slice.pendingExecutables, len(executables)-numAcked)
 	s.validateSliceState(slice)
 
