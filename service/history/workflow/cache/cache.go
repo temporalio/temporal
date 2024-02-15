@@ -81,7 +81,7 @@ type (
 		nonUserContextLockTimeout time.Duration
 	}
 
-	NewCacheFn func(config *configs.Config) Cache
+	NewCacheFn func(config *configs.Config, handler metrics.Handler) Cache
 
 	Key struct {
 		// Those are exported because some unit tests uses the cache directly.
@@ -104,21 +104,25 @@ const (
 
 func NewHostLevelCache(
 	config *configs.Config,
+	handler metrics.Handler,
 ) Cache {
 	return newCache(
 		config.HistoryHostLevelCacheMaxSize(),
 		config.HistoryCacheTTL(),
 		config.HistoryCacheNonUserContextLockTimeout(),
+		handler,
 	)
 }
 
 func NewShardLevelCache(
 	config *configs.Config,
+	handler metrics.Handler,
 ) Cache {
 	return newCache(
 		config.HistoryShardLevelCacheMaxSize(),
 		config.HistoryCacheTTL(),
 		config.HistoryCacheNonUserContextLockTimeout(),
+		handler,
 	)
 }
 
@@ -126,13 +130,14 @@ func newCache(
 	size int,
 	ttl time.Duration,
 	nonUserContextLockTimeout time.Duration,
+	handler metrics.Handler,
 ) Cache {
 	opts := &cache.Options{}
 	opts.TTL = ttl
 	opts.Pin = true
 
 	return &CacheImpl{
-		Cache:                     cache.New(size, opts),
+		Cache:                     cache.New(size, opts, handler.WithTags(metrics.CacheTypeTag(metrics.MutableStateCacheTypeTagValue))),
 		nonUserContextLockTimeout: nonUserContextLockTimeout,
 	}
 }
