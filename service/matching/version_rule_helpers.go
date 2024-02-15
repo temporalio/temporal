@@ -154,7 +154,7 @@ func InsertAssignmentRule(timestamp *hlc.Clock,
 		// given index was too large, insert at end
 		data.AssignmentRules = append(rules, &persistenceAR)
 	} else {
-		slices.Insert(rules, actualIdx, &persistenceAR)
+		data.AssignmentRules = slices.Insert(rules, actualIdx, &persistenceAR)
 	}
 	return data, checkAssignmentConditions(data, maxARs, false, hadUnfiltered)
 }
