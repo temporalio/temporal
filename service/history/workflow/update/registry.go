@@ -163,16 +163,21 @@ func NewRegistry(
 	}
 
 	getStoreFn().VisitUpdates(func(updID string, updInfo *updatespb.UpdateInfo) {
-		// need to eager load here so that Len and admit are correct.
-		if acc := updInfo.GetAcceptance(); acc != nil {
+		if updInfo.GetRequest() != nil {
+			r.updates[updID] = newRequested(
+				updID,
+				nil,
+				r.remover(updID),
+				withInstrumentation(&r.instrumentation),
+			)
+		} else if acc := updInfo.GetAcceptance(); acc != nil {
 			r.updates[updID] = newAccepted(
 				updID,
 				acc.EventId,
 				r.remover(updID),
 				withInstrumentation(&r.instrumentation),
 			)
-		}
-		if updInfo.GetCompletion() != nil {
+		} else if updInfo.GetCompletion() != nil {
 			r.completedCount++
 		}
 	})
