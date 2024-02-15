@@ -350,7 +350,6 @@ func CleanupRuleTombstones(versioningData *persistencepb.VersioningData, retenti
 //  2. Removes all previously added assignment rules to the given target
 //     Build ID (if any).
 //  3. Removes any *unconditional* assignment rule for other Build IDs.
-//  4. Removes the ramp of any incoming redirect rules to this Build ID.
 func CommitBuildID(timestamp *hlc.Clock,
 	data *persistencepb.VersioningData,
 	req *workflowservice.UpdateWorkerVersioningRulesRequest_CommitBuildId) (*persistencepb.VersioningData, error) {
@@ -372,8 +371,5 @@ func CommitBuildID(timestamp *hlc.Clock,
 	if err := checkAssignmentConditions(data, 0, false, true); err != nil {
 		return nil, err
 	}
-
-	// TODO: Removes the ramp of any incoming redirect rules to this Build ID.
-
 	return data, nil
 }
