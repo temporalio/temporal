@@ -20,7 +20,7 @@ A simplistic description of what the History Service does when handling these re
 
 3. _Alternatively, if the request is a Worker reporting that the user workflow is blocked on a timer, then add a Timer Task in a History Service task queue; when that timer expires, create a Transfer Task representing the Workflow Task in Matching that is required to continue advancing the workflow._
 
-This is illustrated in the diagram below, which contains a typical sequence of events in the execution of the following workflow pseudocode (see [Workflow Lifecycle](../../docs/workflow-lifecycle.md) for more detailed scenarios):
+This is illustrated in the diagram below, which contains a typical sequence of events in the execution of the following workflow pseudocode (see [Workflow Lifecycle](./workflow-lifecycle.md) for more detailed scenarios):
 
 ```javascript
 function myWorkflow() {
