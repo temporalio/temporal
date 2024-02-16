@@ -29,6 +29,7 @@ package membership
 import (
 	"context"
 	"errors"
+	"time"
 
 	"go.temporal.io/api/serviceerror"
 
@@ -66,7 +67,10 @@ type (
 		// EvictSelf evicts this member from the membership ring. After this method is
 		// called, other members will discover that this node is no longer part of the
 		// ring. This primitive is useful to carry out graceful host shutdown during deployments.
-		EvictSelf() error
+		// If asOf is in the future, the change will take effect on all hosts at that absolute
+		// time. This process must stay alive until after that time. The resolution of asOf is
+		// whole seconds.
+		EvictSelf(asOf time.Time) error
 		// GetResolver returns the service resolver for a service in the cluster.
 		GetResolver(service primitives.ServiceName) (ServiceResolver, error)
 		// GetReachableMembers returns addresses of all members of the ring.
@@ -78,6 +82,10 @@ type (
 		WaitUntilInitialized(context.Context) error
 		// SetDraining sets the draining state (synchronized through ringpop)
 		SetDraining(draining bool) error
+		// ApproximateMaxPropagationTime returns an approximate upper bound on propagation time
+		// for updates to membership information. This is _not_ a guarantee! This value is only
+		// provided to help with startup/shutdown timing as a best-effort.
+		ApproximateMaxPropagationTime() time.Duration
 	}
 
 	// ServiceResolver provides membership information for a specific temporal service.

@@ -45,6 +45,7 @@ type RpoSuite struct {
 }
 
 func TestRpoSuite(t *testing.T) {
+	t.Parallel()
 	suite.Run(t, new(RpoSuite))
 }
 
@@ -54,7 +55,7 @@ func (s *RpoSuite) SetupTest() {
 
 func (s *RpoSuite) TestMonitor() {
 	serviceName := primitives.HistoryService
-	testService := newTestCluster(s.T(), "rpm-test", 3, "127.0.0.1", "", serviceName, "127.0.0.1")
+	testService := newTestCluster(s.T(), "rpm-test", 3, "127.0.0.1", "", serviceName, "127.0.0.1", nil, true)
 	s.NotNil(testService, "Failed to create test service")
 
 	rpm := testService.rings[0]
@@ -77,7 +78,7 @@ func (s *RpoSuite) TestMonitor() {
 
 	// Force refresh now and drain the notification channel
 	resolver, _ := rpm.GetResolver(serviceName)
-	s.NoError(resolver.(*serviceResolver).refresh())
+	s.NoError(resolver.(*serviceResolver).refresh(true))
 	drainChannel(listenCh)
 
 	s.T().Log("Killing host 1")
@@ -125,7 +126,57 @@ func (s *RpoSuite) TestMonitor() {
 	err = r.RemoveListener("test-listener")
 	s.Nil(err, "RemoveListener() failed")
 
-	rpm.Stop()
+	testService.Stop()
+}
+
+func (s *RpoSuite) TestScheduledUpdates() {
+	serviceName := primitives.MatchingService
+	// note these are only accurate to the start of the second, so they're effectively rounded
+	// down if we start mid-second.
+	start := time.Now()
+	joinTimes := []time.Time{
+		start.Add(2 * time.Second),
+		time.Time{},
+		start.Add(4 * time.Second),
+	}
+	testService := newTestCluster(s.T(), "rpm-test", 3, "127.0.0.1", "", serviceName, "127.0.0.1", joinTimes, false)
+	s.NotNil(testService, "Failed to create test service")
+
+	// in theory this should work if we observe any ring, but it seems unreliable if we observe
+	// one of the delayed-join ones.
+	rpm := testService.rings[1]
+	r, err := rpm.GetResolver(serviceName)
+	s.NoError(err)
+
+	waitFor := func(elements []string) {
+		var addrs []string
+		s.Eventually(func() bool {
+			addrs = util.MapSlice(r.Members(), func(h membership.HostInfo) string { return h.GetAddress() })
+			return len(addrs) == len(elements)
+		}, 5*time.Second, 100*time.Millisecond)
+		s.ElementsMatch(elements, addrs)
+	}
+
+	// we should see only 1 first, then 0,1, then 0,1,2
+	waitFor(testService.hostAddrs[1:2])
+
+	waitFor(testService.hostAddrs[0:2])
+	s.Greater(time.Since(start), 1*time.Second)
+
+	waitFor(testService.hostAddrs[0:3])
+	s.Greater(time.Since(start), 3*time.Second)
+
+	// now remove two at scheduled times. we should see 1 disappear then 0.
+	start = time.Now()
+	testService.rings[1].EvictSelf(start.Add(2 * time.Second))
+	testService.rings[0].EvictSelf(start.Add(4 * time.Second))
+
+	waitFor([]string{testService.hostAddrs[0], testService.hostAddrs[2]})
+	s.Greater(time.Since(start), 1*time.Second)
+
+	waitFor([]string{testService.hostAddrs[2]})
+	s.Greater(time.Since(start), 3*time.Second)
+
 	testService.Stop()
 }
 

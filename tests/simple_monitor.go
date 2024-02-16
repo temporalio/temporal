@@ -26,6 +26,7 @@ package tests
 
 import (
 	"context"
+	"time"
 
 	"go.temporal.io/server/common/membership"
 	"go.temporal.io/server/common/primitives"
@@ -55,7 +56,7 @@ func (s *simpleMonitor) Start() {
 	}
 }
 
-func (s *simpleMonitor) EvictSelf() error {
+func (s *simpleMonitor) EvictSelf(asOf time.Time) error {
 	return nil
 }
 
@@ -77,4 +78,8 @@ func (s *simpleMonitor) WaitUntilInitialized(_ context.Context) error {
 
 func (s *simpleMonitor) SetDraining(draining bool) error {
 	return nil
+}
+
+func (s *simpleMonitor) ApproximateMaxPropagationTime() time.Duration {
+	return 0
 }

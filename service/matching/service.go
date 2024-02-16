@@ -112,7 +112,7 @@ func (s *Service) Start() {
 func (s *Service) Stop() {
 	// remove self from membership ring and wait for traffic to drain
 	s.logger.Info("ShutdownHandler: Evicting self from membership ring")
-	if err := s.membershipMonitor.EvictSelf(); err != nil {
+	if err := s.membershipMonitor.EvictSelf(time.Time{}); err != nil {
 		s.logger.Error("ShutdownHandler: Failed to evict self from membership ring", tag.Error(err))
 	}
 	s.healthServer.SetServingStatus(serviceName, healthpb.HealthCheckResponse_NOT_SERVING)

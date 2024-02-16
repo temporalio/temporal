@@ -74,6 +74,8 @@ type monitor struct {
 	services                  config.ServicePortMap
 	rp                        *ringpop.Ringpop
 	maxJoinDuration           time.Duration
+	propagationTime           time.Duration
+	joinTime                  time.Time
 	rings                     map[primitives.ServiceName]*serviceResolver
 	logger                    log.Logger
 	metadataManager           persistence.ClusterMetadataManager
@@ -93,6 +95,8 @@ func newMonitor(
 	metadataManager persistence.ClusterMetadataManager,
 	broadcastHostPortResolver func() (string, error),
 	maxJoinDuration time.Duration,
+	propagationTime time.Duration,
+	joinTime time.Time,
 ) *monitor {
 	lifecycleCtx, lifecycleCancel := context.WithCancel(context.Background())
 	lifecycleCtx = headers.SetCallerInfo(
@@ -116,6 +120,8 @@ func newMonitor(
 		hostID:                    uuid.NewUUID(),
 		initialized:               future.NewFuture[struct{}](),
 		maxJoinDuration:           maxJoinDuration,
+		propagationTime:           propagationTime,
+		joinTime:                  joinTime,
 	}
 	for service, port := range services {
 		rpo.rings[service] = newServiceResolver(service, port, rp, logger)
@@ -158,15 +164,24 @@ func (rpo *monitor) Start() {
 
 	labels, err := rpo.rp.Labels()
 	if err != nil {
-		rpo.logger.Fatal("unable to get ring pop labels", tag.Error(err))
+		rpo.logger.Fatal("unable to get ringpop labels", tag.Error(err))
+	}
+
+	if !rpo.joinTime.IsZero() {
+		if err = labels.Set(startAtKey, strconv.FormatInt(rpo.joinTime.Unix(), 10)); err != nil {
+			rpo.logger.Fatal("unable to set ringpop label", tag.Error(err), tag.Key(startAtKey))
+		}
+		clearAfter := time.Until(rpo.joinTime.Add(backoff.Jitter(10*time.Second, 0.2)))
+		time.AfterFunc(clearAfter, rpo.clearStartAt)
 	}
 
 	if err = labels.Set(portKey, strconv.Itoa(rpo.services[rpo.serviceName])); err != nil {
-		rpo.logger.Fatal("unable to set ring pop ServicePort label", tag.Error(err))
+		rpo.logger.Fatal("unable to set ringpop label", tag.Error(err), tag.Key(portKey))
 	}
 
+	// This label should be set last, it's used as the prediciate for finding members for rings.
 	if err = labels.Set(roleKey, string(rpo.serviceName)); err != nil {
-		rpo.logger.Fatal("unable to set ring pop ServiceRole label", tag.Error(err))
+		rpo.logger.Fatal("unable to set ringpop label", tag.Error(err), tag.Key(roleKey))
 	}
 
 	// Our individual rings may not support concurrent start/stop calls so we reacquire the state lock while acting upon them
@@ -208,6 +223,14 @@ func (rpo *monitor) bootstrapRingPop() error {
 		return fmt.Errorf("exhausted all retries: %w", err)
 	}
 	return nil
+}
+
+func (rpo *monitor) clearStartAt() {
+	// We can ignore all errors here, they're probably because we shut down already.
+	// This is just to clean up the startAt label.
+	if labels, err := rpo.rp.Labels(); err == nil {
+		_, _ = labels.Remove(startAtKey)
+	}
 }
 
 func (rpo *monitor) WaitUntilInitialized(ctx context.Context) error {
@@ -393,8 +416,22 @@ func (rpo *monitor) Stop() {
 	rpo.rp.Destroy()
 }
 
-func (rpo *monitor) EvictSelf() error {
-	return rpo.rp.SelfEvict()
+func (rpo *monitor) EvictSelf(asOf time.Time) error {
+	until := time.Until(asOf)
+	if until <= 0 {
+		return rpo.rp.SelfEvict()
+	}
+	// set label for eviction time in the future
+	labels, err := rpo.rp.Labels()
+	if err != nil {
+		return err
+	}
+	err = labels.Set(stopAtKey, strconv.FormatInt(asOf.Unix(), 10))
+	if err != nil {
+		return err
+	}
+	time.AfterFunc(until, func() { rpo.rp.SelfEvict() })
+	return nil
 }
 
 func (rpo *monitor) GetResolver(service primitives.ServiceName) (membership.ServiceResolver, error) {
@@ -416,6 +453,10 @@ func (rpo *monitor) SetDraining(draining bool) error {
 		return err
 	}
 	return labels.Set(drainingKey, strconv.FormatBool(draining))
+}
+
+func (rpo *monitor) ApproximateMaxPropagationTime() time.Duration {
+	return rpo.propagationTime
 }
 
 func replaceServicePort(address string, servicePort int) (string, error) {
