@@ -151,6 +151,10 @@ func buildDSN(
 
 func buildDSNAttrs(dbKind sqlplugin.DbKind, cfg *config.SQL) (map[string]string, error) {
 	attrs := make(map[string]string, len(dsnAttrOverrides)+len(cfg.ConnectAttributes)+1)
+	// Enable interpolation by default unless this is a mysql8 visibility store
+	if dbKind != sqlplugin.DbKindVisibility {
+		attrs[interpolateParamsAttr] = "true"
+	}
 	for k, v := range cfg.ConnectAttributes {
 		k1, v1 := sanitizeAttr(k, v)
 		attrs[k1] = v1
