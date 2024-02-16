@@ -150,7 +150,11 @@ func (vsa VisibilitySearchAttributes) Value() (driver.Value, error) {
 	if vsa == nil {
 		return nil, nil
 	}
-	return json.Marshal(vsa)
+	bs, err := json.Marshal(vsa)
+	if err != nil {
+		return nil, err
+	}
+	return string(bs), nil
 }
 
 func ParseCountGroupByRows(rows *sql.Rows, groupBy []string) ([]VisibilityCountRow, error) {
