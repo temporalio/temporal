@@ -51,6 +51,10 @@ func InsertAssignmentRule(timestamp *hlc.Clock,
 	if ramp := rule.GetPercentageRamp(); !validRamp(ramp) {
 		return nil, serviceerror.NewInvalidArgument("ramp percentage must be in range [0, 100)")
 	}
+	target := rule.GetTargetBuildId()
+	if isInVersionSet(target, data.GetVersionSets()) {
+		return nil, serviceerror.NewFailedPrecondition(fmt.Sprintf("update breaks requirement, build id %s is already a member of version set", target))
+	}
 	if data == nil {
 		data = &persistencepb.VersioningData{AssignmentRules: make([]*persistencepb.AssignmentRule, 0)}
 	} else {
@@ -80,6 +84,10 @@ func ReplaceAssignmentRule(timestamp *hlc.Clock,
 	rule := req.GetRule()
 	if ramp := rule.GetPercentageRamp(); !validRamp(ramp) {
 		return nil, serviceerror.NewInvalidArgument("ramp percentage must be in range [0, 100)")
+	}
+	target := rule.GetTargetBuildId()
+	if isInVersionSet(target, data.GetVersionSets()) {
+		return nil, serviceerror.NewFailedPrecondition(fmt.Sprintf("update breaks requirement, build id %s is already a member of version set", target))
 	}
 	rules := data.GetAssignmentRules()
 	idx := req.GetRuleIndex()
@@ -124,13 +132,20 @@ func InsertCompatibleRedirectRule(timestamp *hlc.Clock,
 		data = common.CloneProto(data)
 	}
 	rule := req.GetRule()
-	src := rule.GetSourceBuildId()
+	source := rule.GetSourceBuildId()
+	if isInVersionSet(source, data.GetVersionSets()) {
+		return nil, serviceerror.NewFailedPrecondition(fmt.Sprintf("update breaks requirement, build id %s is already a member of version set", source))
+	}
+	target := rule.GetTargetBuildId()
+	if isInVersionSet(target, data.GetVersionSets()) {
+		return nil, serviceerror.NewFailedPrecondition(fmt.Sprintf("update breaks requirement, build id %s is already a member of version set", target))
+	}
 	rules := data.GetRedirectRules()
 	for _, r := range rules {
-		if r.GetDeleteTimestamp() != nil && r.GetRule().GetSourceBuildId() == src {
+		if r.GetDeleteTimestamp() != nil && r.GetRule().GetSourceBuildId() == source {
 			return nil, serviceerror.NewAlreadyExist(fmt.Sprintf(
 				"cannot insert: source %s already redirects to target %s",
-				src, r.GetRule().GetTargetBuildId(),
+				source, r.GetRule().GetTargetBuildId(),
 			))
 		}
 	}
@@ -147,29 +162,36 @@ func ReplaceCompatibleRedirectRule(timestamp *hlc.Clock,
 	req *workflowservice.UpdateWorkerVersioningRulesRequest_ReplaceCompatibleBuildIdRedirectRule) (*persistencepb.VersioningData, error) {
 	data = common.CloneProto(data)
 	rule := req.GetRule()
-	src := rule.GetSourceBuildId()
+	source := rule.GetSourceBuildId()
+	if isInVersionSet(source, data.GetVersionSets()) {
+		return nil, serviceerror.NewFailedPrecondition(fmt.Sprintf("update breaks requirement, build id %s is already a member of version set", source))
+	}
+	target := rule.GetTargetBuildId()
+	if isInVersionSet(target, data.GetVersionSets()) {
+		return nil, serviceerror.NewFailedPrecondition(fmt.Sprintf("update breaks requirement, build id %s is already a member of version set", target))
+	}
 	for _, r := range data.GetRedirectRules() {
-		if r.GetDeleteTimestamp() != nil && r.GetRule().GetSourceBuildId() == src {
+		if r.GetDeleteTimestamp() != nil && r.GetRule().GetSourceBuildId() == source {
 			r.Rule = rule
 			r.CreateTimestamp = timestamp
 			return data, checkRedirectConditions(data, 0)
 		}
 	}
-	return nil, serviceerror.NewNotFound(fmt.Sprintf("cannot replace: no redirect rule found with source ID %s", src))
+	return nil, serviceerror.NewNotFound(fmt.Sprintf("cannot replace: no redirect rule found with source ID %s", source))
 }
 
 func DeleteCompatibleRedirectRule(timestamp *hlc.Clock,
 	data *persistencepb.VersioningData,
 	req *workflowservice.UpdateWorkerVersioningRulesRequest_DeleteCompatibleBuildIdRedirectRule) (*persistencepb.VersioningData, error) {
 	data = common.CloneProto(data)
-	src := req.GetSourceBuildId()
+	source := req.GetSourceBuildId()
 	for _, r := range data.GetRedirectRules() {
-		if r.GetDeleteTimestamp() != nil && r.GetRule().GetSourceBuildId() == src {
+		if r.GetDeleteTimestamp() != nil && r.GetRule().GetSourceBuildId() == source {
 			r.DeleteTimestamp = timestamp
 			return data, checkRedirectConditions(data, 0)
 		}
 	}
-	return nil, serviceerror.NewNotFound(fmt.Sprintf("cannot delete: no redirect rule found with source ID %s", src))
+	return nil, serviceerror.NewNotFound(fmt.Sprintf("cannot delete: no redirect rule found with source ID %s", source))
 }
 
 // CleanupRuleTombstones clears all deleted rules from versioning data if the rule was deleted more than
@@ -198,6 +220,9 @@ func CommitBuildID(timestamp *hlc.Clock,
 	req *workflowservice.UpdateWorkerVersioningRulesRequest_CommitBuildId) (*persistencepb.VersioningData, error) {
 	data = common.CloneProto(data)
 	target := req.GetTargetBuildId()
+	if isInVersionSet(target, data.GetVersionSets()) {
+		return nil, serviceerror.NewFailedPrecondition(fmt.Sprintf("update breaks requirement, build id %s is already a member of version set", target))
+	}
 	assignmentRules := data.GetAssignmentRules()
 	for _, ar := range getActiveAssignmentRules(assignmentRules) {
 		if ar.GetRule().GetTargetBuildId() == target {
@@ -226,9 +251,6 @@ func checkAssignmentConditions(g *persistencepb.VersioningData, maxARs int, forc
 	if cnt := len(activeRules); maxARs > 0 && cnt > maxARs {
 		return serviceerror.NewFailedPrecondition(fmt.Sprintf("update exceeds number of assignment rules permitted in namespace (%v/%v)", cnt, maxARs))
 	}
-	if tbid, ok := isInVersionSet(activeRules, g.GetVersionSets()); ok {
-		return serviceerror.NewFailedPrecondition(fmt.Sprintf("update breaks requirement, target build id %s is already a member of version set", tbid))
-	}
 	if force == true {
 		return nil
 	}
@@ -243,8 +265,9 @@ func checkAssignmentConditions(g *persistencepb.VersioningData, maxARs int, forc
 // - The DAG of redirect rules must not contain a cycle
 func checkRedirectConditions(g *persistencepb.VersioningData, maxRRs int) error {
 	activeRules := getActiveRedirectRules(slices.Clone(g.GetRedirectRules()))
-	if maxRRs > 0 && countActiveRR(activeRules) > maxRRs {
-		return serviceerror.NewFailedPrecondition(fmt.Sprintf("update would exceed number of redirect rules permitted in namespace dynamic config (%v/%v)", len(rules), maxRRs))
+	if maxRRs > 0 && len(activeRules) > maxRRs {
+		return serviceerror.NewFailedPrecondition(
+			fmt.Sprintf("update exceeds number of redirect rules permitted in namespace (%v/%v)", len(activeRules), maxRRs))
 	}
 	if isCyclic(activeRules) {
 		return serviceerror.NewFailedPrecondition("update would break acyclic requirement")
@@ -284,20 +307,16 @@ func containsUnfiltered(rules []*persistencepb.AssignmentRule) bool {
 	return found
 }
 
-// isInVersionSet returns true if the target build id of any assignment rule is in any of the listed version sets
-func isInVersionSet(rules []*persistencepb.AssignmentRule, sets []*persistencepb.CompatibleVersionSet) (string, bool) {
-	for _, rule := range rules {
-		ar := rule.GetRule()
-		tbid := ar.GetTargetBuildId()
-		for _, set := range sets {
-			for _, bid := range set.BuildIds {
-				if bid.GetId() == tbid {
-					return tbid, true
-				}
+// isInVersionSet returns true if the given build id is in any of the listed version sets
+func isInVersionSet(id string, sets []*persistencepb.CompatibleVersionSet) bool {
+	for _, set := range sets {
+		for _, bid := range set.BuildIds {
+			if bid.GetId() == id {
+				return true
 			}
 		}
 	}
-	return "", false
+	return false
 }
 
 // given2ActualIdx takes in the user-given index, which only counts active assignment rules, and converts it to the
@@ -323,42 +342,32 @@ func validRamp(ramp *taskqueue.RampByPercentage) bool {
 	return ramp.RampPercentage >= 0 && ramp.RampPercentage < 100
 }
 
-func countActiveRR(rules []*persistencepb.RedirectRule) int {
-	cnt := 0
-	for _, rule := range rules {
-		if rule.DeleteTimestamp == nil {
-			cnt++
-		}
-	}
-	return cnt
-}
-
 // isCyclic returns true if there is a cycle in the DAG of redirect rules.
 func isCyclic(rules []*persistencepb.RedirectRule) bool {
+	makeEdgeMap := func(rules []*persistencepb.RedirectRule) map[string][]string {
+		ret := make(map[string][]string)
+		for _, rule := range rules {
+			src := rule.GetRule().GetSourceBuildId()
+			dst := rule.GetRule().GetTargetBuildId()
+			list, ok := ret[src]
+			if !ok {
+				list = make([]string, 0)
+			}
+			list = append(list, dst)
+			ret[src] = list
+		}
+		return ret
+	}
+
 	dag := makeEdgeMap(rules)
+	visited := make(map[string]bool)
 	for node := range dag {
-		visited := make(map[string]bool)
 		inStack := make(map[string]bool)
 		if dfs(node, visited, inStack, dag) {
 			return true
 		}
 	}
 	return false
-}
-
-func makeEdgeMap(rules []*persistencepb.RedirectRule) map[string][]string {
-	ret := make(map[string][]string)
-	for _, rule := range rules {
-		src := rule.GetRule().GetSourceBuildId()
-		dst := rule.GetRule().GetTargetBuildId()
-		list, ok := ret[src]
-		if !ok {
-			list = make([]string, 0)
-		}
-		list = append(list, dst)
-		ret[src] = list
-	}
-	return ret
 }
 
 func dfs(curr string, visited, inStack map[string]bool, nodes map[string][]string) bool {
