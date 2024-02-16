@@ -78,7 +78,7 @@ func (s *RpoSuite) TestMonitor() {
 
 	// Force refresh now and drain the notification channel
 	resolver, _ := rpm.GetResolver(serviceName)
-	s.NoError(resolver.(*serviceResolver).refresh(true))
+	s.NoError(resolver.(*serviceResolver).refresh(refreshModeAlways))
 	drainChannel(listenCh)
 
 	s.T().Log("Killing host 1")

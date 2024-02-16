@@ -374,7 +374,7 @@ func (r *serviceResolver) getReachableMembers() ([]*hostInfo, int64, error) {
 	}
 
 	// Turn swim.Members into hostInfo
-	hosts := make([]*hostInfo, len(members))
+	hosts := make([]*hostInfo, len(filteredMembers))
 	for i, member := range filteredMembers {
 		servicePort := r.port
 
