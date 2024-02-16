@@ -356,6 +356,7 @@ func (c *taskQueueManagerImpl) Stop() {
 	c.liveness.Stop()
 	c.taskWriter.Stop()
 	c.taskReader.Stop()
+	c.matcher.Stop()
 	c.goroGroup.Cancel()
 	// Set user data state on stop to wake up anyone blocked on the user data changed channel.
 	c.db.setUserDataState(userDataClosed)

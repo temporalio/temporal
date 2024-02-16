@@ -161,8 +161,8 @@ type (
 		ForkHistoryBranch(ctx context.Context, request *InternalForkHistoryBranchRequest) error
 		// DeleteHistoryBranch removes a branch
 		DeleteHistoryBranch(ctx context.Context, request *InternalDeleteHistoryBranchRequest) error
-		// GetHistoryTree returns all branch information of a tree
-		GetHistoryTree(ctx context.Context, request *InternalGetHistoryTreeRequest) (*InternalGetHistoryTreeResponse, error)
+		// GetHistoryTreeContainingBranch returns all branch information of the tree containing the specified branch
+		GetHistoryTreeContainingBranch(ctx context.Context, request *InternalGetHistoryTreeContainingBranchRequest) (*InternalGetHistoryTreeContainingBranchResponse, error)
 		// GetAllHistoryTreeBranches returns all branches of all trees.
 		// Note that branches may be skipped or duplicated across pages if there are branches created or deleted while
 		// paginating through results.
@@ -640,17 +640,17 @@ type (
 		Data     []byte // HistoryTreeInfo blob
 	}
 
-	// InternalGetHistoryTreeRequest is used to retrieve branch info of a history tree
-	InternalGetHistoryTreeRequest struct {
-		// A UUID of a tree
-		TreeID string
+	// InternalGetHistoryTreeContainingBranchRequest is used to retrieve branch info of a history tree
+	InternalGetHistoryTreeContainingBranchRequest struct {
+		// The raw branch token
+		BranchToken []byte
 		// Get data from this shard
 		ShardID int32
 	}
 
-	// InternalGetHistoryTreeResponse is response to GetHistoryTree
+	// InternalGetHistoryTreeContainingBranchResponse is response to GetHistoryTreeContainingBranch
 	// Only used by persistence layer
-	InternalGetHistoryTreeResponse struct {
+	InternalGetHistoryTreeContainingBranchResponse struct {
 		// TreeInfos
 		TreeInfos []*commonpb.DataBlob
 	}

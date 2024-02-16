@@ -33,6 +33,8 @@ import (
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
 	"go.temporal.io/server/common/clock"
+	"go.temporal.io/server/common/metrics"
+	"go.temporal.io/server/common/metrics/metricstest"
 )
 
 type (
@@ -52,18 +54,26 @@ func (c *testEntryWithCacheSize) CacheSize() int {
 
 func TestLRU(t *testing.T) {
 	t.Parallel()
+	metricsHandler := metricstest.NewCaptureHandler()
+	capture := metricsHandler.StartCapture()
 
-	cache := NewLRU(4)
+	cache := NewLRU(4, metricsHandler)
 
 	cache.Put("A", "Foo")
 	assert.Equal(t, "Foo", cache.Get("A"))
 	assert.Nil(t, cache.Get("B"))
 	assert.Equal(t, 1, cache.Size())
+	snapshot := capture.Snapshot()
+	assert.Equal(t, float64(4), snapshot[metrics.CacheSize.Name()][0].Value)
+	assert.Equal(t, float64(1), snapshot[metrics.CacheUsage.Name()][0].Value)
 
+	capture = metricsHandler.StartCapture()
 	cache.Put("B", "Bar")
 	cache.Put("C", "Cid")
 	cache.Put("D", "Delt")
 	assert.Equal(t, 4, cache.Size())
+	snapshot = capture.Snapshot()
+	assert.Equal(t, float64(4), snapshot[metrics.CacheUsage.Name()][2].Value)
 
 	assert.Equal(t, "Bar", cache.Get("B"))
 	assert.Equal(t, "Cid", cache.Get("C"))
@@ -73,11 +83,15 @@ func TestLRU(t *testing.T) {
 	assert.Equal(t, "Foo2", cache.Get("A"))
 	assert.Equal(t, 4, cache.Size())
 
+	capture = metricsHandler.StartCapture()
 	cache.Put("E", "Epsi")
 	assert.Equal(t, "Epsi", cache.Get("E"))
 	assert.Equal(t, "Foo2", cache.Get("A"))
 	assert.Nil(t, cache.Get("B")) // Oldest, should be evicted
 	assert.Equal(t, 4, cache.Size())
+	snapshot = capture.Snapshot()
+	assert.Equal(t, 2, len(snapshot[metrics.CacheUsage.Name()]))
+	assert.Equal(t, float64(4), snapshot[metrics.CacheUsage.Name()][1].Value)
 
 	// Access C, D is now LRU
 	cache.Get("C")
@@ -85,9 +99,13 @@ func TestLRU(t *testing.T) {
 	assert.Nil(t, cache.Get("D"))
 	assert.Equal(t, 4, cache.Size())
 
+	capture = metricsHandler.StartCapture()
 	cache.Delete("A")
 	assert.Nil(t, cache.Get("A"))
 	assert.Equal(t, 3, cache.Size())
+	snapshot = capture.Snapshot()
+	assert.Equal(t, 1, len(snapshot[metrics.CacheUsage.Name()]))
+	assert.Equal(t, float64(3), snapshot[metrics.CacheUsage.Name()][0].Value)
 }
 
 func TestGenerics(t *testing.T) {
@@ -99,7 +117,7 @@ func TestGenerics(t *testing.T) {
 	}
 	value := "some random value"
 
-	cache := NewLRU(5)
+	cache := NewLRU(5, metrics.NoopMetricsHandler)
 	cache.Put(key, value)
 
 	assert.Equal(t, value, cache.Get(key))
@@ -122,21 +140,32 @@ func TestLRUWithTTL(t *testing.T) {
 	t.Parallel()
 
 	timeSource := clock.NewEventTimeSource()
-	cache := New(5, &Options{
-		TTL:        time.Millisecond * 100,
-		TimeSource: timeSource,
-	})
+	metricsHandler := metricstest.NewCaptureHandler()
+	capture := metricsHandler.StartCapture()
+	cache := New(5,
+		&Options{
+			TTL:        time.Millisecond * 100,
+			TimeSource: timeSource,
+		},
+		metricsHandler,
+	)
 	cache.Put("A", "foo")
 	assert.Equal(t, "foo", cache.Get("A"))
+	snapshot := capture.Snapshot()
+	assert.Equal(t, float64(5), snapshot[metrics.CacheSize.Name()][0].Value)
+	assert.Equal(t, float64(1), snapshot[metrics.CacheUsage.Name()][0].Value)
 	timeSource.Advance(time.Millisecond * 300)
 	assert.Nil(t, cache.Get("A"))
+	snapshot = capture.Snapshot()
+	assert.Equal(t, 2, len(snapshot[metrics.CacheUsage.Name()]))
+	assert.Equal(t, float64(0), snapshot[metrics.CacheUsage.Name()][1].Value)
 	assert.Equal(t, 0, cache.Size())
 }
 
 func TestLRUCacheConcurrentAccess(t *testing.T) {
 	t.Parallel()
 
-	cache := NewLRU(5)
+	cache := NewLRU(5, metrics.NoopMetricsHandler)
 	values := map[string]string{
 		"A": "foo",
 		"B": "bar",
@@ -190,10 +219,13 @@ func TestTTL(t *testing.T) {
 	t.Parallel()
 
 	timeSource := clock.NewEventTimeSource()
-	cache := New(5, &Options{
-		TTL:        time.Millisecond * 50,
-		TimeSource: timeSource,
-	})
+	cache := New(5,
+		&Options{
+			TTL:        time.Millisecond * 50,
+			TimeSource: timeSource,
+		},
+		metrics.NoopMetricsHandler,
+	)
 
 	cache.Put("A", t)
 	assert.Equal(t, t, cache.Get("A"))
@@ -205,16 +237,25 @@ func TestTTLWithPin(t *testing.T) {
 	t.Parallel()
 
 	timeSource := clock.NewEventTimeSource()
-	cache := New(5, &Options{
-		TTL:        time.Millisecond * 50,
-		Pin:        true,
-		TimeSource: timeSource,
-	})
+	metricsHandler := metricstest.NewCaptureHandler()
+	cache := New(5,
+		&Options{
+			TTL:        time.Millisecond * 50,
+			Pin:        true,
+			TimeSource: timeSource,
+		},
+		metricsHandler,
+	)
 
+	capture := metricsHandler.StartCapture()
 	_, err := cache.PutIfNotExist("A", t)
 	assert.NoError(t, err)
 	assert.Equal(t, t, cache.Get("A"))
 	assert.Equal(t, 1, cache.Size())
+	snapshot := capture.Snapshot()
+	assert.Equal(t, float64(1), snapshot[metrics.CacheUsage.Name()][0].Value)
+	assert.Equal(t, float64(1), snapshot[metrics.CachePinnedUsage.Name()][0].Value)
+	capture = metricsHandler.StartCapture()
 	timeSource.Advance(time.Millisecond * 100)
 	assert.Equal(t, t, cache.Get("A"))
 	assert.Equal(t, 1, cache.Size())
@@ -222,19 +263,26 @@ func TestTTLWithPin(t *testing.T) {
 	cache.Release("A")
 	cache.Release("A")
 	cache.Release("A")
+	snapshot = capture.Snapshot()
+	assert.Equal(t, float64(0), snapshot[metrics.CachePinnedUsage.Name()][0].Value)
 	assert.Nil(t, cache.Get("A"))
 	assert.Equal(t, 0, cache.Size())
+	snapshot = capture.Snapshot()
+	assert.Equal(t, float64(0), snapshot[metrics.CacheUsage.Name()][0].Value)
 }
 
 func TestMaxSizeWithPin_MidItem(t *testing.T) {
 	t.Parallel()
 
 	timeSource := clock.NewEventTimeSource()
-	cache := New(2, &Options{
-		TTL:        time.Millisecond * 50,
-		Pin:        true,
-		TimeSource: timeSource,
-	})
+	cache := New(2,
+		&Options{
+			TTL:        time.Millisecond * 50,
+			Pin:        true,
+			TimeSource: timeSource,
+		},
+		metrics.NoopMetricsHandler,
+	)
 
 	_, err := cache.PutIfNotExist("A", t)
 	assert.NoError(t, err)
@@ -276,11 +324,14 @@ func TestMaxSizeWithPin_LastItem(t *testing.T) {
 	t.Parallel()
 
 	timeSource := clock.NewEventTimeSource()
-	cache := New(2, &Options{
-		TTL:        time.Millisecond * 50,
-		Pin:        true,
-		TimeSource: timeSource,
-	})
+	cache := New(2,
+		&Options{
+			TTL:        time.Millisecond * 50,
+			Pin:        true,
+			TimeSource: timeSource,
+		},
+		metrics.NoopMetricsHandler,
+	)
 
 	_, err := cache.PutIfNotExist("A", t)
 	assert.NoError(t, err)
@@ -328,7 +379,7 @@ func TestIterator(t *testing.T) {
 		"D": "Delta",
 	}
 
-	cache := NewLRU(5)
+	cache := NewLRU(5, metrics.NoopMetricsHandler)
 
 	for k, v := range expected {
 		cache.Put(k, v)
@@ -356,7 +407,7 @@ func TestIterator(t *testing.T) {
 func TestZeroSizeCache(t *testing.T) {
 	t.Parallel()
 
-	cache := NewLRU(0)
+	cache := NewLRU(0, metrics.NoopMetricsHandler)
 	_, err := cache.PutIfNotExist("A", t)
 	assert.NoError(t, err)
 	assert.Equal(t, nil, cache.Get("A"))
@@ -376,7 +427,7 @@ func TestCache_ItemSizeTooLarge(t *testing.T) {
 	t.Parallel()
 
 	maxTotalBytes := 10
-	cache := NewLRU(maxTotalBytes)
+	cache := NewLRU(maxTotalBytes, metrics.NoopMetricsHandler)
 
 	res := cache.Put(uuid.New(), &testEntryWithCacheSize{maxTotalBytes})
 	assert.Equal(t, res, nil)
@@ -393,7 +444,7 @@ func TestCache_ItemHasCacheSizeDefined(t *testing.T) {
 	t.Parallel()
 
 	maxTotalBytes := 10
-	cache := NewLRU(maxTotalBytes)
+	cache := NewLRU(maxTotalBytes, metrics.NoopMetricsHandler)
 
 	numPuts := rand.Intn(1024)
 
@@ -425,7 +476,7 @@ func TestCache_ItemHasCacheSizeDefined_PutWithNewKeys(t *testing.T) {
 	t.Parallel()
 
 	maxTotalBytes := 10
-	cache := NewLRU(maxTotalBytes)
+	cache := NewLRU(maxTotalBytes, metrics.NoopMetricsHandler)
 
 	// Put with new key and value size greater than cache size, should not be added to cache
 	cache.Put(uuid.New(), &testEntryWithCacheSize{15})
@@ -450,7 +501,7 @@ func TestCache_ItemHasCacheSizeDefined_PutWithSameKeyAndDifferentSizes(t *testin
 	t.Parallel()
 
 	maxTotalBytes := 10
-	cache := NewLRU(maxTotalBytes)
+	cache := NewLRU(maxTotalBytes, metrics.NoopMetricsHandler)
 
 	key1 := "A"
 	cache.Put(key1, &testEntryWithCacheSize{4})
@@ -486,7 +537,7 @@ func TestCache_ItemHasCacheSizeDefined_PutWithSameKey(t *testing.T) {
 	t.Parallel()
 
 	maxTotalBytes := 10
-	cache := NewLRU(maxTotalBytes)
+	cache := NewLRU(maxTotalBytes, metrics.NoopMetricsHandler)
 
 	key := uuid.New()
 
@@ -513,7 +564,7 @@ func TestCache_ItemHasCacheSizeDefined_PutIfNotExistWithNewKeys(t *testing.T) {
 	t.Parallel()
 
 	maxTotalBytes := 10
-	cache := NewLRU(maxTotalBytes)
+	cache := NewLRU(maxTotalBytes, metrics.NoopMetricsHandler)
 
 	// PutIfNotExist with new keys with size greater than cache size, should return error and not add to cache
 	val, err := cache.PutIfNotExist(uuid.New(), &testEntryWithCacheSize{15})
@@ -544,7 +595,7 @@ func TestCache_ItemHasCacheSizeDefined_PutIfNotExistWithSameKey(t *testing.T) {
 	t.Parallel()
 
 	maxTotalBytes := 10
-	cache := NewLRU(maxTotalBytes)
+	cache := NewLRU(maxTotalBytes, metrics.NoopMetricsHandler)
 	key := uuid.New().String()
 
 	// PutIfNotExist with new keys with size greater than cache size, should return error and not add to cache
@@ -570,7 +621,7 @@ func TestCache_PutIfNotExistWithNewKeys_Pin(t *testing.T) {
 	t.Parallel()
 
 	maxTotalBytes := 10
-	cache := New(maxTotalBytes, &Options{Pin: true})
+	cache := New(maxTotalBytes, &Options{Pin: true}, metrics.NoopMetricsHandler)
 
 	val, err := cache.PutIfNotExist(uuid.New(), &testEntryWithCacheSize{15})
 	assert.Equal(t, ErrCacheItemTooLarge, err)
@@ -597,7 +648,7 @@ func TestCache_PutIfNotExistWithSameKeys_Pin(t *testing.T) {
 	t.Parallel()
 
 	maxTotalBytes := 10
-	cache := New(maxTotalBytes, &Options{Pin: true})
+	cache := New(maxTotalBytes, &Options{Pin: true}, metrics.NoopMetricsHandler)
 
 	key := uuid.New()
 	val, err := cache.PutIfNotExist(key, &testEntryWithCacheSize{15})

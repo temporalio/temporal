@@ -788,14 +788,14 @@ func (e *FaultInjectionExecutionStore) DeleteHistoryBranch(
 	return e.baseExecutionStore.DeleteHistoryBranch(ctx, request)
 }
 
-func (e *FaultInjectionExecutionStore) GetHistoryTree(
+func (e *FaultInjectionExecutionStore) GetHistoryTreeContainingBranch(
 	ctx context.Context,
-	request *persistence.InternalGetHistoryTreeRequest,
-) (*persistence.InternalGetHistoryTreeResponse, error) {
+	request *persistence.InternalGetHistoryTreeContainingBranchRequest,
+) (*persistence.InternalGetHistoryTreeContainingBranchResponse, error) {
 	if err := e.ErrorGenerator.Generate(); err != nil {
 		return nil, err
 	}
-	return e.baseExecutionStore.GetHistoryTree(ctx, request)
+	return e.baseExecutionStore.GetHistoryTreeContainingBranch(ctx, request)
 }
 
 func (e *FaultInjectionExecutionStore) GetAllHistoryTreeBranches(

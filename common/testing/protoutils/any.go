@@ -22,25 +22,34 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-package cache
+package protoutils
 
 import (
-	"go.uber.org/fx"
+	"reflect"
 
-	"go.temporal.io/server/common/metrics"
-	"go.temporal.io/server/service/history/configs"
+	"github.com/stretchr/testify/require"
+	"google.golang.org/protobuf/proto"
+	"google.golang.org/protobuf/types/known/anypb"
 )
 
-var Module = fx.Options(
-	fx.Provide(func(config *configs.Config, handler metrics.Handler) Cache {
-		return NewHostLevelCache(config, handler)
-	}),
-	fx.Provide(NewCacheFnProvider),
-)
-
-// NewCacheFnProvider provide a NewCacheFn that can be used to create new workflow cache.
-func NewCacheFnProvider() NewCacheFn {
-	return func(config *configs.Config, handler metrics.Handler) Cache {
-		return NewShardLevelCache(config, handler)
+func UnmarshalAny[T proto.Message](t require.TestingT, a *anypb.Any) T {
+	if th, ok := t.(interface{ Helper() }); ok {
+		th.Helper()
 	}
+	pb := new(T)
+	ppb := reflect.ValueOf(pb).Elem()
+	pbNew := reflect.New(reflect.TypeOf(pb).Elem().Elem())
+	ppb.Set(pbNew)
+
+	require.NoError(t, a.UnmarshalTo(*pb))
+	return *pb
+}
+
+func MarshalAny(t require.TestingT, pb proto.Message) *anypb.Any {
+	if th, ok := t.(interface{ Helper() }); ok {
+		th.Helper()
+	}
+	a, err := anypb.New(pb)
+	require.NoError(t, err)
+	return a
 }

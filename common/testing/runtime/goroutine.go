@@ -38,6 +38,8 @@ import (
 
 // WaitGoRoutineWithFn waits for a go routine with the given function to appear within the duration.
 func WaitGoRoutineWithFn(t testing.TB, fn any, maxDuration time.Duration) {
+	t.Helper()
+
 	targetFnName, ok := functionNameForPC(reflect.ValueOf(fn).Pointer())
 	if !ok {
 		t.Errorf("Invalid function %#v", fn)
