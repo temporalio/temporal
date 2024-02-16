@@ -993,10 +993,8 @@ func (e *matchingEngineImpl) ListWorkerVersioningRules(
 	if clk == nil {
 		clk = hlc.Zero(e.clusterMeta.GetClusterID())
 	}
-	updatedClock := hlc.Next(clk, e.timeSource)
-
-	if cT, err = updatedClock.Marshal(); err != nil {
-		return nil, serviceerror.NewInternal("error generating next conflict token")
+	if cT, err = clk.Marshal(); err != nil {
+		return nil, serviceerror.NewInternal("error generating conflict token")
 	}
 
 	return &matchingservice.ListWorkerVersioningRulesResponse{

@@ -215,7 +215,9 @@ func CleanupRuleTombstones(versioningData *persistencepb.VersioningData,
 	return modifiedData
 }
 
-// CommitBuildID makes the following changes:
+// CommitBuildID makes the following changes. If no worker that can accept tasks for the
+// target build id has been seen recently, the operation will fail.
+// To override this check, set the force flag:
 //  1. Adds an unconditional assignment rule for the target Build ID at the
 //     end of the list. An unconditional assignment rule:
 //     - Has no hint filter
