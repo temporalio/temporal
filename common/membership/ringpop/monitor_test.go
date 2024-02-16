@@ -148,7 +148,7 @@ func (s *RpoSuite) TestScheduledUpdates() {
 	r, err := rpm.GetResolver(serviceName)
 	s.NoError(err)
 
-	waitFor := func(elements []string) {
+	waitAndCheckMembers := func(elements []string) {
 		var addrs []string
 		s.Eventually(func() bool {
 			addrs = util.MapSlice(r.Members(), func(h membership.HostInfo) string { return h.GetAddress() })
@@ -158,12 +158,12 @@ func (s *RpoSuite) TestScheduledUpdates() {
 	}
 
 	// we should see only 1 first, then 0,1, then 0,1,2
-	waitFor(testService.hostAddrs[1:2])
+	waitAndCheckMembers(testService.hostAddrs[1:2])
 
-	waitFor(testService.hostAddrs[0:2])
+	waitAndCheckMembers(testService.hostAddrs[0:2])
 	s.Greater(time.Since(start), 1*time.Second)
 
-	waitFor(testService.hostAddrs[0:3])
+	waitAndCheckMembers(testService.hostAddrs[0:3])
 	s.Greater(time.Since(start), 3*time.Second)
 
 	// now remove two at scheduled times. we should see 1 disappear then 0.
@@ -171,10 +171,10 @@ func (s *RpoSuite) TestScheduledUpdates() {
 	testService.rings[1].EvictSelf(start.Add(2 * time.Second))
 	testService.rings[0].EvictSelf(start.Add(4 * time.Second))
 
-	waitFor([]string{testService.hostAddrs[0], testService.hostAddrs[2]})
+	waitAndCheckMembers([]string{testService.hostAddrs[0], testService.hostAddrs[2]})
 	s.Greater(time.Since(start), 1*time.Second)
 
-	waitFor([]string{testService.hostAddrs[2]})
+	waitAndCheckMembers([]string{testService.hostAddrs[2]})
 	s.Greater(time.Since(start), 3*time.Second)
 
 	testService.Stop()

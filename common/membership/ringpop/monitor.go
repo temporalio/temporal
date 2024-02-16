@@ -430,7 +430,7 @@ func (rpo *monitor) EvictSelf(asOf time.Time) error {
 	if err != nil {
 		return err
 	}
-	time.AfterFunc(until, func() { rpo.rp.SelfEvict() })
+	time.AfterFunc(until, func() { _ = rpo.rp.SelfEvict() })
 	return nil
 }
 

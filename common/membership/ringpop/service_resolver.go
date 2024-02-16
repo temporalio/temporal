@@ -74,6 +74,11 @@ const (
 	minRefreshInternal     = time.Second * 4
 	defaultRefreshInterval = time.Second * 10
 	replicaPoints          = 100
+
+	// refreshModeAlways means always do a refresh right now.
+	refreshModeAlways refreshMode = iota
+	// refreshModeLazy means only do a refresh if it's been minRefreshInternal since the last one.
+	refreshModeLazy
 )
 
 type (
@@ -102,6 +107,8 @@ type (
 		ring  *hashring.HashRing
 		hosts map[string]*hostInfo
 	}
+
+	refreshMode int
 )
 
 var _ membership.ServiceResolver = (*serviceResolver)(nil)
@@ -136,7 +143,7 @@ func newHashRing() *hashring.HashRing {
 // Start starts the oracle
 func (r *serviceResolver) Start() {
 	r.rp.AddListener(r)
-	if err := r.refresh(true); err != nil {
+	if err := r.refresh(refreshModeAlways); err != nil {
 		r.logger.Fatal("unable to start ring pop service resolver", tag.Error(err))
 	}
 
@@ -257,13 +264,13 @@ func (r *serviceResolver) HandleEvent(
 		// Note that we receive events asynchronously, possibly out of order.
 		// We cannot rely on the content of the event, rather we load everything
 		// from ringpop when we get a notification that something changed.
-		if err := r.refresh(true); err != nil {
+		if err := r.refresh(refreshModeAlways); err != nil {
 			r.logger.Error("error refreshing ring when receiving a ring changed event", tag.Error(err))
 		}
 	}
 }
 
-func (r *serviceResolver) refresh(force bool) error {
+func (r *serviceResolver) refresh(mode refreshMode) error {
 	var event *membership.ChangedEvent
 	var err error
 	defer func() {
@@ -275,7 +282,7 @@ func (r *serviceResolver) refresh(force bool) error {
 	r.refreshLock.Lock()
 	defer r.refreshLock.Unlock()
 
-	if !force && r.lastRefreshTime.After(time.Now().UTC().Add(-minRefreshInternal)) {
+	if mode == refreshModeLazy && r.lastRefreshTime.After(time.Now().UTC().Add(-minRefreshInternal)) {
 		return nil // refreshed too recently
 	}
 
@@ -323,7 +330,9 @@ func (r *serviceResolver) scheduleRefresh(nextEvent int64) {
 	nextEventTime := time.Unix(nextEvent, 0)
 	r.scheduledRefreshMap[nextEvent] = time.AfterFunc(time.Until(nextEventTime), func() {
 		// force refresh asap
-		r.refresh(true)
+		if err := r.refresh(refreshModeAlways); err != nil {
+			r.logger.Error("error refreshing ring on scheduled event", tag.Error(err))
+		}
 		// clean up map
 		r.refreshLock.Lock()
 		defer r.refreshLock.Unlock()
@@ -338,14 +347,12 @@ func (r *serviceResolver) getReachableMembers() ([]*hostInfo, int64, error) {
 		return nil, 0, err
 	}
 
+	// Filter members by startAt/stopAt times and extract next scheduled event time. We only
+	// need to keep track of one event since we'll refresh at that time and find the next one.
 	nowUnix := time.Now().Unix()
-	// Keep track of earliest scheduled event. We only need to keep track of one, when we
-	// refresh after that one we'll find the next one.
 	nextEvent := int64(math.MaxInt64)
-
-	hosts := make([]*hostInfo, 0, len(members))
+	filteredMembers := make([]swim.Member, 0, len(members))
 	for _, member := range members {
-		// Implement time ranges
 		if startAtStr, ok := member.Label(startAtKey); ok {
 			if startAt, err := strconv.ParseInt(startAtStr, 10, 64); err == nil {
 				if startAt > nowUnix {
@@ -363,7 +370,12 @@ func (r *serviceResolver) getReachableMembers() ([]*hostInfo, int64, error) {
 				}
 			}
 		}
+		filteredMembers = append(filteredMembers, member)
+	}
 
+	// Turn swim.Members into hostInfo
+	hosts := make([]*hostInfo, len(members))
+	for i, member := range filteredMembers {
 		servicePort := r.port
 
 		// Each temporal service in the ring should advertise which port it has its gRPC listener
@@ -385,7 +397,7 @@ func (r *serviceResolver) getReachableMembers() ([]*hostInfo, int64, error) {
 		}
 
 		// We can share member.Labels without copying since we never modify it.
-		hosts = append(hosts, newHostInfo(hostPort, member.Labels))
+		hosts[i] = newHostInfo(hostPort, member.Labels)
 	}
 
 	if nextEvent == math.MaxInt64 {
@@ -419,11 +431,11 @@ func (r *serviceResolver) refreshRingWorker() {
 		case <-r.shutdownCh:
 			return
 		case <-r.refreshChan:
-			if err := r.refresh(false); err != nil {
+			if err := r.refresh(refreshModeLazy); err != nil {
 				r.logger.Error("error refreshing ring by request", tag.Error(err))
 			}
 		case <-refreshTicker.C:
-			if err := r.refresh(false); err != nil {
+			if err := r.refresh(refreshModeLazy); err != nil {
 				r.logger.Error("error periodically refreshing ring", tag.Error(err))
 			}
 		}
