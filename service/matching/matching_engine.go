@@ -882,7 +882,6 @@ func (e *matchingEngineImpl) UpdateWorkerVersioningRules(
 			}
 		}
 		updatedClock := hlc.Next(clk, e.timeSource)
-		hadUnfiltered := containsUnfiltered(data.GetVersioningData().GetAssignmentRules())
 		var versioningData *persistencespb.VersioningData
 		switch req.GetOperation().(type) {
 		case *workflowservice.UpdateWorkerVersioningRulesRequest_InsertAssignmentRule:
@@ -891,21 +890,18 @@ func (e *matchingEngineImpl) UpdateWorkerVersioningRules(
 				data.GetVersioningData(),
 				req.GetInsertAssignmentRule(),
 				e.config.AssignmentRuleLimitPerQueue(ns.Name().String()),
-				hadUnfiltered,
 			)
 		case *workflowservice.UpdateWorkerVersioningRulesRequest_ReplaceAssignmentRule:
 			versioningData, err = ReplaceAssignmentRule(
 				updatedClock,
 				data.GetVersioningData(),
 				req.GetReplaceAssignmentRule(),
-				hadUnfiltered,
 			)
 		case *workflowservice.UpdateWorkerVersioningRulesRequest_DeleteAssignmentRule:
 			versioningData, err = DeleteAssignmentRule(
 				updatedClock,
 				data.GetVersioningData(),
 				req.GetDeleteAssignmentRule(),
-				hadUnfiltered,
 			)
 		case *workflowservice.UpdateWorkerVersioningRulesRequest_InsertCompatibleRedirectRule:
 			versioningData, err = InsertCompatibleRedirectRule(
@@ -931,6 +927,7 @@ func (e *matchingEngineImpl) UpdateWorkerVersioningRules(
 				updatedClock,
 				data.GetVersioningData(),
 				req.GetCommitBuildId(),
+				e.config.AssignmentRuleLimitPerQueue(ns.Name().String()),
 			)
 		}
 		if err != nil {
