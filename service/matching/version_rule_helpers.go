@@ -51,7 +51,7 @@ func InsertAssignmentRule(timestamp *hlc.Clock,
 		return nil, serviceerror.NewInvalidArgument("ramp percentage must be in range [0, 100)")
 	}
 	target := rule.GetTargetBuildId()
-	if isInVersionSet(target, data.GetVersionSets()) {
+	if isInVersionSets(target, data.GetVersionSets()) {
 		return nil, serviceerror.NewFailedPrecondition(fmt.Sprintf("update breaks requirement, build id %s is already a member of version set", target))
 	}
 	if data == nil {
@@ -59,13 +59,12 @@ func InsertAssignmentRule(timestamp *hlc.Clock,
 	} else {
 		data = common.CloneProto(data)
 	}
+	rules := data.GetAssignmentRules()
 	persistenceAR := persistencepb.AssignmentRule{
 		Rule:            rule,
 		CreateTimestamp: timestamp,
 		DeleteTimestamp: nil,
 	}
-	rules := data.GetAssignmentRules()
-
 	if actualIdx := given2ActualIdx(req.GetRuleIndex(), rules); actualIdx < 0 {
 		// given index was too large, insert at end
 		data.AssignmentRules = append(rules, &persistenceAR)
@@ -85,7 +84,7 @@ func ReplaceAssignmentRule(timestamp *hlc.Clock,
 		return nil, serviceerror.NewInvalidArgument("ramp percentage must be in range [0, 100)")
 	}
 	target := rule.GetTargetBuildId()
-	if isInVersionSet(target, data.GetVersionSets()) {
+	if isInVersionSets(target, data.GetVersionSets()) {
 		return nil, serviceerror.NewFailedPrecondition(fmt.Sprintf("update breaks requirement, build id %s is already a member of version set", target))
 	}
 	rules := data.GetAssignmentRules()
@@ -96,12 +95,12 @@ func ReplaceAssignmentRule(timestamp *hlc.Clock,
 		return nil, serviceerror.NewInvalidArgument(fmt.Sprintf(
 			"rule index %d is out of bounds for assignment rule list of length %d", idx, len(getActiveAssignmentRules(rules))))
 	}
-	persistenceAR := persistencepb.AssignmentRule{
+	rules[actualIdx].DeleteTimestamp = timestamp
+	data.AssignmentRules = slices.Insert(rules, actualIdx, &persistencepb.AssignmentRule{
 		Rule:            rule,
 		CreateTimestamp: timestamp,
 		DeleteTimestamp: nil,
-	}
-	slices.Replace(data.AssignmentRules, actualIdx, actualIdx+1, &persistenceAR)
+	})
 	return data, checkAssignmentConditions(data, 0, hadUnfiltered && !req.GetForce())
 }
 
@@ -118,8 +117,7 @@ func DeleteAssignmentRule(timestamp *hlc.Clock,
 		return nil, serviceerror.NewInvalidArgument(fmt.Sprintf(
 			"rule index %d is out of bounds for assignment rule list of length %d", idx, len(getActiveAssignmentRules(rules))))
 	}
-	rule := rules[actualIdx]
-	rule.DeleteTimestamp = timestamp
+	rules[actualIdx].DeleteTimestamp = timestamp
 	return data, checkAssignmentConditions(data, 0, hadUnfiltered && !req.GetForce())
 }
 
@@ -134,11 +132,11 @@ func InsertCompatibleRedirectRule(timestamp *hlc.Clock,
 	}
 	rule := req.GetRule()
 	source := rule.GetSourceBuildId()
-	if isInVersionSet(source, data.GetVersionSets()) {
+	if isInVersionSets(source, data.GetVersionSets()) {
 		return nil, serviceerror.NewFailedPrecondition(fmt.Sprintf("update breaks requirement, build id %s is already a member of version set", source))
 	}
 	target := rule.GetTargetBuildId()
-	if isInVersionSet(target, data.GetVersionSets()) {
+	if isInVersionSets(target, data.GetVersionSets()) {
 		return nil, serviceerror.NewFailedPrecondition(fmt.Sprintf("update breaks requirement, build id %s is already a member of version set", target))
 	}
 	rules := data.GetRedirectRules()
@@ -165,17 +163,22 @@ func ReplaceCompatibleRedirectRule(timestamp *hlc.Clock,
 	data = common.CloneProto(data)
 	rule := req.GetRule()
 	source := rule.GetSourceBuildId()
-	if isInVersionSet(source, data.GetVersionSets()) {
+	if isInVersionSets(source, data.GetVersionSets()) {
 		return nil, serviceerror.NewFailedPrecondition(fmt.Sprintf("update breaks requirement, build id %s is already a member of version set", source))
 	}
 	target := rule.GetTargetBuildId()
-	if isInVersionSet(target, data.GetVersionSets()) {
+	if isInVersionSets(target, data.GetVersionSets()) {
 		return nil, serviceerror.NewFailedPrecondition(fmt.Sprintf("update breaks requirement, build id %s is already a member of version set", target))
 	}
-	for _, r := range data.GetRedirectRules() {
-		if r.GetDeleteTimestamp() != nil && r.GetRule().GetSourceBuildId() == source {
-			r.Rule = rule
-			r.CreateTimestamp = timestamp
+	rules := data.GetRedirectRules()
+	for _, r := range rules {
+		if r.GetDeleteTimestamp() == nil && r.GetRule().GetSourceBuildId() == source {
+			r.DeleteTimestamp = timestamp
+			data.RedirectRules = slices.Insert(rules, 0, &persistencepb.RedirectRule{
+				Rule:            rule,
+				CreateTimestamp: timestamp,
+				DeleteTimestamp: nil,
+			})
 			return data, checkRedirectConditions(data, 0)
 		}
 	}
@@ -226,11 +229,15 @@ func CommitBuildID(timestamp *hlc.Clock,
 	maxAssignmentRules int) (*persistencepb.VersioningData, error) {
 	data = common.CloneProto(data)
 	target := req.GetTargetBuildId()
-	if isInVersionSet(target, data.GetVersionSets()) {
+	if isInVersionSets(target, data.GetVersionSets()) {
 		return nil, serviceerror.NewFailedPrecondition(fmt.Sprintf("update breaks requirement, build id %s is already a member of version set", target))
 	}
-	assignmentRules := data.GetAssignmentRules()
-	for _, ar := range getActiveAssignmentRules(assignmentRules) {
+	data.AssignmentRules = append(data.GetAssignmentRules(), &persistencepb.AssignmentRule{
+		Rule:            &taskqueue.BuildIdAssignmentRule{TargetBuildId: target},
+		CreateTimestamp: timestamp,
+	})
+
+	for _, ar := range getActiveAssignmentRules(data.GetAssignmentRules()) {
 		if ar.GetRule().GetTargetBuildId() == target {
 			ar.DeleteTimestamp = timestamp
 		}
@@ -238,10 +245,6 @@ func CommitBuildID(timestamp *hlc.Clock,
 			ar.DeleteTimestamp = timestamp
 		}
 	}
-	data.AssignmentRules = append(assignmentRules, &persistencepb.AssignmentRule{
-		Rule:            &taskqueue.BuildIdAssignmentRule{TargetBuildId: target},
-		CreateTimestamp: timestamp,
-	})
 	if err := checkAssignmentConditions(data, maxAssignmentRules, false); err != nil {
 		return nil, err
 	}
@@ -309,8 +312,8 @@ func containsUnfiltered(rules []*persistencepb.AssignmentRule) bool {
 	return found
 }
 
-// isInVersionSet returns true if the given build id is in any of the listed version sets
-func isInVersionSet(id string, sets []*persistencepb.CompatibleVersionSet) bool {
+// isInVersionSets returns true if the given build id is in any of the listed version sets
+func isInVersionSets(id string, sets []*persistencepb.CompatibleVersionSet) bool {
 	for _, set := range sets {
 		for _, bid := range set.BuildIds {
 			if bid.GetId() == id {
