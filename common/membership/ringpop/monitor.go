@@ -448,7 +448,6 @@ func (rpo *monitor) EvictSelfAt(asOf time.Time) (time.Duration, error) {
 		rpo.logger.Error("unable to set ringpop label", tag.Error(err), tag.Key(stopAtKey))
 		return 0, err
 	}
-	rpo.logger.Info("evicting self at time", tag.Timestamp(asOf))
 	// Wait a couple more seconds after the stopAt time before actually leaving.
 	// The jitter doesn't really matter, but if two nodes join/leave at the same aligned time,
 	// it just spreads out the membership gossip traffic a little bit.
