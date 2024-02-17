@@ -194,7 +194,7 @@ func DeleteCompatibleRedirectRule(timestamp *hlc.Clock,
 	for _, r := range data.GetRedirectRules() {
 		if r.GetDeleteTimestamp() != nil && r.GetRule().GetSourceBuildId() == source {
 			r.DeleteTimestamp = timestamp
-			return data, checkRedirectConditions(data, 0)
+			return data, nil // no need to check cycle because removing a node cannot create a cycle
 		}
 	}
 	return nil, serviceerror.NewNotFound(fmt.Sprintf("cannot delete: no redirect rule found with source ID %s", source))
