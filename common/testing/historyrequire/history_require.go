@@ -48,6 +48,7 @@ type (
 )
 
 var publicRgx = regexp.MustCompile("^[A-Z]")
+var typeOfBytes = reflect.TypeOf([]byte(nil))
 
 func New(t require.TestingT) HistoryRequire {
 	return HistoryRequire{
@@ -55,12 +56,29 @@ func New(t require.TestingT) HistoryRequire {
 	}
 }
 
+// TODO (maybe):
+//  - StartsWithHistoryEvents (should accept expectedHistory w/o event Ids)
+//  - EndsWithHistoryEvents (should accept expectedHistory w/o event Ids)
+//  - ContainsHistoryEvents (should accept expectedHistory w/o event Ids)
+//  - WaitForHistoryEvents (call getHistory until expectedHistory is found, with interval and timeout)
+//  - Funcs like WithVersion, WithTime, WithAttributes, WithPayloadLimit(100) and pass them to PrintHistory
+//  - oneof support
+//  - enums as strings not as ints
+
 func (h HistoryRequire) EqualHistoryEvents(expectedHistory string, actualHistoryEvents []*historypb.HistoryEvent) {
 	if th, ok := h.t.(helper); ok {
 		th.Helper()
 	}
 
-	h.EqualHistory(expectedHistory, &historypb.History{Events: actualHistoryEvents})
+	expectedCompactHistory, expectedEventsAttributes := h.parseHistory(expectedHistory)
+	actualCompactHistory := h.formatHistoryEventsCompact(actualHistoryEvents)
+	require.Equal(h.t, expectedCompactHistory, actualCompactHistory)
+	for _, actualHistoryEvent := range actualHistoryEvents {
+		if expectedEventAttributes, ok := expectedEventsAttributes[actualHistoryEvent.EventId]; ok {
+			actualEventAttributes := reflect.ValueOf(actualHistoryEvent.Attributes).Elem().Field(0).Elem()
+			h.equalExpectedMapToActualAttributes(expectedEventAttributes, actualEventAttributes, actualHistoryEvent.EventId, "")
+		}
+	}
 }
 
 func (h HistoryRequire) EqualHistory(expectedHistory string, actualHistory *historypb.History) {
@@ -68,40 +86,32 @@ func (h HistoryRequire) EqualHistory(expectedHistory string, actualHistory *hist
 		th.Helper()
 	}
 
-	expectedCompactHistory, expectedEventsAttributes := h.parseHistory(expectedHistory)
-	actualCompactHistory := h.formatHistoryCompact(actualHistory)
-	require.Equal(h.t, expectedCompactHistory, actualCompactHistory)
-	for _, actualHistoryEvent := range actualHistory.Events {
-		if expectedEventAttributes, ok := expectedEventsAttributes[actualHistoryEvent.EventId]; ok {
-			actualEventAttributes := reflect.ValueOf(actualHistoryEvent.Attributes).Elem().Field(0).Elem()
-			h.equalStructToMap(expectedEventAttributes, actualEventAttributes, actualHistoryEvent.EventId, "")
-		}
-	}
+	h.EqualHistoryEvents(expectedHistory, actualHistory.GetEvents())
 }
 
 func (h HistoryRequire) PrintHistory(history *historypb.History) {
-	_, _ = fmt.Println(h.formatHistory(history))
+	h.PrintHistoryEvents(history.GetEvents())
 }
 
 func (h HistoryRequire) PrintHistoryEvents(events []*historypb.HistoryEvent) {
-	h.PrintHistory(&historypb.History{Events: events})
+	_, _ = fmt.Println(h.formatHistoryEvents(events))
 }
 
 func (h HistoryRequire) PrintHistoryCompact(history *historypb.History) {
-	_, _ = fmt.Println(h.formatHistoryCompact(history))
+	h.PrintHistoryEventsCompact(history.GetEvents())
 }
 
 func (h HistoryRequire) PrintHistoryEventsCompact(events []*historypb.HistoryEvent) {
-	h.PrintHistoryCompact(&historypb.History{Events: events})
+	_, _ = fmt.Println(h.formatHistoryEventsCompact(events))
 }
 
-func (h HistoryRequire) formatHistoryCompact(history *historypb.History) string {
+func (h HistoryRequire) formatHistoryEventsCompact(historyEvents []*historypb.HistoryEvent) string {
 	if th, ok := h.t.(helper); ok {
 		th.Helper()
 	}
 
 	var sb strings.Builder
-	for _, event := range history.Events {
+	for _, event := range historyEvents {
 		_, _ = sb.WriteString(fmt.Sprintf("%3d %s\n", event.GetEventId(), event.GetEventType()))
 	}
 	if sb.Len() > 0 {
@@ -110,13 +120,13 @@ func (h HistoryRequire) formatHistoryCompact(history *historypb.History) string 
 	return ""
 }
 
-func (h HistoryRequire) formatHistory(history *historypb.History) string {
+func (h HistoryRequire) formatHistoryEvents(historyEvents []*historypb.HistoryEvent) string {
 	if th, ok := h.t.(helper); ok {
 		th.Helper()
 	}
 
 	var sb strings.Builder
-	for _, event := range history.Events {
+	for _, event := range historyEvents {
 		eventAttrs := reflect.ValueOf(event.Attributes).Elem().Field(0).Elem().Interface()
 		eventAttrsMap := h.structToMap(eventAttrs)
 		eventAttrsJson, err := json.Marshal(eventAttrsMap)
@@ -145,59 +155,109 @@ func (h HistoryRequire) structToMap(strct any) map[string]any {
 		if !publicRgx.MatchString(strctT.Field(i).Name) {
 			continue
 		}
-
-		var fieldData any
 		if field.Kind() == reflect.Pointer && field.IsNil() {
 			continue
-		} else if field.Kind() == reflect.Pointer && field.Elem().Kind() == reflect.Struct {
-			fieldData = h.structToMap(field.Elem().Interface())
-		} else if field.Kind() == reflect.Struct {
-			fieldData = h.structToMap(field.Interface())
-		} else {
-			fieldData = field.Interface()
 		}
-		ret[strctT.Field(i).Name] = fieldData
+		fieldName := strctT.Field(i).Name
+		ret[fieldName] = h.fieldValue(field)
 	}
 
 	return ret
 }
 
-func (h HistoryRequire) equalStructToMap(expectedMap map[string]any, actualStructV reflect.Value, eventID int64, attrPrefix string) {
+func (h HistoryRequire) fieldValue(field reflect.Value) any {
+	if field.Kind() == reflect.Pointer && field.Elem().Kind() == reflect.Struct {
+		return h.structToMap(field.Elem().Interface())
+	} else if field.Kind() == reflect.Struct {
+		return h.structToMap(field.Interface())
+	} else if field.Kind() == reflect.Slice && field.Type() != typeOfBytes {
+		fvSlice := make([]any, field.Len())
+		for i := 0; i < field.Len(); i++ {
+			fvSlice[i] = h.fieldValue(field.Index(i))
+		}
+		return fvSlice
+	} else if field.Kind() == reflect.Map {
+		mr := field.MapRange()
+		fvMap := make(map[string]any)
+		for mr.Next() {
+			// Only string keyed maps are supported.
+			key := mr.Key().Interface().(string)
+			v := mr.Value()
+			if v.Kind() == reflect.Pointer && v.IsNil() {
+				continue
+			}
+			fvMap[key] = h.fieldValue(v)
+		}
+		return fvMap
+	}
+
+	fieldValue := field.Interface()
+	if fieldValueBytes, ok := fieldValue.([]byte); ok {
+		fieldValue = string(fieldValueBytes)
+	}
+
+	return fieldValue
+}
+
+func (h HistoryRequire) equalExpectedMapToActualAttributes(expectedMap map[string]any, actualAttributesV reflect.Value, eventID int64, attrPrefix string) {
 	if th, ok := h.t.(helper); ok {
 		th.Helper()
 	}
 
+	if actualAttributesV.Kind() == reflect.Pointer {
+		actualAttributesV = actualAttributesV.Elem()
+	}
+
 	for attrName, expectedValue := range expectedMap {
-		actualFieldV := actualStructV.FieldByName(attrName)
-		if actualFieldV.Kind() == reflect.Invalid {
-			require.Failf(h.t, "", "Expected property %s%s wasn't found for EventID=%v", attrPrefix, attrName, eventID)
+		var actualV reflect.Value
+		if actualAttributesV.Kind() == reflect.Map {
+			actualV = actualAttributesV.MapIndex(reflect.ValueOf(attrName))
+		} else if actualAttributesV.Kind() == reflect.Struct {
+			actualV = actualAttributesV.FieldByName(attrName)
+		} else {
+			if attrPrefix == "" {
+				attrPrefix = "."
+			}
+			require.Failf(h.t, "", "Value of property %s for EventID=%v expected to be struct or map but was of type %s", attrPrefix, eventID, actualAttributesV.Type().String())
 		}
 
-		if ep, ok := expectedValue.(map[string]any); ok {
-			if actualFieldV.IsNil() {
-				require.Failf(h.t, "", "Value of property %s%s for EventID=%v expected to be struct but was nil", attrPrefix, attrName, eventID)
+		if actualV.Kind() == reflect.Invalid {
+			require.Failf(h.t, "", "Expected property %s.%s wasn't found for EventID=%v", attrPrefix, attrName, eventID)
+		}
+
+		if es, ok := expectedValue.([]any); ok {
+			for i, ei := range es {
+				eim := ei.(map[string]any)
+				h.equalExpectedMapToActualAttributes(eim, actualV.Index(i), eventID, attrPrefix+"."+attrName+"["+strconv.Itoa(i)+"]")
 			}
-			if actualFieldV.Kind() == reflect.Pointer {
-				actualFieldV = actualFieldV.Elem()
-			}
-			if actualFieldV.Kind() != reflect.Struct {
-				require.Failf(h.t, "", "Value of property %s%s for EventID=%v expected to be struct but was of type %s", attrPrefix, attrName, eventID, actualFieldV.Type().String())
-			}
-			h.equalStructToMap(ep, actualFieldV, eventID, attrPrefix+attrName+".")
 			continue
 		}
-		actualFieldValue := actualFieldV.Interface()
-		require.EqualValues(h.t, expectedValue, actualFieldValue, "Values of %s%s property are not equal for EventID=%v", attrPrefix, attrName, eventID)
+
+		if em, ok := expectedValue.(map[string]any); ok {
+			if actualV.IsNil() {
+				require.Failf(h.t, "", "Value of property %s.%s for EventID=%v expected to be struct or map but was nil", attrPrefix, attrName, eventID)
+			}
+
+			h.equalExpectedMapToActualAttributes(em, actualV, eventID, attrPrefix+"."+attrName)
+			continue
+		}
+		actualValue := actualV.Interface()
+		// Actual bytes are expressed as strings in expected history.
+		if actualValueBytes, ok := actualValue.([]byte); ok {
+			actualValue = string(actualValueBytes)
+		}
+
+		require.EqualValues(h.t, expectedValue, actualValue, "Values of %s.%s property are not equal for EventID=%v", attrPrefix, attrName, eventID)
 	}
 }
 
-// parseHistory accept history in a formatHistory format and returns compact history string and map of eventID to map of event attributes.
+// parseHistory accept history in a formatHistoryEvents format and returns compact history string and map of eventID to map of event attributes.
 func (h HistoryRequire) parseHistory(expectedHistory string) (string, map[int64]map[string]any) {
 	if th, ok := h.t.(helper); ok {
 		th.Helper()
 	}
 
-	hist := &historypb.History{}
+	var historyEvents []*historypb.HistoryEvent
 	eventsAttrs := make(map[int64]map[string]any)
 	prevEventID := 0
 	for lineNum, eventLine := range strings.Split(expectedHistory, "\n") {
@@ -220,7 +280,7 @@ func (h HistoryRequire) parseHistory(expectedHistory string) (string, map[int64]
 		if err != nil {
 			require.FailNowf(h.t, "", "Unknown event type %s for EventID=%d", fields[1], lineNum+1)
 		}
-		hist.Events = append(hist.Events, &historypb.HistoryEvent{
+		historyEvents = append(historyEvents, &historypb.HistoryEvent{
 			EventId:   int64(eventID),
 			EventType: eventType,
 		})
@@ -230,6 +290,7 @@ func (h HistoryRequire) parseHistory(expectedHistory string) (string, map[int64]
 				break
 			}
 			_, _ = jb.WriteString(fields[i])
+			_, _ = jb.WriteRune(' ')
 		}
 		if jb.Len() > 0 {
 			var eventAttrs map[string]any
@@ -240,5 +301,5 @@ func (h HistoryRequire) parseHistory(expectedHistory string) (string, map[int64]
 			eventsAttrs[int64(eventID)] = eventAttrs
 		}
 	}
-	return h.formatHistoryCompact(hist), eventsAttrs
+	return h.formatHistoryEventsCompact(historyEvents), eventsAttrs
 }

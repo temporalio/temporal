@@ -33,6 +33,7 @@ import (
 	sdkclient "go.temporal.io/sdk/client"
 	"go.temporal.io/sdk/temporal"
 	"go.temporal.io/sdk/workflow"
+	"go.temporal.io/server/common/testing/historyrequire"
 	"google.golang.org/protobuf/types/known/durationpb"
 
 	"github.com/pborman/uuid"
@@ -54,6 +55,7 @@ import (
 type RawHistorySuite struct {
 	*require.Assertions
 	FunctionalTestBase
+	historyrequire.HistoryRequire
 }
 
 func (s *RawHistorySuite) SetupSuite() {
@@ -69,6 +71,7 @@ func (s *RawHistorySuite) TearDownSuite() {
 
 func (s *RawHistorySuite) SetupTest() {
 	s.Assertions = require.New(s.T())
+	s.HistoryRequire = historyrequire.New(s.T())
 }
 
 func (s *FunctionalSuite) TestGetWorkflowExecutionHistory_All() {
@@ -209,20 +212,18 @@ func (s *FunctionalSuite) TestGetWorkflowExecutionHistory_All() {
 		events, token = getHistory(s.namespace, workflowID, token, true)
 		allEvents = append(allEvents, events...)
 	}
-
-	// there are total 11 events
-	//  1. WorkflowExecutionStarted
-	//  2. WorkflowTaskScheduled
-	//  3. WorkflowTaskStarted
-	//  4. WorkflowTaskCompleted
-	//  5. ActivityTaskScheduled
-	//  6. ActivityTaskStarted
-	//  7. ActivityTaskCompleted
-	//  8. WorkflowTaskScheduled
-	//  9. WorkflowTaskStarted
-	// 10. WorkflowTaskCompleted
-	// 11. WorkflowExecutionCompleted
-	s.Equal(11, len(allEvents))
+	s.EqualHistoryEvents(`
+  1 WorkflowExecutionStarted
+  2 WorkflowTaskScheduled
+  3 WorkflowTaskStarted
+  4 WorkflowTaskCompleted
+  5 ActivityTaskScheduled
+  6 ActivityTaskStarted
+  7 ActivityTaskCompleted
+  8 WorkflowTaskScheduled
+  9 WorkflowTaskStarted
+ 10 WorkflowTaskCompleted
+ 11 WorkflowExecutionCompleted`, allEvents)
 
 	// test non long poll
 	allEvents = nil
@@ -234,10 +235,21 @@ func (s *FunctionalSuite) TestGetWorkflowExecutionHistory_All() {
 			break
 		}
 	}
-	s.Equal(11, len(allEvents))
+	s.EqualHistoryEvents(`
+  1 WorkflowExecutionStarted
+  2 WorkflowTaskScheduled
+  3 WorkflowTaskStarted
+  4 WorkflowTaskCompleted
+  5 ActivityTaskScheduled
+  6 ActivityTaskStarted
+  7 ActivityTaskCompleted
+  8 WorkflowTaskScheduled
+  9 WorkflowTaskStarted
+ 10 WorkflowTaskCompleted
+ 11 WorkflowExecutionCompleted`, allEvents)
 }
 
-func (s *FunctionalSuite) TestGetWorkflowExecutionHistory_Close() {
+func (s *RawHistorySuite) TestGetWorkflowExecutionHistory_Close() {
 	workflowID := "functional-get-workflow-history-events-long-poll-test-close"
 	workflowTypeName := "functional-get-workflow-history-events-long-poll-test-close-type"
 	taskqueueName := "functional-get-workflow-history-events-long-poll-test-close-taskqueue"
@@ -570,19 +582,18 @@ func (s *RawHistorySuite) TestGetWorkflowExecutionHistory_GetRawHistoryData() {
 		allEvents = append(allEvents, events...)
 	}
 
-	// there are total 11 events
-	//  1. WorkflowExecutionStarted
-	//  2. WorkflowTaskScheduled
-	//  3. WorkflowTaskStarted
-	//  4. WorkflowTaskCompleted
-	//  5. ActivityTaskScheduled
-	//  6. ActivityTaskStarted
-	//  7. ActivityTaskCompleted
-	//  8. WorkflowTaskScheduled
-	//  9. WorkflowTaskStarted
-	// 10. WorkflowTaskCompleted
-	// 11. WorkflowExecutionCompleted
-	s.Equal(11, len(allEvents))
+	s.EqualHistoryEvents(`
+  1 WorkflowExecutionStarted
+  2 WorkflowTaskScheduled
+  3 WorkflowTaskStarted
+  4 WorkflowTaskCompleted
+  5 ActivityTaskScheduled
+  6 ActivityTaskStarted
+  7 ActivityTaskCompleted
+  8 WorkflowTaskScheduled
+  9 WorkflowTaskStarted
+ 10 WorkflowTaskCompleted
+ 11 WorkflowExecutionCompleted`, allEvents)
 
 	// test non long poll
 	allEvents = nil
@@ -595,7 +606,18 @@ func (s *RawHistorySuite) TestGetWorkflowExecutionHistory_GetRawHistoryData() {
 			break
 		}
 	}
-	s.Equal(11, len(allEvents))
+	s.EqualHistoryEvents(`
+  1 WorkflowExecutionStarted
+  2 WorkflowTaskScheduled
+  3 WorkflowTaskStarted
+  4 WorkflowTaskCompleted
+  5 ActivityTaskScheduled
+  6 ActivityTaskStarted
+  7 ActivityTaskCompleted
+  8 WorkflowTaskScheduled
+  9 WorkflowTaskStarted
+ 10 WorkflowTaskCompleted
+ 11 WorkflowExecutionCompleted`, allEvents)
 }
 
 func (s *ClientFunctionalSuite) TestGetHistoryReverse() {

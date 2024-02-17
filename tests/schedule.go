@@ -43,6 +43,7 @@ import (
 	"go.temporal.io/sdk/converter"
 	"go.temporal.io/sdk/worker"
 	"go.temporal.io/sdk/workflow"
+	"go.temporal.io/server/common/testing/historyrequire"
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/durationpb"
 
@@ -73,6 +74,7 @@ type (
 	ScheduleFunctionalSuite struct {
 		*require.Assertions
 		protorequire.ProtoAssertions
+		historyrequire.HistoryRequire
 		FunctionalTestBase
 		sdkClient     sdkclient.Client
 		worker        worker.Worker
@@ -98,6 +100,7 @@ func (s *ScheduleFunctionalSuite) TearDownSuite() {
 func (s *ScheduleFunctionalSuite) SetupTest() {
 	s.Assertions = require.New(s.T())
 	s.ProtoAssertions = protorequire.New(s.T())
+	s.HistoryRequire = historyrequire.New(s.T())
 	s.dataConverter = newTestDataConverter()
 	sdkClient, err := sdkclient.Dial(sdkclient.Options{
 		HostPort:      s.hostPort,
@@ -630,13 +633,32 @@ func (s *ScheduleFunctionalSuite) TestRefresh() {
 	s.EqualValues(1, len(describeResp.Info.RunningWorkflows))
 
 	events1 := s.getHistory(s.namespace, &commonpb.WorkflowExecution{WorkflowId: scheduler.WorkflowIDPrefix + sid})
+	expectedHistory := `
+ 1 WorkflowExecutionStarted
+  2 WorkflowTaskScheduled
+  3 WorkflowTaskStarted
+  4 WorkflowTaskCompleted
+  5 MarkerRecorded
+  6 MarkerRecorded
+  7 UpsertWorkflowSearchAttributes
+  8 TimerStarted
+  9 TimerFired
+ 10 WorkflowTaskScheduled
+ 11 WorkflowTaskStarted
+ 12 WorkflowTaskCompleted
+ 13 MarkerRecorded
+ 14 MarkerRecorded
+ 15 WorkflowPropertiesModified
+ 16 TimerStarted`
+
+	s.EqualHistoryEvents(expectedHistory, events1)
 
 	time.Sleep(4 * time.Second)
 	// now it has timed out, but the scheduler hasn't noticed yet. we can prove it by checking
 	// its history.
 
 	events2 := s.getHistory(s.namespace, &commonpb.WorkflowExecution{WorkflowId: scheduler.WorkflowIDPrefix + sid})
-	s.Equal(len(events1), len(events2))
+	s.EqualHistoryEvents(expectedHistory, events2)
 
 	// when we describe we'll force a refresh and see it timed out
 	describeResp, err = s.engine.DescribeSchedule(NewContext(), &workflowservice.DescribeScheduleRequest{
