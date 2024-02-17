@@ -32,7 +32,11 @@ import (
 	"github.com/pborman/uuid"
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
+	namespacepb "go.temporal.io/api/namespace/v1"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
+	persistencespb "go.temporal.io/server/api/persistence/v1"
+	"go.temporal.io/server/common/namespace"
+	"go.temporal.io/server/common/primitives/timestamp"
 	"google.golang.org/protobuf/types/known/durationpb"
 )
 
@@ -65,12 +69,16 @@ func (tv *TestVars) getOrCreate(typ string, key []string, initialVal ...any) any
 	kvKey := tv.key(typ, key)
 	var kvVal any
 	if len(initialVal) == 0 {
-		kvVal = tv.testName + "_" + kvKey
+		kvVal = tv.defaultStringVal(kvKey)
 	} else {
 		kvVal = initialVal[0]
 	}
 	v, _ := tv.kv.LoadOrStore(kvKey, kvVal)
 	return v
+}
+
+func (tv *TestVars) defaultStringVal(key string) string {
+	return tv.testName + "_" + key
 }
 
 func (tv *TestVars) set(typ string, key []string, val any) {
@@ -96,6 +104,41 @@ func (tv *TestVars) cloneSet(typ string, key []string, val any) *TestVars {
 
 // ----------- Methods for every "type" ------------
 // TODO: add more as you need them.
+
+func (tv *TestVars) NamespaceID(key ...string) namespace.ID {
+	return tv.getOrCreate("namespace_id", key, namespace.ID(uuid.New())).(namespace.ID)
+}
+
+func (tv *TestVars) WithNamespaceID(namespaceID namespace.ID, key ...string) *TestVars {
+	return tv.cloneSet("namespace_id", key, namespaceID)
+}
+
+func (tv *TestVars) NamespaceName(key ...string) namespace.Name {
+	const typ = "namespace_name"
+	return tv.getOrCreate(typ, key, namespace.Name(tv.defaultStringVal(tv.key(typ, key)))).(namespace.Name)
+}
+
+func (tv *TestVars) WithNamespaceName(namespaceName namespace.Name, key ...string) *TestVars {
+	return tv.cloneSet("namespace_name", key, namespaceName)
+}
+
+func (tv *TestVars) Namespace(key ...string) *namespace.Namespace {
+	return namespace.NewLocalNamespaceForTest(
+		&persistencespb.NamespaceInfo{
+			Id:   tv.NamespaceID(key...).String(),
+			Name: tv.NamespaceName(key...).String(),
+		},
+		&persistencespb.NamespaceConfig{
+			Retention: timestamp.DurationFromDays(int32(tv.Any().Int())),
+			BadBinaries: &namespacepb.BadBinaries{
+				Binaries: map[string]*namespacepb.BadBinaryInfo{
+					tv.Any().String(): nil,
+				},
+			},
+		},
+		tv.Global().ClusterName(),
+	)
+}
 
 func (tv *TestVars) WorkflowID(key ...string) string {
 	return tv.getOrCreate("workflow_id", key).(string)
@@ -203,6 +246,14 @@ func (tv *TestVars) WithWorkerIdentity(identity string, key ...string) *TestVars
 	return tv.cloneSet("worker_identity", key, identity)
 }
 
+func (tv *TestVars) TimerID(key ...string) string {
+	return tv.getOrCreate("timer_id", key).(string)
+}
+
+func (tv *TestVars) WithTimerID(timerID string, key ...string) *TestVars {
+	return tv.cloneSet("timer_id", key, timerID)
+}
+
 // ----------- Generic methods ------------
 
 func (tv *TestVars) InfiniteTimeout() *durationpb.Duration {
@@ -212,6 +263,10 @@ func (tv *TestVars) InfiniteTimeout() *durationpb.Duration {
 
 func (tv *TestVars) Any() Any {
 	return tv.an
+}
+
+func (tv *TestVars) Global() Global {
+	return newGlobal()
 }
 
 func (tv *TestVars) String(key ...string) string {
