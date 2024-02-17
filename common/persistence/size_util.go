@@ -92,3 +92,14 @@ func sizeOfBlobSlice(
 	}
 	return size
 }
+
+func sizeOfStringPayloadMap(
+	kvBlob map[string]*commonpb.Payload,
+) int {
+	size := 0
+	for id, blob := range kvBlob {
+		// 8 == 64 bit / 8 bit per byte
+		size += len(id) + blob.Size()
+	}
+	return size
+}

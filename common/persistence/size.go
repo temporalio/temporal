@@ -71,6 +71,10 @@ func statusOfInternalWorkflow(
 	totalUpdateCount := state.ExecutionInfo.UpdateCount
 	updateInfoCount := len(state.ExecutionInfo.UpdateInfos)
 
+	payloadSize := sizeOfStringPayloadMap(state.ExecutionInfo.Memo)
+	payloadSize += sizeOfStringPayloadMap(state.ExecutionInfo.SearchAttributes)
+	payloadSize += getActivityPayloadSize(state.ActivityInfos)
+
 	totalSize := executionInfoSize
 	totalSize += executionStateSize
 	totalSize += activityInfoSize
@@ -83,6 +87,7 @@ func statusOfInternalWorkflow(
 
 	return &MutableStateStatistics{
 		TotalSize:         totalSize,
+		PayloadSize:       payloadSize,
 		HistoryStatistics: historyStatistics,
 
 		ExecutionInfoSize:  executionInfoSize,
@@ -121,63 +126,68 @@ func statusOfInternalWorkflow(
 }
 
 func statusOfInternalWorkflowMutation(
-	mutation *InternalWorkflowMutation,
+	internalMutation *InternalWorkflowMutation,
+	mutation *WorkflowMutation,
 	historyStatistics *HistoryStatistics,
 ) *MutableStateStatistics {
-	if mutation == nil {
+	if internalMutation == nil {
 		return nil
 	}
 
-	executionInfoSize := sizeOfBlob(mutation.ExecutionInfoBlob)
-	executionStateSize := sizeOfBlob(mutation.ExecutionStateBlob)
+	executionInfoSize := sizeOfBlob(internalMutation.ExecutionInfoBlob)
+	executionStateSize := sizeOfBlob(internalMutation.ExecutionStateBlob)
 
-	totalActivityCount := mutation.ExecutionInfo.ActivityCount
-	activityInfoCount := len(mutation.UpsertActivityInfos)
-	activityInfoCount += len(mutation.DeleteActivityInfos)
-	activityInfoSize := sizeOfInt64BlobMap(mutation.UpsertActivityInfos)
-	activityInfoSize += sizeOfInt64Set(mutation.DeleteActivityInfos)
+	totalActivityCount := internalMutation.ExecutionInfo.ActivityCount
+	activityInfoCount := len(internalMutation.UpsertActivityInfos)
+	activityInfoCount += len(internalMutation.DeleteActivityInfos)
+	activityInfoSize := sizeOfInt64BlobMap(internalMutation.UpsertActivityInfos)
+	activityInfoSize += sizeOfInt64Set(internalMutation.DeleteActivityInfos)
 
-	totalUserTimerCount := mutation.ExecutionInfo.UserTimerCount
-	timerInfoCount := len(mutation.UpsertTimerInfos)
-	timerInfoCount += len(mutation.DeleteTimerInfos)
-	timerInfoSize := sizeOfStringBlobMap(mutation.UpsertTimerInfos)
-	timerInfoSize += sizeOfStringSet(mutation.DeleteTimerInfos)
+	totalUserTimerCount := internalMutation.ExecutionInfo.UserTimerCount
+	timerInfoCount := len(internalMutation.UpsertTimerInfos)
+	timerInfoCount += len(internalMutation.DeleteTimerInfos)
+	timerInfoSize := sizeOfStringBlobMap(internalMutation.UpsertTimerInfos)
+	timerInfoSize += sizeOfStringSet(internalMutation.DeleteTimerInfos)
 
-	totalChildExecutionCount := mutation.ExecutionInfo.ChildExecutionCount
-	childExecutionInfoCount := len(mutation.UpsertChildExecutionInfos)
-	childExecutionInfoCount += len(mutation.DeleteChildExecutionInfos)
-	childExecutionInfoSize := sizeOfInt64BlobMap(mutation.UpsertChildExecutionInfos)
-	childExecutionInfoSize += sizeOfInt64Set(mutation.DeleteChildExecutionInfos)
+	totalChildExecutionCount := internalMutation.ExecutionInfo.ChildExecutionCount
+	childExecutionInfoCount := len(internalMutation.UpsertChildExecutionInfos)
+	childExecutionInfoCount += len(internalMutation.DeleteChildExecutionInfos)
+	childExecutionInfoSize := sizeOfInt64BlobMap(internalMutation.UpsertChildExecutionInfos)
+	childExecutionInfoSize += sizeOfInt64Set(internalMutation.DeleteChildExecutionInfos)
 
-	totalRequestCancelExternalCount := mutation.ExecutionInfo.RequestCancelExternalCount
-	requestCancelInfoCount := len(mutation.UpsertRequestCancelInfos)
-	requestCancelInfoCount += len(mutation.DeleteRequestCancelInfos)
-	requestCancelInfoSize := sizeOfInt64BlobMap(mutation.UpsertRequestCancelInfos)
-	requestCancelInfoSize += sizeOfInt64Set(mutation.DeleteRequestCancelInfos)
+	totalRequestCancelExternalCount := internalMutation.ExecutionInfo.RequestCancelExternalCount
+	requestCancelInfoCount := len(internalMutation.UpsertRequestCancelInfos)
+	requestCancelInfoCount += len(internalMutation.DeleteRequestCancelInfos)
+	requestCancelInfoSize := sizeOfInt64BlobMap(internalMutation.UpsertRequestCancelInfos)
+	requestCancelInfoSize += sizeOfInt64Set(internalMutation.DeleteRequestCancelInfos)
 
-	totalSignalExternalCount := mutation.ExecutionInfo.SignalExternalCount
-	signalInfoCount := len(mutation.UpsertSignalInfos)
-	signalInfoCount += len(mutation.DeleteSignalInfos)
-	signalInfoSize := sizeOfInt64BlobMap(mutation.UpsertSignalInfos)
-	signalInfoSize += sizeOfInt64Set(mutation.DeleteSignalInfos)
+	totalSignalExternalCount := internalMutation.ExecutionInfo.SignalExternalCount
+	signalInfoCount := len(internalMutation.UpsertSignalInfos)
+	signalInfoCount += len(internalMutation.DeleteSignalInfos)
+	signalInfoSize := sizeOfInt64BlobMap(internalMutation.UpsertSignalInfos)
+	signalInfoSize += sizeOfInt64Set(internalMutation.DeleteSignalInfos)
 
-	totalSignalCount := mutation.ExecutionInfo.SignalCount
-	signalRequestIDCount := len(mutation.UpsertSignalRequestedIDs)
-	signalRequestIDCount += len(mutation.DeleteSignalRequestedIDs)
-	signalRequestIDSize := sizeOfStringSet(mutation.UpsertSignalRequestedIDs)
-	signalRequestIDSize += sizeOfStringSet(mutation.DeleteSignalRequestedIDs)
+	totalSignalCount := internalMutation.ExecutionInfo.SignalCount
+	signalRequestIDCount := len(internalMutation.UpsertSignalRequestedIDs)
+	signalRequestIDCount += len(internalMutation.DeleteSignalRequestedIDs)
+	signalRequestIDSize := sizeOfStringSet(internalMutation.UpsertSignalRequestedIDs)
+	signalRequestIDSize += sizeOfStringSet(internalMutation.DeleteSignalRequestedIDs)
 
-	totalUpdateCount := mutation.ExecutionInfo.UpdateCount
-	updateInfoCount := len(mutation.ExecutionInfo.UpdateInfos)
+	totalUpdateCount := internalMutation.ExecutionInfo.UpdateCount
+	updateInfoCount := len(internalMutation.ExecutionInfo.UpdateInfos)
 
 	bufferedEventsCount := 0
 	bufferedEventsSize := 0
-	if mutation.NewBufferedEvents != nil {
+	if internalMutation.NewBufferedEvents != nil {
 		bufferedEventsCount = 1
-		bufferedEventsSize = mutation.NewBufferedEvents.Size()
+		bufferedEventsSize = internalMutation.NewBufferedEvents.Size()
 	}
 
-	taskCountByCategory := taskCountsByCategory(&mutation.Tasks)
+	taskCountByCategory := taskCountsByCategory(&internalMutation.Tasks)
+
+	payloadSize := sizeOfStringPayloadMap(internalMutation.ExecutionInfo.Memo)
+	payloadSize += sizeOfStringPayloadMap(internalMutation.ExecutionInfo.SearchAttributes)
+	payloadSize += getActivityPayloadSize(mutation.UpsertActivityInfos)
 
 	// TODO what about checksum?
 
@@ -193,6 +203,7 @@ func statusOfInternalWorkflowMutation(
 
 	return &MutableStateStatistics{
 		TotalSize:         totalSize,
+		PayloadSize:       payloadSize,
 		HistoryStatistics: historyStatistics,
 
 		ExecutionInfoSize:  executionInfoSize,
@@ -241,45 +252,50 @@ func taskCountsByCategory(t *map[tasks.Category][]InternalHistoryTask) map[strin
 }
 
 func statusOfInternalWorkflowSnapshot(
-	snapshot *InternalWorkflowSnapshot,
+	internalSnapshot *InternalWorkflowSnapshot,
+	snapshot *WorkflowSnapshot,
 	historyStatistics *HistoryStatistics,
 ) *MutableStateStatistics {
-	if snapshot == nil {
+	if internalSnapshot == nil {
 		return nil
 	}
 
-	executionInfoSize := sizeOfBlob(snapshot.ExecutionInfoBlob)
-	executionStateSize := sizeOfBlob(snapshot.ExecutionStateBlob)
+	executionInfoSize := sizeOfBlob(internalSnapshot.ExecutionInfoBlob)
+	executionStateSize := sizeOfBlob(internalSnapshot.ExecutionStateBlob)
 
-	totalActivityCount := snapshot.ExecutionInfo.ActivityCount
-	activityInfoCount := len(snapshot.ActivityInfos)
-	activityInfoSize := sizeOfInt64BlobMap(snapshot.ActivityInfos)
+	totalActivityCount := internalSnapshot.ExecutionInfo.ActivityCount
+	activityInfoCount := len(internalSnapshot.ActivityInfos)
+	activityInfoSize := sizeOfInt64BlobMap(internalSnapshot.ActivityInfos)
 
-	totalUserTimerCount := snapshot.ExecutionInfo.UserTimerCount
-	timerInfoCount := len(snapshot.TimerInfos)
-	timerInfoSize := sizeOfStringBlobMap(snapshot.TimerInfos)
+	totalUserTimerCount := internalSnapshot.ExecutionInfo.UserTimerCount
+	timerInfoCount := len(internalSnapshot.TimerInfos)
+	timerInfoSize := sizeOfStringBlobMap(internalSnapshot.TimerInfos)
 
-	totalChildExecutionCount := snapshot.ExecutionInfo.ChildExecutionCount
-	childExecutionInfoCount := len(snapshot.ChildExecutionInfos)
-	childExecutionInfoSize := sizeOfInt64BlobMap(snapshot.ChildExecutionInfos)
+	totalChildExecutionCount := internalSnapshot.ExecutionInfo.ChildExecutionCount
+	childExecutionInfoCount := len(internalSnapshot.ChildExecutionInfos)
+	childExecutionInfoSize := sizeOfInt64BlobMap(internalSnapshot.ChildExecutionInfos)
 
-	totalRequestCancelExternalCount := snapshot.ExecutionInfo.RequestCancelExternalCount
-	requestCancelInfoCount := len(snapshot.RequestCancelInfos)
-	requestCancelInfoSize := sizeOfInt64BlobMap(snapshot.RequestCancelInfos)
+	totalRequestCancelExternalCount := internalSnapshot.ExecutionInfo.RequestCancelExternalCount
+	requestCancelInfoCount := len(internalSnapshot.RequestCancelInfos)
+	requestCancelInfoSize := sizeOfInt64BlobMap(internalSnapshot.RequestCancelInfos)
 
-	totalSignalExternalCount := snapshot.ExecutionInfo.SignalExternalCount
-	signalInfoCount := len(snapshot.SignalInfos)
-	signalInfoSize := sizeOfInt64BlobMap(snapshot.SignalInfos)
+	totalSignalExternalCount := internalSnapshot.ExecutionInfo.SignalExternalCount
+	signalInfoCount := len(internalSnapshot.SignalInfos)
+	signalInfoSize := sizeOfInt64BlobMap(internalSnapshot.SignalInfos)
 
-	totalSignalCount := snapshot.ExecutionInfo.SignalCount
-	signalRequestIDCount := len(snapshot.SignalRequestedIDs)
-	signalRequestIDSize := sizeOfStringSet(snapshot.SignalRequestedIDs)
+	totalSignalCount := internalSnapshot.ExecutionInfo.SignalCount
+	signalRequestIDCount := len(internalSnapshot.SignalRequestedIDs)
+	signalRequestIDSize := sizeOfStringSet(internalSnapshot.SignalRequestedIDs)
 
-	totalUpdateCount := snapshot.ExecutionInfo.UpdateCount
-	updateInfoCount := len(snapshot.ExecutionInfo.UpdateInfos)
+	totalUpdateCount := internalSnapshot.ExecutionInfo.UpdateCount
+	updateInfoCount := len(internalSnapshot.ExecutionInfo.UpdateInfos)
 
 	bufferedEventsCount := 0
 	bufferedEventsSize := 0
+
+	payloadSize := sizeOfStringPayloadMap(internalSnapshot.ExecutionInfo.Memo)
+	payloadSize += sizeOfStringPayloadMap(internalSnapshot.ExecutionInfo.SearchAttributes)
+	payloadSize += getActivityPayloadSize(snapshot.ActivityInfos)
 
 	totalSize := executionInfoSize
 	totalSize += executionStateSize
@@ -291,10 +307,11 @@ func statusOfInternalWorkflowSnapshot(
 	totalSize += signalRequestIDSize
 	totalSize += bufferedEventsSize
 
-	taskCountByCategory := taskCountsByCategory(&snapshot.Tasks)
+	taskCountByCategory := taskCountsByCategory(&internalSnapshot.Tasks)
 
 	return &MutableStateStatistics{
 		TotalSize:         totalSize,
+		PayloadSize:       payloadSize,
 		HistoryStatistics: historyStatistics,
 
 		ExecutionInfoSize:  executionInfoSize,
@@ -332,4 +349,13 @@ func statusOfInternalWorkflowSnapshot(
 		TotalUpdateCount: totalUpdateCount,
 		UpdateInfoCount:  updateInfoCount,
 	}
+}
+
+func getActivityPayloadSize(activities map[int64]*persistencespb.ActivityInfo) int {
+	size := 0
+	for _, info := range activities {
+		size += info.GetLastHeartbeatDetails().Size()
+		size += info.GetRetryLastFailure().Size()
+	}
+	return size
 }

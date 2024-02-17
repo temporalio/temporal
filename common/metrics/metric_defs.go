@@ -841,6 +841,7 @@ var (
 		"mutable_state_size",
 		WithDescription("The size of an individual Workflow Execution's state, emitted each time a workflow execution is retrieved or updated."),
 	)
+	MutableStatePayloadSize               = NewBytesHistogramDef("mutable_state_payload_size")
 	ExecutionInfoSize                     = NewBytesHistogramDef("execution_info_size")
 	ExecutionStateSize                    = NewBytesHistogramDef("execution_state_size")
 	ActivityInfoSize                      = NewBytesHistogramDef("activity_info_size")
