@@ -99,7 +99,7 @@ func Load(env string, configDir string, zone string, config interface{}) error {
 		}
 		err = yaml.Unmarshal(data, config)
 		if err != nil {
-			return err
+			return fmt.Errorf("error unmarshaling config: `%v`, %w", string(data), err)
 		}
 	}
 
