@@ -74,6 +74,7 @@ func statusOfInternalWorkflow(
 	payloadSize := sizeOfStringPayloadMap(state.ExecutionInfo.Memo)
 	payloadSize += sizeOfStringPayloadMap(state.ExecutionInfo.SearchAttributes)
 	payloadSize += getActivityPayloadSize(state.ActivityInfos)
+	payloadSize += sizeOfBlobSlice(internalState.BufferedEvents)
 
 	totalSize := executionInfoSize
 	totalSize += executionStateSize
@@ -188,6 +189,7 @@ func statusOfInternalWorkflowMutation(
 	payloadSize := sizeOfStringPayloadMap(internalMutation.ExecutionInfo.Memo)
 	payloadSize += sizeOfStringPayloadMap(internalMutation.ExecutionInfo.SearchAttributes)
 	payloadSize += getActivityPayloadSize(mutation.UpsertActivityInfos)
+	payloadSize += sizeOfBlob(internalMutation.NewBufferedEvents)
 
 	// TODO what about checksum?
 
