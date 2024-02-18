@@ -716,24 +716,6 @@ func (r *workflowResetterImpl) reapplyEvents(
 	mutableState workflow.MutableState,
 	events []*historypb.HistoryEvent,
 ) error {
-
-	for _, event := range events {
-		switch event.GetEventType() {
-		case enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_SIGNALED:
-			attr := event.GetWorkflowExecutionSignaledEventAttributes()
-			if _, err := mutableState.AddWorkflowExecutionSignaled(
-				attr.GetSignalName(),
-				attr.GetInput(),
-				attr.GetIdentity(),
-				attr.GetHeader(),
-				attr.GetSkipGenerateWorkflowTask(),
-			); err != nil {
-				return err
-			}
-		default:
-			// events other than signal will be ignored
-		}
-	}
 	return nil
 }
 
