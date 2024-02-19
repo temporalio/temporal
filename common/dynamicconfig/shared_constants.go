@@ -122,11 +122,9 @@ var DefaultDynamicRateLimitingParams = map[string]interface{}{
 // DEPRECATED: Remove once migration is complete
 func AccessHistory(accessHistoryFraction FloatPropertyFn, metricsHandler metrics.Handler) bool {
 	if rand.Float64() < accessHistoryFraction() {
-		//TODO: New Metric definition
 		metricsHandler.Counter(metrics.AccessHistoryNew).Record(1)
 		return true
 	}
-	//TODO: New Metric definition
 	metricsHandler.Counter(metrics.AccessHistoryOld).Record(1)
 	return false
 }
