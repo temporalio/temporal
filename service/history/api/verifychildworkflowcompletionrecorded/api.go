@@ -49,7 +49,7 @@ func Invoke(
 		return nil, err
 	}
 
-	workflowContext, err := workflowConsistencyChecker.GetWorkflowContext(
+	workflowLease, err := workflowConsistencyChecker.GetWorkflowLease(
 		ctx,
 		request.Clock,
 		// it's ok we have stale state when doing verification,
@@ -67,9 +67,9 @@ func Invoke(
 	if err != nil {
 		return nil, err
 	}
-	defer func() { workflowContext.GetReleaseFn()(retError) }()
+	defer func() { workflowLease.GetReleaseFn()(retError) }()
 
-	mutableState := workflowContext.GetMutableState()
+	mutableState := workflowLease.GetMutableState()
 	if !mutableState.IsWorkflowExecutionRunning() &&
 		mutableState.GetExecutionState().State != enumsspb.WORKFLOW_EXECUTION_STATE_ZOMBIE {
 		// parent has already completed and can't be blocked after failover.

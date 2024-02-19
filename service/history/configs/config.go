@@ -71,17 +71,20 @@ type Config struct {
 	// HistoryCache settings
 	// Change of these configs require shard restart
 	HistoryCacheInitialSize               dynamicconfig.IntPropertyFn
-	HistoryCacheMaxSize                   dynamicconfig.IntPropertyFn
+	HistoryShardLevelCacheMaxSize         dynamicconfig.IntPropertyFn
+	HistoryHostLevelCacheMaxSize          dynamicconfig.IntPropertyFn
 	HistoryCacheTTL                       dynamicconfig.DurationPropertyFn
 	HistoryCacheNonUserContextLockTimeout dynamicconfig.DurationPropertyFn
 	EnableHostLevelHistoryCache           dynamicconfig.BoolPropertyFn
-	HistoryShardLevelCacheMaxSize         dynamicconfig.IntPropertyFn
 	EnableAPIGetCurrentRunIDLock          dynamicconfig.BoolPropertyFn
 
 	// EventsCache settings
 	// Change of these configs require shard restart
-	EventsCacheMaxSizeBytes dynamicconfig.IntPropertyFn
-	EventsCacheTTL          dynamicconfig.DurationPropertyFn
+	EventsShardLevelCacheMaxSizeBytes dynamicconfig.IntPropertyFn
+	EventsCacheTTL                    dynamicconfig.DurationPropertyFn
+	// Change of these configs require service restart
+	EnableHostLevelEventsCache       dynamicconfig.BoolPropertyFn
+	EventsHostLevelCacheMaxSizeBytes dynamicconfig.IntPropertyFn
 
 	// ShardController settings
 	RangeSizeBits                  uint
@@ -104,7 +107,9 @@ type Config struct {
 	QueueCriticalSlicesCount         dynamicconfig.IntPropertyFn
 	QueuePendingTaskMaxCount         dynamicconfig.IntPropertyFn
 
-	TaskDLQEnabled dynamicconfig.BoolPropertyFn
+	TaskDLQEnabled                 dynamicconfig.BoolPropertyFn
+	TaskDLQUnexpectedErrorAttempts dynamicconfig.IntPropertyFn
+	TaskDLQInternalErrors          dynamicconfig.BoolPropertyFn
 
 	TaskSchedulerEnableRateLimiter           dynamicconfig.BoolPropertyFn
 	TaskSchedulerEnableRateLimiterShadowMode dynamicconfig.BoolPropertyFn
@@ -160,6 +165,9 @@ type Config struct {
 
 	// ShardUpdateMinInterval is the minimum time interval within which the shard info can be updated.
 	ShardUpdateMinInterval dynamicconfig.DurationPropertyFn
+	// ShardUpdateMinTasksCompleted is the minimum number of tasks which must be completed before the shard info can be updated before
+	// history.shardUpdateMinInterval has passed
+	ShardUpdateMinTasksCompleted dynamicconfig.IntPropertyFn
 	// ShardSyncMinInterval is the minimum time interval within which the shard info can be synced to the remote.
 	ShardSyncMinInterval            dynamicconfig.DurationPropertyFn
 	ShardSyncTimerJitterCoefficient dynamicconfig.FloatPropertyFn
@@ -354,15 +362,17 @@ func NewConfig(
 
 		EmitShardLagLog:                       dc.GetBoolProperty(dynamicconfig.EmitShardLagLog, false),
 		HistoryCacheInitialSize:               dc.GetIntProperty(dynamicconfig.HistoryCacheInitialSize, 128),
-		HistoryCacheMaxSize:                   dc.GetIntProperty(dynamicconfig.HistoryCacheMaxSize, 256000),
+		HistoryShardLevelCacheMaxSize:         dc.GetIntProperty(dynamicconfig.HistoryCacheMaxSize, 512),
+		HistoryHostLevelCacheMaxSize:          dc.GetIntProperty(dynamicconfig.HistoryCacheHostLevelMaxSize, 256000),
 		HistoryCacheTTL:                       dc.GetDurationProperty(dynamicconfig.HistoryCacheTTL, time.Hour),
 		HistoryCacheNonUserContextLockTimeout: dc.GetDurationProperty(dynamicconfig.HistoryCacheNonUserContextLockTimeout, 500*time.Millisecond),
 		EnableHostLevelHistoryCache:           dc.GetBoolProperty(dynamicconfig.EnableHostHistoryCache, false),
-		HistoryShardLevelCacheMaxSize:         dc.GetIntProperty(dynamicconfig.HistoryCacheShardLevelMaxSize, 512),
 		EnableAPIGetCurrentRunIDLock:          dc.GetBoolProperty(dynamicconfig.EnableAPIGetCurrentRunIDLock, false),
 
-		EventsCacheMaxSizeBytes: dc.GetIntProperty(dynamicconfig.EventsCacheMaxSizeBytes, 512*1024), // 512KB
-		EventsCacheTTL:          dc.GetDurationProperty(dynamicconfig.EventsCacheTTL, time.Hour),
+		EventsShardLevelCacheMaxSizeBytes: dc.GetIntProperty(dynamicconfig.EventsCacheMaxSizeBytes, 512*1024),              // 512KB
+		EventsHostLevelCacheMaxSizeBytes:  dc.GetIntProperty(dynamicconfig.EventsHostLevelCacheMaxSizeBytes, 512*512*1024), // 256MB
+		EventsCacheTTL:                    dc.GetDurationProperty(dynamicconfig.EventsCacheTTL, time.Hour),
+		EnableHostLevelEventsCache:        dc.GetBoolProperty(dynamicconfig.EnableHostLevelEventsCache, false),
 
 		RangeSizeBits:                  20, // 20 bits for sequencer, 2^20 sequence number for any range
 		AcquireShardInterval:           dc.GetDurationProperty(dynamicconfig.AcquireShardInterval, time.Minute),
@@ -383,7 +393,9 @@ func NewConfig(
 		QueueCriticalSlicesCount:         dc.GetIntProperty(dynamicconfig.QueueCriticalSlicesCount, 50),
 		QueuePendingTaskMaxCount:         dc.GetIntProperty(dynamicconfig.QueuePendingTaskMaxCount, 10000),
 
-		TaskDLQEnabled: dc.GetBoolProperty(dynamicconfig.HistoryTaskDLQEnabled, true),
+		TaskDLQEnabled:                 dc.GetBoolProperty(dynamicconfig.HistoryTaskDLQEnabled, true),
+		TaskDLQUnexpectedErrorAttempts: dc.GetIntProperty(dynamicconfig.HistoryTaskDLQUnexpectedErrorAttempts, 100),
+		TaskDLQInternalErrors:          dc.GetBoolProperty(dynamicconfig.HistoryTaskDLQInternalErrors, false),
 
 		TaskSchedulerEnableRateLimiter:           dc.GetBoolProperty(dynamicconfig.TaskSchedulerEnableRateLimiter, false),
 		TaskSchedulerEnableRateLimiterShadowMode: dc.GetBoolProperty(dynamicconfig.TaskSchedulerEnableRateLimiterShadowMode, true),
@@ -443,6 +455,7 @@ func NewConfig(
 		MaximumBufferedEventsSizeInBytes: dc.GetIntProperty(dynamicconfig.MaximumBufferedEventsSizeInBytes, 2*1024*1024),
 		MaximumSignalsPerExecution:       dc.GetIntPropertyFilteredByNamespace(dynamicconfig.MaximumSignalsPerExecution, 10000),
 		ShardUpdateMinInterval:           dc.GetDurationProperty(dynamicconfig.ShardUpdateMinInterval, 5*time.Minute),
+		ShardUpdateMinTasksCompleted:     dc.GetIntProperty(dynamicconfig.ShardUpdateMinTasksCompleted, 1000),
 		ShardSyncMinInterval:             dc.GetDurationProperty(dynamicconfig.ShardSyncMinInterval, 5*time.Minute),
 		ShardSyncTimerJitterCoefficient:  dc.GetFloat64Property(dynamicconfig.TransferProcessorMaxPollIntervalJitterCoefficient, 0.15),
 

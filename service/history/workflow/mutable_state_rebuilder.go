@@ -628,21 +628,24 @@ func (b *MutableStateRebuilderImpl) applyEvents(
 
 			// The length of newRunHistory can be zero in resend case
 			if len(newRunHistory) != 0 {
-				newRunMutableState = NewMutableState(
-					b.shard,
-					b.shard.GetEventsCache(),
-					b.logger,
-					b.mutableState.GetNamespaceEntry(),
-					timestamp.TimeValue(newRunHistory[0].GetEventTime()),
-				)
-
-				newRunStateBuilder := NewMutableStateRebuilder(b.shard, b.logger, newRunMutableState)
-
 				newRunID := event.GetWorkflowExecutionContinuedAsNewEventAttributes().GetNewExecutionRunId()
 				newExecution := commonpb.WorkflowExecution{
 					WorkflowId: execution.WorkflowId,
 					RunId:      newRunID,
 				}
+
+				newRunMutableState = NewMutableState(
+					b.shard,
+					b.shard.GetEventsCache(),
+					b.logger,
+					b.mutableState.GetNamespaceEntry(),
+					newExecution.WorkflowId,
+					newExecution.RunId,
+					timestamp.TimeValue(newRunHistory[0].GetEventTime()),
+				)
+
+				newRunStateBuilder := NewMutableStateRebuilder(b.shard, b.logger, newRunMutableState)
+
 				_, err := newRunStateBuilder.ApplyEvents(
 					ctx,
 					namespaceID,

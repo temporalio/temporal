@@ -2392,7 +2392,7 @@ func (wh *WorkflowHandler) DescribeWorkflowExecution(ctx context.Context, reques
 		if err != nil {
 			return nil, err
 		}
-		if aliasedSas != nil {
+		if aliasedSas != response.GetWorkflowExecutionInfo().GetSearchAttributes() {
 			response.GetWorkflowExecutionInfo().SearchAttributes = aliasedSas
 		}
 	}
@@ -2733,7 +2733,7 @@ func (wh *WorkflowHandler) DescribeSchedule(ctx context.Context, request *workfl
 		if err != nil {
 			return nil, err
 		}
-		if aliasedSas != nil {
+		if aliasedSas != sas {
 			executionInfo.SearchAttributes = aliasedSas
 		}
 	}
@@ -2758,6 +2758,10 @@ func (wh *WorkflowHandler) DescribeSchedule(ctx context.Context, request *workfl
 		return nil, err
 	}
 
+	err = wh.annotateSearchAttributesOfScheduledWorkflow(&queryResponse, request.GetNamespace())
+	if err != nil {
+		return nil, serviceerror.NewInternal(fmt.Sprintf("describe schedule: %v", err))
+	}
 	// Search attributes in the Action are already in external ("aliased") form. Do not alias them here.
 
 	// for all running workflows started by the schedule, we should check that they're still running
@@ -2815,6 +2819,61 @@ func (wh *WorkflowHandler) DescribeSchedule(ctx context.Context, request *workfl
 		SearchAttributes: searchAttributes,
 		ConflictToken:    token,
 	}, nil
+}
+
+func (wh *WorkflowHandler) annotateSearchAttributesOfScheduledWorkflow(
+	queryResponse *schedspb.DescribeResponse,
+	nsName string,
+) error {
+	ei := wh.getScheduledWorkflowExecutionInfoFrom(queryResponse)
+	if ei == nil {
+		return nil
+	}
+	annotatedAttributes, err := wh.annotateSearchAttributes(ei.GetSearchAttributes(), nsName)
+	if err != nil {
+		return fmt.Errorf("annotate search attributes: %w", err)
+	}
+	ei.SearchAttributes = annotatedAttributes
+	return nil
+}
+
+func (wh *WorkflowHandler) getScheduledWorkflowExecutionInfoFrom(
+	queryResponse *schedspb.DescribeResponse,
+) *workflowpb.NewWorkflowExecutionInfo {
+	action := queryResponse.GetSchedule().GetAction().GetAction()
+	startWorkflowAction, ok := action.(*schedpb.ScheduleAction_StartWorkflow)
+	if !ok {
+		return nil
+	}
+	return startWorkflowAction.StartWorkflow
+}
+
+func (wh *WorkflowHandler) annotateSearchAttributes(
+	searchAttributes *commonpb.SearchAttributes,
+	nsName string,
+) (*commonpb.SearchAttributes, error) {
+	unaliasedSearchAttrs, err := searchattribute.UnaliasFields(
+		wh.saMapperProvider,
+		searchAttributes,
+		nsName,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("create annotations: %w", err)
+	}
+	saTypeMap, err := wh.saProvider.GetSearchAttributes(wh.visibilityMrg.GetIndexName(), false)
+	if err != nil {
+		return nil, fmt.Errorf("create annotations: %w", err)
+	}
+	searchattribute.ApplyTypeMap(unaliasedSearchAttrs, saTypeMap)
+	annotatedAttributes, err := searchattribute.AliasFields(
+		wh.saMapperProvider,
+		unaliasedSearchAttrs,
+		nsName,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("create annotations: %w", err)
+	}
+	return annotatedAttributes, nil
 }
 
 // Changes the configuration or state of an existing schedule.
@@ -4165,7 +4224,7 @@ func (wh *WorkflowHandler) unaliasStartWorkflowExecutionRequestSearchAttributes(
 	if err != nil {
 		return nil, err
 	}
-	if unaliasedSas == nil {
+	if unaliasedSas == request.GetSearchAttributes() {
 		return request, nil
 	}
 
@@ -4180,7 +4239,7 @@ func (wh *WorkflowHandler) unaliasSignalWithStartWorkflowExecutionRequestSearchA
 	if err != nil {
 		return nil, err
 	}
-	if unaliasedSas == nil {
+	if unaliasedSas == request.GetSearchAttributes() {
 		return request, nil
 	}
 
@@ -4196,7 +4255,7 @@ func (wh *WorkflowHandler) unaliasCreateScheduleRequestSearchAttributes(request 
 		return nil, err
 	}
 
-	if unaliasedSas == nil {
+	if unaliasedSas == request.GetSearchAttributes() {
 		return request, nil
 	}
 

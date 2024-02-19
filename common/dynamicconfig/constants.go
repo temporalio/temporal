@@ -461,6 +461,9 @@ const (
 	MatchingMaxWaitForPollerBeforeFwd = "matching.maxWaitForPollerBeforeFwd"
 	// QueryPollerUnavailableWindow WF Queries are rejected after a while if no poller has been seen within the window
 	QueryPollerUnavailableWindow = "matching.queryPollerUnavailableWindow"
+	// MatchingMembershipUnloadDelay is how long to wait to re-confirm loss of ownership before unloading a task queue.
+	// Set to zero to disable proactive unload.
+	MatchingMembershipUnloadDelay = "matching.membershipUnloadDelay"
 
 	// for matching testing only:
 
@@ -511,8 +514,8 @@ const (
 	HistoryCacheNonUserContextLockTimeout = "history.cacheNonUserContextLockTimeout"
 	// EnableHostHistoryCache controls if the history cache is host level
 	EnableHostHistoryCache = "history.enableHostHistoryCache"
-	// HistoryCacheShardLevelMaxSize is max size of history shard level cache
-	HistoryCacheShardLevelMaxSize = "history.shardLevelCacheMaxSize"
+	// HistoryCacheHostLevelMaxSize is max size of history host level cache
+	HistoryCacheHostLevelMaxSize = "history.hostLevelCacheMaxSize"
 	// EnableAPIGetCurrentRunIDLock controls if a lock should be acquired before getting current run ID for API requests
 	EnableAPIGetCurrentRunIDLock = "history.enableAPIGetCurrentRunIDLock"
 	// HistoryStartupMembershipJoinDelay is the duration a history instance waits
@@ -522,10 +525,14 @@ const (
 	HistoryShutdownDrainDuration = "history.shutdownDrainDuration"
 	// XDCCacheMaxSizeBytes is max size of events cache in bytes
 	XDCCacheMaxSizeBytes = "history.xdcCacheMaxSizeBytes"
-	// EventsCacheMaxSizeBytes is max size of events cache in bytes
+	// EventsCacheMaxSizeBytes is max size of the shard level events cache in bytes
 	EventsCacheMaxSizeBytes = "history.eventsCacheMaxSizeBytes"
+	// EventsHostLevelCacheMaxSizeBytes is max size of the host level events cache in bytes
+	EventsHostLevelCacheMaxSizeBytes = "history.eventsHostLevelCacheMaxSizeBytes"
 	// EventsCacheTTL is TTL of events cache
 	EventsCacheTTL = "history.eventsCacheTTL"
+	// EnableHostLevelEventsCache controls if the events cache is host level
+	EnableHostLevelEventsCache = "history.enableHostLevelEventsCache"
 	// AcquireShardInterval is interval that timer used to acquire shard
 	AcquireShardInterval = "history.acquireShardInterval"
 	// AcquireShardConcurrency is number of goroutines that can be used to acquire shards in the shard controller.
@@ -741,6 +748,10 @@ const (
 	MaximumSignalsPerExecution = "history.maximumSignalsPerExecution"
 	// ShardUpdateMinInterval is the minimal time interval which the shard info can be updated
 	ShardUpdateMinInterval = "history.shardUpdateMinInterval"
+	// ShardUpdateMinTasksCompleted is the minimum number of tasks which must be completed (across all queues) before the shard info can be updated.
+	// Note that once history.shardUpdateMinInterval amount of time has passed we'll update the shard info regardless of the number of tasks completed.
+	// When the this config is zero or lower we will only update shard info at most once every history.shardUpdateMinInterval.
+	ShardUpdateMinTasksCompleted = "history.shardUpdateMinTasksCompleted"
 	// ShardSyncMinInterval is the minimal time interval which the shard info should be sync to remote
 	ShardSyncMinInterval = "history.shardSyncMinInterval"
 	// EmitShardLagLog whether emit the shard lag log
@@ -822,6 +833,11 @@ const (
 	// HistoryTaskDLQEnabled enables the history task DLQ. This applies to internal tasks like transfer and timer tasks.
 	// Do not turn this on if you aren't using Cassandra as the history task DLQ is not implemented for other databases.
 	HistoryTaskDLQEnabled = "history.TaskDLQEnabled"
+	// HistoryTaskDLQUnexpectedErrorAttempts is the number of task execution attempts before sending the task to DLQ.
+	HistoryTaskDLQUnexpectedErrorAttempts = "history.TaskDLQUnexpectedErrorAttempts"
+	// HistoryTaskDLQInteralErrors causes history task processing to send tasks failing with serviceerror.Internal to
+	// the dlq (or will drop them if not enabled)
+	HistoryTaskDLQInternalErrors = "history.TaskDLQInternalErrors"
 
 	// ReplicationStreamSyncStatusDuration sync replication status duration
 	ReplicationStreamSyncStatusDuration = "history.ReplicationStreamSyncStatusDuration"

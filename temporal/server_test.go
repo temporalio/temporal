@@ -108,10 +108,12 @@ func setTestPorts(cfg *config.Config) {
 
 func getFrontendInterceptors() func(ctx context.Context, req any, info *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (resp any, err error) {
 	return func(ctx context.Context, req any, info *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (resp any, err error) {
-		if _, ok := info.Server.(*frontend.Handler); !ok {
+		switch info.Server.(type) {
+		case *frontend.Handler, *frontend.OperatorHandler, *frontend.AdminHandler, *frontend.WorkflowHandler:
+			return handler(ctx, req)
+		default:
 			panic("Frontend gRPC interceptor provided to non-frontend handler")
 		}
-		return handler(ctx, req)
 	}
 }
 

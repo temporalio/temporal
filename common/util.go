@@ -160,11 +160,17 @@ var (
 // Returns true if the Wait() call succeeded before the timeout
 // Returns false if the Wait() did not return before the timeout
 func AwaitWaitGroup(wg *sync.WaitGroup, timeout time.Duration) bool {
+	return BlockWithTimeout(wg.Wait, timeout)
+}
 
+// BlockWithTimeout invokes fn and waits for it to complete until the timeout.
+// Returns true if the call completed before the timeout, otherwise returns false.
+// fn is expected to be a blocking call and will continue to occupy a goroutine until it finally completes.
+func BlockWithTimeout(fn func(), timeout time.Duration) bool {
 	doneC := make(chan struct{})
 
 	go func() {
-		wg.Wait()
+		fn()
 		close(doneC)
 	}()
 
@@ -461,6 +467,12 @@ func VerifyShardIDMapping(
 			thisShardID, thatShardID,
 		),
 	)
+}
+
+// TaskQueueRoutingKey returns the string that should be passed to Lookup to find the owner of
+// a task queue partition.
+func TaskQueueRoutingKey(namespaceId string, fullName string, tqType enumspb.TaskQueueType) string {
+	return fmt.Sprintf("%s:%s:%d", namespaceId, fullName, tqType)
 }
 
 func PrettyPrint[T proto.Message](msgs []T, header ...string) {

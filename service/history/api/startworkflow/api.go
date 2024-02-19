@@ -75,7 +75,7 @@ type Starter struct {
 type creationParams struct {
 	workflowID           string
 	runID                string
-	workflowContext      api.WorkflowContext
+	workflowLease        api.WorkflowLease
 	workflowTaskInfo     *workflow.WorkflowTaskInfo
 	workflowSnapshot     *persistence.WorkflowSnapshot
 	workflowEventBatches []*persistence.WorkflowEvents
@@ -214,7 +214,7 @@ func (s *Starter) lockCurrentWorkflowExecution(
 // createNewMutableState creates a new workflow context, and closes its mutable state transaction as snapshot.
 // It returns the creationContext which can later be used to insert into the executions table.
 func (s *Starter) createNewMutableState(ctx context.Context, workflowID string, runID string) (*creationParams, error) {
-	workflowContext, err := api.NewWorkflowWithSignal(
+	workflowLease, err := api.NewWorkflowWithSignal(
 		ctx,
 		s.shardContext,
 		s.namespace,
@@ -227,7 +227,7 @@ func (s *Starter) createNewMutableState(ctx context.Context, workflowID string, 
 		return nil, err
 	}
 
-	mutableState := workflowContext.GetMutableState()
+	mutableState := workflowLease.GetMutableState()
 	workflowTaskInfo := mutableState.GetStartedWorkflowTask()
 	if s.requestEagerStart() && workflowTaskInfo == nil {
 		return nil, serviceerror.NewInternal("unexpected error: mutable state did not have a started workflow task")
@@ -245,7 +245,7 @@ func (s *Starter) createNewMutableState(ctx context.Context, workflowID string, 
 	return &creationParams{
 		workflowID:           workflowID,
 		runID:                runID,
-		workflowContext:      workflowContext,
+		workflowLease:        workflowLease,
 		workflowTaskInfo:     workflowTaskInfo,
 		workflowSnapshot:     workflowSnapshot,
 		workflowEventBatches: eventBatches,
@@ -254,13 +254,13 @@ func (s *Starter) createNewMutableState(ctx context.Context, workflowID string, 
 
 // createBrandNew creates a new "brand new" execution in the executions table.
 func (s *Starter) createBrandNew(ctx context.Context, creationParams *creationParams) error {
-	return creationParams.workflowContext.GetContext().CreateWorkflowExecution(
+	return creationParams.workflowLease.GetContext().CreateWorkflowExecution(
 		ctx,
 		s.shardContext,
 		persistence.CreateWorkflowModeBrandNew,
 		"", // prevRunID
 		0,  // prevLastWriteVersion
-		creationParams.workflowContext.GetMutableState(),
+		creationParams.workflowLease.GetMutableState(),
 		creationParams.workflowSnapshot,
 		creationParams.workflowEventBatches,
 	)
@@ -299,20 +299,20 @@ func (s *Starter) createAsCurrent(
 	creationParams *creationParams,
 	currentWorkflowConditionFailed *persistence.CurrentWorkflowConditionFailedError,
 ) error {
-	return creationParams.workflowContext.GetContext().CreateWorkflowExecution(
+	return creationParams.workflowLease.GetContext().CreateWorkflowExecution(
 		ctx,
 		s.shardContext,
 		persistence.CreateWorkflowModeUpdateCurrent,
 		currentWorkflowConditionFailed.RunID,
 		currentWorkflowConditionFailed.LastWriteVersion,
-		creationParams.workflowContext.GetMutableState(),
+		creationParams.workflowLease.GetMutableState(),
 		creationParams.workflowSnapshot,
 		creationParams.workflowEventBatches,
 	)
 }
 
 func (s *Starter) verifyNamespaceActive(creationParams *creationParams, currentWorkflowConditionFailed *persistence.CurrentWorkflowConditionFailedError) error {
-	if creationParams.workflowContext.GetMutableState().GetCurrentVersion() < currentWorkflowConditionFailed.LastWriteVersion {
+	if creationParams.workflowLease.GetMutableState().GetCurrentVersion() < currentWorkflowConditionFailed.LastWriteVersion {
 		clusterMetadata := s.shardContext.GetClusterMetadata()
 		clusterName := clusterMetadata.ClusterNameForFailoverVersion(s.namespace.IsGlobalNamespace(), currentWorkflowConditionFailed.LastWriteVersion)
 		return serviceerror.NewNamespaceNotActive(
@@ -366,7 +366,7 @@ func (s *Starter) applyWorkflowIDReusePolicy(
 		),
 		prevExecutionUpdateAction,
 		func() (workflow.Context, workflow.MutableState, error) {
-			workflowContext, err := api.NewWorkflowWithSignal(
+			workflowLease, err := api.NewWorkflowWithSignal(
 				ctx,
 				s.shardContext,
 				s.namespace,
@@ -377,12 +377,12 @@ func (s *Starter) applyWorkflowIDReusePolicy(
 			if err != nil {
 				return nil, nil, err
 			}
-			mutableState := workflowContext.GetMutableState()
+			mutableState := workflowLease.GetMutableState()
 			mutableStateInfo, err = extractMutableStateInfo(mutableState)
 			if err != nil {
 				return nil, nil, err
 			}
-			return workflowContext.GetContext(), mutableState, nil
+			return workflowLease.GetContext(), mutableState, nil
 		},
 		s.shardContext,
 		s.workflowConsistencyChecker,

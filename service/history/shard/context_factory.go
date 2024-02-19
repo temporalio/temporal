@@ -41,6 +41,7 @@ import (
 	"go.temporal.io/server/common/resource"
 	"go.temporal.io/server/common/searchattribute"
 	"go.temporal.io/server/service/history/configs"
+	"go.temporal.io/server/service/history/events"
 	"go.temporal.io/server/service/history/tasks"
 )
 
@@ -76,6 +77,7 @@ type (
 		ThrottledLogger             log.ThrottledLogger
 		TimeSource                  clock.TimeSource
 		TaskCategoryRegistry        tasks.TaskCategoryRegistry
+		EventsCache                 events.Cache
 	}
 
 	contextFactoryImpl struct {
@@ -115,6 +117,7 @@ func (c *contextFactoryImpl) CreateContext(
 		c.ArchivalMetadata,
 		c.HostInfoProvider,
 		c.TaskCategoryRegistry,
+		c.EventsCache,
 	)
 	if err != nil {
 		return nil, err

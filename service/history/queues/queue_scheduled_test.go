@@ -27,6 +27,7 @@ package queues
 import (
 	"context"
 	"errors"
+	"math"
 	"math/rand"
 	"testing"
 	"time"
@@ -140,6 +141,12 @@ func (s *scheduledQueueSuite) SetupTest() {
 		logger,
 		metrics.NoopMetricsHandler,
 		nil,
+		func() bool {
+			return false
+		},
+		func() int {
+			return math.MaxInt
+		},
 		func() bool {
 			return false
 		},

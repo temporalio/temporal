@@ -63,14 +63,13 @@ type (
 			consistencyPredicate api.MutableStateConsistencyPredicate,
 			workflowKey definition.WorkflowKey,
 			lockPriority workflow.LockPriority,
-		) (api.WorkflowContext, error)
+		) (api.WorkflowLease, error)
 	}
 
-	mockAPICtx struct {
-		api.WorkflowContext
-		GetUpdateRegistryFunc func(context.Context) update.Registry
-		GetReleaseFnFunc      func() wcache.ReleaseCacheFunc
-		GetWorkflowKeyFunc    func() definition.WorkflowKey
+	mockWorkflowLeaseCtx struct {
+		api.WorkflowLease
+		GetContextFn   func() workflow.Context
+		GetReleaseFnFn func() wcache.ReleaseCacheFunc
 	}
 
 	mockReg struct {
@@ -87,26 +86,22 @@ func (mockUpdateEventStore) OnAfterCommit(f func(context.Context))   { f(context
 func (mockUpdateEventStore) OnAfterRollback(f func(context.Context)) {}
 func (mockUpdateEventStore) CanAddEvent() bool                       { return true }
 
-func (m mockWFConsistencyChecker) GetWorkflowContext(
+func (m mockWFConsistencyChecker) GetWorkflowLease(
 	ctx context.Context,
 	clock *clockspb.VectorClock,
 	pred api.MutableStateConsistencyPredicate,
 	wfKey definition.WorkflowKey,
 	prio workflow.LockPriority,
-) (api.WorkflowContext, error) {
+) (api.WorkflowLease, error) {
 	return m.GetWorkflowContextFunc(ctx, clock, pred, wfKey, prio)
 }
 
-func (m mockAPICtx) GetReleaseFn() wcache.ReleaseCacheFunc {
-	return m.GetReleaseFnFunc()
+func (m mockWorkflowLeaseCtx) GetReleaseFn() wcache.ReleaseCacheFunc {
+	return m.GetReleaseFnFn()
 }
 
-func (m mockAPICtx) GetUpdateRegistry(ctx context.Context) update.Registry {
-	return m.GetUpdateRegistryFunc(ctx)
-}
-
-func (m mockAPICtx) GetWorkflowKey() definition.WorkflowKey {
-	return m.GetWorkflowKeyFunc()
+func (m mockWorkflowLeaseCtx) GetContext() workflow.Context {
+	return m.GetContextFn()
 }
 
 func (m mockReg) Find(ctx context.Context, updateID string) (*update.Update, bool) {
@@ -118,14 +113,18 @@ func TestPollOutcome(t *testing.T) {
 	workflowId := t.Name() + "-workflow-id"
 	runId := t.Name() + "-run-id"
 	updateID := t.Name() + "-update-id"
-	reg := mockReg{}
-	apiCtx := mockAPICtx{
-		GetReleaseFnFunc: func() wcache.ReleaseCacheFunc { return func(error) {} },
-		GetUpdateRegistryFunc: func(context.Context) update.Registry {
-			return reg
-		},
-		GetWorkflowKeyFunc: func() definition.WorkflowKey {
-			return definition.WorkflowKey{NamespaceID: namespaceId, WorkflowID: workflowId, RunID: runId}
+	reg := &mockReg{}
+
+	mockController := gomock.NewController(t)
+
+	wfCtx := workflow.NewMockContext(mockController)
+	wfCtx.EXPECT().GetWorkflowKey().Return(definition.WorkflowKey{NamespaceID: namespaceId, WorkflowID: workflowId, RunID: runId}).AnyTimes()
+	wfCtx.EXPECT().UpdateRegistry(gomock.Any()).Return(reg).AnyTimes()
+
+	apiCtx := mockWorkflowLeaseCtx{
+		GetReleaseFnFn: func() wcache.ReleaseCacheFunc { return func(error) {} },
+		GetContextFn: func() workflow.Context {
+			return wfCtx
 		},
 	}
 	wfcc := mockWFConsistencyChecker{
@@ -135,13 +134,12 @@ func TestPollOutcome(t *testing.T) {
 			consistencyPredicate api.MutableStateConsistencyPredicate,
 			workflowKey definition.WorkflowKey,
 			lockPriority workflow.LockPriority,
-		) (api.WorkflowContext, error) {
+		) (api.WorkflowLease, error) {
 			return apiCtx, nil
 		},
 	}
 
 	serverImposedTimeout := 10 * time.Millisecond
-	mockController := gomock.NewController(t)
 	mockNamespaceRegistry := namespace.NewMockRegistry(mockController)
 	mockNamespaceRegistry.EXPECT().GetNamespaceByID(gomock.Any()).Return(tests.GlobalNamespaceEntry, nil).AnyTimes()
 	shardContext := shard.NewMockContext(mockController)

@@ -31,6 +31,7 @@ import (
 	"google.golang.org/protobuf/types/known/timestamppb"
 
 	"go.temporal.io/server/common/cache"
+	"go.temporal.io/server/common/metrics"
 )
 
 const (
@@ -59,7 +60,7 @@ func newPollerHistory() *pollerHistory {
 	}
 
 	return &pollerHistory{
-		history: cache.New(pollerHistoryInitMaxSize, opts),
+		history: cache.New(pollerHistoryInitMaxSize, opts, metrics.NoopMetricsHandler),
 	}
 }
 

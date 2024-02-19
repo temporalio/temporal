@@ -22,11 +22,12 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-package metrics
+package util
 
 import (
 	"errors"
 	"fmt"
+	"strings"
 )
 
 // typedError is an error that has a type name.
@@ -43,12 +44,12 @@ var wrapperErrorTypes = map[string]bool{
 	"*errors.withStack":   true,
 }
 
-// errorType returns a best effort guess at the most meaningful type name for the given error.
+// ErrorType returns a best effort guess at the most meaningful type name for the given error.
 // If any of err's underlying errors implement TypedError, then the type name of the first such error is returned.
 // This allows us to be explicit about the tag values we want to use for telemetry.
 // Otherwise, the type name of the first non-wrapper error in the depth-first traversal of err's tree is returned.
 // We consider errors wrapped via [fmt.Errorf], [errors.Join] and some pkg/errors functions to be wrapper errors.
-func errorType(err error) string {
+func ErrorType(err error) string {
 	// If any error in the tree has an explicit type name, use it, preferring the first one in the DFS traversal.
 	var typedErr typedError
 	if errors.As(err, &typedErr) {
@@ -61,7 +62,7 @@ func errorType(err error) string {
 		q = q[:len(q)-1]
 		errType := fmt.Sprintf("%T", err)
 		if !wrapperErrorTypes[errType] {
-			return errType
+			return strings.TrimPrefix(errType, "*")
 		}
 		// The error could implement zero or one of the unary or multi-error wrapper interfaces. It's impossible to
 		// implement both because they have the same method name. As a result, this is still deterministic.

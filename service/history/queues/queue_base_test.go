@@ -27,6 +27,7 @@ package queues
 import (
 	"context"
 	"errors"
+	"math"
 	"math/rand"
 	"testing"
 	"time"
@@ -693,6 +694,12 @@ func (s *queueBaseSuite) newQueueBase(
 		s.logger,
 		s.metricsHandler,
 		nil,
+		func() bool {
+			return false
+		},
+		func() int {
+			return math.MaxInt
+		},
 		func() bool {
 			return false
 		},

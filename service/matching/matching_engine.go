@@ -51,6 +51,7 @@ import (
 	replicationspb "go.temporal.io/server/api/replication/v1"
 	tokenspb "go.temporal.io/server/api/token/v1"
 	"go.temporal.io/server/common"
+	"go.temporal.io/server/common/backoff"
 	"go.temporal.io/server/common/clock"
 	hlc "go.temporal.io/server/common/clock/hybrid_logical_clock"
 	"go.temporal.io/server/common/cluster"
@@ -67,6 +68,7 @@ import (
 	"go.temporal.io/server/common/resource"
 	serviceerrors "go.temporal.io/server/common/serviceerror"
 	"go.temporal.io/server/common/tasktoken"
+	"go.temporal.io/server/common/util"
 	"go.temporal.io/server/common/worker_versioning"
 )
 
@@ -126,7 +128,9 @@ type (
 		logger               log.Logger
 		throttledLogger      log.ThrottledLogger
 		namespaceRegistry    namespace.Registry
-		keyResolver          membership.ServiceResolver
+		hostInfoProvider     membership.HostInfoProvider
+		serviceResolver      membership.ServiceResolver
+		membershipChangedCh  chan *membership.ChangedEvent
 		clusterMeta          cluster.Metadata
 		timeSource           clock.TimeSource
 		visibilityManager    manager.VisibilityManager
@@ -176,12 +180,12 @@ func NewEngine(
 	throttledLogger log.ThrottledLogger,
 	metricsHandler metrics.Handler,
 	namespaceRegistry namespace.Registry,
+	hostInfoProvider membership.HostInfoProvider,
 	resolver membership.ServiceResolver,
 	clusterMeta cluster.Metadata,
 	namespaceReplicationQueue persistence.NamespaceReplicationQueue,
 	visibilityManager manager.VisibilityManager,
 ) Engine {
-
 	return &matchingEngineImpl{
 		status:                    common.DaemonStatusInitialized,
 		taskManager:               taskManager,
@@ -192,7 +196,9 @@ func NewEngine(
 		logger:                    log.With(logger, tag.ComponentMatchingEngine),
 		throttledLogger:           log.With(throttledLogger, tag.ComponentMatchingEngine),
 		namespaceRegistry:         namespaceRegistry,
-		keyResolver:               resolver,
+		hostInfoProvider:          hostInfoProvider,
+		serviceResolver:           resolver,
+		membershipChangedCh:       make(chan *membership.ChangedEvent, 1), // allow one signal to be buffered while we're working
 		clusterMeta:               clusterMeta,
 		timeSource:                clock.NewRealTimeSource(), // No need to mock this at the moment
 		visibilityManager:         visibilityManager,
@@ -215,6 +221,9 @@ func (e *matchingEngineImpl) Start() {
 	) {
 		return
 	}
+
+	go e.watchMembership()
+	_ = e.serviceResolver.AddListener(e.listenerKey(), e.membershipChangedCh)
 }
 
 func (e *matchingEngineImpl) Stop() {
@@ -226,8 +235,64 @@ func (e *matchingEngineImpl) Stop() {
 		return
 	}
 
+	_ = e.serviceResolver.RemoveListener(e.listenerKey())
+	close(e.membershipChangedCh)
+
 	for _, l := range e.getTaskQueues(math.MaxInt32) {
 		l.Stop()
+	}
+}
+
+func (e *matchingEngineImpl) listenerKey() string {
+	return fmt.Sprintf("matchingEngine[%p]", e)
+}
+
+func (e *matchingEngineImpl) watchMembership() {
+	self := e.hostInfoProvider.HostInfo().Identity()
+
+	for range e.membershipChangedCh {
+		delay := e.config.MembershipUnloadDelay()
+		if delay == 0 {
+			continue
+		}
+
+		// Check all our loaded task queues to see if we lost ownership of any of them.
+		e.taskQueuesLock.RLock()
+		ids := make([]*taskQueueID, 0, len(e.taskQueues))
+		for id := range e.taskQueues {
+			ids = append(ids, util.Ptr(id))
+		}
+		e.taskQueuesLock.RUnlock()
+
+		ids = util.FilterSlice(ids, func(id *taskQueueID) bool {
+			owner, err := e.serviceResolver.Lookup(id.routingKey())
+			return err == nil && owner.Identity() != self
+		})
+
+		const batchSize = 100
+		for i := 0; i < len(ids); i += batchSize {
+			// We don't own these anymore, but don't unload them immediately, wait a few seconds to ensure
+			// the membership update has propagated everywhere so that they won't get immediately re-loaded.
+			// Note that we don't verify ownership at load time, so this is the only guard against a task
+			// queue bouncing back and forth due to long membership propagation time.
+			batch := ids[i:min(len(ids), i+batchSize)]
+			wait := backoff.Jitter(delay, 0.2)
+			time.AfterFunc(wait, func() {
+				// maybe the whole engine stopped
+				if atomic.LoadInt32(&e.status) != common.DaemonStatusStarted {
+					return
+				}
+				for _, id := range batch {
+					// maybe ownership changed again
+					owner, err := e.serviceResolver.Lookup(id.routingKey())
+					if err != nil || owner.Identity() == self {
+						return
+					}
+					// now we can unload
+					e.unloadTaskQueueById(id, nil)
+				}
+			})
+		}
 	}
 }
 
@@ -1164,15 +1229,8 @@ func (e *matchingEngineImpl) ForceUnloadTaskQueue(
 	if err != nil {
 		return nil, err
 	}
-	tqm, err := e.getTaskQueueManager(ctx, taskQueue, normalStickyInfo, false)
-	if err != nil {
-		return nil, err
-	}
-	if tqm == nil {
-		return &matchingservice.ForceUnloadTaskQueueResponse{WasLoaded: false}, nil
-	}
-	e.unloadTaskQueue(tqm)
-	return &matchingservice.ForceUnloadTaskQueueResponse{WasLoaded: true}, nil
+	wasLoaded := e.unloadTaskQueueById(taskQueue, nil)
+	return &matchingservice.ForceUnloadTaskQueueResponse{WasLoaded: wasLoaded}, nil
 }
 
 func (e *matchingEngineImpl) UpdateTaskQueueUserData(ctx context.Context, request *matchingservice.UpdateTaskQueueUserDataRequest) (*matchingservice.UpdateTaskQueueUserDataResponse, error) {
@@ -1225,7 +1283,7 @@ func (e *matchingEngineImpl) getNamespaceUpdateLocks(namespaceId string) *namesp
 }
 
 func (e *matchingEngineImpl) getHostInfo(partitionKey string) (string, error) {
-	host, err := e.keyResolver.Lookup(partitionKey)
+	host, err := e.serviceResolver.Lookup(partitionKey)
 	if err != nil {
 		return "", err
 	}
@@ -1296,19 +1354,27 @@ func (e *matchingEngineImpl) pollTask(
 	return tqm.PollTask(ctx, pollMetadata)
 }
 
+// Unloads the given task queue. If it has already been unloaded (i.e. it's not present in the loaded task
+// queue map), then does nothing.
 func (e *matchingEngineImpl) unloadTaskQueue(unloadTQM taskQueueManager) {
-	queueID := unloadTQM.QueueID()
+	e.unloadTaskQueueById(unloadTQM.QueueID(), unloadTQM)
+}
+
+// Unloads a task queue by id. If unloadTQM is given and the loaded task queue for queueID does not match
+// unloadTQM, then nothing is unloaded. Returns true if it unloaded a task queue and false if not.
+func (e *matchingEngineImpl) unloadTaskQueueById(queueID *taskQueueID, unloadTQM taskQueueManager) bool {
 	e.taskQueuesLock.Lock()
 	foundTQM, ok := e.taskQueues[*queueID]
-	if !ok || foundTQM != unloadTQM {
+	if !ok || (unloadTQM != nil && foundTQM != unloadTQM) {
 		e.taskQueuesLock.Unlock()
-		return
+		return false
 	}
 	delete(e.taskQueues, *queueID)
 	e.taskQueuesLock.Unlock()
 	// This may call unloadTaskQueue again but that's okay, the next call will not find it.
 	foundTQM.Stop()
 	e.updateTaskQueueGauge(foundTQM, -1)
+	return true
 }
 
 func (e *matchingEngineImpl) updateTaskQueueGauge(tqm taskQueueManager, delta int) {

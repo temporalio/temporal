@@ -123,11 +123,11 @@ type (
 		CustomDataStoreFactory persistenceClient.AbstractDataStoreFactory
 		CustomVisibilityStore  visibility.VisibilityStoreFactory
 
-		SearchAttributesMapper searchattribute.Mapper
-		CustomInterceptors     []grpc.UnaryServerInterceptor `group:"frontendInterceptors"`
-		Authorizer             authorization.Authorizer
-		ClaimMapper            authorization.ClaimMapper
-		AudienceGetter         authorization.JWTAudienceMapper
+		SearchAttributesMapper     searchattribute.Mapper
+		CustomFrontendInterceptors []grpc.UnaryServerInterceptor
+		Authorizer                 authorization.Authorizer
+		ClaimMapper                authorization.ClaimMapper
+		AudienceGetter             authorization.JWTAudienceMapper
 
 		// below are things that could be over write by server options or may have default if not supplied by serverOptions.
 		Logger                log.Logger
@@ -284,11 +284,11 @@ func ServerOptionsProvider(opts []ServerOption) (serverOptionsProvider, error) {
 		CustomDataStoreFactory: so.customDataStoreFactory,
 		CustomVisibilityStore:  so.customVisibilityStoreFactory,
 
-		SearchAttributesMapper: so.searchAttributesMapper,
-		CustomInterceptors:     so.customInterceptors,
-		Authorizer:             so.authorizer,
-		ClaimMapper:            so.claimMapper,
-		AudienceGetter:         so.audienceGetter,
+		SearchAttributesMapper:     so.searchAttributesMapper,
+		CustomFrontendInterceptors: so.customFrontendInterceptors,
+		Authorizer:                 so.authorizer,
+		ClaimMapper:                so.claimMapper,
+		AudienceGetter:             so.audienceGetter,
 
 		Logger:                logger,
 		ClientFactoryProvider: clientFactoryProvider,
@@ -352,7 +352,7 @@ type (
 		PersistenceServiceResolver resolver.ServiceResolver
 		PersistenceFactoryProvider persistenceClient.FactoryProviderFn
 		SearchAttributesMapper     searchattribute.Mapper
-		CustomInterceptors         []grpc.UnaryServerInterceptor `group:"frontendInterceptors"`
+		CustomFrontendInterceptors []grpc.UnaryServerInterceptor
 		Authorizer                 authorization.Authorizer
 		ClaimMapper                authorization.ClaimMapper
 		DataStoreFactory           persistenceClient.AbstractDataStoreFactory
@@ -523,9 +523,7 @@ func genericFrontendServiceProvider(
 
 	app := fx.New(
 		params.GetCommonServiceOptions(serviceName),
-		fx.Provide(fx.Annotate(
-			func() []grpc.UnaryServerInterceptor { return params.CustomInterceptors },
-			fx.ParamTags(`group:"frontendInterceptors"`))),
+		fx.Supply(params.CustomFrontendInterceptors),
 		fx.Decorate(func() authorization.ClaimMapper {
 			switch serviceName {
 			case primitives.FrontendService:
@@ -898,7 +896,7 @@ var TraceExportModule = fx.Options(
 	fx.Invoke(func(log log.Logger) {
 		otel.SetErrorHandler(otel.ErrorHandlerFunc(
 			func(err error) {
-				log.Warn("OTEL error", tag.Error(err), tag.ErrorType(err))
+				log.Warn("OTEL error", tag.Error(err), tag.ServiceErrorType(err))
 			}),
 		)
 	}),

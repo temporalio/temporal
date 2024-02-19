@@ -32,7 +32,7 @@ const fullCoefficient float64 = 1
 
 // FullJitter return random number from 0 to input, inclusive, exclusive
 func FullJitter[T ~int64 | ~int | ~int32 | ~float64 | ~float32](input T) T {
-	return Jitter(input, fullCoefficient) / 2
+	return T(rand.Float64() * float64(input))
 }
 
 // Jitter return random number from (1-coefficient)*input to (1+coefficient)*input, inclusive, exclusive
