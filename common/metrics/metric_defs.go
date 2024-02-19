@@ -1106,7 +1106,7 @@ var (
 	MemoryHeapIdleGauge  = NewGaugeDef("memory_heapidle")
 	MemoryHeapInuseGauge = NewGaugeDef("memory_heapinuse")
 	MemoryStackGauge     = NewGaugeDef("memory_stack")
-	NumGCCounter         = NewCounterDef("memory_num_gc")
+	NumGCCounter         = NewBytesHistogramDef("memory_num_gc")
 	GcPauseMsTimer       = NewTimerDef("memory_gc_pause_ms")
 )
 
