@@ -83,7 +83,6 @@ func (r *EventsReapplierImpl) ReapplyEvents(
 				// skip already applied event
 				continue
 			}
-			reappliedEvents = append(reappliedEvents, event)
 		}
 	}
 
