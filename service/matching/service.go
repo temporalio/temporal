@@ -90,7 +90,7 @@ func (s *Service) Start() {
 	s.logger.Info("matching starting")
 
 	// must start base service first
-	//TODO -> New Metric definition
+	//TODO: New Metric definition
 	s.metricsHandler.Counter(metrics.RestartCount).Record(1)
 
 	s.handler.Start()

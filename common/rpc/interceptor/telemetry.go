@@ -154,7 +154,7 @@ func (ti *TelemetryInterceptor) UnaryIntercept(
 	userLatencyDuration := time.Duration(0)
 	defer func() {
 		latency := time.Since(startTime)
-		metricsHandler.Timer(metrics.ServiceLatency.Name()).Record(latency)
+		metrics.ServiceLatency.With(metricsHandler).Record(latency)
 		noUserLatency := latency - userLatencyDuration
 		if noUserLatency < 0 {
 			noUserLatency = 0

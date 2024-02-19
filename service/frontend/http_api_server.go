@@ -367,11 +367,10 @@ func newInlineClientConn(
 		}
 	}
 
-	//TODO -> New Metric definition
 	return &inlineClientConn{
 		methods:           methods,
 		interceptor:       chainUnaryServerInterceptors(interceptors),
-		requestsCounter:   metricsHandler.Counter(metrics.HTTPServiceRequests.Name()),
+		requestsCounter:   metrics.HTTPServiceRequests.With(metricsHandler),
 		namespaceRegistry: namespaceRegistry,
 	}
 }

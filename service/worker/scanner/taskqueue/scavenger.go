@@ -198,7 +198,7 @@ func (s *Scavenger) awaitExecutor() {
 		select {
 		case <-timer.C:
 			outstanding = s.executor.TaskCount()
-			s.metricsHandler.Gauge(metrics.TaskQueueOutstandingCount.Name()).Record(float64(outstanding))
+			metrics.TaskQueueOutstandingCount.With(s.metricsHandler).Record(float64(outstanding))
 		case <-s.stopC:
 			timer.Stop()
 			return
@@ -207,10 +207,10 @@ func (s *Scavenger) awaitExecutor() {
 }
 
 func (s *Scavenger) emitStats() {
-	s.metricsHandler.Gauge(metrics.TaskProcessedCount.Name()).Record(float64(s.stats.task.nProcessed))
-	s.metricsHandler.Gauge(metrics.TaskDeletedCount.Name()).Record(float64(s.stats.task.nDeleted))
-	s.metricsHandler.Gauge(metrics.TaskQueueProcessedCount.Name()).Record(float64(s.stats.taskqueue.nProcessed))
-	s.metricsHandler.Gauge(metrics.TaskQueueDeletedCount.Name()).Record(float64(s.stats.taskqueue.nDeleted))
+	metrics.TaskProcessedCount.With(s.metricsHandler).Record(float64(s.stats.task.nProcessed))
+	metrics.TaskDeletedCount.With(s.metricsHandler).Record(float64(s.stats.task.nDeleted))
+	metrics.TaskQueueProcessedCount.With(s.metricsHandler).Record(float64(s.stats.taskqueue.nProcessed))
+	metrics.TaskQueueDeletedCount.With(s.metricsHandler).Record(float64(s.stats.taskqueue.nDeleted))
 }
 
 // newTask returns a new instance of an executable task which will process a single task queue

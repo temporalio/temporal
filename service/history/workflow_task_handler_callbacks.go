@@ -277,13 +277,12 @@ func (handler *workflowTaskHandlerCallbacksImpl) handleWorkflowTaskStarted(
 			workflowScheduleToStartLatency := workflowTask.StartedTime.Sub(workflowTask.ScheduledTime)
 			namespaceName := namespaceEntry.Name()
 			taskQueue := workflowTask.TaskQueue
-			metrics.GetPerTaskQueueScope(
+			metrics.TaskScheduleToStartLatency.With(metrics.GetPerTaskQueueScope(
 				metricsScope,
 				namespaceName.String(),
 				taskQueue.GetName(),
 				taskQueue.GetKind(),
-			).Timer(metrics.TaskScheduleToStartLatency.Name()).Record(
-				workflowScheduleToStartLatency,
+			)).Record(workflowScheduleToStartLatency,
 				metrics.TaskQueueTypeTag(enumspb.TASK_QUEUE_TYPE_WORKFLOW),
 			)
 

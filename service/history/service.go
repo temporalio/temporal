@@ -89,7 +89,7 @@ func NewService(
 func (s *Service) Start() {
 	s.logger.Info("history starting")
 
-	//TODO -> New Metric definition
+	//TODO: New Metric definition
 	s.metricsHandler.Counter(metrics.RestartCount).Record(1)
 
 	s.handler.Start()

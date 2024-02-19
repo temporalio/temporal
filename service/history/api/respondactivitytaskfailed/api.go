@@ -141,7 +141,7 @@ func Invoke(
 		workflowConsistencyChecker,
 	)
 	if err == nil && !activityStartedTime.IsZero() {
-		shard.GetMetricsHandler().Timer(metrics.ActivityE2ELatency.Name()).Record(
+		metrics.ActivityE2ELatency.With(shard.GetMetricsHandler()).Record(
 			time.Since(activityStartedTime),
 			metrics.OperationTag(metrics.HistoryRespondActivityTaskFailedScope),
 			metrics.NamespaceTag(namespace.String()),

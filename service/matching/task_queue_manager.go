@@ -303,7 +303,7 @@ func (c *taskQueueManagerImpl) signalIfFatal(err error) bool {
 	}
 	var condfail *persistence.ConditionFailedError
 	if errors.As(err, &condfail) {
-		c.taggedMetricsHandler.Counter(metrics.ConditionFailedErrorPerTaskQueueCounter.Name()).Record(1)
+		metrics.ConditionFailedErrorPerTaskQueueCounter.With(c.taggedMetricsHandler).Record(1)
 		c.skipFinalUpdate.Store(true)
 		c.unloadFromEngine()
 		return true
@@ -328,7 +328,7 @@ func (c *taskQueueManagerImpl) Start() {
 		c.goroGroup.Go(c.fetchUserData)
 	}
 	c.logger.Info("", tag.LifeCycleStarted)
-	c.taggedMetricsHandler.Counter(metrics.TaskQueueStartedCounter.Name()).Record(1)
+	metrics.TaskQueueStartedCounter.With(c.taggedMetricsHandler).Record(1)
 }
 
 func (c *taskQueueManagerImpl) Stop() {
@@ -361,7 +361,7 @@ func (c *taskQueueManagerImpl) Stop() {
 	// Set user data state on stop to wake up anyone blocked on the user data changed channel.
 	c.db.setUserDataState(userDataClosed)
 	c.logger.Info("", tag.LifeCycleStopped)
-	c.taggedMetricsHandler.Counter(metrics.TaskQueueStoppedCounter.Name()).Record(1)
+	metrics.TaskQueueStoppedCounter.With(c.taggedMetricsHandler).Record(1)
 	// This may call Stop again, but the status check above makes that a no-op.
 	c.unloadFromEngine()
 }
@@ -430,7 +430,7 @@ func (c *taskQueueManagerImpl) AddTask(
 	// TODO: make this work for versioned queues too
 	if c.QueueID().IsRoot() && c.QueueID().VersionSet() == "" && !c.HasPollerAfter(time.Now().Add(-noPollerThreshold)) {
 		// Only checks recent pollers in the root partition
-		c.taggedMetricsHandler.Counter(metrics.NoRecentPollerTasksPerTaskQueueCounter.Name()).Record(1)
+		metrics.NoRecentPollerTasksPerTaskQueueCounter.With(c.taggedMetricsHandler).Record(1)
 	}
 
 	taskInfo := params.taskInfo
@@ -910,12 +910,12 @@ func (c *taskQueueManagerImpl) RedirectToVersionedQueueForAdd(ctx context.Contex
 
 func (c *taskQueueManagerImpl) recordUnknownBuildPoll(buildId string) {
 	c.logger.Warn("unknown build id in poll", tag.BuildId(buildId))
-	c.taggedMetricsHandler.Counter(metrics.UnknownBuildPollsCounter.Name()).Record(1)
+	metrics.UnknownBuildPollsCounter.With(c.taggedMetricsHandler).Record(1)
 }
 
 func (c *taskQueueManagerImpl) recordUnknownBuildTask(buildId string) {
 	c.logger.Warn("unknown build id in task", tag.BuildId(buildId))
-	c.taggedMetricsHandler.Counter(metrics.UnknownBuildTasksCounter.Name()).Record(1)
+	metrics.UnknownBuildTasksCounter.With(c.taggedMetricsHandler).Record(1)
 }
 
 func (c *taskQueueManagerImpl) callerInfoContext(ctx context.Context) context.Context {

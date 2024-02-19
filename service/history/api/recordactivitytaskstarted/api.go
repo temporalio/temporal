@@ -122,12 +122,13 @@ func Invoke(
 			namespaceName := namespaceEntry.Name()
 			taskQueueName := ai.GetTaskQueue()
 
-			metrics.GetPerTaskQueueScope(
-				taggedMetrics,
-				namespaceName.String(),
-				taskQueueName,
-				enumspb.TASK_QUEUE_KIND_NORMAL,
-			).Timer(metrics.TaskScheduleToStartLatency.Name()).Record(
+			metrics.TaskScheduleToStartLatency.With(
+				metrics.GetPerTaskQueueScope(
+					taggedMetrics,
+					namespaceName.String(),
+					taskQueueName,
+					enumspb.TASK_QUEUE_KIND_NORMAL,
+				)).Record(
 				scheduleToStartLatency,
 				metrics.TaskQueueTypeTag(enumspb.TASK_QUEUE_TYPE_ACTIVITY),
 			)

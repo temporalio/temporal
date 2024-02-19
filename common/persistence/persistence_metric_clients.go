@@ -1240,7 +1240,7 @@ func (p *metadataPersistenceClient) InitializeSystemNamespaces(
 func (p *metricEmitter) recordRequestMetrics(operation string, caller string, latency time.Duration, err error) {
 	handler := p.metricsHandler.WithTags(metrics.OperationTag(operation), metrics.NamespaceTag(caller))
 	metrics.PersistenceRequests.With(handler).Record(1)
-	handler.Timer(metrics.PersistenceLatency.Name()).Record(latency)
+	metrics.PersistenceLatency.With(handler).Record(latency)
 	updateErrorMetric(handler, p.logger, operation, err)
 }
 

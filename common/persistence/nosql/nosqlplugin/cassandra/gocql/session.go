@@ -127,7 +127,7 @@ func initSession(
 	}
 	start := time.Now()
 	defer func() {
-		metricsHandler.Timer(metrics.CassandraInitSessionLatency.Name()).Record(time.Since(start))
+		metrics.CassandraInitSessionLatency.With(metricsHandler).Record(time.Since(start))
 	}()
 	return cluster.CreateSession()
 }

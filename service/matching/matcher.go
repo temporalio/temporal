@@ -167,7 +167,7 @@ func (tm *TaskMatcher) Offer(ctx context.Context, task *internalTask) (bool, err
 
 	if !task.isForwarded() {
 		if err := tm.rateLimiter.Wait(ctx); err != nil {
-			tm.metricsHandler.Counter(metrics.SyncThrottlePerTaskQueueCounter.Name()).Record(1)
+			metrics.SyncThrottlePerTaskQueueCounter.With(tm.metricsHandler).Record(1)
 			return false, err
 		}
 	}
@@ -348,7 +348,7 @@ forLoop:
 			err := tm.fwdr.ForwardTask(childCtx, task)
 			token.release()
 			if err != nil {
-				tm.metricsHandler.Counter(metrics.ForwardTaskErrorsPerTaskQueue.Name()).Record(1)
+				metrics.ForwardTaskErrorsPerTaskQueue.With(tm.metricsHandler).Record(1)
 				// forwarder returns error only when the call is rate limited. To
 				// avoid a busy loop on such rate limiting events, we only attempt to make
 				// the next forwarded call after this childCtx expires. Till then, we block
@@ -397,7 +397,7 @@ func (tm *TaskMatcher) emitDispatchLatency(task *internalTask, forwarded bool) {
 		source = enumsspb.TASK_SOURCE_HISTORY
 	}
 
-	tm.metricsHandler.Timer(metrics.TaskDispatchLatencyPerTaskQueue.Name()).Record(
+	metrics.TaskDispatchLatencyPerTaskQueue.With(tm.metricsHandler).Record(
 		time.Since(timestamp.TimeValue(task.event.Data.CreateTime)),
 		metrics.StringTag("source", source.String()),
 		metrics.StringTag("forwarded", strconv.FormatBool(forwarded)),
@@ -467,7 +467,7 @@ func (tm *TaskMatcher) poll(
 	defer func() {
 		if pollMetadata.forwardedFrom == "" {
 			// Only recording for original polls
-			tm.metricsHandler.Timer(metrics.PollLatencyPerTaskQueue.Name()).Record(
+			metrics.PollLatencyPerTaskQueue.With(tm.metricsHandler).Record(
 				time.Since(start), metrics.StringTag("forwarded", strconv.FormatBool(forwardedPoll)))
 		}
 
@@ -490,7 +490,7 @@ func (tm *TaskMatcher) poll(
 	// 1. ctx.Done
 	select {
 	case <-ctx.Done():
-		tm.metricsHandler.Counter(metrics.PollTimeoutPerTaskQueueCounter.Name()).Record(1)
+		metrics.PollTimeoutPerTaskQueueCounter.With(tm.metricsHandler).Record(1)
 		return nil, false, errNoTasks
 	case <-tm.closeC:
 		return nil, false, errNoTasks
@@ -501,13 +501,13 @@ func (tm *TaskMatcher) poll(
 	select {
 	case task := <-taskC:
 		if task.responseC != nil {
-			tm.metricsHandler.Counter(metrics.PollSuccessWithSyncPerTaskQueueCounter.Name()).Record(1)
+			metrics.PollSuccessWithSyncPerTaskQueueCounter.With(tm.metricsHandler).Record(1)
 		}
-		tm.metricsHandler.Counter(metrics.PollSuccessPerTaskQueueCounter.Name()).Record(1)
+		metrics.PollSuccessPerTaskQueueCounter.With(tm.metricsHandler).Record(1)
 		return task, false, nil
 	case task := <-queryTaskC:
-		tm.metricsHandler.Counter(metrics.PollSuccessWithSyncPerTaskQueueCounter.Name()).Record(1)
-		tm.metricsHandler.Counter(metrics.PollSuccessPerTaskQueueCounter.Name()).Record(1)
+		metrics.PollSuccessWithSyncPerTaskQueueCounter.With(tm.metricsHandler).Record(1)
+		metrics.PollSuccessPerTaskQueueCounter.With(tm.metricsHandler).Record(1)
 		return task, false, nil
 	default:
 	}
@@ -517,19 +517,19 @@ func (tm *TaskMatcher) poll(
 		// We don't forward pollers if there is a non-negligible backlog in this partition.
 		select {
 		case <-ctx.Done():
-			tm.metricsHandler.Counter(metrics.PollTimeoutPerTaskQueueCounter.Name()).Record(1)
+			metrics.PollTimeoutPerTaskQueueCounter.With(tm.metricsHandler).Record(1)
 			return nil, false, errNoTasks
 		case <-tm.closeC:
 			return nil, false, errNoTasks
 		case task := <-taskC:
 			if task.responseC != nil {
-				tm.metricsHandler.Counter(metrics.PollSuccessWithSyncPerTaskQueueCounter.Name()).Record(1)
+				metrics.PollSuccessWithSyncPerTaskQueueCounter.With(tm.metricsHandler).Record(1)
 			}
-			tm.metricsHandler.Counter(metrics.PollSuccessPerTaskQueueCounter.Name()).Record(1)
+			metrics.PollSuccessPerTaskQueueCounter.With(tm.metricsHandler).Record(1)
 			return task, false, nil
 		case task := <-queryTaskC:
-			tm.metricsHandler.Counter(metrics.PollSuccessWithSyncPerTaskQueueCounter.Name()).Record(1)
-			tm.metricsHandler.Counter(metrics.PollSuccessPerTaskQueueCounter.Name()).Record(1)
+			metrics.PollSuccessWithSyncPerTaskQueueCounter.With(tm.metricsHandler).Record(1)
+			metrics.PollSuccessPerTaskQueueCounter.With(tm.metricsHandler).Record(1)
 			return task, false, nil
 		case token := <-tm.fwdrPollReqTokenC():
 			if task, err := tm.fwdr.ForwardPoll(ctx, pollMetadata); err == nil {
@@ -543,19 +543,19 @@ func (tm *TaskMatcher) poll(
 	// 4. blocking local poll
 	select {
 	case <-ctx.Done():
-		tm.metricsHandler.Counter(metrics.PollTimeoutPerTaskQueueCounter.Name()).Record(1)
+		metrics.PollTimeoutPerTaskQueueCounter.With(tm.metricsHandler).Record(1)
 		return nil, false, errNoTasks
 	case <-tm.closeC:
 		return nil, false, errNoTasks
 	case task := <-taskC:
 		if task.responseC != nil {
-			tm.metricsHandler.Counter(metrics.PollSuccessWithSyncPerTaskQueueCounter.Name()).Record(1)
+			metrics.PollSuccessWithSyncPerTaskQueueCounter.With(tm.metricsHandler).Record(1)
 		}
-		tm.metricsHandler.Counter(metrics.PollSuccessPerTaskQueueCounter.Name()).Record(1)
+		metrics.PollSuccessPerTaskQueueCounter.With(tm.metricsHandler).Record(1)
 		return task, false, nil
 	case task := <-queryTaskC:
-		tm.metricsHandler.Counter(metrics.PollSuccessWithSyncPerTaskQueueCounter.Name()).Record(1)
-		tm.metricsHandler.Counter(metrics.PollSuccessPerTaskQueueCounter.Name()).Record(1)
+		metrics.PollSuccessWithSyncPerTaskQueueCounter.With(tm.metricsHandler).Record(1)
+		metrics.PollSuccessPerTaskQueueCounter.With(tm.metricsHandler).Record(1)
 		return task, false, nil
 	}
 }
@@ -645,13 +645,13 @@ func (tm *TaskMatcher) emitForwardedSourceStats(
 	isPollForwarded := len(pollForwardedSource) > 0
 	switch {
 	case isTaskForwarded && isPollForwarded:
-		tm.metricsHandler.Counter(metrics.RemoteToRemoteMatchPerTaskQueueCounter.Name()).Record(1)
+		metrics.RemoteToRemoteMatchPerTaskQueueCounter.With(tm.metricsHandler).Record(1)
 	case isTaskForwarded:
-		tm.metricsHandler.Counter(metrics.RemoteToLocalMatchPerTaskQueueCounter.Name()).Record(1)
+		metrics.RemoteToLocalMatchPerTaskQueueCounter.With(tm.metricsHandler).Record(1)
 	case isPollForwarded:
-		tm.metricsHandler.Counter(metrics.LocalToRemoteMatchPerTaskQueueCounter.Name()).Record(1)
+		metrics.LocalToRemoteMatchPerTaskQueueCounter.With(tm.metricsHandler).Record(1)
 	default:
-		tm.metricsHandler.Counter(metrics.LocalToLocalMatchPerTaskQueueCounter.Name()).Record(1)
+		metrics.LocalToLocalMatchPerTaskQueueCounter.With(tm.metricsHandler).Record(1)
 	}
 }
 

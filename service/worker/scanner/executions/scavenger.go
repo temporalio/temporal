@@ -200,7 +200,7 @@ func (s *Scavenger) run() {
 
 func (s *Scavenger) awaitExecutor() {
 	// gauge value persists, so we want to reset it to 0
-	defer s.metricsHandler.Gauge(metrics.ExecutionsOutstandingCount.Name()).Record(float64(0))
+	defer metrics.ExecutionsOutstandingCount.With(s.metricsHandler).Record(float64(0))
 
 	outstanding := s.executor.TaskCount()
 	for outstanding > 0 {
@@ -208,7 +208,7 @@ func (s *Scavenger) awaitExecutor() {
 		select {
 		case <-timer.C:
 			outstanding = s.executor.TaskCount()
-			s.metricsHandler.Gauge(metrics.ExecutionsOutstandingCount.Name()).Record(float64(outstanding))
+			metrics.ExecutionsOutstandingCount.With(s.metricsHandler).Record(float64(outstanding))
 		case <-s.stopC:
 			timer.Stop()
 			return

@@ -113,7 +113,7 @@ func (vc *VersionChecker) performVersionCheck(
 ) {
 	startTime := time.Now().UTC()
 	defer func() {
-		vc.metricsHandler.Timer(metrics.VersionCheckLatency.Name()).Record(time.Since(startTime))
+		metrics.VersionCheckLatency.With(vc.metricsHandler).Record(time.Since(startTime))
 	}()
 	metadata, err := vc.clusterMetadataManager.GetCurrentClusterMetadata(ctx)
 	if err != nil {

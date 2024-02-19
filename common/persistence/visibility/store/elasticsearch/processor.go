@@ -258,7 +258,7 @@ func (p *processorImpl) bulkAfterAction(_ int64, requests []elastic.BulkableRequ
 	}
 
 	// Record how long the Elasticsearch took to process the bulk request.
-	p.metricsHandler.Timer(metrics.ElasticsearchBulkProcessorBulkResquestTookLatency.Name()).
+	metrics.ElasticsearchBulkProcessorBulkResquestTookLatency.With(p.metricsHandler).
 		Record(time.Duration(response.Took) * time.Millisecond)
 
 	responseIndex := p.buildResponseIndex(response)
@@ -429,14 +429,14 @@ func newAckFuture() *ackFuture {
 func (a *ackFuture) recordAdd(metricsHandler metrics.Handler) {
 	addedAt := time.Now().UTC()
 	a.addedAt.Store(addedAt)
-	metricsHandler.Timer(metrics.ElasticsearchBulkProcessorWaitAddLatency.Name()).Record(addedAt.Sub(a.createdAt))
+	metrics.ElasticsearchBulkProcessorWaitAddLatency.With(metricsHandler).Record(addedAt.Sub(a.createdAt))
 }
 
 func (a *ackFuture) recordStart(metricsHandler metrics.Handler) {
 	a.startedAt = time.Now().UTC()
 	addedAt := a.addedAt.Load().(time.Time)
 	if !addedAt.IsZero() {
-		metricsHandler.Timer(metrics.ElasticsearchBulkProcessorWaitStartLatency.Name()).Record(a.startedAt.Sub(addedAt))
+		metrics.ElasticsearchBulkProcessorWaitStartLatency.With(metricsHandler).Record(a.startedAt.Sub(addedAt))
 	}
 }
 
@@ -444,9 +444,9 @@ func (a *ackFuture) done(ack bool, metricsHandler metrics.Handler) {
 	a.future.Set(ack, nil)
 	doneAt := time.Now().UTC()
 	if !a.createdAt.IsZero() {
-		metricsHandler.Timer(metrics.ElasticsearchBulkProcessorRequestLatency.Name()).Record(doneAt.Sub(a.createdAt))
+		metrics.ElasticsearchBulkProcessorRequestLatency.With(metricsHandler).Record(doneAt.Sub(a.createdAt))
 	}
 	if !a.startedAt.IsZero() {
-		metricsHandler.Timer(metrics.ElasticsearchBulkProcessorCommitLatency.Name()).Record(doneAt.Sub(a.startedAt))
+		metrics.ElasticsearchBulkProcessorCommitLatency.With(metricsHandler).Record(doneAt.Sub(a.startedAt))
 	}
 }
