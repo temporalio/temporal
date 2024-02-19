@@ -785,7 +785,6 @@ func (c *ContextImpl) ReapplyEvents(
 			event := e
 			switch event.GetEventType() {
 			case enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_SIGNALED:
-				reapplyEvents = append(reapplyEvents, event)
 			}
 		}
 	}
