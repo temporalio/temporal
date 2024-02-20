@@ -239,7 +239,7 @@ func (m *userDataManager) fetchUserData(ctx context.Context) error {
 		defer cancel()
 
 		res, err := m.matchingClient.GetTaskQueueUserData(callCtx, &matchingservice.GetTaskQueueUserDataRequest{
-			NamespaceId:              m.partition.NamespaceID().String(),
+			NamespaceId:              m.partition.NamespaceId().String(),
 			TaskQueue:                fetchSource.RpcName(),
 			TaskQueueType:            enumspb.TASK_QUEUE_TYPE_WORKFLOW,
 			LastKnownUserDataVersion: knownUserData.GetVersion(),
@@ -295,7 +295,7 @@ func (m *userDataManager) fetchUserData(ctx context.Context) error {
 // Loads user data from db (called only on initialization of taskQueuePartitionManager).
 func (m *userDataManager) loadUserDataFromDB(ctx context.Context) error {
 	response, err := m.store.GetTaskQueueUserData(ctx, &persistence.GetTaskQueueUserDataRequest{
-		NamespaceID: m.partition.NamespaceID().String(),
+		NamespaceID: m.partition.NamespaceId().String(),
 		TaskQueue:   m.partition.TaskQueue().Name(),
 	})
 	if common.IsNotFoundError(err) {
@@ -328,7 +328,7 @@ func (m *userDataManager) UpdateUserData(ctx context.Context, options UserDataUp
 	}
 
 	// Only replicate if namespace is global and has at least 2 clusters registered.
-	ns, err := m.namespaceRegistry.GetNamespaceByID(m.partition.NamespaceID())
+	ns, err := m.namespaceRegistry.GetNamespaceByID(m.partition.NamespaceId())
 	if err != nil {
 		return err
 	}
@@ -337,7 +337,7 @@ func (m *userDataManager) UpdateUserData(ctx context.Context, options UserDataUp
 	}
 
 	_, err = m.matchingClient.ReplicateTaskQueueUserData(ctx, &matchingservice.ReplicateTaskQueueUserDataRequest{
-		NamespaceId: m.partition.NamespaceID().String(),
+		NamespaceId: m.partition.NamespaceId().String(),
 		TaskQueue:   m.partition.TaskQueue().Name(),
 		UserData:    newData.GetData(),
 	})
@@ -392,7 +392,7 @@ func (m *userDataManager) updateUserData(
 		// We do not enforce the limit when applying replication events.
 		for _, buildId := range added {
 			numTaskQueues, err := m.store.CountTaskQueuesByBuildId(ctx, &persistence.CountTaskQueuesByBuildIdRequest{
-				NamespaceID: m.partition.NamespaceID().String(),
+				NamespaceID: m.partition.NamespaceId().String(),
 				BuildID:     buildId,
 			})
 			if err != nil {
@@ -405,7 +405,7 @@ func (m *userDataManager) updateUserData(
 	}
 
 	_, err = m.matchingClient.UpdateTaskQueueUserData(ctx, &matchingservice.UpdateTaskQueueUserDataRequest{
-		NamespaceId:     m.partition.NamespaceID().String(),
+		NamespaceId:     m.partition.NamespaceId().String(),
 		TaskQueue:       m.partition.TaskQueue().Name(),
 		UserData:        &persistencespb.VersionedTaskQueueUserData{Version: preUpdateVersion, Data: updatedUserData},
 		BuildIdsAdded:   added,
@@ -426,6 +426,6 @@ func (m *userDataManager) setUserDataForNonOwningPartition(userData *persistence
 }
 
 func (m *userDataManager) callerInfoContext(ctx context.Context) context.Context {
-	ns, _ := m.namespaceRegistry.GetNamespaceName(m.partition.NamespaceID())
+	ns, _ := m.namespaceRegistry.GetNamespaceName(m.partition.NamespaceId())
 	return headers.SetCallerInfo(ctx, headers.NewBackgroundCallerInfo(ns.String()))
 }

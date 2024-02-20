@@ -70,7 +70,7 @@ var (
 )
 
 func (dbq *DBTaskQueue) NamespaceID() namespace.ID {
-	return dbq.partition.TaskQueue().NamespaceID()
+	return dbq.partition.TaskQueue().NamespaceId()
 }
 
 func (dbq *DBTaskQueue) TaskQueueFamily() *tqid.TaskQueueFamily {

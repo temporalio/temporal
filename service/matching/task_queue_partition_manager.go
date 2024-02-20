@@ -110,7 +110,7 @@ func newTaskQueuePartitionManager(
 	partition tqid.Partition,
 	config *Config,
 ) (taskQueuePartitionManager, error) {
-	namespaceEntry, err := e.namespaceRegistry.GetNamespaceByID(partition.NamespaceID())
+	namespaceEntry, err := e.namespaceRegistry.GetNamespaceByID(partition.NamespaceId())
 	if err != nil {
 		return nil, err
 	}
@@ -314,7 +314,7 @@ func (pm *taskQueuePartitionManagerImpl) LongPollExpirationInterval() time.Durat
 }
 
 func (pm *taskQueuePartitionManagerImpl) callerInfoContext(ctx context.Context) context.Context {
-	ns, _ := pm.namespaceRegistry.GetNamespaceName(pm.partition.NamespaceID())
+	ns, _ := pm.namespaceRegistry.GetNamespaceName(pm.partition.NamespaceId())
 	return headers.SetCallerInfo(ctx, headers.NewBackgroundCallerInfo(ns.String()))
 }
 
@@ -502,7 +502,7 @@ func (pm *taskQueuePartitionManagerImpl) redirectToVersionSetQueueForAdd(
 		pm.recordUnknownBuildTask(buildId)
 		// Send rpc to root partition to persist the unknown build id before we return success.
 		_, err = pm.matchingClient.UpdateWorkerBuildIdCompatibility(ctx, &matchingservice.UpdateWorkerBuildIdCompatibilityRequest{
-			NamespaceId: pm.partition.NamespaceID().String(),
+			NamespaceId: pm.partition.NamespaceId().String(),
 			TaskQueue:   pm.partition.TaskQueue().Family().TaskQueue(enumspb.TASK_QUEUE_TYPE_WORKFLOW).RootPartition().RpcName(),
 			Operation: &matchingservice.UpdateWorkerBuildIdCompatibilityRequest_PersistUnknownBuildId{
 				PersistUnknownBuildId: buildId,

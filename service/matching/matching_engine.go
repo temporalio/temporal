@@ -1332,7 +1332,7 @@ func (e *matchingEngineImpl) unloadTaskQueuePartition(unloadPM taskQueuePartitio
 
 func (e *matchingEngineImpl) updateTaskQueueGauge(pm taskQueuePartitionManager, versioned bool, delta int) {
 	countKey := taskQueueCounterKey{
-		namespaceID: pm.Partition().NamespaceID(),
+		namespaceID: pm.Partition().NamespaceId(),
 		taskType:    pm.Partition().TaskType(),
 		kind:        pm.Partition().Kind(),
 		versioned:   versioned,

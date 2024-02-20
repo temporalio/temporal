@@ -105,7 +105,7 @@ func (lb *defaultLoadBalancer) PickWritePartition(
 		return taskQueue.NormalPartition(n)
 	}
 
-	nsName, err := lb.namespaceIDToName(taskQueue.NamespaceID())
+	nsName, err := lb.namespaceIDToName(taskQueue.NamespaceId())
 	if err != nil {
 		return taskQueue.RootPartition()
 	}
@@ -125,7 +125,7 @@ func (lb *defaultLoadBalancer) PickReadPartition(
 	// map namespace ID to name.
 	var partitionCount = dynamicconfig.GlobalDefaultNumTaskQueuePartitions
 
-	namespaceName, err := lb.namespaceIDToName(taskQueue.NamespaceID())
+	namespaceName, err := lb.namespaceIDToName(taskQueue.NamespaceId())
 	if err == nil {
 		partitionCount = lb.nReadPartitions(string(namespaceName), taskQueue.Name(), taskQueue.TaskType())
 	}

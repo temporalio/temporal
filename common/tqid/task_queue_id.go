@@ -63,7 +63,7 @@ type (
 	// Each Partition has a distinct task queue partition manager in memory in Matching service.
 	// Normal partition with `partitionId=0` is called the "root". Sticky queues are not considered root.
 	Partition interface {
-		NamespaceID() namespace.ID
+		NamespaceId() namespace.ID
 		TaskQueue() *TaskQueue
 		TaskType() enumspb.TaskQueueType
 		// IsRoot always returns false for Sticky partitions
@@ -107,7 +107,7 @@ type (
 	// Note that task queue kind (sticky vs normal) and normal name for sticky task queues are not
 	// part of the task queue partition identity.
 	PartitionKey struct {
-		namespaceID string
+		namespaceId string
 		name        string
 		partitionId int
 		taskType    enumspb.TaskQueueType
@@ -169,7 +169,7 @@ func (n *TaskQueueFamily) Name() string {
 	return n.name
 }
 
-func (n *TaskQueueFamily) NamespaceID() namespace.ID {
+func (n *TaskQueueFamily) NamespaceId() namespace.ID {
 	return n.namespaceId
 }
 
@@ -188,8 +188,8 @@ func (n *TaskQueue) Family() *TaskQueueFamily {
 	return &n.family
 }
 
-func (n *TaskQueue) NamespaceID() namespace.ID {
-	return n.family.NamespaceID()
+func (n *TaskQueue) NamespaceId() namespace.ID {
+	return n.family.NamespaceId()
 }
 
 func (n *TaskQueue) TaskType() enumspb.TaskQueueType {
@@ -227,8 +227,8 @@ func (s *StickyPartition) IsSticky() bool {
 	return true
 }
 
-func (s *StickyPartition) NamespaceID() namespace.ID {
-	return s.taskQueue.family.NamespaceID()
+func (s *StickyPartition) NamespaceId() namespace.ID {
+	return s.taskQueue.family.NamespaceId()
 }
 
 func (s *StickyPartition) RootPartition() Partition {
@@ -249,7 +249,7 @@ func (s *StickyPartition) RpcName() string {
 
 func (s *StickyPartition) Key() PartitionKey {
 	return PartitionKey{
-		namespaceID: s.NamespaceID().String(),
+		namespaceId: s.NamespaceId().String(),
 		name:        s.StickyName(),
 		taskType:    s.TaskType(),
 	}
@@ -275,7 +275,7 @@ func (p *NormalPartition) PartitionID() int {
 	return p.partitionId
 }
 
-func (p *NormalPartition) NamespaceID() namespace.ID {
+func (p *NormalPartition) NamespaceId() namespace.ID {
 	return p.taskQueue.family.namespaceId
 }
 
@@ -303,7 +303,7 @@ func (p *NormalPartition) RpcName() string {
 
 func (p *NormalPartition) Key() PartitionKey {
 	return PartitionKey{
-		namespaceID: p.NamespaceID().String(),
+		namespaceId: p.NamespaceId().String(),
 		name:        p.TaskQueue().Name(),
 		partitionId: p.partitionId,
 		taskType:    p.TaskType(),

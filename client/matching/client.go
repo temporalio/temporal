@@ -245,7 +245,7 @@ func (c *clientImpl) createLongPollContext(parent context.Context) (context.Cont
 }
 
 func (c *clientImpl) getClientForTaskQueuePartition(tqPrtn tqid.Partition) (matchingservice.MatchingServiceClient, error) {
-	key := fmt.Sprintf("%s:%s:%d", tqPrtn.NamespaceID(), tqPrtn.RpcName(), int(tqPrtn.TaskType()))
+	key := fmt.Sprintf("%s:%s:%d", tqPrtn.NamespaceId(), tqPrtn.RpcName(), int(tqPrtn.TaskType()))
 	client, err := c.clients.GetClientForKey(key)
 	if err != nil {
 		return nil, err
