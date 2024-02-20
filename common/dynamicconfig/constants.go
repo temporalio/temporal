@@ -31,6 +31,8 @@ func (k Key) String() string {
 const (
 	// keys for admin
 
+	// AdminEnableListHistoryTasks is the key for enabling listing history tasks
+	AdminEnableListHistoryTasks = "admin.enableListHistoryTasks"
 	// AdminMatchingNamespaceToPartitionDispatchRate is the max qps of any task queue partition for a given namespace
 	AdminMatchingNamespaceToPartitionDispatchRate = "admin.matchingNamespaceToPartitionDispatchRate"
 	// AdminMatchingNamespaceTaskqueueToPartitionDispatchRate is the max qps of a task queue partition for a given namespace & task queue

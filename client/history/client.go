@@ -305,7 +305,7 @@ func (c *clientImpl) ListTasks(
 	opts ...grpc.CallOption,
 ) (*historyservice.ListTasksResponse, error) {
 	// Depth of the shardId field is 2 which is not supported by the rpcwrapper generator.
-	// Simply changing the maxDepth for ShardId	field in the rpcwrapper generator will
+	// Simply changing the maxDepth for ShardId field in the rpcwrapper generator will
 	// cause the generation logic for other methods to find more than one routing fields.
 
 	shardID := in.Request.GetShardId()

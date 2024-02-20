@@ -100,9 +100,9 @@ func Invoke(
 	}, nil
 }
 
-func toAdminTask(tasks []tasks.Task) []*adminservice.Task {
+func toAdminTask(historyTasks []tasks.Task) []*adminservice.Task {
 	var adminTasks []*adminservice.Task
-	for _, task := range tasks {
+	for _, task := range historyTasks {
 		adminTasks = append(adminTasks, &adminservice.Task{
 			NamespaceId: task.GetNamespaceID(),
 			WorkflowId:  task.GetWorkflowID(),

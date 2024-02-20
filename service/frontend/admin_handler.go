@@ -802,9 +802,13 @@ func (adh *AdminHandler) ListHistoryTasks(
 	if request == nil {
 		return nil, errRequestNotSet
 	}
-	taskRange := request.GetTaskRange()
-	if taskRange == nil {
+
+	if request.GetTaskRange() == nil {
 		return nil, errTaskRangeNotSet
+	}
+
+	if !adh.config.AdminEnableListHistoryTasks() {
+		return nil, errListHistoryTasksNotAllowed
 	}
 
 	resp, err := adh.historyClient.ListTasks(

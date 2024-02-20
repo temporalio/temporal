@@ -126,4 +126,6 @@ var (
 	errUpdateWorkflowExecutionAsyncAdmittedNotAllowed = serviceerror.NewPermissionDenied("UpdateWorkflowExecution issued asynchronously and waiting on update admitted is disabled on this namespace", "")
 
 	errWorkerVersioningNotAllowed = serviceerror.NewPermissionDenied("Worker versioning is disabled on this namespace.", "")
+
+	errListHistoryTasksNotAllowed = serviceerror.NewPermissionDenied("ListHistoryTasks feature is disabled on this cluster.", "")
 )
