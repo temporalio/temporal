@@ -39,7 +39,6 @@ import (
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	"go.temporal.io/server/api/history/v1"
 	"go.temporal.io/server/api/historyservice/v1"
-	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/testing/protoassert"
 	"go.temporal.io/server/service/history/tasks"
@@ -177,7 +176,6 @@ func (s *apiSuite) TestGetHistoryTasks() {
 	s.mockExecutionManager.EXPECT().GetHistoryTasks(gomock.Any(), &persistence.GetHistoryTasksRequest{
 		ShardID:             1,
 		TaskCategory:        tasks.CategoryTransfer,
-		ReaderID:            common.DefaultQueueReaderID,
 		InclusiveMinTaskKey: tasks.NewImmediateKey(minTaskID),
 		ExclusiveMaxTaskKey: tasks.NewImmediateKey(maxTaskID),
 		BatchSize:           batchSize,

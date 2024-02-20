@@ -437,7 +437,7 @@ func (s *sliceSuite) TestSelectTasks_NoError() {
 	predicate := tasks.NewNamespacePredicate(namespaceIDs)
 
 	numTasks := 20
-	paginationFnProvider := func(_ int64, paginationRange Range) collection.PaginationFn[tasks.Task] {
+	paginationFnProvider := func(paginationRange Range) collection.PaginationFn[tasks.Task] {
 		return func(paginationToken []byte) ([]tasks.Task, []byte, error) {
 
 			mockTasks := make([]tasks.Task, 0, numTasks)
@@ -487,7 +487,7 @@ func (s *sliceSuite) TestSelectTasks_Error_NoLoadedTasks() {
 
 	numTasks := 20
 	loadErr := true
-	paginationFnProvider := func(_ int64, paginationRange Range) collection.PaginationFn[tasks.Task] {
+	paginationFnProvider := func(paginationRange Range) collection.PaginationFn[tasks.Task] {
 		return func(paginationToken []byte) ([]tasks.Task, []byte, error) {
 			if loadErr {
 				loadErr = false
@@ -527,7 +527,7 @@ func (s *sliceSuite) TestSelectTasks_Error_WithLoadedTasks() {
 
 	numTasks := 20
 	loadErr := false
-	paginationFnProvider := func(_ int64, paginationRange Range) collection.PaginationFn[tasks.Task] {
+	paginationFnProvider := func(paginationRange Range) collection.PaginationFn[tasks.Task] {
 		return func(paginationToken []byte) ([]tasks.Task, []byte, error) {
 			defer func() {
 				loadErr = !loadErr
