@@ -47,7 +47,6 @@ type (
 		*sqlx.DB
 	}
 
-	// MySQLVersion specifies which of the distinct mysql versions we support
 	MySQLVersion int
 )
 
@@ -70,6 +69,7 @@ const (
 )
 
 var (
+	errUnspecifiedMySQLVersion                = errors.New("bug: mysql version left unspecified")
 	errMySQL8VisInterpolateParamsNotSupported = errors.New("interpolateParams is not supported for mysql8 visibility stores")
 	dsnAttrOverrides                          = map[string]string{
 		"parseTime":       "true",
@@ -95,7 +95,7 @@ func NewSession(
 	resolver resolver.ServiceResolver,
 ) (*Session, error) {
 	if version == MySQLVersionUnspecified {
-		return nil, fmt.Errorf("Bug: unspecified MySQL version provided to NewSession")
+		return nil, errUnspecifiedMySQLVersion
 	}
 
 	db, err := createConnection(version, dbKind, cfg, resolver)

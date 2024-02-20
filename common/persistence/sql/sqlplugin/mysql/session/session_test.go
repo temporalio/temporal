@@ -173,7 +173,7 @@ func (s *sessionTestSuite) TestBuildDSN() {
 }
 
 func (s *sessionTestSuite) Test_MySQL8_Visibility_DoesntSupport_interpolateParams() {
-	config := config.SQL{
+	cfg := config.SQL{
 		User:              "test",
 		Password:          "pass",
 		ConnectProtocol:   "tcp",
@@ -182,8 +182,8 @@ func (s *sessionTestSuite) Test_MySQL8_Visibility_DoesntSupport_interpolateParam
 		ConnectAttributes: map[string]string{"interpolateParams": "ignored"},
 	}
 	r := resolver.NewMockServiceResolver(s.controller)
-	r.EXPECT().Resolve(config.ConnectAddr).Return([]string{config.ConnectAddr})
-	_, err := buildDSN(MySQLVersion8_0, sqlplugin.DbKindVisibility, &config, r)
+	r.EXPECT().Resolve(cfg.ConnectAddr).Return([]string{cfg.ConnectAddr})
+	_, err := buildDSN(MySQLVersion8_0, sqlplugin.DbKindVisibility, &cfg, r)
 	s.Error(err, "We should return an error when a MySQL8 Visibility database is configured with interpolateParams")
 }
 
