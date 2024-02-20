@@ -53,7 +53,7 @@ type (
 		ShutdownDrainDuration                 dynamicconfig.DurationPropertyFn
 		HistoryMaxPageSize                    dynamicconfig.IntPropertyFnWithNamespaceFilter
 
-		// task queue-specific configuration
+		// task queue configuration
 
 		RangeSize                         int64
 		GetTasksBatchSize                 dynamicconfig.IntPropertyFnWithTaskQueueInfoFilters
@@ -215,9 +215,9 @@ func NewConfig(
 	}
 }
 
-func newTaskQueueConfig(partition tqid.Partition, config *Config, ns namespace.Name) *taskQueueConfig {
-	taskQueueName := partition.TaskQueue().Name()
-	taskType := partition.TaskType()
+func newTaskQueueConfig(tq *tqid.TaskQueue, config *Config, ns namespace.Name) *taskQueueConfig {
+	taskQueueName := tq.Name()
+	taskType := tq.TaskType()
 
 	return &taskQueueConfig{
 		RangeSize: config.RangeSize,

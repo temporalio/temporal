@@ -371,7 +371,7 @@ func createTestTaskQueuePartitionManager(controller *gomock.Controller, testOpts
 	mockHistoryClient.EXPECT().IsActivityTaskValid(gomock.Any(), gomock.Any()).Return(&historyservice.IsActivityTaskValidResponse{IsValid: true}, nil).AnyTimes()
 	me := newMatchingEngine(testOpts.config, tm, mockHistoryClient, logger, mockNamespaceCache, testOpts.matchingClientMock, mockVisibilityManager)
 
-	taskQueueConfig := newTaskQueueConfig(testOpts.dbq.Partition(), me.config, ns)
+	taskQueueConfig := newTaskQueueConfig(testOpts.dbq.Partition().TaskQueue(), me.config, ns)
 	pm := &taskQueuePartitionManagerImpl{
 		engine:               me,
 		partition:            testOpts.dbq.Partition(),

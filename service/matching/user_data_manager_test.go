@@ -58,7 +58,7 @@ func createUserDataManager(
 	mockNamespaceCache := namespace.NewMockRegistry(controller)
 	mockNamespaceCache.EXPECT().GetNamespaceByID(gomock.Any()).Return(&namespace.Namespace{}, nil).AnyTimes()
 	mockNamespaceCache.EXPECT().GetNamespaceName(gomock.Any()).Return(ns, nil).AnyTimes()
-	return newUserDataManager(tm, testOpts.matchingClientMock, testOpts.dbq.Partition(), newTaskQueueConfig(testOpts.dbq.Partition(), testOpts.config, ns), logger, mockNamespaceCache)
+	return newUserDataManager(tm, testOpts.matchingClientMock, testOpts.dbq.Partition(), newTaskQueueConfig(testOpts.dbq.Partition().TaskQueue(), testOpts.config, ns), logger, mockNamespaceCache)
 }
 
 func TestUserData_LoadOnInit(t *testing.T) {

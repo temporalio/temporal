@@ -115,7 +115,7 @@ func newTaskQueuePartitionManager(
 		return nil, err
 	}
 	nsName := namespaceEntry.Name()
-	taskQueueConfig := newTaskQueueConfig(partition, config, nsName)
+	taskQueueConfig := newTaskQueueConfig(partition.TaskQueue(), config, nsName)
 
 	logger := log.With(e.logger,
 		tag.WorkflowTaskQueueName(partition.RpcName()),

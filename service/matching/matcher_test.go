@@ -78,7 +78,7 @@ func (t *MatcherTestSuite) SetupTest() {
 	t.Assert().NoError(err)
 	prtn := f.TaskQueue(enumspb.TASK_QUEUE_TYPE_WORKFLOW).NormalPartition(1)
 	t.queue = UnversionedDBQueue(prtn)
-	tlCfg := newTaskQueueConfig(prtn, cfg, "test-namespace")
+	tlCfg := newTaskQueueConfig(prtn.TaskQueue(), cfg, "test-namespace")
 	tlCfg.forwarderConfig = forwarderConfig{
 		ForwarderMaxOutstandingPolls: func() int { return 1 },
 		ForwarderMaxOutstandingTasks: func() int { return 1 },
@@ -89,7 +89,7 @@ func (t *MatcherTestSuite) SetupTest() {
 	t.fwdr = newForwarder(&t.cfg.forwarderConfig, prtn, t.client)
 	t.matcher = newTaskMatcher(tlCfg, t.fwdr, metrics.NoopMetricsHandler)
 
-	rootTaskqueueCfg := newTaskQueueConfig(prtn, cfg, "test-namespace")
+	rootTaskqueueCfg := newTaskQueueConfig(prtn.TaskQueue(), cfg, "test-namespace")
 	t.rootMatcher = newTaskMatcher(rootTaskqueueCfg, nil, metrics.NoopMetricsHandler)
 }
 
