@@ -49,7 +49,6 @@ import (
 	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/primitives"
 	"go.temporal.io/server/common/util"
-	"go.temporal.io/server/service/history/api"
 	"go.temporal.io/server/service/worker/dlq"
 
 	"github.com/pborman/uuid"
@@ -131,10 +130,10 @@ type (
 		clusterMetadata            cluster.Metadata
 		healthServer               *health.Server
 
-		// DEPRECATED
+		// DEPRECATED: only history service on server side is supposed to
+		// use the following components.
 		persistenceExecutionManager persistence.ExecutionManager
-
-		taskCategoryRegistry tasks.TaskCategoryRegistry
+		taskCategoryRegistry        tasks.TaskCategoryRegistry
 	}
 
 	NewAdminHandlerArgs struct {
@@ -163,10 +162,10 @@ type (
 		EventSerializer                     serialization.Serializer
 		TimeSource                          clock.TimeSource
 
-		// DEPRECATED
+		// DEPRECATED: only history service on server side is supposed to
+		// use the following components.
 		PersistenceExecutionManager persistence.ExecutionManager
-
-		CategoryRegistry tasks.TaskCategoryRegistry
+		CategoryRegistry            tasks.TaskCategoryRegistry
 	}
 )
 
@@ -1843,11 +1842,11 @@ func (adh *AdminHandler) PurgeDLQTasks(
 	ctx context.Context,
 	request *adminservice.PurgeDLQTasksRequest,
 ) (*adminservice.PurgeDLQTasksResponse, error) {
-	key, err := adh.parseDLQKey(request.DlqKey)
-	if err != nil {
+	if err := validateHistoryDLQKey(request.DlqKey); err != nil {
 		return nil, err
 	}
-	workflowID := adh.getDLQWorkflowID(key)
+
+	workflowID := adh.getDLQWorkflowID(request.DlqKey)
 	client := adh.sdkClientFactory.GetSystemClient()
 	run, err := client.ExecuteWorkflow(ctx, sdkclient.StartWorkflowOptions{
 		ID:        workflowID,
@@ -1856,9 +1855,9 @@ func (adh *AdminHandler) PurgeDLQTasks(
 		WorkflowType: dlq.WorkflowTypeDelete,
 		DeleteParams: dlq.DeleteParams{
 			Key: dlq.Key{
-				TaskCategoryID: key.Category.ID(),
-				SourceCluster:  key.SourceCluster,
-				TargetCluster:  key.TargetCluster,
+				TaskCategoryID: int(request.DlqKey.TaskCategory),
+				SourceCluster:  request.DlqKey.SourceCluster,
+				TargetCluster:  request.DlqKey.TargetCluster,
 			},
 			MaxMessageID: request.InclusiveMaxTaskMetadata.MessageId,
 		},
@@ -1878,11 +1877,11 @@ func (adh *AdminHandler) PurgeDLQTasks(
 }
 
 func (adh *AdminHandler) MergeDLQTasks(ctx context.Context, request *adminservice.MergeDLQTasksRequest) (*adminservice.MergeDLQTasksResponse, error) {
-	key, err := adh.parseDLQKey(request.DlqKey)
-	if err != nil {
+	if err := validateHistoryDLQKey(request.DlqKey); err != nil {
 		return nil, err
 	}
-	workflowID := adh.getDLQWorkflowID(key)
+
+	workflowID := adh.getDLQWorkflowID(request.DlqKey)
 	client := adh.sdkClientFactory.GetSystemClient()
 	run, err := client.ExecuteWorkflow(ctx, sdkclient.StartWorkflowOptions{
 		ID:        workflowID,
@@ -1891,9 +1890,9 @@ func (adh *AdminHandler) MergeDLQTasks(ctx context.Context, request *adminservic
 		WorkflowType: dlq.WorkflowTypeMerge,
 		MergeParams: dlq.MergeParams{
 			Key: dlq.Key{
-				TaskCategoryID: key.Category.ID(),
-				SourceCluster:  key.SourceCluster,
-				TargetCluster:  key.TargetCluster,
+				TaskCategoryID: int(request.DlqKey.TaskCategory),
+				SourceCluster:  request.DlqKey.SourceCluster,
+				TargetCluster:  request.DlqKey.TargetCluster,
 			},
 			MaxMessageID: request.InclusiveMaxTaskMetadata.MessageId,
 			BatchSize:    int(request.BatchSize), // Let the workflow code validate and set the default value if needed.
@@ -2036,29 +2035,34 @@ func (adh *AdminHandler) ListQueues(
 	}, nil
 }
 
-func (adh *AdminHandler) getDLQWorkflowID(key *persistence.QueueKey) string {
-	return fmt.Sprintf("manage-dlq-tasks-%s", key.GetQueueName())
+func (adh *AdminHandler) getDLQWorkflowID(
+	key *commonspb.HistoryDLQKey,
+) string {
+	return fmt.Sprintf(
+		"manage-dlq-tasks-%s",
+		persistence.GetHistoryTaskQueueName(
+			int(key.TaskCategory),
+			key.SourceCluster,
+			key.TargetCluster,
+		),
+	)
 }
 
-func (adh *AdminHandler) parseDLQKey(key *commonspb.HistoryDLQKey) (*persistence.QueueKey, error) {
-	category, err := api.GetTaskCategory(int(key.TaskCategory), adh.taskCategoryRegistry)
-	if err != nil {
-		return nil, err
+func validateHistoryDLQKey(
+	key *commonspb.HistoryDLQKey,
+) error {
+	if len(key.SourceCluster) == 0 {
+		return errSourceClusterNotSet
 	}
-	sourceCluster := key.SourceCluster
-	if len(sourceCluster) == 0 {
-		return nil, errSourceClusterNotSet
+
+	if len(key.TargetCluster) == 0 {
+		return errTargetClusterNotSet
 	}
-	targetCluster := key.TargetCluster
-	if len(targetCluster) == 0 {
-		return nil, errTargetClusterNotSet
-	}
-	return &persistence.QueueKey{
-		QueueType:     persistence.QueueTypeHistoryDLQ,
-		Category:      category,
-		SourceCluster: sourceCluster,
-		TargetCluster: key.TargetCluster,
-	}, nil
+
+	// history service is responsible for validating
+	// categoryID using task category registry
+
+	return nil
 }
 
 func convertClusterReplicationConfigToProto(
