@@ -42,19 +42,9 @@ import (
 	"go.temporal.io/server/common/resolver"
 )
 
-type (
-	Session struct {
-		*sqlx.DB
-	}
-
-	MySQLVersion int
-)
-
-const (
-	MySQLVersionUnspecified MySQLVersion = iota
-	MySQLVersion5_7
-	MySQLVersion8_0
-)
+type Session struct {
+	*sqlx.DB
+}
 
 const (
 	driverName = "mysql"
@@ -69,7 +59,6 @@ const (
 )
 
 var (
-	errUnspecifiedMySQLVersion                = errors.New("bug: mysql version left unspecified")
 	errMySQL8VisInterpolateParamsNotSupported = errors.New("interpolateParams is not supported for mysql8 visibility stores")
 	dsnAttrOverrides                          = map[string]string{
 		"parseTime":       "true",
@@ -77,28 +66,12 @@ var (
 	}
 )
 
-func (m MySQLVersion) String() string {
-	switch m {
-	case MySQLVersion5_7:
-		return "MySQL 5.7"
-	case MySQLVersion8_0:
-		return "MySQL 8.0"
-	default:
-		return "Unspecified"
-	}
-}
-
 func NewSession(
-	version MySQLVersion,
 	dbKind sqlplugin.DbKind,
 	cfg *config.SQL,
 	resolver resolver.ServiceResolver,
 ) (*Session, error) {
-	if version == MySQLVersionUnspecified {
-		return nil, errUnspecifiedMySQLVersion
-	}
-
-	db, err := createConnection(version, dbKind, cfg, resolver)
+	db, err := createConnection(dbKind, cfg, resolver)
 	if err != nil {
 		return nil, err
 	}
@@ -112,7 +85,6 @@ func (s *Session) Close() {
 }
 
 func createConnection(
-	version MySQLVersion,
 	dbKind sqlplugin.DbKind,
 	cfg *config.SQL,
 	resolver resolver.ServiceResolver,
@@ -122,7 +94,7 @@ func createConnection(
 		return nil, err
 	}
 
-	dsn, err := buildDSN(version, dbKind, cfg, resolver)
+	dsn, err := buildDSN(dbKind, cfg, resolver)
 	if err != nil {
 		return nil, err
 	}
@@ -147,7 +119,6 @@ func createConnection(
 }
 
 func buildDSN(
-	version MySQLVersion,
 	dbKind sqlplugin.DbKind,
 	cfg *config.SQL,
 	r resolver.ServiceResolver,
@@ -160,7 +131,7 @@ func buildDSN(
 	mysqlConfig.DBName = cfg.DatabaseName
 	mysqlConfig.Net = cfg.ConnectProtocol
 	var err error
-	mysqlConfig.Params, err = buildDSNAttrs(version, dbKind, cfg)
+	mysqlConfig.Params, err = buildDSNAttrs(dbKind, cfg)
 	if err != nil {
 		return "", err
 	}
@@ -178,7 +149,7 @@ func buildDSN(
 	return mysqlConfig.FormatDSN(), nil
 }
 
-func buildDSNAttrs(version MySQLVersion, dbKind sqlplugin.DbKind, cfg *config.SQL) (map[string]string, error) {
+func buildDSNAttrs(dbKind sqlplugin.DbKind, cfg *config.SQL) (map[string]string, error) {
 	attrs := make(map[string]string, len(dsnAttrOverrides)+len(cfg.ConnectAttributes)+1)
 	for k, v := range cfg.ConnectAttributes {
 		k1, v1 := sanitizeAttr(k, v)
@@ -196,7 +167,7 @@ func buildDSNAttrs(version MySQLVersion, dbKind sqlplugin.DbKind, cfg *config.SQ
 		attrs[k] = v
 	}
 
-	if version == MySQLVersion8_0 && dbKind == sqlplugin.DbKindVisibility {
+	if dbKind == sqlplugin.DbKindVisibility {
 		if _, ok := attrs[interpolateParamsAttr]; ok {
 			return nil, errMySQL8VisInterpolateParamsNotSupported
 		}

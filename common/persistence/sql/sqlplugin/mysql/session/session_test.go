@@ -146,33 +146,31 @@ func (s *sessionTestSuite) TestBuildDSN() {
 		},
 	}
 
-	for _, version := range []MySQLVersion{MySQLVersion5_7, MySQLVersion8_0} {
-		for _, dbKind := range []sqlplugin.DbKind{sqlplugin.DbKindMain, sqlplugin.DbKindVisibility} {
-			for _, tc := range testCases {
-				s.Run(fmt.Sprintf("%s %s: %s", version.String(), dbKind.String(), tc.name), func() {
-					r := resolver.NewMockServiceResolver(s.controller)
-					r.EXPECT().Resolve(tc.in.ConnectAddr).Return([]string{tc.in.ConnectAddr})
+	for _, dbKind := range []sqlplugin.DbKind{sqlplugin.DbKindMain, sqlplugin.DbKindVisibility} {
+		for _, tc := range testCases {
+			s.Run(fmt.Sprintf("%s: %s", dbKind.String(), tc.name), func() {
+				r := resolver.NewMockServiceResolver(s.controller)
+				r.EXPECT().Resolve(tc.in.ConnectAddr).Return([]string{tc.in.ConnectAddr})
 
-					out, err := buildDSN(version, dbKind, &tc.in, r)
-					if tc.expectInvalidConfig {
-						s.Error(err, "Expected an invalid configuration error")
-					} else {
-						s.NoError(err)
-					}
-					s.True(strings.HasPrefix(out, tc.outURLPath), "invalid url path")
-					tokens := strings.Split(out, "?")
-					s.Equal(2, len(tokens), "invalid url")
-					qry, err := url.Parse("?" + tokens[1])
+				out, err := buildDSN(dbKind, &tc.in, r)
+				if tc.expectInvalidConfig {
+					s.Error(err, "Expected an invalid configuration error")
+				} else {
 					s.NoError(err)
-					wantAttrs := buildExpectedURLParams(tc.in.ConnectAttributes, tc.outIsolationKey, tc.outIsolationVal)
-					s.Equal(wantAttrs, qry.Query(), "invalid dsn url params")
-				})
-			}
+				}
+				s.True(strings.HasPrefix(out, tc.outURLPath), "invalid url path")
+				tokens := strings.Split(out, "?")
+				s.Equal(2, len(tokens), "invalid url")
+				qry, err := url.Parse("?" + tokens[1])
+				s.NoError(err)
+				wantAttrs := buildExpectedURLParams(tc.in.ConnectAttributes, tc.outIsolationKey, tc.outIsolationVal)
+				s.Equal(wantAttrs, qry.Query(), "invalid dsn url params")
+			})
 		}
 	}
 }
 
-func (s *sessionTestSuite) Test_MySQL8_Visibility_DoesntSupport_interpolateParams() {
+func (s *sessionTestSuite) Test_Visibility_DoesntSupport_interpolateParams() {
 	cfg := config.SQL{
 		User:              "test",
 		Password:          "pass",
@@ -183,7 +181,7 @@ func (s *sessionTestSuite) Test_MySQL8_Visibility_DoesntSupport_interpolateParam
 	}
 	r := resolver.NewMockServiceResolver(s.controller)
 	r.EXPECT().Resolve(cfg.ConnectAddr).Return([]string{cfg.ConnectAddr})
-	_, err := buildDSN(MySQLVersion8_0, sqlplugin.DbKindVisibility, &cfg, r)
+	_, err := buildDSN(sqlplugin.DbKindVisibility, &cfg, r)
 	s.Error(err, "We should return an error when a MySQL8 Visibility database is configured with interpolateParams")
 }
 
