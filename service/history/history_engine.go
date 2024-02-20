@@ -934,7 +934,6 @@ func (e *historyEngineImpl) ListTasks(
 ) (_ *historyservice.ListTasksResponse, retError error) {
 	return listtasks.Invoke(
 		ctx,
-		e.shardContext,
 		e.taskCategoryRegistry,
 		e.executionManager,
 		request,

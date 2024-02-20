@@ -34,14 +34,12 @@ import (
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/primitives/timestamp"
-	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/tasks"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
 func Invoke(
 	ctx context.Context,
-	shardContext shard.Context,
 	taskCategoryRegistry tasks.TaskCategoryRegistry,
 	executionManager persistence.ExecutionManager,
 	request *historyservice.ListTasksRequest,
