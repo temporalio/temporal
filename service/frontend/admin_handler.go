@@ -130,10 +130,10 @@ type (
 		clusterMetadata            cluster.Metadata
 		healthServer               *health.Server
 
-		// DEPRECATED
+		// DEPRECATED: only history service on server side is supposed to
+		// use the following components.
 		persistenceExecutionManager persistence.ExecutionManager
-
-		taskCategoryRegistry tasks.TaskCategoryRegistry
+		taskCategoryRegistry        tasks.TaskCategoryRegistry
 	}
 
 	NewAdminHandlerArgs struct {
@@ -162,10 +162,10 @@ type (
 		EventSerializer                     serialization.Serializer
 		TimeSource                          clock.TimeSource
 
-		// DEPRECATED
+		// DEPRECATED: only history service on server side is supposed to
+		// use the following components.
 		PersistenceExecutionManager persistence.ExecutionManager
-
-		CategoryRegistry tasks.TaskCategoryRegistry
+		CategoryRegistry            tasks.TaskCategoryRegistry
 	}
 )
 
@@ -1842,11 +1842,11 @@ func (adh *AdminHandler) PurgeDLQTasks(
 	ctx context.Context,
 	request *adminservice.PurgeDLQTasksRequest,
 ) (*adminservice.PurgeDLQTasksResponse, error) {
-	key, err := adh.parseDLQKey(request.DlqKey)
-	if err != nil {
+	if err := validateHistoryDLQKey(request.DlqKey); err != nil {
 		return nil, err
 	}
-	workflowID := adh.getDLQWorkflowID(key)
+
+	workflowID := adh.getDLQWorkflowID(request.DlqKey)
 	client := adh.sdkClientFactory.GetSystemClient()
 	run, err := client.ExecuteWorkflow(ctx, sdkclient.StartWorkflowOptions{
 		ID:        workflowID,
@@ -1855,9 +1855,9 @@ func (adh *AdminHandler) PurgeDLQTasks(
 		WorkflowType: dlq.WorkflowTypeDelete,
 		DeleteParams: dlq.DeleteParams{
 			Key: dlq.Key{
-				TaskCategoryID: key.taskCategoryID,
-				SourceCluster:  key.sourceCluster,
-				TargetCluster:  key.targetCluster,
+				TaskCategoryID: int(request.DlqKey.TaskCategory),
+				SourceCluster:  request.DlqKey.SourceCluster,
+				TargetCluster:  request.DlqKey.TargetCluster,
 			},
 			MaxMessageID: request.InclusiveMaxTaskMetadata.MessageId,
 		},
@@ -1877,11 +1877,11 @@ func (adh *AdminHandler) PurgeDLQTasks(
 }
 
 func (adh *AdminHandler) MergeDLQTasks(ctx context.Context, request *adminservice.MergeDLQTasksRequest) (*adminservice.MergeDLQTasksResponse, error) {
-	key, err := adh.parseDLQKey(request.DlqKey)
-	if err != nil {
+	if err := validateHistoryDLQKey(request.DlqKey); err != nil {
 		return nil, err
 	}
-	workflowID := adh.getDLQWorkflowID(key)
+
+	workflowID := adh.getDLQWorkflowID(request.DlqKey)
 	client := adh.sdkClientFactory.GetSystemClient()
 	run, err := client.ExecuteWorkflow(ctx, sdkclient.StartWorkflowOptions{
 		ID:        workflowID,
@@ -1890,9 +1890,9 @@ func (adh *AdminHandler) MergeDLQTasks(ctx context.Context, request *adminservic
 		WorkflowType: dlq.WorkflowTypeMerge,
 		MergeParams: dlq.MergeParams{
 			Key: dlq.Key{
-				TaskCategoryID: key.taskCategoryID,
-				SourceCluster:  key.sourceCluster,
-				TargetCluster:  key.targetCluster,
+				TaskCategoryID: int(request.DlqKey.TaskCategory),
+				SourceCluster:  request.DlqKey.SourceCluster,
+				TargetCluster:  request.DlqKey.TargetCluster,
 			},
 			MaxMessageID: request.InclusiveMaxTaskMetadata.MessageId,
 			BatchSize:    int(request.BatchSize), // Let the workflow code validate and set the default value if needed.
@@ -2035,37 +2035,34 @@ func (adh *AdminHandler) ListQueues(
 	}, nil
 }
 
-func (adh *AdminHandler) getDLQWorkflowID(key historyDLQKey) string {
+func (adh *AdminHandler) getDLQWorkflowID(
+	key *commonspb.HistoryDLQKey,
+) string {
 	return fmt.Sprintf(
 		"manage-dlq-tasks-%s",
 		persistence.GetHistoryTaskQueueName(
-			key.taskCategoryID,
-			key.sourceCluster,
-			key.targetCluster,
+			int(key.TaskCategory),
+			key.SourceCluster,
+			key.TargetCluster,
 		),
 	)
 }
 
-type historyDLQKey struct {
-	taskCategoryID int
-	sourceCluster  string
-	targetCluster  string
-}
+func validateHistoryDLQKey(
+	key *commonspb.HistoryDLQKey,
+) error {
+	if len(key.SourceCluster) == 0 {
+		return errSourceClusterNotSet
+	}
 
-func (adh *AdminHandler) parseDLQKey(key *commonspb.HistoryDLQKey) (historyDLQKey, error) {
-	sourceCluster := key.SourceCluster
-	if len(sourceCluster) == 0 {
-		return historyDLQKey{}, errSourceClusterNotSet
+	if len(key.TargetCluster) == 0 {
+		return errTargetClusterNotSet
 	}
-	targetCluster := key.TargetCluster
-	if len(targetCluster) == 0 {
-		return historyDLQKey{}, errTargetClusterNotSet
-	}
-	return historyDLQKey{
-		taskCategoryID: int(key.TaskCategory),
-		sourceCluster:  sourceCluster,
-		targetCluster:  targetCluster,
-	}, nil
+
+	// history service is responsible for validating
+	// categoryID using task category registry
+
+	return nil
 }
 
 func convertClusterReplicationConfigToProto(
