@@ -36,7 +36,6 @@ import (
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	workflowpb "go.temporal.io/api/workflow/v1"
 	"go.temporal.io/api/workflowservice/v1"
-
 	clockspb "go.temporal.io/server/api/clock/v1"
 	"go.temporal.io/server/api/historyservice/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
@@ -213,12 +212,13 @@ func (t *transferQueueActiveTaskExecutor) processActivityTask(
 	}
 
 	timeout := timestamp.DurationValue(ai.ScheduleToStartTimeout)
-	directive := worker_versioning.MakeDirectiveForActivityTask(mutableState.GetWorkerVersionStamp(), ai.UseCompatibleVersion)
+	directive := MakeDirectiveForActivityTask(mutableState, ai)
 
 	// NOTE: do not access anything related mutable state after this lock release
 	// release the context lock since we no longer need mutable state and
 	// the rest of logic is making RPC call, which takes time.
 	release(nil)
+
 	return t.pushActivity(ctx, task, timeout, directive)
 }
 
@@ -260,10 +260,7 @@ func (t *transferQueueActiveTaskExecutor) processWorkflowTask(
 
 	normalTaskQueueName := mutableState.GetExecutionInfo().TaskQueue
 
-	directive := worker_versioning.MakeDirectiveForWorkflowTask(
-		mutableState.GetWorkerVersionStamp(),
-		mutableState.GetLastWorkflowTaskStartedEventID(),
-	)
+	directive := worker_versioning.MakeDirectiveForWorkflowTask(mutableState.GetAssignedBuildId(), mutableState.GetMostRecentWorkerVersionStamp(), mutableState.GetLastWorkflowTaskStartedEventID())
 
 	// NOTE: Do not access mutableState after this lock is released.
 	// It is important to release the workflow lock here, because pushWorkflowTask will call matching,
@@ -287,6 +284,7 @@ func (t *transferQueueActiveTaskExecutor) processWorkflowTask(
 		// will re-create a new non-sticky task and reset sticky.
 		err = t.pushWorkflowTask(ctx, transferTask, taskQueue, scheduleToStartTimeout.AsDuration(), directive)
 	}
+
 	return err
 }
 
@@ -810,7 +808,7 @@ func (t *transferQueueActiveTaskExecutor) processStartChildExecution(
 	// - parent is using versioning
 	var sourceVersionStamp *commonpb.WorkerVersionStamp
 	if attributes.UseCompatibleVersion {
-		sourceVersionStamp = worker_versioning.StampIfUsingVersioning(mutableState.GetWorkerVersionStamp())
+		sourceVersionStamp = worker_versioning.StampIfUsingVersioning(mutableState.GetMostRecentWorkerVersionStamp())
 	}
 
 	childRunID, childClock, err := t.startWorkflow(

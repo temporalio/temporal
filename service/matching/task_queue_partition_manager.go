@@ -259,6 +259,10 @@ func (pm *taskQueuePartitionManagerImpl) PollTask(
 			// use version set if found, otherwise assume user is using new API
 			if versionSet != "" {
 				dbq, err = pm.getVersionedQueue(ctx, versionSet, "", true)
+
+				// TODO: remove this line after old versioning cleanup. we remove build id from workerVersionCapabilities so
+				// History can differentiate between old and new versioning in Record*TaskStart. [cleanup-old-versioning]
+				pollMetadata.workerVersionCapabilities.BuildId = ""
 			} else {
 				dbq, err = pm.getVersionedQueue(ctx, "", buildId, true)
 			}

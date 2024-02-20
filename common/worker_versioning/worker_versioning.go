@@ -30,14 +30,13 @@ import (
 
 	"github.com/temporalio/sqlparser"
 	commonpb "go.temporal.io/api/common/v1"
-	"google.golang.org/protobuf/types/known/emptypb"
-
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	taskqueuespb "go.temporal.io/server/api/taskqueue/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence/visibility/manager"
 	"go.temporal.io/server/common/searchattribute"
+	"google.golang.org/protobuf/types/known/emptypb"
 )
 
 const (
@@ -108,31 +107,34 @@ func StampIfUsingVersioning(stamp *commonpb.WorkerVersionStamp) *commonpb.Worker
 	return nil
 }
 
-func MakeDirectiveForWorkflowTask(
-	stamp *commonpb.WorkerVersionStamp,
-	lastWorkflowTaskStartedEventID int64,
-) *taskqueuespb.TaskVersionDirective {
-	var directive taskqueuespb.TaskVersionDirective
-	if id := StampIfUsingVersioning(stamp).GetBuildId(); id != "" {
-		directive.Value = &taskqueuespb.TaskVersionDirective_AssignedBuildId{AssignedBuildId: id}
+func MakeDirectiveForWorkflowTask(assignedBuildId string, stamp *commonpb.WorkerVersionStamp, lastWorkflowTaskStartedEventID int64) *taskqueuespb.TaskVersionDirective {
+	if assignedBuildId != "" {
+		return MakeBuildIdDirective(assignedBuildId)
+	} else if id := StampIfUsingVersioning(stamp).GetBuildId(); id != "" {
+		// TODO: old versioning only [cleanup-old-wv]
+		return MakeBuildIdDirective(id)
 	} else if lastWorkflowTaskStartedEventID == common.EmptyEventID {
 		// first workflow task
-		directive.Value = &taskqueuespb.TaskVersionDirective_AssignNew{AssignNew: &emptypb.Empty{}}
+		return MakeUseDefaultDirective()
 	}
 	// else: unversioned queue
-	return &directive
+	return nil
 }
 
-func MakeDirectiveForActivityTask(
-	stamp *commonpb.WorkerVersionStamp,
-	useCompatibleVersion bool,
-) *taskqueuespb.TaskVersionDirective {
-	var directive taskqueuespb.TaskVersionDirective
-	if !useCompatibleVersion {
-		directive.Value = &taskqueuespb.TaskVersionDirective_AssignNew{AssignNew: &emptypb.Empty{}}
-	} else if id := StampIfUsingVersioning(stamp).GetBuildId(); id != "" {
-		directive.Value = &taskqueuespb.TaskVersionDirective_AssignedBuildId{AssignedBuildId: id}
+func MakeUseDefaultDirective() *taskqueuespb.TaskVersionDirective {
+	return &taskqueuespb.TaskVersionDirective{Value: &taskqueuespb.TaskVersionDirective_AssignNew{AssignNew: &emptypb.Empty{}}}
+}
+
+func MakeBuildIdDirective(buildId string) *taskqueuespb.TaskVersionDirective {
+	return &taskqueuespb.TaskVersionDirective{Value: &taskqueuespb.TaskVersionDirective_AssignedBuildId{AssignedBuildId: buildId}}
+}
+
+func StampFromCapabilities(cap *commonpb.WorkerVersionCapabilities) *commonpb.WorkerVersionStamp {
+	// TODO: remove `cap.BuildId != ""` condition after old versioning cleanup. this condition is used to differentiate
+	// between old and new versioning in Record*TaskStart calls. [cleanup-old-versioning]
+	// we don't want to add stamp for task started events in old versioning
+	if cap != nil && cap.BuildId != "" {
+		return &commonpb.WorkerVersionStamp{UseVersioning: cap.UseVersioning, BuildId: cap.BuildId}
 	}
-	// else: unversioned queue
-	return &directive
+	return nil
 }

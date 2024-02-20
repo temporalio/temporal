@@ -123,7 +123,7 @@ func Invoke(
 			StateTransitionCount: executionInfo.StateTransitionCount,
 			HistorySizeBytes:     executionInfo.GetExecutionStats().GetHistorySize(),
 
-			MostRecentWorkerVersionStamp: executionInfo.WorkerVersionStamp,
+			MostRecentWorkerVersionStamp: executionInfo.MostRecentWorkerVersionStamp,
 		},
 	}
 

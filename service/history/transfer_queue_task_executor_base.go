@@ -119,7 +119,7 @@ func (t *transferQueueTaskExecutorBase) pushActivity(
 	activityScheduleToStartTimeout time.Duration,
 	directive *taskqueuespb.TaskVersionDirective,
 ) error {
-	_, err := t.matchingRawClient.AddActivityTask(ctx, &matchingservice.AddActivityTaskRequest{
+	resp, err := t.matchingRawClient.AddActivityTask(ctx, &matchingservice.AddActivityTaskRequest{
 		NamespaceId: task.NamespaceID,
 		Execution: &commonpb.WorkflowExecution{
 			WorkflowId: task.WorkflowID,
@@ -140,7 +140,25 @@ func (t *transferQueueTaskExecutorBase) pushActivity(
 		tasks.InitializeLogger(task, t.logger).Error("Matching returned not found error for AddActivityTask", tag.Error(err))
 	}
 
-	return err
+	if err != nil {
+		return err
+	}
+
+	if directive.GetUseDefault() == nil {
+		// activity is not getting a new build id, so no need to update MS
+		return nil
+	}
+
+	return updateIndependentActivityBuildId(
+		ctx,
+		task,
+		task.ScheduledEventID,
+		resp.AssignedBuildId,
+		t.shardContext,
+		t.cache,
+		t.metricHandler,
+		t.logger,
+	)
 }
 
 func (t *transferQueueTaskExecutorBase) pushWorkflowTask(
@@ -154,7 +172,7 @@ func (t *transferQueueTaskExecutorBase) pushWorkflowTask(
 	if workflowTaskScheduleToStartTimeout > 0 {
 		sst = durationpb.New(workflowTaskScheduleToStartTimeout)
 	}
-	_, err := t.matchingRawClient.AddWorkflowTask(ctx, &matchingservice.AddWorkflowTaskRequest{
+	resp, err := t.matchingRawClient.AddWorkflowTask(ctx, &matchingservice.AddWorkflowTaskRequest{
 		NamespaceId: task.NamespaceID,
 		Execution: &commonpb.WorkflowExecution{
 			WorkflowId: task.WorkflowID,
@@ -172,7 +190,24 @@ func (t *transferQueueTaskExecutorBase) pushWorkflowTask(
 		tasks.InitializeLogger(task, t.logger).Error("Matching returned not found error for AddWorkflowTask", tag.Error(err))
 	}
 
-	return err
+	if err != nil {
+		return err
+	}
+
+	if directive.GetUseDefault() == nil {
+		// not the first task of the workflow, no need to update MS
+		return nil
+	}
+
+	return updateWorkflowAssignedBuildId(
+		ctx,
+		task,
+		resp.AssignedBuildId,
+		t.shardContext,
+		t.cache,
+		t.metricHandler,
+		t.logger,
+	)
 }
 
 func (t *transferQueueTaskExecutorBase) processDeleteExecutionTask(

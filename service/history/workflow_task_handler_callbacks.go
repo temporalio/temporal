@@ -28,6 +28,7 @@ import (
 	"context"
 	"fmt"
 
+	"go.temporal.io/server/common/worker_versioning"
 	"google.golang.org/protobuf/types/known/timestamppb"
 
 	commandpb "go.temporal.io/api/command/v1"
@@ -264,6 +265,7 @@ func (handler *workflowTaskHandlerCallbacksImpl) handleWorkflowTaskStarted(
 				requestID,
 				req.PollRequest.TaskQueue,
 				req.PollRequest.Identity,
+				worker_versioning.StampFromCapabilities(req.PollRequest.WorkerVersionCapabilities),
 			)
 			if err != nil {
 				// Unable to add WorkflowTaskStarted event to history
@@ -363,6 +365,7 @@ func (handler *workflowTaskHandlerCallbacksImpl) handleWorkflowTaskFailed(
 				request.GetCause(),
 				request.GetFailure(),
 				request.GetIdentity(),
+				request.GetWorkerVersion(),
 				request.GetBinaryChecksum(),
 				"",
 				"",
@@ -455,7 +458,7 @@ func (handler *workflowTaskHandlerCallbacksImpl) handleWorkflowTaskCompleted(
 	}()
 
 	// It's an error if the workflow has used versioning in the past but this task has no versioning info.
-	if ms.GetWorkerVersionStamp().GetUseVersioning() && !request.GetWorkerVersionStamp().GetUseVersioning() {
+	if ms.GetMostRecentWorkerVersionStamp().GetUseVersioning() && !request.GetWorkerVersionStamp().GetUseVersioning() {
 		return nil, serviceerror.NewInvalidArgument("Workflow using versioning must continue to use versioning.")
 	}
 
@@ -735,6 +738,7 @@ func (handler *workflowTaskHandlerCallbacksImpl) handleWorkflowTaskCompleted(
 				"request-from-RespondWorkflowTaskCompleted",
 				newWorkflowTask.TaskQueue,
 				request.Identity,
+				request.WorkerVersionStamp,
 			)
 			if err != nil {
 				return nil, err
@@ -820,6 +824,7 @@ func (handler *workflowTaskHandlerCallbacksImpl) handleWorkflowTaskCompleted(
 			"request-from-RespondWorkflowTaskCompleted",
 			newWorkflowTask.TaskQueue,
 			request.Identity,
+			nil,
 		)
 		if err != nil {
 			return nil, err
@@ -1308,10 +1313,12 @@ func failWorkflowTask(
 		wtFailedCause.failedCause,
 		failure.NewServerFailure(wtFailedCause.Message(), true),
 		request.GetIdentity(),
+		nil,
 		request.GetBinaryChecksum(),
 		"",
 		"",
-		0)
+		0,
+	)
 	if err != nil {
 		return nil, common.EmptyEventID, err
 	}

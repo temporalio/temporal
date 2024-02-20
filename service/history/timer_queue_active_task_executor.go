@@ -48,7 +48,6 @@ import (
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/common/resource"
-	"go.temporal.io/server/common/worker_versioning"
 	"go.temporal.io/server/service/history/configs"
 	"go.temporal.io/server/service/history/consts"
 	"go.temporal.io/server/service/history/deletemanager"
@@ -486,12 +485,13 @@ func (t *timerQueueActiveTaskExecutor) executeActivityRetryTimerTask(
 		Kind: enumspb.TASK_QUEUE_KIND_NORMAL,
 	}
 	scheduleToStartTimeout := timestamp.DurationValue(activityInfo.ScheduleToStartTimeout)
-	directive := worker_versioning.MakeDirectiveForActivityTask(mutableState.GetWorkerVersionStamp(), activityInfo.UseCompatibleVersion)
+	directive := MakeDirectiveForActivityTask(mutableState, activityInfo)
+	useWfBuildId := activityInfo.GetUseWorkflowBuildId() != nil
 
 	// NOTE: do not access anything related mutable state after this lock release
 	release(nil) // release earlier as we don't need the lock anymore
 
-	_, retError = t.matchingRawClient.AddActivityTask(ctx, &matchingservice.AddActivityTaskRequest{
+	resp, err := t.matchingRawClient.AddActivityTask(ctx, &matchingservice.AddActivityTaskRequest{
 		NamespaceId: task.GetNamespaceID(),
 		Execution: &commonpb.WorkflowExecution{
 			WorkflowId: task.GetWorkflowID(),
@@ -503,8 +503,16 @@ func (t *timerQueueActiveTaskExecutor) executeActivityRetryTimerTask(
 		Clock:                  vclock.NewVectorClock(t.shardContext.GetClusterMetadata().GetClusterID(), t.shardContext.GetShardID(), task.TaskID),
 		VersionDirective:       directive,
 	})
+	if err != nil {
+		return err
+	}
 
-	return retError
+	if useWfBuildId {
+		// activity's build ID is the same as WF's, so no need to update MS
+		return nil
+	}
+
+	return updateIndependentActivityBuildId(task, task.EventID, resp.AssignedBuildId, ctx, t.shardContext, t.cache, t.metricHandler, t.logger)
 }
 
 func (t *timerQueueActiveTaskExecutor) executeWorkflowTimeoutTask(
