@@ -61,8 +61,6 @@ type (
 
 const (
 	lookAheadRateLimitDelay = 3 * time.Second
-
-	lookAheadReaderID = DefaultReaderId
 )
 
 func NewScheduledQueue(
@@ -76,7 +74,7 @@ func NewScheduledQueue(
 	logger log.Logger,
 	metricsHandler metrics.Handler,
 ) *scheduledQueue {
-	paginationFnProvider := func(readerID int64, r Range) collection.PaginationFn[tasks.Task] {
+	paginationFnProvider := func(r Range) collection.PaginationFn[tasks.Task] {
 		return func(paginationToken []byte) ([]tasks.Task, []byte, error) {
 			ctx, cancel := newQueueIOContext()
 			defer cancel()
@@ -84,7 +82,6 @@ func NewScheduledQueue(
 			request := &persistence.GetHistoryTasksRequest{
 				ShardID:             shard.GetShardID(),
 				TaskCategory:        category,
-				ReaderID:            readerID,
 				InclusiveMinTaskKey: tasks.NewKey(r.InclusiveMin.FireTime, 0),
 				ExclusiveMaxTaskKey: tasks.NewKey(
 					r.ExclusiveMax.FireTime.Add(persistence.ScheduledTaskMinPrecision),
@@ -269,16 +266,9 @@ func (p *scheduledQueue) lookAheadTask() {
 	ctx, cancel := newQueueIOContext()
 	defer cancel()
 
-	if err := p.ensureLookAheadReader(); err != nil {
-		p.logger.Error("Failed to create look ahead reader", tag.Error(err))
-		p.timerGate.Update(lookAheadMinTime)
-		return
-	}
-
 	request := &persistence.GetHistoryTasksRequest{
 		ShardID:             p.shard.GetShardID(),
 		TaskCategory:        p.category,
-		ReaderID:            lookAheadReaderID,
 		InclusiveMinTaskKey: tasks.NewKey(lookAheadMinTime, 0),
 		ExclusiveMaxTaskKey: tasks.NewKey(lookAheadMaxTime, 0),
 		BatchSize:           1,
@@ -308,11 +298,6 @@ func (p *scheduledQueue) lookAheadTask() {
 	// NOTE: with this we don't need a separate max poll timer, loading will be triggerred
 	// every maxPollInterval + jitter.
 	p.timerGate.Update(lookAheadMaxTime)
-}
-
-func (p *scheduledQueue) ensureLookAheadReader() error {
-	_, err := p.readerGroup.GetOrCreateReader(lookAheadReaderID)
-	return err
 }
 
 // IsTimeExpired checks if the testing time is equal or before
