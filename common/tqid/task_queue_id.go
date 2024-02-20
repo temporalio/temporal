@@ -123,9 +123,9 @@ var (
 	ErrNonZeroSticky = errors.New("only sticky partitions can not have non-zero partition ID")
 )
 
-// FromFamilyName takes a user-provided task queue name (aka family name) and returns a TaskQueueFamily. Returns an
+// NewTaskQueueFamily takes a user-provided task queue name (aka family name) and returns a TaskQueueFamily. Returns an
 // error if name looks like a mangled name.
-func FromFamilyName(namespaceId string, name string) (*TaskQueueFamily, error) {
+func NewTaskQueueFamily(namespaceId string, name string) (*TaskQueueFamily, error) {
 	if strings.HasPrefix(name, nonRootPartitionPrefix) {
 		return nil, serviceerror.NewInvalidArgument("task queue family name cannot have prefix /_sys/ " + name)
 	}
@@ -135,12 +135,12 @@ func FromFamilyName(namespaceId string, name string) (*TaskQueueFamily, error) {
 	}, nil
 }
 
-// UnsafeTaskQueueFamily should be avoided as much as possible. Use FromFamilyName instead as it validates the tq name.
+// UnsafeTaskQueueFamily should be avoided as much as possible. Use NewTaskQueueFamily instead as it validates the tq name.
 func UnsafeTaskQueueFamily(namespaceId string, name string) *TaskQueueFamily {
 	return &TaskQueueFamily{namespace.ID(namespaceId), name}
 }
 
-func FromProto(proto *taskqueuepb.TaskQueue, namespaceId string, taskType enumspb.TaskQueueType) (Partition, error) {
+func PartitionFromProto(proto *taskqueuepb.TaskQueue, namespaceId string, taskType enumspb.TaskQueueType) (Partition, error) {
 	baseName, partition, err := parseRpcName(proto.GetName())
 	if err != nil {
 		return nil, err

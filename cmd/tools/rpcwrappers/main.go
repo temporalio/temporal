@@ -259,7 +259,7 @@ func makeGetMatchingClient(reqType reflect.Type) string {
 		}
 
 		return fmt.Sprintf(
-			`p, err := tqid.FromProto(%s, %s, %s)
+			`p, err := tqid.PartitionFromProto(%s, %s, %s)
 	if err != nil {
 		return nil, err
 	}

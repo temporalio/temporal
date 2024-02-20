@@ -192,7 +192,7 @@ func (c *clientImpl) QueryWorkflow(ctx context.Context, request *matchingservice
 }
 
 func (c *clientImpl) pickPartitionForWrite(proto *taskqueuepb.TaskQueue, nsid string, taskType enumspb.TaskQueueType, forwardedFrom string) (tqid.Partition, error) {
-	partition, err := tqid.FromProto(proto, nsid, taskType)
+	partition, err := tqid.PartitionFromProto(proto, nsid, taskType)
 	if err != nil {
 		// We preserve the old logic (not returning error in case of invalid proto info) until it's verified that
 		// clients are not sending invalid names.
@@ -214,7 +214,7 @@ func (c *clientImpl) pickPartitionForWrite(proto *taskqueuepb.TaskQueue, nsid st
 }
 
 func (c *clientImpl) pickPartitionForRead(proto *taskqueuepb.TaskQueue, nsid string, taskType enumspb.TaskQueueType, forwardedFrom string) (prtn tqid.Partition, release func(), err error) {
-	partition, err := tqid.FromProto(proto, nsid, taskType)
+	partition, err := tqid.PartitionFromProto(proto, nsid, taskType)
 	if err != nil {
 		// We preserve the old logic (not returning error in case of invalid proto info) until it's verified that
 		// clients are not sending invalid names.

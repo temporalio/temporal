@@ -1677,7 +1677,7 @@ func (s *VersioningIntegSuite) waitForPropagation(ctx context.Context, taskQueue
 	nsId := s.getNamespaceID(s.namespace)
 	s.Eventually(func() bool {
 		for pt := range remaining {
-			f, err := tqid.FromFamilyName("", taskQueue)
+			f, err := tqid.NewTaskQueueFamily("", taskQueue)
 			s.NoError(err)
 			partition := f.TaskQueue(pt.tp).NormalPartition(pt.part)
 			// Use lower-level GetTaskQueueUserData instead of GetWorkerBuildIdCompatibility

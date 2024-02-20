@@ -74,7 +74,7 @@ func (t *MatcherTestSuite) SetupTest() {
 	cfg.BacklogNegligibleAge = dynamicconfig.GetDurationPropertyFnFilteredByTaskQueueInfo(5 * time.Second)
 	cfg.MaxWaitForPollerBeforeFwd = dynamicconfig.GetDurationPropertyFnFilteredByTaskQueueInfo(5 * time.Millisecond)
 
-	f, err := tqid.FromFamilyName("", "tl0")
+	f, err := tqid.NewTaskQueueFamily("", "tl0")
 	t.Assert().NoError(err)
 	prtn := f.TaskQueue(enumspb.TASK_QUEUE_TYPE_WORKFLOW).NormalPartition(1)
 	t.queue = UnversionedDBQueue(prtn)

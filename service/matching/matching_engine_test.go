@@ -2634,7 +2634,7 @@ func newRootPartition(namespaceId string, name string, taskType enumspb.TaskQueu
 }
 
 func newTestTaskQueue(namespaceId string, name string, taskType enumspb.TaskQueueType) *tqid.TaskQueue {
-	result, err := tqid.FromFamilyName(namespaceId, name)
+	result, err := tqid.NewTaskQueueFamily(namespaceId, name)
 	if err != nil {
 		panic(fmt.Sprintf("newTaskQueueID failed with error %v", err))
 	}

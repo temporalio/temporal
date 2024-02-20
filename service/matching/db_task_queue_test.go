@@ -38,7 +38,7 @@ func TestParseDBQueue(t *testing.T) {
 	a := assert.New(t)
 	tt := enumspb.TASK_QUEUE_TYPE_WORKFLOW
 	ns := "ns-id"
-	f, err := tqid.FromFamilyName(ns, "my-basic-tq-name")
+	f, err := tqid.NewTaskQueueFamily(ns, "my-basic-tq-name")
 	assert.NoError(t, err)
 	key := dbTaskQueueKey{f.TaskQueue(tt).RootPartition().Key(), "", ""}
 
@@ -136,7 +136,7 @@ func TestInvalidPersistenceNames(t *testing.T) {
 func TestVersionSetDBQueue(t *testing.T) {
 	a := assert.New(t)
 
-	f, err := tqid.FromFamilyName("", "tq")
+	f, err := tqid.NewTaskQueueFamily("", "tq")
 	assert.NoError(t, err)
 	p := f.TaskQueue(enumspb.TASK_QUEUE_TYPE_WORKFLOW).NormalPartition(2)
 	dbq := VersionSetDBQueue(p, "abc3")
@@ -148,7 +148,7 @@ func TestVersionSetDBQueue(t *testing.T) {
 func TestBuildIDDBQueue(t *testing.T) {
 	a := assert.New(t)
 
-	f, err := tqid.FromFamilyName("", "tq")
+	f, err := tqid.NewTaskQueueFamily("", "tq")
 	assert.NoError(t, err)
 	p := f.TaskQueue(enumspb.TASK_QUEUE_TYPE_WORKFLOW).NormalPartition(2)
 	dbq := BuildIDDBQueue(p, "abc3")
@@ -160,7 +160,7 @@ func TestBuildIDDBQueue(t *testing.T) {
 func TestUnversionedDBQueue(t *testing.T) {
 	a := assert.New(t)
 
-	f, err := tqid.FromFamilyName("", "tq")
+	f, err := tqid.NewTaskQueueFamily("", "tq")
 	assert.NoError(t, err)
 	p := f.TaskQueue(enumspb.TASK_QUEUE_TYPE_WORKFLOW).NormalPartition(2)
 	dbq := UnversionedDBQueue(p)

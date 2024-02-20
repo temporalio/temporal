@@ -184,7 +184,7 @@ func (c *metricClient) emitForwardedSourceStats(
 	default:
 		// TODO: confirmed from metrics, it seems this error does happen at the moment...
 		// it means some mangled name come here; need to check why
-		_, err := tqid.FromFamilyName("", taskQueue.GetName())
+		_, err := tqid.NewTaskQueueFamily("", taskQueue.GetName())
 		if err != nil {
 			c.logger.Info("invalid tq name", tag.Error(err), tag.NewStringsTag("proto", []string{taskQueue.GetName()}))
 			metrics.MatchingClientInvalidTaskQueueName.With(metricsHandler).Record(1)

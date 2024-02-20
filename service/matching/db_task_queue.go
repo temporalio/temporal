@@ -174,7 +174,7 @@ func ParseDBQueue(persistenceName string, namespaceId string, taskType enumspb.T
 		}
 	}
 
-	f, err := tqid.FromFamilyName(namespaceId, baseName)
+	f, err := tqid.NewTaskQueueFamily(namespaceId, baseName)
 	if err != nil {
 		return nil, err
 	}

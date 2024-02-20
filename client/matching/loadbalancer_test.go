@@ -39,7 +39,7 @@ func TestTQLoadBalancerMapping(t *testing.T) {
 		taskQueueLBs: make(map[tqid.TaskQueue]*tqLoadBalancer),
 	}
 
-	f, err := tqid.FromFamilyName("fake-namespace-id", "fake-taskqueue")
+	f, err := tqid.NewTaskQueueFamily("fake-namespace-id", "fake-taskqueue")
 	assert.NoError(t, err)
 
 	taskQueue := f.TaskQueue(enumspb.TASK_QUEUE_TYPE_WORKFLOW)
@@ -58,7 +58,7 @@ func TestTQLoadBalancerMapping(t *testing.T) {
 
 func TestTQLoadBalancer(t *testing.T) {
 	partitionCount := 4
-	f, err := tqid.FromFamilyName("fake-namespace-id", "fake-taskqueue")
+	f, err := tqid.NewTaskQueueFamily("fake-namespace-id", "fake-taskqueue")
 	assert.NoError(t, err)
 	tqlb := newTaskQueueLoadBalancer(f.TaskQueue(enumspb.TASK_QUEUE_TYPE_ACTIVITY))
 
@@ -84,7 +84,7 @@ func TestTQLoadBalancer(t *testing.T) {
 
 func TestTQLoadBalancerForce(t *testing.T) {
 	partitionCount := 4
-	f, err := tqid.FromFamilyName("fake-namespace-id", "fake-taskqueue")
+	f, err := tqid.NewTaskQueueFamily("fake-namespace-id", "fake-taskqueue")
 	assert.NoError(t, err)
 	tqlb := newTaskQueueLoadBalancer(f.TaskQueue(enumspb.TASK_QUEUE_TYPE_ACTIVITY))
 
@@ -116,7 +116,7 @@ func TestTQLoadBalancerForce(t *testing.T) {
 func TestLoadBalancerConcurrent(t *testing.T) {
 	wg := &sync.WaitGroup{}
 	partitionCount := 4
-	f, err := tqid.FromFamilyName("fake-namespace-id", "fake-taskqueue")
+	f, err := tqid.NewTaskQueueFamily("fake-namespace-id", "fake-taskqueue")
 	assert.NoError(t, err)
 	tqlb := newTaskQueueLoadBalancer(f.TaskQueue(enumspb.TASK_QUEUE_TYPE_ACTIVITY))
 
@@ -139,7 +139,7 @@ func TestLoadBalancerConcurrent(t *testing.T) {
 
 func TestLoadBalancer_ReducedPartitionCount(t *testing.T) {
 	partitionCount := 2
-	f, err := tqid.FromFamilyName("fake-namespace-id", "fake-taskqueue")
+	f, err := tqid.NewTaskQueueFamily("fake-namespace-id", "fake-taskqueue")
 	assert.NoError(t, err)
 	tqlb := newTaskQueueLoadBalancer(f.TaskQueue(enumspb.TASK_QUEUE_TYPE_ACTIVITY))
 	p1 := tqlb.pickReadPartition(partitionCount, -1)

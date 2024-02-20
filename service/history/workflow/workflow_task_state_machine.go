@@ -1058,7 +1058,7 @@ func cleanTaskQueue(proto *taskqueuepb.TaskQueue, taskType enumspb.TaskQueueType
 	if proto == nil {
 		return proto
 	}
-	partition, err := tqid.FromProto(proto, "", taskType)
+	partition, err := tqid.PartitionFromProto(proto, "", taskType)
 	if err != nil {
 		return proto
 	}

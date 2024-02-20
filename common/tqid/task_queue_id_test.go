@@ -50,7 +50,7 @@ func TestFromProtoPartition_Sticky(t *testing.T) {
 		NormalName: normalName,
 	}
 
-	p, err := FromProto(proto, nsid, taskType)
+	p, err := PartitionFromProto(proto, nsid, taskType)
 	a.NoError(err)
 	a.Equal(nsid, p.NamespaceID().String())
 	a.Equal(taskType, p.TaskType())
@@ -63,7 +63,7 @@ func TestFromProtoPartition_Sticky(t *testing.T) {
 
 	// should be able to parse without normal name, old clients may not send normal name.
 	proto.NormalName = ""
-	p, err = FromProto(proto, nsid, taskType)
+	p, err = PartitionFromProto(proto, nsid, taskType)
 	a.NoError(err)
 	a.Equal(nsid, p.NamespaceID().String())
 	a.Equal(taskType, p.TaskType())
@@ -75,7 +75,7 @@ func TestFromProtoPartition_Sticky(t *testing.T) {
 	a.Equal(PartitionKey{nsid, stickyName, 0, taskType}, p.Key())
 
 	proto.Name = "/_sys/my-basic-tq-name/23"
-	_, err = FromProto(proto, nsid, taskType)
+	_, err = PartitionFromProto(proto, nsid, taskType)
 	// sticky queue cannot have non-zero prtn
 	a.True(errors.Is(err, ErrNonZeroSticky))
 }
@@ -92,7 +92,7 @@ func TestFromProtoPartition_Normal(t *testing.T) {
 		Kind: kind,
 	}
 
-	p, err := FromProto(proto, nsid, taskType)
+	p, err := PartitionFromProto(proto, nsid, taskType)
 	a.NoError(err)
 	a.Equal(nsid, p.NamespaceID().String())
 	a.Equal(taskType, p.TaskType())
@@ -103,13 +103,13 @@ func TestFromProtoPartition_Normal(t *testing.T) {
 	a.Equal(PartitionKey{nsid, tqname, 0, taskType}, p.Key())
 
 	proto.NormalName = "something"
-	_, err = FromProto(proto, nsid, taskType)
+	_, err = PartitionFromProto(proto, nsid, taskType)
 	// normal queue cannot have normal name
 	a.Error(err)
 
 	proto.Name = "/_sys/my-basic-tq-name/23"
 	proto.NormalName = ""
-	p, err = FromProto(proto, nsid, taskType)
+	p, err = PartitionFromProto(proto, nsid, taskType)
 	a.NoError(err)
 	a.Equal(nsid, p.NamespaceID().String())
 	a.Equal(tqname, p.TaskQueue().Name())
@@ -123,29 +123,29 @@ func TestFromProtoPartition_Normal(t *testing.T) {
 	a.Equal(0, mustParent(p, 32).PartitionID())
 
 	proto.Name = "/_sys/my-basic-tq-name/verxyz:23"
-	_, err = FromProto(proto, nsid, taskType)
+	_, err = PartitionFromProto(proto, nsid, taskType)
 	a.Error(err)
 
 	proto.Name = "/_sys/my-basic-tq-name/verxyz#23"
-	_, err = FromProto(proto, nsid, taskType)
+	_, err = PartitionFromProto(proto, nsid, taskType)
 	a.Error(err)
 }
 
 func TestFromBaseName(t *testing.T) {
 	a := assert.New(t)
 
-	f, err := FromFamilyName("", "my-basic-tq-name")
+	f, err := NewTaskQueueFamily("", "my-basic-tq-name")
 	a.NoError(err)
 	a.Equal("my-basic-tq-name", f.Name())
 
-	_, err = FromFamilyName("", "/_sys/my-basic-tq-name/23")
+	_, err = NewTaskQueueFamily("", "/_sys/my-basic-tq-name/23")
 	a.Error(err)
 }
 
 func TestNormalPartition(t *testing.T) {
 	a := assert.New(t)
 
-	f, err := FromFamilyName("", "tq")
+	f, err := NewTaskQueueFamily("", "tq")
 	a.NoError(err)
 	p := f.TaskQueue(enumspb.TASK_QUEUE_TYPE_WORKFLOW).NormalPartition(23)
 	a.Equal("tq", p.TaskQueue().Name())
@@ -245,14 +245,14 @@ func TestInvalidRpcNames(t *testing.T) {
 	}
 	for _, name := range inputs {
 		t.Run(name, func(t *testing.T) {
-			_, err := FromProto(&taskqueuepb.TaskQueue{Name: name}, "", 0)
+			_, err := PartitionFromProto(&taskqueuepb.TaskQueue{Name: name}, "", 0)
 			require.Error(t, err)
 		})
 	}
 }
 
 func mustParseNormalPartition(t *testing.T, rpcName string, taskType enumspb.TaskQueueType) *NormalPartition {
-	p, err := FromProto(&taskqueuepb.TaskQueue{Name: rpcName}, "", taskType)
+	p, err := PartitionFromProto(&taskqueuepb.TaskQueue{Name: rpcName}, "", taskType)
 	require.NoError(t, err)
 	return p.(*NormalPartition)
 }
