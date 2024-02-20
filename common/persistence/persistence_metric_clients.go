@@ -956,20 +956,6 @@ func (p *executionPersistenceClient) GetAllHistoryTreeBranches(
 	return p.persistence.GetAllHistoryTreeBranches(ctx, request)
 }
 
-// GetHistoryTree returns all branch information of a tree
-func (p *executionPersistenceClient) GetHistoryTree(
-	ctx context.Context,
-	request *GetHistoryTreeRequest,
-) (_ *GetHistoryTreeResponse, retErr error) {
-	caller := headers.GetCallerInfo(ctx).CallerName
-	startTime := time.Now().UTC()
-	defer func() {
-		p.healthSignals.Record(CallerSegmentMissing, caller, time.Since(startTime), retErr)
-		p.recordRequestMetrics(metrics.PersistenceGetHistoryTreeScope, caller, time.Since(startTime), retErr)
-	}()
-	return p.persistence.GetHistoryTree(ctx, request)
-}
-
 func (p *queuePersistenceClient) Init(
 	ctx context.Context,
 	blob *commonpb.DataBlob,

@@ -963,19 +963,19 @@ func (mr *MockExecutionStoreMockRecorder) GetHistoryTasks(ctx, request interface
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetHistoryTasks", reflect.TypeOf((*MockExecutionStore)(nil).GetHistoryTasks), ctx, request)
 }
 
-// GetHistoryTree mocks base method.
-func (m *MockExecutionStore) GetHistoryTree(ctx context.Context, request *persistence.GetHistoryTreeRequest) (*persistence.InternalGetHistoryTreeResponse, error) {
+// GetHistoryTreeContainingBranch mocks base method.
+func (m *MockExecutionStore) GetHistoryTreeContainingBranch(ctx context.Context, request *persistence.InternalGetHistoryTreeContainingBranchRequest) (*persistence.InternalGetHistoryTreeContainingBranchResponse, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "GetHistoryTree", ctx, request)
-	ret0, _ := ret[0].(*persistence.InternalGetHistoryTreeResponse)
+	ret := m.ctrl.Call(m, "GetHistoryTreeContainingBranch", ctx, request)
+	ret0, _ := ret[0].(*persistence.InternalGetHistoryTreeContainingBranchResponse)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
-// GetHistoryTree indicates an expected call of GetHistoryTree.
-func (mr *MockExecutionStoreMockRecorder) GetHistoryTree(ctx, request interface{}) *gomock.Call {
+// GetHistoryTreeContainingBranch indicates an expected call of GetHistoryTreeContainingBranch.
+func (mr *MockExecutionStoreMockRecorder) GetHistoryTreeContainingBranch(ctx, request interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetHistoryTree", reflect.TypeOf((*MockExecutionStore)(nil).GetHistoryTree), ctx, request)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetHistoryTreeContainingBranch", reflect.TypeOf((*MockExecutionStore)(nil).GetHistoryTreeContainingBranch), ctx, request)
 }
 
 // GetName mocks base method.

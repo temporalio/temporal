@@ -185,7 +185,7 @@ func WithChainedFrontendGrpcInterceptors(
 	interceptors ...grpc.UnaryServerInterceptor,
 ) ServerOption {
 	return applyFunc(func(s *serverOptions) {
-		s.customInterceptors = interceptors
+		s.customFrontendInterceptors = interceptors
 	})
 }
 

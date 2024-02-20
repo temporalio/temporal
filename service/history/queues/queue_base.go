@@ -320,8 +320,9 @@ func (p *queueBase) processNewRange() {
 }
 
 func (p *queueBase) checkpoint() {
+	var tasksCompleted int
 	p.readerGroup.ForEach(func(_ int64, r Reader) {
-		r.ShrinkSlices()
+		tasksCompleted += r.ShrinkSlices()
 	})
 
 	// Run slicePredicateAction to move slices with non-universal predicate to non-default reader
@@ -374,7 +375,7 @@ func (p *queueBase) checkpoint() {
 		p.exclusiveDeletionHighWatermark = newExclusiveDeletionHighWatermark
 	}
 
-	err := p.updateQueueState(readerScopes)
+	err := p.updateQueueState(tasksCompleted, readerScopes)
 	p.resetCheckpointTimer(err)
 }
 
@@ -458,6 +459,7 @@ func (p *queueBase) rangeCompleteTasks(
 }
 
 func (p *queueBase) updateQueueState(
+	tasksCompleted int,
 	readerScopes map[int64][]Scope,
 ) error {
 	metrics.AckLevelUpdateCounter.With(p.metricsHandler).Record(1)
@@ -467,7 +469,7 @@ func (p *queueBase) updateQueueState(
 		}
 	}
 
-	err := p.shard.SetQueueState(p.category, ToPersistenceQueueState(&queueState{
+	err := p.shard.SetQueueState(p.category, tasksCompleted, ToPersistenceQueueState(&queueState{
 		readerScopes:                 readerScopes,
 		exclusiveReaderHighWatermark: p.nonReadableScope.Range.InclusiveMin,
 	}))

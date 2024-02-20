@@ -610,22 +610,6 @@ func (p *executionRetryablePersistenceClient) TrimHistoryBranch(
 	return response, err
 }
 
-// GetHistoryTree returns all branch information of a tree
-func (p *executionRetryablePersistenceClient) GetHistoryTree(
-	ctx context.Context,
-	request *GetHistoryTreeRequest,
-) (*GetHistoryTreeResponse, error) {
-	var response *GetHistoryTreeResponse
-	op := func(ctx context.Context) error {
-		var err error
-		response, err = p.persistence.GetHistoryTree(ctx, request)
-		return err
-	}
-
-	err := backoff.ThrottleRetryContext(ctx, op, p.policy, p.isRetryable)
-	return response, err
-}
-
 func (p *executionRetryablePersistenceClient) GetAllHistoryTreeBranches(
 	ctx context.Context,
 	request *GetAllHistoryTreeBranchesRequest,

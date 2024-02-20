@@ -44,6 +44,6 @@ func TestErrorType(t *testing.T) {
 	}
 
 	for id, data := range testData {
-		assert.Equal(t, data.expectedResult, ErrorType(data.err).Value().(string), "Unexpected error type in index", id)
+		assert.Equal(t, data.expectedResult, ServiceErrorType(data.err).Value().(string), "Unexpected error type in index %d", id)
 	}
 }
