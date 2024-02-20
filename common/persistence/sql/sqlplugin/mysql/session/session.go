@@ -27,6 +27,7 @@ package session
 import (
 	"crypto/tls"
 	"crypto/x509"
+	"errors"
 	"fmt"
 	"os"
 	"strings"
@@ -37,7 +38,23 @@ import (
 
 	"go.temporal.io/server/common/auth"
 	"go.temporal.io/server/common/config"
+	"go.temporal.io/server/common/persistence/sql/sqlplugin"
 	"go.temporal.io/server/common/resolver"
+)
+
+type (
+	Session struct {
+		*sqlx.DB
+	}
+
+	// MySQLVersion specifies which of the distinct mysql versions we support
+	MySQLVersion int
+)
+
+const (
+	MySQLVersionUnspecified MySQLVersion = iota
+	MySQLVersion5_7
+	MySQLVersion8_0
 )
 
 const (
@@ -48,22 +65,40 @@ const (
 	defaultIsolationLevel        = "'READ-COMMITTED'"
 	// customTLSName is the name used if a custom tls configuration is created
 	customTLSName = "tls-custom"
+
+	interpolateParamsAttr = "interpolateParams"
 )
 
-var dsnAttrOverrides = map[string]string{
-	"parseTime":       "true",
-	"clientFoundRows": "true",
-}
+var (
+	errMySQL8VisInterpolateParamsNotSupported = errors.New("interpolateParams is not supported for mysql8 visibility stores")
+	dsnAttrOverrides                          = map[string]string{
+		"parseTime":       "true",
+		"clientFoundRows": "true",
+	}
+)
 
-type Session struct {
-	*sqlx.DB
+func (m MySQLVersion) String() string {
+	switch m {
+	case MySQLVersion5_7:
+		return "MySQL 5.7"
+	case MySQLVersion8_0:
+		return "MySQL 8.0"
+	default:
+		return "Unspecified"
+	}
 }
 
 func NewSession(
+	version MySQLVersion,
+	dbKind sqlplugin.DbKind,
 	cfg *config.SQL,
 	resolver resolver.ServiceResolver,
 ) (*Session, error) {
-	db, err := createConnection(cfg, resolver)
+	if version == MySQLVersionUnspecified {
+		return nil, fmt.Errorf("Bug: unspecified MySQL version provided to NewSession")
+	}
+
+	db, err := createConnection(version, dbKind, cfg, resolver)
 	if err != nil {
 		return nil, err
 	}
@@ -77,6 +112,8 @@ func (s *Session) Close() {
 }
 
 func createConnection(
+	version MySQLVersion,
+	dbKind sqlplugin.DbKind,
 	cfg *config.SQL,
 	resolver resolver.ServiceResolver,
 ) (*sqlx.DB, error) {
@@ -85,7 +122,12 @@ func createConnection(
 		return nil, err
 	}
 
-	db, err := sqlx.Connect(driverName, buildDSN(cfg, resolver))
+	dsn, err := buildDSN(version, dbKind, cfg, resolver)
+	if err != nil {
+		return nil, err
+	}
+
+	db, err := sqlx.Connect(driverName, dsn)
 	if err != nil {
 		return nil, err
 	}
@@ -104,7 +146,12 @@ func createConnection(
 	return db, nil
 }
 
-func buildDSN(cfg *config.SQL, r resolver.ServiceResolver) string {
+func buildDSN(
+	version MySQLVersion,
+	dbKind sqlplugin.DbKind,
+	cfg *config.SQL,
+	r resolver.ServiceResolver,
+) (string, error) {
 	mysqlConfig := mysql.NewConfig()
 
 	mysqlConfig.User = cfg.User
@@ -112,7 +159,11 @@ func buildDSN(cfg *config.SQL, r resolver.ServiceResolver) string {
 	mysqlConfig.Addr = r.Resolve(cfg.ConnectAddr)[0]
 	mysqlConfig.DBName = cfg.DatabaseName
 	mysqlConfig.Net = cfg.ConnectProtocol
-	mysqlConfig.Params = buildDSNAttrs(cfg)
+	var err error
+	mysqlConfig.Params, err = buildDSNAttrs(version, dbKind, cfg)
+	if err != nil {
+		return "", err
+	}
 
 	// https://github.com/go-sql-driver/mysql/blob/v1.5.0/dsn.go#L104-L106
 	// https://github.com/go-sql-driver/mysql/blob/v1.5.0/dsn.go#L182-L189
@@ -124,10 +175,10 @@ func buildDSN(cfg *config.SQL, r resolver.ServiceResolver) string {
 	// https://github.com/temporalio/temporal/issues/1703
 	mysqlConfig.RejectReadOnly = true
 
-	return mysqlConfig.FormatDSN()
+	return mysqlConfig.FormatDSN(), nil
 }
 
-func buildDSNAttrs(cfg *config.SQL) map[string]string {
+func buildDSNAttrs(version MySQLVersion, dbKind sqlplugin.DbKind, cfg *config.SQL) (map[string]string, error) {
 	attrs := make(map[string]string, len(dsnAttrOverrides)+len(cfg.ConnectAttributes)+1)
 	for k, v := range cfg.ConnectAttributes {
 		k1, v1 := sanitizeAttr(k, v)
@@ -145,7 +196,13 @@ func buildDSNAttrs(cfg *config.SQL) map[string]string {
 		attrs[k] = v
 	}
 
-	return attrs
+	if version == MySQLVersion8_0 && dbKind == sqlplugin.DbKindVisibility {
+		if _, ok := attrs[interpolateParamsAttr]; ok {
+			return nil, errMySQL8VisInterpolateParamsNotSupported
+		}
+	}
+
+	return attrs, nil
 }
 
 func hasAttr(attrs map[string]string, key string) bool {
