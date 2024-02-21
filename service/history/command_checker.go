@@ -293,11 +293,16 @@ func (v *commandAttrValidator) validateActivityScheduleAttributes(
 	attributes *commandpb.ScheduleActivityTaskCommandAttributes,
 	runTimeout *durationpb.Duration,
 ) (enumspb.WorkflowTaskFailedCause, error) {
-
 	const failedCause = enumspb.WORKFLOW_TASK_FAILED_CAUSE_BAD_SCHEDULE_ACTIVITY_ATTRIBUTES
 
 	if attributes == nil {
 		return failedCause, serviceerror.NewInvalidArgument("ScheduleActivityTaskCommandAttributes is not set on ScheduleActivityTaskCommand.")
+	}
+
+	// The typescript SDK requires that the ScheduleToStart and/or the ScheduleToClose timeouts are non-nil.
+	// Since we override those using the potentially-nil run timeout we need to make sure it is always non-nil
+	if runTimeout == nil {
+		runTimeout = durationpb.New(0)
 	}
 
 	activityID := attributes.GetActivityId()
@@ -344,12 +349,6 @@ func (v *commandAttrValidator) validateActivityScheduleAttributes(
 	ScheduleToCloseSet := attributes.GetScheduleToCloseTimeout().AsDuration() > 0
 	ScheduleToStartSet := attributes.GetScheduleToStartTimeout().AsDuration() > 0
 	StartToCloseSet := attributes.GetStartToCloseTimeout().AsDuration() > 0
-
-	// The typescript SDK requires that the ScheduleToStart and/or the ScheduleToClose timeouts are non-nil.
-	// Since we override those using the potentially-nil run timeout we need to make sure it is always non-nil
-	if runTimeout == nil {
-		runTimeout = durationpb.New(0)
-	}
 
 	if ScheduleToCloseSet {
 		if ScheduleToStartSet {
