@@ -465,6 +465,9 @@ const (
 	MatchingMaxWaitForPollerBeforeFwd = "matching.maxWaitForPollerBeforeFwd"
 	// QueryPollerUnavailableWindow WF Queries are rejected after a while if no poller has been seen within the window
 	QueryPollerUnavailableWindow = "matching.queryPollerUnavailableWindow"
+	// MatchingMembershipUnloadDelay is how long to wait to re-confirm loss of ownership before unloading a task queue.
+	// Set to zero to disable proactive unload.
+	MatchingMembershipUnloadDelay = "matching.membershipUnloadDelay"
 
 	// for matching testing only:
 
@@ -774,6 +777,10 @@ const (
 	MaximumSignalsPerExecution = "history.maximumSignalsPerExecution"
 	// ShardUpdateMinInterval is the minimal time interval which the shard info can be updated
 	ShardUpdateMinInterval = "history.shardUpdateMinInterval"
+	// ShardUpdateMinTasksCompleted is the minimum number of tasks which must be completed (across all queues) before the shard info can be updated.
+	// Note that once history.shardUpdateMinInterval amount of time has passed we'll update the shard info regardless of the number of tasks completed.
+	// When the this config is zero or lower we will only update shard info at most once every history.shardUpdateMinInterval.
+	ShardUpdateMinTasksCompleted = "history.shardUpdateMinTasksCompleted"
 	// ShardSyncMinInterval is the minimal time interval which the shard info should be sync to remote
 	ShardSyncMinInterval = "history.shardSyncMinInterval"
 	// EmitShardLagLog whether emit the shard lag log

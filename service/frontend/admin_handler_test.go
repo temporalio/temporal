@@ -1283,11 +1283,11 @@ func (s *adminHandlerSuite) TestPurgeDLQTasks() {
 	}
 }
 
-func (s *adminHandlerSuite) TestPurgeDLQTasks_InvalidCategory() {
+func (s *adminHandlerSuite) TestPurgeDLQTasks_ClusterNotSet() {
 	_, err := s.handler.PurgeDLQTasks(context.Background(), &adminservice.PurgeDLQTasksRequest{
 		DlqKey: &commonspb.HistoryDLQKey{
-			TaskCategory:  -1,
-			SourceCluster: "test-source-cluster",
+			TaskCategory:  1,
+			SourceCluster: "",
 			TargetCluster: "test-target-cluster",
 		},
 		InclusiveMaxTaskMetadata: &commonspb.HistoryDLQTaskMetadata{
@@ -1296,8 +1296,7 @@ func (s *adminHandlerSuite) TestPurgeDLQTasks_InvalidCategory() {
 	})
 	s.Error(err)
 	s.Equal(codes.InvalidArgument, serviceerror.ToStatus(err).Code())
-	s.ErrorContains(err, "task category")
-	s.ErrorContains(err, "-1")
+	s.ErrorContains(err, errSourceClusterNotSet.Error())
 }
 
 func (s *adminHandlerSuite) TestDescribeDLQJob() {

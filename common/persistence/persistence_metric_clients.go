@@ -353,33 +353,6 @@ func (p *executionPersistenceClient) ListConcreteExecutions(
 	return p.persistence.ListConcreteExecutions(ctx, request)
 }
 
-func (p *executionPersistenceClient) RegisterHistoryTaskReader(
-	ctx context.Context,
-	request *RegisterHistoryTaskReaderRequest,
-) error {
-	// hint methods won't go through persistence rate limiter
-	// so also not emitting any persistence request/error metrics
-	return p.persistence.RegisterHistoryTaskReader(ctx, request)
-}
-
-func (p *executionPersistenceClient) UnregisterHistoryTaskReader(
-	ctx context.Context,
-	request *UnregisterHistoryTaskReaderRequest,
-) {
-	// hint methods won't go through persistence rate limiter
-	// so also not emitting any persistence request/error metrics
-	p.persistence.UnregisterHistoryTaskReader(ctx, request)
-}
-
-func (p *executionPersistenceClient) UpdateHistoryTaskReaderProgress(
-	ctx context.Context,
-	request *UpdateHistoryTaskReaderProgressRequest,
-) {
-	// hint methods won't go through persistence rate limiter
-	// so also not emitting any persistence request/error metrics
-	p.persistence.UpdateHistoryTaskReaderProgress(ctx, request)
-}
-
 func (p *executionPersistenceClient) AddHistoryTasks(
 	ctx context.Context,
 	request *AddHistoryTasksRequest,
@@ -980,20 +953,6 @@ func (p *executionPersistenceClient) GetAllHistoryTreeBranches(
 		p.recordRequestMetrics(metrics.PersistenceGetAllHistoryTreeBranchesScope, caller, time.Since(startTime), retErr)
 	}()
 	return p.persistence.GetAllHistoryTreeBranches(ctx, request)
-}
-
-// GetHistoryTree returns all branch information of a tree
-func (p *executionPersistenceClient) GetHistoryTree(
-	ctx context.Context,
-	request *GetHistoryTreeRequest,
-) (_ *GetHistoryTreeResponse, retErr error) {
-	caller := headers.GetCallerInfo(ctx).CallerName
-	startTime := time.Now().UTC()
-	defer func() {
-		p.healthSignals.Record(CallerSegmentMissing, caller, time.Since(startTime), retErr)
-		p.recordRequestMetrics(metrics.PersistenceGetHistoryTreeScope, caller, time.Since(startTime), retErr)
-	}()
-	return p.persistence.GetHistoryTree(ctx, request)
 }
 
 func (p *queuePersistenceClient) Init(

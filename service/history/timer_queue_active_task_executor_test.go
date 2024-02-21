@@ -162,7 +162,7 @@ func (s *timerQueueActiveTaskExecutorSuite) SetupTest() {
 	s.mockClusterMetadata.EXPECT().GetAllClusterInfo().Return(cluster.TestAllClusterInfo).AnyTimes()
 	s.mockClusterMetadata.EXPECT().IsGlobalNamespaceEnabled().Return(true).AnyTimes()
 	s.mockClusterMetadata.EXPECT().ClusterNameForFailoverVersion(s.namespaceEntry.IsGlobalNamespace(), s.version).Return(s.mockClusterMetadata.GetCurrentClusterName()).AnyTimes()
-	s.workflowCache = wcache.NewHostLevelCache(s.mockShard.GetConfig())
+	s.workflowCache = wcache.NewHostLevelCache(s.mockShard.GetConfig(), metrics.NoopMetricsHandler)
 	s.logger = s.mockShard.GetLogger()
 
 	s.mockDeleteManager = deletemanager.NewMockDeleteManager(s.controller)

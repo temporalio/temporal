@@ -181,7 +181,7 @@ func (s *engine2Suite) SetupTest() {
 			},
 		).
 		AnyTimes()
-	s.workflowCache = wcache.NewHostLevelCache(s.mockShard.GetConfig())
+	s.workflowCache = wcache.NewHostLevelCache(s.mockShard.GetConfig(), metrics.NoopMetricsHandler)
 	s.logger = log.NewMockLogger(s.controller)
 	s.logger.EXPECT().Debug(gomock.Any(), gomock.Any()).AnyTimes()
 	s.logger.EXPECT().Info(gomock.Any(), gomock.Any()).AnyTimes()
@@ -926,7 +926,7 @@ func (s *engine2Suite) createExecutionStartedStateWithParent(we *commonpb.Workfl
 	if wt != nil && startWorkflowTask {
 		addWorkflowTaskStartedEvent(ms, wt.ScheduledEventID, tl, identity)
 	}
-	_ = ms.SetHistoryTree(context.Background(), nil, nil, we.GetRunId())
+	_ = ms.SetHistoryTree(nil, nil, we.GetRunId())
 	versionHistory, _ := versionhistory.GetCurrentVersionHistory(
 		ms.GetExecutionInfo().VersionHistories,
 	)
