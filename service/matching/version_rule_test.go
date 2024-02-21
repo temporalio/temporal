@@ -333,6 +333,50 @@ func TestReplaceAssignmentRuleVariousIdx(t *testing.T) {
 	replace(-1, false)
 }
 
+func TestReplaceAssignmentRuleInVersionSet(t *testing.T) {
+	t.Parallel()
+	maxRules := 3
+	clock := hlc.Zero(1)
+	data := mkInitialData(1, clock)
+	assert.False(t, containsUnfiltered(data.GetAssignmentRules()))
+	var err error
+
+	// insert a rule so there's something to replace
+	rule1 := mkAssignmentRule("1", nil)
+	data, err = insertAssignmentRule(rule1, data, clock, 0, maxRules)
+	expected := &persistencepb.VersioningData{
+		AssignmentRules: []*persistencepb.AssignmentRule{
+			mkAssignmentRulePersistence(rule1, clock, nil),
+		},
+		VersionSets: data.GetVersionSets(),
+	}
+	assert.NoError(t, err)
+	protoassert.ProtoEqual(t, expected, data)
+
+	// replace "0" to versioning data with build id "0" --> failure
+	rule0 := mkAssignmentRule("0", nil)
+	nextClock := hlc.Next(clock, commonclock.NewRealTimeSource())
+	_, err = replaceAssignmentRule(rule0, data, nextClock, 0, false)
+	assert.Error(t, err)
+
+	// replace "3" to versioning data with build id "0" --> success
+	rule3 := mkAssignmentRule("3", nil)
+	updatedData, err := replaceAssignmentRule(rule3, data, nextClock, 0, false)
+	assert.NoError(t, err)
+	expReplacedRule := expected.GetAssignmentRules()[0]
+	expReplacedRule.DeleteTimestamp = nextClock
+	expected = &persistencepb.VersioningData{
+		AssignmentRules: []*persistencepb.AssignmentRule{
+			mkAssignmentRulePersistence(rule3, nextClock, nil),
+			expReplacedRule,
+		},
+		VersionSets: data.GetVersionSets(),
+	}
+	protoassert.ProtoEqual(t, expected, updatedData)
+	assert.Equal(t, getListResp(t, updatedData).GetAssignmentRules()[0].GetRule().GetTargetBuildId(), updatedData.GetAssignmentRules()[0].GetRule().GetTargetBuildId())
+
+}
+
 // Test replacing assignment rule and hitting / not hitting the unfiltered error, and forcing past it
 func TestReplaceAssignmentRuleTestRequireUnfiltered(t *testing.T) {
 	t.Parallel()
@@ -481,8 +525,6 @@ func TestInsertRedirectRuleMaxRules(t *testing.T) {
 	updatedData, err = insertRedirectRule(rule4, updatedData, clock4, maxRules)
 	assert.Error(t, err)
 }
-
-// todo: TestReplaceAssignmentRuleInVersionSet
 
 // Test requirement that target id and source id are not in a version set (success and failure)
 func TestInsertRedirectRuleInVersionSet(t *testing.T) {
