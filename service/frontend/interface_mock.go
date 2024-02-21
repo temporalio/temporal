@@ -494,6 +494,21 @@ func (mr *MockHandlerMockRecorder) PollActivityTaskQueue(arg0, arg1 interface{})
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "PollActivityTaskQueue", reflect.TypeOf((*MockHandler)(nil).PollActivityTaskQueue), arg0, arg1)
 }
 
+// PollNexusTaskQueue mocks base method.
+func (m *MockHandler) PollNexusTaskQueue(arg0 context.Context, arg1 *v10.PollNexusTaskQueueRequest) (*v10.PollNexusTaskQueueResponse, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "PollNexusTaskQueue", arg0, arg1)
+	ret0, _ := ret[0].(*v10.PollNexusTaskQueueResponse)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// PollNexusTaskQueue indicates an expected call of PollNexusTaskQueue.
+func (mr *MockHandlerMockRecorder) PollNexusTaskQueue(arg0, arg1 interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "PollNexusTaskQueue", reflect.TypeOf((*MockHandler)(nil).PollNexusTaskQueue), arg0, arg1)
+}
+
 // PollWorkflowExecutionUpdate mocks base method.
 func (m *MockHandler) PollWorkflowExecutionUpdate(arg0 context.Context, arg1 *v10.PollWorkflowExecutionUpdateRequest) (*v10.PollWorkflowExecutionUpdateResponse, error) {
 	m.ctrl.T.Helper()
@@ -717,6 +732,36 @@ func (m *MockHandler) RespondActivityTaskFailedById(arg0 context.Context, arg1 *
 func (mr *MockHandlerMockRecorder) RespondActivityTaskFailedById(arg0, arg1 interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RespondActivityTaskFailedById", reflect.TypeOf((*MockHandler)(nil).RespondActivityTaskFailedById), arg0, arg1)
+}
+
+// RespondNexusTaskCompleted mocks base method.
+func (m *MockHandler) RespondNexusTaskCompleted(arg0 context.Context, arg1 *v10.RespondNexusTaskCompletedRequest) (*v10.RespondNexusTaskCompletedResponse, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "RespondNexusTaskCompleted", arg0, arg1)
+	ret0, _ := ret[0].(*v10.RespondNexusTaskCompletedResponse)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// RespondNexusTaskCompleted indicates an expected call of RespondNexusTaskCompleted.
+func (mr *MockHandlerMockRecorder) RespondNexusTaskCompleted(arg0, arg1 interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RespondNexusTaskCompleted", reflect.TypeOf((*MockHandler)(nil).RespondNexusTaskCompleted), arg0, arg1)
+}
+
+// RespondNexusTaskFailed mocks base method.
+func (m *MockHandler) RespondNexusTaskFailed(arg0 context.Context, arg1 *v10.RespondNexusTaskFailedRequest) (*v10.RespondNexusTaskFailedResponse, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "RespondNexusTaskFailed", arg0, arg1)
+	ret0, _ := ret[0].(*v10.RespondNexusTaskFailedResponse)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// RespondNexusTaskFailed indicates an expected call of RespondNexusTaskFailed.
+func (mr *MockHandlerMockRecorder) RespondNexusTaskFailed(arg0, arg1 interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RespondNexusTaskFailed", reflect.TypeOf((*MockHandler)(nil).RespondNexusTaskFailed), arg0, arg1)
 }
 
 // RespondQueryTaskCompleted mocks base method.
@@ -1018,6 +1063,21 @@ func (mr *MockOperatorHandlerMockRecorder) AddSearchAttributes(arg0, arg1 interf
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "AddSearchAttributes", reflect.TypeOf((*MockOperatorHandler)(nil).AddSearchAttributes), arg0, arg1)
 }
 
+// CreateOrUpdateNexusIncomingService mocks base method.
+func (m *MockOperatorHandler) CreateOrUpdateNexusIncomingService(arg0 context.Context, arg1 *v1.CreateOrUpdateNexusIncomingServiceRequest) (*v1.CreateOrUpdateNexusIncomingServiceResponse, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "CreateOrUpdateNexusIncomingService", arg0, arg1)
+	ret0, _ := ret[0].(*v1.CreateOrUpdateNexusIncomingServiceResponse)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// CreateOrUpdateNexusIncomingService indicates an expected call of CreateOrUpdateNexusIncomingService.
+func (mr *MockOperatorHandlerMockRecorder) CreateOrUpdateNexusIncomingService(arg0, arg1 interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CreateOrUpdateNexusIncomingService", reflect.TypeOf((*MockOperatorHandler)(nil).CreateOrUpdateNexusIncomingService), arg0, arg1)
+}
+
 // DeleteNamespace mocks base method.
 func (m *MockOperatorHandler) DeleteNamespace(arg0 context.Context, arg1 *v1.DeleteNamespaceRequest) (*v1.DeleteNamespaceResponse, error) {
 	m.ctrl.T.Helper()
@@ -1033,6 +1093,36 @@ func (mr *MockOperatorHandlerMockRecorder) DeleteNamespace(arg0, arg1 interface{
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DeleteNamespace", reflect.TypeOf((*MockOperatorHandler)(nil).DeleteNamespace), arg0, arg1)
 }
 
+// DeleteNexusIncomingService mocks base method.
+func (m *MockOperatorHandler) DeleteNexusIncomingService(arg0 context.Context, arg1 *v1.DeleteNexusIncomingServiceRequest) (*v1.DeleteNexusIncomingServiceResponse, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "DeleteNexusIncomingService", arg0, arg1)
+	ret0, _ := ret[0].(*v1.DeleteNexusIncomingServiceResponse)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// DeleteNexusIncomingService indicates an expected call of DeleteNexusIncomingService.
+func (mr *MockOperatorHandlerMockRecorder) DeleteNexusIncomingService(arg0, arg1 interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DeleteNexusIncomingService", reflect.TypeOf((*MockOperatorHandler)(nil).DeleteNexusIncomingService), arg0, arg1)
+}
+
+// GetNexusIncomingService mocks base method.
+func (m *MockOperatorHandler) GetNexusIncomingService(arg0 context.Context, arg1 *v1.GetNexusIncomingServiceRequest) (*v1.GetNexusIncomingServiceResponse, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetNexusIncomingService", arg0, arg1)
+	ret0, _ := ret[0].(*v1.GetNexusIncomingServiceResponse)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// GetNexusIncomingService indicates an expected call of GetNexusIncomingService.
+func (mr *MockOperatorHandlerMockRecorder) GetNexusIncomingService(arg0, arg1 interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetNexusIncomingService", reflect.TypeOf((*MockOperatorHandler)(nil).GetNexusIncomingService), arg0, arg1)
+}
+
 // ListClusters mocks base method.
 func (m *MockOperatorHandler) ListClusters(arg0 context.Context, arg1 *v1.ListClustersRequest) (*v1.ListClustersResponse, error) {
 	m.ctrl.T.Helper()
@@ -1046,6 +1136,21 @@ func (m *MockOperatorHandler) ListClusters(arg0 context.Context, arg1 *v1.ListCl
 func (mr *MockOperatorHandlerMockRecorder) ListClusters(arg0, arg1 interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ListClusters", reflect.TypeOf((*MockOperatorHandler)(nil).ListClusters), arg0, arg1)
+}
+
+// ListNexusIncomingServices mocks base method.
+func (m *MockOperatorHandler) ListNexusIncomingServices(arg0 context.Context, arg1 *v1.ListNexusIncomingServicesRequest) (*v1.ListNexusIncomingServicesResponse, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "ListNexusIncomingServices", arg0, arg1)
+	ret0, _ := ret[0].(*v1.ListNexusIncomingServicesResponse)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// ListNexusIncomingServices indicates an expected call of ListNexusIncomingServices.
+func (mr *MockOperatorHandlerMockRecorder) ListNexusIncomingServices(arg0, arg1 interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ListNexusIncomingServices", reflect.TypeOf((*MockOperatorHandler)(nil).ListNexusIncomingServices), arg0, arg1)
 }
 
 // ListSearchAttributes mocks base method.
