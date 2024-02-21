@@ -345,6 +345,12 @@ func (v *commandAttrValidator) validateActivityScheduleAttributes(
 	ScheduleToStartSet := attributes.GetScheduleToStartTimeout().AsDuration() > 0
 	StartToCloseSet := attributes.GetStartToCloseTimeout().AsDuration() > 0
 
+	// The typescript SDK requires that the ScheduleToStart and/or the ScheduleToClose timeouts are non-nil.
+	// Since we override those using the potentially-nil run timeout we need to make sure it is always non-nil
+	if runTimeout == nil {
+		runTimeout = durationpb.New(0)
+	}
+
 	if ScheduleToCloseSet {
 		if ScheduleToStartSet {
 			attributes.ScheduleToStartTimeout = timestamp.MinDurationPtr(attributes.GetScheduleToStartTimeout(),
