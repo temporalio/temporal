@@ -115,7 +115,7 @@ func DeleteAssignmentRule(timestamp *hlc.Clock,
 	hadUnfiltered := containsUnfiltered(rules)
 	idx := req.GetRuleIndex()
 	actualIdx := given2ActualIdx(idx, rules)
-	if actualIdx < 0 {
+	if actualIdx < 0 || actualIdx > len(rules)-1 {
 		return nil, serviceerror.NewInvalidArgument(fmt.Sprintf(
 			"rule index %d is out of bounds for assignment rule list of length %d", idx, len(getActiveAssignmentRules(rules))))
 	}
