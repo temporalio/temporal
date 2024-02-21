@@ -25,6 +25,7 @@
 package hybrid_logical_clock
 
 import (
+	"google.golang.org/protobuf/types/known/timestamppb"
 	"time"
 
 	clockpb "go.temporal.io/server/api/clock/v1"
@@ -119,4 +120,9 @@ func UTC(c *Clock) time.Time {
 // Since returns time.Since(UTC(c))
 func Since(c *Clock) time.Duration {
 	return time.Since(UTC(c))
+}
+
+// ProtoTimestamp returns timestamppb.New(UTC(c))
+func ProtoTimestamp(c *Clock) *timestamppb.Timestamp {
+	return timestamppb.New(UTC(c))
 }

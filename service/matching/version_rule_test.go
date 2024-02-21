@@ -26,10 +26,9 @@ package matching
 
 import (
 	"fmt"
+	"github.com/stretchr/testify/assert"
 	"slices"
 	"testing"
-
-	"github.com/stretchr/testify/assert"
 
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	"go.temporal.io/api/workflowservice/v1"
@@ -94,22 +93,36 @@ func insertRule(rule *taskqueuepb.BuildIdAssignmentRule,
 	return InsertAssignmentRule(clock, data, mkNewInsertAssignmentReq(rule, idx), maxARs)
 }
 
-// Test requirement that number of rules does not exceed max rules, including that deleting a rule fixes the error.
+func testList(t *testing.T, expected, actual *persistencepb.VersioningData) {
+	resp, err := ListWorkerVersioningRules(actual, hlc.Zero(1))
+	assert.NoError(t, err)
+	activeAssignmentRules := getActiveAssignmentRules(expected.GetAssignmentRules())
+	activeRedirectRules := getActiveRedirectRules(expected.GetRedirectRules())
+	for i, r := range resp.GetResponse().GetAssignmentRules() {
+		protoassert.ProtoEqual(t, activeAssignmentRules[i].GetRule(), r.GetRule())
+	}
+	for i, r := range resp.GetResponse().GetCompatibleRedirectRules() {
+		protoassert.ProtoEqual(t, activeRedirectRules[i].GetRule(), r.GetRule())
+	}
+}
+
+// Test inserting before and after hitting the max rules limit.
 func TestInsertAssignmentRuleMaxRules(t *testing.T) {
 	t.Parallel()
 	clock := hlc.Zero(1)
+	timesource := commonclock.NewRealTimeSource()
 	initialData := mkInitialData(0, clock)
 	assert.False(t, containsUnfiltered(initialData.GetAssignmentRules()))
 
 	// insert to empty versioning data --> success
 	rule1 := mkAssignmentRule("1", nil)
-	nextClock := hlc.Next(clock, commonclock.NewRealTimeSource())
-	updatedData, err := insertRule(rule1, initialData, nextClock, 0)
+	clock1 := hlc.Next(clock, timesource)
+	updatedData, err := insertRule(rule1, initialData, clock1, 0)
 	assert.NoError(t, err)
 	protoassert.ProtoEqual(t, mkInitialData(0, clock), initialData)
 	expected := &persistencepb.VersioningData{
 		AssignmentRules: []*persistencepb.AssignmentRule{
-			mkAssignmentRulePersistence(rule1, nextClock, nil),
+			mkAssignmentRulePersistence(rule1, clock1, nil),
 		},
 	}
 	protoassert.ProtoEqual(t, expected, updatedData)
@@ -117,28 +130,27 @@ func TestInsertAssignmentRuleMaxRules(t *testing.T) {
 	// insert again --> success
 	assert.True(t, containsUnfiltered(updatedData.GetAssignmentRules()))
 	rule2 := mkAssignmentRule("2", nil)
-	nextClock = hlc.Next(clock, commonclock.NewRealTimeSource())
-	updatedData, err = insertRule(rule2, updatedData, nextClock, 0)
+	clock2 := hlc.Next(clock1, timesource)
+	updatedData, err = insertRule(rule2, updatedData, clock2, 0)
 	assert.NoError(t, err)
 	expected = &persistencepb.VersioningData{
-		AssignmentRules: slices.Insert(expected.GetAssignmentRules(), 0, mkAssignmentRulePersistence(rule2, nextClock, nil)),
+		AssignmentRules: slices.Insert(expected.GetAssignmentRules(), 0, mkAssignmentRulePersistence(rule2, clock2, nil)),
 	}
 	protoassert.ProtoEqual(t, expected, updatedData)
 
 	// insert twice more --> failure due to max rules
 	rule3 := mkAssignmentRule("3", nil)
-	nextClock = hlc.Next(clock, commonclock.NewRealTimeSource())
-	updatedData, err = insertRule(rule3, updatedData, nextClock, 0)
+	clock3 := hlc.Next(clock2, timesource)
+	updatedData, err = insertRule(rule3, updatedData, clock3, 0)
 	assert.NoError(t, err)
 	expected = &persistencepb.VersioningData{
-		AssignmentRules: slices.Insert(expected.GetAssignmentRules(), 0, mkAssignmentRulePersistence(rule3, nextClock, nil)),
+		AssignmentRules: slices.Insert(expected.GetAssignmentRules(), 0, mkAssignmentRulePersistence(rule3, clock3, nil)),
 	}
+	testList(t, expected, updatedData)
 	rule4 := mkAssignmentRule("4", nil)
-	nextClock = hlc.Next(clock, commonclock.NewRealTimeSource())
-	updatedData, err = insertRule(rule4, updatedData, nextClock, 0)
+	clock4 := hlc.Next(clock2, timesource)
+	updatedData, err = insertRule(rule4, updatedData, clock4, 0)
 	assert.Error(t, err)
-
-	// todo: delete then add again --> success
 }
 
 // Test requirement that target id isn't in a version set (success and failure)

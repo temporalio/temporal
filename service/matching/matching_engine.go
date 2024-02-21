@@ -977,9 +977,6 @@ func (e *matchingEngineImpl) ListWorkerVersioningRules(
 		return nil, err
 	}
 
-	var cT []byte
-	var assignmentRules []*taskqueuepb.TimestampedBuildIdAssignmentRule
-	var redirectRules []*taskqueuepb.TimestampedCompatibleBuildIdRedirectRule
 	data, _, err := tqMgr.GetUserData()
 	if err != nil {
 		return nil, err
@@ -993,17 +990,7 @@ func (e *matchingEngineImpl) ListWorkerVersioningRules(
 	if clk == nil {
 		clk = hlc.Zero(e.clusterMeta.GetClusterID())
 	}
-	if cT, err = clk.Marshal(); err != nil {
-		return nil, serviceerror.NewInternal("error generating conflict token")
-	}
-
-	return &matchingservice.ListWorkerVersioningRulesResponse{
-		Response: &workflowservice.ListWorkerVersioningRulesResponse{
-			AssignmentRules:         assignmentRules,
-			CompatibleRedirectRules: redirectRules,
-			ConflictToken:           cT,
-		},
-	}, nil
+	return ListWorkerVersioningRules(data.GetData().GetVersioningData(), clk)
 }
 
 func (e *matchingEngineImpl) UpdateWorkerBuildIdCompatibility(

@@ -26,6 +26,7 @@ package matching
 
 import (
 	"fmt"
+	"go.temporal.io/server/api/matchingservice/v1"
 	"slices"
 	"time"
 
@@ -33,6 +34,7 @@ import (
 	"go.temporal.io/api/taskqueue/v1"
 	"go.temporal.io/api/workflowservice/v1"
 
+	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	persistencepb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common"
 	hlc "go.temporal.io/server/common/clock/hybrid_logical_clock"
@@ -251,6 +253,42 @@ func CommitBuildID(timestamp *hlc.Clock,
 		return nil, err
 	}
 	return data, nil
+}
+
+func ListWorkerVersioningRules(
+	versioningData *persistencepb.VersioningData,
+	clk *hlc.Clock,
+) (*matchingservice.ListWorkerVersioningRulesResponse, error) {
+	var cT []byte
+	var err error
+	if cT, err = clk.Marshal(); err != nil {
+		return nil, serviceerror.NewInternal("error generating conflict token")
+	}
+	activeAssignmentRules := make([]*taskqueuepb.TimestampedBuildIdAssignmentRule, 0)
+	for _, ar := range versioningData.GetAssignmentRules() {
+		if ar.GetDeleteTimestamp() == nil {
+			activeAssignmentRules = append(activeAssignmentRules, &taskqueuepb.TimestampedBuildIdAssignmentRule{
+				Rule:       ar.GetRule(),
+				CreateTime: hlc.ProtoTimestamp(ar.GetCreateTimestamp()),
+			})
+		}
+	}
+	activeRedirectRules := make([]*taskqueuepb.TimestampedCompatibleBuildIdRedirectRule, 0)
+	for _, rr := range versioningData.GetRedirectRules() {
+		if rr.GetDeleteTimestamp() == nil {
+			activeRedirectRules = append(activeRedirectRules, &taskqueuepb.TimestampedCompatibleBuildIdRedirectRule{
+				Rule:       rr.GetRule(),
+				CreateTime: hlc.ProtoTimestamp(rr.GetCreateTimestamp()),
+			})
+		}
+	}
+	return &matchingservice.ListWorkerVersioningRulesResponse{
+		Response: &workflowservice.ListWorkerVersioningRulesResponse{
+			AssignmentRules:         activeAssignmentRules,
+			CompatibleRedirectRules: activeRedirectRules,
+			ConflictToken:           cT,
+		},
+	}, nil
 }
 
 // checkAssignmentConditions returns an error if the new set of assignment rules don't meet the following requirements:
