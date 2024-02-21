@@ -194,7 +194,7 @@ func (s *apiSuite) TestGetHistoryTasks() {
 	s.NoError(err)
 
 	expectedAdminTasks := make([]*adminservice.Task, 0, batchSize)
-	for i, _ := range fakeTasks {
+	for i := range fakeTasks {
 		adminTask := &adminservice.Task{
 			NamespaceId: tests.WorkflowKey.NamespaceID,
 			WorkflowId:  tests.WorkflowKey.WorkflowID,
