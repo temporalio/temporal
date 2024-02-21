@@ -3552,6 +3552,7 @@ func (wh *WorkflowHandler) StartBatchOperation(
 		Executions:      request.GetExecutions(),
 		Reason:          request.GetReason(),
 		BatchType:       operationType,
+		RPS:             float64(request.GetMaxOperationsPerSecond()),
 		TerminateParams: batcher.TerminateParams{},
 		CancelParams:    batcher.CancelParams{},
 		SignalParams:    signalParams,
