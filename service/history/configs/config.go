@@ -80,8 +80,11 @@ type Config struct {
 
 	// EventsCache settings
 	// Change of these configs require shard restart
-	EventsCacheMaxSizeBytes dynamicconfig.IntPropertyFn
-	EventsCacheTTL          dynamicconfig.DurationPropertyFn
+	EventsShardLevelCacheMaxSizeBytes dynamicconfig.IntPropertyFn
+	EventsCacheTTL                    dynamicconfig.DurationPropertyFn
+	// Change of these configs require service restart
+	EnableHostLevelEventsCache       dynamicconfig.BoolPropertyFn
+	EventsHostLevelCacheMaxSizeBytes dynamicconfig.IntPropertyFn
 
 	// ShardController settings
 	RangeSizeBits                  uint
@@ -162,6 +165,9 @@ type Config struct {
 
 	// ShardUpdateMinInterval is the minimum time interval within which the shard info can be updated.
 	ShardUpdateMinInterval dynamicconfig.DurationPropertyFn
+	// ShardUpdateMinTasksCompleted is the minimum number of tasks which must be completed before the shard info can be updated before
+	// history.shardUpdateMinInterval has passed
+	ShardUpdateMinTasksCompleted dynamicconfig.IntPropertyFn
 	// ShardSyncMinInterval is the minimum time interval within which the shard info can be synced to the remote.
 	ShardSyncMinInterval            dynamicconfig.DurationPropertyFn
 	ShardSyncTimerJitterCoefficient dynamicconfig.FloatPropertyFn
@@ -363,8 +369,10 @@ func NewConfig(
 		EnableHostLevelHistoryCache:           dc.GetBoolProperty(dynamicconfig.EnableHostHistoryCache, false),
 		EnableAPIGetCurrentRunIDLock:          dc.GetBoolProperty(dynamicconfig.EnableAPIGetCurrentRunIDLock, false),
 
-		EventsCacheMaxSizeBytes: dc.GetIntProperty(dynamicconfig.EventsCacheMaxSizeBytes, 512*1024), // 512KB
-		EventsCacheTTL:          dc.GetDurationProperty(dynamicconfig.EventsCacheTTL, time.Hour),
+		EventsShardLevelCacheMaxSizeBytes: dc.GetIntProperty(dynamicconfig.EventsCacheMaxSizeBytes, 512*1024),              // 512KB
+		EventsHostLevelCacheMaxSizeBytes:  dc.GetIntProperty(dynamicconfig.EventsHostLevelCacheMaxSizeBytes, 512*512*1024), // 256MB
+		EventsCacheTTL:                    dc.GetDurationProperty(dynamicconfig.EventsCacheTTL, time.Hour),
+		EnableHostLevelEventsCache:        dc.GetBoolProperty(dynamicconfig.EnableHostLevelEventsCache, false),
 
 		RangeSizeBits:                  20, // 20 bits for sequencer, 2^20 sequence number for any range
 		AcquireShardInterval:           dc.GetDurationProperty(dynamicconfig.AcquireShardInterval, time.Minute),
@@ -447,6 +455,7 @@ func NewConfig(
 		MaximumBufferedEventsSizeInBytes: dc.GetIntProperty(dynamicconfig.MaximumBufferedEventsSizeInBytes, 2*1024*1024),
 		MaximumSignalsPerExecution:       dc.GetIntPropertyFilteredByNamespace(dynamicconfig.MaximumSignalsPerExecution, 10000),
 		ShardUpdateMinInterval:           dc.GetDurationProperty(dynamicconfig.ShardUpdateMinInterval, 5*time.Minute),
+		ShardUpdateMinTasksCompleted:     dc.GetIntProperty(dynamicconfig.ShardUpdateMinTasksCompleted, 1000),
 		ShardSyncMinInterval:             dc.GetDurationProperty(dynamicconfig.ShardSyncMinInterval, 5*time.Minute),
 		ShardSyncTimerJitterCoefficient:  dc.GetFloat64Property(dynamicconfig.TransferProcessorMaxPollIntervalJitterCoefficient, 0.15),
 

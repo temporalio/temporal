@@ -231,7 +231,7 @@ func (handler *workflowTaskHandlerCallbacksImpl) handleWorkflowTaskStarted(
 			if workflowTask.StartedEventID != common.EmptyEventID {
 				// If workflow task is started as part of the current request scope then return a positive response
 				if workflowTask.RequestID == requestID {
-					resp, err = handler.createRecordWorkflowTaskStartedResponse(ctx, mutableState, workflowLease.GetUpdateRegistry(ctx), workflowTask, req.PollRequest.GetIdentity(), false)
+					resp, err = handler.createRecordWorkflowTaskStartedResponse(ctx, mutableState, workflowLease.GetContext().UpdateRegistry(ctx), workflowTask, req.PollRequest.GetIdentity(), false)
 					if err != nil {
 						return nil, err
 					}
@@ -287,7 +287,7 @@ func (handler *workflowTaskHandlerCallbacksImpl) handleWorkflowTaskStarted(
 				metrics.TaskQueueTypeTag(enumspb.TASK_QUEUE_TYPE_WORKFLOW),
 			)
 
-			resp, err = handler.createRecordWorkflowTaskStartedResponse(ctx, mutableState, workflowLease.GetUpdateRegistry(ctx), workflowTask, req.PollRequest.GetIdentity(), false)
+			resp, err = handler.createRecordWorkflowTaskStartedResponse(ctx, mutableState, workflowLease.GetContext().UpdateRegistry(ctx), workflowTask, req.PollRequest.GetIdentity(), false)
 			if err != nil {
 				return nil, err
 			}
@@ -398,7 +398,7 @@ func (handler *workflowTaskHandlerCallbacksImpl) handleWorkflowTaskCompleted(
 		return nil, consts.ErrDeserializingToken
 	}
 
-	workflowContext, err := handler.workflowConsistencyChecker.GetWorkflowLease(
+	workflowLease, err := handler.workflowConsistencyChecker.GetWorkflowLease(
 		ctx,
 		token.Clock,
 		func(mutableState workflow.MutableState) bool {
@@ -421,8 +421,8 @@ func (handler *workflowTaskHandlerCallbacksImpl) handleWorkflowTaskCompleted(
 	if err != nil {
 		return nil, err
 	}
-	weContext := workflowContext.GetContext()
-	ms := workflowContext.GetMutableState()
+	weContext := workflowLease.GetContext()
+	ms := workflowLease.GetMutableState()
 
 	currentWorkflowTask := ms.GetWorkflowTaskByID(token.GetScheduledEventId())
 	if !ms.IsWorkflowExecutionRunning() ||
@@ -433,11 +433,11 @@ func (handler *workflowTaskHandlerCallbacksImpl) handleWorkflowTaskCompleted(
 		currentWorkflowTask.Attempt != token.Attempt ||
 		(token.Version != common.EmptyVersion && token.Version != currentWorkflowTask.Version) {
 		// we have not alter mutable state yet, so release with it with nil to avoid clear MS.
-		workflowContext.GetReleaseFn()(nil)
+		workflowLease.GetReleaseFn()(nil)
 		return nil, serviceerror.NewNotFound("Workflow task not found.")
 	}
 
-	defer func() { workflowContext.GetReleaseFn()(retError) }()
+	defer func() { workflowLease.GetReleaseFn()(retError) }()
 
 	var effects effect.Buffer
 	defer func() {
@@ -834,13 +834,13 @@ func (handler *workflowTaskHandlerCallbacksImpl) handleWorkflowTaskCompleted(
 	if wtHeartbeatTimedOut {
 		// at this point, update is successful, but we still return an error to client so that the worker will give up this workflow
 		// release workflow lock with nil error to prevent mutable state from being cleared and reloaded
-		workflowContext.GetReleaseFn()(nil)
+		workflowLease.GetReleaseFn()(nil)
 		return nil, serviceerror.NewNotFound("workflow task heartbeat timeout")
 	}
 
 	if wtFailedCause != nil {
 		// release workflow lock with nil error to prevent mutable state from being cleared and reloaded
-		workflowContext.GetReleaseFn()(nil)
+		workflowLease.GetReleaseFn()(nil)
 		return nil, serviceerror.NewInvalidArgument(wtFailedCause.Message())
 	}
 

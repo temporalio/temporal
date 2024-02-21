@@ -106,12 +106,14 @@ func (t *executableTracker) add(
 	t.pendingPerKey[key]++
 }
 
-func (t *executableTracker) shrink() tasks.Key {
+func (t *executableTracker) shrink() (tasks.Key, int) {
+	var tasksCompleted int
 	minPendingTaskKey := tasks.MaximumKey
 	for key, executable := range t.pendingExecutables {
 		if executable.State() == ctasks.TaskStateAcked {
 			t.pendingPerKey[t.grouper.Key(executable)]--
 			delete(t.pendingExecutables, key)
+			tasksCompleted++
 			continue
 		}
 
@@ -124,7 +126,7 @@ func (t *executableTracker) shrink() tasks.Key {
 		}
 	}
 
-	return minPendingTaskKey
+	return minPendingTaskKey, tasksCompleted
 }
 
 func (t *executableTracker) clear() {

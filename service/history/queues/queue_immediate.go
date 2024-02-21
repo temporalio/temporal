@@ -62,7 +62,7 @@ func NewImmediateQueue(
 	metricsHandler metrics.Handler,
 	factory ExecutableFactory,
 ) *immediateQueue {
-	paginationFnProvider := func(readerID int64, r Range) collection.PaginationFn[tasks.Task] {
+	paginationFnProvider := func(r Range) collection.PaginationFn[tasks.Task] {
 		return func(paginationToken []byte) ([]tasks.Task, []byte, error) {
 			ctx, cancel := newQueueIOContext()
 			defer cancel()
@@ -70,7 +70,6 @@ func NewImmediateQueue(
 			request := &persistence.GetHistoryTasksRequest{
 				ShardID:             shard.GetShardID(),
 				TaskCategory:        category,
-				ReaderID:            readerID,
 				InclusiveMinTaskKey: r.InclusiveMin,
 				ExclusiveMaxTaskKey: r.ExclusiveMax,
 				BatchSize:           options.BatchSize(),

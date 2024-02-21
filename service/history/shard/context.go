@@ -87,7 +87,7 @@ type (
 
 		GetQueueExclusiveHighReadWatermark(category tasks.Category) tasks.Key
 		GetQueueState(category tasks.Category) (*persistencespb.QueueState, bool)
-		SetQueueState(category tasks.Category, state *persistencespb.QueueState) error
+		SetQueueState(category tasks.Category, tasksCompleted int, state *persistencespb.QueueState) error
 		UpdateReplicationQueueReaderState(readerID int64, readerState *persistencespb.QueueReaderState) error
 
 		GetReplicatorDLQAckLevel(sourceCluster string) int64

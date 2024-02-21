@@ -29,11 +29,59 @@
 package tasks
 
 import (
+	context "context"
 	reflect "reflect"
 
 	gomock "github.com/golang/mock/gomock"
 	backoff "go.temporal.io/server/common/backoff"
 )
+
+// MockRunnable is a mock of Runnable interface.
+type MockRunnable struct {
+	ctrl     *gomock.Controller
+	recorder *MockRunnableMockRecorder
+}
+
+// MockRunnableMockRecorder is the mock recorder for MockRunnable.
+type MockRunnableMockRecorder struct {
+	mock *MockRunnable
+}
+
+// NewMockRunnable creates a new mock instance.
+func NewMockRunnable(ctrl *gomock.Controller) *MockRunnable {
+	mock := &MockRunnable{ctrl: ctrl}
+	mock.recorder = &MockRunnableMockRecorder{mock}
+	return mock
+}
+
+// EXPECT returns an object that allows the caller to indicate expected use.
+func (m *MockRunnable) EXPECT() *MockRunnableMockRecorder {
+	return m.recorder
+}
+
+// Abort mocks base method.
+func (m *MockRunnable) Abort() {
+	m.ctrl.T.Helper()
+	m.ctrl.Call(m, "Abort")
+}
+
+// Abort indicates an expected call of Abort.
+func (mr *MockRunnableMockRecorder) Abort() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Abort", reflect.TypeOf((*MockRunnable)(nil).Abort))
+}
+
+// Run mocks base method.
+func (m *MockRunnable) Run(arg0 context.Context) {
+	m.ctrl.T.Helper()
+	m.ctrl.Call(m, "Run", arg0)
+}
+
+// Run indicates an expected call of Run.
+func (mr *MockRunnableMockRecorder) Run(arg0 interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Run", reflect.TypeOf((*MockRunnable)(nil).Run), arg0)
+}
 
 // MockTask is a mock of Task interface.
 type MockTask struct {

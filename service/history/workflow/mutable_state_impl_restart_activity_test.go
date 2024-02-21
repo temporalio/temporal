@@ -113,7 +113,14 @@ func (s *retryActivitySuite) SetupTest() {
 	s.testScope = s.mockShard.Resource.MetricsScope.(tally.TestScope)
 	s.logger = s.mockShard.GetLogger()
 
-	s.mutableState = NewMutableState(s.mockShard, s.mockEventsCache, s.logger, tests.LocalNamespaceEntry, time.Now().UTC())
+	s.mutableState = NewMutableState(
+		s.mockShard,
+		s.mockEventsCache,
+		s.logger,
+		tests.LocalNamespaceEntry,
+		tests.WorkflowID,
+		tests.RunID,
+		time.Now().UTC())
 	s.activity = s.makeActivityAndPutIntoFailingState()
 	s.failure = s.activityFailure()
 	s.nextBackoffStub.onNextCallExpect(

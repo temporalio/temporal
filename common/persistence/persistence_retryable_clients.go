@@ -335,30 +335,6 @@ func (p *executionRetryablePersistenceClient) ListConcreteExecutions(
 	return response, err
 }
 
-func (p *executionRetryablePersistenceClient) RegisterHistoryTaskReader(
-	ctx context.Context,
-	request *RegisterHistoryTaskReaderRequest,
-) error {
-	// hint methods don't actually hint DB, retry won't help
-	return p.persistence.RegisterHistoryTaskReader(ctx, request)
-}
-
-func (p *executionRetryablePersistenceClient) UnregisterHistoryTaskReader(
-	ctx context.Context,
-	request *UnregisterHistoryTaskReaderRequest,
-) {
-	// hint methods don't actually hint DB, retry won't help
-	p.persistence.UnregisterHistoryTaskReader(ctx, request)
-}
-
-func (p *executionRetryablePersistenceClient) UpdateHistoryTaskReaderProgress(
-	ctx context.Context,
-	request *UpdateHistoryTaskReaderProgressRequest,
-) {
-	// hint methods don't actually hint DB, retry won't help
-	p.persistence.UpdateHistoryTaskReaderProgress(ctx, request)
-}
-
 func (p *executionRetryablePersistenceClient) AddHistoryTasks(
 	ctx context.Context,
 	request *AddHistoryTasksRequest,
@@ -603,22 +579,6 @@ func (p *executionRetryablePersistenceClient) TrimHistoryBranch(
 	op := func(ctx context.Context) error {
 		var err error
 		response, err = p.persistence.TrimHistoryBranch(ctx, request)
-		return err
-	}
-
-	err := backoff.ThrottleRetryContext(ctx, op, p.policy, p.isRetryable)
-	return response, err
-}
-
-// GetHistoryTree returns all branch information of a tree
-func (p *executionRetryablePersistenceClient) GetHistoryTree(
-	ctx context.Context,
-	request *GetHistoryTreeRequest,
-) (*GetHistoryTreeResponse, error) {
-	var response *GetHistoryTreeResponse
-	op := func(ctx context.Context) error {
-		var err error
-		response, err = p.persistence.GetHistoryTree(ctx, request)
 		return err
 	}
 

@@ -504,7 +504,7 @@ func (t *transferQueueActiveTaskExecutor) processCancelExecution(
 		case *serviceerror.NamespaceNotFound:
 			failedCause = enumspb.CANCEL_EXTERNAL_WORKFLOW_EXECUTION_FAILED_CAUSE_NAMESPACE_NOT_FOUND
 		default:
-			t.logger.Error("Unexpected error type returned from RequestCancelWorkflowExecution API call.", tag.ErrorType(err), tag.Error(err))
+			t.logger.Error("Unexpected error type returned from RequestCancelWorkflowExecution API call.", tag.ServiceErrorType(err), tag.Error(err))
 			return err
 		}
 		return t.requestCancelExternalExecutionFailed(
@@ -637,7 +637,7 @@ func (t *transferQueueActiveTaskExecutor) processSignalExecution(
 		case *serviceerror.InvalidArgument:
 			failedCause = enumspb.SIGNAL_EXTERNAL_WORKFLOW_EXECUTION_FAILED_CAUSE_SIGNAL_COUNT_LIMIT_EXCEEDED
 		default:
-			t.logger.Error("Unexpected error type returned from SignalWorkflowExecution API call.", tag.ErrorType(err), tag.Error(err))
+			t.logger.Error("Unexpected error type returned from SignalWorkflowExecution API call.", tag.ServiceErrorType(err), tag.Error(err))
 			return err
 		}
 		return t.signalExternalExecutionFailed(
@@ -835,7 +835,7 @@ func (t *transferQueueActiveTaskExecutor) processStartChildExecution(
 		case *serviceerror.NamespaceNotFound:
 			failedCause = enumspb.START_CHILD_WORKFLOW_EXECUTION_FAILED_CAUSE_NAMESPACE_NOT_FOUND
 		default:
-			t.logger.Error("Unexpected error type returned from StartWorkflowExecution API call for child workflow.", tag.ErrorType(err), tag.Error(err))
+			t.logger.Error("Unexpected error type returned from StartWorkflowExecution API call for child workflow.", tag.ServiceErrorType(err), tag.Error(err))
 			return err
 		}
 

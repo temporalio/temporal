@@ -583,6 +583,8 @@ func (t *timerQueueActiveTaskExecutor) executeWorkflowTimeoutTask(
 		t.shardContext.GetEventsCache(),
 		t.shardContext.GetLogger(),
 		mutableState.GetNamespaceEntry(),
+		mutableState.GetWorkflowKey().WorkflowID,
+		newRunID,
 		t.shardContext.GetTimeSource().Now(),
 	)
 	err = workflow.SetupNewWorkflowForRetryOrCron(
@@ -601,10 +603,10 @@ func (t *timerQueueActiveTaskExecutor) executeWorkflowTimeoutTask(
 	}
 
 	err = newMutableState.SetHistoryTree(
-		ctx,
 		newMutableState.GetExecutionInfo().WorkflowExecutionTimeout,
 		newMutableState.GetExecutionInfo().WorkflowRunTimeout,
-		newRunID)
+		newRunID,
+	)
 	if err != nil {
 		return err
 	}

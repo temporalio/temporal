@@ -1311,6 +1311,8 @@ func (handler *workflowTaskHandlerImpl) handleRetry(
 		handler.shard.GetEventsCache(),
 		handler.shard.GetLogger(),
 		handler.mutableState.GetNamespaceEntry(),
+		handler.mutableState.GetWorkflowKey().WorkflowID,
+		newRunID,
 		handler.shard.GetTimeSource().Now(),
 	)
 
@@ -1330,7 +1332,6 @@ func (handler *workflowTaskHandlerImpl) handleRetry(
 	}
 
 	err = newMutableState.SetHistoryTree(
-		ctx,
 		newMutableState.GetExecutionInfo().WorkflowExecutionTimeout,
 		newMutableState.GetExecutionInfo().WorkflowRunTimeout,
 		newRunID,
@@ -1365,6 +1366,8 @@ func (handler *workflowTaskHandlerImpl) handleCron(
 		handler.shard.GetEventsCache(),
 		handler.shard.GetLogger(),
 		handler.mutableState.GetNamespaceEntry(),
+		handler.mutableState.GetWorkflowKey().WorkflowID,
+		newRunID,
 		handler.shard.GetTimeSource().Now(),
 	)
 
@@ -1384,7 +1387,6 @@ func (handler *workflowTaskHandlerImpl) handleCron(
 	}
 
 	err = newMutableState.SetHistoryTree(
-		ctx,
 		newMutableState.GetExecutionInfo().WorkflowExecutionTimeout,
 		newMutableState.GetExecutionInfo().WorkflowRunTimeout,
 		newRunID,

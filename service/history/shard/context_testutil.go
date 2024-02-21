@@ -27,6 +27,7 @@ package shard
 import (
 	"context"
 	"fmt"
+	"sync"
 
 	"github.com/golang/mock/gomock"
 	"golang.org/x/sync/semaphore"
@@ -154,6 +155,7 @@ func newTestContext(t *resourcetest.Test, eventsCache events.Cache, config Conte
 		throttledLogger:     t.GetThrottledLogger(),
 		lifecycleCtx:        lifecycleCtx,
 		lifecycleCancel:     lifecycleCancel,
+		queueMetricEmitter:  sync.Once{},
 
 		state:              contextStateAcquired,
 		engineFuture:       future.NewFuture[Engine](),

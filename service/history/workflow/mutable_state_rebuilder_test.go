@@ -47,6 +47,7 @@ import (
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/backoff"
 	"go.temporal.io/server/common/cluster"
+	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/payload"
@@ -202,7 +203,7 @@ func (s *stateBuilderSuite) TestApplyEvents_EventTypeWorkflowExecutionStarted_No
 		protomock.Eq(event),
 	).Return(nil)
 	s.mockMutableState.EXPECT().ClearStickyTaskQueue()
-	s.mockMutableState.EXPECT().SetHistoryTree(gomock.Any(), nil, timestamp.DurationFromSeconds(100), tests.RunID).Return(nil)
+	s.mockMutableState.EXPECT().SetHistoryTree(nil, timestamp.DurationFromSeconds(100), tests.RunID).Return(nil)
 
 	_, err := s.stateRebuilder.ApplyEvents(context.Background(), tests.NamespaceID, requestID, execution, s.toHistory(event), nil)
 	s.Nil(err)
@@ -251,7 +252,7 @@ func (s *stateBuilderSuite) TestApplyEvents_EventTypeWorkflowExecutionStarted_Wi
 		protomock.Eq(event),
 	).Return(nil)
 	s.mockMutableState.EXPECT().ClearStickyTaskQueue()
-	s.mockMutableState.EXPECT().SetHistoryTree(gomock.Any(), nil, timestamp.DurationFromSeconds(100), tests.RunID).Return(nil)
+	s.mockMutableState.EXPECT().SetHistoryTree(nil, timestamp.DurationFromSeconds(100), tests.RunID).Return(nil)
 
 	_, err := s.stateRebuilder.ApplyEvents(context.Background(), tests.NamespaceID, requestID, execution, s.toHistory(event), nil)
 	s.Nil(err)
@@ -503,6 +504,7 @@ func (s *stateBuilderSuite) TestApplyEvents_EventTypeWorkflowExecutionContinuedA
 		protomock.Eq(continueAsNewEvent),
 	).Return(nil)
 	s.mockMutableState.EXPECT().GetNamespaceEntry().Return(tests.GlobalNamespaceEntry).AnyTimes()
+	s.mockMutableState.EXPECT().GetWorkflowKey().Return(definition.NewWorkflowKey(tests.GlobalNamespaceEntry.ID().String(), execution.WorkflowId, execution.RunId)).AnyTimes()
 	s.mockUpdateVersion(continueAsNewEvent)
 	s.mockTaskGenerator.EXPECT().GenerateWorkflowCloseTasks(
 		now,
