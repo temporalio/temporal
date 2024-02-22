@@ -292,9 +292,8 @@ func (m *incomingNexusServiceManager) loadServices(ctx context.Context) error {
 				m.services = []*persistencepb.NexusIncomingServiceEntry{}
 				m.servicesByName = make(map[string]*persistencepb.NexusIncomingServiceEntry)
 				continue
-			} else {
-				return err
 			}
+			return err
 		}
 
 		pageToken = resp.NextPageToken
