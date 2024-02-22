@@ -1427,8 +1427,8 @@ func GetListInfoFromStartArgs(args *schedspb.StartScheduleArgs, now time.Time, s
 	return s.getListInfo(false)
 }
 
-func InternalWorkflowIdRepresentation(originalWorkflowId string, timestamp time.Time, keepOriginalWorkflowId bool) string {
-	timeSec := timestamp.UTC().Truncate(time.Second)
+func InternalWorkflowIdRepresentation(originalWorkflowId string, startTime time.Time, keepOriginalWorkflowId bool) string {
+	timeSec := startTime.UTC().Truncate(time.Second)
 	if keepOriginalWorkflowId {
 		return originalWorkflowId
 	}
