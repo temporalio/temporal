@@ -32,7 +32,6 @@ import (
 	"math/rand"
 
 	enumspb "go.temporal.io/api/enums/v1"
-	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	"go.temporal.io/server/api/matchingservice/v1"
 	"go.temporal.io/server/common/tqid"
 	"google.golang.org/grpc"
@@ -44,7 +43,7 @@ func (c *clientImpl) ApplyTaskQueueUserDataReplicationEvent(
 	opts ...grpc.CallOption,
 ) (*matchingservice.ApplyTaskQueueUserDataReplicationEventResponse, error) {
 
-	p, err := tqid.PartitionFromProto(&taskqueuepb.TaskQueue{Name: request.GetTaskQueue()}, request.GetNamespaceId(), enumspb.TASK_QUEUE_TYPE_WORKFLOW)
+	p, err := tqid.NormalPartitionFromRpcName(request.GetTaskQueue(), request.GetNamespaceId(), enumspb.TASK_QUEUE_TYPE_WORKFLOW)
 	if err != nil {
 		return nil, err
 	}
@@ -101,7 +100,7 @@ func (c *clientImpl) ForceUnloadTaskQueue(
 	opts ...grpc.CallOption,
 ) (*matchingservice.ForceUnloadTaskQueueResponse, error) {
 
-	p, err := tqid.PartitionFromProto(&taskqueuepb.TaskQueue{Name: request.GetTaskQueue()}, request.GetNamespaceId(), request.GetTaskQueueType())
+	p, err := tqid.NormalPartitionFromRpcName(request.GetTaskQueue(), request.GetNamespaceId(), request.GetTaskQueueType())
 	if err != nil {
 		return nil, err
 	}
@@ -120,7 +119,7 @@ func (c *clientImpl) GetBuildIdTaskQueueMapping(
 	opts ...grpc.CallOption,
 ) (*matchingservice.GetBuildIdTaskQueueMappingResponse, error) {
 
-	p, err := tqid.PartitionFromProto(&taskqueuepb.TaskQueue{Name: fmt.Sprintf("not-applicable-%d", rand.Int())}, request.GetNamespaceId(), enumspb.TASK_QUEUE_TYPE_UNSPECIFIED)
+	p, err := tqid.NormalPartitionFromRpcName(fmt.Sprintf("not-applicable-%d", rand.Int()), request.GetNamespaceId(), enumspb.TASK_QUEUE_TYPE_UNSPECIFIED)
 	if err != nil {
 		return nil, err
 	}
@@ -139,7 +138,7 @@ func (c *clientImpl) GetTaskQueueUserData(
 	opts ...grpc.CallOption,
 ) (*matchingservice.GetTaskQueueUserDataResponse, error) {
 
-	p, err := tqid.PartitionFromProto(&taskqueuepb.TaskQueue{Name: request.GetTaskQueue()}, request.GetNamespaceId(), request.GetTaskQueueType())
+	p, err := tqid.NormalPartitionFromRpcName(request.GetTaskQueue(), request.GetNamespaceId(), request.GetTaskQueueType())
 	if err != nil {
 		return nil, err
 	}
@@ -158,7 +157,7 @@ func (c *clientImpl) GetWorkerBuildIdCompatibility(
 	opts ...grpc.CallOption,
 ) (*matchingservice.GetWorkerBuildIdCompatibilityResponse, error) {
 
-	p, err := tqid.PartitionFromProto(&taskqueuepb.TaskQueue{Name: request.GetRequest().GetTaskQueue()}, request.GetNamespaceId(), enumspb.TASK_QUEUE_TYPE_WORKFLOW)
+	p, err := tqid.NormalPartitionFromRpcName(request.GetRequest().GetTaskQueue(), request.GetNamespaceId(), enumspb.TASK_QUEUE_TYPE_WORKFLOW)
 	if err != nil {
 		return nil, err
 	}
@@ -196,7 +195,7 @@ func (c *clientImpl) ListWorkerVersioningRules(
 	opts ...grpc.CallOption,
 ) (*matchingservice.ListWorkerVersioningRulesResponse, error) {
 
-	p, err := tqid.PartitionFromProto(&taskqueuepb.TaskQueue{Name: request.GetTaskQueue()}, request.GetNamespaceId(), enumspb.TASK_QUEUE_TYPE_WORKFLOW)
+	p, err := tqid.NormalPartitionFromRpcName(request.GetTaskQueue(), request.GetNamespaceId(), enumspb.TASK_QUEUE_TYPE_WORKFLOW)
 	if err != nil {
 		return nil, err
 	}
@@ -215,7 +214,7 @@ func (c *clientImpl) ReplicateTaskQueueUserData(
 	opts ...grpc.CallOption,
 ) (*matchingservice.ReplicateTaskQueueUserDataResponse, error) {
 
-	p, err := tqid.PartitionFromProto(&taskqueuepb.TaskQueue{Name: "not-applicable"}, request.GetNamespaceId(), enumspb.TASK_QUEUE_TYPE_UNSPECIFIED)
+	p, err := tqid.NormalPartitionFromRpcName("not-applicable", request.GetNamespaceId(), enumspb.TASK_QUEUE_TYPE_UNSPECIFIED)
 	if err != nil {
 		return nil, err
 	}
@@ -253,7 +252,7 @@ func (c *clientImpl) UpdateTaskQueueUserData(
 	opts ...grpc.CallOption,
 ) (*matchingservice.UpdateTaskQueueUserDataResponse, error) {
 
-	p, err := tqid.PartitionFromProto(&taskqueuepb.TaskQueue{Name: "not-applicable"}, request.GetNamespaceId(), enumspb.TASK_QUEUE_TYPE_UNSPECIFIED)
+	p, err := tqid.NormalPartitionFromRpcName("not-applicable", request.GetNamespaceId(), enumspb.TASK_QUEUE_TYPE_UNSPECIFIED)
 	if err != nil {
 		return nil, err
 	}
@@ -272,7 +271,7 @@ func (c *clientImpl) UpdateWorkerBuildIdCompatibility(
 	opts ...grpc.CallOption,
 ) (*matchingservice.UpdateWorkerBuildIdCompatibilityResponse, error) {
 
-	p, err := tqid.PartitionFromProto(&taskqueuepb.TaskQueue{Name: request.GetTaskQueue()}, request.GetNamespaceId(), enumspb.TASK_QUEUE_TYPE_WORKFLOW)
+	p, err := tqid.NormalPartitionFromRpcName(request.GetTaskQueue(), request.GetNamespaceId(), enumspb.TASK_QUEUE_TYPE_WORKFLOW)
 	if err != nil {
 		return nil, err
 	}
@@ -291,7 +290,7 @@ func (c *clientImpl) UpdateWorkerVersioningRules(
 	opts ...grpc.CallOption,
 ) (*matchingservice.UpdateWorkerVersioningRulesResponse, error) {
 
-	p, err := tqid.PartitionFromProto(&taskqueuepb.TaskQueue{Name: request.GetTaskQueue()}, request.GetNamespaceId(), enumspb.TASK_QUEUE_TYPE_WORKFLOW)
+	p, err := tqid.NormalPartitionFromRpcName(request.GetTaskQueue(), request.GetNamespaceId(), enumspb.TASK_QUEUE_TYPE_WORKFLOW)
 	if err != nil {
 		return nil, err
 	}

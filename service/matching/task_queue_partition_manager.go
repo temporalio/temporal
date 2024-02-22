@@ -90,9 +90,9 @@ type (
 		config        *taskQueueConfig
 		// this is the default (unversioned) DB queue. As of now, some of the matters related to the whole TQ partition
 		// is delegated to the defaultQueue.
-		defaultQueue dbQueueManager
+		defaultQueue physicalTaskQueueManager
 		// used for non-sticky versioned queues (one for each version)
-		versionedQueues      map[string]dbQueueManager
+		versionedQueues      map[string]physicalTaskQueueManager
 		versionedQueuesLock  sync.RWMutex // locks mutation of versionedQueues
 		userDataManager      *userDataManager
 		namespaceRegistry    namespace.Registry
@@ -143,11 +143,11 @@ func newTaskQueuePartitionManager(
 		throttledLogger:      throttledLogger,
 		matchingClient:       e.matchingRawClient,
 		taggedMetricsHandler: taggedMetricsHandler,
-		versionedQueues:      make(map[string]dbQueueManager),
+		versionedQueues:      make(map[string]physicalTaskQueueManager),
 		userDataManager:      newUserDataManager(e.taskManager, e.matchingRawClient, partition, taskQueueConfig, e.logger, e.namespaceRegistry),
 	}
 
-	defaultQ, err := newTaskQueueManager(pm, UnversionedDBQueue(partition))
+	defaultQ, err := newTaskQueueManager(pm, UnversionedQueueKey(partition))
 	if err != nil {
 		return nil, err
 	}
@@ -180,7 +180,6 @@ func (pm *taskQueuePartitionManagerImpl) MarkAlive() {
 func (pm *taskQueuePartitionManagerImpl) WaitUntilInitialized(ctx context.Context) error {
 	err := pm.userDataManager.WaitUntilInitialized(ctx)
 	if err != nil {
-		pm.unloadFromEngine()
 		return err
 	}
 	return pm.defaultQueue.WaitUntilInitialized(ctx)
@@ -318,7 +317,7 @@ func (pm *taskQueuePartitionManagerImpl) callerInfoContext(ctx context.Context) 
 	return headers.SetCallerInfo(ctx, headers.NewBackgroundCallerInfo(ns.String()))
 }
 
-func (pm *taskQueuePartitionManagerImpl) unloadDbQueue(unloadedDbq dbQueueManager) {
+func (pm *taskQueuePartitionManagerImpl) unloadDbQueue(unloadedDbq physicalTaskQueueManager) {
 	version := unloadedDbq.DBQueue().VersionSet()
 	if version == "" {
 		// this is the default queue, unload the whole partition if it is not healthy
@@ -349,7 +348,7 @@ func (pm *taskQueuePartitionManagerImpl) getVersionedQueue(
 	ctx context.Context,
 	version string,
 	create bool,
-) (dbQueueManager, error) {
+) (physicalTaskQueueManager, error) {
 	tqm, err := pm.getVersionedQueueNoWait(version, create)
 	if err != nil || tqm == nil {
 		return nil, err
@@ -366,7 +365,7 @@ func (pm *taskQueuePartitionManagerImpl) getVersionedQueue(
 func (pm *taskQueuePartitionManagerImpl) getVersionedQueueNoWait(
 	version string,
 	create bool,
-) (dbQueueManager, error) {
+) (physicalTaskQueueManager, error) {
 	pm.versionedQueuesLock.RLock()
 	vq, ok := pm.versionedQueues[version]
 	pm.versionedQueuesLock.RUnlock()
@@ -380,7 +379,7 @@ func (pm *taskQueuePartitionManagerImpl) getVersionedQueueNoWait(
 		vq, ok = pm.versionedQueues[version]
 		if !ok {
 			var err error
-			vq, err = newTaskQueueManager(pm, VersionSetDBQueue(pm.partition, version))
+			vq, err = newTaskQueueManager(pm, VersionSetQueueKey(pm.partition, version))
 			if err != nil {
 				pm.versionedQueuesLock.Unlock()
 				return nil, err
@@ -401,10 +400,10 @@ func (pm *taskQueuePartitionManagerImpl) redirectToVersionSetQueueForPoll(
 	ctx context.Context,
 	caps *commonpb.WorkerVersionCapabilities,
 	userData *persistencespb.VersionedTaskQueueUserData,
-) (dbQueueManager, error) {
+) (physicalTaskQueueManager, error) {
 	data := userData.GetData().GetVersioningData()
 
-	if pm.partition.IsSticky() {
+	if pm.partition.Kind() == enumspb.TASK_QUEUE_KIND_STICKY {
 		// In the sticky case we don't redirect, but we may kick off this worker if there's a newer one.
 		unknownBuild, err := checkVersionForStickyPoll(data, caps)
 		if err != nil {
@@ -444,7 +443,7 @@ func (pm *taskQueuePartitionManagerImpl) loadDemotedSetIds(demotedSetIds []strin
 func (pm *taskQueuePartitionManagerImpl) getDbQueueForAdd(
 	ctx context.Context,
 	directive *taskqueuespb.TaskVersionDirective,
-) (dbQueueManager, error) {
+) (physicalTaskQueueManager, error) {
 	if directive.GetValue() == nil {
 		return pm.defaultQueue, nil
 	}
@@ -463,7 +462,7 @@ func (pm *taskQueuePartitionManagerImpl) redirectToVersionSetQueueForAdd(
 	ctx context.Context,
 	directive *taskqueuespb.TaskVersionDirective,
 	userData *persistencespb.VersionedTaskQueueUserData,
-) (dbQueueManager, error) {
+) (physicalTaskQueueManager, error) {
 	var buildId string
 	switch dir := directive.GetValue().(type) {
 	case *taskqueuespb.TaskVersionDirective_UseDefault:
@@ -477,7 +476,7 @@ func (pm *taskQueuePartitionManagerImpl) redirectToVersionSetQueueForAdd(
 
 	data := userData.GetData().GetVersioningData()
 
-	if pm.partition.IsSticky() {
+	if pm.partition.Kind() == enumspb.TASK_QUEUE_KIND_STICKY {
 		// In the sticky case we don't redirect, but we may kick off this worker if there's a newer one.
 		unknownBuild, err := checkVersionForStickyAdd(data, buildId)
 		if err != nil {

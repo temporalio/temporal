@@ -90,7 +90,7 @@ func TestTQLoadBalancerForce(t *testing.T) {
 
 	// pick 4 times, each partition picked would have one poller
 	p1 := tqlb.pickReadPartition(partitionCount, 1)
-	assert.Equal(t, 1, p1.TQPartition.PartitionID())
+	assert.Equal(t, 1, p1.TQPartition.PartitionId())
 	assert.Equal(t, 1, maxPollerCount(tqlb))
 	tqlb.pickReadPartition(partitionCount, 1)
 	assert.Equal(t, 2, maxPollerCount(tqlb))

@@ -44,8 +44,8 @@ const (
 
 type (
 	// TaskQueueFamily represents the high-level "task queue" that user creates by explicitly providing a task queue name
-	// when starting a worker or a workflow. A task queue family consists of separate TaskQueue's for different types of
-	// task.
+	// when starting a worker or a workflow. A task queue family consists of separate TaskQueues for different types of
+	// task (e.g. Workflow, Activity).
 	TaskQueueFamily struct {
 		namespaceId namespace.ID
 		// this can be any string as long as it does not start with /_sys/.
@@ -68,7 +68,6 @@ type (
 		TaskType() enumspb.TaskQueueType
 		// IsRoot always returns false for Sticky partitions
 		IsRoot() bool
-		IsSticky() bool
 		Kind() enumspb.TaskQueueKind
 
 		// RpcName returns the mangled name of the task queue partition, to be used in RPCs.
@@ -165,6 +164,15 @@ func PartitionFromProto(proto *taskqueuepb.TaskQueue, namespaceId string, taskTy
 	}
 }
 
+func NormalPartitionFromRpcName(rpcName string, namespaceId string, taskType enumspb.TaskQueueType) (*NormalPartition, error) {
+	baseName, partition, err := parseRpcName(rpcName)
+	if err != nil {
+		return nil, err
+	}
+	tq := &TaskQueue{TaskQueueFamily{namespace.ID(namespaceId), baseName}, taskType}
+	return tq.NormalPartition(partition), nil
+}
+
 func (n *TaskQueueFamily) Name() string {
 	return n.name
 }
@@ -223,10 +231,6 @@ func (s *StickyPartition) Kind() enumspb.TaskQueueKind {
 	return enumspb.TASK_QUEUE_KIND_STICKY
 }
 
-func (s *StickyPartition) IsSticky() bool {
-	return true
-}
-
 func (s *StickyPartition) NamespaceId() namespace.ID {
 	return s.taskQueue.family.NamespaceId()
 }
@@ -263,15 +267,11 @@ func (p *NormalPartition) IsRoot() bool {
 	return p.partitionId == 0
 }
 
-func (p *NormalPartition) IsSticky() bool {
-	return false
-}
-
 func (p *NormalPartition) Kind() enumspb.TaskQueueKind {
 	return enumspb.TASK_QUEUE_KIND_NORMAL
 }
 
-func (p *NormalPartition) PartitionID() int {
+func (p *NormalPartition) PartitionId() int {
 	return p.partitionId
 }
 

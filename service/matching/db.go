@@ -34,7 +34,6 @@ import (
 	"go.temporal.io/api/serviceerror"
 	"google.golang.org/protobuf/types/known/timestamppb"
 
-	"go.temporal.io/server/api/matchingservice/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
@@ -50,12 +49,11 @@ const (
 type (
 	taskQueueDB struct {
 		sync.Mutex
-		dbQueue        *DBTaskQueue
-		rangeID        int64
-		ackLevel       int64
-		store          persistence.TaskManager
-		logger         log.Logger
-		matchingClient matchingservice.MatchingServiceClient
+		queue    *PhysicalTaskQueueKey
+		rangeID  int64
+		ackLevel int64
+		store    persistence.TaskManager
+		logger   log.Logger
 	}
 	taskQueueState struct {
 		rangeID  int64
@@ -64,26 +62,24 @@ type (
 )
 
 // newTaskQueueDB returns an instance of an object that represents
-// persistence view of a dbQueue. All mutations / reads to queues
+// persistence view of a physical task queue. All mutations / reads to queues
 // wrt persistence go through this object.
 //
 // This class will serialize writes to persistence that do condition updates. There are
 // two reasons for doing this:
 //   - To work around known Cassandra issue where concurrent LWT to the same partition cause timeout errors
-//   - To provide the guarantee that there is only writer who updates dbQueue in persistence at any given point in time
+//   - To provide the guarantee that there is only writer who updates queue in persistence at any given point in time
 //     This guarantee makes some of the other code simpler and there is no impact to perf because updates to taskqueue are
 //     spread out and happen in background routines
 func newTaskQueueDB(
 	store persistence.TaskManager,
-	matchingClient matchingservice.MatchingServiceClient,
-	taskQueue *DBTaskQueue,
+	queue *PhysicalTaskQueueKey,
 	logger log.Logger,
 ) *taskQueueDB {
 	return &taskQueueDB{
-		dbQueue:        taskQueue,
-		store:          store,
-		logger:         logger,
-		matchingClient: matchingClient,
+		queue:  queue,
+		store:  store,
+		logger: logger,
 	}
 }
 
@@ -118,13 +114,13 @@ func (db *taskQueueDB) takeOverTaskQueueLocked(
 	ctx context.Context,
 ) error {
 	response, err := db.store.GetTaskQueue(ctx, &persistence.GetTaskQueueRequest{
-		NamespaceID: db.dbQueue.NamespaceID().String(),
-		TaskQueue:   db.dbQueue.PersistenceName(),
-		TaskType:    db.dbQueue.TaskType(),
+		NamespaceID: db.queue.NamespaceId().String(),
+		TaskQueue:   db.queue.PersistenceName(),
+		TaskType:    db.queue.TaskType(),
 	})
 	switch err.(type) {
 	case nil:
-		response.TaskQueueInfo.Kind = db.dbQueue.Partition().Kind()
+		response.TaskQueueInfo.Kind = db.queue.Partition().Kind()
 		response.TaskQueueInfo.ExpiryTime = db.expiryTime()
 		response.TaskQueueInfo.LastUpdateTime = timestamp.TimeNowPtrUtc()
 		if _, err := db.store.UpdateTaskQueue(ctx, &persistence.UpdateTaskQueueRequest{
@@ -169,7 +165,7 @@ func (db *taskQueueDB) renewTaskQueueLocked(
 	return nil
 }
 
-// UpdateState updates the dbQueue state with the given value
+// UpdateState updates the queue state with the given value
 func (db *taskQueueDB) UpdateState(
 	ctx context.Context,
 	ackLevel int64,
@@ -215,9 +211,9 @@ func (db *taskQueueDB) GetTasks(
 	batchSize int,
 ) (*persistence.GetTasksResponse, error) {
 	return db.store.GetTasks(ctx, &persistence.GetTasksRequest{
-		NamespaceID:        db.dbQueue.NamespaceID().String(),
-		TaskQueue:          db.dbQueue.PersistenceName(),
-		TaskType:           db.dbQueue.TaskType(),
+		NamespaceID:        db.queue.NamespaceId().String(),
+		TaskQueue:          db.queue.PersistenceName(),
+		TaskType:           db.queue.TaskType(),
 		PageSize:           batchSize,
 		InclusiveMinTaskID: inclusiveMinTaskID,
 		ExclusiveMaxTaskID: exclusiveMaxTaskID,
@@ -231,9 +227,9 @@ func (db *taskQueueDB) CompleteTask(
 ) error {
 	err := db.store.CompleteTask(ctx, &persistence.CompleteTaskRequest{
 		TaskQueue: &persistence.TaskQueueKey{
-			NamespaceID:   db.dbQueue.NamespaceID().String(),
-			TaskQueueName: db.dbQueue.PersistenceName(),
-			TaskQueueType: db.dbQueue.TaskType(),
+			NamespaceID:   db.queue.NamespaceId().String(),
+			TaskQueueName: db.queue.PersistenceName(),
+			TaskQueueType: db.queue.TaskType(),
 		},
 		TaskID: taskID,
 	})
@@ -242,8 +238,8 @@ func (db *taskQueueDB) CompleteTask(
 			tag.StoreOperationCompleteTask,
 			tag.Error(err),
 			tag.TaskID(taskID),
-			tag.WorkflowTaskQueueType(db.dbQueue.TaskType()),
-			tag.WorkflowTaskQueueName(db.dbQueue.PersistenceName()),
+			tag.WorkflowTaskQueueType(db.queue.TaskType()),
+			tag.WorkflowTaskQueueName(db.queue.PersistenceName()),
 		)
 	}
 	return err
@@ -258,9 +254,9 @@ func (db *taskQueueDB) CompleteTasksLessThan(
 	limit int,
 ) (int, error) {
 	n, err := db.store.CompleteTasksLessThan(ctx, &persistence.CompleteTasksLessThanRequest{
-		NamespaceID:        db.dbQueue.NamespaceID().String(),
-		TaskQueueName:      db.dbQueue.PersistenceName(),
-		TaskType:           db.dbQueue.TaskType(),
+		NamespaceID:        db.queue.NamespaceId().String(),
+		TaskQueueName:      db.queue.PersistenceName(),
+		TaskType:           db.queue.TaskType(),
 		ExclusiveMaxTaskID: exclusiveMaxTaskID,
 		Limit:              limit,
 	})
@@ -269,30 +265,30 @@ func (db *taskQueueDB) CompleteTasksLessThan(
 			tag.StoreOperationCompleteTasksLessThan,
 			tag.Error(err),
 			tag.TaskID(exclusiveMaxTaskID),
-			tag.WorkflowTaskQueueType(db.dbQueue.TaskType()),
-			tag.WorkflowTaskQueueName(db.dbQueue.PersistenceName()),
+			tag.WorkflowTaskQueueType(db.queue.TaskType()),
+			tag.WorkflowTaskQueueName(db.queue.PersistenceName()),
 		)
 	}
 	return n, err
 }
 
 func (db *taskQueueDB) expiryTime() *timestamppb.Timestamp {
-	switch db.dbQueue.Partition().Kind() {
+	switch db.queue.Partition().Kind() {
 	case enumspb.TASK_QUEUE_KIND_NORMAL:
 		return nil
 	case enumspb.TASK_QUEUE_KIND_STICKY:
 		return timestamppb.New(time.Now().UTC().Add(stickyTaskQueueTTL))
 	default:
-		panic(fmt.Sprintf("taskQueueDB encountered unknown task kind: %v", db.dbQueue.Partition().Kind()))
+		panic(fmt.Sprintf("taskQueueDB encountered unknown task kind: %v", db.queue.Partition().Kind()))
 	}
 }
 
 func (db *taskQueueDB) cachedQueueInfo() *persistencespb.TaskQueueInfo {
 	return &persistencespb.TaskQueueInfo{
-		NamespaceId:    db.dbQueue.NamespaceID().String(),
-		Name:           db.dbQueue.PersistenceName(),
-		TaskType:       db.dbQueue.TaskType(),
-		Kind:           db.dbQueue.Partition().Kind(),
+		NamespaceId:    db.queue.NamespaceId().String(),
+		Name:           db.queue.PersistenceName(),
+		TaskType:       db.queue.TaskType(),
+		Kind:           db.queue.Partition().Kind(),
 		AckLevel:       db.ackLevel,
 		ExpiryTime:     db.expiryTime(),
 		LastUpdateTime: timestamp.TimeNowPtrUtc(),

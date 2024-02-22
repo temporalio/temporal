@@ -196,7 +196,7 @@ func (c *clientImpl) pickPartitionForWrite(proto *taskqueuepb.TaskQueue, nsid st
 	if err != nil {
 		// We preserve the old logic (not returning error in case of invalid proto info) until it's verified that
 		// clients are not sending invalid names.
-		c.logger.Info("invalid tq partition", tag.Error(err), tag.NewStringsTag("proto", []string{proto.String()}))
+		c.logger.Info("invalid tq partition", tag.Error(err), tag.NewStringTag("proto", proto.String()))
 		metrics.MatchingClientInvalidTaskQueuePartition.With(c.metricsHandler).Record(1)
 		return tqid.UnsafeTaskQueueFamily(nsid, proto.GetName()).TaskQueue(taskType).RootPartition(), nil
 	}
@@ -218,7 +218,7 @@ func (c *clientImpl) pickPartitionForRead(proto *taskqueuepb.TaskQueue, nsid str
 	if err != nil {
 		// We preserve the old logic (not returning error in case of invalid proto info) until it's verified that
 		// clients are not sending invalid names.
-		c.logger.Info("invalid tq partition", tag.Error(err), tag.NewStringsTag("proto", []string{proto.String()}))
+		c.logger.Info("invalid tq partition", tag.Error(err), tag.NewStringTag("proto", proto.String()))
 		metrics.MatchingClientInvalidTaskQueuePartition.With(c.metricsHandler).Record(1)
 		return tqid.UnsafeTaskQueueFamily(nsid, proto.GetName()).TaskQueue(taskType).RootPartition(), nil, nil
 	}

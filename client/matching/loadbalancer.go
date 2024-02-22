@@ -224,6 +224,6 @@ func (b *tqLoadBalancer) Release(partitionID int) {
 func (t *pollToken) Release() {
 	if t.balancer != nil {
 		// t.balancer == nil is valid for example sticky task queue.
-		t.balancer.Release(t.TQPartition.PartitionID())
+		t.balancer.Release(t.TQPartition.PartitionId())
 	}
 }

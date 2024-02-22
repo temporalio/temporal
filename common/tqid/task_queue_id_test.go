@@ -115,12 +115,12 @@ func TestFromProtoPartition_Normal(t *testing.T) {
 	a.Equal(tqname, p.TaskQueue().Name())
 	a.Equal(taskType, p.TaskType())
 	a.Equal(kind, p.Kind())
-	a.Equal(23, p.(*NormalPartition).PartitionID())
+	a.Equal(23, p.(*NormalPartition).PartitionId())
 	a.Equal("/_sys/my-basic-tq-name/23", p.RpcName())
 	a.False(p.IsRoot())
 	a.Equal(PartitionKey{nsid, tqname, 23, taskType}, p.Key())
-	a.Equal(4, mustParent(p, 5).PartitionID())
-	a.Equal(0, mustParent(p, 32).PartitionID())
+	a.Equal(4, mustParent(p, 5).PartitionId())
+	a.Equal(0, mustParent(p, 32).PartitionId())
 
 	proto.Name = "/_sys/my-basic-tq-name/verxyz:23"
 	_, err = PartitionFromProto(proto, nsid, taskType)
@@ -149,7 +149,7 @@ func TestNormalPartition(t *testing.T) {
 	a.NoError(err)
 	p := f.TaskQueue(enumspb.TASK_QUEUE_TYPE_WORKFLOW).NormalPartition(23)
 	a.Equal("tq", p.TaskQueue().Name())
-	a.Equal(23, p.PartitionID())
+	a.Equal(23, p.PartitionId())
 	a.Equal("/_sys/tq/23", p.RpcName())
 	a.False(p.IsRoot())
 }
@@ -174,7 +174,7 @@ func TestValidRpcNames(t *testing.T) {
 	for _, tc := range testCases {
 		t.Run(tc.input, func(t *testing.T) {
 			p := mustParseNormalPartition(t, tc.input, 0)
-			require.Equal(t, tc.partition, p.PartitionID())
+			require.Equal(t, tc.partition, p.PartitionId())
 			require.Equal(t, tc.partition == 0, p.IsRoot())
 			require.Equal(t, tc.baseName, p.TaskQueue().Name())
 			require.Equal(t, tc.input, p.RpcName())

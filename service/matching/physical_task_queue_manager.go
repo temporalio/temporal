@@ -79,7 +79,7 @@ var (
 )
 
 type (
-	taskQueueManagerOpt func(*dbQueueManagerImpl)
+	taskQueueManagerOpt func(*physicalTaskQueueManagerImpl)
 
 	idBlockAllocator interface {
 		RenewLease(context.Context) (taskQueueState, error)
@@ -104,7 +104,7 @@ type (
 	// Extra care should be taken to avoid mutating the current user data to avoid keeping uncommitted data in memory.
 	UserDataUpdateFunc func(*persistencespb.TaskQueueUserData) (*persistencespb.TaskQueueUserData, bool, error)
 
-	dbQueueManager interface {
+	physicalTaskQueueManager interface {
 		Start()
 		Stop()
 		WaitUntilInitialized(context.Context) error
@@ -116,7 +116,7 @@ type (
 		// maxDispatchPerSecond is the max rate at which tasks are allowed to be dispatched
 		// from this task queue to pollers
 		PollTask(ctx context.Context, pollMetadata *pollMetadata) (*internalTask, error)
-		// MarkAlive updates the liveness timer to keep this dbQueueManager alive.
+		// MarkAlive updates the liveness timer to keep this physicalTaskQueueManager alive.
 		MarkAlive()
 		// SpoolTask spools a task to persistence to be matched asynchronously when a poller is available.
 		SpoolTask(params addTaskParams) error
@@ -132,14 +132,14 @@ type (
 		// DescribeTaskQueue returns information about the target task queue
 		DescribeTaskQueue(includeTaskQueueStatus bool) *matchingservice.DescribeTaskQueueResponse
 		String() string
-		DBQueue() *DBTaskQueue
+		DBQueue() *PhysicalTaskQueueKey
 	}
 
-	// Single task queue in memory state
-	dbQueueManagerImpl struct {
+	// physicalTaskQueueManagerImpl manages a single DB-level (aka physical) task queue in memory
+	physicalTaskQueueManagerImpl struct {
 		status               int32
 		partitionMgr         *taskQueuePartitionManagerImpl
-		dbQueue              *DBTaskQueue
+		dbQueue              *PhysicalTaskQueueKey
 		config               *taskQueueConfig
 		db                   *taskQueueDB
 		taskWriter           *taskWriter
@@ -165,7 +165,7 @@ type (
 	}
 )
 
-var _ dbQueueManager = (*dbQueueManagerImpl)(nil)
+var _ physicalTaskQueueManager = (*physicalTaskQueueManagerImpl)(nil)
 
 var (
 	errRemoteSyncMatchFailed  = serviceerror.NewCanceled("remote sync match failed")
@@ -173,25 +173,25 @@ var (
 )
 
 func withIDBlockAllocator(ibl idBlockAllocator) taskQueueManagerOpt {
-	return func(tqm *dbQueueManagerImpl) {
+	return func(tqm *physicalTaskQueueManagerImpl) {
 		tqm.taskWriter.idAlloc = ibl
 	}
 }
 
 func newTaskQueueManager(
 	partitionMgr *taskQueuePartitionManagerImpl,
-	dbQueue *DBTaskQueue,
+	dbQueue *PhysicalTaskQueueKey,
 	opts ...taskQueueManagerOpt,
-) (*dbQueueManagerImpl, error) {
+) (*physicalTaskQueueManagerImpl, error) {
 	e := partitionMgr.engine
 	config := partitionMgr.config
-	db := newTaskQueueDB(e.taskManager, e.matchingRawClient, dbQueue, e.logger)
+	db := newTaskQueueDB(e.taskManager, dbQueue, e.logger)
 	logger := log.With(partitionMgr.logger, tag.WorkerBuildId(dbQueue.VersionSet()))
 	throttledLogger := log.With(partitionMgr.throttledLogger, tag.WorkerBuildId(dbQueue.VersionSet()))
 	taggedMetricsHandler := partitionMgr.taggedMetricsHandler.WithTags(
 		metrics.OperationTag(metrics.MatchingTaskQueueMgrScope),
 		metrics.WorkerBuildIdTag(dbQueue.VersionSet()))
-	tlMgr := &dbQueueManagerImpl{
+	tlMgr := &physicalTaskQueueManagerImpl{
 		status:               common.DaemonStatusInitialized,
 		partitionMgr:         partitionMgr,
 		namespaceRegistry:    e.namespaceRegistry,
@@ -223,7 +223,7 @@ func newTaskQueueManager(
 	tlMgr.taskReader = newTaskReader(tlMgr)
 
 	var fwdr *Forwarder
-	if !dbQueue.Partition().IsRoot() && !dbQueue.Partition().IsSticky() {
+	if !dbQueue.Partition().IsRoot() && dbQueue.Partition().Kind() != enumspb.TASK_QUEUE_KIND_STICKY {
 		// Every DB Queue needs its own forwarder so that the throttles do not interfere
 		fwdr = newForwarder(&config.forwarderConfig, dbQueue.Partition().(*tqid.NormalPartition), e.matchingRawClient)
 	}
@@ -234,11 +234,11 @@ func newTaskQueueManager(
 	return tlMgr, nil
 }
 
-// signalIfFatal calls unloadFromEngine on this dbQueueManagerImpl instance
+// signalIfFatal calls unloadFromEngine on this physicalTaskQueueManagerImpl instance
 // if and only if the supplied error represents a fatal condition, e.g. the
-// existence of another dbQueueManager newer lease. Returns true if the signal
+// existence of another physicalTaskQueueManager newer lease. Returns true if the signal
 // is emitted, false otherwise.
-func (c *dbQueueManagerImpl) signalIfFatal(err error) bool {
+func (c *physicalTaskQueueManagerImpl) signalIfFatal(err error) bool {
 	if err == nil {
 		return false
 	}
@@ -252,7 +252,7 @@ func (c *dbQueueManagerImpl) signalIfFatal(err error) bool {
 	return false
 }
 
-func (c *dbQueueManagerImpl) Start() {
+func (c *physicalTaskQueueManagerImpl) Start() {
 	if !atomic.CompareAndSwapInt32(
 		&c.status,
 		common.DaemonStatusInitialized,
@@ -269,7 +269,7 @@ func (c *dbQueueManagerImpl) Start() {
 
 // Stop does not unload the queue from its partition. It is intended to be called by the partition manager when
 // unloading a queues. For stopping and unloading a queue call unloadFromPartitionManager instead.
-func (c *dbQueueManagerImpl) Stop() {
+func (c *physicalTaskQueueManagerImpl) Stop() {
 	if !atomic.CompareAndSwapInt32(
 		&c.status,
 		common.DaemonStatusStarted,
@@ -302,11 +302,11 @@ func (c *dbQueueManagerImpl) Stop() {
 // feature. Note that this is a different concept from the overall task queue having versioning data associated with it,
 // which is the usual meaning of "versioned task queue". These task queues are not interacted with directly outside of
 // a single matching node.
-func (c *dbQueueManagerImpl) managesSpecificVersionSet() bool {
+func (c *physicalTaskQueueManagerImpl) managesSpecificVersionSet() bool {
 	return c.dbQueue.VersionSet() != ""
 }
 
-func (c *dbQueueManagerImpl) SetInitializedError(err error) {
+func (c *physicalTaskQueueManagerImpl) SetInitializedError(err error) {
 	c.initializedError.Set(struct{}{}, err)
 	if err != nil {
 		// We can't recover from here without starting over, so unload the whole task queue.
@@ -316,7 +316,7 @@ func (c *dbQueueManagerImpl) SetInitializedError(err error) {
 	}
 }
 
-func (c *dbQueueManagerImpl) WaitUntilInitialized(ctx context.Context) error {
+func (c *physicalTaskQueueManagerImpl) WaitUntilInitialized(ctx context.Context) error {
 	_, err := c.initializedError.Get(ctx)
 	return err
 }
@@ -324,7 +324,7 @@ func (c *dbQueueManagerImpl) WaitUntilInitialized(ctx context.Context) error {
 // AddTask adds a task to the task queue. This method will first attempt a synchronous
 // match with a poller. When there are no pollers or if ratelimit is exceeded, task will
 // be written to database and later asynchronously matched with a poller
-func (c *dbQueueManagerImpl) AddTask(
+func (c *physicalTaskQueueManagerImpl) AddTask(
 	ctx context.Context,
 	params addTaskParams,
 ) (bool, error) {
@@ -367,7 +367,7 @@ func (c *dbQueueManagerImpl) AddTask(
 	return false, err
 }
 
-func (c *dbQueueManagerImpl) SpoolTask(params addTaskParams) error {
+func (c *physicalTaskQueueManagerImpl) SpoolTask(params addTaskParams) error {
 	_, err := c.taskWriter.appendTask(params.execution, params.taskInfo)
 	c.signalIfFatal(err)
 	if err == nil {
@@ -380,7 +380,7 @@ func (c *dbQueueManagerImpl) SpoolTask(params addTaskParams) error {
 // Returns error when context deadline is exceeded
 // maxDispatchPerSecond is the max rate at which tasks are allowed
 // to be dispatched from this task queue to pollers
-func (c *dbQueueManagerImpl) PollTask(
+func (c *physicalTaskQueueManagerImpl) PollTask(
 	ctx context.Context,
 	pollMetadata *pollMetadata,
 ) (*internalTask, error) {
@@ -389,7 +389,7 @@ func (c *dbQueueManagerImpl) PollTask(
 	c.currentPolls.Add(1)
 	defer c.currentPolls.Add(-1)
 
-	namespaceEntry, err := c.namespaceRegistry.GetNamespaceByID(c.dbQueue.NamespaceID())
+	namespaceEntry, err := c.namespaceRegistry.GetNamespaceByID(c.dbQueue.NamespaceId())
 	if err != nil {
 		return nil, err
 	}
@@ -415,14 +415,14 @@ func (c *dbQueueManagerImpl) PollTask(
 	return task, nil
 }
 
-func (c *dbQueueManagerImpl) MarkAlive() {
+func (c *physicalTaskQueueManagerImpl) MarkAlive() {
 	c.liveness.markAlive()
 }
 
 // DispatchSpooledTask dispatches a task to a poller. When there are no pollers to pick
 // up the task or if rate limit is exceeded, this method will return error. Task
 // *will not* be persisted to db
-func (c *dbQueueManagerImpl) DispatchSpooledTask(
+func (c *physicalTaskQueueManagerImpl) DispatchSpooledTask(
 	ctx context.Context,
 	task *internalTask,
 	userDataChanged <-chan struct{},
@@ -432,7 +432,7 @@ func (c *dbQueueManagerImpl) DispatchSpooledTask(
 
 // DispatchQueryTask will dispatch query to local or remote poller. If forwarded then result or error is returned,
 // if dispatched to local poller then nil and nil is returned.
-func (c *dbQueueManagerImpl) DispatchQueryTask(
+func (c *physicalTaskQueueManagerImpl) DispatchQueryTask(
 	ctx context.Context,
 	taskID string,
 	request *matchingservice.QueryWorkflowRequest,
@@ -441,21 +441,21 @@ func (c *dbQueueManagerImpl) DispatchQueryTask(
 	return c.matcher.OfferQuery(ctx, task)
 }
 
-func (c *dbQueueManagerImpl) UpdatePollerInfo(id pollerIdentity, pollMetadata *pollMetadata) {
+func (c *physicalTaskQueueManagerImpl) UpdatePollerInfo(id pollerIdentity, pollMetadata *pollMetadata) {
 	if c.pollerHistory != nil {
 		c.pollerHistory.updatePollerInfo(id, pollMetadata)
 	}
 }
 
 // GetAllPollerInfo returns all pollers that polled from this taskqueue in last few minutes
-func (c *dbQueueManagerImpl) GetAllPollerInfo() []*taskqueuepb.PollerInfo {
+func (c *physicalTaskQueueManagerImpl) GetAllPollerInfo() []*taskqueuepb.PollerInfo {
 	if c.pollerHistory == nil {
 		return nil
 	}
 	return c.pollerHistory.getPollerInfo(time.Time{})
 }
 
-func (c *dbQueueManagerImpl) HasPollerAfter(accessTime time.Time) bool {
+func (c *physicalTaskQueueManagerImpl) HasPollerAfter(accessTime time.Time) bool {
 	if c.currentPolls.Load() > 0 {
 		return true
 	}
@@ -469,7 +469,7 @@ func (c *dbQueueManagerImpl) HasPollerAfter(accessTime time.Time) bool {
 // DescribeTaskQueue returns information about the target taskqueue, right now this API returns the
 // pollers which polled this taskqueue in last few minutes and status of taskqueue's ackManager
 // (readLevel, ackLevel, backlogCountHint and taskIDBlock).
-func (c *dbQueueManagerImpl) DescribeTaskQueue(includeTaskQueueStatus bool) *matchingservice.DescribeTaskQueueResponse {
+func (c *physicalTaskQueueManagerImpl) DescribeTaskQueue(includeTaskQueueStatus bool) *matchingservice.DescribeTaskQueueResponse {
 	response := &matchingservice.DescribeTaskQueueResponse{Pollers: c.GetAllPollerInfo()}
 	if !includeTaskQueueStatus {
 		return response
@@ -490,7 +490,7 @@ func (c *dbQueueManagerImpl) DescribeTaskQueue(includeTaskQueueStatus bool) *mat
 	return response
 }
 
-func (c *dbQueueManagerImpl) String() string {
+func (c *physicalTaskQueueManagerImpl) String() string {
 	buf := new(bytes.Buffer)
 	if c.dbQueue.TaskType() == enumspb.TASK_QUEUE_TYPE_ACTIVITY {
 		buf.WriteString("Activity")
@@ -511,7 +511,7 @@ func (c *dbQueueManagerImpl) String() string {
 // here. As part of completion:
 //   - task is deleted from the database when err is nil
 //   - new task is created and current task is deleted when err is not nil
-func (c *dbQueueManagerImpl) completeTask(task *persistencespb.AllocatedTaskInfo, err error) {
+func (c *physicalTaskQueueManagerImpl) completeTask(task *persistencespb.AllocatedTaskInfo, err error) {
 	if err != nil {
 		// failed to start the task.
 		// We cannot just remove it from persistence because then it will be lost.
@@ -574,7 +574,7 @@ func executeWithRetry(
 	})
 }
 
-func (c *dbQueueManagerImpl) trySyncMatch(ctx context.Context, params addTaskParams) (bool, error) {
+func (c *physicalTaskQueueManagerImpl) trySyncMatch(ctx context.Context, params addTaskParams) (bool, error) {
 	if params.forwardedFrom == "" && c.config.TestDisableSyncMatch() {
 		return false, nil
 	}
@@ -616,20 +616,20 @@ func newChildContext(
 	return context.WithTimeout(parent, timeout)
 }
 
-func (c *dbQueueManagerImpl) DBQueue() *DBTaskQueue {
+func (c *physicalTaskQueueManagerImpl) DBQueue() *PhysicalTaskQueueKey {
 	return c.dbQueue
 }
 
-func (c *dbQueueManagerImpl) callerInfoContext(ctx context.Context) context.Context {
-	ns, _ := c.namespaceRegistry.GetNamespaceName(c.dbQueue.NamespaceID())
+func (c *physicalTaskQueueManagerImpl) callerInfoContext(ctx context.Context) context.Context {
+	ns, _ := c.namespaceRegistry.GetNamespaceName(c.dbQueue.NamespaceId())
 	return headers.SetCallerInfo(ctx, headers.NewBackgroundCallerInfo(ns.String()))
 }
 
-func (c *dbQueueManagerImpl) newIOContext() (context.Context, context.CancelFunc) {
+func (c *physicalTaskQueueManagerImpl) newIOContext() (context.Context, context.CancelFunc) {
 	ctx, cancel := context.WithTimeout(context.Background(), ioTimeout)
 	return c.callerInfoContext(ctx), cancel
 }
 
-func (c *dbQueueManagerImpl) unloadFromPartitionManager() {
+func (c *physicalTaskQueueManagerImpl) unloadFromPartitionManager() {
 	c.partitionMgr.unloadDbQueue(c)
 }

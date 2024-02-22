@@ -65,9 +65,9 @@ type (
 	// taskWriter writes tasks sequentially to persistence
 	taskWriter struct {
 		status       int32
-		tlMgr        *dbQueueManagerImpl
+		tlMgr        *physicalTaskQueueManagerImpl
 		config       *taskQueueConfig
-		dbQueue      *DBTaskQueue
+		dbQueue      *PhysicalTaskQueueKey
 		appendCh     chan *writeTaskRequest
 		taskIDBlock  taskIDBlock
 		maxReadLevel int64
@@ -86,7 +86,7 @@ var (
 )
 
 func newTaskWriter(
-	tlMgr *dbQueueManagerImpl,
+	tlMgr *physicalTaskQueueManagerImpl,
 ) *taskWriter {
 	return &taskWriter{
 		status:       common.DaemonStatusInitialized,

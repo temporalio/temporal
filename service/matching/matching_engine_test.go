@@ -40,7 +40,6 @@ import (
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	"github.com/uber-go/tally/v4"
-	"go.temporal.io/server/common/tqid"
 	"google.golang.org/protobuf/types/known/durationpb"
 	"google.golang.org/protobuf/types/known/timestamppb"
 	"google.golang.org/protobuf/types/known/wrapperspb"
@@ -79,6 +78,7 @@ import (
 	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/common/quotas"
 	serviceerrors "go.temporal.io/server/common/serviceerror"
+	"go.temporal.io/server/common/tqid"
 )
 
 type (
@@ -682,7 +682,7 @@ func (s *matchingEngineSuite) TestTaskWriterShutdown() {
 	}
 
 	// stop the task writer explicitly
-	tlmImpl := tlm.(*taskQueuePartitionManagerImpl).defaultQueue.(*dbQueueManagerImpl)
+	tlmImpl := tlm.(*taskQueuePartitionManagerImpl).defaultQueue.(*physicalTaskQueueManagerImpl)
 	tlmImpl.taskWriter.Stop()
 
 	// now attempt to add a task
@@ -838,7 +838,7 @@ func (s *matchingEngineSuite) TestSyncMatchActivities() {
 	mgr, err := newTaskQueuePartitionManager(s.matchingEngine, dbq.partition, s.matchingEngine.config)
 	s.NoError(err)
 
-	mgrImpl, ok := mgr.(*taskQueuePartitionManagerImpl).defaultQueue.(*dbQueueManagerImpl)
+	mgrImpl, ok := mgr.(*taskQueuePartitionManagerImpl).defaultQueue.(*physicalTaskQueueManagerImpl)
 	s.True(ok)
 
 	mgrImpl.matcher.config.MinTaskThrottlingBurstSize = func() int { return 0 }
@@ -1056,7 +1056,7 @@ func (s *matchingEngineSuite) concurrentPublishConsumeActivities(
 	mgr, err := newTaskQueuePartitionManager(s.matchingEngine, dbq.partition, s.matchingEngine.config)
 	s.NoError(err)
 
-	mgrImpl := mgr.(*taskQueuePartitionManagerImpl).defaultQueue.(*dbQueueManagerImpl)
+	mgrImpl := mgr.(*taskQueuePartitionManagerImpl).defaultQueue.(*physicalTaskQueueManagerImpl)
 	mgrImpl.matcher.config.MinTaskThrottlingBurstSize = func() int { return 0 }
 	mgrImpl.matcher.rateLimiter = quotas.NewRateLimiter(
 		defaultTaskDispatchRPS,
@@ -1744,7 +1744,7 @@ func (s *matchingEngineSuite) TestTaskQueueManagerGetTaskBatch() {
 		s.NoError(err)
 	}
 
-	tlMgr, ok := s.matchingEngine.partitions[dbq.key().partitionKey].(*taskQueuePartitionManagerImpl).defaultQueue.(*dbQueueManagerImpl)
+	tlMgr, ok := s.matchingEngine.partitions[dbq.Partition().Key()].(*taskQueuePartitionManagerImpl).defaultQueue.(*physicalTaskQueueManagerImpl)
 	s.True(ok, "taskQueueManger doesn't implement taskQueuePartitionManager interface")
 	s.EqualValues(taskCount, s.taskManager.getTaskCount(dbq))
 
@@ -1818,7 +1818,7 @@ func (s *matchingEngineSuite) TestTaskQueueManagerGetTaskBatch_ReadBatchDone() {
 	tlMgr0, err := newTaskQueuePartitionManager(s.matchingEngine, prtn, config)
 	s.NoError(err)
 
-	tlMgr, ok := tlMgr0.(*taskQueuePartitionManagerImpl).defaultQueue.(*dbQueueManagerImpl)
+	tlMgr, ok := tlMgr0.(*taskQueuePartitionManagerImpl).defaultQueue.(*physicalTaskQueueManagerImpl)
 	s.True(ok)
 
 	tlMgr.Start()
@@ -1913,7 +1913,7 @@ func (s *matchingEngineSuite) TestTaskExpiryAndCompletion() {
 			s.NoError(err)
 		}
 
-		tlMgr, ok := s.matchingEngine.partitions[dbq.key().partitionKey].(*taskQueuePartitionManagerImpl).defaultQueue.(*dbQueueManagerImpl)
+		tlMgr, ok := s.matchingEngine.partitions[dbq.Partition().Key()].(*taskQueuePartitionManagerImpl).defaultQueue.(*physicalTaskQueueManagerImpl)
 		s.True(ok, "failed to load task queue")
 		s.EqualValues(taskCount, s.taskManager.getTaskCount(dbq))
 
@@ -2601,6 +2601,16 @@ type testTaskManager struct {
 	logger log.Logger
 }
 
+type dbTaskQueueKey struct {
+	partitionKey tqid.PartitionKey
+	versionSet   string
+	buildId      string
+}
+
+func getKey(dbq *PhysicalTaskQueueKey) dbTaskQueueKey {
+	return dbTaskQueueKey{dbq.partition.Key(), dbq.versionSet, dbq.buildId}
+}
+
 func newTestTaskManager(logger log.Logger) *testTaskManager {
 	return &testTaskManager{queues: make(map[dbTaskQueueKey]*testDBQueueManager), logger: logger}
 }
@@ -2612,8 +2622,8 @@ func (m *testTaskManager) GetName() string {
 func (m *testTaskManager) Close() {
 }
 
-func (m *testTaskManager) getQueueManager(queue *DBTaskQueue) *testDBQueueManager {
-	key := queue.key()
+func (m *testTaskManager) getQueueManager(queue *PhysicalTaskQueueKey) *testDBQueueManager {
+	key := getKey(queue)
 	m.Lock()
 	defer m.Unlock()
 	result, ok := m.queues[key]
@@ -2625,8 +2635,8 @@ func (m *testTaskManager) getQueueManager(queue *DBTaskQueue) *testDBQueueManage
 	return result
 }
 
-func newUnversionedRootDBQueue(namespaceId string, name string, taskType enumspb.TaskQueueType) *DBTaskQueue {
-	return UnversionedDBQueue(newTestTaskQueue(namespaceId, name, taskType).RootPartition())
+func newUnversionedRootDBQueue(namespaceId string, name string, taskType enumspb.TaskQueueType) *PhysicalTaskQueueKey {
+	return UnversionedQueueKey(newTestTaskQueue(namespaceId, name, taskType).RootPartition())
 }
 
 func newRootPartition(namespaceId string, name string, taskType enumspb.TaskQueueType) *tqid.NormalPartition {
@@ -2643,7 +2653,7 @@ func newTestTaskQueue(namespaceId string, name string, taskType enumspb.TaskQueu
 
 type testDBQueueManager struct {
 	sync.Mutex
-	queue            *DBTaskQueue
+	queue            *PhysicalTaskQueueKey
 	rangeID          int64
 	ackLevel         int64
 	createTaskCount  int
@@ -2669,7 +2679,7 @@ func (m *testTaskManager) CreateTaskQueue(
 	request *persistence.CreateTaskQueueRequest,
 ) (*persistence.CreateTaskQueueResponse, error) {
 	tli := request.TaskQueueInfo
-	dbq, err := ParseDBQueue(tli.Name, tli.NamespaceId, tli.TaskType)
+	dbq, err := ParsePhysicalTaskQueueKey(tli.Name, tli.NamespaceId, tli.TaskType)
 	if err != nil {
 		return nil, err
 	}
@@ -2694,7 +2704,7 @@ func (m *testTaskManager) UpdateTaskQueue(
 	request *persistence.UpdateTaskQueueRequest,
 ) (*persistence.UpdateTaskQueueResponse, error) {
 	tli := request.TaskQueueInfo
-	dbq, err := ParseDBQueue(tli.Name, tli.NamespaceId, tli.TaskType)
+	dbq, err := ParsePhysicalTaskQueueKey(tli.Name, tli.NamespaceId, tli.TaskType)
 	if err != nil {
 		return nil, err
 	}
@@ -2717,7 +2727,7 @@ func (m *testTaskManager) GetTaskQueue(
 	_ context.Context,
 	request *persistence.GetTaskQueueRequest,
 ) (*persistence.GetTaskQueueResponse, error) {
-	dbq, err := ParseDBQueue(request.TaskQueue, request.NamespaceID, request.TaskType)
+	dbq, err := ParsePhysicalTaskQueueKey(request.TaskQueue, request.NamespaceID, request.TaskType)
 	if err != nil {
 		return nil, err
 	}
@@ -2754,7 +2764,7 @@ func (m *testTaskManager) CompleteTask(
 
 	tli := request.TaskQueue
 
-	dbq, err := ParseDBQueue(tli.TaskQueueName, tli.NamespaceID, tli.TaskQueueType)
+	dbq, err := ParsePhysicalTaskQueueKey(tli.TaskQueueName, tli.NamespaceID, tli.TaskQueueType)
 	if err != nil {
 		return err
 	}
@@ -2771,7 +2781,7 @@ func (m *testTaskManager) CompleteTasksLessThan(
 	_ context.Context,
 	request *persistence.CompleteTasksLessThanRequest,
 ) (int, error) {
-	dbq, err := ParseDBQueue(request.TaskQueueName, request.NamespaceID, request.TaskType)
+	dbq, err := ParsePhysicalTaskQueueKey(request.TaskQueueName, request.NamespaceID, request.TaskType)
 	if err != nil {
 		return 0, err
 	}
@@ -2802,7 +2812,7 @@ func (m *testTaskManager) DeleteTaskQueue(
 	m.Lock()
 	defer m.Unlock()
 	q := newUnversionedRootDBQueue(request.TaskQueue.NamespaceID, request.TaskQueue.TaskQueueName, request.TaskQueue.TaskQueueType)
-	delete(m.queues, q.key())
+	delete(m.queues, getKey(q))
 	return nil
 }
 
@@ -2816,7 +2826,7 @@ func (m *testTaskManager) CreateTasks(
 	taskType := request.TaskQueueInfo.Data.TaskType
 	rangeID := request.TaskQueueInfo.RangeID
 
-	dbq, err := ParseDBQueue(taskQueue, namespaceId, taskType)
+	dbq, err := ParsePhysicalTaskQueueKey(taskQueue, namespaceId, taskType)
 	if err != nil {
 		return nil, err
 	}
@@ -2865,7 +2875,7 @@ func (m *testTaskManager) GetTasks(
 ) (*persistence.GetTasksResponse, error) {
 	m.logger.Debug("testTaskManager.GetTasks", tag.MinLevel(request.InclusiveMinTaskID), tag.MaxLevel(request.ExclusiveMaxTaskID))
 
-	dbq, err := ParseDBQueue(request.TaskQueue, request.NamespaceID, request.TaskType)
+	dbq, err := ParsePhysicalTaskQueueKey(request.TaskQueue, request.NamespaceID, request.TaskType)
 	if err != nil {
 		return nil, err
 	}
@@ -2892,7 +2902,7 @@ func (m *testTaskManager) GetTasks(
 }
 
 // getTaskCount returns number of tasks in a task queue
-func (m *testTaskManager) getTaskCount(q *DBTaskQueue) int {
+func (m *testTaskManager) getTaskCount(q *PhysicalTaskQueueKey) int {
 	tlm := m.getQueueManager(q)
 	tlm.Lock()
 	defer tlm.Unlock()
@@ -2900,7 +2910,7 @@ func (m *testTaskManager) getTaskCount(q *DBTaskQueue) int {
 }
 
 // getCreateTaskCount returns how many times CreateTask was called
-func (m *testTaskManager) getCreateTaskCount(q *DBTaskQueue) int {
+func (m *testTaskManager) getCreateTaskCount(q *PhysicalTaskQueueKey) int {
 	tlm := m.getQueueManager(q)
 	tlm.Lock()
 	defer tlm.Unlock()
@@ -2908,7 +2918,7 @@ func (m *testTaskManager) getCreateTaskCount(q *DBTaskQueue) int {
 }
 
 // getGetTasksCount returns how many times GetTasks was called
-func (m *testTaskManager) getGetTasksCount(q *DBTaskQueue) int {
+func (m *testTaskManager) getGetTasksCount(q *PhysicalTaskQueueKey) int {
 	tlm := m.getQueueManager(q)
 	tlm.Lock()
 	defer tlm.Unlock()
@@ -2916,7 +2926,7 @@ func (m *testTaskManager) getGetTasksCount(q *DBTaskQueue) int {
 }
 
 // getGetUserDataCount returns how many times GetUserData was called
-func (m *testTaskManager) getGetUserDataCount(q *DBTaskQueue) int {
+func (m *testTaskManager) getGetUserDataCount(q *PhysicalTaskQueueKey) int {
 	tlm := m.getQueueManager(q)
 	tlm.Lock()
 	defer tlm.Unlock()
@@ -2924,7 +2934,7 @@ func (m *testTaskManager) getGetUserDataCount(q *DBTaskQueue) int {
 }
 
 // getUpdateCount returns how many times UpdateTaskQueue was called
-func (m *testTaskManager) getUpdateCount(q *DBTaskQueue) int {
+func (m *testTaskManager) getUpdateCount(q *PhysicalTaskQueueKey) int {
 	tlm := m.getQueueManager(q)
 	tlm.Lock()
 	defer tlm.Unlock()
@@ -2958,7 +2968,7 @@ func (m *testTaskManager) String() string {
 
 // GetTaskQueueData implements persistence.TaskManager
 func (m *testTaskManager) GetTaskQueueUserData(_ context.Context, request *persistence.GetTaskQueueUserDataRequest) (*persistence.GetTaskQueueUserDataResponse, error) {
-	dbq, err := ParseDBQueue(request.TaskQueue, request.NamespaceID, enumspb.TASK_QUEUE_TYPE_WORKFLOW)
+	dbq, err := ParsePhysicalTaskQueueKey(request.TaskQueue, request.NamespaceID, enumspb.TASK_QUEUE_TYPE_WORKFLOW)
 	if err != nil {
 		return nil, err
 	}
@@ -2973,7 +2983,7 @@ func (m *testTaskManager) GetTaskQueueUserData(_ context.Context, request *persi
 
 // UpdateTaskQueueUserData implements persistence.TaskManager
 func (m *testTaskManager) UpdateTaskQueueUserData(_ context.Context, request *persistence.UpdateTaskQueueUserDataRequest) error {
-	dbq, err := ParseDBQueue(request.TaskQueue, request.NamespaceID, enumspb.TASK_QUEUE_TYPE_WORKFLOW)
+	dbq, err := ParsePhysicalTaskQueueKey(request.TaskQueue, request.NamespaceID, enumspb.TASK_QUEUE_TYPE_WORKFLOW)
 	if err != nil {
 		return err
 	}

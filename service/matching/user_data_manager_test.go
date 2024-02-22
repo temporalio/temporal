@@ -394,7 +394,7 @@ func TestUserData_FetchesUpTree(t *testing.T) {
 	defer controller.Finish()
 	ctx := context.Background()
 	taskQueue := newTestTaskQueue(defaultNamespaceId, defaultRootTqID, enumspb.TASK_QUEUE_TYPE_WORKFLOW)
-	dbq := UnversionedDBQueue(taskQueue.NormalPartition(31))
+	dbq := UnversionedQueueKey(taskQueue.NormalPartition(31))
 	tqCfg := defaultTqmTestOpts(controller)
 	tqCfg.config.ForwarderMaxChildrenPerNode = dynamicconfig.GetIntPropertyFilteredByTaskQueueInfo(3)
 	tqCfg.dbq = dbq
@@ -481,7 +481,7 @@ func TestUserData_FetchesStickyToNormal(t *testing.T) {
 
 	normalTq := newTestTaskQueue(defaultNamespaceId, normalName, enumspb.TASK_QUEUE_TYPE_WORKFLOW)
 	stickyTq := normalTq.StickyPartition(stickyName)
-	tqCfg.dbq = UnversionedDBQueue(stickyTq)
+	tqCfg.dbq = UnversionedQueueKey(stickyTq)
 
 	data1 := &persistencespb.VersionedTaskQueueUserData{
 		Version: 1,
@@ -540,6 +540,6 @@ func TestUserData_UpdateOnNonRootFails(t *testing.T) {
 	require.ErrorIs(t, err, errUserDataNoMutateNonRoot)
 }
 
-func newTestUnversionedDBQueue(namespaceId string, name string, taskType enumspb.TaskQueueType, partition int) *DBTaskQueue {
-	return UnversionedDBQueue(newTestTaskQueue(namespaceId, name, taskType).NormalPartition(partition))
+func newTestUnversionedDBQueue(namespaceId string, name string, taskType enumspb.TaskQueueType, partition int) *PhysicalTaskQueueKey {
+	return UnversionedQueueKey(newTestTaskQueue(namespaceId, name, taskType).NormalPartition(partition))
 }

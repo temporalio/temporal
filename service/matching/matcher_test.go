@@ -58,7 +58,7 @@ type MatcherTestSuite struct {
 	client      *matchingservicemock.MockMatchingServiceClient
 	fwdr        *Forwarder
 	cfg         *taskQueueConfig
-	queue       *DBTaskQueue
+	queue       *PhysicalTaskQueueKey
 	matcher     *TaskMatcher // matcher for child partition
 	rootMatcher *TaskMatcher // matcher for parent partition
 }
@@ -77,7 +77,7 @@ func (t *MatcherTestSuite) SetupTest() {
 	f, err := tqid.NewTaskQueueFamily("", "tl0")
 	t.Assert().NoError(err)
 	prtn := f.TaskQueue(enumspb.TASK_QUEUE_TYPE_WORKFLOW).NormalPartition(1)
-	t.queue = UnversionedDBQueue(prtn)
+	t.queue = UnversionedQueueKey(prtn)
 	tlCfg := newTaskQueueConfig(prtn.TaskQueue(), cfg, "test-namespace")
 	tlCfg.forwarderConfig = forwarderConfig{
 		ForwarderMaxOutstandingPolls: func() int { return 1 },

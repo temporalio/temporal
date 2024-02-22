@@ -63,7 +63,7 @@ type (
 	// to/from the persistence layer passes through userDataManager of the owning partition.
 	// All other partitions long-poll the latest user data from the owning partition.
 	userDataManager struct {
-		sync.Mutex
+		lock            sync.Mutex
 		partition       tqid.Partition
 		userData        *persistencespb.VersionedTaskQueueUserData
 		userDataChanged chan struct{}
@@ -93,7 +93,14 @@ var (
 	errTaskQueueClosed = serviceerror.NewUnavailable("task queue closed")
 )
 
-func newUserDataManager(store persistence.TaskManager, matchingClient matchingservice.MatchingServiceClient, partition tqid.Partition, config *taskQueueConfig, logger log.Logger, registry namespace.Registry) *userDataManager {
+func newUserDataManager(
+	store persistence.TaskManager,
+	matchingClient matchingservice.MatchingServiceClient,
+	partition tqid.Partition,
+	config *taskQueueConfig,
+	logger log.Logger,
+	registry namespace.Registry,
+) *userDataManager {
 
 	m := &userDataManager{
 		logger:            logger,
@@ -125,8 +132,6 @@ func (m *userDataManager) WaitUntilInitialized(ctx context.Context) error {
 	return err
 }
 
-// Stop does not unload the partition from matching engine. It is intended to be called by matching engine when
-// unloading the partition. For stopping and unloading a partition call unloadFromEngine instead.
 func (m *userDataManager) Stop() {
 	m.goroGroup.Cancel()
 	// Set user data state on stop to wake up anyone blocked on the user data changed channel.
@@ -136,8 +141,8 @@ func (m *userDataManager) Stop() {
 // GetUserData returns the versioning data for this task queue. Do not mutate the returned pointer, as doing so
 // will cause cache inconsistency.
 func (m *userDataManager) GetUserData() (*persistencespb.VersionedTaskQueueUserData, chan struct{}, error) {
-	m.Lock()
-	defer m.Unlock()
+	m.lock.Lock()
+	defer m.lock.Unlock()
 	return m.getUserDataLocked()
 }
 
@@ -166,10 +171,8 @@ func (m *userDataManager) setUserDataLocked(userData *persistencespb.VersionedTa
 // Note that this must only be called from a single goroutine since the Ready/Set sequence is
 // potentially racy otherwise.
 func (m *userDataManager) setUserDataState(userDataState userDataState, futureError error) {
-	// Always set state enabled/disabled even if we're not setting the future since we only set
-	// the future once but the enabled/disabled state may change over time.
-	m.Lock()
-	defer m.Unlock()
+	m.lock.Lock()
+	defer m.lock.Unlock()
 
 	if userDataState != m.userDataState && m.userDataState != userDataClosed {
 		m.userDataState = userDataState
@@ -192,6 +195,8 @@ func (m *userDataManager) loadUserData(ctx context.Context) error {
 func (m *userDataManager) userDataFetchSource() (*tqid.NormalPartition, error) {
 	switch p := m.partition.(type) {
 	case *tqid.NormalPartition:
+		// change to the workflow task queue
+		p = p.TaskQueue().Family().TaskQueue(enumspb.TASK_QUEUE_TYPE_WORKFLOW).NormalPartition(p.PartitionId())
 		degree := m.config.ForwarderMaxChildrenPerNode()
 		parent, err := p.ParentPartition(degree)
 		if err == tqid.ErrNoParent { // nolint:goerr113
@@ -209,7 +214,9 @@ func (m *userDataManager) userDataFetchSource() (*tqid.NormalPartition, error) {
 			// Older SDKs don't send the normal name. That's okay, they just can't use versioning.
 			return nil, errMissingNormalQueueName
 		}
-		return normalQ.RootPartition(), nil
+		// sticky queue can only be of workflow type as of now. but to be future-proof, we make sure
+		// change to workflow task queue here
+		return normalQ.Family().TaskQueue(enumspb.TASK_QUEUE_TYPE_WORKFLOW).RootPartition(), nil
 	}
 
 }
@@ -241,7 +248,7 @@ func (m *userDataManager) fetchUserData(ctx context.Context) error {
 		res, err := m.matchingClient.GetTaskQueueUserData(callCtx, &matchingservice.GetTaskQueueUserDataRequest{
 			NamespaceId:              m.partition.NamespaceId().String(),
 			TaskQueue:                fetchSource.RpcName(),
-			TaskQueueType:            enumspb.TASK_QUEUE_TYPE_WORKFLOW,
+			TaskQueueType:            fetchSource.TaskType(),
 			LastKnownUserDataVersion: knownUserData.GetVersion(),
 			WaitNewData:              hasFetchedUserData,
 		})
@@ -306,8 +313,8 @@ func (m *userDataManager) loadUserDataFromDB(ctx context.Context) error {
 		return err
 	}
 
-	m.Lock()
-	defer m.Unlock()
+	m.lock.Lock()
+	defer m.lock.Unlock()
 	m.setUserDataLocked(response.UserData)
 
 	return nil
@@ -365,8 +372,8 @@ func (m *userDataManager) updateUserData(
 	knownVersion int64,
 	taskQueueLimitPerBuildId int,
 ) (*persistencespb.VersionedTaskQueueUserData, bool, error) {
-	m.Lock()
-	defer m.Unlock()
+	m.lock.Lock()
+	defer m.lock.Unlock()
 
 	userData, _, err := m.getUserDataLocked()
 	if err != nil {
@@ -420,8 +427,8 @@ func (m *userDataManager) updateUserData(
 }
 
 func (m *userDataManager) setUserDataForNonOwningPartition(userData *persistencespb.VersionedTaskQueueUserData) {
-	m.Lock()
-	defer m.Unlock()
+	m.lock.Lock()
+	defer m.lock.Unlock()
 	m.setUserDataLocked(userData)
 }
 

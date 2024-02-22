@@ -62,7 +62,7 @@ const (
 
 type tqmTestOpts struct {
 	config             *Config
-	dbq                *DBTaskQueue
+	dbq                *PhysicalTaskQueueKey
 	matchingClientMock *matchingservicemock.MockMatchingServiceClient
 }
 
@@ -78,10 +78,10 @@ func TestDeliverBufferTasks(t *testing.T) {
 	controller := gomock.NewController(t)
 	defer controller.Finish()
 
-	tests := []func(tlm *dbQueueManagerImpl){
-		func(tlm *dbQueueManagerImpl) { close(tlm.taskReader.taskBuffer) },
-		func(tlm *dbQueueManagerImpl) { tlm.taskReader.gorogrp.Cancel() },
-		func(tlm *dbQueueManagerImpl) {
+	tests := []func(tlm *physicalTaskQueueManagerImpl){
+		func(tlm *physicalTaskQueueManagerImpl) { close(tlm.taskReader.taskBuffer) },
+		func(tlm *physicalTaskQueueManagerImpl) { tlm.taskReader.gorogrp.Cancel() },
+		func(tlm *physicalTaskQueueManagerImpl) {
 			rps := 0.1
 			tlm.matcher.UpdateRatelimit(&rps)
 			tlm.taskReader.taskBuffer <- &persistencespb.AllocatedTaskInfo{
@@ -300,7 +300,7 @@ func TestReaderSignaling(t *testing.T) {
 
 // runOneShotPoller spawns a goroutine to call tqm.PollTask on the provided tqm.
 // The second return value is a channel of either error or *internalTask.
-func runOneShotPoller(ctx context.Context, tqm dbQueueManager) (*goro.Handle, chan interface{}) {
+func runOneShotPoller(ctx context.Context, tqm physicalTaskQueueManager) (*goro.Handle, chan interface{}) {
 	out := make(chan interface{}, 1)
 	handle := goro.NewHandle(ctx).Go(func(ctx context.Context) error {
 		task, err := tqm.PollTask(ctx, &pollMetadata{ratePerSecond: &rpsInf})
@@ -318,7 +318,7 @@ func runOneShotPoller(ctx context.Context, tqm dbQueueManager) (*goro.Handle, ch
 	return handle, out
 }
 
-func defaultTqId() *DBTaskQueue {
+func defaultTqId() *PhysicalTaskQueueKey {
 	return newTestUnversionedDBQueue(defaultNamespaceId, defaultRootTqID, enumspb.TASK_QUEUE_TYPE_WORKFLOW, 0)
 }
 
@@ -326,7 +326,7 @@ func mustCreateTestTaskQueueManager(
 	t *testing.T,
 	controller *gomock.Controller,
 	opts ...taskQueueManagerOpt,
-) *dbQueueManagerImpl {
+) *physicalTaskQueueManagerImpl {
 	t.Helper()
 	return mustCreateTestTaskQueueManagerWithConfig(t, controller, defaultTqmTestOpts(controller), opts...)
 }
@@ -336,7 +336,7 @@ func mustCreateTestTaskQueueManagerWithConfig(
 	controller *gomock.Controller,
 	testOpts *tqmTestOpts,
 	opts ...taskQueueManagerOpt,
-) *dbQueueManagerImpl {
+) *physicalTaskQueueManagerImpl {
 	t.Helper()
 	tqm, err := createTestTaskQueueManagerWithConfig(controller, testOpts, opts...)
 	require.NoError(t, err)
@@ -347,7 +347,7 @@ func createTestTaskQueueManagerWithConfig(
 	controller *gomock.Controller,
 	testOpts *tqmTestOpts,
 	opts ...taskQueueManagerOpt,
-) (*dbQueueManagerImpl, error) {
+) (*physicalTaskQueueManagerImpl, error) {
 	pm := createTestTaskQueuePartitionManager(controller, testOpts)
 	tlMgr, err := newTaskQueueManager(pm, testOpts.dbq, opts...)
 	pm.defaultQueue = tlMgr
@@ -488,7 +488,7 @@ func TestAddTaskStandby(t *testing.T) {
 		t,
 		controller,
 		defaultTqmTestOpts(controller),
-		func(tqm *dbQueueManagerImpl) {
+		func(tqm *physicalTaskQueueManagerImpl) {
 			ns := namespace.NewGlobalNamespaceForTest(
 				&persistencespb.NamespaceInfo{},
 				&persistencespb.NamespaceConfig{},

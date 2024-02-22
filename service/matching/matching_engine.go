@@ -278,6 +278,7 @@ func (e *matchingEngineImpl) getTaskQueuePartitionManager(
 		return nil, err
 	}
 	if err = pm.WaitUntilInitialized(ctx); err != nil {
+		e.unloadTaskQueuePartition(pm)
 		return nil, err
 	}
 	return pm, nil
@@ -338,7 +339,7 @@ func (e *matchingEngineImpl) AddWorkflowTask(
 		return false, err
 	}
 
-	sticky := partition.IsSticky()
+	sticky := partition.Kind() == enumspb.TASK_QUEUE_KIND_STICKY
 	// do not load sticky task queue if it is not already loaded, which means it has no poller.
 	pm, err := e.getTaskQueuePartitionManager(ctx, partition, !sticky)
 	if err != nil {
@@ -680,7 +681,7 @@ func (e *matchingEngineImpl) QueryWorkflow(
 	if err != nil {
 		return nil, err
 	}
-	sticky := partition.IsSticky()
+	sticky := partition.Kind() == enumspb.TASK_QUEUE_KIND_STICKY
 	// do not load sticky task queue if it is not already loaded, which means it has no poller.
 	pm, err := e.getTaskQueuePartitionManager(ctx, partition, !sticky)
 	if err != nil {
@@ -831,6 +832,7 @@ func (e *matchingEngineImpl) UpdateWorkerVersioningRules(
 		return nil, serviceerror.NewInternal("Task Queue does not match Task Queue in wrapped command")
 	}
 
+	// We only expect to receive task queue family name (root partition) here.
 	taskQueueFamily, err := tqid.NewTaskQueueFamily(req.GetNamespace(), req.GetTaskQueue())
 	if err != nil {
 		return nil, err
@@ -1196,11 +1198,11 @@ func (e *matchingEngineImpl) ForceUnloadTaskQueue(
 	ctx context.Context,
 	req *matchingservice.ForceUnloadTaskQueueRequest,
 ) (*matchingservice.ForceUnloadTaskQueueResponse, error) {
-	taskQueueFamily, err := tqid.NewTaskQueueFamily(req.NamespaceId, req.GetTaskQueue())
+	p, err := tqid.NormalPartitionFromRpcName(req.GetTaskQueue(), req.GetNamespaceId(), req.GetTaskQueueType())
 	if err != nil {
 		return nil, err
 	}
-	pm, err := e.getTaskQueuePartitionManager(ctx, taskQueueFamily.TaskQueue(req.TaskQueueType).RootPartition(), true)
+	pm, err := e.getTaskQueuePartitionManager(ctx, p, true)
 	if err != nil {
 		return nil, err
 	}

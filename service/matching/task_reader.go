@@ -51,7 +51,7 @@ type (
 		status        int32
 		taskBuffer    chan *persistencespb.AllocatedTaskInfo // tasks loaded from persistence
 		notifyC       chan struct{}                          // Used as signal to notify pump of new tasks
-		tlMgr         *dbQueueManagerImpl
+		tlMgr         *physicalTaskQueueManagerImpl
 		taskValidator taskValidator
 		gorogrp       goro.Group
 
@@ -61,7 +61,7 @@ type (
 	}
 )
 
-func newTaskReader(tlMgr *dbQueueManagerImpl) *taskReader {
+func newTaskReader(tlMgr *physicalTaskQueueManagerImpl) *taskReader {
 	return &taskReader{
 		status:        common.DaemonStatusInitialized,
 		tlMgr:         tlMgr,
