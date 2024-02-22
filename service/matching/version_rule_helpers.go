@@ -143,7 +143,7 @@ func InsertCompatibleRedirectRule(timestamp *hlc.Clock,
 	}
 	rules := data.GetRedirectRules()
 	for _, r := range rules {
-		if r.GetDeleteTimestamp() != nil && r.GetRule().GetSourceBuildId() == source {
+		if r.GetDeleteTimestamp() == nil && r.GetRule().GetSourceBuildId() == source {
 			return nil, serviceerror.NewAlreadyExist(fmt.Sprintf(
 				"cannot insert: source %s already redirects to target %s",
 				source, r.GetRule().GetTargetBuildId(),

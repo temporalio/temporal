@@ -152,6 +152,13 @@ func replaceAssignmentRule(rule *taskqueuepb.BuildIdAssignmentRule,
 	return ReplaceAssignmentRule(clock, data, mkNewReplaceAssignmentReq(rule, idx, force))
 }
 
+func replaceRedirectRule(rule *taskqueuepb.CompatibleBuildIdRedirectRule,
+	data *persistencepb.VersioningData,
+	clock *hlc.Clock,
+) (*persistencepb.VersioningData, error) {
+	return ReplaceCompatibleRedirectRule(clock, data, mkNewReplaceRedirectReq(rule))
+}
+
 func deleteAssignmentRule(data *persistencepb.VersioningData,
 	clock *hlc.Clock,
 	idx int32,
@@ -374,7 +381,6 @@ func TestReplaceAssignmentRuleInVersionSet(t *testing.T) {
 	}
 	protoassert.ProtoEqual(t, expected, updatedData)
 	assert.Equal(t, getListResp(t, updatedData).GetAssignmentRules()[0].GetRule().GetTargetBuildId(), updatedData.GetAssignmentRules()[0].GetRule().GetTargetBuildId())
-
 }
 
 // Test replacing assignment rule and hitting / not hitting the unfiltered error, and forcing past it
@@ -560,7 +566,6 @@ func TestInsertRedirectRuleInVersionSet(t *testing.T) {
 	protoassert.ProtoEqual(t, expected, updatedData)
 }
 
-// todo: WIP
 // Test inserting a rule with a source that already exists.
 func TestInsertRedirectRuleAlreadyExists(t *testing.T) {
 	t.Parallel()
@@ -571,35 +576,174 @@ func TestInsertRedirectRuleAlreadyExists(t *testing.T) {
 	// insert with source build id "0"
 	data, err := insertRedirectRule(mkRedirectRule("0", "1", nil), initialData, clock, maxRules)
 	assert.NoError(t, err)
-	protoassert.ProtoEqual(t, mkInitialData(1, clock), initialData)
+	protoassert.ProtoEqual(t, mkInitialData(0, clock), initialData)
 	// insert with source build id "0" --> failure
-	_, err = insertRedirectRule(mkRedirectRule("0", "0", nil), data, clock, maxRules)
+	_, err = insertRedirectRule(mkRedirectRule("0", "6", nil), data, clock, maxRules)
 	assert.Error(t, err)
-	protoassert.ProtoEqual(t, mkInitialData(1, clock), initialData)
 }
 
 // Test inserting redirect rules and creating a cycle
 func TestInsertRedirectRuleCreateCycle(t *testing.T) {
-	// should error
+	t.Parallel()
+	maxRules := 3
+	clock := hlc.Zero(1)
+	initialData := mkInitialData(0, clock)
+
+	// insert with source -> target == "0" -> "0" --> failure
+	_, err := insertRedirectRule(mkRedirectRule("0", "0", nil), initialData, clock, maxRules)
+	assert.Error(t, err)
+
+	// insert with source -> target == "0" -> "1" --> success
+	data, err := insertRedirectRule(mkRedirectRule("0", "1", nil), initialData, clock, maxRules)
+	assert.NoError(t, err)
+
+	// insert with source build id "1" -> "0" --> failure
+	_, err = insertRedirectRule(mkRedirectRule("1", "0", nil), data, clock, maxRules)
+	assert.Error(t, err)
 }
 
-// Test replacing redirect rules and creating a cycle
-func TestReplaceRedirectRuleSuccess(t *testing.T) {
+// test replacing with a given index, then listing, it should be at the desired index
+func replaceTest(t *testing.T,
+	source, target string,
+	data *persistencepb.VersioningData,
+	clk *hlc.Clock,
+	expectSuccess bool) *persistencepb.VersioningData {
+	prevRule := getActiveRedirectRuleBySrc(source, data)
+	rule := mkRedirectRule(source, target, nil)
+	tmp, err := replaceRedirectRule(rule, data, clk)
+	if !expectSuccess {
+		assert.Error(t, err)
+		return nil
+	}
+	data = tmp
+	assert.NoError(t, err)
+	newActive := getActiveRedirectRuleBySrc(source, data)
+	protoassert.ProtoEqual(t, newActive.GetRule(), rule)
+	deleted := getDeletedRedirectRuleBySrc(source, data)
+	assert.Equal(t, deleted[0].GetRule().GetSourceBuildId(), prevRule.GetRule().GetSourceBuildId())
+	assert.Equal(t, deleted[0].GetRule().GetTargetBuildId(), prevRule.GetRule().GetTargetBuildId())
+	for _, dr := range deleted {
+		assert.GreaterOrEqual(t, newActive.GetCreateTimestamp().GetWallClock(), dr.GetDeleteTimestamp().GetWallClock())
+	}
+	return data
+}
+
+func getActiveRedirectRuleBySrc(src string, data *persistencepb.VersioningData) *persistencepb.RedirectRule {
+	for _, r := range data.GetRedirectRules() {
+		if r.GetDeleteTimestamp() == nil && r.GetRule().GetSourceBuildId() == src {
+			return r
+		}
+	}
+	return nil
+}
+
+func getDeletedRedirectRuleBySrc(src string, data *persistencepb.VersioningData) []*persistencepb.RedirectRule {
+	ret := make([]*persistencepb.RedirectRule, 0)
+	for _, r := range data.GetRedirectRules() {
+		if r.GetDeleteTimestamp() != nil && r.GetRule().GetSourceBuildId() == src {
+			ret = append(ret, r)
+		}
+	}
+	return ret
+}
+
+// Test replacing redirect rules. Confirm existence of new rule and deletion of old rule.
+func TestReplaceRedirectRuleVariousIdx(t *testing.T) {
+	t.Parallel()
+	maxRules := 10
+	clock := hlc.Zero(1)
+	timesource := commonclock.NewRealTimeSource()
+	initialData := mkInitialData(0, clock)
+
+	// insert 3x to get three rules in there
+	rule1 := mkRedirectRule("1", "0", nil)
+	clock1 := hlc.Next(clock, timesource)
+	data, err := insertRedirectRule(rule1, initialData, clock1, maxRules)
+	assert.NoError(t, err)
+	rule2 := mkRedirectRule("2", "0", nil)
+	data, err = insertRedirectRule(rule2, data, clock1, maxRules)
+	assert.NoError(t, err)
+	rule3 := mkRedirectRule("3", "0", nil)
+	data, err = insertRedirectRule(rule3, data, clock1, maxRules)
+	assert.NoError(t, err)
+
+	clock2 := hlc.Next(clock1, timesource)
+	data = replaceTest(t, "1", "100", data, clock2, true)
+	data = replaceTest(t, "2", "100", data, clock2, true)
+	data = replaceTest(t, "3", "100", data, clock2, true)
 }
 
 // Test requirement that target id and source id are not in a version set (success and failure)
 func TestReplaceRedirectRuleInVersionSet(t *testing.T) {
-	// should error
+	t.Parallel()
+	maxRules := 10
+	clock := hlc.Zero(1)
+	timesource := commonclock.NewRealTimeSource()
+	// make a version set with build id 0
+	initialData := mkInitialData(1, clock)
+
+	// insert 3x to get three rules in there
+	rule1 := mkRedirectRule("1", "10", nil)
+	clock1 := hlc.Next(clock, timesource)
+	data, err := insertRedirectRule(rule1, initialData, clock1, maxRules)
+	assert.NoError(t, err)
+	rule2 := mkRedirectRule("2", "10", nil)
+	data, err = insertRedirectRule(rule2, data, clock1, maxRules)
+	assert.NoError(t, err)
+	rule3 := mkRedirectRule("3", "10", nil)
+	data, err = insertRedirectRule(rule3, data, clock1, maxRules)
+	assert.NoError(t, err)
+
+	clock2 := hlc.Next(clock1, timesource)
+	_ = replaceTest(t, "0", "100", data, clock2, false)
+	data = replaceTest(t, "1", "100", data, clock2, true)
+	_ = replaceTest(t, "1", "0", data, clock2, false)
+	data = replaceTest(t, "1", "8", data, clock2, true)
 }
 
 // Test replacing redirect rules and creating a cycle
 func TestReplaceRedirectRuleCreateCycle(t *testing.T) {
-	// should error
+	t.Parallel()
+	maxRules := 3
+	clock := hlc.Zero(1)
+	initialData := mkInitialData(0, clock)
+
+	// insert with source -> target == "0" -> "0" --> failure
+	_, err := insertRedirectRule(mkRedirectRule("0", "0", nil), initialData, clock, maxRules)
+	assert.Error(t, err)
+
+	// insert with source -> target == "0" -> "1" --> success
+	data, err := insertRedirectRule(mkRedirectRule("0", "1", nil), initialData, clock, maxRules)
+	assert.NoError(t, err)
+
+	// insert with source build id "1" -> "0" --> failure
+	_, err = insertRedirectRule(mkRedirectRule("1", "0", nil), data, clock, maxRules)
+	assert.Error(t, err)
 }
 
 // Test replacing a redirect rule that doesn't exist
 func TestReplaceRedirectRuleNotFound(t *testing.T) {
-	// should error
+	t.Parallel()
+	maxRules := 10
+	clock := hlc.Zero(1)
+	timesource := commonclock.NewRealTimeSource()
+	initialData := mkInitialData(0, clock)
+
+	// fails because no rules to replace
+	replaceTest(t, "1", "100", initialData, clock, false)
+
+	// insert a rule to replace
+	rule1 := mkRedirectRule("1", "0", nil)
+	clock1 := hlc.Next(clock, timesource)
+	data, err := insertRedirectRule(rule1, initialData, clock1, maxRules)
+	assert.NoError(t, err)
+
+	// try again --> fail
+	replaceTest(t, "1", "100", data, clock, true)
+}
+
+// Test deleting a redirect rule. List and check timestamp to confirm.
+func TestDeleteRedirectRuleSuccess(t *testing.T) {
 }
 
 // Test deleting a redirect rule that doesn't exist
