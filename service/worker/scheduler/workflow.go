@@ -1180,10 +1180,10 @@ func (s *scheduler) startWorkflow(
 	nominalTimeSec := start.NominalTime.AsTime().UTC().Truncate(time.Second)
 	workflowID := newWorkflow.WorkflowId
 	if start.OverlapPolicy == enumspb.SCHEDULE_OVERLAP_POLICY_ALLOW_ALL || s.tweakables.AlwaysAppendTimestamp {
-		if !s.StartScheduleArgs.Schedule.Policies.GetKeepOriginalWorkflowId() {
-			// must match AppendedTimestampForValidation
-			workflowID += "-" + nominalTimeSec.Format(time.RFC3339)
-		}
+		workflowID = InternalWorkflowIdRepresentation(
+			newWorkflow.WorkflowId,
+			nominalTimeSec,
+			s.StartScheduleArgs.GetSchedule().GetPolicies().GetKeepOriginalWorkflowId())
 	}
 
 	// Set scheduleToCloseTimeout based on catchup window, which is the latest time that it's
@@ -1425,4 +1425,12 @@ func GetListInfoFromStartArgs(args *schedspb.StartScheduleArgs, now time.Time, s
 	s.compileSpec()
 	s.State.LastProcessedTime = timestamppb.New(now)
 	return s.getListInfo(false)
+}
+
+func InternalWorkflowIdRepresentation(originalWorkflowId string, timestamp time.Time, keepOriginalWorkflowId bool) string {
+	timeSec := timestamp.UTC().Truncate(time.Second)
+	if keepOriginalWorkflowId {
+		return originalWorkflowId
+	}
+	return originalWorkflowId + timeSec.Format(time.RFC3339)
 }
