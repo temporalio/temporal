@@ -317,8 +317,12 @@ func (pm *taskQueuePartitionManagerImpl) callerInfoContext(ctx context.Context) 
 	return headers.SetCallerInfo(ctx, headers.NewBackgroundCallerInfo(ns.String()))
 }
 
-func (pm *taskQueuePartitionManagerImpl) unloadDbQueue(unloadedDbq physicalTaskQueueManager) {
-	version := unloadedDbq.DBQueue().VersionSet()
+func (pm *taskQueuePartitionManagerImpl) unloadPhysicalQueue(unloadedDbq physicalTaskQueueManager) {
+	version := unloadedDbq.QueueKey().VersionSet()
+	if version == "" {
+		version = unloadedDbq.QueueKey().BuildId()
+	}
+
 	if version == "" {
 		// this is the default queue, unload the whole partition if it is not healthy
 		if pm.defaultQueue == unloadedDbq {

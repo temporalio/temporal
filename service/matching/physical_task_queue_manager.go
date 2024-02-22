@@ -132,14 +132,14 @@ type (
 		// DescribeTaskQueue returns information about the target task queue
 		DescribeTaskQueue(includeTaskQueueStatus bool) *matchingservice.DescribeTaskQueueResponse
 		String() string
-		DBQueue() *PhysicalTaskQueueKey
+		QueueKey() *PhysicalTaskQueueKey
 	}
 
 	// physicalTaskQueueManagerImpl manages a single DB-level (aka physical) task queue in memory
 	physicalTaskQueueManagerImpl struct {
 		status               int32
 		partitionMgr         *taskQueuePartitionManagerImpl
-		dbQueue              *PhysicalTaskQueueKey
+		queue              *PhysicalTaskQueueKey
 		config               *taskQueueConfig
 		db                   *taskQueueDB
 		taskWriter           *taskWriter
@@ -180,17 +180,17 @@ func withIDBlockAllocator(ibl idBlockAllocator) taskQueueManagerOpt {
 
 func newTaskQueueManager(
 	partitionMgr *taskQueuePartitionManagerImpl,
-	dbQueue *PhysicalTaskQueueKey,
+	queue *PhysicalTaskQueueKey,
 	opts ...taskQueueManagerOpt,
 ) (*physicalTaskQueueManagerImpl, error) {
 	e := partitionMgr.engine
 	config := partitionMgr.config
-	db := newTaskQueueDB(e.taskManager, dbQueue, e.logger)
-	logger := log.With(partitionMgr.logger, tag.WorkerBuildId(dbQueue.VersionSet()))
-	throttledLogger := log.With(partitionMgr.throttledLogger, tag.WorkerBuildId(dbQueue.VersionSet()))
+	db := newTaskQueueDB(e.taskManager, queue, e.logger)
+	logger := log.With(partitionMgr.logger, tag.WorkerBuildId(queue.VersionSet()))
+	throttledLogger := log.With(partitionMgr.throttledLogger, tag.WorkerBuildId(queue.VersionSet()))
 	taggedMetricsHandler := partitionMgr.taggedMetricsHandler.WithTags(
 		metrics.OperationTag(metrics.MatchingTaskQueueMgrScope),
-		metrics.WorkerBuildIdTag(dbQueue.VersionSet()))
+		metrics.WorkerBuildIdTag(queue.VersionSet()))
 	tlMgr := &physicalTaskQueueManagerImpl{
 		status:               common.DaemonStatusInitialized,
 		partitionMgr:         partitionMgr,
@@ -198,7 +198,7 @@ func newTaskQueueManager(
 		matchingClient:       e.matchingRawClient,
 		metricsHandler:       e.metricsHandler,
 		clusterMeta:          e.clusterMeta,
-		dbQueue:              dbQueue,
+		queue:              queue,
 		logger:               logger,
 		throttledLogger:      throttledLogger,
 		db:                   db,
@@ -223,9 +223,9 @@ func newTaskQueueManager(
 	tlMgr.taskReader = newTaskReader(tlMgr)
 
 	var fwdr *Forwarder
-	if !dbQueue.Partition().IsRoot() && dbQueue.Partition().Kind() != enumspb.TASK_QUEUE_KIND_STICKY {
+	if !queue.Partition().IsRoot() && queue.Partition().Kind() != enumspb.TASK_QUEUE_KIND_STICKY {
 		// Every DB Queue needs its own forwarder so that the throttles do not interfere
-		fwdr = newForwarder(&config.forwarderConfig, dbQueue.Partition().(*tqid.NormalPartition), e.matchingRawClient)
+		fwdr = newForwarder(&config.forwarderConfig, queue.Partition().(*tqid.NormalPartition), e.matchingRawClient)
 	}
 	tlMgr.matcher = newTaskMatcher(config, fwdr, tlMgr.taggedMetricsHandler)
 	for _, opt := range opts {
@@ -303,7 +303,7 @@ func (c *physicalTaskQueueManagerImpl) Stop() {
 // which is the usual meaning of "versioned task queue". These task queues are not interacted with directly outside of
 // a single matching node.
 func (c *physicalTaskQueueManagerImpl) managesSpecificVersionSet() bool {
-	return c.dbQueue.VersionSet() != ""
+	return c.queue.VersionSet() != ""
 }
 
 func (c *physicalTaskQueueManagerImpl) SetInitializedError(err error) {
@@ -389,7 +389,7 @@ func (c *physicalTaskQueueManagerImpl) PollTask(
 	c.currentPolls.Add(1)
 	defer c.currentPolls.Add(-1)
 
-	namespaceEntry, err := c.namespaceRegistry.GetNamespaceByID(c.dbQueue.NamespaceId())
+	namespaceEntry, err := c.namespaceRegistry.GetNamespaceByID(c.queue.NamespaceId())
 	if err != nil {
 		return nil, err
 	}
@@ -492,13 +492,13 @@ func (c *physicalTaskQueueManagerImpl) DescribeTaskQueue(includeTaskQueueStatus 
 
 func (c *physicalTaskQueueManagerImpl) String() string {
 	buf := new(bytes.Buffer)
-	if c.dbQueue.TaskType() == enumspb.TASK_QUEUE_TYPE_ACTIVITY {
+	if c.queue.TaskType() == enumspb.TASK_QUEUE_TYPE_ACTIVITY {
 		buf.WriteString("Activity")
 	} else {
 		buf.WriteString("Workflow")
 	}
 	rangeID := c.db.RangeID()
-	_, _ = fmt.Fprintf(buf, " task queue %v\n", c.dbQueue.PersistenceName())
+	_, _ = fmt.Fprintf(buf, " task queue %v\n", c.queue.PersistenceName())
 	_, _ = fmt.Fprintf(buf, "RangeID=%v\n", rangeID)
 	_, _ = fmt.Fprintf(buf, "TaskIDBlock=%+v\n", rangeIDToTaskIDBlock(rangeID, c.config.RangeSize))
 	_, _ = fmt.Fprintf(buf, "AckLevel=%v\n", c.taskAckManager.ackLevel)
@@ -533,8 +533,8 @@ func (c *physicalTaskQueueManagerImpl) completeTask(task *persistencespb.Allocat
 			c.logger.Error("Persistent store operation failure",
 				tag.StoreOperationStopTaskQueue,
 				tag.Error(err),
-				tag.WorkflowTaskQueueName(c.dbQueue.PersistenceName()),
-				tag.WorkflowTaskQueueType(c.dbQueue.TaskType()))
+				tag.WorkflowTaskQueueName(c.queue.PersistenceName()),
+				tag.WorkflowTaskQueueType(c.queue.TaskType()))
 			// Skip final update since persistence is having problems.
 			c.skipFinalUpdate.Store(true)
 			c.unloadFromPartitionManager()
@@ -616,12 +616,12 @@ func newChildContext(
 	return context.WithTimeout(parent, timeout)
 }
 
-func (c *physicalTaskQueueManagerImpl) DBQueue() *PhysicalTaskQueueKey {
-	return c.dbQueue
+func (c *physicalTaskQueueManagerImpl) QueueKey() *PhysicalTaskQueueKey {
+	return c.queue
 }
 
 func (c *physicalTaskQueueManagerImpl) callerInfoContext(ctx context.Context) context.Context {
-	ns, _ := c.namespaceRegistry.GetNamespaceName(c.dbQueue.NamespaceId())
+	ns, _ := c.namespaceRegistry.GetNamespaceName(c.queue.NamespaceId())
 	return headers.SetCallerInfo(ctx, headers.NewBackgroundCallerInfo(ns.String()))
 }
 
@@ -631,5 +631,5 @@ func (c *physicalTaskQueueManagerImpl) newIOContext() (context.Context, context.
 }
 
 func (c *physicalTaskQueueManagerImpl) unloadFromPartitionManager() {
-	c.partitionMgr.unloadDbQueue(c)
+	c.partitionMgr.unloadPhysicalQueue(c)
 }

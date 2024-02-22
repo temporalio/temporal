@@ -45,12 +45,12 @@ const (
 )
 
 type (
-	// PhysicalTaskQueueKey Each task queue partition corresponds to one or more "DB-level task queues", each of
-	// which has a distinct DB queue manager in memory in matching service, as well as a
+	// PhysicalTaskQueueKey Each task queue partition corresponds to one or more "physical" (aka DB-level) task queues,
+	// each of which has a distinct physicalTaskQueueManager in memory in matching service, as well as a
 	// distinct identity in persistence.
 	//
-	// DB task queues with a version set or build ID are called "versioned". The ones without a version set
-	// or build ID are called "unversioned". A DB queue cannot have both version set and build ID.
+	// Physical task queues with a version set or build ID are called "versioned". The ones without a version set
+	// or build ID are called "unversioned". A physical queue cannot have both version set and build ID.
 	PhysicalTaskQueueKey struct {
 		partition  tqid.Partition
 		versionSet string // version set id
@@ -63,28 +63,28 @@ var (
 	ErrInvalidPersistenceName = errors.New("invalid persistence name")
 )
 
-func (dbq *PhysicalTaskQueueKey) NamespaceId() namespace.ID {
-	return dbq.partition.TaskQueue().NamespaceId()
+func (q *PhysicalTaskQueueKey) NamespaceId() namespace.ID {
+	return q.partition.TaskQueue().NamespaceId()
 }
 
-func (dbq *PhysicalTaskQueueKey) TaskQueueFamily() *tqid.TaskQueueFamily {
-	return dbq.partition.TaskQueue().Family()
+func (q *PhysicalTaskQueueKey) TaskQueueFamily() *tqid.TaskQueueFamily {
+	return q.partition.TaskQueue().Family()
 }
 
-func (dbq *PhysicalTaskQueueKey) TaskType() enumspb.TaskQueueType {
-	return dbq.partition.TaskType()
+func (q *PhysicalTaskQueueKey) TaskType() enumspb.TaskQueueType {
+	return q.partition.TaskType()
 }
 
-func (dbq *PhysicalTaskQueueKey) Partition() tqid.Partition {
-	return dbq.partition
+func (q *PhysicalTaskQueueKey) Partition() tqid.Partition {
+	return q.partition
 }
 
-func (dbq *PhysicalTaskQueueKey) BuildId() string {
-	return dbq.buildId
+func (q *PhysicalTaskQueueKey) BuildId() string {
+	return q.buildId
 }
 
-func (dbq *PhysicalTaskQueueKey) VersionSet() string {
-	return dbq.versionSet
+func (q *PhysicalTaskQueueKey) VersionSet() string {
+	return q.versionSet
 }
 
 // UnversionedQueueKey returns the unversioned PhysicalTaskQueueKey of a task queue partition
@@ -122,19 +122,19 @@ func BuildIdQueueKey(p tqid.Partition, buildId string) *PhysicalTaskQueueKey {
 //
 //	with build ID: 		/_sys/<base name>/<build ID base64 URL encoded>#<partition id>
 //	with version set: 		/_sys/<base name>/<version set id>:<partition id>
-func (dbq *PhysicalTaskQueueKey) PersistenceName() string {
-	switch p := dbq.Partition().(type) {
+func (q *PhysicalTaskQueueKey) PersistenceName() string {
+	switch p := q.Partition().(type) {
 	case *tqid.StickyPartition:
 		return p.StickyName()
 	case *tqid.NormalPartition:
-		baseName := dbq.TaskQueueFamily().Name()
+		baseName := q.TaskQueueFamily().Name()
 
-		if len(dbq.versionSet) > 0 {
-			return nonRootPartitionPrefix + baseName + partitionDelimiter + dbq.versionSet + versionSetDelimiter + strconv.Itoa(p.PartitionId())
+		if len(q.versionSet) > 0 {
+			return nonRootPartitionPrefix + baseName + partitionDelimiter + q.versionSet + versionSetDelimiter + strconv.Itoa(p.PartitionId())
 		}
 
-		if len(dbq.buildId) > 0 {
-			encodedBuildId := base64.URLEncoding.EncodeToString([]byte(dbq.buildId))
+		if len(q.buildId) > 0 {
+			encodedBuildId := base64.URLEncoding.EncodeToString([]byte(q.buildId))
 			return nonRootPartitionPrefix + baseName + partitionDelimiter + encodedBuildId + buildIdDelimiter + strconv.Itoa(p.PartitionId())
 		}
 
@@ -206,6 +206,6 @@ func parseSuffix(persistenceName string, suffix string) (partition int, versionS
 	return partition, versionSet, buildId, err
 }
 
-func (dbq *PhysicalTaskQueueKey) IsVersioned() bool {
-	return dbq.versionSet != "" || dbq.buildId != ""
+func (q *PhysicalTaskQueueKey) IsVersioned() bool {
+	return q.versionSet != "" || q.buildId != ""
 }
