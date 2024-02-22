@@ -66,9 +66,9 @@ type (
 	taskWriter struct {
 		status       int32
 		tlMgr        *physicalTaskQueueManagerImpl
-		config   *taskQueueConfig
-		queue    *PhysicalTaskQueueKey
-		appendCh chan *writeTaskRequest
+		config       *taskQueueConfig
+		queue        *PhysicalTaskQueueKey
+		appendCh     chan *writeTaskRequest
 		taskIDBlock  taskIDBlock
 		maxReadLevel int64
 		logger       log.Logger

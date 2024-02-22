@@ -139,7 +139,7 @@ type (
 	physicalTaskQueueManagerImpl struct {
 		status               int32
 		partitionMgr         *taskQueuePartitionManagerImpl
-		queue              *PhysicalTaskQueueKey
+		queue                *PhysicalTaskQueueKey
 		config               *taskQueueConfig
 		db                   *taskQueueDB
 		taskWriter           *taskWriter
@@ -198,7 +198,7 @@ func newTaskQueueManager(
 		matchingClient:       e.matchingRawClient,
 		metricsHandler:       e.metricsHandler,
 		clusterMeta:          e.clusterMeta,
-		queue:              queue,
+		queue:                queue,
 		logger:               logger,
 		throttledLogger:      throttledLogger,
 		db:                   db,
