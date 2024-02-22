@@ -870,7 +870,7 @@ func (e *matchingEngineImpl) UpdateWorkerVersioningRules(
 		clk := data.GetClock()
 		if clk == nil {
 			clk = hlc.Zero(e.clusterMeta.GetClusterID())
-		} else {
+		} else if cT != nil {
 			prevCT, err := clk.Marshal()
 			if err != nil {
 				return nil, false, err
