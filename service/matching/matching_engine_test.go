@@ -2335,14 +2335,14 @@ func (s *matchingEngineSuite) TestGetTaskQueueUserData_LongPoll_Closes() {
 		})
 	}()
 
-	_, err := s.matchingEngine.GetTaskQueueUserData(ctx, &matchingservice.GetTaskQueueUserDataRequest{
+	res, err := s.matchingEngine.GetTaskQueueUserData(ctx, &matchingservice.GetTaskQueueUserDataRequest{
 		NamespaceId:   namespaceID.String(),
 		TaskQueue:     tq,
 		TaskQueueType: enumspb.TASK_QUEUE_TYPE_WORKFLOW,
 		WaitNewData:   true,
 	})
-	s.ErrorAs(err, new(*serviceerror.Unavailable))
-
+	s.NoError(err)
+	s.Nil(res.UserData)
 }
 
 func (s *matchingEngineSuite) TestUpdateUserData_FailsOnKnownVersionMismatch() {
