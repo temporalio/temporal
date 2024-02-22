@@ -1180,7 +1180,7 @@ func (s *scheduler) startWorkflow(
 	nominalTimeSec := start.NominalTime.AsTime().UTC().Truncate(time.Second)
 	workflowID := newWorkflow.WorkflowId
 	if start.OverlapPolicy == enumspb.SCHEDULE_OVERLAP_POLICY_ALLOW_ALL || s.tweakables.AlwaysAppendTimestamp {
-		if !s.StartScheduleArgs.Schedule.Action.GetKeepOriginalWorkflowId() {
+		if !s.StartScheduleArgs.Schedule.Policies.GetKeepOriginalWorkflowId() {
 			// must match AppendedTimestampForValidation
 			workflowID += "-" + nominalTimeSec.Format(time.RFC3339)
 		}

@@ -159,6 +159,8 @@ func (s *ScheduleFunctionalSuite) TestBasics() {
 					},
 				},
 			},
+		},
+		Policies: &schedulepb.SchedulePolicies{
 			KeepOriginalWorkflowId: true,
 		},
 	}
