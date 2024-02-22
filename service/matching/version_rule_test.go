@@ -167,6 +167,13 @@ func deleteAssignmentRule(data *persistencepb.VersioningData,
 	return DeleteAssignmentRule(clock, data, mkNewDeleteAssignmentReq(idx, force))
 }
 
+func deleteRedirectRule(source string,
+	data *persistencepb.VersioningData,
+	clock *hlc.Clock,
+) (*persistencepb.VersioningData, error) {
+	return DeleteCompatibleRedirectRule(clock, data, mkNewDeleteRedirectReq(source))
+}
+
 func testList(t *testing.T, expected, actual *persistencepb.VersioningData) {
 	resp := getListResp(t, actual)
 	activeAssignmentRules := getActiveAssignmentRules(expected.GetAssignmentRules())
@@ -486,6 +493,51 @@ func TestDeleteAssignmentRuleTestRequireUnfiltered(t *testing.T) {
 	assert.Equal(t, 0, len(getListResp(t, data).GetAssignmentRules()))
 }
 
+// Test inserting, deleting, and replacing rules and listing in between.
+func TestListAssignmentRules(t *testing.T) {
+	t.Parallel()
+	maxRules := 10
+	clock := hlc.Zero(1)
+	timesource := commonclock.NewRealTimeSource()
+	// make a version set with build id 0
+	initialData := mkInitialData(1, clock)
+
+	// insert 3x
+	rule1 := mkAssignmentRule("1", nil)
+	clock1 := hlc.Next(clock, timesource)
+	data, err := insertAssignmentRule(rule1, initialData, clock1, 0, maxRules)
+	assert.NoError(t, err)
+	rule2 := mkAssignmentRule("2", nil)
+	data, err = insertAssignmentRule(rule2, data, clock1, 1, maxRules)
+	assert.NoError(t, err)
+	rule3 := mkAssignmentRule("3", nil)
+	data, err = insertAssignmentRule(rule3, data, clock1, 2, maxRules)
+	assert.NoError(t, err)
+
+	// expect they're all in there, no ordering guarantee
+	rules := getListResp(t, data).GetAssignmentRules()
+	protoassert.ProtoEqual(t, rule1, rules[0].GetRule())
+	protoassert.ProtoEqual(t, rule2, rules[1].GetRule())
+	protoassert.ProtoEqual(t, rule3, rules[2].GetRule())
+
+	// replace a rule and expect that list shows the replacement
+	clock2 := hlc.Next(clock1, timesource)
+	rule10 := mkAssignmentRule("10", nil)
+	data, err = replaceAssignmentRule(rule10, data, clock2, 0, false)
+	assert.NoError(t, err)
+	protoassert.ProtoEqual(t, rule10, getListResp(t, data).GetAssignmentRules()[0].GetRule())
+
+	// delete a rule and expect that list shows the deletion
+	clock3 := hlc.Next(clock2, timesource)
+	data, err = deleteAssignmentRule(data, clock3, 0, false)
+	assert.NoError(t, err)
+	rules2 := make([]*taskqueuepb.BuildIdAssignmentRule, 0)
+	for _, r := range getListResp(t, data).GetAssignmentRules() {
+		rules2 = append(rules2, r.GetRule())
+	}
+	assert.NotContains(t, rules2, rule10)
+}
+
 // Test requirement that number of rules does not exceed max rules.
 func TestInsertRedirectRuleMaxRules(t *testing.T) {
 	t.Parallel()
@@ -744,16 +796,123 @@ func TestReplaceRedirectRuleNotFound(t *testing.T) {
 
 // Test deleting a redirect rule. List and check timestamp to confirm.
 func TestDeleteRedirectRuleSuccess(t *testing.T) {
+	t.Parallel()
+	maxRules := 10
+	clock := hlc.Zero(1)
+	timesource := commonclock.NewRealTimeSource()
+	// make a version set with build id 0
+	initialData := mkInitialData(1, clock)
+
+	// insert 3x to get three rules in there
+	rule1 := mkRedirectRule("1", "11", nil)
+	clock1 := hlc.Next(clock, timesource)
+	data, err := insertRedirectRule(rule1, initialData, clock1, maxRules)
+	assert.NoError(t, err)
+	rule2 := mkRedirectRule("2", "12", nil)
+	data, err = insertRedirectRule(rule2, data, clock1, maxRules)
+	assert.NoError(t, err)
+	rule3 := mkRedirectRule("3", "13", nil)
+	data, err = insertRedirectRule(rule3, data, clock1, maxRules)
+	assert.NoError(t, err)
+
+	clock2 := hlc.Next(clock1, timesource)
+	data, err = deleteRedirectRule("1", data, clock2)
+	assert.NoError(t, err)
+	deleted := getDeletedRedirectRuleBySrc("1", data)
+	assert.Equal(t, 1, len(deleted))
+	assert.Equal(t, clock2.GetWallClock(), deleted[0].GetDeleteTimestamp().GetWallClock())
+	assert.Equal(t, "1", deleted[0].GetRule().GetSourceBuildId())
+	assert.Equal(t, "11", deleted[0].GetRule().GetTargetBuildId())
+
+	clock3 := hlc.Next(clock2, timesource)
+	data, err = deleteRedirectRule("3", data, clock3)
+	assert.NoError(t, err)
+	deleted = getDeletedRedirectRuleBySrc("3", data)
+	assert.Equal(t, 1, len(deleted))
+	assert.Equal(t, clock2.GetWallClock(), deleted[0].GetDeleteTimestamp().GetWallClock())
+	assert.Equal(t, "3", deleted[0].GetRule().GetSourceBuildId())
+	assert.Equal(t, "13", deleted[0].GetRule().GetTargetBuildId())
+
 }
 
 // Test deleting a redirect rule that doesn't exist
 func TestDeleteRedirectRuleNotFound(t *testing.T) {
-	// should error
+	t.Parallel()
+	maxRules := 10
+	clock := hlc.Zero(1)
+	timesource := commonclock.NewRealTimeSource()
+	initialData := mkInitialData(0, clock)
+
+	// fails because no rules to delete
+	_, err := deleteRedirectRule("1", initialData, clock)
+	assert.Error(t, err)
+
+	// insert a rule to replace
+	rule1 := mkRedirectRule("1", "0", nil)
+	clock1 := hlc.Next(clock, timesource)
+	data, err := insertRedirectRule(rule1, initialData, clock1, maxRules)
+	assert.NoError(t, err)
+
+	// try again --> success
+	_, err = deleteRedirectRule("1", data, clock1)
+	assert.NoError(t, err)
 }
 
-// Test inserting, deleting, and replacing rules and listing in between. Also check raw data.
-func TestList(t *testing.T) {
-	// should error
+// Test inserting, deleting, and replacing rules and listing in between.
+func TestListRedirectRules(t *testing.T) {
+	t.Parallel()
+	maxRules := 10
+	clock := hlc.Zero(1)
+	timesource := commonclock.NewRealTimeSource()
+	// make a version set with build id 0
+	initialData := mkInitialData(1, clock)
+
+	// insert 3x to get three rules in there
+	rule1 := mkRedirectRule("1", "10", nil)
+	clock1 := hlc.Next(clock, timesource)
+	data, err := insertRedirectRule(rule1, initialData, clock1, maxRules)
+	assert.NoError(t, err)
+	rule2 := mkRedirectRule("2", "10", nil)
+	data, err = insertRedirectRule(rule2, data, clock1, maxRules)
+	assert.NoError(t, err)
+	rule3 := mkRedirectRule("3", "10", nil)
+	data, err = insertRedirectRule(rule3, data, clock1, maxRules)
+	assert.NoError(t, err)
+
+	// expect they're all in there, no ordering guarantee
+	rules := make([]*taskqueuepb.CompatibleBuildIdRedirectRule, 0)
+	for _, r := range getListResp(t, data).GetCompatibleRedirectRules() {
+		rules = append(rules, r.GetRule())
+	}
+	assert.Contains(t, rules, rule1)
+	assert.Contains(t, rules, rule2)
+	assert.Contains(t, rules, rule3)
+
+	// replace a rule
+	clock2 := hlc.Next(clock1, timesource)
+	rule1100 := mkRedirectRule("1", "100", nil)
+	data, err = replaceRedirectRule(rule1100, data, clock2)
+	assert.NoError(t, err)
+
+	// expect that list shows the replacement
+	rules = make([]*taskqueuepb.CompatibleBuildIdRedirectRule, 0)
+	for _, r := range getListResp(t, data).GetCompatibleRedirectRules() {
+		rules = append(rules, r.GetRule())
+	}
+	assert.NotContains(t, rules, rule1)
+	assert.Contains(t, rules, rule1100)
+
+	// delete a rule
+	clock3 := hlc.Next(clock2, timesource)
+	data, err = deleteRedirectRule("2", data, clock3)
+	assert.NoError(t, err)
+
+	// expect that list shows the deletion
+	rules = make([]*taskqueuepb.CompatibleBuildIdRedirectRule, 0)
+	for _, r := range getListResp(t, data).GetCompatibleRedirectRules() {
+		rules = append(rules, r.GetRule())
+	}
+	assert.NotContains(t, rules, rule2)
 }
 
 // eg.

@@ -194,7 +194,7 @@ func DeleteCompatibleRedirectRule(timestamp *hlc.Clock,
 	data = common.CloneProto(data)
 	source := req.GetSourceBuildId()
 	for _, r := range data.GetRedirectRules() {
-		if r.GetDeleteTimestamp() != nil && r.GetRule().GetSourceBuildId() == source {
+		if r.GetDeleteTimestamp() == nil && r.GetRule().GetSourceBuildId() == source {
 			r.DeleteTimestamp = timestamp
 			return data, nil // no need to check cycle because removing a node cannot create a cycle
 		}
