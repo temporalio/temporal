@@ -261,8 +261,10 @@ func (r *serviceResolver) AvailableMembers() []membership.HostInfo {
 func (r *serviceResolver) HandleEvent(
 	event events.Event,
 ) {
-	// We only care about RingChangedEvent
-	if _, ok := event.(events.RingChangedEvent); ok {
+	// We only about membership.ChangeEvent. Normally ringpop converts membership.ChangeEvent
+	// into events.RingChangedEvent when its internal hash ring changes, but since we construct
+	// our own hash rings with filtering, we have to handle the lower-level event ourselves.
+	if _, ok := event.(rpmembership.ChangeEvent); ok {
 		r.logger.Debug("Received a ring changed event")
 		// Note that we receive events asynchronously, possibly out of order.
 		// We cannot rely on the content of the event, rather we load everything

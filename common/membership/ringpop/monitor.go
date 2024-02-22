@@ -440,12 +440,15 @@ func (rpo *monitor) EvictSelfAt(asOf time.Time) (time.Duration, error) {
 	// set label for eviction time in the future
 	labels, err := rpo.rp.Labels()
 	if err != nil {
+		rpo.logger.Error("unable to set ringpop label", tag.Error(err), tag.Key(stopAtKey))
 		return 0, err
 	}
 	err = labels.Set(stopAtKey, strconv.FormatInt(asOf.Unix(), 10))
 	if err != nil {
+		rpo.logger.Error("unable to set ringpop label", tag.Error(err), tag.Key(stopAtKey))
 		return 0, err
 	}
+	rpo.logger.Info("evicting self at time", tag.Timestamp(asOf))
 	// Wait a couple more seconds after the stopAt time before actually leaving.
 	// This doesn't really matter but just spreads out the membership recomputation due to
 	// actually leaving by a little bit.

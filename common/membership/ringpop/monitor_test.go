@@ -26,6 +26,7 @@ package ringpop
 
 import (
 	"fmt"
+	"math/rand"
 	"testing"
 	"time"
 
@@ -142,10 +143,8 @@ func (s *RpoSuite) TestScheduledUpdates() {
 	testService := newTestCluster(s.T(), "rpm-test", 3, "127.0.0.1", "", serviceName, "127.0.0.1", joinTimes, false)
 	s.NotNil(testService, "Failed to create test service")
 
-	// in theory this should work if we observe any ring, but it seems unreliable if we observe
-	// one of the delayed-join ones.
-	rpm := testService.rings[1]
-	r, err := rpm.GetResolver(serviceName)
+	observer := rand.Intn(3)
+	r, err := testService.rings[observer].GetResolver(serviceName)
 	s.NoError(err)
 
 	waitAndCheckMembers := func(elements []string) {
@@ -153,7 +152,7 @@ func (s *RpoSuite) TestScheduledUpdates() {
 		s.Eventually(func() bool {
 			addrs = util.MapSlice(r.Members(), func(h membership.HostInfo) string { return h.GetAddress() })
 			return len(addrs) == len(elements)
-		}, 5*time.Second, 100*time.Millisecond)
+		}, 15*time.Second, 100*time.Millisecond)
 		s.ElementsMatch(elements, addrs)
 	}
 
@@ -167,6 +166,10 @@ func (s *RpoSuite) TestScheduledUpdates() {
 	s.Greater(time.Since(start), 3*time.Second)
 
 	// now remove two at scheduled times. we should see 1 disappear then 0.
+	observer = rand.Intn(3)
+	r, err = testService.rings[observer].GetResolver(serviceName)
+	s.NoError(err)
+
 	start = time.Now()
 	testService.rings[1].EvictSelfAt(start.Add(2 * time.Second))
 	testService.rings[0].EvictSelfAt(start.Add(4 * time.Second))
