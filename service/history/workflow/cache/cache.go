@@ -178,7 +178,8 @@ func (c *CacheImpl) GetOrCreateCurrentWorkflowExecution(
 		lockPriority,
 	)
 
-	metrics.HistoryWorkflowExecutionCacheLatency.With(handler).Record(time.Duration(time.Since(start).Nanoseconds()))
+	metrics.ContextCounterAdd(ctx, metrics.HistoryWorkflowExecutionCacheLatency.Name(),
+		time.Since(start).Nanoseconds())
 
 	return weReleaseFn, err
 }
@@ -213,7 +214,8 @@ func (c *CacheImpl) GetOrCreateWorkflowExecution(
 		lockPriority,
 	)
 
-	metrics.HistoryWorkflowExecutionCacheLatency.With(handler).Record(time.Duration(time.Since(start).Nanoseconds()))
+	metrics.ContextCounterAdd(ctx, metrics.HistoryWorkflowExecutionCacheLatency.Name(),
+		time.Since(start).Nanoseconds())
 
 	return weCtx, weReleaseFunc, err
 }
