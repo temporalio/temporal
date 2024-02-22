@@ -25,6 +25,7 @@ package matching
 import (
 	"cmp"
 	"context"
+	"errors"
 	"fmt"
 	"slices"
 	"sync"
@@ -39,7 +40,6 @@ import (
 	"go.temporal.io/server/common/clock"
 	hlc "go.temporal.io/server/common/clock/hybrid_logical_clock"
 	p "go.temporal.io/server/common/persistence"
-	"go.temporal.io/server/common/primitives"
 )
 
 const (
@@ -83,7 +83,8 @@ func newIncomingServiceManager(
 	persistence p.NexusIncomingServiceManager,
 ) *incomingNexusServiceManager {
 	return &incomingNexusServiceManager{
-		persistence: persistence,
+		persistence:         persistence,
+		tableVersionChanged: make(chan struct{}),
 	}
 }
 
@@ -120,7 +121,7 @@ func (m *incomingNexusServiceManager) CreateOrUpdateNexusIncomingService(
 		return nil, serviceerror.NewNotFound(fmt.Sprintf("error updating Nexus incoming service. service name %v not found", request.service.Name))
 	}
 	if request.service.Version != previous.Version {
-		return nil, serviceerror.NewInvalidArgument(fmt.Sprintf("nexus incoming service mismatch. received: %v expected %v", request.service.Version, previous.Version))
+		return nil, serviceerror.NewInvalidArgument(fmt.Sprintf("nexus incoming service version mismatch. received: %v expected %v", request.service.Version, previous.Version))
 	}
 
 	entry := &persistencepb.NexusIncomingServiceEntry{
@@ -147,8 +148,9 @@ func (m *incomingNexusServiceManager) CreateOrUpdateNexusIncomingService(
 	m.tableVersion++
 	m.servicesByName[entry.Service.Name] = entry
 	m.insertServiceLocked(entry)
-	close(m.tableVersionChanged)
+	ch := m.tableVersionChanged
 	m.tableVersionChanged = make(chan struct{})
+	close(ch)
 
 	return &matchingservice.CreateOrUpdateNexusIncomingServiceResponse{Entry: entry}, nil
 }
@@ -208,6 +210,10 @@ func (m *incomingNexusServiceManager) ListNexusIncomingServices(
 	ctx context.Context,
 	request *matchingservice.ListNexusIncomingServicesRequest,
 ) (*matchingservice.ListNexusIncomingServicesResponse, chan struct{}, error) {
+	if request.LastKnownTableVersion > m.tableVersion {
+		// indicates we may have lost table ownership, so need to reload from persistence
+		m.hasLoadedServices.Store(false)
+	}
 	if !m.hasLoadedServices.Load() {
 		if err := m.loadServices(ctx); err != nil {
 			return nil, nil, fmt.Errorf("error loading nexus incoming services cache: %w", err)
@@ -218,12 +224,12 @@ func (m *incomingNexusServiceManager) ListNexusIncomingServices(
 	defer m.RUnlock()
 
 	if request.LastKnownTableVersion != 0 && request.LastKnownTableVersion != m.tableVersion {
-		return nil, nil, fmt.Errorf("%w received: %v expected: %v", p.ErrNexusTableVersionConflict, request.LastKnownTableVersion, m.tableVersion)
+		return nil, nil, serviceerror.NewFailedPrecondition(fmt.Sprintf("nexus incoming service table version mismatch. received: %v expected %v", request.LastKnownTableVersion, m.tableVersion))
 	}
 
 	startIdx := 0
 	if request.NextPageToken != nil {
-		nextServiceID := primitives.UUIDString(request.NextPageToken)
+		nextServiceID := string(request.NextPageToken)
 
 		startFound := false
 		startIdx, startFound = slices.BinarySearchFunc(
@@ -234,7 +240,7 @@ func (m *incomingNexusServiceManager) ListNexusIncomingServices(
 			})
 
 		if !startFound {
-			return nil, nil, fmt.Errorf("could not find service indicated by nexus list incoming services next page token: %w", p.ErrNexusIncomingServiceNotFound)
+			return nil, nil, serviceerror.NewFailedPrecondition("could not find service indicated by nexus list incoming services next page token")
 		}
 	}
 
@@ -270,17 +276,25 @@ func (m *incomingNexusServiceManager) loadServices(ctx context.Context) error {
 	m.services = []*persistencepb.NexusIncomingServiceEntry{}
 	m.servicesByName = make(map[string]*persistencepb.NexusIncomingServiceEntry)
 
-	finishedPaging := false
 	var pageToken []byte
 
-	for ctx.Err() == nil && !finishedPaging {
+	for ctx.Err() == nil {
 		resp, err := m.persistence.ListNexusIncomingServices(ctx, &p.ListNexusIncomingServicesRequest{
 			LastKnownTableVersion: m.tableVersion,
 			NextPageToken:         pageToken,
 			PageSize:              loadServicesPageSize,
 		})
 		if err != nil {
-			return err
+			if errors.Is(err, p.ErrNexusTableVersionConflict) {
+				// indicates table was updated during paging, so reset and start from the beginning
+				pageToken = nil
+				m.tableVersion = 0
+				m.services = []*persistencepb.NexusIncomingServiceEntry{}
+				m.servicesByName = make(map[string]*persistencepb.NexusIncomingServiceEntry)
+				continue
+			} else {
+				return err
+			}
 		}
 
 		pageToken = resp.NextPageToken
@@ -290,9 +304,11 @@ func (m *incomingNexusServiceManager) loadServices(ctx context.Context) error {
 			m.servicesByName[entry.Service.Name] = entry
 		}
 
-		finishedPaging = pageToken == nil
+		if pageToken == nil {
+			break
+		}
 	}
 
-	m.hasLoadedServices.Store(finishedPaging)
+	m.hasLoadedServices.Store(pageToken == nil)
 	return ctx.Err()
 }

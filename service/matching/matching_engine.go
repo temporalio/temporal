@@ -1395,6 +1395,10 @@ func (e *matchingEngineImpl) DeleteNexusIncomingService(ctx context.Context, req
 
 func (e *matchingEngineImpl) ListNexusIncomingServices(ctx context.Context, request *matchingservice.ListNexusIncomingServicesRequest) (*matchingservice.ListNexusIncomingServicesResponse, error) {
 	if request.Wait {
+		if request.NextPageToken != nil {
+			return nil, serviceerror.NewInvalidArgument("request Wait=true and NextPageToken!=nil on ListNexusIncomingServices request. waiting is only allowed on first page")
+		}
+
 		var cancel context.CancelFunc
 		ctx, cancel = newChildContext(ctx, e.config.ListNexusIncomingServicesLongPollTimeout(), returnEmptyTaskTimeBudget)
 		defer cancel()

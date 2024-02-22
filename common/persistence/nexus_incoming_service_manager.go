@@ -119,9 +119,11 @@ func (m *nexusIncomingServiceManagerImpl) ListNexusIncomingServices(
 			m.logger.Error(fmt.Sprintf("error deserializing nexus incoming service with ID:%v", entry.ServiceID), tag.Error(err))
 			return nil, err
 		}
-		entries[i].Id = entry.ServiceID
-		entries[i].Version = entry.Version
-		entries[i].Service = service
+		entries[i] = &persistencepb.NexusIncomingServiceEntry{
+			Id:      entry.ServiceID,
+			Version: entry.Version,
+			Service: service,
+		}
 	}
 
 	result.NextPageToken = resp.NextPageToken
