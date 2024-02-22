@@ -26,6 +26,7 @@ package history
 
 import (
 	"context"
+	"fmt"
 	"time"
 
 	commonpb "go.temporal.io/api/common/v1"
@@ -154,6 +155,11 @@ func (t *transferQueueTaskExecutorBase) pushWorkflowTask(
 	if workflowTaskScheduleToStartTimeout > 0 {
 		sst = durationpb.New(workflowTaskScheduleToStartTimeout)
 	}
+
+	if task.WorkflowID == "WORKFLOW-ID" {
+		fmt.Println("[TQ]", "pushWorkflowTask")
+	}
+
 	_, err := t.matchingRawClient.AddWorkflowTask(ctx, &matchingservice.AddWorkflowTaskRequest{
 		NamespaceId: task.NamespaceID,
 		Execution: &commonpb.WorkflowExecution{

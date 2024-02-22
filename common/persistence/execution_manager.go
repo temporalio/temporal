@@ -92,6 +92,9 @@ func (m *executionManagerImpl) CreateWorkflowExecution(
 	ctx context.Context,
 	request *CreateWorkflowExecutionRequest,
 ) (*CreateWorkflowExecutionResponse, error) {
+	if request.NewWorkflowSnapshot.ExecutionInfo.WorkflowId == "WORKFLOW-ID" {
+		fmt.Println("[XMGR]", "CreateWorkflowExecution")
+	}
 
 	newSnapshot := request.NewWorkflowSnapshot
 	newWorkflowXDCKVs, newWorkflowNewEvents, newHistoryDiff, err := m.serializeWorkflowEventBatches(
@@ -150,6 +153,9 @@ func (m *executionManagerImpl) UpdateWorkflowExecution(
 	ctx context.Context,
 	request *UpdateWorkflowExecutionRequest,
 ) (*UpdateWorkflowExecutionResponse, error) {
+	if request.UpdateWorkflowMutation.ExecutionInfo.WorkflowId == "WORKFLOW-ID" {
+		fmt.Println("[XMGR]", "UpdateWorkflowExecution")
+	}
 
 	updateMutation := request.UpdateWorkflowMutation
 	newSnapshot := request.NewWorkflowSnapshot
@@ -395,6 +401,10 @@ func (m *executionManagerImpl) GetWorkflowExecution(
 	ctx context.Context,
 	request *GetWorkflowExecutionRequest,
 ) (*GetWorkflowExecutionResponse, error) {
+	if request.WorkflowID == "WORKFLOW-ID" {
+		fmt.Println("[XMGR]", "GetWorkflowExecution", request.RunID)
+	}
+
 	response, respErr := m.persistence.GetWorkflowExecution(ctx, request)
 	if respErr != nil && response == nil {
 		// try to utilize resp as much as possible, for RebuildMutableState API
@@ -763,6 +773,10 @@ func (m *executionManagerImpl) GetCurrentExecution(
 	ctx context.Context,
 	request *GetCurrentExecutionRequest,
 ) (*GetCurrentExecutionResponse, error) {
+	if request.WorkflowID == "WORKFLOW-ID" {
+		fmt.Println("[XMGR]", "GetCurrentExecution")
+	}
+
 	response, respErr := m.persistence.GetCurrentExecution(ctx, request)
 	if respErr != nil && response == nil {
 		// try to utilize resp as much as possible, for RebuildMutableState API

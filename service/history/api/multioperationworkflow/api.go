@@ -26,15 +26,19 @@ package multioperationworkflow
 
 import (
 	"context"
+	"fmt"
 
+	"go.temporal.io/api/serviceerror"
 	historyservicepb "go.temporal.io/server/api/historyservice/v1"
 	matchinservicepb "go.temporal.io/server/api/matchingservice/v1"
 	"go.temporal.io/server/common"
+	"go.temporal.io/server/common/definition"
+	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence/visibility/manager"
 	"go.temporal.io/server/service/history/api"
-	"go.temporal.io/server/service/history/api/startworkflow"
 	"go.temporal.io/server/service/history/api/updateworkflow"
 	"go.temporal.io/server/service/history/shard"
+	"go.temporal.io/server/service/history/workflow"
 )
 
 func Invoke(
@@ -45,25 +49,55 @@ func Invoke(
 	tokenSerializer common.TaskTokenSerializer,
 	visibilityManager manager.VisibilityManager,
 	matchingClient matchinservicepb.MatchingServiceClient,
-) (*historyservicepb.MultiOperationWorkflowExecutionResponse, error) {
-	startReq := req.Operations[0].GetStartWorkflow()
-	starter, err := startworkflow.NewStarter(
-		shardContext,
-		workflowConsistencyChecker,
-		tokenSerializer,
-		visibilityManager,
-		startReq,
-	)
+) (_ *historyservicepb.MultiOperationWorkflowExecutionResponse, retError error) {
+	// TODO: this assumes "Maybe Start"
+
+	namespaceEntry, err := api.GetActiveNamespace(shardContext, namespace.ID(req.GetNamespaceId()))
 	if err != nil {
 		return nil, err
 	}
-	startResp, err := starter.Invoke(ctx)
-	if err != nil {
+	namespaceID := namespaceEntry.ID()
+
+	startReq := req.Operations[0].GetStartWorkflow()
+
+	// grab current Workflow lease, if there is one
+	currentWorkflowLease, err := workflowConsistencyChecker.GetWorkflowLease(
+		ctx,
+		nil,
+		api.BypassMutableStateConsistencyPredicate,
+		definition.NewWorkflowKey(
+			string(namespaceID),
+			startReq.StartRequest.WorkflowId,
+			"",
+		),
+		workflow.LockPriorityHigh,
+	)
+	switch err.(type) {
+	case nil:
+		defer func() { currentWorkflowLease.GetReleaseFn()(retError) }()
+	case *serviceerror.NotFound:
+		currentWorkflowLease = nil
+	default:
 		return nil, err
 	}
 
+	var startResp *historyservicepb.StartWorkflowExecutionResponse
+	var updateResp *historyservicepb.UpdateWorkflowExecutionResponse
+	if currentWorkflowLease == nil {
+		// TODO
+	} else {
+		fmt.Println(">> UPSERT <<")
+	}
+
 	updateReq := req.Operations[1]
-	updateResp, err := updateworkflow.Invoke(ctx, updateReq.GetUpdateWorkflow(), shardContext, workflowConsistencyChecker, matchingClient)
+	updateResp, err = updateworkflow.Invoke(
+		ctx,
+		updateReq.GetUpdateWorkflow(),
+		shardContext,
+		workflowConsistencyChecker,
+		currentWorkflowLease,
+		matchingClient,
+	)
 	if err != nil {
 		return nil, err
 	}

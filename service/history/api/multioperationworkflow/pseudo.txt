@@ -1,0 +1,9 @@
+# maybe_start
+def batch_api_handler(request):
+    start = request[0]
+    update = request[1]
+
+    wfId = start.workflow_id
+    # 
+    doStart(start)
+    doUpdate(update)

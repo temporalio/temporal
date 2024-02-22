@@ -1987,10 +1987,16 @@ func (ms *MutableStateImpl) AddFirstWorkflowTaskScheduled(
 	}
 	scheduleEventID, err := ms.workflowTaskManager.AddFirstWorkflowTaskScheduled(startEvent, bypassTaskGeneration)
 	if err != nil {
+		if ms.executionInfo.WorkflowId == "WORKFLOW-ID" {
+			fmt.Println("[MS]", "AddFirstWorkflowTaskScheduled", "err", err)
+		}
 		return 0, err
 	}
 	if parentClock != nil {
 		ms.executionInfo.ParentClock = parentClock
+	}
+	if ms.executionInfo.WorkflowId == "WORKFLOW-ID" {
+		fmt.Println("[MS]", "AddFirstWorkflowTaskScheduled")
 	}
 	return scheduleEventID, nil
 }
@@ -2002,6 +2008,9 @@ func (ms *MutableStateImpl) AddWorkflowTaskScheduledEvent(
 	opTag := tag.WorkflowActionWorkflowTaskScheduled
 	if err := ms.checkMutability(opTag); err != nil {
 		return nil, err
+	}
+	if ms.executionInfo.WorkflowId == "WORKFLOW-ID" {
+		fmt.Println("[MS]", "AddWorkflowTaskScheduledEvent")
 	}
 	return ms.workflowTaskManager.AddWorkflowTaskScheduledEvent(bypassTaskGeneration, workflowTaskType)
 }

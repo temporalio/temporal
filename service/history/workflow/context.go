@@ -255,6 +255,9 @@ func (c *ContextImpl) LoadMutableState(ctx context.Context, shardContext shard.C
 	}
 
 	if c.MutableState == nil {
+		if c.workflowKey.WorkflowID == "WORKFLOW-ID" {
+			fmt.Println("[WCTX]", "GetWorkflowExecutionRequest", "RID", c.workflowKey.RunID)
+		}
 		response, err := getWorkflowExecution(ctx, shardContext, &persistence.GetWorkflowExecutionRequest{
 			ShardID:     shardContext.GetShardID(),
 			NamespaceID: c.workflowKey.NamespaceID,
@@ -347,7 +350,21 @@ func (c *ContextImpl) CreateWorkflowExecution(
 		createRequest,
 	)
 	if err != nil {
+		if c.workflowKey.WorkflowID == "WORKFLOW-ID" {
+			fmt.Println("[WCTX]", "CreateWorkflowExecutionRequest",
+				"RUN_ID", c.workflowKey.RunID,
+				"PREV_RUN_ID", prevRunID,
+				"err", err,
+			)
+		}
 		return err
+	} else {
+		if c.workflowKey.WorkflowID == "WORKFLOW-ID" {
+			fmt.Println("[WCTX]", "CreateWorkflowExecutionRequest",
+				"RUN_ID", c.workflowKey.RunID,
+				"PREV_RUN_ID", prevRunID,
+			)
+		}
 	}
 
 	engine, err := shardContext.GetEngine(ctx)

@@ -26,6 +26,7 @@ package history
 
 import (
 	"context"
+	"fmt"
 	"sync/atomic"
 	"time"
 
@@ -591,7 +592,7 @@ func (e *historyEngineImpl) UpdateWorkflowExecution(
 	ctx context.Context,
 	req *historyservice.UpdateWorkflowExecutionRequest,
 ) (*historyservice.UpdateWorkflowExecutionResponse, error) {
-	return updateworkflow.Invoke(ctx, req, e.shardContext, e.workflowConsistencyChecker, e.matchingClient)
+	return updateworkflow.Invoke(ctx, req, e.shardContext, e.workflowConsistencyChecker, nil, e.matchingClient)
 }
 
 func (e *historyEngineImpl) PollWorkflowExecutionUpdate(
@@ -778,6 +779,11 @@ func (e *historyEngineImpl) NotifyNewTasks(
 		}
 
 		if len(tasksByCategory) > 0 {
+			for _, t := range tasksByCategory {
+				if t.GetWorkflowID() == "WORKFLOW-ID" {
+					fmt.Println("[ENG]", "NotifyNewTasks", t.GetType())
+				}
+			}
 			e.queueProcessors[category].NotifyNewTasks(tasksByCategory)
 		}
 	}

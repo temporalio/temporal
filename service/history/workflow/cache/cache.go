@@ -28,6 +28,7 @@ package cache
 
 import (
 	"context"
+	"fmt"
 	"sync/atomic"
 	"time"
 	"unicode/utf8"
@@ -263,6 +264,10 @@ func (c *CacheImpl) lockWorkflowExecution(
 	cacheKey Key,
 	lockPriority workflow.LockPriority,
 ) error {
+	if workflowCtx.GetWorkflowKey().WorkflowID == "WORKFLOW-ID" {
+		fmt.Println("[CACHE]", "grab lock:", cacheKey.WorkflowKey.RunID)
+	}
+
 	// skip if there is no deadline
 	if deadline, ok := ctx.Deadline(); ok {
 		var cancel context.CancelFunc
@@ -286,6 +291,11 @@ func (c *CacheImpl) lockWorkflowExecution(
 		c.Release(cacheKey)
 		return consts.ErrResourceExhaustedBusyWorkflow
 	}
+
+	if workflowCtx.GetWorkflowKey().WorkflowID == "WORKFLOW-ID" {
+		fmt.Println("[CACHE]", "grabbed lock:", cacheKey.WorkflowKey.RunID)
+	}
+
 	return nil
 }
 
@@ -299,6 +309,10 @@ func (c *CacheImpl) makeReleaseFunc(
 
 	status := cacheNotReleased
 	return func(err error) {
+		if context.GetWorkflowKey().WorkflowID == "WORKFLOW-ID" {
+			fmt.Println("[CACHE]", "release:", cacheKey.WorkflowKey.RunID)
+		}
+
 		if atomic.CompareAndSwapInt32(&status, cacheNotReleased, cacheReleased) {
 			if rec := recover(); rec != nil {
 				context.Clear()

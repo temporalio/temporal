@@ -27,6 +27,7 @@ package startworkflow
 import (
 	"context"
 	"errors"
+	"fmt"
 
 	"github.com/google/uuid"
 	commonpb "go.temporal.io/api/common/v1"
@@ -162,14 +163,16 @@ func (s *Starter) requestEagerStart() bool {
 func (s *Starter) Invoke(
 	ctx context.Context,
 ) (resp *historyservice.StartWorkflowExecutionResponse, retError error) {
+	if s.request.StartRequest.WorkflowId == "WORKFLOW-ID" {
+		fmt.Println("===== [API]", "Starter.Invoke")
+	}
+
 	request := s.request.StartRequest
 	if err := s.prepare(ctx); err != nil {
 		return nil, err
 	}
 
-	runID := uuid.NewString()
-
-	creationParams, err := s.createNewMutableState(ctx, request.GetWorkflowId(), runID)
+	creationParams, err := s.createNewMutableState(ctx, request.GetWorkflowId())
 	if err != nil {
 		return nil, err
 	}
@@ -186,8 +189,7 @@ func (s *Starter) Invoke(
 		return s.generateResponse(creationParams.runID, creationParams.workflowTaskInfo, extractHistoryEvents(creationParams.workflowEventBatches))
 	}
 	var currentWorkflowConditionFailedError *persistence.CurrentWorkflowConditionFailedError
-	if !errors.As(err, &currentWorkflowConditionFailedError) ||
-		len(currentWorkflowConditionFailedError.RunID) == 0 {
+	if !errors.As(err, &currentWorkflowConditionFailedError) || len(currentWorkflowConditionFailedError.RunID) == 0 {
 		return nil, err
 	}
 
@@ -213,7 +215,8 @@ func (s *Starter) lockCurrentWorkflowExecution(
 
 // createNewMutableState creates a new workflow context, and closes its mutable state transaction as snapshot.
 // It returns the creationContext which can later be used to insert into the executions table.
-func (s *Starter) createNewMutableState(ctx context.Context, workflowID string, runID string) (*creationParams, error) {
+func (s *Starter) createNewMutableState(ctx context.Context, workflowID string) (*creationParams, error) {
+	runID := uuid.NewString()
 	workflowLease, err := api.NewWorkflowWithSignal(
 		s.shardContext,
 		s.namespace,
@@ -273,22 +276,25 @@ func (s *Starter) handleConflict(
 	creationParams *creationParams,
 	currentWorkflowConditionFailed *persistence.CurrentWorkflowConditionFailedError,
 ) (*historyservice.StartWorkflowExecutionResponse, error) {
-	request := s.request.StartRequest
-	if currentWorkflowConditionFailed.RequestID == request.GetRequestId() {
+	if currentWorkflowConditionFailed.RequestID == s.request.StartRequest.GetRequestId() {
 		return s.respondToRetriedRequest(ctx, currentWorkflowConditionFailed.RunID)
 	}
+
 	if err := s.verifyNamespaceActive(creationParams, currentWorkflowConditionFailed); err != nil {
 		return nil, err
 	}
+
 	response, err := s.applyWorkflowIDReusePolicy(ctx, currentWorkflowConditionFailed, creationParams)
 	if err != nil {
 		return nil, err
 	} else if response != nil {
 		return response, nil
 	}
-	if err := s.createAsCurrent(ctx, creationParams, currentWorkflowConditionFailed); err != nil {
+
+	if err = s.createAsCurrent(ctx, creationParams, currentWorkflowConditionFailed); err != nil {
 		return nil, err
 	}
+
 	return s.generateResponse(creationParams.runID, creationParams.workflowTaskInfo, extractHistoryEvents(creationParams.workflowEventBatches))
 }
 
@@ -325,8 +331,8 @@ func (s *Starter) verifyNamespaceActive(creationParams *creationParams, currentW
 
 // applyWorkflowIDReusePolicy applies the workflow ID reuse policy in case a workflow start requests fails with a
 // duplicate execution.
-// At the time of this writing, the only possible action here is to terminate the current execution in case the start
-// request's ID reuse policy is TERMINATE_IF_RUNNING.
+// At the time of this writing, the only possible actions here are to terminate the current execution in case the start
+// request's ID reuse policy is TERMINATE_IF_RUNNING - or ignore the error for the policy SKIP_IF_RUNNING.
 // Returns non-nil response if an action was required and completed successfully resulting in a newly created execution.
 func (s *Starter) applyWorkflowIDReusePolicy(
 	ctx context.Context,
@@ -446,7 +452,7 @@ func (s *Starter) respondToRetriedRequest(
 // getMutableStateInfo gets the relevant mutable state information while getting the state for the given run from the
 // workflow cache and managing the cache lease.
 func (s *Starter) getMutableStateInfo(ctx context.Context, runID string) (*mutableStateInfo, error) {
-	// We techincally never want to create a new execution but in practice this should not happen.
+	// We technically never want to create a new execution but in practice this should not happen.
 	workflowContext, releaseFn, err := s.workflowConsistencyChecker.GetWorkflowCache().GetOrCreateWorkflowExecution(
 		ctx,
 		s.shardContext,
