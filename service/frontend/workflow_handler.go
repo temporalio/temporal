@@ -47,8 +47,10 @@ import (
 	updatepb "go.temporal.io/api/update/v1"
 	workflowpb "go.temporal.io/api/workflow/v1"
 	"go.temporal.io/api/workflowservice/v1"
+	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/health"
 	healthpb "google.golang.org/grpc/health/grpc_health_v1"
+	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/types/known/durationpb"
 	"google.golang.org/protobuf/types/known/timestamppb"
 
@@ -3550,6 +3552,7 @@ func (wh *WorkflowHandler) StartBatchOperation(
 		Executions:      request.GetExecutions(),
 		Reason:          request.GetReason(),
 		BatchType:       operationType,
+		RPS:             float64(request.GetMaxOperationsPerSecond()),
 		TerminateParams: batcher.TerminateParams{},
 		CancelParams:    batcher.CancelParams{},
 		SignalParams:    signalParams,
@@ -4267,4 +4270,19 @@ func (wh *WorkflowHandler) unaliasCreateScheduleRequestSearchAttributes(request 
 	}
 
 	return newRequest, nil
+}
+
+// PollNexusTaskQueue implements Handler.
+func (*WorkflowHandler) PollNexusTaskQueue(context.Context, *workflowservice.PollNexusTaskQueueRequest) (*workflowservice.PollNexusTaskQueueResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method PollNexusTaskQueue not implemented")
+}
+
+// RespondNexusTaskCompleted implements Handler.
+func (*WorkflowHandler) RespondNexusTaskCompleted(context.Context, *workflowservice.RespondNexusTaskCompletedRequest) (*workflowservice.RespondNexusTaskCompletedResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method RespondNexusTaskCompleted not implemented")
+}
+
+// RespondNexusTaskFailed implements Handler.
+func (*WorkflowHandler) RespondNexusTaskFailed(context.Context, *workflowservice.RespondNexusTaskFailedRequest) (*workflowservice.RespondNexusTaskFailedResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method RespondNexusTaskFailed not implemented")
 }

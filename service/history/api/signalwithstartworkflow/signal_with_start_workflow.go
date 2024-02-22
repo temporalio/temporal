@@ -89,7 +89,6 @@ func startAndSignalWorkflow(
 	runID := uuid.New().String()
 	// TODO(bergundy): Support eager workflow task
 	newWorkflowLease, err := api.NewWorkflowWithSignal(
-		ctx,
 		shard,
 		namespaceEntry,
 		workflowID,

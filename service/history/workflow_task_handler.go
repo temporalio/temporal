@@ -1316,7 +1316,6 @@ func (handler *workflowTaskHandlerImpl) handleRetry(
 	}
 
 	err = newMutableState.SetHistoryTree(
-		ctx,
 		newMutableState.GetExecutionInfo().WorkflowExecutionTimeout,
 		newMutableState.GetExecutionInfo().WorkflowRunTimeout,
 		newRunID,
@@ -1372,7 +1371,6 @@ func (handler *workflowTaskHandlerImpl) handleCron(
 	}
 
 	err = newMutableState.SetHistoryTree(
-		ctx,
 		newMutableState.GetExecutionInfo().WorkflowExecutionTimeout,
 		newMutableState.GetExecutionInfo().WorkflowRunTimeout,
 		newRunID,

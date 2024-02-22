@@ -215,7 +215,6 @@ func (s *Starter) lockCurrentWorkflowExecution(
 // It returns the creationContext which can later be used to insert into the executions table.
 func (s *Starter) createNewMutableState(ctx context.Context, workflowID string, runID string) (*creationParams, error) {
 	workflowLease, err := api.NewWorkflowWithSignal(
-		ctx,
 		s.shardContext,
 		s.namespace,
 		workflowID,
@@ -367,7 +366,6 @@ func (s *Starter) applyWorkflowIDReusePolicy(
 		prevExecutionUpdateAction,
 		func() (workflow.Context, workflow.MutableState, error) {
 			workflowLease, err := api.NewWorkflowWithSignal(
-				ctx,
 				s.shardContext,
 				s.namespace,
 				workflowID,

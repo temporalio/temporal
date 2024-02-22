@@ -29,8 +29,6 @@ import (
 	"sync"
 	"time"
 
-	"golang.org/x/exp/slices"
-
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/backoff"
 	"go.temporal.io/server/common/clock"
@@ -353,8 +351,6 @@ func (p *queueBase) checkpoint() {
 	metrics.QueueSliceCountHistogram.With(p.metricsHandler).Record(int64(p.monitor.GetTotalSliceCount()))
 	metrics.PendingTasksCounter.With(p.metricsHandler).Record(int64(p.monitor.GetTotalPendingTaskCount()))
 
-	p.updateReaderProgress(readerScopes)
-
 	// NOTE: Must range-complete task first.
 	// Otherwise, if state is updated first, later deletion fails and the shard gets reloaded.
 	// Some tasks will never be deleted.
@@ -377,52 +373,6 @@ func (p *queueBase) checkpoint() {
 
 	err := p.updateQueueState(tasksCompleted, readerScopes)
 	p.resetCheckpointTimer(err)
-}
-
-func (p *queueBase) updateReaderProgress(
-	readerScopes map[int64][]Scope,
-) {
-	// NOTE: A reader has progress = X means that reader will
-	// never try to load/process tasks with key < X.
-	// If a reader's first slice has scope start from Y,
-	// it's possible that later a slice containing a key < Y gets moved into it.
-	// In general, the minKey of a reader's first slice's scope is not it's progress.
-
-	// However, since slices only move from reader with lower ID to higher ID,
-	// progress of reader with ID X = min(
-	//     progress of reader with ID < X if exists,
-	//     minKey of the first slice's scope,
-	// )
-	ctx, cancel := newQueueIOContext()
-	defer cancel()
-
-	readerIDs := make([]int64, 0, len(readerScopes))
-	for readerID := range readerScopes {
-		readerIDs = append(readerIDs, readerID)
-	}
-	slices.Sort(readerIDs)
-
-	progress := tasks.MaximumKey
-	for _, readerID := range readerIDs {
-		scopes := readerScopes[readerID]
-
-		var minKey tasks.Key
-		if len(scopes) == 0 {
-			// this should only happen to default reader
-			minKey = p.nonReadableScope.Range.InclusiveMin
-		} else {
-			minKey = scopes[0].Range.InclusiveMin
-		}
-
-		progress = tasks.MinKey(progress, minKey)
-		p.shard.GetExecutionManager().UpdateHistoryTaskReaderProgress(ctx, &persistence.UpdateHistoryTaskReaderProgressRequest{
-			ShardID:                    p.shard.GetShardID(),
-			ShardOwner:                 p.shard.GetOwner(),
-			TaskCategory:               p.category,
-			ReaderID:                   readerID,
-			InclusiveMinPendingTaskKey: progress,
-		})
-	}
 }
 
 func (p *queueBase) updateShardRangeID() bool {
