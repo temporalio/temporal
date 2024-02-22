@@ -319,7 +319,7 @@ func runOneShotPoller(ctx context.Context, tqm physicalTaskQueueManager) (*goro.
 }
 
 func defaultTqId() *PhysicalTaskQueueKey {
-	return newTestUnversionedDBQueue(defaultNamespaceId, defaultRootTqID, enumspb.TASK_QUEUE_TYPE_WORKFLOW, 0)
+	return newTestUnversionedPhysicalQueueKey(defaultNamespaceId, defaultRootTqID, enumspb.TASK_QUEUE_TYPE_WORKFLOW, 0)
 }
 
 func mustCreateTestTaskQueueManager(

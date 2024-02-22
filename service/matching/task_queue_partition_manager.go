@@ -189,12 +189,12 @@ func (pm *taskQueuePartitionManagerImpl) AddTask(
 	ctx context.Context,
 	params addTaskParams,
 ) (bool, error) {
-	dbq, err := pm.getDbQueueForAdd(ctx, params.taskInfo.VersionDirective)
+	pq, err := pm.getPhysicalQueueForAdd(ctx, params.taskInfo.VersionDirective)
 	if err != nil {
 		return false, err
 	}
 
-	if pm.defaultQueue != dbq {
+	if pm.defaultQueue != pq {
 		// default queue should stay alive even if requests go to other queues
 		pm.defaultQueue.MarkAlive()
 	}
@@ -204,7 +204,7 @@ func (pm *taskQueuePartitionManagerImpl) AddTask(
 		pm.taggedMetricsHandler.Counter(metrics.NoRecentPollerTasksPerTaskQueueCounter.Name()).Record(1)
 	}
 
-	return dbq.AddTask(ctx, params)
+	return pq.AddTask(ctx, params)
 }
 
 func (pm *taskQueuePartitionManagerImpl) PollTask(
@@ -270,7 +270,7 @@ func (pm *taskQueuePartitionManagerImpl) DispatchQueryTask(
 	taskID string,
 	request *matchingservice.QueryWorkflowRequest,
 ) (*matchingservice.QueryWorkflowResponse, error) {
-	dbq, err := pm.getDbQueueForAdd(ctx, request.VersionDirective)
+	dbq, err := pm.getPhysicalQueueForAdd(ctx, request.VersionDirective)
 	if err != nil {
 		return nil, err
 	}
@@ -444,7 +444,7 @@ func (pm *taskQueuePartitionManagerImpl) loadDemotedSetIds(demotedSetIds []strin
 	}
 }
 
-func (pm *taskQueuePartitionManagerImpl) getDbQueueForAdd(
+func (pm *taskQueuePartitionManagerImpl) getPhysicalQueueForAdd(
 	ctx context.Context,
 	directive *taskqueuespb.TaskVersionDirective,
 ) (physicalTaskQueueManager, error) {

@@ -67,7 +67,7 @@ func TestUserData_LoadOnInit(t *testing.T) {
 	controller := gomock.NewController(t)
 	defer controller.Finish()
 	ctx := context.Background()
-	dbq := newTestUnversionedDBQueue(defaultNamespaceId, defaultRootTqID, enumspb.TASK_QUEUE_TYPE_WORKFLOW, 0)
+	dbq := newTestUnversionedPhysicalQueueKey(defaultNamespaceId, defaultRootTqID, enumspb.TASK_QUEUE_TYPE_WORKFLOW, 0)
 	tqCfg := defaultTqmTestOpts(controller)
 	tqCfg.dbq = dbq
 
@@ -100,7 +100,7 @@ func TestUserData_LoadOnInit_OnlyOnceWhenNoData(t *testing.T) {
 	controller := gomock.NewController(t)
 	defer controller.Finish()
 	ctx := context.Background()
-	dbq := newTestUnversionedDBQueue(defaultNamespaceId, defaultRootTqID, enumspb.TASK_QUEUE_TYPE_WORKFLOW, 0)
+	dbq := newTestUnversionedPhysicalQueueKey(defaultNamespaceId, defaultRootTqID, enumspb.TASK_QUEUE_TYPE_WORKFLOW, 0)
 	tqCfg := defaultTqmTestOpts(controller)
 	tqCfg.dbq = dbq
 
@@ -135,7 +135,7 @@ func TestUserData_FetchesOnInit(t *testing.T) {
 	controller := gomock.NewController(t)
 	defer controller.Finish()
 	ctx := context.Background()
-	dbq := newTestUnversionedDBQueue(defaultNamespaceId, defaultRootTqID, enumspb.TASK_QUEUE_TYPE_WORKFLOW, 1)
+	dbq := newTestUnversionedPhysicalQueueKey(defaultNamespaceId, defaultRootTqID, enumspb.TASK_QUEUE_TYPE_WORKFLOW, 1)
 	tqCfg := defaultTqmTestOpts(controller)
 	tqCfg.dbq = dbq
 
@@ -176,7 +176,7 @@ func TestUserData_FetchesAndFetchesAgain(t *testing.T) {
 	defer controller.Finish()
 	ctx := context.Background()
 	// note: using activity here
-	dbq := newTestUnversionedDBQueue(defaultNamespaceId, defaultRootTqID, enumspb.TASK_QUEUE_TYPE_ACTIVITY, 1)
+	dbq := newTestUnversionedPhysicalQueueKey(defaultNamespaceId, defaultRootTqID, enumspb.TASK_QUEUE_TYPE_ACTIVITY, 1)
 	tqCfg := defaultTqmTestOpts(controller)
 	tqCfg.dbq = dbq
 
@@ -245,7 +245,7 @@ func TestUserData_RetriesFetchOnUnavailable(t *testing.T) {
 	controller := gomock.NewController(t)
 	defer controller.Finish()
 	ctx := context.Background()
-	dbq := newTestUnversionedDBQueue(defaultNamespaceId, defaultRootTqID, enumspb.TASK_QUEUE_TYPE_WORKFLOW, 1)
+	dbq := newTestUnversionedPhysicalQueueKey(defaultNamespaceId, defaultRootTqID, enumspb.TASK_QUEUE_TYPE_WORKFLOW, 1)
 	tqCfg := defaultTqmTestOpts(controller)
 	tqCfg.dbq = dbq
 
@@ -318,7 +318,7 @@ func TestUserData_RetriesFetchOnUnImplemented(t *testing.T) {
 	controller := gomock.NewController(t)
 	defer controller.Finish()
 	ctx := context.Background()
-	dbq := newTestUnversionedDBQueue(defaultNamespaceId, defaultRootTqID, enumspb.TASK_QUEUE_TYPE_WORKFLOW, 1)
+	dbq := newTestUnversionedPhysicalQueueKey(defaultNamespaceId, defaultRootTqID, enumspb.TASK_QUEUE_TYPE_WORKFLOW, 1)
 	tqCfg := defaultTqmTestOpts(controller)
 	tqCfg.dbq = dbq
 
@@ -435,7 +435,7 @@ func TestUserData_FetchesActivityToWorkflow(t *testing.T) {
 	defer controller.Finish()
 	ctx := context.Background()
 	// note: activity root
-	dbq := newTestUnversionedDBQueue(defaultNamespaceId, defaultRootTqID, enumspb.TASK_QUEUE_TYPE_ACTIVITY, 0)
+	dbq := newTestUnversionedPhysicalQueueKey(defaultNamespaceId, defaultRootTqID, enumspb.TASK_QUEUE_TYPE_ACTIVITY, 0)
 	tqCfg := defaultTqmTestOpts(controller)
 	tqCfg.dbq = dbq
 
@@ -519,7 +519,7 @@ func TestUserData_UpdateOnNonRootFails(t *testing.T) {
 	defer controller.Finish()
 	ctx := context.Background()
 
-	subTqId := newTestUnversionedDBQueue(defaultNamespaceId, defaultRootTqID, enumspb.TASK_QUEUE_TYPE_WORKFLOW, 1)
+	subTqId := newTestUnversionedPhysicalQueueKey(defaultNamespaceId, defaultRootTqID, enumspb.TASK_QUEUE_TYPE_WORKFLOW, 1)
 	tqCfg := defaultTqmTestOpts(controller)
 	tqCfg.dbq = subTqId
 	subTq := createUserDataManager(t, controller, tqCfg)
@@ -529,7 +529,7 @@ func TestUserData_UpdateOnNonRootFails(t *testing.T) {
 	require.Error(t, err)
 	require.ErrorIs(t, err, errUserDataNoMutateNonRoot)
 
-	actTqId := newTestUnversionedDBQueue(defaultNamespaceId, defaultRootTqID, enumspb.TASK_QUEUE_TYPE_ACTIVITY, 0)
+	actTqId := newTestUnversionedPhysicalQueueKey(defaultNamespaceId, defaultRootTqID, enumspb.TASK_QUEUE_TYPE_ACTIVITY, 0)
 	actTqCfg := defaultTqmTestOpts(controller)
 	actTqCfg.dbq = actTqId
 	actTq := createUserDataManager(t, controller, actTqCfg)
@@ -540,6 +540,6 @@ func TestUserData_UpdateOnNonRootFails(t *testing.T) {
 	require.ErrorIs(t, err, errUserDataNoMutateNonRoot)
 }
 
-func newTestUnversionedDBQueue(namespaceId string, name string, taskType enumspb.TaskQueueType, partition int) *PhysicalTaskQueueKey {
+func newTestUnversionedPhysicalQueueKey(namespaceId string, name string, taskType enumspb.TaskQueueType, partition int) *PhysicalTaskQueueKey {
 	return UnversionedQueueKey(newTestTaskQueue(namespaceId, name, taskType).NormalPartition(partition))
 }

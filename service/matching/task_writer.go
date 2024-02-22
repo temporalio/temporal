@@ -66,9 +66,9 @@ type (
 	taskWriter struct {
 		status       int32
 		tlMgr        *physicalTaskQueueManagerImpl
-		config       *taskQueueConfig
-		dbQueue      *PhysicalTaskQueueKey
-		appendCh     chan *writeTaskRequest
+		config   *taskQueueConfig
+		queue    *PhysicalTaskQueueKey
+		appendCh chan *writeTaskRequest
 		taskIDBlock  taskIDBlock
 		maxReadLevel int64
 		logger       log.Logger
@@ -92,7 +92,7 @@ func newTaskWriter(
 		status:       common.DaemonStatusInitialized,
 		tlMgr:        tlMgr,
 		config:       tlMgr.config,
-		dbQueue:      tlMgr.dbQueue,
+		queue:        tlMgr.queue,
 		appendCh:     make(chan *writeTaskRequest, tlMgr.config.OutstandingTaskAppendsThreshold()),
 		taskIDBlock:  noTaskIDs,
 		maxReadLevel: noTaskIDs.start - 1,
@@ -213,8 +213,8 @@ func (w *taskWriter) appendTasks(
 		w.logger.Error("Persistent store operation failure",
 			tag.StoreOperationCreateTask,
 			tag.Error(err),
-			tag.WorkflowTaskQueueName(w.dbQueue.PersistenceName()),
-			tag.WorkflowTaskQueueType(w.dbQueue.TaskType()))
+			tag.WorkflowTaskQueueName(w.queue.PersistenceName()),
+			tag.WorkflowTaskQueueType(w.queue.TaskType()))
 		return nil, err
 	}
 	return resp, nil

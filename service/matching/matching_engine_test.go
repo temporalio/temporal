@@ -430,7 +430,7 @@ func (s *matchingEngineSuite) PollForTasksEmptyResultTest(callContext context.Co
 		Kind: enumspb.TASK_QUEUE_KIND_NORMAL,
 	}
 	var taskQueueType enumspb.TaskQueueType
-	tlID := newUnversionedRootDBQueue(namespaceId, tl, taskType)
+	tlID := newUnversionedRootQueueKey(namespaceId, tl, taskType)
 	const pollCount = 10
 	for i := 0; i < pollCount; i++ {
 		if taskType == enumspb.TASK_QUEUE_TYPE_ACTIVITY {
@@ -614,9 +614,9 @@ func (s *matchingEngineSuite) AddTasksTest(taskType enumspb.TaskQueueType, isFor
 
 	switch isForwarded {
 	case false:
-		s.EqualValues(taskCount, s.taskManager.getTaskCount(newUnversionedRootDBQueue(namespaceId, tl, taskType)))
+		s.EqualValues(taskCount, s.taskManager.getTaskCount(newUnversionedRootQueueKey(namespaceId, tl, taskType)))
 	case true:
-		s.EqualValues(0, s.taskManager.getTaskCount(newUnversionedRootDBQueue(namespaceId, tl, taskType)))
+		s.EqualValues(0, s.taskManager.getTaskCount(newUnversionedRootQueueKey(namespaceId, tl, taskType)))
 	}
 }
 
@@ -706,7 +706,7 @@ func (s *matchingEngineSuite) TestAddThenConsumeActivities() {
 
 	namespaceId := uuid.New()
 	tl := "makeToast"
-	tlID := newUnversionedRootDBQueue(namespaceId, tl, enumspb.TASK_QUEUE_TYPE_ACTIVITY)
+	tlID := newUnversionedRootQueueKey(namespaceId, tl, enumspb.TASK_QUEUE_TYPE_ACTIVITY)
 	s.taskManager.getQueueManager(tlID).rangeID = initialRangeID
 	s.matchingEngine.config.RangeSize = rangeSize // override to low number for the test
 
@@ -827,7 +827,7 @@ func (s *matchingEngineSuite) TestSyncMatchActivities() {
 
 	namespaceId := uuid.New()
 	tl := "makeToast"
-	dbq := newUnversionedRootDBQueue(namespaceId, tl, enumspb.TASK_QUEUE_TYPE_ACTIVITY)
+	dbq := newUnversionedRootQueueKey(namespaceId, tl, enumspb.TASK_QUEUE_TYPE_ACTIVITY)
 	s.matchingEngine.config.RangeSize = rangeSize // override to low number for the test
 	// So we can get snapshots
 	scope := tally.NewTestScope("test", nil)
@@ -1048,7 +1048,7 @@ func (s *matchingEngineSuite) concurrentPublishConsumeActivities(
 	var scheduledEventID int64 = 123
 	namespaceId := uuid.New()
 	tl := "makeToast"
-	dbq := newUnversionedRootDBQueue(namespaceId, tl, enumspb.TASK_QUEUE_TYPE_ACTIVITY)
+	dbq := newUnversionedRootQueueKey(namespaceId, tl, enumspb.TASK_QUEUE_TYPE_ACTIVITY)
 	s.matchingEngine.config.RangeSize = rangeSize // override to low number for the test
 
 	s.taskManager.getQueueManager(dbq).rangeID = initialRangeID
@@ -1215,7 +1215,7 @@ func (s *matchingEngineSuite) TestConcurrentPublishConsumeWorkflowTasks() {
 
 	namespaceId := uuid.New()
 	tl := "makeToast"
-	tlID := newUnversionedRootDBQueue(namespaceId, tl, enumspb.TASK_QUEUE_TYPE_WORKFLOW)
+	tlID := newUnversionedRootQueueKey(namespaceId, tl, enumspb.TASK_QUEUE_TYPE_WORKFLOW)
 	s.taskManager.getQueueManager(tlID).rangeID = initialRangeID
 	s.matchingEngine.config.RangeSize = rangeSize // override to low number for the test
 
@@ -1373,7 +1373,7 @@ func (s *matchingEngineSuite) TestMultipleEnginesActivitiesRangeStealing() {
 
 	namespaceId := uuid.New()
 	tl := "makeToast"
-	tlID := newUnversionedRootDBQueue(namespaceId, tl, enumspb.TASK_QUEUE_TYPE_ACTIVITY)
+	tlID := newUnversionedRootQueueKey(namespaceId, tl, enumspb.TASK_QUEUE_TYPE_ACTIVITY)
 	s.taskManager.getQueueManager(tlID).rangeID = initialRangeID
 	s.matchingEngine.config.RangeSize = rangeSize // override to low number for the test
 
@@ -1531,7 +1531,7 @@ func (s *matchingEngineSuite) TestMultipleEnginesWorkflowTasksRangeStealing() {
 
 	namespaceId := uuid.New()
 	tl := "makeToast"
-	tlID := newUnversionedRootDBQueue(namespaceId, tl, enumspb.TASK_QUEUE_TYPE_WORKFLOW)
+	tlID := newUnversionedRootQueueKey(namespaceId, tl, enumspb.TASK_QUEUE_TYPE_WORKFLOW)
 	s.taskManager.getQueueManager(tlID).rangeID = initialRangeID
 	s.matchingEngine.config.RangeSize = rangeSize // override to low number for the test
 
@@ -1673,7 +1673,7 @@ func (s *matchingEngineSuite) TestAddTaskAfterStartFailure() {
 
 	namespaceId := uuid.New()
 	tl := "makeToast"
-	dbq := newUnversionedRootDBQueue(namespaceId, tl, enumspb.TASK_QUEUE_TYPE_ACTIVITY)
+	dbq := newUnversionedRootQueueKey(namespaceId, tl, enumspb.TASK_QUEUE_TYPE_ACTIVITY)
 
 	taskQueue := &taskqueuepb.TaskQueue{
 		Name: tl,
@@ -1718,7 +1718,7 @@ func (s *matchingEngineSuite) TestTaskQueueManagerGetTaskBatch() {
 
 	namespaceId := uuid.New()
 	tl := "makeToast"
-	dbq := newUnversionedRootDBQueue(namespaceId, tl, enumspb.TASK_QUEUE_TYPE_ACTIVITY)
+	dbq := newUnversionedRootQueueKey(namespaceId, tl, enumspb.TASK_QUEUE_TYPE_ACTIVITY)
 
 	taskQueue := &taskqueuepb.TaskQueue{
 		Name: tl,
@@ -1846,7 +1846,7 @@ func (s *matchingEngineSuite) TestTaskQueueManagerGetTaskBatch_ReadBatchDone() {
 func (s *matchingEngineSuite) TestTaskQueueManager_CyclingBehavior() {
 	namespaceId := uuid.New()
 	tl := "makeToast"
-	dbq := newUnversionedRootDBQueue(namespaceId, tl, enumspb.TASK_QUEUE_TYPE_ACTIVITY)
+	dbq := newUnversionedRootQueueKey(namespaceId, tl, enumspb.TASK_QUEUE_TYPE_ACTIVITY)
 	config := defaultTestConfig()
 
 	for i := 0; i < 4; i++ {
@@ -1872,7 +1872,7 @@ func (s *matchingEngineSuite) TestTaskExpiryAndCompletion() {
 
 	namespaceId := uuid.New()
 	tl := "task-expiry-completion-tl0"
-	dbq := newUnversionedRootDBQueue(namespaceId, tl, enumspb.TASK_QUEUE_TYPE_ACTIVITY)
+	dbq := newUnversionedRootQueueKey(namespaceId, tl, enumspb.TASK_QUEUE_TYPE_ACTIVITY)
 
 	taskQueue := &taskqueuepb.TaskQueue{
 		Name: tl,
@@ -2597,7 +2597,7 @@ var _ persistence.TaskManager = (*testTaskManager)(nil) // Asserts that interfac
 
 type testTaskManager struct {
 	sync.Mutex
-	queues map[dbTaskQueueKey]*testDBQueueManager
+	queues map[dbTaskQueueKey]*testPhysicalTaskQueueManager
 	logger log.Logger
 }
 
@@ -2612,7 +2612,7 @@ func getKey(dbq *PhysicalTaskQueueKey) dbTaskQueueKey {
 }
 
 func newTestTaskManager(logger log.Logger) *testTaskManager {
-	return &testTaskManager{queues: make(map[dbTaskQueueKey]*testDBQueueManager), logger: logger}
+	return &testTaskManager{queues: make(map[dbTaskQueueKey]*testPhysicalTaskQueueManager), logger: logger}
 }
 
 func (m *testTaskManager) GetName() string {
@@ -2622,7 +2622,7 @@ func (m *testTaskManager) GetName() string {
 func (m *testTaskManager) Close() {
 }
 
-func (m *testTaskManager) getQueueManager(queue *PhysicalTaskQueueKey) *testDBQueueManager {
+func (m *testTaskManager) getQueueManager(queue *PhysicalTaskQueueKey) *testPhysicalTaskQueueManager {
 	key := getKey(queue)
 	m.Lock()
 	defer m.Unlock()
@@ -2635,7 +2635,7 @@ func (m *testTaskManager) getQueueManager(queue *PhysicalTaskQueueKey) *testDBQu
 	return result
 }
 
-func newUnversionedRootDBQueue(namespaceId string, name string, taskType enumspb.TaskQueueType) *PhysicalTaskQueueKey {
+func newUnversionedRootQueueKey(namespaceId string, name string, taskType enumspb.TaskQueueType) *PhysicalTaskQueueKey {
 	return UnversionedQueueKey(newTestTaskQueue(namespaceId, name, taskType).RootPartition())
 }
 
@@ -2651,7 +2651,7 @@ func newTestTaskQueue(namespaceId string, name string, taskType enumspb.TaskQueu
 	return result.TaskQueue(taskType)
 }
 
-type testDBQueueManager struct {
+type testPhysicalTaskQueueManager struct {
 	sync.Mutex
 	queue            *PhysicalTaskQueueKey
 	rangeID          int64
@@ -2664,14 +2664,14 @@ type testDBQueueManager struct {
 	userData         *persistencespb.VersionedTaskQueueUserData
 }
 
-func (m *testDBQueueManager) RangeID() int64 {
+func (m *testPhysicalTaskQueueManager) RangeID() int64 {
 	m.Lock()
 	defer m.Unlock()
 	return m.rangeID
 }
 
-func newTestTaskQueueManager() *testDBQueueManager {
-	return &testDBQueueManager{tasks: treemap.NewWith(godsutils.Int64Comparator)}
+func newTestTaskQueueManager() *testPhysicalTaskQueueManager {
+	return &testPhysicalTaskQueueManager{tasks: treemap.NewWith(godsutils.Int64Comparator)}
 }
 
 func (m *testTaskManager) CreateTaskQueue(
@@ -2811,7 +2811,7 @@ func (m *testTaskManager) DeleteTaskQueue(
 ) error {
 	m.Lock()
 	defer m.Unlock()
-	q := newUnversionedRootDBQueue(request.TaskQueue.NamespaceID, request.TaskQueue.TaskQueueName, request.TaskQueue.TaskQueueType)
+	q := newUnversionedRootQueueKey(request.TaskQueue.NamespaceID, request.TaskQueue.TaskQueueName, request.TaskQueue.TaskQueueType)
 	delete(m.queues, getKey(q))
 	return nil
 }
