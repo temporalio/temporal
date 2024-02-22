@@ -32,6 +32,7 @@ import (
 
 	"go.temporal.io/server/api/matchingservice/v1"
 	persistencepb "go.temporal.io/server/api/persistence/v1"
+	p "go.temporal.io/server/common/persistence"
 )
 
 func (s *FunctionalSuite) TestCreateOrUpdateNexusIncomingService_Matching() {
@@ -265,21 +266,6 @@ func (s *FunctionalSuite) TestListNexusIncomingServices_Matching() {
 			},
 		},
 		{
-			name: "list nexus incoming services: first_page=true | wait=true | table_version=expected",
-			request: &matchingservice.ListNexusIncomingServicesRequest{
-				NextPageToken:         nil,
-				LastKnownTableVersion: tableVersion,
-				Wait:                  true,
-				PageSize:              2,
-			},
-			assertion: func(resp *matchingservice.ListNexusIncomingServicesResponse, err error) {
-				s.NoError(err)
-				s.Equal(tableVersion, resp.TableVersion)
-				s.Nil(resp.NextPageToken)
-				s.ProtoEqual(resp.Entries[0], servicesOrdered[2])
-			},
-		},
-		{
 			name: "list nexus incoming services: first_page=false | wait=true | table_version=expected",
 			request: &matchingservice.ListNexusIncomingServicesRequest{
 				NextPageToken:         nextPageToken,
@@ -290,6 +276,21 @@ func (s *FunctionalSuite) TestListNexusIncomingServices_Matching() {
 			assertion: func(resp *matchingservice.ListNexusIncomingServicesResponse, err error) {
 				var invalidErr *serviceerror.InvalidArgument
 				s.ErrorAs(err, &invalidErr)
+			},
+		},
+		{
+			name: "list nexus incoming services: first_page=true | wait=true | table_version=expected",
+			request: &matchingservice.ListNexusIncomingServicesRequest{
+				NextPageToken:         nil,
+				LastKnownTableVersion: tableVersion,
+				Wait:                  true,
+				PageSize:              3,
+			},
+			assertion: func(resp *matchingservice.ListNexusIncomingServicesResponse, err error) {
+				s.NoError(err)
+				s.Equal(tableVersion+1, resp.TableVersion)
+				s.NotNil(resp.NextPageToken)
+				s.Len(resp.Entries, 3)
 			},
 		},
 	}
@@ -304,17 +305,7 @@ func (s *FunctionalSuite) TestListNexusIncomingServices_Matching() {
 				tc.assertion(resp, err)
 			}()
 			if tc.request.Wait && tc.request.NextPageToken == nil && tc.request.LastKnownTableVersion != 0 {
-				_, err := matchingClient.CreateOrUpdateNexusIncomingService(NewContext(), &matchingservice.CreateOrUpdateNexusIncomingServiceRequest{
-					Service: &nexus.IncomingService{
-						Version:   s0.Version,
-						Name:      s0.Service.Name,
-						Namespace: s.namespace,
-						TaskQueue: s.defaultTaskQueue().Name,
-					},
-				})
-				s.NoError(err)
-				s0.Version++
-				tableVersion++
+				s.createNexusIncomingService("new-service")
 			}
 			<-listReqDone
 		})
@@ -322,14 +313,53 @@ func (s *FunctionalSuite) TestListNexusIncomingServices_Matching() {
 }
 
 func (s *FunctionalSuite) TestListNexusIncomingServicesOrdering_Matching() {
-
 	// create some services
+	numServices := 40
+	for i := 0; i < numServices; i++ {
+		s.createNexusIncomingService(s.randomizeStr("test-service-name"))
+	}
 
-	// list from persistence manager-level
+	// list from persistence manager level
+	persistence := s.testCluster.testBase.NexusIncomingServiceManager
+	persistenceResp1, err := persistence.ListNexusIncomingServices(NewContext(), &p.ListNexusIncomingServicesRequest{
+		LastKnownTableVersion: int64(numServices),
+		PageSize:              numServices / 2,
+	})
+	s.NoError(err)
+	s.Len(persistenceResp1.Entries, numServices/2)
+	s.NotNil(persistenceResp1.NextPageToken)
+	persistenceResp2, err := persistence.ListNexusIncomingServices(NewContext(), &p.ListNexusIncomingServicesRequest{
+		LastKnownTableVersion: int64(numServices),
+		PageSize:              (numServices / 2) + 1,
+		NextPageToken:         persistenceResp1.NextPageToken,
+	})
+	s.NoError(err)
+	s.Len(persistenceResp2.Entries, numServices/2)
+	s.Nil(persistenceResp2.NextPageToken)
 
 	// list from matching level
+	matchingClient := s.testCluster.GetMatchingClient()
+	matchingResp1, err := matchingClient.ListNexusIncomingServices(NewContext(), &matchingservice.ListNexusIncomingServicesRequest{
+		LastKnownTableVersion: int64(numServices),
+		PageSize:              int32(numServices / 2),
+	})
+	s.NoError(err)
+	s.Len(matchingResp1.Entries, numServices/2)
+	s.NotNil(matchingResp1.NextPageToken)
+	matchingResp2, err := matchingClient.ListNexusIncomingServices(NewContext(), &matchingservice.ListNexusIncomingServicesRequest{
+		LastKnownTableVersion: int64(numServices),
+		PageSize:              int32(numServices/2) + 1,
+		NextPageToken:         matchingResp1.NextPageToken,
+	})
+	s.NoError(err)
+	s.Len(matchingResp2.Entries, numServices/2)
+	s.Nil(matchingResp2.NextPageToken)
 
-	// assert lists match
+	// assert list orders match
+	for i := 0; i < numServices/2; i++ {
+		s.ProtoEqual(persistenceResp1.Entries[i], matchingResp1.Entries[i])
+		s.ProtoEqual(persistenceResp2.Entries[i], matchingResp2.Entries[i])
+	}
 }
 
 func (s *FunctionalSuite) createNexusIncomingService(name string) *persistencepb.NexusIncomingServiceEntry {

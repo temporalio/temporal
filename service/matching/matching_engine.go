@@ -1394,10 +1394,15 @@ func (e *matchingEngineImpl) DeleteNexusIncomingService(ctx context.Context, req
 }
 
 func (e *matchingEngineImpl) ListNexusIncomingServices(ctx context.Context, request *matchingservice.ListNexusIncomingServicesRequest) (*matchingservice.ListNexusIncomingServicesResponse, error) {
+	lastKnownVersion := request.LastKnownTableVersion
+
 	if request.Wait {
 		if request.NextPageToken != nil {
 			return nil, serviceerror.NewInvalidArgument("request Wait=true and NextPageToken!=nil on ListNexusIncomingServices request. waiting is only allowed on first page")
 		}
+
+		// if waiting, send request with unknown table version so we get the newest view of the table
+		request.LastKnownTableVersion = 0
 
 		var cancel context.CancelFunc
 		ctx, cancel = newChildContext(ctx, e.config.ListNexusIncomingServicesLongPollTimeout(), returnEmptyTaskTimeBudget)
@@ -1410,7 +1415,7 @@ func (e *matchingEngineImpl) ListNexusIncomingServices(ctx context.Context, requ
 			return resp, err
 		}
 
-		if request.Wait && request.LastKnownTableVersion == resp.TableVersion {
+		if request.Wait && lastKnownVersion == resp.TableVersion {
 			// long-poll: wait for data to change/appear
 			select {
 			case <-ctx.Done():
