@@ -71,6 +71,7 @@ type (
 		BacklogNegligibleAge              dynamicconfig.DurationPropertyFnWithTaskQueueInfoFilters
 		MaxWaitForPollerBeforeFwd         dynamicconfig.DurationPropertyFnWithTaskQueueInfoFilters
 		QueryPollerUnavailableWindow      dynamicconfig.DurationPropertyFn
+		MembershipUnloadDelay             dynamicconfig.DurationPropertyFn
 
 		// Time to hold a poll request before returning an empty response if there are no tasks
 		LongPollExpirationInterval dynamicconfig.DurationPropertyFnWithTaskQueueInfoFilters
@@ -202,6 +203,7 @@ func NewConfig(
 		BacklogNegligibleAge:                  dc.GetDurationPropertyFilteredByTaskQueueInfo(dynamicconfig.MatchingBacklogNegligibleAge, 24*365*10*time.Hour),
 		MaxWaitForPollerBeforeFwd:             dc.GetDurationPropertyFilteredByTaskQueueInfo(dynamicconfig.MatchingMaxWaitForPollerBeforeFwd, 200*time.Millisecond),
 		QueryPollerUnavailableWindow:          dc.GetDurationProperty(dynamicconfig.QueryPollerUnavailableWindow, 20*time.Second),
+		MembershipUnloadDelay:                 dc.GetDurationProperty(dynamicconfig.MatchingMembershipUnloadDelay, 3*time.Second),
 
 		AdminNamespaceToPartitionDispatchRate:          dc.GetFloatPropertyFilteredByNamespace(dynamicconfig.AdminMatchingNamespaceToPartitionDispatchRate, 10000),
 		AdminNamespaceTaskqueueToPartitionDispatchRate: dc.GetFloatPropertyFilteredByTaskQueueInfo(dynamicconfig.AdminMatchingNamespaceTaskqueueToPartitionDispatchRate, 1000),

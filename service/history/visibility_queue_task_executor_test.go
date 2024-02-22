@@ -147,7 +147,7 @@ func (s *visibilityQueueTaskExecutorSuite) SetupTest() {
 	mockClusterMetadata.EXPECT().IsGlobalNamespaceEnabled().Return(true).AnyTimes()
 	mockClusterMetadata.EXPECT().ClusterNameForFailoverVersion(true, s.version).Return(mockClusterMetadata.GetCurrentClusterName()).AnyTimes()
 
-	s.workflowCache = wcache.NewHostLevelCache(s.mockShard.GetConfig())
+	s.workflowCache = wcache.NewHostLevelCache(s.mockShard.GetConfig(), metrics.NoopMetricsHandler)
 	s.logger = s.mockShard.GetLogger()
 
 	h := &historyEngineImpl{
@@ -533,7 +533,7 @@ func (s *visibilityQueueTaskExecutorSuite) TestProcessorDeleteExecution() {
 	})
 	s.Run("MultiCursorQueue", func() {
 		const highWatermark int64 = 5
-		s.NoError(s.mockShard.SetQueueState(tasks.CategoryVisibility, &persistencespb.QueueState{
+		s.NoError(s.mockShard.SetQueueState(tasks.CategoryVisibility, 1, &persistencespb.QueueState{
 			ReaderStates: nil,
 			ExclusiveReaderHighWatermark: &persistencespb.TaskKey{
 				TaskId:   highWatermark,

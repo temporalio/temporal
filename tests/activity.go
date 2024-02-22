@@ -378,10 +378,10 @@ func (s *FunctionalSuite) TestActivityRetry() {
 		s.Logger.Info("Processing workflow task:", tag.Counter(i))
 		_, err := poller.PollAndProcessWorkflowTask(WithRetries(1))
 		if err != nil {
-			s.printWorkflowHistory(s.namespace, &commonpb.WorkflowExecution{
+			s.PrintHistoryEvents(s.getHistory(s.namespace, &commonpb.WorkflowExecution{
 				WorkflowId: id,
 				RunId:      we.GetRunId(),
-			})
+			}))
 		}
 		s.NoError(err, "Poll for workflow task failed")
 

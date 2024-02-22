@@ -722,19 +722,19 @@ func (s *contextSuite) TestUpdateShardInfo_CallbackIsInvoked_EvenWhenNotPersiste
 
 	s.mockShardManager.EXPECT().UpdateShard(gomock.Any(), gomock.Any()).
 		Return(nil).Times(1)
-	err := s.mockShard.updateShardInfo(callback)
+	err := s.mockShard.updateShardInfo(0, callback)
 	s.NoError(err)
 
-	// No time has passed. This shouldn't touch the db
+	// No time has passed and too few tasks completed: shouldn't update the database
 	s.mockShardManager.EXPECT().UpdateShard(gomock.Any(), gomock.Any()).
 		Return(nil).Times(0)
-	err = s.mockShard.updateShardInfo(callback)
+	err = s.mockShard.updateShardInfo(0, callback)
 	s.NoError(err)
 
 	s.Equal(2, timesCalled)
 }
 
-func (s *contextSuite) TestUpdateShardInfo_PersistsAfterInterval() {
+func (s *contextSuite) TestUpdateShardInfo_PersistsAfterInterval_RegardlessOfTasksCompleted() {
 	s.mockShard.state = contextStateAcquired
 
 	// We only expect the first and third calls to updateShardInfo to hit the database
@@ -746,19 +746,79 @@ func (s *contextSuite) TestUpdateShardInfo_PersistsAfterInterval() {
 
 	s.mockShardManager.EXPECT().UpdateShard(gomock.Any(), gomock.Any()).
 		Return(nil).Times(1)
-	err := s.mockShard.updateShardInfo(callback)
+	err := s.mockShard.updateShardInfo(0, callback)
 	s.NoError(err)
 
 	// No time has passed: shouldn't update the database.
 	s.mockShardManager.EXPECT().UpdateShard(gomock.Any(), gomock.Any()).
 		Return(nil).Times(0)
-	err = s.mockShard.updateShardInfo(callback)
+	err = s.mockShard.updateShardInfo(0, callback)
 	s.NoError(err)
 
 	s.mockShardManager.EXPECT().UpdateShard(gomock.Any(), gomock.Any()).
 		Return(nil).Times(1)
 	s.timeSource.Update(time.Now().Add(s.mockShard.config.ShardUpdateMinInterval()))
-	err = s.mockShard.updateShardInfo(callback)
+	err = s.mockShard.updateShardInfo(0, callback)
+	s.NoError(err)
+	s.Equal(3, timesCalled)
+}
+
+func (s *contextSuite) TestUpdateShardInfo_PersistsBeforeInterval_WhenEnoughTasksCompleted() {
+	s.mockShard.state = contextStateAcquired
+	var timesCalled int
+	callback := func() {
+		timesCalled++
+	}
+	s.mockShardManager.EXPECT().UpdateShard(gomock.Any(), gomock.Any()).
+		Return(nil).Times(1)
+	tasksNecessaryForUpdate := s.mockShard.config.ShardUpdateMinTasksCompleted()
+	err := s.mockShard.updateShardInfo(tasksNecessaryForUpdate, callback)
+	s.NoError(err)
+
+	// No time has passed and too few tasks completed: shouldn't update
+	s.mockShardManager.EXPECT().UpdateShard(gomock.Any(), gomock.Any()).
+		Return(nil).Times(0)
+	err = s.mockShard.updateShardInfo(tasksNecessaryForUpdate-1, callback)
+	s.NoError(err)
+	s.Equal(2, timesCalled, "Should call provided callback even when not persisting updates")
+
+	s.mockShardManager.EXPECT().UpdateShard(gomock.Any(), gomock.Any()).
+		Return(nil).Times(1)
+	err = s.mockShard.updateShardInfo(1, callback)
+	s.NoError(err)
+	s.Equal(3, timesCalled)
+}
+
+func (s *contextSuite) TestUpdateShardInfo_OnlyPersistsAfterInterval_WhenTaskCheckingDisabled() {
+	s.mockShard.state = contextStateAcquired
+
+	// Anything less than one disables the task counting logic
+	s.mockShard.config.ShardUpdateMinTasksCompleted = func() int { return 0 }
+
+	var timesCalled int
+	callback := func() {
+		timesCalled++
+	}
+
+	// Initial call to set the last called time
+	s.mockShardManager.EXPECT().UpdateShard(gomock.Any(), gomock.Any()).
+		Return(nil).Times(1)
+	err := s.mockShard.updateShardInfo(0, callback)
+	s.NoError(err)
+	s.Equal(1, timesCalled)
+
+	// Not enough time passed and with task tracking disabled, this is ignored
+	s.mockShardManager.EXPECT().UpdateShard(gomock.Any(), gomock.Any()).
+		Return(nil).Times(0)
+	err = s.mockShard.updateShardInfo(10000000, callback)
+	s.NoError(err)
+	s.Equal(2, timesCalled, "Should call provided callback even when not persisting updates")
+
+	// Time passes
+	s.mockShardManager.EXPECT().UpdateShard(gomock.Any(), gomock.Any()).
+		Return(nil).Times(1)
+	s.timeSource.Update(time.Now().Add(s.mockShard.config.ShardUpdateMinInterval()))
+	err = s.mockShard.updateShardInfo(0, callback)
 	s.NoError(err)
 	s.Equal(3, timesCalled)
 }
@@ -768,7 +828,7 @@ func (s *contextSuite) TestUpdateShardInfo_FailsUnlessShardAcquired() {
 		contextStateInitialized, contextStateAcquiring, contextStateStopping, contextStateStopped,
 	} {
 		s.mockShard.state = state
-		s.Error(s.mockShard.updateShardInfo(func() {
+		s.Error(s.mockShard.updateShardInfo(0, func() {
 			s.Fail("Should not have called update callback when in state %v", state)
 		}))
 
@@ -778,7 +838,7 @@ func (s *contextSuite) TestUpdateShardInfo_FailsUnlessShardAcquired() {
 	s.mockShardManager.EXPECT().UpdateShard(gomock.Any(), gomock.Any()).
 		Return(nil).Times(1)
 	var called bool
-	s.NoError(s.mockShard.updateShardInfo(func() {
+	s.NoError(s.mockShard.updateShardInfo(0, func() {
 		called = true
 	}))
 	s.True(called)

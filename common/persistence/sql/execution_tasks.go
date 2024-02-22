@@ -41,28 +41,6 @@ import (
 	"go.temporal.io/server/service/history/tasks"
 )
 
-func (m *sqlExecutionStore) RegisterHistoryTaskReader(
-	_ context.Context,
-	_ *p.RegisterHistoryTaskReaderRequest,
-) error {
-	// no-op
-	return nil
-}
-
-func (m *sqlExecutionStore) UnregisterHistoryTaskReader(
-	_ context.Context,
-	_ *p.UnregisterHistoryTaskReaderRequest,
-) {
-	// no-op
-}
-
-func (m *sqlExecutionStore) UpdateHistoryTaskReaderProgress(
-	_ context.Context,
-	_ *p.UpdateHistoryTaskReaderProgressRequest,
-) {
-	// no-op
-}
-
 func (m *sqlExecutionStore) AddHistoryTasks(
 	ctx context.Context,
 	request *p.InternalAddHistoryTasksRequest,

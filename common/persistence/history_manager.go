@@ -159,18 +159,24 @@ func (m *executionManagerImpl) DeleteHistoryBranch(
 		BeginNodeId: GetBeginNodeID(branch),
 	})
 
-	// Get the entire history tree, so we know if any part of the target branch is referenced by other branches.
-	historyTreeResp, err := m.GetHistoryTree(ctx, &GetHistoryTreeRequest{
-		TreeID:  branch.TreeId,
-		ShardID: request.ShardID,
+	// Get the history tree containing the branch to be delelted,
+	// so we know if any part of the target branch is referenced by other branches.
+	historyTreeResp, err := m.persistence.GetHistoryTreeContainingBranch(ctx, &InternalGetHistoryTreeContainingBranchRequest{
+		BranchToken: request.BranchToken,
+		ShardID:     request.ShardID,
 	})
+	if err != nil {
+		return err
+	}
+
+	branchInfos, err := m.deserializeBranchInfos(historyTreeResp)
 	if err != nil {
 		return err
 	}
 
 	// usedBranches record branches referenced by others
 	usedBranches := map[string]int64{}
-	for _, branchInfo := range historyTreeResp.BranchInfos {
+	for _, branchInfo := range branchInfos {
 		if branchInfo.BranchId == branch.BranchId {
 			// skip the target branch
 			continue
@@ -314,29 +320,21 @@ func (m *executionManagerImpl) TrimHistoryBranch(
 	return &TrimHistoryBranchResponse{}, nil
 }
 
-// GetHistoryTree returns all branch information of a tree
-func (m *executionManagerImpl) GetHistoryTree(
-	ctx context.Context,
-	request *GetHistoryTreeRequest,
-) (*GetHistoryTreeResponse, error) {
-
-	resp, err := m.persistence.GetHistoryTree(ctx, request)
-	if err != nil {
-		return nil, err
-	}
-	branchInfos := make([]*persistencespb.HistoryBranch, 0, len(resp.TreeInfos))
-	for _, blob := range resp.TreeInfos {
+func (m *executionManagerImpl) deserializeBranchInfos(
+	historyTreeResp *InternalGetHistoryTreeContainingBranchResponse,
+) ([]*persistencespb.HistoryBranch, error) {
+	branchInfos := make([]*persistencespb.HistoryBranch, 0, len(historyTreeResp.TreeInfos))
+	for _, blob := range historyTreeResp.TreeInfos {
 		treeInfo, err := m.serializer.HistoryTreeInfoFromBlob(blob)
 		if err != nil {
 			return nil, err
 		}
 		branchInfos = append(branchInfos, treeInfo.BranchInfo)
 	}
-	return &GetHistoryTreeResponse{BranchInfos: branchInfos}, nil
+	return branchInfos, nil
 }
 
 func (m *executionManagerImpl) serializeAppendHistoryNodesRequest(
-	ctx context.Context,
 	request *AppendHistoryNodesRequest,
 ) (*InternalAppendHistoryNodesRequest, error) {
 	branch, err := m.GetHistoryBranchUtil().ParseHistoryBranchInfo(request.BranchToken)
@@ -498,7 +496,7 @@ func (m *executionManagerImpl) AppendHistoryNodes(
 	request *AppendHistoryNodesRequest,
 ) (*AppendHistoryNodesResponse, error) {
 
-	req, err := m.serializeAppendHistoryNodesRequest(ctx, request)
+	req, err := m.serializeAppendHistoryNodesRequest(request)
 
 	if err != nil {
 		return nil, err

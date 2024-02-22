@@ -622,17 +622,17 @@ func (mr *MockContextMockRecorder) SetCurrentTime(cluster, currentTime interface
 }
 
 // SetQueueState mocks base method.
-func (m *MockContext) SetQueueState(category tasks.Category, state *v13.QueueState) error {
+func (m *MockContext) SetQueueState(category tasks.Category, tasksCompleted int, state *v13.QueueState) error {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "SetQueueState", category, state)
+	ret := m.ctrl.Call(m, "SetQueueState", category, tasksCompleted, state)
 	ret0, _ := ret[0].(error)
 	return ret0
 }
 
 // SetQueueState indicates an expected call of SetQueueState.
-func (mr *MockContextMockRecorder) SetQueueState(category, state interface{}) *gomock.Call {
+func (mr *MockContextMockRecorder) SetQueueState(category, tasksCompleted, state interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SetQueueState", reflect.TypeOf((*MockContext)(nil).SetQueueState), category, state)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SetQueueState", reflect.TypeOf((*MockContext)(nil).SetQueueState), category, tasksCompleted, state)
 }
 
 // SetWorkflowExecution mocks base method.
@@ -1350,17 +1350,17 @@ func (mr *MockControllableContextMockRecorder) SetCurrentTime(cluster, currentTi
 }
 
 // SetQueueState mocks base method.
-func (m *MockControllableContext) SetQueueState(category tasks.Category, state *v13.QueueState) error {
+func (m *MockControllableContext) SetQueueState(category tasks.Category, tasksCompleted int, state *v13.QueueState) error {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "SetQueueState", category, state)
+	ret := m.ctrl.Call(m, "SetQueueState", category, tasksCompleted, state)
 	ret0, _ := ret[0].(error)
 	return ret0
 }
 
 // SetQueueState indicates an expected call of SetQueueState.
-func (mr *MockControllableContextMockRecorder) SetQueueState(category, state interface{}) *gomock.Call {
+func (mr *MockControllableContextMockRecorder) SetQueueState(category, tasksCompleted, state interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SetQueueState", reflect.TypeOf((*MockControllableContext)(nil).SetQueueState), category, state)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SetQueueState", reflect.TypeOf((*MockControllableContext)(nil).SetQueueState), category, tasksCompleted, state)
 }
 
 // SetWorkflowExecution mocks base method.

@@ -197,16 +197,6 @@ func (s *taskProcessorManagerSuite) TestCleanupReplicationTask_Cleanup() {
 		},
 	}, true)
 	s.taskProcessorManager.minTxAckedTaskID = ackedTaskID - 1
-	s.mockExecutionManager.EXPECT().UpdateHistoryTaskReaderProgress(
-		gomock.Any(),
-		&persistence.UpdateHistoryTaskReaderProgressRequest{
-			ShardID:                    s.shardID,
-			ShardOwner:                 s.shardOwner,
-			TaskCategory:               tasks.CategoryReplication,
-			ReaderID:                   common.DefaultQueueReaderID,
-			InclusiveMinPendingTaskKey: tasks.NewImmediateKey(ackedTaskID + 1),
-		},
-	).Times(1)
 	s.mockExecutionManager.EXPECT().RangeCompleteHistoryTasks(
 		gomock.Any(),
 		&persistence.RangeCompleteHistoryTasksRequest{

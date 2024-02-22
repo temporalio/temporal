@@ -45,6 +45,7 @@ import (
 	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/log"
+	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/primitives/timestamp"
@@ -111,7 +112,7 @@ func (s *activityReplicatorStateSuite) SetupTest() {
 		},
 		tests.NewDynamicConfig(),
 	)
-	s.workflowCache = wcache.NewHostLevelCache(s.mockShard.GetConfig()).(*wcache.CacheImpl)
+	s.workflowCache = wcache.NewHostLevelCache(s.mockShard.GetConfig(), metrics.NoopMetricsHandler).(*wcache.CacheImpl)
 
 	s.mockNamespaceCache = s.mockShard.Resource.NamespaceCache
 	s.mockExecutionMgr = s.mockShard.Resource.ExecutionMgr
