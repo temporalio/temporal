@@ -1432,5 +1432,5 @@ func InternalWorkflowIdRepresentation(originalWorkflowId string, startTime time.
 	if keepOriginalWorkflowId {
 		return originalWorkflowId
 	}
-	return originalWorkflowId + timeSec.Format(time.RFC3339)
+	return originalWorkflowId + "-" + timeSec.Format(time.RFC3339)
 }
