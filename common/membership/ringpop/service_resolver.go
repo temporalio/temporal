@@ -113,6 +113,9 @@ type (
 
 var _ membership.ServiceResolver = (*serviceResolver)(nil)
 
+// errMissingLabel is not a real error, just a sentinel value
+var errMissingLabel = errors.New("missing label")
+
 func newServiceResolver(
 	service primitives.ServiceName,
 	port int,
@@ -349,33 +352,39 @@ func (r *serviceResolver) getReachableMembers() ([]*hostInfo, int64, error) {
 
 	// Filter members by startAt/stopAt times and extract next scheduled event time. We only
 	// need to keep track of one event since we'll refresh at that time and find the next one.
+	// Note that nextEvent is mutated by the filter functions below.
 	nowUnix := time.Now().Unix()
 	nextEvent := int64(math.MaxInt64)
-	filteredMembers := make([]swim.Member, 0, len(members))
-	for _, member := range members {
-		if startAtStr, ok := member.Label(startAtKey); ok {
-			if startAt, err := strconv.ParseInt(startAtStr, 10, 64); err == nil {
-				if startAt > nowUnix {
-					nextEvent = min(nextEvent, startAt)
-					continue
-				}
-			}
+
+	// Filter by startAt
+	members = slices.DeleteFunc(members, func(member swim.Member) bool {
+		startAt, err := parseIntLabel(member, startAtKey)
+		if err != nil {
+			return false // ignore label if missing or can't parse
+		} else if startAt <= nowUnix {
+			return false // start time is in the past
 		}
-		if stopAtStr, ok := member.Label(stopAtKey); ok {
-			if stopAt, err := strconv.ParseInt(stopAtStr, 10, 64); err == nil {
-				if stopAt <= nowUnix {
-					continue
-				} else {
-					nextEvent = min(nextEvent, stopAt)
-				}
-			}
+		/// start time is in the future: schedule refresh at that time
+		nextEvent = min(nextEvent, startAt)
+		return true
+	})
+
+	// Filter by stopAt
+	members = slices.DeleteFunc(members, func(member swim.Member) bool {
+		stopAt, err := parseIntLabel(member, stopAtKey)
+		if err != nil {
+			return false // ignore label if missing or can't parse
+		} else if stopAt > nowUnix {
+			// stop time is in the future: schedule refresh at that time
+			nextEvent = min(nextEvent, stopAt)
+			return false
 		}
-		filteredMembers = append(filteredMembers, member)
-	}
+		return true // stop time is in the past
+	})
 
 	// Turn swim.Members into hostInfo
-	hosts := make([]*hostInfo, len(filteredMembers))
-	for i, member := range filteredMembers {
+	hosts := make([]*hostInfo, len(members))
+	for i, member := range members {
 		servicePort := r.port
 
 		// Each temporal service in the ring should advertise which port it has its gRPC listener
@@ -515,4 +524,13 @@ func buildBroadcastHostPort(listenerPeerInfo tchannel.LocalPeerInfo, broadcastAd
 	}
 
 	return listenerPeerInfo.HostPort, nil
+}
+
+// parseIntLabel returns the value of the given label as an integer.
+func parseIntLabel(member swim.Member, label string) (int64, error) {
+	str, ok := member.Label(label)
+	if !ok {
+		return 0, errMissingLabel
+	}
+	return strconv.ParseInt(str, 10, 64)
 }

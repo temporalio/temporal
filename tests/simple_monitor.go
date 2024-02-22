@@ -56,8 +56,12 @@ func (s *simpleMonitor) Start() {
 	}
 }
 
-func (s *simpleMonitor) EvictSelf(asOf time.Time) error {
+func (s *simpleMonitor) EvictSelf() error {
 	return nil
+}
+
+func (s *simpleMonitor) EvictSelfAt(asOf time.Time) (time.Duration, error) {
+	return 0, nil
 }
 
 func (s *simpleMonitor) GetResolver(service primitives.ServiceName) (membership.ServiceResolver, error) {

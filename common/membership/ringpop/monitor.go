@@ -61,6 +61,15 @@ const (
 
 	// Number of times we retry refreshing the bootstrap list and try to join the Ringpop cluster before giving up
 	maxBootstrapRetries = 5
+
+	// We're passing around absolute timestamps, so we have to worry about clock skew.
+	// With significant clock skew and scheduled start/leave times, nodes might disagree on who
+	// is in the ring. Note that both joining (startAt) and leaving (stopAt) labels will only
+	// be present on any node for a limited amount of time, so the duration of disagreement is
+	// bounded. To be totally sure, monitor enforces a hard limit on how far in the future it
+	// allows join/leave times to be. 15 seconds is enough to allow aligning to 10 seconds plus
+	// 3 seconds of propagation time buffer.
+	maxScheduledEventTimeSeconds = 15
 )
 
 type monitor struct {
@@ -167,11 +176,14 @@ func (rpo *monitor) Start() {
 		rpo.logger.Fatal("unable to get ringpop labels", tag.Error(err))
 	}
 
-	if !rpo.joinTime.IsZero() {
+	if until := time.Until(rpo.joinTime); until > 0 && until.Seconds() < maxScheduledEventTimeSeconds {
 		if err = labels.Set(startAtKey, strconv.FormatInt(rpo.joinTime.Unix(), 10)); err != nil {
 			rpo.logger.Fatal("unable to set ringpop label", tag.Error(err), tag.Key(startAtKey))
 		}
-		clearAfter := time.Until(rpo.joinTime.Add(backoff.Jitter(10*time.Second, 0.2)))
+		// Clean up the label eventually, but we don't really care when. Add a little jitter
+		// since each update will get propagated around, and join time will be aligned if
+		// multiple nodes come online around the same time.
+		clearAfter := until + backoff.Jitter(2*rpo.propagationTime, 0.2)
 		time.AfterFunc(clearAfter, rpo.clearStartAt)
 	}
 
@@ -416,22 +428,30 @@ func (rpo *monitor) Stop() {
 	rpo.rp.Destroy()
 }
 
-func (rpo *monitor) EvictSelf(asOf time.Time) error {
+func (rpo *monitor) EvictSelf() error {
+	return rpo.rp.SelfEvict()
+}
+
+func (rpo *monitor) EvictSelfAt(asOf time.Time) (time.Duration, error) {
 	until := time.Until(asOf)
-	if until <= 0 {
-		return rpo.rp.SelfEvict()
+	if until <= 0 || until.Seconds() >= maxScheduledEventTimeSeconds {
+		return 0, rpo.rp.SelfEvict()
 	}
 	// set label for eviction time in the future
 	labels, err := rpo.rp.Labels()
 	if err != nil {
-		return err
+		return 0, err
 	}
 	err = labels.Set(stopAtKey, strconv.FormatInt(asOf.Unix(), 10))
 	if err != nil {
-		return err
+		return 0, err
 	}
-	time.AfterFunc(until, func() { _ = rpo.rp.SelfEvict() })
-	return nil
+	// Wait a couple more seconds after the stopAt time before actually leaving.
+	// This doesn't really matter but just spreads out the membership recomputation due to
+	// actually leaving by a little bit.
+	leaveAfter := until + backoff.Jitter(rpo.propagationTime, 0.2)
+	time.AfterFunc(leaveAfter, func() { _ = rpo.rp.SelfEvict() })
+	return leaveAfter + rpo.propagationTime, nil
 }
 
 func (rpo *monitor) GetResolver(service primitives.ServiceName) (membership.ServiceResolver, error) {

@@ -67,10 +67,12 @@ type (
 		// EvictSelf evicts this member from the membership ring. After this method is
 		// called, other members will discover that this node is no longer part of the
 		// ring. This primitive is useful to carry out graceful host shutdown during deployments.
-		// If asOf is in the future, the change will take effect on all hosts at that absolute
-		// time. This process must stay alive until after that time. The resolution of asOf is
-		// whole seconds.
-		EvictSelf(asOf time.Time) error
+		EvictSelf() error
+		// EvictSelfAt is similar to EvictSelf but causes the change to take effect on all
+		// hosts at that absolute time (assuming it's in the future). This process should stay
+		// alive for at least the returned duration after calling this, so that all membership
+		// information can be propagated correctly. The resolution of asOf is whole seconds.
+		EvictSelfAt(asOf time.Time) (time.Duration, error)
 		// GetResolver returns the service resolver for a service in the cluster.
 		GetResolver(service primitives.ServiceName) (ServiceResolver, error)
 		// GetReachableMembers returns addresses of all members of the ring.

@@ -75,17 +75,32 @@ func (mr *MockMonitorMockRecorder) ApproximateMaxPropagationTime() *gomock.Call 
 }
 
 // EvictSelf mocks base method.
-func (m *MockMonitor) EvictSelf(asOf time.Time) error {
+func (m *MockMonitor) EvictSelf() error {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "EvictSelf", asOf)
+	ret := m.ctrl.Call(m, "EvictSelf")
 	ret0, _ := ret[0].(error)
 	return ret0
 }
 
 // EvictSelf indicates an expected call of EvictSelf.
-func (mr *MockMonitorMockRecorder) EvictSelf(asOf interface{}) *gomock.Call {
+func (mr *MockMonitorMockRecorder) EvictSelf() *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "EvictSelf", reflect.TypeOf((*MockMonitor)(nil).EvictSelf), asOf)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "EvictSelf", reflect.TypeOf((*MockMonitor)(nil).EvictSelf))
+}
+
+// EvictSelfAt mocks base method.
+func (m *MockMonitor) EvictSelfAt(asOf time.Time) (time.Duration, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "EvictSelfAt", asOf)
+	ret0, _ := ret[0].(time.Duration)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// EvictSelfAt indicates an expected call of EvictSelfAt.
+func (mr *MockMonitorMockRecorder) EvictSelfAt(asOf interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "EvictSelfAt", reflect.TypeOf((*MockMonitor)(nil).EvictSelfAt), asOf)
 }
 
 // GetReachableMembers mocks base method.

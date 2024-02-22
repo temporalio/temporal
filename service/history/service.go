@@ -122,7 +122,7 @@ func (s *Service) Start() {
 // Stop stops the service
 func (s *Service) Stop() {
 	s.logger.Info("ShutdownHandler: Evicting self from membership ring")
-	_ = s.membershipMonitor.EvictSelf(time.Time{})
+	_ = s.membershipMonitor.EvictSelf()
 
 	if delay := s.config.ShutdownDrainDuration(); delay > 0 {
 		s.logger.Info("ShutdownHandler: delaying for shutdown drain",

@@ -158,18 +158,18 @@ func (s *RpoSuite) TestScheduledUpdates() {
 	}
 
 	// we should see only 1 first, then 0,1, then 0,1,2
-	waitAndCheckMembers(testService.hostAddrs[1:2])
+	waitAndCheckMembers([]string{testService.hostAddrs[1]})
 
-	waitAndCheckMembers(testService.hostAddrs[0:2])
+	waitAndCheckMembers([]string{testService.hostAddrs[0], testService.hostAddrs[1]})
 	s.Greater(time.Since(start), 1*time.Second)
 
-	waitAndCheckMembers(testService.hostAddrs[0:3])
+	waitAndCheckMembers([]string{testService.hostAddrs[0], testService.hostAddrs[1], testService.hostAddrs[2]})
 	s.Greater(time.Since(start), 3*time.Second)
 
 	// now remove two at scheduled times. we should see 1 disappear then 0.
 	start = time.Now()
-	testService.rings[1].EvictSelf(start.Add(2 * time.Second))
-	testService.rings[0].EvictSelf(start.Add(4 * time.Second))
+	testService.rings[1].EvictSelfAt(start.Add(2 * time.Second))
+	testService.rings[0].EvictSelfAt(start.Add(4 * time.Second))
 
 	waitAndCheckMembers([]string{testService.hostAddrs[0], testService.hostAddrs[2]})
 	s.Greater(time.Since(start), 1*time.Second)
