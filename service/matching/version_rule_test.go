@@ -35,6 +35,7 @@ import (
 	"go.temporal.io/server/common/testing/protoassert"
 	"slices"
 	"testing"
+	"time"
 )
 
 func mkNewInsertAssignmentReq(rule *taskqueuepb.BuildIdAssignmentRule, ruleIdx int32) *workflowservice.UpdateWorkerVersioningRulesRequest_InsertBuildIdAssignmentRule {
@@ -913,6 +914,63 @@ func TestListRedirectRules(t *testing.T) {
 		rules = append(rules, r.GetRule())
 	}
 	assert.NotContains(t, rules, rule2)
+}
+
+func TestCleanupRedirectRuleTombstones(t *testing.T) {
+	t.Parallel()
+	maxRules := 10
+	clock := hlc.Zero(1)
+	initialData := mkInitialData(0, clock)
+
+	// start time one hour ago
+	timesource := commonclock.NewEventTimeSource().Update(time.Now().Add(-1 * time.Hour))
+
+	// insert 3x to get three rules in there
+	rule1 := mkRedirectRule("1", "10", nil)
+	clock1 := hlc.Next(clock, timesource)
+	data, err := insertRedirectRule(rule1, initialData, clock1, maxRules)
+	assert.NoError(t, err)
+	rule2 := mkRedirectRule("2", "10", nil)
+	data, err = insertRedirectRule(rule2, data, clock1, maxRules)
+	assert.NoError(t, err)
+	rule3 := mkRedirectRule("3", "10", nil)
+	data, err = insertRedirectRule(rule3, data, clock1, maxRules)
+	assert.NoError(t, err)
+
+	// delete "now," ~1 hour ago
+	clock4 := hlc.Next(clock, timesource)
+	data, err = deleteRedirectRule("1", data, clock4)
+	assert.NoError(t, err)
+	// delete 35 min later, ~25 min ago
+	timesource.Advance(35 * time.Minute)
+	clock5 := hlc.Next(clock, timesource)
+	data, err = deleteRedirectRule("2", data, clock5)
+	assert.NoError(t, err)
+	// delete 25 min later, ~now (real time.Now())
+	timesource.Advance(25 * time.Minute)
+	clock6 := hlc.Next(clock, timesource)
+	data, err = deleteRedirectRule("3", data, clock6)
+	assert.NoError(t, err)
+
+	// Remove data that was deleted > 30 min ago --> remove first rule
+	data = CleanupRuleTombstones(data, 30*time.Minute)
+	sources := make([]string, 0)
+	for _, r := range data.GetRedirectRules() {
+		sources = append(sources, r.GetRule().GetSourceBuildId())
+	}
+	assert.NotContains(t, sources, "1")
+	assert.Contains(t, sources, "2")
+	assert.Contains(t, sources, "3")
+
+	// Remove data that was deleted > 5 min ago --> remove second rule
+	data = CleanupRuleTombstones(data, 5*time.Minute)
+	sources = make([]string, 0)
+	for _, r := range data.GetRedirectRules() {
+		sources = append(sources, r.GetRule().GetSourceBuildId())
+	}
+	assert.NotContains(t, sources, "1")
+	assert.NotContains(t, sources, "2")
+	assert.Contains(t, sources, "3")
 }
 
 // eg.
