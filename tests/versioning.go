@@ -78,8 +78,8 @@ func (s *VersioningIntegSuite) SetupSuite() {
 		dynamicconfig.MatchingForwarderMaxChildrenPerNode:        partitionTreeDegree,
 		dynamicconfig.TaskQueuesPerBuildIdLimit:                  3,
 
-		dynamicconfig.AssignmentRuleLimitPerQueue:      3,
-		dynamicconfig.RedirectRuleLimitPerQueue:        3,
+		dynamicconfig.AssignmentRuleLimitPerQueue:      10,
+		dynamicconfig.RedirectRuleLimitPerQueue:        10,
 		dynamicconfig.MatchingDeletedRuleRetentionTime: 24 * time.Hour,
 
 		// Make sure we don't hit the rate limiter in tests
@@ -118,78 +118,102 @@ func (s *VersioningIntegSuite) TearDownTest() {
 	s.sdkClient.Close()
 }
 
-func (s *VersioningIntegSuite) TestAssignmentRuleInsert() {
+func (s *VersioningIntegSuite) TestAssignmentRuleInsertDeleteReplace() {
 	ctx := NewContext()
-	tq := "insert-assignment-rule-basic"
+	tq := "test-assignment-rule"
 
-	s.addNewUnfilteredAssignmentRule(ctx, tq, "1", nil)
+	s.insertAssignmentRule(ctx, tq, "1", 0, nil, true)
 
-	res, err := s.engine.ListWorkerVersioningRules(ctx, &workflowservice.ListWorkerVersioningRulesRequest{
-		Namespace: s.namespace,
-		TaskQueue: tq,
-	})
-	s.NoError(err)
-	s.NotNil(res)
+	res := s.listVersioningRules(ctx, tq)
 	s.Equal("1", res.AssignmentRules[0].GetRule().GetTargetBuildId())
 
 	cT1 := res.GetConflictToken()
-	s.addNewUnfilteredAssignmentRule(ctx, tq, "2", cT1)
-	res, err = s.engine.ListWorkerVersioningRules(ctx, &workflowservice.ListWorkerVersioningRulesRequest{
-		Namespace: s.namespace,
-		TaskQueue: tq,
-	})
-	s.NoError(err)
-	s.NotNil(res)
-	s.Equal("2", res.AssignmentRules[0].GetRule().GetTargetBuildId())
+	s.insertAssignmentRule(ctx, tq, "2", 0, cT1, true)
+	res = s.listVersioningRules(ctx, tq)
+	s.Equal("2", res.GetAssignmentRules()[0].GetRule().GetTargetBuildId())
 
 	cT2 := res.GetConflictToken()
 	s.NotEqual(cT1, cT2)
 
-	s.addNewUnfilteredAssignmentRule(ctx, tq, "3", cT2)
-	res, err = s.engine.ListWorkerVersioningRules(ctx, &workflowservice.ListWorkerVersioningRulesRequest{
-		Namespace: s.namespace,
-		TaskQueue: tq,
-	})
-	s.NoError(err)
-	s.NotNil(res)
-	s.Equal("3", res.AssignmentRules[0].GetRule().GetTargetBuildId())
+	s.insertAssignmentRule(ctx, tq, "3", 0, cT2, true)
+	res = s.listVersioningRules(ctx, tq)
+	s.Equal("3", res.GetAssignmentRules()[0].GetRule().GetTargetBuildId())
+
+	s.insertAssignmentRule(ctx, tq, "4", 0, cT1, false)
+	cT4 := s.insertAssignmentRule(ctx, tq, "4", 0, nil, true)
+
+	s.replaceAssignmentRule(ctx, tq, "20", 2, cT2, false)
+	s.replaceAssignmentRule(ctx, tq, "20", 2, cT4, true)
+	res = s.listVersioningRules(ctx, tq)
+	s.Equal("20", res.GetAssignmentRules()[2].GetRule().GetTargetBuildId())
+	cT5 := res.GetConflictToken()
+	prevHead := res.AssignmentRules[0].GetRule().GetTargetBuildId()
+
+	s.deleteAssignmentRule(ctx, tq, 0, cT4, false)
+	s.deleteAssignmentRule(ctx, tq, 0, cT5, true)
+	res = s.listVersioningRules(ctx, tq)
+	s.NotEqual(prevHead, res.GetAssignmentRules()[0].GetRule().GetTargetBuildId())
+
+	prevHead = res.AssignmentRules[0].GetRule().GetTargetBuildId()
+	s.deleteAssignmentRule(ctx, tq, 0, nil, true)
+	res = s.listVersioningRules(ctx, tq)
+	s.NotEqual(prevHead, res.GetAssignmentRules()[0].GetRule().GetTargetBuildId())
 }
 
-func (s *VersioningIntegSuite) TestAssignmentRuleInsert() {
+func (s *VersioningIntegSuite) TestRedirectRuleInsertDeleteReplace() {
 	ctx := NewContext()
-	tq := "insert-assignment-rule-basic"
+	tq := "test-redirect-rule"
 
-	s.addNewUnfilteredAssignmentRule(ctx, tq, "1", nil)
+	mkRedirectRulesMap := func(redirectRules []*taskqueuepb.TimestampedCompatibleBuildIdRedirectRule) map[string]string {
+		ret := make(map[string]string)
+		for _, r := range redirectRules {
+			rule := r.GetRule()
+			ret[rule.GetSourceBuildId()] = rule.GetTargetBuildId()
+		}
+		return ret
+	}
 
-	res, err := s.engine.ListWorkerVersioningRules(ctx, &workflowservice.ListWorkerVersioningRulesRequest{
-		Namespace: s.namespace,
-		TaskQueue: tq,
-	})
-	s.NoError(err)
-	s.NotNil(res)
-	s.Equal("1", res.AssignmentRules[0].GetRule().GetTargetBuildId())
+	s.insertRedirectRule(ctx, tq, "1", "0", nil, true)
+	res := s.listVersioningRules(ctx, tq)
+	rulesMap := mkRedirectRulesMap(res.GetCompatibleRedirectRules())
+	s.Contains(rulesMap, "1")
+	s.Equal(rulesMap["1"], "0")
 
 	cT1 := res.GetConflictToken()
-	s.addNewUnfilteredAssignmentRule(ctx, tq, "2", cT1)
-	res, err = s.engine.ListWorkerVersioningRules(ctx, &workflowservice.ListWorkerVersioningRulesRequest{
-		Namespace: s.namespace,
-		TaskQueue: tq,
-	})
-	s.NoError(err)
-	s.NotNil(res)
-	s.Equal("2", res.AssignmentRules[0].GetRule().GetTargetBuildId())
+	s.insertRedirectRule(ctx, tq, "2", "0", cT1, true)
+	res = s.listVersioningRules(ctx, tq)
+	rulesMap = mkRedirectRulesMap(res.GetCompatibleRedirectRules())
+	s.Contains(rulesMap, "1")
+	s.Contains(rulesMap, "2")
+	s.Equal(rulesMap["2"], "0")
 
 	cT2 := res.GetConflictToken()
-	s.NotEqual(cT1, cT2)
+	s.insertRedirectRule(ctx, tq, "3", "0", cT1, false)
+	s.insertRedirectRule(ctx, tq, "3", "0", cT2, true)
+	res = s.listVersioningRules(ctx, tq)
+	rulesMap = mkRedirectRulesMap(res.GetCompatibleRedirectRules())
+	s.Contains(rulesMap, "1")
+	s.Contains(rulesMap, "2")
+	s.Contains(rulesMap, "3")
+	s.Equal(rulesMap["3"], "0")
 
-	s.addNewUnfilteredAssignmentRule(ctx, tq, "3", cT2)
-	res, err = s.engine.ListWorkerVersioningRules(ctx, &workflowservice.ListWorkerVersioningRulesRequest{
-		Namespace: s.namespace,
-		TaskQueue: tq,
-	})
-	s.NoError(err)
-	s.NotNil(res)
-	s.Equal("3", res.AssignmentRules[0].GetRule().GetTargetBuildId())
+	cT3 := res.GetConflictToken()
+	s.replaceRedirectRule(ctx, tq, "3", "99", cT3, true)
+	res = s.listVersioningRules(ctx, tq)
+	rulesMap = mkRedirectRulesMap(res.GetCompatibleRedirectRules())
+	s.Contains(rulesMap, "1")
+	s.Contains(rulesMap, "2")
+	s.Contains(rulesMap, "3")
+	s.Equal(rulesMap["3"], "99")
+
+	cT4 := res.GetConflictToken()
+	s.deleteRedirectRule(ctx, tq, "3", cT3, false)
+	s.deleteRedirectRule(ctx, tq, "3", cT4, true)
+	res = s.listVersioningRules(ctx, tq)
+	rulesMap = mkRedirectRulesMap(res.GetCompatibleRedirectRules())
+	s.Contains(rulesMap, "1")
+	s.Contains(rulesMap, "2")
+	s.NotContains(rulesMap, "3")
 }
 
 func (s *VersioningIntegSuite) TestBasicVersionUpdate() {
@@ -1706,23 +1730,211 @@ func (s *VersioningIntegSuite) prefixed(buildId string) string {
 	return fmt.Sprintf("t%x:%s", 0xffff&farm.Hash32([]byte(s.T().Name())), buildId)
 }
 
-// addNewDefaultBuildId updates build id info on a task queue with a new build id in a new default set.
-func (s *VersioningIntegSuite) addNewUnfilteredAssignmentRule(ctx context.Context, tq, newBuildId string, conflictToken []byte) {
+// listVersioningRules lists rules and checks that the result is successful, returning the response.
+func (s *VersioningIntegSuite) listVersioningRules(
+	ctx context.Context, tq string) *workflowservice.ListWorkerVersioningRulesResponse {
+	res, err := s.engine.ListWorkerVersioningRules(ctx, &workflowservice.ListWorkerVersioningRulesRequest{
+		Namespace: s.namespace,
+		TaskQueue: tq,
+	})
+	s.NoError(err)
+	s.NotNil(res)
+	return res
+}
+
+// insertAssignmentRule replaces a new versioning assignment rule to the task queue user data.
+// It checks the response and returns the conflict token.
+func (s *VersioningIntegSuite) insertAssignmentRule(
+	ctx context.Context, tq, newBuildId string,
+	idx int32, conflictToken []byte, expectSuccess bool) []byte {
 	res, err := s.engine.UpdateWorkerVersioningRules(ctx, &workflowservice.UpdateWorkerVersioningRulesRequest{
 		Namespace:     s.namespace,
 		TaskQueue:     tq,
 		ConflictToken: conflictToken,
 		Operation: &workflowservice.UpdateWorkerVersioningRulesRequest_InsertAssignmentRule{
 			InsertAssignmentRule: &workflowservice.UpdateWorkerVersioningRulesRequest_InsertBuildIdAssignmentRule{
-				RuleIndex: 0,
+				RuleIndex: idx,
 				Rule: &taskqueuepb.BuildIdAssignmentRule{
 					TargetBuildId: newBuildId,
 				},
 			},
 		},
 	})
-	s.NoError(err)
-	s.NotNil(res)
+	if expectSuccess {
+		s.NoError(err)
+		s.NotNil(res)
+		return res.GetConflictToken()
+	} else {
+		s.Error(err)
+		s.Nil(res)
+		return nil
+	}
+}
+
+// replaceAssignmentRule replaces a new versioning assignment rule to the task queue user data.
+// It checks the response and returns the conflict token.
+func (s *VersioningIntegSuite) replaceAssignmentRule(
+	ctx context.Context, tq, newBuildId string,
+	idx int32, conflictToken []byte, expectSuccess bool) []byte {
+	res, err := s.engine.UpdateWorkerVersioningRules(ctx, &workflowservice.UpdateWorkerVersioningRulesRequest{
+		Namespace:     s.namespace,
+		TaskQueue:     tq,
+		ConflictToken: conflictToken,
+		Operation: &workflowservice.UpdateWorkerVersioningRulesRequest_ReplaceAssignmentRule{
+			ReplaceAssignmentRule: &workflowservice.UpdateWorkerVersioningRulesRequest_ReplaceBuildIdAssignmentRule{
+				RuleIndex: idx,
+				Rule: &taskqueuepb.BuildIdAssignmentRule{
+					TargetBuildId: newBuildId,
+				},
+			},
+		},
+	})
+	if expectSuccess {
+		s.NoError(err)
+		s.NotNil(res)
+		return res.GetConflictToken()
+	} else {
+		s.Error(err)
+		s.Nil(res)
+		return nil
+	}
+}
+
+// deleteAssignmentRule deletes the versioning assignment rule at a given index.
+// It checks the response and returns the conflict token.
+func (s *VersioningIntegSuite) deleteAssignmentRule(
+	ctx context.Context, tq string,
+	idx int32, conflictToken []byte, expectSuccess bool) []byte {
+	res, err := s.engine.UpdateWorkerVersioningRules(ctx, &workflowservice.UpdateWorkerVersioningRulesRequest{
+		Namespace:     s.namespace,
+		TaskQueue:     tq,
+		ConflictToken: conflictToken,
+		Operation: &workflowservice.UpdateWorkerVersioningRulesRequest_DeleteAssignmentRule{
+			DeleteAssignmentRule: &workflowservice.UpdateWorkerVersioningRulesRequest_DeleteBuildIdAssignmentRule{
+				RuleIndex: idx,
+			},
+		},
+	})
+	if expectSuccess {
+		s.NoError(err)
+		s.NotNil(res)
+		return res.GetConflictToken()
+	} else {
+		s.Error(err)
+		s.Nil(res)
+		return nil
+	}
+}
+
+// insertRedirectRule replaces a new versioning redirect rule to the task queue user data.
+// It checks the response and returns the conflict token.
+func (s *VersioningIntegSuite) insertRedirectRule(
+	ctx context.Context, tq, sourceBuildId, targetBuildId string,
+	conflictToken []byte, expectSuccess bool) []byte {
+	res, err := s.engine.UpdateWorkerVersioningRules(ctx, &workflowservice.UpdateWorkerVersioningRulesRequest{
+		Namespace:     s.namespace,
+		TaskQueue:     tq,
+		ConflictToken: conflictToken,
+		Operation: &workflowservice.UpdateWorkerVersioningRulesRequest_InsertCompatibleRedirectRule{
+			InsertCompatibleRedirectRule: &workflowservice.UpdateWorkerVersioningRulesRequest_AddCompatibleBuildIdRedirectRule{
+				Rule: &taskqueuepb.CompatibleBuildIdRedirectRule{
+					SourceBuildId: sourceBuildId,
+					TargetBuildId: targetBuildId,
+				},
+			},
+		},
+	})
+	if expectSuccess {
+		s.NoError(err)
+		s.NotNil(res)
+		return res.GetConflictToken()
+	} else {
+		s.Error(err)
+		s.Nil(res)
+		return nil
+	}
+}
+
+// replaceRedirectRule replaces a new versioning redirect rule to the task queue user data.
+// It checks the response and returns the conflict token.
+func (s *VersioningIntegSuite) replaceRedirectRule(
+	ctx context.Context, tq, sourceBuildId, targetBuildId string,
+	conflictToken []byte, expectSuccess bool) []byte {
+	res, err := s.engine.UpdateWorkerVersioningRules(ctx, &workflowservice.UpdateWorkerVersioningRulesRequest{
+		Namespace:     s.namespace,
+		TaskQueue:     tq,
+		ConflictToken: conflictToken,
+		Operation: &workflowservice.UpdateWorkerVersioningRulesRequest_ReplaceCompatibleRedirectRule{
+			ReplaceCompatibleRedirectRule: &workflowservice.UpdateWorkerVersioningRulesRequest_ReplaceCompatibleBuildIdRedirectRule{
+				Rule: &taskqueuepb.CompatibleBuildIdRedirectRule{
+					SourceBuildId: sourceBuildId,
+					TargetBuildId: targetBuildId,
+				},
+			},
+		},
+	})
+	if expectSuccess {
+		s.NoError(err)
+		s.NotNil(res)
+		return res.GetConflictToken()
+	} else {
+		s.Error(err)
+		s.Nil(res)
+		return nil
+	}
+}
+
+// deleteRedirectRule deletes the versioning redirect rule at a given index.
+// It checks the response and returns the conflict token.
+func (s *VersioningIntegSuite) deleteRedirectRule(
+	ctx context.Context, tq, sourceBuildId string,
+	conflictToken []byte, expectSuccess bool) []byte {
+	res, err := s.engine.UpdateWorkerVersioningRules(ctx, &workflowservice.UpdateWorkerVersioningRulesRequest{
+		Namespace:     s.namespace,
+		TaskQueue:     tq,
+		ConflictToken: conflictToken,
+		Operation: &workflowservice.UpdateWorkerVersioningRulesRequest_DeleteCompatibleRedirectRule{
+			DeleteCompatibleRedirectRule: &workflowservice.UpdateWorkerVersioningRulesRequest_DeleteCompatibleBuildIdRedirectRule{
+				SourceBuildId: sourceBuildId,
+			},
+		},
+	})
+	if expectSuccess {
+		s.NoError(err)
+		s.NotNil(res)
+		return res.GetConflictToken()
+	} else {
+		s.Error(err)
+		s.Nil(res)
+		return nil
+	}
+}
+
+// commitBuildId sends a CommitBuildId request for the given build ID
+// It checks the response and returns the conflict token.
+func (s *VersioningIntegSuite) commitBuildId(
+	ctx context.Context, tq, targetBuildId string, force bool,
+	conflictToken []byte, expectSuccess bool) []byte {
+	res, err := s.engine.UpdateWorkerVersioningRules(ctx, &workflowservice.UpdateWorkerVersioningRulesRequest{
+		Namespace:     s.namespace,
+		TaskQueue:     tq,
+		ConflictToken: conflictToken,
+		Operation: &workflowservice.UpdateWorkerVersioningRulesRequest_CommitBuildId_{
+			CommitBuildId: &workflowservice.UpdateWorkerVersioningRulesRequest_CommitBuildId{
+				TargetBuildId: targetBuildId,
+				Force:         force,
+			},
+		},
+	})
+	if expectSuccess {
+		s.NoError(err)
+		s.NotNil(res)
+		return res.GetConflictToken()
+	} else {
+		s.Error(err)
+		s.Nil(res)
+		return nil
+	}
 }
 
 // addNewDefaultBuildId updates build id info on a task queue with a new build id in a new default set.
