@@ -126,25 +126,21 @@ service MatchingService {
     // Replicate task queue user data across clusters, must be done via the owning node for updates in namespace.
     rpc ReplicateTaskQueueUserData(ReplicateTaskQueueUserDataRequest) returns (ReplicateTaskQueueUserDataResponse) {}
 
-    // Get a service by its name.
-    rpc	GetNexusService(GetNexusServiceRequest) returns (GetNexusServiceResponse) {}
-    // Optimistically create or update a Nexus service based on provided version.
-    // To update an existing service, get the current service record via the `GetNexusService` API, modify it and submit
-    // to this API.
+    // Optimistically create or update a Nexus incoming service based on provided version.
     // Set version to 0 to create a new service.
     // If this request is accepted, the input is considered the "current" state of this service at the time it was
     // persisted and the updated version is returned.
     // (-- api-linter: core::0133::response-message-name=disabled
-    //     aip.dev/not-precedent: CreateOrUpdateNexusService RPC doesn't follow Google API format. --)
+    //     aip.dev/not-precedent: CreateOrUpdateNexusIncomingService RPC doesn't follow Google API format. --)
     // (-- api-linter: core::0133::http-uri-parent=disabled
-    //     aip.dev/not-precedent: CreateOrUpdateNexusService RPC doesn't follow Google API format. --)
+    //     aip.dev/not-precedent: CreateOrUpdateNexusIncomingService RPC doesn't follow Google API format. --)
     // (-- api-linter: core::0133::method-signature=disabled
-    //     aip.dev/not-precedent: CreateOrUpdateNexusService RPC doesn't follow Google API format. --)
+    //     aip.dev/not-precedent: CreateOrUpdateNexusIncomingService RPC doesn't follow Google API format. --)
     // (-- api-linter: core::0133::request-resource-field=disabled
-    //     aip.dev/not-precedent: CreateOrUpdateNexusService RPC doesn't follow Google API format. --)
-    rpc	CreateOrUpdateNexusService(CreateOrUpdateNexusServiceRequest) returns (CreateOrUpdateNexusServiceResponse) {}
+    //     aip.dev/not-precedent: CreateOrUpdateNexusIncomingService RPC doesn't follow Google API format. --)
+    rpc	CreateOrUpdateNexusIncomingService(CreateOrUpdateNexusIncomingServiceRequest) returns (CreateOrUpdateNexusIncomingServiceResponse) {}
     // Delete a service by its name.
-    rpc	DeleteNexusService(DeleteNexusServiceRequest) returns (DeleteNexusServiceResponse) {}
+    rpc	DeleteNexusIncomingService(DeleteNexusIncomingServiceRequest) returns (DeleteNexusIncomingServiceResponse) {}
     // List all registered services.
-    rpc	ListNexusServices(ListNexusServicesRequest) returns (ListNexusServicesResponse) {}
+    rpc	ListNexusIncomingServices(ListNexusIncomingServicesRequest) returns (ListNexusIncomingServicesResponse) {}
 }

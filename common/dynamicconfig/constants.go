@@ -465,6 +465,8 @@ const (
 	MatchingMaxWaitForPollerBeforeFwd = "matching.maxWaitForPollerBeforeFwd"
 	// QueryPollerUnavailableWindow WF Queries are rejected after a while if no poller has been seen within the window
 	QueryPollerUnavailableWindow = "matching.queryPollerUnavailableWindow"
+	// MatchingListNexusIncomingServicesLongPollTimeout is the max length of long polls for ListNexusIncomingServices calls.
+	MatchingListNexusIncomingServicesLongPollTimeout = "matching.listNexusIncomingServicesLongPollTimeout"
 	// MatchingMembershipUnloadDelay is how long to wait to re-confirm loss of ownership before unloading a task queue.
 	// Set to zero to disable proactive unload.
 	MatchingMembershipUnloadDelay = "matching.membershipUnloadDelay"

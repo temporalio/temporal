@@ -58,10 +58,9 @@ var (
 		"/temporal.server.api.matchingservice.v1.MatchingService/RespondNexusTaskCompleted":              1,
 		"/temporal.server.api.matchingservice.v1.MatchingService/RespondNexusTaskFailed":                 1,
 		"/temporal.server.api.matchingservice.v1.MatchingService/DispatchNexusTask":                      1,
-		"/temporal.server.api.matchingservice.v1.MatchingService/GetNexusService":                        1,
-		"/temporal.server.api.matchingservice.v1.MatchingService/CreateOrUpdateNexusService":             1,
-		"/temporal.server.api.matchingservice.v1.MatchingService/ListNexusServices":                      1,
-		"/temporal.server.api.matchingservice.v1.MatchingService/DeleteNexusService":                     1,
+		"/temporal.server.api.matchingservice.v1.MatchingService/CreateOrUpdateNexusIncomingService":     1,
+		"/temporal.server.api.matchingservice.v1.MatchingService/ListNexusIncomingServices":              1,
+		"/temporal.server.api.matchingservice.v1.MatchingService/DeleteNexusIncomingService":             1,
 	}
 
 	APIPrioritiesOrdered = []int{0, 1}

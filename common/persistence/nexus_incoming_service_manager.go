@@ -38,14 +38,17 @@ var (
 	ErrNexusTableVersionConflict = &ConditionFailedError{
 		Msg: "nexus incoming services table version mismatch",
 	}
+	ErrNexusIncomingServiceAlreadyExists = &ConditionFailedError{
+		Msg: "nexus incoming service already exists",
+	}
 	ErrNexusIncomingServiceVersionConflict = &ConditionFailedError{
 		Msg: "nexus incoming service version mismatch",
 	}
 	ErrNexusIncomingServiceNotFound = &ConditionFailedError{
 		Msg: "nexus incoming service not found",
 	}
-	ErrNonPositiveListNexusIncomingServicesPageSize = &InvalidPersistenceRequestError{
-		Msg: "received non-positive page size for listing Nexus incoming services",
+	ErrNegativeListNexusIncomingServicesPageSize = &InvalidPersistenceRequestError{
+		Msg: "received negative page size for listing Nexus incoming services",
 	}
 )
 
@@ -96,7 +99,7 @@ func (m *nexusIncomingServiceManagerImpl) ListNexusIncomingServices(
 	request *ListNexusIncomingServicesRequest,
 ) (*ListNexusIncomingServicesResponse, error) {
 	if request.PageSize < 0 {
-		return nil, ErrNonPositiveListNexusIncomingServicesPageSize
+		return nil, ErrNegativeListNexusIncomingServicesPageSize
 	}
 
 	result := &ListNexusIncomingServicesResponse{}
@@ -116,9 +119,11 @@ func (m *nexusIncomingServiceManagerImpl) ListNexusIncomingServices(
 			m.logger.Error(fmt.Sprintf("error deserializing nexus incoming service with ID:%v", entry.ServiceID), tag.Error(err))
 			return nil, err
 		}
-		entries[i].Id = entry.ServiceID
-		entries[i].Version = entry.Version
-		entries[i].Service = service
+		entries[i] = &persistencepb.NexusIncomingServiceEntry{
+			Id:      entry.ServiceID,
+			Version: entry.Version,
+			Service: service,
+		}
 	}
 
 	result.NextPageToken = resp.NextPageToken
@@ -147,8 +152,7 @@ func (m *nexusIncomingServiceManagerImpl) CreateOrUpdateNexusIncomingService(
 		return nil, err
 	}
 
-	request.Entry.Version++
-	return &CreateOrUpdateNexusIncomingServiceResponse{Entry: request.Entry}, nil
+	return &CreateOrUpdateNexusIncomingServiceResponse{Version: request.Entry.Version + 1}, nil
 }
 
 func (m *nexusIncomingServiceManagerImpl) DeleteNexusIncomingService(

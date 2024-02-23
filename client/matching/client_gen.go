@@ -67,11 +67,11 @@ func (c *clientImpl) CancelOutstandingPoll(
 	return client.CancelOutstandingPoll(ctx, request, opts...)
 }
 
-func (c *clientImpl) CreateOrUpdateNexusService(
+func (c *clientImpl) CreateOrUpdateNexusIncomingService(
 	ctx context.Context,
-	request *matchingservice.CreateOrUpdateNexusServiceRequest,
+	request *matchingservice.CreateOrUpdateNexusIncomingServiceRequest,
 	opts ...grpc.CallOption,
-) (*matchingservice.CreateOrUpdateNexusServiceResponse, error) {
+) (*matchingservice.CreateOrUpdateNexusIncomingServiceResponse, error) {
 
 	client, err := c.getClientForTaskqueue("not-applicable", &taskqueuepb.TaskQueue{Name: "not-applicable"}, enumspb.TASK_QUEUE_TYPE_UNSPECIFIED)
 	if err != nil {
@@ -79,14 +79,14 @@ func (c *clientImpl) CreateOrUpdateNexusService(
 	}
 	ctx, cancel := c.createContext(ctx)
 	defer cancel()
-	return client.CreateOrUpdateNexusService(ctx, request, opts...)
+	return client.CreateOrUpdateNexusIncomingService(ctx, request, opts...)
 }
 
-func (c *clientImpl) DeleteNexusService(
+func (c *clientImpl) DeleteNexusIncomingService(
 	ctx context.Context,
-	request *matchingservice.DeleteNexusServiceRequest,
+	request *matchingservice.DeleteNexusIncomingServiceRequest,
 	opts ...grpc.CallOption,
-) (*matchingservice.DeleteNexusServiceResponse, error) {
+) (*matchingservice.DeleteNexusIncomingServiceResponse, error) {
 
 	client, err := c.getClientForTaskqueue("not-applicable", &taskqueuepb.TaskQueue{Name: "not-applicable"}, enumspb.TASK_QUEUE_TYPE_UNSPECIFIED)
 	if err != nil {
@@ -94,7 +94,7 @@ func (c *clientImpl) DeleteNexusService(
 	}
 	ctx, cancel := c.createContext(ctx)
 	defer cancel()
-	return client.DeleteNexusService(ctx, request, opts...)
+	return client.DeleteNexusIncomingService(ctx, request, opts...)
 }
 
 func (c *clientImpl) DescribeTaskQueue(
@@ -157,21 +157,6 @@ func (c *clientImpl) GetBuildIdTaskQueueMapping(
 	return client.GetBuildIdTaskQueueMapping(ctx, request, opts...)
 }
 
-func (c *clientImpl) GetNexusService(
-	ctx context.Context,
-	request *matchingservice.GetNexusServiceRequest,
-	opts ...grpc.CallOption,
-) (*matchingservice.GetNexusServiceResponse, error) {
-
-	client, err := c.getClientForTaskqueue("not-applicable", &taskqueuepb.TaskQueue{Name: "not-applicable"}, enumspb.TASK_QUEUE_TYPE_UNSPECIFIED)
-	if err != nil {
-		return nil, err
-	}
-	ctx, cancel := c.createContext(ctx)
-	defer cancel()
-	return client.GetNexusService(ctx, request, opts...)
-}
-
 func (c *clientImpl) GetTaskQueueUserData(
 	ctx context.Context,
 	request *matchingservice.GetTaskQueueUserDataRequest,
@@ -202,19 +187,19 @@ func (c *clientImpl) GetWorkerBuildIdCompatibility(
 	return client.GetWorkerBuildIdCompatibility(ctx, request, opts...)
 }
 
-func (c *clientImpl) ListNexusServices(
+func (c *clientImpl) ListNexusIncomingServices(
 	ctx context.Context,
-	request *matchingservice.ListNexusServicesRequest,
+	request *matchingservice.ListNexusIncomingServicesRequest,
 	opts ...grpc.CallOption,
-) (*matchingservice.ListNexusServicesResponse, error) {
+) (*matchingservice.ListNexusIncomingServicesResponse, error) {
 
 	client, err := c.getClientForTaskqueue("not-applicable", &taskqueuepb.TaskQueue{Name: "not-applicable"}, enumspb.TASK_QUEUE_TYPE_UNSPECIFIED)
 	if err != nil {
 		return nil, err
 	}
-	ctx, cancel := c.createContext(ctx)
+	ctx, cancel := c.createLongPollContext(ctx)
 	defer cancel()
-	return client.ListNexusServices(ctx, request, opts...)
+	return client.ListNexusIncomingServices(ctx, request, opts...)
 }
 
 func (c *clientImpl) ListTaskQueuePartitions(
