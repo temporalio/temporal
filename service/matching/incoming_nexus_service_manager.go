@@ -273,6 +273,7 @@ func (m *incomingNexusServiceManager) loadServices(ctx context.Context) error {
 	}
 
 	// reset cached view since we will be paging from the start
+	m.tableVersion = 0
 	m.services = []*persistencepb.NexusIncomingServiceEntry{}
 	m.servicesByName = make(map[string]*persistencepb.NexusIncomingServiceEntry)
 
@@ -308,6 +309,6 @@ func (m *incomingNexusServiceManager) loadServices(ctx context.Context) error {
 		}
 	}
 
-	m.hasLoadedServices.Store(pageToken == nil)
+	m.hasLoadedServices.Store(ctx.Err() == nil)
 	return ctx.Err()
 }
