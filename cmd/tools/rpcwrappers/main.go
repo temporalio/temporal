@@ -35,11 +35,10 @@ import (
 
 	"go.temporal.io/api/taskqueue/v1"
 	"go.temporal.io/api/workflowservice/v1"
-	"golang.org/x/exp/slices"
-
 	"go.temporal.io/server/api/adminservice/v1"
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/api/matchingservice/v1"
+	"golang.org/x/exp/slices"
 )
 
 type (
@@ -229,12 +228,12 @@ func makeGetMatchingClient(reqType reflect.Type) string {
 	switch t.Name() {
 	case "GetBuildIdTaskQueueMappingRequest":
 		// Pick a random node for this request, it's not associated with a specific task queue.
-		tq = fieldWithPath{path: "&taskqueuepb.TaskQueue{Name: fmt.Sprintf(\"not-applicable-%d\", rand.Int())}"}
+		tq = fieldWithPath{path: "fmt.Sprintf(\"not-applicable-%d\", rand.Int())"}
 		tqt = fieldWithPath{path: "enumspb.TASK_QUEUE_TYPE_UNSPECIFIED"}
 	case "UpdateTaskQueueUserDataRequest",
 		"ReplicateTaskQueueUserDataRequest":
 		// Always route these requests to the same matching node by namespace.
-		tq = fieldWithPath{path: "&taskqueuepb.TaskQueue{Name: \"not-applicable\"}"}
+		tq = fieldWithPath{path: "\"not-applicable\""}
 		tqt = fieldWithPath{path: "enumspb.TASK_QUEUE_TYPE_UNSPECIFIED"}
 	case "GetWorkerBuildIdCompatibilityRequest",
 		"UpdateWorkerBuildIdCompatibilityRequest",
@@ -251,14 +250,20 @@ func makeGetMatchingClient(reqType reflect.Type) string {
 	}
 
 	if nsID.path != "" && tq.path != "" && tqt.path != "" {
-		if tq.field != nil {
-			// Some task queue fields are full messages, some are just strings
-			isTaskQueueMessage := tq.field.Type == reflect.TypeOf((*taskqueue.TaskQueue)(nil))
-			if !isTaskQueueMessage {
-				tq.path = fmt.Sprintf("&taskqueuepb.TaskQueue{Name: %s}", tq.path)
-			}
+		partitionMaker := fmt.Sprintf("tqid.PartitionFromProto(%s, %s, %s)", tq.path, nsID.path, tqt.path)
+		// Some task queue fields are full messages, some are just strings
+		isTaskQueueMessage := tq.field != nil && tq.field.Type == reflect.TypeOf((*taskqueue.TaskQueue)(nil))
+		if !isTaskQueueMessage {
+			partitionMaker = fmt.Sprintf("tqid.NormalPartitionFromRpcName(%s, %s, %s)", tq.path, nsID.path, tqt.path)
 		}
-		return fmt.Sprintf("client, err := c.getClientForTaskqueue(%s, %s, %s)", nsID.path, tq.path, tqt.path)
+
+		return fmt.Sprintf(
+			`p, err := %s
+	if err != nil {
+		return nil, err
+	}
+	client, err := c.getClientForTaskQueuePartition(p)`,
+			partitionMaker)
 	}
 
 	panic("I don't know how to get a client from a " + t.String())
@@ -388,8 +393,8 @@ import (
 	"math/rand"
 
 	enumspb "go.temporal.io/api/enums/v1"
-	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	"{{.ServicePackagePath}}"
+	"go.temporal.io/server/common/tqid"
 	"google.golang.org/grpc"
 )
 `)

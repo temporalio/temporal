@@ -38,13 +38,17 @@ import (
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	enumsspb "go.temporal.io/server/api/enums/v1"
+	"go.temporal.io/server/api/historyservice/v1"
+	"go.temporal.io/server/api/historyservicemock/v1"
 	"go.temporal.io/server/api/matchingservicemock/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/dynamicconfig"
+	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence"
+	"go.temporal.io/server/common/persistence/visibility/manager"
 	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/internal/goro"
 )
@@ -52,20 +56,20 @@ import (
 var rpsInf = math.Inf(1)
 
 const (
-	defaultNamespaceId = namespace.ID("deadbeef-0000-4567-890a-bcdef0123456")
+	defaultNamespaceId = "deadbeef-0000-4567-890a-bcdef0123456"
 	defaultRootTqID    = "tq"
 )
 
 type tqmTestOpts struct {
 	config             *Config
-	tqId               *taskQueueID
+	dbq                *PhysicalTaskQueueKey
 	matchingClientMock *matchingservicemock.MockMatchingServiceClient
 }
 
 func defaultTqmTestOpts(controller *gomock.Controller) *tqmTestOpts {
 	return &tqmTestOpts{
 		config:             defaultTestConfig(),
-		tqId:               defaultTqId(),
+		dbq:                defaultTqId(),
 		matchingClientMock: matchingservicemock.NewMockMatchingServiceClient(controller),
 	}
 }
@@ -74,10 +78,10 @@ func TestDeliverBufferTasks(t *testing.T) {
 	controller := gomock.NewController(t)
 	defer controller.Finish()
 
-	tests := []func(tlm *taskQueueManagerImpl){
-		func(tlm *taskQueueManagerImpl) { close(tlm.taskReader.taskBuffer) },
-		func(tlm *taskQueueManagerImpl) { tlm.taskReader.gorogrp.Cancel() },
-		func(tlm *taskQueueManagerImpl) {
+	tests := []func(tlm *physicalTaskQueueManagerImpl){
+		func(tlm *physicalTaskQueueManagerImpl) { close(tlm.taskReader.taskBuffer) },
+		func(tlm *physicalTaskQueueManagerImpl) { tlm.taskReader.gorogrp.Cancel() },
+		func(tlm *physicalTaskQueueManagerImpl) {
 			rps := 0.1
 			tlm.matcher.UpdateRatelimit(&rps)
 			tlm.taskReader.taskBuffer <- &persistencespb.AllocatedTaskInfo{
@@ -296,7 +300,7 @@ func TestReaderSignaling(t *testing.T) {
 
 // runOneShotPoller spawns a goroutine to call tqm.PollTask on the provided tqm.
 // The second return value is a channel of either error or *internalTask.
-func runOneShotPoller(ctx context.Context, tqm taskQueueManager) (*goro.Handle, chan interface{}) {
+func runOneShotPoller(ctx context.Context, tqm physicalTaskQueueManager) (*goro.Handle, chan interface{}) {
 	out := make(chan interface{}, 1)
 	handle := goro.NewHandle(ctx).Go(func(ctx context.Context) error {
 		task, err := tqm.PollTask(ctx, &pollMetadata{ratePerSecond: &rpsInf})
@@ -314,15 +318,15 @@ func runOneShotPoller(ctx context.Context, tqm taskQueueManager) (*goro.Handle, 
 	return handle, out
 }
 
-func defaultTqId() *taskQueueID {
-	return newTestTaskQueueID(defaultNamespaceId, defaultRootTqID, enumspb.TASK_QUEUE_TYPE_WORKFLOW)
+func defaultTqId() *PhysicalTaskQueueKey {
+	return newTestUnversionedPhysicalQueueKey(defaultNamespaceId, defaultRootTqID, enumspb.TASK_QUEUE_TYPE_WORKFLOW, 0)
 }
 
 func mustCreateTestTaskQueueManager(
 	t *testing.T,
 	controller *gomock.Controller,
 	opts ...taskQueueManagerOpt,
-) *taskQueueManagerImpl {
+) *physicalTaskQueueManagerImpl {
 	t.Helper()
 	return mustCreateTestTaskQueueManagerWithConfig(t, controller, defaultTqmTestOpts(controller), opts...)
 }
@@ -332,7 +336,7 @@ func mustCreateTestTaskQueueManagerWithConfig(
 	controller *gomock.Controller,
 	testOpts *tqmTestOpts,
 	opts ...taskQueueManagerOpt,
-) *taskQueueManagerImpl {
+) *physicalTaskQueueManagerImpl {
 	t.Helper()
 	tqm, err := createTestTaskQueueManagerWithConfig(controller, testOpts, opts...)
 	require.NoError(t, err)
@@ -343,15 +347,44 @@ func createTestTaskQueueManagerWithConfig(
 	controller *gomock.Controller,
 	testOpts *tqmTestOpts,
 	opts ...taskQueueManagerOpt,
-) (*taskQueueManagerImpl, error) {
+) (*physicalTaskQueueManagerImpl, error) {
 	pm := createTestTaskQueuePartitionManager(controller, testOpts)
-	tlMgr, err := newTaskQueueManager(pm, testOpts.tqId, opts...)
+	tlMgr, err := newTaskQueueManager(pm, testOpts.dbq, opts...)
 	pm.defaultQueue = tlMgr
-	pm.db = tlMgr.db
 	if err != nil {
 		return nil, err
 	}
 	return tlMgr, nil
+}
+
+func createTestTaskQueuePartitionManager(controller *gomock.Controller, testOpts *tqmTestOpts) *taskQueuePartitionManagerImpl {
+	logger := log.NewTestLogger()
+	ns := namespace.Name("ns-name")
+	tm := newTestTaskManager(logger)
+	mockNamespaceCache := namespace.NewMockRegistry(controller)
+	mockNamespaceCache.EXPECT().GetNamespaceByID(gomock.Any()).Return(&namespace.Namespace{}, nil).AnyTimes()
+	mockNamespaceCache.EXPECT().GetNamespaceName(gomock.Any()).Return(ns, nil).AnyTimes()
+	mockVisibilityManager := manager.NewMockVisibilityManager(controller)
+	mockVisibilityManager.EXPECT().Close().AnyTimes()
+	mockHistoryClient := historyservicemock.NewMockHistoryServiceClient(controller)
+	mockHistoryClient.EXPECT().IsWorkflowTaskValid(gomock.Any(), gomock.Any()).Return(&historyservice.IsWorkflowTaskValidResponse{IsValid: true}, nil).AnyTimes()
+	mockHistoryClient.EXPECT().IsActivityTaskValid(gomock.Any(), gomock.Any()).Return(&historyservice.IsActivityTaskValidResponse{IsValid: true}, nil).AnyTimes()
+	me := newMatchingEngine(testOpts.config, tm, mockHistoryClient, logger, mockNamespaceCache, testOpts.matchingClientMock, mockVisibilityManager)
+
+	taskQueueConfig := newTaskQueueConfig(testOpts.dbq.Partition().TaskQueue(), me.config, ns)
+	pm := &taskQueuePartitionManagerImpl{
+		engine:               me,
+		partition:            testOpts.dbq.Partition(),
+		config:               taskQueueConfig,
+		namespaceRegistry:    me.namespaceRegistry,
+		logger:               logger,
+		matchingClient:       me.matchingRawClient,
+		taggedMetricsHandler: me.metricsHandler,
+		userDataManager:      newUserDataManager(me.taskManager, me.matchingRawClient, testOpts.dbq.Partition(), taskQueueConfig, me.logger, me.namespaceRegistry),
+	}
+
+	me.partitions[testOpts.dbq.Partition().Key()] = pm
+	return pm
 }
 
 func TestDescribeTaskQueue(t *testing.T) {
@@ -362,7 +395,7 @@ func TestDescribeTaskQueue(t *testing.T) {
 	taskCount := int64(3)
 	PollerIdentity := "test-poll"
 
-	// Create taskQueue Manager and set taskQueue state
+	// Create queue Manager and set queue state
 	tlm := mustCreateTestTaskQueueManager(t, controller)
 	tlm.db.rangeID = int64(1)
 	tlm.db.ackLevel = int64(0)
@@ -455,7 +488,7 @@ func TestAddTaskStandby(t *testing.T) {
 		t,
 		controller,
 		defaultTqmTestOpts(controller),
-		func(tqm *taskQueueManagerImpl) {
+		func(tqm *physicalTaskQueueManagerImpl) {
 			ns := namespace.NewGlobalNamespaceForTest(
 				&persistencespb.NamespaceInfo{},
 				&persistencespb.NamespaceConfig{},
@@ -511,7 +544,7 @@ func TestTQMDoesFinalUpdateOnIdleUnload(t *testing.T) {
 
 	tqm.Start()
 	time.Sleep(2 * time.Second) // will unload due to idleness
-	require.Equal(t, 1, tm.getUpdateCount(tqCfg.tqId))
+	require.Equal(t, 1, tm.getUpdateCount(tqCfg.dbq))
 }
 
 func TestTQMDoesNotDoFinalUpdateOnOwnershipLost(t *testing.T) {
@@ -532,12 +565,12 @@ func TestTQMDoesNotDoFinalUpdateOnOwnershipLost(t *testing.T) {
 	time.Sleep(1 * time.Second)
 
 	// simulate ownership lost
-	ttm := tm.getTaskQueueManager(tqCfg.tqId)
+	ttm := tm.getQueueManager(tqCfg.dbq)
 	ttm.Lock()
 	ttm.rangeID++
 	ttm.Unlock()
 
 	time.Sleep(2 * time.Second) // will attempt to update and fail and not try again
 
-	require.Equal(t, 1, tm.getUpdateCount(tqCfg.tqId))
+	require.Equal(t, 1, tm.getUpdateCount(tqCfg.dbq))
 }

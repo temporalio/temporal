@@ -33,6 +33,7 @@ import (
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence/visibility"
 	"go.temporal.io/server/common/primitives"
+	"go.temporal.io/server/common/tqid"
 )
 
 type (
@@ -52,7 +53,7 @@ type (
 		ShutdownDrainDuration                 dynamicconfig.DurationPropertyFn
 		HistoryMaxPageSize                    dynamicconfig.IntPropertyFnWithNamespaceFilter
 
-		// taskQueueManager configuration
+		// task queue configuration
 
 		RangeSize                         int64
 		GetTasksBatchSize                 dynamicconfig.IntPropertyFnWithTaskQueueInfoFilters
@@ -214,72 +215,72 @@ func NewConfig(
 	}
 }
 
-func newTaskQueueConfig(id *taskQueueID, config *Config, namespace namespace.Name) *taskQueueConfig {
-	taskQueueName := id.BaseNameString()
-	taskType := id.taskType
+func newTaskQueueConfig(tq *tqid.TaskQueue, config *Config, ns namespace.Name) *taskQueueConfig {
+	taskQueueName := tq.Name()
+	taskType := tq.TaskType()
 
 	return &taskQueueConfig{
 		RangeSize: config.RangeSize,
 		GetTasksBatchSize: func() int {
-			return config.GetTasksBatchSize(namespace.String(), taskQueueName, taskType)
+			return config.GetTasksBatchSize(ns.String(), taskQueueName, taskType)
 		},
 		UpdateAckInterval: func() time.Duration {
-			return config.UpdateAckInterval(namespace.String(), taskQueueName, taskType)
+			return config.UpdateAckInterval(ns.String(), taskQueueName, taskType)
 		},
 		MaxTaskQueueIdleTime: func() time.Duration {
-			return config.MaxTaskQueueIdleTime(namespace.String(), taskQueueName, taskType)
+			return config.MaxTaskQueueIdleTime(ns.String(), taskQueueName, taskType)
 		},
 		MinTaskThrottlingBurstSize: func() int {
-			return config.MinTaskThrottlingBurstSize(namespace.String(), taskQueueName, taskType)
+			return config.MinTaskThrottlingBurstSize(ns.String(), taskQueueName, taskType)
 		},
 		SyncMatchWaitDuration: func() time.Duration {
-			return config.SyncMatchWaitDuration(namespace.String(), taskQueueName, taskType)
+			return config.SyncMatchWaitDuration(ns.String(), taskQueueName, taskType)
 		},
 		BacklogNegligibleAge: func() time.Duration {
-			return config.BacklogNegligibleAge(namespace.String(), taskQueueName, taskType)
+			return config.BacklogNegligibleAge(ns.String(), taskQueueName, taskType)
 		},
 		MaxWaitForPollerBeforeFwd: func() time.Duration {
-			return config.MaxWaitForPollerBeforeFwd(namespace.String(), taskQueueName, taskType)
+			return config.MaxWaitForPollerBeforeFwd(ns.String(), taskQueueName, taskType)
 		},
 		TestDisableSyncMatch: config.TestDisableSyncMatch,
 		LongPollExpirationInterval: func() time.Duration {
-			return config.LongPollExpirationInterval(namespace.String(), taskQueueName, taskType)
+			return config.LongPollExpirationInterval(ns.String(), taskQueueName, taskType)
 		},
 		MaxTaskDeleteBatchSize: func() int {
-			return config.MaxTaskDeleteBatchSize(namespace.String(), taskQueueName, taskType)
+			return config.MaxTaskDeleteBatchSize(ns.String(), taskQueueName, taskType)
 		},
 		GetUserDataLongPollTimeout: config.GetUserDataLongPollTimeout,
 		GetUserDataMinWaitTime:     1 * time.Second,
 		OutstandingTaskAppendsThreshold: func() int {
-			return config.OutstandingTaskAppendsThreshold(namespace.String(), taskQueueName, taskType)
+			return config.OutstandingTaskAppendsThreshold(ns.String(), taskQueueName, taskType)
 		},
 		MaxTaskBatchSize: func() int {
-			return config.MaxTaskBatchSize(namespace.String(), taskQueueName, taskType)
+			return config.MaxTaskBatchSize(ns.String(), taskQueueName, taskType)
 		},
 		NumWritePartitions: func() int {
-			return max(1, config.NumTaskqueueWritePartitions(namespace.String(), taskQueueName, taskType))
+			return max(1, config.NumTaskqueueWritePartitions(ns.String(), taskQueueName, taskType))
 		},
 		NumReadPartitions: func() int {
-			return max(1, config.NumTaskqueueReadPartitions(namespace.String(), taskQueueName, taskType))
+			return max(1, config.NumTaskqueueReadPartitions(ns.String(), taskQueueName, taskType))
 		},
 		AdminNamespaceToPartitionDispatchRate: func() float64 {
-			return config.AdminNamespaceToPartitionDispatchRate(namespace.String())
+			return config.AdminNamespaceToPartitionDispatchRate(ns.String())
 		},
 		AdminNamespaceTaskQueueToPartitionDispatchRate: func() float64 {
-			return config.AdminNamespaceTaskqueueToPartitionDispatchRate(namespace.String(), taskQueueName, taskType)
+			return config.AdminNamespaceTaskqueueToPartitionDispatchRate(ns.String(), taskQueueName, taskType)
 		},
 		forwarderConfig: forwarderConfig{
 			ForwarderMaxOutstandingPolls: func() int {
-				return config.ForwarderMaxOutstandingPolls(namespace.String(), taskQueueName, taskType)
+				return config.ForwarderMaxOutstandingPolls(ns.String(), taskQueueName, taskType)
 			},
 			ForwarderMaxOutstandingTasks: func() int {
-				return config.ForwarderMaxOutstandingTasks(namespace.String(), taskQueueName, taskType)
+				return config.ForwarderMaxOutstandingTasks(ns.String(), taskQueueName, taskType)
 			},
 			ForwarderMaxRatePerSecond: func() int {
-				return config.ForwarderMaxRatePerSecond(namespace.String(), taskQueueName, taskType)
+				return config.ForwarderMaxRatePerSecond(ns.String(), taskQueueName, taskType)
 			},
 			ForwarderMaxChildrenPerNode: func() int {
-				return max(1, config.ForwarderMaxChildrenPerNode(namespace.String(), taskQueueName, taskType))
+				return max(1, config.ForwarderMaxChildrenPerNode(ns.String(), taskQueueName, taskType))
 			},
 		},
 		GetUserDataRetryPolicy: backoff.NewExponentialRetryPolicy(1 * time.Second).WithMaximumInterval(5 * time.Minute),

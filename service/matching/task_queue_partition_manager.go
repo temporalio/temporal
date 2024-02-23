@@ -26,28 +26,21 @@ package matching
 
 import (
 	"context"
-	"errors"
 	"sync"
 	"time"
 
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
-	"go.temporal.io/api/serviceerror"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
-	taskqueuespb "go.temporal.io/server/api/taskqueue/v1"
-	"go.temporal.io/server/common/future"
-	"go.temporal.io/server/internal/goro"
-
 	"go.temporal.io/server/api/matchingservice/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
-	"go.temporal.io/server/common"
-	"go.temporal.io/server/common/backoff"
+	taskqueuespb "go.temporal.io/server/api/taskqueue/v1"
 	"go.temporal.io/server/common/headers"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
-	"go.temporal.io/server/common/tqname"
+	"go.temporal.io/server/common/tqid"
 )
 
 type (
@@ -69,20 +62,14 @@ type (
 		// DispatchQueryTask will dispatch query to local or remote poller. If forwarded then result or error is returned,
 		// if dispatched to local poller then nil and nil is returned.
 		DispatchQueryTask(ctx context.Context, taskID string, request *matchingservice.QueryWorkflowRequest) (*matchingservice.QueryWorkflowResponse, error)
-		// GetUserData returns the versioned user data for this task queue
-		GetUserData() (*persistencespb.VersionedTaskQueueUserData, <-chan struct{}, error)
-		// MarkAlive updates the liveness timer to keep this partition manager alive.
+		GetUserDataManager() *userDataManager
 		MarkAlive()
-		// UpdateUserData updates user data for this task queue and replicates across clusters if necessary.
-		// Extra care should be taken to avoid mutating the existing data in the update function.
-		UpdateUserData(ctx context.Context, options UserDataUpdateOptions, updateFn UserDataUpdateFunc) error
 		GetAllPollerInfo() []*taskqueuepb.PollerInfo
 		HasPollerAfter(accessTime time.Time) bool
 		// DescribeTaskQueue returns information about the target task queue
 		DescribeTaskQueue(includeTaskQueueStatus bool) *matchingservice.DescribeTaskQueueResponse
 		String() string
-		QueueID() *taskQueueID
-		TaskQueueKind() enumspb.TaskQueueKind
+		Partition() tqid.Partition
 		LongPollExpirationInterval() time.Duration
 	}
 
@@ -97,28 +84,22 @@ type (
 	//  - This behavior is subject to optimizations in the future: for versioned queues, keeping the default queue
 	//    loaded all the time may be suboptimal.
 	taskQueuePartitionManagerImpl struct {
-		engine      *matchingEngineImpl
-		taskQueueID *taskQueueID
-		stickyInfo
+		engine        *matchingEngineImpl
+		partition     tqid.Partition
 		namespaceName namespace.Name
 		config        *taskQueueConfig
 		// this is the default (unversioned) DB queue. As of now, some of the matters related to the whole TQ partition
-		// is delegated to the defaultQueue. The plan is to eventually rename taskQueueManager to dbQueueManager and
-		// bring all the partition-level logic to taskQueuePartitionManager.
-		defaultQueue taskQueueManager
+		// is delegated to the defaultQueue.
+		defaultQueue physicalTaskQueueManager
 		// used for non-sticky versioned queues (one for each version)
-		versionedQueues      map[string]taskQueueManager
+		versionedQueues      map[string]physicalTaskQueueManager
 		versionedQueuesLock  sync.RWMutex // locks mutation of versionedQueues
-		db                   *taskQueueDB
+		userDataManager      *userDataManager
 		namespaceRegistry    namespace.Registry
 		logger               log.Logger
 		throttledLogger      log.ThrottledLogger
 		matchingClient       matchingservice.MatchingServiceClient
 		taggedMetricsHandler metrics.Handler // namespace/taskqueue tagged metric scope
-		goroGroup            goro.Group
-		// userDataReady is fulfilled once versioning data is fetched from the root partition. If this TQ is
-		// the root partition, it is fulfilled as soon as it is fetched from db.
-		userDataReady *future.FutureImpl[struct{}]
 	}
 )
 
@@ -126,68 +107,57 @@ var _ taskQueuePartitionManager = (*taskQueuePartitionManagerImpl)(nil)
 
 func newTaskQueuePartitionManager(
 	e *matchingEngineImpl,
-	taskQueue *taskQueueID,
-	stickyInfo stickyInfo,
+	partition tqid.Partition,
 	config *Config,
 ) (taskQueuePartitionManager, error) {
-	if taskQueue.VersionSet() != "" {
-		return nil, serviceerror.NewInvalidArgument("task queue ID cannot be versioned")
-	}
-
-	namespaceEntry, err := e.namespaceRegistry.GetNamespaceByID(taskQueue.namespaceID)
+	namespaceEntry, err := e.namespaceRegistry.GetNamespaceByID(partition.NamespaceId())
 	if err != nil {
 		return nil, err
 	}
 	nsName := namespaceEntry.Name()
-
-	taskQueueConfig := newTaskQueueConfig(taskQueue, config, nsName)
+	taskQueueConfig := newTaskQueueConfig(partition.TaskQueue(), config, nsName)
 
 	logger := log.With(e.logger,
-		tag.WorkflowTaskQueueName(taskQueue.FullName()),
-		tag.WorkflowTaskQueueType(taskQueue.taskType),
+		tag.WorkflowTaskQueueName(partition.RpcName()),
+		tag.WorkflowTaskQueueType(partition.TaskType()),
 		tag.WorkflowNamespace(nsName.String()))
 	throttledLogger := log.With(e.throttledLogger,
-		tag.WorkflowTaskQueueName(taskQueue.FullName()),
-		tag.WorkflowTaskQueueType(taskQueue.taskType),
+		tag.WorkflowTaskQueueName(partition.RpcName()),
+		tag.WorkflowTaskQueueType(partition.TaskType()),
 		tag.WorkflowNamespace(nsName.String()))
 	taggedMetricsHandler := metrics.GetPerTaskQueueScope(
-		e.metricsHandler.WithTags(metrics.OperationTag(metrics.MatchingTaskQueuePartitionManagerScope), metrics.TaskQueueTypeTag(taskQueue.taskType)),
+		e.metricsHandler.WithTags(
+			metrics.OperationTag(metrics.MatchingTaskQueuePartitionManagerScope),
+			metrics.TaskQueueTypeTag(partition.TaskType())),
 		nsName.String(),
-		taskQueue.FullName(),
-		stickyInfo.kind,
+		partition.RpcName(),
+		partition.Kind(),
 	)
 
 	pm := &taskQueuePartitionManagerImpl{
 		engine:               e,
-		taskQueueID:          taskQueue,
-		stickyInfo:           stickyInfo,
+		partition:            partition,
 		config:               taskQueueConfig,
 		namespaceRegistry:    e.namespaceRegistry,
 		logger:               logger,
 		throttledLogger:      throttledLogger,
 		matchingClient:       e.matchingRawClient,
 		taggedMetricsHandler: taggedMetricsHandler,
-		userDataReady:        future.NewFuture[struct{}](),
-		versionedQueues:      make(map[string]taskQueueManager),
+		versionedQueues:      make(map[string]physicalTaskQueueManager),
+		userDataManager:      newUserDataManager(e.taskManager, e.matchingRawClient, partition, taskQueueConfig, e.logger, e.namespaceRegistry),
 	}
 
-	defaultQ, err := newTaskQueueManager(pm, taskQueue)
+	defaultQ, err := newTaskQueueManager(pm, UnversionedQueueKey(partition))
 	if err != nil {
 		return nil, err
 	}
 
 	pm.defaultQueue = defaultQ
-	// TODO: separate DB client for task vs userData. partition manage only needs userData persistence
-	pm.db = defaultQ.db
 	return pm, nil
 }
 
 func (pm *taskQueuePartitionManagerImpl) Start() {
-	if pm.db.DbStoresUserData() {
-		pm.goroGroup.Go(pm.loadUserData)
-	} else {
-		pm.goroGroup.Go(pm.fetchUserData)
-	}
+	pm.userDataManager.Start()
 	pm.defaultQueue.Start()
 }
 
@@ -200,7 +170,7 @@ func (pm *taskQueuePartitionManagerImpl) Stop() {
 		vq.Stop()
 	}
 	pm.defaultQueue.Stop()
-	pm.goroGroup.Cancel()
+	pm.userDataManager.Stop()
 }
 
 func (pm *taskQueuePartitionManagerImpl) MarkAlive() {
@@ -208,7 +178,7 @@ func (pm *taskQueuePartitionManagerImpl) MarkAlive() {
 }
 
 func (pm *taskQueuePartitionManagerImpl) WaitUntilInitialized(ctx context.Context) error {
-	_, err := pm.userDataReady.Get(ctx)
+	err := pm.userDataManager.WaitUntilInitialized(ctx)
 	if err != nil {
 		return err
 	}
@@ -219,16 +189,22 @@ func (pm *taskQueuePartitionManagerImpl) AddTask(
 	ctx context.Context,
 	params addTaskParams,
 ) (bool, error) {
-	dbq, err := pm.getDbQueueForAdd(ctx, params.taskInfo.VersionDirective)
+	pq, err := pm.getPhysicalQueueForAdd(ctx, params.taskInfo.VersionDirective)
 	if err != nil {
 		return false, err
 	}
 
-	if pm.defaultQueue != dbq {
+	if pm.defaultQueue != pq {
 		// default queue should stay alive even if requests go to other queues
 		pm.defaultQueue.MarkAlive()
 	}
-	return dbq.AddTask(ctx, params)
+
+	if pm.partition.IsRoot() && !pm.HasPollerAfter(time.Now().Add(-noPollerThreshold)) {
+		// Only checks recent pollers in the root partition
+		pm.taggedMetricsHandler.Counter(metrics.NoRecentPollerTasksPerTaskQueueCounter.Name()).Record(1)
+	}
+
+	return pq.AddTask(ctx, params)
 }
 
 func (pm *taskQueuePartitionManagerImpl) PollTask(
@@ -242,7 +218,7 @@ func (pm *taskQueuePartitionManagerImpl) PollTask(
 		// We don't need the userDataChanged channel here because:
 		// - if we sync match, we're done
 		// - if we spool to db, we'll re-resolve when it comes out of the db
-		userData, _, err := pm.GetUserData()
+		userData, _, err := pm.userDataManager.GetUserData()
 		if err != nil {
 			return nil, err
 		}
@@ -272,7 +248,7 @@ func (pm *taskQueuePartitionManagerImpl) DispatchSpooledTask(
 		dbq := pm.defaultQueue
 		var userDataChanged <-chan struct{}
 		if directive.GetValue() != nil {
-			userData, userDataCh, err := pm.GetUserData()
+			userData, userDataCh, err := pm.userDataManager.GetUserData()
 			userDataChanged = userDataCh
 			if err != nil {
 				return err
@@ -294,7 +270,7 @@ func (pm *taskQueuePartitionManagerImpl) DispatchQueryTask(
 	taskID string,
 	request *matchingservice.QueryWorkflowRequest,
 ) (*matchingservice.QueryWorkflowResponse, error) {
-	dbq, err := pm.getDbQueueForAdd(ctx, request.VersionDirective)
+	dbq, err := pm.getPhysicalQueueForAdd(ctx, request.VersionDirective)
 	if err != nil {
 		return nil, err
 	}
@@ -307,41 +283,8 @@ func (pm *taskQueuePartitionManagerImpl) DispatchQueryTask(
 	return dbq.DispatchQueryTask(ctx, taskID, request)
 }
 
-// GetUserData returns the user data for the task queue if any.
-// Note: can return nil value with no error.
-func (pm *taskQueuePartitionManagerImpl) GetUserData() (*persistencespb.VersionedTaskQueueUserData, <-chan struct{}, error) {
-	return pm.db.GetUserData()
-}
-
-// UpdateUserData updates user data for this task queue and replicates across clusters if necessary.
-func (pm *taskQueuePartitionManagerImpl) UpdateUserData(ctx context.Context, options UserDataUpdateOptions, updateFn UserDataUpdateFunc) error {
-	newData, shouldReplicate, err := pm.db.UpdateUserData(ctx, updateFn, options.KnownVersion, options.TaskQueueLimitPerBuildId)
-	if err != nil {
-		return err
-	}
-	if !shouldReplicate {
-		return nil
-	}
-
-	// Only replicate if namespace is global and has at least 2 clusters registered.
-	ns, err := pm.namespaceRegistry.GetNamespaceByID(pm.db.namespaceID)
-	if err != nil {
-		return err
-	}
-	if ns.ReplicationPolicy() != namespace.ReplicationPolicyMultiCluster {
-		return nil
-	}
-
-	_, err = pm.matchingClient.ReplicateTaskQueueUserData(ctx, &matchingservice.ReplicateTaskQueueUserDataRequest{
-		NamespaceId: pm.db.namespaceID.String(),
-		TaskQueue:   pm.taskQueueID.BaseNameString(),
-		UserData:    newData.GetData(),
-	})
-	if err != nil {
-		pm.logger.Error("Failed to publish a replication task after updating task queue user data", tag.Error(err))
-		return serviceerror.NewUnavailable("storing task queue user data succeeded but publishing to the namespace replication queue failed, please try again")
-	}
-	return err
+func (pm *taskQueuePartitionManagerImpl) GetUserDataManager() *userDataManager {
+	return pm.userDataManager
 }
 
 // GetAllPollerInfo returns all pollers that polled from this taskqueue in last few minutes
@@ -361,12 +304,8 @@ func (pm *taskQueuePartitionManagerImpl) String() string {
 	return pm.defaultQueue.String()
 }
 
-func (pm *taskQueuePartitionManagerImpl) QueueID() *taskQueueID {
-	return pm.taskQueueID
-}
-
-func (pm *taskQueuePartitionManagerImpl) TaskQueueKind() enumspb.TaskQueueKind {
-	return pm.kind
+func (pm *taskQueuePartitionManagerImpl) Partition() tqid.Partition {
+	return pm.partition
 }
 
 func (pm *taskQueuePartitionManagerImpl) LongPollExpirationInterval() time.Duration {
@@ -374,12 +313,16 @@ func (pm *taskQueuePartitionManagerImpl) LongPollExpirationInterval() time.Durat
 }
 
 func (pm *taskQueuePartitionManagerImpl) callerInfoContext(ctx context.Context) context.Context {
-	ns, _ := pm.namespaceRegistry.GetNamespaceName(pm.taskQueueID.namespaceID)
+	ns, _ := pm.namespaceRegistry.GetNamespaceName(pm.partition.NamespaceId())
 	return headers.SetCallerInfo(ctx, headers.NewBackgroundCallerInfo(ns.String()))
 }
 
-func (pm *taskQueuePartitionManagerImpl) unloadDbQueue(unloadedDbq taskQueueManager) {
-	version := unloadedDbq.QueueID().VersionSet()
+func (pm *taskQueuePartitionManagerImpl) unloadPhysicalQueue(unloadedDbq physicalTaskQueueManager) {
+	version := unloadedDbq.QueueKey().VersionSet()
+	if version == "" {
+		version = unloadedDbq.QueueKey().BuildId()
+	}
+
 	if version == "" {
 		// this is the default queue, unload the whole partition if it is not healthy
 		if pm.defaultQueue == unloadedDbq {
@@ -405,137 +348,11 @@ func (pm *taskQueuePartitionManagerImpl) unloadFromEngine() {
 	pm.engine.unloadTaskQueuePartition(pm)
 }
 
-// Sets user data enabled/disabled and marks the future ready (if it's not ready yet).
-// userDataState controls whether GetUserData return an error, and which.
-// futureError is the error to set on the ready future. If this is non-nil, the task queue will
-// be unloaded.
-// Note that this must only be called from a single goroutine since the Ready/Set sequence is
-// potentially racy otherwise.
-func (pm *taskQueuePartitionManagerImpl) SetUserDataState(userDataState userDataState, futureError error) {
-	// Always set state enabled/disabled even if we're not setting the future since we only set
-	// the future once but the enabled/disabled state may change over time.
-	pm.db.setUserDataState(userDataState)
-
-	if !pm.userDataReady.Ready() {
-		pm.userDataReady.Set(struct{}{}, futureError)
-		if futureError != nil {
-			pm.unloadFromEngine()
-		}
-	}
-}
-
-func (pm *taskQueuePartitionManagerImpl) loadUserData(ctx context.Context) error {
-	ctx = pm.callerInfoContext(ctx)
-	err := pm.db.loadUserData(ctx)
-	pm.SetUserDataState(userDataEnabled, err)
-	return nil
-}
-
-func (pm *taskQueuePartitionManagerImpl) userDataFetchSource() (string, error) {
-	if pm.kind == enumspb.TASK_QUEUE_KIND_STICKY {
-		// Sticky queues get data from their corresponding normal queue
-		if pm.normalName == "" {
-			// Older SDKs don't send the normal name. That's okay, they just can't use versioning.
-			return "", errMissingNormalQueueName
-		}
-		return pm.normalName, nil
-	}
-
-	degree := pm.config.ForwarderMaxChildrenPerNode()
-	parent, err := pm.taskQueueID.Parent(degree)
-	if err == tqname.ErrNoParent { // nolint:goerr113
-		// we're the root activity task queue, ask the root workflow task queue
-		return pm.taskQueueID.FullName(), nil
-	} else if err != nil {
-		// invalid degree
-		return "", err
-	}
-	return parent.FullName(), nil
-}
-
-func (pm *taskQueuePartitionManagerImpl) fetchUserData(ctx context.Context) error {
-	ctx = pm.callerInfoContext(ctx)
-
-	// fetch from parent partition
-	fetchSource, err := pm.userDataFetchSource()
-	if err != nil {
-		if err == errMissingNormalQueueName { // nolint:goerr113
-			// pretend we have no user data. this is a sticky queue so the only effect is that we can't
-			// kick off versioned pollers.
-			pm.SetUserDataState(userDataEnabled, nil)
-		}
-		return err
-	}
-
-	// hasFetchedUserData is true if we have gotten a successful reply to GetTaskQueueUserData.
-	// It's used to control whether we do a long poll or a simple get.
-	hasFetchedUserData := false
-
-	op := func(ctx context.Context) error {
-		knownUserData, _, _ := pm.GetUserData()
-
-		callCtx, cancel := context.WithTimeout(ctx, pm.config.GetUserDataLongPollTimeout())
-		defer cancel()
-
-		res, err := pm.matchingClient.GetTaskQueueUserData(callCtx, &matchingservice.GetTaskQueueUserDataRequest{
-			NamespaceId:              pm.taskQueueID.namespaceID.String(),
-			TaskQueue:                fetchSource,
-			TaskQueueType:            enumspb.TASK_QUEUE_TYPE_WORKFLOW,
-			LastKnownUserDataVersion: knownUserData.GetVersion(),
-			WaitNewData:              hasFetchedUserData,
-		})
-		if err != nil {
-			var unimplErr *serviceerror.Unimplemented
-			if errors.As(err, &unimplErr) {
-				// This might happen during a deployment. The older version couldn't have had any user data,
-				// so we act as if it just returned an empty response and set ourselves ready.
-				// Return the error so that we backoff with retry, and do not set hasFetchedUserData so that
-				// we don't do a long poll next time.
-				pm.SetUserDataState(userDataEnabled, nil)
-			}
-			return err
-		}
-		// If the root partition returns nil here, then that means our data matched, and we don't need to update.
-		// If it's nil because it never existed, then we'd never have any data.
-		// It can't be nil due to removing versions, as that would result in a non-nil container with
-		// nil inner fields.
-		if res.GetUserData() != nil {
-			pm.db.setUserDataForNonOwningPartition(res.GetUserData())
-		}
-		hasFetchedUserData = true
-		pm.SetUserDataState(userDataEnabled, nil)
-		return nil
-	}
-
-	minWaitTime := pm.config.GetUserDataMinWaitTime
-
-	for ctx.Err() == nil {
-		start := time.Now()
-		_ = backoff.ThrottleRetryContext(ctx, op, pm.config.GetUserDataRetryPolicy, nil)
-		elapsed := time.Since(start)
-
-		// In general, we want to start a new call immediately on completion of the previous
-		// one. But if the remote is broken and returns success immediately, we might end up
-		// spinning. So enforce a minimum wait time that increases as long as we keep getting
-		// very fast replies.
-		if elapsed < minWaitTime {
-			common.InterruptibleSleep(ctx, minWaitTime-elapsed)
-			// Don't let this get near our call timeout, otherwise we can't tell the difference
-			// between a fast reply and a timeout.
-			minWaitTime = min(minWaitTime*2, pm.config.GetUserDataLongPollTimeout()/2)
-		} else {
-			minWaitTime = pm.config.GetUserDataMinWaitTime
-		}
-	}
-
-	return ctx.Err()
-}
-
 func (pm *taskQueuePartitionManagerImpl) getVersionedQueue(
 	ctx context.Context,
 	version string,
 	create bool,
-) (taskQueueManager, error) {
+) (physicalTaskQueueManager, error) {
 	tqm, err := pm.getVersionedQueueNoWait(version, create)
 	if err != nil || tqm == nil {
 		return nil, err
@@ -552,7 +369,7 @@ func (pm *taskQueuePartitionManagerImpl) getVersionedQueue(
 func (pm *taskQueuePartitionManagerImpl) getVersionedQueueNoWait(
 	version string,
 	create bool,
-) (taskQueueManager, error) {
+) (physicalTaskQueueManager, error) {
 	pm.versionedQueuesLock.RLock()
 	vq, ok := pm.versionedQueues[version]
 	pm.versionedQueuesLock.RUnlock()
@@ -566,7 +383,7 @@ func (pm *taskQueuePartitionManagerImpl) getVersionedQueueNoWait(
 		vq, ok = pm.versionedQueues[version]
 		if !ok {
 			var err error
-			vq, err = newTaskQueueManager(pm, newTaskQueueIDWithVersionSet(pm.taskQueueID, version))
+			vq, err = newTaskQueueManager(pm, VersionSetQueueKey(pm.partition, version))
 			if err != nil {
 				pm.versionedQueuesLock.Unlock()
 				return nil, err
@@ -587,10 +404,10 @@ func (pm *taskQueuePartitionManagerImpl) redirectToVersionSetQueueForPoll(
 	ctx context.Context,
 	caps *commonpb.WorkerVersionCapabilities,
 	userData *persistencespb.VersionedTaskQueueUserData,
-) (taskQueueManager, error) {
+) (physicalTaskQueueManager, error) {
 	data := userData.GetData().GetVersioningData()
 
-	if pm.kind == enumspb.TASK_QUEUE_KIND_STICKY {
+	if pm.partition.Kind() == enumspb.TASK_QUEUE_KIND_STICKY {
 		// In the sticky case we don't redirect, but we may kick off this worker if there's a newer one.
 		unknownBuild, err := checkVersionForStickyPoll(data, caps)
 		if err != nil {
@@ -627,10 +444,10 @@ func (pm *taskQueuePartitionManagerImpl) loadDemotedSetIds(demotedSetIds []strin
 	}
 }
 
-func (pm *taskQueuePartitionManagerImpl) getDbQueueForAdd(
+func (pm *taskQueuePartitionManagerImpl) getPhysicalQueueForAdd(
 	ctx context.Context,
 	directive *taskqueuespb.TaskVersionDirective,
-) (taskQueueManager, error) {
+) (physicalTaskQueueManager, error) {
 	if directive.GetValue() == nil {
 		return pm.defaultQueue, nil
 	}
@@ -638,7 +455,7 @@ func (pm *taskQueuePartitionManagerImpl) getDbQueueForAdd(
 	// We don't need the userDataChanged channel here because:
 	// - if we sync match, we're done
 	// - if we spool to db, we'll re-resolve when it comes out of the db
-	userData, _, err := pm.GetUserData()
+	userData, _, err := pm.userDataManager.GetUserData()
 	if err != nil {
 		return nil, err
 	}
@@ -649,7 +466,7 @@ func (pm *taskQueuePartitionManagerImpl) redirectToVersionSetQueueForAdd(
 	ctx context.Context,
 	directive *taskqueuespb.TaskVersionDirective,
 	userData *persistencespb.VersionedTaskQueueUserData,
-) (taskQueueManager, error) {
+) (physicalTaskQueueManager, error) {
 	var buildId string
 	switch dir := directive.GetValue().(type) {
 	case *taskqueuespb.TaskVersionDirective_UseDefault:
@@ -663,7 +480,7 @@ func (pm *taskQueuePartitionManagerImpl) redirectToVersionSetQueueForAdd(
 
 	data := userData.GetData().GetVersioningData()
 
-	if pm.kind == enumspb.TASK_QUEUE_KIND_STICKY {
+	if pm.partition.Kind() == enumspb.TASK_QUEUE_KIND_STICKY {
 		// In the sticky case we don't redirect, but we may kick off this worker if there's a newer one.
 		unknownBuild, err := checkVersionForStickyAdd(data, buildId)
 		if err != nil {
@@ -688,8 +505,8 @@ func (pm *taskQueuePartitionManagerImpl) redirectToVersionSetQueueForAdd(
 		pm.recordUnknownBuildTask(buildId)
 		// Send rpc to root partition to persist the unknown build id before we return success.
 		_, err = pm.matchingClient.UpdateWorkerBuildIdCompatibility(ctx, &matchingservice.UpdateWorkerBuildIdCompatibilityRequest{
-			NamespaceId: pm.taskQueueID.namespaceID.String(),
-			TaskQueue:   pm.taskQueueID.Root().FullName(),
+			NamespaceId: pm.partition.NamespaceId().String(),
+			TaskQueue:   pm.partition.TaskQueue().Family().TaskQueue(enumspb.TASK_QUEUE_TYPE_WORKFLOW).RootPartition().RpcName(),
 			Operation: &matchingservice.UpdateWorkerBuildIdCompatibilityRequest_PersistUnknownBuildId{
 				PersistUnknownBuildId: buildId,
 			},

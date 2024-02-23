@@ -63,7 +63,7 @@ import (
 	"go.temporal.io/server/common/persistence/versionhistory"
 	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/common/searchattribute"
-	"go.temporal.io/server/common/tqname"
+	"go.temporal.io/server/common/tqid"
 	"go.temporal.io/server/common/worker_versioning"
 	"go.temporal.io/server/service/history/configs"
 	"go.temporal.io/server/service/history/events"
@@ -476,13 +476,13 @@ func (s *mutableStateSuite) TestTransientWorkflowTaskStart_CurrentVersionChanged
 	err = s.mutableState.UpdateCurrentVersion(version+1, true)
 	s.NoError(err)
 
-	name, err := tqname.FromBaseName("tq")
+	f, err := tqid.NewTaskQueueFamily("", "tq")
 	s.NoError(err)
 
 	_, _, err = s.mutableState.AddWorkflowTaskStartedEvent(
 		s.mutableState.GetNextEventID(),
 		uuid.New(),
-		&taskqueuepb.TaskQueue{Name: name.WithPartition(5).FullName()},
+		&taskqueuepb.TaskQueue{Name: f.TaskQueue(enumspb.TASK_QUEUE_TYPE_WORKFLOW).NormalPartition(5).RpcName()},
 		"random identity",
 	)
 	s.NoError(err)
