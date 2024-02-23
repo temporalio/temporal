@@ -67,6 +67,15 @@ type Updater struct {
 	workflowConsistencyChecker api.WorkflowConsistencyChecker
 	matchingClient             matchingservice.MatchingServiceClient
 	request                    *historyservice.UpdateWorkflowExecutionRequest
+
+	// Variables shared with wfCtxOperation. Using values instead of pointers to make sure
+	// they are copied and don't have any pointers to workflow context or mutable state.
+	upd                    *update.Update
+	taskQueue              *taskqueuepb.TaskQueue
+	normalTaskQueueName    string
+	scheduledEventID       int64
+	scheduleToStartTimeout time.Duration
+	directive              *taskqueuespb.TaskVersionDirective
 }
 
 func NewUpdater(
@@ -93,17 +102,6 @@ func (u *Updater) Invoke(
 		u.request.NamespaceId,
 		u.request.Request.WorkflowExecution.WorkflowId,
 		u.request.Request.WorkflowExecution.RunId,
-	)
-
-	// Variables shared with wfCtxOperation. Using values instead of pointers to make sure
-	// they are copied and don't have any pointers to workflow context or mutable state.
-	var (
-		upd                    *update.Update
-		taskQueue              *taskqueuepb.TaskQueue
-		normalTaskQueueName    string
-		scheduledEventID       int64
-		scheduleToStartTimeout time.Duration
-		directive              *taskqueuespb.TaskVersionDirective
 	)
 
 	action := func(workflowLease api.WorkflowLease) (*api.UpdateWorkflowAction, error) {
@@ -138,10 +136,10 @@ func (u *Updater) Invoke(
 			alreadyExisted bool
 			err            error
 		)
-		if upd, alreadyExisted, err = updateReg.FindOrCreate(ctx, updateID); err != nil {
+		if u.upd, alreadyExisted, err = updateReg.FindOrCreate(ctx, updateID); err != nil {
 			return nil, err
 		}
-		if err = upd.Request(ctx, u.request.GetRequest().GetRequest(), workflow.WithEffects(effect.Immediate(ctx), ms)); err != nil {
+		if err = u.upd.Request(ctx, u.request.GetRequest().GetRequest(), workflow.WithEffects(effect.Immediate(ctx), ms)); err != nil {
 			return nil, err
 		}
 
@@ -182,14 +180,14 @@ func (u *Updater) Invoke(
 			return nil, consts.ErrWorkflowTaskStateInconsistent
 		}
 
-		scheduledEventID = newWorkflowTask.ScheduledEventID
+		u.scheduledEventID = newWorkflowTask.ScheduledEventID
 		if _, scheduleToStartTimeoutPtr := ms.TaskQueueScheduleToStartTimeout(ms.CurrentTaskQueue().Name); scheduleToStartTimeoutPtr != nil {
-			scheduleToStartTimeout = scheduleToStartTimeoutPtr.AsDuration()
+			u.scheduleToStartTimeout = scheduleToStartTimeoutPtr.AsDuration()
 		}
 
-		taskQueue = common.CloneProto(newWorkflowTask.TaskQueue)
-		normalTaskQueueName = ms.GetExecutionInfo().TaskQueue
-		directive = worker_versioning.MakeDirectiveForWorkflowTask(
+		u.taskQueue = common.CloneProto(newWorkflowTask.TaskQueue)
+		u.normalTaskQueueName = ms.GetExecutionInfo().TaskQueue
+		u.directive = worker_versioning.MakeDirectiveForWorkflowTask(
 			ms.GetWorkerVersionStamp(),
 			ms.GetLastWorkflowTaskStartedEventID(),
 		)
@@ -234,7 +232,7 @@ func (u *Updater) Invoke(
 		// I.e. if update is received and workflow was completed, or is about to be completed,
 		// then update is consistently rejected (instead of returning error in some cases).
 		if errors.Is(err, consts.ErrWorkflowCompleted) {
-			rejectionResp := createResponse(
+			rejectionResp := u.createResponse(
 				wfKey,
 				u.request,
 				&updatepb.Outcome{
@@ -249,16 +247,16 @@ func (u *Updater) Invoke(
 	// Speculative WT was created and needs to be added directly to matching w/o transfer task.
 	// TODO (alex): This code is copied from transferQueueActiveTaskExecutor.processWorkflowTask.
 	//   Helper function needs to be extracted to avoid code duplication.
-	if scheduledEventID != common.EmptyEventID {
-		err = addWorkflowTaskToMatching(ctx, wfKey, taskQueue, scheduledEventID, scheduleToStartTimeout, namespace.ID(u.request.GetNamespaceId()), directive, u.shardCtx, u.matchingClient)
+	if u.scheduledEventID != common.EmptyEventID {
+		err = u.addWorkflowTaskToMatching(ctx, wfKey, u.taskQueue, u.scheduledEventID, u.scheduleToStartTimeout, namespace.ID(u.request.GetNamespaceId()), u.directive, u.shardCtx, u.matchingClient)
 
 		if _, isStickyWorkerUnavailable := err.(*serviceerrors.StickyWorkerUnavailable); isStickyWorkerUnavailable {
 			// If sticky worker is unavailable, switch to original normal task queue.
-			taskQueue = &taskqueuepb.TaskQueue{
-				Name: normalTaskQueueName,
+			u.taskQueue = &taskqueuepb.TaskQueue{
+				Name: u.normalTaskQueueName,
 				Kind: enumspb.TASK_QUEUE_KIND_NORMAL,
 			}
-			err = addWorkflowTaskToMatching(ctx, wfKey, taskQueue, scheduledEventID, scheduleToStartTimeout, namespace.ID(u.request.GetNamespaceId()), directive, u.shardCtx, u.matchingClient)
+			err = u.addWorkflowTaskToMatching(ctx, wfKey, u.taskQueue, u.scheduledEventID, u.scheduleToStartTimeout, namespace.ID(u.request.GetNamespaceId()), u.directive, u.shardCtx, u.matchingClient)
 		}
 
 		if err != nil {
@@ -287,16 +285,15 @@ func (u *Updater) Invoke(
 	serverTimeout := u.shardCtx.GetConfig().LongPollExpirationInterval(ns.Name().String())
 	waitStage := u.request.GetRequest().GetWaitPolicy().GetLifecycleStage()
 	// If the long-poll times out due to serverTimeout then return a non-error empty response.
-	status, err := upd.WaitLifecycleStage(ctx, waitStage, serverTimeout)
+	status, err := u.upd.WaitLifecycleStage(ctx, waitStage, serverTimeout)
 	if err != nil {
 		return nil, err
 	}
-	resp := createResponse(wfKey, u.request, status.Outcome, status.Stage)
+	resp := u.createResponse(wfKey, u.request, status.Outcome, status.Stage)
 	return resp, nil
 }
 
-// TODO (alex-update): Consider moving this func to a better place.
-func addWorkflowTaskToMatching(
+func (u *Updater) addWorkflowTaskToMatching(
 	ctx context.Context,
 	wfKey definition.WorkflowKey,
 	tq *taskqueuepb.TaskQueue,
@@ -331,7 +328,7 @@ func addWorkflowTaskToMatching(
 	return nil
 }
 
-func createResponse(
+func (u *Updater) createResponse(
 	wfKey definition.WorkflowKey,
 	req *historyservice.UpdateWorkflowExecutionRequest,
 	outcome *updatepb.Outcome,
