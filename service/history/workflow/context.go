@@ -67,6 +67,7 @@ type (
 	Context interface {
 		GetWorkflowKey() definition.WorkflowKey
 
+		SetMutableState(ms MutableState)
 		LoadMutableState(ctx context.Context, shardContext shard.Context) (MutableState, error)
 		LoadExecutionStats(ctx context.Context, shardContext shard.Context) (*persistencespb.ExecutionStats, error)
 		Clear()
@@ -236,6 +237,10 @@ func (c *ContextImpl) GetNamespace(shardContext shard.Context) namespace.Name {
 		return ""
 	}
 	return namespaceEntry.Name()
+}
+
+func (c *ContextImpl) SetMutableState(ms MutableState) {
+	c.MutableState = ms
 }
 
 func (c *ContextImpl) LoadExecutionStats(ctx context.Context, shardContext shard.Context) (*persistencespb.ExecutionStats, error) {

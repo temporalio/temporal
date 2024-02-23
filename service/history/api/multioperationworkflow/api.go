@@ -36,6 +36,7 @@ import (
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence/visibility/manager"
 	"go.temporal.io/server/service/history/api"
+	"go.temporal.io/server/service/history/api/startworkflow"
 	"go.temporal.io/server/service/history/api/updateworkflow"
 	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/workflow"
@@ -59,6 +60,7 @@ func Invoke(
 	namespaceID := namespaceEntry.ID()
 
 	startReq := req.Operations[0].GetStartWorkflow()
+	updateReq := req.Operations[1].GetUpdateWorkflow()
 
 	// grab current Workflow lease, if there is one
 	currentWorkflowLease, err := workflowConsistencyChecker.GetWorkflowLease(
@@ -81,25 +83,54 @@ func Invoke(
 		return nil, err
 	}
 
+	updater := updateworkflow.NewUpdater(
+		shardContext,
+		workflowConsistencyChecker,
+		matchingClient,
+		updateReq,
+	)
+
 	var startResp *historyservicepb.StartWorkflowExecutionResponse
 	var updateResp *historyservicepb.UpdateWorkflowExecutionResponse
 	if currentWorkflowLease == nil {
-		// TODO
+		starter, err := startworkflow.NewStarter(
+			shardContext,
+			workflowConsistencyChecker,
+			tokenSerializer,
+			visibilityManager,
+			startReq,
+		)
+		if err != nil {
+			return nil, err
+		}
+
+		currentWorkflowLease, err = starter.Setup(ctx)
+		if err != nil {
+			return nil, err
+		}
+
+		updateResp, err = updater.Invoke(
+			ctx,
+			currentWorkflowLease,
+		)
+		if err != nil {
+			return nil, err
+		}
+
+		startResp, err = starter.Create(ctx)
+		if err != nil {
+			return nil, err
+		}
 	} else {
 		fmt.Println(">> UPSERT <<")
-	}
 
-	updateReq := req.Operations[1]
-	updateResp, err = updateworkflow.Invoke(
-		ctx,
-		updateReq.GetUpdateWorkflow(),
-		shardContext,
-		workflowConsistencyChecker,
-		currentWorkflowLease,
-		matchingClient,
-	)
-	if err != nil {
-		return nil, err
+		updateResp, err = updater.Invoke(
+			ctx,
+			currentWorkflowLease,
+		)
+		if err != nil {
+			return nil, err
+		}
 	}
 
 	return &historyservicepb.MultiOperationWorkflowExecutionResponse{

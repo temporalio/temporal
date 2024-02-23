@@ -69,6 +69,7 @@ type Starter struct {
 	visibilityManager          manager.VisibilityManager
 	request                    *historyservice.StartWorkflowExecutionRequest
 	namespace                  *namespace.Namespace
+	creationParams             *creationParams
 }
 
 // creationParams is a container for all information obtained from creating the uncommitted execution.
@@ -167,13 +168,7 @@ func (s *Starter) Invoke(
 		fmt.Println("===== [API]", "Starter.Invoke")
 	}
 
-	request := s.request.StartRequest
-	if err := s.prepare(ctx); err != nil {
-		return nil, err
-	}
-
-	creationParams, err := s.createNewMutableState(ctx, request.GetWorkflowId())
-	if err != nil {
+	if _, err := s.Setup(ctx); err != nil {
 		return nil, err
 	}
 
@@ -184,9 +179,28 @@ func (s *Starter) Invoke(
 	}
 	defer func() { currentRelease(retError) }()
 
-	err = s.createBrandNew(ctx, creationParams)
+	return s.Create(ctx)
+}
+
+func (s *Starter) Setup(ctx context.Context) (api.WorkflowLease, error) {
+	request := s.request.StartRequest
+	if err := s.prepare(ctx); err != nil {
+		return nil, err
+	}
+
+	var err error
+	s.creationParams, err = s.createNewMutableState(ctx, request.GetWorkflowId())
+	if err != nil {
+		return nil, err
+	}
+
+	return s.creationParams.workflowLease, nil
+}
+
+func (s *Starter) Create(ctx context.Context) (resp *historyservice.StartWorkflowExecutionResponse, retError error) {
+	err := s.createBrandNew(ctx, s.creationParams)
 	if err == nil {
-		return s.generateResponse(creationParams.runID, creationParams.workflowTaskInfo, extractHistoryEvents(creationParams.workflowEventBatches))
+		return s.generateResponse(s.creationParams.runID, s.creationParams.workflowTaskInfo, extractHistoryEvents(s.creationParams.workflowEventBatches))
 	}
 	var currentWorkflowConditionFailedError *persistence.CurrentWorkflowConditionFailedError
 	if !errors.As(err, &currentWorkflowConditionFailedError) || len(currentWorkflowConditionFailedError.RunID) == 0 {
@@ -194,7 +208,7 @@ func (s *Starter) Invoke(
 	}
 
 	// The history and mutable state we generated above should be deleted by a background process.
-	return s.handleConflict(ctx, creationParams, currentWorkflowConditionFailedError)
+	return s.handleConflict(ctx, s.creationParams, currentWorkflowConditionFailedError)
 }
 
 func (s *Starter) lockCurrentWorkflowExecution(
@@ -228,6 +242,9 @@ func (s *Starter) createNewMutableState(ctx context.Context, workflowID string) 
 	if err != nil {
 		return nil, err
 	}
+
+	// HACK
+	workflowLease.GetContext().SetMutableState(workflowLease.GetMutableState())
 
 	mutableState := workflowLease.GetMutableState()
 	workflowTaskInfo := mutableState.GetStartedWorkflowTask()

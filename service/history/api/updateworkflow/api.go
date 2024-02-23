@@ -62,20 +62,37 @@ const (
 	failUpdateWorkflowTaskAttemptCount = 3
 )
 
-func Invoke(
-	ctx context.Context,
-	req *historyservice.UpdateWorkflowExecutionRequest,
+type Updater struct {
+	shardCtx                   shard.Context
+	workflowConsistencyChecker api.WorkflowConsistencyChecker
+	matchingClient             matchingservice.MatchingServiceClient
+	request                    *historyservice.UpdateWorkflowExecutionRequest
+}
+
+func NewUpdater(
 	shardCtx shard.Context,
 	workflowConsistencyChecker api.WorkflowConsistencyChecker,
-	workflowLease api.WorkflowLease,
 	matchingClient matchingservice.MatchingServiceClient,
+	request *historyservice.UpdateWorkflowExecutionRequest,
+) *Updater {
+	return &Updater{
+		shardCtx:                   shardCtx,
+		workflowConsistencyChecker: workflowConsistencyChecker,
+		matchingClient:             matchingClient,
+		request:                    request,
+	}
+}
+
+func (u *Updater) Invoke(
+	ctx context.Context,
+	workflowLease api.WorkflowLease,
 ) (*historyservice.UpdateWorkflowExecutionResponse, error) {
 	fmt.Println("===== [API]", "updateworkflow.Invoke")
 
 	wfKey := definition.NewWorkflowKey(
-		req.NamespaceId,
-		req.Request.WorkflowExecution.WorkflowId,
-		req.Request.WorkflowExecution.RunId,
+		u.request.NamespaceId,
+		u.request.Request.WorkflowExecution.WorkflowId,
+		u.request.Request.WorkflowExecution.RunId,
 	)
 
 	// Variables shared with wfCtxOperation. Using values instead of pointers to make sure
@@ -98,7 +115,7 @@ func Invoke(
 		// wfKey built from request may have blank RunID so assign a fully populated version
 		wfKey = ms.GetWorkflowKey()
 
-		if req.GetRequest().GetFirstExecutionRunId() != "" && ms.GetExecutionInfo().GetFirstExecutionRunId() != req.GetRequest().GetFirstExecutionRunId() {
+		if u.request.GetRequest().GetFirstExecutionRunId() != "" && ms.GetExecutionInfo().GetFirstExecutionRunId() != u.request.GetRequest().GetFirstExecutionRunId() {
 			return nil, consts.ErrWorkflowExecutionNotFound
 		}
 
@@ -107,15 +124,15 @@ func Invoke(
 			// Additionally, workflow update can't "fix" workflow state because updates (delivered with messages)
 			// are applied after events.
 			// Failing API call fast here to prevent wasting resources for an update that will fail.
-			shardCtx.GetLogger().Info("Fail update fast due to WorkflowTask in failed state.",
-				tag.WorkflowNamespace(req.Request.Namespace),
+			u.shardCtx.GetLogger().Info("Fail update fast due to WorkflowTask in failed state.",
+				tag.WorkflowNamespace(u.request.Request.Namespace),
 				tag.WorkflowNamespaceID(wfKey.NamespaceID),
 				tag.WorkflowID(wfKey.WorkflowID),
 				tag.WorkflowRunID(wfKey.RunID))
 			return nil, serviceerror.NewWorkflowNotReady("Unable to perform workflow execution update due to Workflow Task in failed state.")
 		}
 
-		updateID := req.GetRequest().GetRequest().GetMeta().GetUpdateId()
+		updateID := u.request.GetRequest().GetRequest().GetMeta().GetUpdateId()
 		updateReg := workflowLease.GetContext().UpdateRegistry(ctx)
 		var (
 			alreadyExisted bool
@@ -124,7 +141,7 @@ func Invoke(
 		if upd, alreadyExisted, err = updateReg.FindOrCreate(ctx, updateID); err != nil {
 			return nil, err
 		}
-		if err = upd.Request(ctx, req.GetRequest().GetRequest(), workflow.WithEffects(effect.Immediate(ctx), ms)); err != nil {
+		if err = upd.Request(ctx, u.request.GetRequest().GetRequest(), workflow.WithEffects(effect.Immediate(ctx), ms)); err != nil {
 			return nil, err
 		}
 
@@ -193,12 +210,12 @@ func Invoke(
 			wfKey,
 			action,
 			nil,
-			shardCtx,
-			workflowConsistencyChecker,
+			u.shardCtx,
+			u.workflowConsistencyChecker,
 		)
 	} else {
 		err = api.UpdateWorkflowWithNew(
-			shardCtx,
+			u.shardCtx,
 			ctx,
 			workflowLease,
 			action,
@@ -219,7 +236,7 @@ func Invoke(
 		if errors.Is(err, consts.ErrWorkflowCompleted) {
 			rejectionResp := createResponse(
 				wfKey,
-				req,
+				u.request,
 				&updatepb.Outcome{
 					Value: &updatepb.Outcome_Failure{Failure: update.CancelReasonWorkflowCompleted.RejectionFailure()},
 				},
@@ -233,7 +250,7 @@ func Invoke(
 	// TODO (alex): This code is copied from transferQueueActiveTaskExecutor.processWorkflowTask.
 	//   Helper function needs to be extracted to avoid code duplication.
 	if scheduledEventID != common.EmptyEventID {
-		err = addWorkflowTaskToMatching(ctx, wfKey, taskQueue, scheduledEventID, scheduleToStartTimeout, namespace.ID(req.GetNamespaceId()), directive, shardCtx, matchingClient)
+		err = addWorkflowTaskToMatching(ctx, wfKey, taskQueue, scheduledEventID, scheduleToStartTimeout, namespace.ID(u.request.GetNamespaceId()), directive, u.shardCtx, u.matchingClient)
 
 		if _, isStickyWorkerUnavailable := err.(*serviceerrors.StickyWorkerUnavailable); isStickyWorkerUnavailable {
 			// If sticky worker is unavailable, switch to original normal task queue.
@@ -241,12 +258,12 @@ func Invoke(
 				Name: normalTaskQueueName,
 				Kind: enumspb.TASK_QUEUE_KIND_NORMAL,
 			}
-			err = addWorkflowTaskToMatching(ctx, wfKey, taskQueue, scheduledEventID, scheduleToStartTimeout, namespace.ID(req.GetNamespaceId()), directive, shardCtx, matchingClient)
+			err = addWorkflowTaskToMatching(ctx, wfKey, taskQueue, scheduledEventID, scheduleToStartTimeout, namespace.ID(u.request.GetNamespaceId()), directive, u.shardCtx, u.matchingClient)
 		}
 
 		if err != nil {
-			shardCtx.GetLogger().Warn("Unable to add WorkflowTask directly to matching.",
-				tag.WorkflowNamespace(req.Request.Namespace),
+			u.shardCtx.GetLogger().Warn("Unable to add WorkflowTask directly to matching.",
+				tag.WorkflowNamespace(u.request.Request.Namespace),
 				tag.WorkflowNamespaceID(wfKey.NamespaceID),
 				tag.WorkflowID(wfKey.WorkflowID),
 				tag.WorkflowRunID(wfKey.RunID),
@@ -262,19 +279,19 @@ func Invoke(
 		}
 	}
 
-	namespaceID := namespace.ID(req.GetNamespaceId())
-	ns, err := shardCtx.GetNamespaceRegistry().GetNamespaceByID(namespaceID)
+	namespaceID := namespace.ID(u.request.GetNamespaceId())
+	ns, err := u.shardCtx.GetNamespaceRegistry().GetNamespaceByID(namespaceID)
 	if err != nil {
 		return nil, err
 	}
-	serverTimeout := shardCtx.GetConfig().LongPollExpirationInterval(ns.Name().String())
-	waitStage := req.GetRequest().GetWaitPolicy().GetLifecycleStage()
+	serverTimeout := u.shardCtx.GetConfig().LongPollExpirationInterval(ns.Name().String())
+	waitStage := u.request.GetRequest().GetWaitPolicy().GetLifecycleStage()
 	// If the long-poll times out due to serverTimeout then return a non-error empty response.
 	status, err := upd.WaitLifecycleStage(ctx, waitStage, serverTimeout)
 	if err != nil {
 		return nil, err
 	}
-	resp := createResponse(wfKey, req, status.Outcome, status.Stage)
+	resp := createResponse(wfKey, u.request, status.Outcome, status.Stage)
 	return resp, nil
 }
 
