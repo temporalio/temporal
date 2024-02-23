@@ -1124,7 +1124,13 @@ func (e *matchingEngineImpl) GetTaskQueueUserData(
 	for {
 		resp := &matchingservice.GetTaskQueueUserDataResponse{}
 		userData, userDataChanged, err := tqMgr.GetUserData()
-		if err != nil {
+		if errors.Is(err, errTaskQueueClosed) {
+			// If we're closing, return a success with no data, as if the request expired. We shouldn't
+			// close due to idleness (because of the MarkAlive above), so we're probably closing due to a
+			// change of ownership. The caller will retry and be redirected to the new owner.
+			resp.TaskQueueHasUserData = userData != nil
+			return resp, nil
+		} else if err != nil {
 			return nil, err
 		}
 		if req.WaitNewData && userData.GetVersion() == version {
@@ -1705,6 +1711,13 @@ func (e *matchingEngineImpl) createPollActivityTaskQueueResponse(
 	)
 	serializedToken, _ := e.tokenSerializer.Serialize(taskToken)
 
+	// This is here to ensure that this field is never nil as expected by the TS SDK.
+	// This may happen if ScheduleActivityExecution was recorded in version 1.23.
+	scheduleToCloseTimeout := attributes.ScheduleToCloseTimeout
+	if scheduleToCloseTimeout == nil {
+		scheduleToCloseTimeout = timestamp.DurationPtr(0)
+	}
+
 	return &matchingservice.PollActivityTaskQueueResponse{
 		ActivityId:                  attributes.ActivityId,
 		ActivityType:                attributes.ActivityType,
@@ -1713,7 +1726,7 @@ func (e *matchingEngineImpl) createPollActivityTaskQueueResponse(
 		WorkflowExecution:           task.workflowExecution(),
 		CurrentAttemptScheduledTime: historyResponse.CurrentAttemptScheduledTime,
 		ScheduledTime:               scheduledEvent.EventTime,
-		ScheduleToCloseTimeout:      attributes.ScheduleToCloseTimeout,
+		ScheduleToCloseTimeout:      scheduleToCloseTimeout,
 		StartedTime:                 historyResponse.StartedTime,
 		StartToCloseTimeout:         attributes.StartToCloseTimeout,
 		HeartbeatTimeout:            attributes.HeartbeatTimeout,
