@@ -61,6 +61,15 @@ const (
 
 	// Number of times we retry refreshing the bootstrap list and try to join the Ringpop cluster before giving up
 	maxBootstrapRetries = 5
+
+	// We're passing around absolute timestamps, so we have to worry about clock skew.
+	// With significant clock skew and scheduled start/leave times, nodes might disagree on who
+	// is in the ring. Note that both joining (startAt) and leaving (stopAt) labels will only
+	// be present on any node for a limited amount of time, so the duration of disagreement is
+	// bounded. To be totally sure, monitor enforces a hard limit on how far in the future it
+	// allows join/leave times to be. 15 seconds is enough to allow aligning to 10 seconds plus
+	// 3 seconds of propagation time buffer.
+	maxScheduledEventTimeSeconds = 15
 )
 
 type monitor struct {
@@ -74,6 +83,8 @@ type monitor struct {
 	services                  config.ServicePortMap
 	rp                        *ringpop.Ringpop
 	maxJoinDuration           time.Duration
+	propagationTime           time.Duration
+	joinTime                  time.Time
 	rings                     map[primitives.ServiceName]*serviceResolver
 	logger                    log.Logger
 	metadataManager           persistence.ClusterMetadataManager
@@ -93,6 +104,8 @@ func newMonitor(
 	metadataManager persistence.ClusterMetadataManager,
 	broadcastHostPortResolver func() (string, error),
 	maxJoinDuration time.Duration,
+	propagationTime time.Duration,
+	joinTime time.Time,
 ) *monitor {
 	lifecycleCtx, lifecycleCancel := context.WithCancel(context.Background())
 	lifecycleCtx = headers.SetCallerInfo(
@@ -116,6 +129,8 @@ func newMonitor(
 		hostID:                    uuid.NewUUID(),
 		initialized:               future.NewFuture[struct{}](),
 		maxJoinDuration:           maxJoinDuration,
+		propagationTime:           propagationTime,
+		joinTime:                  joinTime,
 	}
 	for service, port := range services {
 		rpo.rings[service] = newServiceResolver(service, port, rp, logger)
@@ -158,15 +173,27 @@ func (rpo *monitor) Start() {
 
 	labels, err := rpo.rp.Labels()
 	if err != nil {
-		rpo.logger.Fatal("unable to get ring pop labels", tag.Error(err))
+		rpo.logger.Fatal("unable to get ringpop labels", tag.Error(err))
+	}
+
+	if until := time.Until(rpo.joinTime); until > 0 && until.Seconds() < maxScheduledEventTimeSeconds {
+		if err = labels.Set(startAtKey, strconv.FormatInt(rpo.joinTime.Unix(), 10)); err != nil {
+			rpo.logger.Fatal("unable to set ringpop label", tag.Error(err), tag.Key(startAtKey))
+		}
+		// Clean up the label eventually, but we don't really care when.
+		// The jitter doesn't really matter, but if two nodes join/leave at the same aligned
+		// time, it just spreads out the membership gossip traffic a little bit.
+		clearAfter := until + backoff.Jitter(2*rpo.propagationTime, 0.2)
+		time.AfterFunc(clearAfter, rpo.clearStartAt)
 	}
 
 	if err = labels.Set(portKey, strconv.Itoa(rpo.services[rpo.serviceName])); err != nil {
-		rpo.logger.Fatal("unable to set ring pop ServicePort label", tag.Error(err))
+		rpo.logger.Fatal("unable to set ringpop label", tag.Error(err), tag.Key(portKey))
 	}
 
+	// This label should be set last, it's used as the prediciate for finding members for rings.
 	if err = labels.Set(roleKey, string(rpo.serviceName)); err != nil {
-		rpo.logger.Fatal("unable to set ring pop ServiceRole label", tag.Error(err))
+		rpo.logger.Fatal("unable to set ringpop label", tag.Error(err), tag.Key(roleKey))
 	}
 
 	// Our individual rings may not support concurrent start/stop calls so we reacquire the state lock while acting upon them
@@ -208,6 +235,14 @@ func (rpo *monitor) bootstrapRingPop() error {
 		return fmt.Errorf("exhausted all retries: %w", err)
 	}
 	return nil
+}
+
+func (rpo *monitor) clearStartAt() {
+	// We can ignore all errors here, they're probably because we shut down already.
+	// This is just to clean up the startAt label.
+	if labels, err := rpo.rp.Labels(); err == nil {
+		_, _ = labels.Remove(startAtKey)
+	}
 }
 
 func (rpo *monitor) WaitUntilInitialized(ctx context.Context) error {
@@ -397,6 +432,31 @@ func (rpo *monitor) EvictSelf() error {
 	return rpo.rp.SelfEvict()
 }
 
+func (rpo *monitor) EvictSelfAt(asOf time.Time) (time.Duration, error) {
+	until := time.Until(asOf)
+	if until <= 0 || until.Seconds() >= maxScheduledEventTimeSeconds {
+		return 0, rpo.rp.SelfEvict()
+	}
+	// set label for eviction time in the future
+	labels, err := rpo.rp.Labels()
+	if err != nil {
+		rpo.logger.Error("unable to set ringpop label", tag.Error(err), tag.Key(stopAtKey))
+		return 0, err
+	}
+	err = labels.Set(stopAtKey, strconv.FormatInt(asOf.Unix(), 10))
+	if err != nil {
+		rpo.logger.Error("unable to set ringpop label", tag.Error(err), tag.Key(stopAtKey))
+		return 0, err
+	}
+	rpo.logger.Info("evicting self at time", tag.Timestamp(asOf))
+	// Wait a couple more seconds after the stopAt time before actually leaving.
+	// The jitter doesn't really matter, but if two nodes join/leave at the same aligned time,
+	// it just spreads out the membership gossip traffic a little bit.
+	leaveAfter := until + backoff.Jitter(rpo.propagationTime, 0.2)
+	time.AfterFunc(leaveAfter, func() { _ = rpo.rp.SelfEvict() })
+	return leaveAfter + rpo.propagationTime, nil
+}
+
 func (rpo *monitor) GetResolver(service primitives.ServiceName) (membership.ServiceResolver, error) {
 	ring, found := rpo.rings[service]
 	if !found {
@@ -416,6 +476,10 @@ func (rpo *monitor) SetDraining(draining bool) error {
 		return err
 	}
 	return labels.Set(drainingKey, strconv.FormatBool(draining))
+}
+
+func (rpo *monitor) ApproximateMaxPropagationTime() time.Duration {
+	return rpo.propagationTime
 }
 
 func replaceServicePort(address string, servicePort int) (string, error) {
