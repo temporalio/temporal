@@ -67,6 +67,8 @@ type Updater struct {
 	workflowConsistencyChecker api.WorkflowConsistencyChecker
 	matchingClient             matchingservice.MatchingServiceClient
 	request                    *historyservice.UpdateWorkflowExecutionRequest
+	namespaceID                namespace.ID
+	wfKey                      definition.WorkflowKey
 
 	// Variables shared with wfCtxOperation. Using values instead of pointers to make sure
 	// they are copied and don't have any pointers to workflow context or mutable state.
@@ -89,6 +91,7 @@ func NewUpdater(
 		workflowConsistencyChecker: workflowConsistencyChecker,
 		matchingClient:             matchingClient,
 		request:                    request,
+		namespaceID:                namespace.ID(request.GetNamespaceId()),
 	}
 }
 
@@ -98,7 +101,7 @@ func (u *Updater) Invoke(
 ) (*historyservice.UpdateWorkflowExecutionResponse, error) {
 	fmt.Println("===== [API]", "updateworkflow.Invoke")
 
-	wfKey := definition.NewWorkflowKey(
+	u.wfKey = definition.NewWorkflowKey(
 		u.request.NamespaceId,
 		u.request.Request.WorkflowExecution.WorkflowId,
 		u.request.Request.WorkflowExecution.RunId,
@@ -111,7 +114,7 @@ func (u *Updater) Invoke(
 		}
 
 		// wfKey built from request may have blank RunID so assign a fully populated version
-		wfKey = ms.GetWorkflowKey()
+		u.wfKey = ms.GetWorkflowKey()
 
 		if u.request.GetRequest().GetFirstExecutionRunId() != "" && ms.GetExecutionInfo().GetFirstExecutionRunId() != u.request.GetRequest().GetFirstExecutionRunId() {
 			return nil, consts.ErrWorkflowExecutionNotFound
@@ -124,9 +127,9 @@ func (u *Updater) Invoke(
 			// Failing API call fast here to prevent wasting resources for an update that will fail.
 			u.shardCtx.GetLogger().Info("Fail update fast due to WorkflowTask in failed state.",
 				tag.WorkflowNamespace(u.request.Request.Namespace),
-				tag.WorkflowNamespaceID(wfKey.NamespaceID),
-				tag.WorkflowID(wfKey.WorkflowID),
-				tag.WorkflowRunID(wfKey.RunID))
+				tag.WorkflowNamespaceID(u.wfKey.NamespaceID),
+				tag.WorkflowID(u.wfKey.WorkflowID),
+				tag.WorkflowRunID(u.wfKey.RunID))
 			return nil, serviceerror.NewWorkflowNotReady("Unable to perform workflow execution update due to Workflow Task in failed state.")
 		}
 
@@ -205,7 +208,7 @@ func (u *Updater) Invoke(
 			ctx,
 			nil,
 			api.BypassMutableStateConsistencyPredicate,
-			wfKey,
+			u.wfKey,
 			action,
 			nil,
 			u.shardCtx,
@@ -233,7 +236,6 @@ func (u *Updater) Invoke(
 		// then update is consistently rejected (instead of returning error in some cases).
 		if errors.Is(err, consts.ErrWorkflowCompleted) {
 			rejectionResp := u.createResponse(
-				wfKey,
 				u.request,
 				&updatepb.Outcome{
 					Value: &updatepb.Outcome_Failure{Failure: update.CancelReasonWorkflowCompleted.RejectionFailure()},
@@ -248,7 +250,7 @@ func (u *Updater) Invoke(
 	// TODO (alex): This code is copied from transferQueueActiveTaskExecutor.processWorkflowTask.
 	//   Helper function needs to be extracted to avoid code duplication.
 	if u.scheduledEventID != common.EmptyEventID {
-		err = u.addWorkflowTaskToMatching(ctx, wfKey, u.taskQueue, u.scheduledEventID, u.scheduleToStartTimeout, namespace.ID(u.request.GetNamespaceId()), u.directive, u.shardCtx, u.matchingClient)
+		err = u.addWorkflowTaskToMatching(ctx)
 
 		if _, isStickyWorkerUnavailable := err.(*serviceerrors.StickyWorkerUnavailable); isStickyWorkerUnavailable {
 			// If sticky worker is unavailable, switch to original normal task queue.
@@ -256,15 +258,15 @@ func (u *Updater) Invoke(
 				Name: u.normalTaskQueueName,
 				Kind: enumspb.TASK_QUEUE_KIND_NORMAL,
 			}
-			err = u.addWorkflowTaskToMatching(ctx, wfKey, u.taskQueue, u.scheduledEventID, u.scheduleToStartTimeout, namespace.ID(u.request.GetNamespaceId()), u.directive, u.shardCtx, u.matchingClient)
+			err = u.addWorkflowTaskToMatching(ctx)
 		}
 
 		if err != nil {
 			u.shardCtx.GetLogger().Warn("Unable to add WorkflowTask directly to matching.",
 				tag.WorkflowNamespace(u.request.Request.Namespace),
-				tag.WorkflowNamespaceID(wfKey.NamespaceID),
-				tag.WorkflowID(wfKey.WorkflowID),
-				tag.WorkflowRunID(wfKey.RunID),
+				tag.WorkflowNamespaceID(u.wfKey.NamespaceID),
+				tag.WorkflowID(u.wfKey.WorkflowID),
+				tag.WorkflowRunID(u.wfKey.RunID),
 				tag.Error(err))
 
 			// Intentionally just log error here and don't return it to the client.
@@ -277,8 +279,7 @@ func (u *Updater) Invoke(
 		}
 	}
 
-	namespaceID := namespace.ID(u.request.GetNamespaceId())
-	ns, err := u.shardCtx.GetNamespaceRegistry().GetNamespaceByID(namespaceID)
+	ns, err := u.shardCtx.GetNamespaceRegistry().GetNamespaceByID(u.namespaceID)
 	if err != nil {
 		return nil, err
 	}
@@ -289,37 +290,29 @@ func (u *Updater) Invoke(
 	if err != nil {
 		return nil, err
 	}
-	resp := u.createResponse(wfKey, u.request, status.Outcome, status.Stage)
+	resp := u.createResponse(u.request, status.Outcome, status.Stage)
 	return resp, nil
 }
 
 func (u *Updater) addWorkflowTaskToMatching(
 	ctx context.Context,
-	wfKey definition.WorkflowKey,
-	tq *taskqueuepb.TaskQueue,
-	scheduledEventID int64,
-	wtScheduleToStartTimeout time.Duration,
-	nsID namespace.ID,
-	directive *taskqueuespb.TaskVersionDirective,
-	shardCtx shard.Context,
-	matchingClient matchingservice.MatchingServiceClient,
 ) error {
-	clock, err := shardCtx.NewVectorClock()
+	clock, err := u.shardCtx.NewVectorClock()
 	if err != nil {
 		return err
 	}
 
-	_, err = matchingClient.AddWorkflowTask(ctx, &matchingservice.AddWorkflowTaskRequest{
-		NamespaceId: nsID.String(),
+	_, err = u.matchingClient.AddWorkflowTask(ctx, &matchingservice.AddWorkflowTaskRequest{
+		NamespaceId: u.namespaceID.String(),
 		Execution: &commonpb.WorkflowExecution{
-			WorkflowId: wfKey.WorkflowID,
-			RunId:      wfKey.RunID,
+			WorkflowId: u.wfKey.WorkflowID,
+			RunId:      u.wfKey.RunID,
 		},
-		TaskQueue:              tq,
-		ScheduledEventId:       scheduledEventID,
-		ScheduleToStartTimeout: durationpb.New(wtScheduleToStartTimeout),
+		TaskQueue:              u.taskQueue,
+		ScheduledEventId:       u.scheduledEventID,
+		ScheduleToStartTimeout: durationpb.New(u.scheduleToStartTimeout),
 		Clock:                  clock,
-		VersionDirective:       directive,
+		VersionDirective:       u.directive,
 	})
 	if err != nil {
 		return err
@@ -329,7 +322,6 @@ func (u *Updater) addWorkflowTaskToMatching(
 }
 
 func (u *Updater) createResponse(
-	wfKey definition.WorkflowKey,
 	req *historyservice.UpdateWorkflowExecutionRequest,
 	outcome *updatepb.Outcome,
 	stage enumspb.UpdateWorkflowExecutionLifecycleStage,
@@ -338,8 +330,8 @@ func (u *Updater) createResponse(
 		Response: &workflowservice.UpdateWorkflowExecutionResponse{
 			UpdateRef: &updatepb.UpdateRef{
 				WorkflowExecution: &commonpb.WorkflowExecution{
-					WorkflowId: wfKey.WorkflowID,
-					RunId:      wfKey.RunID,
+					WorkflowId: u.wfKey.WorkflowID,
+					RunId:      u.wfKey.RunID,
 				},
 				UpdateId: req.GetRequest().GetRequest().GetMeta().GetUpdateId(),
 			},
