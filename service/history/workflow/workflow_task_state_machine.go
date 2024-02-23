@@ -48,7 +48,7 @@ import (
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/primitives/timestamp"
-	"go.temporal.io/server/common/tqname"
+	"go.temporal.io/server/common/tqid"
 )
 
 type (
@@ -458,7 +458,7 @@ func (m *workflowTaskStateMachine) AddWorkflowTaskStartedEvent(
 		scheduledEvent := m.ms.hBuilder.AddWorkflowTaskScheduledEvent(
 			// taskQueue may come directly from RecordWorkflowTaskStarted from matching, which will
 			// contain a specific partition name. We only want to record the base name here.
-			cleanTaskQueue(taskQueue),
+			cleanTaskQueue(taskQueue, enumspb.TASK_QUEUE_TYPE_WORKFLOW),
 			durationpb.New(workflowTask.WorkflowTaskTimeout),
 			workflowTask.Attempt,
 			startTime,
@@ -1054,16 +1054,16 @@ func (m *workflowTaskStateMachine) convertSpeculativeWorkflowTaskToNormal() erro
 	return nil
 }
 
-func cleanTaskQueue(tq *taskqueuepb.TaskQueue) *taskqueuepb.TaskQueue {
-	if tq == nil {
-		return tq
+func cleanTaskQueue(proto *taskqueuepb.TaskQueue, taskType enumspb.TaskQueueType) *taskqueuepb.TaskQueue {
+	if proto == nil {
+		return proto
 	}
-	name, err := tqname.Parse(tq.Name)
+	partition, err := tqid.PartitionFromProto(proto, "", taskType)
 	if err != nil {
-		return tq
+		return proto
 	}
 
-	cleanTq := common.CloneProto(tq)
-	cleanTq.Name = name.BaseNameString()
+	cleanTq := common.CloneProto(proto)
+	cleanTq.Name = partition.TaskQueue().Name()
 	return cleanTq
 }
