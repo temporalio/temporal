@@ -366,7 +366,7 @@ func (r *serviceResolver) getReachableMembers() ([]*hostInfo, int64, error) {
 		} else if startAt <= nowUnix {
 			return false // start time is in the past
 		}
-		/// start time is in the future: schedule refresh at that time
+		// start time is in the future: schedule refresh at that time
 		nextEvent = min(nextEvent, startAt)
 		return true
 	})

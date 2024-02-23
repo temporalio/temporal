@@ -180,9 +180,9 @@ func (rpo *monitor) Start() {
 		if err = labels.Set(startAtKey, strconv.FormatInt(rpo.joinTime.Unix(), 10)); err != nil {
 			rpo.logger.Fatal("unable to set ringpop label", tag.Error(err), tag.Key(startAtKey))
 		}
-		// Clean up the label eventually, but we don't really care when. Add a little jitter
-		// since each update will get propagated around, and join time will be aligned if
-		// multiple nodes come online around the same time.
+		// Clean up the label eventually, but we don't really care when.
+		// The jitter doesn't really matter, but if two nodes join/leave at the same aligned
+		// time, it just spreads out the membership gossip traffic a little bit.
 		clearAfter := until + backoff.Jitter(2*rpo.propagationTime, 0.2)
 		time.AfterFunc(clearAfter, rpo.clearStartAt)
 	}
@@ -450,8 +450,8 @@ func (rpo *monitor) EvictSelfAt(asOf time.Time) (time.Duration, error) {
 	}
 	rpo.logger.Info("evicting self at time", tag.Timestamp(asOf))
 	// Wait a couple more seconds after the stopAt time before actually leaving.
-	// This doesn't really matter but just spreads out the membership recomputation due to
-	// actually leaving by a little bit.
+	// The jitter doesn't really matter, but if two nodes join/leave at the same aligned time,
+	// it just spreads out the membership gossip traffic a little bit.
 	leaveAfter := until + backoff.Jitter(rpo.propagationTime, 0.2)
 	time.AfterFunc(leaveAfter, func() { _ = rpo.rp.SelfEvict() })
 	return leaveAfter + rpo.propagationTime, nil
