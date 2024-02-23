@@ -141,9 +141,8 @@ func (q *PhysicalTaskQueueKey) PersistenceName() string {
 		// unversioned
 		if p.IsRoot() {
 			return baseName
-		} else {
-			return nonRootPartitionPrefix + baseName + partitionDelimiter + strconv.Itoa(p.PartitionId())
 		}
+		return nonRootPartitionPrefix + baseName + partitionDelimiter + strconv.Itoa(p.PartitionId())
 	default:
 		panic("unsupported partition kind: " + p.Kind().String())
 	}
