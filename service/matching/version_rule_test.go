@@ -427,18 +427,22 @@ func TestDeleteAssignmentRuleVariousIdx(t *testing.T) {
 	t.Parallel()
 	maxRules := 10
 	clock := hlc.Zero(1)
-	timesource := commonclock.NewRealTimeSource()
+	timesource := commonclock.NewEventTimeSource().Update(time.Now())
 	initialData := mkInitialData(0, clock)
 	assert.False(t, containsUnfiltered(initialData.GetAssignmentRules()))
 
 	// insert 3x to get three rules in there
-	rule1 := mkAssignmentRule("1", nil)
-	clock1 := hlc.Next(clock, timesource)
-	data, err := insertAssignmentRule(rule1, initialData, clock1, 0, maxRules)
+	timesource.Advance(time.Minute)
+	clock = hlc.Next(clock, timesource)
+	data, err := insertAssignmentRule(mkAssignmentRule("1", nil), initialData, clock, 0, maxRules)
 	assert.NoError(t, err)
-	data, err = insertAssignmentRule(rule1, data, clock1, 0, maxRules)
+	timesource.Advance(time.Minute)
+	clock = hlc.Next(clock, timesource)
+	data, err = insertAssignmentRule(mkAssignmentRule("1", nil), data, clock, 0, maxRules)
 	assert.NoError(t, err)
-	data, err = insertAssignmentRule(rule1, data, clock1, 0, maxRules)
+	timesource.Advance(time.Minute)
+	clock = hlc.Next(clock, timesource)
+	data, err = insertAssignmentRule(mkAssignmentRule("1", nil), data, clock, 0, maxRules)
 	assert.NoError(t, err)
 
 	// test deleting at a given index, then listing, we should see the difference
@@ -453,7 +457,6 @@ func TestDeleteAssignmentRuleVariousIdx(t *testing.T) {
 		actualIdx := given2ActualIdx(idx, data.GetAssignmentRules())
 		data, err = deleteAssignmentRule(data, clock, idx, false)
 		assert.NoError(t, err)
-		fmt.Printf("%+v\n", rule) // todo: removing this print causes the "NotContains" check to fail, which makes no sense
 		assert.NotContains(t, getListResp(t, data).GetAssignmentRules(), rule)
 		assert.Equal(t, clock, data.GetAssignmentRules()[actualIdx].GetDeleteTimestamp())
 	}
