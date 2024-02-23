@@ -3365,6 +3365,12 @@ func (wh *WorkflowHandler) ListWorkerVersioningRules(ctx context.Context, reques
 	matchingResponse, err := wh.matchingClient.ListWorkerVersioningRules(ctx, &matchingservice.ListWorkerVersioningRulesRequest{
 		NamespaceId: namespaceID.String(),
 		TaskQueue:   request.GetTaskQueue(),
+		Command: &matchingservice.ListWorkerVersioningRulesRequest_Request{
+			Request: &workflowservice.ListWorkerVersioningRulesRequest{
+				Namespace: request.GetNamespace(),
+				TaskQueue: request.GetTaskQueue(),
+			},
+		},
 	})
 
 	if matchingResponse == nil {

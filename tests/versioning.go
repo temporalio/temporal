@@ -118,21 +118,78 @@ func (s *VersioningIntegSuite) TearDownTest() {
 	s.sdkClient.Close()
 }
 
-func (s *VersioningIntegSuite) TestBasicAssignmentRuleInsert() {
+func (s *VersioningIntegSuite) TestAssignmentRuleInsert() {
 	ctx := NewContext()
 	tq := "insert-assignment-rule-basic"
 
-	foo := s.prefixed("foo")
-	s.addNewUnfilteredAssignmentRule(ctx, tq, foo)
+	s.addNewUnfilteredAssignmentRule(ctx, tq, "1", nil)
 
-	res2, err := s.engine.ListWorkerVersioningRules(ctx, &workflowservice.ListWorkerVersioningRulesRequest{
+	res, err := s.engine.ListWorkerVersioningRules(ctx, &workflowservice.ListWorkerVersioningRulesRequest{
 		Namespace: s.namespace,
 		TaskQueue: tq,
 	})
 	s.NoError(err)
-	s.NotNil(res2)
+	s.NotNil(res)
+	s.Equal("1", res.AssignmentRules[0].GetRule().GetTargetBuildId())
 
-	s.Equal(foo, res2.AssignmentRules[0].GetRule().GetTargetBuildId())
+	cT1 := res.GetConflictToken()
+	s.addNewUnfilteredAssignmentRule(ctx, tq, "2", cT1)
+	res, err = s.engine.ListWorkerVersioningRules(ctx, &workflowservice.ListWorkerVersioningRulesRequest{
+		Namespace: s.namespace,
+		TaskQueue: tq,
+	})
+	s.NoError(err)
+	s.NotNil(res)
+	s.Equal("2", res.AssignmentRules[0].GetRule().GetTargetBuildId())
+
+	cT2 := res.GetConflictToken()
+	s.NotEqual(cT1, cT2)
+
+	s.addNewUnfilteredAssignmentRule(ctx, tq, "3", cT2)
+	res, err = s.engine.ListWorkerVersioningRules(ctx, &workflowservice.ListWorkerVersioningRulesRequest{
+		Namespace: s.namespace,
+		TaskQueue: tq,
+	})
+	s.NoError(err)
+	s.NotNil(res)
+	s.Equal("3", res.AssignmentRules[0].GetRule().GetTargetBuildId())
+}
+
+func (s *VersioningIntegSuite) TestAssignmentRuleInsert() {
+	ctx := NewContext()
+	tq := "insert-assignment-rule-basic"
+
+	s.addNewUnfilteredAssignmentRule(ctx, tq, "1", nil)
+
+	res, err := s.engine.ListWorkerVersioningRules(ctx, &workflowservice.ListWorkerVersioningRulesRequest{
+		Namespace: s.namespace,
+		TaskQueue: tq,
+	})
+	s.NoError(err)
+	s.NotNil(res)
+	s.Equal("1", res.AssignmentRules[0].GetRule().GetTargetBuildId())
+
+	cT1 := res.GetConflictToken()
+	s.addNewUnfilteredAssignmentRule(ctx, tq, "2", cT1)
+	res, err = s.engine.ListWorkerVersioningRules(ctx, &workflowservice.ListWorkerVersioningRulesRequest{
+		Namespace: s.namespace,
+		TaskQueue: tq,
+	})
+	s.NoError(err)
+	s.NotNil(res)
+	s.Equal("2", res.AssignmentRules[0].GetRule().GetTargetBuildId())
+
+	cT2 := res.GetConflictToken()
+	s.NotEqual(cT1, cT2)
+
+	s.addNewUnfilteredAssignmentRule(ctx, tq, "3", cT2)
+	res, err = s.engine.ListWorkerVersioningRules(ctx, &workflowservice.ListWorkerVersioningRulesRequest{
+		Namespace: s.namespace,
+		TaskQueue: tq,
+	})
+	s.NoError(err)
+	s.NotNil(res)
+	s.Equal("3", res.AssignmentRules[0].GetRule().GetTargetBuildId())
 }
 
 func (s *VersioningIntegSuite) TestBasicVersionUpdate() {
@@ -1650,11 +1707,11 @@ func (s *VersioningIntegSuite) prefixed(buildId string) string {
 }
 
 // addNewDefaultBuildId updates build id info on a task queue with a new build id in a new default set.
-func (s *VersioningIntegSuite) addNewUnfilteredAssignmentRule(ctx context.Context, tq, newBuildId string) {
+func (s *VersioningIntegSuite) addNewUnfilteredAssignmentRule(ctx context.Context, tq, newBuildId string, conflictToken []byte) {
 	res, err := s.engine.UpdateWorkerVersioningRules(ctx, &workflowservice.UpdateWorkerVersioningRulesRequest{
 		Namespace:     s.namespace,
 		TaskQueue:     tq,
-		ConflictToken: nil, // todo carly
+		ConflictToken: conflictToken,
 		Operation: &workflowservice.UpdateWorkerVersioningRulesRequest_InsertAssignmentRule{
 			InsertAssignmentRule: &workflowservice.UpdateWorkerVersioningRulesRequest_InsertBuildIdAssignmentRule{
 				RuleIndex: 0,
