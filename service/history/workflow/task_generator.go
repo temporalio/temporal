@@ -470,7 +470,7 @@ func (r *TaskGeneratorImpl) GenerateActivityRetryTasks(
 	r.mutableState.AddTasks(&tasks.ActivityRetryTimerTask{
 		// TaskID is set by shard
 		WorkflowKey:         r.mutableState.GetWorkflowKey(),
-		Version:             activity.Version,
+		Version:             r.mutableState.GetCurrentVersion(),
 		VisibilityTimestamp: activity.ScheduledTime.AsTime(),
 		EventID:             activity.ScheduledEventId,
 		Attempt:             nextAttempt,
