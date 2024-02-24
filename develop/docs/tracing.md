@@ -99,8 +99,8 @@ For example:
 OTEL_EXPORTER_OTLP_TRACES_PROTOCOL=grpc OTEL_EXPORTER_OTLP_TRACES_INSECURE=true
 ```
 
-**If an environment variable conflicts with YAML-provided configuration then the environment 
-variable is ignored.**
+**NOTE: If an environment variable conflicts with YAML-provided configuration then the environment 
+variable takes precedence.**
 
 ## Instrumenting
 
