@@ -81,7 +81,7 @@ An OTEL span exporter can also be configured via environment variables: [OTEL_TR
 https://opentelemetry.io/docs/specs/otel/configuration/sdk-environment-variables/#exporter-selection) 
 creates a span exporter.
 
-```json
+```
 OTEL_TRACES_EXPORTER=otlp
 ```
 
@@ -95,8 +95,8 @@ of the exporter. So if you prefer setting environment variables to writing YAML 
 [variables defined in the OTEL spec](https://opentelemetry.io/docs/specs/otel/configuration/sdk-environment-variables/).
 
 For example:
-```json
-OTEL_EXPORTER_OTLP_TRACES_PROTOCOL=grpc OTEL_EXPORTER_OTLP_TRACES_INSECURE=true
+```
+OTEL_SERVICE_NAME=my-service OTEL_EXPORTER_OTLP_TRACES_INSECURE=true
 ```
 
 **NOTE: If an environment variable conflicts with YAML-provided configuration then the environment 
