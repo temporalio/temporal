@@ -36,13 +36,16 @@ import (
 )
 
 var (
-	unsupportedTraceExporter = errors.New("unsupported OTEL env")
+	unsupportedTraceExporter         = errors.New("unsupported OTEL exporter")
+	unsupportedTraceExporterProtocol = errors.New("unsupported OTEL exporter protocol")
 )
 
 const (
-	OtelServiceNameEnvKey      = "OTEL_SERVICE_NAME"
-	OtelTracesExporterEnvKey   = "OTEL_TRACES_EXPORTER"
-	OtelTracesOtlpExporterType = SpanExporterType("otlp")
+	OtelServiceNameEnvKey                = "OTEL_SERVICE_NAME"
+	OtelTracesExporterTypesEnvKey        = "OTEL_TRACES_EXPORTER"
+	OtelTracesOtlpExporterType           = SpanExporterType("otlp")
+	OtelExporterOtlpTracesProtocolEnvKey = "OTEL_EXPORTER_OTLP_TRACES_PROTOCOL"
+	OtelExporterOtlpTracesGrcpProtocol   = "grpc"
 )
 
 type envVarLookup = func(string) (string, bool)
@@ -53,18 +56,31 @@ func SupplementTraceExportersFromEnv(
 	exporters map[SpanExporterType]otelsdktrace.SpanExporter,
 	envVars envVarLookup,
 ) error {
+	exporterTypes, ok := envVars(OtelTracesExporterTypesEnvKey)
+	if !ok {
+		return nil
+	}
+
 	supplements := map[SpanExporterType]otelsdktrace.SpanExporter{}
-	if envVal, ok := envVars(OtelTracesExporterEnvKey); ok {
-		for _, val := range strings.Split(envVal, ",") {
-			switch SpanExporterType(val) {
-			case OtelTracesOtlpExporterType:
-				if _, exists := exporters[OtelTracesOtlpExporterType]; !exists {
-					// other OTEL configuration env variables are picked up automatically by the exporter itself
-					supplements[OtelTracesOtlpExporterType] = otlptracegrpc.NewUnstarted()
-				}
-			default:
-				return fmt.Errorf("%w: %v=%v", unsupportedTraceExporter, OtelTracesExporterEnvKey, val)
+	for _, exporterType := range strings.Split(exporterTypes, ",") {
+		switch SpanExporterType(exporterType) {
+		case OtelTracesOtlpExporterType:
+			if _, exists := exporters[OtelTracesOtlpExporterType]; exists {
+				continue
 			}
+
+			// only grpc is supported; fail if user requests a different protocol
+			if protocol, exists := envVars(OtelExporterOtlpTracesProtocolEnvKey); exists {
+				isSupported := protocol == OtelExporterOtlpTracesGrcpProtocol
+				if !isSupported {
+					return fmt.Errorf("%w: %v=%v", unsupportedTraceExporterProtocol, OtelExporterOtlpTracesProtocolEnvKey, protocol)
+				}
+			}
+
+			// other OTEL configuration env variables are picked up automatically by the exporter itself
+			supplements[OtelTracesOtlpExporterType] = otlptracegrpc.NewUnstarted()
+		default:
+			return fmt.Errorf("%w: %v=%v", unsupportedTraceExporter, OtelTracesExporterTypesEnvKey, exporterType)
 		}
 	}
 	maps.Copy(exporters, supplements)

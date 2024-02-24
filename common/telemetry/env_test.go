@@ -35,18 +35,40 @@ import (
 )
 
 func TestSupplementTraceExportersFromEnv(t *testing.T) {
-	t.Run("when env variable specifies OTEL exporter type, add exporter", func(t *testing.T) {
+	t.Run("when env variable specifies valid OTEL exporter type, add exporter", func(t *testing.T) {
 		exporters := map[telemetry.SpanExporterType]otelsdktrace.SpanExporter{}
 
 		err := telemetry.SupplementTraceExportersFromEnv(
 			exporters,
 			func(key string) (string, bool) {
-				require.Equal(t, telemetry.OtelTracesExporterEnvKey, key)
-				return string(telemetry.OtelTracesOtlpExporterType), true
+				switch key {
+				case telemetry.OtelTracesExporterTypesEnvKey:
+					return string(telemetry.OtelTracesOtlpExporterType), true
+				}
+				return "", false
 			})
 
 		require.NoError(t, err)
 		require.Len(t, exporters, 1)
+	})
+
+	t.Run("when env variable specifies valid OTEL exporter type but invalid protocol, return error", func(t *testing.T) {
+		exporters := map[telemetry.SpanExporterType]otelsdktrace.SpanExporter{}
+
+		err := telemetry.SupplementTraceExportersFromEnv(
+			exporters,
+			func(key string) (string, bool) {
+				switch key {
+				case telemetry.OtelTracesExporterTypesEnvKey:
+					return string(telemetry.OtelTracesOtlpExporterType), true
+				case telemetry.OtelExporterOtlpTracesProtocolEnvKey:
+					return "invalid", true
+				}
+				return "", false
+			})
+
+		require.EqualError(t, err, "unsupported OTEL exporter protocol: OTEL_EXPORTER_OTLP_TRACES_PROTOCOL=invalid")
+		require.Empty(t, exporters)
 	})
 
 	t.Run("when env variable specifies OTEL exporter type but the type already exists, don't add exporter", func(t *testing.T) {
@@ -58,7 +80,11 @@ func TestSupplementTraceExportersFromEnv(t *testing.T) {
 		err := telemetry.SupplementTraceExportersFromEnv(
 			exporters,
 			func(key string) (string, bool) {
-				return string(telemetry.OtelTracesOtlpExporterType), true
+				switch key {
+				case telemetry.OtelTracesExporterTypesEnvKey:
+					return string(telemetry.OtelTracesOtlpExporterType), true
+				}
+				return "", false
 			})
 
 		require.NoError(t, err)
@@ -71,10 +97,14 @@ func TestSupplementTraceExportersFromEnv(t *testing.T) {
 		err := telemetry.SupplementTraceExportersFromEnv(
 			exporters,
 			func(key string) (string, bool) {
-				return fmt.Sprintf("%v,%v", telemetry.OtelTracesOtlpExporterType, "nonsense"), true
+				switch key {
+				case telemetry.OtelTracesExporterTypesEnvKey:
+					return fmt.Sprintf("%v,%v", telemetry.OtelTracesOtlpExporterType, "nonsense"), true
+				}
+				return "", false
 			})
 
-		require.EqualError(t, err, "unsupported OTEL env: OTEL_TRACES_EXPORTER=nonsense")
+		require.EqualError(t, err, "unsupported OTEL exporter: OTEL_TRACES_EXPORTER=nonsense")
 		require.Empty(t, exporters)
 	})
 
