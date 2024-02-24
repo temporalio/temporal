@@ -21,12 +21,9 @@ collected nor emitted without additional configuration.
 In OpenTelemetry, the concept of an "exporter" is
 abstract. The concrete implementation of an exporter is determined by a
 3-tuple of values: the exporter signal, model, and protocol:
-- a "signal" is one of traces, metrics, or logs (in this document we will only deal with
-traces),
-- "model" indicates the abstract data model for the span and trace data
-being exported,
-- and the "protocol" specifies the concrete application protocol
-binding for the indicated model.
+- a "signal" is one of traces, metrics, or logs (in this document we will only deal with traces),
+- "model" indicates the abstract data model for the span and trace data being exported,
+- and the "protocol" specifies the concrete application protocol binding for the indicated model.
 
 Temporal is known to support exporting trace data as defined by otlp over either grpc or http.
 
