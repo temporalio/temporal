@@ -25,6 +25,7 @@
 package telemetry
 
 import (
+	"errors"
 	"fmt"
 	"strings"
 
@@ -34,10 +35,14 @@ import (
 	"golang.org/x/exp/maps"
 )
 
+var (
+	unsupportedTraceExporter = errors.New("unsupported OTEL env")
+)
+
 const (
 	OtelServiceNameEnvKey      = "OTEL_SERVICE_NAME"
 	OtelTracesExporterEnvKey   = "OTEL_TRACES_EXPORTER"
-	OtelTracesOtelExporterType = SpanExporterType("otlp")
+	OtelTracesOtlpExporterType = SpanExporterType("otlp")
 )
 
 type envVarLookup = func(string) (string, bool)
@@ -52,13 +57,13 @@ func SupplementTraceExportersFromEnv(
 	if envVal, ok := envVars(OtelTracesExporterEnvKey); ok {
 		for _, val := range strings.Split(envVal, ",") {
 			switch SpanExporterType(val) {
-			case OtelTracesOtelExporterType:
-				if _, exists := exporters[OtelTracesOtelExporterType]; !exists {
+			case OtelTracesOtlpExporterType:
+				if _, exists := exporters[OtelTracesOtlpExporterType]; !exists {
 					// other OTEL configuration env variables are picked up automatically by the exporter itself
-					supplements[OtelTracesOtelExporterType] = otlptracegrpc.NewUnstarted()
+					supplements[OtelTracesOtlpExporterType] = otlptracegrpc.NewUnstarted()
 				}
 			default:
-				return fmt.Errorf("unsupported %v: %v", OtelTracesExporterEnvKey, val)
+				return fmt.Errorf("%w: %v=%v", unsupportedTraceExporter, OtelTracesExporterEnvKey, val)
 			}
 		}
 	}

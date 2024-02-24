@@ -41,24 +41,24 @@ func TestSupplementTraceExportersFromEnv(t *testing.T) {
 			exporters,
 			func(key string) (string, bool) {
 				require.Equal(t, telemetry.OtelTracesExporterEnvKey, key)
-				return string(telemetry.OtelTracesOtelExporterType), true
+				return string(telemetry.OtelTracesOtlpExporterType), true
 			})
 		require.NoError(t, err)
 		require.Len(t, exporters, 1)
 	})
 
 	t.Run("when env variable specifies OTEL exporter type but the type already exists, don't add exporter", func(t *testing.T) {
-		var mockExporter otelsdktrace.SpanExporter = nil
+		var mockExporter otelsdktrace.SpanExporter
 		exporters := map[telemetry.SpanExporterType]otelsdktrace.SpanExporter{
-			telemetry.OtelTracesOtelExporterType: mockExporter,
+			telemetry.OtelTracesOtlpExporterType: mockExporter,
 		}
 		err := telemetry.SupplementTraceExportersFromEnv(
 			exporters,
 			func(key string) (string, bool) {
-				return string(telemetry.OtelTracesOtelExporterType), true
+				return string(telemetry.OtelTracesOtlpExporterType), true
 			})
 		require.NoError(t, err)
-		require.Equal(t, exporters[telemetry.OtelTracesOtelExporterType], mockExporter)
+		require.Equal(t, exporters[telemetry.OtelTracesOtlpExporterType], mockExporter)
 	})
 
 	t.Run("when env variable is specified but exporter type is not supported, return error", func(t *testing.T) {
@@ -66,9 +66,9 @@ func TestSupplementTraceExportersFromEnv(t *testing.T) {
 		err := telemetry.SupplementTraceExportersFromEnv(
 			exporters,
 			func(key string) (string, bool) {
-				return fmt.Sprintf("%v,%v", telemetry.OtelTracesOtelExporterType, "nonsense"), true
+				return fmt.Sprintf("%v,%v", telemetry.OtelTracesOtlpExporterType, "nonsense"), true
 			})
-		require.EqualError(t, err, "unsupported OTEL_TRACES_EXPORTER: nonsense")
+		require.EqualError(t, err, "unsupported OTEL env: OTEL_TRACES_EXPORTER=nonsense")
 		require.Empty(t, exporters)
 	})
 
