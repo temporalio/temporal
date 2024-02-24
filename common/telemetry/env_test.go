@@ -41,8 +41,7 @@ func TestSupplementTraceExportersFromEnv(t *testing.T) {
 		err := telemetry.SupplementTraceExportersFromEnv(
 			exporters,
 			func(key string) (string, bool) {
-				switch key {
-				case telemetry.OtelTracesExporterTypesEnvKey:
+				if key == telemetry.OtelTracesExporterTypesEnvKey {
 					return string(telemetry.OtelTracesOtlpExporterType), true
 				}
 				return "", false
@@ -80,8 +79,7 @@ func TestSupplementTraceExportersFromEnv(t *testing.T) {
 		err := telemetry.SupplementTraceExportersFromEnv(
 			exporters,
 			func(key string) (string, bool) {
-				switch key {
-				case telemetry.OtelTracesExporterTypesEnvKey:
+				if key == telemetry.OtelTracesExporterTypesEnvKey {
 					return string(telemetry.OtelTracesOtlpExporterType), true
 				}
 				return "", false
@@ -97,8 +95,7 @@ func TestSupplementTraceExportersFromEnv(t *testing.T) {
 		err := telemetry.SupplementTraceExportersFromEnv(
 			exporters,
 			func(key string) (string, bool) {
-				switch key {
-				case telemetry.OtelTracesExporterTypesEnvKey:
+				if key == telemetry.OtelTracesExporterTypesEnvKey {
 					return fmt.Sprintf("%v,%v", telemetry.OtelTracesOtlpExporterType, "nonsense"), true
 				}
 				return "", false
