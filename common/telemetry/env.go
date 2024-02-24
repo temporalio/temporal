@@ -29,6 +29,7 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/davecgh/go-spew/spew"
 	"go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracegrpc"
 	otelsdktrace "go.opentelemetry.io/otel/sdk/trace"
 	"go.temporal.io/server/common/primitives"
@@ -60,7 +61,9 @@ func SupplementTraceExportersFromEnv(
 			case OtelTracesOtlpExporterType:
 				if _, exists := exporters[OtelTracesOtlpExporterType]; !exists {
 					// other OTEL configuration env variables are picked up automatically by the exporter itself
-					supplements[OtelTracesOtlpExporterType] = otlptracegrpc.NewUnstarted()
+					exporter := otlptracegrpc.NewUnstarted()
+					spew.Dump(exporter)
+					supplements[OtelTracesOtlpExporterType] = exporter
 				}
 			default:
 				return fmt.Errorf("%w: %v=%v", unsupportedTraceExporter, OtelTracesExporterEnvKey, val)
