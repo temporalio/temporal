@@ -25,7 +25,7 @@ abstract. The concrete implementation of an exporter is determined by a
 - "model" indicates the abstract data model for the span and trace data being exported,
 - and the "protocol" specifies the concrete application protocol binding for the indicated model.
 
-Temporal is known to support exporting trace data as defined by otlp over either grpc or http.
+Temporal is known to support exporting trace data as defined by otlp over grpc.
 
 ### Configuration File
 
