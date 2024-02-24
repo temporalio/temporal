@@ -25,6 +25,7 @@
 package log
 
 import (
+	"errors"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -35,6 +36,7 @@ import (
 	"go.uber.org/zap/zapcore"
 
 	"go.temporal.io/server/common/log/tag"
+	lumberjack "gopkg.in/natefinch/lumberjack.v2"
 )
 
 const (
@@ -239,8 +241,43 @@ func buildZapLogger(cfg Config, disableCaller bool) *zap.Logger {
 		ErrorOutputPaths: []string{outputPath},
 		DisableCaller:    disableCaller,
 	}
-	logger, _ := config.Build()
+	var logger *zap.Logger
+	if cfg.EnableRotation && len(cfg.OutputFile) > 0 {
+		core, _ := rotationZapCore(cfg, config)
+		logger = zap.New(core)
+	} else {
+		logger, _ = config.Build()
+	}
 	return logger
+}
+
+func rotationZapCore(cfg Config, zapCfg zap.Config) (zapcore.Core, error) {
+	w := zapcore.AddSync(&lumberjack.Logger{
+		Filename:   cfg.OutputFile,
+		MaxSize:    cfg.MaxSize, // megabytes
+		MaxBackups: cfg.MaxBackups,
+		MaxAge:     cfg.MaxAge, // days
+	})
+	encoder, err := newEncoder(zapCfg.Encoding, zapCfg.EncoderConfig)
+	if err != nil {
+		return nil, err
+	}
+	core := zapcore.NewCore(
+		encoder,
+		w,
+		zapCfg.Level,
+	)
+	return core, nil
+}
+
+func newEncoder(name string, encoderConfig zapcore.EncoderConfig) (zapcore.Encoder, error) {
+	if name == "console" {
+		return zapcore.NewConsoleEncoder(encoderConfig), nil
+	}
+	if name == "json" {
+		return zapcore.NewJSONEncoder(encoderConfig), nil
+	}
+	return nil, errors.New("invalid encoder")
 }
 
 func buildCLIZapLogger() *zap.Logger {

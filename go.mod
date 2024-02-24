@@ -56,6 +56,7 @@ require (
 	google.golang.org/api v0.155.0
 	google.golang.org/grpc v1.61.0
 	google.golang.org/grpc/examples v0.0.0-20230623203957-0b3a81eabc28
+	gopkg.in/natefinch/lumberjack.v2 v2.2.1
 	gopkg.in/square/go-jose.v2 v2.6.0
 	gopkg.in/validator.v2 v2.0.1
 	gopkg.in/yaml.v3 v3.0.1

@@ -41,5 +41,20 @@ type (
 		// Production mode.  Default is Production.  Production-stage disables panics from
 		// DPanic logging.
 		Development bool `yaml:"development"`
+		// EnableRotation where file rotation is enabled. If this enabled, output file must be provided
+		EnableRotation bool `yaml:"enableRotation"`
+		// MaxSize is the maximum size in megabytes of the log file before it gets
+		// rotated. It defaults to 100 megabytes.
+		MaxSize int `yaml:"maxSize"`
+		// MaxAge is the maximum number of days to retain old log files based on the
+		// timestamp encoded in their filename.  Note that a day is defined as 24
+		// hours and may not exactly correspond to calendar days due to daylight
+		// savings, leap seconds, etc. The default is not to remove old log files
+		// based on age.
+		MaxAge int `yaml:"maxAge"`
+		// MaxBackups is the maximum number of old log files to retain.  The default
+		// is to retain all old log files (though MaxAge may still cause them to get
+		// deleted.)
+		MaxBackups int `yaml:"maxBackups"`
 	}
 )
