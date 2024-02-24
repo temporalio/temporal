@@ -25,46 +25,52 @@
 package telemetry
 
 import (
-	"errors"
 	"fmt"
+	"strings"
 
 	"go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracegrpc"
 	otelsdktrace "go.opentelemetry.io/otel/sdk/trace"
 	"go.temporal.io/server/common/primitives"
+	"golang.org/x/exp/maps"
 )
 
 const (
-	OtelTracesExporterEnvKey         = "OTEL_TRACES_EXPORTER"
-	OtelTracesExporterProtocolEnvKey = "OTEL_EXPORTER_OTLP_TRACES_PROTOCOL"
-	OtelServiceNameEnvKey            = "OTEL_SERVICE_NAME"
+	OtelServiceNameEnvKey      = "OTEL_SERVICE_NAME"
+	OtelTracesExporterEnvKey   = "OTEL_TRACES_EXPORTER"
+	OtelTracesOtelExporterType = SpanExporterType("otlp")
 )
-
-var unsupportedEnvVar = errors.New("unsupported OpenTelemetry env var")
 
 type envVarLookup = func(string) (string, bool)
 
-// EnvSpanExporter creates a gRPC span exporter from environment variables, if present, as specified in
-// https://github.com/open-telemetry/opentelemetry-specification/blob/main/specification/protocol/exporter.md#configuration-options
-func EnvSpanExporter(enVars envVarLookup) (otelsdktrace.SpanExporter, error) {
-
-	typeOf, found := enVars(OtelTracesExporterEnvKey)
-	if !found {
-		return nil, nil
+// SupplementTraceExportersFromEnv adds any OTEL span exporters configured through environment variables
+// to a given set of exporters. It does not override an existing exporter with the same type.
+func SupplementTraceExportersFromEnv(
+	exporters map[SpanExporterType]otelsdktrace.SpanExporter,
+	envVars envVarLookup,
+) error {
+	supplements := map[SpanExporterType]otelsdktrace.SpanExporter{}
+	if envVal, ok := envVars(OtelTracesExporterEnvKey); ok {
+		for _, val := range strings.Split(envVal, ",") {
+			switch SpanExporterType(val) {
+			case OtelTracesOtelExporterType:
+				if _, exists := exporters[OtelTracesOtelExporterType]; !exists {
+					// other OTEL configuration env variables are picked up automatically by the exporter itself
+					supplements[OtelTracesOtelExporterType] = otlptracegrpc.NewUnstarted()
+				}
+			default:
+				return fmt.Errorf("unsupported %v: %v", OtelTracesExporterEnvKey, val)
+			}
+		}
 	}
-	if typeOf != "oltp" {
-		return nil, unsupportedEnvVarErr(OtelTracesExporterEnvKey, typeOf)
-	}
-
-	protocol, found := enVars(OtelTracesExporterProtocolEnvKey)
-	if found && protocol != "grpc" {
-		return nil, unsupportedEnvVarErr(OtelTracesExporterProtocolEnvKey, protocol)
-	}
-
-	return otlptracegrpc.NewUnstarted(), nil
+	maps.Copy(exporters, supplements)
+	return nil
 }
 
 // ResourceServiceName returns the OpenTelemetry tracing service name for a Temporal service.
-func ResourceServiceName(rsn primitives.ServiceName, enVars envVarLookup) string {
+func ResourceServiceName(
+	rsn primitives.ServiceName,
+	envVars envVarLookup,
+) string {
 	// map "internal-frontend" to "frontend" for the purpose of tracing
 	if rsn == primitives.InternalFrontendService {
 		rsn = primitives.FrontendService
@@ -72,13 +78,9 @@ func ResourceServiceName(rsn primitives.ServiceName, enVars envVarLookup) string
 
 	// allow custom prefix via env vars
 	serviceNamePrefix := "io.temporal"
-	if customServicePrefix, found := enVars(OtelServiceNameEnvKey); found {
+	if customServicePrefix, found := envVars(OtelServiceNameEnvKey); found {
 		serviceNamePrefix = customServicePrefix
 	}
 
 	return fmt.Sprintf("%s.%s", serviceNamePrefix, string(rsn))
-}
-
-func unsupportedEnvVarErr(key, val string) error {
-	return fmt.Errorf("%w: %s=%s", unsupportedEnvVar, key, val)
 }

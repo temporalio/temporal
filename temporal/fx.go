@@ -902,18 +902,17 @@ var TraceExportModule = fx.Options(
 	}),
 
 	fx.Provide(func(lc fx.Lifecycle, c *config.Config) ([]otelsdktrace.SpanExporter, error) {
-		exporters, err := c.ExporterConfig.SpanExporters()
+		exportersByType, err := c.ExporterConfig.SpanExporters()
 		if err != nil {
 			return nil, err
 		}
 
-		exporterFromEnv, err := telemetry.EnvSpanExporter(os.LookupEnv)
+		err = telemetry.SupplementTraceExportersFromEnv(exportersByType, os.LookupEnv)
 		if err != nil {
 			return nil, err
-		} else if exporterFromEnv != nil {
-			exporters = append(exporters, exporterFromEnv)
 		}
 
+		exporters := maps.Values(exportersByType)
 		lc.Append(fx.Hook{
 			OnStart: startAll(exporters),
 			OnStop:  shutdownAll(exporters),

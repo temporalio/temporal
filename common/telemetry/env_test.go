@@ -25,81 +25,77 @@
 package telemetry_test
 
 import (
+	"fmt"
 	"testing"
 
 	"github.com/stretchr/testify/require"
+	otelsdktrace "go.opentelemetry.io/otel/sdk/trace"
 	"go.temporal.io/server/common/primitives"
 	"go.temporal.io/server/common/telemetry"
 )
 
-func TestEnvSpanExporter(t *testing.T) {
-	t.Parallel()
+func TestSupplementTraceExportersFromEnv(t *testing.T) {
+	t.Run("when env variable specifies OTEL exporter type, add exporter", func(t *testing.T) {
+		exporters := map[telemetry.SpanExporterType]otelsdktrace.SpanExporter{}
+		err := telemetry.SupplementTraceExportersFromEnv(
+			exporters,
+			func(key string) (string, bool) {
+				require.Equal(t, telemetry.OtelTracesExporterEnvKey, key)
+				return string(telemetry.OtelTracesOtelExporterType), true
+			})
+		require.NoError(t, err)
+		require.Len(t, exporters, 1)
+	})
 
-	tests := []struct {
-		name     string
-		envVars  map[string]string
-		errMsg   string
-		exporter bool
-	}{
-		{
-			name:    "NoExporter",
-			envVars: map[string]string{},
-		},
-		{
-			name: "InvalidExporter",
-			envVars: map[string]string{
-				telemetry.OtelTracesExporterEnvKey: "invalid-exporter",
-			},
-			errMsg: "unsupported OpenTelemetry env var: OTEL_TRACES_EXPORTER=invalid-exporter",
-		},
-		{
-			name: "ValidExporter",
-			envVars: map[string]string{
-				telemetry.OtelTracesExporterEnvKey: "oltp",
-			},
-			exporter: true,
-		},
-		{
-			name: "ValidExporterWithValidProtocol",
-			envVars: map[string]string{
-				telemetry.OtelTracesExporterEnvKey:         "oltp",
-				telemetry.OtelTracesExporterProtocolEnvKey: "grpc",
-			},
-			errMsg:   "",
-			exporter: true,
-		},
-		{
-			name: "ValidExporterWithInvalidProtocol",
-			envVars: map[string]string{
-				telemetry.OtelTracesExporterEnvKey:         "oltp",
-				telemetry.OtelTracesExporterProtocolEnvKey: "invalid-protocol",
-			},
-			errMsg: "unsupported OpenTelemetry env var: OTEL_EXPORTER_OTLP_TRACES_PROTOCOL=invalid-protocol",
-		},
-	}
+	t.Run("when env variable specifies OTEL exporter type but the type already exists, don't add exporter", func(t *testing.T) {
+		var mockExporter otelsdktrace.SpanExporter = nil
+		exporters := map[telemetry.SpanExporterType]otelsdktrace.SpanExporter{
+			telemetry.OtelTracesOtelExporterType: mockExporter,
+		}
+		err := telemetry.SupplementTraceExportersFromEnv(
+			exporters,
+			func(key string) (string, bool) {
+				return string(telemetry.OtelTracesOtelExporterType), true
+			})
+		require.NoError(t, err)
+		require.Equal(t, exporters[telemetry.OtelTracesOtelExporterType], mockExporter)
+	})
 
-	for _, test := range tests {
-		t.Run(test.name, func(t *testing.T) {
-			envVarsLookup := func(key string) (string, bool) {
-				val, ok := test.envVars[key]
-				return val, ok
-			}
+	t.Run("when env variable is specified but exporter type is not supported, return error", func(t *testing.T) {
+		exporters := map[telemetry.SpanExporterType]otelsdktrace.SpanExporter{}
+		err := telemetry.SupplementTraceExportersFromEnv(
+			exporters,
+			func(key string) (string, bool) {
+				return fmt.Sprintf("%v,%v", telemetry.OtelTracesOtelExporterType, "nonsense"), true
+			})
+		require.EqualError(t, err, "unsupported OTEL_TRACES_EXPORTER: nonsense")
+		require.Empty(t, exporters)
+	})
 
-			exp, err := telemetry.EnvSpanExporter(envVarsLookup)
-			if test.errMsg == "" {
-				require.NoError(t, err)
-			} else {
-				require.EqualError(t, err, test.errMsg)
-			}
-			if test.exporter {
-				require.NotNil(t, exp)
-			}
-		})
-	}
+	t.Run("when not specified, do not create any exporters", func(t *testing.T) {
+		exporters := map[telemetry.SpanExporterType]otelsdktrace.SpanExporter{}
+		err := telemetry.SupplementTraceExportersFromEnv(
+			exporters,
+			func(key string) (string, bool) {
+				return "", false
+			})
+		require.NoError(t, err)
+		require.Empty(t, exporters)
+	})
 }
 
 func TestResourceServiceName(t *testing.T) {
-	t.Run("DefaultPrefix", func(t *testing.T) {
+	t.Run("when env variable is specified, use custom service name prefix", func(t *testing.T) {
+		require.Equal(t,
+			"PREFIX.matching",
+			telemetry.ResourceServiceName(primitives.MatchingService, func(key string) (string, bool) {
+				require.Equal(t, telemetry.OtelServiceNameEnvKey, key)
+				return "PREFIX", true
+			}),
+		)
+	})
+
+	t.Run("when not specified, use default prefix", func(t *testing.T) {
 		require.Equal(t,
 			"io.temporal.history",
 			telemetry.ResourceServiceName(primitives.HistoryService, func(key string) (string, bool) {
@@ -108,21 +104,17 @@ func TestResourceServiceName(t *testing.T) {
 		)
 	})
 
-	t.Run("SingleFrontendServiceName", func(t *testing.T) {
+	t.Run("always use single service name for internal frontend", func(t *testing.T) {
 		require.Equal(t,
-			"io.temporal.frontend", // instead of "internal-frontend"
+			"PREFIX.frontend",
 			telemetry.ResourceServiceName(primitives.InternalFrontendService, func(key string) (string, bool) {
-				return "", false
+				return "PREFIX", true
 			}),
 		)
-	})
-
-	t.Run("CustomPrefix", func(t *testing.T) {
 		require.Equal(t,
-			"PREFIX.matching",
-			telemetry.ResourceServiceName(primitives.MatchingService, func(key string) (string, bool) {
-				require.Equal(t, telemetry.OtelServiceNameEnvKey, key)
-				return "PREFIX", true
+			"io.temporal.frontend",
+			telemetry.ResourceServiceName(primitives.InternalFrontendService, func(key string) (string, bool) {
+				return "", false
 			}),
 		)
 	})

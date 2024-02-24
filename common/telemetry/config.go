@@ -45,14 +45,14 @@ import (
 
 const (
 	// the following defaults were taken from the grpc docs as of grpc v1.46.
-	// they are not available programatically
+	// they are not available programmatically
 
 	defaultReadBufferSize    = 32 * 1024
 	defaultWriteBufferSize   = 32 * 1024
 	defaultMinConnectTimeout = 10 * time.Second
 
 	// the following defaults were taken from the otel library as of v1.7.
-	// they are not available programatically
+	// they are not available programmatically
 
 	retryDefaultEnabled         = true
 	retryDefaultInitialInterval = 5 * time.Second
@@ -159,6 +159,8 @@ type (
 	ExportConfig struct {
 		inner exportConfig `yaml:",inline"`
 	}
+
+	SpanExporterType string
 )
 
 // UnmarshalYAML loads the state of an ExportConfig from parsed YAML
@@ -166,7 +168,7 @@ func (ec *ExportConfig) UnmarshalYAML(n *yaml.Node) error {
 	return n.Decode(&ec.inner)
 }
 
-func (ec *ExportConfig) SpanExporters() ([]otelsdktrace.SpanExporter, error) {
+func (ec *ExportConfig) SpanExporters() (map[SpanExporterType]otelsdktrace.SpanExporter, error) {
 	return ec.inner.SpanExporters()
 }
 
@@ -212,10 +214,10 @@ func (g *grpcconn) dialOpts() []grpc.DialOption {
 }
 
 // SpanExporters builds the set of OTEL SpanExporter objects defined by the YAML
-// unmarshaled into this ExportConfig object. The returned SpanExporters have
+// unmarshalled into this ExportConfig object. The returned SpanExporters have
 // not been started.
-func (ec *exportConfig) SpanExporters() ([]otelsdktrace.SpanExporter, error) {
-	out := make([]otelsdktrace.SpanExporter, 0, len(ec.Exporters))
+func (ec *exportConfig) SpanExporters() (map[SpanExporterType]otelsdktrace.SpanExporter, error) {
+	out := make(map[SpanExporterType]otelsdktrace.SpanExporter, len(ec.Exporters))
 	for _, expcfg := range ec.Exporters {
 		if !strings.HasPrefix(expcfg.Kind.Signal, "trace") {
 			continue
@@ -226,7 +228,7 @@ func (ec *exportConfig) SpanExporters() ([]otelsdktrace.SpanExporter, error) {
 			if err != nil {
 				return nil, err
 			}
-			out = append(out, spanexp)
+			out[SpanExporterType(expcfg.Kind.Model)] = spanexp
 		default:
 			return nil, fmt.Errorf("unsupported span exporter type: %T", spec)
 		}
