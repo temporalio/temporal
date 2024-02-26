@@ -4293,7 +4293,7 @@ func (ms *MutableStateImpl) RetryActivity(
 		return state, nil
 	}
 	nextAttempt := ai.Attempt + 1
-	if err := ms.taskGenerator.GenerateActivityRetryTasks(ai, nextAttempt); err != nil {
+	if err := ms.taskGenerator.GenerateActivityRetryTasks(ai.ScheduledEventId, activityVisitor.NextScheduledTime(), nextAttempt); err != nil {
 		return enumspb.RETRY_STATE_INTERNAL_SERVER_ERROR, err
 	}
 	// we need to store activity info size since pendingActivityInfoIDs holds pointers to activity
