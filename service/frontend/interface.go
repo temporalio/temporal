@@ -49,5 +49,7 @@ type (
 	// OperatorHandler is interface wrapping frontend workflow handler
 	OperatorHandler interface {
 		operatorservice.OperatorServiceServer
+		Start()
+		Stop()
 	}
 )

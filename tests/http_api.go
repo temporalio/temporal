@@ -393,3 +393,23 @@ func (s *ClientFunctionalSuite) httpRequest(expectedStatus int, req *http.Reques
 	s.Require().Equal(expectedStatus, resp.StatusCode, "Bad status, body: %s", body)
 	return resp, body
 }
+
+func (s *ClientFunctionalSuite) TestHTTPAPI_OperatorService_ListSearchAttributes() {
+	_, respBody := s.httpGet(
+		http.StatusOK,
+		"/api/v1/namespaces/"+s.namespace+"/search-attributes",
+		"application/json",
+	)
+	s.T().Log(string(respBody))
+	var searchAttrsResp struct {
+		CustomAttributes map[string]string `json:"customAttributes"`
+		SystemAttributes map[string]string `json:"systemAttributes"`
+		StorageSchema    map[string]string `json:"storageSchema"`
+	}
+	s.Require().NoError(json.Unmarshal(respBody, &searchAttrsResp))
+	// We don't allow for creating search attributes from the HTTP API yet, so
+	// we just check that a few defaults exist. We don't want to check for all
+	// of them as that's brittle and will break the tests if we ever add a new type
+	s.Require().Contains(searchAttrsResp.CustomAttributes, "CustomIntField")
+	s.Require().Equal(searchAttrsResp.CustomAttributes["CustomIntField"], "INDEXED_VALUE_TYPE_INT")
+}
