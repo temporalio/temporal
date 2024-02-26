@@ -160,6 +160,9 @@ func (s *ScheduleFunctionalSuite) TestBasics() {
 				},
 			},
 		},
+		Policies: &schedulepb.SchedulePolicies{
+			KeepOriginalWorkflowId: true,
+		},
 	}
 	req := &workflowservice.CreateScheduleRequest{
 		Namespace:  s.namespace,
@@ -284,7 +287,7 @@ func (s *ScheduleFunctionalSuite) TestBasics() {
 		s.Equal(wt, ex.Type.Name, "should only see started workflows")
 	}
 	ex0 := wfResp.Executions[0]
-	s.True(strings.HasPrefix(ex0.Execution.WorkflowId, wid))
+	s.Equal(ex0.Execution.WorkflowId, wid)
 	s.True(ex0.Execution.RunId == describeResp.Info.RecentActions[0].GetStartWorkflowResult().RunId ||
 		ex0.Execution.RunId == describeResp.Info.RecentActions[1].GetStartWorkflowResult().RunId)
 	s.Equal(wt, ex0.Type.Name)
