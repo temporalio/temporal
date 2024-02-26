@@ -88,6 +88,7 @@ var (
 )
 
 func TestRingpopSuite(t *testing.T) {
+	t.Parallel()
 	suite.Run(t, new(RingpopSuite))
 }
 

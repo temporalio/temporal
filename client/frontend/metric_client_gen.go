@@ -425,6 +425,20 @@ func (c *metricClient) PollActivityTaskQueue(
 	return c.client.PollActivityTaskQueue(ctx, request, opts...)
 }
 
+func (c *metricClient) PollNexusTaskQueue(
+	ctx context.Context,
+	request *workflowservice.PollNexusTaskQueueRequest,
+	opts ...grpc.CallOption,
+) (_ *workflowservice.PollNexusTaskQueueResponse, retError error) {
+
+	metricsHandler, startTime := c.startMetricsRecording(ctx, "FrontendClientPollNexusTaskQueue")
+	defer func() {
+		c.finishMetricsRecording(metricsHandler, startTime, retError)
+	}()
+
+	return c.client.PollNexusTaskQueue(ctx, request, opts...)
+}
+
 func (c *metricClient) PollWorkflowExecutionUpdate(
 	ctx context.Context,
 	request *workflowservice.PollWorkflowExecutionUpdateRequest,
@@ -633,6 +647,34 @@ func (c *metricClient) RespondActivityTaskFailedById(
 	}()
 
 	return c.client.RespondActivityTaskFailedById(ctx, request, opts...)
+}
+
+func (c *metricClient) RespondNexusTaskCompleted(
+	ctx context.Context,
+	request *workflowservice.RespondNexusTaskCompletedRequest,
+	opts ...grpc.CallOption,
+) (_ *workflowservice.RespondNexusTaskCompletedResponse, retError error) {
+
+	metricsHandler, startTime := c.startMetricsRecording(ctx, "FrontendClientRespondNexusTaskCompleted")
+	defer func() {
+		c.finishMetricsRecording(metricsHandler, startTime, retError)
+	}()
+
+	return c.client.RespondNexusTaskCompleted(ctx, request, opts...)
+}
+
+func (c *metricClient) RespondNexusTaskFailed(
+	ctx context.Context,
+	request *workflowservice.RespondNexusTaskFailedRequest,
+	opts ...grpc.CallOption,
+) (_ *workflowservice.RespondNexusTaskFailedResponse, retError error) {
+
+	metricsHandler, startTime := c.startMetricsRecording(ctx, "FrontendClientRespondNexusTaskFailed")
+	defer func() {
+		c.finishMetricsRecording(metricsHandler, startTime, retError)
+	}()
+
+	return c.client.RespondNexusTaskFailed(ctx, request, opts...)
 }
 
 func (c *metricClient) RespondQueryTaskCompleted(
