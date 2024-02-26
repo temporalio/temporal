@@ -35,7 +35,6 @@ import (
 	"go.temporal.io/api/serviceerror"
 
 	enumsspb "go.temporal.io/server/api/enums/v1"
-	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common/archiver"
 	"go.temporal.io/server/common/backoff"
 	"go.temporal.io/server/common/namespace"
@@ -76,10 +75,7 @@ type (
 		GenerateActivityTasks(
 			event *historypb.HistoryEvent,
 		) error
-		GenerateActivityRetryTasks(
-			activity *persistencespb.ActivityInfo,
-			nextAttempt int32,
-		) error
+		GenerateActivityRetryTasks(eventID int64, visibilityTimestamp time.Time, nextAttempt int32) error
 		GenerateChildWorkflowTasks(
 			event *historypb.HistoryEvent,
 		) error
@@ -463,16 +459,13 @@ func (r *TaskGeneratorImpl) GenerateActivityTasks(
 	return nil
 }
 
-func (r *TaskGeneratorImpl) GenerateActivityRetryTasks(
-	activity *persistencespb.ActivityInfo,
-	nextAttempt int32,
-) error {
+func (r *TaskGeneratorImpl) GenerateActivityRetryTasks(eventID int64, visibilityTimestamp time.Time, nextAttempt int32) error {
 	r.mutableState.AddTasks(&tasks.ActivityRetryTimerTask{
 		// TaskID is set by shard
 		WorkflowKey:         r.mutableState.GetWorkflowKey(),
-		Version:             activity.Version,
-		VisibilityTimestamp: activity.ScheduledTime.AsTime(),
-		EventID:             activity.ScheduledEventId,
+		Version:             r.mutableState.GetCurrentVersion(),
+		VisibilityTimestamp: visibilityTimestamp,
+		EventID:             eventID,
 		Attempt:             nextAttempt,
 	})
 	return nil
