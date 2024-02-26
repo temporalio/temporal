@@ -85,7 +85,6 @@ import (
 	"go.temporal.io/server/common/persistence/visibility/manager"
 	"go.temporal.io/server/common/persistence/visibility/store/elasticsearch"
 	esclient "go.temporal.io/server/common/persistence/visibility/store/elasticsearch/client"
-	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/common/sdk"
 	"go.temporal.io/server/common/searchattribute"
 	"go.temporal.io/server/common/xdc"
@@ -803,78 +802,24 @@ func (adh *AdminHandler) ListHistoryTasks(
 	if request == nil {
 		return nil, errRequestNotSet
 	}
-	taskRange := request.GetTaskRange()
-	if taskRange == nil {
+
+	if request.GetTaskRange() == nil {
 		return nil, errTaskRangeNotSet
 	}
 
-	taskCategory, ok := adh.taskCategoryRegistry.GetCategoryByID(int(request.Category))
-	if !ok {
-		return nil, &serviceerror.InvalidArgument{
-			Message: fmt.Sprintf("unknown task category: %v", request.Category),
-		}
+	if !adh.config.AdminEnableListHistoryTasks() {
+		return nil, errListHistoryTasksNotAllowed
 	}
 
-	var minTaskKey, maxTaskKey tasks.Key
-	if taskRange.InclusiveMinTaskKey != nil {
-		minTaskKey = tasks.NewKey(
-			timestamp.TimeValue(taskRange.InclusiveMinTaskKey.FireTime),
-			taskRange.InclusiveMinTaskKey.TaskId,
-		)
-		if err := tasks.ValidateKey(minTaskKey); err != nil {
-			return nil, &serviceerror.InvalidArgument{
-				Message: fmt.Sprintf("invalid minTaskKey: %v", err.Error()),
-			}
-		}
-	}
-	if taskRange.ExclusiveMaxTaskKey != nil {
-		maxTaskKey = tasks.NewKey(
-			timestamp.TimeValue(taskRange.ExclusiveMaxTaskKey.FireTime),
-			taskRange.ExclusiveMaxTaskKey.TaskId,
-		)
-		if err := tasks.ValidateKey(maxTaskKey); err != nil {
-			return nil, &serviceerror.InvalidArgument{
-				Message: fmt.Sprintf("invalid maxTaskKey: %v", err.Error()),
-			}
-		}
-	}
-
-	// Queue reader registration is only meaning for history service
-	// we are on frontend service, so no need to do registration
-	// TODO: move the logic to history service
-
-	resp, err := adh.persistenceExecutionManager.GetHistoryTasks(ctx, &persistence.GetHistoryTasksRequest{
-		ShardID:             request.ShardId,
-		TaskCategory:        taskCategory,
-		InclusiveMinTaskKey: minTaskKey,
-		ExclusiveMaxTaskKey: maxTaskKey,
-		BatchSize:           int(request.BatchSize),
-		NextPageToken:       request.NextPageToken,
-	})
+	resp, err := adh.historyClient.ListTasks(
+		ctx, &historyservice.ListTasksRequest{
+			Request: request,
+		},
+	)
 	if err != nil {
 		return nil, err
 	}
-
-	return &adminservice.ListHistoryTasksResponse{
-		Tasks:         toAdminTask(resp.Tasks),
-		NextPageToken: resp.NextPageToken,
-	}, nil
-}
-
-func toAdminTask(tasks []tasks.Task) []*adminservice.Task {
-	var adminTasks []*adminservice.Task
-	for _, task := range tasks {
-		adminTasks = append(adminTasks, &adminservice.Task{
-			NamespaceId: task.GetNamespaceID(),
-			WorkflowId:  task.GetWorkflowID(),
-			RunId:       task.GetRunID(),
-			TaskId:      task.GetTaskID(),
-			TaskType:    task.GetType(),
-			FireTime:    timestamppb.New(task.GetKey().FireTime),
-			Version:     task.GetVersion(),
-		})
-	}
-	return adminTasks
+	return resp.Response, nil
 }
 
 // DescribeHistoryHost returns information about the internal states of a history host

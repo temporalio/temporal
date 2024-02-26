@@ -1198,6 +1198,30 @@ func (mr *MockOperatorHandlerMockRecorder) RemoveSearchAttributes(arg0, arg1 int
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RemoveSearchAttributes", reflect.TypeOf((*MockOperatorHandler)(nil).RemoveSearchAttributes), arg0, arg1)
 }
 
+// Start mocks base method.
+func (m *MockOperatorHandler) Start() {
+	m.ctrl.T.Helper()
+	m.ctrl.Call(m, "Start")
+}
+
+// Start indicates an expected call of Start.
+func (mr *MockOperatorHandlerMockRecorder) Start() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Start", reflect.TypeOf((*MockOperatorHandler)(nil).Start))
+}
+
+// Stop mocks base method.
+func (m *MockOperatorHandler) Stop() {
+	m.ctrl.T.Helper()
+	m.ctrl.Call(m, "Stop")
+}
+
+// Stop indicates an expected call of Stop.
+func (mr *MockOperatorHandlerMockRecorder) Stop() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Stop", reflect.TypeOf((*MockOperatorHandler)(nil).Stop))
+}
+
 // mustEmbedUnimplementedOperatorServiceServer mocks base method.
 func (m *MockOperatorHandler) mustEmbedUnimplementedOperatorServiceServer() {
 	m.ctrl.T.Helper()

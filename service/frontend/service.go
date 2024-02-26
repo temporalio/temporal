@@ -187,6 +187,8 @@ type Config struct {
 	// AccessHistoryFraction are interim flags across 2 minor releases and will be removed once fully enabled.
 	AccessHistoryFraction            dynamicconfig.FloatPropertyFn
 	AdminDeleteAccessHistoryFraction dynamicconfig.FloatPropertyFn
+
+	AdminEnableListHistoryTasks dynamicconfig.BoolPropertyFn
 }
 
 // NewConfig returns new service config with default values
@@ -284,6 +286,8 @@ func NewConfig(
 
 		AccessHistoryFraction:            dc.GetFloat64Property(dynamicconfig.FrontendAccessHistoryFraction, 0.0),
 		AdminDeleteAccessHistoryFraction: dc.GetFloat64Property(dynamicconfig.FrontendAdminDeleteAccessHistoryFraction, 0.0),
+
+		AdminEnableListHistoryTasks: dc.GetBoolProperty(dynamicconfig.AdminEnableListHistoryTasks, true),
 	}
 }
 
