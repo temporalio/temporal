@@ -44,6 +44,7 @@ type RequestedDelay struct {
 type ActivityVisitor interface {
 	UpdateActivityInfo(ai *persistence.ActivityInfo, version int64, attempt int32, failure *failurepb.Failure) *persistence.ActivityInfo
 	State() enumspb.RetryState
+	NextScheduledTime() time.Time
 }
 
 type nonRetryableActivityVisitor struct {
@@ -54,7 +55,6 @@ type retryableActivityVisitor struct {
 	ai                *persistence.ActivityInfo
 	nextScheduledTime time.Time
 	timesource        clock.TimeSource
-	nextRetryDelay    *time.Duration
 	state             enumspb.RetryState
 }
 
@@ -74,7 +74,7 @@ func newActivityVisitor(
 		return &nonRetryableActivityVisitor{state: enumspb.RETRY_STATE_NON_RETRYABLE_FAILURE}
 	}
 
-	now := timesource.Now()
+	now := timesource.Now().In(time.UTC)
 	delay := nextRetryDelayFrom(failure)
 
 	backoff, retryState := nextBackoffInterval(
@@ -95,7 +95,6 @@ func newActivityVisitor(
 	visitor := &retryableActivityVisitor{
 		ai:                ai,
 		timesource:        timesource,
-		nextRetryDelay:    delay,
 		nextScheduledTime: nextScheduledTime,
 		state:             retryState,
 	}
@@ -108,6 +107,10 @@ func (nra *nonRetryableActivityVisitor) UpdateActivityInfo(ai *persistence.Activ
 
 func (nra *nonRetryableActivityVisitor) State() enumspb.RetryState {
 	return nra.state
+}
+
+func (nra *nonRetryableActivityVisitor) NextScheduledTime() time.Time {
+	return time.Unix(0, 0).In(time.UTC)
 }
 
 func (ra *retryableActivityVisitor) State() enumspb.RetryState {
@@ -125,6 +128,10 @@ func (ra *retryableActivityVisitor) UpdateActivityInfo(ai *persistence.ActivityI
 	ai.RetryLastWorkerIdentity = ai.StartedIdentity
 	ai.RetryLastFailure = failure
 	return ai
+}
+
+func (ra *retryableActivityVisitor) NextScheduledTime() time.Time {
+	return ra.nextScheduledTime
 }
 
 func makeBackoffAlgorithm(requestedDelay *time.Duration) BackoffCalculatorAlgorithmFunc {

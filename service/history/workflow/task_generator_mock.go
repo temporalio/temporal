@@ -34,7 +34,6 @@ import (
 
 	gomock "github.com/golang/mock/gomock"
 	v1 "go.temporal.io/api/history/v1"
-	v10 "go.temporal.io/server/api/persistence/v1"
 	tasks "go.temporal.io/server/service/history/tasks"
 )
 
@@ -62,17 +61,17 @@ func (m *MockTaskGenerator) EXPECT() *MockTaskGeneratorMockRecorder {
 }
 
 // GenerateActivityRetryTasks mocks base method.
-func (m *MockTaskGenerator) GenerateActivityRetryTasks(activity *v10.ActivityInfo, nextAttempt int32) error {
+func (m *MockTaskGenerator) GenerateActivityRetryTasks(eventID int64, visibilityTimestamp time.Time, nextAttempt int32) error {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "GenerateActivityRetryTasks", activity, nextAttempt)
+	ret := m.ctrl.Call(m, "GenerateActivityRetryTasks", eventID, visibilityTimestamp, nextAttempt)
 	ret0, _ := ret[0].(error)
 	return ret0
 }
 
 // GenerateActivityRetryTasks indicates an expected call of GenerateActivityRetryTasks.
-func (mr *MockTaskGeneratorMockRecorder) GenerateActivityRetryTasks(activity, nextAttempt interface{}) *gomock.Call {
+func (mr *MockTaskGeneratorMockRecorder) GenerateActivityRetryTasks(eventID, visibilityTimestamp, nextAttempt interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GenerateActivityRetryTasks", reflect.TypeOf((*MockTaskGenerator)(nil).GenerateActivityRetryTasks), activity, nextAttempt)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GenerateActivityRetryTasks", reflect.TypeOf((*MockTaskGenerator)(nil).GenerateActivityRetryTasks), eventID, visibilityTimestamp, nextAttempt)
 }
 
 // GenerateActivityTasks mocks base method.

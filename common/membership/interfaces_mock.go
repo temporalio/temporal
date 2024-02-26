@@ -31,6 +31,7 @@ package membership
 import (
 	context "context"
 	reflect "reflect"
+	time "time"
 
 	gomock "github.com/golang/mock/gomock"
 	primitives "go.temporal.io/server/common/primitives"
@@ -59,6 +60,20 @@ func (m *MockMonitor) EXPECT() *MockMonitorMockRecorder {
 	return m.recorder
 }
 
+// ApproximateMaxPropagationTime mocks base method.
+func (m *MockMonitor) ApproximateMaxPropagationTime() time.Duration {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "ApproximateMaxPropagationTime")
+	ret0, _ := ret[0].(time.Duration)
+	return ret0
+}
+
+// ApproximateMaxPropagationTime indicates an expected call of ApproximateMaxPropagationTime.
+func (mr *MockMonitorMockRecorder) ApproximateMaxPropagationTime() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ApproximateMaxPropagationTime", reflect.TypeOf((*MockMonitor)(nil).ApproximateMaxPropagationTime))
+}
+
 // EvictSelf mocks base method.
 func (m *MockMonitor) EvictSelf() error {
 	m.ctrl.T.Helper()
@@ -71,6 +86,21 @@ func (m *MockMonitor) EvictSelf() error {
 func (mr *MockMonitorMockRecorder) EvictSelf() *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "EvictSelf", reflect.TypeOf((*MockMonitor)(nil).EvictSelf))
+}
+
+// EvictSelfAt mocks base method.
+func (m *MockMonitor) EvictSelfAt(asOf time.Time) (time.Duration, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "EvictSelfAt", asOf)
+	ret0, _ := ret[0].(time.Duration)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// EvictSelfAt indicates an expected call of EvictSelfAt.
+func (mr *MockMonitorMockRecorder) EvictSelfAt(asOf interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "EvictSelfAt", reflect.TypeOf((*MockMonitor)(nil).EvictSelfAt), asOf)
 }
 
 // GetReachableMembers mocks base method.
