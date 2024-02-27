@@ -617,12 +617,12 @@ func (s *scheduler) getNextTime(after time.Time) getNextTimeResult {
 }
 
 func (s *scheduler) processTimeRange(
-	t1, t2 time.Time,
+	start, end time.Time,
 	overlapPolicy enumspb.ScheduleOverlapPolicy,
 	manual bool,
 	limit *int,
 ) time.Time {
-	s.logger.Debug("processTimeRange", "t1", t1, "t2", t2, "overlap-policy", overlapPolicy, "manual", manual)
+	s.logger.Debug("processTimeRange", "start", start, "end", end, "overlap-policy", overlapPolicy, "manual", manual)
 
 	if s.cspec == nil {
 		return time.Time{}
@@ -638,27 +638,23 @@ func (s *scheduler) processTimeRange(
 		// take an action now. (Don't count as missed catchup window either.)
 		// Skip over entire time range if paused or no actions can be taken
 		if !s.canTakeScheduledAction(manual, false) {
-			return s.getNextTime(t2).Next
+			return s.getNextTime(end).Next
 		}
 	}
 
-	for {
-		next := s.getNextTime(t1)
-		t1 = next.Next
-		if t1.IsZero() || t1.After(t2) {
-			return t1
-		}
+	var next getNextTimeResult
+	for next = s.getNextTime(start); !(next.Next.IsZero() || next.Next.After(end)); next = s.getNextTime(next.Next) {
 		if !s.hasMinVersion(BatchAndCacheTimeQueries) && !s.canTakeScheduledAction(manual, false) {
 			continue
 		}
-		if !manual && s.Info.UpdateTime.AsTime().After(t1) {
+		if !manual && s.Info.UpdateTime.AsTime().After(next.Next) {
 			// We're reprocessing since the most recent event after an update. Discard actions before
 			// the update time (which was just set to "now"). This doesn't have to be guarded with
 			// hasMinVersion because this condition couldn't happen in previous versions.
 			continue
 		}
-		if !manual && t2.Sub(t1) > catchupWindow {
-			s.logger.Warn("Schedule missed catchup window", "now", t2, "time", t1)
+		if !manual && end.Sub(next.Next) > catchupWindow {
+			s.logger.Warn("Schedule missed catchup window", "now", end, "time", next.Next)
 			s.metrics.Counter(metrics.ScheduleMissedCatchupWindow.Name()).Inc(1)
 			s.Info.MissedCatchupWindow++
 			continue
@@ -666,12 +662,12 @@ func (s *scheduler) processTimeRange(
 		s.addStart(next.Nominal, next.Next, overlapPolicy, manual)
 
 		if limit != nil {
-			(*limit)--
-			if *limit <= 0 {
-				return t1
+			if (*limit)--; *limit <= 0 {
+				break
 			}
 		}
 	}
+	return next.Next
 }
 
 func (s *scheduler) canTakeScheduledAction(manual, decrement bool) bool {
