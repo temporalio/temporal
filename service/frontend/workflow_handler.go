@@ -2641,6 +2641,9 @@ func (wh *WorkflowHandler) CreateSchedule(ctx context.Context, request *workflow
 }
 
 func validateSchedulingPolicies(policies *schedpb.SchedulePolicies) error {
+	if policies == nil {
+		return nil
+	}
 	if policies.KeepOriginalWorkflowId && policies.OverlapPolicy == enumspb.SCHEDULE_OVERLAP_POLICY_ALLOW_ALL {
 		return serviceerror.NewInvalidArgument(
 			"either KeepOriginalWorfklowId or OVERLAP_POLICY_ALLOW_ALL can be specified")

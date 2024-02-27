@@ -40,6 +40,11 @@ import (
 	"go.temporal.io/server/common/searchattribute"
 )
 
+func TestNoPoliciesApproved(t *testing.T) {
+	err := validateSchedulingPolicies(nil)
+	assert.NoError(t, err, "compatible policies rejected")
+}
+
 func TestContradictingPoliciesDeclined(t *testing.T) {
 	policies := schedule.SchedulePolicies{
 		OverlapPolicy:          enumspb.SCHEDULE_OVERLAP_POLICY_ALLOW_ALL,
