@@ -2582,7 +2582,10 @@ func (wh *WorkflowHandler) CreateSchedule(ctx context.Context, request *workflow
 	if err != nil {
 		return nil, err
 	}
-
+	err = validateSchedulingPolicies(request.Schedule.Policies)
+	if err != nil {
+		return nil, err
+	}
 	err = wh.validateStartWorkflowArgsForSchedule(
 		namespaceName,
 		request.GetSchedule().GetAction().GetStartWorkflow(),
@@ -2635,6 +2638,14 @@ func (wh *WorkflowHandler) CreateSchedule(ctx context.Context, request *workflow
 	return &workflowservice.CreateScheduleResponse{
 		ConflictToken: token,
 	}, nil
+}
+
+func validateSchedulingPolicies(policies *schedpb.SchedulePolicies) error {
+	if policies.KeepOriginalWorkflowId && policies.OverlapPolicy == enumspb.SCHEDULE_OVERLAP_POLICY_ALLOW_ALL {
+		return serviceerror.NewInvalidArgument(
+			"either KeepOriginalWorfklowId or OVERLAP_POLICY_ALLOW_ALL can be specified")
+	}
+	return nil
 }
 
 // Validates inner start workflow request. Note that this can mutate search attributes if present.

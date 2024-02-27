@@ -28,6 +28,7 @@ import (
 	"testing"
 
 	"github.com/golang/mock/gomock"
+	"github.com/stretchr/testify/assert"
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/schedule/v1"
@@ -38,6 +39,24 @@ import (
 	"go.temporal.io/server/common/persistence/visibility/manager"
 	"go.temporal.io/server/common/searchattribute"
 )
+
+func TestContradictingPoliciesDeclined(t *testing.T) {
+	policies := schedule.SchedulePolicies{
+		OverlapPolicy:          enumspb.SCHEDULE_OVERLAP_POLICY_ALLOW_ALL,
+		KeepOriginalWorkflowId: true,
+	}
+	err := validateSchedulingPolicies(&policies)
+	assert.Error(t, err, "contradicting policies approved")
+}
+
+func TestCompatiblePoliciesApproved(t *testing.T) {
+	policies := schedule.SchedulePolicies{
+		OverlapPolicy:          enumspb.SCHEDULE_OVERLAP_POLICY_BUFFER_ALL,
+		KeepOriginalWorkflowId: true,
+	}
+	err := validateSchedulingPolicies(&policies)
+	assert.NoError(t, err, "compatible policies rejected")
+}
 
 func TestDescribeScheduleAnnotatesScheduledWorkflowWithTypes(t *testing.T) {
 	makeWorkflowHandler := func(
