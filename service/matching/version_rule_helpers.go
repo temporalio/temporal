@@ -26,7 +26,6 @@ package matching
 
 import (
 	"fmt"
-	"go.temporal.io/server/api/matchingservice/v1"
 	"slices"
 	"time"
 
@@ -35,6 +34,7 @@ import (
 	"go.temporal.io/api/workflowservice/v1"
 
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
+	"go.temporal.io/server/api/matchingservice/v1"
 	persistencepb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common"
 	hlc "go.temporal.io/server/common/clock/hybrid_logical_clock"

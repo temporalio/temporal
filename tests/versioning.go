@@ -137,7 +137,7 @@ func (s *VersioningIntegSuite) TestVersionRuleConflictToken() {
 
 	// correct token from List
 	s.insertAssignmentRule(ctx, tq, "3", 0, cT2, true)
-	res = s.listVersioningRules(ctx, tq)
+	s.listVersioningRules(ctx, tq)
 
 	// wrong token fails, same request with nil token succeeds
 	s.insertAssignmentRule(ctx, tq, "4", 0, cT1, false)
@@ -152,7 +152,7 @@ func (s *VersioningIntegSuite) TestVersionRuleConflictToken() {
 	// wrong token fails, same request with correct token from List succeeds
 	s.deleteAssignmentRule(ctx, tq, 0, cT4, false)
 	s.deleteAssignmentRule(ctx, tq, 0, cT5, true)
-	res = s.listVersioningRules(ctx, tq)
+	s.listVersioningRules(ctx, tq)
 
 	// nil token succeeds
 	s.deleteAssignmentRule(ctx, tq, 0, nil, true)

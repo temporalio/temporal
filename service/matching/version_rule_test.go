@@ -26,6 +26,10 @@ package matching
 
 import (
 	"fmt"
+	"slices"
+	"testing"
+	"time"
+
 	"github.com/stretchr/testify/assert"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	"go.temporal.io/api/workflowservice/v1"
@@ -34,9 +38,6 @@ import (
 	hlc "go.temporal.io/server/common/clock/hybrid_logical_clock"
 	"go.temporal.io/server/common/testing/protoassert"
 	"google.golang.org/protobuf/proto"
-	"slices"
-	"testing"
-	"time"
 )
 
 func mkNewInsertAssignmentReq(rule *taskqueuepb.BuildIdAssignmentRule, ruleIdx int32) *workflowservice.UpdateWorkerVersioningRulesRequest_InsertBuildIdAssignmentRule {

@@ -25,8 +25,9 @@
 package hybrid_logical_clock
 
 import (
-	"google.golang.org/protobuf/types/known/timestamppb"
 	"time"
+
+	"google.golang.org/protobuf/types/known/timestamppb"
 
 	clockpb "go.temporal.io/server/api/clock/v1"
 	commonclock "go.temporal.io/server/common/clock"
