@@ -907,10 +907,13 @@ var TraceExportModule = fx.Options(
 			return nil, err
 		}
 
-		err = telemetry.SupplementTraceExportersFromEnv(exportersByType, os.LookupEnv)
+		exportersByTypeFromEnv, err := telemetry.SpanExportersFromEnv(os.LookupEnv)
 		if err != nil {
 			return nil, err
 		}
+
+		// config-defined exporters override env-defined exporters with the same type
+		maps.Copy(exportersByTypeFromEnv, exportersByType)
 
 		exporters := maps.Values(exportersByType)
 		lc.Append(fx.Hook{

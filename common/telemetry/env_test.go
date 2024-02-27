@@ -38,8 +38,7 @@ func TestSupplementTraceExportersFromEnv(t *testing.T) {
 	t.Run("when env variable specifies valid OTEL exporter type, add exporter", func(t *testing.T) {
 		exporters := map[telemetry.SpanExporterType]otelsdktrace.SpanExporter{}
 
-		err := telemetry.SupplementTraceExportersFromEnv(
-			exporters,
+		exporters, err := telemetry.SpanExportersFromEnv(
 			func(key string) (string, bool) {
 				if key == telemetry.OtelTracesExporterTypesEnvKey {
 					return string(telemetry.OtelTracesOtlpExporterType), true
@@ -54,8 +53,7 @@ func TestSupplementTraceExportersFromEnv(t *testing.T) {
 	t.Run("when env variable specifies valid OTEL exporter type but invalid protocol, return error", func(t *testing.T) {
 		exporters := map[telemetry.SpanExporterType]otelsdktrace.SpanExporter{}
 
-		err := telemetry.SupplementTraceExportersFromEnv(
-			exporters,
+		exporters, err := telemetry.SpanExportersFromEnv(
 			func(key string) (string, bool) {
 				switch key {
 				case telemetry.OtelTracesExporterTypesEnvKey:
@@ -70,30 +68,10 @@ func TestSupplementTraceExportersFromEnv(t *testing.T) {
 		require.Empty(t, exporters)
 	})
 
-	t.Run("when env variable specifies OTEL exporter type but the type already exists, don't add exporter", func(t *testing.T) {
-		var mockExporter otelsdktrace.SpanExporter
-		exporters := map[telemetry.SpanExporterType]otelsdktrace.SpanExporter{
-			telemetry.OtelTracesOtlpExporterType: mockExporter,
-		}
-
-		err := telemetry.SupplementTraceExportersFromEnv(
-			exporters,
-			func(key string) (string, bool) {
-				if key == telemetry.OtelTracesExporterTypesEnvKey {
-					return string(telemetry.OtelTracesOtlpExporterType), true
-				}
-				return "", false
-			})
-
-		require.NoError(t, err)
-		require.Equal(t, exporters[telemetry.OtelTracesOtlpExporterType], mockExporter)
-	})
-
 	t.Run("when env variable is specified but exporter type is not supported, return error", func(t *testing.T) {
 		exporters := map[telemetry.SpanExporterType]otelsdktrace.SpanExporter{}
 
-		err := telemetry.SupplementTraceExportersFromEnv(
-			exporters,
+		exporters, err := telemetry.SpanExportersFromEnv(
 			func(key string) (string, bool) {
 				if key == telemetry.OtelTracesExporterTypesEnvKey {
 					return fmt.Sprintf("%v,%v", telemetry.OtelTracesOtlpExporterType, "nonsense"), true
@@ -108,8 +86,7 @@ func TestSupplementTraceExportersFromEnv(t *testing.T) {
 	t.Run("when not specified, do not create any exporters", func(t *testing.T) {
 		exporters := map[telemetry.SpanExporterType]otelsdktrace.SpanExporter{}
 
-		err := telemetry.SupplementTraceExportersFromEnv(
-			exporters,
+		exporters, err := telemetry.SpanExportersFromEnv(
 			func(key string) (string, bool) {
 				return "", false
 			})

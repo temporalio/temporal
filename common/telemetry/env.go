@@ -32,7 +32,6 @@ import (
 	"go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracegrpc"
 	otelsdktrace "go.opentelemetry.io/otel/sdk/trace"
 	"go.temporal.io/server/common/primitives"
-	"golang.org/x/exp/maps"
 )
 
 var (
@@ -50,41 +49,34 @@ const (
 
 type envVarLookup = func(string) (string, bool)
 
-// SupplementTraceExportersFromEnv adds any OTEL span exporters configured through environment variables
-// to a given set of exporters. It does not override an existing exporter with the same type.
-func SupplementTraceExportersFromEnv(
-	exporters map[SpanExporterType]otelsdktrace.SpanExporter,
+// SpanExportersFromEnv creates OTEL span exporters from environment variables.
+func SpanExportersFromEnv(
 	envVars envVarLookup,
-) error {
+) (map[SpanExporterType]otelsdktrace.SpanExporter, error) {
 	exporterTypes, ok := envVars(OtelTracesExporterTypesEnvKey)
 	if !ok {
-		return nil
+		return nil, nil
 	}
 
-	supplements := map[SpanExporterType]otelsdktrace.SpanExporter{}
+	exporters := map[SpanExporterType]otelsdktrace.SpanExporter{}
 	for _, exporterType := range strings.Split(exporterTypes, ",") {
 		switch SpanExporterType(exporterType) {
 		case OtelTracesOtlpExporterType:
-			if _, exists := exporters[OtelTracesOtlpExporterType]; exists {
-				continue
-			}
-
 			// only grpc is supported; fail if user requests a different protocol
 			if protocol, exists := envVars(OtelExporterOtlpTracesProtocolEnvKey); exists {
 				isSupported := protocol == OtelExporterOtlpTracesGrcpProtocol
 				if !isSupported {
-					return fmt.Errorf("%w: %v=%v", unsupportedTraceExporterProtocol, OtelExporterOtlpTracesProtocolEnvKey, protocol)
+					return nil, fmt.Errorf("%w: %v=%v", unsupportedTraceExporterProtocol, OtelExporterOtlpTracesProtocolEnvKey, protocol)
 				}
 			}
 
 			// other OTEL configuration env variables are picked up automatically by the exporter itself
-			supplements[OtelTracesOtlpExporterType] = otlptracegrpc.NewUnstarted()
+			exporters[OtelTracesOtlpExporterType] = otlptracegrpc.NewUnstarted()
 		default:
-			return fmt.Errorf("%w: %v=%v", unsupportedTraceExporter, OtelTracesExporterTypesEnvKey, exporterType)
+			return nil, fmt.Errorf("%w: %v=%v", unsupportedTraceExporter, OtelTracesExporterTypesEnvKey, exporterType)
 		}
 	}
-	maps.Copy(exporters, supplements)
-	return nil
+	return exporters, nil
 }
 
 // ResourceServiceName returns the OpenTelemetry tracing service name for a Temporal service.
