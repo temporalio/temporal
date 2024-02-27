@@ -2927,6 +2927,11 @@ func (wh *WorkflowHandler) UpdateSchedule(ctx context.Context, request *workflow
 		return nil, err
 	}
 
+	err = validateSchedulingPolicies(request.Schedule.Policies)
+	if err != nil {
+		return nil, err
+	}
+
 	err = wh.validateStartWorkflowArgsForSchedule(
 		namespaceName,
 		request.GetSchedule().GetAction().GetStartWorkflow(),
