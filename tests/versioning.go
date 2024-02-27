@@ -34,6 +34,7 @@ import (
 
 	"github.com/dgryski/go-farm"
 	"github.com/stretchr/testify/require"
+	"go.temporal.io/server/common/tqid"
 	"google.golang.org/protobuf/types/known/durationpb"
 
 	commandpb "go.temporal.io/api/command/v1"
@@ -53,7 +54,6 @@ import (
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log/tag"
-	"go.temporal.io/server/common/tqname"
 )
 
 type VersioningIntegSuite struct {
@@ -118,102 +118,153 @@ func (s *VersioningIntegSuite) TearDownTest() {
 	s.sdkClient.Close()
 }
 
-func (s *VersioningIntegSuite) TestAssignmentRuleInsertDeleteReplace() {
+func (s *VersioningIntegSuite) TestVersionRuleConflictToken() {
 	ctx := NewContext()
-	tq := "test-assignment-rule"
+	tq := "test-conflict-token"
 
+	// nil token
 	s.insertAssignmentRule(ctx, tq, "1", 0, nil, true)
-
 	res := s.listVersioningRules(ctx, tq)
-	s.Equal("1", res.AssignmentRules[0].GetRule().GetTargetBuildId())
 
+	// correct token from List
 	cT1 := res.GetConflictToken()
 	s.insertAssignmentRule(ctx, tq, "2", 0, cT1, true)
 	res = s.listVersioningRules(ctx, tq)
-	s.Equal("2", res.GetAssignmentRules()[0].GetRule().GetTargetBuildId())
 
+	// confirm token changes
 	cT2 := res.GetConflictToken()
 	s.NotEqual(cT1, cT2)
 
+	// correct token from List
 	s.insertAssignmentRule(ctx, tq, "3", 0, cT2, true)
 	res = s.listVersioningRules(ctx, tq)
-	s.Equal("3", res.GetAssignmentRules()[0].GetRule().GetTargetBuildId())
 
+	// wrong token fails, same request with nil token succeeds
 	s.insertAssignmentRule(ctx, tq, "4", 0, cT1, false)
 	cT4 := s.insertAssignmentRule(ctx, tq, "4", 0, nil, true)
 
+	// wrong token fails, same request with correct token from Update succeeds
 	s.replaceAssignmentRule(ctx, tq, "20", 2, cT2, false)
 	s.replaceAssignmentRule(ctx, tq, "20", 2, cT4, true)
 	res = s.listVersioningRules(ctx, tq)
-	s.Equal("20", res.GetAssignmentRules()[2].GetRule().GetTargetBuildId())
 	cT5 := res.GetConflictToken()
-	prevHead := res.AssignmentRules[0].GetRule().GetTargetBuildId()
 
+	// wrong token fails, same request with correct token from List succeeds
 	s.deleteAssignmentRule(ctx, tq, 0, cT4, false)
 	s.deleteAssignmentRule(ctx, tq, 0, cT5, true)
 	res = s.listVersioningRules(ctx, tq)
-	s.NotEqual(prevHead, res.GetAssignmentRules()[0].GetRule().GetTargetBuildId())
 
-	prevHead = res.AssignmentRules[0].GetRule().GetTargetBuildId()
+	// nil token succeeds
 	s.deleteAssignmentRule(ctx, tq, 0, nil, true)
-	res = s.listVersioningRules(ctx, tq)
-	s.NotEqual(prevHead, res.GetAssignmentRules()[0].GetRule().GetTargetBuildId())
 }
 
-func (s *VersioningIntegSuite) TestRedirectRuleInsertDeleteReplace() {
+func (s *VersioningIntegSuite) TestAssignmentRuleInsert() {
+	// setup
 	ctx := NewContext()
-	tq := "test-redirect-rule"
+	tq := "test-assignment-rule-insert"
 
-	mkRedirectRulesMap := func(redirectRules []*taskqueuepb.TimestampedCompatibleBuildIdRedirectRule) map[string]string {
-		ret := make(map[string]string)
-		for _, r := range redirectRules {
-			rule := r.GetRule()
-			ret[rule.GetSourceBuildId()] = rule.GetTargetBuildId()
-		}
-		return ret
-	}
+	// success
+	s.insertAssignmentRule(ctx, tq, "1", 0, nil, true)
+	res1 := s.listVersioningRules(ctx, tq)
+	s.Equal("1", res1.GetAssignmentRules()[0].GetRule().GetTargetBuildId())
 
+	// failure
+	s.insertAssignmentRule(ctx, tq, "2", -1, nil, false)
+	s.Equal(res1, s.listVersioningRules(ctx, tq))
+}
+
+func (s *VersioningIntegSuite) TestAssignmentRuleReplace() {
+	// setup
+	ctx := NewContext()
+	tq := "test-assignment-rule-replace"
+	s.insertAssignmentRule(ctx, tq, "1", 0, nil, true)
+	s.insertAssignmentRule(ctx, tq, "2", 0, nil, true)
+
+	// success
+	s.replaceAssignmentRule(ctx, tq, "3", 0, nil, true)
+	res := s.listVersioningRules(ctx, tq)
+	s.Equal("3", res.GetAssignmentRules()[0].GetRule().GetTargetBuildId())
+
+	// failure
+	s.replaceAssignmentRule(ctx, tq, "4", 10, nil, false)
+	s.Equal(res, s.listVersioningRules(ctx, tq))
+}
+
+func (s *VersioningIntegSuite) TestAssignmentRuleDelete() {
+	// setup
+	ctx := NewContext()
+	tq := "test-assignment-rule-delete"
+	s.insertAssignmentRule(ctx, tq, "1", 0, nil, true)
+	s.insertAssignmentRule(ctx, tq, "2", 0, nil, true)
+
+	// success
+	s.deleteAssignmentRule(ctx, tq, 0, nil, true)
+	res := s.listVersioningRules(ctx, tq)
+	s.Equal(1, len(res.GetAssignmentRules()))
+
+	// failure
+	s.deleteAssignmentRule(ctx, tq, 0, nil, false)
+	s.Equal(res, s.listVersioningRules(ctx, tq))
+}
+
+func (s *VersioningIntegSuite) TestRedirectRuleInsert() {
+	// setup
+	ctx := NewContext()
+	tq := "test-redirect-rule-insert"
+
+	// success
 	s.insertRedirectRule(ctx, tq, "1", "0", nil, true)
 	res := s.listVersioningRules(ctx, tq)
 	rulesMap := mkRedirectRulesMap(res.GetCompatibleRedirectRules())
 	s.Contains(rulesMap, "1")
 	s.Equal(rulesMap["1"], "0")
 
-	cT1 := res.GetConflictToken()
-	s.insertRedirectRule(ctx, tq, "2", "0", cT1, true)
-	res = s.listVersioningRules(ctx, tq)
-	rulesMap = mkRedirectRulesMap(res.GetCompatibleRedirectRules())
-	s.Contains(rulesMap, "1")
-	s.Contains(rulesMap, "2")
-	s.Equal(rulesMap["2"], "0")
+	// failure
+	s.insertRedirectRule(ctx, tq, "0", "1", nil, false)
+	s.Equal(res, s.listVersioningRules(ctx, tq))
+}
 
-	cT2 := res.GetConflictToken()
-	s.insertRedirectRule(ctx, tq, "3", "0", cT1, false)
-	s.insertRedirectRule(ctx, tq, "3", "0", cT2, true)
-	res = s.listVersioningRules(ctx, tq)
-	rulesMap = mkRedirectRulesMap(res.GetCompatibleRedirectRules())
-	s.Contains(rulesMap, "1")
-	s.Contains(rulesMap, "2")
-	s.Contains(rulesMap, "3")
-	s.Equal(rulesMap["3"], "0")
+func (s *VersioningIntegSuite) TestRedirectRuleReplace() {
+	// setup
+	ctx := NewContext()
+	tq := "test-redirect-rule-replace"
+	s.insertRedirectRule(ctx, tq, "1", "0", nil, true)
 
-	cT3 := res.GetConflictToken()
-	s.replaceRedirectRule(ctx, tq, "3", "99", cT3, true)
-	res = s.listVersioningRules(ctx, tq)
-	rulesMap = mkRedirectRulesMap(res.GetCompatibleRedirectRules())
+	// success
+	s.replaceRedirectRule(ctx, tq, "1", "2", nil, true)
+	res := s.listVersioningRules(ctx, tq)
+	rulesMap := mkRedirectRulesMap(res.GetCompatibleRedirectRules())
 	s.Contains(rulesMap, "1")
-	s.Contains(rulesMap, "2")
-	s.Contains(rulesMap, "3")
-	s.Equal(rulesMap["3"], "99")
+	s.Equal(rulesMap["1"], "2")
 
-	cT4 := res.GetConflictToken()
-	s.deleteRedirectRule(ctx, tq, "3", cT3, false)
-	s.deleteRedirectRule(ctx, tq, "3", cT4, true)
-	res = s.listVersioningRules(ctx, tq)
-	rulesMap = mkRedirectRulesMap(res.GetCompatibleRedirectRules())
-	s.Contains(rulesMap, "1")
-	s.Contains(rulesMap, "2")
-	s.NotContains(rulesMap, "3")
+	// failure
+	s.replaceRedirectRule(ctx, tq, "10", "2", nil, false)
+	s.Equal(res, s.listVersioningRules(ctx, tq))
+}
+
+func (s *VersioningIntegSuite) TestRedirectRuleDelete() {
+	// setup
+	ctx := NewContext()
+	tq := "test-redirect-rule-delete"
+	s.insertRedirectRule(ctx, tq, "1", "0", nil, true)
+
+	// success
+	s.deleteRedirectRule(ctx, tq, "1", nil, true)
+	res := s.listVersioningRules(ctx, tq)
+	s.Equal(0, len(res.GetCompatibleRedirectRules()))
+
+	// failure
+	s.deleteRedirectRule(ctx, tq, "1", nil, false)
+	s.Equal(res, s.listVersioningRules(ctx, tq))
+}
+
+func mkRedirectRulesMap(redirectRules []*taskqueuepb.TimestampedCompatibleBuildIdRedirectRule) map[string]string {
+	ret := make(map[string]string)
+	for _, r := range redirectRules {
+		rule := r.GetRule()
+		ret[rule.GetSourceBuildId()] = rule.GetTargetBuildId()
+	}
+	return ret
 }
 
 func (s *VersioningIntegSuite) TestBasicVersionUpdate() {
@@ -1968,7 +2019,7 @@ func (s *VersioningIntegSuite) addCompatibleBuildId(ctx context.Context, tq, new
 }
 
 // waitForPropagation waits for all partitions of tq to mention newBuildId in their versioning data (in any position).
-func (s *VersioningIntegSuite) waitForPropagation(ctx context.Context, tq, newBuildId string) {
+func (s *VersioningIntegSuite) waitForPropagation(ctx context.Context, taskQueue, newBuildId string) {
 	v, ok := s.testCluster.host.dcClient.getRawValue(dynamicconfig.MatchingNumTaskqueueReadPartitions)
 	s.True(ok, "versioning tests require setting explicit number of partitions")
 	partCount, ok := v.(int)
@@ -1986,17 +2037,17 @@ func (s *VersioningIntegSuite) waitForPropagation(ctx context.Context, tq, newBu
 	nsId := s.getNamespaceID(s.namespace)
 	s.Eventually(func() bool {
 		for pt := range remaining {
-			partName, err := tqname.FromBaseName(tq)
+			f, err := tqid.NewTaskQueueFamily(nsId, taskQueue)
 			s.NoError(err)
-			partName = partName.WithPartition(pt.part)
+			partition := f.TaskQueue(pt.tp).NormalPartition(pt.part)
 			// Use lower-level GetTaskQueueUserData instead of GetWorkerBuildIdCompatibility
 			// here so that we can target activity queues.
 			res, err := s.testCluster.host.matchingClient.GetTaskQueueUserData(
 				ctx,
 				&matchingservice.GetTaskQueueUserDataRequest{
 					NamespaceId:   nsId,
-					TaskQueue:     partName.FullName(),
-					TaskQueueType: pt.tp,
+					TaskQueue:     partition.RpcName(),
+					TaskQueueType: partition.TaskType(),
 				})
 			s.NoError(err)
 			if containsBuildId(res.GetUserData().GetData().GetVersioningData(), newBuildId) {
