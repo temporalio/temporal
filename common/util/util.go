@@ -50,8 +50,8 @@ func MaxTime(a, b time.Time) time.Time {
 	return b
 }
 
-// NextAlignedTime returns the time after `t` that is aligned to an integer multiple of `align`
-// since the unix epoch.
+// NextAlignedTime returns the earliest time after `t` that is aligned to an integer multiple
+// of `align` since the unix epoch.
 func NextAlignedTime(t time.Time, align time.Duration) time.Time {
 	return time.Unix(0, (t.UnixNano()/int64(align)+1)*int64(align))
 }

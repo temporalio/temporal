@@ -137,8 +137,7 @@ func (s *Service) Stop() {
 	// the engine which stops all task queues).
 	s.handler.Stop()
 
-	// Now there should be no more open RPCs. We can give a second in case there are any
-	// somehow remaining.
+	// All grpc handlers should be cancelled now. Give them a little time to return.
 	t := time.AfterFunc(2*time.Second, func() {
 		s.logger.Info("ShutdownHandler: Drain time expired, stopping all traffic")
 		s.server.Stop()
