@@ -63,6 +63,8 @@ func newTestCluster(
 	seed string,
 	serviceName primitives.ServiceName,
 	broadcastAddress string,
+	joinTimes []time.Time,
+	testInitialBootstrapFailure bool,
 ) *testCluster {
 	logger := log.NewTestLogger()
 	ctrl := gomock.NewController(t)
@@ -122,7 +124,7 @@ func newTestCluster(
 		LastHeartbeat: time.Now().UTC(),
 	}
 
-	firstGetClusterMemberCall := true
+	firstGetClusterMemberCall := testInitialBootstrapFailure
 	mockMgr.EXPECT().GetClusterMembers(gomock.Any(), gomock.Any()).DoAndReturn(
 		func(_ context.Context, _ *persistence.GetClusterMembersRequest) (*persistence.GetClusterMembersResponse, error) {
 			res := &persistence.GetClusterMembersResponse{ActiveMembers: []*persistence.ClusterMember{seedMember}}
@@ -157,6 +159,10 @@ func newTestCluster(
 			return nil
 		}
 		_, port, _ := splitHostPortTyped(cluster.hostAddrs[i])
+		var joinTime time.Time
+		if i < len(joinTimes) {
+			joinTime = joinTimes[i]
+		}
 		cluster.rings[i] = newMonitor(
 			serviceName,
 			config.ServicePortMap{serviceName: int(port)}, // use same port for "grpc" port
@@ -165,6 +171,8 @@ func newTestCluster(
 			mockMgr,
 			resolver,
 			2*time.Second,
+			3*time.Second,
+			joinTime,
 		)
 		cluster.rings[i].Start()
 	}

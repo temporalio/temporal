@@ -103,7 +103,10 @@ func GetOrPollMutableState(
 		logger.Warn("Request history branch and current history branch don't match",
 			tag.Value(logItem),
 			tag.TokenLastEventVersion(request.VersionHistoryItem.GetVersion()),
-			tag.TokenLastEventID(request.VersionHistoryItem.GetEventId()))
+			tag.TokenLastEventID(request.VersionHistoryItem.GetEventId()),
+			tag.WorkflowNamespaceID(workflowKey.GetNamespaceID()),
+			tag.WorkflowID(workflowKey.GetWorkflowID()),
+			tag.WorkflowRunID(workflowKey.GetRunID()))
 		return nil, serviceerrors.NewCurrentBranchChanged(response.CurrentBranchToken, request.CurrentBranchToken)
 	}
 
@@ -138,7 +141,10 @@ func GetOrPollMutableState(
 			logger.Warn("Request history branch and current history branch don't match prior to polling the mutable state",
 				tag.Value(logItem),
 				tag.TokenLastEventVersion(request.VersionHistoryItem.GetVersion()),
-				tag.TokenLastEventID(request.VersionHistoryItem.GetEventId()))
+				tag.TokenLastEventID(request.VersionHistoryItem.GetEventId()),
+				tag.WorkflowNamespaceID(workflowKey.GetNamespaceID()),
+				tag.WorkflowID(workflowKey.GetWorkflowID()),
+				tag.WorkflowRunID(workflowKey.GetRunID()))
 			return nil, serviceerrors.NewCurrentBranchChanged(response.CurrentBranchToken, request.CurrentBranchToken)
 		}
 		if expectedNextEventID < response.GetNextEventId() || response.GetWorkflowStatus() != enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING {
@@ -170,14 +176,17 @@ func GetOrPollMutableState(
 				response.CurrentBranchToken = latestVersionHistory.GetBranchToken()
 				response.VersionHistories = event.VersionHistories
 				if !versionhistory.ContainsVersionHistoryItem(latestVersionHistory, request.VersionHistoryItem) {
-					logItem, err := versionhistory.GetLastVersionHistoryItem(currentVersionHistory)
+					logItem, err := versionhistory.GetLastVersionHistoryItem(latestVersionHistory)
 					if err != nil {
 						return nil, err
 					}
 					logger.Warn("Request history branch and current history branch don't match after polling the mutable state",
 						tag.Value(logItem),
 						tag.TokenLastEventVersion(request.VersionHistoryItem.GetVersion()),
-						tag.TokenLastEventID(request.VersionHistoryItem.GetEventId()))
+						tag.TokenLastEventID(request.VersionHistoryItem.GetEventId()),
+						tag.WorkflowNamespaceID(workflowKey.GetNamespaceID()),
+						tag.WorkflowID(workflowKey.GetWorkflowID()),
+						tag.WorkflowRunID(workflowKey.GetRunID()))
 					return nil, serviceerrors.NewCurrentBranchChanged(response.CurrentBranchToken, request.CurrentBranchToken)
 				}
 				if expectedNextEventID < response.GetNextEventId() || response.GetWorkflowStatus() != enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING {
@@ -207,7 +216,7 @@ func GetMutableState(
 		))
 	}
 
-	weCtx, err := workflowConsistencyChecker.GetWorkflowContext(
+	workflowLease, err := workflowConsistencyChecker.GetWorkflowLease(
 		ctx,
 		nil,
 		BypassMutableStateConsistencyPredicate,
@@ -217,9 +226,9 @@ func GetMutableState(
 	if err != nil {
 		return nil, err
 	}
-	defer func() { weCtx.GetReleaseFn()(retError) }()
+	defer func() { workflowLease.GetReleaseFn()(retError) }()
 
-	mutableState, err := weCtx.GetContext().LoadMutableState(ctx, shardContext)
+	mutableState, err := workflowLease.GetContext().LoadMutableState(ctx, shardContext)
 	if err != nil {
 		return nil, err
 	}

@@ -277,7 +277,7 @@ func ProcessOutgoingSearchAttributes(
 			if err != nil {
 				return err
 			}
-			if aliasedSas != nil {
+			if aliasedSas != searchAttributes {
 				searchAttributes.IndexedFields = aliasedSas.IndexedFields
 			}
 		}

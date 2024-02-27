@@ -6,4 +6,4 @@ a bad docker file system performance on macOS. Please follow the doc for the dat
 [Cassandra](macos/cassandra.md), [MySQL](macos/mysql.md), or [PostgreSQL](macos/postgresql.md).
 
 ### Linux
-Linux users should use `docker-compose` as described in the [contribution guide](../../CONTRIBUTING.md). 
+Linux users should use `docker compose` as described in the [contribution guide](../../CONTRIBUTING.md). 

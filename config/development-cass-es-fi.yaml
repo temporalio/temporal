@@ -4,17 +4,53 @@ log:
 
 persistence:
   defaultStore: cass-default
-  visibilityStore: cass-visibility
+  visibilityStore: es-visibility
   numHistoryShards: 4
   datastores:
     cass-default:
+      faultInjection:
+        targets:
+          dataStores:
+            ExecutionStore:
+              methods:
+                CreateWorkflowExecution:
+                  errors:
+                    ResourceExhausted: 0.05
+                    Timeout: 0.05
+                UpdateWorkflowExecution:
+                  errors:
+                    ResourceExhausted: 0.10
+                    Timeout: 0.05
+                GetWorkflowExecution:
+                  errors:
+                    ResourceExhausted: 0.05
+                    Timeout: 0.05
+                GetCurrentExecution:
+                  errors:
+                    ResourceExhausted: 0.05
+                    Timeout: 0.05
+                AppendHistoryNodes:
+                  errors:
+                    ResourceExhausted: 0.05
+                    Timeout: 0.05
+                ReadHistoryBranch:
+                  errors:
+                    ResourceExhausted: 0.05
+                    Timeout: 0.10
       cassandra:
         hosts: "127.0.0.1"
         keyspace: "temporal"
-    cass-visibility:
-      cassandra:
-        hosts: "127.0.0.1"
-        keyspace: "temporal_visibility"
+    es-visibility:
+      elasticsearch:
+        version: "v7"
+        logLevel: "error"
+        url:
+          scheme: "http"
+          host: "127.0.0.1:9200"
+        indices:
+          visibility: temporal_visibility_v1_dev
+          # secondary_visibility: temporal_visibility_v2_dev
+        closeIdleConnectionsInterval: 15s
 global:
   membership:
     maxJoinDuration: 30s
@@ -28,30 +64,6 @@ global:
       framework: "tally"
       timerType: "histogram"
       listenAddress: "127.0.0.1:8000"
-#    # Deprecated
-#    prometheusSDK:
-#      framework: "tally"
-#      timerType: "histogram"
-#      listenAddress: "127.0.0.1:8001"
-#    tags:
-#      type: test
-#    excludeTags:
-#      namespace:
-#        - temporal-system
-#    perUnitHistogramBoundaries:
-#      dimensionless:
-#        - 10
-#        - 100
-#        - 1000
-#      milliseconds:
-#        - 10
-#        - 100
-#        - 1000
-#        - 60000
-#      bytes:
-#        - 1024
-#        - 1048576
-#        - 1073741824
 
 services:
   frontend:
@@ -122,5 +134,5 @@ namespaceDefaults:
       URI: "file:///tmp/temporal_vis_archival/development"
 
 dynamicConfigClient:
-  filepath: "./config/dynamicconfig/development-cass.yaml"
+  filepath: "config/dynamicconfig/development-cass.yaml"
   pollInterval: "10s"

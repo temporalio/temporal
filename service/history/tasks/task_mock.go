@@ -208,3 +208,40 @@ func (mr *MockTaskMockRecorder) SetVisibilityTime(timestamp interface{}) *gomock
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SetVisibilityTime", reflect.TypeOf((*MockTask)(nil).SetVisibilityTime), timestamp)
 }
+
+// MockHasDestination is a mock of HasDestination interface.
+type MockHasDestination struct {
+	ctrl     *gomock.Controller
+	recorder *MockHasDestinationMockRecorder
+}
+
+// MockHasDestinationMockRecorder is the mock recorder for MockHasDestination.
+type MockHasDestinationMockRecorder struct {
+	mock *MockHasDestination
+}
+
+// NewMockHasDestination creates a new mock instance.
+func NewMockHasDestination(ctrl *gomock.Controller) *MockHasDestination {
+	mock := &MockHasDestination{ctrl: ctrl}
+	mock.recorder = &MockHasDestinationMockRecorder{mock}
+	return mock
+}
+
+// EXPECT returns an object that allows the caller to indicate expected use.
+func (m *MockHasDestination) EXPECT() *MockHasDestinationMockRecorder {
+	return m.recorder
+}
+
+// GetDestination mocks base method.
+func (m *MockHasDestination) GetDestination() string {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetDestination")
+	ret0, _ := ret[0].(string)
+	return ret0
+}
+
+// GetDestination indicates an expected call of GetDestination.
+func (mr *MockHasDestinationMockRecorder) GetDestination() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetDestination", reflect.TypeOf((*MockHasDestination)(nil).GetDestination))
+}

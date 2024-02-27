@@ -47,8 +47,10 @@ import (
 	updatepb "go.temporal.io/api/update/v1"
 	workflowpb "go.temporal.io/api/workflow/v1"
 	"go.temporal.io/api/workflowservice/v1"
+	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/health"
 	healthpb "google.golang.org/grpc/health/grpc_health_v1"
+	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/types/known/durationpb"
 	"google.golang.org/protobuf/types/known/timestamppb"
 
@@ -200,7 +202,10 @@ func NewWorkflowHandler(
 			config.SearchAttributesSizeOfValueLimit,
 			config.SearchAttributesTotalSizeLimit,
 			visibilityMrg,
-			visibility.AllowListForValidation(visibilityMrg.GetStoreNames()),
+			visibility.AllowListForValidation(
+				visibilityMrg.GetStoreNames(),
+				config.VisibilityAllowList,
+			),
 		),
 		archivalMetadata:    archivalMetadata,
 		healthServer:        healthServer,
@@ -2389,7 +2394,7 @@ func (wh *WorkflowHandler) DescribeWorkflowExecution(ctx context.Context, reques
 		if err != nil {
 			return nil, err
 		}
-		if aliasedSas != nil {
+		if aliasedSas != response.GetWorkflowExecutionInfo().GetSearchAttributes() {
 			response.GetWorkflowExecutionInfo().SearchAttributes = aliasedSas
 		}
 	}
@@ -2578,7 +2583,11 @@ func (wh *WorkflowHandler) CreateSchedule(ctx context.Context, request *workflow
 		return nil, err
 	}
 
-	if err = wh.validateStartWorkflowArgsForSchedule(namespaceName, request.GetSchedule().GetAction().GetStartWorkflow()); err != nil {
+	err = wh.validateStartWorkflowArgsForSchedule(
+		namespaceName,
+		request.GetSchedule().GetAction().GetStartWorkflow(),
+		request.GetSchedule().GetPolicies().GetKeepOriginalWorkflowId())
+	if err != nil {
 		return nil, err
 	}
 
@@ -2632,12 +2641,14 @@ func (wh *WorkflowHandler) CreateSchedule(ctx context.Context, request *workflow
 func (wh *WorkflowHandler) validateStartWorkflowArgsForSchedule(
 	namespaceName namespace.Name,
 	startWorkflow *workflowpb.NewWorkflowExecutionInfo,
+	keepOriginalWorkflowId bool,
 ) error {
 	if startWorkflow == nil {
 		return nil
 	}
 
-	if err := wh.validateWorkflowID(startWorkflow.WorkflowId + scheduler.AppendedTimestampForValidation); err != nil {
+	workflowId := scheduler.InternalWorkflowIdRepresentation(startWorkflow.WorkflowId, time.Now(), keepOriginalWorkflowId)
+	if err := wh.validateWorkflowID(workflowId); err != nil {
 		return err
 	}
 
@@ -2730,7 +2741,7 @@ func (wh *WorkflowHandler) DescribeSchedule(ctx context.Context, request *workfl
 		if err != nil {
 			return nil, err
 		}
-		if aliasedSas != nil {
+		if aliasedSas != sas {
 			executionInfo.SearchAttributes = aliasedSas
 		}
 	}
@@ -2755,6 +2766,10 @@ func (wh *WorkflowHandler) DescribeSchedule(ctx context.Context, request *workfl
 		return nil, err
 	}
 
+	err = wh.annotateSearchAttributesOfScheduledWorkflow(&queryResponse, request.GetNamespace())
+	if err != nil {
+		return nil, serviceerror.NewInternal(fmt.Sprintf("describe schedule: %v", err))
+	}
 	// Search attributes in the Action are already in external ("aliased") form. Do not alias them here.
 
 	// for all running workflows started by the schedule, we should check that they're still running
@@ -2814,6 +2829,61 @@ func (wh *WorkflowHandler) DescribeSchedule(ctx context.Context, request *workfl
 	}, nil
 }
 
+func (wh *WorkflowHandler) annotateSearchAttributesOfScheduledWorkflow(
+	queryResponse *schedspb.DescribeResponse,
+	nsName string,
+) error {
+	ei := wh.getScheduledWorkflowExecutionInfoFrom(queryResponse)
+	if ei == nil {
+		return nil
+	}
+	annotatedAttributes, err := wh.annotateSearchAttributes(ei.GetSearchAttributes(), nsName)
+	if err != nil {
+		return fmt.Errorf("annotate search attributes: %w", err)
+	}
+	ei.SearchAttributes = annotatedAttributes
+	return nil
+}
+
+func (wh *WorkflowHandler) getScheduledWorkflowExecutionInfoFrom(
+	queryResponse *schedspb.DescribeResponse,
+) *workflowpb.NewWorkflowExecutionInfo {
+	action := queryResponse.GetSchedule().GetAction().GetAction()
+	startWorkflowAction, ok := action.(*schedpb.ScheduleAction_StartWorkflow)
+	if !ok {
+		return nil
+	}
+	return startWorkflowAction.StartWorkflow
+}
+
+func (wh *WorkflowHandler) annotateSearchAttributes(
+	searchAttributes *commonpb.SearchAttributes,
+	nsName string,
+) (*commonpb.SearchAttributes, error) {
+	unaliasedSearchAttrs, err := searchattribute.UnaliasFields(
+		wh.saMapperProvider,
+		searchAttributes,
+		nsName,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("create annotations: %w", err)
+	}
+	saTypeMap, err := wh.saProvider.GetSearchAttributes(wh.visibilityMrg.GetIndexName(), false)
+	if err != nil {
+		return nil, fmt.Errorf("create annotations: %w", err)
+	}
+	searchattribute.ApplyTypeMap(unaliasedSearchAttrs, saTypeMap)
+	annotatedAttributes, err := searchattribute.AliasFields(
+		wh.saMapperProvider,
+		unaliasedSearchAttrs,
+		nsName,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("create annotations: %w", err)
+	}
+	return annotatedAttributes, nil
+}
+
 // Changes the configuration or state of an existing schedule.
 func (wh *WorkflowHandler) UpdateSchedule(ctx context.Context, request *workflowservice.UpdateScheduleRequest) (_ *workflowservice.UpdateScheduleResponse, retError error) {
 	defer log.CapturePanic(wh.logger, &retError)
@@ -2846,7 +2916,11 @@ func (wh *WorkflowHandler) UpdateSchedule(ctx context.Context, request *workflow
 		return nil, err
 	}
 
-	if err = wh.validateStartWorkflowArgsForSchedule(namespaceName, request.GetSchedule().GetAction().GetStartWorkflow()); err != nil {
+	err = wh.validateStartWorkflowArgsForSchedule(
+		namespaceName,
+		request.GetSchedule().GetAction().GetStartWorkflow(),
+		request.GetSchedule().GetPolicies().GetKeepOriginalWorkflowId())
+	if err != nil {
 		return nil, err
 	}
 
@@ -3488,6 +3562,7 @@ func (wh *WorkflowHandler) StartBatchOperation(
 		Executions:      request.GetExecutions(),
 		Reason:          request.GetReason(),
 		BatchType:       operationType,
+		RPS:             float64(request.GetMaxOperationsPerSecond()),
 		TerminateParams: batcher.TerminateParams{},
 		CancelParams:    batcher.CancelParams{},
 		SignalParams:    signalParams,
@@ -4162,7 +4237,7 @@ func (wh *WorkflowHandler) unaliasStartWorkflowExecutionRequestSearchAttributes(
 	if err != nil {
 		return nil, err
 	}
-	if unaliasedSas == nil {
+	if unaliasedSas == request.GetSearchAttributes() {
 		return request, nil
 	}
 
@@ -4177,7 +4252,7 @@ func (wh *WorkflowHandler) unaliasSignalWithStartWorkflowExecutionRequestSearchA
 	if err != nil {
 		return nil, err
 	}
-	if unaliasedSas == nil {
+	if unaliasedSas == request.GetSearchAttributes() {
 		return request, nil
 	}
 
@@ -4193,7 +4268,7 @@ func (wh *WorkflowHandler) unaliasCreateScheduleRequestSearchAttributes(request 
 		return nil, err
 	}
 
-	if unaliasedSas == nil {
+	if unaliasedSas == request.GetSearchAttributes() {
 		return request, nil
 	}
 
@@ -4205,4 +4280,19 @@ func (wh *WorkflowHandler) unaliasCreateScheduleRequestSearchAttributes(request 
 	}
 
 	return newRequest, nil
+}
+
+// PollNexusTaskQueue implements Handler.
+func (*WorkflowHandler) PollNexusTaskQueue(context.Context, *workflowservice.PollNexusTaskQueueRequest) (*workflowservice.PollNexusTaskQueueResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method PollNexusTaskQueue not implemented")
+}
+
+// RespondNexusTaskCompleted implements Handler.
+func (*WorkflowHandler) RespondNexusTaskCompleted(context.Context, *workflowservice.RespondNexusTaskCompletedRequest) (*workflowservice.RespondNexusTaskCompletedResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method RespondNexusTaskCompleted not implemented")
+}
+
+// RespondNexusTaskFailed implements Handler.
+func (*WorkflowHandler) RespondNexusTaskFailed(context.Context, *workflowservice.RespondNexusTaskFailedRequest) (*workflowservice.RespondNexusTaskFailedResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method RespondNexusTaskFailed not implemented")
 }

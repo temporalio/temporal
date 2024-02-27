@@ -46,6 +46,7 @@ import (
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/payloads"
 	"go.temporal.io/server/common/persistence/visibility/manager"
+	"go.temporal.io/server/common/searchattribute"
 )
 
 func Test_DeleteExecutionsWorkflow_Success(t *testing.T) {
@@ -97,6 +98,7 @@ func Test_DeleteExecutionsWorkflow_NoActivityMocks_NoExecutions(t *testing.T) {
 		Namespace:     "namespace",
 		PageSize:      1000,
 		NextPageToken: nil,
+		Query:         searchattribute.QueryWithAnyNamespaceDivision(""),
 	}).Return(&manager.ListWorkflowExecutionsResponse{
 		Executions:    nil,
 		NextPageToken: nil,
@@ -265,6 +267,7 @@ func Test_DeleteExecutionsWorkflow_NoActivityMocks_ManyExecutions(t *testing.T) 
 		Namespace:     "namespace",
 		PageSize:      2,
 		NextPageToken: nil,
+		Query:         searchattribute.QueryWithAnyNamespaceDivision(""),
 	}).Return(&manager.ListWorkflowExecutionsResponse{
 		Executions: []*workflowpb.WorkflowExecutionInfo{
 			{
@@ -291,6 +294,7 @@ func Test_DeleteExecutionsWorkflow_NoActivityMocks_ManyExecutions(t *testing.T) 
 		Namespace:     "namespace",
 		PageSize:      2,
 		NextPageToken: []byte{22, 8, 78},
+		Query:         searchattribute.QueryWithAnyNamespaceDivision(""),
 	}).Return(&manager.ListWorkflowExecutionsResponse{
 		Executions: []*workflowpb.WorkflowExecutionInfo{
 			{
@@ -364,6 +368,7 @@ func Test_DeleteExecutionsWorkflow_NoActivityMocks_HistoryClientError(t *testing
 		Namespace:     "namespace",
 		PageSize:      2,
 		NextPageToken: nil,
+		Query:         searchattribute.QueryWithAnyNamespaceDivision(""),
 	}).Return(&manager.ListWorkflowExecutionsResponse{
 		Executions: []*workflowpb.WorkflowExecutionInfo{
 			{
@@ -390,6 +395,7 @@ func Test_DeleteExecutionsWorkflow_NoActivityMocks_HistoryClientError(t *testing
 		Namespace:     "namespace",
 		PageSize:      2,
 		NextPageToken: []byte{22, 8, 78},
+		Query:         searchattribute.QueryWithAnyNamespaceDivision(""),
 	}).Return(&manager.ListWorkflowExecutionsResponse{
 		Executions: []*workflowpb.WorkflowExecutionInfo{
 			{

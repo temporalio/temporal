@@ -60,7 +60,7 @@ func (s *RawHistorySuite) SetupSuite() {
 	s.dynamicConfigOverrides = map[dynamicconfig.Key]interface{}{
 		dynamicconfig.SendRawWorkflowHistory: true,
 	}
-	s.setupSuite("testdata/cluster.yaml")
+	s.setupSuite("testdata/es_cluster.yaml")
 }
 
 func (s *RawHistorySuite) TearDownSuite() {

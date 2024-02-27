@@ -677,10 +677,7 @@ func (s *VisibilityStore) processRowSearchAttributes(
 	if err != nil {
 		return nil, err
 	}
-	if aliasedSas != nil {
-		searchAttributes = aliasedSas
-	}
-	return searchAttributes, nil
+	return aliasedSas, nil
 }
 
 func (s *VisibilityStore) buildQueryStringFromListRequest(

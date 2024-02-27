@@ -266,10 +266,7 @@ Loop:
 		failureMsg := fmt.Sprintf("activity %v timeout", timerSequenceID.TimerType.String())
 		timeoutFailure := failure.NewTimeoutFailure(failureMsg, timerSequenceID.TimerType)
 		var retryState enumspb.RetryState
-		if retryState, err = mutableState.RetryActivity(
-			activityInfo,
-			timeoutFailure,
-		); err != nil {
+		if retryState, err = mutableState.RetryActivity(activityInfo, timeoutFailure); err != nil {
 			return err
 		} else if retryState == enumspb.RETRY_STATE_IN_PROGRESS {
 			updateMutableState = true
@@ -586,6 +583,8 @@ func (t *timerQueueActiveTaskExecutor) executeWorkflowTimeoutTask(
 		t.shardContext.GetEventsCache(),
 		t.shardContext.GetLogger(),
 		mutableState.GetNamespaceEntry(),
+		mutableState.GetWorkflowKey().WorkflowID,
+		newRunID,
 		t.shardContext.GetTimeSource().Now(),
 	)
 	err = workflow.SetupNewWorkflowForRetryOrCron(
@@ -604,10 +603,10 @@ func (t *timerQueueActiveTaskExecutor) executeWorkflowTimeoutTask(
 	}
 
 	err = newMutableState.SetHistoryTree(
-		ctx,
 		newMutableState.GetExecutionInfo().WorkflowExecutionTimeout,
 		newMutableState.GetExecutionInfo().WorkflowRunTimeout,
-		newRunID)
+		newRunID,
+	)
 	if err != nil {
 		return err
 	}

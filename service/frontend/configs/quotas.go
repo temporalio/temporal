@@ -140,6 +140,11 @@ var (
 		"ListBatchOperations":    1,
 		"StartBatchOperation":    1,
 		"StopBatchOperation":     1,
+
+		// TODO: added temporarily here; need to be check when implemented if it's the right place and priority
+		"PollNexusTaskQueue":        1,
+		"RespondNexusTaskCompleted": 1,
+		"RespondNexusTaskFailed":    1,
 	}
 
 	OtherAPIPrioritiesOrdered = []int{0, 1}

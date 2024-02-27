@@ -46,7 +46,7 @@ func Invoke(
 	workflowConsistencyChecker api.WorkflowConsistencyChecker,
 	workflowDeleteManager deletemanager.DeleteManager,
 ) (_ *historyservice.DeleteWorkflowExecutionResponse, retError error) {
-	weCtx, err := workflowConsistencyChecker.GetWorkflowContext(
+	workflowLease, err := workflowConsistencyChecker.GetWorkflowLease(
 		ctx,
 		nil,
 		api.BypassMutableStateConsistencyPredicate,
@@ -60,7 +60,7 @@ func Invoke(
 	if err != nil {
 		return nil, err
 	}
-	defer func() { weCtx.GetReleaseFn()(retError) }()
+	defer func() { workflowLease.GetReleaseFn()(retError) }()
 
 	// Open and Close workflow executions are deleted differently.
 	// Open workflow execution is deleted by terminating with special flag `deleteAfterTerminate` set to true.
@@ -72,7 +72,7 @@ func Invoke(
 	// Although running workflows in active cluster are terminated first and the termination event might be replicated.
 	// In passive cluster, workflow executions are just deleted in regardless of its state.
 
-	if weCtx.GetMutableState().IsWorkflowExecutionRunning() {
+	if workflowLease.GetMutableState().IsWorkflowExecutionRunning() {
 		if request.GetClosedWorkflowOnly() {
 			// skip delete open workflow
 			return &historyservice.DeleteWorkflowExecutionResponse{}, nil
@@ -86,9 +86,9 @@ func Invoke(
 			if err := api.UpdateWorkflowWithNew(
 				shard,
 				ctx,
-				weCtx,
-				func(workflowContext api.WorkflowContext) (*api.UpdateWorkflowAction, error) {
-					mutableState := workflowContext.GetMutableState()
+				workflowLease,
+				func(workflowLease api.WorkflowLease) (*api.UpdateWorkflowAction, error) {
+					mutableState := workflowLease.GetMutableState()
 
 					return api.UpdateWorkflowWithoutWorkflowTask, workflow.TerminateWorkflow(
 						mutableState,
@@ -114,7 +114,7 @@ func Invoke(
 			WorkflowId: request.GetWorkflowExecution().GetWorkflowId(),
 			RunId:      request.GetWorkflowExecution().GetRunId(),
 		},
-		weCtx.GetMutableState(),
+		workflowLease.GetMutableState(),
 		request.GetWorkflowVersion(),
 	); err != nil {
 		return nil, err

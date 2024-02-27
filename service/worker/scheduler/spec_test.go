@@ -33,6 +33,7 @@ import (
 	"google.golang.org/protobuf/types/known/timestamppb"
 
 	schedpb "go.temporal.io/api/schedule/v1"
+
 	"go.temporal.io/server/common/testing/protorequire"
 )
 
@@ -70,8 +71,11 @@ func (s *specSuite) checkSequenceFull(jitterSeed string, spec *schedpb.ScheduleS
 	for _, exp := range seq {
 		result := cs.getNextTime(jitterSeed, start)
 		if exp.IsZero() {
-			s.Require().True(result.Nominal.IsZero())
-			s.Require().True(result.Next.IsZero())
+			s.Require().True(
+				result.Nominal.IsZero(),
+				"exp %v nominal should be zero, got %v", exp, result.Nominal,
+			)
+			s.Require().True(result.Next.IsZero(), "next should be zero")
 			break
 		}
 		s.Require().False(result.Nominal.IsZero())

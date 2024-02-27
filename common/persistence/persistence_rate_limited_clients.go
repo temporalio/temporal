@@ -302,30 +302,6 @@ func (p *executionRateLimitedPersistenceClient) ListConcreteExecutions(
 	return response, err
 }
 
-func (p *executionRateLimitedPersistenceClient) RegisterHistoryTaskReader(
-	ctx context.Context,
-	request *RegisterHistoryTaskReaderRequest,
-) error {
-	// hint methods don't actually hint DB, so don't go through persistence rate limiter
-	return p.persistence.RegisterHistoryTaskReader(ctx, request)
-}
-
-func (p *executionRateLimitedPersistenceClient) UnregisterHistoryTaskReader(
-	ctx context.Context,
-	request *UnregisterHistoryTaskReaderRequest,
-) {
-	// hint methods don't actually hint DB, so don't go through persistence rate limiter
-	p.persistence.UnregisterHistoryTaskReader(ctx, request)
-}
-
-func (p *executionRateLimitedPersistenceClient) UpdateHistoryTaskReaderProgress(
-	ctx context.Context,
-	request *UpdateHistoryTaskReaderProgressRequest,
-) {
-	// hint methods don't actually hint DB, so don't go through persistence rate limiter
-	p.persistence.UpdateHistoryTaskReaderProgress(ctx, request)
-}
-
 func (p *executionRateLimitedPersistenceClient) AddHistoryTasks(
 	ctx context.Context,
 	request *AddHistoryTasksRequest,
@@ -804,18 +780,6 @@ func (p *executionRateLimitedPersistenceClient) TrimHistoryBranch(
 	}
 	resp, err := p.persistence.TrimHistoryBranch(ctx, request)
 	return resp, err
-}
-
-// GetHistoryTree returns all branch information of a tree
-func (p *executionRateLimitedPersistenceClient) GetHistoryTree(
-	ctx context.Context,
-	request *GetHistoryTreeRequest,
-) (*GetHistoryTreeResponse, error) {
-	if ok := allow(ctx, "GetHistoryTree", request.ShardID, p.rateLimiter); !ok {
-		return nil, ErrPersistenceLimitExceeded
-	}
-	response, err := p.persistence.GetHistoryTree(ctx, request)
-	return response, err
 }
 
 func (p *executionRateLimitedPersistenceClient) GetAllHistoryTreeBranches(

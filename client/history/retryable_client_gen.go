@@ -410,6 +410,21 @@ func (c *retryableClient) ListQueues(
 	return resp, err
 }
 
+func (c *retryableClient) ListTasks(
+	ctx context.Context,
+	request *historyservice.ListTasksRequest,
+	opts ...grpc.CallOption,
+) (*historyservice.ListTasksResponse, error) {
+	var resp *historyservice.ListTasksResponse
+	op := func(ctx context.Context) error {
+		var err error
+		resp, err = c.client.ListTasks(ctx, request, opts...)
+		return err
+	}
+	err := backoff.ThrottleRetryContext(ctx, op, c.policy, c.isRetryable)
+	return resp, err
+}
+
 func (c *retryableClient) MergeDLQMessages(
 	ctx context.Context,
 	request *historyservice.MergeDLQMessagesRequest,

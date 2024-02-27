@@ -234,6 +234,10 @@ func (s *quotasSuite) TestOtherAPIs() {
 		"ListBatchOperations":    {},
 		"StartBatchOperation":    {},
 		"StopBatchOperation":     {},
+
+		"PollNexusTaskQueue":        {},
+		"RespondNexusTaskCompleted": {},
+		"RespondNexusTaskFailed":    {},
 	}
 
 	var service workflowservice.WorkflowServiceServer

@@ -152,6 +152,8 @@ func (r *MutableStateInitializerImpl) InitializeFromDB(
 					r.shardContext.GetEventsCache(),
 					r.logger,
 					namespaceEntry,
+					workflowKey.WorkflowID,
+					workflowKey.RunID,
 					time.Now().UTC(),
 				),
 				releaseFn,

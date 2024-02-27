@@ -32,9 +32,6 @@ import (
 	"go.temporal.io/server/service/history/tasks"
 )
 
-// NOTE: do not use make(type, len(input))
-// since this will assume initial length being len(inputs)
-// always use make(type, 0, len(input))
 func convertSyncActivityInfos(
 	now time.Time,
 	workflowKey definition.WorkflowKey,

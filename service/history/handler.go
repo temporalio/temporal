@@ -57,7 +57,6 @@ import (
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/persistence/serialization"
 	"go.temporal.io/server/common/persistence/visibility/manager"
-	"go.temporal.io/server/common/persistence/visibility/store/standard/cassandra"
 	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/common/searchattribute"
 	serviceerrors "go.temporal.io/server/common/serviceerror"
@@ -1891,12 +1890,7 @@ func (h *Handler) DeleteWorkflowVisibilityRecord(
 		return nil, errWorkflowExecutionNotSet
 	}
 
-	// If at least one visibility store is Cassandra, then either start or close time should be non-nil.
-	if h.persistenceVisibilityManager.HasStoreName(cassandra.CassandraPersistenceName) && request.WorkflowStartTime == nil && request.WorkflowCloseTime == nil {
-		return nil, &serviceerror.InvalidArgument{Message: "workflow start and close time not specified when deleting cassandra based visibility record"}
-	}
-
-	// NOTE: the deletion is best effort, for sql and cassandra visibility implementation,
+	// NOTE: the deletion is best effort, for sql visibility implementation,
 	// we can't guarantee there's no update or record close request for this workflow since
 	// visibility queue processing is async. Operator can call this api (through admin workflow
 	// delete) again to delete again if this happens.
@@ -1907,8 +1901,6 @@ func (h *Handler) DeleteWorkflowVisibilityRecord(
 		WorkflowID:  request.Execution.GetWorkflowId(),
 		RunID:       request.Execution.GetRunId(),
 		TaskID:      math.MaxInt64,
-		StartTime:   request.GetWorkflowStartTime().AsTime(),
-		CloseTime:   request.GetWorkflowCloseTime().AsTime(),
 	})
 	if err != nil {
 		return nil, h.convertError(err)
@@ -2028,6 +2020,7 @@ func (h *Handler) StreamWorkflowReplicationMessages(
 			clientClusterName,
 			replication.NewClusterShardKey(clientClusterShardID.ClusterID, clientClusterShardID.ShardID),
 		),
+		clientClusterName,
 		replication.NewClusterShardKey(clientClusterShardID.ClusterID, clientClusterShardID.ShardID),
 		replication.NewClusterShardKey(serverClusterShardID.ClusterID, serverClusterShardID.ShardID),
 	)
@@ -2205,6 +2198,35 @@ func (h *Handler) ListQueues(
 	request *historyservice.ListQueuesRequest,
 ) (*historyservice.ListQueuesResponse, error) {
 	return listqueues.Invoke(ctx, h.taskQueueManager, request)
+}
+
+func (h *Handler) ListTasks(
+	ctx context.Context,
+	request *historyservice.ListTasksRequest,
+) (_ *historyservice.ListTasksResponse, retError error) {
+	defer metrics.CapturePanic(h.logger, h.metricsHandler, &retError)
+	h.startWG.Wait()
+
+	if h.isStopped() {
+		return nil, errShuttingDown
+	}
+
+	shardContext, err := h.controller.GetShardByID(request.Request.GetShardId())
+	if err != nil {
+		return nil, h.convertError(err)
+	}
+	engine, err := shardContext.GetEngine(ctx)
+	if err != nil {
+		return nil, h.convertError(err)
+	}
+
+	resp, err := engine.ListTasks(ctx, request)
+	if err != nil {
+		err = h.convertError(err)
+		return nil, err
+	}
+
+	return resp, nil
 }
 
 // convertError is a helper method to convert ShardOwnershipLostError from persistence layer returned by various

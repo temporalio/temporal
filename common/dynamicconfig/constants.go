@@ -31,30 +31,14 @@ func (k Key) String() string {
 const (
 	// keys for admin
 
+	// AdminEnableListHistoryTasks is the key for enabling listing history tasks
+	AdminEnableListHistoryTasks = "admin.enableListHistoryTasks"
 	// AdminMatchingNamespaceToPartitionDispatchRate is the max qps of any task queue partition for a given namespace
 	AdminMatchingNamespaceToPartitionDispatchRate = "admin.matchingNamespaceToPartitionDispatchRate"
 	// AdminMatchingNamespaceTaskqueueToPartitionDispatchRate is the max qps of a task queue partition for a given namespace & task queue
 	AdminMatchingNamespaceTaskqueueToPartitionDispatchRate = "admin.matchingNamespaceTaskqueueToPartitionDispatchRate"
 
 	// keys for system
-
-	// DEPRECATED: the following block of configs are deprecated and replaced by the next block of configs
-	// StandardVisibilityPersistenceMaxReadQPS is the max QPC system host can query standard visibility DB (SQL or Cassandra) for read.
-	StandardVisibilityPersistenceMaxReadQPS = "system.standardVisibilityPersistenceMaxReadQPS"
-	// StandardVisibilityPersistenceMaxWriteQPS is the max QPC system host can query standard visibility DB (SQL or Cassandra) for write.
-	StandardVisibilityPersistenceMaxWriteQPS = "system.standardVisibilityPersistenceMaxWriteQPS"
-	// AdvancedVisibilityPersistenceMaxReadQPS is the max QPC system host can query advanced visibility DB (Elasticsearch) for read.
-	AdvancedVisibilityPersistenceMaxReadQPS = "system.advancedVisibilityPersistenceMaxReadQPS"
-	// AdvancedVisibilityPersistenceMaxWriteQPS is the max QPC system host can query advanced visibility DB (Elasticsearch) for write.
-	AdvancedVisibilityPersistenceMaxWriteQPS = "system.advancedVisibilityPersistenceMaxWriteQPS"
-	// AdvancedVisibilityWritingMode is key for how to write to advanced visibility
-	AdvancedVisibilityWritingMode = "system.advancedVisibilityWritingMode"
-	// EnableWriteToSecondaryAdvancedVisibility is the config to enable write to secondary visibility for Elasticsearch
-	EnableWriteToSecondaryAdvancedVisibility = "system.enableWriteToSecondaryAdvancedVisibility"
-	// EnableReadVisibilityFromES is key for enable read from Elasticsearch
-	EnableReadVisibilityFromES = "system.enableReadVisibilityFromES"
-	// EnableReadFromSecondaryAdvancedVisibility is the config to enable read from secondary Elasticsearch
-	EnableReadFromSecondaryAdvancedVisibility = "system.enableReadFromSecondaryAdvancedVisibility"
 
 	// VisibilityPersistenceMaxReadQPS is the max QPC system host can query visibility DB for read.
 	VisibilityPersistenceMaxReadQPS = "system.visibilityPersistenceMaxReadQPS"
@@ -68,6 +52,8 @@ const (
 	VisibilityDisableOrderByClause = "system.visibilityDisableOrderByClause"
 	// VisibilityEnableManualPagination is the config to enable manual pagination for Elasticsearch
 	VisibilityEnableManualPagination = "system.visibilityEnableManualPagination"
+	// VisibilityAllowList is the config to allow list of values for regular types
+	VisibilityAllowList = "system.visibilityAllowList"
 
 	// HistoryArchivalState is key for the state of history archival
 	HistoryArchivalState = "system.historyArchivalState"
@@ -94,7 +80,12 @@ const (
 	// get the latest data from DB. This effectively bypasses cache value and is used to facilitate testing of changes in
 	// search attributes. This should not be turned on in production.
 	ForceSearchAttributesCacheRefreshOnRead = "system.forceSearchAttributesCacheRefreshOnRead"
-	EnableRingpopTLS                        = "system.enableRingpopTLS"
+	// EnableRingpopTLS controls whether to use TLS for ringpop, using the same "internode" TLS
+	// config as the other services.
+	EnableRingpopTLS = "system.enableRingpopTLS"
+	// RingpopApproximateMaxPropagationTime is used for timing certain startup and shutdown processes.
+	// (It is not and doesn't have to be a guarantee.)
+	RingpopApproximateMaxPropagationTime = "system.ringpopApproximateMaxPropagationTime"
 	// EnableParentClosePolicyWorker decides whether or not enable system workers for processing parent close policy task
 	EnableParentClosePolicyWorker = "system.enableParentClosePolicyWorker"
 	// EnableStickyQuery indicates if sticky query should be enabled per namespace
@@ -367,7 +358,12 @@ const (
 	FrontendEnableBatcher = "frontend.enableBatcher"
 	// FrontendAccessHistoryFraction (0.0~1.0) is the fraction of history operations that are sent to the history
 	// service using the new RPCs. The remaining access history via the existing implementation.
-	FrontendAccessHistoryFraction = "frontend.accessHistoryFraction" // TODO: remove once migration complete
+	// TODO: remove once migration completes.
+	FrontendAccessHistoryFraction = "frontend.accessHistoryFraction"
+	// FrontendAdminDeleteAccessHistoryFraction (0.0~1.0) is the fraction of admin DeleteWorkflowExecution requests
+	// that are sent to the history service using the new RPCs. The remaining access history via the existing implementation.
+	// TODO: remove once migration completes.
+	FrontendAdminDeleteAccessHistoryFraction = "frontend.adminDeleteAccessHistoryFraction"
 
 	// FrontendEnableUpdateWorkflowExecution enables UpdateWorkflowExecution API in the frontend.
 	// The UpdateWorkflowExecution API has gone through rigorous testing efforts but this config's default is `false` until the
@@ -472,6 +468,9 @@ const (
 	MatchingMaxWaitForPollerBeforeFwd = "matching.maxWaitForPollerBeforeFwd"
 	// QueryPollerUnavailableWindow WF Queries are rejected after a while if no poller has been seen within the window
 	QueryPollerUnavailableWindow = "matching.queryPollerUnavailableWindow"
+	// MatchingMembershipUnloadDelay is how long to wait to re-confirm loss of ownership before unloading a task queue.
+	// Set to zero to disable proactive unload.
+	MatchingMembershipUnloadDelay = "matching.membershipUnloadDelay"
 
 	// for matching testing only:
 
@@ -522,8 +521,8 @@ const (
 	HistoryCacheNonUserContextLockTimeout = "history.cacheNonUserContextLockTimeout"
 	// EnableHostHistoryCache controls if the history cache is host level
 	EnableHostHistoryCache = "history.enableHostHistoryCache"
-	// HistoryCacheShardLevelMaxSize is max size of history shard level cache
-	HistoryCacheShardLevelMaxSize = "history.shardLevelCacheMaxSize"
+	// HistoryCacheHostLevelMaxSize is max size of history host level cache
+	HistoryCacheHostLevelMaxSize = "history.hostLevelCacheMaxSize"
 	// EnableAPIGetCurrentRunIDLock controls if a lock should be acquired before getting current run ID for API requests
 	EnableAPIGetCurrentRunIDLock = "history.enableAPIGetCurrentRunIDLock"
 	// HistoryStartupMembershipJoinDelay is the duration a history instance waits
@@ -533,10 +532,14 @@ const (
 	HistoryShutdownDrainDuration = "history.shutdownDrainDuration"
 	// XDCCacheMaxSizeBytes is max size of events cache in bytes
 	XDCCacheMaxSizeBytes = "history.xdcCacheMaxSizeBytes"
-	// EventsCacheMaxSizeBytes is max size of events cache in bytes
+	// EventsCacheMaxSizeBytes is max size of the shard level events cache in bytes
 	EventsCacheMaxSizeBytes = "history.eventsCacheMaxSizeBytes"
+	// EventsHostLevelCacheMaxSizeBytes is max size of the host level events cache in bytes
+	EventsHostLevelCacheMaxSizeBytes = "history.eventsHostLevelCacheMaxSizeBytes"
 	// EventsCacheTTL is TTL of events cache
 	EventsCacheTTL = "history.eventsCacheTTL"
+	// EnableHostLevelEventsCache controls if the events cache is host level
+	EnableHostLevelEventsCache = "history.enableHostLevelEventsCache"
 	// AcquireShardInterval is interval that timer used to acquire shard
 	AcquireShardInterval = "history.acquireShardInterval"
 	// AcquireShardConcurrency is number of goroutines that can be used to acquire shards in the shard controller.
@@ -589,8 +592,6 @@ const (
 	// limit should not be hit and task unloading should happen once critical count is exceeded. But
 	// since queue action is async, we need this hard limit.
 	QueuePendingTaskMaxCount = "history.queuePendingTasksMaxCount"
-	// QueueMaxReaderCount is the max number of readers in one multi-cursor queue
-	QueueMaxReaderCount = "history.queueMaxReaderCount"
 	// ContinueAsNewMinInterval is the minimal interval between continue_as_new executions.
 	// This is needed to prevent tight loop continue_as_new spin. Default is 1s.
 	ContinueAsNewMinInterval = "history.continueAsNewMinInterval"
@@ -627,10 +628,6 @@ const (
 	TimerProcessorUpdateAckInterval = "history.timerProcessorUpdateAckInterval"
 	// TimerProcessorUpdateAckIntervalJitterCoefficient is the update interval jitter coefficient
 	TimerProcessorUpdateAckIntervalJitterCoefficient = "history.timerProcessorUpdateAckIntervalJitterCoefficient"
-	// TimerProcessorCompleteTimerInterval is complete timer interval for timer processor
-	TimerProcessorCompleteTimerInterval = "history.timerProcessorCompleteTimerInterval"
-	// TimerProcessorFailoverMaxPollRPS is max poll rate per second for timer processor
-	TimerProcessorFailoverMaxPollRPS = "history.timerProcessorFailoverMaxPollRPS"
 	// TimerProcessorMaxPollRPS is max poll rate per second for timer processor
 	TimerProcessorMaxPollRPS = "history.timerProcessorMaxPollRPS"
 	// TimerProcessorMaxPollHostRPS is max poll rate per second for all timer processor on a host
@@ -643,6 +640,8 @@ const (
 	TimerProcessorPollBackoffInterval = "history.timerProcessorPollBackoffInterval"
 	// TimerProcessorMaxTimeShift is the max shift timer processor can have
 	TimerProcessorMaxTimeShift = "history.timerProcessorMaxTimeShift"
+	// TimerQueueMaxReaderCount is the max number of readers in one multi-cursor timer queue
+	TimerQueueMaxReaderCount = "history.timerQueueMaxReaderCount"
 	// RetentionTimerJitterDuration is a time duration jitter to distribute timer from T0 to T0 + jitter duration
 	RetentionTimerJitterDuration = "history.retentionTimerJitterDuration"
 
@@ -651,8 +650,6 @@ const (
 
 	// TransferTaskBatchSize is batch size for transferQueueProcessor
 	TransferTaskBatchSize = "history.transferTaskBatchSize"
-	// TransferProcessorFailoverMaxPollRPS is max poll rate per second for transferQueueProcessor
-	TransferProcessorFailoverMaxPollRPS = "history.transferProcessorFailoverMaxPollRPS"
 	// TransferProcessorMaxPollRPS is max poll rate per second for transferQueueProcessor
 	TransferProcessorMaxPollRPS = "history.transferProcessorMaxPollRPS"
 	// TransferProcessorMaxPollHostRPS is max poll rate per second for all transferQueueProcessor on a host
@@ -663,8 +660,6 @@ const (
 	TransferProcessorSchedulerActiveRoundRobinWeights = "history.transferProcessorSchedulerActiveRoundRobinWeights"
 	// TransferProcessorSchedulerStandbyRoundRobinWeights is the priority round robin weights used by transfer task scheduler for standby namespaces
 	TransferProcessorSchedulerStandbyRoundRobinWeights = "history.transferProcessorSchedulerStandbyRoundRobinWeights"
-	// TransferProcessorUpdateShardTaskCount is update shard count for transferQueueProcessor
-	TransferProcessorUpdateShardTaskCount = "history.transferProcessorUpdateShardTaskCount"
 	// TransferProcessorMaxPollInterval max poll interval for transferQueueProcessor
 	TransferProcessorMaxPollInterval = "history.transferProcessorMaxPollInterval"
 	// TransferProcessorMaxPollIntervalJitterCoefficient is the max poll interval jitter coefficient
@@ -673,12 +668,12 @@ const (
 	TransferProcessorUpdateAckInterval = "history.transferProcessorUpdateAckInterval"
 	// TransferProcessorUpdateAckIntervalJitterCoefficient is the update interval jitter coefficient
 	TransferProcessorUpdateAckIntervalJitterCoefficient = "history.transferProcessorUpdateAckIntervalJitterCoefficient"
-	// TransferProcessorCompleteTransferInterval is complete timer interval for transferQueueProcessor
-	TransferProcessorCompleteTransferInterval = "history.transferProcessorCompleteTransferInterval"
 	// TransferProcessorPollBackoffInterval is the poll backoff interval if task redispatcher's size exceeds limit for transferQueueProcessor
 	TransferProcessorPollBackoffInterval = "history.transferProcessorPollBackoffInterval"
 	// TransferProcessorEnsureCloseBeforeDelete means we ensure the execution is closed before we delete it
 	TransferProcessorEnsureCloseBeforeDelete = "history.transferProcessorEnsureCloseBeforeDelete"
+	// TransferQueueMaxReaderCount is the max number of readers in one multi-cursor transfer queue
+	TransferQueueMaxReaderCount = "history.transferQueueMaxReaderCount"
 
 	// VisibilityTaskBatchSize is batch size for visibilityQueueProcessor
 	VisibilityTaskBatchSize = "history.visibilityTaskBatchSize"
@@ -700,8 +695,6 @@ const (
 	VisibilityProcessorUpdateAckInterval = "history.visibilityProcessorUpdateAckInterval"
 	// VisibilityProcessorUpdateAckIntervalJitterCoefficient is the update interval jitter coefficient
 	VisibilityProcessorUpdateAckIntervalJitterCoefficient = "history.visibilityProcessorUpdateAckIntervalJitterCoefficient"
-	// VisibilityProcessorCompleteTaskInterval is complete timer interval for visibilityQueueProcessor
-	VisibilityProcessorCompleteTaskInterval = "history.visibilityProcessorCompleteTaskInterval"
 	// VisibilityProcessorPollBackoffInterval is the poll backoff interval if task redispatcher's size exceeds limit for visibilityQueueProcessor
 	VisibilityProcessorPollBackoffInterval = "history.visibilityProcessorPollBackoffInterval"
 	// VisibilityProcessorEnsureCloseBeforeDelete means we ensure the visibility of an execution is closed before we delete its visibility records
@@ -710,6 +703,8 @@ const (
 	// close task has been processed. Must use Elasticsearch as visibility store, otherwise workflow
 	// data (eg: search attributes) will be lost after workflow is closed.
 	VisibilityProcessorEnableCloseWorkflowCleanup = "history.visibilityProcessorEnableCloseWorkflowCleanup"
+	// VisibilityQueueMaxReaderCount is the max number of readers in one multi-cursor visibility queue
+	VisibilityQueueMaxReaderCount = "history.visibilityQueueMaxReaderCount"
 
 	// ArchivalTaskBatchSize is batch size for archivalQueueProcessor
 	ArchivalTaskBatchSize = "history.archivalTaskBatchSize"
@@ -735,6 +730,8 @@ const (
 	ArchivalProcessorArchiveDelay = "history.archivalProcessorArchiveDelay"
 	// ArchivalBackendMaxRPS is the maximum rate of requests per second to the archival backend
 	ArchivalBackendMaxRPS = "history.archivalBackendMaxRPS"
+	// ArchivalQueueMaxReaderCount is the max number of readers in one multi-cursor archival queue
+	ArchivalQueueMaxReaderCount = "history.archivalQueueMaxReaderCount"
 
 	// WorkflowExecutionMaxInFlightUpdates is the max number of updates that can be in-flight (admitted but not yet completed) for any given workflow execution.
 	WorkflowExecutionMaxInFlightUpdates = "history.maxInFlightUpdates"
@@ -745,20 +742,10 @@ const (
 	ReplicatorTaskBatchSize = "history.replicatorTaskBatchSize"
 	// ReplicatorMaxSkipTaskCount is maximum number of tasks that can be skipped during tasks pagination due to not meeting filtering conditions (e.g. missed namespace).
 	ReplicatorMaxSkipTaskCount = "history.replicatorMaxSkipTaskCount"
-	// ReplicatorTaskWorkerCount is number of worker for ReplicatorProcessor
-	ReplicatorTaskWorkerCount = "history.replicatorTaskWorkerCount"
-	// ReplicatorProcessorMaxPollRPS is max poll rate per second for ReplicatorProcessor
-	ReplicatorProcessorMaxPollRPS = "history.replicatorProcessorMaxPollRPS"
 	// ReplicatorProcessorMaxPollInterval is max poll interval for ReplicatorProcessor
 	ReplicatorProcessorMaxPollInterval = "history.replicatorProcessorMaxPollInterval"
 	// ReplicatorProcessorMaxPollIntervalJitterCoefficient is the max poll interval jitter coefficient
 	ReplicatorProcessorMaxPollIntervalJitterCoefficient = "history.replicatorProcessorMaxPollIntervalJitterCoefficient"
-	// ReplicatorProcessorUpdateAckInterval is update interval for ReplicatorProcessor
-	ReplicatorProcessorUpdateAckInterval = "history.replicatorProcessorUpdateAckInterval"
-	// ReplicatorProcessorUpdateAckIntervalJitterCoefficient is the update interval jitter coefficient
-	ReplicatorProcessorUpdateAckIntervalJitterCoefficient = "history.replicatorProcessorUpdateAckIntervalJitterCoefficient"
-	// ReplicatorProcessorEnablePriorityTaskProcessor indicates whether priority task processor should be used for ReplicatorProcessor
-	ReplicatorProcessorEnablePriorityTaskProcessor = "history.replicatorProcessorEnablePriorityTaskProcessor"
 	// MaximumBufferedEventsBatch is the maximum permissible number of buffered events for any given mutable state.
 	MaximumBufferedEventsBatch = "history.maximumBufferedEventsBatch"
 	// MaximumBufferedEventsSizeInBytes is the maximum permissible size of all buffered events for any given mutable
@@ -768,6 +755,10 @@ const (
 	MaximumSignalsPerExecution = "history.maximumSignalsPerExecution"
 	// ShardUpdateMinInterval is the minimal time interval which the shard info can be updated
 	ShardUpdateMinInterval = "history.shardUpdateMinInterval"
+	// ShardUpdateMinTasksCompleted is the minimum number of tasks which must be completed (across all queues) before the shard info can be updated.
+	// Note that once history.shardUpdateMinInterval amount of time has passed we'll update the shard info regardless of the number of tasks completed.
+	// When the this config is zero or lower we will only update shard info at most once every history.shardUpdateMinInterval.
+	ShardUpdateMinTasksCompleted = "history.shardUpdateMinTasksCompleted"
 	// ShardSyncMinInterval is the minimal time interval which the shard info should be sync to remote
 	ShardSyncMinInterval = "history.shardSyncMinInterval"
 	// EmitShardLagLog whether emit the shard lag log
@@ -844,13 +835,16 @@ const (
 	ReplicationTaskProcessorHostQPS = "history.ReplicationTaskProcessorHostQPS"
 	// ReplicationTaskProcessorShardQPS is the qps of task processing rate limiter on shard level
 	ReplicationTaskProcessorShardQPS = "history.ReplicationTaskProcessorShardQPS"
-	// ReplicationBypassCorruptedData is the flag to bypass corrupted workflow data in source cluster
-	ReplicationBypassCorruptedData = "history.ReplicationBypassCorruptedData"
 	// ReplicationEnableDLQMetrics is the flag to emit DLQ metrics
 	ReplicationEnableDLQMetrics = "history.ReplicationEnableDLQMetrics"
 	// HistoryTaskDLQEnabled enables the history task DLQ. This applies to internal tasks like transfer and timer tasks.
 	// Do not turn this on if you aren't using Cassandra as the history task DLQ is not implemented for other databases.
 	HistoryTaskDLQEnabled = "history.TaskDLQEnabled"
+	// HistoryTaskDLQUnexpectedErrorAttempts is the number of task execution attempts before sending the task to DLQ.
+	HistoryTaskDLQUnexpectedErrorAttempts = "history.TaskDLQUnexpectedErrorAttempts"
+	// HistoryTaskDLQInteralErrors causes history task processing to send tasks failing with serviceerror.Internal to
+	// the dlq (or will drop them if not enabled)
+	HistoryTaskDLQInternalErrors = "history.TaskDLQInternalErrors"
 
 	// ReplicationStreamSyncStatusDuration sync replication status duration
 	ReplicationStreamSyncStatusDuration = "history.ReplicationStreamSyncStatusDuration"

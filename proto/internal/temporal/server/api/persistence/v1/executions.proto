@@ -234,8 +234,8 @@ message VisibilityTaskInfo {
     int64 version = 5;
     int64 task_id = 6;
     google.protobuf.Timestamp visibility_time = 7;
-    google.protobuf.Timestamp close_time = 8;
-    google.protobuf.Timestamp start_time = 9;
+    reserved 8;
+    reserved 9;
     int64 close_visibility_task_id = 10;
 }
 

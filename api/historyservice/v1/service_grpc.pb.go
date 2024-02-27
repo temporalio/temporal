@@ -102,6 +102,7 @@ const (
 	HistoryService_DeleteDLQTasks_FullMethodName                         = "/temporal.server.api.historyservice.v1.HistoryService/DeleteDLQTasks"
 	HistoryService_ListQueues_FullMethodName                             = "/temporal.server.api.historyservice.v1.HistoryService/ListQueues"
 	HistoryService_AddTasks_FullMethodName                               = "/temporal.server.api.historyservice.v1.HistoryService/AddTasks"
+	HistoryService_ListTasks_FullMethodName                              = "/temporal.server.api.historyservice.v1.HistoryService/ListTasks"
 )
 
 // HistoryServiceClient is the client API for HistoryService service.
@@ -306,6 +307,7 @@ type HistoryServiceClient interface {
 	// will fail with an InvalidArgument error. It is ok to have tasks for different workflow runs as long as they are
 	// in the same shard. Calls to the persistence API will be batched by workflow run.
 	AddTasks(ctx context.Context, in *AddTasksRequest, opts ...grpc.CallOption) (*AddTasksResponse, error)
+	ListTasks(ctx context.Context, in *ListTasksRequest, opts ...grpc.CallOption) (*ListTasksResponse, error)
 }
 
 type historyServiceClient struct {
@@ -878,6 +880,15 @@ func (c *historyServiceClient) AddTasks(ctx context.Context, in *AddTasksRequest
 	return out, nil
 }
 
+func (c *historyServiceClient) ListTasks(ctx context.Context, in *ListTasksRequest, opts ...grpc.CallOption) (*ListTasksResponse, error) {
+	out := new(ListTasksResponse)
+	err := c.cc.Invoke(ctx, HistoryService_ListTasks_FullMethodName, in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // HistoryServiceServer is the server API for HistoryService service.
 // All implementations must embed UnimplementedHistoryServiceServer
 // for forward compatibility
@@ -1080,6 +1091,7 @@ type HistoryServiceServer interface {
 	// will fail with an InvalidArgument error. It is ok to have tasks for different workflow runs as long as they are
 	// in the same shard. Calls to the persistence API will be batched by workflow run.
 	AddTasks(context.Context, *AddTasksRequest) (*AddTasksResponse, error)
+	ListTasks(context.Context, *ListTasksRequest) (*ListTasksResponse, error)
 	mustEmbedUnimplementedHistoryServiceServer()
 }
 
@@ -1266,6 +1278,9 @@ func (UnimplementedHistoryServiceServer) ListQueues(context.Context, *ListQueues
 }
 func (UnimplementedHistoryServiceServer) AddTasks(context.Context, *AddTasksRequest) (*AddTasksResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method AddTasks not implemented")
+}
+func (UnimplementedHistoryServiceServer) ListTasks(context.Context, *ListTasksRequest) (*ListTasksResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method ListTasks not implemented")
 }
 func (UnimplementedHistoryServiceServer) mustEmbedUnimplementedHistoryServiceServer() {}
 
@@ -2368,6 +2383,24 @@ func _HistoryService_AddTasks_Handler(srv interface{}, ctx context.Context, dec 
 	return interceptor(ctx, in, info, handler)
 }
 
+func _HistoryService_ListTasks_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(ListTasksRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(HistoryServiceServer).ListTasks(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: HistoryService_ListTasks_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(HistoryServiceServer).ListTasks(ctx, req.(*ListTasksRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 // HistoryService_ServiceDesc is the grpc.ServiceDesc for HistoryService service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -2610,6 +2643,10 @@ var HistoryService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "AddTasks",
 			Handler:    _HistoryService_AddTasks_Handler,
+		},
+		{
+			MethodName: "ListTasks",
+			Handler:    _HistoryService_ListTasks_Handler,
 		},
 	},
 	Streams: []grpc.StreamDesc{

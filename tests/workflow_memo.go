@@ -146,26 +146,30 @@ func (s *FunctionalSuite) startWithMemoHelper(startFn startFunc, id string, task
 
 	// verify open visibility
 	var openExecutionInfo *workflowpb.WorkflowExecutionInfo
-	for i := 0; i < 10; i++ {
-		resp, err1 := s.engine.ListOpenWorkflowExecutions(NewContext(), &workflowservice.ListOpenWorkflowExecutionsRequest{
-			Namespace:       s.namespace,
-			MaximumPageSize: 100,
-			StartTimeFilter: &filterpb.StartTimeFilter{
-				EarliestTime: nil,
-				LatestTime:   timestamppb.New(time.Now().UTC()),
-			},
-			Filters: &workflowservice.ListOpenWorkflowExecutionsRequest_ExecutionFilter{ExecutionFilter: &filterpb.WorkflowExecutionFilter{
-				WorkflowId: id,
-			}},
-		})
-		s.NoError(err1)
-		if len(resp.Executions) == 1 {
-			openExecutionInfo = resp.Executions[0]
-			break
-		}
-		s.Logger.Info("Open WorkflowExecution is not yet visible")
-		time.Sleep(100 * time.Millisecond)
-	}
+	s.Eventually(
+		func() bool {
+			resp, err1 := s.engine.ListOpenWorkflowExecutions(NewContext(), &workflowservice.ListOpenWorkflowExecutionsRequest{
+				Namespace:       s.namespace,
+				MaximumPageSize: 100,
+				StartTimeFilter: &filterpb.StartTimeFilter{
+					EarliestTime: nil,
+					LatestTime:   timestamppb.New(time.Now().UTC()),
+				},
+				Filters: &workflowservice.ListOpenWorkflowExecutionsRequest_ExecutionFilter{ExecutionFilter: &filterpb.WorkflowExecutionFilter{
+					WorkflowId: id,
+				}},
+			})
+			s.NoError(err1)
+			if len(resp.Executions) == 1 {
+				openExecutionInfo = resp.Executions[0]
+				return true
+			}
+			s.Logger.Info("Open WorkflowExecution is not yet visible")
+			return false
+		},
+		waitForESToSettle,
+		100*time.Millisecond,
+	)
 	s.NotNil(openExecutionInfo)
 	s.ProtoEqual(memo, openExecutionInfo.Memo)
 
@@ -207,26 +211,30 @@ func (s *FunctionalSuite) startWithMemoHelper(startFn startFunc, id string, task
 
 	// verify closed visibility
 	var closedExecutionInfo *workflowpb.WorkflowExecutionInfo
-	for i := 0; i < 10; i++ {
-		resp, err1 := s.engine.ListClosedWorkflowExecutions(NewContext(), &workflowservice.ListClosedWorkflowExecutionsRequest{
-			Namespace:       s.namespace,
-			MaximumPageSize: 100,
-			StartTimeFilter: &filterpb.StartTimeFilter{
-				EarliestTime: nil,
-				LatestTime:   timestamppb.New(time.Now().UTC()),
-			},
-			Filters: &workflowservice.ListClosedWorkflowExecutionsRequest_ExecutionFilter{ExecutionFilter: &filterpb.WorkflowExecutionFilter{
-				WorkflowId: id,
-			}},
-		})
-		s.NoError(err1)
-		if len(resp.Executions) == 1 {
-			closedExecutionInfo = resp.Executions[0]
-			break
-		}
-		s.Logger.Info("Closed WorkflowExecution is not yet visible")
-		time.Sleep(100 * time.Millisecond)
-	}
+	s.Eventually(
+		func() bool {
+			resp, err1 := s.engine.ListClosedWorkflowExecutions(NewContext(), &workflowservice.ListClosedWorkflowExecutionsRequest{
+				Namespace:       s.namespace,
+				MaximumPageSize: 100,
+				StartTimeFilter: &filterpb.StartTimeFilter{
+					EarliestTime: nil,
+					LatestTime:   timestamppb.New(time.Now().UTC()),
+				},
+				Filters: &workflowservice.ListClosedWorkflowExecutionsRequest_ExecutionFilter{ExecutionFilter: &filterpb.WorkflowExecutionFilter{
+					WorkflowId: id,
+				}},
+			})
+			s.NoError(err1)
+			if len(resp.Executions) == 1 {
+				closedExecutionInfo = resp.Executions[0]
+				return true
+			}
+			s.Logger.Info("Closed WorkflowExecution is not yet visible")
+			return false
+		},
+		waitForESToSettle,
+		100*time.Millisecond,
+	)
 	s.NotNil(closedExecutionInfo)
 	s.ProtoEqual(memo, closedExecutionInfo.Memo)
 

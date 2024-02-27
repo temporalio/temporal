@@ -41,7 +41,7 @@ type FunctionalTestBaseSuite struct {
 }
 
 func (s *FunctionalTestBaseSuite) SetupSuite() {
-	s.setupSuite("testdata/cluster.yaml",
+	s.setupSuite("testdata/es_cluster.yaml",
 		WithFxOptionsForService(primitives.FrontendService, fx.Populate(&s.frontendServiceName)),
 		WithFxOptionsForService(primitives.MatchingService, fx.Populate(&s.matchingServiceName)),
 		WithFxOptionsForService(primitives.HistoryService, fx.Populate(&s.historyServiceName)),

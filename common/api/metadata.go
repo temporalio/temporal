@@ -129,15 +129,22 @@ var (
 		"StopBatchOperation":                 MethodMetadata{Scope: ScopeNamespace, Access: AccessWrite},
 		"DescribeBatchOperation":             MethodMetadata{Scope: ScopeNamespace, Access: AccessReadOnly},
 		"ListBatchOperations":                MethodMetadata{Scope: ScopeNamespace, Access: AccessReadOnly},
+		"PollNexusTaskQueue":                 MethodMetadata{Scope: ScopeNamespace, Access: AccessAdmin},
+		"RespondNexusTaskCompleted":          MethodMetadata{Scope: ScopeNamespace, Access: AccessAdmin},
+		"RespondNexusTaskFailed":             MethodMetadata{Scope: ScopeNamespace, Access: AccessAdmin},
 	}
 	operatorServiceMetadata = map[string]MethodMetadata{
-		"AddSearchAttributes":      MethodMetadata{Scope: ScopeNamespace, Access: AccessAdmin},
-		"RemoveSearchAttributes":   MethodMetadata{Scope: ScopeNamespace, Access: AccessAdmin},
-		"ListSearchAttributes":     MethodMetadata{Scope: ScopeNamespace, Access: AccessReadOnly},
-		"DeleteNamespace":          MethodMetadata{Scope: ScopeNamespace, Access: AccessAdmin},
-		"AddOrUpdateRemoteCluster": MethodMetadata{Scope: ScopeCluster, Access: AccessAdmin},
-		"RemoveRemoteCluster":      MethodMetadata{Scope: ScopeCluster, Access: AccessAdmin},
-		"ListClusters":             MethodMetadata{Scope: ScopeCluster, Access: AccessAdmin},
+		"AddSearchAttributes":                MethodMetadata{Scope: ScopeNamespace, Access: AccessAdmin},
+		"RemoveSearchAttributes":             MethodMetadata{Scope: ScopeNamespace, Access: AccessAdmin},
+		"ListSearchAttributes":               MethodMetadata{Scope: ScopeNamespace, Access: AccessReadOnly},
+		"DeleteNamespace":                    MethodMetadata{Scope: ScopeNamespace, Access: AccessAdmin},
+		"AddOrUpdateRemoteCluster":           MethodMetadata{Scope: ScopeCluster, Access: AccessAdmin},
+		"RemoveRemoteCluster":                MethodMetadata{Scope: ScopeCluster, Access: AccessAdmin},
+		"ListClusters":                       MethodMetadata{Scope: ScopeCluster, Access: AccessAdmin},
+		"CreateOrUpdateNexusIncomingService": MethodMetadata{Scope: ScopeCluster, Access: AccessAdmin},
+		"DeleteNexusIncomingService":         MethodMetadata{Scope: ScopeCluster, Access: AccessAdmin},
+		"GetNexusIncomingService":            MethodMetadata{Scope: ScopeCluster, Access: AccessAdmin},
+		"ListNexusIncomingServices":          MethodMetadata{Scope: ScopeCluster, Access: AccessAdmin},
 	}
 )
 

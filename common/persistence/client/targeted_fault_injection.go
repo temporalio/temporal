@@ -47,7 +47,7 @@ func NewTargetedDataStoreErrorGenerator(cfg *config.FaultInjectionDataStoreConfi
 		var faultWeights []FaultWeight
 		methodErrRate := 0.0
 		for errName, errRate := range methodConfig.Errors {
-			err := newError(errName, errRate)
+			err := newError(errName, errRate, methodName)
 			faultWeights = append(faultWeights, FaultWeight{
 				errFactory: func(data string) error {
 					return err
@@ -100,18 +100,23 @@ func (d *dataStoreErrorGenerator) Generate() error {
 
 // newError returns an error based on the provided name. If the name is not recognized, then this method will
 // panic.
-func newError(errName string, errRate float64) error {
+func newError(errName string, errRate float64, methodName string) error {
+	header := fmt.Sprintf("fault injection error at %s with %.2f rate", methodName, errRate)
 	switch errName {
 	case "ShardOwnershipLost":
-		return &persistence.ShardOwnershipLostError{Msg: fmt.Sprintf("fault injection error (%f): persistence.ShardOwnershipLostError", errRate)}
+		return &persistence.ShardOwnershipLostError{Msg: fmt.Sprintf("%s: persistence.ShardOwnershipLostError", header)}
 	case "DeadlineExceeded":
-		return fmt.Errorf("fault injection error (%f): %w", errRate, context.DeadlineExceeded)
+		// Real persistence store never returns context.DeadlineExceeded error. It returns persistence.TimeoutError instead.
+		// Therefor "DeadlineExceeded" shouldn't be used with fault injection. Use "Timeout" instead.
+		return fmt.Errorf("%s: %w", header, context.DeadlineExceeded)
+	case "Timeout":
+		return &persistence.TimeoutError{Msg: fmt.Sprintf("%s: persistence.TimeoutError", header)}
 	case "ResourceExhausted":
-		return serviceerror.NewResourceExhausted(enumspb.RESOURCE_EXHAUSTED_CAUSE_SYSTEM_OVERLOADED, fmt.Sprintf("fault injection error (%f): serviceerror.ResourceExhausted", errRate))
+		return serviceerror.NewResourceExhausted(enumspb.RESOURCE_EXHAUSTED_CAUSE_SYSTEM_OVERLOADED, fmt.Sprintf("%s: serviceerror.ResourceExhausted", header))
 	case "Unavailable":
-		return serviceerror.NewUnavailable(fmt.Sprintf("fault injection error (%f): serviceerror.Unavailable", errRate))
+		return serviceerror.NewUnavailable(fmt.Sprintf("%s: serviceerror.Unavailable", header))
 	default:
-		panic(fmt.Sprintf("unknown error type: %v", errName))
+		panic(fmt.Sprintf("unsupported error type: %v", errName))
 	}
 }
 

@@ -85,7 +85,7 @@ func (c *metricClient) finishMetricsRecording(
 			*serviceerror.WorkflowExecutionAlreadyStarted:
 			// noop - not interest and too many logs
 		default:
-			c.throttledLogger.Info("admin client encountered error", tag.Error(err), tag.ErrorType(err))
+			c.throttledLogger.Info("admin client encountered error", tag.Error(err), tag.ServiceErrorType(err))
 		}
 		metrics.ClientFailures.With(metricsHandler).Record(1, metrics.ServiceErrorTypeTag(err))
 	}

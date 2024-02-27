@@ -14,3 +14,10 @@ faultinjection:
           UpdateShard:
             errors:
               DeadlineExceeded: 1.0 # 100% of the time, return a deadline exceeded error
+esconfig:
+  version: "${ES_VERSION}"
+  url:
+    scheme: "http"
+    host: "${ES_SEEDS}:9200"
+  indices:
+    visibility: temporal_visibility_v1_test

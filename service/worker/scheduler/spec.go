@@ -36,6 +36,7 @@ import (
 
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/cache"
+	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/primitives/timestamp"
 )
 
@@ -69,9 +70,12 @@ type (
 
 func NewSpecBuilder() *SpecBuilder {
 	return &SpecBuilder{
-		locationCache: cache.New(1000, &cache.Options{
-			TTL: 24 * time.Hour,
-		}),
+		locationCache: cache.New(1000,
+			&cache.Options{
+				TTL: 24 * time.Hour,
+			},
+			metrics.NoopMetricsHandler,
+		),
 	}
 }
 
@@ -295,20 +299,17 @@ func (cs *CompiledSpec) getNextTime(jitterSeed string, after time.Time) getNextT
 		after = cs.spec.StartTime.AsTime().Add(-time.Second)
 	}
 
+	pastEndTime := func(t time.Time) bool {
+		return cs.spec.EndTime != nil && t.After(cs.spec.EndTime.AsTime())
+	}
 	var nominal time.Time
-	for {
+	for nominal.IsZero() || cs.excluded(nominal) {
 		nominal = cs.rawNextTime(after)
+		after = nominal
 
-		if nominal.IsZero() || (cs.spec.EndTime != nil && nominal.After(cs.spec.EndTime.AsTime())) {
+		if nominal.IsZero() || pastEndTime(nominal) {
 			return getNextTimeResult{}
 		}
-
-		// check against excludes
-		if !cs.excluded(nominal) {
-			break
-		}
-
-		after = nominal
 	}
 
 	maxJitter := timestamp.DurationValue(cs.spec.Jitter)

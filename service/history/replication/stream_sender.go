@@ -75,16 +75,22 @@ func NewStreamSender(
 	shardContext shard.Context,
 	historyEngine shard.Engine,
 	taskConverter SourceTaskConverter,
+	clientClusterName string,
 	clientShardKey ClusterShardKey,
 	serverShardKey ClusterShardKey,
 ) *StreamSenderImpl {
+	logger := log.With(
+		shardContext.GetLogger(),
+		tag.TargetCluster(clientClusterName), // client is the target cluster (passive cluster)
+		tag.TargetShardID(clientShardKey.ShardID),
+	)
 	return &StreamSenderImpl{
 		server:        server,
 		shardContext:  shardContext,
 		historyEngine: historyEngine,
 		taskConverter: taskConverter,
 		metrics:       shardContext.GetMetricsHandler(),
-		logger:        shardContext.GetLogger(),
+		logger:        logger,
 
 		status:         common.DaemonStatusInitialized,
 		clientShardKey: clientShardKey,

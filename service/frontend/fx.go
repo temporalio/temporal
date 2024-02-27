@@ -247,8 +247,6 @@ func ConfigProvider(
 	return NewConfig(
 		dc,
 		persistenceConfig.NumHistoryShards,
-		persistenceConfig.StandardVisibilityConfigExist(),
-		persistenceConfig.AdvancedVisibilityConfigExist(),
 	)
 }
 
@@ -639,6 +637,7 @@ func HTTPAPIServerProvider(
 	grpcListener net.Listener,
 	tlsConfigProvider encryption.TLSConfigProvider,
 	handler Handler,
+	operatorHandler *OperatorHandlerImpl,
 	grpcServerOptions GrpcServerOptions,
 	metricsHandler metrics.Handler,
 	namespaceRegistry namespace.Registry,
@@ -659,6 +658,7 @@ func HTTPAPIServerProvider(
 		grpcListener,
 		tlsConfigProvider,
 		handler,
+		operatorHandler,
 		grpcServerOptions.UnaryInterceptors,
 		metricsHandler,
 		namespaceRegistry,

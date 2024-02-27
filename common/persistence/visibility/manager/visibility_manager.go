@@ -178,8 +178,6 @@ type (
 		RunID       string
 		WorkflowID  string
 		TaskID      int64
-		StartTime   time.Time // if start time is not empty, delete record from open_execution for cassandra db
-		CloseTime   time.Time // if end time is not empty, delete record from closed_execution for cassandra db
 	}
 
 	// GetWorkflowExecutionRequest is request from GetWorkflowExecution
@@ -188,8 +186,6 @@ type (
 		Namespace   namespace.Name // namespace.Name is not persisted
 		RunID       string
 		WorkflowID  string
-		StartTime   time.Time // if start time is not empty, search record from open_execution for cassandra db
-		CloseTime   time.Time // if end time is not empty, search record from closed_execution for cassandra db
 	}
 
 	// GetWorkflowExecutionResponse is response to GetWorkflowExecution

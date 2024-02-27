@@ -32,6 +32,7 @@ import (
 	enumsspb "go.temporal.io/server/api/enums/v1"
 
 	"go.temporal.io/server/common/primitives"
+	"go.temporal.io/server/common/util"
 )
 
 const (
@@ -254,7 +255,7 @@ func VersionedTag(versioned bool) Tag {
 }
 
 func ServiceErrorTypeTag(err error) Tag {
-	return &tagImpl{key: ErrorTypeTagName, value: strings.TrimPrefix(errorType(err), errorPrefix)}
+	return &tagImpl{key: ErrorTypeTagName, value: strings.TrimPrefix(util.ErrorType(err), errorPrefix)}
 }
 
 // HttpStatusTag returns a new httpStatusTag.

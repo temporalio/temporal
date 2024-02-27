@@ -39,7 +39,7 @@ The following are some fundamental premises:
 These premises have led to a system architecture which is divided into user-hosted processes, versus the Temporal cluster processes (which may be hosted outside the user's systems):
 
 <!-- https://lucid.app/lucidchart/0202e4b8-5258-4cd6-a6a0-67159300532b/edit -->
-<img src="https://github.com/temporalio/temporal/assets/52205/47a7c139-1bb4-46f9-a401-793a63e39341">
+<img src="assets/temporal-high-level.svg">
 
 ### User-hosted processes
 
@@ -50,7 +50,7 @@ These premises have led to a system architecture which is divided into user-host
 
 - The worker processes communicate with the Temporal server in two ways: they continuously poll the server for Workflow and Activity tasks, and on completion of each task they send information to the server.
   (For a Workflow task they send commands to the server specifying what must be done to further advance the Workflow execution, and for an Activity task they send the task result or failure information.)
-  See [Tasks](./#Tasks) below.
+  See [Tasks](#Tasks) below.
 
 ### Temporal Cluster
 

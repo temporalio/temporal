@@ -121,7 +121,7 @@ func (s *DLQSuite) SetupSuite() {
 	testPrefix := "dlq-test-terminal-wfts-"
 	s.failingWorkflowIDPrefix.Store(&testPrefix)
 	s.setupSuite(
-		"testdata/cluster.yaml",
+		"testdata/es_cluster.yaml",
 		WithFxOptionsForService(primitives.HistoryService,
 			fx.Populate(&s.dlq),
 			fx.Provide(

@@ -58,53 +58,31 @@ func (c *Persistence) Validate() error {
 	if c.SecondaryVisibilityStore != "" {
 		stores = append(stores, c.SecondaryVisibilityStore)
 	}
-	if c.AdvancedVisibilityStore != "" {
-		stores = append(stores, c.AdvancedVisibilityStore)
-	}
 
 	// There are 3 config keys:
 	// - visibilityStore: can set any data store
 	// - secondaryVisibilityStore: can set any data store
-	// - advancedVisibilityStore: can only set elasticsearch data store
 	// If visibilityStore is set, then it's always the primary.
 	// If secondaryVisibilityStore is set, it's always the secondary.
 	//
 	// Valid dual visibility combinations (order: primary, secondary):
 	// - visibilityStore (standard),      secondaryVisibilityStore (any)
-	// - visibilityStore (standard),      advancedVisibilityStore (es)
 	// - visibilityStore (advanced sql),  secondaryVisibilityStore (advanced sql)
 	// - visibilityStore (es),            visibilityStore (es) [via elasticsearch.indices config]
-	// - advancedVisibilityStore (es),    advancedVisibilityStore (es) [via elasticsearch.indices config]
 	//
 	// Invalid dual visibility combinations:
 	// - visibilityStore (advanced sql),  secondaryVisibilityStore (standard, es)
-	// - visibilityStore (advanced sql),  advancedVisibilityStore (es)
 	// - visibilityStore (es),            secondaryVisibilityStore (any)
-	// - visibilityStore (es),            advancedVisibilityStore (es)
-	// - advancedVisibilityStore (es),    secondaryVisibilityStore (any)
 	//
 	// The validation for dual visibility pair (advanced sql, advanced sql) is in visibility factory
 	// due to circular dependency. This will be better after standard visibility is removed.
 
-	if c.VisibilityStore == "" && c.AdvancedVisibilityStore == "" {
+	if c.VisibilityStore == "" {
 		return errors.New("persistence config: visibilityStore must be specified")
 	}
-	if c.SecondaryVisibilityStore != "" && c.AdvancedVisibilityStore != "" {
+	if c.DataStores[c.VisibilityStore].Elasticsearch != nil && c.SecondaryVisibilityStore != "" {
 		return errors.New(
-			"persistence config: cannot specify both secondaryVisibilityStore and " +
-				"advancedVisibilityStore",
-		)
-	}
-	if c.AdvancedVisibilityStore != "" && c.DataStores[c.AdvancedVisibilityStore].Elasticsearch == nil {
-		return fmt.Errorf(
-			"persistence config: advanced visibility datastore %q: missing elasticsearch config",
-			c.AdvancedVisibilityStore,
-		)
-	}
-	if c.DataStores[c.VisibilityStore].Elasticsearch != nil &&
-		(c.SecondaryVisibilityStore != "" || c.AdvancedVisibilityStore != "") {
-		return errors.New(
-			"persistence config: cannot set secondaryVisibilityStore or advancedVisibilityStore " +
+			"persistence config: cannot set secondaryVisibilityStore " +
 				"when visibilityStore is setting elasticsearch datastore",
 		)
 	}
@@ -141,8 +119,8 @@ func (c *Persistence) Validate() error {
 	return nil
 }
 
-// StandardVisibilityConfigExist returns whether user specified visibilityStore in config
-func (c *Persistence) StandardVisibilityConfigExist() bool {
+// VisibilityConfigExist returns whether user specified visibilityStore in config
+func (c *Persistence) VisibilityConfigExist() bool {
 	return c.VisibilityStore != ""
 }
 
@@ -151,25 +129,13 @@ func (c *Persistence) SecondaryVisibilityConfigExist() bool {
 	return c.SecondaryVisibilityStore != ""
 }
 
-// AdvancedVisibilityConfigExist returns whether user specified advancedVisibilityStore in config
-func (c *Persistence) AdvancedVisibilityConfigExist() bool {
-	return c.AdvancedVisibilityStore != ""
-}
-
 func (c *Persistence) IsSQLVisibilityStore() bool {
-	return (c.StandardVisibilityConfigExist() && c.DataStores[c.VisibilityStore].SQL != nil) ||
+	return (c.VisibilityConfigExist() && c.DataStores[c.VisibilityStore].SQL != nil) ||
 		(c.SecondaryVisibilityConfigExist() && c.DataStores[c.SecondaryVisibilityStore].SQL != nil)
 }
 
 func (c *Persistence) GetVisibilityStoreConfig() DataStore {
-	if c.VisibilityStore != "" {
-		return c.DataStores[c.VisibilityStore]
-	}
-	if c.AdvancedVisibilityStore != "" {
-		return c.DataStores[c.AdvancedVisibilityStore]
-	}
-	// Based on validation above, this should never happen.
-	return DataStore{}
+	return c.DataStores[c.VisibilityStore]
 }
 
 func (c *Persistence) GetSecondaryVisibilityStoreConfig() DataStore {
@@ -177,21 +143,7 @@ func (c *Persistence) GetSecondaryVisibilityStoreConfig() DataStore {
 		return c.DataStores[c.SecondaryVisibilityStore]
 	}
 	if c.VisibilityStore != "" {
-		if c.AdvancedVisibilityStore != "" {
-			return c.DataStores[c.AdvancedVisibilityStore]
-		}
 		ds := c.DataStores[c.VisibilityStore]
-		if ds.Elasticsearch != nil && ds.Elasticsearch.GetSecondaryVisibilityIndex() != "" {
-			esConfig := *ds.Elasticsearch
-			esConfig.Indices = map[string]string{
-				client.VisibilityAppName: ds.Elasticsearch.GetSecondaryVisibilityIndex(),
-			}
-			ds.Elasticsearch = &esConfig
-			return ds
-		}
-	}
-	if c.AdvancedVisibilityStore != "" {
-		ds := c.DataStores[c.AdvancedVisibilityStore]
 		if ds.Elasticsearch != nil && ds.Elasticsearch.GetSecondaryVisibilityIndex() != "" {
 			esConfig := *ds.Elasticsearch
 			esConfig.Indices = map[string]string{

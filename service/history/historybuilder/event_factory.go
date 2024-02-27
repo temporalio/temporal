@@ -753,15 +753,17 @@ func (b *EventFactory) CreateWorkflowExecutionSignaledEvent(
 	identity string,
 	header *commonpb.Header,
 	skipGenerateWorkflowTask bool,
+	externalWorkflowExecution *commonpb.WorkflowExecution,
 ) *historypb.HistoryEvent {
 	event := b.createHistoryEvent(enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_SIGNALED, b.timeSource.Now())
 	event.Attributes = &historypb.HistoryEvent_WorkflowExecutionSignaledEventAttributes{
 		WorkflowExecutionSignaledEventAttributes: &historypb.WorkflowExecutionSignaledEventAttributes{
-			SignalName:               signalName,
-			Input:                    input,
-			Identity:                 identity,
-			Header:                   header,
-			SkipGenerateWorkflowTask: skipGenerateWorkflowTask,
+			SignalName:                signalName,
+			Input:                     input,
+			Identity:                  identity,
+			Header:                    header,
+			SkipGenerateWorkflowTask:  skipGenerateWorkflowTask,
+			ExternalWorkflowExecution: externalWorkflowExecution,
 		},
 	}
 	return event

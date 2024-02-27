@@ -131,6 +131,7 @@ func (r *StateRebuilderImpl) Rebuild(
 
 	rebuiltMutableState, stateBuilder := r.initializeBuilders(
 		namespaceEntry,
+		targetWorkflowIdentifier,
 		now,
 	)
 
@@ -203,6 +204,7 @@ func (r *StateRebuilderImpl) Rebuild(
 
 func (r *StateRebuilderImpl) initializeBuilders(
 	namespaceEntry *namespace.Namespace,
+	workflowIdentifier definition.WorkflowKey,
 	now time.Time,
 ) (workflow.MutableState, workflow.MutableStateRebuilder) {
 	resetMutableState := workflow.NewMutableState(
@@ -210,6 +212,8 @@ func (r *StateRebuilderImpl) initializeBuilders(
 		r.shard.GetEventsCache(),
 		r.logger,
 		namespaceEntry,
+		workflowIdentifier.GetWorkflowID(),
+		workflowIdentifier.GetRunID(),
 		now,
 	)
 	stateBuilder := workflow.NewMutableStateRebuilder(

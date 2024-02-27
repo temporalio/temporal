@@ -38,6 +38,7 @@ message Predicate {
         NotPredicateAttributes not_predicate_attributes = 6;
         NamespaceIdPredicateAttributes namespace_id_predicate_attributes = 7;
         TaskTypePredicateAttributes task_type_predicate_attributes = 8;
+        DestinationPredicateAttributes destination_predicate_attributes = 9;
     }
 }
 
@@ -66,3 +67,8 @@ message NamespaceIdPredicateAttributes {
 message TaskTypePredicateAttributes {
     repeated temporal.server.api.enums.v1.TaskType task_types = 1;
 }
+
+message DestinationPredicateAttributes {
+    repeated string destinations = 1;
+}
+

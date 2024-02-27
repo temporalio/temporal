@@ -90,7 +90,6 @@ func (s *readerGroupSuite) TearDownTest() {
 
 func (s *readerGroupSuite) TestStartStop() {
 	readerID := DefaultReaderId
-	s.setupRegisterReaderMock(readerID)
 	r, err := s.readerGroup.NewReader(readerID)
 	s.NoError(err)
 	s.Equal(common.DaemonStatusInitialized, r.(*testReader).status)
@@ -99,14 +98,12 @@ func (s *readerGroupSuite) TestStartStop() {
 	s.Equal(common.DaemonStatusStarted, r.(*testReader).status)
 
 	readerID = DefaultReaderId + 1
-	s.setupRegisterReaderMock(readerID)
 	r, err = s.readerGroup.NewReader(readerID)
 	s.NoError(err)
 	s.Equal(common.DaemonStatusStarted, r.(*testReader).status)
 
 	var readers []*testReader
-	for readerID, reader := range s.readerGroup.Readers() {
-		s.setupUnRegisterReaderMock(readerID)
+	for _, reader := range s.readerGroup.Readers() {
 		readers = append(readers, reader.(*testReader))
 	}
 	s.readerGroup.Stop()
@@ -129,7 +126,6 @@ func (s *readerGroupSuite) TestAddGetReader() {
 	s.Nil(r)
 
 	for i := int64(0); i < 3; i++ {
-		s.setupRegisterReaderMock(i)
 		r, err := s.readerGroup.NewReader(i)
 		s.NoError(err)
 
@@ -153,11 +149,9 @@ func (s *readerGroupSuite) TestRemoveReader() {
 
 	readerID := DefaultReaderId
 
-	s.setupRegisterReaderMock(readerID)
 	r, err := s.readerGroup.NewReader(readerID)
 	s.NoError(err)
 
-	s.setupUnRegisterReaderMock(readerID)
 	s.readerGroup.RemoveReader(readerID)
 
 	s.Equal(common.DaemonStatusStopped, r.(*testReader).status)
@@ -167,7 +161,6 @@ func (s *readerGroupSuite) TestRemoveReader() {
 func (s *readerGroupSuite) TestForEach() {
 	readerIDs := []int64{1, 2, 3}
 	for _, readerID := range readerIDs {
-		s.setupRegisterReaderMock(readerID)
 		_, err := s.readerGroup.NewReader(readerID)
 		s.NoError(err)
 	}
@@ -178,32 +171,6 @@ func (s *readerGroupSuite) TestForEach() {
 	})
 
 	s.Equal(s.readerGroup.Readers(), forEachResult)
-}
-
-func (s *readerGroupSuite) setupRegisterReaderMock(
-	readerID int64,
-) {
-	request := &persistence.RegisterHistoryTaskReaderRequest{
-		ShardID:      s.shardID,
-		ShardOwner:   s.shardOwner,
-		TaskCategory: s.category,
-		ReaderID:     readerID,
-	}
-
-	s.mockExecutionManager.EXPECT().RegisterHistoryTaskReader(gomock.Any(), request).Return(nil).Times(1)
-}
-
-func (s *readerGroupSuite) setupUnRegisterReaderMock(
-	readerID int64,
-) {
-	request := &persistence.UnregisterHistoryTaskReaderRequest{
-		ShardID:      s.shardID,
-		ShardOwner:   s.shardOwner,
-		TaskCategory: s.category,
-		ReaderID:     readerID,
-	}
-
-	s.mockExecutionManager.EXPECT().UnregisterHistoryTaskReader(gomock.Any(), request).Times(1)
 }
 
 func newTestReader() Reader {
@@ -221,6 +188,6 @@ func (r *testReader) MergeSlices(...Slice)         { panic("not implemented") }
 func (r *testReader) AppendSlices(...Slice)        { panic("not implemented") }
 func (r *testReader) ClearSlices(SlicePredicate)   { panic("not implemented") }
 func (r *testReader) CompactSlices(SlicePredicate) { panic("not implemented") }
-func (r *testReader) ShrinkSlices()                { panic("not implemented") }
+func (r *testReader) ShrinkSlices() int            { panic("not implemented") }
 func (r *testReader) Notify()                      { panic("not implemented") }
 func (r *testReader) Pause(time.Duration)          { panic("not implemented") }

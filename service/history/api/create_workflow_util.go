@@ -55,20 +55,19 @@ type (
 )
 
 func NewWorkflowWithSignal(
-	ctx context.Context,
 	shard shard.Context,
 	namespaceEntry *namespace.Namespace,
 	workflowID string,
 	runID string,
 	startRequest *historyservice.StartWorkflowExecutionRequest,
 	signalWithStartRequest *workflowservice.SignalWithStartWorkflowExecutionRequest,
-) (WorkflowContext, error) {
+) (WorkflowLease, error) {
 	newMutableState, err := CreateMutableState(
-		ctx,
 		shard,
 		namespaceEntry,
 		startRequest.StartRequest.WorkflowExecutionTimeout,
 		startRequest.StartRequest.WorkflowRunTimeout,
+		workflowID,
 		runID,
 	)
 	if err != nil {
@@ -137,15 +136,15 @@ func NewWorkflowWithSignal(
 		shard.GetThrottledLogger(),
 		shard.GetMetricsHandler(),
 	)
-	return NewWorkflowContext(newWorkflowContext, wcache.NoopReleaseFn, newMutableState), nil
+	return NewWorkflowLease(newWorkflowContext, wcache.NoopReleaseFn, newMutableState), nil
 }
 
 func CreateMutableState(
-	ctx context.Context,
 	shard shard.Context,
 	namespaceEntry *namespace.Namespace,
 	executionTimeout *durationpb.Duration,
 	runTimeout *durationpb.Duration,
+	workflowID string,
 	runID string,
 ) (workflow.MutableState, error) {
 	newMutableState := workflow.NewMutableState(
@@ -153,9 +152,11 @@ func CreateMutableState(
 		shard.GetEventsCache(),
 		shard.GetLogger(),
 		namespaceEntry,
+		workflowID,
+		runID,
 		shard.GetTimeSource().Now(),
 	)
-	if err := newMutableState.SetHistoryTree(ctx, executionTimeout, runTimeout, runID); err != nil {
+	if err := newMutableState.SetHistoryTree(executionTimeout, runTimeout, runID); err != nil {
 		return nil, err
 	}
 	return newMutableState, nil

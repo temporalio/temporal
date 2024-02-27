@@ -75,6 +75,7 @@ func (s *mitigatorSuite) SetupTest() {
 		log.NewTestLogger(),
 		metrics.NoopMetricsHandler,
 		dynamicconfig.GetIntPropertyFn(3),
+		GrouperNamespaceID{},
 	)
 }
 

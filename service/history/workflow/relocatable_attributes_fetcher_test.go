@@ -117,7 +117,6 @@ func TestRelocatableAttributesFetcher_Fetch(t *testing.T) {
 					Namespace:   namespaceEntry.Name(),
 					RunID:       tests.RunID,
 					WorkflowID:  tests.WorkflowID,
-					CloseTime:   closeTime,
 				}).Return(&manager.GetWorkflowExecutionResponse{
 					Execution: &workflow.WorkflowExecutionInfo{
 						Memo:             persistenceAttributes.Memo,

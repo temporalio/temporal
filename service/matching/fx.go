@@ -59,7 +59,7 @@ var Module = fx.Options(
 	fx.Provide(TelemetryInterceptorProvider),
 	fx.Provide(RateLimitInterceptorProvider),
 	fx.Provide(VisibilityManagerProvider),
-	fx.Provide(HandlerProvider),
+	fx.Provide(NewHandler),
 	fx.Provide(service.GrpcServerOptionsProvider),
 	fx.Provide(NamespaceReplicationQueueProvider),
 	fx.Provide(ServiceResolverProvider),
@@ -71,11 +71,7 @@ func ConfigProvider(
 	dc *dynamicconfig.Collection,
 	persistenceConfig config.Persistence,
 ) *Config {
-	return NewConfig(
-		dc,
-		persistenceConfig.StandardVisibilityConfigExist(),
-		persistenceConfig.AdvancedVisibilityConfigExist(),
-	)
+	return NewConfig(dc)
 }
 
 func RetryableInterceptorProvider() *interceptor.RetryableInterceptor {
@@ -178,36 +174,6 @@ func VisibilityManagerProvider(
 		serviceConfig.VisibilityEnableManualPagination,
 		metricsHandler,
 		logger,
-	)
-}
-
-func HandlerProvider(
-	config *Config,
-	logger log.SnTaggedLogger,
-	throttledLogger log.ThrottledLogger,
-	taskManager persistence.TaskManager,
-	historyClient resource.HistoryClient,
-	matchingRawClient resource.MatchingRawClient,
-	matchingServiceResolver membership.ServiceResolver,
-	metricsHandler metrics.Handler,
-	namespaceRegistry namespace.Registry,
-	clusterMetadata cluster.Metadata,
-	namespaceReplicationQueue TaskQueueReplicatorNamespaceReplicationQueue,
-	visibilityManager manager.VisibilityManager,
-) *Handler {
-	return NewHandler(
-		config,
-		logger,
-		throttledLogger,
-		taskManager,
-		historyClient,
-		matchingRawClient,
-		matchingServiceResolver,
-		metricsHandler,
-		namespaceRegistry,
-		clusterMetadata,
-		namespaceReplicationQueue,
-		visibilityManager,
 	)
 }
 

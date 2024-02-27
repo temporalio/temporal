@@ -61,17 +61,17 @@ func (m *MockTaskGenerator) EXPECT() *MockTaskGeneratorMockRecorder {
 }
 
 // GenerateActivityRetryTasks mocks base method.
-func (m *MockTaskGenerator) GenerateActivityRetryTasks(activityScheduledEventID int64) error {
+func (m *MockTaskGenerator) GenerateActivityRetryTasks(eventID int64, visibilityTimestamp time.Time, nextAttempt int32) error {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "GenerateActivityRetryTasks", activityScheduledEventID)
+	ret := m.ctrl.Call(m, "GenerateActivityRetryTasks", eventID, visibilityTimestamp, nextAttempt)
 	ret0, _ := ret[0].(error)
 	return ret0
 }
 
 // GenerateActivityRetryTasks indicates an expected call of GenerateActivityRetryTasks.
-func (mr *MockTaskGeneratorMockRecorder) GenerateActivityRetryTasks(activityScheduledEventID interface{}) *gomock.Call {
+func (mr *MockTaskGeneratorMockRecorder) GenerateActivityRetryTasks(eventID, visibilityTimestamp, nextAttempt interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GenerateActivityRetryTasks", reflect.TypeOf((*MockTaskGenerator)(nil).GenerateActivityRetryTasks), activityScheduledEventID)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GenerateActivityRetryTasks", reflect.TypeOf((*MockTaskGenerator)(nil).GenerateActivityRetryTasks), eventID, visibilityTimestamp, nextAttempt)
 }
 
 // GenerateActivityTasks mocks base method.

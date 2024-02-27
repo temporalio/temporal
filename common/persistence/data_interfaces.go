@@ -406,37 +406,12 @@ type (
 		RunID       string
 	}
 
-	// RegisterHistoryTaskReaderRequest is a hint for underlying persistence implementation
-	// that a new queue reader is created by queue processing logic
-	RegisterHistoryTaskReaderRequest struct {
-		ShardID      int32
-		ShardOwner   string
-		TaskCategory tasks.Category
-		ReaderID     int64
-	}
-
-	// UnregisterHistoryTaskReaderRequest is a hint for underlying persistence implementation
-	// that queue processing logic is done using an existing queue reader
-	UnregisterHistoryTaskReaderRequest RegisterHistoryTaskReaderRequest
-
-	// UpdateHistoryTaskReaderProgressRequest is a hint for underlying persistence implementation
-	// that a certain queue reader's process and the fact that it won't try to load tasks with
-	// key less than InclusiveMinPendingTaskKey
-	UpdateHistoryTaskReaderProgressRequest struct {
-		ShardID                    int32
-		ShardOwner                 string
-		TaskCategory               tasks.Category
-		ReaderID                   int64
-		InclusiveMinPendingTaskKey tasks.Key
-	}
-
 	// GetHistoryTasksRequest is used to get a range of history tasks
 	// Either max TaskID or FireTime is required depending on the
 	// task category type. Min TaskID or FireTime is optional.
 	GetHistoryTasksRequest struct {
 		ShardID             int32
 		TaskCategory        tasks.Category
-		ReaderID            int64
 		InclusiveMinTaskKey tasks.Key
 		ExclusiveMaxTaskKey tasks.Key
 		BatchSize           int
@@ -944,24 +919,11 @@ type (
 	TrimHistoryBranchResponse struct {
 	}
 
-	// GetHistoryTreeRequest is used to retrieve branch info of a history tree
-	GetHistoryTreeRequest struct {
-		// A UUID of a tree
-		TreeID string
-		// Get data from this shard
-		ShardID int32
-	}
-
 	// HistoryBranchDetail contains detailed information of a branch
 	HistoryBranchDetail struct {
 		BranchInfo *persistencespb.HistoryBranch
 		ForkTime   *timestamppb.Timestamp
 		Info       string
-	}
-
-	// GetHistoryTreeResponse is a response to GetHistoryTreeRequest
-	GetHistoryTreeResponse struct {
-		BranchInfos []*persistencespb.HistoryBranch
 	}
 
 	// GetAllHistoryTreeBranchesRequest is a request of GetAllHistoryTreeBranches
@@ -1094,11 +1056,6 @@ type (
 
 		// Tasks related APIs
 
-		// Hints for persistence implementation regarding history task readers
-		RegisterHistoryTaskReader(ctx context.Context, request *RegisterHistoryTaskReaderRequest) error
-		UnregisterHistoryTaskReader(ctx context.Context, request *UnregisterHistoryTaskReaderRequest)
-		UpdateHistoryTaskReaderProgress(ctx context.Context, request *UpdateHistoryTaskReaderProgressRequest)
-
 		AddHistoryTasks(ctx context.Context, request *AddHistoryTasksRequest) error
 		GetHistoryTasks(ctx context.Context, request *GetHistoryTasksRequest) (*GetHistoryTasksResponse, error)
 		CompleteHistoryTask(ctx context.Context, request *CompleteHistoryTaskRequest) error
@@ -1134,8 +1091,6 @@ type (
 		DeleteHistoryBranch(ctx context.Context, request *DeleteHistoryBranchRequest) error
 		// TrimHistoryBranch validate & trim a history branch
 		TrimHistoryBranch(ctx context.Context, request *TrimHistoryBranchRequest) (*TrimHistoryBranchResponse, error)
-		// GetHistoryTree returns all branch information of a tree
-		GetHistoryTree(ctx context.Context, request *GetHistoryTreeRequest) (*GetHistoryTreeResponse, error)
 		// GetAllHistoryTreeBranches returns all branches of all trees
 		GetAllHistoryTreeBranches(ctx context.Context, request *GetAllHistoryTreeBranchesRequest) (*GetAllHistoryTreeBranchesResponse, error)
 	}

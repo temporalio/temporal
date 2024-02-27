@@ -52,6 +52,7 @@ type (
 		activityDeps             activityDeps
 		enabledForNs             dynamicconfig.BoolPropertyFnWithNamespaceFilter
 		globalNSStartWorkflowRPS dynamicconfig.FloatPropertyFnWithNamespaceFilter
+		maxBlobSize              dynamicconfig.IntPropertyFnWithNamespaceFilter
 	}
 
 	activityDeps struct {
@@ -86,6 +87,8 @@ func NewResult(
 				dynamicconfig.WorkerEnableScheduler, true),
 			globalNSStartWorkflowRPS: dcCollection.GetFloatPropertyFilteredByNamespace(
 				dynamicconfig.SchedulerNamespaceStartWorkflowRPS, 30.0),
+			maxBlobSize: dcCollection.GetIntPropertyFilteredByNamespace(
+				dynamicconfig.BlobSizeLimitError, eventStorageSize),
 		},
 	}
 }
@@ -109,9 +112,10 @@ func (s *workerComponent) activities(name namespace.Name, id namespace.ID, detai
 		return float64(details.Multiplicity) * s.globalNSStartWorkflowRPS(name.String()) / float64(details.TotalWorkers)
 	}
 	return &activities{
-		activityDeps:             s.activityDeps,
-		namespace:                name,
-		namespaceID:              id,
-		startWorkflowRateLimiter: quotas.NewDefaultOutgoingRateLimiter(localRPS),
+		activityDeps:                 s.activityDeps,
+		namespace:                    name,
+		namespaceID:                  id,
+		startWorkflowRateLimiter:     quotas.NewDefaultOutgoingRateLimiter(localRPS),
+		singleResultStorageSizePerNs: s.maxBlobSize,
 	}
 }

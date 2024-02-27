@@ -74,7 +74,7 @@ func Invoke(
 		return nil, err
 	}
 
-	weCtx, err := workflowConsistencyChecker.GetWorkflowContext(
+	workflowLease, err := workflowConsistencyChecker.GetWorkflowLease(
 		ctx,
 		nil,
 		api.BypassMutableStateConsistencyPredicate,
@@ -91,9 +91,9 @@ func Invoke(
 	// We release the lock on this workflow just before we return from this method, at which point mutable state might
 	// be mutated. Take extra care to clone all response methods as marshalling happens after we return and it is unsafe
 	// to mutate proto fields during marshalling.
-	defer func() { weCtx.GetReleaseFn()(retError) }()
+	defer func() { workflowLease.GetReleaseFn()(retError) }()
 
-	mutableState := weCtx.GetMutableState()
+	mutableState := workflowLease.GetMutableState()
 	executionInfo := mutableState.GetExecutionInfo()
 	executionState := mutableState.GetExecutionState()
 

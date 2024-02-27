@@ -42,7 +42,6 @@ import (
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/api/workflowservice/v1"
-	"google.golang.org/protobuf/types/known/timestamppb"
 
 	"go.temporal.io/api/temporalproto"
 	"go.temporal.io/server/common/debug"
@@ -1741,7 +1740,6 @@ func (s *ESVisibilitySuite) TestCountGroupByWorkflowExecutions() {
 }
 
 func (s *ESVisibilitySuite) TestGetWorkflowExecution() {
-	now := timestamppb.New(time.Now())
 	s.mockESClient.EXPECT().Get(gomock.Any(), testIndex, gomock.Any()).DoAndReturn(
 		func(ctx context.Context, index string, docID string) (*elastic.GetResult, error) {
 			s.Equal(testIndex, index)
@@ -1765,7 +1763,6 @@ func (s *ESVisibilitySuite) TestGetWorkflowExecution() {
 		Namespace:   testNamespace,
 		WorkflowID:  testWorkflowID,
 		RunID:       testRunID,
-		CloseTime:   now.AsTime(),
 	}
 	_, err := s.visibilityStore.GetWorkflowExecution(context.Background(), request)
 	s.NoError(err)

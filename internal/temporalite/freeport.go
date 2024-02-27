@@ -29,16 +29,16 @@ import (
 	"net"
 )
 
-func newPortProvider() *portProvider {
-	return &portProvider{}
+func NewPortProvider() *PortProvider {
+	return &PortProvider{}
 }
 
-type portProvider struct {
+type PortProvider struct {
 	listeners []*net.TCPListener
 }
 
 // GetFreePort finds an open port on the system which is ready to use.
-func (p *portProvider) GetFreePort() (int, error) {
+func (p *PortProvider) GetFreePort() (int, error) {
 	addr, err := net.ResolveTCPAddr("tcp", "127.0.0.1:0")
 	if err != nil {
 		if addr, err = net.ResolveTCPAddr("tcp6", "[::1]:0"); err != nil {
@@ -57,7 +57,7 @@ func (p *portProvider) GetFreePort() (int, error) {
 }
 
 // MustGetFreePort calls GetFreePort, panicking on error.
-func (p *portProvider) MustGetFreePort() int {
+func (p *PortProvider) MustGetFreePort() int {
 	port, err := p.GetFreePort()
 	if err != nil {
 		panic(err)
@@ -65,7 +65,7 @@ func (p *portProvider) MustGetFreePort() int {
 	return port
 }
 
-func (p *portProvider) Close() error {
+func (p *PortProvider) Close() error {
 	for _, l := range p.listeners {
 		if err := l.Close(); err != nil {
 			return err

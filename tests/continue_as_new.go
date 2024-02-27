@@ -543,10 +543,10 @@ func (s *FunctionalSuite) TestChildWorkflowWithContinueAsNew() {
 	s.Equal("Child Done", s.decodePayloadsString(completedAttributes.GetResult()))
 
 	s.Logger.Info("Parent Workflow Execution History: ")
-	s.printWorkflowHistory(s.namespace, &commonpb.WorkflowExecution{
+	s.PrintHistoryEvents(s.getHistory(s.namespace, &commonpb.WorkflowExecution{
 		WorkflowId: parentID,
 		RunId:      we.RunId,
-	})
+	}))
 }
 
 func (s *FunctionalSuite) TestChildWorkflowWithContinueAsNewParentTerminate() {
@@ -646,13 +646,13 @@ func (s *FunctionalSuite) TestChildWorkflowWithContinueAsNewParentTerminate() {
 	s.Equal(enumspb.WORKFLOW_EXECUTION_STATUS_TERMINATED, childDescribeResp.WorkflowExecutionInfo.Status, "expected child to be terminated")
 
 	s.Logger.Info("Parent Workflow Execution History: ")
-	s.printWorkflowHistory(s.namespace, &commonpb.WorkflowExecution{
+	s.PrintHistoryEvents(s.getHistory(s.namespace, &commonpb.WorkflowExecution{
 		WorkflowId: parentID,
 		RunId:      we.RunId,
-	})
+	}))
 
 	s.Logger.Info("Child Workflow Execution History: ")
-	s.printWorkflowHistory(s.namespace, &commonpb.WorkflowExecution{
+	s.PrintHistoryEvents(s.getHistory(s.namespace, &commonpb.WorkflowExecution{
 		WorkflowId: childID,
-	})
+	}))
 }

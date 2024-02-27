@@ -347,6 +347,8 @@ func (r *HistoryReplicatorImpl) applyStartEvents(
 		r.shardContext.GetEventsCache(),
 		task.getLogger(),
 		namespaceEntry,
+		task.getWorkflowID(),
+		task.getRunID(),
 		timestamp.TimeValue(task.getFirstEvent().GetEventTime()),
 	)
 	mutableState, newMutableState, err := r.mutableStateMapper.ApplyEvents(ctx, wfContext, mutableState, task)

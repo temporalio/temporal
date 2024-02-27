@@ -143,6 +143,8 @@ func ToPersistencePredicate(
 		return ToPersistenceNamespaceIDPredicate(predicate)
 	case *tasks.TypePredicate:
 		return ToPersistenceTaskTypePredicate(predicate)
+	case *tasks.DestinationPredicate:
+		return ToPersistenceDestinationPredicate(predicate)
 	default:
 		panic(fmt.Sprintf("unknown task predicate type: %T", predicate))
 	}
@@ -166,6 +168,8 @@ func FromPersistencePredicate(
 		return FromPersistenceNamespaceIDPredicate(predicate.GetNamespaceIdPredicateAttributes())
 	case enumsspb.PREDICATE_TYPE_TASK_TYPE:
 		return FromPersistenceTaskTypePredicate(predicate.GetTaskTypePredicateAttributes())
+	case enumsspb.PREDICATE_TYPE_DESTINATION:
+		return FromPersistenceDestinationPredicate(predicate.GetDestinationPredicateAttributes())
 	default:
 		panic(fmt.Sprintf("unknown persistence task predicate type: %v", predicate.GetPredicateType()))
 	}
@@ -314,4 +318,23 @@ func FromPersistenceTaskTypePredicate(
 	attributes *persistencespb.TaskTypePredicateAttributes,
 ) tasks.Predicate {
 	return tasks.NewTypePredicate(attributes.TaskTypes)
+}
+
+func ToPersistenceDestinationPredicate(
+	taskDestinationPredicate *tasks.DestinationPredicate,
+) *persistencespb.Predicate {
+	return &persistencespb.Predicate{
+		PredicateType: enumsspb.PREDICATE_TYPE_DESTINATION,
+		Attributes: &persistencespb.Predicate_DestinationPredicateAttributes{
+			DestinationPredicateAttributes: &persistencespb.DestinationPredicateAttributes{
+				Destinations: maps.Keys(taskDestinationPredicate.Destinations),
+			},
+		},
+	}
+}
+
+func FromPersistenceDestinationPredicate(
+	attributes *persistencespb.DestinationPredicateAttributes,
+) tasks.Predicate {
+	return tasks.NewDestinationPredicate(attributes.Destinations)
 }

@@ -277,7 +277,7 @@ func newAdminShardManagementCommands(clientFactory ClientFactory, taskCategoryRe
 				},
 				&cli.IntFlag{
 					Name:  FlagPageSize,
-					Value: 10,
+					Value: defaultPageSize,
 					Usage: "Result page size",
 				},
 				&cli.IntFlag{
@@ -296,20 +296,21 @@ func newAdminShardManagementCommands(clientFactory ClientFactory, taskCategoryRe
 				},
 				&cli.StringFlag{
 					Name: FlagMinVisibilityTimestamp,
-					Usage: "Inclusive min task fire timestamp. Optional for timer task. Can't be specified for transfer, replication, visibility tasks." +
+					Usage: "Inclusive min task fire timestamp. Optional for timer task. Can't be specified for transfer, replication, visibility tasks. " +
 						"Supported formats are '2006-01-02T15:04:05+07:00', raw UnixNano and " +
 						"time range (N<duration>), where 0 < N < 1000000 and duration (full-notation/short-notation) can be second/s, " +
 						"minute/m, hour/h, day/d, week/w, month/M or year/y. For example, '15minute' or '15m' implies last 15 minutes.",
 				},
 				&cli.StringFlag{
 					Name: FlagMaxVisibilityTimestamp,
-					Usage: "Exclusive max task fire timestamp. Required for timer task. Can't be specified for transfer, replication, visibility tasks." +
+					Usage: "Exclusive max task fire timestamp. Required for timer task. Can't be specified for transfer, replication, visibility tasks. " +
 						"Supported formats are '2006-01-02T15:04:05+07:00', raw UnixNano and " +
 						"time range (N<duration>), where 0 < N < 1000000 and duration (full-notation/short-notation) can be second/s, " +
 						"minute/m, hour/h, day/d, week/w, month/M or year/y. For example, '15minute' or '15m' implies last 15 minutes.",
 				},
 				&cli.BoolFlag{
 					Name:  FlagPrintJSON,
+					Value: true,
 					Usage: "Print in raw json format",
 				},
 			},

@@ -243,9 +243,6 @@ type (
 		VisibilityStore string `yaml:"visibilityStore"`
 		// SecondaryVisibilityStore is the name of the secondary datastore to be used for visibility records
 		SecondaryVisibilityStore string `yaml:"secondaryVisibilityStore"`
-		// DEPRECATED: use VisibilityStore key instead of AdvancedVisibilityStore
-		// AdvancedVisibilityStore is the name of the datastore to be used for visibility records
-		AdvancedVisibilityStore string `yaml:"advancedVisibilityStore"`
 		// NumHistoryShards is the desired number of history shards. This config doesn't
 		// belong here, needs refactoring
 		NumHistoryShards int32 `yaml:"numHistoryShards" validate:"nonzero"`

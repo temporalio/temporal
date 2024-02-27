@@ -43,6 +43,7 @@ import (
 	"go.temporal.io/server/common/convert"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/payloads"
+	"go.temporal.io/server/common/testing/historyrequire"
 	"go.temporal.io/server/service/history/consts"
 	"google.golang.org/protobuf/types/known/durationpb"
 	"google.golang.org/protobuf/types/known/timestamppb"
@@ -52,6 +53,7 @@ type SizeLimitFunctionalSuite struct {
 	// override suite.Suite.Assertions with require.Assertions; this means that s.NotNil(nil) will stop the test,
 	// not merely log an error
 	*require.Assertions
+	historyrequire.HistoryRequire
 	FunctionalTestBase
 }
 
@@ -67,6 +69,7 @@ func (s *SizeLimitFunctionalSuite) TearDownSuite() {
 func (s *SizeLimitFunctionalSuite) SetupTest() {
 	// Have to define our overridden assertions in the test setup. If we did it earlier, s.T() will return nil
 	s.Assertions = require.New(s.T())
+	s.HistoryRequire = historyrequire.New(s.T())
 }
 
 func (s *SizeLimitFunctionalSuite) TestTerminateWorkflowCausedByHistoryCountLimit() {
@@ -194,10 +197,10 @@ SignalLoop:
 	s.EqualError(signalErr, common.FailureReasonHistoryCountExceedsLimit)
 	s.IsType(&serviceerror.InvalidArgument{}, signalErr)
 
-	s.printWorkflowHistory(s.namespace, &commonpb.WorkflowExecution{
+	s.PrintHistoryEvents(s.getHistory(s.namespace, &commonpb.WorkflowExecution{
 		WorkflowId: id,
 		RunId:      we.GetRunId(),
-	})
+	}))
 
 	// verify last event is terminated event
 	historyResponse, err := s.engine.GetWorkflowExecutionHistory(NewContext(), &workflowservice.GetWorkflowExecutionHistoryRequest{
@@ -213,28 +216,34 @@ SignalLoop:
 	s.Equal(enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_TERMINATED, lastEvent.GetEventType())
 
 	// verify visibility is correctly processed from open to close
-	isCloseCorrect := false
-	for i := 0; i < 10; i++ {
-		resp, err1 := s.engine.ListClosedWorkflowExecutions(NewContext(), &workflowservice.ListClosedWorkflowExecutionsRequest{
-			Namespace:       s.namespace,
-			MaximumPageSize: 100,
-			StartTimeFilter: &filterpb.StartTimeFilter{
-				EarliestTime: nil,
-				LatestTime:   timestamppb.New(time.Now().UTC()),
-			},
-			Filters: &workflowservice.ListClosedWorkflowExecutionsRequest_ExecutionFilter{ExecutionFilter: &filterpb.WorkflowExecutionFilter{
-				WorkflowId: id,
-			}},
-		})
-		s.NoError(err1)
-		if len(resp.Executions) == 1 {
-			isCloseCorrect = true
-			break
-		}
-		s.Logger.Info("Closed WorkflowExecution is not yet visible")
-		time.Sleep(100 * time.Millisecond)
-	}
-	s.True(isCloseCorrect)
+	s.Eventually(
+		func() bool {
+			resp, err1 := s.engine.ListClosedWorkflowExecutions(
+				NewContext(),
+				&workflowservice.ListClosedWorkflowExecutionsRequest{
+					Namespace:       s.namespace,
+					MaximumPageSize: 100,
+					StartTimeFilter: &filterpb.StartTimeFilter{
+						EarliestTime: nil,
+						LatestTime:   timestamppb.New(time.Now().UTC()),
+					},
+					Filters: &workflowservice.ListClosedWorkflowExecutionsRequest_ExecutionFilter{
+						ExecutionFilter: &filterpb.WorkflowExecutionFilter{
+							WorkflowId: id,
+						},
+					},
+				},
+			)
+			s.NoError(err1)
+			if len(resp.Executions) == 1 {
+				return true
+			}
+			s.Logger.Info("Closed WorkflowExecution is not yet visible")
+			return false
+		},
+		waitForESToSettle,
+		100*time.Millisecond,
+	)
 }
 
 func (s *SizeLimitFunctionalSuite) TestWorkflowFailed_PayloadSizeTooLarge() {
@@ -445,10 +454,10 @@ func (s *SizeLimitFunctionalSuite) TestTerminateWorkflowCausedByMsSizeLimit() {
 	s.EqualError(signalErr, consts.ErrWorkflowCompleted.Error())
 	s.IsType(&serviceerror.NotFound{}, signalErr)
 
-	s.printWorkflowHistory(s.namespace, &commonpb.WorkflowExecution{
+	s.PrintHistoryEvents(s.getHistory(s.namespace, &commonpb.WorkflowExecution{
 		WorkflowId: id,
 		RunId:      we.GetRunId(),
-	})
+	}))
 
 	// verify last event is terminated event
 	historyResponse, err := s.engine.GetWorkflowExecutionHistory(NewContext(), &workflowservice.GetWorkflowExecutionHistoryRequest{
@@ -464,28 +473,34 @@ func (s *SizeLimitFunctionalSuite) TestTerminateWorkflowCausedByMsSizeLimit() {
 	s.Equal(enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_TERMINATED, lastEvent.GetEventType())
 
 	// verify visibility is correctly processed from open to close
-	isCloseCorrect := false
-	for i := 0; i < 10; i++ {
-		resp, err1 := s.engine.ListClosedWorkflowExecutions(NewContext(), &workflowservice.ListClosedWorkflowExecutionsRequest{
-			Namespace:       s.namespace,
-			MaximumPageSize: 100,
-			StartTimeFilter: &filterpb.StartTimeFilter{
-				EarliestTime: nil,
-				LatestTime:   timestamppb.New(time.Now().UTC()),
-			},
-			Filters: &workflowservice.ListClosedWorkflowExecutionsRequest_ExecutionFilter{ExecutionFilter: &filterpb.WorkflowExecutionFilter{
-				WorkflowId: id,
-			}},
-		})
-		s.NoError(err1)
-		if len(resp.Executions) == 1 {
-			isCloseCorrect = true
-			break
-		}
-		s.Logger.Info("Closed WorkflowExecution is not yet visible")
-		time.Sleep(100 * time.Millisecond)
-	}
-	s.True(isCloseCorrect)
+	s.Eventually(
+		func() bool {
+			resp, err1 := s.engine.ListClosedWorkflowExecutions(
+				NewContext(),
+				&workflowservice.ListClosedWorkflowExecutionsRequest{
+					Namespace:       s.namespace,
+					MaximumPageSize: 100,
+					StartTimeFilter: &filterpb.StartTimeFilter{
+						EarliestTime: nil,
+						LatestTime:   timestamppb.New(time.Now().UTC()),
+					},
+					Filters: &workflowservice.ListClosedWorkflowExecutionsRequest_ExecutionFilter{
+						ExecutionFilter: &filterpb.WorkflowExecutionFilter{
+							WorkflowId: id,
+						},
+					},
+				},
+			)
+			s.NoError(err1)
+			if len(resp.Executions) == 1 {
+				return true
+			}
+			s.Logger.Info("Closed WorkflowExecution is not yet visible")
+			return false
+		},
+		waitForESToSettle,
+		100*time.Millisecond,
+	)
 }
 
 func (s *SizeLimitFunctionalSuite) TestTerminateWorkflowCausedByHistorySizeLimit() {
@@ -540,10 +555,10 @@ SignalLoop:
 	s.EqualError(signalErr, common.FailureReasonHistorySizeExceedsLimit)
 	s.IsType(&serviceerror.InvalidArgument{}, signalErr)
 
-	s.printWorkflowHistory(s.namespace, &commonpb.WorkflowExecution{
+	s.PrintHistoryEvents(s.getHistory(s.namespace, &commonpb.WorkflowExecution{
 		WorkflowId: id,
 		RunId:      we.GetRunId(),
-	})
+	}))
 
 	// verify last event is terminated event
 	historyResponse, err := s.engine.GetWorkflowExecutionHistory(NewContext(), &workflowservice.GetWorkflowExecutionHistoryRequest{
@@ -559,26 +574,32 @@ SignalLoop:
 	s.Equal(enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_TERMINATED, lastEvent.GetEventType())
 
 	// verify visibility is correctly processed from open to close
-	isCloseCorrect := false
-	for i := 0; i < 10; i++ {
-		resp, err1 := s.engine.ListClosedWorkflowExecutions(NewContext(), &workflowservice.ListClosedWorkflowExecutionsRequest{
-			Namespace:       s.namespace,
-			MaximumPageSize: 100,
-			StartTimeFilter: &filterpb.StartTimeFilter{
-				EarliestTime: nil,
-				LatestTime:   timestamppb.New(time.Now().UTC()),
-			},
-			Filters: &workflowservice.ListClosedWorkflowExecutionsRequest_ExecutionFilter{ExecutionFilter: &filterpb.WorkflowExecutionFilter{
-				WorkflowId: id,
-			}},
-		})
-		s.NoError(err1)
-		if len(resp.Executions) == 1 {
-			isCloseCorrect = true
-			break
-		}
-		s.Logger.Info("Closed WorkflowExecution is not yet visible")
-		time.Sleep(100 * time.Millisecond)
-	}
-	s.True(isCloseCorrect)
+	s.Eventually(
+		func() bool {
+			resp, err1 := s.engine.ListClosedWorkflowExecutions(
+				NewContext(),
+				&workflowservice.ListClosedWorkflowExecutionsRequest{
+					Namespace:       s.namespace,
+					MaximumPageSize: 100,
+					StartTimeFilter: &filterpb.StartTimeFilter{
+						EarliestTime: nil,
+						LatestTime:   timestamppb.New(time.Now().UTC()),
+					},
+					Filters: &workflowservice.ListClosedWorkflowExecutionsRequest_ExecutionFilter{
+						ExecutionFilter: &filterpb.WorkflowExecutionFilter{
+							WorkflowId: id,
+						},
+					},
+				},
+			)
+			s.NoError(err1)
+			if len(resp.Executions) == 1 {
+				return true
+			}
+			s.Logger.Info("Closed WorkflowExecution is not yet visible")
+			return false
+		},
+		waitForESToSettle,
+		100*time.Millisecond,
+	)
 }

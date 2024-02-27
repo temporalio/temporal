@@ -455,13 +455,6 @@ func (c *comparisonExprConverter) Convert(expr sqlparser.Expr) (elastic.Query, e
 		)
 	}
 
-	if comparisonExpr.Operator == "like" || comparisonExpr.Operator == "not like" {
-		colValue, err = cleanLikeValue(colValue)
-		if err != nil {
-			return nil, err
-		}
-	}
-
 	colValues, isArray := colValue.([]interface{})
 	// colValue should be an array only for "in (1,2,3)" queries.
 	if !isArray {
@@ -487,10 +480,10 @@ func (c *comparisonExprConverter) Convert(expr sqlparser.Expr) (elastic.Query, e
 		query = elastic.NewRangeQuery(colName).Gt(colValues[0])
 	case sqlparser.LessThanStr:
 		query = elastic.NewRangeQuery(colName).Lt(colValues[0])
-	case sqlparser.EqualStr, sqlparser.LikeStr: // The only difference is that "%" is removed for LIKE queries.
+	case sqlparser.EqualStr:
 		// Not elastic.NewTermQuery to support partial word match for String custom search attributes.
 		query = elastic.NewMatchQuery(colName, colValues[0])
-	case sqlparser.NotEqualStr, sqlparser.NotLikeStr:
+	case sqlparser.NotEqualStr:
 		// Not elastic.NewTermQuery to support partial word match for String custom search attributes.
 		query = elastic.NewBoolQuery().MustNot(elastic.NewMatchQuery(colName, colValues[0]))
 	case sqlparser.InStr:
@@ -551,14 +544,6 @@ func convertComparisonExprValue(expr sqlparser.Expr) (interface{}, error) {
 	default:
 		return nil, NewConverterError("%s: unexpected value type %T", InvalidExpressionErrMessage, expr)
 	}
-}
-
-func cleanLikeValue(colValue interface{}) (string, error) {
-	colValueStr, isString := colValue.(string)
-	if !isString {
-		return "", NewConverterError("%s: 'like' operator value must be a string but was %T", InvalidExpressionErrMessage, colValue)
-	}
-	return strings.ReplaceAll(colValueStr, "%", ""), nil
 }
 
 func (n *notSupportedExprConverter) Convert(expr sqlparser.Expr) (elastic.Query, error) {

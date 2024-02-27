@@ -75,9 +75,7 @@ type (
 		GenerateActivityTasks(
 			event *historypb.HistoryEvent,
 		) error
-		GenerateActivityRetryTasks(
-			activityScheduledEventID int64,
-		) error
+		GenerateActivityRetryTasks(eventID int64, visibilityTimestamp time.Time, nextAttempt int32) error
 		GenerateChildWorkflowTasks(
 			event *historypb.HistoryEvent,
 		) error
@@ -461,22 +459,14 @@ func (r *TaskGeneratorImpl) GenerateActivityTasks(
 	return nil
 }
 
-func (r *TaskGeneratorImpl) GenerateActivityRetryTasks(
-	activityScheduledEventID int64,
-) error {
-
-	ai, ok := r.mutableState.GetActivityInfo(activityScheduledEventID)
-	if !ok {
-		return serviceerror.NewInternal(fmt.Sprintf("it could be a bug, cannot get pending activity: %v", activityScheduledEventID))
-	}
-
+func (r *TaskGeneratorImpl) GenerateActivityRetryTasks(eventID int64, visibilityTimestamp time.Time, nextAttempt int32) error {
 	r.mutableState.AddTasks(&tasks.ActivityRetryTimerTask{
 		// TaskID is set by shard
 		WorkflowKey:         r.mutableState.GetWorkflowKey(),
-		Version:             ai.Version,
-		VisibilityTimestamp: ai.ScheduledTime.AsTime(),
-		EventID:             ai.ScheduledEventId,
-		Attempt:             ai.Attempt,
+		Version:             r.mutableState.GetCurrentVersion(),
+		VisibilityTimestamp: visibilityTimestamp,
+		EventID:             eventID,
+		Attempt:             nextAttempt,
 	})
 	return nil
 }

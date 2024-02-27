@@ -131,6 +131,10 @@ func (factory *factory) getMonitor() *monitor {
 			factory.Logger.Fatal("Failed to get new ringpop", tag.Error(err))
 		}
 
+		// Empirically, ringpop updates usually propagate in under a second even in relatively large clusters.
+		// 3 seconds is an over-estimate to be safer.
+		maxPropagationTime := factory.DC.GetDurationProperty(dynamicconfig.RingpopApproximateMaxPropagationTime, 3*time.Second)()
+
 		factory.monitor = newMonitor(
 			factory.ServiceName,
 			factory.ServicePortMap,
@@ -139,6 +143,8 @@ func (factory *factory) getMonitor() *monitor {
 			factory.MetadataManager,
 			factory.broadcastAddressResolver,
 			factory.Config.MaxJoinDuration,
+			maxPropagationTime,
+			time.Time{}, // TODO: set this based on dynamic config
 		)
 	})
 

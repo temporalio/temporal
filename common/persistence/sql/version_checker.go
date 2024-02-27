@@ -40,7 +40,7 @@ func VerifyCompatibleVersion(
 	if err := checkMainDatabase(cfg, r); err != nil {
 		return err
 	}
-	if cfg.StandardVisibilityConfigExist() {
+	if cfg.VisibilityConfigExist() {
 		return checkVisibilityDatabase(cfg, r)
 	}
 	return nil

@@ -251,6 +251,14 @@ func combineUnique(strs ...string) string {
 }
 
 func (k QueueKey) GetQueueName() string {
-	hash := combineUnique(k.SourceCluster, k.TargetCluster)[:clusterNamesHashSuffixLength]
-	return fmt.Sprintf("%d_%s_%s_%s", k.Category.ID(), k.SourceCluster, k.TargetCluster, hash)
+	return GetHistoryTaskQueueName(k.Category.ID(), k.SourceCluster, k.TargetCluster)
+}
+
+func GetHistoryTaskQueueName(
+	categoryID int,
+	sourceCluster string,
+	targetCluster string,
+) string {
+	hash := combineUnique(sourceCluster, targetCluster)[:clusterNamesHashSuffixLength]
+	return fmt.Sprintf("%d_%s_%s_%s", categoryID, sourceCluster, targetCluster, hash)
 }

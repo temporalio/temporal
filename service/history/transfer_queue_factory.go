@@ -27,9 +27,12 @@ package history
 import (
 	"context"
 
+	historypb "go.temporal.io/api/history/v1"
+	historyspb "go.temporal.io/server/api/history/v1"
+	"go.temporal.io/server/common/definition"
+	"go.temporal.io/server/common/namespace"
 	"go.uber.org/fx"
 
-	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/client"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
@@ -90,7 +93,7 @@ func NewTransferQueueFactory(
 					params.Config.PersistenceMaxQPS,
 					transferQueuePersistenceMaxRPSRatio,
 				),
-				int64(params.Config.QueueMaxReaderCount()),
+				int64(params.Config.TransferQueueMaxReaderCount()),
 			),
 		},
 	}
@@ -147,12 +150,31 @@ func (f *transferQueueFactory) CreateQueue(
 		xdc.NewNDCHistoryResender(
 			f.NamespaceRegistry,
 			f.ClientBean,
-			func(ctx context.Context, request *historyservice.ReplicateEventsV2Request) error {
+			func(
+				ctx context.Context,
+				sourceClusterName string,
+				namespaceId namespace.ID,
+				workflowId string,
+				runId string,
+				events []*historypb.HistoryEvent,
+				versionHistory []*historyspb.VersionHistoryItem,
+			) error {
 				engine, err := shard.GetEngine(ctx)
 				if err != nil {
 					return err
 				}
-				return engine.ReplicateEventsV2(ctx, request)
+				return engine.ReplicateHistoryEvents(
+					ctx,
+					definition.WorkflowKey{
+						NamespaceID: namespaceId.String(),
+						WorkflowID:  workflowId,
+						RunID:       runId,
+					},
+					nil,
+					versionHistory,
+					[][]*historypb.HistoryEvent{events},
+					nil,
+				)
 			},
 			shard.GetPayloadSerializer(),
 			f.Config.StandbyTaskReReplicationContextTimeout,
@@ -189,6 +211,8 @@ func (f *transferQueueFactory) CreateQueue(
 		metricsHandler,
 		f.DLQWriter,
 		f.Config.TaskDLQEnabled,
+		f.Config.TaskDLQUnexpectedErrorAttempts,
+		f.Config.TaskDLQInternalErrors,
 	)
 	return queues.NewImmediateQueue(
 		shard,
@@ -211,9 +235,10 @@ func (f *transferQueueFactory) CreateQueue(
 			MaxPollIntervalJitterCoefficient:    f.Config.TransferProcessorMaxPollIntervalJitterCoefficient,
 			CheckpointInterval:                  f.Config.TransferProcessorUpdateAckInterval,
 			CheckpointIntervalJitterCoefficient: f.Config.TransferProcessorUpdateAckIntervalJitterCoefficient,
-			MaxReaderCount:                      f.Config.QueueMaxReaderCount,
+			MaxReaderCount:                      f.Config.TransferQueueMaxReaderCount,
 		},
 		f.HostReaderRateLimiter,
+		queues.GrouperNamespaceID{},
 		logger,
 		metricsHandler,
 		factory,

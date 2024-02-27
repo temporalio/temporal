@@ -80,7 +80,7 @@ jobs:
           fi
 
       - name: Create draft release notes
-        if: ${{ github.event.inputs.release_notes }}
+        if: ${{ github.event.inputs.release_notes == 'true' }}
         env:
           GH_TOKEN: ${{ steps.generate_token.outputs.token }}
           BASE_TAG: ${{ github.event.inputs.base_tag }}

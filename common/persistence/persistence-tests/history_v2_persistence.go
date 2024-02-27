@@ -733,12 +733,29 @@ func (s *HistoryV2PersistenceSuite) deleteHistoryBranch(branch []byte) error {
 
 // persistence helper
 func (s *HistoryV2PersistenceSuite) descTree(treeID string) []*persistencespb.HistoryBranch {
-	resp, err := s.ExecutionManager.GetHistoryTree(s.ctx, &p.GetHistoryTreeRequest{
-		TreeID:  treeID,
-		ShardID: s.ShardInfo.GetShardId(),
-	})
-	s.Nil(err)
-	return resp.BranchInfos
+	var branches []*persistencespb.HistoryBranch
+
+	var nextPageToken []byte
+	for {
+		resp, err := s.ExecutionManager.GetAllHistoryTreeBranches(s.ctx, &p.GetAllHistoryTreeBranchesRequest{
+			NextPageToken: nextPageToken,
+			PageSize:      100,
+		})
+		s.NoError(err)
+
+		for _, branch := range resp.Branches {
+			if branch.BranchInfo.TreeId == treeID {
+				branches = append(branches, branch.BranchInfo)
+			}
+		}
+
+		nextPageToken = resp.NextPageToken
+		if len(nextPageToken) == 0 {
+			break
+		}
+	}
+
+	return branches
 }
 
 // persistence helper

@@ -4653,3 +4653,77 @@ func (this *AddTasksResponse) Equal(that interface{}) bool {
 
 	return proto.Equal(this, that1)
 }
+
+// Marshal an object of type ListTasksRequest to the protobuf v3 wire format
+func (val *ListTasksRequest) Marshal() ([]byte, error) {
+	return proto.Marshal(val)
+}
+
+// Unmarshal an object of type ListTasksRequest from the protobuf v3 wire format
+func (val *ListTasksRequest) Unmarshal(buf []byte) error {
+	return proto.Unmarshal(buf, val)
+}
+
+// Size returns the size of the object, in bytes, once serialized
+func (val *ListTasksRequest) Size() int {
+	return proto.Size(val)
+}
+
+// Equal returns whether two ListTasksRequest values are equivalent by recursively
+// comparing the message's fields.
+// For more information see the documentation for
+// https://pkg.go.dev/google.golang.org/protobuf/proto#Equal
+func (this *ListTasksRequest) Equal(that interface{}) bool {
+	if that == nil {
+		return this == nil
+	}
+
+	var that1 *ListTasksRequest
+	switch t := that.(type) {
+	case *ListTasksRequest:
+		that1 = t
+	case ListTasksRequest:
+		that1 = &t
+	default:
+		return false
+	}
+
+	return proto.Equal(this, that1)
+}
+
+// Marshal an object of type ListTasksResponse to the protobuf v3 wire format
+func (val *ListTasksResponse) Marshal() ([]byte, error) {
+	return proto.Marshal(val)
+}
+
+// Unmarshal an object of type ListTasksResponse from the protobuf v3 wire format
+func (val *ListTasksResponse) Unmarshal(buf []byte) error {
+	return proto.Unmarshal(buf, val)
+}
+
+// Size returns the size of the object, in bytes, once serialized
+func (val *ListTasksResponse) Size() int {
+	return proto.Size(val)
+}
+
+// Equal returns whether two ListTasksResponse values are equivalent by recursively
+// comparing the message's fields.
+// For more information see the documentation for
+// https://pkg.go.dev/google.golang.org/protobuf/proto#Equal
+func (this *ListTasksResponse) Equal(that interface{}) bool {
+	if that == nil {
+		return this == nil
+	}
+
+	var that1 *ListTasksResponse
+	switch t := that.(type) {
+	case *ListTasksResponse:
+		that1 = t
+	case ListTasksResponse:
+		that1 = &t
+	default:
+		return false
+	}
+
+	return proto.Equal(this, that1)
+}

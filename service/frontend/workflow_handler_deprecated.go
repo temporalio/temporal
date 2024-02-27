@@ -898,7 +898,7 @@ func (wh *WorkflowHandler) processOutgoingSearchAttributes(events []*historypb.H
 			if err != nil {
 				return err
 			}
-			if aliasedSas != nil {
+			if aliasedSas != searchAttributes {
 				searchAttributes.IndexedFields = aliasedSas.IndexedFields
 			}
 		}

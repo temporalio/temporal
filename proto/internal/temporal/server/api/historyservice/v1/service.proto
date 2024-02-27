@@ -342,4 +342,7 @@ service HistoryService {
     // in the same shard. Calls to the persistence API will be batched by workflow run.
     rpc AddTasks (AddTasksRequest) returns (AddTasksResponse) {
     }
+
+    rpc ListTasks (ListTasksRequest) returns (ListTasksResponse) {     
+    }
 }

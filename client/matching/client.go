@@ -29,7 +29,6 @@ package matching
 
 import (
 	"context"
-	"fmt"
 	"time"
 
 	enumspb "go.temporal.io/api/enums/v1"
@@ -207,7 +206,7 @@ func (c *clientImpl) getClientForTaskqueue(
 	taskQueue *taskqueuepb.TaskQueue,
 	taskQueueType enumspb.TaskQueueType,
 ) (matchingservice.MatchingServiceClient, error) {
-	key := fmt.Sprintf("%s:%s:%d", namespaceID, taskQueue.Name, int(taskQueueType))
+	key := common.TaskQueueRoutingKey(namespaceID, taskQueue.Name, taskQueueType)
 	client, err := c.clients.GetClientForKey(key)
 	if err != nil {
 		return nil, err

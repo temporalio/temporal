@@ -47,7 +47,7 @@ func Invoke(
 		return nil, err
 	}
 
-	weCtx, err := workflowConsistencyChecker.GetWorkflowContext(
+	workflowLease, err := workflowConsistencyChecker.GetWorkflowLease(
 		ctx,
 		nil,
 		api.BypassMutableStateConsistencyPredicate,
@@ -61,17 +61,17 @@ func Invoke(
 	if err != nil {
 		return nil, err
 	}
-	defer func() { weCtx.GetReleaseFn()(retError) }()
+	defer func() { workflowLease.GetReleaseFn()(retError) }()
 
 	response := &historyservice.DescribeMutableStateResponse{}
-	if weCtx.GetContext().(*workflow.ContextImpl).MutableState != nil {
-		msb := weCtx.GetContext().(*workflow.ContextImpl).MutableState
+	if workflowLease.GetContext().(*workflow.ContextImpl).MutableState != nil {
+		msb := workflowLease.GetContext().(*workflow.ContextImpl).MutableState
 		response.CacheMutableState = msb.CloneToProto()
 	}
 
 	// clear mutable state to force reload from persistence. This API returns both cached and persisted version.
-	weCtx.GetContext().Clear()
-	mutableState, err := weCtx.GetContext().LoadMutableState(ctx, shardContext)
+	workflowLease.GetContext().Clear()
+	mutableState, err := workflowLease.GetContext().LoadMutableState(ctx, shardContext)
 	if err != nil {
 		return nil, err
 	}

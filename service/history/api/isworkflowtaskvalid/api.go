@@ -51,8 +51,8 @@ func Invoke(
 			req.Execution.WorkflowId,
 			req.Execution.RunId,
 		),
-		func(workflowContext api.WorkflowContext) (*api.UpdateWorkflowAction, error) {
-			isTaskValid, err := isWorkflowTaskValid(workflowContext, req.ScheduledEventId)
+		func(workflowLease api.WorkflowLease) (*api.UpdateWorkflowAction, error) {
+			isTaskValid, err := isWorkflowTaskValid(workflowLease, req.ScheduledEventId)
 			if err != nil {
 				return nil, err
 			}
@@ -72,10 +72,10 @@ func Invoke(
 }
 
 func isWorkflowTaskValid(
-	workflowContext api.WorkflowContext,
+	workflowLease api.WorkflowLease,
 	scheduledEventID int64,
 ) (bool, error) {
-	mutableState := workflowContext.GetMutableState()
+	mutableState := workflowLease.GetMutableState()
 	if !mutableState.IsWorkflowExecutionRunning() {
 		return false, consts.ErrWorkflowCompleted
 	}

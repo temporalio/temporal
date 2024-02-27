@@ -63,13 +63,12 @@ func (m *MockCache) EXPECT() *MockCacheMockRecorder {
 }
 
 // GetOrCreateCurrentWorkflowExecution mocks base method.
-func (m *MockCache) GetOrCreateCurrentWorkflowExecution(ctx context.Context, shardContext shard.Context, namespaceID namespace.ID, workflowID string, lockPriority workflow.LockPriority) (workflow.Context, ReleaseCacheFunc, error) {
+func (m *MockCache) GetOrCreateCurrentWorkflowExecution(ctx context.Context, shardContext shard.Context, namespaceID namespace.ID, workflowID string, lockPriority workflow.LockPriority) (ReleaseCacheFunc, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "GetOrCreateCurrentWorkflowExecution", ctx, shardContext, namespaceID, workflowID, lockPriority)
-	ret0, _ := ret[0].(workflow.Context)
-	ret1, _ := ret[1].(ReleaseCacheFunc)
-	ret2, _ := ret[2].(error)
-	return ret0, ret1, ret2
+	ret0, _ := ret[0].(ReleaseCacheFunc)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
 }
 
 // GetOrCreateCurrentWorkflowExecution indicates an expected call of GetOrCreateCurrentWorkflowExecution.

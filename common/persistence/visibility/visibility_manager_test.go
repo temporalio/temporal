@@ -309,7 +309,6 @@ func (s *VisibilityManagerSuite) TestGetWorkflowExecution() {
 		Namespace:   testNamespace,
 		RunID:       testWorkflowExecution.RunId,
 		WorkflowID:  testWorkflowExecution.WorkflowId,
-		CloseTime:   time.Now(),
 	}
 	s.visibilityStore.EXPECT().GetWorkflowExecution(gomock.Any(), gomock.Any()).Return(
 		&store.InternalGetWorkflowExecutionResponse{},

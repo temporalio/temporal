@@ -44,7 +44,7 @@ var (
 		dynamicconfig.FrontendMaxNamespaceVisibilityRPSPerInstance:   50,
 		dynamicconfig.FrontendMaxNamespaceVisibilityBurstPerInstance: 50,
 		dynamicconfig.ReplicationTaskProcessorErrorRetryMaxAttempts:  1,
-		dynamicconfig.AdvancedVisibilityWritingMode:                  visibility.SecondaryVisibilityWritingModeOff,
+		dynamicconfig.SecondaryVisibilityWritingMode:                 visibility.SecondaryVisibilityWritingModeOff,
 		dynamicconfig.WorkflowTaskHeartbeatTimeout:                   5 * time.Second,
 		dynamicconfig.ReplicationTaskFetcherAggregationInterval:      200 * time.Millisecond,
 		dynamicconfig.ReplicationTaskFetcherErrorRetryWait:           50 * time.Millisecond,

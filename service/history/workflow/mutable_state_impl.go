@@ -208,6 +208,8 @@ func NewMutableState(
 	eventsCache events.Cache,
 	logger log.Logger,
 	namespaceEntry *namespace.Namespace,
+	workflowID string,
+	runID string,
 	startTime time.Time,
 ) *MutableStateImpl {
 	s := &MutableStateImpl{
@@ -261,6 +263,9 @@ func NewMutableState(
 	}
 
 	s.executionInfo = &persistencespb.WorkflowExecutionInfo{
+		NamespaceId: namespaceEntry.ID().String(),
+		WorkflowId:  workflowID,
+
 		WorkflowTaskVersion:          common.EmptyVersion,
 		WorkflowTaskScheduledEventId: common.EmptyEventID,
 		WorkflowTaskStartedEventId:   common.EmptyEventID,
@@ -275,8 +280,12 @@ func NewMutableState(
 		ExecutionStats:   &persistencespb.ExecutionStats{HistorySize: 0},
 	}
 	s.approximateSize += s.executionInfo.Size()
-	s.executionState = &persistencespb.WorkflowExecutionState{State: enumsspb.WORKFLOW_EXECUTION_STATE_CREATED,
-		Status: enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING}
+	s.executionState = &persistencespb.WorkflowExecutionState{
+		RunId: runID,
+
+		State:  enumsspb.WORKFLOW_EXECUTION_STATE_CREATED,
+		Status: enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
+	}
 	s.approximateSize += s.executionState.Size()
 
 	s.hBuilder = historybuilder.New(
@@ -304,7 +313,15 @@ func NewMutableStateFromDB(
 
 	// startTime will be overridden by DB record
 	startTime := time.Time{}
-	mutableState := NewMutableState(shard, eventsCache, logger, namespaceEntry, startTime)
+	mutableState := NewMutableState(
+		shard,
+		eventsCache,
+		logger,
+		namespaceEntry,
+		dbRecord.ExecutionInfo.WorkflowId,
+		dbRecord.ExecutionState.RunId,
+		startTime,
+	)
 
 	if dbRecord.ActivityInfos != nil {
 		mutableState.pendingActivityInfoIDs = dbRecord.ActivityInfos
@@ -474,7 +491,6 @@ func (ms *MutableStateImpl) getCurrentBranchTokenAndEventVersion(eventID int64) 
 
 // SetHistoryTree set treeID/historyBranches
 func (ms *MutableStateImpl) SetHistoryTree(
-	ctx context.Context,
 	executionTimeout *durationpb.Duration,
 	runTimeout *durationpb.Duration,
 	treeID string,
@@ -758,7 +774,7 @@ func (ms *MutableStateImpl) GetUpdateOutcome(
 		EventID:     completion.EventId,
 		Version:     version,
 	}
-	event, err := ms.eventsCache.GetEvent(ctx, eventKey, completion.EventBatchId, currentBranchToken)
+	event, err := ms.eventsCache.GetEvent(ctx, ms.shard.GetShardID(), eventKey, completion.EventBatchId, currentBranchToken)
 	if err != nil {
 		return nil, err
 	}
@@ -785,6 +801,7 @@ func (ms *MutableStateImpl) GetActivityScheduledEvent(
 	}
 	event, err := ms.eventsCache.GetEvent(
 		ctx,
+		ms.shard.GetShardID(),
 		events.EventKey{
 			NamespaceID: namespace.ID(ms.executionInfo.NamespaceId),
 			WorkflowID:  ms.executionInfo.WorkflowId,
@@ -885,6 +902,7 @@ func (ms *MutableStateImpl) GetChildExecutionInitiatedEvent(
 	}
 	event, err := ms.eventsCache.GetEvent(
 		ctx,
+		ms.shard.GetShardID(),
 		events.EventKey{
 			NamespaceID: namespace.ID(ms.executionInfo.NamespaceId),
 			WorkflowID:  ms.executionInfo.WorkflowId,
@@ -931,6 +949,7 @@ func (ms *MutableStateImpl) GetRequesteCancelExternalInitiatedEvent(
 	}
 	event, err := ms.eventsCache.GetEvent(
 		ctx,
+		ms.shard.GetShardID(),
 		events.EventKey{
 			NamespaceID: namespace.ID(ms.executionInfo.NamespaceId),
 			WorkflowID:  ms.executionInfo.WorkflowId,
@@ -1008,6 +1027,7 @@ func (ms *MutableStateImpl) GetSignalExternalInitiatedEvent(
 	}
 	event, err := ms.eventsCache.GetEvent(
 		ctx,
+		ms.shard.GetShardID(),
 		events.EventKey{
 			NamespaceID: namespace.ID(ms.executionInfo.NamespaceId),
 			WorkflowID:  ms.executionInfo.WorkflowId,
@@ -1049,6 +1069,7 @@ func (ms *MutableStateImpl) GetCompletionEvent(
 
 	event, err := ms.eventsCache.GetEvent(
 		ctx,
+		ms.shard.GetShardID(),
 		events.EventKey{
 			NamespaceID: namespace.ID(ms.executionInfo.NamespaceId),
 			WorkflowID:  ms.executionInfo.WorkflowId,
@@ -1102,6 +1123,7 @@ func (ms *MutableStateImpl) GetStartEvent(
 
 	event, err := ms.eventsCache.GetEvent(
 		ctx,
+		ms.shard.GetShardID(),
 		events.EventKey{
 			NamespaceID: namespace.ID(ms.executionInfo.NamespaceId),
 			WorkflowID:  ms.executionInfo.WorkflowId,
@@ -1830,12 +1852,22 @@ func (ms *MutableStateImpl) ApplyWorkflowExecutionStartedEvent(
 	startEvent *historypb.HistoryEvent,
 ) error {
 
+	if ms.executionInfo.NamespaceId != ms.namespaceEntry.ID().String() {
+		return serviceerror.NewInternal(fmt.Sprintf("applying conflicting namespace ID: %v != %v",
+			ms.executionInfo.NamespaceId, ms.namespaceEntry.ID().String()))
+	}
+	if ms.executionInfo.WorkflowId != execution.GetWorkflowId() {
+		return serviceerror.NewInternal(fmt.Sprintf("applying conflicting workflow ID: %v != %v",
+			ms.executionInfo.WorkflowId, execution.GetWorkflowId()))
+	}
+	if ms.executionState.RunId != execution.GetRunId() {
+		return serviceerror.NewInternal(fmt.Sprintf("applying conflicting run ID: %v != %v",
+			ms.executionState.RunId, execution.GetRunId()))
+	}
+
 	ms.approximateSize -= ms.executionInfo.Size()
 	event := startEvent.GetWorkflowExecutionStartedEventAttributes()
 	ms.executionState.CreateRequestId = requestID
-	ms.executionState.RunId = execution.GetRunId()
-	ms.executionInfo.NamespaceId = ms.namespaceEntry.ID().String()
-	ms.executionInfo.WorkflowId = execution.GetWorkflowId()
 	ms.executionInfo.FirstExecutionRunId = event.GetFirstExecutionRunId()
 	ms.executionInfo.TaskQueue = event.TaskQueue.GetName()
 	ms.executionInfo.WorkflowTypeName = event.WorkflowType.GetName()
@@ -3638,13 +3670,37 @@ func (ms *MutableStateImpl) AddWorkflowExecutionSignaled(
 	header *commonpb.Header,
 	skipGenerateWorkflowTask bool,
 ) (*historypb.HistoryEvent, error) {
+	return ms.AddWorkflowExecutionSignaledEvent(
+		signalName,
+		input,
+		identity,
+		header,
+		skipGenerateWorkflowTask,
+		nil,
+	)
+}
 
+func (ms *MutableStateImpl) AddWorkflowExecutionSignaledEvent(
+	signalName string,
+	input *commonpb.Payloads,
+	identity string,
+	header *commonpb.Header,
+	skipGenerateWorkflowTask bool,
+	externalWorkflowExecution *commonpb.WorkflowExecution,
+) (*historypb.HistoryEvent, error) {
 	opTag := tag.WorkflowActionWorkflowSignaled
 	if err := ms.checkMutability(opTag); err != nil {
 		return nil, err
 	}
 
-	event := ms.hBuilder.AddWorkflowExecutionSignaledEvent(signalName, input, identity, header, skipGenerateWorkflowTask)
+	event := ms.hBuilder.AddWorkflowExecutionSignaledEvent(
+		signalName,
+		input,
+		identity,
+		header,
+		skipGenerateWorkflowTask,
+		externalWorkflowExecution,
+	)
 	if err := ms.ApplyWorkflowExecutionSignaled(event); err != nil {
 		return nil, err
 	}
@@ -3712,6 +3768,8 @@ func (ms *MutableStateImpl) AddContinueAsNewEvent(
 		ms.shard.GetEventsCache(),
 		ms.logger,
 		ms.namespaceEntry,
+		ms.executionInfo.WorkflowId,
+		newRunID,
 		timestamp.TimeValue(continueAsNewEvent.GetEventTime()),
 	)
 
@@ -3726,7 +3784,6 @@ func (ms *MutableStateImpl) AddContinueAsNewEvent(
 	}
 
 	if err = newMutableState.SetHistoryTree(
-		ctx,
 		newMutableState.executionInfo.WorkflowExecutionTimeout,
 		newMutableState.executionInfo.WorkflowRunTimeout,
 		newRunID,
@@ -4222,57 +4279,30 @@ func (ms *MutableStateImpl) RetryActivity(
 	if err := ms.checkMutability(opTag); err != nil {
 		return enumspb.RETRY_STATE_INTERNAL_SERVER_ERROR, err
 	}
-
-	if !ai.HasRetryPolicy {
-		return enumspb.RETRY_STATE_RETRY_POLICY_NOT_SET, nil
+	activityVisitor := newActivityVisitor(ai, failure, ms.timeSource)
+	if state := activityVisitor.State(); state != enumspb.RETRY_STATE_IN_PROGRESS {
+		return state, nil
 	}
-
-	if ai.CancelRequested {
-		return enumspb.RETRY_STATE_CANCEL_REQUESTED, nil
+	nextAttempt := ai.Attempt + 1
+	if err := ms.taskGenerator.GenerateActivityRetryTasks(ai.ScheduledEventId, activityVisitor.NextScheduledTime(), nextAttempt); err != nil {
+		return enumspb.RETRY_STATE_INTERNAL_SERVER_ERROR, err
 	}
-
-	originalSize := 0
+	// we need to store activity info size since pendingActivityInfoIDs holds pointers to activity
+	// info and if prev found it points to the same activity info as ai, so updating ai will cause
+	// size of prev change.
+	var originalSize int
 	if prev, ok := ms.pendingActivityInfoIDs[ai.ScheduledEventId]; ok {
 		originalSize = prev.Size()
 	}
-
-	now := ms.timeSource.Now()
-
-	backoffInterval, retryState := getBackoffInterval(
-		now,
-		ai.Attempt,
-		ai.RetryMaximumAttempts,
-		ai.RetryInitialInterval,
-		ai.RetryMaximumInterval,
-		ai.RetryExpirationTime,
-		ai.RetryBackoffCoefficient,
-		failure,
-		ai.RetryNonRetryableErrorTypes,
+	ai = activityVisitor.UpdateActivityInfo(
+		ai,
+		ms.GetCurrentVersion(),
+		nextAttempt,
+		ms.truncateRetryableActivityFailure(failure),
 	)
-	if retryState != enumspb.RETRY_STATE_IN_PROGRESS {
-		return retryState, nil
-	}
-
-	// a retry is needed, update activity info for next retry
-	ai.Version = ms.GetCurrentVersion()
-	ai.Attempt++
-	ai.ScheduledTime = timestamppb.New(now.Add(backoffInterval)) // update to next schedule time
-	ai.StartedEventId = common.EmptyEventID
-	ai.RequestId = ""
-	ai.StartedTime = nil
-	ai.TimerTaskStatus = TimerTaskStatusNone
-	ai.RetryLastWorkerIdentity = ai.StartedIdentity
-	ai.RetryLastFailure = ms.truncateRetryableActivityFailure(failure)
-
-	if err := ms.taskGenerator.GenerateActivityRetryTasks(
-		ai.ScheduledEventId,
-	); err != nil {
-		return enumspb.RETRY_STATE_INTERNAL_SERVER_ERROR, err
-	}
-
+	ms.approximateSize += ai.Size() - originalSize
 	ms.updateActivityInfos[ai.ScheduledEventId] = ai
 	ms.syncActivityTasks[ai.ScheduledEventId] = struct{}{}
-	ms.approximateSize += ai.Size() - originalSize
 	return enumspb.RETRY_STATE_IN_PROGRESS, nil
 }
 

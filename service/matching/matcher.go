@@ -55,6 +55,8 @@ type TaskMatcher struct {
 	// are interested in queryTasks but not others. One example is when a
 	// namespace is not active in a cluster.
 	queryTaskC chan *internalTask
+	// channel closed when task queue is closed, to interrupt pollers
+	closeC chan struct{}
 
 	// dynamicRate is the dynamic rate & burst for rate limiter
 	dynamicRateBurst quotas.MutableRateBurst
@@ -114,9 +116,14 @@ func newTaskMatcher(config *taskQueueConfig, fwdr *Forwarder, metricsHandler met
 		fwdr:                   fwdr,
 		taskC:                  make(chan *internalTask),
 		queryTaskC:             make(chan *internalTask),
+		closeC:                 make(chan struct{}),
 		numPartitions:          config.NumReadPartitions,
 		backlogTasksCreateTime: make(map[int64]int),
 	}
+}
+
+func (tm *TaskMatcher) Stop() {
+	close(tm.closeC)
 }
 
 // Offer offers a task to a potential consumer (poller)
@@ -472,7 +479,7 @@ func (tm *TaskMatcher) poll(
 	// We want to effectively do a prioritized select, but Go select is random
 	// if multiple cases are ready, so split into multiple selects.
 	// The priority order is:
-	// 1. ctx.Done
+	// 1. ctx.Done or tm.closeC
 	// 2. taskC and queryTaskC
 	// 3. forwarding
 	// 4. block looking locally for remainder of context lifetime
@@ -484,6 +491,8 @@ func (tm *TaskMatcher) poll(
 	select {
 	case <-ctx.Done():
 		tm.metricsHandler.Counter(metrics.PollTimeoutPerTaskQueueCounter.Name()).Record(1)
+		return nil, false, errNoTasks
+	case <-tm.closeC:
 		return nil, false, errNoTasks
 	default:
 	}
@@ -510,6 +519,8 @@ func (tm *TaskMatcher) poll(
 		case <-ctx.Done():
 			tm.metricsHandler.Counter(metrics.PollTimeoutPerTaskQueueCounter.Name()).Record(1)
 			return nil, false, errNoTasks
+		case <-tm.closeC:
+			return nil, false, errNoTasks
 		case task := <-taskC:
 			if task.responseC != nil {
 				tm.metricsHandler.Counter(metrics.PollSuccessWithSyncPerTaskQueueCounter.Name()).Record(1)
@@ -533,6 +544,8 @@ func (tm *TaskMatcher) poll(
 	select {
 	case <-ctx.Done():
 		tm.metricsHandler.Counter(metrics.PollTimeoutPerTaskQueueCounter.Name()).Record(1)
+		return nil, false, errNoTasks
+	case <-tm.closeC:
 		return nil, false, errNoTasks
 	case task := <-taskC:
 		if task.responseC != nil {

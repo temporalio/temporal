@@ -57,8 +57,8 @@ func ApplyWorkflowIDReusePolicy(
 	case enumsspb.WORKFLOW_EXECUTION_STATE_CREATED,
 		enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING:
 		if wfIDReusePolicy == enumspb.WORKFLOW_ID_REUSE_POLICY_TERMINATE_IF_RUNNING {
-			return func(workflowContext WorkflowContext) (*UpdateWorkflowAction, error) {
-				mutableState := workflowContext.GetMutableState()
+			return func(workflowLease WorkflowLease) (*UpdateWorkflowAction, error) {
+				mutableState := workflowLease.GetMutableState()
 				if !mutableState.IsWorkflowExecutionRunning() {
 					return nil, consts.ErrWorkflowCompleted
 				}

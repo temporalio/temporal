@@ -92,7 +92,6 @@ func (s *TestCluster) Config() config.Persistence {
 	cfg := s.cfg
 	return config.Persistence{
 		DefaultStore:    "test",
-		VisibilityStore: "test",
 		DataStores: map[string]config.DataStore{
 			"test": {Cassandra: &cfg, FaultInjection: s.faultInjection},
 		},
@@ -118,7 +117,6 @@ func (s *TestCluster) SetupTestDatabase() {
 	}
 
 	s.LoadSchema(path.Join(schemaDir, "temporal", "schema.cql"))
-	s.LoadSchema(path.Join(schemaDir, "visibility", "schema.cql"))
 }
 
 // TearDownTestDatabase from PersistenceTestCluster interface

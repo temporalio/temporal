@@ -39,6 +39,7 @@ var (
 		"Not":         5,
 		"NamespaceId": 6,
 		"TaskType":    7,
+		"Destination": 8,
 	}
 )
 

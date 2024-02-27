@@ -25,7 +25,6 @@
 package queues
 
 import (
-	"context"
 	"errors"
 	"fmt"
 	"sync"
@@ -104,6 +103,11 @@ func (g *ReaderGroup) Stop() {
 		g.removeReaderLocked(readerID)
 	}
 
+	// TODO: This guarantee is for a deprecated design (which requires registering readers).
+	// It's no longer needed and can be removed.
+	// This means NewReader() can always succeed and all error handling logic
+	// for creating readers can be removed.
+
 	// This guarantee no new reader can be created/registered after Stop() returns
 	// also all registered readers will be unregistered.
 	g.readerMap = nil
@@ -179,15 +183,7 @@ func (g *ReaderGroup) newReaderLocked(readerID int64, slices ...Slice) (Reader, 
 	}
 
 	g.readerMap[readerID] = reader
-	err := g.executionManager.RegisterHistoryTaskReader(context.Background(), &persistence.RegisterHistoryTaskReaderRequest{
-		ShardID:      g.shardID,
-		ShardOwner:   g.shardOwner,
-		TaskCategory: g.category,
-		ReaderID:     readerID,
-	})
-	if err != nil {
-		return nil, fmt.Errorf("unable to register history task reader: %w", err)
-	}
+
 	if g.isStarted() {
 		reader.Start()
 	}
@@ -211,17 +207,7 @@ func (g *ReaderGroup) removeReaderLocked(readerID int64) {
 		return
 	}
 
-	// NOTE: reader.Stop() does not guarantee reader won't issue new read requests
-	// But it's very unlikely as it waits for 1min.
-	// If UnregisterHistoryTaskReader requires no more read requests after the call
-	// we need to wait for the separate reader goroutine to complete.
 	reader.Stop()
-	g.executionManager.UnregisterHistoryTaskReader(context.Background(), &persistence.UnregisterHistoryTaskReaderRequest{
-		ShardID:      g.shardID,
-		ShardOwner:   g.shardOwner,
-		TaskCategory: g.category,
-		ReaderID:     readerID,
-	})
 	delete(g.readerMap, readerID)
 }
 
