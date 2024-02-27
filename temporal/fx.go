@@ -28,7 +28,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"strings"
+	"os"
 
 	"github.com/pborman/uuid"
 	"go.opentelemetry.io/otel"
@@ -902,10 +902,20 @@ var TraceExportModule = fx.Options(
 	}),
 
 	fx.Provide(func(lc fx.Lifecycle, c *config.Config) ([]otelsdktrace.SpanExporter, error) {
-		exporters, err := c.ExporterConfig.SpanExporters()
+		exportersByType, err := c.ExporterConfig.SpanExporters()
 		if err != nil {
 			return nil, err
 		}
+
+		exportersByTypeFromEnv, err := telemetry.SpanExportersFromEnv(os.LookupEnv)
+		if err != nil {
+			return nil, err
+		}
+
+		// config-defined exporters override env-defined exporters with the same type
+		maps.Copy(exportersByType, exportersByTypeFromEnv)
+
+		exporters := maps.Values(exportersByType)
 		lc.Append(fx.Hook{
 			OnStart: startAll(exporters),
 			OnStop:  shutdownAll(exporters),
@@ -948,21 +958,14 @@ var ServiceTracingModule = fx.Options(
 	fx.Provide(
 		fx.Annotate(
 			func(rsn primitives.ServiceName, rsi resource.InstanceID) (*otelresource.Resource, error) {
-				// map "internal-frontend" to "frontend" for the purpose of tracing
-				if rsn == primitives.InternalFrontendService {
-					rsn = primitives.FrontendService
-				}
-				serviceName := string(rsn)
-				if !strings.HasPrefix(serviceName, "io.temporal.") {
-					serviceName = fmt.Sprintf("io.temporal.%s", serviceName)
-				}
 				attrs := []attribute.KeyValue{
-					semconv.ServiceNameKey.String(serviceName),
+					semconv.ServiceNameKey.String(telemetry.ResourceServiceName(rsn, os.LookupEnv)),
 					semconv.ServiceVersionKey.String(headers.ServerVersion),
 				}
 				if rsi != "" {
 					attrs = append(attrs, semconv.ServiceInstanceIDKey.String(string(rsi)))
 				}
+
 				return otelresource.New(context.Background(),
 					otelresource.WithProcess(),
 					otelresource.WithOS(),
