@@ -273,6 +273,19 @@ func TestInsertAssignmentRuleInVersionSet(t *testing.T) {
 	protoassert.ProtoEqual(t, expected, updatedData)
 }
 
+func TestInsertAssignmentRuleTerminalBuildID(t *testing.T) {
+	// setup
+	t.Parallel()
+	maxRules := 3
+	clock := hlc.Zero(1)
+	data, err := insertRedirectRule(mkRedirectRule("0", "1", nil), mkInitialData(0, clock), clock, maxRules)
+	assert.NoError(t, err)
+
+	// insert assignment rule with target 1
+	_, err = insertAssignmentRule(mkAssignmentRule("1", mkNewAssignmentPercentageRamp(10)), data, clock, 0, maxRules)
+	assert.Error(t, err)
+}
+
 // Test inserting assignment rules with non-zero indexes. List to confirm.
 func TestInsertAssignmentRuleNonzeroIdx(t *testing.T) {
 	t.Parallel()
@@ -389,6 +402,22 @@ func TestReplaceAssignmentRuleInVersionSet(t *testing.T) {
 	}
 	protoassert.ProtoEqual(t, expected, updatedData)
 	assert.Equal(t, getListResp(t, updatedData).GetAssignmentRules()[0].GetRule().GetTargetBuildId(), updatedData.GetAssignmentRules()[0].GetRule().GetTargetBuildId())
+}
+
+func TestReplaceAssignmentRuleTerminalBuildID(t *testing.T) {
+	// setup
+	t.Parallel()
+	maxRules := 3
+	clock := hlc.Zero(1)
+	data := mkInitialData(0, clock)
+	data, err := insertRedirectRule(mkRedirectRule("0", "1", nil), data, clock, maxRules)
+	assert.NoError(t, err)
+	data, err = insertAssignmentRule(mkAssignmentRule("1", nil), data, clock, 0, maxRules)
+	assert.NoError(t, err)
+
+	// insert assignment rule with target 1
+	_, err = replaceAssignmentRule(mkAssignmentRule("1", mkNewAssignmentPercentageRamp(10)), data, clock, 0, false)
+	assert.Error(t, err)
 }
 
 // Test replacing assignment rule and hitting / not hitting the unfiltered error, and forcing past it
@@ -622,6 +651,20 @@ func TestInsertRedirectRuleInVersionSet(t *testing.T) {
 	protoassert.ProtoEqual(t, expected, updatedData)
 }
 
+func TestInsertRedirectRuleTerminalBuildID(t *testing.T) {
+	// setup
+	t.Parallel()
+	maxRules := 3
+	clock := hlc.Zero(1)
+	data := mkInitialData(0, clock)
+	data, err := insertAssignmentRule(mkAssignmentRule("1", mkNewAssignmentPercentageRamp(10)), data, clock, 0, maxRules)
+	assert.NoError(t, err)
+
+	// insert redirect rule with target 1
+	_, err = insertRedirectRule(mkRedirectRule("0", "1", nil), data, clock, maxRules)
+	assert.Error(t, err)
+}
+
 // Test inserting a rule with a source that already exists.
 func TestInsertRedirectRuleAlreadyExists(t *testing.T) {
 	t.Parallel()
@@ -755,6 +798,22 @@ func TestReplaceRedirectRuleInVersionSet(t *testing.T) {
 	data = replaceTest(t, "1", "100", data, clock2, true)
 	_ = replaceTest(t, "1", "0", data, clock2, false)
 	data = replaceTest(t, "1", "8", data, clock2, true)
+}
+
+func TestReplaceRedirectRuleTerminalBuildID(t *testing.T) {
+	// setup
+	t.Parallel()
+	maxRules := 3
+	clock := hlc.Zero(1)
+	data := mkInitialData(0, clock)
+	data, err := insertAssignmentRule(mkAssignmentRule("1", mkNewAssignmentPercentageRamp(10)), data, clock, 0, maxRules)
+	assert.NoError(t, err)
+	data, err = insertRedirectRule(mkRedirectRule("0", "2", nil), data, clock, maxRules)
+	assert.NoError(t, err)
+
+	// insert redirect rule with target 1
+	_, err = replaceRedirectRule(mkRedirectRule("0", "1", nil), data, clock)
+	assert.Error(t, err)
 }
 
 // Test replacing redirect rules and creating a cycle

@@ -54,7 +54,12 @@ func InsertAssignmentRule(timestamp *hlc.Clock,
 	}
 	target := rule.GetTargetBuildId()
 	if isInVersionSets(target, data.GetVersionSets()) {
-		return nil, serviceerror.NewFailedPrecondition(fmt.Sprintf("update breaks requirement, build id %s is already a member of version set", target))
+		return nil, serviceerror.NewFailedPrecondition(
+			"update breaks requirement, target build id is already a member of a version set")
+	}
+	if rule.GetRamp() != nil && isRedirectRuleTarget(target, data.GetRedirectRules()) {
+		return nil, serviceerror.NewFailedPrecondition(
+			"update breaks requirement, ramp must be nil if target build id is 'terminal' (the target of a redirect rule)")
 	}
 	if data == nil {
 		data = &persistencepb.VersioningData{AssignmentRules: make([]*persistencepb.AssignmentRule, 0)}
@@ -87,7 +92,12 @@ func ReplaceAssignmentRule(timestamp *hlc.Clock,
 	}
 	target := rule.GetTargetBuildId()
 	if isInVersionSets(target, data.GetVersionSets()) {
-		return nil, serviceerror.NewFailedPrecondition(fmt.Sprintf("update breaks requirement, build id %s is already a member of version set", target))
+		return nil, serviceerror.NewFailedPrecondition(
+			"update breaks requirement, target build id is already a member of a version set")
+	}
+	if rule.GetRamp() != nil && isRedirectRuleTarget(target, data.GetRedirectRules()) {
+		return nil, serviceerror.NewFailedPrecondition(
+			"update breaks requirement, ramp must be nil if target build id is 'terminal' (the target of a redirect rule)")
 	}
 	rules := data.GetAssignmentRules()
 	hadUnfiltered := containsUnfiltered(rules)
@@ -135,11 +145,17 @@ func InsertCompatibleRedirectRule(timestamp *hlc.Clock,
 	rule := req.GetRule()
 	source := rule.GetSourceBuildId()
 	if isInVersionSets(source, data.GetVersionSets()) {
-		return nil, serviceerror.NewFailedPrecondition(fmt.Sprintf("update breaks requirement, build id %s is already a member of version set", source))
+		return nil, serviceerror.NewFailedPrecondition(
+			"update breaks requirement, resource build ID is already a member of a version set")
 	}
 	target := rule.GetTargetBuildId()
 	if isInVersionSets(target, data.GetVersionSets()) {
-		return nil, serviceerror.NewFailedPrecondition(fmt.Sprintf("update breaks requirement, build id %s is already a member of version set", target))
+		return nil, serviceerror.NewFailedPrecondition(
+			"update breaks requirement, target build ID is already a member of a version set")
+	}
+	if isUnfilteredAssignmentRuleTarget(target, data.GetAssignmentRules()) {
+		return nil, serviceerror.NewFailedPrecondition(
+			"redirect rule target build ID cannot be the target of any assignment rule with non-nil ramp")
 	}
 	rules := data.GetRedirectRules()
 	for _, r := range rules {
@@ -166,11 +182,17 @@ func ReplaceCompatibleRedirectRule(timestamp *hlc.Clock,
 	rule := req.GetRule()
 	source := rule.GetSourceBuildId()
 	if isInVersionSets(source, data.GetVersionSets()) {
-		return nil, serviceerror.NewFailedPrecondition(fmt.Sprintf("update breaks requirement, build id %s is already a member of version set", source))
+		return nil, serviceerror.NewFailedPrecondition(
+			"update breaks requirement, resource build ID is already a member of a version set")
 	}
 	target := rule.GetTargetBuildId()
 	if isInVersionSets(target, data.GetVersionSets()) {
-		return nil, serviceerror.NewFailedPrecondition(fmt.Sprintf("update breaks requirement, build id %s is already a member of version set", target))
+		return nil, serviceerror.NewFailedPrecondition(
+			"update breaks requirement, target build ID is already a member of a version set")
+	}
+	if isUnfilteredAssignmentRuleTarget(target, data.GetAssignmentRules()) {
+		return nil, serviceerror.NewFailedPrecondition(
+			"redirect rule target build ID cannot be the target of any assignment rule with non-nil ramp")
 	}
 	rules := data.GetRedirectRules()
 	for _, r := range rules {
@@ -291,25 +313,27 @@ func ListWorkerVersioningRules(
 	}, nil
 }
 
-// checkAssignmentConditions returns an error if the new set of assignment rules don't meet the following requirements:
+// checkAssignmentConditions checks for validity conditions that must be assessed by looking at the entire set of rules.
+// It returns an error if the new set of assignment rules don't meet the following requirements:
 // - No more rules than dynamicconfig.VersionAssignmentRuleLimitPerQueue
 // - If `requireUnfiltered`, ensure at least one unfiltered rule still exists
 func checkAssignmentConditions(g *persistencepb.VersioningData, maxARs int, requireUnfiltered bool) error {
-	activeRules := getActiveAssignmentRules(slices.Clone(g.GetAssignmentRules()))
+	activeRules := getActiveAssignmentRules(g.GetAssignmentRules())
 	if cnt := len(activeRules); maxARs > 0 && cnt > maxARs {
 		return serviceerror.NewFailedPrecondition(fmt.Sprintf("update exceeds number of assignment rules permitted in namespace (%v/%v)", cnt, maxARs))
 	}
 	if requireUnfiltered && !containsUnfiltered(activeRules) {
-		return serviceerror.NewFailedPrecondition("update breaks requirement that at least one assignment rule must have no ramp or hint")
+		return serviceerror.NewFailedPrecondition("there must exist at least one 'unfiltered' assignment rule (one with no ramp or hint)")
 	}
 	return nil
 }
 
-// checkRedirectConditions returns an error if the new set of redirect rules don't meet the following requirements:
+// checkRedirectConditions checks for validity conditions that must be assessed by looking at the entire set of rules.
+// It returns an error if the new set of redirect rules don't meet the following requirements:
 // - No more rules than dynamicconfig.VersionRedirectRuleLimitPerQueue
 // - The DAG of redirect rules must not contain a cycle
 func checkRedirectConditions(g *persistencepb.VersioningData, maxRRs int) error {
-	activeRules := getActiveRedirectRules(slices.Clone(g.GetRedirectRules()))
+	activeRules := getActiveRedirectRules(g.GetRedirectRules())
 	if maxRRs > 0 && len(activeRules) > maxRRs {
 		return serviceerror.NewFailedPrecondition(
 			fmt.Sprintf("update exceeds number of redirect rules permitted in namespace (%v/%v)", len(activeRules), maxRRs))
@@ -321,15 +345,33 @@ func checkRedirectConditions(g *persistencepb.VersioningData, maxRRs int) error 
 }
 
 func getActiveAssignmentRules(rules []*persistencepb.AssignmentRule) []*persistencepb.AssignmentRule {
-	return util.FilterSlice(rules, func(ar *persistencepb.AssignmentRule) bool {
+	return util.FilterSlice(slices.Clone(rules), func(ar *persistencepb.AssignmentRule) bool {
 		return ar.DeleteTimestamp == nil
 	})
 }
 
 func getActiveRedirectRules(rules []*persistencepb.RedirectRule) []*persistencepb.RedirectRule {
-	return util.FilterSlice(rules, func(rr *persistencepb.RedirectRule) bool {
+	return util.FilterSlice(slices.Clone(rules), func(rr *persistencepb.RedirectRule) bool {
 		return rr.DeleteTimestamp == nil
 	})
+}
+
+func isRedirectRuleTarget(buildID string, redirectRules []*persistencepb.RedirectRule) bool {
+	for _, r := range getActiveRedirectRules(redirectRules) {
+		if buildID == r.GetRule().GetTargetBuildId() {
+			return true
+		}
+	}
+	return false
+}
+
+func isUnfilteredAssignmentRuleTarget(buildID string, assignmentRules []*persistencepb.AssignmentRule) bool {
+	for _, r := range getActiveAssignmentRules(assignmentRules) {
+		if buildID == r.GetRule().GetTargetBuildId() {
+			return true
+		}
+	}
+	return false
 }
 
 func isUnfiltered(ar *taskqueue.BuildIdAssignmentRule) bool {

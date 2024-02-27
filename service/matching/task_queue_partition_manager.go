@@ -26,7 +26,6 @@ package matching
 
 import (
 	"context"
-	"fmt"
 	"sync"
 	"time"
 
@@ -120,7 +119,7 @@ func newTaskQueuePartitionManager(
 ) (taskQueuePartitionManager, error) {
 	namespaceEntry, err := e.namespaceRegistry.GetNamespaceByID(partition.NamespaceId())
 	if err != nil {
-		return nil, fmt.Errorf("this is my error !!! : %v", err)
+		return nil, err
 	}
 	nsName := namespaceEntry.Name()
 	taskQueueConfig := newTaskQueueConfig(partition.TaskQueue(), config, nsName)
