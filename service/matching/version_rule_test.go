@@ -33,6 +33,7 @@ import (
 	commonclock "go.temporal.io/server/common/clock"
 	hlc "go.temporal.io/server/common/clock/hybrid_logical_clock"
 	"go.temporal.io/server/common/testing/protoassert"
+	"google.golang.org/protobuf/proto"
 	"slices"
 	"testing"
 	"time"
@@ -173,13 +174,6 @@ func deleteRedirectRule(source string,
 	clock *hlc.Clock,
 ) (*persistencepb.VersioningData, error) {
 	return DeleteCompatibleRedirectRule(clock, data, mkNewDeleteRedirectReq(source))
-}
-
-func getListResp(t *testing.T, data *persistencepb.VersioningData) *workflowservice.ListWorkerVersioningRulesResponse {
-	dummyClock := hlc.Zero(99)
-	resp, err := ListWorkerVersioningRules(data, dummyClock)
-	assert.NoError(t, err)
-	return resp.GetResponse()
 }
 
 func getActiveRedirectRuleBySrc(src string, data *persistencepb.VersioningData) *persistencepb.RedirectRule {
@@ -785,13 +779,11 @@ func TestDeleteRedirectRuleNotFound(t *testing.T) {
 func TestListWorkerVersioningRules(t *testing.T) {
 	t.Parallel()
 	clock1 := hlc.Zero(1)
-	timesource := commonclock.NewRealTimeSource()
-	clock2 := hlc.Next(clock1, timesource)
-	clock3 := hlc.Next(clock2, timesource)
+	clock2 := hlc.Next(clock1, commonclock.NewRealTimeSource())
 	data := &persistencepb.VersioningData{
 		AssignmentRules: []*persistencepb.AssignmentRule{
 			mkAssignmentRulePersistence(mkAssignmentRule("1", nil), clock1, nil),
-			mkAssignmentRulePersistence(mkAssignmentRule("10", nil), clock1, nil),
+			mkAssignmentRulePersistence(mkAssignmentRule("10", nil), clock2, nil),
 			mkAssignmentRulePersistence(mkAssignmentRule("10", nil), clock1, clock2),
 			mkAssignmentRulePersistence(mkAssignmentRule("100", nil), clock2, nil),
 		},
@@ -803,25 +795,54 @@ func TestListWorkerVersioningRules(t *testing.T) {
 		},
 	}
 
-	// check redirect rules, no ordering guarantee
-	redirectRules := getListResp(t, data).GetCompatibleRedirectRules()
-	contains := func([]*taskqueue.TimestampedCompatibleBuildIdRedirectRule)
-
-	assert.Contains(t, redirectRules, rule1)
-	assert.Contains(t, redirectRules, rule2)
-	assert.Contains(t, redirectRules, rule3)
-
-	// delete a rule
-	clock3 := hlc.Next(clock2, timesource)
-	data, err = deleteRedirectRule("2", data, clock3)
+	// Call list successfully
+	dummyClock := hlc.Zero(99) // used to generate conflict token, but not in this test
+	resp, err := ListWorkerVersioningRules(data, dummyClock)
 	assert.NoError(t, err)
 
-	// expect that list shows the deletion
-	rules = make([]*taskqueuepb.CompatibleBuildIdRedirectRule, 0)
-	for _, r := range getListResp(t, data).GetCompatibleRedirectRules() {
-		rules = append(rules, r.GetRule())
+	// check assignment rules
+	assignmentRules := resp.GetResponse().GetAssignmentRules()
+	assert.Equal(t, 3, len(assignmentRules))
+	protoassert.ProtoEqual(t, &taskqueuepb.TimestampedBuildIdAssignmentRule{
+		Rule:       mkAssignmentRule("1", nil),
+		CreateTime: hlc.ProtoTimestamp(clock1),
+	}, assignmentRules[0])
+	protoassert.ProtoEqual(t, &taskqueuepb.TimestampedBuildIdAssignmentRule{
+		Rule:       mkAssignmentRule("10", nil),
+		CreateTime: hlc.ProtoTimestamp(clock2),
+	}, assignmentRules[1])
+	protoassert.ProtoEqual(t, &taskqueuepb.TimestampedBuildIdAssignmentRule{
+		Rule:       mkAssignmentRule("100", nil),
+		CreateTime: hlc.ProtoTimestamp(clock2),
+	}, assignmentRules[2])
+
+	// check redirect rules, no ordering guarantee
+	redirectRules := resp.GetResponse().GetCompatibleRedirectRules()
+	assert.Equal(t, 3, len(redirectRules))
+	contains := func(expected *taskqueuepb.TimestampedCompatibleBuildIdRedirectRule) bool {
+		for _, r := range redirectRules {
+			if proto.Equal(expected, r) {
+				return true
+			}
+		}
+		return false
 	}
-	assert.NotContains(t, rules, rule2)
+	assert.True(t, contains(&taskqueuepb.TimestampedCompatibleBuildIdRedirectRule{
+		Rule:       mkRedirectRule("1", "2", nil),
+		CreateTime: hlc.ProtoTimestamp(clock1),
+	}))
+	assert.True(t, contains(&taskqueuepb.TimestampedCompatibleBuildIdRedirectRule{
+		Rule:       mkRedirectRule("3", "4", nil),
+		CreateTime: hlc.ProtoTimestamp(clock2),
+	}))
+	assert.True(t, contains(&taskqueuepb.TimestampedCompatibleBuildIdRedirectRule{
+		Rule:       mkRedirectRule("4", "5", nil),
+		CreateTime: hlc.ProtoTimestamp(clock2),
+	}))
+	assert.False(t, contains(&taskqueuepb.TimestampedCompatibleBuildIdRedirectRule{
+		Rule:       mkRedirectRule("4", "6", nil),
+		CreateTime: hlc.ProtoTimestamp(clock1),
+	}))
 }
 
 func TestCleanupRedirectRuleTombstones(t *testing.T) {
