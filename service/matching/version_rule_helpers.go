@@ -33,7 +33,6 @@ import (
 	"go.temporal.io/api/taskqueue/v1"
 	"go.temporal.io/api/workflowservice/v1"
 
-	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	"go.temporal.io/server/api/matchingservice/v1"
 	persistencepb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common"
@@ -286,19 +285,19 @@ func ListWorkerVersioningRules(
 	if cT, err = clk.Marshal(); err != nil {
 		return nil, serviceerror.NewInternal("error generating conflict token")
 	}
-	activeAssignmentRules := make([]*taskqueuepb.TimestampedBuildIdAssignmentRule, 0)
+	activeAssignmentRules := make([]*taskqueue.TimestampedBuildIdAssignmentRule, 0)
 	for _, ar := range versioningData.GetAssignmentRules() {
 		if ar.GetDeleteTimestamp() == nil {
-			activeAssignmentRules = append(activeAssignmentRules, &taskqueuepb.TimestampedBuildIdAssignmentRule{
+			activeAssignmentRules = append(activeAssignmentRules, &taskqueue.TimestampedBuildIdAssignmentRule{
 				Rule:       ar.GetRule(),
 				CreateTime: hlc.ProtoTimestamp(ar.GetCreateTimestamp()),
 			})
 		}
 	}
-	activeRedirectRules := make([]*taskqueuepb.TimestampedCompatibleBuildIdRedirectRule, 0)
+	activeRedirectRules := make([]*taskqueue.TimestampedCompatibleBuildIdRedirectRule, 0)
 	for _, rr := range versioningData.GetRedirectRules() {
 		if rr.GetDeleteTimestamp() == nil {
-			activeRedirectRules = append(activeRedirectRules, &taskqueuepb.TimestampedCompatibleBuildIdRedirectRule{
+			activeRedirectRules = append(activeRedirectRules, &taskqueue.TimestampedCompatibleBuildIdRedirectRule{
 				Rule:       rr.GetRule(),
 				CreateTime: hlc.ProtoTimestamp(rr.GetCreateTimestamp()),
 			})

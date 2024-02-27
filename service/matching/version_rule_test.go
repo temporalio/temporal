@@ -409,7 +409,7 @@ func TestReplaceAssignmentRuleTestRequireUnfiltered(t *testing.T) {
 	assert.Error(t, err)
 
 	// same as above but with force --> success
-	data, err = replaceAssignmentRule(mkAssignmentRule("4", mkNewAssignmentPercentageRamp(20)), data, clock, 0, true)
+	_, err = replaceAssignmentRule(mkAssignmentRule("4", mkNewAssignmentPercentageRamp(20)), data, clock, 0, true)
 	assert.NoError(t, err)
 }
 
@@ -448,7 +448,7 @@ func TestDeleteAssignmentRuleBasic(t *testing.T) {
 	expected.AssignmentRules[0].DeleteTimestamp = clock
 	protoassert.ProtoEqual(t, expected, data)
 
-	//out-of-bounds index --> failure
+	// out-of-bounds index --> failure
 	_, err = deleteAssignmentRule(data, nextClock(), 99, false)
 	assert.Error(t, err)
 
