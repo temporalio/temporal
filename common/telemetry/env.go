@@ -53,12 +53,13 @@ type envVarLookup = func(string) (string, bool)
 func SpanExportersFromEnv(
 	envVars envVarLookup,
 ) (map[SpanExporterType]otelsdktrace.SpanExporter, error) {
+	exporters := map[SpanExporterType]otelsdktrace.SpanExporter{}
+
 	exporterTypes, ok := envVars(OtelTracesExporterTypesEnvKey)
 	if !ok {
-		return nil, nil
+		return exporters, nil
 	}
 
-	exporters := map[SpanExporterType]otelsdktrace.SpanExporter{}
 	for _, exporterType := range strings.Split(exporterTypes, ",") {
 		switch SpanExporterType(exporterType) {
 		case OtelTracesOtlpExporterType:
@@ -76,6 +77,7 @@ func SpanExportersFromEnv(
 			return nil, fmt.Errorf("%w: %v=%v", unsupportedTraceExporter, OtelTracesExporterTypesEnvKey, exporterType)
 		}
 	}
+
 	return exporters, nil
 }
 

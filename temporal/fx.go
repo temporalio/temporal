@@ -913,7 +913,7 @@ var TraceExportModule = fx.Options(
 		}
 
 		// config-defined exporters override env-defined exporters with the same type
-		maps.Copy(exportersByTypeFromEnv, exportersByType)
+		maps.Copy(exportersByType, exportersByTypeFromEnv)
 
 		exporters := maps.Values(exportersByType)
 		lc.Append(fx.Hook{
