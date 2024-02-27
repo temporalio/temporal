@@ -25,7 +25,6 @@
 package matching
 
 import (
-	"fmt"
 	"github.com/stretchr/testify/assert"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	"go.temporal.io/api/workflowservice/v1"
@@ -194,51 +193,66 @@ func getListResp(t *testing.T, data *persistencepb.VersioningData) *workflowserv
 	return resp.GetResponse()
 }
 
-// Test inserting before and after hitting the max rules limit.
+func TestInsertAssignmentRuleBasic(t *testing.T) {
+	t.Parallel()
+	maxRules := 10
+	clock := hlc.Zero(1)
+	initialData := mkInitialData(0, clock)
+	assert.False(t, containsUnfiltered(initialData.GetAssignmentRules()))
+	expected := &persistencepb.VersioningData{AssignmentRules: []*persistencepb.AssignmentRule{}}
+
+	// insert at index 0
+	rule1 := mkAssignmentRule("1", nil)
+	data, err := insertAssignmentRule(rule1, initialData, clock, 0, maxRules)
+	assert.NoError(t, err)
+	expected.AssignmentRules = slices.Insert(expected.AssignmentRules, 0, mkAssignmentRulePersistence(rule1, clock, nil))
+	protoassert.ProtoEqual(t, expected, data)
+
+	rule2 := mkAssignmentRule("2", nil)
+	data, err = insertAssignmentRule(rule2, data, clock, 0, maxRules)
+	assert.NoError(t, err)
+	expected.AssignmentRules = slices.Insert(expected.AssignmentRules, 0, mkAssignmentRulePersistence(rule2, clock, nil))
+	protoassert.ProtoEqual(t, expected, data)
+
+	rule3 := mkAssignmentRule("3", nil)
+	data, err = insertAssignmentRule(rule3, data, clock, 0, maxRules)
+	assert.NoError(t, err)
+	expected.AssignmentRules = slices.Insert(expected.AssignmentRules, 0, mkAssignmentRulePersistence(rule3, clock, nil))
+	protoassert.ProtoEqual(t, expected, data)
+
+	// insert into the middle
+	rule4 := mkAssignmentRule("4", nil)
+	data, err = insertAssignmentRule(rule4, data, clock, 2, maxRules)
+	assert.NoError(t, err)
+	expected.AssignmentRules = slices.Insert(expected.AssignmentRules, 2, mkAssignmentRulePersistence(rule4, clock, nil))
+	protoassert.ProtoEqual(t, expected, data)
+
+	// insert with a too-big index, it should be at the back
+	rule5 := mkAssignmentRule("5", nil)
+	data, err = insertAssignmentRule(rule5, data, clock, 100, maxRules)
+	assert.NoError(t, err)
+	expected.AssignmentRules = append(expected.AssignmentRules, mkAssignmentRulePersistence(rule5, clock, nil))
+	protoassert.ProtoEqual(t, expected, data)
+
+	// initial data should be unmodified
+	protoassert.ProtoEqual(t, mkInitialData(0, clock), initialData)
+}
+
 func TestInsertAssignmentRuleMaxRules(t *testing.T) {
 	t.Parallel()
 	maxRules := 3
 	clock := hlc.Zero(1)
-	timesource := commonclock.NewRealTimeSource()
-	initialData := mkInitialData(0, clock)
-	assert.False(t, containsUnfiltered(initialData.GetAssignmentRules()))
+	data := mkInitialData(0, clock)
+	var err error
 
-	// insert to empty versioning data --> success
-	rule1 := mkAssignmentRule("1", nil)
-	clock1 := hlc.Next(clock, timesource)
-	updatedData, err := insertAssignmentRule(rule1, initialData, clock1, 0, maxRules)
-	assert.NoError(t, err)
-	protoassert.ProtoEqual(t, mkInitialData(0, clock), initialData)
-	expected := &persistencepb.VersioningData{
-		AssignmentRules: []*persistencepb.AssignmentRule{
-			mkAssignmentRulePersistence(rule1, clock1, nil),
-		},
+	// insert 3x --> success
+	for i := 0; i < 3; i++ {
+		data, err = insertAssignmentRule(mkAssignmentRule("1", nil), data, clock, 0, maxRules)
+		assert.NoError(t, err)
 	}
-	protoassert.ProtoEqual(t, expected, updatedData)
 
-	// insert again --> success
-	assert.True(t, containsUnfiltered(updatedData.GetAssignmentRules()))
-	rule2 := mkAssignmentRule("2", nil)
-	clock2 := hlc.Next(clock1, timesource)
-	updatedData, err = insertAssignmentRule(rule2, updatedData, clock2, 0, maxRules)
-	assert.NoError(t, err)
-	expected = &persistencepb.VersioningData{
-		AssignmentRules: slices.Insert(expected.GetAssignmentRules(), 0, mkAssignmentRulePersistence(rule2, clock2, nil)),
-	}
-	protoassert.ProtoEqual(t, expected, updatedData)
-
-	// insert twice more --> failure due to max rules
-	rule3 := mkAssignmentRule("3", nil)
-	clock3 := hlc.Next(clock2, timesource)
-	updatedData, err = insertAssignmentRule(rule3, updatedData, clock3, 0, maxRules)
-	assert.NoError(t, err)
-	expected = &persistencepb.VersioningData{
-		AssignmentRules: slices.Insert(expected.GetAssignmentRules(), 0, mkAssignmentRulePersistence(rule3, clock3, nil)),
-	}
-	testList(t, expected, updatedData)
-	rule4 := mkAssignmentRule("4", nil)
-	clock4 := hlc.Next(clock2, timesource)
-	updatedData, err = insertAssignmentRule(rule4, updatedData, clock4, 0, maxRules)
+	// insert fourth --> error
+	_, err = insertAssignmentRule(mkAssignmentRule("1", nil), data, clock, 0, maxRules)
 	assert.Error(t, err)
 }
 
@@ -247,283 +261,229 @@ func TestInsertAssignmentRuleInVersionSet(t *testing.T) {
 	t.Parallel()
 	maxRules := 3
 	clock := hlc.Zero(1)
-	initialData := mkInitialData(1, clock)
-	assert.False(t, containsUnfiltered(initialData.GetAssignmentRules()))
+	data := mkInitialData(1, clock)
 
-	// insert "0" to versioning data with build id "0" --> failure
-	rule0 := mkAssignmentRule("0", nil)
-	nextClock := hlc.Next(clock, commonclock.NewRealTimeSource())
-	_, err := insertAssignmentRule(rule0, initialData, nextClock, 0, maxRules)
+	// target 0 --> failure
+	_, err := insertAssignmentRule(mkAssignmentRule("0", nil), data, clock, 0, maxRules)
 	assert.Error(t, err)
-	protoassert.ProtoEqual(t, mkInitialData(1, clock), initialData)
 
-	// insert "1" --> success
-	rule1 := mkAssignmentRule("1", nil)
-	updatedData, err := insertAssignmentRule(rule1, initialData, nextClock, 0, maxRules)
+	// insert 1 --> success
+	_, err = insertAssignmentRule(mkAssignmentRule("1", nil), data, clock, 0, maxRules)
 	assert.NoError(t, err)
-	protoassert.ProtoEqual(t, mkInitialData(1, clock), initialData)
-	expected := &persistencepb.VersioningData{
-		VersionSets: []*persistencepb.CompatibleVersionSet{
-			mkSingleBuildIdSet("0", clock),
-		},
-		AssignmentRules: []*persistencepb.AssignmentRule{
-			mkAssignmentRulePersistence(rule1, nextClock, nil),
-		},
-	}
-	protoassert.ProtoEqual(t, expected, updatedData)
 }
 
 func TestInsertAssignmentRuleTerminalBuildID(t *testing.T) {
-	// setup
 	t.Parallel()
 	maxRules := 3
 	clock := hlc.Zero(1)
 	data, err := insertRedirectRule(mkRedirectRule("0", "1", nil), mkInitialData(0, clock), clock, maxRules)
 	assert.NoError(t, err)
 
-	// insert assignment rule with target 1
+	// insert 1 --> failure
 	_, err = insertAssignmentRule(mkAssignmentRule("1", mkNewAssignmentPercentageRamp(10)), data, clock, 0, maxRules)
 	assert.Error(t, err)
+
+	// insert 2 --> success
+	_, err = insertAssignmentRule(mkAssignmentRule("2", mkNewAssignmentPercentageRamp(10)), data, clock, 0, maxRules)
+	assert.NoError(t, err)
 }
 
-// Test inserting assignment rules with non-zero indexes. List to confirm.
-func TestInsertAssignmentRuleNonzeroIdx(t *testing.T) {
+func TestReplaceAssignmentRuleBasic(t *testing.T) {
 	t.Parallel()
-	maxRules := 10
 	clock := hlc.Zero(1)
 	timesource := commonclock.NewRealTimeSource()
-	initialData := mkInitialData(0, clock)
-	assert.False(t, containsUnfiltered(initialData.GetAssignmentRules()))
+	data := mkInitialData(0, clock)
+	expected := &persistencepb.VersioningData{AssignmentRules: []*persistencepb.AssignmentRule{}}
+	var err error
 
-	// insert 3x to get three rules in there
+	// start with three rules to replace
 	rule1 := mkAssignmentRule("1", nil)
-	clock1 := hlc.Next(clock, timesource)
-	data, err := insertAssignmentRule(rule1, initialData, clock1, 0, maxRules)
-	assert.NoError(t, err)
-	data, err = insertAssignmentRule(rule1, data, clock1, 0, maxRules)
-	assert.NoError(t, err)
-	data, err = insertAssignmentRule(rule1, data, clock1, 0, maxRules)
-	assert.NoError(t, err)
-
-	// test inserting with a given index, then listing, it should be at the desired index
-	rule2 := mkAssignmentRule("2", nil)
-	clock2 := hlc.Next(clock1, timesource)
-	data, err = insertAssignmentRule(rule2, data, clock2, 2, maxRules)
-	assert.NoError(t, err)
-	assert.Equal(t, "2", getListResp(t, data).GetAssignmentRules()[2].GetRule().GetTargetBuildId())
-
-	// test inserting with a too-big index, then listing, it should be at the back
-	rule3 := mkAssignmentRule("3", nil)
-	clock3 := hlc.Next(clock2, timesource)
-	data, err = insertAssignmentRule(rule3, data, clock3, 100, maxRules)
-	assert.NoError(t, err)
-	listedRules := getListResp(t, data).GetAssignmentRules()
-	assert.Equal(t, "3", listedRules[len(listedRules)-1].GetRule().GetTargetBuildId())
-}
-
-// Test replacing assignment rules at various indices. List to confirm.
-func TestReplaceAssignmentRuleVariousIdx(t *testing.T) {
-	t.Parallel()
-	maxRules := 10
-	clock := hlc.Zero(1)
-	timesource := commonclock.NewRealTimeSource()
-	initialData := mkInitialData(0, clock)
-	assert.False(t, containsUnfiltered(initialData.GetAssignmentRules()))
-
-	// insert 3x to get three rules in there
-	rule1 := mkAssignmentRule("1", nil)
-	clock1 := hlc.Next(clock, timesource)
-	data, err := insertAssignmentRule(rule1, initialData, clock1, 0, maxRules)
-	assert.NoError(t, err)
-	data, err = insertAssignmentRule(rule1, data, clock1, 0, maxRules)
-	assert.NoError(t, err)
-	data, err = insertAssignmentRule(rule1, data, clock1, 0, maxRules)
-	assert.NoError(t, err)
-
-	// test replacing with a given index, then listing, it should be at the desired index
-	replace := func(idx int32, expectSuccess bool) {
-		target := fmt.Sprintf("%d", idx)
-		rule := mkAssignmentRule(target, nil)
-		data, err = replaceAssignmentRule(rule, data, hlc.Next(clock, timesource), idx, false)
-		if !expectSuccess {
-			assert.Error(t, err)
-			return
-		}
-		assert.NoError(t, err)
-		assert.Equal(t, target, getListResp(t, data).GetAssignmentRules()[idx].GetRule().GetTargetBuildId())
+	data.AssignmentRules = []*persistencepb.AssignmentRule{
+		mkAssignmentRulePersistence(rule1, clock, nil),
+		mkAssignmentRulePersistence(rule1, clock, nil),
+		mkAssignmentRulePersistence(rule1, clock, nil),
 	}
-	replace(2, true)
-	replace(0, true)
-	replace(1, true)
+	expected.AssignmentRules = []*persistencepb.AssignmentRule{
+		mkAssignmentRulePersistence(rule1, clock, nil),
+		mkAssignmentRulePersistence(rule1, clock, nil),
+		mkAssignmentRulePersistence(rule1, clock, nil),
+	}
 
-	// test replacing with an out-of-bounds index --> should fail
-	replace(99, false)
-	replace(-1, false)
+	// [1, 1, 1] --> [1, 1, 2]
+	// [1A, 1A, 1A] --> [1A, 1A, 2A, 1D]
+	rule2 := mkAssignmentRule("2", nil)
+	clock = hlc.Next(clock, timesource)
+	data, err = replaceAssignmentRule(rule2, data, clock, 2, false)
+	assert.NoError(t, err)
+	expected.AssignmentRules[2].DeleteTimestamp = clock
+	expected.AssignmentRules = slices.Insert(expected.AssignmentRules, 2, mkAssignmentRulePersistence(rule2, clock, nil))
+	protoassert.ProtoEqual(t, expected, data)
+
+	// [1, 1, 2] --> [0, 1, 2]
+	// [1A, 1A, 2A, 1D] --> [0A, 1D, 1A, 2A, 1D]
+	rule0 := mkAssignmentRule("0", nil)
+	clock = hlc.Next(clock, timesource)
+	data, err = replaceAssignmentRule(rule0, data, clock, 0, false)
+	assert.NoError(t, err)
+	expected.AssignmentRules[0].DeleteTimestamp = clock
+	expected.AssignmentRules = slices.Insert(expected.AssignmentRules, 0, mkAssignmentRulePersistence(rule0, clock, nil))
+	protoassert.ProtoEqual(t, expected, data)
+
+	// [0, 1, 2] --> [0, 11, 2]
+	// [0A, 1D, 1A, 2A, 1D] --> [0A, 1D, 11A, 1D, 2A, 1D]
+	rule11 := mkAssignmentRule("11", nil)
+	clock = hlc.Next(clock, timesource)
+	data, err = replaceAssignmentRule(rule11, data, clock, 1, false)
+	assert.NoError(t, err)
+	expected.AssignmentRules[2].DeleteTimestamp = clock
+	expected.AssignmentRules = slices.Insert(expected.AssignmentRules, 2, mkAssignmentRulePersistence(rule11, clock, nil))
+	protoassert.ProtoEqual(t, expected, data)
+
+	// out-of-bounds indices --> failure
+	_, err = replaceAssignmentRule(rule11, data, clock, 99, false)
+	assert.Error(t, err)
+
+	_, err = replaceAssignmentRule(rule11, data, clock, 99, false)
+	assert.Error(t, err)
 }
 
 func TestReplaceAssignmentRuleInVersionSet(t *testing.T) {
 	t.Parallel()
-	maxRules := 3
 	clock := hlc.Zero(1)
 	data := mkInitialData(1, clock)
-	assert.False(t, containsUnfiltered(data.GetAssignmentRules()))
 	var err error
-
-	// insert a rule so there's something to replace
-	rule1 := mkAssignmentRule("1", nil)
-	data, err = insertAssignmentRule(rule1, data, clock, 0, maxRules)
-	expected := &persistencepb.VersioningData{
-		AssignmentRules: []*persistencepb.AssignmentRule{
-			mkAssignmentRulePersistence(rule1, clock, nil),
-		},
-		VersionSets: data.GetVersionSets(),
+	data.AssignmentRules = []*persistencepb.AssignmentRule{
+		mkAssignmentRulePersistence(mkAssignmentRule("1", nil), clock, nil),
 	}
-	assert.NoError(t, err)
-	protoassert.ProtoEqual(t, expected, data)
 
-	// replace "0" to versioning data with build id "0" --> failure
-	rule0 := mkAssignmentRule("0", nil)
-	nextClock := hlc.Next(clock, commonclock.NewRealTimeSource())
-	_, err = replaceAssignmentRule(rule0, data, nextClock, 0, false)
+	// replace 0 --> failure
+	_, err = replaceAssignmentRule(mkAssignmentRule("0", nil), data, clock, 0, false)
 	assert.Error(t, err)
 
-	// replace "3" to versioning data with build id "0" --> success
-	rule3 := mkAssignmentRule("3", nil)
-	updatedData, err := replaceAssignmentRule(rule3, data, nextClock, 0, false)
+	// replace 3 --> success
+	_, err = replaceAssignmentRule(mkAssignmentRule("3", nil), data, clock, 0, false)
 	assert.NoError(t, err)
-	expReplacedRule := expected.GetAssignmentRules()[0]
-	expReplacedRule.DeleteTimestamp = nextClock
-	expected = &persistencepb.VersioningData{
-		AssignmentRules: []*persistencepb.AssignmentRule{
-			mkAssignmentRulePersistence(rule3, nextClock, nil),
-			expReplacedRule,
-		},
-		VersionSets: data.GetVersionSets(),
-	}
-	protoassert.ProtoEqual(t, expected, updatedData)
-	assert.Equal(t, getListResp(t, updatedData).GetAssignmentRules()[0].GetRule().GetTargetBuildId(), updatedData.GetAssignmentRules()[0].GetRule().GetTargetBuildId())
 }
 
 func TestReplaceAssignmentRuleTerminalBuildID(t *testing.T) {
-	// setup
 	t.Parallel()
-	maxRules := 3
 	clock := hlc.Zero(1)
 	data := mkInitialData(0, clock)
-	data, err := insertRedirectRule(mkRedirectRule("0", "1", nil), data, clock, maxRules)
-	assert.NoError(t, err)
-	data, err = insertAssignmentRule(mkAssignmentRule("1", nil), data, clock, 0, maxRules)
-	assert.NoError(t, err)
+	data.AssignmentRules = []*persistencepb.AssignmentRule{
+		mkAssignmentRulePersistence(mkAssignmentRule("0", nil), clock, nil),
+	}
+	data.RedirectRules = []*persistencepb.RedirectRule{
+		mkRedirectRulePersistence(mkRedirectRule("0", "1", nil), clock, nil),
+	}
 
-	// insert assignment rule with target 1
-	_, err = replaceAssignmentRule(mkAssignmentRule("1", mkNewAssignmentPercentageRamp(10)), data, clock, 0, false)
+	// replace with ramp --> failure
+	_, err := replaceAssignmentRule(mkAssignmentRule("1", mkNewAssignmentPercentageRamp(10)), data, clock, 0, false)
 	assert.Error(t, err)
+
+	// replace without ramp --> success
+	_, err = replaceAssignmentRule(mkAssignmentRule("1", nil), data, clock, 0, false)
+	assert.NoError(t, err)
 }
 
-// Test replacing assignment rule and hitting / not hitting the unfiltered error, and forcing past it
 func TestReplaceAssignmentRuleTestRequireUnfiltered(t *testing.T) {
 	t.Parallel()
-	maxRules := 10
 	clock := hlc.Zero(1)
-	timesource := commonclock.NewRealTimeSource()
 	data := mkInitialData(0, clock)
-	assert.False(t, containsUnfiltered(data.GetAssignmentRules()))
 	var err error
 
-	// test adding a filtered rule and then replacing it (should work)
-	clock1 := hlc.Next(clock, timesource)
-	data, err = insertAssignmentRule(mkAssignmentRule("1", mkNewAssignmentPercentageRamp(10)), data, clock1, 0, maxRules)
+	// replace filtered rule with filtered rule --> success
+	data.AssignmentRules = []*persistencepb.AssignmentRule{
+		mkAssignmentRulePersistence(mkAssignmentRule("1", mkNewAssignmentPercentageRamp(10)), clock, nil),
+	}
+	data, err = replaceAssignmentRule(mkAssignmentRule("2", mkNewAssignmentPercentageRamp(20)), data, clock, 0, false)
 	assert.NoError(t, err)
-	data, err = replaceAssignmentRule(mkAssignmentRule("2", mkNewAssignmentPercentageRamp(20)), data, clock1, 0, false)
-	assert.NoError(t, err)
-	assert.Equal(t, "2", getListResp(t, data).GetAssignmentRules()[0].GetRule().GetTargetBuildId())
-	assert.Equal(t, float32(20), getListResp(t, data).GetAssignmentRules()[0].GetRule().GetPercentageRamp().GetRampPercentage())
 
-	// test adding an unfiltered rule and then replacing it (should fail)
-	data, err = insertAssignmentRule(mkAssignmentRule("3", nil), data, clock1, 0, maxRules)
-	assert.NoError(t, err)
-	data, err = replaceAssignmentRule(mkAssignmentRule("4", mkNewAssignmentPercentageRamp(20)), data, clock1, 0, false)
+	// replace unfiltered rule with filtered rule --> failure
+	data.AssignmentRules = []*persistencepb.AssignmentRule{
+		mkAssignmentRulePersistence(mkAssignmentRule("1", nil), clock, nil),
+	}
+	_, err = replaceAssignmentRule(mkAssignmentRule("2", mkNewAssignmentPercentageRamp(20)), data, clock, 0, false)
 	assert.Error(t, err)
 
-	// test the same as above but with force (should work)
-	data, err = replaceAssignmentRule(mkAssignmentRule("4", mkNewAssignmentPercentageRamp(20)), data, clock1, 0, true)
+	// same as above but with force --> success
+	data, err = replaceAssignmentRule(mkAssignmentRule("4", mkNewAssignmentPercentageRamp(20)), data, clock, 0, true)
 	assert.NoError(t, err)
-	assert.Equal(t, "4", getListResp(t, data).GetAssignmentRules()[0].GetRule().GetTargetBuildId())
-	assert.Equal(t, float32(20), getListResp(t, data).GetAssignmentRules()[0].GetRule().GetPercentageRamp().GetRampPercentage())
 }
 
-func TestDeleteAssignmentRuleVariousIdx(t *testing.T) {
+func TestDeleteAssignmentRuleBasic(t *testing.T) {
 	t.Parallel()
-	maxRules := 10
 	clock := hlc.Zero(1)
 	timesource := commonclock.NewEventTimeSource().Update(time.Now())
-	initialData := mkInitialData(0, clock)
-	assert.False(t, containsUnfiltered(initialData.GetAssignmentRules()))
+	data := mkInitialData(0, clock)
+	data.AssignmentRules = []*persistencepb.AssignmentRule{}
+	expected := &persistencepb.VersioningData{AssignmentRules: []*persistencepb.AssignmentRule{}}
+	var err error
 
-	// insert 3x to get three rules in there
-	timesource.Advance(time.Minute)
-	clock = hlc.Next(clock, timesource)
-	data, err := insertAssignmentRule(mkAssignmentRule("1", nil), initialData, clock, 0, maxRules)
-	assert.NoError(t, err)
-	timesource.Advance(time.Minute)
-	clock = hlc.Next(clock, timesource)
-	data, err = insertAssignmentRule(mkAssignmentRule("1", nil), data, clock, 0, maxRules)
-	assert.NoError(t, err)
-	timesource.Advance(time.Minute)
-	clock = hlc.Next(clock, timesource)
-	data, err = insertAssignmentRule(mkAssignmentRule("1", nil), data, clock, 0, maxRules)
-	assert.NoError(t, err)
-
-	// test deleting at a given index, then listing, we should see the difference
-	deleter := func(idx int32, expectSuccess bool) {
+	nextClock := func() *hlc.Clock {
+		timesource.Advance(time.Minute)
 		clock = hlc.Next(clock, timesource)
-		if !expectSuccess {
-			data, err = deleteAssignmentRule(data, clock, idx, false)
-			assert.Error(t, err)
-			return
-		}
-		rule := getListResp(t, data).GetAssignmentRules()[idx]
-		actualIdx := given2ActualIdx(idx, data.GetAssignmentRules())
-		data, err = deleteAssignmentRule(data, clock, idx, false)
-		assert.NoError(t, err)
-		assert.NotContains(t, getListResp(t, data).GetAssignmentRules(), rule)
-		assert.Equal(t, clock, data.GetAssignmentRules()[actualIdx].GetDeleteTimestamp())
+		return clock
 	}
-	deleter(2, true)
-	deleter(0, true)
 
-	// test deleting with an out-of-bounds index --> should fail
-	deleter(99, false)
-	deleter(-1, false)
+	// start with three rules inserted at different times
+	rule1 := mkAssignmentRule("1", nil)
+	data.AssignmentRules = slices.Insert(data.AssignmentRules, 0, mkAssignmentRulePersistence(rule1, clock, nil))
+	expected.AssignmentRules = slices.Insert(expected.AssignmentRules, 0, mkAssignmentRulePersistence(rule1, clock, nil))
+	data.AssignmentRules = slices.Insert(data.AssignmentRules, 0, mkAssignmentRulePersistence(rule1, nextClock(), nil))
+	expected.AssignmentRules = slices.Insert(expected.AssignmentRules, 0, mkAssignmentRulePersistence(rule1, clock, nil))
+	data.AssignmentRules = slices.Insert(data.AssignmentRules, 0, mkAssignmentRulePersistence(rule1, nextClock(), nil))
+	expected.AssignmentRules = slices.Insert(expected.AssignmentRules, 0, mkAssignmentRulePersistence(rule1, clock, nil))
+
+	// in-bounds index --> success
+	data, err = deleteAssignmentRule(data, nextClock(), 2, false)
+	assert.NoError(t, err)
+	expected.AssignmentRules[2].DeleteTimestamp = clock
+	protoassert.ProtoEqual(t, expected, data)
+
+	data, err = deleteAssignmentRule(data, nextClock(), 0, false)
+	assert.NoError(t, err)
+	expected.AssignmentRules[0].DeleteTimestamp = clock
+	protoassert.ProtoEqual(t, expected, data)
+
+	//out-of-bounds index --> failure
+	_, err = deleteAssignmentRule(data, nextClock(), 99, false)
+	assert.Error(t, err)
+
+	_, err = deleteAssignmentRule(data, nextClock(), -1, false)
+	assert.Error(t, err)
 }
 
 func TestDeleteAssignmentRuleTestRequireUnfiltered(t *testing.T) {
 	t.Parallel()
-	maxRules := 10
 	clock := hlc.Zero(1)
-	timesource := commonclock.NewRealTimeSource()
 	data := mkInitialData(0, clock)
-	assert.False(t, containsUnfiltered(data.GetAssignmentRules()))
 	var err error
 
-	// test adding a filtered rule and then deleting it (should work)
-	clock1 := hlc.Next(clock, timesource)
-	data, err = insertAssignmentRule(mkAssignmentRule("1", mkNewAssignmentPercentageRamp(10)), data, clock1, 0, maxRules)
+	// delete filtered rule --> success
+	data.AssignmentRules = []*persistencepb.AssignmentRule{
+		mkAssignmentRulePersistence(mkAssignmentRule("1", mkNewAssignmentPercentageRamp(10)), clock, nil),
+	}
+	_, err = deleteAssignmentRule(data, clock, 0, false)
 	assert.NoError(t, err)
-	data, err = deleteAssignmentRule(data, clock1, 0, false)
-	assert.NoError(t, err)
-	assert.Equal(t, 0, len(getListResp(t, data).GetAssignmentRules()))
 
-	// test adding an unfiltered rule and then deleting it (should fail)
-	data, err = insertAssignmentRule(mkAssignmentRule("3", nil), data, clock1, 0, maxRules)
-	assert.NoError(t, err)
-	_, err = deleteAssignmentRule(data, clock1, 0, false)
+	// delete only unfiltered rule --> failure
+	data.AssignmentRules = []*persistencepb.AssignmentRule{
+		mkAssignmentRulePersistence(mkAssignmentRule("1", nil), clock, nil),
+	}
+	_, err = deleteAssignmentRule(data, clock, 0, false)
 	assert.Error(t, err)
 
-	// test the same as above but with force (should work)
-	data, err = deleteAssignmentRule(data, clock1, 0, true)
+	// same as above but with force --> success
+	_, err = deleteAssignmentRule(data, clock, 0, true)
 	assert.NoError(t, err)
-	assert.Equal(t, 0, len(getListResp(t, data).GetAssignmentRules()))
+
+	// delete one of two unfiltered rules --> success
+	data.AssignmentRules = []*persistencepb.AssignmentRule{
+		mkAssignmentRulePersistence(mkAssignmentRule("1", nil), clock, nil),
+		mkAssignmentRulePersistence(mkAssignmentRule("1", nil), clock, nil),
+	}
+	_, err = deleteAssignmentRule(data, clock, 0, false)
+	assert.NoError(t, err)
 }
 
 // Test inserting, deleting, and replacing rules and listing in between.
@@ -532,8 +492,7 @@ func TestListAssignmentRules(t *testing.T) {
 	maxRules := 10
 	clock := hlc.Zero(1)
 	timesource := commonclock.NewRealTimeSource()
-	// make a version set with build id 0
-	initialData := mkInitialData(1, clock)
+	initialData := mkInitialData(0, clock)
 
 	// insert 3x
 	rule1 := mkAssignmentRule("1", nil)
