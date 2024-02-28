@@ -44,6 +44,10 @@ func updateIndependentActivityBuildId(
 		retErr = nil
 	}()
 
+	// We should reach to this point only when all the following conditions are true:
+	// - assignment rules are added for the Task Queue (i.e. worker versioning is enabled)
+	// - sync-match did not happen for this task
+	// - the activity is on a different task queue (or otherwise asked to be independently assigned to a build ID)
 	weContext, release, err := getWorkflowExecutionContextForTask(ctx, shardContext, workflowCache, task)
 	if err != nil {
 		return err
@@ -81,7 +85,9 @@ func updateIndependentActivityBuildId(
 		return err
 	}
 
-	return weContext.UpdateWorkflowExecutionAsActive(ctx, shardContext)
+	// calling UpdateWorkflowExecutionAsPassive even in the active cluster should be fine here because we don't need the
+	// history and MS size checks done by UpdateWorkflowExecutionAsActive.
+	return weContext.UpdateWorkflowExecutionAsPassive(ctx, shardContext)
 }
 
 func updateWorkflowAssignedBuildId(
@@ -110,6 +116,11 @@ func updateWorkflowAssignedBuildId(
 		retErr = nil
 	}()
 
+	// We should reach to this point only when all the following conditions are true:
+	// - assignment rules are added for the Task Queue (i.e. worker versioning is enabled)
+	// - sync-match did not happen for this task
+	// - this is the first workflow task of the execution
+	// - the workflow has not inherited a build ID (for child WF or CaN)
 	weContext, release, err := getWorkflowExecutionContextForTask(ctx, shardContext, workflowCache, transferTask)
 	if err != nil {
 		return err
@@ -150,7 +161,10 @@ func updateWorkflowAssignedBuildId(
 	if err != nil {
 		return err
 	}
-	return weContext.UpdateWorkflowExecutionAsActive(ctx, shardContext)
+
+	// calling UpdateWorkflowExecutionAsPassive even in the active cluster should be fine here because we don't need the
+	// history and MS size checks done by UpdateWorkflowExecutionAsActive.
+	return weContext.UpdateWorkflowExecutionAsPassive(ctx, shardContext)
 }
 
 func MakeDirectiveForActivityTask(mutableState workflow.MutableState, activityInfo *persistencespb.ActivityInfo) *taskqueuespb.TaskVersionDirective {
