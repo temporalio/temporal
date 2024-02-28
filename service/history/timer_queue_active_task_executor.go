@@ -616,17 +616,11 @@ func (t *timerQueueActiveTaskExecutor) executeWorkflowTimeoutTask(
 	return weContext.UpdateWorkflowExecutionWithNewAsActive(
 		ctx,
 		t.shardContext,
-		workflow.NewContext(
-			t.shardContext.GetConfig(),
-			definition.NewWorkflowKey(
-				newExecutionInfo.NamespaceId,
-				newExecutionInfo.WorkflowId,
-				newExecutionState.RunId,
-			),
-			t.logger,
-			t.shardContext.GetThrottledLogger(),
-			t.shardContext.GetMetricsHandler(),
-		),
+		workflow.NewContext(t.shardContext.GetConfig(), definition.NewWorkflowKey(
+			newExecutionInfo.NamespaceId,
+			newExecutionInfo.WorkflowId,
+			newExecutionState.RunId,
+		), nil, t.logger, t.shardContext.GetThrottledLogger(), t.shardContext.GetMetricsHandler()),
 		newMutableState,
 	)
 }

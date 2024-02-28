@@ -407,17 +407,11 @@ func (r *workflowResetterImpl) replayResetWorkflow(
 		return nil, err
 	}
 
-	resetContext := workflow.NewContext(
-		r.shardContext.GetConfig(),
-		definition.NewWorkflowKey(
-			namespaceID.String(),
-			workflowID,
-			resetRunID,
-		),
-		r.logger,
-		r.shardContext.GetLogger(),
-		r.shardContext.GetMetricsHandler(),
-	)
+	resetContext := workflow.NewContext(r.shardContext.GetConfig(), definition.NewWorkflowKey(
+		namespaceID.String(),
+		workflowID,
+		resetRunID,
+	), nil, r.logger, r.shardContext.GetLogger(), r.shardContext.GetMetricsHandler())
 	resetMutableState, resetHistorySize, err := r.newStateRebuilder().Rebuild(
 		ctx,
 		r.shardContext.GetTimeSource().Now(),
@@ -620,6 +614,7 @@ func (r *workflowResetterImpl) reapplyContinueAsNewWorkflowEvents(
 				WorkflowId: workflowID,
 				RunId:      runID,
 			},
+			nil,
 			workflow.LockPriorityHigh,
 		)
 		if err != nil {

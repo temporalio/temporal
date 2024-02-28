@@ -76,7 +76,9 @@ func Invoke(
 	)
 	switch err.(type) {
 	case nil:
-		defer func() { currentWorkflowLease.GetReleaseFn()(retError) }()
+		defer func() {
+			currentWorkflowLease.GetReleaseFn()(retError)
+		}()
 	case *serviceerror.NotFound:
 		currentWorkflowLease = nil
 	default:
@@ -109,7 +111,7 @@ func Invoke(
 			return nil, err
 		}
 
-		updateResp, err = updater.Invoke(
+		_, err = updater.Apply(
 			ctx,
 			currentWorkflowLease,
 		)
@@ -118,8 +120,13 @@ func Invoke(
 		}
 
 		startResp, err = starter.Create(ctx)
+		currentWorkflowLease.GetReleaseFn()(retError)
+
 		if err != nil {
+			updateResp, err = updater.AfterPersist(ctx, err)
 			return nil, err
+		} else {
+			updateResp, err = updater.AfterPersist(ctx, nil)
 		}
 	} else {
 		fmt.Println(">> UPSERT <<")

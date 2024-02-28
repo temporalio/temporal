@@ -104,6 +104,7 @@ func (t *timerQueueTaskExecutorBase) executeDeleteHistoryEventTask(
 		t.shardContext,
 		namespace.ID(task.GetNamespaceID()),
 		workflowExecution,
+		nil,
 		workflow.LockPriorityLow,
 	)
 	if err != nil {
@@ -180,6 +181,7 @@ func getWorkflowExecutionContext(
 		shardContext,
 		namespaceID,
 		execution,
+		nil,
 		workflow.LockPriorityLow,
 	)
 	if common.IsContextDeadlineExceededErr(err) {

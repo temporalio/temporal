@@ -110,6 +110,7 @@ func (r *ActivityStateReplicatorImpl) SyncActivityState(
 		r.shardContext,
 		namespaceID,
 		&execution,
+		nil,
 		workflow.LockPriorityHigh,
 	)
 	if err != nil {
@@ -201,6 +202,7 @@ func (r *ActivityStateReplicatorImpl) SyncActivitiesState(
 		r.shardContext,
 		namespaceID,
 		execution,
+		nil,
 		workflow.LockPriorityHigh,
 	)
 	if err != nil {

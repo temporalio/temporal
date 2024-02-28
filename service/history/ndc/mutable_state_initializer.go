@@ -116,6 +116,7 @@ func (r *MutableStateInitializerImpl) InitializeFromDB(
 			WorkflowId: workflowKey.WorkflowID,
 			RunId:      workflowKey.RunID,
 		},
+		nil,
 		workflow.LockPriorityHigh,
 	)
 	if err != nil {
@@ -175,13 +176,7 @@ func (r *MutableStateInitializerImpl) InitializeFromToken(
 	workflowKey definition.WorkflowKey,
 	token []byte,
 ) (Workflow, MutableStateInitializationSpec, error) {
-	wfContext := workflow.NewContext(
-		r.shardContext.GetConfig(),
-		workflowKey,
-		r.logger,
-		r.shardContext.GetThrottledLogger(),
-		r.shardContext.GetMetricsHandler(),
-	)
+	wfContext := workflow.NewContext(r.shardContext.GetConfig(), workflowKey, nil, r.logger, r.shardContext.GetThrottledLogger(), r.shardContext.GetMetricsHandler())
 	mutableStateRow, dbRecordVersion, dbHistorySize, existsInDB, err := r.deserializeBackfillToken(token)
 	if err != nil {
 		return nil, MutableStateInitializationSpec{}, err

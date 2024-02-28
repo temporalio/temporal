@@ -72,8 +72,14 @@ type (
 			shardContext shard.Context,
 			namespaceID namespace.ID,
 			execution *commonpb.WorkflowExecution,
+			mutableState workflow.MutableState,
 			lockPriority workflow.LockPriority,
 		) (workflow.Context, ReleaseCacheFunc, error)
+
+		Evict(
+			ctx context.Context,
+			execution *commonpb.WorkflowExecution,
+		)
 	}
 
 	CacheImpl struct {
@@ -174,6 +180,7 @@ func (c *CacheImpl) GetOrCreateCurrentWorkflowExecution(
 		shardContext,
 		namespaceID,
 		&execution,
+		nil,
 		handler,
 		true,
 		lockPriority,
@@ -189,6 +196,7 @@ func (c *CacheImpl) GetOrCreateWorkflowExecution(
 	shardContext shard.Context,
 	namespaceID namespace.ID,
 	execution *commonpb.WorkflowExecution,
+	mutableState workflow.MutableState,
 	lockPriority workflow.LockPriority,
 ) (workflow.Context, ReleaseCacheFunc, error) {
 
@@ -209,6 +217,7 @@ func (c *CacheImpl) GetOrCreateWorkflowExecution(
 		shardContext,
 		namespaceID,
 		execution,
+		mutableState,
 		handler,
 		false,
 		lockPriority,
@@ -219,25 +228,38 @@ func (c *CacheImpl) GetOrCreateWorkflowExecution(
 	return weCtx, weReleaseFunc, err
 }
 
+func (c *CacheImpl) Evict(ctx context.Context, execution *commonpb.WorkflowExecution) {
+}
+
 func (c *CacheImpl) getOrCreateWorkflowExecutionInternal(
 	ctx context.Context,
 	shardContext shard.Context,
 	namespaceID namespace.ID,
 	execution *commonpb.WorkflowExecution,
+	mutableState workflow.MutableState,
 	handler metrics.Handler,
 	forceClearContext bool,
 	lockPriority workflow.LockPriority,
 ) (workflow.Context, ReleaseCacheFunc, error) {
-
 	cacheKey := Key{
 		WorkflowKey: definition.NewWorkflowKey(namespaceID.String(), execution.GetWorkflowId(), execution.GetRunId()),
 		ShardUUID:   shardContext.GetOwner(),
+	}
+	if cacheKey.WorkflowKey.WorkflowID == "WORKFLOW-ID" {
+		fmt.Println("[CACHE] getOrCreateWorkflowExecutionInternal", cacheKey)
 	}
 	workflowCtx, cacheHit := c.Get(cacheKey).(workflow.Context)
 	if !cacheHit {
 		handler.Counter(metrics.CacheMissCounter.Name()).Record(1)
 		// Let's create the workflow execution workflowCtx
-		workflowCtx = workflow.NewContext(shardContext.GetConfig(), cacheKey.WorkflowKey, shardContext.GetLogger(), shardContext.GetThrottledLogger(), shardContext.GetMetricsHandler())
+		workflowCtx = workflow.NewContext(
+			shardContext.GetConfig(),
+			cacheKey.WorkflowKey,
+			mutableState,
+			shardContext.GetLogger(),
+			shardContext.GetThrottledLogger(),
+			shardContext.GetMetricsHandler(),
+		)
 		elem, err := c.PutIfNotExist(cacheKey, workflowCtx)
 		if err != nil {
 			handler.Counter(metrics.CacheFailures.Name()).Record(1)

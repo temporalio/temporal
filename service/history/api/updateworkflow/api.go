@@ -86,13 +86,117 @@ func NewUpdater(
 	matchingClient matchingservice.MatchingServiceClient,
 	request *historyservice.UpdateWorkflowExecutionRequest,
 ) *Updater {
+	wfKey := definition.NewWorkflowKey(
+		request.NamespaceId,
+		request.Request.WorkflowExecution.WorkflowId,
+		request.Request.WorkflowExecution.RunId,
+	)
+
 	return &Updater{
 		shardCtx:                   shardCtx,
 		workflowConsistencyChecker: workflowConsistencyChecker,
 		matchingClient:             matchingClient,
 		request:                    request,
 		namespaceID:                namespace.ID(request.GetNamespaceId()),
+		wfKey:                      wfKey,
 	}
+}
+
+func (u *Updater) Apply(
+	ctx context.Context,
+	workflowLease api.WorkflowLease,
+) (*api.UpdateWorkflowAction, error) {
+	ms := workflowLease.GetMutableState()
+	if !ms.IsWorkflowExecutionRunning() {
+		return nil, consts.ErrWorkflowCompleted
+	}
+
+	// wfKey built from request may have blank RunID so assign a fully populated version
+	u.wfKey = ms.GetWorkflowKey()
+
+	if u.request.GetRequest().GetFirstExecutionRunId() != "" && ms.GetExecutionInfo().GetFirstExecutionRunId() != u.request.GetRequest().GetFirstExecutionRunId() {
+		return nil, consts.ErrWorkflowExecutionNotFound
+	}
+
+	if ms.GetExecutionInfo().WorkflowTaskAttempt >= failUpdateWorkflowTaskAttemptCount {
+		// If workflow task is constantly failing, the update to that workflow will also fail.
+		// Additionally, workflow update can't "fix" workflow state because updates (delivered with messages)
+		// are applied after events.
+		// Failing API call fast here to prevent wasting resources for an update that will fail.
+		u.shardCtx.GetLogger().Info("Fail update fast due to WorkflowTask in failed state.",
+			tag.WorkflowNamespace(u.request.Request.Namespace),
+			tag.WorkflowNamespaceID(u.wfKey.NamespaceID),
+			tag.WorkflowID(u.wfKey.WorkflowID),
+			tag.WorkflowRunID(u.wfKey.RunID))
+		return nil, serviceerror.NewWorkflowNotReady("Unable to perform workflow execution update due to Workflow Task in failed state.")
+	}
+
+	updateID := u.request.GetRequest().GetRequest().GetMeta().GetUpdateId()
+	updateReg := workflowLease.GetContext().UpdateRegistry(ctx)
+	var (
+		alreadyExisted bool
+		err            error
+	)
+	if u.upd, alreadyExisted, err = updateReg.FindOrCreate(ctx, updateID); err != nil {
+		return nil, err
+	}
+	if err = u.upd.Request(ctx, u.request.GetRequest().GetRequest(), workflow.WithEffects(effect.Immediate(ctx), ms)); err != nil {
+		return nil, err
+	}
+
+	// If WT is scheduled, but not started, updates will be attached to it, when WT is started.
+	// If WT has already started, new speculative WT will be created when started WT completes.
+	// If update is duplicate, then WT for this update was already created.
+	if alreadyExisted || ms.HasPendingWorkflowTask() {
+		return &api.UpdateWorkflowAction{
+			Noop:               true,
+			CreateWorkflowTask: false,
+		}, nil
+	}
+
+	// Speculative WT can be created only if there are no events which worker has not yet seen,
+	// i.e. last event in the history is WTCompleted event.
+	// It is guaranteed that WTStarted event is followed by WTCompleted event and history tail might look like:
+	//   WTStarted
+	//   WTCompleted
+	//   --> NextEventID points here
+	// In this case difference between NextEventID and LastWorkflowTaskStartedEventID is 2.
+	// If there are other events after WTCompleted event, then difference is > 2 and speculative WT can't be created.
+	canCreateSpeculativeWT := ms.GetNextEventID() == ms.GetLastWorkflowTaskStartedEventID()+2
+	if !canCreateSpeculativeWT {
+		return &api.UpdateWorkflowAction{
+			Noop:               false,
+			CreateWorkflowTask: true,
+		}, nil
+	}
+
+	// This will try not to add an event but will create speculative WT in mutable state.
+	newWorkflowTask, err := ms.AddWorkflowTaskScheduledEvent(false, enumsspb.WORKFLOW_TASK_TYPE_SPECULATIVE)
+	if err != nil {
+		return nil, err
+	}
+	if newWorkflowTask.Type != enumsspb.WORKFLOW_TASK_TYPE_SPECULATIVE {
+		// This should never happen because WT is created as normal (despite speculative is requested)
+		// only if there were buffered events and because there were no pending WT, there can't be buffered events.
+		return nil, consts.ErrWorkflowTaskStateInconsistent
+	}
+
+	u.scheduledEventID = newWorkflowTask.ScheduledEventID
+	if _, scheduleToStartTimeoutPtr := ms.TaskQueueScheduleToStartTimeout(ms.CurrentTaskQueue().Name); scheduleToStartTimeoutPtr != nil {
+		u.scheduleToStartTimeout = scheduleToStartTimeoutPtr.AsDuration()
+	}
+
+	u.taskQueue = common.CloneProto(newWorkflowTask.TaskQueue)
+	u.normalTaskQueueName = ms.GetExecutionInfo().TaskQueue
+	u.directive = worker_versioning.MakeDirectiveForWorkflowTask(
+		ms.GetWorkerVersionStamp(),
+		ms.GetLastWorkflowTaskStartedEventID(),
+	)
+
+	return &api.UpdateWorkflowAction{
+		Noop:               true,
+		CreateWorkflowTask: false,
+	}, nil
 }
 
 func (u *Updater) Invoke(
@@ -101,130 +205,25 @@ func (u *Updater) Invoke(
 ) (*historyservice.UpdateWorkflowExecutionResponse, error) {
 	fmt.Println("===== [API]", "updateworkflow.Invoke")
 
-	u.wfKey = definition.NewWorkflowKey(
-		u.request.NamespaceId,
-		u.request.Request.WorkflowExecution.WorkflowId,
-		u.request.Request.WorkflowExecution.RunId,
+	err := api.GetAndUpdateWorkflowWithNew(
+		ctx,
+		nil,
+		api.BypassMutableStateConsistencyPredicate,
+		u.wfKey,
+		func(lease api.WorkflowLease) (*api.UpdateWorkflowAction, error) { return u.Apply(ctx, workflowLease) },
+		nil,
+		u.shardCtx,
+		u.workflowConsistencyChecker,
 	)
 
-	action := func(workflowLease api.WorkflowLease) (*api.UpdateWorkflowAction, error) {
-		ms := workflowLease.GetMutableState()
-		if !ms.IsWorkflowExecutionRunning() {
-			return nil, consts.ErrWorkflowCompleted
-		}
+	return u.AfterPersist(ctx, err)
+}
 
-		// wfKey built from request may have blank RunID so assign a fully populated version
-		u.wfKey = ms.GetWorkflowKey()
-
-		if u.request.GetRequest().GetFirstExecutionRunId() != "" && ms.GetExecutionInfo().GetFirstExecutionRunId() != u.request.GetRequest().GetFirstExecutionRunId() {
-			return nil, consts.ErrWorkflowExecutionNotFound
-		}
-
-		if ms.GetExecutionInfo().WorkflowTaskAttempt >= failUpdateWorkflowTaskAttemptCount {
-			// If workflow task is constantly failing, the update to that workflow will also fail.
-			// Additionally, workflow update can't "fix" workflow state because updates (delivered with messages)
-			// are applied after events.
-			// Failing API call fast here to prevent wasting resources for an update that will fail.
-			u.shardCtx.GetLogger().Info("Fail update fast due to WorkflowTask in failed state.",
-				tag.WorkflowNamespace(u.request.Request.Namespace),
-				tag.WorkflowNamespaceID(u.wfKey.NamespaceID),
-				tag.WorkflowID(u.wfKey.WorkflowID),
-				tag.WorkflowRunID(u.wfKey.RunID))
-			return nil, serviceerror.NewWorkflowNotReady("Unable to perform workflow execution update due to Workflow Task in failed state.")
-		}
-
-		updateID := u.request.GetRequest().GetRequest().GetMeta().GetUpdateId()
-		updateReg := workflowLease.GetContext().UpdateRegistry(ctx)
-		var (
-			alreadyExisted bool
-			err            error
-		)
-		if u.upd, alreadyExisted, err = updateReg.FindOrCreate(ctx, updateID); err != nil {
-			return nil, err
-		}
-		if err = u.upd.Request(ctx, u.request.GetRequest().GetRequest(), workflow.WithEffects(effect.Immediate(ctx), ms)); err != nil {
-			return nil, err
-		}
-
-		// If WT is scheduled, but not started, updates will be attached to it, when WT is started.
-		// If WT has already started, new speculative WT will be created when started WT completes.
-		// If update is duplicate, then WT for this update was already created.
-		if alreadyExisted || ms.HasPendingWorkflowTask() {
-			return &api.UpdateWorkflowAction{
-				Noop:               true,
-				CreateWorkflowTask: false,
-			}, nil
-		}
-
-		// Speculative WT can be created only if there are no events which worker has not yet seen,
-		// i.e. last event in the history is WTCompleted event.
-		// It is guaranteed that WTStarted event is followed by WTCompleted event and history tail might look like:
-		//   WTStarted
-		//   WTCompleted
-		//   --> NextEventID points here
-		// In this case difference between NextEventID and LastWorkflowTaskStartedEventID is 2.
-		// If there are other events after WTCompleted event, then difference is > 2 and speculative WT can't be created.
-		canCreateSpeculativeWT := ms.GetNextEventID() == ms.GetLastWorkflowTaskStartedEventID()+2
-		if !canCreateSpeculativeWT {
-			return &api.UpdateWorkflowAction{
-				Noop:               false,
-				CreateWorkflowTask: true,
-			}, nil
-		}
-
-		// This will try not to add an event but will create speculative WT in mutable state.
-		newWorkflowTask, err := ms.AddWorkflowTaskScheduledEvent(false, enumsspb.WORKFLOW_TASK_TYPE_SPECULATIVE)
-		if err != nil {
-			return nil, err
-		}
-		if newWorkflowTask.Type != enumsspb.WORKFLOW_TASK_TYPE_SPECULATIVE {
-			// This should never happen because WT is created as normal (despite speculative is requested)
-			// only if there were buffered events and because there were no pending WT, there can't be buffered events.
-			return nil, consts.ErrWorkflowTaskStateInconsistent
-		}
-
-		u.scheduledEventID = newWorkflowTask.ScheduledEventID
-		if _, scheduleToStartTimeoutPtr := ms.TaskQueueScheduleToStartTimeout(ms.CurrentTaskQueue().Name); scheduleToStartTimeoutPtr != nil {
-			u.scheduleToStartTimeout = scheduleToStartTimeoutPtr.AsDuration()
-		}
-
-		u.taskQueue = common.CloneProto(newWorkflowTask.TaskQueue)
-		u.normalTaskQueueName = ms.GetExecutionInfo().TaskQueue
-		u.directive = worker_versioning.MakeDirectiveForWorkflowTask(
-			ms.GetWorkerVersionStamp(),
-			ms.GetLastWorkflowTaskStartedEventID(),
-		)
-
-		return &api.UpdateWorkflowAction{
-			Noop:               true,
-			CreateWorkflowTask: false,
-		}, nil
-	}
-
-	// TODO: abstract this into a wrapper
-	var err error
-	if workflowLease == nil {
-		err = api.GetAndUpdateWorkflowWithNew(
-			ctx,
-			nil,
-			api.BypassMutableStateConsistencyPredicate,
-			u.wfKey,
-			action,
-			nil,
-			u.shardCtx,
-			u.workflowConsistencyChecker,
-		)
-	} else {
-		err = api.UpdateWorkflowWithNew(
-			u.shardCtx,
-			ctx,
-			workflowLease,
-			action,
-			nil,
-		)
-		workflowLease.GetReleaseFn()(nil) // TODO: move this
-	}
-
+// TODO onCommit / onRollback
+func (u *Updater) AfterPersist(
+	ctx context.Context,
+	err error,
+) (*historyservice.UpdateWorkflowExecutionResponse, error) {
 	// Wrapping workflow context related operation in separate func to prevent usage of its fields
 	// (including any mutable state fields) outside of this func after workflow lock is released.
 	// It is important to release workflow lock before calling matching.

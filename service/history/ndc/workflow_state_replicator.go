@@ -117,6 +117,7 @@ func (r *WorkflowStateReplicatorImpl) SyncWorkflowState(
 			WorkflowId: wid,
 			RunId:      rid,
 		},
+		nil,
 		workflow.LockPriorityLow,
 	)
 	if err != nil {

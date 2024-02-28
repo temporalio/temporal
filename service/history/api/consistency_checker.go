@@ -180,6 +180,7 @@ func (c *WorkflowConsistencyCheckerImpl) getWorkflowLeaseValidatedByClock(
 			WorkflowId: workflowKey.WorkflowID,
 			RunId:      workflowKey.RunID,
 		},
+		nil,
 		lockPriority,
 	)
 	if err != nil {
@@ -215,6 +216,7 @@ func (c *WorkflowConsistencyCheckerImpl) getWorkflowLeaseValidatedByCheck(
 			WorkflowId: workflowKey.WorkflowID,
 			RunId:      workflowKey.RunID,
 		},
+		nil,
 		lockPriority,
 	)
 	if err != nil {

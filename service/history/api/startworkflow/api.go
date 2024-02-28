@@ -232,7 +232,9 @@ func (s *Starter) lockCurrentWorkflowExecution(
 func (s *Starter) createNewMutableState(ctx context.Context, workflowID string) (*creationParams, error) {
 	runID := uuid.NewString()
 	workflowLease, err := api.NewWorkflowWithSignal(
+		ctx,
 		s.shardContext,
+		s.workflowConsistencyChecker.GetWorkflowCache(),
 		s.namespace,
 		workflowID,
 		runID,
@@ -242,9 +244,6 @@ func (s *Starter) createNewMutableState(ctx context.Context, workflowID string) 
 	if err != nil {
 		return nil, err
 	}
-
-	// HACK
-	workflowLease.GetContext().SetMutableState(workflowLease.GetMutableState())
 
 	mutableState := workflowLease.GetMutableState()
 	workflowTaskInfo := mutableState.GetStartedWorkflowTask()
@@ -391,13 +390,7 @@ func (s *Starter) applyWorkflowIDReusePolicy(
 		),
 		prevExecutionUpdateAction,
 		func() (workflow.Context, workflow.MutableState, error) {
-			workflowLease, err := api.NewWorkflowWithSignal(
-				s.shardContext,
-				s.namespace,
-				workflowID,
-				creationParams.runID,
-				s.request,
-				nil)
+			workflowLease, err := api.NewWorkflowWithSignal(ctx, s.shardContext, nil, s.namespace, workflowID, creationParams.runID, s.request, nil)
 			if err != nil {
 				return nil, nil, err
 			}
@@ -475,6 +468,7 @@ func (s *Starter) getMutableStateInfo(ctx context.Context, runID string) (*mutab
 		s.shardContext,
 		s.namespace.ID(),
 		&commonpb.WorkflowExecution{WorkflowId: s.request.StartRequest.WorkflowId, RunId: runID},
+		nil,
 		workflow.LockPriorityHigh,
 	)
 	if err != nil {

@@ -29,6 +29,7 @@ package workflow
 import (
 	"context"
 	"fmt"
+	"unsafe"
 
 	"go.opentelemetry.io/otel/trace"
 	commonpb "go.temporal.io/api/common/v1"
@@ -67,7 +68,6 @@ type (
 	Context interface {
 		GetWorkflowKey() definition.WorkflowKey
 
-		SetMutableState(ms MutableState)
 		LoadMutableState(ctx context.Context, shardContext shard.Context) (MutableState, error)
 		LoadExecutionStats(ctx context.Context, shardContext shard.Context) (*persistencespb.ExecutionStats, error)
 		Clear()
@@ -169,18 +169,24 @@ var _ Context = (*ContextImpl)(nil)
 func NewContext(
 	config *configs.Config,
 	workflowKey definition.WorkflowKey,
+	mutableState MutableState,
 	logger log.Logger,
 	throttledLogger log.ThrottledLogger,
 	metricsHandler metrics.Handler,
 ) *ContextImpl {
-	return &ContextImpl{
+	c := &ContextImpl{
 		workflowKey:     workflowKey,
+		MutableState:    mutableState,
 		logger:          logger,
 		throttledLogger: throttledLogger,
 		metricsHandler:  metricsHandler.WithTags(metrics.OperationTag(metrics.WorkflowContextScope)),
 		config:          config,
 		mutex:           locks.NewPriorityMutex(),
 	}
+	if workflowKey.WorkflowID == "WORKFLOW-ID" {
+		fmt.Println("[WCTX] NewContext", unsafe.Pointer(c))
+	}
+	return c
 }
 
 func (c *ContextImpl) Lock(
@@ -875,6 +881,7 @@ func (c *ContextImpl) ReapplyEvents(
 
 func (c *ContextImpl) UpdateRegistry(ctx context.Context) update.Registry {
 	if c.updateRegistry == nil {
+		fmt.Println("[WCTX]", "UpdateRegistry", unsafe.Pointer(c))
 		nsIDStr := c.MutableState.GetNamespaceEntry().ID().String()
 		c.updateRegistry = update.NewRegistry(
 			func() update.Store { return c.MutableState },

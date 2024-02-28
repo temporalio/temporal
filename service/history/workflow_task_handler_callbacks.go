@@ -755,6 +755,7 @@ func (handler *workflowTaskHandlerCallbacksImpl) handleWorkflowTaskCompleted(
 					newWorkflowExecutionInfo.WorkflowId,
 					newWorkflowExecutionState.RunId,
 				),
+				nil,
 				handler.logger,
 				handler.shardContext.GetThrottledLogger(),
 				handler.shardContext.GetMetricsHandler(),
