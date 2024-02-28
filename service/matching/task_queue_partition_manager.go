@@ -110,29 +110,25 @@ var _ taskQueuePartitionManager = (*taskQueuePartitionManagerImpl)(nil)
 
 func newTaskQueuePartitionManager(
 	e *matchingEngineImpl,
+	namespace *namespace.Namespace,
 	partition tqid.Partition,
 	tqConfig *taskQueueConfig,
 	userDataManager userDataManager,
 ) (*taskQueuePartitionManagerImpl, error) {
-	namespaceEntry, err := e.namespaceRegistry.GetNamespaceByID(partition.NamespaceId())
-	if err != nil {
-		return nil, err
-	}
-	nsName := namespaceEntry.Name()
-
+	nsName := namespace.Name().String()
 	logger := log.With(e.logger,
 		tag.WorkflowTaskQueueName(partition.RpcName()),
 		tag.WorkflowTaskQueueType(partition.TaskType()),
-		tag.WorkflowNamespace(nsName.String()))
+		tag.WorkflowNamespace(nsName))
 	throttledLogger := log.With(e.throttledLogger,
 		tag.WorkflowTaskQueueName(partition.RpcName()),
 		tag.WorkflowTaskQueueType(partition.TaskType()),
-		tag.WorkflowNamespace(nsName.String()))
+		tag.WorkflowNamespace(nsName))
 	taggedMetricsHandler := metrics.GetPerTaskQueueScope(
 		e.metricsHandler.WithTags(
 			metrics.OperationTag(metrics.MatchingTaskQueuePartitionManagerScope),
 			metrics.TaskQueueTypeTag(partition.TaskType())),
-		nsName.String(),
+		nsName,
 		partition.RpcName(),
 		partition.Kind(),
 	)
@@ -380,7 +376,7 @@ func (pm *taskQueuePartitionManagerImpl) getVersionedQueue(
 	create bool,
 ) (physicalTaskQueueManager, error) {
 	if pm.partition.Kind() == enumspb.TASK_QUEUE_KIND_STICKY {
-		panic("versioned queues can't be used in sticky partitions")
+		return nil, serviceerror.NewInternal("versioned queues can't be used in sticky partitions")
 	}
 	tqm, err := pm.getVersionedQueueNoWait(versionSet, buildId, create)
 	if err != nil || tqm == nil {

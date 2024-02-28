@@ -196,7 +196,7 @@ func newMatchingEngine(
 
 func (s *matchingEngineSuite) newPartitionManager(prtn tqid.Partition, config *Config) taskQueuePartitionManager {
 	tqConfig := newTaskQueueConfig(prtn.TaskQueue(), config, matchingTestNamespace)
-	pm, err := newTaskQueuePartitionManager(s.matchingEngine, prtn, tqConfig, &mockUserDataManager{})
+	pm, err := newTaskQueuePartitionManager(s.matchingEngine, nil, prtn, tqConfig, &mockUserDataManager{})
 	s.Require().NoError(err)
 	return pm
 }

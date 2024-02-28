@@ -28,7 +28,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
-	taskqueue2 "go.temporal.io/api/taskqueue/v1"
+	"go.temporal.io/api/taskqueue/v1"
 	"go.temporal.io/server/api/persistence/v1"
 )
 
@@ -48,5 +48,5 @@ func TestFindAssignmentBuildId_TwoFullRules(t *testing.T) {
 }
 
 func createFullAssignmentRule(buildId string) *persistence.AssignmentRule {
-	return &persistence.AssignmentRule{Rule: &taskqueue2.BuildIdAssignmentRule{TargetBuildId: buildId}}
+	return &persistence.AssignmentRule{Rule: &taskqueue.BuildIdAssignmentRule{TargetBuildId: buildId}}
 }

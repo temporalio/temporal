@@ -312,7 +312,7 @@ func (e *matchingEngineImpl) getTaskQueuePartitionManagerNoWait(
 			nsName := namespaceEntry.Name()
 			tqConfig := newTaskQueueConfig(partition.TaskQueue(), e.config, nsName)
 			userDataManager := newUserDataManager(e.taskManager, e.matchingRawClient, partition, tqConfig, e.logger, e.namespaceRegistry)
-			pm, err = newTaskQueuePartitionManager(e, partition, tqConfig, userDataManager)
+			pm, err = newTaskQueuePartitionManager(e, namespaceEntry, partition, tqConfig, userDataManager)
 			if err != nil {
 				e.partitionsLock.Unlock()
 				return nil, err

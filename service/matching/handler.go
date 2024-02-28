@@ -154,7 +154,10 @@ func (h *Handler) AddActivityTask(
 		opMetrics.Timer(metrics.SyncMatchLatencyPerTaskQueue.Name()).Record(time.Since(startT))
 		return &matchingservice.AddActivityTaskResponse{}, err
 	}
-	// include build ID only if the task is spooled
+	// Include build ID only if the task is spooled. The returned build ID is used by History to update
+	// mutable state (and visibility) when the first workflow task is spooled.
+	// For sync-match case, History has already received the build ID in the RecordActivityTaskStarted call.
+	// By omitting the build ID from this response we help History immediately know that no MS update is needed.
 	return &matchingservice.AddActivityTaskResponse{AssignedBuildId: buildId}, err
 }
 
@@ -180,7 +183,10 @@ func (h *Handler) AddWorkflowTask(
 		opMetrics.Timer(metrics.SyncMatchLatencyPerTaskQueue.Name()).Record(time.Since(startT))
 		return &matchingservice.AddWorkflowTaskResponse{}, err
 	}
-	// include build ID only if the task is spooled
+	// Include build ID only if the task is spooled. The returned build ID is used by History to update
+	// mutable state (and visibility) when the first workflow task is spooled.
+	// For sync-match case, History has already received the build ID in the RecordWorkflowTaskStarted call.
+	// By omitting the build ID from this response we help History immediately know that no MS update is needed.
 	return &matchingservice.AddWorkflowTaskResponse{AssignedBuildId: buildId}, err
 }
 

@@ -236,8 +236,8 @@ func (s *VersioningIntegSuite) TestMaxTaskQueuesPerBuildIdEnforced() {
 
 func (s *VersioningIntegSuite) testWithMatchingBehavior(subtest func()) {
 	dc := s.testCluster.host.dcClient
-	for _, forceForward := range []bool{false} {
-		for _, forceAsync := range []bool{true} {
+	for _, forceForward := range []bool{false, true} {
+		for _, forceAsync := range []bool{false, true} {
 			name := "NoForward"
 			if forceForward {
 				// force two levels of forwarding
