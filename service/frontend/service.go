@@ -191,6 +191,9 @@ type Config struct {
 	// EnableNexusHTTPHandler controls whether to register a handler for Nexus HTTP requests.
 	EnableNexusHTTPHandler dynamicconfig.BoolPropertyFn
 
+	// EnableOpenAPIHTTPHandler controls whether to register a handler for OpenAPI doc HTTP requests.
+	EnableOpenAPIHTTPHandler dynamicconfig.BoolPropertyFn
+
 	// EnableCallbackAttachment enables attaching callbacks to workflows.
 	EnableCallbackAttachment    dynamicconfig.BoolPropertyFnWithNamespaceFilter
 	AdminEnableListHistoryTasks dynamicconfig.BoolPropertyFn
@@ -293,6 +296,7 @@ func NewConfig(
 		AdminDeleteAccessHistoryFraction: dc.GetFloat64Property(dynamicconfig.FrontendAdminDeleteAccessHistoryFraction, 0.0),
 
 		EnableNexusHTTPHandler:      dc.GetBoolProperty(dynamicconfig.FrontendEnableNexusHTTPHandler, false),
+		EnableOpenAPIHTTPHandler:    dc.GetBoolProperty(dynamicconfig.FrontendEnableOpenAPIHTTPHandler, false),
 		EnableCallbackAttachment:    dc.GetBoolPropertyFnWithNamespaceFilter(dynamicconfig.FrontendEnableCallbackAttachment, false),
 		AdminEnableListHistoryTasks: dc.GetBoolProperty(dynamicconfig.AdminEnableListHistoryTasks, true),
 	}
