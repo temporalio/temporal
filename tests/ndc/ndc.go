@@ -26,12 +26,10 @@ package ndc
 
 import (
 	"context"
-	"flag"
 	"fmt"
 	"math/rand"
 	"os"
 	"sync/atomic"
-	"testing"
 	"time"
 
 	"go.temporal.io/api/serviceerror"
@@ -104,11 +102,6 @@ type (
 		standByTaskID               int64
 	}
 )
-
-func TestNDCFuncTestSuite(t *testing.T) {
-	flag.Parse()
-	suite.Run(t, new(NDCFunctionalTestSuite))
-}
 
 func (s *NDCFunctionalTestSuite) SetupSuite() {
 	s.logger = log.NewTestLogger()

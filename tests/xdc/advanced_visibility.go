@@ -27,10 +27,8 @@
 package xdc
 
 import (
-	"flag"
 	"fmt"
 	"os"
-	"testing"
 	"time"
 
 	"github.com/pborman/uuid"
@@ -82,11 +80,6 @@ type AdvVisCrossDCTestSuite struct {
 
 	testSearchAttributeKey string
 	testSearchAttributeVal string
-}
-
-func TestAdvVisCrossDCTestSuite(t *testing.T) {
-	flag.Parse()
-	suite.Run(t, new(AdvVisCrossDCTestSuite))
 }
 
 var (

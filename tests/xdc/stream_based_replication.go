@@ -26,12 +26,10 @@ package xdc
 
 import (
 	"context"
-	"testing"
 	"time"
 
 	"github.com/golang/mock/gomock"
 	"github.com/pborman/uuid"
-	"github.com/stretchr/testify/suite"
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	historypb "go.temporal.io/api/history/v1"
@@ -65,10 +63,6 @@ type (
 		generator     test.Generator
 	}
 )
-
-func TestStreamBasedReplicationTestSuite(t *testing.T) {
-	suite.Run(t, new(streamBasedReplicationTestSuite))
-}
 
 func (s *streamBasedReplicationTestSuite) SetupSuite() {
 	s.controller = gomock.NewController(s.T())

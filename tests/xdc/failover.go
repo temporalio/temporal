@@ -33,13 +33,10 @@ import (
 	"context"
 	"encoding/binary"
 	"errors"
-	"flag"
 	"strconv"
-	"testing"
 	"time"
 
 	"github.com/pborman/uuid"
-	"github.com/stretchr/testify/suite"
 	commandpb "go.temporal.io/api/command/v1"
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
@@ -73,11 +70,6 @@ type (
 		xdcBaseSuite
 	}
 )
-
-func TestFuncClustersTestSuite(t *testing.T) {
-	flag.Parse()
-	suite.Run(t, new(FunctionalClustersTestSuite))
-}
 
 func (s *FunctionalClustersTestSuite) SetupSuite() {
 	s.setupSuite([]string{"integ_active", "integ_standby"})

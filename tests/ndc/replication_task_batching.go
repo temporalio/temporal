@@ -26,10 +26,8 @@ package ndc
 
 import (
 	"context"
-	"flag"
 	"os"
 	"sync/atomic"
-	"testing"
 	"time"
 
 	"github.com/golang/mock/gomock"
@@ -86,11 +84,6 @@ type (
 		logger          log.Logger
 	}
 )
-
-func TestNDCReplicationTaskBatching(t *testing.T) {
-	flag.Parse()
-	suite.Run(t, new(NDCReplicationTaskBatchingTestSuite))
-}
 
 func (s *NDCReplicationTaskBatchingTestSuite) SetupSuite() {
 	s.logger = log.NewNoopLogger()

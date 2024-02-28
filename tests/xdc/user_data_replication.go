@@ -29,13 +29,10 @@
 package xdc
 
 import (
-	"flag"
 	"fmt"
-	"testing"
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/stretchr/testify/suite"
 	commandpb "go.temporal.io/api/command/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
@@ -64,11 +61,6 @@ type (
 		xdcBaseSuite
 	}
 )
-
-func TestUserDataReplicationTestSuite(t *testing.T) {
-	flag.Parse()
-	suite.Run(t, new(UserDataReplicationTestSuite))
-}
 
 func (s *UserDataReplicationTestSuite) SetupSuite() {
 	s.dynamicConfigOverrides = map[dynamicconfig.Key]interface{}{

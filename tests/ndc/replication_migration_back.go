@@ -26,10 +26,8 @@ package ndc
 
 import (
 	"context"
-	"flag"
 	"os"
 	"sync/atomic"
-	"testing"
 	"time"
 
 	"github.com/golang/mock/gomock"
@@ -85,12 +83,6 @@ type (
 		logger          log.Logger
 	}
 )
-
-func TestReplicationMigrationBackTest(t *testing.T) {
-	flag.Parse()
-	suite.Run(t, new(ReplicationMigrationBackTestSuite))
-
-}
 
 func (s *ReplicationMigrationBackTestSuite) SetupSuite() {
 	s.logger = log.NewNoopLogger()
