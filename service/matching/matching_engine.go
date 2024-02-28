@@ -276,7 +276,7 @@ func (e *matchingEngineImpl) watchMembership() {
 			// Note that we don't verify ownership at load time, so this is the only guard against a task
 			// queue bouncing back and forth due to long membership propagation time.
 			batch := ids[i:min(len(ids), i+batchSize)]
-			wait := backoff.Jitter(delay, 0.2)
+			wait := backoff.Jitter(delay, 0.1)
 			time.AfterFunc(wait, func() {
 				// maybe the whole engine stopped
 				if atomic.LoadInt32(&e.status) != common.DaemonStatusStarted {
