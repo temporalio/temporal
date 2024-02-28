@@ -47,6 +47,7 @@ import (
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/primitives"
 	"go.temporal.io/server/common/rpc/encryption"
+	"go.temporal.io/server/common/util"
 	"go.temporal.io/server/environment"
 )
 
@@ -144,11 +145,23 @@ func (factory *factory) getMonitor() *monitor {
 			factory.broadcastAddressResolver,
 			factory.Config.MaxJoinDuration,
 			maxPropagationTime,
-			time.Time{}, // TODO: set this based on dynamic config
+			factory.getJoinTime(maxPropagationTime),
 		)
 	})
 
 	return factory.monitor
+}
+
+func (factory *factory) getJoinTime(maxPropagationTime time.Duration) time.Time {
+	var alignTime time.Duration
+	switch factory.ServiceName {
+	case primitives.MatchingService:
+		alignTime = factory.DC.GetDurationProperty(dynamicconfig.MatchingAlignMembershipChange, 0*time.Second)()
+	}
+	if alignTime == 0 {
+		return time.Time{}
+	}
+	return util.NextAlignedTime(time.Now().Add(maxPropagationTime), alignTime)
 }
 
 func (factory *factory) broadcastAddressResolver() (string, error) {

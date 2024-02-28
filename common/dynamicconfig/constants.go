@@ -456,6 +456,9 @@ const (
 	MatchingForwarderMaxRatePerSecond = "matching.forwarderMaxRatePerSecond"
 	// MatchingForwarderMaxChildrenPerNode is the max number of children per node in the task queue partition tree
 	MatchingForwarderMaxChildrenPerNode = "matching.forwarderMaxChildrenPerNode"
+	// MatchingAlignMembershipChange is a duration to align matching's membership changes to.
+	// This can help reduce effects of task queue movement.
+	MatchingAlignMembershipChange = "matching.alignMembershipChange"
 	// MatchingShutdownDrainDuration is the duration of traffic drain during shutdown
 	MatchingShutdownDrainDuration = "matching.shutdownDrainDuration"
 	// MatchingGetUserDataLongPollTimeout is the max length of long polls for GetUserData calls between partitions.

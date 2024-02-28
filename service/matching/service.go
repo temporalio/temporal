@@ -39,6 +39,7 @@ import (
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/persistence/client"
 	"go.temporal.io/server/common/persistence/visibility/manager"
+	"go.temporal.io/server/common/util"
 )
 
 // Service represents the matching service
@@ -111,18 +112,38 @@ func (s *Service) Start() {
 // Stop stops the service
 func (s *Service) Stop() {
 	// remove self from membership ring and wait for traffic to drain
-	s.logger.Info("ShutdownHandler: Evicting self from membership ring")
-	if err := s.membershipMonitor.EvictSelf(); err != nil {
+	var err error
+	var waitTime time.Duration
+	if align := s.config.AlignMembershipChange(); align > 0 {
+		propagation := s.membershipMonitor.ApproximateMaxPropagationTime()
+		asOf := util.NextAlignedTime(time.Now().Add(propagation), align)
+		s.logger.Info("ShutdownHandler: Evicting self from membership ring as of", tag.Timestamp(asOf))
+		waitTime, err = s.membershipMonitor.EvictSelfAt(asOf)
+	} else {
+		s.logger.Info("ShutdownHandler: Evicting self from membership ring immediately")
+		err = s.membershipMonitor.EvictSelf()
+	}
+	if err != nil {
 		s.logger.Error("ShutdownHandler: Failed to evict self from membership ring", tag.Error(err))
 	}
 	s.healthServer.SetServingStatus(serviceName, healthpb.HealthCheckResponse_NOT_SERVING)
+
 	s.logger.Info("ShutdownHandler: Waiting for others to discover I am unhealthy")
-	time.Sleep(s.config.ShutdownDrainDuration())
+	time.Sleep(max(s.config.ShutdownDrainDuration(), waitTime))
 
-	// TODO: Change this to GracefulStop when integration tests are refactored.
-	s.server.Stop()
-
+	// At this point we should not get any new rpcs since we removed ourself from the ring.
+	// Additionally, the engine will notice the membership change and stop all task queues
+	// after a delay. However, we can do it immediately by stopping the handler (which stops
+	// the engine which stops all task queues).
 	s.handler.Stop()
+
+	// All grpc handlers should be cancelled now. Give them a little time to return.
+	t := time.AfterFunc(2*time.Second, func() {
+		s.logger.Info("ShutdownHandler: Drain time expired, stopping all traffic")
+		s.server.Stop()
+	})
+	s.server.GracefulStop()
+	t.Stop()
 
 	s.visibilityManager.Close()
 
