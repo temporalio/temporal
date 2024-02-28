@@ -16,18 +16,21 @@ itself](https://github.com/open-telemetry/opentelemetry-specification/blob/main/
 ## Configuring
 
 No trace exporters are configured by default and thus trace data is neither
-collected nor emitted without additional configuration added to the server's
-yaml configuration files. 
+collected nor emitted without additional configuration.
 
-The server now supports a new `otel` YAML stanza which is used to configure a
-set of process-wide exporters. In OpenTelemetry, the concept of an "exporter" is
+In OpenTelemetry, the concept of an "exporter" is
 abstract. The concrete implementation of an exporter is determined by a
-3-tuple of values: the exporter signal, model, and protocol. In OTEL, a "signal"
-is one of traces, metrics, or logs (in this document we will only deal with
-traces), "model" indicates the abstract data model for the span and trace data
-being exported, and the "protocol" specifies the concrete application protocol
-binding for the indicated model. Temporal is known to support exporting trace
-data as defined by otlp over either grpc or http.
+3-tuple of values: the exporter signal, model, and protocol:
+- a "signal" is one of traces, metrics, or logs (in this document we will only deal with traces),
+- "model" indicates the abstract data model for the span and trace data being exported,
+- and the "protocol" specifies the concrete application protocol binding for the indicated model.
+
+Temporal is known to support exporting trace data as defined by otlp over grpc.
+
+### Configuration File
+
+The server supports an `otel` YAML stanza which is used to configure a
+set of process-wide exporters. 
 
 A common configuration is to emit tracing data to an agent such as the
 [otel-collector](https://opentelemetry.io/docs/collector/) running locally. To
@@ -70,12 +73,34 @@ fields can be found in [config_test.go](../../common/telemetry/config_test.go)
 and are mostly related to the underlying gRPC client configuration (retries,
 timeouts, etc).
 
-Note that the Go OTEL SDK will also read a well-known set of environment
-variables for configuration. So if you prefer setting environment variables to
-writing YAML then you can use the [variables defined in the OTEL
-spec](https://github.com/open-telemetry/opentelemetry-specification/blob/main/specification/sdk-environment-variables.md).
-If environment variables conflict with YAML-provided configuration then the YAML
-takes precedence.
+### Environment Variables
+
+#### Creating Exporter
+
+An OTEL span exporter can also be configured via environment variables: [OTEL_TRACES_EXPORTER](
+https://opentelemetry.io/docs/specs/otel/configuration/sdk-environment-variables/#exporter-selection) 
+creates a span exporter.
+
+```
+OTEL_TRACES_EXPORTER=otlp
+```
+
+Note that if the configuration file already defines a traces exporter, no additional exporter 
+will be created.
+
+#### Configuring Exporter
+
+The Go OTEL SDK will also read a well-known set of environment variables for the configuration
+of the exporter. So if you prefer setting environment variables to writing YAML then you can use the
+[variables defined in the OTEL spec](https://opentelemetry.io/docs/specs/otel/configuration/sdk-environment-variables/).
+
+For example:
+```
+OTEL_SERVICE_NAME=my-service OTEL_EXPORTER_OTLP_TRACES_INSECURE=true
+```
+
+**NOTE: If an environment variable conflicts with YAML-provided configuration then the environment 
+variable takes precedence.**
 
 ## Instrumenting
 
