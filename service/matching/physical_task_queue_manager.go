@@ -410,7 +410,7 @@ func (c *physicalTaskQueueManagerImpl) PollTask(
 		return nil, err
 	}
 
-	task.namespace = c.partitionMgr.namespaceName
+	task.namespace = c.partitionMgr.ns.Name()
 	task.backlogCountHint = c.taskAckManager.getBacklogCountHint
 	return task, nil
 }

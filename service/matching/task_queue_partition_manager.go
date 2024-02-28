@@ -87,10 +87,10 @@ type (
 	//  - This behavior is subject to optimizations in the future: for versioned queues, keeping the default queue
 	//    loaded all the time may be suboptimal.
 	taskQueuePartitionManagerImpl struct {
-		engine        *matchingEngineImpl
-		partition     tqid.Partition
-		namespaceName namespace.Name
-		config        *taskQueueConfig
+		engine    *matchingEngineImpl
+		partition tqid.Partition
+		ns        *namespace.Namespace
+		config    *taskQueueConfig
 		// this is the default (unversioned) DB queue. As of now, some of the matters related to the whole TQ partition
 		// is delegated to the defaultQueue.
 		defaultQueue physicalTaskQueueManager
@@ -98,7 +98,6 @@ type (
 		versionedQueues      map[string]physicalTaskQueueManager
 		versionedQueuesLock  sync.RWMutex // locks mutation of versionedQueues
 		userDataManager      userDataManager
-		namespaceRegistry    namespace.Registry
 		logger               log.Logger
 		throttledLogger      log.ThrottledLogger
 		matchingClient       matchingservice.MatchingServiceClient
@@ -110,12 +109,12 @@ var _ taskQueuePartitionManager = (*taskQueuePartitionManagerImpl)(nil)
 
 func newTaskQueuePartitionManager(
 	e *matchingEngineImpl,
-	namespace *namespace.Namespace,
+	ns *namespace.Namespace,
 	partition tqid.Partition,
 	tqConfig *taskQueueConfig,
 	userDataManager userDataManager,
 ) (*taskQueuePartitionManagerImpl, error) {
-	nsName := namespace.Name().String()
+	nsName := ns.Name().String()
 	logger := log.With(e.logger,
 		tag.WorkflowTaskQueueName(partition.RpcName()),
 		tag.WorkflowTaskQueueType(partition.TaskType()),
@@ -136,8 +135,8 @@ func newTaskQueuePartitionManager(
 	pm := &taskQueuePartitionManagerImpl{
 		engine:               e,
 		partition:            partition,
+		ns:                   ns,
 		config:               tqConfig,
-		namespaceRegistry:    e.namespaceRegistry,
 		logger:               logger,
 		throttledLogger:      throttledLogger,
 		matchingClient:       e.matchingRawClient,
@@ -333,8 +332,7 @@ func (pm *taskQueuePartitionManagerImpl) LongPollExpirationInterval() time.Durat
 }
 
 func (pm *taskQueuePartitionManagerImpl) callerInfoContext(ctx context.Context) context.Context {
-	ns, _ := pm.namespaceRegistry.GetNamespaceName(pm.partition.NamespaceId())
-	return headers.SetCallerInfo(ctx, headers.NewBackgroundCallerInfo(ns.String()))
+	return headers.SetCallerInfo(ctx, headers.NewBackgroundCallerInfo(pm.ns.Name().String()))
 }
 
 func (pm *taskQueuePartitionManagerImpl) unloadPhysicalQueue(unloadedDbq physicalTaskQueueManager) {
