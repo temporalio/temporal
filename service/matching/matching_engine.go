@@ -1117,7 +1117,6 @@ func (e *matchingEngineImpl) GetTaskQueueUserData(
 			// If we're closing, return a success with no data, as if the request expired. We shouldn't
 			// close due to idleness (because of the MarkAlive above), so we're probably closing due to a
 			// change of ownership. The caller will retry and be redirected to the new owner.
-			resp.TaskQueueHasUserData = userData != nil
 			return resp, nil
 		} else if err != nil {
 			return nil, err
@@ -1126,14 +1125,12 @@ func (e *matchingEngineImpl) GetTaskQueueUserData(
 			// long-poll: wait for data to change/appear
 			select {
 			case <-ctx.Done():
-				resp.TaskQueueHasUserData = userData != nil
 				return resp, nil
 			case <-userDataChanged:
 				continue
 			}
 		}
 		if userData != nil {
-			resp.TaskQueueHasUserData = true
 			if userData.Version > version {
 				resp.UserData = userData
 			} else if userData.Version < version {
