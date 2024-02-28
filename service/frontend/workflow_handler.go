@@ -395,13 +395,13 @@ func (wh *WorkflowHandler) StartWorkflowExecution(ctx context.Context, request *
 		return nil, errRequestIDTooLong
 	}
 
-	request, err := wh.unaliasStartWorkflowExecutionRequestSearchAttributes(request, namespaceName)
+	sa, err := wh.unaliasedSearchAttributesFrom(request.GetSearchAttributes(), namespaceName)
 	if err != nil {
 		return nil, err
 	}
-
-	if err = wh.validateSearchAttributes(request.GetSearchAttributes(), namespaceName); err != nil {
-		return nil, err
+	if sa != request.SearchAttributes {
+		request = common.CloneProto(request)
+		request.SearchAttributes = sa
 	}
 
 	enums.SetDefaultWorkflowIdReusePolicy(&request.WorkflowIdReusePolicy)
@@ -1788,13 +1788,13 @@ func (wh *WorkflowHandler) SignalWithStartWorkflowExecution(ctx context.Context,
 		return nil, err
 	}
 
-	request, err := wh.unaliasSignalWithStartWorkflowExecutionRequestSearchAttributes(request, namespaceName)
+	sa, err := wh.unaliasedSearchAttributesFrom(request.GetSearchAttributes(), namespaceName)
 	if err != nil {
 		return nil, err
 	}
-
-	if err = wh.validateSearchAttributes(request.GetSearchAttributes(), namespaceName); err != nil {
-		return nil, err
+	if sa != request.GetSearchAttributes() {
+		request = common.CloneProto(request)
+		request.SearchAttributes = sa
 	}
 
 	enums.SetDefaultWorkflowIdReusePolicy(&request.WorkflowIdReusePolicy)
@@ -2665,12 +2665,7 @@ func (wh *WorkflowHandler) CreateSchedule(ctx context.Context, request *workflow
 	// Add namespace division before unaliasing search attributes.
 	searchattribute.AddSearchAttribute(&request.SearchAttributes, searchattribute.TemporalNamespaceDivision, payload.EncodeString(scheduler.NamespaceDivision))
 
-	request, err = wh.unaliasCreateScheduleRequestSearchAttributes(request, namespaceName)
-	if err != nil {
-		return nil, err
-	}
-
-	err = wh.validateSearchAttributes(request.GetSearchAttributes(), namespaceName)
+	sa, err := wh.unaliasedSearchAttributesFrom(request.GetSearchAttributes(), namespaceName)
 	if err != nil {
 		return nil, err
 	}
@@ -2715,7 +2710,7 @@ func (wh *WorkflowHandler) CreateSchedule(ctx context.Context, request *workflow
 		RequestId:             request.RequestId,
 		WorkflowIdReusePolicy: enumspb.WORKFLOW_ID_REUSE_POLICY_ALLOW_DUPLICATE,
 		Memo:                  request.Memo,
-		SearchAttributes:      request.SearchAttributes,
+		SearchAttributes:      sa,
 	}
 	_, err = wh.historyClient.StartWorkflowExecution(ctx, common.CreateHistoryStartWorkflowRequest(namespaceID.String(), startReq, nil, time.Now().UTC()))
 
@@ -4322,56 +4317,6 @@ func getBatchOperationState(workflowState enumspb.WorkflowExecutionStatus) enums
 		operationState = enumspb.BATCH_OPERATION_STATE_FAILED
 	}
 	return operationState
-}
-
-func (wh *WorkflowHandler) unaliasStartWorkflowExecutionRequestSearchAttributes(request *workflowservice.StartWorkflowExecutionRequest, namespaceName namespace.Name) (*workflowservice.StartWorkflowExecutionRequest, error) {
-	unaliasedSas, err := searchattribute.UnaliasFields(wh.saMapperProvider, request.GetSearchAttributes(), namespaceName.String())
-	if err != nil {
-		return nil, err
-	}
-	if unaliasedSas == request.GetSearchAttributes() {
-		return request, nil
-	}
-
-	// Copy request and replace SearchAttributes fields only.
-	newRequest := common.CloneProto(request)
-	newRequest.SearchAttributes = unaliasedSas
-	return newRequest, nil
-}
-
-func (wh *WorkflowHandler) unaliasSignalWithStartWorkflowExecutionRequestSearchAttributes(request *workflowservice.SignalWithStartWorkflowExecutionRequest, namespaceName namespace.Name) (*workflowservice.SignalWithStartWorkflowExecutionRequest, error) {
-	unaliasedSas, err := searchattribute.UnaliasFields(wh.saMapperProvider, request.GetSearchAttributes(), namespaceName.String())
-	if err != nil {
-		return nil, err
-	}
-	if unaliasedSas == request.GetSearchAttributes() {
-		return request, nil
-	}
-
-	// Copy request and replace SearchAttributes fields only.
-	newRequest := common.CloneProto(request)
-	newRequest.SearchAttributes = unaliasedSas
-	return newRequest, nil
-}
-
-func (wh *WorkflowHandler) unaliasCreateScheduleRequestSearchAttributes(request *workflowservice.CreateScheduleRequest, namespaceName namespace.Name) (*workflowservice.CreateScheduleRequest, error) {
-	unaliasedSas, err := searchattribute.UnaliasFields(wh.saMapperProvider, request.GetSearchAttributes(), namespaceName.String())
-	if err != nil {
-		return nil, err
-	}
-
-	if unaliasedSas == request.GetSearchAttributes() {
-		return request, nil
-	}
-
-	// Copy request and replace SearchAttributes fields only.
-	newRequest := common.CloneProto(request)
-
-	if unaliasedSas != nil {
-		newRequest.SearchAttributes = unaliasedSas
-	}
-
-	return newRequest, nil
 }
 
 // PollNexusTaskQueue implements Handler.
