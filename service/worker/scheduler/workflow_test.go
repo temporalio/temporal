@@ -212,7 +212,7 @@ func (s *workflowSuite) setupMocksForWorkflows(runs []workflowRun, state *runAcr
 					s.Failf("multiple starts", "for %s at %s (prev %s)", req.Request.WorkflowId, s.now(), prev)
 				}
 				state.started[req.Request.WorkflowId] = s.now()
-				overhead := time.Duration(100*rand.Intn(1000)) * time.Millisecond
+				overhead := time.Duration(100+rand.Intn(100)) * time.Millisecond
 				return &schedspb.StartWorkflowResponse{
 					RunId:         uuid.NewString(),
 					RealStartTime: timestamppb.New(s.now().Add(overhead)),
@@ -320,7 +320,7 @@ func (s *workflowSuite) runAcrossContinue(
 			s.Require().NoError(payloads.Decode(canErr.Input, &startArgs))
 		}
 		// check starts that we actually got
-		s.Require().Equal(len(runs), len(state.started))
+		s.Require().Equalf(len(runs), len(state.started), "started %#v", state.started)
 		for _, run := range runs {
 			actual := state.started[run.id]
 			inRange := !actual.Before(run.start.Add(-run.startTolerance)) && !actual.After(run.start.Add(run.startTolerance))
