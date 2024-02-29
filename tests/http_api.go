@@ -424,9 +424,8 @@ func (s *ClientFunctionalSuite) TestHTTPAPI_Serves_OpenAPIv2_Docs() {
 		"/api/v1/swagger.json",
 		"",
 	)
-	s.T().Log(string(respBody))
 	var spec map[string]interface{}
-	// We're not going to validate it here, just verify that it's valid json
+	// We're not going to validate it here, just verify that it's valid
 	s.Require().NoError(json.Unmarshal(respBody, &spec), string(respBody))
 }
 
@@ -437,6 +436,6 @@ func (s *ClientFunctionalSuite) TestHTTPAPI_Serves_OpenAPIv3_Docs() {
 		"",
 	)
 	var spec map[string]interface{}
-	// We're not going to validate it here, just verify that it's valid json
+	// We're not going to validate it here, just verify that it's valid
 	s.Require().NoError(yaml.Unmarshal(respBody, &spec), string(respBody))
 }
