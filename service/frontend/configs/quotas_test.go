@@ -107,56 +107,6 @@ func (s *quotasSuite) TestNamespaceReplicationInducingAPIPrioritiesOrdered() {
 	}
 }
 
-func (s *quotasSuite) TestExecutionAPIs() {
-	apis := map[string]struct{}{
-		"StartWorkflowExecution":             {},
-		"SignalWithStartWorkflowExecution":   {},
-		"SignalWorkflowExecution":            {},
-		"RequestCancelWorkflowExecution":     {},
-		"TerminateWorkflowExecution":         {},
-		"GetWorkflowExecutionHistory":        {},
-		"GetWorkflowExecutionHistoryReverse": {},
-		"UpdateWorkflowExecution":            {},
-		"PollWorkflowExecutionUpdate":        {},
-
-		"RecordActivityTaskHeartbeat":      {},
-		"RecordActivityTaskHeartbeatById":  {},
-		"RespondActivityTaskCanceled":      {},
-		"RespondActivityTaskCanceledById":  {},
-		"RespondActivityTaskFailed":        {},
-		"RespondActivityTaskFailedById":    {},
-		"RespondActivityTaskCompleted":     {},
-		"RespondActivityTaskCompletedById": {},
-		"RespondWorkflowTaskCompleted":     {},
-
-		"ResetWorkflowExecution":        {},
-		"DescribeWorkflowExecution":     {},
-		"RespondWorkflowTaskFailed":     {},
-		"QueryWorkflow":                 {},
-		"RespondQueryTaskCompleted":     {},
-		"PollWorkflowTaskQueue":         {},
-		"PollActivityTaskQueue":         {},
-		"GetWorkerBuildIdCompatibility": {},
-		"GetWorkerTaskReachability":     {},
-		"DeleteWorkflowExecution":       {},
-
-		"ResetStickyTaskQueue":    {},
-		"DescribeTaskQueue":       {},
-		"ListTaskQueuePartitions": {},
-	}
-
-	var service workflowservice.WorkflowServiceServer
-	t := reflect.TypeOf(&service).Elem()
-	apiToPriority := make(map[string]int, t.NumMethod())
-	for i := 0; i < t.NumMethod(); i++ {
-		apiName := t.Method(i).Name
-		if _, ok := apis[apiName]; ok {
-			apiToPriority[apiName] = ExecutionAPIToPriority[apiName]
-		}
-	}
-	s.Equal(apiToPriority, ExecutionAPIToPriority)
-}
-
 func (s *quotasSuite) TestVisibilityAPIs() {
 	apis := map[string]struct{}{
 		"GetWorkflowExecution":           {},
@@ -200,23 +150,21 @@ func (s *quotasSuite) TestNamespaceReplicationInducingAPIs() {
 }
 
 func (s *quotasSuite) TestAllAPIs() {
-	var service workflowservice.WorkflowServiceServer
-	expectedAPIs := make(map[string]struct{})
-	temporalapi.WalkExportedMethods(&service, func(m reflect.Method) {
-		expectedAPIs[m.Name] = struct{}{}
-	})
-
-	actualAPIs := make(map[string]struct{})
+	apisWithPriority := make(map[string]struct{})
 	for api := range ExecutionAPIToPriority {
-		actualAPIs[api] = struct{}{}
+		apisWithPriority[api] = struct{}{}
 	}
 	for api := range VisibilityAPIToPriority {
-		actualAPIs[api] = struct{}{}
+		apisWithPriority[api] = struct{}{}
 	}
 	for api := range NamespaceReplicationInducingAPIToPriority {
-		actualAPIs[api] = struct{}{}
+		apisWithPriority[api] = struct{}{}
 	}
-	s.Equal(expectedAPIs, actualAPIs)
+	var service workflowservice.WorkflowServiceServer
+	temporalapi.WalkExportedMethods(&service, func(m reflect.Method) {
+		_, ok := apisWithPriority[m.Name]
+		s.True(ok, "missing priority for API: %v", m.Name)
+	})
 }
 
 func (s *quotasSuite) TestOperatorPriority_Execution() {

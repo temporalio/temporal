@@ -52,6 +52,7 @@ var (
 		"QueryWorkflow":               1,
 		"UpdateWorkflowExecution":     1,
 		"GetWorkflowExecutionHistory": 1,
+		"PollNexusTaskQueue":          1,
 	}
 
 	ExecutionAPIToPriority = map[string]int{
@@ -107,11 +108,14 @@ var (
 		"RespondWorkflowTaskCompleted":     4,
 		"RespondWorkflowTaskFailed":        4,
 		"RespondQueryTaskCompleted":        4,
+		"RespondNexusTaskCompleted":        4,
+		"RespondNexusTaskFailed":           4,
 
 		// P5: Poll APIs and other low priority APIs
 		"PollWorkflowTaskQueue":              5,
 		"PollActivityTaskQueue":              5,
 		"PollWorkflowExecutionUpdate":        5,
+		"PollNexusTaskQueue":                 5,
 		"ResetStickyTaskQueue":               5,
 		"GetWorkflowExecutionHistoryReverse": 5,
 	}
