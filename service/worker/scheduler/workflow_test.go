@@ -1670,7 +1670,9 @@ func (s *workflowSuite) TestUpdateNotRetroactive() {
 	)
 }
 
-func (s *workflowSuite) TestUpdateWithJitter() {
+// Tests that an update between a nominal time and jittered time for a start, that doesn't
+// modify that start, will still start it.
+func (s *workflowSuite) TestUpdateBetweenNominalAndJitter() {
 	// TODO: remove once default version is UpdateFromPrevious
 	prevTweakables := currentTweakablePolicies
 	currentTweakablePolicies.Version = UpdateFromPrevious
