@@ -48,53 +48,75 @@ var (
 	ExecutionAPICountLimitOverride = map[string]int{
 		"PollActivityTaskQueue":       1,
 		"PollWorkflowTaskQueue":       1,
+		"PollWorkflowExecutionUpdate": 1,
 		"QueryWorkflow":               1,
 		"UpdateWorkflowExecution":     1,
 		"GetWorkflowExecutionHistory": 1,
 	}
 
 	ExecutionAPIToPriority = map[string]int{
-		// priority 1
-		"StartWorkflowExecution":           1,
-		"SignalWithStartWorkflowExecution": 1,
+		// P0: System level APIs
+		"GetClusterInfo":      0,
+		"GetSystemInfo":       0,
+		"GetSearchAttributes": 0,
+		"DescribeNamespace":   0,
+		"ListNamespaces":      0,
+		"DeprecateNamespace":  0,
+
+		// P1: External Event APIs
 		"SignalWorkflowExecution":          1,
-		"RequestCancelWorkflowExecution":   1,
-		"TerminateWorkflowExecution":       1,
-		"GetWorkflowExecutionHistory":      1,
+		"SignalWithStartWorkflowExecution": 1,
+		"StartWorkflowExecution":           1,
 		"UpdateWorkflowExecution":          1,
+		"CreateSchedule":                   1,
+		"StartBatchOperation":              1,
 
-		// priority 2
-		"RecordActivityTaskHeartbeat":      2,
-		"RecordActivityTaskHeartbeatById":  2,
-		"RespondActivityTaskCanceled":      2,
-		"RespondActivityTaskCanceledById":  2,
-		"RespondActivityTaskFailed":        2,
-		"RespondActivityTaskFailedById":    2,
-		"RespondActivityTaskCompleted":     2,
-		"RespondActivityTaskCompletedById": 2,
-		"RespondWorkflowTaskCompleted":     2,
-		"RespondWorkflowTaskFailed":        2,
-		"RespondQueryTaskCompleted":        2,
+		// P2: Change State APIs
+		"RequestCancelWorkflowExecution": 2,
+		"TerminateWorkflowExecution":     2,
+		"ResetWorkflowExecution":         2,
+		"DeleteWorkflowExecution":        2,
+		"GetWorkflowExecutionHistory":    2, // relatively high priority because it is required for replay
+		"UpdateSchedule":                 2,
+		"PatchSchedule":                  2,
+		"DeleteSchedule":                 2,
+		"StopBatchOperation":             2,
 
-		// priority 3
-		"ResetWorkflowExecution":             3,
-		"DescribeWorkflowExecution":          3,
-		"QueryWorkflow":                      3,
-		"PollWorkflowTaskQueue":              3,
-		"PollActivityTaskQueue":              3,
-		"PollWorkflowExecutionUpdate":        3,
-		"GetWorkflowExecutionHistoryReverse": 3,
-		"GetWorkerBuildIdCompatibility":      3,
-		"GetWorkerTaskReachability":          3,
-		"DeleteWorkflowExecution":            3,
+		// P3: Status Querying APIs
+		"DescribeWorkflowExecution":     3,
+		"DescribeTaskQueue":             3,
+		"GetWorkerBuildIdCompatibility": 3,
+		"GetWorkerTaskReachability":     3,
+		"ListTaskQueuePartitions":       3,
+		"QueryWorkflow":                 3,
+		"DescribeSchedule":              3,
+		"ListScheduleMatchingTimes":     3,
+		"ListSchedules":                 3,
+		"DescribeBatchOperation":        3,
+		"ListBatchOperations":           3,
 
-		// priority 4
-		"ResetStickyTaskQueue":    4,
-		"DescribeTaskQueue":       4,
-		"ListTaskQueuePartitions": 4,
+		// P4: Progress APIs
+		"RecordActivityTaskHeartbeat":      4,
+		"RecordActivityTaskHeartbeatById":  4,
+		"RespondActivityTaskCanceled":      4,
+		"RespondActivityTaskCanceledById":  4,
+		"RespondActivityTaskFailed":        4,
+		"RespondActivityTaskFailedById":    4,
+		"RespondActivityTaskCompleted":     4,
+		"RespondActivityTaskCompletedById": 4,
+		"RespondWorkflowTaskCompleted":     4,
+		"RespondWorkflowTaskFailed":        4,
+		"RespondQueryTaskCompleted":        4,
+
+		// P5: Poll APIs and other low priority APIs
+		"PollWorkflowTaskQueue":              5,
+		"PollActivityTaskQueue":              5,
+		"PollWorkflowExecutionUpdate":        5,
+		"ResetStickyTaskQueue":               5,
+		"GetWorkflowExecutionHistoryReverse": 5,
 	}
 
-	ExecutionAPIPrioritiesOrdered = []int{0, 1, 2, 3, 4}
+	ExecutionAPIPrioritiesOrdered = []int{0, 1, 2, 3, 4, 5}
 
 	VisibilityAPIToPriority = map[string]int{
 		"CountWorkflowExecutions":        1,
@@ -117,37 +139,6 @@ var (
 	}
 
 	NamespaceReplicationInducingAPIPrioritiesOrdered = []int{0, 1, 2}
-
-	OtherAPIToPriority = map[string]int{
-		"GetClusterInfo":      1,
-		"GetSystemInfo":       1,
-		"GetSearchAttributes": 1,
-
-		"DescribeNamespace":  1,
-		"ListNamespaces":     1,
-		"DeprecateNamespace": 1,
-
-		"CreateSchedule":            1,
-		"DescribeSchedule":          1,
-		"UpdateSchedule":            1,
-		"PatchSchedule":             1,
-		"ListScheduleMatchingTimes": 1,
-		"DeleteSchedule":            1,
-		"ListSchedules":             1,
-
-		// TODO(yx): added temporarily here; need to check if it's the right place and priority
-		"DescribeBatchOperation": 1,
-		"ListBatchOperations":    1,
-		"StartBatchOperation":    1,
-		"StopBatchOperation":     1,
-
-		// TODO: added temporarily here; need to be check when implemented if it's the right place and priority
-		"PollNexusTaskQueue":        1,
-		"RespondNexusTaskCompleted": 1,
-		"RespondNexusTaskFailed":    1,
-	}
-
-	OtherAPIPrioritiesOrdered = []int{0, 1}
 )
 
 type (
@@ -208,7 +199,6 @@ func NewRequestToRateLimiter(
 	executionRateBurstFn quotas.RateBurst,
 	visibilityRateBurstFn quotas.RateBurst,
 	namespaceReplicationInducingRateBurstFn quotas.RateBurst,
-	otherRateBurstFn quotas.RateBurst,
 	operatorRPSRatio dynamicconfig.FloatPropertyFn,
 ) quotas.RequestRateLimiter {
 	mapping := make(map[string]quotas.RequestRateLimiter)
@@ -216,7 +206,6 @@ func NewRequestToRateLimiter(
 	executionRateLimiter := NewExecutionPriorityRateLimiter(executionRateBurstFn, operatorRPSRatio)
 	visibilityRateLimiter := NewVisibilityPriorityRateLimiter(visibilityRateBurstFn, operatorRPSRatio)
 	namespaceReplicationInducingRateLimiter := NewNamespaceReplicationInducingAPIPriorityRateLimiter(namespaceReplicationInducingRateBurstFn, operatorRPSRatio)
-	otherRateLimiter := NewOtherAPIPriorityRateLimiter(otherRateBurstFn, operatorRPSRatio)
 
 	for api := range ExecutionAPIToPriority {
 		mapping[api] = executionRateLimiter
@@ -226,9 +215,6 @@ func NewRequestToRateLimiter(
 	}
 	for api := range NamespaceReplicationInducingAPIToPriority {
 		mapping[api] = namespaceReplicationInducingRateLimiter
-	}
-	for api := range OtherAPIToPriority {
-		mapping[api] = otherRateLimiter
 	}
 
 	return quotas.NewRoutingRateLimiter(mapping)
@@ -300,28 +286,5 @@ func NewNamespaceReplicationInducingAPIPriorityRateLimiter(
 			return priority
 		}
 		return NamespaceReplicationInducingAPIPrioritiesOrdered[len(NamespaceReplicationInducingAPIPrioritiesOrdered)-1]
-	}, rateLimiters)
-}
-
-func NewOtherAPIPriorityRateLimiter(
-	rateBurstFn quotas.RateBurst,
-	operatorRPSRatio dynamicconfig.FloatPropertyFn,
-) quotas.RequestRateLimiter {
-	rateLimiters := make(map[int]quotas.RequestRateLimiter)
-	for priority := range OtherAPIPrioritiesOrdered {
-		if priority == OperatorPriority {
-			rateLimiters[priority] = quotas.NewRequestRateLimiterAdapter(quotas.NewDynamicRateLimiter(newOperatorRateBurst(rateBurstFn, operatorRPSRatio), time.Minute))
-		} else {
-			rateLimiters[priority] = quotas.NewRequestRateLimiterAdapter(quotas.NewDynamicRateLimiter(rateBurstFn, time.Minute))
-		}
-	}
-	return quotas.NewPriorityRateLimiter(func(req quotas.Request) int {
-		if req.CallerType == headers.CallerTypeOperator {
-			return OperatorPriority
-		}
-		if priority, ok := OtherAPIToPriority[req.API]; ok {
-			return priority
-		}
-		return OtherAPIPrioritiesOrdered[len(OtherAPIPrioritiesOrdered)-1]
 	}, rateLimiters)
 }

@@ -89,13 +89,6 @@ func (s *quotasSuite) TestNamespaceReplicationInducingAPIToPriorityMapping() {
 	}
 }
 
-func (s *quotasSuite) TestOtherAPIToPriorityMapping() {
-	for _, priority := range OtherAPIToPriority {
-		index := slices.Index(OtherAPIPrioritiesOrdered, priority)
-		s.NotEqual(-1, index)
-	}
-}
-
 func (s *quotasSuite) TestExecutionAPIPrioritiesOrdered() {
 	for idx := range ExecutionAPIPrioritiesOrdered[1:] {
 		s.True(ExecutionAPIPrioritiesOrdered[idx] < ExecutionAPIPrioritiesOrdered[idx+1])
@@ -111,12 +104,6 @@ func (s *quotasSuite) TestVisibilityAPIPrioritiesOrdered() {
 func (s *quotasSuite) TestNamespaceReplicationInducingAPIPrioritiesOrdered() {
 	for idx := range NamespaceReplicationInducingAPIPrioritiesOrdered[1:] {
 		s.True(NamespaceReplicationInducingAPIPrioritiesOrdered[idx] < NamespaceReplicationInducingAPIPrioritiesOrdered[idx+1])
-	}
-}
-
-func (s *quotasSuite) TestOtherAPIPrioritiesOrdered() {
-	for idx := range OtherAPIPrioritiesOrdered[1:] {
-		s.True(OtherAPIPrioritiesOrdered[idx] < OtherAPIPrioritiesOrdered[idx+1])
 	}
 }
 
@@ -212,46 +199,6 @@ func (s *quotasSuite) TestNamespaceReplicationInducingAPIs() {
 	s.Equal(apiToPriority, NamespaceReplicationInducingAPIToPriority)
 }
 
-func (s *quotasSuite) TestOtherAPIs() {
-	apis := map[string]struct{}{
-		"GetClusterInfo":      {},
-		"GetSystemInfo":       {},
-		"GetSearchAttributes": {},
-
-		"DescribeNamespace":  {},
-		"ListNamespaces":     {},
-		"DeprecateNamespace": {},
-
-		"CreateSchedule":            {},
-		"DescribeSchedule":          {},
-		"UpdateSchedule":            {},
-		"PatchSchedule":             {},
-		"ListScheduleMatchingTimes": {},
-		"DeleteSchedule":            {},
-		"ListSchedules":             {},
-
-		"DescribeBatchOperation": {},
-		"ListBatchOperations":    {},
-		"StartBatchOperation":    {},
-		"StopBatchOperation":     {},
-
-		"PollNexusTaskQueue":        {},
-		"RespondNexusTaskCompleted": {},
-		"RespondNexusTaskFailed":    {},
-	}
-
-	var service workflowservice.WorkflowServiceServer
-	t := reflect.TypeOf(&service).Elem()
-	apiToPriority := make(map[string]int, t.NumMethod())
-	for i := 0; i < t.NumMethod(); i++ {
-		apiName := t.Method(i).Name
-		if _, ok := apis[apiName]; ok {
-			apiToPriority[apiName] = OtherAPIToPriority[apiName]
-		}
-	}
-	s.Equal(apiToPriority, OtherAPIToPriority)
-}
-
 func (s *quotasSuite) TestAllAPIs() {
 	var service workflowservice.WorkflowServiceServer
 	expectedAPIs := make(map[string]struct{})
@@ -267,9 +214,6 @@ func (s *quotasSuite) TestAllAPIs() {
 		actualAPIs[api] = struct{}{}
 	}
 	for api := range NamespaceReplicationInducingAPIToPriority {
-		actualAPIs[api] = struct{}{}
-	}
-	for api := range OtherAPIToPriority {
 		actualAPIs[api] = struct{}{}
 	}
 	s.Equal(expectedAPIs, actualAPIs)
@@ -288,11 +232,6 @@ func (s *quotasSuite) TestOperatorPriority_Visibility() {
 func (s *quotasSuite) TestOperatorPriority_NamespaceReplicationInducing() {
 	limiter := NewNamespaceReplicationInducingAPIPriorityRateLimiter(testRateBurstFn, testOperatorRPSRatioFn)
 	s.testOperatorPrioritized(limiter, "RegisterNamespace")
-}
-
-func (s *quotasSuite) TestOperatorPriority_Other() {
-	limiter := NewOtherAPIPriorityRateLimiter(testRateBurstFn, testOperatorRPSRatioFn)
-	s.testOperatorPrioritized(limiter, "DescribeNamespace")
 }
 
 func (s *quotasSuite) testOperatorPrioritized(limiter quotas.RequestRateLimiter, api string) {
