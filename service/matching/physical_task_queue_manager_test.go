@@ -345,13 +345,14 @@ func createTestTaskQueueManagerWithConfig(
 	testOpts *tqmTestOpts,
 	opts ...taskQueueManagerOpt,
 ) (*physicalTaskQueueManagerImpl, error) {
-	ns := namespace.Name("ns-name")
-	registry := createMockNamespaceCache(controller, ns)
+	nsName := namespace.Name("ns-name")
+	registry := createMockNamespaceCache(controller, nsName)
+	ns, _ := registry.GetNamespace(nsName)
 	me := createTestMatchingEngine(controller, testOpts.config, testOpts.matchingClientMock, registry)
 	partition := testOpts.dbq.Partition()
-	tqConfig := newTaskQueueConfig(partition.TaskQueue(), me.config, ns)
+	tqConfig := newTaskQueueConfig(partition.TaskQueue(), me.config, nsName)
 	userDataManager := newUserDataManager(me.taskManager, me.matchingRawClient, partition, tqConfig, me.logger, me.namespaceRegistry)
-	pm := createTestTaskQueuePartitionManager(partition, tqConfig, me, userDataManager)
+	pm := createTestTaskQueuePartitionManager(ns, partition, tqConfig, me, userDataManager)
 	tlMgr, err := newPhysicalTaskQueueManager(pm, testOpts.dbq, opts...)
 	pm.defaultQueue = tlMgr
 	if err != nil {
@@ -360,12 +361,12 @@ func createTestTaskQueueManagerWithConfig(
 	return tlMgr, nil
 }
 
-func createTestTaskQueuePartitionManager(partition tqid.Partition, tqConfig *taskQueueConfig, me *matchingEngineImpl, userDataManager userDataManager) *taskQueuePartitionManagerImpl {
+func createTestTaskQueuePartitionManager(ns *namespace.Namespace, partition tqid.Partition, tqConfig *taskQueueConfig, me *matchingEngineImpl, userDataManager userDataManager) *taskQueuePartitionManagerImpl {
 	pm := &taskQueuePartitionManagerImpl{
 		engine:               me,
 		partition:            partition,
 		config:               tqConfig,
-		namespaceRegistry:    me.namespaceRegistry,
+		ns:                   ns,
 		logger:               me.logger,
 		matchingClient:       me.matchingRawClient,
 		taggedMetricsHandler: me.metricsHandler,
