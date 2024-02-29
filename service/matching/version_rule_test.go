@@ -283,11 +283,11 @@ func TestInsertAssignmentRuleTerminalBuildID(t *testing.T) {
 	assert.NoError(t, err)
 
 	// insert 1 --> failure
-	_, err = insertAssignmentRule(mkAssignmentRule("1", mkNewAssignmentPercentageRamp(10)), data, clock, 0, maxRules)
+	_, err = insertAssignmentRule(mkAssignmentRule("0", mkNewAssignmentPercentageRamp(10)), data, clock, 0, maxRules)
 	assert.Error(t, err)
 
 	// insert 2 --> success
-	_, err = insertAssignmentRule(mkAssignmentRule("2", mkNewAssignmentPercentageRamp(10)), data, clock, 0, maxRules)
+	_, err = insertAssignmentRule(mkAssignmentRule("1", mkNewAssignmentPercentageRamp(10)), data, clock, 0, maxRules)
 	assert.NoError(t, err)
 }
 
@@ -373,18 +373,20 @@ func TestReplaceAssignmentRuleTerminalBuildID(t *testing.T) {
 	clock := hlc.Zero(1)
 	data := mkInitialData(0, clock)
 	data.AssignmentRules = []*persistencepb.AssignmentRule{
-		mkAssignmentRulePersistence(mkAssignmentRule("0", nil), clock, nil),
+		mkAssignmentRulePersistence(mkAssignmentRule("9", nil), clock, nil),
+		mkAssignmentRulePersistence(mkAssignmentRule("10", nil), clock, nil), // to avoid triggering "fully-ramped" error
 	}
 	data.RedirectRules = []*persistencepb.RedirectRule{
 		mkRedirectRulePersistence(mkRedirectRule("0", "1", nil), clock, nil),
 	}
 
-	// replace with ramp --> failure
-	_, err := replaceAssignmentRule(mkAssignmentRule("1", mkNewAssignmentPercentageRamp(10)), data, clock, 0, false)
+	// replace with target isSource and ramp != nil --> failure
+	_, err := replaceAssignmentRule(mkAssignmentRule("0", mkNewAssignmentPercentageRamp(10)), data, clock, 0, false)
+	t.Log(err)
 	assert.Error(t, err)
 
-	// replace without ramp --> success
-	_, err = replaceAssignmentRule(mkAssignmentRule("1", nil), data, clock, 0, false)
+	// replace with target isSource and ramp == nil --> success
+	_, err = replaceAssignmentRule(mkAssignmentRule("0", nil), data, clock, 0, false)
 	assert.NoError(t, err)
 }
 
@@ -572,11 +574,12 @@ func TestInsertRedirectRuleTerminalBuildID(t *testing.T) {
 	maxRules := 3
 	clock := hlc.Zero(1)
 	data := mkInitialData(0, clock)
-	data, err := insertAssignmentRule(mkAssignmentRule("1", mkNewAssignmentPercentageRamp(10)), data, clock, 0, maxRules)
-	assert.NoError(t, err)
+	data.AssignmentRules = []*persistencepb.AssignmentRule{
+		mkAssignmentRulePersistence(mkAssignmentRule("1", mkNewAssignmentPercentageRamp(10)), clock, nil),
+	}
 
-	// insert redirect rule with target 1
-	_, err = insertRedirectRule(mkRedirectRule("0", "1", nil), data, clock, maxRules)
+	// insert redirect rule with target 1 --> failure
+	_, err := insertRedirectRule(mkRedirectRule("1", "0", nil), data, clock, maxRules)
 	assert.Error(t, err)
 }
 
@@ -665,23 +668,6 @@ func TestReplaceRedirectRuleInVersionSet(t *testing.T) {
 	// replace with non-zero target --> success
 	_, err = replaceRedirectRule(mkRedirectRule("1", "10", nil), data, clock)
 	assert.NoError(t, err)
-}
-
-func TestReplaceRedirectRuleTerminalBuildID(t *testing.T) {
-	t.Parallel()
-	clock := hlc.Zero(1)
-	data := mkInitialData(0, clock)
-	data.AssignmentRules = []*persistencepb.AssignmentRule{
-		mkAssignmentRulePersistence(mkAssignmentRule("1", mkNewAssignmentPercentageRamp(10)), clock, nil),
-	}
-	data.RedirectRules = []*persistencepb.RedirectRule{
-		mkRedirectRulePersistence(mkRedirectRule("0", "10", nil), clock, nil),
-	}
-	var err error
-
-	// insert redirect rule with target 1 --> failure
-	_, err = replaceRedirectRule(mkRedirectRule("0", "1", nil), data, clock)
-	assert.Error(t, err)
 }
 
 func TestReplaceRedirectRuleCreateCycle(t *testing.T) {
