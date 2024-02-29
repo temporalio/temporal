@@ -108,7 +108,7 @@ func (mdb *db) Close() error {
 
 // PluginName returns the name of the mysql plugin
 func (mdb *db) PluginName() string {
-	return PluginNameV8
+	return PluginName
 }
 
 // DbName returns the name of the database

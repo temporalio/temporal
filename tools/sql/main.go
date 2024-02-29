@@ -96,7 +96,7 @@ func BuildCLIOptions() *cli.App {
 		},
 		cli.StringFlag{
 			Name:   schema.CLIFlagPluginName,
-			Value:  mysql.PluginNameV8,
+			Value:  mysql.PluginName,
 			Usage:  "name of the sql plugin",
 			EnvVar: "SQL_PLUGIN",
 		},

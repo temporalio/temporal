@@ -33,13 +33,13 @@ import (
 )
 
 const (
-	testMySQLUser       = "temporal"
-	testMySQLPassword   = "temporal"
-	testMySQL8SchemaDir = "schema/mysql/v8"
+	testMySQLUser      = "temporal"
+	testMySQLPassword  = "temporal"
+	testMySQLSchemaDir = "schema/mysql/v8"
 
-	testPostgreSQLUser        = "temporal"
-	testPostgreSQLPassword    = "temporal"
-	testPostgreSQL12SchemaDir = "schema/postgresql/v12"
+	testPostgreSQLUser      = "temporal"
+	testPostgreSQLPassword  = "temporal"
+	testPostgreSQLSchemaDir = "schema/postgresql/v12"
 
 	testSQLiteUser      = ""
 	testSQLitePassword  = ""
@@ -48,41 +48,41 @@ const (
 	testSQLiteSchemaDir = "schema/sqlite/v3" // specify if mode is not "memory"
 )
 
-// GetMySQL8TestClusterOption return test options
-func GetMySQL8TestClusterOption() *TestBaseOptions {
+// GetMySQLTestClusterOption return test options
+func GetMySQLTestClusterOption() *TestBaseOptions {
 	return &TestBaseOptions{
-		SQLDBPluginName: mysql.PluginNameV8,
+		SQLDBPluginName: mysql.PluginName,
 		DBUsername:      testMySQLUser,
 		DBPassword:      testMySQLPassword,
 		DBHost:          environment.GetMySQLAddress(),
 		DBPort:          environment.GetMySQLPort(),
-		SchemaDir:       testMySQL8SchemaDir,
+		SchemaDir:       testMySQLSchemaDir,
 		StoreType:       config.StoreTypeSQL,
 	}
 }
 
-// GetPostgreSQL12TestClusterOption return test options
-func GetPostgreSQL12TestClusterOption() *TestBaseOptions {
+// GetPostgreSQLTestClusterOption return test options
+func GetPostgreSQLTestClusterOption() *TestBaseOptions {
 	return &TestBaseOptions{
-		SQLDBPluginName: postgresql.PluginNameV12,
+		SQLDBPluginName: postgresql.PluginName,
 		DBUsername:      testPostgreSQLUser,
 		DBPassword:      testPostgreSQLPassword,
 		DBHost:          environment.GetPostgreSQLAddress(),
 		DBPort:          environment.GetPostgreSQLPort(),
-		SchemaDir:       testPostgreSQL12SchemaDir,
+		SchemaDir:       testPostgreSQLSchemaDir,
 		StoreType:       config.StoreTypeSQL,
 	}
 }
 
-// GetPostgreSQL12PGXTestClusterOption return test options
-func GetPostgreSQL12PGXTestClusterOption() *TestBaseOptions {
+// GetPostgreSQLPGXTestClusterOption return test options
+func GetPostgreSQLPGXTestClusterOption() *TestBaseOptions {
 	return &TestBaseOptions{
-		SQLDBPluginName: postgresql.PluginNameV12PGX,
+		SQLDBPluginName: postgresql.PluginNamePGX,
 		DBUsername:      testPostgreSQLUser,
 		DBPassword:      testPostgreSQLPassword,
 		DBHost:          environment.GetPostgreSQLAddress(),
 		DBPort:          environment.GetPostgreSQLPort(),
-		SchemaDir:       testPostgreSQL12SchemaDir,
+		SchemaDir:       testPostgreSQLSchemaDir,
 		StoreType:       config.StoreTypeSQL,
 	}
 }

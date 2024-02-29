@@ -155,12 +155,12 @@ func (f *defaultPersistenceTestBaseFactory) NewTestBase(options *persistencetest
 	case config.StoreTypeSQL:
 		var ops *persistencetests.TestBaseOptions
 		switch TestFlags.PersistenceDriver {
-		case mysql.PluginNameV8:
-			ops = persistencetests.GetMySQL8TestClusterOption()
-		case postgresql.PluginNameV12:
-			ops = persistencetests.GetPostgreSQL12TestClusterOption()
-		case postgresql.PluginNameV12PGX:
-			ops = persistencetests.GetPostgreSQL12PGXTestClusterOption()
+		case mysql.PluginName:
+			ops = persistencetests.GetMySQLTestClusterOption()
+		case postgresql.PluginName:
+			ops = persistencetests.GetPostgreSQLTestClusterOption()
+		case postgresql.PluginNamePGX:
+			ops = persistencetests.GetPostgreSQLPGXTestClusterOption()
 		case sqlite.PluginName:
 			ops = persistencetests.GetSQLiteMemoryTestClusterOption()
 		default:

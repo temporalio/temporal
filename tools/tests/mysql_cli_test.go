@@ -36,24 +36,24 @@ import (
 	"go.temporal.io/server/tools/sql/clitest"
 )
 
-func TestMySQL8ConnTestSuite(t *testing.T) {
+func TestMySQLConnTestSuite(t *testing.T) {
 	suite.Run(t, clitest.NewSQLConnTestSuite(
 		environment.GetMySQLAddress(),
 		strconv.Itoa(environment.GetMySQLPort()),
-		mysql.PluginNameV8,
+		mysql.PluginName,
 		testMySQLQuery,
 	))
 }
 
-func TestMySQL8HandlerTestSuite(t *testing.T) {
+func TestMySQLHandlerTestSuite(t *testing.T) {
 	suite.Run(t, clitest.NewHandlerTestSuite(
 		environment.GetMySQLAddress(),
 		strconv.Itoa(environment.GetMySQLPort()),
-		mysql.PluginNameV8,
+		mysql.PluginName,
 	))
 }
 
-func TestMySQL8SetupSchemaTestSuite(t *testing.T) {
+func TestMySQLSetupSchemaTestSuite(t *testing.T) {
 	t.Setenv("SQL_HOST", environment.GetMySQLAddress())
 	t.Setenv("SQL_PORT", strconv.Itoa(environment.GetMySQLPort()))
 	t.Setenv("SQL_USER", testUser)
@@ -61,12 +61,12 @@ func TestMySQL8SetupSchemaTestSuite(t *testing.T) {
 	suite.Run(t, clitest.NewSetupSchemaTestSuite(
 		environment.GetMySQLAddress(),
 		strconv.Itoa(environment.GetMySQLPort()),
-		mysql.PluginNameV8,
+		mysql.PluginName,
 		testMySQLQuery,
 	))
 }
 
-func TestMySQL8UpdateSchemaTestSuite(t *testing.T) {
+func TestMySQLUpdateSchemaTestSuite(t *testing.T) {
 	t.Setenv("SQL_HOST", environment.GetMySQLAddress())
 	t.Setenv("SQL_PORT", strconv.Itoa(environment.GetMySQLPort()))
 	t.Setenv("SQL_USER", testUser)
@@ -74,23 +74,23 @@ func TestMySQL8UpdateSchemaTestSuite(t *testing.T) {
 	suite.Run(t, clitest.NewUpdateSchemaTestSuite(
 		environment.GetMySQLAddress(),
 		strconv.Itoa(environment.GetMySQLPort()),
-		mysql.PluginNameV8,
+		mysql.PluginName,
 		testMySQLQuery,
-		testMySQL8ExecutionSchemaVersionDir,
+		testMySQLExecutionSchemaVersionDir,
 		mysqlversionV8.Version,
-		testMySQL8VisibilitySchemaVersionDir,
+		testMySQLVisibilitySchemaVersionDir,
 		mysqlversionV8.VisibilityVersion,
 	))
 }
 
-func TestMySQL8VersionTestSuite(t *testing.T) {
+func TestMySQLVersionTestSuite(t *testing.T) {
 	t.Setenv("SQL_USER", testUser)
 	t.Setenv("SQL_PASSWORD", testPassword)
 	suite.Run(t, clitest.NewVersionTestSuite(
 		environment.GetMySQLAddress(),
 		strconv.Itoa(environment.GetMySQLPort()),
-		mysql.PluginNameV8,
-		testMySQL8ExecutionSchemaFile,
-		testMySQL8VisibilitySchemaFile,
+		mysql.PluginName,
+		testMySQLExecutionSchemaFile,
+		testMySQLVisibilitySchemaFile,
 	))
 }
