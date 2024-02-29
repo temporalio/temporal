@@ -260,9 +260,6 @@ func (s *UserDataReplicationTestSuite) TestUserDataEntriesAreReplicatedOnDemand(
 }
 
 func (s *UserDataReplicationTestSuite) TestUserDataTombstonesAreReplicated() {
-	if !tests.UsingSQLAdvancedVisibility() {
-		s.T().Skip("Test requires advanced visibility")
-	}
 	ctx := tests.NewContext()
 	namespace := s.T().Name() + "-" + common.GenerateRandomString(5)
 	activeFrontendClient := s.cluster1.GetFrontendClient()
@@ -410,9 +407,6 @@ func (s *UserDataReplicationTestSuite) TestUserDataTombstonesAreReplicated() {
 }
 
 func (s *UserDataReplicationTestSuite) TestApplyReplicationEventRevivesInUseTombstones() {
-	if !tests.UsingSQLAdvancedVisibility() {
-		s.T().Skip("Test requires advanced visibility")
-	}
 	ctx := tests.NewContext()
 	namespace := s.T().Name() + "-" + common.GenerateRandomString(5)
 	taskQueue := "test-task-queue"

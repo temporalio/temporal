@@ -29,6 +29,7 @@ import (
 	"database/sql"
 	"database/sql/driver"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"reflect"
 	"strings"
@@ -39,6 +40,10 @@ import (
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/server/common/searchattribute"
+)
+
+var (
+	ErrInvalidKeywordListDataType = errors.New("Unexpected data type in keyword list")
 )
 
 type (

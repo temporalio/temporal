@@ -35,12 +35,10 @@ import (
 const (
 	testMySQLUser       = "temporal"
 	testMySQLPassword   = "temporal"
-	testMySQLSchemaDir  = "schema/mysql/v57"
 	testMySQL8SchemaDir = "schema/mysql/v8"
 
 	testPostgreSQLUser        = "temporal"
 	testPostgreSQLPassword    = "temporal"
-	testPostgreSQLSchemaDir   = "schema/postgresql/v96"
 	testPostgreSQL12SchemaDir = "schema/postgresql/v12"
 
 	testSQLiteUser      = ""
@@ -49,19 +47,6 @@ const (
 	testSQLiteCache     = "private"
 	testSQLiteSchemaDir = "schema/sqlite/v3" // specify if mode is not "memory"
 )
-
-// GetMySQLTestClusterOption return test options
-func GetMySQLTestClusterOption() *TestBaseOptions {
-	return &TestBaseOptions{
-		SQLDBPluginName: mysql.PluginName,
-		DBUsername:      testMySQLUser,
-		DBPassword:      testMySQLPassword,
-		DBHost:          environment.GetMySQLAddress(),
-		DBPort:          environment.GetMySQLPort(),
-		SchemaDir:       testMySQLSchemaDir,
-		StoreType:       config.StoreTypeSQL,
-	}
-}
 
 // GetMySQL8TestClusterOption return test options
 func GetMySQL8TestClusterOption() *TestBaseOptions {
@@ -72,32 +57,6 @@ func GetMySQL8TestClusterOption() *TestBaseOptions {
 		DBHost:          environment.GetMySQLAddress(),
 		DBPort:          environment.GetMySQLPort(),
 		SchemaDir:       testMySQL8SchemaDir,
-		StoreType:       config.StoreTypeSQL,
-	}
-}
-
-// GetPostgreSQLTestClusterOption return test options
-func GetPostgreSQLTestClusterOption() *TestBaseOptions {
-	return &TestBaseOptions{
-		SQLDBPluginName: postgresql.PluginName,
-		DBUsername:      testPostgreSQLUser,
-		DBPassword:      testPostgreSQLPassword,
-		DBHost:          environment.GetPostgreSQLAddress(),
-		DBPort:          environment.GetPostgreSQLPort(),
-		SchemaDir:       testPostgreSQLSchemaDir,
-		StoreType:       config.StoreTypeSQL,
-	}
-}
-
-// GetPostgreSQLPGXTestClusterOption return test options
-func GetPostgreSQLPGXTestClusterOption() *TestBaseOptions {
-	return &TestBaseOptions{
-		SQLDBPluginName: postgresql.PluginNamePGX,
-		DBUsername:      testPostgreSQLUser,
-		DBPassword:      testPostgreSQLPassword,
-		DBHost:          environment.GetPostgreSQLAddress(),
-		DBPort:          environment.GetPostgreSQLPort(),
-		SchemaDir:       testPostgreSQLSchemaDir,
 		StoreType:       config.StoreTypeSQL,
 	}
 }

@@ -173,27 +173,6 @@ services:
         aliases:
           - integration-test
 
-  integration-test-mysql:
-    build:
-      context: ../..
-      dockerfile: ./develop/buildkite/Dockerfile
-    environment:
-      - "MYSQL_SEEDS=mysql"
-      - "ES_SEEDS=elasticsearch"
-      - "ES_VERSION=v7"
-      - "PERSISTENCE_TYPE=sql"
-      - "PERSISTENCE_DRIVER=mysql"
-      - "TEMPORAL_VERSION_CHECK_DISABLED=1"
-    depends_on:
-      - mysql
-      - elasticsearch
-    volumes:
-      - ../../.testoutput:/temporal/.testoutput
-    networks:
-      services-network:
-        aliases:
-          - integration-test
-
   integration-test-mysql8:
     build:
       context: ../..
@@ -205,48 +184,6 @@ services:
       - "TEMPORAL_VERSION_CHECK_DISABLED=1"
     depends_on:
       - mysql
-    volumes:
-      - ../../.testoutput:/temporal/.testoutput
-    networks:
-      services-network:
-        aliases:
-          - integration-test
-
-  integration-test-postgresql:
-    build:
-      context: ../..
-      dockerfile: ./develop/buildkite/Dockerfile
-    environment:
-      - "POSTGRES_SEEDS=postgresql"
-      - "ES_SEEDS=elasticsearch"
-      - "ES_VERSION=v7"
-      - "PERSISTENCE_TYPE=sql"
-      - "PERSISTENCE_DRIVER=postgres"
-      - "TEMPORAL_VERSION_CHECK_DISABLED=1"
-    depends_on:
-      - postgresql
-      - elasticsearch
-    volumes:
-      - ../../.testoutput:/temporal/.testoutput
-    networks:
-      services-network:
-        aliases:
-          - integration-test
-
-  integration-test-postgresql-pgx:
-    build:
-      context: ../..
-      dockerfile: ./develop/buildkite/Dockerfile
-    environment:
-      - "POSTGRES_SEEDS=postgresql"
-      - "ES_SEEDS=elasticsearch"
-      - "ES_VERSION=v7"
-      - "PERSISTENCE_TYPE=sql"
-      - "PERSISTENCE_DRIVER=postgres_pgx"
-      - "TEMPORAL_VERSION_CHECK_DISABLED=1"
-    depends_on:
-      - postgresql
-      - elasticsearch
     volumes:
       - ../../.testoutput:/temporal/.testoutput
     networks:
@@ -327,28 +264,6 @@ services:
         aliases:
           - integration-test-xdc
 
-  integration-test-xdc-mysql:
-    build:
-      context: ../..
-      dockerfile: ./develop/buildkite/Dockerfile
-    environment:
-      - "MYSQL_SEEDS=mysql"
-      - "ES_SEEDS=elasticsearch"
-      - "ES_VERSION=v7"
-      - "PERSISTENCE_TYPE=sql"
-      - "PERSISTENCE_DRIVER=mysql"
-      - "TEST_RUN_COUNT=10"
-      - "TEMPORAL_VERSION_CHECK_DISABLED=1"
-    depends_on:
-      - mysql
-      - elasticsearch
-    volumes:
-      - ../../.testoutput:/temporal/.testoutput
-    networks:
-      services-network:
-        aliases:
-          - integration-test-xdc
-
   integration-test-xdc-mysql8:
     build:
       context: ../..
@@ -361,50 +276,6 @@ services:
       - "TEMPORAL_VERSION_CHECK_DISABLED=1"
     depends_on:
       - mysql
-    volumes:
-      - ../../.testoutput:/temporal/.testoutput
-    networks:
-      services-network:
-        aliases:
-          - integration-test-xdc
-
-  integration-test-xdc-postgresql:
-    build:
-      context: ../..
-      dockerfile: ./develop/buildkite/Dockerfile
-    environment:
-      - "POSTGRES_SEEDS=postgresql"
-      - "ES_SEEDS=elasticsearch"
-      - "ES_VERSION=v7"
-      - "PERSISTENCE_TYPE=sql"
-      - "PERSISTENCE_DRIVER=postgres"
-      - "TEST_RUN_COUNT=10"
-      - "TEMPORAL_VERSION_CHECK_DISABLED=1"
-    depends_on:
-      - postgresql
-      - elasticsearch
-    volumes:
-      - ../../.testoutput:/temporal/.testoutput
-    networks:
-      services-network:
-        aliases:
-          - integration-test-xdc
-
-  integration-test-xdc-postgresql-pgx:
-    build:
-      context: ../..
-      dockerfile: ./develop/buildkite/Dockerfile
-    environment:
-      - "POSTGRES_SEEDS=postgresql"
-      - "ES_SEEDS=elasticsearch"
-      - "ES_VERSION=v7"
-      - "PERSISTENCE_TYPE=sql"
-      - "PERSISTENCE_DRIVER=postgres_pgx"
-      - "TEST_RUN_COUNT=10"
-      - "TEMPORAL_VERSION_CHECK_DISABLED=1"
-    depends_on:
-      - postgresql
-      - elasticsearch
     volumes:
       - ../../.testoutput:/temporal/.testoutput
     networks:

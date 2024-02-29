@@ -149,9 +149,9 @@ func NewTestBaseWithSQL(options *TestBaseOptions) *TestBase {
 
 	if options.DBPort == 0 {
 		switch options.SQLDBPluginName {
-		case mysql.PluginName, mysql.PluginNameV8:
+		case mysql.PluginNameV8:
 			options.DBPort = environment.GetMySQLPort()
-		case postgresql.PluginName, postgresql.PluginNamePGX, postgresql.PluginNameV12, postgresql.PluginNameV12PGX:
+		case postgresql.PluginNameV12, postgresql.PluginNameV12PGX:
 			options.DBPort = environment.GetPostgreSQLPort()
 		case sqlite.PluginName:
 			options.DBPort = 0
@@ -161,9 +161,9 @@ func NewTestBaseWithSQL(options *TestBaseOptions) *TestBase {
 	}
 	if options.DBHost == "" {
 		switch options.SQLDBPluginName {
-		case mysql.PluginName, mysql.PluginNameV8:
+		case mysql.PluginNameV8:
 			options.DBHost = environment.GetMySQLAddress()
-		case postgresql.PluginName, postgresql.PluginNamePGX:
+		case postgresql.PluginNameV12, postgresql.PluginNameV12PGX:
 			options.DBHost = environment.GetPostgreSQLAddress()
 		case sqlite.PluginName:
 			options.DBHost = environment.GetLocalhostIP()

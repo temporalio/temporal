@@ -31,6 +31,7 @@ import (
 	"github.com/urfave/cli"
 
 	"go.temporal.io/server/common/log"
+	"go.temporal.io/server/common/persistence/sql/sqlplugin/mysql"
 	dbschemas "go.temporal.io/server/schema"
 	"go.temporal.io/server/tools/common/schema"
 )
@@ -95,7 +96,7 @@ func BuildCLIOptions() *cli.App {
 		},
 		cli.StringFlag{
 			Name:   schema.CLIFlagPluginName,
-			Value:  "mysql",
+			Value:  mysql.PluginNameV8,
 			Usage:  "name of the sql plugin",
 			EnvVar: "SQL_PLUGIN",
 		},

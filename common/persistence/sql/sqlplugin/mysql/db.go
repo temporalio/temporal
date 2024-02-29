@@ -33,7 +33,7 @@ import (
 
 	"go.temporal.io/server/common/persistence/schema"
 	"go.temporal.io/server/common/persistence/sql/sqlplugin"
-	mysqlschemaV57 "go.temporal.io/server/schema/mysql/v57"
+	mysqlschemaV8 "go.temporal.io/server/schema/mysql/v8"
 )
 
 // db represents a logical connection to mysql database
@@ -108,7 +108,7 @@ func (mdb *db) Close() error {
 
 // PluginName returns the name of the mysql plugin
 func (mdb *db) PluginName() string {
-	return PluginName
+	return PluginNameV8
 }
 
 // DbName returns the name of the database
@@ -120,9 +120,9 @@ func (mdb *db) DbName() string {
 func (mdb *db) ExpectedVersion() string {
 	switch mdb.dbKind {
 	case sqlplugin.DbKindMain:
-		return mysqlschemaV57.Version
+		return mysqlschemaV8.Version
 	case sqlplugin.DbKindVisibility:
-		return mysqlschemaV57.VisibilityVersion
+		return mysqlschemaV8.VisibilityVersion
 	default:
 		panic(fmt.Sprintf("unknown db kind %v", mdb.dbKind))
 	}
