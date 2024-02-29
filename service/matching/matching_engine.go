@@ -960,7 +960,7 @@ func (e *matchingEngineImpl) ListWorkerVersioningRules(
 		return nil, err
 	}
 
-	data, _, err := tqMgr.GetUserData()
+	data, _, err := tqMgr.GetUserDataManager().GetUserData()
 	if err != nil {
 		return nil, err
 	}
