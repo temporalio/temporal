@@ -38,8 +38,6 @@ import (
 	"go.temporal.io/server/common/persistence/visibility/store/elasticsearch"
 	esclient "go.temporal.io/server/common/persistence/visibility/store/elasticsearch/client"
 	"go.temporal.io/server/common/persistence/visibility/store/sql"
-	"go.temporal.io/server/common/persistence/visibility/store/standard"
-	standardSql "go.temporal.io/server/common/persistence/visibility/store/standard/sql"
 	"go.temporal.io/server/common/resolver"
 	"go.temporal.io/server/common/searchattribute"
 )
@@ -256,25 +254,13 @@ func newVisibilityStoreFromDataStoreConfig(
 		err      error
 	)
 	if dsConfig.SQL != nil {
-		switch dsConfig.SQL.PluginName {
-		case mysql.PluginNameV8, postgresql.PluginNameV12, postgresql.PluginNameV12PGX, sqlite.PluginName:
-			visStore, err = sql.NewSQLVisibilityStore(
-				*dsConfig.SQL,
-				persistenceResolver,
-				searchAttributesProvider,
-				searchAttributesMapperProvider,
-				logger,
-			)
-		default:
-			visStore, err = newStandardVisibilityStore(
-				dsConfig,
-				persistenceResolver,
-				searchAttributesProvider,
-				searchAttributesMapperProvider,
-				logger,
-				metricsHandler,
-			)
-		}
+		visStore, err = sql.NewSQLVisibilityStore(
+			*dsConfig.SQL,
+			persistenceResolver,
+			searchAttributesProvider,
+			searchAttributesMapperProvider,
+			logger,
+		)
 	} else if dsConfig.Elasticsearch != nil {
 		visStore = newElasticsearchVisibilityStore(
 			dsConfig.Elasticsearch.GetVisibilityIndex(),
@@ -296,39 +282,6 @@ func newVisibilityStoreFromDataStoreConfig(
 		)
 	}
 	return visStore, err
-}
-
-func newStandardVisibilityStore(
-	dsConfig config.DataStore,
-	persistenceResolver resolver.ServiceResolver,
-	searchAttributesProvider searchattribute.Provider,
-	searchAttributesMapperProvider searchattribute.MapperProvider,
-	logger log.Logger,
-	metricsHandler metrics.Handler,
-) (store.VisibilityStore, error) {
-	var (
-		visStore store.VisibilityStore
-		err      error
-	)
-	if dsConfig.SQL != nil {
-		visStore, err = standardSql.NewSQLVisibilityStore(
-			*dsConfig.SQL,
-			persistenceResolver,
-			logger,
-		)
-	}
-	if err != nil {
-		return nil, err
-	}
-	if visStore == nil {
-		logger.Fatal("invalid config: sql params must be specified for visibility store")
-		return nil, nil
-	}
-	return standard.NewVisibilityStore(
-		visStore,
-		searchAttributesProvider,
-		searchAttributesMapperProvider,
-	), nil
 }
 
 func newElasticsearchVisibilityStore(

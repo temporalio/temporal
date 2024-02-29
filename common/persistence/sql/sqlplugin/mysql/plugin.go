@@ -36,7 +36,7 @@ import (
 
 const (
 	// PluginName is the name of the plugin
-	PluginName = "mysql"
+	PluginNameV8 = "mysql8"
 )
 
 type plugin struct{}
@@ -44,7 +44,7 @@ type plugin struct{}
 var _ sqlplugin.Plugin = (*plugin)(nil)
 
 func init() {
-	sql.RegisterPlugin(PluginName, &plugin{})
+	sql.RegisterPlugin(PluginNameV8, &plugin{})
 }
 
 // CreateDB initialize the db object
