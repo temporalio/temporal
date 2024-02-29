@@ -314,6 +314,22 @@ func (s *batchedTaskSuite) TestMarkPoisonPill_SingleItem_MarkTheTask() {
 	s.Nil(result)
 }
 
+func (s *batchedTaskSuite) TestReschedule_SingleItem_RescheduleTheTask() {
+	existing := NewMockBatchableTask(s.controller)
+	handlerCallCount := 0
+	batchedTestTask := &batchedTask{
+		batchedTask:     existing,
+		individualTasks: append([]TrackableExecutableTask{}, existing),
+		state:           batchStateOpen,
+		individualTaskHandler: func(task TrackableExecutableTask) {
+			handlerCallCount++
+		},
+	}
+	existing.EXPECT().Reschedule().Times(1)
+
+	batchedTestTask.Reschedule()
+}
+
 func (s *batchedTaskSuite) TestMarkPoisonPill_MultipleItems_CallIndividualHandler() {
 	existing := NewMockBatchableTask(s.controller)
 	add1 := NewMockBatchableTask(s.controller)
