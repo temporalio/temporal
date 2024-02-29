@@ -36,12 +36,12 @@ import (
 	"go.temporal.io/server/tools/sql/clitest"
 )
 
-type Postgresql12Suite struct {
+type PostgresqlSuite struct {
 	suite.Suite
 	pluginName string
 }
 
-func (p *Postgresql12Suite) TestPostgreSQL12ConnTestSuite() {
+func (p *PostgresqlSuite) TestPostgreSQLConnTestSuite() {
 	suite.Run(p.T(), clitest.NewSQLConnTestSuite(
 		environment.GetPostgreSQLAddress(),
 		strconv.Itoa(environment.GetPostgreSQLPort()),
@@ -50,7 +50,7 @@ func (p *Postgresql12Suite) TestPostgreSQL12ConnTestSuite() {
 	))
 }
 
-func (p *Postgresql12Suite) TestPostgreSQL12HandlerTestSuite() {
+func (p *PostgresqlSuite) TestPostgreSQLHandlerTestSuite() {
 	suite.Run(p.T(), clitest.NewHandlerTestSuite(
 		environment.GetPostgreSQLAddress(),
 		strconv.Itoa(environment.GetPostgreSQLPort()),
@@ -58,7 +58,7 @@ func (p *Postgresql12Suite) TestPostgreSQL12HandlerTestSuite() {
 	))
 }
 
-func (p *Postgresql12Suite) TestPostgreSQL12SetupSchemaTestSuite() {
+func (p *PostgresqlSuite) TestPostgreSQLSetupSchemaTestSuite() {
 	p.T().Setenv("SQL_HOST", environment.GetPostgreSQLAddress())
 	p.T().Setenv("SQL_PORT", strconv.Itoa(environment.GetPostgreSQLPort()))
 	p.T().Setenv("SQL_USER", testUser)
@@ -71,7 +71,7 @@ func (p *Postgresql12Suite) TestPostgreSQL12SetupSchemaTestSuite() {
 	))
 }
 
-func (p *Postgresql12Suite) TestPostgreSQL12UpdateSchemaTestSuite() {
+func (p *PostgresqlSuite) TestPostgreSQLUpdateSchemaTestSuite() {
 	p.T().Setenv("SQL_HOST", environment.GetPostgreSQLAddress())
 	p.T().Setenv("SQL_PORT", strconv.Itoa(environment.GetPostgreSQLPort()))
 	p.T().Setenv("SQL_USER", testUser)
@@ -81,31 +81,31 @@ func (p *Postgresql12Suite) TestPostgreSQL12UpdateSchemaTestSuite() {
 		strconv.Itoa(environment.GetPostgreSQLPort()),
 		p.pluginName,
 		testPostgreSQLQuery,
-		testPostgreSQL12ExecutionSchemaVersionDir,
+		testPostgreSQLExecutionSchemaVersionDir,
 		postgresqlversionV12.Version,
-		testPostgreSQL12VisibilitySchemaVersionDir,
+		testPostgreSQLVisibilitySchemaVersionDir,
 		postgresqlversionV12.VisibilityVersion,
 	))
 }
 
-func (p *Postgresql12Suite) TestPostgreSQL12VersionTestSuite() {
+func (p *PostgresqlSuite) TestPostgreSQLVersionTestSuite() {
 	p.T().Setenv("SQL_USER", testUser)
 	p.T().Setenv("SQL_PASSWORD", testPassword)
 	suite.Run(p.T(), clitest.NewVersionTestSuite(
 		environment.GetPostgreSQLAddress(),
 		strconv.Itoa(environment.GetPostgreSQLPort()),
 		p.pluginName,
-		testPostgreSQL12ExecutionSchemaFile,
-		testPostgreSQL12VisibilitySchemaFile,
+		testPostgreSQLExecutionSchemaFile,
+		testPostgreSQLVisibilitySchemaFile,
 	))
 }
 
-func TestPostgres12(t *testing.T) {
-	s := &Postgresql12Suite{pluginName: postgresql.PluginNameV12}
+func TestPostgres(t *testing.T) {
+	s := &PostgresqlSuite{pluginName: postgresql.PluginName}
 	suite.Run(t, s)
 }
 
-func TestPostgre12PGX(t *testing.T) {
-	s := &Postgresql12Suite{pluginName: postgresql.PluginNameV12PGX}
+func TestPostgresPGX(t *testing.T) {
+	s := &PostgresqlSuite{pluginName: postgresql.PluginNamePGX}
 	suite.Run(t, s)
 }

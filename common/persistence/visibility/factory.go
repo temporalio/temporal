@@ -120,11 +120,11 @@ func NewManager(
 		isPrimaryAdvancedSQL := false
 		isSecondaryAdvancedSQL := false
 		switch visibilityManager.GetStoreNames()[0] {
-		case mysql.PluginNameV8, postgresql.PluginNameV12, postgresql.PluginNameV12PGX, sqlite.PluginName:
+		case mysql.PluginName, postgresql.PluginName, postgresql.PluginNamePGX, sqlite.PluginName:
 			isPrimaryAdvancedSQL = true
 		}
 		switch secondaryVisibilityManager.GetStoreNames()[0] {
-		case mysql.PluginNameV8, postgresql.PluginNameV12, postgresql.PluginNameV12PGX, sqlite.PluginName:
+		case mysql.PluginName, postgresql.PluginName, postgresql.PluginNamePGX, sqlite.PluginName:
 			isSecondaryAdvancedSQL = true
 		}
 		if isPrimaryAdvancedSQL && !isSecondaryAdvancedSQL {

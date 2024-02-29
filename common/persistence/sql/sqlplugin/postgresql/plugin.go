@@ -41,8 +41,8 @@ import (
 
 const (
 	// PluginName is the name of the plugin
-	PluginNameV12    = "postgres12"
-	PluginNameV12PGX = "postgres12_pgx"
+	PluginName    = "postgres12"
+	PluginNamePGX = "postgres12_pgx"
 )
 
 var (
@@ -59,8 +59,8 @@ type plugin struct {
 var _ sqlplugin.Plugin = (*plugin)(nil)
 
 func init() {
-	sql.RegisterPlugin(PluginNameV12, &plugin{&driver.PQDriver{}})
-	sql.RegisterPlugin(PluginNameV12PGX, &plugin{&driver.PGXDriver{}})
+	sql.RegisterPlugin(PluginName, &plugin{&driver.PQDriver{}})
+	sql.RegisterPlugin(PluginNamePGX, &plugin{&driver.PGXDriver{}})
 
 }
 
