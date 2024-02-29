@@ -328,6 +328,7 @@ func (s *batchedTaskSuite) TestReschedule_SingleItem_RescheduleTheTask() {
 	existing.EXPECT().Reschedule().Times(1)
 
 	batchedTestTask.Reschedule()
+	s.Equal(0, handlerCallCount)
 }
 
 func (s *batchedTaskSuite) TestMarkPoisonPill_MultipleItems_CallIndividualHandler() {
