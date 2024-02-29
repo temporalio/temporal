@@ -1350,8 +1350,8 @@ go.opentelemetry.io/proto/otlp v0.20.0 h1:BLOA1cZBAGSbRiNuGCCKiFrCdYB7deeHDeD1Su
 go.opentelemetry.io/proto/otlp v0.20.0/go.mod h1:3QgjzPALBIv9pcknj2EXGPXjYPFdUh/RQfF8Lz3+Vnw=
 go.temporal.io/api v1.24.1-0.20231003165936-bb03061759c8 h1:nYlATgXyviKLMySF/eUCnVbUg1AeYwkHcJdhusFYsIs=
 go.temporal.io/api v1.24.1-0.20231003165936-bb03061759c8/go.mod h1:GyVOkCMSlZSqS7MrEaEV8kL3Oy8N0tpEsyVNywG+q5o=
-go.temporal.io/sdk v1.25.1 h1:jC9l9vHHz5OJ7PR6OjrpYSN4+uEG0bLe5rdF9nlMSGk=
-go.temporal.io/sdk v1.25.1/go.mod h1:X7iFKZpsj90BfszfpFCzLX8lwEJXbnRrl351/HyEgmU=
+go.temporal.io/sdk v1.25.2-0.20240229210226-6048f7e9b7c8 h1:ZK10Ts03Ik/nzPkxLhqqC2u4VZpQVn+2BG89WvaOGyo=
+go.temporal.io/sdk v1.25.2-0.20240229210226-6048f7e9b7c8/go.mod h1:X7iFKZpsj90BfszfpFCzLX8lwEJXbnRrl351/HyEgmU=
 go.temporal.io/version v0.3.0 h1:dMrei9l9NyHt8nG6EB8vAwDLLTwx2SvRyucCSumAiig=
 go.temporal.io/version v0.3.0/go.mod h1:UA9S8/1LaKYae6TyD9NaPMJTZb911JcbqghI2CBSP78=
 go.uber.org/atomic v1.5.0/go.mod h1:sABNBOSYdrvTF6hTgEIbc7YasKWGhgEQZyfxyTvoXHQ=
