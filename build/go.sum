@@ -2,8 +2,8 @@ github.com/davecgh/go-spew v1.1.1 h1:vj9j/u1bqnvCEfJOwUhtlOARqs3+rkHYY13jYWTU97c
 github.com/google/go-cmp v0.5.5 h1:Khx7svrCpmxxtHBq5j2mp/xVjsi8hQMfNLvJFAlrGgU=
 github.com/pmezard/go-difflib v1.0.0 h1:4DBwDE0NGyQoBHbLQYPwSUPoCMWR5BEzIk/f1lZbAQM=
 github.com/stretchr/testify v1.8.4 h1:CcVxjf3Q8PM0mHUKJCdn+eZZtm5yQwehR5yeSVQQcUk=
-go.temporal.io/api v1.26.1-0.20240124000020-2149fa650d6b h1:lPeHzyLW34iVojXZlhDPNKwWnKg5aFAnKiU6COJMyno=
-go.temporal.io/api v1.26.1-0.20240124000020-2149fa650d6b/go.mod h1:W10699UWjcJaa4vT6eNPp/Nfd1Wuu5Xmgl6JFSOC5YI=
+go.temporal.io/api v1.29.0 h1:bLviMlvD1SYqKPRGfRAv1/uV+8cNYmuhKIhTgLSs8OY=
+go.temporal.io/api v1.29.0/go.mod h1:sAtVCXkwNaCtHVMP6B/FlK8PcEnaDjJ+KHCwS/ufscI=
 golang.org/x/xerrors v0.0.0-20191204190536-9bdfabe68543 h1:E7g+9GITq07hpfrRu66IVDexMakfv52eLZ2CXBWiKr4=
 google.golang.org/grpc/cmd/protoc-gen-go-grpc v1.3.0 h1:rNBFJjBCOgVr9pWD7rs/knKL4FRTKgpZmsRfV214zcA=
 google.golang.org/grpc/cmd/protoc-gen-go-grpc v1.3.0/go.mod h1:Dk1tviKTvMCz5tvh7t+fh94dhmQVHuCt2OzJB3CTW9Y=
