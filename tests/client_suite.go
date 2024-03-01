@@ -1652,10 +1652,6 @@ func (s *ClientFunctionalSuite) TestBatchReset() {
 }
 
 func (s *ClientFunctionalSuite) TestBatchResetByBuildId() {
-	if !UsingSQLAdvancedVisibility() {
-		s.T().Skip("Test requires advanced visibility")
-	}
-
 	tq := s.randomizeStr(s.T().Name())
 	buildPrefix := uuid.New()[:6] + "-"
 	v1 := buildPrefix + "v1"

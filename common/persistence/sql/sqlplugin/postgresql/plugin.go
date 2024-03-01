@@ -41,8 +41,8 @@ import (
 
 const (
 	// PluginName is the name of the plugin
-	PluginName    = "postgres"
-	PluginNamePGX = "postgres_pgx"
+	PluginName    = "postgres12"
+	PluginNamePGX = "postgres12_pgx"
 )
 
 var (

@@ -396,13 +396,13 @@ func (wh *WorkflowHandler) StartWorkflowExecution(ctx context.Context, request *
 		return nil, errRequestIDTooLong
 	}
 
-	request, err := wh.unaliasStartWorkflowExecutionRequestSearchAttributes(request, namespaceName)
+	sa, err := wh.unaliasedSearchAttributesFrom(request.GetSearchAttributes(), namespaceName)
 	if err != nil {
 		return nil, err
 	}
-
-	if err = wh.validateSearchAttributes(request.GetSearchAttributes(), namespaceName); err != nil {
-		return nil, err
+	if sa != request.SearchAttributes {
+		request = common.CloneProto(request)
+		request.SearchAttributes = sa
 	}
 
 	for _, callback := range request.GetCompletionCallbacks() {
@@ -438,6 +438,21 @@ func (wh *WorkflowHandler) StartWorkflowExecution(ctx context.Context, request *
 		return nil, err
 	}
 	return &workflowservice.StartWorkflowExecutionResponse{RunId: resp.GetRunId(), EagerWorkflowTask: resp.GetEagerWorkflowTask()}, nil
+}
+
+func (wh *WorkflowHandler) unaliasedSearchAttributesFrom(
+	attributes *commonpb.SearchAttributes,
+	namespaceName namespace.Name,
+) (*commonpb.SearchAttributes, error) {
+	sa, err := searchattribute.UnaliasFields(wh.saMapperProvider, attributes, namespaceName.String())
+	if err != nil {
+		return nil, err
+	}
+
+	if err = wh.validateSearchAttributes(sa, namespaceName); err != nil {
+		return nil, err
+	}
+	return sa, nil
 }
 
 // GetWorkflowExecutionHistory returns the history of specified workflow execution.  It fails with 'EntityNotExistError' if specified workflow
@@ -1715,13 +1730,13 @@ func (wh *WorkflowHandler) SignalWithStartWorkflowExecution(ctx context.Context,
 		return nil, err
 	}
 
-	request, err := wh.unaliasSignalWithStartWorkflowExecutionRequestSearchAttributes(request, namespaceName)
+	sa, err := wh.unaliasedSearchAttributesFrom(request.GetSearchAttributes(), namespaceName)
 	if err != nil {
 		return nil, err
 	}
-
-	if err = wh.validateSearchAttributes(request.GetSearchAttributes(), namespaceName); err != nil {
-		return nil, err
+	if sa != request.GetSearchAttributes() {
+		request = common.CloneProto(request)
+		request.SearchAttributes = sa
 	}
 
 	enums.SetDefaultWorkflowIdReusePolicy(&request.WorkflowIdReusePolicy)
@@ -2593,17 +2608,16 @@ func (wh *WorkflowHandler) CreateSchedule(ctx context.Context, request *workflow
 	// Add namespace division before unaliasing search attributes.
 	searchattribute.AddSearchAttribute(&request.SearchAttributes, searchattribute.TemporalNamespaceDivision, payload.EncodeString(scheduler.NamespaceDivision))
 
-	request, err = wh.unaliasCreateScheduleRequestSearchAttributes(request, namespaceName)
+	sa, err := wh.unaliasedSearchAttributesFrom(request.GetSearchAttributes(), namespaceName)
 	if err != nil {
 		return nil, err
 	}
 
-	err = wh.validateSearchAttributes(request.GetSearchAttributes(), namespaceName)
+	err = wh.validateStartWorkflowArgsForSchedule(
+		namespaceName,
+		request.GetSchedule().GetAction().GetStartWorkflow(),
+		request.GetSchedule().GetPolicies().GetKeepOriginalWorkflowId())
 	if err != nil {
-		return nil, err
-	}
-
-	if err = wh.validateStartWorkflowArgsForSchedule(namespaceName, request.GetSchedule().GetAction().GetStartWorkflow()); err != nil {
 		return nil, err
 	}
 
@@ -2639,7 +2653,7 @@ func (wh *WorkflowHandler) CreateSchedule(ctx context.Context, request *workflow
 		RequestId:             request.RequestId,
 		WorkflowIdReusePolicy: enumspb.WORKFLOW_ID_REUSE_POLICY_ALLOW_DUPLICATE,
 		Memo:                  request.Memo,
-		SearchAttributes:      request.SearchAttributes,
+		SearchAttributes:      sa,
 	}
 	_, err = wh.historyClient.StartWorkflowExecution(ctx, common.CreateHistoryStartWorkflowRequest(namespaceID.String(), startReq, nil, time.Now().UTC()))
 
@@ -2657,12 +2671,14 @@ func (wh *WorkflowHandler) CreateSchedule(ctx context.Context, request *workflow
 func (wh *WorkflowHandler) validateStartWorkflowArgsForSchedule(
 	namespaceName namespace.Name,
 	startWorkflow *workflowpb.NewWorkflowExecutionInfo,
+	keepOriginalWorkflowId bool,
 ) error {
 	if startWorkflow == nil {
 		return nil
 	}
 
-	if err := wh.validateWorkflowID(startWorkflow.WorkflowId + scheduler.AppendedTimestampForValidation); err != nil {
+	workflowId := scheduler.InternalWorkflowIdRepresentation(startWorkflow.WorkflowId, time.Now(), keepOriginalWorkflowId)
+	if err := wh.validateWorkflowID(workflowId); err != nil {
 		return err
 	}
 
@@ -2930,7 +2946,11 @@ func (wh *WorkflowHandler) UpdateSchedule(ctx context.Context, request *workflow
 		return nil, err
 	}
 
-	if err = wh.validateStartWorkflowArgsForSchedule(namespaceName, request.GetSchedule().GetAction().GetStartWorkflow()); err != nil {
+	err = wh.validateStartWorkflowArgsForSchedule(
+		namespaceName,
+		request.GetSchedule().GetAction().GetStartWorkflow(),
+		request.GetSchedule().GetPolicies().GetKeepOriginalWorkflowId())
+	if err != nil {
 		return nil, err
 	}
 

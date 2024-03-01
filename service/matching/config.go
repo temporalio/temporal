@@ -49,6 +49,7 @@ type (
 		TestDisableSyncMatch                  dynamicconfig.BoolPropertyFn
 		RPS                                   dynamicconfig.IntPropertyFn
 		OperatorRPSRatio                      dynamicconfig.FloatPropertyFn
+		AlignMembershipChange                 dynamicconfig.DurationPropertyFn
 		ShutdownDrainDuration                 dynamicconfig.DurationPropertyFn
 		HistoryMaxPageSize                    dynamicconfig.IntPropertyFnWithNamespaceFilter
 
@@ -195,6 +196,7 @@ func NewConfig(
 		ForwarderMaxOutstandingTasks:          dc.GetIntPropertyFilteredByTaskQueueInfo(dynamicconfig.MatchingForwarderMaxOutstandingTasks, 1),
 		ForwarderMaxRatePerSecond:             dc.GetIntPropertyFilteredByTaskQueueInfo(dynamicconfig.MatchingForwarderMaxRatePerSecond, 10),
 		ForwarderMaxChildrenPerNode:           dc.GetIntPropertyFilteredByTaskQueueInfo(dynamicconfig.MatchingForwarderMaxChildrenPerNode, 20),
+		AlignMembershipChange:                 dc.GetDurationProperty(dynamicconfig.MatchingAlignMembershipChange, 0*time.Second),
 		ShutdownDrainDuration:                 dc.GetDurationProperty(dynamicconfig.MatchingShutdownDrainDuration, 0*time.Second),
 		VersionCompatibleSetLimitPerQueue:     dc.GetIntPropertyFilteredByNamespace(dynamicconfig.VersionCompatibleSetLimitPerQueue, 10),
 		VersionBuildIdLimitPerQueue:           dc.GetIntPropertyFilteredByNamespace(dynamicconfig.VersionBuildIdLimitPerQueue, 100),
@@ -203,7 +205,7 @@ func NewConfig(
 		BacklogNegligibleAge:                  dc.GetDurationPropertyFilteredByTaskQueueInfo(dynamicconfig.MatchingBacklogNegligibleAge, 24*365*10*time.Hour),
 		MaxWaitForPollerBeforeFwd:             dc.GetDurationPropertyFilteredByTaskQueueInfo(dynamicconfig.MatchingMaxWaitForPollerBeforeFwd, 200*time.Millisecond),
 		QueryPollerUnavailableWindow:          dc.GetDurationProperty(dynamicconfig.QueryPollerUnavailableWindow, 20*time.Second),
-		MembershipUnloadDelay:                 dc.GetDurationProperty(dynamicconfig.MatchingMembershipUnloadDelay, 3*time.Second),
+		MembershipUnloadDelay:                 dc.GetDurationProperty(dynamicconfig.MatchingMembershipUnloadDelay, 500*time.Millisecond),
 
 		AdminNamespaceToPartitionDispatchRate:          dc.GetFloatPropertyFilteredByNamespace(dynamicconfig.AdminMatchingNamespaceToPartitionDispatchRate, 10000),
 		AdminNamespaceTaskqueueToPartitionDispatchRate: dc.GetFloatPropertyFilteredByTaskQueueInfo(dynamicconfig.AdminMatchingNamespaceTaskqueueToPartitionDispatchRate, 1000),

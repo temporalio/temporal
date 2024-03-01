@@ -44,6 +44,7 @@ import (
 	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/proto"
 
+	"go.temporal.io/api/operatorservice/v1"
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/server/common/config"
@@ -91,6 +92,7 @@ func NewHTTPAPIServer(
 	grpcListener net.Listener,
 	tlsConfigProvider encryption.TLSConfigProvider,
 	handler Handler,
+	operatorHandler *OperatorHandlerImpl,
 	interceptors []grpc.UnaryServerInterceptor,
 	metricsHandler metrics.Handler,
 	additionalRouteRegistrationFuncs []func(*mux.Router),
@@ -155,7 +157,10 @@ func NewHTTPAPIServer(
 
 	// Create inline client connection
 	clientConn := newInlineClientConn(
-		map[string]any{"temporal.api.workflowservice.v1.WorkflowService": handler},
+		map[string]any{
+			"temporal.api.workflowservice.v1.WorkflowService": handler,
+			"temporal.api.operatorservice.v1.OperatorService": operatorHandler,
+		},
 		interceptors,
 		metricsHandler,
 		namespaceRegistry,
@@ -163,13 +168,23 @@ func NewHTTPAPIServer(
 
 	// Create serve mux
 	h.serveMux = runtime.NewServeMux(opts...)
+
 	err = workflowservice.RegisterWorkflowServiceHandlerClient(
 		context.Background(),
 		h.serveMux,
 		workflowservice.NewWorkflowServiceClient(clientConn),
 	)
 	if err != nil {
-		return nil, fmt.Errorf("failed registering HTTP API handler: %w", err)
+		return nil, fmt.Errorf("failed registering workflowservice HTTP API handler: %w", err)
+	}
+
+	err = operatorservice.RegisterOperatorServiceHandlerClient(
+		context.Background(),
+		h.serveMux,
+		operatorservice.NewOperatorServiceClient(clientConn),
+	)
+	if err != nil {
+		return nil, fmt.Errorf("failed registering operatorservice HTTP API handler: %w", err)
 	}
 
 	// Instantiate a router to support additional route prefixes.

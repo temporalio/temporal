@@ -97,6 +97,7 @@ var (
 		"/temporal.server.api.historyservice.v1.HistoryService/DeleteDLQTasks":                         1,
 		"/temporal.server.api.historyservice.v1.HistoryService/AddTasks":                               1,
 		"/temporal.server.api.historyservice.v1.HistoryService/ListQueues":                             1,
+		"/temporal.server.api.historyservice.v1.HistoryService/Tasks":                                  1,
 	}
 
 	APIPrioritiesOrdered = []int{OperatorPriority, 1}

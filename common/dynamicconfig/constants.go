@@ -31,6 +31,8 @@ func (k Key) String() string {
 const (
 	// keys for admin
 
+	// AdminEnableListHistoryTasks is the key for enabling listing history tasks
+	AdminEnableListHistoryTasks = "admin.enableListHistoryTasks"
 	// AdminMatchingNamespaceToPartitionDispatchRate is the max qps of any task queue partition for a given namespace
 	AdminMatchingNamespaceToPartitionDispatchRate = "admin.matchingNamespaceToPartitionDispatchRate"
 	// AdminMatchingNamespaceTaskqueueToPartitionDispatchRate is the max qps of a task queue partition for a given namespace & task queue
@@ -78,7 +80,12 @@ const (
 	// get the latest data from DB. This effectively bypasses cache value and is used to facilitate testing of changes in
 	// search attributes. This should not be turned on in production.
 	ForceSearchAttributesCacheRefreshOnRead = "system.forceSearchAttributesCacheRefreshOnRead"
-	EnableRingpopTLS                        = "system.enableRingpopTLS"
+	// EnableRingpopTLS controls whether to use TLS for ringpop, using the same "internode" TLS
+	// config as the other services.
+	EnableRingpopTLS = "system.enableRingpopTLS"
+	// RingpopApproximateMaxPropagationTime is used for timing certain startup and shutdown processes.
+	// (It is not and doesn't have to be a guarantee.)
+	RingpopApproximateMaxPropagationTime = "system.ringpopApproximateMaxPropagationTime"
 	// EnableParentClosePolicyWorker decides whether or not enable system workers for processing parent close policy task
 	EnableParentClosePolicyWorker = "system.enableParentClosePolicyWorker"
 	// EnableStickyQuery indicates if sticky query should be enabled per namespace
@@ -453,6 +460,9 @@ const (
 	MatchingForwarderMaxRatePerSecond = "matching.forwarderMaxRatePerSecond"
 	// MatchingForwarderMaxChildrenPerNode is the max number of children per node in the task queue partition tree
 	MatchingForwarderMaxChildrenPerNode = "matching.forwarderMaxChildrenPerNode"
+	// MatchingAlignMembershipChange is a duration to align matching's membership changes to.
+	// This can help reduce effects of task queue movement.
+	MatchingAlignMembershipChange = "matching.alignMembershipChange"
 	// MatchingShutdownDrainDuration is the duration of traffic drain during shutdown
 	MatchingShutdownDrainDuration = "matching.shutdownDrainDuration"
 	// MatchingGetUserDataLongPollTimeout is the max length of long polls for GetUserData calls between partitions.

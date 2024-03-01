@@ -33,6 +33,7 @@ import (
 	commonpb "go.temporal.io/api/common/v1"
 	historypb "go.temporal.io/api/history/v1"
 	"go.temporal.io/server/service/history/api/getworkflowexecutionrawhistory"
+	"go.temporal.io/server/service/history/api/listtasks"
 
 	historyspb "go.temporal.io/server/api/history/v1"
 	workflowpb "go.temporal.io/server/api/workflow/v1"
@@ -921,5 +922,17 @@ func (e *historyEngineImpl) AddTasks(
 		int(e.config.NumberOfShards),
 		request,
 		e.taskCategoryRegistry,
+	)
+}
+
+func (e *historyEngineImpl) ListTasks(
+	ctx context.Context,
+	request *historyservice.ListTasksRequest,
+) (_ *historyservice.ListTasksResponse, retError error) {
+	return listtasks.Invoke(
+		ctx,
+		e.taskCategoryRegistry,
+		e.executionManager,
+		request,
 	)
 }

@@ -841,3 +841,11 @@ message AddTasksRequest {
 }
 
 message AddTasksResponse {}
+
+message ListTasksRequest {
+    temporal.server.api.adminservice.v1.ListHistoryTasksRequest request = 1;
+}
+
+message ListTasksResponse {
+    temporal.server.api.adminservice.v1.ListHistoryTasksResponse response = 1;
+}

@@ -551,11 +551,14 @@ func (tm *TaskMatcher) poll(
 			tm.metricsHandler.Counter(metrics.PollSuccessPerTaskQueueCounter.Name()).Record(1)
 			return task, false, nil
 		case token := <-tm.fwdrPollReqTokenC():
-			if task, err := tm.fwdr.ForwardPoll(ctx, pollMetadata); err == nil {
-				token.release()
+			// Arrange to cancel this request if closeC is closed
+			fwdCtx, cancel := contextWithCancelOnChannelClose(ctx, tm.closeC)
+			task, err := tm.fwdr.ForwardPoll(fwdCtx, pollMetadata)
+			cancel()
+			token.release()
+			if err == nil {
 				return task, true, nil
 			}
-			token.release()
 		}
 	}
 
@@ -676,4 +679,19 @@ func (tm *TaskMatcher) emitForwardedSourceStats(
 
 func (tm *TaskMatcher) timeSinceLastPoll() time.Duration {
 	return time.Since(time.Unix(0, tm.lastPoller.Load()))
+}
+
+// contextWithCancelOnChannelClose returns a child Context and CancelFunc just like
+// context.WithCancel, but additionally propagates cancellation from another channel (besides
+// the parent's cancellation channel).
+func contextWithCancelOnChannelClose(parent context.Context, closeC <-chan struct{}) (context.Context, context.CancelFunc) {
+	ctx, cancel := context.WithCancel(parent)
+	go func() {
+		select {
+		case <-closeC:
+			cancel()
+		case <-ctx.Done():
+		}
+	}()
+	return ctx, cancel
 }

@@ -45,7 +45,7 @@ docker compose run integration-test-cassandra make integration-test-coverage
 ```
 or run integration tests with MySQL:
 ```bash
-docker compose run integration-test-mysql make integration-test-coverage
+docker compose run integration-test-mysql8 make integration-test-coverage
 ```
 
 ## Testing the build in Buildkite
