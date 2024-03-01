@@ -52,8 +52,10 @@ import (
 	"go.temporal.io/server/service/history/workflow/cache"
 )
 
-type eagerStartDeniedReason metrics.ReasonString
-type WithStartFunc func(lease api.WorkflowLease) error
+type (
+	eagerStartDeniedReason metrics.ReasonString
+	WithStartFunc          func(lease api.WorkflowLease) error
+)
 
 const (
 	eagerStartDeniedReasonDynamicConfigDisabled    eagerStartDeniedReason = "dynamic_config_disabled"
@@ -166,7 +168,8 @@ func (s *Starter) Invoke(
 	return s.invoke(ctx, nil)
 }
 
-// InvokeWithStart starts a new workflow execution; and allows to perform additional .
+// InvokeWithStart starts a new workflow execution;
+// and allows to run additional steps before the new execution is persisted.
 func (s *Starter) InvokeWithStart(
 	ctx context.Context,
 	withStart WithStartFunc,
