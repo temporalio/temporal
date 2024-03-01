@@ -255,8 +255,7 @@ message GetTaskQueueUserDataRequest {
     bool wait_new_data = 4;
 }
 message GetTaskQueueUserDataResponse {
-    // Whether this task queue has any stored user data
-    bool task_queue_has_user_data = 1;
+    reserved 1;
     // Versioned user data, set if the task queue has user data and the request's last_known_user_data_version is less
     // than the version cached in the root partition.
     temporal.server.api.persistence.v1.VersionedTaskQueueUserData user_data = 2;

@@ -36,7 +36,7 @@ import (
 
 const (
 	// PluginName is the name of the plugin
-	PluginName = "mysql"
+	PluginName = "mysql8"
 )
 
 type plugin struct{}

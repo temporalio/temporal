@@ -138,7 +138,7 @@ func (w *batchedTask) Nack(err error) {
 
 func (w *batchedTask) Reschedule() {
 	if len(w.individualTasks) == 1 {
-		w.Reschedule()
+		w.batchedTask.Reschedule()
 	} else {
 		w.handleIndividualTasks()
 	}

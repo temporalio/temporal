@@ -82,6 +82,8 @@ linters-settings:
         disabled: true
       - name: flag-parameter
         disabled: true
+      - name: unnecessary-stmt
+        disabled: true
 
       # Rule tuning
       - name: cognitive-complexity

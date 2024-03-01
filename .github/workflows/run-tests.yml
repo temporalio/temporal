@@ -133,7 +133,7 @@ jobs:
       fail-fast: false
       matrix:
         runs-on: [ubuntu-latest]
-        name: [cass_es, cass_es8, sqlite, mysql, mysql8, postgres, postgres_pgx, postgres12, postgres12_pgx]
+        name: [cass_es, cass_es8, sqlite, mysql8, postgres12, postgres12_pgx]
         shard_index: [0, 1, 2]
         include:
           - name: cass_es
@@ -148,22 +148,10 @@ jobs:
             persistence_type: sql
             persistence_driver: sqlite
             containers: []
-          - name: mysql
-            persistence_type: sql
-            persistence_driver: mysql
-            containers: [mysql, elasticsearch]
           - name: mysql8
             persistence_type: sql
             persistence_driver: mysql8
             containers: [mysql]
-          - name: postgres
-            persistence_type: sql
-            persistence_driver: postgres
-            containers: [postgresql, elasticsearch]
-          - name: postgres_pgx
-            persistence_type: sql
-            persistence_driver: postgres_pgx
-            containers: [postgresql, elasticsearch]
           - name: postgres12
             persistence_type: sql
             persistence_driver: postgres12
@@ -214,7 +202,7 @@ jobs:
       fail-fast: false
       matrix:
         runs-on: [ubuntu-latest]
-        name: [cass_es, cass_es8, mysql, mysql8, postgres, postgres_pgx, postgres12, postgres12_pgx]
+        name: [cass_es, cass_es8, mysql8, postgres12, postgres12_pgx]
         include:
           - name: cass_es
             persistence_type: nosql
@@ -224,22 +212,10 @@ jobs:
             persistence_type: nosql
             persistence_driver: elasticsearch
             containers: [cassandra, elasticsearch8]
-          - name: mysql
-            persistence_type: sql
-            persistence_driver: mysql
-            containers: [mysql, elasticsearch]
           - name: mysql8
             persistence_type: sql
             persistence_driver: mysql8
             containers: [mysql]
-          - name: postgres
-            persistence_type: sql
-            persistence_driver: postgres12
-            containers: [postgresql, elasticsearch]
-          - name: postgres_pgx
-            persistence_type: sql
-            persistence_driver: postgres12_pgx
-            containers: [postgresql, elasticsearch]
           - name: postgres12
             persistence_type: sql
             persistence_driver: postgres12
@@ -288,7 +264,7 @@ jobs:
       fail-fast: false
       matrix:
         runs-on: [ubuntu-latest]
-        name: [cass_es, cass_es8, mysql, mysql8, postgres, postgres_pgx, postgres12, postgres12_pgx]
+        name: [cass_es, cass_es8, mysql8, postgres12, postgres12_pgx]
         include:
           - name: cass_es
             persistence_type: nosql
@@ -298,22 +274,10 @@ jobs:
             persistence_type: nosql
             persistence_driver: elasticsearch
             containers: [cassandra, elasticsearch8]
-          - name: mysql
-            persistence_type: sql
-            persistence_driver: mysql
-            containers: [mysql, elasticsearch]
           - name: mysql8
             persistence_type: sql
             persistence_driver: mysql8
             containers: [mysql]
-          - name: postgres
-            persistence_type: sql
-            persistence_driver: postgres12
-            containers: [postgresql, elasticsearch]
-          - name: postgres_pgx
-            persistence_type: sql
-            persistence_driver: postgres12_pgx
-            containers: [postgresql, elasticsearch]
           - name: postgres12
             persistence_type: sql
             persistence_driver: postgres12

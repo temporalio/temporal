@@ -235,7 +235,7 @@ func (s *operatorHandlerSuite) Test_AddSearchAttributes_DualVisibility() {
 
 	mockVisManager1.EXPECT().GetStoreNames().Return([]string{elasticsearch.PersistenceName}).AnyTimes()
 	mockVisManager1.EXPECT().GetIndexName().Return(testIndexName).AnyTimes()
-	mockVisManager2.EXPECT().GetStoreNames().Return([]string{mysql.PluginNameV8}).AnyTimes()
+	mockVisManager2.EXPECT().GetStoreNames().Return([]string{mysql.PluginName}).AnyTimes()
 	mockVisManager2.EXPECT().GetIndexName().Return(testIndexName).AnyTimes()
 
 	s.mockResource.SearchAttributesManager.EXPECT().
@@ -291,7 +291,7 @@ func (s *operatorHandlerSuite) Test_AddSearchAttributes_DualVisibility() {
 			addVisManager2Err: errors.New("mock error add vis manager 2"),
 			expectedErrMsg: fmt.Sprintf(
 				"Failed to add search attributes to store %s",
-				mysql.PluginNameV8,
+				mysql.PluginName,
 			),
 		},
 	}
@@ -422,7 +422,7 @@ func (s *operatorHandlerSuite) Test_AddSearchAttributesInternal() {
 				},
 				Namespace: testNamespace,
 			},
-			storeName:      mysql.PluginNameV8,
+			storeName:      mysql.PluginName,
 			indexName:      testIndexName,
 			addSqlCalled:   true,
 			addSqlErr:      errors.New("mock error add sql wf"),
@@ -436,7 +436,7 @@ func (s *operatorHandlerSuite) Test_AddSearchAttributesInternal() {
 				},
 				Namespace: testNamespace,
 			},
-			storeName:      mysql.PluginNameV8,
+			storeName:      mysql.PluginName,
 			indexName:      testIndexName,
 			addSqlCalled:   true,
 			expectedErrMsg: "",
