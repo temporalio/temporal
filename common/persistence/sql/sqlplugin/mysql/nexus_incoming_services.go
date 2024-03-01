@@ -31,9 +31,9 @@ import (
 )
 
 const (
-	createIncomingServicesTableVersionQry    = `INSERT INTO nexus_incoming_services_table_version(version) VALUES(1)`
-	incrementIncomingServicesTableVersionQry = `UPDATE nexus_incoming_services_table_version SET version = ? WHERE version = ?`
-	getIncomingServicesTableVersionQry       = `SELECT version FROM nexus_incoming_services_table_version`
+	createIncomingServicesTableVersionQry    = `INSERT INTO nexus_incoming_services_partition_status(version) VALUES(1)`
+	incrementIncomingServicesTableVersionQry = `UPDATE nexus_incoming_services_partition_status SET version = ? WHERE version = ?`
+	getIncomingServicesTableVersionQry       = `SELECT version FROM nexus_incoming_services_partition_status`
 
 	createIncomingServiceQry = `INSERT INTO nexus_incoming_services(service_id, data, data_encoding, version) VALUES (?, ?, ?, 1)`
 	updateIncomingServiceQry = `UPDATE nexus_incoming_services SET data = ?, data_encoding = ?, version = ? WHERE service_id = ? AND version = ?`

@@ -8,7 +8,7 @@ CREATE TABLE nexus_incoming_services (
 );
 
 -- Stores the version of Nexus incoming services table as a whole
-CREATE TABLE nexus_incoming_services_table_version (
+CREATE TABLE nexus_incoming_services_partition_status (
     id      INT NOT NULL DEFAULT 0 CHECK (id = 0),  -- Restrict the primary key to a single value since it will only be used for incoming services
     version BIGINT NOT NULL,                        -- Version of the nexus_incoming_services table
     PRIMARY KEY (id)
