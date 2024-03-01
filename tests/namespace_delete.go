@@ -29,6 +29,7 @@ import (
 	"fmt"
 	"strconv"
 	"time"
+	"unicode/utf8"
 
 	"github.com/pborman/uuid"
 	"github.com/stretchr/testify/require"
@@ -112,7 +113,7 @@ func (s *namespaceTestSuite) SetupTest() {
 func (s *namespaceTestSuite) Test_NamespaceDelete_InvalidUTF8() {
 	ctx, cancel := rpc.NewContextWithTimeoutAndVersionHeaders(10000 * time.Second)
 	defer cancel()
-  s.False(utf8.Valid([]byte(invalidUTF8)))
+	s.False(utf8.Valid([]byte(invalidUTF8)))
 	retention := 24 * time.Hour
 	_, err := s.frontendClient.RegisterNamespace(ctx, &workflowservice.RegisterNamespaceRequest{
 		Namespace:                        "valid-utf8", // we verify internally that these must be valid
