@@ -394,6 +394,8 @@ const (
 	FrontendEnableWorkerVersioningDataAPIs = "frontend.workerVersioningDataAPIs"
 	// FrontendEnableWorkerVersioningWorkflowAPIs enables worker versioning in workflow progress APIs.
 	FrontendEnableWorkerVersioningWorkflowAPIs = "frontend.workerVersioningWorkflowAPIs"
+	// FrontendEnableWorkerVersioningRuleAPIs enables worker versioning in workflow progress APIs.
+	FrontendEnableWorkerVersioningRuleAPIs = "frontend.workerVersioningRuleAPIs"
 
 	// DeleteNamespaceDeleteActivityRPS is an RPS per every parallel delete executions activity.
 	// Total RPS is equal to DeleteNamespaceDeleteActivityRPS * DeleteNamespaceConcurrentDeleteExecutionsActivities.
