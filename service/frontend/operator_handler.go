@@ -577,7 +577,7 @@ func (h *OperatorHandlerImpl) listSearchAttributesSQL(
 	)
 	if err != nil {
 		return nil, serviceerror.NewUnavailable(
-			fmt.Sprintf(errUnableToGetNamespaceInfoMessage, nsName),
+			fmt.Sprintf(errUnableToGetNamespaceInfoMessage, err),
 		)
 	}
 
