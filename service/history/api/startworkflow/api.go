@@ -54,7 +54,7 @@ import (
 
 type (
 	eagerStartDeniedReason metrics.ReasonString
-	WithStartFunc          func(lease api.WorkflowLease) error
+	BeforeCreateHookFunc   func(lease api.WorkflowLease) error
 )
 
 const (
@@ -164,22 +164,7 @@ func (s *Starter) requestEagerStart() bool {
 // Invoke starts a new workflow execution.
 func (s *Starter) Invoke(
 	ctx context.Context,
-) (resp *historyservice.StartWorkflowExecutionResponse, retError error) {
-	return s.invoke(ctx, nil)
-}
-
-// InvokeWithStart starts a new workflow execution;
-// allowing to run additional steps before the execution is started.
-func (s *Starter) InvokeWithStart(
-	ctx context.Context,
-	withStart WithStartFunc,
-) (resp *historyservice.StartWorkflowExecutionResponse, retError error) {
-	return s.invoke(ctx, withStart)
-}
-
-func (s *Starter) invoke(
-	ctx context.Context,
-	withStart WithStartFunc,
+	beforeCreateHook BeforeCreateHookFunc,
 ) (resp *historyservice.StartWorkflowExecutionResponse, retError error) {
 	request := s.request.StartRequest
 	if err := s.prepare(ctx); err != nil {
@@ -198,8 +183,8 @@ func (s *Starter) invoke(
 	}
 	defer func() { currentRelease(retError) }()
 
-	if withStart != nil {
-		if err = withStart(creationParams.workflowLease); err != nil {
+	if beforeCreateHook != nil {
+		if err = beforeCreateHook(creationParams.workflowLease); err != nil {
 			return nil, err
 		}
 	}
