@@ -69,7 +69,7 @@ func (s *quotasSuite) TearDownTest() {
 }
 
 func (s *quotasSuite) TestExecutionAPIToPriorityMapping() {
-	for _, priority := range ExecutionAPIToPriority {
+	for _, priority := range APIToPriority {
 		index := slices.Index(ExecutionAPIPrioritiesOrdered, priority)
 		s.NotEqual(-1, index)
 	}
@@ -85,13 +85,6 @@ func (s *quotasSuite) TestVisibilityAPIToPriorityMapping() {
 func (s *quotasSuite) TestNamespaceReplicationInducingAPIToPriorityMapping() {
 	for _, priority := range NamespaceReplicationInducingAPIToPriority {
 		index := slices.Index(NamespaceReplicationInducingAPIPrioritiesOrdered, priority)
-		s.NotEqual(-1, index)
-	}
-}
-
-func (s *quotasSuite) TestOtherAPIToPriorityMapping() {
-	for _, priority := range OtherAPIToPriority {
-		index := slices.Index(OtherAPIPrioritiesOrdered, priority)
 		s.NotEqual(-1, index)
 	}
 }
@@ -114,62 +107,6 @@ func (s *quotasSuite) TestNamespaceReplicationInducingAPIPrioritiesOrdered() {
 	}
 }
 
-func (s *quotasSuite) TestOtherAPIPrioritiesOrdered() {
-	for idx := range OtherAPIPrioritiesOrdered[1:] {
-		s.True(OtherAPIPrioritiesOrdered[idx] < OtherAPIPrioritiesOrdered[idx+1])
-	}
-}
-
-func (s *quotasSuite) TestExecutionAPIs() {
-	apis := map[string]struct{}{
-		"StartWorkflowExecution":             {},
-		"SignalWithStartWorkflowExecution":   {},
-		"SignalWorkflowExecution":            {},
-		"RequestCancelWorkflowExecution":     {},
-		"TerminateWorkflowExecution":         {},
-		"GetWorkflowExecutionHistory":        {},
-		"GetWorkflowExecutionHistoryReverse": {},
-		"UpdateWorkflowExecution":            {},
-		"PollWorkflowExecutionUpdate":        {},
-
-		"RecordActivityTaskHeartbeat":      {},
-		"RecordActivityTaskHeartbeatById":  {},
-		"RespondActivityTaskCanceled":      {},
-		"RespondActivityTaskCanceledById":  {},
-		"RespondActivityTaskFailed":        {},
-		"RespondActivityTaskFailedById":    {},
-		"RespondActivityTaskCompleted":     {},
-		"RespondActivityTaskCompletedById": {},
-		"RespondWorkflowTaskCompleted":     {},
-
-		"ResetWorkflowExecution":        {},
-		"DescribeWorkflowExecution":     {},
-		"RespondWorkflowTaskFailed":     {},
-		"QueryWorkflow":                 {},
-		"RespondQueryTaskCompleted":     {},
-		"PollWorkflowTaskQueue":         {},
-		"PollActivityTaskQueue":         {},
-		"GetWorkerBuildIdCompatibility": {},
-		"GetWorkerTaskReachability":     {},
-		"DeleteWorkflowExecution":       {},
-
-		"ResetStickyTaskQueue":    {},
-		"DescribeTaskQueue":       {},
-		"ListTaskQueuePartitions": {},
-	}
-
-	var service workflowservice.WorkflowServiceServer
-	t := reflect.TypeOf(&service).Elem()
-	apiToPriority := make(map[string]int, t.NumMethod())
-	for i := 0; i < t.NumMethod(); i++ {
-		apiName := t.Method(i).Name
-		if _, ok := apis[apiName]; ok {
-			apiToPriority[apiName] = ExecutionAPIToPriority[apiName]
-		}
-	}
-	s.Equal(apiToPriority, ExecutionAPIToPriority)
-}
-
 func (s *quotasSuite) TestVisibilityAPIs() {
 	apis := map[string]struct{}{
 		"GetWorkflowExecution":           {},
@@ -179,6 +116,10 @@ func (s *quotasSuite) TestVisibilityAPIs() {
 		"ListClosedWorkflowExecutions":   {},
 		"ListWorkflowExecutions":         {},
 		"ListArchivedWorkflowExecutions": {},
+
+		"GetWorkerTaskReachability": {},
+		"ListSchedules":             {},
+		"ListBatchOperations":       {},
 	}
 
 	var service workflowservice.WorkflowServiceServer
@@ -212,67 +153,22 @@ func (s *quotasSuite) TestNamespaceReplicationInducingAPIs() {
 	s.Equal(apiToPriority, NamespaceReplicationInducingAPIToPriority)
 }
 
-func (s *quotasSuite) TestOtherAPIs() {
-	apis := map[string]struct{}{
-		"GetClusterInfo":      {},
-		"GetSystemInfo":       {},
-		"GetSearchAttributes": {},
-
-		"DescribeNamespace":  {},
-		"ListNamespaces":     {},
-		"DeprecateNamespace": {},
-
-		"CreateSchedule":            {},
-		"DescribeSchedule":          {},
-		"UpdateSchedule":            {},
-		"PatchSchedule":             {},
-		"ListScheduleMatchingTimes": {},
-		"DeleteSchedule":            {},
-		"ListSchedules":             {},
-
-		"DescribeBatchOperation": {},
-		"ListBatchOperations":    {},
-		"StartBatchOperation":    {},
-		"StopBatchOperation":     {},
-
-		"PollNexusTaskQueue":        {},
-		"RespondNexusTaskCompleted": {},
-		"RespondNexusTaskFailed":    {},
-	}
-
-	var service workflowservice.WorkflowServiceServer
-	t := reflect.TypeOf(&service).Elem()
-	apiToPriority := make(map[string]int, t.NumMethod())
-	for i := 0; i < t.NumMethod(); i++ {
-		apiName := t.Method(i).Name
-		if _, ok := apis[apiName]; ok {
-			apiToPriority[apiName] = OtherAPIToPriority[apiName]
-		}
-	}
-	s.Equal(apiToPriority, OtherAPIToPriority)
-}
-
 func (s *quotasSuite) TestAllAPIs() {
-	var service workflowservice.WorkflowServiceServer
-	expectedAPIs := make(map[string]struct{})
-	temporalapi.WalkExportedMethods(&service, func(m reflect.Method) {
-		expectedAPIs[m.Name] = struct{}{}
-	})
-
-	actualAPIs := make(map[string]struct{})
-	for api := range ExecutionAPIToPriority {
-		actualAPIs[api] = struct{}{}
+	apisWithPriority := make(map[string]struct{})
+	for api := range APIToPriority {
+		apisWithPriority[api] = struct{}{}
 	}
 	for api := range VisibilityAPIToPriority {
-		actualAPIs[api] = struct{}{}
+		apisWithPriority[api] = struct{}{}
 	}
 	for api := range NamespaceReplicationInducingAPIToPriority {
-		actualAPIs[api] = struct{}{}
+		apisWithPriority[api] = struct{}{}
 	}
-	for api := range OtherAPIToPriority {
-		actualAPIs[api] = struct{}{}
-	}
-	s.Equal(expectedAPIs, actualAPIs)
+	var service workflowservice.WorkflowServiceServer
+	temporalapi.WalkExportedMethods(&service, func(m reflect.Method) {
+		_, ok := apisWithPriority[m.Name]
+		s.True(ok, "missing priority for API: %v", m.Name)
+	})
 }
 
 func (s *quotasSuite) TestOperatorPriority_Execution() {
@@ -288,11 +184,6 @@ func (s *quotasSuite) TestOperatorPriority_Visibility() {
 func (s *quotasSuite) TestOperatorPriority_NamespaceReplicationInducing() {
 	limiter := NewNamespaceReplicationInducingAPIPriorityRateLimiter(testRateBurstFn, testOperatorRPSRatioFn)
 	s.testOperatorPrioritized(limiter, "RegisterNamespace")
-}
-
-func (s *quotasSuite) TestOperatorPriority_Other() {
-	limiter := NewOtherAPIPriorityRateLimiter(testRateBurstFn, testOperatorRPSRatioFn)
-	s.testOperatorPrioritized(limiter, "DescribeNamespace")
 }
 
 func (s *quotasSuite) testOperatorPrioritized(limiter quotas.RequestRateLimiter, api string) {
