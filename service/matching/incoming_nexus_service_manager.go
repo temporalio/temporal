@@ -210,10 +210,13 @@ func (m *incomingNexusServiceManager) ListNexusIncomingServices(
 	ctx context.Context,
 	request *matchingservice.ListNexusIncomingServicesRequest,
 ) (*matchingservice.ListNexusIncomingServicesResponse, chan struct{}, error) {
+	m.RLock()
 	if request.LastKnownTableVersion > m.tableVersion {
 		// indicates we may have lost table ownership, so need to reload from persistence
 		m.hasLoadedServices.Store(false)
 	}
+	m.RUnlock()
+
 	if !m.hasLoadedServices.Load() {
 		if err := m.loadServices(ctx); err != nil {
 			return nil, nil, fmt.Errorf("error loading nexus incoming services cache: %w", err)
