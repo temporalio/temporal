@@ -69,7 +69,7 @@ func (s *quotasSuite) TearDownTest() {
 }
 
 func (s *quotasSuite) TestExecutionAPIToPriorityMapping() {
-	for _, priority := range ExecutionAPIToPriority {
+	for _, priority := range APIToPriority {
 		index := slices.Index(ExecutionAPIPrioritiesOrdered, priority)
 		s.NotEqual(-1, index)
 	}
@@ -151,7 +151,7 @@ func (s *quotasSuite) TestNamespaceReplicationInducingAPIs() {
 
 func (s *quotasSuite) TestAllAPIs() {
 	apisWithPriority := make(map[string]struct{})
-	for api := range ExecutionAPIToPriority {
+	for api := range APIToPriority {
 		apisWithPriority[api] = struct{}{}
 	}
 	for api := range VisibilityAPIToPriority {

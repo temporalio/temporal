@@ -55,7 +55,10 @@ var (
 		"PollNexusTaskQueue":          1,
 	}
 
-	ExecutionAPIToPriority = map[string]int{
+	// APIToPriority determines common API priorities.
+	// If APIs rely on visibility, they should be added to VisibilityAPIToPriority.
+	// If APIs result in replication in namespace replication queue, they belong to NamespaceReplicationInducingAPIToPriority
+	APIToPriority = map[string]int{
 		// P0: System level APIs
 		"GetClusterInfo":      0,
 		"GetSystemInfo":       0,
@@ -87,14 +90,11 @@ var (
 		"DescribeWorkflowExecution":     3,
 		"DescribeTaskQueue":             3,
 		"GetWorkerBuildIdCompatibility": 3,
-		"GetWorkerTaskReachability":     3,
 		"ListTaskQueuePartitions":       3,
 		"QueryWorkflow":                 3,
 		"DescribeSchedule":              3,
 		"ListScheduleMatchingTimes":     3,
-		"ListSchedules":                 3,
 		"DescribeBatchOperation":        3,
-		"ListBatchOperations":           3,
 
 		// P4: Progress APIs
 		"RecordActivityTaskHeartbeat":      4,
@@ -129,6 +129,11 @@ var (
 		"ListClosedWorkflowExecutions":   1,
 		"ListWorkflowExecutions":         1,
 		"ListArchivedWorkflowExecutions": 1,
+
+		// APIs that rely on visibility
+		"GetWorkerTaskReachability": 1,
+		"ListSchedules":             1,
+		"ListBatchOperations":       1,
 	}
 
 	VisibilityAPIPrioritiesOrdered = []int{0, 1}
@@ -211,7 +216,7 @@ func NewRequestToRateLimiter(
 	visibilityRateLimiter := NewVisibilityPriorityRateLimiter(visibilityRateBurstFn, operatorRPSRatio)
 	namespaceReplicationInducingRateLimiter := NewNamespaceReplicationInducingAPIPriorityRateLimiter(namespaceReplicationInducingRateBurstFn, operatorRPSRatio)
 
-	for api := range ExecutionAPIToPriority {
+	for api := range APIToPriority {
 		mapping[api] = executionRateLimiter
 	}
 	for api := range VisibilityAPIToPriority {
@@ -240,7 +245,7 @@ func NewExecutionPriorityRateLimiter(
 		if req.CallerType == headers.CallerTypeOperator {
 			return OperatorPriority
 		}
-		if priority, ok := ExecutionAPIToPriority[req.API]; ok {
+		if priority, ok := APIToPriority[req.API]; ok {
 			return priority
 		}
 		return ExecutionAPIPrioritiesOrdered[len(ExecutionAPIPrioritiesOrdered)-1]
