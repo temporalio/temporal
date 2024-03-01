@@ -23,8 +23,6 @@
 package tests
 
 import (
-	"cmp"
-	"slices"
 	"testing"
 
 	"go.temporal.io/api/nexus/v1"
@@ -92,8 +90,8 @@ func (s *FunctionalSuite) TestCreateOrUpdateNexusIncomingService_Matching() {
 				TaskQueue: s.defaultTaskQueue().Name,
 			},
 			assertion: func(resp *matchingservice.CreateOrUpdateNexusIncomingServiceResponse, err error) {
-				var invalidArgErr *serviceerror.InvalidArgument
-				s.ErrorAs(err, &invalidArgErr)
+				var notFoundErr *serviceerror.NotFound
+				s.ErrorAs(err, &notFoundErr)
 			},
 		},
 		{
@@ -166,26 +164,23 @@ func (s *FunctionalSuite) TestDeleteNexusIncomingService_Matching() {
 
 func (s *FunctionalSuite) TestListNexusIncomingServices_Matching() {
 	// initialize some services
-	s0 := s.createNexusIncomingService("list-test-service0")
-	s1 := s.createNexusIncomingService("list-test-service1")
-	s2 := s.createNexusIncomingService("list-test-service2")
-	servicesOrdered := []*persistencepb.NexusIncomingServiceEntry{s0, s1, s2}
-	slices.SortFunc(servicesOrdered, func(a *persistencepb.NexusIncomingServiceEntry, b *persistencepb.NexusIncomingServiceEntry) int {
-		return cmp.Compare(a.Id, b.Id)
-	})
+	s.createNexusIncomingService("list-test-service0")
+	s.createNexusIncomingService("list-test-service1")
+	s.createNexusIncomingService("list-test-service2")
 
-	// get expected table version for the course of the tests
+	// get expected table version and services for the course of the tests
 	matchingClient := s.testCluster.GetMatchingClient()
 	resp, err := matchingClient.ListNexusIncomingServices(
 		NewContext(),
 		&matchingservice.ListNexusIncomingServicesRequest{
-			PageSize:              0,
+			PageSize:              100,
 			LastKnownTableVersion: 0,
 			Wait:                  false,
 		})
 	s.NoError(err)
 	s.NotNil(resp)
 	tableVersion := resp.TableVersion
+	servicesOrdered := resp.Entries
 	nextPageToken := []byte(servicesOrdered[2].Id)
 
 	type testcase struct {
@@ -220,8 +215,7 @@ func (s *FunctionalSuite) TestListNexusIncomingServices_Matching() {
 			assertion: func(resp *matchingservice.ListNexusIncomingServicesResponse, err error) {
 				s.NoError(err)
 				s.Equal(tableVersion, resp.TableVersion)
-				s.Nil(resp.NextPageToken)
-				s.ProtoElementsMatch(resp.Entries, servicesOrdered)
+				s.ProtoElementsMatch(resp.Entries, servicesOrdered[0:3])
 			},
 		},
 		{
@@ -261,7 +255,6 @@ func (s *FunctionalSuite) TestListNexusIncomingServices_Matching() {
 			assertion: func(resp *matchingservice.ListNexusIncomingServicesResponse, err error) {
 				s.NoError(err)
 				s.Equal(tableVersion, resp.TableVersion)
-				s.Nil(resp.NextPageToken)
 				s.ProtoEqual(resp.Entries[0], servicesOrdered[2])
 			},
 		},
@@ -313,47 +306,54 @@ func (s *FunctionalSuite) TestListNexusIncomingServices_Matching() {
 }
 
 func (s *FunctionalSuite) TestListNexusIncomingServicesOrdering_Matching() {
+	// get initial table version since it has been modified by other tests
+	resp, err := s.testCluster.GetMatchingClient().ListNexusIncomingServices(NewContext(), &matchingservice.ListNexusIncomingServicesRequest{
+		LastKnownTableVersion: 0,
+		PageSize:              0,
+	})
+	s.NoError(err)
+	initialTableVersion := resp.TableVersion
+
 	// create some services
-	numServices := 40
+	numServices := 40 // minimum number of services to test, there may be more in DB from other tests
 	for i := 0; i < numServices; i++ {
 		s.createNexusIncomingService(s.randomizeStr("test-service-name"))
 	}
+	tableVersion := initialTableVersion + int64(numServices)
 
 	// list from persistence manager level
 	persistence := s.testCluster.testBase.NexusIncomingServiceManager
 	persistenceResp1, err := persistence.ListNexusIncomingServices(NewContext(), &p.ListNexusIncomingServicesRequest{
-		LastKnownTableVersion: int64(numServices),
+		LastKnownTableVersion: tableVersion,
 		PageSize:              numServices / 2,
 	})
 	s.NoError(err)
 	s.Len(persistenceResp1.Entries, numServices/2)
 	s.NotNil(persistenceResp1.NextPageToken)
 	persistenceResp2, err := persistence.ListNexusIncomingServices(NewContext(), &p.ListNexusIncomingServicesRequest{
-		LastKnownTableVersion: int64(numServices),
-		PageSize:              (numServices / 2) + 1,
+		LastKnownTableVersion: tableVersion,
+		PageSize:              numServices / 2,
 		NextPageToken:         persistenceResp1.NextPageToken,
 	})
 	s.NoError(err)
 	s.Len(persistenceResp2.Entries, numServices/2)
-	s.Nil(persistenceResp2.NextPageToken)
 
 	// list from matching level
 	matchingClient := s.testCluster.GetMatchingClient()
 	matchingResp1, err := matchingClient.ListNexusIncomingServices(NewContext(), &matchingservice.ListNexusIncomingServicesRequest{
-		LastKnownTableVersion: int64(numServices),
+		LastKnownTableVersion: tableVersion,
 		PageSize:              int32(numServices / 2),
 	})
 	s.NoError(err)
 	s.Len(matchingResp1.Entries, numServices/2)
 	s.NotNil(matchingResp1.NextPageToken)
 	matchingResp2, err := matchingClient.ListNexusIncomingServices(NewContext(), &matchingservice.ListNexusIncomingServicesRequest{
-		LastKnownTableVersion: int64(numServices),
-		PageSize:              int32(numServices/2) + 1,
+		LastKnownTableVersion: tableVersion,
+		PageSize:              int32(numServices / 2),
 		NextPageToken:         matchingResp1.NextPageToken,
 	})
 	s.NoError(err)
 	s.Len(matchingResp2.Entries, numServices/2)
-	s.Nil(matchingResp2.NextPageToken)
 
 	// assert list orders match
 	for i := 0; i < numServices/2; i++ {
