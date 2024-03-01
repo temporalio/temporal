@@ -168,6 +168,7 @@ func GrpcServerOptionsProvider(
 	audienceGetter authorization.JWTAudienceMapper,
 	customInterceptors []grpc.UnaryServerInterceptor,
 	metricsHandler metrics.Handler,
+	namespaceRegistry namespace.Registry,
 ) GrpcServerOptions {
 	kep := keepalive.EnforcementPolicy{
 		MinTime:             serviceConfig.KeepAliveMinTime(),
@@ -205,6 +206,7 @@ func GrpcServerOptionsProvider(
 			authorizer,
 			metricsHandler,
 			logger,
+			namespaceRegistry,
 			audienceGetter,
 			cfg.Global.Authorization.AuthHeaderName,
 			cfg.Global.Authorization.AuthExtraHeaderName,

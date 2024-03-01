@@ -39,6 +39,7 @@ import (
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
+	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/util"
 )
 
@@ -183,6 +184,7 @@ type interceptor struct {
 	claimMapper         ClaimMapper
 	metricsHandler      metrics.Handler
 	logger              log.Logger
+	namespaceRegistry   namespace.Registry
 	audienceGetter      JWTAudienceMapper
 	authHeaderName      string
 	authExtraHeaderName string
@@ -194,6 +196,7 @@ func NewAuthorizationInterceptor(
 	authorizer Authorizer,
 	metricsHandler metrics.Handler,
 	logger log.Logger,
+	namespaceRegistry namespace.Registry,
 	audienceGetter JWTAudienceMapper,
 	authHeaderName string,
 	authExtraHeaderName string,
@@ -203,6 +206,7 @@ func NewAuthorizationInterceptor(
 		authorizer:          authorizer,
 		metricsHandler:      metricsHandler,
 		logger:              logger,
+		namespaceRegistry:   namespaceRegistry,
 		audienceGetter:      audienceGetter,
 		authHeaderName:      util.Coalesce(authHeaderName, defaultAuthHeaderName),
 		authExtraHeaderName: util.Coalesce(authExtraHeaderName, defaultAuthExtraHeaderName),
@@ -212,11 +216,17 @@ func NewAuthorizationInterceptor(
 // getMetricsHandler return metrics handler with namespace tag
 func (a *interceptor) getMetricsHandler(
 	operation string,
-	namespace string,
+	nsName string,
 ) metrics.Handler {
 	var metricsHandler metrics.Handler
-	if namespace != "" {
-		metricsHandler = a.metricsHandler.WithTags(metrics.OperationTag(operation), metrics.NamespaceTag(namespace))
+	if nsName != "" {
+		if entry, _ := a.namespaceRegistry.GetNamespace(namespace.Name(nsName)); entry == nil {
+			// if this isn't a known namespace, do not use it as a tag value, to avoid cardinality issues
+			nsName = ""
+		}
+	}
+	if nsName != "" {
+		metricsHandler = a.metricsHandler.WithTags(metrics.OperationTag(operation), metrics.NamespaceTag(nsName))
 	} else {
 		metricsHandler = a.metricsHandler.WithTags(metrics.OperationTag(operation), metrics.NamespaceUnknownTag())
 	}
