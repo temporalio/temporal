@@ -169,7 +169,7 @@ func (s *Starter) Invoke(
 }
 
 // InvokeWithStart starts a new workflow execution;
-// and allows to run additional steps before the new execution is persisted.
+// allowing to run additional steps before the execution is started.
 func (s *Starter) InvokeWithStart(
 	ctx context.Context,
 	withStart WithStartFunc,
@@ -186,9 +186,7 @@ func (s *Starter) invoke(
 		return nil, err
 	}
 
-	runID := uuid.NewString()
-
-	creationParams, err := s.createNewMutableState(ctx, request.GetWorkflowId(), runID)
+	creationParams, err := s.createNewMutableState(ctx, request.GetWorkflowId())
 	if err != nil {
 		return nil, err
 	}
@@ -238,7 +236,8 @@ func (s *Starter) lockCurrentWorkflowExecution(
 
 // createNewMutableState creates a new workflow context, and closes its mutable state transaction as snapshot.
 // It returns the creationContext which can later be used to insert into the executions table.
-func (s *Starter) createNewMutableState(ctx context.Context, workflowID string, runID string) (*creationParams, error) {
+func (s *Starter) createNewMutableState(ctx context.Context, workflowID string) (*creationParams, error) {
+	runID := uuid.NewString()
 	workflowLease, err := api.NewWorkflowWithSignal(
 		s.shardContext,
 		s.namespace,
