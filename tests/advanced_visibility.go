@@ -1806,21 +1806,25 @@ func (s *AdvancedVisibilitySuite) TestUpsertWorkflowExecution_InvalidKey() {
 	_, err := poller.PollAndProcessWorkflowTask()
 	s.Error(err)
 	s.IsType(&serviceerror.InvalidArgument{}, err)
-	if s.isElasticsearchEnabled {
-		s.ErrorContains(err, "BadSearchAttributes: search attribute INVALIDKEY is not defined")
-	} else {
-		s.ErrorContains(err, fmt.Sprintf("BadSearchAttributes: Namespace %s has no mapping defined for search attribute INVALIDKEY", s.namespace))
-	}
-
 	historyEvents := s.getHistory(s.namespace, &commonpb.WorkflowExecution{
 		WorkflowId: id,
 		RunId:      we.RunId,
 	})
-	s.EqualHistoryEvents(fmt.Sprintf(`
+	if s.isElasticsearchEnabled {
+		s.ErrorContains(err, "BadSearchAttributes: search attribute INVALIDKEY is not defined")
+		s.EqualHistoryEvents(`
+  1 WorkflowExecutionStarted
+  2 WorkflowTaskScheduled
+  3 WorkflowTaskStarted
+  4 WorkflowTaskFailed {"Cause":23,"Failure":{"Message":"BadSearchAttributes: search attribute INVALIDKEY is not defined"}}`, historyEvents)
+	} else {
+		s.ErrorContains(err, fmt.Sprintf("BadSearchAttributes: Namespace %s has no mapping defined for search attribute INVALIDKEY", s.namespace))
+		s.EqualHistoryEvents(fmt.Sprintf(`
   1 WorkflowExecutionStarted
   2 WorkflowTaskScheduled
   3 WorkflowTaskStarted
   4 WorkflowTaskFailed {"Cause":23,"Failure":{"Message":"BadSearchAttributes: Namespace %s has no mapping defined for search attribute INVALIDKEY"}}`, s.namespace), historyEvents)
+	}
 }
 
 func (s *AdvancedVisibilitySuite) TestChildWorkflow_ParentWorkflow() {

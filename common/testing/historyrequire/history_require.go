@@ -57,9 +57,9 @@ func New(t require.TestingT) HistoryRequire {
 }
 
 // TODO (maybe):
-//  - StartsWithHistoryEvents (should accept expectedHistory w/o event Ids)
-//  - EndsWithHistoryEvents (should accept expectedHistory w/o event Ids)
-//  - ContainsHistoryEvents (should accept expectedHistory w/o event Ids)
+//  - ContainsHistoryEvents (should accept expectedHistory with and w/o event Ids)
+//  - StartsWithHistoryEvents (should accept expectedHistory with and w/o event Ids)
+//  - EndsWithHistoryEvents (should accept expectedHistory with and w/o event Ids)
 //  - WaitForHistoryEvents (call getHistory until expectedHistory is found, with interval and timeout)
 //  - Funcs like WithVersion, WithTime, WithAttributes, WithPayloadLimit(100) and pass them to PrintHistory
 //  - oneof support
@@ -165,6 +165,7 @@ func (h HistoryRequire) structToMap(strct any) map[string]any {
 	return ret
 }
 
+//nolint:revive // cognitive complexity 29 (> max enabled 25)
 func (h HistoryRequire) fieldValue(field reflect.Value) any {
 	if field.Kind() == reflect.Pointer && field.Elem().Kind() == reflect.Struct {
 		return h.structToMap(field.Elem().Interface())
@@ -199,6 +200,7 @@ func (h HistoryRequire) fieldValue(field reflect.Value) any {
 	return fieldValue
 }
 
+//nolint:revive // cognitive complexity 26 (> max enabled 25)
 func (h HistoryRequire) equalExpectedMapToActualAttributes(expectedMap map[string]any, actualAttributesV reflect.Value, eventID int64, attrPrefix string) {
 	if th, ok := h.t.(helper); ok {
 		th.Helper()

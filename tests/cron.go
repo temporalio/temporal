@@ -450,14 +450,10 @@ func (s *ClientFunctionalSuite) TestCronWorkflowCompletionStates() {
 	s.Equal(enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING, exec.GetStatus())
 	historyEvents := s.getHistory(s.namespace, exec.GetExecution())
 	s.EqualHistoryEvents(fmt.Sprintf(`
-  1 WorkflowExecutionStarted {"ContinuedExecutionRunId":"","CronSchedule":"@every 3s","FirstExecutionRunId":"%s","FirstWorkflowTaskBackoff":{"Nanos":0,"Seconds":3}, "Initiator":3}`, firstRunID), historyEvents)
-	// s.Equal(enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_STARTED, lastEvent.GetEventType())
-	// attrs0 := lastEvent.GetWorkflowExecutionStartedEventAttributes()
-	// s.Equal(cronSchedule, attrs0.CronSchedule)
-	// s.DurationNear(attrs0.FirstWorkflowTaskBackoff.AsDuration(), targetBackoffDuration, tolerance)
-	// s.Equal(firstRunID, attrs0.FirstExecutionRunId)
-	// s.Equal(enumspb.CONTINUE_AS_NEW_INITIATOR_CRON_SCHEDULE, attrs0.Initiator)
-	// s.Equal("", attrs0.ContinuedExecutionRunId)
+  1 WorkflowExecutionStarted {"ContinuedExecutionRunId":"","CronSchedule":"@every 3s","FirstExecutionRunId":"%s", "Initiator":3}`, firstRunID), historyEvents)
+	attrs1 := historyEvents[0].GetWorkflowExecutionStartedEventAttributes()
+	// not `"FirstWorkflowTaskBackoff":{"Nanos":0,"Seconds":3}` in the history above because DurationNear is not supported by EqualHistoryEvents.
+	s.DurationNear(attrs1.FirstWorkflowTaskBackoff.AsDuration(), targetBackoffDuration, tolerance)
 
 	// wait for first run
 	s.Equal(<-wfCh, 1)
@@ -477,9 +473,9 @@ func (s *ClientFunctionalSuite) TestCronWorkflowCompletionStates() {
 	historyEvents = s.getHistory(s.namespace, exec.GetExecution())
 	s.EqualHistoryEvents(fmt.Sprintf(`
   1 WorkflowExecutionStarted {"ContinuedExecutionRunId":"%s","CronSchedule":"@every 3s","FirstExecutionRunId":"%s", "Initiator":%d}`, firstRunID, firstRunID, enumspb.CONTINUE_AS_NEW_INITIATOR_CRON_SCHEDULE), historyEvents)
-	attrs := historyEvents[0].GetWorkflowExecutionStartedEventAttributes()
+	attrs2 := historyEvents[0].GetWorkflowExecutionStartedEventAttributes()
 	// not `"FirstWorkflowTaskBackoff":{"Nanos":0,"Seconds":3}` in the history above because DurationNear is not supported by EqualHistoryEvents.
-	s.DurationNear(attrs.FirstWorkflowTaskBackoff.AsDuration(), targetBackoffDuration, tolerance)
+	s.DurationNear(attrs2.FirstWorkflowTaskBackoff.AsDuration(), targetBackoffDuration, tolerance)
 
 	// wait for second run
 	s.Equal(<-wfCh, 2)

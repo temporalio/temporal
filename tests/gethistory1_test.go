@@ -249,7 +249,8 @@ func (s *FunctionalSuite) TestGetWorkflowExecutionHistory_All() {
  11 WorkflowExecutionCompleted`, allEvents)
 }
 
-func (s *RawHistorySuite) TestGetWorkflowExecutionHistory_Close() {
+// Note: not *RawHistorySuite.
+func (s *FunctionalSuite) TestGetWorkflowExecutionHistory_Close() {
 	workflowID := "functional-get-workflow-history-events-long-poll-test-close"
 	workflowTypeName := "functional-get-workflow-history-events-long-poll-test-close-type"
 	taskqueueName := "functional-get-workflow-history-events-long-poll-test-close-taskqueue"
