@@ -322,7 +322,6 @@ func RateLimitInterceptorProvider(
 			quotas.NewDefaultIncomingRateBurst(rateFn),
 			quotas.NewDefaultIncomingRateBurst(rateFn),
 			quotas.NewDefaultIncomingRateBurst(namespaceReplicationInducingRateFn),
-			quotas.NewDefaultIncomingRateBurst(rateFn),
 			serviceConfig.OperatorRPSRatio,
 		),
 		map[string]int{},
@@ -372,7 +371,6 @@ func NamespaceRateLimitInterceptorProvider(
 				configs.NewNamespaceRateBurst(req.Caller, rateFn, serviceConfig.MaxNamespaceBurstPerInstance),
 				configs.NewNamespaceRateBurst(req.Caller, visibilityRateFn, serviceConfig.MaxNamespaceVisibilityBurstPerInstance),
 				configs.NewNamespaceRateBurst(req.Caller, namespaceReplicationInducingRateFn, serviceConfig.MaxNamespaceNamespaceReplicationInducingAPIsBurstPerInstance),
-				configs.NewNamespaceRateBurst(req.Caller, rateFn, serviceConfig.MaxNamespaceBurstPerInstance),
 				serviceConfig.OperatorRPSRatio,
 			)
 		},
