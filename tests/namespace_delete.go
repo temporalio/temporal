@@ -29,6 +29,7 @@ import (
 	"fmt"
 	"strconv"
 	"time"
+	"unicode/utf8"
 
 	"github.com/pborman/uuid"
 	"github.com/stretchr/testify/require"
@@ -66,6 +67,9 @@ type (
 		logger        log.Logger
 	}
 )
+
+// 0x8f01 is invalid UTF-8
+const invalidUTF8 = "\n\x8f\x01\n\x0ejunk\x12data"
 
 func (s *namespaceTestSuite) SetupSuite() {
 	checkTestShard(s.T())
@@ -105,6 +109,51 @@ func (s *namespaceTestSuite) TearDownSuite() {
 func (s *namespaceTestSuite) SetupTest() {
 	// Have to define our overridden assertions in the test setup. If we did it earlier, s.T() will return nil
 	s.Assertions = require.New(s.T())
+}
+
+func (s *namespaceTestSuite) Test_NamespaceDelete_InvalidUTF8() {
+	ctx, cancel := rpc.NewContextWithTimeoutAndVersionHeaders(10000 * time.Second)
+	defer cancel()
+	s.False(utf8.Valid([]byte(invalidUTF8)))
+	retention := 24 * time.Hour
+	_, err := s.frontendClient.RegisterNamespace(ctx, &workflowservice.RegisterNamespaceRequest{
+		Namespace:                        "valid-utf8", // we verify internally that these must be valid
+		Description:                      invalidUTF8,
+		Data:                             map[string]string{invalidUTF8: invalidUTF8},
+		WorkflowExecutionRetentionPeriod: durationpb.New(retention),
+		HistoryArchivalState:             enumspb.ARCHIVAL_STATE_DISABLED,
+		VisibilityArchivalState:          enumspb.ARCHIVAL_STATE_DISABLED,
+	})
+	s.NoError(err)
+
+	descResp, err := s.frontendClient.DescribeNamespace(ctx, &workflowservice.DescribeNamespaceRequest{
+		Namespace: "valid-utf8",
+	})
+	s.NoError(err)
+	nsID := descResp.GetNamespaceInfo().GetId()
+
+	delResp, err := s.operatorClient.DeleteNamespace(ctx, &operatorservice.DeleteNamespaceRequest{
+		NamespaceId: nsID,
+	})
+	s.NoError(err)
+	s.Equal("valid-utf8-deleted-"+nsID[:5], delResp.GetDeletedNamespace())
+
+	descResp2, err := s.frontendClient.DescribeNamespace(ctx, &workflowservice.DescribeNamespaceRequest{
+		Id: nsID,
+	})
+	s.NoError(err)
+	s.Equal(enumspb.NAMESPACE_STATE_DELETED, descResp2.GetNamespaceInfo().GetState())
+	s.Eventually(func() bool {
+		_, err := s.frontendClient.DescribeNamespace(ctx, &workflowservice.DescribeNamespaceRequest{
+			Id: nsID,
+		})
+		var notFound *serviceerror.NamespaceNotFound
+		if !errors.As(err, &notFound) {
+			return false
+		}
+
+		return true
+	}, 20*time.Second, time.Second)
 }
 
 func (s *namespaceTestSuite) Test_NamespaceDelete_Empty() {
