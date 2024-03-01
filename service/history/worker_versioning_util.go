@@ -9,6 +9,7 @@ import (
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
+	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/worker_versioning"
 	"go.temporal.io/server/service/history/consts"
 	"go.temporal.io/server/service/history/shard"
@@ -20,9 +21,11 @@ import (
 func updateIndependentActivityBuildId(
 	ctx context.Context,
 	task tasks.Task,
+	taskVersion int64,
 	scheduledEventId int64,
 	buildId string,
 	shardContext shard.Context,
+	transactionPolicy workflow.TransactionPolicy,
 	workflowCache cache.Cache,
 	metricsHandler metrics.Handler,
 	logger log.Logger,
@@ -59,8 +62,7 @@ func updateIndependentActivityBuildId(
 		return err
 	}
 	defer func() {
-		// release(nil) so that the mutable state is not unloaded from cache
-		release(nil)
+		release(retErr)
 	}()
 
 	if mutableState == nil {
@@ -73,10 +75,9 @@ func updateIndependentActivityBuildId(
 		return nil
 	}
 
-	if ai.ScheduledEventId != scheduledEventId {
-		// this scheduled event is stale now, so don't write build ID
-		// The build ID should be already updated via RecordActivityTaskStarted
-		return nil
+	err = CheckTaskVersion(shardContext, logger, mutableState.GetNamespaceEntry(), ai.Version, taskVersion, task)
+	if err != nil {
+		return err
 	}
 
 	ai.AssignedBuildId = &persistencespb.ActivityInfo_LastIndependentlyAssignedBuildId{LastIndependentlyAssignedBuildId: buildId}
@@ -85,9 +86,15 @@ func updateIndependentActivityBuildId(
 		return err
 	}
 
-	// calling UpdateWorkflowExecutionAsPassive even in the active cluster should be fine here because we don't need the
-	// history and MS size checks done by UpdateWorkflowExecutionAsActive.
-	return weContext.UpdateWorkflowExecutionAsPassive(ctx, shardContext)
+	return weContext.UpdateWorkflowExecutionWithNew(
+		ctx,
+		shardContext,
+		persistence.UpdateWorkflowModeUpdateCurrent,
+		nil,
+		nil,
+		transactionPolicy,
+		nil,
+	)
 }
 
 func updateWorkflowAssignedBuildId(
@@ -95,6 +102,7 @@ func updateWorkflowAssignedBuildId(
 	transferTask *tasks.WorkflowTask,
 	buildId string,
 	shardContext shard.Context,
+	transactionPolicy workflow.TransactionPolicy,
 	workflowCache cache.Cache,
 	metricsHandler metrics.Handler,
 	logger log.Logger,
@@ -132,8 +140,7 @@ func updateWorkflowAssignedBuildId(
 		return err
 	}
 	defer func() {
-		// release(nil) so that the mutable state is not unloaded from cache
-		release(nil)
+		release(retErr)
 	}()
 
 	if mutableState == nil {
@@ -162,9 +169,15 @@ func updateWorkflowAssignedBuildId(
 		return err
 	}
 
-	// calling UpdateWorkflowExecutionAsPassive even in the active cluster should be fine here because we don't need the
-	// history and MS size checks done by UpdateWorkflowExecutionAsActive.
-	return weContext.UpdateWorkflowExecutionAsPassive(ctx, shardContext)
+	return weContext.UpdateWorkflowExecutionWithNew(
+		ctx,
+		shardContext,
+		persistence.UpdateWorkflowModeUpdateCurrent,
+		nil,
+		nil,
+		transactionPolicy,
+		nil,
+	)
 }
 
 func MakeDirectiveForActivityTask(mutableState workflow.MutableState, activityInfo *persistencespb.ActivityInfo) *taskqueuespb.TaskVersionDirective {

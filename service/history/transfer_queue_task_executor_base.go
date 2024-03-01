@@ -118,6 +118,7 @@ func (t *transferQueueTaskExecutorBase) pushActivity(
 	task *tasks.ActivityTask,
 	activityScheduleToStartTimeout time.Duration,
 	directive *taskqueuespb.TaskVersionDirective,
+	transactionPolicy workflow.TransactionPolicy,
 ) error {
 	resp, err := t.matchingRawClient.AddActivityTask(ctx, &matchingservice.AddActivityTaskRequest{
 		NamespaceId: task.NamespaceID,
@@ -152,9 +153,11 @@ func (t *transferQueueTaskExecutorBase) pushActivity(
 	return updateIndependentActivityBuildId(
 		ctx,
 		task,
+		task.Version,
 		task.ScheduledEventID,
 		resp.AssignedBuildId,
 		t.shardContext,
+		transactionPolicy,
 		t.cache,
 		t.metricHandler,
 		t.logger,
@@ -167,6 +170,7 @@ func (t *transferQueueTaskExecutorBase) pushWorkflowTask(
 	taskqueue *taskqueuepb.TaskQueue,
 	workflowTaskScheduleToStartTimeout time.Duration,
 	directive *taskqueuespb.TaskVersionDirective,
+	transactionPolicy workflow.TransactionPolicy,
 ) error {
 	var sst *durationpb.Duration
 	if workflowTaskScheduleToStartTimeout > 0 {
@@ -204,6 +208,7 @@ func (t *transferQueueTaskExecutorBase) pushWorkflowTask(
 		task,
 		resp.AssignedBuildId,
 		t.shardContext,
+		transactionPolicy,
 		t.cache,
 		t.metricHandler,
 		t.logger,

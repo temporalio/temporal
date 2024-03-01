@@ -512,7 +512,18 @@ func (t *timerQueueActiveTaskExecutor) executeActivityRetryTimerTask(
 		return nil
 	}
 
-	return updateIndependentActivityBuildId(task, task.EventID, resp.AssignedBuildId, ctx, t.shardContext, t.cache, t.metricHandler, t.logger)
+	return updateIndependentActivityBuildId(
+		ctx,
+		task,
+		task.Version,
+		task.EventID,
+		resp.AssignedBuildId,
+		t.shardContext,
+		workflow.TransactionPolicyActive,
+		t.cache,
+		t.metricHandler,
+		t.logger,
+	)
 }
 
 func (t *timerQueueActiveTaskExecutor) executeWorkflowTimeoutTask(

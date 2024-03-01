@@ -136,7 +136,6 @@ func newHistoryResendInfo(
 
 func newActivityTaskPostActionInfo(
 	mutableState workflow.MutableState,
-	activityScheduleToStartTimeout time.Duration,
 	activityInfo *persistencespb.ActivityInfo,
 ) (*activityTaskPostActionInfo, error) {
 	resendInfo, err := getHistoryResendInfo(mutableState)
@@ -148,7 +147,7 @@ func newActivityTaskPostActionInfo(
 
 	return &activityTaskPostActionInfo{
 		historyResendInfo:                  resendInfo,
-		activityTaskScheduleToStartTimeout: activityScheduleToStartTimeout,
+		activityTaskScheduleToStartTimeout: activityInfo.ScheduleToStartTimeout.AsDuration(),
 		versionDirective:                   directive,
 	}, nil
 }

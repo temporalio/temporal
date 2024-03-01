@@ -219,7 +219,7 @@ func (t *transferQueueActiveTaskExecutor) processActivityTask(
 	// the rest of logic is making RPC call, which takes time.
 	release(nil)
 
-	return t.pushActivity(ctx, task, timeout, directive)
+	return t.pushActivity(ctx, task, timeout, directive, workflow.TransactionPolicyActive)
 }
 
 func (t *transferQueueActiveTaskExecutor) processWorkflowTask(
@@ -267,7 +267,14 @@ func (t *transferQueueActiveTaskExecutor) processWorkflowTask(
 	// which will call history back (with RecordWorkflowTaskStarted), and it will try to get workflow lock again.
 	release(nil)
 
-	err = t.pushWorkflowTask(ctx, transferTask, taskQueue, scheduleToStartTimeout.AsDuration(), directive)
+	err = t.pushWorkflowTask(
+		ctx,
+		transferTask,
+		taskQueue,
+		scheduleToStartTimeout.AsDuration(),
+		directive,
+		workflow.TransactionPolicyActive,
+	)
 
 	if _, ok := err.(*serviceerrors.StickyWorkerUnavailable); ok {
 		// sticky worker is unavailable, switch to original normal task queue
@@ -282,7 +289,14 @@ func (t *transferQueueActiveTaskExecutor) processWorkflowTask(
 		// There is no need to reset sticky, because if this task is picked by new worker, the new worker will reset
 		// the sticky queue to a new one. However, if worker is completely down, that schedule_to_start timeout task
 		// will re-create a new non-sticky task and reset sticky.
-		err = t.pushWorkflowTask(ctx, transferTask, taskQueue, scheduleToStartTimeout.AsDuration(), directive)
+		err = t.pushWorkflowTask(
+			ctx,
+			transferTask,
+			taskQueue,
+			scheduleToStartTimeout.AsDuration(),
+			directive,
+			workflow.TransactionPolicyActive,
+		)
 	}
 
 	return err
