@@ -116,6 +116,10 @@ func (s *quotasSuite) TestVisibilityAPIs() {
 		"ListClosedWorkflowExecutions":   {},
 		"ListWorkflowExecutions":         {},
 		"ListArchivedWorkflowExecutions": {},
+
+		"GetWorkerTaskReachability": {},
+		"ListSchedules":             {},
+		"ListBatchOperations":       {},
 	}
 
 	var service workflowservice.WorkflowServiceServer
