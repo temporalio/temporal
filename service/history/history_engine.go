@@ -575,7 +575,13 @@ func (e *historyEngineImpl) UpdateWorkflowExecution(
 	ctx context.Context,
 	req *historyservice.UpdateWorkflowExecutionRequest,
 ) (*historyservice.UpdateWorkflowExecutionResponse, error) {
-	return updateworkflow.Invoke(ctx, req, e.shardContext, e.workflowConsistencyChecker, e.matchingClient)
+	updater := updateworkflow.NewUpdater(
+		e.shardContext,
+		e.workflowConsistencyChecker,
+		e.matchingClient,
+		req,
+	)
+	return updater.Invoke(ctx)
 }
 
 func (e *historyEngineImpl) PollWorkflowExecutionUpdate(
