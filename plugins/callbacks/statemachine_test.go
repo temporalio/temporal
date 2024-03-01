@@ -33,31 +33,28 @@ import (
 	workflowpb "go.temporal.io/api/workflow/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common"
-	"go.temporal.io/server/service/history/callbacks"
-	"go.temporal.io/server/service/history/statemachines"
-	"go.temporal.io/server/service/history/tasks"
+	"go.temporal.io/server/plugins/callbacks"
 )
 
 func TestValidTransitions(t *testing.T) {
 	// Setup
-	env := &statemachines.MockEnvironment{
-		CurrentTime: time.Now().UTC(),
-	}
-	info := &persistencespb.CallbackInfo{
-		Id: "ID",
-		PublicInfo: &workflowpb.CallbackInfo{
-			Callback: &commonpb.Callback{
-				Variant: &commonpb.Callback_Nexus_{
-					Nexus: &commonpb.Callback_Nexus{
-						Url: "http://address:666",
+	currentTime := time.Now().UTC()
+	info := callbacks.Callback{
+		&persistencespb.CallbackInfo{
+			PublicInfo: &workflowpb.CallbackInfo{
+				Callback: &commonpb.Callback{
+					Variant: &commonpb.Callback_Nexus_{
+						Nexus: &commonpb.Callback_Nexus{
+							Url: "http://address:666/path/to/callback?query=string",
+						},
 					},
 				},
+				State: enumspb.CALLBACK_STATE_SCHEDULED,
 			},
-			State: enumspb.CALLBACK_STATE_SCHEDULED,
 		},
 	}
 	// AttemptFailed
-	err := callbacks.TransitionAttemptFailed.Apply(info, callbacks.EventAttemptFailed(fmt.Errorf("test")), env)
+	out, err := callbacks.TransitionAttemptFailed.Apply(info, callbacks.EventAttemptFailed{Time: currentTime, Err: fmt.Errorf("test")})
 	require.NoError(t, err)
 
 	// Assert info object is updated
@@ -65,59 +62,57 @@ func TestValidTransitions(t *testing.T) {
 	require.Equal(t, int32(1), info.PublicInfo.Attempt)
 	require.Equal(t, "test", info.PublicInfo.LastAttemptFailure.Message)
 	require.False(t, info.PublicInfo.LastAttemptFailure.GetApplicationFailureInfo().NonRetryable)
-	require.Equal(t, env.CurrentTime, info.PublicInfo.LastAttemptCompleteTime.AsTime())
-	dt := env.CurrentTime.Add(time.Second).Sub(info.PublicInfo.NextAttemptScheduleTime.AsTime())
+	require.Equal(t, currentTime, info.PublicInfo.LastAttemptCompleteTime.AsTime())
+	dt := currentTime.Add(time.Second).Sub(info.PublicInfo.NextAttemptScheduleTime.AsTime())
 	require.True(t, dt < time.Millisecond*200)
 
 	// Assert backoff task is generated
-	require.Equal(t, 1, len(env.ScheduledTasks))
-	boTask := env.ScheduledTasks[0].(*tasks.CallbackBackoffTask)
-	require.Equal(t, info.TransitionCount, boTask.TransitionCount)
-	require.Equal(t, "ID", boTask.CallbackID)
-	require.Equal(t, info.PublicInfo.NextAttemptScheduleTime.AsTime(), boTask.VisibilityTimestamp)
+	require.Equal(t, 1, len(out.Tasks))
+	boTask := out.Tasks[0].(callbacks.BackoffTask)
+	require.Equal(t, info.PublicInfo.NextAttemptScheduleTime.AsTime(), boTask.Deadline)
 
 	// Rescheduled
-	err = callbacks.TransitionRescheduled.Apply(info, callbacks.EventRescheduled{}, env)
+	out, err = callbacks.TransitionRescheduled.Apply(info, callbacks.EventRescheduled{})
 	require.NoError(t, err)
 
 	// Assert info object is updated only where needed
 	require.Equal(t, enumspb.CALLBACK_STATE_SCHEDULED, info.PublicInfo.State)
 	require.Equal(t, int32(1), info.PublicInfo.Attempt)
 	require.Equal(t, "test", info.PublicInfo.LastAttemptFailure.Message)
-	require.Equal(t, env.CurrentTime, info.PublicInfo.LastAttemptCompleteTime.AsTime())
+	// Remains unmodified
+	require.Equal(t, currentTime, info.PublicInfo.LastAttemptCompleteTime.AsTime())
 	require.Nil(t, info.PublicInfo.NextAttemptScheduleTime)
 
 	// Assert callback task is generated
-	require.Equal(t, 2, len(env.ScheduledTasks))
-	cbTask := env.ScheduledTasks[1].(*tasks.CallbackTask)
-	require.Equal(t, info.TransitionCount, cbTask.TransitionCount)
-	require.Equal(t, "ID", cbTask.CallbackID)
-	require.Equal(t, "address:666", cbTask.DestinationAddress)
+	require.Equal(t, 1, len(out.Tasks))
+	cbTask := out.Tasks[0].(callbacks.InvocationTask)
+	require.Equal(t, "http://address:666", cbTask.Destination)
 
 	// Store the pre-succeeded state to test Failed later
-	infoDup := common.CloneProto(info)
+	infoDup := callbacks.Callback{common.CloneProto(info.CallbackInfo)}
 
 	// Succeeded
-	env.CurrentTime = env.CurrentTime.Add(time.Second)
-	err = callbacks.TransitionSucceeded.Apply(info, callbacks.EventSucceeded{}, env)
+	currentTime = currentTime.Add(time.Second)
+	out, err = callbacks.TransitionSucceeded.Apply(info, callbacks.EventSucceeded{Time: currentTime})
 	require.NoError(t, err)
 
 	// Assert info object is updated only where needed
 	require.Equal(t, enumspb.CALLBACK_STATE_SUCCEEDED, info.PublicInfo.State)
 	require.Equal(t, int32(2), info.PublicInfo.Attempt)
 	require.Nil(t, info.PublicInfo.LastAttemptFailure)
-	require.Equal(t, env.CurrentTime, info.PublicInfo.LastAttemptCompleteTime.AsTime())
+	require.Equal(t, currentTime, info.PublicInfo.LastAttemptCompleteTime.AsTime())
 	require.Nil(t, info.PublicInfo.NextAttemptScheduleTime)
 
-	// Assert no additional tasks were generated
-	require.Equal(t, 2, len(env.ScheduledTasks))
+	// Assert no additional tasks are generated
+	require.Equal(t, 0, len(out.Tasks))
 
 	// Reset back to scheduled
 	info = infoDup
 	info.PublicInfo.State = enumspb.CALLBACK_STATE_SCHEDULED
+	currentTime = currentTime.Add(time.Second)
 
 	// Failed
-	err = callbacks.TransitionFailed.Apply(info, callbacks.EventFailed(fmt.Errorf("failed")), env)
+	out, err = callbacks.TransitionFailed.Apply(info, callbacks.EventFailed{Time: currentTime, Err: fmt.Errorf("failed")})
 	require.NoError(t, err)
 
 	// Assert info object is updated only where needed
@@ -125,9 +120,9 @@ func TestValidTransitions(t *testing.T) {
 	require.Equal(t, int32(2), info.PublicInfo.Attempt)
 	require.Equal(t, "failed", info.PublicInfo.LastAttemptFailure.Message)
 	require.True(t, info.PublicInfo.LastAttemptFailure.GetApplicationFailureInfo().NonRetryable)
-	require.Equal(t, env.CurrentTime, info.PublicInfo.LastAttemptCompleteTime.AsTime())
+	require.Equal(t, currentTime, info.PublicInfo.LastAttemptCompleteTime.AsTime())
 	require.Nil(t, info.PublicInfo.NextAttemptScheduleTime)
 
-	// Assert no additional tasks were generated
-	require.Equal(t, 2, len(env.ScheduledTasks))
+	// Assert no additional tasks are generated
+	require.Equal(t, 0, len(out.Tasks))
 }

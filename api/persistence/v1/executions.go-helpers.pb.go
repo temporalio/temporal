@@ -362,35 +362,35 @@ func (this *ArchivalTaskInfo) Equal(that interface{}) bool {
 	return proto.Equal(this, that1)
 }
 
-// Marshal an object of type CallbackTaskInfo to the protobuf v3 wire format
-func (val *CallbackTaskInfo) Marshal() ([]byte, error) {
+// Marshal an object of type OutboundTaskInfo to the protobuf v3 wire format
+func (val *OutboundTaskInfo) Marshal() ([]byte, error) {
 	return proto.Marshal(val)
 }
 
-// Unmarshal an object of type CallbackTaskInfo from the protobuf v3 wire format
-func (val *CallbackTaskInfo) Unmarshal(buf []byte) error {
+// Unmarshal an object of type OutboundTaskInfo from the protobuf v3 wire format
+func (val *OutboundTaskInfo) Unmarshal(buf []byte) error {
 	return proto.Unmarshal(buf, val)
 }
 
 // Size returns the size of the object, in bytes, once serialized
-func (val *CallbackTaskInfo) Size() int {
+func (val *OutboundTaskInfo) Size() int {
 	return proto.Size(val)
 }
 
-// Equal returns whether two CallbackTaskInfo values are equivalent by recursively
+// Equal returns whether two OutboundTaskInfo values are equivalent by recursively
 // comparing the message's fields.
 // For more information see the documentation for
 // https://pkg.go.dev/google.golang.org/protobuf/proto#Equal
-func (this *CallbackTaskInfo) Equal(that interface{}) bool {
+func (this *OutboundTaskInfo) Equal(that interface{}) bool {
 	if that == nil {
 		return this == nil
 	}
 
-	var that1 *CallbackTaskInfo
+	var that1 *OutboundTaskInfo
 	switch t := that.(type) {
-	case *CallbackTaskInfo:
+	case *OutboundTaskInfo:
 		that1 = t
-	case CallbackTaskInfo:
+	case OutboundTaskInfo:
 		that1 = &t
 	default:
 		return false
@@ -613,6 +613,43 @@ func (this *Checksum) Equal(that interface{}) bool {
 	case *Checksum:
 		that1 = t
 	case Checksum:
+		that1 = &t
+	default:
+		return false
+	}
+
+	return proto.Equal(this, that1)
+}
+
+// Marshal an object of type VersionedTransition to the protobuf v3 wire format
+func (val *VersionedTransition) Marshal() ([]byte, error) {
+	return proto.Marshal(val)
+}
+
+// Unmarshal an object of type VersionedTransition from the protobuf v3 wire format
+func (val *VersionedTransition) Unmarshal(buf []byte) error {
+	return proto.Unmarshal(buf, val)
+}
+
+// Size returns the size of the object, in bytes, once serialized
+func (val *VersionedTransition) Size() int {
+	return proto.Size(val)
+}
+
+// Equal returns whether two VersionedTransition values are equivalent by recursively
+// comparing the message's fields.
+// For more information see the documentation for
+// https://pkg.go.dev/google.golang.org/protobuf/proto#Equal
+func (this *VersionedTransition) Equal(that interface{}) bool {
+	if that == nil {
+		return this == nil
+	}
+
+	var that1 *VersionedTransition
+	switch t := that.(type) {
+	case *VersionedTransition:
+		that1 = t
+	case VersionedTransition:
 		that1 = &t
 	default:
 		return false
