@@ -302,7 +302,7 @@ clean-test-results:
 
 build-tests:
 	@printf $(COLOR) "Build tests..."
-	@go test $(BUILD_TAG_FLAG) -exec="true" -count=0 $(TEST_DIRS)
+	@go test $(TEST_TAG_FLAG) -exec="true" -count=0 $(TEST_DIRS)
 
 unit-test: clean-test-results
 	@printf $(COLOR) "Run unit tests..."
