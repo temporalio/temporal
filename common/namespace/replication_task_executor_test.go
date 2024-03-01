@@ -91,7 +91,7 @@ func (s *namespaceReplicationTaskExecutorSuite) TestExecute_RegisterNamespaceTas
 	state := enumspb.NAMESPACE_STATE_REGISTERED
 	description := "some random test description"
 	ownerEmail := "some random test owner"
-	data := map[string]string{"k": "v"}
+	data := map[string][]byte{"k": []byte("v")}
 	retention := 10 * time.Hour * 24
 	historyArchivalState := enumspb.ARCHIVAL_STATE_ENABLED
 	historyArchivalURI := "some random history archival uri"
@@ -177,7 +177,7 @@ func (s *namespaceReplicationTaskExecutorSuite) TestExecute_RegisterNamespaceTas
 	state := enumspb.NAMESPACE_STATE_REGISTERED
 	description := "some random test description"
 	ownerEmail := "some random test owner"
-	data := map[string]string{"k": "v"}
+	data := map[string][]byte{"k": []byte("v")}
 	retention := 10 * time.Hour * 24
 	historyArchivalState := enumspb.ARCHIVAL_STATE_ENABLED
 	historyArchivalURI := "some random history archival uri"
@@ -315,7 +315,7 @@ func (s *namespaceReplicationTaskExecutorSuite) TestExecute_UpdateNamespaceTask_
 	clusterStandby := "some random standby cluster name"
 	configVersion := int64(12)
 	failoverVersion := int64(59)
-	namespaceData := map[string]string{"k1": "v1", "k2": "v2"}
+	namespaceData := map[string][]byte{"k1": []byte("v1"), "k2": []byte("v2")}
 	clusters := []*replicationpb.ClusterReplicationConfig{
 		{
 			ClusterName: clusterActive,
@@ -391,7 +391,7 @@ func (s *namespaceReplicationTaskExecutorSuite) TestExecute_UpdateNamespaceTask_
 	updateState := enumspb.NAMESPACE_STATE_DEPRECATED
 	updateDescription := "other random namespace test description"
 	updateOwnerEmail := "other random namespace test owner"
-	updatedData := map[string]string{"k": "v1"}
+	updatedData := map[string][]byte{"k": []byte("v1")}
 	updateRetention := 122 * time.Hour * 24
 	updateHistoryArchivalState := enumspb.ARCHIVAL_STATE_DISABLED
 	updateHistoryArchivalURI := "some updated history archival uri"
@@ -494,7 +494,7 @@ func (s *namespaceReplicationTaskExecutorSuite) TestExecute_UpdateNamespaceTask_
 	updateState := enumspb.NAMESPACE_STATE_DEPRECATED
 	updateDescription := "other random namespace test description"
 	updateOwnerEmail := "other random namespace test owner"
-	updatedData := map[string]string{"k": "v1"}
+	updatedData := map[string][]byte{"k": []byte("v1")}
 	updateRetention := 122 * time.Hour * 24
 	updateHistoryArchivalState := enumspb.ARCHIVAL_STATE_DISABLED
 	updateHistoryArchivalURI := "some updated history archival uri"
@@ -588,7 +588,7 @@ func (s *namespaceReplicationTaskExecutorSuite) TestExecute_UpdateNamespaceTask_
 	updateState := enumspb.NAMESPACE_STATE_DEPRECATED
 	updateDescription := "other random namespace test description"
 	updateOwnerEmail := "other random namespace test owner"
-	updatedData := map[string]string{"k": "v1"}
+	updatedData := map[string][]byte{"k": []byte("v1")}
 	updateRetention := 122 * time.Hour * 24
 	updateHistoryArchivalState := enumspb.ARCHIVAL_STATE_DISABLED
 	updateHistoryArchivalURI := "some updated history archival uri"
@@ -670,7 +670,7 @@ func (s *namespaceReplicationTaskExecutorSuite) TestExecute_UpdateNamespaceTask_
 	updateState := enumspb.NAMESPACE_STATE_DEPRECATED
 	updateDescription := "other random namespace test description"
 	updateOwnerEmail := "other random namespace test owner"
-	updatedData := map[string]string{"k": "v1"}
+	updatedData := map[string][]byte{"k": []byte("v1")}
 	updateRetention := 122 * time.Hour * 24
 	updateHistoryArchivalState := enumspb.ARCHIVAL_STATE_DISABLED
 	updateHistoryArchivalURI := "some updated history archival uri"

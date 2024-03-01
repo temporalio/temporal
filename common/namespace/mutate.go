@@ -85,11 +85,11 @@ func WithRetention(dur *durationpb.Duration) Mutation {
 }
 
 // WithData adds a key-value pair to a Namespace during a Clone operation.
-func WithData(key, value string) Mutation {
+func WithData(key string, value []byte) Mutation {
 	return mutationFunc(
 		func(ns *persistence.GetNamespaceResponse) {
 			if ns.Namespace.Info.Data == nil {
-				ns.Namespace.Info.Data = make(map[string]string)
+				ns.Namespace.Info.Data = make(map[string][]byte)
 			}
 			ns.Namespace.Info.Data[key] = value
 		})

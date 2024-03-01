@@ -176,7 +176,7 @@ func (m *metadataManagerImpl) ConvertInternalGetResponse(d *InternalGetNamespace
 	}
 
 	if ns.Info.Data == nil {
-		ns.Info.Data = map[string]string{}
+		ns.Info.Data = map[string][]byte{}
 	}
 
 	if ns.Config.BadBinaries == nil || ns.Config.BadBinaries.Binaries == nil {

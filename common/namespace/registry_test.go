@@ -92,7 +92,7 @@ func (s *registrySuite) TestListNamespace() {
 				Id:    namespace.NewID().String(),
 				Name:  "some random namespace name",
 				State: enumspb.NAMESPACE_STATE_REGISTERED,
-				Data:  make(map[string]string)},
+				Data:  make(map[string][]byte)},
 			Config: &persistencespb.NamespaceConfig{
 				Retention: timestamp.DurationFromDays(1),
 				BadBinaries: &namespacepb.BadBinaries{
@@ -118,7 +118,7 @@ func (s *registrySuite) TestListNamespace() {
 				Id:    namespace.NewID().String(),
 				Name:  "another random namespace name",
 				State: enumspb.NAMESPACE_STATE_DELETED, // Still must be included.
-				Data:  make(map[string]string)},
+				Data:  make(map[string][]byte)},
 			Config: &persistencespb.NamespaceConfig{
 				Retention: timestamp.DurationFromDays(2),
 				BadBinaries: &namespacepb.BadBinaries{
@@ -144,7 +144,7 @@ func (s *registrySuite) TestListNamespace() {
 				Id:    namespace.NewID().String(),
 				Name:  "yet another random namespace name",
 				State: enumspb.NAMESPACE_STATE_DEPRECATED, // Still must be included.
-				Data:  make(map[string]string)},
+				Data:  make(map[string][]byte)},
 			Config: &persistencespb.NamespaceConfig{
 				Retention: timestamp.DurationFromDays(3),
 				BadBinaries: &namespacepb.BadBinaries{
@@ -213,7 +213,7 @@ func (s *registrySuite) TestRegisterStateChangeCallback_CatchUp() {
 			Info: &persistencespb.NamespaceInfo{
 				Id:   namespace.NewID().String(),
 				Name: "some random namespace name",
-				Data: make(map[string]string)},
+				Data: make(map[string][]byte)},
 			Config: &persistencespb.NamespaceConfig{
 				Retention: timestamp.DurationFromDays(1),
 				BadBinaries: &namespacepb.BadBinaries{
@@ -240,7 +240,7 @@ func (s *registrySuite) TestRegisterStateChangeCallback_CatchUp() {
 			Info: &persistencespb.NamespaceInfo{
 				Id:   namespace.NewID().String(),
 				Name: "another random namespace name",
-				Data: make(map[string]string)},
+				Data: make(map[string][]byte)},
 			Config: &persistencespb.NamespaceConfig{
 				Retention: timestamp.DurationFromDays(2),
 				BadBinaries: &namespacepb.BadBinaries{
@@ -300,7 +300,7 @@ func (s *registrySuite) TestUpdateCache_TriggerCallBack() {
 			Info: &persistencespb.NamespaceInfo{
 				Id:   namespace.NewID().String(),
 				Name: "some random namespace name",
-				Data: make(map[string]string)},
+				Data: make(map[string][]byte)},
 			Config: &persistencespb.NamespaceConfig{
 				Retention: timestamp.DurationFromDays(1),
 				BadBinaries: &namespacepb.BadBinaries{
@@ -327,7 +327,7 @@ func (s *registrySuite) TestUpdateCache_TriggerCallBack() {
 			Info: &persistencespb.NamespaceInfo{
 				Id:   namespace.NewID().String(),
 				Name: "another random namespace name",
-				Data: make(map[string]string)},
+				Data: make(map[string][]byte)},
 			Config: &persistencespb.NamespaceConfig{
 				Retention: timestamp.DurationFromDays(2),
 				BadBinaries: &namespacepb.BadBinaries{
@@ -383,7 +383,7 @@ func (s *registrySuite) TestUpdateCache_TriggerCallBack() {
 			Info: &persistencespb.NamespaceInfo{
 				Id:          namespaceRecord1Old.Namespace.Info.Id,
 				Name:        namespaceRecord1Old.Namespace.Info.Name,
-				Description: "updated description", Data: make(map[string]string)},
+				Description: "updated description", Data: make(map[string][]byte)},
 			Config: namespaceRecord2Old.Namespace.Config,
 			ReplicationConfig: &persistencespb.NamespaceReplicationConfig{
 				ActiveClusterName: cluster.TestCurrentClusterName,
@@ -449,7 +449,7 @@ func (s *registrySuite) TestGetTriggerListAndUpdateCache_ConcurrentAccess() {
 	id := namespace.NewID()
 	namespaceRecordOld := &persistence.GetNamespaceResponse{
 		Namespace: &persistencespb.NamespaceDetail{
-			Info: &persistencespb.NamespaceInfo{Id: id.String(), Name: "some random namespace name", Data: make(map[string]string)},
+			Info: &persistencespb.NamespaceInfo{Id: id.String(), Name: "some random namespace name", Data: make(map[string][]byte)},
 			Config: &persistencespb.NamespaceConfig{
 				Retention: timestamp.DurationFromDays(1),
 				BadBinaries: &namespacepb.BadBinaries{
@@ -518,7 +518,7 @@ func (s *registrySuite) TestRemoveDeletedNamespace() {
 			Info: &persistencespb.NamespaceInfo{
 				Id:   namespace.NewID().String(),
 				Name: "some random namespace name",
-				Data: make(map[string]string)},
+				Data: make(map[string][]byte)},
 			Config: &persistencespb.NamespaceConfig{
 				Retention: timestamp.DurationFromDays(1),
 				BadBinaries: &namespacepb.BadBinaries{
@@ -544,7 +544,7 @@ func (s *registrySuite) TestRemoveDeletedNamespace() {
 			Info: &persistencespb.NamespaceInfo{
 				Id:   namespace.NewID().String(),
 				Name: "another random namespace name",
-				Data: make(map[string]string)},
+				Data: make(map[string][]byte)},
 			Config: &persistencespb.NamespaceConfig{
 				Retention: timestamp.DurationFromDays(2),
 				BadBinaries: &namespacepb.BadBinaries{

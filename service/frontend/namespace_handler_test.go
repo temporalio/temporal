@@ -127,64 +127,64 @@ func (s *namespaceHandlerCommonSuite) TearDownTest() {
 
 func (s *namespaceHandlerCommonSuite) TestMergeNamespaceData_Overriding() {
 	out := s.handler.mergeNamespaceData(
-		map[string]string{
-			"k0": "v0",
+		map[string][]byte{
+			"k0": []byte("v0"),
 		},
-		map[string]string{
-			"k0": "v2",
+		map[string][]byte{
+			"k0": []byte("v2"),
 		},
 	)
 
-	assert.Equal(s.T(), map[string]string{
-		"k0": "v2",
+	assert.Equal(s.T(), map[string][]byte{
+		"k0": []byte("v2"),
 	}, out)
 }
 
 func (s *namespaceHandlerCommonSuite) TestMergeNamespaceData_Adding() {
 	out := s.handler.mergeNamespaceData(
-		map[string]string{
-			"k0": "v0",
+		map[string][]byte{
+			"k0": []byte("v0"),
 		},
-		map[string]string{
-			"k1": "v2",
+		map[string][]byte{
+			"k1": []byte("v2"),
 		},
 	)
 
-	assert.Equal(s.T(), map[string]string{
-		"k0": "v0",
-		"k1": "v2",
+	assert.Equal(s.T(), map[string][]byte{
+		"k0": []byte("v0"),
+		"k1": []byte("v2"),
 	}, out)
 }
 
 func (s *namespaceHandlerCommonSuite) TestMergeNamespaceData_Merging() {
 	out := s.handler.mergeNamespaceData(
-		map[string]string{
-			"k0": "v0",
+		map[string][]byte{
+			"k0": []byte("v0"),
 		},
-		map[string]string{
-			"k0": "v1",
-			"k1": "v2",
+		map[string][]byte{
+			"k0": []byte("v1"),
+			"k1": []byte("v2"),
 		},
 	)
 
-	assert.Equal(s.T(), map[string]string{
-		"k0": "v1",
-		"k1": "v2",
+	assert.Equal(s.T(), map[string][]byte{
+		"k0": []byte("v1"),
+		"k1": []byte("v2"),
 	}, out)
 }
 
 func (s *namespaceHandlerCommonSuite) TestMergeNamespaceData_Nil() {
 	out := s.handler.mergeNamespaceData(
 		nil,
-		map[string]string{
-			"k0": "v1",
-			"k1": "v2",
+		map[string][]byte{
+			"k0": []byte("v1"),
+			"k1": []byte("v2"),
 		},
 	)
 
-	assert.Equal(s.T(), map[string]string{
-		"k0": "v1",
-		"k1": "v2",
+	assert.Equal(s.T(), map[string][]byte{
+		"k0": []byte("v1"),
+		"k1": []byte("v2"),
 	}, out)
 }
 
@@ -265,14 +265,14 @@ func (s *namespaceHandlerCommonSuite) TestListNamespace() {
 	description1 := "some random description 1"
 	email1 := "some random email 1"
 	retention1 := 1 * time.Hour * 24
-	data1 := map[string]string{"some random key 1": "some random value 1"}
+	data1 := map[string][]byte{"some random key 1": []byte("some random value 1")}
 	isGlobalNamespace1 := false
 	cluster1 := "cluster1"
 	cluster2 := "cluster2"
 	description2 := "some random description 2"
 	email2 := "some random email 2"
 	retention2 := 2 * time.Hour * 24
-	data2 := map[string]string{"some random key 2": "some random value 2"}
+	data2 := map[string][]byte{"some random key 2": []byte("some random value 2")}
 	isGlobalNamespace2 := true
 	namespace1 := &persistencespb.NamespaceDetail{
 		Info: &persistencespb.NamespaceInfo{
@@ -870,7 +870,7 @@ func (s *namespaceHandlerCommonSuite) TestRegisterLocalNamespace_InvalidGlobalNa
 			ClusterName: activeClusterName,
 		},
 	}
-	data := map[string]string{"some random key": "some random value"}
+	data := map[string][]byte{"some random key": []byte("some random value")}
 	isGlobalNamespace := true
 	s.mockClusterMetadata.EXPECT().IsGlobalNamespaceEnabled().Return(false).AnyTimes()
 	s.mockClusterMetadata.EXPECT().IsMasterCluster().Return(true).AnyTimes()
@@ -908,7 +908,7 @@ func (s *namespaceHandlerCommonSuite) TestRegisterLocalNamespace_InvalidCluster(
 			ClusterName: activeClusterName,
 		},
 	}
-	data := map[string]string{"some random key": "some random value"}
+	data := map[string][]byte{"some random key": []byte("some random value")}
 	isGlobalNamespace := false
 	s.mockClusterMetadata.EXPECT().IsGlobalNamespaceEnabled().Return(false).AnyTimes()
 	s.mockClusterMetadata.EXPECT().IsMasterCluster().Return(true).AnyTimes()
@@ -983,7 +983,7 @@ func (s *namespaceHandlerCommonSuite) TestRegisterLocalNamespace_NoDefault() {
 			ClusterName: activeClusterName,
 		},
 	}
-	data := map[string]string{"some random key": "some random value"}
+	data := map[string][]byte{"some random key": []byte("some random value")}
 	isGlobalNamespace := false
 
 	s.mockClusterMetadata.EXPECT().IsGlobalNamespaceEnabled().Return(false).AnyTimes()
@@ -1033,7 +1033,7 @@ func (s *namespaceHandlerCommonSuite) TestUpdateLocalNamespace_NoAttrSet() {
 	description := "some random description"
 	email := "some random email"
 	retention := 7 * time.Hour * 24
-	data := map[string]string{"some random key": "some random value"}
+	data := map[string][]byte{"some random key": []byte("some random value")}
 	version := int64(100)
 	nid := uuid.New()
 	s.mockMetadataMgr.EXPECT().GetMetadata(gomock.Any()).Return(&persistence.GetMetadataResponse{
@@ -1080,7 +1080,7 @@ func (s *namespaceHandlerCommonSuite) TestUpdateLocalNamespace_AllAttrSet() {
 	email := "some random email"
 	retention := durationpb.New(7 * time.Hour * 24)
 	activeClusterName := cluster.TestCurrentClusterName
-	data := map[string]string{"some random key": "some random value"}
+	data := map[string][]byte{"some random key": []byte("some random value")}
 	version := int64(100)
 	nid := uuid.New()
 	s.mockMetadataMgr.EXPECT().GetMetadata(gomock.Any()).Return(&persistence.GetMetadataResponse{
@@ -1212,7 +1212,7 @@ func (s *namespaceHandlerCommonSuite) TestRegisterGlobalNamespace_NoDefault() {
 			ClusterName: cluster.TestAlternativeClusterName,
 		},
 	}
-	data := map[string]string{"some random key": "some random value"}
+	data := map[string][]byte{"some random key": []byte("some random value")}
 	s.mockProducer.EXPECT().Publish(gomock.Any(), gomock.Any()).Return(nil).Times(1)
 	s.mockClusterMetadata.EXPECT().IsGlobalNamespaceEnabled().Return(true).AnyTimes()
 	s.mockClusterMetadata.EXPECT().IsMasterCluster().Return(true).AnyTimes()
@@ -1263,7 +1263,7 @@ func (s *namespaceHandlerCommonSuite) TestUpdateGlobalNamespace_NoAttrSet() {
 	description := "some random description"
 	email := "some random email"
 	retention := 7 * time.Hour * 24
-	data := map[string]string{"some random key": "some random value"}
+	data := map[string][]byte{"some random key": []byte("some random value")}
 	version := int64(100)
 	nid := uuid.New()
 	s.mockMetadataMgr.EXPECT().GetMetadata(gomock.Any()).Return(&persistence.GetMetadataResponse{
@@ -1314,7 +1314,7 @@ func (s *namespaceHandlerCommonSuite) TestUpdateGlobalNamespace_AllAttrSet() {
 	description := "some random description"
 	email := "some random email"
 	retention := durationpb.New(7 * time.Hour * 24)
-	data := map[string]string{"some random key": "some random value"}
+	data := map[string][]byte{"some random key": []byte("some random value")}
 	version := int64(100)
 	nid := uuid.New()
 	s.mockMetadataMgr.EXPECT().GetMetadata(gomock.Any()).Return(&persistence.GetMetadataResponse{
@@ -1430,7 +1430,7 @@ func (s *namespaceHandlerCommonSuite) TestUpdateLocalNamespace_NotMaster() {
 	email := "some random email"
 	retention := durationpb.New(7 * time.Hour * 24)
 	activeClusterName := cluster.TestCurrentClusterName
-	data := map[string]string{"some random key": "some random value"}
+	data := map[string][]byte{"some random key": []byte("some random value")}
 	version := int64(100)
 	nid := uuid.New()
 	s.mockMetadataMgr.EXPECT().GetMetadata(gomock.Any()).Return(&persistence.GetMetadataResponse{
@@ -1524,7 +1524,7 @@ func (s *namespaceHandlerCommonSuite) TestUpdateGlobalNamespace_NotMaster() {
 	description := "some random description"
 	email := "some random email"
 	retention := durationpb.New(7 * time.Hour * 24)
-	data := map[string]string{"some random key": "some random value"}
+	data := map[string][]byte{"some random key": []byte("some random value")}
 	version := int64(100)
 	nid := uuid.New()
 	s.mockMetadataMgr.EXPECT().GetMetadata(gomock.Any()).Return(&persistence.GetMetadataResponse{

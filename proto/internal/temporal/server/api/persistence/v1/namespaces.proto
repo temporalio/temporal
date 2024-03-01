@@ -48,7 +48,7 @@ message NamespaceInfo {
     string name = 3;
     string description = 4;
     string owner = 5;
-    map<string, string> data = 6;
+    map<string, bytes> data = 6;
 }
 
 message NamespaceConfig {

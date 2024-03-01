@@ -113,7 +113,7 @@ func (s *EagerNamespaceRefresherSuite) TestUpdateNamespaceFailoverVersion() {
 				Id:    namespace.NewID().String(),
 				Name:  "another random namespace name",
 				State: enumspb.NAMESPACE_STATE_DELETED, // Still must be included.
-				Data:  make(map[string]string)},
+				Data:  make(map[string][]byte)},
 			Config: &persistencespb.NamespaceConfig{
 				Retention: timestamp.DurationFromDays(2),
 				BadBinaries: &namespacepb.BadBinaries{
@@ -155,7 +155,7 @@ func (s *EagerNamespaceRefresherSuite) TestUpdateNamespaceFailoverVersion_Target
 				Id:    namespace.NewID().String(),
 				Name:  "another random namespace name",
 				State: enumspb.NAMESPACE_STATE_DELETED, // Still must be included.
-				Data:  make(map[string]string)},
+				Data:  make(map[string][]byte)},
 			Config: &persistencespb.NamespaceConfig{
 				Retention: timestamp.DurationFromDays(2),
 				BadBinaries: &namespacepb.BadBinaries{
@@ -191,7 +191,7 @@ func (s *EagerNamespaceRefresherSuite) TestUpdateNamespaceFailoverVersion_Target
 				Id:    namespace.NewID().String(),
 				Name:  "another random namespace name",
 				State: enumspb.NAMESPACE_STATE_DELETED,
-				Data:  make(map[string]string)},
+				Data:  make(map[string][]byte)},
 			Config: &persistencespb.NamespaceConfig{
 				Retention: timestamp.DurationFromDays(2),
 				BadBinaries: &namespacepb.BadBinaries{
@@ -215,7 +215,7 @@ func (s *EagerNamespaceRefresherSuite) TestUpdateNamespaceFailoverVersion_Target
 				Id:    namespace.NewID().String(),
 				Name:  "another random namespace name",
 				State: enumspb.NAMESPACE_STATE_DELETED,
-				Data:  make(map[string]string)},
+				Data:  make(map[string][]byte)},
 			Config: &persistencespb.NamespaceConfig{
 				Retention: timestamp.DurationFromDays(2),
 				BadBinaries: &namespacepb.BadBinaries{
@@ -277,7 +277,7 @@ func (s *EagerNamespaceRefresherSuite) TestUpdateNamespaceFailoverVersion_GetNam
 				Id:    namespace.NewID().String(),
 				Name:  "another random namespace name",
 				State: enumspb.NAMESPACE_STATE_DELETED, // Still must be included.
-				Data:  make(map[string]string)},
+				Data:  make(map[string][]byte)},
 			Config: &persistencespb.NamespaceConfig{
 				Retention: timestamp.DurationFromDays(2),
 				BadBinaries: &namespacepb.BadBinaries{
@@ -320,7 +320,7 @@ func (s *EagerNamespaceRefresherSuite) TestUpdateNamespaceFailoverVersion_GetMet
 				Id:    namespace.NewID().String(),
 				Name:  "another random namespace name",
 				State: enumspb.NAMESPACE_STATE_DELETED, // Still must be included.
-				Data:  make(map[string]string)},
+				Data:  make(map[string][]byte)},
 			Config: &persistencespb.NamespaceConfig{
 				Retention: timestamp.DurationFromDays(2),
 				BadBinaries: &namespacepb.BadBinaries{
@@ -360,7 +360,7 @@ func (s *EagerNamespaceRefresherSuite) TestSyncNamespaceFromSourceCluster_Succes
 			Id:    namespaceId.String(),
 			Name:  "another random namespace name",
 			State: enumspb.NAMESPACE_STATE_DELETED,
-			Data:  make(map[string]string)},
+			Data:  make(map[string][]byte)},
 		ReplicationConfig: &replicationpb.NamespaceReplicationConfig{
 			ActiveClusterName: cluster.TestAlternativeClusterName,
 			Clusters: []*replicationpb.ClusterReplicationConfig{
@@ -390,7 +390,7 @@ func (s *EagerNamespaceRefresherSuite) TestSyncNamespaceFromSourceCluster_Namesp
 			Id:    namespace.NewID().String(),
 			Name:  "another random namespace name",
 			State: enumspb.NAMESPACE_STATE_DELETED,
-			Data:  make(map[string]string)},
+			Data:  make(map[string][]byte)},
 		ReplicationConfig: &replicationpb.NamespaceReplicationConfig{
 			ActiveClusterName: cluster.TestAlternativeClusterName,
 			Clusters: []*replicationpb.ClusterReplicationConfig{
@@ -419,7 +419,7 @@ func (s *EagerNamespaceRefresherSuite) TestSyncNamespaceFromSourceCluster_Execut
 			Id:    namespace.NewID().String(),
 			Name:  "another random namespace name",
 			State: enumspb.NAMESPACE_STATE_DELETED,
-			Data:  make(map[string]string)},
+			Data:  make(map[string][]byte)},
 		ReplicationConfig: &replicationpb.NamespaceReplicationConfig{
 			ActiveClusterName: cluster.TestAlternativeClusterName,
 			Clusters: []*replicationpb.ClusterReplicationConfig{
@@ -450,7 +450,7 @@ func (s *EagerNamespaceRefresherSuite) TestSyncNamespaceFromSourceCluster_Namesp
 			Id:    namespace.NewID().String(),
 			Name:  "another random namespace name",
 			State: enumspb.NAMESPACE_STATE_DELETED,
-			Data:  make(map[string]string)},
+			Data:  make(map[string][]byte)},
 		IsGlobalNamespace: false,
 	}
 	s.remoteAdminClient.EXPECT().GetNamespace(gomock.Any(), &adminservice.GetNamespaceRequest{

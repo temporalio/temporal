@@ -1068,7 +1068,7 @@ func (s *adminHandlerSuite) TestGetNamespace_WithIDSuccess() {
 				Id:    namespaceID,
 				Name:  "another random namespace name",
 				State: enumspb.NAMESPACE_STATE_DELETED,
-				Data:  make(map[string]string)},
+				Data:  make(map[string][]byte)},
 			Config: &persistencespb.NamespaceConfig{
 				Retention: timestamp.DurationFromDays(2),
 				BadBinaries: &namespacepb.BadBinaries{
@@ -1107,7 +1107,7 @@ func (s *adminHandlerSuite) TestGetNamespace_WithNameSuccess() {
 				Id:    namespaceId,
 				Name:  namespaceName,
 				State: enumspb.NAMESPACE_STATE_DELETED,
-				Data:  make(map[string]string)},
+				Data:  make(map[string][]byte)},
 			Config: &persistencespb.NamespaceConfig{
 				Retention: timestamp.DurationFromDays(2),
 				BadBinaries: &namespacepb.BadBinaries{

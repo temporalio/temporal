@@ -2458,7 +2458,7 @@ func persistenceGetNamespaceResponse(historyArchivalState, visibilityArchivalSta
 				State:       0,
 				Description: "test-description",
 				Owner:       "test-owner-email",
-				Data:        make(map[string]string),
+				Data:        make(map[string][]byte),
 			},
 			Config: &persistencespb.NamespaceConfig{
 				Retention:               timestamp.DurationFromDays(1),
@@ -2499,7 +2499,7 @@ func registerNamespaceRequest(
 			},
 		},
 		ActiveClusterName:       cluster.TestCurrentClusterName,
-		Data:                    make(map[string]string),
+		Data:                    make(map[string][]byte),
 		HistoryArchivalState:    historyArchivalState,
 		HistoryArchivalUri:      historyArchivalURI,
 		VisibilityArchivalState: visibilityArchivalState,

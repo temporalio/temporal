@@ -87,7 +87,7 @@ func (s *transmissionTaskSuite) TestHandleTransmissionTask_RegisterNamespaceTask
 	state := enumspb.NAMESPACE_STATE_REGISTERED
 	description := "some random test description"
 	ownerEmail := "some random test owner"
-	data := map[string]string{"k": "v"}
+	data := map[string][]byte{"k": []byte("v")}
 	retention := 10 * time.Hour * 24
 	historyArchivalState := enumspb.ARCHIVAL_STATE_ENABLED
 	historyArchivalURI := "some random history archival uri"
@@ -173,7 +173,7 @@ func (s *transmissionTaskSuite) TestHandleTransmissionTask_RegisterNamespaceTask
 	name := "some random namespace test name"
 	description := "some random test description"
 	ownerEmail := "some random test owner"
-	data := map[string]string{"k": "v"}
+	data := map[string][]byte{"k": []byte("v")}
 	retention := 10 * time.Hour * 24
 	historyArchivalState := enumspb.ARCHIVAL_STATE_ENABLED
 	historyArchivalURI := "some random history archival uri"
@@ -230,7 +230,7 @@ func (s *transmissionTaskSuite) TestHandleTransmissionTask_UpdateNamespaceTask_I
 	state := enumspb.NAMESPACE_STATE_DEPRECATED
 	description := "some random test description"
 	ownerEmail := "some random test owner"
-	data := map[string]string{"k": "v"}
+	data := map[string][]byte{"k": []byte("v")}
 	retention := 10 * time.Hour * 24
 	historyArchivalState := enumspb.ARCHIVAL_STATE_ENABLED
 	historyArchivalURI := "some random history archival uri"
@@ -315,7 +315,7 @@ func (s *transmissionTaskSuite) TestHandleTransmissionTask_UpdateNamespaceTask_N
 	name := "some random namespace test name"
 	description := "some random test description"
 	ownerEmail := "some random test owner"
-	data := map[string]string{"k": "v"}
+	data := map[string][]byte{"k": []byte("v")}
 	retention := 10 * time.Hour * 24
 	historyArchivalState := enumspb.ARCHIVAL_STATE_ENABLED
 	historyArchivalURI := "some random history archival uri"
@@ -371,7 +371,7 @@ func (s *transmissionTaskSuite) TestHandleTransmissionTask_UpdateNamespaceTask_R
 	state := enumspb.NAMESPACE_STATE_DEPRECATED
 	description := "some random test description"
 	ownerEmail := "some random test owner"
-	data := map[string]string{"k": "v"}
+	data := map[string][]byte{"k": []byte("v")}
 	retention := 10 * time.Hour * 24
 	historyArchivalState := enumspb.ARCHIVAL_STATE_ENABLED
 	historyArchivalURI := "some random history archival uri"

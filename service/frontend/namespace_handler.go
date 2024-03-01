@@ -754,12 +754,12 @@ func (d *namespaceHandler) mergeBadBinaries(
 }
 
 func (d *namespaceHandler) mergeNamespaceData(
-	old map[string]string,
-	new map[string]string,
-) map[string]string {
+	old map[string][]byte,
+	new map[string][]byte,
+) map[string][]byte {
 
 	if old == nil {
-		old = map[string]string{}
+		old = map[string][]byte{}
 	}
 	for k, v := range new {
 		old[k] = v

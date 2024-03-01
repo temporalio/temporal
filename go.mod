@@ -2,6 +2,10 @@ module go.temporal.io/server
 
 go 1.21
 
+replace (
+    go.temporal.io/api => ../api-go
+)
+
 require (
 	cloud.google.com/go/storage v1.36.0
 	github.com/aws/aws-sdk-go v1.44.289

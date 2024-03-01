@@ -46,7 +46,7 @@ func base(t *testing.T) *namespace.Namespace {
 			Info: &persistencespb.NamespaceInfo{
 				Id:   namespace.NewID().String(),
 				Name: t.Name(),
-				Data: make(map[string]string),
+				Data: make(map[string][]byte),
 			},
 			Config: &persistencespb.NamespaceConfig{
 				BadBinaries: &namespacepb.BadBinaries{
@@ -136,9 +136,9 @@ func Test_GetRetentionDays(t *testing.T) {
 
 func TestNamespace_GetCustomData(t *testing.T) {
 	base := base(t)
-	ns := base.Clone(namespace.WithData("foo", "bar"))
+	ns := base.Clone(namespace.WithData("foo", []byte("bar")))
 	data := ns.GetCustomData("foo")
-	assert.Equal(t, "bar", data)
+	assert.Equal(t, []byte("bar"), data)
 	data2 := ns.GetCustomData("fake")
-	assert.Equal(t, "", data2)
+	assert.Nil(t, data2)
 }

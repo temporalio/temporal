@@ -138,7 +138,7 @@ func (m *MetadataPersistenceSuiteV2) TestCreateWithPartialNamespaceSameNameSameI
 	state := enumspb.NAMESPACE_STATE_REGISTERED
 	description := "create-namespace-test-description"
 	owner := "create-namespace-test-owner"
-	data := map[string]string{"k1": "v1"}
+	data := map[string][]byte{"k1": []byte("v1")}
 	retention := int32(10)
 	historyArchivalState := enumspb.ARCHIVAL_STATE_ENABLED
 	historyArchivalURI := "test://history/uri"
@@ -217,7 +217,7 @@ func (m *MetadataPersistenceSuiteV2) TestCreateWithPartialNamespaceSameNameDiffe
 	state := enumspb.NAMESPACE_STATE_REGISTERED
 	description := "create-namespace-test-description"
 	owner := "create-namespace-test-owner"
-	data := map[string]string{"k1": "v1"}
+	data := map[string][]byte{"k1": []byte("v1")}
 	retention := int32(10)
 	historyArchivalState := enumspb.ARCHIVAL_STATE_ENABLED
 	historyArchivalURI := "test://history/uri"
@@ -295,7 +295,7 @@ func (m *MetadataPersistenceSuiteV2) TestCreateWithPartialNamespaceDifferentName
 	state := enumspb.NAMESPACE_STATE_REGISTERED
 	description := "create-namespace-test-description"
 	owner := "create-namespace-test-owner"
-	data := map[string]string{"k1": "v1"}
+	data := map[string][]byte{"k1": []byte("v1")}
 	retention := int32(10)
 	historyArchivalState := enumspb.ARCHIVAL_STATE_ENABLED
 	historyArchivalURI := "test://history/uri"
@@ -341,7 +341,7 @@ func (m *MetadataPersistenceSuiteV2) TestCreateNamespace() {
 	state := enumspb.NAMESPACE_STATE_REGISTERED
 	description := "create-namespace-test-description"
 	owner := "create-namespace-test-owner"
-	data := map[string]string{"k1": "v1"}
+	data := map[string][]byte{"k1": []byte("v1")}
 	retention := int32(10)
 	historyArchivalState := enumspb.ARCHIVAL_STATE_ENABLED
 	historyArchivalURI := "test://history/uri"
@@ -410,7 +410,7 @@ func (m *MetadataPersistenceSuiteV2) TestCreateNamespace() {
 			State:       state,
 			Description: "fail",
 			Owner:       "fail",
-			Data:        map[string]string{},
+			Data:        map[string][]byte{},
 		},
 		&persistencespb.NamespaceConfig{
 			Retention:               timestamp.DurationFromDays(100),
@@ -436,7 +436,7 @@ func (m *MetadataPersistenceSuiteV2) TestGetNamespace() {
 	state := enumspb.NAMESPACE_STATE_REGISTERED
 	description := "get-namespace-test-description"
 	owner := "get-namespace-test-owner"
-	data := map[string]string{"k1": "v1"}
+	data := map[string][]byte{"k1": []byte("v1")}
 	retention := int32(10)
 	historyArchivalState := enumspb.ARCHIVAL_STATE_ENABLED
 	historyArchivalURI := "test://history/uri"
@@ -588,7 +588,7 @@ func (m *MetadataPersistenceSuiteV2) TestConcurrentCreateNamespace() {
 	for i := 1; i <= concurrency; i++ {
 		newValue := fmt.Sprintf("v-%v", i)
 		wg.Add(1)
-		go func(data map[string]string) {
+		go func(data map[string][]byte) {
 			_, err1 := m.CreateNamespace(
 				&persistencespb.NamespaceInfo{
 					Id:          id,
@@ -618,7 +618,7 @@ func (m *MetadataPersistenceSuiteV2) TestConcurrentCreateNamespace() {
 				atomic.AddInt32(&successCount, 1)
 			}
 			wg.Done()
-		}(map[string]string{"k0": newValue})
+		}(map[string][]byte{"k0": []byte(newValue)})
 	}
 	wg.Wait()
 	m.Equal(int32(1), successCount)
@@ -646,7 +646,7 @@ func (m *MetadataPersistenceSuiteV2) TestConcurrentCreateNamespace() {
 	m.Equal(failoverVersion, resp.Namespace.FailoverVersion)
 
 	// check namespace data
-	ss := strings.Split(resp.Namespace.Info.Data["k0"], "-")
+	ss := strings.Split(string(resp.Namespace.Info.Data["k0"]), "-")
 	m.Equal(2, len(ss))
 	vi, err := strconv.Atoi(ss[1])
 	m.NoError(err)
@@ -660,7 +660,7 @@ func (m *MetadataPersistenceSuiteV2) TestConcurrentUpdateNamespace() {
 	state := enumspb.NAMESPACE_STATE_REGISTERED
 	description := "update-namespace-test-description"
 	owner := "update-namespace-test-owner"
-	data := map[string]string{"k1": "v1"}
+	data := map[string][]byte{"k1": []byte("v1")}
 	retention := int32(10)
 	historyArchivalState := enumspb.ARCHIVAL_STATE_ENABLED
 	historyArchivalURI := "test://history/uri"
@@ -725,7 +725,7 @@ func (m *MetadataPersistenceSuiteV2) TestConcurrentUpdateNamespace() {
 	for i := 1; i <= concurrency; i++ {
 		newValue := fmt.Sprintf("v-%v", i)
 		wg.Add(1)
-		go func(updatedData map[string]string) {
+		go func(updatedData map[string][]byte) {
 			err3 := m.UpdateNamespace(
 				&persistencespb.NamespaceInfo{
 					Id:          resp2.Namespace.Info.Id,
@@ -758,7 +758,7 @@ func (m *MetadataPersistenceSuiteV2) TestConcurrentUpdateNamespace() {
 				atomic.AddInt32(&successCount, 1)
 			}
 			wg.Done()
-		}(map[string]string{"k0": newValue})
+		}(map[string][]byte{"k0": []byte(newValue)})
 	}
 	wg.Wait()
 	m.Equal(int32(1), successCount)
@@ -789,7 +789,7 @@ func (m *MetadataPersistenceSuiteV2) TestConcurrentUpdateNamespace() {
 	m.Equal(failoverVersion, resp3.Namespace.FailoverVersion)
 
 	// check namespace data
-	ss := strings.Split(resp3.Namespace.Info.Data["k0"], "-")
+	ss := strings.Split(string(resp3.Namespace.Info.Data["k0"]), "-")
 	m.Equal(2, len(ss))
 	vi, err := strconv.Atoi(ss[1])
 	m.NoError(err)
@@ -803,7 +803,7 @@ func (m *MetadataPersistenceSuiteV2) TestUpdateNamespace() {
 	state := enumspb.NAMESPACE_STATE_REGISTERED
 	description := "update-namespace-test-description"
 	owner := "update-namespace-test-owner"
-	data := map[string]string{"k1": "v1"}
+	data := map[string][]byte{"k1": []byte("v1")}
 	retention := int32(10)
 	historyArchivalState := enumspb.ARCHIVAL_STATE_ENABLED
 	historyArchivalURI := "test://history/uri"
@@ -855,7 +855,7 @@ func (m *MetadataPersistenceSuiteV2) TestUpdateNamespace() {
 	updatedDescription := "description-updated"
 	updatedOwner := "owner-updated"
 	// This will overriding the previous key-value pair
-	updatedData := map[string]string{"k1": "v2"}
+	updatedData := map[string][]byte{"k1": []byte("v2")}
 	updatedRetention := timestamp.DurationFromDays(20)
 	updatedHistoryArchivalState := enumspb.ARCHIVAL_STATE_DISABLED
 	updatedHistoryArchivalURI := ""
@@ -1029,7 +1029,7 @@ func (m *MetadataPersistenceSuiteV2) TestRenameNamespace() {
 	state := enumspb.NAMESPACE_STATE_REGISTERED
 	description := "rename-namespace-test-description"
 	owner := "rename-namespace-test-owner"
-	data := map[string]string{"k1": "v1"}
+	data := map[string][]byte{"k1": []byte("v1")}
 	retention := int32(10)
 	historyArchivalState := enumspb.ARCHIVAL_STATE_ENABLED
 	historyArchivalURI := "test://history/uri"
@@ -1114,7 +1114,7 @@ func (m *MetadataPersistenceSuiteV2) TestDeleteNamespace() {
 	state := enumspb.NAMESPACE_STATE_REGISTERED
 	description := "delete-namespace-test-description"
 	owner := "delete-namespace-test-owner"
-	data := map[string]string{"k1": "v1"}
+	data := map[string][]byte{"k1": []byte("v1")}
 	retention := timestamp.DurationFromDays(10)
 	historyArchivalState := enumspb.ARCHIVAL_STATE_ENABLED
 	historyArchivalURI := "test://history/uri"
@@ -1261,7 +1261,7 @@ func (m *MetadataPersistenceSuiteV2) TestListNamespaces() {
 					State:       enumspb.NAMESPACE_STATE_REGISTERED,
 					Description: "list-namespace-test-description-1",
 					Owner:       "list-namespace-test-owner-1",
-					Data:        map[string]string{"k1": "v1"},
+					Data:        map[string][]byte{"k1": []byte("v1")},
 				},
 				Config: &persistencespb.NamespaceConfig{
 					Retention:               timestamp.DurationFromDays(109),
@@ -1289,7 +1289,7 @@ func (m *MetadataPersistenceSuiteV2) TestListNamespaces() {
 					State:       enumspb.NAMESPACE_STATE_REGISTERED,
 					Description: "list-namespace-test-description-2",
 					Owner:       "list-namespace-test-owner-2",
-					Data:        map[string]string{"k1": "v2"},
+					Data:        map[string][]byte{"k1": []byte("v2")},
 				},
 				Config: &persistencespb.NamespaceConfig{
 					Retention:               timestamp.DurationFromDays(326),
@@ -1325,6 +1325,7 @@ func (m *MetadataPersistenceSuiteV2) TestListNamespaces() {
 	const pageSize = 1
 	pageCount := 0
 	outputNamespaces := make(map[string]*p.GetNamespaceResponse)
+
 	for {
 		resp, err := m.ListNamespaces(pageSize, token)
 		m.NoError(err)

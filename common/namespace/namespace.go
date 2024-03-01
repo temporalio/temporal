@@ -302,11 +302,16 @@ func (ns *Namespace) ReplicationPolicy() ReplicationPolicy {
 	return ReplicationPolicyOneCluster
 }
 
-func (ns *Namespace) GetCustomData(key string) string {
+func (ns *Namespace) GetCustomData(key string) []byte {
 	if ns.info.Data == nil {
-		return ""
+		return nil
 	}
-	return ns.info.Data[key]
+	val, _ := ns.info.Data[key]
+	return val
+}
+
+func (ns *Namespace) GetInfo() *persistencespb.NamespaceInfo {
+	return ns.info
 }
 
 // Retention returns retention duration for this namespace.
