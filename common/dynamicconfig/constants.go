@@ -234,7 +234,7 @@ const (
 	// 3. There's propagation delay of the versioning data between matching nodes.
 	RemovableBuildIdDurationSinceDefault = "worker.removableBuildIdDurationSinceDefault"
 	// BuildIdScavengerVisibilityRPS is the rate limit for visibility calls from the build id scavenger
-	BuildIdScavenengerVisibilityRPS = "worker.buildIdScavengerVisibilityRPS"
+	BuildIdScavengerVisibilityRPS = "worker.buildIdScavengerVisibilityRPS"
 
 	// keys for frontend
 
