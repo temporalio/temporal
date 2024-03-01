@@ -3308,8 +3308,7 @@ func (wh *WorkflowHandler) UpdateWorkerVersioningRules(ctx context.Context, requ
 		return nil, errRequestNotSet
 	}
 
-	// todo carly: what about EnableWorkerVersioningWorkflow?
-	if !wh.config.EnableWorkerVersioningData(request.Namespace) {
+	if !wh.config.EnableWorkerVersioningRules(request.Namespace) {
 		return nil, errWorkerVersioningNotAllowed
 	}
 
@@ -3346,8 +3345,7 @@ func (wh *WorkflowHandler) ListWorkerVersioningRules(ctx context.Context, reques
 		return nil, errRequestNotSet
 	}
 
-	// todo carly: what about EnableWorkerVersioningWorkflow?
-	if !wh.config.EnableWorkerVersioningData(request.Namespace) {
+	if !wh.config.EnableWorkerVersioningRules(request.Namespace) {
 		return nil, errWorkerVersioningNotAllowed
 	}
 
