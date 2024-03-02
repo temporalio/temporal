@@ -224,9 +224,6 @@ func (u *Updater) Apply(
 		})
 
 	return func() (*historyservice.UpdateWorkflowExecutionResponse, error) {
-		// Wrapping workflow context related operation in separate func to prevent usage of its fields
-		// (including any mutable state fields) outside of this func after workflow lock is released.
-		// It is important to release workflow lock before calling matching.
 		if err != nil {
 			// If update is received while WFT is running, it will be waiting for the next WFT.
 			// And if that running WFT completes workflow, then update is rejected (see CancelIncomplete).
