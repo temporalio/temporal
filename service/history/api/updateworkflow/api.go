@@ -61,10 +61,6 @@ const (
 	failUpdateWorkflowTaskAttemptCount = 3
 )
 
-type (
-	PostApplyFunc func() (*historyservice.UpdateWorkflowExecutionResponse, error)
-)
-
 type Updater struct {
 	shardCtx                   shard.Context
 	workflowConsistencyChecker api.WorkflowConsistencyChecker
