@@ -116,8 +116,8 @@ func (u *Updater) Apply(
 	ctx context.Context,
 	withLease func(api.UpdateWorkflowActionFunc) error,
 ) OnCommitFunc {
-	// Variables shared with workflow.Context and mutable state.
-	// NOTE: They *have* to be copies to avoid data races when using them outside the workflow lease.
+	// Variables from workflow.Context and mutable state.
+	// NOTE: They *have to* be copies to avoid data races when using them outside the workflow lease.
 	var (
 		wfKey                  definition.WorkflowKey
 		upd                    *update.Update
