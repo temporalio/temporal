@@ -377,7 +377,7 @@ func (e *historyEngineImpl) StartWorkflowExecution(
 	if err != nil {
 		return nil, err
 	}
-	return starter.Invoke(ctx)
+	return starter.Invoke(ctx, nil)
 }
 
 func (e *historyEngineImpl) ExecuteMultiOperation(

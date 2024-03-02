@@ -53,7 +53,10 @@ import (
 	"go.temporal.io/server/service/history/workflow/cache"
 )
 
-type eagerStartDeniedReason metrics.ReasonString
+type (
+	eagerStartDeniedReason metrics.ReasonString
+	BeforeCreateHookFunc   func(lease api.WorkflowLease) error
+)
 
 const (
 	eagerStartDeniedReasonDynamicConfigDisabled    eagerStartDeniedReason = "dynamic_config_disabled"
@@ -160,9 +163,10 @@ func (s *Starter) requestEagerStart() bool {
 	return s.request.StartRequest.GetRequestEagerExecution()
 }
 
-// Invoke starts a new workflow execution
+// Invoke starts a new workflow execution.
 func (s *Starter) Invoke(
 	ctx context.Context,
+	beforeCreateHook BeforeCreateHookFunc,
 ) (resp *historyservice.StartWorkflowExecutionResponse, retError error) {
 	if s.request.StartRequest.WorkflowId == "WORKFLOW-ID" {
 		fmt.Println("===== [API]", "Starter.Invoke")
@@ -207,7 +211,7 @@ func (s *Starter) Create(ctx context.Context) (resp *historyservice.StartWorkflo
 		return nil, err
 	}
 
-	// The history and mutable state we generated above should be deleted by a background process.
+	// The history and mutable state we generated above will be deleted by a background process.
 	return s.handleConflict(ctx, s.creationParams, currentWorkflowConditionFailedError)
 }
 
