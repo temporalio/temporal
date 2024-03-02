@@ -376,7 +376,7 @@ func (e *historyEngineImpl) StartWorkflowExecution(
 	if err != nil {
 		return nil, err
 	}
-	return starter.Invoke(ctx)
+	return starter.Invoke(ctx, nil)
 }
 
 // GetMutableState retrieves the mutable state of the workflow execution
