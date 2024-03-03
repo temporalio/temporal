@@ -2593,11 +2593,7 @@ func (wh *WorkflowHandler) CreateSchedule(ctx context.Context, request *workflow
 		return nil, err
 	}
 
-	err = wh.validateStartWorkflowArgsForSchedule(
-		namespaceName,
-		request.GetSchedule().GetAction().GetStartWorkflow(),
-		request.GetSchedule().GetPolicies().GetKeepOriginalWorkflowId())
-	if err != nil {
+	if err = wh.validateStartWorkflowArgsForSchedule(namespaceName, request.GetSchedule().GetAction().GetStartWorkflow()); err != nil {
 		return nil, err
 	}
 
@@ -2651,14 +2647,12 @@ func (wh *WorkflowHandler) CreateSchedule(ctx context.Context, request *workflow
 func (wh *WorkflowHandler) validateStartWorkflowArgsForSchedule(
 	namespaceName namespace.Name,
 	startWorkflow *workflowpb.NewWorkflowExecutionInfo,
-	keepOriginalWorkflowId bool,
 ) error {
 	if startWorkflow == nil {
 		return nil
 	}
 
-	workflowId := scheduler.InternalWorkflowIdRepresentation(startWorkflow.WorkflowId, time.Now(), keepOriginalWorkflowId)
-	if err := wh.validateWorkflowID(workflowId); err != nil {
+	if err := wh.validateWorkflowID(startWorkflow.WorkflowId + scheduler.AppendedTimestampForValidation); err != nil {
 		return err
 	}
 
@@ -2926,11 +2920,7 @@ func (wh *WorkflowHandler) UpdateSchedule(ctx context.Context, request *workflow
 		return nil, err
 	}
 
-	err = wh.validateStartWorkflowArgsForSchedule(
-		namespaceName,
-		request.GetSchedule().GetAction().GetStartWorkflow(),
-		request.GetSchedule().GetPolicies().GetKeepOriginalWorkflowId())
-	if err != nil {
+	if err = wh.validateStartWorkflowArgsForSchedule(namespaceName, request.GetSchedule().GetAction().GetStartWorkflow()); err != nil {
 		return nil, err
 	}
 
