@@ -1665,7 +1665,7 @@ func (s *engine2Suite) TestSignalWithStartWorkflowExecution_Start_DuplicateReque
 
 	ctx := metrics.AddMetricsContext(context.Background())
 	resp, err := s.historyEngine.SignalWithStartWorkflowExecution(ctx, sRequest)
-	s.Nil(err)
+	s.NoError(err)
 	s.NotNil(resp.GetRunId())
 	s.Equal(runID, resp.GetRunId())
 }
