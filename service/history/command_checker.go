@@ -27,6 +27,7 @@ package history
 import (
 	"fmt"
 	"strings"
+	"unicode/utf8"
 
 	"github.com/pborman/uuid"
 	commandpb "go.temporal.io/api/command/v1"
@@ -410,7 +411,10 @@ func (v *commandAttrValidator) validateTimerScheduleAttributes(
 		return failedCause, serviceerror.NewInvalidArgument("TimerId is not set on StartTimerCommand.")
 	}
 	if len(timerID) > v.maxIDLengthLimit {
-		return failedCause, serviceerror.NewInvalidArgument(fmt.Sprintf("TimerID on StartTimerCommand exceeds length limit. TimerId=%s Length=%d Limit=%d", timerID, len(timerID), v.maxIDLengthLimit))
+		return failedCause, serviceerror.NewInvalidArgument(fmt.Sprintf("TimerId on StartTimerCommand exceeds length limit. TimerId=%s Length=%d Limit=%d", timerID, len(timerID), v.maxIDLengthLimit))
+	}
+	if err := common.ValidateUTF8String("TimerId", timerID); err != nil {
+		return failedCause, err
 	}
 	if err := timer.ValidateAndCapTimer(attributes.GetStartToFireTimeout()); err != nil {
 		return failedCause, serviceerror.NewInvalidArgument(fmt.Sprintf("An invalid StartToFireTimeout is set on StartTimerCommand: %v. TimerId=%s", err, timerID))
@@ -748,6 +752,10 @@ func (v *commandAttrValidator) validateStartChildExecutionAttributes(
 		return failedCause, serviceerror.NewInvalidArgument(fmt.Sprintf("WorkflowType on StartChildWorkflowExecutionCommand exceeds length limit. WorkflowId=%s WorkflowType=%s Length=%d Limit=%d Namespace=%s", wfID, wfType, len(wfType), v.maxIDLengthLimit, ns))
 	}
 
+	if !utf8.ValidString(wfType) {
+		return failedCause, serviceerror.NewInvalidArgument(fmt.Sprintf("WorkflowType %v is not a valid UTF-8 string", wfType))
+	}
+
 	if err := timer.ValidateAndCapTimer(attributes.GetWorkflowExecutionTimeout()); err != nil {
 		return failedCause, serviceerror.NewInvalidArgument(fmt.Sprintf("Invalid WorkflowExecutionTimeout on StartChildWorkflowExecutionCommand: %v. WorkflowId=%s WorkflowType=%s Namespace=%s", err, wfID, wfType, ns))
 	}
@@ -811,6 +819,10 @@ func (v *commandAttrValidator) validateTaskQueue(
 	name := taskQueue.GetName()
 	if len(name) > v.maxIDLengthLimit {
 		return taskQueue, serviceerror.NewInvalidArgument(fmt.Sprintf("task queue name exceeds length limit of %v", v.maxIDLengthLimit))
+	}
+
+	if err := common.ValidateUTF8String("TaskQueue", name); err != nil {
+		return taskQueue, err
 	}
 
 	if strings.HasPrefix(name, reservedTaskQueuePrefix) {
