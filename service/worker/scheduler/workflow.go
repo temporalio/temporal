@@ -82,6 +82,10 @@ const (
 	// Schedules are implemented by a workflow whose ID is this string plus the schedule ID.
 	WorkflowIDPrefix = "temporal-sys-scheduler:"
 
+	// This is an example of a timestamp that's appended to the workflow
+	// id, used for validation in the frontend.
+	AppendedTimestampForValidation = "-2009-11-10T23:00:00Z"
+
 	SignalNameUpdate   = "update"
 	SignalNamePatch    = "patch"
 	SignalNameRefresh  = "refresh"
@@ -1194,10 +1198,8 @@ func (s *scheduler) startWorkflow(
 	nominalTimeSec := start.NominalTime.AsTime().UTC().Truncate(time.Second)
 	workflowID := newWorkflow.WorkflowId
 	if start.OverlapPolicy == enumspb.SCHEDULE_OVERLAP_POLICY_ALLOW_ALL || s.tweakables.AlwaysAppendTimestamp {
-		workflowID = InternalWorkflowIdRepresentation(
-			newWorkflow.WorkflowId,
-			nominalTimeSec,
-			s.StartScheduleArgs.GetSchedule().GetPolicies().GetKeepOriginalWorkflowId())
+		// must match AppendedTimestampForValidation
+		workflowID += "-" + nominalTimeSec.Format(time.RFC3339)
 	}
 
 	// Set scheduleToCloseTimeout based on catchup window, which is the latest time that it's
@@ -1445,12 +1447,4 @@ func GetListInfoFromStartArgs(args *schedspb.StartScheduleArgs, now time.Time, s
 	s.compileSpec()
 	s.State.LastProcessedTime = timestamppb.New(now)
 	return s.getListInfo(false)
-}
-
-func InternalWorkflowIdRepresentation(originalWorkflowId string, startTime time.Time, keepOriginalWorkflowId bool) string {
-	timeSec := startTime.UTC().Truncate(time.Second)
-	if keepOriginalWorkflowId {
-		return originalWorkflowId
-	}
-	return originalWorkflowId + "-" + timeSec.Format(time.RFC3339)
 }
