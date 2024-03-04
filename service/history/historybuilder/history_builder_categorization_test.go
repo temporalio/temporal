@@ -139,7 +139,6 @@ func TestHistoryBuilder_AddWorkflowExecutionStartedEvent(t *testing.T) {
 	})
 }
 
-//nolint:revive
 func TestHistoryBuilder_FlushBufferToCurrentBatch(t *testing.T) {
 	t.Run("when no events in dbBufferBatch or meBufferBatch will return scheduledIDToStartedID", func(t *testing.T) {
 		hb := HistoryBuilder{
@@ -973,7 +972,6 @@ func TestHistoryBuilder_AddDifferentEvents_AssignmentEventId(t *testing.T) {
 	})
 }
 
-//nolint:revive
 func TestHistoryBuilder_FlushBufferToCurrentBatch_WiringEvents(t *testing.T) {
 	t.Run("should allocate event id for each buffered event", func(t *testing.T) {
 		sut := newSUTFromConfig(builderConfig{nextEventId: 98})
