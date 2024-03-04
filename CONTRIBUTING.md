@@ -182,3 +182,18 @@ All commit messages are from the titles of your pull requests. So make sure foll
 Please don't use very generic titles like "bug fixes". 
 
 All PR titles should start with Upper case and have no dot at the end.
+
+## Go build and run tags
+
+Prior to Server version v1.23.0 our protobuf code generator allowed invalid UTF-8 data to be stored as proto strings. This isn't actually allowed by the proto3 spec, so we need to specify `-tags protolegacy` when building against the server. Our Makefile does this, but if you're using temporal as a library you'll need to enable that yourself.
+
+Example:
+
+``` shell
+$ go build -tags protolegacy ./cmd/server
+```
+
+If you see an error like `grpc: error unmarshalling request: string field contains invalid UTF-8` then you've forgotten to specify this flag.
+
+## License
+MIT License, please see [LICENSE](LICENSE) for details.

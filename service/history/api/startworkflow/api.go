@@ -52,7 +52,10 @@ import (
 	"go.temporal.io/server/service/history/workflow/cache"
 )
 
-type eagerStartDeniedReason metrics.ReasonString
+type (
+	eagerStartDeniedReason metrics.ReasonString
+	BeforeCreateHookFunc   func(lease api.WorkflowLease) error
+)
 
 const (
 	eagerStartDeniedReasonDynamicConfigDisabled    eagerStartDeniedReason = "dynamic_config_disabled"
@@ -158,18 +161,17 @@ func (s *Starter) requestEagerStart() bool {
 	return s.request.StartRequest.GetRequestEagerExecution()
 }
 
-// Invoke starts a new workflow execution
+// Invoke starts a new workflow execution.
 func (s *Starter) Invoke(
 	ctx context.Context,
+	beforeCreateHook BeforeCreateHookFunc,
 ) (resp *historyservice.StartWorkflowExecutionResponse, retError error) {
 	request := s.request.StartRequest
 	if err := s.prepare(ctx); err != nil {
 		return nil, err
 	}
 
-	runID := uuid.NewString()
-
-	creationParams, err := s.createNewMutableState(ctx, request.GetWorkflowId(), runID)
+	creationParams, err := s.createNewMutableState(ctx, request.GetWorkflowId())
 	if err != nil {
 		return nil, err
 	}
@@ -181,6 +183,12 @@ func (s *Starter) Invoke(
 	}
 	defer func() { currentRelease(retError) }()
 
+	if beforeCreateHook != nil {
+		if err = beforeCreateHook(creationParams.workflowLease); err != nil {
+			return nil, err
+		}
+	}
+
 	err = s.createBrandNew(ctx, creationParams)
 	if err == nil {
 		return s.generateResponse(creationParams.runID, creationParams.workflowTaskInfo, extractHistoryEvents(creationParams.workflowEventBatches))
@@ -191,7 +199,7 @@ func (s *Starter) Invoke(
 		return nil, err
 	}
 
-	// The history and mutable state we generated above should be deleted by a background process.
+	// The history and mutable state we generated above will be deleted by a background process.
 	return s.handleConflict(ctx, creationParams, currentWorkflowConditionFailedError)
 }
 
@@ -213,7 +221,8 @@ func (s *Starter) lockCurrentWorkflowExecution(
 
 // createNewMutableState creates a new workflow context, and closes its mutable state transaction as snapshot.
 // It returns the creationContext which can later be used to insert into the executions table.
-func (s *Starter) createNewMutableState(ctx context.Context, workflowID string, runID string) (*creationParams, error) {
+func (s *Starter) createNewMutableState(ctx context.Context, workflowID string) (*creationParams, error) {
+	runID := uuid.NewString()
 	workflowLease, err := api.NewWorkflowWithSignal(
 		s.shardContext,
 		s.namespace,
@@ -443,7 +452,7 @@ func (s *Starter) respondToRetriedRequest(
 // getMutableStateInfo gets the relevant mutable state information while getting the state for the given run from the
 // workflow cache and managing the cache lease.
 func (s *Starter) getMutableStateInfo(ctx context.Context, runID string) (*mutableStateInfo, error) {
-	// We techincally never want to create a new execution but in practice this should not happen.
+	// We technically never want to create a new execution but in practice this should not happen.
 	workflowContext, releaseFn, err := s.workflowConsistencyChecker.GetWorkflowCache().GetOrCreateWorkflowExecution(
 		ctx,
 		s.shardContext,
