@@ -99,15 +99,14 @@ linters-settings:
           - "bytes.Buffer.*"
           - "strings.Builder.*"
 issues:
-  # Exclude cyclomatic and cognitive complexity rules for functional tests in the `tests` root directory.
   exclude-rules:
-    - path: ^tests\/.+\.go
-      text: "(cyclomatic|cognitive)"
+    - path: _test\.go|tests/.+\.go
+      text: "(cyclomatic|cognitive)"  # false positives when using subtests
       linters:
         - revive
-    - path: _test\.go|^common/persistence\/tests\/.+\.go # Ignore things like err = errors.New("test error") in tests
+    - path: _test\.go|tests/.+\.go
       linters:
-        - goerr113
+        - goerr113  # like err = errors.New("test error")
     - path: ^tools\/.+\.go
       linters:
         - goerr113
