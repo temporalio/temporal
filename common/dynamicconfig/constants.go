@@ -516,7 +516,9 @@ const (
 	HistoryCacheSizeBasedLimit = "history.cacheSizeBasedLimit"
 	// HistoryCacheInitialSize is initial size of history cache
 	HistoryCacheInitialSize = "history.cacheInitialSize"
-	// HistoryCacheMaxSize is max size of history cache
+	// HistoryCacheMaxSize is max size of history cache. If history.cacheSizeBasedLimit set to true, this value is the
+	// maximum size of history cache in bytes. if history.cacheSizeBasedLimit set to false, this value is the maximum number of
+	// entries in the cache.
 	HistoryCacheMaxSize = "history.cacheMaxSize"
 	// HistoryCacheTTL is TTL of history cache
 	HistoryCacheTTL = "history.cacheTTL"
@@ -525,7 +527,9 @@ const (
 	HistoryCacheNonUserContextLockTimeout = "history.cacheNonUserContextLockTimeout"
 	// EnableHostHistoryCache controls if the history cache is host level
 	EnableHostHistoryCache = "history.enableHostHistoryCache"
-	// HistoryCacheHostLevelMaxSize is max size of history host level cache
+	// HistoryCacheHostLevelMaxSize is max size of history host level cache. If history.cacheSizeBasedLimit set to true,
+	// this value is the maximum size of history host level cache in bytes. if history.cacheSizeBasedLimit set to false,
+	// this value is the maximum number of entries in the host level cache.
 	HistoryCacheHostLevelMaxSize = "history.hostLevelCacheMaxSize"
 	// EnableAPIGetCurrentRunIDLock controls if a lock should be acquired before getting current run ID for API requests
 	EnableAPIGetCurrentRunIDLock = "history.enableAPIGetCurrentRunIDLock"
