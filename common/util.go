@@ -480,12 +480,13 @@ func PrettyPrint[T proto.Message](msgs []T, header ...string) {
 	_, _ = sb.WriteString("==========================================================================\n")
 	for _, h := range header {
 		_, _ = sb.WriteString(h)
-		_, _ = sb.WriteString("\n")
+		_, _ = sb.WriteRune('\n')
 	}
 	_, _ = sb.WriteString("--------------------------------------------------------------------------\n")
 	for _, m := range msgs {
 		bs, _ := prototext.Marshal(m)
 		sb.Write(bs)
+		sb.WriteRune('\n')
 	}
 	fmt.Print(sb.String())
 }

@@ -95,8 +95,6 @@ func (s *FunctionalSuite) TestActivityHeartBeatWorkflow_Success() {
 		previousStartedEventID, startedEventID int64, history *historypb.History) ([]*commandpb.Command, error) {
 		if activityCounter < activityCount {
 			activityCounter++
-			buf := new(bytes.Buffer)
-			s.Nil(binary.Write(buf, binary.LittleEndian, activityCounter))
 
 			return []*commandpb.Command{{
 				CommandType: enumspb.COMMAND_TYPE_SCHEDULE_ACTIVITY_TASK,
@@ -104,7 +102,7 @@ func (s *FunctionalSuite) TestActivityHeartBeatWorkflow_Success() {
 					ActivityId:             convert.Int32ToString(activityCounter),
 					ActivityType:           &commonpb.ActivityType{Name: activityName},
 					TaskQueue:              &taskqueuepb.TaskQueue{Name: tl, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
-					Input:                  payloads.EncodeBytes(buf.Bytes()),
+					Input:                  payloads.EncodeString("activity-input"),
 					Header:                 header,
 					ScheduleToCloseTimeout: durationpb.New(15 * time.Second),
 					ScheduleToStartTimeout: durationpb.New(1 * time.Second),
@@ -174,11 +172,19 @@ func (s *FunctionalSuite) TestActivityHeartBeatWorkflow_Success() {
 		WorkflowId: id,
 		RunId:      we.GetRunId(),
 	})
-	for _, event := range events {
-		if event.GetEventType() == enumspb.EVENT_TYPE_ACTIVITY_TASK_SCHEDULED {
-			s.ProtoEqual(header, event.GetActivityTaskScheduledEventAttributes().Header)
-		}
-	}
+
+	s.EqualHistoryEvents(`
+  1 WorkflowExecutionStarted
+  2 WorkflowTaskScheduled
+  3 WorkflowTaskStarted
+  4 WorkflowTaskCompleted
+  5 ActivityTaskScheduled {"Header":{"Fields":{"tracing":{"Data":"\"sample data\""}}} }
+  6 ActivityTaskStarted
+  7 ActivityTaskCompleted
+  8 WorkflowTaskScheduled
+  9 WorkflowTaskStarted
+ 10 WorkflowTaskCompleted
+ 11 WorkflowExecutionCompleted`, events)
 }
 
 func (s *FunctionalSuite) TestActivityRetry() {
