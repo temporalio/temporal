@@ -25,7 +25,6 @@
 package tests
 
 import (
-	"strconv"
 	"time"
 
 	"github.com/pborman/uuid"
@@ -37,7 +36,6 @@ import (
 	"go.temporal.io/api/workflowservice/v1"
 	"google.golang.org/protobuf/types/known/durationpb"
 
-	"go.temporal.io/server/common/codec"
 	"go.temporal.io/server/common/payloads"
 )
 
@@ -72,7 +70,9 @@ func (s *FunctionalSuite) TestWorkflowTaskHeartbeatingWithEmptyResult() {
 		RunId:      resp0.RunId,
 	}
 
-	s.assertLastHistoryEvent(we, 2, enumspb.EVENT_TYPE_WORKFLOW_TASK_SCHEDULED)
+	s.EqualHistoryEvents(`
+  1 WorkflowExecutionStarted
+  2 WorkflowTaskScheduled`, s.getHistory(s.namespace, we))
 
 	// start workflow task
 	resp1, err1 := s.engine.PollWorkflowTaskQueue(NewContext(), &workflowservice.PollWorkflowTaskQueueRequest{
@@ -83,7 +83,10 @@ func (s *FunctionalSuite) TestWorkflowTaskHeartbeatingWithEmptyResult() {
 	s.NoError(err1)
 
 	s.Equal(int32(1), resp1.GetAttempt())
-	s.assertLastHistoryEvent(we, 3, enumspb.EVENT_TYPE_WORKFLOW_TASK_STARTED)
+	s.EqualHistoryEvents(`
+  1 WorkflowExecutionStarted
+  2 WorkflowTaskScheduled
+  3 WorkflowTaskStarted`, s.getHistory(s.namespace, we))
 
 	taskToken := resp1.GetTaskToken()
 	hbTimeout := 0
@@ -140,7 +143,54 @@ func (s *FunctionalSuite) TestWorkflowTaskHeartbeatingWithEmptyResult() {
 	s.NoError(err5)
 	s.Nil(resp5.WorkflowTask)
 
-	s.assertLastHistoryEvent(we, 47, enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_COMPLETED)
+	s.EqualHistoryEvents(`
+ 1 WorkflowExecutionStarted
+  2 WorkflowTaskScheduled
+  3 WorkflowTaskStarted
+  4 WorkflowTaskCompleted
+  5 WorkflowTaskScheduled
+  6 WorkflowTaskStarted
+  7 WorkflowTaskCompleted
+  8 WorkflowTaskScheduled
+  9 WorkflowTaskStarted
+ 10 WorkflowTaskCompleted
+ 11 WorkflowTaskScheduled
+ 12 WorkflowTaskStarted
+ 13 WorkflowTaskCompleted
+ 14 WorkflowTaskScheduled
+ 15 WorkflowTaskStarted
+ 16 WorkflowTaskCompleted
+ 17 WorkflowTaskScheduled
+ 18 WorkflowTaskStarted
+ 19 WorkflowTaskTimedOut
+ 20 WorkflowTaskScheduled
+ 21 WorkflowTaskStarted
+ 22 WorkflowTaskTimedOut
+ 23 WorkflowTaskScheduled
+ 24 WorkflowTaskStarted
+ 25 WorkflowTaskCompleted
+ 26 WorkflowTaskScheduled
+ 27 WorkflowTaskStarted
+ 28 WorkflowTaskCompleted
+ 29 WorkflowTaskScheduled
+ 30 WorkflowTaskStarted
+ 31 WorkflowTaskCompleted
+ 32 WorkflowTaskScheduled
+ 33 WorkflowTaskStarted
+ 34 WorkflowTaskCompleted
+ 35 WorkflowTaskScheduled
+ 36 WorkflowTaskStarted
+ 37 WorkflowTaskTimedOut
+ 38 WorkflowTaskScheduled
+ 39 WorkflowTaskStarted
+ 40 WorkflowTaskTimedOut
+ 41 WorkflowTaskScheduled
+ 42 WorkflowTaskStarted
+ 43 WorkflowTaskCompleted
+ 44 WorkflowTaskScheduled
+ 45 WorkflowTaskStarted
+ 46 WorkflowTaskCompleted
+ 47 WorkflowExecutionCompleted`, s.getHistory(s.namespace, we))
 }
 
 func (s *FunctionalSuite) TestWorkflowTaskHeartbeatingWithLocalActivitiesResult() {
@@ -174,7 +224,9 @@ func (s *FunctionalSuite) TestWorkflowTaskHeartbeatingWithLocalActivitiesResult(
 		RunId:      resp0.RunId,
 	}
 
-	s.assertLastHistoryEvent(we, 2, enumspb.EVENT_TYPE_WORKFLOW_TASK_SCHEDULED)
+	s.EqualHistoryEvents(`
+  1 WorkflowExecutionStarted
+  2 WorkflowTaskScheduled`, s.getHistory(s.namespace, we))
 
 	// start workflow task
 	resp1, err1 := s.engine.PollWorkflowTaskQueue(NewContext(), &workflowservice.PollWorkflowTaskQueueRequest{
@@ -185,7 +237,10 @@ func (s *FunctionalSuite) TestWorkflowTaskHeartbeatingWithLocalActivitiesResult(
 	s.NoError(err1)
 
 	s.Equal(int32(1), resp1.GetAttempt())
-	s.assertLastHistoryEvent(we, 3, enumspb.EVENT_TYPE_WORKFLOW_TASK_STARTED)
+	s.EqualHistoryEvents(`
+  1 WorkflowExecutionStarted
+  2 WorkflowTaskScheduled
+  3 WorkflowTaskStarted`, s.getHistory(s.namespace, we))
 
 	resp2, err2 := s.engine.RespondWorkflowTaskCompleted(NewContext(), &workflowservice.RespondWorkflowTaskCompletedRequest{
 		Namespace: s.namespace,
@@ -265,25 +320,24 @@ func (s *FunctionalSuite) TestWorkflowTaskHeartbeatingWithLocalActivitiesResult(
 	s.NoError(err5)
 	s.Nil(resp5.WorkflowTask)
 
-	expectedHistory := []enumspb.EventType{
-		enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_STARTED,
-		enumspb.EVENT_TYPE_WORKFLOW_TASK_SCHEDULED,
-		enumspb.EVENT_TYPE_WORKFLOW_TASK_STARTED,
-		enumspb.EVENT_TYPE_WORKFLOW_TASK_COMPLETED,
-		enumspb.EVENT_TYPE_WORKFLOW_TASK_SCHEDULED,
-		enumspb.EVENT_TYPE_WORKFLOW_TASK_STARTED,
-		enumspb.EVENT_TYPE_WORKFLOW_TASK_COMPLETED,
-		enumspb.EVENT_TYPE_MARKER_RECORDED,
-		enumspb.EVENT_TYPE_WORKFLOW_TASK_SCHEDULED,
-		enumspb.EVENT_TYPE_WORKFLOW_TASK_STARTED,
-		enumspb.EVENT_TYPE_WORKFLOW_TASK_COMPLETED,
-		enumspb.EVENT_TYPE_MARKER_RECORDED,
-		enumspb.EVENT_TYPE_WORKFLOW_TASK_SCHEDULED,
-		enumspb.EVENT_TYPE_WORKFLOW_TASK_STARTED,
-		enumspb.EVENT_TYPE_WORKFLOW_TASK_COMPLETED,
-		enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_COMPLETED,
-	}
-	s.assertHistory(we, expectedHistory)
+	historyEvents := s.getHistory(s.namespace, we)
+	s.EqualHistoryEvents(`
+  1 WorkflowExecutionStarted
+  2 WorkflowTaskScheduled
+  3 WorkflowTaskStarted
+  4 WorkflowTaskCompleted
+  5 WorkflowTaskScheduled
+  6 WorkflowTaskStarted
+  7 WorkflowTaskCompleted
+  8 MarkerRecorded
+  9 WorkflowTaskScheduled
+ 10 WorkflowTaskStarted
+ 11 WorkflowTaskCompleted
+ 12 MarkerRecorded
+ 13 WorkflowTaskScheduled
+ 14 WorkflowTaskStarted
+ 15 WorkflowTaskCompleted
+ 16 WorkflowExecutionCompleted`, historyEvents)
 }
 
 func (s *FunctionalSuite) TestWorkflowTerminationSignalBeforeRegularWorkflowTaskStarted() {
@@ -316,7 +370,9 @@ func (s *FunctionalSuite) TestWorkflowTerminationSignalBeforeRegularWorkflowTask
 		RunId:      resp0.RunId,
 	}
 
-	s.assertLastHistoryEvent(we, 2, enumspb.EVENT_TYPE_WORKFLOW_TASK_SCHEDULED)
+	s.EqualHistoryEvents(`
+  1 WorkflowExecutionStarted
+  2 WorkflowTaskScheduled`, s.getHistory(s.namespace, we))
 
 	_, err0 = s.engine.SignalWorkflowExecution(NewContext(), &workflowservice.SignalWorkflowExecutionRequest{
 		Namespace:         s.namespace,
@@ -327,7 +383,10 @@ func (s *FunctionalSuite) TestWorkflowTerminationSignalBeforeRegularWorkflowTask
 		RequestId:         uuid.New(),
 	})
 	s.NoError(err0)
-	s.assertLastHistoryEvent(we, 3, enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_SIGNALED)
+	s.EqualHistoryEvents(`
+  1 WorkflowExecutionStarted
+  2 WorkflowTaskScheduled
+  3 WorkflowExecutionSignaled`, s.getHistory(s.namespace, we))
 
 	// start this transient workflow task, the attempt should be cleared and it becomes again a regular workflow task
 	resp1, err1 := s.engine.PollWorkflowTaskQueue(NewContext(), &workflowservice.PollWorkflowTaskQueueRequest{
@@ -338,9 +397,13 @@ func (s *FunctionalSuite) TestWorkflowTerminationSignalBeforeRegularWorkflowTask
 	s.NoError(err1)
 
 	s.Equal(int32(1), resp1.GetAttempt())
-	s.assertLastHistoryEvent(we, 4, enumspb.EVENT_TYPE_WORKFLOW_TASK_STARTED)
+	s.EqualHistoryEvents(`
+  1 WorkflowExecutionStarted
+  2 WorkflowTaskScheduled
+  3 WorkflowExecutionSignaled
+  4 WorkflowTaskStarted`, s.getHistory(s.namespace, we))
 
-	// then terminate the worklfow
+	// then terminate the workflow
 	_, err := s.engine.TerminateWorkflowExecution(NewContext(), &workflowservice.TerminateWorkflowExecutionRequest{
 		Namespace:         s.namespace,
 		WorkflowExecution: we,
@@ -348,15 +411,13 @@ func (s *FunctionalSuite) TestWorkflowTerminationSignalBeforeRegularWorkflowTask
 	})
 	s.NoError(err)
 
-	expectedHistory := []enumspb.EventType{
-		enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_STARTED,
-		enumspb.EVENT_TYPE_WORKFLOW_TASK_SCHEDULED,
-		enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_SIGNALED,
-		enumspb.EVENT_TYPE_WORKFLOW_TASK_STARTED,
-		enumspb.EVENT_TYPE_WORKFLOW_TASK_FAILED,
-		enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_TERMINATED,
-	}
-	s.assertHistory(we, expectedHistory)
+	s.EqualHistoryEvents(`
+  1 WorkflowExecutionStarted
+  2 WorkflowTaskScheduled
+  3 WorkflowExecutionSignaled
+  4 WorkflowTaskStarted
+  5 WorkflowTaskFailed
+  6 WorkflowExecutionTerminated`, s.getHistory(s.namespace, we))
 }
 
 func (s *FunctionalSuite) TestWorkflowTerminationSignalAfterRegularWorkflowTaskStarted() {
@@ -389,7 +450,9 @@ func (s *FunctionalSuite) TestWorkflowTerminationSignalAfterRegularWorkflowTaskS
 		RunId:      resp0.RunId,
 	}
 
-	s.assertLastHistoryEvent(we, 2, enumspb.EVENT_TYPE_WORKFLOW_TASK_SCHEDULED)
+	s.EqualHistoryEvents(`
+  1 WorkflowExecutionStarted
+  2 WorkflowTaskScheduled`, s.getHistory(s.namespace, we))
 
 	// start workflow task to make signals into bufferedEvents
 	_, err1 := s.engine.PollWorkflowTaskQueue(NewContext(), &workflowservice.PollWorkflowTaskQueueRequest{
@@ -399,7 +462,10 @@ func (s *FunctionalSuite) TestWorkflowTerminationSignalAfterRegularWorkflowTaskS
 	})
 	s.NoError(err1)
 
-	s.assertLastHistoryEvent(we, 3, enumspb.EVENT_TYPE_WORKFLOW_TASK_STARTED)
+	s.EqualHistoryEvents(`
+  1 WorkflowExecutionStarted
+  2 WorkflowTaskScheduled
+  3 WorkflowTaskStarted`, s.getHistory(s.namespace, we))
 
 	// this signal should be buffered
 	_, err0 = s.engine.SignalWorkflowExecution(NewContext(), &workflowservice.SignalWorkflowExecutionRequest{
@@ -411,9 +477,12 @@ func (s *FunctionalSuite) TestWorkflowTerminationSignalAfterRegularWorkflowTaskS
 		RequestId:         uuid.New(),
 	})
 	s.NoError(err0)
-	s.assertLastHistoryEvent(we, 3, enumspb.EVENT_TYPE_WORKFLOW_TASK_STARTED)
+	s.EqualHistoryEvents(`
+  1 WorkflowExecutionStarted
+  2 WorkflowTaskScheduled
+  3 WorkflowTaskStarted`, s.getHistory(s.namespace, we))
 
-	// then terminate the worklfow
+	// then terminate the workflow
 	_, err := s.engine.TerminateWorkflowExecution(NewContext(), &workflowservice.TerminateWorkflowExecutionRequest{
 		Namespace:         s.namespace,
 		WorkflowExecution: we,
@@ -421,15 +490,14 @@ func (s *FunctionalSuite) TestWorkflowTerminationSignalAfterRegularWorkflowTaskS
 	})
 	s.NoError(err)
 
-	expectedHistory := []enumspb.EventType{
-		enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_STARTED,
-		enumspb.EVENT_TYPE_WORKFLOW_TASK_SCHEDULED,
-		enumspb.EVENT_TYPE_WORKFLOW_TASK_STARTED,
-		enumspb.EVENT_TYPE_WORKFLOW_TASK_FAILED,
-		enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_SIGNALED,
-		enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_TERMINATED,
-	}
-	s.assertHistory(we, expectedHistory)
+	historyEvents := s.getHistory(s.namespace, we)
+	s.EqualHistoryEvents(`
+  1 WorkflowExecutionStarted
+  2 WorkflowTaskScheduled
+  3 WorkflowTaskStarted
+  4 WorkflowTaskFailed
+  5 WorkflowExecutionSignaled
+  6 WorkflowExecutionTerminated`, historyEvents)
 }
 
 func (s *FunctionalSuite) TestWorkflowTerminationSignalAfterRegularWorkflowTaskStartedAndFailWorkflowTask() {
@@ -462,7 +530,9 @@ func (s *FunctionalSuite) TestWorkflowTerminationSignalAfterRegularWorkflowTaskS
 		RunId:      resp0.RunId,
 	}
 
-	s.assertLastHistoryEvent(we, 2, enumspb.EVENT_TYPE_WORKFLOW_TASK_SCHEDULED)
+	s.EqualHistoryEvents(`
+  1 WorkflowExecutionStarted
+  2 WorkflowTaskScheduled`, s.getHistory(s.namespace, we))
 
 	cause := enumspb.WORKFLOW_TASK_FAILED_CAUSE_WORKFLOW_WORKER_UNHANDLED_FAILURE
 
@@ -474,7 +544,10 @@ func (s *FunctionalSuite) TestWorkflowTerminationSignalAfterRegularWorkflowTaskS
 	})
 	s.NoError(err1)
 
-	s.assertLastHistoryEvent(we, 3, enumspb.EVENT_TYPE_WORKFLOW_TASK_STARTED)
+	s.EqualHistoryEvents(`
+  1 WorkflowExecutionStarted
+  2 WorkflowTaskScheduled
+  3 WorkflowTaskStarted`, s.getHistory(s.namespace, we))
 
 	// this signal should be buffered
 	_, err0 = s.engine.SignalWorkflowExecution(NewContext(), &workflowservice.SignalWorkflowExecutionRequest{
@@ -486,7 +559,10 @@ func (s *FunctionalSuite) TestWorkflowTerminationSignalAfterRegularWorkflowTaskS
 		RequestId:         uuid.New(),
 	})
 	s.NoError(err0)
-	s.assertLastHistoryEvent(we, 3, enumspb.EVENT_TYPE_WORKFLOW_TASK_STARTED)
+	s.EqualHistoryEvents(`
+  1 WorkflowExecutionStarted
+  2 WorkflowTaskScheduled
+  3 WorkflowTaskStarted`, s.getHistory(s.namespace, we))
 
 	// fail this workflow task to flush buffer, and then another workflow task will be scheduled
 	_, err2 := s.engine.RespondWorkflowTaskFailed(NewContext(), &workflowservice.RespondWorkflowTaskFailedRequest{
@@ -496,9 +572,15 @@ func (s *FunctionalSuite) TestWorkflowTerminationSignalAfterRegularWorkflowTaskS
 		Identity:  "integ test",
 	})
 	s.NoError(err2)
-	s.assertLastHistoryEvent(we, 6, enumspb.EVENT_TYPE_WORKFLOW_TASK_SCHEDULED)
+	s.EqualHistoryEvents(`
+  1 WorkflowExecutionStarted
+  2 WorkflowTaskScheduled
+  3 WorkflowTaskStarted
+  4 WorkflowTaskFailed
+  5 WorkflowExecutionSignaled
+  6 WorkflowTaskScheduled`, s.getHistory(s.namespace, we))
 
-	// then terminate the worklfow
+	// then terminate the workflow
 	_, err := s.engine.TerminateWorkflowExecution(NewContext(), &workflowservice.TerminateWorkflowExecutionRequest{
 		Namespace:         s.namespace,
 		WorkflowExecution: we,
@@ -506,16 +588,14 @@ func (s *FunctionalSuite) TestWorkflowTerminationSignalAfterRegularWorkflowTaskS
 	})
 	s.NoError(err)
 
-	expectedHistory := []enumspb.EventType{
-		enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_STARTED,
-		enumspb.EVENT_TYPE_WORKFLOW_TASK_SCHEDULED,
-		enumspb.EVENT_TYPE_WORKFLOW_TASK_STARTED,
-		enumspb.EVENT_TYPE_WORKFLOW_TASK_FAILED,
-		enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_SIGNALED,
-		enumspb.EVENT_TYPE_WORKFLOW_TASK_SCHEDULED,
-		enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_TERMINATED,
-	}
-	s.assertHistory(we, expectedHistory)
+	s.EqualHistoryEvents(`
+  1 WorkflowExecutionStarted
+  2 WorkflowTaskScheduled
+  3 WorkflowTaskStarted
+  4 WorkflowTaskFailed
+  5 WorkflowExecutionSignaled
+  6 WorkflowTaskScheduled
+  7 WorkflowExecutionTerminated`, s.getHistory(s.namespace, we))
 }
 
 func (s *FunctionalSuite) TestWorkflowTerminationSignalBeforeTransientWorkflowTaskStarted() {
@@ -548,7 +628,9 @@ func (s *FunctionalSuite) TestWorkflowTerminationSignalBeforeTransientWorkflowTa
 		RunId:      resp0.RunId,
 	}
 
-	s.assertLastHistoryEvent(we, 2, enumspb.EVENT_TYPE_WORKFLOW_TASK_SCHEDULED)
+	s.EqualHistoryEvents(`
+  1 WorkflowExecutionStarted
+  2 WorkflowTaskScheduled`, s.getHistory(s.namespace, we))
 
 	cause := enumspb.WORKFLOW_TASK_FAILED_CAUSE_WORKFLOW_WORKER_UNHANDLED_FAILURE
 	for i := 0; i < 10; i++ {
@@ -576,7 +658,11 @@ func (s *FunctionalSuite) TestWorkflowTerminationSignalBeforeTransientWorkflowTa
 		s.NoError(err2)
 	}
 
-	s.assertLastHistoryEvent(we, 4, enumspb.EVENT_TYPE_WORKFLOW_TASK_FAILED)
+	s.EqualHistoryEvents(`
+  1 WorkflowExecutionStarted
+  2 WorkflowTaskScheduled
+  3 WorkflowTaskStarted
+  4 WorkflowTaskFailed`, s.getHistory(s.namespace, we))
 
 	_, err0 = s.engine.SignalWorkflowExecution(NewContext(), &workflowservice.SignalWorkflowExecutionRequest{
 		Namespace:         s.namespace,
@@ -587,7 +673,12 @@ func (s *FunctionalSuite) TestWorkflowTerminationSignalBeforeTransientWorkflowTa
 		RequestId:         uuid.New(),
 	})
 	s.NoError(err0)
-	s.assertLastHistoryEvent(we, 5, enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_SIGNALED)
+	s.EqualHistoryEvents(`
+  1 WorkflowExecutionStarted
+  2 WorkflowTaskScheduled
+  3 WorkflowTaskStarted
+  4 WorkflowTaskFailed
+  5 WorkflowExecutionSignaled`, s.getHistory(s.namespace, we))
 
 	// start this transient workflow task, the attempt should be cleared and it becomes again a regular workflow task
 	resp1, err1 := s.engine.PollWorkflowTaskQueue(NewContext(), &workflowservice.PollWorkflowTaskQueueRequest{
@@ -598,9 +689,16 @@ func (s *FunctionalSuite) TestWorkflowTerminationSignalBeforeTransientWorkflowTa
 	s.NoError(err1)
 
 	s.Equal(int32(1), resp1.GetAttempt())
-	s.assertLastHistoryEvent(we, 7, enumspb.EVENT_TYPE_WORKFLOW_TASK_STARTED)
+	s.EqualHistoryEvents(`
+  1 WorkflowExecutionStarted
+  2 WorkflowTaskScheduled
+  3 WorkflowTaskStarted
+  4 WorkflowTaskFailed
+  5 WorkflowExecutionSignaled
+  6 WorkflowTaskScheduled
+  7 WorkflowTaskStarted`, s.getHistory(s.namespace, we))
 
-	// then terminate the worklfow
+	// then terminate the workflow
 	_, err := s.engine.TerminateWorkflowExecution(NewContext(), &workflowservice.TerminateWorkflowExecutionRequest{
 		Namespace:         s.namespace,
 		WorkflowExecution: we,
@@ -608,18 +706,16 @@ func (s *FunctionalSuite) TestWorkflowTerminationSignalBeforeTransientWorkflowTa
 	})
 	s.NoError(err)
 
-	expectedHistory := []enumspb.EventType{
-		enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_STARTED,
-		enumspb.EVENT_TYPE_WORKFLOW_TASK_SCHEDULED,
-		enumspb.EVENT_TYPE_WORKFLOW_TASK_STARTED,
-		enumspb.EVENT_TYPE_WORKFLOW_TASK_FAILED,
-		enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_SIGNALED,
-		enumspb.EVENT_TYPE_WORKFLOW_TASK_SCHEDULED,
-		enumspb.EVENT_TYPE_WORKFLOW_TASK_STARTED,
-		enumspb.EVENT_TYPE_WORKFLOW_TASK_FAILED,
-		enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_TERMINATED,
-	}
-	s.assertHistory(we, expectedHistory)
+	s.EqualHistoryEvents(`
+  1 WorkflowExecutionStarted
+  2 WorkflowTaskScheduled
+  3 WorkflowTaskStarted
+  4 WorkflowTaskFailed
+  5 WorkflowExecutionSignaled
+  6 WorkflowTaskScheduled
+  7 WorkflowTaskStarted
+  8 WorkflowTaskFailed
+  9 WorkflowExecutionTerminated`, s.getHistory(s.namespace, we))
 }
 
 func (s *FunctionalSuite) TestWorkflowTerminationSignalAfterTransientWorkflowTaskStarted() {
@@ -652,7 +748,9 @@ func (s *FunctionalSuite) TestWorkflowTerminationSignalAfterTransientWorkflowTas
 		RunId:      resp0.RunId,
 	}
 
-	s.assertLastHistoryEvent(we, 2, enumspb.EVENT_TYPE_WORKFLOW_TASK_SCHEDULED)
+	s.EqualHistoryEvents(`
+  1 WorkflowExecutionStarted
+  2 WorkflowTaskScheduled`, s.getHistory(s.namespace, we))
 
 	cause := enumspb.WORKFLOW_TASK_FAILED_CAUSE_WORKFLOW_WORKER_UNHANDLED_FAILURE
 	for i := 0; i < 10; i++ {
@@ -680,7 +778,11 @@ func (s *FunctionalSuite) TestWorkflowTerminationSignalAfterTransientWorkflowTas
 		s.NoError(err2)
 	}
 
-	s.assertLastHistoryEvent(we, 4, enumspb.EVENT_TYPE_WORKFLOW_TASK_FAILED)
+	s.EqualHistoryEvents(`
+  1 WorkflowExecutionStarted
+  2 WorkflowTaskScheduled
+  3 WorkflowTaskStarted
+  4 WorkflowTaskFailed`, s.getHistory(s.namespace, we))
 
 	// start workflow task to make signals into bufferedEvents
 	_, err1 := s.engine.PollWorkflowTaskQueue(NewContext(), &workflowservice.PollWorkflowTaskQueueRequest{
@@ -690,7 +792,11 @@ func (s *FunctionalSuite) TestWorkflowTerminationSignalAfterTransientWorkflowTas
 	})
 	s.NoError(err1)
 
-	s.assertLastHistoryEvent(we, 4, enumspb.EVENT_TYPE_WORKFLOW_TASK_FAILED)
+	s.EqualHistoryEvents(`
+  1 WorkflowExecutionStarted
+  2 WorkflowTaskScheduled
+  3 WorkflowTaskStarted
+  4 WorkflowTaskFailed`, s.getHistory(s.namespace, we))
 
 	// this signal should be buffered
 	_, err0 = s.engine.SignalWorkflowExecution(NewContext(), &workflowservice.SignalWorkflowExecutionRequest{
@@ -702,9 +808,13 @@ func (s *FunctionalSuite) TestWorkflowTerminationSignalAfterTransientWorkflowTas
 		RequestId:         uuid.New(),
 	})
 	s.NoError(err0)
-	s.assertLastHistoryEvent(we, 4, enumspb.EVENT_TYPE_WORKFLOW_TASK_FAILED)
+	s.EqualHistoryEvents(`
+  1 WorkflowExecutionStarted
+  2 WorkflowTaskScheduled
+  3 WorkflowTaskStarted
+  4 WorkflowTaskFailed`, s.getHistory(s.namespace, we))
 
-	// then terminate the worklfow
+	// then terminate the workflow
 	_, err := s.engine.TerminateWorkflowExecution(NewContext(), &workflowservice.TerminateWorkflowExecutionRequest{
 		Namespace:         s.namespace,
 		WorkflowExecution: we,
@@ -712,15 +822,13 @@ func (s *FunctionalSuite) TestWorkflowTerminationSignalAfterTransientWorkflowTas
 	})
 	s.NoError(err)
 
-	expectedHistory := []enumspb.EventType{
-		enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_STARTED,
-		enumspb.EVENT_TYPE_WORKFLOW_TASK_SCHEDULED,
-		enumspb.EVENT_TYPE_WORKFLOW_TASK_STARTED,
-		enumspb.EVENT_TYPE_WORKFLOW_TASK_FAILED,
-		enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_SIGNALED,
-		enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_TERMINATED,
-	}
-	s.assertHistory(we, expectedHistory)
+	s.EqualHistoryEvents(`
+  1 WorkflowExecutionStarted
+  2 WorkflowTaskScheduled
+  3 WorkflowTaskStarted
+  4 WorkflowTaskFailed
+  5 WorkflowExecutionSignaled
+  6 WorkflowExecutionTerminated`, s.getHistory(s.namespace, we))
 }
 
 func (s *FunctionalSuite) TestWorkflowTerminationSignalAfterTransientWorkflowTaskStartedAndFailWorkflowTask() {
@@ -753,7 +861,9 @@ func (s *FunctionalSuite) TestWorkflowTerminationSignalAfterTransientWorkflowTas
 		RunId:      resp0.RunId,
 	}
 
-	s.assertLastHistoryEvent(we, 2, enumspb.EVENT_TYPE_WORKFLOW_TASK_SCHEDULED)
+	s.EqualHistoryEvents(`
+  1 WorkflowExecutionStarted
+  2 WorkflowTaskScheduled`, s.getHistory(s.namespace, we))
 
 	cause := enumspb.WORKFLOW_TASK_FAILED_CAUSE_WORKFLOW_WORKER_UNHANDLED_FAILURE
 	for i := 0; i < 10; i++ {
@@ -781,7 +891,11 @@ func (s *FunctionalSuite) TestWorkflowTerminationSignalAfterTransientWorkflowTas
 		s.NoError(err2)
 	}
 
-	s.assertLastHistoryEvent(we, 4, enumspb.EVENT_TYPE_WORKFLOW_TASK_FAILED)
+	s.EqualHistoryEvents(`
+  1 WorkflowExecutionStarted
+  2 WorkflowTaskScheduled
+  3 WorkflowTaskStarted
+  4 WorkflowTaskFailed`, s.getHistory(s.namespace, we))
 
 	// start workflow task to make signals into bufferedEvents
 	resp1, err1 := s.engine.PollWorkflowTaskQueue(NewContext(), &workflowservice.PollWorkflowTaskQueueRequest{
@@ -791,7 +905,11 @@ func (s *FunctionalSuite) TestWorkflowTerminationSignalAfterTransientWorkflowTas
 	})
 	s.NoError(err1)
 
-	s.assertLastHistoryEvent(we, 4, enumspb.EVENT_TYPE_WORKFLOW_TASK_FAILED)
+	s.EqualHistoryEvents(`
+  1 WorkflowExecutionStarted
+  2 WorkflowTaskScheduled
+  3 WorkflowTaskStarted
+  4 WorkflowTaskFailed`, s.getHistory(s.namespace, we))
 
 	// this signal should be buffered
 	_, err0 = s.engine.SignalWorkflowExecution(NewContext(), &workflowservice.SignalWorkflowExecutionRequest{
@@ -803,7 +921,11 @@ func (s *FunctionalSuite) TestWorkflowTerminationSignalAfterTransientWorkflowTas
 		RequestId:         uuid.New(),
 	})
 	s.NoError(err0)
-	s.assertLastHistoryEvent(we, 4, enumspb.EVENT_TYPE_WORKFLOW_TASK_FAILED)
+	s.EqualHistoryEvents(`
+  1 WorkflowExecutionStarted
+  2 WorkflowTaskScheduled
+  3 WorkflowTaskStarted
+  4 WorkflowTaskFailed`, s.getHistory(s.namespace, we))
 
 	// fail this workflow task to flush buffer
 	_, err2 := s.engine.RespondWorkflowTaskFailed(NewContext(), &workflowservice.RespondWorkflowTaskFailedRequest{
@@ -813,9 +935,15 @@ func (s *FunctionalSuite) TestWorkflowTerminationSignalAfterTransientWorkflowTas
 		Identity:  "integ test",
 	})
 	s.NoError(err2)
-	s.assertLastHistoryEvent(we, 6, enumspb.EVENT_TYPE_WORKFLOW_TASK_SCHEDULED)
+	s.EqualHistoryEvents(`
+  1 WorkflowExecutionStarted
+  2 WorkflowTaskScheduled
+  3 WorkflowTaskStarted
+  4 WorkflowTaskFailed
+  5 WorkflowExecutionSignaled
+  6 WorkflowTaskScheduled`, s.getHistory(s.namespace, we))
 
-	// then terminate the worklfow
+	// then terminate the workflow
 	_, err := s.engine.TerminateWorkflowExecution(NewContext(), &workflowservice.TerminateWorkflowExecutionRequest{
 		Namespace:         s.namespace,
 		WorkflowExecution: we,
@@ -823,44 +951,12 @@ func (s *FunctionalSuite) TestWorkflowTerminationSignalAfterTransientWorkflowTas
 	})
 	s.NoError(err)
 
-	expectedHistory := []enumspb.EventType{
-		enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_STARTED,
-		enumspb.EVENT_TYPE_WORKFLOW_TASK_SCHEDULED,
-		enumspb.EVENT_TYPE_WORKFLOW_TASK_STARTED,
-		enumspb.EVENT_TYPE_WORKFLOW_TASK_FAILED,
-		enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_SIGNALED,
-		enumspb.EVENT_TYPE_WORKFLOW_TASK_SCHEDULED,
-		enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_TERMINATED,
-	}
-	s.assertHistory(we, expectedHistory)
-}
-
-func (s *FunctionalSuite) assertHistory(we *commonpb.WorkflowExecution, expectedHistory []enumspb.EventType) {
-	historyResponse, err := s.engine.GetWorkflowExecutionHistory(NewContext(), &workflowservice.GetWorkflowExecutionHistoryRequest{
-		Namespace: s.namespace,
-		Execution: we,
-	})
-	s.NoError(err)
-	history := historyResponse.History
-	encoder := codec.NewJSONPBIndentEncoder("    ")
-	data, err := encoder.Encode(history)
-	s.NoError(err)
-	s.Equal(len(expectedHistory), len(history.Events), string(data))
-	for i, e := range history.Events {
-		s.Equal(expectedHistory[i], e.GetEventType(), "%v, %v, %v", strconv.Itoa(i), e.GetEventType().String(), string(data))
-	}
-}
-
-func (s *FunctionalSuite) assertLastHistoryEvent(we *commonpb.WorkflowExecution, count int, eventType enumspb.EventType) {
-	historyResponse, err := s.engine.GetWorkflowExecutionHistory(NewContext(), &workflowservice.GetWorkflowExecutionHistoryRequest{
-		Namespace: s.namespace,
-		Execution: we,
-	})
-	s.NoError(err)
-	history := historyResponse.History
-	encoder := codec.NewJSONPBIndentEncoder("    ")
-	data, err := encoder.Encode(history)
-	s.NoError(err)
-	s.Equal(count, len(history.Events), string(data))
-	s.Equal(eventType, history.Events[len(history.Events)-1].GetEventType(), string(data))
+	s.EqualHistoryEvents(`
+  1 WorkflowExecutionStarted
+  2 WorkflowTaskScheduled
+  3 WorkflowTaskStarted
+  4 WorkflowTaskFailed
+  5 WorkflowExecutionSignaled
+  6 WorkflowTaskScheduled
+  7 WorkflowExecutionTerminated`, s.getHistory(s.namespace, we))
 }

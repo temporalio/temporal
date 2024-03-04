@@ -344,12 +344,6 @@ func (s *FunctionalTestBase) getHistory(namespace string, execution *commonpb.Wo
 	return events
 }
 
-func (s *FunctionalTestBase) getLastEvent(namespace string, execution *commonpb.WorkflowExecution) *historypb.HistoryEvent {
-	events := s.getHistory(namespace, execution)
-	s.Require().NotEmpty(events)
-	return events[len(events)-1]
-}
-
 func (s *FunctionalTestBase) decodePayloadsString(ps *commonpb.Payloads) string {
 	s.T().Helper()
 	var r string

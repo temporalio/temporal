@@ -70,7 +70,7 @@ func (s *quotasSuite) TearDownTest() {
 }
 
 func (s *quotasSuite) TestExecutionAPIToPriorityMapping() {
-	for _, priority := range ExecutionAPIToPriority {
+	for _, priority := range APIToPriority {
 		index := slices.Index(ExecutionAPIPrioritiesOrdered, priority)
 		s.NotEqual(-1, index)
 	}
@@ -86,13 +86,6 @@ func (s *quotasSuite) TestVisibilityAPIToPriorityMapping() {
 func (s *quotasSuite) TestNamespaceReplicationInducingAPIToPriorityMapping() {
 	for _, priority := range NamespaceReplicationInducingAPIToPriority {
 		index := slices.Index(NamespaceReplicationInducingAPIPrioritiesOrdered, priority)
-		s.NotEqual(-1, index)
-	}
-}
-
-func (s *quotasSuite) TestOtherAPIToPriorityMapping() {
-	for _, priority := range OtherAPIToPriority {
-		index := slices.Index(OtherAPIPrioritiesOrdered, priority)
 		s.NotEqual(-1, index)
 	}
 }
@@ -115,66 +108,6 @@ func (s *quotasSuite) TestNamespaceReplicationInducingAPIPrioritiesOrdered() {
 	}
 }
 
-func (s *quotasSuite) TestOtherAPIPrioritiesOrdered() {
-	for idx := range OtherAPIPrioritiesOrdered[1:] {
-		s.True(OtherAPIPrioritiesOrdered[idx] < OtherAPIPrioritiesOrdered[idx+1])
-	}
-}
-
-func (s *quotasSuite) TestExecutionAPIs() {
-	apis := map[string]struct{}{
-		"/temporal.api.workflowservice.v1.WorkflowService/StartWorkflowExecution":             {},
-		"/temporal.api.workflowservice.v1.WorkflowService/SignalWithStartWorkflowExecution":   {},
-		"/temporal.api.workflowservice.v1.WorkflowService/SignalWorkflowExecution":            {},
-		"/temporal.api.workflowservice.v1.WorkflowService/RequestCancelWorkflowExecution":     {},
-		"/temporal.api.workflowservice.v1.WorkflowService/TerminateWorkflowExecution":         {},
-		"/temporal.api.workflowservice.v1.WorkflowService/GetWorkflowExecutionHistory":        {},
-		"/temporal.api.workflowservice.v1.WorkflowService/GetWorkflowExecutionHistoryReverse": {},
-		"/temporal.api.workflowservice.v1.WorkflowService/UpdateWorkflowExecution":            {},
-		"/temporal.api.workflowservice.v1.WorkflowService/PollWorkflowExecutionUpdate":        {},
-
-		"/temporal.api.workflowservice.v1.WorkflowService/RecordActivityTaskHeartbeat":      {},
-		"/temporal.api.workflowservice.v1.WorkflowService/RecordActivityTaskHeartbeatById":  {},
-		"/temporal.api.workflowservice.v1.WorkflowService/RespondActivityTaskCanceled":      {},
-		"/temporal.api.workflowservice.v1.WorkflowService/RespondActivityTaskCanceledById":  {},
-		"/temporal.api.workflowservice.v1.WorkflowService/RespondActivityTaskFailed":        {},
-		"/temporal.api.workflowservice.v1.WorkflowService/RespondActivityTaskFailedById":    {},
-		"/temporal.api.workflowservice.v1.WorkflowService/RespondActivityTaskCompleted":     {},
-		"/temporal.api.workflowservice.v1.WorkflowService/RespondActivityTaskCompletedById": {},
-		"/temporal.api.workflowservice.v1.WorkflowService/RespondWorkflowTaskCompleted":     {},
-		"/temporal.api.workflowservice.v1.WorkflowService/RespondNexusTaskCompleted":        {},
-		"/temporal.api.workflowservice.v1.WorkflowService/RespondNexusTaskFailed":           {},
-
-		"/temporal.api.workflowservice.v1.WorkflowService/ResetWorkflowExecution":        {},
-		"/temporal.api.workflowservice.v1.WorkflowService/DescribeWorkflowExecution":     {},
-		"/temporal.api.workflowservice.v1.WorkflowService/RespondWorkflowTaskFailed":     {},
-		"/temporal.api.workflowservice.v1.WorkflowService/QueryWorkflow":                 {},
-		"/temporal.api.workflowservice.v1.WorkflowService/RespondQueryTaskCompleted":     {},
-		"/temporal.api.workflowservice.v1.WorkflowService/PollWorkflowTaskQueue":         {},
-		"/temporal.api.workflowservice.v1.WorkflowService/PollActivityTaskQueue":         {},
-		"/temporal.api.workflowservice.v1.WorkflowService/PollNexusTaskQueue":            {},
-		"/temporal.api.workflowservice.v1.WorkflowService/GetWorkerBuildIdCompatibility": {},
-		"/temporal.api.workflowservice.v1.WorkflowService/GetWorkerTaskReachability":     {},
-		"/temporal.api.workflowservice.v1.WorkflowService/DeleteWorkflowExecution":       {},
-
-		"/temporal.api.workflowservice.v1.WorkflowService/ResetStickyTaskQueue":    {},
-		"/temporal.api.workflowservice.v1.WorkflowService/DescribeTaskQueue":       {},
-		"/temporal.api.workflowservice.v1.WorkflowService/ListTaskQueuePartitions": {},
-	}
-
-	var service workflowservice.WorkflowServiceServer
-	t := reflect.TypeOf(&service).Elem()
-	apiToPriority := make(map[string]int, t.NumMethod())
-	for i := 0; i < t.NumMethod(); i++ {
-		apiName := "/temporal.api.workflowservice.v1.WorkflowService/" + t.Method(i).Name
-		if _, ok := apis[apiName]; ok {
-			apiToPriority[apiName] = ExecutionAPIToPriority[apiName]
-		}
-	}
-	apiToPriority["/temporal.api.nexusservice.v1.NexusService/DispatchNexusTask"] = ExecutionAPIToPriority["/temporal.api.nexusservice.v1.NexusService/DispatchNexusTask"]
-	s.Equal(apiToPriority, ExecutionAPIToPriority)
-}
-
 func (s *quotasSuite) TestVisibilityAPIs() {
 	apis := map[string]struct{}{
 		"/temporal.api.workflowservice.v1.WorkflowService/GetWorkflowExecution":           {},
@@ -184,6 +117,10 @@ func (s *quotasSuite) TestVisibilityAPIs() {
 		"/temporal.api.workflowservice.v1.WorkflowService/ListClosedWorkflowExecutions":   {},
 		"/temporal.api.workflowservice.v1.WorkflowService/ListWorkflowExecutions":         {},
 		"/temporal.api.workflowservice.v1.WorkflowService/ListArchivedWorkflowExecutions": {},
+
+		"/temporal.api.workflowservice.v1.WorkflowService/GetWorkerTaskReachability": {},
+		"/temporal.api.workflowservice.v1.WorkflowService/ListSchedules":             {},
+		"/temporal.api.workflowservice.v1.WorkflowService/ListBatchOperations":       {},
 	}
 
 	var service workflowservice.WorkflowServiceServer
@@ -217,64 +154,24 @@ func (s *quotasSuite) TestNamespaceReplicationInducingAPIs() {
 	s.Equal(apiToPriority, NamespaceReplicationInducingAPIToPriority)
 }
 
-func (s *quotasSuite) TestOtherAPIs() {
-	apis := map[string]struct{}{
-		"/temporal.api.workflowservice.v1.WorkflowService/GetClusterInfo":      {},
-		"/temporal.api.workflowservice.v1.WorkflowService/GetSystemInfo":       {},
-		"/temporal.api.workflowservice.v1.WorkflowService/GetSearchAttributes": {},
-
-		"/temporal.api.workflowservice.v1.WorkflowService/DescribeNamespace":  {},
-		"/temporal.api.workflowservice.v1.WorkflowService/ListNamespaces":     {},
-		"/temporal.api.workflowservice.v1.WorkflowService/DeprecateNamespace": {},
-
-		"/temporal.api.workflowservice.v1.WorkflowService/CreateSchedule":            {},
-		"/temporal.api.workflowservice.v1.WorkflowService/DescribeSchedule":          {},
-		"/temporal.api.workflowservice.v1.WorkflowService/UpdateSchedule":            {},
-		"/temporal.api.workflowservice.v1.WorkflowService/PatchSchedule":             {},
-		"/temporal.api.workflowservice.v1.WorkflowService/ListScheduleMatchingTimes": {},
-		"/temporal.api.workflowservice.v1.WorkflowService/DeleteSchedule":            {},
-		"/temporal.api.workflowservice.v1.WorkflowService/ListSchedules":             {},
-
-		"/temporal.api.workflowservice.v1.WorkflowService/DescribeBatchOperation": {},
-		"/temporal.api.workflowservice.v1.WorkflowService/ListBatchOperations":    {},
-		"/temporal.api.workflowservice.v1.WorkflowService/StartBatchOperation":    {},
-		"/temporal.api.workflowservice.v1.WorkflowService/StopBatchOperation":     {},
-	}
-
-	var service workflowservice.WorkflowServiceServer
-	t := reflect.TypeOf(&service).Elem()
-	apiToPriority := make(map[string]int, t.NumMethod())
-	for i := 0; i < t.NumMethod(); i++ {
-		apiName := "/temporal.api.workflowservice.v1.WorkflowService/" + t.Method(i).Name
-		if _, ok := apis[apiName]; ok {
-			apiToPriority[apiName] = OtherAPIToPriority[apiName]
-		}
-	}
-	s.Equal(apiToPriority, OtherAPIToPriority)
-}
-
 func (s *quotasSuite) TestAllAPIs() {
-	var service workflowservice.WorkflowServiceServer
-	expectedAPIs := make(map[string]struct{})
-	temporalapi.WalkExportedMethods(&service, func(m reflect.Method) {
-		expectedAPIs["/temporal.api.workflowservice.v1.WorkflowService/"+m.Name] = struct{}{}
-	})
-	expectedAPIs["/temporal.api.nexusservice.v1.NexusService/DispatchNexusTask"] = struct{}{}
-
-	actualAPIs := make(map[string]struct{})
-	for api := range ExecutionAPIToPriority {
-		actualAPIs[api] = struct{}{}
+	apisWithPriority := make(map[string]struct{})
+	for api := range APIToPriority {
+		apisWithPriority[api] = struct{}{}
 	}
 	for api := range VisibilityAPIToPriority {
-		actualAPIs[api] = struct{}{}
+		apisWithPriority[api] = struct{}{}
 	}
 	for api := range NamespaceReplicationInducingAPIToPriority {
-		actualAPIs[api] = struct{}{}
+		apisWithPriority[api] = struct{}{}
 	}
-	for api := range OtherAPIToPriority {
-		actualAPIs[api] = struct{}{}
-	}
-	s.Equal(expectedAPIs, actualAPIs)
+	var service workflowservice.WorkflowServiceServer
+	temporalapi.WalkExportedMethods(&service, func(m reflect.Method) {
+		_, ok := apisWithPriority["/temporal.api.workflowservice.v1.WorkflowService/"+m.Name]
+		s.True(ok, "missing priority for API: %v", m.Name)
+	})
+	_, ok := apisWithPriority["/temporal.api.nexusservice.v1.NexusService/DispatchNexusTask"]
+	s.True(ok, "missing priority for API: /temporal.api.nexusservice.v1.NexusService/DispatchNexusTask")
 }
 
 func (s *quotasSuite) TestOperatorPriority_Execution() {
@@ -290,11 +187,6 @@ func (s *quotasSuite) TestOperatorPriority_Visibility() {
 func (s *quotasSuite) TestOperatorPriority_NamespaceReplicationInducing() {
 	limiter := NewNamespaceReplicationInducingAPIPriorityRateLimiter(testRateBurstFn, testOperatorRPSRatioFn)
 	s.testOperatorPrioritized(limiter, "RegisterNamespace")
-}
-
-func (s *quotasSuite) TestOperatorPriority_Other() {
-	limiter := NewOtherAPIPriorityRateLimiter(testRateBurstFn, testOperatorRPSRatioFn)
-	s.testOperatorPrioritized(limiter, "DescribeNamespace")
 }
 
 func (s *quotasSuite) testOperatorPrioritized(limiter quotas.RequestRateLimiter, api string) {
