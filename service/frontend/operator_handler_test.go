@@ -724,7 +724,7 @@ func (s *operatorHandlerSuite) Test_AddSearchAttributesSQL() {
 			},
 			describeNamespaceCalled: true,
 			describeNamespaceErr:    errors.New("mock error describe namespace"),
-			expectedErrMsg:          fmt.Sprintf(errUnableToGetNamespaceInfoMessage, testNamespace),
+			expectedErrMsg:          fmt.Sprintf(errUnableToGetNamespaceInfoMessage, testNamespace, "mock error describe namespace"),
 		},
 		{
 			name: "fail: too many search attributes",
