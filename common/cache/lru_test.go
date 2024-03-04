@@ -666,3 +666,56 @@ func TestCache_PutIfNotExistWithSameKeys_Pin(t *testing.T) {
 	assert.Equal(t, &testEntryWithCacheSize{3}, val)
 	assert.Equal(t, 3, cache.Size())
 }
+
+func TestCache_ItemSizeChangeBeforeRelease(t *testing.T) {
+	t.Parallel()
+
+	maxTotalBytes := 10
+	cache := New(maxTotalBytes,
+		&Options{
+			TTL:        time.Millisecond * 50,
+			Pin:        true,
+			TimeSource: nil,
+		},
+		metrics.NoopMetricsHandler,
+	)
+
+	entry1 := &testEntryWithCacheSize{
+		cacheSize: 1,
+	}
+	key1 := uuid.New()
+	_, err := cache.PutIfNotExist(key1, entry1)
+	assert.NoError(t, err)
+	assert.Equal(t, 1, cache.Size())
+
+	entry1.cacheSize = 5
+	cache.Release(key1)
+	assert.Equal(t, 5, cache.Size())
+
+	_, err = cache.PutIfNotExist(key1, entry1)
+	assert.NoError(t, err)
+	assert.Equal(t, 5, cache.Size())
+	entry1.cacheSize = 10
+	cache.Release(key1)
+	assert.Equal(t, 10, cache.Size())
+
+	// Inserting another entry when cache is full. entry1 should be evicted from cache.
+	entry2 := &testEntryWithCacheSize{
+		cacheSize: 2,
+	}
+	key2 := uuid.New()
+	_, err = cache.PutIfNotExist(key2, entry2)
+	assert.NoError(t, err)
+	assert.Equal(t, 2, cache.Size())
+
+	// Inserting entry1 again to make cache full again.
+	entry1.cacheSize = 8
+	_, err = cache.PutIfNotExist(key1, entry1)
+	assert.NoError(t, err)
+	assert.Equal(t, 10, cache.Size())
+	// Increasing the size of entry1 before releasing. This will make the cache size > max limit.
+	entry1.cacheSize = 10
+	cache.Release(key1)
+	// Cache should have evicted entry1 to bring cache size under max limit.
+	assert.Equal(t, 2, cache.Size())
+}

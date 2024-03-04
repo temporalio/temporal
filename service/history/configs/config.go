@@ -72,6 +72,7 @@ type Config struct {
 	// Change of these configs require shard restart
 	HistoryCacheInitialSize               dynamicconfig.IntPropertyFn
 	HistoryShardLevelCacheMaxSize         dynamicconfig.IntPropertyFn
+	HistoryCacheLimitSizeBased            dynamicconfig.BoolPropertyFn
 	HistoryHostLevelCacheMaxSize          dynamicconfig.IntPropertyFn
 	HistoryCacheTTL                       dynamicconfig.DurationPropertyFn
 	HistoryCacheNonUserContextLockTimeout dynamicconfig.DurationPropertyFn
@@ -362,6 +363,7 @@ func NewConfig(
 
 		EmitShardLagLog:                       dc.GetBoolProperty(dynamicconfig.EmitShardLagLog, false),
 		HistoryCacheInitialSize:               dc.GetIntProperty(dynamicconfig.HistoryCacheInitialSize, 128),
+		HistoryCacheLimitSizeBased:            dc.GetBoolProperty(dynamicconfig.HistoryCacheSizeBasedLimit, false),
 		HistoryShardLevelCacheMaxSize:         dc.GetIntProperty(dynamicconfig.HistoryCacheMaxSize, 512),
 		HistoryHostLevelCacheMaxSize:          dc.GetIntProperty(dynamicconfig.HistoryCacheHostLevelMaxSize, 256000),
 		HistoryCacheTTL:                       dc.GetDurationProperty(dynamicconfig.HistoryCacheTTL, time.Hour),

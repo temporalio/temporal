@@ -1032,6 +1032,20 @@ func (c *ContextImpl) forceTerminateWorkflow(
 	)
 }
 
+func (c *ContextImpl) CacheSize() int {
+	if !c.config.HistoryCacheLimitSizeBased() {
+		return 1
+	}
+	size := len(c.workflowKey.WorkflowID) + len(c.workflowKey.RunID) + len(c.workflowKey.NamespaceID)
+	if c.MutableState != nil {
+		size += c.MutableState.GetApproximatePersistedSize()
+	}
+	if c.updateRegistry != nil {
+		size += c.updateRegistry.GetSize()
+	}
+	return size
+}
+
 func emitStateTransitionCount(
 	metricsHandler metrics.Handler,
 	clusterMetadata cluster.Metadata,

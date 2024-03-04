@@ -260,6 +260,13 @@ func (c *lru) Release(key interface{}) {
 		c.pinnedSize -= entry.Size()
 		metrics.CachePinnedUsage.With(c.metricsHandler).Record(float64(c.pinnedSize))
 	}
+	// Entry size might have changed. Recalculate size and evict entries if necessary.
+	newEntrySize := getSize(entry.value)
+	c.currSize = c.calculateNewCacheSize(newEntrySize, entry.Size())
+	entry.size = newEntrySize
+	if c.currSize > c.maxSize {
+		c.tryEvictUntilCacheSizeUnderLimit()
+	}
 }
 
 // Size returns the current size of the lru, useful if cache is not full. This size is calculated by summing
@@ -355,6 +362,11 @@ func (c *lru) deleteInternal(element *list.Element) {
 	c.currSize -= entry.Size()
 	metrics.CacheUsage.With(c.metricsHandler).Record(float64(c.currSize))
 	delete(c.byKey, entry.key)
+}
+
+// tryEvictUntilSizeUnderLimit tries to evict entries until c.currSize is less than c.maxSize
+func (c *lru) tryEvictUntilCacheSizeUnderLimit() {
+	c.tryEvictUntilEnoughSpaceWithSkipEntry(0, nil)
 }
 
 // tryEvictUntilEnoughSpace try to evict entries until there is enough space for the new entry without

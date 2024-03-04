@@ -38,6 +38,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	commonpb "go.temporal.io/api/common/v1"
+	"go.temporal.io/server/common/cache"
 
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common/definition"
@@ -529,4 +530,216 @@ func (s *workflowCacheSuite) TestCacheImpl_lockWorkflowExecution() {
 
 		})
 	}
+}
+
+func (s *workflowCacheSuite) TestCacheImpl_SizeBasedCacheBasic() {
+	config := tests.NewDynamicConfig()
+	config.HistoryCacheLimitSizeBased = dynamicconfig.GetBoolPropertyFn(true)
+	config.HistoryHostLevelCacheMaxSize = dynamicconfig.GetIntPropertyFn(1000)
+	s.cache = NewHostLevelCache(config, metrics.NoopMetricsHandler)
+	mockShard := shard.NewTestContext(
+		s.controller,
+		&persistencespb.ShardInfo{
+			ShardId: 0,
+			RangeId: 1,
+		},
+		config,
+	)
+
+	namespaceID := namespace.ID("test_namespace_id")
+	execution1 := commonpb.WorkflowExecution{
+		WorkflowId: "some random workflow ID",
+		RunId:      uuid.New(),
+	}
+	mockMS1 := workflow.NewMockMutableState(s.controller)
+	mockMS1.EXPECT().IsDirty().Return(false).AnyTimes()
+	ctx, release1, err := s.cache.GetOrCreateWorkflowExecution(
+		context.Background(),
+		mockShard,
+		namespaceID,
+		&execution1,
+		workflow.LockPriorityHigh,
+	)
+	s.NoError(err)
+	ctx.(*workflow.ContextImpl).MutableState = mockMS1
+	// MockMS1 should fill the entire cache. The total size of the context object will be the size of MutableState
+	// plus the size of commonpb.WorkflowExecution in this case. Even though we are returning a size 900 from
+	// MutableState, the size of workflow.Context object in the cache will be slightly higher (~972bytes).
+	mockMS1.EXPECT().GetApproximatePersistedSize().Return(900).Times(1)
+	release1(nil)
+	ctx, release1, err = s.cache.GetOrCreateWorkflowExecution(
+		context.Background(),
+		mockShard,
+		namespaceID,
+		&execution1,
+		workflow.LockPriorityHigh,
+	)
+	s.NoError(err)
+	s.Equal(mockMS1, ctx.(*workflow.ContextImpl).MutableState)
+
+	// Try to insert another entry before releasing previous.
+	execution2 := commonpb.WorkflowExecution{
+		WorkflowId: "some random workflow ID",
+		RunId:      uuid.New(),
+	}
+	ctx, _, err = s.cache.GetOrCreateWorkflowExecution(
+		context.Background(),
+		mockShard,
+		namespaceID,
+		&execution2,
+		workflow.LockPriorityHigh,
+	)
+	s.Error(err)
+	s.ErrorIs(err, cache.ErrCacheFull)
+
+	// Now try inserting three 400byte entries to cache.
+	// Make mockMS1's size 400.
+	mockMS1.EXPECT().GetApproximatePersistedSize().Return(400).Times(1)
+	release1(nil)
+	// Fill 40 bytes in cache with mockMS1.
+	ctx, release1, err = s.cache.GetOrCreateWorkflowExecution(
+		context.Background(),
+		mockShard,
+		namespaceID,
+		&execution1,
+		workflow.LockPriorityHigh,
+	)
+	s.NoError(err)
+	s.Equal(mockMS1, ctx.(*workflow.ContextImpl).MutableState)
+
+	// Insert another 400byte entry.
+	execution2 = commonpb.WorkflowExecution{
+		WorkflowId: "some random workflow ID",
+		RunId:      uuid.New(),
+	}
+	mockMS2 := workflow.NewMockMutableState(s.controller)
+	mockMS2.EXPECT().IsDirty().Return(false).AnyTimes()
+	ctx, release2, err := s.cache.GetOrCreateWorkflowExecution(
+		context.Background(),
+		mockShard,
+		namespaceID,
+		&execution2,
+		workflow.LockPriorityHigh,
+	)
+	s.NoError(err)
+	ctx.(*workflow.ContextImpl).MutableState = mockMS2
+	mockMS2.EXPECT().GetApproximatePersistedSize().Return(400).Times(1)
+	release2(nil)
+	ctx, release2, err = s.cache.GetOrCreateWorkflowExecution(
+		context.Background(),
+		mockShard,
+		namespaceID,
+		&execution2,
+		workflow.LockPriorityHigh,
+	)
+	s.NoError(err)
+	s.Equal(mockMS2, ctx.(*workflow.ContextImpl).MutableState)
+
+	// Insert another entry. This should fail as cache has ~800bytes pinned.
+	execution3 := commonpb.WorkflowExecution{
+		WorkflowId: "some random workflow ID",
+		RunId:      uuid.New(),
+	}
+	mockMS3 := workflow.NewMockMutableState(s.controller)
+	mockMS3.EXPECT().IsDirty().Return(false).AnyTimes()
+	_, _, err = s.cache.GetOrCreateWorkflowExecution(
+		context.Background(),
+		mockShard,
+		namespaceID,
+		&execution3,
+		workflow.LockPriorityHigh,
+	)
+	s.Error(err)
+	s.ErrorIs(err, cache.ErrCacheFull)
+
+	// Now there are two entries pinned in the cache. Their total size is 800bytes.
+	// Make mockMS1 grow to 1000 bytes. Cache should be able to handle this. Now the cache size will be more than its
+	// limit. Cache will evict this entry and make more size.
+	mockMS1.EXPECT().GetApproximatePersistedSize().Return(1000).Times(1)
+	release1(nil)
+	ctx, release1, err = s.cache.GetOrCreateWorkflowExecution(
+		context.Background(),
+		mockShard,
+		namespaceID,
+		&execution1,
+		workflow.LockPriorityHigh,
+	)
+	s.NoError(err)
+	// Make sure execution 3 was evicted by checking if mutable state is nil.
+	s.Nil(ctx.(*workflow.ContextImpl).MutableState, nil)
+	release1(nil)
+
+	// Insert execution3 again.
+	ctx, release3, err := s.cache.GetOrCreateWorkflowExecution(
+		context.Background(),
+		mockShard,
+		namespaceID,
+		&execution3,
+		workflow.LockPriorityHigh,
+	)
+	s.NoError(err)
+	ctx.(*workflow.ContextImpl).MutableState = mockMS3
+
+	mockMS3.EXPECT().GetApproximatePersistedSize().Return(400).Times(1)
+	release3(nil)
+	ctx, release3, err = s.cache.GetOrCreateWorkflowExecution(
+		context.Background(),
+		mockShard,
+		namespaceID,
+		&execution3,
+		workflow.LockPriorityHigh,
+	)
+	s.NoError(err)
+	s.Equal(mockMS3, ctx.(*workflow.ContextImpl).MutableState)
+
+	// Release all remaining entries.
+	mockMS2.EXPECT().GetApproximatePersistedSize().Return(400).Times(1)
+	release2(nil)
+	mockMS3.EXPECT().GetApproximatePersistedSize().Return(400).Times(1)
+	release3(nil)
+}
+
+func (s *workflowCacheSuite) TestCacheImpl_CheckCacheLimitSizeBasedFlag() {
+	config := tests.NewDynamicConfig()
+	// HistoryCacheLimitSizeBased is set to false. Cache limit should be based on entry count.
+	config.HistoryCacheLimitSizeBased = dynamicconfig.GetBoolPropertyFn(false)
+	config.HistoryHostLevelCacheMaxSize = dynamicconfig.GetIntPropertyFn(1)
+	s.cache = NewHostLevelCache(config, metrics.NoopMetricsHandler)
+	mockShard := shard.NewTestContext(
+		s.controller,
+		&persistencespb.ShardInfo{
+			ShardId: 0,
+			RangeId: 1,
+		},
+		config,
+	)
+
+	namespaceID := namespace.ID("test_namespace_id")
+	execution1 := commonpb.WorkflowExecution{
+		WorkflowId: "some random workflow ID",
+		RunId:      uuid.New(),
+	}
+	mockMS1 := workflow.NewMockMutableState(s.controller)
+	mockMS1.EXPECT().IsDirty().Return(false).AnyTimes()
+	ctx, release1, err := s.cache.GetOrCreateWorkflowExecution(
+		context.Background(),
+		mockShard,
+		namespaceID,
+		&execution1,
+		workflow.LockPriorityHigh,
+	)
+	s.NoError(err)
+	ctx.(*workflow.ContextImpl).MutableState = mockMS1
+	// GetApproximatePersistedSize() should not be called, since we disabled HistoryHostLevelCacheMaxSize flag.
+	mockMS1.EXPECT().GetApproximatePersistedSize().Times(0)
+	release1(nil)
+	ctx, release1, err = s.cache.GetOrCreateWorkflowExecution(
+		context.Background(),
+		mockShard,
+		namespaceID,
+		&execution1,
+		workflow.LockPriorityHigh,
+	)
+	s.NoError(err)
+	s.Equal(mockMS1, ctx.(*workflow.ContextImpl).MutableState)
 }

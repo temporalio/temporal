@@ -82,6 +82,9 @@ type (
 
 		// Len observes the number of incomplete updates in this Registry.
 		Len() int
+
+		// GetSize returns the size of the update object
+		GetSize() int
 	}
 
 	// Store represents the update package's requirements for reading updates from the store.
@@ -357,4 +360,12 @@ func (r *registry) filter(predicate func(u *Update) bool) []*Update {
 		}
 	}
 	return res
+}
+
+func (r *registry) GetSize() int {
+	var size int
+	for key, update := range r.updates {
+		size += len(key) + update.GetSize()
+	}
+	return size
 }
