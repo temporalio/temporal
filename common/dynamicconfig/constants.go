@@ -216,7 +216,7 @@ const (
 	ReachabilityQueryBuildIdLimit = "limit.reachabilityQueryBuildIds"
 	// ReachabilityQuerySetDurationSinceDefault is the minimum period since a version set was demoted from being the
 	// queue default before it is considered unreachable by new workflows.
-	// This setting allows some propogation delay of versioning data for the reachability queries, which may happen for
+	// This setting allows some propagation delay of versioning data for the reachability queries, which may happen for
 	// the following reasons:
 	// 1. There are no workflows currently marked as open in the visibility store but a worker for the demoted version
 	// is currently processing a task.
@@ -227,7 +227,7 @@ const (
 	TaskQueuesPerBuildIdLimit = "limit.taskQueuesPerBuildId"
 	// RemovableBuildIdDurationSinceDefault is the minimum duration since a build id was last default in its containing
 	// set for it to be considered for removal, used by the build id scavenger.
-	// This setting allows some propogation delay of versioning data, which may happen for the following reasons:
+	// This setting allows some propagation delay of versioning data, which may happen for the following reasons:
 	// 1. There are no workflows currently marked as open in the visibility store but a worker for the demoted version
 	// is currently processing a task.
 	// 2. There are delays in the visibility task processor (which is asynchronous).
@@ -244,7 +244,7 @@ const (
 	FrontendPersistenceGlobalMaxQPS = "frontend.persistenceGlobalMaxQPS"
 	// FrontendPersistenceNamespaceMaxQPS is the max qps each namespace on frontend host can query DB
 	FrontendPersistenceNamespaceMaxQPS = "frontend.persistenceNamespaceMaxQPS"
-	// FrontendPersistenceNamespaceMaxQPS is the max qps each namespace in frontend cluster can query DB
+	// FrontendPersistenceGlobalNamespaceMaxQPS is the max qps each namespace in frontend cluster can query DB
 	FrontendPersistenceGlobalNamespaceMaxQPS = "frontend.persistenceGlobalNamespaceMaxQPS"
 	// FrontendEnablePersistencePriorityRateLimiting indicates if priority rate limiting is enabled in frontend persistence client
 	FrontendEnablePersistencePriorityRateLimiting = "frontend.enablePersistencePriorityRateLimiting"
