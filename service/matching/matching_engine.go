@@ -75,7 +75,9 @@ const (
 	// If sticky poller is not seem in last 10s, we treat it as sticky worker unavailable
 	// This seems aggressive, but the default sticky schedule_to_start timeout is 5s, so 10s seems reasonable.
 	stickyPollerUnavailableWindow = 10 * time.Second
-
+	// If a compatible poller hasn't been seen for this time, we fail the CommitBuildId
+	// Set to 70s so that it's a little over the max time a poller should be kept waiting.
+	versioningPollerSeenWindow        = 70 * time.Second
 	recordTaskStartedDefaultTimeout   = 10 * time.Second
 	recordTaskStartedSyncMatchTimeout = 1 * time.Second
 )
@@ -904,12 +906,17 @@ func (e *matchingEngineImpl) UpdateWorkerVersioningRules(
 				req.GetDeleteCompatibleRedirectRule(),
 			)
 		case *workflowservice.UpdateWorkerVersioningRulesRequest_CommitBuildId_:
-			versioningData, err = CommitBuildID(
-				updatedClock,
-				data.GetVersioningData(),
-				req.GetCommitBuildId(),
-				e.config.AssignmentRuleLimitPerQueue(ns.Name().String()),
-			)
+			commitReq := req.GetCommitBuildId()
+			if tqMgr.HasVersionedPollerAfter(time.Now().Add(-versioningPollerSeenWindow), commitReq.GetTargetBuildId()) {
+				versioningData, err = CommitBuildID(
+					updatedClock,
+					data.GetVersioningData(),
+					commitReq,
+					e.config.AssignmentRuleLimitPerQueue(ns.Name().String()),
+				)
+			} else {
+				err = serviceerror.NewFailedPrecondition(fmt.Sprintf("no compatible poller seen within the last %s", versioningPollerSeenWindow.String()))
+			}
 		}
 		if err != nil {
 			// operation can't be completed due to failed validation. no action, do not replicate, report error

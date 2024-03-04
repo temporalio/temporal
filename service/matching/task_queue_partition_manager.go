@@ -67,6 +67,7 @@ type (
 		MarkAlive()
 		GetAllPollerInfo() []*taskqueuepb.PollerInfo
 		HasPollerAfter(accessTime time.Time) bool
+		HasVersionedPollerAfter(accessTime time.Time, buildID string) bool
 		// DescribeTaskQueue returns information about the target task queue
 		DescribeTaskQueue(includeTaskQueueStatus bool) *matchingservice.DescribeTaskQueueResponse
 		String() string
@@ -295,6 +296,10 @@ func (pm *taskQueuePartitionManagerImpl) GetAllPollerInfo() []*taskqueuepb.Polle
 
 func (pm *taskQueuePartitionManagerImpl) HasPollerAfter(accessTime time.Time) bool {
 	return pm.defaultQueue.HasPollerAfter(accessTime)
+}
+
+func (pm *taskQueuePartitionManagerImpl) HasVersionedPollerAfter(accessTime time.Time, buildID string) bool {
+	return pm.defaultQueue.HasVersionedPollerAfter(accessTime, buildID)
 }
 
 func (pm *taskQueuePartitionManagerImpl) DescribeTaskQueue(includeTaskQueueStatus bool) *matchingservice.DescribeTaskQueueResponse {

@@ -129,6 +129,7 @@ type (
 		UpdatePollerInfo(pollerIdentity, *pollMetadata)
 		GetAllPollerInfo() []*taskqueuepb.PollerInfo
 		HasPollerAfter(accessTime time.Time) bool
+		HasVersionedPollerAfter(accessTime time.Time, buildID string) bool
 		// DescribeTaskQueue returns information about the target task queue
 		DescribeTaskQueue(includeTaskQueueStatus bool) *matchingservice.DescribeTaskQueueResponse
 		String() string
@@ -464,6 +465,22 @@ func (c *physicalTaskQueueManagerImpl) HasPollerAfter(accessTime time.Time) bool
 	}
 	recentPollers := c.pollerHistory.getPollerInfo(accessTime)
 	return len(recentPollers) > 0
+}
+
+func (c *physicalTaskQueueManagerImpl) HasVersionedPollerAfter(accessTime time.Time, buildID string) bool {
+	if c.currentPolls.Load() > 0 {
+		return true
+	}
+	if c.pollerHistory == nil {
+		return false
+	}
+	recentPollers := c.pollerHistory.getPollerInfo(accessTime)
+	for _, r := range recentPollers {
+		if r.GetWorkerVersionCapabilities().GetBuildId() == buildID {
+			return true
+		}
+	}
+	return false
 }
 
 // DescribeTaskQueue returns information about the target taskqueue, right now this API returns the
