@@ -68,15 +68,16 @@ type Updater struct {
 	req                        *historyservice.UpdateWorkflowExecutionRequest
 	namespaceID                namespace.ID
 
-	// Variables from workflow.Context and mutable state.
+	wfKey     definition.WorkflowKey
+	upd       *update.Update
+	directive *taskqueuespb.TaskVersionDirective
+
+	// Variables from mutable state.
 	// NOTE: They *have to* be copies to avoid data races when using them outside the workflow lease.
-	wfKey                  definition.WorkflowKey
-	upd                    *update.Update
 	taskQueue              *taskqueuepb.TaskQueue
 	normalTaskQueueName    string
 	scheduledEventID       int64
 	scheduleToStartTimeout time.Duration
-	directive              *taskqueuespb.TaskVersionDirective
 }
 
 func NewUpdater(
