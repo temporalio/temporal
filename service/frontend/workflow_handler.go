@@ -32,7 +32,6 @@ import (
 	"strings"
 	"sync/atomic"
 	"time"
-	"unicode/utf8"
 
 	"github.com/pborman/uuid"
 	batchpb "go.temporal.io/api/batch/v1"
@@ -377,8 +376,8 @@ func (wh *WorkflowHandler) StartWorkflowExecution(ctx context.Context, request *
 		return nil, errWorkflowTypeTooLong
 	}
 
-	if !utf8.ValidString(request.WorkflowType.GetName()) {
-		return nil, serviceerror.NewInvalidArgument(fmt.Sprintf("WorkflowType %v is not a valid UTF-8 string", request.WorkflowType.GetName()))
+	if err := common.ValidateUTF8String("WorkflowType", request.WorkflowType.GetName()); err != nil {
+		return nil, err
 	}
 
 	if err := wh.validateTaskQueue(request.TaskQueue, namespaceName); err != nil {
@@ -1684,10 +1683,9 @@ func (wh *WorkflowHandler) SignalWithStartWorkflowExecution(ctx context.Context,
 		return nil, errWorkflowTypeTooLong
 	}
 
-	if !utf8.ValidString(request.WorkflowType.GetName()) {
-		return nil, serviceerror.NewInvalidArgument(fmt.Sprintf("WorkflowType %v is not a valid UTF-8 string", request.WorkflowType.GetName()))
+	if err := common.ValidateUTF8String("WorkflowType", request.WorkflowType.GetName()); err != nil {
+		return nil, err
 	}
-
 	namespaceName := namespace.Name(request.GetNamespace())
 	if err := wh.validateTaskQueue(request.TaskQueue, namespaceName); err != nil {
 		return nil, err
