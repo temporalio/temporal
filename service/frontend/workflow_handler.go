@@ -3301,12 +3301,81 @@ func (wh *WorkflowHandler) GetWorkerBuildIdCompatibility(ctx context.Context, re
 	return matchingResponse.Response, err
 }
 
-func (wh *WorkflowHandler) UpdateWorkerVersioningRules(context.Context, *workflowservice.UpdateWorkerVersioningRulesRequest) (*workflowservice.UpdateWorkerVersioningRulesResponse, error) {
-	return nil, serviceerror.NewUnimplemented("not implemented")
+func (wh *WorkflowHandler) UpdateWorkerVersioningRules(ctx context.Context, request *workflowservice.UpdateWorkerVersioningRulesRequest) (_ *workflowservice.UpdateWorkerVersioningRulesResponse, retError error) {
+	defer log.CapturePanic(wh.logger, &retError)
+
+	if request == nil {
+		return nil, errRequestNotSet
+	}
+
+	if !wh.config.EnableWorkerVersioningRules(request.Namespace) {
+		return nil, errWorkerVersioningNotAllowed
+	}
+
+	taskQueue := &taskqueuepb.TaskQueue{Name: request.GetTaskQueue(), Kind: enumspb.TASK_QUEUE_KIND_NORMAL}
+	namespaceName := namespace.Name(request.GetNamespace())
+	if err := wh.validateTaskQueue(taskQueue, namespaceName); err != nil {
+		return nil, err
+	}
+
+	namespaceID, err := wh.namespaceRegistry.GetNamespaceID(namespace.Name(request.GetNamespace()))
+	if err != nil {
+		return nil, err
+	}
+
+	matchingResponse, err := wh.matchingClient.UpdateWorkerVersioningRules(ctx, &matchingservice.UpdateWorkerVersioningRulesRequest{
+		NamespaceId: namespaceID.String(),
+		TaskQueue:   request.GetTaskQueue(),
+		Command: &matchingservice.UpdateWorkerVersioningRulesRequest_Request{
+			Request: request,
+		},
+	})
+
+	if matchingResponse == nil {
+		return nil, err
+	}
+
+	return matchingResponse.Response, err
 }
 
-func (wh *WorkflowHandler) ListWorkerVersioningRules(context.Context, *workflowservice.ListWorkerVersioningRulesRequest) (*workflowservice.ListWorkerVersioningRulesResponse, error) {
-	return nil, serviceerror.NewUnimplemented("not implemented")
+func (wh *WorkflowHandler) ListWorkerVersioningRules(ctx context.Context, request *workflowservice.ListWorkerVersioningRulesRequest) (_ *workflowservice.ListWorkerVersioningRulesResponse, retError error) {
+	defer log.CapturePanic(wh.logger, &retError)
+
+	if request == nil {
+		return nil, errRequestNotSet
+	}
+
+	if !wh.config.EnableWorkerVersioningRules(request.Namespace) {
+		return nil, errWorkerVersioningNotAllowed
+	}
+
+	taskQueue := &taskqueuepb.TaskQueue{Name: request.GetTaskQueue(), Kind: enumspb.TASK_QUEUE_KIND_NORMAL}
+	namespaceName := namespace.Name(request.GetNamespace())
+	if err := wh.validateTaskQueue(taskQueue, namespaceName); err != nil {
+		return nil, err
+	}
+
+	namespaceID, err := wh.namespaceRegistry.GetNamespaceID(namespace.Name(request.GetNamespace()))
+	if err != nil {
+		return nil, err
+	}
+
+	matchingResponse, err := wh.matchingClient.ListWorkerVersioningRules(ctx, &matchingservice.ListWorkerVersioningRulesRequest{
+		NamespaceId: namespaceID.String(),
+		TaskQueue:   request.GetTaskQueue(),
+		Command: &matchingservice.ListWorkerVersioningRulesRequest_Request{
+			Request: &workflowservice.ListWorkerVersioningRulesRequest{
+				Namespace: request.GetNamespace(),
+				TaskQueue: request.GetTaskQueue(),
+			},
+		},
+	})
+
+	if matchingResponse == nil {
+		return nil, err
+	}
+
+	return matchingResponse.Response, err
 }
 
 func (wh *WorkflowHandler) GetWorkerTaskReachability(ctx context.Context, request *workflowservice.GetWorkerTaskReachabilityRequest) (_ *workflowservice.GetWorkerTaskReachabilityResponse, retError error) {

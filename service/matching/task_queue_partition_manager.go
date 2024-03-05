@@ -66,6 +66,7 @@ type (
 		// if dispatched to local poller then nil and nil is returned.
 		DispatchQueryTask(ctx context.Context, taskID string, request *matchingservice.QueryWorkflowRequest) (*matchingservice.QueryWorkflowResponse, error)
 		GetUserDataManager() userDataManager
+		// MarkAlive updates the liveness timer to keep this partition manager alive.
 		MarkAlive()
 		GetAllPollerInfo() []*taskqueuepb.PollerInfo
 		HasPollerAfter(accessTime time.Time) bool

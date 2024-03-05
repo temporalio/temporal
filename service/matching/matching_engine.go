@@ -840,7 +840,7 @@ func (e *matchingEngineImpl) UpdateWorkerVersioningRules(
 	}
 
 	// We only expect to receive task queue family name (root partition) here.
-	taskQueueFamily, err := tqid.NewTaskQueueFamily(req.GetNamespace(), req.GetTaskQueue())
+	taskQueueFamily, err := tqid.NewTaskQueueFamily(ns.ID().String(), req.GetTaskQueue())
 	if err != nil {
 		return nil, err
 	}
@@ -858,7 +858,7 @@ func (e *matchingEngineImpl) UpdateWorkerVersioningRules(
 		clk := data.GetClock()
 		if clk == nil {
 			clk = hlc.Zero(e.clusterMeta.GetClusterID())
-		} else {
+		} else if cT != nil {
 			prevCT, err := clk.Marshal()
 			if err != nil {
 				return nil, false, err
@@ -870,7 +870,6 @@ func (e *matchingEngineImpl) UpdateWorkerVersioningRules(
 			}
 		}
 		updatedClock := hlc.Next(clk, e.timeSource)
-		hadUnfiltered := containsUnfiltered(data.GetVersioningData().GetAssignmentRules())
 		var versioningData *persistencespb.VersioningData
 		switch req.GetOperation().(type) {
 		case *workflowservice.UpdateWorkerVersioningRulesRequest_InsertAssignmentRule:
@@ -879,21 +878,18 @@ func (e *matchingEngineImpl) UpdateWorkerVersioningRules(
 				data.GetVersioningData(),
 				req.GetInsertAssignmentRule(),
 				e.config.AssignmentRuleLimitPerQueue(ns.Name().String()),
-				hadUnfiltered,
 			)
 		case *workflowservice.UpdateWorkerVersioningRulesRequest_ReplaceAssignmentRule:
 			versioningData, err = ReplaceAssignmentRule(
 				updatedClock,
 				data.GetVersioningData(),
 				req.GetReplaceAssignmentRule(),
-				hadUnfiltered,
 			)
 		case *workflowservice.UpdateWorkerVersioningRulesRequest_DeleteAssignmentRule:
 			versioningData, err = DeleteAssignmentRule(
 				updatedClock,
 				data.GetVersioningData(),
 				req.GetDeleteAssignmentRule(),
-				hadUnfiltered,
 			)
 		case *workflowservice.UpdateWorkerVersioningRulesRequest_InsertCompatibleRedirectRule:
 			versioningData, err = InsertCompatibleRedirectRule(
@@ -915,7 +911,12 @@ func (e *matchingEngineImpl) UpdateWorkerVersioningRules(
 				req.GetDeleteCompatibleRedirectRule(),
 			)
 		case *workflowservice.UpdateWorkerVersioningRulesRequest_CommitBuildId_:
-			err = serviceerror.NewUnimplemented("commit build id is not yet implemented")
+			versioningData, err = CommitBuildID(
+				updatedClock,
+				data.GetVersioningData(),
+				req.GetCommitBuildId(),
+				e.config.AssignmentRuleLimitPerQueue(ns.Name().String()),
+			)
 		}
 		if err != nil {
 			// operation can't be completed due to failed validation. no action, do not replicate, report error
@@ -944,7 +945,42 @@ func (e *matchingEngineImpl) ListWorkerVersioningRules(
 	ctx context.Context,
 	request *matchingservice.ListWorkerVersioningRulesRequest,
 ) (*matchingservice.ListWorkerVersioningRulesResponse, error) {
-	return nil, nil
+	req := request.GetRequest()
+	ns, err := e.namespaceRegistry.GetNamespace(namespace.Name(req.GetNamespace()))
+	if err != nil {
+		return nil, err
+	}
+	if ns.ID().String() != request.GetNamespaceId() {
+		return nil, serviceerror.NewInternal("Namespace ID does not match Namespace in wrapped command")
+	}
+	if req.GetTaskQueue() != request.GetTaskQueue() {
+		return nil, serviceerror.NewInternal("Task Queue does not match Task Queue in wrapped command")
+	}
+
+	// We only expect to receive task queue family name (root partition) here.
+	taskQueueFamily, err := tqid.NewTaskQueueFamily(ns.ID().String(), req.GetTaskQueue())
+	if err != nil {
+		return nil, err
+	}
+	tqMgr, err := e.getTaskQueuePartitionManager(ctx, taskQueueFamily.TaskQueue(enumspb.TASK_QUEUE_TYPE_WORKFLOW).RootPartition(), true)
+	if err != nil {
+		return nil, err
+	}
+
+	data, _, err := tqMgr.GetUserDataManager().GetUserData()
+	if err != nil {
+		return nil, err
+	}
+	if data == nil {
+		data = &persistencespb.VersionedTaskQueueUserData{Data: &persistencespb.TaskQueueUserData{}}
+	} else {
+		data = common.CloneProto(data)
+	}
+	clk := data.GetData().GetClock()
+	if clk == nil {
+		clk = hlc.Zero(e.clusterMeta.GetClusterID())
+	}
+	return ListWorkerVersioningRules(data.GetData().GetVersioningData(), clk)
 }
 
 func (e *matchingEngineImpl) UpdateWorkerBuildIdCompatibility(

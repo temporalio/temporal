@@ -78,6 +78,7 @@ func (s *UserDataReplicationTestSuite) SetupSuite() {
 		dynamicconfig.FrontendNamespaceReplicationInducingAPIsRPS:                          1000,
 		dynamicconfig.FrontendEnableWorkerVersioningDataAPIs:                               true,
 		dynamicconfig.FrontendEnableWorkerVersioningWorkflowAPIs:                           true,
+		dynamicconfig.FrontendEnableWorkerVersioningRuleAPIs:                               true,
 		dynamicconfig.BuildIdScavengerEnabled:                                              true,
 		// Ensure the scavenger can immediately delete build ids that are not in use.
 		dynamicconfig.RemovableBuildIdDurationSinceDefault: time.Microsecond,
