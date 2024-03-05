@@ -1,0 +1,18 @@
+name: Stale Pull Requests
+
+on:
+  schedule:
+    - cron: '0 0 * * *'
+
+jobs:
+  stale_prs:
+    runs-on: ubuntu-latest
+    steps:
+      - name: label stale pull requests
+        uses: actions/stale@v9
+        with:
+          days-before-close: -1  # ie disabled
+          days-before-stale: 120
+          days-before-issue-stale: -1  # ie disabled
+          stale-pr-label: stale
+          stale-pr-message: 'This PR was marked as stale. Please update or close it.'
