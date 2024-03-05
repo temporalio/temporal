@@ -72,8 +72,9 @@ type Updater struct {
 	upd       *update.Update
 	directive *taskqueuespb.TaskVersionDirective
 
-	// Variables from mutable state.
-	// NOTE: They *have to* be copies to avoid data races when using them outside the workflow lease.
+	// Variables referencing mutable state data.
+	// WARNING: any references to mutable state data *have to* be copied
+	// to avoid data races when used outside the workflow lease.
 	taskQueue              *taskqueuepb.TaskQueue
 	normalTaskQueueName    string
 	scheduledEventID       int64
