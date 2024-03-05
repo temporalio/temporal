@@ -380,6 +380,9 @@ func (wh *WorkflowHandler) StartWorkflowExecution(ctx context.Context, request *
 		return nil, errWorkflowTypeTooLong
 	}
 
+	if err := common.ValidateUTF8String("WorkflowType", request.WorkflowType.GetName()); err != nil {
+		return nil, err
+	}
 	if err := wh.validateTaskQueue(request.TaskQueue); err != nil {
 		return nil, err
 	}
@@ -388,12 +391,12 @@ func (wh *WorkflowHandler) StartWorkflowExecution(ctx context.Context, request *
 		return nil, err
 	}
 
-	if request.GetRequestId() == "" {
+	if request.RequestId == "" {
 		return nil, errRequestIDNotSet
 	}
 
-	if len(request.GetRequestId()) > wh.config.MaxIDLengthLimit() {
-		return nil, errRequestIDTooLong
+	if err := validateRequestId(&request.RequestId, wh.config.MaxIDLengthLimit()); err != nil {
+		return nil, err
 	}
 
 	request, err := wh.unaliasStartWorkflowExecutionRequestSearchAttributes(request, namespaceName)
@@ -2002,12 +2005,16 @@ func (wh *WorkflowHandler) SignalWithStartWorkflowExecution(ctx context.Context,
 		return nil, errWorkflowTypeTooLong
 	}
 
+	if err := common.ValidateUTF8String("WorkflowType", request.WorkflowType.GetName()); err != nil {
+		return nil, err
+	}
+
 	if err := wh.validateTaskQueue(request.TaskQueue); err != nil {
 		return nil, err
 	}
 
-	if len(request.GetRequestId()) > wh.config.MaxIDLengthLimit() {
-		return nil, errRequestIDTooLong
+	if err := validateRequestId(&request.RequestId, wh.config.MaxIDLengthLimit()); err != nil {
+		return nil, err
 	}
 
 	if err := wh.validateSignalWithStartWorkflowTimeouts(request); err != nil {
@@ -4348,6 +4355,9 @@ func (wh *WorkflowHandler) validateTaskQueue(t *taskqueuepb.TaskQueue) error {
 	if len(t.GetName()) > wh.config.MaxIDLengthLimit() {
 		return errTaskQueueTooLong
 	}
+	if err := common.ValidateUTF8String("TaskQueue", t.GetName()); err != nil {
+		return err
+	}
 
 	enums.SetDefaultTaskQueueKind(&t.Kind)
 	return nil
@@ -4356,26 +4366,33 @@ func (wh *WorkflowHandler) validateTaskQueue(t *taskqueuepb.TaskQueue) error {
 func (wh *WorkflowHandler) validateBuildIdOrderingUpdate(
 	req *workflowservice.UpdateWorkerBuildIdOrderingRequest,
 ) error {
-	errstr := "request to update worker build id ordering requires:"
-	hadErr := false
+	errDeets := []string{"request to update worker build id compatability requires: "}
+
+	checkIdLen := func(id string) {
+		if len(id) > wh.config.WorkerBuildIdSizeLimit() {
+			errDeets = append(errDeets, fmt.Sprintf(" Worker build IDs to be no larger than %v characters",
+				wh.config.WorkerBuildIdSizeLimit()))
+		}
+
+		if err := common.ValidateUTF8String("BuildId", id); err != nil {
+			errDeets = append(errDeets, err.Error())
+		}
+	}
+
 	if req.GetNamespace() == "" {
-		errstr += " `namespace` to be set"
-		hadErr = true
+		errDeets = append(errDeets, "`namespace` to be set")
 	}
 	if req.GetTaskQueue() == "" {
-		errstr += " `task_queue` to be set"
-		hadErr = true
+		errDeets = append(errDeets, "`task_queue` to be set")
 	}
 	if req.GetVersionId().GetWorkerBuildId() == "" {
-		errstr += " targeting a valid version identifier"
-		hadErr = true
+		errDeets = append(errDeets, "targeting a valid version identifier")
+	} else {
+		checkIdLen(req.GetVersionId().GetWorkerBuildId())
 	}
-	if len(req.GetVersionId().GetWorkerBuildId()) > wh.config.WorkerBuildIdSizeLimit() {
-		errstr += fmt.Sprintf(" Worker build IDs to be no larger than %v characters", wh.config.WorkerBuildIdSizeLimit())
-		hadErr = true
-	}
-	if hadErr {
-		return serviceerror.NewInvalidArgument(errstr)
+
+	if len(errDeets) > 1 {
+		return serviceerror.NewInvalidArgument(strings.Join(errDeets, ", "))
 	}
 	return nil
 }
@@ -4657,6 +4674,24 @@ func (wh *WorkflowHandler) validateRetryPolicy(namespaceName namespace.Name, ret
 	return common.ValidateRetryPolicy(retryPolicy)
 }
 
+func validateRequestId(requestID *string, lenLimit int) error {
+	if requestID == nil {
+		// should never happen, but just in case.
+		return serviceerror.NewInvalidArgument("RequestId is nil")
+	}
+	if *requestID == "" {
+		// For easy direct API use, we default the request ID here but expect all
+		// SDKs and other auto-retrying clients to set it
+		*requestID = uuid.New()
+	}
+
+	if len(*requestID) > lenLimit {
+		return errRequestIDTooLong
+	}
+
+	return common.ValidateUTF8String("RequestId", *requestID)
+}
+
 func (wh *WorkflowHandler) validateStartWorkflowTimeouts(
 	request *workflowservice.StartWorkflowExecutionRequest,
 ) error {
@@ -4753,7 +4788,7 @@ func (wh *WorkflowHandler) makeFakeContinuedAsNewEvent(
 func (wh *WorkflowHandler) validateNamespace(
 	namespace string,
 ) error {
-	if err := wh.validateUTF8String(namespace); err != nil {
+	if err := common.ValidateUTF8String("Namespace", namespace); err != nil {
 		return err
 	}
 	if len(namespace) > wh.config.MaxIDLengthLimit() {
@@ -4768,7 +4803,7 @@ func (wh *WorkflowHandler) validateWorkflowID(
 	if workflowID == "" {
 		return errWorkflowIDNotSet
 	}
-	if err := wh.validateUTF8String(workflowID); err != nil {
+	if err := common.ValidateUTF8String("WorkflowId", workflowID); err != nil {
 		return err
 	}
 	if len(workflowID) > wh.config.MaxIDLengthLimit() {

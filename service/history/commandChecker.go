@@ -380,6 +380,9 @@ func (v *commandAttrValidator) validateTimerScheduleAttributes(
 	if len(attributes.GetTimerId()) > v.maxIDLengthLimit {
 		return failedCause, serviceerror.NewInvalidArgument("TimerId exceeds length limit.")
 	}
+	if err := common.ValidateUTF8String("TimerId", attributes.TimerId); err != nil {
+		return failedCause, err
+	}
 	if timestamp.DurationValue(attributes.GetStartToFireTimeout()) <= 0 {
 		return failedCause, serviceerror.NewInvalidArgument("A valid StartToFireTimeout is not set on command.")
 	}
@@ -498,7 +501,22 @@ func (v *commandAttrValidator) validateCancelExternalWorkflowExecutionAttributes
 	if len(attributes.GetWorkflowId()) > v.maxIDLengthLimit {
 		return failedCause, serviceerror.NewInvalidArgument("WorkflowId exceeds length limit.")
 	}
-	runID := attributes.GetRunId()
+	runID := attributes.RunId
+	workflowID := attributes.WorkflowId
+	ns := attributes.Namespace
+
+	if workflowID == "" {
+		return failedCause, serviceerror.NewInvalidArgument(fmt.Sprintf("WorkflowId is not set on RequestCancelExternalWorkflowExecutionCommand. Namespace=%s RunId=%s", ns, runID))
+	}
+	if len(ns) > v.maxIDLengthLimit {
+		return failedCause, serviceerror.NewInvalidArgument(fmt.Sprintf("Namespace on RequestCancelExternalWorkflowExecutionCommand exceeds length limit. WorkflowId=%s RunId=%s Namespace=%s Length=%d Limit=%d", workflowID, runID, ns, len(ns), v.maxIDLengthLimit))
+	}
+	if len(workflowID) > v.maxIDLengthLimit {
+		return failedCause, serviceerror.NewInvalidArgument(fmt.Sprintf("WorkflowId on RequestCancelExternalWorkflowExecutionCommand exceeds length limit. WorkflowId=%s Length=%d Limit=%d RunId=%s Namespace=%s", workflowID, len(workflowID), v.maxIDLengthLimit, runID, ns))
+	}
+	if err := common.ValidateUTF8String("WorkflowId", workflowID); err != nil {
+		return failedCause, err
+	}
 	if runID != "" && uuid.Parse(runID) == nil {
 		return failedCause, serviceerror.NewInvalidArgument("Invalid RunId set on command.")
 	}
@@ -540,6 +558,22 @@ func (v *commandAttrValidator) validateSignalExternalWorkflowExecutionAttributes
 	}
 
 	targetRunID := attributes.Execution.GetRunId()
+	signalName := attributes.SignalName
+	workflowID := attributes.Execution.WorkflowId
+	ns := attributes.Namespace
+
+	if workflowID == "" {
+		return failedCause, serviceerror.NewInvalidArgument(fmt.Sprintf("WorkflowId is not set on SignalExternalWorkflowExecutionCommand. Namespace=%s RunId=%s SignalName=%s", ns, targetRunID, signalName))
+	}
+	if len(ns) > v.maxIDLengthLimit {
+		return failedCause, serviceerror.NewInvalidArgument(fmt.Sprintf("Namespace on SignalExternalWorkflowExecutionCommand exceeds length limit. WorkflowId=%s Namespace=%s Length=%d Limit=%d RunId=%s SignalName=%s", workflowID, ns, len(ns), v.maxIDLengthLimit, targetRunID, signalName))
+	}
+	if len(workflowID) > v.maxIDLengthLimit {
+		return failedCause, serviceerror.NewInvalidArgument(fmt.Sprintf("WorkflowId on SignalExternalWorkflowExecutionCommand exceeds length limit. WorkflowId=%s Length=%d Limit=%d Namespace=%s RunId=%s SignalName=%s", workflowID, len(workflowID), v.maxIDLengthLimit, ns, targetRunID, signalName))
+	}
+	if err := common.ValidateUTF8String("WorkflowId", workflowID); err != nil {
+		return failedCause, err
+	}
 	if targetRunID != "" && uuid.Parse(targetRunID) == nil {
 		return failedCause, serviceerror.NewInvalidArgument("Invalid RunId set on command.")
 	}
@@ -791,6 +825,14 @@ func (v *commandAttrValidator) validateStartChildExecutionAttributes(
 		return failedCause, serviceerror.NewInvalidArgument("WorkflowType exceeds length limit.")
 	}
 
+	if err := common.ValidateUTF8String("WorkflowId", attributes.WorkflowId); err != nil {
+		return failedCause, err
+	}
+
+	if err := common.ValidateUTF8String("WorkflowType", attributes.WorkflowType.Name); err != nil {
+		return failedCause, err
+	}
+
 	if timestamp.DurationValue(attributes.GetWorkflowExecutionTimeout()) < 0 {
 		return failedCause, serviceerror.NewInvalidArgument("Invalid WorkflowExecutionTimeout.")
 	}
@@ -866,6 +908,10 @@ func (v *commandAttrValidator) validateTaskQueue(
 	name := taskQueue.GetName()
 	if len(name) > v.maxIDLengthLimit {
 		return taskQueue, serviceerror.NewInvalidArgument(fmt.Sprintf("task queue name exceeds length limit of %v", v.maxIDLengthLimit))
+	}
+
+	if err := common.ValidateUTF8String("TaskQueue", name); err != nil {
+		return taskQueue, err
 	}
 
 	if strings.HasPrefix(name, reservedTaskQueuePrefix) {
