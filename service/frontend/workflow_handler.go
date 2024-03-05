@@ -3758,6 +3758,11 @@ func (wh *WorkflowHandler) validateTaskQueue(t *taskqueuepb.TaskQueue, namespace
 	if err := common.ValidateUTF8String("TaskQueue", t.GetName()); err != nil {
 		return err
 	}
+	if t.GetKind() == enumspb.TASK_QUEUE_KIND_STICKY {
+		if err := common.ValidateUTF8String("TaskQueue", t.GetNormalName()); err != nil {
+			return err
+		}
+	}
 
 	if t.GetKind() == enumspb.TASK_QUEUE_KIND_UNSPECIFIED {
 		wh.logger.Warn("Unspecified task queue kind",
