@@ -26,8 +26,6 @@ package matching
 
 import (
 	"context"
-	"fmt"
-	"strings"
 	"sync"
 	"time"
 
@@ -190,10 +188,6 @@ func (pm *taskQueuePartitionManagerImpl) AddTask(
 	ctx context.Context,
 	params addTaskParams,
 ) (buildId string, syncMatched bool, err error) {
-	if !strings.HasPrefix(pm.partition.TaskQueue().Family().Name(), "temporal-sys") &&
-		!strings.HasPrefix(pm.partition.TaskQueue().Family().Name(), "default-worker-tq") {
-		fmt.Printf("shahab tq add")
-	}
 	// We don't need the userDataChanged channel here because:
 	// - if we sync match, we're done
 	// - if we spool to db, we'll re-resolve when it comes out of the db
@@ -220,11 +214,6 @@ func (pm *taskQueuePartitionManagerImpl) PollTask(
 	ctx context.Context,
 	pollMetadata *pollMetadata,
 ) (*internalTask, error) {
-
-	if !strings.HasPrefix(pm.partition.TaskQueue().Family().Name(), "temporal-sys") &&
-		!strings.HasPrefix(pm.partition.TaskQueue().Family().Name(), "default-worker-tq") {
-		fmt.Printf("shahab tq poll")
-	}
 	dbq := pm.defaultQueue
 	if pollMetadata.workerVersionCapabilities.GetUseVersioning() {
 		userData, _, err := pm.userDataManager.GetUserData()
