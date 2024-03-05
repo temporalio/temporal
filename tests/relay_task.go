@@ -111,9 +111,16 @@ func (s *FunctionalSuite) TestRelayWorkflowTaskTimeout() {
 	workflowTaskTimeout := false
 	for i := 0; i < 3; i++ {
 		events := s.getHistory(s.namespace, workflowExecution)
-		if len(events) >= 8 {
-			s.Equal(enumspb.EVENT_TYPE_WORKFLOW_TASK_TIMED_OUT, events[7].GetEventType())
-			s.Equal(enumspb.TIMEOUT_TYPE_START_TO_CLOSE, events[7].GetWorkflowTaskTimedOutEventAttributes().GetTimeoutType())
+		if len(events) == 8 {
+			s.EqualHistoryEvents(`
+  1 WorkflowExecutionStarted
+  2 WorkflowTaskScheduled
+  3 WorkflowTaskStarted
+  4 WorkflowTaskCompleted
+  5 MarkerRecorded
+  6 WorkflowTaskScheduled
+  7 WorkflowTaskStarted
+  8 WorkflowTaskTimedOut {"ScheduledEventId":6,"StartedEventId":7,"TimeoutType":1} // TIMEOUT_TYPE_START_TO_CLOSE`, events)
 			workflowTaskTimeout = true
 			break
 		}

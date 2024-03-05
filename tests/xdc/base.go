@@ -36,6 +36,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	replicationpb "go.temporal.io/api/replication/v1"
+	"go.temporal.io/server/common/testing/historyrequire"
 	"gopkg.in/yaml.v3"
 
 	"go.temporal.io/server/api/adminservice/v1"
@@ -54,6 +55,7 @@ type (
 		// not merely log an error
 		*require.Assertions
 		protorequire.ProtoAssertions
+		historyrequire.HistoryRequire
 		clusterNames []string
 		suite.Suite
 
@@ -153,4 +155,5 @@ func (s *xdcBaseSuite) setupTest() {
 	// Have to define our overridden assertions in the test setup. If we did it earlier, s.T() will return nil
 	s.Assertions = require.New(s.T())
 	s.ProtoAssertions = protorequire.New(s.T())
+	s.HistoryRequire = historyrequire.New(s.T())
 }

@@ -3,7 +3,7 @@ module build
 go 1.18
 
 require (
-	go.temporal.io/api v1.26.1-0.20240124000020-2149fa650d6b
+	go.temporal.io/api v1.29.0
 	google.golang.org/grpc/cmd/protoc-gen-go-grpc v1.3.0
 )
 

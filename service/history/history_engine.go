@@ -376,7 +376,7 @@ func (e *historyEngineImpl) StartWorkflowExecution(
 	if err != nil {
 		return nil, err
 	}
-	return starter.Invoke(ctx)
+	return starter.Invoke(ctx, nil)
 }
 
 // GetMutableState retrieves the mutable state of the workflow execution
@@ -576,7 +576,13 @@ func (e *historyEngineImpl) UpdateWorkflowExecution(
 	ctx context.Context,
 	req *historyservice.UpdateWorkflowExecutionRequest,
 ) (*historyservice.UpdateWorkflowExecutionResponse, error) {
-	return updateworkflow.Invoke(ctx, req, e.shardContext, e.workflowConsistencyChecker, e.matchingClient)
+	updater := updateworkflow.NewUpdater(
+		e.shardContext,
+		e.workflowConsistencyChecker,
+		e.matchingClient,
+		req,
+	)
+	return updater.Invoke(ctx)
 }
 
 func (e *historyEngineImpl) PollWorkflowExecutionUpdate(
