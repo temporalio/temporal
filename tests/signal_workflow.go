@@ -34,6 +34,7 @@ import (
 	"unicode/utf8"
 
 	"github.com/pborman/uuid"
+	"github.com/stretchr/testify/assert"
 	commandpb "go.temporal.io/api/command/v1"
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
@@ -1616,6 +1617,46 @@ func (s *FunctionalSuite) TestSignalWithStartWorkflow() {
 	s.Equal(1, len(listClosedResp.Executions))
 }
 
+func (s *FunctionalSuite) TestSignalWorkflow_RejectsInvalidUTF8() {
+	invalidUTF8 := "invalid \x80"
+	s.Require().False(utf8.ValidString(invalidUTF8))
+
+	for _, tc := range []struct {
+		Name    string
+		Mutator func(*workflowservice.SignalWorkflowExecutionRequest)
+	}{{
+		Name: "Invalid WorkflowId",
+		Mutator: func(r *workflowservice.SignalWorkflowExecutionRequest) {
+			r.WorkflowExecution.WorkflowId = invalidUTF8
+		},
+	}, {
+		Name: "Invalid RequestID",
+		Mutator: func(r *workflowservice.SignalWorkflowExecutionRequest) {
+			r.RequestId = invalidUTF8
+		},
+	}} {
+		s.Run(tc.Name, func() {
+			identity := "worker1"
+			sRequest := &workflowservice.SignalWorkflowExecutionRequest{
+				RequestId: uuid.New(),
+				Namespace: s.namespace,
+				WorkflowExecution: &commonpb.WorkflowExecution{
+					WorkflowId: "functional-signal-workflow-test",
+					RunId:      uuid.New(),
+				},
+				SignalName: "example signal",
+				Identity:   identity,
+			}
+
+			tc.Mutator(sRequest)
+
+			_, err := s.engine.SignalWorkflowExecution(NewContext(), sRequest)
+			assert.Error(s.T(), err, "SignalWorkflowExecution should fail")
+			assert.Contains(s.T(), err.Error(), "UTF-8")
+		})
+	}
+}
+
 func (s *FunctionalSuite) TestSignalWithStartWorkflow_RejectsInvalidUTF8() {
 	invalidUTF8 := "invalid \x80"
 	s.Require().False(utf8.ValidString(invalidUTF8))
@@ -1645,59 +1686,27 @@ func (s *FunctionalSuite) TestSignalWithStartWorkflow_RejectsInvalidUTF8() {
 		},
 	}} {
 		s.Run(tc.Name, func() {
-			identity := "worker1"
-			taskQueue := &taskqueuepb.TaskQueue{
-				Name: uuid.New(),
-				Kind: enumspb.TASK_QUEUE_KIND_NORMAL,
-			}
-
-			// Poller
-			wtHandler := func(execution *commonpb.WorkflowExecution, wt *commonpb.WorkflowType,
-				previousStartedEventID, startedEventID int64, history *historypb.History) ([]*commandpb.Command, error) {
-				s.Require().Fail("workflow task handler should not be called")
-				return nil, fmt.Errorf("WFT handler should not be called")
-			}
-
-			// activity handler
-			atHandler := func(execution *commonpb.WorkflowExecution, activityType *commonpb.ActivityType,
-				activityID string, input *commonpb.Payloads, taskToken []byte) (*commonpb.Payloads, bool, error) {
-				s.Require().Fail("activity handler should not be called")
-				return nil, false, fmt.Errorf("Activity handler should not be called")
-			}
-
-			poller := &TaskPoller{
-				Engine:              s.engine,
-				Namespace:           s.namespace,
-				TaskQueue:           taskQueue,
-				Identity:            identity,
-				WorkflowTaskHandler: wtHandler,
-				ActivityTaskHandler: atHandler,
-				Logger:              s.Logger,
-				T:                   s.T(),
-			}
-
-			wfIDReusePolicy := enumspb.WORKFLOW_ID_REUSE_POLICY_ALLOW_DUPLICATE
 			sRequest := &workflowservice.SignalWithStartWorkflowExecutionRequest{
-				RequestId:             uuid.New(),
-				Namespace:             s.namespace,
-				WorkflowId:            "functional-signal-with-start-workflow-test",
-				WorkflowType:          &commonpb.WorkflowType{Name: "workflow-type"},
-				TaskQueue:             taskQueue,
+				RequestId:    uuid.New(),
+				Namespace:    s.namespace,
+				WorkflowId:   "functional-signal-with-start-workflow-test",
+				WorkflowType: &commonpb.WorkflowType{Name: "workflow-type"},
+				TaskQueue: &taskqueuepb.TaskQueue{
+					Name: uuid.New(),
+					Kind: enumspb.TASK_QUEUE_KIND_NORMAL,
+				},
 				WorkflowRunTimeout:    durationpb.New(100 * time.Second),
 				WorkflowTaskTimeout:   durationpb.New(1 * time.Second),
 				SignalName:            "example signal",
 				SignalInput:           payloads.EncodeString("example signal input"),
-				Identity:              identity,
-				WorkflowIdReusePolicy: wfIDReusePolicy,
+				Identity:              "worker1",
+				WorkflowIdReusePolicy: enumspb.WORKFLOW_ID_REUSE_POLICY_ALLOW_DUPLICATE,
 			}
 
 			tc.Mutator(sRequest)
 
 			_, err := s.engine.SignalWithStartWorkflowExecution(NewContext(), sRequest)
-			s.Require().Error(err, "SignalWithStartWorkflowExecution should fail when workflow type contains invalid UTF-8 data")
-
-			_, err = poller.PollAndProcessWorkflowTask()
-			s.Equal(errNoTasks, err, "No WFTs should be created")
+			assert.Error(s.T(), err, "SignalWithStartWorkflowExecution should fail")
 		})
 	}
 }
