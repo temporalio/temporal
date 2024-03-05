@@ -25,6 +25,7 @@
 package searchattribute
 
 import (
+	"errors"
 	"fmt"
 	"time"
 	"unicode/utf8"
@@ -34,6 +35,8 @@ import (
 
 	"go.temporal.io/server/common/payload"
 )
+
+var ErrInvalidString = errors.New("SearchAttribute value is not a valid UTF-8 string")
 
 // EncodeValue encodes search attribute value and IndexedValueType to Payload.
 func EncodeValue(val interface{}, t enumspb.IndexedValueType) (*commonpb.Payload, error) {
@@ -92,12 +95,12 @@ func validateStrings(anyValue any, err error) (any, error) {
 	switch value := anyValue.(type) {
 	case string:
 		if !utf8.ValidString(value) {
-			return nil, fmt.Errorf("%v is not a valid UTF-8 string", value)
+			return nil, fmt.Errorf("%w: %s", ErrInvalidString, value)
 		}
 	case []string:
 		for _, item := range value {
 			if !utf8.ValidString(item) {
-				return nil, fmt.Errorf("%v is not a valid UTF-8 string", item)
+				return nil, fmt.Errorf("%w: %s", ErrInvalidString, item)
 			}
 		}
 	}

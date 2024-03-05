@@ -387,7 +387,7 @@ func Test_ValidateStrings(t *testing.T) {
 	assert.Nil(t, err)
 	assert.Equal(t, "anything here", value)
 
-	value, err = validateStrings([]string{"abc", "\x87\x01"}, nil)
+	_, err = validateStrings([]string{"abc", "\x87\x01"}, nil)
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "is not a valid UTF-8 string")
 }
