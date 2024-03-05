@@ -32,8 +32,10 @@ import (
 	"math"
 	"strconv"
 	"time"
+	"unicode/utf8"
 
 	"github.com/pborman/uuid"
+	"github.com/stretchr/testify/assert"
 	commandpb "go.temporal.io/api/command/v1"
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
@@ -101,6 +103,61 @@ func (s *FunctionalSuite) TestStartWorkflowExecution() {
 	var alreadyStarted *serviceerror.WorkflowExecutionAlreadyStarted
 	s.ErrorAs(err2, &alreadyStarted)
 	s.Nil(we2)
+}
+
+func (s *FunctionalSuite) TestStartWorkflowExecution_RejectsInvalidUTF8() {
+	invalidUTF8 := "invalid \x80"
+	s.Require().False(utf8.ValidString(invalidUTF8))
+
+	for _, tc := range []struct {
+		Name    string
+		Mutator func(*workflowservice.StartWorkflowExecutionRequest)
+	}{{
+		Name: "WorkflowType",
+		Mutator: func(request *workflowservice.StartWorkflowExecutionRequest) {
+			request.WorkflowType.Name = invalidUTF8
+		},
+	}, {
+		Name: "Namespace",
+		Mutator: func(request *workflowservice.StartWorkflowExecutionRequest) {
+			request.Namespace = invalidUTF8
+		},
+	}, {
+		Name: "WorkflowType",
+		Mutator: func(request *workflowservice.StartWorkflowExecutionRequest) {
+			request.WorkflowType.Name = invalidUTF8
+		},
+	}, {
+		Name: "TaskQueue Name",
+		Mutator: func(request *workflowservice.StartWorkflowExecutionRequest) {
+			request.TaskQueue.Name = invalidUTF8
+		},
+	}, {
+		Name: "RequestID",
+		Mutator: func(request *workflowservice.StartWorkflowExecutionRequest) {
+			request.RequestId = invalidUTF8
+		},
+	}} {
+		s.Run(tc.Name, func() {
+			request := &workflowservice.StartWorkflowExecutionRequest{
+				RequestId:          uuid.New(),
+				Namespace:          s.namespace,
+				WorkflowId:         "functional-start-workflow-test",
+				WorkflowType:       &commonpb.WorkflowType{Name: "functional-start-workflow-test-type"},
+				TaskQueue:          &taskqueuepb.TaskQueue{Name: "functional-start-workflow-test-taskqueue", Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
+				Input:              nil,
+				WorkflowRunTimeout: durationpb.New(100 * time.Second),
+				Identity:           "worker1",
+			}
+
+			tc.Mutator(request)
+			frontend.SetLogf(s.T().Logf)
+
+			_, err := s.engine.StartWorkflowExecution(NewContext(), request)
+			assert.Error(s.T(), err, "Request should fail")
+			assert.Contains(s.T(), err.Error(), "UTF-8")
+		})
+	}
 }
 
 func (s *FunctionalSuite) TestStartWorkflowExecution_TerminateIfRunning() {
