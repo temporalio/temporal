@@ -2375,8 +2375,8 @@ func (s *matchingEngineSuite) TestUnknownBuildId_Match() {
 			ScheduleToStartTimeout: timestamp.DurationFromSeconds(100),
 			// do not set ForwardedSource, allow to go to db
 			VersionDirective: &taskqueue.TaskVersionDirective{
-				Value: &taskqueue.TaskVersionDirective_BuildId{
-					BuildId: "unknown",
+				Value: &taskqueue.TaskVersionDirective_AssignedBuildId{
+					AssignedBuildId: "unknown",
 				},
 			},
 		})
@@ -2444,8 +2444,8 @@ func (s *matchingEngineSuite) TestDemotedMatch() {
 		ScheduledEventId: 123,
 		TaskQueue:        &taskqueuepb.TaskQueue{Name: tq, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
 		VersionDirective: &taskqueue.TaskVersionDirective{
-			Value: &taskqueue.TaskVersionDirective_BuildId{
-				BuildId: build0,
+			Value: &taskqueue.TaskVersionDirective_AssignedBuildId{
+				AssignedBuildId: build0,
 			},
 		},
 	})

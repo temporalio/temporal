@@ -359,7 +359,7 @@ func (c *physicalTaskQueueManagerImpl) AddTask(
 	// The task queue default set is dynamic and applies only at dispatch time. Putting "default" tasks into version set
 	// specific queues could cause them to get stuck behind "compatible" tasks when they should be able to progress
 	// independently.
-	if taskInfo.VersionDirective.GetUseDefault() != nil {
+	if taskInfo.VersionDirective.GetAssignNew() != nil {
 		err = c.partitionMgr.defaultQueue.SpoolTask(params)
 	} else {
 		err = c.SpoolTask(params)

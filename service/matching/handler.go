@@ -149,16 +149,11 @@ func (h *Handler) AddActivityTask(
 		h.reportForwardedPerTaskQueueCounter(opMetrics, namespace.ID(request.GetNamespaceId()))
 	}
 
-	buildId, syncMatch, err := h.engine.AddActivityTask(ctx, request)
+	assignedBuildId, syncMatch, err := h.engine.AddActivityTask(ctx, request)
 	if syncMatch {
 		opMetrics.Timer(metrics.SyncMatchLatencyPerTaskQueue.Name()).Record(time.Since(startT))
-		return &matchingservice.AddActivityTaskResponse{}, err
 	}
-	// Include build ID only if the task is spooled. The returned build ID is used by History to update
-	// mutable state (and visibility) when the first workflow task is spooled.
-	// For sync-match case, History has already received the build ID in the RecordActivityTaskStarted call.
-	// By omitting the build ID from this response we help History immediately know that no MS update is needed.
-	return &matchingservice.AddActivityTaskResponse{AssignedBuildId: buildId}, err
+	return &matchingservice.AddActivityTaskResponse{AssignedBuildId: assignedBuildId}, err
 }
 
 // AddWorkflowTask - adds a workflow task.
@@ -178,16 +173,11 @@ func (h *Handler) AddWorkflowTask(
 		h.reportForwardedPerTaskQueueCounter(opMetrics, namespace.ID(request.GetNamespaceId()))
 	}
 
-	buildId, syncMatch, err := h.engine.AddWorkflowTask(ctx, request)
+	assignedBuildId, syncMatch, err := h.engine.AddWorkflowTask(ctx, request)
 	if syncMatch {
 		opMetrics.Timer(metrics.SyncMatchLatencyPerTaskQueue.Name()).Record(time.Since(startT))
-		return &matchingservice.AddWorkflowTaskResponse{}, err
 	}
-	// Include build ID only if the task is spooled. The returned build ID is used by History to update
-	// mutable state (and visibility) when the first workflow task is spooled.
-	// For sync-match case, History has already received the build ID in the RecordWorkflowTaskStarted call.
-	// By omitting the build ID from this response we help History immediately know that no MS update is needed.
-	return &matchingservice.AddWorkflowTaskResponse{AssignedBuildId: buildId}, err
+	return &matchingservice.AddWorkflowTaskResponse{AssignedBuildId: assignedBuildId}, err
 }
 
 // PollActivityTaskQueue - long poll for an activity task.

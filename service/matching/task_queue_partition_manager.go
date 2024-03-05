@@ -191,7 +191,8 @@ func (pm *taskQueuePartitionManagerImpl) AddTask(
 	// We don't need the userDataChanged channel here because:
 	// - if we sync match, we're done
 	// - if we spool to db, we'll re-resolve when it comes out of the db
-	pq, _, err := pm.getPhysicalQueueForAdd(ctx, params.taskInfo.VersionDirective)
+	directive := params.taskInfo.VersionDirective
+	pq, _, err := pm.getPhysicalQueueForAdd(ctx, directive)
 	if err != nil {
 		return "", false, err
 	}
@@ -207,7 +208,18 @@ func (pm *taskQueuePartitionManagerImpl) AddTask(
 	}
 
 	syncMatched, err = pq.AddTask(ctx, params)
-	return pq.QueueKey().BuildId(), syncMatched, err
+	var assignedBuildId string
+	if directive.GetAssignNew() != nil {
+		// return build ID only if a new one is assigned.
+		if !syncMatched {
+			// return build ID only if the task is spooled. The returned build ID is used by History to update
+			// mutable state (and visibility) when the first workflow task is spooled.
+			// For sync-match case, History has already received the build ID in the Record*TaskStarted call.
+			// By omitting the build ID from this response we help History immediately know that no MS update is needed.
+			assignedBuildId = pq.QueueKey().BuildId()
+		}
+	}
+	return assignedBuildId, syncMatched, err
 }
 
 func (pm *taskQueuePartitionManagerImpl) PollTask(
@@ -489,7 +501,7 @@ func (pm *taskQueuePartitionManagerImpl) getPhysicalQueueForAdd(
 		// - task queue is switching to the new versioning API and the build ID is not registered in version sets.
 		// - task queue is still using the old API but a failover happened before verisoning data fully propagate.
 		// the second case is unlikely, and we do not support it anymore considering the old API is deprecated.
-		_, err := checkVersionForStickyAdd(data, directive.GetBuildId())
+		_, err := checkVersionForStickyAdd(data, directive.GetAssignedBuildId())
 		if err != nil {
 			return nil, nil, err
 		}
@@ -499,7 +511,7 @@ func (pm *taskQueuePartitionManagerImpl) getPhysicalQueueForAdd(
 	var buildId string
 	var versionSet string
 	switch dir := directive.GetValue().(type) {
-	case *taskqueuespb.TaskVersionDirective_UseDefault:
+	case *taskqueuespb.TaskVersionDirective_AssignNew:
 		// Need to assign build ID. Assignment rules take precedence, fallback to version sets if no matching rule is found
 		if len(data.GetAssignmentRules()) > 0 {
 			buildId = FindAssignmentBuildId(data.GetAssignmentRules())
@@ -510,7 +522,7 @@ func (pm *taskQueuePartitionManagerImpl) getPhysicalQueueForAdd(
 				return nil, nil, err
 			}
 		}
-	case *taskqueuespb.TaskVersionDirective_BuildId:
+	case *taskqueuespb.TaskVersionDirective_AssignedBuildId:
 		// Already assigned, need to stay in the same version set or build ID. If TQ has version sets, first try to
 		// redirect to the version set based on the build ID. If the build ID does not belong to any version set,
 		// assume user wants to use the new API
@@ -521,7 +533,7 @@ func (pm *taskQueuePartitionManagerImpl) getPhysicalQueueForAdd(
 			}
 		}
 		if versionSet == "" {
-			buildId = dir.BuildId
+			buildId = dir.AssignedBuildId
 		}
 	}
 
@@ -537,10 +549,10 @@ func (pm *taskQueuePartitionManagerImpl) getPhysicalQueueForAdd(
 func (pm *taskQueuePartitionManagerImpl) getVersionSetForAdd(directive *taskqueuespb.TaskVersionDirective, data *persistencespb.VersioningData) (string, error) {
 	var buildId string
 	switch dir := directive.GetValue().(type) {
-	case *taskqueuespb.TaskVersionDirective_UseDefault:
+	case *taskqueuespb.TaskVersionDirective_AssignNew:
 		// leave buildId = "", lookupVersionSetForAdd understands that to mean "default"
-	case *taskqueuespb.TaskVersionDirective_BuildId:
-		buildId = dir.BuildId
+	case *taskqueuespb.TaskVersionDirective_AssignedBuildId:
+		buildId = dir.AssignedBuildId
 	default:
 		// Unversioned task, leave on unversioned queue.
 		return "", nil
