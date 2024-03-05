@@ -88,6 +88,7 @@ type (
 		controller            *gomock.Controller
 		mockHistoryClient     *historyservicemock.MockHistoryServiceClient
 		mockMatchingClient    *matchingservicemock.MockMatchingServiceClient
+		ns                    *namespace.Namespace
 		mockNamespaceCache    *namespace.MockRegistry
 		mockVisibilityManager *manager.MockVisibilityManager
 
@@ -117,12 +118,12 @@ func createTestMatchingEngine(
 	return newMatchingEngine(config, tm, mockHistoryClient, logger, namespaceRegistry, matchingClient, mockVisibilityManager)
 }
 
-func createMockNamespaceCache(controller *gomock.Controller, nsName namespace.Name) *namespace.MockRegistry {
+func createMockNamespaceCache(controller *gomock.Controller, nsName namespace.Name) (*namespace.Namespace, *namespace.MockRegistry) {
 	ns := namespace.NewLocalNamespaceForTest(&persistencespb.NamespaceInfo{Name: nsName.String()}, nil, "")
 	mockNamespaceCache := namespace.NewMockRegistry(controller)
 	mockNamespaceCache.EXPECT().GetNamespaceByID(gomock.Any()).Return(ns, nil).AnyTimes()
 	mockNamespaceCache.EXPECT().GetNamespaceName(gomock.Any()).Return(ns.Name(), nil).AnyTimes()
-	return mockNamespaceCache
+	return ns, mockNamespaceCache
 }
 
 func TestMatchingEngineSuite(t *testing.T) {
@@ -151,7 +152,7 @@ func (s *matchingEngineSuite) SetupTest() {
 	s.mockMatchingClient.EXPECT().ReplicateTaskQueueUserData(gomock.Any(), gomock.Any()).
 		Return(&matchingservice.ReplicateTaskQueueUserDataResponse{}, nil).AnyTimes()
 	s.taskManager = newTestTaskManager(s.logger)
-	s.mockNamespaceCache = createMockNamespaceCache(s.controller, matchingTestNamespace)
+	s.ns, s.mockNamespaceCache = createMockNamespaceCache(s.controller, matchingTestNamespace)
 	s.mockVisibilityManager = manager.NewMockVisibilityManager(s.controller)
 	s.mockVisibilityManager.EXPECT().Close().AnyTimes()
 
@@ -196,7 +197,8 @@ func newMatchingEngine(
 
 func (s *matchingEngineSuite) newPartitionManager(prtn tqid.Partition, config *Config) taskQueuePartitionManager {
 	tqConfig := newTaskQueueConfig(prtn.TaskQueue(), config, matchingTestNamespace)
-	pm, err := newTaskQueuePartitionManager(s.matchingEngine, nil, prtn, tqConfig, &mockUserDataManager{})
+
+	pm, err := newTaskQueuePartitionManager(s.matchingEngine, s.ns, prtn, tqConfig, &mockUserDataManager{})
 	s.Require().NoError(err)
 	return pm
 }

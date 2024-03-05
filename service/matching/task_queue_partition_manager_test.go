@@ -61,17 +61,16 @@ func TestPartitionManagerSuite(t *testing.T) {
 
 func (s *PartitionManagerTestSuite) SetupTest() {
 	s.controller = gomock.NewController(s.T())
-	ns := namespace.Name(namespaceName)
-	registry := createMockNamespaceCache(s.controller, ns)
+	ns, registry := createMockNamespaceCache(s.controller, namespace.Name(namespaceName))
 	config := NewConfig(dynamicconfig.NewNoopCollection(), false, false)
 	matchingClientMock := matchingservicemock.NewMockMatchingServiceClient(s.controller)
 	me := createTestMatchingEngine(s.controller, config, matchingClientMock, registry)
 	f, err := tqid.NewTaskQueueFamily(namespaceId, taskQueueName)
 	s.Assert().NoError(err)
 	partition := f.TaskQueue(enumspb.TASK_QUEUE_TYPE_WORKFLOW).RootPartition()
-	tqConfig := newTaskQueueConfig(partition.TaskQueue(), me.config, ns)
+	tqConfig := newTaskQueueConfig(partition.TaskQueue(), me.config, ns.Name())
 	s.userDataMgr = &mockUserDataManager{}
-	pm, err := newTaskQueuePartitionManager(me, nil, partition, tqConfig, s.userDataMgr)
+	pm, err := newTaskQueuePartitionManager(me, ns, partition, tqConfig, s.userDataMgr)
 	s.Assert().NoError(err)
 	s.partitionMgr = pm
 	me.Start()

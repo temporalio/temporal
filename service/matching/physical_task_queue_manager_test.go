@@ -346,8 +346,7 @@ func createTestTaskQueueManagerWithConfig(
 	opts ...taskQueueManagerOpt,
 ) (*physicalTaskQueueManagerImpl, error) {
 	nsName := namespace.Name("ns-name")
-	registry := createMockNamespaceCache(controller, nsName)
-	ns, _ := registry.GetNamespace(nsName)
+	ns, registry := createMockNamespaceCache(controller, nsName)
 	me := createTestMatchingEngine(controller, testOpts.config, testOpts.matchingClientMock, registry)
 	partition := testOpts.dbq.Partition()
 	tqConfig := newTaskQueueConfig(partition.TaskQueue(), me.config, nsName)
