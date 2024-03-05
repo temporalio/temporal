@@ -673,9 +673,6 @@ func (wh *WorkflowHandler) RespondWorkflowTaskCompleted(
 	if len(request.GetIdentity()) > wh.config.MaxIDLengthLimit() {
 		return nil, errIdentityTooLong
 	}
-	if err := common.ValidateUTF8String("Identity", request.GetIdentity()); err != nil {
-		return nil, err
-	}
 
 	if err := wh.validateVersioningInfo(
 		request.Namespace,

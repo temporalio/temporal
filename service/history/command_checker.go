@@ -27,7 +27,6 @@ package history
 import (
 	"fmt"
 	"strings"
-	"unicode/utf8"
 
 	"github.com/pborman/uuid"
 	commandpb "go.temporal.io/api/command/v1"
@@ -544,8 +543,8 @@ func (v *commandAttrValidator) validateCancelExternalWorkflowExecutionAttributes
 	if len(workflowID) > v.maxIDLengthLimit {
 		return failedCause, serviceerror.NewInvalidArgument(fmt.Sprintf("WorkflowId on RequestCancelExternalWorkflowExecutionCommand exceeds length limit. WorkflowId=%s Length=%d Limit=%d RunId=%s Namespace=%s", workflowID, len(workflowID), v.maxIDLengthLimit, runID, ns))
 	}
-	if !utf8.ValidString(workflowID) {
-		return failedCause, serviceerror.NewInvalidArgument(fmt.Sprintf("WorkflowId %v is not a valid UTF-8 string", workflowID))
+	if err := common.ValidateUTF8String("WorkflowId", workflowID); err != nil {
+		return failedCause, err
 	}
 	if runID != "" && uuid.Parse(runID) == nil {
 		return failedCause, serviceerror.NewInvalidArgument(fmt.Sprintf("Invalid RunId set on RequestCancelExternalWorkflowExecutionCommand. WorkflowId=%s RunId=%s Namespace=%s", workflowID, runID, ns))
@@ -592,10 +591,9 @@ func (v *commandAttrValidator) validateSignalExternalWorkflowExecutionAttributes
 	if len(workflowID) > v.maxIDLengthLimit {
 		return failedCause, serviceerror.NewInvalidArgument(fmt.Sprintf("WorkflowId on SignalExternalWorkflowExecutionCommand exceeds length limit. WorkflowId=%s Length=%d Limit=%d Namespace=%s RunId=%s SignalName=%s", workflowID, len(workflowID), v.maxIDLengthLimit, ns, targetRunID, signalName))
 	}
-	if !utf8.ValidString(workflowID) {
-		return failedCause, serviceerror.NewInvalidArgument(fmt.Sprintf("WorkflowId %v is not a valid UTF-8 string", workflowID))
+	if err := common.ValidateUTF8String("WorkflowId", workflowID); err != nil {
+		return failedCause, err
 	}
-
 	if targetRunID != "" && uuid.Parse(targetRunID) == nil {
 		return failedCause, serviceerror.NewInvalidArgument(fmt.Sprintf("Invalid RunId set on SignalExternalWorkflowExecutionCommand. WorkflowId=%s Namespace=%s RunId=%s SignalName=%s", workflowID, ns, targetRunID, signalName))
 	}
@@ -759,12 +757,12 @@ func (v *commandAttrValidator) validateStartChildExecutionAttributes(
 		return failedCause, serviceerror.NewInvalidArgument(fmt.Sprintf("WorkflowType on StartChildWorkflowExecutionCommand exceeds length limit. WorkflowId=%s WorkflowType=%s Length=%d Limit=%d Namespace=%s", wfID, wfType, len(wfType), v.maxIDLengthLimit, ns))
 	}
 
-	if !utf8.ValidString(wfID) {
-		return failedCause, serviceerror.NewInvalidArgument(fmt.Sprintf("WorkflowId %v is not a valid UTF-8 string", wfID))
+	if err := common.ValidateUTF8String("WorkflowId", wfID); err != nil {
+		return failedCause, err
 	}
 
-	if !utf8.ValidString(wfType) {
-		return failedCause, serviceerror.NewInvalidArgument(fmt.Sprintf("WorkflowType %v is not a valid UTF-8 string", wfType))
+	if err := common.ValidateUTF8String("WorkflowType", wfType); err != nil {
+		return failedCause, err
 	}
 
 	if err := timer.ValidateAndCapTimer(attributes.GetWorkflowExecutionTimeout()); err != nil {
