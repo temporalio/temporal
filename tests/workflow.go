@@ -151,7 +151,6 @@ func (s *FunctionalSuite) TestStartWorkflowExecution_RejectsInvalidUTF8() {
 			}
 
 			tc.Mutator(request)
-			frontend.SetLogf(s.T().Logf)
 
 			_, err := s.engine.StartWorkflowExecution(NewContext(), request)
 			assert.Error(s.T(), err, "Request should fail")
