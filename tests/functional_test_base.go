@@ -136,7 +136,7 @@ func (s *FunctionalTestBase) setupSuite(defaultClusterConfigFile string, options
 	if clusterConfig.FrontendAddress != "" {
 		s.Logger.Info("Running functional test against specified frontend", tag.Address(TestFlags.FrontendAddr))
 
-		connection, err := rpc.Dial(TestFlags.FrontendAddr, nil, s.Logger)
+		connection, err := rpc.Dial(TestFlags.FrontendAddr, nil, s.Logger, nil, nil)
 		if err != nil {
 			s.Require().NoError(err)
 		}

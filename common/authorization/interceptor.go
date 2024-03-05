@@ -57,8 +57,8 @@ type (
 const (
 	RequestUnauthorized = "Request unauthorized."
 
-	defaultAuthHeaderName      = "authorization"
-	defaultAuthExtraHeaderName = "authorization-extras"
+	DefaultAuthHeaderName      = "authorization"
+	DefaultAuthExtraHeaderName = "authorization-extras"
 )
 
 var (
@@ -204,8 +204,8 @@ func NewAuthorizationInterceptor(
 		metricsHandler:      metricsHandler,
 		logger:              logger,
 		audienceGetter:      audienceGetter,
-		authHeaderName:      util.Coalesce(authHeaderName, defaultAuthHeaderName),
-		authExtraHeaderName: util.Coalesce(authExtraHeaderName, defaultAuthExtraHeaderName),
+		authHeaderName:      util.Coalesce(authHeaderName, DefaultAuthHeaderName),
+		authExtraHeaderName: util.Coalesce(authExtraHeaderName, DefaultAuthExtraHeaderName),
 	}).Interceptor
 }
 

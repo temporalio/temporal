@@ -576,7 +576,7 @@ func (c *temporalImpl) startHistory(
 		// However current interface for getting history client doesn't specify which client it needs and the tests that use this API
 		// depends on the fact that there's only one history host.
 		// Need to change those tests and modify the interface for getting history client.
-		historyConnection, err := rpc.Dial(c.HistoryServiceAddress()[0], nil, c.logger)
+		historyConnection, err := rpc.Dial(c.HistoryServiceAddress()[0], nil, c.logger, nil, nil)
 		if err != nil {
 			c.logger.Fatal("Failed to create connection for history", tag.Error(err))
 		}
@@ -664,7 +664,7 @@ func (c *temporalImpl) startMatching(hosts map[primitives.ServiceName][]string, 
 		}
 	}
 
-	matchingConnection, err := rpc.Dial(c.MatchingGRPCServiceAddress(), nil, c.logger)
+	matchingConnection, err := rpc.Dial(c.MatchingGRPCServiceAddress(), nil, c.logger, nil, nil)
 	if err != nil {
 		c.logger.Fatal("Failed to create connection for matching", tag.Error(err))
 	}
@@ -884,6 +884,7 @@ func (c *temporalImpl) newRPCFactory(
 		tlsConfigProvider,
 		grpcResolver.MakeURL(primitives.FrontendService),
 		frontendTLSConfig,
+		nil,
 		nil,
 	), nil
 }

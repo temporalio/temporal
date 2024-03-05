@@ -72,11 +72,12 @@ func GetValues(ctx context.Context, headerNames ...string) []string {
 // Propagate propagates version headers from incoming context to outgoing context.
 // It copies all headers to outgoing context only if they are exist in incoming context
 // and doesn't exist in outgoing context already.
-func Propagate(ctx context.Context) context.Context {
+func Propagate(ctx context.Context, extraHeaders []string) context.Context {
+	headersToPropagate := append(propagateHeaders, extraHeaders...)
 	if mdIncoming, ok := metadata.FromIncomingContext(ctx); ok {
 		var headersToAppend []string
 		mdOutgoing, mdOutgoingExist := metadata.FromOutgoingContext(ctx)
-		for _, headerName := range propagateHeaders {
+		for _, headerName := range headersToPropagate {
 			if incomingValue := mdIncoming.Get(headerName); len(incomingValue) > 0 {
 				if mdOutgoingExist {
 					if outgoingValue := mdOutgoing.Get(headerName); len(outgoingValue) > 0 {
