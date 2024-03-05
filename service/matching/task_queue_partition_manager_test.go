@@ -84,29 +84,29 @@ func (s *PartitionManagerTestSuite) SetupTest() {
 }
 
 func (s *PartitionManagerTestSuite) TestAddTaskNoRules_NoVersionDirective() {
-	s.validateAddTask("", nil, nil)
+	s.validateAddTask("", false, nil, nil)
 	s.validatePollTask("", false)
 
 	// a poller with non-empty build ID should go to unversioned queue when useVersioning=false
-	s.validateAddTask("", nil, nil)
+	s.validateAddTask("", false, nil, nil)
 	s.validatePollTask("buildXYZ", false)
 }
 
 func (s *PartitionManagerTestSuite) TestAddTaskNoRules_AssignedTask() {
 	bld := "buildXYZ"
-	s.validateAddTask("", nil, &taskqueue.TaskVersionDirective{Value: &taskqueue.TaskVersionDirective_AssignedBuildId{AssignedBuildId: bld}})
+	s.validateAddTask("", false, nil, &taskqueue.TaskVersionDirective{Value: &taskqueue.TaskVersionDirective_AssignedBuildId{AssignedBuildId: bld}})
 	s.validatePollTask(bld, true)
 }
 
 func (s *PartitionManagerTestSuite) TestAddTaskNoRules_UnassignedTask() {
-	s.validateAddTask("", nil, &taskqueue.TaskVersionDirective{Value: &taskqueue.TaskVersionDirective_AssignNew{AssignNew: &emptypb.Empty{}}})
+	s.validateAddTask("", false, nil, &taskqueue.TaskVersionDirective{Value: &taskqueue.TaskVersionDirective_AssignNew{AssignNew: &emptypb.Empty{}}})
 	s.validatePollTask("", false)
 }
 
 func (s *PartitionManagerTestSuite) TestAddTaskWithAssignmentRules_NoVersionDirective() {
 	buildId := "bld"
 	versioningData := &persistence.VersioningData{AssignmentRules: []*persistence.AssignmentRule{createFullAssignmentRule(buildId)}}
-	s.validateAddTask("", versioningData, nil)
+	s.validateAddTask("", false, versioningData, nil)
 	s.validatePollTask("", false)
 }
 
@@ -114,14 +114,14 @@ func (s *PartitionManagerTestSuite) TestAddTaskWithAssignmentRules_AssignedTask(
 	ruleBld := "rule-bld"
 	versioningData := &persistence.VersioningData{AssignmentRules: []*persistence.AssignmentRule{createFullAssignmentRule(ruleBld)}}
 	taskBld := "task-bld"
-	s.validateAddTask("", versioningData, &taskqueue.TaskVersionDirective{Value: &taskqueue.TaskVersionDirective_AssignedBuildId{AssignedBuildId: taskBld}})
+	s.validateAddTask("", false, versioningData, &taskqueue.TaskVersionDirective{Value: &taskqueue.TaskVersionDirective_AssignedBuildId{AssignedBuildId: taskBld}})
 	s.validatePollTask(taskBld, true)
 }
 
 func (s *PartitionManagerTestSuite) TestAddTaskWithAssignmentRules_UnassignedTask() {
 	ruleBld := "rule-bld"
 	versioningData := &persistence.VersioningData{AssignmentRules: []*persistence.AssignmentRule{createFullAssignmentRule(ruleBld)}}
-	s.validateAddTask(ruleBld, versioningData, &taskqueue.TaskVersionDirective{Value: &taskqueue.TaskVersionDirective_AssignNew{AssignNew: &emptypb.Empty{}}})
+	s.validateAddTask(ruleBld, false, versioningData, &taskqueue.TaskVersionDirective{Value: &taskqueue.TaskVersionDirective_AssignNew{AssignNew: &emptypb.Empty{}}})
 	s.validatePollTask(ruleBld, true)
 }
 
@@ -129,7 +129,7 @@ func (s *PartitionManagerTestSuite) TestAddTaskWithAssignmentRules_UnassignedTas
 	ruleBld := "rule-bld"
 	versioningData := &persistence.VersioningData{AssignmentRules: []*persistence.AssignmentRule{createFullAssignmentRule(ruleBld)}}
 	s.validatePollTaskSyncMatch(ruleBld, true)
-	s.validateAddTask("", versioningData, &taskqueue.TaskVersionDirective{Value: &taskqueue.TaskVersionDirective_AssignNew{AssignNew: &emptypb.Empty{}}})
+	s.validateAddTask("", true, versioningData, &taskqueue.TaskVersionDirective{Value: &taskqueue.TaskVersionDirective_AssignNew{AssignNew: &emptypb.Empty{}}})
 }
 
 func (s *PartitionManagerTestSuite) TestAddTaskWithAssignmentRulesAndVersionSets_NoVersionDirective() {
@@ -140,7 +140,7 @@ func (s *PartitionManagerTestSuite) TestAddTaskWithAssignmentRulesAndVersionSets
 		VersionSets:     []*persistence.CompatibleVersionSet{vs},
 	}
 
-	s.validateAddTask("", versioningData, nil)
+	s.validateAddTask("", false, versioningData, nil)
 	// make sure version set queue is not loaded
 	s.Assert().Nil(s.partitionMgr.versionedQueues[vs.SetIds[0]])
 	s.validatePollTask("", false)
@@ -155,13 +155,13 @@ func (s *PartitionManagerTestSuite) TestAddTaskWithAssignmentRulesAndVersionSets
 	}
 
 	taskBld := "task-bld"
-	s.validateAddTask("", versioningData, &taskqueue.TaskVersionDirective{Value: &taskqueue.TaskVersionDirective_AssignedBuildId{AssignedBuildId: taskBld}})
+	s.validateAddTask("", false, versioningData, &taskqueue.TaskVersionDirective{Value: &taskqueue.TaskVersionDirective_AssignedBuildId{AssignedBuildId: taskBld}})
 	// make sure version set queue is not loaded
 	s.Assert().Nil(s.partitionMgr.versionedQueues[vs.SetIds[0]])
 	s.validatePollTask(taskBld, true)
 
 	// now use the version set build id
-	s.validateAddTask("", versioningData, &taskqueue.TaskVersionDirective{Value: &taskqueue.TaskVersionDirective_AssignedBuildId{AssignedBuildId: vs.BuildIds[0].Id}})
+	s.validateAddTask("", false, versioningData, &taskqueue.TaskVersionDirective{Value: &taskqueue.TaskVersionDirective_AssignedBuildId{AssignedBuildId: vs.BuildIds[0].Id}})
 	// make sure version set queue is loaded
 	s.Assert().NotNil(s.partitionMgr.versionedQueues[vs.SetIds[0]])
 	s.validatePollTask(vs.BuildIds[0].Id, true)
@@ -174,18 +174,23 @@ func (s *PartitionManagerTestSuite) TestAddTaskWithAssignmentRulesAndVersionSets
 		AssignmentRules: []*persistence.AssignmentRule{createFullAssignmentRule(ruleBld)},
 		VersionSets:     []*persistence.CompatibleVersionSet{vs},
 	}
-	s.validateAddTask(ruleBld, versioningData, &taskqueue.TaskVersionDirective{Value: &taskqueue.TaskVersionDirective_AssignNew{AssignNew: &emptypb.Empty{}}})
+	s.validateAddTask(ruleBld, false, versioningData, &taskqueue.TaskVersionDirective{Value: &taskqueue.TaskVersionDirective_AssignNew{AssignNew: &emptypb.Empty{}}})
 	// make sure version set queue is not loaded
 	s.Assert().Nil(s.partitionMgr.versionedQueues[vs.SetIds[0]])
 	s.validatePollTask(ruleBld, true)
 }
 
-func (s *PartitionManagerTestSuite) validateAddTask(expectedBuildId string, versioningData *persistence.VersioningData, directive *taskqueue.TaskVersionDirective) {
-	ctx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
+func (s *PartitionManagerTestSuite) validateAddTask(expectedBuildId string, expectedSyncMatch bool, versioningData *persistence.VersioningData, directive *taskqueue.TaskVersionDirective) {
+	timeout := 100 * time.Millisecond
+	if expectedSyncMatch {
+		// trySyncMatch "eats" one second from the context timeout!
+		timeout += time.Second
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), timeout)
 	defer cancel()
 
 	s.userDataMgr.updateVersioningData(versioningData)
-	buildId, _, err := s.partitionMgr.AddTask(ctx, addTaskParams{
+	buildId, syncMatch, err := s.partitionMgr.AddTask(ctx, addTaskParams{
 		taskInfo: &persistence.TaskInfo{
 			NamespaceId:      namespaceId,
 			RunId:            "run",
@@ -194,12 +199,13 @@ func (s *PartitionManagerTestSuite) validateAddTask(expectedBuildId string, vers
 		},
 	})
 	s.Assert().NoError(err)
+	s.Assert().Equal(expectedSyncMatch, syncMatch)
 	s.Assert().Equal(expectedBuildId, buildId)
 }
 
 func (s *PartitionManagerTestSuite) validatePollTaskSyncMatch(buildId string, useVersioning bool) {
 	go func() {
-		ctx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
+		ctx, cancel := context.WithTimeout(context.Background(), 200*time.Millisecond)
 		defer cancel()
 
 		task, err := s.partitionMgr.PollTask(
@@ -212,6 +218,7 @@ func (s *PartitionManagerTestSuite) validatePollTaskSyncMatch(buildId string, us
 		)
 		s.Assert().NoError(err)
 		s.Assert().NotNil(task)
+		s.Assert().NotNil(task.responseC)
 		close(task.responseC)
 	}()
 	// give time for poller to start polling before resuming execution
