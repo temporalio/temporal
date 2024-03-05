@@ -2897,6 +2897,18 @@ func TestContextNearDeadline(t *testing.T) {
 	assert.False(t, contextNearDeadline(ctx, time.Millisecond))
 }
 
+func TestValidateRequestId(t *testing.T) {
+	req := workflowservice.StartWorkflowExecutionRequest{RequestId: ""}
+	err := validateRequestId(&req.RequestId, 100)
+	assert.Nil(t, err)
+	assert.Len(t, req.RequestId, 36) // new UUID length
+
+	req.RequestId = "\x87\x01"
+	err = validateRequestId(&req.RequestId, 100)
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "not a valid UTF-8 string")
+}
+
 func (s *workflowHandlerSuite) Test_DeleteWorkflowExecution() {
 	config := s.newConfig()
 	wh := s.getWorkflowHandler(config)
