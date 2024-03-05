@@ -207,7 +207,7 @@ func (s *ContextTest) SetHistoryClientForTesting(client historyservice.HistorySe
 	s.historyClient = client
 }
 
-// SetStateMachineRegistry the state machine registry on this shard.
+// SetStateMachineRegistry sets the state machine registry on this shard.
 func (s *ContextTest) SetStateMachineRegistry(reg *hsm.Registry) {
 	s.stateMachineRegistry = reg
 }
