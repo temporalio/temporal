@@ -2615,3 +2615,21 @@ func (s *workflowHandlerSuite) Test_DeleteWorkflowExecution() {
 	s.NoError(err)
 	s.NotNil(resp)
 }
+
+func (s *workflowHandlerSuite) Test_ValidateTaskQueue() {
+	wh := s.getWorkflowHandler(s.newConfig())
+
+	tq := taskqueuepb.TaskQueue{Name: "\x87\x01"}
+	err := wh.validateTaskQueue(&tq, "default")
+	s.Error(err)
+	s.Contains(err.Error(), "is not a valid UTF-8 string")
+
+	tq = taskqueuepb.TaskQueue{Name: "valid-tq-name"}
+	err = wh.validateTaskQueue(&tq, "default")
+	s.NoError(err)
+
+	tq = taskqueuepb.TaskQueue{Name: "valid-tq-name", NormalName: "\x87\x01", Kind: enumspb.TASK_QUEUE_KIND_STICKY}
+	err = wh.validateTaskQueue(&tq, "default")
+	s.Error(err)
+	s.Contains(err.Error(), "is not a valid UTF-8 string")
+}
