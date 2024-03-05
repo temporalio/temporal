@@ -172,7 +172,7 @@ func newMatchingEngine(
 		historyClient:        mockHistoryClient,
 		taskQueues:           make(map[taskQueueID]taskQueueManager),
 		taskQueueCount:       make(map[taskQueueCounterKey]int),
-		lockableQueryTaskMap: lockableQueryTaskMap{queryTaskMap: make(map[string]chan *queryResult)},
+		lockableQueryResultMap: lockableResultMap[*queryResult]{resultMap: make(map[string]chan *queryResult)},
 		logger:               logger,
 		throttledLogger:      log.ThrottledLogger(logger),
 		metricsHandler:       metrics.NoopMetricsHandler,

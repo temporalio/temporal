@@ -44,11 +44,17 @@ type (
 		taskID  string
 		request *matchingservice.QueryWorkflowRequest
 	}
+	// nexusTaskInfo contains the info for a nexus task
+	nexusTaskInfo struct {
+		taskID  string
+		request *matchingservice.DispatchNexusTaskRequest
+	}
 	// startedTaskInfo contains info for any task received from
 	// another matching host. This type of task is already marked as started
 	startedTaskInfo struct {
 		workflowTaskInfo *matchingservice.PollWorkflowTaskQueueResponse
 		activityTaskInfo *matchingservice.PollActivityTaskQueueResponse
+		nexusTaskInfo    *matchingservice.PollNexusTaskQueueResponse
 	}
 	// internalTask represents an activity, workflow, query or started (received from another host).
 	// this struct is more like a union and only one of [ query, event, forwarded ] is
@@ -56,6 +62,7 @@ type (
 	internalTask struct {
 		event            *genericTaskInfo // non-nil for activity or workflow task that's locally generated
 		query            *queryTaskInfo   // non-nil for a query task that's locally sync matched
+		nexus            *nexusTaskInfo   // non-nil for a nexus task that's locally sync matched
 		started          *startedTaskInfo // non-nil for a task received from a parent partition which is already started
 		namespace        namespace.Name
 		source           enumsspb.TaskSource
@@ -92,6 +99,20 @@ func newInternalQueryTask(
 ) *internalTask {
 	return &internalTask{
 		query: &queryTaskInfo{
+			taskID:  taskID,
+			request: request,
+		},
+		forwardedFrom: request.GetForwardedSource(),
+		responseC:     make(chan error, 1),
+	}
+}
+
+func newInternalNexusTask(
+	taskID string,
+	request *matchingservice.DispatchNexusTaskRequest,
+) *internalTask {
+	return &internalTask{
+		nexus: &nexusTaskInfo{
 			taskID:  taskID,
 			request: request,
 		},
@@ -152,6 +173,15 @@ func (task *internalTask) pollWorkflowTaskQueueResponse() *matchingservice.PollW
 func (task *internalTask) pollActivityTaskQueueResponse() *matchingservice.PollActivityTaskQueueResponse {
 	if task.isStarted() {
 		return task.started.activityTaskInfo
+	}
+	return nil
+}
+
+// pollNexusTaskQueueResponse returns the poll response for a nexus task that is ready for dispatching. This method
+// should only be called when isStarted() is true
+func (task *internalTask) pollNexusTaskQueueResponse() *matchingservice.PollNexusTaskQueueResponse {
+	if task.isStarted() {
+		return task.started.nexusTaskInfo
 	}
 	return nil
 }

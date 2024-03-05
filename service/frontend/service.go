@@ -188,6 +188,11 @@ type Config struct {
 	AccessHistoryFraction            dynamicconfig.FloatPropertyFn
 	AdminDeleteAccessHistoryFraction dynamicconfig.FloatPropertyFn
 
+	// EnableNexusHTTPHandler controls whether to register a handler for Nexus HTTP requests.
+	EnableNexusHTTPHandler dynamicconfig.BoolPropertyFn
+
+	// EnableCallbackAttachment enables attaching callbacks to workflows.
+	EnableCallbackAttachment    dynamicconfig.BoolPropertyFnWithNamespaceFilter
 	AdminEnableListHistoryTasks dynamicconfig.BoolPropertyFn
 }
 
@@ -287,6 +292,8 @@ func NewConfig(
 		AccessHistoryFraction:            dc.GetFloat64Property(dynamicconfig.FrontendAccessHistoryFraction, 0.0),
 		AdminDeleteAccessHistoryFraction: dc.GetFloat64Property(dynamicconfig.FrontendAdminDeleteAccessHistoryFraction, 0.0),
 
+		EnableNexusHTTPHandler:      dc.GetBoolProperty(dynamicconfig.FrontendEnableNexusHTTPHandler, false),
+		EnableCallbackAttachment:    dc.GetBoolPropertyFnWithNamespaceFilter(dynamicconfig.FrontendEnableCallbackAttachment, false),
 		AdminEnableListHistoryTasks: dc.GetBoolProperty(dynamicconfig.AdminEnableListHistoryTasks, true),
 	}
 }

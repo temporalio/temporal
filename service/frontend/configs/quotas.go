@@ -46,13 +46,16 @@ var (
 	// long-running. The QueryWorkflow and UpdateWorkflowExecution methods are long-running because they both block
 	// until a background WFT is complete.
 	ExecutionAPICountLimitOverride = map[string]int{
-		"PollActivityTaskQueue":       1,
-		"PollWorkflowTaskQueue":       1,
-		"PollWorkflowExecutionUpdate": 1,
-		"QueryWorkflow":               1,
-		"UpdateWorkflowExecution":     1,
-		"GetWorkflowExecutionHistory": 1,
-		"PollNexusTaskQueue":          1,
+		"/temporal.api.workflowservice.v1.WorkflowService/PollActivityTaskQueue":       1,
+		"/temporal.api.workflowservice.v1.WorkflowService/PollWorkflowTaskQueue":       1,
+		"/temporal.api.workflowservice.v1.WorkflowService/PollWorkflowExecutionUpdate": 1,
+		"/temporal.api.workflowservice.v1.WorkflowService/QueryWorkflow":               1,
+		"/temporal.api.workflowservice.v1.WorkflowService/UpdateWorkflowExecution":     1,
+		"/temporal.api.workflowservice.v1.WorkflowService/GetWorkflowExecutionHistory": 1,
+		"/temporal.api.workflowservice.v1.WorkflowService/PollNexusTaskQueue":          1,
+
+		// DispatchNexusTask is potentially long running, it's classified in the same bucket as QueryWorkflow.
+		"/temporal.api.nexusservice.v1.NexusService/DispatchNexusTask": 1,
 	}
 
 	// APIToPriority determines common API priorities.
@@ -60,80 +63,81 @@ var (
 	// If APIs result in replication in namespace replication queue, they belong to NamespaceReplicationInducingAPIToPriority
 	APIToPriority = map[string]int{
 		// P0: System level APIs
-		"GetClusterInfo":      0,
-		"GetSystemInfo":       0,
-		"GetSearchAttributes": 0,
-		"DescribeNamespace":   0,
-		"ListNamespaces":      0,
-		"DeprecateNamespace":  0,
+		"/temporal.api.workflowservice.v1.WorkflowService/GetClusterInfo":      0,
+		"/temporal.api.workflowservice.v1.WorkflowService/GetSystemInfo":       0,
+		"/temporal.api.workflowservice.v1.WorkflowService/GetSearchAttributes": 0,
+		"/temporal.api.workflowservice.v1.WorkflowService/DescribeNamespace":   0,
+		"/temporal.api.workflowservice.v1.WorkflowService/ListNamespaces":      0,
+		"/temporal.api.workflowservice.v1.WorkflowService/DeprecateNamespace":  0,
 
 		// P1: External Event APIs
-		"SignalWorkflowExecution":          1,
-		"SignalWithStartWorkflowExecution": 1,
-		"StartWorkflowExecution":           1,
-		"UpdateWorkflowExecution":          1,
-		"CreateSchedule":                   1,
-		"StartBatchOperation":              1,
+		"/temporal.api.workflowservice.v1.WorkflowService/SignalWorkflowExecution":          1,
+		"/temporal.api.workflowservice.v1.WorkflowService/SignalWithStartWorkflowExecution": 1,
+		"/temporal.api.workflowservice.v1.WorkflowService/StartWorkflowExecution":           1,
+		"/temporal.api.workflowservice.v1.WorkflowService/UpdateWorkflowExecution":          1,
+		"/temporal.api.workflowservice.v1.WorkflowService/CreateSchedule":                   1,
+		"/temporal.api.workflowservice.v1.WorkflowService/StartBatchOperation":              1,
+		"/temporal.api.nexusservice.v1.NexusService/DispatchNexusTask":                      1,
 
 		// P2: Change State APIs
-		"RequestCancelWorkflowExecution": 2,
-		"TerminateWorkflowExecution":     2,
-		"ResetWorkflowExecution":         2,
-		"DeleteWorkflowExecution":        2,
-		"GetWorkflowExecutionHistory":    2, // relatively high priority because it is required for replay
-		"UpdateSchedule":                 2,
-		"PatchSchedule":                  2,
-		"DeleteSchedule":                 2,
-		"StopBatchOperation":             2,
+		"/temporal.api.workflowservice.v1.WorkflowService/RequestCancelWorkflowExecution": 2,
+		"/temporal.api.workflowservice.v1.WorkflowService/TerminateWorkflowExecution":     2,
+		"/temporal.api.workflowservice.v1.WorkflowService/ResetWorkflowExecution":         2,
+		"/temporal.api.workflowservice.v1.WorkflowService/DeleteWorkflowExecution":        2,
+		"/temporal.api.workflowservice.v1.WorkflowService/GetWorkflowExecutionHistory":    2, // relatively high priority because it is required for replay
+		"/temporal.api.workflowservice.v1.WorkflowService/UpdateSchedule":                 2,
+		"/temporal.api.workflowservice.v1.WorkflowService/PatchSchedule":                  2,
+		"/temporal.api.workflowservice.v1.WorkflowService/DeleteSchedule":                 2,
+		"/temporal.api.workflowservice.v1.WorkflowService/StopBatchOperation":             2,
 
 		// P3: Status Querying APIs
-		"DescribeWorkflowExecution":     3,
-		"DescribeTaskQueue":             3,
-		"GetWorkerBuildIdCompatibility": 3,
-		"ListTaskQueuePartitions":       3,
-		"QueryWorkflow":                 3,
-		"DescribeSchedule":              3,
-		"ListScheduleMatchingTimes":     3,
-		"DescribeBatchOperation":        3,
+		"/temporal.api.workflowservice.v1.WorkflowService/DescribeWorkflowExecution":     3,
+		"/temporal.api.workflowservice.v1.WorkflowService/DescribeTaskQueue":             3,
+		"/temporal.api.workflowservice.v1.WorkflowService/GetWorkerBuildIdCompatibility": 3,
+		"/temporal.api.workflowservice.v1.WorkflowService/ListTaskQueuePartitions":       3,
+		"/temporal.api.workflowservice.v1.WorkflowService/QueryWorkflow":                 3,
+		"/temporal.api.workflowservice.v1.WorkflowService/DescribeSchedule":              3,
+		"/temporal.api.workflowservice.v1.WorkflowService/ListScheduleMatchingTimes":     3,
+		"/temporal.api.workflowservice.v1.WorkflowService/DescribeBatchOperation":        3,
 
 		// P4: Progress APIs
-		"RecordActivityTaskHeartbeat":      4,
-		"RecordActivityTaskHeartbeatById":  4,
-		"RespondActivityTaskCanceled":      4,
-		"RespondActivityTaskCanceledById":  4,
-		"RespondActivityTaskFailed":        4,
-		"RespondActivityTaskFailedById":    4,
-		"RespondActivityTaskCompleted":     4,
-		"RespondActivityTaskCompletedById": 4,
-		"RespondWorkflowTaskCompleted":     4,
-		"RespondWorkflowTaskFailed":        4,
-		"RespondQueryTaskCompleted":        4,
-		"RespondNexusTaskCompleted":        4,
-		"RespondNexusTaskFailed":           4,
+		"/temporal.api.workflowservice.v1.WorkflowService/RecordActivityTaskHeartbeat":      4,
+		"/temporal.api.workflowservice.v1.WorkflowService/RecordActivityTaskHeartbeatById":  4,
+		"/temporal.api.workflowservice.v1.WorkflowService/RespondActivityTaskCanceled":      4,
+		"/temporal.api.workflowservice.v1.WorkflowService/RespondActivityTaskCanceledById":  4,
+		"/temporal.api.workflowservice.v1.WorkflowService/RespondActivityTaskFailed":        4,
+		"/temporal.api.workflowservice.v1.WorkflowService/RespondActivityTaskFailedById":    4,
+		"/temporal.api.workflowservice.v1.WorkflowService/RespondActivityTaskCompleted":     4,
+		"/temporal.api.workflowservice.v1.WorkflowService/RespondActivityTaskCompletedById": 4,
+		"/temporal.api.workflowservice.v1.WorkflowService/RespondWorkflowTaskCompleted":     4,
+		"/temporal.api.workflowservice.v1.WorkflowService/RespondWorkflowTaskFailed":        4,
+		"/temporal.api.workflowservice.v1.WorkflowService/RespondQueryTaskCompleted":        4,
+		"/temporal.api.workflowservice.v1.WorkflowService/RespondNexusTaskCompleted":        4,
+		"/temporal.api.workflowservice.v1.WorkflowService/RespondNexusTaskFailed":           4,
 
 		// P5: Poll APIs and other low priority APIs
-		"PollWorkflowTaskQueue":              5,
-		"PollActivityTaskQueue":              5,
-		"PollWorkflowExecutionUpdate":        5,
-		"PollNexusTaskQueue":                 5,
-		"ResetStickyTaskQueue":               5,
-		"GetWorkflowExecutionHistoryReverse": 5,
+		"/temporal.api.workflowservice.v1.WorkflowService/PollWorkflowTaskQueue":              5,
+		"/temporal.api.workflowservice.v1.WorkflowService/PollActivityTaskQueue":              5,
+		"/temporal.api.workflowservice.v1.WorkflowService/PollWorkflowExecutionUpdate":        5,
+		"/temporal.api.workflowservice.v1.WorkflowService/PollNexusTaskQueue":                 5,
+		"/temporal.api.workflowservice.v1.WorkflowService/ResetStickyTaskQueue":               5,
+		"/temporal.api.workflowservice.v1.WorkflowService/GetWorkflowExecutionHistoryReverse": 5,
 	}
 
 	ExecutionAPIPrioritiesOrdered = []int{0, 1, 2, 3, 4, 5}
 
 	VisibilityAPIToPriority = map[string]int{
-		"CountWorkflowExecutions":        1,
-		"ScanWorkflowExecutions":         1,
-		"ListOpenWorkflowExecutions":     1,
-		"ListClosedWorkflowExecutions":   1,
-		"ListWorkflowExecutions":         1,
-		"ListArchivedWorkflowExecutions": 1,
+		"/temporal.api.workflowservice.v1.WorkflowService/CountWorkflowExecutions":        1,
+		"/temporal.api.workflowservice.v1.WorkflowService/ScanWorkflowExecutions":         1,
+		"/temporal.api.workflowservice.v1.WorkflowService/ListOpenWorkflowExecutions":     1,
+		"/temporal.api.workflowservice.v1.WorkflowService/ListClosedWorkflowExecutions":   1,
+		"/temporal.api.workflowservice.v1.WorkflowService/ListWorkflowExecutions":         1,
+		"/temporal.api.workflowservice.v1.WorkflowService/ListArchivedWorkflowExecutions": 1,
 
 		// APIs that rely on visibility
-		"GetWorkerTaskReachability": 1,
-		"ListSchedules":             1,
-		"ListBatchOperations":       1,
+		"/temporal.api.workflowservice.v1.WorkflowService/GetWorkerTaskReachability": 1,
+		"/temporal.api.workflowservice.v1.WorkflowService/ListSchedules":             1,
+		"/temporal.api.workflowservice.v1.WorkflowService/ListBatchOperations":       1,
 	}
 
 	VisibilityAPIPrioritiesOrdered = []int{0, 1}
@@ -142,9 +146,9 @@ var (
 	// The replication queue is used to propagate critical failover messages and this mapping prevents flooding the
 	// queue and delaying failover.
 	NamespaceReplicationInducingAPIToPriority = map[string]int{
-		"RegisterNamespace":                1,
-		"UpdateNamespace":                  1,
-		"UpdateWorkerBuildIdCompatibility": 2,
+		"/temporal.api.workflowservice.v1.WorkflowService/RegisterNamespace":                1,
+		"/temporal.api.workflowservice.v1.WorkflowService/UpdateNamespace":                  1,
+		"/temporal.api.workflowservice.v1.WorkflowService/UpdateWorkerBuildIdCompatibility": 2,
 	}
 
 	NamespaceReplicationInducingAPIPrioritiesOrdered = []int{0, 1, 2}

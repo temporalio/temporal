@@ -75,3 +75,9 @@ message QueryTask {
     string task_queue = 2;
     string task_id = 3;
 }
+
+message NexusTask {
+    string namespace_id = 1;
+    string task_queue = 2;
+    string task_id = 3;
+}

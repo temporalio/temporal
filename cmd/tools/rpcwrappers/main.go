@@ -84,6 +84,7 @@ var (
 		"client.frontend.PollActivityTaskQueue":          true,
 		"client.frontend.PollWorkflowTaskQueue":          true,
 		"client.matching.GetTaskQueueUserData":           true,
+		"client.matching.ListNexusIncomingServices":      true,
 	}
 	largeTimeoutContext = map[string]bool{
 		"client.admin.GetReplicationMessages": true,
@@ -224,19 +225,20 @@ func makeGetMatchingClient(reqType reflect.Type) string {
 	// this magically figures out how to get a MatchingServiceClient from a request
 	t := reqType.Elem() // we know it's a pointer
 
-	nsID := findOneNestedField(t, "NamespaceId", "request", 1)
-	var tq, tqt fieldWithPath
+	var nsID, tq, tqt fieldWithPath
 
 	switch t.Name() {
 	case "GetBuildIdTaskQueueMappingRequest":
 		// Pick a random node for this request, it's not associated with a specific task queue.
 		tq = fieldWithPath{path: "&taskqueuepb.TaskQueue{Name: fmt.Sprintf(\"not-applicable-%d\", rand.Int())}"}
 		tqt = fieldWithPath{path: "enumspb.TASK_QUEUE_TYPE_UNSPECIFIED"}
+		nsID = findOneNestedField(t, "NamespaceId", "request", 1)
 	case "UpdateTaskQueueUserDataRequest",
 		"ReplicateTaskQueueUserDataRequest":
 		// Always route these requests to the same matching node by namespace.
 		tq = fieldWithPath{path: "&taskqueuepb.TaskQueue{Name: \"not-applicable\"}"}
 		tqt = fieldWithPath{path: "enumspb.TASK_QUEUE_TYPE_UNSPECIFIED"}
+		nsID = findOneNestedField(t, "NamespaceId", "request", 1)
 	case "GetWorkerBuildIdCompatibilityRequest",
 		"UpdateWorkerBuildIdCompatibilityRequest",
 		"RespondQueryTaskCompletedRequest",
@@ -244,9 +246,25 @@ func makeGetMatchingClient(reqType reflect.Type) string {
 		"ApplyTaskQueueUserDataReplicationEventRequest":
 		tq = findOneNestedField(t, "TaskQueue", "request", 2)
 		tqt = fieldWithPath{path: "enumspb.TASK_QUEUE_TYPE_WORKFLOW"}
+		nsID = findOneNestedField(t, "NamespaceId", "request", 1)
+	case "DispatchNexusTaskRequest",
+		"PollNexusTaskQueueRequest",
+		"RespondNexusTaskCompletedRequest",
+		"RespondNexusTaskFailedRequest":
+		tq = findOneNestedField(t, "TaskQueue", "request", 2)
+		tqt = fieldWithPath{path: "enumspb.TASK_QUEUE_TYPE_NEXUS"}
+		nsID = findOneNestedField(t, "NamespaceId", "request", 1)
+	case "CreateOrUpdateNexusIncomingServiceRequest",
+		"ListNexusIncomingServicesRequest",
+		"DeleteNexusIncomingServiceRequest":
+		// Always route these requests to the same matching node by namespace.
+		tq = fieldWithPath{path: "&taskqueuepb.TaskQueue{Name: \"not-applicable\"}"}
+		tqt = fieldWithPath{path: "enumspb.TASK_QUEUE_TYPE_UNSPECIFIED"}
+		nsID = fieldWithPath{path: `"not-applicable"`}
 	default:
 		tq = findOneNestedField(t, "TaskQueue", "request", 2)
 		tqt = findOneNestedField(t, "TaskQueueType", "request", 2)
+		nsID = findOneNestedField(t, "NamespaceId", "request", 1)
 	}
 
 	if nsID.path != "" && tq.path != "" && tqt.path != "" {

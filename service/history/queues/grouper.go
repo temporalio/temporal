@@ -53,32 +53,36 @@ func (GrouperNamespaceID) Predicate(keys []any) tasks.Predicate {
 
 var _ Grouper = GrouperNamespaceID{}
 
-// namespaceIDAndDestination is the key for grouping tasks by namespace ID and destination.
-type namespaceIDAndDestination struct {
-	namespaceID string
-	destination string
+// NamespaceIDAndDestination is the key for grouping tasks by namespace ID and destination.
+type NamespaceIDAndDestination struct {
+	NamespaceID string
+	Destination string
 }
 
 type GrouperNamespaceIDAndDestination struct {
 }
 
-func (GrouperNamespaceIDAndDestination) Key(task tasks.Task) (key any) {
+func (g GrouperNamespaceIDAndDestination) Key(task tasks.Task) (key any) {
+	return g.KeyTyped(task)
+}
+
+func (GrouperNamespaceIDAndDestination) KeyTyped(task tasks.Task) (key NamespaceIDAndDestination) {
 	getter, ok := task.(tasks.HasDestination)
 	var dest string
 	if ok {
 		dest = getter.GetDestination()
 	}
-	return namespaceIDAndDestination{task.GetNamespaceID(), dest}
+	return NamespaceIDAndDestination{task.GetNamespaceID(), dest}
 }
 
 func (GrouperNamespaceIDAndDestination) Predicate(keys []any) tasks.Predicate {
 	pred := predicates.Empty[tasks.Task]()
-	for _, namespaceID := range keys {
+	for _, anyKey := range keys {
 		// Assume predicate is only called with keys returned from GrouperNamespaceID.Key()
-		key := namespaceID.(namespaceIDAndDestination)
+		key := anyKey.(NamespaceIDAndDestination)
 		pred = predicates.Or(pred, predicates.And(
-			tasks.NewNamespacePredicate([]string{key.namespaceID}),
-			tasks.NewDestinationPredicate([]string{key.destination}),
+			tasks.NewNamespacePredicate([]string{key.NamespaceID}),
+			tasks.NewDestinationPredicate([]string{key.Destination}),
 		))
 	}
 	return pred

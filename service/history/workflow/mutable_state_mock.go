@@ -54,6 +54,7 @@ import (
 	namespace "go.temporal.io/server/common/namespace"
 	persistence "go.temporal.io/server/common/persistence"
 	historybuilder "go.temporal.io/server/service/history/historybuilder"
+	statemachines "go.temporal.io/server/service/history/statemachines"
 	tasks "go.temporal.io/server/service/history/tasks"
 	durationpb "google.golang.org/protobuf/types/known/durationpb"
 	timestamppb "google.golang.org/protobuf/types/known/timestamppb"
@@ -1802,6 +1803,20 @@ func (mr *MockMutableStateMockRecorder) GetCurrentBranchToken() *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetCurrentBranchToken", reflect.TypeOf((*MockMutableState)(nil).GetCurrentBranchToken))
 }
 
+// GetCurrentTime mocks base method.
+func (m *MockMutableState) GetCurrentTime() time.Time {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetCurrentTime")
+	ret0, _ := ret[0].(time.Time)
+	return ret0
+}
+
+// GetCurrentTime indicates an expected call of GetCurrentTime.
+func (mr *MockMutableStateMockRecorder) GetCurrentTime() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetCurrentTime", reflect.TypeOf((*MockMutableState)(nil).GetCurrentTime))
+}
+
 // GetCurrentVersion mocks base method.
 func (m *MockMutableState) GetCurrentVersion() int64 {
 	m.ctrl.T.Helper()
@@ -1929,6 +1944,20 @@ func (m *MockMutableState) GetNamespaceEntry() *namespace.Namespace {
 func (mr *MockMutableStateMockRecorder) GetNamespaceEntry() *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetNamespaceEntry", reflect.TypeOf((*MockMutableState)(nil).GetNamespaceEntry))
+}
+
+// GetNamespaceFailoverVersion mocks base method.
+func (m *MockMutableState) GetNamespaceFailoverVersion() int64 {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetNamespaceFailoverVersion")
+	ret0, _ := ret[0].(int64)
+	return ret0
+}
+
+// GetNamespaceFailoverVersion indicates an expected call of GetNamespaceFailoverVersion.
+func (mr *MockMutableStateMockRecorder) GetNamespaceFailoverVersion() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetNamespaceFailoverVersion", reflect.TypeOf((*MockMutableState)(nil).GetNamespaceFailoverVersion))
 }
 
 // GetNextEventID mocks base method.
@@ -2599,6 +2628,18 @@ func (m *MockMutableState) RetryActivity(ai *v112.ActivityInfo, failure *v12.Fai
 func (mr *MockMutableStateMockRecorder) RetryActivity(ai, failure interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RetryActivity", reflect.TypeOf((*MockMutableState)(nil).RetryActivity), ai, failure)
+}
+
+// Schedule mocks base method.
+func (m *MockMutableState) Schedule(task statemachines.Task) {
+	m.ctrl.T.Helper()
+	m.ctrl.Call(m, "Schedule", task)
+}
+
+// Schedule indicates an expected call of Schedule.
+func (mr *MockMutableStateMockRecorder) Schedule(task interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Schedule", reflect.TypeOf((*MockMutableState)(nil).Schedule), task)
 }
 
 // SetBaseWorkflow mocks base method.
