@@ -105,9 +105,9 @@ func (ni *NamespaceValidatorInterceptor) NamespaceValidateIntercept(
 	}
 	reqWithNamespace, hasNamespace := req.(NamespaceNameGetter)
 	if hasNamespace {
-		namespaceName := namespace.Name(reqWithNamespace.GetNamespace())
-		if len(namespaceName) > ni.maxNamespaceLength() {
-			return nil, errNamespaceTooLong
+		_, err := namespace.ParseName(reqWithNamespace.GetNamespace(), ni.maxNamespaceLength())
+		if err != nil {
+			return nil, err
 		}
 	}
 
@@ -228,40 +228,45 @@ func (ni *NamespaceValidatorInterceptor) extractNamespaceFromRequest(req interfa
 	if !hasNamespace {
 		return nil, nil
 	}
-	namespaceName := namespace.Name(reqWithNamespace.GetNamespace())
+
+	nsName := reqWithNamespace.GetNamespace()
 
 	switch request := req.(type) {
 	case *workflowservice.DescribeNamespaceRequest:
 		// Special case for DescribeNamespace API which should read namespace directly from database.
 		// Therefore, it must bypass namespace registry and validator.
-		if request.GetId() == "" && namespaceName.IsEmpty() {
+		if request.GetId() == "" && nsName == "" {
 			return nil, errNamespaceNotSet
 		}
 		return nil, nil
 	case *adminservice.GetNamespaceRequest:
 		// special case for Admin.GetNamespace API which accept either Namespace ID or Namespace name as input
-		if request.GetId() == "" && namespaceName.IsEmpty() {
+		if request.GetId() == "" && nsName == "" {
 			return nil, errNamespaceNotSet
 		}
 		return nil, nil
 	case *workflowservice.RegisterNamespaceRequest:
 		// Special case for RegisterNamespace API. `namespaceName` is name of namespace that about to be registered.
 		// There is no namespace entry for it, therefore, it must bypass namespace registry and validator.
-		if namespaceName.IsEmpty() {
+		if nsName == "" {
 			return nil, errNamespaceNotSet
 		}
 		return nil, nil
 	case *operatorservice.DeleteNamespaceRequest:
 		// special case for Operator.DeleteNamespace API which accept either Namespace ID or Namespace name as input
 		namespaceID := namespace.ID(request.GetNamespaceId())
-		if namespaceID.IsEmpty() && namespaceName.IsEmpty() {
+		if namespaceID.IsEmpty() && nsName == "" {
 			return nil, errNamespaceNotSet
 		}
-		if !namespaceID.IsEmpty() && !namespaceName.IsEmpty() {
+		if !namespaceID.IsEmpty() && nsName != "" {
 			return nil, errBothNamespaceIDAndNameSet
 		}
 		if namespaceID != "" {
 			return ni.namespaceRegistry.GetNamespaceByID(namespaceID)
+		}
+		namespaceName, err := namespace.ParseName(nsName, ni.maxNamespaceLength())
+		if err != nil {
+			return nil, err
 		}
 		return ni.namespaceRegistry.GetNamespace(namespaceName)
 	case *adminservice.AddSearchAttributesRequest,
@@ -272,14 +277,22 @@ func (ni *NamespaceValidatorInterceptor) extractNamespaceFromRequest(req interfa
 		*operatorservice.ListSearchAttributesRequest:
 		// Namespace is optional for search attributes operations.
 		// It's required when using SQL DB for visibility, but not when using Elasticsearch.
-		if !namespaceName.IsEmpty() {
+		if nsName != "" {
+			namespaceName, err := namespace.ParseName(reqWithNamespace.GetNamespace(), ni.maxNamespaceLength())
+			if err != nil {
+				return nil, err
+			}
 			return ni.namespaceRegistry.GetNamespace(namespaceName)
 		}
 		return nil, nil
 	default:
 		// All other APIs.
-		if namespaceName.IsEmpty() {
+		if nsName == "" {
 			return nil, errNamespaceNotSet
+		}
+		namespaceName, err := namespace.ParseName(reqWithNamespace.GetNamespace(), ni.maxNamespaceLength())
+		if err != nil {
+			return nil, err
 		}
 		return ni.namespaceRegistry.GetNamespace(namespaceName)
 	}

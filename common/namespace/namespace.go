@@ -89,6 +89,24 @@ const (
 	EmptyID   ID   = ""
 )
 
+var (
+	errNamespaceTooLong = serviceerror.NewInvalidArgument("Namespace length exceeds limit.")
+)
+
+// Return a valid Name if and only if the provided string represents a valid
+// namespace name.
+// Note that an empty string is a valid namespace name as the name itself is optional in places
+// TODO: empty names should be invalid and return a serviceerror
+func ParseName(name string, maxLength int) (Name, error) {
+	if err := common.ValidateUTF8String("Namespace", name); err != nil {
+		return "", err
+	}
+	if len(name) > maxLength {
+		return "", errNamespaceTooLong
+	}
+	return Name(name), nil
+}
+
 func NewID() ID {
 	return ID(uuid.NewString())
 }

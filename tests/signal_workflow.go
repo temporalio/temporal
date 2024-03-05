@@ -31,8 +31,10 @@ import (
 	"strconv"
 	"strings"
 	"time"
+	"unicode/utf8"
 
 	"github.com/pborman/uuid"
+	"github.com/stretchr/testify/assert"
 	commandpb "go.temporal.io/api/command/v1"
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
@@ -1613,6 +1615,100 @@ func (s *FunctionalSuite) TestSignalWithStartWorkflow() {
 	listClosedResp, err := s.engine.ListClosedWorkflowExecutions(NewContext(), listClosedRequest)
 	s.NoError(err)
 	s.Equal(1, len(listClosedResp.Executions))
+}
+
+func (s *FunctionalSuite) TestSignalWorkflow_RejectsInvalidUTF8() {
+	invalidUTF8 := "invalid \x80"
+	s.Require().False(utf8.ValidString(invalidUTF8))
+
+	for _, tc := range []struct {
+		Name    string
+		Mutator func(*workflowservice.SignalWorkflowExecutionRequest)
+	}{{
+		Name: "Invalid WorkflowId",
+		Mutator: func(r *workflowservice.SignalWorkflowExecutionRequest) {
+			r.WorkflowExecution.WorkflowId = invalidUTF8
+		},
+	}, {
+		Name: "Invalid RequestID",
+		Mutator: func(r *workflowservice.SignalWorkflowExecutionRequest) {
+			r.RequestId = invalidUTF8
+		},
+	}} {
+		s.Run(tc.Name, func() {
+			identity := "worker1"
+			sRequest := &workflowservice.SignalWorkflowExecutionRequest{
+				RequestId: uuid.New(),
+				Namespace: s.namespace,
+				WorkflowExecution: &commonpb.WorkflowExecution{
+					WorkflowId: "functional-signal-workflow-test",
+					RunId:      uuid.New(),
+				},
+				SignalName: "example signal",
+				Identity:   identity,
+			}
+
+			tc.Mutator(sRequest)
+
+			_, err := s.engine.SignalWorkflowExecution(NewContext(), sRequest)
+			assert.Error(s.T(), err, "SignalWorkflowExecution should fail")
+			assert.Contains(s.T(), err.Error(), "UTF-8")
+		})
+	}
+}
+
+func (s *FunctionalSuite) TestSignalWithStartWorkflow_RejectsInvalidUTF8() {
+	invalidUTF8 := "invalid \x80"
+	s.Require().False(utf8.ValidString(invalidUTF8))
+
+	for _, tc := range []struct {
+		Name    string
+		Mutator func(*workflowservice.SignalWithStartWorkflowExecutionRequest)
+	}{{
+		Name: "Invalid TaskQueue name",
+		Mutator: func(r *workflowservice.SignalWithStartWorkflowExecutionRequest) {
+			r.TaskQueue.Name = invalidUTF8
+		},
+	}, {
+		Name: "Invalid WorkflowId",
+		Mutator: func(r *workflowservice.SignalWithStartWorkflowExecutionRequest) {
+			r.WorkflowId = invalidUTF8
+		},
+	}, {
+		Name: "Invalid WorkflowType",
+		Mutator: func(r *workflowservice.SignalWithStartWorkflowExecutionRequest) {
+			r.WorkflowType.Name = invalidUTF8
+		},
+	}, {
+		Name: "Invalid RequestID",
+		Mutator: func(r *workflowservice.SignalWithStartWorkflowExecutionRequest) {
+			r.RequestId = invalidUTF8
+		},
+	}} {
+		s.Run(tc.Name, func() {
+			sRequest := &workflowservice.SignalWithStartWorkflowExecutionRequest{
+				RequestId:    uuid.New(),
+				Namespace:    s.namespace,
+				WorkflowId:   "functional-signal-with-start-workflow-test",
+				WorkflowType: &commonpb.WorkflowType{Name: "workflow-type"},
+				TaskQueue: &taskqueuepb.TaskQueue{
+					Name: uuid.New(),
+					Kind: enumspb.TASK_QUEUE_KIND_NORMAL,
+				},
+				WorkflowRunTimeout:    durationpb.New(100 * time.Second),
+				WorkflowTaskTimeout:   durationpb.New(1 * time.Second),
+				SignalName:            "example signal",
+				SignalInput:           payloads.EncodeString("example signal input"),
+				Identity:              "worker1",
+				WorkflowIdReusePolicy: enumspb.WORKFLOW_ID_REUSE_POLICY_ALLOW_DUPLICATE,
+			}
+
+			tc.Mutator(sRequest)
+
+			_, err := s.engine.SignalWithStartWorkflowExecution(NewContext(), sRequest)
+			assert.Error(s.T(), err, "SignalWithStartWorkflowExecution should fail")
+		})
+	}
 }
 
 func (s *FunctionalSuite) TestSignalWithStartWorkflow_IDReusePolicy() {

@@ -27,6 +27,7 @@ package frontend
 import (
 	"github.com/pborman/uuid"
 	commonpb "go.temporal.io/api/common/v1"
+	"go.temporal.io/server/common"
 )
 
 func validateExecution(w *commonpb.WorkflowExecution) error {
@@ -35,6 +36,9 @@ func validateExecution(w *commonpb.WorkflowExecution) error {
 	}
 	if w.GetWorkflowId() == "" {
 		return errWorkflowIDNotSet
+	}
+	if err := common.ValidateUTF8String("WorkflowId", w.GetWorkflowId()); err != nil {
+		return err
 	}
 	if w.GetRunId() != "" && uuid.Parse(w.GetRunId()) == nil {
 		return errInvalidRunID

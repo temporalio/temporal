@@ -263,7 +263,7 @@ func (wh *WorkflowHandler) RegisterNamespace(ctx context.Context, request *workf
 		return nil, errRequestNotSet
 	}
 
-	if err := wh.validateNamespace(request.GetNamespace()); err != nil {
+	if _, err := namespace.ParseName(request.GetNamespace(), wh.config.MaxIDLengthLimit()); err != nil {
 		return nil, err
 	}
 
@@ -353,7 +353,11 @@ func (wh *WorkflowHandler) StartWorkflowExecution(ctx context.Context, request *
 		return nil, err
 	}
 
-	namespaceName := namespace.Name(request.GetNamespace())
+	namespaceName, err := namespace.ParseName(request.Namespace, wh.config.MaxIDLengthLimit())
+	if err != nil {
+		return nil, err
+	}
+
 	if err := wh.validateRetryPolicy(namespaceName, request.RetryPolicy); err != nil {
 		return nil, err
 	}
@@ -446,13 +450,18 @@ func (wh *WorkflowHandler) GetWorkflowExecutionHistory(ctx context.Context, requ
 		return nil, err
 	}
 
+	namespaceName, err := namespace.ParseName(request.Namespace, wh.config.MaxIDLengthLimit())
+	if err != nil {
+		return nil, err
+	}
+
 	if request.GetMaximumPageSize() <= 0 {
 		request.MaximumPageSize = int32(wh.config.HistoryMaxPageSize(request.GetNamespace()))
 	}
 
 	enums.SetDefaultHistoryEventFilterType(&request.HistoryEventFilterType)
 
-	namespaceID, err := wh.namespaceRegistry.GetNamespaceID(namespace.Name(request.GetNamespace()))
+	namespaceID, err := wh.namespaceRegistry.GetNamespaceID(namespaceName)
 	if err != nil {
 		return nil, err
 	}
@@ -501,11 +510,16 @@ func (wh *WorkflowHandler) GetWorkflowExecutionHistoryReverse(ctx context.Contex
 		return nil, err
 	}
 
+	namespaceName, err := namespace.ParseName(request.Namespace, wh.config.MaxIDLengthLimit())
+	if err != nil {
+		return nil, err
+	}
+
 	if request.GetMaximumPageSize() <= 0 {
 		request.MaximumPageSize = int32(wh.config.HistoryMaxPageSize(request.GetNamespace()))
 	}
 
-	namespaceID, err := wh.namespaceRegistry.GetNamespaceID(namespace.Name(request.GetNamespace()))
+	namespaceID, err := wh.namespaceRegistry.GetNamespaceID(namespaceName)
 	if err != nil {
 		return nil, err
 	}
@@ -565,9 +579,14 @@ func (wh *WorkflowHandler) PollWorkflowTaskQueue(ctx context.Context, request *w
 		return nil, err
 	}
 
+	namespaceName, err := namespace.ParseName(request.Namespace, wh.config.MaxIDLengthLimit())
+	if err != nil {
+		return nil, err
+	}
+
 	callTime := time.Now().UTC()
 
-	namespaceEntry, err := wh.namespaceRegistry.GetNamespace(namespace.Name(request.GetNamespace()))
+	namespaceEntry, err := wh.namespaceRegistry.GetNamespace(namespaceName)
 	if err != nil {
 		return nil, err
 	}
@@ -801,7 +820,10 @@ func (wh *WorkflowHandler) PollActivityTaskQueue(ctx context.Context, request *w
 		return nil, err
 	}
 
-	namespaceName := namespace.Name(request.GetNamespace())
+	namespaceName, err := namespace.ParseName(request.Namespace, wh.config.MaxIDLengthLimit())
+	if err != nil {
+		return nil, err
+	}
 	if err := wh.validateTaskQueue(request.TaskQueue, namespaceName); err != nil {
 		return nil, err
 	}
@@ -1578,6 +1600,10 @@ func (wh *WorkflowHandler) RequestCancelWorkflowExecution(ctx context.Context, r
 		return nil, err
 	}
 
+	if err := validateRequestId(&request.RequestId, wh.config.MaxIDLengthLimit()); err != nil {
+		return nil, err
+	}
+
 	namespaceID, err := wh.namespaceRegistry.GetNamespaceID(namespace.Name(request.GetNamespace()))
 	if err != nil {
 		return nil, err
@@ -1615,8 +1641,8 @@ func (wh *WorkflowHandler) SignalWorkflowExecution(ctx context.Context, request 
 		return nil, errSignalNameTooLong
 	}
 
-	if len(request.GetRequestId()) > wh.config.MaxIDLengthLimit() {
-		return nil, errRequestIDTooLong
+	if err := validateRequestId(&request.RequestId, wh.config.MaxIDLengthLimit()); err != nil {
+		return nil, err
 	}
 
 	namespaceID, err := wh.namespaceRegistry.GetNamespaceID(namespace.Name(request.GetNamespace()))
@@ -1686,7 +1712,12 @@ func (wh *WorkflowHandler) SignalWithStartWorkflowExecution(ctx context.Context,
 	if err := common.ValidateUTF8String("WorkflowType", request.WorkflowType.GetName()); err != nil {
 		return nil, err
 	}
-	namespaceName := namespace.Name(request.GetNamespace())
+
+	namespaceName, err := namespace.ParseName(request.Namespace, wh.config.MaxIDLengthLimit())
+	if err != nil {
+		return nil, err
+	}
+
 	if err := wh.validateTaskQueue(request.TaskQueue, namespaceName); err != nil {
 		return nil, err
 	}
@@ -1750,8 +1781,9 @@ func (wh *WorkflowHandler) ResetWorkflowExecution(ctx context.Context, request *
 	if request.GetRequestId() == "" {
 		return nil, errRequestIDNotSet
 	}
-	if len(request.GetRequestId()) > wh.config.MaxIDLengthLimit() {
-		return nil, errRequestIDTooLong
+
+	if err := validateRequestId(&request.RequestId, wh.config.MaxIDLengthLimit()); err != nil {
+		return nil, err
 	}
 
 	if err := validateExecution(request.WorkflowExecution); err != nil {
@@ -2567,8 +2599,8 @@ func (wh *WorkflowHandler) CreateSchedule(ctx context.Context, request *workflow
 		return nil, errRequestIDNotSet
 	}
 
-	if len(request.GetRequestId()) > wh.config.MaxIDLengthLimit() {
-		return nil, errRequestIDTooLong
+	if err := validateRequestId(&request.RequestId, wh.config.MaxIDLengthLimit()); err != nil {
+		return nil, err
 	}
 
 	namespaceName := namespace.Name(request.Namespace)
@@ -2900,8 +2932,8 @@ func (wh *WorkflowHandler) UpdateSchedule(ctx context.Context, request *workflow
 		return nil, errSchedulesNotAllowed
 	}
 
-	if len(request.GetRequestId()) > wh.config.MaxIDLengthLimit() {
-		return nil, errRequestIDTooLong
+	if err := validateRequestId(&request.RequestId, wh.config.MaxIDLengthLimit()); err != nil {
+		return nil, err
 	}
 
 	workflowID := scheduler.WorkflowIDPrefix + request.ScheduleId
@@ -2981,8 +3013,8 @@ func (wh *WorkflowHandler) PatchSchedule(ctx context.Context, request *workflows
 		return nil, errSchedulesNotAllowed
 	}
 
-	if len(request.GetRequestId()) > wh.config.MaxIDLengthLimit() {
-		return nil, errRequestIDTooLong
+	if err := validateRequestId(&request.RequestId, wh.config.MaxIDLengthLimit()); err != nil {
+		return nil, err
 	}
 
 	workflowID := scheduler.WorkflowIDPrefix + request.ScheduleId
@@ -4125,18 +4157,6 @@ func (wh *WorkflowHandler) validateWorkflowStartDelay(
 
 func (wh *WorkflowHandler) metricsScope(ctx context.Context) metrics.Handler {
 	return interceptor.GetMetricsHandlerFromContext(ctx, wh.logger)
-}
-
-func (wh *WorkflowHandler) validateNamespace(
-	namespace string,
-) error {
-	if err := common.ValidateUTF8String("Namespace", namespace); err != nil {
-		return err
-	}
-	if len(namespace) > wh.config.MaxIDLengthLimit() {
-		return errNamespaceTooLong
-	}
-	return nil
 }
 
 func (wh *WorkflowHandler) validateWorkflowID(
