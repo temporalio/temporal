@@ -220,11 +220,7 @@ func (u *Updater) Apply(
 func (u *Updater) OnError(
 	err error,
 ) (*historyservice.UpdateWorkflowExecutionResponse, error) {
-	// If update is received while WFT is running, it will be waiting for the next WFT.
-	// And if that running WFT completes workflow, then update is rejected (see CancelIncomplete).
-	// Special handling for consts.ErrWorkflowCompleted here is needed to keep parity with this.
-	// I.e. if update is received and workflow was completed, or is about to be completed,
-	// then update is consistently rejected (instead of returning error in some cases).
+	// Special handling for consts.ErrWorkflowCompleted here is needed for consistency with the case when update is received while WFT is running and this WFT completes workflow. In this case update is rejected (see update.CancelIncomplete).
 	if errors.Is(err, consts.ErrWorkflowCompleted) {
 		rejectionResp := u.createResponse(
 			u.wfKey,
