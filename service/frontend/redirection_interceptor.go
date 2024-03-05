@@ -79,6 +79,7 @@ var (
 		"CountWorkflowExecutions":            func() any { return &workflowservice.CountWorkflowExecutionsResponse{} },
 		"PollActivityTaskQueue":              func() any { return &workflowservice.PollActivityTaskQueueResponse{} },
 		"PollWorkflowTaskQueue":              func() any { return &workflowservice.PollWorkflowTaskQueueResponse{} },
+		"PollNexusTaskQueue":                 func() any { return &workflowservice.PollNexusTaskQueueResponse{} },
 		"QueryWorkflow":                      func() any { return &workflowservice.QueryWorkflowResponse{} },
 		"RecordActivityTaskHeartbeat":        func() any { return &workflowservice.RecordActivityTaskHeartbeatResponse{} },
 		"RecordActivityTaskHeartbeatById":    func() any { return &workflowservice.RecordActivityTaskHeartbeatByIdResponse{} },
@@ -94,7 +95,8 @@ var (
 		"RespondWorkflowTaskCompleted":       func() any { return &workflowservice.RespondWorkflowTaskCompletedResponse{} },
 		"RespondWorkflowTaskFailed":          func() any { return &workflowservice.RespondWorkflowTaskFailedResponse{} },
 		"RespondQueryTaskCompleted":          func() any { return &workflowservice.RespondQueryTaskCompletedResponse{} },
-		"ExecuteMultiOperation":              func() any { return &workflowservice.ExecuteMultiOperationRequest{} },
+		"RespondNexusTaskCompleted":          func() any { return &workflowservice.RespondNexusTaskCompletedResponse{} },
+		"RespondNexusTaskFailed":             func() any { return &workflowservice.RespondNexusTaskFailedResponse{} },
 		"SignalWithStartWorkflowExecution":   func() any { return &workflowservice.SignalWithStartWorkflowExecutionResponse{} },
 		"SignalWorkflowExecution":            func() any { return &workflowservice.SignalWorkflowExecutionResponse{} },
 		"StartWorkflowExecution":             func() any { return &workflowservice.StartWorkflowExecutionResponse{} },
@@ -119,10 +121,6 @@ var (
 		"StopBatchOperation":     func() any { return &workflowservice.StopBatchOperationResponse{} },
 		"DescribeBatchOperation": func() any { return &workflowservice.DescribeBatchOperationResponse{} },
 		"ListBatchOperations":    func() any { return &workflowservice.ListBatchOperationsResponse{} },
-
-		"PollNexusTaskQueue":        func() any { return &workflowservice.PollNexusTaskQueueResponse{} },
-		"RespondNexusTaskCompleted": func() any { return &workflowservice.RespondNexusTaskCompletedResponse{} },
-		"RespondNexusTaskFailed":    func() any { return &workflowservice.RespondNexusTaskFailedResponse{} },
 	}
 )
 

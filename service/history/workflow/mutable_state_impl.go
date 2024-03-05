@@ -76,6 +76,7 @@ import (
 	"go.temporal.io/server/service/history/events"
 	"go.temporal.io/server/service/history/historybuilder"
 	"go.temporal.io/server/service/history/shard"
+	"go.temporal.io/server/service/history/statemachines"
 	"go.temporal.io/server/service/history/tasks"
 )
 
@@ -152,6 +153,10 @@ type (
 
 		// In-memory only attributes
 		currentVersion int64
+		// The namespace failover version at the time the current transaction started.
+		// Cached for consistency across a single transaction.
+		// This value can be used to mutate sub-statemachines after the workflow has already been closed.
+		currentTransactionNamespaceFailoverVersion int64
 		// Running approximate total size of mutable state fields (except buffered events) when written to DB in bytes.
 		// Buffered events are added to this value when calling GetApproximatePersistedSize.
 		approximateSize int
@@ -441,6 +446,23 @@ func NewSanitizedMutableState(
 	}
 	mutableState.currentVersion = lastWriteVersion
 	return mutableState, nil
+}
+
+// GetVersion returns the current transaction's namespace failover version.
+func (ms *MutableStateImpl) GetNamespaceFailoverVersion() int64 {
+	return ms.currentTransactionNamespaceFailoverVersion
+}
+
+// GetCurrentTime return the shard's current time for the current cluster name.
+func (ms *MutableStateImpl) GetCurrentTime() time.Time {
+	return ms.shard.GetCurrentTime(ms.shard.GetClusterMetadata().GetCurrentClusterName())
+}
+
+// Schedule a task and associate mutable state's workflow key and version.
+func (ms *MutableStateImpl) Schedule(task statemachines.Task) {
+	task.SetWorkflowKey(ms.GetWorkflowKey())
+	task.SetVersion(ms.GetNamespaceFailoverVersion())
+	ms.AddTasks(task)
 }
 
 func (ms *MutableStateImpl) CloneToProto() *persistencespb.WorkflowMutableState {
@@ -1875,6 +1897,27 @@ func (ms *MutableStateImpl) ApplyWorkflowExecutionStartedEvent(
 	ms.executionInfo.WorkflowExecutionTimeout = event.GetWorkflowExecutionTimeout()
 	ms.executionInfo.DefaultWorkflowTaskTimeout = event.GetWorkflowTaskTimeout()
 
+	ms.executionInfo.Callbacks = make(map[string]*persistencespb.CallbackInfo, len(event.GetCompletionCallbacks()))
+	for idx, cb := range event.GetCompletionCallbacks() {
+		// Use the start event version and ID as part of the callback ID to ensure that callbacks have unique
+		// IDs that are deterministically created across clusters.
+		// TODO: consider replicating the "initiated" event and allocating a uuid there instead of relying on
+		// history event replication.
+		id := fmt.Sprintf("%d-%d-%d", startEvent.GetVersion(), startEvent.GetEventId(), idx)
+		ms.executionInfo.Callbacks[id] = &persistencespb.CallbackInfo{
+			NamespaceFailoverVersion: ms.GetNamespaceFailoverVersion(),
+			TransitionCount:          0,
+			Id:                       id,
+			PublicInfo: &workflowpb.CallbackInfo{
+				Trigger: &workflowpb.CallbackInfo_Trigger{
+					Variant: &workflowpb.CallbackInfo_Trigger_WorkflowClosed{},
+				},
+				Callback:         cb,
+				State:            enumspb.CALLBACK_STATE_STANDBY,
+				RegistrationTime: startEvent.EventTime,
+			},
+		}
+	}
 	if err := ms.UpdateWorkflowStateStatus(
 		enumsspb.WORKFLOW_EXECUTION_STATE_CREATED,
 		enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
@@ -3791,6 +3834,12 @@ func (ms *MutableStateImpl) AddContinueAsNewEvent(
 	); err != nil {
 		return nil, nil, err
 	}
+	// Copy over close callbacks to the next execution.
+	for id, cb := range ms.executionInfo.Callbacks {
+		if _, ok := cb.PublicInfo.GetTrigger().GetVariant().(*workflowpb.CallbackInfo_Trigger_WorkflowClosed); ok {
+			newMutableState.executionInfo.Callbacks[id] = cb
+		}
+	}
 
 	if err = newMutableState.SetHistoryTree(
 		newMutableState.executionInfo.WorkflowExecutionTimeout,
@@ -4449,7 +4498,8 @@ func (ms *MutableStateImpl) StartTransaction(
 		return false, err
 	}
 	ms.namespaceEntry = namespaceEntry
-	if err := ms.UpdateCurrentVersion(namespaceEntry.FailoverVersion(), false); err != nil {
+	ms.currentTransactionNamespaceFailoverVersion = namespaceEntry.FailoverVersion()
+	if err := ms.UpdateCurrentVersion(ms.currentTransactionNamespaceFailoverVersion, false); err != nil {
 		return false, err
 	}
 

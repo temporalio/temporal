@@ -1,8 +1,6 @@
 // The MIT License
 //
-// Copyright (c) 2020 Temporal Technologies Inc.  All rights reserved.
-//
-// Copyright (c) 2020 Uber Technologies, Inc.
+// Copyright (c) 2023 Temporal Technologies Inc.  All rights reserved.
 //
 // Permission is hereby granted, free of charge, to any person obtaining a copy
 // of this software and associated documentation files (the "Software"), to deal
@@ -22,39 +20,40 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-package sql
+package nexus
 
 import (
 	"encoding/json"
+
+	"github.com/nexus-rpc/sdk-go/nexus"
+	failurepb "go.temporal.io/api/failure/v1"
+	nexuspb "go.temporal.io/api/nexus/v1"
 )
 
-type (
-	historyNodePaginationToken struct {
-		LastNodeID int64
-		LastTxnID  int64
+// ProtoFailureToNexusFailure converts a proto Nexus Failure to a Nexus SDK Failure.
+// Always returns a non-nil value.
+func ProtoFailureToNexusFailure(failure *nexuspb.Failure) *nexus.Failure {
+	var details json.RawMessage
+	if failure.GetDetails() != nil {
+		b, err := json.Marshal(failure.Details)
+		// This should never happen, a google.protobuf.Value is always serializable.
+		if err != nil {
+			panic(err)
+		}
+		details = json.RawMessage(b)
 	}
-)
-
-func newHistoryNodePaginationToken(
-	nodeID int64,
-	transactionID int64,
-) historyNodePaginationToken {
-	return historyNodePaginationToken{
-		LastNodeID: nodeID,
-		LastTxnID:  transactionID,
+	return &nexus.Failure{
+		Message:  failure.GetMessage(),
+		Metadata: failure.GetMetadata(),
+		Details:  details,
 	}
 }
 
-func serializeHistoryNodePaginationToken(
-	token historyNodePaginationToken,
-) ([]byte, error) {
-	return json.Marshal(token)
-}
-
-func deserializeHistoryNodePaginationToken(
-	bytes []byte,
-) (historyNodePaginationToken, error) {
-	var token historyNodePaginationToken
-	err := json.Unmarshal(bytes, &token)
-	return token, err
+// APIFailureToNexusFailure converts an API proto Failure to a Nexus SDK Failure taking only the failure message to
+// avoid leaking too many details to 3rd party callers.
+// Always returns a non-nil value.
+func APIFailureToNexusFailure(failure *failurepb.Failure) *nexus.Failure {
+	return &nexus.Failure{
+		Message: failure.GetMessage(),
+	}
 }
