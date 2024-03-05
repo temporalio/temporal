@@ -73,7 +73,7 @@ func TestProcessInvocationTask_Outcomes(t *testing.T) {
 		{
 			name: "success",
 			caller: func(r *http.Request) (*http.Response, error) {
-				return &http.Response{StatusCode: 200}, nil
+				return &http.Response{StatusCode: 200, Body: http.NoBody}, nil
 			},
 			assertOutcome: func(t *testing.T, cb callbacks.Callback) {
 				require.Equal(t, enumspb.CALLBACK_STATE_SUCCEEDED, cb.PublicInfo.State)
@@ -91,7 +91,7 @@ func TestProcessInvocationTask_Outcomes(t *testing.T) {
 		{
 			name: "retryable-error",
 			caller: func(r *http.Request) (*http.Response, error) {
-				return &http.Response{StatusCode: 500}, nil
+				return &http.Response{StatusCode: 500, Body: http.NoBody}, nil
 			},
 			assertOutcome: func(t *testing.T, cb callbacks.Callback) {
 				require.Equal(t, enumspb.CALLBACK_STATE_BACKING_OFF, cb.PublicInfo.State)
@@ -100,7 +100,7 @@ func TestProcessInvocationTask_Outcomes(t *testing.T) {
 		{
 			name: "non-retryable-error",
 			caller: func(r *http.Request) (*http.Response, error) {
-				return &http.Response{StatusCode: 400}, nil
+				return &http.Response{StatusCode: 400, Body: http.NoBody}, nil
 			},
 			assertOutcome: func(t *testing.T, cb callbacks.Callback) {
 				require.Equal(t, enumspb.CALLBACK_STATE_FAILED, cb.PublicInfo.State)

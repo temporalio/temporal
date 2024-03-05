@@ -106,8 +106,10 @@ func (t activeExecutor) executeInvocationTask(ctx context.Context, env hsm.Envir
 
 	caller := t.options.CallerProvider(queues.NamespaceIDAndDestination{NamespaceID: ref.WorkflowKey.GetNamespaceID(), Destination: task.Destination})
 	response, callErr := caller(request)
-	io.Copy(io.Discard, response.Body)
-	response.Body.Close()
+	if callErr == nil {
+		io.Copy(io.Discard, response.Body)
+		response.Body.Close()
+	}
 
 	return env.Access(ctx, ref, hsm.AccessWrite, func(node *hsm.Node) error {
 		return hsm.MachineTransition(node, func(callback Callback) (hsm.TransitionOutput, error) {

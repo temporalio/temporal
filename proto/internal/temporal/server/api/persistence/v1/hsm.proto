@@ -30,7 +30,7 @@ message StateMachineNode {
     // Number of transitions on this state machine object.
     // Used to verify that a task is not stale if the state machine does not allow concurrent task execution.
     int64 transition_count = 1;
-    
+
     // Seralized data of the underlying state machine.
     bytes data = 2;
     map<int32, StateMachineMap> children = 3;
