@@ -20,14 +20,14 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-package statemachines_test
+package hsm_test
 
 import (
 	"errors"
 	"testing"
 
 	"github.com/stretchr/testify/require"
-	"go.temporal.io/server/service/history/statemachines"
+	"go.temporal.io/server/service/history/hsm"
 )
 
 type state string
@@ -40,35 +40,35 @@ const (
 )
 
 type data struct {
-	state       state
-	transitions []struct{ from, to state }
+	state state
 }
 
-type event struct{ failBeforeHook, failAfterHook bool }
+type event struct{ fail bool }
 
-type adapter struct{}
-
-func (adapter) GetState(d *data) state {
+func (d *data) State() state {
 	return d.state
 }
 
-func (adapter) SetState(d *data, s state) {
+func (d *data) SetState(s state) {
 	d.state = s
 }
 
-func (adapter) OnTransition(d *data, from, to state, env statemachines.Environment) error {
-	d.transitions = append(d.transitions, struct {
-		from state
-		to   state
-	}{from, to})
-	return nil
+func (d *data) RegenerateTasks() ([]hsm.Task, error) {
+	panic("not implemented")
 }
 
-var transition = statemachines.Transition[*data, state, event]{
-	Adapter: adapter{},
-	Src:     []state{state1, state2},
-	Dst:     state3,
-}
+var handlerErr = errors.New("test")
+
+var transition = hsm.NewTransition(
+	[]state{state1, state2},
+	state3,
+	func(d *data, e event) (hsm.TransitionOutput, error) {
+		if e.fail {
+			return hsm.TransitionOutput{}, handlerErr
+		}
+		return hsm.TransitionOutput{}, nil
+	},
+)
 
 func TestTransition_Possible(t *testing.T) {
 	d := &data{state: state4}
@@ -81,40 +81,22 @@ func TestTransition_Possible(t *testing.T) {
 	require.True(t, transition.Possible(d))
 }
 
-func TestTransition_WithoutBeforeAndAfterHooks(t *testing.T) {
+func TestTransition_ValidTransition(t *testing.T) {
 	d := &data{state: state1}
-	require.NoError(t, transition.Apply(d, event{}, &statemachines.MockEnvironment{}))
+	_, err := transition.Apply(d, event{})
+	require.NoError(t, err)
 	require.Equal(t, state3, d.state)
-	require.Equal(t, []struct{ from, to state }{{state1, state3}}, d.transitions)
 }
 
 func TestTransition_InvalidTransition(t *testing.T) {
 	d := &data{state: state4}
-	err := transition.Apply(d, event{}, &statemachines.MockEnvironment{})
-	require.ErrorIs(t, err, statemachines.ErrInvalidTransition)
+	_, err := transition.Apply(d, event{})
+	require.ErrorIs(t, err, hsm.ErrInvalidTransition)
+	require.Equal(t, state4, d.state)
 }
 
-func TestTransition_WithHooks(t *testing.T) {
-	transitionWithHooks := transition
-	beforeErr := errors.New("before")
-	afterErr := errors.New("after")
-
-	transitionWithHooks.Before = func(d *data, e event, env statemachines.Environment) error {
-		if e.failBeforeHook {
-			return beforeErr
-		}
-		return nil
-	}
-	transitionWithHooks.After = func(d *data, e event, env statemachines.Environment) error {
-		if e.failAfterHook {
-			return afterErr
-		}
-		return nil
-	}
-
+func TestTransition_HandlerError(t *testing.T) {
 	d := &data{state: state1}
-	err := transitionWithHooks.Apply(d, event{failBeforeHook: true}, &statemachines.MockEnvironment{})
-	require.ErrorIs(t, err, beforeErr)
-	err = transitionWithHooks.Apply(d, event{failAfterHook: true}, &statemachines.MockEnvironment{})
-	require.ErrorIs(t, err, afterErr)
+	_, err := transition.Apply(d, event{fail: true})
+	require.ErrorIs(t, err, handlerErr)
 }
