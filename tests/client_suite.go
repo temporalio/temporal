@@ -50,6 +50,7 @@ import (
 	"go.temporal.io/sdk/temporal"
 	"go.temporal.io/sdk/worker"
 	"go.temporal.io/sdk/workflow"
+	"go.temporal.io/server/common/testing/historyrequire"
 	"go.uber.org/multierr"
 
 	"go.temporal.io/server/api/adminservice/v1"
@@ -69,6 +70,7 @@ type (
 		// not merely log an error
 		*require.Assertions
 		FunctionalTestBase
+		historyrequire.HistoryRequire
 		sdkClient                 sdkclient.Client
 		worker                    worker.Worker
 		taskQueue                 string
@@ -107,6 +109,7 @@ func (s *ClientFunctionalSuite) TearDownSuite() {
 func (s *ClientFunctionalSuite) SetupTest() {
 	// Have to define our overridden assertions in the test setup. If we did it earlier, s.T() will return nil
 	s.Assertions = require.New(s.T())
+	s.HistoryRequire = historyrequire.New(s.T())
 
 	sdkClient, err := sdkclient.Dial(sdkclient.Options{
 		HostPort:  s.hostPort,
