@@ -469,3 +469,14 @@ func dfs(curr string, visited, inStack map[string]bool, nodes map[string][]strin
 	inStack[curr] = false
 	return false
 }
+
+func FindAssignmentBuildId(rules []*persistencepb.AssignmentRule) string {
+	for _, r := range rules {
+		if r.GetDeleteTimestamp() != nil {
+			continue
+		}
+		// TODO: implement filter and ramp
+		return r.GetRule().GetTargetBuildId()
+	}
+	return ""
+}
