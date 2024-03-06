@@ -36,6 +36,7 @@ import (
 	"time"
 
 	otelsdktrace "go.opentelemetry.io/otel/sdk/trace"
+	"go.temporal.io/server/common/membership/static"
 	"go.uber.org/fx"
 	"go.uber.org/multierr"
 	"golang.org/x/exp/maps"
@@ -427,7 +428,7 @@ func (c *temporalImpl) startFrontend(hosts map[primitives.ServiceName][]string, 
 		fx.Provide(func() resource.NamespaceLogger { return c.logger }),
 		fx.Provide(c.newRPCFactory),
 		fx.Provide(func() membership.Monitor {
-			return newSimpleMonitor(hosts)
+			return static.NewStaticMonitor(hosts)
 		}),
 		fx.Provide(func() membership.HostInfoProvider {
 			return newSimpleHostInfoProvider(serviceName, hosts)
@@ -525,7 +526,7 @@ func (c *temporalImpl) startHistory(
 			fx.Provide(func() log.ThrottledLogger { return c.logger }),
 			fx.Provide(c.newRPCFactory),
 			fx.Provide(func() membership.Monitor {
-				return newSimpleMonitor(hosts)
+				return static.NewStaticMonitor(hosts)
 			}),
 			fx.Provide(func() membership.HostInfoProvider {
 				return newSimpleHostInfoProvider(serviceName, hosts)
@@ -624,7 +625,7 @@ func (c *temporalImpl) startMatching(hosts map[primitives.ServiceName][]string, 
 		fx.Provide(func() log.ThrottledLogger { return c.logger }),
 		fx.Provide(c.newRPCFactory),
 		fx.Provide(func() membership.Monitor {
-			return newSimpleMonitor(hosts)
+			return static.NewStaticMonitor(hosts)
 		}),
 		fx.Provide(func() membership.HostInfoProvider {
 			return newSimpleHostInfoProvider(serviceName, hosts)
@@ -721,7 +722,7 @@ func (c *temporalImpl) startWorker(hosts map[primitives.ServiceName][]string, st
 		fx.Provide(func() log.ThrottledLogger { return c.logger }),
 		fx.Provide(c.newRPCFactory),
 		fx.Provide(func() membership.Monitor {
-			return newSimpleMonitor(hosts)
+			return static.NewStaticMonitor(hosts)
 		}),
 		fx.Provide(func() membership.HostInfoProvider {
 			return newSimpleHostInfoProvider(serviceName, hosts)
