@@ -306,8 +306,15 @@ func (e *matchingEngineImpl) getTaskQueuePartitionManagerNoWait(
 		e.partitionsLock.Lock()
 		pm, ok = e.partitions[key]
 		if !ok {
-			var err error
-			pm, err = newTaskQueuePartitionManager(e, partition, e.config)
+			namespaceEntry, err := e.namespaceRegistry.GetNamespaceByID(partition.NamespaceId())
+			if err != nil {
+				e.partitionsLock.Unlock()
+				return nil, err
+			}
+			nsName := namespaceEntry.Name()
+			tqConfig := newTaskQueueConfig(partition.TaskQueue(), e.config, nsName)
+			userDataManager := newUserDataManager(e.taskManager, e.matchingRawClient, partition, tqConfig, e.logger, e.namespaceRegistry)
+			pm, err = newTaskQueuePartitionManager(e, namespaceEntry, partition, tqConfig, userDataManager)
 			if err != nil {
 				e.partitionsLock.Unlock()
 				return nil, err
@@ -335,19 +342,19 @@ func (e *matchingEngineImpl) updateTaskQueue(partition tqid.Partition, mgr taskQ
 func (e *matchingEngineImpl) AddWorkflowTask(
 	ctx context.Context,
 	addRequest *matchingservice.AddWorkflowTaskRequest,
-) (bool, error) {
+) (buildId string, syncMatch bool, err error) {
 	partition, err := tqid.PartitionFromProto(addRequest.TaskQueue, addRequest.NamespaceId, enumspb.TASK_QUEUE_TYPE_WORKFLOW)
 	if err != nil {
-		return false, err
+		return "", false, err
 	}
 
 	sticky := partition.Kind() == enumspb.TASK_QUEUE_KIND_STICKY
 	// do not load sticky task queue if it is not already loaded, which means it has no poller.
 	pm, err := e.getTaskQueuePartitionManager(ctx, partition, !sticky)
 	if err != nil {
-		return false, err
+		return "", false, err
 	} else if sticky && !stickyWorkerAvailable(pm) {
-		return false, serviceerrors.NewStickyWorkerUnavailable()
+		return "", false, serviceerrors.NewStickyWorkerUnavailable()
 	}
 
 	// This needs to move to history see - https://go.temporal.io/server/issues/181
@@ -380,14 +387,14 @@ func (e *matchingEngineImpl) AddWorkflowTask(
 func (e *matchingEngineImpl) AddActivityTask(
 	ctx context.Context,
 	addRequest *matchingservice.AddActivityTaskRequest,
-) (bool, error) {
+) (buildId string, syncMatch bool, err error) {
 	partition, err := tqid.PartitionFromProto(addRequest.TaskQueue, addRequest.GetNamespaceId(), enumspb.TASK_QUEUE_TYPE_ACTIVITY)
 	if err != nil {
-		return false, err
+		return "", false, err
 	}
 	pm, err := e.getTaskQueuePartitionManager(ctx, partition, true)
 	if err != nil {
-		return false, err
+		return "", false, err
 	}
 
 	var expirationTime *timestamppb.Timestamp

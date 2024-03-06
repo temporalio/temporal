@@ -38,18 +38,15 @@ import (
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	enumsspb "go.temporal.io/server/api/enums/v1"
-	"go.temporal.io/server/api/historyservice/v1"
-	"go.temporal.io/server/api/historyservicemock/v1"
 	"go.temporal.io/server/api/matchingservicemock/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/dynamicconfig"
-	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence"
-	"go.temporal.io/server/common/persistence/visibility/manager"
 	"go.temporal.io/server/common/primitives/timestamp"
+	"go.temporal.io/server/common/tqid"
 	"go.temporal.io/server/internal/goro"
 )
 
@@ -348,8 +345,14 @@ func createTestTaskQueueManagerWithConfig(
 	testOpts *tqmTestOpts,
 	opts ...taskQueueManagerOpt,
 ) (*physicalTaskQueueManagerImpl, error) {
-	pm := createTestTaskQueuePartitionManager(controller, testOpts)
-	tlMgr, err := newTaskQueueManager(pm, testOpts.dbq, opts...)
+	nsName := namespace.Name("ns-name")
+	ns, registry := createMockNamespaceCache(controller, nsName)
+	me := createTestMatchingEngine(controller, testOpts.config, testOpts.matchingClientMock, registry)
+	partition := testOpts.dbq.Partition()
+	tqConfig := newTaskQueueConfig(partition.TaskQueue(), me.config, nsName)
+	userDataManager := newUserDataManager(me.taskManager, me.matchingRawClient, partition, tqConfig, me.logger, me.namespaceRegistry)
+	pm := createTestTaskQueuePartitionManager(ns, partition, tqConfig, me, userDataManager)
+	tlMgr, err := newPhysicalTaskQueueManager(pm, testOpts.dbq, opts...)
 	pm.defaultQueue = tlMgr
 	if err != nil {
 		return nil, err
@@ -357,33 +360,19 @@ func createTestTaskQueueManagerWithConfig(
 	return tlMgr, nil
 }
 
-func createTestTaskQueuePartitionManager(controller *gomock.Controller, testOpts *tqmTestOpts) *taskQueuePartitionManagerImpl {
-	logger := log.NewTestLogger()
-	ns := namespace.Name("ns-name")
-	tm := newTestTaskManager(logger)
-	mockNamespaceCache := namespace.NewMockRegistry(controller)
-	mockNamespaceCache.EXPECT().GetNamespaceByID(gomock.Any()).Return(&namespace.Namespace{}, nil).AnyTimes()
-	mockNamespaceCache.EXPECT().GetNamespaceName(gomock.Any()).Return(ns, nil).AnyTimes()
-	mockVisibilityManager := manager.NewMockVisibilityManager(controller)
-	mockVisibilityManager.EXPECT().Close().AnyTimes()
-	mockHistoryClient := historyservicemock.NewMockHistoryServiceClient(controller)
-	mockHistoryClient.EXPECT().IsWorkflowTaskValid(gomock.Any(), gomock.Any()).Return(&historyservice.IsWorkflowTaskValidResponse{IsValid: true}, nil).AnyTimes()
-	mockHistoryClient.EXPECT().IsActivityTaskValid(gomock.Any(), gomock.Any()).Return(&historyservice.IsActivityTaskValidResponse{IsValid: true}, nil).AnyTimes()
-	me := newMatchingEngine(testOpts.config, tm, mockHistoryClient, logger, mockNamespaceCache, testOpts.matchingClientMock, mockVisibilityManager)
-
-	taskQueueConfig := newTaskQueueConfig(testOpts.dbq.Partition().TaskQueue(), me.config, ns)
+func createTestTaskQueuePartitionManager(ns *namespace.Namespace, partition tqid.Partition, tqConfig *taskQueueConfig, me *matchingEngineImpl, userDataManager userDataManager) *taskQueuePartitionManagerImpl {
 	pm := &taskQueuePartitionManagerImpl{
 		engine:               me,
-		partition:            testOpts.dbq.Partition(),
-		config:               taskQueueConfig,
-		namespaceRegistry:    me.namespaceRegistry,
-		logger:               logger,
+		partition:            partition,
+		config:               tqConfig,
+		ns:                   ns,
+		logger:               me.logger,
 		matchingClient:       me.matchingRawClient,
 		taggedMetricsHandler: me.metricsHandler,
-		userDataManager:      newUserDataManager(me.taskManager, me.matchingRawClient, testOpts.dbq.Partition(), taskQueueConfig, me.logger, me.namespaceRegistry),
+		userDataManager:      userDataManager,
 	}
 
-	me.partitions[testOpts.dbq.Partition().Key()] = pm
+	me.partitions[partition.Key()] = pm
 	return pm
 }
 
