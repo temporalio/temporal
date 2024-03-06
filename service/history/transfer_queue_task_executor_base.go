@@ -145,7 +145,7 @@ func (t *transferQueueTaskExecutorBase) pushActivity(
 		return err
 	}
 
-	if directive.GetUseDefault() == nil {
+	if directive.GetAssignNew() == nil {
 		// activity is not getting a new build id, so no need to update MS
 		return nil
 	}
@@ -198,7 +198,7 @@ func (t *transferQueueTaskExecutorBase) pushWorkflowTask(
 		return err
 	}
 
-	if directive.GetUseDefault() == nil {
+	if directive.GetAssignNew() == nil {
 		// not the first task of the workflow, no need to update MS
 		return nil
 	}

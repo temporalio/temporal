@@ -592,7 +592,7 @@ func (t *timerQueueStandbyTaskExecutor) pushActivity(
 		return err
 	}
 
-	if pushActivityInfo.versionDirective.GetUseDefault() == nil {
+	if pushActivityInfo.versionDirective.GetAssignNew() == nil {
 		// activity is not getting a new build id, so no need to update MS
 		return nil
 	}
