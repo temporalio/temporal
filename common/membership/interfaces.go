@@ -49,7 +49,6 @@ var ErrListenerAlreadyExist = errors.New("listener already exist for the service
 var ErrIncorrectAddressFormat = errors.New("incorrect address format")
 
 type (
-
 	// ChangedEvent describes a change in membership
 	ChangedEvent struct {
 		HostsAdded   []HostInfo

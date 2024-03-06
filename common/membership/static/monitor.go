@@ -22,7 +22,7 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-package tests
+package static
 
 import (
 	"context"
@@ -32,39 +32,38 @@ import (
 	"go.temporal.io/server/common/primitives"
 )
 
-type simpleMonitor struct {
+type staticMonitor struct {
 	hosts     map[primitives.ServiceName][]string
-	resolvers map[primitives.ServiceName]*simpleResolver
+	resolvers map[primitives.ServiceName]*staticResolver
 }
 
-// NewSimpleMonitor returns a simple monitor interface
-func newSimpleMonitor(hosts map[primitives.ServiceName][]string) *simpleMonitor {
-	resolvers := make(map[primitives.ServiceName]*simpleResolver, len(hosts))
+func newStaticMonitor(hosts map[primitives.ServiceName][]string) membership.Monitor {
+	resolvers := make(map[primitives.ServiceName]*staticResolver, len(hosts))
 	for service, hostList := range hosts {
-		resolvers[service] = newSimpleResolver(service, hostList)
+		resolvers[service] = newStaticResolver(service, hostList)
 	}
 
-	return &simpleMonitor{
+	return &staticMonitor{
 		hosts:     hosts,
 		resolvers: resolvers,
 	}
 }
 
-func (s *simpleMonitor) Start() {
+func (s *staticMonitor) Start() {
 	for service, r := range s.resolvers {
 		r.start(s.hosts[service])
 	}
 }
 
-func (s *simpleMonitor) EvictSelf() error {
+func (s *staticMonitor) EvictSelf() error {
 	return nil
 }
 
-func (s *simpleMonitor) EvictSelfAt(asOf time.Time) (time.Duration, error) {
+func (s *staticMonitor) EvictSelfAt(asOf time.Time) (time.Duration, error) {
 	return 0, nil
 }
 
-func (s *simpleMonitor) GetResolver(service primitives.ServiceName) (membership.ServiceResolver, error) {
+func (s *staticMonitor) GetResolver(service primitives.ServiceName) (membership.ServiceResolver, error) {
 	resolver, ok := s.resolvers[service]
 	if !ok {
 		return nil, membership.ErrUnknownService
@@ -72,18 +71,18 @@ func (s *simpleMonitor) GetResolver(service primitives.ServiceName) (membership.
 	return resolver, nil
 }
 
-func (s *simpleMonitor) GetReachableMembers() ([]string, error) {
+func (s *staticMonitor) GetReachableMembers() ([]string, error) {
 	return nil, nil
 }
 
-func (s *simpleMonitor) WaitUntilInitialized(_ context.Context) error {
+func (s *staticMonitor) WaitUntilInitialized(_ context.Context) error {
 	return nil
 }
 
-func (s *simpleMonitor) SetDraining(draining bool) error {
+func (s *staticMonitor) SetDraining(draining bool) error {
 	return nil
 }
 
-func (s *simpleMonitor) ApproximateMaxPropagationTime() time.Duration {
+func (s *staticMonitor) ApproximateMaxPropagationTime() time.Duration {
 	return 0
 }
