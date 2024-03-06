@@ -149,12 +149,11 @@ func (h *Handler) AddActivityTask(
 		h.reportForwardedPerTaskQueueCounter(opMetrics, namespace.ID(request.GetNamespaceId()))
 	}
 
-	syncMatch, err := h.engine.AddActivityTask(ctx, request)
+	assignedBuildId, syncMatch, err := h.engine.AddActivityTask(ctx, request)
 	if syncMatch {
 		opMetrics.Timer(metrics.SyncMatchLatencyPerTaskQueue.Name()).Record(time.Since(startT))
 	}
-
-	return &matchingservice.AddActivityTaskResponse{}, err
+	return &matchingservice.AddActivityTaskResponse{AssignedBuildId: assignedBuildId}, err
 }
 
 // AddWorkflowTask - adds a workflow task.
@@ -174,11 +173,11 @@ func (h *Handler) AddWorkflowTask(
 		h.reportForwardedPerTaskQueueCounter(opMetrics, namespace.ID(request.GetNamespaceId()))
 	}
 
-	syncMatch, err := h.engine.AddWorkflowTask(ctx, request)
+	assignedBuildId, syncMatch, err := h.engine.AddWorkflowTask(ctx, request)
 	if syncMatch {
 		opMetrics.Timer(metrics.SyncMatchLatencyPerTaskQueue.Name()).Record(time.Since(startT))
 	}
-	return &matchingservice.AddWorkflowTaskResponse{}, err
+	return &matchingservice.AddWorkflowTaskResponse{AssignedBuildId: assignedBuildId}, err
 }
 
 // PollActivityTaskQueue - long poll for an activity task.

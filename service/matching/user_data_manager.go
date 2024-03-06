@@ -55,6 +55,18 @@ const (
 )
 
 type (
+	userDataManager interface {
+		Start()
+		Stop()
+		WaitUntilInitialized(ctx context.Context) error
+		// GetUserData returns the versioning data for this task queue. Do not mutate the returned pointer, as doing so
+		// will cause cache inconsistency.
+		GetUserData() (*persistencespb.VersionedTaskQueueUserData, chan struct{}, error)
+		// UpdateUserData updates user data for this task queue and replicates across clusters if necessary.
+		// Extra care should be taken to avoid mutating the existing data in the update function.
+		UpdateUserData(ctx context.Context, options UserDataUpdateOptions, updateFn UserDataUpdateFunc) error
+	}
+
 	// userDataManager is responsible for fetching and keeping user data up-to-date in-memory
 	// for a given TQ partition.
 	//
@@ -62,7 +74,7 @@ type (
 	// we say the partition "owns" user data for its task queue. All reads and writes
 	// to/from the persistence layer passes through userDataManager of the owning partition.
 	// All other partitions long-poll the latest user data from the owning partition.
-	userDataManager struct {
+	userDataManagerImpl struct {
 		lock            sync.Mutex
 		partition       tqid.Partition
 		userData        *persistencespb.VersionedTaskQueueUserData
@@ -83,14 +95,11 @@ type (
 	userDataState int
 )
 
+var _ userDataManager = (*userDataManagerImpl)(nil)
+
 var (
 	errUserDataNoMutateNonRoot = serviceerror.NewInvalidArgument("can only mutate user data on root workflow task queue")
-
-	// This is an internal error when requesting user data on a TQM created for a specific
-	// version set. This indicates a bug in the server since nothing should be using this data.
-	errNoUserDataOnVersionedTQM = serviceerror.NewInternal("should not get user data on versioned tqm")
-
-	errTaskQueueClosed = serviceerror.NewUnavailable("task queue closed")
+	errTaskQueueClosed         = serviceerror.NewUnavailable("task queue closed")
 )
 
 func newUserDataManager(
@@ -100,9 +109,9 @@ func newUserDataManager(
 	config *taskQueueConfig,
 	logger log.Logger,
 	registry namespace.Registry,
-) *userDataManager {
+) *userDataManagerImpl {
 
-	m := &userDataManager{
+	m := &userDataManagerImpl{
 		logger:            logger,
 		partition:         partition,
 		config:            config,
@@ -119,7 +128,7 @@ func newUserDataManager(
 	return m
 }
 
-func (m *userDataManager) Start() {
+func (m *userDataManagerImpl) Start() {
 	if m.store != nil {
 		m.goroGroup.Go(m.loadUserData)
 	} else {
@@ -127,12 +136,12 @@ func (m *userDataManager) Start() {
 	}
 }
 
-func (m *userDataManager) WaitUntilInitialized(ctx context.Context) error {
+func (m *userDataManagerImpl) WaitUntilInitialized(ctx context.Context) error {
 	_, err := m.userDataReady.Get(ctx)
 	return err
 }
 
-func (m *userDataManager) Stop() {
+func (m *userDataManagerImpl) Stop() {
 	m.goroGroup.Cancel()
 	// Set user data state on stop to wake up anyone blocked on the user data changed channel.
 	m.setUserDataState(userDataClosed, nil)
@@ -141,13 +150,13 @@ func (m *userDataManager) Stop() {
 // GetUserData returns the versioning data for this task queue and a channel that signals when the data has been updated.
 // Do not mutate the returned pointer, as doing so will cause cache inconsistency.
 // If there is no user data, this can return a nil value with no error.
-func (m *userDataManager) GetUserData() (*persistencespb.VersionedTaskQueueUserData, chan struct{}, error) {
+func (m *userDataManagerImpl) GetUserData() (*persistencespb.VersionedTaskQueueUserData, chan struct{}, error) {
 	m.lock.Lock()
 	defer m.lock.Unlock()
 	return m.getUserDataLocked()
 }
 
-func (m *userDataManager) getUserDataLocked() (*persistencespb.VersionedTaskQueueUserData, chan struct{}, error) {
+func (m *userDataManagerImpl) getUserDataLocked() (*persistencespb.VersionedTaskQueueUserData, chan struct{}, error) {
 	switch m.userDataState {
 	case userDataEnabled:
 		return m.userData, m.userDataChanged, nil
@@ -159,7 +168,7 @@ func (m *userDataManager) getUserDataLocked() (*persistencespb.VersionedTaskQueu
 	}
 }
 
-func (m *userDataManager) setUserDataLocked(userData *persistencespb.VersionedTaskQueueUserData) {
+func (m *userDataManagerImpl) setUserDataLocked(userData *persistencespb.VersionedTaskQueueUserData) {
 	m.userData = userData
 	close(m.userDataChanged)
 	m.userDataChanged = make(chan struct{})
@@ -171,7 +180,7 @@ func (m *userDataManager) setUserDataLocked(userData *persistencespb.VersionedTa
 // be unloaded.
 // Note that this must only be called from a single goroutine since the Ready/Set sequence is
 // potentially racy otherwise.
-func (m *userDataManager) setUserDataState(userDataState userDataState, futureError error) {
+func (m *userDataManagerImpl) setUserDataState(userDataState userDataState, futureError error) {
 	m.lock.Lock()
 	defer m.lock.Unlock()
 
@@ -186,14 +195,14 @@ func (m *userDataManager) setUserDataState(userDataState userDataState, futureEr
 	}
 }
 
-func (m *userDataManager) loadUserData(ctx context.Context) error {
+func (m *userDataManagerImpl) loadUserData(ctx context.Context) error {
 	ctx = m.callerInfoContext(ctx)
 	err := m.loadUserDataFromDB(ctx)
 	m.setUserDataState(userDataEnabled, err)
 	return nil
 }
 
-func (m *userDataManager) userDataFetchSource() (*tqid.NormalPartition, error) {
+func (m *userDataManagerImpl) userDataFetchSource() (*tqid.NormalPartition, error) {
 	switch p := m.partition.(type) {
 	case *tqid.NormalPartition:
 		// change to the workflow task queue
@@ -222,7 +231,7 @@ func (m *userDataManager) userDataFetchSource() (*tqid.NormalPartition, error) {
 
 }
 
-func (m *userDataManager) fetchUserData(ctx context.Context) error {
+func (m *userDataManagerImpl) fetchUserData(ctx context.Context) error {
 	ctx = m.callerInfoContext(ctx)
 
 	// fetch from parent partition
@@ -301,7 +310,7 @@ func (m *userDataManager) fetchUserData(ctx context.Context) error {
 }
 
 // Loads user data from db (called only on initialization of taskQueuePartitionManager).
-func (m *userDataManager) loadUserDataFromDB(ctx context.Context) error {
+func (m *userDataManagerImpl) loadUserDataFromDB(ctx context.Context) error {
 	response, err := m.store.GetTaskQueueUserData(ctx, &persistence.GetTaskQueueUserDataRequest{
 		NamespaceID: m.partition.NamespaceId().String(),
 		TaskQueue:   m.partition.TaskQueue().Name(),
@@ -323,7 +332,7 @@ func (m *userDataManager) loadUserDataFromDB(ctx context.Context) error {
 
 // UpdateUserData updates user data for this task queue and replicates across clusters if necessary.
 // Extra care should be taken to avoid mutating the existing data in the update function.
-func (m *userDataManager) UpdateUserData(ctx context.Context, options UserDataUpdateOptions, updateFn UserDataUpdateFunc) error {
+func (m *userDataManagerImpl) UpdateUserData(ctx context.Context, options UserDataUpdateOptions, updateFn UserDataUpdateFunc) error {
 	if m.store == nil {
 		return errUserDataNoMutateNonRoot
 	}
@@ -367,7 +376,7 @@ func (m *userDataManager) UpdateUserData(ctx context.Context, options UserDataUp
 //
 // On success returns a pointer to the updated data, which must *not* be mutated, and a boolean indicating whether the
 // data should be replicated.
-func (m *userDataManager) updateUserData(
+func (m *userDataManagerImpl) updateUserData(
 	ctx context.Context,
 	updateFn UserDataUpdateFunc,
 	knownVersion int64,
@@ -427,13 +436,13 @@ func (m *userDataManager) updateUserData(
 	return updatedVersionedData, shouldReplicate, err
 }
 
-func (m *userDataManager) setUserDataForNonOwningPartition(userData *persistencespb.VersionedTaskQueueUserData) {
+func (m *userDataManagerImpl) setUserDataForNonOwningPartition(userData *persistencespb.VersionedTaskQueueUserData) {
 	m.lock.Lock()
 	defer m.lock.Unlock()
 	m.setUserDataLocked(userData)
 }
 
-func (m *userDataManager) callerInfoContext(ctx context.Context) context.Context {
+func (m *userDataManagerImpl) callerInfoContext(ctx context.Context) context.Context {
 	ns, _ := m.namespaceRegistry.GetNamespaceName(m.partition.NamespaceId())
 	return headers.SetCallerInfo(ctx, headers.NewBackgroundCallerInfo(ns.String()))
 }
