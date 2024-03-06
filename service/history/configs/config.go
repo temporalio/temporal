@@ -153,6 +153,19 @@ type Config struct {
 	TransferProcessorEnsureCloseBeforeDelete            dynamicconfig.BoolPropertyFn
 	TransferQueueMaxReaderCount                         dynamicconfig.IntPropertyFn
 
+	// CallbackQueueProcessor settings
+	CallbackProcessorEnabled                            dynamicconfig.BoolPropertyFn
+	CallbackTaskBatchSize                               dynamicconfig.IntPropertyFn
+	CallbackProcessorMaxPollRPS                         dynamicconfig.IntPropertyFn
+	CallbackProcessorMaxPollHostRPS                     dynamicconfig.IntPropertyFn
+	CallbackProcessorMaxPollInterval                    dynamicconfig.DurationPropertyFn
+	CallbackProcessorMaxPollIntervalJitterCoefficient   dynamicconfig.FloatPropertyFn
+	CallbackProcessorUpdateAckInterval                  dynamicconfig.DurationPropertyFn
+	CallbackProcessorUpdateAckIntervalJitterCoefficient dynamicconfig.FloatPropertyFn
+	CallbackProcessorPollBackoffInterval                dynamicconfig.DurationPropertyFn
+	CallbackQueueMaxReaderCount                         dynamicconfig.IntPropertyFn
+	CallbackTaskTimeout                                 dynamicconfig.DurationPropertyFn
+
 	// ReplicatorQueueProcessor settings
 	ReplicatorProcessorMaxPollInterval                  dynamicconfig.DurationPropertyFn
 	ReplicatorProcessorMaxPollIntervalJitterCoefficient dynamicconfig.FloatPropertyFn
@@ -438,6 +451,17 @@ func NewConfig(
 		TransferProcessorEnsureCloseBeforeDelete:            dc.GetBoolProperty(dynamicconfig.TransferProcessorEnsureCloseBeforeDelete, true),
 		TimerQueueMaxReaderCount:                            dc.GetIntProperty(dynamicconfig.TimerQueueMaxReaderCount, 2),
 
+		CallbackTaskBatchSize:                               dc.GetIntProperty(dynamicconfig.CallbackTaskBatchSize, 100),
+		CallbackProcessorMaxPollRPS:                         dc.GetIntProperty(dynamicconfig.CallbackProcessorMaxPollRPS, 20),
+		CallbackProcessorMaxPollHostRPS:                     dc.GetIntProperty(dynamicconfig.CallbackProcessorMaxPollHostRPS, 0),
+		CallbackProcessorMaxPollInterval:                    dc.GetDurationProperty(dynamicconfig.CallbackProcessorMaxPollInterval, 1*time.Minute),
+		CallbackProcessorMaxPollIntervalJitterCoefficient:   dc.GetFloat64Property(dynamicconfig.CallbackProcessorMaxPollIntervalJitterCoefficient, 0.15),
+		CallbackProcessorUpdateAckInterval:                  dc.GetDurationProperty(dynamicconfig.CallbackProcessorUpdateAckInterval, 30*time.Second),
+		CallbackProcessorUpdateAckIntervalJitterCoefficient: dc.GetFloat64Property(dynamicconfig.CallbackProcessorUpdateAckIntervalJitterCoefficient, 0.15),
+		CallbackProcessorPollBackoffInterval:                dc.GetDurationProperty(dynamicconfig.CallbackProcessorPollBackoffInterval, 5*time.Second),
+		CallbackQueueMaxReaderCount:                         dc.GetIntProperty(dynamicconfig.CallbackQueueMaxReaderCount, 4),
+		CallbackTaskTimeout:                                 dc.GetDurationProperty(dynamicconfig.CallbackTaskTimeout, time.Second*10),
+
 		ReplicatorProcessorMaxPollInterval:                  dc.GetDurationProperty(dynamicconfig.ReplicatorProcessorMaxPollInterval, 1*time.Minute),
 		ReplicatorProcessorMaxPollIntervalJitterCoefficient: dc.GetFloat64Property(dynamicconfig.ReplicatorProcessorMaxPollIntervalJitterCoefficient, 0.15),
 		ReplicatorProcessorFetchTasksBatchSize:              dc.GetIntProperty(dynamicconfig.ReplicatorTaskBatchSize, 25),
@@ -445,13 +469,12 @@ func NewConfig(
 		ReplicationTaskProcessorHostQPS:                     dc.GetFloat64Property(dynamicconfig.ReplicationTaskProcessorHostQPS, 1500),
 		ReplicationTaskProcessorShardQPS:                    dc.GetFloat64Property(dynamicconfig.ReplicationTaskProcessorShardQPS, 30),
 		ReplicationEnableDLQMetrics:                         dc.GetBoolProperty(dynamicconfig.ReplicationEnableDLQMetrics, true),
-
-		ReplicationStreamSyncStatusDuration:      dc.GetDurationProperty(dynamicconfig.ReplicationStreamSyncStatusDuration, 1*time.Second),
-		ReplicationProcessorSchedulerQueueSize:   dc.GetIntProperty(dynamicconfig.ReplicationProcessorSchedulerQueueSize, 128),
-		ReplicationProcessorSchedulerWorkerCount: dc.GetIntProperty(dynamicconfig.ReplicationProcessorSchedulerWorkerCount, 512),
-		EnableReplicationEagerRefreshNamespace:   dc.GetBoolProperty(dynamicconfig.EnableEagerNamespaceRefresher, false),
-		EnableReplicationTaskBatching:            dc.GetBoolProperty(dynamicconfig.EnableReplicationTaskBatching, false),
-		EnableReplicateLocalGeneratedEvent:       dc.GetBoolProperty(dynamicconfig.EnableReplicateLocalGeneratedEvents, false),
+		ReplicationStreamSyncStatusDuration:                 dc.GetDurationProperty(dynamicconfig.ReplicationStreamSyncStatusDuration, 1*time.Second),
+		ReplicationProcessorSchedulerQueueSize:              dc.GetIntProperty(dynamicconfig.ReplicationProcessorSchedulerQueueSize, 128),
+		ReplicationProcessorSchedulerWorkerCount:            dc.GetIntProperty(dynamicconfig.ReplicationProcessorSchedulerWorkerCount, 512),
+		EnableReplicationEagerRefreshNamespace:              dc.GetBoolProperty(dynamicconfig.EnableEagerNamespaceRefresher, false),
+		EnableReplicationTaskBatching:                       dc.GetBoolProperty(dynamicconfig.EnableReplicationTaskBatching, false),
+		EnableReplicateLocalGeneratedEvent:                  dc.GetBoolProperty(dynamicconfig.EnableReplicateLocalGeneratedEvents, false),
 
 		MaximumBufferedEventsBatch:       dc.GetIntProperty(dynamicconfig.MaximumBufferedEventsBatch, 100),
 		MaximumBufferedEventsSizeInBytes: dc.GetIntProperty(dynamicconfig.MaximumBufferedEventsSizeInBytes, 2*1024*1024),

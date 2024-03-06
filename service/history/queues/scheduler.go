@@ -193,6 +193,17 @@ func (s *schedulerImpl) TaskChannelKeyFn() TaskChannelKeyFn {
 	return s.taskChannelKeyFn
 }
 
+// CommonSchedulerWrapper is an adapter that converts a common [task.Scheduler] to a [Scheduler] with an injectable
+// TaskChannelKeyFn.
+type CommonSchedulerWrapper struct {
+	tasks.Scheduler[Executable]
+	TaskKeyFn func(e Executable) TaskChannelKey
+}
+
+func (s *CommonSchedulerWrapper) TaskChannelKeyFn() TaskChannelKeyFn {
+	return s.TaskKeyFn
+}
+
 func NewRateLimitedScheduler(
 	baseScheduler Scheduler,
 	options RateLimitedSchedulerOptions,

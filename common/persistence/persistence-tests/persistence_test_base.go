@@ -33,6 +33,7 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/suite"
+
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	replicationspb "go.temporal.io/server/api/replication/v1"
 	"go.temporal.io/server/common"
@@ -87,26 +88,27 @@ type (
 	// TestBase wraps the base setup needed to create workflows over persistence layer.
 	TestBase struct {
 		suite.Suite
-		ShardMgr                  persistence.ShardManager
-		AbstractDataStoreFactory  client.AbstractDataStoreFactory
-		VisibilityStoreFactory    visibility.VisibilityStoreFactory
-		FaultInjection            *client.FaultInjectionDataStoreFactory
-		Factory                   client.Factory
-		ExecutionManager          persistence.ExecutionManager
-		TaskMgr                   persistence.TaskManager
-		ClusterMetadataManager    persistence.ClusterMetadataManager
-		MetadataManager           persistence.MetadataManager
-		NamespaceReplicationQueue persistence.NamespaceReplicationQueue
-		ShardInfo                 *persistencespb.ShardInfo
-		TaskIDGenerator           TransferTaskIDGenerator
-		ClusterMetadata           cluster.Metadata
-		SearchAttributesManager   searchattribute.Manager
-		PersistenceRateLimiter    quotas.RequestRateLimiter
-		PersistenceHealthSignals  persistence.HealthSignalAggregator
-		ReadLevel                 int64
-		ReplicationReadLevel      int64
-		DefaultTestCluster        PersistenceTestCluster
-		Logger                    log.Logger
+		ShardMgr                    persistence.ShardManager
+		AbstractDataStoreFactory    client.AbstractDataStoreFactory
+		VisibilityStoreFactory      visibility.VisibilityStoreFactory
+		FaultInjection              *client.FaultInjectionDataStoreFactory
+		Factory                     client.Factory
+		ExecutionManager            persistence.ExecutionManager
+		TaskMgr                     persistence.TaskManager
+		ClusterMetadataManager      persistence.ClusterMetadataManager
+		MetadataManager             persistence.MetadataManager
+		NamespaceReplicationQueue   persistence.NamespaceReplicationQueue
+		NexusIncomingServiceManager persistence.NexusIncomingServiceManager
+		ShardInfo                   *persistencespb.ShardInfo
+		TaskIDGenerator             TransferTaskIDGenerator
+		ClusterMetadata             cluster.Metadata
+		SearchAttributesManager     searchattribute.Manager
+		PersistenceRateLimiter      quotas.RequestRateLimiter
+		PersistenceHealthSignals    persistence.HealthSignalAggregator
+		ReadLevel                   int64
+		ReplicationReadLevel        int64
+		DefaultTestCluster          PersistenceTestCluster
+		Logger                      log.Logger
 	}
 
 	// PersistenceTestCluster exposes management operations on a database
@@ -149,9 +151,9 @@ func NewTestBaseWithSQL(options *TestBaseOptions) *TestBase {
 
 	if options.DBPort == 0 {
 		switch options.SQLDBPluginName {
-		case mysql.PluginName, mysql.PluginNameV8:
+		case mysql.PluginName:
 			options.DBPort = environment.GetMySQLPort()
-		case postgresql.PluginName, postgresql.PluginNamePGX, postgresql.PluginNameV12, postgresql.PluginNameV12PGX:
+		case postgresql.PluginName, postgresql.PluginNamePGX:
 			options.DBPort = environment.GetPostgreSQLPort()
 		case sqlite.PluginName:
 			options.DBPort = 0
@@ -161,7 +163,7 @@ func NewTestBaseWithSQL(options *TestBaseOptions) *TestBase {
 	}
 	if options.DBHost == "" {
 		switch options.SQLDBPluginName {
-		case mysql.PluginName, mysql.PluginNameV8:
+		case mysql.PluginName:
 			options.DBHost = environment.GetMySQLAddress()
 		case postgresql.PluginName, postgresql.PluginNamePGX:
 			options.DBHost = environment.GetPostgreSQLAddress()
@@ -238,6 +240,9 @@ func (s *TestBase) Setup(clusterMetadataConfig *cluster.Config) {
 	s.ExecutionManager, err = factory.NewExecutionManager()
 	s.fatalOnError("NewExecutionManager", err)
 
+	s.NexusIncomingServiceManager, err = factory.NewNexusIncomingServiceManager()
+	s.fatalOnError("NewNexusIncomingServiceManager", err)
+
 	s.Factory = factory
 	s.FaultInjection = faultInjection
 
@@ -274,6 +279,7 @@ func (s *TestBase) TearDownWorkflowStore() {
 	s.ExecutionManager.Close()
 	s.ShardMgr.Close()
 	s.ExecutionManager.Close()
+	s.NexusIncomingServiceManager.Close()
 	s.NamespaceReplicationQueue.Stop()
 	s.Factory.Close()
 	s.DefaultTestCluster.TearDownTestDatabase()

@@ -49,6 +49,7 @@ type (
 		TestDisableSyncMatch                  dynamicconfig.BoolPropertyFn
 		RPS                                   dynamicconfig.IntPropertyFn
 		OperatorRPSRatio                      dynamicconfig.FloatPropertyFn
+		AlignMembershipChange                 dynamicconfig.DurationPropertyFn
 		ShutdownDrainDuration                 dynamicconfig.DurationPropertyFn
 		HistoryMaxPageSize                    dynamicconfig.IntPropertyFnWithNamespaceFilter
 
@@ -94,6 +95,8 @@ type (
 		VisibilityEnableManualPagination  dynamicconfig.BoolPropertyFnWithNamespaceFilter
 
 		LoadUserData dynamicconfig.BoolPropertyFnWithTaskQueueInfoFilters
+
+		ListNexusIncomingServicesLongPollTimeout dynamicconfig.DurationPropertyFn
 
 		// FrontendAccessHistoryFraction is an interim flag across 2 minor releases and will be removed once fully enabled.
 		FrontendAccessHistoryFraction dynamicconfig.FloatPropertyFn
@@ -193,15 +196,16 @@ func NewConfig(
 		ForwarderMaxOutstandingTasks:          dc.GetIntPropertyFilteredByTaskQueueInfo(dynamicconfig.MatchingForwarderMaxOutstandingTasks, 1),
 		ForwarderMaxRatePerSecond:             dc.GetIntPropertyFilteredByTaskQueueInfo(dynamicconfig.MatchingForwarderMaxRatePerSecond, 10),
 		ForwarderMaxChildrenPerNode:           dc.GetIntPropertyFilteredByTaskQueueInfo(dynamicconfig.MatchingForwarderMaxChildrenPerNode, 20),
+		AlignMembershipChange:                 dc.GetDurationProperty(dynamicconfig.MatchingAlignMembershipChange, 0*time.Second),
 		ShutdownDrainDuration:                 dc.GetDurationProperty(dynamicconfig.MatchingShutdownDrainDuration, 0*time.Second),
 		VersionCompatibleSetLimitPerQueue:     dc.GetIntPropertyFilteredByNamespace(dynamicconfig.VersionCompatibleSetLimitPerQueue, 10),
 		VersionBuildIdLimitPerQueue:           dc.GetIntPropertyFilteredByNamespace(dynamicconfig.VersionBuildIdLimitPerQueue, 100),
 		TaskQueueLimitPerBuildId:              dc.GetIntPropertyFilteredByNamespace(dynamicconfig.TaskQueuesPerBuildIdLimit, 20),
-		GetUserDataLongPollTimeout:            dc.GetDurationProperty(dynamicconfig.MatchingGetUserDataLongPollTimeout, 5*time.Minute-10*time.Second),
+		GetUserDataLongPollTimeout:            dc.GetDurationProperty(dynamicconfig.MatchingGetUserDataLongPollTimeout, 5*time.Minute-10*time.Second), // Use -10 seconds so that we send back empty response instead of timeout
 		BacklogNegligibleAge:                  dc.GetDurationPropertyFilteredByTaskQueueInfo(dynamicconfig.MatchingBacklogNegligibleAge, 24*365*10*time.Hour),
 		MaxWaitForPollerBeforeFwd:             dc.GetDurationPropertyFilteredByTaskQueueInfo(dynamicconfig.MatchingMaxWaitForPollerBeforeFwd, 200*time.Millisecond),
 		QueryPollerUnavailableWindow:          dc.GetDurationProperty(dynamicconfig.QueryPollerUnavailableWindow, 20*time.Second),
-		MembershipUnloadDelay:                 dc.GetDurationProperty(dynamicconfig.MatchingMembershipUnloadDelay, 3*time.Second),
+		MembershipUnloadDelay:                 dc.GetDurationProperty(dynamicconfig.MatchingMembershipUnloadDelay, 500*time.Millisecond),
 
 		AdminNamespaceToPartitionDispatchRate:          dc.GetFloatPropertyFilteredByNamespace(dynamicconfig.AdminMatchingNamespaceToPartitionDispatchRate, 10000),
 		AdminNamespaceTaskqueueToPartitionDispatchRate: dc.GetFloatPropertyFilteredByTaskQueueInfo(dynamicconfig.AdminMatchingNamespaceTaskqueueToPartitionDispatchRate, 1000),
@@ -211,6 +215,8 @@ func NewConfig(
 		EnableReadFromSecondaryVisibility: visibility.GetEnableReadFromSecondaryVisibilityConfig(dc),
 		VisibilityDisableOrderByClause:    dc.GetBoolPropertyFnWithNamespaceFilter(dynamicconfig.VisibilityDisableOrderByClause, true),
 		VisibilityEnableManualPagination:  dc.GetBoolPropertyFnWithNamespaceFilter(dynamicconfig.VisibilityEnableManualPagination, true),
+
+		ListNexusIncomingServicesLongPollTimeout: dc.GetDurationProperty(dynamicconfig.MatchingListNexusIncomingServicesLongPollTimeout, 5*time.Minute-10*time.Second), // Use -10 seconds so that we send back empty response instead of timeout
 
 		FrontendAccessHistoryFraction: dc.GetFloat64Property(dynamicconfig.FrontendAccessHistoryFraction, 0.0),
 	}

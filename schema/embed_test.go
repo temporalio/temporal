@@ -38,8 +38,6 @@ func TestSchemaDirs(t *testing.T) {
 
 	dirs = PathsByDir("mysql")
 	requireContains(t, []string{
-		"mysql/v57/temporal",
-		"mysql/v57/visibility",
 		"mysql/v8/temporal",
 		"mysql/v8/visibility",
 	}, dirs)
@@ -48,8 +46,6 @@ func TestSchemaDirs(t *testing.T) {
 	requireContains(t, []string{
 		"postgresql/v12/temporal",
 		"postgresql/v12/visibility",
-		"postgresql/v96/temporal",
-		"postgresql/v96/visibility",
 	}, dirs)
 }
 

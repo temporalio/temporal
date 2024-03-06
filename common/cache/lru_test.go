@@ -154,12 +154,17 @@ func TestLRUWithTTL(t *testing.T) {
 	snapshot := capture.Snapshot()
 	assert.Equal(t, float64(5), snapshot[metrics.CacheSize.Name()][0].Value)
 	assert.Equal(t, float64(1), snapshot[metrics.CacheUsage.Name()][0].Value)
+	assert.Equal(t, time.Millisecond*100, snapshot[metrics.CacheTtl.Name()][0].Value)
+	assert.Equal(t, time.Duration(0), snapshot[metrics.CacheEntryAgeOnGet.Name()][0].Value)
 	timeSource.Advance(time.Millisecond * 300)
 	assert.Nil(t, cache.Get("A"))
 	snapshot = capture.Snapshot()
 	assert.Equal(t, 2, len(snapshot[metrics.CacheUsage.Name()]))
 	assert.Equal(t, float64(0), snapshot[metrics.CacheUsage.Name()][1].Value)
 	assert.Equal(t, 0, cache.Size())
+	assert.Equal(t, 2, len(snapshot[metrics.CacheEntryAgeOnGet.Name()]))
+	assert.Equal(t, time.Millisecond*300, snapshot[metrics.CacheEntryAgeOnGet.Name()][1].Value)
+	assert.Equal(t, time.Millisecond*300, snapshot[metrics.CacheEntryAgeOnEviction.Name()][0].Value)
 }
 
 func TestLRUCacheConcurrentAccess(t *testing.T) {

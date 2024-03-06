@@ -50,6 +50,7 @@ import (
 	"go.temporal.io/sdk/temporal"
 	"go.temporal.io/sdk/worker"
 	"go.temporal.io/sdk/workflow"
+	"go.temporal.io/server/common/testing/historyrequire"
 	"go.uber.org/multierr"
 
 	"go.temporal.io/server/api/adminservice/v1"
@@ -69,6 +70,7 @@ type (
 		// not merely log an error
 		*require.Assertions
 		FunctionalTestBase
+		historyrequire.HistoryRequire
 		sdkClient                 sdkclient.Client
 		worker                    worker.Worker
 		taskQueue                 string
@@ -92,10 +94,13 @@ func (s *ClientFunctionalSuite) SetupSuite() {
 	s.maxPendingCancelRequests = limit
 	s.maxPendingSignals = limit
 	s.dynamicConfigOverrides = map[dynamicconfig.Key]interface{}{
-		dynamicconfig.NumPendingChildExecutionsLimitError: s.maxPendingChildExecutions,
-		dynamicconfig.NumPendingActivitiesLimitError:      s.maxPendingActivities,
-		dynamicconfig.NumPendingCancelRequestsLimitError:  s.maxPendingCancelRequests,
-		dynamicconfig.NumPendingSignalsLimitError:         s.maxPendingSignals,
+		dynamicconfig.NumPendingChildExecutionsLimitError:        s.maxPendingChildExecutions,
+		dynamicconfig.NumPendingActivitiesLimitError:             s.maxPendingActivities,
+		dynamicconfig.NumPendingCancelRequestsLimitError:         s.maxPendingCancelRequests,
+		dynamicconfig.NumPendingSignalsLimitError:                s.maxPendingSignals,
+		dynamicconfig.FrontendEnableNexusHTTPHandler:             true,
+		dynamicconfig.FrontendEnableWorkerVersioningDataAPIs:     true,
+		dynamicconfig.FrontendEnableWorkerVersioningWorkflowAPIs: true,
 	}
 	s.setupSuite("testdata/client_cluster.yaml")
 }
@@ -107,6 +112,7 @@ func (s *ClientFunctionalSuite) TearDownSuite() {
 func (s *ClientFunctionalSuite) SetupTest() {
 	// Have to define our overridden assertions in the test setup. If we did it earlier, s.T() will return nil
 	s.Assertions = require.New(s.T())
+	s.HistoryRequire = historyrequire.New(s.T())
 
 	sdkClient, err := sdkclient.Dial(sdkclient.Options{
 		HostPort:  s.hostPort,
@@ -1649,10 +1655,6 @@ func (s *ClientFunctionalSuite) TestBatchReset() {
 }
 
 func (s *ClientFunctionalSuite) TestBatchResetByBuildId() {
-	if !UsingSQLAdvancedVisibility() {
-		s.T().Skip("Test requires advanced visibility")
-	}
-
 	tq := s.randomizeStr(s.T().Name())
 	buildPrefix := uuid.New()[:6] + "-"
 	v1 := buildPrefix + "v1"

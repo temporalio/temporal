@@ -172,7 +172,7 @@ func newMatchingEngine(
 		historyClient:        mockHistoryClient,
 		taskQueues:           make(map[taskQueueID]taskQueueManager),
 		taskQueueCount:       make(map[taskQueueCounterKey]int),
-		lockableQueryTaskMap: lockableQueryTaskMap{queryTaskMap: make(map[string]chan *queryResult)},
+		lockableQueryResultMap: lockableResultMap[*queryResult]{resultMap: make(map[string]chan *queryResult)},
 		logger:               logger,
 		throttledLogger:      log.ThrottledLogger(logger),
 		metricsHandler:       metrics.NoopMetricsHandler,
@@ -2133,7 +2133,6 @@ func (s *matchingEngineSuite) TestGetTaskQueueUserData_NoData() {
 		LastKnownUserDataVersion: 0,
 	})
 	s.NoError(err)
-	s.False(res.TaskQueueHasUserData)
 	s.Nil(res.UserData.GetData())
 }
 
@@ -2160,7 +2159,6 @@ func (s *matchingEngineSuite) TestGetTaskQueueUserData_ReturnsData() {
 		LastKnownUserDataVersion: 0,
 	})
 	s.NoError(err)
-	s.True(res.TaskQueueHasUserData)
 	s.Equal(res.UserData, userData)
 }
 
@@ -2187,7 +2185,6 @@ func (s *matchingEngineSuite) TestGetTaskQueueUserData_ReturnsEmpty() {
 		LastKnownUserDataVersion: userData.Version,
 	})
 	s.NoError(err)
-	s.True(res.TaskQueueHasUserData)
 	s.Nil(res.UserData.GetData())
 }
 
@@ -2220,7 +2217,6 @@ func (s *matchingEngineSuite) TestGetTaskQueueUserData_LongPoll_Expires() {
 		WaitNewData:              true,
 	})
 	s.NoError(err)
-	s.True(res.TaskQueueHasUserData)
 	s.Nil(res.UserData.GetData())
 	elapsed := time.Since(start)
 	s.Greater(elapsed, 900*time.Millisecond)
@@ -2262,7 +2258,6 @@ func (s *matchingEngineSuite) TestGetTaskQueueUserData_LongPoll_WakesUp_FromNoth
 		WaitNewData:              true,
 	})
 	s.NoError(err)
-	s.True(res.TaskQueueHasUserData)
 	s.NotNil(res.UserData.Data.VersioningData)
 }
 
@@ -2314,7 +2309,6 @@ func (s *matchingEngineSuite) TestGetTaskQueueUserData_LongPoll_WakesUp_From2to3
 		WaitNewData:              true,
 	})
 	s.NoError(err)
-	s.True(res.TaskQueueHasUserData)
 	s.True(hlc.Greater(res.UserData.Data.Clock, userData.Data.Clock))
 	s.NotNil(res.UserData.Data.VersioningData)
 }

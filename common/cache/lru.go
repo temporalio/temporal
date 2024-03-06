@@ -160,6 +160,7 @@ func New(maxSize int, opts *Options, handler metrics.Handler) Cache {
 	}
 
 	metrics.CacheSize.With(handler).Record(float64(maxSize))
+	metrics.CacheTtl.With(handler).Record(opts.TTL)
 	return &lru{
 		byAccess:       list.New(),
 		byKey:          make(map[interface{}]*list.Element),
@@ -192,6 +193,8 @@ func (c *lru) Get(key interface{}) interface{} {
 	}
 
 	entry := element.Value.(*entryImpl)
+
+	metrics.CacheEntryAgeOnGet.With(c.metricsHandler).Record(c.timeSource.Now().UTC().Sub(entry.createTime))
 
 	if c.isEntryExpired(entry, c.timeSource.Now().UTC()) {
 		// Entry has expired
@@ -361,6 +364,7 @@ func (c *lru) deleteInternal(element *list.Element) {
 	entry := c.byAccess.Remove(element).(*entryImpl)
 	c.currSize -= entry.Size()
 	metrics.CacheUsage.With(c.metricsHandler).Record(float64(c.currSize))
+	metrics.CacheEntryAgeOnEviction.With(c.metricsHandler).Record(c.timeSource.Now().UTC().Sub(entry.createTime))
 	delete(c.byKey, entry.key)
 }
 

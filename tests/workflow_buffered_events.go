@@ -27,7 +27,6 @@ package tests
 import (
 	"bytes"
 	"encoding/binary"
-	"fmt"
 	"time"
 
 	"github.com/pborman/uuid"
@@ -235,19 +234,19 @@ func (s *FunctionalSuite) TestBufferedEvents() {
 	s.NoError(err)
 
 	// check history, the signal event should be after the complete workflow task
-	histResp, err := s.engine.GetWorkflowExecutionHistory(NewContext(), &workflowservice.GetWorkflowExecutionHistoryRequest{
-		Namespace: s.namespace,
-		Execution: &commonpb.WorkflowExecution{
-			WorkflowId: id,
-			RunId:      we.RunId,
-		},
+	historyEvents := s.getHistory(s.namespace, &commonpb.WorkflowExecution{
+		WorkflowId: id,
+		RunId:      we.RunId,
 	})
-	s.NoError(err)
-	s.NotNil(histResp.History.Events)
-	s.True(len(histResp.History.Events) >= 6)
-	s.Equal(histResp.History.Events[3].GetEventType(), enumspb.EVENT_TYPE_WORKFLOW_TASK_COMPLETED)
-	s.Equal(histResp.History.Events[4].GetEventType(), enumspb.EVENT_TYPE_ACTIVITY_TASK_SCHEDULED)
-	s.Equal(histResp.History.Events[5].GetEventType(), enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_SIGNALED)
+	s.EqualHistoryEvents(`
+  1 WorkflowExecutionStarted
+  2 WorkflowTaskScheduled
+  3 WorkflowTaskStarted
+  4 WorkflowTaskCompleted
+  5 ActivityTaskScheduled
+  6 WorkflowExecutionSignaled
+  7 WorkflowTaskScheduled
+  8 WorkflowTaskStarted`, historyEvents)
 
 	// Process signal in workflow
 	_, err = poller.PollAndProcessWorkflowTask(WithDumpHistory)
@@ -288,13 +287,10 @@ func (s *FunctionalSuite) TestBufferedEventsOutOfOrder() {
 	}
 
 	// workflow logic
-	workflowComplete := false
 	firstWorkflowTask := false
 	secondWorkflowTask := false
 	wtHandler := func(execution *commonpb.WorkflowExecution, wt *commonpb.WorkflowType,
 		previousStartedEventID, startedEventID int64, history *historypb.History) ([]*commandpb.Command, error) {
-
-		s.Logger.Info(fmt.Sprintf("Workflow called: first: %v, second: %v, complete: %v\n", firstWorkflowTask, secondWorkflowTask, workflowComplete))
 
 		if !firstWorkflowTask {
 			firstWorkflowTask = true
@@ -332,7 +328,6 @@ func (s *FunctionalSuite) TestBufferedEventsOutOfOrder() {
 			}}, nil
 		}
 
-		workflowComplete = true
 		return []*commandpb.Command{{
 			CommandType: enumspb.COMMAND_TYPE_COMPLETE_WORKFLOW_EXECUTION,
 			Attributes: &commandpb.Command_CompleteWorkflowExecutionCommandAttributes{CompleteWorkflowExecutionCommandAttributes: &commandpb.CompleteWorkflowExecutionCommandAttributes{
@@ -389,24 +384,21 @@ func (s *FunctionalSuite) TestBufferedEventsOutOfOrder() {
 	s.Nil(task.WorkflowTask)
 
 	events := s.getHistory(s.namespace, workflowExecution)
-	var scheduleEvent, startedEvent, completedEvent *historypb.HistoryEvent
-	for _, event := range events {
-		switch event.GetEventType() {
-		case enumspb.EVENT_TYPE_ACTIVITY_TASK_SCHEDULED:
-			scheduleEvent = event
-		case enumspb.EVENT_TYPE_ACTIVITY_TASK_STARTED:
-			startedEvent = event
-		case enumspb.EVENT_TYPE_ACTIVITY_TASK_COMPLETED:
-			completedEvent = event
-		}
-	}
-
-	s.NotNil(scheduleEvent)
-	s.NotNil(startedEvent)
-	s.NotNil(completedEvent)
-	s.True(startedEvent.GetEventId() < completedEvent.GetEventId())
-	s.Equal(scheduleEvent.GetEventId(), startedEvent.GetActivityTaskStartedEventAttributes().GetScheduledEventId())
-	s.Equal(scheduleEvent.GetEventId(), completedEvent.GetActivityTaskCompletedEventAttributes().GetScheduledEventId())
-	s.Equal(startedEvent.GetEventId(), completedEvent.GetActivityTaskCompletedEventAttributes().GetStartedEventId())
-	s.True(workflowComplete)
+	s.EqualHistoryEvents(`
+  1 WorkflowExecutionStarted
+  2 WorkflowTaskScheduled
+  3 WorkflowTaskStarted
+  4 WorkflowTaskCompleted
+  5 MarkerRecorded
+  6 ActivityTaskScheduled
+  7 WorkflowTaskScheduled
+  8 WorkflowTaskStarted
+  9 WorkflowTaskCompleted
+ 10 MarkerRecorded
+ 11 ActivityTaskStarted {"ScheduledEventId":6}
+ 12 ActivityTaskCompleted {"ScheduledEventId":6,"StartedEventId":11}
+ 13 WorkflowTaskScheduled
+ 14 WorkflowTaskStarted
+ 15 WorkflowTaskCompleted
+ 16 WorkflowExecutionCompleted`, events)
 }

@@ -29,9 +29,13 @@ import (
 
 	"github.com/golang/mock/gomock"
 	"github.com/stretchr/testify/assert"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 
+	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/server/common/api"
 	"go.temporal.io/server/common/log"
+	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
 )
@@ -81,6 +85,52 @@ func TestEmitActionMetric(t *testing.T) {
 	}
 }
 
+func TestHandleError(t *testing.T) {
+	controller := gomock.NewController(t)
+	registry := namespace.NewMockRegistry(controller)
+	metricsHandler := metrics.NewMockHandler(controller)
+	telemetry := NewTelemetryInterceptor(registry, metricsHandler, log.NewNoopLogger())
+
+	testCases := []struct {
+		name                 string
+		err                  error
+		expectServiceFailure bool
+	}{
+		{
+			name:                 "serviceerror-invalid-argument",
+			err:                  serviceerror.NewInvalidArgument("invalid argument"),
+			expectServiceFailure: false,
+		},
+		{
+			name:                 "statuserror-invalid-argument",
+			err:                  status.Error(codes.InvalidArgument, "invalid argument"),
+			expectServiceFailure: false,
+		},
+		{
+			name:                 "serviceerror-internal",
+			err:                  serviceerror.NewInternal("internal"),
+			expectServiceFailure: true,
+		},
+		{
+			name:                 "statuserror-internal",
+			err:                  status.Error(codes.Internal, "internal"),
+			expectServiceFailure: true,
+		},
+	}
+
+	for _, tt := range testCases {
+		t.Run(tt.name, func(t *testing.T) {
+			metricsHandler.EXPECT().Counter(metrics.ServiceErrorWithType.Name()).Return(metrics.NoopCounterMetricFunc).Times(1)
+			times := 0
+			if tt.expectServiceFailure {
+				times = 1
+			}
+			metricsHandler.EXPECT().Counter(metrics.ServiceFailures.Name()).Return(metrics.NoopCounterMetricFunc).Times(times)
+			telemetry.handleError(metricsHandler, []tag.Tag{}, tt.err)
+		})
+	}
+}
+
 func TestOperationOverwrite(t *testing.T) {
 	controller := gomock.NewController(t)
 	register := namespace.NewMockRegistry(controller)
@@ -115,5 +165,4 @@ func TestOperationOverwrite(t *testing.T) {
 			assert.Equal(t, tt.expectedOperation, operation)
 		})
 	}
-
 }

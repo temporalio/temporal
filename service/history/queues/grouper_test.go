@@ -51,12 +51,12 @@ func TestGrouperNamespaceIDAndDestination_Key(t *testing.T) {
 		Destination: "dest",
 	}
 	k := g.Key(task)
-	require.Equal(t, namespaceIDAndDestination{"nid", "dest"}, k)
+	require.Equal(t, NamespaceIDAndDestination{"nid", "dest"}, k)
 }
 
 func TestGrouperNamespaceIDAndDestination_Predicate(t *testing.T) {
 	g := GrouperNamespaceIDAndDestination{}
-	p := g.Predicate([]any{namespaceIDAndDestination{"n1", "d1"}, namespaceIDAndDestination{"n2", "d2"}})
+	p := g.Predicate([]any{NamespaceIDAndDestination{"n1", "d1"}, NamespaceIDAndDestination{"n2", "d2"}})
 	expected := predicates.Or(
 		predicates.And(
 			tasks.NewNamespacePredicate([]string{"n1"}),

@@ -131,6 +131,7 @@ func (s *FunctionalTestBase) setupSuite(defaultClusterConfigFile string, options
 	})
 	maps.Copy(clusterConfig.DynamicConfigOverrides, s.dynamicConfigOverrides)
 	clusterConfig.ServiceFxOptions = params.ServiceOptions
+	clusterConfig.EnableMetricsCapture = true
 	s.testClusterConfig = clusterConfig
 
 	if clusterConfig.FrontendAddress != "" {
@@ -341,12 +342,6 @@ func (s *FunctionalTestBase) getHistory(namespace string, execution *commonpb.Wo
 	}
 
 	return events
-}
-
-func (s *FunctionalTestBase) getLastEvent(namespace string, execution *commonpb.WorkflowExecution) *historypb.HistoryEvent {
-	events := s.getHistory(namespace, execution)
-	s.Require().NotEmpty(events)
-	return events[len(events)-1]
 }
 
 func (s *FunctionalTestBase) decodePayloadsString(ps *commonpb.Payloads) string {

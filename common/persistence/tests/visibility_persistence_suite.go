@@ -45,8 +45,6 @@ import (
 	"go.temporal.io/server/common/payload"
 	"go.temporal.io/server/common/persistence"
 	persistencetests "go.temporal.io/server/common/persistence/persistence-tests"
-	"go.temporal.io/server/common/persistence/sql/sqlplugin/mysql"
-	"go.temporal.io/server/common/persistence/sql/sqlplugin/postgresql"
 	"go.temporal.io/server/common/persistence/visibility"
 	"go.temporal.io/server/common/persistence/visibility/manager"
 	"go.temporal.io/server/common/primitives/timestamp"
@@ -780,11 +778,6 @@ func (s *VisibilityPersistenceSuite) TestAdvancedVisibilityPagination() {
 }
 
 func (s *VisibilityPersistenceSuite) TestCountWorkflowExecutions() {
-	switch s.VisibilityMgr.GetStoreNames()[0] {
-	case mysql.PluginName, postgresql.PluginName, postgresql.PluginNamePGX:
-		s.T().Skip("Not supported by standard visibility")
-	}
-
 	testNamespaceUUID := namespace.ID(uuid.New())
 	closeTime := time.Now().UTC()
 	startTime := closeTime.Add(-5 * time.Second)
@@ -812,11 +805,6 @@ func (s *VisibilityPersistenceSuite) TestCountWorkflowExecutions() {
 }
 
 func (s *VisibilityPersistenceSuite) TestCountGroupByWorkflowExecutions() {
-	switch s.VisibilityMgr.GetStoreNames()[0] {
-	case mysql.PluginName, postgresql.PluginName, postgresql.PluginNamePGX:
-		s.T().Skip("Not supported by standard visibility")
-	}
-
 	testNamespaceUUID := namespace.ID(uuid.New())
 	closeTime := time.Now().UTC()
 	startTime := closeTime.Add(-5 * time.Second)
