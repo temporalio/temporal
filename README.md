@@ -6,7 +6,7 @@
 [go-report-image]: https://goreportcard.com/badge/github.com/temporalio/temporal
 [go-report-url]: https://goreportcard.com/report/github.com/temporalio/temporal
 
-# Temporal
+# Temporal DEBUG
 
 Temporal is a durable execution platform that enables developers to build scalable applications without sacrificing productivity or reliability.
 The Temporal server executes units of application logic called Workflows in a resilient manner that automatically handles intermittent failures, and retries failed operations.
