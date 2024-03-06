@@ -149,10 +149,14 @@ func buildDSN(
 	return mysqlConfig.FormatDSN(), nil
 }
 
+func paramInterpolationAllowed(dbKind sqlplugin.DbKind) bool {
+	return dbKind != sqlplugin.DbKindVisibility
+}
+
 func buildDSNAttrs(dbKind sqlplugin.DbKind, cfg *config.SQL) (map[string]string, error) {
 	attrs := make(map[string]string, len(dsnAttrOverrides)+len(cfg.ConnectAttributes)+1)
 	// Enable interpolation by default unless this is a mysql8 visibility store
-	if dbKind != sqlplugin.DbKindVisibility {
+	if paramInterpolationAllowed(dbKind) {
 		attrs[interpolateParamsAttr] = "true"
 	}
 	for k, v := range cfg.ConnectAttributes {
@@ -171,7 +175,7 @@ func buildDSNAttrs(dbKind sqlplugin.DbKind, cfg *config.SQL) (map[string]string,
 		attrs[k] = v
 	}
 
-	if dbKind == sqlplugin.DbKindVisibility {
+	if !paramInterpolationAllowed(dbKind) {
 		if _, ok := attrs[interpolateParamsAttr]; ok {
 			return nil, errVisInterpolateParamsNotSupported
 		}
