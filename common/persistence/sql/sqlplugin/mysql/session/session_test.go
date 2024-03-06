@@ -182,7 +182,7 @@ func (s *sessionTestSuite) Test_Visibility_DoesntSupport_interpolateParams() {
 	r := resolver.NewMockServiceResolver(s.controller)
 	r.EXPECT().Resolve(cfg.ConnectAddr).Return([]string{cfg.ConnectAddr})
 	_, err := buildDSN(sqlplugin.DbKindVisibility, &cfg, r)
-	s.Error(err, "We should return an error when a MySQL8 Visibility database is configured with interpolateParams")
+	s.Error(err, "We should return an error when a MySQL Visibility database is configured with interpolateParams")
 }
 
 func buildExpectedURLParams(attrs map[string]string, isolationKey string, isolationValue string) url.Values {

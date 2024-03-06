@@ -59,8 +59,8 @@ const (
 )
 
 var (
-	errMySQL8VisInterpolateParamsNotSupported = errors.New("interpolateParams is not supported for mysql8 visibility stores")
-	dsnAttrOverrides                          = map[string]string{
+	errVisInterpolateParamsNotSupported = errors.New("interpolateParams is not supported for mysql visibility stores")
+	dsnAttrOverrides                    = map[string]string{
 		"parseTime":       "true",
 		"clientFoundRows": "true",
 	}
@@ -169,7 +169,7 @@ func buildDSNAttrs(dbKind sqlplugin.DbKind, cfg *config.SQL) (map[string]string,
 
 	if dbKind == sqlplugin.DbKindVisibility {
 		if _, ok := attrs[interpolateParamsAttr]; ok {
-			return nil, errMySQL8VisInterpolateParamsNotSupported
+			return nil, errVisInterpolateParamsNotSupported
 		}
 	}
 
