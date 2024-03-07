@@ -657,3 +657,77 @@ func (this *CallbackInfo) Equal(that interface{}) bool {
 
 	return proto.Equal(this, that1)
 }
+
+// Marshal an object of type NexusOperationInfo to the protobuf v3 wire format
+func (val *NexusOperationInfo) Marshal() ([]byte, error) {
+	return proto.Marshal(val)
+}
+
+// Unmarshal an object of type NexusOperationInfo from the protobuf v3 wire format
+func (val *NexusOperationInfo) Unmarshal(buf []byte) error {
+	return proto.Unmarshal(buf, val)
+}
+
+// Size returns the size of the object, in bytes, once serialized
+func (val *NexusOperationInfo) Size() int {
+	return proto.Size(val)
+}
+
+// Equal returns whether two NexusOperationInfo values are equivalent by recursively
+// comparing the message's fields.
+// For more information see the documentation for
+// https://pkg.go.dev/google.golang.org/protobuf/proto#Equal
+func (this *NexusOperationInfo) Equal(that interface{}) bool {
+	if that == nil {
+		return this == nil
+	}
+
+	var that1 *NexusOperationInfo
+	switch t := that.(type) {
+	case *NexusOperationInfo:
+		that1 = t
+	case NexusOperationInfo:
+		that1 = &t
+	default:
+		return false
+	}
+
+	return proto.Equal(this, that1)
+}
+
+// Marshal an object of type NexusOperationCancelationInfo to the protobuf v3 wire format
+func (val *NexusOperationCancelationInfo) Marshal() ([]byte, error) {
+	return proto.Marshal(val)
+}
+
+// Unmarshal an object of type NexusOperationCancelationInfo from the protobuf v3 wire format
+func (val *NexusOperationCancelationInfo) Unmarshal(buf []byte) error {
+	return proto.Unmarshal(buf, val)
+}
+
+// Size returns the size of the object, in bytes, once serialized
+func (val *NexusOperationCancelationInfo) Size() int {
+	return proto.Size(val)
+}
+
+// Equal returns whether two NexusOperationCancelationInfo values are equivalent by recursively
+// comparing the message's fields.
+// For more information see the documentation for
+// https://pkg.go.dev/google.golang.org/protobuf/proto#Equal
+func (this *NexusOperationCancelationInfo) Equal(that interface{}) bool {
+	if that == nil {
+		return this == nil
+	}
+
+	var that1 *NexusOperationCancelationInfo
+	switch t := that.(type) {
+	case *NexusOperationCancelationInfo:
+		that1 = t
+	case NexusOperationCancelationInfo:
+		that1 = &t
+	default:
+		return false
+	}
+
+	return proto.Equal(this, that1)
+}
