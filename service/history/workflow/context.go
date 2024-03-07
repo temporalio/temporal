@@ -1005,6 +1005,7 @@ func (c *ContextImpl) maxMutableStateSizeExceeded() bool {
 	mutableStateSizeLimitWarn := c.config.MutableStateSizeLimitWarn()
 
 	mutableStateSize := c.MutableState.GetApproximatePersistedSize()
+	metrics.PersistedMutableStateSize.With(c.metricsHandler).Record(int64(mutableStateSize))
 
 	if mutableStateSize > mutableStateSizeLimitError {
 		c.logger.Warn("mutable state size exceeds error limit.",
