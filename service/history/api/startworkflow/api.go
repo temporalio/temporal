@@ -282,23 +282,30 @@ func (s *Starter) handleConflict(
 	creationParams *creationParams,
 	currentWorkflowConditionFailed *persistence.CurrentWorkflowConditionFailedError,
 ) (*historyservice.StartWorkflowExecutionResponse, error) {
-	request := s.request.StartRequest
-	if currentWorkflowConditionFailed.RequestID == request.GetRequestId() {
+	if currentWorkflowConditionFailed.RequestID == s.request.StartRequest.GetRequestId() {
 		return s.respondToRetriedRequest(ctx, currentWorkflowConditionFailed.RunID)
 	}
+
 	if err := s.verifyNamespaceActive(creationParams, currentWorkflowConditionFailed); err != nil {
 		return nil, err
 	}
-	response, err := s.applyWorkflowIDReusePolicy(ctx, currentWorkflowConditionFailed, creationParams)
+
+	response, err := s.resolveDuplicateWorkflowID(ctx, currentWorkflowConditionFailed, creationParams)
 	if err != nil {
 		return nil, err
 	} else if response != nil {
 		return response, nil
 	}
+
 	if err := s.createAsCurrent(ctx, creationParams, currentWorkflowConditionFailed); err != nil {
 		return nil, err
 	}
-	return s.generateResponse(creationParams.runID, creationParams.workflowTaskInfo, extractHistoryEvents(creationParams.workflowEventBatches))
+
+	return s.generateResponse(
+		creationParams.runID,
+		creationParams.workflowTaskInfo,
+		extractHistoryEvents(creationParams.workflowEventBatches),
+	)
 }
 
 // createAsCurrent creates a new workflow execution and sets it to "current".
@@ -332,24 +339,21 @@ func (s *Starter) verifyNamespaceActive(creationParams *creationParams, currentW
 	return nil
 }
 
-// applyWorkflowIDReusePolicy applies the workflow ID reuse policy in case a workflow start requests fails with a
-// duplicate execution.
-// At the time of this writing, the only possible action here is to terminate the current execution in case the start
-// request's ID reuse policy is TERMINATE_IF_RUNNING.
+// resolveDuplicateWorkflowID determines how to resolve a duplicate workflow ID.
 // Returns non-nil response if an action was required and completed successfully resulting in a newly created execution.
-func (s *Starter) applyWorkflowIDReusePolicy(
+func (s *Starter) resolveDuplicateWorkflowID(
 	ctx context.Context,
 	currentWorkflowConditionFailed *persistence.CurrentWorkflowConditionFailedError,
 	creationParams *creationParams,
 ) (*historyservice.StartWorkflowExecutionResponse, error) {
 	workflowID := s.request.StartRequest.WorkflowId
-	prevExecutionUpdateAction, err := api.ApplyWorkflowIDReusePolicy(
-		currentWorkflowConditionFailed.RequestID,
+	prevExecutionUpdateAction, err := api.ResolveDuplicateWorkflowID(
+		workflowID,
+		creationParams.runID,
 		currentWorkflowConditionFailed.RunID,
 		currentWorkflowConditionFailed.State,
 		currentWorkflowConditionFailed.Status,
-		workflowID,
-		creationParams.runID,
+		currentWorkflowConditionFailed.RequestID,
 		s.request.StartRequest.GetWorkflowIdReusePolicy(),
 	)
 	if err != nil {
