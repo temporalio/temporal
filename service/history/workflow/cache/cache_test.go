@@ -654,7 +654,7 @@ func (s *workflowCacheSuite) TestCacheImpl_SizeBasedCacheBasic() {
 
 	// Now there are two entries pinned in the cache. Their total size is 800bytes.
 	// Make mockMS1 grow to 1000 bytes. Cache should be able to handle this. Now the cache size will be more than its
-	// limit. Cache will evict this entry and make more size.
+	// limit. Cache will evict this entry and make more space.
 	mockMS1.EXPECT().GetApproximatePersistedSize().Return(1000).Times(1)
 	release1(nil)
 	ctx, release1, err = s.cache.GetOrCreateWorkflowExecution(
