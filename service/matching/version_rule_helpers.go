@@ -40,6 +40,16 @@ import (
 	"go.temporal.io/server/common/util"
 )
 
+func cloneOrMkData(data *persistencepb.VersioningData) *persistencepb.VersioningData {
+	if data == nil {
+		return &persistencepb.VersioningData{
+			AssignmentRules: make([]*persistencepb.AssignmentRule, 0),
+			RedirectRules:   make([]*persistencepb.RedirectRule, 0),
+		}
+	}
+	return common.CloneProto(data)
+}
+
 func InsertAssignmentRule(timestamp *hlc.Clock,
 	data *persistencepb.VersioningData,
 	req *workflowservice.UpdateWorkerVersioningRulesRequest_InsertBuildIdAssignmentRule,
@@ -60,11 +70,7 @@ func InsertAssignmentRule(timestamp *hlc.Clock,
 		return nil, serviceerror.NewFailedPrecondition(
 			"update breaks requirement, this target build id cannot have a ramp because it is the source of a redirect rule")
 	}
-	if data == nil {
-		data = &persistencepb.VersioningData{AssignmentRules: make([]*persistencepb.AssignmentRule, 0)}
-	} else {
-		data = common.CloneProto(data)
-	}
+	data = cloneOrMkData(data)
 	rules := data.GetAssignmentRules()
 	persistenceAR := persistencepb.AssignmentRule{
 		Rule:            rule,
@@ -84,7 +90,7 @@ func ReplaceAssignmentRule(timestamp *hlc.Clock,
 	data *persistencepb.VersioningData,
 	req *workflowservice.UpdateWorkerVersioningRulesRequest_ReplaceBuildIdAssignmentRule,
 ) (*persistencepb.VersioningData, error) {
-	data = common.CloneProto(data)
+	data = cloneOrMkData(data)
 	rule := req.GetRule()
 	if ramp := rule.GetPercentageRamp(); !validRamp(ramp) {
 		return nil, serviceerror.NewInvalidArgument("ramp percentage must be in range [0, 100)")
@@ -119,7 +125,7 @@ func DeleteAssignmentRule(timestamp *hlc.Clock,
 	data *persistencepb.VersioningData,
 	req *workflowservice.UpdateWorkerVersioningRulesRequest_DeleteBuildIdAssignmentRule,
 ) (*persistencepb.VersioningData, error) {
-	data = common.CloneProto(data)
+	data = cloneOrMkData(data)
 	rules := data.GetAssignmentRules()
 	hadUnconditional := containsUnconditional(rules)
 	idx := req.GetRuleIndex()
@@ -136,11 +142,7 @@ func InsertCompatibleRedirectRule(timestamp *hlc.Clock,
 	data *persistencepb.VersioningData,
 	req *workflowservice.UpdateWorkerVersioningRulesRequest_AddCompatibleBuildIdRedirectRule,
 	maxRedirectRules int) (*persistencepb.VersioningData, error) {
-	if data == nil {
-		data = &persistencepb.VersioningData{RedirectRules: make([]*persistencepb.RedirectRule, 0)}
-	} else {
-		data = common.CloneProto(data)
-	}
+	data = cloneOrMkData(data)
 	rule := req.GetRule()
 	source := rule.GetSourceBuildId()
 	if isInVersionSets(source, data.GetVersionSets()) {
@@ -177,7 +179,7 @@ func ReplaceCompatibleRedirectRule(timestamp *hlc.Clock,
 	data *persistencepb.VersioningData,
 	req *workflowservice.UpdateWorkerVersioningRulesRequest_ReplaceCompatibleBuildIdRedirectRule,
 ) (*persistencepb.VersioningData, error) {
-	data = common.CloneProto(data)
+	data = cloneOrMkData(data)
 	rule := req.GetRule()
 	source := rule.GetSourceBuildId()
 	if isInVersionSets(source, data.GetVersionSets()) {
@@ -208,7 +210,7 @@ func DeleteCompatibleRedirectRule(timestamp *hlc.Clock,
 	data *persistencepb.VersioningData,
 	req *workflowservice.UpdateWorkerVersioningRulesRequest_DeleteCompatibleBuildIdRedirectRule,
 ) (*persistencepb.VersioningData, error) {
-	data = common.CloneProto(data)
+	data = cloneOrMkData(data)
 	source := req.GetSourceBuildId()
 	for _, r := range data.GetRedirectRules() {
 		if r.GetDeleteTimestamp() == nil && r.GetRule().GetSourceBuildId() == source {
@@ -249,11 +251,7 @@ func CommitBuildID(timestamp *hlc.Clock,
 	req *workflowservice.UpdateWorkerVersioningRulesRequest_CommitBuildId,
 	hasRecentPoller bool,
 	maxAssignmentRules int) (*persistencepb.VersioningData, error) {
-	if data == nil {
-		data = &persistencepb.VersioningData{RedirectRules: make([]*persistencepb.RedirectRule, 0)}
-	} else {
-		data = common.CloneProto(data)
-	}
+	data = cloneOrMkData(data)
 	target := req.GetTargetBuildId()
 	if !hasRecentPoller && !req.GetForce() {
 		return nil, serviceerror.NewFailedPrecondition(
