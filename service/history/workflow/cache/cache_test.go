@@ -532,10 +532,10 @@ func (s *workflowCacheSuite) TestCacheImpl_lockWorkflowExecution() {
 	}
 }
 
-func (s *workflowCacheSuite) TestCacheImpl_SizeBasedCacheBasic() {
+func (s *workflowCacheSuite) TestCacheImpl_RejectsRequestWhenAtLimitSimple() {
 	config := tests.NewDynamicConfig()
-	config.HistoryCacheLimitSizeBased = dynamicconfig.GetBoolPropertyFn(true)
-	config.HistoryHostLevelCacheMaxSize = dynamicconfig.GetIntPropertyFn(1000)
+	config.HistoryCacheLimitSizeBased = true
+	config.HistoryHostLevelCacheMaxSizeBytes = dynamicconfig.GetIntPropertyFn(1000)
 	s.cache = NewHostLevelCache(config, metrics.NoopMetricsHandler)
 	mockShard := shard.NewTestContext(
 		s.controller,
@@ -591,12 +591,43 @@ func (s *workflowCacheSuite) TestCacheImpl_SizeBasedCacheBasic() {
 	)
 	s.Error(err)
 	s.ErrorIs(err, cache.ErrCacheFull)
+}
 
-	// Now try inserting three 400byte entries to cache.
+func (s *workflowCacheSuite) TestCacheImpl_RejectsRequestWhenAtLimitMultiple() {
+	config := tests.NewDynamicConfig()
+	config.HistoryCacheLimitSizeBased = true
+	config.HistoryHostLevelCacheMaxSizeBytes = dynamicconfig.GetIntPropertyFn(1000)
+	s.cache = NewHostLevelCache(config, metrics.NoopMetricsHandler)
+	mockShard := shard.NewTestContext(
+		s.controller,
+		&persistencespb.ShardInfo{
+			ShardId: 0,
+			RangeId: 1,
+		},
+		config,
+	)
+	namespaceID := namespace.ID("test_namespace_id")
+	execution1 := commonpb.WorkflowExecution{
+		WorkflowId: "some random workflow ID",
+		RunId:      uuid.New(),
+	}
+	mockMS1 := workflow.NewMockMutableState(s.controller)
+	mockMS1.EXPECT().IsDirty().Return(false).AnyTimes()
+
+	// Try inserting three 400byte entries to cache.
+	ctx, release1, err := s.cache.GetOrCreateWorkflowExecution(
+		context.Background(),
+		mockShard,
+		namespaceID,
+		&execution1,
+		workflow.LockPriorityHigh,
+	)
+	s.NoError(err)
+	ctx.(*workflow.ContextImpl).MutableState = mockMS1
+
 	// Make mockMS1's size 400.
 	mockMS1.EXPECT().GetApproximatePersistedSize().Return(400).Times(1)
 	release1(nil)
-	// Fill 40 bytes in cache with mockMS1.
 	ctx, release1, err = s.cache.GetOrCreateWorkflowExecution(
 		context.Background(),
 		mockShard,
@@ -608,7 +639,7 @@ func (s *workflowCacheSuite) TestCacheImpl_SizeBasedCacheBasic() {
 	s.Equal(mockMS1, ctx.(*workflow.ContextImpl).MutableState)
 
 	// Insert another 400byte entry.
-	execution2 = commonpb.WorkflowExecution{
+	execution2 := commonpb.WorkflowExecution{
 		WorkflowId: "some random workflow ID",
 		RunId:      uuid.New(),
 	}
@@ -702,7 +733,7 @@ func (s *workflowCacheSuite) TestCacheImpl_SizeBasedCacheBasic() {
 func (s *workflowCacheSuite) TestCacheImpl_CheckCacheLimitSizeBasedFlag() {
 	config := tests.NewDynamicConfig()
 	// HistoryCacheLimitSizeBased is set to false. Cache limit should be based on entry count.
-	config.HistoryCacheLimitSizeBased = dynamicconfig.GetBoolPropertyFn(false)
+	config.HistoryCacheLimitSizeBased = false
 	config.HistoryHostLevelCacheMaxSize = dynamicconfig.GetIntPropertyFn(1)
 	s.cache = NewHostLevelCache(config, metrics.NoopMetricsHandler)
 	mockShard := shard.NewTestContext(

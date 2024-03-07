@@ -1058,7 +1058,7 @@ func (c *ContextImpl) forceTerminateWorkflow(
 // CacheSize estimates the in-memory size of the object for cache limits. For proto objects, it uses proto.Size()
 // which returns the serialized size. Note: In-memory size will be slightly larger than the serialized size.
 func (c *ContextImpl) CacheSize() int {
-	if !c.config.HistoryCacheLimitSizeBased() {
+	if !c.config.HistoryCacheLimitSizeBased {
 		return 1
 	}
 	size := len(c.workflowKey.WorkflowID) + len(c.workflowKey.RunID) + len(c.workflowKey.NamespaceID)

@@ -525,10 +525,11 @@ const (
 	HistoryCacheSizeBasedLimit = "history.cacheSizeBasedLimit"
 	// HistoryCacheInitialSize is initial size of history cache
 	HistoryCacheInitialSize = "history.cacheInitialSize"
-	// HistoryCacheMaxSize is max size of history cache. If history.cacheSizeBasedLimit set to true, this value is the
-	// maximum size of history cache in bytes. if history.cacheSizeBasedLimit set to false, this value is the maximum number of
-	// entries in the cache.
+	// HistoryCacheMaxSize is the maximum number of entries in the shard level history cache
 	HistoryCacheMaxSize = "history.cacheMaxSize"
+	// HistoryCacheMaxSizeBytes is the maximum size of the shard level history cache in bytes. This is only used if
+	// HistoryCacheSizeBasedLimit is set to true.
+	HistoryCacheMaxSizeBytes = "history.cacheMaxSizeBytes"
 	// HistoryCacheTTL is TTL of history cache
 	HistoryCacheTTL = "history.cacheTTL"
 	// HistoryCacheNonUserContextLockTimeout controls how long non-user call (callerType != API or Operator)
@@ -536,10 +537,11 @@ const (
 	HistoryCacheNonUserContextLockTimeout = "history.cacheNonUserContextLockTimeout"
 	// EnableHostHistoryCache controls if the history cache is host level
 	EnableHostHistoryCache = "history.enableHostHistoryCache"
-	// HistoryCacheHostLevelMaxSize is max size of history host level cache. If history.cacheSizeBasedLimit set to true,
-	// this value is the maximum size of history host level cache in bytes. if history.cacheSizeBasedLimit set to false,
-	// this value is the maximum number of entries in the host level cache.
+	// HistoryCacheHostLevelMaxSize is the maximum number of entries in the host level history cache
 	HistoryCacheHostLevelMaxSize = "history.hostLevelCacheMaxSize"
+	// HistoryCacheHostLevelMaxSizeBytes is the maximum size of the host level history cache. This is only used if
+	// HistoryCacheSizeBasedLimit is set to true.
+	HistoryCacheHostLevelMaxSizeBytes = "history.hostLevelCacheMaxSizeBytes"
 	// EnableAPIGetCurrentRunIDLock controls if a lock should be acquired before getting current run ID for API requests
 	EnableAPIGetCurrentRunIDLock = "history.enableAPIGetCurrentRunIDLock"
 	// HistoryStartupMembershipJoinDelay is the duration a history instance waits
