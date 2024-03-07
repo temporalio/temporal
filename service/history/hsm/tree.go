@@ -73,7 +73,8 @@ type cachedMachine struct {
 	data any
 	// Cached children.
 	children map[Key]*Node
-	outputs  []TransitionOutput
+	// Outputs of all transitions in the current transaction.
+	outputs []TransitionOutput
 }
 
 // Node is a node in a heirarchical state machine tree.
@@ -198,7 +199,7 @@ func (n *Node) Child(path []Key) (*Node, error) {
 		persistence: machine,
 	}
 	n.cache.children[key] = child
-	return child, nil
+	return child.Child(rest)
 }
 
 // AddChild adds an immediate child to a node, serializing the given data.

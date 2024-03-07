@@ -29,7 +29,7 @@ import (
 )
 
 // InvocationTaskTimeout is the timeout for executing a single callback invocation task.
-var InvocationTaskTimeout = "plugin.callback.invocation.taskTimeout"
+const InvocationTaskTimeout = "plugin.callback.invocation.taskTimeout"
 
 type Config struct {
 	InvocationTaskTimeout dynamicconfig.DurationPropertyFn
