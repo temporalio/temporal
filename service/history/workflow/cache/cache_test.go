@@ -591,9 +591,15 @@ func (s *workflowCacheSuite) TestCacheImpl_RejectsRequestWhenAtLimitSimple() {
 	)
 	s.Error(err)
 	s.ErrorIs(err, cache.ErrCacheFull)
+	release1(nil)
 }
 
 func (s *workflowCacheSuite) TestCacheImpl_RejectsRequestWhenAtLimitMultiple() {
+	// This test does the following;
+	//   1. Try inserting 3 entries of size 400bytes. Last insert should fail as max size is 1000 bytes.
+	//   2. Make the size of second entry 1000 and release it. This should make the cache size > max limit.
+	//      Cache should evict this entry to maintain its size under limit.
+	//   3. Insert another entry of size 400 bytes successfully.
 	config := tests.NewDynamicConfig()
 	config.HistoryCacheLimitSizeBased = true
 	config.HistoryHostLevelCacheMaxSizeBytes = dynamicconfig.GetIntPropertyFn(1000)
@@ -614,7 +620,6 @@ func (s *workflowCacheSuite) TestCacheImpl_RejectsRequestWhenAtLimitMultiple() {
 	mockMS1 := workflow.NewMockMutableState(s.controller)
 	mockMS1.EXPECT().IsDirty().Return(false).AnyTimes()
 
-	// Try inserting three 400byte entries to cache.
 	ctx, release1, err := s.cache.GetOrCreateWorkflowExecution(
 		context.Background(),
 		mockShard,
@@ -700,7 +705,7 @@ func (s *workflowCacheSuite) TestCacheImpl_RejectsRequestWhenAtLimitMultiple() {
 	s.Nil(ctx.(*workflow.ContextImpl).MutableState, nil)
 	release1(nil)
 
-	// Insert execution3 again.
+	// Insert execution3 again with size 400bytes.
 	ctx, release3, err := s.cache.GetOrCreateWorkflowExecution(
 		context.Background(),
 		mockShard,
