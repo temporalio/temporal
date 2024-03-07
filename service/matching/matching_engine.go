@@ -913,7 +913,12 @@ func (e *matchingEngineImpl) UpdateWorkerVersioningRules(
 				req.GetDeleteCompatibleRedirectRule(),
 			)
 		case *workflowservice.UpdateWorkerVersioningRulesRequest_CommitBuildId_:
-			hasRecentPoller := tqMgr.HasVersionedPollerAfter(time.Now().Add(-versioningPollerSeenWindow), req.GetCommitBuildId().GetTargetBuildId())
+			//hasRecentPoller := tqMgr.HasVersionedPollerAfter(time.Now().Add(-versioningPollerSeenWindow), req.GetCommitBuildId().GetTargetBuildId())
+			hasRecentPoller := false
+			if ptqm := tqMgr.GetVersionedPhysicalTaskQueueManager(req.GetCommitBuildId().GetTargetBuildId()); ptqm != nil {
+				hasRecentPoller = ptqm.HasPollerAfter(time.Now().Add(-versioningPollerSeenWindow))
+				// --> doesn't detect poller when it should
+			}
 			versioningData, err = CommitBuildID(
 				updatedClock,
 				data.GetVersioningData(),
