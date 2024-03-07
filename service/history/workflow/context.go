@@ -231,7 +231,7 @@ func (c *ContextImpl) IsDirty() bool {
 }
 
 func (c *ContextImpl) Clear() {
-	c.metricsHandler.Counter(metrics.WorkflowContextCleared.Name()).Record(1)
+	metrics.WorkflowContextCleared.With(c.metricsHandler).Record(1)
 	if c.MutableState != nil {
 		c.MutableState.GetQueryRegistry().Clear()
 	}
@@ -688,7 +688,7 @@ func (c *ContextImpl) SubmitClosedWorkflowSnapshot(
 		return err
 	}
 	if len(resetWorkflowEventsSeq) != 0 {
-		c.metricsHandler.Counter(metrics.ClosedWorkflowBufferEventCount.Name()).Record(1)
+		metrics.ClosedWorkflowBufferEventCount.With(c.metricsHandler).Record(1)
 		c.logger.Warn("SetWorkflowExecution encountered new events")
 	}
 

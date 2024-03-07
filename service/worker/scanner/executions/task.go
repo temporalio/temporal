@@ -120,7 +120,7 @@ func (t *task) Run() executor.TaskStatus {
 		_ = t.rateLimiter.Wait(t.ctx)
 		record, err := iter.Next()
 		if err != nil {
-			t.metricsHandler.Counter(metrics.ScavengerValidationSkipsCount.Name()).Record(1)
+			metrics.ScavengerValidationSkipsCount.With(t.metricsHandler).Record(1)
 			// continue validation process and retry after all workflow records has been iterated.
 			t.logger.Error("unable to paginate concrete execution", tag.ShardID(t.shardID), tag.Error(err))
 			retryTask = true
@@ -138,7 +138,7 @@ func (t *task) Run() executor.TaskStatus {
 		if err != nil {
 			// continue validation process and retry after all workflow records has been iterated.
 			executionInfo := mutableState.GetExecutionInfo()
-			t.metricsHandler.Counter(metrics.ScavengerValidationSkipsCount.Name()).Record(1)
+			metrics.ScavengerValidationSkipsCount.With(t.metricsHandler).Record(1)
 			t.logger.Error("unable to process failure result",
 				tag.ShardID(t.shardID),
 				tag.Error(err),
@@ -278,14 +278,14 @@ func printValidationResult(
 	metricsHandler metrics.Handler,
 	logger log.Logger,
 ) {
-	metricsHandler.Counter(metrics.ScavengerValidationRequestsCount.Name()).Record(1)
+	metrics.ScavengerValidationRequestsCount.With(metricsHandler).Record(1)
 	if len(results) == 0 {
 		return
 	}
 
-	metricsHandler.Counter(metrics.ScavengerValidationFailuresCount.Name()).Record(1)
+	metrics.ScavengerValidationFailuresCount.With(metricsHandler).Record(1)
 	for _, result := range results {
-		metricsHandler.Counter(metrics.ScavengerValidationFailuresCount.Name()).Record(1, metrics.FailureTag(result.failureType))
+		metrics.ScavengerValidationFailuresCount.With(metricsHandler).Record(1, metrics.FailureTag(result.failureType))
 		logger.Info(
 			"validation failed for execution.",
 			tag.WorkflowNamespaceID(mutableState.GetExecutionInfo().GetNamespaceId()),

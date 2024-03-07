@@ -883,7 +883,7 @@ func (e *matchingEngineImpl) RespondQueryTaskCompleted(
 	opMetrics metrics.Handler,
 ) error {
 	if err := e.deliverQueryResult(request.GetTaskId(), &queryResult{workerResponse: request}); err != nil {
-		opMetrics.Counter(metrics.RespondQueryTaskFailedPerTaskQueueCounter.Name()).Record(1)
+		metrics.RespondQueryTaskFailedPerTaskQueueCounter.With(opMetrics).Record(1)
 		return err
 	}
 	return nil
@@ -1616,7 +1616,7 @@ func (e *matchingEngineImpl) updateTaskQueueGauge(tqm taskQueueManager, delta in
 		ns = nsEntry.Name()
 	}
 
-	e.metricsHandler.Gauge(metrics.LoadedTaskQueueGauge.Name()).Record(
+	metrics.LoadedTaskQueueGauge.With(e.metricsHandler).Record(
 		float64(newCount),
 		metrics.NamespaceTag(ns.String()),
 		metrics.TaskTypeTag(countKey.taskType.String()),
@@ -1657,7 +1657,7 @@ func (e *matchingEngineImpl) createPollWorkflowTaskQueueResponse(
 		serializedToken, _ = e.tokenSerializer.Serialize(taskToken)
 		if task.responseC == nil {
 			ct := timestamp.TimeValue(task.event.Data.CreateTime)
-			metricsHandler.Timer(metrics.AsyncMatchLatencyPerTaskQueue.Name()).Record(time.Since(ct))
+			metrics.AsyncMatchLatencyPerTaskQueue.With(metricsHandler).Record(time.Since(ct))
 		}
 	}
 
@@ -1692,7 +1692,7 @@ func (e *matchingEngineImpl) createPollActivityTaskQueueResponse(
 	}
 	if task.responseC == nil {
 		ct := timestamp.TimeValue(task.event.Data.CreateTime)
-		metricsHandler.Timer(metrics.AsyncMatchLatencyPerTaskQueue.Name()).Record(time.Since(ct))
+		metrics.AsyncMatchLatencyPerTaskQueue.With(metricsHandler).Record(time.Since(ct))
 	}
 
 	taskToken := tasktoken.NewActivityTaskToken(

@@ -781,7 +781,7 @@ func (wh *WorkflowHandler) RespondWorkflowTaskFailed(
 			tag.WorkflowID(taskToken.GetWorkflowId()),
 			tag.WorkflowRunID(taskToken.GetRunId()),
 		)
-		wh.metricsScope(ctx).Counter(metrics.ServiceErrNonDeterministicCounter.Name()).Record(1)
+		metrics.ServiceErrNonDeterministicCounter.With(wh.metricsScope(ctx)).Record(1)
 	}
 
 	_, err = wh.historyClient.RespondWorkflowTaskFailed(ctx, &historyservice.RespondWorkflowTaskFailedRequest{
