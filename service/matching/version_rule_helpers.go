@@ -264,6 +264,15 @@ func CommitBuildID(timestamp *hlc.Clock,
 		return nil, serviceerror.NewFailedPrecondition(
 			fmt.Sprintf("update breaks requirement, build id %s is already a member of version set", target))
 	}
+<<<<<<< HEAD
+=======
+
+	if !hasRecentPoller && !req.GetForce() {
+		return nil, serviceerror.NewFailedPrecondition(
+			fmt.Sprintf("no compatible poller seen within the last %s, use force=true to commit anyways",
+				versioningPollerSeenWindow.String()))
+	}
+>>>>>>> 40a0e1698 (fix issues, clean up, add GetVersionedPhysicalTaskQueueManager)
 
 	for _, ar := range getActiveAssignmentRules(data.GetAssignmentRules()) {
 		if ar.GetRule().GetTargetBuildId() == target {
