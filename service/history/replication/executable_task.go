@@ -183,7 +183,7 @@ func (e *ExecutableTaskImpl) Nack(err error) {
 	if item != nil {
 		namespaceName = item.(namespace.Name).String()
 	}
-	e.MetricsHandler.Counter(metrics.ReplicationTasksFailed.Name()).Record(
+	metrics.ReplicationTasksFailed.With(e.MetricsHandler).Record(
 		1,
 		metrics.OperationTag(e.metricsTag),
 		metrics.NamespaceTag(namespaceName),
@@ -267,17 +267,17 @@ func (e *ExecutableTaskImpl) emitFinishMetrics(
 	if item != nil {
 		nsTag = metrics.NamespaceTag(item.(namespace.Name).String())
 	}
-	e.MetricsHandler.Timer(metrics.ServiceLatency.Name()).Record(
+	metrics.ServiceLatency.With(e.MetricsHandler).Record(
 		now.Sub(e.taskReceivedTime),
 		metrics.OperationTag(e.metricsTag),
 		nsTag,
 	)
-	e.MetricsHandler.Timer(metrics.ReplicationLatency.Name()).Record(
+	metrics.ReplicationLatency.With(e.MetricsHandler).Record(
 		now.Sub(e.taskCreationTime),
 		metrics.OperationTag(e.metricsTag),
 		nsTag,
 	)
-	e.MetricsHandler.Timer(metrics.ReplicationTaskTransmissionLatency.Name()).Record(
+	metrics.ReplicationTaskTransmissionLatency.With(e.MetricsHandler).Record(
 		e.taskReceivedTime.Sub(e.taskCreationTime),
 		metrics.OperationTag(e.metricsTag),
 		nsTag,
@@ -303,13 +303,13 @@ func (e *ExecutableTaskImpl) Resend(
 		return false, ErrResendAttemptExceeded
 	}
 
-	e.MetricsHandler.Counter(metrics.ClientRequests.Name()).Record(
+	metrics.ClientRequests.With(e.MetricsHandler).Record(
 		1,
 		metrics.OperationTag(e.metricsTag+"Resend"),
 	)
 	startTime := time.Now().UTC()
 	defer func() {
-		e.MetricsHandler.Timer(metrics.ClientLatency.Name()).Record(
+		metrics.ClientLatency.With(e.MetricsHandler).Record(
 			time.Since(startTime),
 			metrics.OperationTag(e.metricsTag+"Resend"),
 		)

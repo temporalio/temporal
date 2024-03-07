@@ -165,7 +165,7 @@ func (q *namespaceReplicationQueueImpl) PublishToDLQ(ctx context.Context, task *
 		return err
 	}
 
-	q.metricsHandler.Gauge(metrics.NamespaceReplicationDLQMaxLevelGauge.Name()).
+	metrics.NamespaceReplicationDLQMaxLevelGauge.With(q.metricsHandler).
 		Record(float64(messageID), metrics.OperationTag(metrics.PersistenceNamespaceReplicationQueueScope))
 	return nil
 }
@@ -407,7 +407,7 @@ func (q *namespaceReplicationQueueImpl) purgeAckedMessages(
 	if err != nil {
 		return fmt.Errorf("failed to purge messages: %v", err)
 	}
-	q.metricsHandler.Gauge(metrics.NamespaceReplicationTaskAckLevelGauge.Name()).
+	metrics.NamespaceReplicationTaskAckLevelGauge.With(q.metricsHandler).
 		Record(float64(*minAckLevel), metrics.OperationTag(metrics.PersistenceNamespaceReplicationQueueScope))
 	return nil
 }

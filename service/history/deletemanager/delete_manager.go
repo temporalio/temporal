@@ -191,6 +191,6 @@ func (m *DeleteManagerImpl) deleteWorkflowExecutionInternal(
 	// Clear workflow execution context here to prevent further readers to get stale copy of non-exiting workflow execution.
 	weCtx.Clear()
 
-	metricsHandler.Counter(metrics.WorkflowCleanupDeleteCount.Name()).Record(1)
+	metrics.WorkflowCleanupDeleteCount.With(metricsHandler).Record(1)
 	return nil
 }
