@@ -42,6 +42,7 @@ import (
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/backoff"
 	"go.temporal.io/server/common/dynamicconfig"
+	"go.temporal.io/server/common/future"
 	"go.temporal.io/server/common/headers"
 	p "go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/internal/goro"
@@ -65,8 +66,8 @@ type (
 	}
 
 	registry struct {
-		status                int32
-		initServiceDataWaitCh chan struct{}
+		status           int32
+		serviceDataReady *future.FutureImpl[struct{}]
 
 		sync.RWMutex     // protects tableVersion, services, serviceIDsSorted, and servicesByName
 		tableVersion     int64
@@ -93,7 +94,7 @@ func newNexusIncomingServiceRegistry(
 ) NexusIncomingServiceRegistry {
 	return &registry{
 		status:                         common.DaemonStatusInitialized,
-		initServiceDataWaitCh:          make(chan struct{}),
+		serviceDataReady:               future.NewFuture[struct{}](),
 		refreshServicesLongPollTimeout: listNexusIncomingServicesLongPollTimeout,
 		refreshServicesLongPollMinWait: listNexusIncomingServicesLongPollMinWait,
 		refreshServicesRetryPolicy:     listNexusIncomingServicesRetryPolicy,
@@ -257,8 +258,8 @@ func (r *registry) fetchServices(ctx context.Context) error {
 				r.Lock()
 			}
 			persistenceErr := r.loadServicesLocked(ctx)
-			if r.initServiceDataWaitCh != nil && persistenceErr == nil {
-				close(r.initServiceDataWaitCh)
+			if persistenceErr == nil {
+				r.setServiceDataReady(persistenceErr)
 			}
 			r.Unlock()
 			return persistenceErr
@@ -288,9 +289,7 @@ func (r *registry) fetchServices(ctx context.Context) error {
 		}
 	}
 
-	if r.initServiceDataWaitCh != nil {
-		close(r.initServiceDataWaitCh)
-	}
+	r.setServiceDataReady(ctx.Err())
 	r.Unlock()
 	return ctx.Err()
 }
@@ -333,9 +332,9 @@ func (r *registry) loadServicesLocked(ctx context.Context) error {
 
 func (r *registry) refreshServices(ctx context.Context) error {
 	refreshFn := func(ctx context.Context) error {
-		initErr := r.waitUntilInitialized(ctx)
-		if initErr != nil {
-			return initErr
+		_, err := r.serviceDataReady.Get(ctx)
+		if err != nil {
+			return err
 		}
 
 		return r.fetchServices(ctx)
@@ -365,16 +364,10 @@ func (r *registry) refreshServices(ctx context.Context) error {
 	return ctx.Err()
 }
 
-func (r *registry) waitUntilInitialized(ctx context.Context) error {
-	if r.initServiceDataWaitCh != nil {
-		select {
-		case <-ctx.Done():
-			return ctx.Err()
-		case <-r.initServiceDataWaitCh:
-			return nil
-		}
+func (r *registry) setServiceDataReady(futureErr error) {
+	if !r.serviceDataReady.Ready() {
+		r.serviceDataReady.Set(struct{}{}, futureErr)
 	}
-	return nil
 }
 
 func (r *registry) updateCachedServicesLocked(entries []*persistencepb.NexusIncomingServiceEntry) {
