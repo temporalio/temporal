@@ -824,21 +824,18 @@ func (h *OperatorHandlerImpl) validateRemoteClusterMetadata(metadata *adminservi
 	return nil
 }
 
-func (h *OperatorHandlerImpl) CreateOrUpdateNexusIncomingService(context.Context, *operatorservice.CreateOrUpdateNexusIncomingServiceRequest) (*operatorservice.CreateOrUpdateNexusIncomingServiceResponse, error) {
-	return nil, status.Errorf(codes.Unimplemented, "method CreateOrUpdateNexusIncomingService not implemented")
+func (*OperatorHandlerImpl) CreateOrUpdateNexusIncomingService(context.Context, *operatorservice.CreateOrUpdateNexusIncomingServiceRequest) (*operatorservice.CreateOrUpdateNexusIncomingServiceResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "unimplemented")
 }
 
-// DeleteNexusIncomingService implements OperatorHandler.
 func (*OperatorHandlerImpl) DeleteNexusIncomingService(context.Context, *operatorservice.DeleteNexusIncomingServiceRequest) (*operatorservice.DeleteNexusIncomingServiceResponse, error) {
-	return nil, status.Errorf(codes.Unimplemented, "method DeleteNexusIncomingService not implemented")
+	return nil, status.Error(codes.Unimplemented, "unimplemented")
 }
 
-// GetNexusIncomingService implements OperatorHandler.
 func (*OperatorHandlerImpl) GetNexusIncomingService(context.Context, *operatorservice.GetNexusIncomingServiceRequest) (*operatorservice.GetNexusIncomingServiceResponse, error) {
-	return nil, status.Errorf(codes.Unimplemented, "method GetNexusIncomingService not implemented")
+	return nil, status.Error(codes.Unimplemented, "unimplemented")
 }
 
-// ListNexusIncomingServices implements OperatorHandler.
 func (*OperatorHandlerImpl) ListNexusIncomingServices(context.Context, *operatorservice.ListNexusIncomingServicesRequest) (*operatorservice.ListNexusIncomingServicesResponse, error) {
-	return nil, status.Errorf(codes.Unimplemented, "method ListNexusIncomingServices not implemented")
+	return nil, status.Error(codes.Unimplemented, "unimplemented")
 }

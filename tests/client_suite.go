@@ -94,10 +94,13 @@ func (s *ClientFunctionalSuite) SetupSuite() {
 	s.maxPendingCancelRequests = limit
 	s.maxPendingSignals = limit
 	s.dynamicConfigOverrides = map[dynamicconfig.Key]interface{}{
-		dynamicconfig.NumPendingChildExecutionsLimitError: s.maxPendingChildExecutions,
-		dynamicconfig.NumPendingActivitiesLimitError:      s.maxPendingActivities,
-		dynamicconfig.NumPendingCancelRequestsLimitError:  s.maxPendingCancelRequests,
-		dynamicconfig.NumPendingSignalsLimitError:         s.maxPendingSignals,
+		dynamicconfig.NumPendingChildExecutionsLimitError:        s.maxPendingChildExecutions,
+		dynamicconfig.NumPendingActivitiesLimitError:             s.maxPendingActivities,
+		dynamicconfig.NumPendingCancelRequestsLimitError:         s.maxPendingCancelRequests,
+		dynamicconfig.NumPendingSignalsLimitError:                s.maxPendingSignals,
+		dynamicconfig.FrontendEnableNexusHTTPHandler:             true,
+		dynamicconfig.FrontendEnableWorkerVersioningDataAPIs:     true,
+		dynamicconfig.FrontendEnableWorkerVersioningWorkflowAPIs: true,
 	}
 	s.setupSuite("testdata/client_cluster.yaml")
 }

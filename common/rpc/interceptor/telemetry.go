@@ -33,6 +33,8 @@ import (
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/api/workflowservice/v1"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/api"
@@ -330,12 +332,27 @@ func (ti *TelemetryInterceptor) handleError(
 	// specific metric for resource exhausted error with throttle reason
 	case *serviceerror.ResourceExhausted:
 		metrics.ServiceErrResourceExhaustedCounter.With(metricsHandler).Record(1, metrics.ResourceExhaustedCauseTag(err.Cause))
-	// Any other errors are treated as ServiceFailures against SLA.
+	// Any other errors are treated as ServiceFailures against SLA unless constructed with the standard
+	// `status.Error` (or Errorf) constructors, in which case the status code is checked below.
 	// Including below known errors and any other unknown errors.
 	//  *serviceerror.DataLoss,
 	//  *serviceerror.Internal
 	//	*serviceerror.Unavailable:
 	default:
+		// Also skip emitting ServiceFailures for non serviceerrors returned from handlers for certain error
+		// codes.
+		if st, ok := status.FromError(err); ok {
+			switch st.Code() {
+			case codes.InvalidArgument,
+				codes.AlreadyExists,
+				codes.FailedPrecondition,
+				codes.OutOfRange,
+				codes.PermissionDenied,
+				codes.Unauthenticated,
+				codes.NotFound:
+				return
+			}
+		}
 		metrics.ServiceFailures.With(metricsHandler).Record(1)
 		ti.logger.Error("service failures", append(logTags, tag.Error(err))...)
 	}

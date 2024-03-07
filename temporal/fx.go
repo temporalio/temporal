@@ -441,13 +441,17 @@ func (params ServiceProviderParamsCommon) GetCommonServiceOptions(serviceName pr
 // it, we also do validation on request task categories in the frontend service. As a result, we need to initialize the
 // registry in the server graph, and then propagate it to the service graphs. Otherwise, it would be isolated to the
 // history service's graph.
-func TaskCategoryRegistryProvider(archivalMetadata archiver.ArchivalMetadata) tasks.TaskCategoryRegistry {
+func TaskCategoryRegistryProvider(archivalMetadata archiver.ArchivalMetadata, dc *dynamicconfig.Collection) tasks.TaskCategoryRegistry {
 	registry := tasks.NewDefaultTaskCategoryRegistry()
-	if archivalMetadata.GetHistoryConfig().StaticClusterState() != archiver.ArchivalEnabled &&
-		archivalMetadata.GetVisibilityConfig().StaticClusterState() != archiver.ArchivalEnabled {
-		return registry
+	if archivalMetadata.GetHistoryConfig().StaticClusterState() == archiver.ArchivalEnabled ||
+		archivalMetadata.GetVisibilityConfig().StaticClusterState() == archiver.ArchivalEnabled {
+		registry.AddCategory(tasks.CategoryArchival)
 	}
-	registry.AddCategory(tasks.CategoryArchival)
+	// Can't use history service configs.Config because this provider is applied to all services (see docstring for the
+	// function).
+	if dc.GetBoolProperty(dynamicconfig.CallbackProcessorEnabled, false)() {
+		registry.AddCategory(tasks.CategoryCallback)
+	}
 	return registry
 }
 

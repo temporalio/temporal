@@ -55,18 +55,21 @@ import (
 	"github.com/golang/mock/gomock"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"go.temporal.io/api/enums/v1"
-	"google.golang.org/protobuf/types/known/durationpb"
-
-	"go.temporal.io/server/api/persistence/v1"
+	"go.temporal.io/api/common/v1"
+	enumspb "go.temporal.io/api/enums/v1"
+	"go.temporal.io/api/workflow/v1"
+	enumsspb "go.temporal.io/server/api/enums/v1"
+	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common/archiver"
 	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/service/history/configs"
+	"go.temporal.io/server/service/history/statemachines"
 	"go.temporal.io/server/service/history/tasks"
 	"go.temporal.io/server/service/history/tests"
+	"google.golang.org/protobuf/types/known/durationpb"
 )
 
 type testConfig struct {
@@ -89,6 +92,7 @@ type testParams struct {
 	ExpectArchiveExecutionTask                      bool
 	ExpectDeleteHistoryEventTask                    bool
 	ExpectedArchiveExecutionTaskVisibilityTimestamp time.Time
+	Callbacks                                       []*persistencespb.CallbackInfo
 }
 
 func TestTaskGeneratorImpl_GenerateWorkflowCloseTasks(t *testing.T) {
@@ -188,6 +192,36 @@ func TestTaskGeneratorImpl_GenerateWorkflowCloseTasks(t *testing.T) {
 				p.ExpectArchiveExecutionTask = false
 			},
 		},
+		{
+			Name: "callback tasks",
+			ConfigFn: func(p *testParams) {
+				p.HistoryArchivalEnabledInNamespace = false
+				p.VisibilityArchivalEnabledInNamespace = false
+
+				p.ExpectCloseExecutionVisibilityTask = true
+				p.ExpectDeleteHistoryEventTask = true
+				p.ExpectArchiveExecutionTask = false
+
+				p.Callbacks = []*persistencespb.CallbackInfo{
+					{
+						Id:                       "callback-id",
+						NamespaceFailoverVersion: 3,
+						TransitionCount:          0,
+						PublicInfo: &workflow.CallbackInfo{
+							Callback: &common.Callback{
+								Variant: &common.Callback_Nexus_{
+									Nexus: &common.Callback_Nexus{
+										Url: "http://localhost",
+									},
+								},
+							},
+							Trigger: &workflow.CallbackInfo_Trigger{Variant: &workflow.CallbackInfo_Trigger_WorkflowClosed{}},
+							State:   enumspb.CALLBACK_STATE_STANDBY,
+						},
+					},
+				}
+			},
+		},
 	} {
 		c := c
 		t.Run(c.Name, func(t *testing.T) {
@@ -214,25 +248,25 @@ func TestTaskGeneratorImpl_GenerateWorkflowCloseTasks(t *testing.T) {
 			c.ConfigFn(&p)
 			namespaceRegistry := namespace.NewMockRegistry(ctrl)
 
-			namespaceConfig := &persistence.NamespaceConfig{
+			namespaceConfig := &persistencespb.NamespaceConfig{
 				Retention:             durationpb.New(p.Retention),
 				HistoryArchivalUri:    "test:///history/archival/",
 				VisibilityArchivalUri: "test:///visibility/archival",
 			}
 			if p.HistoryArchivalEnabledInNamespace {
-				namespaceConfig.HistoryArchivalState = enums.ARCHIVAL_STATE_ENABLED
+				namespaceConfig.HistoryArchivalState = enumspb.ARCHIVAL_STATE_ENABLED
 			} else {
-				namespaceConfig.HistoryArchivalState = enums.ARCHIVAL_STATE_DISABLED
+				namespaceConfig.HistoryArchivalState = enumspb.ARCHIVAL_STATE_DISABLED
 			}
 			if p.VisibilityArchivalEnabledInNamespace {
-				namespaceConfig.VisibilityArchivalState = enums.ARCHIVAL_STATE_ENABLED
+				namespaceConfig.VisibilityArchivalState = enumspb.ARCHIVAL_STATE_ENABLED
 			} else {
-				namespaceConfig.VisibilityArchivalState = enums.ARCHIVAL_STATE_DISABLED
+				namespaceConfig.VisibilityArchivalState = enumspb.ARCHIVAL_STATE_DISABLED
 			}
 			namespaceEntry := namespace.NewGlobalNamespaceForTest(
-				&persistence.NamespaceInfo{Id: tests.NamespaceID.String(), Name: tests.Namespace.String()},
+				&persistencespb.NamespaceInfo{Id: tests.NamespaceID.String(), Name: tests.Namespace.String()},
 				namespaceConfig,
-				&persistence.NamespaceReplicationConfig{
+				&persistencespb.NamespaceReplicationConfig{
 					ActiveClusterName: cluster.TestCurrentClusterName,
 					Clusters: []string{
 						cluster.TestCurrentClusterName,
@@ -245,10 +279,22 @@ func TestTaskGeneratorImpl_GenerateWorkflowCloseTasks(t *testing.T) {
 			namespaceRegistry.EXPECT().GetNamespaceByID(namespaceEntry.ID()).Return(namespaceEntry, nil).AnyTimes()
 
 			mutableState := NewMockMutableState(ctrl)
+			execState := &persistencespb.WorkflowExecutionState{
+				State:  enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED,
+				Status: enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED,
+			}
+			mutableState.EXPECT().GetExecutionState().Return(execState).AnyTimes()
 			mutableState.EXPECT().GetNamespaceEntry().Return(namespaceEntry).AnyTimes()
 			mutableState.EXPECT().GetCurrentVersion().Return(int64(0)).AnyTimes()
-			mutableState.EXPECT().GetExecutionInfo().Return(&persistence.WorkflowExecutionInfo{
-				NamespaceId: namespaceEntry.ID().String(),
+			mutableState.EXPECT().GetExecutionInfo().DoAndReturn(func() *persistencespb.WorkflowExecutionInfo {
+				callbacks := make(map[string]*persistencespb.CallbackInfo, len(p.Callbacks))
+				for _, callback := range p.Callbacks {
+					callbacks[callback.Id] = callback
+				}
+				return &persistencespb.WorkflowExecutionInfo{
+					NamespaceId: namespaceEntry.ID().String(),
+					Callbacks:   callbacks,
+				}
 			}).AnyTimes()
 			mutableState.EXPECT().GetWorkflowKey().Return(definition.NewWorkflowKey(
 				namespaceEntry.ID().String(), tests.WorkflowID, tests.RunID,
@@ -281,6 +327,13 @@ func TestTaskGeneratorImpl_GenerateWorkflowCloseTasks(t *testing.T) {
 				return cfg
 			}).AnyTimes()
 
+			// Required for callback statemachine
+			mutableState.EXPECT().GetNamespaceFailoverVersion().AnyTimes()
+			mutableState.EXPECT().GetCurrentTime().AnyTimes()
+			mutableState.EXPECT().Schedule(gomock.Any()).DoAndReturn(func(task statemachines.Task) {
+				allTasks = append(allTasks, task)
+			}).AnyTimes()
+
 			taskGenerator := NewTaskGenerator(namespaceRegistry, mutableState, cfg, archivalMetadata)
 			err := taskGenerator.GenerateWorkflowCloseTasks(p.CloseEventTime, p.DeleteAfterClose)
 			require.NoError(t, err)
@@ -290,6 +343,7 @@ func TestTaskGeneratorImpl_GenerateWorkflowCloseTasks(t *testing.T) {
 				deleteHistoryEventTask       *tasks.DeleteHistoryEventTask
 				closeExecutionVisibilityTask *tasks.CloseExecutionVisibilityTask
 				archiveExecutionTask         *tasks.ArchiveExecutionTask
+				callbackTask                 *tasks.CallbackTask
 			)
 			for _, task := range allTasks {
 				switch t := task.(type) {
@@ -301,6 +355,8 @@ func TestTaskGeneratorImpl_GenerateWorkflowCloseTasks(t *testing.T) {
 					closeExecutionVisibilityTask = t
 				case *tasks.ArchiveExecutionTask:
 					archiveExecutionTask = t
+				case *tasks.CallbackTask:
+					callbackTask = t
 				}
 			}
 			require.NotNil(t, closeExecutionTask)
@@ -332,6 +388,12 @@ func TestTaskGeneratorImpl_GenerateWorkflowCloseTasks(t *testing.T) {
 			} else {
 				assert.Nil(t, deleteHistoryEventTask)
 			}
+			if len(p.Callbacks) > 0 {
+				require.NotNil(t, callbackTask)
+			} else {
+				assert.Nil(t, callbackTask)
+			}
+
 		})
 	}
 }

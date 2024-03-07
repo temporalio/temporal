@@ -40,6 +40,8 @@ const (
 	visibilityPluginNameTagName = "visibility_plugin_name"
 	ErrorTypeTagName            = "error_type"
 	httpStatusTagName           = "http_status"
+	nexusMethodTagName          = "method"
+	nexusOutcomeTagName         = "outcome"
 	versionedTagName            = "versioned"
 	resourceExhaustedTag        = "resource_exhausted_cause"
 )
@@ -193,6 +195,12 @@ const (
 	PersistenceRangeCompleteVisibilityTasksScope = "RangeCompleteVisibilityTasks"
 	// PersistenceGetReplicationTaskScope tracks GetReplicationTask calls made by service to persistence layer
 	PersistenceGetArchivalTasksScope = "GetArchivalTasks"
+	// PersistenceGetCallbackTasksScope tracks GetCallbackTasks calls made by service to persistence layer
+	PersistenceGetCallbackTasksScope = "GetCallbackTasks"
+	// PersistenceCompleteCallbackTasksScope tracks CompleteCallbackTasks calls made by service to persistence layer
+	PersistenceCompleteCallbackTasksScope = "CompleteCallbackTasks"
+	// PersistenceRangeCompleteCallbackTasksScope tracks RangeCompleteCallbackTasks calls made by service to persistence layer
+	PersistenceRangeCompleteCallbackTasksScope = "RangeCompleteCallbackTasks"
 	// PersistenceCompleteArchivalTaskScope tracks CompleteArchivalTasks calls made by service to persistence layer
 	PersistenceCompleteArchivalTaskScope = "CompleteArchivalTask"
 	// PersistenceRangeCompleteArchivalTasksScope tracks CompleteArchivalTasks calls made by service to persistence layer
@@ -263,6 +271,12 @@ const (
 	PersistenceListNamespacesScope = "ListNamespaces"
 	// PersistenceGetMetadataScope tracks DeleteNamespaceByName calls made by service to persistence layer
 	PersistenceGetMetadataScope = "GetMetadata"
+	// PersistenceListNexusIncomingServicesScope tracks ListNexusIncomingService calls made by service to persistence layer
+	PersistenceListNexusIncomingServicesScope = "ListNexusIncomingServices"
+	// PersistenceCreateOrUpdateNexusIncomingServiceScope tracks CreateOrUpdateNexusIncomingService calls made by service to persistence layer
+	PersistenceCreateOrUpdateNexusIncomingServiceScope = "CreateOrUpdateNexusIncomingService"
+	// PersistenceDeleteNexusIncomingServiceScope tracks DeleteNexusIncomingService calls made by service to persistence layer
+	PersistenceDeleteNexusIncomingServiceScope = "DeleteNexusIncomingService"
 
 	// VisibilityPersistenceRecordWorkflowExecutionStartedScope tracks RecordWorkflowExecutionStarted calls made by service to visibility persistence layer
 	VisibilityPersistenceRecordWorkflowExecutionStartedScope = "RecordWorkflowExecutionStarted"
@@ -435,6 +449,8 @@ const (
 	OperationArchivalQueueProcessorScope = "ArchivalQueueProcessor"
 	// OperationMemoryScheduledQueueProcessorScope is a scope for memory scheduled queue processor.
 	OperationMemoryScheduledQueueProcessorScope = "MemoryScheduledQueueProcessor"
+	// OperationCallbackQueueProcessorScope is a scope for the callback queue processor.
+	OperationCallbackQueueProcessorScope = "CallbackQueueProcessor"
 )
 
 // Matching Scope
@@ -443,6 +459,8 @@ const (
 	MatchingPollWorkflowTaskQueueScope = "PollWorkflowTaskQueue"
 	// MatchingPollActivityTaskQueueScope tracks PollActivityTaskQueue API calls received by service
 	MatchingPollActivityTaskQueueScope = "PollActivityTaskQueue"
+	// MatchingPollNexusTaskQueueScope tracks PollNexusTaskQueue API calls received by service
+	MatchingPollNexusTaskQueueScope = "PollNexusTaskQueue"
 	// MatchingAddActivityTaskScope tracks AddActivityTask API calls received by service
 	MatchingAddActivityTaskScope = "AddActivityTask"
 	// MatchingAddWorkflowTaskScope tracks AddWorkflowTask API calls received by service
@@ -453,8 +471,12 @@ const (
 	MatchingEngineScope = "MatchingEngine"
 	// MatchingQueryWorkflowScope tracks AddWorkflowTask API calls received by service
 	MatchingQueryWorkflowScope = "QueryWorkflow"
-	// MatchingRespondQueryTaskCompletedScope tracks AddWorkflowTask API calls received by service
+	// MatchingRespondQueryTaskCompletedScope tracks RespondQueryTaskCompleted API calls received by service
 	MatchingRespondQueryTaskCompletedScope = "RespondQueryTaskCompleted"
+	// MatchingRespondNexusTaskCompletedScope tracks RespondNexusTaskCompleted API calls received by service
+	MatchingRespondNexusTaskCompletedScope = "RespondNexusTaskCompleted"
+	// MatchingRespondNexusTaskFailedScope tracks RespondNexusTaskFailed API calls received by service
+	MatchingRespondNexusTaskFailedScope = "RespondNexusTaskFailed"
 )
 
 // Worker Scope
@@ -638,6 +660,18 @@ var (
 	HTTPServiceRequests                      = NewCounterDef(
 		"http_service_requests",
 		WithDescription("The number of HTTP requests received by the service."),
+	)
+	NexusRequests = NewCounterDef(
+		"nexus_requests",
+		WithDescription("The number of Nexus requests received by the service."),
+	)
+	NexusRequestPreProcessErrors = NewCounterDef(
+		"nexus_request_preprocess_errors",
+		WithDescription("The number of Nexus requests for which pre-processing failed."),
+	)
+	NexusLatencyHistogram = NewCounterDef(
+		"nexus_latency",
+		WithDescription("Latency histogram of Nexus requests."),
 	)
 
 	// History
@@ -934,6 +968,7 @@ var (
 	LeaseFailurePerTaskQueueCounter           = NewCounterDef("lease_failures")
 	ConditionFailedErrorPerTaskQueueCounter   = NewCounterDef("condition_failed_errors")
 	RespondQueryTaskFailedPerTaskQueueCounter = NewCounterDef("respond_query_failed")
+	RespondNexusTaskFailedPerTaskQueueCounter = NewCounterDef("respond_nexus_failed")
 	SyncThrottlePerTaskQueueCounter           = NewCounterDef("sync_throttle_count")
 	BufferThrottlePerTaskQueueCounter         = NewCounterDef("buffer_throttle_count")
 	ExpiredTasksPerTaskQueueCounter           = NewCounterDef("tasks_expired")

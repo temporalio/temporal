@@ -31,6 +31,7 @@ import (
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
+
 	"go.temporal.io/server/common/headers"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/quotas"
@@ -83,6 +84,12 @@ type (
 		persistence Queue
 		logger      log.Logger
 	}
+
+	nexusIncomingServiceRateLimitedPersistenceClient struct {
+		rateLimiter quotas.RequestRateLimiter
+		persistence NexusIncomingServiceManager
+		logger      log.Logger
+	}
 )
 
 var _ ShardManager = (*shardRateLimitedPersistenceClient)(nil)
@@ -91,6 +98,7 @@ var _ TaskManager = (*taskRateLimitedPersistenceClient)(nil)
 var _ MetadataManager = (*metadataRateLimitedPersistenceClient)(nil)
 var _ ClusterMetadataManager = (*clusterMetadataRateLimitedPersistenceClient)(nil)
 var _ Queue = (*queueRateLimitedPersistenceClient)(nil)
+var _ NexusIncomingServiceManager = (*nexusIncomingServiceRateLimitedPersistenceClient)(nil)
 
 // NewShardPersistenceRateLimitedClient creates a client to manage shards
 func NewShardPersistenceRateLimitedClient(persistence ShardManager, rateLimiter quotas.RequestRateLimiter, logger log.Logger) ShardManager {
@@ -128,7 +136,7 @@ func NewMetadataPersistenceRateLimitedClient(persistence MetadataManager, rateLi
 	}
 }
 
-// NewClusterMetadataPersistenceRateLimitedClient creates a MetadataManager client to manage metadata
+// NewClusterMetadataPersistenceRateLimitedClient creates a ClusterMetadataManager client to manage cluster metadata
 func NewClusterMetadataPersistenceRateLimitedClient(persistence ClusterMetadataManager, rateLimiter quotas.RequestRateLimiter, logger log.Logger) ClusterMetadataManager {
 	return &clusterMetadataRateLimitedPersistenceClient{
 		persistence: persistence,
@@ -140,6 +148,15 @@ func NewClusterMetadataPersistenceRateLimitedClient(persistence ClusterMetadataM
 // NewQueuePersistenceRateLimitedClient creates a client to manage queue
 func NewQueuePersistenceRateLimitedClient(persistence Queue, rateLimiter quotas.RequestRateLimiter, logger log.Logger) Queue {
 	return &queueRateLimitedPersistenceClient{
+		persistence: persistence,
+		rateLimiter: rateLimiter,
+		logger:      logger,
+	}
+}
+
+// NewNexusIncomingServicePersistenceRateLimitedClient creates a NexusIncomingServiceManager to manage nexus services
+func NewNexusIncomingServicePersistenceRateLimitedClient(persistence NexusIncomingServiceManager, rateLimiter quotas.RequestRateLimiter, logger log.Logger) NexusIncomingServiceManager {
+	return &nexusIncomingServiceRateLimitedPersistenceClient{
 		persistence: persistence,
 		rateLimiter: rateLimiter,
 		logger:      logger,
@@ -1012,6 +1029,53 @@ func (c *clusterMetadataRateLimitedPersistenceClient) DeleteClusterMetadata(
 		return ErrPersistenceLimitExceeded
 	}
 	return c.persistence.DeleteClusterMetadata(ctx, request)
+}
+
+func (p *nexusIncomingServiceRateLimitedPersistenceClient) GetName() string {
+	return p.persistence.GetName()
+}
+
+func (p *nexusIncomingServiceRateLimitedPersistenceClient) Close() {
+	p.persistence.Close()
+}
+
+func (p *nexusIncomingServiceRateLimitedPersistenceClient) GetNexusIncomingServicesTableVersion(
+	ctx context.Context,
+) (int64, error) {
+	if ok := allow(ctx, "ListNexusIncomingServices", CallerSegmentMissing, p.rateLimiter); !ok {
+		return 0, ErrPersistenceLimitExceeded
+	}
+	return p.persistence.GetNexusIncomingServicesTableVersion(ctx)
+}
+
+func (p *nexusIncomingServiceRateLimitedPersistenceClient) ListNexusIncomingServices(
+	ctx context.Context,
+	request *ListNexusIncomingServicesRequest,
+) (*ListNexusIncomingServicesResponse, error) {
+	if ok := allow(ctx, "ListNexusIncomingServices", CallerSegmentMissing, p.rateLimiter); !ok {
+		return nil, ErrPersistenceLimitExceeded
+	}
+	return p.persistence.ListNexusIncomingServices(ctx, request)
+}
+
+func (p *nexusIncomingServiceRateLimitedPersistenceClient) CreateOrUpdateNexusIncomingService(
+	ctx context.Context,
+	request *CreateOrUpdateNexusIncomingServiceRequest,
+) (*CreateOrUpdateNexusIncomingServiceResponse, error) {
+	if ok := allow(ctx, "CreateOrUpdateNexusIncomingService", CallerSegmentMissing, p.rateLimiter); !ok {
+		return nil, ErrPersistenceLimitExceeded
+	}
+	return p.persistence.CreateOrUpdateNexusIncomingService(ctx, request)
+}
+
+func (p *nexusIncomingServiceRateLimitedPersistenceClient) DeleteNexusIncomingService(
+	ctx context.Context,
+	request *DeleteNexusIncomingServiceRequest,
+) error {
+	if ok := allow(ctx, "DeleteNexusIncomingService", CallerSegmentMissing, p.rateLimiter); !ok {
+		return ErrPersistenceLimitExceeded
+	}
+	return p.persistence.DeleteNexusIncomingService(ctx, request)
 }
 
 func allow(

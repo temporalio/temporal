@@ -53,6 +53,7 @@ import (
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/service/history/historybuilder"
+	"go.temporal.io/server/service/history/statemachines"
 	"go.temporal.io/server/service/history/tasks"
 )
 
@@ -109,6 +110,8 @@ type (
 	}
 
 	MutableState interface {
+		statemachines.Environment
+
 		AddActivityTaskCancelRequestedEvent(int64, int64, string) (*historypb.HistoryEvent, *persistencespb.ActivityInfo, error)
 		AddActivityTaskCanceledEvent(int64, int64, int64, *commonpb.Payloads, string) (*historypb.HistoryEvent, error)
 		AddActivityTaskCompletedEvent(int64, int64, *workflowservice.RespondActivityTaskCompletedRequest) (*historypb.HistoryEvent, error)

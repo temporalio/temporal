@@ -228,14 +228,18 @@ func (tm *TaskMatcher) offerOrTimeout(ctx context.Context, task *internalTask) (
 	}
 }
 
-// OfferQuery will either match task to local poller or will forward query task.
-// Local match is always attempted before forwarding is attempted. If local match occurs
-// response and error are both nil, if forwarding occurs then response or error is returned.
-func (tm *TaskMatcher) OfferQuery(ctx context.Context, task *internalTask) (*matchingservice.QueryWorkflowResponse, error) {
+func syncOfferTask[T any](
+	ctx context.Context,
+	tm *TaskMatcher,
+	task *internalTask,
+	taskChan chan *internalTask,
+	forwardFunc func(context.Context, *internalTask) (T, error),
+) (T, error) {
+	var t T
 	select {
-	case tm.queryTaskC <- task:
+	case taskChan <- task:
 		<-task.responseC
-		return nil, nil
+		return t, nil
 	default:
 	}
 
@@ -253,33 +257,48 @@ func (tm *TaskMatcher) OfferQuery(ctx context.Context, task *internalTask) (*mat
 
 	for {
 		select {
-		case tm.queryTaskC <- task:
+		case taskChan <- task:
 			<-task.responseC
-			return nil, nil
+			return t, nil
 		case token := <-fwdrTokenC:
-			resp, err := tm.fwdr.ForwardQueryTask(ctx, task)
+			resp, err := forwardFunc(ctx, task)
 			token.release()
 			if err == nil {
 				return resp, nil
 			}
 			if err == errForwarderSlowDown {
-				// if we are rate limited, try only local match for the
-				// remainder of the context timeout left
+				// if we are rate limited, try only local match for the remainder of the context timeout
+				// left
 				fwdrTokenC = nil
 				continue
 			}
-			return nil, err
+			return t, err
 		case <-noPollerCtxC:
 			// only error if there has not been a recent poller. Otherwise, let it wait for the remaining time
 			// hopping for a match, or ultimately returning the default CDE error.
+			// TODO: rename this to clarify it applies to nexus tasks and queries.
 			if tm.timeSinceLastPoll() > tm.config.QueryPollerUnavailableWindow() {
-				return nil, errNoRecentPoller
+				return t, errNoRecentPoller
 			}
 			continue
 		case <-ctx.Done():
-			return nil, ctx.Err()
+			return t, ctx.Err()
 		}
 	}
+}
+
+// OfferQuery will either match task to local poller or will forward query task.
+// Local match is always attempted before forwarding is attempted. If local match occurs
+// response and error are both nil, if forwarding occurs then response or error is returned.
+func (tm *TaskMatcher) OfferQuery(ctx context.Context, task *internalTask) (*matchingservice.QueryWorkflowResponse, error) {
+	return syncOfferTask(ctx, tm, task, tm.queryTaskC, tm.fwdr.ForwardQueryTask)
+}
+
+// OfferNexusTask either matchs a task to a local poller or forwards it if no local pollers available.
+// Local match is always attempted before forwarding. If local match occurs response and error are both nil, if
+// forwarding occurs then response or error is returned.
+func (tm *TaskMatcher) OfferNexusTask(ctx context.Context, task *internalTask) (*matchingservice.DispatchNexusTaskResponse, error) {
+	return syncOfferTask(ctx, tm, task, tm.taskC, tm.fwdr.ForwardNexusTask)
 }
 
 // MustOffer blocks until a consumer is found to handle this task

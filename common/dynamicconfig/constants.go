@@ -350,6 +350,10 @@ const (
 	KeepAliveTimeout = "frontend.keepAliveTimeout"
 	// FrontendEnableSchedules enables schedule-related RPCs in the frontend
 	FrontendEnableSchedules = "frontend.enableSchedules"
+	// FrontendEnableNexusHTTPHandler enables serving Nexus HTTP requests in the frontend.
+	FrontendEnableNexusHTTPHandler = "frontend.enableNexusHTTPHandler"
+	// FrontendEnableCallbackAttachment enables attaching callbacks to workflows.
+	FrontendEnableCallbackAttachment = "frontend.enableCallbackAttachment"
 	// FrontendMaxConcurrentBatchOperationPerNamespace is the max concurrent batch operation job count per namespace
 	FrontendMaxConcurrentBatchOperationPerNamespace = "frontend.MaxConcurrentBatchOperationPerNamespace"
 	// FrontendMaxExecutionCountBatchOperationPerNamespace is the max execution count batch operation supports per namespace
@@ -471,6 +475,8 @@ const (
 	MatchingMaxWaitForPollerBeforeFwd = "matching.maxWaitForPollerBeforeFwd"
 	// QueryPollerUnavailableWindow WF Queries are rejected after a while if no poller has been seen within the window
 	QueryPollerUnavailableWindow = "matching.queryPollerUnavailableWindow"
+	// MatchingListNexusIncomingServicesLongPollTimeout is the max length of long polls for ListNexusIncomingServices calls.
+	MatchingListNexusIncomingServicesLongPollTimeout = "matching.listNexusIncomingServicesLongPollTimeout"
 	// MatchingMembershipUnloadDelay is how long to wait to re-confirm loss of ownership before unloading a task queue.
 	// Set to zero to disable proactive unload.
 	MatchingMembershipUnloadDelay = "matching.membershipUnloadDelay"
@@ -677,6 +683,31 @@ const (
 	TransferProcessorEnsureCloseBeforeDelete = "history.transferProcessorEnsureCloseBeforeDelete"
 	// TransferQueueMaxReaderCount is the max number of readers in one multi-cursor transfer queue
 	TransferQueueMaxReaderCount = "history.transferQueueMaxReaderCount"
+
+	// CallbackProcessorEnabled enables starting the callback queue processor.
+	CallbackProcessorEnabled = "history.callbackProcessorEnabled"
+	// CallbackTaskBatchSize is batch size for callbackQueueFactory
+	CallbackTaskBatchSize = "history.callbackTaskBatchSize"
+	// CallbackProcessorMaxPollRPS is max poll rate per second for callbackQueueFactory
+	CallbackProcessorMaxPollRPS = "history.callbackProcessorMaxPollRPS"
+	// CallbackProcessorMaxPollHostRPS is max poll rate per second for all callbackQueueFactory on a host
+	CallbackProcessorMaxPollHostRPS = "history.callbackProcessorMaxPollHostRPS"
+	// CallbackProcessorUpdateShardTaskCount is update shard count for callbackQueueFactory
+	CallbackProcessorUpdateShardTaskCount = "history.callbackProcessorUpdateShardTaskCount"
+	// CallbackProcessorMaxPollInterval max poll interval for callbackQueueFactory
+	CallbackProcessorMaxPollInterval = "history.callbackProcessorMaxPollInterval"
+	// CallbackProcessorMaxPollIntervalJitterCoefficient is the max poll interval jitter coefficient
+	CallbackProcessorMaxPollIntervalJitterCoefficient = "history.callbackProcessorMaxPollIntervalJitterCoefficient"
+	// CallbackProcessorUpdateAckInterval is update interval for callbackQueueFactory
+	CallbackProcessorUpdateAckInterval = "history.callbackProcessorUpdateAckInterval"
+	// CallbackProcessorUpdateAckIntervalJitterCoefficient is the update interval jitter coefficient
+	CallbackProcessorUpdateAckIntervalJitterCoefficient = "history.callbackProcessorUpdateAckIntervalJitterCoefficient"
+	// CallbackProcessorPollBackoffInterval is the poll backoff interval if task redispatcher's size exceeds limit for callbackQueueFactory
+	CallbackProcessorPollBackoffInterval = "history.callbackProcessorPollBackoffInterval"
+	// CallbackQueueMaxReaderCount is the max number of readers in one multi-cursor callback queue
+	CallbackQueueMaxReaderCount = "history.callbackQueueMaxReaderCount"
+	// CallbackTaskTimeout is the timeout for executing a single callback task.
+	CallbackTaskTimeout = "history.callbackTaskTimeout"
 
 	// VisibilityTaskBatchSize is batch size for visibilityQueueProcessor
 	VisibilityTaskBatchSize = "history.visibilityTaskBatchSize"

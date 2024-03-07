@@ -39,6 +39,7 @@ import (
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	historypb "go.temporal.io/api/history/v1"
+
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common/persistence/serialization"
@@ -1019,6 +1020,32 @@ type (
 		MaxRecordsPruned int
 	}
 
+	ListNexusIncomingServicesRequest struct {
+		LastKnownTableVersion int64
+		NextPageToken         []byte
+		PageSize              int
+	}
+
+	ListNexusIncomingServicesResponse struct {
+		TableVersion  int64
+		NextPageToken []byte
+		Entries       []*persistencespb.NexusIncomingServiceEntry
+	}
+
+	CreateOrUpdateNexusIncomingServiceRequest struct {
+		LastKnownTableVersion int64
+		Entry                 *persistencespb.NexusIncomingServiceEntry
+	}
+
+	CreateOrUpdateNexusIncomingServiceResponse struct {
+		Version int64
+	}
+
+	DeleteNexusIncomingServiceRequest struct {
+		LastKnownTableVersion int64
+		ServiceID             string
+	}
+
 	// Closeable is an interface for any entity that supports a close operation to release resources
 	// TODO: allow this method to return errors
 	Closeable interface {
@@ -1159,6 +1186,16 @@ type (
 		GetClusterMetadata(ctx context.Context, request *GetClusterMetadataRequest) (*GetClusterMetadataResponse, error)
 		SaveClusterMetadata(ctx context.Context, request *SaveClusterMetadataRequest) (bool, error)
 		DeleteClusterMetadata(ctx context.Context, request *DeleteClusterMetadataRequest) error
+	}
+
+	// NexusIncomingServiceManager is used to manage CRUD for Nexus services
+	NexusIncomingServiceManager interface {
+		Closeable
+		GetName() string
+		GetNexusIncomingServicesTableVersion(ctx context.Context) (int64, error)
+		ListNexusIncomingServices(ctx context.Context, request *ListNexusIncomingServicesRequest) (*ListNexusIncomingServicesResponse, error)
+		CreateOrUpdateNexusIncomingService(ctx context.Context, request *CreateOrUpdateNexusIncomingServiceRequest) (*CreateOrUpdateNexusIncomingServiceResponse, error)
+		DeleteNexusIncomingService(ctx context.Context, request *DeleteNexusIncomingServiceRequest) error
 	}
 
 	// HistoryTaskQueueManager is responsible for managing a queue of internal history tasks. This is called a history

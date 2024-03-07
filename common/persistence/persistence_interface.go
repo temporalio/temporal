@@ -182,6 +182,15 @@ type (
 		GetDLQAckLevels(ctx context.Context) (*InternalQueueMetadata, error)
 	}
 
+	// NexusIncomingServiceStore is a store for managing Nexus services
+	NexusIncomingServiceStore interface {
+		Closeable
+		GetName() string
+		CreateOrUpdateNexusIncomingService(ctx context.Context, request *InternalCreateOrUpdateNexusIncomingServiceRequest) error
+		ListNexusIncomingServices(ctx context.Context, request *ListNexusIncomingServicesRequest) (*InternalListNexusIncomingServicesResponse, error)
+		DeleteNexusIncomingService(ctx context.Context, request *DeleteNexusIncomingServiceRequest) error
+	}
+
 	// QueueMessage is the message that stores in the queue
 	QueueMessage struct {
 		QueueType QueueType `json:"queue_type"`
@@ -731,6 +740,23 @@ type (
 	InternalUpsertClusterMembershipRequest struct {
 		ClusterMember
 		RecordExpiry time.Time
+	}
+
+	InternalNexusIncomingService struct {
+		ServiceID string
+		Version   int64
+		Data      *commonpb.DataBlob
+	}
+
+	InternalCreateOrUpdateNexusIncomingServiceRequest struct {
+		LastKnownTableVersion int64
+		Service               InternalNexusIncomingService
+	}
+
+	InternalListNexusIncomingServicesResponse struct {
+		TableVersion  int64
+		NextPageToken []byte
+		Services      []InternalNexusIncomingService
 	}
 
 	// QueueV2 is an interface for a generic FIFO queue. It should eventually replace the Queue interface. Why do we

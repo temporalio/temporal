@@ -1081,3 +1081,20 @@ func TestSQLiteQueueV2(t *testing.T) {
 	})
 	RunQueueV2TestSuiteForSQL(t, factory)
 }
+
+func TestSQLiteNexusIncomingServicePersistence(t *testing.T) {
+	cfg := NewSQLiteFileConfig()
+	SetupSQLiteDatabase(cfg)
+	logger := log.NewNoopLogger()
+	factory := sql.NewFactory(
+		*cfg,
+		resolver.NewNoopResolver(),
+		testSQLiteClusterName,
+		logger,
+	)
+	t.Cleanup(func() {
+		factory.Close()
+		assert.NoError(t, os.Remove(cfg.DatabaseName))
+	})
+	RunNexusIncomingServiceTestSuiteForSQL(t, factory)
+}

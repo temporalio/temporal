@@ -61,6 +61,22 @@ service MatchingService {
     rpc RespondQueryTaskCompleted (RespondQueryTaskCompletedRequest) returns (RespondQueryTaskCompletedResponse) {
     }
 
+    // Request from frontend to synchronously dispatch a nexus task to a worker.
+    rpc DispatchNexusTask (DispatchNexusTaskRequest) returns (DispatchNexusTaskResponse) {
+    }
+
+    // Request from worker (via frontend) to long poll on nexus tasks.
+    rpc PollNexusTaskQueue (PollNexusTaskQueueRequest) returns (PollNexusTaskQueueResponse) {
+    }
+
+    // Response from a worker (via frontend) to a Nexus task, unblocks the corresponding DispatchNexusTask request.
+    rpc RespondNexusTaskCompleted (RespondNexusTaskCompletedRequest) returns (RespondNexusTaskCompletedResponse) {
+    }
+
+    // Response from a worker (via frontend) to a Nexus task, unblocks the corresponding DispatchNexusTask request.
+    rpc RespondNexusTaskFailed (RespondNexusTaskFailedRequest) returns (RespondNexusTaskFailedResponse) {
+    }
+
     // CancelOutstandingPoll is called by frontend to unblock long polls on matching for zombie pollers.
     // Our rpc stack does not support context propagation, so when a client connection goes away frontend sees
     // cancellation of context for that handler, but any corresponding calls (long-poll) to matching service does not
@@ -109,4 +125,22 @@ service MatchingService {
 
     // Replicate task queue user data across clusters, must be done via the owning node for updates in namespace.
     rpc ReplicateTaskQueueUserData(ReplicateTaskQueueUserDataRequest) returns (ReplicateTaskQueueUserDataResponse) {}
+
+    // Optimistically create or update a Nexus incoming service based on provided version.
+    // Set version to 0 to create a new service.
+    // If this request is accepted, the input is considered the "current" state of this service at the time it was
+    // persisted and the updated version is returned.
+    // (-- api-linter: core::0133::response-message-name=disabled
+    //     aip.dev/not-precedent: CreateOrUpdateNexusIncomingService RPC doesn't follow Google API format. --)
+    // (-- api-linter: core::0133::http-uri-parent=disabled
+    //     aip.dev/not-precedent: CreateOrUpdateNexusIncomingService RPC doesn't follow Google API format. --)
+    // (-- api-linter: core::0133::method-signature=disabled
+    //     aip.dev/not-precedent: CreateOrUpdateNexusIncomingService RPC doesn't follow Google API format. --)
+    // (-- api-linter: core::0133::request-resource-field=disabled
+    //     aip.dev/not-precedent: CreateOrUpdateNexusIncomingService RPC doesn't follow Google API format. --)
+    rpc	CreateOrUpdateNexusIncomingService(CreateOrUpdateNexusIncomingServiceRequest) returns (CreateOrUpdateNexusIncomingServiceResponse) {}
+    // Delete a service by its name.
+    rpc	DeleteNexusIncomingService(DeleteNexusIncomingServiceRequest) returns (DeleteNexusIncomingServiceResponse) {}
+    // List all registered services.
+    rpc	ListNexusIncomingServices(ListNexusIncomingServicesRequest) returns (ListNexusIncomingServicesResponse) {}
 }
