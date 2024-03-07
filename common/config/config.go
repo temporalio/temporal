@@ -26,6 +26,7 @@ package config
 
 import (
 	"bytes"
+	"database/sql/driver"
 	"fmt"
 	"strings"
 	"time"
@@ -385,6 +386,8 @@ type (
 
 	// SQL is the configuration for connecting to a SQL backed datastore
 	SQL struct {
+		// DBConnector is the SQL driver connector to use. Using this will bypass the string based data source.
+		DBConnector *driver.Connector
 		// User is the username to be used for the conn
 		User string `yaml:"user"`
 		// Password is the password corresponding to the user name
