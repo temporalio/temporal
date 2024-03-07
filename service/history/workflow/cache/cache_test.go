@@ -582,7 +582,7 @@ func (s *workflowCacheSuite) TestCacheImpl_SizeBasedCacheBasic() {
 		WorkflowId: "some random workflow ID",
 		RunId:      uuid.New(),
 	}
-	ctx, _, err = s.cache.GetOrCreateWorkflowExecution(
+	_, _, err = s.cache.GetOrCreateWorkflowExecution(
 		context.Background(),
 		mockShard,
 		namespaceID,
@@ -742,4 +742,5 @@ func (s *workflowCacheSuite) TestCacheImpl_CheckCacheLimitSizeBasedFlag() {
 	)
 	s.NoError(err)
 	s.Equal(mockMS1, ctx.(*workflow.ContextImpl).MutableState)
+	release1(nil)
 }
