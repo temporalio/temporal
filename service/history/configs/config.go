@@ -376,8 +376,9 @@ func NewConfig(
 		VisibilityEnableManualPagination:  dc.GetBoolPropertyFnWithNamespaceFilter(dynamicconfig.VisibilityEnableManualPagination, true),
 		VisibilityAllowList:               dc.GetBoolPropertyFnWithNamespaceFilter(dynamicconfig.VisibilityAllowList, true),
 
-		EmitShardLagLog:                       dc.GetBoolProperty(dynamicconfig.EmitShardLagLog, false),
-		HistoryCacheInitialSize:               dc.GetIntProperty(dynamicconfig.HistoryCacheInitialSize, 128),
+		EmitShardLagLog:         dc.GetBoolProperty(dynamicconfig.EmitShardLagLog, false),
+		HistoryCacheInitialSize: dc.GetIntProperty(dynamicconfig.HistoryCacheInitialSize, 128),
+		// HistoryCacheLimitSizeBased should not change during runtime.
 		HistoryCacheLimitSizeBased:            dc.GetBoolProperty(dynamicconfig.HistoryCacheSizeBasedLimit, false)(),
 		HistoryShardLevelCacheMaxSize:         dc.GetIntProperty(dynamicconfig.HistoryCacheMaxSize, 512),
 		HistoryShardLevelCacheMaxSizeBytes:    dc.GetIntProperty(dynamicconfig.HistoryCacheMaxSizeBytes, 512*4*1024),
