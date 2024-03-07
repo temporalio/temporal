@@ -99,7 +99,7 @@ func ReplaceAssignmentRule(timestamp *hlc.Clock,
 			"update breaks requirement, this target build id cannot have a ramp because it is the source of a redirect rule")
 	}
 	rules := data.GetAssignmentRules()
-	hadUnfiltered := containsUnfiltered(rules)
+	hadUnconditional := containsUnconditional(rules)
 	idx := req.GetRuleIndex()
 	actualIdx := given2ActualIdx(idx, rules)
 	if actualIdx < 0 {
@@ -112,7 +112,7 @@ func ReplaceAssignmentRule(timestamp *hlc.Clock,
 		CreateTimestamp: timestamp,
 		DeleteTimestamp: nil,
 	})
-	return data, checkAssignmentConditions(data, 0, hadUnfiltered && !req.GetForce())
+	return data, checkAssignmentConditions(data, 0, hadUnconditional && !req.GetForce())
 }
 
 func DeleteAssignmentRule(timestamp *hlc.Clock,
@@ -121,7 +121,7 @@ func DeleteAssignmentRule(timestamp *hlc.Clock,
 ) (*persistencepb.VersioningData, error) {
 	data = common.CloneProto(data)
 	rules := data.GetAssignmentRules()
-	hadUnfiltered := containsUnfiltered(rules)
+	hadUnconditional := containsUnconditional(rules)
 	idx := req.GetRuleIndex()
 	actualIdx := given2ActualIdx(idx, rules)
 	if actualIdx < 0 || actualIdx > len(rules)-1 {
@@ -129,7 +129,7 @@ func DeleteAssignmentRule(timestamp *hlc.Clock,
 			"rule index %d is out of bounds for assignment rule list of length %d", idx, len(getActiveAssignmentRules(rules))))
 	}
 	rules[actualIdx].DeleteTimestamp = timestamp
-	return data, checkAssignmentConditions(data, 0, hadUnfiltered && !req.GetForce())
+	return data, checkAssignmentConditions(data, 0, hadUnconditional && !req.GetForce())
 }
 
 func InsertCompatibleRedirectRule(timestamp *hlc.Clock,
@@ -247,25 +247,33 @@ func CleanupRuleTombstones(versioningData *persistencepb.VersioningData,
 func CommitBuildID(timestamp *hlc.Clock,
 	data *persistencepb.VersioningData,
 	req *workflowservice.UpdateWorkerVersioningRulesRequest_CommitBuildId,
+	hasRecentPoller bool,
 	maxAssignmentRules int) (*persistencepb.VersioningData, error) {
 	data = common.CloneProto(data)
 	target := req.GetTargetBuildId()
 	if isInVersionSets(target, data.GetVersionSets()) {
 		return nil, serviceerror.NewFailedPrecondition(fmt.Sprintf("update breaks requirement, build id %s is already a member of version set", target))
 	}
-	data.AssignmentRules = append(data.GetAssignmentRules(), &persistencepb.AssignmentRule{
-		Rule:            &taskqueue.BuildIdAssignmentRule{TargetBuildId: target},
-		CreateTimestamp: timestamp,
-	})
+
+	if !hasRecentPoller && !req.GetForce() {
+		return nil, serviceerror.NewFailedPrecondition(
+			fmt.Sprintf("no compatible poller seen within the last %s, use force=true to commit anyways",
+				versioningPollerSeenWindow.String()))
+	}
 
 	for _, ar := range getActiveAssignmentRules(data.GetAssignmentRules()) {
 		if ar.GetRule().GetTargetBuildId() == target {
 			ar.DeleteTimestamp = timestamp
 		}
-		if isUnfiltered(ar.GetRule()) {
+		if isUnconditional(ar.GetRule()) {
 			ar.DeleteTimestamp = timestamp
 		}
 	}
+
+	data.AssignmentRules = append(data.GetAssignmentRules(), &persistencepb.AssignmentRule{
+		Rule:            &taskqueue.BuildIdAssignmentRule{TargetBuildId: target},
+		CreateTimestamp: timestamp,
+	})
 	if err := checkAssignmentConditions(data, maxAssignmentRules, false); err != nil {
 		return nil, err
 	}
@@ -311,14 +319,14 @@ func ListWorkerVersioningRules(
 // checkAssignmentConditions checks for validity conditions that must be assessed by looking at the entire set of rules.
 // It returns an error if the new set of assignment rules don't meet the following requirements:
 // - No more rules than dynamicconfig.VersionAssignmentRuleLimitPerQueue
-// - If `requireUnfiltered`, ensure at least one unfiltered rule still exists
-func checkAssignmentConditions(g *persistencepb.VersioningData, maxARs int, requireUnfiltered bool) error {
+// - If `requireUnconditional`, ensure at least one unconditional rule still exists
+func checkAssignmentConditions(g *persistencepb.VersioningData, maxARs int, requireUnconditional bool) error {
 	activeRules := getActiveAssignmentRules(g.GetAssignmentRules())
 	if cnt := len(activeRules); maxARs > 0 && cnt > maxARs {
 		return serviceerror.NewFailedPrecondition(fmt.Sprintf("update exceeds number of assignment rules permitted in namespace (%v/%v)", cnt, maxARs))
 	}
-	if requireUnfiltered && !containsUnfiltered(activeRules) {
-		return serviceerror.NewFailedPrecondition("there must exist at least one fully-ramped assignment rule")
+	if requireUnconditional && !containsUnconditional(activeRules) {
+		return serviceerror.NewFailedPrecondition("there must exist at least one fully-ramped 'unconditional' assignment rule, use force=true to bypass this requirement")
 	}
 	return nil
 }
@@ -369,20 +377,20 @@ func isUnfilteredAssignmentRuleTarget(buildID string, assignmentRules []*persist
 	return false
 }
 
-func isUnfiltered(ar *taskqueue.BuildIdAssignmentRule) bool {
+func isUnconditional(ar *taskqueue.BuildIdAssignmentRule) bool {
 	percentageRamp := ar.GetPercentageRamp()
 	return ar.GetFilterExpression() == "" &&
 		ar.GetWorkerRatioRamp() == nil &&
 		(percentageRamp == nil || (percentageRamp != nil && percentageRamp.RampPercentage == 100))
 }
 
-// containsUnfiltered returns true if there exists an assignment rule with no filter expression,
+// containsUnconditional returns true if there exists an assignment rule with no filter expression,
 // no worker ratio ramp, and no ramp percentage, or a ramp percentage of 100
-func containsUnfiltered(rules []*persistencepb.AssignmentRule) bool {
+func containsUnconditional(rules []*persistencepb.AssignmentRule) bool {
 	found := false
 	for _, rule := range rules {
 		ar := rule.GetRule()
-		if isUnfiltered(ar) {
+		if isUnconditional(ar) {
 			found = true
 		}
 	}

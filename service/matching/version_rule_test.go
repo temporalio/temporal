@@ -390,7 +390,7 @@ func TestReplaceAssignmentRuleTerminalBuildID(t *testing.T) {
 	assert.NoError(t, err)
 }
 
-func TestReplaceAssignmentRuleTestRequireUnfiltered(t *testing.T) {
+func TestReplaceAssignmentRuleTestrequireUnconditional(t *testing.T) {
 	t.Parallel()
 	clock := hlc.Zero(1)
 	data := mkInitialData(0, clock)
@@ -458,7 +458,7 @@ func TestDeleteAssignmentRuleBasic(t *testing.T) {
 	assert.Error(t, err)
 }
 
-func TestDeleteAssignmentRuleTestRequireUnfiltered(t *testing.T) {
+func TestDeleteAssignmentRuleTestrequireUnconditional(t *testing.T) {
 	t.Parallel()
 	clock := hlc.Zero(1)
 	data := mkInitialData(0, clock)

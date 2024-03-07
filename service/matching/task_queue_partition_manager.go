@@ -63,6 +63,8 @@ type (
 		// if dispatched to local poller then nil and nil is returned.
 		DispatchQueryTask(ctx context.Context, taskID string, request *matchingservice.QueryWorkflowRequest) (*matchingservice.QueryWorkflowResponse, error)
 		GetUserDataManager() *userDataManager
+		// GetVersionedPhysicalTaskQueueManager gets the physical task queue manager associated with the given buildID
+		GetVersionedPhysicalTaskQueueManager(buildID string) physicalTaskQueueManager
 		// MarkAlive updates the liveness timer to keep this partition manager alive.
 		MarkAlive()
 		GetAllPollerInfo() []*taskqueuepb.PollerInfo
@@ -287,6 +289,14 @@ func (pm *taskQueuePartitionManagerImpl) DispatchQueryTask(
 
 func (pm *taskQueuePartitionManagerImpl) GetUserDataManager() *userDataManager {
 	return pm.userDataManager
+}
+
+func (pm *taskQueuePartitionManagerImpl) GetVersionedPhysicalTaskQueueManager(buildID string) physicalTaskQueueManager {
+	ptqm, ok := pm.versionedQueues[buildID]
+	if !ok {
+		return nil
+	}
+	return ptqm
 }
 
 // GetAllPollerInfo returns all pollers that polled from this taskqueue in last few minutes

@@ -906,17 +906,15 @@ func (e *matchingEngineImpl) UpdateWorkerVersioningRules(
 				req.GetDeleteCompatibleRedirectRule(),
 			)
 		case *workflowservice.UpdateWorkerVersioningRulesRequest_CommitBuildId_:
-			commitReq := req.GetCommitBuildId()
-			if tqMgr.HasVersionedPollerAfter(time.Now().Add(-versioningPollerSeenWindow), commitReq.GetTargetBuildId()) {
-				versioningData, err = CommitBuildID(
-					updatedClock,
-					data.GetVersioningData(),
-					commitReq,
-					e.config.AssignmentRuleLimitPerQueue(ns.Name().String()),
-				)
-			} else {
-				err = serviceerror.NewFailedPrecondition(fmt.Sprintf("no compatible poller seen within the last %s", versioningPollerSeenWindow.String()))
-			}
+			// hasRecentPoller := tqMgr.GetVersionedPhysicalTaskQueueManager(req.GetCommitBuildId().GetTargetBuildId()).HasPollerAfter(time.Now().Add(-versioningPollerSeenWindow))
+			hasRecentPoller := tqMgr.HasVersionedPollerAfter(time.Now().Add(-versioningPollerSeenWindow), req.GetCommitBuildId().GetTargetBuildId())
+			versioningData, err = CommitBuildID(
+				updatedClock,
+				data.GetVersioningData(),
+				req.GetCommitBuildId(),
+				hasRecentPoller,
+				e.config.AssignmentRuleLimitPerQueue(ns.Name().String()),
+			)
 		}
 		if err != nil {
 			// operation can't be completed due to failed validation. no action, do not replicate, report error

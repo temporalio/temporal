@@ -476,7 +476,8 @@ func (c *physicalTaskQueueManagerImpl) HasVersionedPollerAfter(accessTime time.T
 	}
 	recentPollers := c.pollerHistory.getPollerInfo(accessTime)
 	for _, r := range recentPollers {
-		if r.GetWorkerVersionCapabilities().GetBuildId() == buildID {
+		versionCapabilities := r.GetWorkerVersionCapabilities()
+		if versionCapabilities.GetUseVersioning() && versionCapabilities.GetBuildId() == buildID {
 			return true
 		}
 	}
