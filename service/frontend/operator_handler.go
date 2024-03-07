@@ -839,3 +839,19 @@ func (*OperatorHandlerImpl) GetNexusIncomingService(context.Context, *operatorse
 func (*OperatorHandlerImpl) ListNexusIncomingServices(context.Context, *operatorservice.ListNexusIncomingServicesRequest) (*operatorservice.ListNexusIncomingServicesResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "unimplemented")
 }
+
+func (h *OperatorHandlerImpl) CreateOrUpdateNexusOutgoingService(context.Context, *operatorservice.CreateOrUpdateNexusOutgoingServiceRequest) (*operatorservice.CreateOrUpdateNexusOutgoingServiceResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "unimplemented")
+}
+
+func (h *OperatorHandlerImpl) DeleteNexusOutgoingService(context.Context, *operatorservice.DeleteNexusOutgoingServiceRequest) (*operatorservice.DeleteNexusOutgoingServiceResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "unimplemented")
+}
+
+func (h *OperatorHandlerImpl) GetNexusOutgoingService(context.Context, *operatorservice.GetNexusOutgoingServiceRequest) (*operatorservice.GetNexusOutgoingServiceResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "unimplemented")
+}
+
+func (h *OperatorHandlerImpl) ListNexusOutgoingServices(context.Context, *operatorservice.ListNexusOutgoingServicesRequest) (*operatorservice.ListNexusOutgoingServicesResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "unimplemented")
+}
