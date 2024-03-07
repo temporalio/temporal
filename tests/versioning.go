@@ -281,6 +281,10 @@ func (s *VersioningIntegSuite) TestCommitBuildID() {
 	s.Equal("1", res.GetAssignmentRules()[0].GetRule().GetTargetBuildId())
 	s.Equal(nil, res.GetAssignmentRules()[0].GetRule().GetRamp())
 
+	// recent versioned poller on wrong build id --> failure
+	s.pollVersionedTaskQueue(tq, "3", true)
+	s.commitBuildId(ctx, tq, "2", false, nil, false)
+
 	// recent unversioned poller on build id 2 --> failure
 	s.pollVersionedTaskQueue(tq, "2", false)
 	s.commitBuildId(ctx, tq, "2", false, nil, false)
