@@ -251,14 +251,14 @@ func CommitBuildID(timestamp *hlc.Clock,
 	maxAssignmentRules int) (*persistencepb.VersioningData, error) {
 	data = common.CloneProto(data)
 	target := req.GetTargetBuildId()
-	if isInVersionSets(target, data.GetVersionSets()) {
-		return nil, serviceerror.NewFailedPrecondition(fmt.Sprintf("update breaks requirement, build id %s is already a member of version set", target))
-	}
-
 	if !hasRecentPoller && !req.GetForce() {
 		return nil, serviceerror.NewFailedPrecondition(
 			fmt.Sprintf("no compatible poller seen within the last %s, use force=true to commit anyways",
 				versioningPollerSeenWindow.String()))
+	}
+	if isInVersionSets(target, data.GetVersionSets()) {
+		return nil, serviceerror.NewFailedPrecondition(
+			fmt.Sprintf("update breaks requirement, build id %s is already a member of version set", target))
 	}
 
 	for _, ar := range getActiveAssignmentRules(data.GetAssignmentRules()) {
