@@ -2082,15 +2082,6 @@ func (s *VersioningIntegSuite) pollVersionedTaskQueue(tq, buildID string, useVer
 
 	// wait for it to start polling
 	time.Sleep(200 * time.Millisecond)
-
-	//ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
-	//defer cancel()
-
-	//run, err := s.sdkClient.ExecuteWorkflow(ctx, sdkclient.StartWorkflowOptions{TaskQueue: tq}, wf)
-	//s.NoError(err)
-	//var out string
-	//s.NoError(run.Get(ctx, &out))
-	//s.Equal("done!", out)
 }
 
 // addNewDefaultBuildId updates build id info on a task queue with a new build id in a new default set.
