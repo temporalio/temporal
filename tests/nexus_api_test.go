@@ -586,14 +586,14 @@ func (s *ClientFunctionalSuite) versionedNexusTaskPoller(ctx context.Context, ta
 		},
 		WorkerVersionCapabilities: vc,
 	})
-	if err != nil {
-		return
-	}
-	// If the context is canceled, the test is written in a way that it doesn't expect the poll to be unblocked.
+	// The test is written in a way that it doesn't expect the poll to be unblocked and it may cancel this context when it completes.
 	if ctx.Err() != nil {
 		return
 	}
-	s.NoError(err)
+	// There's no clean way to propagate this error back to the test that's worthwhile. Panic is good enough.
+	if err != nil {
+		panic(err)
+	}
 	response, handlerError := handler(res)
 	if handlerError != nil {
 		_, err = s.testCluster.GetFrontendClient().RespondNexusTaskFailed(ctx, &workflowservice.RespondNexusTaskFailedRequest{
@@ -602,7 +602,10 @@ func (s *ClientFunctionalSuite) versionedNexusTaskPoller(ctx context.Context, ta
 			TaskToken: res.TaskToken,
 			Error:     handlerError,
 		})
-		s.NoError(err)
+		// There's no clean way to propagate this error back to the test that's worthwhile. Panic is good enough.
+		if err != nil {
+			panic(err)
+		}
 	} else if response != nil {
 		_, err = s.testCluster.GetFrontendClient().RespondNexusTaskCompleted(ctx, &workflowservice.RespondNexusTaskCompletedRequest{
 			Namespace: s.namespace,
@@ -610,7 +613,10 @@ func (s *ClientFunctionalSuite) versionedNexusTaskPoller(ctx context.Context, ta
 			TaskToken: res.TaskToken,
 			Response:  response,
 		})
-		s.NoError(err)
+		// There's no clean way to propagate this error back to the test that's worthwhile. Panic is good enough.
+		if err != nil {
+			panic(err)
+		}
 	}
 }
 
