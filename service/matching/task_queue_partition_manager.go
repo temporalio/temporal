@@ -547,6 +547,7 @@ func (pm *taskQueuePartitionManagerImpl) getPhysicalQueueForAdd(
 				return nil, nil, err
 			}
 		}
+
 		if versionSet == "" {
 			buildId = dir.AssignedBuildId
 		}
