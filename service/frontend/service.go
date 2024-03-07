@@ -40,6 +40,7 @@ import (
 
 	"go.temporal.io/server/api/adminservice/v1"
 	"go.temporal.io/server/common"
+	"go.temporal.io/server/common/backoff"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
@@ -194,6 +195,11 @@ type Config struct {
 	// EnableCallbackAttachment enables attaching callbacks to workflows.
 	EnableCallbackAttachment    dynamicconfig.BoolPropertyFnWithNamespaceFilter
 	AdminEnableListHistoryTasks dynamicconfig.BoolPropertyFn
+
+	// Operator service Nexus incoming service registry long poll options
+	ListNexusIncomingServicesLongPollTimeout dynamicconfig.DurationPropertyFn
+	ListNexusIncomingServicesLongPollMinWait dynamicconfig.DurationPropertyFn
+	ListNexusIncomingServicesRetryPolicy     backoff.RetryPolicy
 }
 
 // NewConfig returns new service config with default values
@@ -295,6 +301,10 @@ func NewConfig(
 		EnableNexusHTTPHandler:      dc.GetBoolProperty(dynamicconfig.FrontendEnableNexusHTTPHandler, false),
 		EnableCallbackAttachment:    dc.GetBoolPropertyFnWithNamespaceFilter(dynamicconfig.FrontendEnableCallbackAttachment, false),
 		AdminEnableListHistoryTasks: dc.GetBoolProperty(dynamicconfig.AdminEnableListHistoryTasks, true),
+
+		ListNexusIncomingServicesLongPollTimeout: dc.GetDurationProperty(dynamicconfig.FrontendListNexusIncomingServicesLongPollTimeout, 5*time.Minute-10*time.Second), // Use -10 seconds so that we send back empty response instead of timeout
+		ListNexusIncomingServicesLongPollMinWait: dc.GetDurationProperty(dynamicconfig.FrontendListNexusIncomingServicesLongPollMinWait, 1*time.Second),
+		ListNexusIncomingServicesRetryPolicy:     backoff.NewExponentialRetryPolicy(1 * time.Second).WithMaximumInterval(5 * time.Minute),
 	}
 }
 

@@ -90,6 +90,10 @@ func (s *operatorHandlerSuite) SetupTest() {
 	s.mockResource = resourcetest.NewTest(s.controller, primitives.FrontendService)
 	s.mockResource.ClusterMetadata.EXPECT().GetCurrentClusterName().Return(uuid.New()).AnyTimes()
 
+	mockNexusIncomingServiceRegistry := NewMockNexusIncomingServiceRegistry(s.controller)
+	mockNexusIncomingServiceRegistry.EXPECT().Start().AnyTimes()
+	mockNexusIncomingServiceRegistry.EXPECT().Stop().AnyTimes()
+
 	args := NewOperatorHandlerImplArgs{
 		&Config{NumHistoryShards: 4},
 		s.mockResource.ESClient,
@@ -103,6 +107,7 @@ func (s *operatorHandlerSuite) SetupTest() {
 		s.mockResource.GetClusterMetadataManager(),
 		s.mockResource.GetClusterMetadata(),
 		s.mockResource.GetClientFactory(),
+		mockNexusIncomingServiceRegistry,
 	}
 	s.handler = NewOperatorHandlerImpl(args)
 	s.handler.Start()

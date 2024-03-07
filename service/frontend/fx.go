@@ -94,6 +94,7 @@ var Module = fx.Options(
 	fx.Provide(PersistenceRateLimitingParamsProvider),
 	service.PersistenceLazyLoadedServiceResolverModule,
 	fx.Provide(FEReplicatorNamespaceReplicationQueueProvider),
+	fx.Provide(NexusIncomingServiceRegistryProvider),
 	fx.Provide(AuthorizationInterceptorProvider),
 	fx.Provide(func(so GrpcServerOptions) *grpc.Server { return grpc.NewServer(so.Options...) }),
 	fx.Provide(HandlerProvider),
@@ -493,6 +494,20 @@ func ServiceResolverProvider(
 	return membershipMonitor.GetResolver(serviceName)
 }
 
+func NexusIncomingServiceRegistryProvider(
+	serviceConfig *Config,
+	matchingClient resource.MatchingClient,
+	serviceManager persistence.NexusIncomingServiceManager,
+) NexusIncomingServiceRegistry {
+	return newNexusIncomingServiceRegistry(
+		serviceConfig.ListNexusIncomingServicesLongPollTimeout,
+		serviceConfig.ListNexusIncomingServicesLongPollMinWait,
+		serviceConfig.ListNexusIncomingServicesRetryPolicy,
+		matchingClient,
+		serviceManager,
+	)
+}
+
 func AdminHandlerProvider(
 	persistenceConfig *config.Persistence,
 	configuration *Config,
@@ -565,6 +580,7 @@ func OperatorHandlerProvider(
 	clusterMetadataManager persistence.ClusterMetadataManager,
 	clusterMetadata cluster.Metadata,
 	clientFactory client.Factory,
+	nexusIncomingServiceRegistry NexusIncomingServiceRegistry,
 ) *OperatorHandlerImpl {
 	args := NewOperatorHandlerImplArgs{
 		configuration,
@@ -579,6 +595,7 @@ func OperatorHandlerProvider(
 		clusterMetadataManager,
 		clusterMetadata,
 		clientFactory,
+		nexusIncomingServiceRegistry,
 	}
 	return NewOperatorHandlerImpl(args)
 }

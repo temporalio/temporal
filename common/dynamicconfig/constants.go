@@ -403,6 +403,11 @@ const (
 	// Default is 0, means, namespace will be deleted immediately.
 	DeleteNamespaceNamespaceDeleteDelay = "frontend.deleteNamespaceNamespaceDeleteDelay"
 
+	// FrontendListNexusIncomingServicesLongPollTimeout is the timeout for long polls to refresh cached Nexus incoming services
+	FrontendListNexusIncomingServicesLongPollTimeout = "frontend.listNexusIncomingServicesLongPollTimeout"
+	// FrontendListNexusIncomingServicesLongPollMinWait is the minimum time to wait between long polls to refresh cached Nexus incoming services
+	FrontendListNexusIncomingServicesLongPollMinWait = "frontend.listNexusIncomingServicesLongPollMinWait"
+
 	// keys for matching
 
 	// MatchingRPS is request rate per second for each matching host
