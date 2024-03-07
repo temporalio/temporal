@@ -25,7 +25,6 @@
 package frontend
 
 import (
-	"cmp"
 	"context"
 	"errors"
 	"fmt"
@@ -66,8 +65,8 @@ type (
 	}
 
 	registry struct {
-		status            int32
-		hasLoadedServices atomic.Bool
+		status                int32
+		initServiceDataWaitCh chan struct{}
 
 		sync.RWMutex     // protects tableVersion, services, serviceIDsSorted, and servicesByName
 		tableVersion     int64
@@ -94,6 +93,7 @@ func newNexusIncomingServiceRegistry(
 ) NexusIncomingServiceRegistry {
 	return &registry{
 		status:                         common.DaemonStatusInitialized,
+		initServiceDataWaitCh:          make(chan struct{}),
 		refreshServicesLongPollTimeout: listNexusIncomingServicesLongPollTimeout,
 		refreshServicesLongPollMinWait: listNexusIncomingServicesLongPollMinWait,
 		refreshServicesRetryPolicy:     listNexusIncomingServicesRetryPolicy,
@@ -112,7 +112,7 @@ func (r *registry) Start() {
 		headers.SystemBackgroundCallerInfo,
 	)
 
-	r.refreshPoller = goro.NewHandle(refreshCtx).Go(r.fetchServices)
+	r.refreshPoller = goro.NewHandle(refreshCtx).Go(r.refreshServices)
 }
 
 func (r *registry) Stop() {
@@ -135,30 +135,7 @@ func (r *registry) CreateOrUpdateNexusIncomingService(
 		return nil, err
 	}
 
-	service := entryToService(resp.Entry)
-
-	if r.hasLoadedServices.Load() {
-		// Only update in-memory view if we have already done the initial load.
-		// Otherwise, any changes will get overwritten on first read anyway.
-		r.insertService(service, resp.Entry.Id)
-	}
-
-	return &operatorservice.CreateOrUpdateNexusIncomingServiceResponse{Service: service}, nil
-}
-
-func (r *registry) insertService(service *nexus.IncomingService, serviceID string) {
-	r.Lock()
-	defer r.Unlock()
-
-	idx, found := slices.BinarySearch(r.serviceIDsSorted, serviceID)
-	if found {
-		r.services[idx] = service
-	} else {
-		r.services = slices.Insert(r.services, idx, service)
-		r.serviceIDsSorted = slices.Insert(r.serviceIDsSorted, idx, serviceID)
-	}
-	r.servicesByName[service.Name] = service
-	r.tableVersion++
+	return &operatorservice.CreateOrUpdateNexusIncomingServiceResponse{Service: entryToService(resp.Entry)}, nil
 }
 
 func (r *registry) DeleteNexusIncomingService(
@@ -172,39 +149,16 @@ func (r *registry) DeleteNexusIncomingService(
 		return nil, err
 	}
 
-	if r.hasLoadedServices.Load() {
-		// Only update in-memory view if we have already done the initial load.
-		// Otherwise, any changes will get overwritten on first read anyway.
-		r.deleteService(request.Name)
-	}
-
 	return &operatorservice.DeleteNexusIncomingServiceResponse{}, nil
-}
-
-func (r *registry) deleteService(name string) {
-	r.Lock()
-	defer r.Unlock()
-
-	r.tableVersion++
-	delete(r.servicesByName, name)
-
-	idx, found := slices.BinarySearchFunc(r.services, &nexus.IncomingService{Name: name}, func(a *nexus.IncomingService, b *nexus.IncomingService) int {
-		return cmp.Compare(a.Name, b.Name)
-	})
-	if !found {
-		return
-	}
-
-	slices.Delete(r.services, idx, idx)
-	slices.Delete(r.serviceIDsSorted, idx, idx)
 }
 
 func (r *registry) GetNexusIncomingService(
 	ctx context.Context,
 	request *operatorservice.GetNexusIncomingServiceRequest,
 ) (*operatorservice.GetNexusIncomingServiceResponse, error) {
-	if !r.hasLoadedServices.Load() {
-		if err := r.loadServices(ctx); err != nil {
+	if !r.isTableVersionCurrent(ctx) {
+		r.invalidateCachedServices()
+		if err := r.fetchServices(ctx); err != nil {
 			return nil, fmt.Errorf("error loading nexus incoming services frontend cache: %w", err)
 		}
 	}
@@ -224,8 +178,9 @@ func (r *registry) ListNexusIncomingServices(
 	ctx context.Context,
 	request *operatorservice.ListNexusIncomingServicesRequest,
 ) (*operatorservice.ListNexusIncomingServicesResponse, error) {
-	if !r.hasLoadedServices.Load() {
-		if err := r.loadServices(ctx); err != nil {
+	if !r.isTableVersionCurrent(ctx) {
+		r.invalidateCachedServices()
+		if err := r.fetchServices(ctx); err != nil {
 			return nil, fmt.Errorf("error loading nexus incoming services frontend cache: %w", err)
 		}
 	}
@@ -261,104 +216,63 @@ func (r *registry) ListNexusIncomingServices(
 	}, nil
 }
 
-// Loads all incoming services into memory from persistence.
-// Called once, on first read after startup.
-func (r *registry) loadServices(ctx context.Context) error {
-	r.Lock()
-	defer r.Unlock()
-
-	if r.hasLoadedServices.Load() {
-		// check whether services were loaded while waiting for write lock
-		return nil
+func (r *registry) isTableVersionCurrent(ctx context.Context) bool {
+	actualTableVersion, err := r.persistence.GetNexusIncomingServicesTableVersion(ctx)
+	if err != nil {
+		return false
 	}
 
-	r.tableVersion = 0
-	r.services = []*nexus.IncomingService{}
-	r.serviceIDsSorted = []string{}
-	r.servicesByName = make(map[string]*nexus.IncomingService)
-
-	var pageToken []byte
-
-	for ctx.Err() == nil {
-		resp, err := r.persistence.ListNexusIncomingServices(ctx, &p.ListNexusIncomingServicesRequest{
-			LastKnownTableVersion: r.tableVersion,
-			NextPageToken:         pageToken,
-			PageSize:              loadServicesPageSize,
-		})
-		if err != nil {
-			if errors.Is(err, p.ErrNexusTableVersionConflict) {
-				// indicates table was updated during paging, so reset and start from the beginning
-				pageToken = nil
-				r.invalidateCachedServicesLocked()
-				continue
-			}
-			return err
-		}
-
-		pageToken = resp.NextPageToken
-		r.tableVersion = resp.TableVersion
-		for _, entry := range resp.Entries {
-			service := entryToService(entry)
-			r.services = append(r.services, service)
-			r.serviceIDsSorted = append(r.serviceIDsSorted, entry.Id)
-			r.servicesByName[entry.Service.Name] = service
-		}
-
-		if pageToken == nil {
-			break
-		}
-	}
-
-	r.hasLoadedServices.Store(ctx.Err() == nil)
-	return ctx.Err()
+	r.RLock()
+	defer r.RUnlock()
+	return r.tableVersion == actualTableVersion
 }
 
-// Long polls matching service to refresh cached services.
 func (r *registry) fetchServices(ctx context.Context) error {
-	// currentPageToken is the most recently returned page token from ListNexusIncomingServices.
-	// It is used in combination with r.tableVersion to determine whether to do a long poll or a simple get.
 	var currentPageToken []byte
+	pagingWasReset := false // used to ensure write lock is only acquired once
 
-	fetchFn := func(ctx context.Context) error {
-		if !r.hasLoadedServices.Load() {
-			// Wait for at least one read to trigger lazy loading from
-			// persistence before long polling matching for changes
-			return nil
-		}
-
+	for ctx.Err() == nil {
 		r.RLock()
 		requestTableVersion := r.tableVersion
 		r.RUnlock()
 
-		callCtx, cancel := context.WithTimeout(ctx, r.refreshServicesLongPollTimeout())
-		defer cancel()
-
 		shouldWait := currentPageToken == nil && requestTableVersion != 0
 
-		resp, err := r.matchingClient.ListNexusIncomingServices(callCtx, &matchingservice.ListNexusIncomingServicesRequest{
+		resp, err := r.matchingClient.ListNexusIncomingServices(ctx, &matchingservice.ListNexusIncomingServicesRequest{
 			LastKnownTableVersion: requestTableVersion,
 			NextPageToken:         currentPageToken,
 			PageSize:              loadServicesPageSize,
 			Wait:                  shouldWait,
 		})
-
 		if err != nil {
 			if errors.Is(err, p.ErrNexusTableVersionConflict) {
 				// indicates table was updated during paging, so reset and start from the beginning
 				currentPageToken = nil
-				r.invalidateCachedServices()
-				return nil
+				pagingWasReset = true
+				r.invalidateCachedServicesLocked()
+				continue
 			}
-			return err
+			// for all other errors, fall back to reading directly from persistence
+			if currentPageToken == nil && !pagingWasReset {
+				r.Lock()
+			}
+			persistenceErr := r.loadServicesLocked(ctx)
+			if r.initServiceDataWaitCh != nil && persistenceErr == nil {
+				close(r.initServiceDataWaitCh)
+			}
+			r.Unlock()
+			return persistenceErr
 		}
 
-		if shouldWait && resp.TableVersion == requestTableVersion {
+		if shouldWait && requestTableVersion == resp.TableVersion {
 			// long poll returned with no changes
 			return nil
 		}
 
-		r.Lock()
-		defer r.Unlock()
+		if currentPageToken == nil && !pagingWasReset {
+			// acquire lock once upon getting first page and release once all pagination is complete
+			r.Lock()
+		}
 
 		if shouldWait {
 			// long poll returned new data, starting with first page
@@ -367,26 +281,71 @@ func (r *registry) fetchServices(ctx context.Context) error {
 
 		currentPageToken = resp.NextPageToken
 		r.tableVersion = resp.TableVersion
+		r.updateCachedServicesLocked(resp.Entries)
 
-		// the following assumes services returned by matching are already sorted
-		startIdx := len(r.services)
-		r.services = slices.Grow(r.services, len(resp.Entries))
-		r.serviceIDsSorted = slices.Grow(r.serviceIDsSorted, len(resp.Entries))
-		for i, entry := range resp.Entries {
-			service := entryToService(entry)
-			r.services[startIdx+i] = service
-			r.servicesByName[entry.Service.Name] = service
-			r.serviceIDsSorted[startIdx+i] = entry.Id
+		if resp.NextPageToken == nil {
+			break
+		}
+	}
+
+	if r.initServiceDataWaitCh != nil {
+		close(r.initServiceDataWaitCh)
+	}
+	r.Unlock()
+	return ctx.Err()
+}
+
+// Loads all incoming services into memory from persistence.
+// Used as a fallback if matching service is unavailable.
+// Always replaces entire in-memory view by paging from the start.
+func (r *registry) loadServicesLocked(ctx context.Context) error {
+	r.invalidateCachedServicesLocked()
+
+	var currentPageToken []byte
+
+	for ctx.Err() == nil {
+		resp, err := r.persistence.ListNexusIncomingServices(ctx, &p.ListNexusIncomingServicesRequest{
+			LastKnownTableVersion: r.tableVersion,
+			NextPageToken:         currentPageToken,
+			PageSize:              loadServicesPageSize,
+		})
+		if err != nil {
+			if errors.Is(err, p.ErrNexusTableVersionConflict) {
+				// indicates table was updated during paging, so reset and start from the beginning
+				currentPageToken = nil
+				r.invalidateCachedServicesLocked()
+				continue
+			}
+			return err
 		}
 
-		return nil
+		currentPageToken = resp.NextPageToken
+		r.tableVersion = resp.TableVersion
+		r.updateCachedServicesLocked(resp.Entries)
+
+		if resp.NextPageToken == nil {
+			break
+		}
+	}
+
+	return ctx.Err()
+}
+
+func (r *registry) refreshServices(ctx context.Context) error {
+	refreshFn := func(ctx context.Context) error {
+		initErr := r.waitUntilInitialized(ctx)
+		if initErr != nil {
+			return initErr
+		}
+
+		return r.fetchServices(ctx)
 	}
 
 	minWaitTime := r.refreshServicesLongPollMinWait()
 
 	for ctx.Err() == nil {
 		start := time.Now()
-		_ = backoff.ThrottleRetryContext(ctx, fetchFn, r.refreshServicesRetryPolicy, nil)
+		_ = backoff.ThrottleRetryContext(ctx, refreshFn, r.refreshServicesRetryPolicy, nil)
 		elapsed := time.Since(start)
 
 		// In general, we want to start a new call immediately on completion of the previous
@@ -404,6 +363,30 @@ func (r *registry) fetchServices(ctx context.Context) error {
 	}
 
 	return ctx.Err()
+}
+
+func (r *registry) waitUntilInitialized(ctx context.Context) error {
+	if r.initServiceDataWaitCh != nil {
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case <-r.initServiceDataWaitCh:
+			return nil
+		}
+	}
+	return nil
+}
+
+func (r *registry) updateCachedServicesLocked(entries []*persistencepb.NexusIncomingServiceEntry) {
+	// the following assumes entries are already sorted by serviceID
+	r.services = slices.Grow(r.services, len(entries))
+	r.serviceIDsSorted = slices.Grow(r.serviceIDsSorted, len(entries))
+	for _, entry := range entries {
+		service := entryToService(entry)
+		r.services = append(r.services, service)
+		r.servicesByName[entry.Service.Name] = service
+		r.serviceIDsSorted = append(r.serviceIDsSorted, entry.Id)
+	}
 }
 
 func (r *registry) invalidateCachedServices() {
