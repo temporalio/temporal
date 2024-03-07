@@ -249,7 +249,11 @@ func CommitBuildID(timestamp *hlc.Clock,
 	req *workflowservice.UpdateWorkerVersioningRulesRequest_CommitBuildId,
 	hasRecentPoller bool,
 	maxAssignmentRules int) (*persistencepb.VersioningData, error) {
-	data = common.CloneProto(data)
+	if data == nil {
+		data = &persistencepb.VersioningData{RedirectRules: make([]*persistencepb.RedirectRule, 0)}
+	} else {
+		data = common.CloneProto(data)
+	}
 	target := req.GetTargetBuildId()
 	if !hasRecentPoller && !req.GetForce() {
 		return nil, serviceerror.NewFailedPrecondition(
