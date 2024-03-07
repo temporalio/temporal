@@ -1386,6 +1386,20 @@ func (s *engine2Suite) TestStartWorkflowExecution_Dedup() {
 				s.NotEqual(prevRunID, resp.GetRunId())
 			})
 
+			s.Run("and id reuse policy is TERMINATE_IF_RUNNING", func() {
+				s.mockExecutionMgr.EXPECT().CreateWorkflowExecution(gomock.Any(), brandNewExecutionRequest).
+					Return(nil, makeCurrentWorkflowConditionFailedError(prevRequestID))
+				s.mockExecutionMgr.EXPECT().CreateWorkflowExecution(gomock.Any(), updateExecutionRequest).
+					Return(tests.CreateWorkflowExecutionResponse, nil)
+
+				resp, err := s.historyEngine.StartWorkflowExecution(
+					metrics.AddMetricsContext(context.Background()),
+					makeStartRequest(enumspb.WORKFLOW_ID_REUSE_POLICY_TERMINATE_IF_RUNNING))
+
+				s.NoError(err)
+				s.NotEqual(prevRunID, resp.GetRunId())
+			})
+
 			s.Run("and id reuse policy ALLOW_DUPLICATE_FAILED_ONLY", func() {
 				s.mockExecutionMgr.EXPECT().CreateWorkflowExecution(gomock.Any(), brandNewExecutionRequest).
 					Return(nil, makeCurrentWorkflowConditionFailedError(prevRequestID))

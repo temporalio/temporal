@@ -153,13 +153,13 @@ func createWorkflowMutationFunction(
 		return nil, nil
 	}
 	currentExecutionState := currentWorkflowLease.GetMutableState().GetExecutionState()
-	workflowMutationFunc, err := api.ApplyWorkflowIDReusePolicy(
-		currentExecutionState.CreateRequestId,
+	workflowMutationFunc, err := api.ResolveDuplicateWorkflowID(
+		currentWorkflowLease.GetContext().GetWorkflowKey().WorkflowID,
+		newRunID,
 		currentExecutionState.RunId,
 		currentExecutionState.State,
 		currentExecutionState.Status,
-		currentWorkflowLease.GetContext().GetWorkflowKey().WorkflowID,
-		newRunID,
+		currentExecutionState.CreateRequestId,
 		workflowIDReusePolicy,
 	)
 	return workflowMutationFunc, err
