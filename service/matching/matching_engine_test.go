@@ -180,7 +180,7 @@ func newMatchingEngine(
 		taskManager:          taskMgr,
 		historyClient:        mockHistoryClient,
 		partitions:           make(map[tqid.PartitionKey]taskQueuePartitionManager),
-		taskQueueCount:       make(map[taskQueueCounterKey]int),
+		gaugeMetricCounter:   gaugeMetrics{make(map[taskQueueCounterKey]int), make(map[taskQueueCounterKey]int), make(map[taskQueueCounterKey]int), make(map[taskQueueCounterKey]int), sync.Mutex{}},
 		lockableQueryTaskMap: lockableQueryTaskMap{queryTaskMap: make(map[string]chan *queryResult)},
 		logger:               logger,
 		throttledLogger:      log.ThrottledLogger(logger),

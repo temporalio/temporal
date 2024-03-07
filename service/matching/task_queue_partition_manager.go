@@ -150,8 +150,8 @@ func newTaskQueuePartitionManager(
 	if err != nil {
 		return nil, err
 	}
-
 	pm.defaultQueue = defaultQ
+	e.updateTaskQueuePartitionGauge(pm, 1)
 	return pm, nil
 }
 
@@ -358,6 +358,14 @@ func (pm *taskQueuePartitionManagerImpl) unloadPhysicalQueue(unloadedDbq physica
 		// this is the default queue, unload the whole partition if it is not healthy
 		if pm.defaultQueue == unloadedDbq {
 			pm.unloadFromEngine()
+
+			// have to iterate over versionedQueues and call updatePhysicalTaskQueueGauge
+			pm.versionedQueuesLock.Lock()
+			for _, vq := range pm.versionedQueues {
+				vqImpl := vq.(*physicalTaskQueueManagerImpl)
+				pm.engine.updatePhysicalTaskQueueGauge(vqImpl, -1)
+			}
+			pm.versionedQueuesLock.Unlock()
 		}
 		return
 	}
@@ -372,7 +380,9 @@ func (pm *taskQueuePartitionManagerImpl) unloadPhysicalQueue(unloadedDbq physica
 	delete(pm.versionedQueues, version)
 	pm.versionedQueuesLock.Unlock()
 	unloadedDbq.Stop()
-	pm.engine.updateTaskQueueGauge(pm, true, -1)
+
+	unloadedDbqImpl := unloadedDbq.(*physicalTaskQueueManagerImpl)
+	pm.engine.updatePhysicalTaskQueueGauge(unloadedDbqImpl, -1)
 }
 
 func (pm *taskQueuePartitionManagerImpl) unloadFromEngine() {
@@ -442,7 +452,6 @@ func (pm *taskQueuePartitionManagerImpl) getVersionedQueueNoWait(
 
 		if !ok {
 			vq.Start()
-			pm.engine.updateTaskQueueGauge(pm, true, 1)
 		}
 	}
 	return vq, nil

@@ -231,6 +231,7 @@ func newPhysicalTaskQueueManager(
 	for _, opt := range opts {
 		opt(tlMgr)
 	}
+	e.updatePhysicalTaskQueueGauge(tlMgr, 1)
 	return tlMgr, nil
 }
 
