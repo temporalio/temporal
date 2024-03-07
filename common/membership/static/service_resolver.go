@@ -22,18 +22,19 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-package tests
+package static
 
 import (
 	"sync"
 
 	"github.com/dgryski/go-farm"
-
 	"go.temporal.io/server/common/membership"
+
 	"go.temporal.io/server/common/primitives"
 )
 
-type simpleResolver struct {
+// staticResolver is a service resolver that maintains static mapping between services and host info
+type staticResolver struct {
 	mu        sync.Mutex
 	hostInfos []membership.HostInfo
 	listeners map[string]chan<- *membership.ChangedEvent
@@ -41,21 +42,19 @@ type simpleResolver struct {
 	hashfunc func([]byte) uint32
 }
 
-// newSimpleResolver returns a service resolver that maintains static mapping
-// between services and host info
-func newSimpleResolver(service primitives.ServiceName, hosts []string) *simpleResolver {
+func newStaticResolver(service primitives.ServiceName, hosts []string) *staticResolver {
 	hostInfos := make([]membership.HostInfo, 0, len(hosts))
 	for _, host := range hosts {
 		hostInfos = append(hostInfos, membership.NewHostInfoFromAddress(host))
 	}
-	return &simpleResolver{
+	return &staticResolver{
 		hostInfos: hostInfos,
 		hashfunc:  farm.Fingerprint32,
 		listeners: make(map[string]chan<- *membership.ChangedEvent),
 	}
 }
 
-func (s *simpleResolver) start(hosts []string) {
+func (s *staticResolver) start(hosts []string) {
 	hostInfos := make([]membership.HostInfo, 0, len(hosts))
 	for _, host := range hosts {
 		hostInfos = append(hostInfos, membership.NewHostInfoFromAddress(host))
@@ -77,7 +76,7 @@ func (s *simpleResolver) start(hosts []string) {
 	}
 }
 
-func (s *simpleResolver) Lookup(key string) (membership.HostInfo, error) {
+func (s *staticResolver) Lookup(key string) (membership.HostInfo, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if len(s.hostInfos) == 0 {
@@ -88,7 +87,7 @@ func (s *simpleResolver) Lookup(key string) (membership.HostInfo, error) {
 	return s.hostInfos[idx], nil
 }
 
-func (s *simpleResolver) LookupN(key string, _ int) []membership.HostInfo {
+func (s *staticResolver) LookupN(key string, _ int) []membership.HostInfo {
 	info, err := s.Lookup(key)
 	if err != nil {
 		return []membership.HostInfo{}
@@ -96,7 +95,7 @@ func (s *simpleResolver) LookupN(key string, _ int) []membership.HostInfo {
 	return []membership.HostInfo{info}
 }
 
-func (s *simpleResolver) AddListener(name string, notifyChannel chan<- *membership.ChangedEvent) error {
+func (s *staticResolver) AddListener(name string, notifyChannel chan<- *membership.ChangedEvent) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	_, ok := s.listeners[name]
@@ -107,7 +106,7 @@ func (s *simpleResolver) AddListener(name string, notifyChannel chan<- *membersh
 	return nil
 }
 
-func (s *simpleResolver) RemoveListener(name string) error {
+func (s *staticResolver) RemoveListener(name string) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	_, ok := s.listeners[name]
@@ -118,21 +117,21 @@ func (s *simpleResolver) RemoveListener(name string) error {
 	return nil
 }
 
-func (s *simpleResolver) MemberCount() int {
+func (s *staticResolver) MemberCount() int {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	return len(s.hostInfos)
 }
 
-func (s *simpleResolver) Members() []membership.HostInfo {
+func (s *staticResolver) Members() []membership.HostInfo {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	return s.hostInfos
 }
 
-func (s *simpleResolver) AvailableMembers() []membership.HostInfo {
+func (s *staticResolver) AvailableMembers() []membership.HostInfo {
 	return s.Members()
 }
 
-func (s *simpleResolver) RequestRefresh() {
+func (s *staticResolver) RequestRefresh() {
 }
