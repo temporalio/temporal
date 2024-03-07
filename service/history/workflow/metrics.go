@@ -61,6 +61,7 @@ func emitMutableStateStatus(
 	}
 
 	metricsHandler.Histogram(metrics.MutableStateSize.Name(), metrics.MutableStateSize.Unit()).Record(int64(stats.TotalSize))
+	metricsHandler.Histogram(metrics.MutableStatePayloadSize.Name(), metrics.MutableStatePayloadSize.Unit()).Record(int64(stats.PayloadSize))
 	metricsHandler.Histogram(metrics.ExecutionInfoSize.Name(), metrics.ExecutionInfoSize.Unit()).Record(int64(stats.ExecutionInfoSize))
 	metricsHandler.Histogram(metrics.ExecutionStateSize.Name(), metrics.ExecutionStateSize.Unit()).Record(int64(stats.ExecutionStateSize))
 	metricsHandler.Histogram(metrics.ActivityInfoSize.Name(), metrics.ActivityInfoSize.Unit()).Record(int64(stats.ActivityInfoSize))

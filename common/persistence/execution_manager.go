@@ -141,6 +141,7 @@ func (m *executionManagerImpl) CreateWorkflowExecution(
 	return &CreateWorkflowExecutionResponse{
 		NewMutableStateStats: *statusOfInternalWorkflowSnapshot(
 			serializedNewWorkflowSnapshot,
+			&newSnapshot,
 			newHistoryDiff,
 		),
 	}, nil
@@ -227,10 +228,12 @@ func (m *executionManagerImpl) UpdateWorkflowExecution(
 		return &UpdateWorkflowExecutionResponse{
 			UpdateMutableStateStats: *statusOfInternalWorkflowMutation(
 				&newRequest.UpdateWorkflowMutation,
+				&updateMutation,
 				updateWorkflowHistoryDiff,
 			),
 			NewMutableStateStats: statusOfInternalWorkflowSnapshot(
 				newRequest.NewWorkflowSnapshot,
+				newSnapshot,
 				newWorkflowHistoryDiff,
 			),
 		}, nil
@@ -355,14 +358,17 @@ func (m *executionManagerImpl) ConflictResolveWorkflowExecution(
 		return &ConflictResolveWorkflowExecutionResponse{
 			ResetMutableStateStats: *statusOfInternalWorkflowSnapshot(
 				&newRequest.ResetWorkflowSnapshot,
+				&resetSnapshot,
 				resetWorkflowHistoryDiff,
 			),
 			NewMutableStateStats: statusOfInternalWorkflowSnapshot(
 				newRequest.NewWorkflowSnapshot,
+				newSnapshot,
 				newWorkflowHistoryDiff,
 			),
 			CurrentMutableStateStats: statusOfInternalWorkflowMutation(
 				newRequest.CurrentWorkflowMutation,
+				currentMutation,
 				currentWorkflowHistoryDiff,
 			),
 		}, nil

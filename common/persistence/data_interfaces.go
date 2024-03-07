@@ -693,6 +693,7 @@ type (
 	// MutableStateStatistics is the size stats for MutableState
 	MutableStateStatistics struct {
 		TotalSize         int
+		PayloadSize       int
 		HistoryStatistics *HistoryStatistics
 
 		// Breakdown of size into more granular stats
