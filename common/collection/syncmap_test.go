@@ -22,18 +22,18 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-package concurrent_test
+package collection_test
 
 import (
 	"sync"
 	"testing"
 
-	"go.temporal.io/server/common/concurrent"
+	"go.temporal.io/server/common/collection"
 )
 
-// This isn't exhaustive but serves as a basic stress test to ensure our implementation is concurrent
+// This isn't exhaustive but serves as a basic stress test to ensure our implementation is collection
 func TestMap_MultiThreaded(t *testing.T) {
-	m := concurrent.NewMap[int, int]()
+	m := collection.NewSyncMap[int, int]()
 	var wg sync.WaitGroup
 	barrier := make(chan struct{})
 	wg.Add(3)
@@ -63,7 +63,7 @@ func TestMap_MultiThreaded(t *testing.T) {
 }
 
 func TestMap_Get(t *testing.T) {
-	m := concurrent.NewMap[int, int]()
+	m := collection.NewSyncMap[int, int]()
 	m.Set(1, 1)
 	v, ok := m.Get(1)
 	if !ok {
@@ -75,7 +75,7 @@ func TestMap_Get(t *testing.T) {
 }
 
 func TestMap_Delete(t *testing.T) {
-	m := concurrent.NewMap[int, int]()
+	m := collection.NewSyncMap[int, int]()
 	m.Set(1, 1)
 	m.Set(2, 1)
 	m.Delete(1)
@@ -93,7 +93,7 @@ func TestMap_Delete(t *testing.T) {
 }
 
 func TestMap_Pop_ReturnsFalseWhenKeyDoesNotExist(t *testing.T) {
-	m := concurrent.NewMap[int, int]()
+	m := collection.NewSyncMap[int, int]()
 	_, ok := m.Pop(1)
 	if ok {
 		t.Error("Expected false, got true")
@@ -101,7 +101,7 @@ func TestMap_Pop_ReturnsFalseWhenKeyDoesNotExist(t *testing.T) {
 }
 
 func TestMap_Pop_ReturnsTrueWhenKeyExists(t *testing.T) {
-	m := concurrent.NewMap[int, int]()
+	m := collection.NewSyncMap[int, int]()
 	m.Set(1, 1)
 	v, ok := m.Pop(1)
 	if !ok {
