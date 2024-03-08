@@ -169,13 +169,13 @@ func (t *timerQueueTaskExecutorBase) stateMachineTask(task tasks.Task) (hsm.Ref,
 	}
 	def, ok := t.shardContext.StateMachineRegistry().TaskSerializer(cbt.Info.Type)
 	if !ok {
-		return hsm.Ref{}, nil, true, queues.NewUnprocessableTaskError(fmt.Sprintf("cannot derialize task %v", cbt.Info.Type))
+		return hsm.Ref{}, nil, true, queues.NewUnprocessableTaskError(fmt.Sprintf("deserializer not registered for task type %v", cbt.Info.Type))
 	}
-	smt, err := def.Deserialize(cbt.Info.Data, tasks.CategoryCallback, hsm.TaskKindTimer{Deadline: cbt.VisibilityTimestamp})
+	smt, err := def.Deserialize(cbt.Info.Data, tasks.CategoryTimer, hsm.TaskKindTimer{Deadline: cbt.VisibilityTimestamp})
 	if err != nil {
 		return hsm.Ref{}, nil, true, fmt.Errorf(
 			"%w: %w",
-			queues.NewUnprocessableTaskError(fmt.Sprintf("cannot derialize task %v", cbt.Info.Type)),
+			queues.NewUnprocessableTaskError(fmt.Sprintf("cannot deserialize task %v", cbt.Info.Type)),
 			err,
 		)
 	}

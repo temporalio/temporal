@@ -142,7 +142,6 @@ func (f *callbackQueueFactory) CreateQueue(
 		workflowCache,
 		logger,
 		metricsHandler,
-		f.Config,
 	)
 
 	// not implemented yet

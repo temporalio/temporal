@@ -1186,6 +1186,7 @@ func (s *TaskSerializer) serializeCallbackTask(task tasks.Task) (*commonpb.DataB
 			StateMachineInfo: task.Info,
 			TaskType:         task.GetType(),
 			Destination:      task.Destination,
+			VisibilityTime:   timestamppb.New(task.VisibilityTimestamp),
 		})
 	default:
 		return nil, serviceerror.NewInternal(fmt.Sprintf("unknown callback task type while serializing: %v", task))
@@ -1208,7 +1209,7 @@ func (s *TaskSerializer) deserializeCallbackTask(blob *commonpb.DataBlob) (tasks
 				info.WorkflowId,
 				info.RunId,
 			),
-			VisibilityTimestamp: time.Unix(0, 0).UTC(),
+			VisibilityTimestamp: info.VisibilityTime.AsTime(),
 			TaskID:              info.TaskId,
 			Info:                info.StateMachineInfo,
 		},

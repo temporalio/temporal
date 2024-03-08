@@ -283,12 +283,13 @@ message OutboundTaskInfo {
 
     temporal.server.api.enums.v1.TaskType task_type = 4;
     int64 task_id = 5;
+    google.protobuf.Timestamp visibility_time = 6;
 
     // Destination of this task (e.g. protocol+host+port for callbacks).
     // Outbound tasks are grouped by this field (and the namespace ID) when scheduling.
-    string destination = 6;
+    string destination = 7;
     // If task addresses a sub-statemachine (e.g. callback), this field will be set.
-    StateMachineTaskInfo state_machine_info = 7;
+    StateMachineTaskInfo state_machine_info = 8;
 }
 
 // activity_map column

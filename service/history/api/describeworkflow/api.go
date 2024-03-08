@@ -235,7 +235,13 @@ func Invoke(
 	for _, entry := range cbs {
 		callback, err := coll.Data(entry.Key.ID)
 		if err != nil {
-			shard.GetLogger().Error("failed to construct describe response", tag.Error(err))
+			shard.GetLogger().Error(
+				"failed to load callback data while building describe response",
+				tag.WorkflowNamespaceID(namespaceID.String()),
+				tag.WorkflowID(executionInfo.WorkflowId),
+				tag.WorkflowRunID(executionState.RunId),
+				tag.Error(err),
+			)
 			return nil, serviceerror.NewInternal("failed to construct describe response")
 		}
 		// HSM data is mutable and must be cloned to avoid a data race during serialization, which happens after we

@@ -29,7 +29,6 @@ import (
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
-	"go.temporal.io/server/service/history/configs"
 	"go.temporal.io/server/service/history/consts"
 	"go.temporal.io/server/service/history/hsm"
 	"go.temporal.io/server/service/history/queues"
@@ -49,7 +48,6 @@ func newCallbackQueueActiveTaskExecutor(
 	workflowCache wcache.Cache,
 	logger log.Logger,
 	metricsHandler metrics.Handler,
-	config *configs.Config,
 ) *callbackQueueActiveTaskExecutor {
 	return &callbackQueueActiveTaskExecutor{
 		taskExecutor: taskExecutor{
@@ -57,8 +55,6 @@ func newCallbackQueueActiveTaskExecutor(
 			cache:          workflowCache,
 			logger:         logger,
 			metricsHandler: metricsHandler.WithTags(metrics.OperationTag(metrics.OperationCallbackQueueProcessorScope)),
-			clusterName:    shardCtx.GetClusterMetadata().GetCurrentClusterName(),
-			config:         config,
 		},
 	}
 }
@@ -118,13 +114,13 @@ func (e *callbackQueueActiveTaskExecutor) stateMachineTask(task tasks.Task) (hsm
 	}
 	def, ok := e.shardContext.StateMachineRegistry().TaskSerializer(cbt.Info.Type)
 	if !ok {
-		return hsm.Ref{}, nil, queues.NewUnprocessableTaskError(fmt.Sprintf("cannot derialize task %v", cbt.Info.Type))
+		return hsm.Ref{}, nil, queues.NewUnprocessableTaskError(fmt.Sprintf("deserializer not registered for task type %v", cbt.Info.Type))
 	}
 	smt, err := def.Deserialize(cbt.Info.Data, tasks.CategoryCallback, hsm.TaskKindOutbound{Destination: cbt.Destination})
 	if err != nil {
 		return hsm.Ref{}, nil, fmt.Errorf(
 			"%w: %w",
-			queues.NewUnprocessableTaskError(fmt.Sprintf("cannot derialize task %v", cbt.Info.Type)),
+			queues.NewUnprocessableTaskError(fmt.Sprintf("cannot deserialize task %v", cbt.Info.Type)),
 			err,
 		)
 	}

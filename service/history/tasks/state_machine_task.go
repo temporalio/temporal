@@ -38,10 +38,6 @@ type StateMachineTask struct {
 	Info                *persistence.StateMachineTaskInfo
 }
 
-func (t *StateMachineTask) GetKey() Key {
-	return NewKey(t.GetVisibilityTime(), t.TaskID)
-}
-
 func (t *StateMachineTask) GetVersion() int64 {
 	return t.Info.Ref.MutableStateNamespaceFailoverVersion
 }
@@ -84,6 +80,10 @@ func (*StateMachineCallbackTask) GetType() enums.TaskType {
 	return enums.TASK_TYPE_STATE_MACHINE_OUTBOUND
 }
 
+func (t *StateMachineCallbackTask) GetKey() Key {
+	return NewImmediateKey(t.TaskID)
+}
+
 var _ Task = &StateMachineCallbackTask{}
 var _ HasDestination = &StateMachineCallbackTask{}
 
@@ -98,6 +98,10 @@ func (*StateMachineTimerTask) GetCategory() Category {
 
 func (*StateMachineTimerTask) GetType() enums.TaskType {
 	return enums.TASK_TYPE_STATE_MACHINE_TIMER
+}
+
+func (t *StateMachineTimerTask) GetKey() Key {
+	return NewKey(t.VisibilityTimestamp, t.TaskID)
 }
 
 var _ Task = &StateMachineTimerTask{}

@@ -370,7 +370,7 @@ func (s *taskSerializerSuite) TestStateMachineCallbackTask() {
 	task := &tasks.StateMachineCallbackTask{
 		StateMachineTask: tasks.StateMachineTask{
 			WorkflowKey:         s.workflowKey,
-			VisibilityTimestamp: time.Unix(0, 0).UTC(), // go == compare for location as well which is striped during marshaling/unmarshaling
+			VisibilityTimestamp: time.Now().UTC(),
 			TaskID:              rand.Int63(),
 			Info: &persistence.StateMachineTaskInfo{
 				Ref: &persistence.StateMachineRef{
