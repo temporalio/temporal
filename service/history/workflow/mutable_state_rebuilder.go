@@ -205,6 +205,7 @@ func (b *MutableStateRebuilderImpl) applyEvents(
 			}
 
 			if err := b.mutableState.SetHistoryTree(
+				b.shard.GetShardID(),
 				executionInfo.WorkflowExecutionTimeout,
 				executionInfo.WorkflowRunTimeout,
 				execution.GetRunId(),

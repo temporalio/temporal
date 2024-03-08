@@ -513,6 +513,7 @@ func (ms *MutableStateImpl) getCurrentBranchTokenAndEventVersion(eventID int64) 
 
 // SetHistoryTree set treeID/historyBranches
 func (ms *MutableStateImpl) SetHistoryTree(
+	shardID int32,
 	executionTimeout *durationpb.Duration,
 	runTimeout *durationpb.Duration,
 	treeID string,
@@ -526,6 +527,7 @@ func (ms *MutableStateImpl) SetHistoryTree(
 		retentionDuration = durationpb.New(duration)
 	}
 	initialBranchToken, err := ms.shard.GetExecutionManager().GetHistoryBranchUtil().NewHistoryBranch(
+		shardID,
 		workflowKey.NamespaceID,
 		workflowKey.WorkflowID,
 		workflowKey.RunID,
@@ -3833,6 +3835,7 @@ func (ms *MutableStateImpl) AddContinueAsNewEvent(
 	}
 
 	if err = newMutableState.SetHistoryTree(
+		ms.shard.GetShardID(),
 		newMutableState.executionInfo.WorkflowExecutionTimeout,
 		newMutableState.executionInfo.WorkflowRunTimeout,
 		newRunID,

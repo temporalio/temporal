@@ -607,6 +607,7 @@ func (t *timerQueueActiveTaskExecutor) executeWorkflowTimeoutTask(
 	}
 
 	err = newMutableState.SetHistoryTree(
+		t.shardContext.GetShardID(),
 		newMutableState.GetExecutionInfo().WorkflowExecutionTimeout,
 		newMutableState.GetExecutionInfo().WorkflowRunTimeout,
 		newRunID,
