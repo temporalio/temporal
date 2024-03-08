@@ -79,7 +79,8 @@ func checkService(t *testing.T, tp reflect.Type, m map[string]MethodMetadata) {
 				assert.Truef(t, namespaceIsString, "%s with ScopeNamespace should have a Namespace field that is a string", method)
 			}
 		case ScopeCluster:
-			if checkNamespace {
+			// CreateOrUpdateNexusIncomingService needs cluster scope and a namespace field because a service could be updated from one namespace to another
+			if checkNamespace && method != "CreateOrUpdateNexusIncomingService" {
 				assert.Falsef(t, hasNamespace, "%s with ScopeCluster should not have a Namespace field", method)
 			}
 		default:

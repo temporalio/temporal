@@ -88,7 +88,6 @@ type (
 		clusterMetadataManager          persistence.ClusterMetadataManager
 		clusterMetadata                 clustermetadata.Metadata
 		clientFactory                   svc.Factory
-		namespaceRegistry               namespace.Registry
 		nexusIncomingServiceRegistry    NexusIncomingServiceRegistry
 		nexusIncomingServiceNameMatcher *regexp.Regexp
 	}
@@ -106,7 +105,6 @@ type (
 		clusterMetadataManager       persistence.ClusterMetadataManager
 		clusterMetadata              clustermetadata.Metadata
 		clientFactory                svc.Factory
-		namespaceRegistry            namespace.Registry
 		nexusIncomingServiceRegistry NexusIncomingServiceRegistry
 	}
 )
@@ -138,7 +136,6 @@ func NewOperatorHandlerImpl(
 		clusterMetadataManager:       args.clusterMetadataManager,
 		clusterMetadata:              args.clusterMetadata,
 		clientFactory:                args.clientFactory,
-		namespaceRegistry:            args.namespaceRegistry,
 		nexusIncomingServiceRegistry: args.nexusIncomingServiceRegistry,
 	}
 
@@ -841,14 +838,12 @@ func (h *OperatorHandlerImpl) CreateOrUpdateNexusIncomingService(
 ) (_ *operatorservice.CreateOrUpdateNexusIncomingServiceResponse, retError error) {
 	defer log.CapturePanic(h.logger, &retError)
 
+	//NB: namespace validation is already handled by interceptors
 	if len(request.Name) > h.config.NexusIncomingServiceNameLengthLimit() {
 		return nil, serviceerror.NewInvalidArgument(fmt.Sprintf("Nexus incoming service name length exceeds limit of %v", h.config.NexusIncomingServiceNameLengthLimit()))
 	}
 	if !h.nexusIncomingServiceNameMatcher.MatchString(request.Name) {
 		return nil, serviceerror.NewInvalidArgument(fmt.Sprintf("Nexus incoming service name (%v) does not match expected pattern (%v)", request.Name, nexusIncomingServiceNamePattern))
-	}
-	if _, err := h.namespaceRegistry.GetNamespace(namespace.Name(request.Namespace)); err != nil {
-		return nil, serviceerror.NewInvalidArgument(fmt.Sprintf("Nexus incoming service references invalid namespace: %v", err))
 	}
 	if err := validateTaskQueueName(request.TaskQueue, h.config.MaxIDLengthLimit()); err != nil {
 		return nil, err

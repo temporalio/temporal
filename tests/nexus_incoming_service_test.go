@@ -417,8 +417,7 @@ func (s *FunctionalSuite) TestCreateOrUpdateNexusIncomingService_Operator() {
 				TaskQueue: s.defaultTaskQueue().Name,
 			},
 			assertion: func(resp *operatorservice.CreateOrUpdateNexusIncomingServiceResponse, err error) {
-				var invalidErr *serviceerror.InvalidArgument
-				s.ErrorAs(err, &invalidErr)
+				s.ErrorContains(err, "namespace is not found")
 			},
 		},
 		{

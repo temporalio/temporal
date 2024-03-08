@@ -107,7 +107,6 @@ func (s *operatorHandlerSuite) SetupTest() {
 		s.mockResource.GetClusterMetadataManager(),
 		s.mockResource.GetClusterMetadata(),
 		s.mockResource.GetClientFactory(),
-		s.mockResource.GetNamespaceRegistry(),
 		mockNexusIncomingServiceRegistry,
 	}
 	s.handler = NewOperatorHandlerImpl(args)
