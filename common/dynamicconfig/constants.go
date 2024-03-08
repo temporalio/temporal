@@ -519,9 +519,9 @@ const (
 	HistoryPersistenceDynamicRateLimitingParams = "history.persistenceDynamicRateLimitingParams"
 	// HistoryLongPollExpirationInterval is the long poll expiration interval in the history service
 	HistoryLongPollExpirationInterval = "history.longPollExpirationInterval"
-	// HistoryCacheSizeBasedLimit if true, HistoryCacheMaxSize and HistoryCacheHostLevelMaxSize are the total size of
-	// the objects in history cache. Otherwise, HistoryCacheMaxSize and HistoryCacheHostLevelMaxSize are the number of
-	// entries in the history cache.
+	// HistoryCacheSizeBasedLimit if true, size of the history cache will be limited by HistoryCacheMaxSizeBytes
+	// and HistoryCacheHostLevelMaxSizeBytes. Otherwise, entry count in the history cache will be limited by
+	// HistoryCacheMaxSize and HistoryCacheHostLevelMaxSize.
 	HistoryCacheSizeBasedLimit = "history.cacheSizeBasedLimit"
 	// HistoryCacheInitialSize is initial size of history cache
 	HistoryCacheInitialSize = "history.cacheInitialSize"
