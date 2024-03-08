@@ -67,7 +67,7 @@ func (p *plugin) CreateAdminDB(
 	cfg *config.SQL,
 	r resolver.ServiceResolver,
 ) (sqlplugin.AdminDB, error) {
-	conn, err := p.createDBConnection(sqlplugin.DbKindMain, cfg, r)
+	conn, err := p.createDBConnection(dbKind, cfg, r)
 	if err != nil {
 		return nil, err
 	}
