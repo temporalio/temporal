@@ -380,7 +380,7 @@ func (s *Service) Start() {
 	reflection.Register(s.server)
 
 	// must start resource first
-	s.metricsHandler.Counter(metrics.RestartCount).Record(1)
+	metrics.RestartCount.With(s.metricsHandler).Record(1)
 
 	s.versionChecker.Start()
 	s.adminHandler.Start()

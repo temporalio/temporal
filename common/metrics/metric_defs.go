@@ -62,20 +62,6 @@ const (
 	InvalidVisibilityURITagValue = "invalid_visibility_uri"
 )
 
-// Common service base metrics
-const (
-	RestartCount         = "restarts"
-	NumGoRoutinesGauge   = "num_goroutines"
-	GoMaxProcsGauge      = "gomaxprocs"
-	MemoryAllocatedGauge = "memory_allocated"
-	MemoryHeapGauge      = "memory_heap"
-	MemoryHeapIdleGauge  = "memory_heapidle"
-	MemoryHeapInuseGauge = "memory_heapinuse"
-	MemoryStackGauge     = "memory_stack"
-	NumGCCounter         = "memory_num_gc"
-	GcPauseMsTimer       = "memory_gc_pause_ms"
-)
-
 // Admin Client Operations
 const (
 	// AdminClientStreamWorkflowReplicationMessagesScope tracks RPC calls to admin service
@@ -1148,6 +1134,18 @@ var (
 	VisibilityPersistenceLatency           = NewTimerDef("visibility_persistence_latency")
 	CassandraInitSessionLatency            = NewTimerDef("cassandra_init_session_latency")
 	CassandraSessionRefreshFailures        = NewCounterDef("cassandra_session_refresh_failures")
+
+	// Common service base metrics
+	RestartCount         = NewCounterDef("restarts")
+	NumGoRoutinesGauge   = NewGaugeDef("num_goroutines")
+	GoMaxProcsGauge      = NewGaugeDef("gomaxprocs")
+	MemoryAllocatedGauge = NewGaugeDef("memory_allocated")
+	MemoryHeapGauge      = NewGaugeDef("memory_heap")
+	MemoryHeapIdleGauge  = NewGaugeDef("memory_heapidle")
+	MemoryHeapInuseGauge = NewGaugeDef("memory_heapinuse")
+	MemoryStackGauge     = NewGaugeDef("memory_stack")
+	NumGCCounter         = NewBytesHistogramDef("memory_num_gc")
+	GcPauseMsTimer       = NewTimerDef("memory_gc_pause_ms")
 )
 
 // DEPRECATED: remove interim metric names for tracking fraction of FE->History calls during migration

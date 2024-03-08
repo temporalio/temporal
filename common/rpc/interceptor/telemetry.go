@@ -156,12 +156,12 @@ func (ti *TelemetryInterceptor) UnaryIntercept(
 	userLatencyDuration := time.Duration(0)
 	defer func() {
 		latency := time.Since(startTime)
-		metricsHandler.Timer(metrics.ServiceLatency.Name()).Record(latency)
+		metrics.ServiceLatency.With(metricsHandler).Record(latency)
 		noUserLatency := latency - userLatencyDuration
 		if noUserLatency < 0 {
 			noUserLatency = 0
 		}
-		metricsHandler.Timer(metrics.ServiceLatencyNoUserLatency.Name()).Record(noUserLatency)
+		metrics.ServiceLatencyNoUserLatency.With(metricsHandler).Record(noUserLatency)
 	}()
 
 	resp, err := handler(ctx, req)
@@ -169,7 +169,7 @@ func (ti *TelemetryInterceptor) UnaryIntercept(
 	if val, ok := metrics.ContextCounterGet(ctx, metrics.HistoryWorkflowExecutionCacheLatency.Name()); ok {
 		userLatencyDuration = time.Duration(val)
 		startTime.Add(userLatencyDuration)
-		metricsHandler.Timer(metrics.ServiceLatencyUserLatency.Name()).Record(userLatencyDuration)
+		metrics.ServiceLatencyUserLatency.With(metricsHandler).Record(userLatencyDuration)
 	}
 
 	if err != nil {
@@ -191,7 +191,7 @@ func (ti *TelemetryInterceptor) StreamIntercept(
 ) error {
 	methodName := api.MethodName(info.FullMethod)
 	metricsHandler, logTags := ti.streamMetricsHandlerLogTags(info.FullMethod, methodName)
-	metricsHandler.Counter(metrics.ServiceRequests.Name()).Record(1)
+	metrics.ServiceRequests.With(metricsHandler).Record(1)
 
 	err := handler(service, serverStream)
 	if err != nil {
@@ -230,11 +230,11 @@ func (ti *TelemetryInterceptor) emitActionMetric(
 					hasMarker = true
 				case enums.COMMAND_TYPE_START_CHILD_WORKFLOW_EXECUTION:
 					// Each child workflow counts as 2 actions. We use separate tags to track them separately.
-					metricsHandler.Counter(metrics.ActionCounter.Name()).Record(1, metrics.ActionType("command_"+command.CommandType.String()))
-					metricsHandler.Counter(metrics.ActionCounter.Name()).Record(1, metrics.ActionType("command_"+command.CommandType.String()+"_Extra"))
+					metrics.ActionCounter.With(metricsHandler).Record(1, metrics.ActionType("command_"+command.CommandType.String()))
+					metrics.ActionCounter.With(metricsHandler).Record(1, metrics.ActionType("command_"+command.CommandType.String()+"_Extra"))
 				default:
 					// handle all other command action
-					metricsHandler.Counter(metrics.ActionCounter.Name()).Record(1, metrics.ActionType("command_"+command.CommandType.String()))
+					metrics.ActionCounter.With(metricsHandler).Record(1, metrics.ActionType("command_"+command.CommandType.String()))
 				}
 			}
 		}
@@ -243,7 +243,7 @@ func (ti *TelemetryInterceptor) emitActionMetric(
 			// One workflow task response may contain multiple marker commands. Each marker will emit one
 			// command_RecordMarker_Xxx action metric. Depending on pricing model, you may want to ignore all individual
 			// command_RecordMarker_Xxx and use command_BatchMarkers instead.
-			metricsHandler.Counter(metrics.ActionCounter.Name()).Record(1, metrics.ActionType("command_BatchMarkers"))
+			metrics.ActionCounter.With(metricsHandler).Record(1, metrics.ActionType("command_BatchMarkers"))
 		}
 
 	case pollActivityTaskQueue:
@@ -257,12 +257,12 @@ func (ti *TelemetryInterceptor) emitActionMetric(
 			return
 		}
 		if activityPollResponse.Attempt > 1 {
-			metricsHandler.Counter(metrics.ActionCounter.Name()).Record(1, metrics.ActionType("activity_retry"))
+			metrics.ActionCounter.With(metricsHandler).Record(1, metrics.ActionType("activity_retry"))
 		}
 
 	default:
 		// grpc action
-		metricsHandler.Counter(metrics.ActionCounter.Name()).Record(1, metrics.ActionType("grpc_"+methodName))
+		metrics.ActionCounter.With(metricsHandler).Record(1, metrics.ActionType("grpc_"+methodName))
 	}
 }
 
@@ -299,7 +299,7 @@ func (ti *TelemetryInterceptor) handleError(
 	err error,
 ) {
 
-	metricsHandler.Counter(metrics.ServiceErrorWithType.Name()).Record(1, metrics.ServiceErrorTypeTag(err))
+	metrics.ServiceErrorWithType.With(metricsHandler).Record(1, metrics.ServiceErrorTypeTag(err))
 
 	if common.IsContextDeadlineExceededErr(err) || common.IsContextCanceledErr(err) {
 		return
@@ -331,8 +331,7 @@ func (ti *TelemetryInterceptor) handleError(
 
 	// specific metric for resource exhausted error with throttle reason
 	case *serviceerror.ResourceExhausted:
-		metricsHandler.Counter(metrics.ServiceErrResourceExhaustedCounter.Name()).Record(1, metrics.ResourceExhaustedCauseTag(err.Cause))
-
+		metrics.ServiceErrResourceExhaustedCounter.With(metricsHandler).Record(1, metrics.ResourceExhaustedCauseTag(err.Cause))
 	// Any other errors are treated as ServiceFailures against SLA unless constructed with the standard
 	// `status.Error` (or Errorf) constructors, in which case the status code is checked below.
 	// Including below known errors and any other unknown errors.
@@ -354,7 +353,7 @@ func (ti *TelemetryInterceptor) handleError(
 				return
 			}
 		}
-		metricsHandler.Counter(metrics.ServiceFailures.Name()).Record(1)
+		metrics.ServiceFailures.With(metricsHandler).Record(1)
 		ti.logger.Error("service failures", append(logTags, tag.Error(err))...)
 	}
 }

@@ -118,7 +118,7 @@ func Invoke(
 						tag.WorkflowNamespaceID(namespaceID.String()),
 						tag.WorkflowID(workflowID),
 					)
-					shard.GetMetricsHandler().Counter(metrics.EventReapplySkippedCount.Name()).Record(
+					metrics.EventReapplySkippedCount.With(shard.GetMetricsHandler()).Record(
 						1,
 						metrics.OperationTag(metrics.HistoryReapplyEventsScope))
 					return &api.UpdateWorkflowAction{

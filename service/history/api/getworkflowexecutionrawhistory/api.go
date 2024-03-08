@@ -149,7 +149,7 @@ func Invoke(
 	pageToken.PersistenceToken = rawHistoryResponse.NextPageToken
 	size := rawHistoryResponse.Size
 	metricsHandler := interceptor.GetMetricsHandlerFromContext(ctx, shardContext.GetLogger()).WithTags(metrics.OperationTag(metrics.HistoryGetWorkflowExecutionRawHistoryScope))
-	metricsHandler.Histogram(metrics.HistorySize.Name(), metrics.HistorySize.Unit()).Record(
+	metrics.HistorySize.With(metricsHandler).Record(
 		int64(size),
 		metrics.NamespaceTag(ns.Name().String()),
 		metrics.OperationTag(metrics.AdminGetWorkflowExecutionRawHistoryScope),

@@ -123,7 +123,7 @@ func (p *visibilityManagerImpl) RecordWorkflowExecutionClosed(
 		CloseTime:                     request.CloseTime,
 		HistoryLength:                 request.HistoryLength,
 		HistorySizeBytes:              request.HistorySizeBytes,
-		ExecutionDuration:             request.CloseTime.Sub(request.StartTime),
+		ExecutionDuration:             request.CloseTime.Sub(request.ExecutionTime),
 		StateTransitionCount:          request.StateTransitionCount,
 	}
 	return p.store.RecordWorkflowExecutionClosed(ctx, req)
