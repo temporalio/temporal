@@ -591,7 +591,7 @@ func (s *workflowCacheSuite) TestCacheImpl_RejectsRequestWhenAtLimitSimple() {
 	)
 	s.Error(err)
 	s.ErrorIs(err, cache.ErrCacheFull)
-	release1(nil)
+	stat
 }
 
 func (s *workflowCacheSuite) TestCacheImpl_RejectsRequestWhenAtLimitMultiple() {
