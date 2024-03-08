@@ -503,7 +503,7 @@ func (m *workflowTaskStateMachine) AddWorkflowTaskStartedEvent(
 		startTime,
 		suggestContinueAsNew,
 		historySizeBytes,
-		nil,
+		versioningStamp,
 	)
 
 	m.emitWorkflowTaskAttemptStats(workflowTask.Attempt)

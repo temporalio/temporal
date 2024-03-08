@@ -491,6 +491,64 @@ func (s *VersioningIntegSuite) dispatchNewWorkflowV2() {
 	var out string
 	s.NoError(run.Get(ctx, &out))
 	s.Equal("done!", out)
+
+	dw, err := s.sdkClient.DescribeWorkflowExecution(ctx, run.GetID(), run.GetRunID())
+	s.NoError(err)
+	s.Equal(v1, dw.GetWorkflowExecutionInfo().GetAssignedBuildId())
+	s.Equal(true, dw.GetWorkflowExecutionInfo().GetMostRecentWorkerVersionStamp().GetUseVersioning())
+	s.Equal(v1, dw.GetWorkflowExecutionInfo().GetMostRecentWorkerVersionStamp().GetBuildId())
+}
+
+func (s *VersioningIntegSuite) TestBackloggedWorkflowBuildId() {
+	s.testWithMatchingBehavior(s.backloggedWorkflowBuildId)
+}
+
+func (s *VersioningIntegSuite) backloggedWorkflowBuildId() {
+	tq := s.randomizeStr(s.T().Name())
+	v1 := s.prefixed("v1")
+	v2 := s.prefixed("v2")
+	v3 := s.prefixed("v3")
+
+	step := 0
+	wf := func(ctx workflow.Context) (string, error) {
+		switch step {
+		case 0:
+			return "", errors.New("WF task intentionally failed")
+		case 1:
+			time.Sleep(100*time.Millisecond)
+			step ++
+			return "taking too long", nil
+		default:
+		return "done!", nil
+		}
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+
+	rule := s.addAssignmentRule(ctx, tq, v1)
+	s.waitForAssignmentRulePropagation(ctx, tq, rule)
+
+	w1 := worker.New(s.sdkClient, tq, worker.Options{
+		BuildID:                          v1,
+		UseBuildIDForVersioning:          true,
+		MaxConcurrentWorkflowTaskPollers: numPollers,
+	})
+	w1.RegisterWorkflow(wf)
+	s.NoError(w1.Start())
+	defer w1.Stop()
+
+	run, err := s.sdkClient.ExecuteWorkflow(ctx, sdkclient.StartWorkflowOptions{TaskQueue: tq}, wf)
+	s.NoError(err)
+	var out string
+	s.NoError(run.Get(ctx, &out))
+	s.Equal("done!", out)
+
+	dw, err := s.sdkClient.DescribeWorkflowExecution(ctx, run.GetID(), run.GetRunID())
+	s.NoError(err)
+	s.Equal(v1, dw.GetWorkflowExecutionInfo().GetAssignedBuildId())
+	s.Equal(true, dw.GetWorkflowExecutionInfo().GetMostRecentWorkerVersionStamp().GetUseVersioning())
+	s.Equal(v1, dw.GetWorkflowExecutionInfo().GetMostRecentWorkerVersionStamp().GetBuildId())
 }
 
 func (s *VersioningIntegSuite) TestDispatchNotUsingVersioning() {
