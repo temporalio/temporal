@@ -255,19 +255,14 @@ func CommitBuildID(timestamp *hlc.Clock,
 	target := req.GetTargetBuildId()
 	if !hasRecentPoller && !req.GetForce() {
 		return nil, serviceerror.NewFailedPrecondition(
-			fmt.Sprintf("no compatible poller seen within the last %s, use force=true to commit anyways",
-				versioningPollerSeenWindow.String()))
+			fmt.Sprintf("no versioned poller with build ID '%s' seen within the last %s, use force=true to commit anyways",
+				target, versioningPollerSeenWindow.String()))
 	}
 	if isInVersionSets(target, data.GetVersionSets()) {
 		return nil, serviceerror.NewFailedPrecondition(
 			fmt.Sprintf("update breaks requirement, build id %s is already a member of version set", target))
 	}
 
-	if !hasRecentPoller && !req.GetForce() {
-		return nil, serviceerror.NewFailedPrecondition(
-			fmt.Sprintf("no compatible poller seen within the last %s, use force=true to commit anyways",
-				versioningPollerSeenWindow.String()))
-	}
 	for _, ar := range getActiveAssignmentRules(data.GetAssignmentRules()) {
 		if ar.GetRule().GetTargetBuildId() == target {
 			ar.DeleteTimestamp = timestamp
