@@ -580,6 +580,7 @@ func OperatorHandlerProvider(
 	clusterMetadataManager persistence.ClusterMetadataManager,
 	clusterMetadata cluster.Metadata,
 	clientFactory client.Factory,
+	namespaceRegistry namespace.Registry,
 	nexusIncomingServiceRegistry NexusIncomingServiceRegistry,
 ) *OperatorHandlerImpl {
 	args := NewOperatorHandlerImplArgs{
@@ -595,6 +596,7 @@ func OperatorHandlerProvider(
 		clusterMetadataManager,
 		clusterMetadata,
 		clientFactory,
+		namespaceRegistry,
 		nexusIncomingServiceRegistry,
 	}
 	return NewOperatorHandlerImpl(args)

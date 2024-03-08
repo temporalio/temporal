@@ -215,6 +215,10 @@ const (
 	RemovableBuildIdDurationSinceDefault = "worker.removableBuildIdDurationSinceDefault"
 	// BuildIdScavengerVisibilityRPS is the rate limit for visibility calls from the build id scavenger
 	BuildIdScavenengerVisibilityRPS = "worker.buildIdScavengerVisibilityRPS"
+	// NexusIncomingServiceNameLength is the maximum number of characters allowed in a Nexus incoming service name
+	NexusIncomingServiceNameLength = "limit.nexusIncomingServiceNameLength"
+	// NexusIncomingServiceMetadataSize is the maximum size of metadata allowed on a Nexus incoming service in bytes
+	NexusIncomingServiceMetadataSize = "limit.nexusIncomingServiceMetadataSize"
 
 	// keys for frontend
 

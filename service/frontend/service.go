@@ -196,6 +196,9 @@ type Config struct {
 	EnableCallbackAttachment    dynamicconfig.BoolPropertyFnWithNamespaceFilter
 	AdminEnableListHistoryTasks dynamicconfig.BoolPropertyFn
 
+	NexusIncomingServiceNameLengthLimit   dynamicconfig.IntPropertyFn
+	NexusIncomingServiceMetadataSizeLimit dynamicconfig.IntPropertyFn
+
 	// Operator service Nexus incoming service registry long poll options
 	ListNexusIncomingServicesLongPollTimeout dynamicconfig.DurationPropertyFn
 	ListNexusIncomingServicesLongPollMinWait dynamicconfig.DurationPropertyFn
@@ -302,7 +305,10 @@ func NewConfig(
 		EnableCallbackAttachment:    dc.GetBoolPropertyFnWithNamespaceFilter(dynamicconfig.FrontendEnableCallbackAttachment, false),
 		AdminEnableListHistoryTasks: dc.GetBoolProperty(dynamicconfig.AdminEnableListHistoryTasks, true),
 
-		ListNexusIncomingServicesLongPollTimeout: dc.GetDurationProperty(dynamicconfig.FrontendListNexusIncomingServicesLongPollTimeout, 5*time.Minute-10*time.Second), // Use -10 seconds so that we send back empty response instead of timeout
+		NexusIncomingServiceNameLengthLimit:   dc.GetIntProperty(dynamicconfig.NexusIncomingServiceNameLength, 200),
+		NexusIncomingServiceMetadataSizeLimit: dc.GetIntProperty(dynamicconfig.NexusIncomingServiceMetadataSize, 4*1024),
+
+		ListNexusIncomingServicesLongPollTimeout: dc.GetDurationProperty(dynamicconfig.FrontendListNexusIncomingServicesLongPollTimeout, 5*time.Minute),
 		ListNexusIncomingServicesLongPollMinWait: dc.GetDurationProperty(dynamicconfig.FrontendListNexusIncomingServicesLongPollMinWait, 1*time.Second),
 		ListNexusIncomingServicesRetryPolicy:     backoff.NewExponentialRetryPolicy(1 * time.Second).WithMaximumInterval(5 * time.Minute),
 	}

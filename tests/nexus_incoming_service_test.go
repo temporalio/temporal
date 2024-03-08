@@ -28,6 +28,7 @@ import (
 	"go.temporal.io/api/nexus/v1"
 	"go.temporal.io/api/operatorservice/v1"
 	"go.temporal.io/api/serviceerror"
+	"google.golang.org/protobuf/types/known/anypb"
 
 	"go.temporal.io/server/api/matchingservice/v1"
 	persistencepb "go.temporal.io/server/api/persistence/v1"
@@ -307,6 +308,7 @@ func (s *FunctionalSuite) TestListNexusIncomingServices_Matching() {
 }
 
 func (s *FunctionalSuite) TestCreateOrUpdateNexusIncomingService_Operator() {
+
 	type testcase struct {
 		name      string
 		service   *nexus.IncomingService
@@ -380,6 +382,72 @@ func (s *FunctionalSuite) TestCreateOrUpdateNexusIncomingService_Operator() {
 				s.ErrorAs(err, &invalidErr)
 			},
 		},
+		{
+			name: "invalid create: service name length limit",
+			service: &nexus.IncomingService{
+				Version:   0,
+				Name:      string(make([]byte, 300)),
+				Namespace: s.namespace,
+				TaskQueue: s.defaultTaskQueue().Name,
+			},
+			assertion: func(resp *operatorservice.CreateOrUpdateNexusIncomingServiceResponse, err error) {
+				var invalidErr *serviceerror.InvalidArgument
+				s.ErrorAs(err, &invalidErr)
+			},
+		},
+		{
+			name: "invalid create: service name pattern",
+			service: &nexus.IncomingService{
+				Version:   0,
+				Name:      "```",
+				Namespace: s.namespace,
+				TaskQueue: s.defaultTaskQueue().Name,
+			},
+			assertion: func(resp *operatorservice.CreateOrUpdateNexusIncomingServiceResponse, err error) {
+				var invalidErr *serviceerror.InvalidArgument
+				s.ErrorAs(err, &invalidErr)
+			},
+		},
+		{
+			name: "invalid create: missing namespace",
+			service: &nexus.IncomingService{
+				Version:   0,
+				Name:      "invalid-service",
+				Namespace: "invalid-namespace",
+				TaskQueue: s.defaultTaskQueue().Name,
+			},
+			assertion: func(resp *operatorservice.CreateOrUpdateNexusIncomingServiceResponse, err error) {
+				var invalidErr *serviceerror.InvalidArgument
+				s.ErrorAs(err, &invalidErr)
+			},
+		},
+		{
+			name: "invalid create: invalid task queue",
+			service: &nexus.IncomingService{
+				Version:   0,
+				Name:      "invalid-service",
+				Namespace: s.namespace,
+				TaskQueue: "",
+			},
+			assertion: func(resp *operatorservice.CreateOrUpdateNexusIncomingServiceResponse, err error) {
+				var invalidErr *serviceerror.InvalidArgument
+				s.ErrorAs(err, &invalidErr)
+			},
+		},
+		{
+			name: "invalid crate: metadata size limit",
+			service: &nexus.IncomingService{
+				Version:   0,
+				Name:      "invalid-service",
+				Namespace: s.namespace,
+				TaskQueue: s.defaultTaskQueue().Name,
+				Metadata:  map[string]*anypb.Any{"k1": {Value: make([]byte, 5000)}},
+			},
+			assertion: func(resp *operatorservice.CreateOrUpdateNexusIncomingServiceResponse, err error) {
+				var invalidErr *serviceerror.InvalidArgument
+				s.ErrorAs(err, &invalidErr)
+			},
+		},
 	}
 
 	for _, tc := range testCases {
@@ -388,7 +456,11 @@ func (s *FunctionalSuite) TestCreateOrUpdateNexusIncomingService_Operator() {
 			resp, err := s.operatorClient.CreateOrUpdateNexusIncomingService(
 				NewContext(),
 				&operatorservice.CreateOrUpdateNexusIncomingServiceRequest{
-					Service: tc.service,
+					Version:   tc.service.Version,
+					Name:      tc.service.Name,
+					Namespace: tc.service.Namespace,
+					TaskQueue: tc.service.TaskQueue,
+					Metadata:  tc.service.Metadata,
 				})
 			tc.assertion(resp, err)
 		})

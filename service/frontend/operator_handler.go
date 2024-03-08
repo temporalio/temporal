@@ -27,6 +27,7 @@ package frontend
 import (
 	"context"
 	"fmt"
+	"regexp"
 	"sync/atomic"
 
 	commonpb "go.temporal.io/api/common/v1"
@@ -75,19 +76,21 @@ type (
 
 		status int32
 
-		logger                       log.Logger
-		config                       *Config
-		esClient                     esclient.Client
-		sdkClientFactory             sdk.ClientFactory
-		metricsHandler               metrics.Handler
-		visibilityMgr                manager.VisibilityManager
-		saManager                    searchattribute.Manager
-		healthServer                 *health.Server
-		historyClient                resource.HistoryClient
-		clusterMetadataManager       persistence.ClusterMetadataManager
-		clusterMetadata              clustermetadata.Metadata
-		clientFactory                svc.Factory
-		nexusIncomingServiceRegistry NexusIncomingServiceRegistry
+		logger                          log.Logger
+		config                          *Config
+		esClient                        esclient.Client
+		sdkClientFactory                sdk.ClientFactory
+		metricsHandler                  metrics.Handler
+		visibilityMgr                   manager.VisibilityManager
+		saManager                       searchattribute.Manager
+		healthServer                    *health.Server
+		historyClient                   resource.HistoryClient
+		clusterMetadataManager          persistence.ClusterMetadataManager
+		clusterMetadata                 clustermetadata.Metadata
+		clientFactory                   svc.Factory
+		namespaceRegistry               namespace.Registry
+		nexusIncomingServiceRegistry    NexusIncomingServiceRegistry
+		nexusIncomingServiceNameMatcher *regexp.Regexp
 	}
 
 	NewOperatorHandlerImplArgs struct {
@@ -103,6 +106,7 @@ type (
 		clusterMetadataManager       persistence.ClusterMetadataManager
 		clusterMetadata              clustermetadata.Metadata
 		clientFactory                svc.Factory
+		namespaceRegistry            namespace.Registry
 		nexusIncomingServiceRegistry NexusIncomingServiceRegistry
 	}
 )
@@ -111,6 +115,8 @@ const (
 	namespaceTagName                 = "namespace"
 	visibilityIndexNameTagName       = "visibility-index-name"
 	visibilitySearchAttributeTagName = "visibility-search-attribute"
+
+	nexusIncomingServiceNamePattern = "[a-zA-Z_][a-zA-Z0-9_]*"
 )
 
 // NewOperatorHandlerImpl creates a gRPC handler for operatorservice
@@ -132,6 +138,7 @@ func NewOperatorHandlerImpl(
 		clusterMetadataManager:       args.clusterMetadataManager,
 		clusterMetadata:              args.clusterMetadata,
 		clientFactory:                args.clientFactory,
+		namespaceRegistry:            args.namespaceRegistry,
 		nexusIncomingServiceRegistry: args.nexusIncomingServiceRegistry,
 	}
 
@@ -145,6 +152,8 @@ func (h *OperatorHandlerImpl) Start() {
 		common.DaemonStatusInitialized,
 		common.DaemonStatusStarted,
 	) {
+		re, _ := regexp.Compile(nexusIncomingServiceNamePattern)
+		h.nexusIncomingServiceNameMatcher = re
 		h.healthServer.SetServingStatus(OperatorServiceName, healthpb.HealthCheckResponse_SERVING)
 		h.nexusIncomingServiceRegistry.Start()
 	}
@@ -831,6 +840,23 @@ func (h *OperatorHandlerImpl) CreateOrUpdateNexusIncomingService(
 	request *operatorservice.CreateOrUpdateNexusIncomingServiceRequest,
 ) (_ *operatorservice.CreateOrUpdateNexusIncomingServiceResponse, retError error) {
 	defer log.CapturePanic(h.logger, &retError)
+
+	if len(request.Name) > h.config.NexusIncomingServiceNameLengthLimit() {
+		return nil, serviceerror.NewInvalidArgument(fmt.Sprintf("Nexus incoming service name length exceeds limit of %v", h.config.NexusIncomingServiceNameLengthLimit()))
+	}
+	if !h.nexusIncomingServiceNameMatcher.MatchString(request.Name) {
+		return nil, serviceerror.NewInvalidArgument(fmt.Sprintf("Nexus incoming service name (%v) does not match expected pattern (%v)", request.Name, nexusIncomingServiceNamePattern))
+	}
+	if _, err := h.namespaceRegistry.GetNamespace(namespace.Name(request.Namespace)); err != nil {
+		return nil, serviceerror.NewInvalidArgument(fmt.Sprintf("Nexus incoming service references invalid namespace: %v", err))
+	}
+	if err := validateTaskQueueName(request.TaskQueue, h.config.MaxIDLengthLimit()); err != nil {
+		return nil, err
+	}
+	if request.Size()-8-len(request.Name)-len(request.Namespace)-len(request.TaskQueue) > h.config.NexusIncomingServiceMetadataSizeLimit() {
+		return nil, serviceerror.NewInvalidArgument(fmt.Sprintf("Nexus incoming service metadata exceeds size limit of (%v) bytes", h.config.NexusIncomingServiceMetadataSizeLimit()))
+	}
+
 	return h.nexusIncomingServiceRegistry.CreateOrUpdateNexusIncomingService(ctx, request)
 }
 
