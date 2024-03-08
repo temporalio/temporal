@@ -113,7 +113,7 @@ func (r *registry) Start() {
 		headers.SystemBackgroundCallerInfo,
 	)
 
-	r.refreshPoller = goro.NewHandle(refreshCtx).Go(r.refreshServices)
+	r.refreshPoller = goro.NewHandle(refreshCtx).Go(r.refreshServicesLoop)
 }
 
 func (r *registry) Stop() {
@@ -388,90 +388,90 @@ func (r *registry) getAllServicesPersistence(ctx context.Context) (int64, []*nex
 }
 
 func (r *registry) refreshServices(ctx context.Context) error {
-	refreshFn := func(ctx context.Context) error {
-		// wait for data to be initialized before long polling
-		_, err := r.serviceDataReady.Get(ctx)
-		if err != nil {
-			return err
-		}
+	// wait for data to be initialized before long polling
+	_, err := r.serviceDataReady.Get(ctx)
+	if err != nil {
+		return err
+	}
 
-		r.RLock()
-		currentTableVersion := r.tableVersion
-		r.RUnlock()
+	r.RLock()
+	currentTableVersion := r.tableVersion
+	r.RUnlock()
 
-		var currentPageToken []byte
+	var currentPageToken []byte
 
-		// long poll to wait for table updates
-		resp, err := r.matchingClient.ListNexusIncomingServices(ctx, &matchingservice.ListNexusIncomingServicesRequest{
-			LastKnownTableVersion: currentTableVersion,
-			NextPageToken:         currentPageToken,
-			PageSize:              loadServicesPageSize,
-			Wait:                  true,
-		})
-		if err != nil {
-			return err
-		}
+	// long poll to wait for table updates
+	resp, err := r.matchingClient.ListNexusIncomingServices(ctx, &matchingservice.ListNexusIncomingServicesRequest{
+		LastKnownTableVersion: currentTableVersion,
+		NextPageToken:         currentPageToken,
+		PageSize:              loadServicesPageSize,
+		Wait:                  true,
+	})
+	if err != nil {
+		return err
+	}
 
-		if currentTableVersion == resp.TableVersion {
-			// long poll returned with no changes
-			return nil
-		}
-
-		r.Lock()
-		defer r.Unlock()
-
-		if r.tableVersion >= resp.TableVersion {
-			// service data was updated while waiting for the write lock
-			return nil
-		}
-
-		var services []*nexus.IncomingService
-		var serviceIDsSorted []string
-		servicesByName := make(map[string]*nexus.IncomingService)
-
-		services, serviceIDsSorted, servicesByName = appendServiceEntries(resp.Entries, services, serviceIDsSorted, servicesByName)
-		currentTableVersion = resp.TableVersion
-		currentPageToken = resp.NextPageToken
-
-		for currentPageToken != nil && ctx.Err() == nil {
-			// iterate over remaining pages without long polling
-			resp, err = r.matchingClient.ListNexusIncomingServices(ctx, &matchingservice.ListNexusIncomingServicesRequest{
-				LastKnownTableVersion: currentTableVersion,
-				NextPageToken:         currentPageToken,
-				PageSize:              loadServicesPageSize,
-				Wait:                  false,
-			})
-			if err != nil {
-				if errors.Is(err, p.ErrNexusTableVersionConflict) {
-					// indicates table was updated during paging, so reset and start from the beginning
-					currentTableVersion, services, serviceIDsSorted, servicesByName, err = r.getAllServicesMatching(ctx)
-					if err != nil {
-						return err
-					}
-				}
-			}
-
-			services, serviceIDsSorted, servicesByName = appendServiceEntries(resp.Entries, services, serviceIDsSorted, servicesByName)
-			currentPageToken = resp.NextPageToken
-		}
-
-		if ctx.Err() != nil {
-			return ctx.Err()
-		}
-
-		r.tableVersion = currentTableVersion
-		r.services = services
-		r.serviceIDsSorted = serviceIDsSorted
-		r.servicesByName = servicesByName
-
+	if currentTableVersion == resp.TableVersion {
+		// long poll returned with no changes
 		return nil
 	}
 
+	r.Lock()
+	defer r.Unlock()
+
+	if r.tableVersion >= resp.TableVersion {
+		// service data was updated while waiting for the write lock
+		return nil
+	}
+
+	var services []*nexus.IncomingService
+	var serviceIDsSorted []string
+	servicesByName := make(map[string]*nexus.IncomingService)
+
+	services, serviceIDsSorted, servicesByName = appendServiceEntries(resp.Entries, services, serviceIDsSorted, servicesByName)
+	currentTableVersion = resp.TableVersion
+	currentPageToken = resp.NextPageToken
+
+	for currentPageToken != nil && ctx.Err() == nil {
+		// iterate over remaining pages without long polling
+		resp, err = r.matchingClient.ListNexusIncomingServices(ctx, &matchingservice.ListNexusIncomingServicesRequest{
+			LastKnownTableVersion: currentTableVersion,
+			NextPageToken:         currentPageToken,
+			PageSize:              loadServicesPageSize,
+			Wait:                  false,
+		})
+		if err != nil {
+			if errors.Is(err, p.ErrNexusTableVersionConflict) {
+				// indicates table was updated during paging, so reset and start from the beginning
+				currentTableVersion, services, serviceIDsSorted, servicesByName, err = r.getAllServicesMatching(ctx)
+				if err != nil {
+					return err
+				}
+			}
+		}
+
+		services, serviceIDsSorted, servicesByName = appendServiceEntries(resp.Entries, services, serviceIDsSorted, servicesByName)
+		currentPageToken = resp.NextPageToken
+	}
+
+	if ctx.Err() != nil {
+		return ctx.Err()
+	}
+
+	r.tableVersion = currentTableVersion
+	r.services = services
+	r.serviceIDsSorted = serviceIDsSorted
+	r.servicesByName = servicesByName
+
+	return nil
+}
+
+func (r *registry) refreshServicesLoop(ctx context.Context) error {
 	minWaitTime := r.refreshServicesLongPollMinWait()
 
 	for ctx.Err() == nil {
 		start := time.Now()
-		_ = backoff.ThrottleRetryContext(ctx, refreshFn, r.refreshServicesRetryPolicy, nil)
+		_ = backoff.ThrottleRetryContext(ctx, r.refreshServices, r.refreshServicesRetryPolicy, nil)
 		elapsed := time.Since(start)
 
 		// In general, we want to start a new call immediately on completion of the previous
