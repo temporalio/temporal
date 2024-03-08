@@ -77,6 +77,13 @@ func ForServices(names []string) ServerOption {
 	})
 }
 
+// WithStaticHosts disables dynamic service membership and resolves service addresses statically from the config
+func WithStaticHosts() ServerOption {
+	return applyFunc(func(s *serverOptions) {
+		s.staticHosts = true
+	})
+}
+
 // InterruptOn interrupts server on the signal from server. If channel is nil Start() will block forever.
 func InterruptOn(interruptCh <-chan interface{}) ServerOption {
 	return applyFunc(func(s *serverOptions) {

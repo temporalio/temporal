@@ -54,10 +54,11 @@ type (
 	serverOptions struct {
 		serviceNames map[primitives.ServiceName]struct{}
 
-		config    *config.Config
-		configDir string
-		env       string
-		zone      string
+		config      *config.Config
+		configDir   string
+		env         string
+		zone        string
+		staticHosts bool
 
 		startupSynchronizationMode synchronizationModeParams
 

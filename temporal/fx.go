@@ -55,6 +55,8 @@ import (
 	"go.temporal.io/server/common/headers"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
+	"go.temporal.io/server/common/membership/ringpop"
+	"go.temporal.io/server/common/membership/static"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/persistence/cassandra"
@@ -128,6 +130,7 @@ type (
 		Authorizer                 authorization.Authorizer
 		ClaimMapper                authorization.ClaimMapper
 		AudienceGetter             authorization.JWTAudienceMapper
+		ServiceHosts               map[primitives.ServiceName][]string
 
 		// below are things that could be over write by server options or may have default if not supplied by serverOptions.
 		Logger                log.Logger
@@ -268,6 +271,16 @@ func ServerOptionsProvider(opts []ServerOption) (serverOptionsProvider, error) {
 		}
 	}
 
+	// static service hosts
+	staticHosts := make(map[primitives.ServiceName][]string)
+	if so.staticHosts {
+		for serviceName := range so.serviceNames {
+			staticHosts[serviceName] = []string{
+				fmt.Sprintf("127.0.0.1:%v", so.config.Services[string(serviceName)].RPC.GRPCPort),
+			}
+		}
+	}
+
 	return serverOptionsProvider{
 		ServerOptions:              so,
 		StopChan:                   stopChan,
@@ -278,6 +291,7 @@ func ServerOptionsProvider(opts []ServerOption) (serverOptionsProvider, error) {
 		LogConfig:   so.config.Log,
 
 		ServiceNames:    so.serviceNames,
+		ServiceHosts:    staticHosts,
 		NamespaceLogger: so.namespaceLogger,
 
 		ServiceResolver:        so.persistenceServiceResolver,
@@ -358,7 +372,8 @@ type (
 		DataStoreFactory           persistenceClient.AbstractDataStoreFactory
 		VisibilityStoreFactory     visibility.VisibilityStoreFactory
 		SpanExporters              []otelsdktrace.SpanExporter
-		InstanceID                 resource.InstanceID `optional:"true"`
+		InstanceID                 resource.InstanceID                 `optional:"true"`
+		StaticServiceHosts         map[primitives.ServiceName][]string `optional:"true"`
 		TaskCategoryRegistry       tasks.TaskCategoryRegistry
 	}
 )
@@ -371,6 +386,13 @@ type (
 // into fx providers here. Essentially, we want an `fx.In` object in the server graph, and an `fx.Out` object in the
 // service graphs. This is a workaround to achieve something similar.
 func (params ServiceProviderParamsCommon) GetCommonServiceOptions(serviceName primitives.ServiceName) fx.Option {
+	var membershipModule fx.Option
+	if len(params.StaticServiceHosts) > 0 {
+		membershipModule = static.MembershipModule(params.StaticServiceHosts)
+	} else {
+		membershipModule = ringpop.MembershipModule
+	}
+
 	return fx.Options(
 		fx.Supply(
 			serviceName,
@@ -431,6 +453,7 @@ func (params ServiceProviderParamsCommon) GetCommonServiceOptions(serviceName pr
 		),
 		ServiceTracingModule,
 		resource.DefaultOptions,
+		membershipModule,
 		FxLogAdapter,
 	)
 }
