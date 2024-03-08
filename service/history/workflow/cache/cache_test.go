@@ -567,7 +567,7 @@ func (s *workflowCacheSuite) TestCacheImpl_RejectsRequestWhenAtLimitSimple() {
 	// MutableState, the size of workflow.Context object in the cache will be slightly higher (~972bytes).
 	mockMS1.EXPECT().GetApproximatePersistedSize().Return(900).Times(1)
 	release1(nil)
-	ctx, release1, err = s.cache.GetOrCreateWorkflowExecution(
+	ctx, _, err = s.cache.GetOrCreateWorkflowExecution(
 		context.Background(),
 		mockShard,
 		namespaceID,

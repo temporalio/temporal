@@ -270,6 +270,7 @@ func (c *lru) Release(key interface{}) {
 	if c.currSize > c.maxSize {
 		c.tryEvictUntilCacheSizeUnderLimit()
 	}
+	metrics.CacheUsage.With(c.metricsHandler).Record(float64(c.currSize))
 }
 
 // Size returns the current size of the lru, useful if cache is not full. This size is calculated by summing
@@ -320,7 +321,7 @@ func (c *lru) putInternal(key interface{}, value interface{}, allowUpdate bool) 
 				existingEntry.value = value
 				existingEntry.size = newEntrySize
 				c.currSize = newCacheSize
-				metrics.CacheSize.With(c.metricsHandler).Record(float64(c.currSize))
+				metrics.CacheUsage.With(c.metricsHandler).Record(float64(c.currSize))
 				c.updateEntryTTL(existingEntry)
 			}
 
