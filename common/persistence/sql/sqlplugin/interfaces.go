@@ -146,3 +146,14 @@ type (
 		PrepareNamedContext(ctx context.Context, query string) (*sqlx.NamedStmt, error)
 	}
 )
+
+func (k DbKind) String() string {
+	switch k {
+	case DbKindMain:
+		return "main"
+	case DbKindVisibility:
+		return "visibility"
+	default:
+		return "unknown"
+	}
+}
