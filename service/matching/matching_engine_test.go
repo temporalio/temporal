@@ -67,6 +67,7 @@ import (
 	"go.temporal.io/server/common/clock"
 	hlc "go.temporal.io/server/common/clock/hybrid_logical_clock"
 	"go.temporal.io/server/common/cluster"
+	"go.temporal.io/server/common/concurrent"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
@@ -168,24 +169,24 @@ func newMatchingEngine(
 	mockVisibilityManager manager.VisibilityManager, mockHostInfoProvider membership.HostInfoProvider, mockServiceResolver membership.ServiceResolver,
 ) *matchingEngineImpl {
 	return &matchingEngineImpl{
-		taskManager:          taskMgr,
-		historyClient:        mockHistoryClient,
-		taskQueues:           make(map[taskQueueID]taskQueueManager),
-		taskQueueCount:       make(map[taskQueueCounterKey]int),
-		lockableQueryResultMap: lockableResultMap[*queryResult]{resultMap: make(map[string]chan *queryResult)},
-		logger:               logger,
-		throttledLogger:      log.ThrottledLogger(logger),
-		metricsHandler:       metrics.NoopMetricsHandler,
-		matchingRawClient:    mockMatchingClient,
-		tokenSerializer:      common.NewProtoTaskTokenSerializer(),
-		config:               config,
-		namespaceRegistry:    mockNamespaceCache,
-		hostInfoProvider:     mockHostInfoProvider,
-		serviceResolver:      mockServiceResolver,
-		membershipChangedCh:  make(chan *membership.ChangedEvent, 1),
-		clusterMeta:          cluster.NewMetadataForTest(cluster.NewTestClusterMetadataConfig(false, true)),
-		timeSource:           clock.NewRealTimeSource(),
-		visibilityManager:    mockVisibilityManager,
+		taskManager:         taskMgr,
+		historyClient:       mockHistoryClient,
+		taskQueues:          make(map[taskQueueID]taskQueueManager),
+		taskQueueCount:      make(map[taskQueueCounterKey]int),
+		queryResults:        concurrent.NewMap[string, chan *queryResult](),
+		logger:              logger,
+		throttledLogger:     log.ThrottledLogger(logger),
+		metricsHandler:      metrics.NoopMetricsHandler,
+		matchingRawClient:   mockMatchingClient,
+		tokenSerializer:     common.NewProtoTaskTokenSerializer(),
+		config:              config,
+		namespaceRegistry:   mockNamespaceCache,
+		hostInfoProvider:    mockHostInfoProvider,
+		serviceResolver:     mockServiceResolver,
+		membershipChangedCh: make(chan *membership.ChangedEvent, 1),
+		clusterMeta:         cluster.NewMetadataForTest(cluster.NewTestClusterMetadataConfig(false, true)),
+		timeSource:          clock.NewRealTimeSource(),
+		visibilityManager:   mockVisibilityManager,
 	}
 }
 
