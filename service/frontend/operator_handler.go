@@ -838,7 +838,7 @@ func (h *OperatorHandlerImpl) CreateOrUpdateNexusIncomingService(
 ) (_ *operatorservice.CreateOrUpdateNexusIncomingServiceResponse, retError error) {
 	defer log.CapturePanic(h.logger, &retError)
 
-	//NB: namespace validation is already handled by interceptors
+	// NB: namespace validation is already handled by interceptors
 	if len(request.Name) > h.config.NexusIncomingServiceNameLengthLimit() {
 		return nil, serviceerror.NewInvalidArgument(fmt.Sprintf("Nexus incoming service name length exceeds limit of %v", h.config.NexusIncomingServiceNameLengthLimit()))
 	}
