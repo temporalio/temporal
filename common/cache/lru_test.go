@@ -273,7 +273,8 @@ func TestTTLWithPin(t *testing.T) {
 	assert.Nil(t, cache.Get("A"))
 	assert.Equal(t, 0, cache.Size())
 	snapshot = capture.Snapshot()
-	assert.Equal(t, float64(0), snapshot[metrics.CacheUsage.Name()][0].Value)
+	// cache.Release() will emit cacheUsage 3 times. cache.Get() will emit cacheUsage once.
+	assert.Equal(t, float64(0), snapshot[metrics.CacheUsage.Name()][3].Value)
 }
 
 func TestMaxSizeWithPin_MidItem(t *testing.T) {
