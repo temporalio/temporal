@@ -87,7 +87,7 @@ func NewNexusHTTPHandler(
 			},
 			GetResultTimeout: serviceConfig.KeepAliveMaxConnectionIdle(),
 			Logger:           log.NewSlogLogger(logger),
-			Serializer:       commonnexus.PayloadSerializer{},
+			Serializer:       commonnexus.PayloadSerializer,
 		}),
 	}
 }

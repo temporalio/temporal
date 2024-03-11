@@ -26,6 +26,7 @@ package history
 
 import (
 	"context"
+	"fmt"
 
 	commonpb "go.temporal.io/api/common/v1"
 	"go.temporal.io/api/serviceerror"
@@ -38,6 +39,8 @@ import (
 	"go.temporal.io/server/common/resource"
 	"go.temporal.io/server/service/history/configs"
 	"go.temporal.io/server/service/history/deletemanager"
+	"go.temporal.io/server/service/history/hsm"
+	"go.temporal.io/server/service/history/queues"
 	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/tasks"
 	"go.temporal.io/server/service/history/workflow"
@@ -45,8 +48,7 @@ import (
 )
 
 var (
-	errUnknownTimerTask = serviceerror.NewInternal("unknown timer task")
-	errNoTimerFired     = serviceerror.NewNotFound("no expired timer to fire found")
+	errNoTimerFired = serviceerror.NewNotFound("no expired timer to fire found")
 )
 
 type (
@@ -158,4 +160,27 @@ func (t *timerQueueTaskExecutorBase) deleteHistoryBranch(
 		})
 	}
 	return nil
+}
+
+func (t *timerQueueTaskExecutorBase) stateMachineTask(task tasks.Task) (hsm.Ref, hsm.Task, bool, error) {
+	cbt, ok := task.(*tasks.StateMachineTimerTask)
+	if !ok {
+		return hsm.Ref{}, nil, false, nil
+	}
+	def, ok := t.shardContext.StateMachineRegistry().TaskSerializer(cbt.Info.Type)
+	if !ok {
+		return hsm.Ref{}, nil, true, queues.NewUnprocessableTaskError(fmt.Sprintf("deserializer not registered for task type %v", cbt.Info.Type))
+	}
+	smt, err := def.Deserialize(cbt.Info.Data, tasks.CategoryTimer, hsm.TaskKindTimer{Deadline: cbt.VisibilityTimestamp})
+	if err != nil {
+		return hsm.Ref{}, nil, true, fmt.Errorf(
+			"%w: %w",
+			queues.NewUnprocessableTaskError(fmt.Sprintf("cannot deserialize task %v", cbt.Info.Type)),
+			err,
+		)
+	}
+	return hsm.Ref{
+		WorkflowKey:     taskWorkflowKey(task),
+		StateMachineRef: cbt.Info.Ref,
+	}, smt, true, nil
 }

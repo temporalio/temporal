@@ -97,6 +97,16 @@ func TestNode_MaintainsChildCache(t *testing.T) {
 				"persisted": {
 					TransitionCount: 1,
 					Data:            []byte(state1),
+					Children: map[int32]*persistencespb.StateMachineMap{
+						def.Type().ID: {
+							MachinesById: map[string]*persistencespb.StateMachineNode{
+								"persisted-child": {
+									TransitionCount: 2,
+									Data:            []byte(state2),
+								},
+							},
+						},
+					},
 				},
 			},
 		},
@@ -122,16 +132,16 @@ func TestNode_MaintainsChildCache(t *testing.T) {
 	require.Equal(t, []hsm.Key{key}, root.Outputs()[0].Path)
 
 	// Cache when loaded from persistence.
-	key = hsm.Key{Type: def.Type().ID, ID: "persisted"}
-	child, err = root.Child([]hsm.Key{key})
+	path := []hsm.Key{{Type: def.Type().ID, ID: "persisted"}, {Type: def.Type().ID, ID: "persisted-child"}}
+	child, err = root.Child(path)
 	require.NoError(t, err)
 	err = hsm.MachineTransition(child, func(d *data) (hsm.TransitionOutput, error) {
-		d.state = state2
+		d.state = state3
 		return hsm.TransitionOutput{}, nil
 	})
 	require.NoError(t, err)
 	require.True(t, child.Dirty())
-	childRef, err = root.Child([]hsm.Key{key})
+	childRef, err = root.Child(path)
 	require.NoError(t, err)
 	require.True(t, childRef.Dirty())
 

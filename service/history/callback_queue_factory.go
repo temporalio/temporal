@@ -23,11 +23,9 @@
 package history
 
 import (
-	"net/http"
-	"sync"
-
 	"go.uber.org/fx"
 
+	"go.temporal.io/server/common/collection"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
@@ -45,34 +43,6 @@ type callbackQueueFactoryParams struct {
 	fx.In
 
 	QueueFactoryBaseParams
-}
-
-type groupPool[K comparable, T any] struct {
-	mu        sync.RWMutex
-	pool      map[K]T
-	construct func(K) T
-}
-
-func newGroupPool[K comparable, T any](construct func(K) T) *groupPool[K, T] {
-	return &groupPool[K, T]{
-		construct: construct,
-		pool:      make(map[K]T, 0),
-	}
-}
-
-func (p *groupPool[K, T]) getOrCreate(key K) T {
-	p.mu.RLock()
-	value, ok := p.pool[key]
-	p.mu.RUnlock()
-	if !ok {
-		p.mu.Lock()
-		if value, ok = p.pool[key]; !ok {
-			value = p.construct(key)
-		}
-		p.mu.Unlock()
-	}
-
-	return value
 }
 
 // TODO: get actual limits from dynamic config.
@@ -93,16 +63,14 @@ var _ ctasks.DynamicWorkerPoolLimiter = groupLimiter{}
 type callbackQueueFactory struct {
 	callbackQueueFactoryParams
 	hostReaderRateLimiter quotas.RequestRateLimiter
-	// Shared client pool for all shards in the host.
-	completionCallerPool *groupPool[queues.NamespaceIDAndDestination, HTTPCaller]
 	// Shared rate limiter pool for all shards in the host.
-	rateLimiterPool *groupPool[queues.NamespaceIDAndDestination, quotas.RateLimiter]
+	rateLimiterPool *collection.OnceMap[queues.NamespaceIDAndDestination, quotas.RateLimiter]
 	// Shared scheduler across all shards in the host.
 	hostScheduler queues.Scheduler
 }
 
 func NewCallbackQueueFactory(params callbackQueueFactoryParams) QueueFactory {
-	rateLimiterPool := newGroupPool(func(queues.NamespaceIDAndDestination) quotas.RateLimiter {
+	rateLimiterPool := collection.NewOnceMap(func(queues.NamespaceIDAndDestination) quotas.RateLimiter {
 		// TODO: get this value from dynamic config.
 		return quotas.NewDefaultOutgoingRateLimiter(func() float64 { return 100.0 })
 	})
@@ -117,11 +85,6 @@ func NewCallbackQueueFactory(params callbackQueueFactoryParams) QueueFactory {
 			),
 			int64(params.Config.CallbackQueueMaxReaderCount()),
 		),
-		completionCallerPool: newGroupPool(func(queues.NamespaceIDAndDestination) HTTPCaller {
-			// In the future, we'll want to support HTTP2 clients as well.
-			client := &http.Client{}
-			return client.Do
-		}),
 		hostScheduler: &queues.CommonSchedulerWrapper{
 			Scheduler: ctasks.NewGroupByScheduler[queues.NamespaceIDAndDestination, queues.Executable](
 				ctasks.GroupBySchedulerOptions[queues.NamespaceIDAndDestination, queues.Executable]{
@@ -129,7 +92,7 @@ func NewCallbackQueueFactory(params callbackQueueFactoryParams) QueueFactory {
 					KeyFn:  func(e queues.Executable) queues.NamespaceIDAndDestination { return grouper.KeyTyped(e.GetTask()) },
 					RunnableFactory: func(e queues.Executable) ctasks.Runnable {
 						return ctasks.RateLimitedTaskRunnable{
-							Limiter:  rateLimiterPool.getOrCreate(grouper.KeyTyped(e.GetTask())),
+							Limiter:  rateLimiterPool.Get(grouper.KeyTyped(e.GetTask())),
 							Runnable: ctasks.RunnableTask{Task: e},
 						}
 					},
@@ -179,8 +142,6 @@ func (f *callbackQueueFactory) CreateQueue(
 		workflowCache,
 		logger,
 		metricsHandler,
-		f.Config,
-		f.completionCallerPool.getOrCreate,
 	)
 
 	// not implemented yet
