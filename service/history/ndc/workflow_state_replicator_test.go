@@ -31,6 +31,7 @@ import (
 
 	historypb "go.temporal.io/api/history/v1"
 	"go.temporal.io/server/service/history/events"
+	"go.temporal.io/server/service/history/hsm"
 
 	"github.com/golang/mock/gomock"
 	"github.com/pborman/uuid"
@@ -99,6 +100,11 @@ func (s *workflowReplicatorSuite) SetupTest() {
 		},
 		tests.NewDynamicConfig(),
 	)
+
+	reg := hsm.NewRegistry()
+	err := workflow.RegisterStateMachine(reg)
+	s.NoError(err)
+	s.mockShard.SetStateMachineRegistry(reg)
 
 	s.mockExecutionManager = s.mockShard.Resource.ExecutionMgr
 	s.mockNamespaceCache = s.mockShard.Resource.NamespaceCache

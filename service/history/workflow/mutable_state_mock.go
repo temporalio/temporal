@@ -34,6 +34,7 @@ import (
 	time "time"
 
 	gomock "github.com/golang/mock/gomock"
+	nexus "github.com/nexus-rpc/sdk-go/nexus"
 	v1 "go.temporal.io/api/command/v1"
 	v10 "go.temporal.io/api/common/v1"
 	v11 "go.temporal.io/api/enums/v1"
@@ -54,7 +55,7 @@ import (
 	namespace "go.temporal.io/server/common/namespace"
 	persistence "go.temporal.io/server/common/persistence"
 	historybuilder "go.temporal.io/server/service/history/historybuilder"
-	statemachines "go.temporal.io/server/service/history/statemachines"
+	hsm "go.temporal.io/server/service/history/hsm"
 	tasks "go.temporal.io/server/service/history/tasks"
 	durationpb "google.golang.org/protobuf/types/known/durationpb"
 	timestamppb "google.golang.org/protobuf/types/known/timestamppb"
@@ -1803,20 +1804,6 @@ func (mr *MockMutableStateMockRecorder) GetCurrentBranchToken() *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetCurrentBranchToken", reflect.TypeOf((*MockMutableState)(nil).GetCurrentBranchToken))
 }
 
-// GetCurrentTime mocks base method.
-func (m *MockMutableState) GetCurrentTime() time.Time {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "GetCurrentTime")
-	ret0, _ := ret[0].(time.Time)
-	return ret0
-}
-
-// GetCurrentTime indicates an expected call of GetCurrentTime.
-func (mr *MockMutableStateMockRecorder) GetCurrentTime() *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetCurrentTime", reflect.TypeOf((*MockMutableState)(nil).GetCurrentTime))
-}
-
 // GetCurrentVersion mocks base method.
 func (m *MockMutableState) GetCurrentVersion() int64 {
 	m.ctrl.T.Helper()
@@ -1946,20 +1933,6 @@ func (mr *MockMutableStateMockRecorder) GetNamespaceEntry() *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetNamespaceEntry", reflect.TypeOf((*MockMutableState)(nil).GetNamespaceEntry))
 }
 
-// GetNamespaceFailoverVersion mocks base method.
-func (m *MockMutableState) GetNamespaceFailoverVersion() int64 {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "GetNamespaceFailoverVersion")
-	ret0, _ := ret[0].(int64)
-	return ret0
-}
-
-// GetNamespaceFailoverVersion indicates an expected call of GetNamespaceFailoverVersion.
-func (mr *MockMutableStateMockRecorder) GetNamespaceFailoverVersion() *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetNamespaceFailoverVersion", reflect.TypeOf((*MockMutableState)(nil).GetNamespaceFailoverVersion))
-}
-
 // GetNextEventID mocks base method.
 func (m *MockMutableState) GetNextEventID() int64 {
 	m.ctrl.T.Helper()
@@ -1972,6 +1945,21 @@ func (m *MockMutableState) GetNextEventID() int64 {
 func (mr *MockMutableStateMockRecorder) GetNextEventID() *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetNextEventID", reflect.TypeOf((*MockMutableState)(nil).GetNextEventID))
+}
+
+// GetNexusCompletion mocks base method.
+func (m *MockMutableState) GetNexusCompletion(ctx context.Context) (nexus.OperationCompletion, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetNexusCompletion", ctx)
+	ret0, _ := ret[0].(nexus.OperationCompletion)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// GetNexusCompletion indicates an expected call of GetNexusCompletion.
+func (mr *MockMutableStateMockRecorder) GetNexusCompletion(ctx interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetNexusCompletion", reflect.TypeOf((*MockMutableState)(nil).GetNexusCompletion), ctx)
 }
 
 // GetPendingActivityInfos mocks base method.
@@ -2351,6 +2339,20 @@ func (mr *MockMutableStateMockRecorder) GetWorkflowType() *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetWorkflowType", reflect.TypeOf((*MockMutableState)(nil).GetWorkflowType))
 }
 
+// HSM mocks base method.
+func (m *MockMutableState) HSM() *hsm.Node {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "HSM")
+	ret0, _ := ret[0].(*hsm.Node)
+	return ret0
+}
+
+// HSM indicates an expected call of HSM.
+func (mr *MockMutableStateMockRecorder) HSM() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "HSM", reflect.TypeOf((*MockMutableState)(nil).HSM))
+}
+
 // HadOrHasWorkflowTask mocks base method.
 func (m *MockMutableState) HadOrHasWorkflowTask() bool {
 	m.ctrl.T.Helper()
@@ -2628,18 +2630,6 @@ func (m *MockMutableState) RetryActivity(ai *v112.ActivityInfo, failure *v12.Fai
 func (mr *MockMutableStateMockRecorder) RetryActivity(ai, failure interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RetryActivity", reflect.TypeOf((*MockMutableState)(nil).RetryActivity), ai, failure)
-}
-
-// Schedule mocks base method.
-func (m *MockMutableState) Schedule(task statemachines.Task) {
-	m.ctrl.T.Helper()
-	m.ctrl.Call(m, "Schedule", task)
-}
-
-// Schedule indicates an expected call of Schedule.
-func (mr *MockMutableStateMockRecorder) Schedule(task interface{}) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Schedule", reflect.TypeOf((*MockMutableState)(nil).Schedule), task)
 }
 
 // SetBaseWorkflow mocks base method.

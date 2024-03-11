@@ -65,6 +65,7 @@ import (
 	"go.temporal.io/server/service/history/configs"
 	"go.temporal.io/server/service/history/consts"
 	"go.temporal.io/server/service/history/events"
+	"go.temporal.io/server/service/history/hsm"
 	"go.temporal.io/server/service/history/queues"
 	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/tasks"
@@ -152,6 +153,11 @@ func (s *engine2Suite) SetupTest() {
 		},
 		s.config,
 	)
+	reg := hsm.NewRegistry()
+	err := workflow.RegisterStateMachine(reg)
+	s.NoError(err)
+	mockShard.SetStateMachineRegistry(reg)
+
 	s.mockShard = mockShard
 	s.mockShard.Resource.ShardMgr.EXPECT().AssertShardOwnership(gomock.Any(), gomock.Any()).AnyTimes()
 

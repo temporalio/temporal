@@ -155,7 +155,7 @@ func NewStateStaleError(message string) StaleStateError {
 }
 
 func (e StaleStateError) Error() string {
-	return "task stale: " + e.Message
+	return "state stale: " + e.Message
 }
 
 // IsTerminalTaskError marks this error as terminal to be handled appropriately.

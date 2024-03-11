@@ -22,33 +22,10 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-//
-// The MIT License
-// Copyright (c) 2020 Temporal Technologies Inc.  All rights reserved.
-//
-// Copyright (c) 2020 Uber Technologies, Inc.
-//
-// Permission is hereby granted, free of charge, to any person obtaining a copy
-// of this software and associated documentation files (the "Software"), to deal
-// in the Software without restriction, including without limitation the rights
-// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-// copies of the Software, and to permit persons to whom the Software is
-// furnished to do so, subject to the following conditions:
-//
-// The above copyright notice and this permission notice shall be included in
-// all copies or substantial portions of the Software.
-//
-// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
-// THE SOFTWARE.
-
 package workflow
 
 import (
+	"fmt"
 	"testing"
 	"time"
 
@@ -57,7 +34,6 @@ import (
 	"github.com/stretchr/testify/require"
 	"go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
-	"go.temporal.io/api/workflow/v1"
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common/archiver"
@@ -65,11 +41,13 @@ import (
 	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/namespace"
+	"go.temporal.io/server/plugins/callbacks"
 	"go.temporal.io/server/service/history/configs"
-	"go.temporal.io/server/service/history/statemachines"
+	"go.temporal.io/server/service/history/hsm"
 	"go.temporal.io/server/service/history/tasks"
 	"go.temporal.io/server/service/history/tests"
 	"google.golang.org/protobuf/types/known/durationpb"
+	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
 type testConfig struct {
@@ -92,7 +70,6 @@ type testParams struct {
 	ExpectArchiveExecutionTask                      bool
 	ExpectDeleteHistoryEventTask                    bool
 	ExpectedArchiveExecutionTaskVisibilityTimestamp time.Time
-	Callbacks                                       []*persistencespb.CallbackInfo
 }
 
 func TestTaskGeneratorImpl_GenerateWorkflowCloseTasks(t *testing.T) {
@@ -192,36 +169,6 @@ func TestTaskGeneratorImpl_GenerateWorkflowCloseTasks(t *testing.T) {
 				p.ExpectArchiveExecutionTask = false
 			},
 		},
-		{
-			Name: "callback tasks",
-			ConfigFn: func(p *testParams) {
-				p.HistoryArchivalEnabledInNamespace = false
-				p.VisibilityArchivalEnabledInNamespace = false
-
-				p.ExpectCloseExecutionVisibilityTask = true
-				p.ExpectDeleteHistoryEventTask = true
-				p.ExpectArchiveExecutionTask = false
-
-				p.Callbacks = []*persistencespb.CallbackInfo{
-					{
-						Id:                       "callback-id",
-						NamespaceFailoverVersion: 3,
-						TransitionCount:          0,
-						PublicInfo: &workflow.CallbackInfo{
-							Callback: &common.Callback{
-								Variant: &common.Callback_Nexus_{
-									Nexus: &common.Callback_Nexus{
-										Url: "http://localhost",
-									},
-								},
-							},
-							Trigger: &workflow.CallbackInfo_Trigger{Variant: &workflow.CallbackInfo_Trigger_WorkflowClosed{}},
-							State:   enumspb.CALLBACK_STATE_STANDBY,
-						},
-					},
-				}
-			},
-		},
 	} {
 		c := c
 		t.Run(c.Name, func(t *testing.T) {
@@ -287,13 +234,8 @@ func TestTaskGeneratorImpl_GenerateWorkflowCloseTasks(t *testing.T) {
 			mutableState.EXPECT().GetNamespaceEntry().Return(namespaceEntry).AnyTimes()
 			mutableState.EXPECT().GetCurrentVersion().Return(int64(0)).AnyTimes()
 			mutableState.EXPECT().GetExecutionInfo().DoAndReturn(func() *persistencespb.WorkflowExecutionInfo {
-				callbacks := make(map[string]*persistencespb.CallbackInfo, len(p.Callbacks))
-				for _, callback := range p.Callbacks {
-					callbacks[callback.Id] = callback
-				}
 				return &persistencespb.WorkflowExecutionInfo{
 					NamespaceId: namespaceEntry.ID().String(),
-					Callbacks:   callbacks,
 				}
 			}).AnyTimes()
 			mutableState.EXPECT().GetWorkflowKey().Return(definition.NewWorkflowKey(
@@ -327,13 +269,6 @@ func TestTaskGeneratorImpl_GenerateWorkflowCloseTasks(t *testing.T) {
 				return cfg
 			}).AnyTimes()
 
-			// Required for callback statemachine
-			mutableState.EXPECT().GetNamespaceFailoverVersion().AnyTimes()
-			mutableState.EXPECT().GetCurrentTime().AnyTimes()
-			mutableState.EXPECT().Schedule(gomock.Any()).DoAndReturn(func(task statemachines.Task) {
-				allTasks = append(allTasks, task)
-			}).AnyTimes()
-
 			taskGenerator := NewTaskGenerator(namespaceRegistry, mutableState, cfg, archivalMetadata)
 			err := taskGenerator.GenerateWorkflowCloseTasks(p.CloseEventTime, p.DeleteAfterClose)
 			require.NoError(t, err)
@@ -343,7 +278,6 @@ func TestTaskGeneratorImpl_GenerateWorkflowCloseTasks(t *testing.T) {
 				deleteHistoryEventTask       *tasks.DeleteHistoryEventTask
 				closeExecutionVisibilityTask *tasks.CloseExecutionVisibilityTask
 				archiveExecutionTask         *tasks.ArchiveExecutionTask
-				callbackTask                 *tasks.CallbackTask
 			)
 			for _, task := range allTasks {
 				switch t := task.(type) {
@@ -355,8 +289,6 @@ func TestTaskGeneratorImpl_GenerateWorkflowCloseTasks(t *testing.T) {
 					closeExecutionVisibilityTask = t
 				case *tasks.ArchiveExecutionTask:
 					archiveExecutionTask = t
-				case *tasks.CallbackTask:
-					callbackTask = t
 				}
 			}
 			require.NotNil(t, closeExecutionTask)
@@ -388,12 +320,116 @@ func TestTaskGeneratorImpl_GenerateWorkflowCloseTasks(t *testing.T) {
 			} else {
 				assert.Nil(t, deleteHistoryEventTask)
 			}
-			if len(p.Callbacks) > 0 {
-				require.NotNil(t, callbackTask)
-			} else {
-				assert.Nil(t, callbackTask)
-			}
-
 		})
 	}
+}
+
+func TestTaskGenerator_GenerateDirtySubStateMachineTasks(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	namespaceRegistry := namespace.NewMockRegistry(ctrl)
+	subStateMachinesByType := map[int32]*persistencespb.StateMachineMap{}
+	reg := hsm.NewRegistry()
+	require.NoError(t, RegisterStateMachine(reg))
+	require.NoError(t, callbacks.RegisterStateMachine(reg))
+	require.NoError(t, callbacks.RegisterTaskSerializer(reg))
+	node, err := hsm.NewRoot(reg, StateMachineType.ID, nil, subStateMachinesByType)
+	require.NoError(t, err)
+	coll := callbacks.MachineCollection(node)
+
+	callbackToSchedule := callbacks.NewCallback(timestamppb.Now(), callbacks.NewWorkflowClosedTrigger(), &common.Callback{
+		Variant: &common.Callback_Nexus_{
+			Nexus: &common.Callback_Nexus{
+				Url: "http://localhost?foo=bar",
+			},
+		},
+	})
+	_, err = coll.Add("sched", callbackToSchedule)
+	require.NoError(t, err)
+	err = coll.Transition("sched", func(cb callbacks.Callback) (hsm.TransitionOutput, error) {
+		return callbacks.TransitionScheduled.Apply(cb, callbacks.EventScheduled{})
+	})
+	require.NoError(t, err)
+
+	callbackToBackoff := callbacks.NewCallback(timestamppb.Now(), callbacks.NewWorkflowClosedTrigger(), &common.Callback{
+		Variant: &common.Callback_Nexus_{
+			Nexus: &common.Callback_Nexus{
+				Url: "http://localhost?foo=bar",
+			},
+		},
+	})
+	callbackToBackoff.PublicInfo.State = enumspb.CALLBACK_STATE_SCHEDULED
+	_, err = coll.Add("backoff", callbackToBackoff)
+	require.NoError(t, err)
+	err = coll.Transition("backoff", func(cb callbacks.Callback) (hsm.TransitionOutput, error) {
+		return callbacks.TransitionAttemptFailed.Apply(cb, callbacks.EventAttemptFailed{Time: time.Now(), Err: fmt.Errorf("test")}) // nolint:goerr113
+	})
+	require.NoError(t, err)
+
+	mutableState := NewMockMutableState(ctrl)
+	mutableState.EXPECT().HSM().DoAndReturn(func() *hsm.Node { return node })
+	mutableState.EXPECT().GetExecutionInfo().Return(&persistencespb.WorkflowExecutionInfo{
+		TransitionHistory: []*persistencespb.VersionedTransition{
+			{
+				NamespaceFailoverVersion: 3,
+				MaxTransitionCount:       2,
+			},
+		},
+	})
+	mutableState.EXPECT().GetWorkflowKey().Return(tests.WorkflowKey).Times(2)
+
+	cfg := &configs.Config{}
+	archivalMetadata := archiver.NewMockArchivalMetadata(ctrl)
+
+	var genTasks []tasks.Task
+	mutableState.EXPECT().AddTasks(gomock.Any()).Do(func(ts ...tasks.Task) {
+		genTasks = append(genTasks, ts...)
+	}).AnyTimes()
+
+	taskGenerator := NewTaskGenerator(namespaceRegistry, mutableState, cfg, archivalMetadata)
+	err = taskGenerator.GenerateDirtySubStateMachineTasks(reg)
+	require.NoError(t, err)
+
+	require.Equal(t, 2, len(genTasks))
+	invocationTask, ok := genTasks[0].(*tasks.StateMachineCallbackTask)
+	var backoffTask *tasks.StateMachineTimerTask
+	if ok {
+		backoffTask = genTasks[1].(*tasks.StateMachineTimerTask)
+	} else {
+		invocationTask = genTasks[1].(*tasks.StateMachineCallbackTask)
+		backoffTask = genTasks[0].(*tasks.StateMachineTimerTask)
+	}
+	require.Equal(t, tests.WorkflowKey, invocationTask.WorkflowKey)
+	require.Equal(t, "http://localhost", invocationTask.Destination)
+	require.Equal(t, &persistencespb.StateMachineTaskInfo{
+		Ref: &persistencespb.StateMachineRef{
+			Path: []*persistencespb.StateMachineKey{
+				{
+					Type: callbacks.StateMachineType.ID,
+					Id:   "sched",
+				},
+			},
+			MutableStateNamespaceFailoverVersion: 3,
+			MutableStateTransitionCount:          2,
+			MachineTransitionCount:               1,
+		},
+		Type: callbacks.TaskTypeInvocation.ID,
+		Data: nil,
+	}, invocationTask.Info)
+
+	require.Equal(t, tests.WorkflowKey, backoffTask.WorkflowKey)
+	require.Equal(t, &persistencespb.StateMachineTaskInfo{
+		Ref: &persistencespb.StateMachineRef{
+			Path: []*persistencespb.StateMachineKey{
+				{
+					Type: callbacks.StateMachineType.ID,
+					Id:   "backoff",
+				},
+			},
+			MutableStateNamespaceFailoverVersion: 3,
+			MutableStateTransitionCount:          2,
+			MachineTransitionCount:               1,
+		},
+		Type: callbacks.TaskTypeBackoff.ID,
+		Data: nil,
+	}, backoffTask.Info)
 }

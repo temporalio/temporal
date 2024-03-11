@@ -55,6 +55,7 @@ import (
 	"go.temporal.io/server/common/testing/protorequire"
 	"go.temporal.io/server/common/util"
 	"go.temporal.io/server/service/history/events"
+	"go.temporal.io/server/service/history/hsm"
 	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/tests"
 	"go.temporal.io/server/service/history/workflow"
@@ -105,6 +106,11 @@ func (s *stateRebuilderSuite) SetupTest() {
 		},
 		tests.NewDynamicConfig(),
 	)
+
+	reg := hsm.NewRegistry()
+	err := workflow.RegisterStateMachine(reg)
+	s.NoError(err)
+	s.mockShard.SetStateMachineRegistry(reg)
 
 	s.mockExecutionManager = s.mockShard.Resource.ExecutionMgr
 	s.mockNamespaceCache = s.mockShard.Resource.NamespaceCache

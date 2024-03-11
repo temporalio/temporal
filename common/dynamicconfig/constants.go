@@ -706,8 +706,6 @@ const (
 	CallbackProcessorPollBackoffInterval = "history.callbackProcessorPollBackoffInterval"
 	// CallbackQueueMaxReaderCount is the max number of readers in one multi-cursor callback queue
 	CallbackQueueMaxReaderCount = "history.callbackQueueMaxReaderCount"
-	// CallbackTaskTimeout is the timeout for executing a single callback task.
-	CallbackTaskTimeout = "history.callbackTaskTimeout"
 
 	// VisibilityTaskBatchSize is batch size for visibilityQueueProcessor
 	VisibilityTaskBatchSize = "history.visibilityTaskBatchSize"
