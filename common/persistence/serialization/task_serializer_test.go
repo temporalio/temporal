@@ -366,8 +366,8 @@ func (s *taskSerializerSuite) TestArchiveExecutionTask() {
 	s.assertEqualTasks(task)
 }
 
-func (s *taskSerializerSuite) TestStateMachineCallbackTask() {
-	task := &tasks.StateMachineCallbackTask{
+func (s *taskSerializerSuite) TestStateMachineOutboundTask() {
+	task := &tasks.StateMachineOutboundTask{
 		StateMachineTask: tasks.StateMachineTask{
 			WorkflowKey:         s.workflowKey,
 			VisibilityTimestamp: time.Now().UTC(),
@@ -391,13 +391,13 @@ func (s *taskSerializerSuite) TestStateMachineCallbackTask() {
 		Destination: "foo",
 	}
 
-	s.Assert().Equal(tasks.CategoryCallback, task.GetCategory())
+	s.Assert().Equal(tasks.CategoryOutbound, task.GetCategory())
 	s.Assert().Equal(enumsspb.TASK_TYPE_STATE_MACHINE_OUTBOUND, task.GetType())
 
 	blob, err := s.taskSerializer.SerializeTask(task)
 	s.NoError(err)
 	deserializedTaskIface, err := s.taskSerializer.DeserializeTask(task.GetCategory(), blob)
-	deserializedTask := deserializedTaskIface.(*tasks.StateMachineCallbackTask)
+	deserializedTask := deserializedTaskIface.(*tasks.StateMachineOutboundTask)
 	s.NoError(err)
 
 	protorequire.ProtoEqual(s.T(), task.Info, deserializedTask.Info)

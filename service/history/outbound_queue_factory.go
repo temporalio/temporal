@@ -37,9 +37,9 @@ import (
 	wcache "go.temporal.io/server/service/history/workflow/cache"
 )
 
-const callbackQueuePersistenceMaxRPSRatio = 0.3
+const outboundQueuePersistenceMaxRPSRatio = 0.3
 
-type callbackQueueFactoryParams struct {
+type outboundQueueFactoryParams struct {
 	fx.In
 
 	QueueFactoryBaseParams
@@ -60,8 +60,8 @@ func (groupLimiter) Concurrency() int {
 
 var _ ctasks.DynamicWorkerPoolLimiter = groupLimiter{}
 
-type callbackQueueFactory struct {
-	callbackQueueFactoryParams
+type outboundQueueFactory struct {
+	outboundQueueFactoryParams
 	hostReaderRateLimiter quotas.RequestRateLimiter
 	// Shared rate limiter pool for all shards in the host.
 	rateLimiterPool *collection.OnceMap[queues.NamespaceIDAndDestination, quotas.RateLimiter]
@@ -69,21 +69,21 @@ type callbackQueueFactory struct {
 	hostScheduler queues.Scheduler
 }
 
-func NewCallbackQueueFactory(params callbackQueueFactoryParams) QueueFactory {
+func NewOutboundQueueFactory(params outboundQueueFactoryParams) QueueFactory {
 	rateLimiterPool := collection.NewOnceMap(func(queues.NamespaceIDAndDestination) quotas.RateLimiter {
 		// TODO: get this value from dynamic config.
 		return quotas.NewDefaultOutgoingRateLimiter(func() float64 { return 100.0 })
 	})
 	grouper := queues.GrouperNamespaceIDAndDestination{}
-	f := &callbackQueueFactory{
-		callbackQueueFactoryParams: params,
+	f := &outboundQueueFactory{
+		outboundQueueFactoryParams: params,
 		hostReaderRateLimiter: queues.NewReaderPriorityRateLimiter(
 			NewHostRateLimiterRateFn(
-				params.Config.CallbackProcessorMaxPollHostRPS,
+				params.Config.OutboundProcessorMaxPollHostRPS,
 				params.Config.PersistenceMaxQPS,
-				callbackQueuePersistenceMaxRPSRatio,
+				outboundQueuePersistenceMaxRPSRatio,
 			),
-			int64(params.Config.CallbackQueueMaxReaderCount()),
+			int64(params.Config.OutboundQueueMaxReaderCount()),
 		),
 		hostScheduler: &queues.CommonSchedulerWrapper{
 			Scheduler: ctasks.NewGroupByScheduler[queues.NamespaceIDAndDestination, queues.Executable](
@@ -112,21 +112,21 @@ func NewCallbackQueueFactory(params callbackQueueFactoryParams) QueueFactory {
 }
 
 // Start implements QueueFactory.
-func (f *callbackQueueFactory) Start() {
+func (f *outboundQueueFactory) Start() {
 	f.hostScheduler.Start()
 }
 
 // Stop implements QueueFactory.
-func (f *callbackQueueFactory) Stop() {
+func (f *outboundQueueFactory) Stop() {
 	f.hostScheduler.Stop()
 }
 
-func (f *callbackQueueFactory) CreateQueue(
+func (f *outboundQueueFactory) CreateQueue(
 	shardContext shard.Context,
 	workflowCache wcache.Cache,
 ) queues.Queue {
-	logger := log.With(shardContext.GetLogger(), tag.ComponentCallbackQueue)
-	metricsHandler := f.MetricsHandler.WithTags(metrics.OperationTag(metrics.OperationCallbackQueueProcessorScope))
+	logger := log.With(shardContext.GetLogger(), tag.ComponentOutboundQueue)
+	metricsHandler := f.MetricsHandler.WithTags(metrics.OperationTag(metrics.OperationOutboundQueueProcessorScope))
 
 	currentClusterName := f.ClusterMetadata.GetCurrentClusterName()
 
@@ -137,7 +137,7 @@ func (f *callbackQueueFactory) CreateQueue(
 		metricsHandler,
 	)
 
-	activeExecutor := newCallbackQueueActiveTaskExecutor(
+	activeExecutor := newOutboundQueueActiveTaskExecutor(
 		shardContext,
 		workflowCache,
 		logger,
@@ -145,7 +145,7 @@ func (f *callbackQueueFactory) CreateQueue(
 	)
 
 	// not implemented yet
-	standbyExecutor := &callbackQueueStandbyTaskExecutor{}
+	standbyExecutor := &outboundQueueStandbyTaskExecutor{}
 
 	executor := queues.NewActiveStandbyExecutor(
 		currentClusterName,
@@ -176,26 +176,26 @@ func (f *callbackQueueFactory) CreateQueue(
 	)
 	return queues.NewImmediateQueue(
 		shardContext,
-		tasks.CategoryCallback,
+		tasks.CategoryOutbound,
 		f.hostScheduler,
 		rescheduler,
 		&queues.Options{
 			ReaderOptions: queues.ReaderOptions{
-				BatchSize:            f.Config.CallbackTaskBatchSize,
+				BatchSize:            f.Config.OutboundTaskBatchSize,
 				MaxPendingTasksCount: f.Config.QueuePendingTaskMaxCount,
-				PollBackoffInterval:  f.Config.CallbackProcessorPollBackoffInterval,
+				PollBackoffInterval:  f.Config.OutboundProcessorPollBackoffInterval,
 			},
 			MonitorOptions: queues.MonitorOptions{
 				PendingTasksCriticalCount:   f.Config.QueuePendingTaskCriticalCount,
 				ReaderStuckCriticalAttempts: f.Config.QueueReaderStuckCriticalAttempts,
 				SliceCountCriticalThreshold: f.Config.QueueCriticalSlicesCount,
 			},
-			MaxPollRPS:                          f.Config.CallbackProcessorMaxPollRPS,
-			MaxPollInterval:                     f.Config.CallbackProcessorMaxPollInterval,
-			MaxPollIntervalJitterCoefficient:    f.Config.CallbackProcessorMaxPollIntervalJitterCoefficient,
-			CheckpointInterval:                  f.Config.CallbackProcessorUpdateAckInterval,
-			CheckpointIntervalJitterCoefficient: f.Config.CallbackProcessorUpdateAckIntervalJitterCoefficient,
-			MaxReaderCount:                      f.Config.CallbackQueueMaxReaderCount,
+			MaxPollRPS:                          f.Config.OutboundProcessorMaxPollRPS,
+			MaxPollInterval:                     f.Config.OutboundProcessorMaxPollInterval,
+			MaxPollIntervalJitterCoefficient:    f.Config.OutboundProcessorMaxPollIntervalJitterCoefficient,
+			CheckpointInterval:                  f.Config.OutboundProcessorUpdateAckInterval,
+			CheckpointIntervalJitterCoefficient: f.Config.OutboundProcessorUpdateAckIntervalJitterCoefficient,
+			MaxReaderCount:                      f.Config.OutboundQueueMaxReaderCount,
 		},
 		f.hostReaderRateLimiter,
 		queues.GrouperNamespaceIDAndDestination{},

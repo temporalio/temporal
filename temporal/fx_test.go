@@ -176,7 +176,7 @@ func TestTaskCategoryRegistryProvider(t *testing.T) {
 			visibilityArchivalConfig := archiver.NewMockArchivalConfig(ctrl)
 			visibilityArchivalConfig.EXPECT().StaticClusterState().Return(tc.visibilityState).AnyTimes()
 			archivalMetadata.EXPECT().GetVisibilityConfig().Return(visibilityArchivalConfig).AnyTimes()
-			dcClient := dynamicconfig.StaticClient{dynamicconfig.CallbackProcessorEnabled: tc.expectCallbackCategory}
+			dcClient := dynamicconfig.StaticClient{dynamicconfig.OutboundProcessorEnabled: tc.expectCallbackCategory}
 			dcc := dynamicconfig.NewCollection(dcClient, log.NewNoopLogger())
 			registry := TaskCategoryRegistryProvider(archivalMetadata, dcc)
 			_, ok := registry.GetCategoryByID(tasks.CategoryIDArchival)
@@ -185,7 +185,7 @@ func TestTaskCategoryRegistryProvider(t *testing.T) {
 			} else {
 				require.False(t, ok)
 			}
-			_, ok = registry.GetCategoryByID(tasks.CategoryIDCallback)
+			_, ok = registry.GetCategoryByID(tasks.CategoryIDOutbound)
 			require.Equal(t, tc.expectCallbackCategory, ok)
 		})
 	}

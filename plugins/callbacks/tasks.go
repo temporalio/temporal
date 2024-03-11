@@ -52,7 +52,7 @@ func (InvocationTask) Type() hsm.TaskType {
 }
 
 func (t InvocationTask) Category() tasks.Category {
-	return tasks.CategoryCallback
+	return tasks.CategoryOutbound
 }
 
 func (t InvocationTask) Kind() hsm.TaskKind {
@@ -83,7 +83,7 @@ func (BackoffTask) Type() hsm.TaskType {
 }
 
 func (t BackoffTask) Category() tasks.Category {
-	return tasks.CategoryCallback
+	return tasks.CategoryOutbound
 }
 
 func (t BackoffTask) Kind() hsm.TaskKind {

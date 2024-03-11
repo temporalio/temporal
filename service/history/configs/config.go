@@ -154,15 +154,15 @@ type Config struct {
 
 	// CallbackQueueProcessor settings
 	CallbackProcessorEnabled                            dynamicconfig.BoolPropertyFn
-	CallbackTaskBatchSize                               dynamicconfig.IntPropertyFn
-	CallbackProcessorMaxPollRPS                         dynamicconfig.IntPropertyFn
-	CallbackProcessorMaxPollHostRPS                     dynamicconfig.IntPropertyFn
-	CallbackProcessorMaxPollInterval                    dynamicconfig.DurationPropertyFn
-	CallbackProcessorMaxPollIntervalJitterCoefficient   dynamicconfig.FloatPropertyFn
-	CallbackProcessorUpdateAckInterval                  dynamicconfig.DurationPropertyFn
-	CallbackProcessorUpdateAckIntervalJitterCoefficient dynamicconfig.FloatPropertyFn
-	CallbackProcessorPollBackoffInterval                dynamicconfig.DurationPropertyFn
-	CallbackQueueMaxReaderCount                         dynamicconfig.IntPropertyFn
+	OutboundTaskBatchSize                               dynamicconfig.IntPropertyFn
+	OutboundProcessorMaxPollRPS                         dynamicconfig.IntPropertyFn
+	OutboundProcessorMaxPollHostRPS                     dynamicconfig.IntPropertyFn
+	OutboundProcessorMaxPollInterval                    dynamicconfig.DurationPropertyFn
+	OutboundProcessorMaxPollIntervalJitterCoefficient   dynamicconfig.FloatPropertyFn
+	OutboundProcessorUpdateAckInterval                  dynamicconfig.DurationPropertyFn
+	OutboundProcessorUpdateAckIntervalJitterCoefficient dynamicconfig.FloatPropertyFn
+	OutboundProcessorPollBackoffInterval                dynamicconfig.DurationPropertyFn
+	OutboundQueueMaxReaderCount                         dynamicconfig.IntPropertyFn
 
 	// ReplicatorQueueProcessor settings
 	ReplicatorProcessorMaxPollInterval                  dynamicconfig.DurationPropertyFn
@@ -448,15 +448,15 @@ func NewConfig(
 		TransferProcessorEnsureCloseBeforeDelete:            dc.GetBoolProperty(dynamicconfig.TransferProcessorEnsureCloseBeforeDelete, true),
 		TimerQueueMaxReaderCount:                            dc.GetIntProperty(dynamicconfig.TimerQueueMaxReaderCount, 2),
 
-		CallbackTaskBatchSize:                               dc.GetIntProperty(dynamicconfig.CallbackTaskBatchSize, 100),
-		CallbackProcessorMaxPollRPS:                         dc.GetIntProperty(dynamicconfig.CallbackProcessorMaxPollRPS, 20),
-		CallbackProcessorMaxPollHostRPS:                     dc.GetIntProperty(dynamicconfig.CallbackProcessorMaxPollHostRPS, 0),
-		CallbackProcessorMaxPollInterval:                    dc.GetDurationProperty(dynamicconfig.CallbackProcessorMaxPollInterval, 1*time.Minute),
-		CallbackProcessorMaxPollIntervalJitterCoefficient:   dc.GetFloat64Property(dynamicconfig.CallbackProcessorMaxPollIntervalJitterCoefficient, 0.15),
-		CallbackProcessorUpdateAckInterval:                  dc.GetDurationProperty(dynamicconfig.CallbackProcessorUpdateAckInterval, 30*time.Second),
-		CallbackProcessorUpdateAckIntervalJitterCoefficient: dc.GetFloat64Property(dynamicconfig.CallbackProcessorUpdateAckIntervalJitterCoefficient, 0.15),
-		CallbackProcessorPollBackoffInterval:                dc.GetDurationProperty(dynamicconfig.CallbackProcessorPollBackoffInterval, 5*time.Second),
-		CallbackQueueMaxReaderCount:                         dc.GetIntProperty(dynamicconfig.CallbackQueueMaxReaderCount, 4),
+		OutboundTaskBatchSize:                               dc.GetIntProperty(dynamicconfig.OutboundTaskBatchSize, 100),
+		OutboundProcessorMaxPollRPS:                         dc.GetIntProperty(dynamicconfig.OutboundProcessorMaxPollRPS, 20),
+		OutboundProcessorMaxPollHostRPS:                     dc.GetIntProperty(dynamicconfig.OutboundProcessorMaxPollHostRPS, 0),
+		OutboundProcessorMaxPollInterval:                    dc.GetDurationProperty(dynamicconfig.OutboundProcessorMaxPollInterval, 1*time.Minute),
+		OutboundProcessorMaxPollIntervalJitterCoefficient:   dc.GetFloat64Property(dynamicconfig.OutboundProcessorMaxPollIntervalJitterCoefficient, 0.15),
+		OutboundProcessorUpdateAckInterval:                  dc.GetDurationProperty(dynamicconfig.OutboundProcessorUpdateAckInterval, 30*time.Second),
+		OutboundProcessorUpdateAckIntervalJitterCoefficient: dc.GetFloat64Property(dynamicconfig.OutboundProcessorUpdateAckIntervalJitterCoefficient, 0.15),
+		OutboundProcessorPollBackoffInterval:                dc.GetDurationProperty(dynamicconfig.OutboundProcessorPollBackoffInterval, 5*time.Second),
+		OutboundQueueMaxReaderCount:                         dc.GetIntProperty(dynamicconfig.OutboundQueueMaxReaderCount, 4),
 
 		ReplicatorProcessorMaxPollInterval:                  dc.GetDurationProperty(dynamicconfig.ReplicatorProcessorMaxPollInterval, 1*time.Minute),
 		ReplicatorProcessorMaxPollIntervalJitterCoefficient: dc.GetFloat64Property(dynamicconfig.ReplicatorProcessorMaxPollIntervalJitterCoefficient, 0.15),
