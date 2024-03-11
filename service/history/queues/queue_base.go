@@ -184,9 +184,8 @@ func newQueueBase(
 		)
 	}
 
-	resetReaderScope := false
 	exclusiveDeletionHighWatermark := exclusiveReaderHighWatermark
-	readerGroup := NewReaderGroup(shard.GetShardID(), shard.GetOwner(), category, readerInitializer, shard.GetExecutionManager())
+	readerGroup := NewReaderGroup(readerInitializer)
 	for readerID, scopes := range readerScopes {
 		if len(scopes) == 0 {
 			continue
@@ -196,27 +195,9 @@ func newQueueBase(
 		for _, scope := range scopes {
 			slices = append(slices, NewSlice(paginationFnProvider, executableFactory, monitor, scope, grouper))
 		}
-		if _, err := readerGroup.NewReader(readerID, slices...); err != nil {
-			// we are not able to re-create the scopes & readers we previously have
-			// but we may still be able to run with only one reader.
-			// Pick the lowest key among all scopes and start from there
-			logger.Error("Failed to create history queue reader on initialization", tag.QueueReaderID(readerID), tag.Error(err))
-
-			resetReaderScope = true
-
-			// don't break here, still need to update exclusiveDeletionHighWatermark
-		}
+		readerGroup.NewReader(readerID, slices...)
 
 		exclusiveDeletionHighWatermark = tasks.MinKey(exclusiveDeletionHighWatermark, scopes[0].Range.InclusiveMin)
-	}
-	if resetReaderScope {
-		// start from the lowest key of all reader scopes
-		exclusiveReaderHighWatermark = exclusiveDeletionHighWatermark
-
-		// some readers may already be created
-		// stop them and create a new empty reader group
-		readerGroup.Stop()
-		readerGroup = NewReaderGroup(shard.GetShardID(), shard.GetOwner(), category, readerInitializer, shard.GetExecutionManager())
 	}
 
 	mitigator := newMitigator(readerGroup, monitor, logger, metricsHandler, options.MaxReaderCount, grouper)
@@ -290,12 +271,6 @@ func (p *queueBase) FailoverNamespace(
 func (p *queueBase) processNewRange() {
 	newMaxKey := p.shard.GetQueueExclusiveHighReadWatermark(p.category)
 
-	reader, err := p.readerGroup.GetOrCreateReader(DefaultReaderId)
-	if err != nil {
-		p.logger.Error("Unable to create default reader", tag.Error(err), tag.QueueReaderID(DefaultReaderId))
-		return
-	}
-
 	slices := make([]Slice, 0, 1)
 	if p.nonReadableScope.CanSplitByRange(newMaxKey) {
 		var newReadScope Scope
@@ -307,6 +282,12 @@ func (p *queueBase) processNewRange() {
 			newReadScope,
 			p.grouper,
 		))
+	}
+
+	reader, ok := p.readerGroup.ReaderByID(DefaultReaderId)
+	if !ok {
+		p.readerGroup.NewReader(DefaultReaderId, slices...)
+		return
 	}
 
 	if now := p.timeSource.Now(); now.After(p.nextForceNewSliceTime) {
@@ -325,7 +306,7 @@ func (p *queueBase) checkpoint() {
 
 	// Run slicePredicateAction to move slices with non-universal predicate to non-default reader
 	// so that upon shard reload, task loading for those slices won't block other slices in the default reader.
-	_ = runAction(
+	runAction(
 		newSlicePredicateAction(p.monitor, p.mitigator.maxReaderCount()),
 		p.readerGroup,
 		p.metricsHandler,
