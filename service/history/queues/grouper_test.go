@@ -45,7 +45,7 @@ func TestGrouperNamespaceID_Predicate(t *testing.T) {
 }
 
 func TestGrouperNamespaceIDAndDestination_Key(t *testing.T) {
-	g := GrouperNamespaceIDAndDestination{}
+	g := GrouperStateMachineNamespaceIDAndDestination{}
 	task := tasks.FakeDestinationTask{
 		Task:        tasks.NewFakeTask(definition.NewWorkflowKey("nid", "", ""), tasks.CategoryTransfer, time.Now()),
 		Destination: "dest",
@@ -55,7 +55,7 @@ func TestGrouperNamespaceIDAndDestination_Key(t *testing.T) {
 }
 
 func TestGrouperNamespaceIDAndDestination_Predicate(t *testing.T) {
-	g := GrouperNamespaceIDAndDestination{}
+	g := GrouperStateMachineNamespaceIDAndDestination{}
 	p := g.Predicate([]any{NamespaceIDAndDestination{"n1", "d1"}, NamespaceIDAndDestination{"n2", "d2"}})
 	expected := predicates.Or(
 		predicates.And(

@@ -23,7 +23,6 @@
 package tasks
 
 import (
-	"fmt"
 	"time"
 
 	enums "go.temporal.io/server/api/enums/v1"
@@ -38,6 +37,8 @@ type StateMachineTask struct {
 	TaskID              int64
 	Info                *persistence.StateMachineTaskInfo
 }
+
+var _ HasStateMachineTaskType = &StateMachineTask{}
 
 func (t *StateMachineTask) GetVersion() int64 {
 	return t.Info.Ref.MutableStateNamespaceFailoverVersion
@@ -63,6 +64,10 @@ func (t *StateMachineTask) SetVisibilityTime(timestamp time.Time) {
 	t.VisibilityTimestamp = timestamp
 }
 
+func (t *StateMachineTask) StateMachineTaskType() int32 {
+	return t.Info.Type
+}
+
 // StateMachineOutboundTask is a task on the outbound queue.
 type StateMachineOutboundTask struct {
 	StateMachineTask
@@ -70,9 +75,8 @@ type StateMachineOutboundTask struct {
 }
 
 // GetDestination is used for grouping outbound tasks into a per source namespace and destination scheduler and in multi-cursor predicates.
-// Prefix the destination from the task with the task type to avoid collisions.
 func (t *StateMachineOutboundTask) GetDestination() string {
-	return fmt.Sprintf("type:%d:%s", t.StateMachineTask.Info.Type, t.Destination)
+	return t.Destination
 }
 
 func (*StateMachineOutboundTask) GetCategory() Category {

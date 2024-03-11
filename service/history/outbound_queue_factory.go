@@ -47,7 +47,7 @@ type outboundQueueFactoryParams struct {
 
 // TODO: get actual limits from dynamic config.
 type groupLimiter struct {
-	key queues.NamespaceIDAndDestination
+	key queues.StateMachineTaskTypeNamespaceIDAndDestination
 }
 
 func (groupLimiter) BufferSize() int {
@@ -70,11 +70,11 @@ type outboundQueueFactory struct {
 }
 
 func NewOutboundQueueFactory(params outboundQueueFactoryParams) QueueFactory {
-	rateLimiterPool := collection.NewOnceMap(func(queues.NamespaceIDAndDestination) quotas.RateLimiter {
+	rateLimiterPool := collection.NewOnceMap(func(queues.StateMachineTaskTypeNamespaceIDAndDestination) quotas.RateLimiter {
 		// TODO: get this value from dynamic config.
 		return quotas.NewDefaultOutgoingRateLimiter(func() float64 { return 100.0 })
 	})
-	grouper := queues.GrouperNamespaceIDAndDestination{}
+	grouper := queues.GrouperStateMachineNamespaceIDAndDestination{}
 	f := &outboundQueueFactory{
 		outboundQueueFactoryParams: params,
 		hostReaderRateLimiter: queues.NewReaderPriorityRateLimiter(
@@ -86,17 +86,19 @@ func NewOutboundQueueFactory(params outboundQueueFactoryParams) QueueFactory {
 			int64(params.Config.OutboundQueueMaxReaderCount()),
 		),
 		hostScheduler: &queues.CommonSchedulerWrapper{
-			Scheduler: ctasks.NewGroupByScheduler[queues.NamespaceIDAndDestination, queues.Executable](
-				ctasks.GroupBySchedulerOptions[queues.NamespaceIDAndDestination, queues.Executable]{
+			Scheduler: ctasks.NewGroupByScheduler[queues.StateMachineTaskTypeNamespaceIDAndDestination, queues.Executable](
+				ctasks.GroupBySchedulerOptions[queues.StateMachineTaskTypeNamespaceIDAndDestination, queues.Executable]{
 					Logger: params.Logger,
-					KeyFn:  func(e queues.Executable) queues.NamespaceIDAndDestination { return grouper.KeyTyped(e.GetTask()) },
+					KeyFn: func(e queues.Executable) queues.StateMachineTaskTypeNamespaceIDAndDestination {
+						return grouper.KeyTyped(e.GetTask())
+					},
 					RunnableFactory: func(e queues.Executable) ctasks.Runnable {
 						return ctasks.RateLimitedTaskRunnable{
 							Limiter:  rateLimiterPool.Get(grouper.KeyTyped(e.GetTask())),
 							Runnable: ctasks.RunnableTask{Task: e},
 						}
 					},
-					SchedulerFactory: func(key queues.NamespaceIDAndDestination) ctasks.RunnableScheduler {
+					SchedulerFactory: func(key queues.StateMachineTaskTypeNamespaceIDAndDestination) ctasks.RunnableScheduler {
 						return ctasks.NewDynamicWorkerPoolScheduler(groupLimiter{key})
 					},
 				},
@@ -198,7 +200,7 @@ func (f *outboundQueueFactory) CreateQueue(
 			MaxReaderCount:                      f.Config.OutboundQueueMaxReaderCount,
 		},
 		f.hostReaderRateLimiter,
-		queues.GrouperNamespaceIDAndDestination{},
+		queues.GrouperStateMachineNamespaceIDAndDestination{},
 		logger,
 		metricsHandler,
 		factory,

@@ -83,7 +83,7 @@ func (BackoffTask) Type() hsm.TaskType {
 }
 
 func (t BackoffTask) Category() tasks.Category {
-	return tasks.CategoryOutbound
+	return tasks.CategoryTimer
 }
 
 func (t BackoffTask) Kind() hsm.TaskKind {
