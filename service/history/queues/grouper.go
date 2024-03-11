@@ -97,8 +97,8 @@ func (GrouperStateMachineNamespaceIDAndDestination) Predicate(keys []any) tasks.
 		// Assume predicate is only called with keys returned from GrouperStateMachineNamespaceIDAndDestination.Key()
 		key := anyKey.(StateMachineTaskTypeNamespaceIDAndDestination)
 		pred = predicates.Or(pred, predicates.And(
-			tasks.NewNamespacePredicate([]string{key.NamespaceID}),
 			tasks.NewStateMachineTaskTypePredicate([]int32{key.StateMachineTaskType}),
+			tasks.NewNamespacePredicate([]string{key.NamespaceID}),
 			tasks.NewDestinationPredicate([]string{key.Destination}),
 		))
 	}
