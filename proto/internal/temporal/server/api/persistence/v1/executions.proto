@@ -40,6 +40,7 @@ import "temporal/server/api/enums/v1/task.proto";
 import "temporal/server/api/enums/v1/workflow_task_type.proto";
 import "temporal/server/api/history/v1/message.proto";
 import "temporal/server/api/persistence/v1/queues.proto";
+import "temporal/server/api/persistence/v1/hsm.proto";
 import "temporal/server/api/update/v1/message.proto";
 import "temporal/server/api/workflow/v1/message.proto";
 
@@ -161,8 +162,11 @@ message WorkflowExecutionInfo {
 
     // index of update IDs and pointers to associated history events.
     map<string, temporal.server.api.update.v1.UpdateInfo> update_infos = 79;
-    // Map of callback ID to callback info.
-    map<string, CallbackInfo> callbacks = 80;
+    repeated VersionedTransition transition_history = 80;
+    // Map of state machine type to map of machine by ID.
+    // (-- api-linter: core::0140::prepositions=disabled
+    //     aip.dev/not-precedent: "by" is used to clarify the keys and values. --)
+    map<int32, StateMachineMap> sub_state_machines_by_type = 81;
 }
 
 message ExecutionStats {
@@ -258,14 +262,9 @@ message TimerTaskInfo {
     // If this is true, we can bypass archival before deleting. Only defined for DeleteHistoryEventTasks.
     bool already_archived = 13;
 
-    // If task addresses a sub-statemachine (e.g. callback), this field contains the addressable ID of the corresponding
-    // state machine for lookup in mutable state.
-    string sub_statemachine_id = 14;
-    // If task addresses a sub-statemachine, this field contains the number of transitions on the corresponding state
-    // machine object. Used to verify that a task is not referencing a stale state or that the task itself is not stale.
-    int32 sub_statemachine_transition_count = 15;
+    // If task addresses a sub-statemachine (e.g. callback), this field will be set.
+    StateMachineTaskInfo state_machine_info = 14;
 }
-
 
 message ArchivalTaskInfo {
     int64 task_id = 1;
@@ -277,22 +276,20 @@ message ArchivalTaskInfo {
     google.protobuf.Timestamp visibility_time = 7;
 }
 
-// serialized callback task
-message CallbackTaskInfo {
+message OutboundTaskInfo {
     string namespace_id = 1;
     string workflow_id = 2;
     string run_id = 3;
+
     temporal.server.api.enums.v1.TaskType task_type = 4;
-    // Namespace failover version at the time this task was scheduled.
-    int64 version = 5;
-    int64 task_id = 6;
-    google.protobuf.Timestamp visibility_time = 7;
-    // Number of transitions on the corresponding callback object. Used to verify that a task
-    // is not referencing a stale callback object or that the task itself is not stale.
-    int32 transition_count = 8;
-    // The key in the mutable state WorkflowExecutionInfo callback map.
-    string callback_id = 9;
-    string destination_address = 10;
+    int64 task_id = 5;
+    google.protobuf.Timestamp visibility_time = 6;
+
+    // Destination of this task (e.g. protocol+host+port for callbacks).
+    // Outbound tasks are grouped by this field (and the namespace ID) when scheduling.
+    string destination = 7;
+    // If task addresses a sub-statemachine (e.g. callback), this field will be set.
+    StateMachineTaskInfo state_machine_info = 8;
 }
 
 // activity_map column
@@ -395,13 +392,5 @@ message Checksum {
 }
 
 message CallbackInfo {
-    // The namespace failover version at the time this callback info was updated.
-    // Used for conflict resolution when syncing state across clusters.
-    int64 namespace_failover_version = 1;
-    // Number of transitions on this callback object. Used to verify that a task
-    // is not referencing a stale callback object or that the task itself is not stale.
-    int32 transition_count = 2;
-    // ID of this callback, used as a key in the mutable state map.
-    string id = 3;
-    temporal.api.workflow.v1.CallbackInfo public_info = 4;
+    temporal.api.workflow.v1.CallbackInfo public_info = 1;
 }

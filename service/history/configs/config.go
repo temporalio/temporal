@@ -163,7 +163,6 @@ type Config struct {
 	CallbackProcessorUpdateAckIntervalJitterCoefficient dynamicconfig.FloatPropertyFn
 	CallbackProcessorPollBackoffInterval                dynamicconfig.DurationPropertyFn
 	CallbackQueueMaxReaderCount                         dynamicconfig.IntPropertyFn
-	CallbackTaskTimeout                                 dynamicconfig.DurationPropertyFn
 
 	// ReplicatorQueueProcessor settings
 	ReplicatorProcessorMaxPollInterval                  dynamicconfig.DurationPropertyFn
@@ -458,7 +457,6 @@ func NewConfig(
 		CallbackProcessorUpdateAckIntervalJitterCoefficient: dc.GetFloat64Property(dynamicconfig.CallbackProcessorUpdateAckIntervalJitterCoefficient, 0.15),
 		CallbackProcessorPollBackoffInterval:                dc.GetDurationProperty(dynamicconfig.CallbackProcessorPollBackoffInterval, 5*time.Second),
 		CallbackQueueMaxReaderCount:                         dc.GetIntProperty(dynamicconfig.CallbackQueueMaxReaderCount, 4),
-		CallbackTaskTimeout:                                 dc.GetDurationProperty(dynamicconfig.CallbackTaskTimeout, time.Second*10),
 
 		ReplicatorProcessorMaxPollInterval:                  dc.GetDurationProperty(dynamicconfig.ReplicatorProcessorMaxPollInterval, 1*time.Minute),
 		ReplicatorProcessorMaxPollIntervalJitterCoefficient: dc.GetFloat64Property(dynamicconfig.ReplicatorProcessorMaxPollIntervalJitterCoefficient, 0.15),

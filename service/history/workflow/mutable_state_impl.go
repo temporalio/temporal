@@ -30,6 +30,7 @@ import (
 	"math/rand"
 	"time"
 
+	"github.com/nexus-rpc/sdk-go/nexus"
 	"github.com/pborman/uuid"
 	commandpb "go.temporal.io/api/command/v1"
 	commonpb "go.temporal.io/api/common/v1"
@@ -64,6 +65,7 @@ import (
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
+	commonnexus "go.temporal.io/server/common/nexus"
 	"go.temporal.io/server/common/payload"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/persistence/versionhistory"
@@ -71,12 +73,13 @@ import (
 	"go.temporal.io/server/common/searchattribute"
 	"go.temporal.io/server/common/util"
 	"go.temporal.io/server/common/worker_versioning"
+	"go.temporal.io/server/plugins/callbacks"
 	"go.temporal.io/server/service/history/configs"
 	"go.temporal.io/server/service/history/consts"
 	"go.temporal.io/server/service/history/events"
 	"go.temporal.io/server/service/history/historybuilder"
+	"go.temporal.io/server/service/history/hsm"
 	"go.temporal.io/server/service/history/shard"
-	"go.temporal.io/server/service/history/statemachines"
 	"go.temporal.io/server/service/history/tasks"
 )
 
@@ -196,13 +199,14 @@ type (
 		workflowTaskManager *workflowTaskStateMachine
 		QueryRegistry       QueryRegistry
 
-		shard           shard.Context
-		clusterMetadata cluster.Metadata
-		eventsCache     events.Cache
-		config          *configs.Config
-		timeSource      clock.TimeSource
-		logger          log.Logger
-		metricsHandler  metrics.Handler
+		shard            shard.Context
+		clusterMetadata  cluster.Metadata
+		eventsCache      events.Cache
+		config           *configs.Config
+		timeSource       clock.TimeSource
+		logger           log.Logger
+		metricsHandler   metrics.Handler
+		stateMachineNode *hsm.Node
 	}
 )
 
@@ -280,9 +284,10 @@ func NewMutableState(
 
 		LastWorkflowTaskStartedEventId: common.EmptyEventID,
 
-		StartTime:        timestamppb.New(startTime),
-		VersionHistories: versionhistory.NewVersionHistories(&historyspb.VersionHistory{}),
-		ExecutionStats:   &persistencespb.ExecutionStats{HistorySize: 0},
+		StartTime:              timestamppb.New(startTime),
+		VersionHistories:       versionhistory.NewVersionHistories(&historyspb.VersionHistory{}),
+		ExecutionStats:         &persistencespb.ExecutionStats{HistorySize: 0},
+		SubStateMachinesByType: make(map[int32]*persistencespb.StateMachineMap),
 	}
 	s.approximateSize += s.executionInfo.Size()
 	s.executionState = &persistencespb.WorkflowExecutionState{
@@ -303,6 +308,8 @@ func NewMutableState(
 	)
 	s.taskGenerator = taskGeneratorProvider.NewTaskGenerator(shard, s)
 	s.workflowTaskManager = newWorkflowTaskStateMachine(s)
+
+	s.mustInitHSM()
 
 	return s
 }
@@ -417,6 +424,8 @@ func NewMutableStateFromDB(
 		}
 	}
 
+	mutableState.mustInitHSM()
+
 	return mutableState, nil
 }
 
@@ -448,21 +457,69 @@ func NewSanitizedMutableState(
 	return mutableState, nil
 }
 
-// GetVersion returns the current transaction's namespace failover version.
-func (ms *MutableStateImpl) GetNamespaceFailoverVersion() int64 {
-	return ms.currentTransactionNamespaceFailoverVersion
+func (ms *MutableStateImpl) mustInitHSM() {
+	// Error only occurs if some initialization path forgets to register the workflow state machine.
+	stateMachineNode, err := hsm.NewRoot(ms.shard.StateMachineRegistry(), StateMachineType.ID, ms, ms.executionInfo.SubStateMachinesByType)
+	if err != nil {
+		panic(err)
+	}
+	ms.stateMachineNode = stateMachineNode
 }
 
-// GetCurrentTime return the shard's current time for the current cluster name.
-func (ms *MutableStateImpl) GetCurrentTime() time.Time {
-	return ms.shard.GetCurrentTime(ms.shard.GetClusterMetadata().GetCurrentClusterName())
+func (ms *MutableStateImpl) HSM() *hsm.Node {
+	return ms.stateMachineNode
 }
 
-// Schedule a task and associate mutable state's workflow key and version.
-func (ms *MutableStateImpl) Schedule(task statemachines.Task) {
-	task.SetWorkflowKey(ms.GetWorkflowKey())
-	task.SetVersion(ms.GetNamespaceFailoverVersion())
-	ms.AddTasks(task)
+// GetNexusCompletion converts a workflow completion event into a [nexus.OperationCompletion].
+// Completions may be sent to arbitrary third parties, we intentionally do not include any termination reasons, and
+// expose only failure messages.
+func (ms *MutableStateImpl) GetNexusCompletion(ctx context.Context) (nexus.OperationCompletion, error) {
+	ce, err := ms.GetCompletionEvent(ctx)
+	if err != nil {
+		return nil, err
+	}
+	switch ce.GetEventType() {
+	case enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_COMPLETED:
+		payloads := ce.GetWorkflowExecutionCompletedEventAttributes().GetResult().GetPayloads()
+		var p *commonpb.Payload
+		if len(payloads) > 0 {
+			// All of our SDKs support returning a single value from workflows, we can safely ignore the
+			// rest of the payloads. Additionally, even if a workflow could return more than a single value,
+			// Nexus does not support it.
+			p = payloads[0]
+		} else {
+			p = &commonpb.Payload{}
+		}
+		completion, err := nexus.NewOperationCompletionSuccessful(p, nexus.OperationCompletionSuccesfulOptions{
+			Serializer: commonnexus.PayloadSerializer,
+		})
+		if err != nil {
+			return nil, serviceerror.NewInternal(fmt.Sprintf("failed to construct Nexus completion: %v", err))
+		}
+		return completion, nil
+	case enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_FAILED:
+		f := commonnexus.APIFailureToNexusFailure(ce.GetWorkflowExecutionFailedEventAttributes().GetFailure())
+		return &nexus.OperationCompletionUnsuccessful{
+			State:   nexus.OperationStateFailed,
+			Failure: f,
+		}, nil
+	case enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_CANCELED:
+		return &nexus.OperationCompletionUnsuccessful{
+			State:   nexus.OperationStateCanceled,
+			Failure: &nexus.Failure{Message: "operation canceled"},
+		}, nil
+	case enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_TERMINATED:
+		return &nexus.OperationCompletionUnsuccessful{
+			State:   nexus.OperationStateFailed,
+			Failure: &nexus.Failure{Message: "operation terminated"},
+		}, nil
+	case enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_TIMED_OUT:
+		return &nexus.OperationCompletionUnsuccessful{
+			State:   nexus.OperationStateFailed,
+			Failure: &nexus.Failure{Message: "operation exceeded internal timeout"},
+		}, nil
+	}
+	return nil, serviceerror.NewInternal(fmt.Sprintf("invalid workflow execution status: %v", ce.GetEventType()))
 }
 
 func (ms *MutableStateImpl) CloneToProto() *persistencespb.WorkflowMutableState {
@@ -1897,25 +1954,16 @@ func (ms *MutableStateImpl) ApplyWorkflowExecutionStartedEvent(
 	ms.executionInfo.WorkflowExecutionTimeout = event.GetWorkflowExecutionTimeout()
 	ms.executionInfo.DefaultWorkflowTaskTimeout = event.GetWorkflowTaskTimeout()
 
-	ms.executionInfo.Callbacks = make(map[string]*persistencespb.CallbackInfo, len(event.GetCompletionCallbacks()))
+	coll := callbacks.MachineCollection(ms.HSM())
 	for idx, cb := range event.GetCompletionCallbacks() {
+		machine := callbacks.NewCallback(startEvent.EventTime, callbacks.NewWorkflowClosedTrigger(), cb)
 		// Use the start event version and ID as part of the callback ID to ensure that callbacks have unique
 		// IDs that are deterministically created across clusters.
-		// TODO: consider replicating the "initiated" event and allocating a uuid there instead of relying on
-		// history event replication.
+		// TODO: Replicate the state machine state and allocate a uuid there instead of relying on history event
+		// replication.
 		id := fmt.Sprintf("%d-%d-%d", startEvent.GetVersion(), startEvent.GetEventId(), idx)
-		ms.executionInfo.Callbacks[id] = &persistencespb.CallbackInfo{
-			NamespaceFailoverVersion: ms.GetNamespaceFailoverVersion(),
-			TransitionCount:          0,
-			Id:                       id,
-			PublicInfo: &workflowpb.CallbackInfo{
-				Trigger: &workflowpb.CallbackInfo_Trigger{
-					Variant: &workflowpb.CallbackInfo_Trigger_WorkflowClosed{},
-				},
-				Callback:         cb,
-				State:            enumspb.CALLBACK_STATE_STANDBY,
-				RegistrationTime: startEvent.EventTime,
-			},
+		if _, err := coll.Add(id, machine); err != nil {
+			return err
 		}
 	}
 	if err := ms.UpdateWorkflowStateStatus(
@@ -2875,7 +2923,7 @@ func (ms *MutableStateImpl) ApplyWorkflowExecutionCompletedEvent(
 	ms.executionInfo.CloseTime = event.GetEventTime()
 	ms.ClearStickyTaskQueue()
 	ms.writeEventToCache(event)
-	return nil
+	return ms.processCloseCallbacks()
 }
 
 func (ms *MutableStateImpl) AddFailWorkflowEvent(
@@ -2920,7 +2968,7 @@ func (ms *MutableStateImpl) ApplyWorkflowExecutionFailedEvent(
 	ms.executionInfo.CloseTime = event.GetEventTime()
 	ms.ClearStickyTaskQueue()
 	ms.writeEventToCache(event)
-	return nil
+	return ms.processCloseCallbacks()
 }
 
 func (ms *MutableStateImpl) AddTimeoutWorkflowEvent(
@@ -2964,7 +3012,7 @@ func (ms *MutableStateImpl) ApplyWorkflowExecutionTimedoutEvent(
 	ms.executionInfo.CloseTime = event.GetEventTime()
 	ms.ClearStickyTaskQueue()
 	ms.writeEventToCache(event)
-	return nil
+	return ms.processCloseCallbacks()
 }
 
 func (ms *MutableStateImpl) AddWorkflowExecutionCancelRequestedEvent(
@@ -3044,7 +3092,7 @@ func (ms *MutableStateImpl) ApplyWorkflowExecutionCanceledEvent(
 	ms.executionInfo.CloseTime = event.GetEventTime()
 	ms.ClearStickyTaskQueue()
 	ms.writeEventToCache(event)
-	return nil
+	return ms.processCloseCallbacks()
 }
 
 func (ms *MutableStateImpl) AddRequestCancelExternalWorkflowExecutionInitiatedEvent(
@@ -3703,7 +3751,7 @@ func (ms *MutableStateImpl) ApplyWorkflowExecutionTerminatedEvent(
 	ms.executionInfo.CloseTime = event.GetEventTime()
 	ms.ClearStickyTaskQueue()
 	ms.writeEventToCache(event)
-	return nil
+	return ms.processCloseCallbacks()
 }
 
 func (ms *MutableStateImpl) AddWorkflowExecutionSignaled(
@@ -3825,10 +3873,20 @@ func (ms *MutableStateImpl) AddContinueAsNewEvent(
 	); err != nil {
 		return nil, nil, err
 	}
-	// Copy over close callbacks to the next execution.
-	for id, cb := range ms.executionInfo.Callbacks {
+
+	// TODO: should this be in the "Apply" function? How does this work with replication?
+	// TODO: also copy over close callbacks if workflow completes unsuccessfully and its retry policy permits it.
+	oldCallbacks := callbacks.MachineCollection(ms.HSM())
+	newCallbacks := callbacks.MachineCollection(newMutableState.HSM())
+	for _, node := range oldCallbacks.List() {
+		cb, err := oldCallbacks.Data(node.Key.ID)
+		if err != nil {
+			return nil, nil, err
+		}
 		if _, ok := cb.PublicInfo.GetTrigger().GetVariant().(*workflowpb.CallbackInfo_Trigger_WorkflowClosed); ok {
-			newMutableState.executionInfo.Callbacks[id] = cb
+			if _, err := newCallbacks.Add(node.Key.ID, cb); err != nil {
+				return nil, nil, err
+			}
 		}
 	}
 
@@ -4398,6 +4456,33 @@ func (ms *MutableStateImpl) AddHistorySize(size int64) {
 	ms.executionInfo.ExecutionStats.HistorySize += size
 }
 
+// processCloseCallbacks triggers "WorkflowClosed" callbacks, applying the state machine transition that schedules
+// callback tasks.
+func (ms *MutableStateImpl) processCloseCallbacks() error {
+	continuedAsNew := ms.GetExecutionInfo().NewExecutionRunId != ""
+	if continuedAsNew {
+		return nil
+	}
+	coll := callbacks.MachineCollection(ms.HSM())
+	for _, node := range coll.List() {
+		cb, err := coll.Data(node.Key.ID)
+		if err != nil {
+			return err
+		}
+		// Only try to trigger "WorkflowClosed" callbacks.
+		if _, ok := cb.PublicInfo.Trigger.Variant.(*workflowpb.CallbackInfo_Trigger_WorkflowClosed); !ok {
+			continue
+		}
+		err = coll.Transition(node.Key.ID, func(cb callbacks.Callback) (hsm.TransitionOutput, error) {
+			return callbacks.TransitionScheduled.Apply(cb, callbacks.EventScheduled{})
+		})
+		if err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
 // TODO mutable state should generate corresponding transfer / timer tasks according to
 //  updates accumulated, while currently all transfer / timer tasks are managed manually
 
@@ -4467,7 +4552,7 @@ func (ms *MutableStateImpl) UpdateWorkflowStateStatus(
 }
 
 func (ms *MutableStateImpl) IsDirty() bool {
-	return ms.hBuilder.IsDirty() || len(ms.InsertTasks) > 0
+	return ms.hBuilder.IsDirty() || len(ms.InsertTasks) > 0 || (ms.stateMachineNode != nil && ms.stateMachineNode.Dirty())
 }
 
 func (ms *MutableStateImpl) StartTransaction(
@@ -4537,7 +4622,6 @@ func (ms *MutableStateImpl) CloseTransactionAsMutation(
 
 	// update last update time
 	ms.executionInfo.LastUpdateTime = timestamppb.New(ms.shard.GetTimeSource().Now())
-	ms.executionInfo.StateTransitionCount += 1
 
 	// We generate checksum here based on the assumption that the returned
 	// snapshot object is considered immutable. As of this writing, the only
@@ -4623,7 +4707,6 @@ func (ms *MutableStateImpl) CloseTransactionAsSnapshot(
 
 	// update last update time
 	ms.executionInfo.LastUpdateTime = timestamppb.New(ms.shard.GetTimeSource().Now())
-	ms.executionInfo.StateTransitionCount += 1
 
 	// We generate checksum here based on the assumption that the returned
 	// snapshot object is considered immutable. As of this writing, the only
@@ -4705,6 +4788,21 @@ func (ms *MutableStateImpl) prepareCloseTransaction(
 		return err
 	}
 
+	ms.executionInfo.StateTransitionCount += 1
+
+	ms.executionInfo.TransitionHistory = UpdatedTransitionHistory(
+		ms.executionInfo.TransitionHistory,
+		ms.currentTransactionNamespaceFailoverVersion,
+		ms.executionInfo.StateTransitionCount,
+	)
+
+	// TODO(bergundy): Collapse timer tasks.
+	if err := ms.taskGenerator.GenerateDirtySubStateMachineTasks(ms.shard.StateMachineRegistry()); err != nil {
+		return err
+	}
+	// Clear outputs for the next transaction.
+	ms.stateMachineNode.ClearTransactionState()
+
 	ms.closeTransactionCollapseVisibilityTasks()
 
 	// TODO merge active & passive task generation
@@ -4712,9 +4810,7 @@ func (ms *MutableStateImpl) prepareCloseTransaction(
 	//  since we only generate at most one activity & user timer,
 	//  regardless of how many activity & user timer created
 	//  so the calculation must be at the very end
-	return ms.closeTransactionHandleActivityUserTimerTasks(
-		transactionPolicy,
-	)
+	return ms.closeTransactionHandleActivityUserTimerTasks(transactionPolicy)
 }
 
 func (ms *MutableStateImpl) cleanupTransaction(
