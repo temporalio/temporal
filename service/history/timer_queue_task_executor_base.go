@@ -171,7 +171,7 @@ func (t *timerQueueTaskExecutorBase) stateMachineTask(task tasks.Task) (hsm.Ref,
 	if !ok {
 		return hsm.Ref{}, nil, true, queues.NewUnprocessableTaskError(fmt.Sprintf("deserializer not registered for task type %v", cbt.Info.Type))
 	}
-	smt, err := def.Deserialize(cbt.Info.Data, tasks.CategoryTimer, hsm.TaskKindTimer{Deadline: cbt.VisibilityTimestamp})
+	smt, err := def.Deserialize(cbt.Info.Data, hsm.TaskKindTimer{Deadline: cbt.VisibilityTimestamp})
 	if err != nil {
 		return hsm.Ref{}, nil, true, fmt.Errorf(
 			"%w: %w",

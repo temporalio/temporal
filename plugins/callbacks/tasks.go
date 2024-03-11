@@ -27,7 +27,6 @@ import (
 	"time"
 
 	"go.temporal.io/server/service/history/hsm"
-	"go.temporal.io/server/service/history/tasks"
 )
 
 var (
@@ -51,17 +50,13 @@ func (InvocationTask) Type() hsm.TaskType {
 	return TaskTypeInvocation
 }
 
-func (t InvocationTask) Category() tasks.Category {
-	return tasks.CategoryOutbound
-}
-
 func (t InvocationTask) Kind() hsm.TaskKind {
 	return hsm.TaskKindOutbound{Destination: t.Destination}
 }
 
 type InvocationTaskSerializer struct{}
 
-func (InvocationTaskSerializer) Deserialize(data []byte, category tasks.Category, kind hsm.TaskKind) (hsm.Task, error) {
+func (InvocationTaskSerializer) Deserialize(data []byte, kind hsm.TaskKind) (hsm.Task, error) {
 	if kind, ok := kind.(hsm.TaskKindOutbound); ok {
 		return InvocationTask{Destination: kind.Destination}, nil
 	}
@@ -82,17 +77,13 @@ func (BackoffTask) Type() hsm.TaskType {
 	return TaskTypeBackoff
 }
 
-func (t BackoffTask) Category() tasks.Category {
-	return tasks.CategoryTimer
-}
-
 func (t BackoffTask) Kind() hsm.TaskKind {
 	return hsm.TaskKindTimer{Deadline: t.Deadline}
 }
 
 type BackoffTaskSerializer struct{}
 
-func (BackoffTaskSerializer) Deserialize(data []byte, category tasks.Category, kind hsm.TaskKind) (hsm.Task, error) {
+func (BackoffTaskSerializer) Deserialize(data []byte, kind hsm.TaskKind) (hsm.Task, error) {
 	if kind, ok := kind.(hsm.TaskKindTimer); ok {
 		return BackoffTask{Deadline: kind.Deadline}, nil
 	}

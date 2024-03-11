@@ -116,7 +116,7 @@ func (e *outboundQueueActiveTaskExecutor) stateMachineTask(task tasks.Task) (hsm
 	if !ok {
 		return hsm.Ref{}, nil, queues.NewUnprocessableTaskError(fmt.Sprintf("deserializer not registered for task type %v", cbt.Info.Type))
 	}
-	smt, err := def.Deserialize(cbt.Info.Data, tasks.CategoryOutbound, hsm.TaskKindOutbound{Destination: cbt.Destination})
+	smt, err := def.Deserialize(cbt.Info.Data, hsm.TaskKindOutbound{Destination: cbt.Destination})
 	if err != nil {
 		return hsm.Ref{}, nil, fmt.Errorf(
 			"%w: %w",
