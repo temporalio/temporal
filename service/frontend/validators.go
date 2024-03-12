@@ -25,8 +25,18 @@
 package frontend
 
 import (
+	"fmt"
+	"strings"
+
 	"github.com/pborman/uuid"
 	commonpb "go.temporal.io/api/common/v1"
+	"go.temporal.io/api/serviceerror"
+
+	"go.temporal.io/server/common"
+)
+
+const (
+	reservedTaskQueuePrefix = "/_sys/"
 )
 
 func validateExecution(w *commonpb.WorkflowExecution) error {
@@ -38,6 +48,22 @@ func validateExecution(w *commonpb.WorkflowExecution) error {
 	}
 	if w.GetRunId() != "" && uuid.Parse(w.GetRunId()) == nil {
 		return errInvalidRunID
+	}
+	return nil
+}
+
+func validateTaskQueueName(name string, maxIDLength int) error {
+	if name == "" {
+		return serviceerror.NewInvalidArgument("task queue name not set")
+	}
+	if len(name) > maxIDLength {
+		return serviceerror.NewInvalidArgument(fmt.Sprintf("task queue name (%v) exceeds max length limit (%v)", name, maxIDLength))
+	}
+	if err := common.ValidateUTF8String("TaskQueue", name); err != nil {
+		return err
+	}
+	if strings.HasPrefix(name, reservedTaskQueuePrefix) {
+		return serviceerror.NewInvalidArgument(fmt.Sprintf("task queue name cannot start with reserved prefix %v", reservedTaskQueuePrefix))
 	}
 	return nil
 }

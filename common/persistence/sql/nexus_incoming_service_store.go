@@ -147,7 +147,7 @@ func (s *sqlNexusIncomingServiceStore) ListNexusIncomingServices(
 	}
 
 	var nextPageToken []byte
-	if len(rows) == request.PageSize {
+	if request.PageSize > 0 && len(rows) == request.PageSize {
 		nextPageToken, retErr = serializePageTokenJson(&listIncomingServicesNextPageToken{
 			LastServiceID: rows[request.PageSize-1].ServiceID,
 		})

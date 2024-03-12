@@ -215,6 +215,10 @@ const (
 	RemovableBuildIdDurationSinceDefault = "worker.removableBuildIdDurationSinceDefault"
 	// BuildIdScavengerVisibilityRPS is the rate limit for visibility calls from the build id scavenger
 	BuildIdScavenengerVisibilityRPS = "worker.buildIdScavengerVisibilityRPS"
+	// NexusIncomingServiceNameLength is the maximum number of characters allowed in a Nexus incoming service name
+	NexusIncomingServiceNameLength = "limit.nexusIncomingServiceNameLength"
+	// NexusIncomingServiceMetadataSize is the maximum size of metadata allowed on a Nexus incoming service in bytes
+	NexusIncomingServiceMetadataSize = "limit.nexusIncomingServiceMetadataSize"
 
 	// keys for frontend
 
@@ -402,6 +406,11 @@ const (
 	// after all namespace resources (i.e. workflow executions) are deleted.
 	// Default is 0, means, namespace will be deleted immediately.
 	DeleteNamespaceNamespaceDeleteDelay = "frontend.deleteNamespaceNamespaceDeleteDelay"
+
+	// FrontendListNexusIncomingServicesLongPollTimeout is the timeout for long polls to refresh cached Nexus incoming services
+	FrontendListNexusIncomingServicesLongPollTimeout = "frontend.listNexusIncomingServicesLongPollTimeout"
+	// FrontendListNexusIncomingServicesLongPollMinWait is the minimum time to wait between long polls to refresh cached Nexus incoming services
+	FrontendListNexusIncomingServicesLongPollMinWait = "frontend.listNexusIncomingServicesLongPollMinWait"
 
 	// keys for matching
 
