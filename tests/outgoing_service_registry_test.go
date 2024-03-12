@@ -26,7 +26,9 @@ package tests
 
 import (
 	"context"
+	"strconv"
 
+	"go.temporal.io/api/nexus/v1"
 	"go.temporal.io/api/operatorservice/v1"
 	"go.temporal.io/api/serviceerror"
 	"google.golang.org/grpc/codes"
@@ -187,6 +189,38 @@ func (s *FunctionalSuite) TestOutgoingServiceRegistry() {
 			})
 			s.Error(err)
 			s.Assert().Equal(codes.NotFound, serviceerror.ToStatus(err).Code(), err)
+		}
+	})
+
+	s.Run("CreateAndList", func() {
+		serviceName := s.randomizeStr("service-name")
+		for i := 0; i < 10; i++ {
+			response, err := s.operatorClient.CreateOrUpdateNexusOutgoingService(ctx, &operatorservice.CreateOrUpdateNexusOutgoingServiceRequest{
+				Version:   0,
+				Namespace: ns,
+				Name:      serviceName + strconv.Itoa(i),
+				Url:       testURL,
+			})
+			s.NoError(err)
+			s.NotNil(response)
+		}
+		var nextPageToken []byte
+		services := make([]*nexus.OutgoingService, 0, 10)
+		for {
+			response, err := s.operatorClient.ListNexusOutgoingServices(ctx, &operatorservice.ListNexusOutgoingServicesRequest{
+				Namespace:     ns,
+				NextPageToken: nextPageToken,
+			})
+			s.NoError(err)
+			services = append(services, response.Services...)
+			nextPageToken = response.NextPageToken
+			if len(nextPageToken) == 0 {
+				break
+			}
+		}
+		s.Assert().Len(services, 10)
+		for i := 0; i < 10; i++ {
+			s.Assert().Equal(serviceName+strconv.Itoa(i), services[i].Name)
 		}
 	})
 

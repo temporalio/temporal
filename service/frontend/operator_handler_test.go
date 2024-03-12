@@ -62,7 +62,6 @@ import (
 	"golang.org/x/exp/maps"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/health"
-	"google.golang.org/grpc/status"
 )
 
 var (
@@ -103,6 +102,12 @@ func (s *operatorHandlerSuite) SetupTest() {
 		},
 		OutgoingServiceNameMaxLength: func() int {
 			return 200
+		},
+		OutgoingServiceListDefaultPageSize: func() int {
+			return 10
+		},
+		OutgoingServiceListMaxPageSize: func() int {
+			return 100
 		},
 	}
 
@@ -1690,12 +1695,6 @@ func (s *operatorHandlerSuite) Test_GetNexusOutgoingService_Ok() {
 	}, res.Service)
 }
 
-func (s *operatorHandlerSuite) verifyUnimplemented(err error) {
-	st, ok := status.FromError(err)
-	s.True(ok)
-	s.Equal(codes.Unimplemented, st.Code())
-}
-
 func (s *operatorHandlerSuite) Test_CreateOrUpdateNexusOutgoingService_NoNamespace() {
 	_, err := s.handler.CreateOrUpdateNexusOutgoingService(
 		context.Background(),
@@ -1965,10 +1964,122 @@ func (s *operatorHandlerSuite) Test_DeleteNexusOutgoingService_UpdateNamespaceEr
 	s.ErrorIs(err, updateNamespaceErr)
 }
 
-func (s *operatorHandlerSuite) Test_ListNexusOutgoingServices() {
+func (s *operatorHandlerSuite) Test_ListNexusOutgoingServices_NoNamespace() {
 	_, err := s.handler.ListNexusOutgoingServices(
 		context.Background(),
-		&operatorservice.ListNexusOutgoingServicesRequest{},
+		&operatorservice.ListNexusOutgoingServicesRequest{
+			Namespace: "",
+		},
 	)
-	s.verifyUnimplemented(err)
+	s.ErrorIs(err, errNamespaceNotSet)
+}
+
+func (s *operatorHandlerSuite) Test_ListNexusOutgoingServices_NegativePageSize() {
+	_, err := s.handler.ListNexusOutgoingServices(
+		context.Background(),
+		&operatorservice.ListNexusOutgoingServicesRequest{
+			Namespace: testNamespace,
+			PageSize:  -1,
+		},
+	)
+	s.Error(err)
+	s.Equal(codes.InvalidArgument, serviceerror.ToStatus(err).Code(), err)
+	s.ErrorContains(err, "PageSize")
+	s.ErrorContains(err, "negative")
+}
+
+func (s *operatorHandlerSuite) Test_ListNexusOutgoingServices_PageSizeTooLarge() {
+	_, err := s.handler.ListNexusOutgoingServices(
+		context.Background(),
+		&operatorservice.ListNexusOutgoingServicesRequest{
+			Namespace: testNamespace,
+			PageSize:  int32(s.config.OutgoingServiceListMaxPageSize() + 1),
+		},
+	)
+	s.Error(err)
+	s.Equal(codes.InvalidArgument, serviceerror.ToStatus(err).Code(), err)
+	s.ErrorContains(err, "PageSize")
+	s.ErrorContains(err, strconv.Itoa(s.config.OutgoingServiceListMaxPageSize()))
+}
+
+func (s *operatorHandlerSuite) Test_ListNexusOutgoingServices_InvalidPageToken() {
+	_, err := s.handler.ListNexusOutgoingServices(
+		context.Background(),
+		&operatorservice.ListNexusOutgoingServicesRequest{
+			Namespace:     testNamespace,
+			NextPageToken: []byte("invalid-token"),
+		},
+	)
+	s.Error(err)
+	s.Equal(codes.InvalidArgument, serviceerror.ToStatus(err).Code(), err)
+	s.ErrorContains(err, "NextPageToken")
+}
+
+func (s *operatorHandlerSuite) Test_ListNexusOutgoingServices_NegativePageTokenIndex() {
+	_, err := s.handler.ListNexusOutgoingServices(
+		context.Background(),
+		&operatorservice.ListNexusOutgoingServicesRequest{
+			Namespace:     testNamespace,
+			NextPageToken: []byte("v1/-1"),
+		},
+	)
+	s.Error(err)
+	s.Equal(codes.InvalidArgument, serviceerror.ToStatus(err).Code(), err)
+	s.ErrorContains(err, "negative")
+}
+
+func (s *operatorHandlerSuite) Test_ListNexusOutgoingServices_GetNamespaceErr() {
+	getNamespaceErr := errors.New("test error")
+	s.mockResource.MetadataMgr.EXPECT().
+		GetNamespace(gomock.Any(), &persistence.GetNamespaceRequest{Name: testNamespace}).
+		Return(nil, getNamespaceErr)
+	_, err := s.handler.ListNexusOutgoingServices(
+		context.Background(),
+		&operatorservice.ListNexusOutgoingServicesRequest{
+			Namespace: testNamespace,
+		},
+	)
+	s.ErrorIs(err, getNamespaceErr)
+}
+
+func (s *operatorHandlerSuite) Test_ListNexusOutgoingServices_NoNextPageToken() {
+	s.mockResource.MetadataMgr.EXPECT().
+		GetNamespace(gomock.Any(), &persistence.GetNamespaceRequest{Name: testNamespace}).
+		Return(&persistence.GetNamespaceResponse{
+			Namespace: &persistencespb.NamespaceDetail{
+				OutgoingServices: []*persistencespb.OutgoingService{
+					{Version: 1, Name: "service1", Url: "url1"},
+					{Version: 1, Name: "service2", Url: "url2"},
+				},
+			}}, nil)
+	res, err := s.handler.ListNexusOutgoingServices(
+		context.Background(),
+		&operatorservice.ListNexusOutgoingServicesRequest{
+			Namespace: testNamespace,
+			PageSize:  1,
+		},
+	)
+	s.NoError(err)
+	s.NotEmpty(res.Services)
+}
+
+func (s *operatorHandlerSuite) Test_ListNexusOutgoingServices_PageTokenBeyondLimit() {
+	s.mockResource.MetadataMgr.EXPECT().
+		GetNamespace(gomock.Any(), &persistence.GetNamespaceRequest{Name: testNamespace}).
+		Return(&persistence.GetNamespaceResponse{
+			Namespace: &persistencespb.NamespaceDetail{
+				OutgoingServices: []*persistencespb.OutgoingService{
+					{Version: 1, Name: "service1", Url: "url1"},
+				},
+			}}, nil)
+	res, err := s.handler.ListNexusOutgoingServices(
+		context.Background(),
+		&operatorservice.ListNexusOutgoingServicesRequest{
+			Namespace:     testNamespace,
+			PageSize:      1,
+			NextPageToken: []byte("v1/1"),
+		},
+	)
+	s.NoError(err)
+	s.Empty(res.Services)
 }

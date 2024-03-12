@@ -209,6 +209,10 @@ const (
 	OutgoingServiceURLMaxLength = "limit.outgoingServiceURLMaxLength"
 	// OutgoingServiceNameMaxLength is the maximum length of an outgoing service name
 	OutgoingServiceNameMaxLength = "limit.outgoingServiceNameMaxLength"
+	// OutgoingServiceListDefaultPageSize is the default page size for listing outgoing services
+	OutgoingServiceListDefaultPageSize = "limit.outgoingServiceListDefaultPageSize"
+	// OutgoingServiceListMaxPageSize is the maximum page size for listing outgoing services
+	OutgoingServiceListMaxPageSize = "limit.outgoingServiceListMaxPageSize"
 
 	// RemovableBuildIdDurationSinceDefault is the minimum duration since a build id was last default in its containing
 	// set for it to be considered for removal, used by the build id scavenger.

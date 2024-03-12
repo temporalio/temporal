@@ -1022,6 +1022,75 @@ func (h *OperatorHandlerImpl) DeleteNexusOutgoingService(ctx context.Context, re
 	return &operatorservice.DeleteNexusOutgoingServiceResponse{}, nil
 }
 
-func (h *OperatorHandlerImpl) ListNexusOutgoingServices(context.Context, *operatorservice.ListNexusOutgoingServicesRequest) (*operatorservice.ListNexusOutgoingServicesResponse, error) {
-	return nil, status.Error(codes.Unimplemented, "unimplemented")
+type outgoingServicesPageToken struct {
+	Index int
+}
+
+func (token outgoingServicesPageToken) Serialize() []byte {
+	return []byte(fmt.Sprintf("v1/%d", token.Index))
+}
+
+func (token *outgoingServicesPageToken) Deserialize(b []byte) error {
+	_, err := fmt.Sscanf(string(b), "v1/%d", &token.Index)
+	return err
+}
+
+func (h *OperatorHandlerImpl) ListNexusOutgoingServices(ctx context.Context, req *operatorservice.ListNexusOutgoingServicesRequest) (*operatorservice.ListNexusOutgoingServicesResponse, error) {
+	if req.Namespace == "" {
+		return nil, errNamespaceNotSet
+	}
+	pageSize := int(req.PageSize)
+	if pageSize < 0 {
+		return nil, status.Errorf(codes.InvalidArgument, "PageSize must be non-negative but is %d", pageSize)
+	}
+	if pageSize == 0 {
+		pageSize = h.config.OutgoingServiceListDefaultPageSize()
+	}
+	maxPageSize := h.config.OutgoingServiceListMaxPageSize()
+	if pageSize > maxPageSize {
+		return nil, status.Errorf(
+			codes.InvalidArgument,
+			"PageSize cannot exceed %d but is %d",
+			maxPageSize,
+			pageSize,
+		)
+	}
+	var pageToken outgoingServicesPageToken
+	if len(req.NextPageToken) > 0 {
+		if err := pageToken.Deserialize(req.NextPageToken); err != nil {
+			return nil, status.Errorf(codes.InvalidArgument, "Invalid NextPageToken: %v", err)
+		}
+	}
+	startIndex := pageToken.Index
+	if startIndex < 0 {
+		return nil, status.Errorf(codes.InvalidArgument, "Invalid NextPageToken: Index must be non-negative but is %d", startIndex)
+	}
+	response, err := h.metadataMgr.GetNamespace(ctx, &persistence.GetNamespaceRequest{
+		Name: req.Namespace,
+	})
+	if err != nil {
+		return nil, err
+	}
+	numReturnedServices := min(pageSize, len(response.Namespace.OutgoingServices)-startIndex)
+	if numReturnedServices <= 0 {
+		return &operatorservice.ListNexusOutgoingServicesResponse{}, nil
+	}
+	services := make([]*nexus.OutgoingService, 0, numReturnedServices)
+	for i := startIndex; i < startIndex+numReturnedServices; i++ {
+		index := startIndex + i
+		service := response.Namespace.OutgoingServices[index]
+		services = append(services, &nexus.OutgoingService{
+			Name:    service.Name,
+			Version: service.Version,
+			Url:     service.Url,
+		})
+	}
+	var nextPageToken []byte
+	if startIndex+pageSize < len(response.Namespace.OutgoingServices) {
+		nextPageToken = outgoingServicesPageToken{Index: startIndex + pageSize}.Serialize()
+	}
+	return &operatorservice.ListNexusOutgoingServicesResponse{
+		Services:      services,
+		NextPageToken: nextPageToken,
+	}, nil
 }
