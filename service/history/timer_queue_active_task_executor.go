@@ -627,6 +627,7 @@ func (t *timerQueueActiveTaskExecutor) executeWorkflowTimeoutTask(
 				newExecutionInfo.WorkflowId,
 				newExecutionState.RunId,
 			),
+			newMutableState,
 			t.logger,
 			t.shardContext.GetThrottledLogger(),
 			t.shardContext.GetMetricsHandler(),

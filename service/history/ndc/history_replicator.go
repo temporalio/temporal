@@ -412,6 +412,7 @@ func (r *HistoryReplicatorImpl) applyNonStartEventsToCurrentBranch(
 				newExecutionInfo.WorkflowId,
 				newExecutionState.RunId,
 			),
+			newMutableState,
 			r.logger,
 			r.shardContext.GetThrottledLogger(),
 			r.shardContext.GetMetricsHandler(),

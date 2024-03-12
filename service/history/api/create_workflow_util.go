@@ -132,6 +132,7 @@ func NewWorkflowWithSignal(
 			workflowID,
 			runID,
 		),
+		newMutableState,
 		shard.GetLogger(),
 		shard.GetThrottledLogger(),
 		shard.GetMetricsHandler(),

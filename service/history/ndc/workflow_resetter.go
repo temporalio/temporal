@@ -414,6 +414,7 @@ func (r *workflowResetterImpl) replayResetWorkflow(
 			workflowID,
 			resetRunID,
 		),
+		nil,
 		r.logger,
 		r.shardContext.GetLogger(),
 		r.shardContext.GetMetricsHandler(),

@@ -182,12 +182,14 @@ var _ Context = (*ContextImpl)(nil)
 func NewContext(
 	config *configs.Config,
 	workflowKey definition.WorkflowKey,
+	mutableState MutableState,
 	logger log.Logger,
 	throttledLogger log.ThrottledLogger,
 	metricsHandler metrics.Handler,
 ) *ContextImpl {
 	return &ContextImpl{
 		workflowKey:     workflowKey,
+		MutableState:    mutableState,
 		logger:          logger,
 		throttledLogger: throttledLogger,
 		metricsHandler:  metricsHandler.WithTags(metrics.OperationTag(metrics.WorkflowContextScope)),

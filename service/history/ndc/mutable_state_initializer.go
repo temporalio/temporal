@@ -175,17 +175,11 @@ func (r *MutableStateInitializerImpl) InitializeFromToken(
 	workflowKey definition.WorkflowKey,
 	token []byte,
 ) (Workflow, MutableStateInitializationSpec, error) {
-	wfContext := workflow.NewContext(
-		r.shardContext.GetConfig(),
-		workflowKey,
-		r.logger,
-		r.shardContext.GetThrottledLogger(),
-		r.shardContext.GetMetricsHandler(),
-	)
 	mutableStateRow, dbRecordVersion, dbHistorySize, existsInDB, err := r.deserializeBackfillToken(token)
 	if err != nil {
 		return nil, MutableStateInitializationSpec{}, err
 	}
+
 	mutableState, err := workflow.NewMutableStateFromDB(
 		r.shardContext,
 		r.shardContext.GetEventsCache(),
@@ -197,6 +191,16 @@ func (r *MutableStateInitializerImpl) InitializeFromToken(
 	if err != nil {
 		return nil, MutableStateInitializationSpec{}, err
 	}
+
+	wfContext := workflow.NewContext(
+		r.shardContext.GetConfig(),
+		workflowKey,
+		mutableState,
+		r.logger,
+		r.shardContext.GetThrottledLogger(),
+		r.shardContext.GetMetricsHandler(),
+	)
+
 	return NewWorkflow(
 			r.shardContext.GetClusterMetadata(),
 			wfContext,
