@@ -49,6 +49,10 @@ type (
 		Destinations map[string]struct{}
 	}
 
+	StateMachineTaskTypePredicate struct {
+		Types map[int32]struct{}
+	}
+
 	TypePredicate struct {
 		Types map[enumsspb.TaskType]struct{}
 	}
@@ -73,12 +77,12 @@ func (n *NamespacePredicate) Test(task Task) bool {
 }
 
 func (n *NamespacePredicate) Equals(predicate Predicate) bool {
-	nsPrediate, ok := predicate.(*NamespacePredicate)
+	nsPredicate, ok := predicate.(*NamespacePredicate)
 	if !ok {
 		return false
 	}
 
-	return maps.Equal(n.NamespaceIDs, nsPrediate.NamespaceIDs)
+	return maps.Equal(n.NamespaceIDs, nsPredicate.NamespaceIDs)
 }
 
 func NewDestinationPredicate(
@@ -104,12 +108,43 @@ func (n *DestinationPredicate) Test(task Task) bool {
 }
 
 func (n *DestinationPredicate) Equals(predicate Predicate) bool {
-	nsPrediate, ok := predicate.(*DestinationPredicate)
+	dPredicate, ok := predicate.(*DestinationPredicate)
 	if !ok {
 		return false
 	}
 
-	return maps.Equal(n.Destinations, nsPrediate.Destinations)
+	return maps.Equal(n.Destinations, dPredicate.Destinations)
+}
+
+func NewStateMachineTaskTypePredicate(
+	types []int32,
+) *StateMachineTaskTypePredicate {
+	typesMap := make(map[int32]struct{}, len(types))
+	for _, id := range types {
+		typesMap[id] = struct{}{}
+	}
+
+	return &StateMachineTaskTypePredicate{
+		Types: typesMap,
+	}
+}
+
+func (n *StateMachineTaskTypePredicate) Test(task Task) bool {
+	smTask, ok := task.(HasStateMachineTaskType)
+	if !ok {
+		return false
+	}
+	_, ok = n.Types[smTask.StateMachineTaskType()]
+	return ok
+}
+
+func (n *StateMachineTaskTypePredicate) Equals(predicate Predicate) bool {
+	smPredicate, ok := predicate.(*StateMachineTaskTypePredicate)
+	if !ok {
+		return false
+	}
+
+	return maps.Equal(n.Types, smPredicate.Types)
 }
 
 func NewTypePredicate(

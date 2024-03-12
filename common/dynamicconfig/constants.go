@@ -350,6 +350,10 @@ const (
 	KeepAliveTimeout = "frontend.keepAliveTimeout"
 	// FrontendEnableSchedules enables schedule-related RPCs in the frontend
 	FrontendEnableSchedules = "frontend.enableSchedules"
+	// FrontendEnableNexusHTTPHandler enables serving Nexus HTTP requests in the frontend.
+	FrontendEnableNexusHTTPHandler = "frontend.enableNexusHTTPHandler"
+	// FrontendEnableCallbackAttachment enables attaching callbacks to workflows.
+	FrontendEnableCallbackAttachment = "frontend.enableCallbackAttachment"
 	// FrontendMaxConcurrentBatchOperationPerNamespace is the max concurrent batch operation job count per namespace
 	FrontendMaxConcurrentBatchOperationPerNamespace = "frontend.MaxConcurrentBatchOperationPerNamespace"
 	// FrontendMaxExecutionCountBatchOperationPerNamespace is the max execution count batch operation supports per namespace
@@ -471,6 +475,8 @@ const (
 	MatchingMaxWaitForPollerBeforeFwd = "matching.maxWaitForPollerBeforeFwd"
 	// QueryPollerUnavailableWindow WF Queries are rejected after a while if no poller has been seen within the window
 	QueryPollerUnavailableWindow = "matching.queryPollerUnavailableWindow"
+	// MatchingListNexusIncomingServicesLongPollTimeout is the max length of long polls for ListNexusIncomingServices calls.
+	MatchingListNexusIncomingServicesLongPollTimeout = "matching.listNexusIncomingServicesLongPollTimeout"
 	// MatchingMembershipUnloadDelay is how long to wait to re-confirm loss of ownership before unloading a task queue.
 	// Set to zero to disable proactive unload.
 	MatchingMembershipUnloadDelay = "matching.membershipUnloadDelay"
@@ -677,6 +683,29 @@ const (
 	TransferProcessorEnsureCloseBeforeDelete = "history.transferProcessorEnsureCloseBeforeDelete"
 	// TransferQueueMaxReaderCount is the max number of readers in one multi-cursor transfer queue
 	TransferQueueMaxReaderCount = "history.transferQueueMaxReaderCount"
+
+	// OutboundProcessorEnabled enables starting the outbound queue processor.
+	OutboundProcessorEnabled = "history.outboundProcessorEnabled"
+	// OutboundTaskBatchSize is batch size for outboundQueueFactory
+	OutboundTaskBatchSize = "history.outboundTaskBatchSize"
+	// OutboundProcessorMaxPollRPS is max poll rate per second for outboundQueueFactory
+	OutboundProcessorMaxPollRPS = "history.outboundProcessorMaxPollRPS"
+	// OutboundProcessorMaxPollHostRPS is max poll rate per second for all outboundQueueFactory on a host
+	OutboundProcessorMaxPollHostRPS = "history.outboundProcessorMaxPollHostRPS"
+	// OutboundProcessorUpdateShardTaskCount is update shard count for outboundQueueFactory
+	OutboundProcessorUpdateShardTaskCount = "history.outboundProcessorUpdateShardTaskCount"
+	// OutboundProcessorMaxPollInterval max poll interval for outboundQueueFactory
+	OutboundProcessorMaxPollInterval = "history.outboundProcessorMaxPollInterval"
+	// OutboundProcessorMaxPollIntervalJitterCoefficient is the max poll interval jitter coefficient
+	OutboundProcessorMaxPollIntervalJitterCoefficient = "history.outboundProcessorMaxPollIntervalJitterCoefficient"
+	// OutboundProcessorUpdateAckInterval is update interval for outboundQueueFactory
+	OutboundProcessorUpdateAckInterval = "history.outboundProcessorUpdateAckInterval"
+	// OutboundProcessorUpdateAckIntervalJitterCoefficient is the update interval jitter coefficient
+	OutboundProcessorUpdateAckIntervalJitterCoefficient = "history.outboundProcessorUpdateAckIntervalJitterCoefficient"
+	// OutboundProcessorPollBackoffInterval is the poll backoff interval if task redispatcher's size exceeds limit for outboundQueueFactory
+	OutboundProcessorPollBackoffInterval = "history.outboundProcessorPollBackoffInterval"
+	// OutboundQueueMaxReaderCount is the max number of readers in one multi-cursor outbound queue
+	OutboundQueueMaxReaderCount = "history.outboundQueueMaxReaderCount"
 
 	// VisibilityTaskBatchSize is batch size for visibilityQueueProcessor
 	VisibilityTaskBatchSize = "history.visibilityTaskBatchSize"

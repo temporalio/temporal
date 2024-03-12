@@ -69,7 +69,7 @@ type (
 		mockAuthorizer        *MockAuthorizer
 		mockMetricsHandler    *metrics.MockHandler
 		mockNamespaceRegistry *namespace.MockRegistry
-		interceptor           grpc.UnaryServerInterceptor
+		interceptor           *Interceptor
 		handler               grpc.UnaryHandler
 		mockClaimMapper       *MockClaimMapper
 	}
@@ -108,7 +108,7 @@ func (s *authorizerInterceptorSuite) SetupTest() {
 	s.mockNamespaceRegistry.EXPECT().GetNamespace(gomock.Any()).Return(nil, errors.New("not found")).AnyTimes()
 
 	s.mockClaimMapper = NewMockClaimMapper(s.controller)
-	s.interceptor = NewAuthorizationInterceptor(
+	s.interceptor = NewInterceptor(
 		s.mockClaimMapper,
 		s.mockAuthorizer,
 		s.mockMetricsHandler,
@@ -129,7 +129,7 @@ func (s *authorizerInterceptorSuite) TestIsAuthorized() {
 	s.mockAuthorizer.EXPECT().Authorize(ctx, nil, describeNamespaceTarget).
 		Return(Result{Decision: DecisionAllow}, nil)
 
-	res, err := s.interceptor(ctx, describeNamespaceRequest, describeNamespaceInfo, s.handler)
+	res, err := s.interceptor.Intercept(ctx, describeNamespaceRequest, describeNamespaceInfo, s.handler)
 	s.True(res.(bool))
 	s.NoError(err)
 }
@@ -138,7 +138,7 @@ func (s *authorizerInterceptorSuite) TestIsAuthorizedWithNamespace() {
 	s.mockAuthorizer.EXPECT().Authorize(ctx, nil, startWorkflowExecutionTarget).
 		Return(Result{Decision: DecisionAllow}, nil)
 
-	res, err := s.interceptor(ctx, startWorkflowExecutionRequest, startWorkflowExecutionInfo, s.handler)
+	res, err := s.interceptor.Intercept(ctx, startWorkflowExecutionRequest, startWorkflowExecutionInfo, s.handler)
 	s.True(res.(bool))
 	s.NoError(err)
 }
@@ -148,7 +148,7 @@ func (s *authorizerInterceptorSuite) TestIsUnauthorized() {
 		Return(Result{Decision: DecisionDeny}, nil)
 	s.mockMetricsHandler.EXPECT().Counter(metrics.ServiceErrUnauthorizedCounter.Name()).Return(metrics.NoopCounterMetricFunc)
 
-	res, err := s.interceptor(ctx, describeNamespaceRequest, describeNamespaceInfo, s.handler)
+	res, err := s.interceptor.Intercept(ctx, describeNamespaceRequest, describeNamespaceInfo, s.handler)
 	s.Nil(res)
 	s.Error(err)
 }
@@ -165,7 +165,7 @@ func (s *authorizerInterceptorSuite) TestIsUnknown() {
 	handler.EXPECT().Counter(metrics.ServiceErrUnauthorizedCounter.Name()).Return(metrics.NoopCounterMetricFunc)
 	handler.EXPECT().Timer(metrics.ServiceAuthorizationLatency.Name()).Return(metrics.NoopTimerMetricFunc)
 
-	res, err := s.interceptor(ctx, request, describeNamespaceInfo, s.handler)
+	res, err := s.interceptor.Intercept(ctx, request, describeNamespaceInfo, s.handler)
 	s.Nil(res)
 	s.Error(err)
 }
@@ -175,7 +175,7 @@ func (s *authorizerInterceptorSuite) TestAuthorizationFailed() {
 		Return(Result{Decision: DecisionDeny}, errUnauthorized)
 	s.mockMetricsHandler.EXPECT().Counter(metrics.ServiceErrAuthorizeFailedCounter.Name()).Return(metrics.NoopCounterMetricFunc)
 
-	res, err := s.interceptor(ctx, describeNamespaceRequest, describeNamespaceInfo, s.handler)
+	res, err := s.interceptor.Intercept(ctx, describeNamespaceRequest, describeNamespaceInfo, s.handler)
 	s.Nil(res)
 	s.Error(err)
 }
@@ -190,7 +190,7 @@ func (s *authorizerInterceptorSuite) TestNoopClaimMapperWithoutTLS() {
 			return Result{Decision: DecisionAllow}, nil
 		})
 
-	interceptor := NewAuthorizationInterceptor(
+	interceptor := NewInterceptor(
 		NewNoopClaimMapper(),
 		s.mockAuthorizer,
 		s.mockMetricsHandler,
@@ -200,12 +200,12 @@ func (s *authorizerInterceptorSuite) TestNoopClaimMapperWithoutTLS() {
 		"",
 		"",
 	)
-	_, err := interceptor(ctx, describeNamespaceRequest, describeNamespaceInfo, s.handler)
+	_, err := interceptor.Intercept(ctx, describeNamespaceRequest, describeNamespaceInfo, s.handler)
 	s.NoError(err)
 }
 
 func (s *authorizerInterceptorSuite) TestAlternateHeaders() {
-	interceptor := NewAuthorizationInterceptor(
+	interceptor := NewInterceptor(
 		s.mockClaimMapper,
 		NewNoopAuthorizer(),
 		s.mockMetricsHandler,
@@ -251,7 +251,7 @@ func (s *authorizerInterceptorSuite) TestAlternateHeaders() {
 			s.mockClaimMapper.EXPECT().GetClaims(testCase.authInfo).Return(&Claims{System: RoleAdmin}, nil)
 		}
 		inCtx := metadata.NewIncomingContext(ctx, testCase.md)
-		_, err := interceptor(inCtx, describeNamespaceRequest, describeNamespaceInfo, s.handler)
+		_, err := interceptor.Intercept(inCtx, describeNamespaceRequest, describeNamespaceInfo, s.handler)
 		s.NoError(err)
 	}
 }

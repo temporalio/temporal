@@ -57,6 +57,7 @@ import (
 	"go.temporal.io/server/common/testing/protomock"
 	"go.temporal.io/server/service/history/events"
 	"go.temporal.io/server/service/history/historybuilder"
+	"go.temporal.io/server/service/history/hsm"
 	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/tests"
 )
@@ -118,6 +119,11 @@ func (s *stateBuilderSuite) SetupTest() {
 		},
 		tests.NewDynamicConfig(),
 	)
+
+	reg := hsm.NewRegistry()
+	err := RegisterStateMachine(reg)
+	s.NoError(err)
+	s.mockShard.SetStateMachineRegistry(reg)
 
 	s.mockNamespaceCache = s.mockShard.Resource.NamespaceCache
 	s.mockClusterMetadata = s.mockShard.Resource.ClusterMetadata

@@ -36,6 +36,7 @@ import (
 	"time"
 
 	otelsdktrace "go.opentelemetry.io/otel/sdk/trace"
+	"go.temporal.io/server/common/membership/static"
 	"go.uber.org/fx"
 	"go.uber.org/multierr"
 	"golang.org/x/exp/maps"
@@ -75,7 +76,6 @@ import (
 	"go.temporal.io/server/service/history"
 	"go.temporal.io/server/service/history/replication"
 	"go.temporal.io/server/service/history/tasks"
-	"go.temporal.io/server/service/history/workflow"
 	"go.temporal.io/server/service/matching"
 	"go.temporal.io/server/service/worker"
 	"go.temporal.io/server/temporal"
@@ -426,12 +426,7 @@ func (c *temporalImpl) startFrontend(hosts map[primitives.ServiceName][]string, 
 		fx.Provide(func() log.ThrottledLogger { return c.logger }),
 		fx.Provide(func() resource.NamespaceLogger { return c.logger }),
 		fx.Provide(c.newRPCFactory),
-		fx.Provide(func() membership.Monitor {
-			return newSimpleMonitor(hosts)
-		}),
-		fx.Provide(func() membership.HostInfoProvider {
-			return newSimpleHostInfoProvider(serviceName, hosts)
-		}),
+		static.MembershipModule(hosts),
 		fx.Provide(func() *cluster.Config { return c.clusterMetadataConfig }),
 		fx.Provide(func() carchiver.ArchivalMetadata { return c.archiverMetadata }),
 		fx.Provide(func() provider.ArchiverProvider { return c.archiverProvider }),
@@ -524,12 +519,7 @@ func (c *temporalImpl) startHistory(
 			fx.Provide(func() config.DCRedirectionPolicy { return config.DCRedirectionPolicy{} }),
 			fx.Provide(func() log.ThrottledLogger { return c.logger }),
 			fx.Provide(c.newRPCFactory),
-			fx.Provide(func() membership.Monitor {
-				return newSimpleMonitor(hosts)
-			}),
-			fx.Provide(func() membership.HostInfoProvider {
-				return newSimpleHostInfoProvider(serviceName, hosts)
-			}),
+			static.MembershipModule(hosts),
 			fx.Provide(func() *cluster.Config { return c.clusterMetadataConfig }),
 			fx.Provide(func() carchiver.ArchivalMetadata { return c.archiverMetadata }),
 			fx.Provide(func() provider.ArchiverProvider { return c.archiverProvider }),
@@ -548,10 +538,10 @@ func (c *temporalImpl) startHistory(
 			fx.Provide(func() *esclient.Config { return c.esConfig }),
 			fx.Provide(func() esclient.Client { return c.esClient }),
 			fx.Provide(c.GetTLSConfigProvider),
-			fx.Provide(workflow.NewTaskGeneratorProvider),
 			fx.Provide(c.GetTaskCategoryRegistry),
 			fx.Supply(c.spanExporters),
 			temporal.ServiceTracingModule,
+
 			history.QueueModule,
 			history.Module,
 			replication.Module,
@@ -623,12 +613,7 @@ func (c *temporalImpl) startMatching(hosts map[primitives.ServiceName][]string, 
 		fx.Provide(func() listenHostPort { return listenHostPort(c.MatchingGRPCServiceAddress()) }),
 		fx.Provide(func() log.ThrottledLogger { return c.logger }),
 		fx.Provide(c.newRPCFactory),
-		fx.Provide(func() membership.Monitor {
-			return newSimpleMonitor(hosts)
-		}),
-		fx.Provide(func() membership.HostInfoProvider {
-			return newSimpleHostInfoProvider(serviceName, hosts)
-		}),
+		static.MembershipModule(hosts),
 		fx.Provide(func() *cluster.Config { return c.clusterMetadataConfig }),
 		fx.Provide(func() carchiver.ArchivalMetadata { return c.archiverMetadata }),
 		fx.Provide(func() provider.ArchiverProvider { return c.archiverProvider }),
@@ -720,12 +705,7 @@ func (c *temporalImpl) startWorker(hosts map[primitives.ServiceName][]string, st
 		fx.Provide(func() config.DCRedirectionPolicy { return config.DCRedirectionPolicy{} }),
 		fx.Provide(func() log.ThrottledLogger { return c.logger }),
 		fx.Provide(c.newRPCFactory),
-		fx.Provide(func() membership.Monitor {
-			return newSimpleMonitor(hosts)
-		}),
-		fx.Provide(func() membership.HostInfoProvider {
-			return newSimpleHostInfoProvider(serviceName, hosts)
-		}),
+		static.MembershipModule(hosts),
 		fx.Provide(func() *cluster.Config { return &clusterConfigCopy }),
 		fx.Provide(func() carchiver.ArchivalMetadata { return c.archiverMetadata }),
 		fx.Provide(func() provider.ArchiverProvider { return c.archiverProvider }),
@@ -969,9 +949,4 @@ func sdkClientFactoryProvider(
 		logger,
 		dc.GetIntProperty(dynamicconfig.WorkerStickyCacheSize, 0),
 	)
-}
-
-func newSimpleHostInfoProvider(serviceName primitives.ServiceName, hosts map[primitives.ServiceName][]string) membership.HostInfoProvider {
-	hostInfo := membership.NewHostInfoFromAddress(hosts[serviceName][0])
-	return membership.NewHostInfoProvider(hostInfo)
 }

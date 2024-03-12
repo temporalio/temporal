@@ -147,7 +147,7 @@ func (s *StreamSenderImpl) recvEventLoop() (retErr error) {
 	defer func() {
 		if panicErr != nil {
 			retErr = panicErr
-			s.metrics.Counter(metrics.ReplicationStreamPanic.Name()).Record(1)
+			metrics.ReplicationStreamPanic.With(s.metrics).Record(1)
 		}
 	}()
 
@@ -167,7 +167,7 @@ func (s *StreamSenderImpl) recvEventLoop() (retErr error) {
 				s.logger.Error("StreamSender unable to handle SyncReplicationState", tag.Error(err))
 				return err
 			}
-			s.metrics.Counter(metrics.ReplicationTasksRecv.Name()).Record(
+			metrics.ReplicationTasksRecv.With(s.metrics).Record(
 				int64(1),
 				metrics.FromClusterIDTag(s.clientShardKey.ClusterID),
 				metrics.ToClusterIDTag(s.serverShardKey.ClusterID),
@@ -190,7 +190,7 @@ func (s *StreamSenderImpl) sendEventLoop() (retErr error) {
 	defer func() {
 		if panicErr != nil {
 			retErr = panicErr
-			s.metrics.Counter(metrics.ReplicationStreamPanic.Name()).Record(1)
+			metrics.ReplicationStreamPanic.With(s.metrics).Record(1)
 		}
 	}()
 
@@ -368,7 +368,7 @@ Loop:
 		}); err != nil {
 			return err
 		}
-		s.metrics.Counter(metrics.ReplicationTasksSend.Name()).Record(
+		metrics.ReplicationTasksSend.With(s.metrics).Record(
 			int64(1),
 			metrics.FromClusterIDTag(s.serverShardKey.ClusterID),
 			metrics.ToClusterIDTag(s.clientShardKey.ClusterID),

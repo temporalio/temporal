@@ -35,12 +35,14 @@ import (
 	"go.temporal.io/api/serviceerror"
 
 	enumsspb "go.temporal.io/server/api/enums/v1"
+	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common/archiver"
 	"go.temporal.io/server/common/backoff"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence/versionhistory"
 	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/service/history/configs"
+	"go.temporal.io/server/service/history/hsm"
 	"go.temporal.io/server/service/history/tasks"
 )
 
@@ -97,6 +99,10 @@ type (
 			events []*historypb.HistoryEvent,
 		) error
 		GenerateMigrationTasks() ([]tasks.Task, int64, error)
+
+		// Generate tasks for any updated state machines on mutable state.
+		// Looks up machine definition in the provided registry.
+		GenerateDirtySubStateMachineTasks(stateMachineRegistry *hsm.Registry) error
 	}
 
 	TaskGeneratorImpl struct {
@@ -151,7 +157,6 @@ func (r *TaskGeneratorImpl) GenerateWorkflowCloseTasks(
 	closedTime time.Time,
 	deleteAfterClose bool,
 ) error {
-
 	currentVersion := r.mutableState.GetCurrentVersion()
 
 	closeExecutionTask := &tasks.CloseExecutionTask{
@@ -215,6 +220,7 @@ func (r *TaskGeneratorImpl) GenerateWorkflowCloseTasks(
 	}
 
 	r.mutableState.AddTasks(closeTasks...)
+
 	return nil
 }
 
@@ -236,6 +242,65 @@ func (r *TaskGeneratorImpl) getRetention() (time.Duration, error) {
 		return 0, err
 	}
 	return retention, nil
+}
+
+func (r *TaskGeneratorImpl) GenerateDirtySubStateMachineTasks(
+	stateMachineRegistry *hsm.Registry,
+) error {
+	tree := r.mutableState.HSM()
+	transitionHistory := r.mutableState.GetExecutionInfo().TransitionHistory
+	versionedTransition := transitionHistory[len(transitionHistory)-1]
+	for _, pao := range tree.Outputs() {
+		node, err := tree.Child(pao.Path)
+		if err != nil {
+			return err
+		}
+		for _, output := range pao.Outputs {
+			for _, task := range output.Tasks {
+				ser, ok := stateMachineRegistry.TaskSerializer(task.Type().ID)
+				if !ok {
+					return serviceerror.NewInternal(fmt.Sprintf("no task serializer for %v", task.Type()))
+				}
+				data, err := ser.Serialize(task)
+				if err != nil {
+					return err
+				}
+				ppath := make([]*persistencespb.StateMachineKey, len(pao.Path))
+				for i, k := range pao.Path {
+					ppath[i] = &persistencespb.StateMachineKey{
+						Type: k.Type,
+						Id:   k.ID,
+					}
+				}
+				smt := tasks.StateMachineTask{
+					WorkflowKey: r.mutableState.GetWorkflowKey(),
+					Info: &persistencespb.StateMachineTaskInfo{
+						Ref: &persistencespb.StateMachineRef{
+							Path:                                 ppath,
+							MutableStateNamespaceFailoverVersion: versionedTransition.NamespaceFailoverVersion,
+							MutableStateTransitionCount:          versionedTransition.MaxTransitionCount,
+							MachineTransitionCount:               node.TransitionCount(),
+						},
+						Type: task.Type().ID,
+						Data: data,
+					},
+				}
+				switch kind := task.Kind().(type) {
+				case hsm.TaskKindOutbound:
+					r.mutableState.AddTasks(&tasks.StateMachineOutboundTask{
+						StateMachineTask: smt,
+						Destination:      kind.Destination,
+					})
+				case hsm.TaskKindTimer:
+					smt.VisibilityTimestamp = kind.Deadline
+					r.mutableState.AddTasks(&tasks.StateMachineTimerTask{
+						StateMachineTask: smt,
+					})
+				}
+			}
+		}
+	}
+	return nil
 }
 
 // GenerateDeleteHistoryEventTask adds a task to delete all history events for a workflow execution.

@@ -52,6 +52,7 @@ import (
 	"go.temporal.io/server/service/history/configs"
 	"go.temporal.io/server/service/history/consts"
 	"go.temporal.io/server/service/history/deletemanager"
+	"go.temporal.io/server/service/history/hsm"
 	"go.temporal.io/server/service/history/queues"
 	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/tasks"
@@ -92,7 +93,16 @@ func (t *timerQueueActiveTaskExecutor) Execute(
 	ctx context.Context,
 	executable queues.Executable,
 ) queues.ExecuteResponse {
-	taskTypeTagValue := queues.GetActiveTimerTaskTypeTagValue(executable)
+	taskTypeTagValue := "TimerActiveUnknown"
+	smRef, smt, isAStateMachineTask, err := t.stateMachineTask(executable.GetTask())
+	if err == nil {
+		if isAStateMachineTask {
+			taskTypeTagValue = "TimerActive." + smt.Type().Name
+		} else {
+			taskTypeTagValue = queues.GetActiveTimerTaskTypeTagValue(executable)
+		}
+	}
+
 	namespaceTag, replicationState := getNamespaceTagAndReplicationStateByID(
 		t.shardContext.GetNamespaceRegistry(),
 		executable.GetNamespaceID(),
@@ -101,6 +111,14 @@ func (t *timerQueueActiveTaskExecutor) Execute(
 		namespaceTag,
 		metrics.TaskTypeTag(taskTypeTagValue),
 		metrics.OperationTag(taskTypeTagValue), // for backward compatibility
+	}
+
+	if err != nil {
+		return queues.ExecuteResponse{
+			ExecutionMetricTags: metricsTags,
+			ExecutedAsActive:    true,
+			ExecutionErr:        err,
+		}
 	}
 
 	if replicationState == enumspb.REPLICATION_STATE_HANDOVER {
@@ -115,7 +133,15 @@ func (t *timerQueueActiveTaskExecutor) Execute(
 		}
 	}
 
-	var err error
+	if isAStateMachineTask {
+		err = hsm.Execute(ctx, t.shardContext.StateMachineRegistry(), t, smRef, smt)
+		return queues.ExecuteResponse{
+			ExecutionMetricTags: metricsTags,
+			ExecutedAsActive:    true,
+			ExecutionErr:        err,
+		}
+	}
+
 	switch task := executable.GetTask().(type) {
 	case *tasks.UserTimerTask:
 		err = t.executeUserTimerTimeoutTask(ctx, task)
@@ -132,7 +158,7 @@ func (t *timerQueueActiveTaskExecutor) Execute(
 	case *tasks.DeleteHistoryEventTask:
 		err = t.executeDeleteHistoryEventTask(ctx, task)
 	default:
-		err = errUnknownTimerTask
+		err = queues.NewUnprocessableTaskError("unknown task type")
 	}
 
 	return queues.ExecuteResponse{
@@ -155,7 +181,7 @@ func (t *timerQueueActiveTaskExecutor) executeUserTimerTimeoutTask(
 	}
 	defer func() { release(retError) }()
 
-	mutableState, err := loadMutableStateForTimerTask(ctx, t.shardContext, weContext, task, t.metricHandler, t.logger)
+	mutableState, err := loadMutableStateForTimerTask(ctx, t.shardContext, weContext, task, t.metricsHandler, t.logger)
 	if err != nil {
 		return err
 	}
@@ -216,7 +242,7 @@ func (t *timerQueueActiveTaskExecutor) executeActivityTimeoutTask(
 	}
 	defer func() { release(retError) }()
 
-	mutableState, err := loadMutableStateForTimerTask(ctx, t.shardContext, weContext, task, t.metricHandler, t.logger)
+	mutableState, err := loadMutableStateForTimerTask(ctx, t.shardContext, weContext, task, t.metricsHandler, t.logger)
 	if err != nil {
 		return err
 	}
@@ -316,7 +342,7 @@ func (t *timerQueueActiveTaskExecutor) executeWorkflowTaskTimeoutTask(
 	}
 	defer func() { release(retError) }()
 
-	mutableState, err := loadMutableStateForTimerTask(ctx, t.shardContext, weContext, task, t.metricHandler, t.logger)
+	mutableState, err := loadMutableStateForTimerTask(ctx, t.shardContext, weContext, task, t.metricsHandler, t.logger)
 	if err != nil {
 		return err
 	}
@@ -395,7 +421,7 @@ func (t *timerQueueActiveTaskExecutor) executeWorkflowBackoffTimerTask(
 	}
 	defer func() { release(retError) }()
 
-	mutableState, err := loadMutableStateForTimerTask(ctx, t.shardContext, weContext, task, t.metricHandler, t.logger)
+	mutableState, err := loadMutableStateForTimerTask(ctx, t.shardContext, weContext, task, t.metricsHandler, t.logger)
 	if err != nil {
 		return err
 	}
@@ -404,17 +430,17 @@ func (t *timerQueueActiveTaskExecutor) executeWorkflowBackoffTimerTask(
 	}
 
 	if task.WorkflowBackoffType == enumsspb.WORKFLOW_BACKOFF_TYPE_RETRY {
-		t.metricHandler.Counter(metrics.WorkflowRetryBackoffTimerCount.Name()).Record(
+		metrics.WorkflowRetryBackoffTimerCount.With(t.metricsHandler).Record(
 			1,
 			metrics.OperationTag(metrics.TimerActiveTaskWorkflowBackoffTimerScope),
 		)
 	} else if task.WorkflowBackoffType == enumsspb.WORKFLOW_BACKOFF_TYPE_CRON {
-		t.metricHandler.Counter(metrics.WorkflowCronBackoffTimerCount.Name()).Record(
+		metrics.WorkflowCronBackoffTimerCount.With(t.metricsHandler).Record(
 			1,
 			metrics.OperationTag(metrics.TimerActiveTaskWorkflowBackoffTimerScope),
 		)
 	} else if task.WorkflowBackoffType == enumsspb.WORKFLOW_BACKOFF_TYPE_DELAY_START {
-		t.metricHandler.Counter(metrics.WorkflowDelayedStartBackoffTimerCount.Name()).Record(
+		metrics.WorkflowDelayedStartBackoffTimerCount.With(t.metricsHandler).Record(
 			1,
 			metrics.OperationTag(metrics.TimerActiveTaskWorkflowBackoffTimerScope),
 		)
@@ -442,7 +468,7 @@ func (t *timerQueueActiveTaskExecutor) executeActivityRetryTimerTask(
 	}
 	defer func() { release(retError) }()
 
-	mutableState, err := loadMutableStateForTimerTask(ctx, t.shardContext, weContext, task, t.metricHandler, t.logger)
+	mutableState, err := loadMutableStateForTimerTask(ctx, t.shardContext, weContext, task, t.metricsHandler, t.logger)
 	if err != nil {
 		return err
 	}
@@ -517,7 +543,7 @@ func (t *timerQueueActiveTaskExecutor) executeWorkflowTimeoutTask(
 	}
 	defer func() { release(retError) }()
 
-	mutableState, err := loadMutableStateForTimerTask(ctx, t.shardContext, weContext, task, t.metricHandler, t.logger)
+	mutableState, err := loadMutableStateForTimerTask(ctx, t.shardContext, weContext, task, t.metricsHandler, t.logger)
 	if err != nil {
 		return err
 	}
@@ -663,18 +689,18 @@ func (t *timerQueueActiveTaskExecutor) emitTimeoutMetricScopeWithNamespaceTag(
 	if err != nil {
 		return
 	}
-	metricsScope := t.metricHandler.WithTags(
+	metricsScope := t.metricsHandler.WithTags(
 		metrics.OperationTag(operation),
 		metrics.NamespaceTag(namespaceEntry.Name().String()),
 	)
 	switch timerType {
 	case enumspb.TIMEOUT_TYPE_SCHEDULE_TO_START:
-		metricsScope.Counter(metrics.ScheduleToStartTimeoutCounter.Name()).Record(1)
+		metrics.ScheduleToStartTimeoutCounter.With(metricsScope).Record(1)
 	case enumspb.TIMEOUT_TYPE_SCHEDULE_TO_CLOSE:
-		metricsScope.Counter(metrics.ScheduleToCloseTimeoutCounter.Name()).Record(1)
+		metrics.ScheduleToCloseTimeoutCounter.With(metricsScope).Record(1)
 	case enumspb.TIMEOUT_TYPE_START_TO_CLOSE:
-		metricsScope.Counter(metrics.StartToCloseTimeoutCounter.Name()).Record(1)
+		metrics.StartToCloseTimeoutCounter.With(metricsScope).Record(1)
 	case enumspb.TIMEOUT_TYPE_HEARTBEAT:
-		metricsScope.Counter(metrics.HeartbeatTimeoutCounter.Name()).Record(1)
+		metrics.HeartbeatTimeoutCounter.With(metricsScope).Record(1)
 	}
 }

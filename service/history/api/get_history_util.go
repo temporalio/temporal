@@ -79,7 +79,7 @@ func GetRawHistory(
 		if err := validateTransientWorkflowTaskEvents(nextEventID, transientWorkflowTaskInfo); err != nil {
 			logger := shard.GetLogger()
 			metricsHandler := interceptor.GetMetricsHandlerFromContext(ctx, logger).WithTags(metrics.OperationTag(metrics.HistoryGetRawHistoryScope))
-			metricsHandler.Counter(metrics.ServiceErrIncompleteHistoryCounter.Name()).Record(1)
+			metrics.ServiceErrIncompleteHistoryCounter.With(metricsHandler).Record(1)
 			logger.Error("getHistory error",
 				tag.WorkflowNamespaceID(namespaceID.String()),
 				tag.WorkflowID(execution.GetWorkflowId()),
@@ -145,7 +145,7 @@ func GetHistory(
 
 	logger := shard.GetLogger()
 	metricsHandler := interceptor.GetMetricsHandlerFromContext(ctx, logger).WithTags(metrics.OperationTag(metrics.HistoryGetHistoryScope))
-	metricsHandler.Histogram(metrics.HistorySize.Name(), metrics.HistorySize.Unit()).Record(int64(size))
+	metrics.HistorySize.With(metricsHandler).Record(int64(size))
 
 	isLastPage := len(nextPageToken) == 0
 	if err := verifyHistoryIsComplete(
@@ -155,7 +155,7 @@ func GetHistory(
 		isFirstPage,
 		isLastPage,
 		int(pageSize)); err != nil {
-		metricsHandler.Counter(metrics.ServiceErrIncompleteHistoryCounter.Name()).Record(1)
+		metrics.ServiceErrIncompleteHistoryCounter.With(metricsHandler).Record(1)
 		logger.Error("getHistory: incomplete history",
 			tag.WorkflowNamespaceID(namespaceID.String()),
 			tag.WorkflowID(execution.GetWorkflowId()),
@@ -165,7 +165,7 @@ func GetHistory(
 
 	if len(nextPageToken) == 0 && transientWorkflowTaskInfo != nil {
 		if err := validateTransientWorkflowTaskEvents(nextEventID, transientWorkflowTaskInfo); err != nil {
-			metricsHandler.Counter(metrics.ServiceErrIncompleteHistoryCounter.Name()).Record(1)
+			metrics.ServiceErrIncompleteHistoryCounter.With(metricsHandler).Record(1)
 			logger.Error("getHistory error",
 				tag.WorkflowNamespaceID(namespaceID.String()),
 				tag.WorkflowID(execution.GetWorkflowId()),
@@ -225,7 +225,7 @@ func GetHistoryReverse(
 	}
 
 	metricsHandler := interceptor.GetMetricsHandlerFromContext(ctx, logger).WithTags(metrics.OperationTag(metrics.HistoryGetHistoryReverseScope))
-	metricsHandler.Histogram(metrics.HistorySize.Name(), metrics.HistorySize.Unit()).Record(int64(size))
+	metrics.HistorySize.With(metricsHandler).Record(int64(size))
 
 	if err := ProcessOutgoingSearchAttributes(shard, historyEvents, namespaceID, persistenceVisibilityMgr); err != nil {
 		return nil, nil, 0, err

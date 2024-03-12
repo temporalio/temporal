@@ -223,6 +223,20 @@ func (mr *MockContextMockRecorder) SetWorkflowExecution(ctx, shardContext interf
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SetWorkflowExecution", reflect.TypeOf((*MockContext)(nil).SetWorkflowExecution), ctx, shardContext)
 }
 
+// SubmitClosedWorkflowSnapshot mocks base method.
+func (m *MockContext) SubmitClosedWorkflowSnapshot(ctx context.Context, shardContext shard.Context, transactionPolicy TransactionPolicy) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "SubmitClosedWorkflowSnapshot", ctx, shardContext, transactionPolicy)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// SubmitClosedWorkflowSnapshot indicates an expected call of SubmitClosedWorkflowSnapshot.
+func (mr *MockContextMockRecorder) SubmitClosedWorkflowSnapshot(ctx, shardContext, transactionPolicy interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SubmitClosedWorkflowSnapshot", reflect.TypeOf((*MockContext)(nil).SubmitClosedWorkflowSnapshot), ctx, shardContext, transactionPolicy)
+}
+
 // Unlock mocks base method.
 func (m *MockContext) Unlock(lockPriority LockPriority) {
 	m.ctrl.T.Helper()

@@ -69,7 +69,6 @@ func (s *FunctionalSuite) TestCancelTimer() {
 	timerScheduled := false
 	signalDelivered := false
 	timerCancelled := false
-	workflowComplete := false
 	timer := 2000 * time.Second
 	wtHandler := func(execution *commonpb.WorkflowExecution, wt *commonpb.WorkflowType,
 		previousStartedEventID, startedEventID int64, history *historypb.History) ([]*commandpb.Command, error) {
@@ -85,13 +84,8 @@ func (s *FunctionalSuite) TestCancelTimer() {
 			}}, nil
 		}
 
-		resp, err := s.engine.GetWorkflowExecutionHistory(NewContext(), &workflowservice.GetWorkflowExecutionHistoryRequest{
-			Namespace:       s.namespace,
-			Execution:       workflowExecution,
-			MaximumPageSize: 200,
-		})
-		s.NoError(err)
-		for _, event := range resp.History.Events {
+		historyEvents := s.getHistory(s.namespace, workflowExecution)
+		for _, event := range historyEvents {
 			switch event.GetEventType() {
 			case enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_SIGNALED:
 				signalDelivered = true
@@ -113,7 +107,6 @@ func (s *FunctionalSuite) TestCancelTimer() {
 			}}, nil
 		}
 
-		workflowComplete = true
 		return []*commandpb.Command{{
 			CommandType: enumspb.COMMAND_TYPE_COMPLETE_WORKFLOW_EXECUTION,
 			Attributes: &commandpb.Command_CompleteWorkflowExecutionCommandAttributes{CompleteWorkflowExecutionCommandAttributes: &commandpb.CompleteWorkflowExecutionCommandAttributes{
@@ -151,24 +144,24 @@ func (s *FunctionalSuite) TestCancelTimer() {
 	s.Logger.Info("PollAndProcessWorkflowTask: completed")
 	s.NoError(err)
 
-	s.True(workflowComplete)
-
-	resp, err := s.engine.GetWorkflowExecutionHistory(NewContext(), &workflowservice.GetWorkflowExecutionHistoryRequest{
-		Namespace:       s.namespace,
-		Execution:       workflowExecution,
-		MaximumPageSize: 200,
-	})
-	s.NoError(err)
-	for _, event := range resp.History.Events {
-		switch event.GetEventType() {
-		case enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_SIGNALED:
-			signalDelivered = true
-		case enumspb.EVENT_TYPE_TIMER_CANCELED:
-			timerCancelled = true
-		case enumspb.EVENT_TYPE_TIMER_FIRED:
-			s.Fail("timer got fired")
-		}
-	}
+	historyEvents := s.getHistory(s.namespace, workflowExecution)
+	s.EqualHistoryEvents(`
+  1 WorkflowExecutionStarted
+  2 WorkflowTaskScheduled
+  3 WorkflowTaskStarted
+  4 WorkflowTaskCompleted
+  5 TimerStarted
+  6 WorkflowExecutionSignaled
+  7 WorkflowTaskScheduled
+  8 WorkflowTaskStarted
+  9 WorkflowTaskCompleted
+ 10 TimerCanceled
+ 11 WorkflowExecutionSignaled
+ 12 WorkflowTaskScheduled
+ 13 WorkflowTaskStarted
+ 14 WorkflowTaskCompleted
+ 15 WorkflowExecutionCompleted
+`, historyEvents)
 }
 
 func (s *FunctionalSuite) TestCancelTimer_CancelFiredAndBuffered() {
@@ -200,7 +193,6 @@ func (s *FunctionalSuite) TestCancelTimer_CancelFiredAndBuffered() {
 	timerScheduled := false
 	signalDelivered := false
 	timerCancelled := false
-	workflowComplete := false
 	timer := 4 * time.Second
 	wtHandler := func(execution *commonpb.WorkflowExecution, wt *commonpb.WorkflowType,
 		previousStartedEventID, startedEventID int64, history *historypb.History) ([]*commandpb.Command, error) {
@@ -216,13 +208,8 @@ func (s *FunctionalSuite) TestCancelTimer_CancelFiredAndBuffered() {
 			}}, nil
 		}
 
-		resp, err := s.engine.GetWorkflowExecutionHistory(NewContext(), &workflowservice.GetWorkflowExecutionHistoryRequest{
-			Namespace:       s.namespace,
-			Execution:       workflowExecution,
-			MaximumPageSize: 200,
-		})
-		s.NoError(err)
-		for _, event := range resp.History.Events {
+		historyEvents := s.getHistory(s.namespace, workflowExecution)
+		for _, event := range historyEvents {
 			switch event.GetEventType() {
 			case enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_SIGNALED:
 				signalDelivered = true
@@ -245,7 +232,6 @@ func (s *FunctionalSuite) TestCancelTimer_CancelFiredAndBuffered() {
 			}}, nil
 		}
 
-		workflowComplete = true
 		return []*commandpb.Command{{
 			CommandType: enumspb.COMMAND_TYPE_COMPLETE_WORKFLOW_EXECUTION,
 			Attributes: &commandpb.Command_CompleteWorkflowExecutionCommandAttributes{CompleteWorkflowExecutionCommandAttributes: &commandpb.CompleteWorkflowExecutionCommandAttributes{
@@ -283,22 +269,22 @@ func (s *FunctionalSuite) TestCancelTimer_CancelFiredAndBuffered() {
 	s.Logger.Info("PollAndProcessWorkflowTask: completed")
 	s.NoError(err)
 
-	s.True(workflowComplete)
-
-	resp, err := s.engine.GetWorkflowExecutionHistory(NewContext(), &workflowservice.GetWorkflowExecutionHistoryRequest{
-		Namespace:       s.namespace,
-		Execution:       workflowExecution,
-		MaximumPageSize: 200,
-	})
-	s.NoError(err)
-	for _, event := range resp.History.Events {
-		switch event.GetEventType() {
-		case enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_SIGNALED:
-			signalDelivered = true
-		case enumspb.EVENT_TYPE_TIMER_CANCELED:
-			timerCancelled = true
-		case enumspb.EVENT_TYPE_TIMER_FIRED:
-			s.Fail("timer got fired")
-		}
-	}
+	historyEvents := s.getHistory(s.namespace, workflowExecution)
+	s.EqualHistoryEvents(`
+  1 WorkflowExecutionStarted
+  2 WorkflowTaskScheduled
+  3 WorkflowTaskStarted
+  4 WorkflowTaskCompleted
+  5 TimerStarted
+  6 WorkflowExecutionSignaled
+  7 WorkflowTaskScheduled
+  8 WorkflowTaskStarted
+  9 WorkflowTaskCompleted
+ 10 TimerCanceled
+ 11 WorkflowExecutionSignaled
+ 12 WorkflowTaskScheduled
+ 13 WorkflowTaskStarted
+ 14 WorkflowTaskCompleted
+ 15 WorkflowExecutionCompleted
+`, historyEvents)
 }

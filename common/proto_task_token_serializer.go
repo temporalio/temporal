@@ -62,3 +62,16 @@ func (s *protoTaskTokenSerializer) DeserializeQueryTaskToken(data []byte) (*toke
 	err := taskToken.Unmarshal(data)
 	return &taskToken, err
 }
+
+func (s *protoTaskTokenSerializer) SerializeNexusTaskToken(taskToken *tokenspb.NexusTask) ([]byte, error) {
+	if taskToken == nil {
+		return nil, nil
+	}
+	return taskToken.Marshal()
+}
+
+func (s *protoTaskTokenSerializer) DeserializeNexusTaskToken(data []byte) (*tokenspb.NexusTask, error) {
+	taskToken := tokenspb.NexusTask{}
+	err := taskToken.Unmarshal(data)
+	return &taskToken, err
+}

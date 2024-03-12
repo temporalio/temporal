@@ -85,9 +85,9 @@ type (
 		Wrap(delegate Executor) Executor
 	}
 
-	// TerminalErrors are errors which cannot be retried and should not be scheduled again.
-	// Tasks should be enqueued to a DLQ immediately if an error implements this interface.
-	TerminalTaskError interface {
+	// MaybeTerminalTaskError are errors which (if IsTerminalTaskError returns true) cannot be retried and should
+	// not be rescheduled. Tasks should be enqueued to the DLQ immediately if an error is marked as terminal.
+	MaybeTerminalTaskError interface {
 		IsTerminalTaskError() bool
 	}
 )
@@ -116,6 +116,52 @@ const (
 	// while task is retrying
 	taskCriticalLogMetricAttempts = 30
 )
+
+// ErrStaleTask is an indicator that a task cannot be executed because it is stale. This is expected in certain
+// situations and it is safe to drop the task.
+// An example of a stale task is when the task is pointing to a state machine in mutable state that has a newer version
+// than the version that task was created from, that is the state machine has already transitioned and the task is no
+// longer needed.
+var ErrStaleTask = errors.New("task stale")
+
+// UnprocessableTaskError is an indicator that an executor does not know how to handle a task. Considered terminal.
+type UnprocessableTaskError struct {
+	Message string
+}
+
+// NewUnprocessableTaskError returns a new UnprocessableTaskError from given message.
+func NewUnprocessableTaskError(message string) UnprocessableTaskError {
+	return UnprocessableTaskError{Message: message}
+}
+
+func (e UnprocessableTaskError) Error() string {
+	return "unprocessable task: " + e.Message
+}
+
+// IsTerminalTaskError marks this error as terminal to be handled appropriately.
+func (UnprocessableTaskError) IsTerminalTaskError() bool {
+	return true
+}
+
+// StaleStateError is an indicator that after loading the state for a task it was detected as stale. It's possible that
+// state reload solves this issue but otherwise it is unexpected and considered terminal.
+type StaleStateError struct {
+	Message string
+}
+
+// NewStateStaleError returns a new StateStaleError from given message.
+func NewStateStaleError(message string) StaleStateError {
+	return StaleStateError{Message: message}
+}
+
+func (e StaleStateError) Error() string {
+	return "state stale: " + e.Message
+}
+
+// IsTerminalTaskError marks this error as terminal to be handled appropriately.
+func (StaleStateError) IsTerminalTaskError() bool {
+	return true
+}
 
 type (
 	executableImpl struct {
@@ -283,11 +329,13 @@ func (e *executableImpl) Execute() (retErr error) {
 		// Not doing it here as for certain errors latency for the attempt should not be counted
 	}()
 
+	// A previous attempt has marked this executable as no longer retryable.
+	// Instead of executing it, we try to write to the DLQ if enabled, otherwise - drop it.
 	if e.terminalFailureCause != nil {
 		if e.dlqEnabled() {
 			return e.writeToDLQ(ctx)
 		}
-		if errors.As(e.terminalFailureCause, new(TerminalTaskError)) {
+		if errors.As(e.terminalFailureCause, new(MaybeTerminalTaskError)) {
 			e.logger.Warn(
 				"Dropping task with terminal failure because DLQ was disabled",
 				tag.Error(e.terminalFailureCause),
@@ -401,12 +449,18 @@ func (e *executableImpl) isExpectedRetryableError(err error) (isRetryable bool, 
 		metrics.TaskNamespaceHandoverCounter.With(e.taggedMetricsHandler).Record(1)
 		return true, consts.ErrNamespaceHandover
 	}
+	if errors.Is(err, ErrStaleTask) {
+		// The task is stale and is safe to be dropped.
+		metrics.TaskSkipped.With(e.taggedMetricsHandler).Record(1)
+		e.logger.Info("Skipped task due to task being stale", tag.Error(err))
+		return true, err
+	}
 
 	return false, nil
 }
 
 func (e *executableImpl) isUnexpectedNonRetryableError(err error) bool {
-	var terr TerminalTaskError
+	var terr MaybeTerminalTaskError
 	if errors.As(err, &terr) {
 		return terr.IsTerminalTaskError()
 	}
@@ -471,7 +525,7 @@ func (e *executableImpl) HandleErr(err error) (retErr error) {
 		if e.dlqEnabled() {
 			// Keep this message in sync with the log line mentioned in Investigation section of develop/docs/dlq.md
 			e.logger.Error("Marking task as terminally failed, will send to DLQ", tag.Error(err), tag.ErrorType(err))
-			e.terminalFailureCause = err
+			e.terminalFailureCause = err // <- Execute() examines this attribute on the next attempt.
 			metrics.TaskTerminalFailures.With(e.taggedMetricsHandler).Record(1)
 			return fmt.Errorf("%w: %v", ErrTerminalTaskFailure, err)
 		}
@@ -488,7 +542,7 @@ func (e *executableImpl) HandleErr(err error) (retErr error) {
 		// Keep this message in sync with the log line mentioned in Investigation section of develop/docs/dlq.md
 		e.logger.Error("Marking task as terminally failed, will send to DLQ. Maximum number of attempts with unexpected errors",
 			tag.Attempt(int32(e.unexpectedErrorAttempts)), tag.Error(err))
-		e.terminalFailureCause = err
+		e.terminalFailureCause = err // <- Execute() examines this attribute on the next attempt.
 		metrics.TaskTerminalFailures.With(e.taggedMetricsHandler).Record(1)
 		return fmt.Errorf("%w: %w", ErrTerminalTaskFailure, e.terminalFailureCause)
 	}
@@ -629,6 +683,14 @@ func (e *executableImpl) GetDestination() string {
 		return t.GetDestination()
 	}
 	return ""
+}
+
+// StateMachineTaskType returns the embedded task's state machine task type if it exists. Defaults to 0.
+func (e *executableImpl) StateMachineTaskType() int32 {
+	if t, ok := e.Task.(tasks.HasStateMachineTaskType); ok {
+		return t.StateMachineTaskType()
+	}
+	return 0
 }
 
 func (e *executableImpl) shouldResubmitOnNack(attempt int, err error) bool {

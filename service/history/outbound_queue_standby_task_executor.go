@@ -1,8 +1,6 @@
 // The MIT License
 //
-// Copyright (c) 2020 Temporal Technologies Inc.  All rights reserved.
-//
-// Copyright (c) 2020 Uber Technologies, Inc.
+// Copyright (c) 2024 Temporal Technologies Inc.  All rights reserved.
 //
 // Permission is hereby granted, free of charge, to any person obtaining a copy
 // of this software and associated documentation files (the "Software"), to deal
@@ -22,39 +20,19 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-package sql
+package history
 
 import (
-	"encoding/json"
+	"context"
+
+	"go.temporal.io/server/service/history/queues"
 )
 
-type (
-	historyNodePaginationToken struct {
-		LastNodeID int64
-		LastTxnID  int64
-	}
-)
-
-func newHistoryNodePaginationToken(
-	nodeID int64,
-	transactionID int64,
-) historyNodePaginationToken {
-	return historyNodePaginationToken{
-		LastNodeID: nodeID,
-		LastTxnID:  transactionID,
-	}
+type outboundQueueStandbyTaskExecutor struct {
 }
 
-func serializeHistoryNodePaginationToken(
-	token historyNodePaginationToken,
-) ([]byte, error) {
-	return json.Marshal(token)
+func (*outboundQueueStandbyTaskExecutor) Execute(context.Context, queues.Executable) queues.ExecuteResponse {
+	panic("unimplemented")
 }
 
-func deserializeHistoryNodePaginationToken(
-	bytes []byte,
-) (historyNodePaginationToken, error) {
-	var token historyNodePaginationToken
-	err := json.Unmarshal(bytes, &token)
-	return token, err
-}
+var _ queues.Executor = &outboundQueueStandbyTaskExecutor{}

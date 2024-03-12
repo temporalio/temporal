@@ -611,40 +611,21 @@ func (d *MatchingTaskStore) ListTaskQueueUserDataEntries(ctx context.Context, re
 	response := &p.InternalListTaskQueueUserDataEntriesResponse{}
 	row := make(map[string]interface{})
 	for iter.MapScan(row) {
-		taskQueueRaw, ok := row["task_queue_name"]
-		if !ok {
-			return nil, newFieldNotFoundError("task_queue_name", row)
+		taskQueue, err := getTypedFieldFromRow[string]("task_queue_name", row)
+		if err != nil {
+			return nil, err
 		}
-		taskQueue, ok := taskQueueRaw.(string)
-		if !ok {
-			return nil, newPersistedTypeMismatchError("task_queue_name", taskQueue, taskQueueRaw, row)
+		data, err := getTypedFieldFromRow[[]byte]("data", row)
+		if err != nil {
+			return nil, err
 		}
-
-		dataRaw, ok := row["data"]
-		if !ok {
-			return nil, newFieldNotFoundError("data", row)
+		dataEncoding, err := getTypedFieldFromRow[string]("data_encoding", row)
+		if err != nil {
+			return nil, err
 		}
-		data, ok := dataRaw.([]byte)
-		if !ok {
-			return nil, newPersistedTypeMismatchError("data", data, dataRaw, row)
-		}
-
-		dataEncodingRaw, ok := row["data_encoding"]
-		if !ok {
-			return nil, newFieldNotFoundError("data_encoding", row)
-		}
-		dataEncoding, ok := dataEncodingRaw.(string)
-		if !ok {
-			return nil, newPersistedTypeMismatchError("data_encoding", dataEncoding, dataEncodingRaw, row)
-		}
-
-		versionRaw, ok := row["version"]
-		if !ok {
-			return nil, newFieldNotFoundError("version", row)
-		}
-		version, ok := versionRaw.(int64)
-		if !ok {
-			return nil, newPersistedTypeMismatchError("version", version, versionRaw, row)
+		version, err := getTypedFieldFromRow[int64]("version", row)
+		if err != nil {
+			return nil, err
 		}
 
 		response.Entries = append(response.Entries, p.InternalTaskQueueUserDataEntry{TaskQueue: taskQueue, Data: p.NewDataBlob(data, dataEncoding), Version: version})

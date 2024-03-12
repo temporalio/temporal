@@ -229,10 +229,10 @@ func (h *OperatorHandlerImpl) addSearchAttributesInternal(
 		err = h.addSearchAttributesElasticsearch(ctx, request, indexName, currentSearchAttributes)
 		if err != nil {
 			if _, isWorkflowErr := err.(*serviceerror.SystemWorkflow); isWorkflowErr {
-				scope.Counter(metrics.AddSearchAttributesWorkflowFailuresCount.Name()).Record(1)
+				metrics.AddSearchAttributesWorkflowFailuresCount.With(scope).Record(1)
 			}
 		} else {
-			scope.Counter(metrics.AddSearchAttributesWorkflowSuccessCount.Name()).Record(1)
+			metrics.AddSearchAttributesWorkflowSuccessCount.With(scope).Record(1)
 		}
 	} else {
 		err = h.addSearchAttributesSQL(ctx, request, currentSearchAttributes)
@@ -324,7 +324,7 @@ func (h *OperatorHandlerImpl) addSearchAttributesSQL(
 		&workflowservice.DescribeNamespaceRequest{Namespace: nsName},
 	)
 	if err != nil {
-		return serviceerror.NewUnavailable(fmt.Sprintf(errUnableToGetNamespaceInfoMessage, nsName))
+		return serviceerror.NewUnavailable(fmt.Sprintf(errUnableToGetNamespaceInfoMessage, nsName, err))
 	}
 
 	dbCustomSearchAttributes := searchattribute.GetSqlDbIndexSearchAttributes().CustomSearchAttributes
@@ -476,7 +476,7 @@ func (h *OperatorHandlerImpl) removeSearchAttributesSQL(
 		&workflowservice.DescribeNamespaceRequest{Namespace: nsName},
 	)
 	if err != nil {
-		return serviceerror.NewUnavailable(fmt.Sprintf(errUnableToGetNamespaceInfoMessage, nsName))
+		return serviceerror.NewUnavailable(fmt.Sprintf(errUnableToGetNamespaceInfoMessage, nsName, err))
 	}
 
 	upsertFieldToAliasMap := make(map[string]string)
@@ -577,7 +577,7 @@ func (h *OperatorHandlerImpl) listSearchAttributesSQL(
 	)
 	if err != nil {
 		return nil, serviceerror.NewUnavailable(
-			fmt.Sprintf(errUnableToGetNamespaceInfoMessage, nsName),
+			fmt.Sprintf(errUnableToGetNamespaceInfoMessage, nsName, err),
 		)
 	}
 
@@ -648,11 +648,11 @@ func (h *OperatorHandlerImpl) DeleteNamespace(
 	var wfResult deletenamespace.DeleteNamespaceWorkflowResult
 	err = run.Get(ctx, &wfResult)
 	if err != nil {
-		scope.Counter(metrics.DeleteNamespaceWorkflowFailuresCount.Name()).Record(1)
+		metrics.DeleteNamespaceWorkflowFailuresCount.With(scope).Record(1)
 		execution := &commonpb.WorkflowExecution{WorkflowId: deletenamespace.WorkflowName, RunId: run.GetRunID()}
 		return nil, serviceerror.NewSystemWorkflow(execution, err)
 	}
-	scope.Counter(metrics.DeleteNamespaceWorkflowSuccessCount.Name()).Record(1)
+	metrics.DeleteNamespaceWorkflowSuccessCount.With(scope).Record(1)
 
 	return &operatorservice.DeleteNamespaceResponse{
 		DeletedNamespace: wfResult.DeletedNamespace.String(),
@@ -824,21 +824,18 @@ func (h *OperatorHandlerImpl) validateRemoteClusterMetadata(metadata *adminservi
 	return nil
 }
 
-func (h *OperatorHandlerImpl) CreateOrUpdateNexusIncomingService(context.Context, *operatorservice.CreateOrUpdateNexusIncomingServiceRequest) (*operatorservice.CreateOrUpdateNexusIncomingServiceResponse, error) {
-	return nil, status.Errorf(codes.Unimplemented, "method CreateOrUpdateNexusIncomingService not implemented")
+func (*OperatorHandlerImpl) CreateOrUpdateNexusIncomingService(context.Context, *operatorservice.CreateOrUpdateNexusIncomingServiceRequest) (*operatorservice.CreateOrUpdateNexusIncomingServiceResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "unimplemented")
 }
 
-// DeleteNexusIncomingService implements OperatorHandler.
 func (*OperatorHandlerImpl) DeleteNexusIncomingService(context.Context, *operatorservice.DeleteNexusIncomingServiceRequest) (*operatorservice.DeleteNexusIncomingServiceResponse, error) {
-	return nil, status.Errorf(codes.Unimplemented, "method DeleteNexusIncomingService not implemented")
+	return nil, status.Error(codes.Unimplemented, "unimplemented")
 }
 
-// GetNexusIncomingService implements OperatorHandler.
 func (*OperatorHandlerImpl) GetNexusIncomingService(context.Context, *operatorservice.GetNexusIncomingServiceRequest) (*operatorservice.GetNexusIncomingServiceResponse, error) {
-	return nil, status.Errorf(codes.Unimplemented, "method GetNexusIncomingService not implemented")
+	return nil, status.Error(codes.Unimplemented, "unimplemented")
 }
 
-// ListNexusIncomingServices implements OperatorHandler.
 func (*OperatorHandlerImpl) ListNexusIncomingServices(context.Context, *operatorservice.ListNexusIncomingServicesRequest) (*operatorservice.ListNexusIncomingServicesResponse, error) {
-	return nil, status.Errorf(codes.Unimplemented, "method ListNexusIncomingServices not implemented")
+	return nil, status.Error(codes.Unimplemented, "unimplemented")
 }

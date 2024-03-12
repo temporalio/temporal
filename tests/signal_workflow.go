@@ -27,6 +27,7 @@ package tests
 import (
 	"bytes"
 	"encoding/binary"
+	"fmt"
 	"strconv"
 	"strings"
 	"time"
@@ -561,39 +562,36 @@ func (s *FunctionalSuite) TestSignalExternalWorkflowCommand() {
 	s.NoError(err)
 
 	// in source workflow
-	signalSent := false
-	intiatedEventID := 10
+	var historyEvents []*historypb.HistoryEvent
 CheckHistoryLoopForSignalSent:
 	for i := 1; i < 10; i++ {
-		historyResponse, err := s.engine.GetWorkflowExecutionHistory(NewContext(), &workflowservice.GetWorkflowExecutionHistoryRequest{
-			Namespace: s.namespace,
-			Execution: &commonpb.WorkflowExecution{
-				WorkflowId: id,
-				RunId:      we.RunId,
-			},
+		historyEvents = s.getHistory(s.namespace, &commonpb.WorkflowExecution{
+			WorkflowId: id,
+			RunId:      we.RunId,
 		})
-		s.NoError(err)
-		history := historyResponse.History
-		//common.PrettyPrintHistory(history, s.Logger)
 
-		signalRequestedEvent := history.Events[len(history.Events)-2]
+		signalRequestedEvent := historyEvents[len(historyEvents)-2]
 		if signalRequestedEvent.GetEventType() != enumspb.EVENT_TYPE_EXTERNAL_WORKFLOW_EXECUTION_SIGNALED {
 			s.Logger.Info("Signal still not sent")
 			time.Sleep(100 * time.Millisecond)
 			continue CheckHistoryLoopForSignalSent
 		}
-
-		ewfeAttributes := signalRequestedEvent.GetExternalWorkflowExecutionSignaledEventAttributes()
-		s.NotNil(ewfeAttributes)
-		s.Equal(int64(intiatedEventID), ewfeAttributes.GetInitiatedEventId())
-		s.Equal(id, ewfeAttributes.WorkflowExecution.GetWorkflowId())
-		s.Equal(we2.RunId, ewfeAttributes.WorkflowExecution.RunId)
-
-		signalSent = true
 		break
 	}
 
-	s.True(signalSent)
+	s.EqualHistoryEvents(fmt.Sprintf(`
+  1 WorkflowExecutionStarted
+  2 WorkflowTaskScheduled
+  3 WorkflowTaskStarted
+  4 WorkflowTaskCompleted
+  5 ActivityTaskScheduled
+  6 ActivityTaskTimedOut
+  7 WorkflowTaskScheduled
+  8 WorkflowTaskStarted
+  9 WorkflowTaskCompleted
+ 10 SignalExternalWorkflowExecutionInitiated
+ 11 ExternalWorkflowExecutionSignaled {"InitiatedEventId":10,"WorkflowExecution":{"RunId":"%s","WorkflowId":"%s"}}
+ 12 WorkflowTaskScheduled`, we2.RunId, id), historyEvents)
 
 	// Process signal in workflow for foreign workflow
 	_, err = foreignPoller.PollAndProcessWorkflowTask(WithDumpHistory)
@@ -601,7 +599,7 @@ CheckHistoryLoopForSignalSent:
 	s.NoError(err)
 
 	s.False(workflowComplete)
-	s.True(signalEvent != nil)
+	s.NotNil(signalEvent)
 	s.Equal(signalName, signalEvent.GetWorkflowExecutionSignaledEventAttributes().SignalName)
 	s.ProtoEqual(signalInput, signalEvent.GetWorkflowExecutionSignaledEventAttributes().Input)
 	s.ProtoEqual(signalHeader, signalEvent.GetWorkflowExecutionSignaledEventAttributes().Header)
@@ -778,16 +776,11 @@ func (s *FunctionalSuite) TestSignalWorkflow_NoWorkflowTaskCreated() {
 	s.Logger.Info("PollAndProcessWorkflowTask", tag.Error(err))
 	s.NoError(err)
 
-	historyResponse, err := s.engine.GetWorkflowExecutionHistory(NewContext(), &workflowservice.GetWorkflowExecutionHistoryRequest{
-		Namespace: s.namespace,
-		Execution: &commonpb.WorkflowExecution{
-			WorkflowId: id,
-			RunId:      we.RunId,
-		},
+	historyEvents := s.getHistory(s.namespace, &commonpb.WorkflowExecution{
+		WorkflowId: id,
+		RunId:      we.RunId,
 	})
-	s.NoError(err)
-	s.NotNil(historyResponse)
-	s.EqualHistory(`
+	s.EqualHistoryEvents(`
   1 WorkflowExecutionStarted
   2 WorkflowTaskScheduled
   3 WorkflowTaskStarted
@@ -797,7 +790,7 @@ func (s *FunctionalSuite) TestSignalWorkflow_NoWorkflowTaskCreated() {
   7 WorkflowTaskScheduled
   8 WorkflowTaskStarted
   9 WorkflowTaskCompleted
- 10 WorkflowExecutionCompleted`, historyResponse.GetHistory())
+ 10 WorkflowExecutionCompleted`, historyEvents)
 }
 
 func (s *FunctionalSuite) TestSignalWorkflow_WorkflowCloseAttempted() {
@@ -1056,38 +1049,37 @@ func (s *FunctionalSuite) TestSignalExternalWorkflowCommand_WithoutRunID() {
 	s.NoError(err)
 
 	// in source workflow
-	signalSent := false
-	intiatedEventID := 10
+	var historyEvents []*historypb.HistoryEvent
 CheckHistoryLoopForSignalSent:
 	for i := 1; i < 10; i++ {
-		historyResponse, err := s.engine.GetWorkflowExecutionHistory(NewContext(), &workflowservice.GetWorkflowExecutionHistoryRequest{
-			Namespace: s.namespace,
-			Execution: &commonpb.WorkflowExecution{
-				WorkflowId: id,
-				RunId:      we.RunId,
-			},
+		historyEvents = s.getHistory(s.namespace, &commonpb.WorkflowExecution{
+			WorkflowId: id,
+			RunId:      we.RunId,
 		})
-		s.NoError(err)
-		history := historyResponse.History
 
-		signalRequestedEvent := history.Events[len(history.Events)-2]
+		signalRequestedEvent := historyEvents[len(historyEvents)-2]
 		if signalRequestedEvent.GetEventType() != enumspb.EVENT_TYPE_EXTERNAL_WORKFLOW_EXECUTION_SIGNALED {
 			s.Logger.Info("Signal still not sent")
 			time.Sleep(100 * time.Millisecond)
 			continue CheckHistoryLoopForSignalSent
 		}
 
-		ewfeAttributes := signalRequestedEvent.GetExternalWorkflowExecutionSignaledEventAttributes()
-		s.NotNil(ewfeAttributes)
-		s.Equal(int64(intiatedEventID), ewfeAttributes.GetInitiatedEventId())
-		s.Equal(id, ewfeAttributes.WorkflowExecution.GetWorkflowId())
-		s.Equal("", ewfeAttributes.WorkflowExecution.GetRunId())
-
-		signalSent = true
 		break
 	}
 
-	s.True(signalSent)
+	s.EqualHistoryEvents(fmt.Sprintf(`
+  1 WorkflowExecutionStarted
+  2 WorkflowTaskScheduled
+  3 WorkflowTaskStarted
+  4 WorkflowTaskCompleted
+  5 ActivityTaskScheduled
+  6 ActivityTaskTimedOut
+  7 WorkflowTaskScheduled
+  8 WorkflowTaskStarted
+  9 WorkflowTaskCompleted
+ 10 SignalExternalWorkflowExecutionInitiated
+ 11 ExternalWorkflowExecutionSignaled {"InitiatedEventId":10,"WorkflowExecution":{"RunId":"","WorkflowId":"%s"}}
+ 12 WorkflowTaskScheduled`, id), historyEvents)
 
 	// Process signal in workflow for foreign workflow
 	_, err = foreignPoller.PollAndProcessWorkflowTask(WithDumpHistory)
@@ -1193,37 +1185,36 @@ func (s *FunctionalSuite) TestSignalExternalWorkflowCommand_UnKnownTarget() {
 	s.Logger.Info("PollAndProcessWorkflowTask", tag.Error(err))
 	s.NoError(err)
 
-	signalSentFailed := false
-	intiatedEventID := 10
+	var historyEvents []*historypb.HistoryEvent
 CheckHistoryLoopForCancelSent:
 	for i := 1; i < 10; i++ {
-		historyResponse, err := s.engine.GetWorkflowExecutionHistory(NewContext(), &workflowservice.GetWorkflowExecutionHistoryRequest{
-			Namespace: s.namespace,
-			Execution: &commonpb.WorkflowExecution{
-				WorkflowId: id,
-				RunId:      we.RunId,
-			},
+		historyEvents = s.getHistory(s.namespace, &commonpb.WorkflowExecution{
+			WorkflowId: id,
+			RunId:      we.RunId,
 		})
-		s.NoError(err)
-		history := historyResponse.History
 
-		signalFailedEvent := history.Events[len(history.Events)-2]
+		signalFailedEvent := historyEvents[len(historyEvents)-2]
 		if signalFailedEvent.GetEventType() != enumspb.EVENT_TYPE_SIGNAL_EXTERNAL_WORKFLOW_EXECUTION_FAILED {
 			s.Logger.Info("Cancellaton not cancelled yet")
 			time.Sleep(100 * time.Millisecond)
 			continue CheckHistoryLoopForCancelSent
 		}
-
-		signalExternalWorkflowExecutionFailedEventAttributes := signalFailedEvent.GetSignalExternalWorkflowExecutionFailedEventAttributes()
-		s.Equal(int64(intiatedEventID), signalExternalWorkflowExecutionFailedEventAttributes.InitiatedEventId)
-		s.Equal("workflow_not_exist", signalExternalWorkflowExecutionFailedEventAttributes.WorkflowExecution.WorkflowId)
-		s.Equal(we.RunId, signalExternalWorkflowExecutionFailedEventAttributes.WorkflowExecution.RunId)
-
-		signalSentFailed = true
 		break
 	}
 
-	s.True(signalSentFailed)
+	s.EqualHistoryEvents(fmt.Sprintf(`
+  1 WorkflowExecutionStarted
+  2 WorkflowTaskScheduled
+  3 WorkflowTaskStarted
+  4 WorkflowTaskCompleted
+  5 ActivityTaskScheduled
+  6 ActivityTaskTimedOut
+  7 WorkflowTaskScheduled
+  8 WorkflowTaskStarted
+  9 WorkflowTaskCompleted
+ 10 SignalExternalWorkflowExecutionInitiated
+ 11 SignalExternalWorkflowExecutionFailed {"InitiatedEventId":10,"WorkflowExecution":{"RunId":"%s","WorkflowId":"workflow_not_exist"}}
+ 12 WorkflowTaskScheduled`, we.RunId), historyEvents)
 }
 
 func (s *FunctionalSuite) TestSignalExternalWorkflowCommand_SignalSelf() {
@@ -1318,38 +1309,36 @@ func (s *FunctionalSuite) TestSignalExternalWorkflowCommand_SignalSelf() {
 	s.Logger.Info("PollAndProcessWorkflowTask", tag.Error(err))
 	s.NoError(err)
 
-	signalSentFailed := false
-	intiatedEventID := 10
+	var historyEvents []*historypb.HistoryEvent
 CheckHistoryLoopForCancelSent:
 	for i := 1; i < 10; i++ {
-		historyResponse, err := s.engine.GetWorkflowExecutionHistory(NewContext(), &workflowservice.GetWorkflowExecutionHistoryRequest{
-			Namespace: s.namespace,
-			Execution: &commonpb.WorkflowExecution{
-				WorkflowId: id,
-				RunId:      we.RunId,
-			},
+		historyEvents = s.getHistory(s.namespace, &commonpb.WorkflowExecution{
+			WorkflowId: id,
+			RunId:      we.RunId,
 		})
-		s.NoError(err)
-		history := historyResponse.History
 
-		signalFailedEvent := history.Events[len(history.Events)-2]
+		signalFailedEvent := historyEvents[len(historyEvents)-2]
 		if signalFailedEvent.GetEventType() != enumspb.EVENT_TYPE_SIGNAL_EXTERNAL_WORKFLOW_EXECUTION_FAILED {
 			s.Logger.Info("Cancellaton not cancelled yet")
 			time.Sleep(100 * time.Millisecond)
 			continue CheckHistoryLoopForCancelSent
 		}
 
-		signalExternalWorkflowExecutionFailedEventAttributes := signalFailedEvent.GetSignalExternalWorkflowExecutionFailedEventAttributes()
-		s.Equal(int64(intiatedEventID), signalExternalWorkflowExecutionFailedEventAttributes.InitiatedEventId)
-		s.Equal(id, signalExternalWorkflowExecutionFailedEventAttributes.WorkflowExecution.WorkflowId)
-		s.Equal(we.RunId, signalExternalWorkflowExecutionFailedEventAttributes.WorkflowExecution.RunId)
-
-		signalSentFailed = true
 		break
 	}
-
-	s.True(signalSentFailed)
-
+	s.EqualHistoryEvents(fmt.Sprintf(`
+  1 WorkflowExecutionStarted
+  2 WorkflowTaskScheduled
+  3 WorkflowTaskStarted
+  4 WorkflowTaskCompleted
+  5 ActivityTaskScheduled
+  6 ActivityTaskTimedOut
+  7 WorkflowTaskScheduled
+  8 WorkflowTaskStarted
+  9 WorkflowTaskCompleted
+ 10 SignalExternalWorkflowExecutionInitiated
+ 11 SignalExternalWorkflowExecutionFailed {"InitiatedEventId":10,"WorkflowExecution":{"RunId":"%s","WorkflowId":"%s"}}
+ 12 WorkflowTaskScheduled`, we.RunId, id), historyEvents)
 }
 
 func (s *FunctionalSuite) TestSignalWithStartWorkflow() {
@@ -1981,16 +1970,11 @@ func (s *FunctionalSuite) TestSignalWithStartWorkflow_NoWorkflowTaskCreated() {
 	s.Logger.Info("PollAndProcessWorkflowTask", tag.Error(err))
 	s.NoError(err)
 
-	historyResponse, err := s.engine.GetWorkflowExecutionHistory(NewContext(), &workflowservice.GetWorkflowExecutionHistoryRequest{
-		Namespace: s.namespace,
-		Execution: &commonpb.WorkflowExecution{
-			WorkflowId: id,
-			RunId:      we1.RunId,
-		},
+	historyEvents := s.getHistory(s.namespace, &commonpb.WorkflowExecution{
+		WorkflowId: id,
+		RunId:      we1.RunId,
 	})
-	s.NoError(err)
-	s.NotNil(historyResponse)
-	s.EqualHistory(`
+	s.EqualHistoryEvents(`
   1 WorkflowExecutionStarted
   2 WorkflowTaskScheduled
   3 WorkflowTaskStarted
@@ -2000,5 +1984,5 @@ func (s *FunctionalSuite) TestSignalWithStartWorkflow_NoWorkflowTaskCreated() {
   7 WorkflowTaskScheduled
   8 WorkflowTaskStarted
   9 WorkflowTaskCompleted
- 10 WorkflowExecutionCompleted`, historyResponse.GetHistory())
+ 10 WorkflowExecutionCompleted`, historyEvents)
 }

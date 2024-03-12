@@ -28,6 +28,7 @@ import (
 	"fmt"
 	"net"
 
+	"github.com/gorilla/mux"
 	"go.uber.org/fx"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/health"
@@ -93,12 +94,14 @@ var Module = fx.Options(
 	fx.Provide(PersistenceRateLimitingParamsProvider),
 	service.PersistenceLazyLoadedServiceResolverModule,
 	fx.Provide(FEReplicatorNamespaceReplicationQueueProvider),
+	fx.Provide(AuthorizationInterceptorProvider),
 	fx.Provide(func(so GrpcServerOptions) *grpc.Server { return grpc.NewServer(so.Options...) }),
 	fx.Provide(HandlerProvider),
 	fx.Provide(AdminHandlerProvider),
 	fx.Provide(OperatorHandlerProvider),
 	fx.Provide(NewVersionChecker),
 	fx.Provide(ServiceResolverProvider),
+	fx.Provide(NexusHTTPHandlerProvider),
 	fx.Provide(HTTPAPIServerProvider),
 	fx.Provide(NewServiceProvider),
 	fx.Invoke(ServiceLifetimeHooks),
@@ -145,6 +148,27 @@ type GrpcServerOptions struct {
 	UnaryInterceptors []grpc.UnaryServerInterceptor
 }
 
+func AuthorizationInterceptorProvider(
+	cfg *config.Config,
+	logger log.Logger,
+	namespaceRegistry namespace.Registry,
+	metricsHandler metrics.Handler,
+	authorizer authorization.Authorizer,
+	claimMapper authorization.ClaimMapper,
+	audienceGetter authorization.JWTAudienceMapper,
+) *authorization.Interceptor {
+	return authorization.NewInterceptor(
+		claimMapper,
+		authorizer,
+		metricsHandler,
+		logger,
+		namespaceRegistry,
+		audienceGetter,
+		cfg.Global.Authorization.AuthHeaderName,
+		cfg.Global.Authorization.AuthExtraHeaderName,
+	)
+}
+
 func GrpcServerOptionsProvider(
 	logger log.Logger,
 	cfg *config.Config,
@@ -163,12 +187,9 @@ func GrpcServerOptionsProvider(
 	traceInterceptor telemetry.ServerTraceInterceptor,
 	sdkVersionInterceptor *interceptor.SDKVersionInterceptor,
 	callerInfoInterceptor *interceptor.CallerInfoInterceptor,
-	authorizer authorization.Authorizer,
-	claimMapper authorization.ClaimMapper,
-	audienceGetter authorization.JWTAudienceMapper,
+	authInterceptor *authorization.Interceptor,
 	customInterceptors []grpc.UnaryServerInterceptor,
 	metricsHandler metrics.Handler,
-	namespaceRegistry namespace.Registry,
 ) GrpcServerOptions {
 	kep := keepalive.EnforcementPolicy{
 		MinTime:             serviceConfig.KeepAliveMinTime(),
@@ -201,16 +222,7 @@ func GrpcServerOptionsProvider(
 		namespaceLogInterceptor.Intercept, // TODO: Deprecate this with a outer custom interceptor
 		grpc.UnaryServerInterceptor(traceInterceptor),
 		metrics.NewServerMetricsContextInjectorInterceptor(),
-		authorization.NewAuthorizationInterceptor(
-			claimMapper,
-			authorizer,
-			metricsHandler,
-			logger,
-			namespaceRegistry,
-			audienceGetter,
-			cfg.Global.Authorization.AuthHeaderName,
-			cfg.Global.Authorization.AuthExtraHeaderName,
-		),
+		authInterceptor.Intercept,
 		redirectionInterceptor.Intercept,
 		telemetryInterceptor.UnaryIntercept,
 		healthInterceptor.Intercept,
@@ -324,7 +336,6 @@ func RateLimitInterceptorProvider(
 			quotas.NewDefaultIncomingRateBurst(rateFn),
 			quotas.NewDefaultIncomingRateBurst(rateFn),
 			quotas.NewDefaultIncomingRateBurst(namespaceReplicationInducingRateFn),
-			quotas.NewDefaultIncomingRateBurst(rateFn),
 			serviceConfig.OperatorRPSRatio,
 		),
 		map[string]int{},
@@ -374,7 +385,6 @@ func NamespaceRateLimitInterceptorProvider(
 				configs.NewNamespaceRateBurst(req.Caller, rateFn, serviceConfig.MaxNamespaceBurstPerInstance),
 				configs.NewNamespaceRateBurst(req.Caller, visibilityRateFn, serviceConfig.MaxNamespaceVisibilityBurstPerInstance),
 				configs.NewNamespaceRateBurst(req.Caller, namespaceReplicationInducingRateFn, serviceConfig.MaxNamespaceNamespaceReplicationInducingAPIsBurstPerInstance),
-				configs.NewNamespaceRateBurst(req.Caller, rateFn, serviceConfig.MaxNamespaceBurstPerInstance),
 				serviceConfig.OperatorRPSRatio,
 			)
 		},
@@ -630,6 +640,33 @@ func HandlerProvider(
 	return wfHandler
 }
 
+func NexusHTTPHandlerProvider(
+	serviceConfig *Config,
+	serviceName primitives.ServiceName,
+	matchingClient resource.MatchingClient,
+	metricsHandler metrics.Handler,
+	namespaceRegistry namespace.Registry,
+	authInterceptor *authorization.Interceptor,
+	namespaceRateLimiterInterceptor *interceptor.NamespaceRateLimitInterceptor,
+	namespaceCountLimiterInterceptor *interceptor.ConcurrentRequestLimitInterceptor,
+	namespaceValidatorInterceptor *interceptor.NamespaceValidatorInterceptor,
+	rateLimitInterceptor *interceptor.RateLimitInterceptor,
+	logger log.Logger,
+) *NexusHTTPHandler {
+	return NewNexusHTTPHandler(
+		serviceConfig,
+		matchingClient,
+		metricsHandler,
+		namespaceRegistry,
+		authInterceptor,
+		namespaceValidatorInterceptor,
+		namespaceRateLimiterInterceptor,
+		namespaceCountLimiterInterceptor,
+		rateLimitInterceptor,
+		logger,
+	)
+}
+
 // HTTPAPIServerProvider provides an HTTP API server if enabled or nil
 // otherwise.
 func HTTPAPIServerProvider(
@@ -644,6 +681,7 @@ func HTTPAPIServerProvider(
 	metricsHandler metrics.Handler,
 	namespaceRegistry namespace.Registry,
 	logger log.Logger,
+	nexusHTTPHandler *NexusHTTPHandler,
 ) (*HTTPAPIServer, error) {
 	// If the service is not the frontend service, HTTP API is disabled
 	if serviceName != primitives.FrontendService {
@@ -663,6 +701,7 @@ func HTTPAPIServerProvider(
 		operatorHandler,
 		grpcServerOptions.UnaryInterceptors,
 		metricsHandler,
+		[]func(*mux.Router){nexusHTTPHandler.RegisterRoutes},
 		namespaceRegistry,
 		logger,
 	)

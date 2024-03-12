@@ -416,6 +416,7 @@ message DescribeWorkflowExecutionResponse {
     repeated temporal.api.workflow.v1.PendingActivityInfo pending_activities = 3;
     repeated temporal.api.workflow.v1.PendingChildExecutionInfo pending_children = 4;
     temporal.api.workflow.v1.PendingWorkflowTaskInfo pending_workflow_task = 5;
+    repeated temporal.api.workflow.v1.CallbackInfo callbacks = 6;
 }
 
 message ReplicateEventsV2Request {

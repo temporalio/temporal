@@ -20,13 +20,23 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-package tasks
+package callbacks
 
-type FakeDestinationTask struct {
-	Task
-	Destination string
+import (
+	"time"
+
+	"go.temporal.io/server/common/dynamicconfig"
+)
+
+// InvocationTaskTimeout is the timeout for executing a single callback invocation task.
+const InvocationTaskTimeout = "plugin.callback.invocation.taskTimeout"
+
+type Config struct {
+	InvocationTaskTimeout dynamicconfig.DurationPropertyFn
 }
 
-func (t FakeDestinationTask) GetDestination() string {
-	return t.Destination
+func ConfigProvider(dc *dynamicconfig.Collection) *Config {
+	return &Config{
+		InvocationTaskTimeout: dc.GetDurationProperty(dynamicconfig.Key(InvocationTaskTimeout), time.Second*10),
+	}
 }

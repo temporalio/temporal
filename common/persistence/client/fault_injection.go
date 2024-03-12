@@ -42,13 +42,14 @@ type (
 		config         *config.FaultInjection
 		ErrorGenerator ErrorGenerator
 
-		TaskStore      *FaultInjectionTaskStore
-		ShardStore     *FaultInjectionShardStore
-		MetadataStore  *FaultInjectionMetadataStore
-		ExecutionStore *FaultInjectionExecutionStore
-		Queue          *FaultInjectionQueue
-		QueueV2        *FaultInjectionQueueV2
-		ClusterMDStore *FaultInjectionClusterMetadataStore
+		TaskStore                 *FaultInjectionTaskStore
+		ShardStore                *FaultInjectionShardStore
+		MetadataStore             *FaultInjectionMetadataStore
+		ExecutionStore            *FaultInjectionExecutionStore
+		Queue                     *FaultInjectionQueue
+		QueueV2                   *FaultInjectionQueueV2
+		ClusterMDStore            *FaultInjectionClusterMetadataStore
+		NexusIncomingServiceStore *FaultInjectionNexusIncomingServiceStore
 	}
 
 	FaultInjectionShardStore struct {
@@ -85,6 +86,11 @@ type (
 	FaultInjectionQueueV2 struct {
 		baseQueue      persistence.QueueV2
 		ErrorGenerator ErrorGenerator
+	}
+
+	FaultInjectionNexusIncomingServiceStore struct {
+		baseNexusIncomingServiceStore persistence.NexusIncomingServiceStore
+		ErrorGenerator                ErrorGenerator
 	}
 )
 
@@ -147,6 +153,7 @@ func (d *FaultInjectionDataStoreFactory) UpdateRate(rate float64) {
 	d.ExecutionStore.UpdateRate(rate)
 	d.Queue.UpdateRate(rate)
 	d.ClusterMDStore.UpdateRate(rate)
+	d.NexusIncomingServiceStore.UpdateRate(rate)
 }
 
 func (d *FaultInjectionDataStoreFactory) NewTaskStore() (persistence.TaskStore, error) {
@@ -292,6 +299,27 @@ func (d *FaultInjectionDataStoreFactory) NewClusterMetadataStore() (persistence.
 
 	}
 	return d.ClusterMDStore, nil
+}
+
+func (d *FaultInjectionDataStoreFactory) NewNexusIncomingServiceStore() (persistence.NexusIncomingServiceStore, error) {
+	if d.NexusIncomingServiceStore == nil {
+		baseStore, err := d.baseFactory.NewNexusIncomingServiceStore()
+		if err != nil {
+			return nil, err
+		}
+		if storeConfig, ok := d.config.Targets.DataStores[config.NexusIncomingServiceStoreName]; ok {
+			d.NexusIncomingServiceStore = &FaultInjectionNexusIncomingServiceStore{
+				baseNexusIncomingServiceStore: baseStore,
+				ErrorGenerator:                NewTargetedDataStoreErrorGenerator(&storeConfig),
+			}
+		} else {
+			d.NexusIncomingServiceStore, err = NewFaultInjectionNexusIncomingServiceStore(d.ErrorGenerator.Rate(), baseStore)
+			if err != nil {
+				return nil, err
+			}
+		}
+	}
+	return d.NexusIncomingServiceStore, nil
 }
 
 func NewFaultInjectionQueue(rate float64, baseQueue persistence.Queue) (*FaultInjectionQueue, error) {
@@ -1199,4 +1227,57 @@ func (s *FaultInjectionShardStore) AssertShardOwnership(
 
 func (s *FaultInjectionShardStore) UpdateRate(rate float64) {
 	s.ErrorGenerator.UpdateRate(rate)
+}
+
+func NewFaultInjectionNexusIncomingServiceStore(
+	rate float64,
+	baseNexusIncomingServiceStore persistence.NexusIncomingServiceStore,
+) (*FaultInjectionNexusIncomingServiceStore, error) {
+	errorGenerator := newErrorGenerator(rate, defaultErrors)
+	return &FaultInjectionNexusIncomingServiceStore{
+		baseNexusIncomingServiceStore: baseNexusIncomingServiceStore,
+		ErrorGenerator:                errorGenerator,
+	}, nil
+}
+
+func (n *FaultInjectionNexusIncomingServiceStore) GetName() string {
+	return n.baseNexusIncomingServiceStore.GetName()
+}
+
+func (n *FaultInjectionNexusIncomingServiceStore) Close() {
+	n.baseNexusIncomingServiceStore.Close()
+}
+
+func (n *FaultInjectionNexusIncomingServiceStore) ListNexusIncomingServices(
+	ctx context.Context,
+	request *persistence.ListNexusIncomingServicesRequest,
+) (*persistence.InternalListNexusIncomingServicesResponse, error) {
+	if err := n.ErrorGenerator.Generate(); err != nil {
+		return nil, err
+	}
+	return n.baseNexusIncomingServiceStore.ListNexusIncomingServices(ctx, request)
+}
+
+func (n *FaultInjectionNexusIncomingServiceStore) CreateOrUpdateNexusIncomingService(
+	ctx context.Context,
+	request *persistence.InternalCreateOrUpdateNexusIncomingServiceRequest,
+) error {
+	if err := n.ErrorGenerator.Generate(); err != nil {
+		return err
+	}
+	return n.baseNexusIncomingServiceStore.CreateOrUpdateNexusIncomingService(ctx, request)
+}
+
+func (n *FaultInjectionNexusIncomingServiceStore) DeleteNexusIncomingService(
+	ctx context.Context,
+	request *persistence.DeleteNexusIncomingServiceRequest,
+) error {
+	if err := n.ErrorGenerator.Generate(); err != nil {
+		return err
+	}
+	return n.baseNexusIncomingServiceStore.DeleteNexusIncomingService(ctx, request)
+}
+
+func (n *FaultInjectionNexusIncomingServiceStore) UpdateRate(rate float64) {
+	n.ErrorGenerator.UpdateRate(rate)
 }

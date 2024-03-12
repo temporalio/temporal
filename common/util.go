@@ -32,6 +32,7 @@ import (
 	"strings"
 	"sync"
 	"time"
+	"unicode/utf8"
 
 	"github.com/dgryski/go-farm"
 	commonpb "go.temporal.io/api/common/v1"
@@ -480,12 +481,13 @@ func PrettyPrint[T proto.Message](msgs []T, header ...string) {
 	_, _ = sb.WriteString("==========================================================================\n")
 	for _, h := range header {
 		_, _ = sb.WriteString(h)
-		_, _ = sb.WriteString("\n")
+		_, _ = sb.WriteRune('\n')
 	}
 	_, _ = sb.WriteString("--------------------------------------------------------------------------\n")
 	for _, m := range msgs {
 		bs, _ := prototext.Marshal(m)
 		sb.Write(bs)
+		sb.WriteRune('\n')
 	}
 	fmt.Print(sb.String())
 }
@@ -816,4 +818,11 @@ func OverrideWorkflowTaskTimeout(
 // CloneProto is a generic typed version of proto.Clone from proto.
 func CloneProto[T proto.Message](v T) T {
 	return proto.Clone(v).(T)
+}
+
+func ValidateUTF8String(fieldName string, strValue string) error {
+	if !utf8.ValidString(strValue) {
+		return serviceerror.NewInvalidArgument(fmt.Sprintf("%s %v is not a valid UTF-8 string", fieldName, strValue))
+	}
+	return nil
 }

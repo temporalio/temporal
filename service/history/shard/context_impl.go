@@ -73,6 +73,7 @@ import (
 	"go.temporal.io/server/service/history/configs"
 	"go.temporal.io/server/service/history/consts"
 	"go.temporal.io/server/service/history/events"
+	"go.temporal.io/server/service/history/hsm"
 	"go.temporal.io/server/service/history/tasks"
 	"go.temporal.io/server/service/history/vclock"
 )
@@ -165,6 +166,8 @@ type (
 		remoteClusterInfos      map[string]*remoteClusterInfo
 		handoverNamespaces      map[namespace.Name]*namespaceHandOverInfo // keyed on namespace name
 		acquireShardRetryPolicy backoff.RetryPolicy
+
+		stateMachineRegistry *hsm.Registry
 	}
 
 	remoteClusterInfo struct {
@@ -473,7 +476,7 @@ func (s *ContextImpl) UpdateReplicatorDLQAckLevel(
 		return err
 	}
 
-	s.GetMetricsHandler().Gauge(metrics.ReplicationDLQAckLevelGauge.Name()).
+	metrics.ReplicationDLQAckLevelGauge.With(s.GetMetricsHandler()).
 		Record(float64(ackLevel),
 			metrics.OperationTag(metrics.ReplicationDLQStatsScope),
 			metrics.TargetClusterTag(sourceCluster),
@@ -915,9 +918,9 @@ func (s *ContextImpl) AppendHistoryEvents(
 		// N.B. - Dual emit here makes sense so that we can see aggregate timer stats across all
 		// namespaces along with the individual namespaces stats
 		handler := s.GetMetricsHandler().WithTags(metrics.OperationTag(metrics.SessionStatsScope))
-		handler.Histogram(metrics.HistorySize.Name(), metrics.HistorySize.Unit()).Record(int64(size))
+		metrics.HistorySize.With(handler).Record(int64(size))
 		if entry, err := s.GetNamespaceRegistry().GetNamespaceByID(namespaceID); err == nil && entry != nil {
-			handler.Histogram(metrics.HistorySize.Name(), metrics.HistorySize.Unit()).
+			metrics.HistorySize.With(handler).
 				Record(int64(size), metrics.NamespaceTag(entry.Name().String()))
 		}
 		if size >= historySizeLogThreshold {
@@ -1309,10 +1312,9 @@ Loop:
 					tag.ShardQueueAcks(category.Name(), minTaskKey.TaskID),
 				)
 			}
-			metricsHandler.Histogram(
-				metrics.ShardInfoImmediateQueueLagHistogram.Name(),
-				metrics.ShardInfoImmediateQueueLagHistogram.Unit(),
-			).Record(lag, metrics.TaskCategoryTag(category.Name()))
+			metrics.ShardInfoImmediateQueueLagHistogram.
+				With(metricsHandler).
+				Record(lag, metrics.TaskCategoryTag(category.Name()))
 
 		case tasks.CategoryTypeScheduled:
 			minTaskKey := getMinTaskKey(queueState)
@@ -1326,9 +1328,8 @@ Loop:
 					tag.ShardQueueAcks(category.Name(), minTaskKey.FireTime),
 				)
 			}
-			metricsHandler.Timer(
-				metrics.ShardInfoScheduledQueueLagTimer.Name(),
-			).Record(lag, metrics.TaskCategoryTag(category.Name()))
+			metrics.ShardInfoScheduledQueueLagTimer.With(metricsHandler).
+				Record(lag, metrics.TaskCategoryTag(category.Name()))
 		default:
 			s.contextTaggedLogger.Error("Unknown task category type", tag.NewStringTag("task-category", category.Type().String()))
 		}
@@ -1442,7 +1443,7 @@ func (s *ContextImpl) handleWriteErrorLocked(
 
 func (s *ContextImpl) maybeRecordShardAcquisitionLatency(ownershipChanged bool) {
 	if ownershipChanged {
-		s.GetMetricsHandler().Timer(metrics.ShardContextAcquisitionLatency.Name()).
+		metrics.ShardContextAcquisitionLatency.With(s.GetMetricsHandler()).
 			Record(s.GetCurrentTime(s.GetClusterMetadata().GetCurrentClusterName()).Sub(s.getLastUpdatedTime()),
 				metrics.OperationTag(metrics.ShardInfoScope),
 			)
@@ -1497,18 +1498,18 @@ func (s *ContextImpl) stoppedForOwnershipLost() bool {
 
 func (s *ContextImpl) wLock() {
 	handler := s.metricsHandler.WithTags(metrics.OperationTag(metrics.ShardInfoScope))
-	handler.Counter(metrics.LockRequests.Name()).Record(1)
+	metrics.LockRequests.With(handler).Record(1)
 	startTime := time.Now().UTC()
-	defer func() { handler.Timer(metrics.LockLatency.Name()).Record(time.Since(startTime)) }()
+	defer func() { metrics.LockLatency.With(handler).Record(time.Since(startTime)) }()
 
 	s.rwLock.Lock()
 }
 
 func (s *ContextImpl) rLock() {
 	handler := s.metricsHandler.WithTags(metrics.OperationTag(metrics.ShardInfoScope))
-	handler.Counter(metrics.LockRequests.Name()).Record(1)
+	metrics.LockRequests.With(handler).Record(1)
 	startTime := time.Now().UTC()
-	defer func() { handler.Timer(metrics.LockLatency.Name()).Record(time.Since(startTime)) }()
+	defer func() { metrics.LockLatency.With(handler).Record(time.Since(startTime)) }()
 
 	s.rwLock.RLock()
 }
@@ -1525,12 +1526,12 @@ func (s *ContextImpl) ioSemaphoreAcquire(
 	ctx context.Context,
 ) (retErr error) {
 	handler := s.metricsHandler.WithTags(metrics.OperationTag(metrics.ShardInfoScope))
-	handler.Counter(metrics.SemaphoreRequests.Name()).Record(1)
+	metrics.SemaphoreRequests.With(handler).Record(1)
 	startTime := time.Now().UTC()
 	defer func() {
-		handler.Timer(metrics.SemaphoreLatency.Name()).Record(time.Since(startTime))
+		metrics.SemaphoreLatency.With(handler).Record(time.Since(startTime))
 		if retErr != nil {
-			handler.Counter(metrics.SemaphoreFailures.Name()).Record(1)
+			metrics.SemaphoreFailures.With(handler).Record(1)
 		}
 	}()
 
@@ -2053,6 +2054,7 @@ func newContext(
 	hostInfoProvider membership.HostInfoProvider,
 	taskCategoryRegistry tasks.TaskCategoryRegistry,
 	eventsCache events.Cache,
+	stateMachineRegistry *hsm.Registry,
 ) (*ContextImpl, error) {
 	hostIdentity := hostInfoProvider.HostInfo().Identity()
 	sequenceID := atomic.AddInt64(&shardContextSequenceID, 1)
@@ -2098,6 +2100,7 @@ func newContext(
 		engineFuture:            future.NewFuture[Engine](),
 		queueMetricEmitter:      sync.Once{},
 		ioSemaphore:             semaphore.NewWeighted(int64(ioConcurrency)),
+		stateMachineRegistry:    stateMachineRegistry,
 	}
 	shardContext.taskKeyManager = newTaskKeyManager(
 		shardContext.taskCategoryRegistry,
@@ -2181,6 +2184,10 @@ func (s *ContextImpl) GetClusterMetadata() cluster.Metadata {
 
 func (s *ContextImpl) GetArchivalMetadata() archiver.ArchivalMetadata {
 	return s.archivalMetadata
+}
+
+func (s *ContextImpl) StateMachineRegistry() *hsm.Registry {
+	return s.stateMachineRegistry
 }
 
 // newDetachedContext creates a detached context with the same deadline

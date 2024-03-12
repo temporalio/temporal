@@ -109,7 +109,7 @@ var (
 	errInvalidRemoteClusterInfo                       = "Unable connect to remote cluster with invalid config: %v."
 	errUnableToStoreClusterInfo                       = "Unable to persist cluster info with error: %v."
 	errUnableToDeleteClusterInfo                      = "Unable to delete cluster info with error: %v."
-	errUnableToGetNamespaceInfoMessage                = "Unable to get namespace info with error: %v"
+	errUnableToGetNamespaceInfoMessage                = "Unable to get namespace %v info with error: %v"
 	errUnableToCreateFrontendClientMessage            = "Unable to create frontend client with error: %v."
 	errTooManySearchAttributesMessage                 = "Unable to create search attributes: cannot have more than %d search attribute of type %s."
 
