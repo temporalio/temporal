@@ -669,12 +669,10 @@ func NexusHTTPHandlerProvider(
 }
 
 func OpenAPIHTTPHandlerProvider(
-	serviceConfig *Config,
 	rateLimitInterceptor *interceptor.RateLimitInterceptor,
 	logger log.Logger,
 ) *OpenAPIHTTPHandler {
 	return NewOpenAPIHTTPHandler(
-		serviceConfig,
 		rateLimitInterceptor,
 		logger,
 	)

@@ -99,7 +99,6 @@ func (s *ClientFunctionalSuite) SetupSuite() {
 		dynamicconfig.NumPendingCancelRequestsLimitError:         s.maxPendingCancelRequests,
 		dynamicconfig.NumPendingSignalsLimitError:                s.maxPendingSignals,
 		dynamicconfig.FrontendEnableNexusHTTPHandler:             true,
-		dynamicconfig.FrontendEnableOpenAPIHTTPHandler:           true,
 		dynamicconfig.FrontendEnableWorkerVersioningDataAPIs:     true,
 		dynamicconfig.FrontendEnableWorkerVersioningWorkflowAPIs: true,
 	}

@@ -352,8 +352,6 @@ const (
 	FrontendEnableSchedules = "frontend.enableSchedules"
 	// FrontendEnableNexusHTTPHandler enables serving Nexus HTTP requests in the frontend.
 	FrontendEnableNexusHTTPHandler = "frontend.enableNexusHTTPHandler"
-	// FrontendEnableOpenAPIHTTPHandler enables serving OpenAPI HTTP docs in the frontend.
-	FrontendEnableOpenAPIHTTPHandler = "frontend.enableOpenAPIHTTPHandler"
 	// FrontendEnableCallbackAttachment enables attaching callbacks to workflows.
 	FrontendEnableCallbackAttachment = "frontend.enableCallbackAttachment"
 	// FrontendMaxConcurrentBatchOperationPerNamespace is the max concurrent batch operation job count per namespace

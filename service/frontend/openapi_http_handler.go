@@ -40,26 +40,19 @@ import (
 type OpenAPIHTTPHandler struct {
 	logger               log.Logger
 	rateLimitInterceptor *interceptor.RateLimitInterceptor
-	enabled              func() bool
 }
 
 func NewOpenAPIHTTPHandler(
-	serviceConfig *Config,
 	rateLimitInterceptor *interceptor.RateLimitInterceptor,
 	logger log.Logger,
 ) *OpenAPIHTTPHandler {
 	return &OpenAPIHTTPHandler{
 		logger:               logger,
-		enabled:              serviceConfig.EnableOpenAPIHTTPHandler,
 		rateLimitInterceptor: rateLimitInterceptor,
 	}
 }
 
 func (h *OpenAPIHTTPHandler) RegisterRoutes(r *mux.Router) {
-	if !h.enabled() {
-		return
-	}
-
 	serve := func(version int, apiName string, contentType string, spec []byte) func(http.ResponseWriter, *http.Request) {
 		return func(w http.ResponseWriter, r *http.Request) {
 			if err := h.rateLimitInterceptor.Allow(apiName, r.Header); err != nil {
