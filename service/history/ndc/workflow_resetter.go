@@ -218,6 +218,7 @@ func (r *workflowResetterImpl) ResetWorkflow(
 		resetReapplyType,
 		reapplyEventsFn,
 		additionalReapplyEvents,
+		currentMutableState.CloneToProto().SignalRequestedIds,
 	); err != nil {
 		return err
 	}
@@ -315,6 +316,7 @@ func (r *workflowResetterImpl) reapplyEventsToResetWorkflow(
 	resetReapplyType enumspb.ResetReapplyType,
 	reapplyEventsApplier workflowResetReapplyEventsFn,
 	additionalReapplyEvents []*historypb.HistoryEvent,
+	currentMutableStateSignalRequestedIds []string,
 ) error {
 	switch resetReapplyType {
 	case enumspb.RESET_REAPPLY_TYPE_SIGNAL:
@@ -323,6 +325,9 @@ func (r *workflowResetterImpl) reapplyEventsToResetWorkflow(
 			resetMutableState,
 		); err != nil {
 			return err
+		}
+		for _, requestId := range currentMutableStateSignalRequestedIds {
+			resetMutableState.AddSignalRequested(requestId)
 		}
 	case enumspb.RESET_REAPPLY_TYPE_NONE:
 		// noop
