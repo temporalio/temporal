@@ -565,6 +565,7 @@ func OperatorHandlerProvider(
 	clusterMetadataManager persistence.ClusterMetadataManager,
 	clusterMetadata cluster.Metadata,
 	clientFactory client.Factory,
+	metadataManager persistence.MetadataManager,
 ) *OperatorHandlerImpl {
 	args := NewOperatorHandlerImplArgs{
 		configuration,
@@ -579,6 +580,7 @@ func OperatorHandlerProvider(
 		clusterMetadataManager,
 		clusterMetadata,
 		clientFactory,
+		metadataManager,
 	}
 	return NewOperatorHandlerImpl(args)
 }

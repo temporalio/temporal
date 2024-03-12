@@ -29,6 +29,7 @@ import (
 	"fmt"
 	"sync/atomic"
 
+	"go.temporal.io/api/nexus/v1"
 	"golang.org/x/exp/maps"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/health"
@@ -90,6 +91,7 @@ type (
 		clusterMetadataManager persistence.ClusterMetadataManager
 		clusterMetadata        clustermetadata.Metadata
 		clientFactory          svc.Factory
+		metadataMgr            persistence.MetadataManager
 	}
 
 	NewOperatorHandlerImplArgs struct {
@@ -105,6 +107,7 @@ type (
 		clusterMetadataManager persistence.ClusterMetadataManager
 		clusterMetadata        clustermetadata.Metadata
 		clientFactory          svc.Factory
+		metadataMgr            persistence.MetadataManager
 	}
 )
 
@@ -133,6 +136,7 @@ func NewOperatorHandlerImpl(
 		clusterMetadataManager: args.clusterMetadataManager,
 		clusterMetadata:        args.clusterMetadata,
 		clientFactory:          args.clientFactory,
+		metadataMgr:            args.metadataMgr,
 	}
 
 	return handler
@@ -840,8 +844,45 @@ func (*OperatorHandlerImpl) ListNexusIncomingServices(context.Context, *operator
 	return nil, status.Error(codes.Unimplemented, "unimplemented")
 }
 
-func (h *OperatorHandlerImpl) GetNexusOutgoingService(context.Context, *operatorservice.GetNexusOutgoingServiceRequest) (*operatorservice.GetNexusOutgoingServiceResponse, error) {
-	return nil, status.Error(codes.Unimplemented, "unimplemented")
+func (h *OperatorHandlerImpl) GetNexusOutgoingService(ctx context.Context, req *operatorservice.GetNexusOutgoingServiceRequest) (*operatorservice.GetNexusOutgoingServiceResponse, error) {
+	if req.Namespace == "" {
+		return nil, errNamespaceNotSet
+	}
+	if req.Name == "" {
+		return nil, errNameNotSet
+	}
+	response, err := h.metadataMgr.GetNamespace(ctx, &persistence.GetNamespaceRequest{
+		Name: req.Namespace,
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	var service *nexus.OutgoingService
+	service = h.findService(response, req.Name)
+	if service == nil {
+		return nil, serviceerror.NewNotFound(fmt.Sprintf("outgoing service %q not found", req.Name))
+	}
+	return &operatorservice.GetNexusOutgoingServiceResponse{
+		Service: service,
+	}, nil
+}
+
+func (h *OperatorHandlerImpl) findService(response *persistence.GetNamespaceResponse, serviceName string) *nexus.OutgoingService {
+	var services []*persistencespb.OutgoingService
+	if detail := response.Namespace; detail != nil {
+		services = detail.OutgoingServices
+	}
+	for _, service := range services {
+		if service.Name == serviceName {
+			return &nexus.OutgoingService{
+				Name:    service.Name,
+				Version: service.Version,
+				Url:     service.Url,
+			}
+		}
+	}
+	return nil
 }
 
 func (h *OperatorHandlerImpl) CreateOrUpdateNexusOutgoingService(context.Context, *operatorservice.CreateOrUpdateNexusOutgoingServiceRequest) (*operatorservice.CreateOrUpdateNexusOutgoingServiceResponse, error) {

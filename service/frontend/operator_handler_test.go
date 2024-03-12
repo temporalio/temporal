@@ -37,6 +37,7 @@ import (
 	"github.com/stretchr/testify/suite"
 	enumspb "go.temporal.io/api/enums/v1"
 	namespacepb "go.temporal.io/api/namespace/v1"
+	"go.temporal.io/api/nexus/v1"
 	"go.temporal.io/api/operatorservice/v1"
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/api/workflowservice/v1"
@@ -63,8 +64,9 @@ import (
 )
 
 var (
-	testNamespace = "test-namespace"
-	testIndexName = "test-index-name"
+	testNamespace   = "test-namespace"
+	testServiceName = "test-service"
+	testIndexName   = "test-index-name"
 )
 
 type (
@@ -104,6 +106,7 @@ func (s *operatorHandlerSuite) SetupTest() {
 		s.mockResource.GetClusterMetadataManager(),
 		s.mockResource.GetClusterMetadata(),
 		s.mockResource.GetClientFactory(),
+		s.mockResource.GetMetadataManager(),
 	}
 	s.handler = NewOperatorHandlerImpl(args)
 	s.handler.Start()
@@ -1592,18 +1595,92 @@ func (s *operatorHandlerSuite) Test_AddOrUpdateRemoteCluster_SaveClusterMetadata
 	s.IsType(&serviceerror.InvalidArgument{}, err)
 }
 
+func (s *operatorHandlerSuite) Test_GetNexusOutgoingService_NoNamespace() {
+	_, err := s.handler.GetNexusOutgoingService(
+		context.Background(),
+		&operatorservice.GetNexusOutgoingServiceRequest{
+			Name:      testServiceName,
+			Namespace: "",
+		},
+	)
+	s.ErrorIs(err, errNamespaceNotSet)
+}
+
+func (s *operatorHandlerSuite) Test_GetNexusOutgoingService_NoName() {
+	_, err := s.handler.GetNexusOutgoingService(
+		context.Background(),
+		&operatorservice.GetNexusOutgoingServiceRequest{
+			Name:      "",
+			Namespace: testNamespace,
+		},
+	)
+	s.ErrorIs(err, errNameNotSet)
+}
+
+func (s *operatorHandlerSuite) Test_GetNexusOutgoingService_GetNamespaceErr() {
+	getNamespaceErr := errors.New("test error")
+	s.mockResource.MetadataMgr.EXPECT().
+		GetNamespace(gomock.Any(), &persistence.GetNamespaceRequest{Name: testNamespace}).
+		Return(nil, getNamespaceErr)
+	_, err := s.handler.GetNexusOutgoingService(
+		context.Background(),
+		&operatorservice.GetNexusOutgoingServiceRequest{
+			Namespace: testNamespace,
+			Name:      testServiceName,
+		},
+	)
+	s.ErrorIs(err, getNamespaceErr)
+}
+
+func (s *operatorHandlerSuite) Test_GetNexusOutgoingService_ServiceNotFound() {
+	s.mockResource.MetadataMgr.EXPECT().
+		GetNamespace(gomock.Any(), &persistence.GetNamespaceRequest{Name: testNamespace}).
+		Return(&persistence.GetNamespaceResponse{}, nil)
+	_, err := s.handler.GetNexusOutgoingService(
+		context.Background(),
+		&operatorservice.GetNexusOutgoingServiceRequest{
+			Namespace: testNamespace,
+			Name:      testServiceName,
+		},
+	)
+	code := serviceerror.ToStatus(err).Code()
+	s.Equal(codes.NotFound, code, err)
+	s.ErrorContains(err, testServiceName)
+}
+
+func (s *operatorHandlerSuite) Test_GetNexusOutgoingService_Ok() {
+	s.mockResource.MetadataMgr.EXPECT().
+		GetNamespace(gomock.Any(), &persistence.GetNamespaceRequest{Name: testNamespace}).
+		Return(&persistence.GetNamespaceResponse{
+			Namespace: &persistencespb.NamespaceDetail{
+				OutgoingServices: []*persistencespb.OutgoingService{
+					{
+						Version: 1,
+						Name:    testServiceName,
+						Url:     "http://localhost:8080",
+					},
+				},
+			},
+		}, nil)
+	res, err := s.handler.GetNexusOutgoingService(
+		context.Background(),
+		&operatorservice.GetNexusOutgoingServiceRequest{
+			Namespace: testNamespace,
+			Name:      testServiceName,
+		},
+	)
+	s.NoError(err)
+	s.Equal(&nexus.OutgoingService{
+		Version: 1,
+		Name:    testServiceName,
+		Url:     "http://localhost:8080",
+	}, res.Service)
+}
+
 func (s *operatorHandlerSuite) verifyUnimplemented(err error) {
 	st, ok := status.FromError(err)
 	s.True(ok)
 	s.Equal(codes.Unimplemented, st.Code())
-}
-
-func (s *operatorHandlerSuite) Test_GetNexusOutgoingService() {
-	_, err := s.handler.GetNexusOutgoingService(
-		context.Background(),
-		&operatorservice.GetNexusOutgoingServiceRequest{},
-	)
-	s.verifyUnimplemented(err)
 }
 
 func (s *operatorHandlerSuite) Test_CreateOrUpdateNexusOutgoingService() {
