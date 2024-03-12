@@ -58,10 +58,10 @@ func (a *actionSliceCount) Name() string {
 	return "slice-count"
 }
 
-func (a *actionSliceCount) Run(readerGroup *ReaderGroup) error {
+func (a *actionSliceCount) Run(readerGroup *ReaderGroup) {
 	// first check if the alert is still valid
 	if a.monitor.GetTotalSliceCount() <= a.attributes.CriticalSliceCount {
-		return nil
+		return
 	}
 
 	// then try to shrink existing slices, which may reduce slice count
@@ -71,7 +71,7 @@ func (a *actionSliceCount) Run(readerGroup *ReaderGroup) error {
 	}
 	currentSliceCount := a.monitor.GetTotalSliceCount()
 	if currentSliceCount <= a.attributes.CriticalSliceCount {
-		return nil
+		return
 	}
 
 	// have to compact (force merge) slices to reduce slice count
@@ -102,7 +102,7 @@ func (a *actionSliceCount) Run(readerGroup *ReaderGroup) error {
 		isNotUniversalPredicate,
 		preferredSliceCount,
 	) {
-		return nil
+		return
 	}
 
 	if a.findAndCompactCandidates(
@@ -111,7 +111,7 @@ func (a *actionSliceCount) Run(readerGroup *ReaderGroup) error {
 		isNotUniversalPredicate,
 		preferredSliceCount,
 	) {
-		return nil
+		return
 	}
 
 	if a.findAndCompactCandidates(
@@ -120,7 +120,7 @@ func (a *actionSliceCount) Run(readerGroup *ReaderGroup) error {
 		isUniversalPredicate,
 		a.attributes.CriticalSliceCount,
 	) {
-		return nil
+		return
 	}
 
 	a.findAndCompactCandidates(
@@ -129,7 +129,6 @@ func (a *actionSliceCount) Run(readerGroup *ReaderGroup) error {
 		isUniversalPredicate,
 		a.attributes.CriticalSliceCount,
 	)
-	return nil
 }
 
 func (a *actionSliceCount) findAndCompactCandidates(
