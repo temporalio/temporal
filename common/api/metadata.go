@@ -143,10 +143,14 @@ var (
 		"AddOrUpdateRemoteCluster":           {Scope: ScopeCluster, Access: AccessAdmin},
 		"RemoveRemoteCluster":                {Scope: ScopeCluster, Access: AccessAdmin},
 		"ListClusters":                       {Scope: ScopeCluster, Access: AccessAdmin},
-		"CreateOrUpdateNexusIncomingService": {Scope: ScopeCluster, Access: AccessAdmin},
+		"CreateOrUpdateNexusIncomingService": {Scope: ScopeNamespace, Access: AccessAdmin},
 		"DeleteNexusIncomingService":         {Scope: ScopeCluster, Access: AccessAdmin},
 		"GetNexusIncomingService":            {Scope: ScopeCluster, Access: AccessAdmin},
 		"ListNexusIncomingServices":          {Scope: ScopeCluster, Access: AccessAdmin},
+		"CreateOrUpdateNexusOutgoingService": {Scope: ScopeNamespace, Access: AccessWrite},
+		"DeleteNexusOutgoingService":         {Scope: ScopeNamespace, Access: AccessWrite},
+		"GetNexusOutgoingService":            {Scope: ScopeNamespace, Access: AccessReadOnly},
+		"ListNexusOutgoingServices":          {Scope: ScopeNamespace, Access: AccessReadOnly},
 	}
 	nexusServiceMetadata = map[string]MethodMetadata{
 		"DispatchNexusTask": {Scope: ScopeNamespace, Access: AccessWrite},

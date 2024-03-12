@@ -41,9 +41,6 @@ import (
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/api/workflowservice/v1"
 	sdkclient "go.temporal.io/sdk/client"
-	"golang.org/x/exp/maps"
-	"google.golang.org/grpc/health"
-
 	"go.temporal.io/server/api/adminservice/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common/cluster"
@@ -59,6 +56,10 @@ import (
 	"go.temporal.io/server/common/testing/mocksdk"
 	"go.temporal.io/server/service/worker/addsearchattributes"
 	"go.temporal.io/server/service/worker/deletenamespace"
+	"golang.org/x/exp/maps"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/health"
+	"google.golang.org/grpc/status"
 )
 
 var (
@@ -1589,4 +1590,42 @@ func (s *operatorHandlerSuite) Test_AddOrUpdateRemoteCluster_SaveClusterMetadata
 	_, err := s.handler.AddOrUpdateRemoteCluster(context.Background(), &operatorservice.AddOrUpdateRemoteClusterRequest{FrontendAddress: rpcAddress})
 	s.Error(err)
 	s.IsType(&serviceerror.InvalidArgument{}, err)
+}
+
+func (s *operatorHandlerSuite) verifyUnimplemented(err error) {
+	st, ok := status.FromError(err)
+	s.True(ok)
+	s.Equal(codes.Unimplemented, st.Code())
+}
+
+func (s *operatorHandlerSuite) Test_GetNexusOutgoingService() {
+	_, err := s.handler.GetNexusOutgoingService(
+		context.Background(),
+		&operatorservice.GetNexusOutgoingServiceRequest{},
+	)
+	s.verifyUnimplemented(err)
+}
+
+func (s *operatorHandlerSuite) Test_CreateOrUpdateNexusOutgoingService() {
+	_, err := s.handler.CreateOrUpdateNexusOutgoingService(
+		context.Background(),
+		&operatorservice.CreateOrUpdateNexusOutgoingServiceRequest{},
+	)
+	s.verifyUnimplemented(err)
+}
+
+func (s *operatorHandlerSuite) Test_DeleteNexusOutgoingService() {
+	_, err := s.handler.DeleteNexusOutgoingService(
+		context.Background(),
+		&operatorservice.DeleteNexusOutgoingServiceRequest{},
+	)
+	s.verifyUnimplemented(err)
+}
+
+func (s *operatorHandlerSuite) Test_ListNexusOutgoingServices() {
+	_, err := s.handler.ListNexusOutgoingServices(
+		context.Background(),
+		&operatorservice.ListNexusOutgoingServicesRequest{},
+	)
+	s.verifyUnimplemented(err)
 }
