@@ -179,10 +179,10 @@ func Invoke(
 // field (a specification of what to include).
 func GetResetReapplyExcludeTypes(
 	excludeTypes []enumspb.ResetReapplyExcludeType,
-	includeSpec enumspb.ResetReapplyType,
-) []enumspb.ResetReapplyExcludeType {
-	excludeSet := map[enumspb.ResetReapplyExcludeType]bool{}
-	switch includeSpec {
+	includeType enumspb.ResetReapplyType,
+) map[enumspb.ResetReapplyExcludeType]bool {
+	exclude := map[enumspb.ResetReapplyExcludeType]bool{}
+	switch includeType {
 	case enumspb.RESET_REAPPLY_TYPE_SIGNAL:
 		// A client sending this value of the deprecated reset_reapply_type
 		// field will not have any events other than signal reapplied. We may
@@ -195,15 +195,10 @@ func GetResetReapplyExcludeTypes(
 		// TODO (dan) exclude update
 	case enumspb.RESET_REAPPLY_TYPE_NONE:
 		// TODO (dan) exclude update
-		excludeSet[enumspb.RESET_REAPPLY_EXCLUDE_TYPE_SIGNAL] = true
+		exclude[enumspb.RESET_REAPPLY_EXCLUDE_TYPE_SIGNAL] = true
 	}
 	for _, e := range excludeTypes {
-		excludeSet[e] = true
-	}
-
-	exclude := []enumspb.ResetReapplyExcludeType{}
-	for e := range excludeSet {
-		exclude = append(exclude, e)
+		exclude[e] = true
 	}
 	return exclude
 }

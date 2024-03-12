@@ -353,16 +353,11 @@ func (s *FunctionalSuite) testResetWorkflowReapply(
 		}
 	}
 
-	var shouldReapplySignals = true
-	for _, excludeType := range resetworkflow.GetResetReapplyExcludeTypes(reapplyExcludeTypes, reapplyType) {
-		if excludeType == enumspb.RESET_REAPPLY_EXCLUDE_TYPE_SIGNAL {
-			shouldReapplySignals = false
-		}
-	}
-	if shouldReapplySignals {
-		s.Equal(totalSignals, signalCount)
-	} else {
+	resetReapplyExcludeTypes := resetworkflow.GetResetReapplyExcludeTypes(reapplyExcludeTypes, reapplyType)
+	if resetReapplyExcludeTypes[enumspb.RESET_REAPPLY_EXCLUDE_TYPE_SIGNAL] {
 		s.Equal(0, signalCount)
+	} else {
+		s.Equal(totalSignals, signalCount)
 	}
 }
 

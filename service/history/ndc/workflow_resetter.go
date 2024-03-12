@@ -73,7 +73,7 @@ type (
 			currentWorkflow Workflow,
 			resetReason string,
 			additionalReapplyEvents []*historypb.HistoryEvent,
-			resetReapplyExcludeTypes []enumspb.ResetReapplyExcludeType,
+			resetReapplyExcludeTypes map[enumspb.ResetReapplyExcludeType]bool,
 		) error
 	}
 
@@ -126,7 +126,7 @@ func (r *workflowResetterImpl) ResetWorkflow(
 	currentWorkflow Workflow,
 	resetReason string,
 	additionalReapplyEvents []*historypb.HistoryEvent,
-	resetReapplyExcludeTypes []enumspb.ResetReapplyExcludeType,
+	resetReapplyExcludeTypes map[enumspb.ResetReapplyExcludeType]bool,
 ) (retError error) {
 
 	namespaceEntry, err := r.namespaceRegistry.GetNamespaceByID(namespaceID)
@@ -562,7 +562,7 @@ func (r *workflowResetterImpl) reapplyContinueAsNewWorkflowEvents(
 	baseBranchToken []byte,
 	baseRebuildNextEventID int64,
 	baseNextEventID int64,
-	resetReapplyExcludeTypes []enumspb.ResetReapplyExcludeType,
+	resetReapplyExcludeTypes map[enumspb.ResetReapplyExcludeType]bool,
 ) (string, error) {
 
 	// TODO change this logic to fetching all workflow [baseWorkflow, currentWorkflow]
@@ -656,7 +656,7 @@ func (r *workflowResetterImpl) reapplyWorkflowEvents(
 	firstEventID int64,
 	nextEventID int64,
 	branchToken []byte,
-	resetReapplyExcludeTypes []enumspb.ResetReapplyExcludeType,
+	resetReapplyExcludeTypes map[enumspb.ResetReapplyExcludeType]bool,
 ) (string, error) {
 
 	// TODO change this logic to fetching all workflow [baseWorkflow, currentWorkflow]
@@ -696,15 +696,9 @@ func (r *workflowResetterImpl) reapplyWorkflowEvents(
 func reapplyEvents(
 	mutableState workflow.MutableState,
 	events []*historypb.HistoryEvent,
-	resetReapplyExcludeTypes []enumspb.ResetReapplyExcludeType,
+	resetReapplyExcludeTypes map[enumspb.ResetReapplyExcludeType]bool,
 ) error {
-	excludeSignal := false
-	for _, e := range resetReapplyExcludeTypes {
-		if e == enumspb.RESET_REAPPLY_EXCLUDE_TYPE_SIGNAL {
-			excludeSignal = true
-		}
-	}
-
+	excludeSignal := resetReapplyExcludeTypes[enumspb.RESET_REAPPLY_EXCLUDE_TYPE_SIGNAL]
 	for _, event := range events {
 		switch event.GetEventType() {
 		case enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_SIGNALED:
