@@ -29,6 +29,7 @@ import (
 	"fmt"
 	"net/url"
 	"regexp"
+	"slices"
 	"sync/atomic"
 
 	"go.temporal.io/api/nexus/v1"
@@ -989,8 +990,36 @@ func (h *OperatorHandlerImpl) updateNamespace(
 	}, nil
 }
 
-func (h *OperatorHandlerImpl) DeleteNexusOutgoingService(context.Context, *operatorservice.DeleteNexusOutgoingServiceRequest) (*operatorservice.DeleteNexusOutgoingServiceResponse, error) {
-	return nil, status.Error(codes.Unimplemented, "unimplemented")
+func (h *OperatorHandlerImpl) DeleteNexusOutgoingService(ctx context.Context, req *operatorservice.DeleteNexusOutgoingServiceRequest) (*operatorservice.DeleteNexusOutgoingServiceResponse, error) {
+	if req.Namespace == "" {
+		return nil, errNamespaceNotSet
+	}
+	if req.Name == "" {
+		return nil, errNameNotSet
+	}
+	response, err := h.metadataMgr.GetNamespace(ctx, &persistence.GetNamespaceRequest{
+		Name: req.Namespace,
+	})
+	if err != nil {
+		return nil, err
+	}
+	ns := response.Namespace
+	services := ns.OutgoingServices
+	ns.OutgoingServices = slices.DeleteFunc(services, func(svc *persistencespb.OutgoingService) bool {
+		return svc.Name == req.Name
+	})
+	if len(services) == len(ns.OutgoingServices) {
+		return nil, status.Errorf(codes.NotFound, "Outgoing service %q not found", req.Name)
+	}
+	err = h.metadataMgr.UpdateNamespace(ctx, &persistence.UpdateNamespaceRequest{
+		Namespace:           ns,
+		IsGlobalNamespace:   response.IsGlobalNamespace,
+		NotificationVersion: response.NotificationVersion + 1,
+	})
+	if err != nil {
+		return nil, err
+	}
+	return &operatorservice.DeleteNexusOutgoingServiceResponse{}, nil
 }
 
 func (h *OperatorHandlerImpl) ListNexusOutgoingServices(context.Context, *operatorservice.ListNexusOutgoingServicesRequest) (*operatorservice.ListNexusOutgoingServicesResponse, error) {

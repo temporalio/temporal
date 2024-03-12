@@ -160,4 +160,34 @@ func (s *FunctionalSuite) TestOutgoingServiceRegistry() {
 			s.Assert().Equal(serviceName, response.Service.Name)
 		}
 	})
+
+	s.Run("CreateAndDelete", func() {
+		serviceName := s.randomizeStr("service-name")
+		{
+			response, err := s.operatorClient.CreateOrUpdateNexusOutgoingService(ctx, &operatorservice.CreateOrUpdateNexusOutgoingServiceRequest{
+				Version:   0,
+				Namespace: ns,
+				Name:      serviceName,
+				Url:       testURL,
+			})
+			s.NoError(err)
+			s.NotNil(response)
+		}
+		{
+			_, err := s.operatorClient.DeleteNexusOutgoingService(ctx, &operatorservice.DeleteNexusOutgoingServiceRequest{
+				Namespace: ns,
+				Name:      serviceName,
+			})
+			s.NoError(err)
+		}
+		{
+			_, err := s.operatorClient.GetNexusOutgoingService(ctx, &operatorservice.GetNexusOutgoingServiceRequest{
+				Namespace: ns,
+				Name:      serviceName,
+			})
+			s.Error(err)
+			s.Assert().Equal(codes.NotFound, serviceerror.ToStatus(err).Code(), err)
+		}
+	})
+
 }
