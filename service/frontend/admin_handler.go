@@ -362,7 +362,7 @@ func (adh *AdminHandler) addSearchAttributesSQL(
 		&workflowservice.DescribeNamespaceRequest{Namespace: nsName},
 	)
 	if err != nil {
-		return serviceerror.NewUnavailable(fmt.Sprintf(errUnableToGetNamespaceInfoMessage, nsName))
+		return serviceerror.NewUnavailable(fmt.Sprintf(errUnableToGetNamespaceInfoMessage, nsName, err))
 	}
 
 	dbCustomSearchAttributes := searchattribute.GetSqlDbIndexSearchAttributes().CustomSearchAttributes
@@ -506,7 +506,7 @@ func (adh *AdminHandler) removeSearchAttributesSQL(
 		&workflowservice.DescribeNamespaceRequest{Namespace: nsName},
 	)
 	if err != nil {
-		return serviceerror.NewUnavailable(fmt.Sprintf(errUnableToGetNamespaceInfoMessage, nsName))
+		return serviceerror.NewUnavailable(fmt.Sprintf(errUnableToGetNamespaceInfoMessage, nsName, err))
 	}
 
 	upsertFieldToAliasMap := make(map[string]string)
@@ -628,7 +628,7 @@ func (adh *AdminHandler) getSearchAttributesSQL(
 	)
 	if err != nil {
 		return nil, serviceerror.NewUnavailable(
-			fmt.Sprintf(errUnableToGetNamespaceInfoMessage, nsName),
+			fmt.Sprintf(errUnableToGetNamespaceInfoMessage, nsName, err),
 		)
 	}
 
