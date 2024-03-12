@@ -42,7 +42,7 @@ func TestTaskCategoryRegistryProvider(t *testing.T) {
 		historyState           archiver.ArchivalState
 		visibilityState        archiver.ArchivalState
 		expectArchivalCategory bool
-		expectCallbackCategory bool
+		expectOutboundCategory bool
 	}{
 		{
 			name:                   "both disabled",
@@ -69,11 +69,11 @@ func TestTaskCategoryRegistryProvider(t *testing.T) {
 			expectArchivalCategory: true,
 		},
 		{
-			name:                   "callbacks enabled, archival disabled",
+			name:                   "outbound enabled, archival disabled",
 			historyState:           archiver.ArchivalDisabled,
 			visibilityState:        archiver.ArchivalDisabled,
 			expectArchivalCategory: false,
-			expectCallbackCategory: true,
+			expectOutboundCategory: true,
 		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
@@ -87,7 +87,7 @@ func TestTaskCategoryRegistryProvider(t *testing.T) {
 			archivalMetadata.EXPECT().GetVisibilityConfig().Return(visibilityArchivalConfig).AnyTimes()
 
 			serviceConfig := tests.NewDynamicConfig()
-			serviceConfig.OutboundProcessorEnabled = dynamicconfig.GetBoolPropertyFn(tc.expectCallbackCategory)
+			serviceConfig.OutboundProcessorEnabled = dynamicconfig.GetBoolPropertyFn(tc.expectOutboundCategory)
 
 			registry := TaskCategoryRegistryProvider(archivalMetadata, serviceConfig)
 			_, ok := registry.GetCategoryByID(tasks.CategoryIDArchival)
@@ -97,7 +97,7 @@ func TestTaskCategoryRegistryProvider(t *testing.T) {
 				require.False(t, ok)
 			}
 			_, ok = registry.GetCategoryByID(tasks.CategoryIDOutbound)
-			require.Equal(t, tc.expectCallbackCategory, ok)
+			require.Equal(t, tc.expectOutboundCategory, ok)
 		})
 	}
 }
