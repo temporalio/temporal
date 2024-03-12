@@ -27,6 +27,8 @@ package frontend
 import (
 	"context"
 	"fmt"
+	"net/url"
+	"regexp"
 	"sync/atomic"
 
 	"go.temporal.io/api/nexus/v1"
@@ -71,6 +73,8 @@ import (
 )
 
 var _ OperatorHandler = (*OperatorHandlerImpl)(nil)
+
+var serviceNameRegex = regexp.MustCompile(`[a-zA-Z_][a-zA-Z0-9_]*`)
 
 type (
 	// OperatorHandlerImpl - gRPC handler interface for operator service
@@ -861,7 +865,7 @@ func (h *OperatorHandlerImpl) GetNexusOutgoingService(ctx context.Context, req *
 	var service *nexus.OutgoingService
 	service = h.findService(response, req.Name)
 	if service == nil {
-		return nil, serviceerror.NewNotFound(fmt.Sprintf("outgoing service %q not found", req.Name))
+		return nil, status.Errorf(codes.NotFound, "outgoing service %q not found", req.Name)
 	}
 	return &operatorservice.GetNexusOutgoingServiceResponse{
 		Service: service,
@@ -885,8 +889,104 @@ func (h *OperatorHandlerImpl) findService(response *persistence.GetNamespaceResp
 	return nil
 }
 
-func (h *OperatorHandlerImpl) CreateOrUpdateNexusOutgoingService(context.Context, *operatorservice.CreateOrUpdateNexusOutgoingServiceRequest) (*operatorservice.CreateOrUpdateNexusOutgoingServiceResponse, error) {
-	return nil, status.Error(codes.Unimplemented, "unimplemented")
+func (h *OperatorHandlerImpl) CreateOrUpdateNexusOutgoingService(ctx context.Context, req *operatorservice.CreateOrUpdateNexusOutgoingServiceRequest) (*operatorservice.CreateOrUpdateNexusOutgoingServiceResponse, error) {
+	if req.Namespace == "" {
+		return nil, errNamespaceNotSet
+	}
+	if req.Name == "" {
+		return nil, errNameNotSet
+	}
+	nameMaxLength := h.config.OutgoingServiceNameMaxLength()
+	if len(req.Name) > nameMaxLength {
+		return nil, status.Errorf(codes.InvalidArgument, "Outgoing service name length exceeds the limit of %d", nameMaxLength)
+	}
+	if !serviceNameRegex.MatchString(req.Name) {
+		return nil, status.Errorf(codes.InvalidArgument, "Outgoing service name must match the regex: %q", serviceNameRegex.String())
+	}
+	if req.Url == "" {
+		return nil, errURLNotSet
+	}
+	urlMaxLength := h.config.OutgoingServiceURLMaxLength()
+	if len(req.Url) > urlMaxLength {
+		return nil, status.Errorf(codes.InvalidArgument, "Outgoing service URL length exceeds the limit of %d", urlMaxLength)
+	}
+	u, err := url.Parse(req.Url)
+	if err != nil {
+		return nil, status.Errorf(codes.InvalidArgument, "Malformed outgoing service URL: %v", err)
+	}
+	if u.Scheme != "http" && u.Scheme != "https" {
+		return nil, status.Errorf(codes.InvalidArgument, "Outgoing service URL must have http or https scheme but has %q", u.Scheme)
+	}
+	return h.updateNamespace(ctx, req)
+}
+
+func (h *OperatorHandlerImpl) updateNamespace(
+	ctx context.Context,
+	req *operatorservice.CreateOrUpdateNexusOutgoingServiceRequest,
+) (*operatorservice.CreateOrUpdateNexusOutgoingServiceResponse, error) {
+	response, err := h.metadataMgr.GetNamespace(ctx, &persistence.GetNamespaceRequest{
+		Name: req.Namespace,
+	})
+	if err != nil {
+		return nil, err
+	}
+	ns := response.Namespace
+	found := false
+	for _, service := range ns.OutgoingServices {
+		if service.Name == req.Name {
+			if req.Version == 0 {
+				return nil, status.Errorf(
+					codes.AlreadyExists,
+					"Outgoing service %q already exists. Set Version to a non-zero value if you want to update it.",
+					req.Name,
+				)
+			}
+			if service.Version != req.Version {
+				return nil, status.Errorf(
+					codes.FailedPrecondition,
+					"Outgoing service %q update request version %d does not match the current version %d",
+					req.Name,
+					req.Version,
+					service.Version,
+				)
+			}
+			// The service variable is a pointer, so we can modify it directly
+			service.Version++
+			service.Url = req.Url
+			found = true
+			break
+		}
+	}
+	if !found {
+		if req.Version != 0 {
+			return nil, status.Errorf(
+				codes.NotFound,
+				"Outgoing service %q not found. Set Version to 0 (not %d) if you want to register a new service.",
+				req.Name,
+				req.Version,
+			)
+		}
+		ns.OutgoingServices = append(ns.OutgoingServices, &persistencespb.OutgoingService{
+			Version: 1,
+			Name:    req.Name,
+			Url:     req.Url,
+		})
+	}
+	err = h.metadataMgr.UpdateNamespace(ctx, &persistence.UpdateNamespaceRequest{
+		Namespace:           ns,
+		IsGlobalNamespace:   response.IsGlobalNamespace,
+		NotificationVersion: response.NotificationVersion + 1,
+	})
+	if err != nil {
+		return nil, err
+	}
+	return &operatorservice.CreateOrUpdateNexusOutgoingServiceResponse{
+		Service: &nexus.OutgoingService{
+			Name:    req.Name,
+			Version: req.Version + 1,
+			Url:     req.Url,
+		},
+	}, nil
 }
 
 func (h *OperatorHandlerImpl) DeleteNexusOutgoingService(context.Context, *operatorservice.DeleteNexusOutgoingServiceRequest) (*operatorservice.DeleteNexusOutgoingServiceResponse, error) {

@@ -28,6 +28,8 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strconv"
+	"strings"
 	"testing"
 	"time"
 
@@ -66,6 +68,7 @@ import (
 var (
 	testNamespace   = "test-namespace"
 	testServiceName = "test-service"
+	testServiceURL  = "http://localhost:8080"
 	testIndexName   = "test-index-name"
 )
 
@@ -78,6 +81,7 @@ type (
 		mockResource *resourcetest.Test
 
 		handler *OperatorHandlerImpl
+		config  *Config
 	}
 )
 
@@ -92,9 +96,18 @@ func (s *operatorHandlerSuite) SetupTest() {
 	s.controller = gomock.NewController(s.T())
 	s.mockResource = resourcetest.NewTest(s.controller, primitives.FrontendService)
 	s.mockResource.ClusterMetadata.EXPECT().GetCurrentClusterName().Return(uuid.New()).AnyTimes()
+	s.config = &Config{
+		NumHistoryShards: 4,
+		OutgoingServiceURLMaxLength: func() int {
+			return 1000
+		},
+		OutgoingServiceNameMaxLength: func() int {
+			return 200
+		},
+	}
 
 	args := NewOperatorHandlerImplArgs{
-		&Config{NumHistoryShards: 4},
+		s.config,
 		s.mockResource.ESClient,
 		s.mockResource.Logger,
 		s.mockResource.GetSDKClientFactory(),
@@ -1657,7 +1670,7 @@ func (s *operatorHandlerSuite) Test_GetNexusOutgoingService_Ok() {
 					{
 						Version: 1,
 						Name:    testServiceName,
-						Url:     "http://localhost:8080",
+						Url:     testServiceURL,
 					},
 				},
 			},
@@ -1673,7 +1686,7 @@ func (s *operatorHandlerSuite) Test_GetNexusOutgoingService_Ok() {
 	s.Equal(&nexus.OutgoingService{
 		Version: 1,
 		Name:    testServiceName,
-		Url:     "http://localhost:8080",
+		Url:     testServiceURL,
 	}, res.Service)
 }
 
@@ -1683,12 +1696,166 @@ func (s *operatorHandlerSuite) verifyUnimplemented(err error) {
 	s.Equal(codes.Unimplemented, st.Code())
 }
 
-func (s *operatorHandlerSuite) Test_CreateOrUpdateNexusOutgoingService() {
+func (s *operatorHandlerSuite) Test_CreateOrUpdateNexusOutgoingService_NoNamespace() {
 	_, err := s.handler.CreateOrUpdateNexusOutgoingService(
 		context.Background(),
-		&operatorservice.CreateOrUpdateNexusOutgoingServiceRequest{},
+		&operatorservice.CreateOrUpdateNexusOutgoingServiceRequest{
+			Name: testServiceName,
+			Url:  testServiceURL,
+		},
 	)
-	s.verifyUnimplemented(err)
+	s.ErrorIs(err, errNamespaceNotSet)
+}
+
+func (s *operatorHandlerSuite) Test_CreateOrUpdateNexusOutgoingService_NoServiceName() {
+	_, err := s.handler.CreateOrUpdateNexusOutgoingService(
+		context.Background(),
+		&operatorservice.CreateOrUpdateNexusOutgoingServiceRequest{
+			Namespace: testNamespace,
+			Url:       testServiceURL,
+		},
+	)
+	s.ErrorIs(err, errNameNotSet)
+}
+
+func (s *operatorHandlerSuite) Test_CreateOrUpdateNexusOutgoingService_NameTooLong() {
+	name := strings.Repeat("x", s.config.OutgoingServiceNameMaxLength()+1)
+	_, err := s.handler.CreateOrUpdateNexusOutgoingService(
+		context.Background(),
+		&operatorservice.CreateOrUpdateNexusOutgoingServiceRequest{
+			Namespace: testNamespace,
+			Name:      name,
+			Url:       testServiceURL,
+		},
+	)
+	s.Error(err)
+	s.Equal(codes.InvalidArgument, serviceerror.ToStatus(err).Code(), err)
+	s.ErrorContains(err, strconv.Itoa(s.config.OutgoingServiceNameMaxLength()))
+}
+
+func (s *operatorHandlerSuite) Test_CreateOrUpdateNexusOutgoingService_NameInvalidFormat() {
+	_, err := s.handler.CreateOrUpdateNexusOutgoingService(
+		context.Background(),
+		&operatorservice.CreateOrUpdateNexusOutgoingServiceRequest{
+			Namespace: testNamespace,
+			Name:      "!@&#%^$",
+			Url:       testServiceURL,
+		},
+	)
+	s.Error(err)
+	s.Equal(codes.InvalidArgument, serviceerror.ToStatus(err).Code(), err)
+	s.ErrorContains(err, "a-z")
+}
+
+func (s *operatorHandlerSuite) Test_CreateOrUpdateNexusOutgoingService_NoURL() {
+	_, err := s.handler.CreateOrUpdateNexusOutgoingService(
+		context.Background(),
+		&operatorservice.CreateOrUpdateNexusOutgoingServiceRequest{
+			Namespace: testNamespace,
+			Name:      testServiceName,
+		},
+	)
+	s.ErrorIs(err, errURLNotSet)
+}
+
+func (s *operatorHandlerSuite) Test_CreateOrUpdateNexusOutgoingService_URLTooLong() {
+	u := testServiceURL + "/"
+	u += strings.Repeat("x", s.config.OutgoingServiceURLMaxLength()-len(u)+1)
+	_, err := s.handler.CreateOrUpdateNexusOutgoingService(
+		context.Background(),
+		&operatorservice.CreateOrUpdateNexusOutgoingServiceRequest{
+			Namespace: testNamespace,
+			Name:      testServiceName,
+			Url:       u,
+		},
+	)
+	s.Error(err)
+	s.Equal(codes.InvalidArgument, serviceerror.ToStatus(err).Code(), err)
+	s.ErrorContains(err, strconv.Itoa(s.config.OutgoingServiceURLMaxLength()))
+}
+
+func (s *operatorHandlerSuite) Test_CreateOrUpdateNexusOutgoingService_URLMalformed() {
+	u := "://example.com"
+	_, err := s.handler.CreateOrUpdateNexusOutgoingService(
+		context.Background(),
+		&operatorservice.CreateOrUpdateNexusOutgoingServiceRequest{
+			Namespace: testNamespace,
+			Name:      testServiceName,
+			Url:       u,
+		},
+	)
+	s.Error(err)
+	s.Equal(codes.InvalidArgument, serviceerror.ToStatus(err).Code(), err)
+	s.Contains(strings.ToLower(err.Error()), "malformed")
+	s.ErrorContains(err, u)
+}
+
+func (s *operatorHandlerSuite) Test_CreateOrUpdateNexusOutgoingService_InvalidScheme() {
+	u := "oops://example.com"
+	_, err := s.handler.CreateOrUpdateNexusOutgoingService(
+		context.Background(),
+		&operatorservice.CreateOrUpdateNexusOutgoingServiceRequest{
+			Namespace: testNamespace,
+			Name:      testServiceName,
+			Url:       u,
+		},
+	)
+	s.Error(err)
+	s.Equal(codes.InvalidArgument, serviceerror.ToStatus(err).Code(), err)
+	s.ErrorContains(err, "scheme")
+	s.ErrorContains(err, "oops")
+	s.ErrorContains(err, "http")
+	s.ErrorContains(err, "https")
+}
+
+func (s *operatorHandlerSuite) Test_CreateOrUpdateNexusOutgoingService_GetNamespaceErr() {
+	getNamespaceErr := errors.New("test error")
+	s.mockResource.MetadataMgr.EXPECT().
+		GetNamespace(gomock.Any(), &persistence.GetNamespaceRequest{Name: testNamespace}).
+		Return(nil, getNamespaceErr)
+	_, err := s.handler.CreateOrUpdateNexusOutgoingService(
+		context.Background(),
+		&operatorservice.CreateOrUpdateNexusOutgoingServiceRequest{
+			Namespace: testNamespace,
+			Name:      testServiceName,
+			Url:       testServiceURL,
+		},
+	)
+	s.ErrorIs(err, getNamespaceErr)
+}
+
+func (s *operatorHandlerSuite) Test_CreateOrUpdateNexusOutgoingService_UpdateNamespaceErr() {
+	updateNamespaceErr := errors.New("test error")
+	s.mockResource.MetadataMgr.EXPECT().
+		GetNamespace(gomock.Any(), &persistence.GetNamespaceRequest{Name: testNamespace}).
+		Return(&persistence.GetNamespaceResponse{
+			Namespace:           &persistencespb.NamespaceDetail{},
+			IsGlobalNamespace:   true,
+			NotificationVersion: 1,
+		}, nil)
+	s.mockResource.MetadataMgr.EXPECT().
+		UpdateNamespace(gomock.Any(), &persistence.UpdateNamespaceRequest{
+			Namespace: &persistencespb.NamespaceDetail{
+				OutgoingServices: []*persistencespb.OutgoingService{
+					{
+						Version: 1,
+						Name:    testServiceName,
+						Url:     testServiceURL,
+					},
+				},
+			},
+			IsGlobalNamespace:   true,
+			NotificationVersion: 2,
+		}).Return(updateNamespaceErr)
+	_, err := s.handler.CreateOrUpdateNexusOutgoingService(
+		context.Background(),
+		&operatorservice.CreateOrUpdateNexusOutgoingServiceRequest{
+			Namespace: testNamespace,
+			Name:      testServiceName,
+			Url:       testServiceURL,
+		},
+	)
+	s.ErrorIs(err, updateNamespaceErr)
 }
 
 func (s *operatorHandlerSuite) Test_DeleteNexusOutgoingService() {
