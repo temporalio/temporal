@@ -1,5 +1,4 @@
 // The MIT License
-
 //
 // Copyright (c) 2020 Temporal Technologies Inc.  All rights reserved.
 //
