@@ -46,7 +46,6 @@ import (
 
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/client"
-	"go.temporal.io/server/common/archiver"
 	"go.temporal.io/server/common/authorization"
 	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/collection"
@@ -72,7 +71,6 @@ import (
 	"go.temporal.io/server/service/frontend"
 	"go.temporal.io/server/service/history"
 	"go.temporal.io/server/service/history/replication"
-	"go.temporal.io/server/service/history/tasks"
 	"go.temporal.io/server/service/matching"
 	"go.temporal.io/server/service/worker"
 )
@@ -146,7 +144,6 @@ var (
 			ServerOptionsProvider,
 			dynamicconfig.NewCollection,
 			resource.ArchivalMetadataProvider,
-			TaskCategoryRegistryProvider,
 			PersistenceFactoryProvider,
 			HistoryServiceProvider,
 			MatchingServiceProvider,
@@ -358,7 +355,6 @@ type (
 		VisibilityStoreFactory     visibility.VisibilityStoreFactory
 		SpanExporters              []otelsdktrace.SpanExporter
 		InstanceID                 resource.InstanceID `optional:"true"`
-		TaskCategoryRegistry       tasks.TaskCategoryRegistry
 	}
 )
 
@@ -424,34 +420,11 @@ func (params ServiceProviderParamsCommon) GetCommonServiceOptions(serviceName pr
 			func() resource.NamespaceLogger {
 				return params.NamespaceLogger
 			},
-			func() tasks.TaskCategoryRegistry {
-				return params.TaskCategoryRegistry
-			},
 		),
 		ServiceTracingModule,
 		resource.DefaultOptions,
 		FxLogAdapter,
 	)
-}
-
-// TaskCategoryRegistryProvider provides an immutable tasks.TaskCategoryRegistry to the server, which is intended to be
-// shared by each service. Why do we need to initialize this at the top-level? Because, even though the presence of the
-// archival task category is only needed by the history service, which must conditionally start a queue processor for
-// it, we also do validation on request task categories in the frontend service. As a result, we need to initialize the
-// registry in the server graph, and then propagate it to the service graphs. Otherwise, it would be isolated to the
-// history service's graph.
-func TaskCategoryRegistryProvider(archivalMetadata archiver.ArchivalMetadata, dc *dynamicconfig.Collection) tasks.TaskCategoryRegistry {
-	registry := tasks.NewDefaultTaskCategoryRegistry()
-	if archivalMetadata.GetHistoryConfig().StaticClusterState() == archiver.ArchivalEnabled ||
-		archivalMetadata.GetVisibilityConfig().StaticClusterState() == archiver.ArchivalEnabled {
-		registry.AddCategory(tasks.CategoryArchival)
-	}
-	// Can't use history service configs.Config because this provider is applied to all services (see docstring for this
-	// function for more info).
-	if dc.GetBoolProperty(dynamicconfig.OutboundProcessorEnabled, false)() {
-		registry.AddCategory(tasks.CategoryOutbound)
-	}
-	return registry
 }
 
 func NewService(app *fx.App, serviceName primitives.ServiceName, logger log.Logger) ServicesGroupOut {
@@ -476,6 +449,7 @@ func HistoryServiceProvider(
 
 	app := fx.New(
 		params.GetCommonServiceOptions(serviceName),
+		// TODO: move history.QueueModule and replication.Module into history.Module
 		history.QueueModule,
 		history.Module,
 		replication.Module,

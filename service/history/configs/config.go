@@ -153,6 +153,7 @@ type Config struct {
 	TransferQueueMaxReaderCount                         dynamicconfig.IntPropertyFn
 
 	// OutboundQueueProcessor settings
+	OutboundProcessorEnabled                            dynamicconfig.BoolPropertyFn
 	OutboundTaskBatchSize                               dynamicconfig.IntPropertyFn
 	OutboundProcessorMaxPollRPS                         dynamicconfig.IntPropertyFn
 	OutboundProcessorMaxPollHostRPS                     dynamicconfig.IntPropertyFn
@@ -447,6 +448,7 @@ func NewConfig(
 		TransferProcessorEnsureCloseBeforeDelete:            dc.GetBoolProperty(dynamicconfig.TransferProcessorEnsureCloseBeforeDelete, true),
 		TimerQueueMaxReaderCount:                            dc.GetIntProperty(dynamicconfig.TimerQueueMaxReaderCount, 2),
 
+		OutboundProcessorEnabled:                            dc.GetBoolProperty(dynamicconfig.OutboundProcessorEnabled, false),
 		OutboundTaskBatchSize:                               dc.GetIntProperty(dynamicconfig.OutboundTaskBatchSize, 100),
 		OutboundProcessorMaxPollRPS:                         dc.GetIntProperty(dynamicconfig.OutboundProcessorMaxPollRPS, 20),
 		OutboundProcessorMaxPollHostRPS:                     dc.GetIntProperty(dynamicconfig.OutboundProcessorMaxPollHostRPS, 0),

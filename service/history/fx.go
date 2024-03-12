@@ -32,6 +32,7 @@ import (
 	"google.golang.org/grpc/health"
 
 	"go.temporal.io/server/common"
+	"go.temporal.io/server/common/archiver"
 	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/config"
 	"go.temporal.io/server/common/dynamicconfig"
@@ -57,6 +58,7 @@ import (
 	"go.temporal.io/server/service/history/events"
 	"go.temporal.io/server/service/history/hsm"
 	"go.temporal.io/server/service/history/shard"
+	"go.temporal.io/server/service/history/tasks"
 	"go.temporal.io/server/service/history/workflow"
 	"go.temporal.io/server/service/history/workflow/cache"
 
@@ -84,6 +86,7 @@ var Module = fx.Options(
 	service.PersistenceLazyLoadedServiceResolverModule,
 	fx.Provide(ServiceResolverProvider),
 	fx.Provide(EventNotifierProvider),
+	fx.Provide(TaskCategoryRegistryProvider),
 	fx.Provide(HistoryEngineFactoryProvider),
 	fx.Provide(HandlerProvider),
 	fx.Provide(ServiceProvider),
@@ -296,6 +299,21 @@ func EventNotifierProvider(
 		metricsHandler,
 		config.GetShardID,
 	)
+}
+
+func TaskCategoryRegistryProvider(
+	archivalMetadata archiver.ArchivalMetadata,
+	serviceConfig *configs.Config,
+) tasks.TaskCategoryRegistry {
+	registry := tasks.NewDefaultTaskCategoryRegistry()
+	if archivalMetadata.GetHistoryConfig().StaticClusterState() == archiver.ArchivalEnabled ||
+		archivalMetadata.GetVisibilityConfig().StaticClusterState() == archiver.ArchivalEnabled {
+		registry.AddCategory(tasks.CategoryArchival)
+	}
+	if serviceConfig.OutboundProcessorEnabled() {
+		registry.AddCategory(tasks.CategoryOutbound)
+	}
+	return registry
 }
 
 func ServiceLifetimeHooks(lc fx.Lifecycle, svc *Service) {
