@@ -63,8 +63,8 @@ func (s *TaskSerializer) SerializeTask(
 		return s.serializeReplicationTask(task)
 	case tasks.CategoryIDArchival:
 		return s.serializeArchivalTask(task)
-	case tasks.CategoryIDCallback:
-		return s.serializeCallbackTask(task)
+	case tasks.CategoryIDOutbound:
+		return s.serializeOutboundTask(task)
 	default:
 		return nil, serviceerror.NewInternal(fmt.Sprintf("Unknown task category: %v", category))
 	}
@@ -85,8 +85,8 @@ func (s *TaskSerializer) DeserializeTask(
 		return s.deserializeReplicationTasks(blob)
 	case tasks.CategoryIDArchival:
 		return s.deserializeArchivalTasks(blob)
-	case tasks.CategoryIDCallback:
-		return s.deserializeCallbackTask(blob)
+	case tasks.CategoryIDOutbound:
+		return s.deserializeOutboundTask(blob)
 	default:
 		return nil, serviceerror.NewInternal(fmt.Sprintf("Unknown task category: %v", category))
 	}
@@ -1175,9 +1175,9 @@ func (s *TaskSerializer) replicationSyncWorkflowStateTaskFromProto(
 	}
 }
 
-func (s *TaskSerializer) serializeCallbackTask(task tasks.Task) (*commonpb.DataBlob, error) {
+func (s *TaskSerializer) serializeOutboundTask(task tasks.Task) (*commonpb.DataBlob, error) {
 	switch task := task.(type) {
-	case *tasks.StateMachineCallbackTask:
+	case *tasks.StateMachineOutboundTask:
 		return proto3Encode(&persistencespb.OutboundTaskInfo{
 			NamespaceId:      task.NamespaceID,
 			WorkflowId:       task.WorkflowID,
@@ -1189,20 +1189,20 @@ func (s *TaskSerializer) serializeCallbackTask(task tasks.Task) (*commonpb.DataB
 			VisibilityTime:   timestamppb.New(task.VisibilityTimestamp),
 		})
 	default:
-		return nil, serviceerror.NewInternal(fmt.Sprintf("unknown callback task type while serializing: %v", task))
+		return nil, serviceerror.NewInternal(fmt.Sprintf("unknown outbound task type while serializing: %v", task))
 	}
 }
 
-func (s *TaskSerializer) deserializeCallbackTask(blob *commonpb.DataBlob) (tasks.Task, error) {
+func (s *TaskSerializer) deserializeOutboundTask(blob *commonpb.DataBlob) (tasks.Task, error) {
 	info := &persistencespb.OutboundTaskInfo{}
 	if err := proto3Decode(blob.Data, blob.EncodingType.String(), info); err != nil {
 		return nil, err
 	}
 
 	if info.TaskType != enumsspb.TASK_TYPE_STATE_MACHINE_OUTBOUND {
-		return nil, serviceerror.NewInternal(fmt.Sprintf("unknown callback task type while deserializing: %v", info))
+		return nil, serviceerror.NewInternal(fmt.Sprintf("unknown outbound task type while deserializing: %v", info))
 	}
-	return &tasks.StateMachineCallbackTask{
+	return &tasks.StateMachineOutboundTask{
 		StateMachineTask: tasks.StateMachineTask{
 			WorkflowKey: definition.NewWorkflowKey(
 				info.NamespaceId,

@@ -195,12 +195,12 @@ const (
 	PersistenceRangeCompleteVisibilityTasksScope = "RangeCompleteVisibilityTasks"
 	// PersistenceGetReplicationTaskScope tracks GetReplicationTask calls made by service to persistence layer
 	PersistenceGetArchivalTasksScope = "GetArchivalTasks"
-	// PersistenceGetCallbackTasksScope tracks GetCallbackTasks calls made by service to persistence layer
-	PersistenceGetCallbackTasksScope = "GetCallbackTasks"
-	// PersistenceCompleteCallbackTasksScope tracks CompleteCallbackTasks calls made by service to persistence layer
-	PersistenceCompleteCallbackTasksScope = "CompleteCallbackTasks"
-	// PersistenceRangeCompleteCallbackTasksScope tracks RangeCompleteCallbackTasks calls made by service to persistence layer
-	PersistenceRangeCompleteCallbackTasksScope = "RangeCompleteCallbackTasks"
+	// PersistenceGetOutboundTasksScope tracks GetOutboundTasks calls made by service to persistence layer
+	PersistenceGetOutboundTasksScope = "GetOutboundTasks"
+	// PersistenceCompleteOutboundTasksScope tracks CompleteOutboundTasks calls made by service to persistence layer
+	PersistenceCompleteOutboundTasksScope = "CompleteOutboundTasks"
+	// PersistenceRangeCompleteOutboundTasksScope tracks RangeCompleteOutboundTasks calls made by service to persistence layer
+	PersistenceRangeCompleteOutboundTasksScope = "RangeCompleteOutboundTasks"
 	// PersistenceCompleteArchivalTaskScope tracks CompleteArchivalTasks calls made by service to persistence layer
 	PersistenceCompleteArchivalTaskScope = "CompleteArchivalTask"
 	// PersistenceRangeCompleteArchivalTasksScope tracks CompleteArchivalTasks calls made by service to persistence layer
@@ -449,8 +449,8 @@ const (
 	OperationArchivalQueueProcessorScope = "ArchivalQueueProcessor"
 	// OperationMemoryScheduledQueueProcessorScope is a scope for memory scheduled queue processor.
 	OperationMemoryScheduledQueueProcessorScope = "MemoryScheduledQueueProcessor"
-	// OperationCallbackQueueProcessorScope is a scope for the callback queue processor.
-	OperationCallbackQueueProcessorScope = "CallbackQueueProcessor"
+	// OperationOutboundQueueProcessorScope is a scope for the outbound queue processor.
+	OperationOutboundQueueProcessorScope = "OutboundQueueProcessor"
 )
 
 // Matching Scope

@@ -390,12 +390,12 @@ func TestTaskGenerator_GenerateDirtySubStateMachineTasks(t *testing.T) {
 	require.NoError(t, err)
 
 	require.Equal(t, 2, len(genTasks))
-	invocationTask, ok := genTasks[0].(*tasks.StateMachineCallbackTask)
+	invocationTask, ok := genTasks[0].(*tasks.StateMachineOutboundTask)
 	var backoffTask *tasks.StateMachineTimerTask
 	if ok {
 		backoffTask = genTasks[1].(*tasks.StateMachineTimerTask)
 	} else {
-		invocationTask = genTasks[1].(*tasks.StateMachineCallbackTask)
+		invocationTask = genTasks[1].(*tasks.StateMachineOutboundTask)
 		backoffTask = genTasks[0].(*tasks.StateMachineTimerTask)
 	}
 	require.Equal(t, tests.WorkflowKey, invocationTask.WorkflowKey)

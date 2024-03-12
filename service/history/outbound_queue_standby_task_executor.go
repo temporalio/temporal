@@ -28,11 +28,11 @@ import (
 	"go.temporal.io/server/service/history/queues"
 )
 
-type callbackQueueStandbyTaskExecutor struct {
+type outboundQueueStandbyTaskExecutor struct {
 }
 
-func (*callbackQueueStandbyTaskExecutor) Execute(context.Context, queues.Executable) queues.ExecuteResponse {
+func (*outboundQueueStandbyTaskExecutor) Execute(context.Context, queues.Executable) queues.ExecuteResponse {
 	panic("unimplemented")
 }
 
-var _ queues.Executor = &callbackQueueStandbyTaskExecutor{}
+var _ queues.Executor = &outboundQueueStandbyTaskExecutor{}

@@ -185,7 +185,7 @@ func TestValidateStateMachineTask(t *testing.T) {
 			mutableState := s.prepareMutableStateWithTriggeredNexusCompletionCallback()
 			snapshot, _, err := mutableState.CloseTransactionAsMutation(workflow.TransactionPolicyActive)
 			require.NoError(t, err)
-			task := snapshot.Tasks[tasks.CategoryCallback][0]
+			task := snapshot.Tasks[tasks.CategoryOutbound][0]
 			exec := taskExecutor{
 				shardContext:   s.mockShard,
 				cache:          s.workflowCache,
@@ -193,7 +193,7 @@ func TestValidateStateMachineTask(t *testing.T) {
 				logger:         s.mockShard.GetLogger(),
 			}
 
-			cbt := task.(*tasks.StateMachineCallbackTask)
+			cbt := task.(*tasks.StateMachineOutboundTask)
 			ref := hsm.Ref{
 				WorkflowKey:     taskWorkflowKey(task),
 				StateMachineRef: cbt.Info.Ref,
@@ -269,7 +269,7 @@ func TestAccess(t *testing.T) {
 			em := s.mockShard.GetExecutionManager().(*persistence.MockExecutionManager)
 			em.EXPECT().GetWorkflowExecution(gomock.Any(), gomock.Any()).Return(&persistence.GetWorkflowExecutionResponse{State: persistenceMutableState}, nil)
 			em.EXPECT().SetWorkflowExecution(gomock.Any(), gomock.Any()).Return(&persistence.SetWorkflowExecutionResponse{}, nil).Times(tc.expectedSetRequests)
-			task := snapshot.Tasks[tasks.CategoryCallback][0]
+			task := snapshot.Tasks[tasks.CategoryOutbound][0]
 			exec := taskExecutor{
 				shardContext:   s.mockShard,
 				cache:          s.workflowCache,
@@ -277,7 +277,7 @@ func TestAccess(t *testing.T) {
 				logger:         s.mockShard.GetLogger(),
 			}
 
-			cbt := task.(*tasks.StateMachineCallbackTask)
+			cbt := task.(*tasks.StateMachineOutboundTask)
 			ref := hsm.Ref{
 				WorkflowKey:     taskWorkflowKey(task),
 				StateMachineRef: cbt.Info.Ref,

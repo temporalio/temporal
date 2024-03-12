@@ -37,29 +37,29 @@ import (
 	wcache "go.temporal.io/server/service/history/workflow/cache"
 )
 
-type callbackQueueActiveTaskExecutor struct {
+type outboundQueueActiveTaskExecutor struct {
 	taskExecutor
 }
 
-var _ queues.Executor = &callbackQueueActiveTaskExecutor{}
+var _ queues.Executor = &outboundQueueActiveTaskExecutor{}
 
-func newCallbackQueueActiveTaskExecutor(
+func newOutboundQueueActiveTaskExecutor(
 	shardCtx shard.Context,
 	workflowCache wcache.Cache,
 	logger log.Logger,
 	metricsHandler metrics.Handler,
-) *callbackQueueActiveTaskExecutor {
-	return &callbackQueueActiveTaskExecutor{
+) *outboundQueueActiveTaskExecutor {
+	return &outboundQueueActiveTaskExecutor{
 		taskExecutor: taskExecutor{
 			shardContext:   shardCtx,
 			cache:          workflowCache,
 			logger:         logger,
-			metricsHandler: metricsHandler.WithTags(metrics.OperationTag(metrics.OperationCallbackQueueProcessorScope)),
+			metricsHandler: metricsHandler.WithTags(metrics.OperationTag(metrics.OperationOutboundQueueProcessorScope)),
 		},
 	}
 }
 
-func (e *callbackQueueActiveTaskExecutor) Execute(
+func (e *outboundQueueActiveTaskExecutor) Execute(
 	ctx context.Context,
 	executable queues.Executable,
 ) queues.ExecuteResponse {
@@ -67,7 +67,7 @@ func (e *callbackQueueActiveTaskExecutor) Execute(
 	var taskType string
 	ref, smt, err := e.stateMachineTask(task)
 	if err != nil {
-		taskType = "ActiveUnknownCallback"
+		taskType = "ActiveUnknownOutbound"
 	} else {
 		taskType = "Active." + smt.Type().Name
 	}
@@ -82,9 +82,9 @@ func (e *callbackQueueActiveTaskExecutor) Execute(
 		metrics.OperationTag(taskType),
 	}
 
-	// We don't want to execute callback tasks when handing over a namespace to avoid starting work that may not be
+	// We don't want to execute outbound tasks when handing over a namespace to avoid starting work that may not be
 	// committed and cause duplicate requests.
-	// We check namespace handover state **once** when processing is started. Callback tasks may take up to 10
+	// We check namespace handover state **once** when processing is started. Outbound tasks may take up to 10
 	// seconds (by default), but we avoid checking again later, before committing the result, to attempt to commit
 	// results of inflight tasks and not lose the progress.
 	if replicationState == enumspb.REPLICATION_STATE_HANDOVER {
@@ -107,8 +107,8 @@ func (e *callbackQueueActiveTaskExecutor) Execute(
 	}
 }
 
-func (e *callbackQueueActiveTaskExecutor) stateMachineTask(task tasks.Task) (hsm.Ref, hsm.Task, error) {
-	cbt, ok := task.(*tasks.StateMachineCallbackTask)
+func (e *outboundQueueActiveTaskExecutor) stateMachineTask(task tasks.Task) (hsm.Ref, hsm.Task, error) {
+	cbt, ok := task.(*tasks.StateMachineOutboundTask)
 	if !ok {
 		return hsm.Ref{}, nil, queues.NewUnprocessableTaskError("unknown task type")
 	}
@@ -116,7 +116,7 @@ func (e *callbackQueueActiveTaskExecutor) stateMachineTask(task tasks.Task) (hsm
 	if !ok {
 		return hsm.Ref{}, nil, queues.NewUnprocessableTaskError(fmt.Sprintf("deserializer not registered for task type %v", cbt.Info.Type))
 	}
-	smt, err := def.Deserialize(cbt.Info.Data, tasks.CategoryCallback, hsm.TaskKindOutbound{Destination: cbt.Destination})
+	smt, err := def.Deserialize(cbt.Info.Data, hsm.TaskKindOutbound{Destination: cbt.Destination})
 	if err != nil {
 		return hsm.Ref{}, nil, fmt.Errorf(
 			"%w: %w",
