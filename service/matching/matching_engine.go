@@ -30,6 +30,7 @@ import (
 	"errors"
 	"fmt"
 	"math"
+	"math/rand"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -864,6 +865,23 @@ func (e *matchingEngineImpl) QueryWorkflow(
 			return nil, serviceerror.NewInternal("unknown query completed type")
 		}
 	case <-ctx.Done():
+		// task timed out. log (optionally) and return the timeout error
+		ns, err := e.namespaceRegistry.GetNamespaceByID(namespaceID)
+		if err != nil {
+			e.logger.Error("Failed to get the namespace by ID",
+				tag.WorkflowNamespaceID(string(namespaceID)),
+				tag.Error(err))
+		} else {
+			sampleRate := e.config.QueryWorkflowTaskTimeoutLogRate(ns.Name().String())
+			if rand.Float64() < sampleRate {
+				e.logger.Info("Workflow Query Task timed out",
+					tag.WorkflowNamespaceID(ns.ID().String()),
+					tag.WorkflowNamespace(ns.Name().String()),
+					tag.WorkflowID(queryRequest.GetQueryRequest().GetExecution().GetWorkflowId()),
+					tag.WorkflowTaskRequestId(taskID),
+					tag.WorkflowTaskQueueName(taskQueueName))
+			}
+		}
 		return nil, ctx.Err()
 	}
 }
