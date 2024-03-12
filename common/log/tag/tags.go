@@ -587,6 +587,11 @@ func TaskID(taskID int64) ZapTag {
 	return NewInt64("queue-task-id", taskID)
 }
 
+// TaskKey returns tag for TaskKey
+func TaskKey(key interface{}) ZapTag {
+	return NewAnyTag("queue-task-key", key)
+}
+
 // TaskVersion returns tag for TaskVersion
 func TaskVersion(taskVersion int64) ZapTag {
 	return NewInt64("queue-task-version", taskVersion)
