@@ -950,8 +950,3 @@ func sdkClientFactoryProvider(
 		dc.GetIntProperty(dynamicconfig.WorkerStickyCacheSize, 0),
 	)
 }
-
-func newSimpleHostInfoProvider(serviceName primitives.ServiceName, hosts map[primitives.ServiceName][]string) membership.HostInfoProvider {
-	hostInfo := membership.NewHostInfoFromAddress(hosts[serviceName][0])
-	return membership.NewHostInfoProvider(hostInfo)
-}
