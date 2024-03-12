@@ -152,8 +152,7 @@ type Config struct {
 	TransferProcessorEnsureCloseBeforeDelete            dynamicconfig.BoolPropertyFn
 	TransferQueueMaxReaderCount                         dynamicconfig.IntPropertyFn
 
-	// CallbackQueueProcessor settings
-	CallbackProcessorEnabled                            dynamicconfig.BoolPropertyFn
+	// OutboundQueueProcessor settings
 	OutboundTaskBatchSize                               dynamicconfig.IntPropertyFn
 	OutboundProcessorMaxPollRPS                         dynamicconfig.IntPropertyFn
 	OutboundProcessorMaxPollHostRPS                     dynamicconfig.IntPropertyFn
