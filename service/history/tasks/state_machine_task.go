@@ -38,6 +38,8 @@ type StateMachineTask struct {
 	Info                *persistence.StateMachineTaskInfo
 }
 
+var _ HasStateMachineTaskType = &StateMachineTask{}
+
 func (t *StateMachineTask) GetVersion() int64 {
 	return t.Info.Ref.MutableStateNamespaceFailoverVersion
 }
@@ -62,30 +64,35 @@ func (t *StateMachineTask) SetVisibilityTime(timestamp time.Time) {
 	t.VisibilityTimestamp = timestamp
 }
 
-// StateMachineCallbackTask is an outbound task on the callback queue.
-type StateMachineCallbackTask struct {
+func (t *StateMachineTask) StateMachineTaskType() int32 {
+	return t.Info.Type
+}
+
+// StateMachineOutboundTask is a task on the outbound queue.
+type StateMachineOutboundTask struct {
 	StateMachineTask
 	Destination string
 }
 
-func (t *StateMachineCallbackTask) GetDestination() string {
+// GetDestination is used for grouping outbound tasks into a per source namespace and destination scheduler and in multi-cursor predicates.
+func (t *StateMachineOutboundTask) GetDestination() string {
 	return t.Destination
 }
 
-func (*StateMachineCallbackTask) GetCategory() Category {
-	return CategoryCallback
+func (*StateMachineOutboundTask) GetCategory() Category {
+	return CategoryOutbound
 }
 
-func (*StateMachineCallbackTask) GetType() enums.TaskType {
+func (*StateMachineOutboundTask) GetType() enums.TaskType {
 	return enums.TASK_TYPE_STATE_MACHINE_OUTBOUND
 }
 
-func (t *StateMachineCallbackTask) GetKey() Key {
+func (t *StateMachineOutboundTask) GetKey() Key {
 	return NewImmediateKey(t.TaskID)
 }
 
-var _ Task = &StateMachineCallbackTask{}
-var _ HasDestination = &StateMachineCallbackTask{}
+var _ Task = &StateMachineOutboundTask{}
+var _ HasDestination = &StateMachineOutboundTask{}
 
 // StateMachineCallbackTask is a generic timer task that can be emitted by any hierarchical state machine.
 type StateMachineTimerTask struct {

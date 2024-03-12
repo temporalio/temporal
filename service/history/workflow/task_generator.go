@@ -287,7 +287,7 @@ func (r *TaskGeneratorImpl) GenerateDirtySubStateMachineTasks(
 				}
 				switch kind := task.Kind().(type) {
 				case hsm.TaskKindOutbound:
-					r.mutableState.AddTasks(&tasks.StateMachineCallbackTask{
+					r.mutableState.AddTasks(&tasks.StateMachineOutboundTask{
 						StateMachineTask: smt,
 						Destination:      kind.Destination,
 					})

@@ -25,8 +25,6 @@ package hsm
 import (
 	"errors"
 	"time"
-
-	"go.temporal.io/server/service/history/tasks"
 )
 
 // ErrInvalidTaskKind can be returned by a [TaskSerializer] if it received the wrong task kind.
@@ -53,15 +51,13 @@ type Task interface {
 	// Task type that must be unique per task definition.
 	Type() TaskType
 	// Kind of the task, see [TaskKind] for more info.
-	// Note that each category supports a specific task kind, make sure those match.
 	Kind() TaskKind
-	// Determines which queue this task is scheduled on.
-	Category() tasks.Category
 }
 
 // TaskKind represents the possible set of kinds for a task.
 // Each kind is mapped to a concrete [tasks.Task] implementation and is backed by specific protobuf message; for
 // example, [TaskKindTimer] maps to TimerTaskInfo.
+// Kind also determines which queue this task is scheduled on - it is mapped to a specific tasks.Category.
 type TaskKind interface {
 	mustEmbedUnimplementedTaskKind()
 }
@@ -89,5 +85,5 @@ type TaskKindOutbound struct {
 // TaskSerializer provides type information and a serializer for a state machine.
 type TaskSerializer interface {
 	Serialize(Task) ([]byte, error)
-	Deserialize(data []byte, category tasks.Category, kind TaskKind) (Task, error)
+	Deserialize(data []byte, kind TaskKind) (Task, error)
 }

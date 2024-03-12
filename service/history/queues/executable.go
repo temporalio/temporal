@@ -685,6 +685,14 @@ func (e *executableImpl) GetDestination() string {
 	return ""
 }
 
+// StateMachineTaskType returns the embedded task's state machine task type if it exists. Defaults to 0.
+func (e *executableImpl) StateMachineTaskType() int32 {
+	if t, ok := e.Task.(tasks.HasStateMachineTaskType); ok {
+		return t.StateMachineTaskType()
+	}
+	return 0
+}
+
 func (e *executableImpl) shouldResubmitOnNack(attempt int, err error) bool {
 	// this is an optimization for skipping rescheduler and retry the task sooner.
 	// this is useful for errors like workflow busy, which doesn't have to wait for

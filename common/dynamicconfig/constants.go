@@ -684,28 +684,28 @@ const (
 	// TransferQueueMaxReaderCount is the max number of readers in one multi-cursor transfer queue
 	TransferQueueMaxReaderCount = "history.transferQueueMaxReaderCount"
 
-	// CallbackProcessorEnabled enables starting the callback queue processor.
-	CallbackProcessorEnabled = "history.callbackProcessorEnabled"
-	// CallbackTaskBatchSize is batch size for callbackQueueFactory
-	CallbackTaskBatchSize = "history.callbackTaskBatchSize"
-	// CallbackProcessorMaxPollRPS is max poll rate per second for callbackQueueFactory
-	CallbackProcessorMaxPollRPS = "history.callbackProcessorMaxPollRPS"
-	// CallbackProcessorMaxPollHostRPS is max poll rate per second for all callbackQueueFactory on a host
-	CallbackProcessorMaxPollHostRPS = "history.callbackProcessorMaxPollHostRPS"
-	// CallbackProcessorUpdateShardTaskCount is update shard count for callbackQueueFactory
-	CallbackProcessorUpdateShardTaskCount = "history.callbackProcessorUpdateShardTaskCount"
-	// CallbackProcessorMaxPollInterval max poll interval for callbackQueueFactory
-	CallbackProcessorMaxPollInterval = "history.callbackProcessorMaxPollInterval"
-	// CallbackProcessorMaxPollIntervalJitterCoefficient is the max poll interval jitter coefficient
-	CallbackProcessorMaxPollIntervalJitterCoefficient = "history.callbackProcessorMaxPollIntervalJitterCoefficient"
-	// CallbackProcessorUpdateAckInterval is update interval for callbackQueueFactory
-	CallbackProcessorUpdateAckInterval = "history.callbackProcessorUpdateAckInterval"
-	// CallbackProcessorUpdateAckIntervalJitterCoefficient is the update interval jitter coefficient
-	CallbackProcessorUpdateAckIntervalJitterCoefficient = "history.callbackProcessorUpdateAckIntervalJitterCoefficient"
-	// CallbackProcessorPollBackoffInterval is the poll backoff interval if task redispatcher's size exceeds limit for callbackQueueFactory
-	CallbackProcessorPollBackoffInterval = "history.callbackProcessorPollBackoffInterval"
-	// CallbackQueueMaxReaderCount is the max number of readers in one multi-cursor callback queue
-	CallbackQueueMaxReaderCount = "history.callbackQueueMaxReaderCount"
+	// OutboundProcessorEnabled enables starting the outbound queue processor.
+	OutboundProcessorEnabled = "history.outboundProcessorEnabled"
+	// OutboundTaskBatchSize is batch size for outboundQueueFactory
+	OutboundTaskBatchSize = "history.outboundTaskBatchSize"
+	// OutboundProcessorMaxPollRPS is max poll rate per second for outboundQueueFactory
+	OutboundProcessorMaxPollRPS = "history.outboundProcessorMaxPollRPS"
+	// OutboundProcessorMaxPollHostRPS is max poll rate per second for all outboundQueueFactory on a host
+	OutboundProcessorMaxPollHostRPS = "history.outboundProcessorMaxPollHostRPS"
+	// OutboundProcessorUpdateShardTaskCount is update shard count for outboundQueueFactory
+	OutboundProcessorUpdateShardTaskCount = "history.outboundProcessorUpdateShardTaskCount"
+	// OutboundProcessorMaxPollInterval max poll interval for outboundQueueFactory
+	OutboundProcessorMaxPollInterval = "history.outboundProcessorMaxPollInterval"
+	// OutboundProcessorMaxPollIntervalJitterCoefficient is the max poll interval jitter coefficient
+	OutboundProcessorMaxPollIntervalJitterCoefficient = "history.outboundProcessorMaxPollIntervalJitterCoefficient"
+	// OutboundProcessorUpdateAckInterval is update interval for outboundQueueFactory
+	OutboundProcessorUpdateAckInterval = "history.outboundProcessorUpdateAckInterval"
+	// OutboundProcessorUpdateAckIntervalJitterCoefficient is the update interval jitter coefficient
+	OutboundProcessorUpdateAckIntervalJitterCoefficient = "history.outboundProcessorUpdateAckIntervalJitterCoefficient"
+	// OutboundProcessorPollBackoffInterval is the poll backoff interval if task redispatcher's size exceeds limit for outboundQueueFactory
+	OutboundProcessorPollBackoffInterval = "history.outboundProcessorPollBackoffInterval"
+	// OutboundQueueMaxReaderCount is the max number of readers in one multi-cursor outbound queue
+	OutboundQueueMaxReaderCount = "history.outboundQueueMaxReaderCount"
 
 	// VisibilityTaskBatchSize is batch size for visibilityQueueProcessor
 	VisibilityTaskBatchSize = "history.visibilityTaskBatchSize"

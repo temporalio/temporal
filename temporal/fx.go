@@ -446,10 +446,10 @@ func TaskCategoryRegistryProvider(archivalMetadata archiver.ArchivalMetadata, dc
 		archivalMetadata.GetVisibilityConfig().StaticClusterState() == archiver.ArchivalEnabled {
 		registry.AddCategory(tasks.CategoryArchival)
 	}
-	// Can't use history service configs.Config because this provider is applied to all services (see docstring for the
-	// function).
-	if dc.GetBoolProperty(dynamicconfig.CallbackProcessorEnabled, false)() {
-		registry.AddCategory(tasks.CategoryCallback)
+	// Can't use history service configs.Config because this provider is applied to all services (see docstring for this
+	// function for more info).
+	if dc.GetBoolProperty(dynamicconfig.OutboundProcessorEnabled, false)() {
+		registry.AddCategory(tasks.CategoryOutbound)
 	}
 	return registry
 }
