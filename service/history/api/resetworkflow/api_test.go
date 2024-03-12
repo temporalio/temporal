@@ -47,7 +47,7 @@ func (s *resetWorkflowSuite) TestGetResetReapplyExcludeTypes() {
 			[]enums.ResetReapplyExcludeType{},
 			enums.RESET_REAPPLY_TYPE_ALL_ELIGIBLE,
 		),
-		[]enums.ResetReapplyExcludeType{},
+		map[enums.ResetReapplyExcludeType]bool{},
 	)
 	// Include all with one exclusion is one exclusion
 	s.Equal(
@@ -55,7 +55,7 @@ func (s *resetWorkflowSuite) TestGetResetReapplyExcludeTypes() {
 			[]enums.ResetReapplyExcludeType{enums.RESET_REAPPLY_EXCLUDE_TYPE_SIGNAL},
 			enums.RESET_REAPPLY_TYPE_ALL_ELIGIBLE,
 		),
-		[]enums.ResetReapplyExcludeType{enums.RESET_REAPPLY_EXCLUDE_TYPE_SIGNAL},
+		map[enums.ResetReapplyExcludeType]bool{enums.RESET_REAPPLY_EXCLUDE_TYPE_SIGNAL: true},
 	)
 	// Include signal with no exclusions is no exclusions
 	s.Equal(
@@ -63,7 +63,7 @@ func (s *resetWorkflowSuite) TestGetResetReapplyExcludeTypes() {
 			[]enums.ResetReapplyExcludeType{},
 			enums.RESET_REAPPLY_TYPE_SIGNAL,
 		),
-		[]enums.ResetReapplyExcludeType{},
+		map[enums.ResetReapplyExcludeType]bool{},
 	)
 	// Include signal with exclude signal: exclude trumps deprecated include
 	s.Equal(
@@ -71,7 +71,7 @@ func (s *resetWorkflowSuite) TestGetResetReapplyExcludeTypes() {
 			[]enums.ResetReapplyExcludeType{enums.RESET_REAPPLY_EXCLUDE_TYPE_SIGNAL},
 			enums.RESET_REAPPLY_TYPE_SIGNAL,
 		),
-		[]enums.ResetReapplyExcludeType{enums.RESET_REAPPLY_EXCLUDE_TYPE_SIGNAL},
+		map[enums.ResetReapplyExcludeType]bool{enums.RESET_REAPPLY_EXCLUDE_TYPE_SIGNAL: true},
 	)
 	// Include none with no exclusions is all excluded
 	s.Equal(
@@ -79,7 +79,7 @@ func (s *resetWorkflowSuite) TestGetResetReapplyExcludeTypes() {
 			[]enums.ResetReapplyExcludeType{},
 			enums.RESET_REAPPLY_TYPE_NONE,
 		),
-		[]enums.ResetReapplyExcludeType{enums.RESET_REAPPLY_EXCLUDE_TYPE_SIGNAL},
+		map[enums.ResetReapplyExcludeType]bool{enums.RESET_REAPPLY_EXCLUDE_TYPE_SIGNAL: true},
 	)
 	// Include none with exclude signal is all excluded
 	s.Equal(
@@ -87,6 +87,6 @@ func (s *resetWorkflowSuite) TestGetResetReapplyExcludeTypes() {
 			[]enums.ResetReapplyExcludeType{enums.RESET_REAPPLY_EXCLUDE_TYPE_SIGNAL},
 			enums.RESET_REAPPLY_TYPE_NONE,
 		),
-		[]enums.ResetReapplyExcludeType{enums.RESET_REAPPLY_EXCLUDE_TYPE_SIGNAL},
+		map[enums.ResetReapplyExcludeType]bool{enums.RESET_REAPPLY_EXCLUDE_TYPE_SIGNAL: true},
 	)
 }
