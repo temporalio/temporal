@@ -35,6 +35,8 @@ import (
 	"github.com/stretchr/testify/require"
 	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/server/common/membership"
+	"go.temporal.io/server/common/namespace"
+	"go.temporal.io/server/common/primitives"
 	"go.temporal.io/server/internal/nettest"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
@@ -59,6 +61,28 @@ type testCase struct {
 	serviceResolver membership.ServiceResolver
 	// configure is a function that can be used to override the default test case values
 	configure func(tc *testCase)
+}
+
+type testCase2 struct {
+	// name of the test case
+	name string
+	// t is the test object
+	t *testing.T
+	// globalNamespaceRPS is the global RPS limit for a namespace
+	globalNamespaceRPS int
+	// globalNamespaceBurstRatio is the ratio of bursts allowed
+	globalNamespaceBurstRatio int
+	// numRequests is the number of requests to send to the interceptor
+	numRequests int
+	// expectRateLimit is true if the interceptor should return a rate limit error
+	expectRateLimit bool
+	// serviceResolver is used to determine the number of frontend hosts for the global rate limiter
+	serviceResolver membership.ServiceResolver
+	//// configure is a function that can be used to override the default test case values
+	//configure func(tc *testCase)
+	// config contains dynamic config values
+	MaxNamespaceRPSPerInstance        int
+	MaxNamespaceBurstRatioPerInstance float64
 }
 
 func TestRateLimitInterceptorProvider(t *testing.T) {
@@ -262,4 +286,168 @@ func (t *testSvc) StartWorkflowExecution(
 	*workflowservice.StartWorkflowExecutionRequest,
 ) (*workflowservice.StartWorkflowExecutionResponse, error) {
 	return &workflowservice.StartWorkflowExecutionResponse{}, nil
+}
+
+func TestNamespaceRateLimitInterceptorProvider(t *testing.T) {
+	t.Parallel()
+	testCases := []testCase2{
+		{
+			name:                              "namespace rate allow when burst ratio is 1",
+			t:                                 t,
+			MaxNamespaceRPSPerInstance:        10,
+			MaxNamespaceBurstRatioPerInstance: 1,
+			numRequests:                       10,
+			expectRateLimit:                   false,
+		},
+		{
+			name:                              "namespace rate hit when burst ratio is 1",
+			t:                                 t,
+			MaxNamespaceRPSPerInstance:        10,
+			MaxNamespaceBurstRatioPerInstance: 1,
+			numRequests:                       11,
+			expectRateLimit:                   true,
+		},
+		{
+			name:                              "namespace burst allow when burst ratio is 1.5",
+			t:                                 t,
+			MaxNamespaceRPSPerInstance:        10,
+			MaxNamespaceBurstRatioPerInstance: 1.5,
+			numRequests:                       15,
+			expectRateLimit:                   false,
+		},
+		{
+			name:                              "namespace burst hit when burst ratio is 1.5",
+			t:                                 t,
+			MaxNamespaceRPSPerInstance:        10,
+			MaxNamespaceBurstRatioPerInstance: 1.5,
+			numRequests:                       16,
+			expectRateLimit:                   true,
+		},
+		{
+			name:                              "namespace burst allow when burst ratio is 0.5",
+			t:                                 t,
+			MaxNamespaceRPSPerInstance:        10,
+			MaxNamespaceBurstRatioPerInstance: 0.5,
+			numRequests:                       5,
+			expectRateLimit:                   false,
+		},
+		{
+			name:                              "namespace burst hit when burst ratio is 0.5",
+			t:                                 t,
+			MaxNamespaceRPSPerInstance:        10,
+			MaxNamespaceBurstRatioPerInstance: 0.5,
+			numRequests:                       6,
+			expectRateLimit:                   true,
+		},
+		{
+			name:                              "namespace burst hit when burst ratio is 0",
+			t:                                 t,
+			MaxNamespaceRPSPerInstance:        10,
+			MaxNamespaceBurstRatioPerInstance: 0,
+			numRequests:                       1,
+			expectRateLimit:                   true,
+		},
+	}
+
+	for _, tc := range testCases {
+		tc := tc
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			mockRegistry := namespace.NewMockRegistry(gomock.NewController(tc.t))
+			mockRegistry.EXPECT().GetNamespace(namespace.Name("")).Return(&namespace.Namespace{}, nil).AnyTimes()
+			serviceResolver := membership.NewMockServiceResolver(gomock.NewController(tc.t))
+			serviceResolver.EXPECT().MemberCount().Return(0).AnyTimes()
+
+			// Setting higher values for other rate limiters to allow testing only namespace rps and burst.
+			config := Config{
+				OperatorRPSRatio: func() float64 {
+					return 0.20
+				},
+				GlobalNamespaceRPS: func(namespace string) int {
+					return 100
+				},
+				MaxNamespaceVisibilityRPSPerInstance: func(namespace string) int {
+					return 100
+				},
+				GlobalNamespaceVisibilityRPS: func(namespace string) int {
+					return 100
+				},
+				MaxNamespaceVisibilityBurstPerInstance: func(namespace string) int {
+					return 100
+				},
+				MaxNamespaceNamespaceReplicationInducingAPIsRPSPerInstance: func(namespace string) int {
+					return 100
+				},
+				GlobalNamespaceNamespaceReplicationInducingAPIsRPS: func(namespace string) int {
+					return 100
+				},
+				MaxNamespaceNamespaceReplicationInducingAPIsBurstPerInstance: func(namespace string) int {
+					return 100
+				},
+			}
+			config.MaxNamespaceRPSPerInstance = func(namespace string) int {
+				return tc.MaxNamespaceRPSPerInstance
+			}
+			config.MaxNamespaceBurstRatioPerInstance = func(namespace string) float64 {
+				return tc.MaxNamespaceBurstRatioPerInstance
+			}
+
+			// Create a rate limit interceptor.
+			rateLimitInterceptor := NamespaceRateLimitInterceptorProvider(
+				primitives.FrontendService,
+				&config,
+				mockRegistry,
+				serviceResolver,
+			)
+
+			// Create a gRPC server for the fake workflow service.
+			svc := &testSvc{}
+			server := grpc.NewServer(grpc.UnaryInterceptor(rateLimitInterceptor.Intercept))
+			workflowservice.RegisterWorkflowServiceServer(server, svc)
+
+			pipe := nettest.NewPipe()
+
+			var wg sync.WaitGroup
+			defer wg.Wait()
+			wg.Add(1)
+
+			listener := nettest.NewListener(pipe)
+			go func() {
+				defer wg.Done()
+
+				_ = server.Serve(listener)
+			}()
+
+			// Create a gRPC client to the fake workflow service.
+			dialer := grpc.WithContextDialer(func(ctx context.Context, _ string) (net.Conn, error) {
+				return pipe.Connect(ctx.Done())
+			})
+			transportCredentials := grpc.WithTransportCredentials(insecure.NewCredentials())
+			conn, err := grpc.DialContext(context.Background(), "fake", dialer, transportCredentials)
+			require.NoError(t, err)
+
+			defer server.Stop()
+
+			client := workflowservice.NewWorkflowServiceClient(conn)
+
+			// Generate load by sending a number of requests to the server.
+			for i := 0; i < tc.numRequests; i++ {
+				_, err = client.StartWorkflowExecution(
+					context.Background(),
+					&workflowservice.StartWorkflowExecutionRequest{},
+				)
+				if err != nil {
+					break
+				}
+			}
+
+			// Check if the rate limit is hit.
+			if tc.expectRateLimit {
+				assert.ErrorContains(t, err, "rate limit exceeded")
+			} else {
+				assert.NoError(t, err)
+			}
+		})
+	}
 }

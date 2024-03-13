@@ -245,8 +245,8 @@ const (
 	FrontendNamespaceReplicationInducingAPIsRPS = "frontend.rps.namespaceReplicationInducingAPIs"
 	// FrontendMaxNamespaceRPSPerInstance is workflow namespace rate limit per second
 	FrontendMaxNamespaceRPSPerInstance = "frontend.namespaceRPS"
-	// FrontendMaxNamespaceBurstPerInstance is workflow namespace burst limit
-	FrontendMaxNamespaceBurstPerInstance = "frontend.namespaceBurst"
+	// FrontendMaxNamespaceBurstRatioPerInstance is workflow namespace burst limit as fraction of frontend.namespaceRPS.
+	FrontendMaxNamespaceBurstRatioPerInstance = "frontend.namespaceBurstRatio"
 	// FrontendMaxConcurrentLongRunningRequestsPerInstance limits concurrent long-running requests per-instance,
 	// per-API. Example requests include long-poll requests, and `Query` requests (which need to wait for WFTs). The
 	// limit is applied individually to each API method. This value is ignored if
