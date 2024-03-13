@@ -370,12 +370,13 @@ func (u *Update) Send(
 	if !u.needToSend(includeAlreadySent) {
 		return nil
 	}
-
-	if u.state == stateRequested {
-		u.setState(stateProvisionallySent)
-		eventStore.OnAfterCommit(func(context.Context) { u.setState(stateSent) })
-		eventStore.OnAfterRollback(func(context.Context) { u.setState(stateRequested) })
+	if u.state != stateRequested {
+		return nil
 	}
+
+	u.setState(stateProvisionallySent)
+	eventStore.OnAfterCommit(func(context.Context) { u.setState(stateSent) })
+	eventStore.OnAfterRollback(func(context.Context) { u.setState(stateRequested) })
 
 	return &protocolpb.Message{
 		ProtocolInstanceId: u.id,
