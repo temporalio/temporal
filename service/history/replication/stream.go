@@ -88,11 +88,11 @@ func WrapEventLoop(
 			return
 		}
 
-		if retryCount < 10 { // retry at most 10 times and then let the stream_receiver_monitor to restart it
-			retryCount++
-			time.Sleep(retryInterval)
-		} else {
+		if retryCount >= 10 { // retry at most 10 times and then let the stream_receiver_monitor to restart it
 			return
 		}
+
+		retryCount++
+		time.Sleep(retryInterval)
 	}
 }
