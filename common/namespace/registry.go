@@ -133,7 +133,9 @@ type (
 	Registry interface {
 		common.Pingable
 		GetNamespace(name Name) (*Namespace, error)
+		GetNamespaceWithOptions(name Name, opts GetNamespaceOptions) (*Namespace, error)
 		GetNamespaceByID(id ID) (*Namespace, error)
+		GetNamespaceByIDWithOptions(id ID, opts GetNamespaceOptions) (*Namespace, error)
 		GetNamespaceID(name Name) (ID, error)
 		GetNamespaceName(id ID) (Name, error)
 		GetCacheSize() (sizeOfCacheByName int64, sizeOfCacheByID int64)
@@ -147,6 +149,14 @@ type (
 		GetCustomSearchAttributesMapper(name Name) (CustomSearchAttributesMapper, error)
 		Start()
 		Stop()
+	}
+
+	GetNamespaceOptions struct {
+		// Setting this disables the readthrough logic, i.e. only looks at the current in-memory
+		// registry. This is useful if you want to avoid latency or avoid polluting the negative
+		// lookup cache. Note that you may get false negatives (namespace not found) if the
+		// namespace was created very recently.
+		DisableReadthrough bool
 	}
 
 	registry struct {
@@ -311,11 +321,33 @@ func (r *registry) GetNamespace(name Name) (*Namespace, error) {
 	return r.getOrReadthroughNamespace(name)
 }
 
+// GetNamespaceByIDWithOptions retrieves a namespace entry by name, with behavior controlled by options.
+func (r *registry) GetNamespaceWithOptions(name Name, opts GetNamespaceOptions) (*Namespace, error) {
+	if name == "" {
+		return nil, serviceerror.NewInvalidArgument("Namespace is empty.")
+	}
+	if opts.DisableReadthrough {
+		return r.getNamespace(name)
+	}
+	return r.getOrReadthroughNamespace(name)
+}
+
 // GetNamespaceByID retrieves the information from the cache if it exists, otherwise retrieves the information from metadata
 // store and writes it to the cache with an expiry before returning back
 func (r *registry) GetNamespaceByID(id ID) (*Namespace, error) {
 	if id == "" {
 		return nil, serviceerror.NewInvalidArgument("NamespaceID is empty.")
+	}
+	return r.getOrReadthroughNamespaceByID(id)
+}
+
+// GetNamespaceByIDWithOptions retrieves a namespace entry by id, with behavior controlled by options.
+func (r *registry) GetNamespaceByIDWithOptions(id ID, opts GetNamespaceOptions) (*Namespace, error) {
+	if id == "" {
+		return nil, serviceerror.NewInvalidArgument("NamespaceID is empty.")
+	}
+	if opts.DisableReadthrough {
+		return r.getNamespaceByID(id)
 	}
 	return r.getOrReadthroughNamespaceByID(id)
 }
