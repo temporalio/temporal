@@ -70,7 +70,9 @@ import (
 	"go.temporal.io/server/service/worker/scheduler"
 )
 
-type FEReplicatorNamespaceReplicationQueue persistence.NamespaceReplicationQueue
+type (
+	FEReplicatorNamespaceReplicationQueue persistence.NamespaceReplicationQueue
+)
 
 var Module = fx.Options(
 	resource.Module,
@@ -102,6 +104,7 @@ var Module = fx.Options(
 	fx.Provide(NewVersionChecker),
 	fx.Provide(ServiceResolverProvider),
 	fx.Provide(NexusHTTPHandlerProvider),
+	fx.Provide(OpenAPIHTTPHandlerProvider),
 	fx.Provide(HTTPAPIServerProvider),
 	fx.Provide(NewServiceProvider),
 	fx.Invoke(ServiceLifetimeHooks),
@@ -665,6 +668,16 @@ func NexusHTTPHandlerProvider(
 	)
 }
 
+func OpenAPIHTTPHandlerProvider(
+	rateLimitInterceptor *interceptor.RateLimitInterceptor,
+	logger log.Logger,
+) *OpenAPIHTTPHandler {
+	return NewOpenAPIHTTPHandler(
+		rateLimitInterceptor,
+		logger,
+	)
+}
+
 // HTTPAPIServerProvider provides an HTTP API server if enabled or nil
 // otherwise.
 func HTTPAPIServerProvider(
@@ -679,6 +692,7 @@ func HTTPAPIServerProvider(
 	metricsHandler metrics.Handler,
 	namespaceRegistry namespace.Registry,
 	logger log.Logger,
+	openAPIHTTPHandler *OpenAPIHTTPHandler,
 	nexusHTTPHandler *NexusHTTPHandler,
 ) (*HTTPAPIServer, error) {
 	// If the service is not the frontend service, HTTP API is disabled
@@ -699,7 +713,7 @@ func HTTPAPIServerProvider(
 		operatorHandler,
 		grpcServerOptions.UnaryInterceptors,
 		metricsHandler,
-		[]func(*mux.Router){nexusHTTPHandler.RegisterRoutes},
+		[]func(*mux.Router){nexusHTTPHandler.RegisterRoutes, openAPIHTTPHandler.RegisterRoutes},
 		namespaceRegistry,
 		logger,
 	)

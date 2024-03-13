@@ -40,6 +40,7 @@ import (
 	commonnexus "go.temporal.io/server/common/nexus"
 	"go.temporal.io/server/common/rpc"
 	"go.temporal.io/server/common/rpc/interceptor"
+	"go.temporal.io/server/service/frontend/configs"
 	"google.golang.org/grpc/credentials"
 )
 
@@ -137,9 +138,7 @@ func (h *NexusHTTPHandler) dispatchNexusTaskByNamespaceAndTaskQueue(w http.Respo
 		namespaceRateLimitInterceptor:        h.namespaceRateLimitInterceptor,
 		namespaceConcurrencyLimitInterceptor: h.namespaceConcurrencyLimitInterceptor,
 		rateLimitInterceptor:                 h.rateLimitInterceptor,
-		// This name does not map to an underlying gRPC service. This format is used for consistency with the
-		// gRPC API names on which the authorizer - the consumer of this string - may depend.
-		apiName: "/temporal.api.nexusservice.v1.NexusService/DispatchNexusTask",
+		apiName:                              configs.DispatchNexusTaskAPIName,
 	}
 
 	if nc.namespaceName, err = url.PathUnescape(vars["namespace"]); err != nil {
