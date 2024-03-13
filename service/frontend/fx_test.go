@@ -42,7 +42,7 @@ import (
 	"google.golang.org/grpc/credentials/insecure"
 )
 
-type testCase struct {
+type rateLimitInterceptorTestCase struct {
 	// name of the test case
 	name string
 	// t is the test object
@@ -60,10 +60,10 @@ type testCase struct {
 	// serviceResolver is used to determine the number of frontend hosts for the global rate limiter
 	serviceResolver membership.ServiceResolver
 	// configure is a function that can be used to override the default test case values
-	configure func(tc *testCase)
+	configure func(tc *rateLimitInterceptorTestCase)
 }
 
-type testCase2 struct {
+type namespaceRateLimitInterceptorTestCase struct {
 	// name of the test case
 	name string
 	// t is the test object
@@ -79,7 +79,7 @@ type testCase2 struct {
 	// serviceResolver is used to determine the number of frontend hosts for the global rate limiter
 	serviceResolver membership.ServiceResolver
 	//// configure is a function that can be used to override the default test case values
-	//configure func(tc *testCase)
+	//configure func(tc *rateLimitInterceptorTestCase)
 	// config contains dynamic config values
 	MaxNamespaceRPSPerInstance        int
 	MaxNamespaceBurstRatioPerInstance float64
@@ -102,10 +102,10 @@ func TestRateLimitInterceptorProvider(t *testing.T) {
 	highGlobalRPSLimit := highPerInstanceRPSLimit * numHosts
 	operatorRPSRatio := 0.2
 
-	testCases := []testCase{
+	testCases := []rateLimitInterceptorTestCase{
 		{
 			name: "both rate limits hit",
-			configure: func(tc *testCase) {
+			configure: func(tc *rateLimitInterceptorTestCase) {
 				tc.globalRPSLimit = lowGlobalRPSLimit
 				tc.perInstanceRPSLimit = lowPerInstanceRPSLimit
 				tc.operatorRPSRatio = operatorRPSRatio
@@ -114,7 +114,7 @@ func TestRateLimitInterceptorProvider(t *testing.T) {
 		},
 		{
 			name: "global rate limit hit",
-			configure: func(tc *testCase) {
+			configure: func(tc *rateLimitInterceptorTestCase) {
 				tc.globalRPSLimit = lowGlobalRPSLimit
 				tc.perInstanceRPSLimit = highPerInstanceRPSLimit
 				tc.operatorRPSRatio = operatorRPSRatio
@@ -123,7 +123,7 @@ func TestRateLimitInterceptorProvider(t *testing.T) {
 		},
 		{
 			name: "per instance rate limit hit but ignored because global rate limit is not hit",
-			configure: func(tc *testCase) {
+			configure: func(tc *rateLimitInterceptorTestCase) {
 				tc.globalRPSLimit = highGlobalRPSLimit
 				tc.perInstanceRPSLimit = lowPerInstanceRPSLimit
 				tc.operatorRPSRatio = operatorRPSRatio
@@ -132,7 +132,7 @@ func TestRateLimitInterceptorProvider(t *testing.T) {
 		},
 		{
 			name: "neither rate limit hit",
-			configure: func(tc *testCase) {
+			configure: func(tc *rateLimitInterceptorTestCase) {
 				tc.globalRPSLimit = highGlobalRPSLimit
 				tc.perInstanceRPSLimit = highPerInstanceRPSLimit
 				tc.operatorRPSRatio = operatorRPSRatio
@@ -141,7 +141,7 @@ func TestRateLimitInterceptorProvider(t *testing.T) {
 		},
 		{
 			name: "global rate limit not configured and per instance rate limit not hit",
-			configure: func(tc *testCase) {
+			configure: func(tc *rateLimitInterceptorTestCase) {
 				tc.globalRPSLimit = 0
 				tc.perInstanceRPSLimit = highPerInstanceRPSLimit
 				tc.operatorRPSRatio = operatorRPSRatio
@@ -150,7 +150,7 @@ func TestRateLimitInterceptorProvider(t *testing.T) {
 		},
 		{
 			name: "global rate limit not configured and per instance rate limit is hit",
-			configure: func(tc *testCase) {
+			configure: func(tc *rateLimitInterceptorTestCase) {
 				tc.globalRPSLimit = 0
 				tc.perInstanceRPSLimit = lowPerInstanceRPSLimit
 				tc.operatorRPSRatio = operatorRPSRatio
@@ -159,7 +159,7 @@ func TestRateLimitInterceptorProvider(t *testing.T) {
 		},
 		{
 			name: "global rate limit not configured and zero per-instance rate limit",
-			configure: func(tc *testCase) {
+			configure: func(tc *rateLimitInterceptorTestCase) {
 				tc.globalRPSLimit = 0
 				tc.perInstanceRPSLimit = 0
 				tc.operatorRPSRatio = operatorRPSRatio
@@ -168,7 +168,7 @@ func TestRateLimitInterceptorProvider(t *testing.T) {
 		},
 		{
 			name: "nil service resolver causes global RPS limit to be ignored",
-			configure: func(tc *testCase) {
+			configure: func(tc *rateLimitInterceptorTestCase) {
 				tc.globalRPSLimit = lowPerInstanceRPSLimit
 				tc.perInstanceRPSLimit = highPerInstanceRPSLimit
 				tc.operatorRPSRatio = operatorRPSRatio
@@ -178,7 +178,7 @@ func TestRateLimitInterceptorProvider(t *testing.T) {
 		},
 		{
 			name: "no hosts causes global RPS limit to be ignored",
-			configure: func(tc *testCase) {
+			configure: func(tc *rateLimitInterceptorTestCase) {
 				tc.globalRPSLimit = lowPerInstanceRPSLimit
 				tc.perInstanceRPSLimit = highPerInstanceRPSLimit
 				tc.operatorRPSRatio = operatorRPSRatio
@@ -290,7 +290,7 @@ func (t *testSvc) StartWorkflowExecution(
 
 func TestNamespaceRateLimitInterceptorProvider(t *testing.T) {
 	t.Parallel()
-	testCases := []testCase2{
+	testCases := []namespaceRateLimitInterceptorTestCase{
 		{
 			name:                              "namespace rate allow when burst ratio is 1",
 			t:                                 t,
