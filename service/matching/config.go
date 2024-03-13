@@ -101,7 +101,7 @@ type (
 		// FrontendAccessHistoryFraction is an interim flag across 2 minor releases and will be removed once fully enabled.
 		FrontendAccessHistoryFraction dynamicconfig.FloatPropertyFn
 
-		QueryWorkflowTaskTimeoutLogRate dynamicconfig.FloatPropertyFnWithNamespaceFilter
+		QueryWorkflowTaskTimeoutLogRate dynamicconfig.FloatPropertyFnWithTaskQueueInfoFilters
 	}
 
 	forwarderConfig struct {
@@ -221,7 +221,7 @@ func NewConfig(
 		ListNexusIncomingServicesLongPollTimeout: dc.GetDurationProperty(dynamicconfig.MatchingListNexusIncomingServicesLongPollTimeout, 5*time.Minute-10*time.Second), // Use -10 seconds so that we send back empty response instead of timeout
 
 		FrontendAccessHistoryFraction:   dc.GetFloat64Property(dynamicconfig.FrontendAccessHistoryFraction, 0.0),
-		QueryWorkflowTaskTimeoutLogRate: dc.GetFloatPropertyFilteredByNamespace(dynamicconfig.MatchingQueryWorkflowTaskTimeoutLogRate, 0.0),
+		QueryWorkflowTaskTimeoutLogRate: dc.GetFloatPropertyFilteredByTaskQueueInfo(dynamicconfig.MatchingQueryWorkflowTaskTimeoutLogRate, 0.0),
 	}
 }
 

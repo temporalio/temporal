@@ -872,7 +872,7 @@ func (e *matchingEngineImpl) QueryWorkflow(
 				tag.WorkflowNamespaceID(string(namespaceID)),
 				tag.Error(err))
 		} else {
-			sampleRate := e.config.QueryWorkflowTaskTimeoutLogRate(ns.Name().String())
+			sampleRate := e.config.QueryWorkflowTaskTimeoutLogRate(ns.Name().String(), taskQueueName, enumspb.TASK_QUEUE_TYPE_WORKFLOW)
 			if rand.Float64() < sampleRate {
 				e.logger.Info("Workflow Query Task timed out",
 					tag.WorkflowNamespaceID(ns.ID().String()),
