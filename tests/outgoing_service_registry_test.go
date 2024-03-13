@@ -47,11 +47,13 @@ func (s *FunctionalSuite) TestOutgoingServiceRegistry() {
 	testURL := "http://localhost/"
 	s.Run("UpdateNonExistentService", func() {
 		serviceName := s.randomizeStr("service-name")
-		_, err := s.operatorClient.CreateOrUpdateNexusOutgoingService(ctx, &operatorservice.CreateOrUpdateNexusOutgoingServiceRequest{
+		_, err := s.operatorClient.UpdateNexusOutgoingService(ctx, &operatorservice.UpdateNexusOutgoingServiceRequest{
 			Version:   1,
 			Namespace: ns,
 			Name:      serviceName,
-			Url:       testURL,
+			Spec: &nexus.OutgoingServiceSpec{
+				Url: testURL,
+			},
 		})
 		s.Error(err)
 		s.Assert().Equal(codes.NotFound, serviceerror.ToStatus(err).Code(),
@@ -61,11 +63,12 @@ func (s *FunctionalSuite) TestOutgoingServiceRegistry() {
 	s.Run("CreateAndGet", func() {
 		serviceName := s.randomizeStr("service-name")
 		{
-			response, err := s.operatorClient.CreateOrUpdateNexusOutgoingService(ctx, &operatorservice.CreateOrUpdateNexusOutgoingServiceRequest{
-				Version:   0,
+			response, err := s.operatorClient.CreateNexusOutgoingService(ctx, &operatorservice.CreateNexusOutgoingServiceRequest{
 				Namespace: ns,
 				Name:      serviceName,
-				Url:       testURL,
+				Spec: &nexus.OutgoingServiceSpec{
+					Url: testURL,
+				},
 			})
 			s.NoError(err)
 			s.NotNil(response)
@@ -78,28 +81,32 @@ func (s *FunctionalSuite) TestOutgoingServiceRegistry() {
 			s.NoError(err)
 			s.Assert().Equal(1, int(response.Service.Version))
 			s.Assert().Equal(serviceName, response.Service.Name)
-			s.Assert().Equal(testURL, response.Service.Url)
+			s.Assert().Equal(testURL, response.Service.Spec.Url)
 		}
 	})
 
 	s.Run("CreateAndUpdateWrongVersion", func() {
 		serviceName := s.randomizeStr("service-name")
 		{
-			response, err := s.operatorClient.CreateOrUpdateNexusOutgoingService(ctx, &operatorservice.CreateOrUpdateNexusOutgoingServiceRequest{
+			response, err := s.operatorClient.CreateNexusOutgoingService(ctx, &operatorservice.CreateNexusOutgoingServiceRequest{
 				Namespace: ns,
 				Name:      serviceName,
-				Url:       testURL,
+				Spec: &nexus.OutgoingServiceSpec{
+					Url: testURL,
+				},
 			})
 			s.NoError(err)
 			s.NotNil(response)
 			s.Assert().Equal(1, int(response.Service.Version))
 		}
 		{
-			_, err := s.operatorClient.CreateOrUpdateNexusOutgoingService(ctx, &operatorservice.CreateOrUpdateNexusOutgoingServiceRequest{
+			_, err := s.operatorClient.UpdateNexusOutgoingService(ctx, &operatorservice.UpdateNexusOutgoingServiceRequest{
 				Version:   2,
 				Namespace: ns,
 				Name:      serviceName,
-				Url:       testURL,
+				Spec: &nexus.OutgoingServiceSpec{
+					Url: testURL,
+				},
 			})
 			s.Error(err)
 			s.Assert().Equal(codes.FailedPrecondition, serviceerror.ToStatus(err).Code(),
@@ -107,24 +114,27 @@ func (s *FunctionalSuite) TestOutgoingServiceRegistry() {
 		}
 	})
 
-	s.Run("CreateAndUpdateZeroVersion", func() {
+	s.Run("CreateAlreadyExistsSameName", func() {
 		serviceName := s.randomizeStr("service-name")
 		{
-			response, err := s.operatorClient.CreateOrUpdateNexusOutgoingService(ctx, &operatorservice.CreateOrUpdateNexusOutgoingServiceRequest{
+			response, err := s.operatorClient.CreateNexusOutgoingService(ctx, &operatorservice.CreateNexusOutgoingServiceRequest{
 				Namespace: ns,
 				Name:      serviceName,
-				Url:       testURL,
+				Spec: &nexus.OutgoingServiceSpec{
+					Url: testURL,
+				},
 			})
 			s.NoError(err)
 			s.NotNil(response)
 			s.Assert().Equal(1, int(response.Service.Version))
 		}
 		{
-			_, err := s.operatorClient.CreateOrUpdateNexusOutgoingService(ctx, &operatorservice.CreateOrUpdateNexusOutgoingServiceRequest{
-				Version:   0,
+			_, err := s.operatorClient.CreateNexusOutgoingService(ctx, &operatorservice.CreateNexusOutgoingServiceRequest{
 				Namespace: ns,
 				Name:      serviceName,
-				Url:       testURL,
+				Spec: &nexus.OutgoingServiceSpec{
+					Url: testURL,
+				},
 			})
 			s.Error(err)
 			s.Assert().Equal(codes.AlreadyExists, serviceerror.ToStatus(err).Code(),
@@ -134,26 +144,31 @@ func (s *FunctionalSuite) TestOutgoingServiceRegistry() {
 
 	s.Run("CreateAndUpdateCorrectVersion", func() {
 		serviceName := s.randomizeStr("service-name")
+		var version int64
 		{
-			response, err := s.operatorClient.CreateOrUpdateNexusOutgoingService(ctx, &operatorservice.CreateOrUpdateNexusOutgoingServiceRequest{
+			response, err := s.operatorClient.CreateNexusOutgoingService(ctx, &operatorservice.CreateNexusOutgoingServiceRequest{
 				Namespace: ns,
 				Name:      serviceName,
-				Url:       testURL,
+				Spec: &nexus.OutgoingServiceSpec{
+					Url: testURL,
+				},
 			})
 			s.NoError(err)
 			s.NotNil(response)
-			s.Assert().Equal(1, int(response.Service.Version))
+			version = response.Service.Version
 		}
 		{
-			response, err := s.operatorClient.CreateOrUpdateNexusOutgoingService(ctx, &operatorservice.CreateOrUpdateNexusOutgoingServiceRequest{
-				Version:   1,
+			response, err := s.operatorClient.UpdateNexusOutgoingService(ctx, &operatorservice.UpdateNexusOutgoingServiceRequest{
+				Version:   version,
 				Namespace: ns,
 				Name:      serviceName,
-				Url:       testURL + "x",
+				Spec: &nexus.OutgoingServiceSpec{
+					Url: testURL + "x",
+				},
 			})
 			s.NoError(err)
 			s.Assert().Equal(2, int(response.Service.Version))
-			s.Assert().Equal(testURL+"x", response.Service.Url)
+			s.Assert().Equal(testURL+"x", response.Service.Spec.Url)
 		}
 		{
 			response, err := s.operatorClient.GetNexusOutgoingService(ctx, &operatorservice.GetNexusOutgoingServiceRequest{
@@ -169,11 +184,12 @@ func (s *FunctionalSuite) TestOutgoingServiceRegistry() {
 	s.Run("CreateAndDelete", func() {
 		serviceName := s.randomizeStr("service-name")
 		{
-			response, err := s.operatorClient.CreateOrUpdateNexusOutgoingService(ctx, &operatorservice.CreateOrUpdateNexusOutgoingServiceRequest{
-				Version:   0,
+			response, err := s.operatorClient.CreateNexusOutgoingService(ctx, &operatorservice.CreateNexusOutgoingServiceRequest{
 				Namespace: ns,
 				Name:      serviceName,
-				Url:       testURL,
+				Spec: &nexus.OutgoingServiceSpec{
+					Url: testURL,
+				},
 			})
 			s.NoError(err)
 			s.NotNil(response)
@@ -202,26 +218,27 @@ func (s *FunctionalSuite) TestOutgoingServiceRegistry() {
 
 		serviceName := s.randomizeStr("service-name")
 		for i := 0; i < 10; i++ {
-			response, err := s.operatorClient.CreateOrUpdateNexusOutgoingService(ctx, &operatorservice.CreateOrUpdateNexusOutgoingServiceRequest{
-				Version:   0,
+			response, err := s.operatorClient.CreateNexusOutgoingService(ctx, &operatorservice.CreateNexusOutgoingServiceRequest{
 				Namespace: ns,
 				Name:      serviceName + strconv.Itoa(i),
-				Url:       testURL,
+				Spec: &nexus.OutgoingServiceSpec{
+					Url: testURL,
+				},
 			})
 			s.NoError(err)
 			s.NotNil(response)
 		}
-		var nextPageToken []byte
+		var pageToken []byte
 		services := make([]*nexus.OutgoingService, 0, 10)
 		for {
 			response, err := s.operatorClient.ListNexusOutgoingServices(ctx, &operatorservice.ListNexusOutgoingServicesRequest{
-				Namespace:     ns,
-				NextPageToken: nextPageToken,
+				Namespace: ns,
+				PageToken: pageToken,
 			})
 			s.NoError(err)
 			services = append(services, response.Services...)
-			nextPageToken = response.NextPageToken
-			if len(nextPageToken) == 0 {
+			pageToken = response.NextPageToken
+			if len(pageToken) == 0 {
 				break
 			}
 		}

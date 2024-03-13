@@ -851,11 +851,18 @@ func (h *OperatorHandlerImpl) GetNexusOutgoingService(
 	return h.outgoingServiceRegistry.Get(ctx, req)
 }
 
-func (h *OperatorHandlerImpl) CreateOrUpdateNexusOutgoingService(
+func (h *OperatorHandlerImpl) CreateNexusOutgoingService(
 	ctx context.Context,
-	req *operatorservice.CreateOrUpdateNexusOutgoingServiceRequest,
-) (*operatorservice.CreateOrUpdateNexusOutgoingServiceResponse, error) {
-	return h.outgoingServiceRegistry.Upsert(ctx, req)
+	req *operatorservice.CreateNexusOutgoingServiceRequest,
+) (*operatorservice.CreateNexusOutgoingServiceResponse, error) {
+	return h.outgoingServiceRegistry.Create(ctx, req)
+}
+
+func (h *OperatorHandlerImpl) UpdateNexusOutgoingService(
+	ctx context.Context,
+	req *operatorservice.UpdateNexusOutgoingServiceRequest,
+) (*operatorservice.UpdateNexusOutgoingServiceResponse, error) {
+	return h.outgoingServiceRegistry.Update(ctx, req)
 }
 
 func (h *OperatorHandlerImpl) DeleteNexusOutgoingService(

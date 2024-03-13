@@ -116,14 +116,90 @@ func (h *OutgoingServiceRegistry) Get(
 	}, nil
 }
 
-func (h *OutgoingServiceRegistry) Upsert(
+func (h *OutgoingServiceRegistry) Create(
 	ctx context.Context,
-	req *operatorservice.CreateOrUpdateNexusOutgoingServiceRequest,
-) (*operatorservice.CreateOrUpdateNexusOutgoingServiceResponse, error) {
+	req *operatorservice.CreateNexusOutgoingServiceRequest,
+) (*operatorservice.CreateNexusOutgoingServiceResponse, error) {
 	if err := h.validateUpsertRequest(req); err != nil {
 		return nil, err
 	}
-	return h.upsertService(ctx, req)
+	response, err := h.namespaceService.GetNamespace(ctx, &persistence.GetNamespaceRequest{
+		Name: req.GetNamespace(),
+	})
+	if err != nil {
+		return nil, err
+	}
+	ns := response.Namespace
+	i := slices.IndexFunc(ns.OutgoingServices, func(svc *persistencespb.OutgoingService) bool {
+		return svc.Name == req.GetName()
+	})
+	if i >= 0 {
+		return nil, status.Errorf(
+			codes.AlreadyExists,
+			"Outgoing service %q already exists with version %d",
+			req.GetName(),
+			ns.OutgoingServices[i].Version,
+		)
+	}
+	ns.OutgoingServices = append(ns.OutgoingServices, &persistencespb.OutgoingService{
+		Version: 1,
+		Name:    req.GetName(),
+		Url:     req.GetSpec().GetUrl(),
+	})
+	if err := h.updateNamespace(ctx, ns, response); err != nil {
+		return nil, err
+	}
+	return &operatorservice.CreateNexusOutgoingServiceResponse{
+		Service: &nexus.OutgoingService{
+			Name:    req.GetName(),
+			Version: 1,
+			Spec:    req.GetSpec(),
+		},
+	}, nil
+}
+
+func (h *OutgoingServiceRegistry) Update(
+	ctx context.Context,
+	req *operatorservice.UpdateNexusOutgoingServiceRequest,
+) (*operatorservice.UpdateNexusOutgoingServiceResponse, error) {
+	if err := h.validateUpsertRequest(req); err != nil {
+		return nil, err
+	}
+	response, err := h.namespaceService.GetNamespace(ctx, &persistence.GetNamespaceRequest{
+		Name: req.GetNamespace(),
+	})
+	if err != nil {
+		return nil, err
+	}
+	ns := response.Namespace
+	i := slices.IndexFunc(ns.OutgoingServices, func(svc *persistencespb.OutgoingService) bool {
+		return svc.Name == req.GetName()
+	})
+	if i < 0 {
+		return nil, status.Errorf(codes.NotFound, "Outgoing service %q not found", req.GetName())
+	}
+	service := ns.OutgoingServices[i]
+	if service.Version != req.GetVersion() {
+		return nil, status.Errorf(
+			codes.FailedPrecondition,
+			"Outgoing service %q version %d does not match expected version %d",
+			req.GetName(),
+			service.Version,
+			req.GetVersion(),
+		)
+	}
+	service.Version++
+	service.Url = req.GetSpec().GetUrl()
+	if err := h.updateNamespace(ctx, ns, response); err != nil {
+		return nil, err
+	}
+	return &operatorservice.UpdateNexusOutgoingServiceResponse{
+		Service: &nexus.OutgoingService{
+			Name:    req.GetName(),
+			Version: service.Version,
+			Spec:    req.GetSpec(),
+		},
+	}, nil
 }
 
 func (h *OutgoingServiceRegistry) Delete(
@@ -178,7 +254,9 @@ func (h *OutgoingServiceRegistry) List(
 		services = append(services, &nexus.OutgoingService{
 			Name:    service.Name,
 			Version: service.Version,
-			Url:     service.Url,
+			Spec: &nexus.OutgoingServiceSpec{
+				Url: service.Url,
+			},
 		})
 	}
 	var nextPageToken []byte
@@ -215,41 +293,6 @@ func validateCommonRequestParams(req any) error {
 	return nil
 }
 
-func (h *OutgoingServiceRegistry) upsertService(
-	ctx context.Context,
-	req *operatorservice.CreateOrUpdateNexusOutgoingServiceRequest,
-) (*operatorservice.CreateOrUpdateNexusOutgoingServiceResponse, error) {
-	response, err := h.namespaceService.GetNamespace(ctx, &persistence.GetNamespaceRequest{
-		Name: req.Namespace,
-	})
-	if err != nil {
-		return nil, err
-	}
-	ns := response.Namespace
-	i := slices.IndexFunc(ns.OutgoingServices, func(svc *persistencespb.OutgoingService) bool {
-		return svc.Name == req.Name
-	})
-	if i < 0 {
-		if err := h.addService(req, ns); err != nil {
-			return nil, err
-		}
-	} else {
-		if err := h.updateService(req, ns.OutgoingServices[i]); err != nil {
-			return nil, err
-		}
-	}
-	if err := h.updateNamespace(ctx, ns, response); err != nil {
-		return nil, err
-	}
-	return &operatorservice.CreateOrUpdateNexusOutgoingServiceResponse{
-		Service: &nexus.OutgoingService{
-			Name:    req.Name,
-			Version: req.Version + 1, // This is the version now in the DB.
-			Url:     req.Url,
-		},
-	}, nil
-}
-
 func (h *OutgoingServiceRegistry) updateNamespace(
 	ctx context.Context,
 	ns *persistencespb.NamespaceDetail,
@@ -262,43 +305,20 @@ func (h *OutgoingServiceRegistry) updateNamespace(
 	})
 }
 
-func (h *OutgoingServiceRegistry) addService(req *operatorservice.CreateOrUpdateNexusOutgoingServiceRequest, ns *persistencespb.NamespaceDetail) error {
-	if req.Version != 0 {
+func (h *OutgoingServiceRegistry) addService(req UpsertRequest, version int64, ns *persistencespb.NamespaceDetail) error {
+	if version != 0 {
 		return status.Errorf(
 			codes.NotFound,
 			"Outgoing service %q not found. Set Version to 0 (not %d) if you want to register a new service.",
-			req.Name,
-			req.Version,
+			req.GetName(),
+			version,
 		)
 	}
 	ns.OutgoingServices = append(ns.OutgoingServices, &persistencespb.OutgoingService{
 		Version: 1,
-		Name:    req.Name,
-		Url:     req.Url,
+		Name:    req.GetName(),
+		Url:     req.GetSpec().GetUrl(),
 	})
-	return nil
-}
-
-func (h *OutgoingServiceRegistry) updateService(req *operatorservice.CreateOrUpdateNexusOutgoingServiceRequest, service *persistencespb.OutgoingService) error {
-	if req.Version == 0 {
-		return status.Errorf(
-			codes.AlreadyExists,
-			"Outgoing service %q already exists. Set Version to a non-zero value if you want to update it.",
-			req.Name,
-		)
-	}
-	if service.Version != req.Version {
-		return status.Errorf(
-			codes.FailedPrecondition,
-			"Outgoing service %q update request version %d does not match the current version %d",
-			req.Name,
-			req.Version,
-			service.Version,
-		)
-	}
-	// The service variable is a pointer, so we can modify it directly
-	service.Version++
-	service.Url = req.Url
 	return nil
 }
 
@@ -325,8 +345,8 @@ func (h *OutgoingServiceRegistry) parseListRequest(
 		)
 	}
 	var pageToken outgoingServicesPageToken
-	if len(req.NextPageToken) > 0 {
-		if err := pageToken.Deserialize(req.NextPageToken); err != nil {
+	if len(req.PageToken) > 0 {
+		if err := pageToken.Deserialize(req.PageToken); err != nil {
 			return 0, 0, status.Errorf(
 				codes.InvalidArgument,
 				"Invalid NextPageToken: %v",
@@ -358,32 +378,40 @@ func (h *OutgoingServiceRegistry) findService(
 			return &nexus.OutgoingService{
 				Name:    service.Name,
 				Version: service.Version,
-				Url:     service.Url,
+				Spec: &nexus.OutgoingServiceSpec{
+					Url: service.Url,
+				},
 			}
 		}
 	}
 	return nil
 }
 
-func (h *OutgoingServiceRegistry) validateUpsertRequest(req *operatorservice.CreateOrUpdateNexusOutgoingServiceRequest) error {
+type UpsertRequest interface {
+	GetNamespace() string
+	GetName() string
+	GetSpec() *nexus.OutgoingServiceSpec
+}
+
+func (h *OutgoingServiceRegistry) validateUpsertRequest(req UpsertRequest) error {
 	if err := validateCommonRequestParams(req); err != nil {
 		return err
 	}
 	nameMaxLength := h.config.NameMaxLength()
-	if len(req.Name) > nameMaxLength {
+	if len(req.GetName()) > nameMaxLength {
 		return status.Errorf(codes.InvalidArgument, "Outgoing service name length exceeds the limit of %d", nameMaxLength)
 	}
-	if !serviceNameRegex.MatchString(req.Name) {
+	if !serviceNameRegex.MatchString(req.GetName()) {
 		return status.Errorf(codes.InvalidArgument, "Outgoing service name must match the regex: %q", serviceNameRegex.String())
 	}
-	if req.Url == "" {
+	if req.GetSpec() == nil || req.GetSpec().GetUrl() == "" {
 		return ErrURLNotSet
 	}
 	urlMaxLength := h.config.MaxURLLength()
-	if len(req.Url) > urlMaxLength {
+	if len(req.GetSpec().GetUrl()) > urlMaxLength {
 		return status.Errorf(codes.InvalidArgument, "Outgoing service URL length exceeds the limit of %d", urlMaxLength)
 	}
-	u, err := url.Parse(req.Url)
+	u, err := url.Parse(req.GetSpec().GetUrl())
 	if err != nil {
 		return status.Errorf(codes.InvalidArgument, "Malformed outgoing service URL: %v", err)
 	}

@@ -146,47 +146,55 @@ func TestGet_Ok(t *testing.T) {
 	assert.Equal(t, &nexuspb.OutgoingService{
 		Version: 1,
 		Name:    testServiceName,
-		Url:     testServiceURL,
+		Spec: &nexuspb.OutgoingServiceSpec{
+			Url: testServiceURL,
+		},
 	}, res.Service)
 }
 
-func TestUpsert_NoNamespace(t *testing.T) {
+func TestUpdate_NoNamespace(t *testing.T) {
 	t.Parallel()
 	registry := nexus.NewOutgoingServiceRegistry(nil, newConfig())
-	_, err := registry.Upsert(
+	_, err := registry.Update(
 		context.Background(),
-		&operatorservice.CreateOrUpdateNexusOutgoingServiceRequest{
+		&operatorservice.UpdateNexusOutgoingServiceRequest{
 			Name: testServiceName,
-			Url:  testServiceURL,
+			Spec: &nexuspb.OutgoingServiceSpec{
+				Url: testServiceURL,
+			},
 		},
 	)
 	require.ErrorIs(t, err, nexus.ErrNamespaceNotSet)
 }
 
-func TestUpsert_NoServiceName(t *testing.T) {
+func TestUpdate_NoServiceName(t *testing.T) {
 	t.Parallel()
 	registry := nexus.NewOutgoingServiceRegistry(nil, newConfig())
-	_, err := registry.Upsert(
+	_, err := registry.Update(
 		context.Background(),
-		&operatorservice.CreateOrUpdateNexusOutgoingServiceRequest{
+		&operatorservice.UpdateNexusOutgoingServiceRequest{
 			Namespace: testNamespace,
-			Url:       testServiceURL,
+			Spec: &nexuspb.OutgoingServiceSpec{
+				Url: testServiceURL,
+			},
 		},
 	)
 	require.ErrorIs(t, err, nexus.ErrNameNotSet)
 }
 
-func TestUpsert_NameTooLong(t *testing.T) {
+func TestCreate_NameTooLong(t *testing.T) {
 	t.Parallel()
 	config := newConfig()
 	name := strings.Repeat("x", config.NameMaxLength()+1)
 	registry := nexus.NewOutgoingServiceRegistry(nil, config)
-	_, err := registry.Upsert(
+	_, err := registry.Update(
 		context.Background(),
-		&operatorservice.CreateOrUpdateNexusOutgoingServiceRequest{
+		&operatorservice.UpdateNexusOutgoingServiceRequest{
 			Namespace: testNamespace,
 			Name:      name,
-			Url:       testServiceURL,
+			Spec: &nexuspb.OutgoingServiceSpec{
+				Url: testServiceURL,
+			},
 		},
 	)
 	require.Error(t, err)
@@ -194,15 +202,17 @@ func TestUpsert_NameTooLong(t *testing.T) {
 	assert.ErrorContains(t, err, strconv.Itoa(config.NameMaxLength()))
 }
 
-func TestUpsert_NameInvalidFormat(t *testing.T) {
+func TestCreate_NameInvalidFormat(t *testing.T) {
 	t.Parallel()
 	registry := nexus.NewOutgoingServiceRegistry(nil, newConfig())
-	_, err := registry.Upsert(
+	_, err := registry.Create(
 		context.Background(),
-		&operatorservice.CreateOrUpdateNexusOutgoingServiceRequest{
+		&operatorservice.CreateNexusOutgoingServiceRequest{
 			Namespace: testNamespace,
 			Name:      "!@&#%^$",
-			Url:       testServiceURL,
+			Spec: &nexuspb.OutgoingServiceSpec{
+				Url: testServiceURL,
+			},
 		},
 	)
 	require.Error(t, err)
@@ -210,12 +220,12 @@ func TestUpsert_NameInvalidFormat(t *testing.T) {
 	assert.ErrorContains(t, err, "a-z")
 }
 
-func TestUpsert_NoURL(t *testing.T) {
+func TestCreate_NoURL(t *testing.T) {
 	t.Parallel()
 	registry := nexus.NewOutgoingServiceRegistry(nil, newConfig())
-	_, err := registry.Upsert(
+	_, err := registry.Create(
 		context.Background(),
-		&operatorservice.CreateOrUpdateNexusOutgoingServiceRequest{
+		&operatorservice.CreateNexusOutgoingServiceRequest{
 			Namespace: testNamespace,
 			Name:      testServiceName,
 		},
@@ -223,18 +233,20 @@ func TestUpsert_NoURL(t *testing.T) {
 	require.ErrorIs(t, err, nexus.ErrURLNotSet)
 }
 
-func TestUpsert_URLTooLong(t *testing.T) {
+func TestCreate_URLTooLong(t *testing.T) {
 	t.Parallel()
 	config := newConfig()
 	registry := nexus.NewOutgoingServiceRegistry(nil, config)
 	u := testServiceURL + "/"
 	u += strings.Repeat("x", config.MaxURLLength()-len(u)+1)
-	_, err := registry.Upsert(
+	_, err := registry.Create(
 		context.Background(),
-		&operatorservice.CreateOrUpdateNexusOutgoingServiceRequest{
+		&operatorservice.CreateNexusOutgoingServiceRequest{
 			Namespace: testNamespace,
 			Name:      testServiceName,
-			Url:       u,
+			Spec: &nexuspb.OutgoingServiceSpec{
+				Url: u,
+			},
 		},
 	)
 	require.Error(t, err)
@@ -242,16 +254,18 @@ func TestUpsert_URLTooLong(t *testing.T) {
 	assert.ErrorContains(t, err, strconv.Itoa(config.MaxURLLength()))
 }
 
-func TestUpsert_URLMalformed(t *testing.T) {
+func TestCreate_URLMalformed(t *testing.T) {
 	t.Parallel()
 	registry := nexus.NewOutgoingServiceRegistry(nil, newConfig())
 	u := "://example.com"
-	_, err := registry.Upsert(
+	_, err := registry.Create(
 		context.Background(),
-		&operatorservice.CreateOrUpdateNexusOutgoingServiceRequest{
+		&operatorservice.CreateNexusOutgoingServiceRequest{
 			Namespace: testNamespace,
 			Name:      testServiceName,
-			Url:       u,
+			Spec: &nexuspb.OutgoingServiceSpec{
+				Url: u,
+			},
 		},
 	)
 	require.Error(t, err)
@@ -260,16 +274,18 @@ func TestUpsert_URLMalformed(t *testing.T) {
 	assert.ErrorContains(t, err, u)
 }
 
-func TestUpsert_InvalidScheme(t *testing.T) {
+func TestCreate_InvalidScheme(t *testing.T) {
 	t.Parallel()
 	registry := nexus.NewOutgoingServiceRegistry(nil, newConfig())
 	u := "oops://example.com"
-	_, err := registry.Upsert(
+	_, err := registry.Create(
 		context.Background(),
-		&operatorservice.CreateOrUpdateNexusOutgoingServiceRequest{
+		&operatorservice.CreateNexusOutgoingServiceRequest{
 			Namespace: testNamespace,
 			Name:      testServiceName,
-			Url:       u,
+			Spec: &nexuspb.OutgoingServiceSpec{
+				Url: u,
+			},
 		},
 	)
 	require.Error(t, err)
@@ -280,7 +296,7 @@ func TestUpsert_InvalidScheme(t *testing.T) {
 	assert.ErrorContains(t, err, "https")
 }
 
-func TestUpsert_GetNamespaceErr(t *testing.T) {
+func TestCreate_GetNamespaceErr(t *testing.T) {
 	t.Parallel()
 	getNamespaceErr := errors.New("test error")
 	service := nexustest.NamespaceService{}
@@ -288,18 +304,20 @@ func TestUpsert_GetNamespaceErr(t *testing.T) {
 		return nil, getNamespaceErr
 	}
 	registry := nexus.NewOutgoingServiceRegistry(&service, newConfig())
-	_, err := registry.Upsert(
+	_, err := registry.Create(
 		context.Background(),
-		&operatorservice.CreateOrUpdateNexusOutgoingServiceRequest{
+		&operatorservice.CreateNexusOutgoingServiceRequest{
 			Namespace: testNamespace,
 			Name:      testServiceName,
-			Url:       testServiceURL,
+			Spec: &nexuspb.OutgoingServiceSpec{
+				Url: testServiceURL,
+			},
 		},
 	)
 	require.ErrorIs(t, err, getNamespaceErr)
 }
 
-func TestUpsert_UpdateNamespaceErr(t *testing.T) {
+func TestCreate_UpdateNamespaceErr(t *testing.T) {
 	t.Parallel()
 	updateNamespaceErr := errors.New("test error")
 	service := nexustest.NamespaceService{}
@@ -327,12 +345,14 @@ func TestUpsert_UpdateNamespaceErr(t *testing.T) {
 		return updateNamespaceErr
 	}
 	registry := nexus.NewOutgoingServiceRegistry(&service, newConfig())
-	_, err := registry.Upsert(
+	_, err := registry.Create(
 		context.Background(),
-		&operatorservice.CreateOrUpdateNexusOutgoingServiceRequest{
+		&operatorservice.CreateNexusOutgoingServiceRequest{
 			Namespace: testNamespace,
 			Name:      testServiceName,
-			Url:       testServiceURL,
+			Spec: &nexuspb.OutgoingServiceSpec{
+				Url: testServiceURL,
+			},
 		},
 	)
 	require.ErrorIs(t, err, updateNamespaceErr)
@@ -511,8 +531,8 @@ func TestList_InvalidPageToken(t *testing.T) {
 	_, err := registry.List(
 		context.Background(),
 		&operatorservice.ListNexusOutgoingServicesRequest{
-			Namespace:     testNamespace,
-			NextPageToken: []byte("invalid-token"),
+			Namespace: testNamespace,
+			PageToken: []byte("invalid-token"),
 		},
 	)
 	require.Error(t, err)
@@ -526,8 +546,8 @@ func TestList_NegativePageTokenIndex(t *testing.T) {
 	_, err := registry.List(
 		context.Background(),
 		&operatorservice.ListNexusOutgoingServicesRequest{
-			Namespace:     testNamespace,
-			NextPageToken: []byte("v1/-1"),
+			Namespace: testNamespace,
+			PageToken: []byte("v1/-1"),
 		},
 	)
 	require.Error(t, err)
@@ -595,9 +615,9 @@ func TestList_PageTokenBeyondLimit(t *testing.T) {
 	res, err := registry.List(
 		context.Background(),
 		&operatorservice.ListNexusOutgoingServicesRequest{
-			Namespace:     testNamespace,
-			PageSize:      1,
-			NextPageToken: []byte("v1/1"),
+			Namespace: testNamespace,
+			PageSize:  1,
+			PageToken: []byte("v1/1"),
 		},
 	)
 	require.NoError(t, err)
