@@ -70,8 +70,8 @@ func WrapEventLoop(
 	retryInterval time.Duration,
 ) {
 	defer streamStopper()
-	retryCount := 0
-	for {
+
+	for retryCount := 0; retryCount < 11; retryCount++ {
 		err := originalEventLoop()
 
 		if err == nil { // shutdown case
@@ -92,7 +92,6 @@ func WrapEventLoop(
 			return
 		}
 
-		retryCount++
 		time.Sleep(retryInterval)
 	}
 }
