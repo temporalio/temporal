@@ -28,8 +28,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"strconv"
-	"strings"
 	"testing"
 	"time"
 
@@ -39,11 +37,14 @@ import (
 	"github.com/stretchr/testify/suite"
 	enumspb "go.temporal.io/api/enums/v1"
 	namespacepb "go.temporal.io/api/namespace/v1"
-	"go.temporal.io/api/nexus/v1"
 	"go.temporal.io/api/operatorservice/v1"
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/api/workflowservice/v1"
 	sdkclient "go.temporal.io/sdk/client"
+	cnexus "go.temporal.io/server/common/nexus"
+	"golang.org/x/exp/maps"
+	"google.golang.org/grpc/health"
+
 	"go.temporal.io/server/api/adminservice/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common/cluster"
@@ -59,16 +60,11 @@ import (
 	"go.temporal.io/server/common/testing/mocksdk"
 	"go.temporal.io/server/service/worker/addsearchattributes"
 	"go.temporal.io/server/service/worker/deletenamespace"
-	"golang.org/x/exp/maps"
-	"google.golang.org/grpc/codes"
-	"google.golang.org/grpc/health"
 )
 
 var (
-	testNamespace   = "test-namespace"
-	testServiceName = "test-service"
-	testServiceURL  = "http://localhost:8080"
-	testIndexName   = "test-index-name"
+	testNamespace = "test-namespace"
+	testIndexName = "test-index-name"
 )
 
 type (
@@ -80,7 +76,6 @@ type (
 		mockResource *resourcetest.Test
 
 		handler *OperatorHandlerImpl
-		config  *Config
 	}
 )
 
@@ -95,24 +90,13 @@ func (s *operatorHandlerSuite) SetupTest() {
 	s.controller = gomock.NewController(s.T())
 	s.mockResource = resourcetest.NewTest(s.controller, primitives.FrontendService)
 	s.mockResource.ClusterMetadata.EXPECT().GetCurrentClusterName().Return(uuid.New()).AnyTimes()
-	s.config = &Config{
-		NumHistoryShards: 4,
-		OutgoingServiceURLMaxLength: func() int {
-			return 1000
-		},
-		OutgoingServiceNameMaxLength: func() int {
-			return 200
-		},
-		OutgoingServiceListDefaultPageSize: func() int {
-			return 10
-		},
-		OutgoingServiceListMaxPageSize: func() int {
-			return 100
-		},
-	}
 
+	outgoingServiceRegistry := cnexus.NewOutgoingServiceRegistry(
+		s.mockResource.MetadataMgr,
+		cnexus.NewOutgoingServiceRegistryConfig(dynamicconfig.NewNoopCollection()),
+	)
 	args := NewOperatorHandlerImplArgs{
-		s.config,
+		&Config{NumHistoryShards: 4},
 		s.mockResource.ESClient,
 		s.mockResource.Logger,
 		s.mockResource.GetSDKClientFactory(),
@@ -124,7 +108,7 @@ func (s *operatorHandlerSuite) SetupTest() {
 		s.mockResource.GetClusterMetadataManager(),
 		s.mockResource.GetClusterMetadata(),
 		s.mockResource.GetClientFactory(),
-		s.mockResource.GetMetadataManager(),
+		outgoingServiceRegistry,
 	}
 	s.handler = NewOperatorHandlerImpl(args)
 	s.handler.Start()
@@ -1611,475 +1595,4 @@ func (s *operatorHandlerSuite) Test_AddOrUpdateRemoteCluster_SaveClusterMetadata
 	_, err := s.handler.AddOrUpdateRemoteCluster(context.Background(), &operatorservice.AddOrUpdateRemoteClusterRequest{FrontendAddress: rpcAddress})
 	s.Error(err)
 	s.IsType(&serviceerror.InvalidArgument{}, err)
-}
-
-func (s *operatorHandlerSuite) Test_GetNexusOutgoingService_NoNamespace() {
-	_, err := s.handler.GetNexusOutgoingService(
-		context.Background(),
-		&operatorservice.GetNexusOutgoingServiceRequest{
-			Name:      testServiceName,
-			Namespace: "",
-		},
-	)
-	s.ErrorIs(err, errNamespaceNotSet)
-}
-
-func (s *operatorHandlerSuite) Test_GetNexusOutgoingService_NoName() {
-	_, err := s.handler.GetNexusOutgoingService(
-		context.Background(),
-		&operatorservice.GetNexusOutgoingServiceRequest{
-			Name:      "",
-			Namespace: testNamespace,
-		},
-	)
-	s.ErrorIs(err, errNameNotSet)
-}
-
-func (s *operatorHandlerSuite) Test_GetNexusOutgoingService_GetNamespaceErr() {
-	getNamespaceErr := errors.New("test error")
-	s.mockResource.MetadataMgr.EXPECT().
-		GetNamespace(gomock.Any(), &persistence.GetNamespaceRequest{Name: testNamespace}).
-		Return(nil, getNamespaceErr)
-	_, err := s.handler.GetNexusOutgoingService(
-		context.Background(),
-		&operatorservice.GetNexusOutgoingServiceRequest{
-			Namespace: testNamespace,
-			Name:      testServiceName,
-		},
-	)
-	s.ErrorIs(err, getNamespaceErr)
-}
-
-func (s *operatorHandlerSuite) Test_GetNexusOutgoingService_ServiceNotFound() {
-	s.mockResource.MetadataMgr.EXPECT().
-		GetNamespace(gomock.Any(), &persistence.GetNamespaceRequest{Name: testNamespace}).
-		Return(&persistence.GetNamespaceResponse{}, nil)
-	_, err := s.handler.GetNexusOutgoingService(
-		context.Background(),
-		&operatorservice.GetNexusOutgoingServiceRequest{
-			Namespace: testNamespace,
-			Name:      testServiceName,
-		},
-	)
-	code := serviceerror.ToStatus(err).Code()
-	s.Equal(codes.NotFound, code, err)
-	s.ErrorContains(err, testServiceName)
-}
-
-func (s *operatorHandlerSuite) Test_GetNexusOutgoingService_Ok() {
-	s.mockResource.MetadataMgr.EXPECT().
-		GetNamespace(gomock.Any(), &persistence.GetNamespaceRequest{Name: testNamespace}).
-		Return(&persistence.GetNamespaceResponse{
-			Namespace: &persistencespb.NamespaceDetail{
-				OutgoingServices: []*persistencespb.OutgoingService{
-					{
-						Version: 1,
-						Name:    testServiceName,
-						Url:     testServiceURL,
-					},
-				},
-			},
-		}, nil)
-	res, err := s.handler.GetNexusOutgoingService(
-		context.Background(),
-		&operatorservice.GetNexusOutgoingServiceRequest{
-			Namespace: testNamespace,
-			Name:      testServiceName,
-		},
-	)
-	s.NoError(err)
-	s.Equal(&nexus.OutgoingService{
-		Version: 1,
-		Name:    testServiceName,
-		Url:     testServiceURL,
-	}, res.Service)
-}
-
-func (s *operatorHandlerSuite) Test_CreateOrUpdateNexusOutgoingService_NoNamespace() {
-	_, err := s.handler.CreateOrUpdateNexusOutgoingService(
-		context.Background(),
-		&operatorservice.CreateOrUpdateNexusOutgoingServiceRequest{
-			Name: testServiceName,
-			Url:  testServiceURL,
-		},
-	)
-	s.ErrorIs(err, errNamespaceNotSet)
-}
-
-func (s *operatorHandlerSuite) Test_CreateOrUpdateNexusOutgoingService_NoServiceName() {
-	_, err := s.handler.CreateOrUpdateNexusOutgoingService(
-		context.Background(),
-		&operatorservice.CreateOrUpdateNexusOutgoingServiceRequest{
-			Namespace: testNamespace,
-			Url:       testServiceURL,
-		},
-	)
-	s.ErrorIs(err, errNameNotSet)
-}
-
-func (s *operatorHandlerSuite) Test_CreateOrUpdateNexusOutgoingService_NameTooLong() {
-	name := strings.Repeat("x", s.config.OutgoingServiceNameMaxLength()+1)
-	_, err := s.handler.CreateOrUpdateNexusOutgoingService(
-		context.Background(),
-		&operatorservice.CreateOrUpdateNexusOutgoingServiceRequest{
-			Namespace: testNamespace,
-			Name:      name,
-			Url:       testServiceURL,
-		},
-	)
-	s.Error(err)
-	s.Equal(codes.InvalidArgument, serviceerror.ToStatus(err).Code(), err)
-	s.ErrorContains(err, strconv.Itoa(s.config.OutgoingServiceNameMaxLength()))
-}
-
-func (s *operatorHandlerSuite) Test_CreateOrUpdateNexusOutgoingService_NameInvalidFormat() {
-	_, err := s.handler.CreateOrUpdateNexusOutgoingService(
-		context.Background(),
-		&operatorservice.CreateOrUpdateNexusOutgoingServiceRequest{
-			Namespace: testNamespace,
-			Name:      "!@&#%^$",
-			Url:       testServiceURL,
-		},
-	)
-	s.Error(err)
-	s.Equal(codes.InvalidArgument, serviceerror.ToStatus(err).Code(), err)
-	s.ErrorContains(err, "a-z")
-}
-
-func (s *operatorHandlerSuite) Test_CreateOrUpdateNexusOutgoingService_NoURL() {
-	_, err := s.handler.CreateOrUpdateNexusOutgoingService(
-		context.Background(),
-		&operatorservice.CreateOrUpdateNexusOutgoingServiceRequest{
-			Namespace: testNamespace,
-			Name:      testServiceName,
-		},
-	)
-	s.ErrorIs(err, errURLNotSet)
-}
-
-func (s *operatorHandlerSuite) Test_CreateOrUpdateNexusOutgoingService_URLTooLong() {
-	u := testServiceURL + "/"
-	u += strings.Repeat("x", s.config.OutgoingServiceURLMaxLength()-len(u)+1)
-	_, err := s.handler.CreateOrUpdateNexusOutgoingService(
-		context.Background(),
-		&operatorservice.CreateOrUpdateNexusOutgoingServiceRequest{
-			Namespace: testNamespace,
-			Name:      testServiceName,
-			Url:       u,
-		},
-	)
-	s.Error(err)
-	s.Equal(codes.InvalidArgument, serviceerror.ToStatus(err).Code(), err)
-	s.ErrorContains(err, strconv.Itoa(s.config.OutgoingServiceURLMaxLength()))
-}
-
-func (s *operatorHandlerSuite) Test_CreateOrUpdateNexusOutgoingService_URLMalformed() {
-	u := "://example.com"
-	_, err := s.handler.CreateOrUpdateNexusOutgoingService(
-		context.Background(),
-		&operatorservice.CreateOrUpdateNexusOutgoingServiceRequest{
-			Namespace: testNamespace,
-			Name:      testServiceName,
-			Url:       u,
-		},
-	)
-	s.Error(err)
-	s.Equal(codes.InvalidArgument, serviceerror.ToStatus(err).Code(), err)
-	s.Contains(strings.ToLower(err.Error()), "malformed")
-	s.ErrorContains(err, u)
-}
-
-func (s *operatorHandlerSuite) Test_CreateOrUpdateNexusOutgoingService_InvalidScheme() {
-	u := "oops://example.com"
-	_, err := s.handler.CreateOrUpdateNexusOutgoingService(
-		context.Background(),
-		&operatorservice.CreateOrUpdateNexusOutgoingServiceRequest{
-			Namespace: testNamespace,
-			Name:      testServiceName,
-			Url:       u,
-		},
-	)
-	s.Error(err)
-	s.Equal(codes.InvalidArgument, serviceerror.ToStatus(err).Code(), err)
-	s.ErrorContains(err, "scheme")
-	s.ErrorContains(err, "oops")
-	s.ErrorContains(err, "http")
-	s.ErrorContains(err, "https")
-}
-
-func (s *operatorHandlerSuite) Test_CreateOrUpdateNexusOutgoingService_GetNamespaceErr() {
-	getNamespaceErr := errors.New("test error")
-	s.mockResource.MetadataMgr.EXPECT().
-		GetNamespace(gomock.Any(), &persistence.GetNamespaceRequest{Name: testNamespace}).
-		Return(nil, getNamespaceErr)
-	_, err := s.handler.CreateOrUpdateNexusOutgoingService(
-		context.Background(),
-		&operatorservice.CreateOrUpdateNexusOutgoingServiceRequest{
-			Namespace: testNamespace,
-			Name:      testServiceName,
-			Url:       testServiceURL,
-		},
-	)
-	s.ErrorIs(err, getNamespaceErr)
-}
-
-func (s *operatorHandlerSuite) Test_CreateOrUpdateNexusOutgoingService_UpdateNamespaceErr() {
-	updateNamespaceErr := errors.New("test error")
-	s.mockResource.MetadataMgr.EXPECT().
-		GetNamespace(gomock.Any(), &persistence.GetNamespaceRequest{Name: testNamespace}).
-		Return(&persistence.GetNamespaceResponse{
-			Namespace:           &persistencespb.NamespaceDetail{},
-			IsGlobalNamespace:   true,
-			NotificationVersion: 1,
-		}, nil)
-	s.mockResource.MetadataMgr.EXPECT().
-		UpdateNamespace(gomock.Any(), &persistence.UpdateNamespaceRequest{
-			Namespace: &persistencespb.NamespaceDetail{
-				OutgoingServices: []*persistencespb.OutgoingService{
-					{
-						Version: 1,
-						Name:    testServiceName,
-						Url:     testServiceURL,
-					},
-				},
-			},
-			IsGlobalNamespace:   true,
-			NotificationVersion: 2,
-		}).Return(updateNamespaceErr)
-	_, err := s.handler.CreateOrUpdateNexusOutgoingService(
-		context.Background(),
-		&operatorservice.CreateOrUpdateNexusOutgoingServiceRequest{
-			Namespace: testNamespace,
-			Name:      testServiceName,
-			Url:       testServiceURL,
-		},
-	)
-	s.ErrorIs(err, updateNamespaceErr)
-}
-
-func (s *operatorHandlerSuite) Test_DeleteNexusOutgoingService_NoNamespace() {
-	_, err := s.handler.DeleteNexusOutgoingService(
-		context.Background(),
-		&operatorservice.DeleteNexusOutgoingServiceRequest{
-			Namespace: "",
-			Name:      testServiceName,
-		},
-	)
-	s.ErrorIs(err, errNamespaceNotSet)
-}
-
-func (s *operatorHandlerSuite) Test_DeleteNexusOutgoingService_NoName() {
-	_, err := s.handler.DeleteNexusOutgoingService(
-		context.Background(),
-		&operatorservice.DeleteNexusOutgoingServiceRequest{
-			Namespace: testNamespace,
-			Name:      "",
-		},
-	)
-	s.ErrorIs(err, errNameNotSet)
-}
-
-func (s *operatorHandlerSuite) Test_DeleteNexusOutgoingService_GetNamespaceErr() {
-	getNamespaceErr := errors.New("test error")
-	s.mockResource.MetadataMgr.EXPECT().
-		GetNamespace(gomock.Any(), &persistence.GetNamespaceRequest{Name: testNamespace}).
-		Return(nil, getNamespaceErr)
-	_, err := s.handler.DeleteNexusOutgoingService(
-		context.Background(),
-		&operatorservice.DeleteNexusOutgoingServiceRequest{
-			Namespace: testNamespace,
-			Name:      testServiceName,
-		},
-	)
-	s.ErrorIs(err, getNamespaceErr)
-}
-
-func (s *operatorHandlerSuite) Test_DeleteNexusOutgoingService_ServiceNotFound() {
-	s.mockResource.MetadataMgr.EXPECT().
-		GetNamespace(gomock.Any(), &persistence.GetNamespaceRequest{Name: testNamespace}).
-		Return(&persistence.GetNamespaceResponse{
-			Namespace: &persistencespb.NamespaceDetail{
-				OutgoingServices: []*persistencespb.OutgoingService{
-					{
-						Version: 1,
-						Name:    "other-service",
-					},
-				},
-			},
-		}, nil)
-	_, err := s.handler.DeleteNexusOutgoingService(
-		context.Background(),
-		&operatorservice.DeleteNexusOutgoingServiceRequest{
-			Namespace: testNamespace,
-			Name:      testServiceName,
-		},
-	)
-	s.Error(err)
-	s.Equal(codes.NotFound, serviceerror.ToStatus(err).Code(), err)
-}
-
-func (s *operatorHandlerSuite) Test_DeleteNexusOutgoingService_UpdateNamespaceErr() {
-	updateNamespaceErr := errors.New("test error")
-	s.mockResource.MetadataMgr.EXPECT().
-		GetNamespace(gomock.Any(), &persistence.GetNamespaceRequest{Name: testNamespace}).
-		Return(&persistence.GetNamespaceResponse{
-			Namespace: &persistencespb.NamespaceDetail{
-				OutgoingServices: []*persistencespb.OutgoingService{
-					{
-						Version: 1,
-						Name:    testServiceName,
-						Url:     testServiceURL,
-					},
-					{
-						Version: 1,
-						Name:    "other-service",
-						Url:     testServiceURL,
-					},
-				},
-			},
-			IsGlobalNamespace:   true,
-			NotificationVersion: 1,
-		}, nil)
-	s.mockResource.MetadataMgr.EXPECT().
-		UpdateNamespace(gomock.Any(), &persistence.UpdateNamespaceRequest{
-			Namespace: &persistencespb.NamespaceDetail{
-				OutgoingServices: []*persistencespb.OutgoingService{
-					{
-						Version: 1,
-						Name:    "other-service",
-						Url:     testServiceURL,
-					},
-				},
-			},
-			IsGlobalNamespace:   true,
-			NotificationVersion: 2,
-		}).Return(updateNamespaceErr)
-	_, err := s.handler.DeleteNexusOutgoingService(
-		context.Background(),
-		&operatorservice.DeleteNexusOutgoingServiceRequest{
-			Namespace: testNamespace,
-			Name:      testServiceName,
-		},
-	)
-	s.ErrorIs(err, updateNamespaceErr)
-}
-
-func (s *operatorHandlerSuite) Test_ListNexusOutgoingServices_NoNamespace() {
-	_, err := s.handler.ListNexusOutgoingServices(
-		context.Background(),
-		&operatorservice.ListNexusOutgoingServicesRequest{
-			Namespace: "",
-		},
-	)
-	s.ErrorIs(err, errNamespaceNotSet)
-}
-
-func (s *operatorHandlerSuite) Test_ListNexusOutgoingServices_NegativePageSize() {
-	_, err := s.handler.ListNexusOutgoingServices(
-		context.Background(),
-		&operatorservice.ListNexusOutgoingServicesRequest{
-			Namespace: testNamespace,
-			PageSize:  -1,
-		},
-	)
-	s.Error(err)
-	s.Equal(codes.InvalidArgument, serviceerror.ToStatus(err).Code(), err)
-	s.ErrorContains(err, "PageSize")
-	s.ErrorContains(err, "negative")
-}
-
-func (s *operatorHandlerSuite) Test_ListNexusOutgoingServices_PageSizeTooLarge() {
-	_, err := s.handler.ListNexusOutgoingServices(
-		context.Background(),
-		&operatorservice.ListNexusOutgoingServicesRequest{
-			Namespace: testNamespace,
-			PageSize:  int32(s.config.OutgoingServiceListMaxPageSize() + 1),
-		},
-	)
-	s.Error(err)
-	s.Equal(codes.InvalidArgument, serviceerror.ToStatus(err).Code(), err)
-	s.ErrorContains(err, "PageSize")
-	s.ErrorContains(err, strconv.Itoa(s.config.OutgoingServiceListMaxPageSize()))
-}
-
-func (s *operatorHandlerSuite) Test_ListNexusOutgoingServices_InvalidPageToken() {
-	_, err := s.handler.ListNexusOutgoingServices(
-		context.Background(),
-		&operatorservice.ListNexusOutgoingServicesRequest{
-			Namespace:     testNamespace,
-			NextPageToken: []byte("invalid-token"),
-		},
-	)
-	s.Error(err)
-	s.Equal(codes.InvalidArgument, serviceerror.ToStatus(err).Code(), err)
-	s.ErrorContains(err, "NextPageToken")
-}
-
-func (s *operatorHandlerSuite) Test_ListNexusOutgoingServices_NegativePageTokenIndex() {
-	_, err := s.handler.ListNexusOutgoingServices(
-		context.Background(),
-		&operatorservice.ListNexusOutgoingServicesRequest{
-			Namespace:     testNamespace,
-			NextPageToken: []byte("v1/-1"),
-		},
-	)
-	s.Error(err)
-	s.Equal(codes.InvalidArgument, serviceerror.ToStatus(err).Code(), err)
-	s.ErrorContains(err, "negative")
-}
-
-func (s *operatorHandlerSuite) Test_ListNexusOutgoingServices_GetNamespaceErr() {
-	getNamespaceErr := errors.New("test error")
-	s.mockResource.MetadataMgr.EXPECT().
-		GetNamespace(gomock.Any(), &persistence.GetNamespaceRequest{Name: testNamespace}).
-		Return(nil, getNamespaceErr)
-	_, err := s.handler.ListNexusOutgoingServices(
-		context.Background(),
-		&operatorservice.ListNexusOutgoingServicesRequest{
-			Namespace: testNamespace,
-		},
-	)
-	s.ErrorIs(err, getNamespaceErr)
-}
-
-func (s *operatorHandlerSuite) Test_ListNexusOutgoingServices_NoNextPageToken() {
-	s.mockResource.MetadataMgr.EXPECT().
-		GetNamespace(gomock.Any(), &persistence.GetNamespaceRequest{Name: testNamespace}).
-		Return(&persistence.GetNamespaceResponse{
-			Namespace: &persistencespb.NamespaceDetail{
-				OutgoingServices: []*persistencespb.OutgoingService{
-					{Version: 1, Name: "service1", Url: "url1"},
-					{Version: 1, Name: "service2", Url: "url2"},
-				},
-			}}, nil)
-	res, err := s.handler.ListNexusOutgoingServices(
-		context.Background(),
-		&operatorservice.ListNexusOutgoingServicesRequest{
-			Namespace: testNamespace,
-			PageSize:  1,
-		},
-	)
-	s.NoError(err)
-	s.NotEmpty(res.Services)
-}
-
-func (s *operatorHandlerSuite) Test_ListNexusOutgoingServices_PageTokenBeyondLimit() {
-	s.mockResource.MetadataMgr.EXPECT().
-		GetNamespace(gomock.Any(), &persistence.GetNamespaceRequest{Name: testNamespace}).
-		Return(&persistence.GetNamespaceResponse{
-			Namespace: &persistencespb.NamespaceDetail{
-				OutgoingServices: []*persistencespb.OutgoingService{
-					{Version: 1, Name: "service1", Url: "url1"},
-				},
-			}}, nil)
-	res, err := s.handler.ListNexusOutgoingServices(
-		context.Background(),
-		&operatorservice.ListNexusOutgoingServicesRequest{
-			Namespace:     testNamespace,
-			PageSize:      1,
-			NextPageToken: []byte("v1/1"),
-		},
-	)
-	s.NoError(err)
-	s.Empty(res.Services)
 }

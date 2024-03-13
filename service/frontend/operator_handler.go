@@ -27,12 +27,9 @@ package frontend
 import (
 	"context"
 	"fmt"
-	"net/url"
-	"regexp"
-	"slices"
 	"sync/atomic"
 
-	"go.temporal.io/api/nexus/v1"
+	cnexus "go.temporal.io/server/common/nexus"
 	"golang.org/x/exp/maps"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/health"
@@ -75,8 +72,6 @@ import (
 
 var _ OperatorHandler = (*OperatorHandlerImpl)(nil)
 
-var serviceNameRegex = regexp.MustCompile(`[a-zA-Z_][a-zA-Z0-9_]*`)
-
 type (
 	// OperatorHandlerImpl - gRPC handler interface for operator service
 	OperatorHandlerImpl struct {
@@ -84,35 +79,35 @@ type (
 
 		status int32
 
-		logger                 log.Logger
-		config                 *Config
-		esClient               esclient.Client
-		sdkClientFactory       sdk.ClientFactory
-		metricsHandler         metrics.Handler
-		visibilityMgr          manager.VisibilityManager
-		saManager              searchattribute.Manager
-		healthServer           *health.Server
-		historyClient          resource.HistoryClient
-		clusterMetadataManager persistence.ClusterMetadataManager
-		clusterMetadata        clustermetadata.Metadata
-		clientFactory          svc.Factory
-		metadataMgr            persistence.MetadataManager
+		logger                  log.Logger
+		config                  *Config
+		esClient                esclient.Client
+		sdkClientFactory        sdk.ClientFactory
+		metricsHandler          metrics.Handler
+		visibilityMgr           manager.VisibilityManager
+		saManager               searchattribute.Manager
+		healthServer            *health.Server
+		historyClient           resource.HistoryClient
+		clusterMetadataManager  persistence.ClusterMetadataManager
+		clusterMetadata         clustermetadata.Metadata
+		clientFactory           svc.Factory
+		outgoingServiceRegistry *cnexus.OutgoingServiceRegistry
 	}
 
 	NewOperatorHandlerImplArgs struct {
-		config                 *Config
-		EsClient               esclient.Client
-		Logger                 log.Logger
-		sdkClientFactory       sdk.ClientFactory
-		MetricsHandler         metrics.Handler
-		VisibilityMgr          manager.VisibilityManager
-		SaManager              searchattribute.Manager
-		healthServer           *health.Server
-		historyClient          resource.HistoryClient
-		clusterMetadataManager persistence.ClusterMetadataManager
-		clusterMetadata        clustermetadata.Metadata
-		clientFactory          svc.Factory
-		metadataMgr            persistence.MetadataManager
+		config                  *Config
+		EsClient                esclient.Client
+		Logger                  log.Logger
+		sdkClientFactory        sdk.ClientFactory
+		MetricsHandler          metrics.Handler
+		VisibilityMgr           manager.VisibilityManager
+		SaManager               searchattribute.Manager
+		healthServer            *health.Server
+		historyClient           resource.HistoryClient
+		clusterMetadataManager  persistence.ClusterMetadataManager
+		clusterMetadata         clustermetadata.Metadata
+		clientFactory           svc.Factory
+		outgoingServiceRegistry *cnexus.OutgoingServiceRegistry
 	}
 )
 
@@ -128,20 +123,20 @@ func NewOperatorHandlerImpl(
 ) *OperatorHandlerImpl {
 
 	handler := &OperatorHandlerImpl{
-		logger:                 args.Logger,
-		status:                 common.DaemonStatusInitialized,
-		config:                 args.config,
-		esClient:               args.EsClient,
-		sdkClientFactory:       args.sdkClientFactory,
-		metricsHandler:         args.MetricsHandler,
-		visibilityMgr:          args.VisibilityMgr,
-		saManager:              args.SaManager,
-		healthServer:           args.healthServer,
-		historyClient:          args.historyClient,
-		clusterMetadataManager: args.clusterMetadataManager,
-		clusterMetadata:        args.clusterMetadata,
-		clientFactory:          args.clientFactory,
-		metadataMgr:            args.metadataMgr,
+		logger:                  args.Logger,
+		status:                  common.DaemonStatusInitialized,
+		config:                  args.config,
+		esClient:                args.EsClient,
+		sdkClientFactory:        args.sdkClientFactory,
+		metricsHandler:          args.MetricsHandler,
+		visibilityMgr:           args.VisibilityMgr,
+		saManager:               args.SaManager,
+		healthServer:            args.healthServer,
+		historyClient:           args.historyClient,
+		clusterMetadataManager:  args.clusterMetadataManager,
+		clusterMetadata:         args.clusterMetadata,
+		clientFactory:           args.clientFactory,
+		outgoingServiceRegistry: args.outgoingServiceRegistry,
 	}
 
 	return handler
@@ -849,248 +844,30 @@ func (*OperatorHandlerImpl) ListNexusIncomingServices(context.Context, *operator
 	return nil, status.Error(codes.Unimplemented, "unimplemented")
 }
 
-func (h *OperatorHandlerImpl) GetNexusOutgoingService(ctx context.Context, req *operatorservice.GetNexusOutgoingServiceRequest) (*operatorservice.GetNexusOutgoingServiceResponse, error) {
-	if req.Namespace == "" {
-		return nil, errNamespaceNotSet
-	}
-	if req.Name == "" {
-		return nil, errNameNotSet
-	}
-	response, err := h.metadataMgr.GetNamespace(ctx, &persistence.GetNamespaceRequest{
-		Name: req.Namespace,
-	})
-	if err != nil {
-		return nil, err
-	}
-
-	var service *nexus.OutgoingService
-	service = h.findService(response, req.Name)
-	if service == nil {
-		return nil, status.Errorf(codes.NotFound, "outgoing service %q not found", req.Name)
-	}
-	return &operatorservice.GetNexusOutgoingServiceResponse{
-		Service: service,
-	}, nil
+func (h *OperatorHandlerImpl) GetNexusOutgoingService(
+	ctx context.Context,
+	req *operatorservice.GetNexusOutgoingServiceRequest,
+) (*operatorservice.GetNexusOutgoingServiceResponse, error) {
+	return h.outgoingServiceRegistry.Get(ctx, req)
 }
 
-func (h *OperatorHandlerImpl) findService(response *persistence.GetNamespaceResponse, serviceName string) *nexus.OutgoingService {
-	var services []*persistencespb.OutgoingService
-	if detail := response.Namespace; detail != nil {
-		services = detail.OutgoingServices
-	}
-	for _, service := range services {
-		if service.Name == serviceName {
-			return &nexus.OutgoingService{
-				Name:    service.Name,
-				Version: service.Version,
-				Url:     service.Url,
-			}
-		}
-	}
-	return nil
-}
-
-func (h *OperatorHandlerImpl) CreateOrUpdateNexusOutgoingService(ctx context.Context, req *operatorservice.CreateOrUpdateNexusOutgoingServiceRequest) (*operatorservice.CreateOrUpdateNexusOutgoingServiceResponse, error) {
-	if req.Namespace == "" {
-		return nil, errNamespaceNotSet
-	}
-	if req.Name == "" {
-		return nil, errNameNotSet
-	}
-	nameMaxLength := h.config.OutgoingServiceNameMaxLength()
-	if len(req.Name) > nameMaxLength {
-		return nil, status.Errorf(codes.InvalidArgument, "Outgoing service name length exceeds the limit of %d", nameMaxLength)
-	}
-	if !serviceNameRegex.MatchString(req.Name) {
-		return nil, status.Errorf(codes.InvalidArgument, "Outgoing service name must match the regex: %q", serviceNameRegex.String())
-	}
-	if req.Url == "" {
-		return nil, errURLNotSet
-	}
-	urlMaxLength := h.config.OutgoingServiceURLMaxLength()
-	if len(req.Url) > urlMaxLength {
-		return nil, status.Errorf(codes.InvalidArgument, "Outgoing service URL length exceeds the limit of %d", urlMaxLength)
-	}
-	u, err := url.Parse(req.Url)
-	if err != nil {
-		return nil, status.Errorf(codes.InvalidArgument, "Malformed outgoing service URL: %v", err)
-	}
-	if u.Scheme != "http" && u.Scheme != "https" {
-		return nil, status.Errorf(codes.InvalidArgument, "Outgoing service URL must have http or https scheme but has %q", u.Scheme)
-	}
-	return h.updateNamespace(ctx, req)
-}
-
-func (h *OperatorHandlerImpl) updateNamespace(
+func (h *OperatorHandlerImpl) CreateOrUpdateNexusOutgoingService(
 	ctx context.Context,
 	req *operatorservice.CreateOrUpdateNexusOutgoingServiceRequest,
 ) (*operatorservice.CreateOrUpdateNexusOutgoingServiceResponse, error) {
-	response, err := h.metadataMgr.GetNamespace(ctx, &persistence.GetNamespaceRequest{
-		Name: req.Namespace,
-	})
-	if err != nil {
-		return nil, err
-	}
-	ns := response.Namespace
-	found := false
-	for _, service := range ns.OutgoingServices {
-		if service.Name == req.Name {
-			if req.Version == 0 {
-				return nil, status.Errorf(
-					codes.AlreadyExists,
-					"Outgoing service %q already exists. Set Version to a non-zero value if you want to update it.",
-					req.Name,
-				)
-			}
-			if service.Version != req.Version {
-				return nil, status.Errorf(
-					codes.FailedPrecondition,
-					"Outgoing service %q update request version %d does not match the current version %d",
-					req.Name,
-					req.Version,
-					service.Version,
-				)
-			}
-			// The service variable is a pointer, so we can modify it directly
-			service.Version++
-			service.Url = req.Url
-			found = true
-			break
-		}
-	}
-	if !found {
-		if req.Version != 0 {
-			return nil, status.Errorf(
-				codes.NotFound,
-				"Outgoing service %q not found. Set Version to 0 (not %d) if you want to register a new service.",
-				req.Name,
-				req.Version,
-			)
-		}
-		ns.OutgoingServices = append(ns.OutgoingServices, &persistencespb.OutgoingService{
-			Version: 1,
-			Name:    req.Name,
-			Url:     req.Url,
-		})
-	}
-	err = h.metadataMgr.UpdateNamespace(ctx, &persistence.UpdateNamespaceRequest{
-		Namespace:           ns,
-		IsGlobalNamespace:   response.IsGlobalNamespace,
-		NotificationVersion: response.NotificationVersion + 1,
-	})
-	if err != nil {
-		return nil, err
-	}
-	return &operatorservice.CreateOrUpdateNexusOutgoingServiceResponse{
-		Service: &nexus.OutgoingService{
-			Name:    req.Name,
-			Version: req.Version + 1,
-			Url:     req.Url,
-		},
-	}, nil
+	return h.outgoingServiceRegistry.Upsert(ctx, req)
 }
 
-func (h *OperatorHandlerImpl) DeleteNexusOutgoingService(ctx context.Context, req *operatorservice.DeleteNexusOutgoingServiceRequest) (*operatorservice.DeleteNexusOutgoingServiceResponse, error) {
-	if req.Namespace == "" {
-		return nil, errNamespaceNotSet
-	}
-	if req.Name == "" {
-		return nil, errNameNotSet
-	}
-	response, err := h.metadataMgr.GetNamespace(ctx, &persistence.GetNamespaceRequest{
-		Name: req.Namespace,
-	})
-	if err != nil {
-		return nil, err
-	}
-	ns := response.Namespace
-	services := ns.OutgoingServices
-	ns.OutgoingServices = slices.DeleteFunc(services, func(svc *persistencespb.OutgoingService) bool {
-		return svc.Name == req.Name
-	})
-	if len(services) == len(ns.OutgoingServices) {
-		return nil, status.Errorf(codes.NotFound, "Outgoing service %q not found", req.Name)
-	}
-	err = h.metadataMgr.UpdateNamespace(ctx, &persistence.UpdateNamespaceRequest{
-		Namespace:           ns,
-		IsGlobalNamespace:   response.IsGlobalNamespace,
-		NotificationVersion: response.NotificationVersion + 1,
-	})
-	if err != nil {
-		return nil, err
-	}
-	return &operatorservice.DeleteNexusOutgoingServiceResponse{}, nil
+func (h *OperatorHandlerImpl) DeleteNexusOutgoingService(
+	ctx context.Context,
+	req *operatorservice.DeleteNexusOutgoingServiceRequest,
+) (*operatorservice.DeleteNexusOutgoingServiceResponse, error) {
+	return h.outgoingServiceRegistry.Delete(ctx, req)
 }
 
-type outgoingServicesPageToken struct {
-	Index int
-}
-
-func (token outgoingServicesPageToken) Serialize() []byte {
-	return []byte(fmt.Sprintf("v1/%d", token.Index))
-}
-
-func (token *outgoingServicesPageToken) Deserialize(b []byte) error {
-	_, err := fmt.Sscanf(string(b), "v1/%d", &token.Index)
-	return err
-}
-
-func (h *OperatorHandlerImpl) ListNexusOutgoingServices(ctx context.Context, req *operatorservice.ListNexusOutgoingServicesRequest) (*operatorservice.ListNexusOutgoingServicesResponse, error) {
-	if req.Namespace == "" {
-		return nil, errNamespaceNotSet
-	}
-	pageSize := int(req.PageSize)
-	if pageSize < 0 {
-		return nil, status.Errorf(codes.InvalidArgument, "PageSize must be non-negative but is %d", pageSize)
-	}
-	if pageSize == 0 {
-		pageSize = h.config.OutgoingServiceListDefaultPageSize()
-	}
-	maxPageSize := h.config.OutgoingServiceListMaxPageSize()
-	if pageSize > maxPageSize {
-		return nil, status.Errorf(
-			codes.InvalidArgument,
-			"PageSize cannot exceed %d but is %d",
-			maxPageSize,
-			pageSize,
-		)
-	}
-	var pageToken outgoingServicesPageToken
-	if len(req.NextPageToken) > 0 {
-		if err := pageToken.Deserialize(req.NextPageToken); err != nil {
-			return nil, status.Errorf(codes.InvalidArgument, "Invalid NextPageToken: %v", err)
-		}
-	}
-	startIndex := pageToken.Index
-	if startIndex < 0 {
-		return nil, status.Errorf(codes.InvalidArgument, "Invalid NextPageToken: Index must be non-negative but is %d", startIndex)
-	}
-	response, err := h.metadataMgr.GetNamespace(ctx, &persistence.GetNamespaceRequest{
-		Name: req.Namespace,
-	})
-	if err != nil {
-		return nil, err
-	}
-	numReturnedServices := min(pageSize, len(response.Namespace.OutgoingServices)-startIndex)
-	if numReturnedServices <= 0 {
-		return &operatorservice.ListNexusOutgoingServicesResponse{}, nil
-	}
-	services := make([]*nexus.OutgoingService, 0, numReturnedServices)
-	for i := startIndex; i < startIndex+numReturnedServices; i++ {
-		index := startIndex + i
-		service := response.Namespace.OutgoingServices[index]
-		services = append(services, &nexus.OutgoingService{
-			Name:    service.Name,
-			Version: service.Version,
-			Url:     service.Url,
-		})
-	}
-	var nextPageToken []byte
-	if startIndex+pageSize < len(response.Namespace.OutgoingServices) {
-		nextPageToken = outgoingServicesPageToken{Index: startIndex + pageSize}.Serialize()
-	}
-	return &operatorservice.ListNexusOutgoingServicesResponse{
-		Services:      services,
-		NextPageToken: nextPageToken,
-	}, nil
+func (h *OperatorHandlerImpl) ListNexusOutgoingServices(
+	ctx context.Context,
+	req *operatorservice.ListNexusOutgoingServicesRequest,
+) (*operatorservice.ListNexusOutgoingServicesResponse, error) {
+	return h.outgoingServiceRegistry.List(ctx, req)
 }

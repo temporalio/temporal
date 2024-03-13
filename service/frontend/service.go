@@ -194,11 +194,6 @@ type Config struct {
 	// EnableCallbackAttachment enables attaching callbacks to workflows.
 	EnableCallbackAttachment    dynamicconfig.BoolPropertyFnWithNamespaceFilter
 	AdminEnableListHistoryTasks dynamicconfig.BoolPropertyFn
-
-	OutgoingServiceURLMaxLength        dynamicconfig.IntPropertyFn
-	OutgoingServiceNameMaxLength       dynamicconfig.IntPropertyFn
-	OutgoingServiceListDefaultPageSize dynamicconfig.IntPropertyFn
-	OutgoingServiceListMaxPageSize     dynamicconfig.IntPropertyFn
 }
 
 // NewConfig returns new service config with default values
@@ -300,11 +295,6 @@ func NewConfig(
 		EnableNexusHTTPHandler:      dc.GetBoolProperty(dynamicconfig.FrontendEnableNexusHTTPHandler, false),
 		EnableCallbackAttachment:    dc.GetBoolPropertyFnWithNamespaceFilter(dynamicconfig.FrontendEnableCallbackAttachment, false),
 		AdminEnableListHistoryTasks: dc.GetBoolProperty(dynamicconfig.AdminEnableListHistoryTasks, true),
-
-		OutgoingServiceURLMaxLength:        dc.GetIntProperty(dynamicconfig.OutgoingServiceURLMaxLength, 1000),
-		OutgoingServiceNameMaxLength:       dc.GetIntProperty(dynamicconfig.OutgoingServiceNameMaxLength, 200),
-		OutgoingServiceListDefaultPageSize: dc.GetIntProperty(dynamicconfig.OutgoingServiceListDefaultPageSize, 100),
-		OutgoingServiceListMaxPageSize:     dc.GetIntProperty(dynamicconfig.OutgoingServiceListMaxPageSize, 1000),
 	}
 }
 

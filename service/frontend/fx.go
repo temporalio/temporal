@@ -29,6 +29,7 @@ import (
 	"net"
 
 	"github.com/gorilla/mux"
+	"go.temporal.io/server/common/nexus"
 	"go.uber.org/fx"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/health"
@@ -104,6 +105,7 @@ var Module = fx.Options(
 	fx.Provide(NexusHTTPHandlerProvider),
 	fx.Provide(HTTPAPIServerProvider),
 	fx.Provide(NewServiceProvider),
+	fx.Provide(OutgoingServiceRegistryProvider),
 	fx.Invoke(ServiceLifetimeHooks),
 )
 
@@ -565,7 +567,7 @@ func OperatorHandlerProvider(
 	clusterMetadataManager persistence.ClusterMetadataManager,
 	clusterMetadata cluster.Metadata,
 	clientFactory client.Factory,
-	metadataManager persistence.MetadataManager,
+	outgoingServiceRegistry *nexus.OutgoingServiceRegistry,
 ) *OperatorHandlerImpl {
 	args := NewOperatorHandlerImplArgs{
 		configuration,
@@ -580,7 +582,7 @@ func OperatorHandlerProvider(
 		clusterMetadataManager,
 		clusterMetadata,
 		clientFactory,
-		metadataManager,
+		outgoingServiceRegistry,
 	}
 	return NewOperatorHandlerImpl(args)
 }
@@ -705,6 +707,14 @@ func HTTPAPIServerProvider(
 		namespaceRegistry,
 		logger,
 	)
+}
+
+func OutgoingServiceRegistryProvider(
+	metadataManager persistence.MetadataManager,
+	dc *dynamicconfig.Collection,
+) *nexus.OutgoingServiceRegistry {
+	registryConfig := nexus.NewOutgoingServiceRegistryConfig(dc)
+	return nexus.NewOutgoingServiceRegistry(metadataManager, registryConfig)
 }
 
 func ServiceLifetimeHooks(lc fx.Lifecycle, svc *Service) {

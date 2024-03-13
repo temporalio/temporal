@@ -34,6 +34,9 @@ import (
 	"google.golang.org/grpc/codes"
 )
 
+// This file contains tests for the Nexus outgoing service registry. It verifies basic CRUD operations from the operator
+// API.
+
 func (s *FunctionalSuite) TestOutgoingServiceRegistry() {
 	// Use a unique namespace to avoid conditional update conflicts due to concurrent writes.
 	ns := s.randomizeStr("outgoing-service-registry-test")
@@ -193,6 +196,10 @@ func (s *FunctionalSuite) TestOutgoingServiceRegistry() {
 	})
 
 	s.Run("CreateAndList", func() {
+		// Make another unique namespace to avoid listing services from previous tests.
+		ns := s.randomizeStr("list-nexus-outgoing-services-test")
+		s.NoError(s.registerNamespaceWithDefaults(ns))
+
 		serviceName := s.randomizeStr("service-name")
 		for i := 0; i < 10; i++ {
 			response, err := s.operatorClient.CreateOrUpdateNexusOutgoingService(ctx, &operatorservice.CreateOrUpdateNexusOutgoingServiceRequest{
@@ -223,5 +230,4 @@ func (s *FunctionalSuite) TestOutgoingServiceRegistry() {
 			s.Assert().Equal(serviceName+strconv.Itoa(i), services[i].Name)
 		}
 	})
-
 }
