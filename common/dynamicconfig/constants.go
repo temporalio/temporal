@@ -245,7 +245,8 @@ const (
 	FrontendNamespaceReplicationInducingAPIsRPS = "frontend.rps.namespaceReplicationInducingAPIs"
 	// FrontendMaxNamespaceRPSPerInstance is workflow namespace rate limit per second
 	FrontendMaxNamespaceRPSPerInstance = "frontend.namespaceRPS"
-	// FrontendMaxNamespaceBurstRatioPerInstance is workflow namespace burst limit as a ratio of frontend.namespaceRPS.
+	// FrontendMaxNamespaceBurstRatioPerInstance is workflow namespace burst limit as a ratio of namespace RPS. The RPS
+	// used here will be the effective RPS from global and per-instance limits.
 	FrontendMaxNamespaceBurstRatioPerInstance = "frontend.namespaceBurstRatio"
 	// FrontendMaxConcurrentLongRunningRequestsPerInstance limits concurrent long-running requests per-instance,
 	// per-API. Example requests include long-poll requests, and `Query` requests (which need to wait for WFTs). The
@@ -269,12 +270,13 @@ const (
 	// This config is EXPERIMENTAL and may be changed or removed in a later release.
 	FrontendMaxNamespaceNamespaceReplicationInducingAPIsRPSPerInstance = "frontend.namespaceRPS.namespaceReplicationInducingAPIs"
 	// FrontendMaxNamespaceVisibilityBurstRatioPerInstance is namespace burst limit for visibility APIs as a ratio of
-	// frontend.namespaceRPS.visibility. This config is EXPERIMENTAL and may be changed or removed in a later release.
+	// namespace visibility RPS. The RPS used here will be the effective RPS from global and per-instance limits. This
+	// config is EXPERIMENTAL and may be changed or removed in a later release.
 	FrontendMaxNamespaceVisibilityBurstRatioPerInstance = "frontend.namespaceBurstRatio.visibility"
 	// FrontendMaxNamespaceNamespaceReplicationInducingAPIsBurstRatioPerInstance is a per host/per namespace burst limit for
 	// namespace replication inducing APIs (e.g. RegisterNamespace, UpdateNamespace, UpdateWorkerBuildIdCompatibility)
-	// as a ratio of frontend.namespaceRPS.namespaceReplicationInducingAPIs. This config is EXPERIMENTAL and may be
-	// changed or removed in a later release.
+	// as a ratio of namespace ReplicationInducingAPIs RPS. The RPS used here will be the effective RPS from global and
+	// per-instance limits. This config is EXPERIMENTAL and may be changed or removed in a later release.
 	FrontendMaxNamespaceNamespaceReplicationInducingAPIsBurstRatioPerInstance = "frontend.namespaceBurstRatio.namespaceReplicationInducingAPIs"
 	// FrontendGlobalNamespaceRPS is workflow namespace rate limit per second for the whole cluster.
 	// The limit is evenly distributed among available frontend service instances.
