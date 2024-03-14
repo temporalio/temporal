@@ -226,6 +226,21 @@ func (mr *MockRegistryMockRecorder) GetNamespaceByID(id interface{}) *gomock.Cal
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetNamespaceByID", reflect.TypeOf((*MockRegistry)(nil).GetNamespaceByID), id)
 }
 
+// GetNamespaceByIDWithOptions mocks base method.
+func (m *MockRegistry) GetNamespaceByIDWithOptions(id ID, opts GetNamespaceOptions) (*Namespace, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetNamespaceByIDWithOptions", id, opts)
+	ret0, _ := ret[0].(*Namespace)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// GetNamespaceByIDWithOptions indicates an expected call of GetNamespaceByIDWithOptions.
+func (mr *MockRegistryMockRecorder) GetNamespaceByIDWithOptions(id, opts interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetNamespaceByIDWithOptions", reflect.TypeOf((*MockRegistry)(nil).GetNamespaceByIDWithOptions), id, opts)
+}
+
 // GetNamespaceID mocks base method.
 func (m *MockRegistry) GetNamespaceID(name Name) (ID, error) {
 	m.ctrl.T.Helper()
@@ -254,6 +269,21 @@ func (m *MockRegistry) GetNamespaceName(id ID) (Name, error) {
 func (mr *MockRegistryMockRecorder) GetNamespaceName(id interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetNamespaceName", reflect.TypeOf((*MockRegistry)(nil).GetNamespaceName), id)
+}
+
+// GetNamespaceWithOptions mocks base method.
+func (m *MockRegistry) GetNamespaceWithOptions(name Name, opts GetNamespaceOptions) (*Namespace, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetNamespaceWithOptions", name, opts)
+	ret0, _ := ret[0].(*Namespace)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// GetNamespaceWithOptions indicates an expected call of GetNamespaceWithOptions.
+func (mr *MockRegistryMockRecorder) GetNamespaceWithOptions(name, opts interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetNamespaceWithOptions", reflect.TypeOf((*MockRegistry)(nil).GetNamespaceWithOptions), name, opts)
 }
 
 // GetPingChecks mocks base method.

@@ -133,7 +133,7 @@ func (s *Starter) prepare(ctx context.Context) error {
 			metrics.WorkflowTypeTag(request.WorkflowType.Name),
 		)
 
-		// Override to false to avoid having to look up the dynamic config throughout the diffrent code paths.
+		// Override to false to avoid having to look up the dynamic config throughout the different code paths.
 		if !s.shardContext.GetConfig().EnableEagerWorkflowStart(s.namespace.Name().String()) {
 			s.recordEagerDenied(eagerStartDeniedReasonDynamicConfigDisabled)
 			request.RequestEagerExecution = false
