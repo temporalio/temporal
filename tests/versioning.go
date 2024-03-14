@@ -79,7 +79,7 @@ func (s *VersioningIntegSuite) SetupSuite() {
 		dynamicconfig.TaskQueuesPerBuildIdLimit:                  3,
 
 		// Make sure we don't hit the rate limiter in tests
-		dynamicconfig.FrontendMaxNamespaceNamespaceReplicationInducingAPIsRPSPerInstance:        1000,
+		dynamicconfig.FrontendGlobalNamespaceNamespaceReplicationInducingAPIsRPS:                1000,
 		dynamicconfig.FrontendMaxNamespaceNamespaceReplicationInducingAPIsBurstRatioPerInstance: 1,
 		dynamicconfig.FrontendNamespaceReplicationInducingAPIsRPS:                               1000,
 
