@@ -94,8 +94,10 @@ func NewNexusHTTPHandler(
 }
 
 func (h *NexusHTTPHandler) RegisterRoutes(r *mux.Router) {
-	r.PathPrefix("/api/v1/namespaces/{namespace}/task-queues/{task_queue}/dispatch-nexus-task/").HandlerFunc(h.dispatchNexusTaskByNamespaceAndTaskQueue)
-	r.PathPrefix("/api/v1/services/{service}/").HandlerFunc(h.dispatchNexusTaskByService)
+	r.PathPrefix("/" + commonnexus.Routes().DispatchNexusTaskByNamespaceAndTaskQueue.Representation() + "/").
+		HandlerFunc(h.dispatchNexusTaskByNamespaceAndTaskQueue)
+	r.PathPrefix("/" + commonnexus.Routes().DispatchNexusTaskByService.Representation() + "/").
+		HandlerFunc(h.dispatchNexusTaskByService)
 }
 
 func (h *NexusHTTPHandler) writeNexusFailure(writer http.ResponseWriter, statusCode int, failure *nexus.Failure) {
@@ -120,7 +122,7 @@ func (h *NexusHTTPHandler) writeNexusFailure(writer http.ResponseWriter, statusC
 	}
 }
 
-// Handler for /api/v1/namespaces/{namespace}/task-queues/{task_queue}/dispatch-nexus-task
+// Handler for [nexushttp.RouteSet.DispatchNexusTaskByNamespaceAndTaskQueue].
 func (h *NexusHTTPHandler) dispatchNexusTaskByNamespaceAndTaskQueue(w http.ResponseWriter, r *http.Request) {
 	if !h.enabled() {
 		h.writeNexusFailure(w, http.StatusNotFound, &nexus.Failure{Message: "nexus endpoints disabled"})
@@ -141,12 +143,14 @@ func (h *NexusHTTPHandler) dispatchNexusTaskByNamespaceAndTaskQueue(w http.Respo
 		apiName:                              configs.DispatchNexusTaskAPIName,
 	}
 
-	if nc.namespaceName, err = url.PathUnescape(vars["namespace"]); err != nil {
+	params := commonnexus.Routes().DispatchNexusTaskByNamespaceAndTaskQueue.Deserialize(vars)
+
+	if nc.namespaceName, err = url.PathUnescape(params.Namespace); err != nil {
 		h.logger.Error("invalid URL", tag.Error(err))
 		h.writeNexusFailure(w, http.StatusBadRequest, &nexus.Failure{Message: "invalid URL"})
 		return
 	}
-	if nc.taskQueue, err = url.PathUnescape(vars["task_queue"]); err != nil {
+	if nc.taskQueue, err = url.PathUnescape(params.TaskQueue); err != nil {
 		h.logger.Error("invalid URL", tag.Error(err))
 		h.writeNexusFailure(w, http.StatusBadRequest, &nexus.Failure{Message: "invalid URL"})
 		return
@@ -181,7 +185,7 @@ func (h *NexusHTTPHandler) dispatchNexusTaskByNamespaceAndTaskQueue(w http.Respo
 	r = r.WithContext(context.WithValue(r.Context(), nexusContextKey{}, nc))
 
 	// This whole mess is required to support escaped path vars for namespace and task queue.
-	u, err := mux.CurrentRoute(r).URL("namespace", vars["namespace"], "task_queue", vars["task_queue"])
+	u, err := mux.CurrentRoute(r).URL("namespace", params.Namespace, "task_queue", params.TaskQueue)
 	if err != nil {
 		h.logger.Error("invalid URL", tag.Error(err))
 		h.writeNexusFailure(w, http.StatusInternalServerError, &nexus.Failure{Message: "internal error"})
@@ -198,7 +202,7 @@ func (h *NexusHTTPHandler) dispatchNexusTaskByNamespaceAndTaskQueue(w http.Respo
 	http.StripPrefix(prefix, h.nexusHandler).ServeHTTP(w, r)
 }
 
-// Handler for /api/v1/services/{service}
+// Handler for [nexushttp.RouteSet.DispatchNexusTaskByService].
 func (h *NexusHTTPHandler) dispatchNexusTaskByService(w http.ResponseWriter, r *http.Request) {
 	if !h.enabled() {
 		h.writeNexusFailure(w, http.StatusNotFound, &nexus.Failure{Message: "nexus endpoints disabled"})
