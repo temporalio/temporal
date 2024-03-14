@@ -70,9 +70,12 @@ type Config struct {
 
 	// HistoryCache settings
 	// Change of these configs require shard restart
+	HistoryCacheLimitSizeBased            bool
 	HistoryCacheInitialSize               dynamicconfig.IntPropertyFn
 	HistoryShardLevelCacheMaxSize         dynamicconfig.IntPropertyFn
+	HistoryShardLevelCacheMaxSizeBytes    dynamicconfig.IntPropertyFn
 	HistoryHostLevelCacheMaxSize          dynamicconfig.IntPropertyFn
+	HistoryHostLevelCacheMaxSizeBytes     dynamicconfig.IntPropertyFn
 	HistoryCacheTTL                       dynamicconfig.DurationPropertyFn
 	HistoryCacheNonUserContextLockTimeout dynamicconfig.DurationPropertyFn
 	EnableHostLevelHistoryCache           dynamicconfig.BoolPropertyFn
@@ -371,10 +374,14 @@ func NewConfig(
 		VisibilityEnableManualPagination:  dc.GetBoolPropertyFnWithNamespaceFilter(dynamicconfig.VisibilityEnableManualPagination, true),
 		VisibilityAllowList:               dc.GetBoolPropertyFnWithNamespaceFilter(dynamicconfig.VisibilityAllowList, true),
 
-		EmitShardLagLog:                       dc.GetBoolProperty(dynamicconfig.EmitShardLagLog, false),
+		EmitShardLagLog: dc.GetBoolProperty(dynamicconfig.EmitShardLagLog, false),
+		// HistoryCacheLimitSizeBased should not change during runtime.
+		HistoryCacheLimitSizeBased:            dc.GetBoolProperty(dynamicconfig.HistoryCacheSizeBasedLimit, false)(),
 		HistoryCacheInitialSize:               dc.GetIntProperty(dynamicconfig.HistoryCacheInitialSize, 128),
 		HistoryShardLevelCacheMaxSize:         dc.GetIntProperty(dynamicconfig.HistoryCacheMaxSize, 512),
+		HistoryShardLevelCacheMaxSizeBytes:    dc.GetIntProperty(dynamicconfig.HistoryCacheMaxSizeBytes, 512*4*1024),
 		HistoryHostLevelCacheMaxSize:          dc.GetIntProperty(dynamicconfig.HistoryCacheHostLevelMaxSize, 256000),
+		HistoryHostLevelCacheMaxSizeBytes:     dc.GetIntProperty(dynamicconfig.HistoryCacheHostLevelMaxSizeBytes, 256000*4*1024),
 		HistoryCacheTTL:                       dc.GetDurationProperty(dynamicconfig.HistoryCacheTTL, time.Hour),
 		HistoryCacheNonUserContextLockTimeout: dc.GetDurationProperty(dynamicconfig.HistoryCacheNonUserContextLockTimeout, 500*time.Millisecond),
 		EnableHostLevelHistoryCache:           dc.GetBoolProperty(dynamicconfig.EnableHostHistoryCache, false),
