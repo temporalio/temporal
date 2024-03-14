@@ -261,8 +261,14 @@ func (a *Interceptor) Authorize(ctx context.Context, claims *Claims, ct *CallTar
 func (a *Interceptor) getMetricsHandler(nsName string) metrics.Handler {
 	nsTag := metrics.NamespaceUnknownTag()
 	if nsName != "" {
-		if entry, _ := a.namespaceRegistry.GetNamespace(namespace.Name(nsName)); entry != nil {
-			// only use known namespaces as tag values, to avoid cardinality issues
+		// Note that this is before the namespace state validation interceptor, so this
+		// namespace name is not validated. We should only use it as a metric tag if it's a
+		// real namespace, to avoid unbounded cardinality issues.
+		// Also, when we look it up, we want to disable readthrough to avoid polluting the
+		// negative lookup cache, e.g. if this call is for RegisterNamespace and the namespace
+		// doesn't exist yet.
+		opts := namespace.GetNamespaceOptions{DisableReadthrough: true}
+		if entry, _ := a.namespaceRegistry.GetNamespaceWithOptions(namespace.Name(nsName), opts); entry != nil {
 			nsTag = metrics.NamespaceTag(nsName)
 		}
 	}
