@@ -41,6 +41,7 @@ import (
 	"go.temporal.io/server/common/nexus"
 	"go.temporal.io/server/common/nexus/nexustest"
 	"go.temporal.io/server/common/persistence"
+	"go.temporal.io/server/common/testing/protoassert"
 	"google.golang.org/grpc/codes"
 )
 
@@ -127,7 +128,9 @@ func TestGet_Ok(t *testing.T) {
 					{
 						Version: 1,
 						Name:    testServiceName,
-						Url:     testServiceURL,
+						Spec: &nexuspb.OutgoingServiceSpec{
+							Url: testServiceURL,
+						},
 					},
 				},
 			},
@@ -143,7 +146,7 @@ func TestGet_Ok(t *testing.T) {
 		},
 	)
 	require.NoError(t, err)
-	assert.Equal(t, &nexuspb.OutgoingService{
+	protoassert.ProtoEqual(t, &nexuspb.OutgoingService{
 		Version: 1,
 		Name:    testServiceName,
 		Spec: &nexuspb.OutgoingServiceSpec{
@@ -329,19 +332,19 @@ func TestCreate_UpdateNamespaceErr(t *testing.T) {
 		}, nil
 	}
 	service.OnUpdateNamespace = func(ctx context.Context, request *persistence.UpdateNamespaceRequest) error {
-		assert.Equal(t, &persistence.UpdateNamespaceRequest{
-			Namespace: &persistencespb.NamespaceDetail{
-				OutgoingServices: []*persistencespb.OutgoingService{
-					{
-						Version: 1,
-						Name:    testServiceName,
-						Url:     testServiceURL,
+		assert.True(t, request.IsGlobalNamespace)
+		assert.Equal(t, 2, int(request.NotificationVersion))
+		protoassert.ProtoEqual(t, &persistencespb.NamespaceDetail{
+			OutgoingServices: []*persistencespb.OutgoingService{
+				{
+					Version: 1,
+					Name:    testServiceName,
+					Spec: &nexuspb.OutgoingServiceSpec{
+						Url: testServiceURL,
 					},
 				},
 			},
-			IsGlobalNamespace:   true,
-			NotificationVersion: 2,
-		}, request)
+		}, request.Namespace)
 		return updateNamespaceErr
 	}
 	registry := nexus.NewOutgoingServiceRegistry(&service, newConfig())
@@ -440,12 +443,16 @@ func TestDelete_UpdateNamespaceErr(t *testing.T) {
 					{
 						Version: 1,
 						Name:    testServiceName,
-						Url:     testServiceURL,
+						Spec: &nexuspb.OutgoingServiceSpec{
+							Url: testServiceURL,
+						},
 					},
 					{
 						Version: 1,
 						Name:    "other-service",
-						Url:     testServiceURL,
+						Spec: &nexuspb.OutgoingServiceSpec{
+							Url: testServiceURL,
+						},
 					},
 				},
 			},
@@ -460,7 +467,9 @@ func TestDelete_UpdateNamespaceErr(t *testing.T) {
 					{
 						Version: 1,
 						Name:    "other-service",
-						Url:     testServiceURL,
+						Spec: &nexuspb.OutgoingServiceSpec{
+							Url: testServiceURL,
+						},
 					},
 				},
 			},
@@ -579,8 +588,20 @@ func TestList_NoNextPageToken(t *testing.T) {
 		return &persistence.GetNamespaceResponse{
 			Namespace: &persistencespb.NamespaceDetail{
 				OutgoingServices: []*persistencespb.OutgoingService{
-					{Version: 1, Name: "service1", Url: "url1"},
-					{Version: 1, Name: "service2", Url: "url2"},
+					{
+						Version: 1,
+						Name:    "service1",
+						Spec: &nexuspb.OutgoingServiceSpec{
+							Url: "url1",
+						},
+					},
+					{
+						Version: 1,
+						Name:    "service2",
+						Spec: &nexuspb.OutgoingServiceSpec{
+							Url: "url2",
+						},
+					},
 				},
 			},
 		}, nil
@@ -605,7 +626,13 @@ func TestList_PageTokenBeyondLimit(t *testing.T) {
 		return &persistence.GetNamespaceResponse{
 			Namespace: &persistencespb.NamespaceDetail{
 				OutgoingServices: []*persistencespb.OutgoingService{
-					{Version: 1, Name: "service1", Url: "url1"},
+					{
+						Version: 1,
+						Name:    "service1",
+						Spec: &nexuspb.OutgoingServiceSpec{
+							Url: "url1",
+						},
+					},
 				},
 			},
 		}, nil

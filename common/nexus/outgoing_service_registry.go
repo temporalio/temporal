@@ -33,6 +33,7 @@ import (
 	"go.temporal.io/api/nexus/v1"
 	"go.temporal.io/api/operatorservice/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
+	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/persistence"
 	"golang.org/x/exp/slices"
@@ -144,7 +145,7 @@ func (h *OutgoingServiceRegistry) Create(
 	ns.OutgoingServices = append(ns.OutgoingServices, &persistencespb.OutgoingService{
 		Version: 1,
 		Name:    req.GetName(),
-		Url:     req.GetSpec().GetUrl(),
+		Spec:    common.CloneProto(req.GetSpec()),
 	})
 	if err := h.updateNamespace(ctx, ns, response); err != nil {
 		return nil, err
@@ -189,7 +190,7 @@ func (h *OutgoingServiceRegistry) Update(
 		)
 	}
 	service.Version++
-	service.Url = req.GetSpec().GetUrl()
+	service.Spec = common.CloneProto(req.GetSpec())
 	if err := h.updateNamespace(ctx, ns, response); err != nil {
 		return nil, err
 	}
@@ -254,9 +255,7 @@ func (h *OutgoingServiceRegistry) List(
 		services = append(services, &nexus.OutgoingService{
 			Name:    service.Name,
 			Version: service.Version,
-			Spec: &nexus.OutgoingServiceSpec{
-				Url: service.Url,
-			},
+			Spec:    common.CloneProto(service.Spec),
 		})
 	}
 	var nextPageToken []byte
@@ -317,7 +316,7 @@ func (h *OutgoingServiceRegistry) addService(req UpsertRequest, version int64, n
 	ns.OutgoingServices = append(ns.OutgoingServices, &persistencespb.OutgoingService{
 		Version: 1,
 		Name:    req.GetName(),
-		Url:     req.GetSpec().GetUrl(),
+		Spec:    common.CloneProto(req.GetSpec()),
 	})
 	return nil
 }
@@ -378,9 +377,7 @@ func (h *OutgoingServiceRegistry) findService(
 			return &nexus.OutgoingService{
 				Name:    service.Name,
 				Version: service.Version,
-				Spec: &nexus.OutgoingServiceSpec{
-					Url: service.Url,
-				},
+				Spec:    common.CloneProto(service.Spec),
 			}
 		}
 	}

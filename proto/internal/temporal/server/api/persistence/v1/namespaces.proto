@@ -30,6 +30,7 @@ import "google/protobuf/timestamp.proto";
 
 import "temporal/api/enums/v1/namespace.proto";
 import "temporal/api/namespace/v1/message.proto";
+import "temporal/api/nexus/v1/message.proto";
 
 // detail column
 message NamespaceDetail {
@@ -49,12 +50,9 @@ message OutgoingService {
     // Service name, unique for this namespace. May contain any characters.
     string name = 2;
     string description = 3;
-    // URL to invoke requests.
-    // (-- api-linter: core::0140::uri=disabled
-    //     aip.dev/not-precedent: --)
-    string url = 4;
     // Header to attach to outgoing requests.
-    map<string, string> header = 5;
+    map<string, string> header = 4;
+    temporal.api.nexus.v1.OutgoingServiceSpec spec = 5;
 }
 
 message NamespaceInfo {
