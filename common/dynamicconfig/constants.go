@@ -268,13 +268,14 @@ const (
 	// namespace replication inducing APIs (e.g. RegisterNamespace, UpdateNamespace, UpdateWorkerBuildIdCompatibility).
 	// This config is EXPERIMENTAL and may be changed or removed in a later release.
 	FrontendMaxNamespaceNamespaceReplicationInducingAPIsRPSPerInstance = "frontend.namespaceRPS.namespaceReplicationInducingAPIs"
-	// FrontendMaxNamespaceVisibilityBurstPerInstance is namespace burst limit for visibility APIs.
-	// This config is EXPERIMENTAL and may be changed or removed in a later release.
-	FrontendMaxNamespaceVisibilityBurstPerInstance = "frontend.namespaceBurst.visibility"
-	// FrontendMaxNamespaceNamespaceReplicationInducingAPIsBurstPerInstance is a per host/per namespace burst limit for
-	// namespace replication inducing APIs (e.g. RegisterNamespace, UpdateNamespace, UpdateWorkerBuildIdCompatibility).
-	// This config is EXPERIMENTAL and may be changed or removed in a later release.
-	FrontendMaxNamespaceNamespaceReplicationInducingAPIsBurstPerInstance = "frontend.namespaceBurst.namespaceReplicationInducingAPIs"
+	// FrontendMaxNamespaceVisibilityBurstRatioPerInstance is namespace burst limit for visibility APIs as a ratio of
+	// frontend.namespaceRPS.visibility. This config is EXPERIMENTAL and may be changed or removed in a later release.
+	FrontendMaxNamespaceVisibilityBurstRatioPerInstance = "frontend.namespaceBurstRatio.visibility"
+	// FrontendMaxNamespaceNamespaceReplicationInducingAPIsBurstRatioPerInstance is a per host/per namespace burst limit for
+	// namespace replication inducing APIs (e.g. RegisterNamespace, UpdateNamespace, UpdateWorkerBuildIdCompatibility)
+	// as a ratio of frontend.namespaceRPS.namespaceReplicationInducingAPIs. This config is EXPERIMENTAL and may be
+	// changed or removed in a later release.
+	FrontendMaxNamespaceNamespaceReplicationInducingAPIsBurstRatioPerInstance = "frontend.namespaceBurstRatio.namespaceReplicationInducingAPIs"
 	// FrontendGlobalNamespaceRPS is workflow namespace rate limit per second for the whole cluster.
 	// The limit is evenly distributed among available frontend service instances.
 	// If this is set, it overwrites per instance limit "frontend.namespaceRPS".

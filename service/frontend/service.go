@@ -70,32 +70,32 @@ type Config struct {
 	VisibilityEnableManualPagination  dynamicconfig.BoolPropertyFnWithNamespaceFilter
 	VisibilityAllowList               dynamicconfig.BoolPropertyFnWithNamespaceFilter
 
-	HistoryMaxPageSize                                           dynamicconfig.IntPropertyFnWithNamespaceFilter
-	RPS                                                          dynamicconfig.IntPropertyFn
-	GlobalRPS                                                    dynamicconfig.IntPropertyFn
-	OperatorRPSRatio                                             dynamicconfig.FloatPropertyFn
-	NamespaceReplicationInducingAPIsRPS                          dynamicconfig.IntPropertyFn
-	MaxNamespaceRPSPerInstance                                   dynamicconfig.IntPropertyFnWithNamespaceFilter
-	MaxNamespaceBurstRatioPerInstance                            dynamicconfig.FloatPropertyFnWithNamespaceFilter
-	MaxConcurrentLongRunningRequestsPerInstance                  dynamicconfig.IntPropertyFnWithNamespaceFilter
-	MaxGlobalConcurrentLongRunningRequests                       dynamicconfig.IntPropertyFnWithNamespaceFilter
-	MaxNamespaceVisibilityRPSPerInstance                         dynamicconfig.IntPropertyFnWithNamespaceFilter
-	MaxNamespaceVisibilityBurstPerInstance                       dynamicconfig.IntPropertyFnWithNamespaceFilter
-	MaxNamespaceNamespaceReplicationInducingAPIsRPSPerInstance   dynamicconfig.IntPropertyFnWithNamespaceFilter
-	MaxNamespaceNamespaceReplicationInducingAPIsBurstPerInstance dynamicconfig.IntPropertyFnWithNamespaceFilter
-	GlobalNamespaceRPS                                           dynamicconfig.IntPropertyFnWithNamespaceFilter
-	InternalFEGlobalNamespaceRPS                                 dynamicconfig.IntPropertyFnWithNamespaceFilter
-	GlobalNamespaceVisibilityRPS                                 dynamicconfig.IntPropertyFnWithNamespaceFilter
-	InternalFEGlobalNamespaceVisibilityRPS                       dynamicconfig.IntPropertyFnWithNamespaceFilter
-	GlobalNamespaceNamespaceReplicationInducingAPIsRPS           dynamicconfig.IntPropertyFnWithNamespaceFilter
-	MaxIDLengthLimit                                             dynamicconfig.IntPropertyFn
-	WorkerBuildIdSizeLimit                                       dynamicconfig.IntPropertyFn
-	ReachabilityTaskQueueScanLimit                               dynamicconfig.IntPropertyFn
-	ReachabilityQueryBuildIdLimit                                dynamicconfig.IntPropertyFn
-	ReachabilityQuerySetDurationSinceDefault                     dynamicconfig.DurationPropertyFn
-	DisallowQuery                                                dynamicconfig.BoolPropertyFnWithNamespaceFilter
-	ShutdownDrainDuration                                        dynamicconfig.DurationPropertyFn
-	ShutdownFailHealthCheckDuration                              dynamicconfig.DurationPropertyFn
+	HistoryMaxPageSize                                                dynamicconfig.IntPropertyFnWithNamespaceFilter
+	RPS                                                               dynamicconfig.IntPropertyFn
+	GlobalRPS                                                         dynamicconfig.IntPropertyFn
+	OperatorRPSRatio                                                  dynamicconfig.FloatPropertyFn
+	NamespaceReplicationInducingAPIsRPS                               dynamicconfig.IntPropertyFn
+	MaxNamespaceRPSPerInstance                                        dynamicconfig.IntPropertyFnWithNamespaceFilter
+	MaxNamespaceBurstRatioPerInstance                                 dynamicconfig.FloatPropertyFnWithNamespaceFilter
+	MaxConcurrentLongRunningRequestsPerInstance                       dynamicconfig.IntPropertyFnWithNamespaceFilter
+	MaxGlobalConcurrentLongRunningRequests                            dynamicconfig.IntPropertyFnWithNamespaceFilter
+	MaxNamespaceVisibilityRPSPerInstance                              dynamicconfig.IntPropertyFnWithNamespaceFilter
+	MaxNamespaceVisibilityBurstRatioPerInstance                       dynamicconfig.FloatPropertyFnWithNamespaceFilter
+	MaxNamespaceNamespaceReplicationInducingAPIsRPSPerInstance        dynamicconfig.IntPropertyFnWithNamespaceFilter
+	MaxNamespaceNamespaceReplicationInducingAPIsBurstRatioPerInstance dynamicconfig.FloatPropertyFnWithNamespaceFilter
+	GlobalNamespaceRPS                                                dynamicconfig.IntPropertyFnWithNamespaceFilter
+	InternalFEGlobalNamespaceRPS                                      dynamicconfig.IntPropertyFnWithNamespaceFilter
+	GlobalNamespaceVisibilityRPS                                      dynamicconfig.IntPropertyFnWithNamespaceFilter
+	InternalFEGlobalNamespaceVisibilityRPS                            dynamicconfig.IntPropertyFnWithNamespaceFilter
+	GlobalNamespaceNamespaceReplicationInducingAPIsRPS                dynamicconfig.IntPropertyFnWithNamespaceFilter
+	MaxIDLengthLimit                                                  dynamicconfig.IntPropertyFn
+	WorkerBuildIdSizeLimit                                            dynamicconfig.IntPropertyFn
+	ReachabilityTaskQueueScanLimit                                    dynamicconfig.IntPropertyFn
+	ReachabilityQueryBuildIdLimit                                     dynamicconfig.IntPropertyFn
+	ReachabilityQuerySetDurationSinceDefault                          dynamicconfig.DurationPropertyFn
+	DisallowQuery                                                     dynamicconfig.BoolPropertyFnWithNamespaceFilter
+	ShutdownDrainDuration                                             dynamicconfig.DurationPropertyFn
+	ShutdownFailHealthCheckDuration                                   dynamicconfig.DurationPropertyFn
 
 	MaxBadBinaries dynamicconfig.IntPropertyFnWithNamespaceFilter
 
@@ -225,14 +225,14 @@ func NewConfig(
 		OperatorRPSRatio:                    dc.GetFloat64Property(dynamicconfig.OperatorRPSRatio, common.DefaultOperatorRPSRatio),
 		NamespaceReplicationInducingAPIsRPS: dc.GetIntProperty(dynamicconfig.FrontendNamespaceReplicationInducingAPIsRPS, 20),
 
-		MaxNamespaceRPSPerInstance:                                   dc.GetIntPropertyFilteredByNamespace(dynamicconfig.FrontendMaxNamespaceRPSPerInstance, 2400),
-		MaxNamespaceBurstRatioPerInstance:                            dc.GetFloatPropertyFilteredByNamespace(dynamicconfig.FrontendMaxNamespaceBurstRatioPerInstance, 1),
-		MaxConcurrentLongRunningRequestsPerInstance:                  dc.GetIntPropertyFilteredByNamespace(dynamicconfig.FrontendMaxConcurrentLongRunningRequestsPerInstance, 1200),
-		MaxGlobalConcurrentLongRunningRequests:                       dc.GetIntPropertyFilteredByNamespace(dynamicconfig.FrontendGlobalMaxConcurrentLongRunningRequests, 0),
-		MaxNamespaceVisibilityRPSPerInstance:                         dc.GetIntPropertyFilteredByNamespace(dynamicconfig.FrontendMaxNamespaceVisibilityRPSPerInstance, 10),
-		MaxNamespaceVisibilityBurstPerInstance:                       dc.GetIntPropertyFilteredByNamespace(dynamicconfig.FrontendMaxNamespaceVisibilityBurstPerInstance, 10),
-		MaxNamespaceNamespaceReplicationInducingAPIsRPSPerInstance:   dc.GetIntPropertyFilteredByNamespace(dynamicconfig.FrontendMaxNamespaceNamespaceReplicationInducingAPIsRPSPerInstance, 1),
-		MaxNamespaceNamespaceReplicationInducingAPIsBurstPerInstance: dc.GetIntPropertyFilteredByNamespace(dynamicconfig.FrontendMaxNamespaceNamespaceReplicationInducingAPIsBurstPerInstance, 10),
+		MaxNamespaceRPSPerInstance:                                        dc.GetIntPropertyFilteredByNamespace(dynamicconfig.FrontendMaxNamespaceRPSPerInstance, 2400),
+		MaxNamespaceBurstRatioPerInstance:                                 dc.GetFloatPropertyFilteredByNamespace(dynamicconfig.FrontendMaxNamespaceBurstRatioPerInstance, 1),
+		MaxConcurrentLongRunningRequestsPerInstance:                       dc.GetIntPropertyFilteredByNamespace(dynamicconfig.FrontendMaxConcurrentLongRunningRequestsPerInstance, 1200),
+		MaxGlobalConcurrentLongRunningRequests:                            dc.GetIntPropertyFilteredByNamespace(dynamicconfig.FrontendGlobalMaxConcurrentLongRunningRequests, 0),
+		MaxNamespaceVisibilityRPSPerInstance:                              dc.GetIntPropertyFilteredByNamespace(dynamicconfig.FrontendMaxNamespaceVisibilityRPSPerInstance, 10),
+		MaxNamespaceVisibilityBurstRatioPerInstance:                       dc.GetFloatPropertyFilteredByNamespace(dynamicconfig.FrontendMaxNamespaceVisibilityBurstRatioPerInstance, 1),
+		MaxNamespaceNamespaceReplicationInducingAPIsRPSPerInstance:        dc.GetIntPropertyFilteredByNamespace(dynamicconfig.FrontendMaxNamespaceNamespaceReplicationInducingAPIsRPSPerInstance, 1),
+		MaxNamespaceNamespaceReplicationInducingAPIsBurstRatioPerInstance: dc.GetFloatPropertyFilteredByNamespace(dynamicconfig.FrontendMaxNamespaceNamespaceReplicationInducingAPIsBurstRatioPerInstance, 10),
 
 		GlobalNamespaceRPS:                     dc.GetIntPropertyFilteredByNamespace(dynamicconfig.FrontendGlobalNamespaceRPS, 0),
 		InternalFEGlobalNamespaceRPS:           dc.GetIntPropertyFilteredByNamespace(dynamicconfig.InternalFrontendGlobalNamespaceRPS, 0),
