@@ -73,12 +73,12 @@ func TestUserDataReplicationTestSuite(t *testing.T) {
 func (s *UserDataReplicationTestSuite) SetupSuite() {
 	s.dynamicConfigOverrides = map[dynamicconfig.Key]interface{}{
 		// Make sure we don't hit the rate limiter in tests
-		dynamicconfig.FrontendMaxNamespaceNamespaceReplicationInducingAPIsRPSPerInstance:   1000,
-		dynamicconfig.FrontendMaxNamespaceNamespaceReplicationInducingAPIsBurstPerInstance: 1000,
-		dynamicconfig.FrontendNamespaceReplicationInducingAPIsRPS:                          1000,
-		dynamicconfig.FrontendEnableWorkerVersioningDataAPIs:                               true,
-		dynamicconfig.FrontendEnableWorkerVersioningWorkflowAPIs:                           true,
-		dynamicconfig.BuildIdScavengerEnabled:                                              true,
+		dynamicconfig.FrontendMaxNamespaceNamespaceReplicationInducingAPIsRPSPerInstance:        1000,
+		dynamicconfig.FrontendMaxNamespaceNamespaceReplicationInducingAPIsBurstRatioPerInstance: 1,
+		dynamicconfig.FrontendNamespaceReplicationInducingAPIsRPS:                               1000,
+		dynamicconfig.FrontendEnableWorkerVersioningDataAPIs:                                    true,
+		dynamicconfig.FrontendEnableWorkerVersioningWorkflowAPIs:                                true,
+		dynamicconfig.BuildIdScavengerEnabled:                                                   true,
 		// Ensure the scavenger can immediately delete build ids that are not in use.
 		dynamicconfig.RemovableBuildIdDurationSinceDefault: time.Microsecond,
 	}
