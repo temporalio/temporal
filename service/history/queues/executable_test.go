@@ -873,6 +873,37 @@ func (s *executableSuite) TestExecute_SendToDLQSubStringDoesNotMatch() {
 	s.Empty(queueWriter.EnqueueTaskRequests)
 }
 
+func (s *executableSuite) TestExecute_SendToDLQSubStringEmptyString() {
+	queueWriter := &queuestest.FakeQueueWriter{}
+	executable := s.newTestExecutable(func(p *params) {
+		p.dlqWriter = queues.NewDLQWriter(queueWriter, s.mockClusterMetadata, metrics.NoopMetricsHandler, log.NewTestLogger(), s.mockNamespaceRegistry)
+		p.dlqEnabled = func() bool {
+			return true
+		}
+		p.dlqErrorSubStrings = func() string {
+			return ""
+		}
+	})
+	executionError := errors.New("some random error")
+	s.mockExecutor.EXPECT().Execute(gomock.Any(), executable).Return(queues.ExecuteResponse{
+		ExecutionMetricTags: nil,
+		ExecutedAsActive:    false,
+		ExecutionErr:        executionError,
+	}).Times(2)
+
+	// Attempt 1
+	err := executable.Execute()
+	err2 := executable.HandleErr(err)
+	s.Error(err2)
+	s.NotErrorIs(err2, queues.ErrTerminalTaskFailure)
+	s.Contains(err2.Error(), executionError.Error())
+
+	// Attempt 2
+	s.Error(executable.Execute())
+	s.Error(executable.HandleErr(err))
+	s.Empty(queueWriter.EnqueueTaskRequests)
+}
+
 func (s *executableSuite) TestExecute_SendToDLQSubStringMatchesMultiple() {
 	queueWriter := &queuestest.FakeQueueWriter{}
 	executable1 := s.newTestExecutable(func(p *params) {
@@ -897,7 +928,7 @@ func (s *executableSuite) TestExecute_SendToDLQSubStringMatchesMultiple() {
 			return true
 		}
 		p.dlqErrorSubStrings = func() string {
-			return "test substring 1, test substring 2"
+			return ",,test substring 1, test substring 2"
 		}
 	})
 	executionError2 := errors.New("some random error with test substring 2")
