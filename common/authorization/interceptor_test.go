@@ -30,7 +30,6 @@ import (
 	"testing"
 
 	"github.com/golang/mock/gomock"
-	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	"go.temporal.io/api/workflowservice/v1"
@@ -38,11 +37,9 @@ import (
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/metadata"
 
-	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
-	"go.temporal.io/server/common/persistence"
 )
 
 const (
@@ -64,15 +61,16 @@ type (
 		suite.Suite
 		*require.Assertions
 
-		controller            *gomock.Controller
-		mockFrontendHandler   *workflowservicemock.MockWorkflowServiceServer
-		mockAuthorizer        *MockAuthorizer
-		mockMetricsHandler    *metrics.MockHandler
-		mockNamespaceRegistry *namespace.MockRegistry
-		interceptor           *Interceptor
-		handler               grpc.UnaryHandler
-		mockClaimMapper       *MockClaimMapper
+		controller          *gomock.Controller
+		mockFrontendHandler *workflowservicemock.MockWorkflowServiceServer
+		mockAuthorizer      *MockAuthorizer
+		mockMetricsHandler  *metrics.MockHandler
+		interceptor         *Interceptor
+		handler             grpc.UnaryHandler
+		mockClaimMapper     *MockClaimMapper
 	}
+
+	mockNamespaceChecker namespace.Name
 )
 
 func TestAuthorizerInterceptorSuite(t *testing.T) {
@@ -93,27 +91,13 @@ func (s *authorizerInterceptorSuite) SetupTest() {
 	).Return(s.mockMetricsHandler).AnyTimes()
 	s.mockMetricsHandler.EXPECT().Timer(metrics.ServiceAuthorizationLatency.Name()).Return(metrics.NoopTimerMetricFunc).AnyTimes()
 
-	s.mockNamespaceRegistry = namespace.NewMockRegistry(s.controller)
-	testNs := namespace.FromPersistentState(
-		&persistence.GetNamespaceResponse{
-			Namespace: &persistencespb.NamespaceDetail{
-				Config: &persistencespb.NamespaceConfig{},
-				Info: &persistencespb.NamespaceInfo{
-					Id:   uuid.New().String(),
-					Name: testNamespace,
-				},
-			},
-		})
-	s.mockNamespaceRegistry.EXPECT().GetNamespace(namespace.Name(testNamespace)).Return(testNs, nil).AnyTimes()
-	s.mockNamespaceRegistry.EXPECT().GetNamespace(gomock.Any()).Return(nil, errors.New("not found")).AnyTimes()
-
 	s.mockClaimMapper = NewMockClaimMapper(s.controller)
 	s.interceptor = NewInterceptor(
 		s.mockClaimMapper,
 		s.mockAuthorizer,
 		s.mockMetricsHandler,
 		log.NewNoopLogger(),
-		s.mockNamespaceRegistry,
+		mockNamespaceChecker(testNamespace),
 		nil,
 		"",
 		"",
@@ -195,7 +179,7 @@ func (s *authorizerInterceptorSuite) TestNoopClaimMapperWithoutTLS() {
 		s.mockAuthorizer,
 		s.mockMetricsHandler,
 		log.NewNoopLogger(),
-		s.mockNamespaceRegistry,
+		mockNamespaceChecker(testNamespace),
 		nil,
 		"",
 		"",
@@ -210,7 +194,7 @@ func (s *authorizerInterceptorSuite) TestAlternateHeaders() {
 		NewNoopAuthorizer(),
 		s.mockMetricsHandler,
 		log.NewNoopLogger(),
-		s.mockNamespaceRegistry,
+		mockNamespaceChecker(testNamespace),
 		nil,
 		"custom-header",
 		"custom-extra-header",
@@ -254,4 +238,11 @@ func (s *authorizerInterceptorSuite) TestAlternateHeaders() {
 		_, err := interceptor.Intercept(inCtx, describeNamespaceRequest, describeNamespaceInfo, s.handler)
 		s.NoError(err)
 	}
+}
+
+func (n mockNamespaceChecker) Exists(name namespace.Name) error {
+	if name == namespace.Name(n) {
+		return nil
+	}
+	return errors.New("doesn't exist")
 }

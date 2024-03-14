@@ -54,6 +54,11 @@ type (
 	JWTAudienceMapper interface {
 		Audience(ctx context.Context, req interface{}, info *grpc.UnaryServerInfo) string
 	}
+
+	NamespaceChecker interface {
+		// Exists returns nil if the namespace exists, otherwise an error.
+		Exists(name namespace.Name) error
+	}
 )
 
 const (
@@ -101,7 +106,7 @@ type Interceptor struct {
 	authorizer          Authorizer
 	metricsHandler      metrics.Handler
 	logger              log.Logger
-	namespaceRegistry   namespace.Registry
+	namespaceChecker    NamespaceChecker
 	audienceGetter      JWTAudienceMapper
 	authHeaderName      string
 	authExtraHeaderName string
@@ -113,7 +118,7 @@ func NewInterceptor(
 	authorizer Authorizer,
 	metricsHandler metrics.Handler,
 	logger log.Logger,
-	namespaceRegistry namespace.Registry,
+	namespaceChecker NamespaceChecker,
 	audienceGetter JWTAudienceMapper,
 	authHeaderName string,
 	authExtraHeaderName string,
@@ -122,7 +127,7 @@ func NewInterceptor(
 		claimMapper:         claimMapper,
 		authorizer:          authorizer,
 		logger:              logger,
-		namespaceRegistry:   namespaceRegistry,
+		namespaceChecker:    namespaceChecker,
 		metricsHandler:      metricsHandler,
 		authHeaderName:      util.Coalesce(authHeaderName, defaultAuthHeaderName),
 		authExtraHeaderName: util.Coalesce(authExtraHeaderName, defaultAuthExtraHeaderName),
@@ -264,11 +269,7 @@ func (a *Interceptor) getMetricsHandler(nsName string) metrics.Handler {
 		// Note that this is before the namespace state validation interceptor, so this
 		// namespace name is not validated. We should only use it as a metric tag if it's a
 		// real namespace, to avoid unbounded cardinality issues.
-		// Also, when we look it up, we want to disable readthrough to avoid polluting the
-		// negative lookup cache, e.g. if this call is for RegisterNamespace and the namespace
-		// doesn't exist yet.
-		opts := namespace.GetNamespaceOptions{DisableReadthrough: true}
-		if entry, _ := a.namespaceRegistry.GetNamespaceWithOptions(namespace.Name(nsName), opts); entry != nil {
+		if a.namespaceChecker.Exists(namespace.Name(nsName)) == nil {
 			nsTag = metrics.NamespaceTag(nsName)
 		}
 	}

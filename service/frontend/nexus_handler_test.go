@@ -24,6 +24,7 @@ package frontend
 
 import (
 	"context"
+	"errors"
 	"testing"
 	"time"
 
@@ -72,6 +73,15 @@ func (mockRateLimiter) Wait(ctx context.Context, request quotas.Request) error {
 
 var _ quotas.RequestRateLimiter = mockRateLimiter{}
 
+type mockNamespaceChecker namespace.Name
+
+func (n mockNamespaceChecker) Exists(name namespace.Name) error {
+	if name == namespace.Name(n) {
+		return nil
+	}
+	return errors.New("doesn't exist")
+}
+
 type contextOptions struct {
 	namespaceState          enumspb.NamespaceState
 	quota                   int
@@ -98,7 +108,9 @@ func newOperationContext(options contextOptions) *operationContext {
 			},
 		},
 	})
-	oc.auth = authorization.NewInterceptor(nil, mockAuthorizer{}, oc.metricsHandler, oc.logger, nil, "", "")
+
+	checker := mockNamespaceChecker(oc.namespace.Name())
+	oc.auth = authorization.NewInterceptor(nil, mockAuthorizer{}, oc.metricsHandler, oc.logger, checker, nil, "", "")
 	oc.namespaceConcurrencyLimitInterceptor = interceptor.NewConcurrentRequestLimitInterceptor(
 		nil,
 		nil,
