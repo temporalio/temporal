@@ -72,6 +72,7 @@ type (
 		BacklogNegligibleAge              dynamicconfig.DurationPropertyFnWithTaskQueueInfoFilters
 		MaxWaitForPollerBeforeFwd         dynamicconfig.DurationPropertyFnWithTaskQueueInfoFilters
 		QueryPollerUnavailableWindow      dynamicconfig.DurationPropertyFn
+		QueryWorkflowTaskTimeoutLogRate   dynamicconfig.FloatPropertyFnWithTaskQueueInfoFilters
 		MembershipUnloadDelay             dynamicconfig.DurationPropertyFn
 
 		// Time to hold a poll request before returning an empty response if there are no tasks
@@ -100,8 +101,6 @@ type (
 
 		// FrontendAccessHistoryFraction is an interim flag across 2 minor releases and will be removed once fully enabled.
 		FrontendAccessHistoryFraction dynamicconfig.FloatPropertyFn
-
-		QueryWorkflowTaskTimeoutLogRate dynamicconfig.FloatPropertyFnWithTaskQueueInfoFilters
 	}
 
 	forwarderConfig struct {
@@ -207,6 +206,7 @@ func NewConfig(
 		BacklogNegligibleAge:                  dc.GetDurationPropertyFilteredByTaskQueueInfo(dynamicconfig.MatchingBacklogNegligibleAge, 24*365*10*time.Hour),
 		MaxWaitForPollerBeforeFwd:             dc.GetDurationPropertyFilteredByTaskQueueInfo(dynamicconfig.MatchingMaxWaitForPollerBeforeFwd, 200*time.Millisecond),
 		QueryPollerUnavailableWindow:          dc.GetDurationProperty(dynamicconfig.QueryPollerUnavailableWindow, 20*time.Second),
+		QueryWorkflowTaskTimeoutLogRate:       dc.GetFloatPropertyFilteredByTaskQueueInfo(dynamicconfig.MatchingQueryWorkflowTaskTimeoutLogRate, 0.0),
 		MembershipUnloadDelay:                 dc.GetDurationProperty(dynamicconfig.MatchingMembershipUnloadDelay, 500*time.Millisecond),
 
 		AdminNamespaceToPartitionDispatchRate:          dc.GetFloatPropertyFilteredByNamespace(dynamicconfig.AdminMatchingNamespaceToPartitionDispatchRate, 10000),
@@ -220,8 +220,7 @@ func NewConfig(
 
 		ListNexusIncomingServicesLongPollTimeout: dc.GetDurationProperty(dynamicconfig.MatchingListNexusIncomingServicesLongPollTimeout, 5*time.Minute-10*time.Second), // Use -10 seconds so that we send back empty response instead of timeout
 
-		FrontendAccessHistoryFraction:   dc.GetFloat64Property(dynamicconfig.FrontendAccessHistoryFraction, 0.0),
-		QueryWorkflowTaskTimeoutLogRate: dc.GetFloatPropertyFilteredByTaskQueueInfo(dynamicconfig.MatchingQueryWorkflowTaskTimeoutLogRate, 0.0),
+		FrontendAccessHistoryFraction: dc.GetFloat64Property(dynamicconfig.FrontendAccessHistoryFraction, 0.0),
 	}
 }
 

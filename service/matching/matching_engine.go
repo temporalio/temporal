@@ -878,6 +878,7 @@ func (e *matchingEngineImpl) QueryWorkflow(
 					tag.WorkflowNamespaceID(ns.ID().String()),
 					tag.WorkflowNamespace(ns.Name().String()),
 					tag.WorkflowID(queryRequest.GetQueryRequest().GetExecution().GetWorkflowId()),
+					tag.WorkflowRunID(queryRequest.GetQueryRequest().GetExecution().GetRunId()),
 					tag.WorkflowTaskRequestId(taskID),
 					tag.WorkflowTaskQueueName(taskQueueName))
 			}
