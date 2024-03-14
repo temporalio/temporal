@@ -113,8 +113,12 @@ func NewHostLevelCache(
 	config *configs.Config,
 	handler metrics.Handler,
 ) Cache {
+	maxSize := config.HistoryHostLevelCacheMaxSize()
+	if config.HistoryCacheLimitSizeBased {
+		maxSize = config.HistoryHostLevelCacheMaxSizeBytes()
+	}
 	return newCache(
-		config.HistoryHostLevelCacheMaxSize(),
+		maxSize,
 		config.HistoryCacheTTL(),
 		config.HistoryCacheNonUserContextLockTimeout(),
 		handler,
@@ -125,8 +129,12 @@ func NewShardLevelCache(
 	config *configs.Config,
 	handler metrics.Handler,
 ) Cache {
+	maxSize := config.HistoryShardLevelCacheMaxSize()
+	if config.HistoryCacheLimitSizeBased {
+		maxSize = config.HistoryShardLevelCacheMaxSizeBytes()
+	}
 	return newCache(
-		config.HistoryShardLevelCacheMaxSize(),
+		maxSize,
 		config.HistoryCacheTTL(),
 		config.HistoryCacheNonUserContextLockTimeout(),
 		handler,
