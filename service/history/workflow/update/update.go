@@ -564,3 +564,17 @@ func (u *Update) setState(newState state) state {
 	u.instrumentation.StateChange(u.id, prevState, newState)
 	return prevState
 }
+
+func (u *Update) GetSize() int {
+	size := len(u.id)
+	size += proto.Size(u.request)
+	if u.accepted.Ready() {
+		res, _ := u.accepted.Get(context.Background())
+		size += res.Size()
+	}
+	if u.outcome.Ready() {
+		res, _ := u.outcome.Get(context.Background())
+		size += res.Size()
+	}
+	return size
+}
