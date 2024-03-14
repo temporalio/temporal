@@ -32,16 +32,17 @@ import (
 	"time"
 
 	"github.com/pborman/uuid"
+	"google.golang.org/protobuf/types/known/durationpb"
+
 	commandpb "go.temporal.io/api/command/v1"
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	historypb "go.temporal.io/api/history/v1"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	"go.temporal.io/api/workflowservice/v1"
-	"google.golang.org/protobuf/types/known/durationpb"
-
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/payloads"
+	"go.temporal.io/server/service/history/api/resetworkflow"
 )
 
 func (s *FunctionalSuite) TestResetWorkflow() {
@@ -201,30 +202,65 @@ func (s *FunctionalSuite) TestResetWorkflow() {
 	s.True(workflowComplete)
 }
 
-func (s *FunctionalSuite) TestResetWorkflow_ReapplyAll() {
-	workflowID := "functional-reset-workflow-test-reapply-all"
-	workflowTypeName := "functional-reset-workflow-test-reapply-all-type"
-	taskQueueName := "functional-reset-workflow-test-reapply-all-taskqueue"
-
-	s.testResetWorkflowReapply(workflowID, workflowTypeName, taskQueueName, 4, 3, enumspb.RESET_REAPPLY_TYPE_SIGNAL)
+func (s *FunctionalSuite) TestResetWorkflow_ExcludeNoneReapplyAll() {
+	s.testResetWorkflowReapply(
+		"exclude-none-reapply-all",
+		[]enumspb.ResetReapplyExcludeType{},
+		enumspb.RESET_REAPPLY_TYPE_ALL_ELIGIBLE,
+	)
 }
 
-func (s *FunctionalSuite) TestResetWorkflow_ReapplyNone() {
-	workflowID := "functional-reset-workflow-test-reapply-none"
-	workflowTypeName := "functional-reset-workflow-test-reapply-none-type"
-	taskQueueName := "functional-reset-workflow-test-reapply-none-taskqueue"
+func (s *FunctionalSuite) TestResetWorkflow_ExcludeNoneReapplySignal() {
+	s.testResetWorkflowReapply(
+		"exclude-none-reapply-signal",
+		[]enumspb.ResetReapplyExcludeType{},
+		enumspb.RESET_REAPPLY_TYPE_SIGNAL,
+	)
+}
 
-	s.testResetWorkflowReapply(workflowID, workflowTypeName, taskQueueName, 4, 3, enumspb.RESET_REAPPLY_TYPE_NONE)
+func (s *FunctionalSuite) TestResetWorkflow_ExcludeNoneReapplyNone() {
+	s.testResetWorkflowReapply(
+		"exclude-none-reapply-none",
+		[]enumspb.ResetReapplyExcludeType{},
+		enumspb.RESET_REAPPLY_TYPE_NONE,
+	)
+}
+
+func (s *FunctionalSuite) TestResetWorkflow_ExcludeSignalReapplyAll() {
+	s.testResetWorkflowReapply(
+		"exclude-signal-reapply-all",
+		[]enumspb.ResetReapplyExcludeType{enumspb.RESET_REAPPLY_EXCLUDE_TYPE_SIGNAL},
+		enumspb.RESET_REAPPLY_TYPE_ALL_ELIGIBLE,
+	)
+}
+
+func (s *FunctionalSuite) TestResetWorkflow_ExcludeSignalReapplySignal() {
+	s.testResetWorkflowReapply(
+		"exclude-signal-reapply-signal",
+		[]enumspb.ResetReapplyExcludeType{enumspb.RESET_REAPPLY_EXCLUDE_TYPE_SIGNAL},
+		enumspb.RESET_REAPPLY_TYPE_SIGNAL,
+	)
+}
+
+func (s *FunctionalSuite) TestResetWorkflow_ExcludeSignalReapplyNone() {
+	s.testResetWorkflowReapply(
+		"exclude-signal-reapply-none",
+		[]enumspb.ResetReapplyExcludeType{enumspb.RESET_REAPPLY_EXCLUDE_TYPE_SIGNAL},
+		enumspb.RESET_REAPPLY_TYPE_NONE,
+	)
 }
 
 func (s *FunctionalSuite) testResetWorkflowReapply(
-	workflowID string,
-	workflowTypeName string,
-	taskQueueName string,
-	resetToEventID int64,
-	totalSignals int,
+	testName string,
+	reapplyExcludeTypes []enumspb.ResetReapplyExcludeType,
 	reapplyType enumspb.ResetReapplyType,
 ) {
+	totalSignals := 3
+	resetToEventID := int64(totalSignals + 1)
+
+	workflowID := fmt.Sprintf("functional-reset-workflow-test-%s", testName)
+	workflowTypeName := fmt.Sprintf("functional-reset-workflow-test-%s-type", testName)
+	taskQueueName := fmt.Sprintf("functional-reset-workflow-test-%s-taskqueue", testName)
 	identity := "worker1"
 
 	workflowType := &commonpb.WorkflowType{Name: workflowTypeName}
@@ -247,35 +283,22 @@ func (s *FunctionalSuite) testResetWorkflowReapply(
 	s.NoError(err0)
 	runID := we.RunId
 
-	signalRequest := &workflowservice.SignalWorkflowExecutionRequest{
-		Namespace: s.namespace,
-		WorkflowExecution: &commonpb.WorkflowExecution{
-			WorkflowId: workflowID,
-			RunId:      runID,
-		},
-		SignalName: "random signal name",
-		Input: &commonpb.Payloads{Payloads: []*commonpb.Payload{{
-			Data: []byte("random data"),
-		}}},
-		Identity: identity,
-	}
-
 	s.Logger.Info("StartWorkflowExecution", tag.WorkflowRunID(we.RunId))
 
 	// workflow logic
 	invocation := 0
-	completed := false
+	commandsCompleted := false
 	wtHandler := func(execution *commonpb.WorkflowExecution, wt *commonpb.WorkflowType,
 		previousStartedEventID, startedEventID int64, history *historypb.History) ([]*commandpb.Command, error) {
 
 		invocation++
+
+		// First invocation is first workflow task; then come `totalSignals` signals.
 		if invocation <= totalSignals {
-			// fist invocation is first workflow task,
-			// next few are triggered by signals
 			return []*commandpb.Command{}, nil
 		}
 
-		completed = true
+		commandsCompleted = true
 		return []*commandpb.Command{{
 			CommandType: enumspb.COMMAND_TYPE_COMPLETE_WORKFLOW_EXECUTION,
 			Attributes: &commandpb.Command_CompleteWorkflowExecutionCommandAttributes{
@@ -300,17 +323,8 @@ func (s *FunctionalSuite) testResetWorkflowReapply(
 	s.Logger.Info("PollAndProcessWorkflowTask", tag.Error(err))
 	s.NoError(err)
 
-	for i := 0; i < totalSignals; i++ {
-		signalRequest.RequestId = uuid.New()
-		_, err = s.engine.SignalWorkflowExecution(NewContext(), signalRequest)
-		s.NoError(err)
-
-		_, err = poller.PollAndProcessWorkflowTask(WithDumpHistory)
-		s.Logger.Info("PollAndProcessWorkflowTask", tag.Error(err))
-		s.NoError(err)
-	}
-
-	s.True(completed)
+	s.testResetWorkflowReapplySendSignals(totalSignals, workflowID, runID, identity, poller)
+	s.True(commandsCompleted)
 
 	// reset
 	resp, err := s.engine.ResetWorkflowExecution(NewContext(), &workflowservice.ResetWorkflowExecutionRequest{
@@ -323,6 +337,7 @@ func (s *FunctionalSuite) testResetWorkflowReapply(
 		WorkflowTaskFinishEventId: resetToEventID,
 		RequestId:                 uuid.New(),
 		ResetReapplyType:          reapplyType,
+		ResetReapplyExcludeTypes:  reapplyExcludeTypes,
 	})
 	s.NoError(err)
 
@@ -338,15 +353,41 @@ func (s *FunctionalSuite) testResetWorkflowReapply(
 		}
 	}
 
-	switch reapplyType {
-	case enumspb.RESET_REAPPLY_TYPE_SIGNAL:
-		s.Equal(totalSignals, signalCount)
-	case enumspb.RESET_REAPPLY_TYPE_NONE:
+	resetReapplyExcludeTypes := resetworkflow.GetResetReapplyExcludeTypes(reapplyExcludeTypes, reapplyType)
+	if resetReapplyExcludeTypes[enumspb.RESET_REAPPLY_EXCLUDE_TYPE_SIGNAL] {
 		s.Equal(0, signalCount)
-	default:
-		panic(fmt.Sprintf("unknown reset reapply type: %v", reapplyType))
+	} else {
+		s.Equal(totalSignals, signalCount)
+	}
+}
+
+func (s *FunctionalSuite) testResetWorkflowReapplySendSignals(
+	totalSignals int,
+	workflowId, runId, identity string,
+	poller *TaskPoller,
+) {
+	signalRequest := &workflowservice.SignalWorkflowExecutionRequest{
+		Namespace: s.namespace,
+		WorkflowExecution: &commonpb.WorkflowExecution{
+			WorkflowId: workflowId,
+			RunId:      runId,
+		},
+		SignalName: "signal-name",
+		Input: &commonpb.Payloads{Payloads: []*commonpb.Payload{{
+			Data: []byte("random data"),
+		}}},
+		Identity: identity,
 	}
 
+	for i := 0; i < totalSignals; i++ {
+		signalRequest.RequestId = uuid.New()
+		_, err := s.engine.SignalWorkflowExecution(NewContext(), signalRequest)
+		s.NoError(err)
+
+		_, err = poller.PollAndProcessWorkflowTask(WithDumpHistory)
+		s.Logger.Info("PollAndProcessWorkflowTask", tag.Error(err))
+		s.NoError(err)
+	}
 }
 
 func (s *FunctionalSuite) TestResetWorkflow_ReapplyBufferAll() {
