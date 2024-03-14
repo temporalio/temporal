@@ -143,6 +143,7 @@ func (f *visibilityQueueFactory) CreateQueue(
 		f.Config.TaskDLQEnabled,
 		f.Config.TaskDLQUnexpectedErrorAttempts,
 		f.Config.TaskDLQInternalErrors,
+		f.Config.TaskDLQErrorSubStrings,
 	)
 	return queues.NewImmediateQueue(
 		shard,

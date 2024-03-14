@@ -77,6 +77,7 @@ type (
 		priorityAssigner           queues.PriorityAssigner
 		maxUnexpectedErrorAttempts dynamicconfig.IntPropertyFn
 		dlqInternalErrors          dynamicconfig.BoolPropertyFn
+		dlqErrorSubStrings         dynamicconfig.StringPropertyFn
 	}
 	option func(*params)
 )
@@ -841,6 +842,158 @@ func (s *executableSuite) TestTaskCancellation() {
 	s.False(executable.IsRetryableError(errors.New("some random error")))
 }
 
+func (s *executableSuite) TestExecute_SendToDLQSubStringDoesNotMatch() {
+	queueWriter := &queuestest.FakeQueueWriter{}
+	executable := s.newTestExecutable(func(p *params) {
+		p.dlqWriter = queues.NewDLQWriter(queueWriter, s.mockClusterMetadata, metrics.NoopMetricsHandler, log.NewTestLogger(), s.mockNamespaceRegistry)
+		p.dlqEnabled = func() bool {
+			return true
+		}
+		p.dlqErrorSubStrings = func() string {
+			return "test substring"
+		}
+	})
+	executionError := errors.New("some random error")
+	s.mockExecutor.EXPECT().Execute(gomock.Any(), executable).Return(queues.ExecuteResponse{
+		ExecutionMetricTags: nil,
+		ExecutedAsActive:    false,
+		ExecutionErr:        executionError,
+	}).Times(2)
+
+	// Attempt 1
+	err := executable.Execute()
+	err2 := executable.HandleErr(err)
+	s.Error(err2)
+	s.NotErrorIs(err2, queues.ErrTerminalTaskFailure)
+	s.Contains(err2.Error(), executionError.Error())
+
+	// Attempt 2
+	s.Error(executable.Execute())
+	s.Error(executable.HandleErr(err))
+	s.Empty(queueWriter.EnqueueTaskRequests)
+}
+
+func (s *executableSuite) TestExecute_SendToDLQSubStringMatchesMultiple() {
+	queueWriter := &queuestest.FakeQueueWriter{}
+	executable1 := s.newTestExecutable(func(p *params) {
+		p.dlqWriter = queues.NewDLQWriter(queueWriter, s.mockClusterMetadata, metrics.NoopMetricsHandler, log.NewTestLogger(), s.mockNamespaceRegistry)
+		p.dlqEnabled = func() bool {
+			return true
+		}
+		p.dlqErrorSubStrings = func() string {
+			return "test substring 1, test substring 2"
+		}
+	})
+	executionError1 := errors.New("some random error with test substring 1")
+	s.mockExecutor.EXPECT().Execute(gomock.Any(), executable1).Return(queues.ExecuteResponse{
+		ExecutionMetricTags: nil,
+		ExecutedAsActive:    false,
+		ExecutionErr:        executionError1,
+	}).Times(1)
+
+	executable2 := s.newTestExecutable(func(p *params) {
+		p.dlqWriter = queues.NewDLQWriter(queueWriter, s.mockClusterMetadata, metrics.NoopMetricsHandler, log.NewTestLogger(), s.mockNamespaceRegistry)
+		p.dlqEnabled = func() bool {
+			return true
+		}
+		p.dlqErrorSubStrings = func() string {
+			return "test substring 1, test substring 2"
+		}
+	})
+	executionError2 := errors.New("some random error with test substring 2")
+	s.mockExecutor.EXPECT().Execute(gomock.Any(), executable2).Return(queues.ExecuteResponse{
+		ExecutionMetricTags: nil,
+		ExecutedAsActive:    false,
+		ExecutionErr:        executionError2,
+	}).Times(1)
+
+	// Attempt 1
+	err := executable1.Execute()
+	err2 := executable1.HandleErr(err)
+	s.Error(err2)
+	s.ErrorIs(err2, queues.ErrTerminalTaskFailure)
+	s.Contains(err2.Error(), executionError1.Error())
+
+	err = executable2.Execute()
+	err2 = executable2.HandleErr(err)
+	s.Error(err2)
+	s.ErrorIs(err2, queues.ErrTerminalTaskFailure)
+	s.Contains(err2.Error(), executionError2.Error())
+
+	// Attempt 2
+	s.NoError(executable1.Execute())
+	s.NoError(executable2.Execute())
+	s.Len(queueWriter.EnqueueTaskRequests, 2)
+}
+
+func (s *executableSuite) TestExecute_ErrorSubStringIfDLQDisabled() {
+	queueWriter := &queuestest.FakeQueueWriter{}
+	executable := s.newTestExecutable(func(p *params) {
+		p.dlqWriter = queues.NewDLQWriter(queueWriter, s.mockClusterMetadata, metrics.NoopMetricsHandler, log.NewTestLogger(), s.mockNamespaceRegistry)
+		p.dlqEnabled = func() bool {
+			return false
+		}
+		p.dlqErrorSubStrings = func() string {
+			return "test substring"
+		}
+	})
+	executionError := errors.New("some random error with test substring")
+	s.mockExecutor.EXPECT().Execute(gomock.Any(), executable).Return(queues.ExecuteResponse{
+		ExecutionMetricTags: nil,
+		ExecutedAsActive:    false,
+		ExecutionErr:        executionError,
+	}).Times(2)
+
+	// Attempt 1
+	err := executable.Execute()
+	err2 := executable.HandleErr(err)
+	s.Error(err2)
+	s.ErrorIs(err2, queues.ErrTerminalTaskFailure)
+	s.Contains(err2.Error(), executionError.Error())
+
+	// Attempt 2
+	s.Error(executable.Execute())
+	s.Error(executable.HandleErr(err))
+	s.Empty(queueWriter.EnqueueTaskRequests)
+}
+
+func (s *executableSuite) TestExecute_ErrorSubStringThenDisableDLQ() {
+	queueWriter := &queuestest.FakeQueueWriter{}
+	dlqEnabled := true
+	executable := s.newTestExecutable(func(p *params) {
+		p.dlqWriter = queues.NewDLQWriter(queueWriter, s.mockClusterMetadata, metrics.NoopMetricsHandler, log.NewTestLogger(), s.mockNamespaceRegistry)
+		p.dlqEnabled = func() bool {
+			return dlqEnabled
+		}
+		p.dlqErrorSubStrings = func() string {
+			return "test substring"
+		}
+	})
+	execError := errors.New("some random error with test substring")
+	s.mockExecutor.EXPECT().Execute(gomock.Any(), executable).Return(queues.ExecuteResponse{
+		ExecutionMetricTags: nil,
+		ExecutedAsActive:    false,
+		ExecutionErr:        execError,
+	}).Times(1)
+
+	err := executable.Execute()
+	err2 := executable.HandleErr(err)
+
+	s.ErrorIs(err2, queues.ErrTerminalTaskFailure)
+
+	dlqEnabled = false
+
+	// Make sure task is retried this time
+	execError2 := errors.New("some other random error")
+	s.mockExecutor.EXPECT().Execute(gomock.Any(), executable).Return(queues.ExecuteResponse{
+		ExecutionMetricTags: nil,
+		ExecutedAsActive:    false,
+		ExecutionErr:        execError2,
+	}).Times(1)
+	s.ErrorIs(executable.Execute(), execError2)
+	s.Empty(queueWriter.EnqueueTaskRequests)
+}
+
 func (s *executableSuite) newTestExecutable(opts ...option) queues.Executable {
 	p := params{
 		dlqWriter: nil,
@@ -853,6 +1006,9 @@ func (s *executableSuite) newTestExecutable(opts ...option) queues.Executable {
 		priorityAssigner: queues.NewNoopPriorityAssigner(),
 		maxUnexpectedErrorAttempts: func() int {
 			return math.MaxInt
+		},
+		dlqErrorSubStrings: func() string {
+			return ""
 		},
 	}
 	for _, opt := range opts {
@@ -883,6 +1039,7 @@ func (s *executableSuite) newTestExecutable(opts ...option) queues.Executable {
 			params.DLQWriter = p.dlqWriter
 			params.MaxUnexpectedErrorAttempts = p.maxUnexpectedErrorAttempts
 			params.DLQInternalErrors = p.dlqInternalErrors
+			params.DLQErrorSubStrings = p.dlqErrorSubStrings
 		},
 	)
 }

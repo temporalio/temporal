@@ -56,6 +56,7 @@ type (
 		dlqEnabled                 dynamicconfig.BoolPropertyFn
 		attemptsBeforeSendingToDlq dynamicconfig.IntPropertyFn
 		dlqInternalErrors          dynamicconfig.BoolPropertyFn
+		dlqErrorSubStrings         dynamicconfig.StringPropertyFn
 	}
 )
 
@@ -77,6 +78,7 @@ func NewExecutableFactory(
 	dlqEnabled dynamicconfig.BoolPropertyFn,
 	attemptsBeforeSendingToDlq dynamicconfig.IntPropertyFn,
 	dlqInternalErrors dynamicconfig.BoolPropertyFn,
+	dlqErrorSubStrings dynamicconfig.StringPropertyFn,
 ) *executableFactoryImpl {
 	return &executableFactoryImpl{
 		executor:                   executor,
@@ -92,6 +94,7 @@ func NewExecutableFactory(
 		dlqEnabled:                 dlqEnabled,
 		attemptsBeforeSendingToDlq: attemptsBeforeSendingToDlq,
 		dlqInternalErrors:          dlqInternalErrors,
+		dlqErrorSubStrings:         dlqErrorSubStrings,
 	}
 }
 
@@ -113,6 +116,7 @@ func (f *executableFactoryImpl) NewExecutable(task tasks.Task, readerID int64) E
 			params.DLQWriter = f.dlqWriter
 			params.MaxUnexpectedErrorAttempts = f.attemptsBeforeSendingToDlq
 			params.DLQInternalErrors = f.dlqInternalErrors
+			params.DLQErrorSubStrings = f.dlqErrorSubStrings
 		},
 	)
 }

@@ -32,6 +32,7 @@ import (
 	"fmt"
 	"math"
 	"runtime/debug"
+	"strings"
 	"sync"
 	"time"
 
@@ -198,12 +199,14 @@ type (
 		unexpectedErrorAttempts    int
 		maxUnexpectedErrorAttempts dynamicconfig.IntPropertyFn
 		dlqInternalErrors          dynamicconfig.BoolPropertyFn
+		dlqErrorSubStrings         dynamicconfig.StringPropertyFn
 	}
 	ExecutableParams struct {
 		DLQEnabled                 dynamicconfig.BoolPropertyFn
 		DLQWriter                  *DLQWriter
 		MaxUnexpectedErrorAttempts dynamicconfig.IntPropertyFn
 		DLQInternalErrors          dynamicconfig.BoolPropertyFn
+		DLQErrorSubStrings         dynamicconfig.StringPropertyFn
 	}
 	ExecutableOption func(*ExecutableParams)
 )
@@ -232,6 +235,9 @@ func NewExecutable(
 		},
 		DLQInternalErrors: func() bool {
 			return false
+		},
+		DLQErrorSubStrings: func() string {
+			return ""
 		},
 	}
 	for _, opt := range opts {
@@ -262,6 +268,7 @@ func NewExecutable(
 		dlqEnabled:                 params.DLQEnabled,
 		maxUnexpectedErrorAttempts: params.MaxUnexpectedErrorAttempts,
 		dlqInternalErrors:          params.DLQInternalErrors,
+		dlqErrorSubStrings:         params.DLQErrorSubStrings,
 	}
 	executable.updatePriority()
 	return executable
@@ -505,6 +512,23 @@ func (e *executableImpl) HandleErr(err error) (retErr error) {
 			}
 		}
 	}()
+
+	dlqErrSubStrings := e.dlqErrorSubStrings()
+	if len(dlqErrSubStrings) > 0 {
+		subStrings := strings.Split(dlqErrSubStrings, ",")
+		for _, subStr := range subStrings {
+			if len(subStr) > 0 && strings.Contains(err.Error(), subStr) {
+				e.logger.Error(
+					fmt.Sprintf("Error matches with %s. Marking task as terminally failed, will send to DLQ",
+						dynamicconfig.HistoryTaskDLQErrorSubStrings),
+					tag.Error(err),
+					tag.ErrorType(err))
+				e.terminalFailureCause = err
+				metrics.TaskTerminalFailures.With(e.taggedMetricsHandler).Record(1)
+				return fmt.Errorf("%w: %v", ErrTerminalTaskFailure, err)
+			}
+		}
+	}
 
 	if e.isSafeToDropError(err) {
 		return nil
