@@ -1,6 +1,6 @@
 .DEFAULT_GOAL := update-diagrams
 COLOR := "\e[1;36m%s\e[0m\n"
-DIAGRAMS := $(wildcard ./docs/assets/*.d2)
+DIAGRAMS := $(wildcard ./docs/.assets/*.d2)
 
 install-d2:
 	@printf $(COLOR) "Install d2..."
