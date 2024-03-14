@@ -65,14 +65,13 @@ type (
 		// DispatchQueryTask will dispatch query to local or remote poller. If forwarded then result or error is returned,
 		// if dispatched to local poller then nil and nil is returned.
 		DispatchQueryTask(ctx context.Context, taskID string, request *matchingservice.QueryWorkflowRequest) (*matchingservice.QueryWorkflowResponse, error)
-		// GetVersionedPhysicalTaskQueueManager gets the physical task queue manager associated with the given buildID
-		GetVersionedPhysicalTaskQueueManager(buildID string) physicalTaskQueueManager
+		// GetVersionedPhysicalTaskQueueManager gets the physical task queue manager associated with the given buildID. Result may be nil with no error.
+		GetVersionedPhysicalTaskQueueManager(ctx context.Context, buildID string) (physicalTaskQueueManager, error)
 		GetUserDataManager() userDataManager
 		// MarkAlive updates the liveness timer to keep this partition manager alive.
 		MarkAlive()
 		GetAllPollerInfo() []*taskqueuepb.PollerInfo
 		HasPollerAfter(accessTime time.Time) bool
-		HasVersionedPollerAfter(accessTime time.Time, buildID string) bool
 		// DescribeTaskQueue returns information about the target task queue
 		DescribeTaskQueue(includeTaskQueueStatus bool) *matchingservice.DescribeTaskQueueResponse
 		String() string
@@ -273,9 +272,9 @@ func (pm *taskQueuePartitionManagerImpl) PollTask(
 	}
 
 	if identity, ok := ctx.Value(identityKey).(string); ok && identity != "" {
-		pm.defaultQueue.UpdatePollerInfo(pollerIdentity(identity), pollMetadata)
+		dbq.UpdatePollerInfo(pollerIdentity(identity), pollMetadata)
 		// update timestamp when long poll ends
-		defer pm.defaultQueue.UpdatePollerInfo(pollerIdentity(identity), pollMetadata)
+		defer dbq.UpdatePollerInfo(pollerIdentity(identity), pollMetadata)
 	}
 	return dbq.PollTask(ctx, pollMetadata)
 }
@@ -322,28 +321,23 @@ func (pm *taskQueuePartitionManagerImpl) GetUserDataManager() userDataManager {
 	return pm.userDataManager
 }
 
-func (pm *taskQueuePartitionManagerImpl) GetVersionedPhysicalTaskQueueManager(buildID string) physicalTaskQueueManager {
-	ptqm, ok := pm.versionedQueues[buildID]
-	if !ok {
-		return nil
-	}
-	return ptqm
+func (pm *taskQueuePartitionManagerImpl) GetVersionedPhysicalTaskQueueManager(ctx context.Context, buildID string) (physicalTaskQueueManager, error) {
+	return pm.getVersionedQueue(ctx, "", buildID, false)
 }
 
 // GetAllPollerInfo returns all pollers that polled from this taskqueue in last few minutes
 func (pm *taskQueuePartitionManagerImpl) GetAllPollerInfo() []*taskqueuepb.PollerInfo {
+	// todo carly: check all queues here
 	return pm.defaultQueue.GetAllPollerInfo()
 }
 
 func (pm *taskQueuePartitionManagerImpl) HasPollerAfter(accessTime time.Time) bool {
+	// todo carly: check all queues here
 	return pm.defaultQueue.HasPollerAfter(accessTime)
 }
 
-func (pm *taskQueuePartitionManagerImpl) HasVersionedPollerAfter(accessTime time.Time, buildID string) bool {
-	return pm.defaultQueue.HasVersionedPollerAfter(accessTime, buildID)
-}
-
 func (pm *taskQueuePartitionManagerImpl) DescribeTaskQueue(includeTaskQueueStatus bool) *matchingservice.DescribeTaskQueueResponse {
+	// todo carly: check all queues here
 	return pm.defaultQueue.DescribeTaskQueue(includeTaskQueueStatus)
 }
 
@@ -414,7 +408,7 @@ func (pm *taskQueuePartitionManagerImpl) getVersionedQueue(
 	return tqm, nil
 }
 
-// Returns taskQueuePartitionManager for a task queue. If not already cached, and create is true, tries
+// Returns physicalTaskQueueManager for a task queue. If not already cached, and create is true, tries
 // to get new range from DB and create one. This does not block for the task queue to be
 // initialized.
 // Pass either versionSet or build ID
