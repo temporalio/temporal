@@ -70,10 +70,11 @@ func WrapEventLoop(
 	retryInterval time.Duration,
 ) {
 	defer streamStopper()
-	for {
+
+	for retryCount := 0; retryCount < 11; retryCount++ {
 		err := originalEventLoop()
 
-		if err == nil {
+		if err == nil { // shutdown case
 			return
 		}
 		// if it is stream error, we will not retry and terminate the stream, then let the stream_receiver_monitor to restart it
