@@ -54,6 +54,7 @@ func (s *ParseDurationSuite) TestParseDuration() {
 		{"8m7h6d5d4h3m", 8*time.Minute + 7*time.Hour + 6*24*time.Hour + 5*24*time.Hour + 4*time.Hour + 3*time.Minute},
 		{"7", -1}, // error
 		{"", -1},  // error
+		{"10000000h", -1}, // error out of bounds
 	} {
 		got, err := ParseDuration(c.input)
 		if c.expected == -1 {
