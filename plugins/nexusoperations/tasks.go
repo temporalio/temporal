@@ -225,7 +225,7 @@ func (CancelationBackoffTaskSerializer) Serialize(hsm.Task) ([]byte, error) {
 	return nil, nil
 }
 
-func RegisterTaskSerializer(reg *hsm.Registry) error {
+func RegisterTaskSerializers(reg *hsm.Registry) error {
 	if err := reg.RegisterTaskSerializer(TaskTypeTimeout.ID, TimeoutTaskSerializer{}); err != nil {
 		return err
 	}

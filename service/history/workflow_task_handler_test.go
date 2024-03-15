@@ -126,6 +126,7 @@ func TestCommandProtocolMessage(t *testing.T) {
 			shardCtx,
 			nil, // searchattribute.MapperProvider
 			false,
+			nil, // TODO: test usage of commandHandlerRegistry?
 		)
 	}
 

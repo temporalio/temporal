@@ -284,6 +284,7 @@ func TestCollection(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, b, n)
 
+	require.Equal(t, 2, coll.Size())
 	nodes := coll.List()
 	sort.Slice(nodes, func(i, j int) bool {
 		return nodes[i].Key.ID < nodes[j].Key.ID

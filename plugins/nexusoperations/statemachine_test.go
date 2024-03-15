@@ -70,7 +70,17 @@ func TestAddChild(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			root := newRoot(t)
 			schedTime := timestamppb.Now()
-			child, err := nexusoperations.AddChild(root, "service", "operation", schedTime, durationpb.New(tc.timeout))
+			event := &history.HistoryEvent{
+				EventTime: schedTime,
+				Attributes: &history.HistoryEvent_NexusOperationScheduledEventAttributes{
+					NexusOperationScheduledEventAttributes: &history.NexusOperationScheduledEventAttributes{
+						Service:   "service",
+						Operation: "operation",
+						Timeout:   durationpb.New(tc.timeout),
+					},
+				},
+			}
+			child, err := nexusoperations.AddChild(root, "test-id", event)
 			require.NoError(t, err)
 			oap := root.Outputs()
 			require.Equal(t, 1, len(oap))
@@ -564,7 +574,17 @@ func newRoot(t *testing.T) *hsm.Node {
 
 func newOperationNode(t *testing.T, schedTime time.Time, timeout time.Duration) *hsm.Node {
 	root := newRoot(t)
-	node, err := nexusoperations.AddChild(root, "service", "operation", timestamppb.New(schedTime), durationpb.New(timeout))
+	event := &history.HistoryEvent{
+		EventTime: timestamppb.New(schedTime),
+		Attributes: &history.HistoryEvent_NexusOperationScheduledEventAttributes{
+			NexusOperationScheduledEventAttributes: &history.NexusOperationScheduledEventAttributes{
+				Service:   "service",
+				Operation: "operation",
+				Timeout:   durationpb.New(timeout),
+			},
+		},
+	}
+	node, err := nexusoperations.AddChild(root, "test-id", event)
 	require.NoError(t, err)
 	return node
 }
