@@ -839,6 +839,48 @@ func (s *queryConverterSuite) TestParseSQLVal() {
 				"Foo",
 			),
 		},
+		{
+			name:  "valid ExecutionDuration day suffix",
+			input: "'10d'",
+			args: map[string]any{
+				"saName": "ExecutionDuration",
+				"saType": enumspb.INDEXED_VALUE_TYPE_INT,
+			},
+			retValue: int64(10 * 24 * time.Hour),
+			err:      nil,
+		},
+		{
+			name:  "valid ExecutionDuration hour suffix",
+			input: "'10h'",
+			args: map[string]any{
+				"saName": "ExecutionDuration",
+				"saType": enumspb.INDEXED_VALUE_TYPE_INT,
+			},
+			retValue: int64(10 * time.Hour),
+			err:      nil,
+		},
+		{
+			name:  "invalid ExecutionDuration",
+			input: "'100'",
+			args: map[string]any{
+				"saName": "ExecutionDuration",
+				"saType": enumspb.INDEXED_VALUE_TYPE_INT,
+			},
+			retValue: nil,
+			err: query.NewConverterError(
+				"invalid value for search attribute ExecutionDuration: 100 (invalid duration)"),
+		},
+		{
+			name:  "invalid ExecutionDuration out of bounds",
+			input: "'10000000h'",
+			args: map[string]any{
+				"saName": "ExecutionDuration",
+				"saType": enumspb.INDEXED_VALUE_TYPE_INT,
+			},
+			retValue: nil,
+			err: query.NewConverterError(
+				"invalid value for search attribute ExecutionDuration: 10000000h (invalid duration)"),
+		},
 	}
 
 	for _, tc := range tests {
