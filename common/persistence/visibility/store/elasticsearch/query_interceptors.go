@@ -182,7 +182,8 @@ func parseSystemSearchAttributeValues(name string, value any) (any, error) {
 				// To support "hh:mm:ss" durations.
 				duration, err := timestamp.ParseHHMMSSDuration(durationStr)
 				if err != nil {
-					return nil, err
+					return nil, query.NewConverterError(
+						"invalid value for search attribute %s: %v (%v)", name, value, err)
 				}
 				value = duration.Nanoseconds()
 			}
