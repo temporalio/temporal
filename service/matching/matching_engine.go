@@ -1378,7 +1378,6 @@ func (e *matchingEngineImpl) unloadTaskQueuePartition(unloadPM taskQueuePartitio
 	delete(e.partitions, key)
 	e.partitionsLock.Unlock()
 	foundTQM.Stop()
-	e.updateTaskQueuePartitionGauge(unloadPM, -1)
 }
 
 // Responsible for emitting and updating loaded_physical_task_queue_count metric
@@ -1387,7 +1386,7 @@ func (e *matchingEngineImpl) updatePhysicalTaskQueueGauge(pm *physicalTaskQueueM
 	// calculating versioned to be one of: “unversioned” or "buildId” or “versionSet”
 	versioned := "unversioned"
 	if buildID := pm.queue.BuildId(); buildID != "" {
-		versioned = "buildID"
+		versioned = "buildId"
 	} else if versionSet := pm.queue.VersionSet(); versionSet != "" {
 		versioned = "versionSet"
 	}
