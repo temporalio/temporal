@@ -429,7 +429,19 @@ func (s *executableHistoryTaskSuite) TestBatchWith_CurrentTaskHasNewRunEvents_Ba
 	s.False(success)
 }
 
-// TODO: add a test case for incoming task with new run events
+func (s *executableHistoryTaskSuite) TestBatchWith_IncomingTaskHasNewRunEvents_BatchSuccess() {
+	currentTask, incomingTask := s.generateTwoBatchableTasks()
+	incomingTask.newRunID = uuid.NewString()
+	incomingTask.eventsDesResponse.newRunEvents = []*historypb.HistoryEvent{
+		{
+			EventId: 104,
+			Version: 3,
+		},
+	}
+	batchedTask, success := currentTask.BatchWith(incomingTask)
+	s.True(success)
+	s.Equal(incomingTask.newRunID, batchedTask.(*ExecutableHistoryTask).newRunID)
+}
 
 func (s *executableHistoryTaskSuite) generateTwoBatchableTasks() (*ExecutableHistoryTask, *ExecutableHistoryTask) {
 	currentEvent := [][]*historypb.HistoryEvent{

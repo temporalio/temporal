@@ -738,7 +738,7 @@ func (c *ContextImpl) mergeUpdateWithNewReplicationTasks(
 	}
 
 	// merge the new run's replication task to current workflow's replication task
-	// so that they can be applied traqnsactionally in the standby cluster.
+	// so that they can be applied transactionally in the standby cluster.
 	// TODO: this logic should be more generic so that the first replication task
 	// in the new run doesn't have to be HistoryReplicationTask
 	newRunTask := newWorkflowSnapshot.Tasks[tasks.CategoryReplication][0].(*tasks.HistoryReplicationTask)
