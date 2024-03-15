@@ -178,6 +178,7 @@ func (f *timerQueueFactory) CreateQueue(
 					versionHistory,
 					[][]*historypb.HistoryEvent{events},
 					nil,
+					"",
 				)
 			},
 			shard.GetPayloadSerializer(),

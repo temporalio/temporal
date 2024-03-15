@@ -160,8 +160,8 @@ func (s *stateRebuilderSuite) TestApplyEvents() {
 
 	workflowKey := definition.NewWorkflowKey(s.namespaceID.String(), s.workflowID, s.runID)
 
-	mockStateBuilder := workflow.NewMockMutableStateRebuilder(s.controller)
-	mockStateBuilder.EXPECT().ApplyEvents(
+	mockStateRebuilder := workflow.NewMockMutableStateRebuilder(s.controller)
+	mockStateRebuilder.EXPECT().ApplyEvents(
 		gomock.Any(),
 		s.namespaceID,
 		requestID,
@@ -171,9 +171,10 @@ func (s *stateRebuilderSuite) TestApplyEvents() {
 		}),
 		[][]*historypb.HistoryEvent{events},
 		[]*historypb.HistoryEvent(nil),
+		"",
 	).Return(nil, nil)
 
-	err := s.nDCStateRebuilder.applyEvents(context.Background(), workflowKey, mockStateBuilder, events, requestID)
+	err := s.nDCStateRebuilder.applyEvents(context.Background(), workflowKey, mockStateRebuilder, events, requestID)
 	s.NoError(err)
 }
 

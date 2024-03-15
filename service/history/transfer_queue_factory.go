@@ -174,6 +174,7 @@ func (f *transferQueueFactory) CreateQueue(
 					versionHistory,
 					[][]*historypb.HistoryEvent{events},
 					nil,
+					"",
 				)
 			},
 			shard.GetPayloadSerializer(),
