@@ -224,6 +224,13 @@ func TaskTypeTag(value string) Tag {
 	return &tagImpl{key: TaskTypeTagName, value: value}
 }
 
+func PartitionTypeTag(value string) Tag {
+	if len(value) == 0 {
+		value = unknownValue
+	}
+	return &tagImpl{key: PartitionTypeName, value: value}
+}
+
 func TaskPriorityTag(value string) Tag {
 	if len(value) == 0 {
 		value = unknownValue
