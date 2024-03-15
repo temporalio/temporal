@@ -42,7 +42,6 @@ const (
 	httpStatusTagName           = "http_status"
 	versionedTagName            = "versioned"
 	resourceExhaustedTag        = "resource_exhausted_cause"
-	PartitionTypeName           = "partition_type"
 )
 
 // This package should hold all the metrics and tags for temporal
@@ -957,10 +956,7 @@ var (
 	LocalToRemoteMatchPerTaskQueueCounter     = NewCounterDef("local_to_remote_matches")
 	RemoteToLocalMatchPerTaskQueueCounter     = NewCounterDef("remote_to_local_matches")
 	RemoteToRemoteMatchPerTaskQueueCounter    = NewCounterDef("remote_to_remote_matches")
-	LoadedTaskQueueFamilyCounter              = NewGaugeDef("loaded_task_queue_family_count")
-	LoadedTaskQueueCounter                    = NewGaugeDef("loaded_task_queue_count")
-	LoadedTaskQueuePartitionCounter           = NewGaugeDef("loaded_task_queue_partition_count")
-	LoadedPhysicalTaskQueueCounter            = NewGaugeDef("loaded_physical_task_queue_count")
+	LoadedTaskQueueGauge                      = NewGaugeDef("loaded_task_queue_count")
 	TaskQueueStartedCounter                   = NewCounterDef("task_queue_started")
 	TaskQueueStoppedCounter                   = NewCounterDef("task_queue_stopped")
 	TaskWriteThrottlePerTaskQueueCounter      = NewCounterDef("task_write_throttle_count")
