@@ -651,6 +651,115 @@ func (s *FunctionalSuite) testResetWorkflowReapplyBuffer(
 
 }
 
+func (s *FunctionalSuite) TestUpdateMessageInLastWFT() {
+	// set this to false to make the test pass
+	completeWFT := true
+
+	tv := testvars.New(s.T().Name())
+	workflowId := "wfid"
+	workflowTypeName := "wftype"
+	taskQueueName := "tq"
+	identity := "worker1"
+	workflowType := &commonpb.WorkflowType{Name: workflowTypeName}
+	taskQueue := &taskqueuepb.TaskQueue{Name: taskQueueName, Kind: enumspb.TASK_QUEUE_KIND_NORMAL}
+	updateId := tv.UpdateID("update-id")
+
+	we, err := s.engine.StartWorkflowExecution(NewContext(), &workflowservice.StartWorkflowExecutionRequest{
+		RequestId:           uuid.New(),
+		Namespace:           s.namespace,
+		WorkflowId:          workflowId,
+		WorkflowType:        workflowType,
+		TaskQueue:           taskQueue,
+		Input:               nil,
+		WorkflowRunTimeout:  durationpb.New(100 * time.Second),
+		WorkflowTaskTimeout: durationpb.New(1 * time.Second),
+		Identity:            identity,
+	})
+	s.NoError(err)
+
+	wtHandler := func(*commonpb.WorkflowExecution, *commonpb.WorkflowType, int64, int64, *historypb.History) ([]*commandpb.Command, error) {
+		if completeWFT {
+			return []*commandpb.Command{{
+				CommandType: enumspb.COMMAND_TYPE_COMPLETE_WORKFLOW_EXECUTION,
+				Attributes: &commandpb.Command_CompleteWorkflowExecutionCommandAttributes{
+					CompleteWorkflowExecutionCommandAttributes: &commandpb.CompleteWorkflowExecutionCommandAttributes{
+						Result: payloads.EncodeString("Done"),
+					},
+				},
+			}}, nil
+		} else {
+			return []*commandpb.Command{}, nil
+		}
+	}
+
+	messageHandler := func(*workflowservice.PollWorkflowTaskQueueResponse) ([]*protocolpb.Message, error) {
+		return []*protocolpb.Message{
+			{
+				Id:                 tv.MessageID("accept-msg"),
+				ProtocolInstanceId: updateId,
+				Body: protoutils.MarshalAny(s.T(), &updatepb.Acceptance{
+					AcceptedRequestMessageId:         "request-msg",
+					AcceptedRequestSequencingEventId: int64(1),
+				}),
+			},
+		}, nil
+	}
+
+	poller := &TaskPoller{
+		Engine:              s.engine,
+		Namespace:           s.namespace,
+		TaskQueue:           taskQueue,
+		Identity:            identity,
+		WorkflowTaskHandler: wtHandler,
+		MessageHandler:      messageHandler,
+		Logger:              s.Logger,
+		T:                   s.T(),
+	}
+
+	updateResponse := make(chan error)
+	pollResponse := make(chan error)
+	request := &workflowservice.UpdateWorkflowExecutionRequest{
+		Namespace: s.namespace,
+		WorkflowExecution: &commonpb.WorkflowExecution{
+			WorkflowId: workflowId,
+			RunId:      we.RunId,
+		},
+		WaitPolicy: &updatepb.WaitPolicy{LifecycleStage: enumspb.UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_ACCEPTED},
+		Request: &updatepb.Request{
+			Meta: &updatepb.Meta{UpdateId: updateId, Identity: identity},
+			Input: &updatepb.Input{
+				Name: tv.HandlerName(),
+				Args: payloads.EncodeString("args-value-of-" + updateId),
+			},
+		},
+	}
+	go func() {
+		_, err := s.engine.UpdateWorkflowExecution(NewContext(), request)
+		updateResponse <- err
+	}()
+	go func() {
+		// Blocks until the update request causes a WFT to be dispatched; then sends the update complete message
+		// required for the update request to return.
+		_, err := poller.PollAndProcessWorkflowTask(WithDumpHistory)
+		pollResponse <- err
+	}()
+	s.NoError(<-updateResponse)
+	s.NoError(<-pollResponse)
+
+	events := s.getHistory(s.namespace, &commonpb.WorkflowExecution{
+		WorkflowId: workflowId,
+		RunId:      we.RunId,
+	})
+	updateCount := 0
+	for _, event := range events {
+		switch event.GetEventType() {
+		case enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_UPDATE_ACCEPTED:
+			updateCount++
+		}
+	}
+	s.Equal(1, updateCount)
+}
+
 func (s *FunctionalSuite) TestResetWorkflow_WorkflowTask_Schedule() {
 	workflowID := "functional-reset-workflow-test-schedule"
 	workflowTypeName := "functional-reset-workflow-test-schedule-type"
