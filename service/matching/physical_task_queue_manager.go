@@ -32,13 +32,11 @@ import (
 	"sync/atomic"
 	"time"
 
-	"go.temporal.io/server/common/clock"
-	"go.temporal.io/server/common/tqid"
-
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
+	"go.temporal.io/server/common/clock"
 
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	"go.temporal.io/server/api/matchingservice/v1"
@@ -223,9 +221,13 @@ func newPhysicalTaskQueueManager(
 	tlMgr.taskReader = newTaskReader(tlMgr)
 
 	var fwdr *Forwarder
+	var err error
 	if !queue.Partition().IsRoot() && queue.Partition().Kind() != enumspb.TASK_QUEUE_KIND_STICKY {
 		// Every DB Queue needs its own forwarder so that the throttles do not interfere
-		fwdr = newForwarder(&config.forwarderConfig, queue.Partition().(*tqid.NormalPartition), e.matchingRawClient)
+		fwdr, err = newForwarder(&config.forwarderConfig, queue, e.matchingRawClient)
+		if err != nil {
+			return nil, err
+		}
 	}
 	tlMgr.matcher = newTaskMatcher(config, fwdr, tlMgr.taggedMetricsHandler)
 	for _, opt := range opts {
@@ -359,7 +361,8 @@ func (c *physicalTaskQueueManagerImpl) AddTask(
 	// The task queue default set is dynamic and applies only at dispatch time. Putting "default" tasks into version set
 	// specific queues could cause them to get stuck behind "compatible" tasks when they should be able to progress
 	// independently.
-	if taskInfo.VersionDirective.GetAssignNew() != nil {
+	// TODO: [old-wv-cleanup]
+	if c.queue.VersionSet() != "" && taskInfo.VersionDirective.GetAssignNew() != nil {
 		err = c.partitionMgr.defaultQueue.SpoolTask(params)
 	} else {
 		err = c.SpoolTask(params)

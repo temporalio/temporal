@@ -153,8 +153,6 @@ func (t *transferQueueTaskExecutorBase) pushActivity(
 	return updateIndependentActivityBuildId(
 		ctx,
 		task,
-		task.Version,
-		task.ScheduledEventID,
 		resp.AssignedBuildId,
 		t.shardContext,
 		transactionPolicy,

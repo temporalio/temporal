@@ -2473,6 +2473,16 @@ func (ms *MutableStateImpl) AddActivityTaskStartedEvent(
 	ai.RequestId = requestID
 	ai.StartedTime = timestamppb.New(ms.timeSource.Now())
 	ai.StartedIdentity = identity
+	if ai.GetUseWorkflowBuildId() == nil && versioningStamp.GetUseVersioning() && versioningStamp.GetBuildId() != "" {
+		// this activity is independently assigned to a build ID. Storing that in activity info
+		//
+		// note that if versioningStamp.BuildId is present we know it's not an old versioning worker because matching
+		// does not pass build id for old versioning workers to Record*TaskStart.
+		// TODO: cleanup this comment [cleanup-old-wv]
+		ai.AssignedBuildId = &persistencespb.ActivityInfo_LastIndependentlyAssignedBuildId{
+			LastIndependentlyAssignedBuildId: versioningStamp.GetBuildId(),
+		}
+	}
 	if err := ms.UpdateActivity(ai); err != nil {
 		return nil, err
 	}

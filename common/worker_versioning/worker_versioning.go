@@ -108,20 +108,20 @@ func StampIfUsingVersioning(stamp *commonpb.WorkerVersionStamp) *commonpb.Worker
 }
 
 func MakeDirectiveForWorkflowTask(assignedBuildId string, stamp *commonpb.WorkerVersionStamp, lastWorkflowTaskStartedEventID int64) *taskqueuespb.TaskVersionDirective {
-	if assignedBuildId != "" {
-		return MakeBuildIdDirective(assignedBuildId)
-	} else if id := StampIfUsingVersioning(stamp).GetBuildId(); id != "" {
+	if id := StampIfUsingVersioning(stamp).GetBuildId(); id != "" && assignedBuildId == "" {
 		// TODO: old versioning only [cleanup-old-wv]
 		return MakeBuildIdDirective(id)
 	} else if lastWorkflowTaskStartedEventID == common.EmptyEventID {
 		// first workflow task
-		return MakeUseDefaultDirective()
+		return MakeAssignNewDirective()
+	} else if assignedBuildId != "" {
+		return MakeBuildIdDirective(assignedBuildId)
 	}
 	// else: unversioned queue
 	return nil
 }
 
-func MakeUseDefaultDirective() *taskqueuespb.TaskVersionDirective {
+func MakeAssignNewDirective() *taskqueuespb.TaskVersionDirective {
 	return &taskqueuespb.TaskVersionDirective{Value: &taskqueuespb.TaskVersionDirective_AssignNew{AssignNew: &emptypb.Empty{}}}
 }
 
@@ -131,7 +131,7 @@ func MakeBuildIdDirective(buildId string) *taskqueuespb.TaskVersionDirective {
 
 func StampFromCapabilities(cap *commonpb.WorkerVersionCapabilities) *commonpb.WorkerVersionStamp {
 	// TODO: remove `cap.BuildId != ""` condition after old versioning cleanup. this condition is used to differentiate
-	// between old and new versioning in Record*TaskStart calls. [cleanup-old-versioning]
+	// between old and new versioning in Record*TaskStart calls. [cleanup-old-wv]
 	// we don't want to add stamp for task started events in old versioning
 	if cap != nil && cap.BuildId != "" {
 		return &commonpb.WorkerVersionStamp{UseVersioning: cap.UseVersioning, BuildId: cap.BuildId}

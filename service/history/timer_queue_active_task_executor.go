@@ -515,8 +515,6 @@ func (t *timerQueueActiveTaskExecutor) executeActivityRetryTimerTask(
 	return updateIndependentActivityBuildId(
 		ctx,
 		task,
-		task.Version,
-		task.EventID,
 		resp.AssignedBuildId,
 		t.shardContext,
 		workflow.TransactionPolicyActive,

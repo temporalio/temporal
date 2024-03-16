@@ -3,6 +3,7 @@ package history
 import (
 	"context"
 
+	"go.temporal.io/api/serviceerror"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	taskqueuespb "go.temporal.io/server/api/taskqueue/v1"
 	"go.temporal.io/server/common"
@@ -21,8 +22,6 @@ import (
 func updateIndependentActivityBuildId(
 	ctx context.Context,
 	task tasks.Task,
-	taskVersion int64,
-	scheduledEventId int64,
 	buildId string,
 	shardContext shard.Context,
 	transactionPolicy workflow.TransactionPolicy,
@@ -56,7 +55,23 @@ func updateIndependentActivityBuildId(
 		return err
 	}
 
-	mutableState, err := loadMutableStateForTransferTask(ctx, shardContext, weContext, task, metricsHandler, logger)
+	var mutableState workflow.MutableState
+	var scheduledEventId int64
+	var taskVersion int64
+
+	switch t := task.(type) {
+	case *tasks.ActivityTask:
+		scheduledEventId = t.ScheduledEventID
+		taskVersion = t.Version
+		mutableState, err = loadMutableStateForTransferTask(ctx, shardContext, weContext, t, metricsHandler, logger)
+	case *tasks.ActivityRetryTimerTask:
+		scheduledEventId = t.EventID
+		taskVersion = t.Version
+		mutableState, err = loadMutableStateForTimerTask(ctx, shardContext, weContext, t, metricsHandler, logger)
+	default:
+		return serviceerror.NewInvalidArgument("task type not supported")
+	}
+
 	if err != nil {
 		release(err)
 		return err
@@ -181,8 +196,8 @@ func updateWorkflowAssignedBuildId(
 }
 
 func MakeDirectiveForActivityTask(mutableState workflow.MutableState, activityInfo *persistencespb.ActivityInfo) *taskqueuespb.TaskVersionDirective {
-	if !activityInfo.UseCompatibleVersion || activityInfo.GetUseWorkflowBuildId() == nil {
-		return worker_versioning.MakeUseDefaultDirective()
+	if !activityInfo.UseCompatibleVersion && activityInfo.GetUseWorkflowBuildId() == nil {
+		return worker_versioning.MakeAssignNewDirective()
 	} else if id := mutableState.GetAssignedBuildId(); id != "" {
 		return worker_versioning.MakeBuildIdDirective(id)
 	} else if id := worker_versioning.StampIfUsingVersioning(mutableState.GetMostRecentWorkerVersionStamp()).GetBuildId(); id != "" {

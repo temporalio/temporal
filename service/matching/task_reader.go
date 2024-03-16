@@ -133,7 +133,7 @@ dispatchLoop:
 				}
 
 				taskCtx, cancel := context.WithTimeout(ctx, taskReaderOfferTimeout)
-				err := tr.tlMgr.partitionMgr.DispatchSpooledTask(taskCtx, task)
+				err := tr.tlMgr.partitionMgr.DispatchSpooledTask(taskCtx, task, tr.tlMgr.queue.BuildId())
 				cancel()
 				if err == nil {
 					continue dispatchLoop

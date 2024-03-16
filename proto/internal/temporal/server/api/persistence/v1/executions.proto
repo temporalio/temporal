@@ -157,7 +157,7 @@ message WorkflowExecutionInfo {
     google.protobuf.Timestamp close_time = 66;
     bool close_visibility_task_completed = 67;
     temporal.server.api.workflow.v1.BaseExecutionInfo base_execution_info = 76;
-    // If using build-id based versioning: version stamp of the last worker to process a
+    // If using build-id based versioning: version stamp of the last worker to complete a
     // workflow tasks for this workflow.
     temporal.api.common.v1.WorkerVersionStamp most_recent_worker_version_stamp = 78;
     // The currently assigned build ID for this execution. Presence of this value means worker versioning is used

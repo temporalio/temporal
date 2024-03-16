@@ -70,7 +70,7 @@ func (t *ForwarderTestSuite) SetupTest() {
 	f, err := tqid.NewTaskQueueFamily("fwdr", "tl0")
 	t.Assert().NoError(err)
 	t.partition = f.TaskQueue(enumspb.TASK_QUEUE_TYPE_WORKFLOW).RootPartition()
-	t.fwdr = newForwarder(t.cfg, t.partition, t.client)
+	t.fwdr, err = newForwarder(t.cfg, UnversionedQueueKey(t.partition), t.client)
 }
 
 func (t *ForwarderTestSuite) TearDownTest() {
@@ -111,6 +111,35 @@ func (t *ForwarderTestSuite) TestForwardWorkflowTask() {
 	t.Equal(t.partition.RpcName(), request.GetForwardedSource())
 }
 
+func (t *ForwarderTestSuite) TestForwardWorkflowTask_WithBuildId() {
+	bld := "my-bld"
+	t.usingBuildIdQueue(enumspb.TASK_QUEUE_TYPE_WORKFLOW, bld)
+
+	var request *matchingservice.AddWorkflowTaskRequest
+	t.client.EXPECT().AddWorkflowTask(gomock.Any(), gomock.Any(), gomock.Any()).Do(
+		func(arg0 context.Context, arg1 *matchingservice.AddWorkflowTaskRequest, arg2 ...interface{}) {
+			request = arg1
+			t.Equal(bld, request.VersionDirective.GetAssignedBuildId())
+		},
+	).Return(&matchingservice.AddWorkflowTaskResponse{}, nil)
+
+	taskInfo := randomTaskInfo()
+	task := newInternalTask(taskInfo, nil, enumsspb.TASK_SOURCE_HISTORY, "", false)
+	t.NoError(t.fwdr.ForwardTask(context.Background(), task))
+	t.NotNil(request)
+	t.Equal(mustParent(t.partition, 20).RpcName(), request.TaskQueue.GetName())
+	t.Equal(t.fwdr.partition.Kind(), request.TaskQueue.GetKind())
+	t.Equal(taskInfo.Data.GetNamespaceId(), request.GetNamespaceId())
+	t.Equal(taskInfo.Data.GetWorkflowId(), request.GetExecution().GetWorkflowId())
+	t.Equal(taskInfo.Data.GetRunId(), request.GetExecution().GetRunId())
+	t.Equal(taskInfo.Data.GetScheduledEventId(), request.GetScheduledEventId())
+
+	schedToStart := int32(request.GetScheduleToStartTimeout().AsDuration().Seconds())
+	rewritten := convert.Int32Ceil(time.Until(taskInfo.Data.ExpiryTime.AsTime()).Seconds())
+	t.EqualValues(schedToStart, rewritten)
+	t.Equal(t.partition.RpcName(), request.GetForwardedSource())
+}
+
 func (t *ForwarderTestSuite) TestForwardActivityTask() {
 	t.usingTaskqueuePartition(enumspb.TASK_QUEUE_TYPE_ACTIVITY)
 
@@ -118,6 +147,33 @@ func (t *ForwarderTestSuite) TestForwardActivityTask() {
 	t.client.EXPECT().AddActivityTask(gomock.Any(), gomock.Any(), gomock.Any()).Do(
 		func(arg0 context.Context, arg1 *matchingservice.AddActivityTaskRequest, arg2 ...interface{}) {
 			request = arg1
+		},
+	).Return(&matchingservice.AddActivityTaskResponse{}, nil)
+
+	taskInfo := randomTaskInfo()
+	task := newInternalTask(taskInfo, nil, enumsspb.TASK_SOURCE_HISTORY, "", false)
+	t.NoError(t.fwdr.ForwardTask(context.Background(), task))
+	t.NotNil(request)
+	t.Equal(mustParent(t.partition, 20).RpcName(), request.TaskQueue.GetName())
+	t.Equal(t.fwdr.partition.Kind(), request.TaskQueue.GetKind())
+	t.Equal(taskInfo.Data.GetNamespaceId(), request.GetNamespaceId())
+	t.Equal(taskInfo.Data.GetWorkflowId(), request.GetExecution().GetWorkflowId())
+	t.Equal(taskInfo.Data.GetRunId(), request.GetExecution().GetRunId())
+	t.Equal(taskInfo.Data.GetScheduledEventId(), request.GetScheduledEventId())
+	t.EqualValues(convert.Int32Ceil(time.Until(taskInfo.Data.ExpiryTime.AsTime()).Seconds()),
+		int32(request.GetScheduleToStartTimeout().AsDuration().Seconds()))
+	t.Equal(t.partition.RpcName(), request.GetForwardedSource())
+}
+
+func (t *ForwarderTestSuite) TestForwardActivityTask_WithBuildId() {
+	bld := "my-bld"
+	t.usingBuildIdQueue(enumspb.TASK_QUEUE_TYPE_ACTIVITY, bld)
+
+	var request *matchingservice.AddActivityTaskRequest
+	t.client.EXPECT().AddActivityTask(gomock.Any(), gomock.Any(), gomock.Any()).Do(
+		func(arg0 context.Context, arg1 *matchingservice.AddActivityTaskRequest, arg2 ...interface{}) {
+			request = arg1
+			t.Equal(bld, request.VersionDirective.GetAssignedBuildId())
 		},
 	).Return(&matchingservice.AddActivityTaskResponse{}, nil)
 
@@ -336,7 +392,16 @@ func (t *ForwarderTestSuite) usingTaskqueuePartition(taskType enumspb.TaskQueueT
 	f, err := tqid.NewTaskQueueFamily("fwdr", "tl0")
 	t.Assert().NoError(err)
 	t.partition = f.TaskQueue(taskType).NormalPartition(1)
-	t.fwdr = newForwarder(t.cfg, t.partition, t.client)
+	t.fwdr, err = newForwarder(t.cfg, UnversionedQueueKey(t.partition), t.client)
+	t.Nil(err)
+}
+
+func (t *ForwarderTestSuite) usingBuildIdQueue(taskType enumspb.TaskQueueType, buildId string) {
+	f, err := tqid.NewTaskQueueFamily("fwdr", "tl0")
+	t.Assert().NoError(err)
+	t.partition = f.TaskQueue(taskType).NormalPartition(1)
+	t.fwdr, err = newForwarder(t.cfg, BuildIdQueueKey(t.partition, buildId), t.client)
+	t.Nil(err)
 }
 
 func mustParent(tn *tqid.NormalPartition, n int) *tqid.NormalPartition {

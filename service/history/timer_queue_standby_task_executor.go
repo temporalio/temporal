@@ -600,8 +600,6 @@ func (t *timerQueueStandbyTaskExecutor) pushActivity(
 	return updateIndependentActivityBuildId(
 		ctx,
 		activityTask,
-		activityTask.Version,
-		activityTask.EventID,
 		resp.AssignedBuildId,
 		t.shardContext,
 		workflow.TransactionPolicyPassive,
