@@ -1694,7 +1694,7 @@ func (ms *MutableStateImpl) addWorkflowExecutionStartedEventForContinueAsNew(
 	// - command says to use compatible version
 	// - using versioning
 	var sourceVersionStamp *commonpb.WorkerVersionStamp
-	if command.UseCompatibleVersion {
+	if command.InheritBuildId {
 		sourceVersionStamp = worker_versioning.StampIfUsingVersioning(previousExecutionInfo.MostRecentWorkerVersionStamp)
 	}
 
@@ -2366,7 +2366,7 @@ func (ms *MutableStateImpl) ApplyActivityTaskScheduledEvent(
 		ActivityType:            attributes.GetActivityType(),
 	}
 
-	if attributes.UseCompatibleVersion {
+	if attributes.UseWorkflowBuildId {
 		if ms.GetAssignedBuildId() != "" {
 			// only set when using new versioning
 			ai.AssignedBuildId = &persistencespb.ActivityInfo_UseWorkflowBuildId{UseWorkflowBuildId: &emptypb.Empty{}}
