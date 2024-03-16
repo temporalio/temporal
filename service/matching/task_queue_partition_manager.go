@@ -26,8 +26,6 @@ package matching
 
 import (
 	"context"
-	"fmt"
-	"strings"
 	"sync"
 	"time"
 
@@ -223,10 +221,6 @@ func (pm *taskQueuePartitionManagerImpl) AddTask(
 		}
 	}
 
-	if !strings.HasPrefix(pm.partition.TaskQueue().Family().Name(), "temporal-sys") &&
-		!strings.HasPrefix(pm.partition.TaskQueue().Family().Name(), "default-worker-tq") {
-		fmt.Printf("shahab tq add")
-	}
 	return assignedBuildId, syncMatched, err
 }
 
@@ -285,10 +279,6 @@ func (pm *taskQueuePartitionManagerImpl) PollTask(
 		defer pm.defaultQueue.UpdatePollerInfo(pollerIdentity(identity), pollMetadata)
 	}
 
-	if !strings.HasPrefix(pm.partition.TaskQueue().Family().Name(), "temporal-sys") &&
-		!strings.HasPrefix(pm.partition.TaskQueue().Family().Name(), "default-worker-tq") {
-		fmt.Printf("shahab tq poll")
-	}
 	task, err := dbq.PollTask(ctx, pollMetadata)
 	return task, versionSetUsed, err
 }
