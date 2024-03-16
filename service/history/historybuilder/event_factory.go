@@ -228,7 +228,7 @@ func (b *EventFactory) CreateActivityTaskScheduledEvent(
 			StartToCloseTimeout:          command.StartToCloseTimeout,
 			HeartbeatTimeout:             command.HeartbeatTimeout,
 			RetryPolicy:                  command.RetryPolicy,
-			UseCompatibleVersion:         command.UseCompatibleVersion,
+			UseWorkflowBuildId:           command.UseWorkflowBuildId,
 		},
 	}
 	return event
@@ -428,7 +428,7 @@ func (b EventFactory) CreateContinuedAsNewEvent(
 		LastCompletionResult:         command.LastCompletionResult,
 		Memo:                         command.Memo,
 		SearchAttributes:             command.SearchAttributes,
-		UseCompatibleVersion:         command.UseCompatibleVersion,
+		InheritBuildId:               command.InheritBuildId,
 	}
 	event.Attributes = &historypb.HistoryEvent_WorkflowExecutionContinuedAsNewEventAttributes{
 		WorkflowExecutionContinuedAsNewEventAttributes: attributes,
@@ -793,7 +793,7 @@ func (b *EventFactory) CreateStartChildWorkflowExecutionInitiatedEvent(
 			Memo:                         command.Memo,
 			SearchAttributes:             command.SearchAttributes,
 			ParentClosePolicy:            command.GetParentClosePolicy(),
-			UseCompatibleVersion:         command.UseCompatibleVersion,
+			InheritBuildId:               command.InheritBuildId,
 		},
 	}
 	return event
