@@ -267,6 +267,7 @@ func (c *physicalTaskQueueManagerImpl) Start() {
 	c.taskReader.Start()
 	c.logger.Info("", tag.LifeCycleStarted)
 	c.taggedMetricsHandler.Counter(metrics.TaskQueueStartedCounter.Name()).Record(1)
+	c.partitionMgr.engine.updatePhysicalTaskQueueGauge(c, 1)
 }
 
 // Stop does not unload the queue from its partition. It is intended to be called by the partition manager when
@@ -298,6 +299,7 @@ func (c *physicalTaskQueueManagerImpl) Stop() {
 	c.taskReader.Stop()
 	c.logger.Info("", tag.LifeCycleStopped)
 	c.taggedMetricsHandler.Counter(metrics.TaskQueueStoppedCounter.Name()).Record(1)
+	c.partitionMgr.engine.updatePhysicalTaskQueueGauge(c, -1)
 }
 
 // managesSpecificVersionSet returns true if this is a tqm for a specific version set in the build-id-based versioning
