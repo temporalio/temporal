@@ -809,7 +809,7 @@ func (t *transferQueueActiveTaskExecutor) processStartChildExecution(
 	// - command says to use compatible version
 	// - parent is using versioning
 	var sourceVersionStamp *commonpb.WorkerVersionStamp
-	if attributes.UseCompatibleVersion {
+	if attributes.InheritBuildId {
 		sourceVersionStamp = worker_versioning.StampIfUsingVersioning(mutableState.GetWorkerVersionStamp())
 	}
 
