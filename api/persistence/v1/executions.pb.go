@@ -237,7 +237,7 @@ type WorkflowExecutionInfo struct {
 	CloseTime                    *timestamppb.Timestamp `protobuf:"bytes,66,opt,name=close_time,json=closeTime,proto3" json:"close_time,omitempty"`
 	CloseVisibilityTaskCompleted bool                   `protobuf:"varint,67,opt,name=close_visibility_task_completed,json=closeVisibilityTaskCompleted,proto3" json:"close_visibility_task_completed,omitempty"`
 	BaseExecutionInfo            *v15.BaseExecutionInfo `protobuf:"bytes,76,opt,name=base_execution_info,json=baseExecutionInfo,proto3" json:"base_execution_info,omitempty"`
-	// If using build-id based versioning: version stamp of the last worker to process a
+	// If using build-id based versioning: version stamp of the last worker to complete a
 	// workflow tasks for this workflow.
 	MostRecentWorkerVersionStamp *v12.WorkerVersionStamp `protobuf:"bytes,78,opt,name=most_recent_worker_version_stamp,json=mostRecentWorkerVersionStamp,proto3" json:"most_recent_worker_version_stamp,omitempty"`
 	// The currently assigned build ID for this execution. Presence of this value means worker versioning is used
