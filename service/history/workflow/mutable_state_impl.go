@@ -1689,7 +1689,7 @@ func (ms *MutableStateImpl) addWorkflowExecutionStartedEventForContinueAsNew(
 	// - command says to use compatible version
 	// - using versioning
 	var sourceVersionStamp *commonpb.WorkerVersionStamp
-	if command.UseCompatibleVersion {
+	if command.InheritBuildId {
 		sourceVersionStamp = worker_versioning.StampIfUsingVersioning(previousExecutionInfo.WorkerVersionStamp)
 	}
 
@@ -2354,7 +2354,7 @@ func (ms *MutableStateImpl) ApplyActivityTaskScheduledEvent(
 		TaskQueue:               attributes.TaskQueue.GetName(),
 		HasRetryPolicy:          attributes.RetryPolicy != nil,
 		Attempt:                 1,
-		UseCompatibleVersion:    attributes.UseCompatibleVersion,
+		UseCompatibleVersion:    attributes.UseWorkflowBuildId,
 		ActivityType:            attributes.GetActivityType(),
 	}
 	if ai.HasRetryPolicy {

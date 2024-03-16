@@ -370,10 +370,7 @@ func isUnfilteredAssignmentRuleTarget(buildID string, assignmentRules []*persist
 }
 
 func isUnfiltered(ar *taskqueue.BuildIdAssignmentRule) bool {
-	percentageRamp := ar.GetPercentageRamp()
-	return ar.GetFilterExpression() == "" &&
-		ar.GetWorkerRatioRamp() == nil &&
-		(percentageRamp == nil || (percentageRamp != nil && percentageRamp.RampPercentage == 100))
+	return ar.GetPercentageRamp() == nil
 }
 
 // containsUnfiltered returns true if there exists an assignment rule with no filter expression,

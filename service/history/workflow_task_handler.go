@@ -427,7 +427,7 @@ func (handler *workflowTaskHandlerImpl) handleCommandScheduleActivity(
 	}
 
 	// TODO: relax this restriction after matching can support this
-	if attr.UseCompatibleVersion && attr.TaskQueue.GetName() != "" && attr.TaskQueue.Name != handler.mutableState.GetExecutionInfo().TaskQueue {
+	if attr.UseWorkflowBuildId && attr.TaskQueue.GetName() != "" && attr.TaskQueue.Name != handler.mutableState.GetExecutionInfo().TaskQueue {
 		err := serviceerror.NewInvalidArgument("Activity with UseCompatibleVersion cannot run on different task queue.")
 		return nil, handler.failWorkflow(enumspb.WORKFLOW_TASK_FAILED_CAUSE_BAD_SCHEDULE_ACTIVITY_ATTRIBUTES, err)
 	}
@@ -454,7 +454,7 @@ func (handler *workflowTaskHandlerImpl) handleCommandScheduleActivity(
 	// Note that if `UseCompatibleVersion` is false, it implies that the activity should run on the "default" version
 	// for the task queue.
 	eagerStartActivity := attr.RequestEagerExecution && handler.config.EnableActivityEagerExecution(namespace) &&
-		(!handler.mutableState.GetWorkerVersionStamp().GetUseVersioning() || attr.UseCompatibleVersion)
+		(!handler.mutableState.GetWorkerVersionStamp().GetUseVersioning() || attr.UseWorkflowBuildId)
 
 	_, _, err := handler.mutableState.AddActivityTaskScheduledEvent(
 		handler.workflowTaskCompletedID,
@@ -936,7 +936,7 @@ func (handler *workflowTaskHandlerImpl) handleCommandContinueAsNewWorkflow(
 	}
 
 	// TODO: relax this restriction after matching can support this
-	if attr.UseCompatibleVersion && attr.TaskQueue.GetName() != "" && attr.TaskQueue.Name != handler.mutableState.GetExecutionInfo().TaskQueue {
+	if attr.InheritBuildId && attr.TaskQueue.GetName() != "" && attr.TaskQueue.Name != handler.mutableState.GetExecutionInfo().TaskQueue {
 		err := serviceerror.NewInvalidArgument("ContinueAsNew with UseCompatibleVersion cannot run on different task queue.")
 		return handler.failWorkflow(enumspb.WORKFLOW_TASK_FAILED_CAUSE_BAD_CONTINUE_AS_NEW_ATTRIBUTES, err)
 	}
@@ -1057,7 +1057,7 @@ func (handler *workflowTaskHandlerImpl) handleCommandStartChildWorkflow(
 	}
 
 	// TODO: relax this restriction after matching can support this
-	if attr.UseCompatibleVersion && attr.TaskQueue.GetName() != "" && attr.TaskQueue.Name != handler.mutableState.GetExecutionInfo().TaskQueue {
+	if attr.InheritBuildId && attr.TaskQueue.GetName() != "" && attr.TaskQueue.Name != handler.mutableState.GetExecutionInfo().TaskQueue {
 		err := serviceerror.NewInvalidArgument("StartChildWorkflowExecution with UseCompatibleVersion cannot run on different task queue.")
 		return handler.failWorkflow(enumspb.WORKFLOW_TASK_FAILED_CAUSE_BAD_START_CHILD_EXECUTION_ATTRIBUTES, err)
 	}
