@@ -391,7 +391,7 @@ func (s *VersioningIntegSuite) TestMaxTaskQueuesPerBuildIdEnforced() {
 func (s *VersioningIntegSuite) testWithMatchingBehavior(subtest func()) {
 	dc := s.testCluster.host.dcClient
 	for _, forceForward := range []bool{false, true} {
-		for _, forceAsync := range []bool{true} {
+		for _, forceAsync := range []bool{false, true} {
 			name := "NoForward"
 			if forceForward {
 				// force two levels of forwarding
@@ -518,8 +518,8 @@ func (s *VersioningIntegSuite) workflowStaysInBuildId() {
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
-	act1Done := make(chan interface{})
-	rulesUpdated := make(chan interface{})
+	act1Done := make(chan struct{})
+	rulesUpdated := make(chan struct{})
 
 	act1 := func() (string, error) {
 		close(act1Done)
@@ -527,7 +527,7 @@ func (s *VersioningIntegSuite) workflowStaysInBuildId() {
 	}
 
 	act2 := func() (string, error) {
-		<-rulesUpdated
+		s.waitForChan(ctx, rulesUpdated)
 		return "act2 done!", nil
 	}
 
@@ -568,7 +568,7 @@ func (s *VersioningIntegSuite) workflowStaysInBuildId() {
 	run, err := s.sdkClient.ExecuteWorkflow(ctx, sdkclient.StartWorkflowOptions{TaskQueue: tq}, wf)
 	s.NoError(err)
 
-	<-act1Done
+	s.waitForChan(ctx, act1Done)
 	dw, err := s.sdkClient.DescribeWorkflowExecution(ctx, run.GetID(), run.GetRunID())
 	s.NoError(err)
 	s.Equal(v1, dw.GetWorkflowExecutionInfo().GetAssignedBuildId())
@@ -608,8 +608,8 @@ func (s *VersioningIntegSuite) unversionedWorkflowStaysUnversioned() {
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
-	act1Done := make(chan interface{})
-	rulesUpdated := make(chan interface{})
+	act1Done := make(chan struct{})
+	rulesUpdated := make(chan struct{})
 
 	act1 := func() (string, error) {
 		close(act1Done)
@@ -617,7 +617,7 @@ func (s *VersioningIntegSuite) unversionedWorkflowStaysUnversioned() {
 	}
 
 	act2 := func() (string, error) {
-		<-rulesUpdated
+		s.waitForChan(ctx, rulesUpdated)
 		return "act2 done!", nil
 	}
 
@@ -653,7 +653,7 @@ func (s *VersioningIntegSuite) unversionedWorkflowStaysUnversioned() {
 	run, err := s.sdkClient.ExecuteWorkflow(ctx, sdkclient.StartWorkflowOptions{TaskQueue: tq}, wf)
 	s.NoError(err)
 
-	<-act1Done
+	s.waitForChan(ctx, act1Done)
 	dw, err := s.sdkClient.DescribeWorkflowExecution(ctx, run.GetID(), run.GetRunID())
 	s.NoError(err)
 	s.Equal("", dw.GetWorkflowExecutionInfo().GetAssignedBuildId())
@@ -716,7 +716,7 @@ func (s *VersioningIntegSuite) firstWorkflowTaskAssignmentSpooled() {
 	rule = s.addAssignmentRule(ctx, tq, v2)
 	s.waitForAssignmentRulePropagation(ctx, tq, rule)
 
-	failedTask := make(chan interface{})
+	failedTask := make(chan struct{})
 	wf1 := func(ctx workflow.Context) (string, error) {
 		close(failedTask)
 		panic("failing WF task intentionally")
@@ -732,7 +732,7 @@ func (s *VersioningIntegSuite) firstWorkflowTaskAssignmentSpooled() {
 	s.NoError(w1.Start())
 	defer w1.Stop()
 
-	<-failedTask
+	s.waitForChan(ctx, failedTask)
 	time.Sleep(100 * time.Millisecond)
 
 	// After scheduling the second time, now MS should be assigned to v2
@@ -745,7 +745,7 @@ func (s *VersioningIntegSuite) firstWorkflowTaskAssignmentSpooled() {
 	rule = s.addAssignmentRule(ctx, tq, v3)
 	s.waitForAssignmentRulePropagation(ctx, tq, rule)
 
-	timedoutTask := make(chan interface{})
+	timedoutTask := make(chan struct{})
 	wf2 := func(ctx workflow.Context) (string, error) {
 		time.Sleep(1 * time.Second)
 		close(timedoutTask)
@@ -763,7 +763,7 @@ func (s *VersioningIntegSuite) firstWorkflowTaskAssignmentSpooled() {
 	s.NoError(w2.Start())
 	defer w2.Stop()
 
-	<-timedoutTask
+	s.waitForChan(ctx, timedoutTask)
 	time.Sleep(100 * time.Millisecond)
 
 	// After scheduling the third time, now MS should be assigned to v3
@@ -818,7 +818,7 @@ func (s *VersioningIntegSuite) firstWorkflowTaskAssignmentSyncMatch() {
 	s.waitForAssignmentRulePropagation(ctx, tq, rule)
 
 	// v1 fails the task
-	failedTask := make(chan interface{})
+	failedTask := make(chan struct{})
 	wf1 := func(ctx workflow.Context) (string, error) {
 		close(failedTask)
 		panic("failing WF task intentionally")
@@ -840,7 +840,7 @@ func (s *VersioningIntegSuite) firstWorkflowTaskAssignmentSyncMatch() {
 	}, "wf")
 	s.NoError(err)
 
-	<-failedTask
+	s.waitForChan(ctx, failedTask)
 	time.Sleep(100 * time.Millisecond)
 
 	// MS should have the correct build ID
@@ -850,7 +850,7 @@ func (s *VersioningIntegSuite) firstWorkflowTaskAssignmentSyncMatch() {
 	s.Nil(dw.GetWorkflowExecutionInfo().GetMostRecentWorkerVersionStamp())
 
 	// v2 times out the task
-	timedoutTask := make(chan interface{})
+	timedoutTask := make(chan struct{})
 	wf2 := func(ctx workflow.Context) (string, error) {
 		time.Sleep(1 * time.Second)
 		close(timedoutTask)
@@ -879,7 +879,7 @@ func (s *VersioningIntegSuite) firstWorkflowTaskAssignmentSyncMatch() {
 	s.Equal(v2, dw.GetWorkflowExecutionInfo().GetAssignedBuildId())
 	s.Nil(dw.GetWorkflowExecutionInfo().GetMostRecentWorkerVersionStamp())
 
-	<-timedoutTask
+	s.waitForChan(ctx, timedoutTask)
 	//time.Sleep(100 * time.Millisecond)
 
 	// v3 can process the task
@@ -994,7 +994,7 @@ func (s *VersioningIntegSuite) independentActivityTaskAssignmentSpooled(versione
 	rule = s.addAssignmentRule(ctx, actTq, v2)
 	s.waitForAssignmentRulePropagation(ctx, actTq, rule)
 
-	failedTask := make(chan interface{})
+	failedTask := make(chan struct{})
 	act1 := func() (string, error) {
 		close(failedTask)
 		return "", errors.New("failing activity task intentionally") // nolint:goerr113
@@ -1010,7 +1010,7 @@ func (s *VersioningIntegSuite) independentActivityTaskAssignmentSpooled(versione
 	s.NoError(w1.Start())
 	defer w1.Stop()
 
-	<-failedTask
+	s.waitForChan(ctx, failedTask)
 	time.Sleep(1100 * time.Millisecond)
 
 	// After scheduling the second time, now pending activity should be assigned to v2
@@ -1023,7 +1023,7 @@ func (s *VersioningIntegSuite) independentActivityTaskAssignmentSpooled(versione
 	rule = s.addAssignmentRule(ctx, actTq, v3)
 	s.waitForAssignmentRulePropagation(ctx, actTq, rule)
 
-	timedoutTask := make(chan interface{})
+	timedoutTask := make(chan struct{})
 	act2 := func() (string, error) {
 		time.Sleep(1 * time.Second)
 		close(timedoutTask)
@@ -1041,7 +1041,7 @@ func (s *VersioningIntegSuite) independentActivityTaskAssignmentSpooled(versione
 	s.NoError(w2.Start())
 	defer w2.Stop()
 
-	<-timedoutTask
+	s.waitForChan(ctx, timedoutTask)
 	time.Sleep(1100 * time.Millisecond)
 
 	// After scheduling the third time, now pending activity should be assigned to v3
@@ -1131,7 +1131,7 @@ func (s *VersioningIntegSuite) independentActivityTaskAssignmentSyncMatch(versio
 	defer wfw.Stop()
 
 	// v1 fails the activity
-	failedTask := make(chan interface{})
+	failedTask := make(chan struct{})
 	act1 := func() (string, error) {
 		close(failedTask)
 		return "", errors.New("failing activity task intentionally") // nolint:goerr113
@@ -1153,7 +1153,7 @@ func (s *VersioningIntegSuite) independentActivityTaskAssignmentSyncMatch(versio
 	}, wf)
 	s.NoError(err)
 
-	<-failedTask
+	s.waitForChan(ctx, failedTask)
 	time.Sleep(1100 * time.Millisecond)
 
 	// MS should have the correct build ID
@@ -1170,7 +1170,7 @@ func (s *VersioningIntegSuite) independentActivityTaskAssignmentSyncMatch(versio
 	s.Equal(v1, dw.GetPendingActivities()[0].GetLastIndependentlyAssignedBuildId())
 
 	// v2 timesout the activity
-	timedoutTask := make(chan interface{})
+	timedoutTask := make(chan struct{})
 	act2 := func() (string, error) {
 		time.Sleep(1 * time.Second)
 		close(timedoutTask)
@@ -1191,7 +1191,7 @@ func (s *VersioningIntegSuite) independentActivityTaskAssignmentSyncMatch(versio
 	rule = s.addAssignmentRule(ctx, actTq, v2)
 	s.waitForAssignmentRulePropagation(ctx, actTq, rule)
 
-	<-timedoutTask
+	s.waitForChan(ctx, timedoutTask)
 	time.Sleep(1100 * time.Millisecond)
 
 	// After scheduling the second time, now pending activity should be assigned to v2

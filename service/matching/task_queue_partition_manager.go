@@ -210,7 +210,7 @@ func (pm *taskQueuePartitionManagerImpl) AddTask(
 
 	syncMatched, err = pq.AddTask(ctx, params)
 	var assignedBuildId string
-	if directive.GetAssignNew() != nil {
+	if directive.GetUseAssignmentRules() != nil {
 		// return build ID only if a new one is assigned.
 		if !syncMatched {
 			// return build ID only if the task is spooled. The returned build ID is used by History to update
@@ -498,7 +498,7 @@ func (pm *taskQueuePartitionManagerImpl) getPhysicalQueueForAdd(
 	ctx context.Context,
 	directive *taskqueuespb.TaskVersionDirective,
 ) (physicalTaskQueueManager, <-chan struct{}, error) {
-	if directive.GetValue() == nil {
+	if directive.GetBuildId() == nil {
 		// This means the tasks is a middle task belonging to an unversioned execution. Keep using unversioned.
 		return pm.defaultQueue, nil, nil
 	}
@@ -526,8 +526,8 @@ func (pm *taskQueuePartitionManagerImpl) getPhysicalQueueForAdd(
 
 	var buildId string
 	var versionSet string
-	switch dir := directive.GetValue().(type) {
-	case *taskqueuespb.TaskVersionDirective_AssignNew:
+	switch dir := directive.GetBuildId().(type) {
+	case *taskqueuespb.TaskVersionDirective_UseAssignmentRules:
 		// Need to assign build ID. Assignment rules take precedence, fallback to version sets if no matching rule is found
 		if len(data.GetAssignmentRules()) > 0 {
 			buildId = FindAssignmentBuildId(data.GetAssignmentRules())
@@ -564,8 +564,8 @@ func (pm *taskQueuePartitionManagerImpl) getPhysicalQueueForAdd(
 
 func (pm *taskQueuePartitionManagerImpl) getVersionSetForAdd(directive *taskqueuespb.TaskVersionDirective, data *persistencespb.VersioningData) (string, error) {
 	var buildId string
-	switch dir := directive.GetValue().(type) {
-	case *taskqueuespb.TaskVersionDirective_AssignNew:
+	switch dir := directive.GetBuildId().(type) {
+	case *taskqueuespb.TaskVersionDirective_UseAssignmentRules:
 		// leave buildId = "", lookupVersionSetForAdd understands that to mean "default"
 	case *taskqueuespb.TaskVersionDirective_AssignedBuildId:
 		buildId = dir.AssignedBuildId

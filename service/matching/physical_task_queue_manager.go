@@ -364,7 +364,7 @@ func (c *physicalTaskQueueManagerImpl) AddTask(
 	// specific queues could cause them to get stuck behind "compatible" tasks when they should be able to progress
 	// independently.
 	// TODO: [old-wv-cleanup]
-	if c.queue.VersionSet() != "" && taskInfo.VersionDirective.GetAssignNew() != nil {
+	if c.queue.VersionSet() != "" && taskInfo.VersionDirective.GetUseAssignmentRules() != nil {
 		err = c.partitionMgr.defaultQueue.SpoolTask(params)
 	} else {
 		err = c.SpoolTask(params)

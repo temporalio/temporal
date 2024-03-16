@@ -71,6 +71,7 @@ func (t *ForwarderTestSuite) SetupTest() {
 	t.Assert().NoError(err)
 	t.partition = f.TaskQueue(enumspb.TASK_QUEUE_TYPE_WORKFLOW).RootPartition()
 	t.fwdr, err = newForwarder(t.cfg, UnversionedQueueKey(t.partition), t.client)
+	t.Assert().NoError(err)
 }
 
 func (t *ForwarderTestSuite) TearDownTest() {

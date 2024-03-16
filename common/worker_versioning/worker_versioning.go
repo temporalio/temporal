@@ -113,7 +113,7 @@ func MakeDirectiveForWorkflowTask(assignedBuildId string, stamp *commonpb.Worker
 		return MakeBuildIdDirective(id)
 	} else if lastWorkflowTaskStartedEventID == common.EmptyEventID {
 		// first workflow task
-		return MakeAssignNewDirective()
+		return MakeUseAssignmentRulesDirective()
 	} else if assignedBuildId != "" {
 		return MakeBuildIdDirective(assignedBuildId)
 	}
@@ -121,12 +121,12 @@ func MakeDirectiveForWorkflowTask(assignedBuildId string, stamp *commonpb.Worker
 	return nil
 }
 
-func MakeAssignNewDirective() *taskqueuespb.TaskVersionDirective {
-	return &taskqueuespb.TaskVersionDirective{Value: &taskqueuespb.TaskVersionDirective_AssignNew{AssignNew: &emptypb.Empty{}}}
+func MakeUseAssignmentRulesDirective() *taskqueuespb.TaskVersionDirective {
+	return &taskqueuespb.TaskVersionDirective{BuildId: &taskqueuespb.TaskVersionDirective_UseAssignmentRules{UseAssignmentRules: &emptypb.Empty{}}}
 }
 
 func MakeBuildIdDirective(buildId string) *taskqueuespb.TaskVersionDirective {
-	return &taskqueuespb.TaskVersionDirective{Value: &taskqueuespb.TaskVersionDirective_AssignedBuildId{AssignedBuildId: buildId}}
+	return &taskqueuespb.TaskVersionDirective{BuildId: &taskqueuespb.TaskVersionDirective_AssignedBuildId{AssignedBuildId: buildId}}
 }
 
 func StampFromCapabilities(cap *commonpb.WorkerVersionCapabilities) *commonpb.WorkerVersionStamp {
