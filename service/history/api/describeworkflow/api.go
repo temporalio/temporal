@@ -125,6 +125,7 @@ func Invoke(
 			HistorySizeBytes:     executionInfo.GetExecutionStats().GetHistorySize(),
 
 			MostRecentWorkerVersionStamp: executionInfo.MostRecentWorkerVersionStamp,
+			AssignedBuildId: executionInfo.AssignedBuildId,
 		},
 	}
 
