@@ -368,7 +368,7 @@ func (pm *taskQueuePartitionManagerImpl) HasPollerAfter(buildId string, accessTi
 	if buildId == "" {
 		pm.defaultQueue.HasPollerAfter(accessTime)
 	}
-	ptqm, err := pm.getVersionedQueue(context.Background(), "", buildId, false)
+	ptqm, err := pm.getVersionedQueueNoWait("", buildId, false)
 	if err != nil {
 		// todo carly: log error?
 	}
