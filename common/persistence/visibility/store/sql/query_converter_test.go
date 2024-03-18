@@ -860,15 +860,35 @@ func (s *queryConverterSuite) TestParseSQLVal() {
 			err:      nil,
 		},
 		{
-			name:  "invalid ExecutionDuration",
+			name:  "valid ExecutionDuration string nanos",
 			input: "'100'",
+			args: map[string]any{
+				"saName": "ExecutionDuration",
+				"saType": enumspb.INDEXED_VALUE_TYPE_INT,
+			},
+			retValue: int64(100),
+			err:      nil,
+		},
+		{
+			name:  "valid ExecutionDuration int nanos",
+			input: "100",
+			args: map[string]any{
+				"saName": "ExecutionDuration",
+				"saType": enumspb.INDEXED_VALUE_TYPE_INT,
+			},
+			retValue: int64(100),
+			err:      nil,
+		},
+		{
+			name:  "invalid ExecutionDuration",
+			input: "'100q'",
 			args: map[string]any{
 				"saName": "ExecutionDuration",
 				"saType": enumspb.INDEXED_VALUE_TYPE_INT,
 			},
 			retValue: nil,
 			err: query.NewConverterError(
-				"invalid value for search attribute ExecutionDuration: 100 (invalid duration)"),
+				"invalid value for search attribute ExecutionDuration: 100q (invalid duration)"),
 		},
 		{
 			name:  "invalid ExecutionDuration out of bounds",
