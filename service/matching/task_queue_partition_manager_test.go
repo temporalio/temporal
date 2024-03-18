@@ -180,6 +180,12 @@ func (s *PartitionManagerTestSuite) TestAddTaskWithAssignmentRulesAndVersionSets
 	s.validatePollTask(ruleBld, true)
 }
 
+func (s *PartitionManagerTestSuite) TestHasPollerAfter_Unversioned()               {}
+func (s *PartitionManagerTestSuite) TestHasPollerAfter_Versioned_VersionSet()      {}
+func (s *PartitionManagerTestSuite) TestHasPollerAfter_Versioned_VersioningRules() {}
+func (s *PartitionManagerTestSuite) TestHasAnyPollerAfter()                        {}
+func (s *PartitionManagerTestSuite) TestGetAllPollerInfo()                         {}
+
 func (s *PartitionManagerTestSuite) validateAddTask(expectedBuildId string, expectedSyncMatch bool, versioningData *persistence.VersioningData, directive *taskqueue.TaskVersionDirective) {
 	timeout := 100 * time.Millisecond
 	if expectedSyncMatch {
@@ -225,6 +231,7 @@ func (s *PartitionManagerTestSuite) validatePollTaskSyncMatch(buildId string, us
 	time.Sleep(10 * time.Millisecond)
 }
 
+// Poll task and assert no error and that a non-nil task is returned
 func (s *PartitionManagerTestSuite) validatePollTask(buildId string, useVersioning bool) {
 	ctx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
 	defer cancel()
