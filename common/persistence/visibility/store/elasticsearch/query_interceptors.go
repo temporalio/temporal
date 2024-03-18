@@ -32,7 +32,6 @@ import (
 
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence/visibility/store/query"
-	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/common/searchattribute"
 )
 
@@ -173,20 +172,12 @@ func parseSystemSearchAttributeValues(name string, value any) (any, error) {
 		}
 	case searchattribute.ExecutionDuration:
 		if durationStr, isString := value.(string); isString {
-			// To support durations passed as golang durations such as "300ms", "-1.5h" or "2h45m".
-			// Valid time units are "ns", "us" (or "µs"), "ms", "s", "m", "h".
-			// Custom timestamp.ParseDuration also supports "d" as additional unit for days.
-			if duration, err := timestamp.ParseDuration(durationStr); err == nil {
-				value = duration.Nanoseconds()
-			} else {
-				// To support "hh:mm:ss" durations.
-				duration, err := timestamp.ParseHHMMSSDuration(durationStr)
-				if err != nil {
-					return nil, query.NewConverterError(
-						"invalid value for search attribute %s: %v (%v)", name, value, err)
-				}
-				value = duration.Nanoseconds()
+			duration, err := query.ParseExecutionDurationStr(durationStr)
+			if err != nil {
+				return nil, query.NewConverterError(
+					"invalid value for search attribute %s: %v (%v)", name, value, err)
 			}
+			value = duration.Nanoseconds()
 		}
 	default:
 	}
