@@ -124,7 +124,7 @@ func TestGet_Ok(t *testing.T) {
 	service.OnGetNamespace = func(ctx context.Context, request *persistence.GetNamespaceRequest) (*persistence.GetNamespaceResponse, error) {
 		return &persistence.GetNamespaceResponse{
 			Namespace: &persistencespb.NamespaceDetail{
-				OutgoingServices: []*persistencespb.OutgoingService{
+				OutgoingServices: []*persistencespb.NexusOutgoingService{
 					{
 						Version: 1,
 						Name:    testServiceName,
@@ -335,7 +335,7 @@ func TestCreate_UpdateNamespaceErr(t *testing.T) {
 		assert.True(t, request.IsGlobalNamespace)
 		assert.Equal(t, 2, int(request.NotificationVersion))
 		protoassert.ProtoEqual(t, &persistencespb.NamespaceDetail{
-			OutgoingServices: []*persistencespb.OutgoingService{
+			OutgoingServices: []*persistencespb.NexusOutgoingService{
 				{
 					Version: 1,
 					Name:    testServiceName,
@@ -411,7 +411,7 @@ func TestDelete_ServiceNotFound(t *testing.T) {
 	service.OnGetNamespace = func(ctx context.Context, request *persistence.GetNamespaceRequest) (*persistence.GetNamespaceResponse, error) {
 		return &persistence.GetNamespaceResponse{
 			Namespace: &persistencespb.NamespaceDetail{
-				OutgoingServices: []*persistencespb.OutgoingService{
+				OutgoingServices: []*persistencespb.NexusOutgoingService{
 					{
 						Version: 1,
 						Name:    "other-service",
@@ -439,7 +439,7 @@ func TestDelete_UpdateNamespaceErr(t *testing.T) {
 	service.OnGetNamespace = func(ctx context.Context, request *persistence.GetNamespaceRequest) (*persistence.GetNamespaceResponse, error) {
 		return &persistence.GetNamespaceResponse{
 			Namespace: &persistencespb.NamespaceDetail{
-				OutgoingServices: []*persistencespb.OutgoingService{
+				OutgoingServices: []*persistencespb.NexusOutgoingService{
 					{
 						Version: 1,
 						Name:    testServiceName,
@@ -463,7 +463,7 @@ func TestDelete_UpdateNamespaceErr(t *testing.T) {
 	service.OnUpdateNamespace = func(ctx context.Context, request *persistence.UpdateNamespaceRequest) error {
 		assert.Equal(t, &persistence.UpdateNamespaceRequest{
 			Namespace: &persistencespb.NamespaceDetail{
-				OutgoingServices: []*persistencespb.OutgoingService{
+				OutgoingServices: []*persistencespb.NexusOutgoingService{
 					{
 						Version: 1,
 						Name:    "other-service",
@@ -587,7 +587,7 @@ func TestList_NoNextPageToken(t *testing.T) {
 	service.OnGetNamespace = func(ctx context.Context, request *persistence.GetNamespaceRequest) (*persistence.GetNamespaceResponse, error) {
 		return &persistence.GetNamespaceResponse{
 			Namespace: &persistencespb.NamespaceDetail{
-				OutgoingServices: []*persistencespb.OutgoingService{
+				OutgoingServices: []*persistencespb.NexusOutgoingService{
 					{
 						Version: 1,
 						Name:    "service1",
@@ -625,7 +625,7 @@ func TestList_PageTokenBeyondLimit(t *testing.T) {
 	service.OnGetNamespace = func(ctx context.Context, request *persistence.GetNamespaceRequest) (*persistence.GetNamespaceResponse, error) {
 		return &persistence.GetNamespaceResponse{
 			Namespace: &persistencespb.NamespaceDetail{
-				OutgoingServices: []*persistencespb.OutgoingService{
+				OutgoingServices: []*persistencespb.NexusOutgoingService{
 					{
 						Version: 1,
 						Name:    "service1",

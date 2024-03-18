@@ -30,7 +30,8 @@ import "google/protobuf/timestamp.proto";
 
 import "temporal/api/enums/v1/namespace.proto";
 import "temporal/api/namespace/v1/message.proto";
-import "temporal/api/nexus/v1/message.proto";
+
+import "temporal/server/api/persistence/v1/nexus.proto";
 
 // detail column
 message NamespaceDetail {
@@ -41,18 +42,7 @@ message NamespaceDetail {
     int64 failover_notification_version = 5;
     int64 failover_version = 6;
     google.protobuf.Timestamp failover_end_time = 7;
-    repeated OutgoingService outgoing_services = 8;
-}
-
-message OutgoingService {
-    // Data version for this service. Must match current version on update or set to 0 to create a new service.
-    int64 version = 1;
-    // Service name, unique for this namespace. May contain any characters.
-    string name = 2;
-    string description = 3;
-    // Header to attach to outgoing requests.
-    map<string, string> header = 4;
-    temporal.api.nexus.v1.OutgoingServiceSpec spec = 5;
+    repeated NexusOutgoingService outgoing_services = 8;
 }
 
 message NamespaceInfo {

@@ -92,7 +92,7 @@ var (
 	ErrURLNotSet       = status.Errorf(codes.InvalidArgument, "URL is not set on request")
 )
 
-var serviceNameRegex = regexp.MustCompile(`[a-zA-Z_][a-zA-Z0-9_]*`)
+var ServiceNameRegex = regexp.MustCompile(`[a-zA-Z_][a-zA-Z0-9_]*`)
 
 func (h *OutgoingServiceRegistry) Get(
 	ctx context.Context,
@@ -131,7 +131,7 @@ func (h *OutgoingServiceRegistry) Create(
 		return nil, err
 	}
 	ns := response.Namespace
-	i := slices.IndexFunc(ns.OutgoingServices, func(svc *persistencespb.OutgoingService) bool {
+	i := slices.IndexFunc(ns.OutgoingServices, func(svc *persistencespb.NexusOutgoingService) bool {
 		return svc.Name == req.GetName()
 	})
 	if i >= 0 {
@@ -142,7 +142,7 @@ func (h *OutgoingServiceRegistry) Create(
 			ns.OutgoingServices[i].Version,
 		)
 	}
-	ns.OutgoingServices = append(ns.OutgoingServices, &persistencespb.OutgoingService{
+	ns.OutgoingServices = append(ns.OutgoingServices, &persistencespb.NexusOutgoingService{
 		Version: 1,
 		Name:    req.GetName(),
 		Spec:    common.CloneProto(req.GetSpec()),
@@ -173,7 +173,7 @@ func (h *OutgoingServiceRegistry) Update(
 		return nil, err
 	}
 	ns := response.Namespace
-	i := slices.IndexFunc(ns.OutgoingServices, func(svc *persistencespb.OutgoingService) bool {
+	i := slices.IndexFunc(ns.OutgoingServices, func(svc *persistencespb.NexusOutgoingService) bool {
 		return svc.Name == req.GetName()
 	})
 	if i < 0 {
@@ -218,7 +218,7 @@ func (h *OutgoingServiceRegistry) Delete(
 	}
 	ns := response.Namespace
 	services := ns.OutgoingServices
-	ns.OutgoingServices = slices.DeleteFunc(services, func(svc *persistencespb.OutgoingService) bool {
+	ns.OutgoingServices = slices.DeleteFunc(services, func(svc *persistencespb.NexusOutgoingService) bool {
 		return svc.Name == req.Name
 	})
 	if len(services) == len(ns.OutgoingServices) {
@@ -313,7 +313,7 @@ func (h *OutgoingServiceRegistry) addService(req UpsertRequest, version int64, n
 			version,
 		)
 	}
-	ns.OutgoingServices = append(ns.OutgoingServices, &persistencespb.OutgoingService{
+	ns.OutgoingServices = append(ns.OutgoingServices, &persistencespb.NexusOutgoingService{
 		Version: 1,
 		Name:    req.GetName(),
 		Spec:    common.CloneProto(req.GetSpec()),
@@ -368,7 +368,7 @@ func (h *OutgoingServiceRegistry) findService(
 	response *persistence.GetNamespaceResponse,
 	serviceName string,
 ) *nexus.OutgoingService {
-	var services []*persistencespb.OutgoingService
+	var services []*persistencespb.NexusOutgoingService
 	if detail := response.Namespace; detail != nil {
 		services = detail.OutgoingServices
 	}
@@ -398,8 +398,8 @@ func (h *OutgoingServiceRegistry) validateUpsertRequest(req UpsertRequest) error
 	if len(req.GetName()) > nameMaxLength {
 		return status.Errorf(codes.InvalidArgument, "Outgoing service name length exceeds the limit of %d", nameMaxLength)
 	}
-	if !serviceNameRegex.MatchString(req.GetName()) {
-		return status.Errorf(codes.InvalidArgument, "Outgoing service name must match the regex: %q", serviceNameRegex.String())
+	if !ServiceNameRegex.MatchString(req.GetName()) {
+		return status.Errorf(codes.InvalidArgument, "Outgoing service name must match the regex: %q", ServiceNameRegex.String())
 	}
 	if req.GetSpec() == nil || req.GetSpec().GetUrl() == "" {
 		return ErrURLNotSet
