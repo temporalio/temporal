@@ -101,10 +101,10 @@ type (
 	}
 
 	taskQueueCounterKey struct {
-		namespaceID namespace.ID
-		taskType    enumspb.TaskQueueType
-		kind        enumspb.TaskQueueKind
-		versioned   bool
+		namespaceID   namespace.ID
+		taskType      enumspb.TaskQueueType
+		partitionType enumspb.TaskQueueKind
+		versioned     string // one of these values: "unversioned", "versionSet", "buildId"
 	}
 
 	pollMetadata struct {
@@ -116,6 +116,14 @@ type (
 	namespaceUpdateLocks struct {
 		updateLock      sync.Mutex
 		replicationLock sync.Mutex
+	}
+
+	gaugeMetrics struct {
+		loadedTaskQueueFamilyCount    map[taskQueueCounterKey]int
+		loadedTaskQueueCount          map[taskQueueCounterKey]int
+		loadedTaskQueuePartitionCount map[taskQueueCounterKey]int
+		loadedPhysicalTaskQueueCount  map[taskQueueCounterKey]int
+		gaugeMetricCounterLock        sync.Mutex
 	}
 
 	// Implements matching.Engine
@@ -136,8 +144,7 @@ type (
 		metricsHandler       metrics.Handler
 		partitionsLock       sync.RWMutex // locks mutation of partitions
 		partitions           map[tqid.PartitionKey]taskQueuePartitionManager
-		taskQueueCountLock   sync.Mutex
-		taskQueueCount       map[taskQueueCounterKey]int // per-namespace task queue counter
+		gaugeMetricCounter   gaugeMetrics // per-namespace task queue counter
 		config               *Config
 		lockableQueryTaskMap lockableQueryTaskMap
 		// pollMap is needed to keep track of all outstanding pollers for a particular
@@ -201,7 +208,7 @@ func NewEngine(
 		visibilityManager:         visibilityManager,
 		metricsHandler:            metricsHandler.WithTags(metrics.OperationTag(metrics.MatchingEngineScope)),
 		partitions:                make(map[tqid.PartitionKey]taskQueuePartitionManager),
-		taskQueueCount:            make(map[taskQueueCounterKey]int),
+		gaugeMetricCounter:        gaugeMetrics{make(map[taskQueueCounterKey]int), make(map[taskQueueCounterKey]int), make(map[taskQueueCounterKey]int), make(map[taskQueueCounterKey]int), sync.Mutex{}},
 		config:                    config,
 		lockableQueryTaskMap:      lockableQueryTaskMap{queryTaskMap: make(map[string]chan *queryResult)},
 		pollMap:                   lockablePollMap{polls: make(map[string]context.CancelFunc)},
@@ -325,7 +332,6 @@ func (e *matchingEngineImpl) getTaskQueuePartitionManagerNoWait(
 
 		if !ok {
 			pm.Start()
-			e.updateTaskQueueGauge(pm, false, 1)
 		}
 	}
 	return pm, nil
@@ -1376,34 +1382,99 @@ func (e *matchingEngineImpl) unloadTaskQueuePartition(unloadPM taskQueuePartitio
 	delete(e.partitions, key)
 	e.partitionsLock.Unlock()
 	foundTQM.Stop()
-	e.updateTaskQueueGauge(foundTQM, false, -1)
 }
 
-func (e *matchingEngineImpl) updateTaskQueueGauge(pm taskQueuePartitionManager, versioned bool, delta int) {
-	countKey := taskQueueCounterKey{
+// Responsible for emitting and updating loaded_physical_task_queue_count metric
+func (e *matchingEngineImpl) updatePhysicalTaskQueueGauge(pm *physicalTaskQueueManagerImpl, delta int) {
+
+	// calculating versioned to be one of: “unversioned” or "buildId” or “versionSet”
+	versioned := "unversioned"
+	if buildID := pm.queue.BuildId(); buildID != "" {
+		versioned = "buildId"
+	} else if versionSet := pm.queue.VersionSet(); versionSet != "" {
+		versioned = "versionSet"
+	}
+
+	PhysicalTaskQueueParameters := taskQueueCounterKey{
+		namespaceID:   pm.partitionMgr.Partition().NamespaceId(),
+		taskType:      pm.partitionMgr.Partition().TaskType(),
+		partitionType: pm.partitionMgr.Partition().Kind(),
+		versioned:     versioned,
+	}
+
+	e.gaugeMetricCounter.gaugeMetricCounterLock.Lock()
+	e.gaugeMetricCounter.loadedPhysicalTaskQueueCount[PhysicalTaskQueueParameters] += delta
+	loadedPhysicalTaskQueueCounter := e.gaugeMetricCounter.loadedPhysicalTaskQueueCount[PhysicalTaskQueueParameters]
+	e.gaugeMetricCounter.gaugeMetricCounterLock.Unlock()
+
+	pmImpl := pm.partitionMgr
+
+	e.metricsHandler.Gauge(metrics.LoadedPhysicalTaskQueueCounter.Name()).Record(
+		float64(loadedPhysicalTaskQueueCounter),
+		metrics.NamespaceTag(pmImpl.ns.Name().String()),
+		metrics.TaskTypeTag(PhysicalTaskQueueParameters.taskType.String()),
+		metrics.PartitionTypeTag(PhysicalTaskQueueParameters.partitionType.String()),
+	)
+}
+
+// Responsible for emitting and updating loaded_task_queue_family_count, loaded_task_queue_count and
+// loaded_task_queue_partition_count metrics
+func (e *matchingEngineImpl) updateTaskQueuePartitionGauge(pm taskQueuePartitionManager, delta int) {
+
+	// each metric shall be accessed based on the mentioned parameters
+	TaskQueueFamilyParameters := taskQueueCounterKey{
+		namespaceID: pm.Partition().NamespaceId(),
+	}
+
+	TaskQueueParameters := taskQueueCounterKey{
 		namespaceID: pm.Partition().NamespaceId(),
 		taskType:    pm.Partition().TaskType(),
-		kind:        pm.Partition().Kind(),
-		versioned:   versioned,
 	}
 
-	e.taskQueueCountLock.Lock()
-	e.taskQueueCount[countKey] += delta
-	newCount := e.taskQueueCount[countKey]
-	e.taskQueueCountLock.Unlock()
-
-	nsEntry, err := e.namespaceRegistry.GetNamespaceByID(countKey.namespaceID)
-	ns := namespace.Name("unknown")
-	if err == nil {
-		ns = nsEntry.Name()
+	TaskQueuePartitionParameters := taskQueueCounterKey{
+		namespaceID:   pm.Partition().NamespaceId(),
+		taskType:      pm.Partition().TaskType(),
+		partitionType: pm.Partition().Kind(),
 	}
 
-	e.metricsHandler.Gauge(metrics.LoadedTaskQueueGauge.Name()).Record(
-		float64(newCount),
-		metrics.NamespaceTag(ns.String()),
-		metrics.TaskTypeTag(countKey.taskType.String()),
-		metrics.QueueTypeTag(countKey.kind.String()),
-		metrics.VersionedTag(countKey.versioned),
+	rootPartition := pm.Partition().IsRoot()
+	e.gaugeMetricCounter.gaugeMetricCounterLock.Lock()
+
+	loadedTaskQueueFamilyCounter, loadedTaskQueueCounter, loadedTaskQueuePartitionCounter :=
+		e.gaugeMetricCounter.loadedTaskQueueFamilyCount[TaskQueueFamilyParameters], e.gaugeMetricCounter.loadedTaskQueueCount[TaskQueueParameters],
+		e.gaugeMetricCounter.loadedTaskQueuePartitionCount[TaskQueuePartitionParameters]
+
+	loadedTaskQueuePartitionCounter += delta
+	e.gaugeMetricCounter.loadedTaskQueuePartitionCount[TaskQueuePartitionParameters] = loadedTaskQueuePartitionCounter
+	if rootPartition {
+		loadedTaskQueueCounter += delta
+		e.gaugeMetricCounter.loadedTaskQueueCount[TaskQueueParameters] = loadedTaskQueueCounter
+		if pm.Partition().TaskType() == enumspb.TASK_QUEUE_TYPE_WORKFLOW {
+			loadedTaskQueueFamilyCounter += delta
+			e.gaugeMetricCounter.loadedTaskQueueFamilyCount[TaskQueueFamilyParameters] = loadedTaskQueueFamilyCounter
+		}
+	}
+	e.gaugeMetricCounter.gaugeMetricCounterLock.Unlock()
+
+	pmImpl := pm.(*taskQueuePartitionManagerImpl)
+
+	// emitting all the three metrics, for now.
+	e.metricsHandler.Gauge(metrics.LoadedTaskQueueFamilyCounter.Name()).Record(
+		float64(loadedTaskQueueFamilyCounter),
+		metrics.NamespaceTag(pmImpl.ns.Name().String()),
+	)
+
+	e.metricsHandler.Gauge(metrics.LoadedTaskQueueCounter.Name()).Record(
+		float64(loadedTaskQueueCounter),
+		metrics.NamespaceTag(pmImpl.ns.Name().String()),
+		metrics.TaskTypeTag(TaskQueueParameters.taskType.String()),
+	)
+
+	e.metricsHandler.Gauge(metrics.LoadedTaskQueuePartitionCounter.Name()).Record(
+		float64(loadedTaskQueuePartitionCounter),
+		metrics.NamespaceTag(pmImpl.ns.Name().String()),
+		metrics.TaskTypeTag(TaskQueueParameters.taskType.String()),
+		metrics.PartitionTypeTag(TaskQueuePartitionParameters.partitionType.String()),
 	)
 }
 

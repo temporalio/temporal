@@ -153,12 +153,12 @@ func newTaskQueuePartitionManager(
 	if err != nil {
 		return nil, err
 	}
-
 	pm.defaultQueue = defaultQ
 	return pm, nil
 }
 
 func (pm *taskQueuePartitionManagerImpl) Start() {
+	pm.engine.updateTaskQueuePartitionGauge(pm, 1)
 	pm.userDataManager.Start()
 	pm.defaultQueue.Start()
 }
@@ -173,6 +173,7 @@ func (pm *taskQueuePartitionManagerImpl) Stop() {
 	}
 	pm.defaultQueue.Stop()
 	pm.userDataManager.Stop()
+	pm.engine.updateTaskQueuePartitionGauge(pm, -1)
 }
 
 func (pm *taskQueuePartitionManagerImpl) MarkAlive() {
@@ -427,7 +428,7 @@ func (pm *taskQueuePartitionManagerImpl) unloadPhysicalQueue(unloadedDbq physica
 	delete(pm.versionedQueues, version)
 	pm.versionedQueuesLock.Unlock()
 	unloadedDbq.Stop()
-	pm.engine.updateTaskQueueGauge(pm, true, -1)
+
 }
 
 func (pm *taskQueuePartitionManagerImpl) unloadFromEngine() {
@@ -497,7 +498,6 @@ func (pm *taskQueuePartitionManagerImpl) getVersionedQueueNoWait(
 
 		if !ok {
 			vq.Start()
-			pm.engine.updateTaskQueueGauge(pm, true, 1)
 		}
 	}
 	return vq, nil
