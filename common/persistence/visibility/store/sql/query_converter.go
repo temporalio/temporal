@@ -569,6 +569,7 @@ func (c *QueryConverter) convertValueExpr(
 // Returns a string, an int64 or a float64 if there are no errors.
 // For datetime, converts to UTC.
 // For execution status, converts string to enum value.
+// For execution duration, converts to nanoseconds.
 func (c *QueryConverter) parseSQLVal(
 	expr *sqlparser.SQLVal,
 	saName string,
@@ -649,14 +650,12 @@ func (c *QueryConverter) parseSQLVal(
 				value = duration.Nanoseconds()
 			} else {
 				// To support "hh:mm:ss" durations.
-				durationNanos, err := timestamp.ParseHHMMSSDuration(durationStr)
-				var converterErr *query.ConverterError
-				if errors.As(err, &converterErr) {
-					return nil, converterErr
+				duration, err := timestamp.ParseHHMMSSDuration(durationStr)
+				if err != nil {
+					return nil, query.NewConverterError(
+						"invalid value for search attribute %s: %v (%v)", saName, value, err)
 				}
-				if err == nil {
-					value = durationNanos
-				}
+				value = duration.Nanoseconds()
 			}
 		}
 	}

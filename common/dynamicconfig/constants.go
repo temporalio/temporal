@@ -480,6 +480,9 @@ const (
 	// MatchingMembershipUnloadDelay is how long to wait to re-confirm loss of ownership before unloading a task queue.
 	// Set to zero to disable proactive unload.
 	MatchingMembershipUnloadDelay = "matching.membershipUnloadDelay"
+	// MatchingQueryWorkflowTaskTimeoutLogRate defines the sampling rate for logs when a query workflow task times out. Since
+	// these log lines can be noisy, we want to be able to turn on and sample selectively for each affected namespace.
+	MatchingQueryWorkflowTaskTimeoutLogRate = "matching.queryWorkflowTaskTimeoutLogRate"
 
 	// for matching testing only:
 
