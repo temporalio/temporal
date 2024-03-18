@@ -1626,5 +1626,6 @@ func (e *matchingEngineImpl) reviveBuildId(ns *namespace.Namespace, taskQueue st
 // We use a very short timeout for considering a sticky worker available, since tasks can also
 // be processed on the normal queue.
 func stickyWorkerAvailable(pm taskQueuePartitionManager) bool {
-	return pm != nil && pm.HasPollerAfter("", time.Now().Add(-stickyPollerUnavailableWindow))
+	// pm.HasPollerAfter("", time.Now().Add(-stickyPollerUnavailableWindow)) should work, but doesnt
+	return pm != nil && pm.HasAnyPollerAfter(time.Now().Add(-stickyPollerUnavailableWindow))
 }

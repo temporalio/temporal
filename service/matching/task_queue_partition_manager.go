@@ -325,17 +325,9 @@ func (pm *taskQueuePartitionManagerImpl) GetUserDataManager() userDataManager {
 // GetAllPollerInfo returns all pollers that polled from this taskqueue in last few minutes
 func (pm *taskQueuePartitionManagerImpl) GetAllPollerInfo() []*taskqueuepb.PollerInfo {
 	ret := pm.defaultQueue.GetAllPollerInfo()
-	bids := pm.getVersionedQueueBuildIdsNoWait()
-	for _, bid := range bids {
-		// todo carly: is it enough to check only cached physical queues here?
-		ptqm, err := pm.getVersionedQueueNoWait("", bid, false)
-		if err != nil {
-			// todo carly: log error?
-			continue
-		}
-		if ptqm == nil {
-			continue
-		}
+	pm.versionedQueuesLock.RLock()
+	defer pm.versionedQueuesLock.RUnlock()
+	for _, ptqm := range pm.versionedQueues {
 		info := ptqm.GetAllPollerInfo()
 		ret = append(ret, info...)
 	}
@@ -346,17 +338,9 @@ func (pm *taskQueuePartitionManagerImpl) HasAnyPollerAfter(accessTime time.Time)
 	if pm.defaultQueue.HasPollerAfter(accessTime) {
 		return true
 	}
-	bids := pm.getVersionedQueueBuildIdsNoWait()
-	for _, bid := range bids {
-		// todo carly: is it enough to check only cached physical queues here?
-		ptqm, err := pm.getVersionedQueueNoWait("", bid, false)
-		if err != nil {
-			// todo carly: log error?
-			return false
-		}
-		if ptqm == nil {
-			return false
-		}
+	pm.versionedQueuesLock.RLock()
+	defer pm.versionedQueuesLock.RUnlock()
+	for _, ptqm := range pm.versionedQueues {
 		if ptqm.HasPollerAfter(accessTime) {
 			return true
 		}
@@ -368,19 +352,39 @@ func (pm *taskQueuePartitionManagerImpl) HasPollerAfter(buildId string, accessTi
 	if buildId == "" {
 		pm.defaultQueue.HasPollerAfter(accessTime)
 	}
-	ptqm, err := pm.getVersionedQueueNoWait("", buildId, false)
-	if err != nil {
-		// todo carly: log error?
-	}
-	if ptqm == nil {
+	pm.versionedQueuesLock.RLock()
+	vq, ok := pm.versionedQueues[buildId]
+	pm.versionedQueuesLock.RUnlock()
+	if !ok {
 		return false
 	}
-	return ptqm.HasPollerAfter(accessTime)
+	return vq.HasPollerAfter(accessTime)
 }
 
 func (pm *taskQueuePartitionManagerImpl) DescribeTaskQueue(includeTaskQueueStatus bool) *matchingservice.DescribeTaskQueueResponse {
-	// todo carly: check all queues here
-	return pm.defaultQueue.DescribeTaskQueue(includeTaskQueueStatus)
+	pm.versionedQueuesLock.RLock()
+	defer pm.versionedQueuesLock.RUnlock()
+	responses := make([]*matchingservice.DescribeTaskQueueResponse, len(pm.versionedQueues)+1)
+	responses[0] = pm.defaultQueue.DescribeTaskQueue(includeTaskQueueStatus)
+	i := 1
+	for _, ptqm := range pm.versionedQueues {
+		responses[i] = ptqm.DescribeTaskQueue(includeTaskQueueStatus)
+		i++
+	}
+
+	mergeResponses := func(responses []*matchingservice.DescribeTaskQueueResponse) *matchingservice.DescribeTaskQueueResponse {
+		pollers := make([]*taskqueuepb.PollerInfo, 0)
+		for _, e := range responses {
+			pollers = append(pollers, e.GetPollers()...)
+		}
+		return &matchingservice.DescribeTaskQueueResponse{
+			Pollers: pollers,
+			// one TaskQueueStatus doesn't make sense for multiple queues, but this response will change with the new API, so leaving it for now
+			TaskQueueStatus: responses[0].GetTaskQueueStatus(),
+		}
+	}
+
+	return mergeResponses(responses)
 }
 
 func (pm *taskQueuePartitionManagerImpl) String() string {
@@ -497,19 +501,6 @@ func (pm *taskQueuePartitionManagerImpl) getVersionedQueueNoWait(
 		}
 	}
 	return vq, nil
-}
-
-// Returns list of buildIds that have loaded / cached physicalTaskQueueManager's at time of call.
-func (pm *taskQueuePartitionManagerImpl) getVersionedQueueBuildIdsNoWait() []string {
-	pm.versionedQueuesLock.RLock()
-	keys := make([]string, len(pm.versionedQueues))
-	i := 0
-	for k := range pm.versionedQueues {
-		keys[i] = k
-		i++
-	}
-	pm.versionedQueuesLock.RUnlock()
-	return keys
 }
 
 func (pm *taskQueuePartitionManagerImpl) getVersionSetForPoll(
