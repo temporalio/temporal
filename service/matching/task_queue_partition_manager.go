@@ -65,13 +65,14 @@ type (
 		// DispatchQueryTask will dispatch query to local or remote poller. If forwarded then result or error is returned,
 		// if dispatched to local poller then nil and nil is returned.
 		DispatchQueryTask(ctx context.Context, taskID string, request *matchingservice.QueryWorkflowRequest) (*matchingservice.QueryWorkflowResponse, error)
-		// GetVersionedPhysicalTaskQueueManager gets the physical task queue manager associated with the given buildID. Result may be nil with no error.
-		GetVersionedPhysicalTaskQueueManager(ctx context.Context, buildID string) (physicalTaskQueueManager, error)
 		GetUserDataManager() userDataManager
 		// MarkAlive updates the liveness timer to keep this partition manager alive.
 		MarkAlive()
 		GetAllPollerInfo() []*taskqueuepb.PollerInfo
-		HasPollerAfter(accessTime time.Time) bool
+		// HasPollerAfter checks pollers on the queue associated with the given buildId, or the unversioned queue if an empty string is given
+		HasPollerAfter(buildId string, accessTime time.Time) bool
+		// HasAnyPollerAfter checks pollers on all versioned and unversioned queues
+		HasAnyPollerAfter(accessTime time.Time) bool
 		// DescribeTaskQueue returns information about the target task queue
 		DescribeTaskQueue(includeTaskQueueStatus bool) *matchingservice.DescribeTaskQueueResponse
 		String() string
@@ -204,7 +205,7 @@ func (pm *taskQueuePartitionManagerImpl) AddTask(
 		pm.defaultQueue.MarkAlive()
 	}
 
-	if pm.partition.IsRoot() && !pm.HasPollerAfter(time.Now().Add(-noPollerThreshold)) {
+	if pm.partition.IsRoot() && !pm.HasAnyPollerAfter(time.Now().Add(-noPollerThreshold)) {
 		// Only checks recent pollers in the root partition
 		pm.taggedMetricsHandler.Counter(metrics.NoRecentPollerTasksPerTaskQueueCounter.Name()).Record(1)
 	}
@@ -321,19 +322,60 @@ func (pm *taskQueuePartitionManagerImpl) GetUserDataManager() userDataManager {
 	return pm.userDataManager
 }
 
-func (pm *taskQueuePartitionManagerImpl) GetVersionedPhysicalTaskQueueManager(ctx context.Context, buildID string) (physicalTaskQueueManager, error) {
-	return pm.getVersionedQueue(ctx, "", buildID, false)
-}
-
 // GetAllPollerInfo returns all pollers that polled from this taskqueue in last few minutes
 func (pm *taskQueuePartitionManagerImpl) GetAllPollerInfo() []*taskqueuepb.PollerInfo {
-	// todo carly: check all queues here
-	return pm.defaultQueue.GetAllPollerInfo()
+	ret := pm.defaultQueue.GetAllPollerInfo()
+	bids := pm.getVersionedQueueBuildIdsNoWait()
+	for _, bid := range bids {
+		// todo carly: is it enough to check only cached physical queues here?
+		ptqm, err := pm.getVersionedQueueNoWait("", bid, false)
+		if err != nil {
+			// todo carly: log error?
+			continue
+		}
+		if ptqm == nil {
+			continue
+		}
+		info := ptqm.GetAllPollerInfo()
+		ret = append(ret, info...)
+	}
+	return ret
 }
 
-func (pm *taskQueuePartitionManagerImpl) HasPollerAfter(accessTime time.Time) bool {
-	// todo carly: check all queues here
-	return pm.defaultQueue.HasPollerAfter(accessTime)
+func (pm *taskQueuePartitionManagerImpl) HasAnyPollerAfter(accessTime time.Time) bool {
+	if pm.defaultQueue.HasPollerAfter(accessTime) {
+		return true
+	}
+	bids := pm.getVersionedQueueBuildIdsNoWait()
+	for _, bid := range bids {
+		// todo carly: is it enough to check only cached physical queues here?
+		ptqm, err := pm.getVersionedQueueNoWait("", bid, false)
+		if err != nil {
+			// todo carly: log error?
+			return false
+		}
+		if ptqm == nil {
+			return false
+		}
+		if ptqm.HasPollerAfter(accessTime) {
+			return true
+		}
+	}
+	return false
+}
+
+func (pm *taskQueuePartitionManagerImpl) HasPollerAfter(buildId string, accessTime time.Time) bool {
+	if buildId == "" {
+		pm.defaultQueue.HasPollerAfter(accessTime)
+	}
+	ptqm, err := pm.getVersionedQueue(context.Background(), "", buildId, false)
+	if err != nil {
+		// todo carly: log error?
+	}
+	if ptqm == nil {
+		return false
+	}
+	return ptqm.HasPollerAfter(accessTime)
 }
 
 func (pm *taskQueuePartitionManagerImpl) DescribeTaskQueue(includeTaskQueueStatus bool) *matchingservice.DescribeTaskQueueResponse {
@@ -455,6 +497,19 @@ func (pm *taskQueuePartitionManagerImpl) getVersionedQueueNoWait(
 		}
 	}
 	return vq, nil
+}
+
+// Returns list of buildIds that have loaded / cached physicalTaskQueueManager's at time of call.
+func (pm *taskQueuePartitionManagerImpl) getVersionedQueueBuildIdsNoWait() []string {
+	pm.versionedQueuesLock.RLock()
+	keys := make([]string, len(pm.versionedQueues))
+	i := 0
+	for k := range pm.versionedQueues {
+		keys[i] = k
+		i++
+	}
+	pm.versionedQueuesLock.RUnlock()
+	return keys
 }
 
 func (pm *taskQueuePartitionManagerImpl) getVersionSetForPoll(
