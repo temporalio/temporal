@@ -4790,11 +4790,13 @@ func (ms *MutableStateImpl) prepareCloseTransaction(
 
 	ms.executionInfo.StateTransitionCount += 1
 
-	ms.executionInfo.TransitionHistory = UpdatedTransitionHistory(
-		ms.executionInfo.TransitionHistory,
-		ms.currentTransactionNamespaceFailoverVersion,
-		ms.executionInfo.StateTransitionCount,
-	)
+	if ms.config.EnableMutableStateTransitionHistory() {
+		ms.executionInfo.TransitionHistory = UpdatedTransitionHistory(
+			ms.executionInfo.TransitionHistory,
+			ms.currentTransactionNamespaceFailoverVersion,
+			ms.executionInfo.StateTransitionCount,
+		)
+	}
 
 	// TODO(bergundy): Collapse timer tasks.
 	if err := ms.taskGenerator.GenerateDirtySubStateMachineTasks(ms.shard.StateMachineRegistry()); err != nil {
