@@ -346,11 +346,11 @@ func TestNamespaceRateLimitInterceptorProvider(t *testing.T) {
 			expectRateLimit:                   false,
 		},
 		{
-			name:                              "namespace burst hit when burst ratio is 0.5",
+			name:                              "namespace burst ratio does not apply for values < 1",
 			maxNamespaceRPSPerInstance:        10,
 			maxNamespaceBurstRatioPerInstance: 0.5,
-			numRequests:                       6,
-			expectRateLimit:                   true,
+			numRequests:                       10,
+			expectRateLimit:                   false,
 		},
 		{
 			name:                              "namespace burst allow when burst ratio is 1 and global limit is set",
@@ -424,11 +424,11 @@ func TestNamespaceRateLimitInterceptorProvider(t *testing.T) {
 			expectRateLimit:                             false,
 		},
 		{
-			name:                                 "visibility burst hit when burst ratio is 0.5",
+			name:                                 "visibility burst ratio does not apply for values < 1",
 			maxNamespaceVisibilityRPSPerInstance: 10,
 			maxNamespaceVisibilityBurstRatioPerInstance: 0.5,
-			numVisibilityRequests:                       6,
-			expectRateLimit:                             true,
+			numVisibilityRequests:                       10,
+			expectRateLimit:                             false,
 		},
 		{
 			name:                                 "visibility burst allow when burst ratio is 1 and global limit is set",
@@ -502,11 +502,11 @@ func TestNamespaceRateLimitInterceptorProvider(t *testing.T) {
 			expectRateLimit:                                                   false,
 		},
 		{
-			name: "replication inducing op burst hit when burst ratio is 0.5",
+			name: "replication inducing op burst ratio does not apply for values < 1",
 			maxNamespaceNamespaceReplicationInducingAPIsRPSPerInstance:        10,
 			maxNamespaceNamespaceReplicationInducingAPIsBurstRatioPerInstance: 0.5,
-			numReplicationInducingRequests:                                    6,
-			expectRateLimit:                                                   true,
+			numReplicationInducingRequests:                                    10,
+			expectRateLimit:                                                   false,
 		},
 		{
 			name:                 "replication inducing op burst allow when burst ratio is 1 and global limit is set",

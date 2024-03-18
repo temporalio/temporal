@@ -25,6 +25,7 @@
 package configs
 
 import (
+	"math"
 	"time"
 
 	"go.temporal.io/server/common/dynamicconfig"
@@ -179,7 +180,7 @@ func NewNamespaceRateBurst(
 		namespaceName: namespaceName,
 		rateFn:        rateFn,
 		burstFn: func(namespace string) int {
-			return int(rateFn(namespace) * burstRatioFn(namespace))
+			return int(rateFn(namespace) * math.Max(1, burstRatioFn(namespace)))
 		},
 	}
 }
