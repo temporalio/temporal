@@ -367,34 +367,22 @@ func NamespaceRateLimitInterceptorProvider(
 		PerInstanceQuota: serviceConfig.MaxNamespaceRPSPerInstance,
 		GlobalQuota:      globalNamespaceRPS,
 	}.GetQuota
-	namespaceBurstFn := func(ns string) int {
-		return int(namespaceRateFn(ns) *
-			serviceConfig.MaxNamespaceBurstRatioPerInstance(ns))
-	}
 	visibilityRateFn := quotas.ClusterAwareNamespaceSpecificQuotaCalculator{
 		MemberCounter:    frontendServiceResolver,
 		PerInstanceQuota: serviceConfig.MaxNamespaceVisibilityRPSPerInstance,
 		GlobalQuota:      globalNamespaceVisibilityRPS,
 	}.GetQuota
-	visibilityBurstFn := func(ns string) int {
-		return int(visibilityRateFn(ns) *
-			serviceConfig.MaxNamespaceVisibilityBurstRatioPerInstance(ns))
-	}
 	namespaceReplicationInducingRateFn := quotas.ClusterAwareNamespaceSpecificQuotaCalculator{
 		MemberCounter:    frontendServiceResolver,
 		PerInstanceQuota: serviceConfig.MaxNamespaceNamespaceReplicationInducingAPIsRPSPerInstance,
 		GlobalQuota:      globalNamespaceNamespaceReplicationInducingAPIsRPS,
 	}.GetQuota
-	namespaceReplicationInducingBurstFn := func(ns string) int {
-		return int(namespaceReplicationInducingRateFn(ns) *
-			serviceConfig.MaxNamespaceNamespaceReplicationInducingAPIsBurstRatioPerInstance(ns))
-	}
 	namespaceRateLimiter := quotas.NewNamespaceRequestRateLimiter(
 		func(req quotas.Request) quotas.RequestRateLimiter {
 			return configs.NewRequestToRateLimiter(
-				configs.NewNamespaceRateBurst(req.Caller, namespaceRateFn, namespaceBurstFn),
-				configs.NewNamespaceRateBurst(req.Caller, visibilityRateFn, visibilityBurstFn),
-				configs.NewNamespaceRateBurst(req.Caller, namespaceReplicationInducingRateFn, namespaceReplicationInducingBurstFn),
+				configs.NewNamespaceRateBurst(req.Caller, namespaceRateFn, serviceConfig.MaxNamespaceBurstRatioPerInstance),
+				configs.NewNamespaceRateBurst(req.Caller, visibilityRateFn, serviceConfig.MaxNamespaceVisibilityBurstRatioPerInstance),
+				configs.NewNamespaceRateBurst(req.Caller, namespaceReplicationInducingRateFn, serviceConfig.MaxNamespaceNamespaceReplicationInducingAPIsBurstRatioPerInstance),
 				serviceConfig.OperatorRPSRatio,
 			)
 		},
