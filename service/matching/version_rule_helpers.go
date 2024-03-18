@@ -383,8 +383,7 @@ func isUnconditional(ar *taskqueue.BuildIdAssignmentRule) bool {
 	return ar.GetPercentageRamp() == nil
 }
 
-// containsUnconditional returns true if there exists an assignment rule with no filter expression,
-// no worker ratio ramp, and no ramp percentage, or a ramp percentage of 100
+// containsUnconditional returns true if there exists an assignment rule with a nil ramp percentage
 func containsUnconditional(rules []*persistencepb.AssignmentRule) bool {
 	found := false
 	for _, rule := range rules {
