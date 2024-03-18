@@ -39,7 +39,7 @@ The following are some fundamental premises:
 These premises have led to a system architecture which is divided into user-hosted processes, versus the Temporal cluster processes (which may be hosted outside the user's systems):
 
 <!-- https://lucid.app/lucidchart/0202e4b8-5258-4cd6-a6a0-67159300532b/edit -->
-<img src="assets/temporal-high-level.svg">
+<img src="_assets/temporal-high-level.svg">
 
 ### User-hosted processes
 

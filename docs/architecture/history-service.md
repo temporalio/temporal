@@ -4,7 +4,7 @@ This page is an introduction to the History Service architecture and internal im
 See [Temporal overview](./README.md) for a system architecture overview placing this in context.
 
 <!-- https://lucid.app/lucidchart/0202e4b8-5258-4cd6-a6a0-67159300532b/edit -->
-<img src="../.assets/temporal-high-level.svg">
+<img src="../_assets/temporal-high-level.svg">
 
 The History Service handles two main types of request (gRPC) relating to an individual Workflow Execution:
 
