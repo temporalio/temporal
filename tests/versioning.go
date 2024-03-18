@@ -764,7 +764,7 @@ func (s *VersioningIntegSuite) firstWorkflowTaskAssignmentSpooled() {
 	defer w2.Stop()
 
 	s.waitForChan(ctx, timedoutTask)
-	time.Sleep(100 * time.Millisecond)
+	time.Sleep(1100 * time.Millisecond)
 
 	// After scheduling the third time, now MS should be assigned to v3
 	dw, err = s.sdkClient.DescribeWorkflowExecution(ctx, run.GetID(), run.GetRunID())
@@ -880,7 +880,6 @@ func (s *VersioningIntegSuite) firstWorkflowTaskAssignmentSyncMatch() {
 	s.Nil(dw.GetWorkflowExecutionInfo().GetMostRecentWorkerVersionStamp())
 
 	s.waitForChan(ctx, timedoutTask)
-	//time.Sleep(100 * time.Millisecond)
 
 	// v3 can process the task
 	wf3 := func(ctx workflow.Context) (string, error) {
