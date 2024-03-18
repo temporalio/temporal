@@ -1,8 +1,6 @@
 // The MIT License
 //
-// Copyright (c) 2020 Temporal Technologies Inc.  All rights reserved.
-//
-// Copyright (c) 2020 Uber Technologies, Inc.
+// Copyright (c) 2024 Temporal Technologies Inc.  All rights reserved.
 //
 // Permission is hereby granted, free of charge, to any person obtaining a copy
 // of this software and associated documentation files (the "Software"), to deal
@@ -67,8 +65,8 @@ type RouteBuilder[T any] struct {
 	components []Component[T]
 }
 
-// NewRouteBuilder creates a new [RouteBuilder] instance, which can be used to define a new [Route] via a fluent API.
-func NewRouteBuilder[T any]() *RouteBuilder[T] {
+// NewBuilder creates a new [RouteBuilder] instance, which can be used to define a new [Route] via a fluent API.
+func NewBuilder[T any]() *RouteBuilder[T] {
 	return &RouteBuilder[T]{}
 }
 
@@ -78,14 +76,14 @@ func (r *RouteBuilder[T]) With(c ...Component[T]) *RouteBuilder[T] {
 	return r
 }
 
-// Slugs adds a [Slugs] component to the [Route].
-func (r *RouteBuilder[T]) Slugs(slugs ...string) *RouteBuilder[T] {
-	return r.With(Slugs[T](slugs...))
+// Constant adds a [Constant] component to the [Route].
+func (r *RouteBuilder[T]) Constant(values ...string) *RouteBuilder[T] {
+	return r.With(Constant[T](values...))
 }
 
-// StringParam adds a [StringParam] component to the [Route].
-func (r *RouteBuilder[T]) StringParam(name string, getter func(*T) *string) *RouteBuilder[T] {
-	return r.With(StringParam[T](name, getter))
+// Variable adds a [Variable] component to the [Route].
+func (r *RouteBuilder[T]) Variable(name string, getter func(*T) *string) *RouteBuilder[T] {
+	return r.With(Variable[T](name, getter))
 }
 
 // Build returns a read-only [Route].
@@ -131,41 +129,42 @@ func (r Route[T]) Deserialize(vars map[string]string) *T {
 	return &t
 }
 
-// Slugs returns a [Component] that represents a series of HTTP path slugs in a Route. Don't use slashes in the slugs.
-func Slugs[T any](value ...string) slugs[T] {
-	return value
+// Constant returns a [Component] that represents a series of constant HTTP path components in a Route.
+// They will be joined via strings when used to construct a path or path representation.
+func Constant[T any](values ...string) constants[T] {
+	return values
 }
 
-type slugs[T any] []string
+type constants[T any] []string
 
-func (s slugs[T]) Representation() string {
+func (s constants[T]) Representation() string {
 	return strings.Join(s, "/")
 }
 
-func (s slugs[T]) Serialize(T) string {
-	return s.Representation()
+func (s constants[T]) Serialize(T) string {
+	return strings.Join(s, "/")
 }
 
-func (s slugs[T]) Deserialize(map[string]string, *T) {}
+func (s constants[T]) Deserialize(map[string]string, *T) {}
 
-// StringParam returns a [Component] that represents a string variable in a Route.
-func StringParam[T any](name string, getter func(*T) *string) stringParam[T] {
-	return stringParam[T]{name, getter}
+// Variable returns a [Component] that represents a string variable in a Route.
+func Variable[T any](name string, getter func(*T) *string) stringVariable[T] {
+	return stringVariable[T]{name, getter}
 }
 
-type stringParam[T any] struct {
+type stringVariable[T any] struct {
 	name   string
 	getter func(*T) *string
 }
 
-func (s stringParam[T]) Representation() string {
+func (s stringVariable[T]) Representation() string {
 	return "{" + s.name + "}"
 }
 
-func (s stringParam[T]) Serialize(t T) string {
+func (s stringVariable[T]) Serialize(t T) string {
 	return *s.getter(&t)
 }
 
-func (s stringParam[T]) Deserialize(vars map[string]string, t *T) {
+func (s stringVariable[T]) Deserialize(vars map[string]string, t *T) {
 	*s.getter(t) = vars[s.name]
 }

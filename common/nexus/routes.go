@@ -1,8 +1,6 @@
 // The MIT License
 //
-// Copyright (c) 2020 Temporal Technologies Inc.  All rights reserved.
-//
-// Copyright (c) 2020 Uber Technologies, Inc.
+// Copyright (c) 2024 Temporal Technologies Inc.  All rights reserved.
 //
 // Permission is hereby granted, free of charge, to any person obtaining a copy
 // of this software and associated documentation files (the "Software"), to deal
@@ -44,15 +42,15 @@ type NamespaceAndTaskQueue struct {
 }
 
 var routes = RouteSet{
-	DispatchNexusTaskByNamespaceAndTaskQueue: routing.NewRouteBuilder[NamespaceAndTaskQueue]().
-		Slugs("api", "v1", "namespaces").
-		StringParam("namespace", func(params *NamespaceAndTaskQueue) *string { return &params.Namespace }).
-		Slugs("task-queues").
-		StringParam("task_queue", func(params *NamespaceAndTaskQueue) *string { return &params.TaskQueue }).
-		Slugs("dispatch-nexus-task").
+	DispatchNexusTaskByNamespaceAndTaskQueue: routing.NewBuilder[NamespaceAndTaskQueue]().
+		Constant("api", "v1", "namespaces").
+		Variable("namespace", func(params *NamespaceAndTaskQueue) *string { return &params.Namespace }).
+		Constant("task-queues").
+		Variable("task_queue", func(params *NamespaceAndTaskQueue) *string { return &params.TaskQueue }).
+		Constant("dispatch-nexus-task").
 		Build(),
-	DispatchNexusTaskByService: routing.NewRouteBuilder[string]().
-		Slugs("api", "v1", "services").
-		StringParam("service", func(service *string) *string { return service }).
+	DispatchNexusTaskByService: routing.NewBuilder[string]().
+		Constant("api", "v1", "services").
+		Variable("service", func(service *string) *string { return service }).
 		Build(),
 }

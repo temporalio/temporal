@@ -1,8 +1,6 @@
 // The MIT License
 //
-// Copyright (c) 2020 Temporal Technologies Inc.  All rights reserved.
-//
-// Copyright (c) 2020 Uber Technologies, Inc.
+// Copyright (c) 2024 Temporal Technologies Inc.  All rights reserved.
 //
 // Permission is hereby granted, free of charge, to any person obtaining a copy
 // of this software and associated documentation files (the "Software"), to deal
@@ -41,20 +39,20 @@ type QualifiedWorkflow struct {
 }
 
 func newWorkflowRoute() routing.Route[QualifiedWorkflow] {
-	return routing.NewRouteBuilder[QualifiedWorkflow]().
-		Slugs("api", "v1", "namespaces").
-		StringParam("namespace", func(params *QualifiedWorkflow) *string { return &params.Namespace }).
-		Slugs("workflows").
-		StringParam("workflowID", func(params *QualifiedWorkflow) *string { return &params.WorkflowID }).
+	return routing.NewBuilder[QualifiedWorkflow]().
+		Constant("api", "v1", "namespaces").
+		Variable("namespace", func(params *QualifiedWorkflow) *string { return &params.Namespace }).
+		Constant("workflows").
+		Variable("workflowID", func(params *QualifiedWorkflow) *string { return &params.WorkflowID }).
 		Build()
 }
 
 func ExampleRoute() {
-	route := routing.NewRouteBuilder[QualifiedWorkflow]().
-		Slugs("api", "v1", "namespaces").
-		StringParam("namespace", func(params *QualifiedWorkflow) *string { return &params.Namespace }).
-		Slugs("workflows").
-		StringParam("workflowID", func(params *QualifiedWorkflow) *string { return &params.WorkflowID }).
+	route := routing.NewBuilder[QualifiedWorkflow]().
+		Constant("api", "v1", "namespaces").
+		Variable("namespace", func(params *QualifiedWorkflow) *string { return &params.Namespace }).
+		Constant("workflows").
+		Variable("workflowID", func(params *QualifiedWorkflow) *string { return &params.WorkflowID }).
 		Build()
 	router := mux.NewRouter()
 	router.HandleFunc("/"+route.Representation(), func(w http.ResponseWriter, r *http.Request) {
@@ -102,13 +100,13 @@ func ExampleRoute_Deserialize() {
 	// TEST-WORKFLOW-ID
 }
 
-func ExampleSlugs() {
-	fmt.Println(routing.Slugs[QualifiedWorkflow]("api", "v1", "namespaces").Representation())
+func ExampleConstant() {
+	fmt.Println(routing.Constant[QualifiedWorkflow]("api", "v1", "namespaces").Representation())
 	// Output: api/v1/namespaces
 }
 
-func ExampleStringParam() {
-	fmt.Println(routing.StringParam("namespace", func(params *QualifiedWorkflow) *string { return &params.Namespace }).Representation())
+func ExampleVariable() {
+	fmt.Println(routing.Variable("namespace", func(params *QualifiedWorkflow) *string { return &params.Namespace }).Representation())
 	// Output: {namespace}
 }
 
@@ -121,12 +119,12 @@ func TestNewRoute(t *testing.T) {
 		assert.Equal(t, "api/v1/namespaces/{namespace}/workflows/{workflowID}", route.Representation())
 	})
 
-	t.Run("Serialize", func(t *testing.T) {
+	t.Run("Get", func(t *testing.T) {
 		params := QualifiedWorkflow{Namespace: "TEST-NAMESPACE", WorkflowID: "TEST-WORKFLOW-ID"}
 		assert.Equal(t, "api/v1/namespaces/TEST-NAMESPACE/workflows/TEST-WORKFLOW-ID", route.Path(params))
 	})
 
-	t.Run("Deserialize", func(t *testing.T) {
+	t.Run("Set", func(t *testing.T) {
 		params := route.Deserialize(map[string]string{
 			"namespace":  "TEST-NAMESPACE",
 			"workflowID": "TEST-WORKFLOW-ID",
