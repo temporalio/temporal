@@ -34,29 +34,25 @@ func Routes() RouteSet {
 }
 
 type RouteSet struct {
-	DispatchNexusTaskByNamespaceAndTaskQueue routing.Route[DispatchNexusTaskByNamespaceAndTaskQueueParams]
-	DispatchNexusTaskByService               routing.Route[DispatchNexusTaskByServiceParams]
+	DispatchNexusTaskByNamespaceAndTaskQueue routing.Route[NamespaceAndTaskQueue]
+	DispatchNexusTaskByService               routing.Route[string]
 }
 
-type DispatchNexusTaskByNamespaceAndTaskQueueParams struct {
+type NamespaceAndTaskQueue struct {
 	Namespace string
 	TaskQueue string
 }
 
-type DispatchNexusTaskByServiceParams struct {
-	Service string
-}
-
 var routes = RouteSet{
-	DispatchNexusTaskByNamespaceAndTaskQueue: routing.NewRoute[DispatchNexusTaskByNamespaceAndTaskQueueParams](
-		routing.Slugs[DispatchNexusTaskByNamespaceAndTaskQueueParams]("api", "v1", "namespaces"),
-		routing.StringParam("namespace", func(params *DispatchNexusTaskByNamespaceAndTaskQueueParams) *string { return &params.Namespace }),
-		routing.Slugs[DispatchNexusTaskByNamespaceAndTaskQueueParams]("task-queues"),
-		routing.StringParam("task_queue", func(params *DispatchNexusTaskByNamespaceAndTaskQueueParams) *string { return &params.TaskQueue }),
-		routing.Slugs[DispatchNexusTaskByNamespaceAndTaskQueueParams]("dispatch-nexus-task"),
-	),
-	DispatchNexusTaskByService: routing.NewRoute[DispatchNexusTaskByServiceParams](
-		routing.Slugs[DispatchNexusTaskByServiceParams]("api", "v1", "services"),
-		routing.StringParam("service", func(params *DispatchNexusTaskByServiceParams) *string { return &params.Service }),
-	),
+	DispatchNexusTaskByNamespaceAndTaskQueue: routing.NewRouteBuilder[NamespaceAndTaskQueue]().
+		Slugs("api", "v1", "namespaces").
+		StringParam("namespace", func(params *NamespaceAndTaskQueue) *string { return &params.Namespace }).
+		Slugs("task-queues").
+		StringParam("task_queue", func(params *NamespaceAndTaskQueue) *string { return &params.TaskQueue }).
+		Slugs("dispatch-nexus-task").
+		Build(),
+	DispatchNexusTaskByService: routing.NewRouteBuilder[string]().
+		Slugs("api", "v1", "services").
+		StringParam("service", func(service *string) *string { return service }).
+		Build(),
 }

@@ -32,7 +32,7 @@ import (
 
 func ExampleRouteSet_DispatchNexusTaskByNamespaceAndTaskQueue() {
 	path := nexus.Routes().DispatchNexusTaskByNamespaceAndTaskQueue.
-		Path(&nexus.DispatchNexusTaskByNamespaceAndTaskQueueParams{
+		Path(nexus.NamespaceAndTaskQueue{
 			Namespace: "TEST-NAMESPACE",
 			TaskQueue: "TEST-TASK-QUEUE",
 		})
@@ -42,9 +42,7 @@ func ExampleRouteSet_DispatchNexusTaskByNamespaceAndTaskQueue() {
 
 func ExampleRouteSet_DispatchNexusTaskByService() {
 	path := nexus.Routes().DispatchNexusTaskByService.
-		Path(&nexus.DispatchNexusTaskByServiceParams{
-			Service: "TEST-SERVICE",
-		})
+		Path("TEST-SERVICE")
 	fmt.Println(path)
 	// Output: api/v1/services/TEST-SERVICE
 }

@@ -640,7 +640,7 @@ func getDispatchURL(address string, namespace string, taskQueue string) string {
 		"http://%s/%s",
 		address,
 		cnexus.Routes().DispatchNexusTaskByNamespaceAndTaskQueue.
-			Path(&cnexus.DispatchNexusTaskByNamespaceAndTaskQueueParams{
+			Path(&cnexus.NamespaceAndTaskQueue{
 				Namespace: url.PathEscape(namespace),
 				TaskQueue: taskQueue,
 			}),

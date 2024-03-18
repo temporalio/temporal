@@ -35,29 +35,34 @@ import (
 	"go.temporal.io/server/common/routing"
 )
 
-type MyRouteParams struct {
+type QualifiedWorkflow struct {
 	Namespace  string
 	WorkflowID string
 }
 
-func newWorkflowRoute() routing.Route[MyRouteParams] {
-	return routing.NewRoute[MyRouteParams](
-		routing.Slugs[MyRouteParams]("api", "v1", "namespaces"),
-		routing.StringParam("namespace", func(params *MyRouteParams) *string { return &params.Namespace }),
-		routing.Slugs[MyRouteParams]("workflows"),
-		routing.StringParam("workflowID", func(params *MyRouteParams) *string { return &params.WorkflowID }),
-	)
+func newWorkflowRoute() routing.Route[QualifiedWorkflow] {
+	return routing.NewRouteBuilder[QualifiedWorkflow]().
+		Slugs("api", "v1", "namespaces").
+		StringParam("namespace", func(params *QualifiedWorkflow) *string { return &params.Namespace }).
+		Slugs("workflows").
+		StringParam("workflowID", func(params *QualifiedWorkflow) *string { return &params.WorkflowID }).
+		Build()
 }
 
 func ExampleRoute() {
-	route := newWorkflowRoute()
+	route := routing.NewRouteBuilder[QualifiedWorkflow]().
+		Slugs("api", "v1", "namespaces").
+		StringParam("namespace", func(params *QualifiedWorkflow) *string { return &params.Namespace }).
+		Slugs("workflows").
+		StringParam("workflowID", func(params *QualifiedWorkflow) *string { return &params.WorkflowID }).
+		Build()
 	router := mux.NewRouter()
 	router.HandleFunc("/"+route.Representation(), func(w http.ResponseWriter, r *http.Request) {
 		params := route.Deserialize(mux.Vars(r))
 		_, _ = fmt.Fprintf(w, "Namespace: %s, WorkflowID: %s\n", params.Namespace, params.WorkflowID)
 	})
 	recorder := httptest.NewRecorder()
-	u := "http://localhost/" + route.Path(&MyRouteParams{
+	u := "http://localhost/" + route.Path(QualifiedWorkflow{
 		Namespace:  "TEST-NAMESPACE",
 		WorkflowID: "TEST-WORKFLOW-ID",
 	})
@@ -77,8 +82,8 @@ func ExampleRoute_Representation() {
 
 func ExampleRoute_Path() {
 	route := newWorkflowRoute()
-	params := MyRouteParams{Namespace: "TEST-NAMESPACE", WorkflowID: "TEST-WORKFLOW-ID"}
-	fmt.Println(route.Path(&params))
+	params := QualifiedWorkflow{Namespace: "TEST-NAMESPACE", WorkflowID: "TEST-WORKFLOW-ID"}
+	fmt.Println(route.Path(params))
 	// Output: api/v1/namespaces/TEST-NAMESPACE/workflows/TEST-WORKFLOW-ID
 }
 
@@ -98,12 +103,12 @@ func ExampleRoute_Deserialize() {
 }
 
 func ExampleSlugs() {
-	fmt.Println(routing.Slugs[MyRouteParams]("api", "v1", "namespaces").Representation())
+	fmt.Println(routing.Slugs[QualifiedWorkflow]("api", "v1", "namespaces").Representation())
 	// Output: api/v1/namespaces
 }
 
 func ExampleStringParam() {
-	fmt.Println(routing.StringParam("namespace", func(params *MyRouteParams) *string { return &params.Namespace }).Representation())
+	fmt.Println(routing.StringParam("namespace", func(params *QualifiedWorkflow) *string { return &params.Namespace }).Representation())
 	// Output: {namespace}
 }
 
@@ -117,8 +122,8 @@ func TestNewRoute(t *testing.T) {
 	})
 
 	t.Run("Serialize", func(t *testing.T) {
-		params := MyRouteParams{Namespace: "TEST-NAMESPACE", WorkflowID: "TEST-WORKFLOW-ID"}
-		assert.Equal(t, "api/v1/namespaces/TEST-NAMESPACE/workflows/TEST-WORKFLOW-ID", route.Path(&params))
+		params := QualifiedWorkflow{Namespace: "TEST-NAMESPACE", WorkflowID: "TEST-WORKFLOW-ID"}
+		assert.Equal(t, "api/v1/namespaces/TEST-NAMESPACE/workflows/TEST-WORKFLOW-ID", route.Path(params))
 	})
 
 	t.Run("Deserialize", func(t *testing.T) {
@@ -126,6 +131,6 @@ func TestNewRoute(t *testing.T) {
 			"namespace":  "TEST-NAMESPACE",
 			"workflowID": "TEST-WORKFLOW-ID",
 		})
-		assert.Equal(t, &MyRouteParams{Namespace: "TEST-NAMESPACE", WorkflowID: "TEST-WORKFLOW-ID"}, params)
+		assert.Equal(t, &QualifiedWorkflow{Namespace: "TEST-NAMESPACE", WorkflowID: "TEST-WORKFLOW-ID"}, params)
 	})
 }

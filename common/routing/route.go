@@ -50,16 +50,47 @@ type Component[T any] interface {
 	Representation() string
 	// Serialize returns the actual value of the slug when used in an HTTP path, e.g. "v1" for a constant slug or
 	// "test-namespace" for a variable.
-	Serialize(params *T) string
+	Serialize(params T) string
 	// Deserialize mutates the given params object with the value of the component when parsing an HTTP path, e.g.
 	// setting the value of a variable to "test-namespace". If the component is a constant slug, this method should
 	// be a no-op.
 	Deserialize(vars map[string]string, t *T)
 }
 
-// NewRoute creates a new Route with the given options.
+// NewRoute returns a new [Route] instance with the given components.
 func NewRoute[T any](components ...Component[T]) Route[T] {
-	return Route[T]{components}
+	return Route[T]{components: components}
+}
+
+// RouteBuilder is a builder for the [Route] interface.
+type RouteBuilder[T any] struct {
+	components []Component[T]
+}
+
+// NewRouteBuilder creates a new [RouteBuilder] instance, which can be used to define a new [Route] via a fluent API.
+func NewRouteBuilder[T any]() *RouteBuilder[T] {
+	return &RouteBuilder[T]{}
+}
+
+// With adds a series of [Component] instances to the [Route].
+func (r *RouteBuilder[T]) With(c ...Component[T]) *RouteBuilder[T] {
+	r.components = append(r.components, c...)
+	return r
+}
+
+// Slugs adds a [Slugs] component to the [Route].
+func (r *RouteBuilder[T]) Slugs(slugs ...string) *RouteBuilder[T] {
+	return r.With(Slugs[T](slugs...))
+}
+
+// StringParam adds a [StringParam] component to the [Route].
+func (r *RouteBuilder[T]) StringParam(name string, getter func(*T) *string) *RouteBuilder[T] {
+	return r.With(StringParam[T](name, getter))
+}
+
+// Build returns a read-only [Route].
+func (r *RouteBuilder[T]) Build() Route[T] {
+	return NewRoute[T](r.components...)
 }
 
 // Representation returns the [github.com/gorilla/mux] compatible string representation of the route for usage in a
@@ -74,7 +105,7 @@ func (r Route[T]) Representation() string {
 
 // Path returns the serialized path of the route with the given params. There will be no leading or trailing slashes,
 // similar to the behavior of the [Route.Representation] method.
-func (r Route[T]) Path(t *T) string {
+func (r Route[T]) Path(t T) string {
 	return r.serialize(func(c Component[T]) string {
 		return c.Serialize(t)
 	})
@@ -111,7 +142,7 @@ func (s slugs[T]) Representation() string {
 	return strings.Join(s, "/")
 }
 
-func (s slugs[T]) Serialize(*T) string {
+func (s slugs[T]) Serialize(T) string {
 	return s.Representation()
 }
 
@@ -131,8 +162,8 @@ func (s stringParam[T]) Representation() string {
 	return "{" + s.name + "}"
 }
 
-func (s stringParam[T]) Serialize(t *T) string {
-	return *s.getter(t)
+func (s stringParam[T]) Serialize(t T) string {
+	return *s.getter(&t)
 }
 
 func (s stringParam[T]) Deserialize(vars map[string]string, t *T) {
