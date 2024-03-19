@@ -44,13 +44,13 @@ type NamespaceAndTaskQueue struct {
 var routes = RouteSet{
 	DispatchNexusTaskByNamespaceAndTaskQueue: routing.NewBuilder[NamespaceAndTaskQueue]().
 		Constant("api", "v1", "namespaces").
-		Variable("namespace", func(params *NamespaceAndTaskQueue) *string { return &params.Namespace }).
+		StringVariable("namespace", func(params *NamespaceAndTaskQueue) *string { return &params.Namespace }).
 		Constant("task-queues").
-		Variable("task_queue", func(params *NamespaceAndTaskQueue) *string { return &params.TaskQueue }).
+		StringVariable("task_queue", func(params *NamespaceAndTaskQueue) *string { return &params.TaskQueue }).
 		Constant("dispatch-nexus-task").
 		Build(),
 	DispatchNexusTaskByService: routing.NewBuilder[string]().
 		Constant("api", "v1", "services").
-		Variable("service", func(service *string) *string { return service }).
+		StringVariable("service", func(service *string) *string { return service }).
 		Build(),
 }
