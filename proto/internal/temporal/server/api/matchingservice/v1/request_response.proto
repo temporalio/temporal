@@ -235,17 +235,17 @@ message UpdateWorkerBuildIdCompatibilityRequest {
 
 message UpdateWorkerBuildIdCompatibilityResponse {}
 
-message ListWorkerVersioningRulesRequest {
+message GetWorkerVersioningRulesRequest {
     string namespace_id = 1;
     string task_queue = 2;
 
     oneof command {
-        temporal.api.workflowservice.v1.ListWorkerVersioningRulesRequest request = 3;
+        temporal.api.workflowservice.v1.GetWorkerVersioningRulesRequest request = 3;
     }
 }
 
-message ListWorkerVersioningRulesResponse {
-    temporal.api.workflowservice.v1.ListWorkerVersioningRulesResponse response = 1;
+message GetWorkerVersioningRulesResponse {
+    temporal.api.workflowservice.v1.GetWorkerVersioningRulesResponse response = 1;
 }
 
 // (-- api-linter: core::0134::request-mask-required=disabled

@@ -100,8 +100,8 @@ service MatchingService {
 
     // Fetches the Build ID assignment and redirect rules for a Task Queue
     // (-- api-linter: core::0127::resource-name-extraction=disabled
-    //     aip.dev/not-precedent: ListWorkerVersioningRulesRequest RPC doesn't follow Google API format. --)
-    rpc ListWorkerVersioningRules (ListWorkerVersioningRulesRequest) returns (ListWorkerVersioningRulesResponse) {
+    //     aip.dev/not-precedent: GetWorkerVersioningRulesRequest RPC doesn't follow Google API format. --)
+    rpc GetWorkerVersioningRules (GetWorkerVersioningRulesRequest) returns (GetWorkerVersioningRulesResponse) {
         option (google.api.http) = {
             get: "/api/v1/namespaces/{namespace}/task-queues/{task_queue}/worker-versioning-rules"
         };
