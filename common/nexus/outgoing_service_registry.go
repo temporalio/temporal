@@ -26,9 +26,10 @@ package nexus
 
 import (
 	"context"
-	"fmt"
+	"encoding/json"
 	"net/url"
 	"regexp"
+	"strings"
 
 	"go.temporal.io/api/nexus/v1"
 	"go.temporal.io/api/operatorservice/v1"
@@ -36,6 +37,7 @@ import (
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/persistence"
+	"go.temporal.io/server/common/slicex"
 	"golang.org/x/exp/slices"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
@@ -79,10 +81,10 @@ type OutgoingServiceRegistryConfig struct {
 
 func NewOutgoingServiceRegistryConfig(dc *dynamicconfig.Collection) *OutgoingServiceRegistryConfig {
 	return &OutgoingServiceRegistryConfig{
-		MaxURLLength:    dc.GetIntProperty(dynamicconfig.OutgoingServiceURLMaxLength, 1000),
-		NameMaxLength:   dc.GetIntProperty(dynamicconfig.OutgoingServiceNameMaxLength, 200),
-		DefaultPageSize: dc.GetIntProperty(dynamicconfig.OutgoingServiceListDefaultPageSize, 100),
-		MaxPageSize:     dc.GetIntProperty(dynamicconfig.OutgoingServiceListMaxPageSize, 1000),
+		MaxURLLength:    dc.GetIntProperty(dynamicconfig.NexusOutgoingServiceURLMaxLength, 1000),
+		NameMaxLength:   dc.GetIntProperty(dynamicconfig.NexusOutgoingServiceNameMaxLength, 200),
+		DefaultPageSize: dc.GetIntProperty(dynamicconfig.NexusOutgoingServiceListDefaultPageSize, 100),
+		MaxPageSize:     dc.GetIntProperty(dynamicconfig.NexusOutgoingServiceListMaxPageSize, 1000),
 	}
 }
 
@@ -230,11 +232,21 @@ func (h *OutgoingServiceRegistry) Delete(
 	return &operatorservice.DeleteNexusOutgoingServiceResponse{}, nil
 }
 
+func findIndexOfNextService(services []*persistencespb.NexusOutgoingService, lastServiceName string) int {
+	i := slicex.LowerBoundFunc(services, lastServiceName, func(svc *persistencespb.NexusOutgoingService, name string) int {
+		return strings.Compare(svc.Name, name)
+	})
+	if i < len(services) && services[i].Name == lastServiceName {
+		i++
+	}
+	return i
+}
+
 func (h *OutgoingServiceRegistry) List(
 	ctx context.Context,
 	req *operatorservice.ListNexusOutgoingServicesRequest,
 ) (*operatorservice.ListNexusOutgoingServicesResponse, error) {
-	startIndex, pageSize, err := h.parseListRequest(req)
+	lastServiceName, pageSize, err := h.parseListRequest(req)
 	if err != nil {
 		return nil, err
 	}
@@ -244,23 +256,23 @@ func (h *OutgoingServiceRegistry) List(
 	if err != nil {
 		return nil, err
 	}
-	numReturnedServices := min(pageSize, len(response.Namespace.OutgoingServices)-startIndex)
-	if numReturnedServices <= 0 {
+	startIndex := findIndexOfNextService(response.Namespace.OutgoingServices, lastServiceName)
+	size := min(pageSize, len(response.Namespace.OutgoingServices)-startIndex)
+	if size <= 0 {
 		return &operatorservice.ListNexusOutgoingServicesResponse{}, nil
 	}
-	services := make([]*nexus.OutgoingService, 0, numReturnedServices)
-	for i := startIndex; i < startIndex+numReturnedServices; i++ {
-		index := startIndex + i
-		service := response.Namespace.OutgoingServices[index]
-		services = append(services, &nexus.OutgoingService{
+	services := make([]*nexus.OutgoingService, size)
+	for i := 0; i < size; i++ {
+		service := response.Namespace.OutgoingServices[startIndex+i]
+		services[i] = &nexus.OutgoingService{
 			Name:    service.Name,
 			Version: service.Version,
 			Spec:    common.CloneProto(service.Spec),
-		})
+		}
 	}
 	var nextPageToken []byte
 	if startIndex+pageSize < len(response.Namespace.OutgoingServices) {
-		token := outgoingServicesPageToken{Index: startIndex + pageSize}
+		token := outgoingServicesPageToken{LastServiceName: services[len(services)-1].Name}
 		nextPageToken = token.Serialize()
 	}
 	return &operatorservice.ListNexusOutgoingServicesResponse{
@@ -270,16 +282,16 @@ func (h *OutgoingServiceRegistry) List(
 }
 
 type outgoingServicesPageToken struct {
-	Index int
+	LastServiceName string `json:"lastServiceName"`
 }
 
 func (token *outgoingServicesPageToken) Serialize() []byte {
-	return []byte(fmt.Sprintf("v1/%d", token.Index))
+	b, _ := json.Marshal(token)
+	return b
 }
 
 func (token *outgoingServicesPageToken) Deserialize(b []byte) error {
-	_, err := fmt.Sscanf(string(b), "v1/%d", &token.Index)
-	return err
+	return json.Unmarshal(b, token)
 }
 
 func validateCommonRequestParams(req any) error {
@@ -323,20 +335,20 @@ func (h *OutgoingServiceRegistry) addService(req UpsertRequest, version int64, n
 
 func (h *OutgoingServiceRegistry) parseListRequest(
 	req *operatorservice.ListNexusOutgoingServicesRequest,
-) (startIndex int, pageSize int, err error) {
+) (lastServiceName string, pageSize int, err error) {
 	if err := validateCommonRequestParams(req); err != nil {
-		return 0, 0, err
+		return "", 0, err
 	}
 	pageSize = int(req.PageSize)
 	if pageSize < 0 {
-		return 0, 0, status.Errorf(codes.InvalidArgument, "PageSize must be non-negative but is %d", pageSize)
+		return "", 0, status.Errorf(codes.InvalidArgument, "PageSize must be non-negative but is %d", pageSize)
 	}
 	if pageSize == 0 {
 		pageSize = h.config.DefaultPageSize()
 	}
 	maxPageSize := h.config.MaxPageSize()
 	if pageSize > maxPageSize {
-		return 0, 0, status.Errorf(
+		return "", 0, status.Errorf(
 			codes.InvalidArgument,
 			"PageSize cannot exceed %d but is %d",
 			maxPageSize,
@@ -346,22 +358,14 @@ func (h *OutgoingServiceRegistry) parseListRequest(
 	var pageToken outgoingServicesPageToken
 	if len(req.PageToken) > 0 {
 		if err := pageToken.Deserialize(req.PageToken); err != nil {
-			return 0, 0, status.Errorf(
+			return "", 0, status.Errorf(
 				codes.InvalidArgument,
 				"Invalid NextPageToken: %v",
 				err,
 			)
 		}
 	}
-	startIndex = pageToken.Index
-	if startIndex < 0 {
-		return 0, 0, status.Errorf(
-			codes.InvalidArgument,
-			"Invalid NextPageToken: Index must be non-negative but is %d",
-			startIndex,
-		)
-	}
-	return startIndex, pageSize, nil
+	return pageToken.LastServiceName, pageSize, nil
 }
 
 func (h *OutgoingServiceRegistry) findService(

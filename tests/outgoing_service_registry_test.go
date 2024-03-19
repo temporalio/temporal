@@ -26,7 +26,7 @@ package tests
 
 import (
 	"context"
-	"strconv"
+	"fmt"
 
 	"go.temporal.io/api/nexus/v1"
 	"go.temporal.io/api/operatorservice/v1"
@@ -216,11 +216,11 @@ func (s *FunctionalSuite) TestOutgoingServiceRegistry() {
 		ns := s.randomizeStr("list-nexus-outgoing-services-test")
 		s.NoError(s.registerNamespaceWithDefaults(ns))
 
-		serviceName := s.randomizeStr("service-name")
+		baseServiceName := s.randomizeStr("service-name")
 		for i := 0; i < 10; i++ {
 			response, err := s.operatorClient.CreateNexusOutgoingService(ctx, &operatorservice.CreateNexusOutgoingServiceRequest{
 				Namespace: ns,
-				Name:      serviceName + strconv.Itoa(i),
+				Name:      getServiceName(baseServiceName, i),
 				Spec: &nexus.OutgoingServiceSpec{
 					Url: testURL,
 				},
@@ -234,8 +234,10 @@ func (s *FunctionalSuite) TestOutgoingServiceRegistry() {
 			response, err := s.operatorClient.ListNexusOutgoingServices(ctx, &operatorservice.ListNexusOutgoingServicesRequest{
 				Namespace: ns,
 				PageToken: pageToken,
+				PageSize:  2,
 			})
 			s.NoError(err)
+			s.Len(response.Services, 2)
 			services = append(services, response.Services...)
 			pageToken = response.NextPageToken
 			if len(pageToken) == 0 {
@@ -244,7 +246,11 @@ func (s *FunctionalSuite) TestOutgoingServiceRegistry() {
 		}
 		s.Assert().Len(services, 10)
 		for i := 0; i < 10; i++ {
-			s.Assert().Equal(serviceName+strconv.Itoa(i), services[i].Name)
+			s.Assert().Equal(getServiceName(baseServiceName, i), services[i].Name)
 		}
 	})
+}
+
+func getServiceName(baseServiceName string, i int) string {
+	return fmt.Sprintf("%s/%3d", baseServiceName, i)
 }

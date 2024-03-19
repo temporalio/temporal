@@ -27,6 +27,7 @@ package nexus_test
 import (
 	"context"
 	"errors"
+	"fmt"
 	"strconv"
 	"strings"
 	"testing"
@@ -549,21 +550,6 @@ func TestList_InvalidPageToken(t *testing.T) {
 	assert.ErrorContains(t, err, "NextPageToken")
 }
 
-func TestList_NegativePageTokenIndex(t *testing.T) {
-	t.Parallel()
-	registry := nexus.NewOutgoingServiceRegistry(nil, newConfig())
-	_, err := registry.List(
-		context.Background(),
-		&operatorservice.ListNexusOutgoingServicesRequest{
-			Namespace: testNamespace,
-			PageToken: []byte("v1/-1"),
-		},
-	)
-	require.Error(t, err)
-	assert.Equal(t, codes.InvalidArgument, serviceerror.ToStatus(err).Code(), err)
-	assert.ErrorContains(t, err, "negative")
-}
-
 func TestList_GetNamespaceErr(t *testing.T) {
 	t.Parallel()
 	getNamespaceErr := errors.New("test error")
@@ -619,36 +605,50 @@ func TestList_NoNextPageToken(t *testing.T) {
 	assert.Len(t, res.Services, 1)
 }
 
-func TestList_PageTokenBeyondLimit(t *testing.T) {
+func TestList_Paginate(t *testing.T) {
 	t.Parallel()
 	service := &nexustest.NamespaceService{}
-	service.OnGetNamespace = func(ctx context.Context, request *persistence.GetNamespaceRequest) (*persistence.GetNamespaceResponse, error) {
-		return &persistence.GetNamespaceResponse{
-			Namespace: &persistencespb.NamespaceDetail{
-				OutgoingServices: []*persistencespb.NexusOutgoingService{
-					{
-						Version: 1,
-						Name:    "service1",
-						Spec: &nexuspb.OutgoingServiceSpec{
-							Url: "url1",
-						},
-					},
+	{
+		services := make([]*persistencespb.NexusOutgoingService, 10)
+		for i := range services {
+			services[i] = &persistencespb.NexusOutgoingService{
+				Version: 1,
+				Name:    fmt.Sprintf("service/%3d", i+1),
+				Spec: &nexuspb.OutgoingServiceSpec{
+					Url: "url" + strconv.Itoa(i+1),
 				},
-			},
-		}, nil
+			}
+		}
+		service.OnGetNamespace = func(ctx context.Context, request *persistence.GetNamespaceRequest) (*persistence.GetNamespaceResponse, error) {
+			return &persistence.GetNamespaceResponse{
+				Namespace: &persistencespb.NamespaceDetail{
+					OutgoingServices: services,
+				},
+			}, nil
+		}
 	}
 	config := newConfig()
 	registry := nexus.NewOutgoingServiceRegistry(service, config)
-	res, err := registry.List(
-		context.Background(),
-		&operatorservice.ListNexusOutgoingServicesRequest{
-			Namespace: testNamespace,
-			PageSize:  1,
-			PageToken: []byte("v1/1"),
-		},
-	)
-	require.NoError(t, err)
-	assert.Empty(t, res.Services)
+	var pageToken []byte
+	for i := 0; i < 4; i++ {
+		res, err := registry.List(
+			context.Background(),
+			&operatorservice.ListNexusOutgoingServicesRequest{
+				Namespace: testNamespace,
+				PageSize:  3,
+				PageToken: pageToken,
+			},
+		)
+		require.NoError(t, err)
+		if i < 3 {
+			assert.Len(t, res.Services, 3)
+			require.NotEmpty(t, res.NextPageToken)
+			pageToken = res.NextPageToken
+		} else {
+			assert.Len(t, res.Services, 1)
+			assert.Empty(t, res.NextPageToken)
+		}
+	}
 }
 
 func newConfig() *nexus.OutgoingServiceRegistryConfig {
