@@ -872,7 +872,7 @@ func (s *VersioningIntegSuite) firstWorkflowTaskAssignmentSyncMatch() {
 	rule = s.addAssignmentRule(ctx, tq, v2)
 	s.waitForAssignmentRulePropagation(ctx, tq, rule)
 
-	time.Sleep(100 * time.Millisecond)
+	time.Sleep(1100 * time.Millisecond)
 
 	// After scheduling the second time, now MS should be assigned to v2
 	dw, err = s.sdkClient.DescribeWorkflowExecution(ctx, run.GetID(), run.GetRunID())
@@ -2277,7 +2277,7 @@ func (s *VersioningIntegSuite) dispatchRetry() {
 		panic("oops")
 	}
 
-	ctx, cancel := context.WithTimeout(context.Background(), 3000*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
 	s.addNewDefaultBuildId(ctx, tq, v1)
