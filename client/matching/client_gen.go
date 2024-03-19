@@ -170,6 +170,25 @@ func (c *clientImpl) GetWorkerBuildIdCompatibility(
 	return client.GetWorkerBuildIdCompatibility(ctx, request, opts...)
 }
 
+func (c *clientImpl) GetWorkerVersioningRules(
+	ctx context.Context,
+	request *matchingservice.GetWorkerVersioningRulesRequest,
+	opts ...grpc.CallOption,
+) (*matchingservice.GetWorkerVersioningRulesResponse, error) {
+
+	p, err := tqid.NormalPartitionFromRpcName(request.GetTaskQueue(), request.GetNamespaceId(), request.GetTaskQueueType())
+	if err != nil {
+		return nil, err
+	}
+	client, err := c.getClientForTaskQueuePartition(p)
+	if err != nil {
+		return nil, err
+	}
+	ctx, cancel := c.createContext(ctx)
+	defer cancel()
+	return client.GetWorkerVersioningRules(ctx, request, opts...)
+}
+
 func (c *clientImpl) ListTaskQueuePartitions(
 	ctx context.Context,
 	request *matchingservice.ListTaskQueuePartitionsRequest,
@@ -187,25 +206,6 @@ func (c *clientImpl) ListTaskQueuePartitions(
 	ctx, cancel := c.createContext(ctx)
 	defer cancel()
 	return client.ListTaskQueuePartitions(ctx, request, opts...)
-}
-
-func (c *clientImpl) ListWorkerVersioningRules(
-	ctx context.Context,
-	request *matchingservice.ListWorkerVersioningRulesRequest,
-	opts ...grpc.CallOption,
-) (*matchingservice.ListWorkerVersioningRulesResponse, error) {
-
-	p, err := tqid.NormalPartitionFromRpcName(request.GetTaskQueue(), request.GetNamespaceId(), enumspb.TASK_QUEUE_TYPE_WORKFLOW)
-	if err != nil {
-		return nil, err
-	}
-	client, err := c.getClientForTaskQueuePartition(p)
-	if err != nil {
-		return nil, err
-	}
-	ctx, cancel := c.createContext(ctx)
-	defer cancel()
-	return client.ListWorkerVersioningRules(ctx, request, opts...)
 }
 
 func (c *clientImpl) ReplicateTaskQueueUserData(

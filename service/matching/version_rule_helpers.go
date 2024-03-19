@@ -272,10 +272,10 @@ func CommitBuildID(timestamp *hlc.Clock,
 	return data, nil
 }
 
-func ListWorkerVersioningRules(
+func GetWorkerVersioningRules(
 	versioningData *persistencepb.VersioningData,
 	clk *hlc.Clock,
-) (*matchingservice.ListWorkerVersioningRulesResponse, error) {
+) (*matchingservice.GetWorkerVersioningRulesResponse, error) {
 	var cT []byte
 	var err error
 	if cT, err = clk.Marshal(); err != nil {
@@ -299,8 +299,8 @@ func ListWorkerVersioningRules(
 			})
 		}
 	}
-	return &matchingservice.ListWorkerVersioningRulesResponse{
-		Response: &workflowservice.ListWorkerVersioningRulesResponse{
+	return &matchingservice.GetWorkerVersioningRulesResponse{
+		Response: &workflowservice.GetWorkerVersioningRulesResponse{
 			AssignmentRules:         activeAssignmentRules,
 			CompatibleRedirectRules: activeRedirectRules,
 			ConflictToken:           cT,
