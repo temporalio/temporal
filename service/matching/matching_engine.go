@@ -869,17 +869,18 @@ func (e *matchingEngineImpl) UpdateWorkerVersioningRules(
 		clk := data.GetClock()
 		if clk == nil {
 			clk = hlc.Zero(e.clusterMeta.GetClusterID())
-		} else if cT != nil {
-			prevCT, err := clk.Marshal()
-			if err != nil {
-				return nil, false, err
-			}
-			if !bytes.Equal(cT, prevCT) {
-				return nil, false, serviceerror.NewFailedPrecondition(
-					fmt.Sprintf("provided conflict token %v does not match existing one %v", cT, prevCT),
-				)
-			}
 		}
+
+		prevCT, err := clk.Marshal()
+		if err != nil {
+			return nil, false, err
+		}
+		if !bytes.Equal(cT, prevCT) {
+			return nil, false, serviceerror.NewFailedPrecondition(
+				fmt.Sprintf("provided conflict token '%v' does not match existing one '%v'", cT, prevCT),
+			)
+		}
+
 		updatedClock := hlc.Next(clk, e.timeSource)
 		var versioningData *persistencespb.VersioningData
 		switch req.GetOperation().(type) {
