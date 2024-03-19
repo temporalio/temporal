@@ -41,18 +41,18 @@ type QualifiedWorkflow struct {
 func newWorkflowRoute() routing.Route[QualifiedWorkflow] {
 	return routing.NewBuilder[QualifiedWorkflow]().
 		Constant("api", "v1", "namespaces").
-		Variable("namespace", func(params *QualifiedWorkflow) *string { return &params.Namespace }).
+		StringVariable("namespace", func(params *QualifiedWorkflow) *string { return &params.Namespace }).
 		Constant("workflows").
-		Variable("workflowID", func(params *QualifiedWorkflow) *string { return &params.WorkflowID }).
+		StringVariable("workflowID", func(params *QualifiedWorkflow) *string { return &params.WorkflowID }).
 		Build()
 }
 
 func ExampleRoute() {
 	route := routing.NewBuilder[QualifiedWorkflow]().
 		Constant("api", "v1", "namespaces").
-		Variable("namespace", func(params *QualifiedWorkflow) *string { return &params.Namespace }).
+		StringVariable("namespace", func(params *QualifiedWorkflow) *string { return &params.Namespace }).
 		Constant("workflows").
-		Variable("workflowID", func(params *QualifiedWorkflow) *string { return &params.WorkflowID }).
+		StringVariable("workflowID", func(params *QualifiedWorkflow) *string { return &params.WorkflowID }).
 		Build()
 	router := mux.NewRouter()
 	router.HandleFunc("/"+route.Representation(), func(w http.ResponseWriter, r *http.Request) {
@@ -106,7 +106,7 @@ func ExampleConstant() {
 }
 
 func ExampleVariable() {
-	fmt.Println(routing.Variable("namespace", func(params *QualifiedWorkflow) *string { return &params.Namespace }).Representation())
+	fmt.Println(routing.StringVariable("namespace", func(params *QualifiedWorkflow) *string { return &params.Namespace }).Representation())
 	// Output: {namespace}
 }
 
