@@ -302,7 +302,7 @@ func TestUpdate_Ok(t *testing.T) {
 func TestCreate_NameTooLong(t *testing.T) {
 	t.Parallel()
 	config := newConfig()
-	name := strings.Repeat("x", config.NameMaxLength()+1)
+	name := strings.Repeat("x", config.MaxNameLength()+1)
 	registry := nexus.NewOutgoingServiceRegistry(nil, config)
 	_, err := registry.Update(
 		context.Background(),
@@ -316,7 +316,7 @@ func TestCreate_NameTooLong(t *testing.T) {
 	)
 	require.Error(t, err)
 	assert.Equal(t, codes.InvalidArgument, serviceerror.ToStatus(err).Code(), err)
-	assert.ErrorContains(t, err, strconv.Itoa(config.NameMaxLength()))
+	assert.ErrorContains(t, err, strconv.Itoa(config.MaxNameLength()))
 }
 
 func TestCreate_NameInvalidFormat(t *testing.T) {

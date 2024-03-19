@@ -72,7 +72,7 @@ func NewOutgoingServiceRegistry(
 // OutgoingServiceRegistryConfig contains the dynamic configur values for the [OutgoingServiceRegistry].
 type OutgoingServiceRegistryConfig struct {
 	MaxURLLength    dynamicconfig.IntPropertyFn
-	NameMaxLength   dynamicconfig.IntPropertyFn
+	MaxNameLength   dynamicconfig.IntPropertyFn
 	DefaultPageSize dynamicconfig.IntPropertyFn
 	MaxPageSize     dynamicconfig.IntPropertyFn
 }
@@ -81,7 +81,7 @@ type OutgoingServiceRegistryConfig struct {
 func NewOutgoingServiceRegistryConfig(dc *dynamicconfig.Collection) *OutgoingServiceRegistryConfig {
 	return &OutgoingServiceRegistryConfig{
 		MaxURLLength:    dc.GetIntProperty(dynamicconfig.NexusOutgoingServiceURLMaxLength, 1000),
-		NameMaxLength:   dc.GetIntProperty(dynamicconfig.NexusOutgoingServiceNameMaxLength, 200),
+		MaxNameLength:   dc.GetIntProperty(dynamicconfig.NexusOutgoingServiceNameMaxLength, 200),
 		DefaultPageSize: dc.GetIntProperty(dynamicconfig.NexusOutgoingServiceListDefaultPageSize, 100),
 		MaxPageSize:     dc.GetIntProperty(dynamicconfig.NexusOutgoingServiceListMaxPageSize, 1000),
 	}
@@ -392,7 +392,7 @@ type upsertRequest interface {
 
 func (h *OutgoingServiceRegistry) validateUpsertRequest(req upsertRequest) error {
 	issues := findIssuesForCommonRequest(req)
-	nameMaxLength := h.config.NameMaxLength()
+	nameMaxLength := h.config.MaxNameLength()
 	if len(req.GetName()) > nameMaxLength {
 		issues.Appendf("Outgoing service name length exceeds the limit of %d", nameMaxLength)
 	}
