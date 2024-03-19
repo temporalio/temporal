@@ -235,7 +235,7 @@ message UpdateWorkerBuildIdCompatibilityRequest {
 
 message UpdateWorkerBuildIdCompatibilityResponse {}
 
-message GetWorkerVersioningRulesRequest {
+message ListWorkerVersioningRulesRequest {
     string namespace_id = 1;
     string task_queue = 2;
 
@@ -244,7 +244,7 @@ message GetWorkerVersioningRulesRequest {
     }
 }
 
-message GetWorkerVersioningRulesResponse {
+message ListWorkerVersioningRulesResponse {
     temporal.api.workflowservice.v1.GetWorkerVersioningRulesResponse response = 1;
 }
 

@@ -30,6 +30,7 @@ package matchingservice
 
 import (
 	context "context"
+
 	grpc "google.golang.org/grpc"
 	codes "google.golang.org/grpc/codes"
 	status "google.golang.org/grpc/status"
@@ -54,7 +55,7 @@ const (
 	MatchingService_GetWorkerBuildIdCompatibility_FullMethodName          = "/temporal.server.api.matchingservice.v1.MatchingService/GetWorkerBuildIdCompatibility"
 	MatchingService_GetTaskQueueUserData_FullMethodName                   = "/temporal.server.api.matchingservice.v1.MatchingService/GetTaskQueueUserData"
 	MatchingService_UpdateWorkerVersioningRules_FullMethodName            = "/temporal.server.api.matchingservice.v1.MatchingService/UpdateWorkerVersioningRules"
-	MatchingService_GetWorkerVersioningRules_FullMethodName               = "/temporal.server.api.matchingservice.v1.MatchingService/GetWorkerVersioningRules"
+	MatchingService_ListWorkerVersioningRules_FullMethodName              = "/temporal.server.api.matchingservice.v1.MatchingService/ListWorkerVersioningRules"
 	MatchingService_ApplyTaskQueueUserDataReplicationEvent_FullMethodName = "/temporal.server.api.matchingservice.v1.MatchingService/ApplyTaskQueueUserDataReplicationEvent"
 	MatchingService_GetBuildIdTaskQueueMapping_FullMethodName             = "/temporal.server.api.matchingservice.v1.MatchingService/GetBuildIdTaskQueueMapping"
 	MatchingService_ForceUnloadTaskQueue_FullMethodName                   = "/temporal.server.api.matchingservice.v1.MatchingService/ForceUnloadTaskQueue"
@@ -118,8 +119,8 @@ type MatchingServiceClient interface {
 	// Fetches the Build ID assignment and redirect rules for a Task Queue
 	// (-- api-linter: core::0127::resource-name-extraction=disabled
 	//
-	//	aip.dev/not-precedent: GetWorkerVersioningRulesRequest RPC doesn't follow Google API format. --)
-	GetWorkerVersioningRules(ctx context.Context, in *GetWorkerVersioningRulesRequest, opts ...grpc.CallOption) (*GetWorkerVersioningRulesResponse, error)
+	//	aip.dev/not-precedent: ListWorkerVersioningRulesRequest RPC doesn't follow Google API format. --)
+	ListWorkerVersioningRules(ctx context.Context, in *ListWorkerVersioningRulesRequest, opts ...grpc.CallOption) (*ListWorkerVersioningRulesResponse, error)
 	// Apply a user data replication event.
 	ApplyTaskQueueUserDataReplicationEvent(ctx context.Context, in *ApplyTaskQueueUserDataReplicationEventRequest, opts ...grpc.CallOption) (*ApplyTaskQueueUserDataReplicationEventResponse, error)
 	// Gets all task queue names mapped to a given build ID
@@ -266,9 +267,9 @@ func (c *matchingServiceClient) UpdateWorkerVersioningRules(ctx context.Context,
 	return out, nil
 }
 
-func (c *matchingServiceClient) GetWorkerVersioningRules(ctx context.Context, in *GetWorkerVersioningRulesRequest, opts ...grpc.CallOption) (*GetWorkerVersioningRulesResponse, error) {
-	out := new(GetWorkerVersioningRulesResponse)
-	err := c.cc.Invoke(ctx, MatchingService_GetWorkerVersioningRules_FullMethodName, in, out, opts...)
+func (c *matchingServiceClient) ListWorkerVersioningRules(ctx context.Context, in *ListWorkerVersioningRulesRequest, opts ...grpc.CallOption) (*ListWorkerVersioningRulesResponse, error) {
+	out := new(ListWorkerVersioningRulesResponse)
+	err := c.cc.Invoke(ctx, MatchingService_ListWorkerVersioningRules_FullMethodName, in, out, opts...)
 	if err != nil {
 		return nil, err
 	}
@@ -376,8 +377,8 @@ type MatchingServiceServer interface {
 	// Fetches the Build ID assignment and redirect rules for a Task Queue
 	// (-- api-linter: core::0127::resource-name-extraction=disabled
 	//
-	//	aip.dev/not-precedent: GetWorkerVersioningRulesRequest RPC doesn't follow Google API format. --)
-	GetWorkerVersioningRules(context.Context, *GetWorkerVersioningRulesRequest) (*GetWorkerVersioningRulesResponse, error)
+	//	aip.dev/not-precedent: ListWorkerVersioningRulesRequest RPC doesn't follow Google API format. --)
+	ListWorkerVersioningRules(context.Context, *ListWorkerVersioningRulesRequest) (*ListWorkerVersioningRulesResponse, error)
 	// Apply a user data replication event.
 	ApplyTaskQueueUserDataReplicationEvent(context.Context, *ApplyTaskQueueUserDataReplicationEventRequest) (*ApplyTaskQueueUserDataReplicationEventResponse, error)
 	// Gets all task queue names mapped to a given build ID
@@ -443,8 +444,8 @@ func (UnimplementedMatchingServiceServer) GetTaskQueueUserData(context.Context, 
 func (UnimplementedMatchingServiceServer) UpdateWorkerVersioningRules(context.Context, *UpdateWorkerVersioningRulesRequest) (*UpdateWorkerVersioningRulesResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method UpdateWorkerVersioningRules not implemented")
 }
-func (UnimplementedMatchingServiceServer) GetWorkerVersioningRules(context.Context, *GetWorkerVersioningRulesRequest) (*GetWorkerVersioningRulesResponse, error) {
-	return nil, status.Errorf(codes.Unimplemented, "method GetWorkerVersioningRules not implemented")
+func (UnimplementedMatchingServiceServer) ListWorkerVersioningRules(context.Context, *ListWorkerVersioningRulesRequest) (*ListWorkerVersioningRulesResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method ListWorkerVersioningRules not implemented")
 }
 func (UnimplementedMatchingServiceServer) ApplyTaskQueueUserDataReplicationEvent(context.Context, *ApplyTaskQueueUserDataReplicationEventRequest) (*ApplyTaskQueueUserDataReplicationEventResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method ApplyTaskQueueUserDataReplicationEvent not implemented")
@@ -708,20 +709,20 @@ func _MatchingService_UpdateWorkerVersioningRules_Handler(srv interface{}, ctx c
 	return interceptor(ctx, in, info, handler)
 }
 
-func _MatchingService_GetWorkerVersioningRules_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(GetWorkerVersioningRulesRequest)
+func _MatchingService_ListWorkerVersioningRules_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(ListWorkerVersioningRulesRequest)
 	if err := dec(in); err != nil {
 		return nil, err
 	}
 	if interceptor == nil {
-		return srv.(MatchingServiceServer).GetWorkerVersioningRules(ctx, in)
+		return srv.(MatchingServiceServer).ListWorkerVersioningRules(ctx, in)
 	}
 	info := &grpc.UnaryServerInfo{
 		Server:     srv,
-		FullMethod: MatchingService_GetWorkerVersioningRules_FullMethodName,
+		FullMethod: MatchingService_ListWorkerVersioningRules_FullMethodName,
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(MatchingServiceServer).GetWorkerVersioningRules(ctx, req.(*GetWorkerVersioningRulesRequest))
+		return srv.(MatchingServiceServer).ListWorkerVersioningRules(ctx, req.(*ListWorkerVersioningRulesRequest))
 	}
 	return interceptor(ctx, in, info, handler)
 }
@@ -876,8 +877,8 @@ var MatchingService_ServiceDesc = grpc.ServiceDesc{
 			Handler:    _MatchingService_UpdateWorkerVersioningRules_Handler,
 		},
 		{
-			MethodName: "GetWorkerVersioningRules",
-			Handler:    _MatchingService_GetWorkerVersioningRules_Handler,
+			MethodName: "ListWorkerVersioningRules",
+			Handler:    _MatchingService_ListWorkerVersioningRules_Handler,
 		},
 		{
 			MethodName: "ApplyTaskQueueUserDataReplicationEvent",

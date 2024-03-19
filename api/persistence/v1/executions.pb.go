@@ -29,6 +29,9 @@
 package persistence
 
 import (
+	reflect "reflect"
+	sync "sync"
+
 	v12 "go.temporal.io/api/common/v1"
 	v17 "go.temporal.io/api/enums/v1"
 	v18 "go.temporal.io/api/failure/v1"
@@ -42,8 +45,6 @@ import (
 	protoimpl "google.golang.org/protobuf/runtime/protoimpl"
 	durationpb "google.golang.org/protobuf/types/known/durationpb"
 	timestamppb "google.golang.org/protobuf/types/known/timestamppb"
-	reflect "reflect"
-	sync "sync"
 )
 
 const (

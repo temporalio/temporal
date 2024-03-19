@@ -183,6 +183,16 @@ func (c *clientImpl) GetWorkerTaskReachability(
 	return c.client.GetWorkerTaskReachability(ctx, request, opts...)
 }
 
+func (c *clientImpl) GetWorkerVersioningRules(
+	ctx context.Context,
+	request *workflowservice.GetWorkerVersioningRulesRequest,
+	opts ...grpc.CallOption,
+) (*workflowservice.GetWorkerVersioningRulesResponse, error) {
+	ctx, cancel := c.createContext(ctx)
+	defer cancel()
+	return c.client.GetWorkerVersioningRules(ctx, request, opts...)
+}
+
 func (c *clientImpl) GetWorkflowExecutionHistory(
 	ctx context.Context,
 	request *workflowservice.GetWorkflowExecutionHistoryRequest,
@@ -281,16 +291,6 @@ func (c *clientImpl) ListTaskQueuePartitions(
 	ctx, cancel := c.createContext(ctx)
 	defer cancel()
 	return c.client.ListTaskQueuePartitions(ctx, request, opts...)
-}
-
-func (c *clientImpl) ListWorkerVersioningRules(
-	ctx context.Context,
-	request *workflowservice.ListWorkerVersioningRulesRequest,
-	opts ...grpc.CallOption,
-) (*workflowservice.ListWorkerVersioningRulesResponse, error) {
-	ctx, cancel := c.createContext(ctx)
-	defer cancel()
-	return c.client.ListWorkerVersioningRules(ctx, request, opts...)
 }
 
 func (c *clientImpl) ListWorkflowExecutions(
