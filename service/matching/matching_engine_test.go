@@ -180,10 +180,15 @@ func newMatchingEngine(
 	mockVisibilityManager manager.VisibilityManager,
 ) *matchingEngineImpl {
 	return &matchingEngineImpl{
-		taskManager:          taskMgr,
-		historyClient:        mockHistoryClient,
-		partitions:           make(map[tqid.PartitionKey]taskQueuePartitionManager),
-		gaugeMetricCounter:   gaugeMetrics{make(map[taskQueueCounterKey]int), make(map[taskQueueCounterKey]int), make(map[taskQueueCounterKey]int), make(map[taskQueueCounterKey]int), sync.Mutex{}},
+		taskManager:   taskMgr,
+		historyClient: mockHistoryClient,
+		partitions:    make(map[tqid.PartitionKey]taskQueuePartitionManager),
+		gaugeMetrics: gaugeMetrics{
+			loadedTaskQueueFamilyCount:    make(map[taskQueueCounterKey]int),
+			loadedTaskQueueCount:          make(map[taskQueueCounterKey]int),
+			loadedTaskQueuePartitionCount: make(map[taskQueueCounterKey]int),
+			loadedPhysicalTaskQueueCount:  make(map[taskQueueCounterKey]int),
+		},
 		lockableQueryTaskMap: lockableQueryTaskMap{queryTaskMap: make(map[string]chan *queryResult)},
 		logger:               logger,
 		throttledLogger:      log.ThrottledLogger(logger),
@@ -2506,39 +2511,28 @@ func (s *matchingEngineSuite) TestDemotedMatch() {
 	task.finish(nil)
 }
 
-func TaskQueueMetricValidator(T *testing.T, capture *metricstest.Capture, FamilyCounterLength int, FamilyCounter float64, QueueCounterLength int, QueueCounter float64, QueuePartitionCounterLength int, QueuePartitionCounter float64) {
+func (s *matchingEngineSuite) TaskQueueMetricValidator(capture *metricstest.Capture, familyCounterLength int, familyCounter float64, queueCounterLength int, queueCounter float64, queuePartitionCounterLength int, queuePartitionCounter float64) {
 	// checks the metrics according to the values passed in the parameters
-
 	snapshot := capture.Snapshot()
-	FamilyCounterRecordings := snapshot[metrics.LoadedTaskQueueFamilyCounter.Name()]
-	assert.Len(T, FamilyCounterRecordings, FamilyCounterLength)
-	counter, ok := FamilyCounterRecordings[FamilyCounterLength-1].Value.(float64)
-	assert.True(T, ok)
-	assert.Equal(T, FamilyCounter, counter)
+	familyCounterRecordings := snapshot[metrics.LoadedTaskQueueFamilyGauge.Name()]
+	s.Len(familyCounterRecordings, familyCounterLength)
+	s.Equal(familyCounter, familyCounterRecordings[familyCounterLength-1].Value.(float64))
 
-	QueueCounterRecordings := snapshot[metrics.LoadedTaskQueueCounter.Name()]
-	assert.Len(T, QueueCounterRecordings, QueueCounterLength)
-	counter, ok = QueueCounterRecordings[QueueCounterLength-1].Value.(float64)
-	assert.True(T, ok)
-	assert.Equal(T, QueueCounter, counter)
+	queueCounterRecordings := snapshot[metrics.LoadedTaskQueueGauge.Name()]
+	s.Len(queueCounterRecordings, queueCounterLength)
+	s.Equal(queueCounter, queueCounterRecordings[queueCounterLength-1].Value.(float64))
 
-	QueuePartitionCounterRecordings := snapshot[metrics.LoadedTaskQueuePartitionCounter.Name()]
-	assert.Len(T, QueuePartitionCounterRecordings, QueuePartitionCounterLength)
-	counter, ok = QueuePartitionCounterRecordings[QueuePartitionCounterLength-1].Value.(float64)
-	assert.True(T, ok)
-	assert.Equal(T, QueuePartitionCounter, counter)
+	queuePartitionCounterRecordings := snapshot[metrics.LoadedTaskQueuePartitionGauge.Name()]
+	s.Len(queuePartitionCounterRecordings, queuePartitionCounterLength)
+	s.Equal(queuePartitionCounter, queuePartitionCounterRecordings[queuePartitionCounterLength-1].Value.(float64))
 }
 
-func PhysicalQueueMetricValidator(T *testing.T, capture *metricstest.Capture, PhysicalTaskQueueLength int, PhysicalTaskQueueCounter float64) {
+func (s *matchingEngineSuite) PhysicalQueueMetricValidator(capture *metricstest.Capture, physicalTaskQueueLength int, physicalTaskQueueCounter float64) {
 	// checks the metrics according to the values passed in the parameters
-
 	snapshot := capture.Snapshot()
-	PhysicalTaskQueueRecordings := snapshot[metrics.LoadedPhysicalTaskQueueCounter.Name()]
-	assert.Len(T, PhysicalTaskQueueRecordings, PhysicalTaskQueueLength)
-	counter, ok := PhysicalTaskQueueRecordings[PhysicalTaskQueueLength-1].Value.(float64)
-	assert.True(T, ok)
-	assert.Equal(T, PhysicalTaskQueueCounter, counter)
-
+	physicalTaskQueueRecordings := snapshot[metrics.LoadedPhysicalTaskQueueGauge.Name()]
+	s.Len(physicalTaskQueueRecordings, physicalTaskQueueLength)
+	s.Equal(physicalTaskQueueCounter, physicalTaskQueueRecordings[physicalTaskQueueLength-1].Value.(float64))
 }
 
 func (s *matchingEngineSuite) TestUpdateTaskQueuePartitionGauge_RootPartitionWorkflowType() {
@@ -2555,12 +2549,14 @@ func (s *matchingEngineSuite) TestUpdateTaskQueuePartitionGauge_RootPartitionWor
 	tqm, err := s.matchingEngine.getTaskQueuePartitionManager(context.Background(), prtn, true)
 	s.Require().NoError(err)
 
-	TaskQueueMetricValidator(s.T(), capture, 1, 1, 1, 1, 1, 1)
+	s.TaskQueueMetricValidator(capture, 1, 1, 1, 1, 1, 1)
 
 	// Calling the update gauge function should increase each of the metrics to 2
 	// since we are dealing with a root partition
-	s.matchingEngine.updateTaskQueuePartitionGauge(tqm, 1)
-	TaskQueueMetricValidator(s.T(), capture, 2, 2, 2, 2, 2, 2)
+	tqmImpl, ok := tqm.(*taskQueuePartitionManagerImpl)
+	s.True(ok)
+	s.matchingEngine.updateTaskQueuePartitionGauge(tqmImpl, 1)
+	s.TaskQueueMetricValidator(capture, 2, 2, 2, 2, 2, 2)
 
 }
 
@@ -2580,12 +2576,14 @@ func (s *matchingEngineSuite) TestUpdateTaskQueuePartitionGauge_RootPartitionAct
 
 	// Creation of a new root partition, having an activity task queue, should not have
 	// increased FamilyCounter. Other metrics should be 1.
-	TaskQueueMetricValidator(s.T(), capture, 1, 0, 1, 1, 1, 1)
+	s.TaskQueueMetricValidator(capture, 1, 0, 1, 1, 1, 1)
 
 	// Calling the update gauge function should increase each of the metrics to 2
 	// since we are dealing with a root partition
-	s.matchingEngine.updateTaskQueuePartitionGauge(tqm, 1)
-	TaskQueueMetricValidator(s.T(), capture, 2, 0, 2, 2, 2, 2)
+	tqmImpl, ok := tqm.(*taskQueuePartitionManagerImpl)
+	s.True(ok)
+	s.matchingEngine.updateTaskQueuePartitionGauge(tqmImpl, 1)
+	s.TaskQueueMetricValidator(capture, 2, 0, 2, 2, 2, 2)
 
 }
 
@@ -2603,12 +2601,14 @@ func (s *matchingEngineSuite) TestUpdateTaskQueuePartitionGauge_NonRootPartition
 	s.Require().NoError(err)
 
 	// Creation of a non-root partition should only increase the Queue Partition counter
-	TaskQueueMetricValidator(s.T(), capture, 1, 0, 1, 0, 1, 1)
+	s.TaskQueueMetricValidator(capture, 1, 0, 1, 0, 1, 1)
 
 	// Calling the update gauge function should increase each of the metrics to 2
 	// since we are dealing with a root partition
-	s.matchingEngine.updateTaskQueuePartitionGauge(tqm, 1)
-	TaskQueueMetricValidator(s.T(), capture, 2, 0, 2, 0, 2, 2)
+	tqmImpl, ok := tqm.(*taskQueuePartitionManagerImpl)
+	s.True(ok)
+	s.matchingEngine.updateTaskQueuePartitionGauge(tqmImpl, 1)
+	s.TaskQueueMetricValidator(capture, 2, 0, 2, 0, 2, 2)
 
 }
 
@@ -2627,23 +2627,23 @@ func (s *matchingEngineSuite) TestUpdatePhysicalTaskQueueGauge_UnVersioned() {
 
 	// Creating a TaskQueuePartitionManager results in creating a PhysicalTaskQueueManager which should increase
 	// the size of the map to 1 and it's counter to 1.
-	PhysicalQueueMetricValidator(s.T(), capture, 1, 1)
+	s.PhysicalQueueMetricValidator(capture, 1, 1)
 
 	tlmImpl, ok := tqm.(*taskQueuePartitionManagerImpl).defaultQueue.(*physicalTaskQueueManagerImpl)
 	s.True(ok)
 
 	s.matchingEngine.updatePhysicalTaskQueueGauge(tlmImpl, 1)
 
-	PhysicalQueueMetricValidator(s.T(), capture, 2, 2)
+	s.PhysicalQueueMetricValidator(capture, 2, 2)
 
 	// Validating if versioned has been set right for the respective parameters
-	PhysicalTaskQueueParameters := taskQueueCounterKey{
+	physicalTaskQueueParameters := taskQueueCounterKey{
 		namespaceID:   prtn.NamespaceId(),
 		taskType:      prtn.TaskType(),
 		partitionType: prtn.Kind(),
 		versioned:     "unversioned",
 	}
-	assert.Equal(s.T(), s.matchingEngine.gaugeMetricCounter.loadedPhysicalTaskQueueCount[PhysicalTaskQueueParameters], 2)
+	assert.Equal(s.T(), s.matchingEngine.gaugeMetrics.loadedPhysicalTaskQueueCount[physicalTaskQueueParameters], 2)
 
 }
 
@@ -2662,25 +2662,25 @@ func (s *matchingEngineSuite) TestUpdatePhysicalTaskQueueGauge_VersionSet() {
 
 	// Creating a TaskQueuePartitionManager results in creating a PhysicalTaskQueueManager which should increase
 	// the size of the map to 1 and it's counter to 1.
-	PhysicalQueueMetricValidator(s.T(), capture, 1, 1)
+	s.PhysicalQueueMetricValidator(capture, 1, 1)
 
 	Vqtpm, err := tqm.(*taskQueuePartitionManagerImpl).getVersionedQueueNoWait(versionSet, "", true)
 	s.Require().NoError(err)
 
 	// Creating a VersionedQueue results in increasing the size of the map to 2, due to 2 entries now,
 	// with it's counter to 1.
-	PhysicalQueueMetricValidator(s.T(), capture, 2, 1)
+	s.PhysicalQueueMetricValidator(capture, 2, 1)
 	s.matchingEngine.updatePhysicalTaskQueueGauge(Vqtpm.(*physicalTaskQueueManagerImpl), 1)
-	PhysicalQueueMetricValidator(s.T(), capture, 3, 2)
+	s.PhysicalQueueMetricValidator(capture, 3, 2)
 
 	// Validating if versioned has been set right for the specific parameters
-	PhysicalTaskQueueParameters := taskQueueCounterKey{
+	physicalTaskQueueParameters := taskQueueCounterKey{
 		namespaceID:   dbq.Partition().NamespaceId(),
 		taskType:      dbq.Partition().TaskType(),
 		partitionType: dbq.Partition().Kind(),
 		versioned:     "versionSet",
 	}
-	assert.Equal(s.T(), s.matchingEngine.gaugeMetricCounter.loadedPhysicalTaskQueueCount[PhysicalTaskQueueParameters], 2)
+	assert.Equal(s.T(), s.matchingEngine.gaugeMetrics.loadedPhysicalTaskQueueCount[physicalTaskQueueParameters], 2)
 
 }
 
@@ -2699,25 +2699,25 @@ func (s *matchingEngineSuite) TestUpdatePhysicalTaskQueueGauge_BuildID() {
 
 	// Creating a TaskQueuePartitionManager results in creating a PhysicalTaskQueueManager which should increase
 	// the size of the map to 1 and it's counter to 1.
-	PhysicalQueueMetricValidator(s.T(), capture, 1, 1)
+	s.PhysicalQueueMetricValidator(capture, 1, 1)
 
 	Vqtpm, err := tqm.(*taskQueuePartitionManagerImpl).getVersionedQueueNoWait("", buildID, true)
 	s.Require().NoError(err)
 
 	// Creating a VersionedQueue results in increasing the size of the map to 2, due to 2 entries now,
 	// with it's counter to 1.
-	PhysicalQueueMetricValidator(s.T(), capture, 2, 1)
+	s.PhysicalQueueMetricValidator(capture, 2, 1)
 	s.matchingEngine.updatePhysicalTaskQueueGauge(Vqtpm.(*physicalTaskQueueManagerImpl), 1)
-	PhysicalQueueMetricValidator(s.T(), capture, 3, 2)
+	s.PhysicalQueueMetricValidator(capture, 3, 2)
 
 	// Validating if versioned has been set right for the specific parameters
-	PhysicalTaskQueueParameters := taskQueueCounterKey{
+	physicalTaskQueueParameters := taskQueueCounterKey{
 		namespaceID:   dbq.Partition().NamespaceId(),
 		taskType:      dbq.Partition().TaskType(),
 		partitionType: dbq.Partition().Kind(),
 		versioned:     "buildId",
 	}
-	assert.Equal(s.T(), s.matchingEngine.gaugeMetricCounter.loadedPhysicalTaskQueueCount[PhysicalTaskQueueParameters], 2)
+	assert.Equal(s.T(), s.matchingEngine.gaugeMetrics.loadedPhysicalTaskQueueCount[physicalTaskQueueParameters], 2)
 
 }
 
