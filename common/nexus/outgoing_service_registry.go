@@ -1,8 +1,6 @@
 // The MIT License
 //
-// Copyright (c) 2020 Temporal Technologies Inc.  All rights reserved.
-//
-// Copyright (c) 2020 Uber Technologies, Inc.
+// Copyright (c) 2024 Temporal Technologies Inc.  All rights reserved.
 //
 // Permission is hereby granted, free of charge, to any person obtaining a copy
 // of this software and associated documentation files (the "Software"), to deal
@@ -27,6 +25,7 @@ package nexus
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"net/url"
 	"regexp"
 	"strings"
@@ -34,11 +33,8 @@ import (
 	"go.temporal.io/api/nexus/v1"
 	"go.temporal.io/api/operatorservice/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
-	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/persistence"
-	"go.temporal.io/server/common/slicex"
-	"go.uber.org/multierr"
 	"golang.org/x/exp/slices"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
@@ -62,7 +58,7 @@ type NamespaceService interface {
 	UpdateNamespace(ctx context.Context, request *persistence.UpdateNamespaceRequest) error
 }
 
-// NewOutgoingServiceRegistry creates a new OutgoingServiceRegistry with the given namespace service and configuration.
+// NewOutgoingServiceRegistry creates a new [OutgoingServiceRegistry] with the given namespace service and configuration.
 func NewOutgoingServiceRegistry(
 	namespaceService NamespaceService,
 	config *OutgoingServiceRegistryConfig,
@@ -73,6 +69,7 @@ func NewOutgoingServiceRegistry(
 	}
 }
 
+// OutgoingServiceRegistryConfig contains the dynamic configur values for the [OutgoingServiceRegistry].
 type OutgoingServiceRegistryConfig struct {
 	MaxURLLength    dynamicconfig.IntPropertyFn
 	NameMaxLength   dynamicconfig.IntPropertyFn
@@ -80,6 +77,7 @@ type OutgoingServiceRegistryConfig struct {
 	MaxPageSize     dynamicconfig.IntPropertyFn
 }
 
+// NewOutgoingServiceRegistryConfig creates a new [OutgoingServiceRegistryConfig] with the given dynamic configuration.
 func NewOutgoingServiceRegistryConfig(dc *dynamicconfig.Collection) *OutgoingServiceRegistryConfig {
 	return &OutgoingServiceRegistryConfig{
 		MaxURLLength:    dc.GetIntProperty(dynamicconfig.NexusOutgoingServiceURLMaxLength, 1000),
@@ -89,20 +87,22 @@ func NewOutgoingServiceRegistryConfig(dc *dynamicconfig.Collection) *OutgoingSer
 	}
 }
 
-var (
-	ErrNamespaceNotSet = status.Errorf(codes.InvalidArgument, "Namespace is not set on request")
-	ErrNameNotSet      = status.Errorf(codes.InvalidArgument, "Name is not set on request")
-	ErrURLNotSet       = status.Errorf(codes.InvalidArgument, "URL is not set on request")
+const (
+	IssueNamespaceNotSet = "Namespace is not set on request"
+	IssueNameNotSet      = "Name is not set on request"
+	IssueURLNotSet       = "URL is not set on request"
 )
 
+// ServiceNameRegex is the regular expression that outgoing service names must match.
 var ServiceNameRegex = regexp.MustCompile(`[a-zA-Z_][a-zA-Z0-9_]*`)
 
+// Get implements [operatorservice.OperatorServiceServer.GetNexusOutgoingService].
 func (h *OutgoingServiceRegistry) Get(
 	ctx context.Context,
 	req *operatorservice.GetNexusOutgoingServiceRequest,
 ) (*operatorservice.GetNexusOutgoingServiceResponse, error) {
-	if err := validateCommonRequest(req); err != nil {
-		return nil, err
+	if issues := findIssuesForCommonRequest(req); issues != nil {
+		return nil, issues.GetError()
 	}
 	response, err := h.namespaceService.GetNamespace(ctx, &persistence.GetNamespaceRequest{
 		Name: req.Namespace,
@@ -120,6 +120,7 @@ func (h *OutgoingServiceRegistry) Get(
 	}, nil
 }
 
+// Create implements [operatorservice.OperatorServiceServer.CreateNexusOutgoingService].
 func (h *OutgoingServiceRegistry) Create(
 	ctx context.Context,
 	req *operatorservice.CreateNexusOutgoingServiceRequest,
@@ -148,7 +149,7 @@ func (h *OutgoingServiceRegistry) Create(
 	ns.OutgoingServices = append(ns.OutgoingServices, &persistencespb.NexusOutgoingService{
 		Version: 1,
 		Name:    req.GetName(),
-		Spec:    common.CloneProto(req.GetSpec()),
+		Spec:    req.GetSpec(),
 	})
 	if err := h.updateNamespace(ctx, ns, response); err != nil {
 		return nil, err
@@ -162,6 +163,7 @@ func (h *OutgoingServiceRegistry) Create(
 	}, nil
 }
 
+// Update implements [operatorservice.OperatorServiceServer.UpdateNexusOutgoingService].
 func (h *OutgoingServiceRegistry) Update(
 	ctx context.Context,
 	req *operatorservice.UpdateNexusOutgoingServiceRequest,
@@ -193,7 +195,7 @@ func (h *OutgoingServiceRegistry) Update(
 		)
 	}
 	service.Version++
-	service.Spec = common.CloneProto(req.GetSpec())
+	service.Spec = req.GetSpec()
 	if err := h.updateNamespace(ctx, ns, response); err != nil {
 		return nil, err
 	}
@@ -206,12 +208,13 @@ func (h *OutgoingServiceRegistry) Update(
 	}, nil
 }
 
+// Delete implements [operatorservice.OperatorServiceServer.DeleteNexusOutgoingService].
 func (h *OutgoingServiceRegistry) Delete(
 	ctx context.Context,
 	req *operatorservice.DeleteNexusOutgoingServiceRequest,
 ) (*operatorservice.DeleteNexusOutgoingServiceResponse, error) {
-	if err := validateCommonRequest(req); err != nil {
-		return nil, err
+	if errorMessageSet := findIssuesForCommonRequest(req); errorMessageSet != nil {
+		return nil, errorMessageSet.GetError()
 	}
 	response, err := h.namespaceService.GetNamespace(ctx, &persistence.GetNamespaceRequest{
 		Name: req.Namespace,
@@ -233,16 +236,21 @@ func (h *OutgoingServiceRegistry) Delete(
 	return &operatorservice.DeleteNexusOutgoingServiceResponse{}, nil
 }
 
+func compareServiceAndName(svc *persistencespb.NexusOutgoingService, name string) int {
+	return strings.Compare(svc.Name, name)
+}
+
 func findIndexOfNextService(services []*persistencespb.NexusOutgoingService, lastServiceName string) int {
-	i := slicex.LowerBoundFunc(services, lastServiceName, func(svc *persistencespb.NexusOutgoingService, name string) int {
-		return strings.Compare(svc.Name, name)
-	})
-	if i < len(services) && services[i].Name == lastServiceName {
+	i, ok := slices.BinarySearchFunc(services, lastServiceName, compareServiceAndName)
+	if ok {
+		// If the service is found, we want to start at the next service.
 		i++
 	}
+	// If the service is not found, i is the index where the service would be inserted (like std::lower_bound).
 	return i
 }
 
+// List implements [operatorservice.OperatorServiceServer.ListNexusOutgoingServices].
 func (h *OutgoingServiceRegistry) List(
 	ctx context.Context,
 	req *operatorservice.ListNexusOutgoingServicesRequest,
@@ -257,22 +265,26 @@ func (h *OutgoingServiceRegistry) List(
 	if err != nil {
 		return nil, err
 	}
-	startIndex := findIndexOfNextService(response.Namespace.OutgoingServices, lastServiceName)
-	size := min(pageSize, len(response.Namespace.OutgoingServices)-startIndex)
+	startIndex := 0
+	ns := response.Namespace
+	if lastServiceName != "" {
+		startIndex = findIndexOfNextService(ns.OutgoingServices, lastServiceName)
+	}
+	size := min(pageSize, len(ns.OutgoingServices)-startIndex)
 	if size <= 0 {
 		return &operatorservice.ListNexusOutgoingServicesResponse{}, nil
 	}
 	services := make([]*nexus.OutgoingService, size)
 	for i := 0; i < size; i++ {
-		service := response.Namespace.OutgoingServices[startIndex+i]
+		service := ns.OutgoingServices[startIndex+i]
 		services[i] = &nexus.OutgoingService{
 			Name:    service.Name,
 			Version: service.Version,
-			Spec:    common.CloneProto(service.Spec),
+			Spec:    service.Spec,
 		}
 	}
 	var nextPageToken []byte
-	if startIndex+pageSize < len(response.Namespace.OutgoingServices) {
+	if startIndex+pageSize < len(ns.OutgoingServices) {
 		token := outgoingServicesPageToken{LastServiceName: services[len(services)-1].Name}
 		nextPageToken = token.Serialize()
 	}
@@ -295,17 +307,6 @@ func (token *outgoingServicesPageToken) Deserialize(b []byte) error {
 	return json.Unmarshal(b, token)
 }
 
-func validateCommonRequest(req commonRequest) error {
-	var errs error
-	if req, ok := req.(interface{ GetNamespace() string }); ok && req.GetNamespace() == "" {
-		errs = multierr.Append(errs, ErrNamespaceNotSet)
-	}
-	if req, ok := req.(interface{ GetName() string }); ok && req.GetName() == "" {
-		errs = multierr.Append(errs, ErrNameNotSet)
-	}
-	return errs
-}
-
 func (h *OutgoingServiceRegistry) updateNamespace(
 	ctx context.Context,
 	ns *persistencespb.NamespaceDetail,
@@ -318,58 +319,32 @@ func (h *OutgoingServiceRegistry) updateNamespace(
 	})
 }
 
-func (h *OutgoingServiceRegistry) addService(req upsertRequest, version int64, ns *persistencespb.NamespaceDetail) error {
-	if version != 0 {
-		return status.Errorf(
-			codes.NotFound,
-			"Outgoing service %q not found. Set Version to 0 (not %d) if you want to register a new service.",
-			req.GetName(),
-			version,
-		)
-	}
-	ns.OutgoingServices = append(ns.OutgoingServices, &persistencespb.NexusOutgoingService{
-		Version: 1,
-		Name:    req.GetName(),
-		Spec:    common.CloneProto(req.GetSpec()),
-	})
-	return nil
-}
-
 func (h *OutgoingServiceRegistry) parseListRequest(
 	req *operatorservice.ListNexusOutgoingServicesRequest,
 ) (lastServiceName string, pageSize int, err error) {
-	var errs error
+	var issues issueSet
 	if req.Namespace == "" {
-		errs = multierr.Append(errs, ErrNamespaceNotSet)
+		issues.Append(IssueNamespaceNotSet)
 	}
 	pageSize = int(req.PageSize)
 	if pageSize < 0 {
-		errs = multierr.Append(errs, status.Errorf(codes.InvalidArgument, "PageSize must be non-negative but is %d", pageSize))
+		issues.Appendf("PageSize must be non-negative but is %d", pageSize)
 	}
 	if pageSize == 0 {
 		pageSize = h.config.DefaultPageSize()
 	}
 	maxPageSize := h.config.MaxPageSize()
 	if pageSize > maxPageSize {
-		errs = multierr.Append(errs, status.Errorf(
-			codes.InvalidArgument,
-			"PageSize cannot exceed %d but is %d",
-			maxPageSize,
-			pageSize,
-		))
+		issues.Appendf("PageSize cannot exceed %d but is %d", maxPageSize, pageSize)
 	}
 	var pageToken outgoingServicesPageToken
 	if len(req.PageToken) > 0 {
 		if err := pageToken.Deserialize(req.PageToken); err != nil {
-			errs = multierr.Append(errs, status.Errorf(
-				codes.InvalidArgument,
-				"Invalid NextPageToken: %v",
-				err,
-			))
+			issues.Appendf("Invalid NextPageToken: %v", err)
 		}
 	}
-	if errs != nil {
-		return "", 0, errs
+	if err := issues.GetError(); err != nil {
+		return "", 0, err
 	}
 	return pageToken.LastServiceName, pageSize, nil
 }
@@ -387,7 +362,7 @@ func (h *OutgoingServiceRegistry) findService(
 			return &nexus.OutgoingService{
 				Name:    service.Name,
 				Version: service.Version,
-				Spec:    common.CloneProto(service.Spec),
+				Spec:    service.Spec,
 			}
 		}
 	}
@@ -399,58 +374,64 @@ type commonRequest interface {
 	GetName() string
 }
 
+func findIssuesForCommonRequest(req commonRequest) issueSet {
+	var set issueSet
+	if req.GetNamespace() == "" {
+		set.Append(IssueNamespaceNotSet)
+	}
+	if req.GetName() == "" {
+		set.Append(IssueNameNotSet)
+	}
+	return set
+}
+
 type upsertRequest interface {
 	commonRequest
 	GetSpec() *nexus.OutgoingServiceSpec
 }
 
 func (h *OutgoingServiceRegistry) validateUpsertRequest(req upsertRequest) error {
-	var errs error
-	if err := validateCommonRequest(req); err != nil {
-		errs = multierr.Append(errs, err)
-	}
+	issues := findIssuesForCommonRequest(req)
 	nameMaxLength := h.config.NameMaxLength()
 	if len(req.GetName()) > nameMaxLength {
-		errs = multierr.Append(errs, status.Errorf(
-			codes.InvalidArgument,
-			"Outgoing service name length exceeds the limit of %d",
-			nameMaxLength,
-		))
+		issues.Appendf("Outgoing service name length exceeds the limit of %d", nameMaxLength)
 	}
 	if !ServiceNameRegex.MatchString(req.GetName()) {
-		errs = multierr.Append(errs, status.Errorf(
-			codes.InvalidArgument,
-			"Outgoing service name must match the regex: %q",
-			ServiceNameRegex.String(),
-		))
+		issues.Appendf("Outgoing service name must match the regex: %q", ServiceNameRegex.String())
 	}
 	if req.GetSpec() == nil || req.GetSpec().GetUrl() == "" {
-		errs = multierr.Append(errs, ErrURLNotSet)
+		issues.Appendf(IssueURLNotSet)
 	} else {
 		urlMaxLength := h.config.MaxURLLength()
 		if len(req.GetSpec().GetUrl()) > urlMaxLength {
-			errs = multierr.Append(errs, status.Errorf(
-				codes.InvalidArgument,
-				"Outgoing service URL length exceeds the limit of %d",
-				urlMaxLength,
-			))
+			issues.Appendf("Outgoing service URL length exceeds the limit of %d", urlMaxLength)
 		}
 		u, err := url.Parse(req.GetSpec().GetUrl())
 		if err != nil {
-			errs = multierr.Append(errs, status.Errorf(
-				codes.InvalidArgument,
-				"Malformed outgoing service URL: %v",
-				err,
-			))
+			issues.Appendf("Malformed outgoing service URL: %v", err)
 		} else {
 			if u.Scheme != "http" && u.Scheme != "https" {
-				errs = multierr.Append(errs, status.Errorf(
-					codes.InvalidArgument,
-					"Outgoing service URL must have http or https scheme but has %q",
-					u.Scheme,
-				))
+				issues.Appendf("Outgoing service URL must have http or https scheme but has %q", u.Scheme)
 			}
 		}
 	}
-	return errs
+	return issues.GetError()
+}
+
+// issueSet is a set of form validation issues.
+type issueSet []string
+
+func (s *issueSet) Append(msg string) {
+	*s = append(*s, msg)
+}
+
+func (s *issueSet) Appendf(format string, a ...interface{}) {
+	s.Append(fmt.Sprintf(format, a...))
+}
+
+func (s *issueSet) GetError() error {
+	if len(*s) == 0 {
+		return nil
+	}
+	return status.Errorf(codes.InvalidArgument, strings.Join(*s, ", "))
 }

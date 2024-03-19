@@ -1,8 +1,6 @@
 // The MIT License
 //
-// Copyright (c) 2020 Temporal Technologies Inc.  All rights reserved.
-//
-// Copyright (c) 2020 Uber Technologies, Inc.
+// Copyright (c) 2024 Temporal Technologies Inc.  All rights reserved.
 //
 // Permission is hereby granted, free of charge, to any person obtaining a copy
 // of this software and associated documentation files (the "Software"), to deal
@@ -38,6 +36,7 @@ import (
 	"go.temporal.io/api/operatorservice/v1"
 	"go.temporal.io/api/serviceerror"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
+	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/nexus"
 	"go.temporal.io/server/common/nexus/nexustest"
@@ -65,7 +64,7 @@ func TestGet_NoNamespace(t *testing.T) {
 			Namespace: "",
 		},
 	)
-	assert.ErrorIs(t, err, nexus.ErrNamespaceNotSet)
+	assert.ErrorContains(t, err, nexus.IssueNamespaceNotSet)
 }
 
 func TestGet_NoName(t *testing.T) {
@@ -78,7 +77,7 @@ func TestGet_NoName(t *testing.T) {
 			Namespace: testNamespace,
 		},
 	)
-	assert.ErrorIs(t, err, nexus.ErrNameNotSet)
+	assert.ErrorContains(t, err, nexus.IssueNameNotSet)
 }
 
 func TestGet_GetNamespaceErr(t *testing.T) {
@@ -168,7 +167,7 @@ func TestUpdate_NoNamespace(t *testing.T) {
 			},
 		},
 	)
-	require.ErrorIs(t, err, nexus.ErrNamespaceNotSet)
+	require.ErrorContains(t, err, nexus.IssueNamespaceNotSet)
 }
 
 func TestUpdate_NoServiceName(t *testing.T) {
@@ -183,7 +182,121 @@ func TestUpdate_NoServiceName(t *testing.T) {
 			},
 		},
 	)
-	require.ErrorIs(t, err, nexus.ErrNameNotSet)
+	require.ErrorContains(t, err, nexus.IssueNameNotSet)
+}
+
+func TestUpdate_NotFound(t *testing.T) {
+	t.Parallel()
+	service := nexustest.NamespaceService{}
+	service.OnGetNamespace = func(ctx context.Context, request *persistence.GetNamespaceRequest) (*persistence.GetNamespaceResponse, error) {
+		return &persistence.GetNamespaceResponse{
+			Namespace: &persistencespb.NamespaceDetail{},
+		}, nil
+	}
+
+	registry := nexus.NewOutgoingServiceRegistry(&service, newConfig())
+	_, err := registry.Update(
+		context.Background(),
+		&operatorservice.UpdateNexusOutgoingServiceRequest{
+			Namespace: testNamespace,
+			Name:      testServiceName + "x",
+			Version:   1,
+			Spec: &nexuspb.OutgoingServiceSpec{
+				Url: testServiceURL + "x",
+			},
+		},
+	)
+	require.Error(t, err)
+	assert.Equal(t, codes.NotFound, serviceerror.ToStatus(err).Code(), err)
+}
+
+func TestUpdate_VersionMismatch(t *testing.T) {
+	t.Parallel()
+	service := nexustest.NamespaceService{}
+	service.OnGetNamespace = func(ctx context.Context, request *persistence.GetNamespaceRequest) (*persistence.GetNamespaceResponse, error) {
+		return &persistence.GetNamespaceResponse{
+			Namespace: &persistencespb.NamespaceDetail{
+				OutgoingServices: []*persistencespb.NexusOutgoingService{
+					{
+						Version: 1,
+						Name:    testServiceName,
+						Spec: &nexuspb.OutgoingServiceSpec{
+							Url: testServiceURL,
+						},
+					},
+				},
+			},
+		}, nil
+	}
+
+	registry := nexus.NewOutgoingServiceRegistry(&service, newConfig())
+	_, err := registry.Update(
+		context.Background(),
+		&operatorservice.UpdateNexusOutgoingServiceRequest{
+			Namespace: testNamespace,
+			Name:      testServiceName,
+			Version:   2,
+			Spec: &nexuspb.OutgoingServiceSpec{
+				Url: testServiceURL + "x",
+			},
+		},
+	)
+	require.Error(t, err)
+	assert.Equal(t, codes.FailedPrecondition, serviceerror.ToStatus(err).Code(), err)
+}
+
+func TestUpdate_Ok(t *testing.T) {
+	t.Parallel()
+	service := nexustest.NamespaceService{}
+	ns := &persistencespb.NamespaceDetail{
+		OutgoingServices: []*persistencespb.NexusOutgoingService{
+			{
+				Version: 1,
+				Name:    testServiceName,
+				Spec: &nexuspb.OutgoingServiceSpec{
+					Url: testServiceURL,
+				},
+			},
+		},
+	}
+	service.OnGetNamespace = func(ctx context.Context, request *persistence.GetNamespaceRequest) (*persistence.GetNamespaceResponse, error) {
+		return &persistence.GetNamespaceResponse{
+			Namespace: common.CloneProto(ns),
+		}, nil
+	}
+	service.OnUpdateNamespace = func(ctx context.Context, request *persistence.UpdateNamespaceRequest) error {
+		ns = request.Namespace
+		return nil
+	}
+
+	registry := nexus.NewOutgoingServiceRegistry(&service, newConfig())
+	_, err := registry.Update(
+		context.Background(),
+		&operatorservice.UpdateNexusOutgoingServiceRequest{
+			Namespace: testNamespace,
+			Name:      testServiceName,
+			Version:   1,
+			Spec: &nexuspb.OutgoingServiceSpec{
+				Url: testServiceURL + "x",
+			},
+		},
+	)
+	require.NoError(t, err)
+	res, err := registry.Get(
+		context.Background(),
+		&operatorservice.GetNexusOutgoingServiceRequest{
+			Namespace: testNamespace,
+			Name:      testServiceName,
+		},
+	)
+	require.NoError(t, err)
+	protoassert.ProtoEqual(t, &nexuspb.OutgoingService{
+		Version: 2,
+		Name:    testServiceName,
+		Spec: &nexuspb.OutgoingServiceSpec{
+			Url: testServiceURL + "x",
+		},
+	}, res.Service)
 }
 
 func TestCreate_NameTooLong(t *testing.T) {
@@ -234,7 +347,7 @@ func TestCreate_NoURL(t *testing.T) {
 			Name:      testServiceName,
 		},
 	)
-	require.ErrorIs(t, err, nexus.ErrURLNotSet)
+	require.ErrorContains(t, err, nexus.IssueURLNotSet)
 }
 
 func TestCreate_URLTooLong(t *testing.T) {
@@ -362,6 +475,75 @@ func TestCreate_UpdateNamespaceErr(t *testing.T) {
 	require.ErrorIs(t, err, updateNamespaceErr)
 }
 
+func TestCreate_NameAlreadyTaken(t *testing.T) {
+	t.Parallel()
+	service := nexustest.NamespaceService{}
+	service.OnGetNamespace = func(ctx context.Context, request *persistence.GetNamespaceRequest) (*persistence.GetNamespaceResponse, error) {
+		return &persistence.GetNamespaceResponse{
+			Namespace: &persistencespb.NamespaceDetail{
+				OutgoingServices: []*persistencespb.NexusOutgoingService{
+					{
+						Version: 1,
+						Name:    testServiceName,
+						Spec: &nexuspb.OutgoingServiceSpec{
+							Url: testServiceURL,
+						},
+					},
+				},
+			},
+			IsGlobalNamespace:   true,
+			NotificationVersion: 1,
+		}, nil
+	}
+	registry := nexus.NewOutgoingServiceRegistry(&service, newConfig())
+	_, err := registry.Create(
+		context.Background(),
+		&operatorservice.CreateNexusOutgoingServiceRequest{
+			Namespace: testNamespace,
+			Name:      testServiceName,
+			Spec: &nexuspb.OutgoingServiceSpec{
+				Url: testServiceURL,
+			},
+		},
+	)
+	require.Error(t, err)
+	assert.Equal(t, codes.AlreadyExists, serviceerror.ToStatus(err).Code(), err)
+}
+
+func TestCreate_Ok(t *testing.T) {
+	t.Parallel()
+	service := nexustest.NamespaceService{}
+	ns := &persistencespb.NamespaceDetail{}
+	service.OnGetNamespace = func(ctx context.Context, request *persistence.GetNamespaceRequest) (*persistence.GetNamespaceResponse, error) {
+		return &persistence.GetNamespaceResponse{
+			Namespace: common.CloneProto(ns),
+		}, nil
+	}
+	service.OnUpdateNamespace = func(ctx context.Context, request *persistence.UpdateNamespaceRequest) error {
+		ns = request.Namespace
+		return nil
+	}
+	registry := nexus.NewOutgoingServiceRegistry(&service, newConfig())
+	res, err := registry.Create(
+		context.Background(),
+		&operatorservice.CreateNexusOutgoingServiceRequest{
+			Namespace: testNamespace,
+			Name:      testServiceName,
+			Spec: &nexuspb.OutgoingServiceSpec{
+				Url: testServiceURL,
+			},
+		},
+	)
+	require.NoError(t, err)
+	protoassert.ProtoEqual(t, &nexuspb.OutgoingService{
+		Version: 1,
+		Name:    testServiceName,
+		Spec: &nexuspb.OutgoingServiceSpec{
+			Url: testServiceURL,
+		},
+	}, res.Service)
+}
+
 func TestDelete_NoNamespace(t *testing.T) {
 	t.Parallel()
 	registry := nexus.NewOutgoingServiceRegistry(nil, newConfig())
@@ -372,7 +554,7 @@ func TestDelete_NoNamespace(t *testing.T) {
 			Name:      testServiceName,
 		},
 	)
-	require.ErrorIs(t, err, nexus.ErrNamespaceNotSet)
+	require.ErrorContains(t, err, nexus.IssueNamespaceNotSet)
 }
 
 func TestDelete_NoName(t *testing.T) {
@@ -385,7 +567,7 @@ func TestDelete_NoName(t *testing.T) {
 			Name:      "",
 		},
 	)
-	require.ErrorIs(t, err, nexus.ErrNameNotSet)
+	require.ErrorContains(t, err, nexus.IssueNameNotSet)
 }
 
 func TestDelete_GetNamespaceErr(t *testing.T) {
@@ -499,7 +681,7 @@ func TestList_NoNamespace(t *testing.T) {
 			Namespace: "",
 		},
 	)
-	require.ErrorIs(t, err, nexus.ErrNamespaceNotSet)
+	require.ErrorContains(t, err, nexus.IssueNamespaceNotSet)
 }
 
 func TestList_NegativePageSize(t *testing.T) {
@@ -603,6 +785,27 @@ func TestList_NoNextPageToken(t *testing.T) {
 	)
 	require.NoError(t, err)
 	assert.Len(t, res.Services, 1)
+}
+
+func TestList_NoServices(t *testing.T) {
+	t.Parallel()
+	service := &nexustest.NamespaceService{}
+
+	service.OnGetNamespace = func(ctx context.Context, request *persistence.GetNamespaceRequest) (*persistence.GetNamespaceResponse, error) {
+		return &persistence.GetNamespaceResponse{
+			Namespace: &persistencespb.NamespaceDetail{},
+		}, nil
+	}
+	config := newConfig()
+	registry := nexus.NewOutgoingServiceRegistry(service, config)
+	res, err := registry.List(
+		context.Background(),
+		&operatorservice.ListNexusOutgoingServicesRequest{
+			Namespace: testNamespace,
+		},
+	)
+	require.NoError(t, err)
+	assert.Empty(t, res.Services)
 }
 
 func TestList_Paginate(t *testing.T) {
