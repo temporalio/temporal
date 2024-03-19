@@ -696,7 +696,7 @@ func TestList_NegativePageSize(t *testing.T) {
 	)
 	require.Error(t, err)
 	assert.Equal(t, codes.InvalidArgument, serviceerror.ToStatus(err).Code(), err)
-	assert.ErrorContains(t, err, "PageSize")
+	assert.ErrorContains(t, err, "page_size")
 	assert.ErrorContains(t, err, "negative")
 }
 
@@ -713,7 +713,7 @@ func TestList_PageSizeTooLarge(t *testing.T) {
 	)
 	require.Error(t, err)
 	assert.Equal(t, codes.InvalidArgument, serviceerror.ToStatus(err).Code(), err)
-	assert.ErrorContains(t, err, "PageSize")
+	assert.ErrorContains(t, err, "page_size")
 	assert.ErrorContains(t, err, strconv.Itoa(config.MaxPageSize()))
 }
 
@@ -729,7 +729,7 @@ func TestList_InvalidPageToken(t *testing.T) {
 	)
 	require.Error(t, err)
 	assert.Equal(t, codes.InvalidArgument, serviceerror.ToStatus(err).Code(), err)
-	assert.ErrorContains(t, err, "NextPageToken")
+	assert.ErrorContains(t, err, "page_token")
 }
 
 func TestList_GetNamespaceErr(t *testing.T) {

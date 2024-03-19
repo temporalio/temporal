@@ -88,9 +88,9 @@ func NewOutgoingServiceRegistryConfig(dc *dynamicconfig.Collection) *OutgoingSer
 }
 
 const (
-	IssueNamespaceNotSet = "Namespace is not set on request"
-	IssueNameNotSet      = "Name is not set on request"
-	IssueURLNotSet       = "URL is not set on request"
+	IssueNamespaceNotSet = "namespace is not set on request"
+	IssueNameNotSet      = "name is not set on request"
+	IssueURLNotSet       = "url is not set on request"
 )
 
 // ServiceNameRegex is the regular expression that outgoing service names must match.
@@ -141,7 +141,7 @@ func (h *OutgoingServiceRegistry) Create(
 	if i >= 0 {
 		return nil, status.Errorf(
 			codes.AlreadyExists,
-			"Outgoing service %q already exists with version %d",
+			"outgoing service %q already exists with version %d",
 			req.GetName(),
 			ns.OutgoingServices[i].Version,
 		)
@@ -182,13 +182,13 @@ func (h *OutgoingServiceRegistry) Update(
 		return svc.Name == req.GetName()
 	})
 	if i < 0 {
-		return nil, status.Errorf(codes.NotFound, "Outgoing service %q not found", req.GetName())
+		return nil, status.Errorf(codes.NotFound, "outgoing service %q not found", req.GetName())
 	}
 	service := ns.OutgoingServices[i]
 	if service.Version != req.GetVersion() {
 		return nil, status.Errorf(
 			codes.FailedPrecondition,
-			"Outgoing service %q version %d does not match expected version %d",
+			"outgoing service %q version %d does not match expected version %d",
 			req.GetName(),
 			service.Version,
 			req.GetVersion(),
@@ -228,7 +228,7 @@ func (h *OutgoingServiceRegistry) Delete(
 		return svc.Name == req.Name
 	})
 	if len(services) == len(ns.OutgoingServices) {
-		return nil, status.Errorf(codes.NotFound, "Outgoing service %q not found", req.Name)
+		return nil, status.Errorf(codes.NotFound, "outgoing service %q not found", req.Name)
 	}
 	if err := h.updateNamespace(ctx, ns, response); err != nil {
 		return nil, err
@@ -328,19 +328,19 @@ func (h *OutgoingServiceRegistry) parseListRequest(
 	}
 	pageSize = int(req.PageSize)
 	if pageSize < 0 {
-		issues.Appendf("PageSize must be non-negative but is %d", pageSize)
+		issues.Appendf("page_size must be non-negative but is %d", pageSize)
 	}
 	if pageSize == 0 {
 		pageSize = h.config.DefaultPageSize()
 	}
 	maxPageSize := h.config.MaxPageSize()
 	if pageSize > maxPageSize {
-		issues.Appendf("PageSize cannot exceed %d but is %d", maxPageSize, pageSize)
+		issues.Appendf("page_size cannot exceed %d but is %d", maxPageSize, pageSize)
 	}
 	var pageToken outgoingServicesPageToken
 	if len(req.PageToken) > 0 {
 		if err := pageToken.Deserialize(req.PageToken); err != nil {
-			issues.Appendf("Invalid NextPageToken: %v", err)
+			issues.Appendf("invalid page_token: %v", err)
 		}
 	}
 	if err := issues.GetError(); err != nil {
@@ -394,24 +394,24 @@ func (h *OutgoingServiceRegistry) validateUpsertRequest(req upsertRequest) error
 	issues := findIssuesForCommonRequest(req)
 	nameMaxLength := h.config.MaxNameLength()
 	if len(req.GetName()) > nameMaxLength {
-		issues.Appendf("Outgoing service name length exceeds the limit of %d", nameMaxLength)
+		issues.Appendf("outgoing service name length exceeds the limit of %d", nameMaxLength)
 	}
 	if !ServiceNameRegex.MatchString(req.GetName()) {
-		issues.Appendf("Outgoing service name must match the regex: %q", ServiceNameRegex.String())
+		issues.Appendf("outgoing service name must match the regex: %q", ServiceNameRegex.String())
 	}
 	if req.GetSpec() == nil || req.GetSpec().GetUrl() == "" {
 		issues.Appendf(IssueURLNotSet)
 	} else {
 		urlMaxLength := h.config.MaxURLLength()
 		if len(req.GetSpec().GetUrl()) > urlMaxLength {
-			issues.Appendf("Outgoing service URL length exceeds the limit of %d", urlMaxLength)
+			issues.Appendf("outgoing service URL length exceeds the limit of %d", urlMaxLength)
 		}
 		u, err := url.Parse(req.GetSpec().GetUrl())
 		if err != nil {
-			issues.Appendf("Malformed outgoing service URL: %v", err)
+			issues.Appendf("malformed outgoing service URL: %v", err)
 		} else {
 			if u.Scheme != "http" && u.Scheme != "https" {
-				issues.Appendf("Outgoing service URL must have http or https scheme but has %q", u.Scheme)
+				issues.Appendf("outgoing service URL must have http or https scheme but has %q", u.Scheme)
 			}
 		}
 	}
