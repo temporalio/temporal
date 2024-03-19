@@ -2070,7 +2070,6 @@ func (s *VersioningIntegSuite) pollVersionedTaskQueue(tq, buildID string, useVer
 		return "done!", nil
 	}
 
-	// run worker before registering build. it will use guessed set id
 	w1 := worker.New(s.sdkClient, tq, worker.Options{
 		BuildID:                          buildID,
 		UseBuildIDForVersioning:          useVersioning,
