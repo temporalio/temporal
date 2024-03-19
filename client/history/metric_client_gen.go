@@ -145,6 +145,20 @@ func (c *metricClient) DescribeWorkflowExecution(
 	return c.client.DescribeWorkflowExecution(ctx, request, opts...)
 }
 
+func (c *metricClient) ExecuteMultiOperation(
+	ctx context.Context,
+	request *historyservice.ExecuteMultiOperationRequest,
+	opts ...grpc.CallOption,
+) (_ *historyservice.ExecuteMultiOperationResponse, retError error) {
+
+	metricsHandler, startTime := c.startMetricsRecording(ctx, "HistoryClientExecuteMultiOperation")
+	defer func() {
+		c.finishMetricsRecording(metricsHandler, startTime, retError)
+	}()
+
+	return c.client.ExecuteMultiOperation(ctx, request, opts...)
+}
+
 func (c *metricClient) ForceDeleteWorkflowExecution(
 	ctx context.Context,
 	request *historyservice.ForceDeleteWorkflowExecutionRequest,
@@ -383,6 +397,20 @@ func (c *metricClient) ListQueues(
 	return c.client.ListQueues(ctx, request, opts...)
 }
 
+func (c *metricClient) ListTasks(
+	ctx context.Context,
+	request *historyservice.ListTasksRequest,
+	opts ...grpc.CallOption,
+) (_ *historyservice.ListTasksResponse, retError error) {
+
+	metricsHandler, startTime := c.startMetricsRecording(ctx, "HistoryClientListTasks")
+	defer func() {
+		c.finishMetricsRecording(metricsHandler, startTime, retError)
+	}()
+
+	return c.client.ListTasks(ctx, request, opts...)
+}
+
 func (c *metricClient) MergeDLQMessages(
 	ctx context.Context,
 	request *historyservice.MergeDLQMessagesRequest,
@@ -395,20 +423,6 @@ func (c *metricClient) MergeDLQMessages(
 	}()
 
 	return c.client.MergeDLQMessages(ctx, request, opts...)
-}
-
-func (c *metricClient) MultiOperationWorkflowExecution(
-	ctx context.Context,
-	request *historyservice.MultiOperationWorkflowExecutionRequest,
-	opts ...grpc.CallOption,
-) (_ *historyservice.MultiOperationWorkflowExecutionResponse, retError error) {
-
-	metricsHandler, startTime := c.startMetricsRecording(ctx, "HistoryClientMultiOperationWorkflowExecution")
-	defer func() {
-		c.finishMetricsRecording(metricsHandler, startTime, retError)
-	}()
-
-	return c.client.MultiOperationWorkflowExecution(ctx, request, opts...)
 }
 
 func (c *metricClient) PollMutableState(

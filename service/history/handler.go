@@ -138,6 +138,11 @@ type (
 	}
 )
 
+func (h *Handler) ListTasks(ctx context.Context, request *historyservice.ListTasksRequest) (*historyservice.ListTasksResponse, error) {
+	//TODO implement me
+	panic("implement me")
+}
+
 const (
 	serviceName = "temporal.api.workflowservice.v1.HistoryService"
 )
@@ -606,10 +611,10 @@ func (h *Handler) StartWorkflowExecution(ctx context.Context, request *historyse
 	return response, nil
 }
 
-func (h *Handler) MultiOperationWorkflowExecution(
+func (h *Handler) ExecuteMultiOperation(
 	ctx context.Context,
-	request *historyservice.MultiOperationWorkflowExecutionRequest,
-) (*historyservice.MultiOperationWorkflowExecutionResponse, error) {
+	request *historyservice.ExecuteMultiOperationRequest,
+) (*historyservice.ExecuteMultiOperationResponse, error) {
 
 	// TODO
 
@@ -629,7 +634,7 @@ func (h *Handler) MultiOperationWorkflowExecution(
 		return nil, h.convertError(err)
 	}
 
-	return engine.MultiOperationWorkflowExecution(ctx, request)
+	return engine.ExecuteMultiOperation(ctx, request)
 }
 
 // DescribeHistoryHost returns information about the internal states of a history host

@@ -77,8 +77,8 @@ func ApplyWorkflowIDReusePolicy(
 					false,
 				)
 			}, nil
-		case enumspb.WORKFLOW_ID_REUSE_POLICY_SKIP_IF_RUNNING:
-			return nil, ErrIgnoreWorkflowStart
+		//case enumspb.WORKFLOW_ID_REUSE_POLICY_SKIP_IF_RUNNING:
+		//	return nil, ErrIgnoreWorkflowStart
 		default:
 			msg := "Workflow execution is already running. WorkflowId: %v, RunId: %v."
 			return nil, generateWorkflowAlreadyStartedError(msg, prevStartRequestID, workflowID, prevRunID)

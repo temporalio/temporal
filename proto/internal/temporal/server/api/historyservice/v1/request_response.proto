@@ -150,27 +150,27 @@ message ResetStickyTaskQueueRequest {
 message ResetStickyTaskQueueResponse {
 }
 
-message MultiOperationWorkflowExecutionRequest {
+message ExecuteMultiOperationRequest {
     string namespace_id = 1;
     string workflow_id = 2;
-    repeated Operation operations = 3;
+    repeated WorkflowOperation operations = 3;
+}
 
-    message Operation {
-        oneof operation {
-            StartWorkflowExecutionRequest start_workflow = 1;
-            UpdateWorkflowExecutionRequest update_workflow = 2;
-        }
+message WorkflowOperation {
+    oneof operation {
+        StartWorkflowExecutionRequest start_workflow = 1;
+        UpdateWorkflowExecutionRequest update_workflow = 2;
     }
 }
 
-message MultiOperationWorkflowExecutionResponse {
-    repeated Operation operations = 1;
+message ExecuteMultiOperationResponse {
+    repeated WorkflowOperationResult operations = 1;
+}
 
-    message Operation {
-        oneof operation {
-            StartWorkflowExecutionResponse start_workflow = 1;
-            UpdateWorkflowExecutionResponse update_workflow = 2;
-        }
+message WorkflowOperationResult {
+    oneof result {
+        StartWorkflowExecutionResponse start_workflow = 1;
+        UpdateWorkflowExecutionResponse update_workflow = 2;
     }
 }
 
@@ -864,3 +864,11 @@ message AddTasksRequest {
 }
 
 message AddTasksResponse {}
+
+message ListTasksRequest {
+    temporal.server.api.adminservice.v1.ListHistoryTasksRequest request = 1;
+}
+
+message ListTasksResponse {
+    temporal.server.api.adminservice.v1.ListHistoryTasksResponse response = 1;
+}

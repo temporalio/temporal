@@ -44,13 +44,13 @@ import (
 
 func Invoke(
 	ctx context.Context,
-	req *historyservicepb.MultiOperationWorkflowExecutionRequest,
+	req *historyservicepb.ExecuteMultiOperationRequest,
 	shardContext shard.Context,
 	workflowConsistencyChecker api.WorkflowConsistencyChecker,
 	tokenSerializer common.TaskTokenSerializer,
 	visibilityManager manager.VisibilityManager,
 	matchingClient matchinservicepb.MatchingServiceClient,
-) (_ *historyservicepb.MultiOperationWorkflowExecutionResponse, retError error) {
+) (_ *historyservicepb.ExecuteMultiOperationResponse, retError error) {
 	// TODO: this assumes "Maybe Start"
 
 	namespaceEntry, err := api.GetActiveNamespace(shardContext, namespace.ID(req.GetNamespaceId()))
@@ -140,15 +140,15 @@ func Invoke(
 		}
 	}
 
-	return &historyservicepb.MultiOperationWorkflowExecutionResponse{
-		Operations: []*historyservicepb.MultiOperationWorkflowExecutionResponse_Operation{
+	return &historyservicepb.ExecuteMultiOperationResponse{
+		Operations: []*historyservicepb.WorkflowOperationResult{
 			{
-				Operation: &historyservicepb.MultiOperationWorkflowExecutionResponse_Operation_StartWorkflow{
+				Result: &historyservicepb.WorkflowOperationResult_StartWorkflow{
 					StartWorkflow: startResp,
 				},
 			},
 			{
-				Operation: &historyservicepb.MultiOperationWorkflowExecutionResponse_Operation_UpdateWorkflow{
+				Result: &historyservicepb.WorkflowOperationResult_UpdateWorkflow{
 					UpdateWorkflow: updateResp,
 				},
 			},

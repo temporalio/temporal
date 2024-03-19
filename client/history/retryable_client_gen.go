@@ -155,6 +155,21 @@ func (c *retryableClient) DescribeWorkflowExecution(
 	return resp, err
 }
 
+func (c *retryableClient) ExecuteMultiOperation(
+	ctx context.Context,
+	request *historyservice.ExecuteMultiOperationRequest,
+	opts ...grpc.CallOption,
+) (*historyservice.ExecuteMultiOperationResponse, error) {
+	var resp *historyservice.ExecuteMultiOperationResponse
+	op := func(ctx context.Context) error {
+		var err error
+		resp, err = c.client.ExecuteMultiOperation(ctx, request, opts...)
+		return err
+	}
+	err := backoff.ThrottleRetryContext(ctx, op, c.policy, c.isRetryable)
+	return resp, err
+}
+
 func (c *retryableClient) ForceDeleteWorkflowExecution(
 	ctx context.Context,
 	request *historyservice.ForceDeleteWorkflowExecutionRequest,
@@ -410,6 +425,21 @@ func (c *retryableClient) ListQueues(
 	return resp, err
 }
 
+func (c *retryableClient) ListTasks(
+	ctx context.Context,
+	request *historyservice.ListTasksRequest,
+	opts ...grpc.CallOption,
+) (*historyservice.ListTasksResponse, error) {
+	var resp *historyservice.ListTasksResponse
+	op := func(ctx context.Context) error {
+		var err error
+		resp, err = c.client.ListTasks(ctx, request, opts...)
+		return err
+	}
+	err := backoff.ThrottleRetryContext(ctx, op, c.policy, c.isRetryable)
+	return resp, err
+}
+
 func (c *retryableClient) MergeDLQMessages(
 	ctx context.Context,
 	request *historyservice.MergeDLQMessagesRequest,
@@ -419,21 +449,6 @@ func (c *retryableClient) MergeDLQMessages(
 	op := func(ctx context.Context) error {
 		var err error
 		resp, err = c.client.MergeDLQMessages(ctx, request, opts...)
-		return err
-	}
-	err := backoff.ThrottleRetryContext(ctx, op, c.policy, c.isRetryable)
-	return resp, err
-}
-
-func (c *retryableClient) MultiOperationWorkflowExecution(
-	ctx context.Context,
-	request *historyservice.MultiOperationWorkflowExecutionRequest,
-	opts ...grpc.CallOption,
-) (*historyservice.MultiOperationWorkflowExecutionResponse, error) {
-	var resp *historyservice.MultiOperationWorkflowExecutionResponse
-	op := func(ctx context.Context) error {
-		var err error
-		resp, err = c.client.MultiOperationWorkflowExecution(ctx, request, opts...)
 		return err
 	}
 	err := backoff.ThrottleRetryContext(ctx, op, c.policy, c.isRetryable)

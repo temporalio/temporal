@@ -421,10 +421,10 @@ func (wh *WorkflowHandler) StartWorkflowExecution(ctx context.Context, request *
 	return &workflowservice.StartWorkflowExecutionResponse{RunId: resp.GetRunId(), EagerWorkflowTask: resp.GetEagerWorkflowTask()}, nil
 }
 
-func (wh *WorkflowHandler) MultiOperationWorkflowExecution(
+func (wh *WorkflowHandler) ExecuteMultiOperation(
 	ctx context.Context,
-	request *workflowservice.MultiOperationWorkflowExecutionRequest,
-) (_ *workflowservice.MultiOperationWorkflowExecutionResponse, retError error) {
+	request *workflowservice.ExecuteMultiOperationRequest,
+) (_ *workflowservice.ExecuteMultiOperationResponse, retError error) {
 	defer log.CapturePanic(wh.logger, &retError)
 
 	if request == nil {
@@ -442,16 +442,16 @@ func (wh *WorkflowHandler) MultiOperationWorkflowExecution(
 
 	workflowId := request.Operations[0].GetStartWorkflow().WorkflowId
 
-	historyReq := &historyservice.MultiOperationWorkflowExecutionRequest{
+	historyReq := &historyservice.ExecuteMultiOperationRequest{
 		NamespaceId: namespaceID.String(),
 		WorkflowId:  workflowId,
-		Operations:  make([]*historyservice.MultiOperationWorkflowExecutionRequest_Operation, len(request.Operations)),
+		Operations:  make([]*historyservice.WorkflowOperation, len(request.Operations)),
 	}
 	for i, op := range request.Operations {
-		var opReq *historyservice.MultiOperationWorkflowExecutionRequest_Operation
+		var opReq *historyservice.WorkflowOperation
 		if startReq := op.GetStartWorkflow(); startReq != nil {
-			opReq = &historyservice.MultiOperationWorkflowExecutionRequest_Operation{
-				Operation: &historyservice.MultiOperationWorkflowExecutionRequest_Operation_StartWorkflow{
+			opReq = &historyservice.WorkflowOperation{
+				Operation: &historyservice.WorkflowOperation_StartWorkflow{
 					StartWorkflow: common.CreateHistoryStartWorkflowRequest(
 						namespaceID.String(),
 						startReq,
@@ -461,8 +461,8 @@ func (wh *WorkflowHandler) MultiOperationWorkflowExecution(
 				},
 			}
 		} else if updateReq := op.GetUpdateWorkflow(); updateReq != nil {
-			opReq = &historyservice.MultiOperationWorkflowExecutionRequest_Operation{
-				Operation: &historyservice.MultiOperationWorkflowExecutionRequest_Operation_UpdateWorkflow{
+			opReq = &historyservice.WorkflowOperation{
+				Operation: &historyservice.WorkflowOperation_UpdateWorkflow{
 					UpdateWorkflow: &historyservice.UpdateWorkflowExecutionRequest{
 						NamespaceId: namespaceID.String(),
 						Request:     updateReq,
@@ -475,19 +475,19 @@ func (wh *WorkflowHandler) MultiOperationWorkflowExecution(
 		historyReq.Operations[i] = opReq
 	}
 
-	historyResp, err := wh.historyClient.MultiOperationWorkflowExecution(ctx, historyReq)
+	historyResp, err := wh.historyClient.ExecuteMultiOperation(ctx, historyReq)
 	if err != nil {
 		return nil, err
 	}
 
-	resp := &workflowservice.MultiOperationWorkflowExecutionResponse{
-		Operations: make([]*workflowservice.MultiOperationWorkflowExecutionResponse_Operation, len(historyResp.Operations)),
+	resp := &workflowservice.ExecuteMultiOperationResponse{
+		Results: make([]*workflowservice.WorkflowOperationResult, len(historyResp.Operations)),
 	}
 	for i, op := range historyResp.Operations {
-		var opResp *workflowservice.MultiOperationWorkflowExecutionResponse_Operation
+		var opResp *workflowservice.WorkflowOperationResult
 		if startResp := op.GetStartWorkflow(); startResp != nil {
-			opResp = &workflowservice.MultiOperationWorkflowExecutionResponse_Operation{
-				Operation: &workflowservice.MultiOperationWorkflowExecutionResponse_Operation_StartWorkflow{
+			opResp = &workflowservice.WorkflowOperationResult{
+				Result: &workflowservice.WorkflowOperationResult_StartWorkflow{
 					StartWorkflow: &workflowservice.StartWorkflowExecutionResponse{
 						RunId:             startResp.RunId,
 						EagerWorkflowTask: startResp.EagerWorkflowTask,
@@ -495,8 +495,8 @@ func (wh *WorkflowHandler) MultiOperationWorkflowExecution(
 				},
 			}
 		} else if updateResp := op.GetUpdateWorkflow(); updateResp != nil {
-			opResp = &workflowservice.MultiOperationWorkflowExecutionResponse_Operation{
-				Operation: &workflowservice.MultiOperationWorkflowExecutionResponse_Operation_UpdateWorkflow{
+			opResp = &workflowservice.WorkflowOperationResult{
+				Result: &workflowservice.WorkflowOperationResult_UpdateWorkflow{
 					UpdateWorkflow: &workflowservice.UpdateWorkflowExecutionResponse{
 						UpdateRef: updateResp.Response.UpdateRef,
 						Outcome:   updateResp.Response.Outcome,
@@ -507,7 +507,7 @@ func (wh *WorkflowHandler) MultiOperationWorkflowExecution(
 		} else {
 			// TODO
 		}
-		resp.Operations[i] = opResp
+		resp.Results[i] = opResp
 	}
 
 	return resp, nil

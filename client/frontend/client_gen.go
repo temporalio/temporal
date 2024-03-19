@@ -133,6 +133,16 @@ func (c *clientImpl) DescribeWorkflowExecution(
 	return c.client.DescribeWorkflowExecution(ctx, request, opts...)
 }
 
+func (c *clientImpl) ExecuteMultiOperation(
+	ctx context.Context,
+	request *workflowservice.ExecuteMultiOperationRequest,
+	opts ...grpc.CallOption,
+) (*workflowservice.ExecuteMultiOperationResponse, error) {
+	ctx, cancel := c.createContext(ctx)
+	defer cancel()
+	return c.client.ExecuteMultiOperation(ctx, request, opts...)
+}
+
 func (c *clientImpl) GetClusterInfo(
 	ctx context.Context,
 	request *workflowservice.GetClusterInfoRequest,
@@ -291,16 +301,6 @@ func (c *clientImpl) ListWorkflowExecutions(
 	ctx, cancel := c.createContext(ctx)
 	defer cancel()
 	return c.client.ListWorkflowExecutions(ctx, request, opts...)
-}
-
-func (c *clientImpl) MultiOperationWorkflowExecution(
-	ctx context.Context,
-	request *workflowservice.MultiOperationWorkflowExecutionRequest,
-	opts ...grpc.CallOption,
-) (*workflowservice.MultiOperationWorkflowExecutionResponse, error) {
-	ctx, cancel := c.createContext(ctx)
-	defer cancel()
-	return c.client.MultiOperationWorkflowExecution(ctx, request, opts...)
 }
 
 func (c *clientImpl) PatchSchedule(

@@ -58,7 +58,7 @@ const (
 	HistoryService_IsActivityTaskValid_FullMethodName                    = "/temporal.server.api.historyservice.v1.HistoryService/IsActivityTaskValid"
 	HistoryService_SignalWorkflowExecution_FullMethodName                = "/temporal.server.api.historyservice.v1.HistoryService/SignalWorkflowExecution"
 	HistoryService_SignalWithStartWorkflowExecution_FullMethodName       = "/temporal.server.api.historyservice.v1.HistoryService/SignalWithStartWorkflowExecution"
-	HistoryService_MultiOperationWorkflowExecution_FullMethodName        = "/temporal.server.api.historyservice.v1.HistoryService/MultiOperationWorkflowExecution"
+	HistoryService_ExecuteMultiOperation_FullMethodName                  = "/temporal.server.api.historyservice.v1.HistoryService/ExecuteMultiOperation"
 	HistoryService_RemoveSignalMutableState_FullMethodName               = "/temporal.server.api.historyservice.v1.HistoryService/RemoveSignalMutableState"
 	HistoryService_TerminateWorkflowExecution_FullMethodName             = "/temporal.server.api.historyservice.v1.HistoryService/TerminateWorkflowExecution"
 	HistoryService_DeleteWorkflowExecution_FullMethodName                = "/temporal.server.api.historyservice.v1.HistoryService/DeleteWorkflowExecution"
@@ -103,6 +103,7 @@ const (
 	HistoryService_DeleteDLQTasks_FullMethodName                         = "/temporal.server.api.historyservice.v1.HistoryService/DeleteDLQTasks"
 	HistoryService_ListQueues_FullMethodName                             = "/temporal.server.api.historyservice.v1.HistoryService/ListQueues"
 	HistoryService_AddTasks_FullMethodName                               = "/temporal.server.api.historyservice.v1.HistoryService/AddTasks"
+	HistoryService_ListTasks_FullMethodName                              = "/temporal.server.api.historyservice.v1.HistoryService/ListTasks"
 )
 
 // HistoryServiceClient is the client API for HistoryService service.
@@ -187,7 +188,7 @@ type HistoryServiceClient interface {
 	// and record WorkflowExecutionStarted and WorkflowExecutionSignaled event in case of success.
 	// It will return `WorkflowExecutionAlreadyStartedError` if start workflow failed with given policy.
 	SignalWithStartWorkflowExecution(ctx context.Context, in *SignalWithStartWorkflowExecutionRequest, opts ...grpc.CallOption) (*SignalWithStartWorkflowExecutionResponse, error)
-	MultiOperationWorkflowExecution(ctx context.Context, in *MultiOperationWorkflowExecutionRequest, opts ...grpc.CallOption) (*MultiOperationWorkflowExecutionResponse, error)
+	ExecuteMultiOperation(ctx context.Context, in *ExecuteMultiOperationRequest, opts ...grpc.CallOption) (*ExecuteMultiOperationResponse, error)
 	// RemoveSignalMutableState is used to remove a signal request Id that was previously recorded.  This is currently
 	// used to clean execution info when signal workflow task finished.
 	RemoveSignalMutableState(ctx context.Context, in *RemoveSignalMutableStateRequest, opts ...grpc.CallOption) (*RemoveSignalMutableStateResponse, error)
@@ -308,6 +309,7 @@ type HistoryServiceClient interface {
 	// will fail with an InvalidArgument error. It is ok to have tasks for different workflow runs as long as they are
 	// in the same shard. Calls to the persistence API will be batched by workflow run.
 	AddTasks(ctx context.Context, in *AddTasksRequest, opts ...grpc.CallOption) (*AddTasksResponse, error)
+	ListTasks(ctx context.Context, in *ListTasksRequest, opts ...grpc.CallOption) (*ListTasksResponse, error)
 }
 
 type historyServiceClient struct {
@@ -462,9 +464,9 @@ func (c *historyServiceClient) SignalWithStartWorkflowExecution(ctx context.Cont
 	return out, nil
 }
 
-func (c *historyServiceClient) MultiOperationWorkflowExecution(ctx context.Context, in *MultiOperationWorkflowExecutionRequest, opts ...grpc.CallOption) (*MultiOperationWorkflowExecutionResponse, error) {
-	out := new(MultiOperationWorkflowExecutionResponse)
-	err := c.cc.Invoke(ctx, HistoryService_MultiOperationWorkflowExecution_FullMethodName, in, out, opts...)
+func (c *historyServiceClient) ExecuteMultiOperation(ctx context.Context, in *ExecuteMultiOperationRequest, opts ...grpc.CallOption) (*ExecuteMultiOperationResponse, error) {
+	out := new(ExecuteMultiOperationResponse)
+	err := c.cc.Invoke(ctx, HistoryService_ExecuteMultiOperation_FullMethodName, in, out, opts...)
 	if err != nil {
 		return nil, err
 	}
@@ -889,6 +891,15 @@ func (c *historyServiceClient) AddTasks(ctx context.Context, in *AddTasksRequest
 	return out, nil
 }
 
+func (c *historyServiceClient) ListTasks(ctx context.Context, in *ListTasksRequest, opts ...grpc.CallOption) (*ListTasksResponse, error) {
+	out := new(ListTasksResponse)
+	err := c.cc.Invoke(ctx, HistoryService_ListTasks_FullMethodName, in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // HistoryServiceServer is the server API for HistoryService service.
 // All implementations must embed UnimplementedHistoryServiceServer
 // for forward compatibility
@@ -971,7 +982,7 @@ type HistoryServiceServer interface {
 	// and record WorkflowExecutionStarted and WorkflowExecutionSignaled event in case of success.
 	// It will return `WorkflowExecutionAlreadyStartedError` if start workflow failed with given policy.
 	SignalWithStartWorkflowExecution(context.Context, *SignalWithStartWorkflowExecutionRequest) (*SignalWithStartWorkflowExecutionResponse, error)
-	MultiOperationWorkflowExecution(context.Context, *MultiOperationWorkflowExecutionRequest) (*MultiOperationWorkflowExecutionResponse, error)
+	ExecuteMultiOperation(context.Context, *ExecuteMultiOperationRequest) (*ExecuteMultiOperationResponse, error)
 	// RemoveSignalMutableState is used to remove a signal request Id that was previously recorded.  This is currently
 	// used to clean execution info when signal workflow task finished.
 	RemoveSignalMutableState(context.Context, *RemoveSignalMutableStateRequest) (*RemoveSignalMutableStateResponse, error)
@@ -1092,6 +1103,7 @@ type HistoryServiceServer interface {
 	// will fail with an InvalidArgument error. It is ok to have tasks for different workflow runs as long as they are
 	// in the same shard. Calls to the persistence API will be batched by workflow run.
 	AddTasks(context.Context, *AddTasksRequest) (*AddTasksResponse, error)
+	ListTasks(context.Context, *ListTasksRequest) (*ListTasksResponse, error)
 	mustEmbedUnimplementedHistoryServiceServer()
 }
 
@@ -1147,8 +1159,8 @@ func (UnimplementedHistoryServiceServer) SignalWorkflowExecution(context.Context
 func (UnimplementedHistoryServiceServer) SignalWithStartWorkflowExecution(context.Context, *SignalWithStartWorkflowExecutionRequest) (*SignalWithStartWorkflowExecutionResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method SignalWithStartWorkflowExecution not implemented")
 }
-func (UnimplementedHistoryServiceServer) MultiOperationWorkflowExecution(context.Context, *MultiOperationWorkflowExecutionRequest) (*MultiOperationWorkflowExecutionResponse, error) {
-	return nil, status.Errorf(codes.Unimplemented, "method MultiOperationWorkflowExecution not implemented")
+func (UnimplementedHistoryServiceServer) ExecuteMultiOperation(context.Context, *ExecuteMultiOperationRequest) (*ExecuteMultiOperationResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method ExecuteMultiOperation not implemented")
 }
 func (UnimplementedHistoryServiceServer) RemoveSignalMutableState(context.Context, *RemoveSignalMutableStateRequest) (*RemoveSignalMutableStateResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method RemoveSignalMutableState not implemented")
@@ -1281,6 +1293,9 @@ func (UnimplementedHistoryServiceServer) ListQueues(context.Context, *ListQueues
 }
 func (UnimplementedHistoryServiceServer) AddTasks(context.Context, *AddTasksRequest) (*AddTasksResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method AddTasks not implemented")
+}
+func (UnimplementedHistoryServiceServer) ListTasks(context.Context, *ListTasksRequest) (*ListTasksResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method ListTasks not implemented")
 }
 func (UnimplementedHistoryServiceServer) mustEmbedUnimplementedHistoryServiceServer() {}
 
@@ -1583,20 +1598,20 @@ func _HistoryService_SignalWithStartWorkflowExecution_Handler(srv interface{}, c
 	return interceptor(ctx, in, info, handler)
 }
 
-func _HistoryService_MultiOperationWorkflowExecution_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(MultiOperationWorkflowExecutionRequest)
+func _HistoryService_ExecuteMultiOperation_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(ExecuteMultiOperationRequest)
 	if err := dec(in); err != nil {
 		return nil, err
 	}
 	if interceptor == nil {
-		return srv.(HistoryServiceServer).MultiOperationWorkflowExecution(ctx, in)
+		return srv.(HistoryServiceServer).ExecuteMultiOperation(ctx, in)
 	}
 	info := &grpc.UnaryServerInfo{
 		Server:     srv,
-		FullMethod: HistoryService_MultiOperationWorkflowExecution_FullMethodName,
+		FullMethod: HistoryService_ExecuteMultiOperation_FullMethodName,
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(HistoryServiceServer).MultiOperationWorkflowExecution(ctx, req.(*MultiOperationWorkflowExecutionRequest))
+		return srv.(HistoryServiceServer).ExecuteMultiOperation(ctx, req.(*ExecuteMultiOperationRequest))
 	}
 	return interceptor(ctx, in, info, handler)
 }
@@ -2401,6 +2416,24 @@ func _HistoryService_AddTasks_Handler(srv interface{}, ctx context.Context, dec 
 	return interceptor(ctx, in, info, handler)
 }
 
+func _HistoryService_ListTasks_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(ListTasksRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(HistoryServiceServer).ListTasks(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: HistoryService_ListTasks_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(HistoryServiceServer).ListTasks(ctx, req.(*ListTasksRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 // HistoryService_ServiceDesc is the grpc.ServiceDesc for HistoryService service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -2473,8 +2506,8 @@ var HistoryService_ServiceDesc = grpc.ServiceDesc{
 			Handler:    _HistoryService_SignalWithStartWorkflowExecution_Handler,
 		},
 		{
-			MethodName: "MultiOperationWorkflowExecution",
-			Handler:    _HistoryService_MultiOperationWorkflowExecution_Handler,
+			MethodName: "ExecuteMultiOperation",
+			Handler:    _HistoryService_ExecuteMultiOperation_Handler,
 		},
 		{
 			MethodName: "RemoveSignalMutableState",
@@ -2647,6 +2680,10 @@ var HistoryService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "AddTasks",
 			Handler:    _HistoryService_AddTasks_Handler,
+		},
+		{
+			MethodName: "ListTasks",
+			Handler:    _HistoryService_ListTasks_Handler,
 		},
 	},
 	Streams: []grpc.StreamDesc{

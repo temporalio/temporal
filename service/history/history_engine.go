@@ -380,10 +380,10 @@ func (e *historyEngineImpl) StartWorkflowExecution(
 	return starter.Invoke(ctx)
 }
 
-func (e *historyEngineImpl) MultiOperationWorkflowExecution(
+func (e *historyEngineImpl) ExecuteMultiOperation(
 	ctx context.Context,
-	request *historyservice.MultiOperationWorkflowExecutionRequest,
-) (*historyservice.MultiOperationWorkflowExecutionResponse, error) {
+	request *historyservice.ExecuteMultiOperationRequest,
+) (*historyservice.ExecuteMultiOperationResponse, error) {
 	return multioperationworkflow.Invoke(
 		ctx,
 		request,
