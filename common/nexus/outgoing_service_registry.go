@@ -135,28 +135,28 @@ func (h *OutgoingServiceRegistry) Create(
 		return nil, err
 	}
 	ns := response.Namespace
-	i := slices.IndexFunc(ns.OutgoingServices, func(svc *persistencespb.NexusOutgoingService) bool {
-		return svc.Name == req.GetName()
-	})
-	if i >= 0 {
+	i, ok := slices.BinarySearchFunc(ns.OutgoingServices, req.Name, compareServiceAndName)
+	name := req.GetName()
+	if ok {
 		return nil, status.Errorf(
 			codes.AlreadyExists,
 			"outgoing service %q already exists with version %d",
-			req.GetName(),
+			name,
 			ns.OutgoingServices[i].Version,
 		)
 	}
-	ns.OutgoingServices = append(ns.OutgoingServices, &persistencespb.NexusOutgoingService{
+	newService := &persistencespb.NexusOutgoingService{
 		Version: 1,
-		Name:    req.GetName(),
+		Name:    name,
 		Spec:    req.GetSpec(),
-	})
+	}
+	ns.OutgoingServices = slices.Insert(ns.OutgoingServices, i, newService)
 	if err := h.updateNamespace(ctx, ns, response); err != nil {
 		return nil, err
 	}
 	return &operatorservice.CreateNexusOutgoingServiceResponse{
 		Service: &nexus.OutgoingService{
-			Name:    req.GetName(),
+			Name:    name,
 			Version: 1,
 			Spec:    req.GetSpec(),
 		},

@@ -544,6 +544,54 @@ func TestCreate_Ok(t *testing.T) {
 	}, res.Service)
 }
 
+func TestCreate_RemainsSorted(t *testing.T) {
+	t.Parallel()
+	service := nexustest.NamespaceService{}
+	ns := &persistencespb.NamespaceDetail{
+		OutgoingServices: []*persistencespb.NexusOutgoingService{
+			{
+				Version: 1,
+				Name:    "service1",
+				Spec: &nexuspb.OutgoingServiceSpec{
+					Url: testServiceURL,
+				},
+			},
+			{
+				Version: 1,
+				Name:    "service3",
+				Spec: &nexuspb.OutgoingServiceSpec{
+					Url: testServiceURL,
+				},
+			},
+		},
+	}
+	service.OnGetNamespace = func(ctx context.Context, request *persistence.GetNamespaceRequest) (*persistence.GetNamespaceResponse, error) {
+		return &persistence.GetNamespaceResponse{
+			Namespace: common.CloneProto(ns),
+		}, nil
+	}
+	service.OnUpdateNamespace = func(ctx context.Context, request *persistence.UpdateNamespaceRequest) error {
+		ns = request.Namespace
+		return nil
+	}
+	registry := nexus.NewOutgoingServiceRegistry(&service, newConfig())
+	_, err := registry.Create(
+		context.Background(),
+		&operatorservice.CreateNexusOutgoingServiceRequest{
+			Namespace: testNamespace,
+			Name:      "service2",
+			Spec: &nexuspb.OutgoingServiceSpec{
+				Url: testServiceURL,
+			},
+		},
+	)
+	require.NoError(t, err)
+	require.Len(t, ns.OutgoingServices, 3)
+	assert.Equal(t, "service1", ns.OutgoingServices[0].Name)
+	assert.Equal(t, "service2", ns.OutgoingServices[1].Name)
+	assert.Equal(t, "service3", ns.OutgoingServices[2].Name)
+}
+
 func TestDelete_NoNamespace(t *testing.T) {
 	t.Parallel()
 	registry := nexus.NewOutgoingServiceRegistry(nil, newConfig())
