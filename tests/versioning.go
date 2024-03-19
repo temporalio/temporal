@@ -123,40 +123,40 @@ func (s *VersioningIntegSuite) TestVersionRuleConflictToken() {
 	ctx := NewContext()
 	tq := "test-conflict-token"
 
-	// nil token
-	s.insertAssignmentRule(ctx, tq, "1", 0, nil, true)
-	res := s.listVersioningRules(ctx, tq)
+	// nil token --> fail
+	s.insertAssignmentRule(ctx, tq, "1", 0, nil, false)
 
-	// correct token from List
-	cT1 := res.GetConflictToken()
-	s.insertAssignmentRule(ctx, tq, "2", 0, cT1, true)
-	res = s.listVersioningRules(ctx, tq)
+	// correct token from List --> success
+	cT1 := s.listVersioningRules(ctx, tq).GetConflictToken()
+	cT2 := s.insertAssignmentRule(ctx, tq, "2", 0, cT1, true)
 
-	// confirm token changes
-	cT2 := res.GetConflictToken()
+	// confirm token changed on insert but not on list
+	cT3 := s.listVersioningRules(ctx, tq).GetConflictToken()
 	s.NotEqual(cT1, cT2)
+	s.Equal(cT2, cT3)
 
-	// correct token from List
-	s.insertAssignmentRule(ctx, tq, "3", 0, cT2, true)
+	// correct token from List or most recent mutation --> success
+	cT4 := s.insertAssignmentRule(ctx, tq, "3", 0, cT2, true)
 	s.listVersioningRules(ctx, tq)
 
-	// wrong token fails, same request with nil token succeeds
+	// wrong token fails, same request with nil token also fails
 	s.insertAssignmentRule(ctx, tq, "4", 0, cT1, false)
-	cT4 := s.insertAssignmentRule(ctx, tq, "4", 0, nil, true)
+	s.insertAssignmentRule(ctx, tq, "4", 0, nil, false)
 
 	// wrong token fails, same request with correct token from Update succeeds
-	s.replaceAssignmentRule(ctx, tq, "20", 2, cT2, false)
-	s.replaceAssignmentRule(ctx, tq, "20", 2, cT4, true)
-	res = s.listVersioningRules(ctx, tq)
-	cT5 := res.GetConflictToken()
+	s.replaceAssignmentRule(ctx, tq, "20", 0, cT2, false)
+	cT5 := s.replaceAssignmentRule(ctx, tq, "20", 0, cT4, true)
+	cT6 := s.listVersioningRules(ctx, tq).GetConflictToken()
+
+	// confirm that list didn't change the conflict token again
+	s.Equal(cT5, cT6)
 
 	// wrong token fails, same request with correct token from List succeeds
 	s.deleteAssignmentRule(ctx, tq, 0, cT4, false)
-	s.deleteAssignmentRule(ctx, tq, 0, cT5, true)
-	s.listVersioningRules(ctx, tq)
+	s.deleteAssignmentRule(ctx, tq, 0, cT6, true)
 
-	// nil token succeeds
-	s.deleteAssignmentRule(ctx, tq, 0, nil, true)
+	// nil token fails
+	s.deleteAssignmentRule(ctx, tq, 0, nil, false)
 }
 
 func (s *VersioningIntegSuite) TestAssignmentRuleInsert() {
@@ -164,48 +164,73 @@ func (s *VersioningIntegSuite) TestAssignmentRuleInsert() {
 	ctx := NewContext()
 	tq := "test-assignment-rule-insert"
 
+	// get initial conflict token
+	cT := s.listVersioningRules(ctx, tq).GetConflictToken()
+
 	// success
-	s.insertAssignmentRule(ctx, tq, "1", 0, nil, true)
+	cT = s.insertAssignmentRule(ctx, tq, "1", 0, cT, true)
 	res1 := s.listVersioningRules(ctx, tq)
 	s.Equal("1", res1.GetAssignmentRules()[0].GetRule().GetTargetBuildId())
 
-	// failure
-	s.insertAssignmentRule(ctx, tq, "2", -1, nil, false)
+	// failure due to out of bounds index
+	s.insertAssignmentRule(ctx, tq, "2", -1, cT, false)
 	s.Equal(res1, s.listVersioningRules(ctx, tq))
+
+	// success with conflict token returned by last successful call, same as above
+	s.insertAssignmentRule(ctx, tq, "2", 1, cT, true)
+	s.Equal("2", s.listVersioningRules(ctx, tq).GetAssignmentRules()[1].GetRule().GetTargetBuildId())
 }
 
 func (s *VersioningIntegSuite) TestAssignmentRuleReplace() {
 	// setup
 	ctx := NewContext()
 	tq := "test-assignment-rule-replace"
-	s.insertAssignmentRule(ctx, tq, "1", 0, nil, true)
-	s.insertAssignmentRule(ctx, tq, "2", 0, nil, true)
+
+	// get initial conflict token + do initial inserts
+	cT := s.listVersioningRules(ctx, tq).GetConflictToken()
+	cT = s.insertAssignmentRule(ctx, tq, "1", 0, cT, true)
+	cT = s.insertAssignmentRule(ctx, tq, "2", 0, cT, true)
 
 	// success
-	s.replaceAssignmentRule(ctx, tq, "3", 0, nil, true)
+	cT = s.replaceAssignmentRule(ctx, tq, "3", 0, cT, true)
 	res := s.listVersioningRules(ctx, tq)
 	s.Equal("3", res.GetAssignmentRules()[0].GetRule().GetTargetBuildId())
 
-	// failure
-	s.replaceAssignmentRule(ctx, tq, "4", 10, nil, false)
+	// failure due to index out of bounds
+	s.replaceAssignmentRule(ctx, tq, "4", 10, cT, false)
 	s.Equal(res, s.listVersioningRules(ctx, tq))
+
+	// success with conflict token returned by last successful call, same as above
+	s.replaceAssignmentRule(ctx, tq, "4", 0, cT, true)
+	s.Equal("4", s.listVersioningRules(ctx, tq).GetAssignmentRules()[0].GetRule().GetTargetBuildId())
 }
 
 func (s *VersioningIntegSuite) TestAssignmentRuleDelete() {
 	// setup
 	ctx := NewContext()
 	tq := "test-assignment-rule-delete"
-	s.insertAssignmentRule(ctx, tq, "1", 0, nil, true)
-	s.insertAssignmentRule(ctx, tq, "2", 0, nil, true)
+
+	// get initial conflict token + do initial inserts
+	cT := s.listVersioningRules(ctx, tq).GetConflictToken()
+	cT = s.insertAssignmentRule(ctx, tq, "1", 0, cT, true)
+	cT = s.insertAssignmentRule(ctx, tq, "2", 0, cT, true)
 
 	// success
-	s.deleteAssignmentRule(ctx, tq, 0, nil, true)
+	cT = s.deleteAssignmentRule(ctx, tq, 0, cT, true)
 	res := s.listVersioningRules(ctx, tq)
 	s.Equal(1, len(res.GetAssignmentRules()))
 
-	// failure
-	s.deleteAssignmentRule(ctx, tq, 0, nil, false)
+	// failure due to requirement that once an unconditional rule exists, at least one must always exist
+	s.deleteAssignmentRule(ctx, tq, 0, cT, false)
 	s.Equal(res, s.listVersioningRules(ctx, tq))
+
+	// insert another rule to prove that the conflict token was not the issue above
+	cT = s.insertAssignmentRule(ctx, tq, "2", 0, cT, true)
+
+	// delete again, success
+	s.deleteAssignmentRule(ctx, tq, 0, cT, true)
+	s.Equal(1, len(res.GetAssignmentRules()))
+
 }
 
 func (s *VersioningIntegSuite) TestRedirectRuleInsert() {
@@ -213,50 +238,69 @@ func (s *VersioningIntegSuite) TestRedirectRuleInsert() {
 	ctx := NewContext()
 	tq := "test-redirect-rule-insert"
 
+	// get initial conflict token
+	cT := s.listVersioningRules(ctx, tq).GetConflictToken()
+
 	// success
-	s.insertRedirectRule(ctx, tq, "1", "0", nil, true)
+	cT = s.insertRedirectRule(ctx, tq, "1", "0", cT, true)
 	res := s.listVersioningRules(ctx, tq)
 	rulesMap := mkRedirectRulesMap(res.GetCompatibleRedirectRules())
 	s.Contains(rulesMap, "1")
 	s.Equal(rulesMap["1"], "0")
 
-	// failure
-	s.insertRedirectRule(ctx, tq, "0", "1", nil, false)
+	// failure due to cycle
+	s.insertRedirectRule(ctx, tq, "0", "1", cT, false)
 	s.Equal(res, s.listVersioningRules(ctx, tq))
+
+	// success with same conflict token but no cycle
+	s.insertRedirectRule(ctx, tq, "0", "2", cT, true)
 }
 
 func (s *VersioningIntegSuite) TestRedirectRuleReplace() {
 	// setup
 	ctx := NewContext()
 	tq := "test-redirect-rule-replace"
-	s.insertRedirectRule(ctx, tq, "1", "0", nil, true)
+
+	// get initial conflict token + do initial insert
+	cT := s.listVersioningRules(ctx, tq).GetConflictToken()
+	cT = s.insertRedirectRule(ctx, tq, "1", "0", cT, true)
 
 	// success
-	s.replaceRedirectRule(ctx, tq, "1", "2", nil, true)
+	cT = s.replaceRedirectRule(ctx, tq, "1", "2", cT, true)
 	res := s.listVersioningRules(ctx, tq)
 	rulesMap := mkRedirectRulesMap(res.GetCompatibleRedirectRules())
 	s.Contains(rulesMap, "1")
 	s.Equal(rulesMap["1"], "2")
 
-	// failure
-	s.replaceRedirectRule(ctx, tq, "10", "2", nil, false)
+	// failure due to source not found
+	s.replaceRedirectRule(ctx, tq, "10", "3", cT, false)
 	s.Equal(res, s.listVersioningRules(ctx, tq))
+
+	// success with same conflict token and correct source
+	s.replaceRedirectRule(ctx, tq, "1", "3", cT, true)
 }
 
 func (s *VersioningIntegSuite) TestRedirectRuleDelete() {
 	// setup
 	ctx := NewContext()
 	tq := "test-redirect-rule-delete"
-	s.insertRedirectRule(ctx, tq, "1", "0", nil, true)
+
+	// get initial conflict token + do initial inserts
+	cT := s.listVersioningRules(ctx, tq).GetConflictToken()
+	cT = s.insertRedirectRule(ctx, tq, "1", "0", cT, true)
+	cT = s.insertRedirectRule(ctx, tq, "2", "0", cT, true)
 
 	// success
-	s.deleteRedirectRule(ctx, tq, "1", nil, true)
+	cT = s.deleteRedirectRule(ctx, tq, "1", cT, true)
 	res := s.listVersioningRules(ctx, tq)
-	s.Equal(0, len(res.GetCompatibleRedirectRules()))
+	s.Equal(1, len(res.GetCompatibleRedirectRules()))
 
-	// failure
-	s.deleteRedirectRule(ctx, tq, "1", nil, false)
+	// failure due to source not found
+	s.deleteRedirectRule(ctx, tq, "1", cT, false)
 	s.Equal(res, s.listVersioningRules(ctx, tq))
+
+	// success with same conflict token and valid source
+	s.deleteRedirectRule(ctx, tq, "2", cT, true)
 }
 
 func mkRedirectRulesMap(redirectRules []*taskqueuepb.TimestampedCompatibleBuildIdRedirectRule) map[string]string {
@@ -2037,12 +2081,14 @@ func (s *VersioningIntegSuite) addNewDefaultBuildId(ctx context.Context, tq, new
 }
 
 func (s *VersioningIntegSuite) addAssignmentRule(ctx context.Context, tq, buildId string) *taskqueuepb.BuildIdAssignmentRule {
+	cT := s.listVersioningRules(ctx, tq).GetConflictToken()
 	rule := &taskqueuepb.BuildIdAssignmentRule{
 		TargetBuildId: buildId,
 	}
 	res, err := s.engine.UpdateWorkerVersioningRules(ctx, &workflowservice.UpdateWorkerVersioningRulesRequest{
-		Namespace: s.namespace,
-		TaskQueue: tq,
+		Namespace:     s.namespace,
+		TaskQueue:     tq,
+		ConflictToken: cT,
 		Operation: &workflowservice.UpdateWorkerVersioningRulesRequest_InsertAssignmentRule{
 			InsertAssignmentRule: &workflowservice.UpdateWorkerVersioningRulesRequest_InsertBuildIdAssignmentRule{
 				Rule: rule,
