@@ -31,6 +31,7 @@ import (
 
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common/codec"
+	"go.temporal.io/server/common/utf8validator"
 )
 
 func HistoryBranchToBlob(info *persistencespb.HistoryBranch) (*commonpb.DataBlob, error) {
@@ -190,7 +191,11 @@ func Proto3Decode(blob []byte, e enumspb.EncodingType, result proto.Message) err
 	if e != enumspb.ENCODING_TYPE_PROTO3 {
 		return NewUnknownEncodingTypeError(e.String(), enumspb.ENCODING_TYPE_PROTO3)
 	}
-	if err := proto.Unmarshal(blob, result); err != nil {
+	err := proto.Unmarshal(blob, result)
+	if err == nil {
+		err = utf8validator.ValidateUsingGlobalValidator(result, utf8validator.SourcePersistence, nil)
+	}
+	if err != nil {
 		return NewDeserializationError(enumspb.ENCODING_TYPE_PROTO3, err)
 	}
 	return nil

@@ -39,6 +39,7 @@ import (
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/namespace"
+	"go.temporal.io/server/common/utf8validator"
 	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/workflow"
 	wcache "go.temporal.io/server/service/history/workflow/cache"
@@ -268,6 +269,12 @@ func (r *MutableStateInitializerImpl) deserializeBackfillToken(
 		return nil, 0, 0, false, err
 	}
 	if err := proto.Unmarshal(historyBackfillToken.MutableStateRow, mutableState); err != nil {
+		return nil, 0, 0, false, err
+	}
+	// This is ultimately from the replication rpc stream, so it's not really a request or
+	// response, but use SourceRPCRequest here since it's incoming data.
+	err := utf8validator.ValidateUsingGlobalValidator(mutableState, utf8validator.SourceRPCRequest, nil)
+	if err != nil {
 		return nil, 0, 0, false, err
 	}
 	return mutableState, historyBackfillToken.DBRecordVersion, historyBackfillToken.DBHistorySize, historyBackfillToken.ExistsInDB, nil

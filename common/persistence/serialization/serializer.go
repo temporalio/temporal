@@ -544,15 +544,7 @@ func ProtoDecodeBlob(data *commonpb.DataBlob, result proto.Message) error {
 		// TODO: should we return nil or error?
 		return NewDeserializationError(enumspb.ENCODING_TYPE_UNSPECIFIED, errors.New("cannot decode nil"))
 	}
-
-	if data.EncodingType != enumspb.ENCODING_TYPE_PROTO3 {
-		return NewUnknownEncodingTypeError(data.EncodingType.String(), enumspb.ENCODING_TYPE_PROTO3)
-	}
-
-	if err := proto.Unmarshal(data.Data, result); err != nil {
-		return NewDeserializationError(enumspb.ENCODING_TYPE_PROTO3, err)
-	}
-	return nil
+	return Proto3Decode(data.Data, data.EncodingType, result)
 }
 
 func decodeBlob(data *commonpb.DataBlob, result proto.Message) error {
