@@ -39,6 +39,10 @@ message ParentExecutionInfo {
     int64 initiated_version = 6;
 }
 
+message RootExecutionInfo {
+    temporal.api.common.v1.WorkflowExecution execution = 1;
+}
+
 message BaseExecutionInfo {
     string run_id = 1;
     int64 lowest_common_ancestor_event_id = 2;

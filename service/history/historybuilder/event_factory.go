@@ -87,6 +87,7 @@ func (b *EventFactory) CreateWorkflowExecutionStartedEvent(
 		SourceVersionStamp:              request.SourceVersionStamp,
 		CompletionCallbacks:             req.CompletionCallbacks,
 	}
+
 	parentInfo := request.ParentExecutionInfo
 	if parentInfo != nil {
 		attributes.ParentWorkflowNamespaceId = parentInfo.NamespaceId
@@ -95,6 +96,17 @@ func (b *EventFactory) CreateWorkflowExecutionStartedEvent(
 		attributes.ParentInitiatedEventId = parentInfo.InitiatedId
 		attributes.ParentInitiatedEventVersion = parentInfo.InitiatedVersion
 	}
+
+	rootInfo := request.RootExecutionInfo
+	if rootInfo != nil {
+		attributes.RootWorkflowExecution = rootInfo.Execution
+	} else {
+		attributes.RootWorkflowExecution = &commonpb.WorkflowExecution{
+			WorkflowId: req.WorkflowId,
+			RunId:      originalRunID,
+		}
+	}
+
 	event.Attributes = &historypb.HistoryEvent_WorkflowExecutionStartedEventAttributes{
 		WorkflowExecutionStartedEventAttributes: attributes,
 	}

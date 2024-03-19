@@ -81,6 +81,9 @@ var (
 	testParentInitiatedID      = rand.Int63()
 	testParentInitiatedVersion = rand.Int63()
 
+	testRootWorkflowID  = "test root workflow ID"
+	testRootRunID       = uuid.New()
+
 	testIdentity  = "test identity"
 	testRequestID = uuid.New()
 
@@ -267,6 +270,130 @@ func (s *historyBuilderSuite) TestWorkflowExecutionStarted() {
 				},
 				ParentInitiatedEventId:      testParentInitiatedID,
 				ParentInitiatedEventVersion: testParentInitiatedVersion,
+
+				RootWorkflowExecution: &commonpb.WorkflowExecution{
+					WorkflowId: testWorkflowID,
+					RunId:      originalRunID,
+				},
+			},
+		},
+	}, event)
+}
+
+func (s *historyBuilderSuite) TestWorkflowExecutionStarted_WithRoot() {
+	attempt := rand.Int31()
+	workflowExecutionExpirationTime := timestamppb.New(time.Unix(0, rand.Int63()))
+	continueAsNewInitiator := enumspb.ContinueAsNewInitiator(rand.Int31n(int32(len(enumspb.ContinueAsNewInitiator_name))))
+	firstWorkflowTaskBackoff := durationpb.New(time.Duration(rand.Int63()))
+
+	workflowExecutionTimeout := durationpb.New(time.Duration(rand.Int63()))
+	workflowRunTimeout := durationpb.New(time.Duration(rand.Int63()))
+	workflowTaskStartToCloseTimeout := durationpb.New(time.Duration(rand.Int63()))
+
+	resetPoints := &workflowpb.ResetPoints{}
+	prevRunID := uuid.New()
+	firstRunID := uuid.New()
+	originalRunID := uuid.New()
+
+	request := &historyservice.StartWorkflowExecutionRequest{
+		NamespaceId: testNamespaceID.String(),
+		ParentExecutionInfo: &workflowspb.ParentExecutionInfo{
+			NamespaceId: testParentNamespaceID,
+			Namespace:   testParentNamespaceName,
+			Execution: &commonpb.WorkflowExecution{
+				WorkflowId: testParentWorkflowID,
+				RunId:      testParentRunID,
+			},
+			InitiatedId:      testParentInitiatedID,
+			InitiatedVersion: testParentInitiatedVersion,
+		},
+		Attempt:                         attempt,
+		WorkflowExecutionExpirationTime: workflowExecutionExpirationTime,
+		ContinueAsNewInitiator:          continueAsNewInitiator,
+		ContinuedFailure:                testFailure,
+		LastCompletionResult:            testPayloads,
+		FirstWorkflowTaskBackoff:        firstWorkflowTaskBackoff,
+		RootExecutionInfo: &workflowspb.RootExecutionInfo{
+			Execution: &commonpb.WorkflowExecution{
+				WorkflowId: testRootWorkflowID,
+				RunId:      testRootRunID,
+			},
+		},
+
+		StartRequest: &workflowservice.StartWorkflowExecutionRequest{
+			Namespace:                testNamespaceName.String(),
+			WorkflowId:               testWorkflowID,
+			WorkflowType:             testWorkflowType,
+			TaskQueue:                testTaskQueue,
+			Input:                    testPayloads,
+			WorkflowExecutionTimeout: workflowExecutionTimeout,
+			WorkflowRunTimeout:       workflowRunTimeout,
+			WorkflowTaskTimeout:      workflowTaskStartToCloseTimeout,
+			Identity:                 testIdentity,
+			RequestId:                testRequestID,
+			// WorkflowIdReusePolicy: not used for event generation
+			RetryPolicy:      testRetryPolicy,
+			CronSchedule:     testCronSchedule,
+			Memo:             testMemo,
+			SearchAttributes: testSearchAttributes,
+			Header:           testHeader,
+		},
+	}
+
+	event := s.historyBuilder.AddWorkflowExecutionStartedEvent(
+		s.now,
+		request,
+		resetPoints,
+		prevRunID,
+		firstRunID,
+		originalRunID,
+	)
+	s.Equal(event, s.flush())
+	s.Equal(&historypb.HistoryEvent{
+		EventId:   s.nextEventID,
+		TaskId:    s.nextTaskID,
+		EventTime: timestamppb.New(s.now),
+		EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_STARTED,
+		Version:   s.version,
+		Attributes: &historypb.HistoryEvent_WorkflowExecutionStartedEventAttributes{
+			WorkflowExecutionStartedEventAttributes: &historypb.WorkflowExecutionStartedEventAttributes{
+				WorkflowType:                    testWorkflowType,
+				TaskQueue:                       testTaskQueue,
+				Header:                          testHeader,
+				Input:                           testPayloads,
+				WorkflowRunTimeout:              workflowRunTimeout,
+				WorkflowExecutionTimeout:        workflowExecutionTimeout,
+				WorkflowTaskTimeout:             workflowTaskStartToCloseTimeout,
+				ContinuedExecutionRunId:         prevRunID,
+				PrevAutoResetPoints:             resetPoints,
+				Identity:                        testIdentity,
+				RetryPolicy:                     testRetryPolicy,
+				Attempt:                         attempt,
+				WorkflowExecutionExpirationTime: workflowExecutionExpirationTime,
+				CronSchedule:                    testCronSchedule,
+				LastCompletionResult:            testPayloads,
+				ContinuedFailure:                testFailure,
+				Initiator:                       continueAsNewInitiator,
+				FirstWorkflowTaskBackoff:        firstWorkflowTaskBackoff,
+				FirstExecutionRunId:             firstRunID,
+				OriginalExecutionRunId:          originalRunID,
+				Memo:                            testMemo,
+				SearchAttributes:                testSearchAttributes,
+				WorkflowId:                      testWorkflowID,
+
+				ParentWorkflowNamespace:   testParentNamespaceName,
+				ParentWorkflowNamespaceId: testParentNamespaceID,
+				ParentWorkflowExecution: &commonpb.WorkflowExecution{
+					WorkflowId: testParentWorkflowID,
+					RunId:      testParentRunID,
+				},
+				ParentInitiatedEventId:      testParentInitiatedID,
+				ParentInitiatedEventVersion: testParentInitiatedVersion,
+
+				RootWorkflowExecution: &commonpb.WorkflowExecution{
+					WorkflowId: testRootWorkflowID,
+					RunId:      testRootRunID,
+				},
 			},
 		},
 	}, event)

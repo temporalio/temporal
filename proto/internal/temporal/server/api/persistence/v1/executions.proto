@@ -167,6 +167,9 @@ message WorkflowExecutionInfo {
     // (-- api-linter: core::0140::prepositions=disabled
     //     aip.dev/not-precedent: "by" is used to clarify the keys and values. --)
     map<int32, StateMachineMap> sub_state_machines_by_type = 81;
+
+    string root_workflow_id = 82;
+    string root_run_id = 83;
 }
 
 message ExecutionStats {

@@ -84,6 +84,11 @@ func (s *FunctionalSuite) TestDescribeWorkflowExecution() {
 	s.Equal(dweResponse.WorkflowExecutionInfo.GetStartTime(), dweResponse.WorkflowExecutionInfo.GetExecutionTime())
 	s.Equal(tq, dweResponse.WorkflowExecutionInfo.TaskQueue)
 	s.Greater(dweResponse.WorkflowExecutionInfo.GetHistorySizeBytes(), int64(0))
+	s.Empty(dweResponse.WorkflowExecutionInfo.GetParentNamespaceId())
+	s.Nil(dweResponse.WorkflowExecutionInfo.GetParentExecution())
+	s.NotNil(dweResponse.WorkflowExecutionInfo.GetRootExecution())
+	s.Equal(id, dweResponse.WorkflowExecutionInfo.RootExecution.GetWorkflowId())
+	s.Equal(we.RunId, dweResponse.WorkflowExecutionInfo.RootExecution.GetRunId())
 
 	// workflow logic
 	workflowComplete := false

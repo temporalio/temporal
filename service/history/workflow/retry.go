@@ -176,8 +176,9 @@ func SetupNewWorkflowForRetryOrCron(
 	initiator enumspb.ContinueAsNewInitiator,
 ) error {
 
-	// Extract ParentExecutionInfo from current run so it can be passed down to the next
+	// Extract ParentExecutionInfo and RootExecutionInfo from current run so it can be passed down to the next
 	var parentInfo *workflowspb.ParentExecutionInfo
+	var rootInfo *workflowspb.RootExecutionInfo
 	previousExecutionInfo := previousMutableState.GetExecutionInfo()
 	if previousMutableState.HasParentExecution() {
 		parentInfo = &workflowspb.ParentExecutionInfo{
@@ -190,6 +191,12 @@ func SetupNewWorkflowForRetryOrCron(
 			InitiatedId:      previousExecutionInfo.ParentInitiatedId,
 			InitiatedVersion: previousExecutionInfo.ParentInitiatedVersion,
 			Clock:            previousExecutionInfo.ParentClock,
+		}
+		rootInfo = &workflowspb.RootExecutionInfo{
+			Execution: &commonpb.WorkflowExecution{
+				WorkflowId: previousExecutionInfo.RootWorkflowId,
+				RunId:      previousExecutionInfo.RootRunId,
+			},
 		}
 	}
 
@@ -271,6 +278,7 @@ func SetupNewWorkflowForRetryOrCron(
 		FirstWorkflowTaskBackoff: previousMutableState.ContinueAsNewMinBackoff(durationpb.New(backoffInterval)),
 		Attempt:                  attempt,
 		SourceVersionStamp:       sourceVersionStamp,
+		RootExecutionInfo:        rootInfo,
 	}
 	workflowTimeoutTime := timestamp.TimeValue(previousExecutionInfo.WorkflowExecutionExpirationTime)
 	if !workflowTimeoutTime.IsZero() {
