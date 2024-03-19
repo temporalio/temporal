@@ -35,12 +35,14 @@ import (
 	"github.com/stretchr/testify/require"
 	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/server/common/membership"
+	"go.temporal.io/server/common/namespace"
+	"go.temporal.io/server/common/primitives"
 	"go.temporal.io/server/internal/nettest"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
 )
 
-type testCase struct {
+type rateLimitInterceptorTestCase struct {
 	// name of the test case
 	name string
 	// t is the test object
@@ -58,7 +60,32 @@ type testCase struct {
 	// serviceResolver is used to determine the number of frontend hosts for the global rate limiter
 	serviceResolver membership.ServiceResolver
 	// configure is a function that can be used to override the default test case values
-	configure func(tc *testCase)
+	configure func(tc *rateLimitInterceptorTestCase)
+}
+
+type namespaceRateLimitInterceptorTestCase struct {
+	// name of the test case
+	name string
+	// numRequests is the number of requests to send to the interceptor
+	numRequests int
+	// numVisibility is the number of visibility requests to send to the interceptor
+	numVisibilityRequests int
+	// numReplicationInducingRequests is the number of replication inducing requests to send to the interceptor
+	numReplicationInducingRequests int
+	// expectRateLimit is true if the interceptor should return a rate limit error
+	expectRateLimit bool
+	// frontendServiceCount is the number of frontend services returned by ServiceResolver to rate limiter
+	frontendServiceCount int
+	// Rate limiter config values
+	globalNamespaceRPS                                                int
+	maxNamespaceRPSPerInstance                                        int
+	maxNamespaceBurstRatioPerInstance                                 float64
+	globalNamespaceVisibilityRPS                                      int
+	maxNamespaceVisibilityRPSPerInstance                              int
+	maxNamespaceVisibilityBurstRatioPerInstance                       float64
+	globalNamespaceNamespaceReplicationInducingAPIsRPS                int
+	maxNamespaceNamespaceReplicationInducingAPIsRPSPerInstance        int
+	maxNamespaceNamespaceReplicationInducingAPIsBurstRatioPerInstance float64
 }
 
 func TestRateLimitInterceptorProvider(t *testing.T) {
@@ -78,10 +105,10 @@ func TestRateLimitInterceptorProvider(t *testing.T) {
 	highGlobalRPSLimit := highPerInstanceRPSLimit * numHosts
 	operatorRPSRatio := 0.2
 
-	testCases := []testCase{
+	testCases := []rateLimitInterceptorTestCase{
 		{
 			name: "both rate limits hit",
-			configure: func(tc *testCase) {
+			configure: func(tc *rateLimitInterceptorTestCase) {
 				tc.globalRPSLimit = lowGlobalRPSLimit
 				tc.perInstanceRPSLimit = lowPerInstanceRPSLimit
 				tc.operatorRPSRatio = operatorRPSRatio
@@ -90,7 +117,7 @@ func TestRateLimitInterceptorProvider(t *testing.T) {
 		},
 		{
 			name: "global rate limit hit",
-			configure: func(tc *testCase) {
+			configure: func(tc *rateLimitInterceptorTestCase) {
 				tc.globalRPSLimit = lowGlobalRPSLimit
 				tc.perInstanceRPSLimit = highPerInstanceRPSLimit
 				tc.operatorRPSRatio = operatorRPSRatio
@@ -99,7 +126,7 @@ func TestRateLimitInterceptorProvider(t *testing.T) {
 		},
 		{
 			name: "per instance rate limit hit but ignored because global rate limit is not hit",
-			configure: func(tc *testCase) {
+			configure: func(tc *rateLimitInterceptorTestCase) {
 				tc.globalRPSLimit = highGlobalRPSLimit
 				tc.perInstanceRPSLimit = lowPerInstanceRPSLimit
 				tc.operatorRPSRatio = operatorRPSRatio
@@ -108,7 +135,7 @@ func TestRateLimitInterceptorProvider(t *testing.T) {
 		},
 		{
 			name: "neither rate limit hit",
-			configure: func(tc *testCase) {
+			configure: func(tc *rateLimitInterceptorTestCase) {
 				tc.globalRPSLimit = highGlobalRPSLimit
 				tc.perInstanceRPSLimit = highPerInstanceRPSLimit
 				tc.operatorRPSRatio = operatorRPSRatio
@@ -117,7 +144,7 @@ func TestRateLimitInterceptorProvider(t *testing.T) {
 		},
 		{
 			name: "global rate limit not configured and per instance rate limit not hit",
-			configure: func(tc *testCase) {
+			configure: func(tc *rateLimitInterceptorTestCase) {
 				tc.globalRPSLimit = 0
 				tc.perInstanceRPSLimit = highPerInstanceRPSLimit
 				tc.operatorRPSRatio = operatorRPSRatio
@@ -126,7 +153,7 @@ func TestRateLimitInterceptorProvider(t *testing.T) {
 		},
 		{
 			name: "global rate limit not configured and per instance rate limit is hit",
-			configure: func(tc *testCase) {
+			configure: func(tc *rateLimitInterceptorTestCase) {
 				tc.globalRPSLimit = 0
 				tc.perInstanceRPSLimit = lowPerInstanceRPSLimit
 				tc.operatorRPSRatio = operatorRPSRatio
@@ -135,7 +162,7 @@ func TestRateLimitInterceptorProvider(t *testing.T) {
 		},
 		{
 			name: "global rate limit not configured and zero per-instance rate limit",
-			configure: func(tc *testCase) {
+			configure: func(tc *rateLimitInterceptorTestCase) {
 				tc.globalRPSLimit = 0
 				tc.perInstanceRPSLimit = 0
 				tc.operatorRPSRatio = operatorRPSRatio
@@ -144,7 +171,7 @@ func TestRateLimitInterceptorProvider(t *testing.T) {
 		},
 		{
 			name: "nil service resolver causes global RPS limit to be ignored",
-			configure: func(tc *testCase) {
+			configure: func(tc *rateLimitInterceptorTestCase) {
 				tc.globalRPSLimit = lowPerInstanceRPSLimit
 				tc.perInstanceRPSLimit = highPerInstanceRPSLimit
 				tc.operatorRPSRatio = operatorRPSRatio
@@ -154,7 +181,7 @@ func TestRateLimitInterceptorProvider(t *testing.T) {
 		},
 		{
 			name: "no hosts causes global RPS limit to be ignored",
-			configure: func(tc *testCase) {
+			configure: func(tc *rateLimitInterceptorTestCase) {
 				tc.globalRPSLimit = lowPerInstanceRPSLimit
 				tc.perInstanceRPSLimit = highPerInstanceRPSLimit
 				tc.operatorRPSRatio = operatorRPSRatio
@@ -262,4 +289,414 @@ func (t *testSvc) StartWorkflowExecution(
 	*workflowservice.StartWorkflowExecutionRequest,
 ) (*workflowservice.StartWorkflowExecutionResponse, error) {
 	return &workflowservice.StartWorkflowExecutionResponse{}, nil
+}
+
+// ListWorkflowExecution is a fake implementation of the ListWorkflowExecution gRPC method which does nothing.
+func (t *testSvc) ListWorkflowExecutions(
+	context.Context,
+	*workflowservice.ListWorkflowExecutionsRequest,
+) (*workflowservice.ListWorkflowExecutionsResponse, error) {
+	return &workflowservice.ListWorkflowExecutionsResponse{}, nil
+}
+
+// RegisterNamespace is a fake implementation of the RegisterNamespace gRPC method which does nothing.
+func (t *testSvc) RegisterNamespace(
+	context.Context,
+	*workflowservice.RegisterNamespaceRequest,
+) (*workflowservice.RegisterNamespaceResponse, error) {
+	return &workflowservice.RegisterNamespaceResponse{}, nil
+}
+
+func TestNamespaceRateLimitInterceptorProvider(t *testing.T) {
+	t.Parallel()
+	testCases := []namespaceRateLimitInterceptorTestCase{
+		{
+			name:                              "namespace rate allow when burst ratio is 1",
+			maxNamespaceRPSPerInstance:        10,
+			maxNamespaceBurstRatioPerInstance: 1,
+			numRequests:                       10,
+			expectRateLimit:                   false,
+		},
+		{
+			name:                              "namespace rate hit when burst ratio is 1",
+			maxNamespaceRPSPerInstance:        10,
+			maxNamespaceBurstRatioPerInstance: 1,
+			numRequests:                       11,
+			expectRateLimit:                   true,
+		},
+		{
+			name:                              "namespace burst allow when burst ratio is 1.5",
+			maxNamespaceRPSPerInstance:        10,
+			maxNamespaceBurstRatioPerInstance: 1.5,
+			numRequests:                       15,
+			expectRateLimit:                   false,
+		},
+		{
+			name:                              "namespace burst hit when burst ratio is 1.5",
+			maxNamespaceRPSPerInstance:        10,
+			maxNamespaceBurstRatioPerInstance: 1.5,
+			numRequests:                       16,
+			expectRateLimit:                   true,
+		},
+		{
+			name:                              "namespace burst allow when burst ratio is 0.5",
+			maxNamespaceRPSPerInstance:        10,
+			maxNamespaceBurstRatioPerInstance: 0.5,
+			numRequests:                       5,
+			expectRateLimit:                   false,
+		},
+		{
+			name:                              "namespace burst ratio does not apply for values < 1",
+			maxNamespaceRPSPerInstance:        10,
+			maxNamespaceBurstRatioPerInstance: 0.5,
+			numRequests:                       10,
+			expectRateLimit:                   false,
+		},
+		{
+			name:                              "namespace burst allow when burst ratio is 1 and global limit is set",
+			frontendServiceCount:              1,
+			globalNamespaceRPS:                10,
+			maxNamespaceRPSPerInstance:        5,
+			maxNamespaceBurstRatioPerInstance: 1,
+			numRequests:                       10,
+			expectRateLimit:                   false,
+		},
+		{
+			name:                              "namespace burst hit when burst ratio is 1 and global limit is set",
+			frontendServiceCount:              1,
+			globalNamespaceRPS:                5,
+			maxNamespaceRPSPerInstance:        10,
+			maxNamespaceBurstRatioPerInstance: 1,
+			numRequests:                       6,
+			expectRateLimit:                   true,
+		},
+		{
+			name:                              "namespace burst allow when burst ratio is 1.5 and global limit is set",
+			frontendServiceCount:              1,
+			globalNamespaceRPS:                10,
+			maxNamespaceRPSPerInstance:        5,
+			maxNamespaceBurstRatioPerInstance: 1.5,
+			numRequests:                       15,
+			expectRateLimit:                   false,
+		},
+		{
+			name:                              "namespace burst hit when burst ratio is 1.5 and global limit is set",
+			frontendServiceCount:              1,
+			globalNamespaceRPS:                5,
+			maxNamespaceRPSPerInstance:        10,
+			maxNamespaceBurstRatioPerInstance: 1.5,
+			numRequests:                       8,
+			expectRateLimit:                   true,
+		},
+		{
+			name:                                 "visibility rate allow when burst ratio is 1",
+			maxNamespaceVisibilityRPSPerInstance: 10,
+			maxNamespaceVisibilityBurstRatioPerInstance: 1,
+			numVisibilityRequests:                       10,
+			expectRateLimit:                             false,
+		},
+		{
+			name:                                 "visibility rate hit when burst ratio is 1",
+			maxNamespaceVisibilityRPSPerInstance: 10,
+			maxNamespaceVisibilityBurstRatioPerInstance: 1,
+			numVisibilityRequests:                       11,
+			expectRateLimit:                             true,
+		},
+		{
+			name:                                 "visibility burst allow when burst ratio is 1.5",
+			maxNamespaceVisibilityRPSPerInstance: 10,
+			maxNamespaceVisibilityBurstRatioPerInstance: 1.5,
+			numVisibilityRequests:                       15,
+			expectRateLimit:                             false,
+		},
+		{
+			name:                                 "visibility burst hit when burst ratio is 1.5",
+			maxNamespaceVisibilityRPSPerInstance: 10,
+			maxNamespaceVisibilityBurstRatioPerInstance: 1.5,
+			numVisibilityRequests:                       16,
+			expectRateLimit:                             true,
+		},
+		{
+			name:                                 "visibility burst allow when burst ratio is 0.5",
+			maxNamespaceVisibilityRPSPerInstance: 10,
+			maxNamespaceVisibilityBurstRatioPerInstance: 0.5,
+			numVisibilityRequests:                       5,
+			expectRateLimit:                             false,
+		},
+		{
+			name:                                 "visibility burst ratio does not apply for values < 1",
+			maxNamespaceVisibilityRPSPerInstance: 10,
+			maxNamespaceVisibilityBurstRatioPerInstance: 0.5,
+			numVisibilityRequests:                       10,
+			expectRateLimit:                             false,
+		},
+		{
+			name:                                 "visibility burst allow when burst ratio is 1 and global limit is set",
+			frontendServiceCount:                 1,
+			globalNamespaceVisibilityRPS:         10,
+			maxNamespaceVisibilityRPSPerInstance: 5,
+			maxNamespaceVisibilityBurstRatioPerInstance: 1,
+			numVisibilityRequests:                       10,
+			expectRateLimit:                             false,
+		},
+		{
+			name:                                 "visibility burst hit when burst ratio is 1 and global limit is set",
+			frontendServiceCount:                 1,
+			globalNamespaceVisibilityRPS:         5,
+			maxNamespaceVisibilityRPSPerInstance: 10,
+			maxNamespaceVisibilityBurstRatioPerInstance: 1,
+			numVisibilityRequests:                       6,
+			expectRateLimit:                             true,
+		},
+		{
+			name:                                 "visibility burst allow when burst ratio is 1.5 and global limit is set",
+			frontendServiceCount:                 1,
+			globalNamespaceVisibilityRPS:         10,
+			maxNamespaceVisibilityRPSPerInstance: 5,
+			maxNamespaceVisibilityBurstRatioPerInstance: 1.5,
+			numVisibilityRequests:                       15,
+			expectRateLimit:                             false,
+		},
+		{
+			name:                                 "visibility burst hit when burst ratio is 1.5 and global limit is set",
+			frontendServiceCount:                 1,
+			globalNamespaceVisibilityRPS:         5,
+			maxNamespaceVisibilityRPSPerInstance: 10,
+			maxNamespaceVisibilityBurstRatioPerInstance: 1.5,
+			numVisibilityRequests:                       8,
+			expectRateLimit:                             true,
+		},
+		{
+			name: "replication inducing op rate allow when burst ratio is 1",
+			maxNamespaceNamespaceReplicationInducingAPIsRPSPerInstance:        10,
+			maxNamespaceNamespaceReplicationInducingAPIsBurstRatioPerInstance: 1,
+			numReplicationInducingRequests:                                    10,
+			expectRateLimit:                                                   false,
+		},
+		{
+			name: "replication inducing op rate hit when burst ratio is 1",
+			maxNamespaceNamespaceReplicationInducingAPIsRPSPerInstance:        10,
+			maxNamespaceNamespaceReplicationInducingAPIsBurstRatioPerInstance: 1,
+			numReplicationInducingRequests:                                    11,
+			expectRateLimit:                                                   true,
+		},
+		{
+			name: "replication inducing op burst allow when burst ratio is 1.5",
+			maxNamespaceNamespaceReplicationInducingAPIsRPSPerInstance:        10,
+			maxNamespaceNamespaceReplicationInducingAPIsBurstRatioPerInstance: 1.5,
+			numReplicationInducingRequests:                                    15,
+			expectRateLimit:                                                   false,
+		},
+		{
+			name: "replication inducing op burst hit when burst ratio is 1.5",
+			maxNamespaceNamespaceReplicationInducingAPIsRPSPerInstance:        10,
+			maxNamespaceNamespaceReplicationInducingAPIsBurstRatioPerInstance: 1.5,
+			numReplicationInducingRequests:                                    16,
+			expectRateLimit:                                                   true,
+		},
+		{
+			name: "replication inducing op burst allow when burst ratio is 0.5",
+			maxNamespaceNamespaceReplicationInducingAPIsRPSPerInstance:        10,
+			maxNamespaceNamespaceReplicationInducingAPIsBurstRatioPerInstance: 0.5,
+			numReplicationInducingRequests:                                    5,
+			expectRateLimit:                                                   false,
+		},
+		{
+			name: "replication inducing op burst ratio does not apply for values < 1",
+			maxNamespaceNamespaceReplicationInducingAPIsRPSPerInstance:        10,
+			maxNamespaceNamespaceReplicationInducingAPIsBurstRatioPerInstance: 0.5,
+			numReplicationInducingRequests:                                    10,
+			expectRateLimit:                                                   false,
+		},
+		{
+			name:                 "replication inducing op burst allow when burst ratio is 1 and global limit is set",
+			frontendServiceCount: 1,
+			globalNamespaceNamespaceReplicationInducingAPIsRPS:                10,
+			maxNamespaceNamespaceReplicationInducingAPIsRPSPerInstance:        5,
+			maxNamespaceNamespaceReplicationInducingAPIsBurstRatioPerInstance: 1,
+			numReplicationInducingRequests:                                    10,
+			expectRateLimit:                                                   false,
+		},
+		{
+			name:                 "replication inducing op burst hit when burst ratio is 1 and global limit is set",
+			frontendServiceCount: 1,
+			globalNamespaceNamespaceReplicationInducingAPIsRPS:                5,
+			maxNamespaceNamespaceReplicationInducingAPIsRPSPerInstance:        10,
+			maxNamespaceNamespaceReplicationInducingAPIsBurstRatioPerInstance: 1,
+			numReplicationInducingRequests:                                    6,
+			expectRateLimit:                                                   true,
+		},
+		{
+			name:                 "replication inducing op burst allow when burst ratio is 1.5 and global limit is set",
+			frontendServiceCount: 1,
+			globalNamespaceNamespaceReplicationInducingAPIsRPS:                10,
+			maxNamespaceNamespaceReplicationInducingAPIsRPSPerInstance:        5,
+			maxNamespaceNamespaceReplicationInducingAPIsBurstRatioPerInstance: 1.5,
+			numReplicationInducingRequests:                                    15,
+			expectRateLimit:                                                   false,
+		},
+		{
+			name:                 "replication inducing op burst hit when burst ratio is 1.5 and global limit is set",
+			frontendServiceCount: 1,
+			globalNamespaceNamespaceReplicationInducingAPIsRPS:                5,
+			maxNamespaceNamespaceReplicationInducingAPIsRPSPerInstance:        10,
+			maxNamespaceNamespaceReplicationInducingAPIsBurstRatioPerInstance: 1.5,
+			numReplicationInducingRequests:                                    8,
+			expectRateLimit:                                                   true,
+		},
+	}
+
+	for _, tc := range testCases {
+		tc := tc
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			mockRegistry := namespace.NewMockRegistry(gomock.NewController(t))
+			mockRegistry.EXPECT().GetNamespace(namespace.Name("")).Return(&namespace.Namespace{}, nil).AnyTimes()
+			serviceResolver := membership.NewMockServiceResolver(gomock.NewController(t))
+			serviceResolver.EXPECT().MemberCount().Return(tc.frontendServiceCount).AnyTimes()
+
+			config := getTestConfig(tc)
+
+			// Create a rate limit interceptor.
+			rateLimitInterceptor := NamespaceRateLimitInterceptorProvider(
+				primitives.FrontendService,
+				&config,
+				mockRegistry,
+				serviceResolver,
+			)
+
+			// Create a gRPC server for the fake workflow service.
+			svc := &testSvc{}
+			server := grpc.NewServer(grpc.UnaryInterceptor(rateLimitInterceptor.Intercept))
+			workflowservice.RegisterWorkflowServiceServer(server, svc)
+
+			pipe := nettest.NewPipe()
+
+			var wg sync.WaitGroup
+			defer wg.Wait()
+			wg.Add(1)
+
+			listener := nettest.NewListener(pipe)
+			go func() {
+				defer wg.Done()
+
+				_ = server.Serve(listener)
+			}()
+
+			// Create a gRPC client to the fake workflow service.
+			dialer := grpc.WithContextDialer(func(ctx context.Context, _ string) (net.Conn, error) {
+				return pipe.Connect(ctx.Done())
+			})
+			transportCredentials := grpc.WithTransportCredentials(insecure.NewCredentials())
+			conn, err := grpc.DialContext(context.Background(), "fake", dialer, transportCredentials)
+			require.NoError(t, err)
+
+			defer server.Stop()
+
+			client := workflowservice.NewWorkflowServiceClient(conn)
+
+			defer func() {
+				// Check if the rate limit is hit.
+				if tc.expectRateLimit {
+					assert.ErrorContains(t, err, "rate limit exceeded")
+				} else {
+					assert.NoError(t, err)
+				}
+			}()
+
+			// Generate load by sending a number of requests to the server.
+			for i := 0; i < tc.numRequests; i++ {
+				_, err = client.StartWorkflowExecution(
+					context.Background(),
+					&workflowservice.StartWorkflowExecutionRequest{},
+				)
+				if err != nil {
+					return
+				}
+			}
+
+			for i := 0; i < tc.numVisibilityRequests; i++ {
+				_, err = client.ListWorkflowExecutions(
+					context.Background(),
+					&workflowservice.ListWorkflowExecutionsRequest{},
+				)
+				if err != nil {
+					return
+				}
+			}
+
+			for i := 0; i < tc.numReplicationInducingRequests; i++ {
+				_, err = client.RegisterNamespace(
+					context.Background(),
+					&workflowservice.RegisterNamespaceRequest{},
+				)
+				if err != nil {
+					return
+				}
+			}
+		})
+	}
+}
+
+func getTestConfig(tc namespaceRateLimitInterceptorTestCase) Config {
+	return Config{
+		OperatorRPSRatio: func() float64 {
+			return 0.20
+		},
+		GlobalNamespaceRPS: func(namespace string) int {
+			if tc.globalNamespaceRPS != 0 {
+				return tc.globalNamespaceRPS
+			}
+			return 100
+		},
+		GlobalNamespaceVisibilityRPS: func(namespace string) int {
+			if tc.globalNamespaceVisibilityRPS != 0 {
+				return tc.globalNamespaceVisibilityRPS
+			}
+			return 100
+		},
+		GlobalNamespaceNamespaceReplicationInducingAPIsRPS: func(namespace string) int {
+			if tc.globalNamespaceNamespaceReplicationInducingAPIsRPS != 0 {
+				return tc.globalNamespaceNamespaceReplicationInducingAPIsRPS
+			}
+			return 100
+		},
+		MaxNamespaceRPSPerInstance: func(namespace string) int {
+			if tc.maxNamespaceRPSPerInstance != 0 {
+				return tc.maxNamespaceRPSPerInstance
+			}
+			return 100
+		},
+		MaxNamespaceBurstRatioPerInstance: func(namespace string) float64 {
+			if tc.maxNamespaceBurstRatioPerInstance != 0 {
+				return tc.maxNamespaceBurstRatioPerInstance
+			}
+			return 100
+		},
+		MaxNamespaceVisibilityRPSPerInstance: func(namespace string) int {
+			if tc.maxNamespaceVisibilityRPSPerInstance != 0 {
+				return tc.maxNamespaceVisibilityRPSPerInstance
+			}
+			return 100
+		},
+		MaxNamespaceVisibilityBurstRatioPerInstance: func(namespace string) float64 {
+			if tc.maxNamespaceVisibilityBurstRatioPerInstance != 0 {
+				return tc.maxNamespaceVisibilityBurstRatioPerInstance
+			}
+			return 100
+		},
+		MaxNamespaceNamespaceReplicationInducingAPIsRPSPerInstance: func(namespace string) int {
+			if tc.maxNamespaceNamespaceReplicationInducingAPIsRPSPerInstance != 0 {
+				return tc.maxNamespaceNamespaceReplicationInducingAPIsRPSPerInstance
+			}
+			return 100
+		},
+		MaxNamespaceNamespaceReplicationInducingAPIsBurstRatioPerInstance: func(namespace string) float64 {
+			if tc.maxNamespaceNamespaceReplicationInducingAPIsBurstRatioPerInstance != 0 {
+				return tc.maxNamespaceNamespaceReplicationInducingAPIsBurstRatioPerInstance
+			}
+			return 100
+		},
+	}
 }
