@@ -306,7 +306,7 @@ func (s *PartitionManagerTestSuite) validateAddTask(expectedBuildId string, expe
 
 func (s *PartitionManagerTestSuite) validatePollTaskSyncMatch(buildId string, useVersioning bool) {
 	go func() {
-		ctx, cancel := context.WithTimeout(context.WithValue(context.Background(), identityKey, "test-poller"), 200*time.Millisecond)
+		ctx, cancel := context.WithTimeout(context.Background(), 200*time.Millisecond)
 		defer cancel()
 
 		task, err := s.partitionMgr.PollTask(
