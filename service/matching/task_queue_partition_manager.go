@@ -351,7 +351,7 @@ func (pm *taskQueuePartitionManagerImpl) HasAnyPollerAfter(accessTime time.Time)
 
 func (pm *taskQueuePartitionManagerImpl) HasPollerAfter(buildId string, accessTime time.Time) bool {
 	if buildId == "" {
-		pm.defaultQueue.HasPollerAfter(accessTime)
+		return pm.defaultQueue.HasPollerAfter(accessTime)
 	}
 	pm.versionedQueuesLock.RLock()
 	vq, ok := pm.versionedQueues[buildId]

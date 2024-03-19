@@ -919,12 +919,11 @@ func (e *matchingEngineImpl) UpdateWorkerVersioningRules(
 				req.GetDeleteCompatibleRedirectRule(),
 			)
 		case *workflowservice.UpdateWorkerVersioningRulesRequest_CommitBuildId_:
-			hasRecentPoller := tqMgr.HasPollerAfter(req.GetCommitBuildId().GetTargetBuildId(), time.Now().Add(-versioningPollerSeenWindow))
 			versioningData, err = CommitBuildID(
 				updatedClock,
 				data.GetVersioningData(),
 				req.GetCommitBuildId(),
-				hasRecentPoller,
+				tqMgr.HasPollerAfter(req.GetCommitBuildId().GetTargetBuildId(), time.Now().Add(-versioningPollerSeenWindow)),
 				e.config.AssignmentRuleLimitPerQueue(ns.Name().String()),
 			)
 		}
@@ -1697,6 +1696,5 @@ func (e *matchingEngineImpl) reviveBuildId(ns *namespace.Namespace, taskQueue st
 // We use a very short timeout for considering a sticky worker available, since tasks can also
 // be processed on the normal queue.
 func stickyWorkerAvailable(pm taskQueuePartitionManager) bool {
-	// pm.HasPollerAfter("", time.Now().Add(-stickyPollerUnavailableWindow)) should work, but doesnt
-	return pm != nil && pm.HasAnyPollerAfter(time.Now().Add(-stickyPollerUnavailableWindow))
+	return pm != nil && pm.HasPollerAfter("", time.Now().Add(-stickyPollerUnavailableWindow))
 }
