@@ -161,12 +161,10 @@ benefit of sharing a single mapping function.
 ### Start a span in `common` or other non-service-specific code
 
 *Q:* Given that common code can be called from any service, how can I start a span
-in common library code that is bound the the appropriate service
-(frontend/history/matching/worker)?
+in common library code that is bound the appropriate service (frontend/history/matching/worker)?
 
 *A:* The `TracerProvider` that created the currently active Span can be retrieved
-from that Span itself and the currently active Span can be received from from
-the `context.Context`.
+from that Span itself and the currently active Span can be received from the `context.Context`.
 
 ```
 // DoFoo is a function in the common package
@@ -180,7 +178,7 @@ func DoFoo(ctx context.Context, x int, y string) string {
 
 ### `RecordError` does not imply Span failure
 
-Using `Span.RecordError` is a good idea but not all errors imply failure. Thus
+Using `Span.RecordError` is a good idea but not all errors imply failure. Thus,
 if you want to capture an error _and also_ capture that a span failed, you must
 additionally call `Span.SetStatus(codes.Error, err.Error())`. A
 `FailSpanWithError` utility function might be a good idea.
@@ -188,7 +186,7 @@ additionally call `Span.SetStatus(codes.Error, err.Error())`. A
 ### Propagate TraceContext across things other than function calls
 
 This is taken care of by default for gRPC calls via the otelgrpc interceptors.
-However you may want to propagate tracing information between goroutines or
+However, you may want to propagate tracing information between goroutines or
 other places where the `context.Context` is not passed such as handoffs through
 a Go channel or an external datastore. There are two broad approaches that are
 applicable in different situations:

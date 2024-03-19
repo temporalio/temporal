@@ -13,5 +13,5 @@ Here's a list of what you'll need to modify:
 5. For frontend: add definitions to `service/frontend/dcRedirectionHandler.go`.
    (In the future hopefully we can make this generated or use interceptors.)
 6. Add your new methods to `service/<service>/configs/quotas.go`.
-7. Finally implement your new methods in the RPC handler.
+7. Finally, implement your new methods in the RPC handler.
 
