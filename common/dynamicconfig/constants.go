@@ -489,6 +489,9 @@ const (
 	// MatchingMembershipUnloadDelay is how long to wait to re-confirm loss of ownership before unloading a task queue.
 	// Set to zero to disable proactive unload.
 	MatchingMembershipUnloadDelay = "matching.membershipUnloadDelay"
+	// MatchingQueryWorkflowTaskTimeoutLogRate defines the sampling rate for logs when a query workflow task times out. Since
+	// these log lines can be noisy, we want to be able to turn on and sample selectively for each affected namespace.
+	MatchingQueryWorkflowTaskTimeoutLogRate = "matching.queryWorkflowTaskTimeoutLogRate"
 
 	// for matching testing only:
 
@@ -528,10 +531,17 @@ const (
 	HistoryPersistenceDynamicRateLimitingParams = "history.persistenceDynamicRateLimitingParams"
 	// HistoryLongPollExpirationInterval is the long poll expiration interval in the history service
 	HistoryLongPollExpirationInterval = "history.longPollExpirationInterval"
+	// HistoryCacheSizeBasedLimit if true, size of the history cache will be limited by HistoryCacheMaxSizeBytes
+	// and HistoryCacheHostLevelMaxSizeBytes. Otherwise, entry count in the history cache will be limited by
+	// HistoryCacheMaxSize and HistoryCacheHostLevelMaxSize.
+	HistoryCacheSizeBasedLimit = "history.cacheSizeBasedLimit"
 	// HistoryCacheInitialSize is initial size of history cache
 	HistoryCacheInitialSize = "history.cacheInitialSize"
-	// HistoryCacheMaxSize is max size of history cache
+	// HistoryCacheMaxSize is the maximum number of entries in the shard level history cache
 	HistoryCacheMaxSize = "history.cacheMaxSize"
+	// HistoryCacheMaxSizeBytes is the maximum size of the shard level history cache in bytes. This is only used if
+	// HistoryCacheSizeBasedLimit is set to true.
+	HistoryCacheMaxSizeBytes = "history.cacheMaxSizeBytes"
 	// HistoryCacheTTL is TTL of history cache
 	HistoryCacheTTL = "history.cacheTTL"
 	// HistoryCacheNonUserContextLockTimeout controls how long non-user call (callerType != API or Operator)
@@ -539,10 +549,17 @@ const (
 	HistoryCacheNonUserContextLockTimeout = "history.cacheNonUserContextLockTimeout"
 	// EnableHostHistoryCache controls if the history cache is host level
 	EnableHostHistoryCache = "history.enableHostHistoryCache"
-	// HistoryCacheHostLevelMaxSize is max size of history host level cache
+	// HistoryCacheHostLevelMaxSize is the maximum number of entries in the host level history cache
 	HistoryCacheHostLevelMaxSize = "history.hostLevelCacheMaxSize"
+	// HistoryCacheHostLevelMaxSizeBytes is the maximum size of the host level history cache. This is only used if
+	// HistoryCacheSizeBasedLimit is set to true.
+	HistoryCacheHostLevelMaxSizeBytes = "history.hostLevelCacheMaxSizeBytes"
 	// EnableAPIGetCurrentRunIDLock controls if a lock should be acquired before getting current run ID for API requests
 	EnableAPIGetCurrentRunIDLock = "history.enableAPIGetCurrentRunIDLock"
+	// EnableMutableStateTransitionHistory controls whether to record state transition history in mutable state records.
+	// The feature is used in the hierarchical state machine framework and is considered unstable as the structure may
+	// change with the pending replication design.
+	EnableMutableStateTransitionHistory = "history.enableMutableStateTransitionHistory"
 	// HistoryStartupMembershipJoinDelay is the duration a history instance waits
 	// before joining membership after starting.
 	HistoryStartupMembershipJoinDelay = "history.startupMembershipJoinDelay"

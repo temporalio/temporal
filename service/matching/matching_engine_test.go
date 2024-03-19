@@ -1220,7 +1220,7 @@ func (s *matchingEngineSuite) concurrentPublishConsumeActivities(
 				resultToken, err := s.matchingEngine.tokenSerializer.Deserialize(result.TaskToken)
 				s.NoError(err)
 
-				// taskToken, _ := s.matchingEngine.tokenSerializer.Serialize(token)
+				// taskToken, _ := s.matchingEngine.tokenSerializer.Get(token)
 				// s.EqualValues(taskToken, result.Task, fmt.Sprintf("%v!=%v", string(taskToken)))
 				s.EqualValues(taskToken, resultToken, fmt.Sprintf("%v!=%v", taskToken, resultToken))
 				i++
@@ -1351,7 +1351,7 @@ func (s *matchingEngineSuite) TestConcurrentPublishConsumeWorkflowTasks() {
 					panic(err)
 				}
 
-				// taskToken, _ := s.matchingEngine.tokenSerializer.Serialize(token)
+				// taskToken, _ := s.matchingEngine.tokenSerializer.Get(token)
 				// s.EqualValues(taskToken, result.Task, fmt.Sprintf("%v!=%v", string(taskToken)))
 				s.EqualValues(taskToken, resultToken, fmt.Sprintf("%v!=%v", taskToken, resultToken))
 				i++

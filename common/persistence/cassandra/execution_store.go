@@ -42,19 +42,19 @@ import (
 const (
 	// Special Run IDs
 	permanentRunID = "30000000-0000-f000-f000-000000000001"
-	// Row Constants for Shard Row
+	// Row Constant for Shard Row
 	rowTypeShardNamespaceID = "10000000-1000-f000-f000-000000000000"
 	rowTypeShardWorkflowID  = "20000000-1000-f000-f000-000000000000"
 	rowTypeShardRunID       = "30000000-1000-f000-f000-000000000000"
-	// Row Constants for Transfer Task Row
+	// Row Constant for Transfer Task Row
 	rowTypeTransferNamespaceID = "10000000-3000-f000-f000-000000000000"
 	rowTypeTransferWorkflowID  = "20000000-3000-f000-f000-000000000000"
 	rowTypeTransferRunID       = "30000000-3000-f000-f000-000000000000"
-	// Row Constants for Timer Task Row
+	// Row Constant for Timer Task Row
 	rowTypeTimerNamespaceID = "10000000-4000-f000-f000-000000000000"
 	rowTypeTimerWorkflowID  = "20000000-4000-f000-f000-000000000000"
 	rowTypeTimerRunID       = "30000000-4000-f000-f000-000000000000"
-	// Row Constants for Replication Task Row
+	// Row Constant for Replication Task Row
 	rowTypeReplicationNamespaceID = "10000000-5000-f000-f000-000000000000"
 	rowTypeReplicationWorkflowID  = "20000000-5000-f000-f000-000000000000"
 	rowTypeReplicationRunID       = "30000000-5000-f000-f000-000000000000"
@@ -62,7 +62,7 @@ const (
 	rowTypeVisibilityTaskNamespaceID = "10000000-6000-f000-f000-000000000000"
 	rowTypeVisibilityTaskWorkflowID  = "20000000-6000-f000-f000-000000000000"
 	rowTypeVisibilityTaskRunID       = "30000000-6000-f000-f000-000000000000"
-	// Row Constants for Replication Task DLQ Row. Source cluster name will be used as WorkflowID.
+	// Row Constant for Replication Task DLQ Row. Source cluster name will be used as WorkflowID.
 	rowTypeDLQNamespaceID = "10000000-6000-f000-f000-000000000000"
 	rowTypeDLQRunID       = "30000000-6000-f000-f000-000000000000"
 	// Row constants for History task row.

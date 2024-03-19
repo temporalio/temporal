@@ -1,8 +1,6 @@
 // The MIT License
 //
-// Copyright (c) 2023 Temporal Technologies Inc.  All rights reserved.
-//
-// Copyright (c) 2020 Uber Technologies, Inc.
+// Copyright (c) 2024 Temporal Technologies Inc.  All rights reserved.
 //
 // Permission is hereby granted, free of charge, to any person obtaining a copy
 // of this software and associated documentation files (the "Software"), to deal
@@ -22,25 +20,27 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-//go:generate mockgen -copyright_file ../../LICENSE -package $GOPACKAGE -source $GOFILE -destination size_getter_mock.go
+package nexus_test
 
-package cache
+import (
+	"fmt"
 
-// SizeGetter is an interface that can be implemented by cache entries to provide their size.
-// Cache uses CacheSize() to determine the size of a cache entry.
-// Please be aware that if the size of the cache entry changes while the cache is being used without pinning enabled,
-// the cache won't be able to automatically adjust for this size change. In such instances, it's necessary to call Put()
-// again to ensure the cache size remains accurate.
-type (
-	SizeGetter interface {
-		CacheSize() int
-	}
+	"go.temporal.io/server/common/nexus"
 )
 
-func getSize(value interface{}) int {
-	if v, ok := value.(SizeGetter); ok {
-		return v.CacheSize()
-	}
-	// if the object does not have a CacheSize() method, assume is count limit cache, which size should be 1
-	return 1
+func ExampleRouteSet_DispatchNexusTaskByNamespaceAndTaskQueue() {
+	path := nexus.Routes().DispatchNexusTaskByNamespaceAndTaskQueue.
+		Path(nexus.NamespaceAndTaskQueue{
+			Namespace: "TEST-NAMESPACE",
+			TaskQueue: "TEST-TASK-QUEUE",
+		})
+	fmt.Println(path)
+	// Output: api/v1/namespaces/TEST-NAMESPACE/task-queues/TEST-TASK-QUEUE/dispatch-nexus-task
+}
+
+func ExampleRouteSet_DispatchNexusTaskByService() {
+	path := nexus.Routes().DispatchNexusTaskByService.
+		Path("TEST-SERVICE")
+	fmt.Println(path)
+	// Output: api/v1/services/TEST-SERVICE
 }

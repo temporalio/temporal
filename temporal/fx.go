@@ -248,6 +248,8 @@ func ServerOptionsProvider(opts []ServerOption) (serverOptionsProvider, error) {
 	} else if persistenceConfig.SecondaryVisibilityConfigExist() &&
 		persistenceConfig.DataStores[persistenceConfig.SecondaryVisibilityStore].Elasticsearch != nil {
 		esConfig = persistenceConfig.DataStores[persistenceConfig.SecondaryVisibilityStore].Elasticsearch
+	} else if persistenceConfig.AdvancedVisibilityConfigExist() {
+		esConfig = persistenceConfig.DataStores[persistenceConfig.AdvancedVisibilityStore].Elasticsearch
 	}
 
 	if esConfig != nil {
