@@ -365,7 +365,7 @@ func NamespaceRateLimitInterceptorProvider(
 		panic("invalid service name")
 	}
 
-	rateFn := quotas.ClusterAwareNamespaceSpecificQuotaCalculator{
+	namespaceRateFn := quotas.ClusterAwareNamespaceSpecificQuotaCalculator{
 		MemberCounter:    frontendServiceResolver,
 		PerInstanceQuota: serviceConfig.MaxNamespaceRPSPerInstance,
 		GlobalQuota:      globalNamespaceRPS,
@@ -383,9 +383,9 @@ func NamespaceRateLimitInterceptorProvider(
 	namespaceRateLimiter := quotas.NewNamespaceRequestRateLimiter(
 		func(req quotas.Request) quotas.RequestRateLimiter {
 			return configs.NewRequestToRateLimiter(
-				configs.NewNamespaceRateBurst(req.Caller, rateFn, serviceConfig.MaxNamespaceBurstPerInstance),
-				configs.NewNamespaceRateBurst(req.Caller, visibilityRateFn, serviceConfig.MaxNamespaceVisibilityBurstPerInstance),
-				configs.NewNamespaceRateBurst(req.Caller, namespaceReplicationInducingRateFn, serviceConfig.MaxNamespaceNamespaceReplicationInducingAPIsBurstPerInstance),
+				configs.NewNamespaceRateBurst(req.Caller, namespaceRateFn, serviceConfig.MaxNamespaceBurstRatioPerInstance),
+				configs.NewNamespaceRateBurst(req.Caller, visibilityRateFn, serviceConfig.MaxNamespaceVisibilityBurstRatioPerInstance),
+				configs.NewNamespaceRateBurst(req.Caller, namespaceReplicationInducingRateFn, serviceConfig.MaxNamespaceNamespaceReplicationInducingAPIsBurstRatioPerInstance),
 				serviceConfig.OperatorRPSRatio,
 			)
 		},
