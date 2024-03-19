@@ -81,6 +81,16 @@ func (h HistoryRequire) EqualHistoryEvents(expectedHistory string, actualHistory
 	}
 }
 
+// TODO(dan) support an optional version field after eventId in the event format?
+// EqualHistoryEventsAndVersions makes an assertion about the events in history and their failover versions.
+func (h HistoryRequire) EqualHistoryEventsAndVersions(expectedHistory string, actualHistoryEvents []*historypb.HistoryEvent, versions []int) {
+	h.EqualHistoryEvents(expectedHistory, actualHistoryEvents)
+	require.Equal(h.t, len(versions), len(actualHistoryEvents))
+	for i := range versions {
+		require.Equal(h.t, int64(versions[i]), actualHistoryEvents[i].Version)
+	}
+}
+
 func (h HistoryRequire) EqualHistory(expectedHistory string, actualHistory *historypb.History) {
 	if th, ok := h.t.(helper); ok {
 		th.Helper()
