@@ -79,6 +79,10 @@ func updateIndependentActivityBuildId(
 		return err
 	}
 
+	defer func() {
+		release(retErr)
+	}()
+
 	var mutableState workflow.MutableState
 	var scheduledEventId int64
 	var taskVersion int64
@@ -97,12 +101,8 @@ func updateIndependentActivityBuildId(
 	}
 
 	if err != nil {
-		release(err)
 		return err
 	}
-	defer func() {
-		release(retErr)
-	}()
 
 	if mutableState == nil {
 		return consts.ErrWorkflowExecutionNotFound
