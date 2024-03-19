@@ -38,6 +38,7 @@ import (
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/slicex"
+	"go.uber.org/multierr"
 	"golang.org/x/exp/slices"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
@@ -100,7 +101,7 @@ func (h *OutgoingServiceRegistry) Get(
 	ctx context.Context,
 	req *operatorservice.GetNexusOutgoingServiceRequest,
 ) (*operatorservice.GetNexusOutgoingServiceResponse, error) {
-	if err := validateCommonRequestParams(req); err != nil {
+	if err := validateCommonRequest(req); err != nil {
 		return nil, err
 	}
 	response, err := h.namespaceService.GetNamespace(ctx, &persistence.GetNamespaceRequest{
@@ -209,7 +210,7 @@ func (h *OutgoingServiceRegistry) Delete(
 	ctx context.Context,
 	req *operatorservice.DeleteNexusOutgoingServiceRequest,
 ) (*operatorservice.DeleteNexusOutgoingServiceResponse, error) {
-	if err := validateCommonRequestParams(req); err != nil {
+	if err := validateCommonRequest(req); err != nil {
 		return nil, err
 	}
 	response, err := h.namespaceService.GetNamespace(ctx, &persistence.GetNamespaceRequest{
@@ -294,14 +295,15 @@ func (token *outgoingServicesPageToken) Deserialize(b []byte) error {
 	return json.Unmarshal(b, token)
 }
 
-func validateCommonRequestParams(req any) error {
+func validateCommonRequest(req commonRequest) error {
+	var errs error
 	if req, ok := req.(interface{ GetNamespace() string }); ok && req.GetNamespace() == "" {
-		return ErrNamespaceNotSet
+		errs = multierr.Append(errs, ErrNamespaceNotSet)
 	}
 	if req, ok := req.(interface{ GetName() string }); ok && req.GetName() == "" {
-		return ErrNameNotSet
+		errs = multierr.Append(errs, ErrNameNotSet)
 	}
-	return nil
+	return errs
 }
 
 func (h *OutgoingServiceRegistry) updateNamespace(
@@ -316,7 +318,7 @@ func (h *OutgoingServiceRegistry) updateNamespace(
 	})
 }
 
-func (h *OutgoingServiceRegistry) addService(req UpsertRequest, version int64, ns *persistencespb.NamespaceDetail) error {
+func (h *OutgoingServiceRegistry) addService(req upsertRequest, version int64, ns *persistencespb.NamespaceDetail) error {
 	if version != 0 {
 		return status.Errorf(
 			codes.NotFound,
@@ -336,34 +338,38 @@ func (h *OutgoingServiceRegistry) addService(req UpsertRequest, version int64, n
 func (h *OutgoingServiceRegistry) parseListRequest(
 	req *operatorservice.ListNexusOutgoingServicesRequest,
 ) (lastServiceName string, pageSize int, err error) {
-	if err := validateCommonRequestParams(req); err != nil {
-		return "", 0, err
+	var errs error
+	if req.Namespace == "" {
+		errs = multierr.Append(errs, ErrNamespaceNotSet)
 	}
 	pageSize = int(req.PageSize)
 	if pageSize < 0 {
-		return "", 0, status.Errorf(codes.InvalidArgument, "PageSize must be non-negative but is %d", pageSize)
+		errs = multierr.Append(errs, status.Errorf(codes.InvalidArgument, "PageSize must be non-negative but is %d", pageSize))
 	}
 	if pageSize == 0 {
 		pageSize = h.config.DefaultPageSize()
 	}
 	maxPageSize := h.config.MaxPageSize()
 	if pageSize > maxPageSize {
-		return "", 0, status.Errorf(
+		errs = multierr.Append(errs, status.Errorf(
 			codes.InvalidArgument,
 			"PageSize cannot exceed %d but is %d",
 			maxPageSize,
 			pageSize,
-		)
+		))
 	}
 	var pageToken outgoingServicesPageToken
 	if len(req.PageToken) > 0 {
 		if err := pageToken.Deserialize(req.PageToken); err != nil {
-			return "", 0, status.Errorf(
+			errs = multierr.Append(errs, status.Errorf(
 				codes.InvalidArgument,
 				"Invalid NextPageToken: %v",
 				err,
-			)
+			))
 		}
+	}
+	if errs != nil {
+		return "", 0, errs
 	}
 	return pageToken.LastServiceName, pageSize, nil
 }
@@ -388,36 +394,63 @@ func (h *OutgoingServiceRegistry) findService(
 	return nil
 }
 
-type UpsertRequest interface {
+type commonRequest interface {
 	GetNamespace() string
 	GetName() string
+}
+
+type upsertRequest interface {
+	commonRequest
 	GetSpec() *nexus.OutgoingServiceSpec
 }
 
-func (h *OutgoingServiceRegistry) validateUpsertRequest(req UpsertRequest) error {
-	if err := validateCommonRequestParams(req); err != nil {
-		return err
+func (h *OutgoingServiceRegistry) validateUpsertRequest(req upsertRequest) error {
+	var errs error
+	if err := validateCommonRequest(req); err != nil {
+		errs = multierr.Append(errs, err)
 	}
 	nameMaxLength := h.config.NameMaxLength()
 	if len(req.GetName()) > nameMaxLength {
-		return status.Errorf(codes.InvalidArgument, "Outgoing service name length exceeds the limit of %d", nameMaxLength)
+		errs = multierr.Append(errs, status.Errorf(
+			codes.InvalidArgument,
+			"Outgoing service name length exceeds the limit of %d",
+			nameMaxLength,
+		))
 	}
 	if !ServiceNameRegex.MatchString(req.GetName()) {
-		return status.Errorf(codes.InvalidArgument, "Outgoing service name must match the regex: %q", ServiceNameRegex.String())
+		errs = multierr.Append(errs, status.Errorf(
+			codes.InvalidArgument,
+			"Outgoing service name must match the regex: %q",
+			ServiceNameRegex.String(),
+		))
 	}
 	if req.GetSpec() == nil || req.GetSpec().GetUrl() == "" {
-		return ErrURLNotSet
+		errs = multierr.Append(errs, ErrURLNotSet)
+	} else {
+		urlMaxLength := h.config.MaxURLLength()
+		if len(req.GetSpec().GetUrl()) > urlMaxLength {
+			errs = multierr.Append(errs, status.Errorf(
+				codes.InvalidArgument,
+				"Outgoing service URL length exceeds the limit of %d",
+				urlMaxLength,
+			))
+		}
+		u, err := url.Parse(req.GetSpec().GetUrl())
+		if err != nil {
+			errs = multierr.Append(errs, status.Errorf(
+				codes.InvalidArgument,
+				"Malformed outgoing service URL: %v",
+				err,
+			))
+		} else {
+			if u.Scheme != "http" && u.Scheme != "https" {
+				errs = multierr.Append(errs, status.Errorf(
+					codes.InvalidArgument,
+					"Outgoing service URL must have http or https scheme but has %q",
+					u.Scheme,
+				))
+			}
+		}
 	}
-	urlMaxLength := h.config.MaxURLLength()
-	if len(req.GetSpec().GetUrl()) > urlMaxLength {
-		return status.Errorf(codes.InvalidArgument, "Outgoing service URL length exceeds the limit of %d", urlMaxLength)
-	}
-	u, err := url.Parse(req.GetSpec().GetUrl())
-	if err != nil {
-		return status.Errorf(codes.InvalidArgument, "Malformed outgoing service URL: %v", err)
-	}
-	if u.Scheme != "http" && u.Scheme != "https" {
-		return status.Errorf(codes.InvalidArgument, "Outgoing service URL must have http or https scheme but has %q", u.Scheme)
-	}
-	return nil
+	return errs
 }
