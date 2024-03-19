@@ -219,6 +219,7 @@ func (x *NexusIncomingServiceEntry) GetService() *NexusIncomingService {
 	return nil
 }
 
+// Nexus outgoing service info, scoped to a namespace.
 type NexusOutgoingService struct {
 	state         protoimpl.MessageState
 	sizeCache     protoimpl.SizeCache

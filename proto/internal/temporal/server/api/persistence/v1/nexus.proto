@@ -52,6 +52,7 @@ message NexusIncomingServiceEntry {
     NexusIncomingService service = 3;
 }
 
+// Nexus outgoing service info, scoped to a namespace.
 message NexusOutgoingService {
     // Current record version of this service. Incremented with each update.
     int64 version = 1;
