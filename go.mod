@@ -2,7 +2,7 @@ module go.temporal.io/server
 
 go 1.21
 
-replace go.temporal.io/api => github.com/temporalio/api-go v1.26.1-0.20240319231645-ec2eba8e5d4d
+replace go.temporal.io/api => github.com/temporalio/api-go v1.26.1-0.20240319234532-d3c0855dc795
 
 require (
 	cloud.google.com/go/storage v1.36.0
