@@ -25,6 +25,7 @@
 package configs
 
 import (
+	"math"
 	"time"
 
 	"go.temporal.io/server/common/dynamicconfig"
@@ -185,12 +186,14 @@ var _ quotas.RateBurst = (*operatorRateBurstImpl)(nil)
 func NewNamespaceRateBurst(
 	namespaceName string,
 	rateFn dynamicconfig.FloatPropertyFnWithNamespaceFilter,
-	burstFn dynamicconfig.IntPropertyFnWithNamespaceFilter,
+	burstRatioFn dynamicconfig.FloatPropertyFnWithNamespaceFilter,
 ) *NamespaceRateBurstImpl {
 	return &NamespaceRateBurstImpl{
 		namespaceName: namespaceName,
 		rateFn:        rateFn,
-		burstFn:       burstFn,
+		burstFn: func(namespace string) int {
+			return int(rateFn(namespace) * math.Max(1, burstRatioFn(namespace)))
+		},
 	}
 }
 

@@ -39,7 +39,7 @@ func (definition) Deserialize(b []byte) (any, error) {
 	return &data{state(string(b))}, nil
 }
 
-// Get implements hsm.StateMachineDefinition.
+// Serialize implements hsm.StateMachineDefinition.
 func (definition) Serialize(s any) ([]byte, error) {
 	t, ok := s.(*data)
 	if !ok {

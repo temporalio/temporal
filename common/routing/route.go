@@ -81,9 +81,9 @@ func (r *RouteBuilder[T]) Constant(values ...string) *RouteBuilder[T] {
 	return r.With(Constant[T](values...))
 }
 
-// Variable adds a [Variable] component to the [Route].
-func (r *RouteBuilder[T]) Variable(name string, getter func(*T) *string) *RouteBuilder[T] {
-	return r.With(Variable[T](name, getter))
+// StringVariable adds a [StringVariable] component to the [Route].
+func (r *RouteBuilder[T]) StringVariable(name string, getter func(*T) *string) *RouteBuilder[T] {
+	return r.With(StringVariable[T](name, getter))
 }
 
 // Build returns a read-only [Route].
@@ -131,24 +131,24 @@ func (r Route[T]) Deserialize(vars map[string]string) *T {
 
 // Constant returns a [Component] that represents a series of constant HTTP path components in a Route.
 // They will be joined via strings when used to construct a path or path representation.
-func Constant[T any](values ...string) constants[T] {
+func Constant[T any](values ...string) constant[T] {
 	return values
 }
 
-type constants[T any] []string
+type constant[T any] []string
 
-func (s constants[T]) Representation() string {
+func (s constant[T]) Representation() string {
 	return strings.Join(s, "/")
 }
 
-func (s constants[T]) Serialize(T) string {
+func (s constant[T]) Serialize(T) string {
 	return strings.Join(s, "/")
 }
 
-func (s constants[T]) Deserialize(map[string]string, *T) {}
+func (s constant[T]) Deserialize(map[string]string, *T) {}
 
-// Variable returns a [Component] that represents a string variable in a Route.
-func Variable[T any](name string, getter func(*T) *string) stringVariable[T] {
+// StringVariable returns a [Component] that represents a string variable in a Route.
+func StringVariable[T any](name string, getter func(*T) *string) stringVariable[T] {
 	return stringVariable[T]{name, getter}
 }
 
