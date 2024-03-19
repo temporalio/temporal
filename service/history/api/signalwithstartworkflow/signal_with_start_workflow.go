@@ -46,6 +46,7 @@ func SignalWithStartWorkflow(
 	shard shard.Context,
 	namespaceEntry *namespace.Namespace,
 	currentWorkflowLease api.WorkflowLease,
+	workflowConsistencyChecker api.WorkflowConsistencyChecker,
 	startRequest *historyservice.StartWorkflowExecutionRequest,
 	signalWithStartRequest *workflowservice.SignalWithStartWorkflowExecutionRequest,
 ) (string, error) {
@@ -72,6 +73,7 @@ func SignalWithStartWorkflow(
 		shard,
 		namespaceEntry,
 		currentWorkflowLease,
+		workflowConsistencyChecker,
 		startRequest,
 		signalWithStartRequest,
 	)
@@ -82,14 +84,17 @@ func startAndSignalWorkflow(
 	shard shard.Context,
 	namespaceEntry *namespace.Namespace,
 	currentWorkflowLease api.WorkflowLease,
+	workflowConsistencyChecker api.WorkflowConsistencyChecker,
 	startRequest *historyservice.StartWorkflowExecutionRequest,
 	signalWithStartRequest *workflowservice.SignalWithStartWorkflowExecutionRequest,
-) (string, error) {
+) (_ string, retErr error) {
 	workflowID := signalWithStartRequest.GetWorkflowId()
 	runID := uuid.New().String()
 	// TODO(bergundy): Support eager workflow task
 	newWorkflowLease, err := api.NewWorkflowWithSignal(
+		ctx,
 		shard,
+		workflowConsistencyChecker.GetWorkflowCache(),
 		namespaceEntry,
 		workflowID,
 		runID,
@@ -99,6 +104,8 @@ func startAndSignalWorkflow(
 	if err != nil {
 		return "", err
 	}
+	defer func() { newWorkflowLease.GetReleaseFn()(retErr) }()
+
 	if err = api.ValidateSignal(
 		ctx,
 		shard,
@@ -187,8 +194,8 @@ func startAndSignalWithCurrentWorkflow(
 	newWorkflowLease api.WorkflowLease,
 ) error {
 	err := api.UpdateWorkflowWithNew(
-		shard,
 		ctx,
+		shard,
 		currentWorkflowLease,
 		currentWorkflowUpdateAction,
 		func() (workflow.Context, workflow.MutableState, error) {

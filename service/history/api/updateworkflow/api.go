@@ -150,7 +150,7 @@ func (u *Updater) Apply(
 	}
 
 	updateID := u.req.GetRequest().GetRequest().GetMeta().GetUpdateId()
-	updateReg := workflowLease.GetContext().UpdateRegistry(ctx)
+	updateReg := workflowLease.GetUpdateRegistry(ctx)
 	var (
 		alreadyExisted bool
 		err            error

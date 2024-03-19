@@ -31,12 +31,12 @@ import (
 	historypb "go.temporal.io/api/history/v1"
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/api/workflowservice/v1"
+	wcache "go.temporal.io/server/service/history/workflow/cache"
 	"google.golang.org/protobuf/types/known/durationpb"
 
 	"go.temporal.io/server/api/historyservice/v1"
 	workflowspb "go.temporal.io/server/api/workflow/v1"
 	"go.temporal.io/server/common"
-	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
@@ -44,7 +44,6 @@ import (
 	"go.temporal.io/server/common/rpc/interceptor"
 	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/workflow"
-	wcache "go.temporal.io/server/service/history/workflow/cache"
 )
 
 type (
@@ -55,7 +54,9 @@ type (
 )
 
 func NewWorkflowWithSignal(
+	ctx context.Context,
 	shard shard.Context,
+	cache wcache.Cache,
 	namespaceEntry *namespace.Namespace,
 	workflowID string,
 	runID string,
@@ -125,18 +126,17 @@ func NewWorkflowWithSignal(
 		}
 	}
 
-	newWorkflowContext := workflow.NewContext(
-		shard.GetConfig(),
-		definition.NewWorkflowKey(
-			namespaceEntry.ID().String(),
-			workflowID,
-			runID,
-		),
-		shard.GetLogger(),
-		shard.GetThrottledLogger(),
-		shard.GetMetricsHandler(),
+	newWorkflowContext, releaseFn, err := cache.GetOrCreateWorkflowExecution(
+		ctx,
+		shard,
+		namespaceEntry.ID(),
+		&commonpb.WorkflowExecution{WorkflowId: workflowID, RunId: runID},
+		workflow.LockPriorityHigh,
 	)
-	return NewWorkflowLease(newWorkflowContext, wcache.NoopReleaseFn, newMutableState), nil
+	if err != nil {
+		return nil, err
+	}
+	return NewWorkflowLease(newWorkflowContext, releaseFn, newMutableState), nil
 }
 
 func CreateMutableState(

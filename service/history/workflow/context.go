@@ -35,9 +35,8 @@ import (
 	enumspb "go.temporal.io/api/enums/v1"
 	historypb "go.temporal.io/api/history/v1"
 	"go.temporal.io/api/serviceerror"
-	enumsspb "go.temporal.io/server/api/enums/v1"
-
 	"go.temporal.io/server/api/adminservice/v1"
+	enumsspb "go.temporal.io/server/api/enums/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/cluster"
@@ -159,7 +158,10 @@ type (
 			transactionPolicy TransactionPolicy,
 		) error
 		// TODO (alex-update): move this from workflow context.
-		UpdateRegistry(ctx context.Context) update.Registry
+		UpdateRegistry(
+			ctx context.Context,
+			ms MutableState,
+		) update.Registry
 	}
 )
 
@@ -873,11 +875,12 @@ func (c *ContextImpl) ReapplyEvents(
 	return err
 }
 
-func (c *ContextImpl) UpdateRegistry(ctx context.Context) update.Registry {
+func (c *ContextImpl) UpdateRegistry(ctx context.Context, ms MutableState) update.Registry {
 	if c.updateRegistry == nil {
-		nsIDStr := c.MutableState.GetNamespaceEntry().ID().String()
+		// NOTE: cannot use Context's MutableState, as it might not be loaded - use the parameter instead.
+		nsIDStr := ms.GetNamespaceEntry().ID().String()
 		c.updateRegistry = update.NewRegistry(
-			func() update.Store { return c.MutableState },
+			func() update.Store { return ms },
 			update.WithLogger(c.logger),
 			update.WithMetrics(c.metricsHandler),
 			update.WithTracerProvider(trace.SpanFromContext(ctx).TracerProvider()),

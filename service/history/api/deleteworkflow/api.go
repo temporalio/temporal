@@ -84,8 +84,8 @@ func Invoke(
 		if ns.ActiveInCluster(shard.GetClusterMetadata().GetCurrentClusterName()) {
 			// If workflow execution is running and in active cluster.
 			if err := api.UpdateWorkflowWithNew(
-				shard,
 				ctx,
+				shard,
 				workflowLease,
 				func(workflowLease api.WorkflowLease) (*api.UpdateWorkflowAction, error) {
 					mutableState := workflowLease.GetMutableState()

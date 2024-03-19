@@ -88,6 +88,7 @@ func Invoke(
 		shard,
 		namespaceEntry,
 		currentWorkflowLease,
+		workflowConsistencyChecker,
 		startRequest,
 		signalWithStartRequest.SignalWithStartRequest,
 	)

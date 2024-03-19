@@ -68,8 +68,9 @@ type (
 
 	mockWorkflowLeaseCtx struct {
 		api.WorkflowLease
-		GetContextFn   func() workflow.Context
-		GetReleaseFnFn func() wcache.ReleaseCacheFunc
+		GetContextFn        func() workflow.Context
+		GetReleaseFnFn      func() wcache.ReleaseCacheFunc
+		GetUpdateRegistryFn func() update.Registry
 	}
 
 	mockReg struct {
@@ -104,6 +105,10 @@ func (m mockWorkflowLeaseCtx) GetContext() workflow.Context {
 	return m.GetContextFn()
 }
 
+func (m mockWorkflowLeaseCtx) GetUpdateRegistry(ctx context.Context) update.Registry {
+	return m.GetUpdateRegistryFn()
+}
+
 func (m mockReg) Find(ctx context.Context, updateID string) (*update.Update, bool) {
 	return m.FindFunc(ctx, updateID)
 }
@@ -119,12 +124,15 @@ func TestPollOutcome(t *testing.T) {
 
 	wfCtx := workflow.NewMockContext(mockController)
 	wfCtx.EXPECT().GetWorkflowKey().Return(definition.WorkflowKey{NamespaceID: namespaceId, WorkflowID: workflowId, RunID: runId}).AnyTimes()
-	wfCtx.EXPECT().UpdateRegistry(gomock.Any()).Return(reg).AnyTimes()
+	wfCtx.EXPECT().UpdateRegistry(gomock.Any(), gomock.Any()).Return(reg).AnyTimes()
 
 	apiCtx := mockWorkflowLeaseCtx{
 		GetReleaseFnFn: func() wcache.ReleaseCacheFunc { return func(error) {} },
 		GetContextFn: func() workflow.Context {
 			return wfCtx
+		},
+		GetUpdateRegistryFn: func() update.Registry {
+			return reg
 		},
 	}
 	wfcc := mockWFConsistencyChecker{

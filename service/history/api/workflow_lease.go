@@ -25,14 +25,18 @@
 package api
 
 import (
+	"context"
+
 	"go.temporal.io/server/service/history/workflow"
 	wcache "go.temporal.io/server/service/history/workflow/cache"
+	"go.temporal.io/server/service/history/workflow/update"
 )
 
 type WorkflowLease interface {
 	GetContext() workflow.Context
 	GetMutableState() workflow.MutableState
 	GetReleaseFn() wcache.ReleaseCacheFunc
+	GetUpdateRegistry(ctx context.Context) update.Registry
 }
 
 type workflowLease struct {
@@ -81,4 +85,8 @@ func (w *workflowLease) GetMutableState() workflow.MutableState {
 
 func (w *workflowLease) GetReleaseFn() wcache.ReleaseCacheFunc {
 	return w.releaseFn
+}
+
+func (w *workflowLease) GetUpdateRegistry(ctx context.Context) update.Registry {
+	return w.context.UpdateRegistry(ctx, w.mutableState)
 }

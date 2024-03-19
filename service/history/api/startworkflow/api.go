@@ -175,6 +175,7 @@ func (s *Starter) Invoke(
 	if err != nil {
 		return nil, err
 	}
+	defer func() { creationParams.workflowLease.GetReleaseFn()(retError) }()
 
 	// grab current workflow context as a lock so that user latency can be computed
 	currentRelease, err := s.lockCurrentWorkflowExecution(ctx)
@@ -224,7 +225,9 @@ func (s *Starter) lockCurrentWorkflowExecution(
 func (s *Starter) createNewMutableState(ctx context.Context, workflowID string) (*creationParams, error) {
 	runID := uuid.NewString()
 	workflowLease, err := api.NewWorkflowWithSignal(
+		ctx,
 		s.shardContext,
+		s.workflowConsistencyChecker.GetWorkflowCache(),
 		s.namespace,
 		workflowID,
 		runID,
@@ -347,7 +350,8 @@ func (s *Starter) resolveDuplicateWorkflowID(
 	creationParams *creationParams,
 ) (*historyservice.StartWorkflowExecutionResponse, error) {
 	workflowID := s.request.StartRequest.WorkflowId
-	prevExecutionUpdateAction, err := api.ResolveDuplicateWorkflowID(
+
+	currentExecutionUpdateAction, err := api.ResolveDuplicateWorkflowID(
 		workflowID,
 		creationParams.runID,
 		currentWorkflowConditionFailed.RunID,
@@ -359,58 +363,45 @@ func (s *Starter) resolveDuplicateWorkflowID(
 	if err != nil {
 		return nil, err
 	}
-
-	if prevExecutionUpdateAction == nil {
+	if currentExecutionUpdateAction == nil {
 		return nil, nil
 	}
-	var mutableStateInfo *mutableStateInfo
-	// update prev execution and create new execution in one transaction
-	// we already validated that currentWorkflowConditionFailed.RunID is not empty,
-	// so the following update won't try to lock current execution again.
+
+	// Update current execution and create new execution in one transaction.
+	newExecutionWorkflowLease := creationParams.workflowLease
+	currentExecutionWorkflowKey := definition.NewWorkflowKey(
+		s.namespace.ID().String(), workflowID, currentWorkflowConditionFailed.RunID)
 	err = api.GetAndUpdateWorkflowWithNew(
 		ctx,
 		nil,
 		api.BypassMutableStateConsistencyPredicate,
-		definition.NewWorkflowKey(
-			s.namespace.ID().String(),
-			workflowID,
-			currentWorkflowConditionFailed.RunID,
-		),
-		prevExecutionUpdateAction,
+		currentExecutionWorkflowKey,
+		currentExecutionUpdateAction,
 		func() (workflow.Context, workflow.MutableState, error) {
-			workflowLease, err := api.NewWorkflowWithSignal(
-				s.shardContext,
-				s.namespace,
-				workflowID,
-				creationParams.runID,
-				s.request,
-				nil)
-			if err != nil {
-				return nil, nil, err
-			}
-			mutableState := workflowLease.GetMutableState()
-			mutableStateInfo, err = extractMutableStateInfo(mutableState)
-			if err != nil {
-				return nil, nil, err
-			}
-			return workflowLease.GetContext(), mutableState, nil
+			return newExecutionWorkflowLease.GetContext(), newExecutionWorkflowLease.GetMutableState(), nil
 		},
 		s.shardContext,
 		s.workflowConsistencyChecker,
 	)
-	switch err {
-	case nil:
+	switch {
+	case err == nil:
 		if !s.requestEagerStart() {
 			return &historyservice.StartWorkflowExecutionResponse{
 				RunId: creationParams.runID,
 			}, nil
 		}
-		events, err := s.getWorkflowHistory(ctx, mutableStateInfo)
+
+		newExecutionMutableState := newExecutionWorkflowLease.GetMutableState()
+		newExecutionMutableStateInfo, err := extractMutableStateInfo(newExecutionMutableState)
 		if err != nil {
 			return nil, err
 		}
-		return s.generateResponse(creationParams.runID, mutableStateInfo.workflowTask, events)
-	case consts.ErrWorkflowCompleted:
+		events, err := s.getWorkflowHistory(ctx, newExecutionMutableStateInfo)
+		if err != nil {
+			return nil, err
+		}
+		return s.generateResponse(creationParams.runID, newExecutionMutableStateInfo.workflowTask, events)
+	case errors.Is(err, consts.ErrWorkflowCompleted):
 		// previous workflow already closed
 		// fallthough to the logic for only creating the new workflow below
 		return nil, nil
