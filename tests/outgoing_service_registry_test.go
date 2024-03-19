@@ -40,7 +40,7 @@ import (
 func (s *FunctionalSuite) TestOutgoingServiceRegistry() {
 	// Use a unique namespace to avoid conditional update conflicts due to concurrent writes.
 	ns := s.randomizeStr("outgoing-service-registry-test")
-	s.NoError(s.registerNamespaceWithDefaults(ns))
+	s.mustRegister(ns)
 
 	ctx := context.Background()
 
@@ -214,7 +214,7 @@ func (s *FunctionalSuite) TestOutgoingServiceRegistry() {
 	s.Run("CreateAndList", func() {
 		// Make another unique namespace to avoid listing services from previous tests.
 		ns := s.randomizeStr("list-nexus-outgoing-services-test")
-		s.NoError(s.registerNamespaceWithDefaults(ns))
+		s.mustRegister(ns)
 
 		baseServiceName := s.randomizeStr("service-name")
 		for i := 0; i < 10; i++ {
@@ -253,4 +253,8 @@ func (s *FunctionalSuite) TestOutgoingServiceRegistry() {
 
 func getServiceName(baseServiceName string, i int) string {
 	return fmt.Sprintf("%s/%3d", baseServiceName, i)
+}
+
+func (s *FunctionalSuite) mustRegister(ns string) {
+	s.NoError(s.registerNamespaceWithDefaults(ns))
 }
