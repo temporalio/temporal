@@ -176,7 +176,7 @@ func (c *clientImpl) GetWorkerVersioningRules(
 	opts ...grpc.CallOption,
 ) (*matchingservice.GetWorkerVersioningRulesResponse, error) {
 
-	p, err := tqid.NormalPartitionFromRpcName(request.GetTaskQueue(), request.GetNamespaceId(), request.GetTaskQueueType())
+	p, err := tqid.NormalPartitionFromRpcName(request.GetTaskQueue(), request.GetNamespaceId(), enumspb.TASK_QUEUE_TYPE_WORKFLOW)
 	if err != nil {
 		return nil, err
 	}
