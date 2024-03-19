@@ -85,6 +85,7 @@ func (b *EventFactory) CreateWorkflowExecutionStartedEvent(
 		SearchAttributes:                req.SearchAttributes,
 		WorkflowId:                      req.WorkflowId,
 		SourceVersionStamp:              request.SourceVersionStamp,
+		InheritedBuildId:                request.InheritedBuildId,
 	}
 	parentInfo := request.ParentExecutionInfo
 	if parentInfo != nil {
