@@ -57,7 +57,7 @@ note over worker: dequeue Workflow Task
 worker->>handler: RespondWorkflowTaskCompleted(StartTimer)
 note right of handler: State transition:<br>append to Workflow Execution History<br>update Mutable State<br>create Timer Task
 
-qp->>qp: thirty days elapses<br><br>timer fired
+qp->>qp: thirty days elapses<br>timer fired
 note right of handler: State transition:<br>append to Workflow Execution History<br>update Mutable State<br>create Transfer Task (Workflow Task)
 qp->>matching: enqueue Workflow Task
 ```
