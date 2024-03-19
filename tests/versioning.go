@@ -975,7 +975,7 @@ func (s *VersioningIntegSuite) independentActivityTaskAssignmentSpooled(versione
 	}, wf)
 	s.NoError(err)
 
-	time.Sleep(100 * time.Millisecond)
+	time.Sleep(500 * time.Millisecond)
 
 	// MS should have the correct build ID
 	dw, err := s.sdkClient.DescribeWorkflowExecution(ctx, run.GetID(), run.GetRunID())
