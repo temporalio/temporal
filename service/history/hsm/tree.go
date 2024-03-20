@@ -342,6 +342,15 @@ func (c Collection[T]) List() []*Node {
 	return nodes
 }
 
+// Size returns the number of machines in this collection.
+func (c Collection[T]) Size() int {
+	machines, ok := c.node.persistence.Children[c.Type]
+	if !ok {
+		return 0
+	}
+	return len(machines.MachinesById)
+}
+
 // Add adds a node to the collection as a child of the collection's underlying [Node].
 func (c Collection[T]) Add(stateMachineID string, data T) (*Node, error) {
 	return c.node.AddChild(Key{Type: c.Type, ID: stateMachineID}, data)

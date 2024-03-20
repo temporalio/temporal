@@ -40,6 +40,7 @@ import (
 	"go.temporal.io/server/service/history/replication"
 	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/tasks"
+	"go.temporal.io/server/service/history/workflow"
 	wcache "go.temporal.io/server/service/history/workflow/cache"
 )
 
@@ -64,6 +65,7 @@ type (
 		EventBlobCache                  persistence.XDCCache
 		TaskCategoryRegistry            tasks.TaskCategoryRegistry
 		ReplicationDLQWriter            replication.DLQWriter
+		CommandHandlerRegistry          *workflow.CommandHandlerRegistry
 	}
 
 	historyEngineFactory struct {
@@ -101,5 +103,6 @@ func (f *historyEngineFactory) CreateEngine(
 		f.EventBlobCache,
 		f.TaskCategoryRegistry,
 		f.ReplicationDLQWriter,
+		f.CommandHandlerRegistry,
 	)
 }

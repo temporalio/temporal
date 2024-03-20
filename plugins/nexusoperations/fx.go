@@ -20,23 +20,15 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-package callbacks
+package nexusoperations
 
 import (
-	"time"
-
-	"go.temporal.io/server/common/dynamicconfig"
+	"go.uber.org/fx"
 )
 
-// InvocationTaskTimeout is the timeout for executing a single callback invocation task.
-const InvocationTaskTimeout = dynamicconfig.Key("plugin.callback.invocation.taskTimeout")
-
-type Config struct {
-	InvocationTaskTimeout dynamicconfig.DurationPropertyFn
-}
-
-func ConfigProvider(dc *dynamicconfig.Collection) *Config {
-	return &Config{
-		InvocationTaskTimeout: dc.GetDurationProperty(InvocationTaskTimeout, time.Second*10),
-	}
-}
+var Module = fx.Module(
+	"plugin.nexusoperations",
+	fx.Provide(ConfigProvider),
+	fx.Invoke(RegisterStateMachines),
+	fx.Invoke(RegisterTaskSerializers),
+)

@@ -36,6 +36,7 @@ import (
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	failurepb "go.temporal.io/api/failure/v1"
+	"go.temporal.io/api/history/v1"
 	historypb "go.temporal.io/api/history/v1"
 	"go.temporal.io/api/serviceerror"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
@@ -763,6 +764,14 @@ func (ms *MutableStateImpl) IsCurrentWorkflowGuaranteed() bool {
 
 func (ms *MutableStateImpl) GetNamespaceEntry() *namespace.Namespace {
 	return ms.namespaceEntry
+}
+
+// AddHistoryEvent adds any history event to this workflow execution.
+// The provided setAttributes function should be used to set the attributes on the event.
+func (ms *MutableStateImpl) AddHistoryEvent(t enumspb.EventType, setAttributes func(*history.HistoryEvent)) *history.HistoryEvent {
+	event := ms.hBuilder.AddHistoryEvent(t, setAttributes)
+	ms.writeEventToCache(event)
+	return event
 }
 
 func (ms *MutableStateImpl) CurrentTaskQueue() *taskqueuepb.TaskQueue {

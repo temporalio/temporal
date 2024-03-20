@@ -34,7 +34,7 @@ var Module = fx.Module(
 	"plugin.callbacks",
 	fx.Provide(ConfigProvider),
 	fx.Provide(CallbackExecutorOptionsProvider),
-	fx.Invoke(RegisterTaskSerializer),
+	fx.Invoke(RegisterTaskSerializers),
 	fx.Invoke(RegisterStateMachine),
 	fx.Invoke(RegisterExecutor),
 )
