@@ -124,11 +124,11 @@ func (h *OutgoingServiceRegistry) Get(
 	if response.Namespace != nil {
 		services = response.Namespace.OutgoingServices
 	}
-	svc := h.sortedSetManager.Get(services, req.Name)
-	if svc == nil {
+	i := h.sortedSetManager.Get(services, req.Name)
+	if i < 0 {
 		return nil, status.Errorf(codes.NotFound, "outgoing service %q not found", req.Name)
 	}
-	service := persistenceServiceToAPIService(*svc)
+	service := persistenceServiceToAPIService(services[i])
 	return &operatorservice.GetNexusOutgoingServiceResponse{
 		Service: service,
 	}, nil
@@ -189,11 +189,11 @@ func (h *OutgoingServiceRegistry) Update(
 		return nil, err
 	}
 	ns := response.Namespace
-	svcPtr := h.sortedSetManager.Get(ns.OutgoingServices, req.Name)
-	if svcPtr == nil {
+	i := h.sortedSetManager.Get(ns.OutgoingServices, req.Name)
+	if i < 0 {
 		return nil, status.Errorf(codes.NotFound, "outgoing service %q", req.GetName())
 	}
-	svc := *svcPtr
+	svc := ns.OutgoingServices[i]
 	if svc.Version != req.GetVersion() {
 		return nil, status.Errorf(
 			codes.FailedPrecondition,

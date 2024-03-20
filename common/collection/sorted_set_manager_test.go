@@ -52,15 +52,10 @@ func TestSortedSetManager_Get(t *testing.T) {
 	var s []element
 	s, ok := m.Add(s, "a", func() element { return element{"a", 1} })
 	require.True(t, ok)
-	e := m.Get(s, "a")
-	require.NotNil(t, e)
-	e.value = 2
-	e = m.Get(s, "a")
-	require.NotNil(t, e)
-	assert.Equal(t, 2, e.value)
-	assert.Equal(t, "a", e.key)
-	e = m.Get(s, "b")
-	require.Nil(t, e)
+	i := m.Get(s, "a")
+	require.Equal(t, 0, i)
+	i = m.Get(s, "b")
+	require.Equal(t, -1, i)
 }
 
 func TestSortedSetManager_Paginate(t *testing.T) {

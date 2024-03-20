@@ -24,7 +24,8 @@ package collection
 
 import "slices"
 
-// SortedSetManager provides CRUD methods on sorted sets.
+// SortedSetManager provides CURD functionality for sorted sets. There's no Update method because you can just use the
+// [SortedSetManager.Get] method and update that index directly.
 type SortedSetManager[S ~[]E, E, K any] struct {
 	cmp func(E, K) int
 	Key func(E) K
@@ -44,13 +45,13 @@ func (m SortedSetManager[S, E, K]) Add(set S, key K, create func() E) (S, bool) 
 	return slices.Insert(set, i, create()), true
 }
 
-// Get returns a pointer to the element in the set that compares equal to key or nil if there is no such element.
-func (m SortedSetManager[S, E, K]) Get(set S, key K) *E {
+// Get returns the index of the element in the set that compares equal to key or -1 if no such element exists.
+func (m SortedSetManager[S, E, K]) Get(set S, key K) int {
 	i, found := m.find(set, key)
 	if !found {
-		return nil
+		return -1
 	}
-	return &set[i]
+	return i
 }
 
 // Paginate returns up to n elements in the set that compare greater than gtKey. If there are more than n such elements,
