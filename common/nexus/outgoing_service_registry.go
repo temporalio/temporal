@@ -101,8 +101,8 @@ func (h *OutgoingServiceRegistry) Get(
 	ctx context.Context,
 	req *operatorservice.GetNexusOutgoingServiceRequest,
 ) (*operatorservice.GetNexusOutgoingServiceResponse, error) {
-	if issues := findIssuesForCommonRequest(req); issues != nil {
-		return nil, issues.GetError()
+	if err := findIssuesForCommonRequest(req).GetError(); err != nil {
+		return nil, err
 	}
 	response, err := h.namespaceService.GetNamespace(ctx, &persistence.GetNamespaceRequest{
 		Name: req.Namespace,
@@ -213,8 +213,8 @@ func (h *OutgoingServiceRegistry) Delete(
 	ctx context.Context,
 	req *operatorservice.DeleteNexusOutgoingServiceRequest,
 ) (*operatorservice.DeleteNexusOutgoingServiceResponse, error) {
-	if errorMessageSet := findIssuesForCommonRequest(req); errorMessageSet != nil {
-		return nil, errorMessageSet.GetError()
+	if err := findIssuesForCommonRequest(req).GetError(); err != nil {
+		return nil, err
 	}
 	response, err := h.namespaceService.GetNamespace(ctx, &persistence.GetNamespaceRequest{
 		Name: req.Namespace,
@@ -374,7 +374,7 @@ type commonRequest interface {
 	GetName() string
 }
 
-func findIssuesForCommonRequest(req commonRequest) issueSet {
+func findIssuesForCommonRequest(req commonRequest) *issueSet {
 	var set issueSet
 	if req.GetNamespace() == "" {
 		set.Append(IssueNamespaceNotSet)
@@ -382,7 +382,7 @@ func findIssuesForCommonRequest(req commonRequest) issueSet {
 	if req.GetName() == "" {
 		set.Append(IssueNameNotSet)
 	}
-	return set
+	return &set
 }
 
 type upsertRequest interface {
