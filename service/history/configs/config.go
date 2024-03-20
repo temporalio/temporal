@@ -113,7 +113,7 @@ type Config struct {
 	TaskDLQEnabled                 dynamicconfig.BoolPropertyFn
 	TaskDLQUnexpectedErrorAttempts dynamicconfig.IntPropertyFn
 	TaskDLQInternalErrors          dynamicconfig.BoolPropertyFn
-	TaskDLQErrorSubStrings         dynamicconfig.StringPropertyFn
+	TaskDLQErrorPattern            dynamicconfig.StringPropertyFn
 
 	TaskSchedulerEnableRateLimiter           dynamicconfig.BoolPropertyFn
 	TaskSchedulerEnableRateLimiterShadowMode dynamicconfig.BoolPropertyFn
@@ -415,7 +415,7 @@ func NewConfig(
 		TaskDLQEnabled:                 dc.GetBoolProperty(dynamicconfig.HistoryTaskDLQEnabled, true),
 		TaskDLQUnexpectedErrorAttempts: dc.GetIntProperty(dynamicconfig.HistoryTaskDLQUnexpectedErrorAttempts, 100),
 		TaskDLQInternalErrors:          dc.GetBoolProperty(dynamicconfig.HistoryTaskDLQInternalErrors, false),
-		TaskDLQErrorSubStrings:         dc.GetStringProperty(dynamicconfig.HistoryTaskDLQErrorSubStrings, ""),
+		TaskDLQErrorPattern:            dc.GetStringProperty(dynamicconfig.HistoryTaskDLQErrorPattern, ""),
 
 		TaskSchedulerEnableRateLimiter:           dc.GetBoolProperty(dynamicconfig.TaskSchedulerEnableRateLimiter, false),
 		TaskSchedulerEnableRateLimiterShadowMode: dc.GetBoolProperty(dynamicconfig.TaskSchedulerEnableRateLimiterShadowMode, true),

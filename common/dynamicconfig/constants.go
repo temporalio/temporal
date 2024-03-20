@@ -887,9 +887,9 @@ const (
 	// HistoryTaskDLQInternalErrors causes history task processing to send tasks failing with serviceerror.Internal to
 	// the dlq (or will drop them if not enabled)
 	HistoryTaskDLQInternalErrors = "history.TaskDLQInternalErrors"
-	// HistoryTaskDLQErrorSubStrings specifies a comma separated list of strings. If a task processing error contains
-	// any of these strings, that task will be sent to DLQ.
-	HistoryTaskDLQErrorSubStrings = "history.DLQErrorSubStrings"
+	// HistoryTaskDLQErrorPattern specifies a regular expression. If a task processing error matches with this regex,
+	// that task will be sent to DLQ.
+	HistoryTaskDLQErrorPattern = "history.DLQErrorPattern"
 
 	// ReplicationStreamSyncStatusDuration sync replication status duration
 	ReplicationStreamSyncStatusDuration = "history.ReplicationStreamSyncStatusDuration"

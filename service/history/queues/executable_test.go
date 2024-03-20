@@ -77,7 +77,7 @@ type (
 		priorityAssigner           queues.PriorityAssigner
 		maxUnexpectedErrorAttempts dynamicconfig.IntPropertyFn
 		dlqInternalErrors          dynamicconfig.BoolPropertyFn
-		dlqErrorSubStrings         dynamicconfig.StringPropertyFn
+		dlqErrorPattern            dynamicconfig.StringPropertyFn
 	}
 	option func(*params)
 )
@@ -842,15 +842,15 @@ func (s *executableSuite) TestTaskCancellation() {
 	s.False(executable.IsRetryableError(errors.New("some random error")))
 }
 
-func (s *executableSuite) TestExecute_SendToDLQSubStringDoesNotMatch() {
+func (s *executableSuite) TestExecute_SendToDLQErrPatternDoesNotMatch() {
 	queueWriter := &queuestest.FakeQueueWriter{}
 	executable := s.newTestExecutable(func(p *params) {
 		p.dlqWriter = queues.NewDLQWriter(queueWriter, s.mockClusterMetadata, metrics.NoopMetricsHandler, log.NewTestLogger(), s.mockNamespaceRegistry)
 		p.dlqEnabled = func() bool {
 			return true
 		}
-		p.dlqErrorSubStrings = func() string {
-			return "test substring"
+		p.dlqErrorPattern = func() string {
+			return "testpattern"
 		}
 	})
 	executionError := errors.New("some random error")
@@ -873,14 +873,14 @@ func (s *executableSuite) TestExecute_SendToDLQSubStringDoesNotMatch() {
 	s.Empty(queueWriter.EnqueueTaskRequests)
 }
 
-func (s *executableSuite) TestExecute_SendToDLQSubStringEmptyString() {
+func (s *executableSuite) TestExecute_SendToDLQErrPatternEmptyString() {
 	queueWriter := &queuestest.FakeQueueWriter{}
 	executable := s.newTestExecutable(func(p *params) {
 		p.dlqWriter = queues.NewDLQWriter(queueWriter, s.mockClusterMetadata, metrics.NoopMetricsHandler, log.NewTestLogger(), s.mockNamespaceRegistry)
 		p.dlqEnabled = func() bool {
 			return true
 		}
-		p.dlqErrorSubStrings = func() string {
+		p.dlqErrorPattern = func() string {
 			return ""
 		}
 	})
@@ -904,15 +904,15 @@ func (s *executableSuite) TestExecute_SendToDLQSubStringEmptyString() {
 	s.Empty(queueWriter.EnqueueTaskRequests)
 }
 
-func (s *executableSuite) TestExecute_SendToDLQSubStringMatchesMultiple() {
+func (s *executableSuite) TestExecute_SendToDLQErrPatternMatchesMultiple() {
 	queueWriter := &queuestest.FakeQueueWriter{}
 	executable1 := s.newTestExecutable(func(p *params) {
 		p.dlqWriter = queues.NewDLQWriter(queueWriter, s.mockClusterMetadata, metrics.NoopMetricsHandler, log.NewTestLogger(), s.mockNamespaceRegistry)
 		p.dlqEnabled = func() bool {
 			return true
 		}
-		p.dlqErrorSubStrings = func() string {
-			return "test substring 1, test substring 2"
+		p.dlqErrorPattern = func() string {
+			return "test substring 1|test substring 2"
 		}
 	})
 	executionError1 := errors.New("some random error with test substring 1")
@@ -927,8 +927,8 @@ func (s *executableSuite) TestExecute_SendToDLQSubStringMatchesMultiple() {
 		p.dlqEnabled = func() bool {
 			return true
 		}
-		p.dlqErrorSubStrings = func() string {
-			return ",,test substring 1, test substring 2"
+		p.dlqErrorPattern = func() string {
+			return "test substring 1|test substring 2"
 		}
 	})
 	executionError2 := errors.New("some random error with test substring 2")
@@ -957,14 +957,14 @@ func (s *executableSuite) TestExecute_SendToDLQSubStringMatchesMultiple() {
 	s.Len(queueWriter.EnqueueTaskRequests, 2)
 }
 
-func (s *executableSuite) TestExecute_ErrorSubStringIfDLQDisabled() {
+func (s *executableSuite) TestExecute_ErrPatternIfDLQDisabled() {
 	queueWriter := &queuestest.FakeQueueWriter{}
 	executable := s.newTestExecutable(func(p *params) {
 		p.dlqWriter = queues.NewDLQWriter(queueWriter, s.mockClusterMetadata, metrics.NoopMetricsHandler, log.NewTestLogger(), s.mockNamespaceRegistry)
 		p.dlqEnabled = func() bool {
 			return false
 		}
-		p.dlqErrorSubStrings = func() string {
+		p.dlqErrorPattern = func() string {
 			return "test substring"
 		}
 	})
@@ -988,7 +988,7 @@ func (s *executableSuite) TestExecute_ErrorSubStringIfDLQDisabled() {
 	s.Empty(queueWriter.EnqueueTaskRequests)
 }
 
-func (s *executableSuite) TestExecute_ErrorSubStringThenDisableDLQ() {
+func (s *executableSuite) TestExecute_ErrorErrPatternThenDisableDLQ() {
 	queueWriter := &queuestest.FakeQueueWriter{}
 	dlqEnabled := true
 	executable := s.newTestExecutable(func(p *params) {
@@ -996,7 +996,7 @@ func (s *executableSuite) TestExecute_ErrorSubStringThenDisableDLQ() {
 		p.dlqEnabled = func() bool {
 			return dlqEnabled
 		}
-		p.dlqErrorSubStrings = func() string {
+		p.dlqErrorPattern = func() string {
 			return "test substring"
 		}
 	})
@@ -1038,7 +1038,7 @@ func (s *executableSuite) newTestExecutable(opts ...option) queues.Executable {
 		maxUnexpectedErrorAttempts: func() int {
 			return math.MaxInt
 		},
-		dlqErrorSubStrings: func() string {
+		dlqErrorPattern: func() string {
 			return ""
 		},
 	}
@@ -1070,7 +1070,7 @@ func (s *executableSuite) newTestExecutable(opts ...option) queues.Executable {
 			params.DLQWriter = p.dlqWriter
 			params.MaxUnexpectedErrorAttempts = p.maxUnexpectedErrorAttempts
 			params.DLQInternalErrors = p.dlqInternalErrors
-			params.DLQErrorSubStrings = p.dlqErrorSubStrings
+			params.DLQErrorPattern = p.dlqErrorPattern
 		},
 	)
 }

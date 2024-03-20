@@ -31,8 +31,8 @@ import (
 	"errors"
 	"fmt"
 	"math"
+	"regexp"
 	"runtime/debug"
-	"strings"
 	"sync"
 	"time"
 
@@ -199,14 +199,14 @@ type (
 		unexpectedErrorAttempts    int
 		maxUnexpectedErrorAttempts dynamicconfig.IntPropertyFn
 		dlqInternalErrors          dynamicconfig.BoolPropertyFn
-		dlqErrorSubStrings         dynamicconfig.StringPropertyFn
+		dlqErrorPattern            dynamicconfig.StringPropertyFn
 	}
 	ExecutableParams struct {
 		DLQEnabled                 dynamicconfig.BoolPropertyFn
 		DLQWriter                  *DLQWriter
 		MaxUnexpectedErrorAttempts dynamicconfig.IntPropertyFn
 		DLQInternalErrors          dynamicconfig.BoolPropertyFn
-		DLQErrorSubStrings         dynamicconfig.StringPropertyFn
+		DLQErrorPattern            dynamicconfig.StringPropertyFn
 	}
 	ExecutableOption func(*ExecutableParams)
 )
@@ -236,7 +236,7 @@ func NewExecutable(
 		DLQInternalErrors: func() bool {
 			return false
 		},
-		DLQErrorSubStrings: func() string {
+		DLQErrorPattern: func() string {
 			return ""
 		},
 	}
@@ -268,7 +268,7 @@ func NewExecutable(
 		dlqEnabled:                 params.DLQEnabled,
 		maxUnexpectedErrorAttempts: params.MaxUnexpectedErrorAttempts,
 		dlqInternalErrors:          params.DLQInternalErrors,
-		dlqErrorSubStrings:         params.DLQErrorSubStrings,
+		dlqErrorPattern:            params.DLQErrorPattern,
 	}
 	executable.updatePriority()
 	return executable
@@ -513,20 +513,19 @@ func (e *executableImpl) HandleErr(err error) (retErr error) {
 		}
 	}()
 
-	dlqErrSubStrings := e.dlqErrorSubStrings()
-	if len(dlqErrSubStrings) > 0 {
-		subStrings := strings.Split(dlqErrSubStrings, ",")
-		for _, subStr := range subStrings {
-			if len(subStr) > 0 && strings.Contains(err.Error(), subStr) {
-				e.logger.Error(
-					fmt.Sprintf("Error matches with %s. Marking task as terminally failed, will send to DLQ",
-						dynamicconfig.HistoryTaskDLQErrorSubStrings),
-					tag.Error(err),
-					tag.ErrorType(err))
-				e.terminalFailureCause = err
-				metrics.TaskTerminalFailures.With(e.taggedMetricsHandler).Record(1)
-				return fmt.Errorf("%w: %v", ErrTerminalTaskFailure, err)
-			}
+	if len(e.dlqErrorPattern()) > 0 {
+		match, mErr := regexp.Match(e.dlqErrorPattern(), []byte(err.Error()))
+		if mErr != nil {
+			e.logger.Error(fmt.Sprintf("Failed to match task processing error with %s", dynamicconfig.HistoryTaskDLQErrorPattern))
+		} else if match {
+			e.logger.Error(
+				fmt.Sprintf("Error matches with %s. Marking task as terminally failed, will send to DLQ",
+					dynamicconfig.HistoryTaskDLQErrorPattern),
+				tag.Error(err),
+				tag.ErrorType(err))
+			e.terminalFailureCause = err
+			metrics.TaskTerminalFailures.With(e.taggedMetricsHandler).Record(1)
+			return fmt.Errorf("%w: %v", ErrTerminalTaskFailure, err)
 		}
 	}
 
