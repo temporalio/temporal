@@ -275,31 +275,6 @@ func (h *OutgoingServiceRegistry) List(
 	}, nil
 }
 
-type outgoingServicesPageToken struct {
-	LastServiceName string `json:"lastServiceName"`
-}
-
-func (token *outgoingServicesPageToken) Serialize() []byte {
-	b, _ := json.Marshal(token)
-	return b
-}
-
-func (token *outgoingServicesPageToken) Deserialize(b []byte) error {
-	return json.Unmarshal(b, token)
-}
-
-func (h *OutgoingServiceRegistry) updateNamespace(
-	ctx context.Context,
-	ns *persistencespb.NamespaceDetail,
-	response *persistence.GetNamespaceResponse,
-) error {
-	return h.namespaceService.UpdateNamespace(ctx, &persistence.UpdateNamespaceRequest{
-		Namespace:           ns,
-		IsGlobalNamespace:   response.IsGlobalNamespace,
-		NotificationVersion: response.NotificationVersion + 1,
-	})
-}
-
 func (h *OutgoingServiceRegistry) parseListRequest(
 	req *operatorservice.ListNexusOutgoingServicesRequest,
 ) (lastServiceName string, pageSize int, err error) {
@@ -328,6 +303,26 @@ func (h *OutgoingServiceRegistry) parseListRequest(
 		return "", 0, err
 	}
 	return pageToken.LastServiceName, pageSize, nil
+}
+
+func (h *OutgoingServiceRegistry) updateNamespace(
+	ctx context.Context,
+	ns *persistencespb.NamespaceDetail,
+	response *persistence.GetNamespaceResponse,
+) error {
+	return h.namespaceService.UpdateNamespace(ctx, &persistence.UpdateNamespaceRequest{
+		Namespace:           ns,
+		IsGlobalNamespace:   response.IsGlobalNamespace,
+		NotificationVersion: response.NotificationVersion + 1,
+	})
+}
+
+func persistenceServiceToAPIService(outgoingService *persistencespb.NexusOutgoingService) *nexus.OutgoingService {
+	return &nexus.OutgoingService{
+		Name:    outgoingService.Name,
+		Version: outgoingService.Version,
+		Spec:    outgoingService.Spec,
+	}
 }
 
 type commonRequest interface {
@@ -379,10 +374,15 @@ func (h *OutgoingServiceRegistry) validateUpsertRequest(req upsertRequest) error
 	return issues.GetError()
 }
 
-func persistenceServiceToAPIService(outgoingService *persistencespb.NexusOutgoingService) *nexus.OutgoingService {
-	return &nexus.OutgoingService{
-		Name:    outgoingService.Name,
-		Version: outgoingService.Version,
-		Spec:    outgoingService.Spec,
-	}
+type outgoingServicesPageToken struct {
+	LastServiceName string `json:"lastServiceName"`
+}
+
+func (token *outgoingServicesPageToken) Serialize() []byte {
+	b, _ := json.Marshal(token)
+	return b
+}
+
+func (token *outgoingServicesPageToken) Deserialize(b []byte) error {
+	return json.Unmarshal(b, token)
 }
