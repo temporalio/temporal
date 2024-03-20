@@ -60,7 +60,9 @@ type NamespaceDetail struct {
 	FailoverNotificationVersion int64                       `protobuf:"varint,5,opt,name=failover_notification_version,json=failoverNotificationVersion,proto3" json:"failover_notification_version,omitempty"`
 	FailoverVersion             int64                       `protobuf:"varint,6,opt,name=failover_version,json=failoverVersion,proto3" json:"failover_version,omitempty"`
 	FailoverEndTime             *timestamppb.Timestamp      `protobuf:"bytes,7,opt,name=failover_end_time,json=failoverEndTime,proto3" json:"failover_end_time,omitempty"`
-	OutgoingServices            []*NexusOutgoingService     `protobuf:"bytes,8,rep,name=outgoing_services,json=outgoingServices,proto3" json:"outgoing_services,omitempty"`
+	// The list of registered Nexus outgoing services that are used by this namespace. This must remain sorted in
+	// ascending order by service name.
+	OutgoingServices []*NexusOutgoingService `protobuf:"bytes,8,rep,name=outgoing_services,json=outgoingServices,proto3" json:"outgoing_services,omitempty"`
 }
 
 func (x *NamespaceDetail) Reset() {
