@@ -324,7 +324,7 @@ func (t ResetTest) reset(eventId int64) string {
 }
 
 func (t *ResetTest) run() {
-	t.totalSignals = 1
+	t.totalSignals = 2
 	t.tv = t.FunctionalSuite.startWorkflow(t.tv)
 
 	poller := &TaskPoller{
@@ -361,7 +361,11 @@ func (t *ResetTest) run() {
   6 WorkflowTaskScheduled
   7 WorkflowTaskStarted
   8 WorkflowTaskCompleted
-  9 WorkflowExecutionCompleted
+  9 WorkflowExecutionSignaled
+ 10 WorkflowTaskScheduled
+ 11 WorkflowTaskStarted
+ 12 WorkflowTaskCompleted
+ 13 WorkflowExecutionCompleted
 `, t.getHistory(t.namespace, t.tv.WorkflowExecution()))
 
 	resetToEventId := int64(4)
@@ -387,7 +391,8 @@ func (t *ResetTest) run() {
   3 WorkflowTaskStarted
   4 WorkflowTaskFailed
   5 WorkflowExecutionSignaled
-  6 WorkflowTaskScheduled
+  6 WorkflowExecutionSignaled
+  7 WorkflowTaskScheduled
 `, events)
 	}
 }
