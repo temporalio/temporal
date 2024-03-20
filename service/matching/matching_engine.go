@@ -36,7 +36,6 @@ import (
 
 	"github.com/pborman/uuid"
 	"go.temporal.io/server/common/tqid"
-	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/timestamppb"
 
 	commonpb "go.temporal.io/api/common/v1"
@@ -524,7 +523,7 @@ pollLoop:
 			// We remove build id from workerVersionCapabilities so History can differentiate between
 			// old and new versioning in Record*TaskStart.
 			// TODO: remove this block after old versioning cleanup. [cleanup-old-wv]
-			requestClone = proto.Clone(request).(*workflowservice.PollWorkflowTaskQueueRequest)
+			requestClone = common.CloneProto(request)
 			requestClone.WorkerVersionCapabilities.BuildId = ""
 		}
 		resp, err := e.recordWorkflowTaskStarted(ctx, requestClone, task)
@@ -658,7 +657,7 @@ pollLoop:
 			// We remove build id from workerVersionCapabilities so History can differentiate between
 			// old and new versioning in Record*TaskStart.
 			// TODO: remove this block after old versioning cleanup. [cleanup-old-wv]
-			requestClone = proto.Clone(request).(*workflowservice.PollActivityTaskQueueRequest)
+			requestClone = common.CloneProto(request)
 			requestClone.WorkerVersionCapabilities.BuildId = ""
 		}
 		resp, err := e.recordActivityTaskStarted(ctx, requestClone, task)

@@ -65,7 +65,7 @@ func updateIndependentActivityBuildId(
 			// build ID.
 			// Since it does not affect WF progress, just logging warn and skipping the error.
 			// TODO: let the error bubble up so the task is rescheduled and build ID is fully updated
-			logger.Warn("failed to update activity's assigned build ID", tag.Error(retErr))
+			logger.Warn("failed to update activity's assigned build ID", append(tasks.Tags(task), tag.Error(retErr))...)
 		}
 		retErr = nil
 	}()
@@ -158,7 +158,7 @@ func updateWorkflowAssignedBuildId(
 			// build ID.
 			// Since it does not affect WF progress, just logging warn and skipping the error.
 			// TODO: let the error bubble up so the task is rescheduled and build ID is fully updated
-			logger.Error("failed to update workflow's assigned build ID", tag.Error(retErr))
+			logger.Error("failed to update workflow's assigned build ID", append(tasks.Tags(transferTask), tag.Error(retErr))...)
 		}
 		retErr = nil
 	}()
