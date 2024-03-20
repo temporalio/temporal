@@ -168,6 +168,12 @@ var (
 	}
 )
 
+// IsSystem returns true if name is system search attribute
+func IsSystem(name string) bool {
+	_, ok := system[name]
+	return ok
+}
+
 // IsReserved returns true if name is system reserved and can't be used as custom search attribute name.
 func IsReserved(name string) bool {
 	if _, ok := system[name]; ok {
