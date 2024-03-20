@@ -109,7 +109,7 @@ func TestSortedSetManager_Remove(t *testing.T) {
 	assert.Empty(t, s)
 }
 
-func newManager() *collection.SortedSetManager[[]element, element, string] {
+func newManager() collection.SortedSetManager[[]element, element, string] {
 	cmp := func(e element, k string) int {
 		return strings.Compare(e.key, k)
 	}

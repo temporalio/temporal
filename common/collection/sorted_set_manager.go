@@ -31,12 +31,12 @@ type SortedSetManager[S ~[]E, E, K any] struct {
 }
 
 // NewSortedSetManager returns a new SortedSetManager with the given comparison function and key function.
-func NewSortedSetManager[S ~[]E, E, K any](cmp func(E, K) int, key func(E) K) *SortedSetManager[S, E, K] {
-	return &SortedSetManager[S, E, K]{cmp, key}
+func NewSortedSetManager[S ~[]E, E, K any](cmp func(E, K) int, key func(E) K) SortedSetManager[S, E, K] {
+	return SortedSetManager[S, E, K]{cmp, key}
 }
 
 // Add adds a new element to the set. If the element is already in the set, it returns the set unchanged and false.
-func (m *SortedSetManager[S, E, K]) Add(set S, key K, create func() E) (S, bool) {
+func (m SortedSetManager[S, E, K]) Add(set S, key K, create func() E) (S, bool) {
 	i, found := m.find(set, key)
 	if found {
 		return set, false
@@ -45,7 +45,7 @@ func (m *SortedSetManager[S, E, K]) Add(set S, key K, create func() E) (S, bool)
 }
 
 // Get returns the element in the set that compares equal to key. If there is no such element, it returns false.
-func (m *SortedSetManager[S, E, K]) Get(set S, key K) (E, bool) {
+func (m SortedSetManager[S, E, K]) Get(set S, key K) (E, bool) {
 	i, found := m.find(set, key)
 	if !found {
 		var e E
@@ -54,9 +54,9 @@ func (m *SortedSetManager[S, E, K]) Get(set S, key K) (E, bool) {
 	return set[i], true
 }
 
-// Paginate returns up to n elements in the set that compare greater than key. If there are more than n such elements,
-// it also returns the smallest key in the set that compares greater than key. Otherwise, the second return value is nil.
-func (m *SortedSetManager[S, E, K]) Paginate(set S, gtKey K, n int) (S, *K) {
+// Paginate returns up to n elements in the set that compare greater than gtKey. If there are more than n such elements,
+// it also returns the key of the last element in the page. Otherwise, the second return value is nil.
+func (m SortedSetManager[S, E, K]) Paginate(set S, gtKey K, n int) (S, *K) {
 	i, exists := m.find(set, gtKey)
 	if exists {
 		i++
@@ -76,7 +76,7 @@ func (m *SortedSetManager[S, E, K]) Paginate(set S, gtKey K, n int) (S, *K) {
 }
 
 // Update updates an element in the set. If the element is not in the set, it returns the set unchanged and false.
-func (m *SortedSetManager[S, E, K]) Update(set S, key K, update func(e E) E) (S, bool) {
+func (m SortedSetManager[S, E, K]) Update(set S, key K, update func(e E) E) (S, bool) {
 	i, found := m.find(set, key)
 	if !found {
 		return set, false
@@ -86,7 +86,7 @@ func (m *SortedSetManager[S, E, K]) Update(set S, key K, update func(e E) E) (S,
 }
 
 // Remove removes an element from the set. If the element is not in the set, it returns the set unchanged and false.
-func (m *SortedSetManager[S, E, K]) Remove(set S, key K) (S, bool) {
+func (m SortedSetManager[S, E, K]) Remove(set S, key K) (S, bool) {
 	i, found := m.find(set, key)
 	if !found {
 		return set, false
@@ -94,6 +94,6 @@ func (m *SortedSetManager[S, E, K]) Remove(set S, key K) (S, bool) {
 	return slices.Delete(set, i, i+1), true
 }
 
-func (m *SortedSetManager[S, E, K]) find(set S, key K) (int, bool) {
+func (m SortedSetManager[S, E, K]) find(set S, key K) (int, bool) {
 	return slices.BinarySearchFunc(set, key, m.cmp)
 }

@@ -32,10 +32,10 @@ import (
 	"go.temporal.io/api/nexus/v1"
 	"go.temporal.io/api/operatorservice/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
+	"go.temporal.io/server/common/collection"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/rpc"
-	"golang.org/x/exp/slices"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 )
@@ -48,6 +48,7 @@ import (
 type OutgoingServiceRegistry struct {
 	namespaceService NamespaceService
 	config           *OutgoingServiceRegistryConfig
+	sortedSetManager collection.SortedSetManager[[]*persistencespb.NexusOutgoingService, *persistencespb.NexusOutgoingService, string]
 }
 
 // NamespaceService is an interface which contains only the methods we need from
@@ -66,6 +67,14 @@ func NewOutgoingServiceRegistry(
 	return &OutgoingServiceRegistry{
 		namespaceService: namespaceService,
 		config:           config,
+		sortedSetManager: collection.NewSortedSetManager[[]*persistencespb.NexusOutgoingService, *persistencespb.NexusOutgoingService, string](
+			func(service *persistencespb.NexusOutgoingService, name string) int {
+				return strings.Compare(service.Name, name)
+			},
+			func(service *persistencespb.NexusOutgoingService) string {
+				return service.Name
+			},
+		),
 	}
 }
 
@@ -115,11 +124,11 @@ func (h *OutgoingServiceRegistry) Get(
 	if response.Namespace != nil {
 		services = response.Namespace.OutgoingServices
 	}
-	i, exists := getServiceIndexByName(services, req.Name)
-	if !exists {
+	svc, found := h.sortedSetManager.Get(services, req.Name)
+	if !found {
 		return nil, status.Errorf(codes.NotFound, "outgoing service %q not found", req.Name)
 	}
-	service := persistenceServiceToAPIService(services[i])
+	service := persistenceServiceToAPIService(svc)
 	return &operatorservice.GetNexusOutgoingServiceResponse{
 		Service: service,
 	}, nil
@@ -140,22 +149,19 @@ func (h *OutgoingServiceRegistry) Create(
 		return nil, err
 	}
 	ns := response.Namespace
-	i, exists := getServiceIndexByName(ns.OutgoingServices, req.GetName())
 	name := req.GetName()
-	if exists {
-		return nil, status.Errorf(
-			codes.AlreadyExists,
-			"outgoing service %q already exists with version %d",
-			name,
-			ns.OutgoingServices[i].Version,
-		)
-	}
 	newService := &persistencespb.NexusOutgoingService{
 		Version: 1,
 		Name:    name,
 		Spec:    req.GetSpec(),
 	}
-	ns.OutgoingServices = slices.Insert(ns.OutgoingServices, i, newService)
+	var created bool
+	ns.OutgoingServices, created = h.sortedSetManager.Add(ns.OutgoingServices, name, func() *persistencespb.NexusOutgoingService {
+		return newService
+	})
+	if !created {
+		return nil, status.Errorf(codes.AlreadyExists, "outgoing service %q already exists", name)
+	}
 	if err := h.updateNamespace(ctx, ns, response); err != nil {
 		return nil, err
 	}
@@ -183,29 +189,35 @@ func (h *OutgoingServiceRegistry) Update(
 		return nil, err
 	}
 	ns := response.Namespace
-	i, exists := getServiceIndexByName(ns.OutgoingServices, req.GetName())
-	if !exists {
+	var found bool
+	ns.OutgoingServices, found = h.sortedSetManager.Update(ns.OutgoingServices, req.Name, func(svc *persistencespb.NexusOutgoingService) *persistencespb.NexusOutgoingService {
+		if svc.Version != req.GetVersion() {
+			err = status.Errorf(
+				codes.FailedPrecondition,
+				"outgoing service %q version %d does not match expected version %d",
+				req.GetName(),
+				svc.Version,
+				req.GetVersion(),
+			)
+			return svc
+		}
+		svc.Spec = req.GetSpec()
+		svc.Version++
+		return svc
+	})
+	if !found {
 		return nil, status.Errorf(codes.NotFound, "outgoing service %q", req.GetName())
 	}
-	service := ns.OutgoingServices[i]
-	if service.Version != req.GetVersion() {
-		return nil, status.Errorf(
-			codes.FailedPrecondition,
-			"outgoing service %q version %d does not match expected version %d",
-			req.GetName(),
-			service.Version,
-			req.GetVersion(),
-		)
+	if err != nil {
+		return nil, err
 	}
-	service.Version++
-	service.Spec = req.GetSpec()
 	if err := h.updateNamespace(ctx, ns, response); err != nil {
 		return nil, err
 	}
 	return &operatorservice.UpdateNexusOutgoingServiceResponse{
 		Service: &nexus.OutgoingService{
 			Name:    req.GetName(),
-			Version: service.Version,
+			Version: req.GetVersion() + 1,
 			Spec:    req.GetSpec(),
 		},
 	}, nil
@@ -226,11 +238,11 @@ func (h *OutgoingServiceRegistry) Delete(
 		return nil, err
 	}
 	ns := response.Namespace
-	i, exists := getServiceIndexByName(ns.OutgoingServices, req.Name)
-	if !exists {
+	var found bool
+	ns.OutgoingServices, found = h.sortedSetManager.Remove(ns.OutgoingServices, req.Name)
+	if !found {
 		return nil, status.Errorf(codes.NotFound, "outgoing service %q", req.Name)
 	}
-	ns.OutgoingServices = slices.Delete(ns.OutgoingServices, i, i+1)
 	if err := h.updateNamespace(ctx, ns, response); err != nil {
 		return nil, err
 	}
@@ -252,27 +264,15 @@ func (h *OutgoingServiceRegistry) List(
 	if err != nil {
 		return nil, err
 	}
-	startIndex := 0
 	ns := response.Namespace
-	if lastServiceName != "" {
-		startIndex = getIndexOfNextService(ns.OutgoingServices, lastServiceName)
-	}
-	size := min(pageSize, len(ns.OutgoingServices)-startIndex)
-	if size <= 0 {
-		return &operatorservice.ListNexusOutgoingServicesResponse{}, nil
-	}
-	services := make([]*nexus.OutgoingService, size)
-	for i := 0; i < size; i++ {
-		service := ns.OutgoingServices[startIndex+i]
-		services[i] = &nexus.OutgoingService{
-			Name:    service.Name,
-			Version: service.Version,
-			Spec:    service.Spec,
-		}
+	page, lastKey := h.sortedSetManager.Paginate(ns.OutgoingServices, lastServiceName, pageSize)
+	services := make([]*nexus.OutgoingService, len(page))
+	for i := 0; i < len(page); i++ {
+		services[i] = persistenceServiceToAPIService(ns.OutgoingServices[i])
 	}
 	var nextPageToken []byte
-	if startIndex+pageSize < len(ns.OutgoingServices) {
-		token := outgoingServicesPageToken{LastServiceName: services[len(services)-1].Name}
+	if lastKey != nil {
+		token := outgoingServicesPageToken{LastServiceName: *lastKey}
 		nextPageToken = token.Serialize()
 	}
 	return &operatorservice.ListNexusOutgoingServicesResponse{
@@ -383,24 +383,6 @@ func (h *OutgoingServiceRegistry) validateUpsertRequest(req upsertRequest) error
 		}
 	}
 	return issues.GetError()
-}
-
-func compareServiceAndName(svc *persistencespb.NexusOutgoingService, name string) int {
-	return strings.Compare(svc.Name, name)
-}
-
-func getServiceIndexByName(services []*persistencespb.NexusOutgoingService, name string) (int, bool) {
-	return slices.BinarySearchFunc(services, name, compareServiceAndName)
-}
-
-func getIndexOfNextService(services []*persistencespb.NexusOutgoingService, lastServiceName string) int {
-	i, exists := getServiceIndexByName(services, lastServiceName)
-	if exists {
-		// If the service is found, we want to start at the next service.
-		i++
-	}
-	// If the service is not found, i is the index where the service would be inserted (like std::lower_bound).
-	return i
 }
 
 func persistenceServiceToAPIService(outgoingService *persistencespb.NexusOutgoingService) *nexus.OutgoingService {
