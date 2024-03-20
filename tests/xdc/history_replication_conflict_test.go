@@ -144,7 +144,7 @@ func (s *historyReplicationConflictTestSuite) TestReproduceDroppedSignalBug() {
 	s.registerGlobalNamespace(ctx, ns)
 	s.executeNamespaceReplicationTasks(ctx)
 	runId := s.startWorkflow(ctx, sdkClient1, tq, id)
-	s.executeHistoryReplicationTasksUntil(ctx, id, enums.EVENT_TYPE_WORKFLOW_TASK_SCHEDULED)
+	s.executeHistoryReplicationTasksUntilXXX(ctx, id, enums.EVENT_TYPE_WORKFLOW_TASK_SCHEDULED)
 
 	s.HistoryRequire.EqualHistoryEventsAndVersions(`
   1 WorkflowExecutionStarted
@@ -211,6 +211,47 @@ func (s *historyReplicationConflictTestSuite) executeNamespaceReplicationTasks(c
 			fmt.Println("Executed namespace replication task:", task)
 		default:
 			return
+		}
+	}
+}
+
+// executeHistoryReplicationTasksUntil executes buffered history replication tasks until the requested event type is
+// encountered for the workflowId.
+func (s *historyReplicationConflictTestSuite) executeHistoryReplicationTasksUntilXXX(
+	ctx context.Context,
+	workflowId string,
+	eventType enums.EventType,
+) {
+	serializer := serialization.NewSerializer()
+	seen := false
+	for {
+		select {
+		case task := <-s.historyReplicationTasks:
+			trackableTask := (*task).TrackableExecutableTask
+			err := trackableTask.Execute()
+			s.NoError(err)
+			trackableTask.Ack()
+			attr := (*task).replicationTask.GetHistoryTaskAttributes()
+			if attr == nil {
+				s.logger.Warn("task has no history task attributes")
+				continue
+			}
+			if attr.WorkflowId != workflowId {
+				continue
+			}
+			events, err := serializer.DeserializeEvents(attr.Events)
+			s.NoError(err)
+			for _, event := range events {
+				fmt.Println("history replication task event:", event.EventType)
+				if event.GetEventType() == eventType {
+					seen = true
+				}
+			}
+			if seen {
+				return
+			}
+		case <-ctx.Done():
+			s.FailNow("timed out waiting for replication task to be processed")
 		}
 	}
 }
