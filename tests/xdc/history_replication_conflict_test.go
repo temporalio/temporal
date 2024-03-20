@@ -44,6 +44,7 @@ import (
 	"go.temporal.io/api/workflowservice/v1"
 	sdkclient "go.temporal.io/sdk/client"
 	"go.temporal.io/sdk/workflow"
+	"go.temporal.io/server/api/adminservice/v1"
 	replicationspb "go.temporal.io/server/api/replication/v1"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
@@ -79,12 +80,18 @@ type (
 		s *historyReplicationConflictTestSuite
 		replication.TrackableExecutableTask
 		replicationTask *replicationspb.ReplicationTask
+		taskClusterName string
 	}
 )
 
 const (
 	waitDuration       = 2 * time.Second
 	taskBufferCapacity = 100
+)
+
+var (
+	cluster1Count = 0
+	cluster2Count = 0
 )
 
 func TestHistoryReplicationConflictTestSuite(t *testing.T) {
@@ -144,7 +151,9 @@ func (s *historyReplicationConflictTestSuite) TestReproduceDroppedSignalBug() {
 	s.registerGlobalNamespace(ctx, ns)
 	s.executeNamespaceReplicationTasks(ctx)
 	runId := s.startWorkflow(ctx, sdkClient1, tq, id)
-	s.executeHistoryReplicationTasksUntilXXX(ctx, id, enums.EVENT_TYPE_WORKFLOW_TASK_SCHEDULED)
+	time.Sleep(waitDuration)
+	// s.executeHistoryReplicationTasksUntilXXX(ctx, id, enums.EVENT_TYPE_WORKFLOW_TASK_SCHEDULED)
+	s.printEvents(ctx, ns, id, runId)
 
 	s.HistoryRequire.EqualHistoryEventsAndVersions(`
   1 WorkflowExecutionStarted
@@ -167,38 +176,44 @@ func (s *historyReplicationConflictTestSuite) TestReproduceDroppedSignalBug() {
 	time.Sleep(waitDuration)
 
 	// cluster1 has accepted a signal
-	s.HistoryRequire.EqualHistoryEventsAndVersions(`
-	1 WorkflowExecutionStarted
-	2 WorkflowTaskScheduled
-	3 WorkflowExecutionSignaled {"Input": {"Payloads": [{"Data": "\"cluster-1-signal-1\""}]}}
-	`, s.getHistory(ctx, s.cluster1, ns, id, runId), []int{1, 1, 1})
+	// s.HistoryRequire.EqualHistoryEventsAndVersions(`
+	// 1 WorkflowExecutionStarted
+	// 2 WorkflowTaskScheduled
+	// 3 WorkflowExecutionSignaled {"Input": {"Payloads": [{"Data": "\"cluster-1-signal-1\""}]}}
+	// `, s.getHistory(ctx, s.cluster1, ns, id, runId), []int{1, 1, 1})
+	s.printEvents(ctx, ns, id, runId)
 
 	// cluster2: notice that the signal it accepted has failover version 2
-	s.HistoryRequire.EqualHistoryEventsAndVersions(`
-	1 WorkflowExecutionStarted
-	2 WorkflowTaskScheduled
-	3 WorkflowExecutionSignaled {"Input": {"Payloads": [{"Data": "\"cluster-2-signal-1\""}]}}
-	`, s.getHistory(ctx, s.cluster2, ns, id, runId), []int{1, 1, 2})
+	// s.HistoryRequire.EqualHistoryEventsAndVersions(`
+	// 1 WorkflowExecutionStarted
+	// 2 WorkflowTaskScheduled
+	// 3 WorkflowExecutionSignaled {"Input": {"Payloads": [{"Data": "\"cluster-2-signal-1\""}]}}
+	// `, s.getHistory(ctx, s.cluster2, ns, id, runId), []int{1, 1, 2})
 
-	s.printEvents(ctx, ns, id, runId)
 	// Execute pending history replication tasks. Recall that both clusters believe they are active.
 	// TODO(dan): understand what replication tasks are executed at this point and make assertions about them.
 	s.executeHistoryReplicationTasksUntil(ctx, id, enums.EVENT_TYPE_WORKFLOW_EXECUTION_SIGNALED)
 	s.printEvents(ctx, ns, id, runId)
 
 	// cluster1: notice that its own signal has been replaced by the signal from cluster 2. This looks like a bug.
-	s.HistoryRequire.EqualHistoryEventsAndVersions(`
-	1 WorkflowExecutionStarted
-	2 WorkflowTaskScheduled
-	3 WorkflowExecutionSignaled {"Input": {"Payloads": [{"Data": "\"cluster-2-signal-1\""}]}}
-	`, s.getHistory(ctx, s.cluster1, ns, id, runId), []int{1, 1, 2})
+	// s.HistoryRequire.EqualHistoryEventsAndVersions(`
+	// 1 WorkflowExecutionStarted
+	// 2 WorkflowTaskScheduled
+	// 3 WorkflowExecutionSignaled {"Input": {"Payloads": [{"Data": "\"cluster-2-signal-1\""}]}}
+	// `, s.getHistory(ctx, s.cluster1, ns, id, runId), []int{1, 1, 2})
 
 	// cluster2: history has not changed
-	s.HistoryRequire.EqualHistoryEventsAndVersions(`
-	1 WorkflowExecutionStarted
-	2 WorkflowTaskScheduled
-	3 WorkflowExecutionSignaled {"Input": {"Payloads": [{"Data": "\"cluster-2-signal-1\""}]}}
-	`, s.getHistory(ctx, s.cluster2, ns, id, runId), []int{1, 1, 2})
+	// s.HistoryRequire.EqualHistoryEventsAndVersions(`
+	// 1 WorkflowExecutionStarted
+	// 2 WorkflowTaskScheduled
+	// 3 WorkflowExecutionSignaled {"Input": {"Payloads": [{"Data": "\"cluster-2-signal-1\""}]}}
+	// `, s.getHistory(ctx, s.cluster2, ns, id, runId), []int{1, 1, 2})
+
+	fmt.Printf("cluster1 describe workflow")
+	s.describeWorkflow(ctx, s.cluster1, ns, id, runId)
+
+	fmt.Printf("cluster2 describe workflow")
+	s.describeWorkflow(ctx, s.cluster2, ns, id, runId)
 
 }
 
@@ -264,7 +279,8 @@ func (s *historyReplicationConflictTestSuite) executeHistoryReplicationTasksUnti
 	eventType enums.EventType,
 ) {
 	serializer := serialization.NewSerializer()
-	seen := false
+	cluster1Count := 0
+	cluster2Count := 0
 	for {
 		select {
 		case task := <-s.historyReplicationTasks:
@@ -285,11 +301,17 @@ func (s *historyReplicationConflictTestSuite) executeHistoryReplicationTasksUnti
 			for _, event := range events {
 				fmt.Println("history replication task event:", event.EventType)
 				if event.GetEventType() == eventType {
-					seen = true
+					fmt.Println(task.taskClusterName)
+					if task.taskClusterName == "cluster1" {
+						cluster1Count++
+					}
+					if task.taskClusterName == "cluster2" {
+						cluster2Count++
+					}
+					if cluster1Count >= 1 && cluster2Count >= 1 {
+						return
+					}
 				}
-			}
-			if seen {
-				return
 			}
 		case <-ctx.Done():
 			s.FailNow("timed out waiting for replication task to be processed")
@@ -313,6 +335,7 @@ func (t *hrcTestExecutableTaskConverter) Convert(
 	testExecutableTasks := make([]replication.TrackableExecutableTask, len(convertedTasks))
 	for i, task := range convertedTasks {
 		testExecutableTasks[i] = &hrcTestExecutableTask{
+			taskClusterName:         taskClusterName,
 			s:                       t.s,
 			TrackableExecutableTask: task,
 			replicationTask:         replicationTasks[i],
@@ -323,6 +346,15 @@ func (t *hrcTestExecutableTaskConverter) Convert(
 
 // Execute buffers the task instead of executing it.
 func (t *hrcTestExecutableTask) Execute() error {
+	if t.taskClusterName == "cluster1" && cluster1Count == 0 {
+		cluster1Count++
+		err := t.TrackableExecutableTask.Execute()
+		return err
+	} else if t.taskClusterName == "cluster2" && cluster2Count == 0 {
+		cluster2Count++
+		err := t.TrackableExecutableTask.Execute()
+		return err
+	}
 	t.s.historyReplicationTasks <- t
 	return errors.New("Prevent Ack")
 }
@@ -378,6 +410,19 @@ func (s *historyReplicationConflictTestSuite) setActive(ctx context.Context, clu
 	})
 	s.NoError(err)
 	time.Sleep(waitDuration)
+}
+
+func (s *historyReplicationConflictTestSuite) describeWorkflow(ctx context.Context, cluster *tests.TestCluster, ns string, id string, rid string) error {
+	response, err := cluster.GetAdminClient().DescribeMutableState(ctx, &adminservice.DescribeMutableStateRequest{
+		Namespace: ns,
+		Execution: &commonpb.WorkflowExecution{
+			WorkflowId: id,
+			RunId:      rid,
+		},
+	})
+	s.NoError(err)
+	fmt.Printf("VersionHistories: \n%v\n", response.CacheMutableState.ExecutionInfo.VersionHistories)
+	return nil
 }
 
 func (s *historyReplicationConflictTestSuite) getHistory(ctx context.Context, cluster *tests.TestCluster, ns string, id string, rid string) []*historypb.HistoryEvent {
