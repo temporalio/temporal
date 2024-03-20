@@ -135,9 +135,9 @@ func (h *OutgoingServiceRegistry) Create(
 		return nil, err
 	}
 	ns := response.Namespace
-	i, ok := slices.BinarySearchFunc(ns.OutgoingServices, req.Name, compareServiceAndName)
+	i, exists := getServiceIndexByName(ns.OutgoingServices, req.GetName())
 	name := req.GetName()
-	if ok {
+	if exists {
 		return nil, status.Errorf(
 			codes.AlreadyExists,
 			"outgoing service %q already exists with version %d",
@@ -178,8 +178,8 @@ func (h *OutgoingServiceRegistry) Update(
 		return nil, err
 	}
 	ns := response.Namespace
-	i, ok := slices.BinarySearchFunc(ns.OutgoingServices, req.Name, compareServiceAndName)
-	if !ok {
+	i, exists := getServiceIndexByName(ns.OutgoingServices, req.GetName())
+	if !exists {
 		return nil, status.Errorf(codes.NotFound, "outgoing service %q", req.GetName())
 	}
 	service := ns.OutgoingServices[i]
@@ -221,8 +221,8 @@ func (h *OutgoingServiceRegistry) Delete(
 		return nil, err
 	}
 	ns := response.Namespace
-	i, ok := slices.BinarySearchFunc(ns.OutgoingServices, req.Name, compareServiceAndName)
-	if !ok {
+	i, exists := getServiceIndexByName(ns.OutgoingServices, req.Name)
+	if !exists {
 		return nil, status.Errorf(codes.NotFound, "outgoing service %q", req.Name)
 	}
 	ns.OutgoingServices = slices.Delete(ns.OutgoingServices, i, i+1)
@@ -230,20 +230,6 @@ func (h *OutgoingServiceRegistry) Delete(
 		return nil, err
 	}
 	return &operatorservice.DeleteNexusOutgoingServiceResponse{}, nil
-}
-
-func compareServiceAndName(svc *persistencespb.NexusOutgoingService, name string) int {
-	return strings.Compare(svc.Name, name)
-}
-
-func findIndexOfNextService(services []*persistencespb.NexusOutgoingService, lastServiceName string) int {
-	i, ok := slices.BinarySearchFunc(services, lastServiceName, compareServiceAndName)
-	if ok {
-		// If the service is found, we want to start at the next service.
-		i++
-	}
-	// If the service is not found, i is the index where the service would be inserted (like std::lower_bound).
-	return i
 }
 
 // List implements [operatorservice.OperatorServiceServer.ListNexusOutgoingServices].
@@ -264,7 +250,7 @@ func (h *OutgoingServiceRegistry) List(
 	startIndex := 0
 	ns := response.Namespace
 	if lastServiceName != "" {
-		startIndex = findIndexOfNextService(ns.OutgoingServices, lastServiceName)
+		startIndex = getIndexOfNextService(ns.OutgoingServices, lastServiceName)
 	}
 	size := min(pageSize, len(ns.OutgoingServices)-startIndex)
 	if size <= 0 {
@@ -430,4 +416,22 @@ func (s *issueSet) GetError() error {
 		return nil
 	}
 	return status.Errorf(codes.InvalidArgument, strings.Join(*s, ", "))
+}
+
+func compareServiceAndName(svc *persistencespb.NexusOutgoingService, name string) int {
+	return strings.Compare(svc.Name, name)
+}
+
+func getServiceIndexByName(services []*persistencespb.NexusOutgoingService, name string) (int, bool) {
+	return slices.BinarySearchFunc(services, name, compareServiceAndName)
+}
+
+func getIndexOfNextService(services []*persistencespb.NexusOutgoingService, lastServiceName string) int {
+	i, exists := getServiceIndexByName(services, lastServiceName)
+	if exists {
+		// If the service is found, we want to start at the next service.
+		i++
+	}
+	// If the service is not found, i is the index where the service would be inserted (like std::lower_bound).
+	return i
 }
