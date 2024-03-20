@@ -24,11 +24,11 @@ package collection
 
 import "slices"
 
-// SortedSetManager provides CURD functionality for sorted sets. There's no Update method because you can just use the
-// [SortedSetManager.Get] method and update that index directly.
+// SortedSetManager provides CRUD functionality for in-memory sorted sets. Note that there's no Update method because
+// you can just use the [SortedSetManager.Get] method and update that index directly.
 type SortedSetManager[S ~[]E, E, K any] struct {
 	cmp func(E, K) int
-	Key func(E) K
+	key func(E) K
 }
 
 // NewSortedSetManager returns a new SortedSetManager with the given comparison function and key function.
@@ -38,7 +38,7 @@ func NewSortedSetManager[S ~[]E, E, K any](cmp func(E, K) int, key func(E) K) So
 
 // Add adds a new element to the set. If the element is already in the set, it returns the set unchanged and false.
 func (m SortedSetManager[S, E, K]) Add(set S, e E) (S, bool) {
-	i, found := m.find(set, m.Key(e))
+	i, found := m.find(set, m.key(e))
 	if found {
 		return set, false
 	}
@@ -68,7 +68,7 @@ func (m SortedSetManager[S, E, K]) Paginate(set S, gtKey K, n int) (S, *K) {
 	if i+n >= len(set) {
 		page = set[i:]
 	} else {
-		tmp := m.Key(set[i+n-1])
+		tmp := m.key(set[i+n-1])
 		lastKey = &tmp
 		page = set[i : i+n]
 	}
