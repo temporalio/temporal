@@ -111,10 +111,15 @@ func (h *OutgoingServiceRegistry) Get(
 		return nil, err
 	}
 
-	service := h.findService(response, req.Name)
-	if service == nil {
+	var services []*persistencespb.NexusOutgoingService
+	if response.Namespace != nil {
+		services = response.Namespace.OutgoingServices
+	}
+	i, exists := getServiceIndexByName(services, req.Name)
+	if !exists {
 		return nil, status.Errorf(codes.NotFound, "outgoing service %q not found", req.Name)
 	}
+	service := persistenceServiceToAPIService(services[i])
 	return &operatorservice.GetNexusOutgoingServiceResponse{
 		Service: service,
 	}, nil
@@ -331,26 +336,6 @@ func (h *OutgoingServiceRegistry) parseListRequest(
 	return pageToken.LastServiceName, pageSize, nil
 }
 
-func (h *OutgoingServiceRegistry) findService(
-	response *persistence.GetNamespaceResponse,
-	serviceName string,
-) *nexus.OutgoingService {
-	var services []*persistencespb.NexusOutgoingService
-	if detail := response.Namespace; detail != nil {
-		services = detail.OutgoingServices
-	}
-	for _, service := range services {
-		if service.Name == serviceName {
-			return &nexus.OutgoingService{
-				Name:    service.Name,
-				Version: service.Version,
-				Spec:    service.Spec,
-			}
-		}
-	}
-	return nil
-}
-
 type commonRequest interface {
 	GetNamespace() string
 	GetName() string
@@ -434,4 +419,12 @@ func getIndexOfNextService(services []*persistencespb.NexusOutgoingService, last
 	}
 	// If the service is not found, i is the index where the service would be inserted (like std::lower_bound).
 	return i
+}
+
+func persistenceServiceToAPIService(outgoingService *persistencespb.NexusOutgoingService) *nexus.OutgoingService {
+	return &nexus.OutgoingService{
+		Name:    outgoingService.Name,
+		Version: outgoingService.Version,
+		Spec:    outgoingService.Spec,
+	}
 }
