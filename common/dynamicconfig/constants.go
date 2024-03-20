@@ -889,7 +889,7 @@ const (
 	HistoryTaskDLQInternalErrors = "history.TaskDLQInternalErrors"
 	// HistoryTaskDLQErrorPattern specifies a regular expression. If a task processing error matches with this regex,
 	// that task will be sent to DLQ.
-HistoryTaskDLQErrorPattern = "history.TaskDLQErrorPattern"
+	HistoryTaskDLQErrorPattern = "history.TaskDLQErrorPattern"
 
 	// ReplicationStreamSyncStatusDuration sync replication status duration
 	ReplicationStreamSyncStatusDuration = "history.ReplicationStreamSyncStatusDuration"
