@@ -514,7 +514,7 @@ func (e *executableImpl) HandleErr(err error) (retErr error) {
 	}()
 
 	if len(e.dlqErrorPattern()) > 0 {
-		match, mErr := regexp.Match(e.dlqErrorPattern(), []byte(err.Error()))
+		match, mErr := regexp.MatchString(e.dlqErrorPattern(), err.Error())
 		if mErr != nil {
 			e.logger.Error(fmt.Sprintf("Failed to match task processing error with %s", dynamicconfig.HistoryTaskDLQErrorPattern))
 		} else if match {
