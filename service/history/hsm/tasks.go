@@ -47,11 +47,19 @@ type TaskType struct {
 // are executed by an executor that is registered to handle a specific task type. The framework converts this minimal
 // task representation into [tasks.Task] instances, filling in the state machine reference, workflow key, and task ID.
 // A [TaskSerializer] need to be registered in a [Registry] for a given type in order to process tasks of that type.
+//
+// Tasks must specify whether they can run concurrently with other tasks. A non-concurrent task is a task that
+// correlates with a single machine transition and is considered stale if its corresponding machine has transitioned
+// since it was generated.
+// Non-concurrent tasks are persisted with a [Ref] that contains the machine transition count at the time they was
+// generated, which is expected to match the current machine's transition count upon execution. Concurrent tasks skip
+// this validation.
 type Task interface {
 	// Task type that must be unique per task definition.
 	Type() TaskType
 	// Kind of the task, see [TaskKind] for more info.
 	Kind() TaskKind
+	Concurrent() bool
 }
 
 // TaskKind represents the possible set of kinds for a task.

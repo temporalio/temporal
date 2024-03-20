@@ -1,0 +1,49 @@
+// The MIT License
+//
+// Copyright (c) 2024 Temporal Technologies Inc.  All rights reserved.
+//
+// Permission is hereby granted, free of charge, to any person obtaining a copy
+// of this software and associated documentation files (the "Software"), to deal
+// in the Software without restriction, including without limitation the rights
+// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+// copies of the Software, and to permit persons to whom the Software is
+// furnished to do so, subject to the following conditions:
+//
+// The above copyright notice and this permission notice shall be included in
+// all copies or substantial portions of the Software.
+//
+// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
+// THE SOFTWARE.
+
+syntax = "proto3";
+
+package temporal.server.api.enums.v1;
+
+option go_package = "go.temporal.io/server/api/enums/v1;enums";
+
+enum NexusOperationState {
+    // Default value, unspecified state.
+    NEXUS_OPERATION_STATE_UNSPECIFIED = 0;
+    // Operation is in the queue waiting to be executed or is currently executing.
+    NEXUS_OPERATION_STATE_SCHEDULED = 1;
+    // Operation has failed with a retryable error and is backing off before the next attempt.
+    NEXUS_OPERATION_STATE_BACKING_OFF = 2;
+    // Operation was started and will complete asynchronously.
+    NEXUS_OPERATION_STATE_STARTED = 3;
+    // Operation succeeded.
+    // This may happen either as a response to a start request or as reported via callback.
+    NEXUS_OPERATION_STATE_SUCCEEDED = 4;
+    // Operation failed either when a start request encounters a non-retryable error or as reported via callback.
+    NEXUS_OPERATION_STATE_FAILED = 5;
+    // Operation completed as canceled (may have not ever been delivered).
+    // This may happen either as a response to a start request or as reported via callback.
+    NEXUS_OPERATION_STATE_CANCELED = 6;
+    // Operation timed out - exceeded the user supplied schedule-to-close timeout.
+    // Any attempts to complete the operation in this state will be ignored.
+    NEXUS_OPERATION_STATE_TIMED_OUT = 7;
+}

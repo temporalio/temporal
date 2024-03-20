@@ -77,7 +77,7 @@ type cachedMachine struct {
 	outputs []TransitionOutput
 }
 
-// Node is a node in a heirarchical state machine tree.
+// Node is a node in a hierarchical state machine tree.
 //
 // It holds a persistent representation of itself and maintains an in-memory cache of deserialized data and child nodes.
 // Node data should not be manipulated directly and should only be done using [MachineTransition] or
