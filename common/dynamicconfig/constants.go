@@ -205,6 +205,15 @@ const (
 	ReachabilityQuerySetDurationSinceDefault = "frontend.reachabilityQuerySetDurationSinceDefault"
 	// TaskQueuesPerBuildIdLimit limits the number of task queue names that can be mapped to a single build id.
 	TaskQueuesPerBuildIdLimit = "limit.taskQueuesPerBuildId"
+	// NexusOutgoingServiceURLMaxLength is the maximum length of an outgoing service URL
+	NexusOutgoingServiceURLMaxLength = "limit.outgoingServiceURLMaxLength"
+	// NexusOutgoingServiceNameMaxLength is the maximum length of an outgoing service name
+	NexusOutgoingServiceNameMaxLength = "limit.outgoingServiceNameMaxLength"
+	// NexusOutgoingServiceListDefaultPageSize is the default page size for listing outgoing services
+	NexusOutgoingServiceListDefaultPageSize = "limit.outgoingServiceListDefaultPageSize"
+	// NexusOutgoingServiceListMaxPageSize is the maximum page size for listing outgoing services
+	NexusOutgoingServiceListMaxPageSize = "limit.outgoingServiceListMaxPageSize"
+
 	// RemovableBuildIdDurationSinceDefault is the minimum duration since a build id was last default in its containing
 	// set for it to be considered for removal, used by the build id scavenger.
 	// This setting allows some propogation delay of versioning data, which may happen for the following reasons:
