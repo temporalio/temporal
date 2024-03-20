@@ -26,6 +26,8 @@ package gocql
 
 import (
 	"context"
+
+	"github.com/gocql/gocql"
 )
 
 // Note: this file defines the minimal interface that is needed by Temporal's cassandra
@@ -40,6 +42,23 @@ type (
 		NewBatch(BatchType) *Batch
 		ExecuteBatch(*Batch) error
 		MapExecuteBatchCAS(*Batch, map[string]interface{}) (bool, Iter, error)
+		AwaitSchemaAgreement(ctx context.Context) error
+		Close()
+	}
+
+	// GocqlSession is an interface compatible with the concrete type *gocql.Session.
+	//
+	// It only declares the functions which are actually used in Temporal,
+	// so that when declaring a compatible type, only what is strictly required
+	// needs to be implemented.
+	//
+	// This is usefull when using the `CreateSessionFunc` parameter of the
+	// cassandra config, in order to override the default behavior.
+	GocqlSession interface {
+		Query(stmt string, values ...interface{}) *gocql.Query
+		NewBatch(typ gocql.BatchType) *gocql.Batch
+		ExecuteBatch(batch *gocql.Batch) error
+		MapExecuteBatchCAS(batch *gocql.Batch, dest map[string]interface{}) (applied bool, iter *gocql.Iter, err error)
 		AwaitSchemaAgreement(ctx context.Context) error
 		Close()
 	}
@@ -77,3 +96,5 @@ type (
 	// SerialConsistency is the serial consistency level used by a Query
 	SerialConsistency uint16
 )
+
+var _ GocqlSession = &gocql.Session{}

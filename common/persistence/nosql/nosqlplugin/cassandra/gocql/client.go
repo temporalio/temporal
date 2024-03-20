@@ -194,6 +194,16 @@ func ConfigureCassandraCluster(cfg config.Cassandra, cluster *gocql.ClusterConfi
 	return nil
 }
 
+// CreateSession creates a session from a cluster config
+// using default upstream gocql implementation.
+func CreateSession(clusterFunc func() (*gocql.ClusterConfig, error)) (GocqlSession, error) {
+	cluster, err := clusterFunc()
+	if err != nil {
+		return nil, err
+	}
+	return cluster.CreateSession()
+}
+
 // parseHosts returns parses a list of hosts separated by comma
 func parseHosts(input string) []string {
 	var hosts []string

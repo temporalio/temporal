@@ -359,6 +359,10 @@ type (
 		DisableInitialHostLookup bool `yaml:"disableInitialHostLookup"`
 		// AddressTranslator translates Cassandra IP addresses, used for cases when IP addresses gocql driver returns are not accessible from the server
 		AddressTranslator *CassandraAddressTranslator `yaml:"addressTranslator"`
+		// CreateSessionFunc can be used to override the default function which
+		// creates a session from a Gocql struct. Entries here need to be
+		// registered with `cassandra.RegisterCreateSessionFunc`.
+		CreateSessionFunc string `yaml:"createSessionFunc"`
 	}
 
 	// CassandraStoreConsistency enables you to set the consistency settings for each Cassandra Persistence Store for Temporal

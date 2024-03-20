@@ -48,7 +48,6 @@ func TestSessionEmitsMetricOnRefreshError(t *testing.T) {
 		logger:         log.NewNoopLogger(),
 		metricsHandler: metricsHandler,
 	}
-
 	metricsHandler.EXPECT().WithTags(metrics.FailureTag(refreshErrorTagValue)).Return(metricsHandler)
 	metricsHandler.EXPECT().Counter(metrics.CassandraSessionRefreshFailures.Name()).Return(metrics.NoopCounterMetricFunc)
 
@@ -76,7 +75,7 @@ func TestSessionEmitsMetricOnRefreshThrottle(t *testing.T) {
 func TestPanicCapture(t *testing.T) {
 	_, err := initSession(log.NewNoopLogger(), func() (*gocql.ClusterConfig, error) {
 		return &gocql.ClusterConfig{Hosts: []string{"0.0.0.0"}}, nil
-	}, metrics.NoopMetricsHandler)
+	}, metrics.NoopMetricsHandler, CreateSession)
 
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "panic:")
