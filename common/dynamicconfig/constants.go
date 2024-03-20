@@ -54,6 +54,9 @@ const (
 	VisibilityEnableManualPagination = "system.visibilityEnableManualPagination"
 	// VisibilityAllowList is the config to allow list of values for regular types
 	VisibilityAllowList = "system.visibilityAllowList"
+	// SuppressErrorSetSystemSearchAttribute suppresses errors when trying to set
+	// values in system search attributes.
+	SuppressErrorSetSystemSearchAttribute = "system.suppressErrorSetSystemSearchAttribute"
 
 	// HistoryArchivalState is key for the state of history archival
 	HistoryArchivalState = "system.historyArchivalState"
