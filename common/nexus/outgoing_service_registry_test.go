@@ -645,7 +645,7 @@ func TestDelete_ServiceNotFound(t *testing.T) {
 				OutgoingServices: []*persistencespb.NexusOutgoingService{
 					{
 						Version: 1,
-						Name:    "other-service",
+						Name:    testServiceName + "x",
 					},
 				},
 			},
@@ -673,14 +673,21 @@ func TestDelete_UpdateNamespaceErr(t *testing.T) {
 				OutgoingServices: []*persistencespb.NexusOutgoingService{
 					{
 						Version: 1,
-						Name:    testServiceName,
+						Name:    "service1",
 						Spec: &nexuspb.OutgoingServiceSpec{
 							Url: testServiceURL,
 						},
 					},
 					{
 						Version: 1,
-						Name:    "other-service",
+						Name:    "service2",
+						Spec: &nexuspb.OutgoingServiceSpec{
+							Url: testServiceURL,
+						},
+					},
+					{
+						Version: 1,
+						Name:    "service3",
 						Spec: &nexuspb.OutgoingServiceSpec{
 							Url: testServiceURL,
 						},
@@ -697,7 +704,14 @@ func TestDelete_UpdateNamespaceErr(t *testing.T) {
 				OutgoingServices: []*persistencespb.NexusOutgoingService{
 					{
 						Version: 1,
-						Name:    "other-service",
+						Name:    "service1",
+						Spec: &nexuspb.OutgoingServiceSpec{
+							Url: testServiceURL,
+						},
+					},
+					{
+						Version: 1,
+						Name:    "service3",
 						Spec: &nexuspb.OutgoingServiceSpec{
 							Url: testServiceURL,
 						},
@@ -714,7 +728,7 @@ func TestDelete_UpdateNamespaceErr(t *testing.T) {
 		context.Background(),
 		&operatorservice.DeleteNexusOutgoingServiceRequest{
 			Namespace: testNamespace,
-			Name:      testServiceName,
+			Name:      "service2",
 		},
 	)
 	require.ErrorIs(t, err, updateNamespaceErr)

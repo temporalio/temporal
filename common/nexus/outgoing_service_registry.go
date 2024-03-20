@@ -178,11 +178,9 @@ func (h *OutgoingServiceRegistry) Update(
 		return nil, err
 	}
 	ns := response.Namespace
-	i := slices.IndexFunc(ns.OutgoingServices, func(svc *persistencespb.NexusOutgoingService) bool {
-		return svc.Name == req.GetName()
-	})
-	if i < 0 {
-		return nil, status.Errorf(codes.NotFound, "outgoing service %q not found", req.GetName())
+	i, ok := slices.BinarySearchFunc(ns.OutgoingServices, req.Name, compareServiceAndName)
+	if !ok {
+		return nil, status.Errorf(codes.NotFound, "outgoing service %q", req.GetName())
 	}
 	service := ns.OutgoingServices[i]
 	if service.Version != req.GetVersion() {
@@ -223,13 +221,11 @@ func (h *OutgoingServiceRegistry) Delete(
 		return nil, err
 	}
 	ns := response.Namespace
-	services := ns.OutgoingServices
-	ns.OutgoingServices = slices.DeleteFunc(services, func(svc *persistencespb.NexusOutgoingService) bool {
-		return svc.Name == req.Name
-	})
-	if len(services) == len(ns.OutgoingServices) {
-		return nil, status.Errorf(codes.NotFound, "outgoing service %q not found", req.Name)
+	i, ok := slices.BinarySearchFunc(ns.OutgoingServices, req.Name, compareServiceAndName)
+	if !ok {
+		return nil, status.Errorf(codes.NotFound, "outgoing service %q", req.Name)
 	}
+	ns.OutgoingServices = slices.Delete(ns.OutgoingServices, i, i+1)
 	if err := h.updateNamespace(ctx, ns, response); err != nil {
 		return nil, err
 	}
