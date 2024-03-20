@@ -218,6 +218,7 @@ func (s *engine2Suite) SetupTest() {
 			s.config.SearchAttributesTotalSizeLimit,
 			s.mockVisibilityManager,
 			dynamicconfig.GetBoolPropertyFnFilteredByNamespace(false),
+			dynamicconfig.GetBoolPropertyFnFilteredByNamespace(false),
 		),
 		workflowConsistencyChecker: api.NewWorkflowConsistencyChecker(mockShard, s.workflowCache),
 		persistenceVisibilityMgr:   s.mockVisibilityManager,

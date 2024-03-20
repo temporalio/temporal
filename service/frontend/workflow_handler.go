@@ -201,6 +201,7 @@ func NewWorkflowHandler(
 				visibilityMrg.GetStoreNames(),
 				config.VisibilityAllowList,
 			),
+			config.SuppressErrorSetSystemSearchAttribute,
 		),
 		archivalMetadata:  archivalMetadata,
 		healthServer:      healthServer,

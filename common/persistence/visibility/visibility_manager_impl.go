@@ -40,6 +40,7 @@ import (
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence/visibility/manager"
 	"go.temporal.io/server/common/persistence/visibility/store"
+	"go.temporal.io/server/common/searchattribute"
 )
 
 type (
@@ -295,6 +296,21 @@ func (p *visibilityManagerImpl) newInternalVisibilityRequestBase(
 		return nil, err
 	}
 
+	var searchAttrs *commonpb.SearchAttributes
+	if len(request.SearchAttributes.GetIndexedFields()) > 0 {
+		// Remove any system search attribute from the map.
+		// This is necessary because the validation can supress errors when trying
+		// to set a value on a system search attribute.
+		searchAttrs = &commonpb.SearchAttributes{
+			IndexedFields: make(map[string]*commonpb.Payload),
+		}
+		for key, value := range request.SearchAttributes.IndexedFields {
+			if !searchattribute.IsSystem(key) {
+				searchAttrs.IndexedFields[key] = value
+			}
+		}
+	}
+
 	var (
 		parentWorkflowID *string
 		parentRunID      *string
@@ -316,7 +332,7 @@ func (p *visibilityManagerImpl) newInternalVisibilityRequestBase(
 		ShardID:          request.ShardID,
 		TaskQueue:        request.TaskQueue,
 		Memo:             memoBlob,
-		SearchAttributes: request.SearchAttributes,
+		SearchAttributes: searchAttrs,
 		ParentWorkflowID: parentWorkflowID,
 		ParentRunID:      parentRunID,
 	}, nil

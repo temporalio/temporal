@@ -267,6 +267,7 @@ func NewEngineWithShardContext(
 			persistenceVisibilityMgr.GetStoreNames(),
 			config.VisibilityAllowList,
 		),
+		config.SuppressErrorSetSystemSearchAttribute,
 	)
 
 	historyEngImpl.workflowTaskHandler = newWorkflowTaskHandlerCallback(historyEngImpl)

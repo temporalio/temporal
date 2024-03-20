@@ -138,6 +138,7 @@ func (s *WorkflowTaskHandlerCallbackSuite) SetupTest() {
 			config.SearchAttributesTotalSizeLimit,
 			mockShard.Resource.VisibilityManager,
 			dynamicconfig.GetBoolPropertyFnFilteredByNamespace(false),
+			dynamicconfig.GetBoolPropertyFnFilteredByNamespace(false),
 		),
 		workflowConsistencyChecker: api.NewWorkflowConsistencyChecker(mockShard, workflowCache),
 	}
