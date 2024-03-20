@@ -25,7 +25,6 @@ package nexus
 import (
 	"context"
 	"encoding/json"
-	"fmt"
 	"net/url"
 	"regexp"
 	"strings"
@@ -35,6 +34,7 @@ import (
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/persistence"
+	"go.temporal.io/server/common/rpc"
 	"golang.org/x/exp/slices"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
@@ -309,7 +309,7 @@ func (h *OutgoingServiceRegistry) updateNamespace(
 func (h *OutgoingServiceRegistry) parseListRequest(
 	req *operatorservice.ListNexusOutgoingServicesRequest,
 ) (lastServiceName string, pageSize int, err error) {
-	var issues issueSet
+	var issues rpc.RequestIssues
 	if req.Namespace == "" {
 		issues.Append(IssueNamespaceNotSet)
 	}
@@ -341,15 +341,15 @@ type commonRequest interface {
 	GetName() string
 }
 
-func findIssuesForCommonRequest(req commonRequest) *issueSet {
-	var set issueSet
+func findIssuesForCommonRequest(req commonRequest) *rpc.RequestIssues {
+	var issues rpc.RequestIssues
 	if req.GetNamespace() == "" {
-		set.Append(IssueNamespaceNotSet)
+		issues.Append(IssueNamespaceNotSet)
 	}
 	if req.GetName() == "" {
-		set.Append(IssueNameNotSet)
+		issues.Append(IssueNameNotSet)
 	}
-	return &set
+	return &issues
 }
 
 type upsertRequest interface {
@@ -383,24 +383,6 @@ func (h *OutgoingServiceRegistry) validateUpsertRequest(req upsertRequest) error
 		}
 	}
 	return issues.GetError()
-}
-
-// issueSet is a set of form validation issues.
-type issueSet []string
-
-func (s *issueSet) Append(msg string) {
-	*s = append(*s, msg)
-}
-
-func (s *issueSet) Appendf(format string, a ...interface{}) {
-	s.Append(fmt.Sprintf(format, a...))
-}
-
-func (s *issueSet) GetError() error {
-	if len(*s) == 0 {
-		return nil
-	}
-	return status.Errorf(codes.InvalidArgument, strings.Join(*s, ", "))
 }
 
 func compareServiceAndName(svc *persistencespb.NexusOutgoingService, name string) int {
