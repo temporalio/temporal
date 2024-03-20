@@ -203,11 +203,7 @@ func (h *OutgoingServiceRegistry) Update(
 		return nil, err
 	}
 	return &operatorservice.UpdateNexusOutgoingServiceResponse{
-		Service: &nexus.OutgoingService{
-			Name:    req.GetName(),
-			Version: req.GetVersion() + 1,
-			Spec:    req.GetSpec(),
-		},
+		Service: persistenceServiceToAPIService(svc),
 	}, nil
 }
 
