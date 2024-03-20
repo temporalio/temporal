@@ -91,6 +91,7 @@ func newCQLClient(cfg *CQLClientConfig, logger log.Logger) (*cqlClient, error) {
 		func() (*gocql.ClusterConfig, error) {
 			return commongocql.NewCassandraCluster(*cassandraConfig, resolver.NewNoopResolver())
 		},
+		commongocql.CreateSession,
 		logger,
 		metrics.NoopMetricsHandler,
 	)

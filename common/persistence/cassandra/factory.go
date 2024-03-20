@@ -33,10 +33,15 @@ func NewFactory(
 	logger log.Logger,
 	metricsHandler metrics.Handler,
 ) *Factory {
+	createSession, err := getCreateSessionFunc(cfg.CreateSessionFunc)
+	if err != nil {
+		logger.Fatal("unable to get cassandra create session func", tag.Error(err))
+	}
 	session, err := commongocql.NewSession(
 		func() (*gocql.ClusterConfig, error) {
 			return commongocql.NewCassandraCluster(cfg, r)
 		},
+		createSession,
 		logger,
 		metricsHandler,
 	)
