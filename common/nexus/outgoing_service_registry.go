@@ -78,7 +78,7 @@ func NewOutgoingServiceRegistry(
 	}
 }
 
-// OutgoingServiceRegistryConfig contains the dynamic configur values for the [OutgoingServiceRegistry].
+// OutgoingServiceRegistryConfig contains the dynamic configuration values for the [OutgoingServiceRegistry].
 type OutgoingServiceRegistryConfig struct {
 	MaxURLLength    dynamicconfig.IntPropertyFn
 	MaxNameLength   dynamicconfig.IntPropertyFn
