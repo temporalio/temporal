@@ -150,15 +150,13 @@ func (h *OutgoingServiceRegistry) Create(
 	}
 	ns := response.Namespace
 	name := req.GetName()
+	var created bool
 	newService := &persistencespb.NexusOutgoingService{
 		Version: 1,
 		Name:    name,
 		Spec:    req.GetSpec(),
 	}
-	var created bool
-	ns.OutgoingServices, created = h.sortedSetManager.Add(ns.OutgoingServices, name, func() *persistencespb.NexusOutgoingService {
-		return newService
-	})
+	ns.OutgoingServices, created = h.sortedSetManager.Add(ns.OutgoingServices, newService)
 	if !created {
 		return nil, status.Errorf(codes.AlreadyExists, "outgoing service %q already exists", name)
 	}
@@ -166,11 +164,7 @@ func (h *OutgoingServiceRegistry) Create(
 		return nil, err
 	}
 	return &operatorservice.CreateNexusOutgoingServiceResponse{
-		Service: &nexus.OutgoingService{
-			Name:    name,
-			Version: 1,
-			Spec:    req.GetSpec(),
-		},
+		Service: persistenceServiceToAPIService(newService),
 	}, nil
 }
 

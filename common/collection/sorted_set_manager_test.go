@@ -39,9 +39,9 @@ type element struct {
 func TestSortedSetManager_Add(t *testing.T) {
 	m := newManager()
 	var s []element
-	s, ok := m.Add(s, "a", func() element { return element{"a", 1} })
+	s, ok := m.Add(s, element{"a", 1})
 	require.True(t, ok)
-	s, ok = m.Add(s, "a", func() element { return element{"a", 2} })
+	s, ok = m.Add(s, element{"a", 2})
 	require.False(t, ok)
 	assert.Len(t, s, 1)
 	assert.Equal(t, "a", s[0].key)
@@ -50,7 +50,7 @@ func TestSortedSetManager_Add(t *testing.T) {
 func TestSortedSetManager_Get(t *testing.T) {
 	m := newManager()
 	var s []element
-	s, ok := m.Add(s, "a", func() element { return element{"a", 1} })
+	s, ok := m.Add(s, element{"a", 1})
 	require.True(t, ok)
 	i := m.Get(s, "a")
 	require.Equal(t, 0, i)
@@ -61,9 +61,9 @@ func TestSortedSetManager_Get(t *testing.T) {
 func TestSortedSetManager_Paginate(t *testing.T) {
 	m := newManager()
 	var s []element
-	s, _ = m.Add(s, "a", func() element { return element{"a", 1} })
-	s, _ = m.Add(s, "b", func() element { return element{"b", 2} })
-	s, _ = m.Add(s, "c", func() element { return element{"c", 3} })
+	s, _ = m.Add(s, element{"a", 1})
+	s, _ = m.Add(s, element{"b", 2})
+	s, _ = m.Add(s, element{"c", 3})
 	page, lastKey := m.Paginate(s, "", 2)
 	require.Len(t, page, 2)
 	assert.Equal(t, "a", page[0].key)
@@ -78,7 +78,7 @@ func TestSortedSetManager_Paginate(t *testing.T) {
 func TestSortedSetManager_Remove(t *testing.T) {
 	m := newManager()
 	var s []element
-	s, _ = m.Add(s, "a", func() element { return element{"a", 1} })
+	s, _ = m.Add(s, element{"a", 1})
 	s, ok := m.Remove(s, "a")
 	require.True(t, ok)
 	s, ok = m.Remove(s, "a")

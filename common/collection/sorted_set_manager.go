@@ -37,12 +37,12 @@ func NewSortedSetManager[S ~[]E, E, K any](cmp func(E, K) int, key func(E) K) So
 }
 
 // Add adds a new element to the set. If the element is already in the set, it returns the set unchanged and false.
-func (m SortedSetManager[S, E, K]) Add(set S, key K, create func() E) (S, bool) {
-	i, found := m.find(set, key)
+func (m SortedSetManager[S, E, K]) Add(set S, e E) (S, bool) {
+	i, found := m.find(set, m.Key(e))
 	if found {
 		return set, false
 	}
-	return slices.Insert(set, i, create()), true
+	return slices.Insert(set, i, e), true
 }
 
 // Get returns the index of the element in the set that compares equal to key or -1 if no such element exists.
