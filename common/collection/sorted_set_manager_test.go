@@ -52,11 +52,15 @@ func TestSortedSetManager_Get(t *testing.T) {
 	var s []element
 	s, ok := m.Add(s, "a", func() element { return element{"a", 1} })
 	require.True(t, ok)
-	e, ok := m.Get(s, "a")
-	require.True(t, ok)
+	e := m.Get(s, "a")
+	require.NotNil(t, e)
+	e.value = 2
+	e = m.Get(s, "a")
+	require.NotNil(t, e)
+	assert.Equal(t, 2, e.value)
 	assert.Equal(t, "a", e.key)
-	_, ok = m.Get(s, "b")
-	require.False(t, ok)
+	e = m.Get(s, "b")
+	require.Nil(t, e)
 }
 
 func TestSortedSetManager_Paginate(t *testing.T) {
@@ -74,28 +78,6 @@ func TestSortedSetManager_Paginate(t *testing.T) {
 	require.Len(t, page, 1)
 	assert.Equal(t, "c", page[0].key)
 	require.Nil(t, lastKey)
-}
-
-func TestSortedSetManager_Update(t *testing.T) {
-	m := newManager()
-	var s []element
-	s, ok := m.Add(s, "a", func() element { return element{"a", 1} })
-	require.True(t, ok)
-	s, ok = m.Update(s, "a", func(e element) element {
-		e.value = 2
-		return e
-	})
-	require.True(t, ok)
-	e, ok := m.Get(s, "a")
-	require.True(t, ok)
-	assert.Equal(t, 2, e.value)
-	s, ok = m.Update(s, "b", func(e element) element {
-		e.value = 3
-		return e
-	})
-	require.False(t, ok)
-	require.Len(t, s, 1)
-	assert.Equal(t, 2, s[0].value)
 }
 
 func TestSortedSetManager_Remove(t *testing.T) {

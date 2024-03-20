@@ -878,7 +878,7 @@ func TestList_Paginate(t *testing.T) {
 		for i := range services {
 			services[i] = &persistencespb.NexusOutgoingService{
 				Version: 1,
-				Name:    fmt.Sprintf("service/%3d", i+1),
+				Name:    fmt.Sprintf("service/%03d", i+1),
 				Spec: &nexuspb.OutgoingServiceSpec{
 					Url: "url" + strconv.Itoa(i+1),
 				},

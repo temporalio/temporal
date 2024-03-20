@@ -44,14 +44,13 @@ func (m SortedSetManager[S, E, K]) Add(set S, key K, create func() E) (S, bool) 
 	return slices.Insert(set, i, create()), true
 }
 
-// Get returns the element in the set that compares equal to key. If there is no such element, it returns false.
-func (m SortedSetManager[S, E, K]) Get(set S, key K) (E, bool) {
+// Get returns a pointer to the element in the set that compares equal to key or nil if there is no such element.
+func (m SortedSetManager[S, E, K]) Get(set S, key K) *E {
 	i, found := m.find(set, key)
 	if !found {
-		var e E
-		return e, false
+		return nil
 	}
-	return set[i], true
+	return &set[i]
 }
 
 // Paginate returns up to n elements in the set that compare greater than gtKey. If there are more than n such elements,
@@ -73,16 +72,6 @@ func (m SortedSetManager[S, E, K]) Paginate(set S, gtKey K, n int) (S, *K) {
 		page = set[i : i+n]
 	}
 	return page, lastKey
-}
-
-// Update updates an element in the set. If the element is not in the set, it returns the set unchanged and false.
-func (m SortedSetManager[S, E, K]) Update(set S, key K, update func(e E) E) (S, bool) {
-	i, found := m.find(set, key)
-	if !found {
-		return set, false
-	}
-	set[i] = update(set[i])
-	return set, true
 }
 
 // Remove removes an element from the set. If the element is not in the set, it returns the set unchanged and false.

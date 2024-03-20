@@ -124,11 +124,11 @@ func (h *OutgoingServiceRegistry) Get(
 	if response.Namespace != nil {
 		services = response.Namespace.OutgoingServices
 	}
-	svc, found := h.sortedSetManager.Get(services, req.Name)
-	if !found {
+	svc := h.sortedSetManager.Get(services, req.Name)
+	if svc == nil {
 		return nil, status.Errorf(codes.NotFound, "outgoing service %q not found", req.Name)
 	}
-	service := persistenceServiceToAPIService(svc)
+	service := persistenceServiceToAPIService(*svc)
 	return &operatorservice.GetNexusOutgoingServiceResponse{
 		Service: service,
 	}, nil
@@ -189,28 +189,22 @@ func (h *OutgoingServiceRegistry) Update(
 		return nil, err
 	}
 	ns := response.Namespace
-	var found bool
-	ns.OutgoingServices, found = h.sortedSetManager.Update(ns.OutgoingServices, req.Name, func(svc *persistencespb.NexusOutgoingService) *persistencespb.NexusOutgoingService {
-		if svc.Version != req.GetVersion() {
-			err = status.Errorf(
-				codes.FailedPrecondition,
-				"outgoing service %q version %d does not match expected version %d",
-				req.GetName(),
-				svc.Version,
-				req.GetVersion(),
-			)
-			return svc
-		}
-		svc.Spec = req.GetSpec()
-		svc.Version++
-		return svc
-	})
-	if !found {
+	svcPtr := h.sortedSetManager.Get(ns.OutgoingServices, req.Name)
+	if svcPtr == nil {
 		return nil, status.Errorf(codes.NotFound, "outgoing service %q", req.GetName())
 	}
-	if err != nil {
-		return nil, err
+	svc := *svcPtr
+	if svc.Version != req.GetVersion() {
+		return nil, status.Errorf(
+			codes.FailedPrecondition,
+			"outgoing service %q version %d does not match expected version %d",
+			req.GetName(),
+			svc.Version,
+			req.GetVersion(),
+		)
 	}
+	svc.Spec = req.GetSpec()
+	svc.Version++
 	if err := h.updateNamespace(ctx, ns, response); err != nil {
 		return nil, err
 	}
@@ -268,7 +262,7 @@ func (h *OutgoingServiceRegistry) List(
 	page, lastKey := h.sortedSetManager.Paginate(ns.OutgoingServices, lastServiceName, pageSize)
 	services := make([]*nexus.OutgoingService, len(page))
 	for i := 0; i < len(page); i++ {
-		services[i] = persistenceServiceToAPIService(ns.OutgoingServices[i])
+		services[i] = persistenceServiceToAPIService(page[i])
 	}
 	var nextPageToken []byte
 	if lastKey != nil {
