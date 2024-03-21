@@ -769,35 +769,35 @@ func (this *UpdateWorkerBuildIdCompatibilityResponse) Equal(that interface{}) bo
 	return proto.Equal(this, that1)
 }
 
-// Marshal an object of type ListWorkerVersioningRulesRequest to the protobuf v3 wire format
-func (val *ListWorkerVersioningRulesRequest) Marshal() ([]byte, error) {
+// Marshal an object of type GetWorkerVersioningRulesRequest to the protobuf v3 wire format
+func (val *GetWorkerVersioningRulesRequest) Marshal() ([]byte, error) {
 	return proto.Marshal(val)
 }
 
-// Unmarshal an object of type ListWorkerVersioningRulesRequest from the protobuf v3 wire format
-func (val *ListWorkerVersioningRulesRequest) Unmarshal(buf []byte) error {
+// Unmarshal an object of type GetWorkerVersioningRulesRequest from the protobuf v3 wire format
+func (val *GetWorkerVersioningRulesRequest) Unmarshal(buf []byte) error {
 	return proto.Unmarshal(buf, val)
 }
 
 // Size returns the size of the object, in bytes, once serialized
-func (val *ListWorkerVersioningRulesRequest) Size() int {
+func (val *GetWorkerVersioningRulesRequest) Size() int {
 	return proto.Size(val)
 }
 
-// Equal returns whether two ListWorkerVersioningRulesRequest values are equivalent by recursively
+// Equal returns whether two GetWorkerVersioningRulesRequest values are equivalent by recursively
 // comparing the message's fields.
 // For more information see the documentation for
 // https://pkg.go.dev/google.golang.org/protobuf/proto#Equal
-func (this *ListWorkerVersioningRulesRequest) Equal(that interface{}) bool {
+func (this *GetWorkerVersioningRulesRequest) Equal(that interface{}) bool {
 	if that == nil {
 		return this == nil
 	}
 
-	var that1 *ListWorkerVersioningRulesRequest
+	var that1 *GetWorkerVersioningRulesRequest
 	switch t := that.(type) {
-	case *ListWorkerVersioningRulesRequest:
+	case *GetWorkerVersioningRulesRequest:
 		that1 = t
-	case ListWorkerVersioningRulesRequest:
+	case GetWorkerVersioningRulesRequest:
 		that1 = &t
 	default:
 		return false
@@ -806,35 +806,35 @@ func (this *ListWorkerVersioningRulesRequest) Equal(that interface{}) bool {
 	return proto.Equal(this, that1)
 }
 
-// Marshal an object of type ListWorkerVersioningRulesResponse to the protobuf v3 wire format
-func (val *ListWorkerVersioningRulesResponse) Marshal() ([]byte, error) {
+// Marshal an object of type GetWorkerVersioningRulesResponse to the protobuf v3 wire format
+func (val *GetWorkerVersioningRulesResponse) Marshal() ([]byte, error) {
 	return proto.Marshal(val)
 }
 
-// Unmarshal an object of type ListWorkerVersioningRulesResponse from the protobuf v3 wire format
-func (val *ListWorkerVersioningRulesResponse) Unmarshal(buf []byte) error {
+// Unmarshal an object of type GetWorkerVersioningRulesResponse from the protobuf v3 wire format
+func (val *GetWorkerVersioningRulesResponse) Unmarshal(buf []byte) error {
 	return proto.Unmarshal(buf, val)
 }
 
 // Size returns the size of the object, in bytes, once serialized
-func (val *ListWorkerVersioningRulesResponse) Size() int {
+func (val *GetWorkerVersioningRulesResponse) Size() int {
 	return proto.Size(val)
 }
 
-// Equal returns whether two ListWorkerVersioningRulesResponse values are equivalent by recursively
+// Equal returns whether two GetWorkerVersioningRulesResponse values are equivalent by recursively
 // comparing the message's fields.
 // For more information see the documentation for
 // https://pkg.go.dev/google.golang.org/protobuf/proto#Equal
-func (this *ListWorkerVersioningRulesResponse) Equal(that interface{}) bool {
+func (this *GetWorkerVersioningRulesResponse) Equal(that interface{}) bool {
 	if that == nil {
 		return this == nil
 	}
 
-	var that1 *ListWorkerVersioningRulesResponse
+	var that1 *GetWorkerVersioningRulesResponse
 	switch t := that.(type) {
-	case *ListWorkerVersioningRulesResponse:
+	case *GetWorkerVersioningRulesResponse:
 		that1 = t
-	case ListWorkerVersioningRulesResponse:
+	case GetWorkerVersioningRulesResponse:
 		that1 = &t
 	default:
 		return false

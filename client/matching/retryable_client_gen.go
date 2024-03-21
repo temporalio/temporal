@@ -170,6 +170,21 @@ func (c *retryableClient) GetWorkerBuildIdCompatibility(
 	return resp, err
 }
 
+func (c *retryableClient) GetWorkerVersioningRules(
+	ctx context.Context,
+	request *matchingservice.GetWorkerVersioningRulesRequest,
+	opts ...grpc.CallOption,
+) (*matchingservice.GetWorkerVersioningRulesResponse, error) {
+	var resp *matchingservice.GetWorkerVersioningRulesResponse
+	op := func(ctx context.Context) error {
+		var err error
+		resp, err = c.client.GetWorkerVersioningRules(ctx, request, opts...)
+		return err
+	}
+	err := backoff.ThrottleRetryContext(ctx, op, c.policy, c.isRetryable)
+	return resp, err
+}
+
 func (c *retryableClient) ListTaskQueuePartitions(
 	ctx context.Context,
 	request *matchingservice.ListTaskQueuePartitionsRequest,
@@ -179,21 +194,6 @@ func (c *retryableClient) ListTaskQueuePartitions(
 	op := func(ctx context.Context) error {
 		var err error
 		resp, err = c.client.ListTaskQueuePartitions(ctx, request, opts...)
-		return err
-	}
-	err := backoff.ThrottleRetryContext(ctx, op, c.policy, c.isRetryable)
-	return resp, err
-}
-
-func (c *retryableClient) ListWorkerVersioningRules(
-	ctx context.Context,
-	request *matchingservice.ListWorkerVersioningRulesRequest,
-	opts ...grpc.CallOption,
-) (*matchingservice.ListWorkerVersioningRulesResponse, error) {
-	var resp *matchingservice.ListWorkerVersioningRulesResponse
-	op := func(ctx context.Context) error {
-		var err error
-		resp, err = c.client.ListWorkerVersioningRules(ctx, request, opts...)
 		return err
 	}
 	err := backoff.ThrottleRetryContext(ctx, op, c.policy, c.isRetryable)

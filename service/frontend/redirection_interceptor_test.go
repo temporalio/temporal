@@ -178,7 +178,7 @@ func (s *redirectionInterceptorSuite) TestGlobalAPI() {
 		"UpdateWorkerBuildIdCompatibility": {},
 		"GetWorkerBuildIdCompatibility":    {},
 		"UpdateWorkerVersioningRules":      {},
-		"ListWorkerVersioningRules":        {},
+		"GetWorkerVersioningRules":         {},
 		"GetWorkerTaskReachability":        {},
 
 		"StartBatchOperation":    {},
