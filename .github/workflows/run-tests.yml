@@ -134,7 +134,7 @@ jobs:
       matrix:
         runs-on: [ubuntu-latest]
         name: [cass_es, cass_es8, sqlite, mysql, mysql8, postgres, postgres_pgx, postgres12, postgres12_pgx]
-        shard_index: [0, 1, 2]
+        shard_index: [0, 1, 2, 4]
         include:
           - name: cass_es
             persistence_type: nosql
@@ -174,7 +174,7 @@ jobs:
             containers: [postgresql]
     runs-on: ${{ matrix.runs-on }}
     env:
-      TEST_TOTAL_SHARDS: 3
+      TEST_TOTAL_SHARDS: 4
       TEST_SHARD_INDEX: ${{ matrix.shard_index }}
       PERSISTENCE_TYPE: ${{ matrix.persistence_type }}
       PERSISTENCE_DRIVER: ${{ matrix.persistence_driver }}
