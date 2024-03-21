@@ -907,9 +907,12 @@ const (
 	HistoryTaskDLQEnabled = "history.TaskDLQEnabled"
 	// HistoryTaskDLQUnexpectedErrorAttempts is the number of task execution attempts before sending the task to DLQ.
 	HistoryTaskDLQUnexpectedErrorAttempts = "history.TaskDLQUnexpectedErrorAttempts"
-	// HistoryTaskDLQInteralErrors causes history task processing to send tasks failing with serviceerror.Internal to
+	// HistoryTaskDLQInternalErrors causes history task processing to send tasks failing with serviceerror.Internal to
 	// the dlq (or will drop them if not enabled)
 	HistoryTaskDLQInternalErrors = "history.TaskDLQInternalErrors"
+	// HistoryTaskDLQErrorPattern specifies a regular expression. If a task processing error matches with this regex,
+	// that task will be sent to DLQ.
+	HistoryTaskDLQErrorPattern = "history.TaskDLQErrorPattern"
 
 	// ReplicationStreamSyncStatusDuration sync replication status duration
 	ReplicationStreamSyncStatusDuration = "history.ReplicationStreamSyncStatusDuration"

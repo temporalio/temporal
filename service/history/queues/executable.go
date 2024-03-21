@@ -31,6 +31,7 @@ import (
 	"errors"
 	"fmt"
 	"math"
+	"regexp"
 	"runtime/debug"
 	"sync"
 	"time"
@@ -198,12 +199,14 @@ type (
 		unexpectedErrorAttempts    int
 		maxUnexpectedErrorAttempts dynamicconfig.IntPropertyFn
 		dlqInternalErrors          dynamicconfig.BoolPropertyFn
+		dlqErrorPattern            dynamicconfig.StringPropertyFn
 	}
 	ExecutableParams struct {
 		DLQEnabled                 dynamicconfig.BoolPropertyFn
 		DLQWriter                  *DLQWriter
 		MaxUnexpectedErrorAttempts dynamicconfig.IntPropertyFn
 		DLQInternalErrors          dynamicconfig.BoolPropertyFn
+		DLQErrorPattern            dynamicconfig.StringPropertyFn
 	}
 	ExecutableOption func(*ExecutableParams)
 )
@@ -232,6 +235,9 @@ func NewExecutable(
 		},
 		DLQInternalErrors: func() bool {
 			return false
+		},
+		DLQErrorPattern: func() string {
+			return ""
 		},
 	}
 	for _, opt := range opts {
@@ -262,6 +268,7 @@ func NewExecutable(
 		dlqEnabled:                 params.DLQEnabled,
 		maxUnexpectedErrorAttempts: params.MaxUnexpectedErrorAttempts,
 		dlqInternalErrors:          params.DLQInternalErrors,
+		dlqErrorPattern:            params.DLQErrorPattern,
 	}
 	executable.updatePriority()
 	return executable
@@ -505,6 +512,22 @@ func (e *executableImpl) HandleErr(err error) (retErr error) {
 			}
 		}
 	}()
+
+	if len(e.dlqErrorPattern()) > 0 {
+		match, mErr := regexp.MatchString(e.dlqErrorPattern(), err.Error())
+		if mErr != nil {
+			e.logger.Error(fmt.Sprintf("Failed to match task processing error with %s", dynamicconfig.HistoryTaskDLQErrorPattern))
+		} else if match {
+			e.logger.Error(
+				fmt.Sprintf("Error matches with %s. Marking task as terminally failed, will send to DLQ",
+					dynamicconfig.HistoryTaskDLQErrorPattern),
+				tag.Error(err),
+				tag.ErrorType(err))
+			e.terminalFailureCause = err
+			metrics.TaskTerminalFailures.With(e.taggedMetricsHandler).Record(1)
+			return fmt.Errorf("%w: %v", ErrTerminalTaskFailure, err)
+		}
+	}
 
 	if e.isSafeToDropError(err) {
 		return nil
