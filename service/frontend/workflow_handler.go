@@ -3338,7 +3338,7 @@ func (wh *WorkflowHandler) UpdateWorkerVersioningRules(ctx context.Context, requ
 	return matchingResponse.Response, err
 }
 
-func (wh *WorkflowHandler) ListWorkerVersioningRules(ctx context.Context, request *workflowservice.ListWorkerVersioningRulesRequest) (_ *workflowservice.ListWorkerVersioningRulesResponse, retError error) {
+func (wh *WorkflowHandler) GetWorkerVersioningRules(ctx context.Context, request *workflowservice.GetWorkerVersioningRulesRequest) (_ *workflowservice.GetWorkerVersioningRulesResponse, retError error) {
 	defer log.CapturePanic(wh.logger, &retError)
 
 	if request == nil {
@@ -3360,11 +3360,11 @@ func (wh *WorkflowHandler) ListWorkerVersioningRules(ctx context.Context, reques
 		return nil, err
 	}
 
-	matchingResponse, err := wh.matchingClient.ListWorkerVersioningRules(ctx, &matchingservice.ListWorkerVersioningRulesRequest{
+	matchingResponse, err := wh.matchingClient.GetWorkerVersioningRules(ctx, &matchingservice.GetWorkerVersioningRulesRequest{
 		NamespaceId: namespaceID.String(),
 		TaskQueue:   request.GetTaskQueue(),
-		Command: &matchingservice.ListWorkerVersioningRulesRequest_Request{
-			Request: &workflowservice.ListWorkerVersioningRulesRequest{
+		Command: &matchingservice.GetWorkerVersioningRulesRequest_Request{
+			Request: &workflowservice.GetWorkerVersioningRulesRequest{
 				Namespace: request.GetNamespace(),
 				TaskQueue: request.GetTaskQueue(),
 			},
