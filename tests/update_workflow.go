@@ -76,10 +76,19 @@ func (s *FunctionalSuite) sendUpdateNoError(tv *testvars.TestVars, updateID stri
 }
 
 func (s *FunctionalSuite) sendUpdate(tv *testvars.TestVars, updateID string) (*workflowservice.UpdateWorkflowExecutionResponse, error) {
+	return s.sendUpdateWithWaitPolicy(tv, updateID, nil)
+}
+
+func (s *FunctionalSuite) sendUpdateWaitPolicyAccepted(tv *testvars.TestVars, updateID string) (*workflowservice.UpdateWorkflowExecutionResponse, error) {
+	return s.sendUpdateWithWaitPolicy(tv, updateID, &updatepb.WaitPolicy{LifecycleStage: enumspb.UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_ACCEPTED})
+}
+
+func (s *FunctionalSuite) sendUpdateWithWaitPolicy(tv *testvars.TestVars, updateID string, waitPolicy *updatepb.WaitPolicy) (*workflowservice.UpdateWorkflowExecutionResponse, error) {
 	s.T().Helper()
 	return s.engine.UpdateWorkflowExecution(NewContext(), &workflowservice.UpdateWorkflowExecutionRequest{
 		Namespace:         s.namespace,
 		WorkflowExecution: tv.WorkflowExecution(),
+		WaitPolicy:        waitPolicy,
 		Request: &updatepb.Request{
 			Meta: &updatepb.Meta{UpdateId: tv.UpdateID(updateID)},
 			Input: &updatepb.Input{
