@@ -386,7 +386,7 @@ func (s *WorkflowTaskHandlerCallbacksUpdateSuite) createSentUpdate(tv *testvars.
 	ms, err := weContext.LoadMutableState(ctx, s.workflowTaskHandlerCallback.shardContext)
 	s.NoError(err)
 
-	upd, alreadyExisted, err := weContext.UpdateRegistry(ctx, ms).FindOrCreate(ctx, tv.UpdateID(updateID))
+	upd, alreadyExisted, err := weContext.UpdateRegistry(ctx).FindOrCreate(ctx, tv.UpdateID(updateID))
 	s.False(alreadyExisted)
 	s.NoError(err)
 

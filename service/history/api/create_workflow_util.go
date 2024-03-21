@@ -136,6 +136,7 @@ func NewWorkflowWithSignal(
 	if err != nil {
 		return nil, err
 	}
+	newWorkflowContext.WithMutableState(newMutableState)
 	return NewWorkflowLease(newWorkflowContext, releaseFn, newMutableState), nil
 }
 

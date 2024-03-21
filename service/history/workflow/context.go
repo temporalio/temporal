@@ -66,6 +66,7 @@ type (
 	Context interface {
 		GetWorkflowKey() definition.WorkflowKey
 
+		WithMutableState(ms MutableState)
 		LoadMutableState(ctx context.Context, shardContext shard.Context) (MutableState, error)
 		LoadExecutionStats(ctx context.Context, shardContext shard.Context) (*persistencespb.ExecutionStats, error)
 		Clear()
@@ -158,10 +159,7 @@ type (
 			transactionPolicy TransactionPolicy,
 		) error
 		// TODO (alex-update): move this from workflow context.
-		UpdateRegistry(
-			ctx context.Context,
-			ms MutableState,
-		) update.Registry
+		UpdateRegistry(ctx context.Context) update.Registry
 	}
 )
 
@@ -196,6 +194,10 @@ func NewContext(
 		config:          config,
 		mutex:           locks.NewPriorityMutex(),
 	}
+}
+
+func (c *ContextImpl) WithMutableState(ms MutableState) {
+	c.MutableState = ms
 }
 
 func (c *ContextImpl) Lock(
@@ -875,12 +877,11 @@ func (c *ContextImpl) ReapplyEvents(
 	return err
 }
 
-func (c *ContextImpl) UpdateRegistry(ctx context.Context, ms MutableState) update.Registry {
+func (c *ContextImpl) UpdateRegistry(ctx context.Context) update.Registry {
 	if c.updateRegistry == nil {
-		// NOTE: cannot use Context's MutableState, as it might not be loaded - use the parameter instead.
-		nsIDStr := ms.GetNamespaceEntry().ID().String()
+		nsIDStr := c.MutableState.GetNamespaceEntry().ID().String()
 		c.updateRegistry = update.NewRegistry(
-			func() update.Store { return ms },
+			func() update.Store { return c.MutableState },
 			update.WithLogger(c.logger),
 			update.WithMetrics(c.metricsHandler),
 			update.WithTracerProvider(trace.SpanFromContext(ctx).TracerProvider()),
