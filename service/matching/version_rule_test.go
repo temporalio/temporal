@@ -765,7 +765,7 @@ func TestDeleteRedirectRuleNotFound(t *testing.T) {
 	assert.Error(t, err)
 }
 
-func TestListWorkerVersioningRules(t *testing.T) {
+func TestGetWorkerVersioningRules(t *testing.T) {
 	t.Parallel()
 	clock1 := hlc.Zero(1)
 	clock2 := hlc.Next(clock1, commonclock.NewRealTimeSource())
@@ -786,7 +786,7 @@ func TestListWorkerVersioningRules(t *testing.T) {
 
 	// Call list successfully
 	dummyClock := hlc.Zero(99) // used to generate conflict token, but not in this test
-	resp, err := ListWorkerVersioningRules(data, dummyClock)
+	resp, err := GetWorkerVersioningRules(data, dummyClock)
 	assert.NoError(t, err)
 
 	// check assignment rules
