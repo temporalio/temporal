@@ -1897,8 +1897,8 @@ func (s *VersioningIntegSuite) prefixed(buildId string) string {
 
 // listVersioningRules lists rules and checks that the result is successful, returning the response.
 func (s *VersioningIntegSuite) listVersioningRules(
-	ctx context.Context, tq string) *workflowservice.GetWorkerVersioningRulesResponse {
-	res, err := s.engine.GetWorkerVersioningRules(ctx, &workflowservice.GetWorkerVersioningRulesRequest{
+	ctx context.Context, tq string) *workflowservice.ListWorkerVersioningRulesResponse {
+	res, err := s.engine.ListWorkerVersioningRules(ctx, &workflowservice.ListWorkerVersioningRulesRequest{
 		Namespace: s.namespace,
 		TaskQueue: tq,
 	})

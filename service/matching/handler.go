@@ -306,13 +306,13 @@ func (h *Handler) UpdateWorkerVersioningRules(
 	return h.engine.UpdateWorkerVersioningRules(ctx, request)
 }
 
-// GetWorkerVersioningRules fetches the Build ID assignment and redirect rules for a Task Queue
-func (h *Handler) GetWorkerVersioningRules(
+// ListWorkerVersioningRules fetches the Build ID assignment and redirect rules for a Task Queue
+func (h *Handler) ListWorkerVersioningRules(
 	ctx context.Context,
-	request *matchingservice.GetWorkerVersioningRulesRequest,
-) (_ *matchingservice.GetWorkerVersioningRulesResponse, retError error) {
+	request *matchingservice.ListWorkerVersioningRulesRequest,
+) (_ *matchingservice.ListWorkerVersioningRulesResponse, retError error) {
 	defer log.CapturePanic(h.logger, &retError)
-	return h.engine.GetWorkerVersioningRules(ctx, request)
+	return h.engine.ListWorkerVersioningRules(ctx, request)
 }
 
 // UpdateWorkerBuildIdCompatibility allows changing the worker versioning graph for a task queue
