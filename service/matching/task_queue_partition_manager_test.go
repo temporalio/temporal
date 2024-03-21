@@ -238,6 +238,7 @@ func (s *PartitionManagerTestSuite) TestHasPollerAfter_Unversioned() {
 	_, _ = s.pollWithIdentity("v", "bid", true)
 	s.Assert().False(s.partitionMgr.HasPollerAfter("", time.Now().Add(-100*time.Microsecond)))
 }
+
 func (s *PartitionManagerTestSuite) TestHasPollerAfter_Versioned() {
 	// no pollers
 	s.Assert().False(s.partitionMgr.HasAnyPollerAfter(time.Now().Add(-5 * time.Minute)))
