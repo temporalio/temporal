@@ -59,9 +59,9 @@ type (
 		// maxDispatchPerSecond is the max rate at which tasks are allowed to be dispatched
 		// from this task queue to pollers
 		PollTask(ctx context.Context, pollMetadata *pollMetadata) (*internalTask, bool, error)
-		// DispatchSpooledTask dispatches a task to a poller. When there are no pollers to pick
+		// ProcessSpooledTask dispatches a task to a poller. When there are no pollers to pick
 		// up the task, this method will return error. Task will not be persisted to db
-		DispatchSpooledTask(ctx context.Context, task *internalTask, sourceBuildId string) error
+		ProcessSpooledTask(ctx context.Context, task *internalTask, sourceBuildId string) error
 		// DispatchQueryTask will dispatch query to local or remote poller. If forwarded then result or error is returned,
 		// if dispatched to local poller then nil and nil is returned.
 		DispatchQueryTask(ctx context.Context, taskID string, request *matchingservice.QueryWorkflowRequest) (*matchingservice.QueryWorkflowResponse, error)
@@ -286,7 +286,7 @@ func (pm *taskQueuePartitionManagerImpl) PollTask(
 	return task, versionSetUsed, err
 }
 
-func (pm *taskQueuePartitionManagerImpl) DispatchSpooledTask(
+func (pm *taskQueuePartitionManagerImpl) ProcessSpooledTask(
 	ctx context.Context,
 	task *internalTask,
 	sourceBuildId string,

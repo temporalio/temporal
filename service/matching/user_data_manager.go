@@ -67,6 +67,18 @@ type (
 		UpdateUserData(ctx context.Context, options UserDataUpdateOptions, updateFn UserDataUpdateFunc) error
 	}
 
+	UserDataUpdateOptions struct {
+		TaskQueueLimitPerBuildId int
+		// Only perform the update if current version equals to supplied version.
+		// 0 is unset.
+		KnownVersion int64
+	}
+
+	// UserDataUpdateFunc accepts the current user data for a task queue and returns the updated user data, a boolean
+	// indicating whether this data should be replicated, and an error.
+	// Extra care should be taken to avoid mutating the current user data to avoid keeping uncommitted data in memory.
+	UserDataUpdateFunc func(*persistencespb.TaskQueueUserData) (*persistencespb.TaskQueueUserData, bool, error)
+
 	// userDataManager is responsible for fetching and keeping user data up-to-date in-memory
 	// for a given TQ partition.
 	//

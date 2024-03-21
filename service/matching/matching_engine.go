@@ -387,7 +387,6 @@ func (e *matchingEngineImpl) AddWorkflowTask(
 	}
 
 	return pm.AddTask(ctx, addTaskParams{
-		execution:     addRequest.Execution,
 		taskInfo:      taskInfo,
 		source:        addRequest.GetSource(),
 		forwardedFrom: addRequest.GetForwardedSource(),
@@ -426,7 +425,6 @@ func (e *matchingEngineImpl) AddActivityTask(
 	}
 
 	return pm.AddTask(ctx, addTaskParams{
-		execution:     addRequest.Execution,
 		taskInfo:      taskInfo,
 		source:        addRequest.GetSource(),
 		forwardedFrom: addRequest.GetForwardedSource(),

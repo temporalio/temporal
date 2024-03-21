@@ -188,6 +188,12 @@ func makeTestBlocAlloc(f func() (taskQueueState, error)) taskQueueManagerOpt {
 	return withIDBlockAllocator(&testIDBlockAlloc{alloc: f})
 }
 
+func withIDBlockAllocator(ibl idBlockAllocator) taskQueueManagerOpt {
+	return func(tqm *physicalTaskQueueManagerImpl) {
+		tqm.backlogMgr.taskWriter.idAlloc = ibl
+	}
+}
+
 func TestSyncMatchLeasingUnavailable(t *testing.T) {
 	tqm := mustCreateTestTaskQueueManager(t, gomock.NewController(t),
 		makeTestBlocAlloc(func() (taskQueueState, error) {
@@ -202,7 +208,6 @@ func TestSyncMatchLeasingUnavailable(t *testing.T) {
 	defer poller.Cancel()
 
 	sync, err := tqm.AddTask(context.TODO(), addTaskParams{
-		execution: &commonpb.WorkflowExecution{},
 		taskInfo:  &persistencespb.TaskInfo{},
 		source:    enumsspb.TASK_SOURCE_HISTORY})
 	require.NoError(t, err)
@@ -223,7 +228,6 @@ func TestForeignPartitionOwnerCausesUnload(t *testing.T) {
 	// TQM started succesfully with an ID block of size 1. Perform one send
 	// without a poller to consume the one task ID from the reserved block.
 	sync, err := tqm.AddTask(context.TODO(), addTaskParams{
-		execution: &commonpb.WorkflowExecution{},
 		taskInfo: &persistencespb.TaskInfo{
 			CreateTime: timestamp.TimePtr(time.Now().UTC()),
 		},
@@ -237,7 +241,6 @@ func TestForeignPartitionOwnerCausesUnload(t *testing.T) {
 	leaseErr = &persistence.ConditionFailedError{Msg: "should kill the tqm"}
 
 	sync, err = tqm.AddTask(context.TODO(), addTaskParams{
-		execution: &commonpb.WorkflowExecution{},
 		taskInfo: &persistencespb.TaskInfo{
 			CreateTime: timestamp.TimePtr(time.Now().UTC()),
 		},
@@ -269,7 +272,6 @@ func TestReaderSignaling(t *testing.T) {
 	clearNotifications()
 
 	sync, err := tqm.AddTask(context.TODO(), addTaskParams{
-		execution: &commonpb.WorkflowExecution{},
 		taskInfo: &persistencespb.TaskInfo{
 			CreateTime: timestamp.TimePtr(time.Now().UTC()),
 		},
@@ -284,7 +286,6 @@ func TestReaderSignaling(t *testing.T) {
 	defer poller.Cancel()
 
 	sync, err = tqm.AddTask(context.TODO(), addTaskParams{
-		execution: &commonpb.WorkflowExecution{},
 		taskInfo: &persistencespb.TaskInfo{
 			CreateTime: timestamp.TimePtr(time.Now().UTC()),
 		},
