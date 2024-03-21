@@ -153,7 +153,7 @@ func (s *VersioningIntegSuite) TestVersionRuleConflictToken() {
 	// wrong token fails, same request with correct token from List succeeds
 	s.deleteAssignmentRule(ctx, tq, 0, cT4, false)
 	s.deleteAssignmentRule(ctx, tq, 0, cT6, true)
-  
+
 	// nil token fails
 	s.deleteAssignmentRule(ctx, tq, 0, nil, false)
 }
