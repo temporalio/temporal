@@ -31,6 +31,7 @@ import (
 	historypb "go.temporal.io/api/history/v1"
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/api/workflowservice/v1"
+	wcache "go.temporal.io/server/service/history/workflow/cache"
 	"google.golang.org/protobuf/types/known/durationpb"
 
 	"go.temporal.io/server/api/historyservice/v1"
@@ -43,7 +44,6 @@ import (
 	"go.temporal.io/server/common/rpc/interceptor"
 	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/workflow"
-	wcache "go.temporal.io/server/service/history/workflow/cache"
 )
 
 type (
@@ -130,8 +130,7 @@ func NewWorkflowWithSignal(
 		ctx,
 		shard,
 		namespaceEntry.ID(),
-		&commonpb.WorkflowExecution{WorkflowId: startRequest.StartRequest.WorkflowId, RunId: runID},
-		newMutableState,
+		&commonpb.WorkflowExecution{WorkflowId: workflowID, RunId: runID},
 		workflow.LockPriorityHigh,
 	)
 	if err != nil {

@@ -56,12 +56,12 @@ func GetAndUpdateWorkflowWithNew(
 	}
 	defer func() { workflowLease.GetReleaseFn()(retError) }()
 
-	return UpdateWorkflowWithNew(shard, ctx, workflowLease, action, newWorkflowFn)
+	return UpdateWorkflowWithNew(ctx, shard, workflowLease, action, newWorkflowFn)
 }
 
 func UpdateWorkflowWithNew(
-	shardContext shard.Context,
 	ctx context.Context,
+	shardContext shard.Context,
 	workflowLease WorkflowLease,
 	action UpdateWorkflowActionFunc,
 	newWorkflowFn func() (workflow.Context, workflow.MutableState, error),

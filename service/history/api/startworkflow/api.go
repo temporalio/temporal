@@ -121,7 +121,12 @@ func (s *Starter) prepare(ctx context.Context) error {
 	request := s.request.StartRequest
 	metricsHandler := s.shardContext.GetMetricsHandler()
 
+	api.MigrateWorkflowIdDuplicationPolicies(
+		&request.WorkflowIdReusePolicy,
+		&request.WorkflowIdConflictPolicy)
+
 	api.OverrideStartWorkflowExecutionRequest(request, metrics.HistoryStartWorkflowExecutionScope, s.shardContext, metricsHandler)
+
 	err := api.ValidateStartWorkflowExecutionRequest(ctx, request, s.shardContext, s.namespace, "StartWorkflowExecution")
 	if err != nil {
 		return err
@@ -361,67 +366,65 @@ func (s *Starter) applyWorkflowIDReusePolicy(
 ) (*historyservice.StartWorkflowExecutionResponse, error) {
 	workflowID := s.request.StartRequest.WorkflowId
 
-	prevExecutionUpdateAction, err := api.ApplyWorkflowIDReusePolicy(
-		currentWorkflowConditionFailed.RequestID,
+	currentExecutionUpdateAction, err := api.ResolveDuplicateWorkflowID(
+		workflowID,
+		creationParams.runID,
 		currentWorkflowConditionFailed.RunID,
 		currentWorkflowConditionFailed.State,
 		currentWorkflowConditionFailed.Status,
-		workflowID,
-		creationParams.runID,
+		currentWorkflowConditionFailed.RequestID,
 		s.request.StartRequest.GetWorkflowIdReusePolicy(),
+		s.request.StartRequest.GetWorkflowIdConflictPolicy(),
 	)
 	switch {
-	case errors.Is(err, api.ErrIgnoreWorkflowStart):
-		return &historyservice.StartWorkflowExecutionResponse{RunId: currentWorkflowConditionFailed.RunID}, nil
+	case errors.Is(err, api.ErrUseCurrentExecution):
+		return &historyservice.StartWorkflowExecutionResponse{
+			RunId:   currentWorkflowConditionFailed.RunID,
+			Started: false, // set explicitly for emphasis
+		}, nil
 	case err != nil:
 		return nil, err
-	case prevExecutionUpdateAction == nil:
+	case currentExecutionUpdateAction == nil:
 		return nil, nil
 	}
 
-	var mutableStateInfo *mutableStateInfo
-	// update prev execution and create new execution in one transaction
-	// we already validated that currentWorkflowConditionFailed.RunID is not empty,
-	// so the following update won't try to lock current execution again.
+	// Update current execution and create new execution in one transaction.
+	newExecutionWorkflowLease := creationParams.workflowLease
+	currentExecutionWorkflowKey := definition.NewWorkflowKey(
+		s.namespace.ID().String(), workflowID, currentWorkflowConditionFailed.RunID)
 	err = api.GetAndUpdateWorkflowWithNew(
 		ctx,
 		nil,
 		api.BypassMutableStateConsistencyPredicate,
-		definition.NewWorkflowKey(
-			s.namespace.ID().String(),
-			workflowID,
-			currentWorkflowConditionFailed.RunID,
-		),
-		prevExecutionUpdateAction,
+		currentExecutionWorkflowKey,
+		currentExecutionUpdateAction,
 		func() (workflow.Context, workflow.MutableState, error) {
-			workflowLease, err := api.NewWorkflowWithSignal(ctx, s.shardContext, nil, s.namespace, workflowID, creationParams.runID, s.request, nil)
-			if err != nil {
-				return nil, nil, err
-			}
-			mutableState := workflowLease.GetMutableState()
-			mutableStateInfo, err = extractMutableStateInfo(mutableState)
-			if err != nil {
-				return nil, nil, err
-			}
-			return workflowLease.GetContext(), mutableState, nil
+			return newExecutionWorkflowLease.GetContext(), newExecutionWorkflowLease.GetMutableState(), nil
 		},
 		s.shardContext,
 		s.workflowConsistencyChecker,
 	)
-	switch err {
-	case nil:
+	switch {
+	case err == nil:
 		if !s.requestEagerStart() {
 			return &historyservice.StartWorkflowExecutionResponse{
-				RunId: creationParams.runID,
+				RunId:   creationParams.runID,
+				Started: true,
 			}, nil
 		}
-		events, err := s.getWorkflowHistory(ctx, mutableStateInfo)
+
+		newExecutionMutableState := newExecutionWorkflowLease.GetMutableState()
+		newExecutionMutableStateInfo, err := extractMutableStateInfo(newExecutionMutableState)
 		if err != nil {
 			return nil, err
 		}
-		return s.generateResponse(creationParams.runID, mutableStateInfo.workflowTask, events)
-	case consts.ErrWorkflowCompleted:
-		// previous workflow already closed
+		events, err := s.getWorkflowHistory(ctx, newExecutionMutableStateInfo)
+		if err != nil {
+			return nil, err
+		}
+		return s.generateResponse(creationParams.runID, newExecutionMutableStateInfo.workflowTask, events)
+	case errors.Is(err, consts.ErrWorkflowCompleted):
+		// current workflow already closed
 		// fallthough to the logic for only creating the new workflow below
 		return nil, nil
 	default:
@@ -430,13 +433,17 @@ func (s *Starter) applyWorkflowIDReusePolicy(
 }
 
 // respondToRetriedRequest provides a response in case a start request is retried.
+//
+// NOTE: Workflow is marked as "started" even though the client re-issued a request with the same ID,
+// as it's most likely that the response didn't leave the Server and wasn't metered appropriately
 func (s *Starter) respondToRetriedRequest(
 	ctx context.Context,
 	runID string,
 ) (*historyservice.StartWorkflowExecutionResponse, error) {
 	if !s.requestEagerStart() {
 		return &historyservice.StartWorkflowExecutionResponse{
-			RunId: runID,
+			RunId:   runID,
+			Started: true,
 		}, nil
 	}
 
@@ -451,7 +458,8 @@ func (s *Starter) respondToRetriedRequest(
 	if mutableStateInfo.workflowTask == nil || mutableStateInfo.workflowTask.StartedEventID != 3 || mutableStateInfo.workflowTask.Attempt > 1 {
 		s.recordEagerDenied(eagerStartDeniedReasonTaskAlreadyDispatched)
 		return &historyservice.StartWorkflowExecutionResponse{
-			RunId: runID,
+			RunId:   runID,
+			Started: true,
 		}, nil
 	}
 
@@ -472,7 +480,6 @@ func (s *Starter) getMutableStateInfo(ctx context.Context, runID string) (*mutab
 		s.shardContext,
 		s.namespace.ID(),
 		&commonpb.WorkflowExecution{WorkflowId: s.request.StartRequest.WorkflowId, RunId: runID},
-		nil,
 		workflow.LockPriorityHigh,
 	)
 	if err != nil {
@@ -551,7 +558,7 @@ func extractHistoryEvents(persistenceEvents []*persistence.WorkflowEvents) []*hi
 	return events
 }
 
-// generateResponse is a helper for generating StartWorkflowExecutionResponse for eager and non eager workflow start
+// generateResponse is a helper for generating StartWorkflowExecutionResponse for eager and non-eager workflow start
 // requests.
 func (s *Starter) generateResponse(
 	runID string,
@@ -565,7 +572,8 @@ func (s *Starter) generateResponse(
 
 	if !s.requestEagerStart() {
 		return &historyservice.StartWorkflowExecutionResponse{
-			RunId: runID,
+			RunId:   runID,
+			Started: true,
 		}, nil
 	}
 
@@ -594,8 +602,9 @@ func (s *Starter) generateResponse(
 		return nil, err
 	}
 	return &historyservice.StartWorkflowExecutionResponse{
-		RunId: runID,
-		Clock: clock,
+		RunId:   runID,
+		Clock:   clock,
+		Started: true,
 		EagerWorkflowTask: &workflowservice.PollWorkflowTaskQueueResponse{
 			TaskToken:         serializedToken,
 			WorkflowExecution: &commonpb.WorkflowExecution{WorkflowId: workflowID, RunId: runID},

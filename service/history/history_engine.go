@@ -34,7 +34,7 @@ import (
 	commonpb "go.temporal.io/api/common/v1"
 	historypb "go.temporal.io/api/history/v1"
 	"go.temporal.io/server/service/history/api/getworkflowexecutionrawhistory"
-	"go.temporal.io/server/service/history/api/multioperationworkflow"
+	"go.temporal.io/server/service/history/api/multioperation"
 
 	historyspb "go.temporal.io/server/api/history/v1"
 	workflowpb "go.temporal.io/server/api/workflow/v1"
@@ -384,7 +384,7 @@ func (e *historyEngineImpl) ExecuteMultiOperation(
 	ctx context.Context,
 	request *historyservice.ExecuteMultiOperationRequest,
 ) (*historyservice.ExecuteMultiOperationResponse, error) {
-	return multioperationworkflow.Invoke(
+	return multioperation.Invoke(
 		ctx,
 		request,
 		e.shardContext,
@@ -598,7 +598,7 @@ func (e *historyEngineImpl) UpdateWorkflowExecution(
 		e.matchingClient,
 		req,
 	)
-	return updater.Invoke(ctx, nil)
+	return updater.Invoke(ctx)
 }
 
 func (e *historyEngineImpl) PollWorkflowExecutionUpdate(

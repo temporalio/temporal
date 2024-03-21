@@ -101,7 +101,6 @@ func (r *workflowRebuilderImpl) rebuild(
 			WorkflowId: workflowKey.WorkflowID,
 			RunId:      workflowKey.RunID,
 		},
-		nil,
 		workflow.LockPriorityHigh,
 	)
 	if err != nil {

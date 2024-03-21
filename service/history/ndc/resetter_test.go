@@ -110,7 +110,7 @@ func (s *resetterSuite) SetupTest() {
 		s.namespaceID.String(),
 		s.workflowID,
 		s.newRunID,
-	), nil, s.logger, s.mockShard.GetThrottledLogger(), s.mockShard.GetMetricsHandler())
+	), s.logger, s.mockShard.GetThrottledLogger(), s.mockShard.GetMetricsHandler())
 	s.newRunID = uuid.New()
 
 	s.workflowResetter = NewResetter(

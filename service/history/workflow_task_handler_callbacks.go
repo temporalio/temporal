@@ -231,7 +231,7 @@ func (handler *workflowTaskHandlerCallbacksImpl) handleWorkflowTaskStarted(
 			if workflowTask.StartedEventID != common.EmptyEventID {
 				// If workflow task is started as part of the current request scope then return a positive response
 				if workflowTask.RequestID == requestID {
-					resp, err = handler.createRecordWorkflowTaskStartedResponse(ctx, mutableState, workflowLease.GetContext().UpdateRegistry(ctx), workflowTask, req.PollRequest.GetIdentity(), false)
+					resp, err = handler.createRecordWorkflowTaskStartedResponse(ctx, mutableState, workflowLease.GetUpdateRegistry(ctx), workflowTask, req.PollRequest.GetIdentity(), false)
 					if err != nil {
 						return nil, err
 					}
@@ -286,7 +286,7 @@ func (handler *workflowTaskHandlerCallbacksImpl) handleWorkflowTaskStarted(
 				metrics.TaskQueueTypeTag(enumspb.TASK_QUEUE_TYPE_WORKFLOW),
 			)
 
-			resp, err = handler.createRecordWorkflowTaskStartedResponse(ctx, mutableState, workflowLease.GetContext().UpdateRegistry(ctx), workflowTask, req.PollRequest.GetIdentity(), false)
+			resp, err = handler.createRecordWorkflowTaskStartedResponse(ctx, mutableState, workflowLease.GetUpdateRegistry(ctx), workflowTask, req.PollRequest.GetIdentity(), false)
 			if err != nil {
 				return nil, err
 			}
@@ -566,7 +566,7 @@ func (handler *workflowTaskHandlerCallbacksImpl) handleWorkflowTaskCompleted(
 			request.GetIdentity(),
 			completedEvent.GetEventId(), // If completedEvent is nil, then GetEventId() returns 0 and this value shouldn't be used in workflowTaskHandler.
 			ms,
-			weContext.UpdateRegistry(ctx),
+			workflowLease.GetUpdateRegistry(ctx),
 			&effects,
 			handler.commandAttrValidator,
 			workflowSizeChecker,
@@ -609,7 +609,7 @@ func (handler *workflowTaskHandlerCallbacksImpl) handleWorkflowTaskCompleted(
 			// Because all unprocessed updates were already rejected, incomplete updates in the registry are:
 			// - updates that were received while this WT was running,
 			// - updates that were accepted but not completed by this WT.
-			err = weContext.UpdateRegistry(ctx).CancelIncomplete(ctx, update.CancelReasonWorkflowCompleted, workflow.WithEffects(&effects, ms))
+			err = workflowLease.GetUpdateRegistry(ctx).CancelIncomplete(ctx, update.CancelReasonWorkflowCompleted, workflow.WithEffects(&effects, ms))
 			if err != nil {
 				// Just log error here because it is more important to complete workflow than canceling updates.
 				handler.logger.Warn("Unable to cancel incomplete updates while completing the workflow.",
@@ -687,7 +687,7 @@ func (handler *workflowTaskHandlerCallbacksImpl) handleWorkflowTaskCompleted(
 			// There shouldn't be any sent updates in the registry because
 			// all sent but not processed updates were rejected by server.
 			// Therefore, it doesn't matter if to includeAlreadySent or not.
-		} else if weContext.UpdateRegistry(ctx).HasOutgoingMessages(true) {
+		} else if workflowLease.GetUpdateRegistry(ctx).HasOutgoingMessages(true) {
 			if completedEvent == nil || ms.GetNextEventID() == completedEvent.GetEventId()+1 {
 				newWorkflowTaskType = enumsspb.WORKFLOW_TASK_TYPE_SPECULATIVE
 			} else {
@@ -747,18 +747,11 @@ func (handler *workflowTaskHandlerCallbacksImpl) handleWorkflowTaskCompleted(
 		updateErr = weContext.UpdateWorkflowExecutionWithNewAsActive(
 			ctx,
 			handler.shardContext,
-			workflow.NewContext(
-				handler.shardContext.GetConfig(),
-				definition.NewWorkflowKey(
-					newWorkflowExecutionInfo.NamespaceId,
-					newWorkflowExecutionInfo.WorkflowId,
-					newWorkflowExecutionState.RunId,
-				),
-				nil,
-				handler.logger,
-				handler.shardContext.GetThrottledLogger(),
-				handler.shardContext.GetMetricsHandler(),
-			),
+			workflow.NewContext(handler.shardContext.GetConfig(), definition.NewWorkflowKey(
+				newWorkflowExecutionInfo.NamespaceId,
+				newWorkflowExecutionInfo.WorkflowId,
+				newWorkflowExecutionState.RunId,
+			), handler.logger, handler.shardContext.GetThrottledLogger(), handler.shardContext.GetMetricsHandler()),
 			newMutableState,
 		)
 	} else {
@@ -845,8 +838,9 @@ func (handler *workflowTaskHandlerCallbacksImpl) handleWorkflowTaskCompleted(
 	}
 
 	resp := &historyservice.RespondWorkflowTaskCompletedResponse{}
+	//nolint:staticcheck
 	if request.GetReturnNewWorkflowTask() && newWorkflowTask != nil {
-		resp.StartedResponse, err = handler.createRecordWorkflowTaskStartedResponse(ctx, ms, weContext.UpdateRegistry(ctx), newWorkflowTask, request.GetIdentity(), request.GetForceCreateNewWorkflowTask())
+		resp.StartedResponse, err = handler.createRecordWorkflowTaskStartedResponse(ctx, ms, workflowLease.GetUpdateRegistry(ctx), newWorkflowTask, request.GetIdentity(), request.GetForceCreateNewWorkflowTask())
 		if err != nil {
 			return nil, err
 		}

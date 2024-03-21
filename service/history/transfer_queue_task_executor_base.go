@@ -209,7 +209,6 @@ func (t *transferQueueTaskExecutorBase) deleteExecution(
 		t.shardContext,
 		namespace.ID(task.GetNamespaceID()),
 		&workflowExecution,
-		nil,
 		workflow.LockPriorityLow,
 	)
 	if err != nil {

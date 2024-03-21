@@ -72,14 +72,8 @@ type (
 			shardContext shard.Context,
 			namespaceID namespace.ID,
 			execution *commonpb.WorkflowExecution,
-			mutableState workflow.MutableState,
 			lockPriority workflow.LockPriority,
 		) (workflow.Context, ReleaseCacheFunc, error)
-
-		Evict(
-			ctx context.Context,
-			execution *commonpb.WorkflowExecution,
-		)
 	}
 
 	CacheImpl struct {
@@ -188,7 +182,6 @@ func (c *CacheImpl) GetOrCreateCurrentWorkflowExecution(
 		shardContext,
 		namespaceID,
 		&execution,
-		nil,
 		handler,
 		true,
 		lockPriority,
@@ -205,7 +198,6 @@ func (c *CacheImpl) GetOrCreateWorkflowExecution(
 	shardContext shard.Context,
 	namespaceID namespace.ID,
 	execution *commonpb.WorkflowExecution,
-	mutableState workflow.MutableState,
 	lockPriority workflow.LockPriority,
 ) (workflow.Context, ReleaseCacheFunc, error) {
 
@@ -226,7 +218,6 @@ func (c *CacheImpl) GetOrCreateWorkflowExecution(
 		shardContext,
 		namespaceID,
 		execution,
-		mutableState,
 		handler,
 		false,
 		lockPriority,
@@ -246,7 +237,6 @@ func (c *CacheImpl) getOrCreateWorkflowExecutionInternal(
 	shardContext shard.Context,
 	namespaceID namespace.ID,
 	execution *commonpb.WorkflowExecution,
-	mutableState workflow.MutableState,
 	handler metrics.Handler,
 	forceClearContext bool,
 	lockPriority workflow.LockPriority,
@@ -265,7 +255,6 @@ func (c *CacheImpl) getOrCreateWorkflowExecutionInternal(
 		workflowCtx = workflow.NewContext(
 			shardContext.GetConfig(),
 			cacheKey.WorkflowKey,
-			mutableState,
 			shardContext.GetLogger(),
 			shardContext.GetThrottledLogger(),
 			shardContext.GetMetricsHandler(),

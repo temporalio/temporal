@@ -311,7 +311,6 @@ func generateStateReplicationTask(
 			WorkflowId: workflowKey.WorkflowID,
 			RunId:      workflowKey.RunID,
 		},
-		nil,
 		workflow.LockPriorityLow,
 	)
 	if err != nil {
@@ -390,7 +389,6 @@ func getBranchToken(
 			WorkflowId: workflowKey.WorkflowID,
 			RunId:      workflowKey.RunID,
 		},
-		nil,
 		workflow.LockPriorityLow,
 	)
 	if err != nil {

@@ -258,7 +258,6 @@ func (r *HistoryReplicatorImpl) doApplyEvents(
 		r.shardContext,
 		task.getNamespaceID(),
 		task.getExecution(),
-		nil,
 		workflow.LockPriorityHigh,
 	)
 	if err != nil {
@@ -410,7 +409,7 @@ func (r *HistoryReplicatorImpl) applyNonStartEventsToCurrentBranch(
 			newExecutionInfo.NamespaceId,
 			newExecutionInfo.WorkflowId,
 			newExecutionState.RunId,
-		), nil, r.logger, r.shardContext.GetThrottledLogger(), r.shardContext.GetMetricsHandler())
+		), r.logger, r.shardContext.GetThrottledLogger(), r.shardContext.GetMetricsHandler())
 
 		newWorkflow = NewWorkflow(
 			r.clusterMetadata,

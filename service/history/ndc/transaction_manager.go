@@ -447,7 +447,6 @@ func (r *transactionMgrImpl) LoadWorkflow(
 			WorkflowId: workflowID,
 			RunId:      runID,
 		},
-		nil,
 		workflow.LockPriorityHigh,
 	)
 	if err != nil {

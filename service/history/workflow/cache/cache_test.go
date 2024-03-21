@@ -513,7 +513,7 @@ func (s *workflowCacheSuite) TestCacheImpl_lockWorkflowExecution() {
 				WorkflowKey: definition.NewWorkflowKey(namespaceID.String(), execution.GetWorkflowId(), execution.GetRunId()),
 				ShardUUID:   uuid.New(),
 			}
-			workflowCtx := workflow.NewContext(s.mockShard.GetConfig(), cacheKey.WorkflowKey, nil, s.mockShard.GetLogger(), s.mockShard.GetThrottledLogger(), s.mockShard.GetMetricsHandler())
+			workflowCtx := workflow.NewContext(s.mockShard.GetConfig(), cacheKey.WorkflowKey, s.mockShard.GetLogger(), s.mockShard.GetThrottledLogger(), s.mockShard.GetMetricsHandler())
 			ctx := headers.SetCallerType(context.Background(), tt.callerType)
 			ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
 			defer cancel()
