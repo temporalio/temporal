@@ -206,6 +206,7 @@ func NewWorkflowHandler(
 				visibilityMrg.GetStoreNames(),
 				config.VisibilityAllowList,
 			),
+			config.SuppressErrorSetSystemSearchAttribute,
 		),
 		archivalMetadata:    archivalMetadata,
 		healthServer:        healthServer,
@@ -4371,6 +4372,8 @@ func (wh *WorkflowHandler) cleanScheduleSearchAttributes(searchAttributes *commo
 	// scheduler workflows since it's the server worker
 	delete(fields, searchattribute.BinaryChecksums)
 	delete(fields, searchattribute.BuildIds)
+	// all schedule workflows should be in this namespace division so there's no need to include it
+	delete(fields, searchattribute.TemporalNamespaceDivision)
 
 	if len(fields) == 0 {
 		return nil

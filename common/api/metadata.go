@@ -147,6 +147,11 @@ var (
 		"DeleteNexusIncomingService":         {Scope: ScopeCluster, Access: AccessAdmin},
 		"GetNexusIncomingService":            {Scope: ScopeCluster, Access: AccessAdmin},
 		"ListNexusIncomingServices":          {Scope: ScopeCluster, Access: AccessAdmin},
+		"GetNexusOutgoingService":            {Scope: ScopeNamespace, Access: AccessAdmin},
+		"CreateNexusOutgoingService":         {Scope: ScopeNamespace, Access: AccessAdmin},
+		"UpdateNexusOutgoingService":         {Scope: ScopeNamespace, Access: AccessAdmin},
+		"DeleteNexusOutgoingService":         {Scope: ScopeNamespace, Access: AccessAdmin},
+		"ListNexusOutgoingServices":          {Scope: ScopeNamespace, Access: AccessAdmin},
 	}
 	nexusServiceMetadata = map[string]MethodMetadata{
 		"DispatchNexusTask": {Scope: ScopeNamespace, Access: AccessWrite},

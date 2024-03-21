@@ -53,13 +53,14 @@ type Config struct {
 	EnablePersistencePriorityRateLimiting dynamicconfig.BoolPropertyFn
 	PersistenceDynamicRateLimitingParams  dynamicconfig.MapPropertyFn
 
-	VisibilityPersistenceMaxReadQPS   dynamicconfig.IntPropertyFn
-	VisibilityPersistenceMaxWriteQPS  dynamicconfig.IntPropertyFn
-	EnableReadFromSecondaryVisibility dynamicconfig.BoolPropertyFnWithNamespaceFilter
-	SecondaryVisibilityWritingMode    dynamicconfig.StringPropertyFn
-	VisibilityDisableOrderByClause    dynamicconfig.BoolPropertyFnWithNamespaceFilter
-	VisibilityEnableManualPagination  dynamicconfig.BoolPropertyFnWithNamespaceFilter
-	VisibilityAllowList               dynamicconfig.BoolPropertyFnWithNamespaceFilter
+	VisibilityPersistenceMaxReadQPS       dynamicconfig.IntPropertyFn
+	VisibilityPersistenceMaxWriteQPS      dynamicconfig.IntPropertyFn
+	EnableReadFromSecondaryVisibility     dynamicconfig.BoolPropertyFnWithNamespaceFilter
+	SecondaryVisibilityWritingMode        dynamicconfig.StringPropertyFn
+	VisibilityDisableOrderByClause        dynamicconfig.BoolPropertyFnWithNamespaceFilter
+	VisibilityEnableManualPagination      dynamicconfig.BoolPropertyFnWithNamespaceFilter
+	VisibilityAllowList                   dynamicconfig.BoolPropertyFnWithNamespaceFilter
+	SuppressErrorSetSystemSearchAttribute dynamicconfig.BoolPropertyFnWithNamespaceFilter
 
 	EmitShardLagLog            dynamicconfig.BoolPropertyFn
 	MaxAutoResetPoints         dynamicconfig.IntPropertyFnWithNamespaceFilter
@@ -70,13 +71,17 @@ type Config struct {
 
 	// HistoryCache settings
 	// Change of these configs require shard restart
+	HistoryCacheLimitSizeBased            bool
 	HistoryCacheInitialSize               dynamicconfig.IntPropertyFn
 	HistoryShardLevelCacheMaxSize         dynamicconfig.IntPropertyFn
+	HistoryShardLevelCacheMaxSizeBytes    dynamicconfig.IntPropertyFn
 	HistoryHostLevelCacheMaxSize          dynamicconfig.IntPropertyFn
+	HistoryHostLevelCacheMaxSizeBytes     dynamicconfig.IntPropertyFn
 	HistoryCacheTTL                       dynamicconfig.DurationPropertyFn
 	HistoryCacheNonUserContextLockTimeout dynamicconfig.DurationPropertyFn
 	EnableHostLevelHistoryCache           dynamicconfig.BoolPropertyFn
 	EnableAPIGetCurrentRunIDLock          dynamicconfig.BoolPropertyFn
+	EnableMutableStateTransitionHistory   dynamicconfig.BoolPropertyFn
 
 	// EventsCache settings
 	// Change of these configs require shard restart
@@ -110,6 +115,7 @@ type Config struct {
 	TaskDLQEnabled                 dynamicconfig.BoolPropertyFn
 	TaskDLQUnexpectedErrorAttempts dynamicconfig.IntPropertyFn
 	TaskDLQInternalErrors          dynamicconfig.BoolPropertyFn
+	TaskDLQErrorPattern            dynamicconfig.StringPropertyFn
 
 	TaskSchedulerEnableRateLimiter           dynamicconfig.BoolPropertyFn
 	TaskSchedulerEnableRateLimiterShadowMode dynamicconfig.BoolPropertyFn
@@ -363,22 +369,28 @@ func NewConfig(
 		DefaultWorkflowTaskTimeout:            dc.GetDurationPropertyFilteredByNamespace(dynamicconfig.DefaultWorkflowTaskTimeout, common.DefaultWorkflowTaskTimeout),
 		ContinueAsNewMinInterval:              dc.GetDurationPropertyFilteredByNamespace(dynamicconfig.ContinueAsNewMinInterval, time.Second),
 
-		VisibilityPersistenceMaxReadQPS:   visibility.GetVisibilityPersistenceMaxReadQPS(dc),
-		VisibilityPersistenceMaxWriteQPS:  visibility.GetVisibilityPersistenceMaxWriteQPS(dc),
-		EnableReadFromSecondaryVisibility: visibility.GetEnableReadFromSecondaryVisibilityConfig(dc),
-		SecondaryVisibilityWritingMode:    visibility.GetSecondaryVisibilityWritingModeConfig(dc),
-		VisibilityDisableOrderByClause:    dc.GetBoolPropertyFnWithNamespaceFilter(dynamicconfig.VisibilityDisableOrderByClause, true),
-		VisibilityEnableManualPagination:  dc.GetBoolPropertyFnWithNamespaceFilter(dynamicconfig.VisibilityEnableManualPagination, true),
-		VisibilityAllowList:               dc.GetBoolPropertyFnWithNamespaceFilter(dynamicconfig.VisibilityAllowList, true),
+		VisibilityPersistenceMaxReadQPS:       visibility.GetVisibilityPersistenceMaxReadQPS(dc),
+		VisibilityPersistenceMaxWriteQPS:      visibility.GetVisibilityPersistenceMaxWriteQPS(dc),
+		EnableReadFromSecondaryVisibility:     visibility.GetEnableReadFromSecondaryVisibilityConfig(dc),
+		SecondaryVisibilityWritingMode:        visibility.GetSecondaryVisibilityWritingModeConfig(dc),
+		VisibilityDisableOrderByClause:        dc.GetBoolPropertyFnWithNamespaceFilter(dynamicconfig.VisibilityDisableOrderByClause, true),
+		VisibilityEnableManualPagination:      dc.GetBoolPropertyFnWithNamespaceFilter(dynamicconfig.VisibilityEnableManualPagination, true),
+		VisibilityAllowList:                   dc.GetBoolPropertyFnWithNamespaceFilter(dynamicconfig.VisibilityAllowList, true),
+		SuppressErrorSetSystemSearchAttribute: dc.GetBoolPropertyFnWithNamespaceFilter(dynamicconfig.SuppressErrorSetSystemSearchAttribute, false),
 
-		EmitShardLagLog:                       dc.GetBoolProperty(dynamicconfig.EmitShardLagLog, false),
+		EmitShardLagLog: dc.GetBoolProperty(dynamicconfig.EmitShardLagLog, false),
+		// HistoryCacheLimitSizeBased should not change during runtime.
+		HistoryCacheLimitSizeBased:            dc.GetBoolProperty(dynamicconfig.HistoryCacheSizeBasedLimit, false)(),
 		HistoryCacheInitialSize:               dc.GetIntProperty(dynamicconfig.HistoryCacheInitialSize, 128),
 		HistoryShardLevelCacheMaxSize:         dc.GetIntProperty(dynamicconfig.HistoryCacheMaxSize, 512),
+		HistoryShardLevelCacheMaxSizeBytes:    dc.GetIntProperty(dynamicconfig.HistoryCacheMaxSizeBytes, 512*4*1024),
 		HistoryHostLevelCacheMaxSize:          dc.GetIntProperty(dynamicconfig.HistoryCacheHostLevelMaxSize, 256000),
+		HistoryHostLevelCacheMaxSizeBytes:     dc.GetIntProperty(dynamicconfig.HistoryCacheHostLevelMaxSizeBytes, 256000*4*1024),
 		HistoryCacheTTL:                       dc.GetDurationProperty(dynamicconfig.HistoryCacheTTL, time.Hour),
 		HistoryCacheNonUserContextLockTimeout: dc.GetDurationProperty(dynamicconfig.HistoryCacheNonUserContextLockTimeout, 500*time.Millisecond),
 		EnableHostLevelHistoryCache:           dc.GetBoolProperty(dynamicconfig.EnableHostHistoryCache, false),
 		EnableAPIGetCurrentRunIDLock:          dc.GetBoolProperty(dynamicconfig.EnableAPIGetCurrentRunIDLock, false),
+		EnableMutableStateTransitionHistory:   dc.GetBoolProperty(dynamicconfig.EnableMutableStateTransitionHistory, false),
 
 		EventsShardLevelCacheMaxSizeBytes: dc.GetIntProperty(dynamicconfig.EventsCacheMaxSizeBytes, 512*1024),              // 512KB
 		EventsHostLevelCacheMaxSizeBytes:  dc.GetIntProperty(dynamicconfig.EventsHostLevelCacheMaxSizeBytes, 512*512*1024), // 256MB
@@ -407,6 +419,7 @@ func NewConfig(
 		TaskDLQEnabled:                 dc.GetBoolProperty(dynamicconfig.HistoryTaskDLQEnabled, true),
 		TaskDLQUnexpectedErrorAttempts: dc.GetIntProperty(dynamicconfig.HistoryTaskDLQUnexpectedErrorAttempts, 100),
 		TaskDLQInternalErrors:          dc.GetBoolProperty(dynamicconfig.HistoryTaskDLQInternalErrors, false),
+		TaskDLQErrorPattern:            dc.GetStringProperty(dynamicconfig.HistoryTaskDLQErrorPattern, ""),
 
 		TaskSchedulerEnableRateLimiter:           dc.GetBoolProperty(dynamicconfig.TaskSchedulerEnableRateLimiter, false),
 		TaskSchedulerEnableRateLimiterShadowMode: dc.GetBoolProperty(dynamicconfig.TaskSchedulerEnableRateLimiterShadowMode, true),
