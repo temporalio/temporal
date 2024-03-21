@@ -347,12 +347,13 @@ func (s *PartitionManagerTestSuite) pollWithIdentity(pollerId, buildId string, u
 	ctx, cancel := context.WithTimeout(context.WithValue(context.Background(), identityKey, pollerId), 100*time.Millisecond)
 	defer cancel()
 
-	return s.partitionMgr.PollTask(ctx, &pollMetadata{
+	task, _, err := s.partitionMgr.PollTask(ctx, &pollMetadata{
 		workerVersionCapabilities: &common.WorkerVersionCapabilities{
 			BuildId:       buildId,
 			UseVersioning: useVersioning,
 		},
 	})
+	return task, err
 }
 
 func createVersionSet(buildId string) *persistence.CompatibleVersionSet {
