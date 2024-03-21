@@ -956,10 +956,10 @@ func (e *matchingEngineImpl) UpdateWorkerVersioningRules(
 	return &matchingservice.UpdateWorkerVersioningRulesResponse{Response: &workflowservice.UpdateWorkerVersioningRulesResponse{ConflictToken: cT}}, nil
 }
 
-func (e *matchingEngineImpl) GetWorkerVersioningRules(
+func (e *matchingEngineImpl) ListWorkerVersioningRules(
 	ctx context.Context,
-	request *matchingservice.GetWorkerVersioningRulesRequest,
-) (*matchingservice.GetWorkerVersioningRulesResponse, error) {
+	request *matchingservice.ListWorkerVersioningRulesRequest,
+) (*matchingservice.ListWorkerVersioningRulesResponse, error) {
 	req := request.GetRequest()
 	ns, err := e.namespaceRegistry.GetNamespace(namespace.Name(req.GetNamespace()))
 	if err != nil {
@@ -995,7 +995,7 @@ func (e *matchingEngineImpl) GetWorkerVersioningRules(
 	if clk == nil {
 		clk = hlc.Zero(e.clusterMeta.GetClusterID())
 	}
-	return GetWorkerVersioningRules(data.GetData().GetVersioningData(), clk)
+	return ListWorkerVersioningRules(data.GetData().GetVersioningData(), clk)
 }
 
 func (e *matchingEngineImpl) UpdateWorkerBuildIdCompatibility(

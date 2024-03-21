@@ -54,6 +54,6 @@ type (
 		UpdateTaskQueueUserData(ctx context.Context, request *matchingservice.UpdateTaskQueueUserDataRequest) (*matchingservice.UpdateTaskQueueUserDataResponse, error)
 		ReplicateTaskQueueUserData(ctx context.Context, request *matchingservice.ReplicateTaskQueueUserDataRequest) (*matchingservice.ReplicateTaskQueueUserDataResponse, error)
 		UpdateWorkerVersioningRules(ctx context.Context, request *matchingservice.UpdateWorkerVersioningRulesRequest) (*matchingservice.UpdateWorkerVersioningRulesResponse, error)
-		GetWorkerVersioningRules(ctx context.Context, request *matchingservice.GetWorkerVersioningRulesRequest) (*matchingservice.GetWorkerVersioningRulesResponse, error)
+		ListWorkerVersioningRules(ctx context.Context, request *matchingservice.ListWorkerVersioningRulesRequest) (*matchingservice.ListWorkerVersioningRulesResponse, error)
 	}
 )
