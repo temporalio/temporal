@@ -250,7 +250,7 @@ func SetupNewWorkflowForRetryOrCron(
 	// For cron: do not propagate (always start on latest version).
 	var sourceVersionStamp *commonpb.WorkerVersionStamp
 	if initiator == enumspb.CONTINUE_AS_NEW_INITIATOR_RETRY {
-		sourceVersionStamp = worker_versioning.StampIfUsingVersioning(previousMutableState.GetWorkerVersionStamp())
+		sourceVersionStamp = worker_versioning.StampIfUsingVersioning(previousMutableState.GetMostRecentWorkerVersionStamp())
 	}
 
 	req := &historyservice.StartWorkflowExecutionRequest{

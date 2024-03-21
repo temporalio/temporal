@@ -461,7 +461,7 @@ pollLoop:
 			workerVersionCapabilities: request.WorkerVersionCapabilities,
 			forwardedFrom:             req.GetForwardedSource(),
 		}
-		task, err := e.pollTask(pollerCtx, partition, pollMetadata)
+		task, versionSetUsed, err := e.pollTask(pollerCtx, partition, pollMetadata)
 		if err != nil {
 			if errors.Is(err, errNoTasks) {
 				return emptyPollWorkflowTaskQueueResponse, nil
@@ -525,7 +525,15 @@ pollLoop:
 			return e.createPollWorkflowTaskQueueResponse(task, resp, opMetrics), nil
 		}
 
-		resp, err := e.recordWorkflowTaskStarted(ctx, request, task)
+		requestClone := request
+		if versionSetUsed {
+			// We remove build id from workerVersionCapabilities so History can differentiate between
+			// old and new versioning in Record*TaskStart.
+			// TODO: remove this block after old versioning cleanup. [cleanup-old-wv]
+			requestClone = common.CloneProto(request)
+			requestClone.WorkerVersionCapabilities.BuildId = ""
+		}
+		resp, err := e.recordWorkflowTaskStarted(ctx, requestClone, task)
 		if err != nil {
 			switch err.(type) {
 			case *serviceerror.NotFound: // mutable state not found, workflow not running or workflow task not found
@@ -639,7 +647,7 @@ pollLoop:
 		if request.TaskQueueMetadata != nil && request.TaskQueueMetadata.MaxTasksPerSecond != nil {
 			pollMetadata.ratePerSecond = &request.TaskQueueMetadata.MaxTasksPerSecond.Value
 		}
-		task, err := e.pollTask(pollerCtx, partition, pollMetadata)
+		task, versionSetUsed, err := e.pollTask(pollerCtx, partition, pollMetadata)
 		if err != nil {
 			if errors.Is(err, errNoTasks) {
 				return emptyPollActivityTaskQueueResponse, nil
@@ -651,8 +659,15 @@ pollLoop:
 			// tasks received from remote are already started. So, simply forward the response
 			return task.pollActivityTaskQueueResponse(), nil
 		}
-
-		resp, err := e.recordActivityTaskStarted(ctx, request, task)
+		requestClone := request
+		if versionSetUsed {
+			// We remove build id from workerVersionCapabilities so History can differentiate between
+			// old and new versioning in Record*TaskStart.
+			// TODO: remove this block after old versioning cleanup. [cleanup-old-wv]
+			requestClone = common.CloneProto(request)
+			requestClone.WorkerVersionCapabilities.BuildId = ""
+		}
+		resp, err := e.recordActivityTaskStarted(ctx, requestClone, task)
 		if err != nil {
 			switch err.(type) {
 			case *serviceerror.NotFound: // mutable state not found, workflow not running or activity info not found
@@ -1355,10 +1370,10 @@ func (e *matchingEngineImpl) pollTask(
 	ctx context.Context,
 	partition tqid.Partition,
 	pollMetadata *pollMetadata,
-) (*internalTask, error) {
+) (*internalTask, bool, error) {
 	pm, err := e.getTaskQueuePartitionManager(ctx, partition, true)
 	if err != nil {
-		return nil, err
+		return nil, false, err
 	}
 
 	// We need to set a shorter timeout than the original ctx; otherwise, by the time ctx deadline is

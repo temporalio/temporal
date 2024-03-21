@@ -30,19 +30,18 @@ import "google/protobuf/empty.proto";
 
 // TaskVersionDirective controls how matching should direct a task.
 message TaskVersionDirective {
-    // Default (if value is not present) is "unversioned":
+    // Default (if build_id is not present) is "unversioned":
     // Use the unversioned task queue, even if the task queue has versioning data.
     // Absent value means the task is the non-starting task of an unversioned execution so it should remain unversioned.
-    oneof value {
-        // If assign_new is present, the task should be assigned the default
-        // version for the task queue. This will typically be set for the first
-        // workflow task in a workflow.
-        // WV2: this means we should consult Assignment rules to determine the build ID
-        google.protobuf.Empty assign_new = 1;
+    oneof build_id {
+        // If use_assignment_rules is present, matching should use the assignment rules
+        // to determine the build ID.
+        // WV1: the task should be assigned the default version for the task queue. [cleanup-old-wv]
+        google.protobuf.Empty use_assignment_rules = 1;
 
-        // If assigned_build_id is present, use the default version in the compatible set
-        // containing this build id.
-        // WV2: this means the task is already assigned to `build_id`
+        // This means the task is already assigned to `build_id`
+        // WV1: If assigned_build_id is present, use the default version in the compatible set
+        // containing this build id. [cleanup-old-wv]
         string assigned_build_id = 2;
     }
 }

@@ -324,6 +324,7 @@ func (s *workflowSuite) Test_NoMoreRetriesAndMutableStateHasNoPendingTasks_WillR
 		request.FailedRequest.GetFailure(),
 		uc.retryActivityState,
 		request.FailedRequest.GetIdentity(),
+		request.FailedRequest.WorkerVersion,
 	).Return(nil, nil)
 	s.currentMutableState.EXPECT().AddWorkflowTaskScheduledEvent(false, enumsspb.WORKFLOW_TASK_TYPE_NORMAL)
 	s.currentContext.EXPECT().UpdateWorkflowExecutionAsActive(ctx, s.shardContext).Return(nil)
@@ -351,6 +352,7 @@ func (s *workflowSuite) Test_AttemptToAddActivityTaskFailedEventFails_ReturnErro
 		request.FailedRequest.GetFailure(),
 		uc.retryActivityState,
 		request.FailedRequest.GetIdentity(),
+		request.FailedRequest.WorkerVersion,
 	).Return(nil, addTaskError)
 
 	_, err := Invoke(

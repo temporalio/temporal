@@ -6273,6 +6273,7 @@ func addWorkflowTaskStartedEventWithRequestID(ms workflow.MutableState, schedule
 		requestID,
 		&taskqueuepb.TaskQueue{Name: taskQueue},
 		identity,
+		nil,
 	)
 
 	return event
@@ -6349,7 +6350,7 @@ func addActivityTaskScheduledEventWithRetry(
 
 func addActivityTaskStartedEvent(ms workflow.MutableState, scheduledEventID int64, identity string) *historypb.HistoryEvent {
 	ai, _ := ms.GetActivityInfo(scheduledEventID)
-	event, _ := ms.AddActivityTaskStartedEvent(ai, scheduledEventID, tests.RunID, identity)
+	event, _ := ms.AddActivityTaskStartedEvent(ai, scheduledEventID, tests.RunID, identity, nil)
 	return event
 }
 
@@ -6364,7 +6365,7 @@ func addActivityTaskCompletedEvent(ms workflow.MutableState, scheduledEventID, s
 }
 
 func addActivityTaskFailedEvent(ms workflow.MutableState, scheduledEventID, startedEventID int64, failure *failurepb.Failure, retryState enumspb.RetryState, identity string) *historypb.HistoryEvent {
-	event, _ := ms.AddActivityTaskFailedEvent(scheduledEventID, startedEventID, failure, retryState, identity)
+	event, _ := ms.AddActivityTaskFailedEvent(scheduledEventID, startedEventID, failure, retryState, identity, nil)
 	return event
 }
 

@@ -35,6 +35,7 @@ import (
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/server/common/tqid"
+	"go.temporal.io/server/common/worker_versioning"
 	"google.golang.org/protobuf/types/known/durationpb"
 
 	"go.temporal.io/server/api/matchingservice/v1"
@@ -46,6 +47,7 @@ type (
 	// the api call forwarder component
 	Forwarder struct {
 		cfg       *forwarderConfig
+		queue     *PhysicalTaskQueueKey
 		partition *tqid.NormalPartition
 		client    matchingservice.MatchingServiceClient
 
@@ -90,13 +92,19 @@ var (
 //   - errForwarderSlowDown: When the rate limit is exceeded
 func newForwarder(
 	cfg *forwarderConfig,
-	partition *tqid.NormalPartition,
+	queue *PhysicalTaskQueueKey,
 	client matchingservice.MatchingServiceClient,
-) *Forwarder {
+) (*Forwarder, error) {
+	partition, ok := queue.Partition().(*tqid.NormalPartition)
+	if !ok {
+		return nil, serviceerror.NewInvalidArgument("physical queue of normal partition expected")
+	}
+
 	fwdr := &Forwarder{
 		cfg:                   cfg,
 		client:                client,
 		partition:             partition,
+		queue:                 queue,
 		outstandingTasksLimit: int32(cfg.ForwarderMaxOutstandingTasks()),
 		outstandingPollsLimit: int32(cfg.ForwarderMaxOutstandingPolls()),
 		limiter: quotas.NewDefaultOutgoingRateLimiter(
@@ -105,7 +113,7 @@ func newForwarder(
 	}
 	fwdr.addReqToken.Store(newForwarderReqToken(cfg.ForwarderMaxOutstandingTasks()))
 	fwdr.pollReqToken.Store(newForwarderReqToken(cfg.ForwarderMaxOutstandingPolls()))
-	return fwdr
+	return fwdr, nil
 }
 
 // ForwardTask forwards an activity or workflow task to the parent task queue partition if it exists
@@ -130,6 +138,13 @@ func (fwdr *Forwarder) ForwardTask(ctx context.Context, task *internalTask) erro
 		}
 		expirationDuration = durationpb.New(remaining)
 	}
+
+	directive := task.event.Data.GetVersionDirective()
+	if fwdr.queue.BuildId() != "" {
+		// Build ID is already selected for this task, so we override directive to reflect that.
+		directive = worker_versioning.MakeBuildIdDirective(fwdr.queue.BuildId())
+	}
+
 	switch fwdr.partition.TaskType() {
 	case enumspb.TASK_QUEUE_TYPE_WORKFLOW:
 		_, err = fwdr.client.AddWorkflowTask(ctx, &matchingservice.AddWorkflowTaskRequest{
@@ -144,7 +159,7 @@ func (fwdr *Forwarder) ForwardTask(ctx context.Context, task *internalTask) erro
 			Source:                 task.source,
 			ScheduleToStartTimeout: expirationDuration,
 			ForwardedSource:        fwdr.partition.RpcName(),
-			VersionDirective:       task.event.Data.GetVersionDirective(),
+			VersionDirective:       directive,
 		})
 	case enumspb.TASK_QUEUE_TYPE_ACTIVITY:
 		_, err = fwdr.client.AddActivityTask(ctx, &matchingservice.AddActivityTaskRequest{
@@ -159,7 +174,7 @@ func (fwdr *Forwarder) ForwardTask(ctx context.Context, task *internalTask) erro
 			Source:                 task.source,
 			ScheduleToStartTimeout: expirationDuration,
 			ForwardedSource:        fwdr.partition.RpcName(),
-			VersionDirective:       task.event.Data.GetVersionDirective(),
+			VersionDirective:       directive,
 		})
 	default:
 		return errInvalidTaskQueueType

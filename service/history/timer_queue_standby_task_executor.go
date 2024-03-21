@@ -294,7 +294,7 @@ func (t *timerQueueStandbyTaskExecutor) executeActivityRetryTimerTask(
 			return nil, nil
 		}
 
-		return newActivityRetryTimePostActionInfo(mutableState, activityInfo.TaskQueue, activityInfo.ScheduleToStartTimeout.AsDuration(), activityInfo.UseCompatibleVersion)
+		return newActivityRetryTimePostActionInfo(mutableState, activityInfo.TaskQueue, activityInfo.ScheduleToStartTimeout.AsDuration(), activityInfo)
 	}
 
 	return t.processTimer(
@@ -572,7 +572,7 @@ func (t *timerQueueStandbyTaskExecutor) pushActivity(
 	activityScheduleToStartTimeout := pushActivityInfo.activityTaskScheduleToStartTimeout
 	activityTask := task.(*tasks.ActivityRetryTimerTask)
 
-	_, err := t.matchingRawClient.AddActivityTask(ctx, &matchingservice.AddActivityTaskRequest{
+	resp, err := t.matchingRawClient.AddActivityTask(ctx, &matchingservice.AddActivityTaskRequest{
 		NamespaceId: activityTask.NamespaceID,
 		Execution: &commonpb.WorkflowExecution{
 			WorkflowId: activityTask.WorkflowID,
@@ -587,7 +587,26 @@ func (t *timerQueueStandbyTaskExecutor) pushActivity(
 		Clock:                  vclock.NewVectorClock(t.shardContext.GetClusterMetadata().GetClusterID(), t.shardContext.GetShardID(), activityTask.TaskID),
 		VersionDirective:       pushActivityInfo.versionDirective,
 	})
-	return err
+
+	if err != nil {
+		return err
+	}
+
+	if pushActivityInfo.versionDirective.GetUseAssignmentRules() == nil {
+		// activity is not getting a new build id, so no need to update MS
+		return nil
+	}
+
+	return updateIndependentActivityBuildId(
+		ctx,
+		activityTask,
+		resp.AssignedBuildId,
+		t.shardContext,
+		workflow.TransactionPolicyPassive,
+		t.cache,
+		t.metricHandler,
+		t.logger,
+	)
 }
 
 func (t *timerQueueStandbyTaskExecutor) getCurrentTime() time.Time {

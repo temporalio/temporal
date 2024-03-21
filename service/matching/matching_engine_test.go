@@ -35,6 +35,7 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"go.temporal.io/server/common/metrics/metricstest"
+	"go.temporal.io/server/common/worker_versioning"
 
 	"github.com/emirpasic/gods/maps/treemap"
 	godsutils "github.com/emirpasic/gods/utils"
@@ -62,7 +63,6 @@ import (
 	"go.temporal.io/server/api/matchingservice/v1"
 	"go.temporal.io/server/api/matchingservicemock/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
-	"go.temporal.io/server/api/taskqueue/v1"
 	tokenspb "go.temporal.io/server/api/token/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/clock"
@@ -1726,12 +1726,12 @@ func (s *matchingEngineSuite) TestAddTaskAfterStartFailure() {
 	s.NoError(err)
 	s.EqualValues(1, s.taskManager.getTaskCount(dbq))
 
-	task, err := s.matchingEngine.pollTask(context.Background(), dbq.partition, &pollMetadata{})
+	task, _, err := s.matchingEngine.pollTask(context.Background(), dbq.partition, &pollMetadata{})
 	s.NoError(err)
 
 	task.finish(errors.New("test error"))
 	s.EqualValues(1, s.taskManager.getTaskCount(dbq))
-	task2, err := s.matchingEngine.pollTask(context.Background(), dbq.partition, &pollMetadata{})
+	task2, _, err := s.matchingEngine.pollTask(context.Background(), dbq.partition, &pollMetadata{})
 	s.NoError(err)
 	s.NotNil(task2)
 
@@ -2382,11 +2382,7 @@ func (s *matchingEngineSuite) TestUnknownBuildId_Match() {
 			TaskQueue:              &taskqueuepb.TaskQueue{Name: tq, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
 			ScheduleToStartTimeout: timestamp.DurationFromSeconds(100),
 			// do not set ForwardedSource, allow to go to db
-			VersionDirective: &taskqueue.TaskVersionDirective{
-				Value: &taskqueue.TaskVersionDirective_AssignedBuildId{
-					AssignedBuildId: "unknown",
-				},
-			},
+			VersionDirective: worker_versioning.MakeBuildIdDirective("unknown"),
 		})
 		s.NoError(err)
 		wg.Done()
@@ -2394,7 +2390,7 @@ func (s *matchingEngineSuite) TestUnknownBuildId_Match() {
 
 	go func() {
 		prtn := newRootPartition(namespaceId, tq, enumspb.TASK_QUEUE_TYPE_WORKFLOW)
-		task, err := s.matchingEngine.pollTask(ctx, prtn, &pollMetadata{
+		task, _, err := s.matchingEngine.pollTask(ctx, prtn, &pollMetadata{
 			workerVersionCapabilities: &commonpb.WorkerVersionCapabilities{
 				BuildId:       "unknown",
 				UseVersioning: true,
@@ -2451,11 +2447,7 @@ func (s *matchingEngineSuite) TestDemotedMatch() {
 		Execution:        &commonpb.WorkflowExecution{RunId: "run", WorkflowId: "wf"},
 		ScheduledEventId: 123,
 		TaskQueue:        &taskqueuepb.TaskQueue{Name: tq, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
-		VersionDirective: &taskqueue.TaskVersionDirective{
-			Value: &taskqueue.TaskVersionDirective_AssignedBuildId{
-				AssignedBuildId: build0,
-			},
-		},
+		VersionDirective: worker_versioning.MakeBuildIdDirective(build0),
 	})
 	s.NoError(err)
 	// allow taskReader to finish starting dispatch loop so that we can unload tqms cleanly
@@ -2499,7 +2491,7 @@ func (s *matchingEngineSuite) TestDemotedMatch() {
 	s.NoError(err)
 
 	// now poll for the task
-	task, err := s.matchingEngine.pollTask(ctx, prtn, &pollMetadata{
+	task, _, err := s.matchingEngine.pollTask(ctx, prtn, &pollMetadata{
 		workerVersionCapabilities: &commonpb.WorkerVersionCapabilities{
 			BuildId:       build1,
 			UseVersioning: true,

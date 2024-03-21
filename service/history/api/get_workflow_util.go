@@ -264,7 +264,8 @@ func MutableStateToGetResponse(
 		VersionHistories: versionhistory.CopyVersionHistories(
 			mutableState.GetExecutionInfo().GetVersionHistories(),
 		),
-		FirstExecutionRunId: executionInfo.FirstExecutionRunId,
-		WorkerVersionStamp:  executionInfo.WorkerVersionStamp,
+		FirstExecutionRunId:          executionInfo.FirstExecutionRunId,
+		AssignedBuildId:              mutableState.GetAssignedBuildId(),
+		MostRecentWorkerVersionStamp: executionInfo.GetMostRecentWorkerVersionStamp(),
 	}, nil
 }

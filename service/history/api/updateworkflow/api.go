@@ -174,10 +174,7 @@ func Invoke(
 
 			taskQueue = common.CloneProto(newWorkflowTask.TaskQueue)
 			normalTaskQueueName = ms.GetExecutionInfo().TaskQueue
-			directive = worker_versioning.MakeDirectiveForWorkflowTask(
-				ms.GetWorkerVersionStamp(),
-				ms.GetLastWorkflowTaskStartedEventID(),
-			)
+			directive = worker_versioning.MakeDirectiveForWorkflowTask(ms.GetAssignedBuildId(), ms.GetMostRecentWorkerVersionStamp(), ms.GetLastWorkflowTaskStartedEventID())
 
 			return &api.UpdateWorkflowAction{
 				Noop:               true,

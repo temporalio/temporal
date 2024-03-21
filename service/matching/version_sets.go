@@ -388,7 +388,7 @@ func lookupVersionSetForPoll(data *persistencespb.VersioningData, caps *commonpb
 // lookupVersionSetForPoll is that we never redirect, we just need to return an error or not.
 // Requires: caps is not nil
 // Returns:
-// - whether the build id was not found
+// - whether the build id was found
 // - error (can only be nil or serviceerror.NewerBuildExists)
 func checkVersionForStickyPoll(data *persistencespb.VersioningData, caps *commonpb.WorkerVersionCapabilities) (bool, error) {
 	// For poll, only the latest version in the compatible set can get tasks.
@@ -399,14 +399,14 @@ func checkVersionForStickyPoll(data *persistencespb.VersioningData, caps *common
 		// A poller is using a build ID, but we don't know about that build ID. See comments in
 		// lookupVersionSetForPoll. If we consider it the default for its set, then we should
 		// leave it on the sticky queue here.
-		return true, nil
+		return false, nil
 	}
 	set := data.VersionSets[setIdx]
 	lastIndex := len(set.BuildIds) - 1
 	if indexInSet != lastIndex {
-		return false, serviceerror.NewNewerBuildExists(set.BuildIds[lastIndex].Id)
+		return true, serviceerror.NewNewerBuildExists(set.BuildIds[lastIndex].Id)
 	}
-	return false, nil
+	return true, nil
 }
 
 // Looks up a version set in versioning data based on a build id associated with a task to

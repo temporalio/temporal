@@ -30,6 +30,7 @@ import (
 	"time"
 
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
+	persistencespb "go.temporal.io/server/api/persistence/v1"
 	taskqueuespb "go.temporal.io/server/api/taskqueue/v1"
 
 	"go.temporal.io/server/common/log"
@@ -135,19 +136,18 @@ func newHistoryResendInfo(
 
 func newActivityTaskPostActionInfo(
 	mutableState workflow.MutableState,
-	activityScheduleToStartTimeout time.Duration,
-	useCompatibleVersion bool,
+	activityInfo *persistencespb.ActivityInfo,
 ) (*activityTaskPostActionInfo, error) {
 	resendInfo, err := getHistoryResendInfo(mutableState)
 	if err != nil {
 		return nil, err
 	}
 
-	directive := worker_versioning.MakeDirectiveForActivityTask(mutableState.GetWorkerVersionStamp(), useCompatibleVersion)
+	directive := MakeDirectiveForActivityTask(mutableState, activityInfo)
 
 	return &activityTaskPostActionInfo{
 		historyResendInfo:                  resendInfo,
-		activityTaskScheduleToStartTimeout: activityScheduleToStartTimeout,
+		activityTaskScheduleToStartTimeout: activityInfo.ScheduleToStartTimeout.AsDuration(),
 		versionDirective:                   directive,
 	}, nil
 }
@@ -156,14 +156,14 @@ func newActivityRetryTimePostActionInfo(
 	mutableState workflow.MutableState,
 	taskQueue string,
 	activityScheduleToStartTimeout time.Duration,
-	useCompatibleVersion bool,
+	activityInfo *persistencespb.ActivityInfo,
 ) (*activityTaskPostActionInfo, error) {
 	resendInfo, err := getHistoryResendInfo(mutableState)
 	if err != nil {
 		return nil, err
 	}
 
-	directive := worker_versioning.MakeDirectiveForActivityTask(mutableState.GetWorkerVersionStamp(), useCompatibleVersion)
+	directive := MakeDirectiveForActivityTask(mutableState, activityInfo)
 
 	return &activityTaskPostActionInfo{
 		historyResendInfo:                  resendInfo,
@@ -183,10 +183,7 @@ func newWorkflowTaskPostActionInfo(
 		return nil, err
 	}
 
-	directive := worker_versioning.MakeDirectiveForWorkflowTask(
-		mutableState.GetWorkerVersionStamp(),
-		mutableState.GetLastWorkflowTaskStartedEventID(),
-	)
+	directive := worker_versioning.MakeDirectiveForWorkflowTask(mutableState.GetAssignedBuildId(), mutableState.GetMostRecentWorkerVersionStamp(), mutableState.GetLastWorkflowTaskStartedEventID())
 
 	return &workflowTaskPostActionInfo{
 		historyResendInfo:                  resendInfo,
