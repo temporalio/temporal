@@ -331,7 +331,7 @@ func (s *VersioningIntegSuite) TestCommitBuildID() {
 
 	// recent versioned poller on build id 2 --> success
 	s.pollVersionedTaskQueue(tq, "2", true)
-	cT = s.commitBuildId(ctx, tq, "2", false, cT, true)
+	s.commitBuildId(ctx, tq, "2", false, cT, true)
 	res = s.listVersioningRules(ctx, tq)
 	s.Equal(1, len(res.GetAssignmentRules()))
 	s.Equal(0, len(res.GetCompatibleRedirectRules()))
