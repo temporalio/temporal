@@ -208,11 +208,7 @@ func newPhysicalTaskQueueManager(
 		taggedMetricsHandler: taggedMetricsHandler,
 		initializedError:     future.NewFuture[struct{}](),
 	}
-	// TODO: move this to partition manager
-	// poller history is only kept for the base task queue manager
-	if !tlMgr.managesSpecificVersionSet() {
-		tlMgr.pollerHistory = newPollerHistory()
-	}
+	tlMgr.pollerHistory = newPollerHistory()
 
 	tlMgr.liveness = newLiveness(
 		clock.NewRealTimeSource(),
@@ -298,14 +294,6 @@ func (c *physicalTaskQueueManagerImpl) Stop() {
 	c.logger.Info("", tag.LifeCycleStopped)
 	c.taggedMetricsHandler.Counter(metrics.TaskQueueStoppedCounter.Name()).Record(1)
 	c.partitionMgr.engine.updatePhysicalTaskQueueGauge(c, -1)
-}
-
-// managesSpecificVersionSet returns true if this is a tqm for a specific version set in the build-id-based versioning
-// feature. Note that this is a different concept from the overall task queue having versioning data associated with it,
-// which is the usual meaning of "versioned task queue". These task queues are not interacted with directly outside of
-// a single matching node.
-func (c *physicalTaskQueueManagerImpl) managesSpecificVersionSet() bool {
-	return c.queue.VersionSet() != ""
 }
 
 func (c *physicalTaskQueueManagerImpl) SetInitializedError(err error) {
@@ -444,9 +432,7 @@ func (c *physicalTaskQueueManagerImpl) DispatchQueryTask(
 }
 
 func (c *physicalTaskQueueManagerImpl) UpdatePollerInfo(id pollerIdentity, pollMetadata *pollMetadata) {
-	if c.pollerHistory != nil {
-		c.pollerHistory.updatePollerInfo(id, pollMetadata)
-	}
+	c.pollerHistory.updatePollerInfo(id, pollMetadata)
 }
 
 // GetAllPollerInfo returns all pollers that polled from this taskqueue in last few minutes

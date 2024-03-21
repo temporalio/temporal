@@ -283,7 +283,7 @@ func NewConfig(
 				time.Hour,
 			),
 			BuildIdScavengerVisibilityRPS: dc.GetFloat64Property(
-				dynamicconfig.BuildIdScavenengerVisibilityRPS,
+				dynamicconfig.BuildIdScavengerVisibilityRPS,
 				1.0,
 			),
 		},

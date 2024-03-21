@@ -75,7 +75,9 @@ const (
 	// If sticky poller is not seem in last 10s, we treat it as sticky worker unavailable
 	// This seems aggressive, but the default sticky schedule_to_start timeout is 5s, so 10s seems reasonable.
 	stickyPollerUnavailableWindow = 10 * time.Second
-
+	// If a compatible poller hasn't been seen for this time, we fail the CommitBuildId
+	// Set to 70s so that it's a little over the max time a poller should be kept waiting.
+	versioningPollerSeenWindow        = 70 * time.Second
 	recordTaskStartedDefaultTimeout   = 10 * time.Second
 	recordTaskStartedSyncMatchTimeout = 1 * time.Second
 )
@@ -927,6 +929,7 @@ func (e *matchingEngineImpl) UpdateWorkerVersioningRules(
 				updatedClock,
 				data.GetVersioningData(),
 				req.GetCommitBuildId(),
+				tqMgr.HasPollerAfter(req.GetCommitBuildId().GetTargetBuildId(), time.Now().Add(-versioningPollerSeenWindow)),
 				e.config.AssignmentRuleLimitPerQueue(ns.Name().String()),
 			)
 		}
@@ -1696,5 +1699,5 @@ func (e *matchingEngineImpl) reviveBuildId(ns *namespace.Namespace, taskQueue st
 // We use a very short timeout for considering a sticky worker available, since tasks can also
 // be processed on the normal queue.
 func stickyWorkerAvailable(pm taskQueuePartitionManager) bool {
-	return pm != nil && pm.HasPollerAfter(time.Now().Add(-stickyPollerUnavailableWindow))
+	return pm != nil && pm.HasPollerAfter("", time.Now().Add(-stickyPollerUnavailableWindow))
 }

@@ -69,7 +69,10 @@ type (
 		// MarkAlive updates the liveness timer to keep this partition manager alive.
 		MarkAlive()
 		GetAllPollerInfo() []*taskqueuepb.PollerInfo
-		HasPollerAfter(accessTime time.Time) bool
+		// HasPollerAfter checks pollers on the queue associated with the given buildId, or the unversioned queue if an empty string is given
+		HasPollerAfter(buildId string, accessTime time.Time) bool
+		// HasAnyPollerAfter checks pollers on all versioned and unversioned queues
+		HasAnyPollerAfter(accessTime time.Time) bool
 		// DescribeTaskQueue returns information about the target task queue
 		DescribeTaskQueue(includeTaskQueueStatus bool) *matchingservice.DescribeTaskQueueResponse
 		String() string
@@ -203,7 +206,7 @@ func (pm *taskQueuePartitionManagerImpl) AddTask(
 		pm.defaultQueue.MarkAlive()
 	}
 
-	if pm.partition.IsRoot() && !pm.HasPollerAfter(time.Now().Add(-noPollerThreshold)) {
+	if pm.partition.IsRoot() && !pm.HasAnyPollerAfter(time.Now().Add(-noPollerThreshold)) {
 		// Only checks recent pollers in the root partition
 		pm.taggedMetricsHandler.Counter(metrics.NoRecentPollerTasksPerTaskQueueCounter.Name()).Record(1)
 	}
@@ -271,9 +274,9 @@ func (pm *taskQueuePartitionManagerImpl) PollTask(
 	}
 
 	if identity, ok := ctx.Value(identityKey).(string); ok && identity != "" {
-		pm.defaultQueue.UpdatePollerInfo(pollerIdentity(identity), pollMetadata)
+		dbq.UpdatePollerInfo(pollerIdentity(identity), pollMetadata)
 		// update timestamp when long poll ends
-		defer pm.defaultQueue.UpdatePollerInfo(pollerIdentity(identity), pollMetadata)
+		defer dbq.UpdatePollerInfo(pollerIdentity(identity), pollMetadata)
 	}
 	return dbq.PollTask(ctx, pollMetadata)
 }
@@ -322,15 +325,51 @@ func (pm *taskQueuePartitionManagerImpl) GetUserDataManager() userDataManager {
 
 // GetAllPollerInfo returns all pollers that polled from this taskqueue in last few minutes
 func (pm *taskQueuePartitionManagerImpl) GetAllPollerInfo() []*taskqueuepb.PollerInfo {
-	return pm.defaultQueue.GetAllPollerInfo()
+	ret := pm.defaultQueue.GetAllPollerInfo()
+	pm.versionedQueuesLock.RLock()
+	defer pm.versionedQueuesLock.RUnlock()
+	for _, ptqm := range pm.versionedQueues {
+		info := ptqm.GetAllPollerInfo()
+		ret = append(ret, info...)
+	}
+	return ret
 }
 
-func (pm *taskQueuePartitionManagerImpl) HasPollerAfter(accessTime time.Time) bool {
-	return pm.defaultQueue.HasPollerAfter(accessTime)
+func (pm *taskQueuePartitionManagerImpl) HasAnyPollerAfter(accessTime time.Time) bool {
+	if pm.defaultQueue.HasPollerAfter(accessTime) {
+		return true
+	}
+	pm.versionedQueuesLock.RLock()
+	defer pm.versionedQueuesLock.RUnlock()
+	for _, ptqm := range pm.versionedQueues {
+		if ptqm.HasPollerAfter(accessTime) {
+			return true
+		}
+	}
+	return false
+}
+
+func (pm *taskQueuePartitionManagerImpl) HasPollerAfter(buildId string, accessTime time.Time) bool {
+	if buildId == "" {
+		return pm.defaultQueue.HasPollerAfter(accessTime)
+	}
+	pm.versionedQueuesLock.RLock()
+	vq, ok := pm.versionedQueues[buildId]
+	pm.versionedQueuesLock.RUnlock()
+	if !ok {
+		return false
+	}
+	return vq.HasPollerAfter(accessTime)
 }
 
 func (pm *taskQueuePartitionManagerImpl) DescribeTaskQueue(includeTaskQueueStatus bool) *matchingservice.DescribeTaskQueueResponse {
-	return pm.defaultQueue.DescribeTaskQueue(includeTaskQueueStatus)
+	resp := &matchingservice.DescribeTaskQueueResponse{
+		Pollers: pm.GetAllPollerInfo(),
+	}
+	if includeTaskQueueStatus {
+		resp.TaskQueueStatus = pm.defaultQueue.DescribeTaskQueue(true).TaskQueueStatus
+	}
+	return resp
 }
 
 func (pm *taskQueuePartitionManagerImpl) String() string {
@@ -400,7 +439,7 @@ func (pm *taskQueuePartitionManagerImpl) getVersionedQueue(
 	return tqm, nil
 }
 
-// Returns taskQueuePartitionManager for a task queue. If not already cached, and create is true, tries
+// Returns physicalTaskQueueManager for a task queue. If not already cached, and create is true, tries
 // to get new range from DB and create one. This does not block for the task queue to be
 // initialized.
 // Pass either versionSet or build ID
