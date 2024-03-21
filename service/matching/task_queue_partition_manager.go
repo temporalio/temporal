@@ -363,13 +363,13 @@ func (pm *taskQueuePartitionManagerImpl) HasPollerAfter(buildId string, accessTi
 }
 
 func (pm *taskQueuePartitionManagerImpl) DescribeTaskQueue(includeTaskQueueStatus bool) *matchingservice.DescribeTaskQueueResponse {
-		resp := &matchingservice.DescribeTaskQueueResponse{
-			Pollers: pm.GetAllPollersInfo(),
-		}
-		if includeTaskQueueStatus {
-		     resp.TaskQueueStatus = pm.defaultQueue.DescribeTaskQueue(true).TaskQueueStatus
-		}
-		return resp
+	resp := &matchingservice.DescribeTaskQueueResponse{
+		Pollers: pm.GetAllPollerInfo(),
+	}
+	if includeTaskQueueStatus {
+		resp.TaskQueueStatus = pm.defaultQueue.DescribeTaskQueue(true).TaskQueueStatus
+	}
+	return resp
 }
 
 func (pm *taskQueuePartitionManagerImpl) String() string {
