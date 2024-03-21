@@ -26,6 +26,7 @@ package matching
 
 import (
 	"context"
+	"errors"
 	"sync"
 	"testing"
 	"time"
@@ -186,12 +187,12 @@ func (s *PartitionManagerTestSuite) TestGetAllPollerInfo() {
 	s.Assert().True(len(pollers) == 0)
 
 	// one unversioned poller
-	_, _ = s.pollWithIdentity("uv", "", false)
+	s.pollWithIdentity("uv", "", false)
 	pollers = s.partitionMgr.GetAllPollerInfo()
 	s.Assert().True(len(pollers) == 1)
 
 	// one versioned poller
-	_, _ = s.pollWithIdentity("v", "bid", true)
+	s.pollWithIdentity("v", "bid", true)
 	pollers = s.partitionMgr.GetAllPollerInfo()
 	s.Assert().True(len(pollers) == 2)
 
@@ -211,13 +212,13 @@ func (s *PartitionManagerTestSuite) TestHasAnyPollerAfter() {
 	s.Assert().False(s.partitionMgr.HasAnyPollerAfter(time.Now().Add(-5 * time.Minute)))
 
 	// one unversioned poller
-	_, _ = s.pollWithIdentity("uv", "", false)
+	s.pollWithIdentity("uv", "", false)
 	s.Assert().True(s.partitionMgr.HasAnyPollerAfter(time.Now().Add(-100 * time.Microsecond)))
 	time.Sleep(time.Millisecond)
 	s.Assert().False(s.partitionMgr.HasAnyPollerAfter(time.Now().Add(-100 * time.Microsecond)))
 
 	// one versioned poller
-	_, _ = s.pollWithIdentity("v", "bid", true)
+	s.pollWithIdentity("v", "bid", true)
 	s.Assert().True(s.partitionMgr.HasAnyPollerAfter(time.Now().Add(-100 * time.Microsecond)))
 	time.Sleep(time.Millisecond)
 	s.Assert().False(s.partitionMgr.HasAnyPollerAfter(time.Now().Add(-100 * time.Microsecond)))
@@ -228,14 +229,14 @@ func (s *PartitionManagerTestSuite) TestHasPollerAfter_Unversioned() {
 	s.Assert().False(s.partitionMgr.HasPollerAfter("", time.Now().Add(-5*time.Minute)))
 
 	// one unversioned poller
-	_, _ = s.pollWithIdentity("uv", "", false)
+	s.pollWithIdentity("uv", "", false)
 	s.Assert().True(s.partitionMgr.HasAnyPollerAfter(time.Now().Add(-500 * time.Microsecond)))
 	s.Assert().True(s.partitionMgr.HasPollerAfter("", time.Now().Add(-500*time.Microsecond)))
 	time.Sleep(time.Millisecond)
 	s.Assert().False(s.partitionMgr.HasPollerAfter("", time.Now().Add(-100*time.Microsecond)))
 
 	// one versioned poller
-	_, _ = s.pollWithIdentity("v", "bid", true)
+	s.pollWithIdentity("v", "bid", true)
 	s.Assert().False(s.partitionMgr.HasPollerAfter("", time.Now().Add(-100*time.Microsecond)))
 }
 
@@ -245,13 +246,13 @@ func (s *PartitionManagerTestSuite) TestHasPollerAfter_Versioned() {
 
 	// one version-set poller
 	bid := "bid"
-	_, _ = s.pollWithIdentity("v", bid, true)
+	s.pollWithIdentity("v", bid, true)
 	s.Assert().True(s.partitionMgr.HasPollerAfter(bid, time.Now().Add(-100*time.Microsecond)))
 	time.Sleep(time.Millisecond)
 	s.Assert().False(s.partitionMgr.HasPollerAfter(bid, time.Now().Add(-100*time.Microsecond)))
 
 	// one unversioned poller
-	_, _ = s.pollWithIdentity("uv", "", false)
+	s.pollWithIdentity("uv", "", false)
 	s.Assert().False(s.partitionMgr.HasPollerAfter(bid, time.Now().Add(-100*time.Microsecond)))
 }
 
@@ -262,12 +263,12 @@ func (s *PartitionManagerTestSuite) TestDescribeTaskQueue() {
 	s.Assert().True(len(pollers) == 0)
 
 	// one unversioned poller
-	_, _ = s.pollWithIdentity("uv", "", false)
+	s.pollWithIdentity("uv", "", false)
 	pollers = s.partitionMgr.DescribeTaskQueue(false).GetPollers()
 	s.Assert().True(len(pollers) == 1)
 
 	// one versioned poller
-	_, _ = s.pollWithIdentity("v", "bid", true)
+	s.pollWithIdentity("v", "bid", true)
 	pollers = s.partitionMgr.DescribeTaskQueue(false).GetPollers()
 	s.Assert().True(len(pollers) == 2)
 
@@ -343,16 +344,22 @@ func (s *PartitionManagerTestSuite) validatePollTask(buildId string, useVersioni
 }
 
 // UpdatePollerData is a no-op if the poller context has no identity, so we need a context with identity for any tests that check poller info
-func (s *PartitionManagerTestSuite) pollWithIdentity(pollerId, buildId string, useVersioning bool) (*internalTask, error) {
+func (s *PartitionManagerTestSuite) pollWithIdentity(pollerId, buildId string, useVersioning bool) {
 	ctx, cancel := context.WithTimeout(context.WithValue(context.Background(), identityKey, pollerId), 100*time.Millisecond)
 	defer cancel()
 
-	return s.partitionMgr.PollTask(ctx, &pollMetadata{
+	_, _, err := s.partitionMgr.PollTask(ctx, &pollMetadata{
 		workerVersionCapabilities: &common.WorkerVersionCapabilities{
 			BuildId:       buildId,
 			UseVersioning: useVersioning,
 		},
 	})
+
+	if errors.Is(err, errNoTasks) {
+		return // no task error is expected
+	}
+
+	return
 }
 
 func createVersionSet(buildId string) *persistence.CompatibleVersionSet {
