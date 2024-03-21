@@ -73,6 +73,10 @@ import (
 
 type (
 	FEReplicatorNamespaceReplicationQueue persistence.NamespaceReplicationQueue
+
+	namespaceChecker struct {
+		r namespace.Registry
+	}
 )
 
 var Module = fx.Options(
@@ -98,6 +102,7 @@ var Module = fx.Options(
 	service.PersistenceLazyLoadedServiceResolverModule,
 	fx.Provide(FEReplicatorNamespaceReplicationQueueProvider),
 	fx.Provide(AuthorizationInterceptorProvider),
+	fx.Provide(NamespaceCheckerProvider),
 	fx.Provide(func(so GrpcServerOptions) *grpc.Server { return grpc.NewServer(so.Options...) }),
 	fx.Provide(HandlerProvider),
 	fx.Provide(AdminHandlerProvider),
@@ -156,6 +161,7 @@ type GrpcServerOptions struct {
 func AuthorizationInterceptorProvider(
 	cfg *config.Config,
 	logger log.Logger,
+	namespaceChecker authorization.NamespaceChecker,
 	metricsHandler metrics.Handler,
 	authorizer authorization.Authorizer,
 	claimMapper authorization.ClaimMapper,
@@ -166,10 +172,24 @@ func AuthorizationInterceptorProvider(
 		authorizer,
 		metricsHandler,
 		logger,
+		namespaceChecker,
 		audienceGetter,
 		cfg.Global.Authorization.AuthHeaderName,
 		cfg.Global.Authorization.AuthExtraHeaderName,
 	)
+}
+
+func NamespaceCheckerProvider(registry namespace.Registry) authorization.NamespaceChecker {
+	return &namespaceChecker{r: registry}
+}
+
+func (n *namespaceChecker) Exists(name namespace.Name) error {
+	// This will get called before the namespace state validation interceptor. We want to
+	// disable readthrough to avoid polluting the negative lookup cache, e.g. if this call is
+	// for RegisterNamespace and the namespace doesn't exist yet.
+	opts := namespace.GetNamespaceOptions{DisableReadthrough: true}
+	_, err := n.r.GetNamespaceWithOptions(name, opts)
+	return err
 }
 
 func GrpcServerOptionsProvider(
