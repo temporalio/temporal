@@ -363,29 +363,13 @@ func (pm *taskQueuePartitionManagerImpl) HasPollerAfter(buildId string, accessTi
 }
 
 func (pm *taskQueuePartitionManagerImpl) DescribeTaskQueue(includeTaskQueueStatus bool) *matchingservice.DescribeTaskQueueResponse {
-	pm.versionedQueuesLock.RLock()
-	defer pm.versionedQueuesLock.RUnlock()
-	responses := make([]*matchingservice.DescribeTaskQueueResponse, len(pm.versionedQueues)+1)
-	responses[0] = pm.defaultQueue.DescribeTaskQueue(includeTaskQueueStatus)
-	i := 1
-	for _, ptqm := range pm.versionedQueues {
-		responses[i] = ptqm.DescribeTaskQueue(includeTaskQueueStatus)
-		i++
-	}
-
-	mergeResponses := func(responses []*matchingservice.DescribeTaskQueueResponse) *matchingservice.DescribeTaskQueueResponse {
-		pollers := make([]*taskqueuepb.PollerInfo, 0)
-		for _, e := range responses {
-			pollers = append(pollers, e.GetPollers()...)
+		resp := &matchingservice.DescribeTaskQueueResponse{
+			Pollers: pm.GetAllPollersInfo(),
 		}
-		return &matchingservice.DescribeTaskQueueResponse{
-			Pollers: pollers,
-			// one TaskQueueStatus doesn't make sense for multiple queues, but this response will change with the new API, so leaving it for now
-			TaskQueueStatus: responses[0].GetTaskQueueStatus(),
+		if includeTaskQueueStatus {
+		     resp.TaskQueueStatus = pm.defaultQueue.DescribeTaskQueue(true).TaskQueueStatus
 		}
-	}
-
-	return mergeResponses(responses)
+		return resp
 }
 
 func (pm *taskQueuePartitionManagerImpl) String() string {
