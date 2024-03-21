@@ -250,7 +250,7 @@ func (s *FunctionalSuite) TestOutgoingServiceRegistry() {
 }
 
 func getServiceName(baseServiceName string, i int) string {
-	return fmt.Sprintf("%s/%3d", baseServiceName, i)
+	return fmt.Sprintf("%s/%03d", baseServiceName, i)
 }
 
 func (s *FunctionalSuite) mustRegister(ns string) {
