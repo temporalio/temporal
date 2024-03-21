@@ -58,10 +58,10 @@ type (
 		// PollTask blocks waiting for a task Returns error when context deadline is exceeded
 		// maxDispatchPerSecond is the max rate at which tasks are allowed to be dispatched
 		// from this task queue to pollers
-		PollTask(ctx context.Context, pollMetadata *pollMetadata) (*internalTask, error)
+		PollTask(ctx context.Context, pollMetadata *pollMetadata) (*internalTask, bool, error)
 		// DispatchSpooledTask dispatches a task to a poller. When there are no pollers to pick
 		// up the task, this method will return error. Task will not be persisted to db
-		DispatchSpooledTask(ctx context.Context, task *internalTask) error
+		DispatchSpooledTask(ctx context.Context, task *internalTask, sourceBuildId string) error
 		// DispatchQueryTask will dispatch query to local or remote poller. If forwarded then result or error is returned,
 		// if dispatched to local poller then nil and nil is returned.
 		DispatchQueryTask(ctx context.Context, taskID string, request *matchingservice.QueryWorkflowRequest) (*matchingservice.QueryWorkflowResponse, error)
@@ -213,7 +213,7 @@ func (pm *taskQueuePartitionManagerImpl) AddTask(
 
 	syncMatched, err = pq.AddTask(ctx, params)
 	var assignedBuildId string
-	if directive.GetAssignNew() != nil {
+	if directive.GetUseAssignmentRules() != nil {
 		// return build ID only if a new one is assigned.
 		if !syncMatched {
 			// return build ID only if the task is spooled. The returned build ID is used by History to update
@@ -223,18 +223,20 @@ func (pm *taskQueuePartitionManagerImpl) AddTask(
 			assignedBuildId = pq.QueueKey().BuildId()
 		}
 	}
+
 	return assignedBuildId, syncMatched, err
 }
 
 func (pm *taskQueuePartitionManagerImpl) PollTask(
 	ctx context.Context,
 	pollMetadata *pollMetadata,
-) (*internalTask, error) {
+) (*internalTask, bool, error) {
 	dbq := pm.defaultQueue
+	versionSetUsed := false
 	if pollMetadata.workerVersionCapabilities.GetUseVersioning() {
 		userData, _, err := pm.userDataManager.GetUserData()
 		if err != nil {
-			return nil, err
+			return nil, false, err
 		}
 
 		versioningData := userData.GetData().GetVersioningData()
@@ -242,26 +244,27 @@ func (pm *taskQueuePartitionManagerImpl) PollTask(
 		if pm.partition.Kind() == enumspb.TASK_QUEUE_KIND_STICKY {
 			// In the sticky case we always use the unversioned queue
 			// For the old API, we may kick off this worker if there's a newer one.
-			_, err = checkVersionForStickyPoll(versioningData, pollMetadata.workerVersionCapabilities)
+			versionSetUsed, err = checkVersionForStickyPoll(versioningData, pollMetadata.workerVersionCapabilities)
 		} else {
 			// default queue should stay alive even if requests go to other queues
 			pm.defaultQueue.MarkAlive()
 
 			buildId := pollMetadata.workerVersionCapabilities.GetBuildId()
 			if buildId == "" {
-				return nil, serviceerror.NewInvalidArgument("build ID must be provided when using worker versioning")
+				return nil, false, serviceerror.NewInvalidArgument("build ID must be provided when using worker versioning")
 			}
 
 			var versionSet string
 			if versioningData.GetVersionSets() != nil {
 				versionSet, err = pm.getVersionSetForPoll(pollMetadata.workerVersionCapabilities, versioningData)
 				if err != nil {
-					return nil, err
+					return nil, false, err
 				}
 			}
 
 			// use version set if found, otherwise assume user is using new API
 			if versionSet != "" {
+				versionSetUsed = true
 				dbq, err = pm.getVersionedQueue(ctx, versionSet, "", true)
 			} else {
 				dbq, err = pm.getVersionedQueue(ctx, "", buildId, true)
@@ -269,7 +272,7 @@ func (pm *taskQueuePartitionManagerImpl) PollTask(
 		}
 
 		if err != nil {
-			return nil, err
+			return nil, false, err
 		}
 	}
 
@@ -278,15 +281,28 @@ func (pm *taskQueuePartitionManagerImpl) PollTask(
 		// update timestamp when long poll ends
 		defer dbq.UpdatePollerInfo(pollerIdentity(identity), pollMetadata)
 	}
-	return dbq.PollTask(ctx, pollMetadata)
+
+	task, err := dbq.PollTask(ctx, pollMetadata)
+	return task, versionSetUsed, err
 }
 
 func (pm *taskQueuePartitionManagerImpl) DispatchSpooledTask(
 	ctx context.Context,
 	task *internalTask,
+	sourceBuildId string,
 ) error {
+	if sourceBuildId != "" {
+		// Task is spooled in a build ID queue. it should be dispatched to the same build ID until
+		// we add redirect rules support.
+		pq, err := pm.getVersionedQueue(ctx, "", sourceBuildId, true)
+		if err != nil {
+			return err
+		}
+		return pq.DispatchSpooledTask(ctx, task, nil)
+	}
 	taskInfo := task.event.GetData()
 	// This task came from taskReader so task.event is always set here.
+	// TODO: in WV2 we should not look at a spooled task directive anymore [cleanup-old-wv]
 	directive := taskInfo.GetVersionDirective()
 	// Redirect and re-resolve if we're blocked in matcher and user data changes.
 	for {
@@ -521,7 +537,7 @@ func (pm *taskQueuePartitionManagerImpl) getPhysicalQueueForAdd(
 	ctx context.Context,
 	directive *taskqueuespb.TaskVersionDirective,
 ) (physicalTaskQueueManager, <-chan struct{}, error) {
-	if directive.GetValue() == nil {
+	if directive.GetBuildId() == nil {
 		// This means the tasks is a middle task belonging to an unversioned execution. Keep using unversioned.
 		return pm.defaultQueue, nil, nil
 	}
@@ -549,8 +565,8 @@ func (pm *taskQueuePartitionManagerImpl) getPhysicalQueueForAdd(
 
 	var buildId string
 	var versionSet string
-	switch dir := directive.GetValue().(type) {
-	case *taskqueuespb.TaskVersionDirective_AssignNew:
+	switch dir := directive.GetBuildId().(type) {
+	case *taskqueuespb.TaskVersionDirective_UseAssignmentRules:
 		// Need to assign build ID. Assignment rules take precedence, fallback to version sets if no matching rule is found
 		if len(data.GetAssignmentRules()) > 0 {
 			buildId = FindAssignmentBuildId(data.GetAssignmentRules())
@@ -587,8 +603,8 @@ func (pm *taskQueuePartitionManagerImpl) getPhysicalQueueForAdd(
 
 func (pm *taskQueuePartitionManagerImpl) getVersionSetForAdd(directive *taskqueuespb.TaskVersionDirective, data *persistencespb.VersioningData) (string, error) {
 	var buildId string
-	switch dir := directive.GetValue().(type) {
-	case *taskqueuespb.TaskVersionDirective_AssignNew:
+	switch dir := directive.GetBuildId().(type) {
+	case *taskqueuespb.TaskVersionDirective_UseAssignmentRules:
 		// leave buildId = "", lookupVersionSetForAdd understands that to mean "default"
 	case *taskqueuespb.TaskVersionDirective_AssignedBuildId:
 		buildId = dir.AssignedBuildId

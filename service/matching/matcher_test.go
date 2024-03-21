@@ -86,7 +86,8 @@ func (t *MatcherTestSuite) SetupTest() {
 		ForwarderMaxChildrenPerNode:  func() int { return 20 },
 	}
 	t.cfg = tlCfg
-	t.fwdr = newForwarder(&t.cfg.forwarderConfig, prtn, t.client)
+	t.fwdr, err = newForwarder(&t.cfg.forwarderConfig, t.queue, t.client)
+	t.Assert().NoError(err)
 	t.matcher = newTaskMatcher(tlCfg, t.fwdr, metrics.NoopMetricsHandler)
 
 	rootTaskqueueCfg := newTaskQueueConfig(prtn.TaskQueue(), cfg, "test-namespace")

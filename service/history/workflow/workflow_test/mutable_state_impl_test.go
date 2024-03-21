@@ -143,7 +143,7 @@ func (c *mutationTestCase) startWFT(
 		t.Fatal(err)
 	}
 
-	_, wft, err = ms.AddWorkflowTaskStartedEvent(wft.ScheduledEventID, wft.RequestID, wft.TaskQueue, "")
+	_, wft, err = ms.AddWorkflowTaskStartedEvent(wft.ScheduledEventID, wft.RequestID, wft.TaskQueue, "", nil)
 	if err != nil {
 		t.Fatal(err)
 	}

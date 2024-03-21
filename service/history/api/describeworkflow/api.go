@@ -32,6 +32,7 @@ import (
 	"go.temporal.io/api/serviceerror"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	workflowpb "go.temporal.io/api/workflow/v1"
+	"google.golang.org/protobuf/types/known/emptypb"
 	"google.golang.org/protobuf/types/known/timestamppb"
 
 	enumsspb "go.temporal.io/server/api/enums/v1"
@@ -123,7 +124,8 @@ func Invoke(
 			StateTransitionCount: executionInfo.StateTransitionCount,
 			HistorySizeBytes:     executionInfo.GetExecutionStats().GetHistorySize(),
 
-			MostRecentWorkerVersionStamp: executionInfo.WorkerVersionStamp,
+			MostRecentWorkerVersionStamp: executionInfo.MostRecentWorkerVersionStamp,
+			AssignedBuildId:              executionInfo.AssignedBuildId,
 		},
 	}
 
@@ -147,6 +149,13 @@ func Invoke(
 	for _, ai := range mutableState.GetPendingActivityInfos() {
 		p := &workflowpb.PendingActivityInfo{
 			ActivityId: ai.ActivityId,
+		}
+		if ai.GetUseWorkflowBuildId() != nil {
+			p.AssignedBuildId = &workflowpb.PendingActivityInfo_UseWorkflowBuildId{UseWorkflowBuildId: &emptypb.Empty{}}
+		} else if ai.GetLastIndependentlyAssignedBuildId() != "" {
+			p.AssignedBuildId = &workflowpb.PendingActivityInfo_LastIndependentlyAssignedBuildId{
+				LastIndependentlyAssignedBuildId: ai.GetLastIndependentlyAssignedBuildId(),
+			}
 		}
 		if ai.CancelRequested {
 			p.State = enumspb.PENDING_ACTIVITY_STATE_CANCEL_REQUESTED

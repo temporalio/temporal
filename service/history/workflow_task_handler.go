@@ -447,6 +447,10 @@ func (handler *workflowTaskHandlerImpl) handleCommandScheduleActivity(
 
 	namespace := handler.mutableState.GetNamespaceEntry().Name().String()
 
+	oldVersioningUsed := handler.mutableState.GetMostRecentWorkerVersionStamp().GetUseVersioning()
+	newVersioningUsed := handler.mutableState.GetExecutionInfo().GetAssignedBuildId() != ""
+	versioningUsed := oldVersioningUsed || newVersioningUsed
+
 	// Enable eager activity start if dynamic config enables it and either 1. workflow doesn't use versioning,
 	// or 2. workflow uses versioning and activity intends to use a compatible version (since a
 	// worker is obviously compatible with itself and we are okay dispatching an eager task knowing that there may be a
@@ -454,7 +458,7 @@ func (handler *workflowTaskHandlerImpl) handleCommandScheduleActivity(
 	// Note that if `UseCompatibleVersion` is false, it implies that the activity should run on the "default" version
 	// for the task queue.
 	eagerStartActivity := attr.RequestEagerExecution && handler.config.EnableActivityEagerExecution(namespace) &&
-		(!handler.mutableState.GetWorkerVersionStamp().GetUseVersioning() || attr.UseWorkflowBuildId)
+		(!versioningUsed || attr.UseWorkflowBuildId)
 
 	_, _, err := handler.mutableState.AddActivityTaskScheduledEvent(
 		handler.workflowTaskCompletedID,
@@ -493,11 +497,17 @@ func (handler *workflowTaskHandlerImpl) handlePostCommandEagerExecuteActivity(
 		return nil, nil
 	}
 
+	var stamp *commonpb.WorkerVersionStamp
+	// eager activity always uses workflow's build ID
+	buildId := handler.mutableState.GetAssignedBuildId()
+	stamp = &commonpb.WorkerVersionStamp{UseVersioning: buildId != "", BuildId: buildId}
+
 	if _, err := handler.mutableState.AddActivityTaskStartedEvent(
 		ai,
 		ai.GetScheduledEventId(),
 		uuid.New(),
 		handler.identity,
+		stamp,
 	); err != nil {
 		return nil, err
 	}
