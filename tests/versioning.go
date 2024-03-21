@@ -48,7 +48,6 @@ import (
 	"go.temporal.io/sdk/temporal"
 	"go.temporal.io/sdk/worker"
 	"go.temporal.io/sdk/workflow"
-
 	"go.temporal.io/server/api/adminservice/v1"
 	"go.temporal.io/server/api/matchingservice/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
@@ -301,6 +300,42 @@ func (s *VersioningIntegSuite) TestRedirectRuleDelete() {
 
 	// success with same conflict token and valid source
 	s.deleteRedirectRule(ctx, tq, "2", cT, true)
+}
+
+func (s *VersioningIntegSuite) TestCommitBuildID() {
+	// setup
+	ctx := NewContext()
+	tq := "test-commit-build-id"
+
+	// no recent poller --> failure
+	s.commitBuildId(ctx, tq, "1", false, nil, false)
+
+	// no recent poller + force --> success
+	s.commitBuildId(ctx, tq, "1", true, nil, true)
+	res := s.listVersioningRules(ctx, tq)
+	s.Equal(1, len(res.GetAssignmentRules()))
+	s.Equal(0, len(res.GetCompatibleRedirectRules()))
+	s.Equal("1", res.GetAssignmentRules()[0].GetRule().GetTargetBuildId())
+	s.Equal(nil, res.GetAssignmentRules()[0].GetRule().GetRamp())
+
+	// recent versioned poller on wrong build id --> failure
+	s.pollVersionedTaskQueue(tq, "3", true)
+	s.commitBuildId(ctx, tq, "2", false, nil, false)
+
+	// recent unversioned poller on build id 2 --> failure
+	s.pollVersionedTaskQueue(tq, "2", false)
+	s.commitBuildId(ctx, tq, "2", false, nil, false)
+
+	// recent versioned poller on build id 2 --> success
+	s.pollVersionedTaskQueue(tq, "2", true)
+	s.commitBuildId(ctx, tq, "2", false, nil, true)
+	res = s.listVersioningRules(ctx, tq)
+	s.Equal(1, len(res.GetAssignmentRules()))
+	s.Equal(0, len(res.GetCompatibleRedirectRules()))
+	s.Equal("2", res.GetAssignmentRules()[0].GetRule().GetTargetBuildId())
+	s.Equal(nil, res.GetAssignmentRules()[0].GetRule().GetRamp())
+
+	// todo: test that the recentness of the poller goes away. Not sure how to do this without putting the 70s time window in the dynamic config so that we can make it shorter for the test.
 }
 
 func mkRedirectRulesMap(redirectRules []*taskqueuepb.TimestampedCompatibleBuildIdRedirectRule) map[string]string {
@@ -2065,6 +2100,24 @@ func (s *VersioningIntegSuite) commitBuildId(
 		s.Nil(res)
 		return nil
 	}
+}
+
+func (s *VersioningIntegSuite) pollVersionedTaskQueue(tq, buildID string, useVersioning bool) {
+	wf := func(ctx workflow.Context) (string, error) {
+		return "done!", nil
+	}
+
+	w1 := worker.New(s.sdkClient, tq, worker.Options{
+		BuildID:                          buildID,
+		UseBuildIDForVersioning:          useVersioning,
+		MaxConcurrentWorkflowTaskPollers: numPollers,
+	})
+	w1.RegisterWorkflow(wf)
+	s.NoError(w1.Start())
+	defer w1.Stop()
+
+	// wait for it to start polling
+	time.Sleep(200 * time.Millisecond)
 }
 
 // addNewDefaultBuildId updates build id info on a task queue with a new build id in a new default set.
