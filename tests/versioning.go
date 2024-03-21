@@ -307,11 +307,14 @@ func (s *VersioningIntegSuite) TestCommitBuildID() {
 	ctx := NewContext()
 	tq := "test-commit-build-id"
 
+	// get initial conflict token
+	cT := s.listVersioningRules(ctx, tq).GetConflictToken()
+
 	// no recent poller --> failure
-	s.commitBuildId(ctx, tq, "1", false, nil, false)
+	s.commitBuildId(ctx, tq, "1", false, cT, false)
 
 	// no recent poller + force --> success
-	s.commitBuildId(ctx, tq, "1", true, nil, true)
+	cT = s.commitBuildId(ctx, tq, "1", true, cT, true)
 	res := s.listVersioningRules(ctx, tq)
 	s.Equal(1, len(res.GetAssignmentRules()))
 	s.Equal(0, len(res.GetCompatibleRedirectRules()))
@@ -320,22 +323,20 @@ func (s *VersioningIntegSuite) TestCommitBuildID() {
 
 	// recent versioned poller on wrong build id --> failure
 	s.pollVersionedTaskQueue(tq, "3", true)
-	s.commitBuildId(ctx, tq, "2", false, nil, false)
+	s.commitBuildId(ctx, tq, "2", false, cT, false)
 
 	// recent unversioned poller on build id 2 --> failure
 	s.pollVersionedTaskQueue(tq, "2", false)
-	s.commitBuildId(ctx, tq, "2", false, nil, false)
+	s.commitBuildId(ctx, tq, "2", false, cT, false)
 
 	// recent versioned poller on build id 2 --> success
 	s.pollVersionedTaskQueue(tq, "2", true)
-	s.commitBuildId(ctx, tq, "2", false, nil, true)
+	cT = s.commitBuildId(ctx, tq, "2", false, cT, true)
 	res = s.listVersioningRules(ctx, tq)
 	s.Equal(1, len(res.GetAssignmentRules()))
 	s.Equal(0, len(res.GetCompatibleRedirectRules()))
 	s.Equal("2", res.GetAssignmentRules()[0].GetRule().GetTargetBuildId())
 	s.Equal(nil, res.GetAssignmentRules()[0].GetRule().GetRamp())
-
-	// todo: test that the recentness of the poller goes away. Not sure how to do this without putting the 70s time window in the dynamic config so that we can make it shorter for the test.
 }
 
 func mkRedirectRulesMap(redirectRules []*taskqueuepb.TimestampedCompatibleBuildIdRedirectRule) map[string]string {
