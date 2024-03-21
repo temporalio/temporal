@@ -100,6 +100,13 @@ func mkNewDeleteRedirectReq(source string) *workflowservice.UpdateWorkerVersioni
 	}
 }
 
+func mkNewCommitBuildIdReq(target string, force bool) *workflowservice.UpdateWorkerVersioningRulesRequest_CommitBuildId {
+	return &workflowservice.UpdateWorkerVersioningRulesRequest_CommitBuildId{
+		TargetBuildId: target,
+		Force:         force,
+	}
+}
+
 func mkRedirectRulePersistence(rule *taskqueuepb.CompatibleBuildIdRedirectRule, createTs, deleteTs *hlc.Clock) *persistencepb.RedirectRule {
 	return &persistencepb.RedirectRule{
 		Rule:            rule,
@@ -196,7 +203,7 @@ func TestInsertAssignmentRuleBasic(t *testing.T) {
 	maxRules := 10
 	clock := hlc.Zero(1)
 	initialData := mkInitialData(0, clock)
-	assert.False(t, containsUnfiltered(initialData.GetAssignmentRules()))
+	assert.False(t, containsUnconditional(initialData.GetAssignmentRules()))
 	expected := &persistencepb.VersioningData{AssignmentRules: []*persistencepb.AssignmentRule{}}
 
 	// insert at index 0
@@ -385,7 +392,7 @@ func TestReplaceAssignmentRuleTerminalBuildID(t *testing.T) {
 	assert.NoError(t, err)
 }
 
-func TestReplaceAssignmentRuleTestRequireUnfiltered(t *testing.T) {
+func TestReplaceAssignmentRuleTestrequireUnconditional(t *testing.T) {
 	t.Parallel()
 	clock := hlc.Zero(1)
 	data := mkInitialData(0, clock)
@@ -453,7 +460,7 @@ func TestDeleteAssignmentRuleBasic(t *testing.T) {
 	assert.Error(t, err)
 }
 
-func TestDeleteAssignmentRuleTestRequireUnfiltered(t *testing.T) {
+func TestDeleteAssignmentRuleTestrequireUnconditional(t *testing.T) {
 	t.Parallel()
 	clock := hlc.Zero(1)
 	data := mkInitialData(0, clock)
@@ -882,6 +889,117 @@ func TestCleanupRedirectRuleTombstones(t *testing.T) {
 	assert.NotContains(t, sources, "1")
 	assert.NotContains(t, sources, "2")
 	assert.Contains(t, sources, "3")
+}
+
+func TestCommitBuildIDBasic(t *testing.T) {
+	t.Parallel()
+	maxRules := 10
+	timesource := commonclock.NewRealTimeSource()
+	clock1 := hlc.Zero(1)
+	clock2 := hlc.Next(clock1, timesource)
+	data := &persistencepb.VersioningData{
+		AssignmentRules: []*persistencepb.AssignmentRule{
+			mkAssignmentRulePersistence(mkAssignmentRule("1", mkNewAssignmentPercentageRamp(1)), clock1, nil),
+			mkAssignmentRulePersistence(mkAssignmentRule("10", mkNewAssignmentPercentageRamp(1)), clock1, nil),
+			mkAssignmentRulePersistence(mkAssignmentRule("100", nil), clock1, nil),
+		},
+	}
+	expected := &persistencepb.VersioningData{
+		AssignmentRules: []*persistencepb.AssignmentRule{
+			mkAssignmentRulePersistence(mkAssignmentRule("1", mkNewAssignmentPercentageRamp(1)), clock1, nil),
+			mkAssignmentRulePersistence(mkAssignmentRule("10", mkNewAssignmentPercentageRamp(1)), clock1, clock2),
+			mkAssignmentRulePersistence(mkAssignmentRule("100", nil), clock1, clock2),
+			mkAssignmentRulePersistence(mkAssignmentRule("10", nil), clock2, nil),
+		},
+	}
+	var err error
+
+	data, err = CommitBuildID(clock2, data, mkNewCommitBuildIdReq("10", false), true, maxRules)
+	assert.NoError(t, err)
+	protoassert.ProtoEqual(t, expected, data)
+
+	// make sure multiple commits are idempotent except for timestamps
+	clock3 := hlc.Next(clock2, timesource)
+	expected = &persistencepb.VersioningData{
+		AssignmentRules: []*persistencepb.AssignmentRule{
+			mkAssignmentRulePersistence(mkAssignmentRule("1", mkNewAssignmentPercentageRamp(1)), clock1, nil),
+			mkAssignmentRulePersistence(mkAssignmentRule("10", mkNewAssignmentPercentageRamp(1)), clock1, clock2),
+			mkAssignmentRulePersistence(mkAssignmentRule("100", nil), clock1, clock2),
+			mkAssignmentRulePersistence(mkAssignmentRule("10", nil), clock2, clock3),
+			mkAssignmentRulePersistence(mkAssignmentRule("10", nil), clock3, nil),
+		},
+	}
+	data, err = CommitBuildID(clock3, data, mkNewCommitBuildIdReq("10", false), true, maxRules)
+	assert.NoError(t, err)
+	protoassert.ProtoEqual(t, expected, data)
+}
+
+func TestCommitBuildIDNoRecentPoller(t *testing.T) {
+	// note: correctly generating hasRecentPoller needs to be tested in the end-to-end tests
+	t.Parallel()
+	maxRules := 10
+	timesource := commonclock.NewRealTimeSource()
+	clock1 := hlc.Zero(1)
+	clock2 := hlc.Next(clock1, timesource)
+	data := &persistencepb.VersioningData{
+		AssignmentRules: []*persistencepb.AssignmentRule{
+			mkAssignmentRulePersistence(mkAssignmentRule("1", mkNewAssignmentPercentageRamp(1)), clock1, nil),
+			mkAssignmentRulePersistence(mkAssignmentRule("10", mkNewAssignmentPercentageRamp(1)), clock1, nil),
+			mkAssignmentRulePersistence(mkAssignmentRule("100", nil), clock1, nil),
+		},
+	}
+	var err error
+
+	// without force --> fail
+	_, err = CommitBuildID(clock2, data, mkNewCommitBuildIdReq("10", false), false, maxRules)
+	assert.Error(t, err)
+
+	// with force --> success
+	_, err = CommitBuildID(clock2, data, mkNewCommitBuildIdReq("10", true), false, maxRules)
+	assert.NoError(t, err)
+}
+
+func TestCommitBuildIDInVersionSet(t *testing.T) {
+	t.Parallel()
+	maxRules := 10
+	timesource := commonclock.NewRealTimeSource()
+	clock1 := hlc.Zero(1)
+	clock2 := hlc.Next(clock1, timesource)
+	data := mkInitialData(1, clock1)
+	data.AssignmentRules = []*persistencepb.AssignmentRule{
+		mkAssignmentRulePersistence(mkAssignmentRule("0", mkNewAssignmentPercentageRamp(1)), clock1, nil),
+		mkAssignmentRulePersistence(mkAssignmentRule("10", mkNewAssignmentPercentageRamp(1)), clock1, nil),
+		mkAssignmentRulePersistence(mkAssignmentRule("100", nil), clock1, nil),
+	}
+	var err error
+
+	// with target 0 --> fail
+	_, err = CommitBuildID(clock2, data, mkNewCommitBuildIdReq("0", false), true, maxRules)
+	assert.Error(t, err)
+
+	// with target 10 --> success
+	_, err = CommitBuildID(clock2, data, mkNewCommitBuildIdReq("10", false), true, maxRules)
+	assert.NoError(t, err)
+}
+
+func TestCommitBuildIDMaxAssignmentRules(t *testing.T) {
+	t.Parallel()
+	maxRules := 3
+	timesource := commonclock.NewRealTimeSource()
+	clock1 := hlc.Zero(1)
+	clock2 := hlc.Next(clock1, timesource)
+	data := &persistencepb.VersioningData{
+		AssignmentRules: []*persistencepb.AssignmentRule{
+			mkAssignmentRulePersistence(mkAssignmentRule("1", mkNewAssignmentPercentageRamp(1)), clock1, nil),
+			mkAssignmentRulePersistence(mkAssignmentRule("10", mkNewAssignmentPercentageRamp(1)), clock1, nil),
+			mkAssignmentRulePersistence(mkAssignmentRule("100", mkNewAssignmentPercentageRamp(1)), clock1, nil),
+		},
+	}
+	var err error
+
+	// commit a new target, no rules to be deleted --> fail
+	_, err = CommitBuildID(clock2, data, mkNewCommitBuildIdReq("1000", false), false, maxRules)
+	assert.Error(t, err)
 }
 
 // eg.
