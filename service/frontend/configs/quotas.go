@@ -85,7 +85,7 @@ var (
 		"PollWorkflowExecutionUpdate":        3,
 		"GetWorkflowExecutionHistoryReverse": 3,
 		"GetWorkerBuildIdCompatibility":      3,
-		"GetWorkerVersioningRules":           3,
+		"ListWorkerVersioningRules":          3,
 		"GetWorkerTaskReachability":          3,
 		"DeleteWorkflowExecution":            3,
 

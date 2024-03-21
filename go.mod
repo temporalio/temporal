@@ -2,8 +2,6 @@ module go.temporal.io/server
 
 go 1.21
 
-replace go.temporal.io/api => github.com/temporalio/api-go v1.26.1-0.20240319234532-d3c0855dc795
-
 require (
 	cloud.google.com/go/storage v1.36.0
 	github.com/aws/aws-sdk-go v1.44.289
@@ -138,8 +136,8 @@ require (
 	golang.org/x/tools v0.16.0 // indirect
 	google.golang.org/appengine v1.6.8 // indirect
 	google.golang.org/genproto v0.0.0-20240125205218-1f4bbc51befe // indirect
-	google.golang.org/genproto/googleapis/api v0.0.0-20240318140521-94a12d6c2237
-	google.golang.org/genproto/googleapis/rpc v0.0.0-20240318140521-94a12d6c2237 // indirect
+	google.golang.org/genproto/googleapis/api v0.0.0-20240314234333-6e1732d8331c
+	google.golang.org/genproto/googleapis/rpc v0.0.0-20240314234333-6e1732d8331c // indirect
 	google.golang.org/protobuf v1.33.0
 	gopkg.in/inf.v0 v0.9.1 // indirect
 	lukechampine.com/uint128 v1.3.0 // indirect
