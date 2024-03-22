@@ -2098,7 +2098,7 @@ func (s *VersioningIntegSuite) waitForChan(ctx context.Context, ch chan struct{}
 }
 
 func (s *VersioningIntegSuite) unloadTaskQueue(ctx context.Context, tq string) {
-	_, err := s.testCluster.GetMatchingClient().ForceUnloadTaskQueue(ctx, &matchingservice.ForceUnloadTaskQueueRequest{
+	_, err := s.MatchingServiceClient().ForceUnloadTaskQueue(ctx, &matchingservice.ForceUnloadTaskQueueRequest{
 		NamespaceId:   s.getNamespaceID(s.namespace),
 		TaskQueue:     tq,
 		TaskQueueType: enumspb.TASK_QUEUE_TYPE_WORKFLOW,

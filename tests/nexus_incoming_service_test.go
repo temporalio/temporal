@@ -109,11 +109,10 @@ func (s *FunctionalSuite) TestCreateOrUpdateNexusIncomingService_Matching() {
 		},
 	}
 
-	matchingClient := s.testCluster.GetMatchingClient()
 	for _, tc := range testCases {
 		tc := tc
 		s.T().Run(tc.name, func(t *testing.T) {
-			resp, err := matchingClient.CreateOrUpdateNexusIncomingService(
+			resp, err := s.MatchingServiceClient().CreateOrUpdateNexusIncomingService(
 				NewContext(),
 				&matchingservice.CreateOrUpdateNexusIncomingServiceRequest{
 					Service: tc.service,
@@ -148,11 +147,10 @@ func (s *FunctionalSuite) TestDeleteNexusIncomingService_Matching() {
 	}
 
 	s.createNexusIncomingService("service-to-delete")
-	matchingClient := s.testCluster.GetMatchingClient()
 	for _, tc := range testCases {
 		tc := tc
 		s.T().Run(tc.name, func(t *testing.T) {
-			resp, err := matchingClient.DeleteNexusIncomingService(
+			resp, err := s.MatchingServiceClient().DeleteNexusIncomingService(
 				NewContext(),
 				&matchingservice.DeleteNexusIncomingServiceRequest{
 					Name: tc.serviceName,
@@ -169,8 +167,7 @@ func (s *FunctionalSuite) TestListNexusIncomingServices_Matching() {
 	s.createNexusIncomingService("list-test-service2")
 
 	// get expected table version and services for the course of the tests
-	matchingClient := s.testCluster.GetMatchingClient()
-	resp, err := matchingClient.ListNexusIncomingServices(
+	resp, err := s.MatchingServiceClient().ListNexusIncomingServices(
 		NewContext(),
 		&matchingservice.ListNexusIncomingServicesRequest{
 			PageSize:              100,
@@ -294,7 +291,7 @@ func (s *FunctionalSuite) TestListNexusIncomingServices_Matching() {
 			listReqDone := make(chan struct{})
 			go func() {
 				defer close(listReqDone)
-				resp, err := matchingClient.ListNexusIncomingServices(NewContext(), tc.request)
+				resp, err := s.MatchingServiceClient().ListNexusIncomingServices(NewContext(), tc.request)
 				tc.assertion(resp, err)
 			}()
 			if tc.request.Wait && tc.request.NextPageToken == nil && tc.request.LastKnownTableVersion != 0 {
@@ -307,7 +304,7 @@ func (s *FunctionalSuite) TestListNexusIncomingServices_Matching() {
 
 func (s *FunctionalSuite) TestListNexusIncomingServicesOrdering_Matching() {
 	// get initial table version since it has been modified by other tests
-	resp, err := s.testCluster.GetMatchingClient().ListNexusIncomingServices(NewContext(), &matchingservice.ListNexusIncomingServicesRequest{
+	resp, err := s.MatchingServiceClient().ListNexusIncomingServices(NewContext(), &matchingservice.ListNexusIncomingServicesRequest{
 		LastKnownTableVersion: 0,
 		PageSize:              0,
 	})
@@ -339,7 +336,7 @@ func (s *FunctionalSuite) TestListNexusIncomingServicesOrdering_Matching() {
 	s.Len(persistenceResp2.Entries, numServices/2)
 
 	// list from matching level
-	matchingClient := s.testCluster.GetMatchingClient()
+	matchingClient := s.MatchingServiceClient()
 	matchingResp1, err := matchingClient.ListNexusIncomingServices(NewContext(), &matchingservice.ListNexusIncomingServicesRequest{
 		LastKnownTableVersion: tableVersion,
 		PageSize:              int32(numServices / 2),
@@ -363,7 +360,7 @@ func (s *FunctionalSuite) TestListNexusIncomingServicesOrdering_Matching() {
 }
 
 func (s *FunctionalSuite) createNexusIncomingService(name string) *persistencepb.NexusIncomingServiceEntry {
-	resp, err := s.testCluster.GetMatchingClient().CreateOrUpdateNexusIncomingService(
+	resp, err := s.MatchingServiceClient().CreateOrUpdateNexusIncomingService(
 		NewContext(),
 		&matchingservice.CreateOrUpdateNexusIncomingServiceRequest{
 			Service: &nexus.IncomingService{
