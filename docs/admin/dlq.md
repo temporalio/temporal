@@ -10,6 +10,8 @@ To enable the DLQ for history replication tasks, set `history.enableHistoryRepli
 
 ### History Tasks DLQ
 To enable the DLQ for non-replication history tasks, set `history.TaskDLQEnabled` to true.
+You can specify the maximum number of task execution attempts with unexpected errors using the dynamic config
+`history.TaskDLQUnexpectedErrorAttempts`. The task will be sent to DLQ after the specified number of attempts.
 
 ## Detection
 There is a metric `dlq_writes`, which is incremented each time a message is enqueued to the DLQ.
