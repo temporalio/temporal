@@ -53,15 +53,12 @@ message TaskQueueVersionInfoInternal {
     // Empty means unversioned.
     string build_id = 1;
     PhysicalTaskQueueInfo physical_task_queue_info = 2;
-    // Only applicable to versioned workers (workers with `useVersioning=true`).
-    temporal.api.enums.v1.BuildIdTaskReachability task_reachability = 3;
 }
 
 message PhysicalTaskQueueInfo {
     // Unversioned workers (with `useVersioning=false`) are reported in unversioned result even if they set a Build ID.
     repeated temporal.api.taskqueue.v1.PollerInfo pollers = 1;
-    temporal.server.api.taskqueue.v1.TaskQueuePartitionStatus status = 2;
-    temporal.api.taskqueue.v1.BacklogInfo backlog_info = 3;
+    temporal.api.taskqueue.v1.BacklogInfo backlog_info = 2;
 }
 
 // Represents a normal or sticky partition of a task queue.

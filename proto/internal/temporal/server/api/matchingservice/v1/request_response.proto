@@ -207,10 +207,8 @@ message DescribeTaskQueuePartitionRequest {
     bool report_backlog_info = 4;
     // Report list of pollers for requested task queue types and versions
     bool report_pollers = 5;
-    // Report task reachability for the requested versions
-    bool report_task_reachability = 6;
     // Report task queue status
-    bool report_task_queue_status = 7;
+    bool report_task_queue_status = 6;
 }
 
 message DescribeTaskQueuePartitionResponse {
