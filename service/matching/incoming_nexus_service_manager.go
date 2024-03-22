@@ -359,10 +359,7 @@ func (m *incomingNexusServiceManager) loadServices(ctx context.Context) error {
 	}
 
 	// reset cached view since we will be paging from the start
-	m.tableVersion = 0
-	m.services = []*persistencepb.NexusIncomingServiceEntry{}
-	m.servicesByID = make(map[string]*persistencepb.NexusIncomingServiceEntry)
-	m.servicesByName = make(map[string]*persistencepb.NexusIncomingServiceEntry)
+	m.resetCacheStateLocked()
 
 	var pageToken []byte
 
@@ -375,10 +372,8 @@ func (m *incomingNexusServiceManager) loadServices(ctx context.Context) error {
 		if err != nil {
 			if errors.Is(err, p.ErrNexusTableVersionConflict) {
 				// indicates table was updated during paging, so reset and start from the beginning
+				m.resetCacheStateLocked()
 				pageToken = nil
-				m.tableVersion = 0
-				m.services = []*persistencepb.NexusIncomingServiceEntry{}
-				m.servicesByID = make(map[string]*persistencepb.NexusIncomingServiceEntry)
 				continue
 			}
 			return err
@@ -399,4 +394,11 @@ func (m *incomingNexusServiceManager) loadServices(ctx context.Context) error {
 
 	m.hasLoadedServices.Store(ctx.Err() == nil)
 	return ctx.Err()
+}
+
+func (m *incomingNexusServiceManager) resetCacheStateLocked() {
+	m.tableVersion = 0
+	m.services = []*persistencepb.NexusIncomingServiceEntry{}
+	m.servicesByID = make(map[string]*persistencepb.NexusIncomingServiceEntry)
+	m.servicesByName = make(map[string]*persistencepb.NexusIncomingServiceEntry)
 }
