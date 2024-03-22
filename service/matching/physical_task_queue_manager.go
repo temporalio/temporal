@@ -129,7 +129,7 @@ type (
 		UpdatePollerInfo(pollerIdentity, *pollMetadata)
 		GetAllPollerInfo() []*taskqueuepb.PollerInfo
 		HasPollerAfter(accessTime time.Time) bool
-		// LegacyDescribeTaskQueue returns information about the target task queue's pollers and the status of its default queue
+		// LegacyDescribeTaskQueue returns pollers info and legacy TaskQueueStatus for this physical queue
 		LegacyDescribeTaskQueue(includeTaskQueueStatus bool) *matchingservice.DescribeTaskQueueResponse
 		// Describe returns information about the physical task queue
 		Describe() *taskqueuespb.PhysicalTaskQueueInfo
