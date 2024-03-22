@@ -40,6 +40,7 @@ import (
 	historypb "go.temporal.io/api/history/v1"
 	"go.temporal.io/api/serviceerror"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
+	updatepb "go.temporal.io/api/update/v1"
 	"go.temporal.io/api/workflowservice/v1"
 	"google.golang.org/protobuf/types/known/durationpb"
 
@@ -948,4 +949,48 @@ func (s *FunctionalSuite) TestWorkflowRetryFailures() {
   3 WorkflowTaskStarted
   4 WorkflowTaskCompleted
   5 WorkflowExecutionFailed`, events)
+}
+
+func (s *FunctionalSuite) TestExecuteMultiOperation() {
+	id := "functional-multi-operation-test"
+	wt := "functional-multi-operation-test-type"
+	tl := "functional-multi-operation-test-taskqueue"
+
+	s.Run("Start Workflow and send Update", func() {
+		request := &workflowservice.ExecuteMultiOperationRequest{
+			Namespace: s.namespace,
+			Operations: []*workflowservice.WorkflowOperation{
+				{
+					Operation: &workflowservice.WorkflowOperation_StartWorkflow{
+						StartWorkflow: &workflowservice.StartWorkflowExecutionRequest{
+							RequestId:          uuid.New(),
+							WorkflowId:         id,
+							WorkflowType:       &commonpb.WorkflowType{Name: wt},
+							TaskQueue:          &taskqueuepb.TaskQueue{Name: tl, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
+							Input:              nil,
+							WorkflowRunTimeout: durationpb.New(100 * time.Second),
+							Identity:           "worker1",
+						},
+					},
+				},
+				{
+					Operation: &workflowservice.WorkflowOperation_UpdateWorkflow{
+						UpdateWorkflow: &workflowservice.UpdateWorkflowExecutionRequest{
+							Request: &updatepb.Request{
+								Meta:  &updatepb.Meta{UpdateId: "1"},
+								Input: &updatepb.Input{Name: "UPDATE"},
+							},
+							WorkflowExecution: &commonpb.WorkflowExecution{WorkflowId: id},
+							WaitPolicy:        &updatepb.WaitPolicy{LifecycleStage: enumspb.UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_COMPLETED},
+						},
+					},
+				},
+			},
+		}
+
+		_, err := s.engine.ExecuteMultiOperation(NewContext(), request)
+		s.NoError(err)
+
+		// TODO
+	})
 }

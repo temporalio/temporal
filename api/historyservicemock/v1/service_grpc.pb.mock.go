@@ -221,6 +221,26 @@ func (mr *MockHistoryServiceClientMockRecorder) DescribeWorkflowExecution(ctx, i
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DescribeWorkflowExecution", reflect.TypeOf((*MockHistoryServiceClient)(nil).DescribeWorkflowExecution), varargs...)
 }
 
+// ExecuteMultiOperation mocks base method.
+func (m *MockHistoryServiceClient) ExecuteMultiOperation(ctx context.Context, in *historyservice.ExecuteMultiOperationRequest, opts ...grpc.CallOption) (*historyservice.ExecuteMultiOperationResponse, error) {
+	m.ctrl.T.Helper()
+	varargs := []interface{}{ctx, in}
+	for _, a := range opts {
+		varargs = append(varargs, a)
+	}
+	ret := m.ctrl.Call(m, "ExecuteMultiOperation", varargs...)
+	ret0, _ := ret[0].(*historyservice.ExecuteMultiOperationResponse)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// ExecuteMultiOperation indicates an expected call of ExecuteMultiOperation.
+func (mr *MockHistoryServiceClientMockRecorder) ExecuteMultiOperation(ctx, in interface{}, opts ...interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	varargs := append([]interface{}{ctx, in}, opts...)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ExecuteMultiOperation", reflect.TypeOf((*MockHistoryServiceClient)(nil).ExecuteMultiOperation), varargs...)
+}
+
 // ForceDeleteWorkflowExecution mocks base method.
 func (m *MockHistoryServiceClient) ForceDeleteWorkflowExecution(ctx context.Context, in *historyservice.ForceDeleteWorkflowExecutionRequest, opts ...grpc.CallOption) (*historyservice.ForceDeleteWorkflowExecutionResponse, error) {
 	m.ctrl.T.Helper()
@@ -1559,6 +1579,21 @@ func (m *MockHistoryServiceServer) DescribeWorkflowExecution(arg0 context.Contex
 func (mr *MockHistoryServiceServerMockRecorder) DescribeWorkflowExecution(arg0, arg1 interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DescribeWorkflowExecution", reflect.TypeOf((*MockHistoryServiceServer)(nil).DescribeWorkflowExecution), arg0, arg1)
+}
+
+// ExecuteMultiOperation mocks base method.
+func (m *MockHistoryServiceServer) ExecuteMultiOperation(arg0 context.Context, arg1 *historyservice.ExecuteMultiOperationRequest) (*historyservice.ExecuteMultiOperationResponse, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "ExecuteMultiOperation", arg0, arg1)
+	ret0, _ := ret[0].(*historyservice.ExecuteMultiOperationResponse)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// ExecuteMultiOperation indicates an expected call of ExecuteMultiOperation.
+func (mr *MockHistoryServiceServerMockRecorder) ExecuteMultiOperation(arg0, arg1 interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ExecuteMultiOperation", reflect.TypeOf((*MockHistoryServiceServer)(nil).ExecuteMultiOperation), arg0, arg1)
 }
 
 // ForceDeleteWorkflowExecution mocks base method.

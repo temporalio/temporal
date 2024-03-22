@@ -124,6 +124,7 @@ var (
 	errUpdateWorkflowExecutionAPINotAllowed           = serviceerror.NewPermissionDenied("UpdateWorkflowExecution operation is disabled on this namespace.", "")
 	errUpdateWorkflowExecutionAsyncAcceptedNotAllowed = serviceerror.NewPermissionDenied("UpdateWorkflowExecution issued asynchronously and waiting on update accepted is disabled on this namespace", "")
 	errUpdateWorkflowExecutionAsyncAdmittedNotAllowed = serviceerror.NewPermissionDenied("UpdateWorkflowExecution issued asynchronously and waiting on update admitted is disabled on this namespace", "")
+	errMultiOperationAPINotAllowed                    = serviceerror.NewPermissionDenied("ExecuteMultiOperation API is disabled on this namespace.", "")
 
 	errWorkerVersioningNotAllowed = serviceerror.NewPermissionDenied("Worker versioning is disabled on this namespace.", "")
 
