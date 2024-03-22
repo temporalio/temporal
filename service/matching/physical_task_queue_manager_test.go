@@ -33,9 +33,7 @@ import (
 	"time"
 
 	"github.com/golang/mock/gomock"
-	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	"go.temporal.io/server/api/matchingservicemock/v1"
@@ -71,102 +69,6 @@ func defaultTqmTestOpts(controller *gomock.Controller) *tqmTestOpts {
 	}
 }
 
-func TestDeliverBufferTasks(t *testing.T) {
-	controller := gomock.NewController(t)
-	defer controller.Finish()
-
-	tests := []func(tlm *physicalTaskQueueManagerImpl){
-		func(tlm *physicalTaskQueueManagerImpl) { close(tlm.taskReader.taskBuffer) },
-		func(tlm *physicalTaskQueueManagerImpl) { tlm.taskReader.gorogrp.Cancel() },
-		func(tlm *physicalTaskQueueManagerImpl) {
-			rps := 0.1
-			tlm.matcher.UpdateRatelimit(&rps)
-			tlm.taskReader.taskBuffer <- &persistencespb.AllocatedTaskInfo{
-				Data: &persistencespb.TaskInfo{},
-			}
-			err := tlm.matcher.rateLimiter.Wait(context.Background()) // consume the token
-			assert.NoError(t, err)
-			tlm.taskReader.gorogrp.Cancel()
-		},
-	}
-	for _, test := range tests {
-		tlm := mustCreateTestTaskQueueManager(t, controller)
-		tlm.taskReader.gorogrp.Go(tlm.taskReader.dispatchBufferedTasks)
-		test(tlm)
-		// dispatchBufferedTasks should stop after invocation of the test function
-		tlm.taskReader.gorogrp.Wait()
-	}
-}
-
-func TestDeliverBufferTasks_NoPollers(t *testing.T) {
-	controller := gomock.NewController(t)
-	defer controller.Finish()
-
-	tlm := mustCreateTestTaskQueueManager(t, controller)
-	tlm.taskReader.taskBuffer <- &persistencespb.AllocatedTaskInfo{
-		Data: &persistencespb.TaskInfo{},
-	}
-	tlm.taskReader.gorogrp.Go(tlm.taskReader.dispatchBufferedTasks)
-	time.Sleep(100 * time.Millisecond) // let go routine run first and block on tasksForPoll
-	tlm.taskReader.gorogrp.Cancel()
-	tlm.taskReader.gorogrp.Wait()
-}
-
-func TestReadLevelForAllExpiredTasksInBatch(t *testing.T) {
-	controller := gomock.NewController(t)
-	defer controller.Finish()
-
-	tlm := mustCreateTestTaskQueueManager(t, controller)
-	tlm.db.rangeID = int64(1)
-	tlm.db.ackLevel = int64(0)
-	tlm.taskAckManager.setAckLevel(tlm.db.ackLevel)
-	tlm.taskAckManager.setReadLevel(tlm.db.ackLevel)
-	require.Equal(t, int64(0), tlm.taskAckManager.getAckLevel())
-	require.Equal(t, int64(0), tlm.taskAckManager.getReadLevel())
-
-	// Add all expired tasks
-	tasks := []*persistencespb.AllocatedTaskInfo{
-		{
-			Data: &persistencespb.TaskInfo{
-				ExpiryTime: timestamp.TimeNowPtrUtcAddSeconds(-60),
-				CreateTime: timestamp.TimeNowPtrUtcAddSeconds(-60 * 60),
-			},
-			TaskId: 11,
-		},
-		{
-			Data: &persistencespb.TaskInfo{
-				ExpiryTime: timestamp.TimeNowPtrUtcAddSeconds(-60),
-				CreateTime: timestamp.TimeNowPtrUtcAddSeconds(-60 * 60),
-			},
-			TaskId: 12,
-		},
-	}
-
-	require.NoError(t, tlm.taskReader.addTasksToBuffer(context.TODO(), tasks))
-	require.Equal(t, int64(0), tlm.taskAckManager.getAckLevel())
-	require.Equal(t, int64(12), tlm.taskAckManager.getReadLevel())
-
-	// Now add a mix of valid and expired tasks
-	require.NoError(t, tlm.taskReader.addTasksToBuffer(context.TODO(), []*persistencespb.AllocatedTaskInfo{
-		{
-			Data: &persistencespb.TaskInfo{
-				ExpiryTime: timestamp.TimeNowPtrUtcAddSeconds(-60),
-				CreateTime: timestamp.TimeNowPtrUtcAddSeconds(-60 * 60),
-			},
-			TaskId: 13,
-		},
-		{
-			Data: &persistencespb.TaskInfo{
-				ExpiryTime: timestamp.TimeNowPtrUtcAddSeconds(-60),
-				CreateTime: timestamp.TimeNowPtrUtcAddSeconds(-60 * 60),
-			},
-			TaskId: 14,
-		},
-	}))
-	require.Equal(t, int64(0), tlm.taskAckManager.getAckLevel())
-	require.Equal(t, int64(14), tlm.taskAckManager.getReadLevel())
-}
-
 type testIDBlockAlloc struct {
 	rid   int64
 	alloc func() (taskQueueState, error)
@@ -195,7 +97,7 @@ func withIDBlockAllocator(ibl idBlockAllocator) taskQueueManagerOpt {
 }
 
 func TestSyncMatchLeasingUnavailable(t *testing.T) {
-	tqm := mustCreateTestTaskQueueManager(t, gomock.NewController(t),
+	tqm := mustCreateTestPhysicalTaskQueueManager(t, gomock.NewController(t),
 		makeTestBlocAlloc(func() (taskQueueState, error) {
 			// any error other than ConditionFailedError indicates an
 			// availability problem at a lower layer so the TQM should NOT
@@ -208,8 +110,8 @@ func TestSyncMatchLeasingUnavailable(t *testing.T) {
 	defer poller.Cancel()
 
 	sync, err := tqm.AddTask(context.TODO(), addTaskParams{
-		taskInfo:  &persistencespb.TaskInfo{},
-		source:    enumsspb.TASK_SOURCE_HISTORY})
+		taskInfo: &persistencespb.TaskInfo{},
+		source:   enumsspb.TASK_SOURCE_HISTORY})
 	require.NoError(t, err)
 	require.True(t, sync)
 }
@@ -218,7 +120,7 @@ func TestForeignPartitionOwnerCausesUnload(t *testing.T) {
 	cfg := NewConfig(dynamicconfig.NewNoopCollection(), false, false)
 	cfg.RangeSize = 1 // TaskID block size
 	var leaseErr error
-	tqm := mustCreateTestTaskQueueManager(t, gomock.NewController(t),
+	tqm := mustCreateTestPhysicalTaskQueueManager(t, gomock.NewController(t),
 		makeTestBlocAlloc(func() (taskQueueState, error) {
 			return taskQueueState{rangeID: 1}, leaseErr
 		}))
@@ -250,6 +152,7 @@ func TestForeignPartitionOwnerCausesUnload(t *testing.T) {
 	require.False(t, sync)
 }
 
+// TODO: this test probably should go to backlog_manager_test
 func TestReaderSignaling(t *testing.T) {
 	readerNotifications := make(chan struct{}, 1)
 	clearNotifications := func() {
@@ -257,17 +160,17 @@ func TestReaderSignaling(t *testing.T) {
 			<-readerNotifications
 		}
 	}
-	tqm := mustCreateTestTaskQueueManager(t, gomock.NewController(t))
+	tqm := mustCreateTestPhysicalTaskQueueManager(t, gomock.NewController(t))
 
 	// redirect taskReader signals into our local channel
-	tqm.taskReader.notifyC = readerNotifications
+	tqm.backlogMgr.taskReader.notifyC = readerNotifications
 
 	tqm.Start()
 	defer tqm.Stop()
 
 	// shut down the taskReader so it doesn't steal notifications from us
-	tqm.taskReader.gorogrp.Cancel()
-	tqm.taskReader.gorogrp.Wait()
+	tqm.backlogMgr.taskReader.gorogrp.Cancel()
+	tqm.backlogMgr.taskReader.gorogrp.Wait()
 
 	clearNotifications()
 
@@ -320,7 +223,7 @@ func defaultTqId() *PhysicalTaskQueueKey {
 	return newTestUnversionedPhysicalQueueKey(defaultNamespaceId, defaultRootTqID, enumspb.TASK_QUEUE_TYPE_WORKFLOW, 0)
 }
 
-func mustCreateTestTaskQueueManager(
+func mustCreateTestPhysicalTaskQueueManager(
 	t *testing.T,
 	controller *gomock.Controller,
 	opts ...taskQueueManagerOpt,
@@ -386,13 +289,13 @@ func TestDescribeTaskQueue(t *testing.T) {
 	PollerIdentity := "test-poll"
 
 	// Create queue Manager and set queue state
-	tlm := mustCreateTestTaskQueueManager(t, controller)
-	tlm.db.rangeID = int64(1)
-	tlm.db.ackLevel = int64(0)
-	tlm.taskAckManager.setAckLevel(tlm.db.ackLevel)
+	tlm := mustCreateTestPhysicalTaskQueueManager(t, controller)
+	tlm.backlogMgr.db.rangeID = int64(1)
+	tlm.backlogMgr.db.ackLevel = int64(0)
+	tlm.backlogMgr.taskAckManager.setAckLevel(tlm.backlogMgr.db.ackLevel)
 
 	for i := int64(0); i < taskCount; i++ {
-		tlm.taskAckManager.addTask(startTaskID + i)
+		tlm.backlogMgr.taskAckManager.addTask(startTaskID + i)
 	}
 
 	includeTaskStatus := false
@@ -413,7 +316,7 @@ func TestDescribeTaskQueue(t *testing.T) {
 	// Add a poller and complete all tasks
 	tlm.pollerHistory.updatePollerInfo(pollerIdentity(PollerIdentity), &pollMetadata{})
 	for i := int64(0); i < taskCount; i++ {
-		tlm.taskAckManager.completeTask(startTaskID + i)
+		tlm.backlogMgr.taskAckManager.completeTask(startTaskID + i)
 	}
 
 	descResp = tlm.DescribeTaskQueue(includeTaskStatus)
@@ -463,7 +366,7 @@ func TestCheckIdleTaskQueue(t *testing.T) {
 	tlm = mustCreateTestTaskQueueManagerWithConfig(t, controller, tqCfg)
 	tlm.Start()
 	require.Equal(t, 0, len(tlm.GetAllPollerInfo()))
-	tlm.taskReader.Signal()
+	tlm.backlogMgr.taskReader.Signal()
 	time.Sleep(1 * time.Second)
 	require.Equal(t, common.DaemonStatusStarted, atomic.LoadInt32(&tlm.status))
 	tlm.Stop()
@@ -498,11 +401,10 @@ func TestAddTaskStandby(t *testing.T) {
 	tlm.Start()
 	// stop taskWriter so that we can check if there's any call to it
 	// otherwise the task persist process is async and hard to test
-	tlm.taskWriter.Stop()
-	<-tlm.taskWriter.writeLoop.Done()
+	tlm.backlogMgr.taskWriter.Stop()
+	<-tlm.backlogMgr.taskWriter.writeLoop.Done()
 
 	addTaskParam := addTaskParams{
-		execution: &commonpb.WorkflowExecution{},
 		taskInfo: &persistencespb.TaskInfo{
 			CreateTime: timestamp.TimePtr(time.Now().UTC()),
 		},

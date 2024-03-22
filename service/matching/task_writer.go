@@ -62,9 +62,9 @@ type (
 
 	// taskWriter writes tasks sequentially to persistence
 	taskWriter struct {
-		status     int32
-		backlogMgr *backlogManagerImpl
-		config     *taskQueueConfig
+		status       int32
+		backlogMgr   *backlogManagerImpl
+		config       *taskQueueConfig
 		appendCh     chan *writeTaskRequest
 		taskIDBlock  taskIDBlock
 		maxReadLevel int64

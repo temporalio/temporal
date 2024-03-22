@@ -48,11 +48,11 @@ const (
 
 type (
 	taskReader struct {
-		status        int32
-		taskBuffer    chan *persistencespb.AllocatedTaskInfo // tasks loaded from persistence
-		notifyC       chan struct{}                          // Used as signal to notify pump of new tasks
-		backlogMgr    *backlogManagerImpl
-		gorogrp       goro.Group
+		status     int32
+		taskBuffer chan *persistencespb.AllocatedTaskInfo // tasks loaded from persistence
+		notifyC    chan struct{}                          // Used as signal to notify pump of new tasks
+		backlogMgr *backlogManagerImpl
+		gorogrp    goro.Group
 
 		backoffTimerLock sync.Mutex
 		backoffTimer     *time.Timer
@@ -62,9 +62,9 @@ type (
 
 func newTaskReader(backlogMgr *backlogManagerImpl) *taskReader {
 	return &taskReader{
-		status:        common.DaemonStatusInitialized,
-		backlogMgr:         backlogMgr,
-		notifyC:       make(chan struct{}, 1),
+		status:     common.DaemonStatusInitialized,
+		backlogMgr: backlogMgr,
+		notifyC:    make(chan struct{}, 1),
 		// we always dequeue the head of the buffer and try to dispatch it to a poller
 		// so allocate one less than desired target buffer size
 		taskBuffer: make(chan *persistencespb.AllocatedTaskInfo, backlogMgr.config.GetTasksBatchSize()-1),

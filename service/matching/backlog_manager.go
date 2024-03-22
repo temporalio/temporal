@@ -33,12 +33,12 @@ import (
 	"time"
 
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
-	"go.temporal.io/server/common/future"
 
 	"go.temporal.io/server/api/matchingservice/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/backoff"
+	"go.temporal.io/server/common/future"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
@@ -65,6 +65,7 @@ type (
 	backlogManager interface {
 		Start()
 		Stop()
+		WaitUntilInitialized(context.Context) error
 		SpoolTask(taskInfo *persistencespb.TaskInfo) error
 		BacklogCountHint() int64
 		BacklogStatus() *taskqueuepb.TaskQueueStatus
@@ -72,19 +73,19 @@ type (
 	}
 
 	backlogManagerImpl struct {
-		pqMgr				physicalTaskQueueManager
-		db                   *taskQueueDB
-		taskWriter           *taskWriter
-		taskReader           *taskReader // reads tasks from db and async matches it with poller
-		taskGC               *taskGC
-		taskAckManager       ackManager   // tracks ackLevel for delivered messages
-		config               *taskQueueConfig
-		logger               log.Logger
-		throttledLogger      log.ThrottledLogger
-		matchingClient       matchingservice.MatchingServiceClient
-		metricsHandler       metrics.Handler
+		pqMgr               physicalTaskQueueManager
+		db                  *taskQueueDB
+		taskWriter          *taskWriter
+		taskReader          *taskReader // reads tasks from db and async matches it with poller
+		taskGC              *taskGC
+		taskAckManager      ackManager // tracks ackLevel for delivered messages
+		config              *taskQueueConfig
+		logger              log.Logger
+		throttledLogger     log.ThrottledLogger
+		matchingClient      matchingservice.MatchingServiceClient
+		metricsHandler      metrics.Handler
 		contextInfoProvider func(ctx context.Context) context.Context
-		initializedError *future.FutureImpl[struct{}]
+		initializedError    *future.FutureImpl[struct{}]
 		// skipFinalUpdate controls behavior on Stop: if it's false, we try to write one final
 		// update before unloading
 		skipFinalUpdate atomic.Bool
@@ -94,28 +95,28 @@ type (
 var _ backlogManager = (*backlogManagerImpl)(nil)
 
 func newBacklogManager(
-	pqMgr				physicalTaskQueueManager,
-	config               *taskQueueConfig,
-	taskManager  persistence.TaskManager,
-	logger               log.Logger,
-	throttledLogger      log.ThrottledLogger,
-	matchingClient       matchingservice.MatchingServiceClient,
-	metricsHandler       metrics.Handler,
+	pqMgr physicalTaskQueueManager,
+	config *taskQueueConfig,
+	taskManager persistence.TaskManager,
+	logger log.Logger,
+	throttledLogger log.ThrottledLogger,
+	matchingClient matchingservice.MatchingServiceClient,
+	metricsHandler metrics.Handler,
 	contextInfoProvider func(ctx context.Context) context.Context,
 ) *backlogManagerImpl {
 	db := newTaskQueueDB(taskManager, pqMgr.QueueKey(), logger)
 	bmg := &backlogManagerImpl{
-		pqMgr: pqMgr,
-		matchingClient:       matchingClient,
-		metricsHandler:       metricsHandler,
-		logger:               logger,
-		throttledLogger:      throttledLogger,
-		db:                   db,
-		taskAckManager:       newAckManager(logger),
-		taskGC:               newTaskGC(db, config),
-		config:               config,
-		contextInfoProvider:  contextInfoProvider,
-		initializedError:     future.NewFuture[struct{}](),
+		pqMgr:               pqMgr,
+		matchingClient:      matchingClient,
+		metricsHandler:      metricsHandler,
+		logger:              logger,
+		throttledLogger:     throttledLogger,
+		db:                  db,
+		taskAckManager:      newAckManager(logger),
+		taskGC:              newTaskGC(db, config),
+		config:              config,
+		contextInfoProvider: contextInfoProvider,
+		initializedError:    future.NewFuture[struct{}](),
 	}
 	bmg.taskWriter = newTaskWriter(bmg)
 	bmg.taskReader = newTaskReader(bmg)

@@ -109,7 +109,7 @@ type (
 		partitionMgr         *taskQueuePartitionManagerImpl
 		queue                *PhysicalTaskQueueKey
 		config               *taskQueueConfig
-		backlogMgr			 *backlogManagerImpl
+		backlogMgr           *backlogManagerImpl
 		liveness             *liveness
 		matcher              *TaskMatcher // for matching a task producer with a poller
 		namespaceRegistry    namespace.Registry
@@ -120,9 +120,9 @@ type (
 		clusterMeta          cluster.Metadata
 		taggedMetricsHandler metrics.Handler // namespace/taskqueue tagged metric scope
 		// pollerHistory stores poller which poll from this taskqueue in last few minutes
-		pollerHistory    *pollerHistory
-		currentPolls     atomic.Int64
-		taskValidator	taskValidator
+		pollerHistory *pollerHistory
+		currentPolls  atomic.Int64
+		taskValidator taskValidator
 	}
 )
 
