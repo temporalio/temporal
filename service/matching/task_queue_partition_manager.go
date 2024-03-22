@@ -227,6 +227,7 @@ func (pm *taskQueuePartitionManagerImpl) AddTask(
 	return assignedBuildId, syncMatched, err
 }
 
+// PollTask returns a task if there was a match, a boolean that reports whether a versionSet was used for the match, and an error
 func (pm *taskQueuePartitionManagerImpl) PollTask(
 	ctx context.Context,
 	pollMetadata *pollMetadata,
