@@ -2435,10 +2435,7 @@ func (wh *WorkflowHandler) DescribeTaskQueue(ctx context.Context, request *workf
 		return nil, err
 	}
 
-	return &workflowservice.DescribeTaskQueueResponse{
-		Pollers:         matchingResponse.DescResponse.Pollers,
-		TaskQueueStatus: matchingResponse.DescResponse.TaskQueueStatus,
-	}, nil
+	return matchingResponse.DescResponse, nil
 }
 
 // GetClusterInfo return information about Temporal deployment.
