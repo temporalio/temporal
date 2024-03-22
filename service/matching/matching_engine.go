@@ -805,7 +805,7 @@ func (e *matchingEngineImpl) DescribeTaskQueue(
 		return pm.DescribeTaskQueue(request.DescRequest.GetIncludeTaskQueueStatus()), nil
 	} else if request.DescRequest.ApiMode == enumspb.DESCRIBE_TASK_QUEUE_MODE_ENHANCED {
 		versionsInfo := make([]*taskqueuepb.TaskQueueVersionInfo, 0)
-		//for _, queue_type := range request.DescRequest.TaskQueueTypes {
+		// for _, queue_type := range request.DescRequest.TaskQueueTypes {
 		//	for partition {
 		//		partitionResp, err := pm.DescribeTaskQueuePartition(&matchingservice.DescribeTaskQueuePartitionRequest{
 		//			NamespaceId:            request.NamespaceId,
@@ -818,7 +818,7 @@ func (e *matchingEngineImpl) DescribeTaskQueue(
 		//		})
 		//		merge responses into versionsInfo
 		//	}
-		//}
+		// }
 		return &matchingservice.DescribeTaskQueueResponse{
 			DescResponse: &workflowservice.DescribeTaskQueueResponse{
 				Pollers:         nil,

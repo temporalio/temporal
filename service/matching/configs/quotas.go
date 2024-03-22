@@ -41,6 +41,7 @@ var (
 		"AddWorkflowTask":                        1,
 		"CancelOutstandingPoll":                  1,
 		"DescribeTaskQueue":                      1,
+		"DescribeTaskQueuePartition":             1,
 		"ListTaskQueuePartitions":                1,
 		"PollActivityTaskQueue":                  1,
 		"PollWorkflowTaskQueue":                  1,
