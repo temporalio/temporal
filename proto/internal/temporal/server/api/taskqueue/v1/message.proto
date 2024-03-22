@@ -72,11 +72,3 @@ message TaskQueuePartition {
         string sticky_name = 4;
     }
 }
-
-message TaskQueuePartitionStatus {
-    int64 backlog_count_hint = 1;
-    int64 read_level = 2;
-    int64 ack_level = 3;
-    double rate_per_second = 4;
-    temporal.api.taskqueue.v1.TaskIdBlock task_id_block = 5;
-}

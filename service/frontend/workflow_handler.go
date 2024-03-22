@@ -29,6 +29,7 @@ import (
 	"encoding/binary"
 	"errors"
 	"fmt"
+	"go.temporal.io/server/common/tqid"
 	"strings"
 	"sync/atomic"
 	"time"
@@ -2425,6 +2426,19 @@ func (wh *WorkflowHandler) DescribeTaskQueue(ctx context.Context, request *workf
 
 	if len(request.TaskQueueTypes) == 0 {
 		request.TaskQueueTypes = []enumspb.TaskQueueType{enumspb.TASK_QUEUE_TYPE_WORKFLOW, enumspb.TASK_QUEUE_TYPE_ACTIVITY}
+	}
+
+	if request.ApiMode == enumspb.DESCRIBE_TASK_QUEUE_MODE_ENHANCED {
+		if request.TaskQueue.Kind == enumspb.TASK_QUEUE_KIND_STICKY {
+			return nil, errUseEnhancedDescribeOnStickyQueue
+		}
+		for _, qtype := range request.TaskQueueTypes {
+			if partition, err := tqid.PartitionFromProto(request.TaskQueue, namespaceID.String(), qtype); err != nil {
+				return nil, errTaskQueuePartitionInvalid
+			} else if !partition.IsRoot() {
+				return nil, errUseEnhancedDescribeOnNonRootQueue
+			}
+		}
 	}
 
 	matchingResponse, err := wh.matchingClient.DescribeTaskQueue(ctx, &matchingservice.DescribeTaskQueueRequest{
