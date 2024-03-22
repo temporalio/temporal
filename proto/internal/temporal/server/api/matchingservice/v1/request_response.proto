@@ -197,11 +197,9 @@ message DescribeTaskQueuePartitionRequest {
     string namespace_id = 1;
     temporal.server.api.taskqueue.v1.TaskQueuePartition task_queue_partition = 2;
 
-    // If not provided, the result for the default Build ID will be returned. The default Build ID is the one
-    // mentioned in the first unconditional Assignment Rule. If there is no default Build ID, the result for the
-    // unversioned queue will be returned.
-    // (-- api-linter: core::0140::prepositions --)
-    temporal.api.taskqueue.v1.TaskQueueVersionGroup versions = 3;
+    // List of build ids that should be described. An empty string refers to the unversioned queue.
+    // If empty, all active queues will be described. Currently, active means that the queue is loaded.
+    repeated string build_ids = 3;
 
     // Report backlog info for the requested task queue types and versions
     bool report_backlog_info = 4;
