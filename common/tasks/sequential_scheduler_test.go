@@ -210,7 +210,7 @@ func (s *sequentialSchedulerSuite) TestStartStopWorkers() {
 	processor.stopWorkers(numWorkers / 2)
 	s.Len(processor.workerShutdownCh, numWorkers/2)
 
-	processor.stopWorkers(len(processor.workerShutdownCh))
+	processor.stopWorkers(len(processor.workerShutdownCh) + 1)
 	s.Empty(processor.workerShutdownCh)
 
 	processor.shutdownWG.Wait()

@@ -182,6 +182,10 @@ func (f *FIFOScheduler[T]) startWorkers(
 func (f *FIFOScheduler[T]) stopWorkers(
 	count int,
 ) {
+	if count > len(f.workerShutdownCh) {
+		count = len(f.workerShutdownCh)
+	}
+
 	shutdownChToClose := f.workerShutdownCh[:count]
 	f.workerShutdownCh = f.workerShutdownCh[count:]
 
