@@ -36,13 +36,15 @@ import (
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
-	"go.temporal.io/server/common/clock"
+	"go.temporal.io/api/workflowservice/v1"
 
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	"go.temporal.io/server/api/matchingservice/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
+	taskqueuespb "go.temporal.io/server/api/taskqueue/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/backoff"
+	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/debug"
 	"go.temporal.io/server/common/future"
@@ -127,8 +129,10 @@ type (
 		UpdatePollerInfo(pollerIdentity, *pollMetadata)
 		GetAllPollerInfo() []*taskqueuepb.PollerInfo
 		HasPollerAfter(accessTime time.Time) bool
-		// DescribeTaskQueue returns information about the target task queue
-		DescribeTaskQueue(includeTaskQueueStatus bool) *matchingservice.DescribeTaskQueueResponse
+		// LegacyDescribeTaskQueue returns pollers info and legacy TaskQueueStatus for this physical queue
+		LegacyDescribeTaskQueue(includeTaskQueueStatus bool) *matchingservice.DescribeTaskQueueResponse
+		// Describe returns information about the physical task queue
+		Describe() *taskqueuespb.PhysicalTaskQueueInfo
 		String() string
 		QueueKey() *PhysicalTaskQueueKey
 	}
@@ -457,17 +461,21 @@ func (c *physicalTaskQueueManagerImpl) HasPollerAfter(accessTime time.Time) bool
 	return len(recentPollers) > 0
 }
 
-// DescribeTaskQueue returns information about the target taskqueue, right now this API returns the
+// LegacyDescribeTaskQueue returns information about the target taskqueue, right now this API returns the
 // pollers which polled this taskqueue in last few minutes and status of taskqueue's ackManager
 // (readLevel, ackLevel, backlogCountHint and taskIDBlock).
-func (c *physicalTaskQueueManagerImpl) DescribeTaskQueue(includeTaskQueueStatus bool) *matchingservice.DescribeTaskQueueResponse {
-	response := &matchingservice.DescribeTaskQueueResponse{Pollers: c.GetAllPollerInfo()}
+func (c *physicalTaskQueueManagerImpl) LegacyDescribeTaskQueue(includeTaskQueueStatus bool) *matchingservice.DescribeTaskQueueResponse {
+	response := &matchingservice.DescribeTaskQueueResponse{
+		DescResponse: &workflowservice.DescribeTaskQueueResponse{
+			Pollers: c.GetAllPollerInfo(),
+		},
+	}
 	if !includeTaskQueueStatus {
 		return response
 	}
 
 	taskIDBlock := rangeIDToTaskIDBlock(c.db.RangeID(), c.config.RangeSize)
-	response.TaskQueueStatus = &taskqueuepb.TaskQueueStatus{
+	response.DescResponse.TaskQueueStatus = &taskqueuepb.TaskQueueStatus{
 		ReadLevel:        c.taskAckManager.getReadLevel(),
 		AckLevel:         c.taskAckManager.getAckLevel(),
 		BacklogCountHint: c.taskAckManager.getBacklogCountHint(),
@@ -479,6 +487,10 @@ func (c *physicalTaskQueueManagerImpl) DescribeTaskQueue(includeTaskQueueStatus 
 	}
 
 	return response
+}
+
+func (c *physicalTaskQueueManagerImpl) Describe() *taskqueuespb.PhysicalTaskQueueInfo {
+	return nil
 }
 
 func (c *physicalTaskQueueManagerImpl) String() string {
