@@ -190,8 +190,42 @@ message DescribeTaskQueueRequest {
 }
 
 message DescribeTaskQueueResponse {
-    repeated temporal.api.taskqueue.v1.PollerInfo pollers = 1;
-    temporal.api.taskqueue.v1.TaskQueueStatus task_queue_status = 2;
+    temporal.api.workflowservice.v1.DescribeTaskQueueResponse desc_response = 1;
+}
+
+message DescribeTaskQueuePartitionRequest {
+    string namespace_id = 1;
+    temporal.server.api.taskqueue.v1.TaskQueuePartition task_queue_partition = 2;
+
+    // Optional. If not provided, the result for the default Build ID will be returned. The default Build ID is the one
+    // mentioned in the first unconditional Assignment Rule. If there is no default Build ID, the result for the
+    // unversioned queue will be returned.
+    // (-- api-linter: core::0140::prepositions --)
+    oneof versions {
+        BuildIdList build_ids = 6;
+        // Explicitly ask for the unversioned queue.
+        bool unversioned = 7;
+        // Ask for all active versions (including unversioned). A version is considered active if it has had new
+        // tasks or polls recently.
+        bool all_active = 8;
+    }
+
+    // Report backlog info for the requested task queue types and versions
+    bool report_backlog_info = 10;
+    // Report list of pollers for requested task queue types and versions
+    bool report_pollers = 11;
+    // Report task reachability for the requested versions
+    bool report_task_reachability = 12;
+    // Report task queue status
+    bool report_task_queue_status = 13;
+
+    message BuildIdList {
+        repeated string build_ids = 1;
+    }
+}
+
+message DescribeTaskQueuePartitionResponse {
+    repeated temporal.server.api.taskqueue.v1.TaskQueueVersionInfoInternal versions_info_internal = 1;
 }
 
 message ListTaskQueuePartitionsRequest {

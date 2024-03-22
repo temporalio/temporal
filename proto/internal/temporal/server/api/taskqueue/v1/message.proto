@@ -28,6 +28,9 @@ option go_package = "go.temporal.io/server/api/taskqueue/v1;taskqueue";
 
 import "google/protobuf/empty.proto";
 
+import "temporal/api/taskqueue/v1/message.proto";
+import "temporal/api/enums/v1/task_queue.proto";
+
 // TaskVersionDirective controls how matching should direct a task.
 message TaskVersionDirective {
     // Default (if build_id is not present) is "unversioned":
@@ -46,3 +49,36 @@ message TaskVersionDirective {
     }
 }
 
+message TaskQueueVersionInfoInternal {
+    // Empty means unversioned.
+    string build_id = 1;
+    PhysicalTaskQueueInfo physical_task_queue_info = 2;
+    // Only applicable to versioned workers (workers with `useVersioning=true`).
+    temporal.api.enums.v1.BuildIdTaskReachability task_reachability = 3;
+    message PhysicalTaskQueueInfo {
+        // Unversioned workers (with `useVersioning=false`) are reported in unversioned result even if they set a Build ID.
+        repeated temporal.api.taskqueue.v1.PollerInfo pollers = 1;
+        temporal.server.api.taskqueue.v1.TaskQueuePartitionStatus status = 2;
+        temporal.api.taskqueue.v1.BacklogInfo backlog_info = 3;
+    }
+}
+
+// Represents a normal or sticky partition of a task queue.
+message TaskQueuePartition {
+    // This is the user-facing name for this task queue
+    string task_queue = 1;
+    temporal.api.enums.v1.TaskQueueType task_queue_type = 2;
+    // Absent means normal root partition (normal_partition_id=0)
+    oneof partition_id {
+        int32 normal_partition_id = 3;
+        int32 sticky_name = 4;
+    }
+}
+
+message TaskQueuePartitionStatus {
+    int64 backlog_count_hint = 1;
+    int64 read_level = 2;
+    int64 ack_level = 3;
+    double rate_per_second = 4;
+    temporal.api.taskqueue.v1.TaskIdBlock task_id_block = 5;
+}
