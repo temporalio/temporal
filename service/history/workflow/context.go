@@ -67,6 +67,7 @@ type (
 	Context interface {
 		GetWorkflowKey() definition.WorkflowKey
 
+		SetMutableState(ms MutableState)
 		LoadMutableState(ctx context.Context, shardContext shard.Context) (MutableState, error)
 		LoadExecutionStats(ctx context.Context, shardContext shard.Context) (*persistencespb.ExecutionStats, error)
 		Clear()
@@ -194,6 +195,10 @@ func NewContext(
 		config:          config,
 		mutex:           locks.NewPriorityMutex(),
 	}
+}
+
+func (c *ContextImpl) SetMutableState(ms MutableState) {
+	c.MutableState = ms
 }
 
 func (c *ContextImpl) Lock(
