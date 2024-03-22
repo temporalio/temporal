@@ -288,6 +288,15 @@ func (h *Handler) DescribeTaskQueue(
 	return h.engine.DescribeTaskQueue(ctx, request)
 }
 
+// DescribeTaskQueuePartition returns information about the target task queue partition.
+func (h *Handler) DescribeTaskQueuePartition(
+	ctx context.Context,
+	request *matchingservice.DescribeTaskQueuePartitionRequest,
+) (_ *matchingservice.DescribeTaskQueuePartitionResponse, retError error) {
+	defer log.CapturePanic(h.logger, &retError)
+	return h.engine.DescribeTaskQueuePartition(ctx, request)
+}
+
 // ListTaskQueuePartitions returns information about partitions for a taskQueue
 func (h *Handler) ListTaskQueuePartitions(
 	ctx context.Context,
