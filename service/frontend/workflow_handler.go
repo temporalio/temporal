@@ -2423,6 +2423,10 @@ func (wh *WorkflowHandler) DescribeTaskQueue(ctx context.Context, request *workf
 		request.TaskQueueType = enumspb.TASK_QUEUE_TYPE_WORKFLOW
 	}
 
+	if len(request.TaskQueueTypes) == 0 {
+		request.TaskQueueTypes = []enumspb.TaskQueueType{enumspb.TASK_QUEUE_TYPE_WORKFLOW, enumspb.TASK_QUEUE_TYPE_ACTIVITY}
+	}
+
 	matchingResponse, err := wh.matchingClient.DescribeTaskQueue(ctx, &matchingservice.DescribeTaskQueueRequest{
 		NamespaceId: namespaceID.String(),
 		DescRequest: request,
@@ -2432,8 +2436,8 @@ func (wh *WorkflowHandler) DescribeTaskQueue(ctx context.Context, request *workf
 	}
 
 	return &workflowservice.DescribeTaskQueueResponse{
-		Pollers:         matchingResponse.Pollers,
-		TaskQueueStatus: matchingResponse.TaskQueueStatus,
+		Pollers:         matchingResponse.DescResponse.Pollers,
+		TaskQueueStatus: matchingResponse.DescResponse.TaskQueueStatus,
 	}, nil
 }
 

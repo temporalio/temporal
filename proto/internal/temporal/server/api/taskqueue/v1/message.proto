@@ -71,7 +71,7 @@ message TaskQueuePartition {
     // Absent means normal root partition (normal_partition_id=0)
     oneof partition_id {
         int32 normal_partition_id = 3;
-        int32 sticky_name = 4;
+        string sticky_name = 4;
     }
 }
 
