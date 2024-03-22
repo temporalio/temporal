@@ -619,7 +619,9 @@ func (s *workflowHandlerSuite) TestStartWorkflowExecution_Failed_InvalidStartDel
 }
 
 func (s *workflowHandlerSuite) TestStartWorkflowExecution_InvalidWorkflowIdReusePolicy_TerminateIfRunning() {
-	wh := s.getWorkflowHandler(s.newConfig())
+	config := s.newConfig()
+	config.EnableWorkflowIdConflictPolicy = func(string) bool { return true }
+	wh := s.getWorkflowHandler(config)
 	req := &workflowservice.StartWorkflowExecutionRequest{
 		WorkflowId:               testWorkflowID,
 		WorkflowType:             &commonpb.WorkflowType{Name: "WORKFLOW"},
@@ -659,7 +661,9 @@ func (s *workflowHandlerSuite) TestStartWorkflowExecution_DefaultWorkflowIdDupli
 }
 
 func (s *workflowHandlerSuite) TestSignalWithStartWorkflowExecution_InvalidWorkflowIdConflictPolicy() {
-	wh := s.getWorkflowHandler(s.newConfig())
+	config := s.newConfig()
+	config.EnableWorkflowIdConflictPolicy = func(string) bool { return true }
+	wh := s.getWorkflowHandler(config)
 	req := &workflowservice.SignalWithStartWorkflowExecutionRequest{
 		WorkflowId:               testWorkflowID,
 		WorkflowType:             &commonpb.WorkflowType{Name: "WORKFLOW"},
@@ -676,7 +680,9 @@ func (s *workflowHandlerSuite) TestSignalWithStartWorkflowExecution_InvalidWorkf
 }
 
 func (s *workflowHandlerSuite) TestSignalWithStartWorkflowExecution_InvalidWorkflowIdReusePolicy_TerminateIfRunning() {
-	wh := s.getWorkflowHandler(s.newConfig())
+	config := s.newConfig()
+	config.EnableWorkflowIdConflictPolicy = func(string) bool { return true }
+	wh := s.getWorkflowHandler(config)
 	req := &workflowservice.SignalWithStartWorkflowExecutionRequest{
 		WorkflowId:               testWorkflowID,
 		WorkflowType:             &commonpb.WorkflowType{Name: "WORKFLOW"},

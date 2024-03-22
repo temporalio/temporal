@@ -179,6 +179,8 @@ type Config struct {
 	MaxConcurrentBatchOperation     dynamicconfig.IntPropertyFnWithNamespaceFilter
 	MaxExecutionCountBatchOperation dynamicconfig.IntPropertyFnWithNamespaceFilter
 
+	EnableWorkflowIdConflictPolicy dynamicconfig.BoolPropertyFnWithNamespaceFilter
+
 	EnableUpdateWorkflowExecution              dynamicconfig.BoolPropertyFnWithNamespaceFilter
 	EnableUpdateWorkflowExecutionAsyncAccepted dynamicconfig.BoolPropertyFnWithNamespaceFilter
 
@@ -284,6 +286,8 @@ func NewConfig(
 		EnableBatcher:                   dc.GetBoolPropertyFnWithNamespaceFilter(dynamicconfig.FrontendEnableBatcher, true),
 		MaxConcurrentBatchOperation:     dc.GetIntPropertyFilteredByNamespace(dynamicconfig.FrontendMaxConcurrentBatchOperationPerNamespace, 1),
 		MaxExecutionCountBatchOperation: dc.GetIntPropertyFilteredByNamespace(dynamicconfig.FrontendMaxExecutionCountBatchOperationPerNamespace, 1000),
+
+		EnableWorkflowIdConflictPolicy: dc.GetBoolPropertyFnWithNamespaceFilter(dynamicconfig.EnableWorkflowIdConflictPolicy, false),
 
 		EnableUpdateWorkflowExecution:              dc.GetBoolPropertyFnWithNamespaceFilter(dynamicconfig.FrontendEnableUpdateWorkflowExecution, false),
 		EnableUpdateWorkflowExecutionAsyncAccepted: dc.GetBoolPropertyFnWithNamespaceFilter(dynamicconfig.FrontendEnableUpdateWorkflowExecutionAsyncAccepted, false),
