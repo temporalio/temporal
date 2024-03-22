@@ -204,7 +204,7 @@ func (s *FunctionalSuite) TestResetWorkflow() {
 }
 
 func (s *FunctionalSuite) TestResetWorkflow_ExcludeNoneReapplyAll() {
-	t := ResetTest{
+	t := resetTest{
 		FunctionalSuite:     s,
 		tv:                  testvars.New(s.T().Name()),
 		reapplyExcludeTypes: []enumspb.ResetReapplyExcludeType{},
@@ -214,7 +214,7 @@ func (s *FunctionalSuite) TestResetWorkflow_ExcludeNoneReapplyAll() {
 }
 
 func (s *FunctionalSuite) TestResetWorkflow_ExcludeNoneReapplySignal() {
-	t := ResetTest{
+	t := resetTest{
 		FunctionalSuite:     s,
 		tv:                  testvars.New(s.T().Name()),
 		reapplyExcludeTypes: []enumspb.ResetReapplyExcludeType{},
@@ -224,7 +224,7 @@ func (s *FunctionalSuite) TestResetWorkflow_ExcludeNoneReapplySignal() {
 }
 
 func (s *FunctionalSuite) TestResetWorkflow_ExcludeNoneReapplyNone() {
-	t := ResetTest{
+	t := resetTest{
 		FunctionalSuite:     s,
 		tv:                  testvars.New(s.T().Name()),
 		reapplyExcludeTypes: []enumspb.ResetReapplyExcludeType{},
@@ -234,7 +234,7 @@ func (s *FunctionalSuite) TestResetWorkflow_ExcludeNoneReapplyNone() {
 }
 
 func (s *FunctionalSuite) TestResetWorkflow_ExcludeSignalReapplyAll() {
-	t := ResetTest{
+	t := resetTest{
 		FunctionalSuite:     s,
 		tv:                  testvars.New(s.T().Name()),
 		reapplyExcludeTypes: []enumspb.ResetReapplyExcludeType{enumspb.RESET_REAPPLY_EXCLUDE_TYPE_SIGNAL},
@@ -244,7 +244,7 @@ func (s *FunctionalSuite) TestResetWorkflow_ExcludeSignalReapplyAll() {
 }
 
 func (s *FunctionalSuite) TestResetWorkflow_ExcludeSignalReapplySignal() {
-	t := ResetTest{
+	t := resetTest{
 		FunctionalSuite:     s,
 		tv:                  testvars.New(s.T().Name()),
 		reapplyExcludeTypes: []enumspb.ResetReapplyExcludeType{enumspb.RESET_REAPPLY_EXCLUDE_TYPE_SIGNAL},
@@ -254,7 +254,7 @@ func (s *FunctionalSuite) TestResetWorkflow_ExcludeSignalReapplySignal() {
 }
 
 func (s *FunctionalSuite) TestResetWorkflow_ExcludeSignalReapplyNone() {
-	t := ResetTest{
+	t := resetTest{
 		FunctionalSuite:     s,
 		tv:                  testvars.New(s.T().Name()),
 		reapplyExcludeTypes: []enumspb.ResetReapplyExcludeType{enumspb.RESET_REAPPLY_EXCLUDE_TYPE_SIGNAL},
@@ -263,7 +263,7 @@ func (s *FunctionalSuite) TestResetWorkflow_ExcludeSignalReapplyNone() {
 	t.run()
 }
 
-type ResetTest struct {
+type resetTest struct {
 	*FunctionalSuite
 	tv                  *testvars.TestVars
 	reapplyExcludeTypes []enumspb.ResetReapplyExcludeType
@@ -274,7 +274,7 @@ type ResetTest struct {
 }
 
 // TODO(dan) FunctionalSuite.sendSignal() should use testvars
-func (t ResetTest) sendSignalAndProcessWFT(poller *TaskPoller) {
+func (t resetTest) sendSignalAndProcessWFT(poller *TaskPoller) {
 	signalRequest := &workflowservice.SignalWorkflowExecutionRequest{
 		RequestId:         uuid.New(),
 		Namespace:         t.namespace,
@@ -289,7 +289,7 @@ func (t ResetTest) sendSignalAndProcessWFT(poller *TaskPoller) {
 	t.NoError(err)
 }
 
-func (t *ResetTest) wftHandler(_ *commonpb.WorkflowExecution, _ *commonpb.WorkflowType, _ int64, _ int64, _ *historypb.History) ([]*commandpb.Command, error) {
+func (t *resetTest) wftHandler(_ *commonpb.WorkflowExecution, _ *commonpb.WorkflowType, _ int64, _ int64, _ *historypb.History) ([]*commandpb.Command, error) {
 	commands := []*commandpb.Command{}
 
 	t.wftCounter++
@@ -309,7 +309,7 @@ func (t *ResetTest) wftHandler(_ *commonpb.WorkflowExecution, _ *commonpb.Workfl
 	return commands, nil
 }
 
-func (t ResetTest) reset(eventId int64) string {
+func (t resetTest) reset(eventId int64) string {
 	resp, err := t.engine.ResetWorkflowExecution(NewContext(), &workflowservice.ResetWorkflowExecutionRequest{
 		Namespace:                 t.namespace,
 		WorkflowExecution:         t.tv.WorkflowExecution(),
@@ -323,7 +323,7 @@ func (t ResetTest) reset(eventId int64) string {
 	return resp.RunId
 }
 
-func (t *ResetTest) run() {
+func (t *resetTest) run() {
 	t.totalSignals = 2
 	t.tv = t.FunctionalSuite.startWorkflow(t.tv)
 
