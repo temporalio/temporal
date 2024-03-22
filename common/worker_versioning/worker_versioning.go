@@ -27,6 +27,7 @@ package worker_versioning
 import (
 	"context"
 	"fmt"
+	"strings"
 
 	"github.com/temporalio/sqlparser"
 	commonpb "go.temporal.io/api/common/v1"
@@ -41,12 +42,24 @@ import (
 )
 
 const (
+	buildIdSearchAttributePrefixAssigned   = "assigned"
 	buildIdSearchAttributePrefixVersioned   = "versioned"
 	buildIdSearchAttributePrefixUnversioned = "unversioned"
 	BuildIdSearchAttributeDelimiter         = ":"
 	// UnversionedSearchAttribute is the sentinel value used to mark all unversioned workflows
 	UnversionedSearchAttribute = buildIdSearchAttributePrefixUnversioned
 )
+
+// AssignedBuildIdSearchAttribute returns the search attribute value for the currently assigned build id
+func AssignedBuildIdSearchAttribute(buildId string) string {
+	return buildIdSearchAttributePrefixAssigned + BuildIdSearchAttributeDelimiter + buildId
+}
+
+// IsUnversionedOrAssignedBuildIdSearchAttribute returns the value is "unversioned" or "assigned:<bld>"
+func IsUnversionedOrAssignedBuildIdSearchAttribute(buildId string) bool {
+	return buildId == UnversionedSearchAttribute ||
+		strings.HasPrefix(buildId, buildIdSearchAttributePrefixAssigned + BuildIdSearchAttributeDelimiter)
+}
 
 // VersionedBuildIdSearchAttribute returns the search attribute value for an unversioned build id
 func VersionedBuildIdSearchAttribute(buildId string) string {
