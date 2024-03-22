@@ -396,11 +396,11 @@ func TestDescribeTaskQueue(t *testing.T) {
 
 	includeTaskStatus := false
 	descResp := tlm.DescribeTaskQueue(includeTaskStatus)
-	require.Equal(t, 0, len(descResp.GetPollers()))
-	require.Nil(t, descResp.GetTaskQueueStatus())
+	require.Equal(t, 0, len(descResp.DescResponse.GetPollers()))
+	require.Nil(t, descResp.DescResponse.GetTaskQueueStatus())
 
 	includeTaskStatus = true
-	taskQueueStatus := tlm.DescribeTaskQueue(includeTaskStatus).GetTaskQueueStatus()
+	taskQueueStatus := tlm.DescribeTaskQueue(includeTaskStatus).DescResponse.GetTaskQueueStatus()
 	require.NotNil(t, taskQueueStatus)
 	require.Zero(t, taskQueueStatus.GetAckLevel())
 	require.Equal(t, taskCount, taskQueueStatus.GetReadLevel())
@@ -416,18 +416,18 @@ func TestDescribeTaskQueue(t *testing.T) {
 	}
 
 	descResp = tlm.DescribeTaskQueue(includeTaskStatus)
-	require.Equal(t, 1, len(descResp.GetPollers()))
-	require.Equal(t, PollerIdentity, descResp.Pollers[0].GetIdentity())
-	require.NotEmpty(t, descResp.Pollers[0].GetLastAccessTime())
+	require.Equal(t, 1, len(descResp.DescResponse.GetPollers()))
+	require.Equal(t, PollerIdentity, descResp.DescResponse.Pollers[0].GetIdentity())
+	require.NotEmpty(t, descResp.DescResponse.Pollers[0].GetLastAccessTime())
 
 	rps := 5.0
 	tlm.pollerHistory.updatePollerInfo(pollerIdentity(PollerIdentity), &pollMetadata{ratePerSecond: &rps})
 	descResp = tlm.DescribeTaskQueue(includeTaskStatus)
-	require.Equal(t, 1, len(descResp.GetPollers()))
-	require.Equal(t, PollerIdentity, descResp.Pollers[0].GetIdentity())
-	require.True(t, descResp.Pollers[0].GetRatePerSecond() > 4.0 && descResp.Pollers[0].GetRatePerSecond() < 6.0)
+	require.Equal(t, 1, len(descResp.DescResponse.GetPollers()))
+	require.Equal(t, PollerIdentity, descResp.DescResponse.Pollers[0].GetIdentity())
+	require.True(t, descResp.DescResponse.Pollers[0].GetRatePerSecond() > 4.0 && descResp.DescResponse.Pollers[0].GetRatePerSecond() < 6.0)
 
-	taskQueueStatus = descResp.GetTaskQueueStatus()
+	taskQueueStatus = descResp.DescResponse.GetTaskQueueStatus()
 	require.NotNil(t, taskQueueStatus)
 	require.Equal(t, taskCount, taskQueueStatus.GetAckLevel())
 	require.Zero(t, taskQueueStatus.GetBacklogCountHint())
