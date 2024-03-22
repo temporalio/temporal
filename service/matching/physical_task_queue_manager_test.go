@@ -376,7 +376,7 @@ func createTestTaskQueuePartitionManager(ns *namespace.Namespace, partition tqid
 	return pm
 }
 
-func TestDescribeTaskQueue(t *testing.T) {
+func TestLegacyDescribeTaskQueue(t *testing.T) {
 	controller := gomock.NewController(t)
 	defer controller.Finish()
 
@@ -395,12 +395,12 @@ func TestDescribeTaskQueue(t *testing.T) {
 	}
 
 	includeTaskStatus := false
-	descResp := tlm.DescribeTaskQueue(includeTaskStatus)
+	descResp := tlm.LegacyDescribeTaskQueue(includeTaskStatus)
 	require.Equal(t, 0, len(descResp.DescResponse.GetPollers()))
 	require.Nil(t, descResp.DescResponse.GetTaskQueueStatus())
 
 	includeTaskStatus = true
-	taskQueueStatus := tlm.DescribeTaskQueue(includeTaskStatus).DescResponse.GetTaskQueueStatus()
+	taskQueueStatus := tlm.LegacyDescribeTaskQueue(includeTaskStatus).DescResponse.GetTaskQueueStatus()
 	require.NotNil(t, taskQueueStatus)
 	require.Zero(t, taskQueueStatus.GetAckLevel())
 	require.Equal(t, taskCount, taskQueueStatus.GetReadLevel())
@@ -415,14 +415,14 @@ func TestDescribeTaskQueue(t *testing.T) {
 		tlm.taskAckManager.completeTask(startTaskID + i)
 	}
 
-	descResp = tlm.DescribeTaskQueue(includeTaskStatus)
+	descResp = tlm.LegacyDescribeTaskQueue(includeTaskStatus)
 	require.Equal(t, 1, len(descResp.DescResponse.GetPollers()))
 	require.Equal(t, PollerIdentity, descResp.DescResponse.Pollers[0].GetIdentity())
 	require.NotEmpty(t, descResp.DescResponse.Pollers[0].GetLastAccessTime())
 
 	rps := 5.0
 	tlm.pollerHistory.updatePollerInfo(pollerIdentity(PollerIdentity), &pollMetadata{ratePerSecond: &rps})
-	descResp = tlm.DescribeTaskQueue(includeTaskStatus)
+	descResp = tlm.LegacyDescribeTaskQueue(includeTaskStatus)
 	require.Equal(t, 1, len(descResp.DescResponse.GetPollers()))
 	require.Equal(t, PollerIdentity, descResp.DescResponse.Pollers[0].GetIdentity())
 	require.True(t, descResp.DescResponse.Pollers[0].GetRatePerSecond() > 4.0 && descResp.DescResponse.Pollers[0].GetRatePerSecond() < 6.0)

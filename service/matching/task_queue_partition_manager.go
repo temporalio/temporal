@@ -74,8 +74,10 @@ type (
 		HasPollerAfter(buildId string, accessTime time.Time) bool
 		// HasAnyPollerAfter checks pollers on all versioned and unversioned queues
 		HasAnyPollerAfter(accessTime time.Time) bool
-		// DescribeTaskQueue returns information about the target task queue
-		DescribeTaskQueue(includeTaskQueueStatus bool) *matchingservice.DescribeTaskQueueResponse
+		// LegacyDescribeTaskQueue returns information about the target task queue's pollers and the status of its default queue
+		LegacyDescribeTaskQueue(includeTaskQueueStatus bool) *matchingservice.DescribeTaskQueueResponse
+		// DescribeTaskQueuePartition returns information about the target task queue partition
+		DescribeTaskQueuePartition(request *matchingservice.DescribeTaskQueuePartitionRequest) (*matchingservice.DescribeTaskQueuePartitionResponse, error)
 		String() string
 		Partition() tqid.Partition
 		LongPollExpirationInterval() time.Duration
@@ -380,16 +382,21 @@ func (pm *taskQueuePartitionManagerImpl) HasPollerAfter(buildId string, accessTi
 	return vq.HasPollerAfter(accessTime)
 }
 
-func (pm *taskQueuePartitionManagerImpl) DescribeTaskQueue(includeTaskQueueStatus bool) *matchingservice.DescribeTaskQueueResponse {
+func (pm *taskQueuePartitionManagerImpl) LegacyDescribeTaskQueue(includeTaskQueueStatus bool) *matchingservice.DescribeTaskQueueResponse {
 	resp := &matchingservice.DescribeTaskQueueResponse{
 		DescResponse: &workflowservice.DescribeTaskQueueResponse{
 			Pollers: pm.GetAllPollerInfo(),
 		},
 	}
 	if includeTaskQueueStatus {
-		resp.DescResponse.TaskQueueStatus = pm.defaultQueue.DescribeTaskQueue(true).DescResponse.TaskQueueStatus
+		resp.DescResponse.TaskQueueStatus = pm.defaultQueue.LegacyDescribeTaskQueue(true).DescResponse.TaskQueueStatus
 	}
 	return resp
+}
+
+func (pm *taskQueuePartitionManagerImpl) DescribeTaskQueuePartition(
+	request *matchingservice.DescribeTaskQueuePartitionRequest) (*matchingservice.DescribeTaskQueuePartitionResponse, error) {
+	return nil, nil
 }
 
 func (pm *taskQueuePartitionManagerImpl) String() string {

@@ -29,6 +29,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	taskqueuespb "go.temporal.io/server/api/taskqueue/v1"
 	"sync/atomic"
 	"time"
 
@@ -127,8 +128,10 @@ type (
 		UpdatePollerInfo(pollerIdentity, *pollMetadata)
 		GetAllPollerInfo() []*taskqueuepb.PollerInfo
 		HasPollerAfter(accessTime time.Time) bool
-		// DescribeTaskQueue returns information about the target task queue
-		DescribeTaskQueue(includeTaskQueueStatus bool) *matchingservice.DescribeTaskQueueResponse
+		// LegacyDescribeTaskQueue returns information about the target task queue's pollers and the status of its default queue
+		LegacyDescribeTaskQueue(includeTaskQueueStatus bool) *matchingservice.DescribeTaskQueueResponse
+		// Describe returns information about the physical task queue
+		Describe() *taskqueuespb.PhysicalTaskQueueInfo
 		String() string
 		QueueKey() *PhysicalTaskQueueKey
 	}
@@ -457,10 +460,10 @@ func (c *physicalTaskQueueManagerImpl) HasPollerAfter(accessTime time.Time) bool
 	return len(recentPollers) > 0
 }
 
-// DescribeTaskQueue returns information about the target taskqueue, right now this API returns the
+// LegacyDescribeTaskQueue returns information about the target taskqueue, right now this API returns the
 // pollers which polled this taskqueue in last few minutes and status of taskqueue's ackManager
 // (readLevel, ackLevel, backlogCountHint and taskIDBlock).
-func (c *physicalTaskQueueManagerImpl) DescribeTaskQueue(includeTaskQueueStatus bool) *matchingservice.DescribeTaskQueueResponse {
+func (c *physicalTaskQueueManagerImpl) LegacyDescribeTaskQueue(includeTaskQueueStatus bool) *matchingservice.DescribeTaskQueueResponse {
 	response := &matchingservice.DescribeTaskQueueResponse{
 		DescResponse: &workflowservice.DescribeTaskQueueResponse{
 			Pollers: c.GetAllPollerInfo(),
@@ -483,6 +486,10 @@ func (c *physicalTaskQueueManagerImpl) DescribeTaskQueue(includeTaskQueueStatus 
 	}
 
 	return response
+}
+
+func (c *physicalTaskQueueManagerImpl) Describe() *taskqueuespb.PhysicalTaskQueueInfo {
+	return nil
 }
 
 func (c *physicalTaskQueueManagerImpl) String() string {

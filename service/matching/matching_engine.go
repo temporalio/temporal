@@ -802,7 +802,7 @@ func (e *matchingEngineImpl) DescribeTaskQueue(
 		if err != nil {
 			return nil, err
 		}
-		return pm.DescribeTaskQueue(request.DescRequest.GetIncludeTaskQueueStatus()), nil
+		return pm.LegacyDescribeTaskQueue(request.DescRequest.GetIncludeTaskQueueStatus()), nil
 	} else if request.DescRequest.ApiMode == enumspb.DESCRIBE_TASK_QUEUE_MODE_ENHANCED {
 		versionsInfo := make([]*taskqueuepb.TaskQueueVersionInfo, 0)
 		// for _, queue_type := range request.DescRequest.TaskQueueTypes {
