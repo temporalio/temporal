@@ -74,7 +74,7 @@ type (
 		HasPollerAfter(buildId string, accessTime time.Time) bool
 		// HasAnyPollerAfter checks pollers on all versioned and unversioned queues
 		HasAnyPollerAfter(accessTime time.Time) bool
-		// LegacyDescribeTaskQueue returns information about the target task queue's pollers and the status of its default queue
+		// LegacyDescribeTaskQueue returns information about all pollers of this partition and the status of its unversioned physical queue
 		LegacyDescribeTaskQueue(includeTaskQueueStatus bool) *matchingservice.DescribeTaskQueueResponse
 		// DescribeTaskQueuePartition returns information about the target task queue partition
 		DescribeTaskQueuePartition(request *matchingservice.DescribeTaskQueuePartitionRequest) (*matchingservice.DescribeTaskQueuePartitionResponse, error)
