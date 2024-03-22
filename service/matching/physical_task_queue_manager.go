@@ -29,6 +29,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"go.temporal.io/api/workflowservice/v1"
 	"sync/atomic"
 	"time"
 
@@ -461,13 +462,17 @@ func (c *physicalTaskQueueManagerImpl) HasPollerAfter(accessTime time.Time) bool
 // pollers which polled this taskqueue in last few minutes and status of taskqueue's ackManager
 // (readLevel, ackLevel, backlogCountHint and taskIDBlock).
 func (c *physicalTaskQueueManagerImpl) DescribeTaskQueue(includeTaskQueueStatus bool) *matchingservice.DescribeTaskQueueResponse {
-	response := &matchingservice.DescribeTaskQueueResponse{Pollers: c.GetAllPollerInfo()}
+	response := &matchingservice.DescribeTaskQueueResponse{
+		DescResponse: &workflowservice.DescribeTaskQueueResponse{
+			Pollers: c.GetAllPollerInfo(),
+		},
+	}
 	if !includeTaskQueueStatus {
 		return response
 	}
 
 	taskIDBlock := rangeIDToTaskIDBlock(c.db.RangeID(), c.config.RangeSize)
-	response.TaskQueueStatus = &taskqueuepb.TaskQueueStatus{
+	response.DescResponse.TaskQueueStatus = &taskqueuepb.TaskQueueStatus{
 		ReadLevel:        c.taskAckManager.getReadLevel(),
 		AckLevel:         c.taskAckManager.getAckLevel(),
 		BacklogCountHint: c.taskAckManager.getBacklogCountHint(),

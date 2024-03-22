@@ -26,6 +26,7 @@ package matching
 
 import (
 	"context"
+	"go.temporal.io/api/workflowservice/v1"
 	"sync"
 	"time"
 
@@ -381,10 +382,12 @@ func (pm *taskQueuePartitionManagerImpl) HasPollerAfter(buildId string, accessTi
 
 func (pm *taskQueuePartitionManagerImpl) DescribeTaskQueue(includeTaskQueueStatus bool) *matchingservice.DescribeTaskQueueResponse {
 	resp := &matchingservice.DescribeTaskQueueResponse{
-		Pollers: pm.GetAllPollerInfo(),
+		DescResponse: &workflowservice.DescribeTaskQueueResponse{
+			Pollers: pm.GetAllPollerInfo(),
+		},
 	}
 	if includeTaskQueueStatus {
-		resp.TaskQueueStatus = pm.defaultQueue.DescribeTaskQueue(true).TaskQueueStatus
+		resp.DescResponse.TaskQueueStatus = pm.defaultQueue.DescribeTaskQueue(true).DescResponse.TaskQueueStatus
 	}
 	return resp
 }
