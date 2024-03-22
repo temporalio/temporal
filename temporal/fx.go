@@ -271,16 +271,6 @@ func ServerOptionsProvider(opts []ServerOption) (serverOptionsProvider, error) {
 		}
 	}
 
-	// static service hosts
-	staticHosts := make(map[primitives.ServiceName][]string)
-	if so.staticHosts {
-		for serviceName := range so.serviceNames {
-			staticHosts[serviceName] = []string{
-				fmt.Sprintf("127.0.0.1:%v", so.config.Services[string(serviceName)].RPC.GRPCPort),
-			}
-		}
-	}
-
 	return serverOptionsProvider{
 		ServerOptions:              so,
 		StopChan:                   stopChan,
@@ -291,7 +281,7 @@ func ServerOptionsProvider(opts []ServerOption) (serverOptionsProvider, error) {
 		LogConfig:   so.config.Log,
 
 		ServiceNames:    so.serviceNames,
-		ServiceHosts:    staticHosts,
+		ServiceHosts:    so.hosts,
 		NamespaceLogger: so.namespaceLogger,
 
 		ServiceResolver:        so.persistenceServiceResolver,

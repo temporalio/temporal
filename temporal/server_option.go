@@ -78,9 +78,9 @@ func ForServices(names []string) ServerOption {
 }
 
 // WithStaticHosts disables dynamic service membership and resolves service addresses statically from the config
-func WithStaticHosts() ServerOption {
+func WithStaticHosts(hosts map[primitives.ServiceName][]string) ServerOption {
 	return applyFunc(func(s *serverOptions) {
-		s.staticHosts = true
+		s.hosts = hosts
 	})
 }
 
