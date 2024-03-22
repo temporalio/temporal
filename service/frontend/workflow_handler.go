@@ -29,13 +29,13 @@ import (
 	"encoding/binary"
 	"errors"
 	"fmt"
-	"go.temporal.io/server/common/tqid"
 	"strings"
 	"sync/atomic"
 	"time"
 	"unicode/utf8"
 
 	"github.com/pborman/uuid"
+
 	batchpb "go.temporal.io/api/batch/v1"
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
@@ -87,6 +87,7 @@ import (
 	"go.temporal.io/server/common/searchattribute"
 	"go.temporal.io/server/common/tasktoken"
 	"go.temporal.io/server/common/timer"
+	"go.temporal.io/server/common/tqid"
 	"go.temporal.io/server/common/util"
 	"go.temporal.io/server/service/worker/batcher"
 	"go.temporal.io/server/service/worker/scheduler"
