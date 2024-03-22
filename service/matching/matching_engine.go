@@ -813,8 +813,6 @@ func (e *matchingEngineImpl) DescribeTaskQueue(
 		//			Versions:               request.DescRequest.Versions,
 		//			ReportBacklogInfo:      false,
 		//			ReportPollers:          request.DescRequest.ReportPollers,
-		//			ReportTaskReachability: request.DescRequest.ReportTaskReachability,
-		//			ReportTaskQueueStatus:  false,
 		//		})
 		//		merge responses into versionsInfo
 		//	}
