@@ -155,6 +155,21 @@ func (c *retryableClient) DescribeWorkflowExecution(
 	return resp, err
 }
 
+func (c *retryableClient) ExecuteMultiOperation(
+	ctx context.Context,
+	request *historyservice.ExecuteMultiOperationRequest,
+	opts ...grpc.CallOption,
+) (*historyservice.ExecuteMultiOperationResponse, error) {
+	var resp *historyservice.ExecuteMultiOperationResponse
+	op := func(ctx context.Context) error {
+		var err error
+		resp, err = c.client.ExecuteMultiOperation(ctx, request, opts...)
+		return err
+	}
+	err := backoff.ThrottleRetryContext(ctx, op, c.policy, c.isRetryable)
+	return resp, err
+}
+
 func (c *retryableClient) ForceDeleteWorkflowExecution(
 	ctx context.Context,
 	request *historyservice.ForceDeleteWorkflowExecutionRequest,

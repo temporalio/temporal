@@ -100,6 +100,7 @@ var (
 		"SignalWithStartWorkflowExecution":   func() any { return &workflowservice.SignalWithStartWorkflowExecutionResponse{} },
 		"SignalWorkflowExecution":            func() any { return &workflowservice.SignalWorkflowExecutionResponse{} },
 		"StartWorkflowExecution":             func() any { return &workflowservice.StartWorkflowExecutionResponse{} },
+		"ExecuteMultiOperationRequest":       func() any { return &workflowservice.ExecuteMultiOperationResponse{} },
 		"UpdateWorkflowExecution":            func() any { return &workflowservice.UpdateWorkflowExecutionResponse{} },
 		"PollWorkflowExecutionUpdate":        func() any { return &workflowservice.PollWorkflowExecutionUpdateResponse{} },
 		"TerminateWorkflowExecution":         func() any { return &workflowservice.TerminateWorkflowExecutionResponse{} },

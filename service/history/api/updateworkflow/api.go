@@ -117,7 +117,8 @@ func (u *Updater) Invoke(
 	)
 
 	if err != nil {
-		return u.OnError(err)
+		u.OnError(err)
+		return nil, err
 	}
 	return u.OnSuccess(ctx)
 }
@@ -219,7 +220,7 @@ func (u *Updater) Apply(
 
 func (u *Updater) OnError(
 	err error,
-) (*historyservice.UpdateWorkflowExecutionResponse, error) {
+) *historyservice.UpdateWorkflowExecutionResponse {
 	// Special handling for consts.ErrWorkflowCompleted here is needed for consistency with the case when update is received while WFT is running and this WFT completes workflow. In this case update is rejected (see update.CancelIncomplete).
 	if errors.Is(err, consts.ErrWorkflowCompleted) {
 		rejectionResp := u.createResponse(
@@ -228,9 +229,9 @@ func (u *Updater) OnError(
 				Value: &updatepb.Outcome_Failure{Failure: update.CancelReasonWorkflowCompleted.RejectionFailure()},
 			},
 			enumspb.UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_COMPLETED)
-		return rejectionResp, err
+		return rejectionResp
 	}
-	return nil, err
+	return nil
 }
 
 func (u *Updater) OnSuccess(

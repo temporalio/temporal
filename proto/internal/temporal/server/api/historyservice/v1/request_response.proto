@@ -27,6 +27,7 @@ option go_package = "go.temporal.io/server/api/historyservice/v1;historyservice"
 
 import "google/protobuf/duration.proto";
 import "google/protobuf/timestamp.proto";
+import "google/rpc/status.proto";
 
 import "temporal/api/common/v1/message.proto";
 import "temporal/api/history/v1/message.proto";
@@ -148,6 +149,31 @@ message ResetStickyTaskQueueRequest {
 }
 
 message ResetStickyTaskQueueResponse {
+}
+
+message ExecuteMultiOperationRequest {
+    string namespace_id = 1;
+    string workflow_id = 2;
+    repeated WorkflowOperation operations = 3;
+}
+
+message WorkflowOperation {
+    oneof operation {
+        StartWorkflowExecutionRequest start_workflow = 1;
+        UpdateWorkflowExecutionRequest update_workflow = 2;
+    }
+}
+
+message ExecuteMultiOperationResponse {
+    repeated WorkflowOperationResult results = 1;
+}
+
+message WorkflowOperationResult {
+    oneof result {
+        google.rpc.Status error = 1;
+        StartWorkflowExecutionResponse start_workflow = 2;
+        UpdateWorkflowExecutionResponse update_workflow = 3;
+    }
 }
 
 message RecordWorkflowTaskStartedRequest {
