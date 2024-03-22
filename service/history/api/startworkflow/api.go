@@ -33,6 +33,7 @@ import (
 	historypb "go.temporal.io/api/history/v1"
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/api/workflowservice/v1"
+	"go.temporal.io/server/common/definition"
 	"google.golang.org/protobuf/types/known/timestamppb"
 
 	"go.temporal.io/server/api/historyservice/v1"
@@ -41,7 +42,6 @@ import (
 	"go.temporal.io/server/common/tasktoken"
 
 	"go.temporal.io/server/common"
-	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence"
@@ -348,7 +348,7 @@ func (s *Starter) resolveDuplicateWorkflowID(
 	ctx context.Context,
 	currentWorkflowConditionFailed *persistence.CurrentWorkflowConditionFailedError,
 	creationParams *creationParams,
-) (*historyservice.StartWorkflowExecutionResponse, error) {
+) (_ *historyservice.StartWorkflowExecutionResponse, retErr error) {
 	workflowID := s.request.StartRequest.WorkflowId
 
 	currentExecutionUpdateAction, err := api.ResolveDuplicateWorkflowID(
@@ -367,21 +367,36 @@ func (s *Starter) resolveDuplicateWorkflowID(
 		return nil, nil
 	}
 
-	// Update current execution and create new execution in one transaction.
-	newExecutionWorkflowLease := creationParams.workflowLease
-	currentExecutionWorkflowKey := definition.NewWorkflowKey(
-		s.namespace.ID().String(), workflowID, currentWorkflowConditionFailed.RunID)
-	err = api.GetAndUpdateWorkflowWithNew(
+	currentWorkflowLease, err := s.workflowConsistencyChecker.GetWorkflowLease(
 		ctx,
 		nil,
 		api.BypassMutableStateConsistencyPredicate,
-		currentExecutionWorkflowKey,
-		currentExecutionUpdateAction,
-		func() (workflow.Context, workflow.MutableState, error) {
-			return newExecutionWorkflowLease.GetContext(), newExecutionWorkflowLease.GetMutableState(), nil
-		},
+		definition.NewWorkflowKey(
+			s.namespace.ID().String(),
+			workflowID,
+			currentWorkflowConditionFailed.RunID,
+		),
+		workflow.LockPriorityHigh,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer func() { currentWorkflowLease.GetReleaseFn()(retErr) }()
+
+	_, err = currentExecutionUpdateAction(currentWorkflowLease)
+	if err != nil {
+		return nil, err
+	}
+
+	newExecutionMutableState := creationParams.workflowLease.GetMutableState()
+	err = currentWorkflowLease.GetContext().UpdateWorkflowExecutionWithNew2(
+		ctx,
 		s.shardContext,
-		s.workflowConsistencyChecker,
+		persistence.UpdateWorkflowModeUpdateCurrent,
+		newExecutionMutableState,
+		creationParams.workflowSnapshot,
+		creationParams.workflowEventBatches,
+		workflow.TransactionPolicyActive,
 	)
 	switch {
 	case err == nil:
@@ -390,8 +405,6 @@ func (s *Starter) resolveDuplicateWorkflowID(
 				RunId: creationParams.runID,
 			}, nil
 		}
-
-		newExecutionMutableState := newExecutionWorkflowLease.GetMutableState()
 		newExecutionMutableStateInfo, err := extractMutableStateInfo(newExecutionMutableState)
 		if err != nil {
 			return nil, err

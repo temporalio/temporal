@@ -1312,19 +1312,19 @@ func (s *engine2Suite) TestStartWorkflowExecution_Dedup() {
 		s.Run("terminate when id reuse policy is TERMINATE_IF_RUNNING", func() {
 			failedError := makeCurrentWorkflowConditionFailedError(prevRequestID)
 			failedError.RunID = uuid.New()
-
 			s.mockExecutionMgr.EXPECT().CreateWorkflowExecution(gomock.Any(), gomock.Any()).
 				Return(nil, failedError)
 
-			ms := workflow.TestGlobalMutableState(s.historyEngine.shardContext, s.mockEventsCache, log.NewTestLogger(), tests.Version, tests.WorkflowID, tests.RunID)
-			ms.GetExecutionInfo().VersionHistories.Histories[0].Items = []*historyspb.VersionHistoryItem{{Version: 0, EventId: 0}}
-
+			currentMS := workflow.TestGlobalMutableState(s.historyEngine.shardContext, s.mockEventsCache, log.NewTestLogger(), tests.Version, tests.WorkflowID, tests.RunID)
+			currentMS.GetExecutionInfo().VersionHistories.Histories[0].Items = []*historyspb.VersionHistoryItem{{Version: 0, EventId: 0}}
 			s.mockExecutionMgr.EXPECT().GetWorkflowExecution(gomock.Any(), gomock.Any()).
-				Return(&persistence.GetWorkflowExecutionResponse{State: workflow.TestCloneToProto(ms)}, nil)
+				Return(&persistence.GetWorkflowExecutionResponse{State: workflow.TestCloneToProto(currentMS)}, nil)
+
 			s.mockExecutionMgr.EXPECT().UpdateWorkflowExecution(
 				gomock.Any(),
 				mock.MatchedBy(func(req *persistence.UpdateWorkflowExecutionRequest) bool {
-					return req.UpdateWorkflowMutation.ExecutionState.Status == enumspb.WORKFLOW_EXECUTION_STATUS_TERMINATED
+					return len(req.NewWorkflowEvents) == 1 && len(req.NewWorkflowEvents[0].Events) == 2 &&
+						req.UpdateWorkflowMutation.ExecutionState.Status == enumspb.WORKFLOW_EXECUTION_STATUS_TERMINATED
 				}),
 			).Return(&persistence.UpdateWorkflowExecutionResponse{
 				UpdateMutableStateStats: persistence.MutableStateStatistics{

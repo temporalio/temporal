@@ -140,6 +140,15 @@ type (
 			updateWorkflowTransactionPolicy TransactionPolicy,
 			newWorkflowTransactionPolicy *TransactionPolicy,
 		) error
+		UpdateWorkflowExecutionWithNew2(
+			ctx context.Context,
+			shardContext shard.Context,
+			updateMode persistence.UpdateWorkflowMode,
+			newMutableState MutableState,
+			newWorkflow *persistence.WorkflowSnapshot,
+			newWorkflowEvents []*persistence.WorkflowEvents,
+			updateWorkflowTransactionPolicy TransactionPolicy,
+		) (retError error)
 		// SetWorkflowExecution is an alias to SubmitClosedWorkflowSnapshot with TransactionPolicyPassive.
 		SetWorkflowExecution(
 			ctx context.Context,
@@ -590,7 +599,6 @@ func (c *ContextImpl) UpdateWorkflowExecutionWithNew(
 	updateWorkflowTransactionPolicy TransactionPolicy,
 	newWorkflowTransactionPolicy *TransactionPolicy,
 ) (retError error) {
-
 	defer func() {
 		if retError != nil {
 			c.Clear()
@@ -648,6 +656,74 @@ func (c *ContextImpl) UpdateWorkflowExecutionWithNew(
 		MutableStateFailoverVersion(newMutableState),
 		newWorkflow,
 		newWorkflowEventsSeq,
+	); err != nil {
+		return err
+	}
+
+	emitStateTransitionCount(c.metricsHandler, shardContext.GetClusterMetadata(), c.MutableState)
+	emitStateTransitionCount(c.metricsHandler, shardContext.GetClusterMetadata(), newMutableState)
+
+	// finally emit session stats
+	emitWorkflowHistoryStats(
+		c.metricsHandler,
+		c.GetNamespace(shardContext),
+		c.MutableState.GetExecutionState().State,
+		int(c.MutableState.GetExecutionInfo().ExecutionStats.HistorySize),
+		int(c.MutableState.GetNextEventID()-1),
+	)
+
+	return nil
+}
+
+func (c *ContextImpl) UpdateWorkflowExecutionWithNew2(
+	ctx context.Context,
+	shardContext shard.Context,
+	updateMode persistence.UpdateWorkflowMode,
+	newMutableState MutableState,
+	newWorkflow *persistence.WorkflowSnapshot,
+	newWorkflowEvents []*persistence.WorkflowEvents,
+	updateWorkflowTransactionPolicy TransactionPolicy,
+) (retError error) {
+	defer func() {
+		if retError != nil {
+			c.Clear()
+		}
+	}()
+
+	updateWorkflow, updateWorkflowEventsSeq, err := c.MutableState.CloseTransactionAsMutation(
+		updateWorkflowTransactionPolicy,
+	)
+	if err != nil {
+		return err
+	}
+
+	if err := c.mergeContinueAsNewReplicationTasks(
+		updateMode,
+		updateWorkflow,
+		newWorkflow,
+	); err != nil {
+		return err
+	}
+
+	if err := c.updateWorkflowExecutionEventReapply(
+		ctx,
+		shardContext,
+		updateMode,
+		updateWorkflowEventsSeq,
+		newWorkflowEvents,
+	); err != nil {
+		return err
+	}
+
+	if _, _, err := NewTransaction(shardContext).UpdateWorkflowExecution(
+		ctx,
+		updateMode,
+		c.MutableState.GetCurrentVersion(),
+		updateWorkflow,
+		updateWorkflowEventsSeq,
+		MutableStateFailoverVersion(newMutableState),
+		newWorkflow,
+		newWorkflowEvents,
 	); err != nil {
 		return err
 	}
