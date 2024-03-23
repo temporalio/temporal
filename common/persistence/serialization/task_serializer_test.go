@@ -238,7 +238,7 @@ func (s *taskSerializerSuite) TestTimerUserTask() {
 }
 
 func (s *taskSerializerSuite) TestTimerWorkflowRun() {
-	workflowTimer := &tasks.WorkflowTimeoutTask{
+	workflowTimer := &tasks.WorkflowRunTimeoutTask{
 		WorkflowKey:         s.workflowKey,
 		VisibilityTimestamp: time.Unix(0, rand.Int63()).UTC(),
 		TaskID:              rand.Int63(),

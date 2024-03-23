@@ -200,7 +200,7 @@ func (c *CacheImpl) GetOrCreateWorkflowExecution(
 	lockPriority workflow.LockPriority,
 ) (workflow.Context, ReleaseCacheFunc, error) {
 
-	if err := c.validateWorkflowExecutionInfo(ctx, shardContext, namespaceID, execution); err != nil {
+	if err := c.validateWorkflowExecutionInfo(ctx, shardContext, namespaceID, execution, lockPriority); err != nil {
 		return nil, nil, err
 	}
 
@@ -348,6 +348,7 @@ func (c *CacheImpl) validateWorkflowExecutionInfo(
 	shardContext shard.Context,
 	namespaceID namespace.ID,
 	execution *commonpb.WorkflowExecution,
+	lockPriority workflow.LockPriority,
 ) error {
 
 	if err := c.validateWorkflowID(execution.GetWorkflowId()); err != nil {
@@ -356,17 +357,20 @@ func (c *CacheImpl) validateWorkflowExecutionInfo(
 
 	// RunID is not provided, lets try to retrieve the RunID for current active execution
 	if execution.GetRunId() == "" {
-		response, err := shardContext.GetCurrentExecution(ctx, &persistence.GetCurrentExecutionRequest{
-			ShardID:     shardContext.GetShardID(),
-			NamespaceID: namespaceID.String(),
-			WorkflowID:  execution.GetWorkflowId(),
-		})
-
+		runID, err := GetCurrentRunID(
+			ctx,
+			shardContext,
+			c,
+			nil,
+			namespaceID.String(),
+			execution.GetWorkflowId(),
+			lockPriority,
+		)
 		if err != nil {
 			return err
 		}
 
-		execution.RunId = response.RunID
+		execution.RunId = runID
 	} else if uuid.Parse(execution.GetRunId()) == nil { // immediately return if invalid runID
 		return serviceerror.NewInvalidArgument("RunId is not valid UUID.")
 	}
@@ -386,4 +390,52 @@ func (c *CacheImpl) validateWorkflowID(
 	}
 
 	return nil
+}
+
+func GetCurrentRunID(
+	ctx context.Context,
+	shardContext shard.Context,
+	workflowCache Cache,
+	shardOwnershipAsserted *bool,
+	namespaceID string,
+	workflowID string,
+	lockPriority workflow.LockPriority,
+) (runID string, retErr error) {
+	if shardContext.GetConfig().EnableAPIGetCurrentRunIDLock() {
+		currentRelease, err := workflowCache.GetOrCreateCurrentWorkflowExecution(
+			ctx,
+			shardContext,
+			namespace.ID(namespaceID),
+			workflowID,
+			lockPriority,
+		)
+		if err != nil {
+			return "", err
+		}
+		defer currentRelease(retErr)
+	}
+
+	resp, err := shardContext.GetCurrentExecution(
+		ctx,
+		&persistence.GetCurrentExecutionRequest{
+			ShardID:     shardContext.GetShardID(),
+			NamespaceID: namespaceID,
+			WorkflowID:  workflowID,
+		},
+	)
+	switch err.(type) {
+	case nil:
+		return resp.RunID, nil
+	case *serviceerror.NotFound:
+		if err := shard.AssertShardOwnership(
+			ctx,
+			shardContext,
+			shardOwnershipAsserted,
+		); err != nil {
+			return "", err
+		}
+		return "", err
+	default:
+		return "", err
+	}
 }

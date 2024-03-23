@@ -113,8 +113,10 @@ func (t *timerQueueStandbyTaskExecutor) Execute(
 		err = t.executeWorkflowBackoffTimerTask(ctx, task)
 	case *tasks.ActivityRetryTimerTask:
 		err = t.executeActivityRetryTimerTask(ctx, task)
-	case *tasks.WorkflowTimeoutTask:
-		err = t.executeWorkflowTimeoutTask(ctx, task)
+	case *tasks.WorkflowRunTimeoutTask:
+		err = t.executeWorkflowRunTimeoutTask(ctx, task)
+	case *tasks.WorkflowExecutionTimeoutTask:
+		err = t.executeWorkflowExecutionTimeoutTask(ctx, task)
 	case *tasks.DeleteHistoryEventTask:
 		err = t.executeDeleteHistoryEventTask(ctx, task)
 	default:
@@ -281,7 +283,7 @@ func (t *timerQueueStandbyTaskExecutor) executeActivityRetryTimerTask(
 			return nil, nil
 		}
 
-		err := CheckTaskVersion(t.shardContext, t.logger, mutableState.GetNamespaceEntry(), activityInfo.Version, task.Version, task)
+		err := checkTaskVersion(t.shardContext, t.logger, mutableState.GetNamespaceEntry(), activityInfo.Version, task.Version, task)
 		if err != nil {
 			return nil, err
 		}
@@ -329,7 +331,7 @@ func (t *timerQueueStandbyTaskExecutor) executeWorkflowTaskTimeoutTask(
 			return nil, nil
 		}
 
-		err := CheckTaskVersion(t.shardContext, t.logger, mutableState.GetNamespaceEntry(), workflowTask.Version, timerTask.Version, timerTask)
+		err := checkTaskVersion(t.shardContext, t.logger, mutableState.GetNamespaceEntry(), workflowTask.Version, timerTask.Version, timerTask)
 		if err != nil {
 			return nil, err
 		}
@@ -391,21 +393,50 @@ func (t *timerQueueStandbyTaskExecutor) executeWorkflowBackoffTimerTask(
 	)
 }
 
-func (t *timerQueueStandbyTaskExecutor) executeWorkflowTimeoutTask(
+func (t *timerQueueStandbyTaskExecutor) executeWorkflowRunTimeoutTask(
 	ctx context.Context,
-	timerTask *tasks.WorkflowTimeoutTask,
+	timerTask *tasks.WorkflowRunTimeoutTask,
 ) error {
 	actionFn := func(_ context.Context, wfContext workflow.Context, mutableState workflow.MutableState) (interface{}, error) {
-		// we do not need to notify new timer to base, since if there is no new event being replicated
-		// checking again if the timer can be completed is meaningless
-
 		startVersion, err := mutableState.GetStartVersion()
 		if err != nil {
 			return nil, err
 		}
-		err = CheckTaskVersion(t.shardContext, t.logger, mutableState.GetNamespaceEntry(), startVersion, timerTask.Version, timerTask)
+		err = checkTaskVersion(t.shardContext, t.logger, mutableState.GetNamespaceEntry(), startVersion, timerTask.Version, timerTask)
 		if err != nil {
 			return nil, err
+		}
+
+		return getHistoryResendInfo(mutableState)
+	}
+
+	return t.processTimer(
+		ctx,
+		timerTask,
+		actionFn,
+		getStandbyPostActionFn(
+			timerTask,
+			t.getCurrentTime,
+			t.config.StandbyTaskMissingEventsResendDelay(timerTask.GetType()),
+			t.config.StandbyTaskMissingEventsDiscardDelay(timerTask.GetType()),
+			t.fetchHistoryFromRemote,
+			standbyTimerTaskPostActionTaskDiscarded,
+		),
+	)
+}
+
+func (t *timerQueueStandbyTaskExecutor) executeWorkflowExecutionTimeoutTask(
+	ctx context.Context,
+	timerTask *tasks.WorkflowExecutionTimeoutTask,
+) error {
+	actionFn := func(
+		_ context.Context,
+		wfContext workflow.Context,
+		mutableState workflow.MutableState,
+	) (interface{}, error) {
+
+		if !t.isValidExecutionTimeoutTask(mutableState, timerTask) {
+			return nil, nil
 		}
 
 		return getHistoryResendInfo(mutableState)

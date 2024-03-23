@@ -45,8 +45,8 @@ import (
 	"go.temporal.io/server/service/history/workflow"
 )
 
-// CheckTaskVersion will return an error if task version check fails
-func CheckTaskVersion(
+// checkTaskVersion will return an error if task version check fails
+func checkTaskVersion(
 	shard shard.Context,
 	logger log.Logger,
 	namespace *namespace.Namespace,
@@ -82,7 +82,7 @@ func loadMutableStateForTransferTask(
 	logger log.Logger,
 ) (workflow.MutableState, error) {
 	logger = tasks.InitializeLogger(transferTask, logger)
-	mutableState, err := LoadMutableStateForTask(
+	mutableState, err := loadMutableStateForTask(
 		ctx,
 		shardContext,
 		wfContext,
@@ -128,7 +128,7 @@ func loadMutableStateForTimerTask(
 	logger log.Logger,
 ) (workflow.MutableState, error) {
 	logger = tasks.InitializeLogger(timerTask, logger)
-	return LoadMutableStateForTask(
+	return loadMutableStateForTask(
 		ctx,
 		shardContext,
 		wfContext,
@@ -139,7 +139,7 @@ func loadMutableStateForTimerTask(
 	)
 }
 
-func LoadMutableStateForTask(
+func loadMutableStateForTask(
 	ctx context.Context,
 	shardContext shard.Context,
 	wfContext workflow.Context,

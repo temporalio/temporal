@@ -1387,7 +1387,7 @@ func (s *timerQueueActiveTaskExecutorSuite) TestWorkflowTimeout_Fire() {
 	wt.StartedEventID = startEvent.GetEventId()
 	completionEvent := addWorkflowTaskCompletedEvent(&s.Suite, mutableState, wt.ScheduledEventID, wt.StartedEventID, "some random identity")
 
-	timerTask := &tasks.WorkflowTimeoutTask{
+	timerTask := &tasks.WorkflowRunTimeoutTask{
 		WorkflowKey: definition.NewWorkflowKey(
 			s.namespaceID.String(),
 			execution.GetWorkflowId(),
@@ -1447,7 +1447,7 @@ func (s *timerQueueActiveTaskExecutorSuite) TestWorkflowTimeout_Retry() {
 	wt.StartedEventID = startEvent.GetEventId()
 	completionEvent := addWorkflowTaskCompletedEvent(&s.Suite, mutableState, wt.ScheduledEventID, wt.StartedEventID, "some random identity")
 
-	timerTask := &tasks.WorkflowTimeoutTask{
+	timerTask := &tasks.WorkflowRunTimeoutTask{
 		WorkflowKey: definition.NewWorkflowKey(
 			s.namespaceID.String(),
 			execution.GetWorkflowId(),
@@ -1504,7 +1504,7 @@ func (s *timerQueueActiveTaskExecutorSuite) TestWorkflowTimeout_Cron() {
 	wt.StartedEventID = startEvent.GetEventId()
 	completionEvent := addWorkflowTaskCompletedEvent(&s.Suite, mutableState, wt.ScheduledEventID, wt.StartedEventID, "some random identity")
 
-	timerTask := &tasks.WorkflowTimeoutTask{
+	timerTask := &tasks.WorkflowRunTimeoutTask{
 		WorkflowKey: definition.NewWorkflowKey(
 			s.namespaceID.String(),
 			execution.GetWorkflowId(),
@@ -1560,7 +1560,7 @@ func (s *timerQueueActiveTaskExecutorSuite) TestWorkflowTimeout_WorkflowExpired(
 	wt.StartedEventID = startEvent.GetEventId()
 	completionEvent := addWorkflowTaskCompletedEvent(&s.Suite, mutableState, wt.ScheduledEventID, wt.StartedEventID, "some random identity")
 
-	timerTask := &tasks.WorkflowTimeoutTask{
+	timerTask := &tasks.WorkflowRunTimeoutTask{
 		WorkflowKey: definition.NewWorkflowKey(
 			s.namespaceID.String(),
 			execution.GetWorkflowId(),

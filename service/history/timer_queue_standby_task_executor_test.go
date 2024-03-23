@@ -1084,7 +1084,7 @@ func (s *timerQueueStandbyTaskExecutorSuite) TestProcessWorkflowTimeout_Pending(
 	mutableState.FlushBufferedEvents()
 	nextEventID := completionEvent.GetEventId()
 
-	timerTask := &tasks.WorkflowTimeoutTask{
+	timerTask := &tasks.WorkflowRunTimeoutTask{
 		WorkflowKey: definition.NewWorkflowKey(
 			s.namespaceID.String(),
 			execution.GetWorkflowId(),
@@ -1154,7 +1154,7 @@ func (s *timerQueueStandbyTaskExecutorSuite) TestProcessWorkflowTimeout_Success(
 	// Flush buffered events so real IDs get assigned
 	mutableState.FlushBufferedEvents()
 
-	timerTask := &tasks.WorkflowTimeoutTask{
+	timerTask := &tasks.WorkflowRunTimeoutTask{
 		WorkflowKey: definition.NewWorkflowKey(
 			s.namespaceID.String(),
 			execution.GetWorkflowId(),

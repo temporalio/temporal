@@ -207,7 +207,7 @@ func (s *stateBuilderSuite) TestApplyEvents_EventTypeWorkflowExecutionStarted_No
 	).Return(nil)
 	s.mockTaskGenerator.EXPECT().GenerateWorkflowStartTasks(
 		protomock.Eq(event),
-	).Return(nil)
+	).Return(int32(TimerTaskStatusCreated), nil)
 	s.mockMutableState.EXPECT().ClearStickyTaskQueue()
 	s.mockMutableState.EXPECT().SetHistoryTree(nil, timestamp.DurationFromSeconds(100), tests.RunID).Return(nil)
 
@@ -253,7 +253,7 @@ func (s *stateBuilderSuite) TestApplyEvents_EventTypeWorkflowExecutionStarted_Wi
 	).Return(nil)
 	s.mockTaskGenerator.EXPECT().GenerateWorkflowStartTasks(
 		protomock.Eq(event),
-	).Return(nil)
+	).Return(int32(TimerTaskStatusCreated), nil)
 	s.mockTaskGenerator.EXPECT().GenerateDelayedWorkflowTasks(
 		protomock.Eq(event),
 	).Return(nil)
@@ -774,7 +774,7 @@ func (s *stateBuilderSuite) TestApplyEvents_EventTypeWorkflowExecutionContinuedA
 	).Return(nil)
 	s.mockTaskGeneratorForNew.EXPECT().GenerateWorkflowStartTasks(
 		protomock.Eq(newRunStartedEvent),
-	).Return(nil)
+	).Return(int32(TimerTaskStatusCreated), nil)
 	s.mockTaskGeneratorForNew.EXPECT().GenerateScheduleWorkflowTaskTasks(
 		newRunWorkflowTaskEvent.GetEventId(),
 	).Return(nil)
@@ -2114,7 +2114,7 @@ func (s *stateBuilderSuite) setupMockForNewRunStartedEvent(
 
 	s.mockTaskGeneratorForNew.EXPECT().GenerateWorkflowStartTasks(
 		protomock.Eq(newRunStartedEvent),
-	).Return(nil)
+	).Return(int32(TimerTaskStatusCreated), nil)
 
 	backoffDuration := newRunStartedEvent.GetWorkflowExecutionStartedEventAttributes().GetFirstWorkflowTaskBackoff().AsDuration()
 	if backoffDuration > 0 {

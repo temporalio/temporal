@@ -50,7 +50,7 @@ type (
 	TaskGenerator interface {
 		GenerateWorkflowStartTasks(
 			startEvent *historypb.HistoryEvent,
-		) error
+		) (executionTimeoutTimerTaskStatus int32, err error)
 		GenerateWorkflowCloseTasks(
 			closedTime time.Time,
 			deleteAfterClose bool,
@@ -133,24 +133,54 @@ func NewTaskGenerator(
 
 func (r *TaskGeneratorImpl) GenerateWorkflowStartTasks(
 	startEvent *historypb.HistoryEvent,
-) error {
+) (int32, error) {
 
-	startVersion := startEvent.GetVersion()
-	workflowRunExpirationTime := timestamp.TimeValue(r.mutableState.GetExecutionInfo().WorkflowRunExpirationTime)
-	if workflowRunExpirationTime.IsZero() {
-		// this mean infinite timeout
-		return nil
+	executionInfo := r.mutableState.GetExecutionInfo()
+	executionTimeoutTimerTaskStatus := executionInfo.WorkflowExecutionTimerTaskStatus
+	workflowExecutionTimeoutTimerEnabled := r.config.EnableWorkflowExecutionTimeoutTimer()
+	if !workflowExecutionTimeoutTimerEnabled {
+		// when the feature is disabled, reset this field so that it won't be carried over to the next run
+		// and new runs can always have the run timeout timer always generated.
+		executionTimeoutTimerTaskStatus = TimerTaskStatusNone
 	}
 
-	if r.mutableState.IsWorkflowExecutionRunning() {
-		r.mutableState.AddTasks(&tasks.WorkflowTimeoutTask{
+	if !r.mutableState.IsWorkflowExecutionRunning() {
+		return executionTimeoutTimerTaskStatus, nil
+	}
+
+	workflowExecutionExpirationTime := timestamp.TimeValue(
+		executionInfo.WorkflowExecutionExpirationTime,
+	)
+	if !workflowExecutionExpirationTime.IsZero() &&
+		executionInfo.WorkflowExecutionTimerTaskStatus == TimerTaskStatusNone &&
+		workflowExecutionTimeoutTimerEnabled {
+		r.mutableState.AddTasks(&tasks.WorkflowExecutionTimeoutTask{
+			// TaskID is set by shard
+			NamespaceID:         executionInfo.NamespaceId,
+			WorkflowID:          executionInfo.WorkflowId,
+			FirstRunID:          executionInfo.FirstExecutionRunId,
+			VisibilityTimestamp: workflowExecutionExpirationTime,
+		})
+		executionTimeoutTimerTaskStatus = TimerTaskStatusCreated
+	}
+
+	workflowRunExpirationTime := timestamp.TimeValue(
+		executionInfo.WorkflowRunExpirationTime,
+	)
+	if workflowRunExpirationTime.IsZero() {
+		return executionTimeoutTimerTaskStatus, nil
+	}
+	if executionTimeoutTimerTaskStatus == TimerTaskStatusNone ||
+		workflowRunExpirationTime.Before(workflowExecutionExpirationTime) {
+		r.mutableState.AddTasks(&tasks.WorkflowRunTimeoutTask{
 			// TaskID is set by shard
 			WorkflowKey:         r.mutableState.GetWorkflowKey(),
 			VisibilityTimestamp: workflowRunExpirationTime,
-			Version:             startVersion,
+			Version:             startEvent.GetVersion(),
 		})
 	}
-	return nil
+
+	return executionTimeoutTimerTaskStatus, nil
 }
 
 func (r *TaskGeneratorImpl) GenerateWorkflowCloseTasks(
