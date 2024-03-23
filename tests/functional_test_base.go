@@ -49,6 +49,7 @@ import (
 	"go.temporal.io/api/operatorservice/v1"
 	"go.temporal.io/api/workflowservice/v1"
 
+	"go.temporal.io/server/api/matchingservice/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/dynamicconfig"
@@ -72,6 +73,7 @@ type (
 		testClusterConfig      *TestClusterConfig
 		engine                 FrontendClient
 		adminClient            AdminClient
+		matchingServiceClient  matchingservice.MatchingServiceClient
 		operatorClient         operatorservice.OperatorServiceClient
 		httpAPIAddress         string
 		Logger                 log.Logger
@@ -152,6 +154,7 @@ func (s *FunctionalTestBase) setupSuite(defaultClusterConfigFile string, options
 		s.Require().NoError(err)
 		s.testCluster = cluster
 		s.engine = s.testCluster.GetFrontendClient()
+		s.matchingServiceClient = s.testCluster.GetMatchingClient()
 		s.adminClient = s.testCluster.GetAdminClient()
 		s.operatorClient = s.testCluster.GetOperatorClient()
 		s.httpAPIAddress = cluster.host.FrontendHTTPAddress()
@@ -414,4 +417,9 @@ func (s *FunctionalTestBase) registerArchivalNamespace(archivalNamespace string)
 		tag.WorkflowNamespaceID(response.ID),
 	)
 	return err
+}
+
+// MatchingServiceClient returns the matching service client setup for this functional test.
+func (s *FunctionalTestBase) MatchingServiceClient() matchingservice.MatchingServiceClient {
+	return s.matchingServiceClient
 }
