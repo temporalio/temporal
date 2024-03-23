@@ -394,7 +394,7 @@ func (wh *WorkflowHandler) StartWorkflowExecution(ctx context.Context, request *
 		return nil, err
 	}
 
-	if err := wh.validateWorkflowIdDedupPolicies(
+	if err := wh.validateWorkflowIdReusePolicy(
 		namespaceName,
 		request.WorkflowIdReusePolicy,
 		request.WorkflowIdConflictPolicy,
@@ -1740,7 +1740,7 @@ func (wh *WorkflowHandler) SignalWithStartWorkflowExecution(ctx context.Context,
 		return nil, err
 	}
 
-	if err := wh.validateWorkflowIdDedupPolicies(
+	if err := wh.validateWorkflowIdReusePolicy(
 		namespaceName,
 		request.WorkflowIdReusePolicy,
 		request.WorkflowIdConflictPolicy,
@@ -4064,13 +4064,13 @@ func (wh *WorkflowHandler) validateTaskQueue(t *taskqueuepb.TaskQueue, namespace
 	return nil
 }
 
-func (wh *WorkflowHandler) validateWorkflowIdDedupPolicies(
-	namespace namespace.Name,
+func (wh *WorkflowHandler) validateWorkflowIdReusePolicy(
+	ns namespace.Name,
 	reusePolicy enumspb.WorkflowIdReusePolicy,
 	conflictPolicy enumspb.WorkflowIdConflictPolicy,
 ) error {
 	if conflictPolicy != enumspb.WORKFLOW_ID_CONFLICT_POLICY_UNSPECIFIED {
-		if !wh.config.EnableWorkflowIdConflictPolicy(namespace.String()) {
+		if !wh.config.EnableWorkflowIdConflictPolicy(ns.String()) {
 			return errWorkflowIdConflictPolicyNotAllowed
 		}
 		if reusePolicy == enumspb.WORKFLOW_ID_REUSE_POLICY_TERMINATE_IF_RUNNING {
