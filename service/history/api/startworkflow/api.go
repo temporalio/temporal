@@ -119,7 +119,7 @@ func (s *Starter) prepare(ctx context.Context) error {
 	request := s.request.StartRequest
 	metricsHandler := s.shardContext.GetMetricsHandler()
 
-	api.MigrateWorkflowIdDuplicationPolicies(
+	api.MigrateWorkflowIdReusePolicyForRunningWorkflow(
 		&request.WorkflowIdReusePolicy,
 		&request.WorkflowIdConflictPolicy)
 

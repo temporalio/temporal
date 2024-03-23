@@ -71,7 +71,7 @@ func Invoke(
 		return nil, err
 	}
 
-	api.MigrateWorkflowIdDuplicationPolicies(
+	api.MigrateWorkflowIdReusePolicyForRunningWorkflow(
 		&signalWithStartRequest.SignalWithStartRequest.WorkflowIdReusePolicy,
 		&signalWithStartRequest.SignalWithStartRequest.WorkflowIdConflictPolicy)
 

@@ -133,7 +133,7 @@ func generateWorkflowAlreadyStartedError(
 	)
 }
 
-func MigrateWorkflowIdDuplicationPolicies(
+func MigrateWorkflowIdReusePolicyForRunningWorkflow(
 	wfIDReusePolicy *enumspb.WorkflowIdReusePolicy,
 	wfIDConflictPolicy *enumspb.WorkflowIdConflictPolicy,
 ) {
