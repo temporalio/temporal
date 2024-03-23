@@ -236,6 +236,9 @@ var (
 			10_000,
 			20_000,
 			50_000,
+			// 51_200 : the default value of limit.historyCount.error.
+			// So that we can see the error rate in the prometheus and alert on it without any config change.
+			51_200,
 			100_000,
 		},
 		Milliseconds: {
@@ -275,6 +278,9 @@ var (
 			4194304,
 			8388608,
 			16777216,
+			// 50MB : the default value of limit.historySize.error.
+			// So that we can see the error rate in the prometheus and alert on it without any config change.
+			52428800,
 		},
 	}
 )
