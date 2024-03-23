@@ -58,7 +58,7 @@ type (
 		configDir string
 		env       string
 		zone      string
-		hosts     map[primitives.ServiceName][]string
+		hosts     map[primitives.ServiceName]string
 
 		startupSynchronizationMode synchronizationModeParams
 

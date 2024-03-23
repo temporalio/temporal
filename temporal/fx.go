@@ -130,7 +130,7 @@ type (
 		Authorizer                 authorization.Authorizer
 		ClaimMapper                authorization.ClaimMapper
 		AudienceGetter             authorization.JWTAudienceMapper
-		ServiceHosts               map[primitives.ServiceName][]string
+		ServiceHosts               map[primitives.ServiceName]string
 
 		// below are things that could be over write by server options or may have default if not supplied by serverOptions.
 		Logger                log.Logger
@@ -362,8 +362,8 @@ type (
 		DataStoreFactory           persistenceClient.AbstractDataStoreFactory
 		VisibilityStoreFactory     visibility.VisibilityStoreFactory
 		SpanExporters              []otelsdktrace.SpanExporter
-		InstanceID                 resource.InstanceID                 `optional:"true"`
-		StaticServiceHosts         map[primitives.ServiceName][]string `optional:"true"`
+		InstanceID                 resource.InstanceID               `optional:"true"`
+		StaticServiceHosts         map[primitives.ServiceName]string `optional:"true"`
 		TaskCategoryRegistry       tasks.TaskCategoryRegistry
 	}
 )
@@ -376,11 +376,13 @@ type (
 // into fx providers here. Essentially, we want an `fx.In` object in the server graph, and an `fx.Out` object in the
 // service graphs. This is a workaround to achieve something similar.
 func (params ServiceProviderParamsCommon) GetCommonServiceOptions(serviceName primitives.ServiceName) fx.Option {
-	var membershipModule fx.Option
+	membershipModule := ringpop.MembershipModule
 	if len(params.StaticServiceHosts) > 0 {
-		membershipModule = static.MembershipModule(params.StaticServiceHosts)
-	} else {
-		membershipModule = ringpop.MembershipModule
+		if host, ok := params.StaticServiceHosts[serviceName]; ok {
+			membershipModule = static.MembershipModule(host, map[primitives.ServiceName][]string{serviceName: {host}})
+		} else {
+			panic(fmt.Sprintf("Service %v was not found in static membership definition", serviceName))
+		}
 	}
 
 	return fx.Options(
