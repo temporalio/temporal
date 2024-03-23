@@ -378,11 +378,11 @@ type (
 func (params ServiceProviderParamsCommon) GetCommonServiceOptions(serviceName primitives.ServiceName) fx.Option {
 	membershipModule := ringpop.MembershipModule
 	if len(params.StaticServiceHosts) > 0 {
-		if host, ok := params.StaticServiceHosts[serviceName]; ok {
-			membershipModule = static.MembershipModule(host, map[primitives.ServiceName][]string{serviceName: {host}})
-		} else {
+		host, exists := params.StaticServiceHosts[serviceName]
+		if !exists {
 			panic(fmt.Sprintf("Service %v was not found in static membership definition", serviceName))
 		}
+		membershipModule = static.MembershipModule(host, map[primitives.ServiceName][]string{serviceName: {host}})
 	}
 
 	return fx.Options(
