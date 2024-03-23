@@ -234,7 +234,7 @@ func (c *temporalImpl) Start() error {
 	hosts := make(map[primitives.ServiceName][]string)
 	hosts[primitives.FrontendService] = []string{c.FrontendGRPCAddress()}
 	hosts[primitives.MatchingService] = []string{c.MatchingGRPCServiceAddress()}
-	hosts[primitives.HistoryService] = c.HistoryServiceAddress()
+	hosts[primitives.HistoryService] = c.HistoryServiceAddresses()
 	if c.enableWorker() {
 		hosts[primitives.WorkerService] = []string{c.WorkerGRPCServiceAddress()}
 	}
@@ -322,7 +322,7 @@ func (c *temporalImpl) FrontendHTTPHostPort() (string, int) {
 	}
 }
 
-func (c *temporalImpl) HistoryServiceAddress() []string {
+func (c *temporalImpl) HistoryServiceAddresses() []string {
 	var hosts []string
 	var startPort int
 	switch c.clusterNo {
@@ -427,7 +427,7 @@ func (c *temporalImpl) startFrontend(hosts map[primitives.ServiceName][]string, 
 		fx.Provide(func() log.ThrottledLogger { return c.logger }),
 		fx.Provide(func() resource.NamespaceLogger { return c.logger }),
 		fx.Provide(c.newRPCFactory),
-		static.MembershipModule(hosts),
+		static.MembershipModule(hosts[serviceName][0], hosts),
 		fx.Provide(func() *cluster.Config { return c.clusterMetadataConfig }),
 		fx.Provide(func() carchiver.ArchivalMetadata { return c.archiverMetadata }),
 		fx.Provide(func() provider.ArchiverProvider { return c.archiverProvider }),
@@ -494,7 +494,8 @@ func (c *temporalImpl) startHistory(
 	startWG *sync.WaitGroup,
 ) {
 	serviceName := primitives.HistoryService
-	for _, grpcPort := range c.HistoryServiceAddress() {
+	serviceHosts := hosts[serviceName]
+	for _, host := range serviceHosts {
 		persistenceConfig, err := copyPersistenceConfig(c.persistenceConfig)
 		if err != nil {
 			c.logger.Fatal("Failed to copy persistence config for history", tag.Error(err))
@@ -516,11 +517,11 @@ func (c *temporalImpl) startHistory(
 				serviceName,
 			),
 			fx.Provide(c.GetMetricsHandler),
-			fx.Provide(func() listenHostPort { return listenHostPort(grpcPort) }),
+			fx.Provide(func() listenHostPort { return listenHostPort(host) }),
 			fx.Provide(func() config.DCRedirectionPolicy { return config.DCRedirectionPolicy{} }),
 			fx.Provide(func() log.ThrottledLogger { return c.logger }),
 			fx.Provide(c.newRPCFactory),
-			static.MembershipModule(hosts),
+			static.MembershipModule(host, hosts),
 			fx.Provide(func() *cluster.Config { return c.clusterMetadataConfig }),
 			fx.Provide(func() carchiver.ArchivalMetadata { return c.archiverMetadata }),
 			fx.Provide(func() provider.ArchiverProvider { return c.archiverProvider }),
@@ -567,7 +568,7 @@ func (c *temporalImpl) startHistory(
 		// However current interface for getting history client doesn't specify which client it needs and the tests that use this API
 		// depends on the fact that there's only one history host.
 		// Need to change those tests and modify the interface for getting history client.
-		historyConnection, err := rpc.Dial(c.HistoryServiceAddress()[0], nil, c.logger)
+		historyConnection, err := rpc.Dial(serviceHosts[0], nil, c.logger)
 		if err != nil {
 			c.logger.Fatal("Failed to create connection for history", tag.Error(err))
 		}
@@ -614,7 +615,7 @@ func (c *temporalImpl) startMatching(hosts map[primitives.ServiceName][]string, 
 		fx.Provide(func() listenHostPort { return listenHostPort(c.MatchingGRPCServiceAddress()) }),
 		fx.Provide(func() log.ThrottledLogger { return c.logger }),
 		fx.Provide(c.newRPCFactory),
-		static.MembershipModule(hosts),
+		static.MembershipModule(hosts[serviceName][0], hosts),
 		fx.Provide(func() *cluster.Config { return c.clusterMetadataConfig }),
 		fx.Provide(func() carchiver.ArchivalMetadata { return c.archiverMetadata }),
 		fx.Provide(func() provider.ArchiverProvider { return c.archiverProvider }),
@@ -706,7 +707,7 @@ func (c *temporalImpl) startWorker(hosts map[primitives.ServiceName][]string, st
 		fx.Provide(func() config.DCRedirectionPolicy { return config.DCRedirectionPolicy{} }),
 		fx.Provide(func() log.ThrottledLogger { return c.logger }),
 		fx.Provide(c.newRPCFactory),
-		static.MembershipModule(hosts),
+		static.MembershipModule(hosts[serviceName][0], hosts),
 		fx.Provide(func() *cluster.Config { return &clusterConfigCopy }),
 		fx.Provide(func() carchiver.ArchivalMetadata { return c.archiverMetadata }),
 		fx.Provide(func() provider.ArchiverProvider { return c.archiverProvider }),

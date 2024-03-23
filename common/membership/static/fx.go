@@ -25,6 +25,8 @@
 package static
 
 import (
+	"fmt"
+
 	"go.temporal.io/server/common/primitives"
 	"go.uber.org/fx"
 
@@ -32,6 +34,7 @@ import (
 )
 
 func MembershipModule(
+	selfHost string,
 	hosts map[primitives.ServiceName][]string,
 ) fx.Option {
 	return fx.Options(
@@ -39,8 +42,13 @@ func MembershipModule(
 			return newStaticMonitor(hosts)
 		}),
 		fx.Provide(func(serviceName primitives.ServiceName) membership.HostInfoProvider {
-			hostInfo := membership.NewHostInfoFromAddress(hosts[serviceName][0])
-			return membership.NewHostInfoProvider(hostInfo)
+			for _, serviceHost := range hosts[serviceName] {
+				if serviceHost == selfHost {
+					hostInfo := membership.NewHostInfoFromAddress(selfHost)
+					return membership.NewHostInfoProvider(hostInfo)
+				}
+			}
+			panic(fmt.Sprintf("self host %v for %v is missing from static hosts", selfHost, serviceName))
 		}),
 	)
 }
