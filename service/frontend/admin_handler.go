@@ -88,7 +88,6 @@ import (
 	"go.temporal.io/server/common/sdk"
 	"go.temporal.io/server/common/searchattribute"
 	"go.temporal.io/server/common/xdc"
-	"go.temporal.io/server/service/history/tasks"
 	"go.temporal.io/server/service/worker/addsearchattributes"
 )
 
@@ -132,7 +131,6 @@ type (
 		// DEPRECATED: only history service on server side is supposed to
 		// use the following components.
 		persistenceExecutionManager persistence.ExecutionManager
-		taskCategoryRegistry        tasks.TaskCategoryRegistry
 	}
 
 	NewAdminHandlerArgs struct {
@@ -164,7 +162,6 @@ type (
 		// DEPRECATED: only history service on server side is supposed to
 		// use the following components.
 		PersistenceExecutionManager persistence.ExecutionManager
-		CategoryRegistry            tasks.TaskCategoryRegistry
 	}
 )
 
@@ -214,7 +211,6 @@ func NewAdminHandler(
 		saManager:                   args.SaManager,
 		clusterMetadata:             args.ClusterMetadata,
 		healthServer:                args.HealthServer,
-		taskCategoryRegistry:        args.CategoryRegistry,
 	}
 }
 

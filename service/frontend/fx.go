@@ -67,7 +67,6 @@ import (
 	"go.temporal.io/server/common/telemetry"
 	"go.temporal.io/server/service"
 	"go.temporal.io/server/service/frontend/configs"
-	"go.temporal.io/server/service/history/tasks"
 	"go.temporal.io/server/service/worker/scheduler"
 )
 
@@ -544,7 +543,6 @@ func AdminHandlerProvider(
 	healthServer *health.Server,
 	eventSerializer serialization.Serializer,
 	timeSource clock.TimeSource,
-	taskCategoryRegistry tasks.TaskCategoryRegistry,
 ) *AdminHandler {
 	args := NewAdminHandlerArgs{
 		persistenceConfig,
@@ -572,7 +570,6 @@ func AdminHandlerProvider(
 		eventSerializer,
 		timeSource,
 		persistenceExecutionManager,
-		taskCategoryRegistry,
 	}
 	return NewAdminHandler(args)
 }
