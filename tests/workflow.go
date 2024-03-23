@@ -38,10 +38,12 @@ import (
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	historypb "go.temporal.io/api/history/v1"
+	protocolpb "go.temporal.io/api/protocol/v1"
 	"go.temporal.io/api/serviceerror"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	updatepb "go.temporal.io/api/update/v1"
 	"go.temporal.io/api/workflowservice/v1"
+	"go.temporal.io/server/common/testing/testvars"
 	"google.golang.org/protobuf/types/known/durationpb"
 
 	"go.temporal.io/server/common/convert"
@@ -952,24 +954,26 @@ func (s *FunctionalSuite) TestWorkflowRetryFailures() {
 }
 
 func (s *FunctionalSuite) TestExecuteMultiOperation() {
-	id := "functional-multi-operation-test"
-	wt := "functional-multi-operation-test-type"
-	tl := "functional-multi-operation-test-taskqueue"
+	identity := "worker1"
 
 	s.Run("Start Workflow and send Update", func() {
+		tv := testvars.New(s.T().Name())
+		id := tv.WorkflowID()
+		wt := tv.WorkflowType()
+		tl := tv.TaskQueue()
+
 		request := &workflowservice.ExecuteMultiOperationRequest{
 			Namespace: s.namespace,
 			Operations: []*workflowservice.WorkflowOperation{
 				{
 					Operation: &workflowservice.WorkflowOperation_StartWorkflow{
 						StartWorkflow: &workflowservice.StartWorkflowExecutionRequest{
-							RequestId:          uuid.New(),
-							WorkflowId:         id,
-							WorkflowType:       &commonpb.WorkflowType{Name: wt},
-							TaskQueue:          &taskqueuepb.TaskQueue{Name: tl, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
-							Input:              nil,
-							WorkflowRunTimeout: durationpb.New(100 * time.Second),
-							Identity:           "worker1",
+							RequestId:    uuid.New(),
+							WorkflowId:   id,
+							WorkflowType: wt,
+							TaskQueue:    tl,
+							Input:        nil,
+							Identity:     identity,
 						},
 					},
 				},
@@ -977,7 +981,7 @@ func (s *FunctionalSuite) TestExecuteMultiOperation() {
 					Operation: &workflowservice.WorkflowOperation_UpdateWorkflow{
 						UpdateWorkflow: &workflowservice.UpdateWorkflowExecutionRequest{
 							Request: &updatepb.Request{
-								Meta:  &updatepb.Meta{UpdateId: "1"},
+								Meta:  &updatepb.Meta{UpdateId: "UPDATE_ID"},
 								Input: &updatepb.Input{Name: "UPDATE"},
 							},
 							WorkflowExecution: &commonpb.WorkflowExecution{WorkflowId: id},
@@ -988,9 +992,39 @@ func (s *FunctionalSuite) TestExecuteMultiOperation() {
 			},
 		}
 
-		_, err := s.engine.ExecuteMultiOperation(NewContext(), request)
+		poller := &TaskPoller{
+			Engine:    s.engine,
+			Namespace: s.namespace,
+			TaskQueue: tv.TaskQueue(),
+			Identity:  identity,
+			WorkflowTaskHandler: func(execution *commonpb.WorkflowExecution, wt *commonpb.WorkflowType, previousStartedEventID, startedEventID int64, history *historypb.History) ([]*commandpb.Command, error) {
+				return nil, nil
+			},
+			MessageHandler: func(task *workflowservice.PollWorkflowTaskQueueResponse) ([]*protocolpb.Message, error) {
+				updRequestMsg := task.Messages[0]
+				return s.UpdateAcceptCompleteMessages(tv, updRequestMsg, "1"), nil
+			},
+			Logger: s.Logger,
+			T:      s.T(),
+		}
+
+		resultCh := make(chan *workflowservice.ExecuteMultiOperationResponse)
+		go func() {
+			resp, err := s.engine.ExecuteMultiOperation(NewContext(), request)
+			s.NoError(err)
+			resultCh <- resp
+		}()
+
+		_, err := poller.PollAndProcessWorkflowTask(WithDumpHistory)
 		s.NoError(err)
 
-		// TODO
+		resp := <-resultCh
+		s.Len(resp.Results, 2)
+
+		startRes := resp.Results[0].Result.(*workflowservice.WorkflowOperationResult_StartWorkflow).StartWorkflow
+		s.NotZero(startRes.RunId)
+
+		updateRes := resp.Results[1].Result.(*workflowservice.WorkflowOperationResult_UpdateWorkflow).UpdateWorkflow
+		s.NotZero(updateRes.Outcome.String())
 	})
 }
