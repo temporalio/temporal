@@ -706,21 +706,10 @@ func (c *ContextImpl) mergeUpdateWithNewReplicationTasks(
 		return nil
 	}
 
-	// TODO: looks like ndc tests will generate this invalid case
-	// if currentWorkflowMutation.ExecutionState.Status == enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING {
-	// 	return serviceerror.NewInternal("cannot creating new workflow when current workflow is still running")
-	// }
-
-	if currentWorkflowMutation.ExecutionState.Status != enumspb.WORKFLOW_EXECUTION_STATUS_CONTINUED_AS_NEW &&
-		!c.config.ReplicationEnableUpdateWithNewTaskMerge() {
-		// we need to make sure target cell is able to handle updateWithNew
-		// for non continuedAsNewcase before enabling this feature
-		return nil
-	}
-
-	// current workflow is doing closing with new workflow
-
-	// namespace could be local or global with only one cluster, so no replication task is generated.
+	// namespace could be local or global with only one cluster,
+	// or current cluster is standby cluster for the namespace,
+	// so no replication task is generated.
+	//
 	// TODO: What does the following comment mean?
 	// it is possible that continue as new is done as part of passive logic
 	numCurrentReplicationTasks := len(currentWorkflowMutation.Tasks[tasks.CategoryReplication])
@@ -737,6 +726,14 @@ func (c *ContextImpl) mergeUpdateWithNewReplicationTasks(
 		return serviceerror.NewInternal("new workflow in update-with-new should contain exactly one replication task")
 	}
 
+	if currentWorkflowMutation.ExecutionState.Status != enumspb.WORKFLOW_EXECUTION_STATUS_CONTINUED_AS_NEW &&
+		!c.config.ReplicationEnableUpdateWithNewTaskMerge() {
+		// we need to make sure target cell is able to handle updateWithNew
+		// for non continuedAsNewcase before enabling this feature
+		return nil
+	}
+
+	// current workflow is closing with new workflow
 	// merge the new run's replication task to current workflow's replication task
 	// so that they can be applied transactionally in the standby cluster.
 	// TODO: this logic should be more generic so that the first replication task

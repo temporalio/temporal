@@ -2096,7 +2096,6 @@ func (s *NDCFunctionalTestSuite) generateNewRunHistory(
 	// TODO temporary code to generate first event & version history
 	//  we should generate these as part of modeled based testing
 
-	// TODO: test updateWithNew without continue as new case
 	if event.GetWorkflowExecutionContinuedAsNewEventAttributes() == nil {
 		return nil, ""
 	}
