@@ -32,7 +32,6 @@ import (
 	"sync/atomic"
 	"time"
 
-	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
@@ -43,17 +42,13 @@ import (
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	taskqueuespb "go.temporal.io/server/api/taskqueue/v1"
 	"go.temporal.io/server/common"
-	"go.temporal.io/server/common/backoff"
 	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/debug"
-	"go.temporal.io/server/common/future"
-	"go.temporal.io/server/common/headers"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
-	"go.temporal.io/server/common/persistence"
 )
 
 const (
@@ -70,39 +65,12 @@ const (
 	noPollerThreshold = time.Minute * 2
 )
 
-var (
-	// this retry policy is currently only used for matching persistence operations
-	// that, if failed, the entire task queue needs to be reloaded
-	persistenceOperationRetryPolicy = backoff.NewExponentialRetryPolicy(50 * time.Millisecond).
-		WithMaximumInterval(1 * time.Second).
-		WithExpirationInterval(30 * time.Second)
-)
-
 type (
-	taskQueueManagerOpt func(*physicalTaskQueueManagerImpl)
-
-	idBlockAllocator interface {
-		RenewLease(context.Context) (taskQueueState, error)
-		RangeID() int64
-	}
-
 	addTaskParams struct {
-		execution     *commonpb.WorkflowExecution
 		taskInfo      *persistencespb.TaskInfo
 		source        enumsspb.TaskSource
 		forwardedFrom string
 	}
-
-	UserDataUpdateOptions struct {
-		TaskQueueLimitPerBuildId int
-		// Only perform the update if current version equals to supplied version.
-		// 0 is unset.
-		KnownVersion int64
-	}
-	// UserDataUpdateFunc accepts the current user data for a task queue and returns the updated user data, a boolean
-	// indicating whether this data should be replicated, and an error.
-	// Extra care should be taken to avoid mutating the current user data to avoid keeping uncommitted data in memory.
-	UserDataUpdateFunc func(*persistencespb.TaskQueueUserData) (*persistencespb.TaskQueueUserData, bool, error)
 
 	physicalTaskQueueManager interface {
 		Start()
@@ -120,6 +88,7 @@ type (
 		MarkAlive()
 		// SpoolTask spools a task to persistence to be matched asynchronously when a poller is available.
 		SpoolTask(params addTaskParams) error
+		ProcessSpooledTask(ctx context.Context, task *internalTask) error
 		// DispatchSpooledTask dispatches a task to a poller. When there are no pollers to pick
 		// up the task, this method will return error. Task will not be persisted to db
 		DispatchSpooledTask(ctx context.Context, task *internalTask, userDataChanged <-chan struct{}) error
@@ -133,6 +102,7 @@ type (
 		LegacyDescribeTaskQueue(includeTaskQueueStatus bool) *matchingservice.DescribeTaskQueueResponse
 		// Describe returns information about the physical task queue
 		Describe() *taskqueuespb.PhysicalTaskQueueInfo
+		UnloadFromPartitionManager()
 		String() string
 		QueueKey() *PhysicalTaskQueueKey
 	}
@@ -143,12 +113,8 @@ type (
 		partitionMgr         *taskQueuePartitionManagerImpl
 		queue                *PhysicalTaskQueueKey
 		config               *taskQueueConfig
-		db                   *taskQueueDB
-		taskWriter           *taskWriter
-		taskReader           *taskReader // reads tasks from db and async matches it with poller
+		backlogMgr           *backlogManagerImpl
 		liveness             *liveness
-		taskGC               *taskGC
-		taskAckManager       ackManager   // tracks ackLevel for delivered messages
 		matcher              *TaskMatcher // for matching a task producer with a poller
 		namespaceRegistry    namespace.Registry
 		logger               log.Logger
@@ -158,12 +124,9 @@ type (
 		clusterMeta          cluster.Metadata
 		taggedMetricsHandler metrics.Handler // namespace/taskqueue tagged metric scope
 		// pollerHistory stores poller which poll from this taskqueue in last few minutes
-		pollerHistory    *pollerHistory
-		currentPolls     atomic.Int64
-		initializedError *future.FutureImpl[struct{}]
-		// skipFinalUpdate controls behavior on Stop: if it's false, we try to write one final
-		// update before unloading
-		skipFinalUpdate atomic.Bool
+		pollerHistory *pollerHistory
+		currentPolls  atomic.Int64
+		taskValidator taskValidator
 	}
 )
 
@@ -174,12 +137,6 @@ var (
 	errMissingNormalQueueName = errors.New("missing normal queue name")
 )
 
-func withIDBlockAllocator(ibl idBlockAllocator) taskQueueManagerOpt {
-	return func(tqm *physicalTaskQueueManagerImpl) {
-		tqm.taskWriter.idAlloc = ibl
-	}
-}
-
 func newPhysicalTaskQueueManager(
 	partitionMgr *taskQueuePartitionManagerImpl,
 	queue *PhysicalTaskQueueKey,
@@ -187,13 +144,12 @@ func newPhysicalTaskQueueManager(
 ) (*physicalTaskQueueManagerImpl, error) {
 	e := partitionMgr.engine
 	config := partitionMgr.config
-	db := newTaskQueueDB(e.taskManager, queue, e.logger)
 	logger := log.With(partitionMgr.logger, tag.WorkerBuildId(queue.VersionSet()))
 	throttledLogger := log.With(partitionMgr.throttledLogger, tag.WorkerBuildId(queue.VersionSet()))
 	taggedMetricsHandler := partitionMgr.taggedMetricsHandler.WithTags(
 		metrics.OperationTag(metrics.MatchingTaskQueueMgrScope),
 		metrics.WorkerBuildIdTag(queue.VersionSet()))
-	tlMgr := &physicalTaskQueueManagerImpl{
+	pqMgr := &physicalTaskQueueManagerImpl{
 		status:               common.DaemonStatusInitialized,
 		partitionMgr:         partitionMgr,
 		namespaceRegistry:    e.namespaceRegistry,
@@ -203,22 +159,28 @@ func newPhysicalTaskQueueManager(
 		queue:                queue,
 		logger:               logger,
 		throttledLogger:      throttledLogger,
-		db:                   db,
-		taskAckManager:       newAckManager(e.logger),
-		taskGC:               newTaskGC(db, config),
 		config:               config,
 		taggedMetricsHandler: taggedMetricsHandler,
-		initializedError:     future.NewFuture[struct{}](),
 	}
-	tlMgr.pollerHistory = newPollerHistory()
+	pqMgr.pollerHistory = newPollerHistory()
 
-	tlMgr.liveness = newLiveness(
+	pqMgr.liveness = newLiveness(
 		clock.NewRealTimeSource(),
 		config.MaxTaskQueueIdleTime,
-		tlMgr.unloadFromPartitionManager,
+		pqMgr.UnloadFromPartitionManager,
 	)
-	tlMgr.taskWriter = newTaskWriter(tlMgr)
-	tlMgr.taskReader = newTaskReader(tlMgr)
+
+	pqMgr.taskValidator = newTaskValidator(pqMgr.newIOContext, pqMgr.clusterMeta, pqMgr.namespaceRegistry, pqMgr.partitionMgr.engine.historyClient)
+	pqMgr.backlogMgr = newBacklogManager(
+		pqMgr,
+		config,
+		e.taskManager,
+		logger,
+		throttledLogger,
+		e.matchingRawClient,
+		taggedMetricsHandler,
+		partitionMgr.callerInfoContext,
+	)
 
 	var fwdr *Forwarder
 	var err error
@@ -229,29 +191,11 @@ func newPhysicalTaskQueueManager(
 			return nil, err
 		}
 	}
-	tlMgr.matcher = newTaskMatcher(config, fwdr, tlMgr.taggedMetricsHandler)
+	pqMgr.matcher = newTaskMatcher(config, fwdr, pqMgr.taggedMetricsHandler)
 	for _, opt := range opts {
-		opt(tlMgr)
+		opt(pqMgr)
 	}
-	return tlMgr, nil
-}
-
-// signalIfFatal calls unloadFromEngine on this physicalTaskQueueManagerImpl instance
-// if and only if the supplied error represents a fatal condition, e.g. the
-// existence of another physicalTaskQueueManager newer lease. Returns true if the signal
-// is emitted, false otherwise.
-func (c *physicalTaskQueueManagerImpl) signalIfFatal(err error) bool {
-	if err == nil {
-		return false
-	}
-	var condfail *persistence.ConditionFailedError
-	if errors.As(err, &condfail) {
-		c.taggedMetricsHandler.Counter(metrics.ConditionFailedErrorPerTaskQueueCounter.Name()).Record(1)
-		c.skipFinalUpdate.Store(true)
-		c.unloadFromPartitionManager()
-		return true
-	}
-	return false
+	return pqMgr, nil
 }
 
 func (c *physicalTaskQueueManagerImpl) Start() {
@@ -263,8 +207,7 @@ func (c *physicalTaskQueueManagerImpl) Start() {
 		return
 	}
 	c.liveness.Start()
-	c.taskWriter.Start()
-	c.taskReader.Start()
+	c.backlogMgr.Start()
 	c.logger.Info("", tag.LifeCycleStarted)
 	c.taggedMetricsHandler.Counter(metrics.TaskQueueStartedCounter.Name()).Record(1)
 	c.partitionMgr.engine.updatePhysicalTaskQueueGauge(c, 1)
@@ -280,41 +223,15 @@ func (c *physicalTaskQueueManagerImpl) Stop() {
 	) {
 		return
 	}
-	// Maybe try to write one final update of ack level and GC some tasks.
-	// Skip the update if we never initialized (ackLevel will be -1 in that case).
-	// Also skip if we're stopping due to lost ownership (the update will fail in that case).
-	// Ignore any errors.
-	// Note that it's fine to GC even if the update ack level fails because we did match the
-	// tasks, the next owner will just read over an empty range.
-	ackLevel := c.taskAckManager.getAckLevel()
-	if ackLevel >= 0 && !c.skipFinalUpdate.Load() {
-		ctx, cancel := c.newIOContext()
-		defer cancel()
-
-		_ = c.db.UpdateState(ctx, ackLevel)
-		c.taskGC.RunNow(ctx, ackLevel)
-	}
+	c.backlogMgr.Stop()
 	c.liveness.Stop()
-	c.taskWriter.Stop()
-	c.taskReader.Stop()
 	c.logger.Info("", tag.LifeCycleStopped)
 	c.taggedMetricsHandler.Counter(metrics.TaskQueueStoppedCounter.Name()).Record(1)
 	c.partitionMgr.engine.updatePhysicalTaskQueueGauge(c, -1)
 }
 
-func (c *physicalTaskQueueManagerImpl) SetInitializedError(err error) {
-	c.initializedError.Set(struct{}{}, err)
-	if err != nil {
-		// We can't recover from here without starting over, so unload the whole task queue.
-		// Skip final update since we never initialized.
-		c.skipFinalUpdate.Store(true)
-		c.unloadFromPartitionManager()
-	}
-}
-
 func (c *physicalTaskQueueManagerImpl) WaitUntilInitialized(ctx context.Context) error {
-	_, err := c.initializedError.Get(ctx)
-	return err
+	return c.backlogMgr.WaitUntilInitialized(ctx)
 }
 
 // AddTask adds a task to the task queue. This method will first attempt a synchronous
@@ -365,12 +282,7 @@ func (c *physicalTaskQueueManagerImpl) AddTask(
 }
 
 func (c *physicalTaskQueueManagerImpl) SpoolTask(params addTaskParams) error {
-	_, err := c.taskWriter.appendTask(params.execution, params.taskInfo)
-	c.signalIfFatal(err)
-	if err == nil {
-		c.taskReader.Signal()
-	}
-	return err
+	return c.backlogMgr.SpoolTask(params.taskInfo)
 }
 
 // PollTask blocks waiting for a task.
@@ -408,7 +320,7 @@ func (c *physicalTaskQueueManagerImpl) PollTask(
 	}
 
 	task.namespace = c.partitionMgr.ns.Name()
-	task.backlogCountHint = c.taskAckManager.getBacklogCountHint
+	task.backlogCountHint = c.backlogMgr.BacklogCountHint
 	return task, nil
 }
 
@@ -425,6 +337,19 @@ func (c *physicalTaskQueueManagerImpl) DispatchSpooledTask(
 	userDataChanged <-chan struct{},
 ) error {
 	return c.matcher.MustOffer(ctx, task, userDataChanged)
+}
+
+func (c *physicalTaskQueueManagerImpl) ProcessSpooledTask(
+	ctx context.Context,
+	task *internalTask,
+) error {
+	if !c.taskValidator.maybeValidate(task.event.AllocatedTaskInfo, c.queue.TaskType()) {
+		task.finish(nil)
+		c.taggedMetricsHandler.Counter(metrics.ExpiredTasksPerTaskQueueCounter.Name()).Record(1)
+		// Don't try to set read level here because it may have been advanced already.
+		return nil
+	}
+	return c.partitionMgr.ProcessSpooledTask(ctx, task, c.queue.BuildId())
 }
 
 // DispatchQueryTask will dispatch query to local or remote poller. If forwarded then result or error is returned,
@@ -470,22 +395,10 @@ func (c *physicalTaskQueueManagerImpl) LegacyDescribeTaskQueue(includeTaskQueueS
 			Pollers: c.GetAllPollerInfo(),
 		},
 	}
-	if !includeTaskQueueStatus {
-		return response
+	if includeTaskQueueStatus {
+		response.DescResponse.TaskQueueStatus = c.backlogMgr.BacklogStatus()
+		response.DescResponse.TaskQueueStatus.RatePerSecond = c.matcher.Rate()
 	}
-
-	taskIDBlock := rangeIDToTaskIDBlock(c.db.RangeID(), c.config.RangeSize)
-	response.DescResponse.TaskQueueStatus = &taskqueuepb.TaskQueueStatus{
-		ReadLevel:        c.taskAckManager.getReadLevel(),
-		AckLevel:         c.taskAckManager.getAckLevel(),
-		BacklogCountHint: c.taskAckManager.getBacklogCountHint(),
-		RatePerSecond:    c.matcher.Rate(),
-		TaskIdBlock: &taskqueuepb.TaskIdBlock{
-			StartId: taskIDBlock.start,
-			EndId:   taskIDBlock.end,
-		},
-	}
-
 	return response
 }
 
@@ -500,81 +413,9 @@ func (c *physicalTaskQueueManagerImpl) String() string {
 	} else {
 		buf.WriteString("Workflow")
 	}
-	rangeID := c.db.RangeID()
-	_, _ = fmt.Fprintf(buf, " task queue %v\n", c.queue.PersistenceName())
-	_, _ = fmt.Fprintf(buf, "RangeID=%v\n", rangeID)
-	_, _ = fmt.Fprintf(buf, "TaskIDBlock=%+v\n", rangeIDToTaskIDBlock(rangeID, c.config.RangeSize))
-	_, _ = fmt.Fprintf(buf, "AckLevel=%v\n", c.taskAckManager.ackLevel)
-	_, _ = fmt.Fprintf(buf, "MaxTaskID=%v\n", c.taskAckManager.getReadLevel())
+	_, _ = fmt.Fprintf(buf, "Backlog=%s\n", c.backlogMgr.String())
 
 	return buf.String()
-}
-
-// completeTask marks a task as processed. Only tasks created by taskReader (i.e. backlog from db) reach
-// here. As part of completion:
-//   - task is deleted from the database when err is nil
-//   - new task is created and current task is deleted when err is not nil
-func (c *physicalTaskQueueManagerImpl) completeTask(task *persistencespb.AllocatedTaskInfo, err error) {
-	if err != nil {
-		// failed to start the task.
-		// We cannot just remove it from persistence because then it will be lost.
-		// We handle this by writing the task back to persistence with a higher taskID.
-		// This will allow subsequent tasks to make progress, and hopefully by the time this task is picked-up
-		// again the underlying reason for failing to start will be resolved.
-		// Note that RecordTaskStarted only fails after retrying for a long time, so a single task will not be
-		// re-written to persistence frequently.
-		err = executeWithRetry(context.Background(), func(_ context.Context) error {
-			wf := &commonpb.WorkflowExecution{WorkflowId: task.Data.GetWorkflowId(), RunId: task.Data.GetRunId()}
-			_, err := c.taskWriter.appendTask(wf, task.Data)
-			return err
-		})
-
-		if err != nil {
-			// OK, we also failed to write to persistence.
-			// This should only happen in very extreme cases where persistence is completely down.
-			// We still can't lose the old task, so we just unload the entire task queue
-			c.logger.Error("Persistent store operation failure",
-				tag.StoreOperationStopTaskQueue,
-				tag.Error(err),
-				tag.WorkflowTaskQueueName(c.queue.PersistenceName()),
-				tag.WorkflowTaskQueueType(c.queue.TaskType()))
-			// Skip final update since persistence is having problems.
-			c.skipFinalUpdate.Store(true)
-			c.unloadFromPartitionManager()
-			return
-		}
-		c.taskReader.Signal()
-	}
-
-	ackLevel := c.taskAckManager.completeTask(task.GetTaskId())
-
-	// TODO: completeTaskFunc and task.finish() should take in a context
-	ctx, cancel := c.newIOContext()
-	defer cancel()
-	c.taskGC.Run(ctx, ackLevel)
-}
-
-func rangeIDToTaskIDBlock(rangeID int64, rangeSize int64) taskIDBlock {
-	return taskIDBlock{
-		start: (rangeID-1)*rangeSize + 1,
-		end:   rangeID * rangeSize,
-	}
-}
-
-// Retry operation on transient error.
-func executeWithRetry(
-	ctx context.Context,
-	operation func(context.Context) error,
-) error {
-	return backoff.ThrottleRetryContext(ctx, operation, persistenceOperationRetryPolicy, func(err error) bool {
-		if common.IsContextDeadlineExceededErr(err) || common.IsContextCanceledErr(err) {
-			return false
-		}
-		if _, ok := err.(*persistence.ConditionFailedError); ok {
-			return false
-		}
-		return common.IsPersistenceTransientError(err)
-	})
 }
 
 func (c *physicalTaskQueueManagerImpl) trySyncMatch(ctx context.Context, params addTaskParams) (bool, error) {
@@ -623,16 +464,11 @@ func (c *physicalTaskQueueManagerImpl) QueueKey() *PhysicalTaskQueueKey {
 	return c.queue
 }
 
-func (c *physicalTaskQueueManagerImpl) callerInfoContext(ctx context.Context) context.Context {
-	ns, _ := c.namespaceRegistry.GetNamespaceName(c.queue.NamespaceId())
-	return headers.SetCallerInfo(ctx, headers.NewBackgroundCallerInfo(ns.String()))
-}
-
 func (c *physicalTaskQueueManagerImpl) newIOContext() (context.Context, context.CancelFunc) {
 	ctx, cancel := context.WithTimeout(context.Background(), ioTimeout)
-	return c.callerInfoContext(ctx), cancel
+	return c.partitionMgr.callerInfoContext(ctx), cancel
 }
 
-func (c *physicalTaskQueueManagerImpl) unloadFromPartitionManager() {
+func (c *physicalTaskQueueManagerImpl) UnloadFromPartitionManager() {
 	c.partitionMgr.unloadPhysicalQueue(c)
 }
