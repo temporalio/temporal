@@ -61,18 +61,18 @@ func (c *metricClient) CancelOutstandingPoll(
 	return c.client.CancelOutstandingPoll(ctx, request, opts...)
 }
 
-func (c *metricClient) CreateOrUpdateNexusIncomingService(
+func (c *metricClient) CreateNexusIncomingService(
 	ctx context.Context,
-	request *matchingservice.CreateOrUpdateNexusIncomingServiceRequest,
+	request *matchingservice.CreateNexusIncomingServiceRequest,
 	opts ...grpc.CallOption,
-) (_ *matchingservice.CreateOrUpdateNexusIncomingServiceResponse, retError error) {
+) (_ *matchingservice.CreateNexusIncomingServiceResponse, retError error) {
 
-	metricsHandler, startTime := c.startMetricsRecording(ctx, "MatchingClientCreateOrUpdateNexusIncomingService")
+	metricsHandler, startTime := c.startMetricsRecording(ctx, "MatchingClientCreateNexusIncomingService")
 	defer func() {
 		c.finishMetricsRecording(metricsHandler, startTime, retError)
 	}()
 
-	return c.client.CreateOrUpdateNexusIncomingService(ctx, request, opts...)
+	return c.client.CreateNexusIncomingService(ctx, request, opts...)
 }
 
 func (c *metricClient) DeleteNexusIncomingService(
@@ -269,6 +269,20 @@ func (c *metricClient) RespondQueryTaskCompleted(
 	}()
 
 	return c.client.RespondQueryTaskCompleted(ctx, request, opts...)
+}
+
+func (c *metricClient) UpdateNexusIncomingService(
+	ctx context.Context,
+	request *matchingservice.UpdateNexusIncomingServiceRequest,
+	opts ...grpc.CallOption,
+) (_ *matchingservice.UpdateNexusIncomingServiceResponse, retError error) {
+
+	metricsHandler, startTime := c.startMetricsRecording(ctx, "MatchingClientUpdateNexusIncomingService")
+	defer func() {
+		c.finishMetricsRecording(metricsHandler, startTime, retError)
+	}()
+
+	return c.client.UpdateNexusIncomingService(ctx, request, opts...)
 }
 
 func (c *metricClient) UpdateTaskQueueUserData(

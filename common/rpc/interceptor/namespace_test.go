@@ -58,10 +58,11 @@ var (
 	matchingAPIExcluded = map[string]struct{}{
 		"ListTaskQueuePartitions": {},
 		// Nexus APIs operate on a cluster scope, not a namespace scope.
-		"GetNexusService":                    {},
-		"CreateOrUpdateNexusIncomingService": {},
-		"ListNexusIncomingServices":          {},
-		"DeleteNexusIncomingService":         {},
+		"GetNexusService":            {},
+		"CreateNexusIncomingService": {},
+		"UpdateNexusIncomingService": {},
+		"ListNexusIncomingServices":  {},
+		"DeleteNexusIncomingService": {},
 	}
 
 	historyAPIExcluded = map[string]struct{}{

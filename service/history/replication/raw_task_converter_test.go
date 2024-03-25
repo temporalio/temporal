@@ -84,7 +84,6 @@ type (
 		newWorkflowContext *workflow.MockContext
 		newMutableState    *workflow.MockMutableState
 		newReleaseFn       wcache.ReleaseCacheFunc
-		newLockReleased    bool
 	}
 )
 
@@ -718,6 +717,7 @@ func (s *rawTaskConverterSuite) TestConvertHistoryReplicationTask_WithNewRun() {
 				VersionHistoryItems: versionHistory.Items,
 				Events:              events,
 				NewRunEvents:        newEvents,
+				NewRunId:            s.newRunID,
 			},
 		},
 		VisibilityTime: timestamppb.New(task.VisibilityTimestamp),
@@ -811,6 +811,7 @@ func (s *rawTaskConverterSuite) TestConvertHistoryReplicationTask_WithoutNewRun(
 				VersionHistoryItems: versionHistory.Items,
 				Events:              events,
 				NewRunEvents:        nil,
+				NewRunId:            "",
 			},
 		},
 		VisibilityTime: timestamppb.New(task.VisibilityTimestamp),

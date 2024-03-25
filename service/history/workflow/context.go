@@ -617,8 +617,7 @@ func (c *ContextImpl) UpdateWorkflowExecutionWithNew(
 		}
 	}
 
-	if err := c.mergeContinueAsNewReplicationTasks(
-		updateMode,
+	if err := c.mergeUpdateWithNewReplicationTasks(
 		updateWorkflow,
 		newWorkflow,
 	); err != nil {
@@ -698,48 +697,64 @@ func (c *ContextImpl) SubmitClosedWorkflowSnapshot(
 	)
 }
 
-func (c *ContextImpl) mergeContinueAsNewReplicationTasks(
-	updateMode persistence.UpdateWorkflowMode,
+func (c *ContextImpl) mergeUpdateWithNewReplicationTasks(
 	currentWorkflowMutation *persistence.WorkflowMutation,
 	newWorkflowSnapshot *persistence.WorkflowSnapshot,
 ) error {
 
-	if currentWorkflowMutation.ExecutionState.Status != enumspb.WORKFLOW_EXECUTION_STATUS_CONTINUED_AS_NEW {
-		return nil
-	} else if updateMode == persistence.UpdateWorkflowModeBypassCurrent && newWorkflowSnapshot == nil {
-		// update current workflow as zombie & continue as new without new zombie workflow
-		// this case can be valid if new workflow is already created by resend
+	if newWorkflowSnapshot == nil {
 		return nil
 	}
 
-	// current workflow is doing continue as new
-
+	// namespace could be local or global with only one cluster,
+	// or current cluster is standby cluster for the namespace,
+	// so no replication task is generated.
+	//
+	// TODO: What does the following comment mean?
 	// it is possible that continue as new is done as part of passive logic
-	if len(currentWorkflowMutation.Tasks[tasks.CategoryReplication]) == 0 {
+	numCurrentReplicationTasks := len(currentWorkflowMutation.Tasks[tasks.CategoryReplication])
+	numNewReplicationTasks := len(newWorkflowSnapshot.Tasks[tasks.CategoryReplication])
+
+	if numCurrentReplicationTasks == 0 && numNewReplicationTasks == 0 {
+		return nil
+	}
+	if numCurrentReplicationTasks == 0 {
+		return serviceerror.NewInternal("current workflow has no replication task, while new workflow contains replication task")
+	}
+	if numNewReplicationTasks != 1 {
+		// TODO: support more than one replication tasks (batch of events) in the new workflow
+		return serviceerror.NewInternal("new workflow in update-with-new should contain exactly one replication task")
+	}
+
+	if currentWorkflowMutation.ExecutionState.Status != enumspb.WORKFLOW_EXECUTION_STATUS_CONTINUED_AS_NEW &&
+		!c.config.ReplicationEnableUpdateWithNewTaskMerge() {
+		// we need to make sure target cell is able to handle updateWithNew
+		// for non continuedAsNewcase before enabling this feature
 		return nil
 	}
 
-	if newWorkflowSnapshot == nil || len(newWorkflowSnapshot.Tasks[tasks.CategoryReplication]) != 1 {
-		return serviceerror.NewInternal("unable to find replication task from new workflow for continue as new replication")
-	}
-
-	// merge the new run first event batch replication task
-	// to current event batch replication task
+	// current workflow is closing with new workflow
+	// merge the new run's replication task to current workflow's replication task
+	// so that they can be applied transactionally in the standby cluster.
+	// TODO: this logic should be more generic so that the first replication task
+	// in the new run doesn't have to be HistoryReplicationTask
 	newRunTask := newWorkflowSnapshot.Tasks[tasks.CategoryReplication][0].(*tasks.HistoryReplicationTask)
 	delete(newWorkflowSnapshot.Tasks, tasks.CategoryReplication)
 
 	newRunBranchToken := newRunTask.BranchToken
 	newRunID := newRunTask.RunID
 	taskUpdated := false
-	for _, replicationTask := range currentWorkflowMutation.Tasks[tasks.CategoryReplication] {
+	for idx := numCurrentReplicationTasks - 1; idx >= 0; idx-- {
+		replicationTask := currentWorkflowMutation.Tasks[tasks.CategoryReplication][idx]
 		if task, ok := replicationTask.(*tasks.HistoryReplicationTask); ok {
 			taskUpdated = true
 			task.NewRunBranchToken = newRunBranchToken
 			task.NewRunID = newRunID
+			break
 		}
 	}
 	if !taskUpdated {
-		return serviceerror.NewInternal("unable to find replication task from current workflow for continue as new replication")
+		return serviceerror.NewInternal("unable to find HistoryReplicationTask from current workflow for update-with-new replication")
 	}
 	return nil
 }

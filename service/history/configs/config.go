@@ -262,6 +262,7 @@ type Config struct {
 	ReplicationTaskProcessorHostQPS                      dynamicconfig.FloatPropertyFn
 	ReplicationTaskProcessorShardQPS                     dynamicconfig.FloatPropertyFn
 	ReplicationEnableDLQMetrics                          dynamicconfig.BoolPropertyFn
+	ReplicationEnableUpdateWithNewTaskMerge              dynamicconfig.BoolPropertyFn
 
 	ReplicationStreamSyncStatusDuration      dynamicconfig.DurationPropertyFn
 	ReplicationProcessorSchedulerQueueSize   dynamicconfig.IntPropertyFn
@@ -477,6 +478,7 @@ func NewConfig(
 		ReplicationTaskProcessorHostQPS:                     dc.GetFloat64Property(dynamicconfig.ReplicationTaskProcessorHostQPS, 1500),
 		ReplicationTaskProcessorShardQPS:                    dc.GetFloat64Property(dynamicconfig.ReplicationTaskProcessorShardQPS, 30),
 		ReplicationEnableDLQMetrics:                         dc.GetBoolProperty(dynamicconfig.ReplicationEnableDLQMetrics, true),
+		ReplicationEnableUpdateWithNewTaskMerge:             dc.GetBoolProperty(dynamicconfig.ReplicationEnableUpdateWithNewTaskMerge, false),
 		ReplicationStreamSyncStatusDuration:                 dc.GetDurationProperty(dynamicconfig.ReplicationStreamSyncStatusDuration, 1*time.Second),
 		ReplicationProcessorSchedulerQueueSize:              dc.GetIntProperty(dynamicconfig.ReplicationProcessorSchedulerQueueSize, 128),
 		ReplicationProcessorSchedulerWorkerCount:            dc.GetIntProperty(dynamicconfig.ReplicationProcessorSchedulerWorkerCount, 512),

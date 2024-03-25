@@ -191,5 +191,6 @@ func NewDynamicConfig() *configs.Config {
 	config.EnableAPIGetCurrentRunIDLock = dynamicconfig.GetBoolPropertyFn(true)
 	config.FrontendAccessHistoryFraction = dynamicconfig.GetFloatPropertyFn(1.0)
 	config.EnableMutableStateTransitionHistory = dynamicconfig.GetBoolPropertyFn(true)
+	config.ReplicationEnableUpdateWithNewTaskMerge = dynamicconfig.GetBoolPropertyFn(true)
 	return config
 }
