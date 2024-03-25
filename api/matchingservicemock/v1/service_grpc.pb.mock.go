@@ -160,6 +160,26 @@ func (mr *MockMatchingServiceClientMockRecorder) DescribeTaskQueue(ctx, in inter
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DescribeTaskQueue", reflect.TypeOf((*MockMatchingServiceClient)(nil).DescribeTaskQueue), varargs...)
 }
 
+// DescribeTaskQueuePartition mocks base method.
+func (m *MockMatchingServiceClient) DescribeTaskQueuePartition(ctx context.Context, in *matchingservice.DescribeTaskQueuePartitionRequest, opts ...grpc.CallOption) (*matchingservice.DescribeTaskQueuePartitionResponse, error) {
+	m.ctrl.T.Helper()
+	varargs := []interface{}{ctx, in}
+	for _, a := range opts {
+		varargs = append(varargs, a)
+	}
+	ret := m.ctrl.Call(m, "DescribeTaskQueuePartition", varargs...)
+	ret0, _ := ret[0].(*matchingservice.DescribeTaskQueuePartitionResponse)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// DescribeTaskQueuePartition indicates an expected call of DescribeTaskQueuePartition.
+func (mr *MockMatchingServiceClientMockRecorder) DescribeTaskQueuePartition(ctx, in interface{}, opts ...interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	varargs := append([]interface{}{ctx, in}, opts...)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DescribeTaskQueuePartition", reflect.TypeOf((*MockMatchingServiceClient)(nil).DescribeTaskQueuePartition), varargs...)
+}
+
 // ForceUnloadTaskQueue mocks base method.
 func (m *MockMatchingServiceClient) ForceUnloadTaskQueue(ctx context.Context, in *matchingservice.ForceUnloadTaskQueueRequest, opts ...grpc.CallOption) (*matchingservice.ForceUnloadTaskQueueResponse, error) {
 	m.ctrl.T.Helper()
@@ -536,6 +556,21 @@ func (m *MockMatchingServiceServer) DescribeTaskQueue(arg0 context.Context, arg1
 func (mr *MockMatchingServiceServerMockRecorder) DescribeTaskQueue(arg0, arg1 interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DescribeTaskQueue", reflect.TypeOf((*MockMatchingServiceServer)(nil).DescribeTaskQueue), arg0, arg1)
+}
+
+// DescribeTaskQueuePartition mocks base method.
+func (m *MockMatchingServiceServer) DescribeTaskQueuePartition(arg0 context.Context, arg1 *matchingservice.DescribeTaskQueuePartitionRequest) (*matchingservice.DescribeTaskQueuePartitionResponse, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "DescribeTaskQueuePartition", arg0, arg1)
+	ret0, _ := ret[0].(*matchingservice.DescribeTaskQueuePartitionResponse)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// DescribeTaskQueuePartition indicates an expected call of DescribeTaskQueuePartition.
+func (mr *MockMatchingServiceServerMockRecorder) DescribeTaskQueuePartition(arg0, arg1 interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DescribeTaskQueuePartition", reflect.TypeOf((*MockMatchingServiceServer)(nil).DescribeTaskQueuePartition), arg0, arg1)
 }
 
 // ForceUnloadTaskQueue mocks base method.

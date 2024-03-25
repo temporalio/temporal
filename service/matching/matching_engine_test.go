@@ -509,10 +509,10 @@ func (s *matchingEngineSuite) PollForTasksEmptyResultTest(callContext context.Co
 			},
 		})
 		s.NoError(err)
-		s.Equal(1, len(descResp.Pollers))
-		s.Equal(identity, descResp.Pollers[0].GetIdentity())
-		s.NotEmpty(descResp.Pollers[0].GetLastAccessTime())
-		s.Nil(descResp.GetTaskQueueStatus())
+		s.Equal(1, len(descResp.DescResponse.Pollers))
+		s.Equal(identity, descResp.DescResponse.Pollers[0].GetIdentity())
+		s.NotEmpty(descResp.DescResponse.Pollers[0].GetLastAccessTime())
+		s.Nil(descResp.DescResponse.GetTaskQueueStatus())
 	}
 	s.EqualValues(1, s.taskManager.getQueueManager(tlID).RangeID())
 }
@@ -1029,13 +1029,13 @@ func (s *matchingEngineSuite) TestSyncMatchActivities() {
 		},
 	})
 	s.NoError(err)
-	s.Equal(1, len(descResp.Pollers))
-	s.Equal(identity, descResp.Pollers[0].GetIdentity())
-	s.NotEmpty(descResp.Pollers[0].GetLastAccessTime())
-	s.Equal(defaultTaskDispatchRPS, descResp.Pollers[0].GetRatePerSecond())
-	s.NotNil(descResp.GetTaskQueueStatus())
+	s.Equal(1, len(descResp.DescResponse.Pollers))
+	s.Equal(identity, descResp.DescResponse.Pollers[0].GetIdentity())
+	s.NotEmpty(descResp.DescResponse.Pollers[0].GetLastAccessTime())
+	s.Equal(defaultTaskDispatchRPS, descResp.DescResponse.Pollers[0].GetRatePerSecond())
+	s.NotNil(descResp.DescResponse.GetTaskQueueStatus())
 	numPartitions := float64(s.matchingEngine.config.NumTaskqueueWritePartitions("", "", tlType))
-	s.True(descResp.GetTaskQueueStatus().GetRatePerSecond()*numPartitions >= (defaultTaskDispatchRPS - 1))
+	s.True(descResp.DescResponse.GetTaskQueueStatus().GetRatePerSecond()*numPartitions >= (defaultTaskDispatchRPS - 1))
 }
 
 func (s *matchingEngineSuite) TestConcurrentPublishConsumeActivities() {

@@ -50,6 +50,7 @@ const (
 	MatchingService_RespondQueryTaskCompleted_FullMethodName              = "/temporal.server.api.matchingservice.v1.MatchingService/RespondQueryTaskCompleted"
 	MatchingService_CancelOutstandingPoll_FullMethodName                  = "/temporal.server.api.matchingservice.v1.MatchingService/CancelOutstandingPoll"
 	MatchingService_DescribeTaskQueue_FullMethodName                      = "/temporal.server.api.matchingservice.v1.MatchingService/DescribeTaskQueue"
+	MatchingService_DescribeTaskQueuePartition_FullMethodName             = "/temporal.server.api.matchingservice.v1.MatchingService/DescribeTaskQueuePartition"
 	MatchingService_ListTaskQueuePartitions_FullMethodName                = "/temporal.server.api.matchingservice.v1.MatchingService/ListTaskQueuePartitions"
 	MatchingService_UpdateWorkerBuildIdCompatibility_FullMethodName       = "/temporal.server.api.matchingservice.v1.MatchingService/UpdateWorkerBuildIdCompatibility"
 	MatchingService_GetWorkerBuildIdCompatibility_FullMethodName          = "/temporal.server.api.matchingservice.v1.MatchingService/GetWorkerBuildIdCompatibility"
@@ -94,6 +95,8 @@ type MatchingServiceClient interface {
 	// DescribeTaskQueue returns information about the target task queue, right now this API returns the
 	// pollers which polled this task queue in last few minutes.
 	DescribeTaskQueue(ctx context.Context, in *DescribeTaskQueueRequest, opts ...grpc.CallOption) (*DescribeTaskQueueResponse, error)
+	// DescribeTaskQueuePartition returns information about the target task queue partition.
+	DescribeTaskQueuePartition(ctx context.Context, in *DescribeTaskQueuePartitionRequest, opts ...grpc.CallOption) (*DescribeTaskQueuePartitionResponse, error)
 	// ListTaskQueuePartitions returns a map of partitionKey and hostAddress for a task queue.
 	ListTaskQueuePartitions(ctx context.Context, in *ListTaskQueuePartitionsRequest, opts ...grpc.CallOption) (*ListTaskQueuePartitionsResponse, error)
 	// (-- api-linter: core::0134::response-message-name=disabled
@@ -220,6 +223,15 @@ func (c *matchingServiceClient) CancelOutstandingPoll(ctx context.Context, in *C
 func (c *matchingServiceClient) DescribeTaskQueue(ctx context.Context, in *DescribeTaskQueueRequest, opts ...grpc.CallOption) (*DescribeTaskQueueResponse, error) {
 	out := new(DescribeTaskQueueResponse)
 	err := c.cc.Invoke(ctx, MatchingService_DescribeTaskQueue_FullMethodName, in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *matchingServiceClient) DescribeTaskQueuePartition(ctx context.Context, in *DescribeTaskQueuePartitionRequest, opts ...grpc.CallOption) (*DescribeTaskQueuePartitionResponse, error) {
+	out := new(DescribeTaskQueuePartitionResponse)
+	err := c.cc.Invoke(ctx, MatchingService_DescribeTaskQueuePartition_FullMethodName, in, out, opts...)
 	if err != nil {
 		return nil, err
 	}
@@ -356,6 +368,8 @@ type MatchingServiceServer interface {
 	// DescribeTaskQueue returns information about the target task queue, right now this API returns the
 	// pollers which polled this task queue in last few minutes.
 	DescribeTaskQueue(context.Context, *DescribeTaskQueueRequest) (*DescribeTaskQueueResponse, error)
+	// DescribeTaskQueuePartition returns information about the target task queue partition.
+	DescribeTaskQueuePartition(context.Context, *DescribeTaskQueuePartitionRequest) (*DescribeTaskQueuePartitionResponse, error)
 	// ListTaskQueuePartitions returns a map of partitionKey and hostAddress for a task queue.
 	ListTaskQueuePartitions(context.Context, *ListTaskQueuePartitionsRequest) (*ListTaskQueuePartitionsResponse, error)
 	// (-- api-linter: core::0134::response-message-name=disabled
@@ -436,6 +450,9 @@ func (UnimplementedMatchingServiceServer) CancelOutstandingPoll(context.Context,
 }
 func (UnimplementedMatchingServiceServer) DescribeTaskQueue(context.Context, *DescribeTaskQueueRequest) (*DescribeTaskQueueResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method DescribeTaskQueue not implemented")
+}
+func (UnimplementedMatchingServiceServer) DescribeTaskQueuePartition(context.Context, *DescribeTaskQueuePartitionRequest) (*DescribeTaskQueuePartitionResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method DescribeTaskQueuePartition not implemented")
 }
 func (UnimplementedMatchingServiceServer) ListTaskQueuePartitions(context.Context, *ListTaskQueuePartitionsRequest) (*ListTaskQueuePartitionsResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method ListTaskQueuePartitions not implemented")
@@ -623,6 +640,24 @@ func _MatchingService_DescribeTaskQueue_Handler(srv interface{}, ctx context.Con
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
 		return srv.(MatchingServiceServer).DescribeTaskQueue(ctx, req.(*DescribeTaskQueueRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _MatchingService_DescribeTaskQueuePartition_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(DescribeTaskQueuePartitionRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(MatchingServiceServer).DescribeTaskQueuePartition(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: MatchingService_DescribeTaskQueuePartition_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(MatchingServiceServer).DescribeTaskQueuePartition(ctx, req.(*DescribeTaskQueuePartitionRequest))
 	}
 	return interceptor(ctx, in, info, handler)
 }
@@ -863,6 +898,10 @@ var MatchingService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "DescribeTaskQueue",
 			Handler:    _MatchingService_DescribeTaskQueue_Handler,
+		},
+		{
+			MethodName: "DescribeTaskQueuePartition",
+			Handler:    _MatchingService_DescribeTaskQueuePartition_Handler,
 		},
 		{
 			MethodName: "ListTaskQueuePartitions",
