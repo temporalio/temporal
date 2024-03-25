@@ -35,6 +35,7 @@ import (
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
+	"go.temporal.io/api/workflowservice/v1"
 
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	"go.temporal.io/server/api/matchingservice/v1"
@@ -389,10 +390,14 @@ func (c *physicalTaskQueueManagerImpl) HasPollerAfter(accessTime time.Time) bool
 // pollers which polled this taskqueue in last few minutes and status of taskqueue's ackManager
 // (readLevel, ackLevel, backlogCountHint and taskIDBlock).
 func (c *physicalTaskQueueManagerImpl) LegacyDescribeTaskQueue(includeTaskQueueStatus bool) *matchingservice.DescribeTaskQueueResponse {
-	response := &matchingservice.DescribeTaskQueueResponse{Pollers: c.GetAllPollerInfo()}
+	response := &matchingservice.DescribeTaskQueueResponse{
+		DescResponse: &workflowservice.DescribeTaskQueueResponse{
+			Pollers: c.GetAllPollerInfo(),
+		},
+	}
 	if includeTaskQueueStatus {
-		response.TaskQueueStatus = c.backlogMgr.BacklogStatus()
-		response.TaskQueueStatus.RatePerSecond = c.matcher.Rate()
+		response.DescResponse.TaskQueueStatus = c.backlogMgr.BacklogStatus()
+		response.DescResponse.TaskQueueStatus.RatePerSecond = c.matcher.Rate()
 	}
 	return response
 }
