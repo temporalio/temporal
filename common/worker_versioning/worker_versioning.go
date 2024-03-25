@@ -108,12 +108,12 @@ func StampIfUsingVersioning(stamp *commonpb.WorkerVersionStamp) *commonpb.Worker
 	return nil
 }
 
-func MakeDirectiveForWorkflowTask(assignedBuildId string, stamp *commonpb.WorkerVersionStamp, lastWorkflowTaskStartedEventID int64) *taskqueuespb.TaskVersionDirective {
+func MakeDirectiveForWorkflowTask(inheritedBuildId string, assignedBuildId string, stamp *commonpb.WorkerVersionStamp, lastWorkflowTaskStartedEventID int64) *taskqueuespb.TaskVersionDirective {
 	if id := StampIfUsingVersioning(stamp).GetBuildId(); id != "" && assignedBuildId == "" {
 		// TODO: old versioning only [cleanup-old-wv]
 		return MakeBuildIdDirective(id)
-	} else if lastWorkflowTaskStartedEventID == common.EmptyEventID {
-		// first workflow task
+	} else if lastWorkflowTaskStartedEventID == common.EmptyEventID && inheritedBuildId == "" {
+		// first workflow task and build ID not inherited. if this is retry we reassign build ID
 		return MakeUseAssignmentRulesDirective()
 	} else if assignedBuildId != "" {
 		return MakeBuildIdDirective(assignedBuildId)

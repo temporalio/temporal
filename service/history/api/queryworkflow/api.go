@@ -259,6 +259,7 @@ func queryDirectlyThroughMatching(
 	}()
 
 	directive := worker_versioning.MakeDirectiveForWorkflowTask(
+		msResp.GetInheritedBuildId(),
 		msResp.GetAssignedBuildId(),
 		msResp.GetMostRecentWorkerVersionStamp(),
 		msResp.GetPreviousStartedEventId(),

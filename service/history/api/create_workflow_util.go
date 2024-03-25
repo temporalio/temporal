@@ -119,7 +119,7 @@ func NewWorkflowWithSignal(
 			startRequest.StartRequest.RequestId,
 			startRequest.StartRequest.TaskQueue,
 			startRequest.StartRequest.Identity,
-			startRequest.SourceVersionStamp,
+			nil,
 		)
 		if err != nil {
 			// Unable to add WorkflowTaskStarted event to history

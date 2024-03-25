@@ -355,11 +355,7 @@ func (s *PartitionManagerTestSuite) pollWithIdentity(pollerId, buildId string, u
 		},
 	})
 
-	if errors.Is(err, errNoTasks) {
-		return // no task error is expected
-	}
-
-	return
+	s.True(errors.Is(err, errNoTasks), "no task is expected")
 }
 
 func createVersionSet(buildId string) *persistence.CompatibleVersionSet {

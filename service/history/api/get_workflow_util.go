@@ -266,6 +266,7 @@ func MutableStateToGetResponse(
 		),
 		FirstExecutionRunId:          executionInfo.FirstExecutionRunId,
 		AssignedBuildId:              mutableState.GetAssignedBuildId(),
+		InheritedBuildId:             mutableState.GetInheritedBuildId(),
 		MostRecentWorkerVersionStamp: executionInfo.GetMostRecentWorkerVersionStamp(),
 	}, nil
 }

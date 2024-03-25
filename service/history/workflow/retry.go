@@ -246,11 +246,15 @@ func SetupNewWorkflowForRetryOrCron(
 		attempt = previousExecutionInfo.Attempt + 1
 	}
 
-	// For retry: propagate build-id version info to new workflow.
-	// For cron: do not propagate (always start on latest version).
 	var sourceVersionStamp *commonpb.WorkerVersionStamp
-	if initiator == enumspb.CONTINUE_AS_NEW_INITIATOR_RETRY {
-		sourceVersionStamp = worker_versioning.StampIfUsingVersioning(previousMutableState.GetMostRecentWorkerVersionStamp())
+	if previousExecutionInfo.AssignedBuildId == "" {
+		// TODO: only keeping this part for old versioning. The desired logic seem to be the same for both cron and
+		// retry: keep originally-inherited build ID. [cleanup-old-wv]
+		// For retry: propagate build-id version info to new workflow.
+		// For cron: do not propagate (always start on latest version).
+		if initiator == enumspb.CONTINUE_AS_NEW_INITIATOR_RETRY {
+			sourceVersionStamp = worker_versioning.StampIfUsingVersioning(previousMutableState.GetMostRecentWorkerVersionStamp())
+		}
 	}
 
 	req := &historyservice.StartWorkflowExecutionRequest{
@@ -264,6 +268,7 @@ func SetupNewWorkflowForRetryOrCron(
 		FirstWorkflowTaskBackoff: previousMutableState.ContinueAsNewMinBackoff(durationpb.New(backoffInterval)),
 		Attempt:                  attempt,
 		SourceVersionStamp:       sourceVersionStamp,
+		InheritedBuildId:         startAttr.InheritedBuildId,
 	}
 	workflowTimeoutTime := timestamp.TimeValue(previousExecutionInfo.WorkflowExecutionExpirationTime)
 	if !workflowTimeoutTime.IsZero() {

@@ -1872,6 +1872,20 @@ func (mr *MockMutableStateMockRecorder) GetHistorySize() *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetHistorySize", reflect.TypeOf((*MockMutableState)(nil).GetHistorySize))
 }
 
+// GetInheritedBuildId mocks base method.
+func (m *MockMutableState) GetInheritedBuildId() string {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetInheritedBuildId")
+	ret0, _ := ret[0].(string)
+	return ret0
+}
+
+// GetInheritedBuildId indicates an expected call of GetInheritedBuildId.
+func (mr *MockMutableStateMockRecorder) GetInheritedBuildId() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetInheritedBuildId", reflect.TypeOf((*MockMutableState)(nil).GetInheritedBuildId))
+}
+
 // GetLastFirstEventIDTxnID mocks base method.
 func (m *MockMutableState) GetLastFirstEventIDTxnID() (int64, int64) {
 	m.ctrl.T.Helper()

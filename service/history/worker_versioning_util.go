@@ -219,6 +219,15 @@ func updateWorkflowAssignedBuildId(
 	)
 }
 
+func MakeDirectiveForWorkflowTask(ms workflow.MutableState) *taskqueuespb.TaskVersionDirective {
+	return worker_versioning.MakeDirectiveForWorkflowTask(
+		ms.GetInheritedBuildId(),
+		ms.GetAssignedBuildId(),
+		ms.GetMostRecentWorkerVersionStamp(),
+		ms.GetLastWorkflowTaskStartedEventID(),
+	)
+}
+
 func MakeDirectiveForActivityTask(mutableState workflow.MutableState, activityInfo *persistencespb.ActivityInfo) *taskqueuespb.TaskVersionDirective {
 	if !activityInfo.UseCompatibleVersion && activityInfo.GetUseWorkflowBuildId() == nil {
 		return worker_versioning.MakeUseAssignmentRulesDirective()

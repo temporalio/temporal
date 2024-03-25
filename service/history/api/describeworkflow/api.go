@@ -126,6 +126,7 @@ func Invoke(
 
 			MostRecentWorkerVersionStamp: executionInfo.MostRecentWorkerVersionStamp,
 			AssignedBuildId:              executionInfo.AssignedBuildId,
+			InheritedBuildId:             executionInfo.InheritedBuildId,
 		},
 	}
 
