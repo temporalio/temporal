@@ -232,11 +232,11 @@ func (c *temporalImpl) enableWorker() bool {
 
 func (c *temporalImpl) Start() error {
 	hosts := make(map[primitives.ServiceName]static.Hosts)
-	hosts[primitives.FrontendService] = static.SingleHost(c.FrontendGRPCAddress())
-	hosts[primitives.MatchingService] = static.SingleHost(c.MatchingGRPCServiceAddress())
+	hosts[primitives.FrontendService] = static.SingleLocalHost(c.FrontendGRPCAddress())
+	hosts[primitives.MatchingService] = static.SingleLocalHost(c.MatchingGRPCServiceAddress())
 	hosts[primitives.HistoryService] = static.Hosts{All: c.HistoryServiceAddresses()}
 	if c.enableWorker() {
-		hosts[primitives.WorkerService] = static.SingleHost(c.WorkerGRPCServiceAddress())
+		hosts[primitives.WorkerService] = static.SingleLocalHost(c.WorkerGRPCServiceAddress())
 	}
 
 	// create temporal-system namespace, this must be created before starting

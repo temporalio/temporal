@@ -46,7 +46,7 @@ type (
 	}
 )
 
-func SingleHost(host string) Hosts {
+func SingleLocalHost(host string) Hosts {
 	return Hosts{All: []string{host}, Self: host}
 }
 
