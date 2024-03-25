@@ -170,3 +170,109 @@ func (s *contextSuite) TestMergeReplicationTasks_SingleReplicationTask() {
 	s.Empty(mergedReplicationTasks[0].(*tasks.HistoryReplicationTask).NewRunID)
 	s.Equal(newRunID, mergedReplicationTasks[1].(*tasks.HistoryReplicationTask).NewRunID)
 }
+
+func (s *contextSuite) TestMergeReplicationTasks_MultipleReplicationTasks() {
+	// The case can happen when importing a workflow:
+	// current workflow will be terminated and imported workflow can contain multiple replication tasks
+	// This case is not supported right now
+
+	currentWorkflowMutation := &persistence.WorkflowMutation{
+		ExecutionState: &persistencespb.WorkflowExecutionState{
+			Status: enumspb.WORKFLOW_EXECUTION_STATUS_TERMINATED,
+			State:  enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED,
+		},
+		Tasks: map[tasks.Category][]tasks.Task{
+			tasks.CategoryReplication: {
+				&tasks.HistoryReplicationTask{
+					WorkflowKey:         tests.WorkflowKey,
+					VisibilityTimestamp: time.Now(),
+					FirstEventID:        9,
+					NextEventID:         10,
+					Version:             tests.Version,
+				},
+			},
+		},
+	}
+
+	newRunID := uuid.New()
+	newWorkflowSnapshot := &persistence.WorkflowSnapshot{
+		ExecutionState: &persistencespb.WorkflowExecutionState{
+			Status: enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
+			State:  enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING,
+		},
+		Tasks: map[tasks.Category][]tasks.Task{
+			tasks.CategoryReplication: {
+				&tasks.HistoryReplicationTask{
+					WorkflowKey: definition.NewWorkflowKey(
+						string(tests.NamespaceID),
+						tests.WorkflowID,
+						newRunID,
+					),
+					VisibilityTimestamp: time.Now(),
+					FirstEventID:        1,
+					NextEventID:         3,
+					Version:             tests.Version,
+				},
+				&tasks.HistoryReplicationTask{
+					WorkflowKey: definition.NewWorkflowKey(
+						string(tests.NamespaceID),
+						tests.WorkflowID,
+						newRunID,
+					),
+					VisibilityTimestamp: time.Now(),
+					FirstEventID:        3,
+					NextEventID:         6,
+					Version:             tests.Version,
+				},
+				&tasks.HistoryReplicationTask{
+					WorkflowKey: definition.NewWorkflowKey(
+						string(tests.NamespaceID),
+						tests.WorkflowID,
+						newRunID,
+					),
+					VisibilityTimestamp: time.Now(),
+					FirstEventID:        6,
+					NextEventID:         10,
+					Version:             tests.Version,
+				},
+			},
+		},
+	}
+
+	err := s.workflowContext.mergeUpdateWithNewReplicationTasks(
+		currentWorkflowMutation,
+		newWorkflowSnapshot,
+	)
+	s.NoError(err)
+	s.Len(currentWorkflowMutation.Tasks[tasks.CategoryReplication], 1) // verify no change to tasks
+	s.Len(newWorkflowSnapshot.Tasks[tasks.CategoryReplication], 3)     // verify no change to tasks
+}
+
+func (s *contextSuite) TestMergeReplicationTasks_CurrentRunRunning() {
+	// The case can happen when suppressing a current running workflow to be zombie
+	// and creating a new workflow at the same time
+
+	currentWorkflowMutation := &persistence.WorkflowMutation{
+		ExecutionState: &persistencespb.WorkflowExecutionState{
+			Status: enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
+			State:  enumsspb.WORKFLOW_EXECUTION_STATE_ZOMBIE,
+		},
+		Tasks: map[tasks.Category][]tasks.Task{},
+	}
+
+	newWorkflowSnapshot := &persistence.WorkflowSnapshot{
+		ExecutionState: &persistencespb.WorkflowExecutionState{
+			Status: enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
+			State:  enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING,
+		},
+		Tasks: map[tasks.Category][]tasks.Task{},
+	}
+
+	err := s.workflowContext.mergeUpdateWithNewReplicationTasks(
+		currentWorkflowMutation,
+		newWorkflowSnapshot,
+	)
+	s.NoError(err)
+	s.Empty(currentWorkflowMutation.Tasks) // verify no change to tasks
+	s.Empty(newWorkflowSnapshot.Tasks)     // verify no change to tasks
+}
