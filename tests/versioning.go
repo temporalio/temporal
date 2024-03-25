@@ -95,7 +95,8 @@ func (s *VersioningIntegSuite) SetupSuite() {
 		dynamicconfig.MatchingLongPollExpirationInterval: longPollTime,
 
 		// this is overridden for tests using testWithMatchingBehavior
-		dynamicconfig.MatchingNumTaskqueueReadPartitions: 1,
+		dynamicconfig.MatchingNumTaskqueueReadPartitions:  4,
+		dynamicconfig.MatchingNumTaskqueueWritePartitions: 4,
 	}
 	s.setupSuite("testdata/cluster.yaml")
 }
