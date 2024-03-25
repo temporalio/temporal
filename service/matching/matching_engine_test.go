@@ -690,44 +690,6 @@ func (s *matchingEngineSuite) TestQueryWorkflowDoesNotLoadSticky() {
 	s.Equal(0, len(s.matchingEngine.partitions))
 }
 
-// TODO: this unit test does not seem to belong to matchingEngine, move it to the right place
-func (s *matchingEngineSuite) TestTaskWriterShutdown() {
-	s.matchingEngine.config.RangeSize = 300 // override to low number for the test
-
-	namespaceId := uuid.New()
-	tl := "makeToast"
-
-	taskQueue := &taskqueuepb.TaskQueue{
-		Name: tl,
-		Kind: enumspb.TASK_QUEUE_KIND_NORMAL,
-	}
-
-	runID := uuid.NewRandom().String()
-	workflowID := "workflow1"
-	execution := &commonpb.WorkflowExecution{RunId: runID, WorkflowId: workflowID}
-
-	tlID := newRootPartition(namespaceId, tl, enumspb.TASK_QUEUE_TYPE_ACTIVITY)
-	tlm, err := s.matchingEngine.getTaskQueuePartitionManager(context.Background(), tlID, true)
-	s.Nil(err)
-
-	addRequest := matchingservice.AddActivityTaskRequest{
-		NamespaceId:            namespaceId,
-		Execution:              execution,
-		TaskQueue:              taskQueue,
-		ScheduleToStartTimeout: timestamp.DurationFromSeconds(100),
-	}
-
-	// stop the task writer explicitly
-	tlmImpl := tlm.(*taskQueuePartitionManagerImpl).defaultQueue.(*physicalTaskQueueManagerImpl)
-	tlmImpl.taskWriter.Stop()
-
-	// now attempt to add a task
-	scheduledEventID := int64(5)
-	addRequest.ScheduledEventId = scheduledEventID
-	_, _, err = s.matchingEngine.AddActivityTask(context.Background(), &addRequest)
-	s.Error(err)
-}
-
 func (s *matchingEngineSuite) TestAddThenConsumeActivities() {
 	s.matchingEngine.config.LongPollExpirationInterval = dynamicconfig.GetDurationPropertyFnFilteredByTaskQueueInfo(10 * time.Millisecond)
 
@@ -1744,6 +1706,7 @@ func (s *matchingEngineSuite) TestAddTaskAfterStartFailure() {
 	s.EqualValues(0, s.taskManager.getTaskCount(dbq))
 }
 
+// TODO: should be moved to backlog_manager_test
 func (s *matchingEngineSuite) TestTaskQueueManagerGetTaskBatch() {
 	runID := uuid.NewRandom().String()
 	workflowID := "workflow1"
@@ -1783,24 +1746,24 @@ func (s *matchingEngineSuite) TestTaskQueueManagerGetTaskBatch() {
 
 	// wait until all tasks are read by the task pump and enqueued into the in-memory buffer
 	// at the end of this step, ackManager readLevel will also be equal to the buffer size
-	expectedBufSize := min(cap(tlMgr.taskReader.taskBuffer), taskCount)
-	s.True(s.awaitCondition(func() bool { return len(tlMgr.taskReader.taskBuffer) == expectedBufSize }, time.Second))
+	expectedBufSize := min(cap(tlMgr.backlogMgr.taskReader.taskBuffer), taskCount)
+	s.True(s.awaitCondition(func() bool { return len(tlMgr.backlogMgr.taskReader.taskBuffer) == expectedBufSize }, time.Second))
 
 	// unload the queue and stop all goroutines that read / write tasks in the background
 	// remainder of this test works with the in-memory buffer
-	tlMgr.unloadFromPartitionManager()
+	tlMgr.UnloadFromPartitionManager()
 
 	// setReadLevel should NEVER be called without updating ackManager.outstandingTasks
 	// This is only for unit test purpose
-	tlMgr.taskAckManager.setReadLevel(tlMgr.taskWriter.GetMaxReadLevel())
-	batch, err := tlMgr.taskReader.getTaskBatch(context.Background())
+	tlMgr.backlogMgr.taskAckManager.setReadLevel(tlMgr.backlogMgr.taskWriter.GetMaxReadLevel())
+	batch, err := tlMgr.backlogMgr.taskReader.getTaskBatch(context.Background())
 	s.Nil(err)
 	s.EqualValues(0, len(batch.tasks))
-	s.EqualValues(tlMgr.taskWriter.GetMaxReadLevel(), batch.readLevel)
+	s.EqualValues(tlMgr.backlogMgr.taskWriter.GetMaxReadLevel(), batch.readLevel)
 	s.True(batch.isReadBatchDone)
 
-	tlMgr.taskAckManager.setReadLevel(0)
-	batch, err = tlMgr.taskReader.getTaskBatch(context.Background())
+	tlMgr.backlogMgr.taskAckManager.setReadLevel(0)
+	batch, err = tlMgr.backlogMgr.taskReader.getTaskBatch(context.Background())
 	s.Nil(err)
 	s.EqualValues(rangeSize, len(batch.tasks))
 	s.EqualValues(rangeSize, batch.readLevel)
@@ -1811,7 +1774,7 @@ func (s *matchingEngineSuite) TestTaskQueueManagerGetTaskBatch() {
 	// reset the ackManager readLevel to the buffer size and consume
 	// the in-memory tasks by calling Poll API - assert ackMgr state
 	// at the end
-	tlMgr.taskAckManager.setReadLevel(int64(expectedBufSize))
+	tlMgr.backlogMgr.taskAckManager.setReadLevel(int64(expectedBufSize))
 
 	// complete rangeSize events
 	for i := int64(0); i < rangeSize; i++ {
@@ -1833,12 +1796,13 @@ func (s *matchingEngineSuite) TestTaskQueueManagerGetTaskBatch() {
 		}
 	}
 	s.EqualValues(taskCount-rangeSize, s.taskManager.getTaskCount(dbq))
-	batch, err = tlMgr.taskReader.getTaskBatch(context.Background())
+	batch, err = tlMgr.backlogMgr.taskReader.getTaskBatch(context.Background())
 	s.Nil(err)
 	s.True(0 < len(batch.tasks) && len(batch.tasks) <= rangeSize)
 	s.True(batch.isReadBatchDone)
 }
 
+// TODO: should be moved to backlog_manager_test
 func (s *matchingEngineSuite) TestTaskQueueManagerGetTaskBatch_ReadBatchDone() {
 	namespaceId := uuid.New()
 	tl := "makeToast"
@@ -1859,16 +1823,16 @@ func (s *matchingEngineSuite) TestTaskQueueManagerGetTaskBatch_ReadBatchDone() {
 	// the following few lines get clobbered as part of the taskWriter.Start()
 	time.Sleep(100 * time.Millisecond)
 
-	tlMgr.taskAckManager.setReadLevel(0)
-	atomic.StoreInt64(&tlMgr.taskWriter.maxReadLevel, maxReadLevel)
-	batch, err := tlMgr.taskReader.getTaskBatch(context.Background())
+	tlMgr.backlogMgr.taskAckManager.setReadLevel(0)
+	atomic.StoreInt64(&tlMgr.backlogMgr.taskWriter.maxReadLevel, maxReadLevel)
+	batch, err := tlMgr.backlogMgr.taskReader.getTaskBatch(context.Background())
 	s.Empty(batch.tasks)
 	s.Equal(int64(rangeSize*10), batch.readLevel)
 	s.False(batch.isReadBatchDone)
 	s.NoError(err)
 
-	tlMgr.taskAckManager.setReadLevel(batch.readLevel)
-	batch, err = tlMgr.taskReader.getTaskBatch(context.Background())
+	tlMgr.backlogMgr.taskAckManager.setReadLevel(batch.readLevel)
+	batch, err = tlMgr.backlogMgr.taskReader.getTaskBatch(context.Background())
 	s.Empty(batch.tasks)
 	s.Equal(maxReadLevel, batch.readLevel)
 	s.True(batch.isReadBatchDone)
@@ -1896,6 +1860,7 @@ func (s *matchingEngineSuite) TestTaskQueueManager_CyclingBehavior() {
 	}
 }
 
+// TODO: should be moved to backlog_manager_test
 func (s *matchingEngineSuite) TestTaskExpiryAndCompletion() {
 	runID := uuid.NewRandom().String()
 	workflowID := uuid.New()
@@ -1951,7 +1916,7 @@ func (s *matchingEngineSuite) TestTaskExpiryAndCompletion() {
 		// wait until all tasks are loaded by into in-memory buffers by task queue manager
 		// the buffer size should be one less than expected because dispatcher will dequeue the head
 		// 1/4 should be thrown out because they are expired before they hit the buffer
-		s.True(s.awaitCondition(func() bool { return len(tlMgr.taskReader.taskBuffer) >= (3*taskCount/4 - 1) }, time.Second))
+		s.True(s.awaitCondition(func() bool { return len(tlMgr.backlogMgr.taskReader.taskBuffer) >= (3*taskCount/4 - 1) }, time.Second))
 
 		// ensure the 1/4 of tasks with small ScheduleToStartTimeout will be expired when they come out of the buffer
 		time.Sleep(300 * time.Millisecond)
@@ -1984,8 +1949,8 @@ func (s *matchingEngineSuite) TestTaskExpiryAndCompletion() {
 			s.Truef(-3 <= delta && delta <= 1, "remaining %d, getTaskCount %d", remaining, s.taskManager.getTaskCount(dbq))
 		}
 		// ensure full gc for the next case (twice in case one doesn't get the gc lock)
-		tlMgr.taskGC.RunNow(context.Background(), tlMgr.taskAckManager.getAckLevel())
-		tlMgr.taskGC.RunNow(context.Background(), tlMgr.taskAckManager.getAckLevel())
+		tlMgr.backlogMgr.taskGC.RunNow(context.Background(), tlMgr.backlogMgr.taskAckManager.getAckLevel())
+		tlMgr.backlogMgr.taskGC.RunNow(context.Background(), tlMgr.backlogMgr.taskAckManager.getAckLevel())
 	}
 }
 
