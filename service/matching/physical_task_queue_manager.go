@@ -35,12 +35,13 @@ import (
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
-	"go.temporal.io/server/common/clock"
 
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	"go.temporal.io/server/api/matchingservice/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
+	taskqueuespb "go.temporal.io/server/api/taskqueue/v1"
 	"go.temporal.io/server/common"
+	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/debug"
 	"go.temporal.io/server/common/log"
@@ -96,8 +97,10 @@ type (
 		UpdatePollerInfo(pollerIdentity, *pollMetadata)
 		GetAllPollerInfo() []*taskqueuepb.PollerInfo
 		HasPollerAfter(accessTime time.Time) bool
-		// DescribeTaskQueue returns information about the target task queue
-		DescribeTaskQueue(includeTaskQueueStatus bool) *matchingservice.DescribeTaskQueueResponse
+		// LegacyDescribeTaskQueue returns pollers info and legacy TaskQueueStatus for this physical queue
+		LegacyDescribeTaskQueue(includeTaskQueueStatus bool) *matchingservice.DescribeTaskQueueResponse
+		// Describe returns information about the physical task queue
+		Describe() *taskqueuespb.PhysicalTaskQueueInfo
 		UnloadFromPartitionManager()
 		String() string
 		QueueKey() *PhysicalTaskQueueKey
@@ -382,16 +385,20 @@ func (c *physicalTaskQueueManagerImpl) HasPollerAfter(accessTime time.Time) bool
 	return len(recentPollers) > 0
 }
 
-// DescribeTaskQueue returns information about the target taskqueue, right now this API returns the
+// LegacyDescribeTaskQueue returns information about the target taskqueue, right now this API returns the
 // pollers which polled this taskqueue in last few minutes and status of taskqueue's ackManager
 // (readLevel, ackLevel, backlogCountHint and taskIDBlock).
-func (c *physicalTaskQueueManagerImpl) DescribeTaskQueue(includeTaskQueueStatus bool) *matchingservice.DescribeTaskQueueResponse {
+func (c *physicalTaskQueueManagerImpl) LegacyDescribeTaskQueue(includeTaskQueueStatus bool) *matchingservice.DescribeTaskQueueResponse {
 	response := &matchingservice.DescribeTaskQueueResponse{Pollers: c.GetAllPollerInfo()}
 	if includeTaskQueueStatus {
 		response.TaskQueueStatus = c.backlogMgr.BacklogStatus()
 		response.TaskQueueStatus.RatePerSecond = c.matcher.Rate()
 	}
 	return response
+}
+
+func (c *physicalTaskQueueManagerImpl) Describe() *taskqueuespb.PhysicalTaskQueueInfo {
+	return nil
 }
 
 func (c *physicalTaskQueueManagerImpl) String() string {

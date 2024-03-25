@@ -791,16 +791,46 @@ func (e *matchingEngineImpl) DescribeTaskQueue(
 	ctx context.Context,
 	request *matchingservice.DescribeTaskQueueRequest,
 ) (*matchingservice.DescribeTaskQueueResponse, error) {
-	partition, err := tqid.PartitionFromProto(request.DescRequest.TaskQueue, request.GetNamespaceId(), request.DescRequest.TaskQueueType)
-	if err != nil {
-		return nil, err
+	if request.DescRequest.ApiMode == enumspb.DESCRIBE_TASK_QUEUE_MODE_UNSPECIFIED {
+		partition, err := tqid.PartitionFromProto(request.DescRequest.TaskQueue, request.GetNamespaceId(), request.DescRequest.TaskQueueType)
+		if err != nil {
+			return nil, err
+		}
+		pm, err := e.getTaskQueuePartitionManager(ctx, partition, true)
+		if err != nil {
+			return nil, err
+		}
+		return pm.LegacyDescribeTaskQueue(request.DescRequest.GetIncludeTaskQueueStatus()), nil
+	} else if request.DescRequest.ApiMode == enumspb.DESCRIBE_TASK_QUEUE_MODE_ENHANCED {
+		versionsInfo := make([]*taskqueuepb.TaskQueueVersionInfo, 0)
+		// for _, queue_type := range request.DescRequest.TaskQueueTypes {
+		//	for partition {
+		//		partitionResp, err := pm.DescribeTaskQueuePartition(&matchingservice.DescribeTaskQueuePartitionRequest{
+		//			NamespaceId:            request.NamespaceId,
+		//			TaskQueuePartition:     &taskqueue.TaskQueuePartition{make with a helper fn},
+		//			Versions:               request.DescRequest.Versions,
+		//			ReportBacklogInfo:      false,
+		//			ReportPollers:          request.DescRequest.ReportPollers,
+		//		})
+		//		merge responses into versionsInfo
+		//	}
+		// }
+		return &matchingservice.DescribeTaskQueueResponse{
+			DescResponse: &workflowservice.DescribeTaskQueueResponse{
+				Pollers:         nil,
+				TaskQueueStatus: nil,
+				VersionsInfo:    versionsInfo,
+			},
+		}, nil
 	}
-	pm, err := e.getTaskQueuePartitionManager(ctx, partition, true)
-	if err != nil {
-		return nil, err
-	}
+	return nil, nil
+}
 
-	return pm.DescribeTaskQueue(request.DescRequest.GetIncludeTaskQueueStatus()), nil
+func (e *matchingEngineImpl) DescribeTaskQueuePartition(
+	ctx context.Context,
+	request *matchingservice.DescribeTaskQueuePartitionRequest,
+) (*matchingservice.DescribeTaskQueuePartitionResponse, error) {
+	return nil, nil
 }
 
 func (e *matchingEngineImpl) ListTaskQueuePartitions(

@@ -33,6 +33,7 @@ import (
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
+	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/server/api/matchingservice/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	taskqueuespb "go.temporal.io/server/api/taskqueue/v1"
@@ -73,8 +74,9 @@ type (
 		HasPollerAfter(buildId string, accessTime time.Time) bool
 		// HasAnyPollerAfter checks pollers on all versioned and unversioned queues
 		HasAnyPollerAfter(accessTime time.Time) bool
-		// DescribeTaskQueue returns information about the target task queue
-		DescribeTaskQueue(includeTaskQueueStatus bool) *matchingservice.DescribeTaskQueueResponse
+		// LegacyDescribeTaskQueue returns information about all pollers of this partition and the status of its unversioned physical queue
+		LegacyDescribeTaskQueue(includeTaskQueueStatus bool) *matchingservice.DescribeTaskQueueResponse
+		Describe(request *matchingservice.DescribeTaskQueuePartitionRequest) (*matchingservice.DescribeTaskQueuePartitionResponse, error)
 		String() string
 		Partition() tqid.Partition
 		LongPollExpirationInterval() time.Duration
@@ -379,14 +381,21 @@ func (pm *taskQueuePartitionManagerImpl) HasPollerAfter(buildId string, accessTi
 	return vq.HasPollerAfter(accessTime)
 }
 
-func (pm *taskQueuePartitionManagerImpl) DescribeTaskQueue(includeTaskQueueStatus bool) *matchingservice.DescribeTaskQueueResponse {
+func (pm *taskQueuePartitionManagerImpl) LegacyDescribeTaskQueue(includeTaskQueueStatus bool) *matchingservice.DescribeTaskQueueResponse {
 	resp := &matchingservice.DescribeTaskQueueResponse{
-		Pollers: pm.GetAllPollerInfo(),
+		DescResponse: &workflowservice.DescribeTaskQueueResponse{
+			Pollers: pm.GetAllPollerInfo(),
+		},
 	}
 	if includeTaskQueueStatus {
-		resp.TaskQueueStatus = pm.defaultQueue.DescribeTaskQueue(true).TaskQueueStatus
+		resp.DescResponse.TaskQueueStatus = pm.defaultQueue.LegacyDescribeTaskQueue(true).DescResponse.TaskQueueStatus
 	}
 	return resp
+}
+
+func (pm *taskQueuePartitionManagerImpl) Describe(
+	request *matchingservice.DescribeTaskQueuePartitionRequest) (*matchingservice.DescribeTaskQueuePartitionResponse, error) {
+	return nil, nil
 }
 
 func (pm *taskQueuePartitionManagerImpl) String() string {
