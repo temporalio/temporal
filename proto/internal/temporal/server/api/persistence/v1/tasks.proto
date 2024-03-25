@@ -60,6 +60,7 @@ message TaskQueueInfo {
     int64 ack_level = 5;
     google.protobuf.Timestamp expiry_time = 6;
     google.protobuf.Timestamp last_update_time = 7;
+    int64 approximate_backlog_count = 8;
 }
 
 message TaskKey {

@@ -49,11 +49,12 @@ const (
 type (
 	taskQueueDB struct {
 		sync.Mutex
-		queue    *PhysicalTaskQueueKey
-		rangeID  int64
-		ackLevel int64
-		store    persistence.TaskManager
-		logger   log.Logger
+		queue                   *PhysicalTaskQueueKey
+		rangeID                 int64
+		ackLevel                int64
+		store                   persistence.TaskManager
+		logger                  log.Logger
+		approximateBacklogCount int64
 	}
 	taskQueueState struct {
 		rangeID  int64
@@ -132,6 +133,7 @@ func (db *taskQueueDB) takeOverTaskQueueLocked(
 		}
 		db.ackLevel = response.TaskQueueInfo.AckLevel
 		db.rangeID = response.RangeID + 1
+		db.approximateBacklogCount = response.TaskQueueInfo.ApproximateBacklogCount
 		return nil
 
 	case *serviceerror.NotFound:
@@ -165,15 +167,17 @@ func (db *taskQueueDB) renewTaskQueueLocked(
 	return nil
 }
 
-// UpdateState updates the queue state with the given value
-func (db *taskQueueDB) UpdateState(
+// UpdateStateAckLevelBacklogCount updates the queue state with the given Ack and BacklogCount values
+func (db *taskQueueDB) UpdateStateAckLevelBacklogCount(
 	ctx context.Context,
 	ackLevel int64,
+	approximateBacklogCount int64,
 ) error {
 	db.Lock()
 	defer db.Unlock()
 	queueInfo := db.cachedQueueInfo()
 	queueInfo.AckLevel = ackLevel
+	queueInfo.ApproximateBacklogCount = approximateBacklogCount
 	_, err := db.store.UpdateTaskQueue(ctx, &persistence.UpdateTaskQueueRequest{
 		RangeID:       db.rangeID,
 		TaskQueueInfo: queueInfo,
@@ -181,8 +185,24 @@ func (db *taskQueueDB) UpdateState(
 	})
 	if err == nil {
 		db.ackLevel = ackLevel
+		db.approximateBacklogCount = approximateBacklogCount
 	}
 	return err
+}
+
+// updateInMemoryBacklogCount updates the in-memory DB state with the given approximateBacklogCount value
+func (db *taskQueueDB) updateInMemoryBacklogCount(
+	approximateBacklogCount int64,
+) {
+	db.Lock()
+	defer db.Unlock()
+	db.approximateBacklogCount += approximateBacklogCount
+}
+
+func (db *taskQueueDB) getApproximateBacklogCount() int64 {
+	db.Lock()
+	defer db.Unlock()
+	return db.approximateBacklogCount
 }
 
 // CreateTasks creates a batch of given tasks for this task queue
@@ -285,12 +305,13 @@ func (db *taskQueueDB) expiryTime() *timestamppb.Timestamp {
 
 func (db *taskQueueDB) cachedQueueInfo() *persistencespb.TaskQueueInfo {
 	return &persistencespb.TaskQueueInfo{
-		NamespaceId:    db.queue.NamespaceId().String(),
-		Name:           db.queue.PersistenceName(),
-		TaskType:       db.queue.TaskType(),
-		Kind:           db.queue.Partition().Kind(),
-		AckLevel:       db.ackLevel,
-		ExpiryTime:     db.expiryTime(),
-		LastUpdateTime: timestamp.TimeNowPtrUtc(),
+		NamespaceId:             db.queue.NamespaceId().String(),
+		Name:                    db.queue.PersistenceName(),
+		TaskType:                db.queue.TaskType(),
+		Kind:                    db.queue.Partition().Kind(),
+		AckLevel:                db.ackLevel,
+		ExpiryTime:              db.expiryTime(),
+		LastUpdateTime:          timestamp.TimeNowPtrUtc(),
+		ApproximateBacklogCount: db.approximateBacklogCount,
 	}
 }

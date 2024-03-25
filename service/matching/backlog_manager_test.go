@@ -26,6 +26,12 @@ package matching
 
 import (
 	"context"
+	enumspb "go.temporal.io/api/enums/v1"
+	"go.temporal.io/server/api/matchingservicemock/v1"
+	"go.temporal.io/server/common/dynamicconfig"
+	"go.temporal.io/server/common/log"
+	"go.temporal.io/server/common/metrics"
+	"go.temporal.io/server/common/tqid"
 	"testing"
 	"time"
 
@@ -153,4 +159,109 @@ func TestTaskWriterShutdown(t *testing.T) {
 	// now attempt to add a task
 	err = tlm.backlogMgr.SpoolTask(&persistencespb.TaskInfo{})
 	require.Error(t, err)
+}
+
+// Aims to test if ApproximateBacklogCount is being rightly updated during the
+// dispatchBufferedTasks call by taskReader
+func TestApproximateBacklogCount_dispatchBufferTasks(t *testing.T) {
+	controller := gomock.NewController(t)
+	defer controller.Finish()
+
+	logger := log.NewMockLogger(controller)
+	tm := newTestTaskManager(logger)
+
+	pqMgr := NewMockphysicalTaskQueueManager(controller)
+
+	matchingClient := matchingservicemock.NewMockMatchingServiceClient(controller)
+	handler := metrics.NewMockHandler(controller)
+
+	cfg := NewConfig(dynamicconfig.NewNoopCollection(), false, false)
+	f, err := tqid.NewTaskQueueFamily("", "test-queue")
+	require.NoError(t, err)
+	prtn := f.TaskQueue(enumspb.TASK_QUEUE_TYPE_WORKFLOW).NormalPartition(0)
+	queue := UnversionedQueueKey(prtn)
+	tlCfg := newTaskQueueConfig(prtn.TaskQueue(), cfg, "test-namespace")
+
+	// Expected calls
+	pqMgr.EXPECT().QueueKey().Return(queue).AnyTimes()
+	pqMgr.EXPECT().ProcessSpooledTask(gomock.Any(), gomock.Any()).Return(nil).AnyTimes()
+
+	backlogMgr := newBacklogManager(pqMgr, tlCfg, tm, logger, logger, matchingClient, handler, defaultContextInfoProvider)
+
+	// Adding tasks to the buffer
+	require.NoError(t, backlogMgr.taskReader.addTasksToBuffer(context.Background(), []*persistencespb.AllocatedTaskInfo{
+		{
+			Data: &persistencespb.TaskInfo{
+				ExpiryTime: timestamp.TimeNowPtrUtcAddSeconds(3000),
+				CreateTime: timestamp.TimeNowPtrUtc(),
+			},
+			TaskId: 13,
+		},
+	}))
+
+	// Setting the initial value to be 1 as dispatching of a task should
+	// decrease this counter
+	backlogMgr.db.updateInMemoryBacklogCount(int64(1))
+	require.Equal(t, backlogMgr.db.getApproximateBacklogCount(), int64(1))
+
+	backlogMgr.taskReader.gorogrp.Go(backlogMgr.taskReader.dispatchBufferedTasks)
+	time.Sleep(30 * time.Second) // let go routine run first
+	backlogMgr.taskReader.gorogrp.Cancel()
+	backlogMgr.taskReader.gorogrp.Wait()
+
+	close(backlogMgr.taskReader.taskBuffer)
+	require.Equal(t, backlogMgr.db.getApproximateBacklogCount(), int64(0))
+}
+
+func TestApproximateBacklogCount_taskWriterLoop(t *testing.T) {
+	controller := gomock.NewController(t)
+	defer controller.Finish()
+
+	// Setup calls
+	logger := log.NewMockLogger(controller)
+	tm := newTestTaskManager(logger)
+
+	pqMgr := NewMockphysicalTaskQueueManager(controller)
+
+	matchingClient := matchingservicemock.NewMockMatchingServiceClient(controller)
+	handler := metrics.NewMockHandler(controller)
+
+	cfg := NewConfig(dynamicconfig.NewNoopCollection(), false, false)
+	f, err := tqid.NewTaskQueueFamily("", "test-queue")
+	require.NoError(t, err)
+	prtn := f.TaskQueue(enumspb.TASK_QUEUE_TYPE_WORKFLOW).NormalPartition(0)
+	queue := UnversionedQueueKey(prtn)
+	tlCfg := newTaskQueueConfig(prtn.TaskQueue(), cfg, "test-namespace")
+
+	// Expected calls
+	pqMgr.EXPECT().QueueKey().Return(queue).AnyTimes()
+	pqMgr.EXPECT().ProcessSpooledTask(gomock.Any(), gomock.Any()).Return(nil).AnyTimes()
+	handler.EXPECT().Counter(gomock.Any()).Return(metrics.NoopCounterMetricFunc).AnyTimes()
+	logger.EXPECT().Debug(gomock.Any(), gomock.Any()).AnyTimes()
+
+	backlogMgr := newBacklogManager(pqMgr, tlCfg, tm, logger, logger, matchingClient, handler, defaultContextInfoProvider)
+
+	// Adding tasks on the taskWriters channel
+	backlogMgr.taskWriter.appendCh <- &writeTaskRequest{
+		taskInfo: &persistencespb.TaskInfo{
+			ExpiryTime: timestamp.TimeNowPtrUtcAddSeconds(3000),
+			CreateTime: timestamp.TimeNowPtrUtc(),
+		},
+		responseCh: make(chan<- *writeTaskResponse),
+	}
+
+	require.Equal(t, backlogMgr.db.getApproximateBacklogCount(), int64(0))
+
+	backlogMgr.taskWriter.Start()
+	time.Sleep(30 * time.Second) // let go routine run first
+	backlogMgr.taskWriter.Stop()
+
+	// Adding tasks to the buffer shall increase the in-memory counter by 1
+	// and this shall be written to persistence
+	require.Equal(t, backlogMgr.db.getApproximateBacklogCount(), int64(1))
+
+}
+
+func defaultContextInfoProvider(ctx context.Context) context.Context {
+	return ctx
 }

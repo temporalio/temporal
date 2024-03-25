@@ -244,6 +244,8 @@ writerLoop:
 				maxReadLevel = taskIDs[i]
 			}
 
+			// Appending backlogSizeHint by batchSize
+			w.backlogMgr.db.updateInMemoryBacklogCount(int64(batchSize))
 			resp, err := w.appendTasks(ctx, tasks)
 			// Update the maxReadLevel after the writes are completed, but before we send the response,
 			// so that taskReader is guaranteed to see the new read level when SpoolTask wakes it up.
