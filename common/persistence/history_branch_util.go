@@ -39,6 +39,7 @@ import (
 type (
 	HistoryBranchUtil interface {
 		NewHistoryBranch(
+			shardID int32,
 			namespaceID string,
 			workflowID string,
 			runID string,
@@ -83,6 +84,7 @@ func NewHistoryBranch(
 }
 
 func (u *HistoryBranchUtilImpl) NewHistoryBranch(
+	shardID int32,
 	namespaceID string,
 	workflowID string,
 	runID string,

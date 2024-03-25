@@ -156,7 +156,7 @@ func CreateMutableState(
 		runID,
 		shard.GetTimeSource().Now(),
 	)
-	if err := newMutableState.SetHistoryTree(executionTimeout, runTimeout, runID); err != nil {
+	if err := newMutableState.SetHistoryTree(shard.GetShardID(), executionTimeout, runTimeout, runID); err != nil {
 		return nil, err
 	}
 	return newMutableState, nil

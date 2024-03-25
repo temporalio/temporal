@@ -319,7 +319,7 @@ type (
 		ApplyWorkflowExecutionUpdateCompletedEvent(event *historypb.HistoryEvent, batchID int64) error
 		SetCurrentBranchToken(branchToken []byte) error
 		SetHistoryBuilder(hBuilder *historybuilder.HistoryBuilder)
-		SetHistoryTree(executionTimeout *durationpb.Duration, runTimeout *durationpb.Duration, treeID string) error
+		SetHistoryTree(shardID int32, executionTimeout *durationpb.Duration, runTimeout *durationpb.Duration, treeID string) error
 		SetBaseWorkflow(
 			baseRunID string,
 			baseRunLowestCommonAncestorEventID int64,
