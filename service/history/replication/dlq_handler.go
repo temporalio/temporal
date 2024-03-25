@@ -146,6 +146,7 @@ func newDLQHandler(
 					versionHistory,
 					[][]*historypb.HistoryEvent{events},
 					nil,
+					"",
 				)
 
 			},
