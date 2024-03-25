@@ -729,7 +729,8 @@ func (c *ContextImpl) mergeUpdateWithNewReplicationTasks(
 		return serviceerror.NewInternal("current workflow has no replication task, while new workflow contains replication task")
 	}
 	if numNewReplicationTasks == 0 {
-		return serviceerror.NewInternal("new workflow has no replication task, while current workflow contains replication task")
+		panic("new workflow has no replication task, while current workflow contains replication task")
+		// return serviceerror.NewInternal("new workflow has no replication task, while current workflow contains replication task")
 	}
 	if numNewReplicationTasks > 1 {
 		// This could happen when importing a workflow and current running workflow is being terminated.
