@@ -276,7 +276,7 @@ func ServerOptionsProvider(opts []ServerOption) (serverOptionsProvider, error) {
 		for _, service := range DefaultServices {
 			hosts := so.hostsByService[primitives.ServiceName(service)]
 			if len(hosts.All) == 0 {
-				panic(fmt.Sprintf("hosts for %v service are missing in static hosts", service))
+				return serverOptionsProvider{}, fmt.Errorf("hosts for %v service are missing in static hosts", service)
 			}
 		}
 	}
