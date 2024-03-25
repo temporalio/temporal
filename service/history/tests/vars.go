@@ -190,6 +190,7 @@ func NewDynamicConfig() *configs.Config {
 	config.NamespaceCacheRefreshInterval = dynamicconfig.GetDurationPropertyFn(time.Second)
 	config.EnableAPIGetCurrentRunIDLock = dynamicconfig.GetBoolPropertyFn(true)
 	config.FrontendAccessHistoryFraction = dynamicconfig.GetFloatPropertyFn(1.0)
+	config.EnableMutableStateTransitionHistory = dynamicconfig.GetBoolPropertyFn(true)
 	config.ReplicationEnableUpdateWithNewTaskMerge = dynamicconfig.GetBoolPropertyFn(true)
 	return config
 }

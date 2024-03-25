@@ -1023,6 +1023,7 @@ func (c *ContextImpl) maxMutableStateSizeExceeded() bool {
 	mutableStateSizeLimitWarn := c.config.MutableStateSizeLimitWarn()
 
 	mutableStateSize := c.MutableState.GetApproximatePersistedSize()
+	metrics.PersistedMutableStateSize.With(c.metricsHandler).Record(int64(mutableStateSize))
 
 	if mutableStateSize > mutableStateSizeLimitError {
 		c.logger.Warn("mutable state size exceeds error limit.",
@@ -1070,6 +1071,22 @@ func (c *ContextImpl) forceTerminateWorkflow(
 		consts.IdentityHistoryService,
 		false,
 	)
+}
+
+// CacheSize estimates the in-memory size of the object for cache limits. For proto objects, it uses proto.Size()
+// which returns the serialized size. Note: In-memory size will be slightly larger than the serialized size.
+func (c *ContextImpl) CacheSize() int {
+	if !c.config.HistoryCacheLimitSizeBased {
+		return 1
+	}
+	size := len(c.workflowKey.WorkflowID) + len(c.workflowKey.RunID) + len(c.workflowKey.NamespaceID)
+	if c.MutableState != nil {
+		size += c.MutableState.GetApproximatePersistedSize()
+	}
+	if c.updateRegistry != nil {
+		size += c.updateRegistry.GetSize()
+	}
+	return size
 }
 
 func emitStateTransitionCount(

@@ -25,6 +25,7 @@
 package configs
 
 import (
+	"math"
 	"time"
 
 	"go.temporal.io/server/common/dynamicconfig"
@@ -35,6 +36,14 @@ import (
 const (
 	// OperatorPriority is used to give precedence to calls coming from web UI or tctl
 	OperatorPriority = 0
+)
+
+const (
+	// These names do not map to an underlying gRPC service. This format is used for consistency with the
+	// gRPC API names on which the authorizer - the consumer of this string - may depend.
+	OpenAPIV3APIName         = "/temporal.api.openapi.v1.OpenAPIService/GetOpenAPIV3Docs"
+	OpenAPIV2APIName         = "/temporal.api.openapi.v1.OpenAPIService/GetOpenAPIV2Docs"
+	DispatchNexusTaskAPIName = "/temporal.api.nexusservice.v1.NexusService/DispatchNexusTask"
 )
 
 var (
@@ -55,7 +64,7 @@ var (
 		"/temporal.api.workflowservice.v1.WorkflowService/PollNexusTaskQueue":          1,
 
 		// DispatchNexusTask is potentially long running, it's classified in the same bucket as QueryWorkflow.
-		"/temporal.api.nexusservice.v1.NexusService/DispatchNexusTask": 1,
+		DispatchNexusTaskAPIName: 1,
 	}
 
 	// APIToPriority determines common API priorities.
@@ -77,7 +86,7 @@ var (
 		"/temporal.api.workflowservice.v1.WorkflowService/UpdateWorkflowExecution":          1,
 		"/temporal.api.workflowservice.v1.WorkflowService/CreateSchedule":                   1,
 		"/temporal.api.workflowservice.v1.WorkflowService/StartBatchOperation":              1,
-		"/temporal.api.nexusservice.v1.NexusService/DispatchNexusTask":                      1,
+		DispatchNexusTaskAPIName: 1,
 
 		// P2: Change State APIs
 		"/temporal.api.workflowservice.v1.WorkflowService/RequestCancelWorkflowExecution": 2,
@@ -122,9 +131,13 @@ var (
 		"/temporal.api.workflowservice.v1.WorkflowService/PollNexusTaskQueue":                 5,
 		"/temporal.api.workflowservice.v1.WorkflowService/ResetStickyTaskQueue":               5,
 		"/temporal.api.workflowservice.v1.WorkflowService/GetWorkflowExecutionHistoryReverse": 5,
+
+		// P6: Informational API that aren't required for the temporal service to function
+		OpenAPIV3APIName: 6,
+		OpenAPIV2APIName: 6,
 	}
 
-	ExecutionAPIPrioritiesOrdered = []int{0, 1, 2, 3, 4, 5}
+	ExecutionAPIPrioritiesOrdered = []int{0, 1, 2, 3, 4, 5, 6}
 
 	VisibilityAPIToPriority = map[string]int{
 		"/temporal.api.workflowservice.v1.WorkflowService/CountWorkflowExecutions":        1,
@@ -173,12 +186,14 @@ var _ quotas.RateBurst = (*operatorRateBurstImpl)(nil)
 func NewNamespaceRateBurst(
 	namespaceName string,
 	rateFn dynamicconfig.FloatPropertyFnWithNamespaceFilter,
-	burstFn dynamicconfig.IntPropertyFnWithNamespaceFilter,
+	burstRatioFn dynamicconfig.FloatPropertyFnWithNamespaceFilter,
 ) *NamespaceRateBurstImpl {
 	return &NamespaceRateBurstImpl{
 		namespaceName: namespaceName,
 		rateFn:        rateFn,
-		burstFn:       burstFn,
+		burstFn: func(namespace string) int {
+			return int(rateFn(namespace) * math.Max(1, burstRatioFn(namespace)))
+		},
 	}
 }
 
