@@ -127,6 +127,8 @@ dispatchLoop:
 				err := tr.backlogMgr.processSpooledTask(taskCtx, task)
 				cancel()
 				if err == nil {
+					// Task has been matched with a poller and is read from the db; decrease the backlog count
+					tr.backlogMgr.db.updateInMemoryBacklogCount(-1)
 					continue dispatchLoop
 				}
 
@@ -199,7 +201,7 @@ Loop:
 			tr.Signal()
 
 		case <-updateAckTimer.C:
-			err := tr.persistAckLevel(ctx)
+			err := tr.persistAckBacklogCountLevel(ctx)
 			isConditionFailed := tr.backlogMgr.signalIfFatal(err)
 			if err != nil && !isConditionFailed {
 				tr.logger().Error("Persistent store operation failure",
@@ -298,10 +300,12 @@ func (tr *taskReader) addSingleTaskToBuffer(
 	}
 }
 
-func (tr *taskReader) persistAckLevel(ctx context.Context) error {
+func (tr *taskReader) persistAckBacklogCountLevel(ctx context.Context) error {
+	approximateBacklogCount := tr.backlogMgr.db.getApproximateBacklogCount()
 	ackLevel := tr.backlogMgr.taskAckManager.getAckLevel()
+	// TODO: Emit approximateBacklogCount metric as well
 	tr.emitTaskLagMetric(ackLevel)
-	return tr.backlogMgr.db.UpdateState(ctx, ackLevel)
+	return tr.backlogMgr.db.UpdateStateAckLevelBacklogCount(ctx, ackLevel, approximateBacklogCount)
 }
 
 func (tr *taskReader) logger() log.Logger {
