@@ -23,10 +23,8 @@ syntax = "proto3";
 package temporal.server.api.persistence.v1;
 option go_package = "go.temporal.io/server/api/persistence/v1;persistence";
 
-import "google/protobuf/any.proto";
-
+import "google/protobuf/timestamp.proto";
 import "temporal/api/nexus/v1/message.proto";
-
 import "temporal/server/api/clock/v1/message.proto";
 
 message NexusIncomingService {
@@ -35,14 +33,12 @@ message NexusIncomingService {
     // The clock is referenced when new timestamps are generated to ensure it produces monotonically increasing
     // timestamps.
     temporal.server.api.clock.v1.HybridLogicalClock clock = 1;
-    // Name of this service.
-    string name = 2;
-    // UUID of the namespace to dispatch service requests to.
-    string namespace_id = 3;
-    // Task queue to dispatch service requests to.
-    string task_queue = 4;
-    // Arbitrary user provided data. For use in the authorizer.
-    map<string, google.protobuf.Any> metadata = 5;
+    // Service specification. This is a mirror of the public API and is intended to be mutable.
+    temporal.api.nexus.v1.IncomingServiceSpec spec = 2;
+    // The date and time when the service was created.
+    // (-- api-linter: core::0142::time-field-names=disabled
+    //     aip.dev/not-precedent: Not following linter rules. --)
+    google.protobuf.Timestamp created_time = 3;
 }
 
 // Container for a version, a UUID, and a NexusIncomingService.
