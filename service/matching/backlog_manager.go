@@ -124,9 +124,9 @@ func newBacklogManager(
 	return bmg
 }
 
-// signalIfFatal calls unloadFromEngine on this physicalTaskQueueManagerImpl instance
-// if and only if the supplied error represents a fatal condition, e.g. the
-// existence of another physicalTaskQueueManager newer lease. Returns true if the signal
+// signalIfFatal calls UnloadFromPartitionManager of the physicalTaskQueueManager
+// if and only if the supplied error represents a fatal condition, e.g. the existence
+// of a newer lease by another backlogManager. Returns true if the unload signal
 // is emitted, false otherwise.
 func (c *backlogManagerImpl) signalIfFatal(err error) bool {
 	if err == nil {
