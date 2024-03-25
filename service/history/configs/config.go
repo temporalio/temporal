@@ -404,7 +404,7 @@ func NewConfig(
 		ShardIOConcurrency:             dc.GetIntProperty(dynamicconfig.ShardIOConcurrency, 1),
 		ShardLingerOwnershipCheckQPS:   dc.GetIntProperty(dynamicconfig.ShardLingerOwnershipCheckQPS, 4),
 		ShardLingerTimeLimit:           dc.GetDurationProperty(dynamicconfig.ShardLingerTimeLimit, 0),
-		ShardOwnershipAssertionEnabled: dc.GetBoolProperty(dynamicconfig.ShardOwnershipAssertionEnabled, true),
+		ShardOwnershipAssertionEnabled: dc.GetBoolProperty(dynamicconfig.ShardOwnershipAssertionEnabled, false),
 
 		HistoryClientOwnershipCachingEnabled: dc.GetBoolProperty(dynamicconfig.HistoryClientOwnershipCachingEnabled, false),
 
