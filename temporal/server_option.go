@@ -27,6 +27,7 @@ package temporal
 import (
 	"net/http"
 
+	"go.temporal.io/server/common/membership/static"
 	"google.golang.org/grpc"
 
 	"go.temporal.io/server/client"
@@ -77,10 +78,12 @@ func ForServices(names []string) ServerOption {
 	})
 }
 
-// WithStaticHosts disables dynamic service membership and resolves service addresses statically from the config
-func WithStaticHosts(hosts map[primitives.ServiceName]string) ServerOption {
+// WithStaticHosts disables dynamic service membership and resolves service hosts statically.
+// At least one host must be provided for all required services (frontend, history, matching, worker).
+// And a self-address must be provided for all services passed to ForServices.
+func WithStaticHosts(hostsByService map[primitives.ServiceName]static.Hosts) ServerOption {
 	return applyFunc(func(s *serverOptions) {
-		s.hosts = hosts
+		s.hostsByService = hostsByService
 	})
 }
 

@@ -28,6 +28,7 @@ import (
 	"fmt"
 	"net/http"
 
+	"go.temporal.io/server/common/membership/static"
 	"golang.org/x/exp/slices"
 	"google.golang.org/grpc"
 
@@ -54,11 +55,11 @@ type (
 	serverOptions struct {
 		serviceNames map[primitives.ServiceName]struct{}
 
-		config    *config.Config
-		configDir string
-		env       string
-		zone      string
-		hosts     map[primitives.ServiceName]string
+		config         *config.Config
+		configDir      string
+		env            string
+		zone           string
+		hostsByService map[primitives.ServiceName]static.Hosts
 
 		startupSynchronizationMode synchronizationModeParams
 

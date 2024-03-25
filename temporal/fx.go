@@ -130,7 +130,7 @@ type (
 		Authorizer                 authorization.Authorizer
 		ClaimMapper                authorization.ClaimMapper
 		AudienceGetter             authorization.JWTAudienceMapper
-		ServiceHosts               map[primitives.ServiceName]string
+		ServiceHosts               map[primitives.ServiceName]static.Hosts
 
 		// below are things that could be over write by server options or may have default if not supplied by serverOptions.
 		Logger                log.Logger
@@ -271,6 +271,16 @@ func ServerOptionsProvider(opts []ServerOption) (serverOptionsProvider, error) {
 		}
 	}
 
+	// check that when static hosts are defined, they are defined for all required hosts
+	if len(so.hostsByService) > 0 {
+		for _, service := range DefaultServices {
+			hosts := so.hostsByService[primitives.ServiceName(service)]
+			if len(hosts.All) == 0 {
+				panic(fmt.Sprintf("hosts for %v service are missing in static hosts", service))
+			}
+		}
+	}
+
 	return serverOptionsProvider{
 		ServerOptions:              so,
 		StopChan:                   stopChan,
@@ -281,7 +291,7 @@ func ServerOptionsProvider(opts []ServerOption) (serverOptionsProvider, error) {
 		LogConfig:   so.config.Log,
 
 		ServiceNames:    so.serviceNames,
-		ServiceHosts:    so.hosts,
+		ServiceHosts:    so.hostsByService,
 		NamespaceLogger: so.namespaceLogger,
 
 		ServiceResolver:        so.persistenceServiceResolver,
@@ -362,8 +372,8 @@ type (
 		DataStoreFactory           persistenceClient.AbstractDataStoreFactory
 		VisibilityStoreFactory     visibility.VisibilityStoreFactory
 		SpanExporters              []otelsdktrace.SpanExporter
-		InstanceID                 resource.InstanceID               `optional:"true"`
-		StaticServiceHosts         map[primitives.ServiceName]string `optional:"true"`
+		InstanceID                 resource.InstanceID                     `optional:"true"`
+		StaticServiceHosts         map[primitives.ServiceName]static.Hosts `optional:"true"`
 		TaskCategoryRegistry       tasks.TaskCategoryRegistry
 	}
 )
@@ -378,11 +388,7 @@ type (
 func (params ServiceProviderParamsCommon) GetCommonServiceOptions(serviceName primitives.ServiceName) fx.Option {
 	membershipModule := ringpop.MembershipModule
 	if len(params.StaticServiceHosts) > 0 {
-		host, exists := params.StaticServiceHosts[serviceName]
-		if !exists {
-			panic(fmt.Sprintf("Service %v was not found in static membership definition", serviceName))
-		}
-		membershipModule = static.MembershipModule(host, map[primitives.ServiceName][]string{serviceName: {host}})
+		membershipModule = static.MembershipModule(params.StaticServiceHosts)
 	}
 
 	return fx.Options(

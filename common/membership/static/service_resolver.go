@@ -29,8 +29,6 @@ import (
 
 	"github.com/dgryski/go-farm"
 	"go.temporal.io/server/common/membership"
-
-	"go.temporal.io/server/common/primitives"
 )
 
 // staticResolver is a service resolver that maintains static mapping between services and host info
@@ -42,7 +40,7 @@ type staticResolver struct {
 	hashfunc func([]byte) uint32
 }
 
-func newStaticResolver(service primitives.ServiceName, hosts []string) *staticResolver {
+func newStaticResolver(hosts []string) *staticResolver {
 	hostInfos := make([]membership.HostInfo, 0, len(hosts))
 	for _, host := range hosts {
 		hostInfos = append(hostInfos, membership.NewHostInfoFromAddress(host))

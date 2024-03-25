@@ -231,12 +231,12 @@ func (c *temporalImpl) enableWorker() bool {
 }
 
 func (c *temporalImpl) Start() error {
-	hosts := make(map[primitives.ServiceName][]string)
-	hosts[primitives.FrontendService] = []string{c.FrontendGRPCAddress()}
-	hosts[primitives.MatchingService] = []string{c.MatchingGRPCServiceAddress()}
-	hosts[primitives.HistoryService] = c.HistoryServiceAddresses()
+	hosts := make(map[primitives.ServiceName]static.Hosts)
+	hosts[primitives.FrontendService] = static.SingleHost(c.FrontendGRPCAddress())
+	hosts[primitives.MatchingService] = static.SingleHost(c.MatchingGRPCServiceAddress())
+	hosts[primitives.HistoryService] = static.Hosts{All: c.HistoryServiceAddresses()}
 	if c.enableWorker() {
-		hosts[primitives.WorkerService] = []string{c.WorkerGRPCServiceAddress()}
+		hosts[primitives.WorkerService] = static.SingleHost(c.WorkerGRPCServiceAddress())
 	}
 
 	// create temporal-system namespace, this must be created before starting
@@ -398,7 +398,10 @@ func (c *temporalImpl) GetMatchingClient() matchingservice.MatchingServiceClient
 	return c.matchingClient
 }
 
-func (c *temporalImpl) startFrontend(hosts map[primitives.ServiceName][]string, startWG *sync.WaitGroup) {
+func (c *temporalImpl) startFrontend(
+	hostsByService map[primitives.ServiceName]static.Hosts,
+	startWG *sync.WaitGroup,
+) {
 	serviceName := primitives.FrontendService
 	persistenceConfig, err := copyPersistenceConfig(c.persistenceConfig)
 	if err != nil {
@@ -427,7 +430,7 @@ func (c *temporalImpl) startFrontend(hosts map[primitives.ServiceName][]string, 
 		fx.Provide(func() log.ThrottledLogger { return c.logger }),
 		fx.Provide(func() resource.NamespaceLogger { return c.logger }),
 		fx.Provide(c.newRPCFactory),
-		static.MembershipModule(hosts[serviceName][0], hosts),
+		static.MembershipModule(hostsByService),
 		fx.Provide(func() *cluster.Config { return c.clusterMetadataConfig }),
 		fx.Provide(func() carchiver.ArchivalMetadata { return c.archiverMetadata }),
 		fx.Provide(func() provider.ArchiverProvider { return c.archiverProvider }),
@@ -490,12 +493,17 @@ func (c *temporalImpl) startFrontend(hosts map[primitives.ServiceName][]string, 
 }
 
 func (c *temporalImpl) startHistory(
-	hosts map[primitives.ServiceName][]string,
+	hostsByService map[primitives.ServiceName]static.Hosts,
 	startWG *sync.WaitGroup,
 ) {
 	serviceName := primitives.HistoryService
-	serviceHosts := hosts[serviceName]
-	for _, host := range serviceHosts {
+	allHosts := hostsByService[serviceName].All
+	for _, host := range allHosts {
+		hostMap := maps.Clone(hostsByService)
+		historyHosts := hostMap[serviceName]
+		historyHosts.Self = host
+		hostMap[serviceName] = historyHosts
+
 		persistenceConfig, err := copyPersistenceConfig(c.persistenceConfig)
 		if err != nil {
 			c.logger.Fatal("Failed to copy persistence config for history", tag.Error(err))
@@ -521,7 +529,7 @@ func (c *temporalImpl) startHistory(
 			fx.Provide(func() config.DCRedirectionPolicy { return config.DCRedirectionPolicy{} }),
 			fx.Provide(func() log.ThrottledLogger { return c.logger }),
 			fx.Provide(c.newRPCFactory),
-			static.MembershipModule(host, hosts),
+			static.MembershipModule(hostMap),
 			fx.Provide(func() *cluster.Config { return c.clusterMetadataConfig }),
 			fx.Provide(func() carchiver.ArchivalMetadata { return c.archiverMetadata }),
 			fx.Provide(func() provider.ArchiverProvider { return c.archiverProvider }),
@@ -568,7 +576,7 @@ func (c *temporalImpl) startHistory(
 		// However current interface for getting history client doesn't specify which client it needs and the tests that use this API
 		// depends on the fact that there's only one history host.
 		// Need to change those tests and modify the interface for getting history client.
-		historyConnection, err := rpc.Dial(serviceHosts[0], nil, c.logger)
+		historyConnection, err := rpc.Dial(allHosts[0], nil, c.logger)
 		if err != nil {
 			c.logger.Fatal("Failed to create connection for history", tag.Error(err))
 		}
@@ -588,7 +596,10 @@ func (c *temporalImpl) startHistory(
 	c.shutdownWG.Done()
 }
 
-func (c *temporalImpl) startMatching(hosts map[primitives.ServiceName][]string, startWG *sync.WaitGroup) {
+func (c *temporalImpl) startMatching(
+	hostsByService map[primitives.ServiceName]static.Hosts,
+	startWG *sync.WaitGroup,
+) {
 	serviceName := primitives.MatchingService
 
 	persistenceConfig, err := copyPersistenceConfig(c.persistenceConfig)
@@ -615,7 +626,7 @@ func (c *temporalImpl) startMatching(hosts map[primitives.ServiceName][]string, 
 		fx.Provide(func() listenHostPort { return listenHostPort(c.MatchingGRPCServiceAddress()) }),
 		fx.Provide(func() log.ThrottledLogger { return c.logger }),
 		fx.Provide(c.newRPCFactory),
-		static.MembershipModule(hosts[serviceName][0], hosts),
+		static.MembershipModule(hostsByService),
 		fx.Provide(func() *cluster.Config { return c.clusterMetadataConfig }),
 		fx.Provide(func() carchiver.ArchivalMetadata { return c.archiverMetadata }),
 		fx.Provide(func() provider.ArchiverProvider { return c.archiverProvider }),
@@ -668,7 +679,10 @@ func (c *temporalImpl) startMatching(hosts map[primitives.ServiceName][]string, 
 	c.shutdownWG.Done()
 }
 
-func (c *temporalImpl) startWorker(hosts map[primitives.ServiceName][]string, startWG *sync.WaitGroup) {
+func (c *temporalImpl) startWorker(
+	hostsByService map[primitives.ServiceName]static.Hosts,
+	startWG *sync.WaitGroup,
+) {
 	serviceName := primitives.WorkerService
 
 	persistenceConfig, err := copyPersistenceConfig(c.persistenceConfig)
@@ -707,7 +721,7 @@ func (c *temporalImpl) startWorker(hosts map[primitives.ServiceName][]string, st
 		fx.Provide(func() config.DCRedirectionPolicy { return config.DCRedirectionPolicy{} }),
 		fx.Provide(func() log.ThrottledLogger { return c.logger }),
 		fx.Provide(c.newRPCFactory),
-		static.MembershipModule(hosts[serviceName][0], hosts),
+		static.MembershipModule(hostsByService),
 		fx.Provide(func() *cluster.Config { return &clusterConfigCopy }),
 		fx.Provide(func() carchiver.ArchivalMetadata { return c.archiverMetadata }),
 		fx.Provide(func() provider.ArchiverProvider { return c.archiverProvider }),
@@ -951,9 +965,4 @@ func sdkClientFactoryProvider(
 		logger,
 		dc.GetIntProperty(dynamicconfig.WorkerStickyCacheSize, 0),
 	)
-}
-
-func newSimpleHostInfoProvider(serviceName primitives.ServiceName, hosts map[primitives.ServiceName][]string) membership.HostInfoProvider {
-	hostInfo := membership.NewHostInfoFromAddress(hosts[serviceName][0])
-	return membership.NewHostInfoProvider(hostInfo)
 }
