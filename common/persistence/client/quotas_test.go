@@ -109,7 +109,7 @@ func (s *quotasSuite) TestPriorityNamespaceRateLimiter_DoesLimit() {
 	hostMaxRPS := func() int { return 1 }
 	operatorRPSRatioFn := func() float64 { return 0.2 }
 
-	limiter := NewPriorityNamespaceRateLimiter(namespaceMaxRPS, hostMaxRPS, RequestPriorityFn, operatorRPSRatioFn)
+	limiter := newPriorityNamespaceRateLimiter(namespaceMaxRPS, hostMaxRPS, RequestPriorityFn, operatorRPSRatioFn)
 
 	request := quotas.NewRequest(
 		"test-api",

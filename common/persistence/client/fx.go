@@ -97,12 +97,11 @@ func EventBlobCacheProvider(
 func FactoryProvider(
 	params NewFactoryParams,
 ) Factory {
-	var requestRateLimiter, namespaceRequestRateLimiter quotas.RequestRateLimiter
+	var systemRequestRateLimiter, namespaceRequestRateLimiter quotas.RequestRateLimiter
 	if params.PersistenceMaxQPS != nil && params.PersistenceMaxQPS() > 0 {
 		if params.EnablePriorityRateLimiting != nil && params.EnablePriorityRateLimiting() {
-			requestRateLimiter = NewPriorityRateLimiter(
+			systemRequestRateLimiter = NewPriorityRateLimiter(
 				params.PersistenceMaxQPS,
-				params.PersistencePerShardNamespaceMaxQPS,
 				RequestPriorityFn,
 				params.OperatorRPSRatio,
 				params.HealthSignals,
@@ -111,13 +110,14 @@ func FactoryProvider(
 				params.Logger,
 			)
 			namespaceRequestRateLimiter = NewPriorityNamespaceRateLimiter(
-				params.PersistenceNamespaceMaxQPS,
 				params.PersistenceMaxQPS,
+				params.PersistenceNamespaceMaxQPS,
+				params.PersistencePerShardNamespaceMaxQPS,
 				RequestPriorityFn,
 				params.OperatorRPSRatio,
 			)
 		} else {
-			requestRateLimiter = NewNoopPriorityRateLimiter(params.PersistenceMaxQPS)
+			systemRequestRateLimiter = NewNoopPriorityRateLimiter(params.PersistenceMaxQPS)
 			namespaceRequestRateLimiter = NewNoopPriorityRateLimiter(params.PersistenceMaxQPS)
 		}
 	}
@@ -125,7 +125,7 @@ func FactoryProvider(
 	return NewFactory(
 		params.DataStoreFactory,
 		params.Cfg,
-		requestRateLimiter,
+		systemRequestRateLimiter,
 		namespaceRequestRateLimiter,
 		serialization.NewSerializer(),
 		params.EventBlobCache,

@@ -71,7 +71,7 @@ var (
 	// ErrWorkflowClosing is the error indicating requests to workflow can not be applied as workflow is closing
 	ErrWorkflowClosing = serviceerror.NewResourceExhausted(
 		enumspb.RESOURCE_EXHAUSTED_CAUSE_BUSY_WORKFLOW,
-		enumspb.RESOURCE_SCOPE_SYSTEM,
+		enumspb.RESOURCE_SCOPE_NAMESPACE,
 		"workflow operation can not be applied because workflow is closing",
 	)
 	// ErrEventsAterWorkflowFinish is the error indicating server error trying to write events after workflow finish event

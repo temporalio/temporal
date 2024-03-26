@@ -89,7 +89,7 @@ type (
 func NewFactory(
 	dataStoreFactory DataStoreFactory,
 	cfg *config.Persistence,
-	rateLimiter quotas.RequestRateLimiter,
+	systemRateLimiter quotas.RequestRateLimiter,
 	namespaceRateLimiter quotas.RequestRateLimiter,
 	serializer serialization.Serializer,
 	eventBlobCache p.XDCCache,
@@ -106,7 +106,7 @@ func NewFactory(
 		metricsHandler:       metricsHandler,
 		logger:               logger,
 		clusterName:          clusterName,
-		ratelimiter:          rateLimiter,
+		ratelimiter:          systemRateLimiter,
 		namespaceRatelimiter: namespaceRateLimiter,
 		healthSignals:        healthSignals,
 	}
