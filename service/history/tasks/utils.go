@@ -115,7 +115,9 @@ func GetTimerTaskEventID(
 		eventID = common.FirstEventID
 	case *ActivityRetryTimerTask:
 		eventID = task.EventID
-	case *WorkflowTimeoutTask:
+	case *WorkflowRunTimeoutTask:
+		eventID = common.FirstEventID
+	case *WorkflowExecutionTimeoutTask:
 		eventID = common.FirstEventID
 	case *DeleteHistoryEventTask:
 		eventID = common.FirstEventID

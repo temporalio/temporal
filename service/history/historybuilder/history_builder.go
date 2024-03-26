@@ -140,8 +140,9 @@ func (b *HistoryBuilder) IsDirty() bool {
 }
 
 // AddWorkflowExecutionStartedEvent
-// firstInChainRunID is the very first runID along the chain of ContinueAsNew and Reset
-// originalRunID is the runID when the WorkflowExecutionStarted event is written
+// firstInChainRunID is the runID of the first run in a workflow chain (continueAsNew, cron & workflow retry)
+// originalRunID is the base workflow's runID upon workflow reset. If the current run is the base (i.e. no reset),
+// then originalRunID is current run's runID.
 func (b *HistoryBuilder) AddWorkflowExecutionStartedEvent(
 	startTime time.Time,
 	request *historyservice.StartWorkflowExecutionRequest,

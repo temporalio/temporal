@@ -393,24 +393,6 @@ func (s *workflowConsistencyCheckerSuite) TestGetCurrentRunID_Error() {
 	s.True(released)
 }
 
-func (s *workflowConsistencyCheckerSuite) TestAssertShardOwnership_FirstTime() {
-	ctx := context.Background()
-	shardOwnershipAsserted := false
-
-	s.shardContext.EXPECT().AssertOwnership(ctx).Return(nil)
-
-	err := assertShardOwnership(ctx, s.shardContext, &shardOwnershipAsserted)
-	s.NoError(err)
-}
-
-func (s *workflowConsistencyCheckerSuite) TestAssertShardOwnership_Dedup() {
-	ctx := context.Background()
-	shardOwnershipAsserted := true
-
-	err := assertShardOwnership(ctx, s.shardContext, &shardOwnershipAsserted)
-	s.NoError(err)
-}
-
 func (s *workflowConsistencyCheckerSuite) TestHistoryEventConsistencyPredicate() {
 	eventID := int64(400)
 	eventVersion := int64(200)

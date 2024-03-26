@@ -50,3 +50,5 @@ matching.queryWorkflowTaskTimeoutLogRate:
   - value: 1.0
 history.ReplicationEnableUpdateWithNewTaskMerge:
   - value: true
+history.enableWorkflowExecutionTimeoutTimer:
+  - value: true

@@ -238,14 +238,26 @@ func (s *taskSerializerSuite) TestTimerUserTask() {
 }
 
 func (s *taskSerializerSuite) TestTimerWorkflowRun() {
-	workflowTimer := &tasks.WorkflowTimeoutTask{
+	workflowRunTimer := &tasks.WorkflowRunTimeoutTask{
 		WorkflowKey:         s.workflowKey,
 		VisibilityTimestamp: time.Unix(0, rand.Int63()).UTC(),
 		TaskID:              rand.Int63(),
 		Version:             rand.Int63(),
 	}
 
-	s.assertEqualTasks(workflowTimer)
+	s.assertEqualTasks(workflowRunTimer)
+}
+
+func (s *taskSerializerSuite) TestTimerWorkflowExecution() {
+	workflowExecutionTimer := &tasks.WorkflowExecutionTimeoutTask{
+		NamespaceID:         s.workflowKey.NamespaceID,
+		WorkflowID:          s.workflowKey.WorkflowID,
+		FirstRunID:          s.workflowKey.RunID,
+		VisibilityTimestamp: time.Unix(0, rand.Int63()).UTC(),
+		TaskID:              rand.Int63(),
+	}
+
+	s.assertEqualTasks(workflowExecutionTimer)
 }
 
 func (s *taskSerializerSuite) TestTimerWorkflowCleanupTask() {

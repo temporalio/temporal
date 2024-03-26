@@ -55,6 +55,7 @@ var (
 		dynamicconfig.FrontendAccessHistoryFraction:                       0.5,
 		dynamicconfig.EnableWorkflowIdConflictPolicy:                      true,
 		dynamicconfig.ReplicationEnableUpdateWithNewTaskMerge:             true,
+		dynamicconfig.EnableWorkflowExecutionTimeoutTimer:                 true,
 	}
 )
 

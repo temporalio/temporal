@@ -31,10 +31,10 @@ import (
 	"go.temporal.io/server/common/definition"
 )
 
-var _ Task = (*WorkflowTimeoutTask)(nil)
+var _ Task = (*WorkflowRunTimeoutTask)(nil)
 
 type (
-	WorkflowTimeoutTask struct {
+	WorkflowRunTimeoutTask struct {
 		definition.WorkflowKey
 		VisibilityTimestamp time.Time
 		TaskID              int64
@@ -42,38 +42,38 @@ type (
 	}
 )
 
-func (u *WorkflowTimeoutTask) GetKey() Key {
+func (u *WorkflowRunTimeoutTask) GetKey() Key {
 	return NewKey(u.VisibilityTimestamp, u.TaskID)
 }
 
-func (u *WorkflowTimeoutTask) GetVersion() int64 {
+func (u *WorkflowRunTimeoutTask) GetVersion() int64 {
 	return u.Version
 }
 
-func (u *WorkflowTimeoutTask) SetVersion(version int64) {
+func (u *WorkflowRunTimeoutTask) SetVersion(version int64) {
 	u.Version = version
 }
 
-func (u *WorkflowTimeoutTask) GetTaskID() int64 {
+func (u *WorkflowRunTimeoutTask) GetTaskID() int64 {
 	return u.TaskID
 }
 
-func (u *WorkflowTimeoutTask) SetTaskID(id int64) {
+func (u *WorkflowRunTimeoutTask) SetTaskID(id int64) {
 	u.TaskID = id
 }
 
-func (u *WorkflowTimeoutTask) GetVisibilityTime() time.Time {
+func (u *WorkflowRunTimeoutTask) GetVisibilityTime() time.Time {
 	return u.VisibilityTimestamp
 }
 
-func (u *WorkflowTimeoutTask) SetVisibilityTime(t time.Time) {
+func (u *WorkflowRunTimeoutTask) SetVisibilityTime(t time.Time) {
 	u.VisibilityTimestamp = t
 }
 
-func (u *WorkflowTimeoutTask) GetCategory() Category {
+func (u *WorkflowRunTimeoutTask) GetCategory() Category {
 	return CategoryTimer
 }
 
-func (u *WorkflowTimeoutTask) GetType() enumsspb.TaskType {
+func (u *WorkflowRunTimeoutTask) GetType() enumsspb.TaskType {
 	return enumsspb.TASK_TYPE_WORKFLOW_RUN_TIMEOUT
 }

@@ -511,6 +511,42 @@ func (s *mutableStateSuite) TestTransientWorkflowTaskStart_CurrentVersionChanged
 	s.Equal("tq", attrs.TaskQueue.Name)
 }
 
+func (s *mutableStateSuite) TestNewMutableStateInChain() {
+	executionTimerTaskStatuses := []int32{
+		TimerTaskStatusNone,
+		TimerTaskStatusCreated,
+	}
+
+	for _, taskStatus := range executionTimerTaskStatuses {
+		s.T().Run(
+			fmt.Sprintf("TimerTaskStatus: %v", taskStatus),
+			func(t *testing.T) {
+				currentMutableState := TestGlobalMutableState(
+					s.mockShard,
+					s.mockEventsCache,
+					s.logger,
+					1000,
+					tests.WorkflowID,
+					uuid.New(),
+				)
+				currentMutableState.GetExecutionInfo().WorkflowExecutionTimerTaskStatus = taskStatus
+
+				newMutableState := NewMutableStateInChain(
+					s.mockShard,
+					s.mockEventsCache,
+					s.logger,
+					tests.GlobalNamespaceEntry,
+					tests.WorkflowID,
+					uuid.New(),
+					s.mockShard.GetTimeSource().Now(),
+					currentMutableState,
+				)
+				s.Equal(taskStatus, newMutableState.GetExecutionInfo().WorkflowExecutionTimerTaskStatus)
+			},
+		)
+	}
+}
+
 func (s *mutableStateSuite) TestSanitizedMutableState() {
 	txnID := int64(2000)
 	runID := uuid.New()
@@ -534,6 +570,7 @@ func (s *mutableStateSuite) TestSanitizedMutableState() {
 			Clock:   1,
 		},
 	}}
+	mutableState.executionInfo.WorkflowExecutionTimerTaskStatus = TimerTaskStatusCreated
 
 	mutableStateProto := mutableState.CloneToProto()
 	sanitizedMutableState, err := NewSanitizedMutableState(s.mockShard, s.mockEventsCache, s.logger, tests.LocalNamespaceEntry, mutableStateProto, 0, 0)
@@ -543,6 +580,7 @@ func (s *mutableStateSuite) TestSanitizedMutableState() {
 	for _, childInfo := range sanitizedMutableState.pendingChildExecutionInfoIDs {
 		s.Nil(childInfo.Clock)
 	}
+	s.Equal(int32(TimerTaskStatusNone), sanitizedMutableState.executionInfo.WorkflowExecutionTimerTaskStatus)
 }
 
 func (s *mutableStateSuite) prepareTransientWorkflowTaskCompletionFirstBatchApplied(version int64, workflowID, runID string) (*historypb.HistoryEvent, *historypb.HistoryEvent) {

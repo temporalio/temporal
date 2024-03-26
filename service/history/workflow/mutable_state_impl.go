@@ -445,6 +445,7 @@ func NewSanitizedMutableState(
 	}
 
 	// sanitize data
+	mutableState.executionInfo.WorkflowExecutionTimerTaskStatus = TimerTaskStatusNone
 	mutableState.executionInfo.LastFirstEventTxnId = lastFirstEventTxnID
 	mutableState.executionInfo.CloseVisibilityTaskId = common.EmptyVersion
 	mutableState.executionInfo.CloseTransferTaskId = common.EmptyVersion
@@ -455,6 +456,35 @@ func NewSanitizedMutableState(
 	}
 	mutableState.currentVersion = lastWriteVersion
 	return mutableState, nil
+}
+
+func NewMutableStateInChain(
+	shardContext shard.Context,
+	eventsCache events.Cache,
+	logger log.Logger,
+	namespaceEntry *namespace.Namespace,
+	workflowID string,
+	runID string,
+	startTime time.Time,
+	currentMutableState MutableState,
+) MutableState {
+	newMutableState := NewMutableState(
+		shardContext,
+		eventsCache,
+		logger,
+		namespaceEntry,
+		workflowID,
+		runID,
+		startTime,
+	)
+
+	// carry over necessary fields from current mutable state
+	newMutableState.executionInfo.WorkflowExecutionTimerTaskStatus = currentMutableState.GetExecutionInfo().WorkflowExecutionTimerTaskStatus
+
+	// TODO: carry over other fields like autoResetPoints, previousRunID, firstRunID, etc.
+	// Additional parameters in AddWorkflowExecutionStartedEventWithOptions can be carried over and
+	// that method can be deprecated.
+	return newMutableState
 }
 
 func (ms *MutableStateImpl) mustInitHSM() {
@@ -1911,11 +1941,14 @@ func (ms *MutableStateImpl) AddWorkflowExecutionStartedEventWithOptions(
 	}
 
 	// TODO merge active & passive task generation
-	if err := ms.taskGenerator.GenerateWorkflowStartTasks(
+	var err error
+	ms.executionInfo.WorkflowExecutionTimerTaskStatus, err = ms.taskGenerator.GenerateWorkflowStartTasks(
 		event,
-	); err != nil {
+	)
+	if err != nil {
 		return nil, err
 	}
+
 	if err := ms.taskGenerator.GenerateRecordWorkflowStartedTasks(
 		event,
 	); err != nil {
@@ -2008,6 +2041,7 @@ func (ms *MutableStateImpl) ApplyWorkflowExecutionStartedEvent(
 
 	ms.executionInfo.Attempt = event.GetAttempt()
 	if !timestamp.TimeValue(event.GetWorkflowExecutionExpirationTime()).IsZero() {
+		// TODO: for workflow reset case, re-calculate the expiration time instead of reusing the one in the event
 		ms.executionInfo.WorkflowExecutionExpirationTime = event.GetWorkflowExecutionExpirationTime()
 	}
 

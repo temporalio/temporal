@@ -135,7 +135,7 @@ func (t *timerQueueTaskExecutorBase) executeDeleteHistoryEventTask(
 	if err != nil {
 		return err
 	}
-	if err := CheckTaskVersion(t.shardContext, t.logger, mutableState.GetNamespaceEntry(), lastWriteVersion, task.Version, task); err != nil {
+	if err := checkTaskVersion(t.shardContext, t.logger, mutableState.GetNamespaceEntry(), lastWriteVersion, task.Version, task); err != nil {
 		return err
 	}
 
@@ -160,6 +160,42 @@ func (t *timerQueueTaskExecutorBase) deleteHistoryBranch(
 		})
 	}
 	return nil
+}
+
+func (t *timerQueueTaskExecutorBase) isValidExecutionTimeoutTask(
+	mutableState workflow.MutableState,
+	task *tasks.WorkflowExecutionTimeoutTask,
+) bool {
+
+	executionInfo := mutableState.GetExecutionInfo()
+	if executionInfo.FirstExecutionRunId != task.FirstRunID {
+		// current run does not belong to workflow chain the task is generated for
+		return false
+	}
+
+	if !mutableState.IsWorkflowExecutionRunning() {
+		return false
+	}
+
+	// NOTE: we don't need to do version check here because if we were to do it, we need to compare the task version
+	// and the start version in the first run. However, failover & conflict resolution will never change
+	// the first event of a workflowID (the history tree model we are using always share at least one node),
+	// meaning start version check will always pass.
+	// Also there's no way we can perform version check before first run may already be deleted due to retention
+
+	return true
+
+	// TODO: uncomment the following logic when fixing
+	// https://github.com/temporalio/temporal/issues/1913
+
+	// // workflow timeout is not expired
+	// // This can happen if the workflow is reset since reset re-calculates the execution timeout but shares the same firstRunID
+	// // as the base run
+
+	// now := t.shardContext.GetTimeSource().Now()
+	// expired := queues.IsTimeExpired(now, executionInfo.WorkflowExecutionExpirationTime.AsTime())
+
+	// return expired
 }
 
 func (t *timerQueueTaskExecutorBase) stateMachineTask(task tasks.Task) (hsm.Ref, hsm.Task, bool, error) {

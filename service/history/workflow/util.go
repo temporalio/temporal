@@ -25,9 +25,6 @@
 package workflow
 
 import (
-	"context"
-
-	commandpb "go.temporal.io/api/command/v1"
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	historypb "go.temporal.io/api/history/v1"
@@ -35,9 +32,7 @@ import (
 	workflowpb "go.temporal.io/api/workflow/v1"
 
 	enumsspb "go.temporal.io/server/api/enums/v1"
-	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/clock"
-	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/internal/effect"
 	"go.temporal.io/server/service/history/consts"
@@ -81,42 +76,6 @@ func ScheduleWorkflowTask(
 		return serviceerror.NewInternal("Failed to add workflow task scheduled event.")
 	}
 	return nil
-}
-
-func RetryWorkflow(
-	ctx context.Context,
-	mutableState MutableState,
-	parentNamespace namespace.Name,
-	continueAsNewAttributes *commandpb.ContinueAsNewWorkflowExecutionCommandAttributes,
-) (MutableState, error) {
-
-	// Check TerminateWorkflow comment bellow.
-	eventBatchFirstEventID := mutableState.GetNextEventID()
-	if workflowTask := mutableState.GetStartedWorkflowTask(); workflowTask != nil {
-		wtFailedEvent, err := failWorkflowTask(
-			mutableState,
-			workflowTask,
-			enumspb.WORKFLOW_TASK_FAILED_CAUSE_FORCE_CLOSE_COMMAND,
-		)
-		if err != nil {
-			return nil, err
-		}
-		if wtFailedEvent != nil {
-			eventBatchFirstEventID = wtFailedEvent.GetEventId()
-		}
-	}
-
-	_, newMutableState, err := mutableState.AddContinueAsNewEvent(
-		ctx,
-		eventBatchFirstEventID,
-		common.EmptyEventID,
-		parentNamespace,
-		continueAsNewAttributes,
-	)
-	if err != nil {
-		return nil, err
-	}
-	return newMutableState, nil
 }
 
 func TimeoutWorkflow(

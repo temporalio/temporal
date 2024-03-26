@@ -97,13 +97,15 @@ func GetActiveTimerTaskTypeTagValue(
 		return metrics.TaskTypeTimerActiveTaskActivityTimeout
 	case *tasks.UserTimerTask:
 		return metrics.TaskTypeTimerActiveTaskUserTimer
-	case *tasks.WorkflowTimeoutTask:
+	case *tasks.WorkflowRunTimeoutTask:
 		switch executable.(type) {
 		case *speculativeWorkflowTaskTimeoutExecutable:
 			return metrics.TaskTypeMemoryScheduledTaskWorkflowTaskTimeout
 		default:
-			return metrics.TaskTypeTimerActiveTaskWorkflowTimeout
+			return metrics.TaskTypeTimerActiveTaskWorkflowRunTimeout
 		}
+	case *tasks.WorkflowExecutionTimeoutTask:
+		return metrics.TaskTypeTimerActiveTaskWorkflowExecutionTimeout
 	case *tasks.DeleteHistoryEventTask:
 		return metrics.TaskTypeTimerActiveTaskDeleteHistoryEvent
 	case *tasks.ActivityRetryTimerTask:
@@ -125,8 +127,10 @@ func GetStandbyTimerTaskTypeTagValue(
 		return metrics.TaskTypeTimerStandbyTaskActivityTimeout
 	case *tasks.UserTimerTask:
 		return metrics.TaskTypeTimerStandbyTaskUserTimer
-	case *tasks.WorkflowTimeoutTask:
-		return metrics.TaskTypeTimerStandbyTaskWorkflowTimeout
+	case *tasks.WorkflowRunTimeoutTask:
+		return metrics.TaskTypeTimerStandbyTaskWorkflowRunTimeout
+	case *tasks.WorkflowExecutionTimeoutTask:
+		return metrics.TaskTypeTimerStandbyTaskWorkflowExecutionTimeout
 	case *tasks.DeleteHistoryEventTask:
 		return metrics.TaskTypeTimerStandbyTaskDeleteHistoryEvent
 	case *tasks.ActivityRetryTimerTask:
