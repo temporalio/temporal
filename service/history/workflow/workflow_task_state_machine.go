@@ -943,6 +943,8 @@ func (m *workflowTaskStateMachine) afterAddWorkflowTaskCompletedEvent(
 		event.GetEventId(),
 		limits.MaxResetPoints,
 	)
+	// For versioned workflows the search attributes should be already up-to-date based on the task started events.
+	// This is still useful for unversioned workers who report build ID.
 	if err := m.ms.updateBuildIdsSearchAttribute(attrs.GetWorkerVersion(), limits.MaxSearchAttributeValueSize); err != nil {
 		return err
 	}
