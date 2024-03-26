@@ -28,10 +28,10 @@ import (
 	"fmt"
 	"net/http"
 
-	"go.temporal.io/server/common/membership/static"
 	"golang.org/x/exp/slices"
 	"google.golang.org/grpc"
 
+	"go.temporal.io/server/common/membership/static"
 	"go.temporal.io/server/client"
 	"go.temporal.io/server/common/authorization"
 	"go.temporal.io/server/common/config"
