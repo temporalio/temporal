@@ -175,6 +175,10 @@ func (s *contextSuite) TestMergeReplicationTasks_MultipleReplicationTasks() {
 	// The case can happen when importing a workflow:
 	// current workflow will be terminated and imported workflow can contain multiple replication tasks
 	// This case is not supported right now
+	// NOTE: ^ should be the case and both current and new runs should have replication tasks. However, the
+	// actual implementation in WorkflowImporter will close the transaction of the new run with Passive
+	// policy resulting in 0 replication tasks.
+	// However the implementation of mergeUpdateWithNewReplicationTasks should still handle this case and not error out.
 
 	currentWorkflowMutation := &persistence.WorkflowMutation{
 		ExecutionState: &persistencespb.WorkflowExecutionState{
@@ -275,4 +279,82 @@ func (s *contextSuite) TestMergeReplicationTasks_CurrentRunRunning() {
 	s.NoError(err)
 	s.Empty(currentWorkflowMutation.Tasks) // verify no change to tasks
 	s.Empty(newWorkflowSnapshot.Tasks)     // verify no change to tasks
+}
+
+func (s *contextSuite) TestMergeReplicationTasks_OnlyCurrentRunHasReplicationTasks() {
+	// The case can happen when importing a workflow (via replication task)
+	// current workflow may be terminated and the imported workflow since it's received via replication task
+	// will not generate replication tasks again.
+
+	currentWorkflowMutation := &persistence.WorkflowMutation{
+		ExecutionState: &persistencespb.WorkflowExecutionState{
+			Status: enumspb.WORKFLOW_EXECUTION_STATUS_TERMINATED,
+			State:  enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED,
+		},
+		Tasks: map[tasks.Category][]tasks.Task{
+			tasks.CategoryReplication: {
+				&tasks.HistoryReplicationTask{
+					WorkflowKey:         tests.WorkflowKey,
+					VisibilityTimestamp: time.Now(),
+					FirstEventID:        5,
+					NextEventID:         6,
+					Version:             tests.Version,
+				},
+			},
+		},
+	}
+
+	newWorkflowSnapshot := &persistence.WorkflowSnapshot{
+		ExecutionState: &persistencespb.WorkflowExecutionState{
+			Status: enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
+			State:  enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING,
+		},
+		Tasks: map[tasks.Category][]tasks.Task{},
+	}
+
+	err := s.workflowContext.mergeUpdateWithNewReplicationTasks(
+		currentWorkflowMutation,
+		newWorkflowSnapshot,
+	)
+	s.NoError(err)
+	s.Len(currentWorkflowMutation.Tasks[tasks.CategoryReplication], 1) // verify no change to tasks
+	s.Empty(newWorkflowSnapshot.Tasks)                                 // verify no change to tasks
+}
+
+func (s *contextSuite) TestMergeReplicationTasks_OnlyNewRunHasReplicationTasks() {
+	// TODO: check if this case can happen or not.
+
+	currentWorkflowMutation := &persistence.WorkflowMutation{
+		ExecutionState: &persistencespb.WorkflowExecutionState{
+			Status: enumspb.WORKFLOW_EXECUTION_STATUS_TERMINATED,
+			State:  enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED,
+		},
+		Tasks: map[tasks.Category][]tasks.Task{},
+	}
+
+	newWorkflowSnapshot := &persistence.WorkflowSnapshot{
+		ExecutionState: &persistencespb.WorkflowExecutionState{
+			Status: enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
+			State:  enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING,
+		},
+		Tasks: map[tasks.Category][]tasks.Task{
+			tasks.CategoryReplication: {
+				&tasks.HistoryReplicationTask{
+					WorkflowKey:         tests.WorkflowKey,
+					VisibilityTimestamp: time.Now(),
+					FirstEventID:        5,
+					NextEventID:         6,
+					Version:             tests.Version,
+				},
+			},
+		},
+	}
+
+	err := s.workflowContext.mergeUpdateWithNewReplicationTasks(
+		currentWorkflowMutation,
+		newWorkflowSnapshot,
+	)
+	s.NoError(err)
+	s.Empty(currentWorkflowMutation.Tasks)                         // verify no change to tasks
+	s.Len(newWorkflowSnapshot.Tasks[tasks.CategoryReplication], 1) // verify no change to tasks
 }
