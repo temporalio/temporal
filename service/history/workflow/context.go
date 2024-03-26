@@ -726,15 +726,27 @@ func (c *ContextImpl) mergeUpdateWithNewReplicationTasks(
 		return nil
 	}
 	if numCurrentReplicationTasks == 0 {
-		return serviceerror.NewInternal("current workflow has no replication task, while new workflow contains replication task")
+		c.logger.Info("Current workflow has no replication task, while new workflow has replication task",
+			tag.WorkflowNamespaceID(c.workflowKey.NamespaceID),
+			tag.WorkflowID(c.workflowKey.WorkflowID),
+			tag.WorkflowRunID(c.workflowKey.RunID),
+			tag.WorkflowNewRunID(newWorkflowSnapshot.ExecutionState.RunId),
+		)
+		return nil
 	}
 	if numNewReplicationTasks == 0 {
-		return serviceerror.NewInternal("new workflow has no replication task, while current workflow contains replication task")
+		c.logger.Info("New workflow has no replication task, while current workflow has replication task",
+			tag.WorkflowNamespaceID(c.workflowKey.NamespaceID),
+			tag.WorkflowID(c.workflowKey.WorkflowID),
+			tag.WorkflowRunID(c.workflowKey.RunID),
+			tag.WorkflowNewRunID(newWorkflowSnapshot.ExecutionState.RunId),
+		)
+		return nil
 	}
 	if numNewReplicationTasks > 1 {
 		// This could happen when importing a workflow and current running workflow is being terminated.
 		// TODO: support more than one replication tasks (batch of events) in the new workflow
-		c.logger.Info("Skipped merging replication tasks because new run contains more than one replication tasks",
+		c.logger.Info("Skipped merging replication tasks because new run has more than one replication tasks",
 			tag.WorkflowNamespaceID(c.workflowKey.NamespaceID),
 			tag.WorkflowID(c.workflowKey.WorkflowID),
 			tag.WorkflowRunID(c.workflowKey.RunID),
