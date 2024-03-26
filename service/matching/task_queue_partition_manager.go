@@ -76,7 +76,7 @@ type (
 		HasAnyPollerAfter(accessTime time.Time) bool
 		// LegacyDescribeTaskQueue returns information about all pollers of this partition and the status of its unversioned physical queue
 		LegacyDescribeTaskQueue(includeTaskQueueStatus bool) *matchingservice.DescribeTaskQueueResponse
-		Describe(request *matchingservice.DescribeTaskQueuePartitionRequest) (*matchingservice.DescribeTaskQueuePartitionResponse, error)
+		Describe(buildIds []string, reportBacklogInfo, reportPollers bool) (*matchingservice.DescribeTaskQueuePartitionResponse, error)
 		String() string
 		Partition() tqid.Partition
 		LongPollExpirationInterval() time.Duration
@@ -394,11 +394,10 @@ func (pm *taskQueuePartitionManagerImpl) LegacyDescribeTaskQueue(includeTaskQueu
 }
 
 func (pm *taskQueuePartitionManagerImpl) Describe(
-	request *matchingservice.DescribeTaskQueuePartitionRequest) (*matchingservice.DescribeTaskQueuePartitionResponse, error) {
+	buildIds []string, reportBacklogInfo, reportPollers bool) (*matchingservice.DescribeTaskQueuePartitionResponse, error) {
 	pm.versionedQueuesLock.RLock()
 	defer pm.versionedQueuesLock.RUnlock()
 
-	buildIds := request.GetBuildIds()
 	// An empty build id list means that the caller is asking for info about all "active versions."
 	// Active means that the physical queue for that version is loaded.
 	// An empty string refers to the unversioned queue, which is always loaded.
@@ -411,11 +410,17 @@ func (pm *taskQueuePartitionManagerImpl) Describe(
 
 	versionsInfo := make([]*taskqueuespb.TaskQueueVersionInfoInternal, len(buildIds))
 	for i, bid := range buildIds {
-		versionsInfo[i] = &taskqueuespb.TaskQueueVersionInfoInternal{BuildId: bid}
+		versionsInfo[i] = &taskqueuespb.TaskQueueVersionInfoInternal{
+			BuildId:               bid,
+			PhysicalTaskQueueInfo: &taskqueuespb.PhysicalTaskQueueInfo{},
+		}
+		// todo carly: should we return an error if !ok? right now it will always be ok because we lock the map
 		if vq, ok := pm.versionedQueues[bid]; ok {
-			versionsInfo[i].PhysicalTaskQueueInfo = &taskqueuespb.PhysicalTaskQueueInfo{
-				Pollers:     vq.GetAllPollerInfo(),
-				BacklogInfo: vq.GetBacklogInfo(),
+			if reportPollers {
+				versionsInfo[i].PhysicalTaskQueueInfo.Pollers = vq.GetAllPollerInfo()
+			}
+			if reportBacklogInfo {
+				versionsInfo[i].PhysicalTaskQueueInfo.BacklogInfo = vq.GetBacklogInfo()
 			}
 		}
 	}
