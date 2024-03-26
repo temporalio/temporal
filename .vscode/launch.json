@@ -1,87 +1,88 @@
 {
-    "version": "0.2.0",
-    "configurations": [
-        {
-            "name": "Debug single functional test method",
-            "type": "go",
-            "request": "launch",
-            "mode": "test",
-            "program": "${relativeFileDirname}",
-            "args": [
-                "-testify.m",
-                "${input:functionalTestSuiteMethod}"
-            ],
-        },
-        {
-            "name": "Debug Server",
-            "type": "go",
-            "request": "launch",
-            "mode": "debug",
-            "program": "${workspaceFolder}/cmd/server",
-            "cwd": "${workspaceFolder}",
-            "args": [
-                "start",
-            ]
-        },
-        {
-            "name": "Debug Active Server",
-            "type": "go",
-            "request": "launch",
-            "mode": "debug",
-            "program": "${workspaceFolder}/cmd/server",
-            "cwd": "${workspaceFolder}",
-            "args": [
-                "--env",
-                "development-active",
-                "start",
-            ]
-        },
-        {
-            "name": "Debug Server with MySql",
-            "type": "go",
-            "request": "launch",
-            "mode": "debug",
-            "program": "${workspaceFolder}/cmd/server",
-            "cwd": "${workspaceFolder}",
-            "args": [
-                "--env",
-                "development-mysql",
-                "start",
-            ]
-        },
-        {
-            "name": "Debug Server with PostgreSQL",
-            "type": "go",
-            "request": "launch",
-            "mode": "debug",
-            "program": "${workspaceFolder}/cmd/server",
-            "cwd": "${workspaceFolder}",
-            "args": [
-                "--env",
-                "development-postgres",
-                "start",
-            ]
-        },
-        {
-            "name": "Debug Server with SQLite",
-            "type": "go",
-            "request": "launch",
-            "mode": "debug",
-            "program": "${workspaceFolder}/cmd/server",
-            "cwd": "${workspaceFolder}",
-            "args": [
-                "--env",
-                "development-sqlite",
-                "start",
-            ]
-        },
-    ],
-    "inputs": [
-        {
-            "type": "promptString",
-            "id": "functionalTestSuiteMethod",
-            "description": "The method name withing the functional test suite that you wish to debug.",
-            "default": "."
-        }
-    ]
+	"version": "0.2.0",
+	"configurations": [
+		{
+			"name": "Debug single functional test method",
+			"type": "go",
+			"request": "launch",
+			"mode": "test",
+			"program": "${relativeFileDirname}",
+			"args": [
+				"-testify.m",
+				"${input:functionalTestSuiteMethod}"
+			]
+
+		},
+		{
+			"name": "Debug Server",
+			"type": "go",
+			"request": "launch",
+			"mode": "debug",
+			"program": "${workspaceFolder}/cmd/server",
+			"cwd": "${workspaceFolder}",
+			"args": [
+				"start",
+			]
+		},
+		{
+			"name": "Debug Active Server",
+			"type": "go",
+			"request": "launch",
+			"mode": "debug",
+			"program": "${workspaceFolder}/cmd/server",
+			"cwd": "${workspaceFolder}",
+			"args": [
+				"--env",
+				"development-active",
+				"start",
+			]
+		},
+		{
+			"name": "Debug Server with MySql",
+			"type": "go",
+			"request": "launch",
+			"mode": "debug",
+			"program": "${workspaceFolder}/cmd/server",
+			"cwd": "${workspaceFolder}",
+			"args": [
+				"--env",
+				"development-mysql",
+				"start",
+			]
+		},
+		{
+			"name": "Debug Server with PostgreSQL",
+			"type": "go",
+			"request": "launch",
+			"mode": "debug",
+			"program": "${workspaceFolder}/cmd/server",
+			"cwd": "${workspaceFolder}",
+			"args": [
+				"--env",
+				"development-postgres",
+				"start",
+			]
+		},
+		{
+			"name": "Debug Server with SQLite",
+			"type": "go",
+			"request": "launch",
+			"mode": "debug",
+			"program": "${workspaceFolder}/cmd/server",
+			"cwd": "${workspaceFolder}",
+			"args": [
+				"--env",
+				"development-sqlite",
+				"start",
+			]
+		},
+	],
+	"inputs": [
+		{
+			"type": "promptString",
+			"id": "functionalTestSuiteMethod",
+			"description": "The method name withing the functional test suite that you wish to debug.",
+			"default": "."
+		}
+	]
 }
