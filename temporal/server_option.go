@@ -27,9 +27,9 @@ package temporal
 import (
 	"net/http"
 
-	"go.temporal.io/server/common/membership/static"
 	"google.golang.org/grpc"
 
+	"go.temporal.io/server/common/membership/static"
 	"go.temporal.io/server/client"
 	"go.temporal.io/server/common/authorization"
 	"go.temporal.io/server/common/config"
