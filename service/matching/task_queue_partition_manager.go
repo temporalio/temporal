@@ -36,7 +36,7 @@ import (
 	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/server/api/matchingservice/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
-	taskqueuespb "go.temporal.io/server/api/taskqueue/v1"
+	internal_taskqueuepb "go.temporal.io/server/api/taskqueue/v1"
 	"go.temporal.io/server/common/headers"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
@@ -347,11 +347,26 @@ func (pm *taskQueuePartitionManagerImpl) GetAllPollerInfo() []*taskqueuepb.Polle
 	ret := pm.defaultQueue.GetAllPollerInfo()
 	pm.versionedQueuesLock.RLock()
 	defer pm.versionedQueuesLock.RUnlock()
-	for _, ptqm := range pm.versionedQueues {
-		info := ptqm.GetAllPollerInfo()
+	for _, vq := range pm.versionedQueues {
+		info := vq.GetAllPollerInfo()
 		ret = append(ret, info...)
 	}
 	return ret
+}
+
+// getVersionedPollerInfo returns all pollers that polled from the specified versioned taskqueue in the last few minutes.
+// An empty version string refers to the unversioned queue.
+func (pm *taskQueuePartitionManagerImpl) getVersionedPollerInfo(buildId string) []*taskqueuepb.PollerInfo {
+	if buildId == "" {
+		return pm.defaultQueue.GetAllPollerInfo()
+	}
+	pm.versionedQueuesLock.RLock()
+	vq, ok := pm.versionedQueues[buildId]
+	pm.versionedQueuesLock.RUnlock()
+	if !ok {
+		return nil
+	}
+	return vq.GetAllPollerInfo()
 }
 
 func (pm *taskQueuePartitionManagerImpl) HasAnyPollerAfter(accessTime time.Time) bool {
@@ -395,7 +410,43 @@ func (pm *taskQueuePartitionManagerImpl) LegacyDescribeTaskQueue(includeTaskQueu
 
 func (pm *taskQueuePartitionManagerImpl) Describe(
 	request *matchingservice.DescribeTaskQueuePartitionRequest) (*matchingservice.DescribeTaskQueuePartitionResponse, error) {
-	return nil, nil
+	buildIds := request.GetBuildIds()
+	if len(buildIds) == 0 {
+		buildIds = pm.getActiveVersions()
+	}
+
+	versionsInfo := make([]*internal_taskqueuepb.TaskQueueVersionInfoInternal, len(buildIds))
+	for i, bid := range buildIds {
+		versionsInfo[i] = &internal_taskqueuepb.TaskQueueVersionInfoInternal{
+			BuildId: bid,
+			PhysicalTaskQueueInfo: &internal_taskqueuepb.PhysicalTaskQueueInfo{
+				Pollers:     pm.getVersionedPollerInfo(bid),
+				BacklogInfo: pm.getBacklogInfo(bid),
+			},
+		}
+	}
+
+	return &matchingservice.DescribeTaskQueuePartitionResponse{
+		VersionsInfoInternal: versionsInfo,
+	}, nil
+}
+
+// getActiveVersions returns a list of build ids that are active.
+// Active means that the physical queue for that version is loaded.
+// An empty string refers to the unversioned queue, which is always loaded.
+// In the future, active will mean that the physical queue for that version has had a task added recently or a recent poller.
+func (pm *taskQueuePartitionManagerImpl) getActiveVersions() []string {
+	ret := []string{""}
+	pm.versionedQueuesLock.RLock()
+	for k, _ := range pm.versionedQueues {
+		ret = append(ret, k)
+	}
+	pm.versionedQueuesLock.RUnlock()
+	return ret
+}
+
+func (pm *taskQueuePartitionManagerImpl) getBacklogInfo(buildId string) *taskqueuepb.BacklogInfo {
+	return nil
 }
 
 func (pm *taskQueuePartitionManagerImpl) String() string {
@@ -545,7 +596,7 @@ func (pm *taskQueuePartitionManagerImpl) loadDemotedSetIds(demotedSetIds []strin
 
 func (pm *taskQueuePartitionManagerImpl) getPhysicalQueueForAdd(
 	ctx context.Context,
-	directive *taskqueuespb.TaskVersionDirective,
+	directive *internal_taskqueuepb.TaskVersionDirective,
 ) (physicalTaskQueueManager, <-chan struct{}, error) {
 	if directive.GetBuildId() == nil {
 		// This means the tasks is a middle task belonging to an unversioned execution. Keep using unversioned.
@@ -576,7 +627,7 @@ func (pm *taskQueuePartitionManagerImpl) getPhysicalQueueForAdd(
 	var buildId string
 	var versionSet string
 	switch dir := directive.GetBuildId().(type) {
-	case *taskqueuespb.TaskVersionDirective_UseAssignmentRules:
+	case *internal_taskqueuepb.TaskVersionDirective_UseAssignmentRules:
 		// Need to assign build ID. Assignment rules take precedence, fallback to version sets if no matching rule is found
 		if len(data.GetAssignmentRules()) > 0 {
 			buildId = FindAssignmentBuildId(data.GetAssignmentRules())
@@ -587,7 +638,7 @@ func (pm *taskQueuePartitionManagerImpl) getPhysicalQueueForAdd(
 				return nil, nil, err
 			}
 		}
-	case *taskqueuespb.TaskVersionDirective_AssignedBuildId:
+	case *internal_taskqueuepb.TaskVersionDirective_AssignedBuildId:
 		// Already assigned, need to stay in the same version set or build ID. If TQ has version sets, first try to
 		// redirect to the version set based on the build ID. If the build ID does not belong to any version set,
 		// assume user wants to use the new API
@@ -611,12 +662,12 @@ func (pm *taskQueuePartitionManagerImpl) getPhysicalQueueForAdd(
 	return dbq, userDataChanged, err
 }
 
-func (pm *taskQueuePartitionManagerImpl) getVersionSetForAdd(directive *taskqueuespb.TaskVersionDirective, data *persistencespb.VersioningData) (string, error) {
+func (pm *taskQueuePartitionManagerImpl) getVersionSetForAdd(directive *internal_taskqueuepb.TaskVersionDirective, data *persistencespb.VersioningData) (string, error) {
 	var buildId string
 	switch dir := directive.GetBuildId().(type) {
-	case *taskqueuespb.TaskVersionDirective_UseAssignmentRules:
+	case *internal_taskqueuepb.TaskVersionDirective_UseAssignmentRules:
 		// leave buildId = "", lookupVersionSetForAdd understands that to mean "default"
-	case *taskqueuespb.TaskVersionDirective_AssignedBuildId:
+	case *internal_taskqueuepb.TaskVersionDirective_AssignedBuildId:
 		buildId = dir.AssignedBuildId
 	default:
 		// Unversioned task, leave on unversioned queue.
