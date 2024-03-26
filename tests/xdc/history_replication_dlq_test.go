@@ -131,10 +131,6 @@ type (
 	}
 )
 
-const (
-	testTimeout = 30 * time.Second
-)
-
 func TestHistoryReplicationDLQSuite(t *testing.T) {
 	flag.Parse()
 	for _, tc := range []struct {
