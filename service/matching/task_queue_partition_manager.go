@@ -198,7 +198,7 @@ func (pm *taskQueuePartitionManagerImpl) AddTask(
 	// - if we sync match, we're done
 	// - if we spool to db, we'll re-resolve when it comes out of the db
 	directive := params.taskInfo.VersionDirective
-	pq, _, err := pm.getPhysicalQueueForAdd(ctx, directive)
+	pq, _, err := pm.getPhysicalQueueForAdd(ctx, directive, params.taskInfo.GetRunId())
 	if err != nil {
 		return "", false, err
 	}
@@ -309,7 +309,7 @@ func (pm *taskQueuePartitionManagerImpl) ProcessSpooledTask(
 	directive := taskInfo.GetVersionDirective()
 	// Redirect and re-resolve if we're blocked in matcher and user data changes.
 	for {
-		pq, userDataChanged, err := pm.getPhysicalQueueForAdd(ctx, directive)
+		pq, userDataChanged, err := pm.getPhysicalQueueForAdd(ctx, directive, taskInfo.GetRunId())
 		if err != nil {
 			return err
 		}
@@ -325,7 +325,11 @@ func (pm *taskQueuePartitionManagerImpl) DispatchQueryTask(
 	taskID string,
 	request *matchingservice.QueryWorkflowRequest,
 ) (*matchingservice.QueryWorkflowResponse, error) {
-	pq, _, err := pm.getPhysicalQueueForAdd(ctx, request.VersionDirective)
+	pq, _, err := pm.getPhysicalQueueForAdd(
+		ctx,
+		request.VersionDirective,
+		request.GetQueryRequest().GetExecution().GetRunId(),
+	)
 	if err != nil {
 		return nil, err
 	}
@@ -546,6 +550,7 @@ func (pm *taskQueuePartitionManagerImpl) loadDemotedSetIds(demotedSetIds []strin
 func (pm *taskQueuePartitionManagerImpl) getPhysicalQueueForAdd(
 	ctx context.Context,
 	directive *taskqueuespb.TaskVersionDirective,
+	runId string,
 ) (physicalTaskQueueManager, <-chan struct{}, error) {
 	if directive.GetBuildId() == nil {
 		// This means the tasks is a middle task belonging to an unversioned execution. Keep using unversioned.
@@ -579,7 +584,10 @@ func (pm *taskQueuePartitionManagerImpl) getPhysicalQueueForAdd(
 	case *taskqueuespb.TaskVersionDirective_UseAssignmentRules:
 		// Need to assign build ID. Assignment rules take precedence, fallback to version sets if no matching rule is found
 		if len(data.GetAssignmentRules()) > 0 {
-			buildId = FindAssignmentBuildId(data.GetAssignmentRules())
+			buildId, err = FindAssignmentBuildId(data.GetAssignmentRules(), runId)
+			if err != nil {
+				return nil, nil, err
+			}
 		}
 		if buildId == "" {
 			versionSet, err = pm.getVersionSetForAdd(directive, data)
