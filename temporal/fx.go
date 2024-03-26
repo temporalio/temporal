@@ -49,7 +49,6 @@ import (
 	"go.temporal.io/server/common/archiver"
 	"go.temporal.io/server/common/authorization"
 	"go.temporal.io/server/common/cluster"
-	"go.temporal.io/server/common/collection"
 	"go.temporal.io/server/common/config"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/headers"
@@ -571,6 +570,10 @@ func WorkerServiceProvider(
 	return NewService(app, serviceName, params.Logger), app.Err()
 }
 
+func ClusterMetadataManagerProvider() {
+
+}
+
 // ApplyClusterMetadataConfigProvider performs a config check against the configured persistence store for cluster metadata.
 // If there is a mismatch, the persisted values take precedence and will be written over in the config objects.
 // This is to keep this check hidden from downstream calls.
@@ -671,73 +674,12 @@ func ApplyClusterMetadataConfigProvider(
 		return svc.ClusterMetadata, svc.Persistence, fmt.Errorf("error while fetching cluster metadata: %w", err)
 	}
 
-	err = loadClusterInformationFromStore(ctx, svc, clusterMetadataManager, logger)
+	clusterLoader := NewClusterMetadataLoader(clusterMetadataManager, logger)
+	err = clusterLoader.LoadClusterInformationFromStore(ctx, svc)
 	if err != nil {
 		return svc.ClusterMetadata, svc.Persistence, fmt.Errorf("error while loading metadata from cluster: %w", err)
 	}
 	return svc.ClusterMetadata, svc.Persistence, nil
-}
-
-// TODO: move this to cluster.fx
-func loadClusterInformationFromStore(ctx context.Context, svc *config.Config, clusterMsg persistence.ClusterMetadataManager, logger log.Logger) error {
-	iter := collection.NewPagingIterator(func(paginationToken []byte) ([]interface{}, []byte, error) {
-		request := &persistence.ListClusterMetadataRequest{
-			PageSize:      100,
-			NextPageToken: nil,
-		}
-		resp, err := clusterMsg.ListClusterMetadata(ctx, request)
-		if err != nil {
-			return nil, nil, err
-		}
-		var pageItem []interface{}
-		for _, metadata := range resp.ClusterMetadata {
-			pageItem = append(pageItem, metadata)
-		}
-		return pageItem, resp.NextPageToken, nil
-	})
-
-	for iter.HasNext() {
-		item, err := iter.Next()
-		if err != nil {
-			return err
-		}
-		response := item.(*persistence.GetClusterMetadataResponse)
-		merge(svc, response, logger)
-	}
-	return nil
-}
-
-func merge(svc *config.Config, metadata *persistence.GetClusterMetadataResponse, logger log.Logger) {
-	shardCount := metadata.HistoryShardCount
-	if shardCount == 0 {
-		// This is to add backward compatibility to the svc based cluster connection.
-		shardCount = svc.Persistence.NumHistoryShards
-	}
-	newMetadata := cluster.ClusterInformationFromDB(metadata)
-	if staticClusterMetadata, ok := svc.ClusterMetadata.ClusterInformation[metadata.ClusterName]; ok {
-		if metadata.ClusterName != svc.ClusterMetadata.CurrentClusterName {
-			logger.Warn(
-				"ClusterInformation in ClusterMetadata svc is deprecated. Please use TCTL tool to configure remote cluster connections",
-				tag.Key("clusterInformation"),
-				tag.IgnoredValue(staticClusterMetadata),
-				tag.Value(newMetadata))
-		} else {
-			newMetadata.RPCAddress = staticClusterMetadata.RPCAddress
-			logger.Info(fmt.Sprintf("Use rpc address %v for cluster %v.", newMetadata.RPCAddress, metadata.ClusterName))
-			// The logic for HTTP addresses is different from that of RPC addresses because HTTP addresses are optional.
-			if newMetadata.HTTPAddress == "" {
-				// Only use HTTP address from static config if there isn't one in the database.
-				newMetadata.HTTPAddress = staticClusterMetadata.HTTPAddress
-			} else {
-				// Otherwise, defer to the HTTP address in the database, and log a message that the static one is ignored.
-				logger.Warn(fmt.Sprintf(
-					"Static http address %v is ignored for cluster %v, using %v from database.",
-					staticClusterMetadata.HTTPAddress, metadata.ClusterName, newMetadata.HTTPAddress,
-				))
-			}
-		}
-	}
-	svc.ClusterMetadata.ClusterInformation[metadata.ClusterName] = *newMetadata
 }
 
 func initCurrentClusterMetadataRecord(
