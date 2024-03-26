@@ -1946,7 +1946,7 @@ func (ms *MutableStateImpl) ApplyWorkflowExecutionStartedEvent(
 	// TODO: [cleanup-old-wv]
 	if event.SourceVersionStamp.GetUseVersioning() && event.SourceVersionStamp.GetBuildId() != "" {
 		limit := ms.config.SearchAttributesSizeOfValueLimit(string(ms.namespaceEntry.Name()))
-		if _, err := ms.addBuildIdToSearchAttributesWithNoVisibilityTask(worker_versioning.VersionedBuildIdSearchAttribute(event.SourceVersionStamp.BuildId), limit); err != nil {
+		if _, err := ms.addBuildIdToSearchAttributesWithNoVisibilityTask(event.SourceVersionStamp, limit); err != nil {
 			return err
 		}
 	}
@@ -2133,7 +2133,7 @@ func (ms *MutableStateImpl) updateBuildIdsSearchAttribute(version *commonpb.Work
 	if version.GetBuildId() == "" {
 		return nil
 	}
-	changed, err := ms.addBuildIdToSearchAttributesWithNoVisibilityTask(worker_versioning.VersionStampToBuildIdSearchAttribute(version), maxSearchAttributeValueSize)
+	changed, err := ms.addBuildIdToSearchAttributesWithNoVisibilityTask(version, maxSearchAttributeValueSize)
 	if err != nil {
 		return err
 	} else if !changed {
@@ -2165,17 +2165,22 @@ func (ms *MutableStateImpl) loadBuildIds() ([]string, error) {
 // Takes a list of loaded build IDs from a search attribute and adds a new build ID to it. Also makes sure that the
 // resulting SA list begins with either "unversioned" or "assigned:<bld>" based on workflow's Build ID assignment status.
 // Returns a potentially modified list.
-func (ms *MutableStateImpl) addBuildIdToLoadedSearchAttribute(existingValues []string, newValue string) []string {
+// [cleanup-old-wv] old versioning does not add "assigned:<bld>" value to the SA.
+func (ms *MutableStateImpl) addBuildIdToLoadedSearchAttribute(
+	existingValues []string,
+	stamp *commonpb.WorkerVersionStamp,
+) []string {
 	var newValues []string
-	if ms.GetAssignedBuildId() == "" {
+	if !stamp.GetUseVersioning() {
 		newValues = append(newValues, worker_versioning.UnversionedSearchAttribute)
-	} else {
+	} else if ms.GetAssignedBuildId() != "" {
 		newValues = append(newValues, worker_versioning.AssignedBuildIdSearchAttribute(ms.GetAssignedBuildId()))
 	}
 
-	found := false
+	buildId := worker_versioning.VersionStampToBuildIdSearchAttribute(stamp)
+	found := slices.Contains(newValues, buildId)
 	for _, existingValue := range existingValues {
-		if existingValue == newValue {
+		if existingValue == buildId {
 			found = true
 		}
 		if !worker_versioning.IsUnversionedOrAssignedBuildIdSearchAttribute(existingValue) {
@@ -2183,7 +2188,7 @@ func (ms *MutableStateImpl) addBuildIdToLoadedSearchAttribute(existingValues []s
 		}
 	}
 	if !found {
-		newValues = append(newValues, newValue)
+		newValues = append(newValues, buildId)
 	}
 	return newValues
 }
@@ -2217,13 +2222,13 @@ func (ms *MutableStateImpl) saveBuildIds(buildIds []string, maxSearchAttributeVa
 	return nil
 }
 
-func (ms *MutableStateImpl) addBuildIdToSearchAttributesWithNoVisibilityTask(buildId string, maxSearchAttributeValueSize int) (bool, error) {
+func (ms *MutableStateImpl) addBuildIdToSearchAttributesWithNoVisibilityTask(stamp *commonpb.WorkerVersionStamp, maxSearchAttributeValueSize int) (bool, error) {
 	existingBuildIds, err := ms.loadBuildIds()
 	if err != nil {
 		return false, err
 	}
-	modifiedBuildIds := ms.addBuildIdToLoadedSearchAttribute(existingBuildIds, buildId)
-	if !slices.Equal(existingBuildIds, modifiedBuildIds) {
+	modifiedBuildIds := ms.addBuildIdToLoadedSearchAttribute(existingBuildIds, stamp)
+	if slices.Equal(existingBuildIds, modifiedBuildIds) {
 		return false, nil
 	}
 	return true, ms.saveBuildIds(modifiedBuildIds, maxSearchAttributeValueSize)

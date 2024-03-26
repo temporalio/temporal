@@ -42,7 +42,7 @@ import (
 )
 
 const (
-	buildIdSearchAttributePrefixAssigned   = "assigned"
+	buildIdSearchAttributePrefixAssigned    = "assigned"
 	buildIdSearchAttributePrefixVersioned   = "versioned"
 	buildIdSearchAttributePrefixUnversioned = "unversioned"
 	BuildIdSearchAttributeDelimiter         = ":"
@@ -58,7 +58,7 @@ func AssignedBuildIdSearchAttribute(buildId string) string {
 // IsUnversionedOrAssignedBuildIdSearchAttribute returns the value is "unversioned" or "assigned:<bld>"
 func IsUnversionedOrAssignedBuildIdSearchAttribute(buildId string) bool {
 	return buildId == UnversionedSearchAttribute ||
-		strings.HasPrefix(buildId, buildIdSearchAttributePrefixAssigned + BuildIdSearchAttributeDelimiter)
+		strings.HasPrefix(buildId, buildIdSearchAttributePrefixAssigned+BuildIdSearchAttributeDelimiter)
 }
 
 // VersionedBuildIdSearchAttribute returns the search attribute value for an unversioned build id
