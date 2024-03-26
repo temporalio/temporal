@@ -439,7 +439,7 @@ func (t *timerQueueStandbyTaskExecutor) executeWorkflowExecutionTimeoutTask(
 			return nil, nil
 		}
 
-		return getHistoryResendInfo(mutableState)
+		return newExecutionTimerPostActionInfo(mutableState)
 	}
 
 	return t.processTimer(
@@ -522,12 +522,17 @@ func (t *timerQueueStandbyTaskExecutor) fetchHistoryFromRemote(
 	postActionInfo interface{},
 	logger log.Logger,
 ) error {
+	workflowKey := taskWorkflowKey(taskInfo)
+
 	var resendInfo *historyResendInfo
 	switch postActionInfo := postActionInfo.(type) {
 	case nil:
 		return nil
 	case *historyResendInfo:
 		resendInfo = postActionInfo
+	case *executionTimerPostActionInfo:
+		resendInfo = postActionInfo.historyResendInfo
+		workflowKey.RunID = postActionInfo.currentRunID
 	case *activityTaskPostActionInfo:
 		resendInfo = postActionInfo.historyResendInfo
 	default:
@@ -537,7 +542,7 @@ func (t *timerQueueStandbyTaskExecutor) fetchHistoryFromRemote(
 	remoteClusterName, err := getRemoteClusterName(
 		t.currentClusterName,
 		t.registry,
-		taskInfo.GetNamespaceID(),
+		workflowKey.GetNamespaceID(),
 	)
 	if err != nil {
 		return err
@@ -551,9 +556,9 @@ func (t *timerQueueStandbyTaskExecutor) fetchHistoryFromRemote(
 	if resendInfo.lastEventID == common.EmptyEventID || resendInfo.lastEventVersion == common.EmptyVersion {
 		t.logger.Error("Error re-replicating history from remote: timerQueueStandbyProcessor encountered empty historyResendInfo.",
 			tag.ShardID(t.shardContext.GetShardID()),
-			tag.WorkflowNamespaceID(taskInfo.GetNamespaceID()),
-			tag.WorkflowID(taskInfo.GetWorkflowID()),
-			tag.WorkflowRunID(taskInfo.GetRunID()),
+			tag.WorkflowNamespaceID(workflowKey.GetNamespaceID()),
+			tag.WorkflowID(workflowKey.GetWorkflowID()),
+			tag.WorkflowRunID(workflowKey.GetRunID()),
 			tag.ClusterName(remoteClusterName))
 
 		return consts.ErrTaskRetry
@@ -564,9 +569,9 @@ func (t *timerQueueStandbyTaskExecutor) fetchHistoryFromRemote(
 	if err = t.nDCHistoryResender.SendSingleWorkflowHistory(
 		ctx,
 		remoteClusterName,
-		namespace.ID(taskInfo.GetNamespaceID()),
-		taskInfo.GetWorkflowID(),
-		taskInfo.GetRunID(),
+		namespace.ID(workflowKey.GetNamespaceID()),
+		workflowKey.GetWorkflowID(),
+		workflowKey.GetRunID(),
 		resendInfo.lastEventID,
 		resendInfo.lastEventVersion,
 		common.EmptyEventID,
@@ -578,9 +583,9 @@ func (t *timerQueueStandbyTaskExecutor) fetchHistoryFromRemote(
 		}
 		t.logger.Error("Error re-replicating history from remote.",
 			tag.ShardID(t.shardContext.GetShardID()),
-			tag.WorkflowNamespaceID(taskInfo.GetNamespaceID()),
-			tag.WorkflowID(taskInfo.GetWorkflowID()),
-			tag.WorkflowRunID(taskInfo.GetRunID()),
+			tag.WorkflowNamespaceID(workflowKey.GetNamespaceID()),
+			tag.WorkflowID(workflowKey.GetWorkflowID()),
+			tag.WorkflowRunID(workflowKey.GetRunID()),
 			tag.ClusterName(remoteClusterName),
 			tag.Error(err))
 	}

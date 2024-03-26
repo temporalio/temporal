@@ -357,11 +357,12 @@ func (c *CacheImpl) validateWorkflowExecutionInfo(
 
 	// RunID is not provided, lets try to retrieve the RunID for current active execution
 	if execution.GetRunId() == "" {
+		shardOwnershipAsserted := false
 		runID, err := GetCurrentRunID(
 			ctx,
 			shardContext,
 			c,
-			nil,
+			&shardOwnershipAsserted,
 			namespaceID.String(),
 			execution.GetWorkflowId(),
 			lockPriority,

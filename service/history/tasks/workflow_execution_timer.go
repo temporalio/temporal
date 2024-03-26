@@ -42,8 +42,8 @@ type (
 		VisibilityTimestamp time.Time
 		TaskID              int64
 
-		// NOTE: we don't need version check here
-		// TODO: explain why
+		// Check the comment in timerQueueTaskExecutorBase.isValidExecutionTimeoutTask()
+		// for why version is not needed here
 	}
 )
 
@@ -56,6 +56,7 @@ func (t *WorkflowExecutionTimeoutTask) GetWorkflowID() string {
 }
 
 func (t *WorkflowExecutionTimeoutTask) GetRunID() string {
+	// RunID is empty as the task is not for a specific run but a workflow chain
 	return ""
 }
 

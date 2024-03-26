@@ -109,10 +109,7 @@ func getCurrentWorkflowExecutionContext(
 	workflowID string,
 	lockPriority workflow.LockPriority,
 ) (workflow.Context, wcache.ReleaseCacheFunc, error) {
-	// we don't need shard ownership check here
-	// this concept is deprecated
-	shardOwnershipAsserted := true
-
+	shardOwnershipAsserted := false
 	currentRunID, err := wcache.GetCurrentRunID(
 		ctx,
 		shardContext,
@@ -120,7 +117,7 @@ func getCurrentWorkflowExecutionContext(
 		&shardOwnershipAsserted,
 		namespaceID,
 		workflowID,
-		workflow.LockPriorityLow,
+		lockPriority,
 	)
 	if err != nil {
 		return nil, nil, err
@@ -147,18 +144,17 @@ func getCurrentWorkflowExecutionContext(
 		return wfContext, release, nil
 	}
 
-	// we need to validate currentRunID is still the current
-	// since it's possible that the workflowID has a newer run
-	// before it's locked
+	// for close workflow we need to check if it is still the current run
+	// since it's possible that the workflowID has a newer run before it's locked
 
 	currentRunID, err = wcache.GetCurrentRunID(
 		ctx,
 		shardContext,
 		workflowCache,
-		nil,
+		&shardOwnershipAsserted,
 		namespaceID,
 		workflowID,
-		workflow.LockPriorityLow,
+		lockPriority,
 	)
 	if err != nil {
 		// release with nil error to prevent mutable state from being unloaded from the cache

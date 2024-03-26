@@ -59,6 +59,7 @@ import (
 	"go.temporal.io/server/service/history/historybuilder"
 	"go.temporal.io/server/service/history/hsm"
 	"go.temporal.io/server/service/history/shard"
+	"go.temporal.io/server/service/history/tasks"
 	"go.temporal.io/server/service/history/tests"
 )
 
@@ -75,8 +76,6 @@ type (
 		mockMutableState    *MockMutableState
 		mockClusterMetadata *cluster.MockMetadata
 
-		mockTaskGeneratorForNew *MockTaskGenerator
-
 		logger log.Logger
 
 		sourceCluster  string
@@ -85,10 +84,8 @@ type (
 	}
 
 	testTaskGeneratorProvider struct {
-		mockMutableState *MockMutableState
-
-		mockTaskGenerator       *MockTaskGenerator
-		mockTaskGeneratorForNew *MockTaskGenerator
+		mockMutableState  *MockMutableState
+		mockTaskGenerator *MockTaskGenerator
 	}
 )
 
@@ -109,7 +106,6 @@ func (s *stateBuilderSuite) SetupTest() {
 	s.controller = gomock.NewController(s.T())
 	s.mockTaskGenerator = NewMockTaskGenerator(s.controller)
 	s.mockMutableState = NewMockMutableState(s.controller)
-	s.mockTaskGeneratorForNew = NewMockTaskGenerator(s.controller)
 
 	s.mockShard = shard.NewTestContext(
 		s.controller,
@@ -134,14 +130,15 @@ func (s *stateBuilderSuite) SetupTest() {
 
 	s.logger = s.mockShard.GetLogger()
 	s.executionInfo = &persistencespb.WorkflowExecutionInfo{
-		VersionHistories: versionhistory.NewVersionHistories(&historyspb.VersionHistory{}),
+		VersionHistories:                 versionhistory.NewVersionHistories(&historyspb.VersionHistory{}),
+		FirstExecutionRunId:              uuid.New(),
+		WorkflowExecutionTimerTaskStatus: TimerTaskStatusCreated,
 	}
 	s.mockMutableState.EXPECT().GetExecutionInfo().Return(s.executionInfo).AnyTimes()
 
 	taskGeneratorProvider = &testTaskGeneratorProvider{
-		mockMutableState:        s.mockMutableState,
-		mockTaskGenerator:       s.mockTaskGenerator,
-		mockTaskGeneratorForNew: s.mockTaskGeneratorForNew,
+		mockMutableState:  s.mockMutableState,
+		mockTaskGenerator: s.mockTaskGenerator,
 	}
 	s.stateRebuilder = NewMutableStateRebuilder(
 		s.mockShard,
@@ -328,11 +325,15 @@ func (s *stateBuilderSuite) TestApplyEvents_EventTypeWorkflowExecutionTimedOut_W
 		EventTime: timestamppb.New(now),
 		EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_STARTED,
 		Attributes: &historypb.HistoryEvent_WorkflowExecutionStartedEventAttributes{WorkflowExecutionStartedEventAttributes: &historypb.WorkflowExecutionStartedEventAttributes{
-			WorkflowExecutionTimeout: durationpb.New(100 * time.Second),
-			WorkflowTaskTimeout:      durationpb.New(10 * time.Second),
-			TaskQueue:                &taskqueuepb.TaskQueue{Name: "some random taskqueue"},
-			WorkflowType:             &commonpb.WorkflowType{Name: "some random workflow type"},
-			FirstWorkflowTaskBackoff: durationpb.New(10 * time.Second),
+			WorkflowExecutionTimeout:        durationpb.New(100 * time.Second),
+			WorkflowRunTimeout:              durationpb.New(100 * time.Second),
+			WorkflowTaskTimeout:             durationpb.New(10 * time.Second),
+			TaskQueue:                       &taskqueuepb.TaskQueue{Name: "some random taskqueue"},
+			WorkflowType:                    &commonpb.WorkflowType{Name: "some random workflow type"},
+			FirstWorkflowTaskBackoff:        durationpb.New(10 * time.Second),
+			FirstExecutionRunId:             s.mockMutableState.GetExecutionInfo().FirstExecutionRunId,
+			WorkflowExecutionExpirationTime: timestamppb.New(now.Add(100 * time.Second)),
+			ContinuedExecutionRunId:         execution.RunId,
 		}},
 	}
 	newRunEvents := []*historypb.HistoryEvent{newRunStartedEvent}
@@ -351,12 +352,14 @@ func (s *stateBuilderSuite) TestApplyEvents_EventTypeWorkflowExecutionTimedOut_W
 	).Return(nil)
 	s.mockMutableState.EXPECT().ClearStickyTaskQueue()
 
-	s.setupMockForNewRunStartedEvent(newRunStartedEvent)
-
 	newRunStateBuilder, err := s.stateRebuilder.ApplyEvents(context.Background(), tests.NamespaceID, requestID, execution, s.toHistory(event), newRunEvents, newRunID)
 	s.Nil(err)
 	s.NotNil(newRunStateBuilder)
 	s.Equal(event.TaskId, s.executionInfo.LastEventTaskId)
+
+	newRunTasks := newRunStateBuilder.PopTasks()
+	s.Len(newRunTasks[tasks.CategoryTimer], 1)      // backoffTimer
+	s.Len(newRunTasks[tasks.CategoryVisibility], 1) // recordWorkflowStarted
 }
 
 func (s *stateBuilderSuite) TestApplyEvents_EventTypeWorkflowExecutionTerminated() {
@@ -416,11 +419,14 @@ func (s *stateBuilderSuite) TestApplyEvents_EventTypeWorkflowExecutionTerminated
 		EventTime: timestamppb.New(now),
 		EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_STARTED,
 		Attributes: &historypb.HistoryEvent_WorkflowExecutionStartedEventAttributes{WorkflowExecutionStartedEventAttributes: &historypb.WorkflowExecutionStartedEventAttributes{
-			WorkflowExecutionTimeout: durationpb.New(100 * time.Second),
-			WorkflowTaskTimeout:      durationpb.New(10 * time.Second),
-			TaskQueue:                &taskqueuepb.TaskQueue{Name: "some random taskqueue"},
-			WorkflowType:             &commonpb.WorkflowType{Name: "some random workflow type"},
-			FirstWorkflowTaskBackoff: durationpb.New(10 * time.Second),
+			WorkflowExecutionTimeout:        durationpb.New(100 * time.Second),
+			WorkflowRunTimeout:              durationpb.New(10 * time.Second),
+			WorkflowTaskTimeout:             durationpb.New(10 * time.Second),
+			TaskQueue:                       &taskqueuepb.TaskQueue{Name: "some random taskqueue"},
+			WorkflowType:                    &commonpb.WorkflowType{Name: "some random workflow type"},
+			FirstWorkflowTaskBackoff:        durationpb.New(10 * time.Second),
+			FirstExecutionRunId:             uuid.New(),
+			WorkflowExecutionExpirationTime: timestamppb.New(now.Add(100 * time.Second)),
 		}},
 	}
 	newRunEvents := []*historypb.HistoryEvent{newRunStartedEvent}
@@ -439,12 +445,14 @@ func (s *stateBuilderSuite) TestApplyEvents_EventTypeWorkflowExecutionTerminated
 	).Return(nil)
 	s.mockMutableState.EXPECT().ClearStickyTaskQueue()
 
-	s.setupMockForNewRunStartedEvent(newRunStartedEvent)
-
 	newRunStateBuilder, err := s.stateRebuilder.ApplyEvents(context.Background(), tests.NamespaceID, requestID, execution, s.toHistory(event), newRunEvents, uuid.New())
 	s.Nil(err)
 	s.NotNil(newRunStateBuilder)
 	s.Equal(event.TaskId, s.executionInfo.LastEventTaskId)
+
+	newRunTasks := newRunStateBuilder.PopTasks()
+	s.Len(newRunTasks[tasks.CategoryTimer], 3)      // backoff timer, runTimeout timer, executionTimeout timer
+	s.Len(newRunTasks[tasks.CategoryVisibility], 1) // recordWorkflowStarted
 }
 
 func (s *stateBuilderSuite) TestApplyEvents_EventTypeWorkflowExecutionFailed() {
@@ -510,11 +518,15 @@ func (s *stateBuilderSuite) TestApplyEvents_EventTypeWorkflowExecutionFailed_Wit
 		EventTime: timestamppb.New(now),
 		EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_STARTED,
 		Attributes: &historypb.HistoryEvent_WorkflowExecutionStartedEventAttributes{WorkflowExecutionStartedEventAttributes: &historypb.WorkflowExecutionStartedEventAttributes{
-			WorkflowExecutionTimeout: durationpb.New(100 * time.Second),
-			WorkflowTaskTimeout:      durationpb.New(10 * time.Second),
-			TaskQueue:                &taskqueuepb.TaskQueue{Name: "some random taskqueue"},
-			WorkflowType:             &commonpb.WorkflowType{Name: "some random workflow type"},
-			FirstWorkflowTaskBackoff: durationpb.New(10 * time.Second),
+			WorkflowExecutionTimeout:        durationpb.New(100 * time.Second),
+			WorkflowRunTimeout:              durationpb.New(10 * time.Second),
+			WorkflowTaskTimeout:             durationpb.New(10 * time.Second),
+			TaskQueue:                       &taskqueuepb.TaskQueue{Name: "some random taskqueue"},
+			WorkflowType:                    &commonpb.WorkflowType{Name: "some random workflow type"},
+			FirstWorkflowTaskBackoff:        durationpb.New(10 * time.Second),
+			FirstExecutionRunId:             s.mockMutableState.GetExecutionInfo().FirstExecutionRunId,
+			WorkflowExecutionExpirationTime: timestamppb.New(now.Add(100 * time.Second)),
+			ContinuedExecutionRunId:         execution.RunId,
 		}},
 	}
 	newRunEvents := []*historypb.HistoryEvent{newRunStartedEvent}
@@ -533,12 +545,14 @@ func (s *stateBuilderSuite) TestApplyEvents_EventTypeWorkflowExecutionFailed_Wit
 	).Return(nil)
 	s.mockMutableState.EXPECT().ClearStickyTaskQueue()
 
-	s.setupMockForNewRunStartedEvent(newRunStartedEvent)
-
 	newRunStateBuilder, err := s.stateRebuilder.ApplyEvents(context.Background(), tests.NamespaceID, requestID, execution, s.toHistory(event), newRunEvents, newRunID)
 	s.Nil(err)
 	s.NotNil(newRunStateBuilder)
 	s.Equal(event.TaskId, s.executionInfo.LastEventTaskId)
+
+	newRunTasks := newRunStateBuilder.PopTasks()
+	s.Len(newRunTasks[tasks.CategoryTimer], 2)      // backoffTimer, runTimeout timer
+	s.Len(newRunTasks[tasks.CategoryVisibility], 1) // recordWorkflowStarted
 }
 
 func (s *stateBuilderSuite) TestApplyEvents_EventTypeWorkflowExecutionCompleted() {
@@ -604,11 +618,14 @@ func (s *stateBuilderSuite) TestApplyEvents_EventTypeWorkflowExecutionCompleted_
 		EventTime: timestamppb.New(now),
 		EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_STARTED,
 		Attributes: &historypb.HistoryEvent_WorkflowExecutionStartedEventAttributes{WorkflowExecutionStartedEventAttributes: &historypb.WorkflowExecutionStartedEventAttributes{
-			WorkflowExecutionTimeout: durationpb.New(100 * time.Second),
-			WorkflowTaskTimeout:      durationpb.New(10 * time.Second),
-			TaskQueue:                &taskqueuepb.TaskQueue{Name: "some random taskqueue"},
-			WorkflowType:             &commonpb.WorkflowType{Name: "some random workflow type"},
-			FirstWorkflowTaskBackoff: durationpb.New(10 * time.Second),
+			WorkflowExecutionTimeout:        durationpb.New(100 * time.Second),
+			WorkflowRunTimeout:              durationpb.New(100 * time.Second),
+			WorkflowTaskTimeout:             durationpb.New(10 * time.Second),
+			TaskQueue:                       &taskqueuepb.TaskQueue{Name: "some random taskqueue"},
+			WorkflowType:                    &commonpb.WorkflowType{Name: "some random workflow type"},
+			FirstExecutionRunId:             s.mockMutableState.GetExecutionInfo().FirstExecutionRunId,
+			WorkflowExecutionExpirationTime: timestamppb.New(now.Add(100 * time.Second)),
+			ContinuedExecutionRunId:         execution.RunId,
 		}},
 	}
 	newRunEvents := []*historypb.HistoryEvent{newRunStartedEvent}
@@ -627,12 +644,14 @@ func (s *stateBuilderSuite) TestApplyEvents_EventTypeWorkflowExecutionCompleted_
 	).Return(nil)
 	s.mockMutableState.EXPECT().ClearStickyTaskQueue()
 
-	s.setupMockForNewRunStartedEvent(newRunStartedEvent)
-
 	newRunStateBuilder, err := s.stateRebuilder.ApplyEvents(context.Background(), tests.NamespaceID, requestID, execution, s.toHistory(event), newRunEvents, newRunID)
 	s.Nil(err)
 	s.NotNil(newRunStateBuilder)
 	s.Equal(event.TaskId, s.executionInfo.LastEventTaskId)
+
+	newRunTasks := newRunStateBuilder.PopTasks()
+	s.Len(newRunTasks[tasks.CategoryTimer], 0)
+	s.Len(newRunTasks[tasks.CategoryVisibility], 1) // recordWorkflowStarted
 }
 
 func (s *stateBuilderSuite) TestApplyEvents_EventTypeWorkflowExecutionCanceled() {
@@ -709,11 +728,14 @@ func (s *stateBuilderSuite) TestApplyEvents_EventTypeWorkflowExecutionContinuedA
 				WorkflowId: parentWorkflowID,
 				RunId:      parentRunID,
 			},
-			ParentInitiatedEventId:   parentInitiatedEventID,
-			WorkflowExecutionTimeout: durationpb.New(workflowTimeoutSecond),
-			WorkflowTaskTimeout:      durationpb.New(taskTimeout),
-			TaskQueue:                &taskqueuepb.TaskQueue{Name: taskqueue},
-			WorkflowType:             &commonpb.WorkflowType{Name: workflowType},
+			ParentInitiatedEventId:          parentInitiatedEventID,
+			WorkflowExecutionTimeout:        durationpb.New(workflowTimeoutSecond),
+			WorkflowTaskTimeout:             durationpb.New(taskTimeout),
+			TaskQueue:                       &taskqueuepb.TaskQueue{Name: taskqueue},
+			WorkflowType:                    &commonpb.WorkflowType{Name: workflowType},
+			WorkflowExecutionExpirationTime: timestamppb.New(now.Add(workflowTimeoutSecond)),
+			FirstExecutionRunId:             s.mockMutableState.GetExecutionInfo().FirstExecutionRunId,
+			ContinuedExecutionRunId:         execution.RunId,
 		}},
 	}
 
@@ -768,18 +790,6 @@ func (s *stateBuilderSuite) TestApplyEvents_EventTypeWorkflowExecutionContinuedA
 
 	// new workflow namespace
 	s.mockNamespaceCache.EXPECT().GetNamespace(tests.ParentNamespace).Return(tests.GlobalParentNamespaceEntry, nil).AnyTimes()
-	// task for the new workflow
-	s.mockTaskGeneratorForNew.EXPECT().GenerateRecordWorkflowStartedTasks(
-		protomock.Eq(newRunStartedEvent),
-	).Return(nil)
-	s.mockTaskGeneratorForNew.EXPECT().GenerateWorkflowStartTasks(
-		protomock.Eq(newRunStartedEvent),
-	).Return(int32(TimerTaskStatusCreated), nil)
-	s.mockTaskGeneratorForNew.EXPECT().GenerateScheduleWorkflowTaskTasks(
-		newRunWorkflowTaskEvent.GetEventId(),
-	).Return(nil)
-	s.mockTaskGeneratorForNew.EXPECT().GenerateActivityTimerTasks().Return(nil)
-	s.mockTaskGeneratorForNew.EXPECT().GenerateUserTimerTasks().Return(nil)
 
 	newRunStateBuilder, err := s.stateRebuilder.ApplyEvents(
 		context.Background(), tests.NamespaceID, requestID, execution, s.toHistory(continueAsNewEvent), newRunEvents, "",
@@ -787,6 +797,11 @@ func (s *stateBuilderSuite) TestApplyEvents_EventTypeWorkflowExecutionContinuedA
 	s.Nil(err)
 	s.NotNil(newRunStateBuilder)
 	s.Equal(continueAsNewEvent.TaskId, s.executionInfo.LastEventTaskId)
+
+	newRunTasks := newRunStateBuilder.PopTasks()
+	s.Empty(newRunTasks[tasks.CategoryTimer])
+	s.Len(newRunTasks[tasks.CategoryVisibility], 1) // recordWorkflowStarted
+	s.Len(newRunTasks[tasks.CategoryTransfer], 1)   // workflow task
 }
 
 func (s *stateBuilderSuite) TestApplyEvents_EventTypeWorkflowExecutionContinuedAsNew_EmptyNewRunHistory() {
@@ -2105,34 +2120,18 @@ func (s *stateBuilderSuite) TestApplyEvents_EventTypeWorkflowExecutionUpdateComp
 	s.Equal(event.TaskId, s.executionInfo.LastEventTaskId)
 }
 
-func (s *stateBuilderSuite) setupMockForNewRunStartedEvent(
-	newRunStartedEvent *historypb.HistoryEvent,
-) {
-	s.mockTaskGeneratorForNew.EXPECT().GenerateRecordWorkflowStartedTasks(
-		protomock.Eq(newRunStartedEvent),
-	).Return(nil)
-
-	s.mockTaskGeneratorForNew.EXPECT().GenerateWorkflowStartTasks(
-		protomock.Eq(newRunStartedEvent),
-	).Return(int32(TimerTaskStatusCreated), nil)
-
-	backoffDuration := newRunStartedEvent.GetWorkflowExecutionStartedEventAttributes().GetFirstWorkflowTaskBackoff().AsDuration()
-	if backoffDuration > 0 {
-		s.mockTaskGeneratorForNew.EXPECT().GenerateDelayedWorkflowTasks(
-			protomock.Eq(newRunStartedEvent),
-		).Return(nil)
-	}
-
-	s.mockTaskGeneratorForNew.EXPECT().GenerateActivityTimerTasks().Return(nil)
-	s.mockTaskGeneratorForNew.EXPECT().GenerateUserTimerTasks().Return(nil)
-}
-
 func (p *testTaskGeneratorProvider) NewTaskGenerator(
-	_ shard.Context,
+	shardContext shard.Context,
 	mutableState MutableState,
 ) TaskGenerator {
 	if mutableState == p.mockMutableState {
 		return p.mockTaskGenerator
 	}
-	return p.mockTaskGeneratorForNew
+
+	return NewTaskGenerator(
+		shardContext.GetNamespaceRegistry(),
+		mutableState,
+		shardContext.GetConfig(),
+		shardContext.GetArchivalMetadata(),
+	)
 }
