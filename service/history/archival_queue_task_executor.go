@@ -266,7 +266,6 @@ func (e *archivalQueueTaskExecutor) addDeletionTask(
 		ShardID:     e.shardContext.GetShardID(),
 		NamespaceID: task.GetNamespaceID(),
 		WorkflowID:  task.WorkflowID,
-		RunID:       task.RunID,
 		Tasks:       mutableState.PopTasks(),
 	})
 	return err

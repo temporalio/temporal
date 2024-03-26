@@ -814,7 +814,6 @@ func (m *executionManagerImpl) AddHistoryTasks(
 
 		NamespaceID: input.NamespaceID,
 		WorkflowID:  input.WorkflowID,
-		RunID:       input.RunID,
 
 		Tasks: tasks,
 	})

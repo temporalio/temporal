@@ -126,7 +126,6 @@ func (m *DeleteManagerImpl) AddDeleteWorkflowExecutionTask(
 		// RangeID is set by shardContext
 		NamespaceID: nsID.String(),
 		WorkflowID:  we.GetWorkflowId(),
-		RunID:       we.GetRunId(),
 		Tasks: map[tasks.Category][]tasks.Task{
 			tasks.CategoryTransfer: {deleteTask},
 		},

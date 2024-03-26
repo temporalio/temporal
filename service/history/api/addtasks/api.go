@@ -110,10 +110,11 @@ func Invoke(
 			))
 		}
 
+		// group by namespaceID + workflowID
 		workflowKey := definition.NewWorkflowKey(
 			deserializedTask.GetNamespaceID(),
 			deserializedTask.GetWorkflowID(),
-			deserializedTask.GetRunID(),
+			"",
 		)
 		if _, ok := taskBatches[workflowKey]; !ok {
 			taskBatches[workflowKey] = make(map[tasks.Category][]tasks.Task, 1)
@@ -128,7 +129,6 @@ func Invoke(
 			RangeID:     shardContext.GetRangeID(),
 			NamespaceID: workflowKey.NamespaceID,
 			WorkflowID:  workflowKey.WorkflowID,
-			RunID:       workflowKey.RunID,
 			Tasks:       taskBatch,
 		})
 		if err != nil {

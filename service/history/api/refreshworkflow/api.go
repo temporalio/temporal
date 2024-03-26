@@ -76,7 +76,6 @@ func Invoke(
 		// RangeID is set by shard
 		NamespaceID: workflowKey.NamespaceID,
 		WorkflowID:  workflowKey.WorkflowID,
-		RunID:       workflowKey.RunID,
 		Tasks:       mutableState.PopTasks(),
 	})
 }
