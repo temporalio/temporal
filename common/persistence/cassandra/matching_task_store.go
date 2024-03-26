@@ -481,28 +481,6 @@ func (d *MatchingTaskStore) GetTasks(
 	return response, nil
 }
 
-// CompleteTask delete a task
-func (d *MatchingTaskStore) CompleteTask(
-	ctx context.Context,
-	request *p.CompleteTaskRequest,
-) error {
-	tli := request.TaskQueue
-	query := d.Session.Query(templateCompleteTaskQuery,
-		tli.NamespaceID,
-		tli.TaskQueueName,
-		tli.TaskQueueType,
-		rowTypeTask,
-		request.TaskID,
-	).WithContext(ctx)
-
-	err := query.Exec()
-	if err != nil {
-		return gocql.ConvertError("CompleteTask", err)
-	}
-
-	return nil
-}
-
 // CompleteTasksLessThan deletes all tasks less than the given task id. This API ignores the
 // Limit request parameter i.e. either all tasks leq the task_id will be deleted or an error will
 // be returned to the caller
