@@ -83,6 +83,7 @@ import (
 var (
 	clusterMetadataInitErr           = errors.New("failed to initialize current cluster metadata")
 	missingCurrentClusterMetadataErr = errors.New("missing current cluster metadata under clusterMetadata.ClusterInformation")
+	missingServiceInStaticHosts      = errors.New("hosts are missing in static hosts for service: ")
 )
 
 type (
@@ -276,7 +277,7 @@ func ServerOptionsProvider(opts []ServerOption) (serverOptionsProvider, error) {
 		for _, service := range DefaultServices {
 			hosts := so.hostsByService[primitives.ServiceName(service)]
 			if len(hosts.All) == 0 {
-				return serverOptionsProvider{}, fmt.Errorf("hosts for %v service are missing in static hosts", service)
+				return serverOptionsProvider{}, fmt.Errorf("%w: %v", missingServiceInStaticHosts, service)
 			}
 		}
 	}
