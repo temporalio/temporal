@@ -53,6 +53,8 @@ var (
 		dynamicconfig.NamespaceCacheRefreshInterval:                       NamespaceCacheRefreshInterval,
 		dynamicconfig.FrontendEnableUpdateWorkflowExecution:               true,
 		dynamicconfig.FrontendAccessHistoryFraction:                       0.5,
+		dynamicconfig.EnableWorkflowIdConflictPolicy:                      true,
+		dynamicconfig.ReplicationEnableUpdateWithNewTaskMerge:             true,
 	}
 )
 

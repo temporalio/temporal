@@ -38,7 +38,6 @@ import "temporal/api/protocol/v1/message.proto";
 import "temporal/server/api/clock/v1/message.proto";
 import "temporal/server/api/enums/v1/task.proto";
 import "temporal/server/api/history/v1/message.proto";
-import "temporal/server/api/persistence/v1/nexus.proto";
 import "temporal/server/api/persistence/v1/task_queues.proto";
 import "temporal/server/api/taskqueue/v1/message.proto";
 
@@ -376,20 +375,35 @@ message RespondNexusTaskFailedRequest {
 message RespondNexusTaskFailedResponse {
 }
 
-// (-- api-linter: core::0133::request-resource-field=disabled
-//     aip.dev/not-precedent: CreateOrUpdateNexusIncomingService RPC doesn't follow Google API format. --)
-// (-- api-linter: core::0133::request-resource-behavior=disabled
-//     aip.dev/not-precedent: CreateOrUpdateNexusIncomingService RPC doesn't follow Google API format. --)
-// (-- api-linter: core::0133::request-parent-required=disabled
-//     aip.dev/not-precedent: CreateOrUpdateNexusIncomingService RPC doesn't follow Google API format. --)
 // (-- api-linter: core::0133::request-unknown-fields=disabled
-//     aip.dev/not-precedent: CreateOrUpdateNexusIncomingService RPC doesn't follow Google API format. --)
-message CreateOrUpdateNexusIncomingServiceRequest {
+//     aip.dev/not-precedent: CreateNexusIncomingService RPC doesn't follow Google API format. --)
+// (-- api-linter: core::0133::request-resource-field=disabled
+//     aip.dev/not-precedent: CreateNexusIncomingService RPC doesn't follow Google API format. --)
+// (-- api-linter: core::0133::request-parent-required=disabled
+//     aip.dev/not-precedent: CreateNexusIncomingService RPC doesn't follow Google API format. --)
+message CreateNexusIncomingServiceRequest {
+    temporal.api.nexus.v1.IncomingServiceSpec spec = 1;
+}
+
+message CreateNexusIncomingServiceResponse {
     temporal.api.nexus.v1.IncomingService service = 1;
 }
 
-message CreateOrUpdateNexusIncomingServiceResponse {
-    temporal.server.api.persistence.v1.NexusIncomingServiceEntry entry = 1;
+// (-- api-linter: core::0134::request-resource-required=disabled
+//     aip.dev/not-precedent: UpdateNexusIncomingService RPC doesn't follow Google API format. --)
+// (-- api-linter: core::0134::request-mask-required=disabled
+//     aip.dev/not-precedent: UpdateNexusIncomingService RPC doesn't follow Google API format. --)
+message UpdateNexusIncomingServiceRequest {
+    // ID of the service to update.
+    string id = 1;
+    // Version of the service, used for optimistic concurrency. Must match current version in persistence or the request
+    // will fail a FAILED_PRECONDITION error.
+    int64 version = 2; 
+    temporal.api.nexus.v1.IncomingServiceSpec spec = 3;
+}
+
+message UpdateNexusIncomingServiceResponse {
+    temporal.api.nexus.v1.IncomingService service = 1;
 }
 
 // (-- api-linter: core::0135::request-name-behavior=disabled
@@ -397,8 +411,8 @@ message CreateOrUpdateNexusIncomingServiceResponse {
 // (-- api-linter: core::0135::request-name-reference=disabled
 //     aip.dev/not-precedent: DeleteNexusIncomingServiceRequest RPC doesn't follow Google API format. --)
 message DeleteNexusIncomingServiceRequest {
-    // Name of the service to delete.
-    string name = 1;
+    // ID of the service to delete.
+    string id = 1;
 }
 
 message DeleteNexusIncomingServiceResponse {
@@ -426,5 +440,5 @@ message ListNexusIncomingServicesResponse {
     // Token for getting the next page.
     bytes next_page_token = 1;
     int64 table_version = 2;
-    repeated temporal.server.api.persistence.v1.NexusIncomingServiceEntry entries = 3;
+    repeated temporal.api.nexus.v1.IncomingService services = 3;
 }

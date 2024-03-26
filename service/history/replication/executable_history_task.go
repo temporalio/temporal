@@ -58,6 +58,7 @@ type (
 		versionHistoryItems []*historyspb.VersionHistoryItem
 		eventsBlob          *common.DataBlob
 		newRunEventsBlob    *common.DataBlob
+		newRunID            string
 
 		deserializeLock   sync.Mutex
 		eventsDesResponse *eventsDeserializeResponse
@@ -99,6 +100,7 @@ func NewExecutableHistoryTask(
 		versionHistoryItems: task.VersionHistoryItems,
 		eventsBlob:          task.GetEvents(),
 		newRunEventsBlob:    task.GetNewRunEvents(),
+		newRunID:            task.GetNewRunId(),
 		batchable:           true,
 	}
 }
@@ -159,6 +161,7 @@ func (e *ExecutableHistoryTask) Execute() error {
 			e.versionHistoryItems,
 			events,
 			newRunEvents,
+			e.newRunID,
 		)
 	}
 
@@ -170,6 +173,7 @@ func (e *ExecutableHistoryTask) Execute() error {
 		e.versionHistoryItems,
 		events,
 		newRunEvents,
+		e.newRunID,
 	)
 }
 
@@ -351,6 +355,9 @@ func (e *ExecutableHistoryTask) BatchWith(incomingTask BatchableTask) (Trackable
 			err:          nil,
 		},
 		batchable: true,
+		// we have validated that currentTask has no new run events in e.checkEvents(),
+		// so e.newRunID must be empty.
+		newRunID: incomingHistoryTask.newRunID,
 	}, true
 }
 
@@ -387,12 +394,12 @@ func (e *ExecutableHistoryTask) validateIncomingBatchTask(incomingTask Batchable
 		return nil, err
 	}
 
-	events, newRunEvents, err := incomingHistoryTask.getDeserializedEvents()
+	events, _, err := incomingHistoryTask.getDeserializedEvents()
 	if err != nil {
 		return nil, err
 	}
 
-	if err = e.checkEvents(events, newRunEvents); err != nil {
+	if err = e.checkEvents(events); err != nil {
 		return nil, err
 	}
 
@@ -435,7 +442,9 @@ func (e *ExecutableHistoryTask) checkBaseExecutionInfo(incomingTaskExecutionInfo
 	return nil
 }
 
-func (e *ExecutableHistoryTask) checkEvents(incomingEventBatches [][]*historypb.HistoryEvent, incomingNewRunEvents []*historypb.HistoryEvent) error {
+func (e *ExecutableHistoryTask) checkEvents(
+	incomingEventBatches [][]*historypb.HistoryEvent,
+) error {
 	if len(incomingEventBatches) == 0 {
 		return serviceerror.NewInvalidArgument("incoming task is empty")
 	}

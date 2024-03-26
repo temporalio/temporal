@@ -46,6 +46,7 @@ type (
 			versionHistoryItems []*historyspb.VersionHistoryItem,
 			historyEvents [][]*historypb.HistoryEvent,
 			newEvents []*historypb.HistoryEvent,
+			newRunID string,
 		) error
 	}
 
@@ -67,6 +68,7 @@ func (f futureEventsHandlerImpl) HandleRemoteGeneratedHistoryEvents(
 	versionHistoryItems []*historyspb.VersionHistoryItem,
 	historyEvents [][]*historypb.HistoryEvent,
 	newEvents []*historypb.HistoryEvent,
+	newRunID string,
 ) error {
 	shardContext, err := f.shardController.GetShardByNamespaceWorkflow(
 		namespace.ID(workflowKey.NamespaceID),
@@ -86,5 +88,6 @@ func (f futureEventsHandlerImpl) HandleRemoteGeneratedHistoryEvents(
 		versionHistoryItems,
 		historyEvents,
 		newEvents,
+		newRunID,
 	)
 }

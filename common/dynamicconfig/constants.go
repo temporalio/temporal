@@ -395,6 +395,9 @@ const (
 	// lifecycle stage. Default value is `false`.
 	FrontendEnableUpdateWorkflowExecutionAsyncAccepted = "frontend.enableUpdateWorkflowExecutionAsyncAccepted"
 
+	// EnableWorkflowIdConflictPolicy enables the `WorkflowIdConflictPolicy` option for Start and Signal-with-Start
+	EnableWorkflowIdConflictPolicy = "frontend.enableWorkflowIdConflictPolicy"
+
 	// FrontendEnableWorkerVersioningDataAPIs enables worker versioning data read / write APIs.
 	FrontendEnableWorkerVersioningDataAPIs = "frontend.workerVersioningDataAPIs"
 	// FrontendEnableWorkerVersioningWorkflowAPIs enables worker versioning in workflow progress APIs.
@@ -902,6 +905,9 @@ const (
 	ReplicationTaskProcessorShardQPS = "history.ReplicationTaskProcessorShardQPS"
 	// ReplicationEnableDLQMetrics is the flag to emit DLQ metrics
 	ReplicationEnableDLQMetrics = "history.ReplicationEnableDLQMetrics"
+	// ReplicationEnableUpdateWithNewTaskMerge is the flag controlling whether replication task merging logic
+	// should be enabled for non continuedAsNew workflow UpdateWithNew case.
+	ReplicationEnableUpdateWithNewTaskMerge = "history.ReplicationEnableUpdateWithNewTaskMerge"
 	// HistoryTaskDLQEnabled enables the history task DLQ. This applies to internal tasks like transfer and timer tasks.
 	// Do not turn this on if you aren't using Cassandra as the history task DLQ is not implemented for other databases.
 	HistoryTaskDLQEnabled = "history.TaskDLQEnabled"

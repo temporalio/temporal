@@ -613,17 +613,17 @@ func (mr *MockEngineMockRecorder) ReplicateEventsV2(ctx, request interface{}) *g
 }
 
 // ReplicateHistoryEvents mocks base method.
-func (m *MockEngine) ReplicateHistoryEvents(ctx context.Context, workflowKey definition.WorkflowKey, baseExecutionInfo *workflow.BaseExecutionInfo, versionHistoryItems []*history0.VersionHistoryItem, historyEvents [][]*history.HistoryEvent, newEvents []*history.HistoryEvent) error {
+func (m *MockEngine) ReplicateHistoryEvents(ctx context.Context, workflowKey definition.WorkflowKey, baseExecutionInfo *workflow.BaseExecutionInfo, versionHistoryItems []*history0.VersionHistoryItem, historyEvents [][]*history.HistoryEvent, newEvents []*history.HistoryEvent, newRunID string) error {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "ReplicateHistoryEvents", ctx, workflowKey, baseExecutionInfo, versionHistoryItems, historyEvents, newEvents)
+	ret := m.ctrl.Call(m, "ReplicateHistoryEvents", ctx, workflowKey, baseExecutionInfo, versionHistoryItems, historyEvents, newEvents, newRunID)
 	ret0, _ := ret[0].(error)
 	return ret0
 }
 
 // ReplicateHistoryEvents indicates an expected call of ReplicateHistoryEvents.
-func (mr *MockEngineMockRecorder) ReplicateHistoryEvents(ctx, workflowKey, baseExecutionInfo, versionHistoryItems, historyEvents, newEvents interface{}) *gomock.Call {
+func (mr *MockEngineMockRecorder) ReplicateHistoryEvents(ctx, workflowKey, baseExecutionInfo, versionHistoryItems, historyEvents, newEvents, newRunID interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ReplicateHistoryEvents", reflect.TypeOf((*MockEngine)(nil).ReplicateHistoryEvents), ctx, workflowKey, baseExecutionInfo, versionHistoryItems, historyEvents, newEvents)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ReplicateHistoryEvents", reflect.TypeOf((*MockEngine)(nil).ReplicateHistoryEvents), ctx, workflowKey, baseExecutionInfo, versionHistoryItems, historyEvents, newEvents, newRunID)
 }
 
 // ReplicateWorkflowState mocks base method.

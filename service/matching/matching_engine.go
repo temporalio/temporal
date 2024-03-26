@@ -1450,13 +1450,28 @@ func (e *matchingEngineImpl) RespondNexusTaskFailed(ctx context.Context, request
 	return &matchingservice.RespondNexusTaskFailedResponse{}, nil
 }
 
-func (e *matchingEngineImpl) CreateOrUpdateNexusIncomingService(ctx context.Context, request *matchingservice.CreateOrUpdateNexusIncomingServiceRequest) (*matchingservice.CreateOrUpdateNexusIncomingServiceResponse, error) {
-	namespaceID, err := e.namespaceRegistry.GetNamespaceID(namespace.Name(request.Service.Spec.GetNamespace()))
+func (e *matchingEngineImpl) CreateNexusIncomingService(ctx context.Context, request *matchingservice.CreateNexusIncomingServiceRequest) (*matchingservice.CreateNexusIncomingServiceResponse, error) {
+	namespaceID, err := e.namespaceRegistry.GetNamespaceID(namespace.Name(request.GetSpec().GetNamespace()))
 	if err != nil {
 		return nil, err
 	}
-	return e.incomingServiceManager.CreateOrUpdateNexusIncomingService(ctx, &internalCreateOrUpdateRequest{
-		service:     request.Service,
+	return e.incomingServiceManager.CreateNexusIncomingService(ctx, &internalCreateRequest{
+		spec:        request.GetSpec(),
+		namespaceID: namespaceID.String(),
+		clusterID:   e.clusterMeta.GetClusterID(),
+		timeSource:  e.timeSource,
+	})
+}
+
+func (e *matchingEngineImpl) UpdateNexusIncomingService(ctx context.Context, request *matchingservice.UpdateNexusIncomingServiceRequest) (*matchingservice.UpdateNexusIncomingServiceResponse, error) {
+	namespaceID, err := e.namespaceRegistry.GetNamespaceID(namespace.Name(request.GetSpec().GetNamespace()))
+	if err != nil {
+		return nil, err
+	}
+	return e.incomingServiceManager.UpdateNexusIncomingService(ctx, &internalUpdateRequest{
+		serviceID:   request.GetId(),
+		version:     request.GetVersion(),
+		spec:        request.GetSpec(),
 		namespaceID: namespaceID.String(),
 		clusterID:   e.clusterMeta.GetClusterID(),
 		timeSource:  e.timeSource,

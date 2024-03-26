@@ -29,82 +29,87 @@ import (
 	"go.temporal.io/api/serviceerror"
 
 	"go.temporal.io/server/api/matchingservice/v1"
-	persistencepb "go.temporal.io/server/api/persistence/v1"
 	p "go.temporal.io/server/common/persistence"
 )
 
-func (s *FunctionalSuite) TestCreateOrUpdateNexusIncomingService_Matching() {
+func (s *FunctionalSuite) TestCreateNexusIncomingService_Matching() {
+	service := s.createNexusIncomingService(s.T().Name())
+	s.Equal(int64(1), service.Version)
+	s.Nil(service.LastModifiedTime)
+	s.NotNil(service.CreatedTime)
+	s.NotEmpty(service.Id)
+	s.Equal(service.Spec.Name, s.T().Name())
+	s.Equal(service.Spec.Namespace, s.namespace)
+	s.Equal("/api/v1/services/"+service.Id, service.UrlPrefix)
+
+	_, err := s.testCluster.GetMatchingClient().CreateNexusIncomingService(NewContext(), &matchingservice.CreateNexusIncomingServiceRequest{
+		Spec: &nexus.IncomingServiceSpec{
+			Name:      s.T().Name(),
+			Namespace: s.namespace,
+			TaskQueue: "dont-care",
+		},
+	})
+	var existsErr *serviceerror.AlreadyExists
+	s.ErrorAs(err, &existsErr)
+}
+func (s *FunctionalSuite) TestUpdateNexusIncomingService_Matching() {
+	service := s.createNexusIncomingService(s.T().Name())
 	type testcase struct {
 		name      string
-		service   *nexus.IncomingService
-		assertion func(*matchingservice.CreateOrUpdateNexusIncomingServiceResponse, error)
+		request   *matchingservice.UpdateNexusIncomingServiceRequest
+		assertion func(*matchingservice.UpdateNexusIncomingServiceResponse, error)
 	}
 	testCases := []testcase{
 		{
-			name: "valid create",
-			service: &nexus.IncomingService{
-				Version:   0,
-				Name:      "testService",
-				Namespace: s.namespace,
-				TaskQueue: s.defaultTaskQueue().Name,
-			},
-			assertion: func(resp *matchingservice.CreateOrUpdateNexusIncomingServiceResponse, err error) {
-				s.NoError(err)
-				s.NotNil(resp.Entry)
-				s.Equal(int64(1), resp.Entry.Version)
-			},
-		},
-		{
-			name: "invalid create: service already exists",
-			service: &nexus.IncomingService{
-				Version:   0,
-				Name:      "testService",
-				Namespace: s.namespace,
-				TaskQueue: s.defaultTaskQueue().Name,
-			},
-			assertion: func(resp *matchingservice.CreateOrUpdateNexusIncomingServiceResponse, err error) {
-				var existsErr *serviceerror.AlreadyExists
-				s.ErrorAs(err, &existsErr)
-			},
-		},
-		{
 			name: "valid update",
-			service: &nexus.IncomingService{
-				Version:   1,
-				Name:      "testService",
-				Namespace: s.namespace,
-				TaskQueue: s.defaultTaskQueue().Name,
+			request: &matchingservice.UpdateNexusIncomingServiceRequest{
+				Version: 1,
+				Id:      service.Id,
+				Spec: &nexus.IncomingServiceSpec{
+					Name:      "updated name",
+					Namespace: s.namespace,
+					TaskQueue: s.defaultTaskQueue().Name,
+				},
 			},
-			assertion: func(resp *matchingservice.CreateOrUpdateNexusIncomingServiceResponse, err error) {
+			assertion: func(resp *matchingservice.UpdateNexusIncomingServiceResponse, err error) {
 				s.NoError(err)
-				s.NotNil(resp.Entry)
-				s.Equal(int64(2), resp.Entry.Version)
+				s.NotNil(resp.Service)
+				s.Equal("/api/v1/services/"+service.Id, service.UrlPrefix)
+				s.Equal(int64(2), resp.Service.Version)
+				s.Equal("updated name", resp.Service.Spec.Name)
+				s.NotNil(resp.Service.LastModifiedTime)
 			},
 		},
 		{
 			name: "invalid update: service not found",
-			service: &nexus.IncomingService{
-				Version:   1,
-				Name:      "missing-service",
-				Namespace: s.namespace,
-				TaskQueue: s.defaultTaskQueue().Name,
+			request: &matchingservice.UpdateNexusIncomingServiceRequest{
+				Version: 1,
+				Id:      "not-found",
+				Spec: &nexus.IncomingServiceSpec{
+					Name:      "updated name",
+					Namespace: s.namespace,
+					TaskQueue: s.defaultTaskQueue().Name,
+				},
 			},
-			assertion: func(resp *matchingservice.CreateOrUpdateNexusIncomingServiceResponse, err error) {
+			assertion: func(resp *matchingservice.UpdateNexusIncomingServiceResponse, err error) {
 				var notFoundErr *serviceerror.NotFound
 				s.ErrorAs(err, &notFoundErr)
 			},
 		},
 		{
 			name: "invalid update: service version mismatch",
-			service: &nexus.IncomingService{
-				Version:   1,
-				Name:      "testService",
-				Namespace: s.namespace,
-				TaskQueue: s.defaultTaskQueue().Name,
+			request: &matchingservice.UpdateNexusIncomingServiceRequest{
+				Version: 1,
+				Id:      service.Id,
+				Spec: &nexus.IncomingServiceSpec{
+					Name:      "updated name",
+					Namespace: s.namespace,
+					TaskQueue: s.defaultTaskQueue().Name,
+				},
 			},
-			assertion: func(resp *matchingservice.CreateOrUpdateNexusIncomingServiceResponse, err error) {
-				var invalidErr *serviceerror.InvalidArgument
-				s.ErrorAs(err, &invalidErr)
+			assertion: func(resp *matchingservice.UpdateNexusIncomingServiceResponse, err error) {
+				var fpErr *serviceerror.FailedPrecondition
+				s.ErrorAs(err, &fpErr)
 			},
 		},
 	}
@@ -113,41 +118,37 @@ func (s *FunctionalSuite) TestCreateOrUpdateNexusIncomingService_Matching() {
 	for _, tc := range testCases {
 		tc := tc
 		s.T().Run(tc.name, func(t *testing.T) {
-			resp, err := matchingClient.CreateOrUpdateNexusIncomingService(
-				NewContext(),
-				&matchingservice.CreateOrUpdateNexusIncomingServiceRequest{
-					Service: tc.service,
-				})
+			resp, err := matchingClient.UpdateNexusIncomingService(NewContext(), tc.request)
 			tc.assertion(resp, err)
 		})
 	}
 }
 
 func (s *FunctionalSuite) TestDeleteNexusIncomingService_Matching() {
+	service := s.createNexusIncomingService("service-to-delete")
 	type testcase struct {
-		name        string
-		serviceName string
-		assertion   func(*matchingservice.DeleteNexusIncomingServiceResponse, error)
+		name      string
+		serviceId string
+		assertion func(*matchingservice.DeleteNexusIncomingServiceResponse, error)
 	}
 	testCases := []testcase{
 		{
-			name:        "invalid delete: not found",
-			serviceName: "missing-service",
+			name:      "invalid delete: not found",
+			serviceId: "missing-service",
 			assertion: func(resp *matchingservice.DeleteNexusIncomingServiceResponse, err error) {
 				var notFoundErr *serviceerror.NotFound
 				s.ErrorAs(err, &notFoundErr)
 			},
 		},
 		{
-			name:        "valid delete",
-			serviceName: "service-to-delete",
+			name:      "valid delete",
+			serviceId: service.Id,
 			assertion: func(resp *matchingservice.DeleteNexusIncomingServiceResponse, err error) {
 				s.NoError(err)
 			},
 		},
 	}
 
-	s.createNexusIncomingService("service-to-delete")
 	matchingClient := s.testCluster.GetMatchingClient()
 	for _, tc := range testCases {
 		tc := tc
@@ -155,7 +156,7 @@ func (s *FunctionalSuite) TestDeleteNexusIncomingService_Matching() {
 			resp, err := matchingClient.DeleteNexusIncomingService(
 				NewContext(),
 				&matchingservice.DeleteNexusIncomingServiceRequest{
-					Name: tc.serviceName,
+					Id: tc.serviceId,
 				})
 			tc.assertion(resp, err)
 		})
@@ -180,7 +181,7 @@ func (s *FunctionalSuite) TestListNexusIncomingServices_Matching() {
 	s.NoError(err)
 	s.NotNil(resp)
 	tableVersion := resp.TableVersion
-	servicesOrdered := resp.Entries
+	servicesOrdered := resp.Services
 	nextPageToken := []byte(servicesOrdered[2].Id)
 
 	type testcase struct {
@@ -201,7 +202,7 @@ func (s *FunctionalSuite) TestListNexusIncomingServices_Matching() {
 				s.NoError(err)
 				s.Equal(tableVersion, resp.TableVersion)
 				s.Equal([]byte(servicesOrdered[2].Id), resp.NextPageToken)
-				s.ProtoElementsMatch(resp.Entries, servicesOrdered[0:2])
+				s.ProtoElementsMatch(resp.Services, servicesOrdered[0:2])
 			},
 		},
 		{
@@ -215,7 +216,7 @@ func (s *FunctionalSuite) TestListNexusIncomingServices_Matching() {
 			assertion: func(resp *matchingservice.ListNexusIncomingServicesResponse, err error) {
 				s.NoError(err)
 				s.Equal(tableVersion, resp.TableVersion)
-				s.ProtoElementsMatch(resp.Entries, servicesOrdered[0:3])
+				s.ProtoElementsMatch(resp.Services, servicesOrdered[0:3])
 			},
 		},
 		{
@@ -255,7 +256,7 @@ func (s *FunctionalSuite) TestListNexusIncomingServices_Matching() {
 			assertion: func(resp *matchingservice.ListNexusIncomingServicesResponse, err error) {
 				s.NoError(err)
 				s.Equal(tableVersion, resp.TableVersion)
-				s.ProtoEqual(resp.Entries[0], servicesOrdered[2])
+				s.ProtoEqual(resp.Services[0], servicesOrdered[2])
 			},
 		},
 		{
@@ -283,7 +284,7 @@ func (s *FunctionalSuite) TestListNexusIncomingServices_Matching() {
 				s.NoError(err)
 				s.Equal(tableVersion+1, resp.TableVersion)
 				s.NotNil(resp.NextPageToken)
-				s.Len(resp.Entries, 3)
+				s.Len(resp.Services, 3)
 			},
 		},
 	}
@@ -345,7 +346,7 @@ func (s *FunctionalSuite) TestListNexusIncomingServicesOrdering_Matching() {
 		PageSize:              int32(numServices / 2),
 	})
 	s.NoError(err)
-	s.Len(matchingResp1.Entries, numServices/2)
+	s.Len(matchingResp1.Services, numServices/2)
 	s.NotNil(matchingResp1.NextPageToken)
 	matchingResp2, err := matchingClient.ListNexusIncomingServices(NewContext(), &matchingservice.ListNexusIncomingServicesRequest{
 		LastKnownTableVersion: tableVersion,
@@ -353,21 +354,20 @@ func (s *FunctionalSuite) TestListNexusIncomingServicesOrdering_Matching() {
 		NextPageToken:         matchingResp1.NextPageToken,
 	})
 	s.NoError(err)
-	s.Len(matchingResp2.Entries, numServices/2)
+	s.Len(matchingResp2.Services, numServices/2)
 
 	// assert list orders match
 	for i := 0; i < numServices/2; i++ {
-		s.ProtoEqual(persistenceResp1.Entries[i], matchingResp1.Entries[i])
-		s.ProtoEqual(persistenceResp2.Entries[i], matchingResp2.Entries[i])
+		s.Equal(persistenceResp1.Entries[i].Id, matchingResp1.Services[i].Id)
+		s.Equal(persistenceResp2.Entries[i].Id, matchingResp2.Services[i].Id)
 	}
 }
 
-func (s *FunctionalSuite) createNexusIncomingService(name string) *persistencepb.NexusIncomingServiceEntry {
-	resp, err := s.testCluster.GetMatchingClient().CreateOrUpdateNexusIncomingService(
+func (s *FunctionalSuite) createNexusIncomingService(name string) *nexus.IncomingService {
+	resp, err := s.testCluster.GetMatchingClient().CreateNexusIncomingService(
 		NewContext(),
-		&matchingservice.CreateOrUpdateNexusIncomingServiceRequest{
-			Service: &nexus.IncomingService{
-				Version:   0,
+		&matchingservice.CreateNexusIncomingServiceRequest{
+			Spec: &nexus.IncomingServiceSpec{
 				Name:      name,
 				Namespace: s.namespace,
 				TaskQueue: s.defaultTaskQueue().Name,
@@ -375,6 +375,6 @@ func (s *FunctionalSuite) createNexusIncomingService(name string) *persistencepb
 		})
 
 	s.NoError(err)
-	s.NotNil(resp.Entry)
-	return resp.Entry
+	s.NotNil(resp.Service)
+	return resp.Service
 }
