@@ -27,9 +27,9 @@ package static
 import (
 	"fmt"
 
-	"go.temporal.io/server/common/primitives"
 	"go.uber.org/fx"
 
+	"go.temporal.io/server/common/primitives"
 	"go.temporal.io/server/common/membership"
 )
 
