@@ -59,13 +59,6 @@ const (
 		`and task_id >= ? ` +
 		`and task_id < ?`
 
-	templateCompleteTaskQuery = `DELETE FROM tasks ` +
-		`WHERE namespace_id = ? ` +
-		`and task_queue_name = ? ` +
-		`and task_queue_type = ? ` +
-		`and type = ? ` +
-		`and task_id = ?`
-
 	templateCompleteTasksLessThanQuery = `DELETE FROM tasks ` +
 		`WHERE namespace_id = ? ` +
 		`AND task_queue_name = ? ` +
