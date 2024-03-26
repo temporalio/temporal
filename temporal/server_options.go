@@ -31,6 +31,7 @@ import (
 	"golang.org/x/exp/slices"
 	"google.golang.org/grpc"
 
+	"go.temporal.io/server/common/membership/static"
 	"go.temporal.io/server/client"
 	"go.temporal.io/server/common/authorization"
 	"go.temporal.io/server/common/config"
@@ -54,10 +55,11 @@ type (
 	serverOptions struct {
 		serviceNames map[primitives.ServiceName]struct{}
 
-		config    *config.Config
-		configDir string
-		env       string
-		zone      string
+		config         *config.Config
+		configDir      string
+		env            string
+		zone           string
+		hostsByService map[primitives.ServiceName]static.Hosts
 
 		startupSynchronizationMode synchronizationModeParams
 
