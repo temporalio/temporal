@@ -805,7 +805,7 @@ func (e *matchingEngineImpl) DescribeTaskQueue(
 		versionsInfo := make([]*taskqueuepb.TaskQueueVersionInfo, 0)
 		// for _, queue_type := range request.DescRequest.TaskQueueTypes {
 		//	for partition {
-		//		partitionResp, err := pm.DescribeTaskQueuePartition(&matchingservice.DescribeTaskQueuePartitionRequest{
+		//		partitionResp, err := pm.Describe(&matchingservice.DescribeTaskQueuePartitionRequest{
 		//			NamespaceId:            request.NamespaceId,
 		//			TaskQueuePartition:     &taskqueue.TaskQueuePartition{make with a helper fn},
 		//			Versions:               request.DescRequest.Versions,
