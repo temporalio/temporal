@@ -111,10 +111,10 @@ func NewPriorityNamespaceRateLimiter(
 ) quotas.RequestRateLimiter {
 
 	return quotas.NewMultiRequestRateLimiter(
-		// per namespaceID rate limiters
-		newPriorityNamespaceRateLimiter(namespaceMaxQPS, hostMaxQPS, requestPriorityFn, operatorRPSRatio),
 		// per shardID+namespaceID rate limiters
 		newPerShardPerNamespacePriorityRateLimiter(perShardNamespaceMaxQPS, hostMaxQPS, requestPriorityFn, operatorRPSRatio),
+		// per namespaceID rate limiters
+		newPriorityNamespaceRateLimiter(namespaceMaxQPS, hostMaxQPS, requestPriorityFn, operatorRPSRatio),
 	)
 }
 
