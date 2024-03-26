@@ -177,6 +177,7 @@ func (w *taskWriter) appendTask(
 		metrics.TaskWriteThrottlePerTaskQueueCounter.With(w.tlMgr.metricsHandler).Record(1)
 		return nil, serviceerror.NewResourceExhausted(
 			enumspb.RESOURCE_EXHAUSTED_CAUSE_SYSTEM_OVERLOADED,
+			enumspb.RESOURCE_SCOPE_SYSTEM,
 			"Too many outstanding appends to the task queue")
 	}
 }

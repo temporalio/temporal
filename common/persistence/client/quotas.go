@@ -84,7 +84,6 @@ var (
 )
 
 func NewPriorityRateLimiter(
-	namespaceMaxQPS PersistenceNamespaceMaxQps,
 	hostMaxQPS PersistenceMaxQps,
 	perShardNamespaceMaxQPS PersistencePerShardNamespaceMaxQPS,
 	requestPriorityFn quotas.RequestPriorityFn,
@@ -99,8 +98,6 @@ func NewPriorityRateLimiter(
 	return quotas.NewMultiRequestRateLimiter(
 		// per shardID+namespaceID rate limiters
 		newPerShardPerNamespacePriorityRateLimiter(perShardNamespaceMaxQPS, hostMaxQPS, requestPriorityFn, operatorRPSRatio),
-		// per namespaceID rate limiters
-		newPriorityNamespaceRateLimiter(namespaceMaxQPS, hostMaxQPS, requestPriorityFn, operatorRPSRatio),
 		// host-level dynamic rate limiter
 		newPriorityDynamicRateLimiter(hostRateFn, requestPriorityFn, operatorRPSRatio, healthSignals, dynamicParams, metricsHandler, logger),
 		// basic host-level rate limiter
@@ -139,7 +136,7 @@ func perShardPerNamespaceKeyFn(req quotas.Request) perShardPerNamespaceKey {
 	}
 }
 
-func newPriorityNamespaceRateLimiter(
+func NewPriorityNamespaceRateLimiter(
 	namespaceMaxQPS PersistenceNamespaceMaxQps,
 	hostMaxQPS PersistenceMaxQps,
 	requestPriorityFn quotas.RequestPriorityFn,

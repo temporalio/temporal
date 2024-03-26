@@ -39,6 +39,7 @@ var (
 	// ErrCacheFull is returned if Put fails due to cache being filled with pinned elements
 	ErrCacheFull = serviceerror.NewResourceExhausted(
 		enumspb.RESOURCE_EXHAUSTED_CAUSE_SYSTEM_OVERLOADED,
+		enumspb.RESOURCE_SCOPE_SYSTEM,
 		"cache capacity is fully occupied with pinned elements",
 	)
 	// ErrCacheItemTooLarge is returned if Put fails due to item size being larger than max cache capacity
