@@ -634,7 +634,7 @@ func (s *FunctionalSuite) TestUpdateWorkflow_NormalScheduledWorkflowTask_AcceptC
 			}()
 			// Signal creates WFT, and it is important to wait for update to get blocked,
 			// to make sure that poll bellow won't poll just for WFT from signal.
-			runtime.WaitGoRoutineWithFn(s.T(), ((*update.Update)(nil)).WaitOutcome, 1*time.Second)
+			runtime.WaitGoRoutineWithFn(s.T(), ((*update.Update)(nil)).WaitLifecycleStage, 1*time.Second)
 
 			// Process update in workflow. It will be attached to existing WT.
 			res, err := poller.PollAndProcessWorkflowTask(WithRetries(1), WithForceNewWorkflowTask)
@@ -694,7 +694,7 @@ func (s *FunctionalSuite) TestUpdateWorkflow_NewSpeculativeFromStartedWorkflowTa
 				updateResultCh <- s.sendUpdateNoError(tv, "1")
 			}()
 			// To make sure that 1st update gets to the sever while WT1 is running.
-			runtime.WaitGoRoutineWithFn(s.T(), ((*update.Update)(nil)).WaitOutcome, 1*time.Second)
+			runtime.WaitGoRoutineWithFn(s.T(), ((*update.Update)(nil)).WaitLifecycleStage, 1*time.Second)
 			// Completes WT with empty command list to create next WT as speculative.
 			return nil, nil
 		case 2:
@@ -811,7 +811,7 @@ func (s *FunctionalSuite) TestUpdateWorkflow_NewNormalFromStartedWorkflowTask_Re
 				updateResultCh <- s.sendUpdateNoError(tv, "1")
 			}()
 			// To make sure that 1st update gets to the sever while WT1 is running.
-			runtime.WaitGoRoutineWithFn(s.T(), ((*update.Update)(nil)).WaitOutcome, 1*time.Second)
+			runtime.WaitGoRoutineWithFn(s.T(), ((*update.Update)(nil)).WaitLifecycleStage, 1*time.Second)
 			// Completes WT with update unrelated commands to prevent next WT to be speculative.
 			return []*commandpb.Command{{
 				CommandType: enumspb.COMMAND_TYPE_SCHEDULE_ACTIVITY_TASK,
@@ -2564,7 +2564,7 @@ func (s *FunctionalSuite) TestUpdateWorkflow_ConvertScheduledSpeculativeWorkflow
 		updateResultCh <- s.sendUpdateNoError(tv, "1")
 	}()
 	// This is to make sure that update gets to the server before the next Signal call.
-	runtime.WaitGoRoutineWithFn(s.T(), ((*update.Update)(nil)).WaitOutcome, 1*time.Second)
+	runtime.WaitGoRoutineWithFn(s.T(), ((*update.Update)(nil)).WaitLifecycleStage, 1*time.Second)
 
 	// Send signal which will NOT be buffered because speculative WT is not started yet (only scheduled).
 	// This will persist MS and speculative WT must be converted to normal.
@@ -3173,7 +3173,7 @@ func (s *FunctionalSuite) TestUpdateWorkflow_ScheduledSpeculativeWorkflowTask_Te
 	}
 	go updateWorkflowFn()
 	// This is to make sure that update gets to the server before the next Terminate call.
-	runtime.WaitGoRoutineWithFn(s.T(), ((*update.Update)(nil)).WaitOutcome, 1*time.Second)
+	runtime.WaitGoRoutineWithFn(s.T(), ((*update.Update)(nil)).WaitLifecycleStage, 1*time.Second)
 
 	// Terminate workflow after speculative WT is scheduled but not started.
 	_, err = s.engine.TerminateWorkflowExecution(NewContext(), &workflowservice.TerminateWorkflowExecutionRequest{
@@ -3956,7 +3956,7 @@ func (s *FunctionalSuite) TestUpdateWorkflow_ScheduledSpeculativeWorkflowTask_De
 	go func() {
 		updateResultCh <- s.sendUpdateNoError(tv, "1")
 	}()
-	runtime.WaitGoRoutineWithFn(s.T(), ((*update.Update)(nil)).WaitOutcome, 1*time.Second)
+	runtime.WaitGoRoutineWithFn(s.T(), ((*update.Update)(nil)).WaitLifecycleStage, 1*time.Second)
 
 	// Send second update with the same ID.
 	updateResultCh2 := make(chan *workflowservice.UpdateWorkflowExecutionResponse)
@@ -4021,7 +4021,7 @@ func (s *FunctionalSuite) TestUpdateWorkflow_StartedSpeculativeWorkflowTask_Dedu
 			go func() {
 				updateResultCh2 <- s.sendUpdateNoError(tv, "1")
 			}()
-			runtime.WaitGoRoutineWithFn(s.T(), ((*update.Update)(nil)).WaitOutcome, 1*time.Second)
+			runtime.WaitGoRoutineWithFn(s.T(), ((*update.Update)(nil)).WaitLifecycleStage, 1*time.Second)
 
 			s.EqualHistory(`
   1 WorkflowExecutionStarted
@@ -5038,7 +5038,7 @@ func (s *FunctionalSuite) TestUpdateWorkflow_NewSpeculativeWorkflowTask_WorkerSk
 				update2ResultCh <- s.sendUpdateNoError(tv, "2")
 			}()
 			// To make sure that gets to the sever while this WT is running.
-			runtime.WaitGoRoutineWithFn(s.T(), ((*update.Update)(nil)).WaitOutcome, 1*time.Second)
+			runtime.WaitGoRoutineWithFn(s.T(), ((*update.Update)(nil)).WaitLifecycleStage, 1*time.Second)
 			return nil, nil
 		case 3:
 			s.EqualHistory(`
