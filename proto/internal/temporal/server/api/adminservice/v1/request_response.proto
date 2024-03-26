@@ -297,7 +297,7 @@ message ListClustersResponse {
 message AddOrUpdateRemoteClusterRequest {
   string frontend_address = 1;
   bool enable_remote_cluster_connection = 2;
-  string http_address = 3;
+  string frontend_http_address = 3;
 }
 
 message AddOrUpdateRemoteClusterResponse {

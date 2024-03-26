@@ -1281,8 +1281,8 @@ func (s *operatorHandlerSuite) Test_AddOrUpdateRemoteCluster_RecordFound_Success
 		Version: recordVersion,
 	}).Return(true, nil)
 	_, err := s.handler.AddOrUpdateRemoteCluster(context.Background(), &operatorservice.AddOrUpdateRemoteClusterRequest{
-		FrontendAddress: rpcAddress,
-		HttpAddress:     httpAddress,
+		FrontendAddress:     rpcAddress,
+		FrontendHttpAddress: httpAddress,
 	})
 	s.NoError(err)
 }
@@ -1325,8 +1325,8 @@ func (s *operatorHandlerSuite) Test_AddOrUpdateRemoteCluster_RecordNotFound_Succ
 		Version: 0,
 	}).Return(true, nil)
 	_, err := s.handler.AddOrUpdateRemoteCluster(context.Background(), &operatorservice.AddOrUpdateRemoteClusterRequest{
-		FrontendAddress: rpcAddress,
-		HttpAddress:     httpAddress,
+		FrontendAddress:     rpcAddress,
+		FrontendHttpAddress: httpAddress,
 	})
 	s.NoError(err)
 }
@@ -1437,8 +1437,8 @@ func (s *operatorHandlerSuite) Test_AddOrUpdateRemoteCluster_ShardCount_Multiple
 		Version: recordVersion,
 	}).Return(true, nil)
 	_, err := s.handler.AddOrUpdateRemoteCluster(context.Background(), &operatorservice.AddOrUpdateRemoteClusterRequest{
-		FrontendAddress: rpcAddress,
-		HttpAddress:     httpAddress,
+		FrontendAddress:     rpcAddress,
+		FrontendHttpAddress: httpAddress,
 	})
 	s.NoError(err)
 }
@@ -1571,8 +1571,8 @@ func (s *operatorHandlerSuite) Test_AddOrUpdateRemoteCluster_SaveClusterMetadata
 		Version: 0,
 	}).Return(false, fmt.Errorf("test error"))
 	_, err := s.handler.AddOrUpdateRemoteCluster(context.Background(), &operatorservice.AddOrUpdateRemoteClusterRequest{
-		FrontendAddress: rpcAddress,
-		HttpAddress:     httpAddress,
+		FrontendAddress:     rpcAddress,
+		FrontendHttpAddress: httpAddress,
 	})
 	s.Error(err)
 }
@@ -1615,8 +1615,8 @@ func (s *operatorHandlerSuite) Test_AddOrUpdateRemoteCluster_SaveClusterMetadata
 		Version: 0,
 	}).Return(false, nil)
 	_, err := s.handler.AddOrUpdateRemoteCluster(context.Background(), &operatorservice.AddOrUpdateRemoteClusterRequest{
-		FrontendAddress: rpcAddress,
-		HttpAddress:     httpAddress,
+		FrontendAddress:     rpcAddress,
+		FrontendHttpAddress: httpAddress,
 	})
 	s.Error(err)
 	s.IsType(&serviceerror.InvalidArgument{}, err)
