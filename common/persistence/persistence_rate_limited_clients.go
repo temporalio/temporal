@@ -1112,6 +1112,7 @@ func allow(
 	namespaceRateLimiter quotas.RequestRateLimiter,
 ) error {
 	callerInfo := headers.GetCallerInfo(ctx)
+	// namespace-level rate limits has to be applied before system-level rate limits.
 	if ok := namespaceRateLimiter.Allow(time.Now().UTC(), quotas.NewRequest(
 		api,
 		RateLimitDefaultToken,
