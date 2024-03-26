@@ -40,6 +40,7 @@ import (
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
+	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/util"
 )
 
@@ -52,6 +53,11 @@ type (
 	// JWTAudienceMapper returns JWT audience for a given request
 	JWTAudienceMapper interface {
 		Audience(ctx context.Context, req interface{}, info *grpc.UnaryServerInfo) string
+	}
+
+	NamespaceChecker interface {
+		// Exists returns nil if the namespace exists, otherwise an error.
+		Exists(name namespace.Name) error
 	}
 )
 
@@ -100,6 +106,7 @@ type Interceptor struct {
 	authorizer          Authorizer
 	metricsHandler      metrics.Handler
 	logger              log.Logger
+	namespaceChecker    NamespaceChecker
 	audienceGetter      JWTAudienceMapper
 	authHeaderName      string
 	authExtraHeaderName string
@@ -111,6 +118,7 @@ func NewInterceptor(
 	authorizer Authorizer,
 	metricsHandler metrics.Handler,
 	logger log.Logger,
+	namespaceChecker NamespaceChecker,
 	audienceGetter JWTAudienceMapper,
 	authHeaderName string,
 	authExtraHeaderName string,
@@ -119,6 +127,7 @@ func NewInterceptor(
 		claimMapper:         claimMapper,
 		authorizer:          authorizer,
 		logger:              logger,
+		namespaceChecker:    namespaceChecker,
 		metricsHandler:      metricsHandler,
 		authHeaderName:      util.Coalesce(authHeaderName, defaultAuthHeaderName),
 		authExtraHeaderName: util.Coalesce(authExtraHeaderName, defaultAuthExtraHeaderName),
@@ -254,12 +263,15 @@ func (a *Interceptor) Authorize(ctx context.Context, claims *Claims, ct *CallTar
 }
 
 // getMetricsHandler returns a metrics handler with a namespace tag
-func (a *Interceptor) getMetricsHandler(namespace string) metrics.Handler {
-	var metricsHandler metrics.Handler
-	if namespace != "" {
-		metricsHandler = a.metricsHandler.WithTags(metrics.OperationTag(metrics.AuthorizationScope), metrics.NamespaceTag(namespace))
-	} else {
-		metricsHandler = a.metricsHandler.WithTags(metrics.OperationTag(metrics.AuthorizationScope), metrics.NamespaceUnknownTag())
+func (a *Interceptor) getMetricsHandler(nsName string) metrics.Handler {
+	nsTag := metrics.NamespaceUnknownTag()
+	if nsName != "" {
+		// Note that this is before the namespace state validation interceptor, so this
+		// namespace name is not validated. We should only use it as a metric tag if it's a
+		// real namespace, to avoid unbounded cardinality issues.
+		if a.namespaceChecker.Exists(namespace.Name(nsName)) == nil {
+			nsTag = metrics.NamespaceTag(nsName)
+		}
 	}
-	return metricsHandler
+	return a.metricsHandler.WithTags(metrics.OperationTag(metrics.AuthorizationScope), nsTag)
 }

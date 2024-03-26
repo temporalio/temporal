@@ -30,6 +30,7 @@ import (
 	"errors"
 	"fmt"
 	"math"
+	"math/rand"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -864,6 +865,24 @@ func (e *matchingEngineImpl) QueryWorkflow(
 			return nil, serviceerror.NewInternal("unknown query completed type")
 		}
 	case <-ctx.Done():
+		// task timed out. log (optionally) and return the timeout error
+		ns, err := e.namespaceRegistry.GetNamespaceByID(namespaceID)
+		if err != nil {
+			e.logger.Error("Failed to get the namespace by ID",
+				tag.WorkflowNamespaceID(string(namespaceID)),
+				tag.Error(err))
+		} else {
+			sampleRate := e.config.QueryWorkflowTaskTimeoutLogRate(ns.Name().String(), taskQueueName, enumspb.TASK_QUEUE_TYPE_WORKFLOW)
+			if rand.Float64() < sampleRate {
+				e.logger.Info("Workflow Query Task timed out",
+					tag.WorkflowNamespaceID(ns.ID().String()),
+					tag.WorkflowNamespace(ns.Name().String()),
+					tag.WorkflowID(queryRequest.GetQueryRequest().GetExecution().GetWorkflowId()),
+					tag.WorkflowRunID(queryRequest.GetQueryRequest().GetExecution().GetRunId()),
+					tag.WorkflowTaskRequestId(taskID),
+					tag.WorkflowTaskQueueName(taskQueueName))
+			}
+		}
 		return nil, ctx.Err()
 	}
 }
@@ -1431,13 +1450,28 @@ func (e *matchingEngineImpl) RespondNexusTaskFailed(ctx context.Context, request
 	return &matchingservice.RespondNexusTaskFailedResponse{}, nil
 }
 
-func (e *matchingEngineImpl) CreateOrUpdateNexusIncomingService(ctx context.Context, request *matchingservice.CreateOrUpdateNexusIncomingServiceRequest) (*matchingservice.CreateOrUpdateNexusIncomingServiceResponse, error) {
-	namespaceID, err := e.namespaceRegistry.GetNamespaceID(namespace.Name(request.Service.Namespace))
+func (e *matchingEngineImpl) CreateNexusIncomingService(ctx context.Context, request *matchingservice.CreateNexusIncomingServiceRequest) (*matchingservice.CreateNexusIncomingServiceResponse, error) {
+	namespaceID, err := e.namespaceRegistry.GetNamespaceID(namespace.Name(request.GetSpec().GetNamespace()))
 	if err != nil {
 		return nil, err
 	}
-	return e.incomingServiceManager.CreateOrUpdateNexusIncomingService(ctx, &internalCreateOrUpdateRequest{
-		service:     request.Service,
+	return e.incomingServiceManager.CreateNexusIncomingService(ctx, &internalCreateRequest{
+		spec:        request.GetSpec(),
+		namespaceID: namespaceID.String(),
+		clusterID:   e.clusterMeta.GetClusterID(),
+		timeSource:  e.timeSource,
+	})
+}
+
+func (e *matchingEngineImpl) UpdateNexusIncomingService(ctx context.Context, request *matchingservice.UpdateNexusIncomingServiceRequest) (*matchingservice.UpdateNexusIncomingServiceResponse, error) {
+	namespaceID, err := e.namespaceRegistry.GetNamespaceID(namespace.Name(request.GetSpec().GetNamespace()))
+	if err != nil {
+		return nil, err
+	}
+	return e.incomingServiceManager.UpdateNexusIncomingService(ctx, &internalUpdateRequest{
+		serviceID:   request.GetId(),
+		version:     request.GetVersion(),
+		spec:        request.GetSpec(),
 		namespaceID: namespaceID.String(),
 		clusterID:   e.clusterMeta.GetClusterID(),
 		timeSource:  e.timeSource,

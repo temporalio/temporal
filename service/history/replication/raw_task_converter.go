@@ -264,6 +264,8 @@ func convertHistoryReplicationTask(
 			definition.NewWorkflowKey(taskInfo.NamespaceID, taskInfo.WorkflowID, taskInfo.NewRunID),
 			taskInfo.Version,
 			common.FirstEventID,
+			// when generating the replication task,
+			// we validated that new run contains only 1 replication task (event batch)
 			common.FirstEventID+1,
 			workflowCache,
 			eventBlobCache,
@@ -290,6 +292,7 @@ func convertHistoryReplicationTask(
 				VersionHistoryItems: currentVersionHistory,
 				Events:              currentEvents,
 				NewRunEvents:        newEvents,
+				NewRunId:            taskInfo.NewRunID,
 			},
 		},
 		VisibilityTime: timestamppb.New(taskInfo.VisibilityTimestamp),

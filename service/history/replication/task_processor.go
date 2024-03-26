@@ -401,6 +401,7 @@ func (p *taskProcessorImpl) convertTaskToDLQTask(
 				TaskType:         enumsspb.TASK_TYPE_REPLICATION_SYNC_ACTIVITY,
 				ScheduledEventId: taskAttributes.GetScheduledEventId(),
 				Version:          taskAttributes.GetVersion(),
+				VisibilityTime:   replicationTask.GetVisibilityTime(),
 			},
 		}, nil
 
@@ -426,14 +427,17 @@ func (p *taskProcessorImpl) convertTaskToDLQTask(
 			ShardID:           p.shard.GetShardID(),
 			SourceClusterName: p.sourceCluster,
 			TaskInfo: &persistencespb.ReplicationTaskInfo{
-				NamespaceId:  taskAttributes.GetNamespaceId(),
-				WorkflowId:   taskAttributes.GetWorkflowId(),
-				RunId:        taskAttributes.GetRunId(),
-				TaskId:       replicationTask.GetSourceTaskId(),
-				TaskType:     enumsspb.TASK_TYPE_REPLICATION_HISTORY,
-				FirstEventId: firstEvent.GetEventId(),
-				NextEventId:  nextEventID,
-				Version:      firstEvent.GetVersion(),
+				NamespaceId:    taskAttributes.GetNamespaceId(),
+				WorkflowId:     taskAttributes.GetWorkflowId(),
+				RunId:          taskAttributes.GetRunId(),
+				TaskId:         replicationTask.GetSourceTaskId(),
+				TaskType:       enumsspb.TASK_TYPE_REPLICATION_HISTORY,
+				FirstEventId:   firstEvent.GetEventId(),
+				NextEventId:    nextEventID,
+				Version:        firstEvent.GetVersion(),
+				VisibilityTime: replicationTask.GetVisibilityTime(),
+				NewRunId:       taskAttributes.GetNewRunId(),
+				// BranchToken & NewRunBranchToken should also be populated but are deprecated
 			},
 		}, nil
 
@@ -455,12 +459,13 @@ func (p *taskProcessorImpl) convertTaskToDLQTask(
 			ShardID:           p.shard.GetShardID(),
 			SourceClusterName: p.sourceCluster,
 			TaskInfo: &persistencespb.ReplicationTaskInfo{
-				NamespaceId: executionInfo.GetNamespaceId(),
-				WorkflowId:  executionInfo.GetWorkflowId(),
-				RunId:       executionState.GetRunId(),
-				TaskId:      replicationTask.GetSourceTaskId(),
-				TaskType:    enumsspb.TASK_TYPE_REPLICATION_SYNC_WORKFLOW_STATE,
-				Version:     lastItem.GetVersion(),
+				NamespaceId:    executionInfo.GetNamespaceId(),
+				WorkflowId:     executionInfo.GetWorkflowId(),
+				RunId:          executionState.GetRunId(),
+				TaskId:         replicationTask.GetSourceTaskId(),
+				TaskType:       enumsspb.TASK_TYPE_REPLICATION_SYNC_WORKFLOW_STATE,
+				Version:        lastItem.GetVersion(),
+				VisibilityTime: replicationTask.GetVisibilityTime(),
 			},
 		}, nil
 

@@ -29,6 +29,7 @@ import (
 	"net"
 
 	"github.com/gorilla/mux"
+	"go.temporal.io/server/common/nexus"
 	"go.uber.org/fx"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/health"
@@ -72,6 +73,10 @@ import (
 
 type (
 	FEReplicatorNamespaceReplicationQueue persistence.NamespaceReplicationQueue
+
+	namespaceChecker struct {
+		r namespace.Registry
+	}
 )
 
 var Module = fx.Options(
@@ -97,6 +102,7 @@ var Module = fx.Options(
 	service.PersistenceLazyLoadedServiceResolverModule,
 	fx.Provide(FEReplicatorNamespaceReplicationQueueProvider),
 	fx.Provide(AuthorizationInterceptorProvider),
+	fx.Provide(NamespaceCheckerProvider),
 	fx.Provide(func(so GrpcServerOptions) *grpc.Server { return grpc.NewServer(so.Options...) }),
 	fx.Provide(HandlerProvider),
 	fx.Provide(AdminHandlerProvider),
@@ -107,6 +113,7 @@ var Module = fx.Options(
 	fx.Provide(OpenAPIHTTPHandlerProvider),
 	fx.Provide(HTTPAPIServerProvider),
 	fx.Provide(NewServiceProvider),
+	fx.Provide(OutgoingServiceRegistryProvider),
 	fx.Invoke(ServiceLifetimeHooks),
 )
 
@@ -154,6 +161,7 @@ type GrpcServerOptions struct {
 func AuthorizationInterceptorProvider(
 	cfg *config.Config,
 	logger log.Logger,
+	namespaceChecker authorization.NamespaceChecker,
 	metricsHandler metrics.Handler,
 	authorizer authorization.Authorizer,
 	claimMapper authorization.ClaimMapper,
@@ -164,10 +172,24 @@ func AuthorizationInterceptorProvider(
 		authorizer,
 		metricsHandler,
 		logger,
+		namespaceChecker,
 		audienceGetter,
 		cfg.Global.Authorization.AuthHeaderName,
 		cfg.Global.Authorization.AuthExtraHeaderName,
 	)
+}
+
+func NamespaceCheckerProvider(registry namespace.Registry) authorization.NamespaceChecker {
+	return &namespaceChecker{r: registry}
+}
+
+func (n *namespaceChecker) Exists(name namespace.Name) error {
+	// This will get called before the namespace state validation interceptor. We want to
+	// disable readthrough to avoid polluting the negative lookup cache, e.g. if this call is
+	// for RegisterNamespace and the namespace doesn't exist yet.
+	opts := namespace.GetNamespaceOptions{DisableReadthrough: true}
+	_, err := n.r.GetNamespaceWithOptions(name, opts)
+	return err
 }
 
 func GrpcServerOptionsProvider(
@@ -365,7 +387,7 @@ func NamespaceRateLimitInterceptorProvider(
 		panic("invalid service name")
 	}
 
-	rateFn := quotas.ClusterAwareNamespaceSpecificQuotaCalculator{
+	namespaceRateFn := quotas.ClusterAwareNamespaceSpecificQuotaCalculator{
 		MemberCounter:    frontendServiceResolver,
 		PerInstanceQuota: serviceConfig.MaxNamespaceRPSPerInstance,
 		GlobalQuota:      globalNamespaceRPS,
@@ -383,9 +405,9 @@ func NamespaceRateLimitInterceptorProvider(
 	namespaceRateLimiter := quotas.NewNamespaceRequestRateLimiter(
 		func(req quotas.Request) quotas.RequestRateLimiter {
 			return configs.NewRequestToRateLimiter(
-				configs.NewNamespaceRateBurst(req.Caller, rateFn, serviceConfig.MaxNamespaceBurstPerInstance),
-				configs.NewNamespaceRateBurst(req.Caller, visibilityRateFn, serviceConfig.MaxNamespaceVisibilityBurstPerInstance),
-				configs.NewNamespaceRateBurst(req.Caller, namespaceReplicationInducingRateFn, serviceConfig.MaxNamespaceNamespaceReplicationInducingAPIsBurstPerInstance),
+				configs.NewNamespaceRateBurst(req.Caller, namespaceRateFn, serviceConfig.MaxNamespaceBurstRatioPerInstance),
+				configs.NewNamespaceRateBurst(req.Caller, visibilityRateFn, serviceConfig.MaxNamespaceVisibilityBurstRatioPerInstance),
+				configs.NewNamespaceRateBurst(req.Caller, namespaceReplicationInducingRateFn, serviceConfig.MaxNamespaceNamespaceReplicationInducingAPIsBurstRatioPerInstance),
 				serviceConfig.OperatorRPSRatio,
 			)
 		},
@@ -568,6 +590,7 @@ func OperatorHandlerProvider(
 	clusterMetadataManager persistence.ClusterMetadataManager,
 	clusterMetadata cluster.Metadata,
 	clientFactory client.Factory,
+	outgoingServiceRegistry *nexus.OutgoingServiceRegistry,
 ) *OperatorHandlerImpl {
 	args := NewOperatorHandlerImplArgs{
 		configuration,
@@ -582,6 +605,7 @@ func OperatorHandlerProvider(
 		clusterMetadataManager,
 		clusterMetadata,
 		clientFactory,
+		outgoingServiceRegistry,
 	}
 	return NewOperatorHandlerImpl(args)
 }
@@ -717,6 +741,14 @@ func HTTPAPIServerProvider(
 		namespaceRegistry,
 		logger,
 	)
+}
+
+func OutgoingServiceRegistryProvider(
+	metadataManager persistence.MetadataManager,
+	dc *dynamicconfig.Collection,
+) *nexus.OutgoingServiceRegistry {
+	registryConfig := nexus.NewOutgoingServiceRegistryConfig(dc)
+	return nexus.NewOutgoingServiceRegistry(metadataManager, registryConfig)
 }
 
 func ServiceLifetimeHooks(lc fx.Lifecycle, svc *Service) {

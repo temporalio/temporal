@@ -244,6 +244,7 @@ func (e *taskExecutorImpl) handleHistoryReplicationTask(
 		Events:              attr.Events,
 		// new run events does not need version history since there is no prior events
 		NewRunEvents: attr.NewRunEvents,
+		NewRunId:     attr.NewRunId,
 	}
 	ctx, cancel := e.newTaskContext(ctx, attr.NamespaceId)
 	defer cancel()

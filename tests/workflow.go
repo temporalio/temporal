@@ -52,102 +52,133 @@ import (
 )
 
 func (s *FunctionalSuite) TestStartWorkflowExecution() {
-	id := "functional-start-workflow-test"
 	wt := "functional-start-workflow-test-type"
 	tl := "functional-start-workflow-test-taskqueue"
-	identity := "worker1"
 
-	request := &workflowservice.StartWorkflowExecutionRequest{
-		RequestId:          uuid.New(),
-		Namespace:          s.namespace,
-		WorkflowId:         id,
-		WorkflowType:       &commonpb.WorkflowType{Name: wt},
-		TaskQueue:          &taskqueuepb.TaskQueue{Name: tl, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
-		Input:              nil,
-		WorkflowRunTimeout: durationpb.New(100 * time.Second),
-		Identity:           identity,
+	makeRequest := func() *workflowservice.StartWorkflowExecutionRequest {
+		return &workflowservice.StartWorkflowExecutionRequest{
+			RequestId:          uuid.New(),
+			Namespace:          s.namespace,
+			WorkflowId:         s.randomizeStr(s.T().Name()),
+			WorkflowType:       &commonpb.WorkflowType{Name: wt},
+			TaskQueue:          &taskqueuepb.TaskQueue{Name: tl, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
+			Input:              nil,
+			WorkflowRunTimeout: durationpb.New(100 * time.Second),
+			Identity:           "worker1",
+		}
 	}
 
-	we0, err0 := s.engine.StartWorkflowExecution(NewContext(), request)
-	s.NoError(err0)
+	s.Run("start", func() {
+		request := makeRequest()
+		we, err := s.engine.StartWorkflowExecution(NewContext(), request)
+		s.NoError(err)
+		s.True(we.Started)
 
-	// Validate the default value for WorkflowTaskTimeoutSeconds
-	historyEvents := s.getHistory(s.namespace, &commonpb.WorkflowExecution{
-		WorkflowId: id,
-		RunId:      we0.RunId,
-	})
-
-	s.EqualHistoryEvents(`
+		// Validate the default value for WorkflowTaskTimeoutSeconds
+		historyEvents := s.getHistory(s.namespace, &commonpb.WorkflowExecution{
+			WorkflowId: request.WorkflowId,
+			RunId:      we.RunId,
+		})
+		s.EqualHistoryEvents(`
   1 WorkflowExecutionStarted {"Attempt":1,"WorkflowTaskTimeout":{"Nanos":0,"Seconds":10}}
   2 WorkflowTaskScheduled`, historyEvents)
+	})
 
-	we1, err1 := s.engine.StartWorkflowExecution(NewContext(), request)
-	s.NoError(err1)
-	s.Equal(we0.RunId, we1.RunId)
+	s.Run("start twice - same request", func() {
+		request := makeRequest()
 
-	newRequest := &workflowservice.StartWorkflowExecutionRequest{
-		RequestId:           uuid.New(),
-		Namespace:           s.namespace,
-		WorkflowId:          id,
-		WorkflowType:        &commonpb.WorkflowType{Name: wt},
-		TaskQueue:           &taskqueuepb.TaskQueue{Name: tl, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
-		Input:               nil,
-		WorkflowRunTimeout:  durationpb.New(100 * time.Second),
-		WorkflowTaskTimeout: durationpb.New(1 * time.Second),
-		Identity:            identity,
-	}
-	we2, err2 := s.engine.StartWorkflowExecution(NewContext(), newRequest)
-	s.Error(err2)
-	var alreadyStarted *serviceerror.WorkflowExecutionAlreadyStarted
-	s.ErrorAs(err2, &alreadyStarted)
-	s.Nil(we2)
+		we0, err0 := s.engine.StartWorkflowExecution(NewContext(), request)
+		s.NoError(err0)
+		s.True(we0.Started)
+
+		we1, err1 := s.engine.StartWorkflowExecution(NewContext(), request)
+		s.NoError(err1)
+		s.True(we1.Started)
+
+		s.Equal(we0.RunId, we1.RunId)
+	})
+
+	s.Run("fail when already started", func() {
+		request := makeRequest()
+		we, err := s.engine.StartWorkflowExecution(NewContext(), request)
+		s.NoError(err)
+		s.True(we.Started)
+
+		request.RequestId = uuid.New()
+
+		we2, err := s.engine.StartWorkflowExecution(NewContext(), request)
+		s.Error(err)
+		var alreadyStarted *serviceerror.WorkflowExecutionAlreadyStarted
+		s.ErrorAs(err, &alreadyStarted)
+		s.Nil(we2)
+	})
 }
 
-func (s *FunctionalSuite) TestStartWorkflowExecution_TerminateIfRunning() {
-	id := "functional-start-workflow-terminate-if-running-test"
-	wt := "functional-start-workflow-terminate-if-running-test-type"
-	tl := "functional-start-workflow-terminate-if-running-test-taskqueue"
-	identity := "worker1"
-
-	request := &workflowservice.StartWorkflowExecutionRequest{
-		RequestId:          uuid.New(),
-		Namespace:          s.namespace,
-		WorkflowId:         id,
-		WorkflowType:       &commonpb.WorkflowType{Name: wt},
-		TaskQueue:          &taskqueuepb.TaskQueue{Name: tl, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
-		Input:              nil,
-		WorkflowRunTimeout: durationpb.New(100 * time.Second),
-		Identity:           identity,
+func (s *FunctionalSuite) TestStartWorkflowExecution_Terminate() {
+	testCases := []struct {
+		name                     string
+		WorkflowIdReusePolicy    enumspb.WorkflowIdReusePolicy
+		WorkflowIdConflictPolicy enumspb.WorkflowIdConflictPolicy
+	}{
+		{
+			"TerminateIfRunning id workflow reuse policy",
+			enumspb.WORKFLOW_ID_REUSE_POLICY_TERMINATE_IF_RUNNING,
+			enumspb.WORKFLOW_ID_CONFLICT_POLICY_UNSPECIFIED,
+		},
+		{
+			"TerminateExisting id workflow conflict policy",
+			enumspb.WORKFLOW_ID_REUSE_POLICY_UNSPECIFIED,
+			enumspb.WORKFLOW_ID_CONFLICT_POLICY_TERMINATE_EXISTING,
+		},
 	}
 
-	we0, err0 := s.engine.StartWorkflowExecution(NewContext(), request)
-	s.NoError(err0)
+	for i, tc := range testCases {
+		tc := tc
+		s.Run(tc.name, func() {
+			id := fmt.Sprintf("functional-start-workflow-terminate-test-%v", i)
 
-	request.RequestId = uuid.New()
-	request.WorkflowIdReusePolicy = enumspb.WORKFLOW_ID_REUSE_POLICY_TERMINATE_IF_RUNNING
-	we1, err1 := s.engine.StartWorkflowExecution(NewContext(), request)
-	s.NoError(err1)
-	s.NotEqual(we0.RunId, we1.RunId)
+			request := &workflowservice.StartWorkflowExecutionRequest{
+				RequestId:          uuid.New(),
+				Namespace:          s.namespace,
+				WorkflowId:         id,
+				WorkflowType:       &commonpb.WorkflowType{Name: "functional-start-workflow-terminate-test-type"},
+				TaskQueue:          &taskqueuepb.TaskQueue{Name: "functional-start-workflow-terminate-test-taskqueue", Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
+				Input:              nil,
+				WorkflowRunTimeout: durationpb.New(100 * time.Second),
+				Identity:           "worker1",
+			}
 
-	descResp, err := s.engine.DescribeWorkflowExecution(NewContext(), &workflowservice.DescribeWorkflowExecutionRequest{
-		Namespace: s.namespace,
-		Execution: &commonpb.WorkflowExecution{
-			WorkflowId: id,
-			RunId:      we0.RunId,
-		},
-	})
-	s.NoError(err)
-	s.Equal(enumspb.WORKFLOW_EXECUTION_STATUS_TERMINATED, descResp.WorkflowExecutionInfo.Status)
+			we0, err0 := s.engine.StartWorkflowExecution(NewContext(), request)
+			s.NoError(err0)
 
-	descResp, err = s.engine.DescribeWorkflowExecution(NewContext(), &workflowservice.DescribeWorkflowExecutionRequest{
-		Namespace: s.namespace,
-		Execution: &commonpb.WorkflowExecution{
-			WorkflowId: id,
-			RunId:      we1.RunId,
-		},
-	})
-	s.NoError(err)
-	s.Equal(enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING, descResp.WorkflowExecutionInfo.Status)
+			request.RequestId = uuid.New()
+			request.WorkflowIdReusePolicy = tc.WorkflowIdReusePolicy
+			request.WorkflowIdConflictPolicy = tc.WorkflowIdConflictPolicy
+			we1, err1 := s.engine.StartWorkflowExecution(NewContext(), request)
+			s.NoError(err1)
+			s.NotEqual(we0.RunId, we1.RunId)
+
+			descResp, err := s.engine.DescribeWorkflowExecution(NewContext(), &workflowservice.DescribeWorkflowExecutionRequest{
+				Namespace: s.namespace,
+				Execution: &commonpb.WorkflowExecution{
+					WorkflowId: id,
+					RunId:      we0.RunId,
+				},
+			})
+			s.NoError(err)
+			s.Equal(enumspb.WORKFLOW_EXECUTION_STATUS_TERMINATED, descResp.WorkflowExecutionInfo.Status)
+
+			descResp, err = s.engine.DescribeWorkflowExecution(NewContext(), &workflowservice.DescribeWorkflowExecutionRequest{
+				Namespace: s.namespace,
+				Execution: &commonpb.WorkflowExecution{
+					WorkflowId: id,
+					RunId:      we1.RunId,
+				},
+			})
+			s.NoError(err)
+			s.Equal(enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING, descResp.WorkflowExecutionInfo.Status)
+		})
+	}
 }
 
 func (s *FunctionalSuite) TestStartWorkflowExecutionWithDelay() {

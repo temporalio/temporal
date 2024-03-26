@@ -63,7 +63,8 @@ const (
 	MatchingService_ForceUnloadTaskQueue_FullMethodName                   = "/temporal.server.api.matchingservice.v1.MatchingService/ForceUnloadTaskQueue"
 	MatchingService_UpdateTaskQueueUserData_FullMethodName                = "/temporal.server.api.matchingservice.v1.MatchingService/UpdateTaskQueueUserData"
 	MatchingService_ReplicateTaskQueueUserData_FullMethodName             = "/temporal.server.api.matchingservice.v1.MatchingService/ReplicateTaskQueueUserData"
-	MatchingService_CreateOrUpdateNexusIncomingService_FullMethodName     = "/temporal.server.api.matchingservice.v1.MatchingService/CreateOrUpdateNexusIncomingService"
+	MatchingService_CreateNexusIncomingService_FullMethodName             = "/temporal.server.api.matchingservice.v1.MatchingService/CreateNexusIncomingService"
+	MatchingService_UpdateNexusIncomingService_FullMethodName             = "/temporal.server.api.matchingservice.v1.MatchingService/UpdateNexusIncomingService"
 	MatchingService_DeleteNexusIncomingService_FullMethodName             = "/temporal.server.api.matchingservice.v1.MatchingService/DeleteNexusIncomingService"
 	MatchingService_ListNexusIncomingServices_FullMethodName              = "/temporal.server.api.matchingservice.v1.MatchingService/ListNexusIncomingServices"
 )
@@ -143,22 +144,30 @@ type MatchingServiceClient interface {
 	// Set version to 0 to create a new service.
 	// If this request is accepted, the input is considered the "current" state of this service at the time it was
 	// persisted and the updated version is returned.
+	// (-- api-linter: core::0133::method-signature=disabled
+	//
+	//	aip.dev/not-precedent: CreateNexusIncomingService RPC doesn't follow Google API format. --)
+	//
 	// (-- api-linter: core::0133::response-message-name=disabled
 	//
-	//	aip.dev/not-precedent: CreateOrUpdateNexusIncomingService RPC doesn't follow Google API format. --)
+	//	aip.dev/not-precedent: CreateNexusIncomingService RPC doesn't follow Google API format. --)
 	//
 	// (-- api-linter: core::0133::http-uri-parent=disabled
 	//
-	//	aip.dev/not-precedent: CreateOrUpdateNexusIncomingService RPC doesn't follow Google API format. --)
+	//	aip.dev/not-precedent: CreateNexusIncomingService RPC doesn't follow Google API format. --)
+	CreateNexusIncomingService(ctx context.Context, in *CreateNexusIncomingServiceRequest, opts ...grpc.CallOption) (*CreateNexusIncomingServiceResponse, error)
+	// (-- api-linter: core::0134::method-signature=disabled
 	//
-	// (-- api-linter: core::0133::method-signature=disabled
+	//	aip.dev/not-precedent: UpdateNexusIncomingService RPC doesn't follow Google API format. --)
 	//
-	//	aip.dev/not-precedent: CreateOrUpdateNexusIncomingService RPC doesn't follow Google API format. --)
+	// (-- api-linter: core::0134::response-message-name=disabled
 	//
-	// (-- api-linter: core::0133::request-resource-field=disabled
+	//	aip.dev/not-precedent: UpdateNexusIncomingService RPC doesn't follow Google API format. --)
 	//
-	//	aip.dev/not-precedent: CreateOrUpdateNexusIncomingService RPC doesn't follow Google API format. --)
-	CreateOrUpdateNexusIncomingService(ctx context.Context, in *CreateOrUpdateNexusIncomingServiceRequest, opts ...grpc.CallOption) (*CreateOrUpdateNexusIncomingServiceResponse, error)
+	// (-- api-linter: core::0134::request-resource-required=disabled
+	//
+	//	aip.dev/not-precedent: UpdateNexusIncomingService RPC doesn't follow Google API format. --)
+	UpdateNexusIncomingService(ctx context.Context, in *UpdateNexusIncomingServiceRequest, opts ...grpc.CallOption) (*UpdateNexusIncomingServiceResponse, error)
 	// Delete a service by its name.
 	DeleteNexusIncomingService(ctx context.Context, in *DeleteNexusIncomingServiceRequest, opts ...grpc.CallOption) (*DeleteNexusIncomingServiceResponse, error)
 	// List all registered services.
@@ -362,9 +371,18 @@ func (c *matchingServiceClient) ReplicateTaskQueueUserData(ctx context.Context, 
 	return out, nil
 }
 
-func (c *matchingServiceClient) CreateOrUpdateNexusIncomingService(ctx context.Context, in *CreateOrUpdateNexusIncomingServiceRequest, opts ...grpc.CallOption) (*CreateOrUpdateNexusIncomingServiceResponse, error) {
-	out := new(CreateOrUpdateNexusIncomingServiceResponse)
-	err := c.cc.Invoke(ctx, MatchingService_CreateOrUpdateNexusIncomingService_FullMethodName, in, out, opts...)
+func (c *matchingServiceClient) CreateNexusIncomingService(ctx context.Context, in *CreateNexusIncomingServiceRequest, opts ...grpc.CallOption) (*CreateNexusIncomingServiceResponse, error) {
+	out := new(CreateNexusIncomingServiceResponse)
+	err := c.cc.Invoke(ctx, MatchingService_CreateNexusIncomingService_FullMethodName, in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *matchingServiceClient) UpdateNexusIncomingService(ctx context.Context, in *UpdateNexusIncomingServiceRequest, opts ...grpc.CallOption) (*UpdateNexusIncomingServiceResponse, error) {
+	out := new(UpdateNexusIncomingServiceResponse)
+	err := c.cc.Invoke(ctx, MatchingService_UpdateNexusIncomingService_FullMethodName, in, out, opts...)
 	if err != nil {
 		return nil, err
 	}
@@ -464,22 +482,30 @@ type MatchingServiceServer interface {
 	// Set version to 0 to create a new service.
 	// If this request is accepted, the input is considered the "current" state of this service at the time it was
 	// persisted and the updated version is returned.
+	// (-- api-linter: core::0133::method-signature=disabled
+	//
+	//	aip.dev/not-precedent: CreateNexusIncomingService RPC doesn't follow Google API format. --)
+	//
 	// (-- api-linter: core::0133::response-message-name=disabled
 	//
-	//	aip.dev/not-precedent: CreateOrUpdateNexusIncomingService RPC doesn't follow Google API format. --)
+	//	aip.dev/not-precedent: CreateNexusIncomingService RPC doesn't follow Google API format. --)
 	//
 	// (-- api-linter: core::0133::http-uri-parent=disabled
 	//
-	//	aip.dev/not-precedent: CreateOrUpdateNexusIncomingService RPC doesn't follow Google API format. --)
+	//	aip.dev/not-precedent: CreateNexusIncomingService RPC doesn't follow Google API format. --)
+	CreateNexusIncomingService(context.Context, *CreateNexusIncomingServiceRequest) (*CreateNexusIncomingServiceResponse, error)
+	// (-- api-linter: core::0134::method-signature=disabled
 	//
-	// (-- api-linter: core::0133::method-signature=disabled
+	//	aip.dev/not-precedent: UpdateNexusIncomingService RPC doesn't follow Google API format. --)
 	//
-	//	aip.dev/not-precedent: CreateOrUpdateNexusIncomingService RPC doesn't follow Google API format. --)
+	// (-- api-linter: core::0134::response-message-name=disabled
 	//
-	// (-- api-linter: core::0133::request-resource-field=disabled
+	//	aip.dev/not-precedent: UpdateNexusIncomingService RPC doesn't follow Google API format. --)
 	//
-	//	aip.dev/not-precedent: CreateOrUpdateNexusIncomingService RPC doesn't follow Google API format. --)
-	CreateOrUpdateNexusIncomingService(context.Context, *CreateOrUpdateNexusIncomingServiceRequest) (*CreateOrUpdateNexusIncomingServiceResponse, error)
+	// (-- api-linter: core::0134::request-resource-required=disabled
+	//
+	//	aip.dev/not-precedent: UpdateNexusIncomingService RPC doesn't follow Google API format. --)
+	UpdateNexusIncomingService(context.Context, *UpdateNexusIncomingServiceRequest) (*UpdateNexusIncomingServiceResponse, error)
 	// Delete a service by its name.
 	DeleteNexusIncomingService(context.Context, *DeleteNexusIncomingServiceRequest) (*DeleteNexusIncomingServiceResponse, error)
 	// List all registered services.
@@ -554,8 +580,11 @@ func (UnimplementedMatchingServiceServer) UpdateTaskQueueUserData(context.Contex
 func (UnimplementedMatchingServiceServer) ReplicateTaskQueueUserData(context.Context, *ReplicateTaskQueueUserDataRequest) (*ReplicateTaskQueueUserDataResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method ReplicateTaskQueueUserData not implemented")
 }
-func (UnimplementedMatchingServiceServer) CreateOrUpdateNexusIncomingService(context.Context, *CreateOrUpdateNexusIncomingServiceRequest) (*CreateOrUpdateNexusIncomingServiceResponse, error) {
-	return nil, status.Errorf(codes.Unimplemented, "method CreateOrUpdateNexusIncomingService not implemented")
+func (UnimplementedMatchingServiceServer) CreateNexusIncomingService(context.Context, *CreateNexusIncomingServiceRequest) (*CreateNexusIncomingServiceResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method CreateNexusIncomingService not implemented")
+}
+func (UnimplementedMatchingServiceServer) UpdateNexusIncomingService(context.Context, *UpdateNexusIncomingServiceRequest) (*UpdateNexusIncomingServiceResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method UpdateNexusIncomingService not implemented")
 }
 func (UnimplementedMatchingServiceServer) DeleteNexusIncomingService(context.Context, *DeleteNexusIncomingServiceRequest) (*DeleteNexusIncomingServiceResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method DeleteNexusIncomingService not implemented")
@@ -954,20 +983,38 @@ func _MatchingService_ReplicateTaskQueueUserData_Handler(srv interface{}, ctx co
 	return interceptor(ctx, in, info, handler)
 }
 
-func _MatchingService_CreateOrUpdateNexusIncomingService_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(CreateOrUpdateNexusIncomingServiceRequest)
+func _MatchingService_CreateNexusIncomingService_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(CreateNexusIncomingServiceRequest)
 	if err := dec(in); err != nil {
 		return nil, err
 	}
 	if interceptor == nil {
-		return srv.(MatchingServiceServer).CreateOrUpdateNexusIncomingService(ctx, in)
+		return srv.(MatchingServiceServer).CreateNexusIncomingService(ctx, in)
 	}
 	info := &grpc.UnaryServerInfo{
 		Server:     srv,
-		FullMethod: MatchingService_CreateOrUpdateNexusIncomingService_FullMethodName,
+		FullMethod: MatchingService_CreateNexusIncomingService_FullMethodName,
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(MatchingServiceServer).CreateOrUpdateNexusIncomingService(ctx, req.(*CreateOrUpdateNexusIncomingServiceRequest))
+		return srv.(MatchingServiceServer).CreateNexusIncomingService(ctx, req.(*CreateNexusIncomingServiceRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _MatchingService_UpdateNexusIncomingService_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(UpdateNexusIncomingServiceRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(MatchingServiceServer).UpdateNexusIncomingService(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: MatchingService_UpdateNexusIncomingService_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(MatchingServiceServer).UpdateNexusIncomingService(ctx, req.(*UpdateNexusIncomingServiceRequest))
 	}
 	return interceptor(ctx, in, info, handler)
 }
@@ -1100,8 +1147,12 @@ var MatchingService_ServiceDesc = grpc.ServiceDesc{
 			Handler:    _MatchingService_ReplicateTaskQueueUserData_Handler,
 		},
 		{
-			MethodName: "CreateOrUpdateNexusIncomingService",
-			Handler:    _MatchingService_CreateOrUpdateNexusIncomingService_Handler,
+			MethodName: "CreateNexusIncomingService",
+			Handler:    _MatchingService_CreateNexusIncomingService_Handler,
+		},
+		{
+			MethodName: "UpdateNexusIncomingService",
+			Handler:    _MatchingService_UpdateNexusIncomingService_Handler,
 		},
 		{
 			MethodName: "DeleteNexusIncomingService",

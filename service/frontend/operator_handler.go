@@ -29,6 +29,7 @@ import (
 	"fmt"
 	"sync/atomic"
 
+	cnexus "go.temporal.io/server/common/nexus"
 	"golang.org/x/exp/maps"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/health"
@@ -78,33 +79,35 @@ type (
 
 		status int32
 
-		logger                 log.Logger
-		config                 *Config
-		esClient               esclient.Client
-		sdkClientFactory       sdk.ClientFactory
-		metricsHandler         metrics.Handler
-		visibilityMgr          manager.VisibilityManager
-		saManager              searchattribute.Manager
-		healthServer           *health.Server
-		historyClient          resource.HistoryClient
-		clusterMetadataManager persistence.ClusterMetadataManager
-		clusterMetadata        clustermetadata.Metadata
-		clientFactory          svc.Factory
+		logger                  log.Logger
+		config                  *Config
+		esClient                esclient.Client
+		sdkClientFactory        sdk.ClientFactory
+		metricsHandler          metrics.Handler
+		visibilityMgr           manager.VisibilityManager
+		saManager               searchattribute.Manager
+		healthServer            *health.Server
+		historyClient           resource.HistoryClient
+		clusterMetadataManager  persistence.ClusterMetadataManager
+		clusterMetadata         clustermetadata.Metadata
+		clientFactory           svc.Factory
+		outgoingServiceRegistry *cnexus.OutgoingServiceRegistry
 	}
 
 	NewOperatorHandlerImplArgs struct {
-		config                 *Config
-		EsClient               esclient.Client
-		Logger                 log.Logger
-		sdkClientFactory       sdk.ClientFactory
-		MetricsHandler         metrics.Handler
-		VisibilityMgr          manager.VisibilityManager
-		SaManager              searchattribute.Manager
-		healthServer           *health.Server
-		historyClient          resource.HistoryClient
-		clusterMetadataManager persistence.ClusterMetadataManager
-		clusterMetadata        clustermetadata.Metadata
-		clientFactory          svc.Factory
+		config                  *Config
+		EsClient                esclient.Client
+		Logger                  log.Logger
+		sdkClientFactory        sdk.ClientFactory
+		MetricsHandler          metrics.Handler
+		VisibilityMgr           manager.VisibilityManager
+		SaManager               searchattribute.Manager
+		healthServer            *health.Server
+		historyClient           resource.HistoryClient
+		clusterMetadataManager  persistence.ClusterMetadataManager
+		clusterMetadata         clustermetadata.Metadata
+		clientFactory           svc.Factory
+		outgoingServiceRegistry *cnexus.OutgoingServiceRegistry
 	}
 )
 
@@ -120,19 +123,20 @@ func NewOperatorHandlerImpl(
 ) *OperatorHandlerImpl {
 
 	handler := &OperatorHandlerImpl{
-		logger:                 args.Logger,
-		status:                 common.DaemonStatusInitialized,
-		config:                 args.config,
-		esClient:               args.EsClient,
-		sdkClientFactory:       args.sdkClientFactory,
-		metricsHandler:         args.MetricsHandler,
-		visibilityMgr:          args.VisibilityMgr,
-		saManager:              args.SaManager,
-		healthServer:           args.healthServer,
-		historyClient:          args.historyClient,
-		clusterMetadataManager: args.clusterMetadataManager,
-		clusterMetadata:        args.clusterMetadata,
-		clientFactory:          args.clientFactory,
+		logger:                  args.Logger,
+		status:                  common.DaemonStatusInitialized,
+		config:                  args.config,
+		esClient:                args.EsClient,
+		sdkClientFactory:        args.sdkClientFactory,
+		metricsHandler:          args.MetricsHandler,
+		visibilityMgr:           args.VisibilityMgr,
+		saManager:               args.SaManager,
+		healthServer:            args.healthServer,
+		historyClient:           args.historyClient,
+		clusterMetadataManager:  args.clusterMetadataManager,
+		clusterMetadata:         args.clusterMetadata,
+		clientFactory:           args.clientFactory,
+		outgoingServiceRegistry: args.outgoingServiceRegistry,
 	}
 
 	return handler
@@ -824,7 +828,11 @@ func (h *OperatorHandlerImpl) validateRemoteClusterMetadata(metadata *adminservi
 	return nil
 }
 
-func (*OperatorHandlerImpl) CreateOrUpdateNexusIncomingService(context.Context, *operatorservice.CreateOrUpdateNexusIncomingServiceRequest) (*operatorservice.CreateOrUpdateNexusIncomingServiceResponse, error) {
+func (*OperatorHandlerImpl) CreateNexusIncomingService(context.Context, *operatorservice.CreateNexusIncomingServiceRequest) (*operatorservice.CreateNexusIncomingServiceResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "unimplemented")
+}
+
+func (*OperatorHandlerImpl) UpdateNexusIncomingService(context.Context, *operatorservice.UpdateNexusIncomingServiceRequest) (*operatorservice.UpdateNexusIncomingServiceResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "unimplemented")
 }
 
@@ -838,4 +846,39 @@ func (*OperatorHandlerImpl) GetNexusIncomingService(context.Context, *operatorse
 
 func (*OperatorHandlerImpl) ListNexusIncomingServices(context.Context, *operatorservice.ListNexusIncomingServicesRequest) (*operatorservice.ListNexusIncomingServicesResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "unimplemented")
+}
+
+func (h *OperatorHandlerImpl) GetNexusOutgoingService(
+	ctx context.Context,
+	req *operatorservice.GetNexusOutgoingServiceRequest,
+) (*operatorservice.GetNexusOutgoingServiceResponse, error) {
+	return h.outgoingServiceRegistry.Get(ctx, req)
+}
+
+func (h *OperatorHandlerImpl) CreateNexusOutgoingService(
+	ctx context.Context,
+	req *operatorservice.CreateNexusOutgoingServiceRequest,
+) (*operatorservice.CreateNexusOutgoingServiceResponse, error) {
+	return h.outgoingServiceRegistry.Create(ctx, req)
+}
+
+func (h *OperatorHandlerImpl) UpdateNexusOutgoingService(
+	ctx context.Context,
+	req *operatorservice.UpdateNexusOutgoingServiceRequest,
+) (*operatorservice.UpdateNexusOutgoingServiceResponse, error) {
+	return h.outgoingServiceRegistry.Update(ctx, req)
+}
+
+func (h *OperatorHandlerImpl) DeleteNexusOutgoingService(
+	ctx context.Context,
+	req *operatorservice.DeleteNexusOutgoingServiceRequest,
+) (*operatorservice.DeleteNexusOutgoingServiceResponse, error) {
+	return h.outgoingServiceRegistry.Delete(ctx, req)
+}
+
+func (h *OperatorHandlerImpl) ListNexusOutgoingServices(
+	ctx context.Context,
+	req *operatorservice.ListNexusOutgoingServicesRequest,
+) (*operatorservice.ListNexusOutgoingServicesResponse, error) {
+	return h.outgoingServiceRegistry.List(ctx, req)
 }

@@ -174,6 +174,7 @@ func (f *transferQueueFactory) CreateQueue(
 					versionHistory,
 					[][]*historypb.HistoryEvent{events},
 					nil,
+					"",
 				)
 			},
 			shard.GetPayloadSerializer(),
@@ -213,6 +214,7 @@ func (f *transferQueueFactory) CreateQueue(
 		f.Config.TaskDLQEnabled,
 		f.Config.TaskDLQUnexpectedErrorAttempts,
 		f.Config.TaskDLQInternalErrors,
+		f.Config.TaskDLQErrorPattern,
 	)
 	return queues.NewImmediateQueue(
 		shard,

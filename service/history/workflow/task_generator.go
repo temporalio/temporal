@@ -248,9 +248,14 @@ func (r *TaskGeneratorImpl) GenerateDirtySubStateMachineTasks(
 	stateMachineRegistry *hsm.Registry,
 ) error {
 	tree := r.mutableState.HSM()
+	// Early return here to avoid accessing the transition history. It may be disabled via dynamic config.
+	outputs := tree.Outputs()
+	if len(outputs) == 0 {
+		return nil
+	}
 	transitionHistory := r.mutableState.GetExecutionInfo().TransitionHistory
 	versionedTransition := transitionHistory[len(transitionHistory)-1]
-	for _, pao := range tree.Outputs() {
+	for _, pao := range outputs {
 		node, err := tree.Child(pao.Path)
 		if err != nil {
 			return err
