@@ -108,9 +108,11 @@ type (
 	ClusterInformation struct {
 		Enabled                bool  `yaml:"enabled"`
 		InitialFailoverVersion int64 `yaml:"initialFailoverVersion"`
-		// Address indicate the remote service address(Host:Port). Host can be DNS name.
+		// RPCAddress indicate the remote service address(Host:Port). Host can be DNS name.
 		RPCAddress string `yaml:"rpcAddress"`
-		// Cluster ID allows to explicitly set the ID of the cluster. Optional.
+		// HTTPAddress indicates the address of the [go.temporal.io/server/service/frontend.HTTPAPIServer].
+		HTTPAddress string `yaml:"httpAddress"`
+		// ClusterID allows to explicitly set the ID of the cluster. Optional.
 		ClusterID  string            `yaml:"-"`
 		ShardCount int32             `yaml:"-"` // Ignore this field when loading config.
 		Tags       map[string]string `yaml:"-"` // Ignore this field. Use cluster.Config.Tags for customized tags.
@@ -409,13 +411,7 @@ func (m *metadataImpl) RegisterMetadataChangeCallback(callbackId any, cb Callbac
 	m.clusterLock.RLock()
 	for clusterName, clusterInfo := range m.clusterInfo {
 		oldEntries[clusterName] = nil
-		newEntries[clusterName] = &ClusterInformation{
-			Enabled:                clusterInfo.Enabled,
-			InitialFailoverVersion: clusterInfo.InitialFailoverVersion,
-			RPCAddress:             clusterInfo.RPCAddress,
-			ShardCount:             clusterInfo.ShardCount,
-			version:                clusterInfo.version,
-		}
+		newEntries[clusterName] = ShallowCopyClusterInformation(&clusterInfo)
 	}
 	m.clusterLock.RUnlock()
 	cb(oldEntries, newEntries)
@@ -466,39 +462,19 @@ func (m *metadataImpl) refreshClusterMetadata(ctx context.Context) error {
 		if !ok {
 			// handle new cluster registry
 			oldEntries[clusterName] = nil
-			newEntries[clusterName] = &ClusterInformation{
-				Enabled:                newClusterInfo.Enabled,
-				InitialFailoverVersion: newClusterInfo.InitialFailoverVersion,
-				RPCAddress:             newClusterInfo.RPCAddress,
-				ShardCount:             newClusterInfo.ShardCount,
-				Tags:                   newClusterInfo.Tags,
-				version:                newClusterInfo.version,
-			}
+			newEntries[clusterName] = ShallowCopyClusterInformation(newClusterInfo)
 		} else if newClusterInfo.version > oldClusterInfo.version {
 			if newClusterInfo.Enabled == oldClusterInfo.Enabled &&
 				newClusterInfo.RPCAddress == oldClusterInfo.RPCAddress &&
+				newClusterInfo.HTTPAddress == oldClusterInfo.HTTPAddress &&
 				newClusterInfo.InitialFailoverVersion == oldClusterInfo.InitialFailoverVersion &&
 				maps.Equal(newClusterInfo.Tags, oldClusterInfo.Tags) {
 				// key cluster info does not change
 				continue
 			}
 			// handle updated cluster registry
-			oldEntries[clusterName] = &ClusterInformation{
-				Enabled:                oldClusterInfo.Enabled,
-				InitialFailoverVersion: oldClusterInfo.InitialFailoverVersion,
-				RPCAddress:             oldClusterInfo.RPCAddress,
-				ShardCount:             oldClusterInfo.ShardCount,
-				Tags:                   oldClusterInfo.Tags,
-				version:                oldClusterInfo.version,
-			}
-			newEntries[clusterName] = &ClusterInformation{
-				Enabled:                newClusterInfo.Enabled,
-				InitialFailoverVersion: newClusterInfo.InitialFailoverVersion,
-				RPCAddress:             newClusterInfo.RPCAddress,
-				ShardCount:             newClusterInfo.ShardCount,
-				Tags:                   newClusterInfo.Tags,
-				version:                newClusterInfo.version,
-			}
+			oldEntries[clusterName] = ShallowCopyClusterInformation(&oldClusterInfo)
+			newEntries[clusterName] = ShallowCopyClusterInformation(newClusterInfo)
 		}
 	}
 	for clusterName, oldClusterInfo := range clusterInfoMap {
@@ -559,6 +535,7 @@ func updateVersionToClusterName(clusterInfo map[string]ClusterInformation, failo
 		if info.Enabled && info.RPCAddress == "" {
 			panic(fmt.Sprintf("Cluster %v: RPCAddress is empty", clusterName))
 		}
+		// It's ok if info.HTTPAddress is empty
 	}
 	return versionToClusterName
 }
@@ -596,14 +573,24 @@ func (m *metadataImpl) listAllClusterMetadataFromDB(
 			return nil, err
 		}
 		getClusterResp := item.(*persistence.GetClusterMetadataResponse)
-		result[getClusterResp.GetClusterName()] = &ClusterInformation{
-			Enabled:                getClusterResp.GetIsConnectionEnabled(),
-			InitialFailoverVersion: getClusterResp.GetInitialFailoverVersion(),
-			RPCAddress:             getClusterResp.GetClusterAddress(),
-			ShardCount:             getClusterResp.GetHistoryShardCount(),
-			Tags:                   getClusterResp.GetTags(),
-			version:                getClusterResp.Version,
-		}
+		result[getClusterResp.GetClusterName()] = ClusterInformationFromDB(getClusterResp)
 	}
 	return result, nil
+}
+
+func ClusterInformationFromDB(getClusterResp *persistence.GetClusterMetadataResponse) *ClusterInformation {
+	return &ClusterInformation{
+		Enabled:                getClusterResp.GetIsConnectionEnabled(),
+		InitialFailoverVersion: getClusterResp.GetInitialFailoverVersion(),
+		RPCAddress:             getClusterResp.GetClusterAddress(),
+		HTTPAddress:            getClusterResp.GetHttpAddress(),
+		ShardCount:             getClusterResp.GetHistoryShardCount(),
+		Tags:                   getClusterResp.GetTags(),
+		version:                getClusterResp.Version,
+	}
+}
+
+func ShallowCopyClusterInformation(information *ClusterInformation) *ClusterInformation {
+	tmp := *information
+	return &tmp
 }

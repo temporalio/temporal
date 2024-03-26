@@ -1451,7 +1451,7 @@ func (e *matchingEngineImpl) RespondNexusTaskFailed(ctx context.Context, request
 }
 
 func (e *matchingEngineImpl) CreateOrUpdateNexusIncomingService(ctx context.Context, request *matchingservice.CreateOrUpdateNexusIncomingServiceRequest) (*matchingservice.CreateOrUpdateNexusIncomingServiceResponse, error) {
-	namespaceID, err := e.namespaceRegistry.GetNamespaceID(namespace.Name(request.Service.Namespace))
+	namespaceID, err := e.namespaceRegistry.GetNamespaceID(namespace.Name(request.Service.Spec.GetNamespace()))
 	if err != nil {
 		return nil, err
 	}

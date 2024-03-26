@@ -701,34 +701,43 @@ func loadClusterInformationFromStore(ctx context.Context, svc *config.Config, cl
 		if err != nil {
 			return err
 		}
-		metadata := item.(*persistence.GetClusterMetadataResponse)
-		shardCount := metadata.HistoryShardCount
-		if shardCount == 0 {
-			// This is to add backward compatibility to the svc based cluster connection.
-			shardCount = svc.Persistence.NumHistoryShards
-		}
-		newMetadata := cluster.ClusterInformation{
-			Enabled:                metadata.IsConnectionEnabled,
-			InitialFailoverVersion: metadata.InitialFailoverVersion,
-			RPCAddress:             metadata.ClusterAddress,
-			ShardCount:             shardCount,
-			Tags:                   metadata.Tags,
-		}
-		if staticClusterMetadata, ok := svc.ClusterMetadata.ClusterInformation[metadata.ClusterName]; ok {
-			if metadata.ClusterName != svc.ClusterMetadata.CurrentClusterName {
-				logger.Warn(
-					"ClusterInformation in ClusterMetadata svc is deprecated. Please use TCTL tool to configure remote cluster connections",
-					tag.Key("clusterInformation"),
-					tag.IgnoredValue(staticClusterMetadata),
-					tag.Value(newMetadata))
-			} else {
-				newMetadata.RPCAddress = staticClusterMetadata.RPCAddress
-				logger.Info(fmt.Sprintf("Use rpc address %v for cluster %v.", newMetadata.RPCAddress, metadata.ClusterName))
-			}
-		}
-		svc.ClusterMetadata.ClusterInformation[metadata.ClusterName] = newMetadata
+		response := item.(*persistence.GetClusterMetadataResponse)
+		merge(svc, response, logger)
 	}
 	return nil
+}
+
+func merge(svc *config.Config, metadata *persistence.GetClusterMetadataResponse, logger log.Logger) {
+	shardCount := metadata.HistoryShardCount
+	if shardCount == 0 {
+		// This is to add backward compatibility to the svc based cluster connection.
+		shardCount = svc.Persistence.NumHistoryShards
+	}
+	newMetadata := cluster.ClusterInformationFromDB(metadata)
+	if staticClusterMetadata, ok := svc.ClusterMetadata.ClusterInformation[metadata.ClusterName]; ok {
+		if metadata.ClusterName != svc.ClusterMetadata.CurrentClusterName {
+			logger.Warn(
+				"ClusterInformation in ClusterMetadata svc is deprecated. Please use TCTL tool to configure remote cluster connections",
+				tag.Key("clusterInformation"),
+				tag.IgnoredValue(staticClusterMetadata),
+				tag.Value(newMetadata))
+		} else {
+			newMetadata.RPCAddress = staticClusterMetadata.RPCAddress
+			logger.Info(fmt.Sprintf("Use rpc address %v for cluster %v.", newMetadata.RPCAddress, metadata.ClusterName))
+			// The logic for HTTP addresses is different from that of RPC addresses because HTTP addresses are optional.
+			if newMetadata.HTTPAddress == "" {
+				// Only use HTTP address from static config if there isn't one in the database.
+				newMetadata.HTTPAddress = staticClusterMetadata.HTTPAddress
+			} else {
+				// Otherwise, defer to the HTTP address in the database, and log a message that the static one is ignored.
+				logger.Warn(fmt.Sprintf(
+					"Static http address %v is ignored for cluster %v, using %v from database.",
+					staticClusterMetadata.HTTPAddress, metadata.ClusterName, newMetadata.HTTPAddress,
+				))
+			}
+		}
+	}
+	svc.ClusterMetadata.ClusterInformation[metadata.ClusterName] = *newMetadata
 }
 
 func initCurrentClusterMetadataRecord(
@@ -758,6 +767,7 @@ func initCurrentClusterMetadataRecord(
 				ClusterName:              currentClusterName,
 				ClusterId:                clusterId,
 				ClusterAddress:           currentClusterInfo.RPCAddress,
+				HttpAddress:              currentClusterInfo.HTTPAddress,
 				FailoverVersionIncrement: svc.ClusterMetadata.FailoverVersionIncrement,
 				InitialFailoverVersion:   currentClusterInfo.InitialFailoverVersion,
 				IsGlobalNamespaceEnabled: svc.ClusterMetadata.EnableGlobalNamespace,
@@ -798,6 +808,10 @@ func updateCurrentClusterMetadataRecord(
 	}
 	if currentClusterDBRecord.ClusterAddress != currentCLusterInfo.RPCAddress {
 		currentClusterDBRecord.ClusterAddress = currentCLusterInfo.RPCAddress
+		updateDBRecord = true
+	}
+	if currentClusterDBRecord.HttpAddress != currentCLusterInfo.HTTPAddress {
+		currentClusterDBRecord.HttpAddress = currentCLusterInfo.HTTPAddress
 		updateDBRecord = true
 	}
 	if !maps.Equal(currentClusterDBRecord.Tags, svc.ClusterMetadata.Tags) {

@@ -103,7 +103,7 @@ func (m *incomingNexusServiceManager) CreateOrUpdateNexusIncomingService(
 	m.Lock()
 	defer m.Unlock()
 
-	previous, exists := m.servicesByName[request.service.Name]
+	previous, exists := m.servicesByName[request.service.Id]
 	if !exists {
 		previous = &persistencepb.NexusIncomingServiceEntry{
 			Version: 0,
@@ -118,7 +118,7 @@ func (m *incomingNexusServiceManager) CreateOrUpdateNexusIncomingService(
 		return nil, serviceerror.NewAlreadyExist(fmt.Sprintf("error creating Nexus incoming service. service with name %v already registered with version %v", previous.Service.Name, previous.Version))
 	}
 	if request.service.Version != 0 && !exists {
-		return nil, serviceerror.NewNotFound(fmt.Sprintf("error updating Nexus incoming service. service name %v not found", request.service.Name))
+		return nil, serviceerror.NewNotFound(fmt.Sprintf("error updating Nexus incoming service. service name %v not found", request.service.Id))
 	}
 	if request.service.Version != previous.Version {
 		return nil, serviceerror.NewInvalidArgument(fmt.Sprintf("nexus incoming service version mismatch. received: %v expected %v", request.service.Version, previous.Version))
@@ -129,10 +129,10 @@ func (m *incomingNexusServiceManager) CreateOrUpdateNexusIncomingService(
 		Id:      previous.Id,
 		Service: &persistencepb.NexusIncomingService{
 			Clock:       hlc.Next(previous.Service.Clock, request.timeSource),
-			Name:        request.service.Name,
+			Name:        request.service.Id,
 			NamespaceId: request.namespaceID,
-			TaskQueue:   request.service.TaskQueue,
-			Metadata:    request.service.Metadata,
+			TaskQueue:   request.service.GetSpec().GetTaskQueue(),
+			Metadata:    request.service.GetSpec().GetMetadata(),
 		},
 	}
 
