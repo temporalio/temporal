@@ -136,7 +136,7 @@ func withIncreasedSkip(logger Logger, skip int) Logger {
 			logger: withIncreasedSkip(l.logger, skip),
 		}
 	}
-	return logger
+	return nil
 }
 
 // convertSlogToZapLevel maps slog Levels to zap Levels.
