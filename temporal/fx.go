@@ -683,7 +683,7 @@ func loadClusterInformationFromStore(ctx context.Context, svc *config.Config, cl
 	iter := collection.NewPagingIterator(func(paginationToken []byte) ([]interface{}, []byte, error) {
 		request := &persistence.ListClusterMetadataRequest{
 			PageSize:      100,
-			NextPageToken: nil,
+			NextPageToken: paginationToken,
 		}
 		resp, err := clusterMsg.ListClusterMetadata(ctx, request)
 		if err != nil {
