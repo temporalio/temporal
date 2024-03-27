@@ -680,7 +680,7 @@ func ApplyClusterMetadataConfigProvider(
 
 // TODO: move this to cluster.fx
 func loadClusterInformationFromStore(ctx context.Context, svc *config.Config, clusterMsg persistence.ClusterMetadataManager, logger log.Logger) error {
-	iter := collection.NewPagingIterator(func(paginationToken []byte) ([]interface{}, []byte, error) {
+	iter := collection.NewPagingIterator(func(paginationToken []byte) ([]*persistence.GetClusterMetadataResponse, []byte, error) {
 		request := &persistence.ListClusterMetadataRequest{
 			PageSize:      100,
 			NextPageToken: paginationToken,
@@ -689,19 +689,14 @@ func loadClusterInformationFromStore(ctx context.Context, svc *config.Config, cl
 		if err != nil {
 			return nil, nil, err
 		}
-		var pageItem []interface{}
-		for _, metadata := range resp.ClusterMetadata {
-			pageItem = append(pageItem, metadata)
-		}
-		return pageItem, resp.NextPageToken, nil
+		return resp.ClusterMetadata, resp.NextPageToken, nil
 	})
 
 	for iter.HasNext() {
-		item, err := iter.Next()
+		metadata, err := iter.Next()
 		if err != nil {
 			return err
 		}
-		metadata := item.(*persistence.GetClusterMetadataResponse)
 		newMetadata := cluster.ClusterInformationFromDB(metadata)
 		if newMetadata.ShardCount == 0 {
 			newMetadata.ShardCount = svc.Persistence.NumHistoryShards

@@ -170,7 +170,7 @@ func (t *serializerImpl) DeserializeEvents(data *commonpb.DataBlob) ([]*historyp
 		return nil, NewUnknownEncodingTypeError(data.EncodingType.String(), enumspb.ENCODING_TYPE_PROTO3)
 	}
 	if err != nil {
-		return nil, err
+		return nil, NewDeserializationError(enumspb.ENCODING_TYPE_PROTO3, err)
 	}
 	return events.Events, nil
 }
@@ -201,7 +201,7 @@ func (t *serializerImpl) DeserializeEvent(data *commonpb.DataBlob) (*historypb.H
 	}
 
 	if err != nil {
-		return nil, err
+		return nil, NewDeserializationError(enumspb.ENCODING_TYPE_PROTO3, err)
 	}
 
 	return event, err
@@ -234,7 +234,7 @@ func (t *serializerImpl) DeserializeClusterMetadata(data *commonpb.DataBlob) (*p
 	}
 
 	if err != nil {
-		return nil, err
+		return nil, NewSerializationError(enumspb.ENCODING_TYPE_PROTO3, err)
 	}
 
 	return cm, err
