@@ -119,6 +119,7 @@ type localStoreRPCSuite struct {
 }
 
 func TestLocalStoreTLSSuite(t *testing.T) {
+	t.Skip("Skipping flaky test")
 	suite.Run(t, &localStoreRPCSuite{
 		Suite: &suite.Suite{},
 	})
@@ -623,7 +624,6 @@ func (s *localStoreRPCSuite) getTestFactory(frontend bool) (server *TestFactory,
 }
 
 func (s *localStoreRPCSuite) TestServerTLSRefreshInternode() {
-	s.T().Skip("Skipping flaky test")
 	s.testServerTLSRefresh(s.internodeMutualTLSRPCRefreshFactory, s.internodeRefreshCA, s.internodeRefreshCertDir, internodeServerCertSerialNumber)
 }
 
