@@ -56,6 +56,7 @@ const (
 )
 
 type (
+	// Metadata provides information about the current cluster and other registered remote clusters.
 	Metadata interface {
 		common.Pingable
 
@@ -91,20 +92,20 @@ type (
 	// Config contains the all cluster which participated in cross DC
 	Config struct {
 		EnableGlobalNamespace bool `yaml:"enableGlobalNamespace"`
-		// FailoverVersionIncrement is the increment of each cluster version when failover happens
+		// FailoverVersionIncrement is the increment of each cluster version when failover happens.
 		FailoverVersionIncrement int64 `yaml:"failoverVersionIncrement"`
 		// MasterClusterName is the master cluster name, only the master cluster can register / update namespace
-		// all clusters can do namespace failover
+		// all clusters can do namespace failover.
 		MasterClusterName string `yaml:"masterClusterName"`
-		// CurrentClusterName is the name of the current cluster
+		// CurrentClusterName is the name of the current cluster.
 		CurrentClusterName string `yaml:"currentClusterName"`
-		// ClusterInformation contains all cluster names to corresponding information about that cluster
+		// ClusterInformation is a map from cluster name to corresponding information for each registered cluster.
 		ClusterInformation map[string]ClusterInformation `yaml:"clusterInformation"`
-		// Tag contains customized tag about the current cluster
+		// Tags contains customized tags for the current cluster.
 		Tags map[string]string `yaml:"tags"`
 	}
 
-	// ClusterInformation contains the information about each cluster which participated in cross DC
+	// ClusterInformation contains information for a single cluster.
 	ClusterInformation struct {
 		Enabled                bool  `yaml:"enabled"`
 		InitialFailoverVersion int64 `yaml:"initialFailoverVersion"`
@@ -220,21 +221,6 @@ func NewMetadataFromConfig(
 		clusterMetadataStore,
 		dynamicCollection.GetDurationProperty(dynamicconfig.ClusterMetadataRefreshInterval, refreshInterval),
 		logger,
-	)
-}
-
-func NewMetadataForTest(
-	config *Config,
-) Metadata {
-	return NewMetadata(
-		config.EnableGlobalNamespace,
-		config.FailoverVersionIncrement,
-		config.MasterClusterName,
-		config.CurrentClusterName,
-		config.ClusterInformation,
-		nil,
-		nil,
-		log.NewNoopLogger(),
 	)
 }
 
@@ -413,6 +399,7 @@ func (m *metadataImpl) RegisterMetadataChangeCallback(callbackId any, cb Callbac
 	for clusterName, clusterInfo := range m.clusterInfo {
 		oldEntries[clusterName] = nil
 		newEntries[clusterName] = ShallowCopyClusterInformation(&clusterInfo)
+		newEntries[clusterName].Tags = nil
 	}
 	m.clusterLock.RUnlock()
 	cb(oldEntries, newEntries)
@@ -591,6 +578,8 @@ func ClusterInformationFromDB(getClusterResp *persistence.GetClusterMetadataResp
 	}
 }
 
+// ShallowCopyClusterInformation returns a shallow copy of the given ClusterInformation. The [ClusterInformation.Tags]
+// field is not deep-copied, so you must be careful when modifying it.
 func ShallowCopyClusterInformation(information *ClusterInformation) *ClusterInformation {
 	tmp := *information
 	return &tmp
