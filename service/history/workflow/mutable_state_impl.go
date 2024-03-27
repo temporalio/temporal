@@ -28,6 +28,7 @@ import (
 	"context"
 	"fmt"
 	"math/rand"
+	"runtime/debug"
 	"time"
 
 	"github.com/nexus-rpc/sdk-go/nexus"
@@ -3767,10 +3768,9 @@ func (ms *MutableStateImpl) ApplyWorkflowExecutionUpdateRequestedEvent(event *hi
 		},
 	}
 	var sizeDelta int
-	if ui, ok := ms.executionInfo.UpdateInfos[updateID]; ok {
-		sizeBefore := ui.Size()
-		ui.Value = request
-		sizeDelta = ui.Size() - sizeBefore
+	if _, ok := ms.executionInfo.UpdateInfos[updateID]; ok {
+		debug.PrintStack()
+		panic(fmt.Sprintf("Did not expect updateID %s to exist in registry when applying requested event to MS", updateID))
 	} else {
 		ui := updatespb.UpdateInfo{Value: request}
 		ms.executionInfo.UpdateInfos[updateID] = &ui
