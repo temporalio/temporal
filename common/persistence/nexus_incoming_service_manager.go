@@ -38,9 +38,6 @@ var (
 	ErrNexusTableVersionConflict = &ConditionFailedError{
 		Msg: "nexus incoming services table version mismatch",
 	}
-	ErrNexusIncomingServiceAlreadyExists = &ConditionFailedError{
-		Msg: "nexus incoming service already exists",
-	}
 	ErrNexusIncomingServiceVersionConflict = &ConditionFailedError{
 		Msg: "nexus incoming service version mismatch",
 	}
@@ -92,6 +89,28 @@ func (m *nexusIncomingServiceManagerImpl) GetNexusIncomingServicesTableVersion(c
 		tableVersion = resp.TableVersion
 	}
 	return tableVersion, err
+}
+
+func (m *nexusIncomingServiceManagerImpl) GetNexusIncomingService(
+	ctx context.Context,
+	request *GetNexusIncomingServiceRequest,
+) (*persistencepb.NexusIncomingServiceEntry, error) {
+	internalService, err := m.persistence.GetNexusIncomingService(ctx, request)
+	if err != nil {
+		return nil, err
+	}
+
+	service, err := m.serializer.NexusIncomingServiceFromBlob(internalService.Data)
+	if err != nil {
+		m.logger.Error(fmt.Sprintf("error deserializing nexus incoming service with ID:%v", internalService.ServiceID), tag.Error(err))
+		return nil, err
+	}
+
+	return &persistencepb.NexusIncomingServiceEntry{
+		Id:      internalService.ServiceID,
+		Version: internalService.Version,
+		Service: service,
+	}, nil
 }
 
 func (m *nexusIncomingServiceManagerImpl) ListNexusIncomingServices(

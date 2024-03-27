@@ -35,10 +35,11 @@ const (
 	incrementIncomingServicesTableVersionQry = `UPDATE nexus_incoming_services_partition_status SET version = $1 WHERE version = $2`
 	getIncomingServicesTableVersionQry       = `SELECT version FROM nexus_incoming_services_partition_status`
 
-	createIncomingServiceQry = `INSERT INTO nexus_incoming_services(service_id, data, data_encoding, version) VALUES ($1, $2, $3, 1)`
-	updateIncomingServiceQry = `UPDATE nexus_incoming_services SET data = $1, data_encoding = $2, version = $3 WHERE service_id = $4 AND version = $5`
-	deleteIncomingServiceQry = `DELETE FROM nexus_incoming_services WHERE service_id = $1`
-	getIncomingServicesQry   = `SELECT service_id, data, data_encoding, version FROM nexus_incoming_services WHERE service_id > $1 ORDER BY service_id LIMIT $2`
+	createIncomingServiceQry  = `INSERT INTO nexus_incoming_services(service_id, data, data_encoding, version) VALUES ($1, $2, $3, 1)`
+	updateIncomingServiceQry  = `UPDATE nexus_incoming_services SET data = $1, data_encoding = $2, version = $3 WHERE service_id = $4 AND version = $5`
+	deleteIncomingServiceQry  = `DELETE FROM nexus_incoming_services WHERE service_id = $1`
+	getIncomingServiceByIdQry = `SELECT service_id, data, data_encoding, version FROM nexus_incoming_services WHERE service_id = $1`
+	getIncomingServicesQry    = `SELECT service_id, data, data_encoding, version FROM nexus_incoming_services WHERE service_id > $1 ORDER BY service_id LIMIT $2`
 )
 
 func (pdb *db) InitializeNexusIncomingServicesTableVersion(ctx context.Context) (sql.Result, error) {
@@ -94,6 +95,15 @@ func (pdb *db) DeleteFromNexusIncomingServices(
 	serviceID []byte,
 ) (sql.Result, error) {
 	return pdb.conn.ExecContext(ctx, deleteIncomingServiceQry, serviceID)
+}
+
+func (pdb *db) GetNexusIncomingServiceByID(
+	ctx context.Context,
+	serviceID []byte,
+) (*sqlplugin.NexusIncomingServicesRow, error) {
+	var row sqlplugin.NexusIncomingServicesRow
+	err := pdb.conn.GetContext(ctx, &row, getIncomingServiceByIdQry, serviceID)
+	return &row, err
 }
 
 func (pdb *db) ListNexusIncomingServices(
