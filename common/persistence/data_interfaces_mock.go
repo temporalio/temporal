@@ -33,6 +33,7 @@ import (
 	reflect "reflect"
 
 	gomock "github.com/golang/mock/gomock"
+	v1 "go.temporal.io/server/api/persistence/v1"
 )
 
 // MockCloseable is a mock of Closeable interface.
@@ -1313,6 +1314,21 @@ func (m *MockNexusIncomingServiceManager) GetName() string {
 func (mr *MockNexusIncomingServiceManagerMockRecorder) GetName() *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetName", reflect.TypeOf((*MockNexusIncomingServiceManager)(nil).GetName))
+}
+
+// GetNexusIncomingService mocks base method.
+func (m *MockNexusIncomingServiceManager) GetNexusIncomingService(ctx context.Context, request *GetNexusIncomingServiceRequest) (*v1.NexusIncomingServiceEntry, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetNexusIncomingService", ctx, request)
+	ret0, _ := ret[0].(*v1.NexusIncomingServiceEntry)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// GetNexusIncomingService indicates an expected call of GetNexusIncomingService.
+func (mr *MockNexusIncomingServiceManagerMockRecorder) GetNexusIncomingService(ctx, request interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetNexusIncomingService", reflect.TypeOf((*MockNexusIncomingServiceManager)(nil).GetNexusIncomingService), ctx, request)
 }
 
 // GetNexusIncomingServicesTableVersion mocks base method.
