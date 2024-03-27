@@ -74,6 +74,10 @@ func testNexusIncomingServicesStoreSteadyState(t *testing.T, store persistence.N
 			EncodingType: enums.ENCODING_TYPE_PROTO3,
 		}
 
+		// Get service by ID when table is empty
+		service, err := store.GetNexusIncomingService(ctx, &persistence.GetNexusIncomingServiceRequest{ServiceID: uuid.NewString()})
+		require.ErrorContains(t, err, "not found")
+
 		// List when table is empty
 		resp, err := store.ListNexusIncomingServices(ctx, &persistence.ListNexusIncomingServicesRequest{PageSize: 10})
 		require.NoError(t, err)
@@ -89,6 +93,12 @@ func testNexusIncomingServicesStoreSteadyState(t *testing.T, store persistence.N
 		require.NoError(t, err)
 		tableVersion.Add(1)
 		firstService.Version++
+
+		// Get service by ID
+		service, err = store.GetNexusIncomingService(ctx, &persistence.GetNexusIncomingServiceRequest{ServiceID: firstService.ServiceID})
+		require.NoError(t, err)
+		require.Equal(t, firstService.ServiceID, service.ServiceID)
+		require.Equal(t, firstService.Version, service.Version)
 
 		// List one
 		resp, err = store.ListNexusIncomingServices(ctx, &persistence.ListNexusIncomingServicesRequest{PageSize: 10})
