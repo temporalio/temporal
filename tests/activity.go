@@ -1054,13 +1054,14 @@ func (s *FunctionalSuite) TestActivityHeartBeat_RecordIdentity() {
 		panic("Unexpected workflow state")
 	}
 
-	heartbeatSignalChan := make(chan bool) // Activity task sends heartbeat when signaled on this chan. It also signals back on the same chan after sending the heartbeat.
-	endActivityTask := make(chan bool)     // Activity task completes when signaled on this chan. This is to force the task to be in pending state.
+	activityStartedSignal := make(chan bool) // Used by activity channel to signal the start so that the test can verify empty identity.
+	heartbeatSignalChan := make(chan bool)   // Activity task sends heartbeat when signaled on this chan. It also signals back on the same chan after sending the heartbeat.
+	endActivityTask := make(chan bool)       // Activity task completes when signaled on this chan. This is to force the task to be in pending state.
 	atHandler := func(
 		execution *commonpb.WorkflowExecution, activityType *commonpb.ActivityType, activityID string, input *commonpb.Payloads, taskToken []byte,
 	) (*commonpb.Payloads, bool, error) {
-
-		<-heartbeatSignalChan // wait for signal before sending heartbeat.
+		activityStartedSignal <- true // signal the start of activity task.
+		<-heartbeatSignalChan         // wait for signal before sending heartbeat.
 		_, err := s.engine.RecordActivityTaskHeartbeat(NewContext(), &workflowservice.RecordActivityTaskHeartbeatRequest{
 			Namespace: s.namespace,
 			TaskToken: taskToken,
@@ -1095,8 +1096,6 @@ func (s *FunctionalSuite) TestActivityHeartBeat_RecordIdentity() {
 		s.True(err == nil || err == errNoTasks)
 	}()
 
-	heartbeatSignalChan <- true // ask the activity to send a heartbeat.
-	<-heartbeatSignalChan       // wait for the heartbeat to be sent (to prevent the test from racing to describe the workflow before the heartbeat is sent)
 	describeWorkflowExecution := func() (*workflowservice.DescribeWorkflowExecutionResponse, error) {
 		return s.engine.DescribeWorkflowExecution(NewContext(), &workflowservice.DescribeWorkflowExecutionRequest{
 			Namespace: s.namespace,
@@ -1106,12 +1105,20 @@ func (s *FunctionalSuite) TestActivityHeartBeat_RecordIdentity() {
 			},
 		})
 	}
+	<-activityStartedSignal // wait for the activity to start
 
-	descResp, err := describeWorkflowExecution()
+	// Verify that the worker identity is empty.
+	descRespBeforeHeartbeat, err := describeWorkflowExecution()
 	s.NoError(err)
+	s.Empty(descRespBeforeHeartbeat.PendingActivities[0].LastWorkerIdentity)
+
+	heartbeatSignalChan <- true // ask the activity to send a heartbeat.
+	<-heartbeatSignalChan       // wait for the heartbeat to be sent (to prevent the test from racing to describe the workflow before the heartbeat is sent)
 
 	// Verify that the worker identity is set now.
-	s.Equal(workerIdentity, descResp.PendingActivities[0].LastWorkerIdentity)
+	descRespAfterHeartbeat, err := describeWorkflowExecution()
+	s.NoError(err)
+	s.Equal(workerIdentity, descRespAfterHeartbeat.PendingActivities[0].LastWorkerIdentity)
 
 	// unblock the activity task
 	endActivityTask <- true
