@@ -270,14 +270,14 @@ func (r *MutableStateInitializerImpl) deserializeBackfillToken(
 	if err := json.Unmarshal(token, historyBackfillToken); err != nil {
 		return nil, 0, 0, false, serialization.NewDeserializationError(enums.ENCODING_TYPE_JSON, err)
 	}
-	if err := proto.Unmarshal(historyBackfillToken.MutableStateRow, mutableState); err != nil {
-		return nil, 0, 0, false, serialization.NewDeserializationError(enums.ENCODING_TYPE_PROTO3, err)
+	err := proto.Unmarshal(historyBackfillToken.MutableStateRow, mutableState)
+	if err == nil {
+		// This is ultimately from the replication rpc stream, so it's not really a request or
+		// response, but use SourceRPCRequest here since it's incoming data.
+		err = utf8validator.ValidateUsingGlobalValidator(mutableState, utf8validator.SourceRPCRequest, nil)
 	}
-	// This is ultimately from the replication rpc stream, so it's not really a request or
-	// response, but use SourceRPCRequest here since it's incoming data.
-	err := utf8validator.ValidateUsingGlobalValidator(mutableState, utf8validator.SourceRPCRequest, nil)
 	if err != nil {
-		return nil, 0, 0, false, err
+		return nil, 0, 0, false, serialization.NewDeserializationError(enums.ENCODING_TYPE_PROTO3, err)
 	}
 	return mutableState, historyBackfillToken.DBRecordVersion, historyBackfillToken.DBHistorySize, historyBackfillToken.ExistsInDB, nil
 }
