@@ -730,7 +730,7 @@ func (s *testSerializer) DeserializeTask(
 
 	taskInfo := &persistencespb.TransferTaskInfo{}
 	if err := proto.Unmarshal(blob.Data, taskInfo); err != nil {
-		return nil, err
+		return nil, serialization.NewDeserializationError(enumspb.ENCODING_TYPE_PROTO3, err)
 	}
 
 	fakeTask := tasks.NewFakeTask(
