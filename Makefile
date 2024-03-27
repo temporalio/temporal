@@ -175,8 +175,9 @@ ci-update-tools: update-goimports update-mockgen update-proto-plugins update-pro
 $(PROTO_OUT):
 	@mkdir -p $(PROTO_OUT)
 
-clean-proto:
-	@go mod tidy # Make sure go.mod is up to date before we delete the generated files in case protogen fails and we need to rerun it.
+# We depend on gomodtidy to ensure that go.mod is up to date before we delete the generated files
+# in case protogen fails, and we need to rerun it.
+clean-proto: gomodtidy
 	@rm -rf $(PROTO_OUT)/*
 
 update-proto-submodule:
