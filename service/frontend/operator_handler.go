@@ -29,12 +29,15 @@ import (
 	"fmt"
 	"sync/atomic"
 
-	cnexus "go.temporal.io/server/common/nexus"
+	"go.temporal.io/api/nexus/v1"
 	"golang.org/x/exp/maps"
-	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/health"
 	healthpb "google.golang.org/grpc/health/grpc_health_v1"
-	"google.golang.org/grpc/status"
+	"google.golang.org/protobuf/types/known/timestamppb"
+
+	"go.temporal.io/server/api/matchingservice/v1"
+	hlc "go.temporal.io/server/common/clock/hybrid_logical_clock"
+	cnexus "go.temporal.io/server/common/nexus"
 
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
@@ -88,9 +91,11 @@ type (
 		saManager               searchattribute.Manager
 		healthServer            *health.Server
 		historyClient           resource.HistoryClient
+		matchingClient          resource.MatchingClient
 		clusterMetadataManager  persistence.ClusterMetadataManager
 		clusterMetadata         clustermetadata.Metadata
 		clientFactory           svc.Factory
+		incomingServiceManager  persistence.NexusIncomingServiceManager
 		outgoingServiceRegistry *cnexus.OutgoingServiceRegistry
 	}
 
@@ -104,9 +109,11 @@ type (
 		SaManager               searchattribute.Manager
 		healthServer            *health.Server
 		historyClient           resource.HistoryClient
+		matchingClient          resource.MatchingClient
 		clusterMetadataManager  persistence.ClusterMetadataManager
 		clusterMetadata         clustermetadata.Metadata
 		clientFactory           svc.Factory
+		incomingServiceManager  persistence.NexusIncomingServiceManager
 		outgoingServiceRegistry *cnexus.OutgoingServiceRegistry
 	}
 )
@@ -828,24 +835,129 @@ func (h *OperatorHandlerImpl) validateRemoteClusterMetadata(metadata *adminservi
 	return nil
 }
 
-func (*OperatorHandlerImpl) CreateNexusIncomingService(context.Context, *operatorservice.CreateNexusIncomingServiceRequest) (*operatorservice.CreateNexusIncomingServiceResponse, error) {
-	return nil, status.Error(codes.Unimplemented, "unimplemented")
+func (h *OperatorHandlerImpl) CreateNexusIncomingService(
+	ctx context.Context,
+	request *operatorservice.CreateNexusIncomingServiceRequest,
+) (_ *operatorservice.CreateNexusIncomingServiceResponse, retError error) {
+	defer log.CapturePanic(h.logger, &retError)
+
+	// TODO: validate request
+
+	resp, err := h.matchingClient.CreateNexusIncomingService(ctx, &matchingservice.CreateNexusIncomingServiceRequest{
+		Spec: request.Spec,
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	return &operatorservice.CreateNexusIncomingServiceResponse{
+		Service: resp.GetService(),
+	}, nil
 }
 
-func (*OperatorHandlerImpl) UpdateNexusIncomingService(context.Context, *operatorservice.UpdateNexusIncomingServiceRequest) (*operatorservice.UpdateNexusIncomingServiceResponse, error) {
-	return nil, status.Error(codes.Unimplemented, "unimplemented")
+func (h *OperatorHandlerImpl) UpdateNexusIncomingService(
+	ctx context.Context,
+	request *operatorservice.UpdateNexusIncomingServiceRequest,
+) (_ *operatorservice.UpdateNexusIncomingServiceResponse, retError error) {
+	defer log.CapturePanic(h.logger, &retError)
+
+	// TODO: validate request
+
+	resp, err := h.matchingClient.UpdateNexusIncomingService(ctx, &matchingservice.UpdateNexusIncomingServiceRequest{
+		Id:      request.Id,
+		Version: request.Version,
+		Spec:    request.Spec,
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	return &operatorservice.UpdateNexusIncomingServiceResponse{
+		Service: resp.Service,
+	}, nil
 }
 
-func (*OperatorHandlerImpl) DeleteNexusIncomingService(context.Context, *operatorservice.DeleteNexusIncomingServiceRequest) (*operatorservice.DeleteNexusIncomingServiceResponse, error) {
-	return nil, status.Error(codes.Unimplemented, "unimplemented")
+func (h *OperatorHandlerImpl) DeleteNexusIncomingService(
+	ctx context.Context,
+	request *operatorservice.DeleteNexusIncomingServiceRequest,
+) (_ *operatorservice.DeleteNexusIncomingServiceResponse, retError error) {
+	defer log.CapturePanic(h.logger, &retError)
+
+	// TODO: validate request
+
+	_, err := h.matchingClient.DeleteNexusIncomingService(ctx, &matchingservice.DeleteNexusIncomingServiceRequest{
+		Id: request.Id,
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	return &operatorservice.DeleteNexusIncomingServiceResponse{}, nil
 }
 
-func (*OperatorHandlerImpl) GetNexusIncomingService(context.Context, *operatorservice.GetNexusIncomingServiceRequest) (*operatorservice.GetNexusIncomingServiceResponse, error) {
-	return nil, status.Error(codes.Unimplemented, "unimplemented")
+func (h *OperatorHandlerImpl) GetNexusIncomingService(
+	ctx context.Context,
+	request *operatorservice.GetNexusIncomingServiceRequest,
+) (_ *operatorservice.GetNexusIncomingServiceResponse, retError error) {
+	defer log.CapturePanic(h.logger, &retError)
+
+	// TODO: validate request
+
 }
 
-func (*OperatorHandlerImpl) ListNexusIncomingServices(context.Context, *operatorservice.ListNexusIncomingServicesRequest) (*operatorservice.ListNexusIncomingServicesResponse, error) {
-	return nil, status.Error(codes.Unimplemented, "unimplemented")
+func (h *OperatorHandlerImpl) ListNexusIncomingServices(
+	ctx context.Context,
+	request *operatorservice.ListNexusIncomingServicesRequest,
+) (_ *operatorservice.ListNexusIncomingServicesResponse, retError error) {
+	defer log.CapturePanic(h.logger, &retError)
+
+	// TODO: validate request
+
+	if request.Name != "" {
+		return h.listNexusIncomingServicesAndFilterByName(ctx, request)
+	}
+
+	resp, err := h.incomingServiceManager.ListNexusIncomingServices(ctx, &persistence.ListNexusIncomingServicesRequest{
+		LastKnownTableVersion: 0,
+		NextPageToken:         request.NextPageToken,
+		PageSize:              int(request.PageSize),
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	services := make([]*nexus.IncomingService, len(resp.Entries))
+	for i, entry := range resp.Entries {
+		var lastModifiedTime *timestamppb.Timestamp
+		// Only set last modified if there were modifications as stated in the UI contract.
+		if entry.Version > 1 {
+			lastModifiedTime = timestamppb.New(hlc.UTC(entry.Service.Clock))
+		}
+
+		services[i] = &nexus.IncomingService{
+			Version:          entry.Version,
+			Id:               entry.Id,
+			Spec:             entry.Service.Spec,
+			CreatedTime:      entry.Service.CreatedTime,
+			LastModifiedTime: lastModifiedTime,
+			UrlPrefix:        "/" + cnexus.Routes().DispatchNexusTaskByService.Path(entry.Id),
+		}
+	}
+
+	return &operatorservice.ListNexusIncomingServicesResponse{
+		NextPageToken: resp.NextPageToken,
+		Services:      services,
+	}, nil
+}
+
+// listNexusIncomingServicesAndFilterByName paginates over all services returned by persistence layer
+// to find the service name indicated in the request. Returns that service if found or an empty response if not.
+// PageSize and NextPageToken fields on the request are ignored.
+func (h *OperatorHandlerImpl) listNexusIncomingServicesAndFilterByName(
+	ctx context.Context,
+	request *operatorservice.ListNexusIncomingServicesRequest,
+) (*operatorservice.ListNexusIncomingServicesResponse, error) {
+
 }
 
 func (h *OperatorHandlerImpl) GetNexusOutgoingService(
