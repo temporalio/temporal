@@ -1627,7 +1627,7 @@ func (wh *WorkflowHandler) SignalWorkflowExecution(ctx context.Context, request 
 	}
 
 	if request.GetSignalName() == "" {
-		return nil, errSignalNameTooLong
+		return nil, errSignalNameIsEmpty
 	}
 
 	if len(request.GetSignalName()) > wh.config.MaxIDLengthLimit() {

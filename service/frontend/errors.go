@@ -53,6 +53,7 @@ var (
 	errWorkflowTypeTooLong                                = serviceerror.NewInvalidArgument("WorkflowType length exceeds limit.")
 	errWorkflowIDTooLong                                  = serviceerror.NewInvalidArgument("WorkflowId length exceeds limit.")
 	errSignalNameTooLong                                  = serviceerror.NewInvalidArgument("SignalName length exceeds limit.")
+	errSignalNameIsEmpty                                  = serviceerror.NewInvalidArgument("SignalName is empty.")
 	errTaskQueueTooLong                                   = serviceerror.NewInvalidArgument("TaskQueue length exceeds limit.")
 	errRequestIDTooLong                                   = serviceerror.NewInvalidArgument("RequestId length exceeds limit.")
 	errIdentityTooLong                                    = serviceerror.NewInvalidArgument("Identity length exceeds limit.")
