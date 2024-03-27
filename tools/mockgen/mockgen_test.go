@@ -26,7 +26,11 @@ func TestNoDestinationFile(t *testing.T) {
 }
 
 func TestFileNotExists(t *testing.T) {
-	calls, err := runCommand([]string{"-source", "2dc53c2850878438af974704", "-destination", "7433393f1ff8c1373e15c2ce"})
+	t.Parallel()
+	calls, err := runCommand([]string{
+		// Random file names that shouldn't exist
+		"-source", "2dc53c2850878438af974704", "-destination", "7433393f1ff8c1373e15c2ce",
+	})
 	require.ErrorIs(t, err, os.ErrNotExist)
 	assert.Empty(t, calls)
 }
@@ -57,7 +61,7 @@ func TestSourceFileStale(t *testing.T) {
 
 func runCommand(args []string) ([][]string, error) {
 	var calls [][]string
-	err := mockgen.Run(args, mockgen.WithRunCommand(func(args []string) error {
+	err := mockgen.Run(args, mockgen.WithExecFn(func(args []string) error {
 		calls = append(calls, args)
 		return nil
 	}))
@@ -66,10 +70,6 @@ func runCommand(args []string) ([][]string, error) {
 
 func createTemp(t *testing.T) *os.File {
 	return testutils.CreateTemp(t, "", "")
-}
-
-func remove(t *testing.T, path string) {
-	require.NoError(t, os.Remove(path))
 }
 
 func chModTime(t *testing.T, path string, ts time.Time) {

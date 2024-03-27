@@ -1,3 +1,5 @@
+// Package mockgen contains a wrapper for the `mockgen` tool, which bypasses running `mockgen` if the destination file
+// is newer than the source file. This is useful because `mockgen` is slow and can be a bottleneck in the build process.
 package mockgen
 
 import (
@@ -6,26 +8,43 @@ import (
 	"time"
 )
 
-// Run checks the modification times of the source and destination files,
-// running mockgen only if necessary.
+// Run a cached version of `mockgen`, which checks the modification times of the source and destination files,
+// running mockgen only if necessary. This is similar to the behavior of `Make`, but it wasn't easy to express this
+// in a Makefile because the generate commands are in our source code.
 func Run(args []string, opts ...Option) error {
 	params := &Params{
-		RunCommand: runRealCommand,
+		Exec: runRealCommand,
 	}
 	for _, opt := range opts {
 		opt(params)
 	}
 
-	shouldRun, err := shouldRunMockgenBasedOnArgs(args)
+	upToDate, err := isDestinationFileUpToDateWithSourceInArgs(args)
 	if err != nil {
 		return err
 	}
-	if !shouldRun {
+	if !upToDate {
 		return nil
 	}
 
-	// Either the source or destination file doesn't exist, or the source is newer; run mockgen
-	return params.RunCommand(args)
+	// We couldn't confirm that the target file was up-to-date; run mockgen
+	return params.Exec(args)
+}
+
+// Params for running the mockgen wrapper.
+type Params struct {
+	// Exec is a function that should execute a shell command with the given arguments.
+	Exec func(args []string) error
+}
+
+// Option to override the [Params] of the mockgen wrapper.
+type Option func(*Params)
+
+// WithExecFn sets a custom [Params.Exec] function.
+func WithExecFn(f func(args []string) error) Option {
+	return func(params *Params) {
+		params.Exec = f
+	}
 }
 
 func runRealCommand(args []string) error {
@@ -35,19 +54,7 @@ func runRealCommand(args []string) error {
 	return cmd.Run()
 }
 
-type Params struct {
-	RunCommand func(args []string) error
-}
-
-type Option func(*Params)
-
-func WithRunCommand(f func(args []string) error) Option {
-	return func(params *Params) {
-		params.RunCommand = f
-	}
-}
-
-func shouldRunMockgenBasedOnArgs(args []string) (bool, error) {
+func isDestinationFileUpToDateWithSourceInArgs(args []string) (bool, error) {
 	var sourcePath, destPath string
 
 	// Extract source and destination paths from the args
@@ -61,28 +68,29 @@ func shouldRunMockgenBasedOnArgs(args []string) (bool, error) {
 		}
 	}
 
-	// If either source or destination path is empty, run mockgen
+	// If either source or destination path aren't specified, run mockgen. There's no way for us to know if the source
+	// is newer than the destination in this case.
 	if sourcePath == "" || destPath == "" {
 		return true, nil
 	}
 
 	// Get modification times of source and destination files
 	var sourceTime, destTime time.Time
-	for _, arg := range []struct {
-		path  string
-		field *time.Time
+	for _, f := range []struct {
+		filePath string
+		modTime  *time.Time
 	}{
 		{sourcePath, &sourceTime},
 		{destPath, &destTime},
 	} {
-		fileInfo, err := os.Stat(arg.path)
+		fileInfo, err := os.Stat(f.filePath)
 		if err != nil {
 			return false, err
 		}
-		*arg.field = fileInfo.ModTime()
+		*f.modTime = fileInfo.ModTime()
 	}
 
 	// Compare modification times
-	shouldRun := sourceTime.After(destTime)
-	return shouldRun, nil
+	upToDate := sourceTime.After(destTime)
+	return upToDate, nil
 }
