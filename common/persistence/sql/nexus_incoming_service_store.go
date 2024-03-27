@@ -25,6 +25,7 @@ package sql
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"fmt"
 
 	"go.temporal.io/api/serviceerror"
@@ -107,6 +108,26 @@ func (s *sqlNexusIncomingServiceStore) CreateOrUpdateNexusIncomingService(
 		return err
 	})
 	return retErr
+}
+
+func (s *sqlNexusIncomingServiceStore) GetNexusIncomingService(
+	ctx context.Context,
+	request *p.GetNexusIncomingServiceRequest,
+) (*p.InternalNexusIncomingService, error) {
+	row, err := s.Db.SelectNexusIncomingServiceByID(ctx, []byte(request.ServiceID))
+	if err != nil {
+		if errors.As(err, &sql.ErrNoRows) {
+			return nil, serviceerror.NewNotFound(fmt.Sprintf("Nexus incoming service with ID `%v` not found", request.ServiceID))
+		}
+		s.logger.Error(fmt.Sprintf("error getting Nexus incoming service with ID %v", request.ServiceID), tag.Error(err))
+		return nil, serviceerror.NewUnavailable(err.Error())
+	}
+
+	return &p.InternalNexusIncomingService{
+		ServiceID: request.ServiceID,
+		Version:   row.Version,
+		Data:      p.NewDataBlob(row.Data, row.DataEncoding),
+	}, nil
 }
 
 func (s *sqlNexusIncomingServiceStore) ListNexusIncomingServices(

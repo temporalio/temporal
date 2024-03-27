@@ -35,10 +35,11 @@ const (
 	incrementIncomingServicesTableVersionQry = `UPDATE nexus_incoming_services_partition_status SET version = ? WHERE version = ?`
 	getIncomingServicesTableVersionQry       = `SELECT version FROM nexus_incoming_services_partition_status`
 
-	createIncomingServiceQry = `INSERT INTO nexus_incoming_services(service_id, data, data_encoding, version) VALUES (?, ?, ?, 1)`
-	updateIncomingServiceQry = `UPDATE nexus_incoming_services SET data = ?, data_encoding = ?, version = ? WHERE service_id = ? AND version = ?`
-	deleteIncomingServiceQry = `DELETE FROM nexus_incoming_services WHERE service_id = ?`
-	getIncomingServicesQry   = `SELECT service_id, data, data_encoding, version FROM nexus_incoming_services WHERE service_id > ? LIMIT ?`
+	createIncomingServiceQry  = `INSERT INTO nexus_incoming_services(service_id, data, data_encoding, version) VALUES (?, ?, ?, 1)`
+	updateIncomingServiceQry  = `UPDATE nexus_incoming_services SET data = ?, data_encoding = ?, version = ? WHERE service_id = ? AND version = ?`
+	deleteIncomingServiceQry  = `DELETE FROM nexus_incoming_services WHERE service_id = ?`
+	getIncomingServiceByIdQry = `SELECT service_id, data, data_encoding, version FROM nexus_incoming_services WHERE service_id = ? LIMIT 1`
+	getIncomingServicesQry    = `SELECT service_id, data, data_encoding, version FROM nexus_incoming_services WHERE service_id > ? LIMIT ?`
 )
 
 func (mdb *db) InitializeNexusIncomingServicesTableVersion(ctx context.Context) (sql.Result, error) {
@@ -92,6 +93,15 @@ func (mdb *db) DeleteFromNexusIncomingServices(
 	serviceID []byte,
 ) (sql.Result, error) {
 	return mdb.conn.ExecContext(ctx, deleteIncomingServiceQry, serviceID)
+}
+
+func (mdb *db) SelectNexusIncomingServiceByID(
+	ctx context.Context,
+	serviceID []byte,
+) (sqlplugin.NexusIncomingServicesRow, error) {
+	var row sqlplugin.NexusIncomingServicesRow
+	err := mdb.conn.SelectContext(ctx, &row, getIncomingServiceByIdQry, serviceID)
+	return row, err
 }
 
 func (mdb *db) ListNexusIncomingServices(

@@ -48,6 +48,7 @@ type (
 
 		InsertIntoNexusIncomingServices(ctx context.Context, row *NexusIncomingServicesRow) (sql.Result, error)
 		UpdateNexusIncomingService(ctx context.Context, row *NexusIncomingServicesRow) (sql.Result, error)
+		SelectNexusIncomingServiceByID(ctx context.Context, serviceID []byte) (NexusIncomingServicesRow, error)
 		ListNexusIncomingServices(ctx context.Context, request *ListNexusIncomingServicesRequest) ([]NexusIncomingServicesRow, error)
 		DeleteFromNexusIncomingServices(ctx context.Context, serviceID []byte) (sql.Result, error)
 	}
