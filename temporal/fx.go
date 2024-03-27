@@ -570,10 +570,6 @@ func WorkerServiceProvider(
 	return NewService(app, serviceName, params.Logger), app.Err()
 }
 
-func ClusterMetadataManagerProvider() {
-
-}
-
 // ApplyClusterMetadataConfigProvider performs a config check against the configured persistence store for cluster metadata.
 // If there is a mismatch, the persisted values take precedence and will be written over in the config objects.
 // This is to keep this check hidden from downstream calls.
