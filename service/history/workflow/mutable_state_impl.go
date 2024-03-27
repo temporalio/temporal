@@ -3655,12 +3655,9 @@ func (ms *MutableStateImpl) ApplyWorkflowExecutionUpdateAcceptedEvent(
 	}
 	updateID := attrs.GetAcceptedRequest().GetMeta().GetUpdateId()
 	var sizeDelta int
-	if ui, ok := ms.executionInfo.UpdateInfos[updateID]; ok {
-		sizeBefore := ui.Size()
-		ui.Value = &updatespb.UpdateInfo_Acceptance{
-			Acceptance: &updatespb.AcceptanceInfo{EventId: event.EventId},
-		}
-		sizeDelta = ui.Size() - sizeBefore
+	if _, ok := ms.executionInfo.UpdateInfos[updateID]; ok {
+		debug.PrintStack()
+		panic(fmt.Sprintf("Did not expect updateID %s to exist in registry when applying accepted event to MS", updateID))
 	} else {
 		ui := updatespb.UpdateInfo{
 			Value: &updatespb.UpdateInfo_Acceptance{
