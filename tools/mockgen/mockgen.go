@@ -7,7 +7,6 @@ import (
 	"os"
 	"os/exec"
 	"syscall"
-	"time"
 )
 
 // Run a cached version of `mockgen`, which checks the modification times of the source and destination files,
@@ -82,20 +81,20 @@ func isDestinationFileUpToDateWithSourceInArgs(args []string) (bool, error) {
 	}
 
 	// Get modification times of source and destination files
-	var sourceTime, destTime time.Time
-	for _, f := range []struct {
-		filePath string
-		modTime  *time.Time
-	}{
-		{sourcePath, &sourceTime},
-		{destPath, &destTime},
-	} {
-		fileInfo, err := os.Stat(f.filePath)
-		if err != nil {
-			return false, fmt.Errorf("failed to stat file %q: %w", f.filePath, err)
-		}
-		*f.modTime = fileInfo.ModTime()
+	fileInfo, err := os.Stat(sourcePath)
+	if err != nil {
+		return false, fmt.Errorf("failed to stat source file %q: %w", sourcePath, err)
 	}
+	sourceTime := fileInfo.ModTime()
+	fileInfo, err = os.Stat(destPath)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return true, nil
+		} else {
+			return false, fmt.Errorf("failed to stat dest file %q: %w", sourcePath, err)
+		}
+	}
+	destTime := fileInfo.ModTime()
 
 	// Compare modification times
 	upToDate := sourceTime.After(destTime)

@@ -25,14 +25,26 @@ func TestNoDestinationFile(t *testing.T) {
 	assert.Equal(t, [][]string{{"-source", "foo.go"}}, calls)
 }
 
-func TestFileNotExists(t *testing.T) {
+func TestSourceFileNotExists(t *testing.T) {
 	t.Parallel()
+	dest := createTemp(t)
 	calls, err := runCommand([]string{
 		// Random file names that shouldn't exist
-		"-source", "2dc53c2850878438af974704", "-destination", "7433393f1ff8c1373e15c2ce",
+		"-source", "2dc53c2850878438af974704", "-destination", dest.Name(),
 	})
 	require.ErrorIs(t, err, os.ErrNotExist)
 	assert.Empty(t, calls)
+}
+
+func TestDestFileNotExists(t *testing.T) {
+	t.Parallel()
+	source := createTemp(t)
+	calls, err := runCommand([]string{
+		// Random file names that shouldn't exist
+		"-source", source.Name(), "-destination", "7433393f1ff8c1373e15c2ce",
+	})
+	require.NoError(t, err)
+	assert.Len(t, calls, 1)
 }
 
 func TestSourceFileNotStale(t *testing.T) {
