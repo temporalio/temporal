@@ -151,6 +151,10 @@ func (f *FIFOScheduler[T]) workerMonitor() {
 			timer.Reset(backoff.Jitter(defaultMonitorTickerDuration, defaultMonitorTickerJitter))
 
 			targetWorkerNum := f.options.WorkerCount()
+			if targetWorkerNum < 0 {
+				f.logger.Error("Target worker pool size is negative. Please fix the dynamic config.", tag.Key("worker-pool-size"), tag.Value(targetWorkerNum))
+				continue
+			}
 			currentWorkerNum := len(f.workerShutdownCh)
 
 			if targetWorkerNum == currentWorkerNum {
