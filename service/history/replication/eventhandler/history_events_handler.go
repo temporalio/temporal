@@ -60,6 +60,7 @@ type (
 			versionHistoryItems []*historyspb.VersionHistoryItem,
 			historyEvents [][]*historypb.HistoryEvent,
 			newEvents []*historypb.HistoryEvent,
+			newRunID string,
 		) error
 	}
 
@@ -90,6 +91,7 @@ func (h *historyEventsHandlerImpl) HandleHistoryEvents(
 	versionHistoryItems []*historyspb.VersionHistoryItem,
 	historyEvents [][]*historypb.HistoryEvent,
 	newEvents []*historypb.HistoryEvent,
+	newRunID string,
 ) error {
 	if len(historyEvents) == 0 {
 		return serviceerror.NewInvalidArgument("Empty batches")
@@ -118,6 +120,7 @@ func (h *historyEventsHandlerImpl) HandleHistoryEvents(
 			versionHistoryItems,
 			remoteEvents,
 			newEvents,
+			newRunID,
 		); err != nil {
 			return err
 		}

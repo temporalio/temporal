@@ -1478,6 +1478,7 @@ func (s *FunctionalSuite) TestSignalWithStartWorkflow() {
 	}
 	resp, err := s.engine.SignalWithStartWorkflowExecution(NewContext(), sRequest)
 	s.NoError(err)
+	s.False(resp.Started)
 	s.Equal(we.GetRunId(), resp.GetRunId())
 
 	// Process signal in workflow
@@ -1512,6 +1513,7 @@ func (s *FunctionalSuite) TestSignalWithStartWorkflow() {
 
 	resp, err = s.engine.SignalWithStartWorkflowExecution(NewContext(), sRequest)
 	s.NoError(err)
+	s.True(resp.Started)
 	s.NotNil(resp.GetRunId())
 	s.NotEqual(we.GetRunId(), resp.GetRunId())
 	newWorkflowStarted = true
@@ -1539,6 +1541,7 @@ func (s *FunctionalSuite) TestSignalWithStartWorkflow() {
 	resp, err = s.engine.SignalWithStartWorkflowExecution(NewContext(), sRequest)
 	s.NoError(err)
 	s.NotNil(resp.GetRunId())
+	s.True(resp.Started)
 	newWorkflowStarted = true
 
 	// Process signal in workflow
@@ -1615,7 +1618,7 @@ func (s *FunctionalSuite) TestSignalWithStartWorkflow() {
 	s.Equal(1, len(listClosedResp.Executions))
 }
 
-func (s *FunctionalSuite) TestSignalWithStartWorkflow_IDReusePolicy() {
+func (s *FunctionalSuite) TestSignalWithStartWorkflow_ResolveIDDeduplication() {
 	id := "functional-signal-with-start-workflow-id-reuse-test"
 	wt := "functional-signal-with-start-workflow-id-reuse-test-type"
 	tl := "functional-signal-with-start-workflow-id-reuse-test-taskqueue"
@@ -1703,7 +1706,7 @@ func (s *FunctionalSuite) TestSignalWithStartWorkflow_IDReusePolicy() {
 	s.NoError(err)
 	s.True(workflowComplete)
 
-	// test policy WorkflowIdReusePolicyRejectDuplicate
+	// test WorkflowIdReusePolicy: RejectDuplicate
 	signalName := "my signal"
 	signalInput := payloads.EncodeString("my signal input")
 	sRequest := &workflowservice.SignalWithStartWorkflowExecutionRequest{
@@ -1727,7 +1730,7 @@ func (s *FunctionalSuite) TestSignalWithStartWorkflow_IDReusePolicy() {
 	s.True(strings.Contains(err.Error(), "reject duplicate workflow Id"))
 	s.IsType(&serviceerror.WorkflowExecutionAlreadyStarted{}, err)
 
-	// test policy WorkflowIdReusePolicyAllowDuplicateFailedOnly
+	// test WorkflowIdReusePolicy: AllowDuplicateFailedOnly
 	sRequest.WorkflowIdReusePolicy = enumspb.WORKFLOW_ID_REUSE_POLICY_ALLOW_DUPLICATE_FAILED_ONLY
 	ctx, _ = rpc.NewContextWithTimeoutAndVersionHeaders(5 * time.Second)
 	resp, err = s.engine.SignalWithStartWorkflowExecution(ctx, sRequest)
@@ -1736,12 +1739,13 @@ func (s *FunctionalSuite) TestSignalWithStartWorkflow_IDReusePolicy() {
 	s.True(strings.Contains(err.Error(), "allow duplicate workflow Id if last run failed"))
 	s.IsType(&serviceerror.WorkflowExecutionAlreadyStarted{}, err)
 
-	// test policy WorkflowIdReusePolicyAllowDuplicate
+	// test WorkflowIdReusePolicy: AllowDuplicate
 	sRequest.WorkflowIdReusePolicy = enumspb.WORKFLOW_ID_REUSE_POLICY_ALLOW_DUPLICATE
 	ctx, _ = rpc.NewContextWithTimeoutAndVersionHeaders(5 * time.Second)
 	resp, err = s.engine.SignalWithStartWorkflowExecution(ctx, sRequest)
 	s.NoError(err)
 	s.NotEmpty(resp.GetRunId())
+	s.True(resp.Started)
 
 	// Terminate workflow execution
 	_, err = s.engine.TerminateWorkflowExecution(NewContext(), &workflowservice.TerminateWorkflowExecutionRequest{
@@ -1755,26 +1759,42 @@ func (s *FunctionalSuite) TestSignalWithStartWorkflow_IDReusePolicy() {
 	})
 	s.NoError(err)
 
-	// test policy WorkflowIdReusePolicyAllowDuplicateFailedOnly success start
+	// test WorkflowIdReusePolicy: AllowDuplicateFailedOnly
 	sRequest.WorkflowIdReusePolicy = enumspb.WORKFLOW_ID_REUSE_POLICY_ALLOW_DUPLICATE_FAILED_ONLY
 	resp, err = s.engine.SignalWithStartWorkflowExecution(NewContext(), sRequest)
 	s.NoError(err)
 	s.NotEmpty(resp.GetRunId())
+	s.True(resp.Started)
 
-	// test policy WorkflowIdReusePolicyTerminateIfRunning
+	// test WorkflowIdReusePolicy: TerminateIfRunning (for backwards compatibility)
 	prevRunID := resp.RunId
 	sRequest.WorkflowIdReusePolicy = enumspb.WORKFLOW_ID_REUSE_POLICY_TERMINATE_IF_RUNNING
 	resp, err = s.engine.SignalWithStartWorkflowExecution(NewContext(), sRequest)
 	s.NoError(err)
 	s.NotEmpty(resp.GetRunId())
 	s.NotEqual(prevRunID, resp.GetRunId())
+	s.True(resp.Started)
 
 	descResp, err := s.engine.DescribeWorkflowExecution(NewContext(), &workflowservice.DescribeWorkflowExecutionRequest{
 		Namespace: s.namespace,
-		Execution: &commonpb.WorkflowExecution{
-			WorkflowId: id,
-			RunId:      prevRunID,
-		},
+		Execution: &commonpb.WorkflowExecution{WorkflowId: id, RunId: prevRunID},
+	})
+	s.NoError(err)
+	s.Equal(enumspb.WORKFLOW_EXECUTION_STATUS_TERMINATED, descResp.WorkflowExecutionInfo.Status)
+
+	// test WorkflowIdConflictPolicy: TerminateExisting (replaced TerminateIfRunning)
+	prevRunID = resp.RunId
+	sRequest.WorkflowIdReusePolicy = enumspb.WORKFLOW_ID_REUSE_POLICY_ALLOW_DUPLICATE
+	sRequest.WorkflowIdConflictPolicy = enumspb.WORKFLOW_ID_CONFLICT_POLICY_TERMINATE_EXISTING
+	resp, err = s.engine.SignalWithStartWorkflowExecution(NewContext(), sRequest)
+	s.NoError(err)
+	s.NotEmpty(resp.GetRunId())
+	s.NotEqual(prevRunID, resp.GetRunId())
+	s.True(resp.Started)
+
+	descResp, err = s.engine.DescribeWorkflowExecution(NewContext(), &workflowservice.DescribeWorkflowExecutionRequest{
+		Namespace: s.namespace,
+		Execution: &commonpb.WorkflowExecution{WorkflowId: id, RunId: prevRunID},
 	})
 	s.NoError(err)
 	s.Equal(enumspb.WORKFLOW_EXECUTION_STATUS_TERMINATED, descResp.WorkflowExecutionInfo.Status)

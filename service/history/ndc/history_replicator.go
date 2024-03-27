@@ -58,7 +58,7 @@ const (
 )
 
 type (
-	stateBuilderProvider func(
+	mutableStateRebuilderProvider func(
 		mutableState workflow.MutableState,
 		logger log.Logger,
 	) workflow.MutableStateRebuilder
@@ -111,6 +111,7 @@ type (
 			versionHistoryItems []*historyspb.VersionHistoryItem,
 			events [][]*historypb.HistoryEvent,
 			newEvents []*historypb.HistoryEvent,
+			newRunID string,
 		) error
 	}
 
@@ -231,6 +232,7 @@ func (r *HistoryReplicatorImpl) ReplicateHistoryEvents(
 	versionHistoryItems []*historyspb.VersionHistoryItem,
 	eventsSlice [][]*historypb.HistoryEvent,
 	newEvents []*historypb.HistoryEvent,
+	newRunID string,
 ) error {
 	task, err := newReplicationTaskFromBatch(
 		r.clusterMetadata,
@@ -240,6 +242,7 @@ func (r *HistoryReplicatorImpl) ReplicateHistoryEvents(
 		versionHistoryItems,
 		eventsSlice,
 		newEvents,
+		newRunID,
 	)
 	if err != nil {
 		return err
@@ -280,7 +283,7 @@ func (r *HistoryReplicatorImpl) doApplyEvents(
 
 	default:
 		// apply events, other than simple start workflow execution
-		// the continue as new + start workflow execution combination will also be processed here
+		// the update + start workflow execution combination will also be processed here
 		mutableState, err := wfContext.LoadMutableState(ctx, r.shardContext)
 		switch err.(type) {
 		case nil:

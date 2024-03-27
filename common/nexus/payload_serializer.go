@@ -30,6 +30,8 @@ import (
 
 	"github.com/nexus-rpc/sdk-go/nexus"
 	commonpb "go.temporal.io/api/common/v1"
+	"go.temporal.io/api/enums/v1"
+	"go.temporal.io/server/common/persistence/serialization"
 )
 
 type payloadSerializer struct{}
@@ -79,7 +81,7 @@ func (payloadSerializer) Deserialize(content *nexus.Content, v any) error {
 	case "application/x-temporal-payload":
 		err := payload.Unmarshal(content.Data)
 		if err != nil {
-			return err
+			return serialization.NewDeserializationError(enums.ENCODING_TYPE_PROTO3, err)
 		}
 	case "application/json":
 		if len(params) == 0 {

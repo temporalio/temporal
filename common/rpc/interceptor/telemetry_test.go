@@ -29,6 +29,7 @@ import (
 
 	"github.com/golang/mock/gomock"
 	"github.com/stretchr/testify/assert"
+	"go.temporal.io/api/workflowservice/v1"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 
@@ -55,21 +56,31 @@ func TestEmitActionMetric(t *testing.T) {
 		methodName        string
 		fullName          string
 		expectEmitMetrics bool
+		resp              any
 	}{
 		{
-			queryWorkflow,
-			api.WorkflowServicePrefix + queryWorkflow,
-			true,
+			methodName: startWorkflow,
+			fullName:   api.WorkflowServicePrefix + startWorkflow,
+			resp:       &workflowservice.StartWorkflowExecutionResponse{Started: false},
 		},
 		{
-			queryWorkflow,
-			api.AdminServicePrefix + queryWorkflow,
-			false,
+			methodName:        startWorkflow,
+			fullName:          api.WorkflowServicePrefix + startWorkflow,
+			resp:              &workflowservice.StartWorkflowExecutionResponse{Started: true},
+			expectEmitMetrics: true,
 		},
 		{
-			metrics.MatchingClientAddWorkflowTaskScope,
-			api.WorkflowServicePrefix + queryWorkflow,
-			false,
+			methodName:        queryWorkflow,
+			fullName:          api.WorkflowServicePrefix + queryWorkflow,
+			expectEmitMetrics: true,
+		},
+		{
+			methodName: queryWorkflow,
+			fullName:   api.AdminServicePrefix + queryWorkflow,
+		},
+		{
+			methodName: metrics.MatchingClientAddWorkflowTaskScope,
+			fullName:   api.WorkflowServicePrefix + queryWorkflow,
 		},
 	}
 
@@ -80,7 +91,7 @@ func TestEmitActionMetric(t *testing.T) {
 			} else {
 				metricsHandler.EXPECT().Counter(gomock.Any()).Return(metrics.NoopCounterMetricFunc).Times(0)
 			}
-			telemetry.emitActionMetric(tt.methodName, tt.fullName, nil, metricsHandler, nil)
+			telemetry.emitActionMetric(tt.methodName, tt.fullName, nil, metricsHandler, tt.resp)
 		})
 	}
 }

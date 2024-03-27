@@ -660,6 +660,7 @@ func (e *historyEngineImpl) ReplicateHistoryEvents(
 	versionHistoryItems []*historyspb.VersionHistoryItem,
 	historyEvents [][]*historypb.HistoryEvent,
 	newEvents []*historypb.HistoryEvent,
+	newRunID string,
 ) error {
 	return e.nDCHistoryReplicator.ReplicateHistoryEvents(
 		ctx,
@@ -668,6 +669,7 @@ func (e *historyEngineImpl) ReplicateHistoryEvents(
 		versionHistoryItems,
 		historyEvents,
 		newEvents,
+		newRunID,
 	)
 }
 
