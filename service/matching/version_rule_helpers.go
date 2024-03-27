@@ -501,11 +501,12 @@ func FindAssignmentBuildId(rules []*persistencepb.AssignmentRule, runId string) 
 	return "", nil
 }
 
+// calcRampThreshold returns a number in [0, 100) that is deterministically calculated based on the passed id
 func calcRampThreshold(id string) (float64, error) {
 	h := fnv.New32a()
 	_, err := h.Write([]byte(id))
 	if err != nil {
 		return -1, err
 	}
-	return float64(h.Sum32()) / math.MaxUint32, nil
+	return 100 * (float64(h.Sum32()) / math.MaxUint32), nil
 }

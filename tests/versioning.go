@@ -606,7 +606,7 @@ func (s *VersioningIntegSuite) TestDispatchNewWorkflowWithRamp() {
 	defer cancel()
 
 	rule := s.addAssignmentRule(ctx, tq, v1)
-	rule2 := s.addAssignmentRuleWithRamp(ctx, tq, v2, .5)
+	rule2 := s.addAssignmentRuleWithRamp(ctx, tq, v2, 50)
 	s.waitForAssignmentRulePropagation(ctx, tq, rule)
 	s.waitForAssignmentRulePropagation(ctx, tq, rule2)
 

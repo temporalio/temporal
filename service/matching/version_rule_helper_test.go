@@ -68,11 +68,11 @@ func TestFindAssignmentBuildId_WithRamp(t *testing.T) {
 	buildId5 := "bld5"
 
 	rules := []*persistence.AssignmentRule{
-		createAssignmentRuleWithRamp(buildId1, .0),
-		createAssignmentRuleWithRamp(buildId2, .2),
-		createAssignmentRuleWithRamp(buildId3, .7),
+		createAssignmentRuleWithRamp(buildId1, 0),
+		createAssignmentRuleWithRamp(buildId2, 20),
+		createAssignmentRuleWithRamp(buildId3, 70),
 		createFullAssignmentRule(buildId4),
-		createAssignmentRuleWithRamp(buildId5, .9),
+		createAssignmentRuleWithRamp(buildId5, 90),
 	}
 
 	histogram := make(map[string]int)
@@ -97,7 +97,7 @@ func TestCalcRampThresholdUniform(t *testing.T) {
 	for i := 0; i < 1000000; i++ {
 		v, err := calcRampThreshold(buildPref + strconv.Itoa(i))
 		assert.NoError(t, err)
-		histogram[int32(v*100)]++
+		histogram[int32(v)]++
 	}
 
 	for i := 0; i < 100; i++ {
