@@ -30,8 +30,10 @@ import (
 	"time"
 
 	commonpb "go.temporal.io/api/common/v1"
+	"go.temporal.io/api/enums/v1"
 	historypb "go.temporal.io/api/history/v1"
 	"go.temporal.io/api/serviceerror"
+	"go.temporal.io/server/common/persistence/serialization"
 	"google.golang.org/protobuf/proto"
 
 	persistencespb "go.temporal.io/server/api/persistence/v1"
@@ -266,10 +268,10 @@ func (r *MutableStateInitializerImpl) deserializeBackfillToken(
 
 	historyBackfillToken := &MutableStateToken{}
 	if err := json.Unmarshal(token, historyBackfillToken); err != nil {
-		return nil, 0, 0, false, err
+		return nil, 0, 0, false, serialization.NewDeserializationError(enums.ENCODING_TYPE_JSON, err)
 	}
 	if err := proto.Unmarshal(historyBackfillToken.MutableStateRow, mutableState); err != nil {
-		return nil, 0, 0, false, err
+		return nil, 0, 0, false, serialization.NewDeserializationError(enums.ENCODING_TYPE_PROTO3, err)
 	}
 	// This is ultimately from the replication rpc stream, so it's not really a request or
 	// response, but use SourceRPCRequest here since it's incoming data.
