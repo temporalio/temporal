@@ -29,6 +29,7 @@ import (
 	"context"
 	"encoding/binary"
 	"errors"
+	"math/rand"
 	"time"
 
 	"go.temporal.io/sdk/activity"
@@ -987,4 +988,136 @@ func (s *ClientFunctionalSuite) TestActivityHeartbeatDetailsDuringRetry() {
 	s.NoError(err)
 
 	s.NoError(err1)
+}
+
+// TestActivityHeartBeat_RecordIdentity verifies that the identity of the worker sending the heartbeat
+// is recorded in pending activity info and returned in describe workflow API response. This happens
+// only when the worker identity is not sent when a poller picks the task.
+func (s *FunctionalSuite) TestActivityHeartBeat_RecordIdentity() {
+	id := "functional-heartbeat-identity-record"
+	workerIdentity := "70df788a-b0b2-4113-a0d5-130f13889e35"
+	activityName := "activity_timer"
+
+	taskQueue := &taskqueuepb.TaskQueue{Name: "functional-heartbeat-identity-record-taskqueue", Kind: enumspb.TASK_QUEUE_KIND_NORMAL}
+
+	header := &commonpb.Header{
+		Fields: map[string]*commonpb.Payload{"tracing": payload.EncodeString("sample data")},
+	}
+
+	request := &workflowservice.StartWorkflowExecutionRequest{
+		RequestId:           uuid.New(),
+		Namespace:           s.namespace,
+		WorkflowId:          id,
+		WorkflowType:        &commonpb.WorkflowType{Name: "functional-heartbeat-identity-record-type"},
+		TaskQueue:           taskQueue,
+		Input:               nil,
+		Header:              header,
+		WorkflowRunTimeout:  durationpb.New(100 * time.Second),
+		WorkflowTaskTimeout: durationpb.New(60 * time.Second),
+		Identity:            workerIdentity,
+	}
+
+	we, err := s.engine.StartWorkflowExecution(NewContext(), request)
+	s.NoError(err)
+
+	workflowComplete := false
+	workflowNextCmd := enumspb.COMMAND_TYPE_SCHEDULE_ACTIVITY_TASK
+	wtHandler := func(
+		execution *commonpb.WorkflowExecution, wt *commonpb.WorkflowType, previousStartedEventID, startedEventID int64, history *historypb.History,
+	) ([]*commandpb.Command, error) {
+		switch workflowNextCmd {
+		case enumspb.COMMAND_TYPE_SCHEDULE_ACTIVITY_TASK:
+			workflowNextCmd = enumspb.COMMAND_TYPE_COMPLETE_WORKFLOW_EXECUTION
+			return []*commandpb.Command{{
+				CommandType: enumspb.COMMAND_TYPE_SCHEDULE_ACTIVITY_TASK,
+				Attributes: &commandpb.Command_ScheduleActivityTaskCommandAttributes{ScheduleActivityTaskCommandAttributes: &commandpb.ScheduleActivityTaskCommandAttributes{
+					ActivityId:             convert.IntToString(rand.Int()),
+					ActivityType:           &commonpb.ActivityType{Name: activityName},
+					TaskQueue:              taskQueue,
+					Input:                  payloads.EncodeString("activity-input"),
+					Header:                 header,
+					ScheduleToCloseTimeout: durationpb.New(15 * time.Second),
+					ScheduleToStartTimeout: durationpb.New(60 * time.Second),
+					StartToCloseTimeout:    durationpb.New(15 * time.Second),
+					HeartbeatTimeout:       durationpb.New(60 * time.Second),
+				}},
+			}}, nil
+		case enumspb.COMMAND_TYPE_COMPLETE_WORKFLOW_EXECUTION:
+			workflowComplete = true
+			return []*commandpb.Command{{
+				CommandType: enumspb.COMMAND_TYPE_COMPLETE_WORKFLOW_EXECUTION,
+				Attributes: &commandpb.Command_CompleteWorkflowExecutionCommandAttributes{CompleteWorkflowExecutionCommandAttributes: &commandpb.CompleteWorkflowExecutionCommandAttributes{
+					Result: payloads.EncodeString("Done"),
+				}},
+			}}, nil
+		}
+		panic("Unexpected workflow state")
+	}
+
+	heartbeatSignalChan := make(chan bool) // Activity task sends heartbeat when signaled on this chan. It also signals back on the same chan after sending the heartbeat.
+	endActivityTask := make(chan bool)     // Activity task completes when signaled on this chan. This is to force the task to be in pending state.
+	atHandler := func(
+		execution *commonpb.WorkflowExecution, activityType *commonpb.ActivityType, activityID string, input *commonpb.Payloads, taskToken []byte,
+	) (*commonpb.Payloads, bool, error) {
+
+		<-heartbeatSignalChan // wait for signal before sending heartbeat.
+		_, err := s.engine.RecordActivityTaskHeartbeat(NewContext(), &workflowservice.RecordActivityTaskHeartbeatRequest{
+			Namespace: s.namespace,
+			TaskToken: taskToken,
+			Details:   payloads.EncodeString("details"),
+			Identity:  workerIdentity, // explicitly set the worker identity in the heartbeat request
+		})
+		s.NoError(err)
+		heartbeatSignalChan <- true // signal that the heartbeat is sent.
+
+		<-endActivityTask // wait for signal before completing the task
+		return payloads.EncodeString("Activity Result"), false, nil
+	}
+
+	poller := &TaskPoller{
+		Engine:              s.engine,
+		Namespace:           s.namespace,
+		TaskQueue:           taskQueue,
+		Identity:            "", // Do not send the worker identity.
+		WorkflowTaskHandler: wtHandler,
+		ActivityTaskHandler: atHandler,
+		Logger:              s.Logger,
+		T:                   s.T(),
+	}
+
+	// execute workflow task so that an activity can be enqueued.
+	_, err = poller.PollAndProcessWorkflowTask()
+	s.True(err == nil || err == errNoTasks)
+
+	// execute activity task which waits for signal before sending heartbeat.
+	go func() {
+		err = poller.PollAndProcessActivityTask(false)
+		s.True(err == nil || err == errNoTasks)
+	}()
+
+	heartbeatSignalChan <- true // ask the activity to send a heartbeat.
+	<-heartbeatSignalChan       // wait for the heartbeat to be sent (to prevent the test from racing to describe the workflow before the heartbeat is sent)
+	describeWorkflowExecution := func() (*workflowservice.DescribeWorkflowExecutionResponse, error) {
+		return s.engine.DescribeWorkflowExecution(NewContext(), &workflowservice.DescribeWorkflowExecutionRequest{
+			Namespace: s.namespace,
+			Execution: &commonpb.WorkflowExecution{
+				WorkflowId: id,
+				RunId:      we.RunId,
+			},
+		})
+	}
+
+	descResp, err := describeWorkflowExecution()
+	s.NoError(err)
+
+	// Verify that the worker identity is set now.
+	s.Equal(workerIdentity, descResp.PendingActivities[0].LastWorkerIdentity)
+
+	// unblock the activity task
+	endActivityTask <- true
+
+	// ensure that the workflow is complete.
+	_, err = poller.PollAndProcessWorkflowTask(WithDumpHistory)
+	s.NoError(err)
+	s.True(workflowComplete)
 }
