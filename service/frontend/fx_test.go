@@ -280,7 +280,7 @@ func TestRateLimitInterceptorProvider(t *testing.T) {
 				var resourceExhausted *serviceerror.ResourceExhausted
 				errors.As(serviceerror.FromStatus(s), &resourceExhausted)
 				assert.Equal(t, enumspb.RESOURCE_EXHAUSTED_CAUSE_RPS_LIMIT, resourceExhausted.Cause)
-				assert.Equal(t, enumspb.RESOURCE_SCOPE_SYSTEM, resourceExhausted.Scope)
+				assert.Equal(t, enumspb.RESOURCE_EXHAUSTED_SCOPE_SYSTEM, resourceExhausted.Scope)
 			} else {
 				assert.NoError(t, err)
 			}
@@ -614,7 +614,7 @@ func TestNamespaceRateLimitInterceptorProvider(t *testing.T) {
 					var resourceExhausted *serviceerror.ResourceExhausted
 					errors.As(serviceerror.FromStatus(s), &resourceExhausted)
 					assert.Equal(t, enumspb.RESOURCE_EXHAUSTED_CAUSE_RPS_LIMIT, resourceExhausted.Cause)
-					assert.Equal(t, enumspb.RESOURCE_SCOPE_NAMESPACE, resourceExhausted.Scope)
+					assert.Equal(t, enumspb.RESOURCE_EXHAUSTED_SCOPE_NAMESPACE, resourceExhausted.Scope)
 				} else {
 					assert.NoError(t, err)
 				}

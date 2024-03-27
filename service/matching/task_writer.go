@@ -175,10 +175,11 @@ func (w *taskWriter) appendTask(
 		}
 	default: // channel is full, throttle
 		metrics.TaskWriteThrottlePerTaskQueueCounter.With(w.tlMgr.metricsHandler).Record(1)
-		return nil, serviceerror.NewResourceExhausted(
-			enumspb.RESOURCE_EXHAUSTED_CAUSE_SYSTEM_OVERLOADED,
-			enumspb.RESOURCE_SCOPE_SYSTEM,
-			"Too many outstanding appends to the task queue")
+		return nil, &serviceerror.ResourceExhausted{
+			Cause:   enumspb.RESOURCE_EXHAUSTED_CAUSE_SYSTEM_OVERLOADED,
+			Scope:   enumspb.RESOURCE_EXHAUSTED_SCOPE_NAMESPACE,
+			Message: "Too many outstanding appends to the task queue",
+		}
 	}
 }
 

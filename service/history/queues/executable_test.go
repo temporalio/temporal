@@ -450,7 +450,11 @@ func (s *executableSuite) TestExecute_DontSendToDLQAfterMaxAttemptsExpectedError
 	s.mockExecutor.EXPECT().Execute(gomock.Any(), executable).Return(queues.ExecuteResponse{
 		ExecutionMetricTags: nil,
 		ExecutedAsActive:    false,
-		ExecutionErr:        serviceerror.NewResourceExhausted(enumspb.RESOURCE_EXHAUSTED_CAUSE_BUSY_WORKFLOW, enumspb.RESOURCE_SCOPE_NAMESPACE, "test"),
+		ExecutionErr: &serviceerror.ResourceExhausted{
+			Cause:   enumspb.RESOURCE_EXHAUSTED_CAUSE_BUSY_WORKFLOW,
+			Scope:   enumspb.RESOURCE_EXHAUSTED_SCOPE_NAMESPACE,
+			Message: "test",
+		},
 	}).Times(2)
 
 	// Attempt 1

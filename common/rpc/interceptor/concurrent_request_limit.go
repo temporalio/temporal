@@ -59,10 +59,11 @@ type (
 var (
 	_ grpc.UnaryServerInterceptor = (*ConcurrentRequestLimitInterceptor)(nil).Intercept
 
-	ErrNamespaceCountLimitServerBusy = serviceerror.NewResourceExhausted(
-		enumspb.RESOURCE_EXHAUSTED_CAUSE_CONCURRENT_LIMIT,
-		enumspb.RESOURCE_SCOPE_NAMESPACE,
-		"namespace concurrent poller limit exceeded")
+	ErrNamespaceCountLimitServerBusy = &serviceerror.ResourceExhausted{
+		Cause:   enumspb.RESOURCE_EXHAUSTED_CAUSE_CONCURRENT_LIMIT,
+		Scope:   enumspb.RESOURCE_EXHAUSTED_SCOPE_NAMESPACE,
+		Message: "namespace concurrent poller limit exceeded",
+	}
 )
 
 func NewConcurrentRequestLimitInterceptor(

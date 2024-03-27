@@ -221,9 +221,11 @@ func (h *historyArchiverSuite) TestArchive_Fail_TimeoutWhenReadingHistory() {
 		historyIterator.EXPECT().HasNext().Return(true),
 		historyIterator.EXPECT().Next(gomock.Any()).Return(
 			nil,
-			serviceerror.NewResourceExhausted(enumspb.RESOURCE_EXHAUSTED_CAUSE_RPS_LIMIT,
-				enumspb.RESOURCE_SCOPE_NAMESPACE,
-				""),
+			&serviceerror.ResourceExhausted{
+				Cause:   enumspb.RESOURCE_EXHAUSTED_CAUSE_RPS_LIMIT,
+				Scope:   enumspb.RESOURCE_EXHAUSTED_SCOPE_NAMESPACE,
+				Message: "",
+			},
 		),
 	)
 

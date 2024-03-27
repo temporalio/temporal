@@ -45,16 +45,16 @@ const (
 
 var (
 	// ErrPersistenceLimitExceeded is the error indicating QPS limit reached.
-	ErrPersistenceLimitExceeded = serviceerror.NewResourceExhausted(
-		enumspb.RESOURCE_EXHAUSTED_CAUSE_PERSISTENCE_LIMIT,
-		enumspb.RESOURCE_SCOPE_SYSTEM,
-		"System Persistence Max QPS Reached.",
-	)
-	ErrPersistenceNamespaceLimitExceeded = serviceerror.NewResourceExhausted(
-		enumspb.RESOURCE_EXHAUSTED_CAUSE_PERSISTENCE_LIMIT,
-		enumspb.RESOURCE_SCOPE_NAMESPACE,
-		"Namespace Persistence Max QPS Reached.",
-	)
+	ErrPersistenceLimitExceeded = &serviceerror.ResourceExhausted{
+		Cause:   enumspb.RESOURCE_EXHAUSTED_CAUSE_PERSISTENCE_LIMIT,
+		Scope:   enumspb.RESOURCE_EXHAUSTED_SCOPE_SYSTEM,
+		Message: "System Persistence Max QPS Reached.",
+	}
+	ErrPersistenceNamespaceLimitExceeded = &serviceerror.ResourceExhausted{
+		Cause:   enumspb.RESOURCE_EXHAUSTED_CAUSE_PERSISTENCE_LIMIT,
+		Scope:   enumspb.RESOURCE_EXHAUSTED_SCOPE_NAMESPACE,
+		Message: "Namespace Persistence Max QPS Reached.",
+	}
 )
 
 type (
