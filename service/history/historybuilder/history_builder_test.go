@@ -2200,7 +2200,7 @@ func (s *historyBuilderSuite) TestBufferEvent() {
 		enumspb.EVENT_TYPE_WORKFLOW_TASK_TIMED_OUT: true,
 	}
 
-	// events corresponding to commands from client will be assign event ID immediately
+	// events corresponding to commands from client will be assigned an event ID immediately
 	commandEvents := map[enumspb.EventType]bool{
 		enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_COMPLETED:                         true,
 		enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_FAILED:                            true,
@@ -2218,14 +2218,14 @@ func (s *historyBuilderSuite) TestBufferEvent() {
 		enumspb.EVENT_TYPE_WORKFLOW_PROPERTIES_MODIFIED:                         true,
 	}
 
-	// events corresponding to message from client will be assign event ID immediately
+	// events corresponding to message from client will be assigned an event ID immediately
 	messageEvents := map[enumspb.EventType]bool{
 		enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_UPDATE_REJECTED:  true,
 		enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_UPDATE_ACCEPTED:  true,
 		enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_UPDATE_COMPLETED: true,
 	}
 
-	// other events will not be assign event ID immediately (created automatically)
+	// other events will not be assigned an event ID immediately (created automatically)
 	otherEvents := map[enumspb.EventType]bool{}
 	for _, eventType := range enumspb.EventType_value {
 		if _, ok := workflowEvents[enumspb.EventType(eventType)]; ok {
