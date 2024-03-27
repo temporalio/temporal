@@ -29,7 +29,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	taskqueuespb "go.temporal.io/server/api/taskqueue/v1"
 	"math"
 	"sync"
 	"sync/atomic"
@@ -51,6 +50,7 @@ import (
 	"go.temporal.io/server/api/matchingservice/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	replicationspb "go.temporal.io/server/api/replication/v1"
+	taskqueuespb "go.temporal.io/server/api/taskqueue/v1"
 	tokenspb "go.temporal.io/server/api/token/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/clock"
@@ -836,12 +836,15 @@ func (e *matchingEngineImpl) DescribeTaskQueue(
 					Type:    taskQueueType,
 					Pollers: physicalInfo.Pollers,
 				})
-
+			}
+			reachability, err := e.getReachability(ctx, bid)
+			if err != nil {
+				return nil, err
 			}
 			versionsInfo = append(versionsInfo, &taskqueuepb.TaskQueueVersionInfo{
 				BuildId:          bid,
 				TypesInfo:        typesInfo,
-				TaskReachability: 0, // todo carly
+				TaskReachability: reachability,
 			})
 		}
 
@@ -868,8 +871,36 @@ func (e *matchingEngineImpl) DescribeTaskQueuePartition(
 	ctx context.Context,
 	request *matchingservice.DescribeTaskQueuePartitionRequest,
 ) (*matchingservice.DescribeTaskQueuePartitionResponse, error) {
+	pm, err := e.getTaskQueuePartitionManager(ctx, tqid.PartitionFromPartitionProto(request.GetTaskQueuePartition(), request.GetNamespaceId()), true)
+	if err != nil {
+		return nil, err
+	}
+	return pm.Describe(request.GetBuildIds(), request.GetReportBacklogInfo(), request.GetReportPollers())
+}
+
+// getReachability specifies which category of tasks may reach a versioned worker of a certain Build ID.
+//   - BUILD_ID_TASK_REACHABILITY_UNSPECIFIED: Task reachability is not reported
+//   - BUILD_ID_TASK_REACHABILITY_REACHABLE: Build ID may be used by new workflows or activities (base on versioning rules), or there are open workflows or backlogged activities assigned to it.
+//   - BUILD_ID_TASK_REACHABILITY_CLOSED_WORKFLOWS_ONLY: Build ID does not have open workflows and is not reachable by new workflows, but MAY have closed workflows within the namespace retention period. Not applicable to activity-only task queues.
+//   - BUILD_ID_TASK_REACHABILITY_UNREACHABLE: Build ID is not used for new executions, nor it has been used by any existing execution within the retention period.
+func (e *matchingEngineImpl) getReachability(ctx context.Context, buildId string) (enumspb.BuildIdTaskReachability, error) {
 	// todo carly
-	return nil, nil
+	openResp, err := e.visibilityManager.ListOpenWorkflowExecutionsByVersion(ctx, &manager.ListWorkflowExecutionsByVersionSARequest{
+		ListWorkflowExecutionsRequest: &manager.ListWorkflowExecutionsRequest{},
+		VersionSearchAttribute:        "",
+	})
+	if err != nil {
+		return enumspb.BUILD_ID_TASK_REACHABILITY_UNSPECIFIED, err
+	}
+	closedResp, err := e.visibilityManager.ListClosedWorkflowExecutionsByVersion(ctx, &manager.ListWorkflowExecutionsByVersionSARequest{
+		ListWorkflowExecutionsRequest: &manager.ListWorkflowExecutionsRequest{},
+		VersionSearchAttribute:        "",
+	})
+	if err != nil {
+		return enumspb.BUILD_ID_TASK_REACHABILITY_UNSPECIFIED, err
+	}
+
+	return enumspb.BUILD_ID_TASK_REACHABILITY_UNSPECIFIED, nil
 }
 
 // getDefaultBuildId gets the build id mentioned in the first unconditional Assignment Rule.

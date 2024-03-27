@@ -63,6 +63,8 @@ type (
 		ListClosedWorkflowExecutionsByType(ctx context.Context, request *ListWorkflowExecutionsByTypeRequest) (*ListWorkflowExecutionsResponse, error)
 		ListOpenWorkflowExecutionsByWorkflowID(ctx context.Context, request *ListWorkflowExecutionsByWorkflowIDRequest) (*ListWorkflowExecutionsResponse, error)
 		ListClosedWorkflowExecutionsByWorkflowID(ctx context.Context, request *ListWorkflowExecutionsByWorkflowIDRequest) (*ListWorkflowExecutionsResponse, error)
+		ListOpenWorkflowExecutionsByVersion(ctx context.Context, request *ListWorkflowExecutionsByVersionSARequest) (*ListWorkflowExecutionsResponse, error)
+		ListClosedWorkflowExecutionsByVersion(ctx context.Context, request *ListWorkflowExecutionsByVersionSARequest) (*ListWorkflowExecutionsResponse, error)
 		ListClosedWorkflowExecutionsByStatus(ctx context.Context, request *ListClosedWorkflowExecutionsByStatusRequest) (*ListWorkflowExecutionsResponse, error)
 		ListWorkflowExecutions(ctx context.Context, request *ListWorkflowExecutionsRequestV2) (*ListWorkflowExecutionsResponse, error)
 		ScanWorkflowExecutions(ctx context.Context, request *ListWorkflowExecutionsRequestV2) (*ListWorkflowExecutionsResponse, error)
@@ -163,6 +165,13 @@ type (
 	ListWorkflowExecutionsByWorkflowIDRequest struct {
 		*ListWorkflowExecutionsRequest
 		WorkflowID string
+	}
+
+	// ListWorkflowExecutionsByVersionSARequest is used to list executions that
+	// have specific build id and version in a namespace
+	ListWorkflowExecutionsByVersionSARequest struct {
+		*ListWorkflowExecutionsRequest
+		VersionSearchAttribute string
 	}
 
 	// ListClosedWorkflowExecutionsByStatusRequest is used to list executions that

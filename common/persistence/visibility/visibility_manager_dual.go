@@ -215,6 +215,20 @@ func (v *VisibilityManagerDual) ListClosedWorkflowExecutionsByWorkflowID(
 	return v.managerSelector.readManager(request.Namespace).ListClosedWorkflowExecutionsByWorkflowID(ctx, request)
 }
 
+func (v *VisibilityManagerDual) ListOpenWorkflowExecutionsByVersion(
+	ctx context.Context,
+	request *manager.ListWorkflowExecutionsByVersionSARequest,
+) (*manager.ListWorkflowExecutionsResponse, error) {
+	return v.managerSelector.readManager(request.Namespace).ListOpenWorkflowExecutionsByVersion(ctx, request)
+}
+
+func (v *VisibilityManagerDual) ListClosedWorkflowExecutionsByVersion(
+	ctx context.Context,
+	request *manager.ListWorkflowExecutionsByVersionSARequest,
+) (*manager.ListWorkflowExecutionsResponse, error) {
+	return v.managerSelector.readManager(request.Namespace).ListClosedWorkflowExecutionsByVersion(ctx, request)
+}
+
 func (v *VisibilityManagerDual) ListClosedWorkflowExecutionsByStatus(
 	ctx context.Context,
 	request *manager.ListClosedWorkflowExecutionsByStatusRequest,
