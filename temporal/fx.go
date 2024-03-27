@@ -697,17 +697,9 @@ func loadClusterInformationFromStore(ctx context.Context, svc *config.Config, cl
 		if err != nil {
 			return err
 		}
-		shardCount := metadata.HistoryShardCount
-		if shardCount == 0 {
-			// This is to add backward compatibility to the svc based cluster connection.
-			shardCount = svc.Persistence.NumHistoryShards
-		}
-		newMetadata := cluster.ClusterInformation{
-			Enabled:                metadata.IsConnectionEnabled,
-			InitialFailoverVersion: metadata.InitialFailoverVersion,
-			RPCAddress:             metadata.ClusterAddress,
-			ShardCount:             shardCount,
-			Tags:                   metadata.Tags,
+		newMetadata := cluster.ClusterInformationFromDB(metadata)
+		if newMetadata.ShardCount == 0 {
+			newMetadata.ShardCount = svc.Persistence.NumHistoryShards
 		}
 		if staticClusterMetadata, ok := svc.ClusterMetadata.ClusterInformation[metadata.ClusterName]; ok {
 			if metadata.ClusterName != svc.ClusterMetadata.CurrentClusterName {
@@ -721,7 +713,7 @@ func loadClusterInformationFromStore(ctx context.Context, svc *config.Config, cl
 				logger.Info(fmt.Sprintf("Use rpc address %v for cluster %v.", newMetadata.RPCAddress, metadata.ClusterName))
 			}
 		}
-		svc.ClusterMetadata.ClusterInformation[metadata.ClusterName] = newMetadata
+		svc.ClusterMetadata.ClusterInformation[metadata.ClusterName] = *newMetadata
 	}
 	return nil
 }
