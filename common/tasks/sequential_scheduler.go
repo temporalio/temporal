@@ -233,10 +233,6 @@ func (s *SequentialScheduler[T]) startWorkers(
 func (s *SequentialScheduler[T]) stopWorkers(
 	count int,
 ) {
-	if count > len(s.workerShutdownCh) {
-		count = len(s.workerShutdownCh)
-	}
-
 	shutdownChToClose := s.workerShutdownCh[:count]
 	s.workerShutdownCh = s.workerShutdownCh[count:]
 
