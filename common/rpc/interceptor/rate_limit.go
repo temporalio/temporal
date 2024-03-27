@@ -42,7 +42,10 @@ const (
 )
 
 var (
-	RateLimitServerBusy = serviceerror.NewResourceExhausted(enumspb.RESOURCE_EXHAUSTED_CAUSE_RPS_LIMIT, "service rate limit exceeded")
+	RateLimitServerBusy = serviceerror.NewResourceExhausted(
+		enumspb.RESOURCE_EXHAUSTED_CAUSE_RPS_LIMIT,
+		enumspb.RESOURCE_SCOPE_SYSTEM,
+		"service rate limit exceeded")
 )
 
 type (

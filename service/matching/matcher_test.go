@@ -50,7 +50,11 @@ import (
 	"go.temporal.io/server/common/payloads"
 )
 
-var errMatchingHostThrottleTest = serviceerror.NewResourceExhausted(enumspb.RESOURCE_EXHAUSTED_CAUSE_RPS_LIMIT, "Matching host RPS exceeded.")
+var errMatchingHostThrottleTest = serviceerror.NewResourceExhausted(
+	enumspb.RESOURCE_EXHAUSTED_CAUSE_RPS_LIMIT,
+	enumspb.RESOURCE_SCOPE_SYSTEM,
+	"Matching host RPS exceeded.",
+)
 
 type MatcherTestSuite struct {
 	suite.Suite

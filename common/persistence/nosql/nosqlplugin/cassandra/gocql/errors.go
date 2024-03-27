@@ -54,7 +54,9 @@ func ConvertError(
 		return &persistence.TimeoutError{Msg: fmt.Sprintf("operation %v encountered %v", operation, err.Error())}
 	case gocql.RequestError:
 		if v.Code() == gocql.ErrCodeOverloaded {
-			return serviceerror.NewResourceExhausted(enumspb.RESOURCE_EXHAUSTED_CAUSE_SYSTEM_OVERLOADED,
+			return serviceerror.NewResourceExhausted(
+				enumspb.RESOURCE_EXHAUSTED_CAUSE_SYSTEM_OVERLOADED,
+				enumspb.RESOURCE_SCOPE_SYSTEM,
 				fmt.Sprintf("operation %v encountered %v", operation, err.Error()))
 		}
 		return serviceerror.NewUnavailable(fmt.Sprintf("operation %v encountered %v", operation, err.Error()))

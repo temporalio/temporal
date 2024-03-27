@@ -112,7 +112,10 @@ func newError(errName string, errRate float64, methodName string) error {
 	case "Timeout":
 		return &persistence.TimeoutError{Msg: fmt.Sprintf("%s: persistence.TimeoutError", header)}
 	case "ResourceExhausted":
-		return serviceerror.NewResourceExhausted(enumspb.RESOURCE_EXHAUSTED_CAUSE_SYSTEM_OVERLOADED, fmt.Sprintf("%s: serviceerror.ResourceExhausted", header))
+		return serviceerror.NewResourceExhausted(
+			enumspb.RESOURCE_EXHAUSTED_CAUSE_SYSTEM_OVERLOADED,
+			enumspb.RESOURCE_SCOPE_SYSTEM,
+			fmt.Sprintf("%s: serviceerror.ResourceExhausted", header))
 	case "Unavailable":
 		return serviceerror.NewUnavailable(fmt.Sprintf("%s: serviceerror.Unavailable", header))
 	default:
