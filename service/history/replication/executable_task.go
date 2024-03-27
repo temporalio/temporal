@@ -45,7 +45,7 @@ import (
 	ctasks "go.temporal.io/server/common/tasks"
 )
 
-//go:generate mockgen -copyright_file ../../../LICENSE -package $GOPACKAGE -source $GOFILE -destination executable_task_mock.go
+//go:generate go run ../../../cmd/tools/mockgen/main.go -copyright_file ../../../LICENSE -package $GOPACKAGE -source $GOFILE -destination executable_task_mock.go
 
 const (
 	taskStatePending = int32(ctasks.TaskStatePending)

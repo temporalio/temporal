@@ -46,7 +46,7 @@ import (
 	"go.temporal.io/server/service/history/tasks"
 )
 
-//go:generate mockgen -copyright_file ../../../LICENSE -package $GOPACKAGE -source $GOFILE -destination context_factory_mock.go
+//go:generate go run ../../../cmd/tools/mockgen/main.go -copyright_file ../../../LICENSE -package $GOPACKAGE -source $GOFILE -destination context_factory_mock.go
 
 type (
 	CloseCallback func(ControllableContext)

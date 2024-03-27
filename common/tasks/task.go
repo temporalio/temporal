@@ -30,7 +30,7 @@ import (
 	"go.temporal.io/server/common/backoff"
 )
 
-//go:generate mockgen -copyright_file ../../LICENSE -package $GOPACKAGE -source $GOFILE -destination task_mock.go
+//go:generate go run ../../cmd/tools/mockgen/main.go -copyright_file ../../LICENSE -package $GOPACKAGE -source $GOFILE -destination task_mock.go
 type (
 	Runnable interface {
 		// Run and handle errors, abort on context error.

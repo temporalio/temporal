@@ -29,7 +29,7 @@ import (
 	"go.temporal.io/server/common/namespace"
 )
 
-//go:generate mockgen -copyright_file ../../../LICENSE -package $GOPACKAGE -source $GOFILE -destination controller_mock.go
+//go:generate go run ../../../cmd/tools/mockgen/main.go -copyright_file ../../../LICENSE -package $GOPACKAGE -source $GOFILE -destination controller_mock.go
 
 type (
 	Controller interface {

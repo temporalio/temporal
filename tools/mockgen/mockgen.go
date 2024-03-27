@@ -1,7 +1,6 @@
 package mockgen
 
 import (
-	"fmt"
 	"os"
 	"os/exec"
 	"time"
@@ -22,7 +21,6 @@ func Run(args []string, opts ...Option) error {
 		return err
 	}
 	if !shouldRun {
-		fmt.Println("Skipping mockgen")
 		return nil
 	}
 
