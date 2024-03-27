@@ -814,12 +814,20 @@ func (t *transferQueueActiveTaskExecutor) processStartChildExecution(
 		sourceVersionStamp = worker_versioning.StampIfUsingVersioning(mutableState.GetWorkerVersionStamp())
 	}
 
+	event, err := mutableState.GetStartEvent(ctx)
+	if err != nil {
+		t.logger.Error("Error when get start event", tag.Error(err))
+		return err
+	}
+	identity := event.GetWorkflowExecutionStartedEventAttributes().Identity
+
 	childRunID, childClock, err := t.startWorkflow(
 		ctx,
 		task,
 		parentNamespaceName,
 		targetNamespaceName,
 		childInfo.CreateRequestId,
+		identity,
 		attributes,
 		sourceVersionStamp,
 	)
@@ -1303,6 +1311,7 @@ func (t *transferQueueActiveTaskExecutor) startWorkflow(
 	namespace namespace.Name,
 	targetNamespace namespace.Name,
 	childRequestID string,
+	identity string,
 	attributes *historypb.StartChildWorkflowExecutionInitiatedEventAttributes,
 	sourceVersionStamp *commonpb.WorkerVersionStamp,
 ) (string, *clockspb.VectorClock, error) {
@@ -1326,6 +1335,7 @@ func (t *transferQueueActiveTaskExecutor) startWorkflow(
 			CronSchedule:          attributes.CronSchedule,
 			Memo:                  attributes.Memo,
 			SearchAttributes:      attributes.SearchAttributes,
+			Identity:              identity,
 		},
 		&workflowspb.ParentExecutionInfo{
 			NamespaceId: task.NamespaceID,
