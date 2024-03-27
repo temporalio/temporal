@@ -33,12 +33,12 @@ import (
 	"os"
 	"strconv"
 	"strings"
+	"sync/atomic"
 	"time"
 
 	"github.com/pborman/uuid"
 	"github.com/stretchr/testify/require"
 	"github.com/urfave/cli/v2"
-	"go.uber.org/atomic"
 	"go.uber.org/fx"
 	"google.golang.org/protobuf/encoding/protojson"
 	"google.golang.org/protobuf/proto"
@@ -77,7 +77,7 @@ type (
 		worker           sdkworker.Worker
 		deleteBlockCh    chan interface{}
 
-		failingWorkflowIDPrefix atomic.String
+		failingWorkflowIDPrefix atomic.Pointer[string]
 	}
 	dlqTestCase struct {
 		name string
@@ -118,7 +118,8 @@ func (s *DLQSuite) SetupSuite() {
 		dynamicconfig.HistoryTaskDLQEnabled: true,
 	}
 	s.dlqTasks = make(chan tasks.Task)
-	s.failingWorkflowIDPrefix.Store("dlq-test-terminal-wfts-")
+	testPrefix := "dlq-test-terminal-wfts-"
+	s.failingWorkflowIDPrefix.Store(&testPrefix)
 	s.setupSuite(
 		"testdata/es_cluster.yaml",
 		WithFxOptionsForService(primitives.HistoryService,
@@ -354,7 +355,8 @@ func (s *DLQSuite) TestMergeRealWorkflow() {
 	}
 
 	// Re-enqueue the workflow tasks from the DLQ, but don't fail its WFTs this time.
-	s.failingWorkflowIDPrefix.Store("some-workflow-id-that-wont-exist")
+	nonExistantID := "some-workflow-id-that-wont-exist"
+	s.failingWorkflowIDPrefix.Store(&nonExistantID)
 	token := s.mergeMessages(ctx, dlqMessageID)
 
 	// Verify that the workflow task was deleted from the DLQ after merging.
@@ -470,7 +472,7 @@ func (s *DLQSuite) validateWorkflowRun(ctx context.Context, run sdkclient.Workfl
 func (s *DLQSuite) executeDoomedWorkflow(ctx context.Context) (sdkclient.WorkflowRun, int64) {
 	// Execute a workflow.
 	// Use a random workflow ID to ensure that we don't have any collisions with other runs.
-	run := s.executeWorkflow(ctx, s.failingWorkflowIDPrefix.Load()+uuid.New())
+	run := s.executeWorkflow(ctx, *s.failingWorkflowIDPrefix.Load()+uuid.New())
 
 	// Wait for the workflow task to be added to the DLQ.
 	select {
@@ -709,7 +711,7 @@ func (t testExecutorWrapper) Wrap(delegate queues.Executor) queues.Executor {
 // Execute is used to wrap the executor so that we can intercept the workflow task and ensure it fails with a terminal
 // error.
 func (t testExecutor) Execute(ctx context.Context, e queues.Executable) queues.ExecuteResponse {
-	if strings.HasPrefix(e.GetWorkflowID(), t.suite.failingWorkflowIDPrefix.Load()) && e.GetCategory() == tasks.CategoryTransfer {
+	if strings.HasPrefix(e.GetWorkflowID(), *t.suite.failingWorkflowIDPrefix.Load()) && e.GetCategory() == tasks.CategoryTransfer {
 		// Return a terminal error that will cause this task to be added to the DLQ.
 		return queues.ExecuteResponse{
 			ExecutionErr: serialization.NewDeserializationError(enumspb.ENCODING_TYPE_PROTO3, errors.New("test error")),

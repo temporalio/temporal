@@ -28,6 +28,7 @@ import (
 	"context"
 	"errors"
 	"strings"
+	"sync/atomic"
 	"time"
 
 	"github.com/pborman/uuid"
@@ -36,7 +37,6 @@ import (
 	"go.temporal.io/sdk/worker"
 	"go.temporal.io/sdk/workflow"
 	"go.temporal.io/server/api/adminservice/v1"
-	"go.uber.org/atomic"
 	"go.uber.org/fx"
 
 	enumspb "go.temporal.io/server/api/enums/v1"
@@ -64,8 +64,8 @@ type (
 		skippedTasks    chan tasks.Task
 
 		shouldSkip   atomic.Bool
-		getEngineErr atomic.Error
-		workflowID   atomic.String
+		getEngineErr atomic.Pointer[error]
+		workflowID   atomic.Pointer[string]
 	}
 	faultyShardController struct {
 		shard.Controller
@@ -98,8 +98,8 @@ func (c *faultyShardController) GetShardByID(shardID int32) (shard.Context, erro
 
 func (c *faultyShardContext) GetEngine(ctx context.Context) (shard.Engine, error) {
 	err := c.suite.getEngineErr.Load()
-	if err != nil {
-		return nil, err
+	if err != nil && *err != nil {
+		return nil, *err
 	}
 	return c.Context.GetEngine(ctx)
 }
@@ -127,7 +127,8 @@ func (e *noopExecutor) Execute(ctx context.Context, executable queues.Executable
 // shouldExecute returns true if the task is not a workflow task, or if the workflow task is not from this test suite
 // (e.g. from the history scanner), or if we've turned off skipping (which we do when we re-add the task).
 func (e *noopExecutor) shouldExecute(task tasks.Task) bool {
-	return task.GetWorkflowID() != e.suite.workflowID.Load() ||
+	suiteWorkflowID := e.suite.workflowID.Load()
+	return (suiteWorkflowID != nil && task.GetWorkflowID() != *suiteWorkflowID) ||
 		task.GetType() != enumspb.TASK_TYPE_TRANSFER_WORKFLOW_TASK ||
 		!e.suite.shouldSkip.Load()
 }
@@ -195,7 +196,7 @@ func (s *AddTasksSuite) TestAddTasks_Ok() {
 			// Execute that workflow
 			// We need to track the workflow ID so that we can filter out tasks from this test suite
 			workflowID := uuid.New()
-			s.workflowID.Store(workflowID)
+			s.workflowID.Store(&workflowID)
 			s.shouldSkip.Store(true)
 			s.skippedTasks = make(chan tasks.Task)
 			ctx := context.Background()
@@ -259,12 +260,13 @@ func (s *AddTasksSuite) TestAddTasks_GetEngineErr() {
 	defer func() {
 		s.getEngineErr.Store(nil)
 	}()
-	s.getEngineErr.Store(errors.New("example shard engine error"))
+	engineErr := errors.New("example shard engine error")
+	s.getEngineErr.Store(&engineErr)
 	_, err := s.testCluster.GetHistoryClient().AddTasks(context.Background(), &historyservice.AddTasksRequest{
 		ShardId: 1,
 	})
 	s.Error(err)
-	s.ErrorContains(err, s.getEngineErr.Load().Error())
+	s.ErrorContains(err, (*s.getEngineErr.Load()).Error())
 }
 
 func (s *AddTasksSuite) newSDKClient() sdkclient.Client {
