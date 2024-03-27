@@ -1091,7 +1091,7 @@ func (s *FunctionalSuite) TestActivityHeartBeat_RecordIdentity() {
 
 	// execute activity task which waits for signal before sending heartbeat.
 	go func() {
-		err = poller.PollAndProcessActivityTask(false)
+		err := poller.PollAndProcessActivityTask(false)
 		s.True(err == nil || err == errNoTasks)
 	}()
 
