@@ -3,8 +3,10 @@
 package mockgen
 
 import (
+	"fmt"
 	"os"
 	"os/exec"
+	"syscall"
 	"time"
 )
 
@@ -48,10 +50,15 @@ func WithExecFn(f func(args []string) error) Option {
 }
 
 func runRealCommand(args []string) error {
-	cmd := exec.Command("mockgen", args...)
-	cmd.Stdout = os.Stdout
-	cmd.Stderr = os.Stderr
-	return cmd.Run()
+	fullPath, lookErr := exec.LookPath("mockgen")
+	if lookErr != nil {
+		return fmt.Errorf("failed to find mockgen binary: %w", lookErr)
+	}
+	err := syscall.Exec(fullPath, append([]string{""}, args...), os.Environ())
+	if err != nil {
+		return fmt.Errorf("failed to exec mockgen with args %v: %w", args, err)
+	}
+	return nil
 }
 
 func isDestinationFileUpToDateWithSourceInArgs(args []string) (bool, error) {
@@ -85,7 +92,7 @@ func isDestinationFileUpToDateWithSourceInArgs(args []string) (bool, error) {
 	} {
 		fileInfo, err := os.Stat(f.filePath)
 		if err != nil {
-			return false, err
+			return false, fmt.Errorf("failed to stat file %q: %w", f.filePath, err)
 		}
 		*f.modTime = fileInfo.ModTime()
 	}
