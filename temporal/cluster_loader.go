@@ -54,7 +54,7 @@ func (c *ClusterMetadataLoader) LoadClusterInformationFromStore(ctx context.Cont
 	iter = collection.NewPagingIterator(func(paginationToken []byte) ([]*persistence.GetClusterMetadataResponse, []byte, error) {
 		request := &persistence.ListClusterMetadataRequest{
 			PageSize:      100,
-			NextPageToken: nil,
+			NextPageToken: paginationToken,
 		}
 		resp, err := c.manager.ListClusterMetadata(ctx, request)
 		if err != nil {
