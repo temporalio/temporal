@@ -181,21 +181,17 @@ func GetResetReapplyExcludeTypes(
 	excludeTypes []enumspb.ResetReapplyExcludeType,
 	includeType enumspb.ResetReapplyType,
 ) map[enumspb.ResetReapplyExcludeType]bool {
+	// A client who wishes to have reapplication of all supported event types should omit the deprecated
+	// reset_reapply_type field (since its default value is RESET_REAPPLY_TYPE_ALL_ELIGIBLE).
 	exclude := map[enumspb.ResetReapplyExcludeType]bool{}
 	switch includeType {
 	case enumspb.RESET_REAPPLY_TYPE_SIGNAL:
-		// A client sending this value of the deprecated reset_reapply_type
-		// field will not have any events other than signal reapplied. We may
-		// implement reapplication of event types other than signal in the
-		// future; any such event type should be added as an exclusion to this
-		// switch case. A client who wishes to have reapplication of all
-		// supported event types should not send the deprecated
-		// reset_reapply_type field (since its default value is
-		// RESET_REAPPLY_TYPE_ALL_ELIGIBLE).
-		// TODO (dan) exclude update
+		// A client sending this value of the deprecated reset_reapply_type field will not have any events other than
+		// signal reapplied.
+		exclude[enumspb.RESET_REAPPLY_EXCLUDE_TYPE_UPDATE] = true
 	case enumspb.RESET_REAPPLY_TYPE_NONE:
-		// TODO (dan) exclude update
 		exclude[enumspb.RESET_REAPPLY_EXCLUDE_TYPE_SIGNAL] = true
+		exclude[enumspb.RESET_REAPPLY_EXCLUDE_TYPE_UPDATE] = true
 	}
 	for _, e := range excludeTypes {
 		exclude[e] = true

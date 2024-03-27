@@ -36,6 +36,7 @@ import (
 	protocolpb "go.temporal.io/api/protocol/v1"
 	"go.temporal.io/api/serviceerror"
 	updatepb "go.temporal.io/api/update/v1"
+	"google.golang.org/protobuf/types/known/anypb"
 
 	updatespb "go.temporal.io/server/api/update/v1"
 	"go.temporal.io/server/common/future"
@@ -163,16 +164,30 @@ func NewRegistry(
 	}
 
 	getStoreFn().VisitUpdates(func(updID string, updInfo *updatespb.UpdateInfo) {
-		// need to eager load here so that Len and admit are correct.
-		if acc := updInfo.GetAcceptance(); acc != nil {
+		if updInfo.GetRequest() != nil {
+			// A update entry in the registry may have a request payload: we use this to write the payload to an
+			// UpdateAccepted event, in the event that the update is accepted. However, when populating the registry
+			// from mutable state, we do not have access to update request payloads. In this situation it is correct to
+			// create a registry entry in state Requested with a nil payload for the following reason: the fact that we
+			// have encountered an UpdateInfo in state Requested in mutable state implies that there is an
+			// UpdateRequested event in history; and when there is an UpdateRequested event in history, we will not
+			// attempt to write the request payload to the UpdateAccepted event, since the request payload is already
+			// present in the UpdateRequested event.
+			var request *anypb.Any
+			r.updates[updID] = newRequested(
+				updID,
+				request,
+				r.remover(updID),
+				withInstrumentation(&r.instrumentation),
+			)
+		} else if acc := updInfo.GetAcceptance(); acc != nil {
 			r.updates[updID] = newAccepted(
 				updID,
 				acc.EventId,
 				r.remover(updID),
 				withInstrumentation(&r.instrumentation),
 			)
-		}
-		if updInfo.GetCompletion() != nil {
+		} else if updInfo.GetCompletion() != nil {
 			r.completedCount++
 		}
 	})
