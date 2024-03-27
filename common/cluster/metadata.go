@@ -396,7 +396,6 @@ func (m *metadataImpl) RegisterMetadataChangeCallback(callbackId any, cb Callbac
 	for clusterName, clusterInfo := range m.clusterInfo {
 		oldEntries[clusterName] = nil
 		newEntries[clusterName] = ShallowCopyClusterInformation(&clusterInfo)
-		newEntries[clusterName].Tags = nil
 	}
 	m.clusterLock.RUnlock()
 	cb(oldEntries, newEntries)
