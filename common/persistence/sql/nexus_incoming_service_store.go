@@ -114,9 +114,14 @@ func (s *sqlNexusIncomingServiceStore) GetNexusIncomingService(
 	ctx context.Context,
 	request *p.GetNexusIncomingServiceRequest,
 ) (*p.InternalNexusIncomingService, error) {
-	row, err := s.Db.SelectNexusIncomingServiceByID(ctx, []byte(request.ServiceID))
+	serviceID, retErr := primitives.ParseUUID(request.ServiceID)
+	if retErr != nil {
+		return nil, serviceerror.NewInternal(fmt.Sprintf("unable to parse service ID as UUID: %v", retErr))
+	}
+
+	row, err := s.Db.GetNexusIncomingServiceByID(ctx, serviceID)
 	if err != nil {
-		if errors.As(err, &sql.ErrNoRows) {
+		if errors.Is(err, sql.ErrNoRows) {
 			return nil, serviceerror.NewNotFound(fmt.Sprintf("Nexus incoming service with ID `%v` not found", request.ServiceID))
 		}
 		s.logger.Error(fmt.Sprintf("error getting Nexus incoming service with ID %v", request.ServiceID), tag.Error(err))

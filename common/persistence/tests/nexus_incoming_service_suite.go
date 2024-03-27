@@ -77,6 +77,7 @@ func testNexusIncomingServicesStoreSteadyState(t *testing.T, store persistence.N
 		// Get service by ID when table is empty
 		service, err := store.GetNexusIncomingService(ctx, &persistence.GetNexusIncomingServiceRequest{ServiceID: uuid.NewString()})
 		require.ErrorContains(t, err, "not found")
+		require.Nil(t, service)
 
 		// List when table is empty
 		resp, err := store.ListNexusIncomingServices(ctx, &persistence.ListNexusIncomingServicesRequest{PageSize: 10})

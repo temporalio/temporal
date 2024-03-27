@@ -38,7 +38,7 @@ const (
 	createIncomingServiceQry  = `INSERT INTO nexus_incoming_services(service_id, data, data_encoding, version) VALUES (?, ?, ?, 1)`
 	updateIncomingServiceQry  = `UPDATE nexus_incoming_services SET data = ?, data_encoding = ?, version = ? WHERE service_id = ? AND version = ?`
 	deleteIncomingServiceQry  = `DELETE FROM nexus_incoming_services WHERE service_id = ?`
-	getIncomingServiceByIdQry = `SELECT service_id, data, data_encoding, version FROM nexus_incoming_services WHERE service_id = ? LIMIT 1`
+	getIncomingServiceByIdQry = `SELECT service_id, data, data_encoding, version FROM nexus_incoming_services WHERE service_id = ?`
 	getIncomingServicesQry    = `SELECT service_id, data, data_encoding, version FROM nexus_incoming_services WHERE service_id > ? LIMIT ?`
 )
 
@@ -95,13 +95,13 @@ func (mdb *db) DeleteFromNexusIncomingServices(
 	return mdb.conn.ExecContext(ctx, deleteIncomingServiceQry, serviceID)
 }
 
-func (mdb *db) SelectNexusIncomingServiceByID(
+func (mdb *db) GetNexusIncomingServiceByID(
 	ctx context.Context,
 	serviceID []byte,
-) (sqlplugin.NexusIncomingServicesRow, error) {
+) (*sqlplugin.NexusIncomingServicesRow, error) {
 	var row sqlplugin.NexusIncomingServicesRow
-	err := mdb.conn.SelectContext(ctx, &row, getIncomingServiceByIdQry, serviceID)
-	return row, err
+	err := mdb.conn.GetContext(ctx, &row, getIncomingServiceByIdQry, serviceID)
+	return &row, err
 }
 
 func (mdb *db) ListNexusIncomingServices(
