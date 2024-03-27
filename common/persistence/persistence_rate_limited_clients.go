@@ -48,7 +48,7 @@ var (
 	ErrPersistenceLimitExceeded = serviceerror.NewResourceExhausted(
 		enumspb.RESOURCE_EXHAUSTED_CAUSE_PERSISTENCE_LIMIT,
 		enumspb.RESOURCE_SCOPE_SYSTEM,
-		"Persistence System Max QPS Reached.",
+		"System Persistence Max QPS Reached.",
 	)
 	ErrPersistenceNamespaceLimitExceeded = serviceerror.NewResourceExhausted(
 		enumspb.RESOURCE_EXHAUSTED_CAUSE_PERSISTENCE_LIMIT,
