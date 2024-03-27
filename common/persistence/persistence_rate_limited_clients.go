@@ -53,7 +53,7 @@ var (
 	ErrPersistenceNamespaceLimitExceeded = serviceerror.NewResourceExhausted(
 		enumspb.RESOURCE_EXHAUSTED_CAUSE_PERSISTENCE_LIMIT,
 		enumspb.RESOURCE_SCOPE_NAMESPACE,
-		"Persistence Namespace Max QPS Reached.",
+		"Namespace Persistence Max QPS Reached.",
 	)
 )
 
