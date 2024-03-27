@@ -176,6 +176,7 @@ $(PROTO_OUT):
 	@mkdir -p $(PROTO_OUT)
 
 clean-proto:
+	@go mod tidy # Make sure go.mod is up to date before we delete the generated files in case protogen fails and we need to rerun it.
 	@rm -rf $(PROTO_OUT)/*
 
 update-proto-submodule:
