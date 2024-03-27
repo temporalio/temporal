@@ -26,6 +26,8 @@ package matching
 
 import (
 	"fmt"
+	"hash/fnv"
+	"math"
 	"slices"
 	"time"
 
@@ -476,13 +478,35 @@ func dfs(curr string, visited, inStack map[string]bool, nodes map[string][]strin
 	return false
 }
 
-func FindAssignmentBuildId(rules []*persistencepb.AssignmentRule) string {
+func FindAssignmentBuildId(rules []*persistencepb.AssignmentRule, runId string) (string, error) {
+	rampThreshold := -1.
+	var err error
 	for _, r := range rules {
 		if r.GetDeleteTimestamp() != nil {
 			continue
 		}
-		// TODO: implement filter and ramp
-		return r.GetRule().GetTargetBuildId()
+		if ramp := r.GetRule().GetPercentageRamp(); ramp != nil {
+			if rampThreshold == -1. {
+				rampThreshold, err = calcRampThreshold(runId)
+				if err != nil {
+					return "", err
+				}
+			}
+			if float64(ramp.GetRampPercentage()) <= rampThreshold {
+				continue
+			}
+		}
+		return r.GetRule().GetTargetBuildId(), nil
 	}
-	return ""
+	return "", nil
+}
+
+// calcRampThreshold returns a number in [0, 100) that is deterministically calculated based on the passed id
+func calcRampThreshold(id string) (float64, error) {
+	h := fnv.New32a()
+	_, err := h.Write([]byte(id))
+	if err != nil {
+		return -1, err
+	}
+	return 100 * (float64(h.Sum32()) / math.MaxUint32), nil
 }
