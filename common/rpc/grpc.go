@@ -71,9 +71,11 @@ const (
 	maxInternodeRecvPayloadSize = 128 * 1024 * 1024 // 128 Mb
 
 	// ResourceExhaustedCauseHeader will be added to rpc response if request returns ResourceExhausted error.
+	// Value of this header will be ResourceExhaustedCause.
 	ResourceExhaustedCauseHeader = "X-Resource-Exhausted-Cause"
 
 	// ResourceExhaustedScopeHeader will be added to rpc response if request returns ResourceExhausted error.
+	// Value of this header will be ResourceExhaustedScope.
 	ResourceExhaustedScopeHeader = "X-Resource-Exhausted-Scope"
 )
 
