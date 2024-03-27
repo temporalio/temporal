@@ -384,6 +384,80 @@ func (s *VersioningIntegSuite) TestSeriesOfUpdates() {
 	s.Equal(s.prefixed("foo-2"), res.GetMajorVersionSets()[2].GetBuildIds()[0])
 }
 
+func (s *VersioningIntegSuite) TestTwoWorkersGetDifferentTasks() {
+	ctx := NewContext()
+	tq := "functional-versioning-two-workers-different-task"
+
+	_, err := s.engine.UpdateWorkerBuildIdCompatibility(ctx, &workflowservice.UpdateWorkerBuildIdCompatibilityRequest{
+		Namespace: s.namespace,
+		TaskQueue: tq,
+		Operation: &workflowservice.UpdateWorkerBuildIdCompatibilityRequest_AddNewBuildIdInNewDefaultSet{
+			AddNewBuildIdInNewDefaultSet: "1.0",
+		},
+	})
+	s.NoError(err)
+
+	wf := func(ctx workflow.Context) (string, error) {
+		var value string
+		workflow.GetSignalChannel(ctx, "start-signal").Receive(ctx, &value)
+		return value, nil
+	}
+
+	w1 := worker.New(s.sdkClient, tq, worker.Options{BuildID: "1.0", UseBuildIDForVersioning: true, MaxConcurrentWorkflowTaskPollers: numPollers})
+	w1.RegisterWorkflow(wf)
+	s.NoError(w1.Start())
+	defer w1.Stop()
+	w2 := worker.New(s.sdkClient, tq, worker.Options{BuildID: "2.0", UseBuildIDForVersioning: true, MaxConcurrentWorkflowTaskPollers: numPollers})
+	w2.RegisterWorkflow(wf)
+	s.NoError(w2.Start())
+	defer w2.Stop()
+
+	// Start some workflows targeting 1.0
+	handle11, err := s.sdkClient.ExecuteWorkflow(ctx, s.startWorkflowOptions("1-1", tq), wf)
+	s.NoError(err)
+	handle12, err := s.sdkClient.ExecuteWorkflow(ctx, s.startWorkflowOptions("1-2", tq), wf)
+	s.NoError(err)
+
+	// Now add the 2.0 version
+	_, err = s.engine.UpdateWorkerBuildIdCompatibility(ctx, &workflowservice.UpdateWorkerBuildIdCompatibilityRequest{
+		Namespace: s.namespace,
+		TaskQueue: tq,
+		Operation: &workflowservice.UpdateWorkerBuildIdCompatibilityRequest_AddNewBuildIdInNewDefaultSet{
+			AddNewBuildIdInNewDefaultSet: "2.0",
+		},
+	})
+	s.NoError(err)
+
+	// Start some workflows targeting 2.0
+	handle21, err := s.sdkClient.ExecuteWorkflow(ctx, s.startWorkflowOptions("2-1", tq), wf)
+	s.NoError(err)
+	handle22, err := s.sdkClient.ExecuteWorkflow(ctx, s.startWorkflowOptions("2-2", tq), wf)
+	s.NoError(err)
+
+	// finish them all
+	s.NoError(s.sdkClient.SignalWorkflow(ctx, handle11.GetID(), handle11.GetRunID(), "start-signal", ""))
+	s.NoError(s.sdkClient.SignalWorkflow(ctx, handle12.GetID(), handle12.GetRunID(), "start-signal", ""))
+	s.NoError(s.sdkClient.SignalWorkflow(ctx, handle21.GetID(), handle21.GetRunID(), "start-signal", ""))
+	s.NoError(s.sdkClient.SignalWorkflow(ctx, handle22.GetID(), handle22.GetRunID(), "start-signal", ""))
+
+	// Wait for all wfs to finish
+	s.NoError(handle11.Get(ctx, nil))
+	s.NoError(handle12.Get(ctx, nil))
+	s.NoError(handle21.Get(ctx, nil))
+	s.NoError(handle22.Get(ctx, nil))
+}
+
+func (s *VersioningIntegSuite) startWorkflowOptions(wfID, tqName string) sdkclient.StartWorkflowOptions {
+	var wfOptions = sdkclient.StartWorkflowOptions{
+		ID:                       wfID,
+		TaskQueue:                tqName,
+		WorkflowExecutionTimeout: 15 * time.Second,
+		WorkflowTaskTimeout:      time.Second,
+		WorkflowIDReusePolicy:    enumspb.WORKFLOW_ID_REUSE_POLICY_ALLOW_DUPLICATE,
+	}
+	return wfOptions
+}
+
 func (s *VersioningIntegSuite) TestLinkToNonexistentCompatibleVersionReturnsNotFound() {
 	ctx := NewContext()
 	tq := "functional-versioning-compat-not-found"
