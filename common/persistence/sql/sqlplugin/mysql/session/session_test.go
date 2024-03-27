@@ -163,7 +163,7 @@ func (s *sessionTestSuite) TestBuildDSN() {
 				s.Equal(2, len(tokens), "invalid url")
 				qry, err := url.Parse("?" + tokens[1])
 				s.NoError(err)
-				wantAttrs := buildExpectedURLParams(tc.in.ConnectAttributes, tc.outIsolationKey, tc.outIsolationVal)
+				wantAttrs := buildExpectedURLParams(dbKind, tc.in.ConnectAttributes, tc.outIsolationKey, tc.outIsolationVal)
 				s.Equal(wantAttrs, qry.Query(), "invalid dsn url params")
 			})
 		}
@@ -185,7 +185,7 @@ func (s *sessionTestSuite) Test_Visibility_DoesntSupport_interpolateParams() {
 	s.Error(err, "We should return an error when a MySQL Visibility database is configured with interpolateParams")
 }
 
-func buildExpectedURLParams(attrs map[string]string, isolationKey string, isolationValue string) url.Values {
+func buildExpectedURLParams(dbKind sqlplugin.DbKind, attrs map[string]string, isolationKey string, isolationValue string) url.Values {
 	result := make(map[string][]string, len(dsnAttrOverrides)+len(attrs)+1)
 	for k, v := range attrs {
 		result[k] = []string{v}
@@ -195,5 +195,8 @@ func buildExpectedURLParams(attrs map[string]string, isolationKey string, isolat
 		result[k] = []string{v}
 	}
 	result["rejectReadOnly"] = []string{"true"}
+	if dbKind != sqlplugin.DbKindVisibility {
+		result["interpolateParams"] = []string{"true"}
+	}
 	return result
 }
