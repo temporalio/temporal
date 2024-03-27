@@ -45,7 +45,7 @@ var (
 	// workflow update
 	WorkflowActionUpdateAccepted  = workflowAction("add-workflow-update-accepted-event")
 	WorkflowActionUpdateCompleted = workflowAction("add-workflow-update-completed-event")
-	WorkflowActionUpdateRequested = workflowAction("add-workflow-update-requested")
+	WorkflowActionUpdateRequested = workflowAction("add-workflow-update-requested-event")
 
 	// workflow task
 	WorkflowActionWorkflowTaskScheduled = workflowAction("add-workflowtask-scheduled-event")
