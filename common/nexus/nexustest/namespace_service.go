@@ -25,23 +25,21 @@ package nexustest
 import (
 	"context"
 
+	enumsspb "go.temporal.io/server/api/enums/v1"
+	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common/nexus"
 	"go.temporal.io/server/common/persistence"
 )
 
-// NamespaceService is a test implementation of [nexus.NamespaceService] that allows you to easily override its methods.
-// It will panic if any of its methods are called without their respective On* fields being set.
+// NamespaceService is a test implementation of [nexus.NamespaceService] and [namespace.Replicator] that allows you to
+// easily override its methods. It will panic if any of its methods are called without their respective On* fields
+// being set.
 type NamespaceService struct {
-	OnCreateNamespace func(ctx context.Context, request *persistence.CreateNamespaceRequest) (*persistence.CreateNamespaceResponse, error)
 	OnGetNamespace    func(ctx context.Context, request *persistence.GetNamespaceRequest) (*persistence.GetNamespaceResponse, error)
 	OnUpdateNamespace func(ctx context.Context, request *persistence.UpdateNamespaceRequest) error
 }
 
 var _ nexus.NamespaceService = (*NamespaceService)(nil)
-
-func (n *NamespaceService) CreateNamespace(ctx context.Context, request *persistence.CreateNamespaceRequest) (*persistence.CreateNamespaceResponse, error) {
-	return n.OnCreateNamespace(ctx, request)
-}
 
 func (n *NamespaceService) GetNamespace(ctx context.Context, request *persistence.GetNamespaceRequest) (*persistence.GetNamespaceResponse, error) {
 	return n.OnGetNamespace(ctx, request)
@@ -49,4 +47,20 @@ func (n *NamespaceService) GetNamespace(ctx context.Context, request *persistenc
 
 func (n *NamespaceService) UpdateNamespace(ctx context.Context, request *persistence.UpdateNamespaceRequest) error {
 	return n.OnUpdateNamespace(ctx, request)
+}
+
+func (n *NamespaceService) HandleTransmissionTask(
+	ctx context.Context,
+	namespaceOperation enumsspb.NamespaceOperation,
+	info *persistencespb.NamespaceInfo,
+	config *persistencespb.NamespaceConfig,
+	replicationConfig *persistencespb.NamespaceReplicationConfig,
+	nexusOutgoingServices []*persistencespb.NexusOutgoingService,
+	replicationClusterListUpdated bool,
+	configVersion int64,
+	failoverVersion int64,
+	isGlobalNamespace bool,
+	failoverHistory []*persistencespb.FailoverStatus,
+) error {
+	return nil
 }

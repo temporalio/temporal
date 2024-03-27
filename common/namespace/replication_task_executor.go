@@ -313,6 +313,7 @@ func (h *namespaceReplicationTaskExecutorImpl) handleNamespaceUpdateReplicationT
 		}
 		request.Namespace.ReplicationConfig.Clusters = ConvertClusterReplicationConfigFromProto(task.ReplicationConfig.Clusters)
 		request.Namespace.ConfigVersion = task.GetConfigVersion()
+		request.Namespace.OutgoingServices = task.GetNexusOutgoingServices()
 	}
 	if resp.Namespace.FailoverVersion < task.GetFailoverVersion() {
 		recordUpdated = true
