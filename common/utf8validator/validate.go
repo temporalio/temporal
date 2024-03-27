@@ -139,10 +139,7 @@ func (v *Validator) Validate(
 	if source < 0 || source >= sourceCount {
 		return ErrInvalidMessageSource
 	}
-	checkFraction := v.checkBySource[source]()
-	// This makes checkFraction = 0.0 really mean "never" and checkFraction = 1.0 really mean "always".
-	cutoff := uint64(checkFraction * (1 << 32))
-	if rand.Uint64()&(1<<32-1) >= cutoff {
+	if rand.Float64() >= v.checkBySource[source]() {
 		return nil
 	}
 
