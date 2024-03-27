@@ -66,17 +66,18 @@ var (
 var (
 	respondWorkflowTaskCompleted = "RespondWorkflowTaskCompleted"
 	pollActivityTaskQueue        = "PollActivityTaskQueue"
+	startWorkflowExecution       = "StartWorkflowExecution"
 
 	grpcActions = map[string]struct{}{
+		startWorkflowExecution:             {},
+		respondWorkflowTaskCompleted:       {},
+		pollActivityTaskQueue:              {},
 		"QueryWorkflow":                    {},
 		"RecordActivityTaskHeartbeat":      {},
 		"RecordActivityTaskHeartbeatById":  {},
 		"ResetWorkflowExecution":           {},
-		"StartWorkflowExecution":           {},
 		"SignalWorkflowExecution":          {},
 		"SignalWithStartWorkflowExecution": {},
-		"RespondWorkflowTaskCompleted":     {},
-		"PollActivityTaskQueue":            {},
 		"CreateSchedule":                   {},
 		"UpdateSchedule":                   {},
 		"DeleteSchedule":                   {},
@@ -214,6 +215,15 @@ func (ti *TelemetryInterceptor) emitActionMetric(
 	}
 
 	switch methodName {
+	case startWorkflowExecution:
+		resp, ok := result.(*workflowservice.StartWorkflowExecutionResponse)
+		if !ok {
+			return
+		}
+		if resp.Started {
+			metrics.ActionCounter.With(metricsHandler).Record(1, metrics.ActionType("grpc_"+methodName))
+		}
+
 	case respondWorkflowTaskCompleted:
 		// handle commands
 		completedRequest, ok := req.(*workflowservice.RespondWorkflowTaskCompletedRequest)
