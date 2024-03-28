@@ -522,6 +522,7 @@ update-dependencies:
 
 go-generate:
 	@printf $(COLOR) "Process go:generate directives..."
+	@go build -o cached-mockgen ./cmd/tools/mockgen
 	@go generate ./...
 
 ensure-no-changes:

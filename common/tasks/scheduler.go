@@ -24,7 +24,7 @@
 
 package tasks
 
-//go:generate go run ../../cmd/tools/mockgen -copyright_file ../../LICENSE -package $GOPACKAGE -source $GOFILE -destination scheduler_mock.go
+//go:generate ../../cached-mockgen -copyright_file ../../LICENSE -package $GOPACKAGE -source $GOFILE -destination scheduler_mock.go
 type (
 	// Scheduler is the generic interface for scheduling & processing tasks
 	Scheduler[T Task] interface {
