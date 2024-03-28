@@ -1248,6 +1248,16 @@ func (n *FaultInjectionNexusIncomingServiceStore) Close() {
 	n.baseNexusIncomingServiceStore.Close()
 }
 
+func (n *FaultInjectionNexusIncomingServiceStore) GetNexusIncomingService(
+	ctx context.Context,
+	request *persistence.GetNexusIncomingServiceRequest,
+) (*persistence.InternalNexusIncomingService, error) {
+	if err := n.ErrorGenerator.Generate(); err != nil {
+		return nil, err
+	}
+	return n.baseNexusIncomingServiceStore.GetNexusIncomingService(ctx, request)
+}
+
 func (n *FaultInjectionNexusIncomingServiceStore) ListNexusIncomingServices(
 	ctx context.Context,
 	request *persistence.ListNexusIncomingServicesRequest,

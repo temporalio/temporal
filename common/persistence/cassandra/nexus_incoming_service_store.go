@@ -53,10 +53,11 @@ const (
 	// incoming service templates
 	templateCreateIncomingServiceQuery         = `INSERT INTO nexus_incoming_services(partition, type, service_id, data, data_encoding, version) VALUES(0, ?, ?, ?, ?, ?) IF NOT EXISTS`
 	templateUpdateIncomingServiceQuery         = `UPDATE nexus_incoming_services SET data = ?, data_encoding = ?, version = ? WHERE partition = 0 AND type = ? AND service_id = ? IF version = ?`
+	templateDeleteIncomingServiceQuery         = `DELETE FROM nexus_incoming_services WHERE partition = 0 AND type = ? AND service_id = ? IF EXISTS`
+	templateGetIncomingServiceByIdQuery        = `SELECT data, data_encoding, version FROM nexus_incoming_services WHERE partition = 0 AND type = ? AND service_id = ? LIMIT 1`
 	templateBaseListIncomingServicesQuery      = `SELECT service_id, data, data_encoding, version FROM nexus_incoming_services WHERE partition = 0`
 	templateListIncomingServicesQuery          = templateBaseListIncomingServicesQuery + ` AND type = ?`
 	templateListIncomingServicesFirstPageQuery = templateBaseListIncomingServicesQuery + ` ORDER BY type ASC`
-	templateDeleteIncomingServiceQuery         = `DELETE FROM nexus_incoming_services WHERE partition = 0 AND type = ? AND service_id = ? IF EXISTS`
 )
 
 type (
@@ -168,6 +169,31 @@ func (s *NexusIncomingServiceStore) CreateOrUpdateNexusIncomingService(
 	}
 
 	return nil
+}
+
+func (s *NexusIncomingServiceStore) GetNexusIncomingService(
+	ctx context.Context,
+	request *p.GetNexusIncomingServiceRequest,
+) (*p.InternalNexusIncomingService, error) {
+	query := s.session.Query(templateGetIncomingServiceByIdQuery, rowTypeIncomingNexusService, request.ServiceID).WithContext(ctx)
+
+	var data []byte
+	var dataEncoding string
+	var version int64
+
+	err := query.Scan(&data, &dataEncoding, &version)
+	if gocql.IsNotFoundError(err) {
+		return nil, serviceerror.NewNotFound(fmt.Sprintf("Nexus incoming service with ID `%v` not found", request.ServiceID))
+	}
+	if err != nil {
+		return nil, gocql.ConvertError("GetNexusIncomingService", err)
+	}
+
+	return &p.InternalNexusIncomingService{
+		ServiceID: request.ServiceID,
+		Version:   version,
+		Data:      p.NewDataBlob(data, dataEncoding),
+	}, nil
 }
 
 func (s *NexusIncomingServiceStore) ListNexusIncomingServices(

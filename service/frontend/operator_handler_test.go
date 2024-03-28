@@ -41,9 +41,10 @@ import (
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/api/workflowservice/v1"
 	sdkclient "go.temporal.io/sdk/client"
-	cnexus "go.temporal.io/server/common/nexus"
 	"golang.org/x/exp/maps"
 	"google.golang.org/grpc/health"
+
+	cnexus "go.temporal.io/server/common/nexus"
 
 	"go.temporal.io/server/api/adminservice/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
@@ -91,10 +92,18 @@ func (s *operatorHandlerSuite) SetupTest() {
 	s.mockResource = resourcetest.NewTest(s.controller, primitives.FrontendService)
 	s.mockResource.ClusterMetadata.EXPECT().GetCurrentClusterName().Return(uuid.New()).AnyTimes()
 
+	incomingServiceClient := newNexusIncomingServiceClient(
+		newNexusIncomingServiceClientConfig(dynamicconfig.NewNoopCollection()),
+		s.mockResource.NamespaceCache,
+		s.mockResource.MatchingClient,
+		persistence.NewMockNexusIncomingServiceManager(s.controller),
+		s.mockResource.Logger,
+	)
 	outgoingServiceRegistry := cnexus.NewOutgoingServiceRegistry(
 		s.mockResource.MetadataMgr,
 		cnexus.NewOutgoingServiceRegistryConfig(dynamicconfig.NewNoopCollection()),
 	)
+
 	args := NewOperatorHandlerImplArgs{
 		&Config{NumHistoryShards: 4},
 		s.mockResource.ESClient,
@@ -108,6 +117,7 @@ func (s *operatorHandlerSuite) SetupTest() {
 		s.mockResource.GetClusterMetadataManager(),
 		s.mockResource.GetClusterMetadata(),
 		s.mockResource.GetClientFactory(),
+		incomingServiceClient,
 		outgoingServiceRegistry,
 	}
 	s.handler = NewOperatorHandlerImpl(args)
