@@ -78,8 +78,7 @@ func isDestinationFileUpToDate(args []string) (bool, error) {
 		}
 	}
 
-	// If either source or destination path aren't specified, so we can't tell if we can cache. There's no way for us to
-	// know if the source is newer than the destination in this case.
+	// Either source or destination path aren't specified, so we can't check if the destination file is up-to-date.
 	if sourcePath == "" || destPath == "" {
 		return false, nil
 	}
@@ -101,6 +100,7 @@ func isDestinationFileUpToDate(args []string) (bool, error) {
 	destTime := fileInfo.ModTime()
 
 	// Check if the destination file is up-to-date by comparing modification times
-	upToDate := !sourceTime.After(destTime) // 'true' if source is not newer than destination
+	sourceIsNewer := sourceTime.After(destTime)
+	upToDate := !sourceIsNewer
 	return upToDate, nil
 }
