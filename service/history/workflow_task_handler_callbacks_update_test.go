@@ -28,6 +28,7 @@ import (
 	"context"
 	"errors"
 	"testing"
+	"time"
 
 	"github.com/golang/mock/gomock"
 	"github.com/stretchr/testify/require"
@@ -198,7 +199,7 @@ func (s *WorkflowTaskHandlerCallbacksUpdateSuite) TestAcceptComplete() {
 	})
 	s.NoError(err)
 
-	updStatus, err := upd.Status()
+	updStatus, err := upd.WaitLifecycleStage(context.Background(), enumspb.UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_UNSPECIFIED, time.Duration(0))
 	s.NoError(err)
 	s.Equal(enumspb.UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_COMPLETED.String(), updStatus.Stage.String())
 	s.ProtoEqual(payloads.EncodeString("success-result-of-"+tv.UpdateID("1")), updStatus.Outcome.GetSuccess())
@@ -232,7 +233,7 @@ func (s *WorkflowTaskHandlerCallbacksUpdateSuite) TestReject() {
 	})
 	s.NoError(err)
 
-	updStatus, err := upd.Status()
+	updStatus, err := upd.WaitLifecycleStage(context.Background(), enumspb.UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_UNSPECIFIED, time.Duration(0))
 	s.NoError(err)
 	s.Equal(enumspb.UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_COMPLETED.String(), updStatus.Stage.String())
 	s.Equal("rejection-of-"+tv.UpdateID("1"), updStatus.Outcome.GetFailure().GetMessage())
@@ -266,7 +267,7 @@ func (s *WorkflowTaskHandlerCallbacksUpdateSuite) TestWriteFailed() {
 	})
 	s.ErrorIs(err, writeErr)
 
-	updStatus, err := upd.Status()
+	updStatus, err := upd.WaitLifecycleStage(context.Background(), enumspb.UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_UNSPECIFIED, time.Duration(0))
 	s.NoError(err)
 	s.Equal(enumspb.UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_ADMITTED.String(), updStatus.Stage.String())
 	s.Nil(updStatus.Outcome.GetSuccess())
@@ -301,7 +302,7 @@ func (s *WorkflowTaskHandlerCallbacksUpdateSuite) TestGetHistoryFailed() {
 	})
 	s.ErrorIs(err, readHistoryErr)
 
-	updStatus, err := upd.Status()
+	updStatus, err := upd.WaitLifecycleStage(context.Background(), enumspb.UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_UNSPECIFIED, time.Duration(0))
 	s.NoError(err)
 	s.Equal(enumspb.UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_COMPLETED.String(), updStatus.Stage.String())
 	s.ProtoEqual(payloads.EncodeString("success-result-of-"+tv.UpdateID("1")), updStatus.Outcome.GetSuccess())
