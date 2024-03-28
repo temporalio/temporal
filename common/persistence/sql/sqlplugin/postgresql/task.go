@@ -158,10 +158,10 @@ func (pdb *db) DeleteFromTasks(
 	filter sqlplugin.TasksFilter,
 ) (sql.Result, error) {
 	if filter.ExclusiveMaxTaskID == nil {
-		return nil, fmt.Errorf("missing ExclusiveMaxTaskId parameter")
+		return nil, serviceerror.NewInternal("missing ExclusiveMaxTaskID parameter")
 	}
 	if filter.Limit == nil || *filter.Limit == 0 {
-		return nil, fmt.Errorf("missing limit parameter")
+		return nil, serviceerror.NewInternal("missing limit parameter")
 	}
 	return pdb.conn.ExecContext(ctx,
 		rangeDeleteTaskQry,
