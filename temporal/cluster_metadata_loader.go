@@ -88,27 +88,10 @@ func (c *ClusterMetadataLoader) reconcileMetadata(
 			tag.Value(newMetadata))
 		return
 	}
-	c.reconcileRPCAddress(newMetadata, currentMetadata, clusterName)
-	c.reconcileHTTPAddress(newMetadata, currentMetadata, clusterName)
-}
-
-func (c *ClusterMetadataLoader) reconcileRPCAddress(newMetadata *cluster.ClusterInformation, currentMetadata cluster.ClusterInformation, clusterName string) {
 	newMetadata.RPCAddress = currentMetadata.RPCAddress
 	c.logger.Info(fmt.Sprintf("Use rpc address %v for cluster %v.", newMetadata.RPCAddress, clusterName))
-}
-
-func (c *ClusterMetadataLoader) reconcileHTTPAddress(newMetadata *cluster.ClusterInformation, currentMetadata cluster.ClusterInformation, clusterName string) {
-	// The logic for HTTP addresses is different from that of RPC addresses because HTTP addresses are optional.
-	if newMetadata.HTTPAddress == "" {
-		// Only use HTTP address from static config if there isn't one in the database.
-		newMetadata.HTTPAddress = currentMetadata.HTTPAddress
-	} else {
-		// Otherwise, defer to the HTTP address in the database, and log a message that the static one is ignored.
-		c.logger.Warn(fmt.Sprintf(
-			"Static http address %v is ignored for cluster %v, using %v from database.",
-			currentMetadata.HTTPAddress, clusterName, newMetadata.HTTPAddress,
-		))
-	}
+	newMetadata.HTTPAddress = currentMetadata.HTTPAddress
+	c.logger.Info(fmt.Sprintf("Use http address %v for cluster %v.", newMetadata.HTTPAddress, clusterName))
 }
 
 // backfillShardCount is to add backward compatibility to the svc based cluster connection. It sets the shard count for

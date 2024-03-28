@@ -24,10 +24,14 @@ func TestNewClusterMetadataLoader(t *testing.T) {
 	ctx := context.Background()
 	svc := &config.Config{
 		ClusterMetadata: &cluster.Config{
-			CurrentClusterName: "cluster1",
+			CurrentClusterName: "current_cluster",
 			ClusterInformation: map[string]cluster.ClusterInformation{
-				"cluster1": {
-					RPCAddress: "rpc1",
+				"current_cluster": {
+					RPCAddress:  "rpc_static",
+					HTTPAddress: "http_static",
+				},
+				"remote_cluster": {
+					RPCAddress: "rpc_static",
 				},
 			},
 		},
@@ -38,15 +42,22 @@ func TestNewClusterMetadataLoader(t *testing.T) {
 			{
 				ClusterMetadata: &persistencespb.ClusterMetadata{
 					ClusterName:    "cluster1",
-					ClusterAddress: "rpc1",
-					HttpAddress:    "http1",
+					ClusterAddress: "rpc_dynamic",
+					HttpAddress:    "http_dynamic",
 				},
 			},
 			{
 				ClusterMetadata: &persistencespb.ClusterMetadata{
 					ClusterName:    "cluster2",
-					ClusterAddress: "rpc2",
-					HttpAddress:    "http2",
+					ClusterAddress: "rpc_dynamic",
+					HttpAddress:    "http_dynamic",
+				},
+			},
+			{
+				ClusterMetadata: &persistencespb.ClusterMetadata{
+					ClusterName:    "cluster3",
+					ClusterAddress: "rpc_dynamic",
+					HttpAddress:    "http_dynamic",
 				},
 			},
 		},
@@ -57,12 +68,16 @@ func TestNewClusterMetadataLoader(t *testing.T) {
 
 	assert.Equal(t, map[string]cluster.ClusterInformation{
 		"cluster1": {
-			RPCAddress:  "rpc1",
-			HTTPAddress: "http1",
+			RPCAddress:  "rpc_static",
+			HTTPAddress: "http_dynamic",
 		},
 		"cluster2": {
 			RPCAddress:  "rpc2",
 			HTTPAddress: "http2",
+		},
+		"cluster3": {
+			RPCAddress:  "rpc3",
+			HTTPAddress: "http3",
 		},
 	}, svc.ClusterMetadata.ClusterInformation)
 }
