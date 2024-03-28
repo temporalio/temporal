@@ -138,7 +138,7 @@ func (e *taskExecutorImpl) handleActivityTask(
 
 	startTime := time.Now().UTC()
 	defer func() {
-		e.metricsHandler.Timer(metrics.ServiceLatency.Name()).Record(
+		metrics.ServiceLatency.With(e.metricsHandler).Record(
 			time.Since(startTime),
 			metrics.OperationTag(metrics.SyncActivityTaskScope),
 		)
@@ -171,13 +171,13 @@ func (e *taskExecutorImpl) handleActivityTask(
 		return nil
 
 	case *serviceerrors.RetryReplication:
-		e.metricsHandler.Counter(metrics.ClientRequests.Name()).Record(
+		metrics.ClientRequests.With(e.metricsHandler).Record(
 			1,
 			metrics.OperationTag(metrics.HistoryRereplicationByActivityReplicationScope),
 		)
 		startTime := time.Now().UTC()
 		defer func() {
-			e.metricsHandler.Timer(metrics.ClientLatency.Name()).Record(
+			metrics.ClientLatency.With(e.metricsHandler).Record(
 				time.Since(startTime),
 				metrics.OperationTag(metrics.HistoryRereplicationByActivityReplicationScope),
 			)
@@ -228,7 +228,7 @@ func (e *taskExecutorImpl) handleHistoryReplicationTask(
 
 	startTime := time.Now().UTC()
 	defer func() {
-		e.metricsHandler.Timer(metrics.ServiceLatency.Name()).Record(
+		metrics.ServiceLatency.With(e.metricsHandler).Record(
 			time.Since(startTime),
 			metrics.OperationTag(metrics.HistoryReplicationTaskScope),
 		)
@@ -244,6 +244,7 @@ func (e *taskExecutorImpl) handleHistoryReplicationTask(
 		Events:              attr.Events,
 		// new run events does not need version history since there is no prior events
 		NewRunEvents: attr.NewRunEvents,
+		NewRunId:     attr.NewRunId,
 	}
 	ctx, cancel := e.newTaskContext(ctx, attr.NamespaceId)
 	defer cancel()
@@ -256,13 +257,13 @@ func (e *taskExecutorImpl) handleHistoryReplicationTask(
 		return nil
 
 	case *serviceerrors.RetryReplication:
-		e.metricsHandler.Counter(metrics.ClientRequests.Name()).Record(
+		metrics.ClientRequests.With(e.metricsHandler).Record(
 			1,
 			metrics.OperationTag(metrics.HistoryRereplicationByHistoryReplicationScope),
 		)
 		startTime := time.Now().UTC()
 		defer func() {
-			e.metricsHandler.Timer(metrics.ClientLatency.Name()).Record(
+			metrics.ClientLatency.With(e.metricsHandler).Record(
 				time.Since(startTime),
 				metrics.OperationTag(metrics.HistoryRereplicationByHistoryReplicationScope),
 			)

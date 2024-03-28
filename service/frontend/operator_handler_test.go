@@ -41,6 +41,7 @@ import (
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/api/workflowservice/v1"
 	sdkclient "go.temporal.io/sdk/client"
+	cnexus "go.temporal.io/server/common/nexus"
 	"golang.org/x/exp/maps"
 	"google.golang.org/grpc/health"
 
@@ -90,6 +91,10 @@ func (s *operatorHandlerSuite) SetupTest() {
 	s.mockResource = resourcetest.NewTest(s.controller, primitives.FrontendService)
 	s.mockResource.ClusterMetadata.EXPECT().GetCurrentClusterName().Return(uuid.New()).AnyTimes()
 
+	outgoingServiceRegistry := cnexus.NewOutgoingServiceRegistry(
+		s.mockResource.MetadataMgr,
+		cnexus.NewOutgoingServiceRegistryConfig(dynamicconfig.NewNoopCollection()),
+	)
 	args := NewOperatorHandlerImplArgs{
 		&Config{NumHistoryShards: 4},
 		s.mockResource.ESClient,
@@ -103,6 +108,7 @@ func (s *operatorHandlerSuite) SetupTest() {
 		s.mockResource.GetClusterMetadataManager(),
 		s.mockResource.GetClusterMetadata(),
 		s.mockResource.GetClientFactory(),
+		outgoingServiceRegistry,
 	}
 	s.handler = NewOperatorHandlerImpl(args)
 	s.handler.Start()
@@ -724,7 +730,7 @@ func (s *operatorHandlerSuite) Test_AddSearchAttributesSQL() {
 			},
 			describeNamespaceCalled: true,
 			describeNamespaceErr:    errors.New("mock error describe namespace"),
-			expectedErrMsg:          fmt.Sprintf(errUnableToGetNamespaceInfoMessage, testNamespace),
+			expectedErrMsg:          fmt.Sprintf(errUnableToGetNamespaceInfoMessage, testNamespace, "mock error describe namespace"),
 		},
 		{
 			name: "fail: too many search attributes",

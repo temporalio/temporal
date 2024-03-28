@@ -73,7 +73,6 @@ import (
 	"go.temporal.io/server/service/history"
 	"go.temporal.io/server/service/history/replication"
 	"go.temporal.io/server/service/history/tasks"
-	"go.temporal.io/server/service/history/workflow"
 	"go.temporal.io/server/service/matching"
 	"go.temporal.io/server/service/worker"
 )
@@ -249,6 +248,8 @@ func ServerOptionsProvider(opts []ServerOption) (serverOptionsProvider, error) {
 	} else if persistenceConfig.SecondaryVisibilityConfigExist() &&
 		persistenceConfig.DataStores[persistenceConfig.SecondaryVisibilityStore].Elasticsearch != nil {
 		esConfig = persistenceConfig.DataStores[persistenceConfig.SecondaryVisibilityStore].Elasticsearch
+	} else if persistenceConfig.AdvancedVisibilityConfigExist() {
+		esConfig = persistenceConfig.DataStores[persistenceConfig.AdvancedVisibilityStore].Elasticsearch
 	}
 
 	if esConfig != nil {
@@ -447,10 +448,10 @@ func TaskCategoryRegistryProvider(archivalMetadata archiver.ArchivalMetadata, dc
 		archivalMetadata.GetVisibilityConfig().StaticClusterState() == archiver.ArchivalEnabled {
 		registry.AddCategory(tasks.CategoryArchival)
 	}
-	// Can't use history service configs.Config because this provider is applied to all services (see docstring for the
-	// function).
-	if dc.GetBoolProperty(dynamicconfig.CallbackProcessorEnabled, false)() {
-		registry.AddCategory(tasks.CategoryCallback)
+	// Can't use history service configs.Config because this provider is applied to all services (see docstring for this
+	// function for more info).
+	if dc.GetBoolProperty(dynamicconfig.OutboundProcessorEnabled, false)() {
+		registry.AddCategory(tasks.CategoryOutbound)
 	}
 	return registry
 }
@@ -477,7 +478,6 @@ func HistoryServiceProvider(
 
 	app := fx.New(
 		params.GetCommonServiceOptions(serviceName),
-		fx.Provide(workflow.NewTaskGeneratorProvider),
 		history.QueueModule,
 		history.Module,
 		replication.Module,
@@ -680,28 +680,23 @@ func ApplyClusterMetadataConfigProvider(
 
 // TODO: move this to cluster.fx
 func loadClusterInformationFromStore(ctx context.Context, svc *config.Config, clusterMsg persistence.ClusterMetadataManager, logger log.Logger) error {
-	iter := collection.NewPagingIterator(func(paginationToken []byte) ([]interface{}, []byte, error) {
+	iter := collection.NewPagingIterator(func(paginationToken []byte) ([]*persistence.GetClusterMetadataResponse, []byte, error) {
 		request := &persistence.ListClusterMetadataRequest{
 			PageSize:      100,
-			NextPageToken: nil,
+			NextPageToken: paginationToken,
 		}
 		resp, err := clusterMsg.ListClusterMetadata(ctx, request)
 		if err != nil {
 			return nil, nil, err
 		}
-		var pageItem []interface{}
-		for _, metadata := range resp.ClusterMetadata {
-			pageItem = append(pageItem, metadata)
-		}
-		return pageItem, resp.NextPageToken, nil
+		return resp.ClusterMetadata, resp.NextPageToken, nil
 	})
 
 	for iter.HasNext() {
-		item, err := iter.Next()
+		metadata, err := iter.Next()
 		if err != nil {
 			return err
 		}
-		metadata := item.(*persistence.GetClusterMetadataResponse)
 		shardCount := metadata.HistoryShardCount
 		if shardCount == 0 {
 			// This is to add backward compatibility to the svc based cluster connection.

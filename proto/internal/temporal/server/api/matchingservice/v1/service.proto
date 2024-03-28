@@ -130,15 +130,20 @@ service MatchingService {
     // Set version to 0 to create a new service.
     // If this request is accepted, the input is considered the "current" state of this service at the time it was
     // persisted and the updated version is returned.
-    // (-- api-linter: core::0133::response-message-name=disabled
-    //     aip.dev/not-precedent: CreateOrUpdateNexusIncomingService RPC doesn't follow Google API format. --)
-    // (-- api-linter: core::0133::http-uri-parent=disabled
-    //     aip.dev/not-precedent: CreateOrUpdateNexusIncomingService RPC doesn't follow Google API format. --)
     // (-- api-linter: core::0133::method-signature=disabled
-    //     aip.dev/not-precedent: CreateOrUpdateNexusIncomingService RPC doesn't follow Google API format. --)
-    // (-- api-linter: core::0133::request-resource-field=disabled
-    //     aip.dev/not-precedent: CreateOrUpdateNexusIncomingService RPC doesn't follow Google API format. --)
-    rpc	CreateOrUpdateNexusIncomingService(CreateOrUpdateNexusIncomingServiceRequest) returns (CreateOrUpdateNexusIncomingServiceResponse) {}
+    //     aip.dev/not-precedent: CreateNexusIncomingService RPC doesn't follow Google API format. --)
+    // (-- api-linter: core::0133::response-message-name=disabled
+    //     aip.dev/not-precedent: CreateNexusIncomingService RPC doesn't follow Google API format. --)
+    // (-- api-linter: core::0133::http-uri-parent=disabled
+    //     aip.dev/not-precedent: CreateNexusIncomingService RPC doesn't follow Google API format. --)
+    rpc	CreateNexusIncomingService(CreateNexusIncomingServiceRequest) returns (CreateNexusIncomingServiceResponse) {}
+    // (-- api-linter: core::0134::method-signature=disabled
+    //     aip.dev/not-precedent: UpdateNexusIncomingService RPC doesn't follow Google API format. --)
+    // (-- api-linter: core::0134::response-message-name=disabled
+    //     aip.dev/not-precedent: UpdateNexusIncomingService RPC doesn't follow Google API format. --)
+    // (-- api-linter: core::0134::request-resource-required=disabled
+    //     aip.dev/not-precedent: UpdateNexusIncomingService RPC doesn't follow Google API format. --)
+    rpc	UpdateNexusIncomingService(UpdateNexusIncomingServiceRequest) returns (UpdateNexusIncomingServiceResponse) {}
     // Delete a service by its name.
     rpc	DeleteNexusIncomingService(DeleteNexusIncomingServiceRequest) returns (DeleteNexusIncomingServiceResponse) {}
     // List all registered services.

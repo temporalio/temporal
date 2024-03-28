@@ -37,7 +37,6 @@ import (
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence/sql/sqlplugin"
 	"go.temporal.io/server/common/persistence/visibility/store/query"
-	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/common/searchattribute"
 )
 
@@ -569,6 +568,7 @@ func (c *QueryConverter) convertValueExpr(
 // Returns a string, an int64 or a float64 if there are no errors.
 // For datetime, converts to UTC.
 // For execution status, converts string to enum value.
+// For execution duration, converts to nanoseconds.
 func (c *QueryConverter) parseSQLVal(
 	expr *sqlparser.SQLVal,
 	saName string,
@@ -642,22 +642,12 @@ func (c *QueryConverter) parseSQLVal(
 
 	if saName == searchattribute.ExecutionDuration {
 		if durationStr, isString := value.(string); isString {
-			// To support durations passed as golang durations such as "300ms", "-1.5h" or "2h45m".
-			// Valid time units are "ns", "us" (or "µs"), "ms", "s", "m", "h".
-			// Custom timestamp.ParseDuration also supports "d" as additional unit for days.
-			if duration, err := timestamp.ParseDuration(durationStr); err == nil {
-				value = duration.Nanoseconds()
-			} else {
-				// To support "hh:mm:ss" durations.
-				durationNanos, err := timestamp.ParseHHMMSSDuration(durationStr)
-				var converterErr *query.ConverterError
-				if errors.As(err, &converterErr) {
-					return nil, converterErr
-				}
-				if err == nil {
-					value = durationNanos
-				}
+			duration, err := query.ParseExecutionDurationStr(durationStr)
+			if err != nil {
+				return nil, query.NewConverterError(
+					"invalid value for search attribute %s: %v (%v)", saName, value, err)
 			}
+			value = duration.Nanoseconds()
 		}
 	}
 

@@ -68,6 +68,7 @@ import (
 	"go.temporal.io/server/service/history/configs"
 	"go.temporal.io/server/service/history/events"
 	"go.temporal.io/server/service/history/historybuilder"
+	"go.temporal.io/server/service/history/hsm"
 	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/tasks"
 	"go.temporal.io/server/service/history/tests"
@@ -127,6 +128,9 @@ func (s *mutableStateSuite) SetupTest() {
 		},
 		s.mockConfig,
 	)
+	reg := hsm.NewRegistry()
+	s.Require().NoError(RegisterStateMachine(reg))
+	s.mockShard.SetStateMachineRegistry(reg)
 	// set the checksum probabilities to 100% for exercising during test
 	s.mockConfig.MutableStateChecksumGenProbability = func(namespace string) int { return 100 }
 	s.mockConfig.MutableStateChecksumVerifyProbability = func(namespace string) int { return 100 }

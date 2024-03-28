@@ -242,6 +242,7 @@ func (r *StateRebuilderImpl) applyEvents(
 		},
 		[][]*historypb.HistoryEvent{events},
 		nil, // no new run history when rebuilding mutable state
+		"",
 	)
 	if err != nil {
 		r.logger.Error("StateRebuilder unable to Rebuild mutable state.", tag.Error(err))

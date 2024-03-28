@@ -149,7 +149,7 @@ func (c *workflowSizeChecker) checkIfMemoSizeExceedsLimit(
 	commandTypeTag metrics.Tag,
 	message string,
 ) error {
-	c.metricsHandler.Histogram(metrics.MemoSize.Name(), metrics.MemoSize.Unit()).Record(
+	metrics.MemoSize.With(c.metricsHandler).Record(
 		int64(memo.Size()),
 		commandTypeTag)
 
@@ -256,7 +256,7 @@ func (c *workflowSizeChecker) checkIfSearchAttributesSizeExceedsLimit(
 	namespace namespace.Name,
 	commandTypeTag metrics.Tag,
 ) error {
-	c.metricsHandler.Histogram(metrics.SearchAttributesSize.Name(), metrics.SearchAttributesSize.Unit()).Record(
+	metrics.SearchAttributesSize.With(c.metricsHandler).Record(
 		int64(searchAttributes.Size()),
 		commandTypeTag)
 	err := c.searchAttributesValidator.ValidateSize(searchAttributes, namespace.String())

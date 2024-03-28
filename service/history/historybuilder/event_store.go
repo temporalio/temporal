@@ -471,7 +471,7 @@ func (b *EventStore) emitInorderedBufferedEvents(bufferedEvents []*historypb.His
 	}
 
 	if inorderedEventsCount > 0 && b.metricsHandler != nil {
-		b.metricsHandler.Counter(metrics.InorderBufferedEventsCounter.Name()).Record(inorderedEventsCount)
+		metrics.InorderBufferedEventsCounter.With(b.metricsHandler).Record(inorderedEventsCount)
 	}
 }
 
