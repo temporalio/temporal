@@ -531,12 +531,29 @@ func (m *metadataImpl) listAllClusterMetadataFromDB(
 	ctx context.Context,
 ) (map[string]*ClusterInformation, error) {
 	result := make(map[string]*ClusterInformation)
-	if m.clusterMetadataStore == nil {
+	metadataStore := m.clusterMetadataStore
+	if metadataStore == nil {
 		return result, nil
 	}
 
-	paginationFn := func(paginationToken []byte) ([]interface{}, []byte, error) {
-		resp, err := m.clusterMetadataStore.ListClusterMetadata(
+	iterator := GetAllClustersIter(ctx, metadataStore)
+	for iterator.HasNext() {
+		item, err := iterator.Next()
+		if err != nil {
+			return nil, err
+		}
+		result[item.GetClusterName()] = ClusterInformationFromDB(item)
+	}
+	return result, nil
+}
+
+// GetAllClustersIter returns an iterator that can be used to iterate over all clusters in the metadata store.
+func GetAllClustersIter(
+	ctx context.Context,
+	metadataStore persistence.ClusterMetadataManager,
+) collection.Iterator[*persistence.GetClusterMetadataResponse] {
+	paginationFn := func(paginationToken []byte) ([]*persistence.GetClusterMetadataResponse, []byte, error) {
+		resp, err := metadataStore.ListClusterMetadata(
 			ctx,
 			&persistence.ListClusterMetadataRequest{
 				PageSize:      defaultClusterMetadataPageSize,
@@ -546,23 +563,11 @@ func (m *metadataImpl) listAllClusterMetadataFromDB(
 		if err != nil {
 			return nil, nil, err
 		}
-		var paginateItems []interface{}
-		for _, clusterInfo := range resp.ClusterMetadata {
-			paginateItems = append(paginateItems, clusterInfo)
-		}
-		return paginateItems, resp.NextPageToken, nil
+		return resp.ClusterMetadata, resp.NextPageToken, nil
 	}
 
 	iterator := collection.NewPagingIterator(paginationFn)
-	for iterator.HasNext() {
-		item, err := iterator.Next()
-		if err != nil {
-			return nil, err
-		}
-		getClusterResp := item.(*persistence.GetClusterMetadataResponse)
-		result[getClusterResp.GetClusterName()] = ClusterInformationFromDB(getClusterResp)
-	}
-	return result, nil
+	return iterator
 }
 
 func ClusterInformationFromDB(getClusterResp *persistence.GetClusterMetadataResponse) *ClusterInformation {

@@ -671,7 +671,7 @@ func ApplyClusterMetadataConfigProvider(
 	}
 
 	clusterLoader := NewClusterMetadataLoader(clusterMetadataManager, logger)
-	err = clusterLoader.LoadClusterInformationFromStore(ctx, svc)
+	err = clusterLoader.LoadAndMergeWithStaticConfig(ctx, svc)
 	if err != nil {
 		return svc.ClusterMetadata, svc.Persistence, fmt.Errorf("error while loading metadata from cluster: %w", err)
 	}
