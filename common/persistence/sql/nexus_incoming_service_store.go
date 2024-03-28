@@ -116,7 +116,7 @@ func (s *sqlNexusIncomingServiceStore) GetNexusIncomingService(
 ) (*p.InternalNexusIncomingService, error) {
 	serviceID, err := primitives.ParseUUID(request.ServiceID)
 	if err != nil {
-		return nil, serviceerror.NewInternal(fmt.Sprintf("unable to parse service ID as UUID: %v", retErr))
+		return nil, serviceerror.NewInternal(fmt.Sprintf("unable to parse service ID as UUID: %v", err))
 	}
 
 	row, err := s.Db.GetNexusIncomingServiceByID(ctx, serviceID)
