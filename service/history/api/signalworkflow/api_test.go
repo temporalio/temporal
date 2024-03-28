@@ -29,6 +29,7 @@ import (
 	"testing"
 
 	commonpb "go.temporal.io/api/common/v1"
+	"go.temporal.io/server/common/cluster/clustertest"
 
 	"github.com/golang/mock/gomock"
 	"github.com/stretchr/testify/require"
@@ -92,7 +93,7 @@ func (s *signalWorkflowSuite) SetupTest() {
 	s.shardContext.EXPECT().GetMetricsHandler().Return(metrics.NoopMetricsHandler).AnyTimes()
 	s.shardContext.EXPECT().GetTimeSource().Return(clock.NewRealTimeSource()).AnyTimes()
 	s.shardContext.EXPECT().GetNamespaceRegistry().Return(s.namespaceRegistry).AnyTimes()
-	s.shardContext.EXPECT().GetClusterMetadata().Return(cluster.NewMetadataForTest(cluster.NewTestClusterMetadataConfig(true, true))).AnyTimes()
+	s.shardContext.EXPECT().GetClusterMetadata().Return(clustertest.NewMetadataForTest(cluster.NewTestClusterMetadataConfig(true, true))).AnyTimes()
 
 	s.currentMutableState = workflow.NewMockMutableState(s.controller)
 	s.currentMutableState.EXPECT().GetNamespaceEntry().Return(tests.GlobalNamespaceEntry).AnyTimes()

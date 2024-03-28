@@ -20,27 +20,25 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-package nexus_test
+package clustertest
 
 import (
-	"fmt"
-
-	"go.temporal.io/server/common/nexus"
+	"go.temporal.io/server/common/cluster"
+	"go.temporal.io/server/common/log"
 )
 
-func ExampleRouteSet_DispatchNexusTaskByNamespaceAndTaskQueue() {
-	path := nexus.Routes().DispatchNexusTaskByNamespaceAndTaskQueue.
-		Path(nexus.NamespaceAndTaskQueue{
-			Namespace: "TEST-NAMESPACE",
-			TaskQueue: "TEST-TASK-QUEUE",
-		})
-	fmt.Println(path)
-	// Output: api/v1/namespaces/TEST-NAMESPACE/task-queues/TEST-TASK-QUEUE/nexus-operations
-}
-
-func ExampleRouteSet_DispatchNexusTaskByService() {
-	path := nexus.Routes().DispatchNexusTaskByService.
-		Path("TEST-SERVICE")
-	fmt.Println(path)
-	// Output: api/v1/nexus/services/TEST-SERVICE/operations
+// NewMetadataForTest returns a new [cluster.Metadata] instance for testing.
+func NewMetadataForTest(
+	config *cluster.Config,
+) cluster.Metadata {
+	return cluster.NewMetadata(
+		config.EnableGlobalNamespace,
+		config.FailoverVersionIncrement,
+		config.MasterClusterName,
+		config.CurrentClusterName,
+		config.ClusterInformation,
+		nil,
+		nil,
+		log.NewNoopLogger(),
+	)
 }

@@ -35,6 +35,7 @@ import (
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/workflowservice/v1"
+	"go.temporal.io/server/common/cluster/clustertest"
 
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	"go.temporal.io/server/api/historyservice/v1"
@@ -448,7 +449,7 @@ func (s *workflowSuite) setupShardContext(registry namespace.Registry) *shard.Mo
 	shardContext.EXPECT().GetThrottledLogger().Return(log.NewTestLogger()).AnyTimes()
 
 	shardContext.EXPECT().GetTimeSource().Return(clock.NewRealTimeSource()).AnyTimes()
-	shardContext.EXPECT().GetClusterMetadata().Return(cluster.NewMetadataForTest(cluster.NewTestClusterMetadataConfig(true, true))).AnyTimes()
+	shardContext.EXPECT().GetClusterMetadata().Return(clustertest.NewMetadataForTest(cluster.NewTestClusterMetadataConfig(true, true))).AnyTimes()
 	shardContext.EXPECT().GetShardID().Return(int32(1)).AnyTimes()
 	response := &persistencespb.GetCurrentExecutionResponse{
 		RunID: tests.RunID,
