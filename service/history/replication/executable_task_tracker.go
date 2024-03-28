@@ -34,7 +34,7 @@ import (
 	ctasks "go.temporal.io/server/common/tasks"
 )
 
-//go:generate ../../../cached-mockgen -copyright_file ../../../LICENSE -package $GOPACKAGE -source $GOFILE -destination executable_task_tracker_mock.go
+//go:generate cached-mockgen -copyright_file ../../../LICENSE -package $GOPACKAGE -source $GOFILE -destination executable_task_tracker_mock.go
 
 type (
 	TrackableExecutableTask interface {

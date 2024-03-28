@@ -46,7 +46,7 @@ const (
 	resendContextTimeout = 30 * time.Second
 )
 
-//go:generate ../../../../cached-mockgen -copyright_file ../../../../LICENSE -package $GOPACKAGE -source $GOFILE -destination remote_history_paginated_fetcher_mock.go
+//go:generate cached-mockgen -copyright_file ../../../../LICENSE -package $GOPACKAGE -source $GOFILE -destination remote_history_paginated_fetcher_mock.go
 
 type (
 	// HistoryPaginatedFetcher is the interface for fetching history from remote cluster

@@ -29,7 +29,7 @@ import (
 	"time"
 )
 
-//go:generate ../../cached-mockgen -copyright_file ../../LICENSE -package $GOPACKAGE -source $GOFILE -destination rate_limiter_mock.go
+//go:generate cached-mockgen -copyright_file ../../LICENSE -package $GOPACKAGE -source $GOFILE -destination rate_limiter_mock.go
 
 type (
 	// RateLimiter corresponds to basic rate limiting functionality.

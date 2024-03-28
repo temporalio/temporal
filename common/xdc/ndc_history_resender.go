@@ -22,7 +22,7 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-//go:generate ../../cached-mockgen -copyright_file ../../LICENSE -package $GOPACKAGE -source $GOFILE -destination ndc_history_resender_mock.go
+//go:generate cached-mockgen -copyright_file ../../LICENSE -package $GOPACKAGE -source $GOFILE -destination ndc_history_resender_mock.go
 
 package xdc
 

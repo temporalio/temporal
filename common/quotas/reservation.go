@@ -28,7 +28,7 @@ import (
 	"time"
 )
 
-//go:generate ../../cached-mockgen -copyright_file ../../LICENSE -package $GOPACKAGE -source $GOFILE -destination reservation_mock.go
+//go:generate cached-mockgen -copyright_file ../../LICENSE -package $GOPACKAGE -source $GOFILE -destination reservation_mock.go
 
 type (
 	// Reservation holds information about events that are permitted by a Limiter to happen after a delay

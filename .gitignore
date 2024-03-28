@@ -21,7 +21,6 @@
 /temporal-*
 /tctl*
 /tdbg
-/cached-mockgen
 
 # Buf proto image
 /proto/image.bin

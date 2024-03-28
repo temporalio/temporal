@@ -35,7 +35,7 @@ import (
 	ctasks "go.temporal.io/server/common/tasks"
 )
 
-//go:generate ../../../cached-mockgen -copyright_file ../../../LICENSE -package $GOPACKAGE -source $GOFILE -destination batchable_task_mock.go
+//go:generate cached-mockgen -copyright_file ../../../LICENSE -package $GOPACKAGE -source $GOFILE -destination batchable_task_mock.go
 
 type (
 	BatchableTask interface {
