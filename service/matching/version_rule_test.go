@@ -571,18 +571,23 @@ func TestInsertRedirectRuleInVersionSet(t *testing.T) {
 	assert.NoError(t, err)
 }
 
-func TestInsertRedirectRuleTerminalBuildID(t *testing.T) {
+func TestInsertRedirectRuleSourceIsRampedAssignmentRuleTarget(t *testing.T) {
 	t.Parallel()
 	maxRules := 3
 	clock := hlc.Zero(1)
 	data := mkInitialData(0, clock)
 	data.AssignmentRules = []*persistencepb.AssignmentRule{
 		mkAssignmentRulePersistence(mkAssignmentRule("1", mkNewAssignmentPercentageRamp(10)), clock, nil),
+		mkAssignmentRulePersistence(mkAssignmentRule("2", nil), clock, nil),
 	}
 
 	// insert redirect rule with target 1 --> failure
 	_, err := insertRedirectRule(mkRedirectRule("1", "0"), data, clock, maxRules)
 	assert.Error(t, err)
+
+	// insert redirect rule with target 2 --> success
+	_, err = insertRedirectRule(mkRedirectRule("2", "0"), data, clock, maxRules)
+	assert.NoError(t, err)
 }
 
 func TestInsertRedirectRuleAlreadyExists(t *testing.T) {
