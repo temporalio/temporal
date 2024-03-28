@@ -140,7 +140,7 @@ func (h *NexusHTTPHandler) dispatchNexusTaskByNamespaceAndTaskQueue(w http.Respo
 		namespaceRateLimitInterceptor:        h.namespaceRateLimitInterceptor,
 		namespaceConcurrencyLimitInterceptor: h.namespaceConcurrencyLimitInterceptor,
 		rateLimitInterceptor:                 h.rateLimitInterceptor,
-		apiName:                              configs.DispatchNexusTaskAPIName,
+		apiName:                              configs.DispatchNexusTaskByNamespaceAndTaskQueueAPIName,
 	}
 
 	params := commonnexus.Routes().DispatchNexusTaskByNamespaceAndTaskQueue.Deserialize(vars)
