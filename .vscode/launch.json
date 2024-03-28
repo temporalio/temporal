@@ -2,6 +2,18 @@
 	"version": "0.2.0",
 	"configurations": [
 		{
+			"name": "Debug single functional test method",
+			"type": "go",
+			"request": "launch",
+			"mode": "test",
+			"program": "${relativeFileDirname}",
+			"args": [
+				"-testify.m",
+				"${input:functionalTestSuiteMethod}"
+			]
+
+		},
+		{
 			"name": "Debug Server",
 			"type": "go",
 			"request": "launch",
@@ -64,5 +76,13 @@
 				"start",
 			]
 		},
+	],
+	"inputs": [
+		{
+			"type": "promptString",
+			"id": "functionalTestSuiteMethod",
+			"description": "The method name within the functional test suite that you wish to debug.",
+			"default": "."
+		}
 	]
 }

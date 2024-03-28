@@ -680,7 +680,7 @@ func ApplyClusterMetadataConfigProvider(
 
 // TODO: move this to cluster.fx
 func loadClusterInformationFromStore(ctx context.Context, svc *config.Config, clusterMsg persistence.ClusterMetadataManager, logger log.Logger) error {
-	iter := collection.NewPagingIterator(func(paginationToken []byte) ([]interface{}, []byte, error) {
+	iter := collection.NewPagingIterator(func(paginationToken []byte) ([]*persistence.GetClusterMetadataResponse, []byte, error) {
 		request := &persistence.ListClusterMetadataRequest{
 			PageSize:      100,
 			NextPageToken: paginationToken,
@@ -689,30 +689,17 @@ func loadClusterInformationFromStore(ctx context.Context, svc *config.Config, cl
 		if err != nil {
 			return nil, nil, err
 		}
-		var pageItem []interface{}
-		for _, metadata := range resp.ClusterMetadata {
-			pageItem = append(pageItem, metadata)
-		}
-		return pageItem, resp.NextPageToken, nil
+		return resp.ClusterMetadata, resp.NextPageToken, nil
 	})
 
 	for iter.HasNext() {
-		item, err := iter.Next()
+		metadata, err := iter.Next()
 		if err != nil {
 			return err
 		}
-		metadata := item.(*persistence.GetClusterMetadataResponse)
-		shardCount := metadata.HistoryShardCount
-		if shardCount == 0 {
-			// This is to add backward compatibility to the svc based cluster connection.
-			shardCount = svc.Persistence.NumHistoryShards
-		}
-		newMetadata := cluster.ClusterInformation{
-			Enabled:                metadata.IsConnectionEnabled,
-			InitialFailoverVersion: metadata.InitialFailoverVersion,
-			RPCAddress:             metadata.ClusterAddress,
-			ShardCount:             shardCount,
-			Tags:                   metadata.Tags,
+		newMetadata := cluster.ClusterInformationFromDB(metadata)
+		if newMetadata.ShardCount == 0 {
+			newMetadata.ShardCount = svc.Persistence.NumHistoryShards
 		}
 		if staticClusterMetadata, ok := svc.ClusterMetadata.ClusterInformation[metadata.ClusterName]; ok {
 			if metadata.ClusterName != svc.ClusterMetadata.CurrentClusterName {
@@ -726,7 +713,7 @@ func loadClusterInformationFromStore(ctx context.Context, svc *config.Config, cl
 				logger.Info(fmt.Sprintf("Use rpc address %v for cluster %v.", newMetadata.RPCAddress, metadata.ClusterName))
 			}
 		}
-		svc.ClusterMetadata.ClusterInformation[metadata.ClusterName] = newMetadata
+		svc.ClusterMetadata.ClusterInformation[metadata.ClusterName] = *newMetadata
 	}
 	return nil
 }
