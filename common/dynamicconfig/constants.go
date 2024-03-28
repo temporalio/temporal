@@ -128,6 +128,14 @@ const (
 	// How many extra goroutines can be created per root.
 	DeadlockMaxWorkersPerRoot = "system.deadlock.MaxWorkersPerRoot"
 
+	// utf-8 validation
+	ValidateUTF8SampleRPCRequest  = "system.validateUTF8.sample.rpcRequest"
+	ValidateUTF8SampleRPCResponse = "system.validateUTF8.sample.rpcResponse"
+	ValidateUTF8SamplePersistence = "system.validateUTF8.sample.persistence"
+	ValidateUTF8FailRPCRequest    = "system.validateUTF8.fail.rpcRequest"
+	ValidateUTF8FailRPCResponse   = "system.validateUTF8.fail.rpcResponse"
+	ValidateUTF8FailPersistence   = "system.validateUTF8.fail.persistence"
+
 	// keys for size limit
 
 	// BlobSizeLimitError is the per event blob size limit
