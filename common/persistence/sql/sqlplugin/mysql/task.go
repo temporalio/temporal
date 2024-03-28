@@ -161,23 +161,18 @@ func (mdb *db) DeleteFromTasks(
 	ctx context.Context,
 	filter sqlplugin.TasksFilter,
 ) (sql.Result, error) {
-	if filter.ExclusiveMaxTaskID != nil {
-		if filter.Limit == nil || *filter.Limit == 0 {
-			return nil, fmt.Errorf("missing limit parameter")
-		}
-		return mdb.conn.ExecContext(ctx,
-			rangeDeleteTaskQry,
-			filter.RangeHash,
-			filter.TaskQueueID,
-			*filter.ExclusiveMaxTaskID,
-			*filter.Limit,
-		)
+	if filter.ExclusiveMaxTaskID == nil {
+		return nil, fmt.Errorf("missing ExclusiveMaxTaskID parameter")
+	}
+	if filter.Limit == nil || *filter.Limit == 0 {
+		return nil, fmt.Errorf("missing limit parameter")
 	}
 	return mdb.conn.ExecContext(ctx,
-		deleteTaskQry,
+		rangeDeleteTaskQry,
 		filter.RangeHash,
 		filter.TaskQueueID,
-		*filter.TaskID,
+		*filter.ExclusiveMaxTaskID,
+		*filter.Limit,
 	)
 }
 

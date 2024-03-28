@@ -82,9 +82,6 @@ task_queue_id = :task_queue_id
 		`tasks(range_hash, task_queue_id, task_id, data, data_encoding) ` +
 		`VALUES(:range_hash, :task_queue_id, :task_id, :data, :data_encoding)`
 
-	deleteTaskQry = `DELETE FROM tasks ` +
-		`WHERE range_hash = $1 AND task_queue_id = $2 AND task_id = $3`
-
 	rangeDeleteTaskQry = `DELETE FROM tasks ` +
 		`WHERE range_hash = $1 AND task_queue_id = $2 AND task_id IN (SELECT task_id FROM
 		 tasks WHERE range_hash = $1 AND task_queue_id = $2 AND task_id < $3 ` +
@@ -155,28 +152,23 @@ func (pdb *db) SelectFromTasks(
 	return rows, err
 }
 
-// DeleteFromTasks deletes one or more rows from tasks table
+// DeleteFromTasks deletes multiple rows from tasks table
 func (pdb *db) DeleteFromTasks(
 	ctx context.Context,
 	filter sqlplugin.TasksFilter,
 ) (sql.Result, error) {
-	if filter.ExclusiveMaxTaskID != nil {
-		if filter.Limit == nil || *filter.Limit == 0 {
-			return nil, fmt.Errorf("missing limit parameter")
-		}
-		return pdb.conn.ExecContext(ctx,
-			rangeDeleteTaskQry,
-			filter.RangeHash,
-			filter.TaskQueueID,
-			*filter.ExclusiveMaxTaskID,
-			*filter.Limit,
-		)
+	if filter.ExclusiveMaxTaskID == nil {
+		return nil, fmt.Errorf("missing ExclusiveMaxTaskId parameter")
+	}
+	if filter.Limit == nil || *filter.Limit == 0 {
+		return nil, fmt.Errorf("missing limit parameter")
 	}
 	return pdb.conn.ExecContext(ctx,
-		deleteTaskQry,
+		rangeDeleteTaskQry,
 		filter.RangeHash,
 		filter.TaskQueueID,
-		*filter.TaskID,
+		*filter.ExclusiveMaxTaskID,
+		*filter.Limit,
 	)
 }
 
