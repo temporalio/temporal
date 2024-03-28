@@ -25,7 +25,7 @@
 package manager
 
 // -aux_files is required here due to Closeable interface being in another file.
-//go:generate go run ../../../../cmd/tools/mockgen/main.go -copyright_file ../../../../LICENSE -package $GOPACKAGE -source $GOFILE -destination visibility_manager_mock.go -aux_files go.temporal.io/server/common/persistence=../../data_interfaces.go
+//go:generate go run ../../../../cmd/tools/mockgen -copyright_file ../../../../LICENSE -package $GOPACKAGE -source $GOFILE -destination visibility_manager_mock.go -aux_files go.temporal.io/server/common/persistence=../../data_interfaces.go
 
 import (
 	"context"

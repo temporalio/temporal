@@ -22,7 +22,7 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-//go:generate go run ../../../cmd/tools/mockgen/main.go -copyright_file ../../../LICENSE -package $GOPACKAGE -source query_parser.go -destination query_parser_mock.go -mock_names Interface=MockQueryParser
+//go:generate go run ../../../cmd/tools/mockgen -copyright_file ../../../LICENSE -package $GOPACKAGE -source query_parser.go -destination query_parser_mock.go -mock_names Interface=MockQueryParser
 
 package gcloud
 

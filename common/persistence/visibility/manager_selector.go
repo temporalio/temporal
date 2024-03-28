@@ -24,7 +24,7 @@
 
 package visibility
 
-//go:generate go run ../../../cmd/tools/mockgen/main.go -copyright_file ../../../LICENSE -package $GOPACKAGE -source $GOFILE -destination manager_selector_mock.go
+//go:generate go run ../../../cmd/tools/mockgen -copyright_file ../../../LICENSE -package $GOPACKAGE -source $GOFILE -destination manager_selector_mock.go
 
 import (
 	"fmt"

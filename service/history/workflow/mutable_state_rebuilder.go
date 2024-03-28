@@ -24,7 +24,7 @@
 
 // Code generated: TODO put <- here to avoid linter, this file need to be rewritten
 
-//go:generate go run ../../../cmd/tools/mockgen/main.go -copyright_file ../../../LICENSE -package $GOPACKAGE -source $GOFILE -destination mutable_state_rebuilder_mock.go
+//go:generate go run ../../../cmd/tools/mockgen -copyright_file ../../../LICENSE -package $GOPACKAGE -source $GOFILE -destination mutable_state_rebuilder_mock.go
 
 package workflow
 

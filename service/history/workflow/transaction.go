@@ -30,7 +30,7 @@ import (
 	"go.temporal.io/server/common/persistence"
 )
 
-//go:generate go run ../../../cmd/tools/mockgen/main.go -copyright_file ../../../LICENSE -package $GOPACKAGE -source $GOFILE -destination transaction_mock.go
+//go:generate go run ../../../cmd/tools/mockgen -copyright_file ../../../LICENSE -package $GOPACKAGE -source $GOFILE -destination transaction_mock.go
 type (
 	Transaction interface {
 		CreateWorkflowExecution(

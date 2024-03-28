@@ -43,7 +43,7 @@ import (
 	"go.temporal.io/server/service/history/shard"
 )
 
-//go:generate go run ../../../../cmd/tools/mockgen/main.go -copyright_file ../../../../LICENSE -package $GOPACKAGE -source $GOFILE -destination local_events_handler_mock.go
+//go:generate go run ../../../../cmd/tools/mockgen -copyright_file ../../../../LICENSE -package $GOPACKAGE -source $GOFILE -destination local_events_handler_mock.go
 
 const (
 	historyImportBlobSize = 16

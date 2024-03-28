@@ -28,7 +28,7 @@ import (
 	"go.temporal.io/server/service/history/tasks"
 )
 
-//go:generate go run ../../../cmd/tools/mockgen/main.go -copyright_file ../../../LICENSE -package $GOPACKAGE -source $GOFILE -destination queue_mock.go
+//go:generate go run ../../../cmd/tools/mockgen -copyright_file ../../../LICENSE -package $GOPACKAGE -source $GOFILE -destination queue_mock.go
 
 type (
 	Queue interface {
