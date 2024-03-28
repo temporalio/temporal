@@ -236,6 +236,11 @@ func (r *MutableStateInitializerImpl) serializeBackfillToken(
 	dbHistorySize int64,
 	existsInDB bool,
 ) ([]byte, error) {
+	// This is ultimately for the replication rpc stream, so it's not really a request or
+	// response, but use SourceRPCResponse here since it's outgoing data.
+	if err := utf8validator.ValidateUsingGlobalValidator(mutableState, utf8validator.SourceRPCResponse, nil); err != nil {
+		return nil, err
+	}
 	mutableStateRow, err := mutableState.Marshal()
 	if err != nil {
 		return nil, err

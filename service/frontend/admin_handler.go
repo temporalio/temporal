@@ -48,6 +48,7 @@ import (
 	"go.temporal.io/server/common/channel"
 	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/primitives"
+	"go.temporal.io/server/common/utf8validator"
 	"go.temporal.io/server/common/util"
 	"go.temporal.io/server/service/worker/dlq"
 
@@ -1814,6 +1815,9 @@ func (adh *AdminHandler) PurgeDLQTasks(
 		WorkflowId: workflowID,
 		RunId:      runID,
 	}
+	if err := utf8validator.ValidateUsingGlobalValidator(&jobToken, utf8validator.SourceRPCResponse, nil); err != nil {
+		return nil, err
+	}
 	jobTokenBytes, _ := jobToken.Marshal()
 	return &adminservice.PurgeDLQTasksResponse{
 		JobToken: jobTokenBytes,
@@ -1850,6 +1854,9 @@ func (adh *AdminHandler) MergeDLQTasks(ctx context.Context, request *adminservic
 		WorkflowId: workflowID,
 		RunId:      runID,
 	}
+	if err := utf8validator.ValidateUsingGlobalValidator(&jobToken, utf8validator.SourceRPCResponse, nil); err != nil {
+		return nil, err
+	}
 	jobTokenBytes, _ := jobToken.Marshal()
 	return &adminservice.MergeDLQTasksResponse{
 		JobToken: jobTokenBytes,
@@ -1859,6 +1866,9 @@ func (adh *AdminHandler) MergeDLQTasks(ctx context.Context, request *adminservic
 func (adh *AdminHandler) DescribeDLQJob(ctx context.Context, request *adminservice.DescribeDLQJobRequest) (*adminservice.DescribeDLQJobResponse, error) {
 	jt := adminservice.DLQJobToken{}
 	err := jt.Unmarshal([]byte(request.JobToken))
+	if err == nil {
+		err = utf8validator.ValidateUsingGlobalValidator(&jt, utf8validator.SourceRPCRequest, nil)
+	}
 	if err != nil {
 		return nil, fmt.Errorf("%w: %v", errInvalidDLQJobToken, err)
 	}
@@ -1912,6 +1922,9 @@ func (adh *AdminHandler) DescribeDLQJob(ctx context.Context, request *adminservi
 func (adh *AdminHandler) CancelDLQJob(ctx context.Context, request *adminservice.CancelDLQJobRequest) (*adminservice.CancelDLQJobResponse, error) {
 	jt := adminservice.DLQJobToken{}
 	err := jt.Unmarshal([]byte(request.JobToken))
+	if err == nil {
+		err = utf8validator.ValidateUsingGlobalValidator(&jt, utf8validator.SourceRPCRequest, nil)
+	}
 	if err != nil {
 		return nil, fmt.Errorf("%w: %v", errInvalidDLQJobToken, err)
 	}
