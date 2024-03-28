@@ -2907,31 +2907,6 @@ func (m *testTaskManager) GetTaskQueue(
 	}, nil
 }
 
-// CompleteTask provides a mock function with given fields: request
-func (m *testTaskManager) CompleteTask(
-	_ context.Context,
-	request *persistence.CompleteTaskRequest,
-) error {
-	m.logger.Debug("CompleteTask", tag.TaskID(request.TaskID), tag.Name(request.TaskQueue.TaskQueueName), tag.WorkflowTaskQueueType(request.TaskQueue.TaskQueueType))
-	if request.TaskID <= 0 {
-		panic(fmt.Errorf("invalid taskID=%v", request.TaskID))
-	}
-
-	tli := request.TaskQueue
-
-	dbq, err := ParsePhysicalTaskQueueKey(tli.TaskQueueName, tli.NamespaceID, tli.TaskQueueType)
-	if err != nil {
-		return err
-	}
-	tlm := m.getQueueManager(dbq)
-
-	tlm.Lock()
-	defer tlm.Unlock()
-
-	tlm.tasks.Remove(request.TaskID)
-	return nil
-}
-
 func (m *testTaskManager) CompleteTasksLessThan(
 	_ context.Context,
 	request *persistence.CompleteTasksLessThanRequest,

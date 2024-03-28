@@ -206,23 +206,19 @@ func (s *matchingTaskSuite) TestInsertSelect_Multiple() {
 	s.Equal([]sqlplugin.TasksRow{task1, task2}, rows)
 }
 
-func (s *matchingTaskSuite) TestDeleteSelect() {
+func (s *matchingTaskSuite) TestDeleteSingle_Fail() {
 	queueID := shuffle.Bytes(testMatchingTaskTaskQueueID)
-	taskID := int64(100)
 
 	filter := sqlplugin.TasksFilter{
 		RangeHash:   testMatchingTaskRangeHash,
 		TaskQueueID: queueID,
-		TaskID:      util.Ptr(taskID),
 	}
-	result, err := s.store.DeleteFromTasks(newExecutionContext(), filter)
-	s.NoError(err)
-	rowsAffected, err := result.RowsAffected()
-	s.NoError(err)
-	s.Equal(0, int(rowsAffected))
+	expectedError := "missing ExclusiveMaxTaskID parameter"
+	_, err := s.store.DeleteFromTasks(newExecutionContext(), filter)
+	s.Error(err, expectedError)
 }
 
-func (s *matchingTaskSuite) TestInsertDeleteSelect_Single() {
+func (s *matchingTaskSuite) TestInsertDeleteSingle_Fail() {
 	queueID := shuffle.Bytes(testMatchingTaskTaskQueueID)
 	taskID := int64(100)
 
@@ -236,27 +232,10 @@ func (s *matchingTaskSuite) TestInsertDeleteSelect_Single() {
 	filter := sqlplugin.TasksFilter{
 		RangeHash:   testMatchingTaskRangeHash,
 		TaskQueueID: queueID,
-		TaskID:      util.Ptr(taskID),
 	}
+	expectedError := "missing ExclusiveMaxTaskID parameter"
 	result, err = s.store.DeleteFromTasks(newExecutionContext(), filter)
-	s.NoError(err)
-	rowsAffected, err = result.RowsAffected()
-	s.NoError(err)
-	s.Equal(1, int(rowsAffected))
-
-	inclusiveMinTaskID := util.Ptr(taskID)
-	exclusiveMaxTaskID := util.Ptr(taskID + 1)
-	pageSize := util.Ptr(1)
-	filter = sqlplugin.TasksFilter{
-		RangeHash:          testMatchingTaskRangeHash,
-		TaskQueueID:        queueID,
-		InclusiveMinTaskID: inclusiveMinTaskID,
-		ExclusiveMaxTaskID: exclusiveMaxTaskID,
-		PageSize:           pageSize,
-	}
-	rows, err := s.store.SelectFromTasks(newExecutionContext(), filter)
-	s.NoError(err)
-	s.Equal([]sqlplugin.TasksRow(nil), rows)
+	s.Error(err, expectedError)
 }
 
 func (s *matchingTaskSuite) TestInsertDeleteSelect_Multiple() {

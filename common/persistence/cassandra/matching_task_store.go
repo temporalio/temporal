@@ -59,13 +59,6 @@ const (
 		`and task_id >= ? ` +
 		`and task_id < ?`
 
-	templateCompleteTaskQuery = `DELETE FROM tasks ` +
-		`WHERE namespace_id = ? ` +
-		`and task_queue_name = ? ` +
-		`and task_queue_type = ? ` +
-		`and type = ? ` +
-		`and task_id = ?`
-
 	templateCompleteTasksLessThanQuery = `DELETE FROM tasks ` +
 		`WHERE namespace_id = ? ` +
 		`AND task_queue_name = ? ` +
@@ -479,28 +472,6 @@ func (d *MatchingTaskStore) GetTasks(
 		return nil, serviceerror.NewUnavailable(fmt.Sprintf("GetTasks operation failed. Error: %v", err))
 	}
 	return response, nil
-}
-
-// CompleteTask delete a task
-func (d *MatchingTaskStore) CompleteTask(
-	ctx context.Context,
-	request *p.CompleteTaskRequest,
-) error {
-	tli := request.TaskQueue
-	query := d.Session.Query(templateCompleteTaskQuery,
-		tli.NamespaceID,
-		tli.TaskQueueName,
-		tli.TaskQueueType,
-		rowTypeTask,
-		request.TaskID,
-	).WithContext(ctx)
-
-	err := query.Exec()
-	if err != nil {
-		return gocql.ConvertError("CompleteTask", err)
-	}
-
-	return nil
 }
 
 // CompleteTasksLessThan deletes all tasks less than the given task id. This API ignores the
