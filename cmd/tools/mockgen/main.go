@@ -30,8 +30,17 @@ import (
 )
 
 func main() {
-	if err := mockgen.Run(mockgen.RealExecFn, os.Args[1:]); err != nil {
+	if err := run(os.Args[1:]); err != nil {
 		_, _ = fmt.Fprintf(os.Stderr, "%+v\n", err)
 		os.Exit(1)
 	}
+}
+
+func run(args []string) error {
+	execFn := mockgen.RealExecFn
+	if os.Getenv("BUILD_ENV") == "ci" {
+		// Just run mockgen without caching if we're in the CI environment
+		return execFn(args)
+	}
+	return mockgen.Run(execFn, args)
 }
