@@ -23,19 +23,144 @@
 package tests
 
 import (
+	"fmt"
 	"testing"
 
 	"github.com/google/uuid"
+	"github.com/stretchr/testify/require"
+	"github.com/stretchr/testify/suite"
+	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/nexus/v1"
 	"go.temporal.io/api/operatorservice/v1"
 	"go.temporal.io/api/serviceerror"
+	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	"google.golang.org/protobuf/types/known/anypb"
 
 	"go.temporal.io/server/api/matchingservice/v1"
 	p "go.temporal.io/server/common/persistence"
+	"go.temporal.io/server/common/testing/protorequire"
 )
 
-func (s *FunctionalSuite) TestCreateNexusIncomingService_Matching() {
+func TestNexusIncomingServicesFunctionalSuite(t *testing.T) {
+	t.Run("Common", func(t *testing.T) {
+		s := new(CommonSuite)
+		suite.Run(t, s)
+	})
+	t.Run("Matching", func(t *testing.T) {
+		s := new(MatchingSuite)
+		suite.Run(t, s)
+	})
+	t.Run("Operator", func(t *testing.T) {
+		s := new(OperatorSuite)
+		suite.Run(t, s)
+	})
+}
+
+type NexusIncomingServiceFunctionalSuite struct {
+	FunctionalTestBase
+	// override suite.Suite.Assertions with require.Assertions; this means that s.NotNil(nil) will stop the test,
+	// not merely log an error
+	*require.Assertions
+	protorequire.ProtoAssertions
+}
+
+func (s *NexusIncomingServiceFunctionalSuite) SetupSuite() {
+	s.setupSuite("testdata/es_cluster.yaml")
+}
+
+func (s *NexusIncomingServiceFunctionalSuite) TearDownSuite() {
+	s.tearDownSuite()
+}
+
+func (s *NexusIncomingServiceFunctionalSuite) SetupTest() {
+	// Have to define our overridden assertions in the test setup. If we did it earlier, s.T() will return nil
+	s.Assertions = require.New(s.T())
+	s.ProtoAssertions = protorequire.New(s.T())
+}
+
+type CommonSuite struct {
+	NexusIncomingServiceFunctionalSuite
+}
+
+func (s *CommonSuite) TestListOrdering() {
+	// get initial table version since it has been modified by other tests
+	resp, err := s.testCluster.GetMatchingClient().ListNexusIncomingServices(NewContext(), &matchingservice.ListNexusIncomingServicesRequest{
+		LastKnownTableVersion: 0,
+		PageSize:              0,
+	})
+	s.NoError(err)
+	initialTableVersion := resp.TableVersion
+
+	// create some services
+	numServices := 40 // minimum number of services to test, there may be more in DB from other tests
+	for i := 0; i < numServices; i++ {
+		s.createNexusIncomingService(s.randomizeStr("test-service-name"))
+	}
+	tableVersion := initialTableVersion + int64(numServices)
+
+	// list from persistence manager level
+	persistence := s.testCluster.testBase.NexusIncomingServiceManager
+	persistenceResp1, err := persistence.ListNexusIncomingServices(NewContext(), &p.ListNexusIncomingServicesRequest{
+		LastKnownTableVersion: tableVersion,
+		PageSize:              numServices / 2,
+	})
+	s.NoError(err)
+	s.Len(persistenceResp1.Entries, numServices/2)
+	s.NotNil(persistenceResp1.NextPageToken)
+	persistenceResp2, err := persistence.ListNexusIncomingServices(NewContext(), &p.ListNexusIncomingServicesRequest{
+		LastKnownTableVersion: tableVersion,
+		PageSize:              numServices / 2,
+		NextPageToken:         persistenceResp1.NextPageToken,
+	})
+	s.NoError(err)
+	s.Len(persistenceResp2.Entries, numServices/2)
+
+	// list from matching level
+	matchingClient := s.testCluster.GetMatchingClient()
+	matchingResp1, err := matchingClient.ListNexusIncomingServices(NewContext(), &matchingservice.ListNexusIncomingServicesRequest{
+		LastKnownTableVersion: tableVersion,
+		PageSize:              int32(numServices / 2),
+	})
+	s.NoError(err)
+	s.Len(matchingResp1.Services, numServices/2)
+	s.NotNil(matchingResp1.NextPageToken)
+	matchingResp2, err := matchingClient.ListNexusIncomingServices(NewContext(), &matchingservice.ListNexusIncomingServicesRequest{
+		LastKnownTableVersion: tableVersion,
+		PageSize:              int32(numServices / 2),
+		NextPageToken:         matchingResp1.NextPageToken,
+	})
+	s.NoError(err)
+	s.Len(matchingResp2.Services, numServices/2)
+
+	// list from operator level
+	operatorResp1, err := s.operatorClient.ListNexusIncomingServices(NewContext(), &operatorservice.ListNexusIncomingServicesRequest{
+		PageSize: int32(numServices / 2),
+	})
+	s.NoError(err)
+	s.Len(operatorResp1.Services, numServices/2)
+	s.NotNil(operatorResp1.NextPageToken)
+	operatorResp2, err := s.operatorClient.ListNexusIncomingServices(NewContext(), &operatorservice.ListNexusIncomingServicesRequest{
+		PageSize:      int32(numServices / 2),
+		NextPageToken: operatorResp1.NextPageToken,
+	})
+	s.NoError(err)
+	s.Len(operatorResp2.Services, numServices/2)
+
+	// assert list orders match
+	for i := 0; i < numServices/2; i++ {
+		s.Equal(persistenceResp1.Entries[i].Id, matchingResp1.Services[i].Id)
+		s.Equal(persistenceResp2.Entries[i].Id, matchingResp2.Services[i].Id)
+
+		s.Equal(persistenceResp1.Entries[i].Id, operatorResp1.Services[i].Id)
+		s.Equal(persistenceResp2.Entries[i].Id, operatorResp2.Services[i].Id)
+	}
+}
+
+type MatchingSuite struct {
+	NexusIncomingServiceFunctionalSuite
+}
+
+func (s *MatchingSuite) TestCreate() {
 	service := s.createNexusIncomingService(s.T().Name())
 	s.Equal(int64(1), service.Version)
 	s.Nil(service.LastModifiedTime)
@@ -56,7 +181,7 @@ func (s *FunctionalSuite) TestCreateNexusIncomingService_Matching() {
 	s.ErrorAs(err, &existsErr)
 }
 
-func (s *FunctionalSuite) TestUpdateNexusIncomingService_Matching() {
+func (s *MatchingSuite) TestUpdate() {
 	service := s.createNexusIncomingService(s.T().Name())
 	type testcase struct {
 		name      string
@@ -128,7 +253,7 @@ func (s *FunctionalSuite) TestUpdateNexusIncomingService_Matching() {
 	}
 }
 
-func (s *FunctionalSuite) TestDeleteNexusIncomingService_Matching() {
+func (s *MatchingSuite) TestDelete() {
 	service := s.createNexusIncomingService("service-to-delete-matching")
 	type testcase struct {
 		name      string
@@ -167,7 +292,7 @@ func (s *FunctionalSuite) TestDeleteNexusIncomingService_Matching() {
 	}
 }
 
-func (s *FunctionalSuite) TestListNexusIncomingServices_Matching() {
+func (s *MatchingSuite) TestList() {
 	// initialize some services
 	s.createNexusIncomingService("list-test-service0")
 	s.createNexusIncomingService("list-test-service1")
@@ -310,7 +435,11 @@ func (s *FunctionalSuite) TestListNexusIncomingServices_Matching() {
 	}
 }
 
-func (s *FunctionalSuite) TestCreateNexusIncomingService_Operator() {
+type OperatorSuite struct {
+	NexusIncomingServiceFunctionalSuite
+}
+
+func (s *OperatorSuite) TestCreate() {
 	type testcase struct {
 		name      string
 		request   *operatorservice.CreateNexusIncomingServiceRequest
@@ -478,7 +607,7 @@ func (s *FunctionalSuite) TestCreateNexusIncomingService_Operator() {
 	}
 }
 
-func (s *FunctionalSuite) TestUpdateNexusIncomingService_Operator() {
+func (s *OperatorSuite) TestUpdate() {
 	service := s.createNexusIncomingService(s.T().Name())
 	type testcase struct {
 		name      string
@@ -549,7 +678,7 @@ func (s *FunctionalSuite) TestUpdateNexusIncomingService_Operator() {
 	}
 }
 
-func (s *FunctionalSuite) TestDeleteNexusIncomingService_Operator() {
+func (s *OperatorSuite) TestDelete() {
 	service := s.createNexusIncomingService("service-to-delete-operator")
 	type testcase struct {
 		name      string
@@ -588,7 +717,7 @@ func (s *FunctionalSuite) TestDeleteNexusIncomingService_Operator() {
 	}
 }
 
-func (s *FunctionalSuite) TestListNexusIncomingServices_Operator() {
+func (s *OperatorSuite) TestList() {
 	// initialize some services
 	s.createNexusIncomingService("operator-list-test-service0")
 	s.createNexusIncomingService("operator-list-test-service1")
@@ -703,7 +832,7 @@ func (s *FunctionalSuite) TestListNexusIncomingServices_Operator() {
 	}
 }
 
-func (s *FunctionalSuite) TestGetNexusIncomingService_Operator() {
+func (s *OperatorSuite) TestGet() {
 	service := s.createNexusIncomingService(s.T().Name())
 
 	type testcase struct {
@@ -736,7 +865,7 @@ func (s *FunctionalSuite) TestGetNexusIncomingService_Operator() {
 			name:    "invalid: service ID not set",
 			request: &operatorservice.GetNexusIncomingServiceRequest{},
 			assertion: func(response *operatorservice.GetNexusIncomingServiceResponse, err error) {
-				s.ErrorContains(err, "incoming service Id not set")
+				s.ErrorContains(err, "incoming service ID not set")
 			},
 		},
 	}
@@ -750,81 +879,12 @@ func (s *FunctionalSuite) TestGetNexusIncomingService_Operator() {
 	}
 }
 
-func (s *FunctionalSuite) TestListNexusIncomingServicesOrdering() {
-	// get initial table version since it has been modified by other tests
-	resp, err := s.testCluster.GetMatchingClient().ListNexusIncomingServices(NewContext(), &matchingservice.ListNexusIncomingServicesRequest{
-		LastKnownTableVersion: 0,
-		PageSize:              0,
-	})
-	s.NoError(err)
-	initialTableVersion := resp.TableVersion
-
-	// create some services
-	numServices := 40 // minimum number of services to test, there may be more in DB from other tests
-	for i := 0; i < numServices; i++ {
-		s.createNexusIncomingService(s.randomizeStr("test-service-name"))
-	}
-	tableVersion := initialTableVersion + int64(numServices)
-
-	// list from persistence manager level
-	persistence := s.testCluster.testBase.NexusIncomingServiceManager
-	persistenceResp1, err := persistence.ListNexusIncomingServices(NewContext(), &p.ListNexusIncomingServicesRequest{
-		LastKnownTableVersion: tableVersion,
-		PageSize:              numServices / 2,
-	})
-	s.NoError(err)
-	s.Len(persistenceResp1.Entries, numServices/2)
-	s.NotNil(persistenceResp1.NextPageToken)
-	persistenceResp2, err := persistence.ListNexusIncomingServices(NewContext(), &p.ListNexusIncomingServicesRequest{
-		LastKnownTableVersion: tableVersion,
-		PageSize:              numServices / 2,
-		NextPageToken:         persistenceResp1.NextPageToken,
-	})
-	s.NoError(err)
-	s.Len(persistenceResp2.Entries, numServices/2)
-
-	// list from matching level
-	matchingClient := s.testCluster.GetMatchingClient()
-	matchingResp1, err := matchingClient.ListNexusIncomingServices(NewContext(), &matchingservice.ListNexusIncomingServicesRequest{
-		LastKnownTableVersion: tableVersion,
-		PageSize:              int32(numServices / 2),
-	})
-	s.NoError(err)
-	s.Len(matchingResp1.Services, numServices/2)
-	s.NotNil(matchingResp1.NextPageToken)
-	matchingResp2, err := matchingClient.ListNexusIncomingServices(NewContext(), &matchingservice.ListNexusIncomingServicesRequest{
-		LastKnownTableVersion: tableVersion,
-		PageSize:              int32(numServices / 2),
-		NextPageToken:         matchingResp1.NextPageToken,
-	})
-	s.NoError(err)
-	s.Len(matchingResp2.Services, numServices/2)
-
-	// list from operator level
-	operatorResp1, err := s.operatorClient.ListNexusIncomingServices(NewContext(), &operatorservice.ListNexusIncomingServicesRequest{
-		PageSize: int32(numServices / 2),
-	})
-	s.NoError(err)
-	s.Len(operatorResp1.Services, numServices/2)
-	s.NotNil(operatorResp1.NextPageToken)
-	operatorResp2, err := s.operatorClient.ListNexusIncomingServices(NewContext(), &operatorservice.ListNexusIncomingServicesRequest{
-		PageSize:      int32(numServices / 2),
-		NextPageToken: operatorResp1.NextPageToken,
-	})
-	s.NoError(err)
-	s.Len(operatorResp2.Services, numServices/2)
-
-	// assert list orders match
-	for i := 0; i < numServices/2; i++ {
-		s.Equal(persistenceResp1.Entries[i].Id, matchingResp1.Services[i].Id)
-		s.Equal(persistenceResp2.Entries[i].Id, matchingResp2.Services[i].Id)
-
-		s.Equal(persistenceResp1.Entries[i].Id, operatorResp1.Services[i].Id)
-		s.Equal(persistenceResp2.Entries[i].Id, operatorResp2.Services[i].Id)
-	}
+func (s *NexusIncomingServiceFunctionalSuite) defaultTaskQueue() *taskqueuepb.TaskQueue {
+	name := fmt.Sprintf("functional-queue-%v", s.T().Name())
+	return &taskqueuepb.TaskQueue{Name: name, Kind: enumspb.TASK_QUEUE_KIND_NORMAL}
 }
 
-func (s *FunctionalSuite) createNexusIncomingService(name string) *nexus.IncomingService {
+func (s *NexusIncomingServiceFunctionalSuite) createNexusIncomingService(name string) *nexus.IncomingService {
 	resp, err := s.testCluster.GetMatchingClient().CreateNexusIncomingService(
 		NewContext(),
 		&matchingservice.CreateNexusIncomingServiceRequest{

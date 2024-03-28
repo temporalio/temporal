@@ -27,17 +27,13 @@ import (
 	"errors"
 	"fmt"
 	"regexp"
-	"strings"
 
 	"github.com/google/uuid"
 	"go.temporal.io/api/nexus/v1"
 	"go.temporal.io/api/operatorservice/v1"
 	"go.temporal.io/api/serviceerror"
-	"google.golang.org/protobuf/types/known/timestamppb"
 
 	"go.temporal.io/server/api/matchingservice/v1"
-	persistencespb "go.temporal.io/server/api/persistence/v1"
-	hlc "go.temporal.io/server/common/clock/hybrid_logical_clock"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
@@ -45,10 +41,6 @@ import (
 	cnexus "go.temporal.io/server/common/nexus"
 	p "go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/rpc"
-)
-
-const (
-	reservedTaskQueuePrefix = "/_sys/"
 )
 
 // ServiceNameRegex is the regular expression that incoming service names must match.
@@ -184,7 +176,7 @@ func (c *NexusIncomingServiceClient) Get(
 	}
 
 	return &operatorservice.GetNexusIncomingServiceResponse{
-		Service: persistedEntryToExternalAPI(entry),
+		Service: cnexus.IncomingServicePersistedEntryToExternalAPI(entry),
 	}, nil
 }
 
@@ -215,7 +207,7 @@ func (c *NexusIncomingServiceClient) List(
 
 	services := make([]*nexus.IncomingService, len(resp.Entries))
 	for i, entry := range resp.Entries {
-		services[i] = persistedEntryToExternalAPI(entry)
+		services[i] = cnexus.IncomingServicePersistedEntryToExternalAPI(entry)
 	}
 
 	return &operatorservice.ListNexusIncomingServicesResponse{
@@ -253,7 +245,7 @@ func (c *NexusIncomingServiceClient) listAndFilterByName(
 
 		for _, entry := range resp.Entries {
 			if request.Name == entry.Service.Spec.Name {
-				result.Services = []*nexus.IncomingService{persistedEntryToExternalAPI(entry)}
+				result.Services = []*nexus.IncomingService{cnexus.IncomingServicePersistedEntryToExternalAPI(entry)}
 				return result, nil
 			}
 		}
@@ -266,23 +258,6 @@ func (c *NexusIncomingServiceClient) listAndFilterByName(
 	}
 
 	return nil, ctx.Err()
-}
-
-func persistedEntryToExternalAPI(entry *persistencespb.NexusIncomingServiceEntry) *nexus.IncomingService {
-	var lastModifiedTime *timestamppb.Timestamp
-	// Only set last modified if there were modifications as stated in the UI contract.
-	if entry.Version > 1 {
-		lastModifiedTime = timestamppb.New(hlc.UTC(entry.Service.Clock))
-	}
-
-	return &nexus.IncomingService{
-		Version:          entry.Version,
-		Id:               entry.Id,
-		Spec:             entry.Service.Spec,
-		CreatedTime:      entry.Service.CreatedTime,
-		LastModifiedTime: lastModifiedTime,
-		UrlPrefix:        "/" + cnexus.Routes().DispatchNexusTaskByService.Path(entry.Id),
-	}
 }
 
 func (c *NexusIncomingServiceClient) getServiceNameIssues(name string) rpc.RequestIssues {
@@ -314,16 +289,8 @@ func (c *NexusIncomingServiceClient) validateUpsertSpec(spec *nexus.IncomingServ
 		return serviceerror.NewFailedPrecondition(fmt.Sprintf("could not verify namespace referenced by incoming service exists: %v", nsErr.Error()))
 	}
 
-	if spec.TaskQueue == "" {
-		issues.Append("incoming service task queue not set")
-	} else {
-		maxTaskQueueLength := c.config.maxTaskQueueLength()
-		if len(spec.TaskQueue) > maxTaskQueueLength {
-			issues.Appendf("incoming service task queue exceeds length limit of %d", maxTaskQueueLength)
-		}
-		if strings.HasPrefix(spec.TaskQueue, reservedTaskQueuePrefix) {
-			issues.Appendf("incoming service task queue begins with reserved prefix: %q", reservedTaskQueuePrefix)
-		}
+	if err := validateTaskQueueName(spec.GetTaskQueue(), c.config.maxTaskQueueLength()); err != nil {
+		issues.Appendf("invalid incoming service task queue: %q", err.Error())
 	}
 
 	maxSize := c.config.maxSize()
@@ -337,9 +304,9 @@ func (c *NexusIncomingServiceClient) validateUpsertSpec(spec *nexus.IncomingServ
 func getServiceIdIssues(ID string) rpc.RequestIssues {
 	var issues rpc.RequestIssues
 	if ID == "" {
-		issues.Append("incoming service Id not set")
+		issues.Append("incoming service ID not set")
 	} else if _, err := uuid.Parse(ID); err != nil {
-		issues.Appendf("malformed incoming service Id: %q", err.Error())
+		issues.Appendf("malformed incoming service ID: %q", err.Error())
 	}
 	return issues
 }

@@ -4039,15 +4039,13 @@ func (wh *WorkflowHandler) validateSearchAttributes(searchAttributes *commonpb.S
 }
 
 func (wh *WorkflowHandler) validateTaskQueue(t *taskqueuepb.TaskQueue, namespaceName namespace.Name) error {
-	if t == nil || t.GetName() == "" {
+	if t == nil {
 		return errTaskQueueNotSet
 	}
-	if len(t.GetName()) > wh.config.MaxIDLengthLimit() {
-		return errTaskQueueTooLong
-	}
-	if err := common.ValidateUTF8String("TaskQueue", t.GetName()); err != nil {
+	if err := validateTaskQueueName(t.GetName(), wh.config.MaxIDLengthLimit()); err != nil {
 		return err
 	}
+
 	if t.GetKind() == enumspb.TASK_QUEUE_KIND_STICKY {
 		if err := common.ValidateUTF8String("TaskQueue", t.GetNormalName()); err != nil {
 			return err

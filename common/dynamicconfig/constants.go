@@ -209,21 +209,21 @@ const (
 	// TaskQueuesPerBuildIdLimit limits the number of task queue names that can be mapped to a single build id.
 	TaskQueuesPerBuildIdLimit = "limit.taskQueuesPerBuildId"
 
-	// NexusIncomingServiceNameMaxLength is the maximum length of a Nexus incoming service name
+	// NexusIncomingServiceNameMaxLength is the maximum length of a Nexus incoming service name.
 	NexusIncomingServiceNameMaxLength = "limit.incomingServiceNameMaxLength"
-	// NexusIncomingServiceMaxSize is the maximum size of a Nexus incoming service in bytes
+	// NexusIncomingServiceMaxSize is the maximum size of a Nexus incoming service in bytes.
 	NexusIncomingServiceMaxSize = "limit.incomingServiceMaxSize"
-	// NexusIncomingServiceListDefaultPageSize is the default page size for listing Nexus incoming services
+	// NexusIncomingServiceListDefaultPageSize is the default page size for listing Nexus incoming services.
 	NexusIncomingServiceListDefaultPageSize = "limit.incomingServiceListDefaultPageSize"
-	// NexusIncomingServiceListMaxPageSize is the maximum page size for listing Nexus incoming services
+	// NexusIncomingServiceListMaxPageSize is the maximum page size for listing Nexus incoming services.
 	NexusIncomingServiceListMaxPageSize = "limit.incomingServiceListMaxPageSize"
-	// NexusOutgoingServiceURLMaxLength is the maximum length of an outgoing service URL
+	// NexusOutgoingServiceURLMaxLength is the maximum length of an outgoing service URL.
 	NexusOutgoingServiceURLMaxLength = "limit.outgoingServiceURLMaxLength"
-	// NexusOutgoingServiceNameMaxLength is the maximum length of an outgoing service name
+	// NexusOutgoingServiceNameMaxLength is the maximum length of an outgoing service name.
 	NexusOutgoingServiceNameMaxLength = "limit.outgoingServiceNameMaxLength"
-	// NexusOutgoingServiceListDefaultPageSize is the default page size for listing outgoing services
+	// NexusOutgoingServiceListDefaultPageSize is the default page size for listing outgoing services.
 	NexusOutgoingServiceListDefaultPageSize = "limit.outgoingServiceListDefaultPageSize"
-	// NexusOutgoingServiceListMaxPageSize is the maximum page size for listing outgoing services
+	// NexusOutgoingServiceListMaxPageSize is the maximum page size for listing outgoing services.
 	NexusOutgoingServiceListMaxPageSize = "limit.outgoingServiceListMaxPageSize"
 
 	// RemovableBuildIdDurationSinceDefault is the minimum duration since a build id was last default in its containing
