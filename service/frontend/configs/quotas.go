@@ -89,6 +89,7 @@ var (
 		"/temporal.api.workflowservice.v1.WorkflowService/CreateSchedule":                   1,
 		"/temporal.api.workflowservice.v1.WorkflowService/StartBatchOperation":              1,
 		DispatchNexusTaskByNamespaceAndTaskQueueAPIName:                                     1,
+		DispatchNexusTaskByServiceAPIName:                                                   1,
 
 		// P2: Change State APIs
 		"/temporal.api.workflowservice.v1.WorkflowService/RequestCancelWorkflowExecution": 2,
