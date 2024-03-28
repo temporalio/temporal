@@ -30,7 +30,7 @@ import (
 )
 
 func main() {
-	if err := mockgen.Run(os.Args[1:]); err != nil {
+	if err := mockgen.Run(mockgen.RealExecFn, os.Args[1:]); err != nil {
 		_, _ = fmt.Fprintf(os.Stderr, "%+v\n", err)
 		os.Exit(1)
 	}

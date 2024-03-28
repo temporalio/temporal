@@ -95,10 +95,10 @@ func TestSourceFileStale(t *testing.T) {
 
 func runCommand(args []string) ([][]string, error) {
 	var calls [][]string
-	err := mockgen.Run(args, mockgen.WithExecFn(func(args []string) error {
+	err := mockgen.Run(func(args []string) error {
 		calls = append(calls, args)
 		return nil
-	}))
+	}, args)
 	return calls, err
 }
 

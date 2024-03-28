@@ -34,14 +34,7 @@ import (
 // Run a cached version of `mockgen`, which checks the modification times of the source and destination files,
 // running mockgen only if necessary. This is similar to the behavior of `Make`, but it wasn't easy to express this
 // in a Makefile because the generate commands are in our source code.
-func Run(args []string, opts ...Option) error {
-	params := &Params{
-		Exec: runRealCommand,
-	}
-	for _, opt := range opts {
-		opt(params)
-	}
-
+func Run(mockgenExecFn ExecFn, args []string) error {
 	upToDate, err := isDestinationFileUpToDateWithSourceInArgs(args)
 	if err != nil {
 		return err
@@ -51,26 +44,15 @@ func Run(args []string, opts ...Option) error {
 	}
 
 	// We couldn't confirm that the target file was up-to-date; run mockgen
-	return params.Exec(args)
+	return mockgenExecFn(args)
 }
 
-// Params for running the mockgen wrapper.
-type Params struct {
-	// Exec is a function that should execute a shell command with the given arguments.
-	Exec func(args []string) error
-}
+// ExecFn is a function that should run a command with the given arguments.
+type ExecFn func(args []string) error
 
-// Option to override the [Params] of the mockgen wrapper.
-type Option func(*Params)
-
-// WithExecFn sets a custom [Params.Exec] function.
-func WithExecFn(f func(args []string) error) Option {
-	return func(params *Params) {
-		params.Exec = f
-	}
-}
-
-func runRealCommand(args []string) error {
+// RealExecFn is an [ExecFn] which runs `mockgen` with the given arguments using [syscall.Exec]. This replaces the
+// current process with the `mockgen` process, so that we don't need to maintain a parent and child process.
+func RealExecFn(args []string) error {
 	fullPath, lookErr := exec.LookPath("mockgen")
 	if lookErr != nil {
 		return fmt.Errorf("failed to find mockgen binary: %w", lookErr)
