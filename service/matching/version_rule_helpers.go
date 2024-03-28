@@ -376,13 +376,13 @@ func isRedirectRuleSource(buildID string, redirectRules []*persistencepb.Redirec
 // traffic being passed through to the next assignment rule in the chain. This would not be a sensible use of redirect
 // rules or assignment rule ramps, so it is prohibited.
 //
-// e.g. Scenario in which a conditional assignment rule target is the source for a redirect rule
+// e.g. Scenario in which a conditional assignment rule target is the source for a redirect rule.
 //
 //	Assignment rules: [{target: 1, ramp: 50%}, {target: 2, ramp: nil}, {target: 3, ramp: nil}]
 //	  Redirect rules: [{1->4}]
-//			 Outcome: 50% of tasks that start with buildID 1 would be sent on to buildID 2 per assignment rules, and the
-//					  remaining 50% that "stay" on buildID 1 would be redirected to buildID 4 per the redirect rules.
-//					  This doesn't make sense, so we prohibit it.
+//	50% of tasks that start with buildID 1 would be sent on to buildID 2 per assignment rules, and the
+//	remaining 50% that "stay" on buildID 1 would be redirected to buildID 4 per the redirect rules.
+//	This doesn't make sense, so we prohibit it.
 func isConditionalAssignmentRuleTarget(buildID string, assignmentRules []*persistencepb.AssignmentRule) bool {
 	for _, r := range getActiveAssignmentRules(assignmentRules) {
 		if !isUnconditional(r.GetRule()) && buildID == r.GetRule().GetTargetBuildId() {
