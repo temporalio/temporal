@@ -41,9 +41,10 @@ const (
 const (
 	// These names do not map to an underlying gRPC service. This format is used for consistency with the
 	// gRPC API names on which the authorizer - the consumer of this string - may depend.
-	OpenAPIV3APIName         = "/temporal.api.openapi.v1.OpenAPIService/GetOpenAPIV3Docs"
-	OpenAPIV2APIName         = "/temporal.api.openapi.v1.OpenAPIService/GetOpenAPIV2Docs"
-	DispatchNexusTaskAPIName = "/temporal.api.nexusservice.v1.NexusService/DispatchNexusTask"
+	OpenAPIV3APIName                                = "/temporal.api.openapi.v1.OpenAPIService/GetOpenAPIV3Docs"
+	OpenAPIV2APIName                                = "/temporal.api.openapi.v1.OpenAPIService/GetOpenAPIV2Docs"
+	DispatchNexusTaskByNamespaceAndTaskQueueAPIName = "/temporal.api.nexusservice.v1.NexusService/DispatchByNamespaceAndTaskQueue"
+	DispatchNexusTaskByServiceAPIName               = "/temporal.api.nexusservice.v1.NexusService/DispatchByService"
 )
 
 var (
@@ -63,8 +64,9 @@ var (
 		"/temporal.api.workflowservice.v1.WorkflowService/GetWorkflowExecutionHistory": 1,
 		"/temporal.api.workflowservice.v1.WorkflowService/PollNexusTaskQueue":          1,
 
-		// DispatchNexusTask is potentially long running, it's classified in the same bucket as QueryWorkflow.
-		DispatchNexusTaskAPIName: 1,
+		// Dispatching a Nexus task is a potentially long running RPC, it's classified in the same bucket as QueryWorkflow.
+		DispatchNexusTaskByNamespaceAndTaskQueueAPIName: 1,
+		DispatchNexusTaskByServiceAPIName:               1,
 	}
 
 	// APIToPriority determines common API priorities.
@@ -86,7 +88,7 @@ var (
 		"/temporal.api.workflowservice.v1.WorkflowService/UpdateWorkflowExecution":          1,
 		"/temporal.api.workflowservice.v1.WorkflowService/CreateSchedule":                   1,
 		"/temporal.api.workflowservice.v1.WorkflowService/StartBatchOperation":              1,
-		DispatchNexusTaskAPIName: 1,
+		DispatchNexusTaskByNamespaceAndTaskQueueAPIName:                                     1,
 
 		// P2: Change State APIs
 		"/temporal.api.workflowservice.v1.WorkflowService/RequestCancelWorkflowExecution": 2,

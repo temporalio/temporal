@@ -47,10 +47,11 @@ var routes = RouteSet{
 		StringVariable("namespace", func(params *NamespaceAndTaskQueue) *string { return &params.Namespace }).
 		Constant("task-queues").
 		StringVariable("task_queue", func(params *NamespaceAndTaskQueue) *string { return &params.TaskQueue }).
-		Constant("dispatch-nexus-task").
+		Constant("nexus-operations").
 		Build(),
 	DispatchNexusTaskByService: routing.NewBuilder[string]().
-		Constant("api", "v1", "services").
+		Constant("api", "v1", "nexus", "services").
 		StringVariable("service", func(service *string) *string { return service }).
+		Constant("operations").
 		Build(),
 }
