@@ -792,36 +792,44 @@ func (e *matchingEngineImpl) DescribeTaskQueue(
 	ctx context.Context,
 	request *matchingservice.DescribeTaskQueueRequest,
 ) (*matchingservice.DescribeTaskQueueResponse, error) {
-	if request.DescRequest.ApiMode == enumspb.DESCRIBE_TASK_QUEUE_MODE_ENHANCED {
+	req := request.GetDescRequest()
+	if req.ApiMode == enumspb.DESCRIBE_TASK_QUEUE_MODE_ENHANCED {
 		// convert versions to buildId list
 		var buildIds []string
-		versions := request.DescRequest.GetVersions()
+		versions := req.GetVersions()
 		if versions == nil {
-			buildIds = []string{e.getDefaultBuildId()}
+			buildIds = nil
 		} else if versions.GetAllActive() {
 			buildIds = make([]string, 0)
 		} else if versions.GetUnversioned() {
 			buildIds = []string{""}
 		} else if versions.GetBuildIds() != nil {
 			buildIds = versions.GetBuildIds().GetBuildIds()
-		} else { // this would happen if the caller set all_active or unversioned to false
-			buildIds = []string{e.getDefaultBuildId()}
+		} else { // this would happen if the caller set versions != nil, with all_active or unversioned set to false
+			buildIds = nil
 		}
 
 		// collect internal info
 		physicalInfoByBuildId := make(map[string]map[enumspb.TaskQueueType]*taskqueuespb.PhysicalTaskQueueInfo)
 		e.partitionsLock.RLock()
-		for _, taskQueueType := range request.DescRequest.TaskQueueTypes {
-			partitions, err := e.getAllPartitions(namespace.Name(request.DescRequest.Namespace), request.DescRequest.TaskQueue, taskQueueType)
+		for _, taskQueueType := range req.TaskQueueTypes {
+			partitions, err := e.getAllPartitions(namespace.Name(req.Namespace), req.TaskQueue, taskQueueType)
 			if err != nil {
 				return nil, err
+			}
+			if buildIds == nil {
+				defaultBuildId, err := e.getDefaultBuildId(ctx, req.TaskQueue, request.NamespaceId, taskQueueType)
+				if err != nil {
+					return nil, err
+				}
+				buildIds = []string{defaultBuildId}
 			}
 			for _, p := range partitions {
 				pm, err := e.getTaskQueuePartitionManager(ctx, p, true)
 				if err != nil {
 					return nil, err
 				}
-				partitionResp, err := pm.Describe(buildIds, false, request.DescRequest.ReportPollers)
+				partitionResp, err := pm.Describe(buildIds, false, req.ReportPollers)
 				if err != nil {
 					return nil, err
 				}
@@ -859,8 +867,8 @@ func (e *matchingEngineImpl) DescribeTaskQueue(
 			},
 		}, nil
 	} else {
-		// request.DescRequest.ApiMode == enumspb.DESCRIBE_TASK_QUEUE_MODE_UNSPECIFIED
-		partition, err := tqid.PartitionFromProto(request.DescRequest.TaskQueue, request.GetNamespaceId(), request.DescRequest.TaskQueueType)
+		// req.ApiMode == enumspb.DESCRIBE_TASK_QUEUE_MODE_UNSPECIFIED
+		partition, err := tqid.PartitionFromProto(req.TaskQueue, request.GetNamespaceId(), req.TaskQueueType)
 		if err != nil {
 			return nil, err
 		}
@@ -868,7 +876,7 @@ func (e *matchingEngineImpl) DescribeTaskQueue(
 		if err != nil {
 			return nil, err
 		}
-		return pm.LegacyDescribeTaskQueue(request.DescRequest.GetIncludeTaskQueueStatus()), nil
+		return pm.LegacyDescribeTaskQueue(req.GetIncludeTaskQueueStatus()), nil
 	}
 }
 
@@ -885,9 +893,29 @@ func (e *matchingEngineImpl) DescribeTaskQueuePartition(
 
 // getDefaultBuildId gets the build id mentioned in the first unconditional Assignment Rule.
 // If there is no default Build ID, the result for the unversioned queue will be returned.
-func (e *matchingEngineImpl) getDefaultBuildId() string {
-	// todo carly
-	return ""
+func (e *matchingEngineImpl) getDefaultBuildId(
+	ctx context.Context,
+	proto *taskqueuepb.TaskQueue,
+	namespaceId string,
+	taskQueueType enumspb.TaskQueueType) (string, error) {
+	rootPartition, err := tqid.PartitionFromProto(proto, namespaceId, taskQueueType)
+	if err != nil {
+		return "", err
+	}
+	tqMgr, err := e.getTaskQueuePartitionManager(ctx, rootPartition, true)
+	if err != nil {
+		return "", err
+	}
+	resp, err := getWorkVersioningRules(tqMgr, e.clusterMeta.GetClusterID())
+	if err != nil {
+		return "", err
+	}
+	for _, ar := range resp.GetResponse().GetAssignmentRules() {
+		if isUnconditional(ar.GetRule()) {
+			return ar.GetRule().GetTargetBuildId(), nil
+		}
+	}
+	return "", nil
 }
 
 func (e *matchingEngineImpl) ListTaskQueuePartitions(
@@ -1077,25 +1105,12 @@ func (e *matchingEngineImpl) GetWorkerVersioningRules(
 	if err != nil {
 		return nil, err
 	}
-	tqMgr, err := e.getTaskQueuePartitionManager(ctx, taskQueueFamily.TaskQueue(enumspb.TASK_QUEUE_TYPE_WORKFLOW).RootPartition(), true)
+	tqMgr, err := e.getTaskQueuePartitionManager(ctx, taskQueueFamily.TaskQueue(request.GetTaskQueueType()).RootPartition(), true)
 	if err != nil {
 		return nil, err
 	}
 
-	data, _, err := tqMgr.GetUserDataManager().GetUserData()
-	if err != nil {
-		return nil, err
-	}
-	if data == nil {
-		data = &persistencespb.VersionedTaskQueueUserData{Data: &persistencespb.TaskQueueUserData{}}
-	} else {
-		data = common.CloneProto(data)
-	}
-	clk := data.GetData().GetClock()
-	if clk == nil {
-		clk = hlc.Zero(e.clusterMeta.GetClusterID())
-	}
-	return GetWorkerVersioningRules(data.GetData().GetVersioningData(), clk)
+	return getWorkVersioningRules(tqMgr, e.clusterMeta.GetClusterID())
 }
 
 func (e *matchingEngineImpl) UpdateWorkerBuildIdCompatibility(
