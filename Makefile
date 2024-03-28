@@ -212,6 +212,7 @@ proto-mocks: protoc
 
 service-clients:
 	@printf $(COLOR) "Generate service clients..."
+	@go build -o cached-mockgen ./cmd/tools/mockgen
 	@go generate ./client/...
 
 update-go-api:
