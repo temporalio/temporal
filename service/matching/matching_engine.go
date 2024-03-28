@@ -885,16 +885,27 @@ func (e *matchingEngineImpl) DescribeTaskQueuePartition(
 //   - BUILD_ID_TASK_REACHABILITY_UNREACHABLE: Build ID is not used for new executions, nor it has been used by any existing execution within the retention period.
 func (e *matchingEngineImpl) getReachability(ctx context.Context, buildId string) (enumspb.BuildIdTaskReachability, error) {
 	// todo carly
+	/*
+		if assignableToNewTasks(buildId) || ∃ openWFAssignedTo(buildId) || ∃ backloggedActivitiesAssignedTo(buildId) {
+			return BUILD_ID_TASK_REACHABILITY_REACHABLE
+		} else if ∃ closedWFAssignedTo(buildId) {
+			not sure what "MAY" means here
+			return BUILD_ID_TASK_REACHABILITY_CLOSED_WORKFLOWS_ONLY
+		} else {
+			return BUILD_ID_TASK_REACHABILITY_UNREACHABLE
+		}
+	*/
+
 	openResp, err := e.visibilityManager.ListOpenWorkflowExecutionsByVersion(ctx, &manager.ListWorkflowExecutionsByVersionSARequest{
 		ListWorkflowExecutionsRequest: &manager.ListWorkflowExecutionsRequest{},
-		VersionSearchAttribute:        "",
+		VersionSearchAttribute:        "todo",
 	})
 	if err != nil {
 		return enumspb.BUILD_ID_TASK_REACHABILITY_UNSPECIFIED, err
 	}
 	closedResp, err := e.visibilityManager.ListClosedWorkflowExecutionsByVersion(ctx, &manager.ListWorkflowExecutionsByVersionSARequest{
 		ListWorkflowExecutionsRequest: &manager.ListWorkflowExecutionsRequest{},
-		VersionSearchAttribute:        "",
+		VersionSearchAttribute:        "todo",
 	})
 	if err != nil {
 		return enumspb.BUILD_ID_TASK_REACHABILITY_UNSPECIFIED, err
