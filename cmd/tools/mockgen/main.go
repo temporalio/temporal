@@ -1,8 +1,6 @@
 // The MIT License
 //
-// Copyright (c) 2020 Temporal Technologies Inc.  All rights reserved.
-//
-// Copyright (c) 2020 Uber Technologies, Inc.
+// Copyright (c) 2024 Temporal Technologies Inc.  All rights reserved.
 //
 // Permission is hereby granted, free of charge, to any person obtaining a copy
 // of this software and associated documentation files (the "Software"), to deal
@@ -22,13 +20,18 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-//go:generate go run ../../../cmd/tools/mockgen -copyright_file ../../../LICENSE -package $GOPACKAGE -source $GOFILE -destination engine_factory_mock.go
+package main
 
-package shard
+import (
+	"fmt"
+	"os"
 
-type (
-	// EngineFactory is used to create an instance of sharded history engine
-	EngineFactory interface {
-		CreateEngine(context Context) Engine
-	}
+	"go.temporal.io/server/tools/mockgen"
 )
+
+func main() {
+	if err := mockgen.Run(mockgen.RealExecFn, os.Args[1:]); err != nil {
+		_, _ = fmt.Fprintf(os.Stderr, "%+v\n", err)
+		os.Exit(1)
+	}
+}
