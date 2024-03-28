@@ -1120,7 +1120,7 @@ func allow(
 		callerInfo.CallerType,
 		shardID,
 		callerInfo.CallOrigin,
-	)); ok {
+	)); !ok {
 		return ErrPersistenceNamespaceLimitExceeded
 	}
 	if ok := systemRateLimiter.Allow(time.Now().UTC(), quotas.NewRequest(
@@ -1130,7 +1130,7 @@ func allow(
 		callerInfo.CallerType,
 		shardID,
 		callerInfo.CallOrigin,
-	)); ok {
+	)); !ok {
 		return ErrPersistenceLimitExceeded
 	}
 	return nil
