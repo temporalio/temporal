@@ -673,6 +673,8 @@ var (
 		"nexus_latency",
 		WithDescription("Latency histogram of Nexus requests."),
 	)
+	HostRPSLimit          = NewGaugeDef("host_rps_limit")
+	NamespaceHostRPSLimit = NewGaugeDef("namespace_host_rps_limit")
 
 	// History
 	CacheRequests                                = NewCounterDef("cache_requests")
