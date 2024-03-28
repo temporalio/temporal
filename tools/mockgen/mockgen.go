@@ -35,11 +35,11 @@ import (
 // running mockgen only if necessary. This is similar to the behavior of `Make`, but it wasn't easy to express this
 // in a Makefile because the generate commands are in our source code.
 func Run(mockgenExecFn ExecFn, args []string) error {
-	upToDate, err := isDestinationFileUpToDateWithSourceInArgs(args)
+	upToDate, err := isDestinationFileUpToDate(args)
 	if err != nil {
 		return err
 	}
-	if !upToDate {
+	if upToDate {
 		return nil
 	}
 
@@ -64,7 +64,7 @@ func RealExecFn(args []string) error {
 	return nil
 }
 
-func isDestinationFileUpToDateWithSourceInArgs(args []string) (bool, error) {
+func isDestinationFileUpToDate(args []string) (bool, error) {
 	var sourcePath, destPath string
 
 	// Extract source and destination paths from the args
@@ -78,10 +78,10 @@ func isDestinationFileUpToDateWithSourceInArgs(args []string) (bool, error) {
 		}
 	}
 
-	// If either source or destination path aren't specified, run mockgen. There's no way for us to know if the source
-	// is newer than the destination in this case.
+	// If either source or destination path aren't specified, so we can't tell if we can cache. There's no way for us to
+	// know if the source is newer than the destination in this case.
 	if sourcePath == "" || destPath == "" {
-		return true, nil
+		return false, nil
 	}
 
 	// Get modification times of source and destination files
@@ -93,14 +93,14 @@ func isDestinationFileUpToDateWithSourceInArgs(args []string) (bool, error) {
 	fileInfo, err = os.Stat(destPath)
 	if err != nil {
 		if os.IsNotExist(err) {
-			return true, nil
+			return false, nil
 		} else {
 			return false, fmt.Errorf("failed to stat dest file %q: %w", sourcePath, err)
 		}
 	}
 	destTime := fileInfo.ModTime()
 
-	// Compare modification times
-	upToDate := sourceTime.After(destTime)
+	// Check if the destination file is up-to-date by comparing modification times
+	upToDate := !sourceTime.After(destTime) // 'true' if source is not newer than destination
 	return upToDate, nil
 }
