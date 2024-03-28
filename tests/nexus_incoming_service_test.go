@@ -464,7 +464,7 @@ func (s *OperatorSuite) TestCreate() {
 				s.NotEmpty(resp.Service.Id)
 				s.Equal(resp.Service.Spec.Name, s.T().Name())
 				s.Equal(resp.Service.Spec.Namespace, s.namespace)
-				s.Equal("/api/v1/services/"+resp.Service.Id, resp.Service.UrlPrefix)
+				s.Equal("/"+commonnexus.Routes().DispatchNexusTaskByService.Path(resp.Service.Id), resp.Service.UrlPrefix)
 			},
 		},
 		{
@@ -617,7 +617,7 @@ func (s *OperatorSuite) TestUpdate() {
 			assertion: func(resp *operatorservice.UpdateNexusIncomingServiceResponse, err error) {
 				s.NoError(err)
 				s.NotNil(resp.Service)
-				s.Equal("/api/v1/services/"+service.Id, service.UrlPrefix)
+				s.Equal("/"+commonnexus.Routes().DispatchNexusTaskByService.Path(service.Id), service.UrlPrefix)
 				s.Equal(int64(2), resp.Service.Version)
 				s.Equal("updated name", resp.Service.Spec.Name)
 				s.NotNil(resp.Service.LastModifiedTime)
