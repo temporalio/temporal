@@ -812,9 +812,14 @@ func (e *matchingEngineImpl) DescribeTaskQueue(
 		physicalInfoByBuildId := make(map[string]map[enumspb.TaskQueueType]*taskqueuespb.PhysicalTaskQueueInfo)
 		e.partitionsLock.RLock()
 		for _, taskQueueType := range request.DescRequest.TaskQueueTypes {
-			for _, pm := range e.partitions {
-				if pm.Partition().TaskType() != taskQueueType || pm.Partition().Kind() != enumspb.TASK_QUEUE_KIND_NORMAL {
-					continue
+			partitions, err := e.getAllPartitions(namespace.Name(request.DescRequest.Namespace), request.DescRequest.TaskQueue, taskQueueType)
+			if err != nil {
+				return nil, err
+			}
+			for _, p := range partitions {
+				pm, err := e.getTaskQueuePartitionManager(ctx, p, true)
+				if err != nil {
+					return nil, err
 				}
 				partitionResp, err := pm.Describe(buildIds, false, request.DescRequest.ReportPollers)
 				if err != nil {
@@ -837,7 +842,7 @@ func (e *matchingEngineImpl) DescribeTaskQueue(
 					Pollers: physicalInfo.Pollers,
 				})
 			}
-			reachability, err := e.getReachability(ctx, bid)
+			reachability, err := getReachability(e, ctx, bid)
 			if err != nil {
 				return nil, err
 			}
@@ -878,42 +883,6 @@ func (e *matchingEngineImpl) DescribeTaskQueuePartition(
 	return pm.Describe(request.GetBuildIds(), request.GetReportBacklogInfo(), request.GetReportPollers())
 }
 
-// getReachability specifies which category of tasks may reach a versioned worker of a certain Build ID.
-//   - BUILD_ID_TASK_REACHABILITY_UNSPECIFIED: Task reachability is not reported
-//   - BUILD_ID_TASK_REACHABILITY_REACHABLE: Build ID may be used by new workflows or activities (base on versioning rules), or there are open workflows or backlogged activities assigned to it.
-//   - BUILD_ID_TASK_REACHABILITY_CLOSED_WORKFLOWS_ONLY: Build ID does not have open workflows and is not reachable by new workflows, but MAY have closed workflows within the namespace retention period. Not applicable to activity-only task queues.
-//   - BUILD_ID_TASK_REACHABILITY_UNREACHABLE: Build ID is not used for new executions, nor it has been used by any existing execution within the retention period.
-func (e *matchingEngineImpl) getReachability(ctx context.Context, buildId string) (enumspb.BuildIdTaskReachability, error) {
-	// todo carly
-	/*
-		if assignableToNewTasks(buildId) || ∃ openWFAssignedTo(buildId) || ∃ backloggedActivitiesAssignedTo(buildId) {
-			return BUILD_ID_TASK_REACHABILITY_REACHABLE
-		} else if ∃ closedWFAssignedTo(buildId) {
-			not sure what "MAY" means here
-			return BUILD_ID_TASK_REACHABILITY_CLOSED_WORKFLOWS_ONLY
-		} else {
-			return BUILD_ID_TASK_REACHABILITY_UNREACHABLE
-		}
-	*/
-
-	openResp, err := e.visibilityManager.ListOpenWorkflowExecutionsByVersion(ctx, &manager.ListWorkflowExecutionsByVersionSARequest{
-		ListWorkflowExecutionsRequest: &manager.ListWorkflowExecutionsRequest{},
-		VersionSearchAttribute:        "todo",
-	})
-	if err != nil {
-		return enumspb.BUILD_ID_TASK_REACHABILITY_UNSPECIFIED, err
-	}
-	closedResp, err := e.visibilityManager.ListClosedWorkflowExecutionsByVersion(ctx, &manager.ListWorkflowExecutionsByVersionSARequest{
-		ListWorkflowExecutionsRequest: &manager.ListWorkflowExecutionsRequest{},
-		VersionSearchAttribute:        "todo",
-	})
-	if err != nil {
-		return enumspb.BUILD_ID_TASK_REACHABILITY_UNSPECIFIED, err
-	}
-
-	return enumspb.BUILD_ID_TASK_REACHABILITY_UNSPECIFIED, nil
-}
-
 // getDefaultBuildId gets the build id mentioned in the first unconditional Assignment Rule.
 // If there is no default Build ID, the result for the unversioned queue will be returned.
 func (e *matchingEngineImpl) getDefaultBuildId() string {
@@ -941,7 +910,7 @@ func (e *matchingEngineImpl) ListTaskQueuePartitions(
 }
 
 func (e *matchingEngineImpl) listTaskQueuePartitions(request *matchingservice.ListTaskQueuePartitionsRequest, taskQueueType enumspb.TaskQueueType) ([]*taskqueuepb.TaskQueuePartitionMetadata, error) {
-	partitions, err := e.getAllPartitions(
+	partitions, err := e.getAllPartitionKeys(
 		namespace.Name(request.GetNamespace()),
 		request.TaskQueue,
 		taskQueueType,
@@ -1463,20 +1432,38 @@ func (e *matchingEngineImpl) getAllPartitions(
 	ns namespace.Name,
 	taskQueue *taskqueuepb.TaskQueue,
 	taskQueueType enumspb.TaskQueueType,
-) ([]string, error) {
-	var partitionKeys []string
+) ([]*tqid.NormalPartition, error) {
+	var partitions []*tqid.NormalPartition
 	namespaceID, err := e.namespaceRegistry.GetNamespaceID(ns)
 	if err != nil {
-		return partitionKeys, err
+		return partitions, err
 	}
 	taskQueueFamily, err := tqid.NewTaskQueueFamily(namespaceID.String(), taskQueue.GetName())
 	if err != nil {
-		return partitionKeys, err
+		return partitions, err
 	}
 
 	n := e.config.NumTaskqueueWritePartitions(ns.String(), taskQueueFamily.Name(), taskQueueType)
 	for i := 0; i < n; i++ {
-		partitionKeys = append(partitionKeys, taskQueueFamily.TaskQueue(taskQueueType).NormalPartition(i).RpcName())
+		partitions = append(partitions, taskQueueFamily.TaskQueue(taskQueueType).NormalPartition(i))
+	}
+
+	return partitions, nil
+}
+
+func (e *matchingEngineImpl) getAllPartitionKeys(
+	ns namespace.Name,
+	taskQueue *taskqueuepb.TaskQueue,
+	taskQueueType enumspb.TaskQueueType,
+) ([]string, error) {
+	var partitionKeys []string
+	partitions, err := e.getAllPartitions(ns, taskQueue, taskQueueType)
+	if err != nil {
+		return partitionKeys, err
+	}
+
+	for _, p := range partitions {
+		partitionKeys = append(partitionKeys, p.RpcName())
 	}
 
 	return partitionKeys, nil
