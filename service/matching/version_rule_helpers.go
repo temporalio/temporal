@@ -370,11 +370,11 @@ func isRedirectRuleSource(buildID string, redirectRules []*persistencepb.Redirec
 	return false
 }
 
-// isConditionalAssignmentRuleTarget checks whether the given buildID is the target of a conditional assignment rule (one with a ramp).
-// We check this for any buildID that is the source of a proposed redirect rule, because having a ramped assignment rule
-// target as the source for a redirect rule would lead to an unpredictable amount of traffic being redirected, and the rest of the
-// traffic being passed through to the next assignment rule in the chain. This would not be a sensible use of redirect
-// rules or assignment rule ramps, so it is prohibited.
+// isConditionalAssignmentRuleTarget checks whether the given buildID is the target of a conditional assignment rule
+// (one with a ramp). We check this for any buildID that is the source of a proposed redirect rule, because having a
+// ramped assignment rule target as the source for a redirect rule would lead to an unpredictable amount of traffic
+// being redirected vs being passed through to the next assignment rule in the chain. This would not be a sensible use
+// of redirect rules or assignment rule ramps, so it is prohibited.
 //
 // e.g. Scenario in which a conditional assignment rule target is the source for a redirect rule.
 //
