@@ -29,14 +29,10 @@ import (
 	"fmt"
 	"sync/atomic"
 
-	"go.temporal.io/api/nexus/v1"
 	"golang.org/x/exp/maps"
 	"google.golang.org/grpc/health"
 	healthpb "google.golang.org/grpc/health/grpc_health_v1"
-	"google.golang.org/protobuf/types/known/timestamppb"
 
-	"go.temporal.io/server/api/matchingservice/v1"
-	hlc "go.temporal.io/server/common/clock/hybrid_logical_clock"
 	cnexus "go.temporal.io/server/common/nexus"
 
 	commonpb "go.temporal.io/api/common/v1"
@@ -91,11 +87,10 @@ type (
 		saManager               searchattribute.Manager
 		healthServer            *health.Server
 		historyClient           resource.HistoryClient
-		matchingClient          resource.MatchingClient
 		clusterMetadataManager  persistence.ClusterMetadataManager
 		clusterMetadata         clustermetadata.Metadata
 		clientFactory           svc.Factory
-		incomingServiceManager  persistence.NexusIncomingServiceManager
+		incomingServiceClient   *NexusIncomingServiceClient
 		outgoingServiceRegistry *cnexus.OutgoingServiceRegistry
 	}
 
@@ -109,11 +104,10 @@ type (
 		SaManager               searchattribute.Manager
 		healthServer            *health.Server
 		historyClient           resource.HistoryClient
-		matchingClient          resource.MatchingClient
 		clusterMetadataManager  persistence.ClusterMetadataManager
 		clusterMetadata         clustermetadata.Metadata
 		clientFactory           svc.Factory
-		incomingServiceManager  persistence.NexusIncomingServiceManager
+		incomingServiceClient   *NexusIncomingServiceClient
 		outgoingServiceRegistry *cnexus.OutgoingServiceRegistry
 	}
 )
@@ -143,6 +137,7 @@ func NewOperatorHandlerImpl(
 		clusterMetadataManager:  args.clusterMetadataManager,
 		clusterMetadata:         args.clusterMetadata,
 		clientFactory:           args.clientFactory,
+		incomingServiceClient:   args.incomingServiceClient,
 		outgoingServiceRegistry: args.outgoingServiceRegistry,
 	}
 
@@ -840,19 +835,7 @@ func (h *OperatorHandlerImpl) CreateNexusIncomingService(
 	request *operatorservice.CreateNexusIncomingServiceRequest,
 ) (_ *operatorservice.CreateNexusIncomingServiceResponse, retError error) {
 	defer log.CapturePanic(h.logger, &retError)
-
-	// TODO: validate request
-
-	resp, err := h.matchingClient.CreateNexusIncomingService(ctx, &matchingservice.CreateNexusIncomingServiceRequest{
-		Spec: request.Spec,
-	})
-	if err != nil {
-		return nil, err
-	}
-
-	return &operatorservice.CreateNexusIncomingServiceResponse{
-		Service: resp.GetService(),
-	}, nil
+	return h.incomingServiceClient.Create(ctx, request)
 }
 
 func (h *OperatorHandlerImpl) UpdateNexusIncomingService(
@@ -860,21 +843,7 @@ func (h *OperatorHandlerImpl) UpdateNexusIncomingService(
 	request *operatorservice.UpdateNexusIncomingServiceRequest,
 ) (_ *operatorservice.UpdateNexusIncomingServiceResponse, retError error) {
 	defer log.CapturePanic(h.logger, &retError)
-
-	// TODO: validate request
-
-	resp, err := h.matchingClient.UpdateNexusIncomingService(ctx, &matchingservice.UpdateNexusIncomingServiceRequest{
-		Id:      request.Id,
-		Version: request.Version,
-		Spec:    request.Spec,
-	})
-	if err != nil {
-		return nil, err
-	}
-
-	return &operatorservice.UpdateNexusIncomingServiceResponse{
-		Service: resp.Service,
-	}, nil
+	return h.incomingServiceClient.Update(ctx, request)
 }
 
 func (h *OperatorHandlerImpl) DeleteNexusIncomingService(
@@ -882,17 +851,7 @@ func (h *OperatorHandlerImpl) DeleteNexusIncomingService(
 	request *operatorservice.DeleteNexusIncomingServiceRequest,
 ) (_ *operatorservice.DeleteNexusIncomingServiceResponse, retError error) {
 	defer log.CapturePanic(h.logger, &retError)
-
-	// TODO: validate request
-
-	_, err := h.matchingClient.DeleteNexusIncomingService(ctx, &matchingservice.DeleteNexusIncomingServiceRequest{
-		Id: request.Id,
-	})
-	if err != nil {
-		return nil, err
-	}
-
-	return &operatorservice.DeleteNexusIncomingServiceResponse{}, nil
+	return h.incomingServiceClient.Delete(ctx, request)
 }
 
 func (h *OperatorHandlerImpl) GetNexusIncomingService(
@@ -900,9 +859,7 @@ func (h *OperatorHandlerImpl) GetNexusIncomingService(
 	request *operatorservice.GetNexusIncomingServiceRequest,
 ) (_ *operatorservice.GetNexusIncomingServiceResponse, retError error) {
 	defer log.CapturePanic(h.logger, &retError)
-
-	// TODO: validate request
-
+	return h.incomingServiceClient.Get(ctx, request)
 }
 
 func (h *OperatorHandlerImpl) ListNexusIncomingServices(
@@ -910,54 +867,7 @@ func (h *OperatorHandlerImpl) ListNexusIncomingServices(
 	request *operatorservice.ListNexusIncomingServicesRequest,
 ) (_ *operatorservice.ListNexusIncomingServicesResponse, retError error) {
 	defer log.CapturePanic(h.logger, &retError)
-
-	// TODO: validate request
-
-	if request.Name != "" {
-		return h.listNexusIncomingServicesAndFilterByName(ctx, request)
-	}
-
-	resp, err := h.incomingServiceManager.ListNexusIncomingServices(ctx, &persistence.ListNexusIncomingServicesRequest{
-		LastKnownTableVersion: 0,
-		NextPageToken:         request.NextPageToken,
-		PageSize:              int(request.PageSize),
-	})
-	if err != nil {
-		return nil, err
-	}
-
-	services := make([]*nexus.IncomingService, len(resp.Entries))
-	for i, entry := range resp.Entries {
-		var lastModifiedTime *timestamppb.Timestamp
-		// Only set last modified if there were modifications as stated in the UI contract.
-		if entry.Version > 1 {
-			lastModifiedTime = timestamppb.New(hlc.UTC(entry.Service.Clock))
-		}
-
-		services[i] = &nexus.IncomingService{
-			Version:          entry.Version,
-			Id:               entry.Id,
-			Spec:             entry.Service.Spec,
-			CreatedTime:      entry.Service.CreatedTime,
-			LastModifiedTime: lastModifiedTime,
-			UrlPrefix:        "/" + cnexus.Routes().DispatchNexusTaskByService.Path(entry.Id),
-		}
-	}
-
-	return &operatorservice.ListNexusIncomingServicesResponse{
-		NextPageToken: resp.NextPageToken,
-		Services:      services,
-	}, nil
-}
-
-// listNexusIncomingServicesAndFilterByName paginates over all services returned by persistence layer
-// to find the service name indicated in the request. Returns that service if found or an empty response if not.
-// PageSize and NextPageToken fields on the request are ignored.
-func (h *OperatorHandlerImpl) listNexusIncomingServicesAndFilterByName(
-	ctx context.Context,
-	request *operatorservice.ListNexusIncomingServicesRequest,
-) (*operatorservice.ListNexusIncomingServicesResponse, error) {
-
+	return h.incomingServiceClient.List(ctx, request)
 }
 
 func (h *OperatorHandlerImpl) GetNexusOutgoingService(

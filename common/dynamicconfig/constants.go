@@ -208,6 +208,15 @@ const (
 	ReachabilityQuerySetDurationSinceDefault = "frontend.reachabilityQuerySetDurationSinceDefault"
 	// TaskQueuesPerBuildIdLimit limits the number of task queue names that can be mapped to a single build id.
 	TaskQueuesPerBuildIdLimit = "limit.taskQueuesPerBuildId"
+
+	// NexusIncomingServiceNameMaxLength is the maximum length of a Nexus incoming service name
+	NexusIncomingServiceNameMaxLength = "limit.incomingServiceNameMaxLength"
+	// NexusIncomingServiceMaxSize is the maximum size of a Nexus incoming service in bytes
+	NexusIncomingServiceMaxSize = "limit.incomingServiceMaxSize"
+	// NexusIncomingServiceListDefaultPageSize is the default page size for listing Nexus incoming services
+	NexusIncomingServiceListDefaultPageSize = "limit.incomingServiceListDefaultPageSize"
+	// NexusIncomingServiceListMaxPageSize is the maximum page size for listing Nexus incoming services
+	NexusIncomingServiceListMaxPageSize = "limit.incomingServiceListMaxPageSize"
 	// NexusOutgoingServiceURLMaxLength is the maximum length of an outgoing service URL
 	NexusOutgoingServiceURLMaxLength = "limit.outgoingServiceURLMaxLength"
 	// NexusOutgoingServiceNameMaxLength is the maximum length of an outgoing service name
