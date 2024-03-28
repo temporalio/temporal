@@ -301,7 +301,7 @@ func (c *NexusIncomingServiceClient) validateUpsertSpec(spec *nexus.IncomingServ
 	return issues.GetError()
 }
 
-func getServiceIdIssues(ID string) rpc.RequestIssues {
+func getServiceIDIssues(ID string) rpc.RequestIssues {
 	var issues rpc.RequestIssues
 	if ID == "" {
 		issues.Append("incoming service ID not set")
@@ -312,7 +312,7 @@ func getServiceIdIssues(ID string) rpc.RequestIssues {
 }
 
 func validateDeleteRequest(request *operatorservice.DeleteNexusIncomingServiceRequest) error {
-	issues := getServiceIdIssues(request.GetId())
+	issues := getServiceIDIssues(request.GetId())
 
 	if request.GetVersion() <= 0 {
 		issues.Append("incoming service version is non-positive")
@@ -322,7 +322,7 @@ func validateDeleteRequest(request *operatorservice.DeleteNexusIncomingServiceRe
 }
 
 func validateGetRequest(request *operatorservice.GetNexusIncomingServiceRequest) error {
-	issues := getServiceIdIssues(request.GetId())
+	issues := getServiceIDIssues(request.GetId())
 	return issues.GetError()
 }
 

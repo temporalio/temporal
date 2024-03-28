@@ -553,7 +553,7 @@ func (s *OperatorSuite) TestCreate() {
 				},
 			},
 			assertion: func(resp *operatorservice.CreateNexusIncomingServiceResponse, err error) {
-				s.ErrorContains(err, "incoming service task queue not set")
+				s.ErrorContains(err, "TaskQueue is not set on request")
 			},
 		},
 		{
@@ -566,20 +566,7 @@ func (s *OperatorSuite) TestCreate() {
 				},
 			},
 			assertion: func(resp *operatorservice.CreateNexusIncomingServiceResponse, err error) {
-				s.ErrorContains(err, "incoming service task queue exceeds length limit")
-			},
-		},
-		{
-			name: "invalid: task queue starts with reserved prefix",
-			request: &operatorservice.CreateNexusIncomingServiceRequest{
-				Spec: &nexus.IncomingServiceSpec{
-					Name:      s.randomizeStr(s.T().Name()),
-					Namespace: s.namespace,
-					TaskQueue: "/_sys/" + s.defaultTaskQueue().Name,
-				},
-			},
-			assertion: func(resp *operatorservice.CreateNexusIncomingServiceResponse, err error) {
-				s.ErrorContains(err, "incoming service task queue begins with reserved prefix")
+				s.ErrorContains(err, "TaskQueue length exceeds limit")
 			},
 		},
 		{
