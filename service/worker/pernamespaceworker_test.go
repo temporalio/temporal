@@ -35,6 +35,7 @@ import (
 	enumspb "go.temporal.io/api/enums/v1"
 	sdkclient "go.temporal.io/sdk/client"
 	sdkworker "go.temporal.io/sdk/worker"
+	"go.temporal.io/server/common/cluster/clustertest"
 
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common/cluster"
@@ -107,7 +108,7 @@ func (s *perNsWorkerManagerSuite) SetupTest() {
 			PerNamespaceWorkerStartRate: dynamicconfig.GetFloatPropertyFn(10),
 		},
 		Components:      []workercommon.PerNSWorkerComponent{s.cmp1, s.cmp2},
-		ClusterMetadata: cluster.NewMetadataForTest(cluster.NewTestClusterMetadataConfig(false, true)),
+		ClusterMetadata: clustertest.NewMetadataForTest(cluster.NewTestClusterMetadataConfig(false, true)),
 	})
 	s.manager.initialRetry = 1 * time.Millisecond
 
