@@ -125,8 +125,7 @@ func (r *IncomingServiceRegistry) Stop() {
 func (r *IncomingServiceRegistry) Get(ctx context.Context, id string) (*nexus.IncomingService, error) {
 	if !r.serviceDataReady.Ready() {
 		if err := r.initializeServices(ctx); err != nil {
-			r.logger.Error("error initializing Nexus incoming service cache.", tag.Error(err))
-			return nil, serviceerror.NewInternal("error loading Nexus incoming service data.")
+			return nil, err
 		}
 	}
 
@@ -193,15 +192,6 @@ func (r *IncomingServiceRegistry) refreshServices(ctx context.Context) error {
 		return nil
 	}
 
-	// changes were returned by long poll so acquire write lock to prevent reads while updating
-	r.dataLock.Lock()
-	defer r.dataLock.Unlock()
-
-	if r.tableVersion >= resp.TableVersion {
-		// service data was updated while waiting for the write lock
-		return nil
-	}
-
 	currentTableVersion = resp.TableVersion
 	services := make(map[string]*nexus.IncomingService)
 	for _, service := range resp.Services {
@@ -240,8 +230,12 @@ func (r *IncomingServiceRegistry) refreshServices(ctx context.Context) error {
 		currentPageToken = resp.NextPageToken
 	}
 
+	r.dataLock.Lock()
+	defer r.dataLock.Unlock()
+
 	r.tableVersion = currentTableVersion
 	r.services = services
+
 	return nil
 }
 
@@ -259,6 +253,7 @@ func (r *IncomingServiceRegistry) initializeServices(ctx context.Context) error 
 	tableVersion, services, err := r.getAllServicesMatching(ctx)
 	if err != nil {
 		// Fallback to persistence on matching error during initial load.
+		r.logger.Error("error from matching when initializing Nexus incoming service cache.", tag.Error(err))
 		tableVersion, services, err = r.getAllServicesPersistence(ctx)
 		if err != nil {
 			return err
@@ -267,9 +262,7 @@ func (r *IncomingServiceRegistry) initializeServices(ctx context.Context) error 
 
 	r.tableVersion = tableVersion
 	r.services = services
-	if !r.serviceDataReady.Ready() {
-		r.serviceDataReady.Set(struct{}{}, nil)
-	}
+	r.serviceDataReady.Set(struct{}{}, nil) // should only ever reach this point once so don't check if already set
 
 	return nil
 }
