@@ -200,7 +200,7 @@ func (s *NexusIncomingServiceStore) ListNexusIncomingServices(
 	ctx context.Context,
 	request *p.ListNexusIncomingServicesRequest,
 ) (*p.InternalListNexusIncomingServicesResponse, error) {
-	if request.LastKnownTableVersion == 0 {
+	if request.LastKnownTableVersion == 0 && request.NextPageToken == nil {
 		return s.listFirstPageWithVersion(ctx, request)
 	}
 
@@ -230,8 +230,11 @@ func (s *NexusIncomingServiceStore) ListNexusIncomingServices(
 
 	response.TableVersion = currentTableVersion
 
-	if request.LastKnownTableVersion != currentTableVersion {
-		// If table has been updated during pagination, throw error to indicate caller must start over
+	if request.LastKnownTableVersion != 0 && request.LastKnownTableVersion != currentTableVersion {
+		// If request.LastKnownTableVersion == 0 then caller does not care about checking whether they have the most
+		// current view while paginating.
+		// Otherwise, if there is a version mismatch, then the table has been updated during pagination, and throw
+		// error to indicate caller must start over.
 		return nil, fmt.Errorf("%w. provided table version: %v current table version: %v",
 			p.ErrNexusTableVersionConflict,
 			request.LastKnownTableVersion,
