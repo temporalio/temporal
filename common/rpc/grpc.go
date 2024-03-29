@@ -152,10 +152,9 @@ func headersInterceptor(
 	return invoker(ctx, method, req, reply, cc, opts...)
 }
 
-func addResourceExhaustedHeaders(ctx context.Context, logger log.Logger, err error) {
+func addHeadersForResourceExhausted(ctx context.Context, logger log.Logger, err error) {
 	var reErr *serviceerror.ResourceExhausted
-	switch {
-	case errors.As(err, &reErr):
+	if errors.As(err, &reErr) {
 		headerErr := grpc.SetHeader(ctx, metadata.Pairs(
 			ResourceExhaustedCauseHeader, reErr.Cause.String(),
 			ResourceExhaustedScopeHeader, reErr.Scope.String(),
@@ -178,7 +177,7 @@ func NewServiceErrorInterceptor(
 
 		resp, err := handler(ctx, req)
 		if err != nil {
-			addResourceExhaustedHeaders(ctx, logger, err)
+			addHeadersForResourceExhausted(ctx, logger, err)
 		}
 		return resp, serviceerror.ToStatus(err).Err()
 	}
