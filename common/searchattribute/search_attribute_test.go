@@ -35,10 +35,10 @@ import (
 )
 
 func Test_ApplyTypeMap_Success(t *testing.T) {
-	assert := assert.New(t)
+	s := assert.New(t)
 
 	payloadInt, err := payload.Encode(123)
-	assert.NoError(err)
+	s.NoError(err)
 
 	sa := &commonpb.SearchAttributes{
 		IndexedFields: map[string]*commonpb.Payload{
@@ -56,16 +56,16 @@ func Test_ApplyTypeMap_Success(t *testing.T) {
 	}}
 
 	ApplyTypeMap(sa, validSearchAttributes)
-	assert.Equal("Text", string(sa.GetIndexedFields()["key1"].Metadata["type"]))
-	assert.Equal("Keyword", string(sa.GetIndexedFields()["key2"].Metadata["type"]))
-	assert.Equal("Int", string(sa.GetIndexedFields()["key3"].Metadata["type"]))
+	s.Equal("Text", string(sa.GetIndexedFields()["key1"].Metadata["type"]))
+	s.Equal("Keyword", string(sa.GetIndexedFields()["key2"].Metadata["type"]))
+	s.Equal("Int", string(sa.GetIndexedFields()["key3"].Metadata["type"]))
 }
 
 func Test_ApplyTypeMap_Skip(t *testing.T) {
-	assert := assert.New(t)
+	s := assert.New(t)
 
 	payloadInt, err := payload.Encode(123)
-	assert.NoError(err)
+	s.NoError(err)
 	payloadInt.Metadata["type"] = []byte("String")
 
 	sa := &commonpb.SearchAttributes{
@@ -83,14 +83,83 @@ func Test_ApplyTypeMap_Skip(t *testing.T) {
 	}}
 
 	ApplyTypeMap(sa, validSearchAttributes)
-	assert.Nil(sa.GetIndexedFields()["UnknownKey"].Metadata["type"])
-	assert.Equal("String", string(sa.GetIndexedFields()["key3"].Metadata["type"]))
+	s.Nil(sa.GetIndexedFields()["UnknownKey"].Metadata["type"])
+	s.Equal("String", string(sa.GetIndexedFields()["key3"].Metadata["type"]))
 
 	validSearchAttributes = NameTypeMap{customSearchAttributes: map[string]enumspb.IndexedValueType{
 		"key4": enumspb.IndexedValueType(100),
 	}}
 
-	assert.Panics(func() {
+	s.Panics(func() {
 		ApplyTypeMap(sa, validSearchAttributes)
 	})
+}
+
+func Test_SetMetadataType(t *testing.T) {
+	s := assert.New(t)
+	p := payload.EncodeString("foo")
+
+	for _, v := range enumspb.IndexedValueType_value {
+		tp := enumspb.IndexedValueType(v)
+		setMetadataType(p, tp)
+		if tp == enumspb.INDEXED_VALUE_TYPE_UNSPECIFIED {
+			s.NotContains(p.Metadata, MetadataType)
+		} else {
+			s.Contains(p.Metadata, MetadataType)
+			s.Equal(tp.String(), string(p.Metadata[MetadataType]))
+		}
+		delete(p.Metadata, MetadataType)
+	}
+
+	s.Panics(func() {
+		invalidType := enumspb.IndexedValueType(len(enumspb.IndexedValueType_value))
+		setMetadataType(p, invalidType)
+	})
+}
+
+func Test_GetMetadataType(t *testing.T) {
+	s := assert.New(t)
+	p := payload.EncodeString("foo")
+
+	tp, err := getMetadataType(p)
+	s.NoError(err)
+	s.Equal(enumspb.INDEXED_VALUE_TYPE_UNSPECIFIED, tp)
+
+	for _, v := range enumspb.IndexedValueType_value {
+		expectedType := enumspb.IndexedValueType(v)
+		p.Metadata[MetadataType] = []byte(expectedType.String())
+		tp, err := getMetadataType(p)
+		s.NoError(err)
+		s.Equal(expectedType, tp)
+		delete(p.Metadata, MetadataType)
+	}
+
+	p.Metadata[MetadataType] = []byte("InvalidType")
+	_, err = getMetadataType(p)
+	s.ErrorIs(err, ErrInvalidType)
+}
+
+func Test_GetSearchAttributeKeyFromPayloadMetadata(t *testing.T) {
+	s := assert.New(t)
+	p := payload.EncodeString("foo")
+
+	for _, v := range enumspb.IndexedValueType_value {
+		tp := enumspb.IndexedValueType(v)
+		setMetadataType(p, tp)
+		saKey, err := GetSearchAttributeKeyFromPayloadMetadata("key", p)
+		if tp == enumspb.INDEXED_VALUE_TYPE_UNSPECIFIED {
+			s.ErrorIs(err, ErrInvalidType)
+			s.Nil(saKey)
+		} else {
+			s.NoError(err)
+			s.Equal("key", saKey.GetName())
+			s.Equal(tp, saKey.GetValueType())
+		}
+		delete(p.Metadata, MetadataType)
+	}
+
+	p.Metadata[MetadataType] = []byte("InvalidType")
+	saKey, err := GetSearchAttributeKeyFromPayloadMetadata("key", p)
+	s.ErrorIs(err, ErrInvalidType)
+	s.Nil(saKey)
 }

@@ -33,6 +33,7 @@ import (
 
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
+	"go.temporal.io/sdk/temporal"
 )
 
 const (
@@ -83,6 +84,18 @@ func setMetadataType(p *commonpb.Payload, t enumspb.IndexedValueType) {
 	p.Metadata[MetadataType] = []byte(enumspb.IndexedValueType(t).String())
 }
 
+func getMetadataType(p *commonpb.Payload) (enumspb.IndexedValueType, error) {
+	metadataType := string(p.Metadata[MetadataType])
+	if len(metadataType) == 0 {
+		return enumspb.INDEXED_VALUE_TYPE_UNSPECIFIED, nil
+	}
+	t, err := enumspb.IndexedValueTypeFromString(string(p.Metadata[MetadataType]))
+	if err != nil {
+		return enumspb.INDEXED_VALUE_TYPE_UNSPECIFIED, fmt.Errorf("%w: %v", ErrInvalidType, metadataType)
+	}
+	return t, nil
+}
+
 // This may mutate saPtr and *saPtr
 func AddSearchAttribute(saPtr **commonpb.SearchAttributes, key string, value *commonpb.Payload) {
 	if *saPtr == nil {
@@ -92,4 +105,32 @@ func AddSearchAttribute(saPtr **commonpb.SearchAttributes, key string, value *co
 		(*saPtr).IndexedFields = make(map[string]*commonpb.Payload)
 	}
 	(*saPtr).IndexedFields[key] = value
+}
+
+func GetSearchAttributeKeyFromPayloadMetadata(
+	name string,
+	payload *commonpb.Payload,
+) (temporal.SearchAttributeKey, error) {
+	t, err := getMetadataType(payload)
+	if err != nil {
+		return nil, err
+	}
+	switch t {
+	case enumspb.INDEXED_VALUE_TYPE_BOOL:
+		return temporal.NewSearchAttributeKeyBool(name), nil
+	case enumspb.INDEXED_VALUE_TYPE_DATETIME:
+		return temporal.NewSearchAttributeKeyTime(name), nil
+	case enumspb.INDEXED_VALUE_TYPE_DOUBLE:
+		return temporal.NewSearchAttributeKeyFloat64(name), nil
+	case enumspb.INDEXED_VALUE_TYPE_INT:
+		return temporal.NewSearchAttributeKeyInt64(name), nil
+	case enumspb.INDEXED_VALUE_TYPE_KEYWORD:
+		return temporal.NewSearchAttributeKeyKeyword(name), nil
+	case enumspb.INDEXED_VALUE_TYPE_TEXT:
+		return temporal.NewSearchAttributeKeyString(name), nil
+	case enumspb.INDEXED_VALUE_TYPE_KEYWORD_LIST:
+		return temporal.NewSearchAttributeKeyKeywordList(name), nil
+	default:
+		return nil, fmt.Errorf("%w: %v", ErrInvalidType, t)
+	}
 }

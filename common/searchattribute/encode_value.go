@@ -60,9 +60,9 @@ func DecodeValue(
 ) (any, error) {
 	if t == enumspb.INDEXED_VALUE_TYPE_UNSPECIFIED {
 		var err error
-		t, err = enumspb.IndexedValueTypeFromString(string(value.Metadata[MetadataType]))
+		t, err = getMetadataType(value)
 		if err != nil {
-			return nil, fmt.Errorf("%w: %v", ErrInvalidType, t)
+			return nil, err
 		}
 	}
 
