@@ -57,6 +57,7 @@ import (
 	"go.temporal.io/server/common/worker_versioning"
 	"go.temporal.io/server/service/history/configs"
 	"go.temporal.io/server/service/history/consts"
+	"go.temporal.io/server/service/history/events"
 	"go.temporal.io/server/service/history/ndc"
 	"go.temporal.io/server/service/history/queues"
 	"go.temporal.io/server/service/history/shard"
@@ -813,12 +814,36 @@ func (t *transferQueueActiveTaskExecutor) processStartChildExecution(
 		sourceVersionStamp = worker_versioning.StampIfUsingVersioning(mutableState.GetWorkerVersionStamp())
 	}
 
-	event, err := mutableState.GetStartEvent(ctx)
+	baseVersionHistories := mutableState.GetExecutionInfo().GetVersionHistories()
+	baseCurrentVersionHistory, err := versionhistory.GetCurrentVersionHistory(baseVersionHistories)
 	if err != nil {
-		t.logger.Error("Error when get start event", tag.Error(err))
+		t.logger.Error("Error to get current version history for child workflow execution",
+			tag.Error(err),
+			tag.WorkflowID(attributes.WorkflowId))
 		return err
 	}
-	identity := event.GetWorkflowExecutionStartedEventAttributes().Identity
+	baseCurrentBranchToken := baseCurrentVersionHistory.GetBranchToken()
+	currentStartVersion, _ := mutableState.GetStartVersion()
+	workflowTaskCompletedEventId := attributes.WorkflowTaskCompletedEventId
+	var identity string
+
+	event, err := t.shardContext.GetEventsCache().GetEvent(ctx, t.shardContext.GetShardID(), events.EventKey{
+		NamespaceID: namespace.ID(task.NamespaceID),
+		WorkflowID:  task.WorkflowID,
+		EventID:     workflowTaskCompletedEventId,
+		Version:     currentStartVersion,
+	},
+		workflowTaskCompletedEventId,
+		baseCurrentBranchToken,
+	)
+	// We dont want to stop the execution of the child workflow if the err is from a cache miss of the event
+	if err != nil {
+		t.logger.Warn("Failed to get WorkflowTaskCompleted event for the identity of child workflow",
+			tag.Error(err),
+			tag.WorkflowID(attributes.WorkflowId))
+	} else {
+		identity = event.GetWorkflowTaskCompletedEventAttributes().Identity
+	}
 
 	childRunID, childClock, err := t.startWorkflow(
 		ctx,
