@@ -1113,24 +1113,19 @@ func allow(
 ) error {
 	callerInfo := headers.GetCallerInfo(ctx)
 	// namespace-level rate limits has to be applied before system-level rate limits.
-	if ok := namespaceRateLimiter.Allow(time.Now().UTC(), quotas.NewRequest(
+	now := time.Now().UTC()
+	quotaRequest := quotas.NewRequest(
 		api,
 		RateLimitDefaultToken,
 		callerInfo.CallerName,
 		callerInfo.CallerType,
 		shardID,
 		callerInfo.CallOrigin,
-	)); !ok {
+	)
+	if ok := namespaceRateLimiter.Allow(now, quotaRequest); !ok {
 		return ErrPersistenceNamespaceLimitExceeded
 	}
-	if ok := systemRateLimiter.Allow(time.Now().UTC(), quotas.NewRequest(
-		api,
-		RateLimitDefaultToken,
-		callerInfo.CallerName,
-		callerInfo.CallerType,
-		shardID,
-		callerInfo.CallOrigin,
-	)); !ok {
+	if ok := systemRateLimiter.Allow(now, quotaRequest); !ok {
 		return ErrPersistenceLimitExceeded
 	}
 	return nil

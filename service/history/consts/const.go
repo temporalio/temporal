@@ -81,7 +81,7 @@ var (
 	// ErrConsistentQueryBufferExceeded is error indicating that too many consistent queries have been buffered and until buffered queries are finished new consistent queries cannot be buffered
 	ErrConsistentQueryBufferExceeded = &serviceerror.ResourceExhausted{
 		Cause:   enumspb.RESOURCE_EXHAUSTED_CAUSE_BUSY_WORKFLOW,
-		Scope:   enumspb.RESOURCE_EXHAUSTED_SCOPE_SYSTEM,
+		Scope:   enumspb.RESOURCE_EXHAUSTED_SCOPE_NAMESPACE,
 		Message: "consistent query buffer is full, this may be caused by too many queries and workflow not able to process query fast enough",
 	}
 	// ErrEmptyHistoryRawEventBatch indicate that one single batch of history raw events is of size 0
