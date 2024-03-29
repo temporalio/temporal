@@ -1098,7 +1098,7 @@ func (p *nexusIncomingServiceRateLimitedPersistenceClient) DeleteNexusIncomingSe
 	ctx context.Context,
 	request *DeleteNexusIncomingServiceRequest,
 ) error {
-	if err := allow(ctx, "DeleteNexusIncomingService", CallerSegmentMissing, p.systemRateLimiter, p.systemRateLimiter); err != nil {
+	if err := allow(ctx, "DeleteNexusIncomingService", CallerSegmentMissing, p.systemRateLimiter, p.namespaceRateLimiter); err != nil {
 		return err
 	}
 	return p.persistence.DeleteNexusIncomingService(ctx, request)
