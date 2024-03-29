@@ -75,7 +75,7 @@ const (
 	ResourceExhaustedCauseHeader = "X-Resource-Exhausted-Cause"
 
 	// ResourceExhaustedScopeHeader will be added to rpc response if request returns ResourceExhausted error.
-	// Value of this header will be ResourceExhaustedScope.
+	// Value of this header will be the scope of exhausted resource.
 	ResourceExhaustedScopeHeader = "X-Resource-Exhausted-Scope"
 )
 
@@ -158,8 +158,7 @@ func addResourceExhaustedHeaders(ctx context.Context, logger log.Logger, err err
 	case errors.As(err, &reErr):
 		headerErr := grpc.SetHeader(ctx, metadata.Pairs(
 			ResourceExhaustedCauseHeader, reErr.Cause.String(),
-			// TODO: Add this when api-go changes land
-			//"X-Resource-Exhausted-Scope", reErr.Scope.String(),
+			ResourceExhaustedScopeHeader, reErr.Scope.String(),
 		))
 		if headerErr != nil {
 			logger.Error("Failed to add Resource-Exhausted headers to response", tag.Error(err))

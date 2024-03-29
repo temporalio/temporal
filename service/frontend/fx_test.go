@@ -280,9 +280,8 @@ func TestRateLimitInterceptorProvider(t *testing.T) {
 				assert.ErrorContains(t, err, "rate limit exceeded")
 				assert.Len(t, header.Get(rpc.ResourceExhaustedCauseHeader), 1)
 				assert.Equal(t, enumspb.RESOURCE_EXHAUSTED_CAUSE_RPS_LIMIT.String(), header.Get(rpc.ResourceExhaustedCauseHeader)[0])
-				// TODO: Uncomment when api-go change land
-				//assert.Len(t, header.Get(rpc.ResourceExhaustedScopeHeader), 1)
-				//assert.Equal(t, enumspb.RESOURCE_EXHAUSTED_SCOPE_SYSTEM.String(), headers.Get(rpc.ResourceExhaustedScopeHeader))
+				assert.Len(t, header.Get(rpc.ResourceExhaustedScopeHeader), 1)
+				assert.Equal(t, enumspb.RESOURCE_EXHAUSTED_SCOPE_SYSTEM.String(), header.Get(rpc.ResourceExhaustedScopeHeader))
 			} else {
 				assert.NoError(t, err)
 			}
@@ -615,9 +614,8 @@ func TestNamespaceRateLimitInterceptorProvider(t *testing.T) {
 					assert.ErrorContains(t, err, "rate limit exceeded")
 					assert.Len(t, header.Get(rpc.ResourceExhaustedCauseHeader), 1)
 					assert.Equal(t, enumspb.RESOURCE_EXHAUSTED_CAUSE_RPS_LIMIT.String(), header.Get(rpc.ResourceExhaustedCauseHeader)[0])
-					// TODO: Uncomment when api-go change land
-					//assert.Len(t, header.Get(rpc.ResourceExhaustedScopeHeader), 1)
-					//assert.Equal(t, enumspb.RESOURCE_EXHAUSTED_SCOPE_NAMESPACE.String(), headers.Get(rpc.ResourceExhaustedScopeHeader))
+					assert.Len(t, header.Get(rpc.ResourceExhaustedScopeHeader), 1)
+					assert.Equal(t, enumspb.RESOURCE_EXHAUSTED_SCOPE_NAMESPACE.String(), header.Get(rpc.ResourceExhaustedScopeHeader))
 				} else {
 					assert.NoError(t, err)
 				}
