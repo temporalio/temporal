@@ -231,7 +231,10 @@ func (s *NexusIncomingServiceStore) ListNexusIncomingServices(
 	response.TableVersion = currentTableVersion
 
 	if request.LastKnownTableVersion != 0 && request.LastKnownTableVersion != currentTableVersion {
-		// If table has been updated during pagination, throw error to indicate caller must start over
+		// If request.LastKnownTableVersion == 0 then caller does not care about checking whether they have the most
+		// current view while paginating.
+		// Otherwise, if there is a version mismatch, then the table has been updated during pagination, and throw
+		// error to indicate caller must start over.
 		return nil, fmt.Errorf("%w. provided table version: %v current table version: %v",
 			p.ErrNexusTableVersionConflict,
 			request.LastKnownTableVersion,

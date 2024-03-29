@@ -223,11 +223,6 @@ func (c *NexusIncomingServiceClient) listAndFilterByName(
 	ctx context.Context,
 	request *operatorservice.ListNexusIncomingServicesRequest,
 ) (*operatorservice.ListNexusIncomingServicesResponse, error) {
-	nameIssues := c.getServiceNameIssues(request.Name)
-	if err := nameIssues.GetError(); err != nil {
-		return nil, err
-	}
-
 	result := &operatorservice.ListNexusIncomingServicesResponse{Services: []*nexus.IncomingService{}}
 	pageSize := c.config.listDefaultPageSize()
 	var currentPageToken []byte
@@ -327,6 +322,7 @@ func validateGetRequest(request *operatorservice.GetNexusIncomingServiceRequest)
 }
 
 func (c *NexusIncomingServiceClient) validatePageSize(pageSize int32) error {
+	// pageSize == 0 is treated as unset and will be changed to the default and does not go through this validation
 	if pageSize < 0 {
 		return serviceerror.NewInvalidArgument("page_size is negative")
 	}
