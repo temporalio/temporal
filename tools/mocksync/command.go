@@ -33,7 +33,8 @@ import (
 
 // Run a cached version of `mockgen`, which checks the modification times of the source and destination files,
 // running mockgen only if necessary. This is similar to the behavior of `Make`, but it wasn't easy to express this
-// in a Makefile because the generate commands are in our source code.
+// in a Makefile because the generate commands are in our source code. The args here should not include the command
+// name, e.g. they should be [os.Args][1:].
 func Run(mockgenExecFn ExecFn, args []string) error {
 	upToDate, err := isDestinationFileUpToDate(args)
 	if err != nil {
