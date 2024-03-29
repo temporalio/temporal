@@ -51,7 +51,7 @@ import (
 	"go.temporal.io/server/service/history/tasks"
 )
 
-//go:generate mockgen -copyright_file ../../../LICENSE -package $GOPACKAGE -source $GOFILE -destination context_mock.go
+//go:generate mocksync -copyright_file ../../../LICENSE -package $GOPACKAGE -source $GOFILE -destination context_mock.go
 
 type (
 	// Context represents a history engine shard

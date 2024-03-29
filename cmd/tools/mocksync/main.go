@@ -1,8 +1,6 @@
 // The MIT License
 //
-// Copyright (c) 2020 Temporal Technologies Inc.  All rights reserved.
-//
-// Copyright (c) 2020 Uber Technologies, Inc.
+// Copyright (c) 2024 Temporal Technologies Inc.  All rights reserved.
 //
 // Permission is hereby granted, free of charge, to any person obtaining a copy
 // of this software and associated documentation files (the "Software"), to deal
@@ -22,24 +20,27 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-package shard
+package main
 
 import (
-	"go.temporal.io/server/common"
-	"go.temporal.io/server/common/namespace"
+	"fmt"
+	"os"
+
+	"go.temporal.io/server/tools/mocksync"
 )
 
-//go:generate mocksync -copyright_file ../../../LICENSE -package $GOPACKAGE -source $GOFILE -destination controller_mock.go
-
-type (
-	Controller interface {
-		common.Pingable
-
-		GetShardByID(shardID int32) (Context, error)
-		GetShardByNamespaceWorkflow(namespaceID namespace.ID, workflowID string) (Context, error)
-		CloseShardByID(shardID int32)
-		ShardIDs() []int32
-		Start()
-		Stop()
+func main() {
+	if err := run(os.Args[1:]); err != nil {
+		_, _ = fmt.Fprintf(os.Stderr, "%+v\n", err)
+		os.Exit(1)
 	}
-)
+}
+
+func run(args []string) error {
+	execFn := mocksync.RealExecFn
+	if os.Getenv("BUILD_ENV") == "ci" {
+		// Just run mockgen without caching if we're in the CI environment
+		return execFn(args)
+	}
+	return mocksync.Run(execFn, args)
+}

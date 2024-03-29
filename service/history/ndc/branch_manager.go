@@ -22,7 +22,7 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-//go:generate mockgen -copyright_file ../../../LICENSE -package $GOPACKAGE -source $GOFILE -destination branch_manager_mock.go
+//go:generate mocksync -copyright_file ../../../LICENSE -package $GOPACKAGE -source $GOFILE -destination branch_manager_mock.go
 
 package ndc
 
