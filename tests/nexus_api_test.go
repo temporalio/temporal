@@ -48,6 +48,7 @@ import (
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/metrics/metricstest"
 	cnexus "go.temporal.io/server/common/nexus"
+	"go.temporal.io/server/service/frontend/configs"
 	"google.golang.org/protobuf/types/known/structpb"
 )
 
@@ -262,7 +263,7 @@ func (s *ClientFunctionalSuite) TestNexusStartOperation_WithNamespaceAndTaskQueu
 		{
 			name: "deny with reason",
 			onAuthorize: func(ctx context.Context, c *authorization.Claims, ct *authorization.CallTarget) (authorization.Result, error) {
-				if ct.APIName == "/temporal.api.nexusservice.v1.NexusService/DispatchNexusTask" {
+				if ct.APIName == configs.DispatchNexusTaskByNamespaceAndTaskQueueAPIName {
 					return authorization.Result{Decision: authorization.DecisionDeny, Reason: "unauthorized in test"}, nil
 				}
 				return authorization.Result{Decision: authorization.DecisionAllow}, nil
@@ -272,7 +273,7 @@ func (s *ClientFunctionalSuite) TestNexusStartOperation_WithNamespaceAndTaskQueu
 		{
 			name: "deny without reason",
 			onAuthorize: func(ctx context.Context, c *authorization.Claims, ct *authorization.CallTarget) (authorization.Result, error) {
-				if ct.APIName == "/temporal.api.nexusservice.v1.NexusService/DispatchNexusTask" {
+				if ct.APIName == configs.DispatchNexusTaskByNamespaceAndTaskQueueAPIName {
 					return authorization.Result{Decision: authorization.DecisionDeny}, nil
 				}
 				return authorization.Result{Decision: authorization.DecisionAllow}, nil
@@ -282,7 +283,7 @@ func (s *ClientFunctionalSuite) TestNexusStartOperation_WithNamespaceAndTaskQueu
 		{
 			name: "deny with generic error",
 			onAuthorize: func(ctx context.Context, c *authorization.Claims, ct *authorization.CallTarget) (authorization.Result, error) {
-				if ct.APIName == "/temporal.api.nexusservice.v1.NexusService/DispatchNexusTask" {
+				if ct.APIName == configs.DispatchNexusTaskByNamespaceAndTaskQueueAPIName {
 					return authorization.Result{}, errors.New("some generic error")
 				}
 				return authorization.Result{Decision: authorization.DecisionAllow}, nil
@@ -364,7 +365,7 @@ func (s *ClientFunctionalSuite) TestNexusStartOperation_WithNamespaceAndTaskQueu
 	}
 
 	s.testCluster.host.SetOnAuthorize(func(ctx context.Context, c *authorization.Claims, ct *authorization.CallTarget) (authorization.Result, error) {
-		if ct.APIName == "/temporal.api.nexusservice.v1.NexusService/DispatchNexusTask" && (c == nil || c.Subject != "test") {
+		if ct.APIName == configs.DispatchNexusTaskByNamespaceAndTaskQueueAPIName && (c == nil || c.Subject != "test") {
 			return authorization.Result{Decision: authorization.DecisionDeny}, nil
 		}
 		return authorization.Result{Decision: authorization.DecisionAllow}, nil

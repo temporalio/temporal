@@ -204,7 +204,6 @@ type (
 
 		NamespaceID string
 		WorkflowID  string
-		RunID       string
 
 		Tasks map[tasks.Category][]tasks.Task
 	}
@@ -1020,6 +1019,10 @@ type (
 		MaxRecordsPruned int
 	}
 
+	GetNexusIncomingServiceRequest struct {
+		ServiceID string
+	}
+
 	ListNexusIncomingServicesRequest struct {
 		LastKnownTableVersion int64
 		NextPageToken         []byte
@@ -1193,6 +1196,7 @@ type (
 		Closeable
 		GetName() string
 		GetNexusIncomingServicesTableVersion(ctx context.Context) (int64, error)
+		GetNexusIncomingService(ctx context.Context, request *GetNexusIncomingServiceRequest) (*persistencespb.NexusIncomingServiceEntry, error)
 		ListNexusIncomingServices(ctx context.Context, request *ListNexusIncomingServicesRequest) (*ListNexusIncomingServicesResponse, error)
 		CreateOrUpdateNexusIncomingService(ctx context.Context, request *CreateOrUpdateNexusIncomingServiceRequest) (*CreateOrUpdateNexusIncomingServiceResponse, error)
 		DeleteNexusIncomingService(ctx context.Context, request *DeleteNexusIncomingServiceRequest) error
