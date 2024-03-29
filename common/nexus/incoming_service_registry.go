@@ -212,6 +212,7 @@ func (r *IncomingServiceRegistry) refreshServices(ctx context.Context) error {
 				// Indicates table was updated during paging, so reset and start from the beginning
 				currentTableVersion, services, err = r.getAllServicesMatching(ctx)
 				if err != nil {
+					r.logger.Error("error during background refresh of Nexus incoming services", tag.Error(err))
 					return err
 				}
 				break
