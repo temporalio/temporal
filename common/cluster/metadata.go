@@ -109,9 +109,12 @@ type (
 	ClusterInformation struct {
 		Enabled                bool  `yaml:"enabled"`
 		InitialFailoverVersion int64 `yaml:"initialFailoverVersion"`
-		// Address indicate the remote service address(Host:Port). Host can be DNS name.
+		// RPCAddress indicate the remote service address(Host:Port). Host can be DNS name.
 		RPCAddress string `yaml:"rpcAddress"`
-		// Cluster ID allows to explicitly set the ID of the cluster. Optional.
+		// HTTPAddress indicates the address of the [go.temporal.io/server/service/frontend.HTTPAPIServer]. Optional.
+		// This should include the scheme, whether it be HTTP or HTTPS, e.g. "http://localhost:8088".
+		HTTPAddress string `yaml:"httpAddress"`
+		// ClusterID allows to explicitly set the ID of the cluster. Optional.
 		ClusterID  string            `yaml:"-"`
 		ShardCount int32             `yaml:"-"` // Ignore this field when loading config.
 		Tags       map[string]string `yaml:"-"` // Ignore this field. Use cluster.Config.Tags for customized tags.
@@ -450,6 +453,7 @@ func (m *metadataImpl) refreshClusterMetadata(ctx context.Context) error {
 		} else if newClusterInfo.version > oldClusterInfo.version {
 			if newClusterInfo.Enabled == oldClusterInfo.Enabled &&
 				newClusterInfo.RPCAddress == oldClusterInfo.RPCAddress &&
+				newClusterInfo.HTTPAddress == oldClusterInfo.HTTPAddress &&
 				newClusterInfo.InitialFailoverVersion == oldClusterInfo.InitialFailoverVersion &&
 				maps.Equal(newClusterInfo.Tags, oldClusterInfo.Tags) {
 				// key cluster info does not change
@@ -518,6 +522,7 @@ func updateVersionToClusterName(clusterInfo map[string]ClusterInformation, failo
 		if info.Enabled && info.RPCAddress == "" {
 			panic(fmt.Sprintf("Cluster %v: RPCAddress is empty", clusterName))
 		}
+		// It's ok if info.HTTPAddress is empty
 	}
 	return versionToClusterName
 }
@@ -526,12 +531,29 @@ func (m *metadataImpl) listAllClusterMetadataFromDB(
 	ctx context.Context,
 ) (map[string]*ClusterInformation, error) {
 	result := make(map[string]*ClusterInformation)
-	if m.clusterMetadataStore == nil {
+	metadataStore := m.clusterMetadataStore
+	if metadataStore == nil {
 		return result, nil
 	}
 
-	paginationFn := func(paginationToken []byte) ([]interface{}, []byte, error) {
-		resp, err := m.clusterMetadataStore.ListClusterMetadata(
+	iterator := GetAllClustersIter(ctx, metadataStore)
+	for iterator.HasNext() {
+		item, err := iterator.Next()
+		if err != nil {
+			return nil, err
+		}
+		result[item.GetClusterName()] = ClusterInformationFromDB(item)
+	}
+	return result, nil
+}
+
+// GetAllClustersIter returns an iterator that can be used to iterate over all clusters in the metadata store.
+func GetAllClustersIter(
+	ctx context.Context,
+	metadataStore persistence.ClusterMetadataManager,
+) collection.Iterator[*persistence.GetClusterMetadataResponse] {
+	paginationFn := func(paginationToken []byte) ([]*persistence.GetClusterMetadataResponse, []byte, error) {
+		resp, err := metadataStore.ListClusterMetadata(
 			ctx,
 			&persistence.ListClusterMetadataRequest{
 				PageSize:      defaultClusterMetadataPageSize,
@@ -541,23 +563,11 @@ func (m *metadataImpl) listAllClusterMetadataFromDB(
 		if err != nil {
 			return nil, nil, err
 		}
-		var paginateItems []interface{}
-		for _, clusterInfo := range resp.ClusterMetadata {
-			paginateItems = append(paginateItems, clusterInfo)
-		}
-		return paginateItems, resp.NextPageToken, nil
+		return resp.ClusterMetadata, resp.NextPageToken, nil
 	}
 
 	iterator := collection.NewPagingIterator(paginationFn)
-	for iterator.HasNext() {
-		item, err := iterator.Next()
-		if err != nil {
-			return nil, err
-		}
-		getClusterResp := item.(*persistence.GetClusterMetadataResponse)
-		result[getClusterResp.GetClusterName()] = ClusterInformationFromDB(getClusterResp)
-	}
-	return result, nil
+	return iterator
 }
 
 func ClusterInformationFromDB(getClusterResp *persistence.GetClusterMetadataResponse) *ClusterInformation {
@@ -565,6 +575,7 @@ func ClusterInformationFromDB(getClusterResp *persistence.GetClusterMetadataResp
 		Enabled:                getClusterResp.GetIsConnectionEnabled(),
 		InitialFailoverVersion: getClusterResp.GetInitialFailoverVersion(),
 		RPCAddress:             getClusterResp.GetClusterAddress(),
+		HTTPAddress:            getClusterResp.GetHttpAddress(),
 		ShardCount:             getClusterResp.GetHistoryShardCount(),
 		Tags:                   getClusterResp.GetTags(),
 		version:                getClusterResp.Version,
