@@ -94,7 +94,7 @@ func isDestinationFileUpToDate(args []string) (bool, error) {
 		if os.IsNotExist(err) {
 			return false, nil
 		} else {
-			return false, fmt.Errorf("failed to stat dest file %q: %w", sourcePath, err)
+			return false, fmt.Errorf("failed to stat dest file %q: %w", destPath, err)
 		}
 	}
 	destTime := fileInfo.ModTime()
