@@ -141,6 +141,11 @@ func (r *IncomingServiceRegistry) Get(ctx context.Context, id string) (*nexus.In
 }
 
 func (r *IncomingServiceRegistry) refreshServicesLoop(ctx context.Context) error {
+	// Wait for service data to be initialized before starting long poll loop.
+	if _, err := r.serviceDataReady.Get(ctx); err != nil {
+		return err
+	}
+
 	minWaitTime := r.config.refreshMinWait()
 
 	for ctx.Err() == nil {
@@ -168,11 +173,6 @@ func (r *IncomingServiceRegistry) refreshServicesLoop(ctx context.Context) error
 // refreshServices sends long-poll requests to matching to check for any updates to service data.
 // It waits to send any requests until service data has been initialized.
 func (r *IncomingServiceRegistry) refreshServices(ctx context.Context) error {
-	// Wait for service data to be initialized before long polling.
-	if _, err := r.serviceDataReady.Get(ctx); err != nil {
-		return err
-	}
-
 	r.dataLock.RLock()
 	currentTableVersion := r.tableVersion
 	r.dataLock.RUnlock()

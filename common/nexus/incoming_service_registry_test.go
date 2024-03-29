@@ -79,8 +79,11 @@ func TestGet(t *testing.T) {
 
 	service, err := reg.Get(context.Background(), testService.Id)
 	require.NoError(t, err)
-	assert.Equal(t, int64(1), reg.tableVersion)
 	protoassert.ProtoEqual(t, testService, service)
+
+	reg.dataLock.RLock()
+	defer reg.dataLock.RUnlock()
+	assert.Equal(t, int64(1), reg.tableVersion)
 }
 
 func TestGetNotFound(t *testing.T) {
@@ -114,6 +117,9 @@ func TestGetNotFound(t *testing.T) {
 	var notFound *serviceerror.NotFound
 	assert.ErrorAs(t, err, &notFound)
 	assert.Nil(t, service)
+
+	reg.dataLock.RLock()
+	defer reg.dataLock.RUnlock()
 	assert.Equal(t, int64(1), reg.tableVersion)
 	assert.NotEmpty(t, reg.services)
 }
@@ -137,8 +143,11 @@ func TestLazyLoadFallback(t *testing.T) {
 
 	service, err := reg.Get(context.Background(), testService.Id)
 	require.NoError(t, err)
-	assert.Equal(t, int64(1), reg.tableVersion)
 	protoassert.ProtoEqual(t, testService, service)
+
+	reg.dataLock.RLock()
+	defer reg.dataLock.RUnlock()
+	assert.Equal(t, int64(1), reg.tableVersion)
 }
 
 func TestTableVersionErrorResetsMatchingPagination(t *testing.T) {
@@ -214,6 +223,8 @@ func TestTableVersionErrorResetsMatchingPagination(t *testing.T) {
 	require.NoError(t, err)
 	protoassert.ProtoEqual(t, testService1, service)
 
+	reg.dataLock.RLock()
+	defer reg.dataLock.RUnlock()
 	assert.Equal(t, int64(3), reg.tableVersion)
 }
 
@@ -279,6 +290,8 @@ func TestTableVersionErrorResetsPersistencePagination(t *testing.T) {
 	require.NoError(t, err)
 	protoassert.ProtoEqual(t, testService1, service)
 
+	reg.dataLock.RLock()
+	defer reg.dataLock.RUnlock()
 	assert.Equal(t, int64(3), reg.tableVersion)
 }
 
