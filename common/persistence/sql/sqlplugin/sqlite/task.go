@@ -29,7 +29,6 @@ package sqlite
 import (
 	"context"
 	"database/sql"
-	"fmt"
 	"strings"
 
 	"go.temporal.io/api/serviceerror"
@@ -164,25 +163,20 @@ func (mdb *db) DeleteFromTasks(
 	ctx context.Context,
 	filter sqlplugin.TasksFilter,
 ) (sql.Result, error) {
-	if filter.ExclusiveMaxTaskID != nil {
-		if filter.Limit == nil || *filter.Limit == 0 {
-			return nil, fmt.Errorf("missing limit parameter")
-		}
-		return mdb.conn.ExecContext(ctx,
-			rangeDeleteTaskQry,
-			filter.RangeHash,
-			filter.TaskQueueID,
-			filter.RangeHash,
-			filter.TaskQueueID,
-			*filter.ExclusiveMaxTaskID,
-			*filter.Limit,
-		)
+	if filter.ExclusiveMaxTaskID == nil {
+		return nil, serviceerror.NewInternal("missing ExclusiveMaxTaskID parameter")
+	}
+	if filter.Limit == nil || *filter.Limit == 0 {
+		return nil, serviceerror.NewInternal("missing limit parameter")
 	}
 	return mdb.conn.ExecContext(ctx,
-		deleteTaskQry,
+		rangeDeleteTaskQry,
 		filter.RangeHash,
 		filter.TaskQueueID,
-		*filter.TaskID,
+		filter.RangeHash,
+		filter.TaskQueueID,
+		*filter.ExclusiveMaxTaskID,
+		*filter.Limit,
 	)
 }
 

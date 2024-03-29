@@ -178,20 +178,6 @@ func (mr *MockTaskStoreMockRecorder) Close() *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Close", reflect.TypeOf((*MockTaskStore)(nil).Close))
 }
 
-// CompleteTask mocks base method.
-func (m *MockTaskStore) CompleteTask(ctx context.Context, request *persistence.CompleteTaskRequest) error {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "CompleteTask", ctx, request)
-	ret0, _ := ret[0].(error)
-	return ret0
-}
-
-// CompleteTask indicates an expected call of CompleteTask.
-func (mr *MockTaskStoreMockRecorder) CompleteTask(ctx, request interface{}) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CompleteTask", reflect.TypeOf((*MockTaskStore)(nil).CompleteTask), ctx, request)
-}
-
 // CompleteTasksLessThan mocks base method.
 func (m *MockTaskStore) CompleteTasksLessThan(ctx context.Context, request *persistence.CompleteTasksLessThanRequest) (int, error) {
 	m.ctrl.T.Helper()
