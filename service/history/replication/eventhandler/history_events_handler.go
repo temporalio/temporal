@@ -36,7 +36,7 @@ import (
 	"go.temporal.io/server/common/persistence/versionhistory"
 )
 
-//go:generate cached-mockgen -copyright_file ../../../../LICENSE -package $GOPACKAGE -source $GOFILE -destination history_events_handler_mock.go
+//go:generate mocksync -copyright_file ../../../../LICENSE -package $GOPACKAGE -source $GOFILE -destination history_events_handler_mock.go
 
 // Local vs Remote
 // Local and Remote are introduced to handle the case:
