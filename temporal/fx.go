@@ -49,7 +49,6 @@ import (
 	"go.temporal.io/server/common/archiver"
 	"go.temporal.io/server/common/authorization"
 	"go.temporal.io/server/common/cluster"
-	"go.temporal.io/server/common/collection"
 	"go.temporal.io/server/common/config"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/headers"
@@ -671,59 +670,12 @@ func ApplyClusterMetadataConfigProvider(
 		return svc.ClusterMetadata, svc.Persistence, fmt.Errorf("error while fetching cluster metadata: %w", err)
 	}
 
-	err = loadClusterInformationFromStore(ctx, svc, clusterMetadataManager, logger)
+	clusterLoader := NewClusterMetadataLoader(clusterMetadataManager, logger)
+	err = clusterLoader.LoadAndMergeWithStaticConfig(ctx, svc)
 	if err != nil {
 		return svc.ClusterMetadata, svc.Persistence, fmt.Errorf("error while loading metadata from cluster: %w", err)
 	}
 	return svc.ClusterMetadata, svc.Persistence, nil
-}
-
-// TODO: move this to cluster.fx
-func loadClusterInformationFromStore(ctx context.Context, svc *config.Config, clusterMsg persistence.ClusterMetadataManager, logger log.Logger) error {
-	iter := collection.NewPagingIterator(func(paginationToken []byte) ([]*persistence.GetClusterMetadataResponse, []byte, error) {
-		request := &persistence.ListClusterMetadataRequest{
-			PageSize:      100,
-			NextPageToken: paginationToken,
-		}
-		resp, err := clusterMsg.ListClusterMetadata(ctx, request)
-		if err != nil {
-			return nil, nil, err
-		}
-		return resp.ClusterMetadata, resp.NextPageToken, nil
-	})
-
-	for iter.HasNext() {
-		metadata, err := iter.Next()
-		if err != nil {
-			return err
-		}
-		shardCount := metadata.HistoryShardCount
-		if shardCount == 0 {
-			// This is to add backward compatibility to the svc based cluster connection.
-			shardCount = svc.Persistence.NumHistoryShards
-		}
-		newMetadata := cluster.ClusterInformation{
-			Enabled:                metadata.IsConnectionEnabled,
-			InitialFailoverVersion: metadata.InitialFailoverVersion,
-			RPCAddress:             metadata.ClusterAddress,
-			ShardCount:             shardCount,
-			Tags:                   metadata.Tags,
-		}
-		if staticClusterMetadata, ok := svc.ClusterMetadata.ClusterInformation[metadata.ClusterName]; ok {
-			if metadata.ClusterName != svc.ClusterMetadata.CurrentClusterName {
-				logger.Warn(
-					"ClusterInformation in ClusterMetadata svc is deprecated. Please use TCTL tool to configure remote cluster connections",
-					tag.Key("clusterInformation"),
-					tag.IgnoredValue(staticClusterMetadata),
-					tag.Value(newMetadata))
-			} else {
-				newMetadata.RPCAddress = staticClusterMetadata.RPCAddress
-				logger.Info(fmt.Sprintf("Use rpc address %v for cluster %v.", newMetadata.RPCAddress, metadata.ClusterName))
-			}
-		}
-		svc.ClusterMetadata.ClusterInformation[metadata.ClusterName] = newMetadata
-	}
-	return nil
 }
 
 func initCurrentClusterMetadataRecord(
@@ -753,6 +705,7 @@ func initCurrentClusterMetadataRecord(
 				ClusterName:              currentClusterName,
 				ClusterId:                clusterId,
 				ClusterAddress:           currentClusterInfo.RPCAddress,
+				HttpAddress:              currentClusterInfo.HTTPAddress,
 				FailoverVersionIncrement: svc.ClusterMetadata.FailoverVersionIncrement,
 				InitialFailoverVersion:   currentClusterInfo.InitialFailoverVersion,
 				IsGlobalNamespaceEnabled: svc.ClusterMetadata.EnableGlobalNamespace,
@@ -793,6 +746,10 @@ func updateCurrentClusterMetadataRecord(
 	}
 	if currentClusterDBRecord.ClusterAddress != currentCLusterInfo.RPCAddress {
 		currentClusterDBRecord.ClusterAddress = currentCLusterInfo.RPCAddress
+		updateDBRecord = true
+	}
+	if currentClusterDBRecord.HttpAddress != currentCLusterInfo.HTTPAddress {
+		currentClusterDBRecord.HttpAddress = currentCLusterInfo.HTTPAddress
 		updateDBRecord = true
 	}
 	if !maps.Equal(currentClusterDBRecord.Tags, svc.ClusterMetadata.Tags) {

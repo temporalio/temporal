@@ -29,11 +29,12 @@ import (
 	"net"
 
 	"github.com/gorilla/mux"
-	"go.temporal.io/server/common/nexus"
 	"go.uber.org/fx"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/health"
 	"google.golang.org/grpc/keepalive"
+
+	"go.temporal.io/server/common/nexus"
 
 	"go.temporal.io/server/client"
 	"go.temporal.io/server/common"
@@ -113,6 +114,7 @@ var Module = fx.Options(
 	fx.Provide(OpenAPIHTTPHandlerProvider),
 	fx.Provide(HTTPAPIServerProvider),
 	fx.Provide(NewServiceProvider),
+	fx.Provide(IncomingServiceClientProvider),
 	fx.Provide(OutgoingServiceRegistryProvider),
 	fx.Invoke(ServiceLifetimeHooks),
 )
@@ -590,6 +592,7 @@ func OperatorHandlerProvider(
 	clusterMetadataManager persistence.ClusterMetadataManager,
 	clusterMetadata cluster.Metadata,
 	clientFactory client.Factory,
+	incomingServiceClient *NexusIncomingServiceClient,
 	outgoingServiceRegistry *nexus.OutgoingServiceRegistry,
 ) *OperatorHandlerImpl {
 	args := NewOperatorHandlerImplArgs{
@@ -605,6 +608,7 @@ func OperatorHandlerProvider(
 		clusterMetadataManager,
 		clusterMetadata,
 		clientFactory,
+		incomingServiceClient,
 		outgoingServiceRegistry,
 	}
 	return NewOperatorHandlerImpl(args)
@@ -739,6 +743,23 @@ func HTTPAPIServerProvider(
 		metricsHandler,
 		[]func(*mux.Router){nexusHTTPHandler.RegisterRoutes, openAPIHTTPHandler.RegisterRoutes},
 		namespaceRegistry,
+		logger,
+	)
+}
+
+func IncomingServiceClientProvider(
+	dc *dynamicconfig.Collection,
+	namespaceRegistry namespace.Registry,
+	matchingClient resource.MatchingClient,
+	incomingServiceManager persistence.NexusIncomingServiceManager,
+	logger log.Logger,
+) *NexusIncomingServiceClient {
+	clientConfig := newNexusIncomingServiceClientConfig(dc)
+	return newNexusIncomingServiceClient(
+		clientConfig,
+		namespaceRegistry,
+		matchingClient,
+		incomingServiceManager,
 		logger,
 	)
 }

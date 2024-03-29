@@ -1641,7 +1641,7 @@ func (wh *WorkflowHandler) SignalWorkflowExecution(ctx context.Context, request 
 	}
 
 	if request.GetSignalName() == "" {
-		return nil, errSignalNameTooLong
+		return nil, errSignalNameNotSet
 	}
 
 	if len(request.GetSignalName()) > wh.config.MaxIDLengthLimit() {
@@ -3564,7 +3564,11 @@ func (wh *WorkflowHandler) StartBatchOperation(
 		}
 	}
 	if openBatchOperationCount >= maxConcurrentBatchOperation {
-		return nil, serviceerror.NewResourceExhausted(enumspb.RESOURCE_EXHAUSTED_CAUSE_CONCURRENT_LIMIT, "Max concurrent batch operations is reached")
+		return nil, &serviceerror.ResourceExhausted{
+			Cause:   enumspb.RESOURCE_EXHAUSTED_CAUSE_CONCURRENT_LIMIT,
+			Scope:   enumspb.RESOURCE_EXHAUSTED_SCOPE_NAMESPACE,
+			Message: "Max concurrent batch operations is reached",
+		}
 	}
 
 	namespaceID, err := wh.namespaceRegistry.GetNamespaceID(namespace.Name(request.GetNamespace()))
@@ -4039,15 +4043,13 @@ func (wh *WorkflowHandler) validateSearchAttributes(searchAttributes *commonpb.S
 }
 
 func (wh *WorkflowHandler) validateTaskQueue(t *taskqueuepb.TaskQueue, namespaceName namespace.Name) error {
-	if t == nil || t.GetName() == "" {
+	if t == nil {
 		return errTaskQueueNotSet
 	}
-	if len(t.GetName()) > wh.config.MaxIDLengthLimit() {
-		return errTaskQueueTooLong
-	}
-	if err := common.ValidateUTF8String("TaskQueue", t.GetName()); err != nil {
+	if err := validateTaskQueueName(t.GetName(), wh.config.MaxIDLengthLimit()); err != nil {
 		return err
 	}
+
 	if t.GetKind() == enumspb.TASK_QUEUE_KIND_STICKY {
 		if err := common.ValidateUTF8String("TaskQueue", t.GetNormalName()); err != nil {
 			return err

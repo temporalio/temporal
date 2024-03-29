@@ -1026,7 +1026,6 @@ func (s *ContextImpl) DeleteWorkflowExecution(
 					ShardID:     s.shardID,
 					NamespaceID: key.NamespaceID,
 					WorkflowID:  key.WorkflowID,
-					RunID:       key.RunID,
 
 					Tasks: newTasks,
 				}

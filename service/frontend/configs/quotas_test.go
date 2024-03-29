@@ -170,8 +170,10 @@ func (s *quotasSuite) TestAllAPIs() {
 		_, ok := apisWithPriority["/temporal.api.workflowservice.v1.WorkflowService/"+m.Name]
 		s.True(ok, "missing priority for API: %v", m.Name)
 	})
-	_, ok := apisWithPriority["/temporal.api.nexusservice.v1.NexusService/DispatchNexusTask"]
-	s.True(ok, "missing priority for API: /temporal.api.nexusservice.v1.NexusService/DispatchNexusTask")
+	_, ok := apisWithPriority[DispatchNexusTaskByNamespaceAndTaskQueueAPIName]
+	s.Truef(ok, "missing priority for API: %q", DispatchNexusTaskByNamespaceAndTaskQueueAPIName)
+	_, ok = apisWithPriority[DispatchNexusTaskByServiceAPIName]
+	s.Truef(ok, "missing priority for API: %q", DispatchNexusTaskByServiceAPIName)
 }
 
 func (s *quotasSuite) TestOperatorPriority_Execution() {

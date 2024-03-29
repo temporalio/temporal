@@ -1,8 +1,6 @@
 // The MIT License
 //
-// Copyright (c) 2020 Temporal Technologies Inc.  All rights reserved.
-//
-// Copyright (c) 2020 Uber Technologies, Inc.
+// Copyright (c) 2024 Temporal Technologies Inc.  All rights reserved.
 //
 // Permission is hereby granted, free of charge, to any person obtaining a copy
 // of this software and associated documentation files (the "Software"), to deal
@@ -22,38 +20,25 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-package frontend
+package clustertest
 
 import (
-	"github.com/pborman/uuid"
-	commonpb "go.temporal.io/api/common/v1"
-
-	"go.temporal.io/server/common"
+	"go.temporal.io/server/common/cluster"
+	"go.temporal.io/server/common/log"
 )
 
-func validateExecution(w *commonpb.WorkflowExecution) error {
-	if w == nil {
-		return errExecutionNotSet
-	}
-	if w.GetWorkflowId() == "" {
-		return errWorkflowIDNotSet
-	}
-	if w.GetRunId() != "" && uuid.Parse(w.GetRunId()) == nil {
-		return errInvalidRunID
-	}
-	return nil
-}
-
-// validateTaskQueueName does simple verification on a high-level (user-provided) task queue name.
-// See also: service/frontend/workflow_handler.go#validateTaskQueue and
-// service/history/command_checker.go#validateTaskQueue for more information on task queue validation.
-// TODO: standardize task queue validation across the codebase
-func validateTaskQueueName(name string, maxLength int) error {
-	if name == "" {
-		return errTaskQueueNotSet
-	}
-	if len(name) > maxLength {
-		return errTaskQueueTooLong
-	}
-	return common.ValidateUTF8String("TaskQueue", name)
+// NewMetadataForTest returns a new [cluster.Metadata] instance for testing.
+func NewMetadataForTest(
+	config *cluster.Config,
+) cluster.Metadata {
+	return cluster.NewMetadata(
+		config.EnableGlobalNamespace,
+		config.FailoverVersionIncrement,
+		config.MasterClusterName,
+		config.CurrentClusterName,
+		config.ClusterInformation,
+		nil,
+		nil,
+		log.NewNoopLogger(),
+	)
 }

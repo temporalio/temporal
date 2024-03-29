@@ -147,13 +147,7 @@ func (m *incomingNexusServiceManager) CreateNexusIncomingService(
 	close(ch)
 
 	return &matchingservice.CreateNexusIncomingServiceResponse{
-		Service: &nexuspb.IncomingService{
-			Version:     entry.Version,
-			Id:          entry.Id,
-			Spec:        entry.Service.Spec,
-			CreatedTime: entry.Service.CreatedTime,
-			UrlPrefix:   "/" + commonnexus.Routes().DispatchNexusTaskByService.Path(entry.Id),
-		},
+		Service: commonnexus.IncomingServicePersistedEntryToExternalAPI(entry),
 	}, nil
 }
 
@@ -208,14 +202,7 @@ func (m *incomingNexusServiceManager) UpdateNexusIncomingService(
 	close(ch)
 
 	return &matchingservice.UpdateNexusIncomingServiceResponse{
-		Service: &nexuspb.IncomingService{
-			Version:          entry.Version,
-			Id:               entry.Id,
-			Spec:             entry.Service.Spec,
-			CreatedTime:      entry.Service.CreatedTime,
-			LastModifiedTime: timestamppb.New(hlc.UTC(entry.Service.Clock)),
-			UrlPrefix:        "/" + commonnexus.Routes().DispatchNexusTaskByService.Path(entry.Id),
-		},
+		Service: commonnexus.IncomingServicePersistedEntryToExternalAPI(entry),
 	}, nil
 }
 
@@ -325,19 +312,7 @@ func (m *incomingNexusServiceManager) ListNexusIncomingServices(
 	services := make([]*nexuspb.IncomingService, endIdx-startIdx)
 	for i := 0; i < endIdx-startIdx; i++ {
 		entry := m.services[i+startIdx]
-		var lastModifiedTime *timestamppb.Timestamp
-		// Only set last modified if there were modifications as stated in the UI contract.
-		if entry.Version > 1 {
-			lastModifiedTime = timestamppb.New(hlc.UTC(entry.Service.Clock))
-		}
-		services[i] = &nexuspb.IncomingService{
-			Version:          entry.Version,
-			Id:               entry.Id,
-			Spec:             entry.Service.Spec,
-			CreatedTime:      entry.Service.CreatedTime,
-			LastModifiedTime: lastModifiedTime,
-			UrlPrefix:        "/" + commonnexus.Routes().DispatchNexusTaskByService.Path(entry.Id),
-		}
+		services[i] = commonnexus.IncomingServicePersistedEntryToExternalAPI(entry)
 	}
 
 	resp := &matchingservice.ListNexusIncomingServicesResponse{
