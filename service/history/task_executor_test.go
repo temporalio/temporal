@@ -24,17 +24,16 @@ package history
 
 import (
 	"context"
+	"fmt"
 	"testing"
 	"time"
 
 	"github.com/golang/mock/gomock"
 	"github.com/pborman/uuid"
 	"github.com/stretchr/testify/require"
-	"github.com/stretchr/testify/suite"
 	commandpb "go.temporal.io/api/command/v1"
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
-	historypb "go.temporal.io/api/history/v1"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	"go.temporal.io/api/workflowservice/v1"
 	"google.golang.org/protobuf/types/known/durationpb"
@@ -47,8 +46,9 @@ import (
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence"
-	"go.temporal.io/server/common/persistence/versionhistory"
+	"go.temporal.io/server/plugins/callbacks"
 	"go.temporal.io/server/service/history/events"
+	"go.temporal.io/server/service/history/hsm"
 	"go.temporal.io/server/service/history/queues"
 	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/tasks"
@@ -57,10 +57,8 @@ import (
 	wcache "go.temporal.io/server/service/history/workflow/cache"
 )
 
-type taskExecutorSuite struct {
-	suite.Suite
-	*require.Assertions
-
+type taskExecutorTestContext struct {
+	t              *testing.T
 	namespaceID    namespace.ID
 	namespaceEntry *namespace.Namespace
 	controller     *gomock.Controller
@@ -71,18 +69,14 @@ type taskExecutorSuite struct {
 	timeSource     *clock.EventTimeSource
 }
 
-func TestTaskExecutor(t *testing.T) {
-	s := new(taskExecutorSuite)
-	suite.Run(t, s)
-}
-
-func (s *taskExecutorSuite) SetupTest() {
-	s.Assertions = require.New(s.T())
+func newTaskExecutorTestContext(t *testing.T) *taskExecutorTestContext {
+	s := taskExecutorTestContext{}
+	s.t = t
 	s.namespaceID = tests.NamespaceID
 	s.namespaceEntry = tests.GlobalNamespaceEntry
 	s.now = time.Now().UTC()
 	s.timeSource = clock.NewEventTimeSource().Update(s.now)
-	s.controller = gomock.NewController(s.T())
+	s.controller = gomock.NewController(t)
 	config := tests.NewDynamicConfig()
 	s.version = s.namespaceEntry.FailoverVersion()
 
@@ -102,6 +96,11 @@ func (s *taskExecutorSuite) SetupTest() {
 		s.mockShard.GetLogger(),
 		false,
 	))
+	reg := hsm.NewRegistry()
+	require.NoError(t, workflow.RegisterStateMachine(reg))
+	require.NoError(t, callbacks.RegisterStateMachine(reg))
+	require.NoError(t, callbacks.RegisterTaskSerializer(reg))
+	s.mockShard.SetStateMachineRegistry(reg)
 	s.workflowCache = wcache.NewHostLevelCache(s.mockShard.GetConfig(), s.mockShard.GetMetricsHandler())
 
 	mockClusterMetadata := s.mockShard.Resource.ClusterMetadata
@@ -129,89 +128,167 @@ func (s *taskExecutorSuite) SetupTest() {
 		},
 	}
 	s.mockShard.SetEngineForTesting(h)
+	return &s
 }
 
-func (s *taskExecutorSuite) TearDownTest() {
+func (s *taskExecutorTestContext) tearDown() {
 	s.controller.Finish()
 	s.mockShard.StopForTest()
 }
 
-func (s *taskExecutorSuite) TestProcessCallbackTask_TaskState() {
-	type testcase struct {
-		name             string
-		mutateCallback   func(*persistencespb.CallbackInfo)
-		assertOutcome    func(error)
-		expectedGetCalls int
-	}
-	cases := []testcase{
+func TestValidateStateMachineTask(t *testing.T) {
+	cases := []struct {
+		name          string
+		mutateRef     func(*hsm.Ref)
+		assertOutcome func(*testing.T, error)
+	}{
 		{
-			name: "stale-task-version",
-			mutateCallback: func(cb *persistencespb.CallbackInfo) {
-				cb.NamespaceFailoverVersion++
+			name: "staleness check failure",
+			mutateRef: func(ref *hsm.Ref) {
+				ref.StateMachineRef.MutableStateNamespaceFailoverVersion++
 			},
-			assertOutcome: func(err error) {
-				s.ErrorIs(err, queues.ErrStaleTask)
+			assertOutcome: func(t *testing.T, err error) {
+				require.ErrorAs(t, err, new(queues.StaleStateError))
 			},
-			expectedGetCalls: 1,
 		},
 		{
-			name: "stale-callback-version",
-			mutateCallback: func(cb *persistencespb.CallbackInfo) {
-				cb.NamespaceFailoverVersion--
+			name: "node not found",
+			mutateRef: func(ref *hsm.Ref) {
+				ref.StateMachineRef.Path[0].Id = "not-found"
 			},
-			assertOutcome: func(err error) {
-				s.ErrorAs(err, new(queues.StaleStateError))
+			assertOutcome: func(t *testing.T, err error) {
+				require.ErrorAs(t, err, new(queues.UnprocessableTaskError))
 			},
-			expectedGetCalls: 2,
 		},
 		{
-			name: "stale-task-transitions",
-			mutateCallback: func(cb *persistencespb.CallbackInfo) {
-				cb.TransitionCount++
+			name: "machine transition inequality",
+			mutateRef: func(ref *hsm.Ref) {
+				ref.StateMachineRef.MachineTransitionCount++
 			},
-			assertOutcome: func(err error) {
-				s.ErrorIs(err, queues.ErrStaleTask)
+			assertOutcome: func(t *testing.T, err error) {
+				require.ErrorIs(t, err, queues.ErrStaleTask)
 			},
-			expectedGetCalls: 1,
 		},
 		{
-			name: "stale-callback-transitions",
-			mutateCallback: func(cb *persistencespb.CallbackInfo) {
-				cb.TransitionCount--
+			name: "valid",
+			mutateRef: func(ref *hsm.Ref) {
 			},
-			assertOutcome: func(err error) {
-				s.ErrorAs(err, new(queues.StaleStateError))
+			assertOutcome: func(t *testing.T, err error) {
+				require.NoError(t, err)
 			},
-			expectedGetCalls: 2,
 		},
 	}
 	for _, tc := range cases {
 		tc := tc
-		s.T().Run(tc.name, func(t *testing.T) {
-			mutableState := s.prepareMutableStateWithCompletedWFT()
-			event, err := mutableState.AddCompletedWorkflowEvent(mutableState.GetNextEventID(), &commandpb.CompleteWorkflowExecutionCommandAttributes{}, "")
-			s.NoError(err)
-			for _, cb := range mutableState.GetExecutionInfo().Callbacks {
-				tc.mutateCallback(cb)
-			}
-			task := mutableState.PopTasks()[tasks.CategoryCallback][0]
-			s.sealMutableState(mutableState, event, tc.expectedGetCalls)
+		t.Run(tc.name, func(t *testing.T) {
+			s := newTaskExecutorTestContext(t)
+			mutableState := s.prepareMutableStateWithTriggeredNexusCompletionCallback()
+			snapshot, _, err := mutableState.CloseTransactionAsMutation(workflow.TransactionPolicyActive)
+			require.NoError(t, err)
+			task := snapshot.Tasks[tasks.CategoryOutbound][0]
 			exec := taskExecutor{
 				shardContext:   s.mockShard,
 				cache:          s.workflowCache,
 				metricsHandler: s.mockShard.GetMetricsHandler(),
 				logger:         s.mockShard.GetLogger(),
 			}
-			_, _, _, err = exec.getValidatedMutableStateForTask(context.Background(), task, func(ms workflow.MutableState) error {
-				_, err := exec.validateCallbackTask(ms, task.(*tasks.CallbackTask))
-				return err
-			})
-			tc.assertOutcome(err)
+
+			cbt := task.(*tasks.StateMachineOutboundTask)
+			ref := hsm.Ref{
+				WorkflowKey:     taskWorkflowKey(task),
+				StateMachineRef: cbt.Info.Ref,
+			}
+			tc.mutateRef(&ref)
+			err = exec.validateStateMachineTask(mutableState, ref)
+			tc.assertOutcome(t, err)
 		})
 	}
 }
 
-func (s *taskExecutorSuite) prepareMutableStateWithCompletedWFT() workflow.MutableState {
+func TestAccess(t *testing.T) {
+	cases := []struct {
+		name                string
+		accessType          hsm.AccessType
+		expectedSetRequests int
+		accessor            func(*hsm.Node) error
+		assertOutcome       func(*testing.T, error)
+	}{
+		{
+			name:                "read success",
+			accessType:          hsm.AccessRead,
+			expectedSetRequests: 0,
+			accessor: func(n *hsm.Node) error {
+				return nil
+			},
+			assertOutcome: func(t *testing.T, err error) {
+				require.NoError(t, err)
+			},
+		},
+		{
+			name:                "read failure",
+			accessType:          hsm.AccessRead,
+			expectedSetRequests: 0,
+			accessor: func(n *hsm.Node) error {
+				return fmt.Errorf("test read error")
+			},
+			assertOutcome: func(t *testing.T, err error) {
+				require.ErrorContains(t, err, "test read error")
+			},
+		},
+		{
+			name:                "write success",
+			accessType:          hsm.AccessWrite,
+			expectedSetRequests: 1,
+			accessor: func(n *hsm.Node) error {
+				return nil
+			},
+			assertOutcome: func(t *testing.T, err error) {
+				require.NoError(t, err)
+			},
+		},
+		{
+			name:                "write error",
+			accessType:          hsm.AccessWrite,
+			expectedSetRequests: 0,
+			accessor: func(n *hsm.Node) error {
+				return fmt.Errorf("test write error")
+			},
+			assertOutcome: func(t *testing.T, err error) {
+				require.ErrorContains(t, err, "test write error")
+			},
+		},
+		// TODO: test write success on open workflow updates instead of sets execution when we have machines that support that.
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			s := newTaskExecutorTestContext(t)
+			mutableState := s.prepareMutableStateWithTriggeredNexusCompletionCallback()
+			snapshot, _, err := mutableState.CloseTransactionAsMutation(workflow.TransactionPolicyActive)
+			require.NoError(t, err)
+			persistenceMutableState := workflow.TestCloneToProto(mutableState)
+			em := s.mockShard.GetExecutionManager().(*persistence.MockExecutionManager)
+			em.EXPECT().GetWorkflowExecution(gomock.Any(), gomock.Any()).Return(&persistence.GetWorkflowExecutionResponse{State: persistenceMutableState}, nil)
+			em.EXPECT().SetWorkflowExecution(gomock.Any(), gomock.Any()).Return(&persistence.SetWorkflowExecutionResponse{}, nil).Times(tc.expectedSetRequests)
+			task := snapshot.Tasks[tasks.CategoryOutbound][0]
+			exec := taskExecutor{
+				shardContext:   s.mockShard,
+				cache:          s.workflowCache,
+				metricsHandler: s.mockShard.GetMetricsHandler(),
+				logger:         s.mockShard.GetLogger(),
+			}
+
+			cbt := task.(*tasks.StateMachineOutboundTask)
+			ref := hsm.Ref{
+				WorkflowKey:     taskWorkflowKey(task),
+				StateMachineRef: cbt.Info.Ref,
+			}
+			err = exec.Access(context.Background(), ref, tc.accessType, tc.accessor)
+			tc.assertOutcome(t, err)
+		})
+	}
+}
+
+func (s *taskExecutorTestContext) prepareMutableStateWithReadyNexusCompletionCallback() *workflow.MutableStateImpl {
 	s.mockShard.Resource.NamespaceCache.EXPECT().GetNamespaceByID(s.namespaceID).Return(s.namespaceEntry, nil).AnyTimes()
 
 	execution := &commonpb.WorkflowExecution{
@@ -244,26 +321,22 @@ func (s *taskExecutorSuite) prepareMutableStateWithCompletedWFT() workflow.Mutab
 			},
 		},
 	)
-	s.NoError(err)
+	require.NoError(s.t, err)
+	return mutableState
+}
+
+func (s *taskExecutorTestContext) prepareMutableStateWithTriggeredNexusCompletionCallback() *workflow.MutableStateImpl {
+	mutableState := s.prepareMutableStateWithReadyNexusCompletionCallback()
 	wt := addWorkflowTaskScheduledEvent(mutableState)
 	taskQueueName := "irrelevant"
 	event := addWorkflowTaskStartedEvent(mutableState, wt.ScheduledEventID, taskQueueName, uuid.New())
 	wt.StartedEventID = event.GetEventId()
-	_, err = mutableState.AddWorkflowTaskCompletedEvent(wt, &workflowservice.RespondWorkflowTaskCompletedRequest{
+	_, err := mutableState.AddWorkflowTaskCompletedEvent(wt, &workflowservice.RespondWorkflowTaskCompletedRequest{
 		Identity: "some random identity",
 	}, defaultWorkflowTaskCompletionLimits)
-	s.NoError(err)
+	require.NoError(s.t, err)
+	_, err = mutableState.AddCompletedWorkflowEvent(mutableState.GetNextEventID(), &commandpb.CompleteWorkflowExecutionCommandAttributes{}, "")
+	require.NoError(s.t, err)
 
 	return mutableState
-}
-
-func (s *taskExecutorSuite) sealMutableState(mutableState workflow.MutableState, lastEvent *historypb.HistoryEvent, expectedGetCalls int) {
-	currentVersionHistory, err := versionhistory.GetCurrentVersionHistory(mutableState.GetExecutionInfo().GetVersionHistories())
-	s.NoError(err)
-	err = versionhistory.AddOrUpdateVersionHistoryItem(currentVersionHistory, versionhistory.NewVersionHistoryItem(
-		lastEvent.EventId, lastEvent.Version,
-	))
-	s.NoError(err)
-	persistenceMutableState := workflow.TestCloneToProto(mutableState)
-	s.mockShard.Resource.ExecutionMgr.EXPECT().GetWorkflowExecution(gomock.Any(), gomock.Any()).Return(&persistence.GetWorkflowExecutionResponse{State: persistenceMutableState}, nil).Times(expectedGetCalls)
 }

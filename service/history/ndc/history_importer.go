@@ -192,6 +192,7 @@ func (r *HistoryImporterImpl) applyEvents(
 		versionHistoryItems,
 		eventsSlice,
 		nil,
+		"",
 	)
 	if err != nil {
 		return nil, false, err

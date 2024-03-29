@@ -47,6 +47,8 @@ import (
 	"go.temporal.io/server/common/authorization"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/metrics/metricstest"
+	cnexus "go.temporal.io/server/common/nexus"
+	"go.temporal.io/server/service/frontend/configs"
 	"google.golang.org/protobuf/types/known/structpb"
 )
 
@@ -173,8 +175,8 @@ func (s *ClientFunctionalSuite) TestNexusStartOperation_WithNamespaceAndTaskQueu
 			taskQueue := s.randomizeStr("task-queue")
 			ctx := NewContext()
 
-			url := fmt.Sprintf("http://%s/api/v1/namespaces/%s/task-queues/%s/dispatch-nexus-task", s.httpAPIAddress, s.namespace, taskQueue)
-			client, err := nexus.NewClient(nexus.ClientOptions{ServiceBaseURL: url})
+			u := getDispatchURL(s.httpAPIAddress, s.namespace, taskQueue)
+			client, err := nexus.NewClient(nexus.ClientOptions{ServiceBaseURL: u})
 			s.NoError(err)
 			capture := s.testCluster.host.captureMetricsHandler.StartCapture()
 			defer s.testCluster.host.captureMetricsHandler.StopCapture(capture)
@@ -206,7 +208,7 @@ func (s *ClientFunctionalSuite) TestNexusStartOperation_WithNamespaceAndTaskQueu
 	// Also use this test to verify that namespaces are unescaped in the path.
 	taskQueue := s.randomizeStr("task-queue")
 	namespace := "namespace not/found"
-	u := fmt.Sprintf("http://%s/api/v1/namespaces/%s/task-queues/%s/dispatch-nexus-task", s.httpAPIAddress, url.PathEscape(namespace), taskQueue)
+	u := getDispatchURL(s.httpAPIAddress, namespace, taskQueue)
 	client, err := nexus.NewClient(nexus.ClientOptions{ServiceBaseURL: u})
 	s.NoError(err)
 	ctx := NewContext()
@@ -233,7 +235,7 @@ func (s *ClientFunctionalSuite) TestNexusStartOperation_WithNamespaceAndTaskQueu
 		namespace += "namespace-is-a-very-long-string"
 	}
 
-	u := fmt.Sprintf("http://%s/api/v1/namespaces/%s/task-queues/%s/dispatch-nexus-task", s.httpAPIAddress, namespace, taskQueue)
+	u := getDispatchURL(s.httpAPIAddress, namespace, taskQueue)
 	client, err := nexus.NewClient(nexus.ClientOptions{ServiceBaseURL: u})
 	s.NoError(err)
 	ctx := NewContext()
@@ -261,7 +263,7 @@ func (s *ClientFunctionalSuite) TestNexusStartOperation_WithNamespaceAndTaskQueu
 		{
 			name: "deny with reason",
 			onAuthorize: func(ctx context.Context, c *authorization.Claims, ct *authorization.CallTarget) (authorization.Result, error) {
-				if ct.APIName == "/temporal.api.nexusservice.v1.NexusService/DispatchNexusTask" {
+				if ct.APIName == configs.DispatchNexusTaskByNamespaceAndTaskQueueAPIName {
 					return authorization.Result{Decision: authorization.DecisionDeny, Reason: "unauthorized in test"}, nil
 				}
 				return authorization.Result{Decision: authorization.DecisionAllow}, nil
@@ -271,7 +273,7 @@ func (s *ClientFunctionalSuite) TestNexusStartOperation_WithNamespaceAndTaskQueu
 		{
 			name: "deny without reason",
 			onAuthorize: func(ctx context.Context, c *authorization.Claims, ct *authorization.CallTarget) (authorization.Result, error) {
-				if ct.APIName == "/temporal.api.nexusservice.v1.NexusService/DispatchNexusTask" {
+				if ct.APIName == configs.DispatchNexusTaskByNamespaceAndTaskQueueAPIName {
 					return authorization.Result{Decision: authorization.DecisionDeny}, nil
 				}
 				return authorization.Result{Decision: authorization.DecisionAllow}, nil
@@ -281,7 +283,7 @@ func (s *ClientFunctionalSuite) TestNexusStartOperation_WithNamespaceAndTaskQueu
 		{
 			name: "deny with generic error",
 			onAuthorize: func(ctx context.Context, c *authorization.Claims, ct *authorization.CallTarget) (authorization.Result, error) {
-				if ct.APIName == "/temporal.api.nexusservice.v1.NexusService/DispatchNexusTask" {
+				if ct.APIName == configs.DispatchNexusTaskByNamespaceAndTaskQueueAPIName {
 					return authorization.Result{}, errors.New("some generic error")
 				}
 				return authorization.Result{Decision: authorization.DecisionAllow}, nil
@@ -291,7 +293,7 @@ func (s *ClientFunctionalSuite) TestNexusStartOperation_WithNamespaceAndTaskQueu
 	}
 
 	taskQueue := s.randomizeStr("task-queue")
-	u := fmt.Sprintf("http://%s/api/v1/namespaces/%s/task-queues/%s/dispatch-nexus-task", s.httpAPIAddress, s.namespace, taskQueue)
+	u := getDispatchURL(s.httpAPIAddress, s.namespace, taskQueue)
 	client, err := nexus.NewClient(nexus.ClientOptions{ServiceBaseURL: u})
 	s.NoError(err)
 	ctx := NewContext()
@@ -363,7 +365,7 @@ func (s *ClientFunctionalSuite) TestNexusStartOperation_WithNamespaceAndTaskQueu
 	}
 
 	s.testCluster.host.SetOnAuthorize(func(ctx context.Context, c *authorization.Claims, ct *authorization.CallTarget) (authorization.Result, error) {
-		if ct.APIName == "/temporal.api.nexusservice.v1.NexusService/DispatchNexusTask" && (c == nil || c.Subject != "test") {
+		if ct.APIName == configs.DispatchNexusTaskByNamespaceAndTaskQueueAPIName && (c == nil || c.Subject != "test") {
 			return authorization.Result{Decision: authorization.DecisionDeny}, nil
 		}
 		return authorization.Result{Decision: authorization.DecisionAllow}, nil
@@ -382,7 +384,7 @@ func (s *ClientFunctionalSuite) TestNexusStartOperation_WithNamespaceAndTaskQueu
 
 	go s.echoNexusTaskPoller(ctx, taskQueue)
 
-	u := fmt.Sprintf("http://%s/api/v1/namespaces/%s/task-queues/%s/dispatch-nexus-task", s.httpAPIAddress, s.namespace, taskQueue)
+	u := getDispatchURL(s.httpAPIAddress, s.namespace, taskQueue)
 	client, err := nexus.NewClient(nexus.ClientOptions{ServiceBaseURL: u})
 	s.NoError(err)
 
@@ -401,6 +403,7 @@ func (s *ClientFunctionalSuite) TestNexusStartOperation_WithNamespaceAndTaskQueu
 		})
 	}
 }
+
 func (s *ClientFunctionalSuite) TestNexusCancelOperation_WithNamespaceAndTaskQueue_Outcomes() {
 	type testcase struct {
 		outcome   string
@@ -469,8 +472,8 @@ func (s *ClientFunctionalSuite) TestNexusCancelOperation_WithNamespaceAndTaskQue
 			taskQueue := s.randomizeStr("task-queue")
 			ctx := NewContext()
 
-			url := fmt.Sprintf("http://%s/api/v1/namespaces/%s/task-queues/%s/dispatch-nexus-task", s.httpAPIAddress, s.namespace, taskQueue)
-			client, err := nexus.NewClient(nexus.ClientOptions{ServiceBaseURL: url})
+			u := getDispatchURL(s.httpAPIAddress, s.namespace, taskQueue)
+			client, err := nexus.NewClient(nexus.ClientOptions{ServiceBaseURL: u})
 			s.NoError(err)
 			capture := s.testCluster.host.captureMetricsHandler.StartCapture()
 			defer s.testCluster.host.captureMetricsHandler.StopCapture(capture)
@@ -495,7 +498,6 @@ func (s *ClientFunctionalSuite) TestNexusCancelOperation_WithNamespaceAndTaskQue
 		})
 	}
 }
-
 func (s *ClientFunctionalSuite) TestNexusStartOperation_WithNamespaceAndTaskQueue_SupportsVersioning() {
 	ctx, cancel := context.WithCancel(NewContext())
 	defer cancel()
@@ -511,7 +513,7 @@ func (s *ClientFunctionalSuite) TestNexusStartOperation_WithNamespaceAndTaskQueu
 	})
 	s.NoError(err)
 
-	u := fmt.Sprintf("http://%s/api/v1/namespaces/%s/task-queues/%s/dispatch-nexus-task", s.httpAPIAddress, s.namespace, taskQueue)
+	u := getDispatchURL(s.httpAPIAddress, s.namespace, taskQueue)
 	client, err := nexus.NewClient(nexus.ClientOptions{ServiceBaseURL: u})
 	s.NoError(err)
 	// Versioned poller gets task
@@ -632,4 +634,16 @@ func nexusEchoHandler(res *workflowservice.PollNexusTaskQueueResponse) (*nexuspb
 			},
 		},
 	}, nil
+}
+
+func getDispatchURL(address string, namespace string, taskQueue string) string {
+	return fmt.Sprintf(
+		"http://%s/%s",
+		address,
+		cnexus.Routes().DispatchNexusTaskByNamespaceAndTaskQueue.
+			Path(cnexus.NamespaceAndTaskQueue{
+				Namespace: url.PathEscape(namespace),
+				TaskQueue: taskQueue,
+			}),
+	)
 }

@@ -53,7 +53,7 @@ func (p *plugin) CreateDB(
 	cfg *config.SQL,
 	r resolver.ServiceResolver,
 ) (sqlplugin.DB, error) {
-	conn, err := p.createDBConnection(cfg, r)
+	conn, err := p.createDBConnection(dbKind, cfg, r)
 	if err != nil {
 		return nil, err
 	}
@@ -67,7 +67,7 @@ func (p *plugin) CreateAdminDB(
 	cfg *config.SQL,
 	r resolver.ServiceResolver,
 ) (sqlplugin.AdminDB, error) {
-	conn, err := p.createDBConnection(cfg, r)
+	conn, err := p.createDBConnection(dbKind, cfg, r)
 	if err != nil {
 		return nil, err
 	}
@@ -80,10 +80,11 @@ func (p *plugin) CreateAdminDB(
 // SQL database and the object can be used to perform CRUD operations on
 // the tables in the database
 func (p *plugin) createDBConnection(
+	dbKind sqlplugin.DbKind,
 	cfg *config.SQL,
 	resolver resolver.ServiceResolver,
 ) (*sqlx.DB, error) {
-	mysqlSession, err := session.NewSession(cfg, resolver)
+	mysqlSession, err := session.NewSession(dbKind, cfg, resolver)
 	if err != nil {
 		return nil, err
 	}

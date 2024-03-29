@@ -126,7 +126,6 @@ func (m *DeleteManagerImpl) AddDeleteWorkflowExecutionTask(
 		// RangeID is set by shardContext
 		NamespaceID: nsID.String(),
 		WorkflowID:  we.GetWorkflowId(),
-		RunID:       we.GetRunId(),
 		Tasks: map[tasks.Category][]tasks.Task{
 			tasks.CategoryTransfer: {deleteTask},
 		},
@@ -191,6 +190,6 @@ func (m *DeleteManagerImpl) deleteWorkflowExecutionInternal(
 	// Clear workflow execution context here to prevent further readers to get stale copy of non-exiting workflow execution.
 	weCtx.Clear()
 
-	metricsHandler.Counter(metrics.WorkflowCleanupDeleteCount.Name()).Record(1)
+	metrics.WorkflowCleanupDeleteCount.With(metricsHandler).Record(1)
 	return nil
 }

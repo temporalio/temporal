@@ -62,20 +62,6 @@ const (
 	InvalidVisibilityURITagValue = "invalid_visibility_uri"
 )
 
-// Common service base metrics
-const (
-	RestartCount         = "restarts"
-	NumGoRoutinesGauge   = "num_goroutines"
-	GoMaxProcsGauge      = "gomaxprocs"
-	MemoryAllocatedGauge = "memory_allocated"
-	MemoryHeapGauge      = "memory_heap"
-	MemoryHeapIdleGauge  = "memory_heapidle"
-	MemoryHeapInuseGauge = "memory_heapinuse"
-	MemoryStackGauge     = "memory_stack"
-	NumGCCounter         = "memory_num_gc"
-	GcPauseMsTimer       = "memory_gc_pause_ms"
-)
-
 // Admin Client Operations
 const (
 	// AdminClientStreamWorkflowReplicationMessagesScope tracks RPC calls to admin service
@@ -209,12 +195,12 @@ const (
 	PersistenceRangeCompleteVisibilityTasksScope = "RangeCompleteVisibilityTasks"
 	// PersistenceGetReplicationTaskScope tracks GetReplicationTask calls made by service to persistence layer
 	PersistenceGetArchivalTasksScope = "GetArchivalTasks"
-	// PersistenceGetCallbackTasksScope tracks GetCallbackTasks calls made by service to persistence layer
-	PersistenceGetCallbackTasksScope = "GetCallbackTasks"
-	// PersistenceCompleteCallbackTasksScope tracks CompleteCallbackTasks calls made by service to persistence layer
-	PersistenceCompleteCallbackTasksScope = "CompleteCallbackTasks"
-	// PersistenceRangeCompleteCallbackTasksScope tracks RangeCompleteCallbackTasks calls made by service to persistence layer
-	PersistenceRangeCompleteCallbackTasksScope = "RangeCompleteCallbackTasks"
+	// PersistenceGetOutboundTasksScope tracks GetOutboundTasks calls made by service to persistence layer
+	PersistenceGetOutboundTasksScope = "GetOutboundTasks"
+	// PersistenceCompleteOutboundTasksScope tracks CompleteOutboundTasks calls made by service to persistence layer
+	PersistenceCompleteOutboundTasksScope = "CompleteOutboundTasks"
+	// PersistenceRangeCompleteOutboundTasksScope tracks RangeCompleteOutboundTasks calls made by service to persistence layer
+	PersistenceRangeCompleteOutboundTasksScope = "RangeCompleteOutboundTasks"
 	// PersistenceCompleteArchivalTaskScope tracks CompleteArchivalTasks calls made by service to persistence layer
 	PersistenceCompleteArchivalTaskScope = "CompleteArchivalTask"
 	// PersistenceRangeCompleteArchivalTasksScope tracks CompleteArchivalTasks calls made by service to persistence layer
@@ -285,6 +271,8 @@ const (
 	PersistenceListNamespacesScope = "ListNamespaces"
 	// PersistenceGetMetadataScope tracks DeleteNamespaceByName calls made by service to persistence layer
 	PersistenceGetMetadataScope = "GetMetadata"
+	// PersistenceGetNexusIncomingServiceScope tracks GetNexusIncomingService calls made by service to persistence layer
+	PersistenceGetNexusIncomingServiceScope = "GetNexusIncomingService"
 	// PersistenceListNexusIncomingServicesScope tracks ListNexusIncomingService calls made by service to persistence layer
 	PersistenceListNexusIncomingServicesScope = "ListNexusIncomingServices"
 	// PersistenceCreateOrUpdateNexusIncomingServiceScope tracks CreateOrUpdateNexusIncomingService calls made by service to persistence layer
@@ -463,8 +451,8 @@ const (
 	OperationArchivalQueueProcessorScope = "ArchivalQueueProcessor"
 	// OperationMemoryScheduledQueueProcessorScope is a scope for memory scheduled queue processor.
 	OperationMemoryScheduledQueueProcessorScope = "MemoryScheduledQueueProcessor"
-	// OperationCallbackQueueProcessorScope is a scope for the callback queue processor.
-	OperationCallbackQueueProcessorScope = "CallbackQueueProcessor"
+	// OperationOutboundQueueProcessorScope is a scope for the outbound queue processor.
+	OperationOutboundQueueProcessorScope = "OutboundQueueProcessor"
 )
 
 // Matching Scope
@@ -797,7 +785,6 @@ var (
 	QueueReaderCountHistogram   = NewDimensionlessHistogramDef("queue_reader_count")
 	QueueSliceCountHistogram    = NewDimensionlessHistogramDef("queue_slice_count")
 	QueueActionCounter          = NewCounterDef("queue_actions")
-	QueueActionFailures         = NewCounterDef("queue_action_errors")
 	ActivityE2ELatency          = NewTimerDef("activity_end_to_end_latency")
 	AckLevelUpdateCounter       = NewCounterDef("ack_level_update")
 	AckLevelUpdateFailedCounter = NewCounterDef("ack_level_update_failed")
@@ -877,6 +864,10 @@ var (
 	MutableStateSize                              = NewBytesHistogramDef(
 		"mutable_state_size",
 		WithDescription("The size of an individual Workflow Execution's state, emitted each time a workflow execution is retrieved or updated."),
+	)
+	PersistedMutableStateSize = NewBytesHistogramDef(
+		"persisted_mutable_state_size",
+		WithDescription("Size of the persisted Workflow Execution's state in DB, emitted each time a workflow execution is updated."),
 	)
 	ExecutionInfoSize                     = NewBytesHistogramDef("execution_info_size")
 	ExecutionStateSize                    = NewBytesHistogramDef("execution_state_size")
@@ -1148,6 +1139,18 @@ var (
 	VisibilityPersistenceLatency           = NewTimerDef("visibility_persistence_latency")
 	CassandraInitSessionLatency            = NewTimerDef("cassandra_init_session_latency")
 	CassandraSessionRefreshFailures        = NewCounterDef("cassandra_session_refresh_failures")
+
+	// Common service base metrics
+	RestartCount         = NewCounterDef("restarts")
+	NumGoRoutinesGauge   = NewGaugeDef("num_goroutines")
+	GoMaxProcsGauge      = NewGaugeDef("gomaxprocs")
+	MemoryAllocatedGauge = NewGaugeDef("memory_allocated")
+	MemoryHeapGauge      = NewGaugeDef("memory_heap")
+	MemoryHeapIdleGauge  = NewGaugeDef("memory_heapidle")
+	MemoryHeapInuseGauge = NewGaugeDef("memory_heapinuse")
+	MemoryStackGauge     = NewGaugeDef("memory_stack")
+	NumGCCounter         = NewBytesHistogramDef("memory_num_gc")
+	GcPauseMsTimer       = NewTimerDef("memory_gc_pause_ms")
 )
 
 // DEPRECATED: remove interim metric names for tracking fraction of FE->History calls during migration

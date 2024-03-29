@@ -205,7 +205,7 @@ func TestNexusPayloadSerializer(t *testing.T) {
 		c := c
 		t.Run(c.name, func(t *testing.T) {
 			t.Parallel()
-			s := PayloadSerializer{}
+			s := payloadSerializer{}
 			content, err := s.Serialize(c.inputPayload)
 			require.NoError(t, err)
 			require.Equal(t, c.header, content.Header)

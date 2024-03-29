@@ -54,6 +54,7 @@ func TestInitCurrentClusterMetadataRecord(t *testing.T) {
 			require.Equal(t, cfg.ClusterMetadata.EnableGlobalNamespace, request.IsGlobalNamespaceEnabled)
 			require.Equal(t, cfg.ClusterMetadata.CurrentClusterName, request.ClusterName)
 			require.Equal(t, cfg.ClusterMetadata.ClusterInformation[cfg.ClusterMetadata.CurrentClusterName].RPCAddress, request.ClusterAddress)
+			require.Equal(t, cfg.ClusterMetadata.ClusterInformation[cfg.ClusterMetadata.CurrentClusterName].HTTPAddress, request.HttpAddress)
 			require.Equal(t, cfg.ClusterMetadata.ClusterInformation[cfg.ClusterMetadata.CurrentClusterName].InitialFailoverVersion, request.InitialFailoverVersion)
 			require.Equal(t, cfg.Persistence.NumHistoryShards, request.HistoryShardCount)
 			require.Equal(t, cfg.ClusterMetadata.FailoverVersionIncrement, request.FailoverVersionIncrement)
@@ -83,6 +84,7 @@ func TestUpdateCurrentClusterMetadataRecord(t *testing.T) {
 			require.Equal(t, cfg.ClusterMetadata.EnableGlobalNamespace, request.IsGlobalNamespaceEnabled)
 			require.Equal(t, "", request.ClusterName)
 			require.Equal(t, cfg.ClusterMetadata.ClusterInformation[cfg.ClusterMetadata.CurrentClusterName].RPCAddress, request.ClusterAddress)
+			require.Equal(t, cfg.ClusterMetadata.ClusterInformation[cfg.ClusterMetadata.CurrentClusterName].HTTPAddress, request.HttpAddress)
 			require.Equal(t, cfg.ClusterMetadata.ClusterInformation[cfg.ClusterMetadata.CurrentClusterName].InitialFailoverVersion, request.InitialFailoverVersion)
 			require.Equal(t, int32(0), request.HistoryShardCount)
 			require.Equal(t, cfg.ClusterMetadata.FailoverVersionIncrement, request.FailoverVersionIncrement)
@@ -176,7 +178,7 @@ func TestTaskCategoryRegistryProvider(t *testing.T) {
 			visibilityArchivalConfig := archiver.NewMockArchivalConfig(ctrl)
 			visibilityArchivalConfig.EXPECT().StaticClusterState().Return(tc.visibilityState).AnyTimes()
 			archivalMetadata.EXPECT().GetVisibilityConfig().Return(visibilityArchivalConfig).AnyTimes()
-			dcClient := dynamicconfig.StaticClient{dynamicconfig.CallbackProcessorEnabled: tc.expectCallbackCategory}
+			dcClient := dynamicconfig.StaticClient{dynamicconfig.OutboundProcessorEnabled: tc.expectCallbackCategory}
 			dcc := dynamicconfig.NewCollection(dcClient, log.NewNoopLogger())
 			registry := TaskCategoryRegistryProvider(archivalMetadata, dcc)
 			_, ok := registry.GetCategoryByID(tasks.CategoryIDArchival)
@@ -185,7 +187,7 @@ func TestTaskCategoryRegistryProvider(t *testing.T) {
 			} else {
 				require.False(t, ok)
 			}
-			_, ok = registry.GetCategoryByID(tasks.CategoryIDCallback)
+			_, ok = registry.GetCategoryByID(tasks.CategoryIDOutbound)
 			require.Equal(t, tc.expectCallbackCategory, ok)
 		})
 	}

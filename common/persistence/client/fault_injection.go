@@ -110,8 +110,11 @@ var defaultErrors = []FaultWeight{
 	},
 	{
 		errFactory: func(msg string) error {
-			return serviceerror.NewResourceExhausted(enumspb.RESOURCE_EXHAUSTED_CAUSE_SYSTEM_OVERLOADED,
-				fmt.Sprintf("serviceerror.NewResourceExhausted: %s", msg))
+			return &serviceerror.ResourceExhausted{
+				Cause:   enumspb.RESOURCE_EXHAUSTED_CAUSE_SYSTEM_OVERLOADED,
+				Scope:   enumspb.RESOURCE_EXHAUSTED_SCOPE_SYSTEM,
+				Message: fmt.Sprintf("serviceerror.NewResourceExhausted: %s", msg),
+			}
 		},
 		weight: 1,
 	},
@@ -1246,6 +1249,16 @@ func (n *FaultInjectionNexusIncomingServiceStore) GetName() string {
 
 func (n *FaultInjectionNexusIncomingServiceStore) Close() {
 	n.baseNexusIncomingServiceStore.Close()
+}
+
+func (n *FaultInjectionNexusIncomingServiceStore) GetNexusIncomingService(
+	ctx context.Context,
+	request *persistence.GetNexusIncomingServiceRequest,
+) (*persistence.InternalNexusIncomingService, error) {
+	if err := n.ErrorGenerator.Generate(); err != nil {
+		return nil, err
+	}
+	return n.baseNexusIncomingServiceStore.GetNexusIncomingService(ctx, request)
 }
 
 func (n *FaultInjectionNexusIncomingServiceStore) ListNexusIncomingServices(

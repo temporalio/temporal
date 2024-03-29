@@ -83,6 +83,7 @@ var (
 	errUseVersioningWithoutBuildId                        = serviceerror.NewInvalidArgument("WorkerVersionStamp must be present if UseVersioning is true.")
 	errUseVersioningWithoutNormalName                     = serviceerror.NewInvalidArgument("NormalName must be set on sticky queue if UseVersioning is true.")
 	errBuildIdTooLong                                     = serviceerror.NewInvalidArgument("Build ID exceeds configured limit.workerBuildIdSize, use a shorter build ID.")
+	errIncompatibleIDReusePolicy                          = serviceerror.NewInvalidArgument("Invalid WorkflowIDReusePolicy: WORKFLOW_ID_REUSE_POLICY_TERMINATE_IF_RUNNING cannot be used together with a WorkflowIDConflictPolicy.")
 
 	errUpdateMetaNotSet       = serviceerror.NewInvalidArgument("Update meta is not set on request.")
 	errUpdateInputNotSet      = serviceerror.NewInvalidArgument("Update input is not set on request.")
@@ -109,9 +110,10 @@ var (
 	errInvalidRemoteClusterInfo                       = "Unable connect to remote cluster with invalid config: %v."
 	errUnableToStoreClusterInfo                       = "Unable to persist cluster info with error: %v."
 	errUnableToDeleteClusterInfo                      = "Unable to delete cluster info with error: %v."
-	errUnableToGetNamespaceInfoMessage                = "Unable to get namespace info with error: %v"
+	errUnableToGetNamespaceInfoMessage                = "Unable to get namespace %v info with error: %v"
 	errUnableToCreateFrontendClientMessage            = "Unable to create frontend client with error: %v."
 	errTooManySearchAttributesMessage                 = "Unable to create search attributes: cannot have more than %d search attribute of type %s."
+	errUnsupportedIDConflictPolicy                    = "Invalid WorkflowIDConflictPolicy: %v is not supported for this operation."
 
 	errListNotAllowed      = serviceerror.NewPermissionDenied("List is disabled on this namespace.", "")
 	errSchedulesNotAllowed = serviceerror.NewPermissionDenied("Schedules are disabled on this namespace.", "")
@@ -121,6 +123,7 @@ var (
 	errBatchOpsWorkflowFiltersNotAllowed = serviceerror.NewInvalidArgument("Workflow executions and visibility filter are both set on request. Only one of them is allowed.")
 	errBatchOpsMaxWorkflowExecutionCount = serviceerror.NewInvalidArgument("Workflow executions count exceeded.")
 
+	errWorkflowIdConflictPolicyNotAllowed             = serviceerror.NewPermissionDenied("WorkflowIdConflictPolicy option is disabled on this namespace.", "")
 	errUpdateWorkflowExecutionAPINotAllowed           = serviceerror.NewPermissionDenied("UpdateWorkflowExecution operation is disabled on this namespace.", "")
 	errUpdateWorkflowExecutionAsyncAcceptedNotAllowed = serviceerror.NewPermissionDenied("UpdateWorkflowExecution issued asynchronously and waiting on update accepted is disabled on this namespace", "")
 	errUpdateWorkflowExecutionAsyncAdmittedNotAllowed = serviceerror.NewPermissionDenied("UpdateWorkflowExecution issued asynchronously and waiting on update admitted is disabled on this namespace", "")

@@ -47,7 +47,7 @@ const (
 	CategoryIDVisibility  = 4
 	CategoryIDArchival    = 5
 	CategoryIDMemoryTimer = 6
-	CategoryIDCallback    = 7
+	CategoryIDOutbound    = 7
 )
 
 const (
@@ -63,7 +63,7 @@ const (
 	categoryNameVisibility  = "visibility"
 	categoryNameArchival    = "archival"
 	categoryNameMemoryTimer = "memory-timer"
-	categoryNameCallback    = "callback"
+	categoryNameOutbound    = "outbound"
 )
 
 var (
@@ -103,10 +103,10 @@ var (
 		name:  categoryNameMemoryTimer,
 	}
 
-	CategoryCallback = Category{
-		id:    CategoryIDCallback,
+	CategoryOutbound = Category{
+		id:    CategoryIDOutbound,
 		cType: CategoryTypeImmediate,
-		name:  categoryNameCallback,
+		name:  categoryNameOutbound,
 	}
 )
 

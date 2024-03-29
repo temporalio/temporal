@@ -158,10 +158,10 @@ func (s *FunctionalTestBase) setupSuite(defaultClusterConfigFile string, options
 	}
 
 	s.namespace = s.randomizeStr("functional-test-namespace")
-	s.Require().NoError(s.registerNamespace(s.namespace, 24*time.Hour, enumspb.ARCHIVAL_STATE_DISABLED, "", enumspb.ARCHIVAL_STATE_DISABLED, ""))
+	s.Require().NoError(s.registerNamespaceWithDefaults(s.namespace))
 
 	s.foreignNamespace = s.randomizeStr("functional-foreign-test-namespace")
-	s.Require().NoError(s.registerNamespace(s.foreignNamespace, 24*time.Hour, enumspb.ARCHIVAL_STATE_DISABLED, "", enumspb.ARCHIVAL_STATE_DISABLED, ""))
+	s.Require().NoError(s.registerNamespaceWithDefaults(s.foreignNamespace))
 
 	if clusterConfig.EnableArchival {
 		s.archivalNamespace = s.randomizeStr("functional-archival-enabled-namespace")
@@ -171,6 +171,10 @@ func (s *FunctionalTestBase) setupSuite(defaultClusterConfigFile string, options
 	// For tests using SQL visibility, we need to wait for search attributes to be available as part of the ns config
 	// TODO: remove after https://github.com/temporalio/temporal/issues/4017 is resolved
 	time.Sleep(2 * NamespaceCacheRefreshInterval)
+}
+
+func (s *FunctionalTestBase) registerNamespaceWithDefaults(name string) error {
+	return s.registerNamespace(name, 24*time.Hour, enumspb.ARCHIVAL_STATE_DISABLED, "", enumspb.ARCHIVAL_STATE_DISABLED, "")
 }
 
 func ApplyTestClusterParams(options []Option) TestClusterParams {

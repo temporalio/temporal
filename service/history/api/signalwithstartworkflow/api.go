@@ -71,19 +71,25 @@ func Invoke(
 		return nil, err
 	}
 
-	// Start workflow and signal
+	api.MigrateWorkflowIdReusePolicyForRunningWorkflow(
+		&signalWithStartRequest.SignalWithStartRequest.WorkflowIdReusePolicy,
+		&signalWithStartRequest.SignalWithStartRequest.WorkflowIdConflictPolicy)
+
 	startRequest := ConvertToStartRequest(
 		namespaceID,
 		signalWithStartRequest.SignalWithStartRequest,
 		shard.GetTimeSource().Now(),
 	)
 	request := startRequest.StartRequest
+
 	api.OverrideStartWorkflowExecutionRequest(request, metrics.HistorySignalWithStartWorkflowExecutionScope, shard, shard.GetMetricsHandler())
+
 	err = api.ValidateStartWorkflowExecutionRequest(ctx, request, shard, namespaceEntry, "SignalWithStartWorkflowExecution")
 	if err != nil {
 		return nil, err
 	}
-	runID, err := SignalWithStartWorkflow(
+
+	runID, started, err := SignalWithStartWorkflow(
 		ctx,
 		shard,
 		namespaceEntry,
@@ -95,6 +101,7 @@ func Invoke(
 		return nil, err
 	}
 	return &historyservice.SignalWithStartWorkflowExecutionResponse{
-		RunId: runID,
+		RunId:   runID,
+		Started: started,
 	}, nil
 }
