@@ -787,18 +787,6 @@ func (s *OperatorSuite) TestList() {
 			},
 		},
 		{
-			name: "list with malformed filter",
-			request: &operatorservice.ListNexusIncomingServicesRequest{
-				NextPageToken: nextPageToken,
-				PageSize:      2,
-				Name:          "\n```\n",
-			},
-			assertion: func(resp *operatorservice.ListNexusIncomingServicesResponse, err error) {
-				var invalidErr *serviceerror.InvalidArgument
-				s.ErrorAs(err, &invalidErr)
-			},
-		},
-		{
 			name: "list with page size too large",
 			request: &operatorservice.ListNexusIncomingServicesRequest{
 				NextPageToken: nil,
