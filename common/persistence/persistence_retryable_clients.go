@@ -29,6 +29,7 @@ import (
 
 	commonpb "go.temporal.io/api/common/v1"
 
+	persistencepb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common/backoff"
 )
 
@@ -1237,6 +1238,20 @@ func (p *nexusIncomingServiceRetryablePersistenceClient) GetNexusIncomingService
 	op := func(ctx context.Context) error {
 		var err error
 		response, err = p.persistence.GetNexusIncomingServicesTableVersion(ctx)
+		return err
+	}
+	err := backoff.ThrottleRetryContext(ctx, op, p.policy, p.isRetryable)
+	return response, err
+}
+
+func (p *nexusIncomingServiceRetryablePersistenceClient) GetNexusIncomingService(
+	ctx context.Context,
+	request *GetNexusIncomingServiceRequest,
+) (*persistencepb.NexusIncomingServiceEntry, error) {
+	var response *persistencepb.NexusIncomingServiceEntry
+	op := func(ctx context.Context) error {
+		var err error
+		response, err = p.persistence.GetNexusIncomingService(ctx, request)
 		return err
 	}
 	err := backoff.ThrottleRetryContext(ctx, op, p.policy, p.isRetryable)

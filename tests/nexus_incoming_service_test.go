@@ -29,6 +29,7 @@ import (
 	"go.temporal.io/api/serviceerror"
 
 	"go.temporal.io/server/api/matchingservice/v1"
+	commonnexus "go.temporal.io/server/common/nexus"
 	p "go.temporal.io/server/common/persistence"
 )
 
@@ -40,7 +41,7 @@ func (s *FunctionalSuite) TestCreateNexusIncomingService_Matching() {
 	s.NotEmpty(service.Id)
 	s.Equal(service.Spec.Name, s.T().Name())
 	s.Equal(service.Spec.Namespace, s.namespace)
-	s.Equal("/api/v1/services/"+service.Id, service.UrlPrefix)
+	s.Equal("/"+commonnexus.Routes().DispatchNexusTaskByService.Path(service.Id), service.UrlPrefix)
 
 	_, err := s.testCluster.GetMatchingClient().CreateNexusIncomingService(NewContext(), &matchingservice.CreateNexusIncomingServiceRequest{
 		Spec: &nexus.IncomingServiceSpec{
@@ -74,7 +75,7 @@ func (s *FunctionalSuite) TestUpdateNexusIncomingService_Matching() {
 			assertion: func(resp *matchingservice.UpdateNexusIncomingServiceResponse, err error) {
 				s.NoError(err)
 				s.NotNil(resp.Service)
-				s.Equal("/api/v1/services/"+service.Id, service.UrlPrefix)
+				s.Equal("/"+commonnexus.Routes().DispatchNexusTaskByService.Path(service.Id), service.UrlPrefix)
 				s.Equal(int64(2), resp.Service.Version)
 				s.Equal("updated name", resp.Service.Spec.Name)
 				s.NotNil(resp.Service.LastModifiedTime)

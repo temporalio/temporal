@@ -32,6 +32,7 @@ import (
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
 
+	persistencepb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common/headers"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/quotas"
@@ -1046,6 +1047,16 @@ func (p *nexusIncomingServiceRateLimitedPersistenceClient) GetNexusIncomingServi
 		return 0, ErrPersistenceLimitExceeded
 	}
 	return p.persistence.GetNexusIncomingServicesTableVersion(ctx)
+}
+
+func (p *nexusIncomingServiceRateLimitedPersistenceClient) GetNexusIncomingService(
+	ctx context.Context,
+	request *GetNexusIncomingServiceRequest,
+) (*persistencepb.NexusIncomingServiceEntry, error) {
+	if ok := allow(ctx, "GetNexusIncomingService", CallerSegmentMissing, p.rateLimiter); !ok {
+		return nil, ErrPersistenceLimitExceeded
+	}
+	return p.persistence.GetNexusIncomingService(ctx, request)
 }
 
 func (p *nexusIncomingServiceRateLimitedPersistenceClient) ListNexusIncomingServices(
