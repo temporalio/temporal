@@ -53,9 +53,9 @@ type (
 		refreshRetryPolicy     backoff.RetryPolicy
 	}
 
-	// IncomingServiceRegistry manages a cached view of incoming services.
+	// IncomingServiceRegistry manages a cached view of Nexus incoming services.
 	// Services are lazily-loaded into memory on the first read. Thereafter, service data is kept up to date by
-	// long polling on matching service ListNexusIncomingServices.
+	// background long polling on matching service ListNexusIncomingServices.
 	IncomingServiceRegistry struct {
 		config *IncomingServiceRegistryConfig
 
@@ -125,7 +125,7 @@ func (r *IncomingServiceRegistry) Stop() {
 func (r *IncomingServiceRegistry) Get(ctx context.Context, id string) (*nexus.IncomingService, error) {
 	if !r.serviceDataReady.Ready() {
 		if err := r.initializeServices(ctx); err != nil {
-			r.logger.Error("error loading Nexus incoming service cache.", tag.Error(err))
+			r.logger.Error("error initializing Nexus incoming service cache.", tag.Error(err))
 			return nil, serviceerror.NewInternal("error loading Nexus incoming service data.")
 		}
 	}
@@ -174,7 +174,6 @@ func (r *IncomingServiceRegistry) refreshServices(ctx context.Context) error {
 		return err
 	}
 
-	// acquire read lock only to get last known table version, but do not lock during long poll
 	r.dataLock.RLock()
 	currentTableVersion := r.tableVersion
 	r.dataLock.RUnlock()
@@ -190,7 +189,7 @@ func (r *IncomingServiceRegistry) refreshServices(ctx context.Context) error {
 	}
 
 	if resp.TableVersion == currentTableVersion {
-		// long poll returned with no changes
+		// Long poll returned with no changes
 		return nil
 	}
 
@@ -211,7 +210,6 @@ func (r *IncomingServiceRegistry) refreshServices(ctx context.Context) error {
 
 	currentPageToken := resp.NextPageToken
 	for currentPageToken != nil {
-		// iterate over remaining pages
 		resp, err = r.matchingClient.ListNexusIncomingServices(ctx, &matchingservice.ListNexusIncomingServicesRequest{
 			NextPageToken:         currentPageToken,
 			PageSize:              int32(r.config.refreshPageSize()),
@@ -221,7 +219,7 @@ func (r *IncomingServiceRegistry) refreshServices(ctx context.Context) error {
 
 		if err != nil {
 			if errors.Is(err, p.ErrNexusTableVersionConflict) {
-				// indicates table was updated during paging, so reset and start from the beginning
+				// Indicates table was updated during paging, so reset and start from the beginning
 				currentTableVersion, services, err = r.getAllServicesMatching(ctx)
 				if err != nil {
 					return err
@@ -229,6 +227,10 @@ func (r *IncomingServiceRegistry) refreshServices(ctx context.Context) error {
 				break
 			}
 			return err
+		}
+
+		if ctx.Err() != nil {
+			return ctx.Err()
 		}
 
 		for _, service := range resp.Services {
