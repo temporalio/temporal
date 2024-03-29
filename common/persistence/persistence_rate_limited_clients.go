@@ -1079,8 +1079,8 @@ func (p *nexusIncomingServiceRateLimitedPersistenceClient) GetNexusIncomingServi
 	ctx context.Context,
 	request *GetNexusIncomingServiceRequest,
 ) (*persistencepb.NexusIncomingServiceEntry, error) {
-	if ok := allow(ctx, "GetNexusIncomingService", CallerSegmentMissing, p.rateLimiter); !ok {
-		return nil, ErrPersistenceLimitExceeded
+	if err := allow(ctx, "GetNexusIncomingService", CallerSegmentMissing, p.systemRateLimiter, p.namespaceRateLimiter); err != nil {
+		return nil, err
 	}
 	return p.persistence.GetNexusIncomingService(ctx, request)
 }
