@@ -29,7 +29,6 @@
 package xdc
 
 import (
-	"context"
 	"fmt"
 	"os"
 	"time"
@@ -37,9 +36,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	replicationpb "go.temporal.io/api/replication/v1"
-	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/server/common/testing/historyrequire"
-	"google.golang.org/protobuf/types/known/durationpb"
 	"gopkg.in/yaml.v3"
 
 	"go.temporal.io/server/api/adminservice/v1"
@@ -138,7 +135,7 @@ func (s *xdcBaseSuite) setupSuite(clusterNames []string, opts ...tests.Option) {
 		tests.NewContext(),
 		&adminservice.AddOrUpdateRemoteClusterRequest{
 			FrontendAddress:               cluster2Info.RPCAddress,
-			HttpAddress:                   cluster2Info.HTTPAddress,
+			FrontendHttpAddress:           cluster2Info.HTTPAddress,
 			EnableRemoteClusterConnection: true,
 		})
 	s.Require().NoError(err)
@@ -147,7 +144,7 @@ func (s *xdcBaseSuite) setupSuite(clusterNames []string, opts ...tests.Option) {
 		tests.NewContext(),
 		&adminservice.AddOrUpdateRemoteClusterRequest{
 			FrontendAddress:               cluster1Info.RPCAddress,
-			HttpAddress:                   cluster1Info.HTTPAddress,
+			FrontendHttpAddress:           cluster1Info.HTTPAddress,
 			EnableRemoteClusterConnection: true,
 		})
 	s.Require().NoError(err)
