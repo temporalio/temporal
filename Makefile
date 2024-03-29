@@ -210,7 +210,7 @@ proto-mocks: protoc
 		mockgen -copyright_file ../LICENSE -package $(call service_name,$(PROTO_GRPC_SERVICE))mock -source $(PROTO_GRPC_SERVICE) -destination $(call mock_file_name,$(PROTO_GRPC_SERVICE)) \
 	$(NEWLINE))
 
-service-clients: cached-mockgen
+service-clients: install-mocksync
 	@printf $(COLOR) "Generate service clients..."
 	@go generate ./client/...
 
@@ -254,9 +254,9 @@ temporal-server-debug: $(ALL_SRC)
 	@printf $(COLOR) "Build temporal-server-debug with CGO_ENABLED=$(CGO_ENABLED) for $(GOOS)/$(GOARCH)..."
 	CGO_ENABLED=$(CGO_ENABLED) go build $(BUILD_TAG_FLAG),TEMPORAL_DEBUG -o temporal-server-debug ./cmd/server
 
-cached-mockgen:
-	@printf $(COLOR) "Build cached-mockgen..."
-	@go build -o $$(go env GOPATH)/bin/cached-mockgen ./cmd/tools/mockgen
+install-mocksync:
+	@printf $(COLOR) "Build mocksync..."
+	@go install ./cmd/tools/mocksync
 
 ##### Checks #####
 copyright-check:
@@ -524,7 +524,7 @@ update-dependencies:
 	@go get -u -t $(PINNED_DEPENDENCIES) ./...
 	@go mod tidy
 
-go-generate: cached-mockgen
+go-generate: install-mocksync
 	@printf $(COLOR) "Process go:generate directives..."
 	@go generate ./...
 

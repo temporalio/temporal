@@ -20,9 +20,9 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-// Package mockgen contains a wrapper for the `mockgen` tool, which bypasses running `mockgen` if the destination file
+// Package mocksync contains a wrapper for the `mockgen` tool, which bypasses running `mockgen` if the destination file
 // is newer than the source file. This is useful because `mockgen` is slow and can be a bottleneck in the build process.
-package mockgen
+package mocksync
 
 import (
 	"fmt"

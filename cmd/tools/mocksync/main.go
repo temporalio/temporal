@@ -26,7 +26,7 @@ import (
 	"fmt"
 	"os"
 
-	"go.temporal.io/server/tools/mockgen"
+	"go.temporal.io/server/tools/mocksync"
 )
 
 func main() {
@@ -37,10 +37,10 @@ func main() {
 }
 
 func run(args []string) error {
-	execFn := mockgen.RealExecFn
+	execFn := mocksync.RealExecFn
 	if os.Getenv("BUILD_ENV") == "ci" {
 		// Just run mockgen without caching if we're in the CI environment
 		return execFn(args)
 	}
-	return mockgen.Run(execFn, args)
+	return mocksync.Run(execFn, args)
 }

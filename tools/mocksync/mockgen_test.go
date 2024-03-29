@@ -20,7 +20,7 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-package mockgen_test
+package mocksync_test
 
 import (
 	"os"
@@ -30,7 +30,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"go.temporal.io/server/tests/testutils"
-	"go.temporal.io/server/tools/mockgen"
+	"go.temporal.io/server/tools/mocksync"
 )
 
 func TestNoSourceFile(t *testing.T) {
@@ -95,7 +95,7 @@ func TestSourceFileStale(t *testing.T) {
 
 func runCommand(args []string) ([][]string, error) {
 	var calls [][]string
-	err := mockgen.Run(func(args []string) error {
+	err := mocksync.Run(func(args []string) error {
 		calls = append(calls, args)
 		return nil
 	}, args)
