@@ -27,11 +27,12 @@ func TestNewClusterMetadataLoader(t *testing.T) {
 			CurrentClusterName: "current_cluster",
 			ClusterInformation: map[string]cluster.ClusterInformation{
 				"current_cluster": {
-					RPCAddress:  "rpc_static",
-					HTTPAddress: "http_static",
+					RPCAddress:  "rpc_old",
+					HTTPAddress: "http_old",
 				},
-				"remote_cluster": {
-					RPCAddress: "rpc_static",
+				"remote_cluster1": {
+					RPCAddress:  "rpc_old",
+					HTTPAddress: "http_old",
 				},
 			},
 		},
@@ -41,23 +42,23 @@ func TestNewClusterMetadataLoader(t *testing.T) {
 		ClusterMetadata: []*persistence.GetClusterMetadataResponse{
 			{
 				ClusterMetadata: &persistencespb.ClusterMetadata{
-					ClusterName:    "cluster1",
-					ClusterAddress: "rpc_dynamic",
-					HttpAddress:    "http_dynamic",
+					ClusterName:    "current_cluster",
+					ClusterAddress: "rpc_new",
+					HttpAddress:    "http_new",
 				},
 			},
 			{
 				ClusterMetadata: &persistencespb.ClusterMetadata{
-					ClusterName:    "cluster2",
-					ClusterAddress: "rpc_dynamic",
-					HttpAddress:    "http_dynamic",
+					ClusterName:    "remote_cluster1",
+					ClusterAddress: "rpc_new",
+					HttpAddress:    "http_new",
 				},
 			},
 			{
 				ClusterMetadata: &persistencespb.ClusterMetadata{
-					ClusterName:    "cluster3",
-					ClusterAddress: "rpc_dynamic",
-					HttpAddress:    "http_dynamic",
+					ClusterName:    "remote_cluster2",
+					ClusterAddress: "rpc_new",
+					HttpAddress:    "http_new",
 				},
 			},
 		},
@@ -67,17 +68,17 @@ func TestNewClusterMetadataLoader(t *testing.T) {
 	require.NoError(t, err)
 
 	assert.Equal(t, map[string]cluster.ClusterInformation{
-		"cluster1": {
-			RPCAddress:  "rpc_static",
-			HTTPAddress: "http_dynamic",
+		"current_cluster": {
+			RPCAddress:  "rpc_old",
+			HTTPAddress: "http_new",
 		},
-		"cluster2": {
-			RPCAddress:  "rpc2",
-			HTTPAddress: "http2",
+		"remote_cluster1": {
+			RPCAddress:  "rpc_new",
+			HTTPAddress: "http_new",
 		},
-		"cluster3": {
-			RPCAddress:  "rpc3",
-			HTTPAddress: "http3",
+		"remote_cluster2": {
+			RPCAddress:  "rpc_new",
+			HTTPAddress: "http_new",
 		},
 	}, svc.ClusterMetadata.ClusterInformation)
 }

@@ -90,8 +90,6 @@ func (c *ClusterMetadataLoader) reconcileMetadata(
 	}
 	newMetadata.RPCAddress = currentMetadata.RPCAddress
 	c.logger.Info(fmt.Sprintf("Use rpc address %v for cluster %v.", newMetadata.RPCAddress, clusterName))
-	newMetadata.HTTPAddress = currentMetadata.HTTPAddress
-	c.logger.Info(fmt.Sprintf("Use http address %v for cluster %v.", newMetadata.HTTPAddress, clusterName))
 }
 
 // backfillShardCount is to add backward compatibility to the svc based cluster connection. It sets the shard count for
