@@ -488,7 +488,6 @@ func (s *ExecutionMutableStateTaskSuite) TestGetTimerTasksOrdered() {
 		RangeID:     s.RangeID,
 		NamespaceID: s.WorkflowKey.NamespaceID,
 		WorkflowID:  s.WorkflowKey.WorkflowID,
-		RunID:       s.WorkflowKey.RunID,
 		Tasks: map[tasks.Category][]tasks.Task{
 			tasks.CategoryTimer: timerTasks,
 		},
@@ -530,7 +529,6 @@ func (s *ExecutionMutableStateTaskSuite) TestGetScheduledTasksOrdered() {
 		RangeID:     s.RangeID,
 		NamespaceID: s.WorkflowKey.NamespaceID,
 		WorkflowID:  s.WorkflowKey.WorkflowID,
-		RunID:       s.WorkflowKey.RunID,
 		Tasks: map[tasks.Category][]tasks.Task{
 			fakeScheduledTaskCategory: scheduledTasks,
 		},
@@ -588,7 +586,6 @@ func (s *ExecutionMutableStateTaskSuite) AddRandomTasks(
 		RangeID:     s.RangeID,
 		NamespaceID: s.WorkflowKey.NamespaceID,
 		WorkflowID:  s.WorkflowKey.WorkflowID,
-		RunID:       s.WorkflowKey.RunID,
 		Tasks: map[tasks.Category][]tasks.Task{
 			category: randomTasks,
 		},
