@@ -69,24 +69,26 @@ func TestDestFileNotExists(t *testing.T) {
 	assert.Len(t, calls, 1)
 }
 
-func TestSourceFileNotStale(t *testing.T) {
+func TestDestFileUpToDate(t *testing.T) {
 	t.Parallel()
 	src := createTemp(t)
 	dest := createTemp(t)
-	chModTime(t, src.Name(), time.Now())
-	chModTime(t, dest.Name(), time.Now())
+	now := time.Now()
+	chModTime(t, src.Name(), now)
+	chModTime(t, dest.Name(), now)
 
 	calls, err := runCommand([]string{"-source", src.Name(), "-destination", dest.Name()})
 	require.NoError(t, err)
 	assert.Empty(t, calls)
 }
 
-func TestSourceFileStale(t *testing.T) {
+func TestDestFileStale(t *testing.T) {
 	t.Parallel()
 	src := createTemp(t)
 	dest := createTemp(t)
-	chModTime(t, src.Name(), time.Now())
-	chModTime(t, dest.Name(), time.Now().Add(-time.Second))
+	now := time.Now()
+	chModTime(t, src.Name(), now)
+	chModTime(t, dest.Name(), now.Add(-time.Second))
 
 	calls, err := runCommand([]string{"-source", src.Name(), "-destination", dest.Name()})
 	require.NoError(t, err)
