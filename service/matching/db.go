@@ -220,31 +220,6 @@ func (db *taskQueueDB) GetTasks(
 	})
 }
 
-// CompleteTask deletes a single task from this task queue
-func (db *taskQueueDB) CompleteTask(
-	ctx context.Context,
-	taskID int64,
-) error {
-	err := db.store.CompleteTask(ctx, &persistence.CompleteTaskRequest{
-		TaskQueue: &persistence.TaskQueueKey{
-			NamespaceID:   db.queue.NamespaceId().String(),
-			TaskQueueName: db.queue.PersistenceName(),
-			TaskQueueType: db.queue.TaskType(),
-		},
-		TaskID: taskID,
-	})
-	if err != nil {
-		db.logger.Error("Persistent store operation failure",
-			tag.StoreOperationCompleteTask,
-			tag.Error(err),
-			tag.TaskID(taskID),
-			tag.WorkflowTaskQueueType(db.queue.TaskType()),
-			tag.WorkflowTaskQueueName(db.queue.PersistenceName()),
-		)
-	}
-	return err
-}
-
 // CompleteTasksLessThan deletes of tasks less than the given taskID. Limit is
 // the upper bound of number of tasks that can be deleted by this method. It may
 // or may not be honored
