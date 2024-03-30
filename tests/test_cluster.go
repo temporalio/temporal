@@ -64,7 +64,6 @@ import (
 	"go.temporal.io/server/common/primitives"
 	"go.temporal.io/server/common/rpc/encryption"
 	"go.temporal.io/server/common/searchattribute"
-	"go.temporal.io/server/temporal"
 	"go.temporal.io/server/tests/testutils"
 )
 
@@ -282,10 +281,6 @@ func NewClusterWithPersistenceTestBaseFactory(t *testing.T, options *TestCluster
 		}
 	}
 
-	dcClient := dynamicconfig.StaticClient(options.DynamicConfigOverrides)
-	dcc := dynamicconfig.NewCollection(dcClient, log.NewNoopLogger())
-	taskCategoryRegistry := temporal.TaskCategoryRegistryProvider(archiverBase.metadata, dcc)
-
 	temporalParams := &TemporalParams{
 		ClusterMetadataConfig:            clusterMetadataConfig,
 		PersistenceConfig:                pConfig,
@@ -310,7 +305,6 @@ func NewClusterWithPersistenceTestBaseFactory(t *testing.T, options *TestCluster
 		DynamicConfigOverrides:           options.DynamicConfigOverrides,
 		TLSConfigProvider:                tlsConfigProvider,
 		ServiceFxOptions:                 options.ServiceFxOptions,
-		TaskCategoryRegistry:             taskCategoryRegistry,
 	}
 
 	if options.EnableMetricsCapture {

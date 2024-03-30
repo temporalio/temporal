@@ -75,7 +75,6 @@ import (
 	"go.temporal.io/server/service/frontend"
 	"go.temporal.io/server/service/history"
 	"go.temporal.io/server/service/history/replication"
-	"go.temporal.io/server/service/history/tasks"
 	"go.temporal.io/server/service/matching"
 	"go.temporal.io/server/service/worker"
 	"go.temporal.io/server/temporal"
@@ -130,11 +129,10 @@ type (
 		tlsConfigProvider                *encryption.FixedTLSConfigProvider
 		captureMetricsHandler            *metricstest.CaptureHandler
 
-		onGetClaims          func(*authorization.AuthInfo) (*authorization.Claims, error)
-		onAuthorize          func(context.Context, *authorization.Claims, *authorization.CallTarget) (authorization.Result, error)
-		callbackLock         sync.RWMutex // Must be used for above callbacks
-		serviceFxOptions     map[primitives.ServiceName][]fx.Option
-		taskCategoryRegistry tasks.TaskCategoryRegistry
+		onGetClaims      func(*authorization.AuthInfo) (*authorization.Claims, error)
+		onAuthorize      func(context.Context, *authorization.Claims, *authorization.CallTarget) (authorization.Result, error)
+		callbackLock     sync.RWMutex // Must be used for above callbacks
+		serviceFxOptions map[primitives.ServiceName][]fx.Option
 	}
 
 	// HistoryConfig contains configs for history service
@@ -179,8 +177,7 @@ type (
 		TLSConfigProvider                *encryption.FixedTLSConfigProvider
 		CaptureMetricsHandler            *metricstest.CaptureHandler
 		// ServiceFxOptions is populated by WithFxOptionsForService.
-		ServiceFxOptions     map[primitives.ServiceName][]fx.Option
-		TaskCategoryRegistry tasks.TaskCategoryRegistry
+		ServiceFxOptions map[primitives.ServiceName][]fx.Option
 	}
 
 	listenHostPort string
@@ -219,7 +216,6 @@ func newTemporal(t *testing.T, params *TemporalParams) *temporalImpl {
 		captureMetricsHandler:            params.CaptureMetricsHandler,
 		dcClient:                         testDCClient,
 		serviceFxOptions:                 params.ServiceFxOptions,
-		taskCategoryRegistry:             params.TaskCategoryRegistry,
 	}
 	impl.overrideHistoryDynamicConfig(t, testDCClient)
 	return impl
@@ -450,7 +446,6 @@ func (c *temporalImpl) startFrontend(hosts map[primitives.ServiceName][]string, 
 		fx.Provide(func() *esclient.Config { return c.esConfig }),
 		fx.Provide(func() esclient.Client { return c.esClient }),
 		fx.Provide(c.GetTLSConfigProvider),
-		fx.Provide(c.GetTaskCategoryRegistry),
 		fx.Supply(c.spanExporters),
 		temporal.ServiceTracingModule,
 		frontend.Module,
@@ -538,7 +533,6 @@ func (c *temporalImpl) startHistory(
 			fx.Provide(func() *esclient.Config { return c.esConfig }),
 			fx.Provide(func() esclient.Client { return c.esClient }),
 			fx.Provide(c.GetTLSConfigProvider),
-			fx.Provide(c.GetTaskCategoryRegistry),
 			fx.Supply(c.spanExporters),
 			temporal.ServiceTracingModule,
 
@@ -629,7 +623,6 @@ func (c *temporalImpl) startMatching(hosts map[primitives.ServiceName][]string, 
 		fx.Provide(c.GetTLSConfigProvider),
 		fx.Provide(func() log.Logger { return c.logger }),
 		fx.Provide(resource.DefaultSnTaggedLoggerProvider),
-		fx.Provide(c.GetTaskCategoryRegistry),
 		fx.Supply(c.spanExporters),
 		temporal.ServiceTracingModule,
 		matching.Module,
@@ -722,7 +715,6 @@ func (c *temporalImpl) startWorker(hosts map[primitives.ServiceName][]string, st
 		fx.Provide(func() esclient.Client { return c.esClient }),
 		fx.Provide(func() *esclient.Config { return c.esConfig }),
 		fx.Provide(c.GetTLSConfigProvider),
-		fx.Provide(c.GetTaskCategoryRegistry),
 		fx.Supply(c.spanExporters),
 		temporal.ServiceTracingModule,
 		worker.Module,
@@ -770,10 +762,6 @@ func (c *temporalImpl) GetTLSConfigProvider() encryption.TLSConfigProvider {
 		return c.tlsConfigProvider
 	}
 	return nil
-}
-
-func (c *temporalImpl) GetTaskCategoryRegistry() tasks.TaskCategoryRegistry {
-	return c.taskCategoryRegistry
 }
 
 func (c *temporalImpl) GetMetricsHandler() metrics.Handler {
