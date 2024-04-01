@@ -40,6 +40,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	"github.com/uber-go/tally/v4"
+	"go.temporal.io/server/common/cluster/clustertest"
 	"google.golang.org/protobuf/types/known/durationpb"
 	"google.golang.org/protobuf/types/known/emptypb"
 	"google.golang.org/protobuf/types/known/timestamppb"
@@ -184,7 +185,7 @@ func newMatchingEngine(
 		hostInfoProvider:    mockHostInfoProvider,
 		serviceResolver:     mockServiceResolver,
 		membershipChangedCh: make(chan *membership.ChangedEvent, 1),
-		clusterMeta:         cluster.NewMetadataForTest(cluster.NewTestClusterMetadataConfig(false, true)),
+		clusterMeta:         clustertest.NewMetadataForTest(cluster.NewTestClusterMetadataConfig(false, true)),
 		timeSource:          clock.NewRealTimeSource(),
 		visibilityManager:   mockVisibilityManager,
 	}
