@@ -35,6 +35,8 @@ import (
 	"github.com/stretchr/testify/require"
 	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/server/common/membership"
+	"go.temporal.io/server/common/metrics"
+	"go.temporal.io/server/common/metrics/metricstest"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/primitives"
 	"go.temporal.io/server/internal/nettest"
@@ -59,6 +61,8 @@ type rateLimitInterceptorTestCase struct {
 	numRequests int
 	// serviceResolver is used to determine the number of frontend hosts for the global rate limiter
 	serviceResolver membership.ServiceResolver
+	// expectedLimit is the expected rate limit value
+	expectedLimitValue int
 	// configure is a function that can be used to override the default test case values
 	configure func(tc *rateLimitInterceptorTestCase)
 }
@@ -74,6 +78,8 @@ type namespaceRateLimitInterceptorTestCase struct {
 	numReplicationInducingRequests int
 	// expectRateLimit is true if the interceptor should return a rate limit error
 	expectRateLimit bool
+	// expectedLimit is the expected rate limit value
+	expectedLimitValue int
 	// frontendServiceCount is the number of frontend services returned by ServiceResolver to rate limiter
 	frontendServiceCount int
 	// Rate limiter config values
@@ -113,6 +119,7 @@ func TestRateLimitInterceptorProvider(t *testing.T) {
 				tc.perInstanceRPSLimit = lowPerInstanceRPSLimit
 				tc.operatorRPSRatio = operatorRPSRatio
 				tc.expectRateLimit = true
+				tc.expectedLimitValue = 4
 			},
 		},
 		{
@@ -122,6 +129,7 @@ func TestRateLimitInterceptorProvider(t *testing.T) {
 				tc.perInstanceRPSLimit = highPerInstanceRPSLimit
 				tc.operatorRPSRatio = operatorRPSRatio
 				tc.expectRateLimit = true
+				tc.expectedLimitValue = 4
 			},
 		},
 		{
@@ -131,6 +139,7 @@ func TestRateLimitInterceptorProvider(t *testing.T) {
 				tc.perInstanceRPSLimit = lowPerInstanceRPSLimit
 				tc.operatorRPSRatio = operatorRPSRatio
 				tc.expectRateLimit = false
+				tc.expectedLimitValue = 5
 			},
 		},
 		{
@@ -140,6 +149,7 @@ func TestRateLimitInterceptorProvider(t *testing.T) {
 				tc.perInstanceRPSLimit = highPerInstanceRPSLimit
 				tc.operatorRPSRatio = operatorRPSRatio
 				tc.expectRateLimit = false
+				tc.expectedLimitValue = 5
 			},
 		},
 		{
@@ -149,6 +159,7 @@ func TestRateLimitInterceptorProvider(t *testing.T) {
 				tc.perInstanceRPSLimit = highPerInstanceRPSLimit
 				tc.operatorRPSRatio = operatorRPSRatio
 				tc.expectRateLimit = false
+				tc.expectedLimitValue = 5
 			},
 		},
 		{
@@ -158,6 +169,7 @@ func TestRateLimitInterceptorProvider(t *testing.T) {
 				tc.perInstanceRPSLimit = lowPerInstanceRPSLimit
 				tc.operatorRPSRatio = operatorRPSRatio
 				tc.expectRateLimit = true
+				tc.expectedLimitValue = 4
 			},
 		},
 		{
@@ -167,6 +179,7 @@ func TestRateLimitInterceptorProvider(t *testing.T) {
 				tc.perInstanceRPSLimit = 0
 				tc.operatorRPSRatio = operatorRPSRatio
 				tc.expectRateLimit = true
+				tc.expectedLimitValue = 0
 			},
 		},
 		{
@@ -177,6 +190,7 @@ func TestRateLimitInterceptorProvider(t *testing.T) {
 				tc.operatorRPSRatio = operatorRPSRatio
 				tc.expectRateLimit = false
 				tc.serviceResolver = nil
+				tc.expectedLimitValue = 5
 			},
 		},
 		{
@@ -186,6 +200,7 @@ func TestRateLimitInterceptorProvider(t *testing.T) {
 				tc.perInstanceRPSLimit = highPerInstanceRPSLimit
 				tc.operatorRPSRatio = operatorRPSRatio
 				tc.expectRateLimit = false
+				tc.expectedLimitValue = 5
 				serviceResolver := membership.NewMockServiceResolver(gomock.NewController(tc.t))
 				serviceResolver.EXPECT().MemberCount().Return(0).AnyTimes()
 				tc.serviceResolver = serviceResolver
@@ -210,6 +225,8 @@ func TestRateLimitInterceptorProvider(t *testing.T) {
 			}
 			tc.configure(&tc)
 
+			metricsHandler := metricstest.NewCaptureHandler()
+			capture := metricsHandler.StartCapture()
 			// Create a rate limit interceptor which uses the per-instance and global RPS limits from the test case.
 			rateLimitInterceptor := RateLimitInterceptorProvider(&Config{
 				RPS: func() int {
@@ -225,7 +242,7 @@ func TestRateLimitInterceptorProvider(t *testing.T) {
 				OperatorRPSRatio: func() float64 {
 					return tc.operatorRPSRatio
 				},
-			}, tc.serviceResolver)
+			}, tc.serviceResolver, metricsHandler)
 
 			// Create a gRPC server for the fake workflow service.
 			svc := &testSvc{}
@@ -274,6 +291,12 @@ func TestRateLimitInterceptorProvider(t *testing.T) {
 			} else {
 				assert.NoError(t, err)
 			}
+
+			// Check if limits are emitted by metrics handler
+			snapshot := capture.Snapshot()
+			for _, limit := range snapshot[metrics.HostRPSLimit.Name()] {
+				assert.Equal(t, float64(tc.expectedLimitValue), limit.Value)
+			}
 		})
 	}
 }
@@ -316,6 +339,7 @@ func TestNamespaceRateLimitInterceptorProvider(t *testing.T) {
 			maxNamespaceBurstRatioPerInstance: 1,
 			numRequests:                       10,
 			expectRateLimit:                   false,
+			expectedLimitValue:                10,
 		},
 		{
 			name:                              "namespace rate hit when burst ratio is 1",
@@ -557,6 +581,8 @@ func TestNamespaceRateLimitInterceptorProvider(t *testing.T) {
 			serviceResolver.EXPECT().MemberCount().Return(tc.frontendServiceCount).AnyTimes()
 
 			config := getTestConfig(tc)
+			metricsHandler := metricstest.NewCaptureHandler()
+			capture := metricsHandler.StartCapture()
 
 			// Create a rate limit interceptor.
 			rateLimitInterceptor := NamespaceRateLimitInterceptorProvider(
@@ -564,6 +590,7 @@ func TestNamespaceRateLimitInterceptorProvider(t *testing.T) {
 				&config,
 				mockRegistry,
 				serviceResolver,
+				metricsHandler,
 			)
 
 			// Create a gRPC server for the fake workflow service.
@@ -603,6 +630,14 @@ func TestNamespaceRateLimitInterceptorProvider(t *testing.T) {
 				} else {
 					assert.NoError(t, err)
 				}
+
+				// Check if limit metrics are emitted
+				snapshot := capture.Snapshot()
+				for _, limit := range snapshot[metrics.NamespaceHostRPSLimit.Name()] {
+					actual := limit.Value
+					assert.Equal(t, float64(tc.expectedLimitValue), actual)
+				}
+
 			}()
 
 			// Generate load by sending a number of requests to the server.
