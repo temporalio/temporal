@@ -981,15 +981,6 @@ func (e *matchingEngineImpl) UpdateWorkerVersioningRules(
 			// operation can't be completed due to failed validation. no action, do not replicate, report error
 			return nil, false, err
 		}
-		if cT, err = updatedClock.Marshal(); err != nil {
-			return nil, false, serviceerror.NewInternal("error generating next conflict token")
-		}
-		// We can replicate tombstone cleanup, because it's just based on DeletionTimestamp, so no need to only do it locally
-		versioningData = CleanupRuleTombstones(versioningData, e.config.DeletedRuleRetentionTime(ns.Name().String()))
-		// Avoid mutation
-		ret := common.CloneProto(data)
-		ret.Clock = updatedClock
-		ret.VersioningData = versioningData
 
 		// Get versioning data formatted for response
 		getResp, err = GetWorkerVersioningRules(versioningData, updatedClock)
@@ -997,6 +988,14 @@ func (e *matchingEngineImpl) UpdateWorkerVersioningRules(
 			return nil, false, err
 		}
 
+		// Clean up tombstones after all fallible tasks are complete, once we know we are committing and replicating the changes.
+		// We can replicate tombstone cleanup, because it's just based on DeletionTimestamp, so no need to only do it locally.
+		versioningData = CleanupRuleTombstones(versioningData, e.config.DeletedRuleRetentionTime(ns.Name().String()))
+
+		// Avoid mutation
+		ret := common.CloneProto(data)
+		ret.Clock = updatedClock
+		ret.VersioningData = versioningData
 		return ret, true, nil
 	})
 
