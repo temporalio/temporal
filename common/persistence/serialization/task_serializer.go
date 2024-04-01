@@ -834,9 +834,9 @@ func (s *TaskSerializer) timerWorkflowExecutionToProto(
 	workflowExecutionTimer *tasks.WorkflowExecutionTimeoutTask,
 ) *persistencespb.TimerTaskInfo {
 	return &persistencespb.TimerTaskInfo{
-		NamespaceId:         workflowExecutionTimer.NamespaceID,
-		WorkflowId:          workflowExecutionTimer.WorkflowID,
-		RunId:               "",
+		NamespaceId:         workflowExecutionTimer.GetNamespaceID(),
+		WorkflowId:          workflowExecutionTimer.GetWorkflowID(),
+		RunId:               workflowExecutionTimer.GetRunID(),
 		FirstRunId:          workflowExecutionTimer.FirstRunID,
 		TaskType:            enumsspb.TASK_TYPE_WORKFLOW_EXECUTION_TIMEOUT,
 		TimeoutType:         enumspb.TIMEOUT_TYPE_UNSPECIFIED,
