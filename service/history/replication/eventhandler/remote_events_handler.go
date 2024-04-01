@@ -35,7 +35,7 @@ import (
 	"go.temporal.io/server/service/history/shard"
 )
 
-//go:generate mockgen -copyright_file ../../../../LICENSE -package $GOPACKAGE -source $GOFILE -destination remote_events_handler_mock.go
+//go:generate mocksync -copyright_file ../../../../LICENSE -package $GOPACKAGE -source $GOFILE -destination remote_events_handler_mock.go
 
 type (
 	RemoteGeneratedEventsHandler interface {

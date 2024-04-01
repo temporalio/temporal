@@ -212,7 +212,7 @@ proto-mocks: protoc
 
 service-clients:
 	@printf $(COLOR) "Generate service clients..."
-	@go generate ./client/...
+	@go generate -run rpcwrappers ./client/...
 
 update-go-api:
 	@printf $(COLOR) "Update go.temporal.io/api@master..."
@@ -522,6 +522,7 @@ update-dependencies:
 
 go-generate:
 	@printf $(COLOR) "Process go:generate directives..."
+	@go install ./cmd/tools/mocksync
 	@go generate ./...
 
 ensure-no-changes:

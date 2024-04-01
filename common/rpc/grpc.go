@@ -183,3 +183,18 @@ func NewServiceErrorInterceptor(
 	}
 
 }
+
+func FrontendErrorInterceptor(
+	ctx context.Context,
+	req interface{},
+	_ *grpc.UnaryServerInfo,
+	handler grpc.UnaryHandler,
+) (interface{}, error) {
+	resp, err := handler(ctx, req)
+
+	// mask some internal errors at frontend
+	if _, ok := err.(*serviceerrors.ShardOwnershipLost); ok {
+		err = serviceerror.NewUnavailable("shard unavailable, please backoff and retry")
+	}
+	return resp, serviceerror.ToStatus(err).Err()
+}
