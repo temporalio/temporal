@@ -909,6 +909,7 @@ func (e *matchingEngineImpl) UpdateWorkerVersioningRules(
 	// we don't set updateOptions.KnownVersion, because we handle external API call ordering with conflictToken
 	updateOptions := UserDataUpdateOptions{}
 	cT := req.GetConflictToken()
+	var getResp *matchingservice.GetWorkerVersioningRulesResponse
 
 	err = tqMgr.GetUserDataManager().UpdateUserData(ctx, updateOptions, func(data *persistencespb.TaskQueueUserData) (*persistencespb.TaskQueueUserData, bool, error) {
 		clk := data.GetClock()
@@ -989,6 +990,13 @@ func (e *matchingEngineImpl) UpdateWorkerVersioningRules(
 		ret := common.CloneProto(data)
 		ret.Clock = updatedClock
 		ret.VersioningData = versioningData
+
+		// Get versioning data formatted for response
+		getResp, err = GetWorkerVersioningRules(versioningData, updatedClock)
+		if err != nil {
+			return nil, false, err
+		}
+
 		return ret, true, nil
 	})
 
@@ -996,7 +1004,11 @@ func (e *matchingEngineImpl) UpdateWorkerVersioningRules(
 		return nil, err
 	}
 
-	return &matchingservice.UpdateWorkerVersioningRulesResponse{Response: &workflowservice.UpdateWorkerVersioningRulesResponse{ConflictToken: cT}}, nil
+	return &matchingservice.UpdateWorkerVersioningRulesResponse{Response: &workflowservice.UpdateWorkerVersioningRulesResponse{
+		AssignmentRules:         getResp.GetResponse().GetAssignmentRules(),
+		CompatibleRedirectRules: getResp.GetResponse().GetCompatibleRedirectRules(),
+		ConflictToken:           getResp.GetResponse().GetConflictToken(),
+	}}, nil
 }
 
 func (e *matchingEngineImpl) GetWorkerVersioningRules(
