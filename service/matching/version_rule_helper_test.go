@@ -34,29 +34,26 @@ import (
 )
 
 func TestFindAssignmentBuildId_NoRules(t *testing.T) {
-	b, err := FindAssignmentBuildId(nil, "")
-	assert.NoError(t, err)
+	b := FindAssignmentBuildId(nil, "")
 	assert.Equal(t, "", b)
 }
 
 func TestFindAssignmentBuildId_OneFullRule(t *testing.T) {
 	buildId := "bld"
-	b, err := FindAssignmentBuildId([]*persistence.AssignmentRule{createFullAssignmentRule(buildId)}, "")
-	assert.NoError(t, err)
+	b := FindAssignmentBuildId([]*persistence.AssignmentRule{createFullAssignmentRule(buildId)}, "")
 	assert.Equal(t, buildId, b)
 }
 
 func TestFindAssignmentBuildId_TwoFullRules(t *testing.T) {
 	buildId := "bld"
 	buildId2 := "bld2"
-	b, err := FindAssignmentBuildId(
+	b := FindAssignmentBuildId(
 		[]*persistence.AssignmentRule{
 			createFullAssignmentRule(buildId),
 			createFullAssignmentRule(buildId2),
 		},
 		"",
 	)
-	assert.NoError(t, err)
 	assert.Equal(t, buildId, b)
 }
 
@@ -78,8 +75,7 @@ func TestFindAssignmentBuildId_WithRamp(t *testing.T) {
 	histogram := make(map[string]int)
 	runs := 1000000
 	for i := 0; i < runs; i++ {
-		b, err := FindAssignmentBuildId(rules, "run-"+strconv.Itoa(i))
-		assert.NoError(t, err)
+		b := FindAssignmentBuildId(rules, "run-"+strconv.Itoa(i))
 		histogram[b]++
 	}
 
@@ -95,8 +91,7 @@ func TestCalcRampThresholdUniform(t *testing.T) {
 	buildPref := "bldXYZ-"
 	histogram := [100]int{}
 	for i := 0; i < 1000000; i++ {
-		v, err := calcRampThreshold(buildPref + strconv.Itoa(i))
-		assert.NoError(t, err)
+		v := calcRampThreshold(buildPref + strconv.Itoa(i))
 		histogram[int32(v)]++
 	}
 

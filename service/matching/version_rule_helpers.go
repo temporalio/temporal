@@ -26,11 +26,11 @@ package matching
 
 import (
 	"fmt"
-	"hash/fnv"
 	"math"
 	"slices"
 	"time"
 
+	"github.com/dgryski/go-farm"
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/api/taskqueue/v1"
 	"go.temporal.io/api/workflowservice/v1"
@@ -478,35 +478,27 @@ func dfs(curr string, visited, inStack map[string]bool, nodes map[string][]strin
 	return false
 }
 
-func FindAssignmentBuildId(rules []*persistencepb.AssignmentRule, runId string) (string, error) {
+func FindAssignmentBuildId(rules []*persistencepb.AssignmentRule, runId string) string {
 	rampThreshold := -1.
-	var err error
 	for _, r := range rules {
 		if r.GetDeleteTimestamp() != nil {
 			continue
 		}
 		if ramp := r.GetRule().GetPercentageRamp(); ramp != nil {
 			if rampThreshold == -1. {
-				rampThreshold, err = calcRampThreshold(runId)
-				if err != nil {
-					return "", err
-				}
+				rampThreshold = calcRampThreshold(runId)
 			}
 			if float64(ramp.GetRampPercentage()) <= rampThreshold {
 				continue
 			}
 		}
-		return r.GetRule().GetTargetBuildId(), nil
+		return r.GetRule().GetTargetBuildId()
 	}
-	return "", nil
+	return ""
 }
 
 // calcRampThreshold returns a number in [0, 100) that is deterministically calculated based on the passed id
-func calcRampThreshold(id string) (float64, error) {
-	h := fnv.New32a()
-	_, err := h.Write([]byte(id))
-	if err != nil {
-		return -1, err
-	}
-	return 100 * (float64(h.Sum32()) / math.MaxUint32), nil
+func calcRampThreshold(id string) float64 {
+	h := farm.Fingerprint32([]byte(id))
+	return 100 * (float64(h) / (float64(math.MaxUint32) + 1))
 }
