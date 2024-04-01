@@ -74,8 +74,8 @@ func TestGet(t *testing.T) {
 	}).MaxTimes(1)
 
 	reg := NewIncomingServiceRegistry(mocks.config, mocks.matchingClient, mocks.persistence, log.NewNoopLogger())
-	reg.Start()
-	defer reg.Stop()
+	reg.StartLifecycle()
+	defer reg.StopLifecycle()
 
 	service, err := reg.Get(context.Background(), testService.Id)
 	require.NoError(t, err)
@@ -110,8 +110,8 @@ func TestGetNotFound(t *testing.T) {
 	}).MaxTimes(1)
 
 	reg := NewIncomingServiceRegistry(mocks.config, mocks.matchingClient, mocks.persistence, log.NewNoopLogger())
-	reg.Start()
-	defer reg.Stop()
+	reg.StartLifecycle()
+	defer reg.StopLifecycle()
 
 	service, err := reg.Get(context.Background(), uuid.NewString())
 	var notFound *serviceerror.NotFound
@@ -138,8 +138,8 @@ func TestLazyLoadFallback(t *testing.T) {
 	}, nil)
 
 	reg := NewIncomingServiceRegistry(mocks.config, mocks.matchingClient, mocks.persistence, log.NewNoopLogger())
-	reg.Start()
-	defer reg.Stop()
+	reg.StartLifecycle()
+	defer reg.StopLifecycle()
 
 	service, err := reg.Get(context.Background(), testService.Id)
 	require.NoError(t, err)
@@ -212,8 +212,8 @@ func TestTableVersionErrorResetsMatchingPagination(t *testing.T) {
 	}).MaxTimes(1)
 
 	reg := NewIncomingServiceRegistry(mocks.config, mocks.matchingClient, mocks.persistence, log.NewNoopLogger())
-	reg.Start()
-	defer reg.Stop()
+	reg.StartLifecycle()
+	defer reg.StopLifecycle()
 
 	service, err := reg.Get(context.Background(), testService0.Id)
 	require.NoError(t, err)
@@ -279,8 +279,8 @@ func TestTableVersionErrorResetsPersistencePagination(t *testing.T) {
 	}, nil)
 
 	reg := NewIncomingServiceRegistry(mocks.config, mocks.matchingClient, mocks.persistence, log.NewNoopLogger())
-	reg.Start()
-	defer reg.Stop()
+	reg.StartLifecycle()
+	defer reg.StopLifecycle()
 
 	service, err := reg.Get(context.Background(), testService0.Id)
 	require.NoError(t, err)

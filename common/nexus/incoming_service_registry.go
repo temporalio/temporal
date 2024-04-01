@@ -27,7 +27,6 @@ import (
 	"errors"
 	"fmt"
 	"sync"
-	"sync/atomic"
 	"time"
 
 	"go.temporal.io/api/nexus/v1"
@@ -59,7 +58,6 @@ type (
 	IncomingServiceRegistry struct {
 		config *IncomingServiceRegistryConfig
 
-		status           int32
 		serviceDataReady *future.FutureImpl[struct{}]
 
 		dataLock     sync.RWMutex // protects tableVersion and services
@@ -91,7 +89,6 @@ func NewIncomingServiceRegistry(
 	logger log.Logger,
 ) *IncomingServiceRegistry {
 	return &IncomingServiceRegistry{
-		status:           common.DaemonStatusInitialized,
 		config:           config,
 		serviceDataReady: future.NewFuture[struct{}](),
 		services:         make(map[string]*nexus.IncomingService),
@@ -101,11 +98,8 @@ func NewIncomingServiceRegistry(
 	}
 }
 
-func (r *IncomingServiceRegistry) Start() {
-	if !atomic.CompareAndSwapInt32(&r.status, common.DaemonStatusInitialized, common.DaemonStatusStarted) {
-		return
-	}
-
+// StartLifecycle starts this component. It should only be invoked by an fx lifecycle hook.
+func (r *IncomingServiceRegistry) StartLifecycle() {
 	refreshCtx := headers.SetCallerInfo(
 		context.Background(),
 		headers.SystemBackgroundCallerInfo,
@@ -113,11 +107,8 @@ func (r *IncomingServiceRegistry) Start() {
 	r.refreshPoller = goro.NewHandle(refreshCtx).Go(r.refreshServicesLoop)
 }
 
-func (r *IncomingServiceRegistry) Stop() {
-	if !atomic.CompareAndSwapInt32(&r.status, common.DaemonStatusStarted, common.DaemonStatusStopped) {
-		return
-	}
-
+// StopLifecycle stops this component. It should only be invoked by an fx lifecycle hook.
+func (r *IncomingServiceRegistry) StopLifecycle() {
 	r.refreshPoller.Cancel()
 	<-r.refreshPoller.Done()
 }
@@ -171,7 +162,6 @@ func (r *IncomingServiceRegistry) refreshServicesLoop(ctx context.Context) error
 }
 
 // refreshServices sends long-poll requests to matching to check for any updates to service data.
-// It waits to send any requests until service data has been initialized.
 func (r *IncomingServiceRegistry) refreshServices(ctx context.Context) error {
 	r.dataLock.RLock()
 	currentTableVersion := r.tableVersion
