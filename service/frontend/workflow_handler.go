@@ -3189,7 +3189,10 @@ func (wh *WorkflowHandler) DeleteSchedule(ctx context.Context, request *workflow
 }
 
 // List all schedules in a namespace.
-func (wh *WorkflowHandler) ListSchedules(ctx context.Context, request *workflowservice.ListSchedulesRequest) (_ *workflowservice.ListSchedulesResponse, retError error) {
+func (wh *WorkflowHandler) ListSchedules(
+	ctx context.Context,
+	request *workflowservice.ListSchedulesRequest,
+) (_ *workflowservice.ListSchedulesResponse, retError error) {
 	defer log.CapturePanic(wh.logger, &retError)
 
 	if request == nil {
@@ -3215,18 +3218,24 @@ func (wh *WorkflowHandler) ListSchedules(ctx context.Context, request *workflows
 		return nil, errListNotAllowed
 	}
 
-	persistenceResp, err := wh.visibilityMrg.ListOpenWorkflowExecutionsByType(ctx, &manager.ListWorkflowExecutionsByTypeRequest{
-		ListWorkflowExecutionsRequest: &manager.ListWorkflowExecutionsRequest{
-			NamespaceID:       namespaceID,
-			Namespace:         namespaceName,
-			NamespaceDivision: scheduler.NamespaceDivision,
-			PageSize:          int(request.GetMaximumPageSize()),
-			NextPageToken:     request.NextPageToken,
-			EarliestStartTime: minTime,
-			LatestStartTime:   maxTime,
+	persistenceResp, err := wh.visibilityMrg.ListWorkflowExecutions(
+		ctx,
+		&manager.ListWorkflowExecutionsRequestV2{
+			NamespaceID:   namespaceID,
+			Namespace:     namespaceName,
+			PageSize:      int(request.GetMaximumPageSize()),
+			NextPageToken: request.NextPageToken,
+			Query: fmt.Sprintf(
+				"%s = '%s' AND %s = '%s' AND %s = '%s'",
+				searchattribute.WorkflowType,
+				scheduler.WorkflowType,
+				searchattribute.TemporalNamespaceDivision,
+				scheduler.NamespaceDivision,
+				searchattribute.ExecutionStatus,
+				enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING.String(),
+			),
 		},
-		WorkflowTypeName: scheduler.WorkflowType,
-	})
+	)
 	if err != nil {
 		return nil, err
 	}
