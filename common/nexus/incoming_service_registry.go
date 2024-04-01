@@ -131,7 +131,7 @@ func (r *IncomingServiceRegistry) Get(ctx context.Context, id string) (*nexus.In
 
 	service, ok := r.services[id]
 	if !ok {
-		return nil, serviceerror.NewNotFound(fmt.Sprintf("could not find Nexus incoming service with ID: %v.", id))
+		return nil, serviceerror.NewNotFound(fmt.Sprintf("could not find Nexus incoming service with ID: %v", id))
 	}
 
 	return service, nil
@@ -172,7 +172,7 @@ func (r *IncomingServiceRegistry) initializeServicesLocked(ctx context.Context) 
 	tableVersion, services, err := r.getAllServicesMatching(ctx)
 	if err != nil {
 		// Fallback to persistence on matching error during initial load.
-		r.logger.Error("error from matching when initializing Nexus incoming service cache.", tag.Error(err))
+		r.logger.Error("error from matching when initializing Nexus incoming service cache", tag.Error(err))
 		tableVersion, services, err = r.getAllServicesPersistence(ctx)
 		if err != nil {
 			return err
@@ -258,7 +258,7 @@ func (r *IncomingServiceRegistry) refreshServices(ctx context.Context) error {
 				// Indicates table was updated during paging, so reset and start from the beginning.
 				currentTableVersion, services, err = r.getAllServicesMatching(ctx)
 				if err != nil {
-					r.logger.Error("error during background refresh of Nexus incoming services.", tag.Error(err))
+					r.logger.Error("error during background refresh of Nexus incoming services", tag.Error(err))
 					return err
 				}
 				break
