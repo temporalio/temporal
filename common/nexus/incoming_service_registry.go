@@ -119,7 +119,7 @@ func (r *IncomingServiceRegistry) StopLifecycle() {
 
 func (r *IncomingServiceRegistry) Get(ctx context.Context, id string) (*nexus.IncomingService, error) {
 	if !r.serviceDataReady.Ready() {
-		if err := r.initializeServices(ctx); err != nil {
+		if err := r.initializeServicesWithTimeout(ctx); err != nil {
 			return nil, err
 		}
 	}
@@ -133,6 +133,55 @@ func (r *IncomingServiceRegistry) Get(ctx context.Context, id string) (*nexus.In
 	}
 
 	return service, nil
+}
+
+// initializeServicesWithTimeout initializes service data or waits until the context deadline if another
+// thread is initializing service data. Data initialization happens in the background and will continue
+// even if the original request context times out.
+func (r *IncomingServiceRegistry) initializeServicesWithTimeout(ctx context.Context) error {
+	var initErr error
+	waitCh := make(chan struct{})
+
+	go func() {
+		r.dataLock.Lock()
+		defer r.dataLock.Unlock()
+		defer close(waitCh)
+		initErr = r.initializeServicesLocked(context.Background())
+	}()
+
+	select {
+	case <-waitCh:
+		return initErr
+	case <-ctx.Done():
+		return ctx.Err()
+	}
+}
+
+// initializeServicesLocked initializes the in-memory view of service data.
+// It first tries to load from matching service and falls back to querying persistence directly if matching is unavailable.
+func (r *IncomingServiceRegistry) initializeServicesLocked(ctx context.Context) error {
+	if r.serviceDataReady.Ready() {
+		// Indicates service data was loaded by another thread while waiting for initializationLock.
+		return nil
+	}
+
+	tableVersion, services, err := r.getAllServicesMatching(ctx)
+	if err != nil {
+		// Fallback to persistence on matching error during initial load.
+		r.logger.Error("error from matching when initializing Nexus incoming service cache.", tag.Error(err))
+		tableVersion, services, err = r.getAllServicesPersistence(ctx)
+		if err != nil {
+			return err
+		}
+	}
+
+	// no need to acquire dataLock because initializationLock ensures only one thread will do
+	// this update once before any reads.
+	r.tableVersion = tableVersion
+	r.services = services
+	r.serviceDataReady.Set(struct{}{}, nil)
+
+	return nil
 }
 
 func (r *IncomingServiceRegistry) refreshServicesLoop(ctx context.Context) error {
@@ -231,34 +280,6 @@ func (r *IncomingServiceRegistry) refreshServices(ctx context.Context) error {
 
 	r.tableVersion = currentTableVersion
 	r.services = services
-
-	return nil
-}
-
-// initializeServices initializes the in-memory view of service data.
-// It first tries to load from matching service and falls back to querying persistence directly if matching is unavailable.
-func (r *IncomingServiceRegistry) initializeServices(ctx context.Context) error {
-	r.dataLock.Lock()
-	defer r.dataLock.Unlock()
-
-	if r.serviceDataReady.Ready() {
-		// Indicates service data was loaded by another thread while waiting for write lock.
-		return nil
-	}
-
-	tableVersion, services, err := r.getAllServicesMatching(ctx)
-	if err != nil {
-		// Fallback to persistence on matching error during initial load.
-		r.logger.Error("error from matching when initializing Nexus incoming service cache.", tag.Error(err))
-		tableVersion, services, err = r.getAllServicesPersistence(ctx)
-		if err != nil {
-			return err
-		}
-	}
-
-	r.tableVersion = tableVersion
-	r.services = services
-	r.serviceDataReady.Set(struct{}{}, nil) // should only ever reach this point once so don't check if already set
 
 	return nil
 }
