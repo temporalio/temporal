@@ -46,10 +46,11 @@ import (
 
 type (
 	IncomingServiceRegistryConfig struct {
-		refreshLongPollTimeout dynamicconfig.DurationPropertyFn
-		refreshPageSize        dynamicconfig.IntPropertyFn
-		refreshMinWait         dynamicconfig.DurationPropertyFn
-		refreshRetryPolicy     backoff.RetryPolicy
+		initializeServicesTimeout dynamicconfig.DurationPropertyFn
+		refreshLongPollTimeout    dynamicconfig.DurationPropertyFn
+		refreshPageSize           dynamicconfig.IntPropertyFn
+		refreshMinWait            dynamicconfig.DurationPropertyFn
+		refreshRetryPolicy        backoff.RetryPolicy
 	}
 
 	// IncomingServiceRegistry manages a cached view of Nexus incoming services.
@@ -60,9 +61,9 @@ type (
 
 		serviceDataReady *future.FutureImpl[struct{}]
 
-		dataLock     sync.RWMutex // protects tableVersion and services
+		dataLock     sync.RWMutex // Protects tableVersion and services.
 		tableVersion int64
-		services     map[string]*nexus.IncomingService // mapping of service ID -> service
+		services     map[string]*nexus.IncomingService // Mapping of service ID -> service.
 
 		refreshPoller *goro.Handle
 
@@ -74,9 +75,10 @@ type (
 
 func NewIncomingServiceRegistryConfig(dc *dynamicconfig.Collection) *IncomingServiceRegistryConfig {
 	config := &IncomingServiceRegistryConfig{
-		refreshLongPollTimeout: dc.GetDurationProperty(dynamicconfig.FrontendRefreshNexusIncomingServicesLongPollTimeout, 5*time.Minute),
-		refreshPageSize:        dc.GetIntProperty(dynamicconfig.NexusIncomingServiceListDefaultPageSize, 1000),
-		refreshMinWait:         dc.GetDurationProperty(dynamicconfig.FrontendRefreshNexusIncomingServicesLongPollTimeout, 1*time.Second),
+		initializeServicesTimeout: dc.GetDurationProperty(dynamicconfig.FrontendInitializeNexusIncomingServicesTimeout, 1*time.Minute),
+		refreshLongPollTimeout:    dc.GetDurationProperty(dynamicconfig.FrontendRefreshNexusIncomingServicesLongPollTimeout, 5*time.Minute),
+		refreshPageSize:           dc.GetIntProperty(dynamicconfig.NexusIncomingServiceListDefaultPageSize, 1000),
+		refreshMinWait:            dc.GetDurationProperty(dynamicconfig.FrontendRefreshNexusIncomingServicesLongPollTimeout, 1*time.Second),
 	}
 	config.refreshRetryPolicy = backoff.NewExponentialRetryPolicy(config.refreshMinWait()).WithMaximumInterval(config.refreshLongPollTimeout())
 	return config
@@ -146,7 +148,9 @@ func (r *IncomingServiceRegistry) initializeServicesWithTimeout(ctx context.Cont
 		r.dataLock.Lock()
 		defer r.dataLock.Unlock()
 		defer close(waitCh)
-		initErr = r.initializeServicesLocked(context.Background())
+		initCtx, cancel := context.WithTimeout(context.Background(), r.config.initializeServicesTimeout())
+		defer cancel()
+		initErr = r.initializeServicesLocked(initCtx)
 	}()
 
 	select {
@@ -161,7 +165,7 @@ func (r *IncomingServiceRegistry) initializeServicesWithTimeout(ctx context.Cont
 // It first tries to load from matching service and falls back to querying persistence directly if matching is unavailable.
 func (r *IncomingServiceRegistry) initializeServicesLocked(ctx context.Context) error {
 	if r.serviceDataReady.Ready() {
-		// Indicates service data was loaded by another thread while waiting for initializationLock.
+		// Indicates service data was loaded by another thread while waiting for write lock.
 		return nil
 	}
 
@@ -175,8 +179,6 @@ func (r *IncomingServiceRegistry) initializeServicesLocked(ctx context.Context) 
 		}
 	}
 
-	// no need to acquire dataLock because initializationLock ensures only one thread will do
-	// this update once before any reads.
 	r.tableVersion = tableVersion
 	r.services = services
 	r.serviceDataReady.Set(struct{}{}, nil)
@@ -232,7 +234,7 @@ func (r *IncomingServiceRegistry) refreshServices(ctx context.Context) error {
 	}
 
 	if resp.TableVersion == currentTableVersion {
-		// Long poll returned with no changes
+		// Long poll returned with no changes.
 		return nil
 	}
 
@@ -253,7 +255,7 @@ func (r *IncomingServiceRegistry) refreshServices(ctx context.Context) error {
 
 		if err != nil {
 			if errors.Is(err, p.ErrNexusTableVersionConflict) {
-				// Indicates table was updated during paging, so reset and start from the beginning
+				// Indicates table was updated during paging, so reset and start from the beginning.
 				currentTableVersion, services, err = r.getAllServicesMatching(ctx)
 				if err != nil {
 					r.logger.Error("error during background refresh of Nexus incoming services", tag.Error(err))
@@ -300,7 +302,7 @@ func (r *IncomingServiceRegistry) getAllServicesMatching(ctx context.Context) (i
 		})
 		if err != nil {
 			if errors.Is(err, p.ErrNexusTableVersionConflict) {
-				// indicates table was updated during paging, so reset and start from the beginning
+				// indicates table was updated during paging, so reset and start from the beginning.
 				currentPageToken = nil
 				currentTableVersion = 0
 				services = make(map[string]*nexus.IncomingService)
@@ -340,7 +342,7 @@ func (r *IncomingServiceRegistry) getAllServicesPersistence(ctx context.Context)
 		})
 		if err != nil {
 			if errors.Is(err, p.ErrNexusTableVersionConflict) {
-				// indicates table was updated during paging, so reset and start from the beginning
+				// indicates table was updated during paging, so reset and start from the beginning.
 				currentPageToken = nil
 				currentTableVersion = 0
 				services = make(map[string]*nexus.IncomingService)
