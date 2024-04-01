@@ -35,7 +35,7 @@ import (
 
 	"github.com/dgryski/go-farm"
 	"github.com/stretchr/testify/require"
-	"go.temporal.io/sdk/converter"
+	"go.temporal.io/server/common/searchattribute"
 	"go.temporal.io/server/common/tqid"
 	"go.temporal.io/server/common/worker_versioning"
 	"google.golang.org/protobuf/types/known/durationpb"
@@ -3745,10 +3745,10 @@ func (s *VersioningIntegSuite) validateWorkflowBuildId(
 ) {
 	dw, err := s.sdkClient.DescribeWorkflowExecution(ctx, wfId, runId)
 	s.NoError(err)
-	var searchAttr []string
-	err = converter.GetDefaultDataConverter().FromPayload(dw.GetWorkflowExecutionInfo().GetSearchAttributes().GetIndexedFields()["BuildIds"], &searchAttr)
+	saPayload := dw.GetWorkflowExecutionInfo().GetSearchAttributes().GetIndexedFields()["BuildIds"]
+	searchAttrAny, err := searchattribute.DecodeValue(saPayload, enumspb.INDEXED_VALUE_TYPE_KEYWORD_LIST, true)
+	searchAttr := searchAttrAny.([]string)
 	s.NoError(err)
-	fmt.Printf("shahab> BuildIds=%v\n", searchAttr)
 	if expectedBuildId == "" {
 		if expectingStamp {
 			s.NotNil(dw.GetWorkflowExecutionInfo().GetMostRecentWorkerVersionStamp())

@@ -66,7 +66,7 @@ func VersionedBuildIdSearchAttribute(buildId string) string {
 	return buildIdSearchAttributePrefixVersioned + BuildIdSearchAttributeDelimiter + buildId
 }
 
-// VersionedBuildIdSearchAttribute returns the search attribute value for an versioned build id
+// UnversionedBuildIdSearchAttribute returns the search attribute value for an versioned build id
 func UnversionedBuildIdSearchAttribute(buildId string) string {
 	return buildIdSearchAttributePrefixUnversioned + BuildIdSearchAttributeDelimiter + buildId
 }

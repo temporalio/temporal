@@ -2129,11 +2129,8 @@ func (ms *MutableStateImpl) UpdateBuildIdAssignment(buildId string) error {
 	return ms.updateBuildIdsSearchAttribute(&commonpb.WorkerVersionStamp{UseVersioning: true, BuildId: buildId}, limit)
 }
 
-func (ms *MutableStateImpl) updateBuildIdsSearchAttribute(version *commonpb.WorkerVersionStamp, maxSearchAttributeValueSize int) error {
-	if version.GetBuildId() == "" {
-		return nil
-	}
-	changed, err := ms.addBuildIdToSearchAttributesWithNoVisibilityTask(version, maxSearchAttributeValueSize)
+func (ms *MutableStateImpl) updateBuildIdsSearchAttribute(stamp *commonpb.WorkerVersionStamp, maxSearchAttributeValueSize int) error {
+	changed, err := ms.addBuildIdToSearchAttributesWithNoVisibilityTask(stamp, maxSearchAttributeValueSize)
 	if err != nil {
 		return err
 	} else if !changed {
@@ -2200,7 +2197,7 @@ func (ms *MutableStateImpl) saveBuildIds(buildIds []string, maxSearchAttributeVa
 		ms.executionInfo.SearchAttributes = searchAttributes
 	}
 
-	hasUnversioned := buildIds[0] == worker_versioning.UnversionedSearchAttribute
+	hasUnversionedOrAssigned := worker_versioning.IsUnversionedOrAssignedBuildIdSearchAttribute(buildIds[0])
 	for {
 		saPayload, err := searchattribute.EncodeValue(buildIds, enumspb.INDEXED_VALUE_TYPE_KEYWORD_LIST)
 		if err != nil {
@@ -2212,7 +2209,7 @@ func (ms *MutableStateImpl) saveBuildIds(buildIds []string, maxSearchAttributeVa
 		}
 		if len(buildIds) == 1 {
 			buildIds = make([]string, 0)
-		} else if hasUnversioned {
+		} else if hasUnversionedOrAssigned {
 			// Make sure to maintain the unversioned sentinel, it's required for the reachability API
 			buildIds = append(buildIds[:1], buildIds[2:]...)
 		} else {
