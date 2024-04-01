@@ -99,7 +99,7 @@ func NewIncomingServiceRegistry(
 }
 
 // StartLifecycle starts this component. It should only be invoked by an fx lifecycle hook.
-// Should not be called concurrently with StopLifecycle()
+// Should not be called multiple times or concurrently with StopLifecycle()
 func (r *IncomingServiceRegistry) StartLifecycle() {
 	refreshCtx := headers.SetCallerInfo(
 		context.Background(),
@@ -109,7 +109,7 @@ func (r *IncomingServiceRegistry) StartLifecycle() {
 }
 
 // StopLifecycle stops this component. It should only be invoked by an fx lifecycle hook.
-// Should not be called concurrently with StartLifecycle()
+// Should not be called multiple times or concurrently with StartLifecycle()
 func (r *IncomingServiceRegistry) StopLifecycle() {
 	if r.refreshPoller != nil {
 		r.refreshPoller.Cancel()
