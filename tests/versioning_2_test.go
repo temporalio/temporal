@@ -2073,7 +2073,7 @@ func (s *VersioningIntegSuite) dispatchChildWorkflowUpgrade() {
 	}
 	child11 := func(cctx workflow.Context) (string, error) {
 		exec := workflow.GetInfo(cctx).WorkflowExecution
-		s.validateWorkflowBuildId(ctx, exec.ID, exec.RunID, v11, false, true, "", []string{v1})
+		s.validateWorkflowBuildId(ctx, exec.ID, exec.RunID, v11, false, true, "", nil)
 		return "v1.1", nil
 	}
 	wf1 := func(ctx workflow.Context) (string, error) {
