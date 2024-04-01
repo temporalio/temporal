@@ -131,7 +131,7 @@ func (r *IncomingServiceRegistry) Get(ctx context.Context, id string) (*nexus.In
 
 	service, ok := r.services[id]
 	if !ok {
-		return nil, serviceerror.NewNotFound(fmt.Sprintf("could not find Nexus incoming service with ID: %v", id))
+		return nil, serviceerror.NewNotFound(fmt.Sprintf("could not find Nexus incoming service with ID: %v.", id))
 	}
 
 	return service, nil
@@ -258,7 +258,7 @@ func (r *IncomingServiceRegistry) refreshServices(ctx context.Context) error {
 				// Indicates table was updated during paging, so reset and start from the beginning.
 				currentTableVersion, services, err = r.getAllServicesMatching(ctx)
 				if err != nil {
-					r.logger.Error("error during background refresh of Nexus incoming services", tag.Error(err))
+					r.logger.Error("error during background refresh of Nexus incoming services.", tag.Error(err))
 					return err
 				}
 				break
