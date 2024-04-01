@@ -3747,7 +3747,10 @@ func (s *VersioningIntegSuite) validateWorkflowBuildId(
 	s.NoError(err)
 	saPayload := dw.GetWorkflowExecutionInfo().GetSearchAttributes().GetIndexedFields()["BuildIds"]
 	searchAttrAny, err := searchattribute.DecodeValue(saPayload, enumspb.INDEXED_VALUE_TYPE_KEYWORD_LIST, true)
-	searchAttr := searchAttrAny.([]string)
+	var searchAttr []string
+	if searchAttrAny != nil {
+		searchAttr = searchAttrAny.([]string)
+	}
 	s.NoError(err)
 	if expectedBuildId == "" {
 		if expectingStamp {
