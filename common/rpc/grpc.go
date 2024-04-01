@@ -27,13 +27,16 @@ package rpc
 import (
 	"context"
 	"crypto/tls"
+	"errors"
 	"time"
 
 	"go.temporal.io/api/serviceerror"
+	"go.temporal.io/server/common/log/tag"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/backoff"
 	"google.golang.org/grpc/credentials"
 	"google.golang.org/grpc/credentials/insecure"
+	"google.golang.org/grpc/metadata"
 	"google.golang.org/grpc/status"
 
 	"go.temporal.io/server/common/headers"
@@ -66,6 +69,14 @@ const (
 
 	// maxInternodeRecvPayloadSize indicates the internode max receive payload size.
 	maxInternodeRecvPayloadSize = 128 * 1024 * 1024 // 128 Mb
+
+	// ResourceExhaustedCauseHeader will be added to rpc response if request returns ResourceExhausted error.
+	// Value of this header will be ResourceExhaustedCause.
+	ResourceExhaustedCauseHeader = "X-Resource-Exhausted-Cause"
+
+	// ResourceExhaustedScopeHeader will be added to rpc response if request returns ResourceExhausted error.
+	// Value of this header will be the scope of exhausted resource.
+	ResourceExhaustedScopeHeader = "X-Resource-Exhausted-Scope"
 )
 
 // Dial creates a client connection to the given target with default options.
@@ -141,14 +152,36 @@ func headersInterceptor(
 	return invoker(ctx, method, req, reply, cc, opts...)
 }
 
-func ServiceErrorInterceptor(
-	ctx context.Context,
-	req interface{},
-	_ *grpc.UnaryServerInfo,
-	handler grpc.UnaryHandler,
-) (interface{}, error) {
-	resp, err := handler(ctx, req)
-	return resp, serviceerror.ToStatus(err).Err()
+func addHeadersForResourceExhausted(ctx context.Context, logger log.Logger, err error) {
+	var reErr *serviceerror.ResourceExhausted
+	if errors.As(err, &reErr) {
+		headerErr := grpc.SetHeader(ctx, metadata.Pairs(
+			ResourceExhaustedCauseHeader, reErr.Cause.String(),
+			ResourceExhaustedScopeHeader, reErr.Scope.String(),
+		))
+		if headerErr != nil {
+			logger.Error("Failed to add Resource-Exhausted headers to response", tag.Error(err))
+		}
+	}
+}
+
+func NewServiceErrorInterceptor(
+	logger log.Logger,
+) grpc.UnaryServerInterceptor {
+	return func(
+		ctx context.Context,
+		req interface{},
+		_ *grpc.UnaryServerInfo,
+		handler grpc.UnaryHandler,
+	) (interface{}, error) {
+
+		resp, err := handler(ctx, req)
+		if err != nil {
+			addHeadersForResourceExhausted(ctx, logger, err)
+		}
+		return resp, serviceerror.ToStatus(err).Err()
+	}
+
 }
 
 func FrontendErrorInterceptor(
