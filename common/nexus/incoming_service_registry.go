@@ -145,6 +145,7 @@ func (r *IncomingServiceRegistry) refreshServicesLoop(ctx context.Context) error
 
 	for ctx.Err() == nil {
 		start := time.Now()
+		// Ignoring errors here because they are logged where they occur and we never want to exit the refresh loop.
 		_ = backoff.ThrottleRetryContext(ctx, r.refreshServices, r.config.refreshRetryPolicy, nil)
 		elapsed := time.Since(start)
 
