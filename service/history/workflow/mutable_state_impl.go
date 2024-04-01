@@ -45,7 +45,6 @@ import (
 	"golang.org/x/exp/slices"
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/durationpb"
-	"google.golang.org/protobuf/types/known/emptypb"
 	"google.golang.org/protobuf/types/known/timestamppb"
 
 	clockspb "go.temporal.io/server/api/clock/v1"
@@ -2242,9 +2241,10 @@ func (ms *MutableStateImpl) ApplyWorkflowTaskStartedEvent(
 	suggestContinueAsNew bool,
 	historySizeBytes int64,
 	versioningStamp *commonpb.WorkerVersionStamp,
+	redirectCounter int64,
 ) (*WorkflowTaskInfo, error) {
 	return ms.workflowTaskManager.ApplyWorkflowTaskStartedEvent(workflowTask, version, scheduledEventID,
-		startedEventID, requestID, timestamp, suggestContinueAsNew, historySizeBytes, versioningStamp)
+		startedEventID, requestID, timestamp, suggestContinueAsNew, historySizeBytes, versioningStamp, redirectCounter)
 }
 
 // TODO (alex-update): 	Transient needs to be renamed to "TransientOrSpeculative"
@@ -2312,8 +2312,34 @@ func (ms *MutableStateImpl) addResetPointFromCompletion(
 	return true
 }
 
+// ApplyBuildIdRedirect used for applying redirects from History events when rebuilding MS
+func (ms *MutableStateImpl) ApplyBuildIdRedirect(buildId string, redirectCounter int64) error {
+	if ms.GetExecutionInfo().GetBuildIdRedirectCounter() >= redirectCounter {
+		// existing redirect counter is more than the given one so, this redirect or a one more recent
+		// than it is already applied
+		return nil
+	}
+	err := ms.UpdateBuildIdAssignment(buildId)
+	if err != nil {
+		return err
+	}
+	// if this redirect is applicable, we need to set workflow's redirect counter to the given value
+	ms.GetExecutionInfo().BuildIdRedirectCounter = redirectCounter
+	return nil
+}
+
+// UpdateBuildIdAssignment based on initial assignment or a redirect
 func (ms *MutableStateImpl) UpdateBuildIdAssignment(buildId string) error {
+	if ms.GetAssignedBuildId() == buildId {
+		return nil
+	}
+	if ms.GetAssignedBuildId() != "" {
+		// if build ID is being set for the first time, we don't increment redirect counter
+		ms.GetExecutionInfo().BuildIdRedirectCounter++
+	}
 	ms.executionInfo.AssignedBuildId = buildId
+	// because build id is changed, we clear sticky queue so to make sure the next wf task does not go to old version.
+	ms.ClearStickyTaskQueue()
 	limit := ms.config.SearchAttributesSizeOfValueLimit(ms.namespaceEntry.Name().String())
 	return ms.updateBuildIdsSearchAttribute(&commonpb.WorkerVersionStamp{UseVersioning: true, BuildId: buildId}, limit)
 }
@@ -2578,7 +2604,9 @@ func (ms *MutableStateImpl) ApplyActivityTaskScheduledEvent(
 	if attributes.UseWorkflowBuildId {
 		if ms.GetAssignedBuildId() != "" {
 			// only set when using new versioning
-			ai.AssignedBuildId = &persistencespb.ActivityInfo_UseWorkflowBuildId{UseWorkflowBuildId: &emptypb.Empty{}}
+			ai.AssignedBuildId = &persistencespb.ActivityInfo_UseWorkflowBuildId_{
+				UseWorkflowBuildId: &persistencespb.ActivityInfo_UseWorkflowBuildId{},
+			}
 		} else {
 			// only set when using old versioning
 			ai.UseCompatibleVersion = true
@@ -2619,15 +2647,20 @@ func (ms *MutableStateImpl) addTransientActivityStartedEvent(
 		return nil
 	}
 
-	if versioningStamp == nil {
-		// activity timeout and cancellation does not have stamp available.
-		// Here we reconstruct it based on pending activity data, if versioning is used.
-		buildId := ai.GetLastIndependentlyAssignedBuildId()
-		if ai.GetUseWorkflowBuildId() != nil {
-			buildId = ms.GetAssignedBuildId()
-		}
-		if buildId != "" {
-			versioningStamp = &commonpb.WorkerVersionStamp{UseVersioning: true, BuildId: buildId}
+	startedBuildId := ai.GetLastIndependentlyAssignedBuildId()
+	if useWf := ai.GetUseWorkflowBuildId(); useWf != nil {
+		startedBuildId = useWf.GetLastUsedBuildId()
+	}
+
+	if startedBuildId != "" {
+		if versioningStamp == nil {
+			// activity timeout, cancellation, and failed by reseter do not have stamp available.
+			// Here we reconstruct it based on pending activity data, if versioning is used.
+			versioningStamp = &commonpb.WorkerVersionStamp{UseVersioning: true, BuildId: startedBuildId}
+		} else {
+			if versioningStamp.GetBuildId() != startedBuildId {
+				return serviceerror.NewInvalidArgument("activity was started in a different Build ID")
+			}
 		}
 	}
 
@@ -2639,6 +2672,7 @@ func (ms *MutableStateImpl) addTransientActivityStartedEvent(
 		ai.StartedIdentity,
 		ai.RetryLastFailure,
 		versioningStamp,
+		ai.GetUseWorkflowBuildId().GetLastRedirectCounter(),
 	)
 	if ai.StartedTime != nil {
 		// overwrite started event time to the one recorded in ActivityInfo
@@ -2660,6 +2694,27 @@ func (ms *MutableStateImpl) AddActivityTaskStartedEvent(
 		return nil, err
 	}
 
+	if versioningStamp.GetUseVersioning() && versioningStamp.GetBuildId() != "" {
+		// note that if versioningStamp.BuildId is present we know it's not an old versioning worker because matching
+		// does not pass build id for old versioning workers to Record*TaskStart.
+		// TODO: cleanup this comment [cleanup-old-wv]
+		if useWf := ai.GetUseWorkflowBuildId(); useWf != nil {
+			// when a dependent activity is redirected, we update workflow's assigned build ID as well
+			err := ms.UpdateBuildIdAssignment(versioningStamp.GetBuildId())
+			if err != nil {
+				return nil, err
+			}
+			useWf.LastRedirectCounter = ms.GetExecutionInfo().GetBuildIdRedirectCounter()
+		} else if !ai.UseCompatibleVersion {
+			// this activity is using new versioning and is independently assigned to a build ID.
+			// Storing that in activity info. (normaly, LastIndependentlyAssignedBuildId should be present already,
+			// but setting it here again, in case the persistence call after AddTask was failed)
+			ai.AssignedBuildId = &persistencespb.ActivityInfo_LastIndependentlyAssignedBuildId{
+				LastIndependentlyAssignedBuildId: versioningStamp.GetBuildId(),
+			}
+		}
+	}
+
 	if !ai.HasRetryPolicy {
 		event := ms.hBuilder.AddActivityTaskStartedEvent(
 			scheduledEventID,
@@ -2668,6 +2723,7 @@ func (ms *MutableStateImpl) AddActivityTaskStartedEvent(
 			identity,
 			ai.RetryLastFailure,
 			versioningStamp,
+			ms.GetExecutionInfo().GetBuildIdRedirectCounter(),
 		)
 		if err := ms.ApplyActivityTaskStartedEvent(event); err != nil {
 			return nil, err
@@ -2682,16 +2738,6 @@ func (ms *MutableStateImpl) AddActivityTaskStartedEvent(
 	ai.RequestId = requestID
 	ai.StartedTime = timestamppb.New(ms.timeSource.Now())
 	ai.StartedIdentity = identity
-	if ai.GetUseWorkflowBuildId() == nil && versioningStamp.GetUseVersioning() && versioningStamp.GetBuildId() != "" {
-		// this activity is independently assigned to a build ID. Storing that in activity info
-		//
-		// note that if versioningStamp.BuildId is present we know it's not an old versioning worker because matching
-		// does not pass build id for old versioning workers to Record*TaskStart.
-		// TODO: cleanup this comment [cleanup-old-wv]
-		ai.AssignedBuildId = &persistencespb.ActivityInfo_LastIndependentlyAssignedBuildId{
-			LastIndependentlyAssignedBuildId: versioningStamp.GetBuildId(),
-		}
-	}
 	if err := ms.UpdateActivity(ai); err != nil {
 		return nil, err
 	}
@@ -2702,7 +2748,6 @@ func (ms *MutableStateImpl) AddActivityTaskStartedEvent(
 func (ms *MutableStateImpl) ApplyActivityTaskStartedEvent(
 	event *historypb.HistoryEvent,
 ) error {
-
 	attributes := event.GetActivityTaskStartedEventAttributes()
 	scheduledEventID := attributes.GetScheduledEventId()
 	ai, ok := ms.GetActivityInfo(scheduledEventID)
@@ -2723,11 +2768,15 @@ func (ms *MutableStateImpl) ApplyActivityTaskStartedEvent(
 	ms.updateActivityInfos[ai.ScheduledEventId] = ai
 	ms.approximateSize += ai.Size()
 
-	if attributes.GetWorkerVersion().GetUseVersioning() {
+	if buildId := attributes.GetWorkerVersion().GetBuildId(); buildId != "" && attributes.GetWorkerVersion().GetUseVersioning() {
 		if ai.GetUseWorkflowBuildId() != nil {
-			// TODO: update wf assigned build id
-		} else if buildId := attributes.GetWorkerVersion().GetBuildId(); buildId != "" {
-			// This activity is not attached to the wf build ID so we store it's build ID in activity info.
+			// when a dependent activity is redirected, we update workflow's assigned build ID as well
+			err := ms.ApplyBuildIdRedirect(buildId, attributes.GetBuildIdRedirectCounter())
+			if err != nil {
+				return err
+			}
+		} else {
+			// This activity is not attached to the wf build ID so we store its build ID in activity info.
 			ai.AssignedBuildId = &persistencespb.ActivityInfo_LastIndependentlyAssignedBuildId{LastIndependentlyAssignedBuildId: buildId}
 		}
 	}

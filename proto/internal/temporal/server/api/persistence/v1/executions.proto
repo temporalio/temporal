@@ -26,7 +26,6 @@ package temporal.server.api.persistence.v1;
 option go_package = "go.temporal.io/server/api/persistence/v1;persistence";
 
 import "google/protobuf/duration.proto";
-import "google/protobuf/empty.proto";
 import "google/protobuf/timestamp.proto";
 
 import "temporal/api/common/v1/message.proto";
@@ -41,7 +40,6 @@ import "temporal/server/api/enums/v1/task.proto";
 import "temporal/server/api/enums/v1/workflow_task_type.proto";
 import "temporal/server/api/history/v1/message.proto";
 import "temporal/server/api/persistence/v1/queues.proto";
-import "temporal/server/api/persistence/v1/hsm.proto";
 import "temporal/server/api/update/v1/message.proto";
 import "temporal/server/api/workflow/v1/message.proto";
 
@@ -106,6 +104,14 @@ message WorkflowExecutionInfo {
     temporal.server.api.enums.v1.WorkflowTaskType workflow_task_type = 68;
     bool workflow_task_suggest_continue_as_new = 69;
     int64 workflow_task_history_size_bytes = 70;
+    // tracks the started build id for transient wft. This info is used for two purposes:
+    // - verify wft completes by the same Build ID that started in the latest attempt
+    // - when persisting transient wft, the right Build ID is used in the wft started event
+    string workflow_task_build_id = 83;
+    // tracks the started build id redirect counter for transient wft. This info is to
+    // sure the right redirect counter is used in the wft started event created later
+    // for a transient wft.
+    int64 workflow_task_build_id_redirect_counter = 84;
 
     bool cancel_requested = 29;
     string cancel_request_id = 32;
@@ -167,34 +173,16 @@ message WorkflowExecutionInfo {
     // again, the assigned build ID may change according to the latest versioning rules.
     // Assigned build ID can also change in the middle of a execution if Compatible Redirect Rules are applied to
     // this execution.
-    string assigned_build_id = 85;
+    string assigned_build_id = 80;
     // Build ID inherited from a previous/parent execution. If present, assigned_build_id will be set to this, instead
     // of using the assignment rules.
-    string inherited_build_id = 86;
+    string inherited_build_id = 81;
+    // Tracks the number of times a redirect rule is applied to this workflow. Used to synchronize the redirects
+    // based on history events.
+    int64 build_id_redirect_counter = 82;
 
     // index of update IDs and pointers to associated history events.
     map<string, temporal.server.api.update.v1.UpdateInfo> update_infos = 79;
-    repeated VersionedTransition transition_history = 80;
-    // Map of state machine type to map of machine by ID.
-    // (-- api-linter: core::0140::prepositions=disabled
-    //     aip.dev/not-precedent: "by" is used to clarify the keys and values. --)
-    map<int32, StateMachineMap> sub_state_machines_by_type = 81;
-
-    // This field is for tracking if the workflow execution timer task is created or not.
-    // We don't need this field if we always create the execution timer task when the first
-    // workflow in a workflow chain starts. However, this execution timer logic is later added. 
-    // To maintain backward compatibility, we need to track if the execution timer task is created
-    // for a workflow chain since later workflows in the chain also need to create the execution 
-    // timer task if it is not created yet.
-    // NOTE: Task status is clsuter specific information, so when replicating mutable state, this
-    // field need to be sanitized.
-    int32 workflow_execution_timer_task_status = 82;
-
-    // The root workflow execution is defined as follows:
-    // 1. A workflow without parent workflow is its own root workflow.
-    // 2. A workflow that has a parent workflow has the same root workflow as its parent workflow.
-    string root_workflow_id = 83;
-    string root_run_id = 84;
 }
 
 message ExecutionStats {
@@ -268,8 +256,8 @@ message VisibilityTaskInfo {
     int64 version = 5;
     int64 task_id = 6;
     google.protobuf.Timestamp visibility_time = 7;
-    reserved 8;
-    reserved 9;
+    google.protobuf.Timestamp close_time = 8;
+    google.protobuf.Timestamp start_time = 9;
     int64 close_visibility_task_id = 10;
 }
 
@@ -289,14 +277,8 @@ message TimerTaskInfo {
     bytes branch_token = 12;
     // If this is true, we can bypass archival before deleting. Only defined for DeleteHistoryEventTasks.
     bool already_archived = 13;
-
-    // If task addresses a sub-statemachine (e.g. callback), this field will be set.
-    StateMachineTaskInfo state_machine_info = 14;
-
-    // If specified, the task is a for a workflow chain instead of a specific workflow run.
-    // A workflow chain is identified by the run_id of the first workflow in the chain.
-    string first_run_id = 15;
 }
+
 
 message ArchivalTaskInfo {
     int64 task_id = 1;
@@ -306,22 +288,6 @@ message ArchivalTaskInfo {
     temporal.server.api.enums.v1.TaskType task_type = 5;
     int64 version = 6;
     google.protobuf.Timestamp visibility_time = 7;
-}
-
-message OutboundTaskInfo {
-    string namespace_id = 1;
-    string workflow_id = 2;
-    string run_id = 3;
-
-    temporal.server.api.enums.v1.TaskType task_type = 4;
-    int64 task_id = 5;
-    google.protobuf.Timestamp visibility_time = 6;
-
-    // Destination of this task (e.g. protocol+host+port for callbacks).
-    // Outbound tasks are grouped by this field (and the namespace ID) when scheduling.
-    string destination = 7;
-    // If task addresses a sub-statemachine (e.g. callback), this field will be set.
-    StateMachineTaskInfo state_machine_info = 8;
 }
 
 // activity_map column
@@ -373,7 +339,7 @@ message ActivityInfo {
     // independently-assigned build ID to the database. This case heals automatically once the task is dispatched.
     oneof assigned_build_id {
         // When true, it means this activity is assigned to the build ID of its workflow.
-        google.protobuf.Empty use_workflow_build_id = 35;
+        UseWorkflowBuildId use_workflow_build_id = 35;
         // This means the activity is independently versioned and not bound to the build ID of its workflow.
         // If the task fails and is scheduled again, the assigned build ID may change according to the latest versioning
         // rules.
@@ -381,6 +347,14 @@ message ActivityInfo {
     }
     // The version stamp of the worker to whom this activity was most-recently dispatched
     temporal.api.common.v1.WorkerVersionStamp last_worker_version_stamp = 37;
+
+    message UseWorkflowBuildId {
+        // build ID of the wf when this activity started last time (which is the build ID of
+        // the worker who received this activity)
+        string last_used_build_id = 1;
+        // workflows redirect_counter value when this activity started last time
+        int64 last_redirect_counter = 2;
+    }
 }
 
 // timer_map column
@@ -438,6 +412,3 @@ message Checksum {
     bytes value = 3;
 }
 
-message CallbackInfo {
-    temporal.api.workflow.v1.CallbackInfo public_info = 1;
-}

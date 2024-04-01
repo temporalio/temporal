@@ -662,6 +662,7 @@ func (s *historyBuilderSuite) TestWorkflowTaskStarted() {
 		false,
 		123678,
 		nil,
+		int64(0),
 	)
 	s.Equal(event, s.flush())
 	s.Equal(&historypb.HistoryEvent{
@@ -848,6 +849,7 @@ func (s *historyBuilderSuite) TestActivityTaskStarted() {
 		testIdentity,
 		testFailure,
 		stamp,
+		int64(0),
 	)
 	s.Equal(event, s.flush())
 	s.Equal(&historypb.HistoryEvent{
