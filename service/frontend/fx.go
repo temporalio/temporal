@@ -413,16 +413,16 @@ func NamespaceRateLimitInterceptorProvider(
 		PerInstanceQuota: serviceConfig.MaxNamespaceRPSPerInstance,
 		GlobalQuota:      globalNamespaceRPS,
 	}.GetQuota, handler)
-	visibilityRateFn := getNamespaceRateFnWithMetrics(quotas.ClusterAwareNamespaceSpecificQuotaCalculator{
+	visibilityRateFn := quotas.ClusterAwareNamespaceSpecificQuotaCalculator{
 		MemberCounter:    frontendServiceResolver,
 		PerInstanceQuota: serviceConfig.MaxNamespaceVisibilityRPSPerInstance,
 		GlobalQuota:      globalNamespaceVisibilityRPS,
-	}.GetQuota, handler)
-	namespaceReplicationInducingRateFn := getNamespaceRateFnWithMetrics(quotas.ClusterAwareNamespaceSpecificQuotaCalculator{
+	}.GetQuota
+	namespaceReplicationInducingRateFn := quotas.ClusterAwareNamespaceSpecificQuotaCalculator{
 		MemberCounter:    frontendServiceResolver,
 		PerInstanceQuota: serviceConfig.MaxNamespaceNamespaceReplicationInducingAPIsRPSPerInstance,
 		GlobalQuota:      globalNamespaceNamespaceReplicationInducingAPIsRPS,
-	}.GetQuota, handler)
+	}.GetQuota
 	namespaceRateLimiter := quotas.NewNamespaceRequestRateLimiter(
 		func(req quotas.Request) quotas.RequestRateLimiter {
 			return configs.NewRequestToRateLimiter(
