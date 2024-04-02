@@ -81,7 +81,7 @@ type namespaceRateLimitInterceptorTestCase struct {
 	numReplicationInducingRequests int
 	// expectRateLimit is true if the interceptor should return a rate limit error
 	expectRateLimit bool
-	// expectedLimit is the expected rate limit value
+	// frontendServiceCount is the number of frontend services returned by ServiceResolver to rate limiter
 	frontendServiceCount int
 	// Rate limiter config values
 	globalNamespaceRPS                                                int
@@ -97,15 +97,14 @@ type namespaceRateLimitInterceptorTestCase struct {
 
 type rateLimitMetricsTestcase struct {
 	// name of the test case
-	name                 string
+	name string
+	// frontendServiceCount is the number of frontend services returned by ServiceResolver to rate limiter
 	frontendServiceCount int
 	// Rate limiter config values
-	rps       int
-	globalRPS int
-
+	rps                        int
+	globalRPS                  int
 	globalNamespaceRPS         int
 	maxNamespaceRPSPerInstance int
-
 	expectedHostLimit          int
 	expectedNamespaceHostLimit int
 }

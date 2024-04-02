@@ -369,7 +369,7 @@ func RateLimitInterceptorProvider(
 	return interceptor.NewRateLimitInterceptor(
 		configs.NewRequestToRateLimiter(
 			quotas.NewDefaultIncomingRateBurst(rateFnWithMetrics),
-			quotas.NewDefaultIncomingRateBurst(rateFnWithMetrics),
+			quotas.NewDefaultIncomingRateBurst(rateFn),
 			quotas.NewDefaultIncomingRateBurst(namespaceReplicationInducingRateFn),
 			serviceConfig.OperatorRPSRatio,
 		),
