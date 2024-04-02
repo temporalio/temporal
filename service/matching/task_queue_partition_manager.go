@@ -76,7 +76,7 @@ type (
 		HasAnyPollerAfter(accessTime time.Time) bool
 		// LegacyDescribeTaskQueue returns information about all pollers of this partition and the status of its unversioned physical queue
 		LegacyDescribeTaskQueue(includeTaskQueueStatus bool) *matchingservice.DescribeTaskQueueResponse
-		Describe(buildIds []string, reportBacklogInfo, reportPollers bool) (*matchingservice.DescribeTaskQueuePartitionResponse, error)
+		Describe(buildIds []string, includeAllActive, reportBacklogInfo, reportPollers bool) (*matchingservice.DescribeTaskQueuePartitionResponse, error)
 		String() string
 		Partition() tqid.Partition
 		LongPollExpirationInterval() time.Duration
@@ -394,15 +394,15 @@ func (pm *taskQueuePartitionManagerImpl) LegacyDescribeTaskQueue(includeTaskQueu
 }
 
 func (pm *taskQueuePartitionManagerImpl) Describe(
-	buildIds []string, reportBacklogInfo, reportPollers bool) (*matchingservice.DescribeTaskQueuePartitionResponse, error) {
+	buildIds []string,
+	includeAllActive, reportBacklogInfo, reportPollers bool) (*matchingservice.DescribeTaskQueuePartitionResponse, error) {
 	pm.versionedQueuesLock.RLock()
 	defer pm.versionedQueuesLock.RUnlock()
 
-	// An empty build id list means that the caller is asking for info about all "active versions."
 	// Active means that the physical queue for that version is loaded.
 	// An empty string refers to the unversioned queue, which is always loaded.
 	// In the future, active will mean that the physical queue for that version has had a task added recently or a recent poller.
-	if len(buildIds) == 0 {
+	if includeAllActive {
 		for k, _ := range pm.versionedQueues {
 			buildIds = append(buildIds, k)
 		}
