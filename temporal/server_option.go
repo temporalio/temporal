@@ -29,12 +29,12 @@ import (
 
 	"google.golang.org/grpc"
 
-	"go.temporal.io/server/common/membership/static"
 	"go.temporal.io/server/client"
 	"go.temporal.io/server/common/authorization"
 	"go.temporal.io/server/common/config"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
+	"go.temporal.io/server/common/membership/static"
 	"go.temporal.io/server/common/metrics"
 	persistenceclient "go.temporal.io/server/common/persistence/client"
 	"go.temporal.io/server/common/persistence/visibility"
