@@ -2514,71 +2514,57 @@ func (s *VersioningIntegSuite) dispatchCron() {
 
 func (s *VersioningIntegSuite) TestDescribeTaskQueueEnhanced_Unversioned() {
 	tq := s.randomizeStr(s.T().Name())
-
 	wf := func(ctx workflow.Context) (string, error) { return "ok", nil }
-
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
-	w1Id := s.randomizeStr("id")
-	w1 := worker.New(s.sdkClient, tq, worker.Options{
-		UseBuildIDForVersioning: false,
-		Identity:                w1Id,
-	})
-	w1.RegisterWorkflow(wf)
-	s.NoError(w1.Start())
-	defer w1.Stop()
-
-	w2Id := s.randomizeStr("id")
-	w2 := worker.New(s.sdkClient, tq, worker.Options{
-		UseBuildIDForVersioning: false,
-		Identity:                w2Id,
-	})
-	w2.RegisterWorkflow(wf)
-	s.NoError(w2.Start())
-	defer w2.Stop()
-
-	w3Id := s.randomizeStr("id")
-	w3 := worker.New(s.sdkClient, tq, worker.Options{
-		UseBuildIDForVersioning: false,
-		Identity:                w3Id,
-	})
-	w3.RegisterWorkflow(wf)
-	s.NoError(w3.Start())
-	defer w3.Stop()
-
-	resp, err := s.engine.DescribeTaskQueue(ctx, &workflowservice.DescribeTaskQueueRequest{
-		Namespace:              s.namespace,
-		TaskQueue:              &taskqueuepb.TaskQueue{Name: tq, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
-		ApiMode:                enumspb.DESCRIBE_TASK_QUEUE_MODE_ENHANCED,
-		Versions:               nil,
-		TaskQueueTypes:         []enumspb.TaskQueueType{enumspb.TASK_QUEUE_TYPE_WORKFLOW},
-		ReportPollers:          true,
-		ReportTaskReachability: true,
-	})
-	s.NoError(err)
-	s.NotNil(resp)
-	s.Assert().Equal(1, len(resp.GetVersionsInfo()), "should be 1 because only default/unversioned queue")
-	versionInfo := resp.GetVersionsInfo()[0]
-	s.Assert().Equal(1, len(versionInfo.GetTypesInfo()), "should be 1 because only 1 TaskQueueType")
-	s.Assert().Equal(enumspb.BUILD_ID_TASK_REACHABILITY_UNSPECIFIED, versionInfo.GetTaskReachability(), "not yet implemented")
-	s.Assert().Equal(enumspb.TASK_QUEUE_TYPE_WORKFLOW, versionInfo.GetTypesInfo()[0].GetType())
-	pollersInfo := versionInfo.GetTypesInfo()[0].GetPollers()
-	s.Assert().Equal(3, len(pollersInfo), "there were three separate unversioned pollers")
-
-	var w1Found, w2Found, w3Found bool
-	for _, pi := range pollersInfo {
-		s.False(pi.GetWorkerVersionCapabilities().GetUseVersioning())
-		switch pi.GetIdentity() {
-		case w1Id:
-			w1Found = true
-		case w2Id:
-			w2Found = true
-		case w3Id:
-			w3Found = true
-		}
+	workerN := 3
+	workerMap := make(map[string]worker.Worker)
+	for i := 0; i < workerN; i++ {
+		wId := s.randomizeStr("id")
+		w := worker.New(s.sdkClient, tq, worker.Options{
+			UseBuildIDForVersioning: false,
+			Identity:                wId,
+		})
+		w.RegisterWorkflow(wf)
+		s.NoError(w.Start())
+		defer w.Stop()
+		workerMap[wId] = w
 	}
-	s.True(w1Found && w2Found && w3Found)
+
+	s.Eventually(func() bool {
+		resp, err := s.engine.DescribeTaskQueue(ctx, &workflowservice.DescribeTaskQueueRequest{
+			Namespace:              s.namespace,
+			TaskQueue:              &taskqueuepb.TaskQueue{Name: tq, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
+			ApiMode:                enumspb.DESCRIBE_TASK_QUEUE_MODE_ENHANCED,
+			Versions:               nil, // default version, in this case unversioned queue
+			TaskQueueTypes:         nil, // both types
+			ReportPollers:          true,
+			ReportTaskReachability: true,
+		})
+		s.NoError(err)
+		s.NotNil(resp)
+		s.Assert().Equal(1, len(resp.GetVersionsInfo()), "should be 1 because only default/unversioned queue")
+		versionInfo := resp.GetVersionsInfo()[0]
+		s.Assert().Equal(enumspb.BUILD_ID_TASK_REACHABILITY_UNSPECIFIED, versionInfo.GetTaskReachability(), "not yet implemented")
+		var pollersInfo []*taskqueuepb.PollerInfo
+		for _, t := range versionInfo.GetTypesInfo() {
+			pollersInfo = append(pollersInfo, t.GetPollers()...)
+		}
+		foundN := 0
+		for wId := range workerMap {
+			for _, pi := range pollersInfo {
+				s.False(pi.GetWorkerVersionCapabilities().GetUseVersioning())
+				if pi.GetIdentity() == wId {
+					foundN++
+					break
+				}
+			}
+		}
+
+		return foundN == workerN
+	}, 3*time.Second, 50*time.Millisecond)
+
 }
 
 func (s *VersioningIntegSuite) TestDescribeTaskQueueLegacy_VersionSets() {
