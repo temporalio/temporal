@@ -1097,16 +1097,6 @@ func (t *FaultInjectionTaskStore) GetTasks(
 	return t.baseTaskStore.GetTasks(ctx, request)
 }
 
-func (t *FaultInjectionTaskStore) CompleteTask(
-	ctx context.Context,
-	request *persistence.CompleteTaskRequest,
-) error {
-	if err := t.ErrorGenerator.Generate(); err != nil {
-		return err
-	}
-	return t.baseTaskStore.CompleteTask(ctx, request)
-}
-
 func (t *FaultInjectionTaskStore) CompleteTasksLessThan(
 	ctx context.Context,
 	request *persistence.CompleteTasksLessThanRequest,

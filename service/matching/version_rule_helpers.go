@@ -154,7 +154,7 @@ func InsertCompatibleRedirectRule(timestamp *hlc.Clock,
 		return nil, serviceerror.NewFailedPrecondition(
 			"update breaks requirement, target build ID is already a member of a version set")
 	}
-	if isUnfilteredAssignmentRuleTarget(source, data.GetAssignmentRules()) {
+	if isConditionalAssignmentRuleTarget(source, data.GetAssignmentRules()) {
 		return nil, serviceerror.NewFailedPrecondition(
 			"redirect rule source build ID cannot be the target of any assignment rule with non-nil ramp")
 	}
@@ -370,9 +370,22 @@ func isRedirectRuleSource(buildID string, redirectRules []*persistencespb.Redire
 	return false
 }
 
-func isUnfilteredAssignmentRuleTarget(buildID string, assignmentRules []*persistencespb.AssignmentRule) bool {
+// isConditionalAssignmentRuleTarget checks whether the given buildID is the target of a conditional assignment rule
+// (one with a ramp). We check this for any buildID that is the source of a proposed redirect rule, because having a
+// ramped assignment rule target as the source for a redirect rule would lead to an unpredictable amount of traffic
+// being redirected vs being passed through to the next assignment rule in the chain. This would not be a sensible use
+// of redirect rules or assignment rule ramps, so it is prohibited.
+//
+// e.g. Scenario in which a conditional assignment rule target is the source for a redirect rule.
+//
+//	Assignment rules: [{target: 1, ramp: 50%}, {target: 2, ramp: nil}, {target: 3, ramp: nil}]
+//	  Redirect rules: [{1->4}]
+//	50% of tasks that start with buildID 1 would be sent on to buildID 2 per assignment rules, and the
+//	remaining 50% that "stay" on buildID 1 would be redirected to buildID 4 per the redirect rules.
+//	This doesn't make sense, so we prohibit it.
+func isConditionalAssignmentRuleTarget(buildID string, assignmentRules []*persistencepb.AssignmentRule) bool {
 	for _, r := range getActiveAssignmentRules(assignmentRules) {
-		if buildID == r.GetRule().GetTargetBuildId() {
+		if !isUnconditional(r.GetRule()) && buildID == r.GetRule().GetTargetBuildId() {
 			return true
 		}
 	}
