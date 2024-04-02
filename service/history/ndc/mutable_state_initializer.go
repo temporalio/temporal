@@ -238,7 +238,7 @@ func (r *MutableStateInitializerImpl) serializeBackfillToken(
 ) ([]byte, error) {
 	// This is ultimately for the replication rpc stream, so it's not really a request or
 	// response, but use SourceRPCResponse here since it's outgoing data.
-	if err := utf8validator.Validate(mutableState, utf8validator.SourceRPCResponse, nil); err != nil {
+	if err := utf8validator.Validate(mutableState, utf8validator.SourceRPCResponse); err != nil {
 		return nil, err
 	}
 	mutableStateRow, err := mutableState.Marshal()
@@ -279,7 +279,7 @@ func (r *MutableStateInitializerImpl) deserializeBackfillToken(
 	if err == nil {
 		// This is ultimately from the replication rpc stream, so it's not really a request or
 		// response, but use SourceRPCRequest here since it's incoming data.
-		err = utf8validator.Validate(mutableState, utf8validator.SourceRPCRequest, nil)
+		err = utf8validator.Validate(mutableState, utf8validator.SourceRPCRequest)
 	}
 	if err != nil {
 		return nil, 0, 0, false, serialization.NewDeserializationError(enums.ENCODING_TYPE_PROTO3, err)

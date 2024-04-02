@@ -1045,15 +1045,14 @@ func (s *scheduler) updateMemoAndSearchAttributes() {
 }
 
 func (s *scheduler) logUTF8ValidationErrors(msgs ...proto.Message) {
-	getTags := func() []tag.Tag {
-		return []tag.Tag{
-			tag.WorkflowNamespace(s.State.Namespace),
-			tag.ScheduleID(s.State.ScheduleId),
-		}
-	}
 	for _, msg := range msgs {
 		// log errors only, don't affect control flow
-		_ = utf8validator.Validate(msg, utf8validator.SourcePersistence, getTags)
+		_ = utf8validator.Validate(
+			msg,
+			utf8validator.SourcePersistence,
+			tag.WorkflowNamespace(s.State.Namespace),
+			tag.ScheduleID(s.State.ScheduleId),
+		)
 	}
 }
 

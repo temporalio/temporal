@@ -75,7 +75,7 @@ func serializeRawHistoryToken(token *tokenspb.RawHistoryContinuation) ([]byte, e
 	if token == nil {
 		return nil, nil
 	}
-	if err := utf8validator.Validate(token, utf8validator.SourceRPCResponse, nil); err != nil {
+	if err := utf8validator.Validate(token, utf8validator.SourceRPCResponse); err != nil {
 		return nil, err
 	}
 	return token.Marshal()
@@ -86,7 +86,7 @@ func deserializeRawHistoryToken(bytes []byte) (*tokenspb.RawHistoryContinuation,
 	token := &tokenspb.RawHistoryContinuation{}
 	err := token.Unmarshal(bytes)
 	if err == nil {
-		err = utf8validator.Validate(token, utf8validator.SourceRPCRequest, nil)
+		err = utf8validator.Validate(token, utf8validator.SourceRPCRequest)
 	}
 	return token, err
 }
@@ -96,7 +96,7 @@ func serializeHistoryToken(token *tokenspb.HistoryContinuation) ([]byte, error) 
 	if token == nil {
 		return nil, nil
 	}
-	if err := utf8validator.Validate(token, utf8validator.SourceRPCResponse, nil); err != nil {
+	if err := utf8validator.Validate(token, utf8validator.SourceRPCResponse); err != nil {
 		return nil, err
 	}
 	return token.Marshal()
@@ -107,7 +107,7 @@ func deserializeHistoryToken(bytes []byte) (*tokenspb.HistoryContinuation, error
 	token := &tokenspb.HistoryContinuation{}
 	err := token.Unmarshal(bytes)
 	if err == nil {
-		err = utf8validator.Validate(token, utf8validator.SourceRPCRequest, nil)
+		err = utf8validator.Validate(token, utf8validator.SourceRPCRequest)
 	}
 	return token, err
 }

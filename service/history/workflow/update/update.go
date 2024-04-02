@@ -289,7 +289,7 @@ func (u *Update) Request(
 
 	u.instrumentation.CountRequestMsg()
 	// Marshal update request here to return InvalidArgument to the API caller if it can't be marshaled.
-	if err := utf8validator.Validate(req, utf8validator.SourceRPCRequest, nil); err != nil {
+	if err := utf8validator.Validate(req, utf8validator.SourceRPCRequest); err != nil {
 		return invalidArgf("unable to marshal request: %v", err)
 	}
 	reqAny, err := anypb.New(req)
@@ -330,7 +330,7 @@ func (u *Update) OnProtocolMessage(
 	if err != nil {
 		return invalidArgf("unable to unmarshal request: %v", err)
 	}
-	err = utf8validator.Validate(body, utf8validator.SourceRPCRequest, nil)
+	err = utf8validator.Validate(body, utf8validator.SourceRPCRequest)
 	if err != nil {
 		return invalidArgf("unable to unmarshal request: %v", err)
 	}

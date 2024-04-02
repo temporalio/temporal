@@ -119,10 +119,10 @@ func newValidator(
 func Validate(
 	m proto.Message,
 	source MessageSource,
-	getTags func() []tag.Tag,
+	tags ...tag.Tag,
 ) error {
 	if v, ok := globalValidator.Load().(*Validator); ok {
-		return v.Validate(m, source, getTags)
+		return v.Validate(m, source, tags...)
 	}
 	return nil
 }
@@ -134,7 +134,7 @@ func Validate(
 func (v *Validator) Validate(
 	m proto.Message,
 	source MessageSource,
-	getTags func() []tag.Tag,
+	tags ...tag.Tag,
 ) error {
 	if source < 0 || source >= sourceCount {
 		return ErrInvalidMessageSource
@@ -151,14 +151,10 @@ func (v *Validator) Validate(
 
 	badPath := string(ref.Descriptor().Name()) + "." + validation.badPath
 
-	var tags []tag.Tag
-	if getTags != nil {
-		tags = getTags()
-	}
-	v.logger.Warn("invalid utf-8 in string field", append(tags,
+	v.logger.Warn("invalid utf-8 in string field", append([]tag.Tag{
 		tag.NewStringTag("message-source", sourceNames[source]),
 		tag.NewStringTag("message-path", badPath),
-	)...)
+	}, tags...)...)
 	metrics.UTF8ValidationErrors.With(v.metrics).Record(1)
 
 	if v.failBySource[source]() {
@@ -171,17 +167,13 @@ var _ grpc.UnaryServerInterceptor = (*Validator)(nil).Intercept
 
 // Intercept acts as grpc interceptor.
 func (v *Validator) Intercept(ctx context.Context, req any, info *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (any, error) {
-	getTags := func() []tag.Tag {
-		if getNs, ok := req.(interface{ GetNamespace() string }); ok {
-			return []tag.Tag{
-				tag.WorkflowNamespace(getNs.GetNamespace()),
-			}
-		}
-		return nil
+	nsTags := make([]tag.Tag, 0, 1)
+	if getNs, ok := req.(interface{ GetNamespace() string }); ok {
+		nsTags = append(nsTags, tag.WorkflowNamespace(getNs.GetNamespace()))
 	}
 
 	if reqM, ok := req.(proto.Message); ok {
-		err := v.Validate(reqM, SourceRPCRequest, getTags)
+		err := v.Validate(reqM, SourceRPCRequest, nsTags...)
 		if err != nil {
 			return nil, serviceerror.NewInvalidArgument(err.Error())
 		}
@@ -190,7 +182,7 @@ func (v *Validator) Intercept(ctx context.Context, req any, info *grpc.UnaryServ
 	res, err := handler(ctx, req)
 
 	if resM, ok := res.(proto.Message); ok {
-		vErr := v.Validate(resM, SourceRPCResponse, getTags)
+		vErr := v.Validate(resM, SourceRPCResponse, nsTags...)
 		if vErr != nil && err == nil {
 			err = serviceerror.NewInternal(vErr.Error())
 		}

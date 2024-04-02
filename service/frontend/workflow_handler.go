@@ -4414,7 +4414,7 @@ func (wh *WorkflowHandler) decodeScheduleListInfo(memo *commonpb.Memo) *schedpb.
 	} else if err := listInfo.Unmarshal(listInfoBytes); err != nil {
 		wh.logger.Error("decoding schedule list info from payload", tag.Error(err))
 		return nil
-	} else if err := utf8validator.Validate(&listInfo, utf8validator.SourcePersistence, nil); err != nil {
+	} else if err := utf8validator.Validate(&listInfo, utf8validator.SourcePersistence); err != nil {
 		wh.logger.Error("decoding schedule list info from payload", tag.Error(err))
 		return nil
 	}

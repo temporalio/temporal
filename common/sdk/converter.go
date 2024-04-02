@@ -68,7 +68,7 @@ func (c *protoPayloadConverter) ToPayload(value interface{}) (*commonpb.Payload,
 	builtPointer := false
 	for {
 		if valueProto, ok := value.(proto.Message); ok {
-			err := utf8validator.Validate(valueProto, utf8validator.SourcePersistence, nil)
+			err := utf8validator.Validate(valueProto, utf8validator.SourcePersistence)
 			if err != nil {
 				return nil, fmt.Errorf("%w: %v", converter.ErrUnableToEncode, err)
 			}
@@ -132,7 +132,7 @@ func (c *protoPayloadConverter) FromPayload(payload *commonpb.Payload, valuePtr 
 
 	err := proto.Unmarshal(payload.GetData(), protoMessage)
 	if err == nil {
-		err = utf8validator.Validate(protoMessage, utf8validator.SourcePersistence, nil)
+		err = utf8validator.Validate(protoMessage, utf8validator.SourcePersistence)
 	}
 	if err != nil {
 		return fmt.Errorf("%w: %v", converter.ErrUnableToDecode, err)

@@ -34,8 +34,6 @@ import (
 	"google.golang.org/grpc/health"
 	"google.golang.org/grpc/keepalive"
 
-	"go.temporal.io/server/common/nexus"
-
 	"go.temporal.io/server/client"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/archiver"
