@@ -798,6 +798,7 @@ func (e *matchingEngineImpl) DescribeTaskQueue(
 		// collect internal info
 		physicalInfoByBuildId := make(map[string]map[enumspb.TaskQueueType]*taskqueuespb.PhysicalTaskQueueInfo)
 		for _, taskQueueType := range req.TaskQueueTypes {
+
 			for i := 0; i < e.config.NumTaskqueueWritePartitions(req.Namespace, req.TaskQueue.Name, taskQueueType); i++ {
 				pm, err := e.getTaskQueuePartitionManager(
 					ctx,
