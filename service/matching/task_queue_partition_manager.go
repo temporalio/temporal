@@ -403,7 +403,7 @@ func (pm *taskQueuePartitionManagerImpl) Describe(
 	// An empty string refers to the unversioned queue, which is always loaded.
 	// In the future, active will mean that the physical queue for that version has had a task added recently or a recent poller.
 	if includeAllActive {
-		for k, _ := range pm.versionedQueues {
+		for k := range pm.versionedQueues {
 			buildIds = append(buildIds, k)
 		}
 	}
@@ -414,13 +414,18 @@ func (pm *taskQueuePartitionManagerImpl) Describe(
 			BuildId:               bid,
 			PhysicalTaskQueueInfo: &taskqueuespb.PhysicalTaskQueueInfo{},
 		}
-		// todo carly: should we return an error if !ok? right now it will always be ok because we lock the map
+		var physicalQueue physicalTaskQueueManager
 		if vq, ok := pm.versionedQueues[bid]; ok {
+			physicalQueue = vq
+		} else if bid == "" {
+			physicalQueue = pm.defaultQueue
+		}
+		if physicalQueue != nil {
 			if reportPollers {
-				versionsInfo[i].PhysicalTaskQueueInfo.Pollers = vq.GetAllPollerInfo()
+				versionsInfo[i].PhysicalTaskQueueInfo.Pollers = physicalQueue.GetAllPollerInfo()
 			}
 			if reportBacklogInfo {
-				versionsInfo[i].PhysicalTaskQueueInfo.BacklogInfo = vq.GetBacklogInfo()
+				versionsInfo[i].PhysicalTaskQueueInfo.BacklogInfo = physicalQueue.GetBacklogInfo()
 			}
 		}
 	}
