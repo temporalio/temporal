@@ -242,8 +242,8 @@ func (u *Update) WaitOutcome(ctx context.Context) (UpdateStatus, error) {
 	return UpdateStatus{enumspb.UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_COMPLETED, outcome}, nil
 }
 
-// WaitAccepted blocks on the acceptance of this update, returning nil if has
-// been accepted but not yet completed or the overall Outcome if the update has
+// WaitAccepted blocks on the acceptance of this update, returning nil if it has
+// been accepted but not yet completed, or the overall Outcome if the update has
 // been completed (including completed by rejection). This call will block until
 // the acceptance occurs or the provided context.Context expires.
 // It is safe to call this method outside of workflow lock.

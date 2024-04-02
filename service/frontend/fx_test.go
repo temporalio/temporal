@@ -26,6 +26,7 @@ package frontend
 
 import (
 	"context"
+	"errors"
 	"net"
 	"sync"
 	"testing"
@@ -33,13 +34,19 @@ import (
 	"github.com/golang/mock/gomock"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	enumspb "go.temporal.io/api/enums/v1"
+	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/api/workflowservice/v1"
+	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/membership"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/primitives"
+	"go.temporal.io/server/common/rpc"
 	"go.temporal.io/server/internal/nettest"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
+	"google.golang.org/grpc/metadata"
+	"google.golang.org/grpc/status"
 )
 
 type rateLimitInterceptorTestCase struct {
@@ -229,7 +236,7 @@ func TestRateLimitInterceptorProvider(t *testing.T) {
 
 			// Create a gRPC server for the fake workflow service.
 			svc := &testSvc{}
-			server := grpc.NewServer(grpc.UnaryInterceptor(rateLimitInterceptor.Intercept))
+			server := grpc.NewServer(grpc.ChainUnaryInterceptor(rpc.NewServiceErrorInterceptor(log.NewTestLogger()), rateLimitInterceptor.Intercept))
 			workflowservice.RegisterWorkflowServiceServer(server, svc)
 
 			pipe := nettest.NewPipe()
@@ -256,12 +263,14 @@ func TestRateLimitInterceptorProvider(t *testing.T) {
 			defer server.Stop()
 
 			client := workflowservice.NewWorkflowServiceClient(conn)
+			var header metadata.MD
 
 			// Generate load by sending a number of requests to the server.
 			for i := 0; i < tc.numRequests; i++ {
 				_, err = client.StartWorkflowExecution(
 					context.Background(),
 					&workflowservice.StartWorkflowExecutionRequest{},
+					grpc.Header(&header),
 				)
 				if err != nil {
 					break
@@ -271,6 +280,16 @@ func TestRateLimitInterceptorProvider(t *testing.T) {
 			// Check if the rate limit is hit.
 			if tc.expectRateLimit {
 				assert.ErrorContains(t, err, "rate limit exceeded")
+				s := status.Convert(err)
+				var resourceExhausted *serviceerror.ResourceExhausted
+				errors.As(serviceerror.FromStatus(s), &resourceExhausted)
+				assert.Equal(t, enumspb.RESOURCE_EXHAUSTED_CAUSE_RPS_LIMIT, resourceExhausted.Cause)
+				assert.Equal(t, enumspb.RESOURCE_EXHAUSTED_SCOPE_SYSTEM, resourceExhausted.Scope)
+
+				assert.Len(t, header.Get(rpc.ResourceExhaustedCauseHeader), 1)
+				assert.Equal(t, enumspb.RESOURCE_EXHAUSTED_CAUSE_RPS_LIMIT.String(), header.Get(rpc.ResourceExhaustedCauseHeader)[0])
+				assert.Len(t, header.Get(rpc.ResourceExhaustedScopeHeader), 1)
+				assert.Equal(t, enumspb.RESOURCE_EXHAUSTED_SCOPE_SYSTEM.String(), header.Get(rpc.ResourceExhaustedScopeHeader)[0])
 			} else {
 				assert.NoError(t, err)
 			}
@@ -568,7 +587,7 @@ func TestNamespaceRateLimitInterceptorProvider(t *testing.T) {
 
 			// Create a gRPC server for the fake workflow service.
 			svc := &testSvc{}
-			server := grpc.NewServer(grpc.UnaryInterceptor(rateLimitInterceptor.Intercept))
+			server := grpc.NewServer(grpc.ChainUnaryInterceptor(rpc.NewServiceErrorInterceptor(log.NewTestLogger()), rateLimitInterceptor.Intercept))
 			workflowservice.RegisterWorkflowServiceServer(server, svc)
 
 			pipe := nettest.NewPipe()
@@ -595,11 +614,22 @@ func TestNamespaceRateLimitInterceptorProvider(t *testing.T) {
 			defer server.Stop()
 
 			client := workflowservice.NewWorkflowServiceClient(conn)
+			var header metadata.MD
 
 			defer func() {
 				// Check if the rate limit is hit.
 				if tc.expectRateLimit {
 					assert.ErrorContains(t, err, "rate limit exceeded")
+					s := status.Convert(err)
+					var resourceExhausted *serviceerror.ResourceExhausted
+					errors.As(serviceerror.FromStatus(s), &resourceExhausted)
+					assert.Equal(t, enumspb.RESOURCE_EXHAUSTED_CAUSE_RPS_LIMIT, resourceExhausted.Cause)
+					assert.Equal(t, enumspb.RESOURCE_EXHAUSTED_SCOPE_NAMESPACE, resourceExhausted.Scope)
+
+					assert.Len(t, header.Get(rpc.ResourceExhaustedCauseHeader), 1)
+					assert.Equal(t, enumspb.RESOURCE_EXHAUSTED_CAUSE_RPS_LIMIT.String(), header.Get(rpc.ResourceExhaustedCauseHeader)[0])
+					assert.Len(t, header.Get(rpc.ResourceExhaustedScopeHeader), 1)
+					assert.Equal(t, enumspb.RESOURCE_EXHAUSTED_SCOPE_NAMESPACE.String(), header.Get(rpc.ResourceExhaustedScopeHeader)[0])
 				} else {
 					assert.NoError(t, err)
 				}
@@ -610,6 +640,7 @@ func TestNamespaceRateLimitInterceptorProvider(t *testing.T) {
 				_, err = client.StartWorkflowExecution(
 					context.Background(),
 					&workflowservice.StartWorkflowExecutionRequest{},
+					grpc.Header(&header),
 				)
 				if err != nil {
 					return
@@ -620,6 +651,7 @@ func TestNamespaceRateLimitInterceptorProvider(t *testing.T) {
 				_, err = client.ListWorkflowExecutions(
 					context.Background(),
 					&workflowservice.ListWorkflowExecutionsRequest{},
+					grpc.Header(&header),
 				)
 				if err != nil {
 					return
@@ -630,6 +662,7 @@ func TestNamespaceRateLimitInterceptorProvider(t *testing.T) {
 				_, err = client.RegisterNamespace(
 					context.Background(),
 					&workflowservice.RegisterNamespaceRequest{},
+					grpc.Header(&header),
 				)
 				if err != nil {
 					return

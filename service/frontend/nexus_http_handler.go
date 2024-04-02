@@ -76,7 +76,7 @@ func NewNexusHTTPHandler(
 		namespaceRateLimitInterceptor:        namespaceRateLimitInterceptor,
 		namespaceConcurrencyLimitInterceptor: namespaceConcurrencyLimitIntercptor,
 		rateLimitInterceptor:                 rateLimitInterceptor,
-		enabled:                              serviceConfig.EnableNexusHTTPHandler,
+		enabled:                              serviceConfig.EnableNexusAPIs,
 		preprocessErrorCounter:               metricsHandler.Counter(metrics.NexusRequestPreProcessErrors.Name()).Record,
 		nexusHandler: nexus.NewHTTPHandler(nexus.HandlerOptions{
 			Handler: &nexusHandler{
@@ -94,9 +94,9 @@ func NewNexusHTTPHandler(
 }
 
 func (h *NexusHTTPHandler) RegisterRoutes(r *mux.Router) {
-	r.PathPrefix("/" + commonnexus.Routes().DispatchNexusTaskByNamespaceAndTaskQueue.Representation() + "/").
+	r.PathPrefix("/" + commonnexus.RouteDispatchNexusTaskByNamespaceAndTaskQueue.Representation() + "/").
 		HandlerFunc(h.dispatchNexusTaskByNamespaceAndTaskQueue)
-	r.PathPrefix("/" + commonnexus.Routes().DispatchNexusTaskByService.Representation() + "/").
+	r.PathPrefix("/" + commonnexus.RouteDispatchNexusTaskByService.Representation() + "/").
 		HandlerFunc(h.dispatchNexusTaskByService)
 }
 
@@ -140,10 +140,10 @@ func (h *NexusHTTPHandler) dispatchNexusTaskByNamespaceAndTaskQueue(w http.Respo
 		namespaceRateLimitInterceptor:        h.namespaceRateLimitInterceptor,
 		namespaceConcurrencyLimitInterceptor: h.namespaceConcurrencyLimitInterceptor,
 		rateLimitInterceptor:                 h.rateLimitInterceptor,
-		apiName:                              configs.DispatchNexusTaskAPIName,
+		apiName:                              configs.DispatchNexusTaskByNamespaceAndTaskQueueAPIName,
 	}
 
-	params := commonnexus.Routes().DispatchNexusTaskByNamespaceAndTaskQueue.Deserialize(vars)
+	params := commonnexus.RouteDispatchNexusTaskByNamespaceAndTaskQueue.Deserialize(vars)
 
 	if nc.namespaceName, err = url.PathUnescape(params.Namespace); err != nil {
 		h.logger.Error("invalid URL", tag.Error(err))

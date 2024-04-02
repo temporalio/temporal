@@ -22,7 +22,7 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-//go:generate mockgen -copyright_file ../../LICENSE -package $GOPACKAGE -source $GOFILE -destination namespace_handler_mock.go
+//go:generate mocksync -copyright_file ../../LICENSE -package $GOPACKAGE -source $GOFILE -destination namespace_handler_mock.go
 
 package frontend
 
@@ -276,6 +276,7 @@ func (d *namespaceHandler) RegisterNamespace(
 		namespaceRequest.Namespace.Info,
 		namespaceRequest.Namespace.Config,
 		namespaceRequest.Namespace.ReplicationConfig,
+		namespaceRequest.Namespace.OutgoingServices,
 		false,
 		namespaceRequest.Namespace.ConfigVersion,
 		namespaceRequest.Namespace.FailoverVersion,
@@ -599,6 +600,7 @@ func (d *namespaceHandler) UpdateNamespace(
 				ConfigVersion:               configVersion,
 				FailoverVersion:             failoverVersion,
 				FailoverNotificationVersion: failoverNotificationVersion,
+				OutgoingServices:            getResponse.Namespace.OutgoingServices,
 			},
 			IsGlobalNamespace:   isGlobalNamespace,
 			NotificationVersion: notificationVersion,
@@ -615,6 +617,7 @@ func (d *namespaceHandler) UpdateNamespace(
 		info,
 		config,
 		replicationConfig,
+		getResponse.Namespace.OutgoingServices,
 		clusterListChanged,
 		configVersion,
 		failoverVersion,
@@ -675,6 +678,7 @@ func (d *namespaceHandler) DeprecateNamespace(
 			ConfigVersion:               getResponse.Namespace.ConfigVersion,
 			FailoverVersion:             getResponse.Namespace.FailoverVersion,
 			FailoverNotificationVersion: getResponse.Namespace.FailoverNotificationVersion,
+			OutgoingServices:            getResponse.Namespace.OutgoingServices,
 		},
 		NotificationVersion: notificationVersion,
 		IsGlobalNamespace:   getResponse.IsGlobalNamespace,

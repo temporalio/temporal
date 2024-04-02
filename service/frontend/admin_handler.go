@@ -1136,6 +1136,7 @@ func (adh *AdminHandler) AddOrUpdateRemoteCluster(
 			HistoryShardCount:        resp.GetHistoryShardCount(),
 			ClusterId:                resp.GetClusterId(),
 			ClusterAddress:           request.GetFrontendAddress(),
+			HttpAddress:              request.GetFrontendHttpAddress(),
 			FailoverVersionIncrement: resp.GetFailoverVersionIncrement(),
 			InitialFailoverVersion:   resp.GetInitialFailoverVersion(),
 			IsGlobalNamespaceEnabled: resp.GetIsGlobalNamespaceEnabled(),
@@ -1761,6 +1762,7 @@ func (adh *AdminHandler) GetNamespace(ctx context.Context, request *adminservice
 		FailoverVersion:   resp.Namespace.GetFailoverVersion(),
 		IsGlobalNamespace: resp.IsGlobalNamespace,
 		FailoverHistory:   convertFailoverHistoryToReplicationProto(resp.Namespace.GetReplicationConfig().GetFailoverHistory()),
+		OutgoingServices:  resp.Namespace.GetOutgoingServices(),
 	}
 	return nsResponse, nil
 }

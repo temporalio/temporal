@@ -219,13 +219,22 @@ const (
 	ReachabilityQuerySetDurationSinceDefault = "frontend.reachabilityQuerySetDurationSinceDefault"
 	// TaskQueuesPerBuildIdLimit limits the number of task queue names that can be mapped to a single build id.
 	TaskQueuesPerBuildIdLimit = "limit.taskQueuesPerBuildId"
-	// NexusOutgoingServiceURLMaxLength is the maximum length of an outgoing service URL
+
+	// NexusIncomingServiceNameMaxLength is the maximum length of a Nexus incoming service name.
+	NexusIncomingServiceNameMaxLength = "limit.incomingServiceNameMaxLength"
+	// NexusIncomingServiceMaxSize is the maximum size of a Nexus incoming service in bytes.
+	NexusIncomingServiceMaxSize = "limit.incomingServiceMaxSize"
+	// NexusIncomingServiceListDefaultPageSize is the default page size for listing Nexus incoming services.
+	NexusIncomingServiceListDefaultPageSize = "limit.incomingServiceListDefaultPageSize"
+	// NexusIncomingServiceListMaxPageSize is the maximum page size for listing Nexus incoming services.
+	NexusIncomingServiceListMaxPageSize = "limit.incomingServiceListMaxPageSize"
+	// NexusOutgoingServiceURLMaxLength is the maximum length of an outgoing service URL.
 	NexusOutgoingServiceURLMaxLength = "limit.outgoingServiceURLMaxLength"
-	// NexusOutgoingServiceNameMaxLength is the maximum length of an outgoing service name
+	// NexusOutgoingServiceNameMaxLength is the maximum length of an outgoing service name.
 	NexusOutgoingServiceNameMaxLength = "limit.outgoingServiceNameMaxLength"
-	// NexusOutgoingServiceListDefaultPageSize is the default page size for listing outgoing services
+	// NexusOutgoingServiceListDefaultPageSize is the default page size for listing outgoing services.
 	NexusOutgoingServiceListDefaultPageSize = "limit.outgoingServiceListDefaultPageSize"
-	// NexusOutgoingServiceListMaxPageSize is the maximum page size for listing outgoing services
+	// NexusOutgoingServiceListMaxPageSize is the maximum page size for listing outgoing services.
 	NexusOutgoingServiceListMaxPageSize = "limit.outgoingServiceListMaxPageSize"
 
 	// RemovableBuildIdDurationSinceDefault is the minimum duration since a build id was last default in its containing
@@ -377,8 +386,14 @@ const (
 	KeepAliveTimeout = "frontend.keepAliveTimeout"
 	// FrontendEnableSchedules enables schedule-related RPCs in the frontend
 	FrontendEnableSchedules = "frontend.enableSchedules"
-	// FrontendEnableNexusHTTPHandler enables serving Nexus HTTP requests in the frontend.
-	FrontendEnableNexusHTTPHandler = "frontend.enableNexusHTTPHandler"
+	// FrontendEnableNexusAPIs enables serving Nexus HTTP requests in the frontend.
+	FrontendEnableNexusAPIs = "frontend.enableNexusAPIs"
+	// FrontendInitializeNexusIncomingServicesTimeout is the maximum time allowed for initializing Nexus incoming services.
+	FrontendInitializeNexusIncomingServicesTimeout = "frontend.initializeNexusIncomingServicesTimeout"
+	// FrontendRefreshNexusIncomingServicesLongPollTimeout is the maximum duration of background long poll requests to update Nexus incoming services.
+	FrontendRefreshNexusIncomingServicesLongPollTimeout = "frontend.refreshNexusIncomingServicesLongPollTimeout"
+	// FrontendRefreshNexusIncomingServicesMinWait is the minimum wait time between background long poll requests to update Nexus incoming services.
+	FrontendRefreshNexusIncomingServicesMinWait = "frontend.refreshNexusIncomingServicesMinWait"
 	// FrontendEnableCallbackAttachment enables attaching callbacks to workflows.
 	FrontendEnableCallbackAttachment = "frontend.enableCallbackAttachment"
 	// FrontendMaxConcurrentBatchOperationPerNamespace is the max concurrent batch operation job count per namespace
@@ -400,6 +415,10 @@ const (
 	// The UpdateWorkflowExecution API has gone through rigorous testing efforts but this config's default is `false` until the
 	// feature gets more time in production.
 	FrontendEnableUpdateWorkflowExecution = "frontend.enableUpdateWorkflowExecution"
+
+	// FrontendEnableExecuteMultiOperation enables the ExecuteMultiOperation API in the frontend.
+	// The API is under active development.
+	FrontendEnableExecuteMultiOperation = "frontend.enableExecuteMultiOperation"
 
 	// FrontendEnableUpdateWorkflowExecutionAsyncAccepted enables the form of
 	// asynchronous workflow execution update that waits on the "Accepted"

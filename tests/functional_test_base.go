@@ -128,6 +128,7 @@ func (s *FunctionalTestBase) setupSuite(defaultClusterConfigFile string, options
 		dynamicconfig.TaskQueueScannerEnabled:  false,
 		dynamicconfig.ExecutionsScannerEnabled: false,
 		dynamicconfig.BuildIdScavengerEnabled:  false,
+		dynamicconfig.FrontendEnableNexusAPIs:  true,
 	})
 	maps.Copy(clusterConfig.DynamicConfigOverrides, s.dynamicConfigOverrides)
 	clusterConfig.ServiceFxOptions = params.ServiceOptions

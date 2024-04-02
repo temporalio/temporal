@@ -43,7 +43,7 @@ import (
 	"go.temporal.io/server/common/persistence"
 )
 
-//go:generate mockgen -copyright_file ../../../LICENSE -package $GOPACKAGE -source $GOFILE -destination eager_namespace_refresher_mock.go
+//go:generate mocksync -copyright_file ../../../LICENSE -package $GOPACKAGE -source $GOFILE -destination eager_namespace_refresher_mock.go
 
 type (
 	EagerNamespaceRefresher interface {
@@ -185,6 +185,7 @@ func (e *eagerNamespaceRefresherImpl) SyncNamespaceFromSourceCluster(
 		Info:               resp.GetInfo(),
 		Config:             resp.GetConfig(),
 		ReplicationConfig:  resp.GetReplicationConfig(),
+		NexusOutgoingServices: resp.GetOutgoingServices(),
 		ConfigVersion:      resp.GetConfigVersion(),
 		FailoverVersion:    resp.GetFailoverVersion(),
 		FailoverHistory:    resp.GetFailoverHistory(),

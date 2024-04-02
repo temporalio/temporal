@@ -34,6 +34,8 @@ import (
 	"google.golang.org/grpc/health"
 	"google.golang.org/grpc/keepalive"
 
+	"go.temporal.io/server/common/nexus"
+
 	"go.temporal.io/server/client"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/archiver"
@@ -114,6 +116,7 @@ var Module = fx.Options(
 	fx.Provide(OpenAPIHTTPHandlerProvider),
 	fx.Provide(HTTPAPIServerProvider),
 	fx.Provide(NewServiceProvider),
+	fx.Provide(IncomingServiceClientProvider),
 	fx.Provide(OutgoingServiceRegistryProvider),
 	fx.Invoke(ServiceLifetimeHooks),
 )
@@ -242,7 +245,7 @@ func GrpcServerOptionsProvider(
 	}
 	unaryInterceptors := []grpc.UnaryServerInterceptor{
 		// Service Error Interceptor should be the most outer interceptor on error handling
-		rpc.ServiceErrorInterceptor,
+		rpc.NewServiceErrorInterceptor(logger),
 		utf8Validator.Intercept,
 		namespaceValidatorInterceptor.NamespaceValidateIntercept,
 		namespaceLogInterceptor.Intercept, // TODO: Deprecate this with a outer custom interceptor
@@ -593,6 +596,7 @@ func OperatorHandlerProvider(
 	clusterMetadataManager persistence.ClusterMetadataManager,
 	clusterMetadata cluster.Metadata,
 	clientFactory client.Factory,
+	incomingServiceClient *NexusIncomingServiceClient,
 	outgoingServiceRegistry *nexus.OutgoingServiceRegistry,
 ) *OperatorHandlerImpl {
 	args := NewOperatorHandlerImplArgs{
@@ -608,6 +612,7 @@ func OperatorHandlerProvider(
 		clusterMetadataManager,
 		clusterMetadata,
 		clientFactory,
+		incomingServiceClient,
 		outgoingServiceRegistry,
 	}
 	return NewOperatorHandlerImpl(args)
@@ -746,12 +751,32 @@ func HTTPAPIServerProvider(
 	)
 }
 
+func IncomingServiceClientProvider(
+	dc *dynamicconfig.Collection,
+	namespaceRegistry namespace.Registry,
+	matchingClient resource.MatchingClient,
+	incomingServiceManager persistence.NexusIncomingServiceManager,
+	logger log.Logger,
+) *NexusIncomingServiceClient {
+	clientConfig := newNexusIncomingServiceClientConfig(dc)
+	return newNexusIncomingServiceClient(
+		clientConfig,
+		namespaceRegistry,
+		matchingClient,
+		incomingServiceManager,
+		logger,
+	)
+}
+
 func OutgoingServiceRegistryProvider(
 	metadataManager persistence.MetadataManager,
+	logger log.Logger,
+	namespaceReplicationQueue persistence.NamespaceReplicationQueue,
 	dc *dynamicconfig.Collection,
 ) *nexus.OutgoingServiceRegistry {
 	registryConfig := nexus.NewOutgoingServiceRegistryConfig(dc)
-	return nexus.NewOutgoingServiceRegistry(metadataManager, registryConfig)
+	namespaceReplicator := namespace.NewNamespaceReplicator(namespaceReplicationQueue, logger)
+	return nexus.NewOutgoingServiceRegistry(metadataManager, namespaceReplicator, registryConfig)
 }
 
 func ServiceLifetimeHooks(lc fx.Lifecycle, svc *Service) {

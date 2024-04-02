@@ -1,4 +1,4 @@
-# Overrides for CDD for Mac/Darwin users.
+# Overrides for CDC for MacOS (Darwin) users.
 version: "3.5"
 
 services:
