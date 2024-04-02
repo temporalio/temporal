@@ -405,6 +405,10 @@ const (
 	// feature gets more time in production.
 	FrontendEnableUpdateWorkflowExecution = "frontend.enableUpdateWorkflowExecution"
 
+	// FrontendEnableExecuteMultiOperation enables the ExecuteMultiOperation API in the frontend.
+	// The API is under active development.
+	FrontendEnableExecuteMultiOperation = "frontend.enableExecuteMultiOperation"
+
 	// FrontendEnableUpdateWorkflowExecutionAsyncAccepted enables the form of
 	// asynchronous workflow execution update that waits on the "Accepted"
 	// lifecycle stage. Default value is `false`.
