@@ -222,22 +222,19 @@ func (s *FunctionalSuite) TestWorkflowNexusCallbacks_CarriedOverContinueAsNew() 
 			err = nexus.HandlerErrorf(nexus.HandlerErrorTypeInternal, "intentional error")
 		}
 		ch.requestCompleteCh <- err
-		s.Eventually(func() bool {
-			description, err := sdkClient.DescribeWorkflowExecution(ctx, request.WorkflowId, "")
-			s.NoError(err)
-			s.Equal(1, len(description.Callbacks))
-			callbackInfo := description.Callbacks[0]
-			s.ProtoEqual(request.CompletionCallbacks[0], callbackInfo.Callback)
-			s.ProtoEqual(&workflowpb.CallbackInfo_Trigger{Variant: &workflowpb.CallbackInfo_Trigger_WorkflowClosed{WorkflowClosed: &workflowpb.CallbackInfo_WorkflowClosed{}}}, callbackInfo.Trigger)
-			s.Equal(int32(attempt), callbackInfo.Attempt)
-			if attempt < numAttempts {
-				s.Equal(enumspb.CALLBACK_STATE_BACKING_OFF, callbackInfo.State)
-				s.Equal("request failed with: 500 Internal Server Error", callbackInfo.LastAttemptFailure.Message)
-			} else {
-				s.Equal(enumspb.CALLBACK_STATE_SUCCEEDED, callbackInfo.State)
-				s.Nil(callbackInfo.LastAttemptFailure)
-			}
-			return true
-		}, time.Second, time.Millisecond*100)
+		description, err := sdkClient.DescribeWorkflowExecution(ctx, request.WorkflowId, "")
+		s.NoError(err)
+		s.Equal(1, len(description.Callbacks))
+		callbackInfo := description.Callbacks[0]
+		s.ProtoEqual(request.CompletionCallbacks[0], callbackInfo.Callback)
+		s.ProtoEqual(&workflowpb.CallbackInfo_Trigger{Variant: &workflowpb.CallbackInfo_Trigger_WorkflowClosed{WorkflowClosed: &workflowpb.CallbackInfo_WorkflowClosed{}}}, callbackInfo.Trigger)
+		s.Equal(int32(attempt), callbackInfo.Attempt)
+		if attempt < numAttempts {
+			s.Equal(enumspb.CALLBACK_STATE_BACKING_OFF, callbackInfo.State)
+			s.Equal("request failed with: 500 Internal Server Error", callbackInfo.LastAttemptFailure.Message)
+		} else {
+			s.Equal(enumspb.CALLBACK_STATE_SUCCEEDED, callbackInfo.State)
+			s.Nil(callbackInfo.LastAttemptFailure)
+		}
 	}
 }

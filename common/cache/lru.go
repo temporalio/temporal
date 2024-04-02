@@ -37,10 +37,11 @@ import (
 
 var (
 	// ErrCacheFull is returned if Put fails due to cache being filled with pinned elements
-	ErrCacheFull = serviceerror.NewResourceExhausted(
-		enumspb.RESOURCE_EXHAUSTED_CAUSE_SYSTEM_OVERLOADED,
-		"cache capacity is fully occupied with pinned elements",
-	)
+	ErrCacheFull = &serviceerror.ResourceExhausted{
+		Cause:   enumspb.RESOURCE_EXHAUSTED_CAUSE_SYSTEM_OVERLOADED,
+		Scope:   enumspb.RESOURCE_EXHAUSTED_SCOPE_SYSTEM,
+		Message: "cache capacity is fully occupied with pinned elements",
+	}
 	// ErrCacheItemTooLarge is returned if Put fails due to item size being larger than max cache capacity
 	ErrCacheItemTooLarge = serviceerror.NewInternal("cache item size is larger than max cache capacity")
 )
@@ -263,6 +264,14 @@ func (c *lru) Release(key interface{}) {
 		c.pinnedSize -= entry.Size()
 		metrics.CachePinnedUsage.With(c.metricsHandler).Record(float64(c.pinnedSize))
 	}
+	// Entry size might have changed. Recalculate size and evict entries if necessary.
+	newEntrySize := getSize(entry.value)
+	c.currSize = c.calculateNewCacheSize(newEntrySize, entry.Size())
+	entry.size = newEntrySize
+	if c.currSize > c.maxSize {
+		c.tryEvictUntilCacheSizeUnderLimit()
+	}
+	metrics.CacheUsage.With(c.metricsHandler).Record(float64(c.currSize))
 }
 
 // Size returns the current size of the lru, useful if cache is not full. This size is calculated by summing
@@ -313,7 +322,7 @@ func (c *lru) putInternal(key interface{}, value interface{}, allowUpdate bool) 
 				existingEntry.value = value
 				existingEntry.size = newEntrySize
 				c.currSize = newCacheSize
-				metrics.CacheSize.With(c.metricsHandler).Record(float64(c.currSize))
+				metrics.CacheUsage.With(c.metricsHandler).Record(float64(c.currSize))
 				c.updateEntryTTL(existingEntry)
 			}
 
@@ -359,6 +368,11 @@ func (c *lru) deleteInternal(element *list.Element) {
 	metrics.CacheUsage.With(c.metricsHandler).Record(float64(c.currSize))
 	metrics.CacheEntryAgeOnEviction.With(c.metricsHandler).Record(c.timeSource.Now().UTC().Sub(entry.createTime))
 	delete(c.byKey, entry.key)
+}
+
+// tryEvictUntilSizeUnderLimit tries to evict entries until c.currSize is less than c.maxSize.
+func (c *lru) tryEvictUntilCacheSizeUnderLimit() {
+	c.tryEvictUntilEnoughSpaceWithSkipEntry(0, nil)
 }
 
 // tryEvictUntilEnoughSpace try to evict entries until there is enough space for the new entry without

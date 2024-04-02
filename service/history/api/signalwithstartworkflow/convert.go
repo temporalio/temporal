@@ -51,6 +51,7 @@ func ConvertToStartRequest(
 		Identity:                 request.GetIdentity(),
 		RequestId:                request.GetRequestId(),
 		WorkflowIdReusePolicy:    request.GetWorkflowIdReusePolicy(),
+		WorkflowIdConflictPolicy: request.GetWorkflowIdConflictPolicy(),
 		RetryPolicy:              request.GetRetryPolicy(),
 		CronSchedule:             request.GetCronSchedule(),
 		Memo:                     request.GetMemo(),

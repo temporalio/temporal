@@ -1583,35 +1583,35 @@ func (this *RespondNexusTaskFailedResponse) Equal(that interface{}) bool {
 	return proto.Equal(this, that1)
 }
 
-// Marshal an object of type CreateOrUpdateNexusIncomingServiceRequest to the protobuf v3 wire format
-func (val *CreateOrUpdateNexusIncomingServiceRequest) Marshal() ([]byte, error) {
+// Marshal an object of type CreateNexusIncomingServiceRequest to the protobuf v3 wire format
+func (val *CreateNexusIncomingServiceRequest) Marshal() ([]byte, error) {
 	return proto.Marshal(val)
 }
 
-// Unmarshal an object of type CreateOrUpdateNexusIncomingServiceRequest from the protobuf v3 wire format
-func (val *CreateOrUpdateNexusIncomingServiceRequest) Unmarshal(buf []byte) error {
+// Unmarshal an object of type CreateNexusIncomingServiceRequest from the protobuf v3 wire format
+func (val *CreateNexusIncomingServiceRequest) Unmarshal(buf []byte) error {
 	return proto.Unmarshal(buf, val)
 }
 
 // Size returns the size of the object, in bytes, once serialized
-func (val *CreateOrUpdateNexusIncomingServiceRequest) Size() int {
+func (val *CreateNexusIncomingServiceRequest) Size() int {
 	return proto.Size(val)
 }
 
-// Equal returns whether two CreateOrUpdateNexusIncomingServiceRequest values are equivalent by recursively
+// Equal returns whether two CreateNexusIncomingServiceRequest values are equivalent by recursively
 // comparing the message's fields.
 // For more information see the documentation for
 // https://pkg.go.dev/google.golang.org/protobuf/proto#Equal
-func (this *CreateOrUpdateNexusIncomingServiceRequest) Equal(that interface{}) bool {
+func (this *CreateNexusIncomingServiceRequest) Equal(that interface{}) bool {
 	if that == nil {
 		return this == nil
 	}
 
-	var that1 *CreateOrUpdateNexusIncomingServiceRequest
+	var that1 *CreateNexusIncomingServiceRequest
 	switch t := that.(type) {
-	case *CreateOrUpdateNexusIncomingServiceRequest:
+	case *CreateNexusIncomingServiceRequest:
 		that1 = t
-	case CreateOrUpdateNexusIncomingServiceRequest:
+	case CreateNexusIncomingServiceRequest:
 		that1 = &t
 	default:
 		return false
@@ -1620,35 +1620,109 @@ func (this *CreateOrUpdateNexusIncomingServiceRequest) Equal(that interface{}) b
 	return proto.Equal(this, that1)
 }
 
-// Marshal an object of type CreateOrUpdateNexusIncomingServiceResponse to the protobuf v3 wire format
-func (val *CreateOrUpdateNexusIncomingServiceResponse) Marshal() ([]byte, error) {
+// Marshal an object of type CreateNexusIncomingServiceResponse to the protobuf v3 wire format
+func (val *CreateNexusIncomingServiceResponse) Marshal() ([]byte, error) {
 	return proto.Marshal(val)
 }
 
-// Unmarshal an object of type CreateOrUpdateNexusIncomingServiceResponse from the protobuf v3 wire format
-func (val *CreateOrUpdateNexusIncomingServiceResponse) Unmarshal(buf []byte) error {
+// Unmarshal an object of type CreateNexusIncomingServiceResponse from the protobuf v3 wire format
+func (val *CreateNexusIncomingServiceResponse) Unmarshal(buf []byte) error {
 	return proto.Unmarshal(buf, val)
 }
 
 // Size returns the size of the object, in bytes, once serialized
-func (val *CreateOrUpdateNexusIncomingServiceResponse) Size() int {
+func (val *CreateNexusIncomingServiceResponse) Size() int {
 	return proto.Size(val)
 }
 
-// Equal returns whether two CreateOrUpdateNexusIncomingServiceResponse values are equivalent by recursively
+// Equal returns whether two CreateNexusIncomingServiceResponse values are equivalent by recursively
 // comparing the message's fields.
 // For more information see the documentation for
 // https://pkg.go.dev/google.golang.org/protobuf/proto#Equal
-func (this *CreateOrUpdateNexusIncomingServiceResponse) Equal(that interface{}) bool {
+func (this *CreateNexusIncomingServiceResponse) Equal(that interface{}) bool {
 	if that == nil {
 		return this == nil
 	}
 
-	var that1 *CreateOrUpdateNexusIncomingServiceResponse
+	var that1 *CreateNexusIncomingServiceResponse
 	switch t := that.(type) {
-	case *CreateOrUpdateNexusIncomingServiceResponse:
+	case *CreateNexusIncomingServiceResponse:
 		that1 = t
-	case CreateOrUpdateNexusIncomingServiceResponse:
+	case CreateNexusIncomingServiceResponse:
+		that1 = &t
+	default:
+		return false
+	}
+
+	return proto.Equal(this, that1)
+}
+
+// Marshal an object of type UpdateNexusIncomingServiceRequest to the protobuf v3 wire format
+func (val *UpdateNexusIncomingServiceRequest) Marshal() ([]byte, error) {
+	return proto.Marshal(val)
+}
+
+// Unmarshal an object of type UpdateNexusIncomingServiceRequest from the protobuf v3 wire format
+func (val *UpdateNexusIncomingServiceRequest) Unmarshal(buf []byte) error {
+	return proto.Unmarshal(buf, val)
+}
+
+// Size returns the size of the object, in bytes, once serialized
+func (val *UpdateNexusIncomingServiceRequest) Size() int {
+	return proto.Size(val)
+}
+
+// Equal returns whether two UpdateNexusIncomingServiceRequest values are equivalent by recursively
+// comparing the message's fields.
+// For more information see the documentation for
+// https://pkg.go.dev/google.golang.org/protobuf/proto#Equal
+func (this *UpdateNexusIncomingServiceRequest) Equal(that interface{}) bool {
+	if that == nil {
+		return this == nil
+	}
+
+	var that1 *UpdateNexusIncomingServiceRequest
+	switch t := that.(type) {
+	case *UpdateNexusIncomingServiceRequest:
+		that1 = t
+	case UpdateNexusIncomingServiceRequest:
+		that1 = &t
+	default:
+		return false
+	}
+
+	return proto.Equal(this, that1)
+}
+
+// Marshal an object of type UpdateNexusIncomingServiceResponse to the protobuf v3 wire format
+func (val *UpdateNexusIncomingServiceResponse) Marshal() ([]byte, error) {
+	return proto.Marshal(val)
+}
+
+// Unmarshal an object of type UpdateNexusIncomingServiceResponse from the protobuf v3 wire format
+func (val *UpdateNexusIncomingServiceResponse) Unmarshal(buf []byte) error {
+	return proto.Unmarshal(buf, val)
+}
+
+// Size returns the size of the object, in bytes, once serialized
+func (val *UpdateNexusIncomingServiceResponse) Size() int {
+	return proto.Size(val)
+}
+
+// Equal returns whether two UpdateNexusIncomingServiceResponse values are equivalent by recursively
+// comparing the message's fields.
+// For more information see the documentation for
+// https://pkg.go.dev/google.golang.org/protobuf/proto#Equal
+func (this *UpdateNexusIncomingServiceResponse) Equal(that interface{}) bool {
+	if that == nil {
+		return this == nil
+	}
+
+	var that1 *UpdateNexusIncomingServiceResponse
+	switch t := that.(type) {
+	case *UpdateNexusIncomingServiceResponse:
+		that1 = t
+	case UpdateNexusIncomingServiceResponse:
 		that1 = &t
 	default:
 		return false

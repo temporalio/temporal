@@ -254,7 +254,8 @@ func makeGetMatchingClient(reqType reflect.Type) string {
 		tq = findOneNestedField(t, "TaskQueue", "request", 2)
 		tqt = fieldWithPath{path: "enumspb.TASK_QUEUE_TYPE_NEXUS"}
 		nsID = findOneNestedField(t, "NamespaceId", "request", 1)
-	case "CreateOrUpdateNexusIncomingServiceRequest",
+	case "CreateNexusIncomingServiceRequest",
+		"UpdateNexusIncomingServiceRequest",
 		"ListNexusIncomingServicesRequest",
 		"DeleteNexusIncomingServiceRequest":
 		// Always route these requests to the same matching node by namespace.

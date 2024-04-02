@@ -82,6 +82,9 @@ type (
 
 		// Len observes the number of incomplete updates in this Registry.
 		Len() int
+
+		// GetSize returns the size of the update object
+		GetSize() int
 	}
 
 	// Store represents the update package's requirements for reading updates from the store.
@@ -301,10 +304,11 @@ func (r *registry) remover(id string) updateOpt {
 
 func (r *registry) admit(ctx context.Context) error {
 	if len(r.updates) >= r.maxInFlight() {
-		return serviceerror.NewResourceExhausted(
-			enumspb.RESOURCE_EXHAUSTED_CAUSE_CONCURRENT_LIMIT,
-			fmt.Sprintf("limit on number of concurrent in-flight updates has been reached (%v)", r.maxInFlight()),
-		)
+		return &serviceerror.ResourceExhausted{
+			Cause:   enumspb.RESOURCE_EXHAUSTED_CAUSE_CONCURRENT_LIMIT,
+			Scope:   enumspb.RESOURCE_EXHAUSTED_SCOPE_NAMESPACE,
+			Message: fmt.Sprintf("limit on number of concurrent in-flight updates has been reached (%v)", r.maxInFlight()),
+		}
 	}
 
 	if len(r.updates)+r.completedCount >= r.maxTotal() {
@@ -357,4 +361,12 @@ func (r *registry) filter(predicate func(u *Update) bool) []*Update {
 		}
 	}
 	return res
+}
+
+func (r *registry) GetSize() int {
+	var size int
+	for key, update := range r.updates {
+		size += len(key) + update.GetSize()
+	}
+	return size
 }

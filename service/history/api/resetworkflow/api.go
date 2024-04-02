@@ -30,6 +30,7 @@ import (
 	"github.com/google/uuid"
 	"go.temporal.io/api/serviceerror"
 
+	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/definition"
@@ -163,11 +164,41 @@ func Invoke(
 		),
 		request.GetReason(),
 		nil,
-		request.GetResetReapplyType(),
+		GetResetReapplyExcludeTypes(request.GetResetReapplyExcludeTypes(), request.GetResetReapplyType()),
 	); err != nil {
 		return nil, err
 	}
 	return &historyservice.ResetWorkflowExecutionResponse{
 		RunId: resetRunID,
 	}, nil
+}
+
+// GetResetReapplyExcludeTypes computes the set of requested exclude types. It
+// uses the reset_reapply_exclude_types request field (a set of event types to
+// exclude from reapply), as well as the deprecated reset_reapply_type request
+// field (a specification of what to include).
+func GetResetReapplyExcludeTypes(
+	excludeTypes []enumspb.ResetReapplyExcludeType,
+	includeType enumspb.ResetReapplyType,
+) map[enumspb.ResetReapplyExcludeType]bool {
+	exclude := map[enumspb.ResetReapplyExcludeType]bool{}
+	switch includeType {
+	case enumspb.RESET_REAPPLY_TYPE_SIGNAL:
+		// A client sending this value of the deprecated reset_reapply_type
+		// field will not have any events other than signal reapplied. We may
+		// implement reapplication of event types other than signal in the
+		// future; any such event type should be added as an exclusion to this
+		// switch case. A client who wishes to have reapplication of all
+		// supported event types should not send the deprecated
+		// reset_reapply_type field (since its default value is
+		// RESET_REAPPLY_TYPE_ALL_ELIGIBLE).
+		// TODO (dan) exclude update
+	case enumspb.RESET_REAPPLY_TYPE_NONE:
+		// TODO (dan) exclude update
+		exclude[enumspb.RESET_REAPPLY_EXCLUDE_TYPE_SIGNAL] = true
+	}
+	for _, e := range excludeTypes {
+		exclude[e] = true
+	}
+	return exclude
 }

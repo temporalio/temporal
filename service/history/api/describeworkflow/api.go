@@ -41,6 +41,7 @@ import (
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence/visibility/manager"
+	"go.temporal.io/server/plugins/callbacks"
 	"go.temporal.io/server/service/history/api"
 	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/workflow"
@@ -228,8 +229,23 @@ func Invoke(
 	result.WorkflowExecutionInfo.SearchAttributes = &commonpb.SearchAttributes{
 		IndexedFields: clonePayloadMap(relocatableAttributes.SearchAttributes.GetIndexedFields()),
 	}
-	result.Callbacks = make([]*workflowpb.CallbackInfo, 0, len(mutableState.GetExecutionInfo().GetCallbacks()))
-	for _, callback := range mutableState.GetExecutionInfo().GetCallbacks() {
+	coll := callbacks.MachineCollection(mutableState.HSM())
+	cbs := coll.List()
+	result.Callbacks = make([]*workflowpb.CallbackInfo, 0, len(cbs))
+	for _, entry := range cbs {
+		callback, err := coll.Data(entry.Key.ID)
+		if err != nil {
+			shard.GetLogger().Error(
+				"failed to load callback data while building describe response",
+				tag.WorkflowNamespaceID(namespaceID.String()),
+				tag.WorkflowID(executionInfo.WorkflowId),
+				tag.WorkflowRunID(executionState.RunId),
+				tag.Error(err),
+			)
+			return nil, serviceerror.NewInternal("failed to construct describe response")
+		}
+		// HSM data is mutable and must be cloned to avoid a data race during serialization, which happens after we
+		// release the lock on this workflow.
 		result.Callbacks = append(result.Callbacks, common.CloneProto(callback.PublicInfo))
 	}
 

@@ -255,6 +255,7 @@ func NewClusterWithPersistenceTestBaseFactory(t *testing.T, options *TestCluster
 				IsGlobalNamespaceEnabled: clusterMetadataConfig.EnableGlobalNamespace,
 				FailoverVersionIncrement: clusterMetadataConfig.FailoverVersionIncrement,
 				ClusterAddress:           clusterInfo.RPCAddress,
+				HttpAddress:              clusterInfo.HTTPAddress,
 				InitialFailoverVersion:   clusterInfo.InitialFailoverVersion,
 			}})
 		if err != nil {

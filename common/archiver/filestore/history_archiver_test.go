@@ -192,7 +192,14 @@ func (s *historyArchiverSuite) TestArchive_Fail_TimeoutWhenReadingHistory() {
 	historyIterator := archiver.NewMockHistoryIterator(mockCtrl)
 	gomock.InOrder(
 		historyIterator.EXPECT().HasNext().Return(true),
-		historyIterator.EXPECT().Next(gomock.Any()).Return(nil, serviceerror.NewResourceExhausted(enumspb.RESOURCE_EXHAUSTED_CAUSE_RPS_LIMIT, "")),
+		historyIterator.EXPECT().Next(gomock.Any()).Return(
+			nil,
+			&serviceerror.ResourceExhausted{
+				Cause:   enumspb.RESOURCE_EXHAUSTED_CAUSE_RPS_LIMIT,
+				Scope:   enumspb.RESOURCE_EXHAUSTED_SCOPE_NAMESPACE,
+				Message: "",
+			},
+		),
 	)
 
 	historyArchiver := s.newTestHistoryArchiver(historyIterator)

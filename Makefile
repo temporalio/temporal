@@ -132,7 +132,8 @@ update-goimports:
 
 update-linters:
 	@printf $(COLOR) "Install/update linters..."
-	@go install github.com/golangci/golangci-lint/cmd/golangci-lint@v1.53.3
+	# When updating the version, update the golangci-lint GHA workflow as well.
+	@go install github.com/golangci/golangci-lint/cmd/golangci-lint@v1.57.2
 
 update-mockgen:
 	@printf $(COLOR) "Install/update mockgen tool..."
@@ -175,7 +176,9 @@ ci-update-tools: update-goimports update-mockgen update-proto-plugins update-pro
 $(PROTO_OUT):
 	@mkdir -p $(PROTO_OUT)
 
-clean-proto:
+# We depend on gomodtidy to ensure that go.mod is up to date before we delete the generated files
+# in case protogen fails, and we need to rerun it.
+clean-proto: gomodtidy
 	@rm -rf $(PROTO_OUT)/*
 
 update-proto-submodule:
@@ -210,7 +213,7 @@ proto-mocks: protoc
 
 service-clients:
 	@printf $(COLOR) "Generate service clients..."
-	@go generate ./client/...
+	@go generate -run rpcwrappers ./client/...
 
 update-go-api:
 	@printf $(COLOR) "Update go.temporal.io/api@master..."
@@ -520,6 +523,7 @@ update-dependencies:
 
 go-generate:
 	@printf $(COLOR) "Process go:generate directives..."
+	@go install ./cmd/tools/mocksync
 	@go generate ./...
 
 ensure-no-changes:

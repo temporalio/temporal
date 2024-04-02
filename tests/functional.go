@@ -53,9 +53,11 @@ type (
 
 func (s *FunctionalSuite) SetupSuite() {
 	s.dynamicConfigOverrides = map[dynamicconfig.Key]interface{}{
-		dynamicconfig.RetentionTimerJitterDuration: time.Second,
-		dynamicconfig.EnableEagerWorkflowStart:     true,
-		dynamicconfig.CallbackProcessorEnabled:     true,
+		dynamicconfig.RetentionTimerJitterDuration:        time.Second,
+		dynamicconfig.EnableEagerWorkflowStart:            true,
+		dynamicconfig.EnableMutableStateTransitionHistory: true,
+		dynamicconfig.OutboundProcessorEnabled:            true,
+		dynamicconfig.FrontendEnableExecuteMultiOperation: true,
 	}
 	s.setupSuite("testdata/es_cluster.yaml")
 }

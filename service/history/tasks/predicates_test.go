@@ -35,6 +35,7 @@ import (
 	"golang.org/x/exp/slices"
 
 	enumsspb "go.temporal.io/server/api/enums/v1"
+	"go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common/predicates"
 )
 
@@ -154,11 +155,11 @@ func (s *predicatesSuite) TestDestinationPredicate_Test() {
 
 	p := NewDestinationPredicate(destinations)
 	for _, dest := range destinations {
-		mockTask := FakeDestinationTask{NewMockTask(s.controller), dest}
+		mockTask := &StateMachineOutboundTask{Destination: dest}
 		s.True(p.Test(mockTask))
 	}
 
-	mockTask := FakeDestinationTask{NewMockTask(s.controller), uuid.New()}
+	mockTask := &StateMachineOutboundTask{Destination: uuid.New()}
 	s.False(p.Test(mockTask))
 }
 
@@ -178,6 +179,39 @@ func (s *predicatesSuite) TestDestinationPredicate_Equals() {
 	s.True(p.Equals(NewDestinationPredicate(destinations)))
 
 	s.False(p.Equals(NewDestinationPredicate([]string{uuid.New(), uuid.New()})))
+	s.False(p.Equals(NewTypePredicate([]enumsspb.TaskType{enumsspb.TASK_TYPE_ACTIVITY_RETRY_TIMER})))
+	s.False(p.Equals(predicates.Universal[Task]()))
+}
+
+func (s *predicatesSuite) TestStateMachineTaskTypePredicate_Test() {
+	types := []int32{1, 2}
+
+	p := NewStateMachineTaskTypePredicate(types)
+	for _, t := range types {
+		mockTask := &StateMachineOutboundTask{StateMachineTask: StateMachineTask{Info: &persistence.StateMachineTaskInfo{Type: t}}}
+		s.True(p.Test(mockTask))
+	}
+
+	mockTask := &StateMachineOutboundTask{StateMachineTask: StateMachineTask{Info: &persistence.StateMachineTaskInfo{Type: 3}}}
+	s.False(p.Test(mockTask))
+}
+
+func (s *predicatesSuite) TestStateMachineTaskTypePredicate_Equals() {
+	types := []int32{1, 2}
+
+	p := NewStateMachineTaskTypePredicate(types)
+
+	s.True(p.Equals(p))
+	s.True(p.Equals(NewStateMachineTaskTypePredicate(types)))
+	rand.Shuffle(
+		len(types),
+		func(i, j int) {
+			types[i], types[j] = types[j], types[i]
+		},
+	)
+	s.True(p.Equals(NewStateMachineTaskTypePredicate(types)))
+
+	s.False(p.Equals(NewStateMachineTaskTypePredicate([]int32{3, 4})))
 	s.False(p.Equals(NewTypePredicate([]enumsspb.TaskType{enumsspb.TASK_TYPE_ACTIVITY_RETRY_TIMER})))
 	s.False(p.Equals(predicates.Universal[Task]()))
 }

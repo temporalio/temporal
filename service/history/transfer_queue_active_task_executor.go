@@ -42,6 +42,7 @@ import (
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	workflowspb "go.temporal.io/server/api/workflow/v1"
 	"go.temporal.io/server/common"
+	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
@@ -963,11 +964,7 @@ func (t *transferQueueActiveTaskExecutor) processResetWorkflow(
 			ctx,
 			t.shardContext,
 			t.cache,
-			namespace.ID(task.NamespaceID),
-			&commonpb.WorkflowExecution{
-				WorkflowId: task.WorkflowID,
-				RunId:      resetPoint.GetRunId(),
-			},
+			definition.NewWorkflowKey(task.NamespaceID, task.WorkflowID, resetPoint.GetRunId()),
 		)
 		if err != nil {
 			return err
@@ -1406,7 +1403,7 @@ func (t *transferQueueActiveTaskExecutor) resetWorkflow(
 		),
 		reason,
 		nil,
-		enumspb.RESET_REAPPLY_TYPE_SIGNAL,
+		nil,
 	)
 
 	switch err.(type) {

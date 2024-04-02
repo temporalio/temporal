@@ -54,6 +54,9 @@ const (
 	VisibilityEnableManualPagination = "system.visibilityEnableManualPagination"
 	// VisibilityAllowList is the config to allow list of values for regular types
 	VisibilityAllowList = "system.visibilityAllowList"
+	// SuppressErrorSetSystemSearchAttribute suppresses errors when trying to set
+	// values in system search attributes.
+	SuppressErrorSetSystemSearchAttribute = "system.suppressErrorSetSystemSearchAttribute"
 
 	// HistoryArchivalState is key for the state of history archival
 	HistoryArchivalState = "system.historyArchivalState"
@@ -205,6 +208,24 @@ const (
 	ReachabilityQuerySetDurationSinceDefault = "frontend.reachabilityQuerySetDurationSinceDefault"
 	// TaskQueuesPerBuildIdLimit limits the number of task queue names that can be mapped to a single build id.
 	TaskQueuesPerBuildIdLimit = "limit.taskQueuesPerBuildId"
+
+	// NexusIncomingServiceNameMaxLength is the maximum length of a Nexus incoming service name.
+	NexusIncomingServiceNameMaxLength = "limit.incomingServiceNameMaxLength"
+	// NexusIncomingServiceMaxSize is the maximum size of a Nexus incoming service in bytes.
+	NexusIncomingServiceMaxSize = "limit.incomingServiceMaxSize"
+	// NexusIncomingServiceListDefaultPageSize is the default page size for listing Nexus incoming services.
+	NexusIncomingServiceListDefaultPageSize = "limit.incomingServiceListDefaultPageSize"
+	// NexusIncomingServiceListMaxPageSize is the maximum page size for listing Nexus incoming services.
+	NexusIncomingServiceListMaxPageSize = "limit.incomingServiceListMaxPageSize"
+	// NexusOutgoingServiceURLMaxLength is the maximum length of an outgoing service URL.
+	NexusOutgoingServiceURLMaxLength = "limit.outgoingServiceURLMaxLength"
+	// NexusOutgoingServiceNameMaxLength is the maximum length of an outgoing service name.
+	NexusOutgoingServiceNameMaxLength = "limit.outgoingServiceNameMaxLength"
+	// NexusOutgoingServiceListDefaultPageSize is the default page size for listing outgoing services.
+	NexusOutgoingServiceListDefaultPageSize = "limit.outgoingServiceListDefaultPageSize"
+	// NexusOutgoingServiceListMaxPageSize is the maximum page size for listing outgoing services.
+	NexusOutgoingServiceListMaxPageSize = "limit.outgoingServiceListMaxPageSize"
+
 	// RemovableBuildIdDurationSinceDefault is the minimum duration since a build id was last default in its containing
 	// set for it to be considered for removal, used by the build id scavenger.
 	// This setting allows some propogation delay of versioning data, which may happen for the following reasons:
@@ -245,8 +266,9 @@ const (
 	FrontendNamespaceReplicationInducingAPIsRPS = "frontend.rps.namespaceReplicationInducingAPIs"
 	// FrontendMaxNamespaceRPSPerInstance is workflow namespace rate limit per second
 	FrontendMaxNamespaceRPSPerInstance = "frontend.namespaceRPS"
-	// FrontendMaxNamespaceBurstPerInstance is workflow namespace burst limit
-	FrontendMaxNamespaceBurstPerInstance = "frontend.namespaceBurst"
+	// FrontendMaxNamespaceBurstRatioPerInstance is workflow namespace burst limit as a ratio of namespace RPS. The RPS
+	// used here will be the effective RPS from global and per-instance limits. The value must be 1 or higher.
+	FrontendMaxNamespaceBurstRatioPerInstance = "frontend.namespaceBurstRatio"
 	// FrontendMaxConcurrentLongRunningRequestsPerInstance limits concurrent long-running requests per-instance,
 	// per-API. Example requests include long-poll requests, and `Query` requests (which need to wait for WFTs). The
 	// limit is applied individually to each API method. This value is ignored if
@@ -268,13 +290,16 @@ const (
 	// namespace replication inducing APIs (e.g. RegisterNamespace, UpdateNamespace, UpdateWorkerBuildIdCompatibility).
 	// This config is EXPERIMENTAL and may be changed or removed in a later release.
 	FrontendMaxNamespaceNamespaceReplicationInducingAPIsRPSPerInstance = "frontend.namespaceRPS.namespaceReplicationInducingAPIs"
-	// FrontendMaxNamespaceVisibilityBurstPerInstance is namespace burst limit for visibility APIs.
-	// This config is EXPERIMENTAL and may be changed or removed in a later release.
-	FrontendMaxNamespaceVisibilityBurstPerInstance = "frontend.namespaceBurst.visibility"
-	// FrontendMaxNamespaceNamespaceReplicationInducingAPIsBurstPerInstance is a per host/per namespace burst limit for
-	// namespace replication inducing APIs (e.g. RegisterNamespace, UpdateNamespace, UpdateWorkerBuildIdCompatibility).
-	// This config is EXPERIMENTAL and may be changed or removed in a later release.
-	FrontendMaxNamespaceNamespaceReplicationInducingAPIsBurstPerInstance = "frontend.namespaceBurst.namespaceReplicationInducingAPIs"
+	// FrontendMaxNamespaceVisibilityBurstRatioPerInstance is namespace burst limit for visibility APIs as a ratio of
+	// namespace visibility RPS. The RPS used here will be the effective RPS from global and per-instance limits. This
+	// config is EXPERIMENTAL and may be changed or removed in a later release. The value must be 1 or higher.
+	FrontendMaxNamespaceVisibilityBurstRatioPerInstance = "frontend.namespaceBurstRatio.visibility"
+	// FrontendMaxNamespaceNamespaceReplicationInducingAPIsBurstRatioPerInstance is a per host/per namespace burst limit for
+	// namespace replication inducing APIs (e.g. RegisterNamespace, UpdateNamespace, UpdateWorkerBuildIdCompatibility)
+	// as a ratio of namespace ReplicationInducingAPIs RPS. The RPS used here will be the effective RPS from global and
+	// per-instance limits. This config is EXPERIMENTAL and may be changed or removed in a later release. The value must
+	// be 1 or higher.
+	FrontendMaxNamespaceNamespaceReplicationInducingAPIsBurstRatioPerInstance = "frontend.namespaceBurstRatio.namespaceReplicationInducingAPIs"
 	// FrontendGlobalNamespaceRPS is workflow namespace rate limit per second for the whole cluster.
 	// The limit is evenly distributed among available frontend service instances.
 	// If this is set, it overwrites per instance limit "frontend.namespaceRPS".
@@ -352,6 +377,12 @@ const (
 	FrontendEnableSchedules = "frontend.enableSchedules"
 	// FrontendEnableNexusHTTPHandler enables serving Nexus HTTP requests in the frontend.
 	FrontendEnableNexusHTTPHandler = "frontend.enableNexusHTTPHandler"
+	// FrontendInitializeNexusIncomingServicesTimeout is the maximum time allowed for initializing Nexus incoming services.
+	FrontendInitializeNexusIncomingServicesTimeout = "frontend.initializeNexusIncomingServicesTimeout"
+	// FrontendRefreshNexusIncomingServicesLongPollTimeout is the maximum duration of background long poll requests to update Nexus incoming services.
+	FrontendRefreshNexusIncomingServicesLongPollTimeout = "frontend.refreshNexusIncomingServicesLongPollTimeout"
+	// FrontendRefreshNexusIncomingServicesMinWait is the minimum wait time between background long poll requests to update Nexus incoming services.
+	FrontendRefreshNexusIncomingServicesMinWait = "frontend.refreshNexusIncomingServicesMinWait"
 	// FrontendEnableCallbackAttachment enables attaching callbacks to workflows.
 	FrontendEnableCallbackAttachment = "frontend.enableCallbackAttachment"
 	// FrontendMaxConcurrentBatchOperationPerNamespace is the max concurrent batch operation job count per namespace
@@ -374,10 +405,17 @@ const (
 	// feature gets more time in production.
 	FrontendEnableUpdateWorkflowExecution = "frontend.enableUpdateWorkflowExecution"
 
+	// FrontendEnableExecuteMultiOperation enables the ExecuteMultiOperation API in the frontend.
+	// The API is under active development.
+	FrontendEnableExecuteMultiOperation = "frontend.enableExecuteMultiOperation"
+
 	// FrontendEnableUpdateWorkflowExecutionAsyncAccepted enables the form of
 	// asynchronous workflow execution update that waits on the "Accepted"
 	// lifecycle stage. Default value is `false`.
 	FrontendEnableUpdateWorkflowExecutionAsyncAccepted = "frontend.enableUpdateWorkflowExecutionAsyncAccepted"
+
+	// EnableWorkflowIdConflictPolicy enables the `WorkflowIdConflictPolicy` option for Start and Signal-with-Start
+	EnableWorkflowIdConflictPolicy = "frontend.enableWorkflowIdConflictPolicy"
 
 	// FrontendEnableWorkerVersioningDataAPIs enables worker versioning data read / write APIs.
 	FrontendEnableWorkerVersioningDataAPIs = "frontend.workerVersioningDataAPIs"
@@ -480,6 +518,9 @@ const (
 	// MatchingMembershipUnloadDelay is how long to wait to re-confirm loss of ownership before unloading a task queue.
 	// Set to zero to disable proactive unload.
 	MatchingMembershipUnloadDelay = "matching.membershipUnloadDelay"
+	// MatchingQueryWorkflowTaskTimeoutLogRate defines the sampling rate for logs when a query workflow task times out. Since
+	// these log lines can be noisy, we want to be able to turn on and sample selectively for each affected namespace.
+	MatchingQueryWorkflowTaskTimeoutLogRate = "matching.queryWorkflowTaskTimeoutLogRate"
 
 	// for matching testing only:
 
@@ -519,10 +560,17 @@ const (
 	HistoryPersistenceDynamicRateLimitingParams = "history.persistenceDynamicRateLimitingParams"
 	// HistoryLongPollExpirationInterval is the long poll expiration interval in the history service
 	HistoryLongPollExpirationInterval = "history.longPollExpirationInterval"
+	// HistoryCacheSizeBasedLimit if true, size of the history cache will be limited by HistoryCacheMaxSizeBytes
+	// and HistoryCacheHostLevelMaxSizeBytes. Otherwise, entry count in the history cache will be limited by
+	// HistoryCacheMaxSize and HistoryCacheHostLevelMaxSize.
+	HistoryCacheSizeBasedLimit = "history.cacheSizeBasedLimit"
 	// HistoryCacheInitialSize is initial size of history cache
 	HistoryCacheInitialSize = "history.cacheInitialSize"
-	// HistoryCacheMaxSize is max size of history cache
+	// HistoryCacheMaxSize is the maximum number of entries in the shard level history cache
 	HistoryCacheMaxSize = "history.cacheMaxSize"
+	// HistoryCacheMaxSizeBytes is the maximum size of the shard level history cache in bytes. This is only used if
+	// HistoryCacheSizeBasedLimit is set to true.
+	HistoryCacheMaxSizeBytes = "history.cacheMaxSizeBytes"
 	// HistoryCacheTTL is TTL of history cache
 	HistoryCacheTTL = "history.cacheTTL"
 	// HistoryCacheNonUserContextLockTimeout controls how long non-user call (callerType != API or Operator)
@@ -530,10 +578,17 @@ const (
 	HistoryCacheNonUserContextLockTimeout = "history.cacheNonUserContextLockTimeout"
 	// EnableHostHistoryCache controls if the history cache is host level
 	EnableHostHistoryCache = "history.enableHostHistoryCache"
-	// HistoryCacheHostLevelMaxSize is max size of history host level cache
+	// HistoryCacheHostLevelMaxSize is the maximum number of entries in the host level history cache
 	HistoryCacheHostLevelMaxSize = "history.hostLevelCacheMaxSize"
+	// HistoryCacheHostLevelMaxSizeBytes is the maximum size of the host level history cache. This is only used if
+	// HistoryCacheSizeBasedLimit is set to true.
+	HistoryCacheHostLevelMaxSizeBytes = "history.hostLevelCacheMaxSizeBytes"
 	// EnableAPIGetCurrentRunIDLock controls if a lock should be acquired before getting current run ID for API requests
 	EnableAPIGetCurrentRunIDLock = "history.enableAPIGetCurrentRunIDLock"
+	// EnableMutableStateTransitionHistory controls whether to record state transition history in mutable state records.
+	// The feature is used in the hierarchical state machine framework and is considered unstable as the structure may
+	// change with the pending replication design.
+	EnableMutableStateTransitionHistory = "history.enableMutableStateTransitionHistory"
 	// HistoryStartupMembershipJoinDelay is the duration a history instance waits
 	// before joining membership after starting.
 	HistoryStartupMembershipJoinDelay = "history.startupMembershipJoinDelay"
@@ -684,30 +739,28 @@ const (
 	// TransferQueueMaxReaderCount is the max number of readers in one multi-cursor transfer queue
 	TransferQueueMaxReaderCount = "history.transferQueueMaxReaderCount"
 
-	// CallbackProcessorEnabled enables starting the callback queue processor.
-	CallbackProcessorEnabled = "history.callbackProcessorEnabled"
-	// CallbackTaskBatchSize is batch size for callbackQueueFactory
-	CallbackTaskBatchSize = "history.callbackTaskBatchSize"
-	// CallbackProcessorMaxPollRPS is max poll rate per second for callbackQueueFactory
-	CallbackProcessorMaxPollRPS = "history.callbackProcessorMaxPollRPS"
-	// CallbackProcessorMaxPollHostRPS is max poll rate per second for all callbackQueueFactory on a host
-	CallbackProcessorMaxPollHostRPS = "history.callbackProcessorMaxPollHostRPS"
-	// CallbackProcessorUpdateShardTaskCount is update shard count for callbackQueueFactory
-	CallbackProcessorUpdateShardTaskCount = "history.callbackProcessorUpdateShardTaskCount"
-	// CallbackProcessorMaxPollInterval max poll interval for callbackQueueFactory
-	CallbackProcessorMaxPollInterval = "history.callbackProcessorMaxPollInterval"
-	// CallbackProcessorMaxPollIntervalJitterCoefficient is the max poll interval jitter coefficient
-	CallbackProcessorMaxPollIntervalJitterCoefficient = "history.callbackProcessorMaxPollIntervalJitterCoefficient"
-	// CallbackProcessorUpdateAckInterval is update interval for callbackQueueFactory
-	CallbackProcessorUpdateAckInterval = "history.callbackProcessorUpdateAckInterval"
-	// CallbackProcessorUpdateAckIntervalJitterCoefficient is the update interval jitter coefficient
-	CallbackProcessorUpdateAckIntervalJitterCoefficient = "history.callbackProcessorUpdateAckIntervalJitterCoefficient"
-	// CallbackProcessorPollBackoffInterval is the poll backoff interval if task redispatcher's size exceeds limit for callbackQueueFactory
-	CallbackProcessorPollBackoffInterval = "history.callbackProcessorPollBackoffInterval"
-	// CallbackQueueMaxReaderCount is the max number of readers in one multi-cursor callback queue
-	CallbackQueueMaxReaderCount = "history.callbackQueueMaxReaderCount"
-	// CallbackTaskTimeout is the timeout for executing a single callback task.
-	CallbackTaskTimeout = "history.callbackTaskTimeout"
+	// OutboundProcessorEnabled enables starting the outbound queue processor.
+	OutboundProcessorEnabled = "history.outboundProcessorEnabled"
+	// OutboundTaskBatchSize is batch size for outboundQueueFactory
+	OutboundTaskBatchSize = "history.outboundTaskBatchSize"
+	// OutboundProcessorMaxPollRPS is max poll rate per second for outboundQueueFactory
+	OutboundProcessorMaxPollRPS = "history.outboundProcessorMaxPollRPS"
+	// OutboundProcessorMaxPollHostRPS is max poll rate per second for all outboundQueueFactory on a host
+	OutboundProcessorMaxPollHostRPS = "history.outboundProcessorMaxPollHostRPS"
+	// OutboundProcessorUpdateShardTaskCount is update shard count for outboundQueueFactory
+	OutboundProcessorUpdateShardTaskCount = "history.outboundProcessorUpdateShardTaskCount"
+	// OutboundProcessorMaxPollInterval max poll interval for outboundQueueFactory
+	OutboundProcessorMaxPollInterval = "history.outboundProcessorMaxPollInterval"
+	// OutboundProcessorMaxPollIntervalJitterCoefficient is the max poll interval jitter coefficient
+	OutboundProcessorMaxPollIntervalJitterCoefficient = "history.outboundProcessorMaxPollIntervalJitterCoefficient"
+	// OutboundProcessorUpdateAckInterval is update interval for outboundQueueFactory
+	OutboundProcessorUpdateAckInterval = "history.outboundProcessorUpdateAckInterval"
+	// OutboundProcessorUpdateAckIntervalJitterCoefficient is the update interval jitter coefficient
+	OutboundProcessorUpdateAckIntervalJitterCoefficient = "history.outboundProcessorUpdateAckIntervalJitterCoefficient"
+	// OutboundProcessorPollBackoffInterval is the poll backoff interval if task redispatcher's size exceeds limit for outboundQueueFactory
+	OutboundProcessorPollBackoffInterval = "history.outboundProcessorPollBackoffInterval"
+	// OutboundQueueMaxReaderCount is the max number of readers in one multi-cursor outbound queue
+	OutboundQueueMaxReaderCount = "history.outboundQueueMaxReaderCount"
 
 	// VisibilityTaskBatchSize is batch size for visibilityQueueProcessor
 	VisibilityTaskBatchSize = "history.visibilityTaskBatchSize"
@@ -871,14 +924,20 @@ const (
 	ReplicationTaskProcessorShardQPS = "history.ReplicationTaskProcessorShardQPS"
 	// ReplicationEnableDLQMetrics is the flag to emit DLQ metrics
 	ReplicationEnableDLQMetrics = "history.ReplicationEnableDLQMetrics"
+	// ReplicationEnableUpdateWithNewTaskMerge is the flag controlling whether replication task merging logic
+	// should be enabled for non continuedAsNew workflow UpdateWithNew case.
+	ReplicationEnableUpdateWithNewTaskMerge = "history.ReplicationEnableUpdateWithNewTaskMerge"
 	// HistoryTaskDLQEnabled enables the history task DLQ. This applies to internal tasks like transfer and timer tasks.
 	// Do not turn this on if you aren't using Cassandra as the history task DLQ is not implemented for other databases.
 	HistoryTaskDLQEnabled = "history.TaskDLQEnabled"
 	// HistoryTaskDLQUnexpectedErrorAttempts is the number of task execution attempts before sending the task to DLQ.
 	HistoryTaskDLQUnexpectedErrorAttempts = "history.TaskDLQUnexpectedErrorAttempts"
-	// HistoryTaskDLQInteralErrors causes history task processing to send tasks failing with serviceerror.Internal to
+	// HistoryTaskDLQInternalErrors causes history task processing to send tasks failing with serviceerror.Internal to
 	// the dlq (or will drop them if not enabled)
 	HistoryTaskDLQInternalErrors = "history.TaskDLQInternalErrors"
+	// HistoryTaskDLQErrorPattern specifies a regular expression. If a task processing error matches with this regex,
+	// that task will be sent to DLQ.
+	HistoryTaskDLQErrorPattern = "history.TaskDLQErrorPattern"
 
 	// ReplicationStreamSyncStatusDuration sync replication status duration
 	ReplicationStreamSyncStatusDuration = "history.ReplicationStreamSyncStatusDuration"

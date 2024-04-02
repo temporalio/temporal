@@ -22,7 +22,7 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-//go:generate mockgen -copyright_file ../../../LICENSE -package $GOPACKAGE -source $GOFILE -destination task_executor_mock.go
+//go:generate mocksync -copyright_file ../../../LICENSE -package $GOPACKAGE -source $GOFILE -destination task_executor_mock.go
 
 package replication
 
@@ -244,6 +244,7 @@ func (e *taskExecutorImpl) handleHistoryReplicationTask(
 		Events:              attr.Events,
 		// new run events does not need version history since there is no prior events
 		NewRunEvents: attr.NewRunEvents,
+		NewRunId:     attr.NewRunId,
 	}
 	ctx, cancel := e.newTaskContext(ctx, attr.NamespaceId)
 	defer cancel()

@@ -73,6 +73,7 @@ import (
 	"go.temporal.io/server/service/history/configs"
 	"go.temporal.io/server/service/history/consts"
 	"go.temporal.io/server/service/history/events"
+	"go.temporal.io/server/service/history/hsm"
 	"go.temporal.io/server/service/history/tasks"
 	"go.temporal.io/server/service/history/vclock"
 )
@@ -165,6 +166,8 @@ type (
 		remoteClusterInfos      map[string]*remoteClusterInfo
 		handoverNamespaces      map[namespace.Name]*namespaceHandOverInfo // keyed on namespace name
 		acquireShardRetryPolicy backoff.RetryPolicy
+
+		stateMachineRegistry *hsm.Registry
 	}
 
 	remoteClusterInfo struct {
@@ -1023,7 +1026,6 @@ func (s *ContextImpl) DeleteWorkflowExecution(
 					ShardID:     s.shardID,
 					NamespaceID: key.NamespaceID,
 					WorkflowID:  key.WorkflowID,
-					RunID:       key.RunID,
 
 					Tasks: newTasks,
 				}
@@ -2051,6 +2053,7 @@ func newContext(
 	hostInfoProvider membership.HostInfoProvider,
 	taskCategoryRegistry tasks.TaskCategoryRegistry,
 	eventsCache events.Cache,
+	stateMachineRegistry *hsm.Registry,
 ) (*ContextImpl, error) {
 	hostIdentity := hostInfoProvider.HostInfo().Identity()
 	sequenceID := atomic.AddInt64(&shardContextSequenceID, 1)
@@ -2096,6 +2099,7 @@ func newContext(
 		engineFuture:            future.NewFuture[Engine](),
 		queueMetricEmitter:      sync.Once{},
 		ioSemaphore:             semaphore.NewWeighted(int64(ioConcurrency)),
+		stateMachineRegistry:    stateMachineRegistry,
 	}
 	shardContext.taskKeyManager = newTaskKeyManager(
 		shardContext.taskCategoryRegistry,
@@ -2179,6 +2183,10 @@ func (s *ContextImpl) GetClusterMetadata() cluster.Metadata {
 
 func (s *ContextImpl) GetArchivalMetadata() archiver.ArchivalMetadata {
 	return s.archivalMetadata
+}
+
+func (s *ContextImpl) StateMachineRegistry() *hsm.Registry {
+	return s.stateMachineRegistry
 }
 
 // newDetachedContext creates a detached context with the same deadline

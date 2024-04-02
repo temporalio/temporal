@@ -31,6 +31,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 
+	"go.temporal.io/server/common/persistence/visibility/store/query"
 	"go.temporal.io/server/common/searchattribute"
 )
 
@@ -160,7 +161,7 @@ func (s *QueryInterceptorSuite) TestDurationProcessFunc() {
 		value     interface{}
 		returnErr bool
 	}{
-		{value: nil, returnErr: true},
+		{value: int64(1), returnErr: false},
 		{value: int64(1), returnErr: false},
 		{value: int64(18180000000000), returnErr: false},
 		{value: int64(1000000000), returnErr: false},
@@ -173,6 +174,8 @@ func (s *QueryInterceptorSuite) TestDurationProcessFunc() {
 		v, err := vi.Values(testCase.key, testCase.value)
 		if expected[i].returnErr {
 			s.Error(err)
+			var converterErr *query.ConverterError
+			s.ErrorAs(err, &converterErr)
 			continue
 		}
 		s.NoError(err)

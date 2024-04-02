@@ -22,7 +22,7 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-//go:generate mockgen -copyright_file ../../../LICENSE -package $GOPACKAGE -source $GOFILE -destination transaction_manager_mock.go
+//go:generate mocksync -copyright_file ../../../LICENSE -package $GOPACKAGE -source $GOFILE -destination transaction_manager_mock.go
 
 package ndc
 
@@ -31,7 +31,6 @@ import (
 
 	"github.com/pborman/uuid"
 	commonpb "go.temporal.io/api/common/v1"
-	enumspb "go.temporal.io/api/enums/v1"
 	historypb "go.temporal.io/api/history/v1"
 	"go.temporal.io/api/serviceerror"
 
@@ -348,7 +347,7 @@ func (r *transactionMgrImpl) backfillWorkflowEventsReapply(
 			targetWorkflow,
 			EventsReapplicationResetWorkflowReason,
 			totalEvents,
-			enumspb.RESET_REAPPLY_TYPE_SIGNAL,
+			nil,
 		)
 		switch err.(type) {
 		case *serviceerror.InvalidArgument:

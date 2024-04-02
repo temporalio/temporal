@@ -22,7 +22,7 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-//go:generate mockgen -copyright_file ../../../LICENSE -package $GOPACKAGE -source $GOFILE -destination stream_sender_mock.go
+//go:generate mocksync -copyright_file ../../../LICENSE -package $GOPACKAGE -source $GOFILE -destination stream_sender_mock.go
 
 package replication
 
@@ -153,13 +153,11 @@ func (s *StreamSenderImpl) recvEventLoop() (retErr error) {
 
 	defer log.CapturePanic(s.logger, &panicErr)
 
-	defer s.Stop()
-
 	for !s.shutdownChan.IsShutdown() {
 		req, err := s.server.Recv()
 		if err != nil {
 			s.logger.Error("StreamSender exit recv loop", tag.Error(err))
-			return err
+			return NewStreamError("Stream recv error", err)
 		}
 		switch attr := req.GetAttributes().(type) {
 		case *historyservice.StreamWorkflowReplicationMessagesRequest_SyncReplicationState:
@@ -185,7 +183,6 @@ func (s *StreamSenderImpl) recvEventLoop() (retErr error) {
 }
 
 func (s *StreamSenderImpl) sendEventLoop() (retErr error) {
-	defer s.Stop()
 	var panicErr error
 	defer func() {
 		if panicErr != nil {
@@ -317,7 +314,7 @@ func (s *StreamSenderImpl) sendTasks(
 		return err
 	}
 	if beginInclusiveWatermark == endExclusiveWatermark {
-		return s.server.Send(&historyservice.StreamWorkflowReplicationMessagesResponse{
+		return s.sendToStream(&historyservice.StreamWorkflowReplicationMessagesResponse{
 			Attributes: &historyservice.StreamWorkflowReplicationMessagesResponse_Messages{
 				Messages: &replicationspb.WorkflowReplicationMessages{
 					ReplicationTasks:           nil,
@@ -357,7 +354,7 @@ Loop:
 		if task == nil {
 			continue Loop
 		}
-		if err := s.server.Send(&historyservice.StreamWorkflowReplicationMessagesResponse{
+		if err := s.sendToStream(&historyservice.StreamWorkflowReplicationMessagesResponse{
 			Attributes: &historyservice.StreamWorkflowReplicationMessagesResponse_Messages{
 				Messages: &replicationspb.WorkflowReplicationMessages{
 					ReplicationTasks:           []*replicationspb.ReplicationTask{task},
@@ -375,7 +372,7 @@ Loop:
 			metrics.OperationTag(TaskOperationTag(task)),
 		)
 	}
-	return s.server.Send(&historyservice.StreamWorkflowReplicationMessagesResponse{
+	return s.sendToStream(&historyservice.StreamWorkflowReplicationMessagesResponse{
 		Attributes: &historyservice.StreamWorkflowReplicationMessagesResponse_Messages{
 			Messages: &replicationspb.WorkflowReplicationMessages{
 				ReplicationTasks:           nil,
@@ -384,4 +381,12 @@ Loop:
 			},
 		},
 	})
+}
+
+func (s *StreamSenderImpl) sendToStream(payload *historyservice.StreamWorkflowReplicationMessagesResponse) error {
+	err := s.server.Send(payload)
+	if err != nil {
+		return NewStreamError("Stream send error", err)
+	}
+	return nil
 }

@@ -119,7 +119,12 @@ func (s *Starter) prepare(ctx context.Context) error {
 	request := s.request.StartRequest
 	metricsHandler := s.shardContext.GetMetricsHandler()
 
+	api.MigrateWorkflowIdReusePolicyForRunningWorkflow(
+		&request.WorkflowIdReusePolicy,
+		&request.WorkflowIdConflictPolicy)
+
 	api.OverrideStartWorkflowExecutionRequest(request, metrics.HistoryStartWorkflowExecutionScope, s.shardContext, metricsHandler)
+
 	err := api.ValidateStartWorkflowExecutionRequest(ctx, request, s.shardContext, s.namespace, "StartWorkflowExecution")
 	if err != nil {
 		return err
@@ -133,7 +138,7 @@ func (s *Starter) prepare(ctx context.Context) error {
 			metrics.WorkflowTypeTag(request.WorkflowType.Name),
 		)
 
-		// Override to false to avoid having to look up the dynamic config throughout the diffrent code paths.
+		// Override to false to avoid having to look up the dynamic config throughout the different code paths.
 		if !s.shardContext.GetConfig().EnableEagerWorkflowStart(s.namespace.Name().String()) {
 			s.recordEagerDenied(eagerStartDeniedReasonDynamicConfigDisabled)
 			request.RequestEagerExecution = false
@@ -282,7 +287,8 @@ func (s *Starter) handleConflict(
 	creationParams *creationParams,
 	currentWorkflowConditionFailed *persistence.CurrentWorkflowConditionFailedError,
 ) (*historyservice.StartWorkflowExecutionResponse, error) {
-	if currentWorkflowConditionFailed.RequestID == s.request.StartRequest.GetRequestId() {
+	request := s.request.StartRequest
+	if currentWorkflowConditionFailed.RequestID == request.GetRequestId() {
 		return s.respondToRetriedRequest(ctx, currentWorkflowConditionFailed.RunID)
 	}
 
@@ -347,7 +353,8 @@ func (s *Starter) resolveDuplicateWorkflowID(
 	creationParams *creationParams,
 ) (*historyservice.StartWorkflowExecutionResponse, error) {
 	workflowID := s.request.StartRequest.WorkflowId
-	prevExecutionUpdateAction, err := api.ResolveDuplicateWorkflowID(
+
+	currentExecutionUpdateAction, err := api.ResolveDuplicateWorkflowID(
 		workflowID,
 		creationParams.runID,
 		currentWorkflowConditionFailed.RunID,
@@ -355,16 +362,22 @@ func (s *Starter) resolveDuplicateWorkflowID(
 		currentWorkflowConditionFailed.Status,
 		currentWorkflowConditionFailed.RequestID,
 		s.request.StartRequest.GetWorkflowIdReusePolicy(),
+		s.request.StartRequest.GetWorkflowIdConflictPolicy(),
 	)
-	if err != nil {
+	switch {
+	case errors.Is(err, api.ErrUseCurrentExecution):
+		return &historyservice.StartWorkflowExecutionResponse{
+			RunId:   currentWorkflowConditionFailed.RunID,
+			Started: false, // set explicitly for emphasis
+		}, nil
+	case err != nil:
 		return nil, err
-	}
-
-	if prevExecutionUpdateAction == nil {
+	case currentExecutionUpdateAction == nil:
 		return nil, nil
 	}
+
 	var mutableStateInfo *mutableStateInfo
-	// update prev execution and create new execution in one transaction
+	// update current execution and create new execution in one transaction
 	// we already validated that currentWorkflowConditionFailed.RunID is not empty,
 	// so the following update won't try to lock current execution again.
 	err = api.GetAndUpdateWorkflowWithNew(
@@ -376,7 +389,7 @@ func (s *Starter) resolveDuplicateWorkflowID(
 			workflowID,
 			currentWorkflowConditionFailed.RunID,
 		),
-		prevExecutionUpdateAction,
+		currentExecutionUpdateAction,
 		func() (workflow.Context, workflow.MutableState, error) {
 			workflowLease, err := api.NewWorkflowWithSignal(
 				s.shardContext,
@@ -402,7 +415,8 @@ func (s *Starter) resolveDuplicateWorkflowID(
 	case nil:
 		if !s.requestEagerStart() {
 			return &historyservice.StartWorkflowExecutionResponse{
-				RunId: creationParams.runID,
+				RunId:   creationParams.runID,
+				Started: true,
 			}, nil
 		}
 		events, err := s.getWorkflowHistory(ctx, mutableStateInfo)
@@ -411,7 +425,7 @@ func (s *Starter) resolveDuplicateWorkflowID(
 		}
 		return s.generateResponse(creationParams.runID, mutableStateInfo.workflowTask, events)
 	case consts.ErrWorkflowCompleted:
-		// previous workflow already closed
+		// current workflow already closed
 		// fallthough to the logic for only creating the new workflow below
 		return nil, nil
 	default:
@@ -420,13 +434,17 @@ func (s *Starter) resolveDuplicateWorkflowID(
 }
 
 // respondToRetriedRequest provides a response in case a start request is retried.
+//
+// NOTE: Workflow is marked as "started" even though the client re-issued a request with the same ID,
+// as it's most likely that the response didn't leave the Server and wasn't metered appropriately
 func (s *Starter) respondToRetriedRequest(
 	ctx context.Context,
 	runID string,
 ) (*historyservice.StartWorkflowExecutionResponse, error) {
 	if !s.requestEagerStart() {
 		return &historyservice.StartWorkflowExecutionResponse{
-			RunId: runID,
+			RunId:   runID,
+			Started: true,
 		}, nil
 	}
 
@@ -441,7 +459,8 @@ func (s *Starter) respondToRetriedRequest(
 	if mutableStateInfo.workflowTask == nil || mutableStateInfo.workflowTask.StartedEventID != 3 || mutableStateInfo.workflowTask.Attempt > 1 {
 		s.recordEagerDenied(eagerStartDeniedReasonTaskAlreadyDispatched)
 		return &historyservice.StartWorkflowExecutionResponse{
-			RunId: runID,
+			RunId:   runID,
+			Started: true,
 		}, nil
 	}
 
@@ -540,7 +559,7 @@ func extractHistoryEvents(persistenceEvents []*persistence.WorkflowEvents) []*hi
 	return events
 }
 
-// generateResponse is a helper for generating StartWorkflowExecutionResponse for eager and non eager workflow start
+// generateResponse is a helper for generating StartWorkflowExecutionResponse for eager and non-eager workflow start
 // requests.
 func (s *Starter) generateResponse(
 	runID string,
@@ -554,7 +573,8 @@ func (s *Starter) generateResponse(
 
 	if !s.requestEagerStart() {
 		return &historyservice.StartWorkflowExecutionResponse{
-			RunId: runID,
+			RunId:   runID,
+			Started: true,
 		}, nil
 	}
 
@@ -583,8 +603,9 @@ func (s *Starter) generateResponse(
 		return nil, err
 	}
 	return &historyservice.StartWorkflowExecutionResponse{
-		RunId: runID,
-		Clock: clock,
+		RunId:   runID,
+		Clock:   clock,
+		Started: true,
 		EagerWorkflowTask: &workflowservice.PollWorkflowTaskQueueResponse{
 			TaskToken:         serializedToken,
 			WorkflowExecution: &commonpb.WorkflowExecution{WorkflowId: workflowID, RunId: runID},
