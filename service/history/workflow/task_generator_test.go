@@ -42,6 +42,7 @@ import (
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/plugins/callbacks"
+	"go.temporal.io/server/plugins/nexusoperations"
 	"go.temporal.io/server/service/history/configs"
 	"go.temporal.io/server/service/history/hsm"
 	"go.temporal.io/server/service/history/tasks"
@@ -332,6 +333,8 @@ func TestTaskGenerator_GenerateDirtySubStateMachineTasks(t *testing.T) {
 	require.NoError(t, RegisterStateMachine(reg))
 	require.NoError(t, callbacks.RegisterStateMachine(reg))
 	require.NoError(t, callbacks.RegisterTaskSerializer(reg))
+	require.NoError(t, nexusoperations.RegisterStateMachines(reg))
+	require.NoError(t, nexusoperations.RegisterTaskSerializer(reg))
 	node, err := hsm.NewRoot(reg, StateMachineType.ID, nil, subStateMachinesByType)
 	require.NoError(t, err)
 	coll := callbacks.MachineCollection(node)
@@ -366,7 +369,7 @@ func TestTaskGenerator_GenerateDirtySubStateMachineTasks(t *testing.T) {
 	require.NoError(t, err)
 
 	mutableState := NewMockMutableState(ctrl)
-	mutableState.EXPECT().HSM().DoAndReturn(func() *hsm.Node { return node })
+	mutableState.EXPECT().HSM().DoAndReturn(func() *hsm.Node { return node }).AnyTimes()
 	mutableState.EXPECT().GetExecutionInfo().Return(&persistencespb.WorkflowExecutionInfo{
 		TransitionHistory: []*persistencespb.VersionedTransition{
 			{
@@ -374,8 +377,8 @@ func TestTaskGenerator_GenerateDirtySubStateMachineTasks(t *testing.T) {
 				MaxTransitionCount:       2,
 			},
 		},
-	})
-	mutableState.EXPECT().GetWorkflowKey().Return(tests.WorkflowKey).Times(2)
+	}).AnyTimes()
+	mutableState.EXPECT().GetWorkflowKey().Return(tests.WorkflowKey).AnyTimes()
 
 	cfg := &configs.Config{}
 	archivalMetadata := archiver.NewMockArchivalMetadata(ctrl)
@@ -432,4 +435,35 @@ func TestTaskGenerator_GenerateDirtySubStateMachineTasks(t *testing.T) {
 		Type: callbacks.TaskTypeBackoff.ID,
 		Data: nil,
 	}, backoffTask.Info)
+
+	// Reset and test a concurrent task (nexusoperations.TimeoutTask)
+	node.ClearTransactionState()
+	genTasks = nil
+	opNode, err := nexusoperations.AddChild(node, "some-service", "some-op", timestamppb.Now(), durationpb.New(time.Hour))
+	require.NoError(t, err)
+	err = taskGenerator.GenerateDirtySubStateMachineTasks(reg)
+	require.NoError(t, err)
+
+	require.Equal(t, 2, len(genTasks))
+	timeoutTask, ok := genTasks[0].(*tasks.StateMachineTimerTask)
+	if !ok {
+		timeoutTask = genTasks[1].(*tasks.StateMachineTimerTask)
+	}
+
+	require.Equal(t, tests.WorkflowKey, timeoutTask.WorkflowKey)
+	require.Equal(t, &persistencespb.StateMachineTaskInfo{
+		Ref: &persistencespb.StateMachineRef{
+			Path: []*persistencespb.StateMachineKey{
+				{
+					Type: opNode.Key.Type,
+					Id:   opNode.Key.ID,
+				},
+			},
+			MutableStateNamespaceFailoverVersion: 3,
+			MutableStateTransitionCount:          2,
+			MachineTransitionCount:               0, // concurrent tasks don't store the machine transition count.
+		},
+		Type: nexusoperations.TaskTypeTimeout.ID,
+		Data: nil,
+	}, timeoutTask.Info)
 }
