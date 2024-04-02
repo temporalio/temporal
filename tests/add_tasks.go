@@ -88,6 +88,8 @@ type (
 	}
 )
 
+var ExampleShardEngineErr error = errors.New("example shard engine error")
+
 func (c *faultyShardController) GetShardByID(shardID int32) (shard.Context, error) {
 	ctx, err := c.Controller.GetShardByID(shardID)
 	if err != nil {
@@ -260,8 +262,7 @@ func (s *AddTasksSuite) TestAddTasks_GetEngineErr() {
 	defer func() {
 		s.getEngineErr.Store(nil)
 	}()
-	engineErr := errors.New("example shard engine error")
-	s.getEngineErr.Store(&engineErr)
+	s.getEngineErr.Store(&ExampleShardEngineErr)
 	_, err := s.testCluster.GetHistoryClient().AddTasks(context.Background(), &historyservice.AddTasksRequest{
 		ShardId: 1,
 	})
