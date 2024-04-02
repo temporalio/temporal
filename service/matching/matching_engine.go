@@ -798,6 +798,7 @@ func (e *matchingEngineImpl) DescribeTaskQueue(
 		// collect internal info
 		physicalInfoByBuildId := make(map[string]map[enumspb.TaskQueueType]*taskqueuespb.PhysicalTaskQueueInfo)
 		for _, taskQueueType := range req.TaskQueueTypes {
+
 			for i := 0; i < e.config.NumTaskqueueWritePartitions(req.Namespace, req.TaskQueue.Name, taskQueueType); i++ {
 				pm, err := e.getTaskQueuePartitionManager(
 					ctx,
@@ -820,17 +821,27 @@ func (e *matchingEngineImpl) DescribeTaskQueue(
 					return nil, err
 				}
 				for _, vii := range partitionResp.VersionsInfoInternal {
-					type2InfoMap := physicalInfoByBuildId[vii.BuildId]
-					if type2InfoMap == nil {
-						type2InfoMap = make(map[enumspb.TaskQueueType]*taskqueuespb.PhysicalTaskQueueInfo)
-						physicalInfoByBuildId[vii.BuildId] = type2InfoMap
+					if _, ok := physicalInfoByBuildId[vii.BuildId]; !ok {
+						physicalInfoByBuildId[vii.BuildId] = make(map[enumspb.TaskQueueType]*taskqueuespb.PhysicalTaskQueueInfo)
 					}
-					type2InfoMap[taskQueueType] = vii.PhysicalTaskQueueInfo
+					if physInfo, ok := physicalInfoByBuildId[vii.BuildId][taskQueueType]; !ok {
+						physicalInfoByBuildId[vii.BuildId][taskQueueType] = vii.PhysicalTaskQueueInfo
+					} else {
+						var bInfo *taskqueuepb.BacklogInfo
+						if i == 0 { // root partition
+							bInfo = vii.PhysicalTaskQueueInfo.BacklogInfo
+						}
+						merged := &taskqueuespb.PhysicalTaskQueueInfo{
+							Pollers:     append(physInfo.GetPollers(), vii.PhysicalTaskQueueInfo.GetPollers()...),
+							BacklogInfo: bInfo,
+						}
+						physicalInfoByBuildId[vii.BuildId][taskQueueType] = merged
+					}
 				}
 			}
 		}
 
-		// merge internal info into versions info
+		// smush internal info into versions info
 		versionsInfo := make([]*taskqueuepb.TaskQueueVersionInfo, 0)
 		for bid, typeMap := range physicalInfoByBuildId {
 			typesInfo := make([]*taskqueuepb.TaskQueueTypeInfo, 0)
