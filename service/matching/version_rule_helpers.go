@@ -383,7 +383,7 @@ func isRedirectRuleSource(buildID string, redirectRules []*persistencespb.Redire
 //	50% of tasks that start with buildID 1 would be sent on to buildID 2 per assignment rules, and the
 //	remaining 50% that "stay" on buildID 1 would be redirected to buildID 4 per the redirect rules.
 //	This doesn't make sense, so we prohibit it.
-func isConditionalAssignmentRuleTarget(buildID string, assignmentRules []*persistencepb.AssignmentRule) bool {
+func isConditionalAssignmentRuleTarget(buildID string, assignmentRules []*persistencespb.AssignmentRule) bool {
 	for _, r := range getActiveAssignmentRules(assignmentRules) {
 		if !isUnconditional(r.GetRule()) && buildID == r.GetRule().GetTargetBuildId() {
 			return true
