@@ -766,10 +766,13 @@ func IncomingServiceClientProvider(
 
 func OutgoingServiceRegistryProvider(
 	metadataManager persistence.MetadataManager,
+	logger log.Logger,
+	namespaceReplicationQueue persistence.NamespaceReplicationQueue,
 	dc *dynamicconfig.Collection,
 ) *nexus.OutgoingServiceRegistry {
 	registryConfig := nexus.NewOutgoingServiceRegistryConfig(dc)
-	return nexus.NewOutgoingServiceRegistry(metadataManager, registryConfig)
+	namespaceReplicator := namespace.NewNamespaceReplicator(namespaceReplicationQueue, logger)
+	return nexus.NewOutgoingServiceRegistry(metadataManager, namespaceReplicator, registryConfig)
 }
 
 func ServiceLifetimeHooks(lc fx.Lifecycle, svc *Service) {

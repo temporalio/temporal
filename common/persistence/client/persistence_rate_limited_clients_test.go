@@ -198,7 +198,7 @@ func TestRateLimitedPersistenceClients(t *testing.T) {
 			var err error
 			for _, persistenceCall := range persistenceCalls {
 				t.Run(fmt.Sprintf("%s %s", tc.name, persistenceCall.name), func(t *testing.T) {
-					//Generate load by sending a number of requests.
+					// Generate load by sending a number of requests.
 					for i := 0; i < tc.numRequests; i++ {
 						err = persistenceCall.call()
 						if err != nil {
