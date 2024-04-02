@@ -282,23 +282,6 @@ func CommitBuildID(timestamp *hlc.Clock,
 	return data, nil
 }
 
-func getWorkVersioningRules(tqMgr taskQueuePartitionManager, clusterID int64) (*matchingservice.GetWorkerVersioningRulesResponse, error) {
-	data, _, err := tqMgr.GetUserDataManager().GetUserData()
-	if err != nil {
-		return nil, err
-	}
-	if data == nil {
-		data = &persistencespb.VersionedTaskQueueUserData{Data: &persistencespb.TaskQueueUserData{}}
-	} else {
-		data = common.CloneProto(data)
-	}
-	clk := data.GetData().GetClock()
-	if clk == nil {
-		clk = hlc.Zero(clusterID)
-	}
-	return GetWorkerVersioningRules(data.GetData().GetVersioningData(), clk)
-}
-
 func GetWorkerVersioningRules(
 	versioningData *persistencespb.VersioningData,
 	clk *hlc.Clock,

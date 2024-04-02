@@ -165,13 +165,6 @@ type (
 		WorkflowID string
 	}
 
-	// ListWorkflowExecutionsByVersionSARequest is used to list executions that
-	// have specific build id and version in a namespace
-	ListWorkflowExecutionsByVersionSARequest struct {
-		*ListWorkflowExecutionsRequest
-		VersionSearchAttribute string
-	}
-
 	// ListClosedWorkflowExecutionsByStatusRequest is used to list executions that
 	// have specific close status
 	ListClosedWorkflowExecutionsByStatusRequest struct {

@@ -902,7 +902,7 @@ func (e *matchingEngineImpl) getDefaultBuildId(
 	if err != nil {
 		return "", err
 	}
-	resp, err := getWorkVersioningRules(tqMgr, e.clusterMeta.GetClusterID())
+	resp, err := e.getWorkVersioningRules(tqMgr)
 	if err != nil {
 		return "", err
 	}
@@ -1106,7 +1106,24 @@ func (e *matchingEngineImpl) GetWorkerVersioningRules(
 		return nil, err
 	}
 
-	return getWorkVersioningRules(tqMgr, e.clusterMeta.GetClusterID())
+	return e.getWorkVersioningRules(tqMgr)
+}
+
+func (e *matchingEngineImpl) getWorkVersioningRules(tqMgr taskQueuePartitionManager) (*matchingservice.GetWorkerVersioningRulesResponse, error) {
+	data, _, err := tqMgr.GetUserDataManager().GetUserData()
+	if err != nil {
+		return nil, err
+	}
+	if data == nil {
+		data = &persistencespb.VersionedTaskQueueUserData{Data: &persistencespb.TaskQueueUserData{}}
+	} else {
+		data = common.CloneProto(data)
+	}
+	clk := data.GetData().GetClock()
+	if clk == nil {
+		clk = hlc.Zero(e.clusterMeta.GetClusterID())
+	}
+	return GetWorkerVersioningRules(data.GetData().GetVersioningData(), clk)
 }
 
 func (e *matchingEngineImpl) UpdateWorkerBuildIdCompatibility(
