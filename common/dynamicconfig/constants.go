@@ -129,6 +129,9 @@ const (
 	DeadlockMaxWorkersPerRoot = "system.deadlock.MaxWorkersPerRoot"
 
 	// utf-8 validation
+	// The *Sample* keys control the sample rate of messages to examine as a fraction in [0.0, 1.0].
+	// The *Fail* keys control whether a validation failure causes an error (rpc error for rpc
+	// request/response, [de]serialization error for persistence).
 	ValidateUTF8SampleRPCRequest  = "system.validateUTF8.sample.rpcRequest"
 	ValidateUTF8SampleRPCResponse = "system.validateUTF8.sample.rpcResponse"
 	ValidateUTF8SamplePersistence = "system.validateUTF8.sample.persistence"

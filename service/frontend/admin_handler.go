@@ -1815,7 +1815,7 @@ func (adh *AdminHandler) PurgeDLQTasks(
 		WorkflowId: workflowID,
 		RunId:      runID,
 	}
-	if err := utf8validator.ValidateUsingGlobalValidator(&jobToken, utf8validator.SourceRPCResponse, nil); err != nil {
+	if err := utf8validator.Validate(&jobToken, utf8validator.SourceRPCResponse, nil); err != nil {
 		return nil, err
 	}
 	jobTokenBytes, _ := jobToken.Marshal()
@@ -1854,7 +1854,7 @@ func (adh *AdminHandler) MergeDLQTasks(ctx context.Context, request *adminservic
 		WorkflowId: workflowID,
 		RunId:      runID,
 	}
-	if err := utf8validator.ValidateUsingGlobalValidator(&jobToken, utf8validator.SourceRPCResponse, nil); err != nil {
+	if err := utf8validator.Validate(&jobToken, utf8validator.SourceRPCResponse, nil); err != nil {
 		return nil, err
 	}
 	jobTokenBytes, _ := jobToken.Marshal()
@@ -1867,7 +1867,7 @@ func (adh *AdminHandler) DescribeDLQJob(ctx context.Context, request *adminservi
 	jt := adminservice.DLQJobToken{}
 	err := jt.Unmarshal([]byte(request.JobToken))
 	if err == nil {
-		err = utf8validator.ValidateUsingGlobalValidator(&jt, utf8validator.SourceRPCRequest, nil)
+		err = utf8validator.Validate(&jt, utf8validator.SourceRPCRequest, nil)
 	}
 	if err != nil {
 		return nil, fmt.Errorf("%w: %v", errInvalidDLQJobToken, err)
@@ -1923,7 +1923,7 @@ func (adh *AdminHandler) CancelDLQJob(ctx context.Context, request *adminservice
 	jt := adminservice.DLQJobToken{}
 	err := jt.Unmarshal([]byte(request.JobToken))
 	if err == nil {
-		err = utf8validator.ValidateUsingGlobalValidator(&jt, utf8validator.SourceRPCRequest, nil)
+		err = utf8validator.Validate(&jt, utf8validator.SourceRPCRequest, nil)
 	}
 	if err != nil {
 		return nil, fmt.Errorf("%w: %v", errInvalidDLQJobToken, err)

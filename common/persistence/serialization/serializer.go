@@ -171,7 +171,7 @@ func (t *serializerImpl) DeserializeEvents(data *commonpb.DataBlob) ([]*historyp
 		return nil, NewUnknownEncodingTypeError(data.EncodingType.String(), enumspb.ENCODING_TYPE_PROTO3)
 	}
 	if err == nil {
-		err = utf8validator.ValidateUsingGlobalValidator(events, utf8validator.SourcePersistence, nil)
+		err = utf8validator.Validate(events, utf8validator.SourcePersistence, nil)
 	}
 	if err != nil {
 		return nil, NewDeserializationError(enumspb.ENCODING_TYPE_PROTO3, err)
@@ -204,7 +204,7 @@ func (t *serializerImpl) DeserializeEvent(data *commonpb.DataBlob) (*historypb.H
 		return nil, NewUnknownEncodingTypeError(data.EncodingType.String(), enumspb.ENCODING_TYPE_PROTO3)
 	}
 	if err == nil {
-		err = utf8validator.ValidateUsingGlobalValidator(event, utf8validator.SourcePersistence, nil)
+		err = utf8validator.Validate(event, utf8validator.SourcePersistence, nil)
 	}
 	if err != nil {
 		return nil, NewDeserializationError(enumspb.ENCODING_TYPE_PROTO3, err)
@@ -239,7 +239,7 @@ func (t *serializerImpl) DeserializeClusterMetadata(data *commonpb.DataBlob) (*p
 		return nil, NewUnknownEncodingTypeError(data.EncodingType.String(), enumspb.ENCODING_TYPE_PROTO3)
 	}
 	if err == nil {
-		err = utf8validator.ValidateUsingGlobalValidator(cm, utf8validator.SourcePersistence, nil)
+		err = utf8validator.Validate(cm, utf8validator.SourcePersistence, nil)
 	}
 	if err != nil {
 		return nil, NewSerializationError(enumspb.ENCODING_TYPE_PROTO3, err)
@@ -260,7 +260,7 @@ func (t *serializerImpl) serialize(p marshaler, encodingType enumspb.EncodingTyp
 	case enumspb.ENCODING_TYPE_PROTO3:
 		// Client API currently specifies encodingType on requests which span multiple of these objects
 		if msg, ok := p.(proto.Message); ok {
-			if err := utf8validator.ValidateUsingGlobalValidator(msg, utf8validator.SourcePersistence, nil); err != nil {
+			if err := utf8validator.Validate(msg, utf8validator.SourcePersistence, nil); err != nil {
 				return nil, NewSerializationError(enumspb.ENCODING_TYPE_PROTO3, err)
 			}
 		}
@@ -618,7 +618,7 @@ func ProtoEncodeBlob(m proto.Message, encoding enumspb.EncodingType) (*commonpb.
 		}, nil
 	}
 
-	if err := utf8validator.ValidateUsingGlobalValidator(m, utf8validator.SourcePersistence, nil); err != nil {
+	if err := utf8validator.Validate(m, utf8validator.SourcePersistence, nil); err != nil {
 		return nil, NewSerializationError(enumspb.ENCODING_TYPE_PROTO3, err)
 	}
 	data, err := proto.Marshal(m)

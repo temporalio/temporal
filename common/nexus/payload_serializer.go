@@ -82,7 +82,7 @@ func (payloadSerializer) Deserialize(content *nexus.Content, v any) error {
 	case "application/x-temporal-payload":
 		err := payload.Unmarshal(content.Data)
 		if err == nil {
-			err = utf8validator.ValidateUsingGlobalValidator(payload, utf8validator.SourceRPCRequest, nil)
+			err = utf8validator.Validate(payload, utf8validator.SourceRPCRequest, nil)
 		}
 		if err != nil {
 			return serialization.NewDeserializationError(enums.ENCODING_TYPE_PROTO3, err)
@@ -178,7 +178,7 @@ func (payloadSerializer) Serialize(v any) (*nexus.Content, error) {
 }
 
 func xTemporalPayload(payload *commonpb.Payload) (*nexus.Content, error) {
-	if err := utf8validator.ValidateUsingGlobalValidator(payload, utf8validator.SourceRPCResponse, nil); err != nil {
+	if err := utf8validator.Validate(payload, utf8validator.SourceRPCResponse, nil); err != nil {
 		return nil, fmt.Errorf("%w: payload marshal error: %w", errSerializer, err)
 	}
 	data, err := payload.Marshal()

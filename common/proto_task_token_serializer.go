@@ -42,7 +42,7 @@ func (s *protoTaskTokenSerializer) Serialize(taskToken *tokenspb.Task) ([]byte, 
 	if taskToken == nil {
 		return nil, nil
 	}
-	if err := utf8validator.ValidateUsingGlobalValidator(taskToken, utf8validator.SourceRPCResponse, nil); err != nil {
+	if err := utf8validator.Validate(taskToken, utf8validator.SourceRPCResponse, nil); err != nil {
 		return nil, err
 	}
 	return taskToken.Marshal()
@@ -52,7 +52,7 @@ func (s *protoTaskTokenSerializer) Deserialize(data []byte) (*tokenspb.Task, err
 	taskToken := &tokenspb.Task{}
 	err := taskToken.Unmarshal(data)
 	if err == nil {
-		err = utf8validator.ValidateUsingGlobalValidator(taskToken, utf8validator.SourceRPCRequest, nil)
+		err = utf8validator.Validate(taskToken, utf8validator.SourceRPCRequest, nil)
 	}
 	return taskToken, err
 }
@@ -61,7 +61,7 @@ func (s *protoTaskTokenSerializer) SerializeQueryTaskToken(taskToken *tokenspb.Q
 	if taskToken == nil {
 		return nil, nil
 	}
-	if err := utf8validator.ValidateUsingGlobalValidator(taskToken, utf8validator.SourceRPCResponse, nil); err != nil {
+	if err := utf8validator.Validate(taskToken, utf8validator.SourceRPCResponse, nil); err != nil {
 		return nil, err
 	}
 	return taskToken.Marshal()
@@ -71,7 +71,7 @@ func (s *protoTaskTokenSerializer) DeserializeQueryTaskToken(data []byte) (*toke
 	taskToken := tokenspb.QueryTask{}
 	err := taskToken.Unmarshal(data)
 	if err == nil {
-		err = utf8validator.ValidateUsingGlobalValidator(&taskToken, utf8validator.SourceRPCRequest, nil)
+		err = utf8validator.Validate(&taskToken, utf8validator.SourceRPCRequest, nil)
 	}
 	return &taskToken, err
 }
@@ -80,7 +80,7 @@ func (s *protoTaskTokenSerializer) SerializeNexusTaskToken(taskToken *tokenspb.N
 	if taskToken == nil {
 		return nil, nil
 	}
-	if err := utf8validator.ValidateUsingGlobalValidator(taskToken, utf8validator.SourceRPCResponse, nil); err != nil {
+	if err := utf8validator.Validate(taskToken, utf8validator.SourceRPCResponse, nil); err != nil {
 		return nil, err
 	}
 	return taskToken.Marshal()
@@ -90,7 +90,7 @@ func (s *protoTaskTokenSerializer) DeserializeNexusTaskToken(data []byte) (*toke
 	taskToken := tokenspb.NexusTask{}
 	err := taskToken.Unmarshal(data)
 	if err == nil {
-		err = utf8validator.ValidateUsingGlobalValidator(&taskToken, utf8validator.SourceRPCRequest, nil)
+		err = utf8validator.Validate(&taskToken, utf8validator.SourceRPCRequest, nil)
 	}
 	return &taskToken, err
 }

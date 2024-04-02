@@ -312,7 +312,7 @@ func (h *HTTPAPIServer) errorHandler(
 
 	sProto := s.Proto()
 	var buf []byte
-	merr := utf8validator.ValidateUsingGlobalValidator(sProto, utf8validator.SourceRPCResponse, nil)
+	merr := utf8validator.Validate(sProto, utf8validator.SourceRPCResponse, nil)
 	if merr == nil {
 		buf, merr = marshaler.Marshal(sProto)
 	}

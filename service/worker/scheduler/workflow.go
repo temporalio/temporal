@@ -1053,7 +1053,7 @@ func (s *scheduler) logUTF8ValidationErrors(msgs ...proto.Message) {
 	}
 	for _, msg := range msgs {
 		// log errors only, don't affect control flow
-		_ = utf8validator.ValidateUsingGlobalValidator(msg, utf8validator.SourcePersistence, getTags)
+		_ = utf8validator.Validate(msg, utf8validator.SourcePersistence, getTags)
 	}
 }
 

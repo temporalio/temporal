@@ -111,12 +111,12 @@ func newValidator(
 	return v
 }
 
-// ValidateUsingGlobalValidator maybe validates one proto message, depending on dynamic config
+// Validate maybe validates one proto message, depending on dynamic config
 // and random sampling. If validation fails, this may still return no error, depending on
 // dynamic config. This deliberately does not return a serviceerror because the decision of
 // which serviceerror to use is contextual. The caller should wrap it in the appropriate
 // serviceerror.
-func ValidateUsingGlobalValidator(
+func Validate(
 	m proto.Message,
 	source MessageSource,
 	getTags func() []tag.Tag,

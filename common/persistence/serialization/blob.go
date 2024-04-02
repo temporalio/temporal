@@ -170,7 +170,7 @@ func decode(
 }
 
 func proto3Encode(m proto.Message) (*commonpb.DataBlob, error) {
-	if err := utf8validator.ValidateUsingGlobalValidator(m, utf8validator.SourcePersistence, nil); err != nil {
+	if err := utf8validator.Validate(m, utf8validator.SourcePersistence, nil); err != nil {
 		return nil, NewSerializationError(enumspb.ENCODING_TYPE_PROTO3, err)
 	}
 	blob := commonpb.DataBlob{EncodingType: enumspb.ENCODING_TYPE_PROTO3}
@@ -196,7 +196,7 @@ func Proto3Decode(blob []byte, e enumspb.EncodingType, result proto.Message) err
 	}
 	err := proto.Unmarshal(blob, result)
 	if err == nil {
-		err = utf8validator.ValidateUsingGlobalValidator(result, utf8validator.SourcePersistence, nil)
+		err = utf8validator.Validate(result, utf8validator.SourcePersistence, nil)
 	}
 	if err != nil {
 		return NewDeserializationError(enumspb.ENCODING_TYPE_PROTO3, err)

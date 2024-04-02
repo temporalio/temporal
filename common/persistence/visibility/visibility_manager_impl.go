@@ -424,7 +424,7 @@ func (p *visibilityManagerImpl) deserializeMemo(data *commonpb.DataBlob) (*commo
 		memo := &commonpb.Memo{}
 		err := proto.Unmarshal(data.Data, memo)
 		if err == nil {
-			err = utf8validator.ValidateUsingGlobalValidator(memo, utf8validator.SourcePersistence, nil)
+			err = utf8validator.Validate(memo, utf8validator.SourcePersistence, nil)
 		}
 		if err != nil {
 			return nil, serialization.NewDeserializationError(
