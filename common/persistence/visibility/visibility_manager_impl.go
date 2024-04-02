@@ -221,30 +221,6 @@ func (p *visibilityManagerImpl) ListClosedWorkflowExecutionsByWorkflowID(
 	return p.convertInternalListResponse(response)
 }
 
-func (p *visibilityManagerImpl) ListOpenWorkflowExecutionsByVersion(
-	ctx context.Context,
-	request *manager.ListWorkflowExecutionsByVersionSARequest,
-) (*manager.ListWorkflowExecutionsResponse, error) {
-	response, err := p.store.ListOpenWorkflowExecutionsByVersion(ctx, request)
-	if err != nil {
-		return nil, err
-	}
-
-	return p.convertInternalListResponse(response)
-}
-
-func (p *visibilityManagerImpl) ListClosedWorkflowExecutionsByVersion(
-	ctx context.Context,
-	request *manager.ListWorkflowExecutionsByVersionSARequest,
-) (*manager.ListWorkflowExecutionsResponse, error) {
-	response, err := p.store.ListClosedWorkflowExecutionsByVersion(ctx, request)
-	if err != nil {
-		return nil, err
-	}
-
-	return p.convertInternalListResponse(response)
-}
-
 func (p *visibilityManagerImpl) ListClosedWorkflowExecutionsByStatus(
 	ctx context.Context,
 	request *manager.ListClosedWorkflowExecutionsByStatusRequest,

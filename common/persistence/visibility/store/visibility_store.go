@@ -63,8 +63,6 @@ type (
 		ListClosedWorkflowExecutionsByType(ctx context.Context, request *manager.ListWorkflowExecutionsByTypeRequest) (*InternalListWorkflowExecutionsResponse, error)
 		ListOpenWorkflowExecutionsByWorkflowID(ctx context.Context, request *manager.ListWorkflowExecutionsByWorkflowIDRequest) (*InternalListWorkflowExecutionsResponse, error)
 		ListClosedWorkflowExecutionsByWorkflowID(ctx context.Context, request *manager.ListWorkflowExecutionsByWorkflowIDRequest) (*InternalListWorkflowExecutionsResponse, error)
-		ListOpenWorkflowExecutionsByVersion(ctx context.Context, request *manager.ListWorkflowExecutionsByVersionSARequest) (*InternalListWorkflowExecutionsResponse, error)
-		ListClosedWorkflowExecutionsByVersion(ctx context.Context, request *manager.ListWorkflowExecutionsByVersionSARequest) (*InternalListWorkflowExecutionsResponse, error)
 		ListClosedWorkflowExecutionsByStatus(ctx context.Context, request *manager.ListClosedWorkflowExecutionsByStatusRequest) (*InternalListWorkflowExecutionsResponse, error)
 		ListWorkflowExecutions(ctx context.Context, request *manager.ListWorkflowExecutionsRequestV2) (*InternalListWorkflowExecutionsResponse, error)
 		ScanWorkflowExecutions(ctx context.Context, request *manager.ListWorkflowExecutionsRequestV2) (*InternalListWorkflowExecutionsResponse, error)

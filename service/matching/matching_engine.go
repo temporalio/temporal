@@ -850,14 +850,10 @@ func (e *matchingEngineImpl) DescribeTaskQueue(
 					Pollers: physicalInfo.Pollers,
 				})
 			}
-			reachability, err := getReachability(e, ctx, bid)
-			if err != nil {
-				return nil, err
-			}
 			versionsInfo = append(versionsInfo, &taskqueuepb.TaskQueueVersionInfo{
 				BuildId:          bid,
 				TypesInfo:        typesInfo,
-				TaskReachability: reachability,
+				TaskReachability: enumspb.BUILD_ID_TASK_REACHABILITY_UNSPECIFIED,
 			})
 		}
 
