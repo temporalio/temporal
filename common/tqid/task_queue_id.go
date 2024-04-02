@@ -33,6 +33,8 @@ import (
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
+
+	taskqueuespb "go.temporal.io/server/api/taskqueue/v1"
 	"go.temporal.io/server/common/namespace"
 )
 
@@ -161,6 +163,17 @@ func PartitionFromProto(proto *taskqueuepb.TaskQueue, namespaceId string, taskTy
 	default:
 		tq := &TaskQueue{TaskQueueFamily{namespace.ID(namespaceId), baseName}, taskType}
 		return tq.NormalPartition(partition), nil
+	}
+}
+
+func PartitionFromPartitionProto(proto *taskqueuespb.TaskQueuePartition, namespaceId string) Partition {
+	switch proto.GetPartitionId().(type) {
+	case *taskqueuespb.TaskQueuePartition_StickyName:
+		tq := &TaskQueue{TaskQueueFamily{namespace.ID(namespaceId), proto.GetTaskQueue()}, proto.GetTaskQueueType()}
+		return tq.StickyPartition(proto.GetStickyName())
+	default:
+		tq := &TaskQueue{TaskQueueFamily{namespace.ID(namespaceId), proto.GetTaskQueue()}, proto.GetTaskQueueType()}
+		return tq.NormalPartition(int(proto.GetNormalPartitionId()))
 	}
 }
 
