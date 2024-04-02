@@ -1462,22 +1462,22 @@ func (e *matchingEngineImpl) getAllPartitionRpcNames(
 	taskQueue *taskqueuepb.TaskQueue,
 	taskQueueType enumspb.TaskQueueType,
 ) ([]string, error) {
-	var partitions []string
+	var partitionKeys []string
 	namespaceID, err := e.namespaceRegistry.GetNamespaceID(ns)
 	if err != nil {
-		return partitions, err
+		return partitionKeys, err
 	}
 	taskQueueFamily, err := tqid.NewTaskQueueFamily(namespaceID.String(), taskQueue.GetName())
 	if err != nil {
-		return partitions, err
+		return partitionKeys, err
 	}
 
 	n := e.config.NumTaskqueueWritePartitions(ns.String(), taskQueueFamily.Name(), taskQueueType)
 	for i := 0; i < n; i++ {
-		partitions = append(partitions, taskQueueFamily.TaskQueue(taskQueueType).NormalPartition(i).RpcName())
+		partitionKeys = append(partitionKeys, taskQueueFamily.TaskQueue(taskQueueType).NormalPartition(i).RpcName())
 	}
 
-	return partitions, nil
+	return partitionKeys, nil
 }
 
 func (e *matchingEngineImpl) pollTask(
