@@ -804,15 +804,15 @@ func (e *matchingEngineImpl) DescribeTaskQueue(
 				return nil, err
 			}
 			for _, p := range partitions {
-				tqMgr, err := e.getTaskQueuePartitionManager(ctx, p, true)
+				pm, err := e.getTaskQueuePartitionManager(ctx, p, true)
 				if err != nil {
 					return nil, err
 				}
-				buildIds, err := e.getBuildIdList(req.GetVersions(), tqMgr)
+				buildIds, err := e.getBuildIdList(req.GetVersions(), pm)
 				if err != nil {
 					return nil, err
 				}
-				partitionResp, err := tqMgr.Describe(buildIds, req.GetVersions().GetAllActive(), false, req.ReportPollers)
+				partitionResp, err := pm.Describe(buildIds, req.GetVersions().GetAllActive(), false, req.ReportPollers)
 				if err != nil {
 					return nil, err
 				}
@@ -861,15 +861,15 @@ func (e *matchingEngineImpl) DescribeTaskQueuePartition(
 	ctx context.Context,
 	request *matchingservice.DescribeTaskQueuePartitionRequest,
 ) (*matchingservice.DescribeTaskQueuePartitionResponse, error) {
-	tqMgr, err := e.getTaskQueuePartitionManager(ctx, tqid.PartitionFromPartitionProto(request.GetTaskQueuePartition(), request.GetNamespaceId()), true)
+	pm, err := e.getTaskQueuePartitionManager(ctx, tqid.PartitionFromPartitionProto(request.GetTaskQueuePartition(), request.GetNamespaceId()), true)
 	if err != nil {
 		return nil, err
 	}
-	buildIds, err := e.getBuildIdList(request.GetVersions(), tqMgr)
+	buildIds, err := e.getBuildIdList(request.GetVersions(), pm)
 	if err != nil {
 		return nil, err
 	}
-	return tqMgr.Describe(buildIds, request.GetVersions().GetAllActive(), request.GetReportBacklogInfo(), request.GetReportPollers())
+	return pm.Describe(buildIds, request.GetVersions().GetAllActive(), request.GetReportBacklogInfo(), request.GetReportPollers())
 }
 
 func (e *matchingEngineImpl) getBuildIdList(
@@ -896,7 +896,7 @@ func (e *matchingEngineImpl) getBuildIdList(
 // getDefaultBuildId gets the build id mentioned in the first unconditional Assignment Rule.
 // If there is no default Build ID, the result for the unversioned queue will be returned.
 func (e *matchingEngineImpl) getDefaultBuildId(tqMgr taskQueuePartitionManager) (string, error) {
-	resp, err := e.getWorkVersioningRules(tqMgr)
+	resp, err := e.getWorkerVersioningRules(tqMgr)
 	if err != nil {
 		return "", err
 	}
@@ -1100,10 +1100,10 @@ func (e *matchingEngineImpl) GetWorkerVersioningRules(
 		return nil, err
 	}
 
-	return e.getWorkVersioningRules(tqMgr)
+	return e.getWorkerVersioningRules(tqMgr)
 }
 
-func (e *matchingEngineImpl) getWorkVersioningRules(tqMgr taskQueuePartitionManager) (*matchingservice.GetWorkerVersioningRulesResponse, error) {
+func (e *matchingEngineImpl) getWorkerVersioningRules(tqMgr taskQueuePartitionManager) (*matchingservice.GetWorkerVersioningRulesResponse, error) {
 	data, _, err := tqMgr.GetUserDataManager().GetUserData()
 	if err != nil {
 		return nil, err
