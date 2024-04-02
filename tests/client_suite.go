@@ -98,7 +98,7 @@ func (s *ClientFunctionalSuite) SetupSuite() {
 		dynamicconfig.NumPendingActivitiesLimitError:                  s.maxPendingActivities,
 		dynamicconfig.NumPendingCancelRequestsLimitError:              s.maxPendingCancelRequests,
 		dynamicconfig.NumPendingSignalsLimitError:                     s.maxPendingSignals,
-		dynamicconfig.FrontendEnableNexusHTTPHandler:                  true,
+		dynamicconfig.FrontendEnableNexusAPIs:                         true,
 		dynamicconfig.FrontendEnableWorkerVersioningDataAPIs:          true,
 		dynamicconfig.FrontendEnableWorkerVersioningWorkflowAPIs:      true,
 		dynamicconfig.FrontendMaxConcurrentBatchOperationPerNamespace: limit,
