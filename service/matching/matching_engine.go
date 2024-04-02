@@ -794,11 +794,9 @@ func (e *matchingEngineImpl) DescribeTaskQueue(
 ) (*matchingservice.DescribeTaskQueueResponse, error) {
 	req := request.GetDescRequest()
 	if req.ApiMode == enumspb.DESCRIBE_TASK_QUEUE_MODE_ENHANCED {
-
 		// collect internal info
 		physicalInfoByBuildId := make(map[string]map[enumspb.TaskQueueType]*taskqueuespb.PhysicalTaskQueueInfo)
 		for _, taskQueueType := range req.TaskQueueTypes {
-
 			for i := 0; i < e.config.NumTaskqueueWritePartitions(req.Namespace, req.TaskQueue.Name, taskQueueType); i++ {
 				pm, err := e.getTaskQueuePartitionManager(
 					ctx,
@@ -840,7 +838,6 @@ func (e *matchingEngineImpl) DescribeTaskQueue(
 				}
 			}
 		}
-
 		// smush internal info into versions info
 		versionsInfo := make([]*taskqueuepb.TaskQueueVersionInfo, 0)
 		for bid, typeMap := range physicalInfoByBuildId {
@@ -862,17 +859,17 @@ func (e *matchingEngineImpl) DescribeTaskQueue(
 				VersionsInfo: versionsInfo,
 			},
 		}, nil
-	} else {
-		partition, err := tqid.PartitionFromProto(req.TaskQueue, request.GetNamespaceId(), req.TaskQueueType)
-		if err != nil {
-			return nil, err
-		}
-		pm, err := e.getTaskQueuePartitionManager(ctx, partition, true)
-		if err != nil {
-			return nil, err
-		}
-		return pm.LegacyDescribeTaskQueue(req.GetIncludeTaskQueueStatus()), nil
 	}
+	// Otherwise, do legacy DescribeTaskQueue
+	partition, err := tqid.PartitionFromProto(req.TaskQueue, request.GetNamespaceId(), req.TaskQueueType)
+	if err != nil {
+		return nil, err
+	}
+	pm, err := e.getTaskQueuePartitionManager(ctx, partition, true)
+	if err != nil {
+		return nil, err
+	}
+	return pm.LegacyDescribeTaskQueue(req.GetIncludeTaskQueueStatus()), nil
 }
 
 func (e *matchingEngineImpl) DescribeTaskQueuePartition(
