@@ -110,8 +110,8 @@ func TestValidate(t *testing.T) {
 			name: "string inside repeated message",
 			message: &replicationpb.NamespaceReplicationConfig{
 				Clusters: []*replicationpb.ClusterReplicationConfig{
-					&replicationpb.ClusterReplicationConfig{ClusterName: "good"},
-					&replicationpb.ClusterReplicationConfig{ClusterName: "oops" + invalid},
+					{ClusterName: "good"},
+					{ClusterName: "oops" + invalid},
 				},
 			},
 			badPath: "clusters.[1].cluster_name",
