@@ -37,6 +37,7 @@ import (
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/api/workflowservice/v1"
+	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/membership"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/primitives"
@@ -230,7 +231,7 @@ func TestRateLimitInterceptorProvider(t *testing.T) {
 				OperatorRPSRatio: func() float64 {
 					return tc.operatorRPSRatio
 				},
-			}, tc.serviceResolver)
+			}, tc.serviceResolver, log.NewTestLogger())
 
 			// Create a gRPC server for the fake workflow service.
 			svc := &testSvc{}
@@ -574,6 +575,7 @@ func TestNamespaceRateLimitInterceptorProvider(t *testing.T) {
 				&config,
 				mockRegistry,
 				serviceResolver,
+				log.NewTestLogger(),
 			)
 
 			// Create a gRPC server for the fake workflow service.
