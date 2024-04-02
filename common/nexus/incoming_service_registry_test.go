@@ -310,7 +310,7 @@ func newIncomingService(name string) *nexus.IncomingService {
 		Version:     1,
 		Id:          id,
 		CreatedTime: timestamppb.Now(),
-		UrlPrefix:   "/" + Routes().DispatchNexusTaskByService.Path(id),
+		UrlPrefix:   "/" + RouteDispatchNexusTaskByService.Path(id),
 		Spec: &nexus.IncomingServiceSpec{
 			Name:      name,
 			Namespace: name + "-namespace",
