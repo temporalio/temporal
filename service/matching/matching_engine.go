@@ -797,14 +797,17 @@ func (e *matchingEngineImpl) DescribeTaskQueue(
 
 		// collect internal info
 		physicalInfoByBuildId := make(map[string]map[enumspb.TaskQueueType]*taskqueuespb.PhysicalTaskQueueInfo)
-		e.partitionsLock.RLock()
 		for _, taskQueueType := range req.TaskQueueTypes {
-			partitions, err := e.getAllPartitions(namespace.Name(req.Namespace), req.TaskQueue, taskQueueType)
-			if err != nil {
-				return nil, err
-			}
-			for _, p := range partitions {
-				pm, err := e.getTaskQueuePartitionManager(ctx, p, true)
+			for i := 0; i < e.config.NumTaskqueueWritePartitions(req.Namespace, req.TaskQueue.Name, taskQueueType); i++ {
+				pm, err := e.getTaskQueuePartitionManager(
+					ctx,
+					tqid.PartitionFromPartitionProto(&taskqueuespb.TaskQueuePartition{
+						TaskQueue:     req.TaskQueue.Name,
+						TaskQueueType: taskQueueType,
+						PartitionId:   &taskqueuespb.TaskQueuePartition_NormalPartitionId{NormalPartitionId: int32(i)},
+					}, request.GetNamespaceId()),
+					true, // todo carly: should this be true?
+				)
 				if err != nil {
 					return nil, err
 				}
@@ -817,11 +820,15 @@ func (e *matchingEngineImpl) DescribeTaskQueue(
 					return nil, err
 				}
 				for _, vii := range partitionResp.VersionsInfoInternal {
-					physicalInfoByBuildId[vii.BuildId][taskQueueType] = vii.PhysicalTaskQueueInfo
+					type2InfoMap := physicalInfoByBuildId[vii.BuildId]
+					if type2InfoMap == nil {
+						type2InfoMap = make(map[enumspb.TaskQueueType]*taskqueuespb.PhysicalTaskQueueInfo)
+						physicalInfoByBuildId[vii.BuildId] = type2InfoMap
+					}
+					type2InfoMap[taskQueueType] = vii.PhysicalTaskQueueInfo
 				}
 			}
 		}
-		e.partitionsLock.RUnlock()
 
 		// merge internal info into versions info
 		versionsInfo := make([]*taskqueuepb.TaskQueueVersionInfo, 0)
@@ -928,7 +935,7 @@ func (e *matchingEngineImpl) ListTaskQueuePartitions(
 }
 
 func (e *matchingEngineImpl) listTaskQueuePartitions(request *matchingservice.ListTaskQueuePartitionsRequest, taskQueueType enumspb.TaskQueueType) ([]*taskqueuepb.TaskQueuePartitionMetadata, error) {
-	partitions, err := e.getAllPartitionKeys(
+	partitions, err := e.getAllPartitionRpcNames(
 		namespace.Name(request.GetNamespace()),
 		request.TaskQueue,
 		taskQueueType,
@@ -1450,12 +1457,12 @@ func (e *matchingEngineImpl) getHostInfo(partitionKey string) (string, error) {
 	return host.GetAddress(), nil
 }
 
-func (e *matchingEngineImpl) getAllPartitions(
+func (e *matchingEngineImpl) getAllPartitionRpcNames(
 	ns namespace.Name,
 	taskQueue *taskqueuepb.TaskQueue,
 	taskQueueType enumspb.TaskQueueType,
-) ([]*tqid.NormalPartition, error) {
-	var partitions []*tqid.NormalPartition
+) ([]string, error) {
+	var partitions []string
 	namespaceID, err := e.namespaceRegistry.GetNamespaceID(ns)
 	if err != nil {
 		return partitions, err
@@ -1467,28 +1474,10 @@ func (e *matchingEngineImpl) getAllPartitions(
 
 	n := e.config.NumTaskqueueWritePartitions(ns.String(), taskQueueFamily.Name(), taskQueueType)
 	for i := 0; i < n; i++ {
-		partitions = append(partitions, taskQueueFamily.TaskQueue(taskQueueType).NormalPartition(i))
+		partitions = append(partitions, taskQueueFamily.TaskQueue(taskQueueType).NormalPartition(i).RpcName())
 	}
 
 	return partitions, nil
-}
-
-func (e *matchingEngineImpl) getAllPartitionKeys(
-	ns namespace.Name,
-	taskQueue *taskqueuepb.TaskQueue,
-	taskQueueType enumspb.TaskQueueType,
-) ([]string, error) {
-	var partitionKeys []string
-	partitions, err := e.getAllPartitions(ns, taskQueue, taskQueueType)
-	if err != nil {
-		return partitionKeys, err
-	}
-
-	for _, p := range partitions {
-		partitionKeys = append(partitionKeys, p.RpcName())
-	}
-
-	return partitionKeys, nil
 }
 
 func (e *matchingEngineImpl) pollTask(
