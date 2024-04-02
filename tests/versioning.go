@@ -2699,6 +2699,7 @@ func (s *VersioningIntegSuite) insertAssignmentRule(
 	if expectSuccess {
 		s.NoError(err)
 		s.NotNil(res)
+		s.Assert().Equal(newBuildId, res.GetAssignmentRules()[idx].GetRule().GetTargetBuildId())
 		return res.GetConflictToken()
 	} else {
 		s.Error(err)
@@ -2728,6 +2729,7 @@ func (s *VersioningIntegSuite) replaceAssignmentRule(
 	if expectSuccess {
 		s.NoError(err)
 		s.NotNil(res)
+		s.Assert().Equal(newBuildId, res.GetAssignmentRules()[idx].GetRule().GetTargetBuildId())
 		return res.GetConflictToken()
 	} else {
 		s.Error(err)
@@ -2741,6 +2743,18 @@ func (s *VersioningIntegSuite) replaceAssignmentRule(
 func (s *VersioningIntegSuite) deleteAssignmentRule(
 	ctx context.Context, tq string,
 	idx int32, conflictToken []byte, expectSuccess bool) []byte {
+	getResp, err := s.engine.GetWorkerVersioningRules(ctx, &workflowservice.GetWorkerVersioningRulesRequest{
+		Namespace: s.namespace,
+		TaskQueue: tq,
+	})
+	s.NoError(err)
+	s.NotNil(getResp)
+
+	var prevRule *taskqueuepb.BuildIdAssignmentRule
+	if expectSuccess {
+		prevRule = getResp.GetAssignmentRules()[idx].GetRule()
+	}
+
 	res, err := s.engine.UpdateWorkerVersioningRules(ctx, &workflowservice.UpdateWorkerVersioningRulesRequest{
 		Namespace:     s.namespace,
 		TaskQueue:     tq,
@@ -2754,6 +2768,14 @@ func (s *VersioningIntegSuite) deleteAssignmentRule(
 	if expectSuccess {
 		s.NoError(err)
 		s.NotNil(res)
+		found := false
+		for _, r := range res.GetAssignmentRules() {
+			if r.GetRule() == prevRule {
+				found = true
+				break
+			}
+		}
+		s.Assert().False(found)
 		return res.GetConflictToken()
 	} else {
 		s.Error(err)
@@ -2783,6 +2805,14 @@ func (s *VersioningIntegSuite) insertRedirectRule(
 	if expectSuccess {
 		s.NoError(err)
 		s.NotNil(res)
+		found := false
+		for _, r := range res.GetCompatibleRedirectRules() {
+			if r.GetRule().GetSourceBuildId() == sourceBuildId && r.GetRule().GetTargetBuildId() == targetBuildId {
+				found = true
+				break
+			}
+		}
+		s.Assert().True(found)
 		return res.GetConflictToken()
 	} else {
 		s.Error(err)
@@ -2812,6 +2842,14 @@ func (s *VersioningIntegSuite) replaceRedirectRule(
 	if expectSuccess {
 		s.NoError(err)
 		s.NotNil(res)
+		found := false
+		for _, r := range res.GetCompatibleRedirectRules() {
+			if r.GetRule().GetSourceBuildId() == sourceBuildId && r.GetRule().GetTargetBuildId() == targetBuildId {
+				found = true
+				break
+			}
+		}
+		s.Assert().True(found)
 		return res.GetConflictToken()
 	} else {
 		s.Error(err)
@@ -2838,6 +2876,14 @@ func (s *VersioningIntegSuite) deleteRedirectRule(
 	if expectSuccess {
 		s.NoError(err)
 		s.NotNil(res)
+		found := false
+		for _, r := range res.GetCompatibleRedirectRules() {
+			if r.GetRule().GetSourceBuildId() == sourceBuildId {
+				found = true
+				break
+			}
+		}
+		s.Assert().False(found)
 		return res.GetConflictToken()
 	} else {
 		s.Error(err)
@@ -2865,6 +2911,27 @@ func (s *VersioningIntegSuite) commitBuildId(
 	if expectSuccess {
 		s.NoError(err)
 		s.NotNil(res)
+		// 1. Adds an assignment rule (with full ramp) for the target Build ID at the end of the list.
+		endIdx := len(res.GetAssignmentRules()) - 1
+		addedRule := res.GetAssignmentRules()[endIdx].GetRule()
+		s.Assert().Equal(targetBuildId, addedRule.GetTargetBuildId())
+		s.Assert().Nil(addedRule.GetRamp())
+		s.Assert().Nil(addedRule.GetPercentageRamp())
+
+		foundOtherAssignmentRuleForTarget := false
+		foundFullyRampedAssignmentRuleForOtherTarget := false
+		for i, r := range res.GetAssignmentRules() {
+			if r.GetRule().GetTargetBuildId() == targetBuildId && i != endIdx {
+				foundOtherAssignmentRuleForTarget = true
+			}
+			if r.GetRule().GetRamp() == nil && r.GetRule().GetTargetBuildId() != targetBuildId {
+				foundFullyRampedAssignmentRuleForOtherTarget = true
+			}
+		}
+		// 2. Removes all previously added assignment rules to the given target Build ID (if any).
+		s.Assert().False(foundOtherAssignmentRuleForTarget)
+		// 3. Removes any fully-ramped assignment rule for other Build IDs.
+		s.Assert().False(foundFullyRampedAssignmentRuleForOtherTarget)
 		return res.GetConflictToken()
 	} else {
 		s.Error(err)

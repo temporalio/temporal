@@ -909,6 +909,7 @@ func (e *matchingEngineImpl) UpdateWorkerVersioningRules(
 	// we don't set updateOptions.KnownVersion, because we handle external API call ordering with conflictToken
 	updateOptions := UserDataUpdateOptions{}
 	cT := req.GetConflictToken()
+	var getResp *matchingservice.GetWorkerVersioningRulesResponse
 
 	err = tqMgr.GetUserDataManager().UpdateUserData(ctx, updateOptions, func(data *persistencespb.TaskQueueUserData) (*persistencespb.TaskQueueUserData, bool, error) {
 		clk := data.GetClock()
@@ -980,11 +981,17 @@ func (e *matchingEngineImpl) UpdateWorkerVersioningRules(
 			// operation can't be completed due to failed validation. no action, do not replicate, report error
 			return nil, false, err
 		}
-		if cT, err = updatedClock.Marshal(); err != nil {
-			return nil, false, serviceerror.NewInternal("error generating next conflict token")
+
+		// Get versioning data formatted for response
+		getResp, err = GetWorkerVersioningRules(versioningData, updatedClock)
+		if err != nil {
+			return nil, false, err
 		}
-		// We can replicate tombstone cleanup, because it's just based on DeletionTimestamp, so no need to only do it locally
+
+		// Clean up tombstones after all fallible tasks are complete, once we know we are committing and replicating the changes.
+		// We can replicate tombstone cleanup, because it's just based on DeletionTimestamp, so no need to only do it locally.
 		versioningData = CleanupRuleTombstones(versioningData, e.config.DeletedRuleRetentionTime(ns.Name().String()))
+
 		// Avoid mutation
 		ret := common.CloneProto(data)
 		ret.Clock = updatedClock
@@ -996,7 +1003,11 @@ func (e *matchingEngineImpl) UpdateWorkerVersioningRules(
 		return nil, err
 	}
 
-	return &matchingservice.UpdateWorkerVersioningRulesResponse{Response: &workflowservice.UpdateWorkerVersioningRulesResponse{ConflictToken: cT}}, nil
+	return &matchingservice.UpdateWorkerVersioningRulesResponse{Response: &workflowservice.UpdateWorkerVersioningRulesResponse{
+		AssignmentRules:         getResp.GetResponse().GetAssignmentRules(),
+		CompatibleRedirectRules: getResp.GetResponse().GetCompatibleRedirectRules(),
+		ConflictToken:           getResp.GetResponse().GetConflictToken(),
+	}}, nil
 }
 
 func (e *matchingEngineImpl) GetWorkerVersioningRules(
