@@ -2747,6 +2747,9 @@ func (s *VersioningIntegSuite) deleteAssignmentRule(
 		Namespace: s.namespace,
 		TaskQueue: tq,
 	})
+	s.NoError(err)
+	s.NotNil(getResp)
+
 	var prevRule *taskqueuepb.BuildIdAssignmentRule
 	if expectSuccess {
 		prevRule = getResp.GetAssignmentRules()[idx].GetRule()
