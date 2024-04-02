@@ -27,6 +27,7 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/require"
+	"go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/predicates"
 	"go.temporal.io/server/service/history/tasks"
@@ -44,25 +45,32 @@ func TestGrouperNamespaceID_Predicate(t *testing.T) {
 	require.Equal(t, tasks.NewNamespacePredicate([]string{"n1", "n2"}), p)
 }
 
-func TestGrouperNamespaceIDAndDestination_Key(t *testing.T) {
-	g := GrouperNamespaceIDAndDestination{}
-	task := tasks.FakeDestinationTask{
-		Task:        tasks.NewFakeTask(definition.NewWorkflowKey("nid", "", ""), tasks.CategoryTransfer, time.Now()),
+func TestGrouperStateMachineNamespaceIDAndDestination_Key(t *testing.T) {
+	g := GrouperStateMachineNamespaceIDAndDestination{}
+	task := &tasks.StateMachineOutboundTask{
+		StateMachineTask: tasks.StateMachineTask{
+			WorkflowKey: definition.NewWorkflowKey("nid", "", ""),
+			Info: &persistence.StateMachineTaskInfo{
+				Type: 3,
+			},
+		},
 		Destination: "dest",
 	}
 	k := g.Key(task)
-	require.Equal(t, namespaceIDAndDestination{"nid", "dest"}, k)
+	require.Equal(t, StateMachineTaskTypeNamespaceIDAndDestination{3, "nid", "dest"}, k)
 }
 
-func TestGrouperNamespaceIDAndDestination_Predicate(t *testing.T) {
-	g := GrouperNamespaceIDAndDestination{}
-	p := g.Predicate([]any{namespaceIDAndDestination{"n1", "d1"}, namespaceIDAndDestination{"n2", "d2"}})
+func TestGrouperStateMachineNamespaceIDAndDestination_Predicate(t *testing.T) {
+	g := GrouperStateMachineNamespaceIDAndDestination{}
+	p := g.Predicate([]any{StateMachineTaskTypeNamespaceIDAndDestination{1, "n1", "d1"}, StateMachineTaskTypeNamespaceIDAndDestination{2, "n2", "d2"}})
 	expected := predicates.Or(
 		predicates.And(
+			tasks.NewStateMachineTaskTypePredicate([]int32{1}),
 			tasks.NewNamespacePredicate([]string{"n1"}),
 			tasks.NewDestinationPredicate([]string{"d1"}),
 		),
 		predicates.And(
+			tasks.NewStateMachineTaskTypePredicate([]int32{2}),
 			tasks.NewNamespacePredicate([]string{"n2"}),
 			tasks.NewDestinationPredicate([]string{"d2"}),
 		),

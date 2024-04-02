@@ -176,3 +176,40 @@ func (this *QueryTask) Equal(that interface{}) bool {
 
 	return proto.Equal(this, that1)
 }
+
+// Marshal an object of type NexusTask to the protobuf v3 wire format
+func (val *NexusTask) Marshal() ([]byte, error) {
+	return proto.Marshal(val)
+}
+
+// Unmarshal an object of type NexusTask from the protobuf v3 wire format
+func (val *NexusTask) Unmarshal(buf []byte) error {
+	return proto.Unmarshal(buf, val)
+}
+
+// Size returns the size of the object, in bytes, once serialized
+func (val *NexusTask) Size() int {
+	return proto.Size(val)
+}
+
+// Equal returns whether two NexusTask values are equivalent by recursively
+// comparing the message's fields.
+// For more information see the documentation for
+// https://pkg.go.dev/google.golang.org/protobuf/proto#Equal
+func (this *NexusTask) Equal(that interface{}) bool {
+	if that == nil {
+		return this == nil
+	}
+
+	var that1 *NexusTask
+	switch t := that.(type) {
+	case *NexusTask:
+		that1 = t
+	case NexusTask:
+		that1 = &t
+	default:
+		return false
+	}
+
+	return proto.Equal(this, that1)
+}

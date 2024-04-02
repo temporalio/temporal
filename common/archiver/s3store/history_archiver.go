@@ -132,12 +132,12 @@ func (h *historyArchiver) Archive(
 	featureCatalog := archiver.GetFeatureCatalog(opts...)
 	startTime := time.Now().UTC()
 	defer func() {
-		handler.Timer(metrics.ServiceLatency.Name()).Record(time.Since(startTime))
+		metrics.ServiceLatency.With(handler).Record(time.Since(startTime))
 		if err != nil {
 			if common.IsPersistenceTransientError(err) || isRetryableError(err) {
-				handler.Counter(metrics.HistoryArchiverArchiveTransientErrorCount.Name()).Record(1)
+				metrics.HistoryArchiverArchiveTransientErrorCount.With(handler).Record(1)
 			} else {
-				handler.Counter(metrics.HistoryArchiverArchiveNonRetryableErrorCount.Name()).Record(1)
+				metrics.HistoryArchiverArchiveNonRetryableErrorCount.With(handler).Record(1)
 				if featureCatalog.NonRetryableError != nil {
 					err = featureCatalog.NonRetryableError()
 				}
@@ -170,7 +170,7 @@ func (h *historyArchiver) Archive(
 				// this may happen even in the middle of iterating history as two archival signals
 				// can be processed concurrently.
 				logger.Info(archiver.ArchiveSkippedInfoMsg)
-				handler.Counter(metrics.HistoryArchiverDuplicateArchivalsCount.Name()).Record(1)
+				metrics.HistoryArchiverDuplicateArchivalsCount.With(handler).Record(1)
 				return nil
 			}
 
@@ -207,7 +207,7 @@ func (h *historyArchiver) Archive(
 		}
 		blobSize := int64(binary.Size(encodedHistoryBlob))
 		if exists {
-			handler.Counter(metrics.HistoryArchiverBlobExistsCount.Name()).Record(1)
+			metrics.HistoryArchiverBlobExistsCount.With(handler).Record(1)
 		} else {
 			if err := Upload(ctx, h.s3cli, URI, key, encodedHistoryBlob); err != nil {
 				if isRetryableError(err) {
@@ -228,7 +228,7 @@ func (h *historyArchiver) Archive(
 
 	handler.Histogram(metrics.HistoryArchiverTotalUploadSize.Name(), metrics.HistoryArchiverTotalUploadSize.Unit()).Record(progress.uploadedSize)
 	handler.Histogram(metrics.HistoryArchiverHistorySize.Name(), metrics.HistoryArchiverHistorySize.Unit()).Record(progress.historySize)
-	handler.Counter(metrics.HistoryArchiverArchiveSuccessCount.Name()).Record(1)
+	metrics.HistoryArchiverArchiveSuccessCount.With(handler).Record(1)
 	return nil
 }
 

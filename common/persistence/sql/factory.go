@@ -148,6 +148,15 @@ func (f *Factory) NewQueueV2() (p.QueueV2, error) {
 	return NewQueueV2(conn, f.logger), nil
 }
 
+// NewNexusIncomingServiceStore returns a new NexusIncomingServiceStore
+func (f *Factory) NewNexusIncomingServiceStore() (p.NexusIncomingServiceStore, error) {
+	conn, err := f.mainDBConn.Get()
+	if err != nil {
+		return nil, err
+	}
+	return NewSqlNexusIncomingServiceStore(conn, f.logger)
+}
+
 // Close closes the factory
 func (f *Factory) Close() {
 	f.mainDBConn.ForceClose()

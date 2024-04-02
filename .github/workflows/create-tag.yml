@@ -93,22 +93,27 @@ jobs:
 
           TEMPFILE=$(mktemp)
           cat > $TEMPFILE <<- EOF
-          # Release Highlights
+          ## Breaking Changes
+          Document them here, if any
+
+          ## Deprecation Announcements
+          Document them here, if any.
+
+          ## Release Highlights
           Add highlights if any.
 
-          # All Changes
-          $(git log --cherry-pick --right-only --pretty='%cd - %h - %s' --date=short ${BASE_TAG}..${TAG})
-
-          # Helpful links to get you started with Temporal
+          ### Helpful links to get you started with Temporal
           [Temporal Docs](https://docs.temporal.io/)
           [Server](https://github.com/temporalio/temporal)
           [Docker Compose](https://github.com/temporalio/docker-compose)
           [Helm Chart](https://github.com/temporalio/helm-charts)
 
-          # Docker images for this release (use the tag \`${TAG#v}\`)
+          ### Docker images for this release (use the tag \`${TAG#v}\`)
           [Server](https://hub.docker.com/repository/docker/temporalio/server)
           [Server With Auto Setup](https://hub.docker.com/repository/docker/temporalio/auto-setup) ([what is Auto-Setup?](https://docs.temporal.io/blog/auto-setup))
           [Admin-Tools](https://hub.docker.com/repository/docker/temporalio/admin-tools)
+
+          **Full Changelog**: https://github.com/temporalio/temporal/compare/${BASE_TAG}...${TAG}
           EOF
 
           gh repo set-default ${{ github.repository }}

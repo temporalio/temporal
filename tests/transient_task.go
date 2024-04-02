@@ -26,6 +26,7 @@ package tests
 
 import (
 	"errors"
+	"fmt"
 	"time"
 
 	"github.com/pborman/uuid"
@@ -304,25 +305,38 @@ func (s *FunctionalSuite) TestTransientWorkflowTaskHistorySize() {
 
 	s.True(workflowComplete)
 
-	// check history
-	// we should have 4 workflow task completed events
+	var sawFieldsFlat []any
+	for _, f := range sawFields {
+		sawFieldsFlat = append(sawFieldsFlat, f.size, f.suggest)
+	}
+
 	allEvents := s.getHistory(s.namespace, workflowExecution)
-	var completedEvents []*historypb.HistoryEvent
-	for _, event := range allEvents {
-		if event.EventType == enumspb.EVENT_TYPE_WORKFLOW_TASK_COMPLETED {
-			completedEvents = append(completedEvents, event)
-		}
-	}
-	s.Equal(4, len(completedEvents))
-	for i, event := range completedEvents {
-		// find the corresponding started event, and make sure it matches the values we
-		// recorded in the workflow
-		completedAttrs := event.GetWorkflowTaskCompletedEventAttributes()
-		startedEvent := allEvents[completedAttrs.StartedEventId-1]
-		startedAttrs := startedEvent.GetWorkflowTaskStartedEventAttributes()
-		s.Equal(sawFields[i].size, startedAttrs.HistorySizeBytes)
-		s.Equal(sawFields[i].suggest, startedAttrs.SuggestContinueAsNew)
-	}
+	s.EqualHistoryEvents(fmt.Sprintf(`
+  1 WorkflowExecutionStarted
+  2 WorkflowTaskScheduled
+  3 WorkflowTaskStarted {"HistorySizeBytes":%d, "SuggestContinueAsNew":%t}
+  4 WorkflowTaskCompleted // 1 WFTCompleted
+  5 MarkerRecorded
+  6 WorkflowExecutionSignaled
+  7 WorkflowTaskScheduled
+  8 WorkflowTaskStarted {"HistorySizeBytes":%d, "SuggestContinueAsNew":%t}
+  9 WorkflowTaskCompleted // 2 WFTCompleted
+ 10 MarkerRecorded
+ 11 WorkflowExecutionSignaled
+ 12 WorkflowTaskScheduled
+ 13 WorkflowTaskStarted
+ 14 WorkflowTaskFailed
+ 15 WorkflowTaskScheduled
+ 16 WorkflowTaskStarted {"HistorySizeBytes":%d, "SuggestContinueAsNew":%t}
+ 17 WorkflowTaskCompleted // 3 WFTCompleted
+ 18 WorkflowExecutionSignaled
+ 19 WorkflowTaskScheduled
+ 20 WorkflowTaskStarted
+ 21 WorkflowTaskTimedOut
+ 22 WorkflowTaskScheduled
+ 23 WorkflowTaskStarted {"HistorySizeBytes":%d, "SuggestContinueAsNew":%t}
+ 24 WorkflowTaskCompleted // 4 WFTCompleted
+ 25 WorkflowExecutionCompleted`, sawFieldsFlat...), allEvents)
 }
 
 func (s *FunctionalSuite) TestNoTransientWorkflowTaskAfterFlushBufferedEvents() {

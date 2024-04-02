@@ -47,10 +47,11 @@ import (
 	"go.temporal.io/server/common/searchattribute"
 	"go.temporal.io/server/service/history/configs"
 	"go.temporal.io/server/service/history/events"
+	"go.temporal.io/server/service/history/hsm"
 	"go.temporal.io/server/service/history/tasks"
 )
 
-//go:generate mockgen -copyright_file ../../../LICENSE -package $GOPACKAGE -source $GOFILE -destination context_mock.go
+//go:generate mocksync -copyright_file ../../../LICENSE -package $GOPACKAGE -source $GOFILE -destination context_mock.go
 
 type (
 	// Context represents a history engine shard
@@ -118,6 +119,8 @@ type (
 		DeleteWorkflowExecution(ctx context.Context, workflowKey definition.WorkflowKey, branchToken []byte, closeExecutionVisibilityTaskID int64, stage *tasks.DeleteWorkflowExecutionStage) error
 
 		UnloadForOwnershipLost()
+
+		StateMachineRegistry() *hsm.Registry
 	}
 
 	// A ControllableContext is a Context plus other methods needed by

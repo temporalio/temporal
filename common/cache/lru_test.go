@@ -154,12 +154,17 @@ func TestLRUWithTTL(t *testing.T) {
 	snapshot := capture.Snapshot()
 	assert.Equal(t, float64(5), snapshot[metrics.CacheSize.Name()][0].Value)
 	assert.Equal(t, float64(1), snapshot[metrics.CacheUsage.Name()][0].Value)
+	assert.Equal(t, time.Millisecond*100, snapshot[metrics.CacheTtl.Name()][0].Value)
+	assert.Equal(t, time.Duration(0), snapshot[metrics.CacheEntryAgeOnGet.Name()][0].Value)
 	timeSource.Advance(time.Millisecond * 300)
 	assert.Nil(t, cache.Get("A"))
 	snapshot = capture.Snapshot()
 	assert.Equal(t, 2, len(snapshot[metrics.CacheUsage.Name()]))
 	assert.Equal(t, float64(0), snapshot[metrics.CacheUsage.Name()][1].Value)
 	assert.Equal(t, 0, cache.Size())
+	assert.Equal(t, 2, len(snapshot[metrics.CacheEntryAgeOnGet.Name()]))
+	assert.Equal(t, time.Millisecond*300, snapshot[metrics.CacheEntryAgeOnGet.Name()][1].Value)
+	assert.Equal(t, time.Millisecond*300, snapshot[metrics.CacheEntryAgeOnEviction.Name()][0].Value)
 }
 
 func TestLRUCacheConcurrentAccess(t *testing.T) {
@@ -268,7 +273,8 @@ func TestTTLWithPin(t *testing.T) {
 	assert.Nil(t, cache.Get("A"))
 	assert.Equal(t, 0, cache.Size())
 	snapshot = capture.Snapshot()
-	assert.Equal(t, float64(0), snapshot[metrics.CacheUsage.Name()][0].Value)
+	// cache.Release() will emit cacheUsage 3 times. cache.Get() will emit cacheUsage once.
+	assert.Equal(t, float64(0), snapshot[metrics.CacheUsage.Name()][3].Value)
 }
 
 func TestMaxSizeWithPin_MidItem(t *testing.T) {
@@ -665,4 +671,57 @@ func TestCache_PutIfNotExistWithSameKeys_Pin(t *testing.T) {
 	assert.NoError(t, err)
 	assert.Equal(t, &testEntryWithCacheSize{3}, val)
 	assert.Equal(t, 3, cache.Size())
+}
+
+func TestCache_ItemSizeChangeBeforeRelease(t *testing.T) {
+	t.Parallel()
+
+	maxTotalBytes := 10
+	cache := New(maxTotalBytes,
+		&Options{
+			TTL:        time.Millisecond * 50,
+			Pin:        true,
+			TimeSource: nil,
+		},
+		metrics.NoopMetricsHandler,
+	)
+
+	entry1 := &testEntryWithCacheSize{
+		cacheSize: 1,
+	}
+	key1 := uuid.New()
+	_, err := cache.PutIfNotExist(key1, entry1)
+	assert.NoError(t, err)
+	assert.Equal(t, 1, cache.Size())
+
+	entry1.cacheSize = 5
+	cache.Release(key1)
+	assert.Equal(t, 5, cache.Size())
+
+	_, err = cache.PutIfNotExist(key1, entry1)
+	assert.NoError(t, err)
+	assert.Equal(t, 5, cache.Size())
+	entry1.cacheSize = 10
+	cache.Release(key1)
+	assert.Equal(t, 10, cache.Size())
+
+	// Inserting another entry when cache is full. entry1 should be evicted from cache.
+	entry2 := &testEntryWithCacheSize{
+		cacheSize: 2,
+	}
+	key2 := uuid.New()
+	_, err = cache.PutIfNotExist(key2, entry2)
+	assert.NoError(t, err)
+	assert.Equal(t, 2, cache.Size())
+
+	// Inserting entry1 again to make cache full again.
+	entry1.cacheSize = 8
+	_, err = cache.PutIfNotExist(key1, entry1)
+	assert.NoError(t, err)
+	assert.Equal(t, 10, cache.Size())
+	// Increasing the size of entry1 before releasing. This will make the cache size > max limit.
+	entry1.cacheSize = 10
+	cache.Release(key1)
+	// Cache should have evicted entry1 to bring cache size under max limit.
+	assert.Equal(t, 2, cache.Size())
 }

@@ -63,15 +63,15 @@ func (m *MockHistoryEventsHandler) EXPECT() *MockHistoryEventsHandlerMockRecorde
 }
 
 // HandleHistoryEvents mocks base method.
-func (m *MockHistoryEventsHandler) HandleHistoryEvents(ctx context.Context, sourceClusterName string, workflowKey definition.WorkflowKey, baseExecutionInfo *workflow.BaseExecutionInfo, versionHistoryItems []*history0.VersionHistoryItem, historyEvents [][]*history.HistoryEvent, newEvents []*history.HistoryEvent) error {
+func (m *MockHistoryEventsHandler) HandleHistoryEvents(ctx context.Context, sourceClusterName string, workflowKey definition.WorkflowKey, baseExecutionInfo *workflow.BaseExecutionInfo, versionHistoryItems []*history0.VersionHistoryItem, historyEvents [][]*history.HistoryEvent, newEvents []*history.HistoryEvent, newRunID string) error {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "HandleHistoryEvents", ctx, sourceClusterName, workflowKey, baseExecutionInfo, versionHistoryItems, historyEvents, newEvents)
+	ret := m.ctrl.Call(m, "HandleHistoryEvents", ctx, sourceClusterName, workflowKey, baseExecutionInfo, versionHistoryItems, historyEvents, newEvents, newRunID)
 	ret0, _ := ret[0].(error)
 	return ret0
 }
 
 // HandleHistoryEvents indicates an expected call of HandleHistoryEvents.
-func (mr *MockHistoryEventsHandlerMockRecorder) HandleHistoryEvents(ctx, sourceClusterName, workflowKey, baseExecutionInfo, versionHistoryItems, historyEvents, newEvents interface{}) *gomock.Call {
+func (mr *MockHistoryEventsHandlerMockRecorder) HandleHistoryEvents(ctx, sourceClusterName, workflowKey, baseExecutionInfo, versionHistoryItems, historyEvents, newEvents, newRunID interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "HandleHistoryEvents", reflect.TypeOf((*MockHistoryEventsHandler)(nil).HandleHistoryEvents), ctx, sourceClusterName, workflowKey, baseExecutionInfo, versionHistoryItems, historyEvents, newEvents)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "HandleHistoryEvents", reflect.TypeOf((*MockHistoryEventsHandler)(nil).HandleHistoryEvents), ctx, sourceClusterName, workflowKey, baseExecutionInfo, versionHistoryItems, historyEvents, newEvents, newRunID)
 }

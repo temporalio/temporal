@@ -118,7 +118,7 @@ func (t *timerQueueStandbyTaskExecutor) Execute(
 	case *tasks.DeleteHistoryEventTask:
 		err = t.executeDeleteHistoryEventTask(ctx, task)
 	default:
-		err = errUnknownTimerTask
+		err = queues.NewUnprocessableTaskError("unknown task type")
 	}
 
 	return queues.ExecuteResponse{
@@ -462,7 +462,7 @@ func (t *timerQueueStandbyTaskExecutor) processTimer(
 		}
 	}()
 
-	mutableState, err := loadMutableStateForTimerTask(ctx, t.shardContext, executionContext, timerTask, t.metricHandler, t.logger)
+	mutableState, err := loadMutableStateForTimerTask(ctx, t.shardContext, executionContext, timerTask, t.metricsHandler, t.logger)
 	if err != nil {
 		return err
 	}
@@ -512,10 +512,10 @@ func (t *timerQueueStandbyTaskExecutor) fetchHistoryFromRemote(
 		return err
 	}
 
-	scope := t.metricHandler.WithTags(metrics.OperationTag(metrics.HistoryRereplicationByTimerTaskScope))
-	scope.Counter(metrics.ClientRequests.Name()).Record(1)
+	scope := t.metricsHandler.WithTags(metrics.OperationTag(metrics.HistoryRereplicationByTimerTaskScope))
+	metrics.ClientRequests.With(scope).Record(1)
 	startTime := time.Now()
-	defer func() { scope.Timer(metrics.ClientLatency.Name()).Record(time.Since(startTime)) }()
+	defer func() { metrics.ClientLatency.With(scope).Record(time.Since(startTime)) }()
 
 	if resendInfo.lastEventID == common.EmptyEventID || resendInfo.lastEventVersion == common.EmptyVersion {
 		t.logger.Error("Error re-replicating history from remote: timerQueueStandbyProcessor encountered empty historyResendInfo.",

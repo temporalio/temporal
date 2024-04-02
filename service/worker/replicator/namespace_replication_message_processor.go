@@ -181,7 +181,7 @@ func (p *namespaceReplicationMessageProcessor) getAndHandleNamespaceReplicationT
 		}, p.retryPolicy, isTransientRetryableError)
 
 		if err != nil {
-			p.metricsHandler.Counter(metrics.ReplicatorFailures.Name()).Record(1)
+			metrics.ReplicatorFailures.With(p.metricsHandler).Record(1)
 			p.logger.Error("Failed to apply namespace replication tasks", tag.Error(err))
 
 			dlqErr := backoff.ThrottleRetry(func() error {
@@ -190,7 +190,7 @@ func (p *namespaceReplicationMessageProcessor) getAndHandleNamespaceReplicationT
 			}, p.retryPolicy, isTransientRetryableError)
 			if dlqErr != nil {
 				p.logger.Error("Failed to put replication tasks to DLQ", tag.Error(dlqErr))
-				p.metricsHandler.Counter(metrics.ReplicatorDLQFailures.Name()).Record(1)
+				metrics.ReplicatorDLQFailures.With(p.metricsHandler).Record(1)
 				return
 			}
 		}
@@ -206,7 +206,7 @@ func (p *namespaceReplicationMessageProcessor) putNamespaceReplicationTaskToDLQ(
 ) error {
 	switch task.TaskType {
 	case enumsspb.REPLICATION_TASK_TYPE_NAMESPACE_TASK:
-		p.metricsHandler.Counter(metrics.NamespaceReplicationEnqueueDLQCount.Name()).
+		metrics.NamespaceReplicationEnqueueDLQCount.With(p.metricsHandler).
 			Record(1,
 				metrics.ReplicationTaskTypeTag(task.TaskType),
 				metrics.NamespaceTag(task.GetNamespaceTaskAttributes().GetInfo().GetName()),
@@ -216,7 +216,7 @@ func (p *namespaceReplicationMessageProcessor) putNamespaceReplicationTaskToDLQ(
 		if err != nil {
 			return err
 		}
-		p.metricsHandler.Counter(metrics.NamespaceReplicationEnqueueDLQCount.Name()).
+		metrics.NamespaceReplicationEnqueueDLQCount.With(p.metricsHandler).
 			Record(1,
 				metrics.ReplicationTaskTypeTag(task.TaskType),
 				metrics.NamespaceTag(ns.Name().String()),
@@ -234,10 +234,10 @@ func (p *namespaceReplicationMessageProcessor) handleNamespaceReplicationTask(
 	task *replicationspb.ReplicationTask,
 ) error {
 	metricsTag := metrics.ReplicationTaskTypeTag(task.TaskType)
-	p.metricsHandler.Counter(metrics.ReplicatorMessages.Name()).Record(1, metricsTag)
+	metrics.ReplicatorMessages.With(p.metricsHandler).Record(1, metricsTag)
 	startTime := time.Now().UTC()
 	defer func() {
-		p.metricsHandler.Timer(metrics.ReplicatorLatency.Name()).Record(time.Since(startTime), metricsTag)
+		metrics.ReplicatorLatency.With(p.metricsHandler).Record(time.Since(startTime), metricsTag)
 	}()
 
 	switch task.TaskType {

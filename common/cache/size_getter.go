@@ -22,11 +22,15 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-//go:generate mockgen -copyright_file ../../LICENSE -package $GOPACKAGE -source $GOFILE -destination size_getter_mock.go
+//go:generate mocksync -copyright_file ../../LICENSE -package $GOPACKAGE -source $GOFILE -destination size_getter_mock.go
 
 package cache
 
-// SizeGetter is an interface that can be implemented by cache entries to provide their size
+// SizeGetter is an interface that can be implemented by cache entries to provide their size.
+// Cache uses CacheSize() to determine the size of a cache entry.
+// Please be aware that if the size of the cache entry changes while the cache is being used without pinning enabled,
+// the cache won't be able to automatically adjust for this size change. In such instances, it's necessary to call Put()
+// again to ensure the cache size remains accurate.
 type (
 	SizeGetter interface {
 		CacheSize() int

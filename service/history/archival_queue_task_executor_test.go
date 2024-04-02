@@ -447,7 +447,6 @@ func TestArchivalQueueTaskExecutor(t *testing.T) {
 							ShardID:     shardID,
 							NamespaceID: tests.NamespaceID.String(),
 							WorkflowID:  task.WorkflowID,
-							RunID:       task.RunID,
 							Tasks:       popTasks,
 						})
 					})

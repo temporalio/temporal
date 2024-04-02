@@ -209,6 +209,43 @@ func (mr *MockTaskMockRecorder) SetVisibilityTime(timestamp interface{}) *gomock
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SetVisibilityTime", reflect.TypeOf((*MockTask)(nil).SetVisibilityTime), timestamp)
 }
 
+// MockHasStateMachineTaskType is a mock of HasStateMachineTaskType interface.
+type MockHasStateMachineTaskType struct {
+	ctrl     *gomock.Controller
+	recorder *MockHasStateMachineTaskTypeMockRecorder
+}
+
+// MockHasStateMachineTaskTypeMockRecorder is the mock recorder for MockHasStateMachineTaskType.
+type MockHasStateMachineTaskTypeMockRecorder struct {
+	mock *MockHasStateMachineTaskType
+}
+
+// NewMockHasStateMachineTaskType creates a new mock instance.
+func NewMockHasStateMachineTaskType(ctrl *gomock.Controller) *MockHasStateMachineTaskType {
+	mock := &MockHasStateMachineTaskType{ctrl: ctrl}
+	mock.recorder = &MockHasStateMachineTaskTypeMockRecorder{mock}
+	return mock
+}
+
+// EXPECT returns an object that allows the caller to indicate expected use.
+func (m *MockHasStateMachineTaskType) EXPECT() *MockHasStateMachineTaskTypeMockRecorder {
+	return m.recorder
+}
+
+// StateMachineTaskType mocks base method.
+func (m *MockHasStateMachineTaskType) StateMachineTaskType() int32 {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "StateMachineTaskType")
+	ret0, _ := ret[0].(int32)
+	return ret0
+}
+
+// StateMachineTaskType indicates an expected call of StateMachineTaskType.
+func (mr *MockHasStateMachineTaskTypeMockRecorder) StateMachineTaskType() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "StateMachineTaskType", reflect.TypeOf((*MockHasStateMachineTaskType)(nil).StateMachineTaskType))
+}
+
 // MockHasDestination is a mock of HasDestination interface.
 type MockHasDestination struct {
 	ctrl     *gomock.Controller

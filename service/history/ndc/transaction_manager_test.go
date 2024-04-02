@@ -243,7 +243,7 @@ func (s *transactionMgrSuite) TestBackfillWorkflow_CurrentWorkflow_Active_Closed
 		targetWorkflow,
 		EventsReapplicationResetWorkflowReason,
 		workflowEvents.Events,
-		enumspb.RESET_REAPPLY_TYPE_SIGNAL,
+		nil,
 	).Return(nil)
 
 	s.mockExecutionMgr.EXPECT().GetCurrentExecution(gomock.Any(), &persistence.GetCurrentExecutionRequest{
@@ -322,7 +322,7 @@ func (s *transactionMgrSuite) TestBackfillWorkflow_CurrentWorkflow_Closed_ResetF
 		targetWorkflow,
 		EventsReapplicationResetWorkflowReason,
 		workflowEvents.Events,
-		enumspb.RESET_REAPPLY_TYPE_SIGNAL,
+		nil,
 	).Return(serviceerror.NewInvalidArgument("reset fail"))
 
 	s.mockExecutionMgr.EXPECT().GetCurrentExecution(gomock.Any(), &persistence.GetCurrentExecutionRequest{

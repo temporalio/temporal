@@ -29,6 +29,7 @@ import (
 	"database/sql"
 
 	"github.com/jmoiron/sqlx"
+
 	"go.temporal.io/server/common/config"
 	"go.temporal.io/server/common/resolver"
 )
@@ -42,6 +43,12 @@ const (
 	DbKindMain
 	DbKindVisibility
 )
+
+type VersionedBlob struct {
+	Version      int64
+	Data         []byte
+	DataEncoding string
+}
 
 type (
 	// Plugin defines the interface for any SQL database that needs to implement
@@ -62,6 +69,8 @@ type (
 
 		MatchingTask
 		MatchingTaskQueue
+
+		NexusIncomingServices
 
 		HistoryNode
 		HistoryTree
@@ -137,3 +146,14 @@ type (
 		PrepareNamedContext(ctx context.Context, query string) (*sqlx.NamedStmt, error)
 	}
 )
+
+func (k DbKind) String() string {
+	switch k {
+	case DbKindMain:
+		return "main"
+	case DbKindVisibility:
+		return "visibility"
+	default:
+		return "unknown"
+	}
+}

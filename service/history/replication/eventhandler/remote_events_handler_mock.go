@@ -63,15 +63,15 @@ func (m *MockRemoteGeneratedEventsHandler) EXPECT() *MockRemoteGeneratedEventsHa
 }
 
 // HandleRemoteGeneratedHistoryEvents mocks base method.
-func (m *MockRemoteGeneratedEventsHandler) HandleRemoteGeneratedHistoryEvents(ctx context.Context, workflowKey definition.WorkflowKey, baseExecutionInfo *workflow.BaseExecutionInfo, versionHistoryItems []*history0.VersionHistoryItem, historyEvents [][]*history.HistoryEvent, newEvents []*history.HistoryEvent) error {
+func (m *MockRemoteGeneratedEventsHandler) HandleRemoteGeneratedHistoryEvents(ctx context.Context, workflowKey definition.WorkflowKey, baseExecutionInfo *workflow.BaseExecutionInfo, versionHistoryItems []*history0.VersionHistoryItem, historyEvents [][]*history.HistoryEvent, newEvents []*history.HistoryEvent, newRunID string) error {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "HandleRemoteGeneratedHistoryEvents", ctx, workflowKey, baseExecutionInfo, versionHistoryItems, historyEvents, newEvents)
+	ret := m.ctrl.Call(m, "HandleRemoteGeneratedHistoryEvents", ctx, workflowKey, baseExecutionInfo, versionHistoryItems, historyEvents, newEvents, newRunID)
 	ret0, _ := ret[0].(error)
 	return ret0
 }
 
 // HandleRemoteGeneratedHistoryEvents indicates an expected call of HandleRemoteGeneratedHistoryEvents.
-func (mr *MockRemoteGeneratedEventsHandlerMockRecorder) HandleRemoteGeneratedHistoryEvents(ctx, workflowKey, baseExecutionInfo, versionHistoryItems, historyEvents, newEvents interface{}) *gomock.Call {
+func (mr *MockRemoteGeneratedEventsHandlerMockRecorder) HandleRemoteGeneratedHistoryEvents(ctx, workflowKey, baseExecutionInfo, versionHistoryItems, historyEvents, newEvents, newRunID interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "HandleRemoteGeneratedHistoryEvents", reflect.TypeOf((*MockRemoteGeneratedEventsHandler)(nil).HandleRemoteGeneratedHistoryEvents), ctx, workflowKey, baseExecutionInfo, versionHistoryItems, historyEvents, newEvents)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "HandleRemoteGeneratedHistoryEvents", reflect.TypeOf((*MockRemoteGeneratedEventsHandler)(nil).HandleRemoteGeneratedHistoryEvents), ctx, workflowKey, baseExecutionInfo, versionHistoryItems, historyEvents, newEvents, newRunID)
 }

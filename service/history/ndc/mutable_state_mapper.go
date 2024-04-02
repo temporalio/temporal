@@ -44,11 +44,11 @@ type (
 	) (workflow.MutableState, Output, error)
 
 	MutableStateMapperImpl struct {
-		shardContext          shard.Context
-		newBufferEventFlusher bufferEventFlusherProvider
-		newBranchMgr          branchMgrProvider
-		newConflictResolver   conflictResolverProvider
-		newStateBuilder       stateBuilderProvider
+		shardContext             shard.Context
+		newBufferEventFlusher    bufferEventFlusherProvider
+		newBranchMgr             branchMgrProvider
+		newConflictResolver      conflictResolverProvider
+		newMutableStateRebuilder mutableStateRebuilderProvider
 	}
 
 	PrepareHistoryBranchOut struct {
@@ -74,14 +74,14 @@ func NewMutableStateMapping(
 	newBufferEventFlusher bufferEventFlusherProvider,
 	newBranchMgr branchMgrProvider,
 	newConflictResolver conflictResolverProvider,
-	newStateBuilder stateBuilderProvider,
+	newMutableStateRebuilder mutableStateRebuilderProvider,
 ) *MutableStateMapperImpl {
 	return &MutableStateMapperImpl{
-		shardContext:          shardContext,
-		newBufferEventFlusher: newBufferEventFlusher,
-		newBranchMgr:          newBranchMgr,
-		newConflictResolver:   newConflictResolver,
-		newStateBuilder:       newStateBuilder,
+		shardContext:             shardContext,
+		newBufferEventFlusher:    newBufferEventFlusher,
+		newBranchMgr:             newBranchMgr,
+		newConflictResolver:      newConflictResolver,
+		newMutableStateRebuilder: newMutableStateRebuilder,
 	}
 }
 
@@ -233,14 +233,15 @@ func (m *MutableStateMapperImpl) ApplyEvents(
 	mutableState workflow.MutableState,
 	task replicationTask,
 ) (workflow.MutableState, workflow.MutableState, error) {
-	stateBuilder := m.newStateBuilder(mutableState, task.getLogger())
-	newMutableState, err := stateBuilder.ApplyEvents(
+	mutableStateRebuilder := m.newMutableStateRebuilder(mutableState, task.getLogger())
+	newMutableState, err := mutableStateRebuilder.ApplyEvents(
 		ctx,
 		task.getNamespaceID(),
 		uuid.New().String(),
 		task.getExecution(),
 		task.getEvents(),
 		task.getNewEvents(),
+		task.getNewRunID(),
 	)
 	if err != nil {
 		task.getLogger().Error(

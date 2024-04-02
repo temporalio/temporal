@@ -172,6 +172,11 @@ func (m *sqlExecutionStore) DeleteHistoryNodes(
 	return nil
 }
 
+type historyNodePaginationToken struct {
+	LastNodeID int64
+	LastTxnID  int64
+}
+
 // ReadHistoryBranch returns history node data for a branch
 func (m *sqlExecutionStore) ReadHistoryBranch(
 	ctx context.Context,
@@ -190,15 +195,15 @@ func (m *sqlExecutionStore) ReadHistoryBranch(
 		return nil, err
 	}
 
-	var token historyNodePaginationToken
+	var token *historyNodePaginationToken
 	if len(request.NextPageToken) == 0 {
 		if request.ReverseOrder {
-			token = newHistoryNodePaginationToken(request.MaxNodeID, MaxTxnID)
+			token = &historyNodePaginationToken{LastNodeID: request.MaxNodeID, LastTxnID: MaxTxnID}
 		} else {
-			token = newHistoryNodePaginationToken(request.MinNodeID, MinTxnID)
+			token = &historyNodePaginationToken{LastNodeID: request.MinNodeID, LastTxnID: MinTxnID}
 		}
 	} else {
-		token, err = deserializeHistoryNodePaginationToken(request.NextPageToken)
+		token, err = deserializePageTokenJson[historyNodePaginationToken](request.NextPageToken)
 		if err != nil {
 			return nil, err
 		}
@@ -250,9 +255,10 @@ func (m *sqlExecutionStore) ReadHistoryBranch(
 		pagingToken = nil
 	} else {
 		lastRow := rows[len(rows)-1]
-		pagingToken, err = serializeHistoryNodePaginationToken(
-			newHistoryNodePaginationToken(lastRow.NodeID, lastRow.TxnID),
-		)
+		pagingToken, err = serializePageTokenJson(&historyNodePaginationToken{
+			LastNodeID: lastRow.NodeID,
+			LastTxnID:  lastRow.TxnID,
+		})
 		if err != nil {
 			return nil, err
 		}

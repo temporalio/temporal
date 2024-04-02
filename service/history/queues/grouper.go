@@ -53,35 +53,56 @@ func (GrouperNamespaceID) Predicate(keys []any) tasks.Predicate {
 
 var _ Grouper = GrouperNamespaceID{}
 
-// namespaceIDAndDestination is the key for grouping tasks by namespace ID and destination.
-type namespaceIDAndDestination struct {
-	namespaceID string
-	destination string
+// NamespaceIDAndDestination is the key for grouping tasks by namespace ID and destination.
+type NamespaceIDAndDestination struct {
+	NamespaceID string
+	Destination string
 }
 
-type GrouperNamespaceIDAndDestination struct {
+// StateMachineTaskTypeNamespaceIDAndDestination is the key for grouping tasks by task type namespace ID and destination.
+type StateMachineTaskTypeNamespaceIDAndDestination struct {
+	StateMachineTaskType int32
+	NamespaceID          string
+	Destination          string
 }
 
-func (GrouperNamespaceIDAndDestination) Key(task tasks.Task) (key any) {
-	getter, ok := task.(tasks.HasDestination)
+type GrouperStateMachineNamespaceIDAndDestination struct {
+}
+
+func (g GrouperStateMachineNamespaceIDAndDestination) Key(task tasks.Task) (key any) {
+	return g.KeyTyped(task)
+}
+
+func (GrouperStateMachineNamespaceIDAndDestination) KeyTyped(task tasks.Task) (key StateMachineTaskTypeNamespaceIDAndDestination) {
+	destGetter, ok := task.(tasks.HasDestination)
 	var dest string
 	if ok {
-		dest = getter.GetDestination()
+		dest = destGetter.GetDestination()
 	}
-	return namespaceIDAndDestination{task.GetNamespaceID(), dest}
+	smtGetter, ok := task.(tasks.HasStateMachineTaskType)
+	var smt int32
+	if ok {
+		smt = smtGetter.StateMachineTaskType()
+	}
+	return StateMachineTaskTypeNamespaceIDAndDestination{
+		StateMachineTaskType: smt,
+		NamespaceID:          task.GetNamespaceID(),
+		Destination:          dest,
+	}
 }
 
-func (GrouperNamespaceIDAndDestination) Predicate(keys []any) tasks.Predicate {
+func (GrouperStateMachineNamespaceIDAndDestination) Predicate(keys []any) tasks.Predicate {
 	pred := predicates.Empty[tasks.Task]()
-	for _, namespaceID := range keys {
-		// Assume predicate is only called with keys returned from GrouperNamespaceID.Key()
-		key := namespaceID.(namespaceIDAndDestination)
+	for _, anyKey := range keys {
+		// Assume predicate is only called with keys returned from GrouperStateMachineNamespaceIDAndDestination.Key()
+		key := anyKey.(StateMachineTaskTypeNamespaceIDAndDestination)
 		pred = predicates.Or(pred, predicates.And(
-			tasks.NewNamespacePredicate([]string{key.namespaceID}),
-			tasks.NewDestinationPredicate([]string{key.destination}),
+			tasks.NewStateMachineTaskTypePredicate([]int32{key.StateMachineTaskType}),
+			tasks.NewNamespacePredicate([]string{key.NamespaceID}),
+			tasks.NewDestinationPredicate([]string{key.Destination}),
 		))
 	}
 	return pred
 }
 
-var _ Grouper = GrouperNamespaceIDAndDestination{}
+var _ Grouper = GrouperStateMachineNamespaceIDAndDestination{}

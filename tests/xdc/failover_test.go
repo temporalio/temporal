@@ -375,12 +375,18 @@ func (s *FunctionalClustersTestSuite) TestSimpleWorkflowFailover() {
 			RunId:      rid,
 		},
 	}
-	var historyResponse *workflowservice.GetWorkflowExecutionHistoryResponse
 	eventsReplicated := false
 	for i := 0; i < 15; i++ {
+		var historyResponse *workflowservice.GetWorkflowExecutionHistoryResponse
 		historyResponse, err = client2.GetWorkflowExecutionHistory(tests.NewContext(), getHistoryReq)
 		if err == nil && len(historyResponse.History.Events) == 5 {
 			eventsReplicated = true
+			s.EqualHistory(`
+  1 WorkflowExecutionStarted
+  2 WorkflowTaskScheduled
+  3 WorkflowTaskStarted
+  4 WorkflowTaskCompleted
+  5 ActivityTaskScheduled`, historyResponse.History)
 			break
 		}
 		time.Sleep(1 * time.Second)
@@ -441,9 +447,22 @@ func (s *FunctionalClustersTestSuite) TestSimpleWorkflowFailover() {
 	// check history replicated in cluster 1
 	eventsReplicated = false
 	for i := 0; i < 15; i++ {
+		var historyResponse *workflowservice.GetWorkflowExecutionHistoryResponse
 		historyResponse, err = client1.GetWorkflowExecutionHistory(tests.NewContext(), getHistoryReq)
 		if err == nil && len(historyResponse.History.Events) == 11 {
 			eventsReplicated = true
+			s.EqualHistory(`
+  1 WorkflowExecutionStarted
+  2 WorkflowTaskScheduled
+  3 WorkflowTaskStarted
+  4 WorkflowTaskCompleted
+  5 ActivityTaskScheduled
+  6 ActivityTaskStarted
+  7 ActivityTaskCompleted
+  8 WorkflowTaskScheduled
+  9 WorkflowTaskStarted
+ 10 WorkflowTaskCompleted
+ 11 WorkflowExecutionCompleted`, historyResponse.History)
 			break
 		}
 		time.Sleep(1 * time.Second)
@@ -863,10 +882,16 @@ GetHistoryLoop:
 			continue GetHistoryLoop
 		}
 
-		terminateEventAttributes := lastEvent.GetWorkflowExecutionTerminatedEventAttributes()
-		s.Equal(terminateReason, terminateEventAttributes.Reason)
-		s.ProtoEqual(terminateDetails, terminateEventAttributes.Details)
-		s.Equal(identity, terminateEventAttributes.Identity)
+		s.EqualHistory(`
+  1 WorkflowExecutionStarted
+  2 WorkflowTaskScheduled
+  3 WorkflowTaskStarted
+  4 WorkflowTaskCompleted
+  5 ActivityTaskScheduled
+  6 ActivityTaskTimedOut
+  7 WorkflowTaskScheduled
+  8 WorkflowExecutionTerminated  {"Details":{"Payloads":[{"Data":"\"terminate details\""}]},"Identity":"worker1","Reason":"terminate reason"}`, history)
+
 		executionTerminated = true
 		break GetHistoryLoop
 	}
@@ -882,10 +907,15 @@ GetHistoryLoop2:
 			history := historyResponse.History
 			lastEvent := history.Events[len(history.Events)-1]
 			if lastEvent.EventType == enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_TERMINATED {
-				terminateEventAttributes := lastEvent.GetWorkflowExecutionTerminatedEventAttributes()
-				s.Equal(terminateReason, terminateEventAttributes.Reason)
-				s.ProtoEqual(terminateDetails, terminateEventAttributes.Details)
-				s.Equal(identity, terminateEventAttributes.Identity)
+				s.EqualHistory(`
+  1 WorkflowExecutionStarted
+  2 WorkflowTaskScheduled
+  3 WorkflowTaskStarted
+  4 WorkflowTaskCompleted
+  5 ActivityTaskScheduled
+  6 ActivityTaskTimedOut
+  7 WorkflowTaskScheduled
+  8 WorkflowExecutionTerminated  {"Details":{"Payloads":[{"Data":"\"terminate details\""}]},"Identity":"worker1","Reason":"terminate reason"}`, history)
 				eventsReplicated = true
 				break GetHistoryLoop2
 			}
@@ -1044,13 +1074,29 @@ func (s *FunctionalClustersTestSuite) TestResetWorkflowFailover() {
 
 	getHistoryResp, err := client1.GetWorkflowExecutionHistory(tests.NewContext(), getHistoryReq)
 	s.NoError(err)
-	events := getHistoryResp.History.Events
-	s.Equal(enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_COMPLETED, events[len(events)-1].GetEventType())
+	s.EqualHistory(`
+  1 WorkflowExecutionStarted
+  2 WorkflowTaskScheduled
+  3 WorkflowExecutionSignaled
+  4 WorkflowTaskStarted
+  5 WorkflowTaskFailed
+  6 WorkflowTaskScheduled
+  7 WorkflowTaskStarted
+  8 WorkflowTaskCompleted
+  9 WorkflowExecutionCompleted`, getHistoryResp.History)
 
 	getHistoryResp, err = client2.GetWorkflowExecutionHistory(tests.NewContext(), getHistoryReq)
 	s.NoError(err)
-	events = getHistoryResp.History.Events
-	s.Equal(enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_COMPLETED, events[len(events)-1].GetEventType())
+	s.EqualHistory(`
+  1 WorkflowExecutionStarted
+  2 WorkflowTaskScheduled
+  3 WorkflowExecutionSignaled
+  4 WorkflowTaskStarted
+  5 WorkflowTaskFailed
+  6 WorkflowTaskScheduled
+  7 WorkflowTaskStarted
+  8 WorkflowTaskCompleted
+  9 WorkflowExecutionCompleted`, getHistoryResp.History)
 }
 
 func (s *FunctionalClustersTestSuite) TestContinueAsNewFailover() {
@@ -1323,6 +1369,16 @@ func (s *FunctionalClustersTestSuite) TestSignalFailover() {
 	for i := 0; i < 15; i++ {
 		historyResponse, err = client2.GetWorkflowExecutionHistory(tests.NewContext(), getHistoryReq)
 		if err == nil && len(historyResponse.History.Events) == 9 {
+			s.EqualHistory(`
+  1 WorkflowExecutionStarted
+  2 WorkflowTaskScheduled
+  3 WorkflowTaskStarted
+  4 WorkflowTaskCompleted
+  5 WorkflowExecutionSignaled
+  6 WorkflowExecutionSignaled
+  7 WorkflowTaskScheduled
+  8 WorkflowTaskStarted
+  9 WorkflowTaskCompleted`, historyResponse.History)
 			eventsReplicated = true
 			break
 		}
@@ -1371,6 +1427,21 @@ func (s *FunctionalClustersTestSuite) TestSignalFailover() {
 	for i := 0; i < 15; i++ {
 		historyResponse, err = client2.GetWorkflowExecutionHistory(tests.NewContext(), getHistoryReq)
 		if err == nil && len(historyResponse.History.Events) == 14 {
+			s.EqualHistory(`
+  1 WorkflowExecutionStarted
+  2 WorkflowTaskScheduled
+  3 WorkflowTaskStarted
+  4 WorkflowTaskCompleted
+  5 WorkflowExecutionSignaled
+  6 WorkflowExecutionSignaled
+  7 WorkflowTaskScheduled
+  8 WorkflowTaskStarted
+  9 WorkflowTaskCompleted
+ 10 WorkflowExecutionSignaled
+ 11 WorkflowExecutionSignaled
+ 12 WorkflowTaskScheduled
+ 13 WorkflowTaskStarted
+ 14 WorkflowTaskCompleted`, historyResponse.History)
 			eventsReplicated = true
 			break
 		}
@@ -1875,6 +1946,12 @@ func (s *FunctionalClustersTestSuite) TestCronWorkflowStartAndFailover() {
 	s.NoError(err)
 	s.True(wfCompleted)
 	events := s.getHistory(client2, namespace, executions[0])
+	s.EqualHistoryEvents(`
+  1 WorkflowExecutionStarted
+  2 WorkflowTaskScheduled
+  3 WorkflowTaskStarted
+  4 WorkflowTaskCompleted
+  5 WorkflowExecutionCompleted`, events)
 	s.Equal(int64(2), events[len(events)-1].GetVersion())
 
 	// terminate the remaining cron
@@ -1973,6 +2050,13 @@ func (s *FunctionalClustersTestSuite) TestCronWorkflowCompleteAndFailover() {
 	s.NoError(err)
 	s.Equal(1, wfCompletionCount)
 	events := s.getHistory(client1, namespace, executions[0])
+	s.EqualHistoryEvents(`
+  1 WorkflowExecutionStarted
+  2 WorkflowTaskScheduled
+  3 WorkflowTaskStarted
+  4 WorkflowTaskCompleted
+  5 WorkflowExecutionCompleted`, events)
+
 	s.Equal(int64(1), events[0].GetVersion())
 	s.Equal(int64(1), events[len(events)-1].GetVersion())
 
@@ -1982,6 +2066,12 @@ func (s *FunctionalClustersTestSuite) TestCronWorkflowCompleteAndFailover() {
 	s.NoError(err)
 	s.Equal(2, wfCompletionCount)
 	events = s.getHistory(client2, namespace, executions[1])
+	s.EqualHistoryEvents(`
+  1 WorkflowExecutionStarted
+  2 WorkflowTaskScheduled
+  3 WorkflowTaskStarted
+  4 WorkflowTaskCompleted
+  5 WorkflowExecutionCompleted`, events)
 	s.Equal(int64(1), events[0].GetVersion())
 	s.Equal(int64(2), events[len(events)-1].GetVersion())
 
@@ -2076,19 +2166,27 @@ func (s *FunctionalClustersTestSuite) TestWorkflowRetryStartAndFailover() {
 	_, err = poller2.PollAndProcessWorkflowTask()
 	s.NoError(err)
 	events := s.getHistory(client2, namespace, executions[0])
+	s.EqualHistoryEvents(`
+  1 WorkflowExecutionStarted {"Attempt":1}
+  2 WorkflowTaskScheduled
+  3 WorkflowTaskStarted
+  4 WorkflowTaskCompleted
+  5 WorkflowExecutionFailed`, events)
 	s.Equal(int64(1), events[0].GetVersion())
 	s.Equal(int64(2), events[len(events)-1].GetVersion())
-	s.Equal(int32(1), events[0].GetWorkflowExecutionStartedEventAttributes().GetAttempt())
-	s.Equal(enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_FAILED, events[len(events)-1].GetEventType())
 
 	// second attempt
 	_, err = poller2.PollAndProcessWorkflowTask()
 	s.NoError(err)
 	events = s.getHistory(client2, namespace, executions[1])
+	s.EqualHistoryEvents(`
+  1 WorkflowExecutionStarted {"Attempt":2}
+  2 WorkflowTaskScheduled
+  3 WorkflowTaskStarted
+  4 WorkflowTaskCompleted
+  5 WorkflowExecutionFailed`, events)
 	s.Equal(int64(2), events[0].GetVersion())
 	s.Equal(int64(2), events[len(events)-1].GetVersion())
-	s.Equal(enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_FAILED, events[len(events)-1].GetEventType())
-	s.Equal(int32(2), events[0].GetWorkflowExecutionStartedEventAttributes().GetAttempt())
 }
 
 func (s *FunctionalClustersTestSuite) TestWorkflowRetryFailAndFailover() {
@@ -2180,20 +2278,29 @@ func (s *FunctionalClustersTestSuite) TestWorkflowRetryFailAndFailover() {
 	_, err = poller1.PollAndProcessWorkflowTask()
 	s.NoError(err)
 	events := s.getHistory(client1, namespace, executions[0])
+	s.EqualHistoryEvents(`
+  1 WorkflowExecutionStarted {"Attempt":1}
+  2 WorkflowTaskScheduled
+  3 WorkflowTaskStarted
+  4 WorkflowTaskCompleted
+  5 WorkflowExecutionFailed`, events)
+
 	s.Equal(int64(1), events[0].GetVersion())
 	s.Equal(int64(1), events[len(events)-1].GetVersion())
-	s.Equal(enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_FAILED, events[len(events)-1].GetEventType())
-	s.Equal(int32(1), events[0].GetWorkflowExecutionStartedEventAttributes().GetAttempt())
 
 	s.failover(namespace, s.clusterNames[1], int64(2), client1)
 
 	_, err = poller2.PollAndProcessWorkflowTask()
 	s.NoError(err)
 	events = s.getHistory(client2, namespace, executions[1])
+	s.EqualHistoryEvents(`
+  1 WorkflowExecutionStarted {"Attempt":2}
+  2 WorkflowTaskScheduled
+  3 WorkflowTaskStarted
+  4 WorkflowTaskCompleted
+  5 WorkflowExecutionFailed`, events)
 	s.Equal(int64(1), events[0].GetVersion())
 	s.Equal(int64(2), events[len(events)-1].GetVersion())
-	s.Equal(enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_FAILED, events[len(events)-1].GetEventType())
-	s.Equal(int32(2), events[0].GetWorkflowExecutionStartedEventAttributes().GetAttempt())
 }
 
 func (s *FunctionalClustersTestSuite) TestActivityHeartbeatFailover() {

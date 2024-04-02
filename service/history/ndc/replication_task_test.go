@@ -177,6 +177,7 @@ func (s *replicationTaskSuite) TestSkipDuplicatedEvents_ValidInput_SkipEvents() 
 		nil,
 		[][]*historypb.HistoryEvent{slice1, slice2},
 		nil,
+		"",
 	)
 	err := task.skipDuplicatedEvents(1)
 	s.NoError(err)
@@ -216,6 +217,7 @@ func (s *replicationTaskSuite) TestSkipDuplicatedEvents_InvalidInput_ErrorOut() 
 		nil,
 		[][]*historypb.HistoryEvent{slice1, slice2},
 		nil,
+		"",
 	)
 	err := task.skipDuplicatedEvents(2)
 	s.Error(err)
@@ -251,6 +253,7 @@ func (s *replicationTaskSuite) TestSkipDuplicatedEvents_ZeroInput_DoNothing() {
 		nil,
 		[][]*historypb.HistoryEvent{slice1, slice2},
 		nil,
+		"",
 	)
 	err := task.skipDuplicatedEvents(0)
 	s.NoError(err)

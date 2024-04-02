@@ -22,7 +22,7 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-//go:generate mockgen -copyright_file ../../../LICENSE -package $GOPACKAGE -source $GOFILE -destination scheduler_mock.go
+//go:generate mocksync -copyright_file ../../../LICENSE -package $GOPACKAGE -source $GOFILE -destination scheduler_mock.go
 
 package queues
 
@@ -191,6 +191,17 @@ func (s *schedulerImpl) Stop() {
 
 func (s *schedulerImpl) TaskChannelKeyFn() TaskChannelKeyFn {
 	return s.taskChannelKeyFn
+}
+
+// CommonSchedulerWrapper is an adapter that converts a common [task.Scheduler] to a [Scheduler] with an injectable
+// TaskChannelKeyFn.
+type CommonSchedulerWrapper struct {
+	tasks.Scheduler[Executable]
+	TaskKeyFn func(e Executable) TaskChannelKey
+}
+
+func (s *CommonSchedulerWrapper) TaskChannelKeyFn() TaskChannelKeyFn {
+	return s.TaskKeyFn
 }
 
 func NewRateLimitedScheduler(

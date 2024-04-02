@@ -75,7 +75,7 @@ func WithGlobalFlag(b bool) Mutation {
 		})
 }
 
-// WithRentention assigns the retention duration to a Namespace during a Clone
+// WithRetention assigns the retention duration to a Namespace during a Clone
 // operation.
 func WithRetention(dur *durationpb.Duration) Mutation {
 	return mutationFunc(

@@ -35,7 +35,7 @@ import (
 	"go.temporal.io/server/service/history/shard"
 )
 
-//go:generate mockgen -copyright_file ../../../../LICENSE -package $GOPACKAGE -source $GOFILE -destination remote_events_handler_mock.go
+//go:generate mocksync -copyright_file ../../../../LICENSE -package $GOPACKAGE -source $GOFILE -destination remote_events_handler_mock.go
 
 type (
 	RemoteGeneratedEventsHandler interface {
@@ -46,6 +46,7 @@ type (
 			versionHistoryItems []*historyspb.VersionHistoryItem,
 			historyEvents [][]*historypb.HistoryEvent,
 			newEvents []*historypb.HistoryEvent,
+			newRunID string,
 		) error
 	}
 
@@ -67,6 +68,7 @@ func (f futureEventsHandlerImpl) HandleRemoteGeneratedHistoryEvents(
 	versionHistoryItems []*historyspb.VersionHistoryItem,
 	historyEvents [][]*historypb.HistoryEvent,
 	newEvents []*historypb.HistoryEvent,
+	newRunID string,
 ) error {
 	shardContext, err := f.shardController.GetShardByNamespaceWorkflow(
 		namespace.ID(workflowKey.NamespaceID),
@@ -86,5 +88,6 @@ func (f futureEventsHandlerImpl) HandleRemoteGeneratedHistoryEvents(
 		versionHistoryItems,
 		historyEvents,
 		newEvents,
+		newRunID,
 	)
 }

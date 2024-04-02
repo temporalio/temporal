@@ -258,6 +258,14 @@ func ServiceErrorTypeTag(err error) Tag {
 	return &tagImpl{key: ErrorTypeTagName, value: strings.TrimPrefix(util.ErrorType(err), errorPrefix)}
 }
 
+func NexusOutcomeTag(outcome string) Tag {
+	return &tagImpl{key: nexusOutcomeTagName, value: outcome}
+}
+
+func NexusMethodTag(value string) Tag {
+	return &tagImpl{key: nexusMethodTagName, value: value}
+}
+
 // HttpStatusTag returns a new httpStatusTag.
 func HttpStatusTag(value int) Tag {
 	return &tagImpl{key: httpStatusTagName, value: strconv.Itoa(value)}

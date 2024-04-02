@@ -22,7 +22,7 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-//go:generate mockgen -copyright_file ../../../LICENSE -package $GOPACKAGE -source $GOFILE -destination events_cache_mock.go
+//go:generate mocksync -copyright_file ../../../LICENSE -package $GOPACKAGE -source $GOFILE -destination events_cache_mock.go
 
 package events
 
@@ -147,10 +147,10 @@ func (e *CacheImpl) GetEvent(ctx context.Context, shardID int32, key EventKey, f
 		}
 	}
 
-	handler.Counter(metrics.CacheMissCounter.Name()).Record(1)
+	metrics.CacheMissCounter.With(handler).Record(1)
 	event, err := e.getHistoryEventFromStore(ctx, shardID, key, firstEventID, branchToken)
 	if err != nil {
-		handler.Counter(metrics.CacheFailures.Name()).Record(1)
+		metrics.CacheFailures.With(handler).Record(1)
 		e.logger.Error("Cache unable to retrieve event from store",
 			tag.Error(err),
 			tag.WorkflowID(key.WorkflowID),
@@ -219,10 +219,10 @@ func (e *CacheImpl) getHistoryEventFromStore(
 			tag.WorkflowNamespaceID(key.NamespaceID.String()),
 			tag.WorkflowID(key.WorkflowID),
 			tag.WorkflowRunID(key.RunID))
-		handler.Counter(metrics.CacheFailures.Name()).Record(1)
+		metrics.CacheFailures.With(handler).Record(1)
 		return nil, err
 	default:
-		handler.Counter(metrics.CacheFailures.Name()).Record(1)
+		metrics.CacheFailures.With(handler).Record(1)
 		return nil, err
 	}
 

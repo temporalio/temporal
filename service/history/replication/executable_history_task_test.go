@@ -84,6 +84,7 @@ type (
 		task           *ExecutableHistoryTask
 		events         []*historypb.HistoryEvent
 		newRunEvents   []*historypb.HistoryEvent
+		newRunID       string
 		processToolBox ProcessToolBox
 	}
 )
@@ -129,6 +130,7 @@ func (s *executableHistoryTaskSuite) SetupTest() {
 		Version: version,
 	}}, enumspb.ENCODING_TYPE_PROTO3)
 	s.newRunEvents, _ = s.eventSerializer.DeserializeEvents(newEventsBlob)
+	s.newRunID = uuid.NewString()
 
 	s.replicationTask = &replicationspb.HistoryTaskAttributes{
 		NamespaceId:       uuid.NewString(),
@@ -141,6 +143,7 @@ func (s *executableHistoryTaskSuite) SetupTest() {
 		}},
 		Events:       eventsBlob,
 		NewRunEvents: newEventsBlob,
+		NewRunId:     s.newRunID,
 	}
 	s.sourceClusterName = cluster.TestCurrentClusterName
 
@@ -194,6 +197,7 @@ func (s *executableHistoryTaskSuite) TestExecute_Process() {
 		s.task.versionHistoryItems,
 		[][]*historypb.HistoryEvent{s.events},
 		s.newRunEvents,
+		s.newRunID,
 	).Return(nil).Times(1)
 
 	err := s.task.Execute()
@@ -246,6 +250,7 @@ func (s *executableHistoryTaskSuite) TestHandleErr_Resend_Success() {
 		s.task.versionHistoryItems,
 		[][]*historypb.HistoryEvent{s.events},
 		s.newRunEvents,
+		s.newRunID,
 	).Return(nil)
 
 	err := serviceerrors.NewRetryReplication(
@@ -424,6 +429,20 @@ func (s *executableHistoryTaskSuite) TestBatchWith_CurrentTaskHasNewRunEvents_Ba
 	s.False(success)
 }
 
+func (s *executableHistoryTaskSuite) TestBatchWith_IncomingTaskHasNewRunEvents_BatchSuccess() {
+	currentTask, incomingTask := s.generateTwoBatchableTasks()
+	incomingTask.newRunID = uuid.NewString()
+	incomingTask.eventsDesResponse.newRunEvents = []*historypb.HistoryEvent{
+		{
+			EventId: 104,
+			Version: 3,
+		},
+	}
+	batchedTask, success := currentTask.BatchWith(incomingTask)
+	s.True(success)
+	s.Equal(incomingTask.newRunID, batchedTask.(*ExecutableHistoryTask).newRunID)
+}
+
 func (s *executableHistoryTaskSuite) generateTwoBatchableTasks() (*ExecutableHistoryTask, *ExecutableHistoryTask) {
 	currentEvent := [][]*historypb.HistoryEvent{
 		{
@@ -477,8 +496,8 @@ func (s *executableHistoryTaskSuite) generateTwoBatchableTasks() (*ExecutableHis
 	sourceCluster := uuid.NewString()
 	sourceTaskId := int64(111)
 	incomingTaskId := int64(120)
-	currentTask := s.buildExecutableHistoryTask(currentEvent, nil, sourceTaskId, currentVersionHistoryItems, workflowKeyCurrent, sourceCluster)
-	incomingTask := s.buildExecutableHistoryTask(incomingEvent, nil, incomingTaskId, incomingVersionHistoryItems, workflowKeyIncoming, sourceCluster)
+	currentTask := s.buildExecutableHistoryTask(currentEvent, nil, "", sourceTaskId, currentVersionHistoryItems, workflowKeyCurrent, sourceCluster)
+	incomingTask := s.buildExecutableHistoryTask(incomingEvent, nil, "", incomingTaskId, incomingVersionHistoryItems, workflowKeyIncoming, sourceCluster)
 
 	resultTask, batched := currentTask.BatchWith(incomingTask)
 
@@ -503,6 +522,7 @@ func (s *executableHistoryTaskSuite) generateTwoBatchableTasks() (*ExecutableHis
 func (s *executableHistoryTaskSuite) buildExecutableHistoryTask(
 	events [][]*historypb.HistoryEvent,
 	newRunEvents []*historypb.HistoryEvent,
+	newRunID string,
 	taskId int64,
 	versionHistoryItems []*history.VersionHistoryItem,
 	workflowKey definition.WorkflowKey,
@@ -518,6 +538,7 @@ func (s *executableHistoryTaskSuite) buildExecutableHistoryTask(
 		VersionHistoryItems: versionHistoryItems,
 		Events:              eventsBlob,
 		NewRunEvents:        newRunEventsBlob,
+		NewRunId:            newRunID,
 	}
 	executableTask := NewMockExecutableTask(s.controller)
 	executableTask.EXPECT().TaskID().Return(taskId).AnyTimes()

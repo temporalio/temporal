@@ -25,14 +25,18 @@
 package searchattribute
 
 import (
+	"errors"
 	"fmt"
 	"time"
+	"unicode/utf8"
 
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 
 	"go.temporal.io/server/common/payload"
 )
+
+var ErrInvalidString = errors.New("SearchAttribute value is not a valid UTF-8 string")
 
 // EncodeValue encodes search attribute value and IndexedValueType to Payload.
 func EncodeValue(val interface{}, t enumspb.IndexedValueType) (*commonpb.Payload, error) {
@@ -72,14 +76,35 @@ func DecodeValue(
 	case enumspb.INDEXED_VALUE_TYPE_INT:
 		return decodeValueTyped[int64](value, allowList)
 	case enumspb.INDEXED_VALUE_TYPE_KEYWORD:
-		return decodeValueTyped[string](value, allowList)
+		return validateStrings(decodeValueTyped[string](value, allowList))
 	case enumspb.INDEXED_VALUE_TYPE_TEXT:
-		return decodeValueTyped[string](value, allowList)
+		return validateStrings(decodeValueTyped[string](value, allowList))
 	case enumspb.INDEXED_VALUE_TYPE_KEYWORD_LIST:
-		return decodeValueTyped[[]string](value, false)
+		return validateStrings(decodeValueTyped[[]string](value, false))
 	default:
 		return nil, fmt.Errorf("%w: %v", ErrInvalidType, t)
 	}
+}
+
+func validateStrings(anyValue any, err error) (any, error) {
+	if err != nil {
+		return anyValue, err
+	}
+
+	// validate strings
+	switch value := anyValue.(type) {
+	case string:
+		if !utf8.ValidString(value) {
+			return nil, fmt.Errorf("%w: %s", ErrInvalidString, value)
+		}
+	case []string:
+		for _, item := range value {
+			if !utf8.ValidString(item) {
+				return nil, fmt.Errorf("%w: %s", ErrInvalidString, item)
+			}
+		}
+	}
+	return anyValue, err
 }
 
 // decodeValueTyped tries to decode to the given type.

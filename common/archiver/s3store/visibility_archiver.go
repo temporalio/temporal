@@ -116,13 +116,13 @@ func (v *visibilityArchiver) Archive(
 	logger := archiver.TagLoggerWithArchiveVisibilityRequestAndURI(v.container.Logger, request, URI.String())
 	archiveFailReason := ""
 	defer func() {
-		handler.Timer(metrics.ServiceLatency.Name()).Record(time.Since(startTime))
+		metrics.ServiceLatency.With(handler).Record(time.Since(startTime))
 		if err != nil {
 			if isRetryableError(err) {
-				handler.Counter(metrics.VisibilityArchiverArchiveTransientErrorCount.Name()).Record(1)
+				metrics.VisibilityArchiverArchiveTransientErrorCount.With(handler).Record(1)
 				logger.Error(archiver.ArchiveTransientErrorMsg, tag.ArchivalArchiveFailReason(archiveFailReason), tag.Error(err))
 			} else {
-				handler.Counter(metrics.VisibilityArchiverArchiveNonRetryableErrorCount.Name()).Record(1)
+				metrics.VisibilityArchiverArchiveNonRetryableErrorCount.With(handler).Record(1)
 				logger.Error(archiver.ArchiveNonRetryableErrorMsg, tag.ArchivalArchiveFailReason(archiveFailReason), tag.Error(err))
 				if featureCatalog.NonRetryableError != nil {
 					err = featureCatalog.NonRetryableError()
@@ -155,7 +155,7 @@ func (v *visibilityArchiver) Archive(
 			return err
 		}
 	}
-	handler.Counter(metrics.VisibilityArchiveSuccessCount.Name()).Record(1)
+	metrics.VisibilityArchiveSuccessCount.With(handler).Record(1)
 	return nil
 }
 

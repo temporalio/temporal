@@ -52,6 +52,7 @@ import (
 	searchattribute "go.temporal.io/server/common/searchattribute"
 	configs "go.temporal.io/server/service/history/configs"
 	events "go.temporal.io/server/service/history/events"
+	hsm "go.temporal.io/server/service/history/hsm"
 	tasks "go.temporal.io/server/service/history/tasks"
 )
 
@@ -648,6 +649,20 @@ func (m *MockContext) SetWorkflowExecution(ctx context.Context, request *persist
 func (mr *MockContextMockRecorder) SetWorkflowExecution(ctx, request interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SetWorkflowExecution", reflect.TypeOf((*MockContext)(nil).SetWorkflowExecution), ctx, request)
+}
+
+// StateMachineRegistry mocks base method.
+func (m *MockContext) StateMachineRegistry() *hsm.Registry {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "StateMachineRegistry")
+	ret0, _ := ret[0].(*hsm.Registry)
+	return ret0
+}
+
+// StateMachineRegistry indicates an expected call of StateMachineRegistry.
+func (mr *MockContextMockRecorder) StateMachineRegistry() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "StateMachineRegistry", reflect.TypeOf((*MockContext)(nil).StateMachineRegistry))
 }
 
 // UnloadForOwnershipLost mocks base method.
@@ -1376,6 +1391,20 @@ func (m *MockControllableContext) SetWorkflowExecution(ctx context.Context, requ
 func (mr *MockControllableContextMockRecorder) SetWorkflowExecution(ctx, request interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SetWorkflowExecution", reflect.TypeOf((*MockControllableContext)(nil).SetWorkflowExecution), ctx, request)
+}
+
+// StateMachineRegistry mocks base method.
+func (m *MockControllableContext) StateMachineRegistry() *hsm.Registry {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "StateMachineRegistry")
+	ret0, _ := ret[0].(*hsm.Registry)
+	return ret0
+}
+
+// StateMachineRegistry indicates an expected call of StateMachineRegistry.
+func (mr *MockControllableContextMockRecorder) StateMachineRegistry() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "StateMachineRegistry", reflect.TypeOf((*MockControllableContext)(nil).StateMachineRegistry))
 }
 
 // UnloadForOwnershipLost mocks base method.

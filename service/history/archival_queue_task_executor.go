@@ -174,7 +174,7 @@ func (e *archivalQueueTaskExecutor) getArchiveTaskRequest(
 		visibilityURIString := namespaceEntry.VisibilityArchivalState().URI
 		visibilityURI, err = carchiver.NewURI(visibilityURIString)
 		if err != nil {
-			e.metricsHandler.Counter(metrics.ArchivalTaskInvalidURI.Name()).Record(
+			metrics.ArchivalTaskInvalidURI.With(e.metricsHandler).Record(
 				1,
 				metrics.NamespaceTag(namespaceName.String()),
 				metrics.FailureTag(metrics.InvalidVisibilityURITagValue),
@@ -192,7 +192,7 @@ func (e *archivalQueueTaskExecutor) getArchiveTaskRequest(
 		historyURIString := namespaceEntry.HistoryArchivalState().URI
 		historyURI, err = carchiver.NewURI(historyURIString)
 		if err != nil {
-			e.metricsHandler.Counter(metrics.ArchivalTaskInvalidURI.Name()).Record(
+			metrics.ArchivalTaskInvalidURI.With(e.metricsHandler).Record(
 				1,
 				metrics.NamespaceTag(namespaceName.String()),
 				metrics.FailureTag(metrics.InvalidHistoryURITagValue),
@@ -266,7 +266,6 @@ func (e *archivalQueueTaskExecutor) addDeletionTask(
 		ShardID:     e.shardContext.GetShardID(),
 		NamespaceID: task.GetNamespaceID(),
 		WorkflowID:  task.WorkflowID,
-		RunID:       task.RunID,
 		Tasks:       mutableState.PopTasks(),
 	})
 	return err

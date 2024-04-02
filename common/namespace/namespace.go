@@ -212,7 +212,7 @@ func (ns *Namespace) Name() Name {
 }
 
 func (ns *Namespace) State() enumspb.NamespaceState {
-	if ns.replicationConfig == nil {
+	if ns.info == nil {
 		return enumspb.NAMESPACE_STATE_UNSPECIFIED
 	}
 	return ns.info.State

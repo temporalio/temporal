@@ -100,7 +100,7 @@ func NewMySQLConfig() *config.SQL {
 			strconv.Itoa(environment.GetMySQLPort()),
 		),
 		ConnectProtocol: testMySQLConnectionProtocol,
-		PluginName:      mysql.PluginNameV8,
+		PluginName:      mysql.PluginName,
 		DatabaseName:    testMySQLDatabaseNamePrefix + shuffle.String(testMySQLDatabaseNameSuffix),
 	}
 }

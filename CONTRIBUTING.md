@@ -1,7 +1,7 @@
 # Develop Temporal Server
 This doc is for contributors to Temporal Server (hopefully that's you!)
 
-**Note:** All contributors also need to fill out the [Temporal Contributor License Agreement](develop/docs/temporal-cla.md) before we can merge in any of your changes.
+**Note:** All contributors also need to fill out the [Temporal Contributor License Agreement](docs/development/temporal-cla.md) before we can merge in any of your changes.
 
 ## Prerequisites
 
@@ -22,7 +22,7 @@ This doc is for contributors to Temporal Server (hopefully that's you!)
 * [docker](https://docs.docker.com/engine/install/)
 
 > Note: it is possible to run Temporal server without a `docker`. If for some reason (for example, performance on macOS)
-> you want to run dependencies on the host OS, please follow the [doc](develop/docs/run_dependencies_host.md).
+> you want to run dependencies on the host OS, please follow the [doc](docs/development/run-dependencies-host.md).
 
 ### For Windows developers
 For developing on Windows, install [Windows Subsystem for Linux 2 (WSL2)](https://aka.ms/wsl) and [Ubuntu](https://docs.microsoft.com/en-us/windows/wsl/install-win10#step-6---install-your-linux-distribution-of-choice). After that, follow the guidance for installing prerequisites, building, and testing on Ubuntu.
@@ -182,3 +182,18 @@ All commit messages are from the titles of your pull requests. So make sure foll
 Please don't use very generic titles like "bug fixes". 
 
 All PR titles should start with Upper case and have no dot at the end.
+
+## Go build and run tags
+
+Prior to Server version v1.23.0 our protobuf code generator allowed invalid UTF-8 data to be stored as proto strings. This isn't actually allowed by the proto3 spec, so we need to specify `-tags protolegacy` when building against the server. Our Makefile does this, but if you're using temporal as a library you'll need to enable that yourself.
+
+Example:
+
+``` shell
+$ go build -tags protolegacy ./cmd/server
+```
+
+If you see an error like `grpc: error unmarshalling request: string field contains invalid UTF-8` then you've forgotten to specify this flag.
+
+## License
+MIT License, please see [LICENSE](LICENSE) for details.

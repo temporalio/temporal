@@ -46,6 +46,7 @@ import (
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	workflowpb "go.temporal.io/api/workflow/v1"
 	"go.temporal.io/api/workflowservice/v1"
+	"go.temporal.io/server/common/testing/historyrequire"
 	"google.golang.org/protobuf/types/known/durationpb"
 	"google.golang.org/protobuf/types/known/timestamppb"
 	"gopkg.in/yaml.v3"
@@ -68,6 +69,7 @@ type AdvVisCrossDCTestSuite struct {
 	// not merely log an error
 	*require.Assertions
 	protorequire.ProtoAssertions
+	historyrequire.HistoryRequire
 	suite.Suite
 
 	testClusterFactory tests.TestClusterFactory
@@ -160,6 +162,7 @@ func (s *AdvVisCrossDCTestSuite) SetupTest() {
 	// Have to define our overridden assertions in the test setup. If we did it earlier, s.T() will return nil
 	s.Assertions = require.New(s.T())
 	s.ProtoAssertions = protorequire.New(s.T())
+	s.HistoryRequire = historyrequire.New(s.T())
 }
 
 func (s *AdvVisCrossDCTestSuite) TearDownSuite() {
@@ -400,11 +403,13 @@ GetHistoryLoop:
 			time.Sleep(100 * time.Millisecond)
 			continue GetHistoryLoop
 		}
-
-		terminateEventAttributes := lastEvent.GetWorkflowExecutionTerminatedEventAttributes()
-		s.Equal(terminateReason, terminateEventAttributes.Reason)
-		s.ProtoEqual(terminateDetails, terminateEventAttributes.Details)
-		s.Equal(identity, terminateEventAttributes.Identity)
+		s.EqualHistory(`
+  1 WorkflowExecutionStarted
+  2 WorkflowTaskScheduled
+  3 WorkflowTaskStarted
+  4 WorkflowTaskCompleted
+  5 UpsertWorkflowSearchAttributes
+  6 WorkflowExecutionTerminated {"Details":{"Payloads":[{"Data":"\"terminate details\""}]},"Identity":"worker1","Reason":"force terminate to make sure standby process tasks"}`, history)
 		executionTerminated = true
 		break GetHistoryLoop
 	}
@@ -420,10 +425,13 @@ GetHistoryLoop2:
 			history := historyResponse.History
 			lastEvent := history.Events[len(history.Events)-1]
 			if lastEvent.EventType == enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_TERMINATED {
-				terminateEventAttributes := lastEvent.GetWorkflowExecutionTerminatedEventAttributes()
-				s.Equal(terminateReason, terminateEventAttributes.Reason)
-				s.ProtoEqual(terminateDetails, terminateEventAttributes.Details)
-				s.Equal(identity, terminateEventAttributes.Identity)
+				s.EqualHistory(`
+  1 WorkflowExecutionStarted
+  2 WorkflowTaskScheduled
+  3 WorkflowTaskStarted
+  4 WorkflowTaskCompleted
+  5 UpsertWorkflowSearchAttributes
+  6 WorkflowExecutionTerminated {"Details":{"Payloads":[{"Data":"\"terminate details\""}]},"Identity":"worker1","Reason":"force terminate to make sure standby process tasks"}`, history)
 				eventsReplicated = true
 				break GetHistoryLoop2
 			}

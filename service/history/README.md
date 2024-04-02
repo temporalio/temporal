@@ -1,1 +1,1 @@
-See [docs/history-service.md](../../docs/history-service.md).
+See [docs/history-service.md](../../docs/architecture/history-service.md).

@@ -192,7 +192,7 @@ func (c *ControllerImpl) GetShardByID(
 ) (Context, error) {
 	startTime := time.Now().UTC()
 	defer func() {
-		c.taggedMetricsHandler.Timer(metrics.GetEngineForShardLatency.Name()).Record(time.Since(startTime))
+		metrics.GetEngineForShardLatency.With(c.taggedMetricsHandler).Record(time.Since(startTime))
 	}()
 
 	return c.getOrCreateShardContext(shardID)
@@ -201,7 +201,7 @@ func (c *ControllerImpl) GetShardByID(
 func (c *ControllerImpl) CloseShardByID(shardID int32) {
 	startTime := time.Now().UTC()
 	defer func() {
-		c.taggedMetricsHandler.Timer(metrics.RemoveEngineForShardLatency.Name()).Record(time.Since(startTime))
+		metrics.RemoveEngineForShardLatency.With(c.taggedMetricsHandler).Record(time.Since(startTime))
 	}()
 
 	shard := c.removeShard(shardID, nil)
@@ -226,10 +226,10 @@ func (c *ControllerImpl) ShardIDs() []int32 {
 func (c *ControllerImpl) shardRemoveAndStop(shard ControllableContext) {
 	startTime := time.Now().UTC()
 	defer func() {
-		c.taggedMetricsHandler.Timer(metrics.RemoveEngineForShardLatency.Name()).Record(time.Since(startTime))
+		metrics.RemoveEngineForShardLatency.With(c.taggedMetricsHandler).Record(time.Since(startTime))
 	}()
 
-	c.taggedMetricsHandler.Counter(metrics.ShardContextClosedCounter.Name()).Record(1)
+	metrics.ShardContextClosedCounter.With(c.taggedMetricsHandler).Record(1)
 	_ = c.removeShard(shard.GetShardID(), shard)
 
 	// Whether shard was in the shards map or not, in both cases we should stop it.
@@ -281,7 +281,7 @@ func (c *ControllerImpl) getOrCreateShardContext(shardID int32) (ControllableCon
 		return nil, err
 	}
 	c.historyShards[shardID] = shard
-	c.taggedMetricsHandler.Counter(metrics.ShardContextCreatedCounter.Name()).Record(1)
+	metrics.ShardContextCreatedCounter.With(c.taggedMetricsHandler).Record(1)
 	c.contextTaggedLogger.Info("", numShardsTag(len(c.historyShards)))
 
 	return shard, nil
@@ -306,7 +306,7 @@ func (c *ControllerImpl) removeShardLocked(shardID int32, expected ControllableC
 
 	delete(c.historyShards, shardID)
 	c.contextTaggedLogger.Info("", numShardsTag(len(c.historyShards)))
-	c.taggedMetricsHandler.Counter(metrics.ShardContextRemovedCounter.Name()).Record(1)
+	metrics.ShardContextRemovedCounter.With(c.taggedMetricsHandler).Record(1)
 
 	return current
 }
@@ -371,7 +371,7 @@ func (c *ControllerImpl) doLinger(ctx context.Context, shard ControllableContext
 
 	for {
 		if !shard.IsValid() {
-			c.taggedMetricsHandler.Timer(metrics.ShardLingerSuccess.Name()).Record(time.Since(startTime))
+			metrics.ShardLingerSuccess.With(c.taggedMetricsHandler).Record(time.Since(startTime))
 			break
 		}
 
@@ -380,7 +380,7 @@ func (c *ControllerImpl) doLinger(ctx context.Context, shard ControllableContext
 				tag.ShardID(shard.GetShardID()),
 				tag.NewDurationTag("duration", time.Now().Sub(startTime)),
 			)
-			c.taggedMetricsHandler.Counter(metrics.ShardLingerTimeouts.Name()).Record(1)
+			metrics.ShardLingerTimeouts.With(c.taggedMetricsHandler).Record(1)
 			break
 		}
 
@@ -393,10 +393,10 @@ func (c *ControllerImpl) doLinger(ctx context.Context, shard ControllableContext
 }
 
 func (c *ControllerImpl) acquireShards(ctx context.Context) {
-	c.taggedMetricsHandler.Counter(metrics.AcquireShardsCounter.Name()).Record(1)
+	metrics.AcquireShardsCounter.With(c.taggedMetricsHandler).Record(1)
 	startTime := time.Now().UTC()
 	defer func() {
-		c.taggedMetricsHandler.Timer(metrics.AcquireShardsLatency.Name()).Record(time.Since(startTime))
+		metrics.AcquireShardsLatency.With(c.taggedMetricsHandler).Record(time.Since(startTime))
 	}()
 
 	ctx = headers.SetCallerInfo(ctx, headers.SystemBackgroundCallerInfo)
@@ -416,7 +416,7 @@ func (c *ControllerImpl) acquireShards(ctx context.Context) {
 
 		shard, err := c.GetShardByID(shardID)
 		if err != nil {
-			c.taggedMetricsHandler.Counter(metrics.GetEngineForShardErrorCounter.Name()).Record(1)
+			metrics.GetEngineForShardErrorCounter.With(c.taggedMetricsHandler).Record(1)
 			c.contextTaggedLogger.Error("Unable to create history shard context", tag.Error(err), tag.OperationFailed, tag.ShardID(shardID))
 			return
 		}
@@ -452,8 +452,7 @@ func (c *ControllerImpl) acquireShards(ctx context.Context) {
 	c.RLock()
 	numOfOwnedShards := len(c.historyShards)
 	c.RUnlock()
-
-	c.taggedMetricsHandler.Gauge(metrics.NumShardsGauge.Name()).Record(float64(numOfOwnedShards))
+	metrics.NumShardsGauge.With(c.taggedMetricsHandler).Record(float64(numOfOwnedShards))
 	c.publishShardCountUpdate(numOfOwnedShards)
 }
 

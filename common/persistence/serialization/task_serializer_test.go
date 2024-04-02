@@ -35,8 +35,10 @@ import (
 	enumspb "go.temporal.io/api/enums/v1"
 
 	enumsspb "go.temporal.io/server/api/enums/v1"
+	"go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/shuffle"
+	"go.temporal.io/server/common/testing/protorequire"
 	"go.temporal.io/server/service/history/tasks"
 )
 
@@ -362,6 +364,85 @@ func (s *taskSerializerSuite) TestArchiveExecutionTask() {
 	s.Assert().Equal(enumsspb.TASK_TYPE_ARCHIVAL_ARCHIVE_EXECUTION, task.GetType())
 
 	s.assertEqualTasks(task)
+}
+
+func (s *taskSerializerSuite) TestStateMachineOutboundTask() {
+	task := &tasks.StateMachineOutboundTask{
+		StateMachineTask: tasks.StateMachineTask{
+			WorkflowKey:         s.workflowKey,
+			VisibilityTimestamp: time.Now().UTC(),
+			TaskID:              rand.Int63(),
+			Info: &persistence.StateMachineTaskInfo{
+				Ref: &persistence.StateMachineRef{
+					Path: []*persistence.StateMachineKey{
+						{
+							Type: rand.Int31(),
+							Id:   "some-id",
+						},
+					},
+					MutableStateNamespaceFailoverVersion: rand.Int63(),
+					MutableStateTransitionCount:          rand.Int63(),
+					MachineTransitionCount:               rand.Int63(),
+				},
+				Type: rand.Int31(),
+				Data: []byte{},
+			},
+		},
+		Destination: "foo",
+	}
+
+	s.Assert().Equal(tasks.CategoryOutbound, task.GetCategory())
+	s.Assert().Equal(enumsspb.TASK_TYPE_STATE_MACHINE_OUTBOUND, task.GetType())
+
+	blob, err := s.taskSerializer.SerializeTask(task)
+	s.NoError(err)
+	deserializedTaskIface, err := s.taskSerializer.DeserializeTask(task.GetCategory(), blob)
+	deserializedTask := deserializedTaskIface.(*tasks.StateMachineOutboundTask)
+	s.NoError(err)
+
+	protorequire.ProtoEqual(s.T(), task.Info, deserializedTask.Info)
+	task.Info = nil
+	deserializedTask.Info = nil
+	s.Equal(task, deserializedTask)
+}
+
+func (s *taskSerializerSuite) TestStateMachineTimerTask() {
+	task := &tasks.StateMachineTimerTask{
+		StateMachineTask: tasks.StateMachineTask{
+			WorkflowKey:         s.workflowKey,
+			VisibilityTimestamp: time.Now().UTC(),
+			TaskID:              rand.Int63(),
+			Info: &persistence.StateMachineTaskInfo{
+				Ref: &persistence.StateMachineRef{
+					Path: []*persistence.StateMachineKey{
+						{
+							Type: rand.Int31(),
+							Id:   "some-id",
+						},
+					},
+					MutableStateNamespaceFailoverVersion: rand.Int63(),
+					MutableStateTransitionCount:          rand.Int63(),
+					MachineTransitionCount:               rand.Int63(),
+				},
+				Type: rand.Int31(),
+				Data: []byte{},
+			},
+		},
+	}
+
+	s.Assert().Equal(tasks.CategoryTimer, task.GetCategory())
+	s.Assert().Equal(enumsspb.TASK_TYPE_STATE_MACHINE_TIMER, task.GetType())
+
+	blob, err := s.taskSerializer.SerializeTask(task)
+	s.NoError(err)
+	deserializedTaskIface, err := s.taskSerializer.DeserializeTask(task.GetCategory(), blob)
+	deserializedTask := deserializedTaskIface.(*tasks.StateMachineTimerTask)
+	s.NoError(err)
+
+	protorequire.ProtoEqual(s.T(), task.Info, deserializedTask.Info)
+	task.Info = nil
+	deserializedTask.Info = nil
+	s.Equal(task, deserializedTask)
 }
 
 func (s *taskSerializerSuite) assertEqualTasks(

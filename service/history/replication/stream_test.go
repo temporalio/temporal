@@ -40,7 +40,6 @@ func TestWrapEventLoopFn_ReturnStreamError_ShouldStopLoop(t *testing.T) {
 	done := make(chan bool)
 	timer := time.NewTimer(3 * time.Second)
 	go func() {
-		// Your original test code goes here
 		originalEventLoopCallCount := 0
 		originalEventLoop := func() error {
 			originalEventLoopCallCount++
@@ -72,7 +71,6 @@ func TestWrapEventLoopFn_ReturnServiceError_ShouldRetryUntilStreamError(t *testi
 	timer := time.NewTimer(3 * time.Second)
 
 	go func() {
-		// Your original test code goes here
 		originalEventLoopCallCount := 0
 		originalEventLoop := func() error {
 			originalEventLoopCallCount++
@@ -87,6 +85,37 @@ func TestWrapEventLoopFn_ReturnServiceError_ShouldRetryUntilStreamError(t *testi
 		}
 		WrapEventLoop(originalEventLoop, stopFunc, log.NewNoopLogger(), metrics.NoopMetricsHandler, NewClusterShardKey(1, 1), NewClusterShardKey(2, 1), 0)
 		assertion.Equal(3, originalEventLoopCallCount)
+		assertion.Equal(1, stopFuncCallCount)
+
+		done <- true
+	}()
+
+	select {
+	case <-done:
+		// Test completed within the timeout
+	case <-timer.C:
+		t.Fatal("Test timed out after 5 seconds")
+	}
+}
+
+func TestWrapEventLoopFn_ReturnServiceError_ShouldRetry10Times(t *testing.T) {
+	assertion := require.New(t)
+
+	done := make(chan bool)
+	timer := time.NewTimer(3 * time.Second)
+
+	go func() {
+		originalEventLoopCallCount := 0
+		originalEventLoop := func() error {
+			originalEventLoopCallCount++
+			return errors.New("error")
+		}
+		stopFuncCallCount := 0
+		stopFunc := func() {
+			stopFuncCallCount++
+		}
+		WrapEventLoop(originalEventLoop, stopFunc, log.NewNoopLogger(), metrics.NoopMetricsHandler, NewClusterShardKey(1, 1), NewClusterShardKey(2, 1), 0)
+		assertion.Equal(11, originalEventLoopCallCount)
 		assertion.Equal(1, stopFuncCallCount)
 
 		done <- true

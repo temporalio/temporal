@@ -129,6 +129,11 @@ func WorkflowRunID(runID string) ZapTag {
 	return NewStringTag("wf-run-id", runID)
 }
 
+// WorkflowNewRunID returns tag for WorkflowNewRunID
+func WorkflowNewRunID(newRunID string) ZapTag {
+	return NewStringTag("wf-new-run-id", newRunID)
+}
+
 // WorkflowResetBaseRunID returns tag for WorkflowResetBaseRunID
 func WorkflowResetBaseRunID(runID string) ZapTag {
 	return NewStringTag("wf-reset-base-run-id", runID)
@@ -585,6 +590,11 @@ func Task(task interface{}) ZapTag {
 // TaskID returns tag for TaskID
 func TaskID(taskID int64) ZapTag {
 	return NewInt64("queue-task-id", taskID)
+}
+
+// TaskKey returns tag for TaskKey
+func TaskKey(key interface{}) ZapTag {
+	return NewAnyTag("queue-task-key", key)
 }
 
 // TaskVersion returns tag for TaskVersion

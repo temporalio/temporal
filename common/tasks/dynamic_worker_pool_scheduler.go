@@ -103,11 +103,10 @@ func (pool *DynamicWorkerPoolScheduler) TrySubmit(task Runnable) bool {
 		pool.mu.Unlock()
 		pool.wg.Done()
 		return enqueued
-	} else {
-		pool.runningGoroutines++
-		pool.mu.Unlock()
-		go pool.executeUntilBufferEmpty(task)
 	}
+	pool.runningGoroutines++
+	pool.mu.Unlock()
+	go pool.executeUntilBufferEmpty(task)
 	return true
 }
 

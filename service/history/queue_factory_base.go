@@ -140,15 +140,19 @@ type additionalQueueFactories struct {
 // is why we must return a list here.
 func getOptionalQueueFactories(
 	registry tasks.TaskCategoryRegistry,
-	params ArchivalQueueFactoryParams,
+	archivalParams ArchivalQueueFactoryParams,
+	callbackParams outboundQueueFactoryParams,
+	config *configs.Config,
 ) additionalQueueFactories {
-	if _, ok := registry.GetCategoryByID(tasks.CategoryIDArchival); !ok {
-		return additionalQueueFactories{}
+	factories := []QueueFactory{}
+	if _, ok := registry.GetCategoryByID(tasks.CategoryIDArchival); ok {
+		factories = append(factories, NewArchivalQueueFactory(archivalParams))
+	}
+	if _, ok := registry.GetCategoryByID(tasks.CategoryIDOutbound); ok {
+		factories = append(factories, NewOutboundQueueFactory(callbackParams))
 	}
 	return additionalQueueFactories{
-		Factories: []QueueFactory{
-			NewArchivalQueueFactory(params),
-		},
+		Factories: factories,
 	}
 }
 

@@ -205,6 +205,7 @@ func ndcHistoryResenderProvider(
 					versionHistory,
 					[][]*historypb.HistoryEvent{events},
 					nil,
+					"",
 				)
 			}
 
@@ -230,6 +231,7 @@ func ndcHistoryResenderProvider(
 				versionHistory,
 				[][]*historypb.HistoryEvent{events},
 				nil,
+				"",
 			)
 		},
 		serializer,

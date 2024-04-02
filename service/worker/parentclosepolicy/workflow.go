@@ -162,13 +162,13 @@ func ProcessorActivity(ctx context.Context, request Request) error {
 
 		switch typedErr := err.(type) {
 		case nil:
-			processor.metricsHandler.Counter(metrics.ParentClosePolicyProcessorSuccess.Name()).Record(1)
+			metrics.ParentClosePolicyProcessorSuccess.With(processor.metricsHandler).Record(1)
 		case *serviceerror.NotFound, *serviceerror.NamespaceNotFound:
 			// no-op
 		case *serviceerror.NamespaceNotActive:
 			remoteExecutions[typedErr.ActiveCluster] = append(remoteExecutions[typedErr.ActiveCluster], execution)
 		default:
-			processor.metricsHandler.Counter(metrics.ParentClosePolicyProcessorFailures.Name()).Record(1)
+			metrics.ParentClosePolicyProcessorFailures.With(processor.metricsHandler).Record(1)
 			getActivityLogger(ctx).Error("failed to process parent close policy", tag.Error(err))
 			return err
 		}

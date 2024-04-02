@@ -82,7 +82,7 @@ func (a *activities) BatchActivity(ctx context.Context, batchParams BatchParams)
 	metricsHandler := a.MetricsHandler.WithTags(metrics.OperationTag(metrics.BatcherScope), metrics.NamespaceTag(batchParams.Namespace))
 
 	if err := a.checkNamespace(batchParams.Namespace); err != nil {
-		metricsHandler.Counter(metrics.BatcherOperationFailures.Name()).Record(1)
+		metrics.BatcherOperationFailures.With(metricsHandler).Record(1)
 		logger.Error("Failed to run batch operation due to namespace mismatch", tag.Error(err))
 		return hbd, err
 	}
@@ -116,7 +116,7 @@ func (a *activities) BatchActivity(ctx context.Context, batchParams BatchParams)
 				Query: batchParams.Query,
 			})
 			if err != nil {
-				metricsHandler.Counter(metrics.BatcherOperationFailures.Name()).Record(1)
+				metrics.BatcherOperationFailures.With(metricsHandler).Record(1)
 				logger.Error("Failed to get estimate workflow count", tag.Error(err))
 				return HeartBeatDetails{}, err
 			}
@@ -144,7 +144,7 @@ func (a *activities) BatchActivity(ctx context.Context, batchParams BatchParams)
 				Query:         batchParams.Query,
 			})
 			if err != nil {
-				metricsHandler.Counter(metrics.BatcherOperationFailures.Name()).Record(1)
+				metrics.BatcherOperationFailures.With(metricsHandler).Record(1)
 				logger.Error("Failed to list workflow executions", tag.Error(err))
 				return HeartBeatDetails{}, err
 			}
@@ -183,7 +183,7 @@ func (a *activities) BatchActivity(ctx context.Context, batchParams BatchParams)
 					break Loop
 				}
 			case <-ctx.Done():
-				metricsHandler.Counter(metrics.BatcherOperationFailures.Name()).Record(1)
+				metrics.BatcherOperationFailures.With(metricsHandler).Record(1)
 				logger.Error("Failed to complete batch operation", tag.Error(ctx.Err()))
 				return HeartBeatDetails{}, ctx.Err()
 			}
@@ -321,7 +321,7 @@ func startTaskProcessor(
 					})
 			}
 			if err != nil {
-				metricsHandler.Counter(metrics.BatcherProcessorFailures.Name()).Record(1)
+				metrics.BatcherProcessorFailures.With(metricsHandler).Record(1)
 				logger.Error("Failed to process batch operation task", tag.Error(err))
 
 				_, ok := batchParams._nonRetryableErrors[err.Error()]
@@ -333,7 +333,7 @@ func startTaskProcessor(
 					taskCh <- task
 				}
 			} else {
-				metricsHandler.Counter(metrics.BatcherProcessorSuccess.Name()).Record(1)
+				metrics.BatcherProcessorSuccess.With(metricsHandler).Record(1)
 				respCh <- nil
 			}
 		}

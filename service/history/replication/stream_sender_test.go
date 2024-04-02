@@ -25,6 +25,7 @@
 package replication
 
 import (
+	"errors"
 	"math"
 	"math/rand"
 	"testing"
@@ -422,4 +423,30 @@ func (s *streamSenderSuite) TestRecvEventLoop_Panic_ShouldCaptureAsError() {
 	s.streamSender.shutdownChan = nil // mimic nil pointer panic
 	err := s.streamSender.recvEventLoop()
 	s.Error(err) // panic is captured as error
+}
+
+func (s *streamSenderSuite) TestSendEventLoop_StreamSendError_ShouldReturnStreamError() {
+	beginInclusiveWatermark := rand.Int63()
+	endExclusiveWatermark := beginInclusiveWatermark
+
+	s.server.EXPECT().Send(gomock.Any()).DoAndReturn(func(resp *historyservice.StreamWorkflowReplicationMessagesResponse) error {
+		s.Equal(endExclusiveWatermark, resp.GetMessages().ExclusiveHighWatermark)
+		s.NotNil(resp.GetMessages().ExclusiveHighWatermarkTime)
+		return errors.New("rpc error")
+	})
+
+	err := s.streamSender.sendTasks(
+		beginInclusiveWatermark,
+		endExclusiveWatermark,
+	)
+	s.Error(err, "rpc error")
+	s.IsType(&StreamError{}, err)
+}
+
+func (s *streamSenderSuite) TestRecvEventLoop_RpcError_ShouldReturnStreamError() {
+	s.server.EXPECT().Recv().Return(nil, errors.New("rpc error"))
+	err := s.streamSender.recvEventLoop()
+	s.Error(err)
+	s.Error(err, "rpc error")
+	s.IsType(&StreamError{}, err)
 }

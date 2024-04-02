@@ -55,13 +55,17 @@ import (
 	"go.temporal.io/server/service/history/configs"
 	"go.temporal.io/server/service/history/consts"
 	"go.temporal.io/server/service/history/events"
+	"go.temporal.io/server/service/history/hsm"
 	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/workflow"
 	"go.temporal.io/server/service/history/workflow/cache"
+
+	"go.temporal.io/server/plugins/callbacks"
 )
 
 var Module = fx.Options(
 	resource.Module,
+	fx.Provide(hsm.NewRegistry),
 	workflow.Module,
 	shard.Module,
 	events.Module,
@@ -84,6 +88,8 @@ var Module = fx.Options(
 	fx.Provide(HandlerProvider),
 	fx.Provide(ServiceProvider),
 	fx.Invoke(ServiceLifetimeHooks),
+
+	callbacks.Module,
 )
 
 func ServiceProvider(

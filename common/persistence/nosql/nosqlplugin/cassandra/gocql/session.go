@@ -32,7 +32,6 @@ import (
 	"time"
 
 	"github.com/gocql/gocql"
-
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
@@ -69,7 +68,7 @@ func NewSession(
 	metricsHandler metrics.Handler,
 ) (*session, error) {
 
-	gocqlSession, err := initSession(newClusterConfigFunc, metricsHandler)
+	gocqlSession, err := initSession(logger, newClusterConfigFunc, metricsHandler)
 	if err != nil {
 		return nil, err
 	}
@@ -98,15 +97,15 @@ func (s *session) refresh() {
 		s.logger.Warn("gocql wrapper: did not refresh gocql session because the last refresh was too close",
 			tag.NewDurationTag("min_refresh_interval_seconds", sessionRefreshMinInternal))
 		handler := s.metricsHandler.WithTags(metrics.FailureTag(refreshThrottleTagValue))
-		handler.Counter(metrics.CassandraSessionRefreshFailures.Name()).Record(1)
+		metrics.CassandraSessionRefreshFailures.With(handler).Record(1)
 		return
 	}
 
-	newSession, err := initSession(s.newClusterConfigFunc, s.metricsHandler)
+	newSession, err := initSession(s.logger, s.newClusterConfigFunc, s.metricsHandler)
 	if err != nil {
 		s.logger.Error("gocql wrapper: unable to refresh gocql session", tag.Error(err))
 		handler := s.metricsHandler.WithTags(metrics.FailureTag(refreshErrorTagValue))
-		handler.Counter(metrics.CassandraSessionRefreshFailures.Name()).Record(1)
+		metrics.CassandraSessionRefreshFailures.With(handler).Record(1)
 		return
 	}
 
@@ -118,16 +117,18 @@ func (s *session) refresh() {
 }
 
 func initSession(
+	logger log.Logger,
 	newClusterConfigFunc func() (*gocql.ClusterConfig, error),
 	metricsHandler metrics.Handler,
-) (*gocql.Session, error) {
+) (gs *gocql.Session, retErr error) {
+	defer log.CapturePanic(logger, &retErr)
 	cluster, err := newClusterConfigFunc()
 	if err != nil {
 		return nil, err
 	}
 	start := time.Now()
 	defer func() {
-		metricsHandler.Timer(metrics.CassandraInitSessionLatency.Name()).Record(time.Since(start))
+		metrics.CassandraInitSessionLatency.With(metricsHandler).Record(time.Since(start))
 	}()
 	return cluster.CreateSession()
 }

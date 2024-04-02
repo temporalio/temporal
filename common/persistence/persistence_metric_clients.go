@@ -31,6 +31,8 @@ import (
 
 	commonpb "go.temporal.io/api/common/v1"
 	"go.temporal.io/api/serviceerror"
+
+	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common/headers"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
@@ -79,6 +81,12 @@ type (
 		healthSignals HealthSignalAggregator
 		persistence   Queue
 	}
+
+	nexusIncomingServicePersistenceClient struct {
+		metricEmitter
+		healthSignals HealthSignalAggregator
+		persistence   NexusIncomingServiceManager
+	}
 )
 
 var _ ShardManager = (*shardPersistenceClient)(nil)
@@ -87,6 +95,7 @@ var _ TaskManager = (*taskPersistenceClient)(nil)
 var _ MetadataManager = (*metadataPersistenceClient)(nil)
 var _ ClusterMetadataManager = (*clusterMetadataPersistenceClient)(nil)
 var _ Queue = (*queuePersistenceClient)(nil)
+var _ NexusIncomingServiceManager = (*nexusIncomingServicePersistenceClient)(nil)
 
 // NewShardPersistenceMetricsClient creates a client to manage shards
 func NewShardPersistenceMetricsClient(persistence ShardManager, metricsHandler metrics.Handler, healthSignals HealthSignalAggregator, logger log.Logger) ShardManager {
@@ -151,6 +160,18 @@ func NewClusterMetadataPersistenceMetricsClient(persistence ClusterMetadataManag
 // NewQueuePersistenceMetricsClient creates a client to manage queue
 func NewQueuePersistenceMetricsClient(persistence Queue, metricsHandler metrics.Handler, healthSignals HealthSignalAggregator, logger log.Logger) Queue {
 	return &queuePersistenceClient{
+		metricEmitter: metricEmitter{
+			metricsHandler: metricsHandler,
+			logger:         logger,
+		},
+		healthSignals: healthSignals,
+		persistence:   persistence,
+	}
+}
+
+// NewNexusIncomingServicePersistenceMetricsClient creates a NexusIncomingServiceManager to manage nexus services
+func NewNexusIncomingServicePersistenceMetricsClient(persistence NexusIncomingServiceManager, metricsHandler metrics.Handler, healthSignals HealthSignalAggregator, logger log.Logger) NexusIncomingServiceManager {
+	return &nexusIncomingServicePersistenceClient{
 		metricEmitter: metricEmitter{
 			metricsHandler: metricsHandler,
 			logger:         logger,
@@ -362,6 +383,8 @@ func (p *executionPersistenceClient) GetHistoryTasks(
 		operation = metrics.PersistenceGetReplicationTasksScope
 	case tasks.CategoryIDArchival:
 		operation = metrics.PersistenceGetArchivalTasksScope
+	case tasks.CategoryIDOutbound:
+		operation = metrics.PersistenceGetOutboundTasksScope
 	default:
 		return nil, serviceerror.NewInternal(fmt.Sprintf("unknown task category type: %v", request.TaskCategory))
 	}
@@ -391,6 +414,8 @@ func (p *executionPersistenceClient) CompleteHistoryTask(
 		operation = metrics.PersistenceCompleteReplicationTaskScope
 	case tasks.CategoryIDArchival:
 		operation = metrics.PersistenceCompleteArchivalTaskScope
+	case tasks.CategoryIDOutbound:
+		operation = metrics.PersistenceCompleteOutboundTasksScope
 	default:
 		return serviceerror.NewInternal(fmt.Sprintf("unknown task category type: %v", request.TaskCategory))
 	}
@@ -420,6 +445,8 @@ func (p *executionPersistenceClient) RangeCompleteHistoryTasks(
 		operation = metrics.PersistenceRangeCompleteReplicationTasksScope
 	case tasks.CategoryIDArchival:
 		operation = metrics.PersistenceRangeCompleteArchivalTasksScope
+	case tasks.CategoryIDOutbound:
+		operation = metrics.PersistenceRangeCompleteOutboundTasksScope
 	default:
 		return serviceerror.NewInternal(fmt.Sprintf("unknown task category type: %v", request.TaskCategory))
 	}
@@ -1210,16 +1237,88 @@ func (p *metadataPersistenceClient) InitializeSystemNamespaces(
 	return p.persistence.InitializeSystemNamespaces(ctx, currentClusterName)
 }
 
+func (p *nexusIncomingServicePersistenceClient) GetName() string {
+	return p.persistence.GetName()
+}
+
+func (p *nexusIncomingServicePersistenceClient) Close() {
+	p.persistence.Close()
+}
+
+func (p *nexusIncomingServicePersistenceClient) GetNexusIncomingServicesTableVersion(
+	ctx context.Context,
+) (_ int64, retErr error) {
+	caller := headers.GetCallerInfo(ctx).CallerName
+	startTime := time.Now().UTC()
+	defer func() {
+		p.healthSignals.Record(CallerSegmentMissing, caller, time.Since(startTime), retErr)
+		p.recordRequestMetrics(metrics.PersistenceListNexusIncomingServicesScope, caller, time.Since(startTime), retErr)
+	}()
+	return p.persistence.GetNexusIncomingServicesTableVersion(ctx)
+}
+
+func (p *nexusIncomingServicePersistenceClient) GetNexusIncomingService(
+	ctx context.Context,
+	request *GetNexusIncomingServiceRequest,
+) (_ *persistencespb.NexusIncomingServiceEntry, retErr error) {
+	caller := headers.GetCallerInfo(ctx).CallerName
+	startTime := time.Now().UTC()
+	defer func() {
+		p.healthSignals.Record(CallerSegmentMissing, caller, time.Since(startTime), retErr)
+		p.recordRequestMetrics(metrics.PersistenceGetNexusIncomingServiceScope, caller, time.Since(startTime), retErr)
+	}()
+	return p.persistence.GetNexusIncomingService(ctx, request)
+}
+
+func (p *nexusIncomingServicePersistenceClient) ListNexusIncomingServices(
+	ctx context.Context,
+	request *ListNexusIncomingServicesRequest,
+) (_ *ListNexusIncomingServicesResponse, retErr error) {
+	caller := headers.GetCallerInfo(ctx).CallerName
+	startTime := time.Now().UTC()
+	defer func() {
+		p.healthSignals.Record(CallerSegmentMissing, caller, time.Since(startTime), retErr)
+		p.recordRequestMetrics(metrics.PersistenceListNexusIncomingServicesScope, caller, time.Since(startTime), retErr)
+	}()
+	return p.persistence.ListNexusIncomingServices(ctx, request)
+}
+
+func (p *nexusIncomingServicePersistenceClient) CreateOrUpdateNexusIncomingService(
+	ctx context.Context,
+	request *CreateOrUpdateNexusIncomingServiceRequest,
+) (_ *CreateOrUpdateNexusIncomingServiceResponse, retErr error) {
+	caller := headers.GetCallerInfo(ctx).CallerName
+	startTime := time.Now().UTC()
+	defer func() {
+		p.healthSignals.Record(CallerSegmentMissing, caller, time.Since(startTime), retErr)
+		p.recordRequestMetrics(metrics.PersistenceCreateOrUpdateNexusIncomingServiceScope, caller, time.Since(startTime), retErr)
+	}()
+	return p.persistence.CreateOrUpdateNexusIncomingService(ctx, request)
+}
+
+func (p *nexusIncomingServicePersistenceClient) DeleteNexusIncomingService(
+	ctx context.Context,
+	request *DeleteNexusIncomingServiceRequest,
+) (retErr error) {
+	caller := headers.GetCallerInfo(ctx).CallerName
+	startTime := time.Now().UTC()
+	defer func() {
+		p.healthSignals.Record(CallerSegmentMissing, caller, time.Since(startTime), retErr)
+		p.recordRequestMetrics(metrics.PersistenceDeleteNexusIncomingServiceScope, caller, time.Since(startTime), retErr)
+	}()
+	return p.persistence.DeleteNexusIncomingService(ctx, request)
+}
+
 func (p *metricEmitter) recordRequestMetrics(operation string, caller string, latency time.Duration, err error) {
 	handler := p.metricsHandler.WithTags(metrics.OperationTag(operation), metrics.NamespaceTag(caller))
-	handler.Counter(metrics.PersistenceRequests.Name()).Record(1)
-	handler.Timer(metrics.PersistenceLatency.Name()).Record(latency)
+	metrics.PersistenceRequests.With(handler).Record(1)
+	metrics.PersistenceLatency.With(handler).Record(latency)
 	updateErrorMetric(handler, p.logger, operation, err)
 }
 
 func updateErrorMetric(handler metrics.Handler, logger log.Logger, operation string, err error) {
 	if err != nil {
-		handler.Counter(metrics.PersistenceErrorWithType.Name()).Record(1, metrics.ServiceErrorTypeTag(err))
+		metrics.PersistenceErrorWithType.With(handler).Record(1, metrics.ServiceErrorTypeTag(err))
 		switch err := err.(type) {
 		case *ShardAlreadyExistError,
 			*ShardOwnershipLostError,
@@ -1235,10 +1334,10 @@ func updateErrorMetric(handler metrics.Handler, logger log.Logger, operation str
 			// no-op
 
 		case *serviceerror.ResourceExhausted:
-			handler.Counter(metrics.PersistenceErrResourceExhaustedCounter.Name()).Record(1, metrics.ResourceExhaustedCauseTag(err.Cause))
+			metrics.PersistenceErrResourceExhaustedCounter.With(handler).Record(1, metrics.ResourceExhaustedCauseTag(err.Cause))
 		default:
 			logger.Error("Operation failed with internal error.", tag.Error(err), tag.Operation(operation))
-			handler.Counter(metrics.PersistenceFailures.Name()).Record(1)
+			metrics.PersistenceFailures.With(handler).Record(1)
 		}
 	}
 }

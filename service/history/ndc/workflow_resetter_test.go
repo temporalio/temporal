@@ -606,6 +606,7 @@ func (s *workflowResetterSuite) TestReapplyContinueAsNewWorkflowEvents_WithOutCo
 		baseBranchToken,
 		baseFirstEventID,
 		baseNextEventID,
+		nil,
 	)
 	s.NoError(err)
 	s.Equal(s.baseRunID, lastVisitedRunID)
@@ -723,6 +724,7 @@ func (s *workflowResetterSuite) TestReapplyContinueAsNewWorkflowEvents_WithConti
 		baseBranchToken,
 		baseFirstEventID,
 		baseNextEventID,
+		nil,
 	)
 	s.NoError(err)
 	s.Equal(newRunID, lastVisitedRunID)
@@ -783,6 +785,7 @@ func (s *workflowResetterSuite) TestReapplyWorkflowEvents() {
 		firstEventID,
 		nextEventID,
 		branchToken,
+		nil,
 	)
 	s.NoError(err)
 	s.Equal(newRunID, nextRunID)
@@ -831,7 +834,7 @@ func (s *workflowResetterSuite) TestReapplyEvents() {
 		}
 	}
 
-	err := s.workflowResetter.reapplyEvents(mutableState, events)
+	err := reapplyEvents(mutableState, events, nil)
 	s.NoError(err)
 }
 

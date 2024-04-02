@@ -84,7 +84,7 @@ func (s *HandlerTestSuite) TestValidateSetupConfig() {
 	config.SchemaFilePath = "/tmp/foo.cql"
 	s.assertValidateSetupSucceeds(config, s.db)
 
-	config.SchemaName = "mysql/v57/temporal"
+	config.SchemaName = "mysql/v8/temporal"
 	s.assertValidateSetupFails(config, s.db)
 	config.SchemaFilePath = ""
 	s.assertValidateSetupSucceeds(config, s.db)
@@ -116,7 +116,7 @@ func (s *HandlerTestSuite) TestValidateUpdateConfig() {
 	s.assertValidateUpdateSucceeds(config, s.db)
 	s.Equal("1.2", config.TargetVersion)
 
-	config.SchemaName = "mysql/v57/temporal"
+	config.SchemaName = "mysql/v8/temporal"
 	s.assertValidateUpdateFails(config, s.db)
 	config.SchemaDir = ""
 	s.assertValidateUpdateSucceeds(config, s.db)

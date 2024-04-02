@@ -99,6 +99,10 @@ func TestGetMethodMetadata(t *testing.T) {
 	assert.Equal(t, ScopeNamespace, md.Scope)
 	assert.Equal(t, AccessWrite, md.Access)
 
+	md = GetMethodMetadata("/temporal.api.nexusservice.v1.NexusService/DispatchNexusTask")
+	assert.Equal(t, ScopeNamespace, md.Scope)
+	assert.Equal(t, AccessWrite, md.Access)
+
 	// all AdminService is cluster/admin
 	md = GetMethodMetadata("/temporal.server.api.adminservice.v1.AdminService/CloseShard")
 	assert.Equal(t, ScopeCluster, md.Scope)

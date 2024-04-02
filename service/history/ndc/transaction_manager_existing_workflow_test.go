@@ -35,6 +35,7 @@ import (
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence"
+	"go.temporal.io/server/service/history/hsm"
 	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/workflow"
 	wcache "go.temporal.io/server/service/history/workflow/cache"
@@ -64,6 +65,11 @@ func (s *transactionMgrForExistingWorkflowSuite) SetupTest() {
 	s.controller = gomock.NewController(s.T())
 	s.mockTransactionMgr = NewMockTransactionManager(s.controller)
 	s.mockShard = shard.NewMockContext(s.controller)
+
+	reg := hsm.NewRegistry()
+	err := workflow.RegisterStateMachine(reg)
+	s.NoError(err)
+	s.mockShard.EXPECT().StateMachineRegistry().Return(reg).AnyTimes()
 
 	s.updateMgr = newNDCTransactionMgrForExistingWorkflow(s.mockShard, s.mockTransactionMgr, false)
 }

@@ -58,7 +58,7 @@ const (
 		`PRIMARY KEY (version_partition, year, month, update_time));`
 
 	// NOTE: we have to use %v because somehow mysql doesn't work with ? here
-	createDatabaseQuery = "CREATE DATABASE IF NOT EXISTS %v CHARACTER SET UTF8"
+	createDatabaseQuery = "CREATE DATABASE IF NOT EXISTS %v CHARACTER SET utf8mb4"
 
 	dropDatabaseQuery = "DROP DATABASE IF EXISTS %v"
 

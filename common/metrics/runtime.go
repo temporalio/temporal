@@ -89,26 +89,26 @@ func (r *RuntimeMetricsReporter) report() {
 	var memStats runtime.MemStats
 	runtime.ReadMemStats(&memStats)
 
-	r.handler.Gauge(NumGoRoutinesGauge).Record(float64(runtime.NumGoroutine()))
-	r.handler.Gauge(GoMaxProcsGauge).Record(float64(runtime.GOMAXPROCS(0)))
-	r.handler.Gauge(MemoryAllocatedGauge).Record(float64(memStats.Alloc))
-	r.handler.Gauge(MemoryHeapGauge).Record(float64(memStats.HeapAlloc))
-	r.handler.Gauge(MemoryHeapIdleGauge).Record(float64(memStats.HeapIdle))
-	r.handler.Gauge(MemoryHeapInuseGauge).Record(float64(memStats.HeapInuse))
-	r.handler.Gauge(MemoryStackGauge).Record(float64(memStats.StackInuse))
+	NumGoRoutinesGauge.With(r.handler).Record(float64(runtime.NumGoroutine()))
+	GoMaxProcsGauge.With(r.handler).Record(float64(runtime.GOMAXPROCS(0)))
+	MemoryAllocatedGauge.With(r.handler).Record(float64(memStats.Alloc))
+	MemoryHeapGauge.With(r.handler).Record(float64(memStats.HeapAlloc))
+	MemoryHeapIdleGauge.With(r.handler).Record(float64(memStats.HeapIdle))
+	MemoryHeapInuseGauge.With(r.handler).Record(float64(memStats.HeapInuse))
+	MemoryStackGauge.With(r.handler).Record(float64(memStats.StackInuse))
 
 	// memStats.NumGC is a perpetually incrementing counter (unless it wraps at 2^32)
 	num := memStats.NumGC
 	lastNum := atomic.SwapUint32(&r.lastNumGC, num) // reset for the next iteration
 	if delta := num - lastNum; delta > 0 {
-		r.handler.Histogram(NumGCCounter, Bytes).Record(int64(delta))
+		NumGCCounter.With(r.handler).Record(int64(delta))
 		if delta > 255 {
 			// too many GCs happened, the timestamps buffer got wrapped around. Report only the last 256
 			lastNum = num - 256
 		}
 		for i := lastNum; i != num; i++ {
 			pause := memStats.PauseNs[i%256]
-			r.handler.Timer(GcPauseMsTimer).Record(time.Duration(pause))
+			GcPauseMsTimer.With(r.handler).Record(time.Duration(pause))
 		}
 	}
 

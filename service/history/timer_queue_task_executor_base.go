@@ -26,20 +26,21 @@ package history
 
 import (
 	"context"
+	"fmt"
 
 	commonpb "go.temporal.io/api/common/v1"
 	"go.temporal.io/api/serviceerror"
 
 	enumsspb "go.temporal.io/server/api/enums/v1"
-	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/resource"
 	"go.temporal.io/server/service/history/configs"
-	"go.temporal.io/server/service/history/consts"
 	"go.temporal.io/server/service/history/deletemanager"
+	"go.temporal.io/server/service/history/hsm"
+	"go.temporal.io/server/service/history/queues"
 	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/tasks"
 	"go.temporal.io/server/service/history/workflow"
@@ -47,20 +48,16 @@ import (
 )
 
 var (
-	errUnknownTimerTask = serviceerror.NewInternal("unknown timer task")
-	errNoTimerFired     = serviceerror.NewNotFound("no expired timer to fire found")
+	errNoTimerFired = serviceerror.NewNotFound("no expired timer to fire found")
 )
 
 type (
 	timerQueueTaskExecutorBase struct {
+		taskExecutor
 		currentClusterName string
-		shardContext       shard.Context
 		registry           namespace.Registry
 		deleteManager      deletemanager.DeleteManager
-		cache              wcache.Cache
-		logger             log.Logger
 		matchingRawClient  resource.MatchingRawClient
-		metricHandler      metrics.Handler
 		config             *configs.Config
 	}
 )
@@ -71,18 +68,20 @@ func newTimerQueueTaskExecutorBase(
 	deleteManager deletemanager.DeleteManager,
 	matchingRawClient resource.MatchingRawClient,
 	logger log.Logger,
-	metricHandler metrics.Handler,
+	metricsHandler metrics.Handler,
 	config *configs.Config,
 ) *timerQueueTaskExecutorBase {
 	return &timerQueueTaskExecutorBase{
+		taskExecutor: taskExecutor{
+			shardContext:   shardContext,
+			cache:          workflowCache,
+			logger:         logger,
+			metricsHandler: metricsHandler,
+		},
 		currentClusterName: shardContext.GetClusterMetadata().GetCurrentClusterName(),
-		shardContext:       shardContext,
 		registry:           shardContext.GetNamespaceRegistry(),
-		cache:              workflowCache,
 		deleteManager:      deleteManager,
-		logger:             logger,
 		matchingRawClient:  matchingRawClient,
-		metricHandler:      metricHandler,
 		config:             config,
 	}
 }
@@ -111,7 +110,7 @@ func (t *timerQueueTaskExecutorBase) executeDeleteHistoryEventTask(
 	}
 	defer func() { release(retError) }()
 
-	mutableState, err := loadMutableStateForTimerTask(ctx, t.shardContext, weContext, task, t.metricHandler, t.logger)
+	mutableState, err := loadMutableStateForTimerTask(ctx, t.shardContext, weContext, task, t.metricsHandler, t.logger)
 	switch err.(type) {
 	case nil:
 		if mutableState == nil {
@@ -150,53 +149,6 @@ func (t *timerQueueTaskExecutorBase) executeDeleteHistoryEventTask(
 	)
 }
 
-func getWorkflowExecutionContextForTask(
-	ctx context.Context,
-	shardContext shard.Context,
-	workflowCache wcache.Cache,
-	task tasks.Task,
-) (workflow.Context, wcache.ReleaseCacheFunc, error) {
-	namespaceID, execution := getTaskNamespaceIDAndWorkflowExecution(task)
-	return getWorkflowExecutionContext(
-		ctx,
-		shardContext,
-		workflowCache,
-		namespaceID,
-		execution,
-	)
-}
-
-func getWorkflowExecutionContext(
-	ctx context.Context,
-	shardContext shard.Context,
-	workflowCache wcache.Cache,
-	namespaceID namespace.ID,
-	execution *commonpb.WorkflowExecution,
-) (workflow.Context, wcache.ReleaseCacheFunc, error) {
-	// workflowCache will automatically use short context timeout when
-	// locking workflow for all background calls, we don't need a separate context here
-	weContext, release, err := workflowCache.GetOrCreateWorkflowExecution(
-		ctx,
-		shardContext,
-		namespaceID,
-		execution,
-		workflow.LockPriorityLow,
-	)
-	if common.IsContextDeadlineExceededErr(err) {
-		err = consts.ErrResourceExhaustedBusyWorkflow
-	}
-	return weContext, release, err
-}
-
-func getTaskNamespaceIDAndWorkflowExecution(
-	task tasks.Task,
-) (namespace.ID, *commonpb.WorkflowExecution) {
-	return namespace.ID(task.GetNamespaceID()), &commonpb.WorkflowExecution{
-		WorkflowId: task.GetWorkflowID(),
-		RunId:      task.GetRunID(),
-	}
-}
-
 func (t *timerQueueTaskExecutorBase) deleteHistoryBranch(
 	ctx context.Context,
 	branchToken []byte,
@@ -208,4 +160,27 @@ func (t *timerQueueTaskExecutorBase) deleteHistoryBranch(
 		})
 	}
 	return nil
+}
+
+func (t *timerQueueTaskExecutorBase) stateMachineTask(task tasks.Task) (hsm.Ref, hsm.Task, bool, error) {
+	cbt, ok := task.(*tasks.StateMachineTimerTask)
+	if !ok {
+		return hsm.Ref{}, nil, false, nil
+	}
+	def, ok := t.shardContext.StateMachineRegistry().TaskSerializer(cbt.Info.Type)
+	if !ok {
+		return hsm.Ref{}, nil, true, queues.NewUnprocessableTaskError(fmt.Sprintf("deserializer not registered for task type %v", cbt.Info.Type))
+	}
+	smt, err := def.Deserialize(cbt.Info.Data, hsm.TaskKindTimer{Deadline: cbt.VisibilityTimestamp})
+	if err != nil {
+		return hsm.Ref{}, nil, true, fmt.Errorf(
+			"%w: %w",
+			queues.NewUnprocessableTaskError(fmt.Sprintf("cannot deserialize task %v", cbt.Info.Type)),
+			err,
+		)
+	}
+	return hsm.Ref{
+		WorkflowKey:     taskWorkflowKey(task),
+		StateMachineRef: cbt.Info.Ref,
+	}, smt, true, nil
 }

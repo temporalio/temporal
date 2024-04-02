@@ -81,7 +81,8 @@ func (s *quotasSuite) TestAPIs() {
 	var service matchingservice.MatchingServiceServer
 	apiToPriority := make(map[string]int)
 	temporalapi.WalkExportedMethods(&service, func(m reflect.Method) {
-		apiToPriority[m.Name] = APIToPriority[m.Name]
+		fullName := "/temporal.server.api.matchingservice.v1.MatchingService/" + m.Name
+		apiToPriority[fullName] = APIToPriority[fullName]
 	})
 	s.Equal(apiToPriority, APIToPriority)
 }
@@ -92,7 +93,7 @@ func (s *quotasSuite) TestOperatorPrioritized() {
 	limiter := NewPriorityRateLimiter(rateFn, operatorRPSRatioFn)
 
 	operatorRequest := quotas.NewRequest(
-		"QueryWorkflow",
+		"/temporal.server.api.matchingservice.v1.MatchingService/QueryWorkflow",
 		1,
 		"",
 		headers.CallerTypeOperator,
@@ -100,7 +101,7 @@ func (s *quotasSuite) TestOperatorPrioritized() {
 		"")
 
 	apiRequest := quotas.NewRequest(
-		"QueryWorkflow",
+		"/temporal.server.api.matchingservice.v1.MatchingService/QueryWorkflow",
 		1,
 		"",
 		headers.CallerTypeAPI,

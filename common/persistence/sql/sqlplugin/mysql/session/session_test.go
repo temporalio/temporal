@@ -25,6 +25,7 @@
 package session
 
 import (
+	"fmt"
 	"net/url"
 	"strings"
 	"testing"
@@ -33,6 +34,7 @@ import (
 	"github.com/stretchr/testify/suite"
 
 	"go.temporal.io/server/common/config"
+	"go.temporal.io/server/common/persistence/sql/sqlplugin"
 	"go.temporal.io/server/common/resolver"
 )
 
@@ -66,12 +68,15 @@ func (s *sessionTestSuite) TearDownTest() {
 
 func (s *sessionTestSuite) TestBuildDSN() {
 	testCases := []struct {
-		in              config.SQL
-		outURLPath      string
-		outIsolationKey string
-		outIsolationVal string
+		name                string
+		in                  config.SQL
+		outURLPath          string
+		outIsolationKey     string
+		outIsolationVal     string
+		expectInvalidConfig bool
 	}{
 		{
+			name: "no connect attributes",
 			in: config.SQL{
 				User:            "test",
 				Password:        "pass",
@@ -84,6 +89,7 @@ func (s *sessionTestSuite) TestBuildDSN() {
 			outURLPath:      "test:pass@tcp(192.168.0.1:3306)/db1?",
 		},
 		{
+			name: "with connect attributes",
 			in: config.SQL{
 				User:              "test",
 				Password:          "pass",
@@ -97,6 +103,7 @@ func (s *sessionTestSuite) TestBuildDSN() {
 			outURLPath:      "test:pass@tcp(192.168.0.1:3306)/db1?",
 		},
 		{
+			name: "override isolation level (quoted, shorthand)",
 			in: config.SQL{
 				User:              "test",
 				Password:          "pass",
@@ -110,6 +117,7 @@ func (s *sessionTestSuite) TestBuildDSN() {
 			outURLPath:      "test:pass@tcp(192.168.0.1:3306)/db1?",
 		},
 		{
+			name: "override isolation level (unquoted, shorthand)",
 			in: config.SQL{
 				User:              "test",
 				Password:          "pass",
@@ -123,6 +131,7 @@ func (s *sessionTestSuite) TestBuildDSN() {
 			outURLPath:      "test:pass@tcp(192.168.0.1:3306)/db1?",
 		},
 		{
+			name: "override isolation level (unquoted, full name)",
 			in: config.SQL{
 				User:              "test",
 				Password:          "pass",
@@ -137,19 +146,43 @@ func (s *sessionTestSuite) TestBuildDSN() {
 		},
 	}
 
-	for _, tc := range testCases {
-		r := resolver.NewMockServiceResolver(s.controller)
-		r.EXPECT().Resolve(tc.in.ConnectAddr).Return([]string{tc.in.ConnectAddr})
+	for _, dbKind := range []sqlplugin.DbKind{sqlplugin.DbKindMain, sqlplugin.DbKindVisibility} {
+		for _, tc := range testCases {
+			s.Run(fmt.Sprintf("%s: %s", dbKind.String(), tc.name), func() {
+				r := resolver.NewMockServiceResolver(s.controller)
+				r.EXPECT().Resolve(tc.in.ConnectAddr).Return([]string{tc.in.ConnectAddr})
 
-		out := buildDSN(&tc.in, r)
-		s.True(strings.HasPrefix(out, tc.outURLPath), "invalid url path")
-		tokens := strings.Split(out, "?")
-		s.Equal(2, len(tokens), "invalid url")
-		qry, err := url.Parse("?" + tokens[1])
-		s.NoError(err)
-		wantAttrs := buildExpectedURLParams(tc.in.ConnectAttributes, tc.outIsolationKey, tc.outIsolationVal)
-		s.Equal(wantAttrs, qry.Query(), "invalid dsn url params")
+				out, err := buildDSN(dbKind, &tc.in, r)
+				if tc.expectInvalidConfig {
+					s.Error(err, "Expected an invalid configuration error")
+				} else {
+					s.NoError(err)
+				}
+				s.True(strings.HasPrefix(out, tc.outURLPath), "invalid url path")
+				tokens := strings.Split(out, "?")
+				s.Equal(2, len(tokens), "invalid url")
+				qry, err := url.Parse("?" + tokens[1])
+				s.NoError(err)
+				wantAttrs := buildExpectedURLParams(tc.in.ConnectAttributes, tc.outIsolationKey, tc.outIsolationVal)
+				s.Equal(wantAttrs, qry.Query(), "invalid dsn url params")
+			})
+		}
 	}
+}
+
+func (s *sessionTestSuite) Test_Visibility_DoesntSupport_interpolateParams() {
+	cfg := config.SQL{
+		User:              "test",
+		Password:          "pass",
+		ConnectProtocol:   "tcp",
+		ConnectAddr:       "192.168.0.1:3306",
+		DatabaseName:      "db1",
+		ConnectAttributes: map[string]string{"interpolateParams": "ignored"},
+	}
+	r := resolver.NewMockServiceResolver(s.controller)
+	r.EXPECT().Resolve(cfg.ConnectAddr).Return([]string{cfg.ConnectAddr})
+	_, err := buildDSN(sqlplugin.DbKindVisibility, &cfg, r)
+	s.Error(err, "We should return an error when a MySQL Visibility database is configured with interpolateParams")
 }
 
 func buildExpectedURLParams(attrs map[string]string, isolationKey string, isolationValue string) url.Values {

@@ -112,6 +112,7 @@ var (
 	ComponentHistoryCache             = component("history-cache")
 	ComponentEventsCache              = component("events-cache")
 	ComponentTransferQueue            = component("transfer-queue-processor")
+	ComponentOutboundQueue            = component("outbound-queue-processor")
 	ComponentVisibilityQueue          = component("visibility-queue-processor")
 	ComponentArchivalQueue            = component("archival-queue-processor")
 	ComponentTimerQueue               = component("timer-queue-processor")

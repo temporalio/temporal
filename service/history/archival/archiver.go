@@ -22,7 +22,7 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-//go:generate mockgen -copyright_file ../../../LICENSE -package $GOPACKAGE -source $GOFILE -destination archiver_mock.go
+//go:generate mocksync -copyright_file ../../../LICENSE -package $GOPACKAGE -source $GOFILE -destination archiver_mock.go
 
 package archival
 
@@ -154,7 +154,7 @@ func (a *archiver) Archive(ctx context.Context, request *Request) (res *Response
 			logger.Warn("failed to archive workflow", tag.Error(err))
 		}
 
-		metricsScope.Timer(metrics.ArchiverArchiveLatency.Name()).
+		metrics.ArchiverArchiveLatency.With(metricsScope).
 			Record(time.Since(start), metrics.StringTag("status", status))
 	}(time.Now())
 
@@ -286,6 +286,6 @@ func (a *archiver) recordArchiveTargetResult(logger log.Logger, startTime time.T
 		metrics.StringTag("target", string(target)),
 		metrics.StringTag("status", status),
 	}
-	latency := metrics.ArchiverArchiveTargetLatency.Name()
-	a.metricsHandler.Timer(latency).Record(duration, tags...)
+
+	metrics.ArchiverArchiveTargetLatency.With(a.metricsHandler).Record(duration, tags...)
 }

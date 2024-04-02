@@ -181,14 +181,13 @@ func (s *ClientFunctionalSuite) TestQueryWorkflow_QueryWhileBackoff() {
 		historyEvents := s.getHistory(s.namespace, &commonpb.WorkflowExecution{
 			WorkflowId: id,
 		})
-		s.True(len(historyEvents) > 0)
-		startEvent := historyEvents[0]
-		startAttributes := startEvent.GetWorkflowExecutionStartedEventAttributes()
-		s.NotNil(startAttributes)
-		if startAttributes.FirstWorkflowTaskBackoff != nil && startAttributes.FirstWorkflowTaskBackoff.AsDuration() > 0 {
+		if len(historyEvents) == 1 {
+			s.EqualHistoryEvents(`
+  1 WorkflowExecutionStarted {"FirstWorkflowTaskBackoff":{"Seconds":10}}`, historyEvents)
 			findBackoffWorkflow = true
 			break
 		}
+
 		// wait for the retry, which will have backoff
 		time.Sleep(time.Second)
 	}

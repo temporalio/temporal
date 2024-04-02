@@ -72,6 +72,7 @@ func (s *searchAttributesValidatorSuite) TestSearchAttributesValidate() {
 		dynamicconfig.GetIntPropertyFilteredByNamespace(sizeOfTotalLimit),
 		s.mockVisibilityManager,
 		dynamicconfig.GetBoolPropertyFnFilteredByNamespace(true),
+		dynamicconfig.GetBoolPropertyFnFilteredByNamespace(false),
 	)
 
 	namespace := "namespace"
@@ -136,6 +137,33 @@ func (s *searchAttributesValidatorSuite) TestSearchAttributesValidate() {
 	s.Equal("StartTime attribute can't be set in SearchAttributes", err.Error())
 }
 
+func (s *searchAttributesValidatorSuite) TestSearchAttributesValidate_SuppressError() {
+	numOfKeysLimit := 2
+	sizeOfValueLimit := 5
+	sizeOfTotalLimit := 20
+
+	saValidator := NewValidator(
+		NewTestProvider(),
+		NewTestMapperProvider(nil),
+		dynamicconfig.GetIntPropertyFilteredByNamespace(numOfKeysLimit),
+		dynamicconfig.GetIntPropertyFilteredByNamespace(sizeOfValueLimit),
+		dynamicconfig.GetIntPropertyFilteredByNamespace(sizeOfTotalLimit),
+		s.mockVisibilityManager,
+		dynamicconfig.GetBoolPropertyFnFilteredByNamespace(false),
+		dynamicconfig.GetBoolPropertyFnFilteredByNamespace(true),
+	)
+
+	namespace := "namespace"
+	attr := &commonpb.SearchAttributes{
+		IndexedFields: map[string]*commonpb.Payload{
+			"ParentWorkflowId": payload.EncodeString("foo"),
+		},
+	}
+
+	err := saValidator.Validate(attr, namespace)
+	s.NoError(err)
+}
+
 func (s *searchAttributesValidatorSuite) TestSearchAttributesValidate_Mapper() {
 	numOfKeysLimit := 2
 	sizeOfValueLimit := 5
@@ -148,6 +176,7 @@ func (s *searchAttributesValidatorSuite) TestSearchAttributesValidate_Mapper() {
 		dynamicconfig.GetIntPropertyFilteredByNamespace(sizeOfValueLimit),
 		dynamicconfig.GetIntPropertyFilteredByNamespace(sizeOfTotalLimit),
 		s.mockVisibilityManager,
+		dynamicconfig.GetBoolPropertyFnFilteredByNamespace(false),
 		dynamicconfig.GetBoolPropertyFnFilteredByNamespace(false),
 	)
 
@@ -212,6 +241,7 @@ func (s *searchAttributesValidatorSuite) TestSearchAttributesValidateSize() {
 		dynamicconfig.GetIntPropertyFilteredByNamespace(sizeOfTotalLimit),
 		s.mockVisibilityManager,
 		dynamicconfig.GetBoolPropertyFnFilteredByNamespace(false),
+		dynamicconfig.GetBoolPropertyFnFilteredByNamespace(false),
 	)
 
 	namespace := "namespace"
@@ -250,6 +280,7 @@ func (s *searchAttributesValidatorSuite) TestSearchAttributesValidateSize_Mapper
 		dynamicconfig.GetIntPropertyFilteredByNamespace(sizeOfValueLimit),
 		dynamicconfig.GetIntPropertyFilteredByNamespace(sizeOfTotalLimit),
 		s.mockVisibilityManager,
+		dynamicconfig.GetBoolPropertyFnFilteredByNamespace(false),
 		dynamicconfig.GetBoolPropertyFnFilteredByNamespace(false),
 	)
 

@@ -22,7 +22,7 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-//go:generate mockgen -copyright_file ../../../LICENSE -package $GOPACKAGE -source $GOFILE -destination state_rebuilder_mock.go
+//go:generate mocksync -copyright_file ../../../LICENSE -package $GOPACKAGE -source $GOFILE -destination state_rebuilder_mock.go
 
 package ndc
 
@@ -242,6 +242,7 @@ func (r *StateRebuilderImpl) applyEvents(
 		},
 		[][]*historypb.HistoryEvent{events},
 		nil, // no new run history when rebuilding mutable state
+		"",
 	)
 	if err != nil {
 		r.logger.Error("StateRebuilder unable to Rebuild mutable state.", tag.Error(err))

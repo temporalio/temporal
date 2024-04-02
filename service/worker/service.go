@@ -348,7 +348,7 @@ func (s *Service) Start() {
 		tag.ComponentWorker,
 	)
 
-	s.metricsHandler.Counter(metrics.RestartCount).Record(1)
+	metrics.RestartCount.With(s.metricsHandler).Record(1)
 
 	s.clusterMetadata.Start()
 	s.namespaceRegistry.Start()

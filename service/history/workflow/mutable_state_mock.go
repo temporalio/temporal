@@ -34,6 +34,7 @@ import (
 	time "time"
 
 	gomock "github.com/golang/mock/gomock"
+	nexus "github.com/nexus-rpc/sdk-go/nexus"
 	v1 "go.temporal.io/api/command/v1"
 	v10 "go.temporal.io/api/common/v1"
 	v11 "go.temporal.io/api/enums/v1"
@@ -54,6 +55,7 @@ import (
 	namespace "go.temporal.io/server/common/namespace"
 	persistence "go.temporal.io/server/common/persistence"
 	historybuilder "go.temporal.io/server/service/history/historybuilder"
+	hsm "go.temporal.io/server/service/history/hsm"
 	tasks "go.temporal.io/server/service/history/tasks"
 	durationpb "google.golang.org/protobuf/types/known/durationpb"
 	timestamppb "google.golang.org/protobuf/types/known/timestamppb"
@@ -1945,6 +1947,21 @@ func (mr *MockMutableStateMockRecorder) GetNextEventID() *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetNextEventID", reflect.TypeOf((*MockMutableState)(nil).GetNextEventID))
 }
 
+// GetNexusCompletion mocks base method.
+func (m *MockMutableState) GetNexusCompletion(ctx context.Context) (nexus.OperationCompletion, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetNexusCompletion", ctx)
+	ret0, _ := ret[0].(nexus.OperationCompletion)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// GetNexusCompletion indicates an expected call of GetNexusCompletion.
+func (mr *MockMutableStateMockRecorder) GetNexusCompletion(ctx interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetNexusCompletion", reflect.TypeOf((*MockMutableState)(nil).GetNexusCompletion), ctx)
+}
+
 // GetPendingActivityInfos mocks base method.
 func (m *MockMutableState) GetPendingActivityInfos() map[int64]*v112.ActivityInfo {
 	m.ctrl.T.Helper()
@@ -2320,6 +2337,20 @@ func (m *MockMutableState) GetWorkflowType() *v10.WorkflowType {
 func (mr *MockMutableStateMockRecorder) GetWorkflowType() *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetWorkflowType", reflect.TypeOf((*MockMutableState)(nil).GetWorkflowType))
+}
+
+// HSM mocks base method.
+func (m *MockMutableState) HSM() *hsm.Node {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "HSM")
+	ret0, _ := ret[0].(*hsm.Node)
+	return ret0
+}
+
+// HSM indicates an expected call of HSM.
+func (mr *MockMutableStateMockRecorder) HSM() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "HSM", reflect.TypeOf((*MockMutableState)(nil).HSM))
 }
 
 // HadOrHasWorkflowTask mocks base method.

@@ -83,6 +83,14 @@ Enable AWS SDK Logging with config parameter `logLevel`. For example enable debu
 * LogDebugWithDeprecated = 4128 = 0x1020
 
 
+## Permissions
+
+Your s3 user must have at least the following permissions:
+
+* s3:ListBucket
+* s3:GetObject
+* s3:PutObject
+
 ## Using localstack for local development
 1. Install awscli from [here](https://docs.aws.amazon.com/cli/latest/userguide/getting-started-install.html)
 2. Install localstack from [here](https://github.com/localstack/localstack#installing)

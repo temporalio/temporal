@@ -174,7 +174,7 @@ func LoadMutableStateForTask(
 		return mutableState, nil
 	}
 
-	metricsHandler.Counter(metrics.StaleMutableStateCounter.Name()).Record(1)
+	metrics.StaleMutableStateCounter.With(metricsHandler).Record(1)
 	wfContext.Clear()
 
 	mutableState, err = wfContext.LoadMutableState(ctx, shardContext)
@@ -183,7 +183,7 @@ func LoadMutableStateForTask(
 	}
 	// after refresh, still mutable state's next event ID <= task's event ID
 	if eventID >= mutableState.GetNextEventID() {
-		metricsHandler.Counter(metrics.TaskSkipped.Name()).Record(1)
+		metrics.TaskSkipped.With(metricsHandler).Record(1)
 		logger.Info("Task Processor: task event ID >= MS NextEventID, skip.",
 			tag.WorkflowNextEventID(mutableState.GetNextEventID()),
 		)

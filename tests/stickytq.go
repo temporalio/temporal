@@ -151,7 +151,16 @@ WaitForStickyTimeoutLoop:
 		events := s.getHistory(s.namespace, workflowExecution)
 		for _, event := range events {
 			if event.GetEventType() == enumspb.EVENT_TYPE_WORKFLOW_TASK_TIMED_OUT {
-				s.Equal(enumspb.TIMEOUT_TYPE_SCHEDULE_TO_START, event.GetWorkflowTaskTimedOutEventAttributes().GetTimeoutType())
+				s.EqualHistoryEvents(`
+  1 WorkflowExecutionStarted
+  2 WorkflowTaskScheduled
+  3 WorkflowTaskStarted
+  4 WorkflowTaskCompleted
+  5 MarkerRecorded
+  6 WorkflowExecutionSignaled
+  7 WorkflowTaskScheduled
+  8 WorkflowTaskTimedOut {"TimeoutType":2} // enumspb.TIMEOUT_TYPE_SCHEDULE_TO_START
+  9 WorkflowTaskScheduled`, events)
 				stickyTimeout = true
 				break WaitForStickyTimeoutLoop
 			}
@@ -182,34 +191,49 @@ WaitForStickyTimeoutLoop:
 		s.NoError(err)
 	}
 
-	workflowTaskFailed := false
 	events := s.getHistory(s.namespace, workflowExecution)
-	for _, event := range events {
-		if event.GetEventType() == enumspb.EVENT_TYPE_WORKFLOW_TASK_FAILED {
-			workflowTaskFailed = true
-			break
-		}
-	}
-	s.True(workflowTaskFailed)
+	s.EqualHistoryEvents(`
+  1 WorkflowExecutionStarted
+  2 WorkflowTaskScheduled
+  3 WorkflowTaskStarted
+  4 WorkflowTaskCompleted
+  5 MarkerRecorded
+  6 WorkflowExecutionSignaled
+  7 WorkflowTaskScheduled
+  8 WorkflowTaskTimedOut
+  9 WorkflowTaskScheduled
+ 10 WorkflowTaskStarted
+ 11 WorkflowTaskFailed
+ 12 WorkflowExecutionSignaled
+ 13 WorkflowTaskScheduled
+ 14 WorkflowTaskStarted
+ 15 WorkflowTaskFailed`, events)
 
 	// Complete workflow execution
 	_, err = poller.PollAndProcessWorkflowTask(WithDumpHistory, WithRespondSticky, WithExpectedAttemptCount(3))
 	s.NoError(err)
 
-	// Assert for single workflow task failed and workflow completion
-	failedWorkflowTasks := 0
-	workflowComplete := false
 	events = s.getHistory(s.namespace, workflowExecution)
-	for _, event := range events {
-		switch event.GetEventType() {
-		case enumspb.EVENT_TYPE_WORKFLOW_TASK_FAILED:
-			failedWorkflowTasks++
-		case enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_COMPLETED:
-			workflowComplete = true
-		}
-	}
-	s.True(workflowComplete, "Workflow not complete")
-	s.Equal(2, failedWorkflowTasks, "Mismatched failed workflow tasks count")
+	s.EqualHistoryEvents(`
+  1 WorkflowExecutionStarted
+  2 WorkflowTaskScheduled
+  3 WorkflowTaskStarted
+  4 WorkflowTaskCompleted
+  5 MarkerRecorded
+  6 WorkflowExecutionSignaled
+  7 WorkflowTaskScheduled
+  8 WorkflowTaskTimedOut
+  9 WorkflowTaskScheduled
+ 10 WorkflowTaskStarted
+ 11 WorkflowTaskFailed  // Two WFTs have failed
+ 12 WorkflowExecutionSignaled
+ 13 WorkflowTaskScheduled
+ 14 WorkflowTaskStarted
+ 15 WorkflowTaskFailed // Two WFTs have failed
+ 16 WorkflowTaskScheduled
+ 17 WorkflowTaskStarted
+ 18 WorkflowTaskCompleted
+ 19 WorkflowExecutionCompleted // Workflow has completed`, events)
 }
 
 func (s *FunctionalSuite) TestStickyTaskqueueResetThenTimeout() {
@@ -317,7 +341,16 @@ WaitForStickyTimeoutLoop:
 		events := s.getHistory(s.namespace, workflowExecution)
 		for _, event := range events {
 			if event.GetEventType() == enumspb.EVENT_TYPE_WORKFLOW_TASK_TIMED_OUT {
-				s.Equal(enumspb.TIMEOUT_TYPE_SCHEDULE_TO_START, event.GetWorkflowTaskTimedOutEventAttributes().GetTimeoutType())
+				s.EqualHistoryEvents(`
+  1 WorkflowExecutionStarted
+  2 WorkflowTaskScheduled
+  3 WorkflowTaskStarted
+  4 WorkflowTaskCompleted
+  5 MarkerRecorded
+  6 WorkflowExecutionSignaled
+  7 WorkflowTaskScheduled
+  8 WorkflowTaskTimedOut {"TimeoutType":2} // enumspb.TIMEOUT_TYPE_SCHEDULE_TO_START 
+  9 WorkflowTaskScheduled`, events)
 				stickyTimeout = true
 				break WaitForStickyTimeoutLoop
 			}
@@ -348,32 +381,47 @@ WaitForStickyTimeoutLoop:
 		s.NoError(err)
 	}
 
-	workflowTaskFailed := false
 	events := s.getHistory(s.namespace, workflowExecution)
-	for _, event := range events {
-		if event.GetEventType() == enumspb.EVENT_TYPE_WORKFLOW_TASK_FAILED {
-			workflowTaskFailed = true
-			break
-		}
-	}
-	s.True(workflowTaskFailed)
+	s.EqualHistoryEvents(`
+  1 WorkflowExecutionStarted
+  2 WorkflowTaskScheduled
+  3 WorkflowTaskStarted
+  4 WorkflowTaskCompleted
+  5 MarkerRecorded
+  6 WorkflowExecutionSignaled
+  7 WorkflowTaskScheduled
+  8 WorkflowTaskTimedOut
+  9 WorkflowTaskScheduled
+ 10 WorkflowTaskStarted
+ 11 WorkflowTaskFailed
+ 12 WorkflowExecutionSignaled
+ 13 WorkflowTaskScheduled
+ 14 WorkflowTaskStarted
+ 15 WorkflowTaskFailed`, events)
 
 	// Complete workflow execution
 	_, err = poller.PollAndProcessWorkflowTask(WithDumpHistory, WithRespondSticky, WithExpectedAttemptCount(3))
 	s.NoError(err)
 
-	// Assert for single workflow task failed and workflow completion
-	failedWorkflowTasks := 0
-	workflowComplete := false
 	events = s.getHistory(s.namespace, workflowExecution)
-	for _, event := range events {
-		switch event.GetEventType() {
-		case enumspb.EVENT_TYPE_WORKFLOW_TASK_FAILED:
-			failedWorkflowTasks++
-		case enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_COMPLETED:
-			workflowComplete = true
-		}
-	}
-	s.True(workflowComplete, "Workflow not complete")
-	s.Equal(2, failedWorkflowTasks, "Mismatched failed workflow tasks count")
+	s.EqualHistoryEvents(`
+  1 WorkflowExecutionStarted
+  2 WorkflowTaskScheduled
+  3 WorkflowTaskStarted
+  4 WorkflowTaskCompleted
+  5 MarkerRecorded
+  6 WorkflowExecutionSignaled
+  7 WorkflowTaskScheduled
+  8 WorkflowTaskTimedOut
+  9 WorkflowTaskScheduled
+ 10 WorkflowTaskStarted
+ 11 WorkflowTaskFailed  // Two WFTs have failed
+ 12 WorkflowExecutionSignaled
+ 13 WorkflowTaskScheduled
+ 14 WorkflowTaskStarted
+ 15 WorkflowTaskFailed // Two WFTs have failed
+ 16 WorkflowTaskScheduled
+ 17 WorkflowTaskStarted
+ 18 WorkflowTaskCompleted
+ 19 WorkflowExecutionCompleted // Workflow has completed`, events)
 }

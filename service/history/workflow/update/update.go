@@ -241,8 +241,8 @@ func (u *Update) WaitOutcome(ctx context.Context) (UpdateStatus, error) {
 	return UpdateStatus{enumspb.UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_COMPLETED, outcome}, nil
 }
 
-// WaitAccepted blocks on the acceptance of this update, returning nil if has
-// been accepted but not yet completed or the overall Outcome if the update has
+// WaitAccepted blocks on the acceptance of this update, returning nil if it has
+// been accepted but not yet completed, or the overall Outcome if the update has
 // been completed (including completed by rejection). This call will block until
 // the acceptance occurs or the provided context.Context expires.
 // It is safe to call this method outside of workflow lock.
@@ -563,4 +563,18 @@ func (u *Update) setState(newState state) state {
 	u.state = newState
 	u.instrumentation.StateChange(u.id, prevState, newState)
 	return prevState
+}
+
+func (u *Update) GetSize() int {
+	size := len(u.id)
+	size += proto.Size(u.request)
+	if u.accepted.Ready() {
+		res, _ := u.accepted.Get(context.Background())
+		size += res.Size()
+	}
+	if u.outcome.Ready() {
+		res, _ := u.outcome.Get(context.Background())
+		size += res.Size()
+	}
+	return size
 }

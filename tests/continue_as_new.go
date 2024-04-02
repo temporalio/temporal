@@ -232,18 +232,13 @@ func (s *FunctionalSuite) TestContinueAsNewRun_Timeout() {
 
 	time.Sleep(1 * time.Second) // wait 1 second for timeout
 
+	var historyEvents []*historypb.HistoryEvent
 GetHistoryLoop:
 	for i := 0; i < 20; i++ {
-		historyResponse, err := s.engine.GetWorkflowExecutionHistory(NewContext(), &workflowservice.GetWorkflowExecutionHistoryRequest{
-			Namespace: s.namespace,
-			Execution: &commonpb.WorkflowExecution{
-				WorkflowId: id,
-			},
+		historyEvents = s.getHistory(s.namespace, &commonpb.WorkflowExecution{
+			WorkflowId: id,
 		})
-		s.NoError(err)
-		history := historyResponse.History
-
-		lastEvent := history.Events[len(history.Events)-1]
+		lastEvent := historyEvents[len(historyEvents)-1]
 		if lastEvent.GetEventType() != enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_TIMED_OUT {
 			s.Logger.Warn("Execution not timedout yet")
 			time.Sleep(200 * time.Millisecond)
@@ -254,6 +249,10 @@ GetHistoryLoop:
 		break GetHistoryLoop
 	}
 	s.True(workflowComplete)
+	s.EqualHistoryEvents(`
+  1 WorkflowExecutionStarted
+  2 WorkflowTaskScheduled
+  3 WorkflowExecutionTimedOut`, historyEvents)
 }
 
 func (s *FunctionalSuite) TestWorkflowContinueAsNew_TaskID() {
@@ -542,8 +541,21 @@ func (s *FunctionalSuite) TestChildWorkflowWithContinueAsNew() {
 	s.Equal(wtChild, completedAttributes.WorkflowType.Name)
 	s.Equal("Child Done", s.decodePayloadsString(completedAttributes.GetResult()))
 
-	s.Logger.Info("Parent Workflow Execution History: ")
-	s.PrintHistoryEvents(s.getHistory(s.namespace, &commonpb.WorkflowExecution{
+	s.EqualHistoryEvents(`
+  1 WorkflowExecutionStarted
+  2 WorkflowTaskScheduled
+  3 WorkflowTaskStarted
+  4 WorkflowTaskCompleted
+  5 StartChildWorkflowExecutionInitiated
+  6 ChildWorkflowExecutionStarted
+  7 WorkflowTaskScheduled
+  8 WorkflowTaskStarted
+  9 WorkflowTaskCompleted
+ 10 ChildWorkflowExecutionCompleted
+ 11 WorkflowTaskScheduled
+ 12 WorkflowTaskStarted
+ 13 WorkflowTaskCompleted
+ 14 WorkflowExecutionCompleted`, s.getHistory(s.namespace, &commonpb.WorkflowExecution{
 		WorkflowId: parentID,
 		RunId:      we.RunId,
 	}))
@@ -645,14 +657,24 @@ func (s *FunctionalSuite) TestChildWorkflowWithContinueAsNewParentTerminate() {
 	}
 	s.Equal(enumspb.WORKFLOW_EXECUTION_STATUS_TERMINATED, childDescribeResp.WorkflowExecutionInfo.Status, "expected child to be terminated")
 
-	s.Logger.Info("Parent Workflow Execution History: ")
-	s.PrintHistoryEvents(s.getHistory(s.namespace, &commonpb.WorkflowExecution{
+	s.EqualHistoryEvents(`
+  1 WorkflowExecutionStarted
+  2 WorkflowTaskScheduled
+  3 WorkflowTaskStarted
+  4 WorkflowTaskCompleted
+  5 StartChildWorkflowExecutionInitiated
+  6 ChildWorkflowExecutionStarted
+  7 WorkflowTaskScheduled
+  8 WorkflowTaskStarted
+  9 WorkflowTaskCompleted
+ 10 WorkflowExecutionTerminated`, s.getHistory(s.namespace, &commonpb.WorkflowExecution{
 		WorkflowId: parentID,
 		RunId:      we.RunId,
 	}))
 
-	s.Logger.Info("Child Workflow Execution History: ")
-	s.PrintHistoryEvents(s.getHistory(s.namespace, &commonpb.WorkflowExecution{
+	s.EqualHistoryEvents(`
+  1 WorkflowExecutionStarted
+  2 WorkflowExecutionTerminated`, s.getHistory(s.namespace, &commonpb.WorkflowExecution{
 		WorkflowId: childID,
 	}))
 }

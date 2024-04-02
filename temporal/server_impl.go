@@ -25,11 +25,12 @@
 package temporal
 
 import (
+	"cmp"
 	"context"
 	"fmt"
-	"sync"
 
 	"go.uber.org/multierr"
+	"golang.org/x/exp/slices"
 
 	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/config"
@@ -58,6 +59,17 @@ type (
 		metricsHandler             metrics.Handler
 	}
 )
+
+// When starting multiple services in one process (typically a development server), start them
+// in this order and stop them in the reverse order. This most important part here is that the
+// worker depends on the frontend, which depends on matching and history.
+var initOrder = map[primitives.ServiceName]int{
+	primitives.MatchingService:         1,
+	primitives.HistoryService:          2,
+	primitives.InternalFrontendService: 3,
+	primitives.FrontendService:         3,
+	primitives.WorkerService:           4,
+}
 
 // NewServerFxImpl returns a new instance of server that serves one or many services.
 func NewServerFxImpl(
@@ -110,18 +122,15 @@ func (s *ServerImpl) Start(ctx context.Context) error {
 }
 
 func (s *ServerImpl) Stop(ctx context.Context) error {
-	var wg sync.WaitGroup
-	wg.Add(len(s.servicesMetadata))
 	close(s.stoppedCh)
 
-	for _, svcMeta := range s.servicesMetadata {
-		go func(svc *ServicesMetadata) {
-			svc.Stop(ctx)
-			wg.Done()
-		}(svcMeta)
+	svcs := slices.Clone(s.servicesMetadata)
+	slices.SortFunc(svcs, func(a, b *ServicesMetadata) int {
+		return -cmp.Compare(initOrder[a.serviceName], initOrder[b.serviceName]) // note negative
+	})
+	for _, svc := range svcs {
+		svc.Stop(ctx)
 	}
-
-	wg.Wait()
 
 	if s.so.metricHandler != nil {
 		s.so.metricHandler.Stop(s.logger)
@@ -135,32 +144,20 @@ func (s *ServerImpl) startServices() error {
 	timeout := max(serviceStartTimeout, 2*s.so.config.Global.Membership.MaxJoinDuration)
 	ctx, cancel := context.WithTimeout(context.Background(), timeout)
 	defer cancel()
-	results := make(chan startServiceResult, len(s.servicesMetadata))
-	for _, svcMeta := range s.servicesMetadata {
-		go func(svcMeta *ServicesMetadata) {
-			err := svcMeta.app.Start(ctx)
-			results <- startServiceResult{
-				svc: svcMeta,
-				err: err,
-			}
-		}(svcMeta)
-	}
-	return s.readResults(results)
-}
 
-func (s *ServerImpl) readResults(results chan startServiceResult) (err error) {
-	for range s.servicesMetadata {
-		r := <-results
-		if r.err != nil {
-			err = multierr.Combine(err, fmt.Errorf("failed to start service %v: %w", r.svc.serviceName, r.err))
+	svcs := slices.Clone(s.servicesMetadata)
+	slices.SortFunc(svcs, func(a, b *ServicesMetadata) int {
+		return cmp.Compare(initOrder[a.serviceName], initOrder[b.serviceName])
+	})
+
+	var allErrs error
+	for _, svc := range svcs {
+		err := svc.app.Start(ctx)
+		if err != nil {
+			allErrs = multierr.Append(allErrs, fmt.Errorf("failed to start service %v: %w", svc.serviceName, err))
 		}
 	}
-	return
-}
-
-type startServiceResult struct {
-	svc *ServicesMetadata
-	err error
+	return allErrs
 }
 
 func initSystemNamespaces(

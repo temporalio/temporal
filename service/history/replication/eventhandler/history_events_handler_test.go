@@ -123,6 +123,7 @@ func (s *historyEventHandlerSuite) TestHandleHistoryEvents_RemoteOnly() {
 		versionHistory.Items,
 		historyEvents,
 		nil,
+		"",
 	).Return(nil).Times(1)
 
 	err := s.historyEventHandler.HandleHistoryEvents(
@@ -133,6 +134,7 @@ func (s *historyEventHandlerSuite) TestHandleHistoryEvents_RemoteOnly() {
 		versionHistory.Items,
 		historyEvents,
 		nil,
+		"",
 	)
 	s.Nil(err)
 }
@@ -188,6 +190,7 @@ func (s *historyEventHandlerSuite) TestHandleHistoryEvents_LocalOnly() {
 		versionHistory.Items,
 		[][]*historypb.HistoryEvent{historyEvents},
 		nil,
+		"",
 	)
 	s.Nil(err)
 }
@@ -290,6 +293,7 @@ func (s *historyEventHandlerSuite) TestHandleHistoryEvents_LocalAndRemote_Handle
 			versionHistory.Items,
 			remoteHistoryEvents,
 			nil,
+			"",
 		).Return(nil).Times(1),
 	)
 
@@ -301,6 +305,7 @@ func (s *historyEventHandlerSuite) TestHandleHistoryEvents_LocalAndRemote_Handle
 		versionHistory.Items,
 		initialHistoryEvents,
 		nil,
+		"",
 	)
 	s.Nil(err)
 }

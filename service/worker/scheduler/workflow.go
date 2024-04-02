@@ -74,11 +74,17 @@ const (
 	InclusiveBackfillStartTime = 4
 	// do backfill incrementally
 	IncrementalBackfill = 5
+	// update from previous action instead of current time
+	UpdateFromPrevious = 6
 )
 
 const (
 	// Schedules are implemented by a workflow whose ID is this string plus the schedule ID.
 	WorkflowIDPrefix = "temporal-sys-scheduler:"
+
+	// This is an example of a timestamp that's appended to the workflow
+	// id, used for validation in the frontend.
+	AppendedTimestampForValidation = "-2009-11-10T23:00:00Z"
 
 	SignalNameUpdate   = "update"
 	SignalNamePatch    = "patch"
@@ -206,7 +212,7 @@ var (
 		AllowZeroSleep:                    true,
 		ReuseTimer:                        true,
 		NextTimeCacheV2Size:               14,                   // see note below
-		Version:                           DontTrackOverlapping, // TODO: upgrade to IncrementalBackfill
+		Version:                           DontTrackOverlapping, // TODO: upgrade to UpdateFromPrevious
 	}
 
 	// Note on NextTimeCacheV2Size: This value must be > FutureActionCountForList. Each
@@ -295,8 +301,14 @@ func (s *scheduler) run() error {
 		// handle signals after processing time range that just elapsed
 		scheduleChanged := s.processSignals()
 		if scheduleChanged {
-			// need to calculate sleep again
-			nextWakeup = s.processTimeRange(t2, t2, enumspb.SCHEDULE_OVERLAP_POLICY_UNSPECIFIED, false, nil)
+			// need to calculate sleep again. note that processSignals may move LastProcessedTime backwards.
+			nextWakeup = s.processTimeRange(
+				s.State.LastProcessedTime.AsTime(),
+				t2,
+				enumspb.SCHEDULE_OVERLAP_POLICY_UNSPECIFIED,
+				false,
+				nil,
+			)
 		}
 		// process backfills if we have any too
 		s.processBackfills()
@@ -589,19 +601,28 @@ func (s *scheduler) fillNextTimeCacheV2(start time.Time) {
 }
 
 func (s *scheduler) getNextTime(after time.Time) getNextTimeResult {
+	// Implementation using a cache to save markers + computation.
 	if s.hasMinVersion(NewCacheAndJitter) {
 		return s.getNextTimeV2(after, after)
+	} else if s.hasMinVersion(BatchAndCacheTimeQueries) {
+		return s.getNextTimeV1(after)
 	}
-	return s.getNextTimeV1(after)
+	// Run this logic in a SideEffect so that we can fix bugs there without breaking
+	// existing schedule workflows.
+	var next getNextTimeResult
+	panicIfErr(workflow.SideEffect(s.ctx, func(ctx workflow.Context) interface{} {
+		return s.cspec.getNextTime(s.jitterSeed(), after)
+	}).Get(&next))
+	return next
 }
 
 func (s *scheduler) processTimeRange(
-	t1, t2 time.Time,
+	start, end time.Time,
 	overlapPolicy enumspb.ScheduleOverlapPolicy,
 	manual bool,
 	limit *int,
 ) time.Time {
-	s.logger.Debug("processTimeRange", "t1", t1, "t2", t2, "overlap-policy", overlapPolicy, "manual", manual)
+	s.logger.Debug("processTimeRange", "start", start, "end", end, "overlap-policy", overlapPolicy, "manual", manual)
 
 	if s.cspec == nil {
 		return time.Time{}
@@ -617,30 +638,23 @@ func (s *scheduler) processTimeRange(
 		// take an action now. (Don't count as missed catchup window either.)
 		// Skip over entire time range if paused or no actions can be taken
 		if !s.canTakeScheduledAction(manual, false) {
-			return s.getNextTime(t2).Next
+			return s.getNextTime(end).Next
 		}
 	}
 
-	for {
-		var next getNextTimeResult
-		if !s.hasMinVersion(BatchAndCacheTimeQueries) {
-			// Run this logic in a SideEffect so that we can fix bugs there without breaking
-			// existing schedule workflows.
-			panicIfErr(workflow.SideEffect(s.ctx, func(ctx workflow.Context) interface{} {
-				return s.cspec.getNextTime(s.jitterSeed(), t1)
-			}).Get(&next))
-		} else {
-			next = s.getNextTime(t1)
-		}
-		t1 = next.Next
-		if t1.IsZero() || t1.After(t2) {
-			return t1
-		}
+	var next getNextTimeResult
+	for next = s.getNextTime(start); !(next.Next.IsZero() || next.Next.After(end)); next = s.getNextTime(next.Next) {
 		if !s.hasMinVersion(BatchAndCacheTimeQueries) && !s.canTakeScheduledAction(manual, false) {
 			continue
 		}
-		if !manual && t2.Sub(t1) > catchupWindow {
-			s.logger.Warn("Schedule missed catchup window", "now", t2, "time", t1)
+		if !manual && s.Info.UpdateTime.AsTime().After(next.Next) {
+			// We're reprocessing since the most recent event after an update. Discard actions before
+			// the update time (which was just set to "now"). This doesn't have to be guarded with
+			// hasMinVersion because this condition couldn't happen in previous versions.
+			continue
+		}
+		if !manual && end.Sub(next.Next) > catchupWindow {
+			s.logger.Warn("Schedule missed catchup window", "now", end, "time", next.Next)
 			s.metrics.Counter(metrics.ScheduleMissedCatchupWindow.Name()).Inc(1)
 			s.Info.MissedCatchupWindow++
 			continue
@@ -648,12 +662,12 @@ func (s *scheduler) processTimeRange(
 		s.addStart(next.Nominal, next.Next, overlapPolicy, manual)
 
 		if limit != nil {
-			(*limit)--
-			if *limit <= 0 {
-				return t1
+			if (*limit)--; *limit <= 0 {
+				break
 			}
 		}
 	}
+	return next.Next
 }
 
 func (s *scheduler) canTakeScheduledAction(manual, decrement bool) bool {
@@ -856,6 +870,14 @@ func (s *scheduler) processUpdate(req *schedspb.FullUpdateRequest) {
 
 	s.ensureFields()
 	s.compileSpec()
+
+	if s.hasMinVersion(UpdateFromPrevious) {
+		// We need to start re-processing from the last event, so that we catch actions whose
+		// nominal time is before now but actual time (with jitter) is after now. Logic in
+		// processTimeRange will discard actions before the UpdateTime.
+		// Note: get last event time before updating s.Info.UpdateTime, otherwise it'll always be now.
+		s.State.LastProcessedTime = timestamppb.New(s.getLastEvent())
+	}
 
 	s.Info.UpdateTime = timestamppb.New(s.now())
 	s.incSeqNo()
@@ -1176,10 +1198,8 @@ func (s *scheduler) startWorkflow(
 	nominalTimeSec := start.NominalTime.AsTime().UTC().Truncate(time.Second)
 	workflowID := newWorkflow.WorkflowId
 	if start.OverlapPolicy == enumspb.SCHEDULE_OVERLAP_POLICY_ALLOW_ALL || s.tweakables.AlwaysAppendTimestamp {
-		workflowID = InternalWorkflowIdRepresentation(
-			newWorkflow.WorkflowId,
-			nominalTimeSec,
-			s.StartScheduleArgs.GetSchedule().GetPolicies().GetKeepOriginalWorkflowId())
+		// must match AppendedTimestampForValidation
+		workflowID += "-" + nominalTimeSec.Format(time.RFC3339)
 	}
 
 	// Set scheduleToCloseTimeout based on catchup window, which is the latest time that it's
@@ -1372,16 +1392,22 @@ func (s *scheduler) getRetentionExpiration(nextWakeup time.Time) time.Time {
 		return time.Time{}
 	}
 
-	var lastActionTime time.Time
-	if len(s.Info.RecentActions) > 0 {
-		lastActionTime = timestamp.TimeValue(s.Info.RecentActions[len(s.Info.RecentActions)-1].ActualTime)
-	}
+	// retention starts from the last "event"
+	return s.getLastEvent().Add(s.tweakables.RetentionTime)
+}
 
-	// retention base is max(CreateTime, UpdateTime, and last action time)
-	retentionBase := lastActionTime
-	retentionBase = util.MaxTime(retentionBase, timestamp.TimeValue(s.Info.CreateTime))
-	retentionBase = util.MaxTime(retentionBase, timestamp.TimeValue(s.Info.UpdateTime))
-	return retentionBase.Add(s.tweakables.RetentionTime)
+// Returns the time of the last "event" to happen to the schedule. An event here is the
+// schedule getting created or updated, or an action. This value is used for calculating the
+// retention time (how long an idle schedule lives after becoming idle), and also for
+// recalculating times after an update to account for jitter.
+func (s *scheduler) getLastEvent() time.Time {
+	var lastEvent time.Time
+	if len(s.Info.RecentActions) > 0 {
+		lastEvent = s.Info.RecentActions[len(s.Info.RecentActions)-1].ActualTime.AsTime()
+	}
+	lastEvent = util.MaxTime(lastEvent, s.Info.CreateTime.AsTime())
+	lastEvent = util.MaxTime(lastEvent, s.Info.UpdateTime.AsTime())
+	return lastEvent
 }
 
 func (s *scheduler) newUUIDString() string {
@@ -1421,12 +1447,4 @@ func GetListInfoFromStartArgs(args *schedspb.StartScheduleArgs, now time.Time, s
 	s.compileSpec()
 	s.State.LastProcessedTime = timestamppb.New(now)
 	return s.getListInfo(false)
-}
-
-func InternalWorkflowIdRepresentation(originalWorkflowId string, startTime time.Time, keepOriginalWorkflowId bool) string {
-	timeSec := startTime.UTC().Truncate(time.Second)
-	if keepOriginalWorkflowId {
-		return originalWorkflowId
-	}
-	return originalWorkflowId + "-" + timeSec.Format(time.RFC3339)
 }

@@ -642,3 +642,67 @@ func (s *registrySuite) TestCacheByName() {
 	s.NoError(err)
 	s.Equal(namespace.Name("foo"), ns.Name())
 }
+
+func (s *registrySuite) TestGetByNameWithoutReadthrough() {
+	// registry start will refresh once
+	s.regPersistence.EXPECT().ListNamespaces(gomock.Any(), gomock.Any()).Return(&persistence.ListNamespacesResponse{
+		Namespaces: nil,
+	}, nil)
+	// second call will readthrough
+	s.regPersistence.EXPECT().GetNamespace(gomock.Any(), &persistence.GetNamespaceRequest{
+		Name: "foo",
+	}).Return(&persistence.GetNamespaceResponse{
+		Namespace: &persistencespb.NamespaceDetail{
+			Info: &persistencespb.NamespaceInfo{
+				Id:   namespace.NewID().String(),
+				Name: "foo",
+			},
+			Config:            &persistencespb.NamespaceConfig{},
+			ReplicationConfig: &persistencespb.NamespaceReplicationConfig{},
+		},
+	}, nil)
+
+	s.registry.Start()
+	defer s.registry.Stop()
+
+	ns, err := s.registry.GetNamespaceWithOptions(namespace.Name("foo"), namespace.GetNamespaceOptions{DisableReadthrough: true})
+	var notFound *serviceerror.NamespaceNotFound
+	s.ErrorAs(err, &notFound)
+
+	ns, err = s.registry.GetNamespaceWithOptions(namespace.Name("foo"), namespace.GetNamespaceOptions{DisableReadthrough: false})
+	s.NoError(err)
+	s.Equal(namespace.Name("foo"), ns.Name())
+}
+
+func (s *registrySuite) TestGetByIDWithoutReadthrough() {
+	id := namespace.NewID()
+
+	// registry start will refresh once
+	s.regPersistence.EXPECT().ListNamespaces(gomock.Any(), gomock.Any()).Return(&persistence.ListNamespacesResponse{
+		Namespaces: nil,
+	}, nil)
+	// second call will readthrough
+	s.regPersistence.EXPECT().GetNamespace(gomock.Any(), &persistence.GetNamespaceRequest{
+		ID: id.String(),
+	}).Return(&persistence.GetNamespaceResponse{
+		Namespace: &persistencespb.NamespaceDetail{
+			Info: &persistencespb.NamespaceInfo{
+				Id:   id.String(),
+				Name: "foo",
+			},
+			Config:            &persistencespb.NamespaceConfig{},
+			ReplicationConfig: &persistencespb.NamespaceReplicationConfig{},
+		},
+	}, nil)
+
+	s.registry.Start()
+	defer s.registry.Stop()
+
+	ns, err := s.registry.GetNamespaceByIDWithOptions(id, namespace.GetNamespaceOptions{DisableReadthrough: true})
+	var notFound *serviceerror.NamespaceNotFound
+	s.ErrorAs(err, &notFound)
+
+	ns, err = s.registry.GetNamespaceByIDWithOptions(id, namespace.GetNamespaceOptions{DisableReadthrough: false})
+	s.NoError(err)
+	s.Equal(namespace.Name("foo"), ns.Name())
+}

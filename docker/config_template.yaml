@@ -40,7 +40,7 @@ persistence:
                         advertised-hostname: {{ default .Env.CASSANDRA_ADDRESS_TRANSLATOR_OPTIONS "" }}
                     {{- end }}
                 {{- end }}
-        {{- else if eq $db "mysql" "mysql8" }}
+        {{- else if eq $db "mysql8" }}
         default:
             sql:
                 pluginName: "{{ $db }}"
@@ -93,8 +93,7 @@ persistence:
                     keyFile: {{ default .Env.SQL_CERT_KEY "" }}
                     enableHostVerification: {{ default .Env.SQL_HOST_VERIFICATION "false" }}
                     serverName: {{ default .Env.SQL_HOST_NAME "" }}
-        {{- else if eq $db "postgresql" "postgres" "postgres12" "postgres12_pgx" }}
-        {{- $db := replace $db "postgresql" "postgres" 1 }}
+        {{- else if eq $db "postgres12" "postgres12_pgx" }}
         default:
             sql:
                 pluginName: "{{ $db }}"

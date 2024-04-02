@@ -43,7 +43,7 @@ import (
 	"go.temporal.io/server/common/persistence"
 )
 
-//go:generate mockgen -copyright_file ../../../LICENSE -package $GOPACKAGE -source $GOFILE -destination eager_namespace_refresher_mock.go
+//go:generate mocksync -copyright_file ../../../LICENSE -package $GOPACKAGE -source $GOFILE -destination eager_namespace_refresher_mock.go
 
 type (
 	EagerNamespaceRefresher interface {
@@ -176,7 +176,7 @@ func (e *eagerNamespaceRefresherImpl) SyncNamespaceFromSourceCluster(
 		}
 	}
 	if !hasCurrentCluster {
-		e.metricsHandler.Counter(metrics.ReplicationOutlierNamespace.Name()).Record(1)
+		metrics.ReplicationOutlierNamespace.With(e.metricsHandler).Record(1)
 		return nil, serviceerror.NewFailedPrecondition("Namespace does not belong to current cluster")
 	}
 	task := &replicationspb.NamespaceTaskAttributes{

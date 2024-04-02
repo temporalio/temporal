@@ -49,6 +49,7 @@ import (
 	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/service/history/configs"
 	"go.temporal.io/server/service/history/events"
+	"go.temporal.io/server/service/history/hsm"
 	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/tests"
 )
@@ -109,6 +110,11 @@ func (s *retryActivitySuite) SetupTest() {
 		s.mockConfig,
 	)
 	s.mockShard.SetEventsCacheForTesting(s.mockEventsCache)
+
+	reg := hsm.NewRegistry()
+	err := RegisterStateMachine(reg)
+	s.NoError(err)
+	s.mockShard.SetStateMachineRegistry(reg)
 
 	s.testScope = s.mockShard.Resource.MetricsScope.(tally.TestScope)
 	s.logger = s.mockShard.GetLogger()

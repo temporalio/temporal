@@ -22,7 +22,7 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-//go:generate mockgen -copyright_file ../../../LICENSE -package $GOPACKAGE -source $GOFILE -destination task_mock.go
+//go:generate mocksync -copyright_file ../../../LICENSE -package $GOPACKAGE -source $GOFILE -destination task_mock.go
 
 package tasks
 
@@ -50,7 +50,11 @@ type (
 		SetVisibilityTime(timestamp time.Time)
 	}
 
-	// HasDestination must be implemented by all tasks used in multi-destination queues.
+	// HasStateMachineTaskType must be implemented by all HSM state machine tasks.
+	HasStateMachineTaskType interface {
+		StateMachineTaskType() int32
+	}
+	// HasDestination must be implemented by all tasks used in the outbound queue.
 	HasDestination interface {
 		GetDestination() string
 	}

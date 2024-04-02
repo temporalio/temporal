@@ -29,10 +29,12 @@ package sqlite
 import (
 	"fmt"
 	"net/url"
+	"sort"
 	"strings"
 
 	"github.com/iancoleman/strcase"
 	"github.com/jmoiron/sqlx"
+	"golang.org/x/exp/maps"
 
 	"go.temporal.io/server/common/config"
 	"go.temporal.io/server/common/persistence/sql"
@@ -185,9 +187,14 @@ func buildDSN(cfg *config.SQL) (string, error) {
 
 func buildDSNAttr(cfg *config.SQL) (url.Values, error) {
 	parameters := url.Values{}
-	for k, v := range cfg.ConnectAttributes {
+
+	// sort ConnectAttributes to get a deterministic order
+	keys := maps.Keys(cfg.ConnectAttributes)
+	sort.Strings(keys)
+
+	for _, k := range keys {
 		key := strings.TrimSpace(k)
-		value := strings.TrimSpace(v)
+		value := strings.TrimSpace(cfg.ConnectAttributes[k])
 		if parameters.Get(key) != "" {
 			return nil, fmt.Errorf("duplicate connection attr: %v:%v, %v:%v",
 				key,

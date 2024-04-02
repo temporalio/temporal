@@ -73,16 +73,16 @@ func (a *actionQueuePendingTask) Name() string {
 	return "queue-pending-task"
 }
 
-func (a *actionQueuePendingTask) Run(readerGroup *ReaderGroup) error {
+func (a *actionQueuePendingTask) Run(readerGroup *ReaderGroup) {
 	// first check if the alert is still valid
 	if a.monitor.GetTotalPendingTaskCount() <= a.attributes.CiriticalPendingTaskCount {
-		return nil
+		return
 	}
 
 	// then try to shrink existing slices, which may reduce pending task count
 	readers := readerGroup.Readers()
 	if a.tryShrinkSlice(readers) {
-		return nil
+		return
 	}
 
 	// have to unload pending tasks to reduce pending task count
@@ -91,7 +91,7 @@ func (a *actionQueuePendingTask) Run(readerGroup *ReaderGroup) error {
 	a.findSliceToClear(
 		int(float64(a.attributes.CiriticalPendingTaskCount) * targetLoadFactor),
 	)
-	return a.splitAndClearSlice(readers, readerGroup)
+	a.splitAndClearSlice(readers, readerGroup)
 }
 
 func (a *actionQueuePendingTask) tryShrinkSlice(
@@ -182,11 +182,7 @@ func (a *actionQueuePendingTask) findSliceToClear(
 func (a *actionQueuePendingTask) splitAndClearSlice(
 	readers map[int64]Reader,
 	readerGroup *ReaderGroup,
-) error {
-	if err := a.ensureNewReaders(readers, readerGroup); err != nil {
-		return err
-	}
-
+) {
 	for readerID, reader := range readers {
 		if readerID == int64(a.maxReaderCount)-1 {
 			// we can't do further split, have to clear entire slice
@@ -219,50 +215,11 @@ func (a *actionQueuePendingTask) splitAndClearSlice(
 			continue
 		}
 
-		nextReader, ok := readerGroup.ReaderByID(readerID + 1)
-		if !ok {
-			// this should never happen, we already ensured all readers are created.
-			// we have no choice but to put those slices back
-			reader.MergeSlices(splitSlices...)
-			continue
-		}
-
+		nextReader := readerGroup.GetOrCreateReader(readerID + 1)
 		nextReader.MergeSlices(splitSlices...)
 		nextReader.Pause(clearSliceThrottleDuration)
 	}
 
 	// ShrinkSlices will be triggered as part of checkpointing process
 	// see queueBase.handleAlert() and queueBase.checkpoint()
-	return nil
-}
-
-func (a *actionQueuePendingTask) ensureNewReaders(
-	readers map[int64]Reader,
-	readerGroup *ReaderGroup,
-) error {
-	for readerID, reader := range readers {
-		if readerID == a.maxReaderCount-1 {
-			// we won't perform split
-			continue
-		}
-
-		needNewReader := false
-		reader.WalkSlices(func(s Slice) {
-			// keysToClearPerSlice contains all the slices
-			// that needs to be split & cleared
-			_, ok := a.keysToClearPerSlice[s]
-			needNewReader = needNewReader || ok
-		})
-
-		if !needNewReader {
-			continue
-		}
-
-		_, err := readerGroup.GetOrCreateReader(readerID + 1)
-		if err != nil {
-			return err
-		}
-	}
-
-	return nil
 }

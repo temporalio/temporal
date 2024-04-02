@@ -21,6 +21,7 @@ env:
   COMMIT: ${{ github.event.inputs.commit || github.sha }}
   DOCKER_COMPOSE_FILE: ./develop/github/docker-compose.yml
   TEMPORAL_VERSION_CHECK_DISABLED: 1
+  BUILD_ENV: ci # Set the build environment to ci so that tools (Make targets) can adjust their behavior
 
 jobs:
   misc-checks:
@@ -37,12 +38,12 @@ jobs:
           ref: ${{ env.COMMIT }}
           submodules: true
 
-      - uses: actions/setup-go@v4
+      - uses: actions/setup-go@v5
         with:
           go-version-file: 'go.mod'
           check-latest: true
 
-      - uses: arduino/setup-protoc@v2
+      - uses: arduino/setup-protoc@v3
 
       - run: make ci-build-misc
 
@@ -81,7 +82,7 @@ jobs:
           token: ${{ secrets.GITHUB_TOKEN }}
           ref: ${{ env.COMMIT }}
 
-      - uses: actions/setup-go@v4
+      - uses: actions/setup-go@v5
         with:
           go-version-file: 'go.mod'
           check-latest: true
@@ -108,7 +109,7 @@ jobs:
           token: ${{ secrets.GITHUB_TOKEN }}
           ref: ${{ env.COMMIT }}
 
-      - uses: actions/setup-go@v4
+      - uses: actions/setup-go@v5
         with:
           go-version-file: 'go.mod'
           check-latest: true
@@ -133,7 +134,7 @@ jobs:
       fail-fast: false
       matrix:
         runs-on: [ubuntu-latest]
-        name: [cass_es, cass_es8, sqlite, mysql, mysql8, postgres, postgres_pgx, postgres12, postgres12_pgx]
+        name: [cass_es, cass_es8, sqlite, mysql8, postgres12, postgres12_pgx]
         shard_index: [0, 1, 2]
         include:
           - name: cass_es
@@ -148,22 +149,10 @@ jobs:
             persistence_type: sql
             persistence_driver: sqlite
             containers: []
-          - name: mysql
-            persistence_type: sql
-            persistence_driver: mysql
-            containers: [mysql, elasticsearch]
           - name: mysql8
             persistence_type: sql
             persistence_driver: mysql8
             containers: [mysql]
-          - name: postgres
-            persistence_type: sql
-            persistence_driver: postgres
-            containers: [postgresql, elasticsearch]
-          - name: postgres_pgx
-            persistence_type: sql
-            persistence_driver: postgres_pgx
-            containers: [postgresql, elasticsearch]
           - name: postgres12
             persistence_type: sql
             persistence_driver: postgres12
@@ -188,7 +177,7 @@ jobs:
           token: ${{ secrets.GITHUB_TOKEN }}
           ref: ${{ env.COMMIT }}
 
-      - uses: actions/setup-go@v4
+      - uses: actions/setup-go@v5
         with:
           go-version-file: 'go.mod'
           check-latest: true
@@ -214,7 +203,7 @@ jobs:
       fail-fast: false
       matrix:
         runs-on: [ubuntu-latest]
-        name: [cass_es, cass_es8, mysql, mysql8, postgres, postgres_pgx, postgres12, postgres12_pgx]
+        name: [cass_es, cass_es8, mysql8, postgres12, postgres12_pgx]
         include:
           - name: cass_es
             persistence_type: nosql
@@ -224,22 +213,10 @@ jobs:
             persistence_type: nosql
             persistence_driver: elasticsearch
             containers: [cassandra, elasticsearch8]
-          - name: mysql
-            persistence_type: sql
-            persistence_driver: mysql
-            containers: [mysql, elasticsearch]
           - name: mysql8
             persistence_type: sql
             persistence_driver: mysql8
             containers: [mysql]
-          - name: postgres
-            persistence_type: sql
-            persistence_driver: postgres12
-            containers: [postgresql, elasticsearch]
-          - name: postgres_pgx
-            persistence_type: sql
-            persistence_driver: postgres12_pgx
-            containers: [postgresql, elasticsearch]
           - name: postgres12
             persistence_type: sql
             persistence_driver: postgres12
@@ -262,7 +239,7 @@ jobs:
           token: ${{ secrets.GITHUB_TOKEN }}
           ref: ${{ env.COMMIT }}
 
-      - uses: actions/setup-go@v4
+      - uses: actions/setup-go@v5
         with:
           go-version-file: 'go.mod'
           check-latest: true
@@ -288,7 +265,7 @@ jobs:
       fail-fast: false
       matrix:
         runs-on: [ubuntu-latest]
-        name: [cass_es, cass_es8, mysql, mysql8, postgres, postgres_pgx, postgres12, postgres12_pgx]
+        name: [cass_es, cass_es8, mysql8, postgres12, postgres12_pgx]
         include:
           - name: cass_es
             persistence_type: nosql
@@ -298,22 +275,10 @@ jobs:
             persistence_type: nosql
             persistence_driver: elasticsearch
             containers: [cassandra, elasticsearch8]
-          - name: mysql
-            persistence_type: sql
-            persistence_driver: mysql
-            containers: [mysql, elasticsearch]
           - name: mysql8
             persistence_type: sql
             persistence_driver: mysql8
             containers: [mysql]
-          - name: postgres
-            persistence_type: sql
-            persistence_driver: postgres12
-            containers: [postgresql, elasticsearch]
-          - name: postgres_pgx
-            persistence_type: sql
-            persistence_driver: postgres12_pgx
-            containers: [postgresql, elasticsearch]
           - name: postgres12
             persistence_type: sql
             persistence_driver: postgres12
@@ -336,7 +301,7 @@ jobs:
           token: ${{ secrets.GITHUB_TOKEN }}
           ref: ${{ env.COMMIT }}
 
-      - uses: actions/setup-go@v4
+      - uses: actions/setup-go@v5
         with:
           go-version-file: 'go.mod'
           check-latest: true
@@ -365,10 +330,11 @@ jobs:
       - functional-test-ndc
     runs-on: ubuntu-latest
     if: always()
+    env:
+      RESULTS: ${{ toJSON(needs.*.result) }}
     steps:
-      - name: Success
-        if: ${{ !(contains(needs.*.result, 'failure')) }}
-        run: exit 0
-      - name: Failure
-        if: ${{ contains(needs.*.result, 'failure') }}
-        run: exit 1
+      - name: Check results
+        run: |
+          if [[ -n $(echo "$RESULTS" | jq '.[] | select (. != "success")') ]]; then
+            exit 1
+          fi

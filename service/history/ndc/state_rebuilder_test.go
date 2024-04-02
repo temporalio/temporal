@@ -55,6 +55,7 @@ import (
 	"go.temporal.io/server/common/testing/protorequire"
 	"go.temporal.io/server/common/util"
 	"go.temporal.io/server/service/history/events"
+	"go.temporal.io/server/service/history/hsm"
 	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/tests"
 	"go.temporal.io/server/service/history/workflow"
@@ -106,6 +107,11 @@ func (s *stateRebuilderSuite) SetupTest() {
 		tests.NewDynamicConfig(),
 	)
 
+	reg := hsm.NewRegistry()
+	err := workflow.RegisterStateMachine(reg)
+	s.NoError(err)
+	s.mockShard.SetStateMachineRegistry(reg)
+
 	s.mockExecutionManager = s.mockShard.Resource.ExecutionMgr
 	s.mockNamespaceCache = s.mockShard.Resource.NamespaceCache
 	s.mockClusterMetadata = s.mockShard.Resource.ClusterMetadata
@@ -154,8 +160,8 @@ func (s *stateRebuilderSuite) TestApplyEvents() {
 
 	workflowKey := definition.NewWorkflowKey(s.namespaceID.String(), s.workflowID, s.runID)
 
-	mockStateBuilder := workflow.NewMockMutableStateRebuilder(s.controller)
-	mockStateBuilder.EXPECT().ApplyEvents(
+	mockStateRebuilder := workflow.NewMockMutableStateRebuilder(s.controller)
+	mockStateRebuilder.EXPECT().ApplyEvents(
 		gomock.Any(),
 		s.namespaceID,
 		requestID,
@@ -165,9 +171,10 @@ func (s *stateRebuilderSuite) TestApplyEvents() {
 		}),
 		[][]*historypb.HistoryEvent{events},
 		[]*historypb.HistoryEvent(nil),
+		"",
 	).Return(nil, nil)
 
-	err := s.nDCStateRebuilder.applyEvents(context.Background(), workflowKey, mockStateBuilder, events, requestID)
+	err := s.nDCStateRebuilder.applyEvents(context.Background(), workflowKey, mockStateRebuilder, events, requestID)
 	s.NoError(err)
 }
 

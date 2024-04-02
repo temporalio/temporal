@@ -9,7 +9,7 @@ persistence:
   datastores:
     mysql-default:
       sql:
-        pluginName: "mysql"
+        pluginName: "mysql8"
         databaseName: "temporal"
         connectAddr: "127.0.0.1:3306"
         connectProtocol: "tcp"

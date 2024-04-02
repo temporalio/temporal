@@ -32,7 +32,7 @@ import (
 	"go.temporal.io/server/common/persistence/schema"
 	"go.temporal.io/server/common/persistence/sql/sqlplugin"
 	"go.temporal.io/server/common/persistence/sql/sqlplugin/postgresql/driver"
-	postgresqlschemaV96 "go.temporal.io/server/schema/postgresql/v96"
+	postgresqlschemaV12 "go.temporal.io/server/schema/postgresql/v12"
 )
 
 func (pdb *db) IsDupEntryError(err error) bool {
@@ -120,9 +120,9 @@ func (pdb *db) DbName() string {
 func (pdb *db) ExpectedVersion() string {
 	switch pdb.dbKind {
 	case sqlplugin.DbKindMain:
-		return postgresqlschemaV96.Version
+		return postgresqlschemaV12.Version
 	case sqlplugin.DbKindVisibility:
-		return postgresqlschemaV96.VisibilityVersion
+		return postgresqlschemaV12.VisibilityVersion
 	default:
 		panic(fmt.Sprintf("unknown db kind %v", pdb.dbKind))
 	}

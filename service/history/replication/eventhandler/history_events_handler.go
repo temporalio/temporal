@@ -36,7 +36,7 @@ import (
 	"go.temporal.io/server/common/persistence/versionhistory"
 )
 
-//go:generate mockgen -copyright_file ../../../../LICENSE -package $GOPACKAGE -source $GOFILE -destination history_events_handler_mock.go
+//go:generate mocksync -copyright_file ../../../../LICENSE -package $GOPACKAGE -source $GOFILE -destination history_events_handler_mock.go
 
 // Local vs Remote
 // Local and Remote are introduced to handle the case:
@@ -60,6 +60,7 @@ type (
 			versionHistoryItems []*historyspb.VersionHistoryItem,
 			historyEvents [][]*historypb.HistoryEvent,
 			newEvents []*historypb.HistoryEvent,
+			newRunID string,
 		) error
 	}
 
@@ -90,6 +91,7 @@ func (h *historyEventsHandlerImpl) HandleHistoryEvents(
 	versionHistoryItems []*historyspb.VersionHistoryItem,
 	historyEvents [][]*historypb.HistoryEvent,
 	newEvents []*historypb.HistoryEvent,
+	newRunID string,
 ) error {
 	if len(historyEvents) == 0 {
 		return serviceerror.NewInvalidArgument("Empty batches")
@@ -118,6 +120,7 @@ func (h *historyEventsHandlerImpl) HandleHistoryEvents(
 			versionHistoryItems,
 			remoteEvents,
 			newEvents,
+			newRunID,
 		); err != nil {
 			return err
 		}

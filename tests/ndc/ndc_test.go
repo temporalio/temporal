@@ -2091,16 +2091,17 @@ func (s *NDCFunctionalTestSuite) generateNewRunHistory(
 	version int64,
 	workflowType string,
 	taskQueue string,
-) *commonpb.DataBlob {
+) (*commonpb.DataBlob, string) {
 
 	// TODO temporary code to generate first event & version history
 	//  we should generate these as part of modeled based testing
 
 	if event.GetWorkflowExecutionContinuedAsNewEventAttributes() == nil {
-		return nil
+		return nil, ""
 	}
 
-	event.GetWorkflowExecutionContinuedAsNewEventAttributes().NewExecutionRunId = uuid.New()
+	newRunID := uuid.New()
+	event.GetWorkflowExecutionContinuedAsNewEventAttributes().NewExecutionRunId = newRunID
 
 	newRunFirstEvent := &historypb.HistoryEvent{
 		EventId:   common.FirstEventID,
@@ -2127,13 +2128,14 @@ func (s *NDCFunctionalTestSuite) generateNewRunHistory(
 			FirstExecutionRunId:             runID,
 			Attempt:                         1,
 			WorkflowExecutionExpirationTime: timestamppb.New(time.Now().UTC().Add(time.Minute)),
+			WorkflowId:                      workflowID,
 		}},
 	}
 
 	eventBlob, err := s.serializer.SerializeEvents([]*historypb.HistoryEvent{newRunFirstEvent}, enumspb.ENCODING_TYPE_PROTO3)
 	s.NoError(err)
 
-	return eventBlob
+	return eventBlob, newRunID
 }
 
 func (s *NDCFunctionalTestSuite) generateEventBlobs(
@@ -2142,18 +2144,18 @@ func (s *NDCFunctionalTestSuite) generateEventBlobs(
 	workflowType string,
 	taskqueue string,
 	batch *historypb.History,
-) (*commonpb.DataBlob, *commonpb.DataBlob) {
+) (*commonpb.DataBlob, *commonpb.DataBlob, string) {
 	// TODO temporary code to generate next run first event
 	//  we should generate these as part of modeled based testing
 	lastEvent := batch.Events[len(batch.Events)-1]
-	newRunEventBlob := s.generateNewRunHistory(
+	newRunEventBlob, newRunID := s.generateNewRunHistory(
 		lastEvent, s.namespace, s.namespaceID, workflowID, runID, lastEvent.GetVersion(), workflowType, taskqueue,
 	)
 	// must serialize events batch after attempt on continue as new as generateNewRunHistory will
 	// modify the NewExecutionRunId attr
 	eventBlob, err := s.serializer.SerializeEvents(batch.Events, enumspb.ENCODING_TYPE_PROTO3)
 	s.NoError(err)
-	return eventBlob, newRunEventBlob
+	return eventBlob, newRunEventBlob, newRunID
 }
 
 func (s *NDCFunctionalTestSuite) applyEvents(
@@ -2171,7 +2173,7 @@ func (s *NDCFunctionalTestSuite) applyEvents(
 		common.IsServiceClientTransientError,
 	)
 	for _, batch := range eventBatches {
-		eventBlob, newRunEventBlob := s.generateEventBlobs(workflowID, runID, workflowType, taskqueue, batch)
+		eventBlob, newRunEventBlob, newRunID := s.generateEventBlobs(workflowID, runID, workflowType, taskqueue, batch)
 		req := &historyservice.ReplicateEventsV2Request{
 			NamespaceId: s.namespaceID.String(),
 			WorkflowExecution: &commonpb.WorkflowExecution{
@@ -2181,6 +2183,7 @@ func (s *NDCFunctionalTestSuite) applyEvents(
 			VersionHistoryItems: versionHistory.GetItems(),
 			Events:              eventBlob,
 			NewRunEvents:        newRunEventBlob,
+			NewRunId:            newRunID,
 		}
 
 		resp, err := historyClient.ReplicateEventsV2(s.newContext(), req)
@@ -2213,7 +2216,7 @@ func (s *NDCFunctionalTestSuite) importEvents(
 	)
 	var token []byte
 	for _, batch := range eventBatches {
-		eventBlob, _ := s.generateEventBlobs(workflowID, runID, workflowType, taskqueue, batch)
+		eventBlob, _, _ := s.generateEventBlobs(workflowID, runID, workflowType, taskqueue, batch)
 		req := &historyservice.ImportWorkflowExecutionRequest{
 			NamespaceId: s.namespaceID.String(),
 			Execution: &commonpb.WorkflowExecution{
@@ -2264,7 +2267,7 @@ func (s *NDCFunctionalTestSuite) applyEventsThroughFetcher(
 	eventBatches []*historypb.History,
 ) {
 	for _, batch := range eventBatches {
-		eventBlob, newRunEventBlob := s.generateEventBlobs(workflowID, runID, workflowType, taskqueue, batch)
+		eventBlob, newRunEventBlob, newRunID := s.generateEventBlobs(workflowID, runID, workflowType, taskqueue, batch)
 
 		taskType := enumsspb.REPLICATION_TASK_TYPE_HISTORY_V2_TASK
 		replicationTask := &replicationspb.ReplicationTask{
@@ -2278,6 +2281,7 @@ func (s *NDCFunctionalTestSuite) applyEventsThroughFetcher(
 					VersionHistoryItems: versionHistory.GetItems(),
 					Events:              eventBlob,
 					NewRunEvents:        newRunEventBlob,
+					NewRunId:            newRunID,
 				}},
 		}
 

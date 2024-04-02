@@ -73,33 +73,29 @@ func (s *FunctionalSuite) TestWorkflowTimeout() {
 
 	s.Logger.Info("StartWorkflowExecution", tag.WorkflowRunID(we.RunId))
 
-	workflowComplete := false
-
 	time.Sleep(time.Second)
 
+	var historyEvents []*historypb.HistoryEvent
 GetHistoryLoop:
 	for i := 0; i < 10; i++ {
-		historyResponse, err := s.engine.GetWorkflowExecutionHistory(NewContext(), &workflowservice.GetWorkflowExecutionHistoryRequest{
-			Namespace: s.namespace,
-			Execution: &commonpb.WorkflowExecution{
-				WorkflowId: id,
-				RunId:      we.RunId,
-			},
+		historyEvents = s.getHistory(s.namespace, &commonpb.WorkflowExecution{
+			WorkflowId: id,
+			RunId:      we.RunId,
 		})
-		s.NoError(err)
-		history := historyResponse.History
 
-		lastEvent := history.Events[len(history.Events)-1]
+		lastEvent := historyEvents[len(historyEvents)-1]
 		if lastEvent.GetEventType() != enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_TIMED_OUT {
 			s.Logger.Warn("Execution not timedout yet. Last event: " + lastEvent.GetEventType().String())
 			time.Sleep(200 * time.Millisecond)
 			continue GetHistoryLoop
 		}
 
-		workflowComplete = true
 		break GetHistoryLoop
 	}
-	s.True(workflowComplete)
+	s.EqualHistoryEvents(`
+  1 WorkflowExecutionStarted
+  2 WorkflowTaskScheduled
+  3 WorkflowExecutionTimedOut`, historyEvents)
 
 	startFilter := &filterpb.StartTimeFilter{
 		EarliestTime: timestamppb.New(startTime),
@@ -265,7 +261,7 @@ func (s *FunctionalSuite) TestWorkflowTaskFailed() {
 	s.NoError(err, "failed to send signal to execution")
 
 	// process signal
-	_, err = poller.PollAndProcessWorkflowTask(WithDumpHistory)
+	_, err = poller.PollAndProcessWorkflowTask()
 	s.Logger.Info("PollAndProcessWorkflowTask", tag.Error(err))
 	s.NoError(err)
 	s.Equal(1, signalCount)
@@ -295,35 +291,47 @@ func (s *FunctionalSuite) TestWorkflowTaskFailed() {
 	s.Equal(12, signalCount)
 
 	// Make complete workflow workflow task
-	_, err = poller.PollAndProcessWorkflowTask(WithDumpHistory, WithExpectedAttemptCount(3))
+	_, err = poller.PollAndProcessWorkflowTask(WithExpectedAttemptCount(3))
 	s.Logger.Info("PollAndProcessWorkflowTask", tag.Error(err))
 	s.NoError(err)
 	s.True(workflowComplete)
 	s.Equal(16, signalCount)
 
 	events := s.getHistory(s.namespace, workflowExecution)
-	var lastEvent *historypb.HistoryEvent
-	var lastWorkflowTaskStartedEvent *historypb.HistoryEvent
-	lastIdx := 0
-	for i, e := range events {
-		if e.GetEventType() == enumspb.EVENT_TYPE_WORKFLOW_TASK_STARTED {
-			lastWorkflowTaskStartedEvent = e
-			lastIdx = i
-		}
-		lastEvent = e
-	}
-	s.NotNil(lastEvent)
-	s.Equal(enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_COMPLETED, lastEvent.GetEventType())
-	s.Logger.Info(fmt.Sprintf("Last workflow task time: %v, Last Workflow task history timestamp: %v, Complete timestamp: %v",
-		lastWorkflowTaskTime, lastWorkflowTaskStartedEvent.GetEventTime(), lastEvent.GetEventTime()))
-	s.Equal(lastWorkflowTaskTime, lastWorkflowTaskStartedEvent.GetEventTime().AsTime())
-	s.True(lastEvent.GetEventTime().AsTime().Sub(lastWorkflowTaskTime) >= time.Second)
+	s.EqualHistoryEvents(`
+  1 WorkflowExecutionStarted
+  2 WorkflowTaskScheduled
+  3 WorkflowTaskStarted
+  4 WorkflowTaskCompleted
+  5 ActivityTaskScheduled
+  6 ActivityTaskStarted
+  7 ActivityTaskCompleted
+  8 WorkflowTaskScheduled
+  9 WorkflowTaskStarted
+ 10 WorkflowTaskFailed
+ 11 WorkflowExecutionSignaled
+ 12 WorkflowTaskScheduled
+ 13 WorkflowTaskStarted
+ 14 WorkflowTaskCompleted
+ 15 WorkflowExecutionSignaled
+ 16 WorkflowTaskScheduled
+ 17 WorkflowTaskStarted
+ 18 WorkflowTaskFailed
+ 19 WorkflowExecutionSignaled
+ 20 WorkflowExecutionSignaled
+ 21 WorkflowExecutionSignaled
+ 22 WorkflowTaskScheduled
+ 23 WorkflowTaskStarted
+ 24 WorkflowTaskFailed
+ 25 WorkflowTaskScheduled
+ 26 WorkflowTaskStarted //lastWorkflowTaskStartedEvent
+ 27 WorkflowTaskCompleted
+ 28 WorkflowExecutionCompleted //wfCompletedEvent`, events)
 
-	s.Equal(2, len(events)-lastIdx-1)
-	workflowTaskCompletedEvent := events[lastIdx+1]
-	workflowCompletedEvent := events[lastIdx+2]
-	s.Equal(enumspb.EVENT_TYPE_WORKFLOW_TASK_COMPLETED, workflowTaskCompletedEvent.GetEventType())
-	s.Equal(enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_COMPLETED, workflowCompletedEvent.GetEventType())
+	lastWorkflowTaskStartedEvent := events[25]
+	s.Equal(lastWorkflowTaskTime, lastWorkflowTaskStartedEvent.GetEventTime().AsTime())
+	wfCompletedEvent := events[27]
+	s.True(wfCompletedEvent.GetEventTime().AsTime().Sub(lastWorkflowTaskTime) >= time.Second)
 }
 
 func (s *FunctionalSuite) TestRespondWorkflowTaskCompleted_ReturnsErrorIfInvalidArgument() {
@@ -378,17 +386,13 @@ func (s *FunctionalSuite) TestRespondWorkflowTaskCompleted_ReturnsErrorIfInvalid
 	s.IsType(&serviceerror.InvalidArgument{}, err)
 	s.Equal("BadRecordMarkerAttributes: MarkerName is not set on RecordMarkerCommand.", err.Error())
 
-	resp, err := s.engine.GetWorkflowExecutionHistory(NewContext(), &workflowservice.GetWorkflowExecutionHistoryRequest{
-		Namespace: s.namespace,
-		Execution: &commonpb.WorkflowExecution{
-			WorkflowId: id,
-			RunId:      we0.GetRunId(),
-		},
+	historyEvents := s.getHistory(s.namespace, &commonpb.WorkflowExecution{
+		WorkflowId: id,
+		RunId:      we0.GetRunId(),
 	})
-
-	s.NoError(err)
-	s.NotNil(resp)
-
-	// Last event is WORKFLOW_TASK_FAILED.
-	s.Equal(enumspb.EVENT_TYPE_WORKFLOW_TASK_FAILED, resp.History.Events[len(resp.History.Events)-1].GetEventType())
+	s.EqualHistoryEvents(`
+  1 WorkflowExecutionStarted
+  2 WorkflowTaskScheduled
+  3 WorkflowTaskStarted
+  4 WorkflowTaskFailed`, historyEvents)
 }

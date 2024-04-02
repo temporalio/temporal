@@ -22,7 +22,7 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-//go:generate mockgen -copyright_file ../../LICENSE -package mock -source $GOFILE -destination mock/store_mock.go -aux_files go.temporal.io/server/common/persistence=data_interfaces.go
+//go:generate mocksync -copyright_file ../../LICENSE -package mock -source $GOFILE -destination mock/store_mock.go -aux_files go.temporal.io/server/common/persistence=data_interfaces.go
 
 package persistence
 
@@ -180,6 +180,16 @@ type (
 		RangeDeleteMessagesFromDLQ(ctx context.Context, firstMessageID int64, lastMessageID int64) error
 		UpdateDLQAckLevel(ctx context.Context, metadata *InternalQueueMetadata) error
 		GetDLQAckLevels(ctx context.Context) (*InternalQueueMetadata, error)
+	}
+
+	// NexusIncomingServiceStore is a store for managing Nexus services
+	NexusIncomingServiceStore interface {
+		Closeable
+		GetName() string
+		CreateOrUpdateNexusIncomingService(ctx context.Context, request *InternalCreateOrUpdateNexusIncomingServiceRequest) error
+		DeleteNexusIncomingService(ctx context.Context, request *DeleteNexusIncomingServiceRequest) error
+		GetNexusIncomingService(ctx context.Context, request *GetNexusIncomingServiceRequest) (*InternalNexusIncomingService, error)
+		ListNexusIncomingServices(ctx context.Context, request *ListNexusIncomingServicesRequest) (*InternalListNexusIncomingServicesResponse, error)
 	}
 
 	// QueueMessage is the message that stores in the queue
@@ -397,7 +407,6 @@ type (
 
 		NamespaceID string
 		WorkflowID  string
-		RunID       string
 
 		Tasks map[tasks.Category][]InternalHistoryTask
 	}
@@ -731,6 +740,23 @@ type (
 	InternalUpsertClusterMembershipRequest struct {
 		ClusterMember
 		RecordExpiry time.Time
+	}
+
+	InternalNexusIncomingService struct {
+		ServiceID string
+		Version   int64
+		Data      *commonpb.DataBlob
+	}
+
+	InternalCreateOrUpdateNexusIncomingServiceRequest struct {
+		LastKnownTableVersion int64
+		Service               InternalNexusIncomingService
+	}
+
+	InternalListNexusIncomingServicesResponse struct {
+		TableVersion  int64
+		NextPageToken []byte
+		Services      []InternalNexusIncomingService
 	}
 
 	// QueueV2 is an interface for a generic FIFO queue. It should eventually replace the Queue interface. Why do we

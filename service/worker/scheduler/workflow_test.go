@@ -212,9 +212,10 @@ func (s *workflowSuite) setupMocksForWorkflows(runs []workflowRun, state *runAcr
 					s.Failf("multiple starts", "for %s at %s (prev %s)", req.Request.WorkflowId, s.now(), prev)
 				}
 				state.started[req.Request.WorkflowId] = s.now()
+				overhead := time.Duration(100+rand.Intn(100)) * time.Millisecond
 				return &schedspb.StartWorkflowResponse{
 					RunId:         uuid.NewString(),
-					RealStartTime: timestamppb.New(time.Now()),
+					RealStartTime: timestamppb.New(s.now().Add(overhead)),
 				}, nil
 			})
 		// set up short-poll watchers
@@ -319,7 +320,7 @@ func (s *workflowSuite) runAcrossContinue(
 			s.Require().NoError(payloads.Decode(canErr.Input, &startArgs))
 		}
 		// check starts that we actually got
-		s.Require().Equal(len(runs), len(state.started))
+		s.Require().Equalf(len(runs), len(state.started), "started %#v", state.started)
 		for _, run := range runs {
 			actual := state.started[run.id]
 			inRange := !actual.Before(run.start.Add(-run.startTolerance)) && !actual.After(run.start.Add(run.startTolerance))
@@ -1665,6 +1666,71 @@ func (s *workflowSuite) TestUpdateNotRetroactive() {
 					Interval: durationpb.New(1 * time.Hour),
 				}},
 			},
+		},
+	)
+}
+
+// Tests that an update between a nominal time and jittered time for a start, that doesn't
+// modify that start, will still start it.
+func (s *workflowSuite) TestUpdateBetweenNominalAndJitter() {
+	// TODO: remove once default version is UpdateFromPrevious
+	prevTweakables := currentTweakablePolicies
+	currentTweakablePolicies.Version = UpdateFromPrevious
+	defer func() { currentTweakablePolicies = prevTweakables }()
+
+	spec := &schedpb.ScheduleSpec{
+		Interval: []*schedpb.IntervalSpec{{
+			Interval: durationpb.New(1 * time.Hour),
+		}},
+		Jitter: durationpb.New(1 * time.Hour),
+	}
+	s.runAcrossContinue(
+		[]workflowRun{
+			{
+				id:     "myid-2022-06-01T01:00:00Z",
+				start:  time.Date(2022, 6, 1, 1, 49, 22, 594000000, time.UTC),
+				end:    time.Date(2022, 6, 1, 1, 53, 0, 0, time.UTC),
+				result: enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED,
+			},
+			{
+				id:     "myid-2022-06-01T02:00:00Z",
+				start:  time.Date(2022, 6, 1, 2, 2, 39, 204000000, time.UTC),
+				end:    time.Date(2022, 6, 1, 2, 11, 0, 0, time.UTC),
+				result: enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED,
+			},
+			{
+				id:     "newid-2022-06-01T03:00:00Z",
+				start:  time.Date(2022, 6, 1, 3, 37, 29, 538000000, time.UTC),
+				end:    time.Date(2022, 6, 1, 3, 41, 0, 0, time.UTC),
+				result: enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED,
+			},
+			{
+				id:     "newid-2022-06-01T04:00:00Z",
+				start:  time.Date(2022, 6, 1, 4, 23, 34, 755000000, time.UTC),
+				end:    time.Date(2022, 6, 1, 4, 27, 0, 0, time.UTC),
+				result: enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED,
+			},
+		},
+		[]delayedCallback{
+			{
+				// update after nominal time 03:00:00 but before jittered time 03:37:29
+				at: time.Date(2022, 6, 1, 3, 22, 10, 0, time.UTC),
+				f: func() {
+					s.env.SignalWorkflow(SignalNameUpdate, &schedspb.FullUpdateRequest{
+						Schedule: &schedpb.Schedule{
+							Spec:   spec,
+							Action: s.defaultAction("newid"),
+						},
+					})
+				},
+			},
+			{
+				at:         time.Date(2022, 6, 1, 5, 0, 0, 0, time.UTC),
+				finishTest: true,
+			},
+		},
+		&schedpb.Schedule{
+			Spec: spec,
 		},
 	)
 }

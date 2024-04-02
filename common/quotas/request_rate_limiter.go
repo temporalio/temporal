@@ -29,7 +29,7 @@ import (
 	"time"
 )
 
-//go:generate mockgen -copyright_file ../../LICENSE -package $GOPACKAGE -source $GOFILE -destination request_rate_limiter_mock.go
+//go:generate mocksync -copyright_file ../../LICENSE -package $GOPACKAGE -source $GOFILE -destination request_rate_limiter_mock.go
 
 type (
 	// RequestRateLimiterFn returns generate a namespace specific rate limiter

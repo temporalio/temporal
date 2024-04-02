@@ -47,6 +47,7 @@ import (
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/util"
 	"go.temporal.io/server/service/history/events"
+	"go.temporal.io/server/service/history/hsm"
 	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/tasks"
 	"go.temporal.io/server/service/history/tests"
@@ -101,6 +102,11 @@ func (s *ackManagerSuite) SetupTest() {
 		},
 		tests.NewDynamicConfig(),
 	)
+
+	reg := hsm.NewRegistry()
+	err := workflow.RegisterStateMachine(reg)
+	s.NoError(err)
+	s.mockShard.SetStateMachineRegistry(reg)
 
 	s.mockNamespaceRegistry = s.mockShard.Resource.NamespaceCache
 	s.mockNamespaceRegistry.EXPECT().GetNamespaceByID(tests.NamespaceID).Return(tests.GlobalNamespaceEntry, nil).AnyTimes()

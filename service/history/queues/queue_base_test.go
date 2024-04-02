@@ -577,6 +577,9 @@ func (s *queueBaseSuite) newQueueBase(
 		func() bool {
 			return false
 		},
+		func() string {
+			return ""
+		},
 	)
 	return newQueueBase(
 		mockShard,
