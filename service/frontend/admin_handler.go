@@ -140,7 +140,7 @@ type (
 		NamespaceReplicationQueue           persistence.NamespaceReplicationQueue
 		ReplicatorNamespaceReplicationQueue persistence.NamespaceReplicationQueue
 		EsClient                            esclient.Client
-		VisibilityMrg                       manager.VisibilityManager
+		visibilityMgr                       manager.VisibilityManager
 		Logger                              log.Logger
 		TaskManager                         persistence.TaskManager
 		ClusterMetadataManager              persistence.ClusterMetadataManager
@@ -194,7 +194,7 @@ func NewAdminHandler(
 			args.Logger,
 		),
 		eventSerializer:             args.EventSerializer,
-		visibilityMgr:               args.VisibilityMrg,
+		visibilityMgr:               args.visibilityMgr,
 		ESClient:                    args.EsClient,
 		persistenceExecutionManager: args.PersistenceExecutionManager,
 		namespaceReplicationQueue:   args.NamespaceReplicationQueue,

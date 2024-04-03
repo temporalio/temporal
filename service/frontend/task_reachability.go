@@ -240,7 +240,7 @@ func (wh *WorkflowHandler) getTaskQueueReachability(ctx context.Context, request
 		}
 	}
 
-	reachability, err := wh.queryVisibilityForExisitingWorkflowsReachability(ctx, request.namespace, request.taskQueue, buildIdsFilter, request.reachabilityType)
+	reachability, err := wh.queryVisibilityForExistingWorkflowsReachability(ctx, request.namespace, request.taskQueue, buildIdsFilter, request.reachabilityType)
 	if err != nil {
 		return nil, err
 	}
@@ -248,7 +248,7 @@ func (wh *WorkflowHandler) getTaskQueueReachability(ctx context.Context, request
 	return &taskQueueReachability, nil
 }
 
-func (wh *WorkflowHandler) queryVisibilityForExisitingWorkflowsReachability(
+func (wh *WorkflowHandler) queryVisibilityForExistingWorkflowsReachability(
 	ctx context.Context,
 	ns *namespace.Namespace,
 	taskQueue,
@@ -281,11 +281,185 @@ func (wh *WorkflowHandler) queryVisibilityForExisitingWorkflowsReachability(
 	}
 
 	// TODO(bergundy): is count more efficient than select with page size of 1?
-	countResponse, err := wh.visibilityMrg.CountWorkflowExecutions(ctx, &req)
+	countResponse, err := wh.visibilityMgr.CountWorkflowExecutions(ctx, &req)
 	if err != nil {
 		return nil, err
 	} else if countResponse.Count == 0 {
 		return nil, nil
 	}
 	return []enumspb.TaskReachability{reachabilityType}, nil
+}
+
+/*
+All code below this point is for versioning v2
+*/
+
+func (wh *WorkflowHandler) getBuildIdTaskReachability(
+	ctx context.Context,
+	ns *namespace.Namespace,
+	taskQueue,
+	buildId string,
+	typesInfo []*taskqueuepb.TaskQueueTypeInfo,
+) (enumspb.BuildIdTaskReachability, error) {
+	getResp, err := wh.GetWorkerVersioningRules(ctx, &workflowservice.GetWorkerVersioningRulesRequest{
+		Namespace: ns.Name().String(),
+		TaskQueue: taskQueue,
+	})
+	if err != nil {
+		return enumspb.BUILD_ID_TASK_REACHABILITY_UNSPECIFIED, err
+	}
+	assignmentRules := getResp.GetAssignmentRules()
+	redirectRules := getResp.GetCompatibleRedirectRules()
+
+	// 1. Easy UNREACHABLE case
+	if isRedirectRuleSource(buildId, redirectRules) {
+		return enumspb.BUILD_ID_TASK_REACHABILITY_UNREACHABLE, nil
+	}
+
+	// Gather list of all build ids that could point to buildId -> upstreamBuildIds
+	upstreamBuildIds := getUpstreamBuildIds(buildId, assignmentRules, redirectRules)
+	buildIdsOfInterest := append(upstreamBuildIds, buildId)
+
+	// 2. Cases for REACHABLE
+	// 2a. If buildId could be reached from the backlog
+	for _, bid := range buildIdsOfInterest {
+		if existsBackloggedActivityOrWFAssignedTo(bid, typesInfo) {
+			return enumspb.BUILD_ID_TASK_REACHABILITY_REACHABLE, nil
+		}
+	}
+
+	// 2b. If buildId is assignable to new tasks
+	for _, bid := range buildIdsOfInterest {
+		if isReachableAssignmentRuleTarget(bid, assignmentRules) {
+			return enumspb.BUILD_ID_TASK_REACHABILITY_REACHABLE, nil
+		}
+	}
+
+	// Note: The below cases are not applicable to activity-only task queues, since we don't record those in visibility
+
+	// 2c. If buildId is assignable to tasks from open workflows
+	existsOpenWFAssignedToBuildId, err := existsWFAssignedToAny(ctx, wh.visibilityMgr, ns, taskQueue, buildIdsOfInterest, true)
+	if err != nil {
+		return enumspb.BUILD_ID_TASK_REACHABILITY_UNSPECIFIED, err
+	}
+	if existsOpenWFAssignedToBuildId {
+		return enumspb.BUILD_ID_TASK_REACHABILITY_REACHABLE, nil
+	}
+
+	// 3. Cases for CLOSED_WORKFLOWS_ONLY
+	existsClosedWFAssignedToBuildId, err := existsWFAssignedToAny(ctx, wh.visibilityMgr, ns, taskQueue, buildIdsOfInterest, false)
+	if err != nil {
+		return enumspb.BUILD_ID_TASK_REACHABILITY_UNSPECIFIED, err
+	}
+	if existsClosedWFAssignedToBuildId {
+		return enumspb.BUILD_ID_TASK_REACHABILITY_CLOSED_WORKFLOWS_ONLY, nil
+	}
+
+	// 4. Otherwise, UNREACHABLE
+	return enumspb.BUILD_ID_TASK_REACHABILITY_UNREACHABLE, nil
+}
+
+func isRedirectRuleSource(buildId string, redirectRules []*taskqueuepb.TimestampedCompatibleBuildIdRedirectRule) bool {
+	for _, r := range redirectRules {
+		if r.GetRule().GetSourceBuildId() == buildId {
+			return true
+		}
+	}
+	return false
+}
+
+func getUpstreamBuildIds(
+	buildId string,
+	assignmentRules []*taskqueuepb.TimestampedBuildIdAssignmentRule,
+	redirectRules []*taskqueuepb.TimestampedCompatibleBuildIdRedirectRule) []string {
+	var upstream []string
+	// todo carly: traverse redirect rule graph to gather any build id that could point to buildId
+	return upstream
+}
+
+func existsBackloggedActivityOrWFAssignedTo(buildId string, typesInfo []*taskqueuepb.TaskQueueTypeInfo) bool {
+	// todo carly: needs Shivam's work which has a backlog count
+	// for _, typeInfo := range typesInfo {
+	//	 if typeInfo.GetBacklogInfo().GetApproximateBacklogCount() > 0 {
+	//		 return true
+	//	 }
+	// }
+	return false
+}
+
+func isReachableAssignmentRuleTarget(buildId string, assignmentRules []*taskqueuepb.TimestampedBuildIdAssignmentRule) bool {
+	for _, r := range assignmentRules {
+		if r.GetRule().GetTargetBuildId() == buildId {
+			return true
+		}
+		if r.GetRule().GetPercentageRamp() == nil {
+			// rules after an unconditional rule will not be reached
+			break
+		}
+	}
+	return false
+}
+
+func existsWFAssignedToAny(
+	ctx context.Context,
+	visibilityMgr manager.VisibilityManager,
+	ns *namespace.Namespace,
+	taskQueue string,
+	buildIdsOfInterest []string,
+	open bool,
+) (bool, error) {
+	countResponse, err := visibilityMgr.CountWorkflowExecutions(ctx, &manager.CountWorkflowExecutionsRequest{
+		NamespaceID: ns.ID(),
+		Namespace:   ns.Name(),
+		Query:       makeBuildIdQuery(buildIdsOfInterest, taskQueue, open),
+	})
+	if err != nil {
+		return false, err
+	}
+	return countResponse.Count > 0, nil
+}
+
+func makeBuildIdQuery(
+	buildIdsOfInterest []string,
+	taskQueue string,
+	open bool,
+) string {
+	escapedTaskQueue := sqlparser.String(sqlparser.NewStrVal([]byte(taskQueue)))
+	var statusFilter string
+	var escapedBuildIds []string
+	var includeNull bool
+	if open {
+		statusFilter = fmt.Sprintf(` AND %s = "Running"`, searchattribute.ExecutionStatus)
+		// want: currently assigned to that build-id
+		// (b1, b2) --> (assigned:b1, assigned:b2)
+		// (b1, b2, "") --> (assigned:b1, assigned:b2, unversioned, null)
+		// ("") --> (unversioned, null)
+		for _, bid := range buildIdsOfInterest {
+			if bid == "" {
+				escapedBuildIds = append(escapedBuildIds, worker_versioning.UnversionedSearchAttribute)
+				includeNull = true
+			} else {
+				escapedBuildIds = append(escapedBuildIds, sqlparser.String(sqlparser.NewStrVal([]byte(worker_versioning.AssignedBuildIdSearchAttribute(bid)))))
+			}
+		}
+	} else {
+		statusFilter = fmt.Sprintf(` AND %s != "Running"`, searchattribute.ExecutionStatus)
+		// want: closed AT that build id, and once used that build id
+		// (b1, b2) --> (versioned:b1, versioned:b2)
+		// (b1, b2, "") --> (versioned:b1, versioned:b2, unversioned, null)
+		// ("") --> (unversioned, null)
+		for _, bid := range buildIdsOfInterest {
+			if bid == "" {
+				escapedBuildIds = append(escapedBuildIds, worker_versioning.UnversionedSearchAttribute)
+				includeNull = true
+			} else {
+				escapedBuildIds = append(escapedBuildIds, sqlparser.String(sqlparser.NewStrVal([]byte(worker_versioning.VersionedBuildIdSearchAttribute(bid)))))
+			}
+		}
+	}
+	buildIdsFilter := fmt.Sprintf("%s IN (%s)", searchattribute.BuildIds, strings.Join(escapedBuildIds, ","))
+	if includeNull {
+		buildIdsFilter = fmt.Sprintf("(%s IS NULL OR %s)", searchattribute.BuildIds, buildIdsFilter)
+	}
+	return fmt.Sprintf("%s = %s AND %s%s", searchattribute.TaskQueue, escapedTaskQueue, buildIdsFilter, statusFilter)
 }
