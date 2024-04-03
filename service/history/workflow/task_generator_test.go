@@ -34,6 +34,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
+	historypb "go.temporal.io/api/history/v1"
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common/archiver"
@@ -332,9 +333,9 @@ func TestTaskGenerator_GenerateDirtySubStateMachineTasks(t *testing.T) {
 	reg := hsm.NewRegistry()
 	require.NoError(t, RegisterStateMachine(reg))
 	require.NoError(t, callbacks.RegisterStateMachine(reg))
-	require.NoError(t, callbacks.RegisterTaskSerializer(reg))
+	require.NoError(t, callbacks.RegisterTaskSerializers(reg))
 	require.NoError(t, nexusoperations.RegisterStateMachines(reg))
-	require.NoError(t, nexusoperations.RegisterTaskSerializer(reg))
+	require.NoError(t, nexusoperations.RegisterTaskSerializers(reg))
 	node, err := hsm.NewRoot(reg, StateMachineType.ID, nil, subStateMachinesByType)
 	require.NoError(t, err)
 	coll := callbacks.MachineCollection(node)
@@ -439,7 +440,15 @@ func TestTaskGenerator_GenerateDirtySubStateMachineTasks(t *testing.T) {
 	// Reset and test a concurrent task (nexusoperations.TimeoutTask)
 	node.ClearTransactionState()
 	genTasks = nil
-	opNode, err := nexusoperations.AddChild(node, "some-service", "some-op", timestamppb.Now(), durationpb.New(time.Hour))
+	opNode, err := nexusoperations.AddChild(node, "ID", &historypb.HistoryEvent{
+		Attributes: &historypb.HistoryEvent_NexusOperationScheduledEventAttributes{
+			NexusOperationScheduledEventAttributes: &historypb.NexusOperationScheduledEventAttributes{
+				Service:   "some-service",
+				Operation: "some-op",
+				Timeout:   durationpb.New(time.Hour),
+			},
+		},
+	})
 	require.NoError(t, err)
 	err = taskGenerator.GenerateDirtySubStateMachineTasks(reg)
 	require.NoError(t, err)

@@ -99,7 +99,7 @@ func newTaskExecutorTestContext(t *testing.T) *taskExecutorTestContext {
 	reg := hsm.NewRegistry()
 	require.NoError(t, workflow.RegisterStateMachine(reg))
 	require.NoError(t, callbacks.RegisterStateMachine(reg))
-	require.NoError(t, callbacks.RegisterTaskSerializer(reg))
+	require.NoError(t, callbacks.RegisterTaskSerializers(reg))
 	s.mockShard.SetStateMachineRegistry(reg)
 	s.workflowCache = wcache.NewHostLevelCache(s.mockShard.GetConfig(), s.mockShard.GetMetricsHandler())
 

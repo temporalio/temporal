@@ -51,6 +51,7 @@ import (
 	"go.temporal.io/sdk/worker"
 	"go.temporal.io/sdk/workflow"
 	"go.temporal.io/server/common/testing/historyrequire"
+	"go.temporal.io/server/plugins/nexusoperations"
 	"go.uber.org/multierr"
 
 	"go.temporal.io/server/api/adminservice/v1"
@@ -102,6 +103,8 @@ func (s *ClientFunctionalSuite) SetupSuite() {
 		dynamicconfig.FrontendEnableWorkerVersioningDataAPIs:          true,
 		dynamicconfig.FrontendEnableWorkerVersioningWorkflowAPIs:      true,
 		dynamicconfig.FrontendMaxConcurrentBatchOperationPerNamespace: limit,
+		nexusoperations.Enabled:                                       true,
+		dynamicconfig.OutboundProcessorEnabled:                        true,
 	}
 	s.setupSuite("testdata/client_cluster.yaml")
 }

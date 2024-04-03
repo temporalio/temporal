@@ -34,6 +34,7 @@ import (
 	historypb "go.temporal.io/api/history/v1"
 	"go.temporal.io/server/service/history/api/getworkflowexecutionrawhistory"
 	"go.temporal.io/server/service/history/api/listtasks"
+	"go.temporal.io/server/service/history/workflow"
 
 	historyspb "go.temporal.io/server/api/history/v1"
 	workflowpb "go.temporal.io/server/api/workflow/v1"
@@ -144,6 +145,7 @@ type (
 		versionChecker             headers.VersionChecker
 		tracer                     trace.Tracer
 		taskCategoryRegistry       tasks.TaskCategoryRegistry
+		commandHandlerRegistry     *workflow.CommandHandlerRegistry
 	}
 )
 
@@ -167,6 +169,7 @@ func NewEngineWithShardContext(
 	eventBlobCache persistence.XDCCache,
 	taskCategoryRegistry tasks.TaskCategoryRegistry,
 	dlqWriter replication.DLQWriter,
+	commandHandlerRegistry *workflow.CommandHandlerRegistry,
 ) shard.Engine {
 	currentClusterName := shard.GetClusterMetadata().GetCurrentClusterName()
 
@@ -204,6 +207,7 @@ func NewEngineWithShardContext(
 		versionChecker:             headers.NewDefaultVersionChecker(),
 		tracer:                     tracerProvider.Tracer(consts.LibraryName),
 		taskCategoryRegistry:       taskCategoryRegistry,
+		commandHandlerRegistry:     commandHandlerRegistry,
 	}
 
 	historyEngImpl.queueProcessors = make(map[tasks.Category]queues.Queue)
