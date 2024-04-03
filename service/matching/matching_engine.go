@@ -835,6 +835,73 @@ func (e *matchingEngineImpl) DescribeTaskQueuePartition(
 	return nil, nil
 }
 
+func (e *matchingEngineImpl) getBuildIdTaskReachability(
+	ctx context.Context,
+	nsID,
+	nsName,
+	taskQueue,
+	buildId string,
+	typesInfo []*taskqueuepb.TaskQueueTypeInfo,
+) (enumspb.BuildIdTaskReachability, error) {
+	getResp, err := e.GetWorkerVersioningRules(ctx, &matchingservice.GetWorkerVersioningRulesRequest{
+		NamespaceId:                nsID,
+		TaskQueue:                  taskQueue,
+		DeletedRuleInclusionPeriod: durationpb.New(deletedVersioningRuleReachabilityInclusionPeriod),
+	})
+	if err != nil {
+		return enumspb.BUILD_ID_TASK_REACHABILITY_UNSPECIFIED, err
+	}
+	assignmentRules := getResp.GetResponse().GetAssignmentRules()
+	redirectRules := getResp.GetResponse().GetCompatibleRedirectRules()
+
+	// 1. Easy UNREACHABLE case
+	if isTimestampedRedirectRuleSource(buildId, redirectRules) {
+		return enumspb.BUILD_ID_TASK_REACHABILITY_UNREACHABLE, nil
+	}
+
+	// Gather list of all build ids that could point to buildId -> upstreamBuildIds
+	upstreamBuildIds := getUpstreamBuildIds(buildId, assignmentRules, redirectRules)
+	buildIdsOfInterest := append(upstreamBuildIds, buildId)
+
+	// 2. Cases for REACHABLE
+	// 2a. If buildId could be reached from the backlog
+	for _, bid := range buildIdsOfInterest {
+		if existsBackloggedActivityOrWFAssignedTo(bid, typesInfo) {
+			return enumspb.BUILD_ID_TASK_REACHABILITY_REACHABLE, nil
+		}
+	}
+
+	// 2b. If buildId is assignable to new tasks
+	for _, bid := range buildIdsOfInterest {
+		if isReachableAssignmentRuleTarget(bid, assignmentRules) {
+			return enumspb.BUILD_ID_TASK_REACHABILITY_REACHABLE, nil
+		}
+	}
+
+	// Note: The below cases are not applicable to activity-only task queues, since we don't record those in visibility
+
+	// 2c. If buildId is assignable to tasks from open workflows
+	existsOpenWFAssignedToBuildId, err := existsWFAssignedToAny(ctx, e.visibilityManager, nsID, nsName, taskQueue, buildIdsOfInterest, true)
+	if err != nil {
+		return enumspb.BUILD_ID_TASK_REACHABILITY_UNSPECIFIED, err
+	}
+	if existsOpenWFAssignedToBuildId {
+		return enumspb.BUILD_ID_TASK_REACHABILITY_REACHABLE, nil
+	}
+
+	// 3. Cases for CLOSED_WORKFLOWS_ONLY
+	existsClosedWFAssignedToBuildId, err := existsWFAssignedToAny(ctx, e.visibilityManager, nsID, nsName, taskQueue, buildIdsOfInterest, false)
+	if err != nil {
+		return enumspb.BUILD_ID_TASK_REACHABILITY_UNSPECIFIED, err
+	}
+	if existsClosedWFAssignedToBuildId {
+		return enumspb.BUILD_ID_TASK_REACHABILITY_CLOSED_WORKFLOWS_ONLY, nil
+	}
+
+	// 4. Otherwise, UNREACHABLE
+	return enumspb.BUILD_ID_TASK_REACHABILITY_UNREACHABLE, nil
+}
+
 func (e *matchingEngineImpl) ListTaskQueuePartitions(
 	_ context.Context,
 	request *matchingservice.ListTaskQueuePartitionsRequest,
@@ -1756,74 +1823,4 @@ func (e *matchingEngineImpl) reviveBuildId(ns *namespace.Namespace, taskQueue st
 // be processed on the normal queue.
 func stickyWorkerAvailable(pm taskQueuePartitionManager) bool {
 	return pm != nil && pm.HasPollerAfter("", time.Now().Add(-stickyPollerUnavailableWindow))
-}
-
-/*
-All code below this point is for versioning v2
-*/
-
-func (e *matchingEngineImpl) getBuildIdTaskReachability(
-	ctx context.Context,
-	ns *namespace.Namespace,
-	taskQueue,
-	buildId string,
-	typesInfo []*taskqueuepb.TaskQueueTypeInfo,
-) (enumspb.BuildIdTaskReachability, error) {
-	getResp, err := e.GetWorkerVersioningRules(ctx, &matchingservice.GetWorkerVersioningRulesRequest{
-		NamespaceId:                ns.ID().String(),
-		TaskQueue:                  taskQueue,
-		DeletedRuleInclusionPeriod: durationpb.New(deletedVersioningRuleReachabilityInclusionPeriod),
-	})
-	if err != nil {
-		return enumspb.BUILD_ID_TASK_REACHABILITY_UNSPECIFIED, err
-	}
-	assignmentRules := getResp.GetResponse().GetAssignmentRules()
-	redirectRules := getResp.GetResponse().GetCompatibleRedirectRules()
-
-	// 1. Easy UNREACHABLE case
-	if isTimestampedRedirectRuleSource(buildId, redirectRules) {
-		return enumspb.BUILD_ID_TASK_REACHABILITY_UNREACHABLE, nil
-	}
-
-	// Gather list of all build ids that could point to buildId -> upstreamBuildIds
-	upstreamBuildIds := getUpstreamBuildIds(buildId, assignmentRules, redirectRules)
-	buildIdsOfInterest := append(upstreamBuildIds, buildId)
-
-	// 2. Cases for REACHABLE
-	// 2a. If buildId could be reached from the backlog
-	for _, bid := range buildIdsOfInterest {
-		if existsBackloggedActivityOrWFAssignedTo(bid, typesInfo) {
-			return enumspb.BUILD_ID_TASK_REACHABILITY_REACHABLE, nil
-		}
-	}
-
-	// 2b. If buildId is assignable to new tasks
-	for _, bid := range buildIdsOfInterest {
-		if isReachableAssignmentRuleTarget(bid, assignmentRules) {
-			return enumspb.BUILD_ID_TASK_REACHABILITY_REACHABLE, nil
-		}
-	}
-
-	// Note: The below cases are not applicable to activity-only task queues, since we don't record those in visibility
-
-	// 2c. If buildId is assignable to tasks from open workflows
-	existsOpenWFAssignedToBuildId, err := existsWFAssignedToAny(ctx, e.visibilityManager, ns, taskQueue, buildIdsOfInterest, true)
-	if err != nil {
-		return enumspb.BUILD_ID_TASK_REACHABILITY_UNSPECIFIED, err
-	}
-	if existsOpenWFAssignedToBuildId {
-		return enumspb.BUILD_ID_TASK_REACHABILITY_REACHABLE, nil
-	}
-
-	// 3. Cases for CLOSED_WORKFLOWS_ONLY
-	existsClosedWFAssignedToBuildId, err := existsWFAssignedToAny(ctx, e.visibilityManager, ns, taskQueue, buildIdsOfInterest, false)
-	if err != nil {
-		return enumspb.BUILD_ID_TASK_REACHABILITY_UNSPECIFIED, err
-	}
-	if existsClosedWFAssignedToBuildId {
-		return enumspb.BUILD_ID_TASK_REACHABILITY_CLOSED_WORKFLOWS_ONLY, nil
-	}
-
-	// 4. Otherwise, UNREACHABLE
-	return enumspb.BUILD_ID_TASK_REACHABILITY_UNREACHABLE, nil
 }

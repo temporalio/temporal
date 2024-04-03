@@ -558,14 +558,15 @@ func isReachableAssignmentRuleTarget(buildId string, assignmentRules []*taskqueu
 func existsWFAssignedToAny(
 	ctx context.Context,
 	visibilityMgr manager.VisibilityManager,
-	ns *namespace.Namespace,
+	nsID,
+	nsName,
 	taskQueue string,
 	buildIdsOfInterest []string,
 	open bool,
 ) (bool, error) {
 	countResponse, err := visibilityMgr.CountWorkflowExecutions(ctx, &manager.CountWorkflowExecutionsRequest{
-		NamespaceID: ns.ID(),
-		Namespace:   ns.Name(),
+		NamespaceID: namespace.ID(nsID),
+		Namespace:   namespace.Name(nsName),
 		Query:       makeBuildIdQuery(buildIdsOfInterest, taskQueue, open),
 	})
 	if err != nil {
