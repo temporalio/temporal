@@ -105,6 +105,7 @@ func (s *ClientFunctionalSuite) SetupSuite() {
 		dynamicconfig.FrontendMaxConcurrentBatchOperationPerNamespace: limit,
 		nexusoperations.Enabled:                                       true,
 		dynamicconfig.OutboundProcessorEnabled:                        true,
+		dynamicconfig.EnableMutableStateTransitionHistory:             true,
 	}
 	s.setupSuite("testdata/client_cluster.yaml")
 }

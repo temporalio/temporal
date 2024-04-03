@@ -27,6 +27,7 @@ package workflow
 import (
 	"context"
 	"fmt"
+	"reflect"
 
 	commandpb "go.temporal.io/api/command/v1"
 	commonpb "go.temporal.io/api/common/v1"
@@ -241,9 +242,18 @@ func (mse MutableStateWithEffects) CanAddEvent() bool {
 
 // TokenFromEvent returns a token for loading a history event.
 func TokenFromEvent(event *historypb.HistoryEvent, branchToken []byte) ([]byte, error) {
+	attrs := reflect.ValueOf(event.Attributes).Elem()
+
+	// Attributes is always a struct with a single field (e.g: HistoryEvent_NexusOperationScheduledEventAttributes)
+	if attrs.Kind() != reflect.Struct || attrs.NumField() != 1 {
+		return nil, serviceerror.NewInternal(fmt.Sprintf("got an invalid event structure: %v", event.EventType))
+	}
+
+	f := attrs.Field(0).Interface()
+
 	var eventBatchID int64
-	if getter, ok := event.Attributes.(interface{ GetWorkflowTaskCompletedEventId() int64 }); ok {
-		// Command-Events always have WorkflowTaskCompletedEventId and is always equal to the batch ID.
+	if getter, ok := f.(interface{ GetWorkflowTaskCompletedEventId() int64 }); ok {
+		// Command-Events always have a WorkflowTaskCompletedEventId field that is equal to the batch ID.
 		eventBatchID = getter.GetWorkflowTaskCompletedEventId()
 	} else if attrs := event.GetWorkflowExecutionStartedEventAttributes(); attrs != nil {
 		// WFEStarted is always stored in the first batch of events.
