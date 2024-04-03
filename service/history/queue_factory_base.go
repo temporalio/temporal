@@ -163,7 +163,7 @@ func QueueSchedulerRateLimiterProvider(
 	serviceResolver membership.ServiceResolver,
 	config *configs.Config,
 	timeSource clock.TimeSource,
-	logger log.Logger,
+	logger log.SnTaggedLogger,
 ) (queues.SchedulerRateLimiter, error) {
 	return queues.NewPrioritySchedulerRateLimiter(
 		calculator.NewLoggedNamespaceCalculator(

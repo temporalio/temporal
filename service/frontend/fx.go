@@ -347,7 +347,7 @@ func TelemetryInterceptorProvider(
 func RateLimitInterceptorProvider(
 	serviceConfig *Config,
 	frontendServiceResolver membership.ServiceResolver,
-	logger log.Logger,
+	logger log.SnTaggedLogger,
 ) *interceptor.RateLimitInterceptor {
 	rateFn := calculator.NewLoggedCalculator(
 		calculator.ClusterAwareQuotaCalculator{
@@ -377,7 +377,7 @@ func NamespaceRateLimitInterceptorProvider(
 	serviceConfig *Config,
 	namespaceRegistry namespace.Registry,
 	frontendServiceResolver membership.ServiceResolver,
-	logger log.Logger,
+	logger log.SnTaggedLogger,
 ) *interceptor.NamespaceRateLimitInterceptor {
 	var globalNamespaceRPS, globalNamespaceVisibilityRPS, globalNamespaceNamespaceReplicationInducingAPIsRPS dynamicconfig.IntPropertyFnWithNamespaceFilter
 
@@ -472,7 +472,7 @@ func CallerInfoInterceptorProvider(
 func PersistenceRateLimitingParamsProvider(
 	serviceConfig *Config,
 	persistenceLazyLoadedServiceResolver service.PersistenceLazyLoadedServiceResolver,
-	logger log.Logger,
+	logger log.SnTaggedLogger,
 ) service.PersistenceRateLimitingParams {
 	return service.NewPersistenceRateLimitingParams(
 		serviceConfig.PersistenceMaxQPS,

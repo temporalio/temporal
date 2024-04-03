@@ -229,7 +229,7 @@ func PersistenceRateLimitingParamsProvider(
 	serviceConfig *configs.Config,
 	persistenceLazyLoadedServiceResolver service.PersistenceLazyLoadedServiceResolver,
 	ownershipBasedQuotaScaler shard.LazyLoadedOwnershipBasedQuotaScaler,
-	logger log.Logger,
+	logger log.SnTaggedLogger,
 ) service.PersistenceRateLimitingParams {
 	hostCalculator := calculator.NewLoggedCalculator(
 		shard.NewOwnershipAwareQuotaCalculator(
