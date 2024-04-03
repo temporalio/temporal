@@ -30,6 +30,8 @@ import (
 	enumspb "go.temporal.io/api/enums/v1"
 	historypb "go.temporal.io/api/history/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
+	tokenspb "go.temporal.io/server/api/token/v1"
+	"google.golang.org/protobuf/proto"
 )
 
 // ErrStateMachineNotFound is returned when looking up a non-existing state machine in a [Node] or a [Collection].
@@ -89,6 +91,13 @@ type NodeBackend interface {
 	GenerateEventLoadToken(event *historypb.HistoryEvent) ([]byte, error)
 	// Load a history event by token generated via [GenerateEventLoadToken].
 	LoadHistoryEvent(ctx context.Context, token []byte) (*historypb.HistoryEvent, error)
+}
+
+// EventIDFromToken gets the event ID associated with an event load token.
+func EventIDFromToken(token []byte) (int64, error) {
+	ref := &tokenspb.HistoryEventRef{}
+	err := proto.Unmarshal(token, ref)
+	return ref.EventId, err
 }
 
 // Node is a node in a hierarchical state machine tree.

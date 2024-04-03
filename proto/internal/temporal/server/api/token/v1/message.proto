@@ -29,6 +29,7 @@ option go_package = "go.temporal.io/server/api/token/v1;token";
 import "google/protobuf/timestamp.proto";
 import "temporal/server/api/clock/v1/message.proto";
 import "temporal/server/api/history/v1/message.proto";
+import "temporal/server/api/persistence/v1/hsm.proto";
 
 message HistoryContinuation {
     string run_id = 1;
@@ -90,3 +91,22 @@ message HistoryEventRef {
     int64 event_batch_id = 2;
 }
 
+// A completion token for a Nexus operation started from a workflow.
+message NexusOperationCompletion {
+    // Namespace UUID.
+    string namespace_id = 1;
+    // Workflow ID.
+    string workflow_id = 2;
+    // Run ID at the time this token was generated. If this run isn't "current" for the workflow ID, the "current" run
+    // is loaded to support cases where the workflow was reset.
+    string run_id = 3;
+    // The request ID imprinted on the Operation state machine at schedule time. Compared to verify that the completion
+    // is addressing the same operation even in cases a workflow was reset.
+    string operation_request_id = 4;
+    // Path to the backing Operation state machine.
+    repeated temporal.server.api.persistence.v1.StateMachineKey path = 5;
+    // Namespace failover version at the time this token was generated. If this version is greater than the current
+    // version referenced by the workflow, a completion request will fail with a retryable error to allow for
+    // replication to catch up.
+    int64 namespace_failover_version = 6;
+}

@@ -23,15 +23,27 @@
 package tests
 
 import (
+	"context"
+	"errors"
+	"fmt"
+	"net"
+	"net/http"
 	"slices"
+	"testing"
 	"time"
 
+	"github.com/nexus-rpc/sdk-go/nexus"
+	"github.com/stretchr/testify/require"
 	commandpb "go.temporal.io/api/command/v1"
+	commonpb "go.temporal.io/api/common/v1"
 	"go.temporal.io/api/enums/v1"
 	historypb "go.temporal.io/api/history/v1"
+	nexuspb "go.temporal.io/api/nexus/v1"
+	"go.temporal.io/api/operatorservice/v1"
 	"go.temporal.io/api/taskqueue/v1"
 	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/sdk/client"
+	"go.temporal.io/server/internal/temporalite"
 	"google.golang.org/protobuf/types/known/durationpb"
 )
 
@@ -114,4 +126,156 @@ func (s *ClientFunctionalSuite) TestNexusScheduleAndCancelCommands() {
 	s.NoError(err)
 	err = s.sdkClient.TerminateWorkflow(ctx, run.GetID(), run.GetRunID(), "test")
 	s.NoError(err)
+}
+
+func (s *ClientFunctionalSuite) TestNexusOperationSyncCompletion() {
+	ctx := NewContext()
+	namespace := s.randomizeStr(s.T().Name())
+	taskQueue := s.randomizeStr(s.T().Name())
+	serviceName := s.randomizeStr(s.T().Name())
+
+	h := handler{
+		OnStartOperation: func(ctx context.Context, operation string, input *nexus.LazyValue, options nexus.StartOperationOptions) (nexus.HandlerStartOperationResult[any], error) {
+			return &nexus.HandlerStartOperationResultSync[any]{Value: "result"}, nil
+		},
+	}
+	listenAddr := allocListenAddress(s.T())
+	shutdownServer := newNexusServer(s.T(), listenAddr, h)
+	defer func() {
+		if err := shutdownServer(); err != nil {
+			panic(err)
+		}
+	}()
+
+	_, err := s.engine.RegisterNamespace(ctx, &workflowservice.RegisterNamespaceRequest{
+		Namespace:                        namespace,
+		WorkflowExecutionRetentionPeriod: durationpb.New(time.Hour * 24),
+	})
+	s.NoError(err)
+	_, err = s.operatorClient.CreateNexusOutgoingService(ctx, &operatorservice.CreateNexusOutgoingServiceRequest{
+		Namespace: namespace,
+		Name:      serviceName,
+		Spec: &nexuspb.OutgoingServiceSpec{
+			Url:               "http://" + listenAddr,
+			PublicCallbackUrl: "http://localhost/callback",
+		},
+	})
+	s.NoError(err)
+
+	sdkClient, err := client.Dial(client.Options{
+		HostPort:  s.hostPort,
+		Namespace: namespace,
+	})
+	s.NoError(err)
+
+	run, err := sdkClient.ExecuteWorkflow(ctx, client.StartWorkflowOptions{
+		TaskQueue: taskQueue,
+	}, "workflow")
+	s.NoError(err)
+	pollResp, err := s.engine.PollWorkflowTaskQueue(ctx, &workflowservice.PollWorkflowTaskQueueRequest{
+		Namespace: namespace,
+		TaskQueue: &taskqueue.TaskQueue{
+			Name: taskQueue,
+			Kind: enums.TASK_QUEUE_KIND_NORMAL,
+		},
+		Identity: "test",
+	})
+	s.NoError(err)
+	_, err = s.engine.RespondWorkflowTaskCompleted(ctx, &workflowservice.RespondWorkflowTaskCompletedRequest{
+		Identity:  "test",
+		TaskToken: pollResp.TaskToken,
+		Commands: []*commandpb.Command{
+			{
+				CommandType: enums.COMMAND_TYPE_SCHEDULE_NEXUS_OPERATION,
+				Attributes: &commandpb.Command_ScheduleNexusOperationCommandAttributes{
+					ScheduleNexusOperationCommandAttributes: &commandpb.ScheduleNexusOperationCommandAttributes{
+						Service:   serviceName,
+						Operation: "operation",
+						Input:     s.mustToPayload("input"),
+					},
+				},
+			},
+		},
+	})
+	s.NoError(err)
+	pollResp, err = s.engine.PollWorkflowTaskQueue(ctx, &workflowservice.PollWorkflowTaskQueueRequest{
+		Namespace: namespace,
+		TaskQueue: &taskqueue.TaskQueue{
+			Name: taskQueue,
+			Kind: enums.TASK_QUEUE_KIND_NORMAL,
+		},
+		Identity: "test",
+	})
+	s.NoError(err)
+	completedEventIdx := slices.IndexFunc(pollResp.History.Events, func(e *historypb.HistoryEvent) bool {
+		return e.GetNexusOperationCompletedEventAttributes() != nil
+	})
+	s.Greater(completedEventIdx, 0)
+
+	_, err = s.engine.RespondWorkflowTaskCompleted(ctx, &workflowservice.RespondWorkflowTaskCompletedRequest{
+		Identity:                   "test",
+		ReturnNewWorkflowTask:      true,
+		ForceCreateNewWorkflowTask: true,
+		TaskToken:                  pollResp.TaskToken,
+		Commands: []*commandpb.Command{
+			{
+				CommandType: enums.COMMAND_TYPE_COMPLETE_WORKFLOW_EXECUTION,
+				Attributes: &commandpb.Command_CompleteWorkflowExecutionCommandAttributes{
+					CompleteWorkflowExecutionCommandAttributes: &commandpb.CompleteWorkflowExecutionCommandAttributes{
+						Result: &commonpb.Payloads{
+							Payloads: []*commonpb.Payload{
+								pollResp.History.Events[completedEventIdx].GetNexusOperationCompletedEventAttributes().Result,
+							},
+						},
+					},
+				},
+			},
+		},
+	})
+	s.NoError(err)
+	var result string
+	s.NoError(run.Get(ctx, &result))
+	s.Equal("result", result)
+}
+
+func allocListenAddress(t *testing.T) string {
+	pp := temporalite.NewPortProvider()
+	listenAddr := fmt.Sprintf("localhost:%d", pp.MustGetFreePort())
+	require.NoError(t, pp.Close())
+	return listenAddr
+}
+
+func newNexusServer(t *testing.T, listenAddr string, handler nexus.Handler) func() error {
+	hh := nexus.NewHTTPHandler(nexus.HandlerOptions{
+		Handler: handler,
+	})
+	srv := &http.Server{Addr: listenAddr, Handler: hh}
+	listener, err := net.Listen("tcp", listenAddr)
+	require.NoError(t, err)
+	errCh := make(chan error, 1)
+	go func() {
+		errCh <- srv.Serve(listener)
+	}()
+
+	return func() error {
+		// Graceful shutdown
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		if err := srv.Shutdown(ctx); err != nil {
+			return err
+		}
+		if err := <-errCh; err != nil && !errors.Is(err, http.ErrServerClosed) {
+			return err
+		}
+		return nil
+	}
+}
+
+type handler struct {
+	nexus.UnimplementedHandler
+	OnStartOperation func(ctx context.Context, operation string, input *nexus.LazyValue, options nexus.StartOperationOptions) (nexus.HandlerStartOperationResult[any], error)
+}
+
+func (h handler) StartOperation(ctx context.Context, operation string, input *nexus.LazyValue, options nexus.StartOperationOptions) (nexus.HandlerStartOperationResult[any], error) {
+	return h.OnStartOperation(ctx, operation, input, options)
 }

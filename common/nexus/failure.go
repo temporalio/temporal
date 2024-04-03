@@ -26,6 +26,7 @@ import (
 	"encoding/json"
 
 	"github.com/nexus-rpc/sdk-go/nexus"
+	commonpb "go.temporal.io/api/common/v1"
 	failurepb "go.temporal.io/api/failure/v1"
 	nexuspb "go.temporal.io/api/nexus/v1"
 )
@@ -55,5 +56,46 @@ func ProtoFailureToNexusFailure(failure *nexuspb.Failure) *nexus.Failure {
 func APIFailureToNexusFailure(failure *failurepb.Failure) *nexus.Failure {
 	return &nexus.Failure{
 		Message: failure.GetMessage(),
+	}
+}
+
+func UnsuccessfulOperationErrorToTemporalFailure(err *nexus.UnsuccessfulOperationError) *failurepb.Failure {
+	failure := &failurepb.Failure{
+		Message: err.Failure.Message,
+	}
+	if err.State == nexus.OperationStateCanceled {
+		failure.FailureInfo = &failurepb.Failure_CanceledFailureInfo{
+			CanceledFailureInfo: &failurepb.CanceledFailureInfo{
+				Details: nexusFailureMetadataToPayloads(err.Failure),
+			},
+		}
+	} else {
+		failure.FailureInfo = &failurepb.Failure_ApplicationFailureInfo{
+			ApplicationFailureInfo: &failurepb.ApplicationFailureInfo{
+				// Make up a type here, it's not part of the Nexus Failure spec.
+				Type:         "NexusOperationFailure",
+				Details:      nexusFailureMetadataToPayloads(err.Failure),
+				NonRetryable: true,
+			},
+		}
+	}
+	return failure
+}
+
+func nexusFailureMetadataToPayloads(failure nexus.Failure) *commonpb.Payloads {
+	if len(failure.Metadata) == 0 && len(failure.Details) == 0 {
+		return nil
+	}
+	metadata := make(map[string][]byte, len(failure.Metadata))
+	for k, v := range failure.Metadata {
+		metadata[k] = []byte(v)
+	}
+	return &commonpb.Payloads{
+		Payloads: []*commonpb.Payload{
+			{
+				Metadata: metadata,
+				Data:     failure.Details,
+			},
+		},
 	}
 }

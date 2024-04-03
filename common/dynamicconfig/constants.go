@@ -217,7 +217,7 @@ const (
 	NexusIncomingServiceListDefaultPageSize = "limit.incomingServiceListDefaultPageSize"
 	// NexusIncomingServiceListMaxPageSize is the maximum page size for listing Nexus incoming services.
 	NexusIncomingServiceListMaxPageSize = "limit.incomingServiceListMaxPageSize"
-	// NexusOutgoingServiceURLMaxLength is the maximum length of an outgoing service URL.
+	// NexusOutgoingServiceURLMaxLength is the maximum length of an outgoing service URL and public callback URL.
 	NexusOutgoingServiceURLMaxLength = "limit.outgoingServiceURLMaxLength"
 	// NexusOutgoingServiceNameMaxLength is the maximum length of an outgoing service name.
 	NexusOutgoingServiceNameMaxLength = "limit.outgoingServiceNameMaxLength"
