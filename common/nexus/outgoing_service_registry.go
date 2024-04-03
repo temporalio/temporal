@@ -101,9 +101,11 @@ func NewOutgoingServiceRegistryConfig(dc *dynamicconfig.Collection) *OutgoingSer
 }
 
 const (
-	IssueNamespaceNotSet = "namespace is not set on request"
-	IssueNameNotSet      = "name is not set on request"
-	IssueURLNotSet       = "url is not set on request"
+	IssueNamespaceNotSet         = "namespace is not set on request"
+	IssueNameNotSet              = "name is not set on request"
+	IssueSpecNotSet              = "spec is not set on request"
+	IssueURLNotSet               = "url is not set on request"
+	IssuePublicCallbackURLNotSet = "public callback url is not set on request"
 )
 
 // ServiceNameRegex is the regular expression that outgoing service names must match.
@@ -306,8 +308,9 @@ func (h *OutgoingServiceRegistry) updateNamespace(
 ) error {
 	ns.ConfigVersion++
 	err := h.namespaceService.UpdateNamespace(ctx, &persistence.UpdateNamespaceRequest{
-		Namespace:           ns,
-		IsGlobalNamespace:   response.IsGlobalNamespace,
+		Namespace:         ns,
+		IsGlobalNamespace: response.IsGlobalNamespace,
+		// TODO: This is wrong. It's not how it's done in namespace_handler.
 		NotificationVersion: response.NotificationVersion + 1,
 	})
 	if err != nil {
@@ -366,19 +369,40 @@ func (h *OutgoingServiceRegistry) validateUpsertRequest(req upsertRequest) error
 	if !ServiceNameRegex.MatchString(req.GetName()) {
 		issues.Appendf("outgoing service name must match the regex: %q", ServiceNameRegex.String())
 	}
-	if req.GetSpec() == nil || req.GetSpec().GetUrl() == "" {
-		issues.Appendf(IssueURLNotSet)
+	if req.GetSpec() == nil {
+		issues.Appendf(IssueSpecNotSet)
 	} else {
-		urlMaxLength := h.config.MaxURLLength()
-		if len(req.GetSpec().GetUrl()) > urlMaxLength {
-			issues.Appendf("outgoing service URL length exceeds the limit of %d", urlMaxLength)
-		}
-		u, err := url.Parse(req.GetSpec().GetUrl())
-		if err != nil {
-			issues.Appendf("malformed outgoing service URL: %v", err)
+		if req.GetSpec().GetUrl() == "" {
+			issues.Appendf(IssueURLNotSet)
 		} else {
-			if u.Scheme != "http" && u.Scheme != "https" {
-				issues.Appendf("outgoing service URL must have http or https scheme but has %q", u.Scheme)
+			urlMaxLength := h.config.MaxURLLength()
+			if len(req.GetSpec().GetUrl()) > urlMaxLength {
+				issues.Appendf("outgoing service URL length exceeds the limit of %d", urlMaxLength)
+			}
+			u, err := url.Parse(req.GetSpec().GetUrl())
+			if err != nil {
+				issues.Appendf("malformed outgoing service URL: %v", err)
+			} else {
+				if u.Scheme != "http" && u.Scheme != "https" {
+					issues.Appendf("outgoing service URL must have http or https scheme but has %q", u.Scheme)
+				}
+			}
+		}
+
+		if req.GetSpec().GetPublicCallbackUrl() == "" {
+			issues.Appendf(IssuePublicCallbackURLNotSet)
+		} else {
+			urlMaxLength := h.config.MaxURLLength()
+			if len(req.GetSpec().GetPublicCallbackUrl()) > urlMaxLength {
+				issues.Appendf("outgoing service public callback URL length exceeds the limit of %d", urlMaxLength)
+			}
+			u, err := url.Parse(req.GetSpec().GetPublicCallbackUrl())
+			if err != nil {
+				issues.Appendf("malformed outgoing service public callback URL: %v", err)
+			} else {
+				if u.Scheme != "http" && u.Scheme != "https" {
+					issues.Appendf("outgoing service public callback URL must have http or https scheme but has %q", u.Scheme)
+				}
 			}
 		}
 	}

@@ -71,6 +71,7 @@ func newTestContext(t *testing.T, cfg *nexusoperations.Config) testContext {
 	smReg := hsm.NewRegistry()
 	require.NoError(t, workflow.RegisterStateMachine(smReg))
 	require.NoError(t, nexusoperations.RegisterStateMachines(smReg))
+	require.NoError(t, nexusoperations.RegisterEventDefinitions(smReg))
 	// Backend is nil because we don't need to generate history events for this test.
 	node, err := hsm.NewRoot(smReg, workflow.StateMachineType.ID, nil, make(map[int32]*persistencespb.StateMachineMap), nil)
 	require.NoError(t, err)

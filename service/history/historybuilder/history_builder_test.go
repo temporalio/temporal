@@ -2291,6 +2291,11 @@ func (s *historyBuilderSuite) TestReorder() {
 		enumspb.EVENT_TYPE_CHILD_WORKFLOW_EXECUTION_TIMED_OUT:  {},
 		enumspb.EVENT_TYPE_CHILD_WORKFLOW_EXECUTION_CANCELED:   {},
 		enumspb.EVENT_TYPE_CHILD_WORKFLOW_EXECUTION_TERMINATED: {},
+		enumspb.EVENT_TYPE_NEXUS_OPERATION_STARTED:             {},
+		enumspb.EVENT_TYPE_NEXUS_OPERATION_COMPLETED:           {},
+		enumspb.EVENT_TYPE_NEXUS_OPERATION_FAILED:              {},
+		enumspb.EVENT_TYPE_NEXUS_OPERATION_CANCELED:            {},
+		enumspb.EVENT_TYPE_NEXUS_OPERATION_TIMED_OUT:           {},
 	}
 	var reorderEvents []*historypb.HistoryEvent
 	for eventType := range reorderEventTypes {

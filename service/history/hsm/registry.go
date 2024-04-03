@@ -27,6 +27,8 @@ import (
 	"errors"
 	"fmt"
 	"reflect"
+
+	enumspb "go.temporal.io/api/enums/v1"
 )
 
 // ErrDuplicateRegistration is returned by a [Registry] when it detects duplicate registration.
@@ -57,6 +59,7 @@ type Registry struct {
 	// This is mapped to any because of Go's limited generics support.
 	// The actual value is Executor[T].
 	executors map[int32]any
+	events    map[enumspb.EventType]EventDefinition
 }
 
 // NewRegistry creates a new [Registry].
@@ -65,6 +68,7 @@ func NewRegistry() *Registry {
 		machines:  make(map[int32]StateMachineDefinition),
 		tasks:     make(map[int32]TaskSerializer),
 		executors: make(map[int32]any),
+		events:    make(map[enumspb.EventType]EventDefinition),
 	}
 }
 
@@ -101,8 +105,8 @@ func (r *Registry) TaskSerializer(t int32) (d TaskSerializer, ok bool) {
 	return
 }
 
-// RegisterExecutor registers an [Executor] for the given task types.
-// Returns an [ErrDuplicateRegistration] if an executor for any of the types has already been registered.
+// RegisterExecutor registers an [Executor] for the given task type.
+// Returns an [ErrDuplicateRegistration] if an executor for the type has already been registered.
 func RegisterExecutor[T Task](r *Registry, t int32, exec Executor[T]) error {
 	if existing, ok := r.executors[t]; ok {
 		return fmt.Errorf("%w: executor already registered for %v: %v", ErrDuplicateRegistration, t, existing)
@@ -124,4 +128,22 @@ func Execute(ctx context.Context, r *Registry, env Environment, ref Ref, task Ta
 		return values[0].Interface().(error)
 	}
 	return nil
+}
+
+// RegisterEventDefinition registers an [EventDefinition] for the given event type.
+// Returns an [ErrDuplicateRegistration] if a definition for the type has already been registered.
+func (r *Registry) RegisterEventDefinition(def EventDefinition) error {
+	t := def.Type()
+	prev, ok := r.events[t]
+	if ok {
+		return fmt.Errorf("%w: event definition for event type %v: %v", ErrDuplicateRegistration, t, prev)
+	}
+	r.events[t] = def
+	return nil
+}
+
+// EventDefinition returns an [EventDefinition] for a given type and a boolean indicating whether it was found.
+func (r *Registry) EventDefinition(t enumspb.EventType) (def EventDefinition, ok bool) {
+	def, ok = r.events[t]
+	return
 }
