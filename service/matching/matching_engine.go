@@ -798,23 +798,17 @@ func (e *matchingEngineImpl) DescribeTaskQueue(
 		physicalInfoByBuildId := make(map[string]map[enumspb.TaskQueueType]*taskqueuespb.PhysicalTaskQueueInfo)
 		for _, taskQueueType := range req.TaskQueueTypes {
 			for i := 0; i < e.config.NumTaskqueueWritePartitions(req.Namespace, req.TaskQueue.Name, taskQueueType); i++ {
-				pm, err := e.getTaskQueuePartitionManager(
-					ctx,
-					tqid.PartitionFromPartitionProto(&taskqueuespb.TaskQueuePartition{
+				partitionResp, err := e.matchingRawClient.DescribeTaskQueuePartition(ctx, &matchingservice.DescribeTaskQueuePartitionRequest{
+					NamespaceId: request.GetNamespaceId(),
+					TaskQueuePartition: &taskqueuespb.TaskQueuePartition{
 						TaskQueue:     req.TaskQueue.Name,
 						TaskQueueType: taskQueueType,
 						PartitionId:   &taskqueuespb.TaskQueuePartition_NormalPartitionId{NormalPartitionId: int32(i)},
-					}, request.GetNamespaceId()),
-					true, // todo carly: should this be true?
-				)
-				if err != nil {
-					return nil, err
-				}
-				buildIds, err := e.getBuildIds(req.GetVersions(), pm)
-				if err != nil {
-					return nil, err
-				}
-				partitionResp, err := pm.Describe(buildIds, req.GetVersions().GetAllActive(), false, req.ReportPollers)
+					},
+					Versions:          req.GetVersions(),
+					ReportBacklogInfo: false,
+					ReportPollers:     req.GetReportTaskReachability(),
+				})
 				if err != nil {
 					return nil, err
 				}
