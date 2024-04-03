@@ -861,7 +861,7 @@ func TestNamespaceRateLimitMetrics(t *testing.T) {
 
 			client := workflowservice.NewWorkflowServiceClient(conn)
 
-			_, err = client.StartWorkflowExecution(
+			_, _ = client.StartWorkflowExecution(
 				context.Background(),
 				&workflowservice.StartWorkflowExecutionRequest{
 					Namespace: testNS,

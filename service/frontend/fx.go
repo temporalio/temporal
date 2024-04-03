@@ -377,10 +377,10 @@ func RateLimitInterceptorProvider(
 	)
 }
 
-func getNamespaceRateFnWithMetrics(rateFn func(namespace string) float64, handler metrics.Handler) quotas.NamespaceRateFn {
-	return func(namespace string) float64 {
-		rate := rateFn(namespace)
-		metrics.NamespaceHostRPSLimit.With(handler.WithTags(metrics.NamespaceTag(namespace))).Record(rate)
+func getNamespaceRateFnWithMetrics(rateFn func(ns string) float64, handler metrics.Handler) quotas.NamespaceRateFn {
+	return func(ns string) float64 {
+		rate := rateFn(ns)
+		metrics.NamespaceHostRPSLimit.With(handler.WithTags(metrics.NamespaceTag(ns))).Record(rate)
 		return rate
 	}
 }
