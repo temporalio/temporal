@@ -23,6 +23,7 @@
 package hsm
 
 import (
+	"context"
 	"errors"
 	"fmt"
 
@@ -86,6 +87,8 @@ type NodeBackend interface {
 	AddHistoryEvent(t enumspb.EventType, setAttributes func(*historypb.HistoryEvent)) *historypb.HistoryEvent
 	// GenerateEventLoadToken generates a token for loading a history event from an [Environment].
 	GenerateEventLoadToken(event *historypb.HistoryEvent) ([]byte, error)
+	// Load a history event by token generated via [GenerateEventLoadToken].
+	LoadHistoryEvent(ctx context.Context, token []byte) (*historypb.HistoryEvent, error)
 }
 
 // Node is a node in a hierarchical state machine tree.
@@ -272,6 +275,12 @@ func (n *Node) AddHistoryEvent(t enumspb.EventType, setAttributes func(*historyp
 // Must be called within an [Environment.Access] function block with either read or write access.
 func (n *Node) GenerateEventLoadToken(event *historypb.HistoryEvent) ([]byte, error) {
 	return n.backend.GenerateEventLoadToken(event)
+}
+
+// Load a history event by token generated via [GenerateEventLoadToken].
+// Must be called within an [Environment.Access] function block with either read or write access.
+func (n *Node) LoadHistoryEvent(ctx context.Context, token []byte) (*historypb.HistoryEvent, error) {
+	return n.backend.LoadHistoryEvent(ctx, token)
 }
 
 // MachineData deserializes the persistent state machine's data, casts it to type T, and returns it.

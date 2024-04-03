@@ -29,23 +29,19 @@ import (
 	"time"
 
 	commonpb "go.temporal.io/api/common/v1"
-	historypb "go.temporal.io/api/history/v1"
 	enumsspb "go.temporal.io/server/api/enums/v1"
-	tokenspb "go.temporal.io/server/api/token/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/service/history/consts"
-	"go.temporal.io/server/service/history/events"
 	"go.temporal.io/server/service/history/hsm"
 	"go.temporal.io/server/service/history/queues"
 	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/tasks"
 	"go.temporal.io/server/service/history/workflow"
 	wcache "go.temporal.io/server/service/history/workflow/cache"
-	"google.golang.org/protobuf/proto"
 )
 
 func taskWorkflowKey(task tasks.Task) definition.WorkflowKey {
@@ -177,22 +173,6 @@ func (t *taskExecutor) getValidatedMutableState(
 		return nil, nil, nil, err
 	}
 	return wfCtx, release, ms, nil
-}
-
-func (t *taskExecutor) LoadHistoryEvent(ctx context.Context, def definition.WorkflowKey, token []byte) (*historypb.HistoryEvent, error) {
-	ref := &tokenspb.HistoryEventRef{}
-	err := proto.Unmarshal(token, ref)
-	if err != nil {
-		return nil, err
-	}
-	eventKey := events.EventKey{
-		NamespaceID: namespace.ID(def.NamespaceID),
-		WorkflowID:  def.WorkflowID,
-		RunID:       def.RunID,
-		EventID:     ref.EventId,
-		Version:     ref.NamespaceFailoverVersion,
-	}
-	return t.shardContext.GetEventsCache().GetEvent(ctx, t.shardContext.GetShardID(), eventKey, ref.EventBatchId, ref.BranchToken)
 }
 
 func (t *taskExecutor) Access(ctx context.Context, ref hsm.Ref, accessType hsm.AccessType, accessor func(*hsm.Node) error) (retErr error) {

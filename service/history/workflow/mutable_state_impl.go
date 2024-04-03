@@ -28,6 +28,7 @@ import (
 	"context"
 	"fmt"
 	"math/rand"
+	reflect "reflect"
 	"time"
 
 	"github.com/nexus-rpc/sdk-go/nexus"
@@ -52,6 +53,7 @@ import (
 	historyspb "go.temporal.io/server/api/history/v1"
 	"go.temporal.io/server/api/historyservice/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
+	tokenspb "go.temporal.io/server/api/token/v1"
 	updatespb "go.temporal.io/server/api/update/v1"
 	workflowspb "go.temporal.io/server/api/workflow/v1"
 	"go.temporal.io/server/common"
@@ -775,11 +777,54 @@ func (ms *MutableStateImpl) AddHistoryEvent(t enumspb.EventType, setAttributes f
 }
 
 func (ms *MutableStateImpl) GenerateEventLoadToken(event *history.HistoryEvent) ([]byte, error) {
-	branchToken, err := ms.GetCurrentBranchToken()
+	attrs := reflect.ValueOf(event.Attributes).Elem()
+
+	// Attributes is always a struct with a single field (e.g: HistoryEvent_NexusOperationScheduledEventAttributes)
+	if attrs.Kind() != reflect.Struct || attrs.NumField() != 1 {
+		return nil, serviceerror.NewInternal(fmt.Sprintf("got an invalid event structure: %v", event.EventType))
+	}
+
+	f := attrs.Field(0).Interface()
+
+	var eventBatchID int64
+	if getter, ok := f.(interface{ GetWorkflowTaskCompletedEventId() int64 }); ok {
+		// Command-Events always have a WorkflowTaskCompletedEventId field that is equal to the batch ID.
+		eventBatchID = getter.GetWorkflowTaskCompletedEventId()
+	} else if attrs := event.GetWorkflowExecutionStartedEventAttributes(); attrs != nil {
+		// WFEStarted is always stored in the first batch of events.
+		eventBatchID = 1
+	} else {
+		// By default events aren't referenceable as they may end up buffered.
+		// This limitation may be relaxed later and the platform would need a way to fix references to buffered events.
+		return nil, serviceerror.NewInternal(fmt.Sprintf("cannot reference event: %v", event.EventType))
+	}
+	ref := &tokenspb.HistoryEventRef{
+		EventId:                  event.EventId,
+		EventBatchId:             eventBatchID,
+	}
+	return proto.Marshal(ref)
+}
+
+func (ms *MutableStateImpl) LoadHistoryEvent(ctx context.Context, token []byte) (*historypb.HistoryEvent, error) {
+	ref := &tokenspb.HistoryEventRef{}
+	err := proto.Unmarshal(token, ref)
 	if err != nil {
 		return nil, err
 	}
-	return TokenFromEvent(event, branchToken)
+	branchToken, version, err := ms.getCurrentBranchTokenAndEventVersion(ref.EventId)
+	if err != nil {
+		return nil, err
+	}
+	wfKey := ms.GetWorkflowKey()
+	eventKey := events.EventKey{
+		NamespaceID: namespace.ID(wfKey.NamespaceID),
+		WorkflowID:  wfKey.WorkflowID,
+		RunID:       wfKey.RunID,
+		EventID:     ref.EventId,
+		Version:     version,
+	}
+
+	return ms.eventsCache.GetEvent(ctx, ms.shard.GetShardID(), eventKey, ref.EventBatchId, branchToken)
 }
 
 func (ms *MutableStateImpl) CurrentTaskQueue() *taskqueuepb.TaskQueue {

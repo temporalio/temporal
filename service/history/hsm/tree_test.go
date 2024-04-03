@@ -23,6 +23,7 @@
 package hsm_test
 
 import (
+	"context"
 	"fmt"
 	"sort"
 	"testing"
@@ -68,6 +69,10 @@ func (b *backend) AddHistoryEvent(t enumspb.EventType, setAttributes func(*histo
 }
 
 func (b *backend) GenerateEventLoadToken(event *historypb.HistoryEvent) ([]byte, error) {
+	panic("unimplemented - not used in test")
+}
+
+func (b *backend) LoadHistoryEvent(ctx context.Context, token []byte) (*historypb.HistoryEvent, error) {
 	panic("unimplemented - not used in test")
 }
 
