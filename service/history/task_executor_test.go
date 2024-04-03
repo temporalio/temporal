@@ -29,11 +29,12 @@ import (
 	"time"
 
 	"github.com/golang/mock/gomock"
-	"github.com/pborman/uuid"
+	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 	commandpb "go.temporal.io/api/command/v1"
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
+	historypb "go.temporal.io/api/history/v1"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	"go.temporal.io/api/workflowservice/v1"
 	"google.golang.org/protobuf/types/known/durationpb"
@@ -43,6 +44,7 @@ import (
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/cluster"
+	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence"
@@ -288,12 +290,47 @@ func TestAccess(t *testing.T) {
 	}
 }
 
+func TestLoadHistoryEvent(t *testing.T) {
+	s := newTaskExecutorTestContext(t)
+	ms := s.prepareMutableStateWithReadyNexusCompletionCallback()
+	key := definition.NewWorkflowKey("ns-id", "wf-id", uuid.NewString())
+	_, _, err := ms.CloseTransactionAsMutation(workflow.TransactionPolicyActive)
+	require.NoError(t, err)
+	event, err := ms.GetStartEvent(context.Background())
+	require.NoError(t, err)
+	branchToken, err := ms.GetCurrentBranchToken()
+	require.NoError(t, err)
+	firstEventID := event.EventId
+
+	s.mockShard.Resource.ExecutionMgr.EXPECT().ReadHistoryBranch(gomock.Any(), &persistence.ReadHistoryBranchRequest{
+		ShardID:     s.mockShard.GetShardID(),
+		BranchToken: branchToken,
+		MinEventID:  firstEventID,
+		MaxEventID:  firstEventID + 1,
+		PageSize:    1,
+	}).Return(&persistence.ReadHistoryBranchResponse{
+		HistoryEvents: []*historypb.HistoryEvent{event},
+	}, nil)
+
+	exec := taskExecutor{
+		shardContext:   s.mockShard,
+		cache:          s.workflowCache,
+		metricsHandler: s.mockShard.GetMetricsHandler(),
+		logger:         s.mockShard.GetLogger(),
+	}
+	token, err := workflow.TokenFromEvent(event, branchToken)
+	require.NoError(t, err)
+	loaded, err := exec.LoadHistoryEvent(context.Background(), key, token)
+	require.NoError(t, err)
+	require.Equal(t, event, loaded)
+}
+
 func (s *taskExecutorTestContext) prepareMutableStateWithReadyNexusCompletionCallback() *workflow.MutableStateImpl {
 	s.mockShard.Resource.NamespaceCache.EXPECT().GetNamespaceByID(s.namespaceID).Return(s.namespaceEntry, nil).AnyTimes()
 
 	execution := &commonpb.WorkflowExecution{
 		WorkflowId: "some random workflow ID",
-		RunId:      uuid.New(),
+		RunId:      uuid.NewString(),
 	}
 	mutableState := workflow.TestGlobalMutableState(s.mockShard, s.mockShard.GetEventsCache(), s.mockShard.GetLogger(), s.namespaceEntry.FailoverVersion(), execution.GetWorkflowId(), execution.GetRunId())
 	_, err := mutableState.AddWorkflowExecutionStartedEvent(
@@ -329,7 +366,7 @@ func (s *taskExecutorTestContext) prepareMutableStateWithTriggeredNexusCompletio
 	mutableState := s.prepareMutableStateWithReadyNexusCompletionCallback()
 	wt := addWorkflowTaskScheduledEvent(mutableState)
 	taskQueueName := "irrelevant"
-	event := addWorkflowTaskStartedEvent(mutableState, wt.ScheduledEventID, taskQueueName, uuid.New())
+	event := addWorkflowTaskStartedEvent(mutableState, wt.ScheduledEventID, taskQueueName, uuid.NewString())
 	wt.StartedEventID = event.GetEventId()
 	_, err := mutableState.AddWorkflowTaskCompletedEvent(wt, &workflowservice.RespondWorkflowTaskCompletedRequest{
 		Identity: "some random identity",

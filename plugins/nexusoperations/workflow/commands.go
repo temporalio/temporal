@@ -112,7 +112,11 @@ func (ch *commandHandler) HandleScheduleCommand(
 			},
 		}
 	})
-	_, err := nexusoperations.AddChild(root, strconv.FormatInt(event.EventId, 10), event)
+	token, err := ms.GenerateEventLoadToken(event)
+	if err != nil {
+		return err
+	}
+	_, err = nexusoperations.AddChild(root, strconv.FormatInt(event.EventId, 10), event, token, true)
 	return err
 }
 

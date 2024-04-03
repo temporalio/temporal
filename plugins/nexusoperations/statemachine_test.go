@@ -76,11 +76,12 @@ func TestAddChild(t *testing.T) {
 					NexusOperationScheduledEventAttributes: &history.NexusOperationScheduledEventAttributes{
 						Service:   "service",
 						Operation: "operation",
+						RequestId: "request-id",
 						Timeout:   durationpb.New(tc.timeout),
 					},
 				},
 			}
-			child, err := nexusoperations.AddChild(root, "test-id", event)
+			child, err := nexusoperations.AddChild(root, "test-id", event, []byte("token"), false)
 			require.NoError(t, err)
 			oap := root.Outputs()
 			require.Equal(t, 1, len(oap))
@@ -92,8 +93,10 @@ func TestAddChild(t *testing.T) {
 			require.Equal(t, "service", op.Service)
 			require.Equal(t, "operation", op.Operation)
 			require.Equal(t, schedTime, op.ScheduledTime)
+			require.Equal(t, "request-id", op.RequestId)
 			require.Equal(t, tc.timeout, op.Timeout.AsDuration())
 			require.Equal(t, int32(0), op.Attempt)
+			require.Equal(t, []byte("token"), op.ScheduledEventToken)
 		})
 	}
 }
@@ -567,7 +570,8 @@ func newRoot(t *testing.T) *hsm.Node {
 	reg := hsm.NewRegistry()
 	require.NoError(t, workflow.RegisterStateMachine(reg))
 	require.NoError(t, nexusoperations.RegisterStateMachines(reg))
-	root, err := hsm.NewRoot(reg, workflow.StateMachineType.ID, nil, make(map[int32]*persistence.StateMachineMap))
+	// Backend is nil because we don't need to generate history events for this test.
+	root, err := hsm.NewRoot(reg, workflow.StateMachineType.ID, nil, make(map[int32]*persistence.StateMachineMap), nil)
 	require.NoError(t, err)
 	return root
 }
@@ -584,7 +588,7 @@ func newOperationNode(t *testing.T, schedTime time.Time, timeout time.Duration) 
 			},
 		},
 	}
-	node, err := nexusoperations.AddChild(root, "test-id", event)
+	node, err := nexusoperations.AddChild(root, "test-id", event, []byte("token"), false)
 	require.NoError(t, err)
 	return node
 }

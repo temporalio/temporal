@@ -81,3 +81,16 @@ message NexusTask {
     string task_queue = 2;
     string task_id = 3;
 }
+
+// A reference for loading a history event.
+message HistoryEventRef {
+    // Namespace failover version of the mutable state instance at the time the event was generated.
+    int64 namespace_failover_version = 1;
+    // Event ID.
+    int64 event_id = 2;
+    // Event batch ID - the first event ID in the batch the event was stored in.
+    int64 event_batch_id = 3;
+    // Branch token.
+    bytes branch_token = 4;
+}
+

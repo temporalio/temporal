@@ -26,6 +26,7 @@ package workflow
 
 import (
 	"context"
+	"fmt"
 
 	commandpb "go.temporal.io/api/command/v1"
 	commonpb "go.temporal.io/api/common/v1"
@@ -33,8 +34,10 @@ import (
 	historypb "go.temporal.io/api/history/v1"
 	"go.temporal.io/api/serviceerror"
 	workflowpb "go.temporal.io/api/workflow/v1"
+	"google.golang.org/protobuf/proto"
 
 	enumsspb "go.temporal.io/server/api/enums/v1"
+	tokenspb "go.temporal.io/server/api/token/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/namespace"
@@ -234,4 +237,27 @@ type MutableStateWithEffects struct {
 func (mse MutableStateWithEffects) CanAddEvent() bool {
 	// Event can be added to the history if workflow is still running.
 	return mse.MutableState.IsWorkflowExecutionRunning()
+}
+
+// TokenFromEvent returns a token for loading a history event.
+func TokenFromEvent(event *historypb.HistoryEvent, branchToken []byte) ([]byte, error) {
+	var eventBatchID int64
+	if getter, ok := event.Attributes.(interface{ GetWorkflowTaskCompletedEventId() int64 }); ok {
+		// Command-Events always have WorkflowTaskCompletedEventId and is always equal to the batch ID.
+		eventBatchID = getter.GetWorkflowTaskCompletedEventId()
+	} else if attrs := event.GetWorkflowExecutionStartedEventAttributes(); attrs != nil {
+		// WFEStarted is always stored in the first batch of events.
+		eventBatchID = 1
+	} else {
+		// By default events aren't referenceable as they may end up buffered.
+		// This limitation may be relaxed later and the platform would need a way to fix references to buffered events.
+		return nil, serviceerror.NewInternal(fmt.Sprintf("cannot reference event: %v", event.EventType))
+	}
+	ref := &tokenspb.HistoryEventRef{
+		NamespaceFailoverVersion: event.Version,
+		EventId:                  event.EventId,
+		EventBatchId:             eventBatchID,
+		BranchToken:              branchToken,
+	}
+	return proto.Marshal(ref)
 }

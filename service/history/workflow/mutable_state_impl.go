@@ -460,7 +460,7 @@ func NewSanitizedMutableState(
 
 func (ms *MutableStateImpl) mustInitHSM() {
 	// Error only occurs if some initialization path forgets to register the workflow state machine.
-	stateMachineNode, err := hsm.NewRoot(ms.shard.StateMachineRegistry(), StateMachineType.ID, ms, ms.executionInfo.SubStateMachinesByType)
+	stateMachineNode, err := hsm.NewRoot(ms.shard.StateMachineRegistry(), StateMachineType.ID, ms, ms.executionInfo.SubStateMachinesByType, ms)
 	if err != nil {
 		panic(err)
 	}
@@ -772,6 +772,14 @@ func (ms *MutableStateImpl) AddHistoryEvent(t enumspb.EventType, setAttributes f
 	event := ms.hBuilder.AddHistoryEvent(t, setAttributes)
 	ms.writeEventToCache(event)
 	return event
+}
+
+func (ms *MutableStateImpl) GenerateEventLoadToken(event *history.HistoryEvent) ([]byte, error) {
+	branchToken, err := ms.GetCurrentBranchToken()
+	if err != nil {
+		return nil, err
+	}
+	return TokenFromEvent(event, branchToken)
 }
 
 func (ms *MutableStateImpl) CurrentTaskQueue() *taskqueuepb.TaskQueue {
