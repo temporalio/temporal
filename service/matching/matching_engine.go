@@ -844,10 +844,14 @@ func (e *matchingEngineImpl) DescribeTaskQueue(
 					Pollers: physicalInfo.Pollers,
 				})
 			}
+			reachability, err := e.getBuildIdTaskReachability(ctx, request.GetNamespaceId(), req.GetNamespace(), req.GetTaskQueue().GetName(), bid, typesInfo)
+			if err != nil {
+				return nil, err
+			}
 			versionsInfo = append(versionsInfo, &taskqueuepb.TaskQueueVersionInfo{
 				BuildId:          bid,
 				TypesInfo:        typesInfo,
-				TaskReachability: enumspb.BUILD_ID_TASK_REACHABILITY_UNSPECIFIED,
+				TaskReachability: reachability,
 			})
 		}
 		return &matchingservice.DescribeTaskQueueResponse{
@@ -907,7 +911,7 @@ func (e *matchingEngineImpl) getBuildIds(
 // getDefaultBuildId gets the build id mentioned in the first unconditional Assignment Rule.
 // If there is no default Build ID, the result for the unversioned queue will be returned.
 func (e *matchingEngineImpl) getDefaultBuildId(tqMgr taskQueuePartitionManager) (string, error) {
-	resp, err := e.getWorkerVersioningRules(tqMgr)
+	resp, err := e.getWorkerVersioningRules(tqMgr, nil)
 	if err != nil {
 		return "", err
 	}
@@ -1189,10 +1193,10 @@ func (e *matchingEngineImpl) GetWorkerVersioningRules(
 		return nil, err
 	}
 
-	return e.getWorkerVersioningRules(tqMgr)
+	return e.getWorkerVersioningRules(tqMgr, request.GetDeletedRuleInclusionPeriod())
 }
 
-func (e *matchingEngineImpl) getWorkerVersioningRules(tqMgr taskQueuePartitionManager) (*matchingservice.GetWorkerVersioningRulesResponse, error) {
+func (e *matchingEngineImpl) getWorkerVersioningRules(tqMgr taskQueuePartitionManager, deletedRuleInclusionPeriod *durationpb.Duration) (*matchingservice.GetWorkerVersioningRulesResponse, error) {
 	data, _, err := tqMgr.GetUserDataManager().GetUserData()
 	if err != nil {
 		return nil, err
@@ -1206,7 +1210,7 @@ func (e *matchingEngineImpl) getWorkerVersioningRules(tqMgr taskQueuePartitionMa
 	if clk == nil {
 		clk = hlc.Zero(e.clusterMeta.GetClusterID())
 	}
-	return GetWorkerVersioningRules(data.GetData().GetVersioningData(), clk, nil)
+	return GetWorkerVersioningRules(data.GetData().GetVersioningData(), clk, deletedRuleInclusionPeriod)
 }
 
 func (e *matchingEngineImpl) UpdateWorkerBuildIdCompatibility(
