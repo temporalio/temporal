@@ -155,12 +155,12 @@ func (c *backlogManagerImpl) Stop() {
 	// Note that it's fine to GC even if the update ack level fails because we did match the
 	// tasks, the next owner will just read over an empty range.
 	ackLevel := c.taskAckManager.getAckLevel()
-	approximateBacklogCount := c.db.getApproximateBacklogCount()
 	if ackLevel >= 0 && !c.skipFinalUpdate.Load() {
 		ctx, cancel := c.newIOContext()
 		defer cancel()
 
-		_ = c.db.UpdateStateAckLevelBacklogCount(ctx, ackLevel, approximateBacklogCount)
+		_ = c.db.UpdateState(ctx, ackLevel)
+		// TODO: Says we should ignore any errors, but can an error occur when UpdatingState?
 		c.taskGC.RunNow(ctx, ackLevel)
 	}
 	c.taskWriter.Stop()
@@ -261,10 +261,8 @@ func (c *backlogManagerImpl) completeTask(task *persistencespb.AllocatedTaskInfo
 		c.taskReader.Signal()
 	}
 
+	// This call updates the ackLevel and the completedTaskCount inside of AckManager
 	ackLevel := c.taskAckManager.completeTask(task.GetTaskId())
-
-	// updating the in-memory counter inside of db
-	c.db.updateInMemoryBacklogCount(-1)
 
 	// TODO: completeTaskFunc and task.finish() should take in a context
 	ctx, cancel := c.newIOContext()

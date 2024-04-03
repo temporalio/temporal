@@ -49,6 +49,7 @@ const (
 type (
 	taskQueueDB struct {
 		sync.Mutex
+		backlogMgr              *backlogManagerImpl // accessing taskWriter and taskReader
 		queue                   *PhysicalTaskQueueKey
 		rangeID                 int64
 		ackLevel                int64
@@ -167,17 +168,25 @@ func (db *taskQueueDB) renewTaskQueueLocked(
 	return nil
 }
 
-// UpdateStateAckLevelBacklogCount updates the queue state with the given Ack and BacklogCount values
-func (db *taskQueueDB) UpdateStateAckLevelBacklogCount(
+// UpdateState updates the queue state with the given values
+func (db *taskQueueDB) UpdateState(
 	ctx context.Context,
 	ackLevel int64,
-	approximateBacklogCount int64,
 ) error {
 	db.Lock()
 	defer db.Unlock()
+
+	// TODO Shivam: Do we want to fetch the latest ackLevel from taskAckManager?
+	//ackLevel := db.backlogMgr.taskAckManager.getAckLevel() // latest value of ackLevel
+
+	maxReadLevel := db.backlogMgr.taskWriter.GetMaxReadLevel()
+	// Resetting approximateBacklogCounter to fix the count divergence issue
+	if (ackLevel == maxReadLevel) || db.approximateBacklogCount < 0 {
+		db.approximateBacklogCount = 0
+	}
+
 	queueInfo := db.cachedQueueInfo()
 	queueInfo.AckLevel = ackLevel
-	queueInfo.ApproximateBacklogCount = approximateBacklogCount
 	_, err := db.store.UpdateTaskQueue(ctx, &persistence.UpdateTaskQueueRequest{
 		RangeID:       db.rangeID,
 		TaskQueueInfo: queueInfo,
@@ -185,13 +194,12 @@ func (db *taskQueueDB) UpdateStateAckLevelBacklogCount(
 	})
 	if err == nil {
 		db.ackLevel = ackLevel
-		db.approximateBacklogCount = approximateBacklogCount
 	}
 	return err
 }
 
-// updateInMemoryBacklogCount updates the in-memory DB state with the given approximateBacklogCount value
-func (db *taskQueueDB) updateInMemoryBacklogCount(
+// updateApproximateBacklogCount updates the in-memory DB state with the given approximateBacklogCount value
+func (db *taskQueueDB) updateApproximateBacklogCount(
 	approximateBacklogCount int64,
 ) {
 	db.Lock()
@@ -200,8 +208,6 @@ func (db *taskQueueDB) updateInMemoryBacklogCount(
 }
 
 func (db *taskQueueDB) getApproximateBacklogCount() int64 {
-	db.Lock()
-	defer db.Unlock()
 	return db.approximateBacklogCount
 }
 
@@ -212,7 +218,10 @@ func (db *taskQueueDB) CreateTasks(
 ) (*persistence.CreateTasksResponse, error) {
 	db.Lock()
 	defer db.Unlock()
-	return db.store.CreateTasks(
+
+	db.approximateBacklogCount += int64(len(tasks))
+	// TODO Shivam: Is it possible for only some tasks, from a batch, to be created while others fail?
+	CreateTaskResponse, err := db.store.CreateTasks(
 		ctx,
 		&persistence.CreateTasksRequest{
 			TaskQueueInfo: &persistence.PersistedTaskQueueInfo{
@@ -221,6 +230,12 @@ func (db *taskQueueDB) CreateTasks(
 			},
 			Tasks: tasks,
 		})
+
+	// TODO Shivam: Check error codes since writing of tasks could have succeeded
+	if err != nil {
+		db.approximateBacklogCount -= int64(len(tasks))
+	}
+	return CreateTaskResponse, err
 }
 
 // GetTasks returns a batch of tasks between the given range

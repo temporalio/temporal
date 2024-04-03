@@ -970,6 +970,7 @@ var (
 	UnknownBuildPollsCounter                  = NewCounterDef("unknown_build_polls")
 	UnknownBuildTasksCounter                  = NewCounterDef("unknown_build_tasks")
 	TaskDispatchLatencyPerTaskQueue           = NewTimerDef("task_dispatch_latency")
+	ApproximateBacklogCount                   = NewGaugeDef("approximate_backlog_count")
 
 	// Worker
 	ExecutorTasksDoneCount                          = NewCounterDef("executor_done")

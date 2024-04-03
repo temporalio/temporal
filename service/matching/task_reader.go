@@ -127,8 +127,6 @@ dispatchLoop:
 				err := tr.backlogMgr.processSpooledTask(taskCtx, task)
 				cancel()
 				if err == nil {
-					// Task has been matched with a poller and is read from the db; decrease the backlog count
-					tr.backlogMgr.db.updateInMemoryBacklogCount(-1)
 					continue dispatchLoop
 				}
 
@@ -278,6 +276,10 @@ func (tr *taskReader) addTasksToBuffer(
 			// Also increment readLevel for expired tasks otherwise it could result in
 			// looping over the same tasks if all tasks read in the batch are expired
 			tr.backlogMgr.taskAckManager.setReadLevel(t.GetTaskId())
+			// Decreasing the approximateBacklogCounter as this task will no longer be part of the backlog and
+			// gets deleted by task_gc eventually. This task won't be seen by the ack_manager as it is never added
+			// to the outstanding tasks map, thus requiring to decrease the counter here
+			tr.backlogMgr.db.updateApproximateBacklogCount(-1)
 			continue
 		}
 		if err := tr.addSingleTaskToBuffer(ctx, t); err != nil {
@@ -301,11 +303,13 @@ func (tr *taskReader) addSingleTaskToBuffer(
 }
 
 func (tr *taskReader) persistAckBacklogCountLevel(ctx context.Context) error {
-	approximateBacklogCount := tr.backlogMgr.db.getApproximateBacklogCount()
 	ackLevel := tr.backlogMgr.taskAckManager.getAckLevel()
-	// TODO: Emit approximateBacklogCount metric as well
 	tr.emitTaskLagMetric(ackLevel)
-	return tr.backlogMgr.db.UpdateStateAckLevelBacklogCount(ctx, ackLevel, approximateBacklogCount)
+	err := tr.backlogMgr.db.UpdateState(ctx, ackLevel)
+	if err == nil {
+		tr.emitApproximateBacklogCount()
+	}
+	return err
 }
 
 func (tr *taskReader) logger() log.Logger {
@@ -325,6 +329,12 @@ func (tr *taskReader) emitTaskLagMetric(ackLevel int64) {
 	// taskID in DB may not be continuous, especially when task list ownership changes.
 	maxReadLevel := tr.backlogMgr.taskWriter.GetMaxReadLevel()
 	tr.taggedMetricsHandler().Gauge(metrics.TaskLagPerTaskQueueGauge.Name()).Record(float64(maxReadLevel - ackLevel))
+}
+
+func (tr *taskReader) emitApproximateBacklogCount() {
+	// note: this metric is called after persisting the updated BacklogCount
+	approximateBacklogCount := tr.backlogMgr.db.getApproximateBacklogCount()
+	tr.taggedMetricsHandler().Gauge(metrics.ApproximateBacklogCount.Name()).Record(float64(approximateBacklogCount))
 }
 
 func (tr *taskReader) reEnqueueAfterDelay(duration time.Duration) {
