@@ -338,7 +338,7 @@ func (wh *WorkflowHandler) getBuildIdTaskReachability(
 	// Note: The below cases are not applicable to activity-only task queues, since we don't record those in visibility
 
 	// 2c. If buildId is assignable to tasks from open workflows
-	existsOpenWFAssignedToBuildId, err := existsWFAssignedToAny(ctx, wh.visibilityMgr, ns, taskQueue, buildIdsOfInterest, true)
+	existsOpenWFAssignedToBuildId, err := existsWFAssignedToAny(ctx, wh.visibilityMrg, ns, taskQueue, buildIdsOfInterest, true)
 	if err != nil {
 		return enumspb.BUILD_ID_TASK_REACHABILITY_UNSPECIFIED, err
 	}
@@ -347,7 +347,7 @@ func (wh *WorkflowHandler) getBuildIdTaskReachability(
 	}
 
 	// 3. Cases for CLOSED_WORKFLOWS_ONLY
-	existsClosedWFAssignedToBuildId, err := existsWFAssignedToAny(ctx, wh.visibilityMgr, ns, taskQueue, buildIdsOfInterest, false)
+	existsClosedWFAssignedToBuildId, err := existsWFAssignedToAny(ctx, wh.visibilityMrg, ns, taskQueue, buildIdsOfInterest, false)
 	if err != nil {
 		return enumspb.BUILD_ID_TASK_REACHABILITY_UNSPECIFIED, err
 	}
