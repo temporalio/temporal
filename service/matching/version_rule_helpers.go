@@ -34,26 +34,26 @@ import (
 	"go.temporal.io/api/workflowservice/v1"
 
 	"go.temporal.io/server/api/matchingservice/v1"
-	persistencepb "go.temporal.io/server/api/persistence/v1"
+	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common"
 	hlc "go.temporal.io/server/common/clock/hybrid_logical_clock"
 	"go.temporal.io/server/common/util"
 )
 
-func cloneOrMkData(data *persistencepb.VersioningData) *persistencepb.VersioningData {
+func cloneOrMkData(data *persistencespb.VersioningData) *persistencespb.VersioningData {
 	if data == nil {
-		return &persistencepb.VersioningData{
-			AssignmentRules: make([]*persistencepb.AssignmentRule, 0),
-			RedirectRules:   make([]*persistencepb.RedirectRule, 0),
+		return &persistencespb.VersioningData{
+			AssignmentRules: make([]*persistencespb.AssignmentRule, 0),
+			RedirectRules:   make([]*persistencespb.RedirectRule, 0),
 		}
 	}
 	return common.CloneProto(data)
 }
 
 func InsertAssignmentRule(timestamp *hlc.Clock,
-	data *persistencepb.VersioningData,
+	data *persistencespb.VersioningData,
 	req *workflowservice.UpdateWorkerVersioningRulesRequest_InsertBuildIdAssignmentRule,
-	maxAssignmentRules int) (*persistencepb.VersioningData, error) {
+	maxAssignmentRules int) (*persistencespb.VersioningData, error) {
 	if req.GetRuleIndex() < 0 {
 		return nil, serviceerror.NewInvalidArgument("rule index cannot be negative")
 	}
@@ -72,7 +72,7 @@ func InsertAssignmentRule(timestamp *hlc.Clock,
 	}
 	data = cloneOrMkData(data)
 	rules := data.GetAssignmentRules()
-	persistenceAR := persistencepb.AssignmentRule{
+	persistenceAR := persistencespb.AssignmentRule{
 		Rule:            rule,
 		CreateTimestamp: timestamp,
 		DeleteTimestamp: nil,
@@ -87,9 +87,9 @@ func InsertAssignmentRule(timestamp *hlc.Clock,
 }
 
 func ReplaceAssignmentRule(timestamp *hlc.Clock,
-	data *persistencepb.VersioningData,
+	data *persistencespb.VersioningData,
 	req *workflowservice.UpdateWorkerVersioningRulesRequest_ReplaceBuildIdAssignmentRule,
-) (*persistencepb.VersioningData, error) {
+) (*persistencespb.VersioningData, error) {
 	data = cloneOrMkData(data)
 	rule := req.GetRule()
 	if ramp := rule.GetPercentageRamp(); !validRamp(ramp) {
@@ -113,7 +113,7 @@ func ReplaceAssignmentRule(timestamp *hlc.Clock,
 			"rule index %d is out of bounds for assignment rule list of length %d", idx, len(getActiveAssignmentRules(rules))))
 	}
 	rules[actualIdx].DeleteTimestamp = timestamp
-	data.AssignmentRules = slices.Insert(rules, actualIdx, &persistencepb.AssignmentRule{
+	data.AssignmentRules = slices.Insert(rules, actualIdx, &persistencespb.AssignmentRule{
 		Rule:            rule,
 		CreateTimestamp: timestamp,
 		DeleteTimestamp: nil,
@@ -122,9 +122,9 @@ func ReplaceAssignmentRule(timestamp *hlc.Clock,
 }
 
 func DeleteAssignmentRule(timestamp *hlc.Clock,
-	data *persistencepb.VersioningData,
+	data *persistencespb.VersioningData,
 	req *workflowservice.UpdateWorkerVersioningRulesRequest_DeleteBuildIdAssignmentRule,
-) (*persistencepb.VersioningData, error) {
+) (*persistencespb.VersioningData, error) {
 	data = cloneOrMkData(data)
 	rules := data.GetAssignmentRules()
 	hadUnconditional := containsUnconditional(rules)
@@ -139,9 +139,9 @@ func DeleteAssignmentRule(timestamp *hlc.Clock,
 }
 
 func InsertCompatibleRedirectRule(timestamp *hlc.Clock,
-	data *persistencepb.VersioningData,
+	data *persistencespb.VersioningData,
 	req *workflowservice.UpdateWorkerVersioningRulesRequest_AddCompatibleBuildIdRedirectRule,
-	maxRedirectRules int) (*persistencepb.VersioningData, error) {
+	maxRedirectRules int) (*persistencespb.VersioningData, error) {
 	data = cloneOrMkData(data)
 	rule := req.GetRule()
 	source := rule.GetSourceBuildId()
@@ -154,7 +154,7 @@ func InsertCompatibleRedirectRule(timestamp *hlc.Clock,
 		return nil, serviceerror.NewFailedPrecondition(
 			"update breaks requirement, target build ID is already a member of a version set")
 	}
-	if isUnfilteredAssignmentRuleTarget(source, data.GetAssignmentRules()) {
+	if isConditionalAssignmentRuleTarget(source, data.GetAssignmentRules()) {
 		return nil, serviceerror.NewFailedPrecondition(
 			"redirect rule source build ID cannot be the target of any assignment rule with non-nil ramp")
 	}
@@ -167,7 +167,7 @@ func InsertCompatibleRedirectRule(timestamp *hlc.Clock,
 			))
 		}
 	}
-	data.RedirectRules = slices.Insert(rules, 0, &persistencepb.RedirectRule{
+	data.RedirectRules = slices.Insert(rules, 0, &persistencespb.RedirectRule{
 		Rule:            rule,
 		CreateTimestamp: timestamp,
 		DeleteTimestamp: nil,
@@ -176,9 +176,9 @@ func InsertCompatibleRedirectRule(timestamp *hlc.Clock,
 }
 
 func ReplaceCompatibleRedirectRule(timestamp *hlc.Clock,
-	data *persistencepb.VersioningData,
+	data *persistencespb.VersioningData,
 	req *workflowservice.UpdateWorkerVersioningRulesRequest_ReplaceCompatibleBuildIdRedirectRule,
-) (*persistencepb.VersioningData, error) {
+) (*persistencespb.VersioningData, error) {
 	data = cloneOrMkData(data)
 	rule := req.GetRule()
 	source := rule.GetSourceBuildId()
@@ -195,7 +195,7 @@ func ReplaceCompatibleRedirectRule(timestamp *hlc.Clock,
 	for _, r := range rules {
 		if r.GetDeleteTimestamp() == nil && r.GetRule().GetSourceBuildId() == source {
 			r.DeleteTimestamp = timestamp
-			data.RedirectRules = slices.Insert(rules, 0, &persistencepb.RedirectRule{
+			data.RedirectRules = slices.Insert(rules, 0, &persistencespb.RedirectRule{
 				Rule:            rule,
 				CreateTimestamp: timestamp,
 				DeleteTimestamp: nil,
@@ -207,9 +207,9 @@ func ReplaceCompatibleRedirectRule(timestamp *hlc.Clock,
 }
 
 func DeleteCompatibleRedirectRule(timestamp *hlc.Clock,
-	data *persistencepb.VersioningData,
+	data *persistencespb.VersioningData,
 	req *workflowservice.UpdateWorkerVersioningRulesRequest_DeleteCompatibleBuildIdRedirectRule,
-) (*persistencepb.VersioningData, error) {
+) (*persistencespb.VersioningData, error) {
 	data = cloneOrMkData(data)
 	source := req.GetSourceBuildId()
 	for _, r := range data.GetRedirectRules() {
@@ -223,14 +223,14 @@ func DeleteCompatibleRedirectRule(timestamp *hlc.Clock,
 
 // CleanupRuleTombstones clears all deleted rules from versioning data if the rule was deleted more than
 // retentionTime ago. Clones data to avoid mutating in place.
-func CleanupRuleTombstones(versioningData *persistencepb.VersioningData,
+func CleanupRuleTombstones(versioningData *persistencespb.VersioningData,
 	retentionTime time.Duration,
-) *persistencepb.VersioningData {
+) *persistencespb.VersioningData {
 	modifiedData := shallowCloneVersioningData(versioningData)
-	modifiedData.AssignmentRules = util.FilterSlice(modifiedData.GetAssignmentRules(), func(ar *persistencepb.AssignmentRule) bool {
+	modifiedData.AssignmentRules = util.FilterSlice(modifiedData.GetAssignmentRules(), func(ar *persistencespb.AssignmentRule) bool {
 		return ar.DeleteTimestamp == nil || (ar.DeleteTimestamp != nil && hlc.Since(ar.DeleteTimestamp) < retentionTime)
 	})
-	modifiedData.RedirectRules = util.FilterSlice(modifiedData.GetRedirectRules(), func(rr *persistencepb.RedirectRule) bool {
+	modifiedData.RedirectRules = util.FilterSlice(modifiedData.GetRedirectRules(), func(rr *persistencespb.RedirectRule) bool {
 		return rr.DeleteTimestamp == nil || (rr.DeleteTimestamp != nil && hlc.Since(rr.DeleteTimestamp) < retentionTime)
 	})
 	return modifiedData
@@ -247,10 +247,10 @@ func CleanupRuleTombstones(versioningData *persistencepb.VersioningData,
 //     Build ID (if any).
 //  3. Removes any *unconditional* assignment rule for other Build IDs.
 func CommitBuildID(timestamp *hlc.Clock,
-	data *persistencepb.VersioningData,
+	data *persistencespb.VersioningData,
 	req *workflowservice.UpdateWorkerVersioningRulesRequest_CommitBuildId,
 	hasRecentPoller bool,
-	maxAssignmentRules int) (*persistencepb.VersioningData, error) {
+	maxAssignmentRules int) (*persistencespb.VersioningData, error) {
 	data = cloneOrMkData(data)
 	target := req.GetTargetBuildId()
 	if !hasRecentPoller && !req.GetForce() {
@@ -272,7 +272,7 @@ func CommitBuildID(timestamp *hlc.Clock,
 		}
 	}
 
-	data.AssignmentRules = append(data.GetAssignmentRules(), &persistencepb.AssignmentRule{
+	data.AssignmentRules = append(data.GetAssignmentRules(), &persistencespb.AssignmentRule{
 		Rule:            &taskqueue.BuildIdAssignmentRule{TargetBuildId: target},
 		CreateTimestamp: timestamp,
 	})
@@ -283,7 +283,7 @@ func CommitBuildID(timestamp *hlc.Clock,
 }
 
 func GetWorkerVersioningRules(
-	versioningData *persistencepb.VersioningData,
+	versioningData *persistencespb.VersioningData,
 	clk *hlc.Clock,
 ) (*matchingservice.GetWorkerVersioningRulesResponse, error) {
 	var cT []byte
@@ -322,7 +322,7 @@ func GetWorkerVersioningRules(
 // It returns an error if the new set of assignment rules don't meet the following requirements:
 // - No more rules than dynamicconfig.VersionAssignmentRuleLimitPerQueue
 // - If `requireUnconditional`, ensure at least one unconditional rule still exists
-func checkAssignmentConditions(g *persistencepb.VersioningData, maxARs int, requireUnconditional bool) error {
+func checkAssignmentConditions(g *persistencespb.VersioningData, maxARs int, requireUnconditional bool) error {
 	activeRules := getActiveAssignmentRules(g.GetAssignmentRules())
 	if cnt := len(activeRules); maxARs > 0 && cnt > maxARs {
 		return serviceerror.NewFailedPrecondition(fmt.Sprintf("update exceeds number of assignment rules permitted in namespace (%v/%v)", cnt, maxARs))
@@ -337,7 +337,7 @@ func checkAssignmentConditions(g *persistencepb.VersioningData, maxARs int, requ
 // It returns an error if the new set of redirect rules don't meet the following requirements:
 // - No more rules than dynamicconfig.VersionRedirectRuleLimitPerQueue
 // - The DAG of redirect rules must not contain a cycle
-func checkRedirectConditions(g *persistencepb.VersioningData, maxRRs int) error {
+func checkRedirectConditions(g *persistencespb.VersioningData, maxRRs int) error {
 	activeRules := getActiveRedirectRules(g.GetRedirectRules())
 	if maxRRs > 0 && len(activeRules) > maxRRs {
 		return serviceerror.NewFailedPrecondition(
@@ -349,19 +349,19 @@ func checkRedirectConditions(g *persistencepb.VersioningData, maxRRs int) error 
 	return nil
 }
 
-func getActiveAssignmentRules(rules []*persistencepb.AssignmentRule) []*persistencepb.AssignmentRule {
-	return util.FilterSlice(slices.Clone(rules), func(ar *persistencepb.AssignmentRule) bool {
+func getActiveAssignmentRules(rules []*persistencespb.AssignmentRule) []*persistencespb.AssignmentRule {
+	return util.FilterSlice(slices.Clone(rules), func(ar *persistencespb.AssignmentRule) bool {
 		return ar.DeleteTimestamp == nil
 	})
 }
 
-func getActiveRedirectRules(rules []*persistencepb.RedirectRule) []*persistencepb.RedirectRule {
-	return util.FilterSlice(slices.Clone(rules), func(rr *persistencepb.RedirectRule) bool {
+func getActiveRedirectRules(rules []*persistencespb.RedirectRule) []*persistencespb.RedirectRule {
+	return util.FilterSlice(slices.Clone(rules), func(rr *persistencespb.RedirectRule) bool {
 		return rr.DeleteTimestamp == nil
 	})
 }
 
-func isRedirectRuleSource(buildID string, redirectRules []*persistencepb.RedirectRule) bool {
+func isRedirectRuleSource(buildID string, redirectRules []*persistencespb.RedirectRule) bool {
 	for _, r := range getActiveRedirectRules(redirectRules) {
 		if buildID == r.GetRule().GetSourceBuildId() {
 			return true
@@ -370,9 +370,22 @@ func isRedirectRuleSource(buildID string, redirectRules []*persistencepb.Redirec
 	return false
 }
 
-func isUnfilteredAssignmentRuleTarget(buildID string, assignmentRules []*persistencepb.AssignmentRule) bool {
+// isConditionalAssignmentRuleTarget checks whether the given buildID is the target of a conditional assignment rule
+// (one with a ramp). We check this for any buildID that is the source of a proposed redirect rule, because having a
+// ramped assignment rule target as the source for a redirect rule would lead to an unpredictable amount of traffic
+// being redirected vs being passed through to the next assignment rule in the chain. This would not be a sensible use
+// of redirect rules or assignment rule ramps, so it is prohibited.
+//
+// e.g. Scenario in which a conditional assignment rule target is the source for a redirect rule.
+//
+//	Assignment rules: [{target: 1, ramp: 50%}, {target: 2, ramp: nil}, {target: 3, ramp: nil}]
+//	  Redirect rules: [{1->4}]
+//	50% of tasks that start with buildID 1 would be sent on to buildID 2 per assignment rules, and the
+//	remaining 50% that "stay" on buildID 1 would be redirected to buildID 4 per the redirect rules.
+//	This doesn't make sense, so we prohibit it.
+func isConditionalAssignmentRuleTarget(buildID string, assignmentRules []*persistencespb.AssignmentRule) bool {
 	for _, r := range getActiveAssignmentRules(assignmentRules) {
-		if buildID == r.GetRule().GetTargetBuildId() {
+		if !isUnconditional(r.GetRule()) && buildID == r.GetRule().GetTargetBuildId() {
 			return true
 		}
 	}
@@ -384,7 +397,7 @@ func isUnconditional(ar *taskqueue.BuildIdAssignmentRule) bool {
 }
 
 // containsUnconditional returns true if there exists an assignment rule with a nil ramp percentage
-func containsUnconditional(rules []*persistencepb.AssignmentRule) bool {
+func containsUnconditional(rules []*persistencespb.AssignmentRule) bool {
 	found := false
 	for _, rule := range rules {
 		ar := rule.GetRule()
@@ -396,7 +409,7 @@ func containsUnconditional(rules []*persistencepb.AssignmentRule) bool {
 }
 
 // isInVersionSets returns true if the given build id is in any of the listed version sets
-func isInVersionSets(id string, sets []*persistencepb.CompatibleVersionSet) bool {
+func isInVersionSets(id string, sets []*persistencespb.CompatibleVersionSet) bool {
 	for _, set := range sets {
 		for _, bid := range set.BuildIds {
 			if bid.GetId() == id {
@@ -410,7 +423,7 @@ func isInVersionSets(id string, sets []*persistencepb.CompatibleVersionSet) bool
 // given2ActualIdx takes in the user-given index, which only counts active assignment rules, and converts it to the
 // actual index of that rule in the assignment rule list, which includes deleted rules.
 // A negative return value means index out of bounds.
-func given2ActualIdx(idx int32, rules []*persistencepb.AssignmentRule) int {
+func given2ActualIdx(idx int32, rules []*persistencespb.AssignmentRule) int {
 	for i, rule := range rules {
 		if rule.DeleteTimestamp == nil {
 			if idx == 0 {
@@ -431,8 +444,8 @@ func validRamp(ramp *taskqueue.RampByPercentage) bool {
 }
 
 // isCyclic returns true if there is a cycle in the DAG of redirect rules.
-func isCyclic(rules []*persistencepb.RedirectRule) bool {
-	makeEdgeMap := func(rules []*persistencepb.RedirectRule) map[string][]string {
+func isCyclic(rules []*persistencespb.RedirectRule) bool {
+	makeEdgeMap := func(rules []*persistencespb.RedirectRule) map[string][]string {
 		ret := make(map[string][]string)
 		for _, rule := range rules {
 			src := rule.GetRule().GetSourceBuildId()
@@ -476,7 +489,7 @@ func dfs(curr string, visited, inStack map[string]bool, nodes map[string][]strin
 	return false
 }
 
-func FindAssignmentBuildId(rules []*persistencepb.AssignmentRule) string {
+func FindAssignmentBuildId(rules []*persistencespb.AssignmentRule) string {
 	for _, r := range rules {
 		if r.GetDeleteTimestamp() != nil {
 			continue
