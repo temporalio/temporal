@@ -25,7 +25,10 @@
 package frontend
 
 import (
+	"fmt"
 	"testing"
+
+	"github.com/stretchr/testify/assert"
 )
 
 func TestIsRedirectRuleSource(t *testing.T) {
@@ -50,4 +53,17 @@ func TestExistsWFAssignedToAny(t *testing.T) {
 
 func TestMakeBuildIdQuery(t *testing.T) {
 	t.Parallel()
+
+	buildIdsOfInterest := []string{"0", "1", "2", ""}
+	tq := "test-query-tq"
+
+	queryOpen := makeBuildIdQuery(buildIdsOfInterest, tq, true)
+	fmt.Printf("%s\n", queryOpen)
+	expectedQueryOpen := "TaskQueue = 'test-query-tq' AND (BuildIds IS NULL OR BuildIds IN ('assigned:0','assigned:1','assigned:2',unversioned)) AND ExecutionStatus = \"Running\""
+	assert.Equal(t, expectedQueryOpen, queryOpen)
+
+	queryClosed := makeBuildIdQuery(buildIdsOfInterest, tq, false)
+	fmt.Printf("%s\n", queryClosed)
+	expectedQueryClosed := "TaskQueue = 'test-query-tq' AND (BuildIds IS NULL OR BuildIds IN ('versioned:0','versioned:1','versioned:2',unversioned)) AND ExecutionStatus != \"Running\""
+	assert.Equal(t, expectedQueryClosed, queryClosed)
 }
