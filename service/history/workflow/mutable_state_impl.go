@@ -28,7 +28,7 @@ import (
 	"context"
 	"fmt"
 	"math/rand"
-	reflect "reflect"
+	"reflect"
 	"time"
 
 	"github.com/nexus-rpc/sdk-go/nexus"
@@ -799,8 +799,8 @@ func (ms *MutableStateImpl) GenerateEventLoadToken(event *history.HistoryEvent) 
 		return nil, serviceerror.NewInternal(fmt.Sprintf("cannot reference event: %v", event.EventType))
 	}
 	ref := &tokenspb.HistoryEventRef{
-		EventId:                  event.EventId,
-		EventBatchId:             eventBatchID,
+		EventId:      event.EventId,
+		EventBatchId: eventBatchID,
 	}
 	return proto.Marshal(ref)
 }

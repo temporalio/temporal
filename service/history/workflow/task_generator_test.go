@@ -454,9 +454,9 @@ func TestTaskGenerator_GenerateDirtySubStateMachineTasks(t *testing.T) {
 	require.NoError(t, err)
 
 	require.Equal(t, 2, len(genTasks))
-	timeoutTask, ok := genTasks[0].(*tasks.StateMachineTimerTask)
+	timeoutTask, ok := genTasks[0].(*tasks.StateMachineTimerTask) // nolint:revive
 	if !ok {
-		timeoutTask = genTasks[1].(*tasks.StateMachineTimerTask)
+		timeoutTask = genTasks[1].(*tasks.StateMachineTimerTask) // nolint:revive
 	}
 
 	require.Equal(t, tests.WorkflowKey, timeoutTask.WorkflowKey)
