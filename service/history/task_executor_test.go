@@ -29,7 +29,7 @@ import (
 	"time"
 
 	"github.com/golang/mock/gomock"
-	"github.com/pborman/uuid"
+	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 	commandpb "go.temporal.io/api/command/v1"
 	commonpb "go.temporal.io/api/common/v1"
@@ -293,7 +293,7 @@ func (s *taskExecutorTestContext) prepareMutableStateWithReadyNexusCompletionCal
 
 	execution := &commonpb.WorkflowExecution{
 		WorkflowId: "some random workflow ID",
-		RunId:      uuid.New(),
+		RunId:      uuid.NewString(),
 	}
 	mutableState := workflow.TestGlobalMutableState(s.mockShard, s.mockShard.GetEventsCache(), s.mockShard.GetLogger(), s.namespaceEntry.FailoverVersion(), execution.GetWorkflowId(), execution.GetRunId())
 	_, err := mutableState.AddWorkflowExecutionStartedEvent(
@@ -329,7 +329,7 @@ func (s *taskExecutorTestContext) prepareMutableStateWithTriggeredNexusCompletio
 	mutableState := s.prepareMutableStateWithReadyNexusCompletionCallback()
 	wt := addWorkflowTaskScheduledEvent(mutableState)
 	taskQueueName := "irrelevant"
-	event := addWorkflowTaskStartedEvent(mutableState, wt.ScheduledEventID, taskQueueName, uuid.New())
+	event := addWorkflowTaskStartedEvent(mutableState, wt.ScheduledEventID, taskQueueName, uuid.NewString())
 	wt.StartedEventID = event.GetEventId()
 	_, err := mutableState.AddWorkflowTaskCompletedEvent(wt, &workflowservice.RespondWorkflowTaskCompletedRequest{
 		Identity: "some random identity",

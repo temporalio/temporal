@@ -66,15 +66,20 @@ type Operation struct {
 }
 
 // AddChild adds a new operation child machine to the given node and transitions it to the SCHEDULED state.
-func AddChild(node *hsm.Node, id string, event *historypb.HistoryEvent) (*hsm.Node, error) {
+func AddChild(node *hsm.Node, id string, event *historypb.HistoryEvent, eventToken []byte, deleteOnCompletion bool) (*hsm.Node, error) {
 	attrs := event.GetNexusOperationScheduledEventAttributes()
+
 	node, err := node.AddChild(hsm.Key{Type: OperationMachineType.ID, ID: id}, Operation{
 		&persistencespb.NexusOperationInfo{
 			Service:       attrs.Service,
 			Operation:     attrs.Operation,
 			ScheduledTime: event.EventTime,
 			Timeout:       attrs.Timeout,
+			RequestId:     attrs.RequestId,
 			State:         enumsspb.NEXUS_OPERATION_STATE_UNSPECIFIED,
+			// TODO(bergundy): actually delete on completion if this is set.
+			DeleteOnCompletion:  deleteOnCompletion,
+			ScheduledEventToken: eventToken,
 		},
 	})
 

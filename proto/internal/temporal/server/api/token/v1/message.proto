@@ -81,3 +81,12 @@ message NexusTask {
     string task_queue = 2;
     string task_id = 3;
 }
+
+// A reference for loading a history event.
+message HistoryEventRef {
+    // Event ID.
+    int64 event_id = 1;
+    // Event batch ID - the first event ID in the batch the event was stored in.
+    int64 event_batch_id = 2;
+}
+

@@ -23,9 +23,12 @@
 package hsm
 
 import (
+	"context"
 	"errors"
 	"fmt"
 
+	enumspb "go.temporal.io/api/enums/v1"
+	historypb "go.temporal.io/api/history/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 )
 
@@ -77,6 +80,17 @@ type cachedMachine struct {
 	outputs []TransitionOutput
 }
 
+// NodeBackend is a concrete implementation to support interacting with the underlying platform.
+// It currently has only a single implementation - workflow mutable state.
+type NodeBackend interface {
+	// AddHistoryEvent adds a history event to be committed at the end of the current transaction.
+	AddHistoryEvent(t enumspb.EventType, setAttributes func(*historypb.HistoryEvent)) *historypb.HistoryEvent
+	// GenerateEventLoadToken generates a token for loading a history event from an [Environment].
+	GenerateEventLoadToken(event *historypb.HistoryEvent) ([]byte, error)
+	// Load a history event by token generated via [GenerateEventLoadToken].
+	LoadHistoryEvent(ctx context.Context, token []byte) (*historypb.HistoryEvent, error)
+}
+
 // Node is a node in a hierarchical state machine tree.
 //
 // It holds a persistent representation of itself and maintains an in-memory cache of deserialized data and child nodes.
@@ -91,12 +105,13 @@ type Node struct {
 	cache       *cachedMachine
 	persistence *persistencespb.StateMachineNode
 	definition  StateMachineDefinition
+	backend     NodeBackend
 }
 
 // NewRoot creates a new root [Node].
 // Children may be provided from persistence to rehydrate the tree.
 // Returns [ErrNotRegistered] if the key's type is not registered in the given registry or serialization errors.
-func NewRoot(registry *Registry, t int32, data any, children map[int32]*persistencespb.StateMachineMap) (*Node, error) {
+func NewRoot(registry *Registry, t int32, data any, children map[int32]*persistencespb.StateMachineMap, backend NodeBackend) (*Node, error) {
 	def, ok := registry.Machine(t)
 	if !ok {
 		return nil, fmt.Errorf("%w: state machine for type: %v", ErrNotRegistered, t)
@@ -117,6 +132,7 @@ func NewRoot(registry *Registry, t int32, data any, children map[int32]*persiste
 			data:       data,
 			children:   make(map[Key]*Node),
 		},
+		backend: backend,
 	}, nil
 }
 
@@ -197,6 +213,7 @@ func (n *Node) Child(path []Key) (*Node, error) {
 			children: make(map[Key]*Node),
 		},
 		persistence: machine,
+		backend:     n.backend,
 	}
 	n.cache.children[key] = child
 	return child.Child(rest)
@@ -236,6 +253,7 @@ func (n *Node) AddChild(key Key, data any) (*Node, error) {
 			data:       data,
 			children:   make(map[Key]*Node),
 		},
+		backend: n.backend,
 	}
 	n.cache.children[key] = node
 	children, ok := n.persistence.Children[key.Type]
@@ -245,6 +263,24 @@ func (n *Node) AddChild(key Key, data any) (*Node, error) {
 	}
 	children.MachinesById[key.ID] = node.persistence
 	return node, nil
+}
+
+// AddHistoryEvent adds a history event to be committed at the end of the current transaction.
+// Must be called within an [Environment.Access] function block with write access.
+func (n *Node) AddHistoryEvent(t enumspb.EventType, setAttributes func(*historypb.HistoryEvent)) *historypb.HistoryEvent {
+	return n.backend.AddHistoryEvent(t, setAttributes)
+}
+
+// GenerateEventLoadToken generates a token for loading a history event from an [Environment].
+// Must be called within an [Environment.Access] function block with either read or write access.
+func (n *Node) GenerateEventLoadToken(event *historypb.HistoryEvent) ([]byte, error) {
+	return n.backend.GenerateEventLoadToken(event)
+}
+
+// Load a history event by token generated via [GenerateEventLoadToken].
+// Must be called within an [Environment.Access] function block with either read or write access.
+func (n *Node) LoadHistoryEvent(ctx context.Context, token []byte) (*historypb.HistoryEvent, error) {
+	return n.backend.LoadHistoryEvent(ctx, token)
 }
 
 // MachineData deserializes the persistent state machine's data, casts it to type T, and returns it.

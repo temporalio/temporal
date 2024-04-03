@@ -336,7 +336,7 @@ func TestTaskGenerator_GenerateDirtySubStateMachineTasks(t *testing.T) {
 	require.NoError(t, callbacks.RegisterTaskSerializers(reg))
 	require.NoError(t, nexusoperations.RegisterStateMachines(reg))
 	require.NoError(t, nexusoperations.RegisterTaskSerializers(reg))
-	node, err := hsm.NewRoot(reg, StateMachineType.ID, nil, subStateMachinesByType)
+	node, err := hsm.NewRoot(reg, StateMachineType.ID, nil, subStateMachinesByType, nil)
 	require.NoError(t, err)
 	coll := callbacks.MachineCollection(node)
 
@@ -448,15 +448,15 @@ func TestTaskGenerator_GenerateDirtySubStateMachineTasks(t *testing.T) {
 				Timeout:   durationpb.New(time.Hour),
 			},
 		},
-	})
+	}, []byte("token"), false)
 	require.NoError(t, err)
 	err = taskGenerator.GenerateDirtySubStateMachineTasks(reg)
 	require.NoError(t, err)
 
 	require.Equal(t, 2, len(genTasks))
-	timeoutTask, ok := genTasks[0].(*tasks.StateMachineTimerTask)
+	timeoutTask, ok := genTasks[0].(*tasks.StateMachineTimerTask) // nolint:revive
 	if !ok {
-		timeoutTask = genTasks[1].(*tasks.StateMachineTimerTask)
+		timeoutTask = genTasks[1].(*tasks.StateMachineTimerTask) // nolint:revive
 	}
 
 	require.Equal(t, tests.WorkflowKey, timeoutTask.WorkflowKey)

@@ -71,7 +71,8 @@ func newTestContext(t *testing.T, cfg *nexusoperations.Config) testContext {
 	smReg := hsm.NewRegistry()
 	require.NoError(t, workflow.RegisterStateMachine(smReg))
 	require.NoError(t, nexusoperations.RegisterStateMachines(smReg))
-	node, err := hsm.NewRoot(smReg, workflow.StateMachineType.ID, nil, make(map[int32]*persistencespb.StateMachineMap))
+	// Backend is nil because we don't need to generate history events for this test.
+	node, err := hsm.NewRoot(smReg, workflow.StateMachineType.ID, nil, make(map[int32]*persistencespb.StateMachineMap), nil)
 	require.NoError(t, err)
 	ms := workflow.NewMockMutableState(gomock.NewController(t))
 	ms.EXPECT().HSM().Return(node).AnyTimes()
@@ -88,6 +89,7 @@ func newTestContext(t *testing.T, cfg *nexusoperations.Config) testContext {
 		history.Events = append(history.Events, e)
 		return e
 	}).AnyTimes()
+	ms.EXPECT().GenerateEventLoadToken(gomock.Any()).Return([]byte("token"), nil).AnyTimes()
 	ms.EXPECT().GetNamespaceEntry().Return(tests.GlobalNamespaceEntry).AnyTimes()
 	ms.EXPECT().GetExecutionInfo().Return(&persistencespb.WorkflowExecutionInfo{}).AnyTimes()
 	scheduleHandler, ok := chReg.Handler(enumspb.COMMAND_TYPE_SCHEDULE_NEXUS_OPERATION)
