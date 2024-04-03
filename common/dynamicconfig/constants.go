@@ -583,8 +583,6 @@ const (
 	// HistoryCacheHostLevelMaxSizeBytes is the maximum size of the host level history cache. This is only used if
 	// HistoryCacheSizeBasedLimit is set to true.
 	HistoryCacheHostLevelMaxSizeBytes = "history.hostLevelCacheMaxSizeBytes"
-	// EnableAPIGetCurrentRunIDLock controls if a lock should be acquired before getting current run ID for API requests
-	EnableAPIGetCurrentRunIDLock = "history.enableAPIGetCurrentRunIDLock"
 	// EnableMutableStateTransitionHistory controls whether to record state transition history in mutable state records.
 	// The feature is used in the hierarchical state machine framework and is considered unstable as the structure may
 	// change with the pending replication design.
