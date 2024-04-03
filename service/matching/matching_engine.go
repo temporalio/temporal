@@ -110,28 +110,28 @@ type (
 
 	// Implements matching.Engine
 	matchingEngineImpl struct {
-		status                 int32
-		taskManager            persistence.TaskManager
-		historyClient          resource.HistoryClient
-		matchingRawClient      resource.MatchingRawClient
-		tokenSerializer        common.TaskTokenSerializer
-		historySerializer      serialization.Serializer
-		logger                 log.Logger
-		throttledLogger        log.ThrottledLogger
-		namespaceRegistry      namespace.Registry
-		hostInfoProvider       membership.HostInfoProvider
-		serviceResolver        membership.ServiceResolver
-		membershipChangedCh    chan *membership.ChangedEvent
-		clusterMeta            cluster.Metadata
-		timeSource             clock.TimeSource
-		visibilityManager      manager.VisibilityManager
-		incomingServiceManager *incomingNexusServiceManager
-		metricsHandler         metrics.Handler
-		taskQueuesLock         sync.RWMutex // locks mutation of taskQueues
-		taskQueues             map[taskQueueID]taskQueueManager
-		taskQueueCountLock     sync.Mutex
-		taskQueueCount         map[taskQueueCounterKey]int // per-namespace task queue counter
-		config                 *Config
+		status                int32
+		taskManager           persistence.TaskManager
+		historyClient         resource.HistoryClient
+		matchingRawClient     resource.MatchingRawClient
+		tokenSerializer       common.TaskTokenSerializer
+		historySerializer     serialization.Serializer
+		logger                log.Logger
+		throttledLogger       log.ThrottledLogger
+		namespaceRegistry     namespace.Registry
+		hostInfoProvider      membership.HostInfoProvider
+		serviceResolver       membership.ServiceResolver
+		membershipChangedCh   chan *membership.ChangedEvent
+		clusterMeta           cluster.Metadata
+		timeSource            clock.TimeSource
+		visibilityManager     manager.VisibilityManager
+		incomingServiceClient *nexusIncomingServiceClient
+		metricsHandler        metrics.Handler
+		taskQueuesLock        sync.RWMutex // locks mutation of taskQueues
+		taskQueues            map[taskQueueID]taskQueueManager
+		taskQueueCountLock    sync.Mutex
+		taskQueueCount        map[taskQueueCounterKey]int // per-namespace task queue counter
+		config                *Config
 		// queryResults maps query TaskID (which is a UUID generated in QueryWorkflow() call) to a channel
 		// that QueryWorkflow() will block on. The channel is unblocked either by worker sending response through
 		// RespondQueryTaskCompleted() or through an internal service error causing temporal to be unable to dispatch
@@ -203,7 +203,7 @@ func NewEngine(
 		clusterMeta:               clusterMeta,
 		timeSource:                clock.NewRealTimeSource(), // No need to mock this at the moment
 		visibilityManager:         visibilityManager,
-		incomingServiceManager:    newIncomingServiceManager(nexusIncomingServiceManager),
+		incomingServiceClient:     newIncomingServiceClient(nexusIncomingServiceManager),
 		metricsHandler:            metricsHandler.WithTags(metrics.OperationTag(metrics.MatchingEngineScope)),
 		taskQueues:                make(map[taskQueueID]taskQueueManager),
 		taskQueueCount:            make(map[taskQueueCounterKey]int),
@@ -1455,7 +1455,7 @@ func (e *matchingEngineImpl) CreateNexusIncomingService(ctx context.Context, req
 	if err != nil {
 		return nil, err
 	}
-	return e.incomingServiceManager.CreateNexusIncomingService(ctx, &internalCreateRequest{
+	return e.incomingServiceClient.CreateNexusIncomingService(ctx, &internalCreateRequest{
 		spec:        request.GetSpec(),
 		namespaceID: namespaceID.String(),
 		clusterID:   e.clusterMeta.GetClusterID(),
@@ -1468,7 +1468,7 @@ func (e *matchingEngineImpl) UpdateNexusIncomingService(ctx context.Context, req
 	if err != nil {
 		return nil, err
 	}
-	return e.incomingServiceManager.UpdateNexusIncomingService(ctx, &internalUpdateRequest{
+	return e.incomingServiceClient.UpdateNexusIncomingService(ctx, &internalUpdateRequest{
 		serviceID:   request.GetId(),
 		version:     request.GetVersion(),
 		spec:        request.GetSpec(),
@@ -1479,7 +1479,7 @@ func (e *matchingEngineImpl) UpdateNexusIncomingService(ctx context.Context, req
 }
 
 func (e *matchingEngineImpl) DeleteNexusIncomingService(ctx context.Context, request *matchingservice.DeleteNexusIncomingServiceRequest) (*matchingservice.DeleteNexusIncomingServiceResponse, error) {
-	return e.incomingServiceManager.DeleteNexusIncomingService(ctx, request)
+	return e.incomingServiceClient.DeleteNexusIncomingService(ctx, request)
 }
 
 func (e *matchingEngineImpl) ListNexusIncomingServices(ctx context.Context, request *matchingservice.ListNexusIncomingServicesRequest) (*matchingservice.ListNexusIncomingServicesResponse, error) {
@@ -1499,7 +1499,7 @@ func (e *matchingEngineImpl) ListNexusIncomingServices(ctx context.Context, requ
 	}
 
 	for {
-		resp, tableVersionChanged, err := e.incomingServiceManager.ListNexusIncomingServices(ctx, request)
+		resp, tableVersionChanged, err := e.incomingServiceClient.ListNexusIncomingServices(ctx, request)
 		if err != nil {
 			return resp, err
 		}
