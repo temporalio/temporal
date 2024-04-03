@@ -25,6 +25,7 @@
 package utf8validator
 
 import (
+	"context"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -33,8 +34,14 @@ import (
 	namespacepb "go.temporal.io/api/namespace/v1"
 	"go.temporal.io/api/operatorservice/v1"
 	replicationpb "go.temporal.io/api/replication/v1"
+	"go.temporal.io/api/serviceerror"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	"go.temporal.io/api/workflowservice/v1"
+	"go.temporal.io/server/common/dynamicconfig"
+	"go.temporal.io/server/common/log"
+	"go.temporal.io/server/common/metrics"
+	"go.temporal.io/server/common/metrics/metricstest"
+	"google.golang.org/grpc"
 	"google.golang.org/protobuf/proto"
 )
 
@@ -143,4 +150,106 @@ func TestValidate(t *testing.T) {
 			assert.Equal(t, c.badPath, validation.badPath, i)
 		})
 	}
+}
+
+func TestSample(t *testing.T) {
+	v := newValidator(
+		log.NewTestLogger(),
+		metricstest.NewCaptureHandler(),
+		dynamicconfig.GetFloatPropertyFn(0.5),
+		dynamicconfig.GetFloatPropertyFn(0.0),
+		dynamicconfig.GetFloatPropertyFn(1.0),
+		dynamicconfig.GetBoolPropertyFn(true),
+		dynamicconfig.GetBoolPropertyFn(true),
+		dynamicconfig.GetBoolPropertyFn(true),
+	)
+
+	msg := &workflowservice.StartWorkflowExecutionRequest{
+		Namespace: "uh oh \xfe",
+	}
+
+	var requestErrors, responseErrors, persistenceErrors int
+	for i := 0; i < 1000; i++ {
+		if v.Validate(msg, SourceRPCRequest) != nil {
+			requestErrors++
+		}
+		if v.Validate(msg, SourceRPCResponse) != nil {
+			responseErrors++
+		}
+		if v.Validate(msg, SourcePersistence) != nil {
+			persistenceErrors++
+		}
+	}
+	assert.Greater(t, requestErrors, 400)
+	assert.Less(t, requestErrors, 600)
+	assert.Equal(t, responseErrors, 0)
+	assert.Equal(t, persistenceErrors, 1000)
+}
+
+func testInterceptGeneric(t *testing.T, shouldFail bool) {
+	captureHandler := metricstest.NewCaptureHandler()
+
+	v := newValidator(
+		log.NewTestLogger(),
+		captureHandler,
+		dynamicconfig.GetFloatPropertyFn(1.0),
+		dynamicconfig.GetFloatPropertyFn(1.0),
+		dynamicconfig.GetFloatPropertyFn(1.0),
+		dynamicconfig.GetBoolPropertyFn(shouldFail),
+		dynamicconfig.GetBoolPropertyFn(shouldFail),
+		dynamicconfig.GetBoolPropertyFn(shouldFail),
+	)
+
+	// request is invalid
+	capture := captureHandler.StartCapture()
+	req := &workflowservice.StartWorkflowExecutionRequest{
+		Namespace: "uh oh \xfe",
+	}
+	_, err := v.Intercept(
+		context.Background(),
+		req,
+		&grpc.UnaryServerInfo{FullMethod: "start workflow"},
+		func(ctx context.Context, req any) (any, error) {
+			return nil, nil
+		})
+	if shouldFail {
+		var invalidArg *serviceerror.InvalidArgument
+		assert.ErrorAs(t, err, &invalidArg)
+		assert.ErrorContains(t, err, ErrInvalidUTF8.Error())
+	} else {
+		assert.NoError(t, err)
+	}
+	assert.NotEmpty(t, capture.Snapshot()[metrics.UTF8ValidationErrors.Name()])
+	captureHandler.StopCapture(capture)
+
+	// response is invalid
+	capture = captureHandler.StartCapture()
+	req = &workflowservice.StartWorkflowExecutionRequest{
+		Namespace: "ok",
+	}
+	_, err = v.Intercept(
+		context.Background(),
+		req,
+		&grpc.UnaryServerInfo{FullMethod: "start workflow"},
+		func(ctx context.Context, req any) (any, error) {
+			return &workflowservice.StartWorkflowExecutionResponse{
+				RunId: "oops \xee",
+			}, nil
+		})
+	if shouldFail {
+		var internal *serviceerror.Internal
+		assert.ErrorAs(t, err, &internal)
+		assert.ErrorContains(t, err, ErrInvalidUTF8.Error())
+	} else {
+		assert.NoError(t, err)
+	}
+	assert.NotEmpty(t, capture.Snapshot()[metrics.UTF8ValidationErrors.Name()])
+	captureHandler.StopCapture(capture)
+}
+
+func TestInterceptWithoutFail(t *testing.T) {
+	testInterceptGeneric(t, false)
+}
+func TestInterceptWithFail(t *testing.T) {
+	testInterceptGeneric(t, true)
 }
