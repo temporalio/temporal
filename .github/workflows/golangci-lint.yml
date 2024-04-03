@@ -20,7 +20,8 @@ jobs:
       - name: golangci-lint
         uses: golangci/golangci-lint-action@v4
         with:
-          version: v1.54.2
+          # When updating the version, update the update-linters target in Makefile as well.
+          version: v1.57.2
           args: --verbose --timeout 10m --fix=false --new-from-rev=HEAD~ --config=.golangci.yml
 
       - name: check-is-dirty

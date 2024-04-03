@@ -242,7 +242,7 @@ func GrpcServerOptionsProvider(
 	}
 	unaryInterceptors := []grpc.UnaryServerInterceptor{
 		// Service Error Interceptor should be the most outer interceptor on error handling
-		rpc.FrontendErrorInterceptor,
+		rpc.NewServiceErrorInterceptor(logger),
 		namespaceValidatorInterceptor.NamespaceValidateIntercept,
 		namespaceLogInterceptor.Intercept, // TODO: Deprecate this with a outer custom interceptor
 		grpc.UnaryServerInterceptor(traceInterceptor),
@@ -544,7 +544,7 @@ func AdminHandlerProvider(
 	configuration *Config,
 	replicatorNamespaceReplicationQueue FEReplicatorNamespaceReplicationQueue,
 	esClient esclient.Client,
-	visibilityMrg manager.VisibilityManager,
+	visibilityMgr manager.VisibilityManager,
 	logger log.SnTaggedLogger,
 	persistenceExecutionManager persistence.ExecutionManager,
 	namespaceReplicationQueue persistence.NamespaceReplicationQueue,
@@ -573,7 +573,7 @@ func AdminHandlerProvider(
 		namespaceReplicationQueue,
 		replicatorNamespaceReplicationQueue,
 		esClient,
-		visibilityMrg,
+		visibilityMgr,
 		logger,
 		taskManager,
 		clusterMetadataManager,
@@ -785,10 +785,13 @@ func IncomingServiceClientProvider(
 
 func OutgoingServiceRegistryProvider(
 	metadataManager persistence.MetadataManager,
+	logger log.Logger,
+	namespaceReplicationQueue persistence.NamespaceReplicationQueue,
 	dc *dynamicconfig.Collection,
 ) *nexus.OutgoingServiceRegistry {
 	registryConfig := nexus.NewOutgoingServiceRegistryConfig(dc)
-	return nexus.NewOutgoingServiceRegistry(metadataManager, registryConfig)
+	namespaceReplicator := namespace.NewNamespaceReplicator(namespaceReplicationQueue, logger)
+	return nexus.NewOutgoingServiceRegistry(metadataManager, namespaceReplicator, registryConfig)
 }
 
 func ServiceLifetimeHooks(lc fx.Lifecycle, svc *Service) {

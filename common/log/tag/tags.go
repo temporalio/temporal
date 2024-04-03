@@ -934,3 +934,7 @@ func Endpoint(endpoint string) ZapTag {
 func BuildId(buildId string) ZapTag {
 	return NewStringTag("build-id", buildId)
 }
+
+func Cause(cause string) ZapTag {
+	return NewStringTag("cause", cause)
+}

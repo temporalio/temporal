@@ -230,12 +230,12 @@ func (c *temporalImpl) enableWorker() bool {
 }
 
 func (c *temporalImpl) Start() error {
-	hosts := make(map[primitives.ServiceName][]string)
-	hosts[primitives.FrontendService] = []string{c.FrontendGRPCAddress()}
-	hosts[primitives.MatchingService] = []string{c.MatchingGRPCServiceAddress()}
-	hosts[primitives.HistoryService] = c.HistoryServiceAddress()
+	hosts := make(map[primitives.ServiceName]static.Hosts)
+	hosts[primitives.FrontendService] = static.SingleLocalHost(c.FrontendGRPCAddress())
+	hosts[primitives.MatchingService] = static.SingleLocalHost(c.MatchingGRPCServiceAddress())
+	hosts[primitives.HistoryService] = static.Hosts{All: c.HistoryServiceAddresses()}
 	if c.enableWorker() {
-		hosts[primitives.WorkerService] = []string{c.WorkerGRPCServiceAddress()}
+		hosts[primitives.WorkerService] = static.SingleLocalHost(c.WorkerGRPCServiceAddress())
 	}
 
 	// create temporal-system namespace, this must be created before starting
@@ -321,7 +321,7 @@ func (c *temporalImpl) FrontendHTTPHostPort() (string, int) {
 	}
 }
 
-func (c *temporalImpl) HistoryServiceAddress() []string {
+func (c *temporalImpl) HistoryServiceAddresses() []string {
 	var hosts []string
 	var startPort int
 	switch c.clusterNo {
@@ -397,7 +397,10 @@ func (c *temporalImpl) GetMatchingClient() matchingservice.MatchingServiceClient
 	return c.matchingClient
 }
 
-func (c *temporalImpl) startFrontend(hosts map[primitives.ServiceName][]string, startWG *sync.WaitGroup) {
+func (c *temporalImpl) startFrontend(
+	hostsByService map[primitives.ServiceName]static.Hosts,
+	startWG *sync.WaitGroup,
+) {
 	serviceName := primitives.FrontendService
 	persistenceConfig, err := copyPersistenceConfig(c.persistenceConfig)
 	if err != nil {
@@ -426,7 +429,7 @@ func (c *temporalImpl) startFrontend(hosts map[primitives.ServiceName][]string, 
 		fx.Provide(func() log.ThrottledLogger { return c.logger }),
 		fx.Provide(func() resource.NamespaceLogger { return c.logger }),
 		fx.Provide(c.newRPCFactory),
-		static.MembershipModule(hosts),
+		static.MembershipModule(hostsByService),
 		fx.Provide(func() *cluster.Config { return c.clusterMetadataConfig }),
 		fx.Provide(func() carchiver.ArchivalMetadata { return c.archiverMetadata }),
 		fx.Provide(func() provider.ArchiverProvider { return c.archiverProvider }),
@@ -489,11 +492,17 @@ func (c *temporalImpl) startFrontend(hosts map[primitives.ServiceName][]string, 
 }
 
 func (c *temporalImpl) startHistory(
-	hosts map[primitives.ServiceName][]string,
+	hostsByService map[primitives.ServiceName]static.Hosts,
 	startWG *sync.WaitGroup,
 ) {
 	serviceName := primitives.HistoryService
-	for _, grpcPort := range c.HistoryServiceAddress() {
+	allHosts := hostsByService[serviceName].All
+	for _, host := range allHosts {
+		hostMap := maps.Clone(hostsByService)
+		historyHosts := hostMap[serviceName]
+		historyHosts.Self = host
+		hostMap[serviceName] = historyHosts
+
 		persistenceConfig, err := copyPersistenceConfig(c.persistenceConfig)
 		if err != nil {
 			c.logger.Fatal("Failed to copy persistence config for history", tag.Error(err))
@@ -515,11 +524,11 @@ func (c *temporalImpl) startHistory(
 				serviceName,
 			),
 			fx.Provide(c.GetMetricsHandler),
-			fx.Provide(func() listenHostPort { return listenHostPort(grpcPort) }),
+			fx.Provide(func() listenHostPort { return listenHostPort(host) }),
 			fx.Provide(func() config.DCRedirectionPolicy { return config.DCRedirectionPolicy{} }),
 			fx.Provide(func() log.ThrottledLogger { return c.logger }),
 			fx.Provide(c.newRPCFactory),
-			static.MembershipModule(hosts),
+			static.MembershipModule(hostMap),
 			fx.Provide(func() *cluster.Config { return c.clusterMetadataConfig }),
 			fx.Provide(func() carchiver.ArchivalMetadata { return c.archiverMetadata }),
 			fx.Provide(func() provider.ArchiverProvider { return c.archiverProvider }),
@@ -566,7 +575,7 @@ func (c *temporalImpl) startHistory(
 		// However current interface for getting history client doesn't specify which client it needs and the tests that use this API
 		// depends on the fact that there's only one history host.
 		// Need to change those tests and modify the interface for getting history client.
-		historyConnection, err := rpc.Dial(c.HistoryServiceAddress()[0], nil, c.logger)
+		historyConnection, err := rpc.Dial(allHosts[0], nil, c.logger)
 		if err != nil {
 			c.logger.Fatal("Failed to create connection for history", tag.Error(err))
 		}
@@ -586,7 +595,10 @@ func (c *temporalImpl) startHistory(
 	c.shutdownWG.Done()
 }
 
-func (c *temporalImpl) startMatching(hosts map[primitives.ServiceName][]string, startWG *sync.WaitGroup) {
+func (c *temporalImpl) startMatching(
+	hostsByService map[primitives.ServiceName]static.Hosts,
+	startWG *sync.WaitGroup,
+) {
 	serviceName := primitives.MatchingService
 
 	persistenceConfig, err := copyPersistenceConfig(c.persistenceConfig)
@@ -613,7 +625,7 @@ func (c *temporalImpl) startMatching(hosts map[primitives.ServiceName][]string, 
 		fx.Provide(func() listenHostPort { return listenHostPort(c.MatchingGRPCServiceAddress()) }),
 		fx.Provide(func() log.ThrottledLogger { return c.logger }),
 		fx.Provide(c.newRPCFactory),
-		static.MembershipModule(hosts),
+		static.MembershipModule(hostsByService),
 		fx.Provide(func() *cluster.Config { return c.clusterMetadataConfig }),
 		fx.Provide(func() carchiver.ArchivalMetadata { return c.archiverMetadata }),
 		fx.Provide(func() provider.ArchiverProvider { return c.archiverProvider }),
@@ -666,7 +678,10 @@ func (c *temporalImpl) startMatching(hosts map[primitives.ServiceName][]string, 
 	c.shutdownWG.Done()
 }
 
-func (c *temporalImpl) startWorker(hosts map[primitives.ServiceName][]string, startWG *sync.WaitGroup) {
+func (c *temporalImpl) startWorker(
+	hostsByService map[primitives.ServiceName]static.Hosts,
+	startWG *sync.WaitGroup,
+) {
 	serviceName := primitives.WorkerService
 
 	persistenceConfig, err := copyPersistenceConfig(c.persistenceConfig)
@@ -705,7 +720,7 @@ func (c *temporalImpl) startWorker(hosts map[primitives.ServiceName][]string, st
 		fx.Provide(func() config.DCRedirectionPolicy { return config.DCRedirectionPolicy{} }),
 		fx.Provide(func() log.ThrottledLogger { return c.logger }),
 		fx.Provide(c.newRPCFactory),
-		static.MembershipModule(hosts),
+		static.MembershipModule(hostsByService),
 		fx.Provide(func() *cluster.Config { return &clusterConfigCopy }),
 		fx.Provide(func() carchiver.ArchivalMetadata { return c.archiverMetadata }),
 		fx.Provide(func() provider.ArchiverProvider { return c.archiverProvider }),
@@ -832,8 +847,6 @@ func (c *temporalImpl) overrideHistoryDynamicConfig(t *testing.T, client *dcClie
 	// For DeleteWorkflowExecution tests
 	client.OverrideValue(t, dynamicconfig.TransferProcessorUpdateAckInterval, 1*time.Second)
 	client.OverrideValue(t, dynamicconfig.VisibilityProcessorUpdateAckInterval, 1*time.Second)
-
-	client.OverrideValue(t, dynamicconfig.EnableAPIGetCurrentRunIDLock, true)
 }
 
 func (c *temporalImpl) newRPCFactory(

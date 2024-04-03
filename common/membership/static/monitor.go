@@ -32,15 +32,28 @@ import (
 	"go.temporal.io/server/common/primitives"
 )
 
-type staticMonitor struct {
-	hosts     map[primitives.ServiceName][]string
-	resolvers map[primitives.ServiceName]*staticResolver
+type (
+	staticMonitor struct {
+		hosts     map[primitives.ServiceName]Hosts
+		resolvers map[primitives.ServiceName]*staticResolver
+	}
+
+	Hosts struct {
+		// Addresses of all hosts per service.
+		All []string
+		// Address of this host. May be empty if this host is not running this service.
+		Self string
+	}
+)
+
+func SingleLocalHost(host string) Hosts {
+	return Hosts{All: []string{host}, Self: host}
 }
 
-func newStaticMonitor(hosts map[primitives.ServiceName][]string) membership.Monitor {
+func newStaticMonitor(hosts map[primitives.ServiceName]Hosts) membership.Monitor {
 	resolvers := make(map[primitives.ServiceName]*staticResolver, len(hosts))
 	for service, hostList := range hosts {
-		resolvers[service] = newStaticResolver(service, hostList)
+		resolvers[service] = newStaticResolver(hostList.All)
 	}
 
 	return &staticMonitor{
@@ -51,7 +64,7 @@ func newStaticMonitor(hosts map[primitives.ServiceName][]string) membership.Moni
 
 func (s *staticMonitor) Start() {
 	for service, r := range s.resolvers {
-		r.start(s.hosts[service])
+		r.start(s.hosts[service].All)
 	}
 }
 

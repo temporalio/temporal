@@ -80,7 +80,6 @@ type Config struct {
 	HistoryCacheTTL                       dynamicconfig.DurationPropertyFn
 	HistoryCacheNonUserContextLockTimeout dynamicconfig.DurationPropertyFn
 	EnableHostLevelHistoryCache           dynamicconfig.BoolPropertyFn
-	EnableAPIGetCurrentRunIDLock          dynamicconfig.BoolPropertyFn
 	EnableMutableStateTransitionHistory   dynamicconfig.BoolPropertyFn
 
 	// EventsCache settings
@@ -390,7 +389,6 @@ func NewConfig(
 		HistoryCacheTTL:                       dc.GetDurationProperty(dynamicconfig.HistoryCacheTTL, time.Hour),
 		HistoryCacheNonUserContextLockTimeout: dc.GetDurationProperty(dynamicconfig.HistoryCacheNonUserContextLockTimeout, 500*time.Millisecond),
 		EnableHostLevelHistoryCache:           dc.GetBoolProperty(dynamicconfig.EnableHostHistoryCache, false),
-		EnableAPIGetCurrentRunIDLock:          dc.GetBoolProperty(dynamicconfig.EnableAPIGetCurrentRunIDLock, false),
 		EnableMutableStateTransitionHistory:   dc.GetBoolProperty(dynamicconfig.EnableMutableStateTransitionHistory, false),
 
 		EventsShardLevelCacheMaxSizeBytes: dc.GetIntProperty(dynamicconfig.EventsCacheMaxSizeBytes, 512*1024),              // 512KB

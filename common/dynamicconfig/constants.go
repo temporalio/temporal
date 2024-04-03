@@ -375,8 +375,14 @@ const (
 	KeepAliveTimeout = "frontend.keepAliveTimeout"
 	// FrontendEnableSchedules enables schedule-related RPCs in the frontend
 	FrontendEnableSchedules = "frontend.enableSchedules"
-	// FrontendEnableNexusHTTPHandler enables serving Nexus HTTP requests in the frontend.
-	FrontendEnableNexusHTTPHandler = "frontend.enableNexusHTTPHandler"
+	// FrontendEnableNexusAPIs enables serving Nexus HTTP requests in the frontend.
+	FrontendEnableNexusAPIs = "frontend.enableNexusAPIs"
+	// FrontendInitializeNexusIncomingServicesTimeout is the maximum time allowed for initializing Nexus incoming services.
+	FrontendInitializeNexusIncomingServicesTimeout = "frontend.initializeNexusIncomingServicesTimeout"
+	// FrontendRefreshNexusIncomingServicesLongPollTimeout is the maximum duration of background long poll requests to update Nexus incoming services.
+	FrontendRefreshNexusIncomingServicesLongPollTimeout = "frontend.refreshNexusIncomingServicesLongPollTimeout"
+	// FrontendRefreshNexusIncomingServicesMinWait is the minimum wait time between background long poll requests to update Nexus incoming services.
+	FrontendRefreshNexusIncomingServicesMinWait = "frontend.refreshNexusIncomingServicesMinWait"
 	// FrontendEnableCallbackAttachment enables attaching callbacks to workflows.
 	FrontendEnableCallbackAttachment = "frontend.enableCallbackAttachment"
 	// FrontendMaxConcurrentBatchOperationPerNamespace is the max concurrent batch operation job count per namespace
@@ -398,6 +404,10 @@ const (
 	// The UpdateWorkflowExecution API has gone through rigorous testing efforts but this config's default is `false` until the
 	// feature gets more time in production.
 	FrontendEnableUpdateWorkflowExecution = "frontend.enableUpdateWorkflowExecution"
+
+	// FrontendEnableExecuteMultiOperation enables the ExecuteMultiOperation API in the frontend.
+	// The API is under active development.
+	FrontendEnableExecuteMultiOperation = "frontend.enableExecuteMultiOperation"
 
 	// FrontendEnableUpdateWorkflowExecutionAsyncAccepted enables the form of
 	// asynchronous workflow execution update that waits on the "Accepted"
@@ -573,8 +583,6 @@ const (
 	// HistoryCacheHostLevelMaxSizeBytes is the maximum size of the host level history cache. This is only used if
 	// HistoryCacheSizeBasedLimit is set to true.
 	HistoryCacheHostLevelMaxSizeBytes = "history.hostLevelCacheMaxSizeBytes"
-	// EnableAPIGetCurrentRunIDLock controls if a lock should be acquired before getting current run ID for API requests
-	EnableAPIGetCurrentRunIDLock = "history.enableAPIGetCurrentRunIDLock"
 	// EnableMutableStateTransitionHistory controls whether to record state transition history in mutable state records.
 	// The feature is used in the hierarchical state machine framework and is considered unstable as the structure may
 	// change with the pending replication design.

@@ -56,7 +56,7 @@ const (
 
 func TestGet_NoNamespace(t *testing.T) {
 	t.Parallel()
-	registry := nexus.NewOutgoingServiceRegistry(nil, nil)
+	registry := nexus.NewOutgoingServiceRegistry(nil, nil, nil)
 	_, err := registry.Get(
 		context.Background(),
 		&operatorservice.GetNexusOutgoingServiceRequest{
@@ -69,7 +69,7 @@ func TestGet_NoNamespace(t *testing.T) {
 
 func TestGet_NoName(t *testing.T) {
 	t.Parallel()
-	registry := nexus.NewOutgoingServiceRegistry(nil, nil)
+	registry := nexus.NewOutgoingServiceRegistry(nil, nil, nil)
 	_, err := registry.Get(
 		context.Background(),
 		&operatorservice.GetNexusOutgoingServiceRequest{
@@ -87,7 +87,7 @@ func TestGet_GetNamespaceErr(t *testing.T) {
 	service.OnGetNamespace = func(ctx context.Context, request *persistence.GetNamespaceRequest) (*persistence.GetNamespaceResponse, error) {
 		return nil, getNamespaceErr
 	}
-	registry := nexus.NewOutgoingServiceRegistry(&service, newConfig())
+	registry := nexus.NewOutgoingServiceRegistry(&service, nil, newConfig())
 	_, err := registry.Get(
 		context.Background(),
 		&operatorservice.GetNexusOutgoingServiceRequest{
@@ -104,7 +104,7 @@ func TestGet_ServiceNotFound(t *testing.T) {
 	service.OnGetNamespace = func(ctx context.Context, request *persistence.GetNamespaceRequest) (*persistence.GetNamespaceResponse, error) {
 		return &persistence.GetNamespaceResponse{}, nil
 	}
-	registry := nexus.NewOutgoingServiceRegistry(&service, newConfig())
+	registry := nexus.NewOutgoingServiceRegistry(&service, nil, newConfig())
 	_, err := registry.Get(
 		context.Background(),
 		&operatorservice.GetNexusOutgoingServiceRequest{
@@ -137,7 +137,7 @@ func TestGet_Ok(t *testing.T) {
 		}, nil
 	}
 
-	registry := nexus.NewOutgoingServiceRegistry(&service, newConfig())
+	registry := nexus.NewOutgoingServiceRegistry(&service, &service, newConfig())
 	res, err := registry.Get(
 		context.Background(),
 		&operatorservice.GetNexusOutgoingServiceRequest{
@@ -157,7 +157,7 @@ func TestGet_Ok(t *testing.T) {
 
 func TestUpdate_NoNamespace(t *testing.T) {
 	t.Parallel()
-	registry := nexus.NewOutgoingServiceRegistry(nil, newConfig())
+	registry := nexus.NewOutgoingServiceRegistry(nil, nil, newConfig())
 	_, err := registry.Update(
 		context.Background(),
 		&operatorservice.UpdateNexusOutgoingServiceRequest{
@@ -172,7 +172,7 @@ func TestUpdate_NoNamespace(t *testing.T) {
 
 func TestUpdate_NoServiceName(t *testing.T) {
 	t.Parallel()
-	registry := nexus.NewOutgoingServiceRegistry(nil, newConfig())
+	registry := nexus.NewOutgoingServiceRegistry(nil, nil, newConfig())
 	_, err := registry.Update(
 		context.Background(),
 		&operatorservice.UpdateNexusOutgoingServiceRequest{
@@ -194,7 +194,7 @@ func TestUpdate_NotFound(t *testing.T) {
 		}, nil
 	}
 
-	registry := nexus.NewOutgoingServiceRegistry(&service, newConfig())
+	registry := nexus.NewOutgoingServiceRegistry(&service, &service, newConfig())
 	_, err := registry.Update(
 		context.Background(),
 		&operatorservice.UpdateNexusOutgoingServiceRequest{
@@ -229,7 +229,7 @@ func TestUpdate_VersionMismatch(t *testing.T) {
 		}, nil
 	}
 
-	registry := nexus.NewOutgoingServiceRegistry(&service, newConfig())
+	registry := nexus.NewOutgoingServiceRegistry(&service, &service, newConfig())
 	_, err := registry.Update(
 		context.Background(),
 		&operatorservice.UpdateNexusOutgoingServiceRequest{
@@ -269,7 +269,7 @@ func TestUpdate_Ok(t *testing.T) {
 		return nil
 	}
 
-	registry := nexus.NewOutgoingServiceRegistry(&service, newConfig())
+	registry := nexus.NewOutgoingServiceRegistry(&service, &service, newConfig())
 	_, err := registry.Update(
 		context.Background(),
 		&operatorservice.UpdateNexusOutgoingServiceRequest{
@@ -303,7 +303,7 @@ func TestCreate_NameTooLong(t *testing.T) {
 	t.Parallel()
 	config := newConfig()
 	name := strings.Repeat("x", config.MaxNameLength()+1)
-	registry := nexus.NewOutgoingServiceRegistry(nil, config)
+	registry := nexus.NewOutgoingServiceRegistry(nil, nil, config)
 	_, err := registry.Update(
 		context.Background(),
 		&operatorservice.UpdateNexusOutgoingServiceRequest{
@@ -321,7 +321,7 @@ func TestCreate_NameTooLong(t *testing.T) {
 
 func TestCreate_NameInvalidFormat(t *testing.T) {
 	t.Parallel()
-	registry := nexus.NewOutgoingServiceRegistry(nil, newConfig())
+	registry := nexus.NewOutgoingServiceRegistry(nil, nil, newConfig())
 	_, err := registry.Create(
 		context.Background(),
 		&operatorservice.CreateNexusOutgoingServiceRequest{
@@ -339,7 +339,7 @@ func TestCreate_NameInvalidFormat(t *testing.T) {
 
 func TestCreate_NoURL(t *testing.T) {
 	t.Parallel()
-	registry := nexus.NewOutgoingServiceRegistry(nil, newConfig())
+	registry := nexus.NewOutgoingServiceRegistry(nil, nil, newConfig())
 	_, err := registry.Create(
 		context.Background(),
 		&operatorservice.CreateNexusOutgoingServiceRequest{
@@ -353,7 +353,7 @@ func TestCreate_NoURL(t *testing.T) {
 func TestCreate_URLTooLong(t *testing.T) {
 	t.Parallel()
 	config := newConfig()
-	registry := nexus.NewOutgoingServiceRegistry(nil, config)
+	registry := nexus.NewOutgoingServiceRegistry(nil, nil, config)
 	u := testServiceURL + "/"
 	u += strings.Repeat("x", config.MaxURLLength()-len(u)+1)
 	_, err := registry.Create(
@@ -373,7 +373,7 @@ func TestCreate_URLTooLong(t *testing.T) {
 
 func TestCreate_URLMalformed(t *testing.T) {
 	t.Parallel()
-	registry := nexus.NewOutgoingServiceRegistry(nil, newConfig())
+	registry := nexus.NewOutgoingServiceRegistry(nil, nil, newConfig())
 	u := "://example.com"
 	_, err := registry.Create(
 		context.Background(),
@@ -393,7 +393,7 @@ func TestCreate_URLMalformed(t *testing.T) {
 
 func TestCreate_InvalidScheme(t *testing.T) {
 	t.Parallel()
-	registry := nexus.NewOutgoingServiceRegistry(nil, newConfig())
+	registry := nexus.NewOutgoingServiceRegistry(nil, nil, newConfig())
 	u := "oops://example.com"
 	_, err := registry.Create(
 		context.Background(),
@@ -420,7 +420,7 @@ func TestCreate_GetNamespaceErr(t *testing.T) {
 	service.OnGetNamespace = func(ctx context.Context, request *persistence.GetNamespaceRequest) (*persistence.GetNamespaceResponse, error) {
 		return nil, getNamespaceErr
 	}
-	registry := nexus.NewOutgoingServiceRegistry(&service, newConfig())
+	registry := nexus.NewOutgoingServiceRegistry(&service, &service, newConfig())
 	_, err := registry.Create(
 		context.Background(),
 		&operatorservice.CreateNexusOutgoingServiceRequest{
@@ -449,6 +449,7 @@ func TestCreate_UpdateNamespaceErr(t *testing.T) {
 		assert.True(t, request.IsGlobalNamespace)
 		assert.Equal(t, 2, int(request.NotificationVersion))
 		protoassert.ProtoEqual(t, &persistencespb.NamespaceDetail{
+			ConfigVersion: 1,
 			OutgoingServices: []*persistencespb.NexusOutgoingService{
 				{
 					Version: 1,
@@ -461,7 +462,7 @@ func TestCreate_UpdateNamespaceErr(t *testing.T) {
 		}, request.Namespace)
 		return updateNamespaceErr
 	}
-	registry := nexus.NewOutgoingServiceRegistry(&service, newConfig())
+	registry := nexus.NewOutgoingServiceRegistry(&service, &service, newConfig())
 	_, err := registry.Create(
 		context.Background(),
 		&operatorservice.CreateNexusOutgoingServiceRequest{
@@ -495,7 +496,7 @@ func TestCreate_NameAlreadyTaken(t *testing.T) {
 			NotificationVersion: 1,
 		}, nil
 	}
-	registry := nexus.NewOutgoingServiceRegistry(&service, newConfig())
+	registry := nexus.NewOutgoingServiceRegistry(&service, &service, newConfig())
 	_, err := registry.Create(
 		context.Background(),
 		&operatorservice.CreateNexusOutgoingServiceRequest{
@@ -523,7 +524,7 @@ func TestCreate_Ok(t *testing.T) {
 		ns = request.Namespace
 		return nil
 	}
-	registry := nexus.NewOutgoingServiceRegistry(&service, newConfig())
+	registry := nexus.NewOutgoingServiceRegistry(&service, &service, newConfig())
 	res, err := registry.Create(
 		context.Background(),
 		&operatorservice.CreateNexusOutgoingServiceRequest{
@@ -574,7 +575,7 @@ func TestCreate_RemainsSorted(t *testing.T) {
 		ns = request.Namespace
 		return nil
 	}
-	registry := nexus.NewOutgoingServiceRegistry(&service, newConfig())
+	registry := nexus.NewOutgoingServiceRegistry(&service, &service, newConfig())
 	_, err := registry.Create(
 		context.Background(),
 		&operatorservice.CreateNexusOutgoingServiceRequest{
@@ -594,7 +595,7 @@ func TestCreate_RemainsSorted(t *testing.T) {
 
 func TestDelete_NoNamespace(t *testing.T) {
 	t.Parallel()
-	registry := nexus.NewOutgoingServiceRegistry(nil, newConfig())
+	registry := nexus.NewOutgoingServiceRegistry(nil, nil, newConfig())
 	_, err := registry.Delete(
 		context.Background(),
 		&operatorservice.DeleteNexusOutgoingServiceRequest{
@@ -607,7 +608,7 @@ func TestDelete_NoNamespace(t *testing.T) {
 
 func TestDelete_NoName(t *testing.T) {
 	t.Parallel()
-	registry := nexus.NewOutgoingServiceRegistry(nil, newConfig())
+	registry := nexus.NewOutgoingServiceRegistry(nil, nil, newConfig())
 	_, err := registry.Delete(
 		context.Background(),
 		&operatorservice.DeleteNexusOutgoingServiceRequest{
@@ -625,7 +626,7 @@ func TestDelete_GetNamespaceErr(t *testing.T) {
 	service.OnGetNamespace = func(ctx context.Context, request *persistence.GetNamespaceRequest) (*persistence.GetNamespaceResponse, error) {
 		return nil, getNamespaceErr
 	}
-	registry := nexus.NewOutgoingServiceRegistry(&service, newConfig())
+	registry := nexus.NewOutgoingServiceRegistry(&service, &service, newConfig())
 	_, err := registry.Delete(
 		context.Background(),
 		&operatorservice.DeleteNexusOutgoingServiceRequest{
@@ -651,7 +652,7 @@ func TestDelete_ServiceNotFound(t *testing.T) {
 			},
 		}, nil
 	}
-	registry := nexus.NewOutgoingServiceRegistry(&service, newConfig())
+	registry := nexus.NewOutgoingServiceRegistry(&service, &service, newConfig())
 	_, err := registry.Delete(
 		context.Background(),
 		&operatorservice.DeleteNexusOutgoingServiceRequest{
@@ -701,6 +702,7 @@ func TestDelete_UpdateNamespaceErr(t *testing.T) {
 	service.OnUpdateNamespace = func(ctx context.Context, request *persistence.UpdateNamespaceRequest) error {
 		assert.Equal(t, &persistence.UpdateNamespaceRequest{
 			Namespace: &persistencespb.NamespaceDetail{
+				ConfigVersion: 1,
 				OutgoingServices: []*persistencespb.NexusOutgoingService{
 					{
 						Version: 1,
@@ -723,7 +725,7 @@ func TestDelete_UpdateNamespaceErr(t *testing.T) {
 		}, request)
 		return updateNamespaceErr
 	}
-	registry := nexus.NewOutgoingServiceRegistry(&service, nil)
+	registry := nexus.NewOutgoingServiceRegistry(&service, &service, nil)
 	_, err := registry.Delete(
 		context.Background(),
 		&operatorservice.DeleteNexusOutgoingServiceRequest{
@@ -736,7 +738,7 @@ func TestDelete_UpdateNamespaceErr(t *testing.T) {
 
 func TestList_NoNamespace(t *testing.T) {
 	t.Parallel()
-	registry := nexus.NewOutgoingServiceRegistry(nil, newConfig())
+	registry := nexus.NewOutgoingServiceRegistry(nil, nil, newConfig())
 	_, err := registry.List(
 		context.Background(),
 		&operatorservice.ListNexusOutgoingServicesRequest{
@@ -748,7 +750,7 @@ func TestList_NoNamespace(t *testing.T) {
 
 func TestList_NegativePageSize(t *testing.T) {
 	t.Parallel()
-	registry := nexus.NewOutgoingServiceRegistry(nil, newConfig())
+	registry := nexus.NewOutgoingServiceRegistry(nil, nil, newConfig())
 	_, err := registry.List(
 		context.Background(),
 		&operatorservice.ListNexusOutgoingServicesRequest{
@@ -765,7 +767,7 @@ func TestList_NegativePageSize(t *testing.T) {
 func TestList_PageSizeTooLarge(t *testing.T) {
 	t.Parallel()
 	config := nexus.NewOutgoingServiceRegistryConfig(dynamicconfig.NewNoopCollection())
-	registry := nexus.NewOutgoingServiceRegistry(nil, config)
+	registry := nexus.NewOutgoingServiceRegistry(nil, nil, config)
 	_, err := registry.List(
 		context.Background(),
 		&operatorservice.ListNexusOutgoingServicesRequest{
@@ -781,7 +783,7 @@ func TestList_PageSizeTooLarge(t *testing.T) {
 
 func TestList_InvalidPageToken(t *testing.T) {
 	t.Parallel()
-	registry := nexus.NewOutgoingServiceRegistry(nil, newConfig())
+	registry := nexus.NewOutgoingServiceRegistry(nil, nil, newConfig())
 	_, err := registry.List(
 		context.Background(),
 		&operatorservice.ListNexusOutgoingServicesRequest{
@@ -801,7 +803,7 @@ func TestList_GetNamespaceErr(t *testing.T) {
 	service.OnGetNamespace = func(ctx context.Context, request *persistence.GetNamespaceRequest) (*persistence.GetNamespaceResponse, error) {
 		return nil, getNamespaceErr
 	}
-	registry := nexus.NewOutgoingServiceRegistry(&service, newConfig())
+	registry := nexus.NewOutgoingServiceRegistry(&service, &service, newConfig())
 	_, err := registry.List(
 		context.Background(),
 		&operatorservice.ListNexusOutgoingServicesRequest{
@@ -837,7 +839,7 @@ func TestList_NoNextPageToken(t *testing.T) {
 		}, nil
 	}
 	config := newConfig()
-	registry := nexus.NewOutgoingServiceRegistry(service, config)
+	registry := nexus.NewOutgoingServiceRegistry(service, service, config)
 	res, err := registry.List(
 		context.Background(),
 		&operatorservice.ListNexusOutgoingServicesRequest{
@@ -859,7 +861,7 @@ func TestList_NoServices(t *testing.T) {
 		}, nil
 	}
 	config := newConfig()
-	registry := nexus.NewOutgoingServiceRegistry(service, config)
+	registry := nexus.NewOutgoingServiceRegistry(service, service, config)
 	res, err := registry.List(
 		context.Background(),
 		&operatorservice.ListNexusOutgoingServicesRequest{
@@ -893,7 +895,7 @@ func TestList_Paginate(t *testing.T) {
 		}
 	}
 	config := newConfig()
-	registry := nexus.NewOutgoingServiceRegistry(service, config)
+	registry := nexus.NewOutgoingServiceRegistry(service, service, config)
 	var pageToken []byte
 	for i := 0; i < 4; i++ {
 		res, err := registry.List(
