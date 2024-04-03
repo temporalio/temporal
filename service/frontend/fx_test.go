@@ -829,7 +829,7 @@ func TestNamespaceRateLimitMetrics(t *testing.T) {
 			svc := &testSvc{}
 			server := grpc.NewServer(
 				grpc.ChainUnaryInterceptor(
-					rpc.ServiceErrorInterceptor,
+					rpc.NewServiceErrorInterceptor(log.NewTestLogger()),
 					rateLimitInterceptor.Intercept,
 					namespaceRateLimitInterceptor.Intercept,
 				),
