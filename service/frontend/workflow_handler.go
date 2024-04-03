@@ -2448,18 +2448,7 @@ func (wh *WorkflowHandler) DescribeTaskQueue(ctx context.Context, request *workf
 	if err != nil {
 		return nil, err
 	}
-
-	response := matchingResponse.DescResponse
-	if request.ReportTaskReachability && request.ApiMode == enumspb.DESCRIBE_TASK_QUEUE_MODE_ENHANCED {
-		for _, vInfo := range response.VersionsInfo {
-			vInfo.TaskReachability, err = wh.getBuildIdTaskReachability(ctx, ns, request.TaskQueue.Name, vInfo.BuildId, vInfo.TypesInfo)
-			if err != nil {
-				return nil, err
-			}
-		}
-	}
-
-	return response, nil
+	return matchingResponse.DescResponse, nil
 }
 
 // GetClusterInfo return information about Temporal deployment.

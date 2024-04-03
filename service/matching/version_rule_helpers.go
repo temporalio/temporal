@@ -25,19 +25,28 @@
 package matching
 
 import (
+	"context"
 	"fmt"
 	"slices"
+	"strings"
 	"time"
 
+	"github.com/temporalio/sqlparser"
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/api/taskqueue/v1"
 	"go.temporal.io/api/workflowservice/v1"
+	"google.golang.org/protobuf/types/known/durationpb"
 
+	"go.temporal.io/server/api/clock/v1"
 	"go.temporal.io/server/api/matchingservice/v1"
 	persistencepb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common"
 	hlc "go.temporal.io/server/common/clock/hybrid_logical_clock"
+	"go.temporal.io/server/common/namespace"
+	"go.temporal.io/server/common/persistence/visibility/manager"
+	"go.temporal.io/server/common/searchattribute"
 	"go.temporal.io/server/common/util"
+	"go.temporal.io/server/common/worker_versioning"
 )
 
 func cloneOrMkData(data *persistencepb.VersioningData) *persistencepb.VersioningData {
@@ -285,6 +294,7 @@ func CommitBuildID(timestamp *hlc.Clock,
 func GetWorkerVersioningRules(
 	versioningData *persistencepb.VersioningData,
 	clk *hlc.Clock,
+	deletedRuleInclusionPeriod *durationpb.Duration,
 ) (*matchingservice.GetWorkerVersioningRulesResponse, error) {
 	var cT []byte
 	var err error
@@ -293,7 +303,7 @@ func GetWorkerVersioningRules(
 	}
 	activeAssignmentRules := make([]*taskqueue.TimestampedBuildIdAssignmentRule, 0)
 	for _, ar := range versioningData.GetAssignmentRules() {
-		if ar.GetDeleteTimestamp() == nil {
+		if ar.GetDeleteTimestamp() == nil || withinDeletedRuleInclusionPeriod(ar.GetDeleteTimestamp(), deletedRuleInclusionPeriod) {
 			activeAssignmentRules = append(activeAssignmentRules, &taskqueue.TimestampedBuildIdAssignmentRule{
 				Rule:       ar.GetRule(),
 				CreateTime: hlc.ProtoTimestamp(ar.GetCreateTimestamp()),
@@ -302,7 +312,7 @@ func GetWorkerVersioningRules(
 	}
 	activeRedirectRules := make([]*taskqueue.TimestampedCompatibleBuildIdRedirectRule, 0)
 	for _, rr := range versioningData.GetRedirectRules() {
-		if rr.GetDeleteTimestamp() == nil {
+		if rr.GetDeleteTimestamp() == nil || withinDeletedRuleInclusionPeriod(rr.GetDeleteTimestamp(), deletedRuleInclusionPeriod) {
 			activeRedirectRules = append(activeRedirectRules, &taskqueue.TimestampedCompatibleBuildIdRedirectRule{
 				Rule:       rr.GetRule(),
 				CreateTime: hlc.ProtoTimestamp(rr.GetCreateTimestamp()),
@@ -316,6 +326,10 @@ func GetWorkerVersioningRules(
 			ConflictToken:           cT,
 		},
 	}, nil
+}
+
+func withinDeletedRuleInclusionPeriod(ts *clock.HybridLogicalClock, period *durationpb.Duration) bool {
+	return period != nil && hlc.Since(ts) <= period.AsDuration()
 }
 
 // checkAssignmentConditions checks for validity conditions that must be assessed by looking at the entire set of rules.
@@ -363,6 +377,15 @@ func getActiveRedirectRules(rules []*persistencepb.RedirectRule) []*persistencep
 
 func isRedirectRuleSource(buildID string, redirectRules []*persistencepb.RedirectRule) bool {
 	for _, r := range getActiveRedirectRules(redirectRules) {
+		if buildID == r.GetRule().GetSourceBuildId() {
+			return true
+		}
+	}
+	return false
+}
+
+func isTimestampedRedirectRuleSource(buildID string, redirectRules []*taskqueue.TimestampedCompatibleBuildIdRedirectRule) bool {
+	for _, r := range redirectRules {
 		if buildID == r.GetRule().GetSourceBuildId() {
 			return true
 		}
@@ -498,4 +521,100 @@ func FindAssignmentBuildId(rules []*persistencepb.AssignmentRule) string {
 		return r.GetRule().GetTargetBuildId()
 	}
 	return ""
+}
+
+func getUpstreamBuildIds(
+	buildId string,
+	assignmentRules []*taskqueue.TimestampedBuildIdAssignmentRule,
+	redirectRules []*taskqueue.TimestampedCompatibleBuildIdRedirectRule) []string {
+	var upstream []string
+	// todo carly: traverse redirect rule graph to gather any build id that could point to buildId
+	return upstream
+}
+
+func existsBackloggedActivityOrWFAssignedTo(buildId string, typesInfo []*taskqueue.TaskQueueTypeInfo) bool {
+	// todo carly: needs Shivam's work which has a backlog count
+	// for _, typeInfo := range typesInfo {
+	//	 if typeInfo.GetBacklogInfo().GetApproximateBacklogCount() > 0 {
+	//		 return true
+	//	 }
+	// }
+	return false
+}
+
+func isReachableAssignmentRuleTarget(buildId string, assignmentRules []*taskqueue.TimestampedBuildIdAssignmentRule) bool {
+	for _, r := range assignmentRules {
+		if r.GetRule().GetTargetBuildId() == buildId {
+			return true
+		}
+		if r.GetRule().GetPercentageRamp() == nil {
+			// rules after an unconditional rule will not be reached
+			break
+		}
+	}
+	return false
+}
+
+func existsWFAssignedToAny(
+	ctx context.Context,
+	visibilityMgr manager.VisibilityManager,
+	ns *namespace.Namespace,
+	taskQueue string,
+	buildIdsOfInterest []string,
+	open bool,
+) (bool, error) {
+	countResponse, err := visibilityMgr.CountWorkflowExecutions(ctx, &manager.CountWorkflowExecutionsRequest{
+		NamespaceID: ns.ID(),
+		Namespace:   ns.Name(),
+		Query:       makeBuildIdQuery(buildIdsOfInterest, taskQueue, open),
+	})
+	if err != nil {
+		return false, err
+	}
+	return countResponse.Count > 0, nil
+}
+
+func makeBuildIdQuery(
+	buildIdsOfInterest []string,
+	taskQueue string,
+	open bool,
+) string {
+	escapedTaskQueue := sqlparser.String(sqlparser.NewStrVal([]byte(taskQueue)))
+	var statusFilter string
+	var escapedBuildIds []string
+	var includeNull bool
+	if open {
+		statusFilter = fmt.Sprintf(` AND %s = "Running"`, searchattribute.ExecutionStatus)
+		// want: currently assigned to that build-id
+		// (b1, b2) --> (assigned:b1, assigned:b2)
+		// (b1, b2, "") --> (assigned:b1, assigned:b2, unversioned, null)
+		// ("") --> (unversioned, null)
+		for _, bid := range buildIdsOfInterest {
+			if bid == "" {
+				escapedBuildIds = append(escapedBuildIds, worker_versioning.UnversionedSearchAttribute)
+				includeNull = true
+			} else {
+				escapedBuildIds = append(escapedBuildIds, sqlparser.String(sqlparser.NewStrVal([]byte(worker_versioning.AssignedBuildIdSearchAttribute(bid)))))
+			}
+		}
+	} else {
+		statusFilter = fmt.Sprintf(` AND %s != "Running"`, searchattribute.ExecutionStatus)
+		// want: closed AT that build id, and once used that build id
+		// (b1, b2) --> (versioned:b1, versioned:b2)
+		// (b1, b2, "") --> (versioned:b1, versioned:b2, unversioned, null)
+		// ("") --> (unversioned, null)
+		for _, bid := range buildIdsOfInterest {
+			if bid == "" {
+				escapedBuildIds = append(escapedBuildIds, worker_versioning.UnversionedSearchAttribute)
+				includeNull = true
+			} else {
+				escapedBuildIds = append(escapedBuildIds, sqlparser.String(sqlparser.NewStrVal([]byte(worker_versioning.VersionedBuildIdSearchAttribute(bid)))))
+			}
+		}
+	}
+	buildIdsFilter := fmt.Sprintf("%s IN (%s)", searchattribute.BuildIds, strings.Join(escapedBuildIds, ","))
+	if includeNull {
+		buildIdsFilter = fmt.Sprintf("(%s IS NULL OR %s)", searchattribute.BuildIds, buildIdsFilter)
+	}
+	return fmt.Sprintf("%s = %s AND %s%s", searchattribute.TaskQueue, escapedTaskQueue, buildIdsFilter, statusFilter)
 }
