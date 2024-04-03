@@ -2512,7 +2512,62 @@ func (s *VersioningIntegSuite) dispatchCron() {
 	s.GreaterOrEqual(runs2.Load(), int32(3))
 }
 
-func (s *VersioningIntegSuite) TestDescribeTaskQueue() {
+func (s *VersioningIntegSuite) TestDescribeTaskQueueEnhanced_Unversioned() {
+	tq := s.randomizeStr(s.T().Name())
+	wf := func(ctx workflow.Context) (string, error) { return "ok", nil }
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+
+	workerN := 3
+	workerMap := make(map[string]worker.Worker)
+	for i := 0; i < workerN; i++ {
+		wId := s.randomizeStr("id")
+		w := worker.New(s.sdkClient, tq, worker.Options{
+			UseBuildIDForVersioning: false,
+			Identity:                wId,
+		})
+		w.RegisterWorkflow(wf)
+		s.NoError(w.Start())
+		defer w.Stop()
+		workerMap[wId] = w
+	}
+
+	s.Eventually(func() bool {
+		resp, err := s.engine.DescribeTaskQueue(ctx, &workflowservice.DescribeTaskQueueRequest{
+			Namespace:              s.namespace,
+			TaskQueue:              &taskqueuepb.TaskQueue{Name: tq, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
+			ApiMode:                enumspb.DESCRIBE_TASK_QUEUE_MODE_ENHANCED,
+			Versions:               nil, // default version, in this case unversioned queue
+			TaskQueueTypes:         nil, // both types
+			ReportPollers:          true,
+			ReportTaskReachability: true,
+		})
+		s.NoError(err)
+		s.NotNil(resp)
+		s.Assert().Equal(1, len(resp.GetVersionsInfo()), "should be 1 because only default/unversioned queue")
+		versionInfo := resp.GetVersionsInfo()[0]
+		s.Assert().Equal(enumspb.BUILD_ID_TASK_REACHABILITY_UNSPECIFIED, versionInfo.GetTaskReachability(), "not yet implemented")
+		var pollersInfo []*taskqueuepb.PollerInfo
+		for _, t := range versionInfo.GetTypesInfo() {
+			pollersInfo = append(pollersInfo, t.GetPollers()...)
+		}
+		foundN := 0
+		for wId := range workerMap {
+			for _, pi := range pollersInfo {
+				s.False(pi.GetWorkerVersionCapabilities().GetUseVersioning())
+				if pi.GetIdentity() == wId {
+					foundN++
+					break
+				}
+			}
+		}
+
+		return foundN == workerN
+	}, 3*time.Second, 50*time.Millisecond)
+
+}
+
+func (s *VersioningIntegSuite) TestDescribeTaskQueueLegacy_VersionSets() {
 	// force one partition since DescribeTaskQueue only goes to the root
 	dc := s.testCluster.host.dcClient
 	dc.OverrideValue(s.T(), dynamicconfig.MatchingNumTaskqueueReadPartitions, 1)
