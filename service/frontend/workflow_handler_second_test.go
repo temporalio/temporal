@@ -46,7 +46,7 @@ func TestDescribeScheduleAnnotatesScheduledWorkflowWithTypes(t *testing.T) {
 	) WorkflowHandler {
 		h := WorkflowHandler{
 			saMapperProvider: searchattribute.NewTestMapperProvider(&searchattribute.TestMapper{Namespace: "ns"}),
-			visibilityMrg:    visibilityManager,
+			visibilityMgr:    visibilityManager,
 			saProvider:       searchAttrProvider,
 		}
 		return h
