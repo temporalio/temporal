@@ -167,12 +167,11 @@ func PartitionFromProto(proto *taskqueuepb.TaskQueue, namespaceId string, taskTy
 }
 
 func PartitionFromPartitionProto(proto *taskqueuespb.TaskQueuePartition, namespaceId string) Partition {
+	tq := &TaskQueue{TaskQueueFamily{namespace.ID(namespaceId), proto.GetTaskQueue()}, proto.GetTaskQueueType()}
 	switch proto.GetPartitionId().(type) {
 	case *taskqueuespb.TaskQueuePartition_StickyName:
-		tq := &TaskQueue{TaskQueueFamily{namespace.ID(namespaceId), proto.GetTaskQueue()}, proto.GetTaskQueueType()}
 		return tq.StickyPartition(proto.GetStickyName())
 	default:
-		tq := &TaskQueue{TaskQueueFamily{namespace.ID(namespaceId), proto.GetTaskQueue()}, proto.GetTaskQueueType()}
 		return tq.NormalPartition(int(proto.GetNormalPartitionId()))
 	}
 }

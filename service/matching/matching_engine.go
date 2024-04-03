@@ -810,7 +810,7 @@ func (e *matchingEngineImpl) DescribeTaskQueue(
 				if err != nil {
 					return nil, err
 				}
-				buildIds, err := e.getBuildIdList(req.GetVersions(), pm)
+				buildIds, err := e.getBuildIds(req.GetVersions(), pm)
 				if err != nil {
 					return nil, err
 				}
@@ -880,30 +880,30 @@ func (e *matchingEngineImpl) DescribeTaskQueuePartition(
 	if err != nil {
 		return nil, err
 	}
-	buildIds, err := e.getBuildIdList(request.GetVersions(), pm)
+	buildIds, err := e.getBuildIds(request.GetVersions(), pm)
 	if err != nil {
 		return nil, err
 	}
 	return pm.Describe(buildIds, request.GetVersions().GetAllActive(), request.GetReportBacklogInfo(), request.GetReportPollers())
 }
 
-func (e *matchingEngineImpl) getBuildIdList(
+func (e *matchingEngineImpl) getBuildIds(
 	versions *taskqueuepb.TaskQueueVersionSelection,
-	tqMgr taskQueuePartitionManager) ([]string, error) {
-	var buildIds []string
+	tqMgr taskQueuePartitionManager) (map[string]bool, error) {
+	buildIds := make(map[string]bool)
 	if versions != nil {
-		if len(versions.GetBuildIds()) > 0 {
-			buildIds = append(buildIds, versions.GetBuildIds()...)
+		for _, bid := range versions.GetBuildIds() {
+			buildIds[bid] = true
 		}
 		if versions.GetUnversioned() {
-			buildIds = append(buildIds, "")
+			buildIds[""] = true
 		}
 	} else {
 		defaultBuildId, err := e.getDefaultBuildId(tqMgr)
 		if err != nil {
 			return nil, err
 		}
-		buildIds = []string{defaultBuildId}
+		buildIds[defaultBuildId] = true
 	}
 	return buildIds, nil
 }

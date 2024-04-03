@@ -76,7 +76,7 @@ type (
 		HasAnyPollerAfter(accessTime time.Time) bool
 		// LegacyDescribeTaskQueue returns information about all pollers of this partition and the status of its unversioned physical queue
 		LegacyDescribeTaskQueue(includeTaskQueueStatus bool) *matchingservice.DescribeTaskQueueResponse
-		Describe(buildIds []string, includeAllActive, reportBacklogInfo, reportPollers bool) (*matchingservice.DescribeTaskQueuePartitionResponse, error)
+		Describe(buildIds map[string]bool, includeAllActive, reportBacklogInfo, reportPollers bool) (*matchingservice.DescribeTaskQueuePartitionResponse, error)
 		String() string
 		Partition() tqid.Partition
 		LongPollExpirationInterval() time.Duration
@@ -394,7 +394,7 @@ func (pm *taskQueuePartitionManagerImpl) LegacyDescribeTaskQueue(includeTaskQueu
 }
 
 func (pm *taskQueuePartitionManagerImpl) Describe(
-	buildIds []string,
+	buildIds map[string]bool,
 	includeAllActive, reportBacklogInfo, reportPollers bool) (*matchingservice.DescribeTaskQueuePartitionResponse, error) {
 	pm.versionedQueuesLock.RLock()
 	defer pm.versionedQueuesLock.RUnlock()
@@ -404,13 +404,13 @@ func (pm *taskQueuePartitionManagerImpl) Describe(
 	// In the future, active will mean that the physical queue for that version has had a task added recently or a recent poller.
 	if includeAllActive {
 		for k := range pm.versionedQueues {
-			buildIds = append(buildIds, k)
+			buildIds[k] = true
 		}
 	}
 
-	versionsInfo := make([]*taskqueuespb.TaskQueueVersionInfoInternal, len(buildIds))
-	for i, bid := range buildIds {
-		versionsInfo[i] = &taskqueuespb.TaskQueueVersionInfoInternal{
+	versionsInfo := make([]*taskqueuespb.TaskQueueVersionInfoInternal, 0)
+	for bid := range buildIds {
+		vInfo := &taskqueuespb.TaskQueueVersionInfoInternal{
 			BuildId:               bid,
 			PhysicalTaskQueueInfo: &taskqueuespb.PhysicalTaskQueueInfo{},
 		}
@@ -422,12 +422,13 @@ func (pm *taskQueuePartitionManagerImpl) Describe(
 		}
 		if physicalQueue != nil {
 			if reportPollers {
-				versionsInfo[i].PhysicalTaskQueueInfo.Pollers = physicalQueue.GetAllPollerInfo()
+				vInfo.PhysicalTaskQueueInfo.Pollers = physicalQueue.GetAllPollerInfo()
 			}
 			if reportBacklogInfo {
-				versionsInfo[i].PhysicalTaskQueueInfo.BacklogInfo = physicalQueue.GetBacklogInfo()
+				vInfo.PhysicalTaskQueueInfo.BacklogInfo = physicalQueue.GetBacklogInfo()
 			}
 		}
+		versionsInfo = append(versionsInfo, vInfo)
 	}
 
 	return &matchingservice.DescribeTaskQueuePartitionResponse{
