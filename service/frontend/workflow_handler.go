@@ -2411,12 +2411,13 @@ func (wh *WorkflowHandler) DescribeTaskQueue(ctx context.Context, request *workf
 		return nil, errRequestNotSet
 	}
 
-	ns, err := wh.namespaceRegistry.GetNamespace(namespace.Name(request.GetNamespace()))
+	namespaceName := namespace.Name(request.GetNamespace())
+	namespaceID, err := wh.namespaceRegistry.GetNamespaceID(namespaceName)
 	if err != nil {
 		return nil, err
 	}
 
-	if err := wh.validateTaskQueue(request.TaskQueue, ns.Name()); err != nil {
+	if err := wh.validateTaskQueue(request.TaskQueue, namespaceName); err != nil {
 		return nil, err
 	}
 
@@ -2433,7 +2434,7 @@ func (wh *WorkflowHandler) DescribeTaskQueue(ctx context.Context, request *workf
 			return nil, errUseEnhancedDescribeOnStickyQueue
 		}
 		for _, qtype := range request.TaskQueueTypes {
-			if partition, err := tqid.PartitionFromProto(request.TaskQueue, ns.ID().String(), qtype); err != nil {
+			if partition, err := tqid.PartitionFromProto(request.TaskQueue, namespaceID.String(), qtype); err != nil {
 				return nil, errTaskQueuePartitionInvalid
 			} else if !partition.IsRoot() {
 				return nil, errUseEnhancedDescribeOnNonRootQueue
@@ -2442,7 +2443,7 @@ func (wh *WorkflowHandler) DescribeTaskQueue(ctx context.Context, request *workf
 	}
 
 	matchingResponse, err := wh.matchingClient.DescribeTaskQueue(ctx, &matchingservice.DescribeTaskQueueRequest{
-		NamespaceId: ns.ID().String(),
+		NamespaceId: namespaceID.String(),
 		DescRequest: request,
 	})
 	if err != nil {
