@@ -41,12 +41,18 @@ import (
 )
 
 const (
+	buildIdSearchAttributePrefixAssigned    = "assigned"
 	buildIdSearchAttributePrefixVersioned   = "versioned"
 	buildIdSearchAttributePrefixUnversioned = "unversioned"
 	BuildIdSearchAttributeDelimiter         = ":"
 	// UnversionedSearchAttribute is the sentinel value used to mark all unversioned workflows
 	UnversionedSearchAttribute = buildIdSearchAttributePrefixUnversioned
 )
+
+// AssignedBuildIdSearchAttribute returns the search attribute value for the currently assigned build id
+func AssignedBuildIdSearchAttribute(buildId string) string {
+	return buildIdSearchAttributePrefixAssigned + BuildIdSearchAttributeDelimiter + buildId
+}
 
 // VersionedBuildIdSearchAttribute returns the search attribute value for an unversioned build id
 func VersionedBuildIdSearchAttribute(buildId string) string {

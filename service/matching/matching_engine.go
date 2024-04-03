@@ -29,6 +29,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"google.golang.org/protobuf/types/known/durationpb"
 	"math"
 	"sync"
 	"sync/atomic"
@@ -78,9 +79,10 @@ const (
 	stickyPollerUnavailableWindow = 10 * time.Second
 	// If a compatible poller hasn't been seen for this time, we fail the CommitBuildId
 	// Set to 70s so that it's a little over the max time a poller should be kept waiting.
-	versioningPollerSeenWindow        = 70 * time.Second
-	recordTaskStartedDefaultTimeout   = 10 * time.Second
-	recordTaskStartedSyncMatchTimeout = 1 * time.Second
+	versioningPollerSeenWindow                       = 70 * time.Second
+	versioningReachabilityDeletedRuleInclusionPeriod = 2 * time.Minute
+	recordTaskStartedDefaultTimeout                  = 10 * time.Second
+	recordTaskStartedSyncMatchTimeout                = 1 * time.Second
 )
 
 type (
@@ -917,6 +919,73 @@ func (e *matchingEngineImpl) getDefaultBuildId(tqMgr taskQueuePartitionManager) 
 	return "", nil
 }
 
+func (e *matchingEngineImpl) getBuildIdTaskReachability(
+	ctx context.Context,
+	nsID,
+	nsName,
+	taskQueue,
+	buildId string,
+	typesInfo []*taskqueuepb.TaskQueueTypeInfo,
+) (enumspb.BuildIdTaskReachability, error) {
+	getResp, err := e.GetWorkerVersioningRules(ctx, &matchingservice.GetWorkerVersioningRulesRequest{
+		NamespaceId:                nsID,
+		TaskQueue:                  taskQueue,
+		DeletedRuleInclusionPeriod: durationpb.New(versioningReachabilityDeletedRuleInclusionPeriod),
+	})
+	if err != nil {
+		return enumspb.BUILD_ID_TASK_REACHABILITY_UNSPECIFIED, err
+	}
+	assignmentRules := getResp.GetResponse().GetAssignmentRules()
+	redirectRules := getResp.GetResponse().GetCompatibleRedirectRules()
+
+	// 1. Easy UNREACHABLE case
+	if isTimestampedRedirectRuleSource(buildId, redirectRules) {
+		return enumspb.BUILD_ID_TASK_REACHABILITY_UNREACHABLE, nil
+	}
+
+	// Gather list of all build ids that could point to buildId -> upstreamBuildIds
+	upstreamBuildIds := getUpstreamBuildIds(buildId, assignmentRules, redirectRules)
+	buildIdsOfInterest := append(upstreamBuildIds, buildId)
+
+	// 2. Cases for REACHABLE
+	// 2a. If buildId could be reached from the backlog
+	for _, bid := range buildIdsOfInterest {
+		if existsBackloggedActivityOrWFAssignedTo(bid, typesInfo) {
+			return enumspb.BUILD_ID_TASK_REACHABILITY_REACHABLE, nil
+		}
+	}
+
+	// 2b. If buildId is assignable to new tasks
+	for _, bid := range buildIdsOfInterest {
+		if isReachableAssignmentRuleTarget(bid, assignmentRules) {
+			return enumspb.BUILD_ID_TASK_REACHABILITY_REACHABLE, nil
+		}
+	}
+
+	// Note: The below cases are not applicable to activity-only task queues, since we don't record those in visibility
+
+	// 2c. If buildId is assignable to tasks from open workflows
+	existsOpenWFAssignedToBuildId, err := existsWFAssignedToAny(ctx, e.visibilityManager, nsID, nsName, taskQueue, buildIdsOfInterest, true)
+	if err != nil {
+		return enumspb.BUILD_ID_TASK_REACHABILITY_UNSPECIFIED, err
+	}
+	if existsOpenWFAssignedToBuildId {
+		return enumspb.BUILD_ID_TASK_REACHABILITY_REACHABLE, nil
+	}
+
+	// 3. Cases for CLOSED_WORKFLOWS_ONLY
+	existsClosedWFAssignedToBuildId, err := existsWFAssignedToAny(ctx, e.visibilityManager, nsID, nsName, taskQueue, buildIdsOfInterest, false)
+	if err != nil {
+		return enumspb.BUILD_ID_TASK_REACHABILITY_UNSPECIFIED, err
+	}
+	if existsClosedWFAssignedToBuildId {
+		return enumspb.BUILD_ID_TASK_REACHABILITY_CLOSED_WORKFLOWS_ONLY, nil
+	}
+
+	// 4. Otherwise, UNREACHABLE
+	return enumspb.BUILD_ID_TASK_REACHABILITY_UNREACHABLE, nil
+}
+
 func (e *matchingEngineImpl) ListTaskQueuePartitions(
 	_ context.Context,
 	request *matchingservice.ListTaskQueuePartitionsRequest,
@@ -1067,7 +1136,7 @@ func (e *matchingEngineImpl) UpdateWorkerVersioningRules(
 		}
 
 		// Get versioning data formatted for response
-		getResp, err = GetWorkerVersioningRules(versioningData, updatedClock)
+		getResp, err = GetWorkerVersioningRules(versioningData, updatedClock, nil)
 		if err != nil {
 			return nil, false, err
 		}
@@ -1137,7 +1206,7 @@ func (e *matchingEngineImpl) getWorkerVersioningRules(tqMgr taskQueuePartitionMa
 	if clk == nil {
 		clk = hlc.Zero(e.clusterMeta.GetClusterID())
 	}
-	return GetWorkerVersioningRules(data.GetData().GetVersioningData(), clk)
+	return GetWorkerVersioningRules(data.GetData().GetVersioningData(), clk, nil)
 }
 
 func (e *matchingEngineImpl) UpdateWorkerBuildIdCompatibility(

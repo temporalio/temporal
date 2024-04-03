@@ -25,6 +25,7 @@
 package matching
 
 import (
+	"fmt"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -49,4 +50,41 @@ func TestFindAssignmentBuildId_TwoFullRules(t *testing.T) {
 
 func createFullAssignmentRule(buildId string) *persistence.AssignmentRule {
 	return &persistence.AssignmentRule{Rule: &taskqueue.BuildIdAssignmentRule{TargetBuildId: buildId}}
+}
+
+func TestIsTimestampedRedirectRuleSource(t *testing.T) {
+	t.Parallel()
+}
+
+func TestGetUpstreamBuildIds(t *testing.T) {
+	t.Parallel()
+}
+
+func TestExistsBackloggedActivityOrWFAssignedTo(t *testing.T) {
+	t.Parallel()
+}
+
+func TestIsReachableAssignmentRuleTarget(t *testing.T) {
+	t.Parallel()
+}
+
+func TestExistsWFAssignedToAny(t *testing.T) {
+	t.Parallel()
+}
+
+func TestMakeBuildIdQuery(t *testing.T) {
+	t.Parallel()
+
+	buildIdsOfInterest := []string{"0", "1", "2", ""}
+	tq := "test-query-tq"
+
+	queryOpen := makeBuildIdQuery(buildIdsOfInterest, tq, true)
+	fmt.Printf("%s\n", queryOpen)
+	expectedQueryOpen := "TaskQueue = 'test-query-tq' AND (BuildIds IS NULL OR BuildIds IN ('assigned:0','assigned:1','assigned:2',unversioned)) AND ExecutionStatus = \"Running\""
+	assert.Equal(t, expectedQueryOpen, queryOpen)
+
+	queryClosed := makeBuildIdQuery(buildIdsOfInterest, tq, false)
+	fmt.Printf("%s\n", queryClosed)
+	expectedQueryClosed := "TaskQueue = 'test-query-tq' AND (BuildIds IS NULL OR BuildIds IN ('versioned:0','versioned:1','versioned:2',unversioned)) AND ExecutionStatus != \"Running\""
+	assert.Equal(t, expectedQueryClosed, queryClosed)
 }
