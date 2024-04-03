@@ -2449,6 +2449,7 @@ func (wh *WorkflowHandler) DescribeTaskQueue(ctx context.Context, request *workf
 	if err != nil {
 		return nil, err
 	}
+
 	return matchingResponse.DescResponse, nil
 }
 
