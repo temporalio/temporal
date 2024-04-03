@@ -79,9 +79,9 @@ const (
 	// If a compatible poller hasn't been seen for this time, we fail the CommitBuildId
 	// Set to 70s so that it's a little over the max time a poller should be kept waiting.
 	versioningPollerSeenWindow                       = 70 * time.Second
+	versioningReachabilityDeletedRuleInclusionPeriod = 2 * time.Minute
 	recordTaskStartedDefaultTimeout                  = 10 * time.Second
 	recordTaskStartedSyncMatchTimeout                = 1 * time.Second
-	deletedVersioningRuleReachabilityInclusionPeriod = 2 * time.Minute
 )
 
 type (
@@ -846,7 +846,7 @@ func (e *matchingEngineImpl) getBuildIdTaskReachability(
 	getResp, err := e.GetWorkerVersioningRules(ctx, &matchingservice.GetWorkerVersioningRulesRequest{
 		NamespaceId:                nsID,
 		TaskQueue:                  taskQueue,
-		DeletedRuleInclusionPeriod: durationpb.New(deletedVersioningRuleReachabilityInclusionPeriod),
+		DeletedRuleInclusionPeriod: durationpb.New(versioningReachabilityDeletedRuleInclusionPeriod),
 	})
 	if err != nil {
 		return enumspb.BUILD_ID_TASK_REACHABILITY_UNSPECIFIED, err
