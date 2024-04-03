@@ -137,6 +137,10 @@ func (r *TaskGeneratorImpl) GenerateWorkflowStartTasks(
 
 	executionInfo := r.mutableState.GetExecutionInfo()
 	executionTimeoutTimerTaskStatus := executionInfo.WorkflowExecutionTimerTaskStatus
+	if !r.mutableState.IsWorkflowExecutionRunning() {
+		return executionTimeoutTimerTaskStatus, nil
+	}
+
 	workflowExecutionTimeoutTimerEnabled := r.config.EnableWorkflowExecutionTimeoutTimer()
 	if !workflowExecutionTimeoutTimerEnabled {
 		// when the feature is disabled, reset this field so that it won't be carried over to the next run
@@ -144,16 +148,27 @@ func (r *TaskGeneratorImpl) GenerateWorkflowStartTasks(
 		executionTimeoutTimerTaskStatus = TimerTaskStatusNone
 	}
 
-	if !r.mutableState.IsWorkflowExecutionRunning() {
-		return executionTimeoutTimerTaskStatus, nil
-	}
+	// The WorkflowExecutionTimeoutTask is more expensive than other tasks as it's
+	// not for a certain run, but for a workflowID. When processing that task, the
+	// logic needs to load the current run, which require two persistence GetCurrentExecution
+	// calls for closed workflows (and workflow is likely to be already closed). Always
+	// generating the WorkflowExecutionTimeoutTask means lots of extra load to persistence.
+	//
+	// So here we don't generate the WorkflowExecutionTimeoutTask on the first run. If the
+	// workflow has a second run, the it's likely to have more runs, and only then the extra load
+	// from WorkflowExecutionTimeoutTask is justified.
+	//
+	// Also note the run timeout, if not specified, defaults to execution timeout, so we won't run
+	// into the situation where execution timeout is set but no timeout timer task is generated.
 
+	isFirstRun := executionInfo.FirstExecutionRunId == r.mutableState.GetExecutionState().RunId
 	workflowExecutionExpirationTime := timestamp.TimeValue(
 		executionInfo.WorkflowExecutionExpirationTime,
 	)
-	if !workflowExecutionExpirationTime.IsZero() &&
-		executionInfo.WorkflowExecutionTimerTaskStatus == TimerTaskStatusNone &&
-		workflowExecutionTimeoutTimerEnabled {
+	if workflowExecutionTimeoutTimerEnabled &&
+		!isFirstRun &&
+		!workflowExecutionExpirationTime.IsZero() &&
+		executionInfo.WorkflowExecutionTimerTaskStatus == TimerTaskStatusNone {
 		r.mutableState.AddTasks(&tasks.WorkflowExecutionTimeoutTask{
 			// TaskID is set by shard
 			NamespaceID:         executionInfo.NamespaceId,

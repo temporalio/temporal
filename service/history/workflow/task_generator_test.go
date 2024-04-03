@@ -444,6 +444,7 @@ func TestTaskGenerator_GenerateWorkflowStartTasks(t *testing.T) {
 
 		executionTimerEnabled bool
 
+		isFirstRun                   bool
 		existingExecutionTimerStatus int32
 		executionExpirationTime      time.Time
 		runExpirationTime            time.Time
@@ -454,6 +455,7 @@ func TestTaskGenerator_GenerateWorkflowStartTasks(t *testing.T) {
 		{
 			name:                         "execution timer disabled, no run expiration",
 			executionTimerEnabled:        false,
+			isFirstRun:                   false,
 			existingExecutionTimerStatus: TimerTaskStatusCreated,
 			executionExpirationTime:      time.Time{},
 			runExpirationTime:            time.Time{},
@@ -463,6 +465,7 @@ func TestTaskGenerator_GenerateWorkflowStartTasks(t *testing.T) {
 		{
 			name:                         "execution timer disabled, has run expiration",
 			executionTimerEnabled:        false,
+			isFirstRun:                   false,
 			existingExecutionTimerStatus: TimerTaskStatusCreated,
 			executionExpirationTime:      time.Time{},
 			runExpirationTime:            time.Now().Add(time.Minute),
@@ -472,6 +475,7 @@ func TestTaskGenerator_GenerateWorkflowStartTasks(t *testing.T) {
 		{
 			name:                         "execution timer enabled and carried over, run expiration capped",
 			executionTimerEnabled:        true,
+			isFirstRun:                   false,
 			existingExecutionTimerStatus: TimerTaskStatusCreated,
 			executionExpirationTime:      time.Now().Add(time.Minute),
 			runExpirationTime:            time.Now().Add(time.Minute), // run expiration capped to execution expiration
@@ -481,6 +485,7 @@ func TestTaskGenerator_GenerateWorkflowStartTasks(t *testing.T) {
 		{
 			name:                         "execution timer enabled and carried over, run expiration not capped",
 			executionTimerEnabled:        true,
+			isFirstRun:                   false,
 			existingExecutionTimerStatus: TimerTaskStatusCreated,
 			executionExpirationTime:      time.Now().Add(time.Minute),
 			runExpirationTime:            time.Now().Add(time.Second),
@@ -490,6 +495,7 @@ func TestTaskGenerator_GenerateWorkflowStartTasks(t *testing.T) {
 		{
 			name:                         "execution timer enabled but not carried over, run expiration capped",
 			executionTimerEnabled:        true,
+			isFirstRun:                   false,
 			existingExecutionTimerStatus: TimerTaskStatusNone,
 			executionExpirationTime:      time.Now().Add(time.Minute),
 			runExpirationTime:            time.Now().Add(time.Minute),
@@ -499,12 +505,49 @@ func TestTaskGenerator_GenerateWorkflowStartTasks(t *testing.T) {
 		{
 			name:                         "execution timer enabled but not carried over, run expiration not capped",
 			executionTimerEnabled:        true,
+			isFirstRun:                   false,
 			existingExecutionTimerStatus: TimerTaskStatusNone,
 			executionExpirationTime:      time.Now().Add(time.Minute),
 			runExpirationTime:            time.Now().Add(time.Second),
 			expectedExecutionTimerStatus: TimerTaskStatusCreated,
 			expectedTaskTypes: []enumsspb.TaskType{
 				enumsspb.TASK_TYPE_WORKFLOW_EXECUTION_TIMEOUT,
+				enumsspb.TASK_TYPE_WORKFLOW_RUN_TIMEOUT,
+			},
+		},
+		{
+			name:                         "execution timer enabled, first run, run expiration capped",
+			executionTimerEnabled:        true,
+			isFirstRun:                   true,
+			existingExecutionTimerStatus: TimerTaskStatusNone,
+			executionExpirationTime:      time.Now().Add(time.Minute),
+			runExpirationTime:            time.Now().Add(time.Minute),
+			expectedExecutionTimerStatus: TimerTaskStatusNone,
+			expectedTaskTypes: []enumsspb.TaskType{
+				enumsspb.TASK_TYPE_WORKFLOW_RUN_TIMEOUT,
+			},
+		},
+		{
+			name:                         "execution timer enabled, first run, run expiration not capped",
+			executionTimerEnabled:        true,
+			isFirstRun:                   true,
+			existingExecutionTimerStatus: TimerTaskStatusNone,
+			executionExpirationTime:      time.Now().Add(time.Minute),
+			runExpirationTime:            time.Now().Add(time.Second),
+			expectedExecutionTimerStatus: TimerTaskStatusNone,
+			expectedTaskTypes: []enumsspb.TaskType{
+				enumsspb.TASK_TYPE_WORKFLOW_RUN_TIMEOUT,
+			},
+		},
+		{
+			name:                         "execution timer enabled, no execution expiration",
+			executionTimerEnabled:        true,
+			isFirstRun:                   true,
+			existingExecutionTimerStatus: TimerTaskStatusNone,
+			executionExpirationTime:      time.Time{},
+			runExpirationTime:            time.Now().Add(time.Second),
+			expectedExecutionTimerStatus: TimerTaskStatusNone,
+			expectedTaskTypes: []enumsspb.TaskType{
 				enumsspb.TASK_TYPE_WORKFLOW_RUN_TIMEOUT,
 			},
 		},
@@ -531,6 +574,12 @@ func TestTaskGenerator_GenerateWorkflowStartTasks(t *testing.T) {
 			mockMutableState := NewMockMutableState(controller)
 			mockMutableState.EXPECT().IsWorkflowExecutionRunning().Return(true).AnyTimes()
 
+			firstRunID := uuid.New()
+			currentRunID := firstRunID
+			if !tc.isFirstRun {
+				currentRunID = uuid.New()
+			}
+
 			workflowKey := tests.WorkflowKey
 			mockMutableState.EXPECT().GetWorkflowKey().Return(workflowKey).AnyTimes()
 			mockMutableState.EXPECT().GetExecutionInfo().Return(&persistencespb.WorkflowExecutionInfo{
@@ -539,7 +588,10 @@ func TestTaskGenerator_GenerateWorkflowStartTasks(t *testing.T) {
 				WorkflowExecutionTimerTaskStatus: tc.existingExecutionTimerStatus,
 				WorkflowExecutionExpirationTime:  timestamppb.New(tc.executionExpirationTime),
 				WorkflowRunExpirationTime:        timestamppb.New(tc.runExpirationTime),
-				FirstExecutionRunId:              uuid.New(),
+				FirstExecutionRunId:              firstRunID,
+			}).AnyTimes()
+			mockMutableState.EXPECT().GetExecutionState().Return(&persistencespb.WorkflowExecutionState{
+				RunId: currentRunID,
 			}).AnyTimes()
 
 			var generatedTaskTypes []enumsspb.TaskType
