@@ -234,7 +234,7 @@ func NewConfig(
 		MaxConcurrentLongRunningRequestsPerInstance:                       dc.GetIntPropertyFilteredByNamespace(dynamicconfig.FrontendMaxConcurrentLongRunningRequestsPerInstance, 1200),
 		MaxGlobalConcurrentLongRunningRequests:                            dc.GetIntPropertyFilteredByNamespace(dynamicconfig.FrontendGlobalMaxConcurrentLongRunningRequests, 0),
 		MaxNamespaceVisibilityRPSPerInstance:                              dc.GetIntPropertyFilteredByNamespace(dynamicconfig.FrontendMaxNamespaceVisibilityRPSPerInstance, 10),
-		MaxNamespaceVisibilityBurstRatioPerInstance:                       dc.GetFloatPropertyFilteredByNamespace(dynamicconfig.FrontendMaxNamespaceVisibilityBurstRatioPerInstance, 2),
+		MaxNamespaceVisibilityBurstRatioPerInstance:                       dc.GetFloatPropertyFilteredByNamespace(dynamicconfig.FrontendMaxNamespaceVisibilityBurstRatioPerInstance, 1),
 		MaxNamespaceNamespaceReplicationInducingAPIsRPSPerInstance:        dc.GetIntPropertyFilteredByNamespace(dynamicconfig.FrontendMaxNamespaceNamespaceReplicationInducingAPIsRPSPerInstance, 1),
 		MaxNamespaceNamespaceReplicationInducingAPIsBurstRatioPerInstance: dc.GetFloatPropertyFilteredByNamespace(dynamicconfig.FrontendMaxNamespaceNamespaceReplicationInducingAPIsBurstRatioPerInstance, 10),
 
