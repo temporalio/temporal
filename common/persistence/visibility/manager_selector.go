@@ -24,7 +24,7 @@
 
 package visibility
 
-//go:generate mocksync -copyright_file ../../../LICENSE -package $GOPACKAGE -source $GOFILE -destination manager_selector_mock.go
+//go:generate mockgen -copyright_file ../../../LICENSE -package $GOPACKAGE -source $GOFILE -destination manager_selector_mock.go
 
 import (
 	"fmt"

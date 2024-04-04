@@ -40,6 +40,7 @@ import (
 
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/future"
+	"go.temporal.io/server/common/utf8validator"
 	"go.temporal.io/server/internal/effect"
 )
 
@@ -241,8 +242,8 @@ func (u *Update) WaitOutcome(ctx context.Context) (UpdateStatus, error) {
 	return UpdateStatus{enumspb.UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_COMPLETED, outcome}, nil
 }
 
-// WaitAccepted blocks on the acceptance of this update, returning nil if has
-// been accepted but not yet completed or the overall Outcome if the update has
+// WaitAccepted blocks on the acceptance of this update, returning nil if it has
+// been accepted but not yet completed, or the overall Outcome if the update has
 // been completed (including completed by rejection). This call will block until
 // the acceptance occurs or the provided context.Context expires.
 // It is safe to call this method outside of workflow lock.
@@ -288,6 +289,9 @@ func (u *Update) Request(
 
 	u.instrumentation.CountRequestMsg()
 	// Marshal update request here to return InvalidArgument to the API caller if it can't be marshaled.
+	if err := utf8validator.Validate(req, utf8validator.SourceRPCRequest); err != nil {
+		return invalidArgf("unable to marshal request: %v", err)
+	}
 	reqAny, err := anypb.New(req)
 	if err != nil {
 		return invalidArgf("unable to marshal request: %v", err)
@@ -324,7 +328,11 @@ func (u *Update) OnProtocolMessage(
 
 	body, err := protocolMsg.Body.UnmarshalNew()
 	if err != nil {
-		return err
+		return invalidArgf("unable to unmarshal request: %v", err)
+	}
+	err = utf8validator.Validate(body, utf8validator.SourceRPCRequest)
+	if err != nil {
+		return invalidArgf("unable to unmarshal request: %v", err)
 	}
 
 	// If no new events can be added to the event store (e.g. workflow is completed),
@@ -422,6 +430,7 @@ func (u *Update) onAcceptanceMsg(
 	if err := u.request.UnmarshalTo(acceptedRequest); err != nil {
 		return internalErrorf("unable to unmarshal original request: %v", err)
 	}
+	// utf8validator: we just marshaled u.request ourself earlier, so we don't need to validate it for utf8 strings here
 
 	event, err := eventStore.AddWorkflowExecutionUpdateAcceptedEvent(
 		u.id,

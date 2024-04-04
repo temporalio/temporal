@@ -61,9 +61,10 @@ type (
 		WorkflowID  string
 		RunID       string
 
-		ShardManager     p.ShardManager
-		ExecutionManager p.ExecutionManager
-		Logger           log.Logger
+		ShardManager      p.ShardManager
+		ExecutionManager  p.ExecutionManager
+		historyBranchUtil p.HistoryBranchUtil
+		Logger            log.Logger
 
 		Ctx    context.Context
 		Cancel context.CancelFunc
@@ -75,6 +76,7 @@ func NewExecutionMutableStateSuite(
 	shardStore p.ShardStore,
 	executionStore p.ExecutionStore,
 	serializer serialization.Serializer,
+	historyBranchUtil p.HistoryBranchUtil,
 	logger log.Logger,
 ) *ExecutionMutableStateSuite {
 	return &ExecutionMutableStateSuite{
@@ -91,7 +93,8 @@ func NewExecutionMutableStateSuite(
 			logger,
 			dynamicconfig.GetIntPropertyFn(4*1024*1024),
 		),
-		Logger: logger,
+		historyBranchUtil: historyBranchUtil,
+		Logger:            logger,
 	}
 }
 
@@ -195,6 +198,7 @@ func (s *ExecutionMutableStateSuite) TestCreate_Reuse() {
 		enumsspb.WORKFLOW_EXECUTION_STATE_CREATED,
 		enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
 		rand.Int63(),
+		s.historyBranchUtil,
 	)
 
 	_, err := s.ExecutionManager.CreateWorkflowExecution(s.Ctx, &p.CreateWorkflowExecutionRequest{
@@ -265,6 +269,7 @@ func (s *ExecutionMutableStateSuite) TestCreate_Zombie() {
 		enumsspb.WORKFLOW_EXECUTION_STATE_ZOMBIE,
 		enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
 		rand.Int63(),
+		s.historyBranchUtil,
 	)
 
 	_, err := s.ExecutionManager.CreateWorkflowExecution(s.Ctx, &p.CreateWorkflowExecutionRequest{
@@ -334,6 +339,7 @@ func (s *ExecutionMutableStateSuite) TestCreate_ClosedWorkflow_Bypass() {
 		enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED,
 		enumspb.WORKFLOW_EXECUTION_STATUS_TERMINATED,
 		rand.Int63(),
+		s.historyBranchUtil,
 	)
 
 	_, err := s.ExecutionManager.CreateWorkflowExecution(s.Ctx, &p.CreateWorkflowExecutionRequest{
@@ -369,6 +375,7 @@ func (s *ExecutionMutableStateSuite) TestCreate_ClosedWorkflow_UpdateCurrent() {
 		enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED,
 		enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED,
 		rand.Int63(),
+		s.historyBranchUtil,
 	)
 
 	_, err := s.ExecutionManager.CreateWorkflowExecution(s.Ctx, &p.CreateWorkflowExecutionRequest{
@@ -403,6 +410,7 @@ func (s *ExecutionMutableStateSuite) TestUpdate_NotZombie() {
 		enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING,
 		enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
 		currentSnapshot.DBRecordVersion+1,
+		s.historyBranchUtil,
 	)
 	_, err := s.ExecutionManager.UpdateWorkflowExecution(s.Ctx, &p.UpdateWorkflowExecutionRequest{
 		ShardID: s.ShardID,
@@ -436,6 +444,7 @@ func (s *ExecutionMutableStateSuite) TestUpdate_NotZombie_CurrentConflict() {
 		enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING,
 		enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
 		rand.Int63(),
+		s.historyBranchUtil,
 	)
 	_, err := s.ExecutionManager.UpdateWorkflowExecution(s.Ctx, &p.UpdateWorkflowExecutionRequest{
 		ShardID: s.ShardID,
@@ -473,6 +482,7 @@ func (s *ExecutionMutableStateSuite) TestUpdate_NotZombie_Conflict() {
 		enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING,
 		enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
 		rand.Int63(),
+		s.historyBranchUtil,
 	)
 	_, err := s.ExecutionManager.UpdateWorkflowExecution(s.Ctx, &p.UpdateWorkflowExecutionRequest{
 		ShardID: s.ShardID,
@@ -506,6 +516,7 @@ func (s *ExecutionMutableStateSuite) TestUpdate_NotZombie_WithNew() {
 		enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED,
 		enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED,
 		currentSnapshot.DBRecordVersion+1,
+		s.historyBranchUtil,
 	)
 	newSnapshot := RandomSnapshot(
 		s.NamespaceID,
@@ -515,6 +526,7 @@ func (s *ExecutionMutableStateSuite) TestUpdate_NotZombie_WithNew() {
 		enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING,
 		enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
 		rand.Int63(),
+		s.historyBranchUtil,
 	)
 	_, err := s.ExecutionManager.UpdateWorkflowExecution(s.Ctx, &p.UpdateWorkflowExecutionRequest{
 		ShardID: s.ShardID,
@@ -549,6 +561,7 @@ func (s *ExecutionMutableStateSuite) TestUpdate_Zombie() {
 		enumsspb.WORKFLOW_EXECUTION_STATE_ZOMBIE,
 		enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
 		rand.Int63(),
+		s.historyBranchUtil,
 	)
 	_, err := s.ExecutionManager.CreateWorkflowExecution(s.Ctx, &p.CreateWorkflowExecutionRequest{
 		ShardID: s.ShardID,
@@ -571,6 +584,7 @@ func (s *ExecutionMutableStateSuite) TestUpdate_Zombie() {
 		enumsspb.WORKFLOW_EXECUTION_STATE_ZOMBIE,
 		enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
 		zombieSnapshot.DBRecordVersion+1,
+		s.historyBranchUtil,
 	)
 	_, err = s.ExecutionManager.UpdateWorkflowExecution(s.Ctx, &p.UpdateWorkflowExecutionRequest{
 		ShardID: s.ShardID,
@@ -604,6 +618,7 @@ func (s *ExecutionMutableStateSuite) TestUpdate_Zombie_CurrentConflict() {
 		enumsspb.WORKFLOW_EXECUTION_STATE_ZOMBIE,
 		enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
 		currentSnapshot.DBRecordVersion+1,
+		s.historyBranchUtil,
 	)
 	_, err := s.ExecutionManager.UpdateWorkflowExecution(s.Ctx, &p.UpdateWorkflowExecutionRequest{
 		ShardID: s.ShardID,
@@ -637,6 +652,7 @@ func (s *ExecutionMutableStateSuite) TestUpdate_Zombie_Conflict() {
 		enumsspb.WORKFLOW_EXECUTION_STATE_ZOMBIE,
 		enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
 		rand.Int63(),
+		s.historyBranchUtil,
 	)
 	_, err := s.ExecutionManager.CreateWorkflowExecution(s.Ctx, &p.CreateWorkflowExecutionRequest{
 		ShardID: s.ShardID,
@@ -659,6 +675,7 @@ func (s *ExecutionMutableStateSuite) TestUpdate_Zombie_Conflict() {
 		enumsspb.WORKFLOW_EXECUTION_STATE_ZOMBIE,
 		enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
 		rand.Int63(),
+		s.historyBranchUtil,
 	)
 	_, err = s.ExecutionManager.UpdateWorkflowExecution(s.Ctx, &p.UpdateWorkflowExecutionRequest{
 		ShardID: s.ShardID,
@@ -692,6 +709,7 @@ func (s *ExecutionMutableStateSuite) TestUpdate_Zombie_WithNew() {
 		enumsspb.WORKFLOW_EXECUTION_STATE_ZOMBIE,
 		enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
 		rand.Int63(),
+		s.historyBranchUtil,
 	)
 	_, err := s.ExecutionManager.CreateWorkflowExecution(s.Ctx, &p.CreateWorkflowExecutionRequest{
 		ShardID: s.ShardID,
@@ -714,6 +732,7 @@ func (s *ExecutionMutableStateSuite) TestUpdate_Zombie_WithNew() {
 		enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED,
 		enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED,
 		zombieSnapshot.DBRecordVersion+1,
+		s.historyBranchUtil,
 	)
 	newZombieSnapshot := RandomSnapshot(
 		s.NamespaceID,
@@ -723,6 +742,7 @@ func (s *ExecutionMutableStateSuite) TestUpdate_Zombie_WithNew() {
 		enumsspb.WORKFLOW_EXECUTION_STATE_ZOMBIE,
 		enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
 		rand.Int63(),
+		s.historyBranchUtil,
 	)
 	_, err = s.ExecutionManager.UpdateWorkflowExecution(s.Ctx, &p.UpdateWorkflowExecutionRequest{
 		ShardID: s.ShardID,
@@ -758,6 +778,7 @@ func (s *ExecutionMutableStateSuite) TestConflictResolve_SuppressCurrent() {
 		enumsspb.WORKFLOW_EXECUTION_STATE_ZOMBIE,
 		enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
 		rand.Int63(),
+		s.historyBranchUtil,
 	)
 	_, err := s.ExecutionManager.CreateWorkflowExecution(s.Ctx, &p.CreateWorkflowExecutionRequest{
 		ShardID: s.ShardID,
@@ -780,6 +801,7 @@ func (s *ExecutionMutableStateSuite) TestConflictResolve_SuppressCurrent() {
 		enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING,
 		enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
 		baseSnapshot.DBRecordVersion+1,
+		s.historyBranchUtil,
 	)
 	currentMutation := RandomMutation(
 		s.NamespaceID,
@@ -789,6 +811,7 @@ func (s *ExecutionMutableStateSuite) TestConflictResolve_SuppressCurrent() {
 		enumsspb.WORKFLOW_EXECUTION_STATE_ZOMBIE,
 		enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
 		currentSnapshot.DBRecordVersion+1,
+		s.historyBranchUtil,
 	)
 	_, err = s.ExecutionManager.ConflictResolveWorkflowExecution(s.Ctx, &p.ConflictResolveWorkflowExecutionRequest{
 		ShardID: s.ShardID,
@@ -827,6 +850,7 @@ func (s *ExecutionMutableStateSuite) TestConflictResolve_SuppressCurrent_Current
 		enumsspb.WORKFLOW_EXECUTION_STATE_ZOMBIE,
 		enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
 		rand.Int63(),
+		s.historyBranchUtil,
 	)
 	_, err := s.ExecutionManager.CreateWorkflowExecution(s.Ctx, &p.CreateWorkflowExecutionRequest{
 		ShardID: s.ShardID,
@@ -849,6 +873,7 @@ func (s *ExecutionMutableStateSuite) TestConflictResolve_SuppressCurrent_Current
 		enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING,
 		enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
 		baseSnapshot.DBRecordVersion+1,
+		s.historyBranchUtil,
 	)
 	currentMutation := RandomMutation(
 		s.NamespaceID,
@@ -858,6 +883,7 @@ func (s *ExecutionMutableStateSuite) TestConflictResolve_SuppressCurrent_Current
 		enumsspb.WORKFLOW_EXECUTION_STATE_ZOMBIE,
 		enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
 		rand.Int63(),
+		s.historyBranchUtil,
 	)
 	_, err = s.ExecutionManager.ConflictResolveWorkflowExecution(s.Ctx, &p.ConflictResolveWorkflowExecutionRequest{
 		ShardID: s.ShardID,
@@ -896,6 +922,7 @@ func (s *ExecutionMutableStateSuite) TestConflictResolve_SuppressCurrent_Conflic
 		enumsspb.WORKFLOW_EXECUTION_STATE_ZOMBIE,
 		enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
 		rand.Int63(),
+		s.historyBranchUtil,
 	)
 	_, err := s.ExecutionManager.CreateWorkflowExecution(s.Ctx, &p.CreateWorkflowExecutionRequest{
 		ShardID: s.ShardID,
@@ -918,6 +945,7 @@ func (s *ExecutionMutableStateSuite) TestConflictResolve_SuppressCurrent_Conflic
 		enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING,
 		enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
 		baseSnapshot.DBRecordVersion+1,
+		s.historyBranchUtil,
 	)
 	currentMutation := RandomMutation(
 		s.NamespaceID,
@@ -927,6 +955,7 @@ func (s *ExecutionMutableStateSuite) TestConflictResolve_SuppressCurrent_Conflic
 		enumsspb.WORKFLOW_EXECUTION_STATE_ZOMBIE,
 		enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
 		rand.Int63(),
+		s.historyBranchUtil,
 	)
 	_, err = s.ExecutionManager.ConflictResolveWorkflowExecution(s.Ctx, &p.ConflictResolveWorkflowExecutionRequest{
 		ShardID: s.ShardID,
@@ -965,6 +994,7 @@ func (s *ExecutionMutableStateSuite) TestConflictResolve_SuppressCurrent_Conflic
 		enumsspb.WORKFLOW_EXECUTION_STATE_ZOMBIE,
 		enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
 		rand.Int63(),
+		s.historyBranchUtil,
 	)
 	_, err := s.ExecutionManager.CreateWorkflowExecution(s.Ctx, &p.CreateWorkflowExecutionRequest{
 		ShardID: s.ShardID,
@@ -987,6 +1017,7 @@ func (s *ExecutionMutableStateSuite) TestConflictResolve_SuppressCurrent_Conflic
 		enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING,
 		enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
 		rand.Int63(),
+		s.historyBranchUtil,
 	)
 	currentMutation := RandomMutation(
 		s.NamespaceID,
@@ -996,6 +1027,7 @@ func (s *ExecutionMutableStateSuite) TestConflictResolve_SuppressCurrent_Conflic
 		enumsspb.WORKFLOW_EXECUTION_STATE_ZOMBIE,
 		enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
 		currentSnapshot.DBRecordVersion+1,
+		s.historyBranchUtil,
 	)
 	_, err = s.ExecutionManager.ConflictResolveWorkflowExecution(s.Ctx, &p.ConflictResolveWorkflowExecutionRequest{
 		ShardID: s.ShardID,
@@ -1034,6 +1066,7 @@ func (s *ExecutionMutableStateSuite) TestConflictResolve_SuppressCurrent_WithNew
 		enumsspb.WORKFLOW_EXECUTION_STATE_ZOMBIE,
 		enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
 		rand.Int63(),
+		s.historyBranchUtil,
 	)
 	_, err := s.ExecutionManager.CreateWorkflowExecution(s.Ctx, &p.CreateWorkflowExecutionRequest{
 		ShardID: s.ShardID,
@@ -1056,6 +1089,7 @@ func (s *ExecutionMutableStateSuite) TestConflictResolve_SuppressCurrent_WithNew
 		enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED,
 		enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED,
 		baseSnapshot.DBRecordVersion+1,
+		s.historyBranchUtil,
 	)
 	newSnapshot := RandomSnapshot(
 		s.NamespaceID,
@@ -1065,6 +1099,7 @@ func (s *ExecutionMutableStateSuite) TestConflictResolve_SuppressCurrent_WithNew
 		enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING,
 		enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
 		rand.Int63(),
+		s.historyBranchUtil,
 	)
 	currentMutation := RandomMutation(
 		s.NamespaceID,
@@ -1074,6 +1109,7 @@ func (s *ExecutionMutableStateSuite) TestConflictResolve_SuppressCurrent_WithNew
 		enumsspb.WORKFLOW_EXECUTION_STATE_ZOMBIE,
 		enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
 		currentSnapshot.DBRecordVersion+1,
+		s.historyBranchUtil,
 	)
 	_, err = s.ExecutionManager.ConflictResolveWorkflowExecution(s.Ctx, &p.ConflictResolveWorkflowExecutionRequest{
 		ShardID: s.ShardID,
@@ -1112,6 +1148,7 @@ func (s *ExecutionMutableStateSuite) TestConflictResolve_ResetCurrent() {
 		enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING,
 		enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
 		baseSnapshot.DBRecordVersion+1,
+		s.historyBranchUtil,
 	)
 	_, err := s.ExecutionManager.ConflictResolveWorkflowExecution(s.Ctx, &p.ConflictResolveWorkflowExecutionRequest{
 		ShardID: s.ShardID,
@@ -1148,6 +1185,7 @@ func (s *ExecutionMutableStateSuite) TestConflictResolve_ResetCurrent_CurrentCon
 		enumsspb.WORKFLOW_EXECUTION_STATE_ZOMBIE,
 		enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
 		rand.Int63(),
+		s.historyBranchUtil,
 	)
 	_, err := s.ExecutionManager.CreateWorkflowExecution(s.Ctx, &p.CreateWorkflowExecutionRequest{
 		ShardID: s.ShardID,
@@ -1170,6 +1208,7 @@ func (s *ExecutionMutableStateSuite) TestConflictResolve_ResetCurrent_CurrentCon
 		enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING,
 		enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
 		baseSnapshot.DBRecordVersion+1,
+		s.historyBranchUtil,
 	)
 	_, err = s.ExecutionManager.ConflictResolveWorkflowExecution(s.Ctx, &p.ConflictResolveWorkflowExecutionRequest{
 		ShardID: s.ShardID,
@@ -1206,6 +1245,7 @@ func (s *ExecutionMutableStateSuite) TestConflictResolve_ResetCurrent_Conflict()
 		enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING,
 		enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
 		rand.Int63(),
+		s.historyBranchUtil,
 	)
 	_, err := s.ExecutionManager.ConflictResolveWorkflowExecution(s.Ctx, &p.ConflictResolveWorkflowExecutionRequest{
 		ShardID: s.ShardID,
@@ -1242,6 +1282,7 @@ func (s *ExecutionMutableStateSuite) TestConflictResolve_ResetCurrent_WithNew() 
 		enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED,
 		enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED,
 		baseSnapshot.DBRecordVersion+1,
+		s.historyBranchUtil,
 	)
 	newSnapshot := RandomSnapshot(
 		s.NamespaceID,
@@ -1251,6 +1292,7 @@ func (s *ExecutionMutableStateSuite) TestConflictResolve_ResetCurrent_WithNew() 
 		enumsspb.WORKFLOW_EXECUTION_STATE_CREATED,
 		enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
 		rand.Int63(),
+		s.historyBranchUtil,
 	)
 	_, err := s.ExecutionManager.ConflictResolveWorkflowExecution(s.Ctx, &p.ConflictResolveWorkflowExecutionRequest{
 		ShardID: s.ShardID,
@@ -1288,6 +1330,7 @@ func (s *ExecutionMutableStateSuite) TestConflictResolve_Zombie() {
 		enumsspb.WORKFLOW_EXECUTION_STATE_ZOMBIE,
 		enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
 		rand.Int63(),
+		s.historyBranchUtil,
 	)
 	_, err := s.ExecutionManager.CreateWorkflowExecution(s.Ctx, &p.CreateWorkflowExecutionRequest{
 		ShardID: s.ShardID,
@@ -1310,6 +1353,7 @@ func (s *ExecutionMutableStateSuite) TestConflictResolve_Zombie() {
 		enumsspb.WORKFLOW_EXECUTION_STATE_ZOMBIE,
 		enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
 		baseSnapshot.DBRecordVersion+1,
+		s.historyBranchUtil,
 	)
 	_, err = s.ExecutionManager.ConflictResolveWorkflowExecution(s.Ctx, &p.ConflictResolveWorkflowExecutionRequest{
 		ShardID: s.ShardID,
@@ -1346,6 +1390,7 @@ func (s *ExecutionMutableStateSuite) TestConflictResolve_Zombie_CurrentConflict(
 		enumsspb.WORKFLOW_EXECUTION_STATE_ZOMBIE,
 		enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
 		baseSnapshot.DBRecordVersion+1,
+		s.historyBranchUtil,
 	)
 	_, err := s.ExecutionManager.ConflictResolveWorkflowExecution(s.Ctx, &p.ConflictResolveWorkflowExecutionRequest{
 		ShardID: s.ShardID,
@@ -1382,6 +1427,7 @@ func (s *ExecutionMutableStateSuite) TestConflictResolve_Zombie_Conflict() {
 		enumsspb.WORKFLOW_EXECUTION_STATE_ZOMBIE,
 		enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
 		rand.Int63(),
+		s.historyBranchUtil,
 	)
 	_, err := s.ExecutionManager.CreateWorkflowExecution(s.Ctx, &p.CreateWorkflowExecutionRequest{
 		ShardID: s.ShardID,
@@ -1404,6 +1450,7 @@ func (s *ExecutionMutableStateSuite) TestConflictResolve_Zombie_Conflict() {
 		enumsspb.WORKFLOW_EXECUTION_STATE_ZOMBIE,
 		enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
 		rand.Int63(),
+		s.historyBranchUtil,
 	)
 	_, err = s.ExecutionManager.ConflictResolveWorkflowExecution(s.Ctx, &p.ConflictResolveWorkflowExecutionRequest{
 		ShardID: s.ShardID,
@@ -1440,6 +1487,7 @@ func (s *ExecutionMutableStateSuite) TestConflictResolve_Zombie_WithNew() {
 		enumsspb.WORKFLOW_EXECUTION_STATE_ZOMBIE,
 		enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
 		rand.Int63(),
+		s.historyBranchUtil,
 	)
 	_, err := s.ExecutionManager.CreateWorkflowExecution(s.Ctx, &p.CreateWorkflowExecutionRequest{
 		ShardID: s.ShardID,
@@ -1462,6 +1510,7 @@ func (s *ExecutionMutableStateSuite) TestConflictResolve_Zombie_WithNew() {
 		enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED,
 		enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED,
 		baseSnapshot.DBRecordVersion+1,
+		s.historyBranchUtil,
 	)
 	newSnapshot := RandomSnapshot(
 		s.NamespaceID,
@@ -1471,6 +1520,7 @@ func (s *ExecutionMutableStateSuite) TestConflictResolve_Zombie_WithNew() {
 		enumsspb.WORKFLOW_EXECUTION_STATE_ZOMBIE,
 		enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
 		rand.Int63(),
+		s.historyBranchUtil,
 	)
 	_, err = s.ExecutionManager.ConflictResolveWorkflowExecution(s.Ctx, &p.ConflictResolveWorkflowExecutionRequest{
 		ShardID: s.ShardID,
@@ -1501,6 +1551,7 @@ func (s *ExecutionMutableStateSuite) TestSet_NotExists() {
 		enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING,
 		enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
 		rand.Int63(),
+		s.historyBranchUtil,
 	)
 	_, err := s.ExecutionManager.SetWorkflowExecution(s.Ctx, &p.SetWorkflowExecutionRequest{
 		ShardID: s.ShardID,
@@ -1529,6 +1580,7 @@ func (s *ExecutionMutableStateSuite) TestSet_Conflict() {
 		enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING,
 		enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
 		rand.Int63(),
+		s.historyBranchUtil,
 	)
 	_, err := s.ExecutionManager.SetWorkflowExecution(s.Ctx, &p.SetWorkflowExecutionRequest{
 		ShardID: s.ShardID,
@@ -1557,6 +1609,7 @@ func (s *ExecutionMutableStateSuite) TestSet() {
 		enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING,
 		enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
 		snapshot.DBRecordVersion+1,
+		s.historyBranchUtil,
 	)
 	_, err := s.ExecutionManager.SetWorkflowExecution(s.Ctx, &p.SetWorkflowExecutionRequest{
 		ShardID: s.ShardID,
@@ -1604,6 +1657,7 @@ func (s *ExecutionMutableStateSuite) TestDeleteCurrent_NotCurrent() {
 		enumsspb.WORKFLOW_EXECUTION_STATE_ZOMBIE,
 		enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
 		rand.Int63(),
+		s.historyBranchUtil,
 	)
 
 	_, err := s.ExecutionManager.CreateWorkflowExecution(s.Ctx, &p.CreateWorkflowExecutionRequest{
@@ -1646,6 +1700,7 @@ func (s *ExecutionMutableStateSuite) TestDelete_Exists() {
 		enumsspb.WORKFLOW_EXECUTION_STATE_ZOMBIE,
 		enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
 		rand.Int63(),
+		s.historyBranchUtil,
 	)
 
 	_, err := s.ExecutionManager.CreateWorkflowExecution(s.Ctx, &p.CreateWorkflowExecutionRequest{
@@ -1698,6 +1753,7 @@ func (s *ExecutionMutableStateSuite) CreateWorkflow(
 		state,
 		status,
 		dbRecordVersion,
+		s.historyBranchUtil,
 	)
 	_, err := s.ExecutionManager.CreateWorkflowExecution(s.Ctx, &p.CreateWorkflowExecutionRequest{
 		ShardID: s.ShardID,

@@ -726,9 +726,9 @@ func CheckEventBlobSizeLimit(
 	return nil
 }
 
-// ValidateLongPollContextTimeout check if the context timeout for a long poll handler is too short or below a normal value.
-// If the timeout is not set or too short, it logs an error, and return ErrContextTimeoutNotSet or ErrContextTimeoutTooShort
-// accordingly. If the timeout is only below a normal value, it just logs an info and return nil.
+// ValidateLongPollContextTimeout checks if the context timeout for a long poll handler is too short or below a normal value.
+// If the timeout is not set or too short, it logs an error, and returns ErrContextTimeoutNotSet or ErrContextTimeoutTooShort
+// accordingly. If the timeout is only below a normal value, it just logs an info and returns nil.
 func ValidateLongPollContextTimeout(
 	ctx context.Context,
 	handlerName string,

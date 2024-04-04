@@ -40,6 +40,7 @@ import (
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	namespacepb "go.temporal.io/api/namespace/v1"
+	nexuspb "go.temporal.io/api/nexus/v1"
 	"go.temporal.io/api/serviceerror"
 	workflowpb "go.temporal.io/api/workflow/v1"
 	"go.temporal.io/api/workflowservice/v1"
@@ -71,6 +72,7 @@ import (
 	"go.temporal.io/server/common/resourcetest"
 	"go.temporal.io/server/common/searchattribute"
 	"go.temporal.io/server/common/testing/mocksdk"
+	"go.temporal.io/server/common/testing/protorequire"
 	"go.temporal.io/server/service/history/tasks"
 	"go.temporal.io/server/service/worker/dlq"
 )
@@ -1107,6 +1109,13 @@ func (s *adminHandlerSuite) TestGetNamespace_WithIDSuccess() {
 				},
 			},
 			FailoverNotificationVersion: 0,
+			OutgoingServices: []*persistencespb.NexusOutgoingService{
+				{
+					Version: 1,
+					Name:    "svc",
+					Spec:    &nexuspb.OutgoingServiceSpec{},
+				},
+			},
 		},
 	}
 	s.mockResource.MetadataMgr.EXPECT().GetNamespace(gomock.Any(), &persistence.GetNamespaceRequest{
@@ -1119,7 +1128,7 @@ func (s *adminHandlerSuite) TestGetNamespace_WithIDSuccess() {
 	})
 	s.NoError(err)
 	s.Equal(namespaceID, resp.GetInfo().GetId())
-	s.Equal(cluster.TestAlternativeClusterName, resp.GetReplicationConfig().GetActiveClusterName())
+	protorequire.ProtoSliceEqual(s.T(), nsResponse.Namespace.OutgoingServices, resp.OutgoingServices)
 }
 
 func (s *adminHandlerSuite) TestGetNamespace_WithNameSuccess() {

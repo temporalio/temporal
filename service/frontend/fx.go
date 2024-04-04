@@ -34,8 +34,6 @@ import (
 	"google.golang.org/grpc/health"
 	"google.golang.org/grpc/keepalive"
 
-	"go.temporal.io/server/common/nexus"
-
 	"go.temporal.io/server/client"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/archiver"
@@ -50,6 +48,7 @@ import (
 	"go.temporal.io/server/common/membership"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
+	"go.temporal.io/server/common/nexus"
 	"go.temporal.io/server/common/persistence"
 	persistenceClient "go.temporal.io/server/common/persistence/client"
 	"go.temporal.io/server/common/persistence/serialization"
@@ -58,6 +57,7 @@ import (
 	esclient "go.temporal.io/server/common/persistence/visibility/store/elasticsearch/client"
 	"go.temporal.io/server/common/primitives"
 	"go.temporal.io/server/common/quotas"
+	"go.temporal.io/server/common/quotas/calculator"
 	"go.temporal.io/server/common/resolver"
 	"go.temporal.io/server/common/resource"
 	"go.temporal.io/server/common/rpc"
@@ -66,6 +66,7 @@ import (
 	"go.temporal.io/server/common/sdk"
 	"go.temporal.io/server/common/searchattribute"
 	"go.temporal.io/server/common/telemetry"
+	"go.temporal.io/server/common/utf8validator"
 	"go.temporal.io/server/service"
 	"go.temporal.io/server/service/frontend/configs"
 	"go.temporal.io/server/service/history/tasks"
@@ -213,6 +214,7 @@ func GrpcServerOptionsProvider(
 	sdkVersionInterceptor *interceptor.SDKVersionInterceptor,
 	callerInfoInterceptor *interceptor.CallerInfoInterceptor,
 	authInterceptor *authorization.Interceptor,
+	utf8Validator *utf8validator.Validator,
 	customInterceptors []grpc.UnaryServerInterceptor,
 	metricsHandler metrics.Handler,
 ) GrpcServerOptions {
@@ -242,7 +244,8 @@ func GrpcServerOptionsProvider(
 	}
 	unaryInterceptors := []grpc.UnaryServerInterceptor{
 		// Service Error Interceptor should be the most outer interceptor on error handling
-		rpc.ServiceErrorInterceptor,
+		rpc.NewServiceErrorInterceptor(logger),
+		utf8Validator.Intercept,
 		namespaceValidatorInterceptor.NamespaceValidateIntercept,
 		namespaceLogInterceptor.Intercept, // TODO: Deprecate this with a outer custom interceptor
 		grpc.UnaryServerInterceptor(traceInterceptor),
@@ -343,22 +346,37 @@ func TelemetryInterceptorProvider(
 	)
 }
 
+func getRateFnWithMetrics(rateFn quotas.RateFn, handler metrics.Handler) quotas.RateFn {
+	return func() float64 {
+		rate := rateFn()
+		metrics.HostRPSLimit.With(handler).Record(rate)
+		return rate
+	}
+}
+
 func RateLimitInterceptorProvider(
 	serviceConfig *Config,
 	frontendServiceResolver membership.ServiceResolver,
+	handler metrics.Handler,
+	logger log.SnTaggedLogger,
 ) *interceptor.RateLimitInterceptor {
-	rateFn := quotas.ClusterAwareQuotaCalculator{
-		MemberCounter:    frontendServiceResolver,
-		PerInstanceQuota: serviceConfig.RPS,
-		GlobalQuota:      serviceConfig.GlobalRPS,
-	}.GetQuota
+	rateFn := calculator.NewLoggedCalculator(
+		calculator.ClusterAwareQuotaCalculator{
+			MemberCounter:    frontendServiceResolver,
+			PerInstanceQuota: serviceConfig.RPS,
+			GlobalQuota:      serviceConfig.GlobalRPS,
+		},
+		log.With(logger, tag.ComponentRPCHandler, tag.ScopeHost),
+	).GetQuota
+	rateFnWithMetrics := getRateFnWithMetrics(rateFn, handler)
+
 	namespaceReplicationInducingRateFn := func() float64 {
 		return float64(serviceConfig.NamespaceReplicationInducingAPIsRPS())
 	}
 
 	return interceptor.NewRateLimitInterceptor(
 		configs.NewRequestToRateLimiter(
-			quotas.NewDefaultIncomingRateBurst(rateFn),
+			quotas.NewDefaultIncomingRateBurst(rateFnWithMetrics),
 			quotas.NewDefaultIncomingRateBurst(rateFn),
 			quotas.NewDefaultIncomingRateBurst(namespaceReplicationInducingRateFn),
 			serviceConfig.OperatorRPSRatio,
@@ -372,6 +390,7 @@ func NamespaceRateLimitInterceptorProvider(
 	serviceConfig *Config,
 	namespaceRegistry namespace.Registry,
 	frontendServiceResolver membership.ServiceResolver,
+	logger log.SnTaggedLogger,
 ) *interceptor.NamespaceRateLimitInterceptor {
 	var globalNamespaceRPS, globalNamespaceVisibilityRPS, globalNamespaceNamespaceReplicationInducingAPIsRPS dynamicconfig.IntPropertyFnWithNamespaceFilter
 
@@ -389,21 +408,30 @@ func NamespaceRateLimitInterceptorProvider(
 		panic("invalid service name")
 	}
 
-	namespaceRateFn := quotas.ClusterAwareNamespaceSpecificQuotaCalculator{
-		MemberCounter:    frontendServiceResolver,
-		PerInstanceQuota: serviceConfig.MaxNamespaceRPSPerInstance,
-		GlobalQuota:      globalNamespaceRPS,
-	}.GetQuota
-	visibilityRateFn := quotas.ClusterAwareNamespaceSpecificQuotaCalculator{
-		MemberCounter:    frontendServiceResolver,
-		PerInstanceQuota: serviceConfig.MaxNamespaceVisibilityRPSPerInstance,
-		GlobalQuota:      globalNamespaceVisibilityRPS,
-	}.GetQuota
-	namespaceReplicationInducingRateFn := quotas.ClusterAwareNamespaceSpecificQuotaCalculator{
-		MemberCounter:    frontendServiceResolver,
-		PerInstanceQuota: serviceConfig.MaxNamespaceNamespaceReplicationInducingAPIsRPSPerInstance,
-		GlobalQuota:      globalNamespaceNamespaceReplicationInducingAPIsRPS,
-	}.GetQuota
+	namespaceRateFn := calculator.NewLoggedNamespaceCalculator(
+		calculator.ClusterAwareNamespaceQuotaCalculator{
+			MemberCounter:    frontendServiceResolver,
+			PerInstanceQuota: serviceConfig.MaxNamespaceRPSPerInstance,
+			GlobalQuota:      globalNamespaceRPS,
+		},
+		log.With(logger, tag.ComponentRPCHandler, tag.ScopeNamespace),
+	).GetQuota
+	visibilityRateFn := calculator.NewLoggedNamespaceCalculator(
+		calculator.ClusterAwareNamespaceQuotaCalculator{
+			MemberCounter:    frontendServiceResolver,
+			PerInstanceQuota: serviceConfig.MaxNamespaceVisibilityRPSPerInstance,
+			GlobalQuota:      globalNamespaceVisibilityRPS,
+		},
+		log.With(logger, tag.ComponentVisibilityHandler, tag.ScopeNamespace),
+	).GetQuota
+	namespaceReplicationInducingRateFn := calculator.NewLoggedNamespaceCalculator(
+		calculator.ClusterAwareNamespaceQuotaCalculator{
+			MemberCounter:    frontendServiceResolver,
+			PerInstanceQuota: serviceConfig.MaxNamespaceNamespaceReplicationInducingAPIsRPSPerInstance,
+			GlobalQuota:      globalNamespaceNamespaceReplicationInducingAPIsRPS,
+		},
+		log.With(logger, tag.ComponentNamespaceReplication, tag.ScopeNamespace),
+	).GetQuota
 	namespaceRateLimiter := quotas.NewNamespaceRequestRateLimiter(
 		func(req quotas.Request) quotas.RequestRateLimiter {
 			return configs.NewRequestToRateLimiter(
@@ -457,6 +485,7 @@ func CallerInfoInterceptorProvider(
 func PersistenceRateLimitingParamsProvider(
 	serviceConfig *Config,
 	persistenceLazyLoadedServiceResolver service.PersistenceLazyLoadedServiceResolver,
+	logger log.SnTaggedLogger,
 ) service.PersistenceRateLimitingParams {
 	return service.NewPersistenceRateLimitingParams(
 		serviceConfig.PersistenceMaxQPS,
@@ -468,6 +497,7 @@ func PersistenceRateLimitingParamsProvider(
 		serviceConfig.OperatorRPSRatio,
 		serviceConfig.PersistenceDynamicRateLimitingParams,
 		persistenceLazyLoadedServiceResolver,
+		logger,
 	)
 }
 
@@ -525,7 +555,7 @@ func AdminHandlerProvider(
 	configuration *Config,
 	replicatorNamespaceReplicationQueue FEReplicatorNamespaceReplicationQueue,
 	esClient esclient.Client,
-	visibilityMrg manager.VisibilityManager,
+	visibilityMgr manager.VisibilityManager,
 	logger log.SnTaggedLogger,
 	persistenceExecutionManager persistence.ExecutionManager,
 	namespaceReplicationQueue persistence.NamespaceReplicationQueue,
@@ -554,7 +584,7 @@ func AdminHandlerProvider(
 		namespaceReplicationQueue,
 		replicatorNamespaceReplicationQueue,
 		esClient,
-		visibilityMrg,
+		visibilityMgr,
 		logger,
 		taskManager,
 		clusterMetadataManager,
@@ -766,10 +796,13 @@ func IncomingServiceClientProvider(
 
 func OutgoingServiceRegistryProvider(
 	metadataManager persistence.MetadataManager,
+	logger log.Logger,
+	namespaceReplicationQueue persistence.NamespaceReplicationQueue,
 	dc *dynamicconfig.Collection,
 ) *nexus.OutgoingServiceRegistry {
 	registryConfig := nexus.NewOutgoingServiceRegistryConfig(dc)
-	return nexus.NewOutgoingServiceRegistry(metadataManager, registryConfig)
+	namespaceReplicator := namespace.NewNamespaceReplicator(namespaceReplicationQueue, logger)
+	return nexus.NewOutgoingServiceRegistry(metadataManager, namespaceReplicator, registryConfig)
 }
 
 func ServiceLifetimeHooks(lc fx.Lifecycle, svc *Service) {

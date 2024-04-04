@@ -22,7 +22,12 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-package quotas
+package calculator
+
+var (
+	_ Calculator          = (*ClusterAwareQuotaCalculator)(nil)
+	_ NamespaceCalculator = (*ClusterAwareNamespaceQuotaCalculator)(nil)
+)
 
 type (
 	// MemberCounter returns the total number of instances there are for a given service.
@@ -33,9 +38,9 @@ type (
 	// cluster quota. The quota could represent requests per second, total number of active requests, etc. It works by
 	// dividing the per cluster quota by the total number of instances running the same service.
 	ClusterAwareQuotaCalculator quotaCalculator[func() int]
-	// ClusterAwareNamespaceSpecificQuotaCalculator is similar to ClusterAwareQuotaCalculator, but it uses quotas that
+	// ClusterAwareNamespaceQuotaCalculator is similar to ClusterAwareQuotaCalculator, but it uses quotas that
 	// are specific to a namespace.
-	ClusterAwareNamespaceSpecificQuotaCalculator quotaCalculator[func(namespace string) int]
+	ClusterAwareNamespaceQuotaCalculator quotaCalculator[func(namespace string) int]
 	// quotaCalculator is a generic type that we use because the quota functions could be namespace specific or not.
 	quotaCalculator[T any] struct {
 		MemberCounter MemberCounter
@@ -64,6 +69,6 @@ func (l ClusterAwareQuotaCalculator) GetQuota() float64 {
 	return getQuota(l.MemberCounter, l.PerInstanceQuota(), l.GlobalQuota())
 }
 
-func (l ClusterAwareNamespaceSpecificQuotaCalculator) GetQuota(namespace string) float64 {
+func (l ClusterAwareNamespaceQuotaCalculator) GetQuota(namespace string) float64 {
 	return getQuota(l.MemberCounter, l.PerInstanceQuota(namespace), l.GlobalQuota(namespace))
 }

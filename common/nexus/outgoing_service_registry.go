@@ -31,9 +31,11 @@ import (
 
 	"go.temporal.io/api/nexus/v1"
 	"go.temporal.io/api/operatorservice/v1"
+	"go.temporal.io/server/api/enums/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common/collection"
 	"go.temporal.io/server/common/dynamicconfig"
+	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/rpc"
 	"google.golang.org/grpc/codes"
@@ -46,15 +48,15 @@ import (
 // We need a registry for these services, so that we can look up the URL for a service by name. Later, we may add more
 // service-specific information to the registry.
 type OutgoingServiceRegistry struct {
-	namespaceService NamespaceService
-	config           *OutgoingServiceRegistryConfig
-	sortedSetManager collection.SortedSetManager[[]*persistencespb.NexusOutgoingService, *persistencespb.NexusOutgoingService, string]
+	namespaceService    NamespaceService
+	namespaceReplicator namespace.Replicator
+	config              *OutgoingServiceRegistryConfig
+	sortedSetManager    collection.SortedSetManager[[]*persistencespb.NexusOutgoingService, *persistencespb.NexusOutgoingService, string]
 }
 
 // NamespaceService is an interface which contains only the methods we need from
 // [go.temporal.io/server/common/persistence.MetadataManager].
 type NamespaceService interface {
-	CreateNamespace(ctx context.Context, request *persistence.CreateNamespaceRequest) (*persistence.CreateNamespaceResponse, error)
 	GetNamespace(ctx context.Context, request *persistence.GetNamespaceRequest) (*persistence.GetNamespaceResponse, error)
 	UpdateNamespace(ctx context.Context, request *persistence.UpdateNamespaceRequest) error
 }
@@ -62,11 +64,13 @@ type NamespaceService interface {
 // NewOutgoingServiceRegistry creates a new [OutgoingServiceRegistry] with the given namespace service and configuration.
 func NewOutgoingServiceRegistry(
 	namespaceService NamespaceService,
+	namespaceReplicator namespace.Replicator,
 	config *OutgoingServiceRegistryConfig,
 ) *OutgoingServiceRegistry {
 	return &OutgoingServiceRegistry{
-		namespaceService: namespaceService,
-		config:           config,
+		namespaceService:    namespaceService,
+		namespaceReplicator: namespaceReplicator,
+		config:              config,
 		sortedSetManager: collection.NewSortedSetManager[[]*persistencespb.NexusOutgoingService, *persistencespb.NexusOutgoingService, string](
 			func(service *persistencespb.NexusOutgoingService, name string) int {
 				return strings.Compare(service.Name, name)
@@ -300,11 +304,28 @@ func (h *OutgoingServiceRegistry) updateNamespace(
 	ns *persistencespb.NamespaceDetail,
 	response *persistence.GetNamespaceResponse,
 ) error {
-	return h.namespaceService.UpdateNamespace(ctx, &persistence.UpdateNamespaceRequest{
+	ns.ConfigVersion++
+	err := h.namespaceService.UpdateNamespace(ctx, &persistence.UpdateNamespaceRequest{
 		Namespace:           ns,
 		IsGlobalNamespace:   response.IsGlobalNamespace,
 		NotificationVersion: response.NotificationVersion + 1,
 	})
+	if err != nil {
+		return err
+	}
+	return h.namespaceReplicator.HandleTransmissionTask(
+		ctx,
+		enums.NAMESPACE_OPERATION_UPDATE,
+		ns.GetInfo(),
+		ns.GetConfig(),
+		ns.GetReplicationConfig(),
+		ns.GetOutgoingServices(),
+		false,
+		ns.ConfigVersion,
+		ns.GetFailoverVersion(),
+		response.IsGlobalNamespace,
+		nil,
+	)
 }
 
 func persistenceServiceToAPIService(outgoingService *persistencespb.NexusOutgoingService) *nexus.OutgoingService {

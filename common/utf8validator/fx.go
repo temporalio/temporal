@@ -1,6 +1,8 @@
 // The MIT License
 //
-// Copyright (c) 2024 Temporal Technologies Inc.  All rights reserved.
+// Copyright (c) 2020 Temporal Technologies Inc.  All rights reserved.
+//
+// Copyright (c) 2020 Uber Technologies, Inc.
 //
 // Permission is hereby granted, free of charge, to any person obtaining a copy
 // of this software and associated documentation files (the "Software"), to deal
@@ -20,27 +22,33 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-package main
+package utf8validator
 
 import (
-	"fmt"
-	"os"
+	"go.uber.org/fx"
 
-	"go.temporal.io/server/tools/mocksync"
+	"go.temporal.io/server/common/dynamicconfig"
+	"go.temporal.io/server/common/log"
+	"go.temporal.io/server/common/metrics"
 )
 
-func main() {
-	if err := run(os.Args[1:]); err != nil {
-		_, _ = fmt.Fprintf(os.Stderr, "%+v\n", err)
-		os.Exit(1)
-	}
-}
+var Module = fx.Options(
+	fx.Provide(utf8ValidatorProvider),
+)
 
-func run(args []string) error {
-	execFn := mocksync.RealExecFn
-	if os.Getenv("BUILD_ENV") == "ci" {
-		// Just run mockgen without caching if we're in the CI environment
-		return execFn(args)
-	}
-	return mocksync.Run(execFn, args)
+func utf8ValidatorProvider(
+	logger log.Logger,
+	metrics metrics.Handler,
+	col *dynamicconfig.Collection,
+) *Validator {
+	return newValidator(
+		logger,
+		metrics,
+		col.GetFloat64Property(dynamicconfig.ValidateUTF8SampleRPCRequest, 0.0),
+		col.GetFloat64Property(dynamicconfig.ValidateUTF8SampleRPCResponse, 0.0),
+		col.GetFloat64Property(dynamicconfig.ValidateUTF8SamplePersistence, 0.0),
+		col.GetBoolProperty(dynamicconfig.ValidateUTF8FailRPCRequest, false),
+		col.GetBoolProperty(dynamicconfig.ValidateUTF8FailRPCResponse, false),
+		col.GetBoolProperty(dynamicconfig.ValidateUTF8FailPersistence, false),
+	)
 }

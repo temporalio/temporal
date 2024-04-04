@@ -44,6 +44,7 @@ import (
 	"golang.org/x/exp/maps"
 	"google.golang.org/grpc/health"
 
+	"go.temporal.io/server/common/namespace"
 	cnexus "go.temporal.io/server/common/nexus"
 
 	"go.temporal.io/server/api/adminservice/v1"
@@ -101,6 +102,7 @@ func (s *operatorHandlerSuite) SetupTest() {
 	)
 	outgoingServiceRegistry := cnexus.NewOutgoingServiceRegistry(
 		s.mockResource.MetadataMgr,
+		namespace.NewNamespaceReplicator(s.mockResource.NamespaceReplicationQueue, s.mockResource.Logger),
 		cnexus.NewOutgoingServiceRegistryConfig(dynamicconfig.NewNoopCollection()),
 	)
 

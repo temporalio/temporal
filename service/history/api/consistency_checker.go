@@ -309,19 +309,17 @@ func (c *WorkflowConsistencyCheckerImpl) getCurrentRunID(
 	workflowID string,
 	lockPriority workflow.LockPriority,
 ) (runID string, retErr error) {
-	if c.shardContext.GetConfig().EnableAPIGetCurrentRunIDLock() {
-		currentRelease, err := c.workflowCache.GetOrCreateCurrentWorkflowExecution(
-			ctx,
-			c.shardContext,
-			namespace.ID(namespaceID),
-			workflowID,
-			lockPriority,
-		)
-		if err != nil {
-			return "", err
-		}
-		defer currentRelease(retErr)
+	currentRelease, err := c.workflowCache.GetOrCreateCurrentWorkflowExecution(
+		ctx,
+		c.shardContext,
+		namespace.ID(namespaceID),
+		workflowID,
+		lockPriority,
+	)
+	if err != nil {
+		return "", err
 	}
+	defer currentRelease(retErr)
 
 	resp, err := c.shardContext.GetCurrentExecution(
 		ctx,

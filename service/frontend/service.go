@@ -184,6 +184,8 @@ type Config struct {
 	EnableUpdateWorkflowExecution              dynamicconfig.BoolPropertyFnWithNamespaceFilter
 	EnableUpdateWorkflowExecutionAsyncAccepted dynamicconfig.BoolPropertyFnWithNamespaceFilter
 
+	EnableExecuteMultiOperation dynamicconfig.BoolPropertyFnWithNamespaceFilter
+
 	EnableWorkerVersioningData     dynamicconfig.BoolPropertyFnWithNamespaceFilter
 	EnableWorkerVersioningWorkflow dynamicconfig.BoolPropertyFnWithNamespaceFilter
 
@@ -191,8 +193,9 @@ type Config struct {
 	AccessHistoryFraction            dynamicconfig.FloatPropertyFn
 	AdminDeleteAccessHistoryFraction dynamicconfig.FloatPropertyFn
 
-	// EnableNexusHTTPHandler controls whether to register a handler for Nexus HTTP requests.
-	EnableNexusHTTPHandler dynamicconfig.BoolPropertyFn
+	// EnableNexusAPIs controls whether to allow invoking Nexus related APIs and whether to register a handler for Nexus
+	// HTTP requests.
+	EnableNexusAPIs dynamicconfig.BoolPropertyFn
 
 	// EnableCallbackAttachment enables attaching callbacks to workflows.
 	EnableCallbackAttachment    dynamicconfig.BoolPropertyFnWithNamespaceFilter
@@ -230,7 +233,7 @@ func NewConfig(
 		NamespaceReplicationInducingAPIsRPS: dc.GetIntProperty(dynamicconfig.FrontendNamespaceReplicationInducingAPIsRPS, 20),
 
 		MaxNamespaceRPSPerInstance:                                        dc.GetIntPropertyFilteredByNamespace(dynamicconfig.FrontendMaxNamespaceRPSPerInstance, 2400),
-		MaxNamespaceBurstRatioPerInstance:                                 dc.GetFloatPropertyFilteredByNamespace(dynamicconfig.FrontendMaxNamespaceBurstRatioPerInstance, 1),
+		MaxNamespaceBurstRatioPerInstance:                                 dc.GetFloatPropertyFilteredByNamespace(dynamicconfig.FrontendMaxNamespaceBurstRatioPerInstance, 2),
 		MaxConcurrentLongRunningRequestsPerInstance:                       dc.GetIntPropertyFilteredByNamespace(dynamicconfig.FrontendMaxConcurrentLongRunningRequestsPerInstance, 1200),
 		MaxGlobalConcurrentLongRunningRequests:                            dc.GetIntPropertyFilteredByNamespace(dynamicconfig.FrontendGlobalMaxConcurrentLongRunningRequests, 0),
 		MaxNamespaceVisibilityRPSPerInstance:                              dc.GetIntPropertyFilteredByNamespace(dynamicconfig.FrontendMaxNamespaceVisibilityRPSPerInstance, 10),
@@ -289,6 +292,8 @@ func NewConfig(
 
 		EnableWorkflowIdConflictPolicy: dc.GetBoolPropertyFnWithNamespaceFilter(dynamicconfig.EnableWorkflowIdConflictPolicy, false),
 
+		EnableExecuteMultiOperation: dc.GetBoolPropertyFnWithNamespaceFilter(dynamicconfig.FrontendEnableExecuteMultiOperation, false),
+
 		EnableUpdateWorkflowExecution:              dc.GetBoolPropertyFnWithNamespaceFilter(dynamicconfig.FrontendEnableUpdateWorkflowExecution, false),
 		EnableUpdateWorkflowExecutionAsyncAccepted: dc.GetBoolPropertyFnWithNamespaceFilter(dynamicconfig.FrontendEnableUpdateWorkflowExecutionAsyncAccepted, false),
 
@@ -298,7 +303,7 @@ func NewConfig(
 		AccessHistoryFraction:            dc.GetFloat64Property(dynamicconfig.FrontendAccessHistoryFraction, 0.0),
 		AdminDeleteAccessHistoryFraction: dc.GetFloat64Property(dynamicconfig.FrontendAdminDeleteAccessHistoryFraction, 0.0),
 
-		EnableNexusHTTPHandler:      dc.GetBoolProperty(dynamicconfig.FrontendEnableNexusHTTPHandler, false),
+		EnableNexusAPIs:             dc.GetBoolProperty(dynamicconfig.FrontendEnableNexusAPIs, false),
 		EnableCallbackAttachment:    dc.GetBoolPropertyFnWithNamespaceFilter(dynamicconfig.FrontendEnableCallbackAttachment, false),
 		AdminEnableListHistoryTasks: dc.GetBoolProperty(dynamicconfig.AdminEnableListHistoryTasks, true),
 	}
