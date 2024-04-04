@@ -46,6 +46,7 @@ import (
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
+	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/rpc"
 )
@@ -111,6 +112,15 @@ func (s *namespaceTestSuite) SetupTest() {
 }
 
 func (s *namespaceTestSuite) Test_NamespaceDelete_InvalidUTF8() {
+	dc := s.cluster.host.dcClient
+	// don't fail for this test, we're testing this behavior specifically
+	dc.OverrideValue(s.T(), dynamicconfig.ValidateUTF8FailRPCRequest, false)
+	dc.OverrideValue(s.T(), dynamicconfig.ValidateUTF8FailRPCResponse, false)
+	dc.OverrideValue(s.T(), dynamicconfig.ValidateUTF8FailPersistence, false)
+
+	capture := s.cluster.host.captureMetricsHandler.StartCapture()
+	defer s.cluster.host.captureMetricsHandler.StopCapture(capture)
+
 	ctx, cancel := rpc.NewContextWithTimeoutAndVersionHeaders(10000 * time.Second)
 	defer cancel()
 	s.False(utf8.Valid([]byte(invalidUTF8)))
@@ -153,6 +163,9 @@ func (s *namespaceTestSuite) Test_NamespaceDelete_InvalidUTF8() {
 
 		return true
 	}, 20*time.Second, time.Second)
+
+	// check that we saw some validation errors
+	s.NotEmpty(capture.Snapshot()[metrics.UTF8ValidationErrors.Name()])
 }
 
 func (s *namespaceTestSuite) Test_NamespaceDelete_Empty() {
