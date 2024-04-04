@@ -65,7 +65,10 @@ message StartWorkflowExecutionRequest {
     google.protobuf.Duration first_workflow_task_backoff = 9;
     // For child or continued-as-new workflows, including a version here from the source
     // (parent/previous) will set the initial version stamp of this workflow.
+    // Deprecated. use `inherited_build_id`
     temporal.api.common.v1.WorkerVersionStamp source_version_stamp = 10;
+    // inherited build ID from parent/previous execution
+    string inherited_build_id = 11;
 }
 
 message StartWorkflowExecutionResponse {
@@ -112,6 +115,7 @@ message GetMutableStateResponse {
     // The currently assigned build ID for this execution. Presence of this value means worker versioning is used
     // for this execution.
     string assigned_build_id = 22;
+    string inherited_build_id = 23;
 }
 
 message PollMutableStateRequest {

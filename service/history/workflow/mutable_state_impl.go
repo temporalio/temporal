@@ -1525,6 +1525,10 @@ func (ms *MutableStateImpl) GetAssignedBuildId() string {
 	return ms.executionInfo.AssignedBuildId
 }
 
+func (ms *MutableStateImpl) GetInheritedBuildId() string {
+	return ms.executionInfo.InheritedBuildId
+}
+
 func (ms *MutableStateImpl) GetMostRecentWorkerVersionStamp() *commonpb.WorkerVersionStamp {
 	return ms.executionInfo.MostRecentWorkerVersionStamp
 }
@@ -1690,12 +1694,18 @@ func (ms *MutableStateImpl) addWorkflowExecutionStartedEventForContinueAsNew(
 
 	enums.SetDefaultContinueAsNewInitiator(&command.Initiator)
 
-	// Copy version stamp to new workflow only if:
-	// - command says to use compatible version
-	// - using versioning
 	var sourceVersionStamp *commonpb.WorkerVersionStamp
+	var inheritedBuildId string
 	if command.InheritBuildId {
-		sourceVersionStamp = worker_versioning.StampIfUsingVersioning(previousExecutionInfo.MostRecentWorkerVersionStamp)
+		inheritedBuildId = previousExecutionInfo.AssignedBuildId
+		if inheritedBuildId == "" {
+			// TODO: this is only needed for old versioning. get rid of StartWorkflowExecutionRequest.SourceVersionStamp
+			// [cleanup-old-wv]
+			// Copy version stamp to new workflow only if:
+			// - command says to use compatible version
+			// - using versioning
+			sourceVersionStamp = worker_versioning.StampIfUsingVersioning(previousExecutionInfo.MostRecentWorkerVersionStamp)
+		}
 	}
 
 	req := &historyservice.StartWorkflowExecutionRequest{
@@ -1708,6 +1718,7 @@ func (ms *MutableStateImpl) addWorkflowExecutionStartedEventForContinueAsNew(
 		// enforce minimal interval between runs to prevent tight loop continue as new spin.
 		FirstWorkflowTaskBackoff: previousExecutionState.ContinueAsNewMinBackoff(command.BackoffStartInterval),
 		SourceVersionStamp:       sourceVersionStamp,
+		InheritedBuildId:         inheritedBuildId,
 	}
 	if command.GetInitiator() == enumspb.CONTINUE_AS_NEW_INITIATOR_RETRY {
 		req.Attempt = previousExecutionState.GetExecutionInfo().Attempt + 1
@@ -1931,7 +1942,16 @@ func (ms *MutableStateImpl) ApplyWorkflowExecutionStartedEvent(
 	if event.SearchAttributes != nil {
 		ms.executionInfo.SearchAttributes = event.SearchAttributes.GetIndexedFields()
 	}
-	if event.SourceVersionStamp.GetUseVersioning() && event.SourceVersionStamp.GetBuildId() != "" {
+
+	if inheritedBuildId := event.InheritedBuildId; inheritedBuildId != "" {
+		ms.executionInfo.InheritedBuildId = inheritedBuildId
+		ms.executionInfo.AssignedBuildId = inheritedBuildId
+		limit := ms.config.SearchAttributesSizeOfValueLimit(string(ms.namespaceEntry.Name()))
+		if _, err := ms.addBuildIdsWithNoVisibilityTask([]string{worker_versioning.VersionedBuildIdSearchAttribute(inheritedBuildId)}, limit); err != nil {
+			return err
+		}
+	} else if event.SourceVersionStamp.GetUseVersioning() && event.SourceVersionStamp.GetBuildId() != "" {
+		// TODO: [cleanup-old-wv]
 		limit := ms.config.SearchAttributesSizeOfValueLimit(string(ms.namespaceEntry.Name()))
 		if _, err := ms.addBuildIdsWithNoVisibilityTask([]string{worker_versioning.VersionedBuildIdSearchAttribute(event.SourceVersionStamp.BuildId)}, limit); err != nil {
 			return err
