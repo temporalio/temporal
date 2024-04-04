@@ -212,7 +212,9 @@ func (s *BeanImpl) Close() {
 	s.namespaceReplicationQueue.Stop()
 	s.shardManager.Close()
 	s.executionManager.Close()
-	s.nexusIncomingServiceManager.Close()
+	if s.nexusIncomingServiceManager != nil {
+		s.nexusIncomingServiceManager.Close()
+	}
 
 	s.factory.Close()
 	s.isClosed = true
