@@ -43,7 +43,7 @@ import (
 	"go.temporal.io/server/internal/goro"
 )
 
-var errNexusAPIsDisabled = serviceerror.NewFailedPrecondition("error Nexus APIs are disabled.")
+var errNexusAPIsDisabled = serviceerror.NewNotFound("error Nexus APIs are disabled.")
 
 type (
 	IncomingServiceRegistryConfig struct {
@@ -66,7 +66,6 @@ type (
 		tableVersion int64
 		services     map[string]*nexus.IncomingService // Mapping of service ID -> service.
 
-		initHandle    *goro.Handle
 		refreshPoller *goro.Handle
 
 		matchingClient matchingservice.MatchingServiceClient
@@ -109,17 +108,12 @@ func (r *IncomingServiceRegistry) StartLifecycle() {
 		context.Background(),
 		headers.SystemBackgroundCallerInfo,
 	)
-	r.initHandle = goro.NewHandle(backgroundCtx).Go(r.initializeServicesLoop)
 	r.refreshPoller = goro.NewHandle(backgroundCtx).Go(r.refreshServicesLoop)
 }
 
 // StopLifecycle stops this component. It should only be invoked by an fx lifecycle hook.
 // Should not be called multiple times or concurrently with StartLifecycle()
 func (r *IncomingServiceRegistry) StopLifecycle() {
-	if r.initHandle != nil {
-		r.initHandle.Cancel()
-		<-r.initHandle.Done()
-	}
 	if r.refreshPoller != nil {
 		r.refreshPoller.Cancel()
 		<-r.refreshPoller.Done()
@@ -127,6 +121,10 @@ func (r *IncomingServiceRegistry) StopLifecycle() {
 }
 
 func (r *IncomingServiceRegistry) Get(ctx context.Context, id string) (*nexus.IncomingService, error) {
+	if !r.config.nexusAPIsEnabled() {
+		return nil, errNexusAPIsDisabled
+	}
+
 	if err := r.waitUntilInitialized(ctx); err != nil {
 		return nil, err
 	}
@@ -143,10 +141,6 @@ func (r *IncomingServiceRegistry) Get(ctx context.Context, id string) (*nexus.In
 }
 
 func (r *IncomingServiceRegistry) waitUntilInitialized(ctx context.Context) error {
-	if !r.config.nexusAPIsEnabled() {
-		return errNexusAPIsDisabled
-	}
-
 	select {
 	case <-r.serviceDataReady:
 		return nil
@@ -155,59 +149,38 @@ func (r *IncomingServiceRegistry) waitUntilInitialized(ctx context.Context) erro
 	}
 }
 
-// initializeServicesLoop initializes service data once frontend Nexus APIs have been enabled.
-func (r *IncomingServiceRegistry) initializeServicesLoop(ctx context.Context) error {
-	hasLoadedServiceData := false
-
-	for ctx.Err() == nil {
-		if !r.config.nexusAPIsEnabled() {
-			// initialize again if re-enabled
-			if hasLoadedServiceData {
-				// only reset the waiting channel if we previously had loaded data
-				r.serviceDataReady = make(chan struct{})
-			}
-			hasLoadedServiceData = false
-		} else if !hasLoadedServiceData {
-			// only try to initialize once
-			err := r.initializeServices(ctx)
-			if err != nil {
-				r.logger.Error("unable to initialize Nexus incoming service registry cache", tag.Error(err))
-			} else {
-				hasLoadedServiceData = true
-				close(r.serviceDataReady)
-			}
-		}
-		common.InterruptibleSleep(ctx, r.config.refreshLongPollTimeout())
-	}
-
-	return ctx.Err()
-}
-
-// initializeServices initializes the in-memory view of service data.
-// It first tries to load from matching service and falls back to querying persistence directly if matching is unavailable.
-func (r *IncomingServiceRegistry) initializeServices(ctx context.Context) error {
-	tableVersion, services, err := r.getAllServicesMatching(ctx)
-	if err != nil {
-		// Fallback to persistence on matching error during initial load.
-		r.logger.Error("error from matching when initializing Nexus incoming service cache", tag.Error(err))
-		tableVersion, services, err = r.getAllServicesPersistence(ctx)
-		if err != nil {
-			return err
-		}
-	}
-
-	r.tableVersion = tableVersion
-	r.services = services
-	return nil
-}
-
 func (r *IncomingServiceRegistry) refreshServicesLoop(ctx context.Context) error {
+	hasLoadedServiceData := false
 	minWaitTime := r.config.refreshMinWait()
 
 	for ctx.Err() == nil {
+		// Wait for Nexus APIs to be enabled.
+		if !r.config.nexusAPIsEnabled() {
+			if hasLoadedServiceData {
+				// Nexus APIs were previously enabled and service data loaded, so make future requests wait for
+				// reload once the FF is re-enabled.
+				r.serviceDataReady = make(chan struct{})
+			}
+			hasLoadedServiceData = false
+			common.InterruptibleSleep(ctx, r.config.refreshMinWait())
+			continue
+		}
+
 		start := time.Now()
-		// Ignoring errors here because they are logged where they occur and we never want to exit the refresh loop.
-		_ = backoff.ThrottleRetryContext(ctx, r.refreshServices, r.config.refreshRetryPolicy, nil)
+		if !hasLoadedServiceData {
+			// Loading services for the first time after being (re)enabled, so load with fallback to persistence
+			// and unblock any threads waiting on r.serviceDataReady if successful.
+			err := backoff.ThrottleRetryContext(ctx, r.loadServices, r.config.refreshRetryPolicy, nil)
+			if err == nil {
+				hasLoadedServiceData = true
+				close(r.serviceDataReady)
+			}
+		} else {
+			// Services have previously been loaded, so just keep them up to date by with long poll requests
+			// to matching, without fallback to persistence. Ignoring long poll errors since we will just retry
+			// on next loop iteration.
+			_ = backoff.ThrottleRetryContext(ctx, r.refreshServices, r.config.refreshRetryPolicy, nil)
+		}
 		elapsed := time.Since(start)
 
 		// In general, we want to start a new call immediately on completion of the previous
@@ -227,13 +200,26 @@ func (r *IncomingServiceRegistry) refreshServicesLoop(ctx context.Context) error
 	return ctx.Err()
 }
 
-// refreshServices sends long-poll requests to matching to check for any updates to service data.
-func (r *IncomingServiceRegistry) refreshServices(ctx context.Context) error {
-	// Wait for service data to be initialized before starting long poll.
-	if err := r.waitUntilInitialized(ctx); err != nil {
-		return err
+// loadServices initializes the in-memory view of service data.
+// It first tries to load from matching service and falls back to querying persistence directly if matching is unavailable.
+func (r *IncomingServiceRegistry) loadServices(ctx context.Context) error {
+	tableVersion, services, err := r.getAllServicesMatching(ctx)
+	if err != nil {
+		// Fallback to persistence on matching error during initial load.
+		r.logger.Error("error from matching when initializing Nexus incoming service cache", tag.Error(err))
+		tableVersion, services, err = r.getAllServicesPersistence(ctx)
+		if err != nil {
+			return err
+		}
 	}
 
+	r.tableVersion = tableVersion
+	r.services = services
+	return nil
+}
+
+// refreshServices sends long-poll requests to matching to check for any updates to service data.
+func (r *IncomingServiceRegistry) refreshServices(ctx context.Context) error {
 	r.dataLock.RLock()
 	currentTableVersion := r.tableVersion
 	r.dataLock.RUnlock()
