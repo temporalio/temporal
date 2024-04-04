@@ -92,6 +92,10 @@ func (s *VersioningIntegSuite) SetupSuite() {
 		// versioning data "soon", i.e. after a long poll interval. We can reduce the long poll
 		// interval so that we don't have to wait so long.
 		dynamicconfig.MatchingLongPollExpirationInterval: longPollTime,
+
+		// this is overridden for tests using testWithMatchingBehavior
+		dynamicconfig.MatchingNumTaskqueueReadPartitions:  4,
+		dynamicconfig.MatchingNumTaskqueueWritePartitions: 4,
 	}
 	s.setupSuite("testdata/cluster.yaml")
 }
@@ -584,6 +588,58 @@ func (s *VersioningIntegSuite) dispatchNewWorkflowV2() {
 	s.Equal(v1, dw.GetWorkflowExecutionInfo().GetMostRecentWorkerVersionStamp().GetBuildId())
 
 	s.verifyWorkflowEventsVersionStamps(ctx, run, []string{v1})
+}
+
+func (s *VersioningIntegSuite) TestDispatchNewWorkflowWithRamp() {
+	tq := s.randomizeStr(s.T().Name())
+	v1 := s.prefixed("v1")
+	v2 := s.prefixed("v2")
+
+	wf1 := func(ctx workflow.Context) (string, error) {
+		return "done v1!", nil
+	}
+	wf2 := func(ctx workflow.Context) (string, error) {
+		return "done v2!", nil
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+
+	rule := s.addAssignmentRule(ctx, tq, v1)
+	rule2 := s.addAssignmentRuleWithRamp(ctx, tq, v2, 50)
+	s.waitForAssignmentRulePropagation(ctx, tq, rule)
+	s.waitForAssignmentRulePropagation(ctx, tq, rule2)
+
+	w1 := worker.New(s.sdkClient, tq, worker.Options{
+		BuildID:                          v1,
+		UseBuildIDForVersioning:          true,
+		MaxConcurrentWorkflowTaskPollers: numPollers,
+	})
+	w1.RegisterWorkflowWithOptions(wf1, workflow.RegisterOptions{Name: "wf"})
+	s.NoError(w1.Start())
+	defer w1.Stop()
+	w2 := worker.New(s.sdkClient, tq, worker.Options{
+		BuildID:                          v2,
+		UseBuildIDForVersioning:          true,
+		MaxConcurrentWorkflowTaskPollers: numPollers,
+	})
+	w2.RegisterWorkflowWithOptions(wf2, workflow.RegisterOptions{Name: "wf"})
+	s.NoError(w2.Start())
+	defer w2.Stop()
+
+	counter := make(map[string]int)
+	for i := 0; i < 10; i++ {
+		run, err := s.sdkClient.ExecuteWorkflow(ctx, sdkclient.StartWorkflowOptions{TaskQueue: tq}, "wf")
+		s.NoError(err)
+		var out string
+		s.NoError(run.Get(ctx, &out))
+		counter[out]++
+	}
+
+	// both builds should've got executions
+	s.Greater(counter["done v1!"], 0)
+	s.Greater(counter["done v2!"], 0)
+	s.Equal(10, counter["done v1!"]+counter["done v2!"])
 }
 
 func (s *VersioningIntegSuite) TestWorkflowStaysInBuildId() {
@@ -3027,10 +3083,26 @@ func (s *VersioningIntegSuite) addNewDefaultBuildId(ctx context.Context, tq, new
 }
 
 func (s *VersioningIntegSuite) addAssignmentRule(ctx context.Context, tq, buildId string) *taskqueuepb.BuildIdAssignmentRule {
-	cT := s.listVersioningRules(ctx, tq).GetConflictToken()
 	rule := &taskqueuepb.BuildIdAssignmentRule{
 		TargetBuildId: buildId,
 	}
+	return s.doAddAssignmentRule(ctx, tq, rule)
+}
+
+func (s *VersioningIntegSuite) addAssignmentRuleWithRamp(ctx context.Context, tq, buildId string, ramp float32) *taskqueuepb.BuildIdAssignmentRule {
+	rule := &taskqueuepb.BuildIdAssignmentRule{
+		TargetBuildId: buildId,
+		Ramp: &taskqueuepb.BuildIdAssignmentRule_PercentageRamp{
+			PercentageRamp: &taskqueuepb.RampByPercentage{
+				RampPercentage: ramp,
+			},
+		},
+	}
+	return s.doAddAssignmentRule(ctx, tq, rule)
+}
+
+func (s *VersioningIntegSuite) doAddAssignmentRule(ctx context.Context, tq string, rule *taskqueuepb.BuildIdAssignmentRule) *taskqueuepb.BuildIdAssignmentRule {
+	cT := s.listVersioningRules(ctx, tq).GetConflictToken()
 	res, err := s.engine.UpdateWorkerVersioningRules(ctx, &workflowservice.UpdateWorkerVersioningRulesRequest{
 		Namespace:     s.namespace,
 		TaskQueue:     tq,

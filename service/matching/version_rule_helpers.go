@@ -26,9 +26,11 @@ package matching
 
 import (
 	"fmt"
+	"math"
 	"slices"
 	"time"
 
+	"github.com/dgryski/go-farm"
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/api/taskqueue/v1"
 	"go.temporal.io/api/workflowservice/v1"
@@ -489,13 +491,27 @@ func dfs(curr string, visited, inStack map[string]bool, nodes map[string][]strin
 	return false
 }
 
-func FindAssignmentBuildId(rules []*persistencespb.AssignmentRule) string {
+func FindAssignmentBuildId(rules []*persistencespb.AssignmentRule, runId string) string {
+	rampThreshold := -1.
 	for _, r := range rules {
 		if r.GetDeleteTimestamp() != nil {
 			continue
 		}
-		// TODO: implement filter and ramp
+		if ramp := r.GetRule().GetPercentageRamp(); ramp != nil {
+			if rampThreshold == -1. {
+				rampThreshold = calcRampThreshold(runId)
+			}
+			if float64(ramp.GetRampPercentage()) <= rampThreshold {
+				continue
+			}
+		}
 		return r.GetRule().GetTargetBuildId()
 	}
 	return ""
+}
+
+// calcRampThreshold returns a number in [0, 100) that is deterministically calculated based on the passed id
+func calcRampThreshold(id string) float64 {
+	h := farm.Fingerprint32([]byte(id))
+	return 100 * (float64(h) / (float64(math.MaxUint32) + 1))
 }
