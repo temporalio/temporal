@@ -1943,8 +1943,16 @@ func (ms *MutableStateImpl) ApplyWorkflowExecutionStartedEvent(
 	if event.SearchAttributes != nil {
 		ms.executionInfo.SearchAttributes = event.SearchAttributes.GetIndexedFields()
 	}
-	// TODO: [cleanup-old-wv]
-	if event.SourceVersionStamp.GetUseVersioning() && event.SourceVersionStamp.GetBuildId() != "" {
+
+	if inheritedBuildId := event.InheritedBuildId; inheritedBuildId != "" {
+		ms.executionInfo.InheritedBuildId = inheritedBuildId
+		ms.executionInfo.AssignedBuildId = inheritedBuildId
+		limit := ms.config.SearchAttributesSizeOfValueLimit(string(ms.namespaceEntry.Name()))
+		if _, err := ms.addBuildIdsWithNoVisibilityTask([]string{worker_versioning.VersionedBuildIdSearchAttribute(inheritedBuildId)}, limit); err != nil {
+			return err
+		}
+	} else if event.SourceVersionStamp.GetUseVersioning() && event.SourceVersionStamp.GetBuildId() != "" {
+		// TODO: [cleanup-old-wv]
 		limit := ms.config.SearchAttributesSizeOfValueLimit(string(ms.namespaceEntry.Name()))
 		if _, err := ms.addBuildIdToSearchAttributesWithNoVisibilityTask(event.SourceVersionStamp, limit); err != nil {
 			return err

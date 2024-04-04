@@ -563,6 +563,58 @@ func (s *VersioningIntegSuite) dispatchNewWorkflow(newVersioning bool) {
 	}
 }
 
+func (s *VersioningIntegSuite) TestDispatchNewWorkflowWithRamp() {
+	tq := s.randomizeStr(s.T().Name())
+	v1 := s.prefixed("v1")
+	v2 := s.prefixed("v2")
+
+	wf1 := func(ctx workflow.Context) (string, error) {
+		return "done v1!", nil
+	}
+	wf2 := func(ctx workflow.Context) (string, error) {
+		return "done v2!", nil
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+
+	rule := s.addAssignmentRule(ctx, tq, v1)
+	rule2 := s.addAssignmentRuleWithRamp(ctx, tq, v2, 50)
+	s.waitForAssignmentRulePropagation(ctx, tq, rule)
+	s.waitForAssignmentRulePropagation(ctx, tq, rule2)
+
+	w1 := worker.New(s.sdkClient, tq, worker.Options{
+		BuildID:                          v1,
+		UseBuildIDForVersioning:          true,
+		MaxConcurrentWorkflowTaskPollers: numPollers,
+	})
+	w1.RegisterWorkflowWithOptions(wf1, workflow.RegisterOptions{Name: "wf"})
+	s.NoError(w1.Start())
+	defer w1.Stop()
+	w2 := worker.New(s.sdkClient, tq, worker.Options{
+		BuildID:                          v2,
+		UseBuildIDForVersioning:          true,
+		MaxConcurrentWorkflowTaskPollers: numPollers,
+	})
+	w2.RegisterWorkflowWithOptions(wf2, workflow.RegisterOptions{Name: "wf"})
+	s.NoError(w2.Start())
+	defer w2.Stop()
+
+	counter := make(map[string]int)
+	for i := 0; i < 10; i++ {
+		run, err := s.sdkClient.ExecuteWorkflow(ctx, sdkclient.StartWorkflowOptions{TaskQueue: tq}, "wf")
+		s.NoError(err)
+		var out string
+		s.NoError(run.Get(ctx, &out))
+		counter[out]++
+	}
+
+	// both builds should've got executions
+	s.Greater(counter["done v1!"], 0)
+	s.Greater(counter["done v2!"], 0)
+	s.Equal(10, counter["done v1!"]+counter["done v2!"])
+}
+
 func (s *VersioningIntegSuite) TestWorkflowStaysInBuildId() {
 	s.testWithMatchingBehavior(s.workflowStaysInBuildId)
 }
@@ -3199,7 +3251,7 @@ func (s *VersioningIntegSuite) validateBuildIdAfterReset(ctx context.Context, wf
 	s.validateWorkflowEventsVersionStamps(ctx, run3.GetID(), run3.GetRunID(), []string{v1, v1, v1}, inheritedBuildId)
 }
 
-func (s *VersioningIntegSuite) TestDescribeTaskQueue() {
+func (s *VersioningIntegSuite) TestDescribeTaskQueueLegacy_VersionSets() {
 	// force one partition since DescribeTaskQueue only goes to the root
 	dc := s.testCluster.host.dcClient
 	dc.OverrideValue(s.T(), dynamicconfig.MatchingNumTaskqueueReadPartitions, 1)
@@ -3386,6 +3438,7 @@ func (s *VersioningIntegSuite) insertAssignmentRule(
 	if expectSuccess {
 		s.NoError(err)
 		s.NotNil(res)
+		s.Assert().Equal(newBuildId, res.GetAssignmentRules()[idx].GetRule().GetTargetBuildId())
 		return res.GetConflictToken()
 	} else {
 		s.Error(err)
@@ -3415,6 +3468,7 @@ func (s *VersioningIntegSuite) replaceAssignmentRule(
 	if expectSuccess {
 		s.NoError(err)
 		s.NotNil(res)
+		s.Assert().Equal(newBuildId, res.GetAssignmentRules()[idx].GetRule().GetTargetBuildId())
 		return res.GetConflictToken()
 	} else {
 		s.Error(err)
@@ -3428,6 +3482,18 @@ func (s *VersioningIntegSuite) replaceAssignmentRule(
 func (s *VersioningIntegSuite) deleteAssignmentRule(
 	ctx context.Context, tq string,
 	idx int32, conflictToken []byte, expectSuccess bool) []byte {
+	getResp, err := s.engine.GetWorkerVersioningRules(ctx, &workflowservice.GetWorkerVersioningRulesRequest{
+		Namespace: s.namespace,
+		TaskQueue: tq,
+	})
+	s.NoError(err)
+	s.NotNil(getResp)
+
+	var prevRule *taskqueuepb.BuildIdAssignmentRule
+	if expectSuccess {
+		prevRule = getResp.GetAssignmentRules()[idx].GetRule()
+	}
+
 	res, err := s.engine.UpdateWorkerVersioningRules(ctx, &workflowservice.UpdateWorkerVersioningRulesRequest{
 		Namespace:     s.namespace,
 		TaskQueue:     tq,
@@ -3441,6 +3507,14 @@ func (s *VersioningIntegSuite) deleteAssignmentRule(
 	if expectSuccess {
 		s.NoError(err)
 		s.NotNil(res)
+		found := false
+		for _, r := range res.GetAssignmentRules() {
+			if r.GetRule() == prevRule {
+				found = true
+				break
+			}
+		}
+		s.Assert().False(found)
 		return res.GetConflictToken()
 	} else {
 		s.Error(err)
@@ -3470,6 +3544,14 @@ func (s *VersioningIntegSuite) insertRedirectRule(
 	if expectSuccess {
 		s.NoError(err)
 		s.NotNil(res)
+		found := false
+		for _, r := range res.GetCompatibleRedirectRules() {
+			if r.GetRule().GetSourceBuildId() == sourceBuildId && r.GetRule().GetTargetBuildId() == targetBuildId {
+				found = true
+				break
+			}
+		}
+		s.Assert().True(found)
 		return res.GetConflictToken()
 	} else {
 		s.Error(err)
@@ -3499,6 +3581,14 @@ func (s *VersioningIntegSuite) replaceRedirectRule(
 	if expectSuccess {
 		s.NoError(err)
 		s.NotNil(res)
+		found := false
+		for _, r := range res.GetCompatibleRedirectRules() {
+			if r.GetRule().GetSourceBuildId() == sourceBuildId && r.GetRule().GetTargetBuildId() == targetBuildId {
+				found = true
+				break
+			}
+		}
+		s.Assert().True(found)
 		return res.GetConflictToken()
 	} else {
 		s.Error(err)
@@ -3525,6 +3615,14 @@ func (s *VersioningIntegSuite) deleteRedirectRule(
 	if expectSuccess {
 		s.NoError(err)
 		s.NotNil(res)
+		found := false
+		for _, r := range res.GetCompatibleRedirectRules() {
+			if r.GetRule().GetSourceBuildId() == sourceBuildId {
+				found = true
+				break
+			}
+		}
+		s.Assert().False(found)
 		return res.GetConflictToken()
 	} else {
 		s.Error(err)
@@ -3552,6 +3650,27 @@ func (s *VersioningIntegSuite) commitBuildId(
 	if expectSuccess {
 		s.NoError(err)
 		s.NotNil(res)
+		// 1. Adds an assignment rule (with full ramp) for the target Build ID at the end of the list.
+		endIdx := len(res.GetAssignmentRules()) - 1
+		addedRule := res.GetAssignmentRules()[endIdx].GetRule()
+		s.Assert().Equal(targetBuildId, addedRule.GetTargetBuildId())
+		s.Assert().Nil(addedRule.GetRamp())
+		s.Assert().Nil(addedRule.GetPercentageRamp())
+
+		foundOtherAssignmentRuleForTarget := false
+		foundFullyRampedAssignmentRuleForOtherTarget := false
+		for i, r := range res.GetAssignmentRules() {
+			if r.GetRule().GetTargetBuildId() == targetBuildId && i != endIdx {
+				foundOtherAssignmentRuleForTarget = true
+			}
+			if r.GetRule().GetRamp() == nil && r.GetRule().GetTargetBuildId() != targetBuildId {
+				foundFullyRampedAssignmentRuleForOtherTarget = true
+			}
+		}
+		// 2. Removes all previously added assignment rules to the given target Build ID (if any).
+		s.Assert().False(foundOtherAssignmentRuleForTarget)
+		// 3. Removes any fully-ramped assignment rule for other Build IDs.
+		s.Assert().False(foundFullyRampedAssignmentRuleForOtherTarget)
 		return res.GetConflictToken()
 	} else {
 		s.Error(err)
@@ -3592,10 +3711,26 @@ func (s *VersioningIntegSuite) addNewDefaultBuildId(ctx context.Context, tq, new
 }
 
 func (s *VersioningIntegSuite) addAssignmentRule(ctx context.Context, tq, buildId string) *taskqueuepb.BuildIdAssignmentRule {
-	cT := s.listVersioningRules(ctx, tq).GetConflictToken()
 	rule := &taskqueuepb.BuildIdAssignmentRule{
 		TargetBuildId: buildId,
 	}
+	return s.doAddAssignmentRule(ctx, tq, rule)
+}
+
+func (s *VersioningIntegSuite) addAssignmentRuleWithRamp(ctx context.Context, tq, buildId string, ramp float32) *taskqueuepb.BuildIdAssignmentRule {
+	rule := &taskqueuepb.BuildIdAssignmentRule{
+		TargetBuildId: buildId,
+		Ramp: &taskqueuepb.BuildIdAssignmentRule_PercentageRamp{
+			PercentageRamp: &taskqueuepb.RampByPercentage{
+				RampPercentage: ramp,
+			},
+		},
+	}
+	return s.doAddAssignmentRule(ctx, tq, rule)
+}
+
+func (s *VersioningIntegSuite) doAddAssignmentRule(ctx context.Context, tq string, rule *taskqueuepb.BuildIdAssignmentRule) *taskqueuepb.BuildIdAssignmentRule {
+	cT := s.listVersioningRules(ctx, tq).GetConflictToken()
 	res, err := s.engine.UpdateWorkerVersioningRules(ctx, &workflowservice.UpdateWorkerVersioningRulesRequest{
 		Namespace:     s.namespace,
 		TaskQueue:     tq,

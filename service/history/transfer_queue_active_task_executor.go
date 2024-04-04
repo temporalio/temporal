@@ -820,6 +820,7 @@ func (t *transferQueueActiveTaskExecutor) processStartChildExecution(
 	var sourceVersionStamp *commonpb.WorkerVersionStamp
 	var inheritedBuildId string
 	if attributes.InheritBuildId {
+		// setting inheritedBuildId of the child wf to the assignedBuildId of the parent
 		inheritedBuildId = mutableState.GetAssignedBuildId()
 		if inheritedBuildId == "" {
 			// TODO: this is only needed for old versioning. get rid of StartWorkflowExecutionRequest.SourceVersionStamp
