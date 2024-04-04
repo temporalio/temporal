@@ -43,8 +43,6 @@ import (
 	"go.temporal.io/server/internal/goro"
 )
 
-var errNexusAPIsDisabled = serviceerror.NewNotFound("error Nexus APIs are disabled.")
-
 type (
 	IncomingServiceRegistryConfig struct {
 		nexusAPIsEnabled       dynamicconfig.BoolPropertyFn
@@ -121,10 +119,6 @@ func (r *IncomingServiceRegistry) StopLifecycle() {
 }
 
 func (r *IncomingServiceRegistry) Get(ctx context.Context, id string) (*nexus.IncomingService, error) {
-	if !r.config.nexusAPIsEnabled() {
-		return nil, errNexusAPIsDisabled
-	}
-
 	if err := r.waitUntilInitialized(ctx); err != nil {
 		return nil, err
 	}
@@ -176,8 +170,8 @@ func (r *IncomingServiceRegistry) refreshServicesLoop(ctx context.Context) error
 				close(r.serviceDataReady)
 			}
 		} else {
-			// Services have previously been loaded, so just keep them up to date by with long poll requests
-			// to matching, without fallback to persistence. Ignoring long poll errors since we will just retry
+			// Services have previously been loaded, so just keep them up to date with long poll requests to
+			// matching, without fallback to persistence. Ignoring long poll errors since we will just retry
 			// on next loop iteration.
 			_ = backoff.ThrottleRetryContext(ctx, r.refreshServices, r.config.refreshRetryPolicy, nil)
 		}
