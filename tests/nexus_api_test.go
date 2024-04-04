@@ -174,9 +174,6 @@ func (s *ClientFunctionalSuite) TestNexusStartOperation_Outcomes() {
 		// },
 	}
 
-	// Wait to make sure all incoming services are loaded into memory before starting tests.
-	time.Sleep(100 * time.Millisecond)
-
 	testFn := func(t *testing.T, tc testcase, dispatchURL string) {
 		ctx := NewContext()
 
@@ -207,6 +204,9 @@ func (s *ClientFunctionalSuite) TestNexusStartOperation_Outcomes() {
 		s.Contains(snap["nexus_latency"][0].Tags, "service")
 		s.Equal(metrics.MetricUnit(metrics.Milliseconds), snap["nexus_latency"][0].Unit)
 	}
+
+	// Wait to make sure all incoming services are loaded into memory before starting tests.
+	time.Sleep(500 * time.Millisecond)
 
 	for _, tc := range testCases {
 		tc := tc
@@ -273,9 +273,6 @@ func (s *ClientFunctionalSuite) TestNexusStartOperation_WithNamespaceAndTaskQueu
 func (s *ClientFunctionalSuite) TestNexusStartOperation_Forbidden() {
 	taskQueue := s.randomizeStr("task-queue")
 	testService := s.createNexusIncomingService(s.randomizeStr("test-service"), taskQueue)
-
-	// Wait to make sure all incoming services are loaded into memory before starting tests.
-	time.Sleep(100 * time.Millisecond)
 
 	type testcase struct {
 		name           string
@@ -344,6 +341,9 @@ func (s *ClientFunctionalSuite) TestNexusStartOperation_Forbidden() {
 		s.Equal(int64(1), snap["nexus_requests"][0].Value)
 	}
 
+	// Wait to make sure all incoming services are loaded into memory before starting tests.
+	time.Sleep(500 * time.Millisecond)
+
 	for _, tc := range testCases {
 		tc := tc
 		s.T().Run(tc.name, func(t *testing.T) {
@@ -363,9 +363,6 @@ func (s *ClientFunctionalSuite) TestNexusStartOperation_Forbidden() {
 func (s *ClientFunctionalSuite) TestNexusStartOperation_Claims() {
 	taskQueue := s.randomizeStr("task-queue")
 	testService := s.createNexusIncomingService(s.randomizeStr("test-service"), taskQueue)
-
-	// Wait to make sure all incoming services are loaded into memory before starting tests.
-	time.Sleep(100 * time.Millisecond)
 
 	type testcase struct {
 		name      string
@@ -452,6 +449,9 @@ func (s *ClientFunctionalSuite) TestNexusStartOperation_Claims() {
 		tc.assertion(result, err, snap)
 	}
 
+	// Wait to make sure all incoming services are loaded into memory before starting tests.
+	time.Sleep(500 * time.Millisecond)
+
 	for _, tc := range testCases {
 		tc := tc
 		s.T().Run(tc.name, func(t *testing.T) {
@@ -530,9 +530,6 @@ func (s *ClientFunctionalSuite) TestNexusCancelOperation_Outcomes() {
 		// },
 	}
 
-	// Wait to make sure all incoming services are loaded into memory before starting tests.
-	time.Sleep(100 * time.Millisecond)
-
 	testFn := func(t *testing.T, tc testcase, dispatchURL string) {
 		ctx := NewContext()
 
@@ -561,6 +558,9 @@ func (s *ClientFunctionalSuite) TestNexusCancelOperation_Outcomes() {
 		s.Contains(snap["nexus_latency"][0].Tags, "service")
 		s.Equal(metrics.MetricUnit(metrics.Milliseconds), snap["nexus_latency"][0].Unit)
 	}
+
+	// Wait to make sure all incoming services are loaded into memory before starting tests.
+	time.Sleep(500 * time.Millisecond)
 
 	for _, tc := range testCases {
 		tc := tc
