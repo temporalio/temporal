@@ -32,6 +32,7 @@ import (
 	commonpb "go.temporal.io/api/common/v1"
 	"go.temporal.io/api/enums/v1"
 	"go.temporal.io/server/common/persistence/serialization"
+	"go.temporal.io/server/common/utf8validator"
 )
 
 type payloadSerializer struct{}
@@ -80,6 +81,9 @@ func (payloadSerializer) Deserialize(content *nexus.Content, v any) error {
 	switch mediaType {
 	case "application/x-temporal-payload":
 		err := payload.Unmarshal(content.Data)
+		if err == nil {
+			err = utf8validator.Validate(payload, utf8validator.SourceRPCRequest)
+		}
 		if err != nil {
 			return serialization.NewDeserializationError(enums.ENCODING_TYPE_PROTO3, err)
 		}
@@ -174,6 +178,9 @@ func (payloadSerializer) Serialize(v any) (*nexus.Content, error) {
 }
 
 func xTemporalPayload(payload *commonpb.Payload) (*nexus.Content, error) {
+	if err := utf8validator.Validate(payload, utf8validator.SourceRPCResponse); err != nil {
+		return nil, fmt.Errorf("%w: payload marshal error: %w", errSerializer, err)
+	}
 	data, err := payload.Marshal()
 	if err != nil {
 		return nil, fmt.Errorf("%w: payload marshal error: %w", errSerializer, err)

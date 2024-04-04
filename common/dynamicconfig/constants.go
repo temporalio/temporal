@@ -128,6 +128,17 @@ const (
 	// How many extra goroutines can be created per root.
 	DeadlockMaxWorkersPerRoot = "system.deadlock.MaxWorkersPerRoot"
 
+	// utf-8 validation
+	// The *Sample* keys control the sample rate of messages to examine as a fraction in [0.0, 1.0].
+	// The *Fail* keys control whether a validation failure causes an error (rpc error for rpc
+	// request/response, [de]serialization error for persistence).
+	ValidateUTF8SampleRPCRequest  = "system.validateUTF8.sample.rpcRequest"
+	ValidateUTF8SampleRPCResponse = "system.validateUTF8.sample.rpcResponse"
+	ValidateUTF8SamplePersistence = "system.validateUTF8.sample.persistence"
+	ValidateUTF8FailRPCRequest    = "system.validateUTF8.fail.rpcRequest"
+	ValidateUTF8FailRPCResponse   = "system.validateUTF8.fail.rpcResponse"
+	ValidateUTF8FailPersistence   = "system.validateUTF8.fail.persistence"
+
 	// keys for size limit
 
 	// BlobSizeLimitError is the per event blob size limit
@@ -377,8 +388,6 @@ const (
 	FrontendEnableSchedules = "frontend.enableSchedules"
 	// FrontendEnableNexusAPIs enables serving Nexus HTTP requests in the frontend.
 	FrontendEnableNexusAPIs = "frontend.enableNexusAPIs"
-	// FrontendInitializeNexusIncomingServicesTimeout is the maximum time allowed for initializing Nexus incoming services.
-	FrontendInitializeNexusIncomingServicesTimeout = "frontend.initializeNexusIncomingServicesTimeout"
 	// FrontendRefreshNexusIncomingServicesLongPollTimeout is the maximum duration of background long poll requests to update Nexus incoming services.
 	FrontendRefreshNexusIncomingServicesLongPollTimeout = "frontend.refreshNexusIncomingServicesLongPollTimeout"
 	// FrontendRefreshNexusIncomingServicesMinWait is the minimum wait time between background long poll requests to update Nexus incoming services.

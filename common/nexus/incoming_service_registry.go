@@ -36,7 +36,6 @@ import (
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/backoff"
 	"go.temporal.io/server/common/dynamicconfig"
-	"go.temporal.io/server/common/future"
 	"go.temporal.io/server/common/headers"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
@@ -46,11 +45,11 @@ import (
 
 type (
 	IncomingServiceRegistryConfig struct {
-		initializeServicesTimeout dynamicconfig.DurationPropertyFn
-		refreshLongPollTimeout    dynamicconfig.DurationPropertyFn
-		refreshPageSize           dynamicconfig.IntPropertyFn
-		refreshMinWait            dynamicconfig.DurationPropertyFn
-		refreshRetryPolicy        backoff.RetryPolicy
+		nexusAPIsEnabled       dynamicconfig.BoolPropertyFn
+		refreshLongPollTimeout dynamicconfig.DurationPropertyFn
+		refreshPageSize        dynamicconfig.IntPropertyFn
+		refreshMinWait         dynamicconfig.DurationPropertyFn
+		refreshRetryPolicy     backoff.RetryPolicy
 	}
 
 	// IncomingServiceRegistry manages a cached view of Nexus incoming services.
@@ -59,7 +58,7 @@ type (
 	IncomingServiceRegistry struct {
 		config *IncomingServiceRegistryConfig
 
-		serviceDataReady *future.FutureImpl[struct{}]
+		serviceDataReady chan struct{}
 
 		dataLock     sync.RWMutex // Protects tableVersion and services.
 		tableVersion int64
@@ -75,10 +74,10 @@ type (
 
 func NewIncomingServiceRegistryConfig(dc *dynamicconfig.Collection) *IncomingServiceRegistryConfig {
 	config := &IncomingServiceRegistryConfig{
-		initializeServicesTimeout: dc.GetDurationProperty(dynamicconfig.FrontendInitializeNexusIncomingServicesTimeout, 1*time.Minute),
-		refreshLongPollTimeout:    dc.GetDurationProperty(dynamicconfig.FrontendRefreshNexusIncomingServicesLongPollTimeout, 5*time.Minute),
-		refreshPageSize:           dc.GetIntProperty(dynamicconfig.NexusIncomingServiceListDefaultPageSize, 1000),
-		refreshMinWait:            dc.GetDurationProperty(dynamicconfig.FrontendRefreshNexusIncomingServicesLongPollTimeout, 1*time.Second),
+		nexusAPIsEnabled:       dc.GetBoolProperty(dynamicconfig.FrontendEnableNexusAPIs, false),
+		refreshLongPollTimeout: dc.GetDurationProperty(dynamicconfig.FrontendRefreshNexusIncomingServicesLongPollTimeout, 5*time.Minute),
+		refreshPageSize:        dc.GetIntProperty(dynamicconfig.NexusIncomingServiceListDefaultPageSize, 1000),
+		refreshMinWait:         dc.GetDurationProperty(dynamicconfig.FrontendRefreshNexusIncomingServicesLongPollTimeout, 1*time.Second),
 	}
 	config.refreshRetryPolicy = backoff.NewExponentialRetryPolicy(config.refreshMinWait()).WithMaximumInterval(config.refreshLongPollTimeout())
 	return config
@@ -92,7 +91,7 @@ func NewIncomingServiceRegistry(
 ) *IncomingServiceRegistry {
 	return &IncomingServiceRegistry{
 		config:           config,
-		serviceDataReady: future.NewFuture[struct{}](),
+		serviceDataReady: make(chan struct{}),
 		services:         make(map[string]*nexus.IncomingService),
 		matchingClient:   matchingClient,
 		persistence:      persistence,
@@ -103,11 +102,11 @@ func NewIncomingServiceRegistry(
 // StartLifecycle starts this component. It should only be invoked by an fx lifecycle hook.
 // Should not be called multiple times or concurrently with StopLifecycle()
 func (r *IncomingServiceRegistry) StartLifecycle() {
-	refreshCtx := headers.SetCallerInfo(
+	backgroundCtx := headers.SetCallerInfo(
 		context.Background(),
 		headers.SystemBackgroundCallerInfo,
 	)
-	r.refreshPoller = goro.NewHandle(refreshCtx).Go(r.refreshServicesLoop)
+	r.refreshPoller = goro.NewHandle(backgroundCtx).Go(r.refreshServicesLoop)
 }
 
 // StopLifecycle stops this component. It should only be invoked by an fx lifecycle hook.
@@ -120,10 +119,8 @@ func (r *IncomingServiceRegistry) StopLifecycle() {
 }
 
 func (r *IncomingServiceRegistry) Get(ctx context.Context, id string) (*nexus.IncomingService, error) {
-	if !r.serviceDataReady.Ready() {
-		if err := r.initializeServicesWithTimeout(ctx); err != nil {
-			return nil, err
-		}
+	if err := r.waitUntilInitialized(ctx); err != nil {
+		return nil, err
 	}
 
 	r.dataLock.RLock()
@@ -137,67 +134,47 @@ func (r *IncomingServiceRegistry) Get(ctx context.Context, id string) (*nexus.In
 	return service, nil
 }
 
-// initializeServicesWithTimeout initializes service data or waits until the context deadline if another
-// thread is initializing service data. Data initialization happens in the background and will continue
-// even if the original request context times out.
-func (r *IncomingServiceRegistry) initializeServicesWithTimeout(ctx context.Context) error {
-	var initErr error
-	waitCh := make(chan struct{})
-
-	go func() {
-		r.dataLock.Lock()
-		defer r.dataLock.Unlock()
-		defer close(waitCh)
-		initCtx, cancel := context.WithTimeout(context.Background(), r.config.initializeServicesTimeout())
-		defer cancel()
-		initErr = r.initializeServicesLocked(initCtx)
-	}()
-
+func (r *IncomingServiceRegistry) waitUntilInitialized(ctx context.Context) error {
 	select {
-	case <-waitCh:
-		return initErr
+	case <-r.serviceDataReady:
+		return nil
 	case <-ctx.Done():
 		return ctx.Err()
 	}
 }
 
-// initializeServicesLocked initializes the in-memory view of service data.
-// It first tries to load from matching service and falls back to querying persistence directly if matching is unavailable.
-func (r *IncomingServiceRegistry) initializeServicesLocked(ctx context.Context) error {
-	if r.serviceDataReady.Ready() {
-		// Indicates service data was loaded by another thread while waiting for write lock.
-		return nil
-	}
-
-	tableVersion, services, err := r.getAllServicesMatching(ctx)
-	if err != nil {
-		// Fallback to persistence on matching error during initial load.
-		r.logger.Error("error from matching when initializing Nexus incoming service cache", tag.Error(err))
-		tableVersion, services, err = r.getAllServicesPersistence(ctx)
-		if err != nil {
-			return err
-		}
-	}
-
-	r.tableVersion = tableVersion
-	r.services = services
-	r.serviceDataReady.Set(struct{}{}, nil)
-
-	return nil
-}
-
 func (r *IncomingServiceRegistry) refreshServicesLoop(ctx context.Context) error {
-	// Wait for service data to be initialized before starting long poll loop.
-	if _, err := r.serviceDataReady.Get(ctx); err != nil {
-		return err
-	}
-
+	hasLoadedServiceData := false
 	minWaitTime := r.config.refreshMinWait()
 
 	for ctx.Err() == nil {
+		// Wait for Nexus APIs to be enabled.
+		if !r.config.nexusAPIsEnabled() {
+			if hasLoadedServiceData {
+				// Nexus APIs were previously enabled and service data loaded, so make future requests wait for
+				// reload once the FF is re-enabled.
+				r.serviceDataReady = make(chan struct{})
+			}
+			hasLoadedServiceData = false
+			common.InterruptibleSleep(ctx, r.config.refreshMinWait())
+			continue
+		}
+
 		start := time.Now()
-		// Ignoring errors here because they are logged where they occur and we never want to exit the refresh loop.
-		_ = backoff.ThrottleRetryContext(ctx, r.refreshServices, r.config.refreshRetryPolicy, nil)
+		if !hasLoadedServiceData {
+			// Loading services for the first time after being (re)enabled, so load with fallback to persistence
+			// and unblock any threads waiting on r.serviceDataReady if successful.
+			err := backoff.ThrottleRetryContext(ctx, r.loadServices, r.config.refreshRetryPolicy, nil)
+			if err == nil {
+				hasLoadedServiceData = true
+				close(r.serviceDataReady)
+			}
+		} else {
+			// Services have previously been loaded, so just keep them up to date with long poll requests to
+			// matching, without fallback to persistence. Ignoring long poll errors since we will just retry
+			// on next loop iteration.
+			_ = backoff.ThrottleRetryContext(ctx, r.refreshServices, r.config.refreshRetryPolicy, nil)
+		}
 		elapsed := time.Since(start)
 
 		// In general, we want to start a new call immediately on completion of the previous
@@ -217,6 +194,24 @@ func (r *IncomingServiceRegistry) refreshServicesLoop(ctx context.Context) error
 	return ctx.Err()
 }
 
+// loadServices initializes the in-memory view of service data.
+// It first tries to load from matching service and falls back to querying persistence directly if matching is unavailable.
+func (r *IncomingServiceRegistry) loadServices(ctx context.Context) error {
+	tableVersion, services, err := r.getAllServicesMatching(ctx)
+	if err != nil {
+		// Fallback to persistence on matching error during initial load.
+		r.logger.Error("error from matching when initializing Nexus incoming service cache", tag.Error(err))
+		tableVersion, services, err = r.getAllServicesPersistence(ctx)
+		if err != nil {
+			return err
+		}
+	}
+
+	r.tableVersion = tableVersion
+	r.services = services
+	return nil
+}
+
 // refreshServices sends long-poll requests to matching to check for any updates to service data.
 func (r *IncomingServiceRegistry) refreshServices(ctx context.Context) error {
 	r.dataLock.RLock()
@@ -230,6 +225,7 @@ func (r *IncomingServiceRegistry) refreshServices(ctx context.Context) error {
 		Wait:                  true,
 	})
 	if err != nil {
+		r.logger.Error("long poll to refresh Nexus incoming services returned error", tag.Error(err))
 		return err
 	}
 
@@ -239,7 +235,7 @@ func (r *IncomingServiceRegistry) refreshServices(ctx context.Context) error {
 	}
 
 	currentTableVersion = resp.TableVersion
-	services := make(map[string]*nexus.IncomingService)
+	services := make(map[string]*nexus.IncomingService, len(resp.Services))
 	for _, service := range resp.Services {
 		services[service.Id] = service
 	}

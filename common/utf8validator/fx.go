@@ -22,14 +22,33 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-package workflow
+package utf8validator
 
 import (
 	"go.uber.org/fx"
+
+	"go.temporal.io/server/common/dynamicconfig"
+	"go.temporal.io/server/common/log"
+	"go.temporal.io/server/common/metrics"
 )
 
 var Module = fx.Options(
-	fx.Populate(&taskGeneratorProvider),
-	fx.Provide(RelocatableAttributesFetcherProvider),
-	fx.Invoke(RegisterStateMachine),
+	fx.Provide(utf8ValidatorProvider),
 )
+
+func utf8ValidatorProvider(
+	logger log.Logger,
+	metrics metrics.Handler,
+	col *dynamicconfig.Collection,
+) *Validator {
+	return newValidator(
+		logger,
+		metrics,
+		col.GetFloat64Property(dynamicconfig.ValidateUTF8SampleRPCRequest, 0.0),
+		col.GetFloat64Property(dynamicconfig.ValidateUTF8SampleRPCResponse, 0.0),
+		col.GetFloat64Property(dynamicconfig.ValidateUTF8SamplePersistence, 0.0),
+		col.GetBoolProperty(dynamicconfig.ValidateUTF8FailRPCRequest, false),
+		col.GetBoolProperty(dynamicconfig.ValidateUTF8FailRPCResponse, false),
+		col.GetBoolProperty(dynamicconfig.ValidateUTF8FailPersistence, false),
+	)
+}

@@ -382,6 +382,12 @@ func shardupdate(shardupdate string) ZapTag {
 	return NewStringTag("shard-update", shardupdate)
 }
 
+// scope returns a tag for scope
+// Pre-defined scope tags are in values.go.
+func scope(scope string) ZapTag {
+	return NewStringTag("scope", scope)
+}
+
 // general
 
 // Service returns tag for Service

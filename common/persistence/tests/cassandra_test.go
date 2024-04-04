@@ -1244,6 +1244,9 @@ func testCassandraNexusIncomingServiceStore(t *testing.T, cluster *cassandra.Tes
 	t.Run("ConcurrentUpdateAndDelete", func(t *testing.T) {
 		testCassandraNexusIncomingServiceStoreConcurrentUpdateAndDelete(t, store, tableVersion)
 	})
+	t.Run("DeleteWhilePaging", func(t *testing.T) {
+		testCassandraNexusIncomingServiceStoreDeleteWhilePaging(t, store, tableVersion)
+	})
 }
 
 func testCassandraNexusIncomingServiceStoreConcurrentCreate(t *testing.T, store persistence.NexusIncomingServiceStore, tableVersion *atomic.Int64) {
@@ -1475,6 +1478,56 @@ func testCassandraNexusIncomingServiceStoreConcurrentUpdateAndDelete(t *testing.
 		require.ErrorContains(t, updateErr, "nexus incoming services table version mismatch")
 	}
 	assertNexusIncomingServicesTableVersion(t, tableVersion.Load(), store)
+}
+
+func testCassandraNexusIncomingServiceStoreDeleteWhilePaging(t *testing.T, store persistence.NexusIncomingServiceStore, tableVersion *atomic.Int64) {
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	// Create some services
+	numServices := 3
+	for i := 0; i < numServices; i++ {
+		err := store.CreateOrUpdateNexusIncomingService(ctx, &persistence.InternalCreateOrUpdateNexusIncomingServiceRequest{
+			LastKnownTableVersion: tableVersion.Load(),
+			Service: persistence.InternalNexusIncomingService{
+				ServiceID: uuid.NewString(),
+				Version:   0,
+				Data: &commonpb.DataBlob{
+					Data:         []byte("some dummy service data"),
+					EncodingType: enums.ENCODING_TYPE_PROTO3,
+				}},
+		})
+		require.NoError(t, err)
+		tableVersion.Add(1)
+	}
+
+	// List first page
+	resp1, err := store.ListNexusIncomingServices(ctx, &persistence.ListNexusIncomingServicesRequest{
+		LastKnownTableVersion: 0,
+		PageSize:              2,
+	})
+	require.NoError(t, err)
+	require.NotNil(t, resp1)
+	require.NotNil(t, resp1.NextPageToken)
+	require.Equal(t, tableVersion.Load(), resp1.TableVersion)
+
+	// Delete last service in first page
+	err = store.DeleteNexusIncomingService(ctx, &persistence.DeleteNexusIncomingServiceRequest{
+		LastKnownTableVersion: tableVersion.Load(),
+		ServiceID:             resp1.Services[1].ServiceID,
+	})
+	require.NoError(t, err)
+	tableVersion.Add(1)
+
+	// List second page
+	resp2, err := store.ListNexusIncomingServices(ctx, &persistence.ListNexusIncomingServicesRequest{
+		LastKnownTableVersion: 0,
+		NextPageToken:         resp1.NextPageToken,
+		PageSize:              2,
+	})
+	require.NoError(t, err)
+	require.NotNil(t, resp2)
+	require.Equal(t, tableVersion.Load(), resp2.TableVersion)
 }
 
 func newNexusIncomingServiceStore(session gocql.Session, opts ...func(params *testQueueParams)) persistence.NexusIncomingServiceStore {

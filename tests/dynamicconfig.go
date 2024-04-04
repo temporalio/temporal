@@ -55,6 +55,12 @@ var (
 		dynamicconfig.FrontendAccessHistoryFraction:                       0.5,
 		dynamicconfig.EnableWorkflowIdConflictPolicy:                      true,
 		dynamicconfig.ReplicationEnableUpdateWithNewTaskMerge:             true,
+		dynamicconfig.ValidateUTF8SampleRPCRequest:                        1.0,
+		dynamicconfig.ValidateUTF8SampleRPCResponse:                       1.0,
+		dynamicconfig.ValidateUTF8SamplePersistence:                       1.0,
+		dynamicconfig.ValidateUTF8FailRPCRequest:                          true,
+		dynamicconfig.ValidateUTF8FailRPCResponse:                         true,
+		dynamicconfig.ValidateUTF8FailPersistence:                         true,
 	}
 )
 
