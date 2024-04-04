@@ -39,6 +39,7 @@ import (
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	replicationspb "go.temporal.io/server/api/replication/v1"
 	"go.temporal.io/server/common/codec"
+	"go.temporal.io/server/common/utf8validator"
 	"go.temporal.io/server/service/history/tasks"
 )
 
@@ -169,6 +170,9 @@ func (t *serializerImpl) DeserializeEvents(data *commonpb.DataBlob) ([]*historyp
 	default:
 		return nil, NewUnknownEncodingTypeError(data.EncodingType.String(), enumspb.ENCODING_TYPE_PROTO3)
 	}
+	if err == nil {
+		err = utf8validator.Validate(events, utf8validator.SourcePersistence)
+	}
 	if err != nil {
 		return nil, NewDeserializationError(enumspb.ENCODING_TYPE_PROTO3, err)
 	}
@@ -199,7 +203,9 @@ func (t *serializerImpl) DeserializeEvent(data *commonpb.DataBlob) (*historypb.H
 	default:
 		return nil, NewUnknownEncodingTypeError(data.EncodingType.String(), enumspb.ENCODING_TYPE_PROTO3)
 	}
-
+	if err == nil {
+		err = utf8validator.Validate(event, utf8validator.SourcePersistence)
+	}
 	if err != nil {
 		return nil, NewDeserializationError(enumspb.ENCODING_TYPE_PROTO3, err)
 	}
@@ -232,7 +238,9 @@ func (t *serializerImpl) DeserializeClusterMetadata(data *commonpb.DataBlob) (*p
 	default:
 		return nil, NewUnknownEncodingTypeError(data.EncodingType.String(), enumspb.ENCODING_TYPE_PROTO3)
 	}
-
+	if err == nil {
+		err = utf8validator.Validate(cm, utf8validator.SourcePersistence)
+	}
 	if err != nil {
 		return nil, NewSerializationError(enumspb.ENCODING_TYPE_PROTO3, err)
 	}
@@ -251,6 +259,11 @@ func (t *serializerImpl) serialize(p marshaler, encodingType enumspb.EncodingTyp
 	switch encodingType {
 	case enumspb.ENCODING_TYPE_PROTO3:
 		// Client API currently specifies encodingType on requests which span multiple of these objects
+		if msg, ok := p.(proto.Message); ok {
+			if err := utf8validator.Validate(msg, utf8validator.SourcePersistence); err != nil {
+				return nil, NewSerializationError(enumspb.ENCODING_TYPE_PROTO3, err)
+			}
+		}
 		data, err = p.Marshal()
 	default:
 		return nil, NewUnknownEncodingTypeError(encodingType.String(), enumspb.ENCODING_TYPE_PROTO3)
@@ -544,15 +557,7 @@ func ProtoDecodeBlob(data *commonpb.DataBlob, result proto.Message) error {
 		// TODO: should we return nil or error?
 		return NewDeserializationError(enumspb.ENCODING_TYPE_UNSPECIFIED, errors.New("cannot decode nil"))
 	}
-
-	if data.EncodingType != enumspb.ENCODING_TYPE_PROTO3 {
-		return NewUnknownEncodingTypeError(data.EncodingType.String(), enumspb.ENCODING_TYPE_PROTO3)
-	}
-
-	if err := proto.Unmarshal(data.Data, result); err != nil {
-		return NewDeserializationError(enumspb.ENCODING_TYPE_PROTO3, err)
-	}
-	return nil
+	return Proto3Decode(data.Data, data.EncodingType, result)
 }
 
 func decodeBlob(data *commonpb.DataBlob, result proto.Message) error {
@@ -613,11 +618,12 @@ func ProtoEncodeBlob(m proto.Message, encoding enumspb.EncodingType) (*commonpb.
 		}, nil
 	}
 
-	blob := &commonpb.DataBlob{EncodingType: enumspb.ENCODING_TYPE_PROTO3}
+	if err := utf8validator.Validate(m, utf8validator.SourcePersistence); err != nil {
+		return nil, NewSerializationError(enumspb.ENCODING_TYPE_PROTO3, err)
+	}
 	data, err := proto.Marshal(m)
 	if err != nil {
 		return nil, NewSerializationError(enumspb.ENCODING_TYPE_PROTO3, err)
 	}
-	blob.Data = data
-	return blob, nil
+	return &commonpb.DataBlob{EncodingType: enumspb.ENCODING_TYPE_PROTO3, Data: data}, nil
 }

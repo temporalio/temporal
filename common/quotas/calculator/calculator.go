@@ -22,14 +22,14 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-package workflow
+package calculator
 
-import (
-	"go.uber.org/fx"
-)
+type (
+	Calculator interface {
+		GetQuota() float64
+	}
 
-var Module = fx.Options(
-	fx.Populate(&taskGeneratorProvider),
-	fx.Provide(RelocatableAttributesFetcherProvider),
-	fx.Invoke(RegisterStateMachine),
+	NamespaceCalculator interface {
+		GetQuota(namespace string) float64
+	}
 )

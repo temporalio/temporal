@@ -245,7 +245,7 @@ func TestRateLimitInterceptorProvider(t *testing.T) {
 				OperatorRPSRatio: func() float64 {
 					return tc.operatorRPSRatio
 				},
-			}, tc.serviceResolver, metrics.NoopMetricsHandler)
+			}, tc.serviceResolver, metrics.NoopMetricsHandler, log.NewTestLogger())
 
 			// Create a gRPC server for the fake workflow service.
 			svc := &testSvc{}
@@ -596,6 +596,7 @@ func TestNamespaceRateLimitInterceptorProvider(t *testing.T) {
 				&config,
 				mockRegistry,
 				serviceResolver,
+				log.NewTestLogger(),
 			)
 
 			// Create a gRPC server for the fake workflow service.
@@ -774,7 +775,7 @@ func TestNamespaceRateLimitMetrics(t *testing.T) {
 			}
 
 			// Create a rate limit interceptor which uses the per-instance and global RPS limits from the test case.
-			rateLimitInterceptor := RateLimitInterceptorProvider(config, serviceResolver, metricsHandler)
+			rateLimitInterceptor := RateLimitInterceptorProvider(config, serviceResolver, metricsHandler, log.NewTestLogger())
 
 			// Create a gRPC server for the fake workflow service.
 			svc := &testSvc{}
