@@ -104,22 +104,21 @@ func newBacklogManager(
 	metricsHandler metrics.Handler,
 	contextInfoProvider func(ctx context.Context) context.Context,
 ) *backlogManagerImpl {
-	db := newTaskQueueDB(taskManager, pqMgr.QueueKey(), logger)
 	bmg := &backlogManagerImpl{
 		pqMgr:               pqMgr,
 		matchingClient:      matchingClient,
 		metricsHandler:      metricsHandler,
 		logger:              logger,
 		throttledLogger:     throttledLogger,
-		db:                  db,
-		taskAckManager:      newAckManager(logger),
-		taskGC:              newTaskGC(db, config),
 		config:              config,
 		contextInfoProvider: contextInfoProvider,
 		initializedError:    future.NewFuture[struct{}](),
 	}
+	bmg.db = newTaskQueueDB(bmg, taskManager, pqMgr.QueueKey(), logger)
 	bmg.taskWriter = newTaskWriter(bmg)
 	bmg.taskReader = newTaskReader(bmg)
+	bmg.taskAckManager = newAckManager(bmg)
+	bmg.taskGC = newTaskGC(bmg.db, config)
 
 	return bmg
 }

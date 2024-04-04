@@ -74,14 +74,16 @@ type (
 //     This guarantee makes some of the other code simpler and there is no impact to perf because updates to taskqueue are
 //     spread out and happen in background routines
 func newTaskQueueDB(
+	backlogMgr *backlogManagerImpl,
 	store persistence.TaskManager,
 	queue *PhysicalTaskQueueKey,
 	logger log.Logger,
 ) *taskQueueDB {
 	return &taskQueueDB{
-		queue:  queue,
-		store:  store,
-		logger: logger,
+		backlogMgr: backlogMgr,
+		queue:      queue,
+		store:      store,
+		logger:     logger,
 	}
 }
 

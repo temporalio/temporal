@@ -46,9 +46,10 @@ type ackManager struct {
 	logger           log.Logger
 }
 
-func newAckManager(logger log.Logger) ackManager {
+func newAckManager(backlogMgr *backlogManagerImpl) ackManager {
 	return ackManager{
-		logger:           logger,
+		backlogMgr:       backlogMgr,
+		logger:           backlogMgr.logger,
 		outstandingTasks: treemap.NewWith(godsutils.Int64Comparator),
 		readLevel:        -1,
 		ackLevel:         -1}
@@ -146,7 +147,7 @@ func (m *ackManager) completeTask(taskID int64) int64 {
 		m.ackLevel = min.(int64)
 		m.outstandingTasks.Remove(min)
 		// reducing our backlog since a task gets acked
-		m.backlogMgr.db.updateApproximateBacklogCount(-1)
+		m.backlogMgr.db.updateApproximateBacklogCount(int64(-1))
 	}
 
 }

@@ -212,7 +212,11 @@ func (s *matchingEngineSuite) newPartitionManager(prtn tqid.Partition, config *C
 }
 
 func (s *matchingEngineSuite) TestAckManager() {
-	m := newAckManager(s.logger)
+	controller := gomock.NewController(s.T())
+	defer controller.Finish()
+	backlogMgr := newBacklogMgr(controller)
+	m := newAckManager(backlogMgr)
+
 	m.setAckLevel(100)
 	s.EqualValues(100, m.getAckLevel())
 	s.EqualValues(100, m.getReadLevel())
@@ -269,7 +273,11 @@ func (s *matchingEngineSuite) TestAckManager() {
 }
 
 func (s *matchingEngineSuite) TestAckManager_Sort() {
-	m := newAckManager(s.logger)
+	controller := gomock.NewController(s.T())
+	defer controller.Finish()
+	backlogMgr := newBacklogMgr(controller)
+	m := newAckManager(backlogMgr)
+
 	const t0 = 100
 	m.setAckLevel(t0)
 	s.EqualValues(t0, m.getAckLevel())
