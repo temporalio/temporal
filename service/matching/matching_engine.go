@@ -948,7 +948,7 @@ func (e *matchingEngineImpl) getBuildIdTaskReachability(
 	}
 
 	// Gather list of all build ids that could point to buildId -> upstreamBuildIds
-	upstreamBuildIds := getUpstreamBuildIds(buildId, assignmentRules, redirectRules)
+	upstreamBuildIds := getUpstreamBuildIds(buildId, redirectRules)
 	buildIdsOfInterest := append(upstreamBuildIds, buildId)
 
 	// 2. Cases for REACHABLE

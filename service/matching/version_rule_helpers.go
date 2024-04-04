@@ -523,13 +523,44 @@ func FindAssignmentBuildId(rules []*persistencespb.AssignmentRule) string {
 	return ""
 }
 
+/*
+e.g.
+Redirect Rules:
+10
+^
+|
+1 <------ 2
+^
+|
+5 <------ 3 <------ 4
+
+Assignment Rules:
+[ (3, 50%), (2, nil) ]
+*/
 func getUpstreamBuildIds(
 	buildId string,
-	assignmentRules []*taskqueue.TimestampedBuildIdAssignmentRule,
 	redirectRules []*taskqueue.TimestampedCompatibleBuildIdRedirectRule) []string {
 	var upstream []string
-	// todo carly: traverse redirect rule graph to gather any build id that could point to buildId
+	directSources := getSourcesForTarget(buildId, redirectRules)
+
+	for _, src := range directSources {
+		upstream = append(upstream, src)
+		upstream = append(upstream, getUpstreamBuildIds(src, redirectRules)...)
+	}
+
 	return upstream
+}
+
+// getSourcesForTarget gets the first-degree sources for any redirect rule targeting buildId
+func getSourcesForTarget(buildId string, redirectRules []*taskqueue.TimestampedCompatibleBuildIdRedirectRule) []string {
+	var sources []string
+	for _, rr := range redirectRules {
+		if rr.GetRule().GetTargetBuildId() == buildId {
+			sources = append(sources, rr.GetRule().GetSourceBuildId())
+		}
+	}
+
+	return sources
 }
 
 func existsBackloggedActivityOrWFAssignedTo(buildId string, typesInfo []*taskqueue.TaskQueueTypeInfo) bool {

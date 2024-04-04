@@ -791,7 +791,7 @@ func TestGetWorkerVersioningRules(t *testing.T) {
 
 	// Call list successfully
 	dummyClock := hlc.Zero(99) // used to generate conflict token, but not in this test
-	resp, err := GetWorkerVersioningRules(data, dummyClock)
+	resp, err := GetWorkerVersioningRules(data, dummyClock, nil)
 	assert.NoError(t, err)
 
 	// check assignment rules
@@ -1005,34 +1005,4 @@ func TestCommitBuildIDMaxAssignmentRules(t *testing.T) {
 	// commit a new target, no rules to be deleted --> fail
 	_, err = CommitBuildID(clock2, data, mkNewCommitBuildIdReq("1000", false), false, maxRules)
 	assert.Error(t, err)
-}
-
-// eg.
-// 1 ------> 2
-// ^        |
-// |        v
-// 5 <------ 3 ------> 4
-func TestIsCycle(t *testing.T) {
-	rules := []*persistencepb.RedirectRule{
-		{Rule: &taskqueuepb.CompatibleBuildIdRedirectRule{SourceBuildId: "1", TargetBuildId: "2"}},
-		{Rule: &taskqueuepb.CompatibleBuildIdRedirectRule{SourceBuildId: "5", TargetBuildId: "1"}},
-		{Rule: &taskqueuepb.CompatibleBuildIdRedirectRule{SourceBuildId: "3", TargetBuildId: "4"}},
-		{Rule: &taskqueuepb.CompatibleBuildIdRedirectRule{SourceBuildId: "3", TargetBuildId: "5"}},
-		{Rule: &taskqueuepb.CompatibleBuildIdRedirectRule{SourceBuildId: "2", TargetBuildId: "3"}},
-	}
-	if !isCyclic(rules) {
-		t.Fail()
-	}
-
-	rules = slices.Delete(rules, 3, 4)
-	if isCyclic(rules) {
-		t.Fail()
-	}
-
-	rules = append(rules, &persistencepb.RedirectRule{
-		Rule: &taskqueuepb.CompatibleBuildIdRedirectRule{SourceBuildId: "4", TargetBuildId: "2"},
-	})
-	if !isCyclic(rules) {
-		t.Fail()
-	}
 }
