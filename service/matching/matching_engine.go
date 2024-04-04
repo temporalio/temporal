@@ -50,6 +50,7 @@ import (
 	"go.temporal.io/server/api/matchingservice/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	replicationspb "go.temporal.io/server/api/replication/v1"
+	taskqueuespb "go.temporal.io/server/api/taskqueue/v1"
 	tokenspb "go.temporal.io/server/api/token/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/clock"
@@ -791,46 +792,129 @@ func (e *matchingEngineImpl) DescribeTaskQueue(
 	ctx context.Context,
 	request *matchingservice.DescribeTaskQueueRequest,
 ) (*matchingservice.DescribeTaskQueueResponse, error) {
-	if request.DescRequest.ApiMode == enumspb.DESCRIBE_TASK_QUEUE_MODE_UNSPECIFIED {
-		partition, err := tqid.PartitionFromProto(request.DescRequest.TaskQueue, request.GetNamespaceId(), request.DescRequest.TaskQueueType)
-		if err != nil {
-			return nil, err
+	req := request.GetDescRequest()
+	if req.ApiMode == enumspb.DESCRIBE_TASK_QUEUE_MODE_ENHANCED {
+		// collect internal info
+		physicalInfoByBuildId := make(map[string]map[enumspb.TaskQueueType]*taskqueuespb.PhysicalTaskQueueInfo)
+		for _, taskQueueType := range req.TaskQueueTypes {
+			for i := 0; i < e.config.NumTaskqueueWritePartitions(req.Namespace, req.TaskQueue.Name, taskQueueType); i++ {
+				partitionResp, err := e.matchingRawClient.DescribeTaskQueuePartition(ctx, &matchingservice.DescribeTaskQueuePartitionRequest{
+					NamespaceId: request.GetNamespaceId(),
+					TaskQueuePartition: &taskqueuespb.TaskQueuePartition{
+						TaskQueue:     req.TaskQueue.Name,
+						TaskQueueType: taskQueueType,
+						PartitionId:   &taskqueuespb.TaskQueuePartition_NormalPartitionId{NormalPartitionId: int32(i)},
+					},
+					Versions:          req.GetVersions(),
+					ReportBacklogInfo: false,
+					ReportPollers:     req.GetReportTaskReachability(),
+				})
+				if err != nil {
+					return nil, err
+				}
+				for _, vii := range partitionResp.VersionsInfoInternal {
+					if _, ok := physicalInfoByBuildId[vii.BuildId]; !ok {
+						physicalInfoByBuildId[vii.BuildId] = make(map[enumspb.TaskQueueType]*taskqueuespb.PhysicalTaskQueueInfo)
+					}
+					if physInfo, ok := physicalInfoByBuildId[vii.BuildId][taskQueueType]; !ok {
+						physicalInfoByBuildId[vii.BuildId][taskQueueType] = vii.PhysicalTaskQueueInfo
+					} else {
+						var bInfo *taskqueuepb.BacklogInfo
+						if i == 0 { // root partition
+							bInfo = vii.PhysicalTaskQueueInfo.BacklogInfo
+						}
+						merged := &taskqueuespb.PhysicalTaskQueueInfo{
+							Pollers:     append(physInfo.GetPollers(), vii.PhysicalTaskQueueInfo.GetPollers()...),
+							BacklogInfo: bInfo,
+						}
+						physicalInfoByBuildId[vii.BuildId][taskQueueType] = merged
+					}
+				}
+			}
 		}
-		pm, err := e.getTaskQueuePartitionManager(ctx, partition, true)
-		if err != nil {
-			return nil, err
-		}
-		return pm.LegacyDescribeTaskQueue(request.DescRequest.GetIncludeTaskQueueStatus()), nil
-	} else if request.DescRequest.ApiMode == enumspb.DESCRIBE_TASK_QUEUE_MODE_ENHANCED {
+		// smush internal info into versions info
 		versionsInfo := make([]*taskqueuepb.TaskQueueVersionInfo, 0)
-		// for _, queue_type := range request.DescRequest.TaskQueueTypes {
-		//	for partition {
-		//		partitionResp, err := pm.DescribeTaskQueuePartition(&matchingservice.DescribeTaskQueuePartitionRequest{
-		//			NamespaceId:            request.NamespaceId,
-		//			TaskQueuePartition:     &taskqueue.TaskQueuePartition{make with a helper fn},
-		//			Versions:               request.DescRequest.Versions,
-		//			ReportBacklogInfo:      false,
-		//			ReportPollers:          request.DescRequest.ReportPollers,
-		//		})
-		//		merge responses into versionsInfo
-		//	}
-		// }
+		for bid, typeMap := range physicalInfoByBuildId {
+			typesInfo := make([]*taskqueuepb.TaskQueueTypeInfo, 0)
+			for taskQueueType, physicalInfo := range typeMap {
+				typesInfo = append(typesInfo, &taskqueuepb.TaskQueueTypeInfo{
+					Type:    taskQueueType,
+					Pollers: physicalInfo.Pollers,
+				})
+			}
+			versionsInfo = append(versionsInfo, &taskqueuepb.TaskQueueVersionInfo{
+				BuildId:          bid,
+				TypesInfo:        typesInfo,
+				TaskReachability: enumspb.BUILD_ID_TASK_REACHABILITY_UNSPECIFIED,
+			})
+		}
 		return &matchingservice.DescribeTaskQueueResponse{
 			DescResponse: &workflowservice.DescribeTaskQueueResponse{
-				Pollers:         nil,
-				TaskQueueStatus: nil,
-				VersionsInfo:    versionsInfo,
+				VersionsInfo: versionsInfo,
 			},
 		}, nil
 	}
-	return nil, nil
+	// Otherwise, do legacy DescribeTaskQueue
+	partition, err := tqid.PartitionFromProto(req.TaskQueue, request.GetNamespaceId(), req.TaskQueueType)
+	if err != nil {
+		return nil, err
+	}
+	pm, err := e.getTaskQueuePartitionManager(ctx, partition, true)
+	if err != nil {
+		return nil, err
+	}
+	return pm.LegacyDescribeTaskQueue(req.GetIncludeTaskQueueStatus()), nil
 }
 
 func (e *matchingEngineImpl) DescribeTaskQueuePartition(
 	ctx context.Context,
 	request *matchingservice.DescribeTaskQueuePartitionRequest,
 ) (*matchingservice.DescribeTaskQueuePartitionResponse, error) {
-	return nil, nil
+	pm, err := e.getTaskQueuePartitionManager(ctx, tqid.PartitionFromPartitionProto(request.GetTaskQueuePartition(), request.GetNamespaceId()), true)
+	if err != nil {
+		return nil, err
+	}
+	buildIds, err := e.getBuildIds(request.GetVersions(), pm)
+	if err != nil {
+		return nil, err
+	}
+	return pm.Describe(buildIds, request.GetVersions().GetAllActive(), request.GetReportBacklogInfo(), request.GetReportPollers())
+}
+
+func (e *matchingEngineImpl) getBuildIds(
+	versions *taskqueuepb.TaskQueueVersionSelection,
+	tqMgr taskQueuePartitionManager) (map[string]bool, error) {
+	buildIds := make(map[string]bool)
+	if versions != nil {
+		for _, bid := range versions.GetBuildIds() {
+			buildIds[bid] = true
+		}
+		if versions.GetUnversioned() {
+			buildIds[""] = true
+		}
+	} else {
+		defaultBuildId, err := e.getDefaultBuildId(tqMgr)
+		if err != nil {
+			return nil, err
+		}
+		buildIds[defaultBuildId] = true
+	}
+	return buildIds, nil
+}
+
+// getDefaultBuildId gets the build id mentioned in the first unconditional Assignment Rule.
+// If there is no default Build ID, the result for the unversioned queue will be returned.
+func (e *matchingEngineImpl) getDefaultBuildId(tqMgr taskQueuePartitionManager) (string, error) {
+	resp, err := e.getWorkerVersioningRules(tqMgr)
+	if err != nil {
+		return "", err
+	}
+	for _, ar := range resp.GetResponse().GetAssignmentRules() {
+		if isUnconditional(ar.GetRule()) {
+			return ar.GetRule().GetTargetBuildId(), nil
+		}
+	}
+	return "", nil
 }
 
 func (e *matchingEngineImpl) ListTaskQueuePartitions(
@@ -853,7 +937,7 @@ func (e *matchingEngineImpl) ListTaskQueuePartitions(
 }
 
 func (e *matchingEngineImpl) listTaskQueuePartitions(request *matchingservice.ListTaskQueuePartitionsRequest, taskQueueType enumspb.TaskQueueType) ([]*taskqueuepb.TaskQueuePartitionMetadata, error) {
-	partitions, err := e.getAllPartitions(
+	partitions, err := e.getAllPartitionRpcNames(
 		namespace.Name(request.GetNamespace()),
 		request.TaskQueue,
 		taskQueueType,
@@ -909,6 +993,7 @@ func (e *matchingEngineImpl) UpdateWorkerVersioningRules(
 	// we don't set updateOptions.KnownVersion, because we handle external API call ordering with conflictToken
 	updateOptions := UserDataUpdateOptions{}
 	cT := req.GetConflictToken()
+	var getResp *matchingservice.GetWorkerVersioningRulesResponse
 
 	err = tqMgr.GetUserDataManager().UpdateUserData(ctx, updateOptions, func(data *persistencespb.TaskQueueUserData) (*persistencespb.TaskQueueUserData, bool, error) {
 		clk := data.GetClock()
@@ -980,11 +1065,17 @@ func (e *matchingEngineImpl) UpdateWorkerVersioningRules(
 			// operation can't be completed due to failed validation. no action, do not replicate, report error
 			return nil, false, err
 		}
-		if cT, err = updatedClock.Marshal(); err != nil {
-			return nil, false, serviceerror.NewInternal("error generating next conflict token")
+
+		// Get versioning data formatted for response
+		getResp, err = GetWorkerVersioningRules(versioningData, updatedClock)
+		if err != nil {
+			return nil, false, err
 		}
-		// We can replicate tombstone cleanup, because it's just based on DeletionTimestamp, so no need to only do it locally
+
+		// Clean up tombstones after all fallible tasks are complete, once we know we are committing and replicating the changes.
+		// We can replicate tombstone cleanup, because it's just based on DeletionTimestamp, so no need to only do it locally.
 		versioningData = CleanupRuleTombstones(versioningData, e.config.DeletedRuleRetentionTime(ns.Name().String()))
+
 		// Avoid mutation
 		ret := common.CloneProto(data)
 		ret.Clock = updatedClock
@@ -996,7 +1087,11 @@ func (e *matchingEngineImpl) UpdateWorkerVersioningRules(
 		return nil, err
 	}
 
-	return &matchingservice.UpdateWorkerVersioningRulesResponse{Response: &workflowservice.UpdateWorkerVersioningRulesResponse{ConflictToken: cT}}, nil
+	return &matchingservice.UpdateWorkerVersioningRulesResponse{Response: &workflowservice.UpdateWorkerVersioningRulesResponse{
+		AssignmentRules:         getResp.GetResponse().GetAssignmentRules(),
+		CompatibleRedirectRules: getResp.GetResponse().GetCompatibleRedirectRules(),
+		ConflictToken:           getResp.GetResponse().GetConflictToken(),
+	}}, nil
 }
 
 func (e *matchingEngineImpl) GetWorkerVersioningRules(
@@ -1025,6 +1120,10 @@ func (e *matchingEngineImpl) GetWorkerVersioningRules(
 		return nil, err
 	}
 
+	return e.getWorkerVersioningRules(tqMgr)
+}
+
+func (e *matchingEngineImpl) getWorkerVersioningRules(tqMgr taskQueuePartitionManager) (*matchingservice.GetWorkerVersioningRulesResponse, error) {
 	data, _, err := tqMgr.GetUserDataManager().GetUserData()
 	if err != nil {
 		return nil, err
@@ -1371,7 +1470,7 @@ func (e *matchingEngineImpl) getHostInfo(partitionKey string) (string, error) {
 	return host.GetAddress(), nil
 }
 
-func (e *matchingEngineImpl) getAllPartitions(
+func (e *matchingEngineImpl) getAllPartitionRpcNames(
 	ns namespace.Name,
 	taskQueue *taskqueuepb.TaskQueue,
 	taskQueueType enumspb.TaskQueueType,
@@ -1390,7 +1489,6 @@ func (e *matchingEngineImpl) getAllPartitions(
 	for i := 0; i < n; i++ {
 		partitionKeys = append(partitionKeys, taskQueueFamily.TaskQueue(taskQueueType).NormalPartition(i).RpcName())
 	}
-
 	return partitionKeys, nil
 }
 

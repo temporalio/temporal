@@ -76,7 +76,7 @@ type (
 		HasAnyPollerAfter(accessTime time.Time) bool
 		// LegacyDescribeTaskQueue returns information about all pollers of this partition and the status of its unversioned physical queue
 		LegacyDescribeTaskQueue(includeTaskQueueStatus bool) *matchingservice.DescribeTaskQueueResponse
-		Describe(request *matchingservice.DescribeTaskQueuePartitionRequest) (*matchingservice.DescribeTaskQueuePartitionResponse, error)
+		Describe(buildIds map[string]bool, includeAllActive, reportBacklogInfo, reportPollers bool) (*matchingservice.DescribeTaskQueuePartitionResponse, error)
 		String() string
 		Partition() tqid.Partition
 		LongPollExpirationInterval() time.Duration
@@ -351,8 +351,8 @@ func (pm *taskQueuePartitionManagerImpl) GetAllPollerInfo() []*taskqueuepb.Polle
 	ret := pm.defaultQueue.GetAllPollerInfo()
 	pm.versionedQueuesLock.RLock()
 	defer pm.versionedQueuesLock.RUnlock()
-	for _, ptqm := range pm.versionedQueues {
-		info := ptqm.GetAllPollerInfo()
+	for _, vq := range pm.versionedQueues {
+		info := vq.GetAllPollerInfo()
 		ret = append(ret, info...)
 	}
 	return ret
@@ -398,8 +398,46 @@ func (pm *taskQueuePartitionManagerImpl) LegacyDescribeTaskQueue(includeTaskQueu
 }
 
 func (pm *taskQueuePartitionManagerImpl) Describe(
-	request *matchingservice.DescribeTaskQueuePartitionRequest) (*matchingservice.DescribeTaskQueuePartitionResponse, error) {
-	return nil, nil
+	buildIds map[string]bool,
+	includeAllActive, reportBacklogInfo, reportPollers bool) (*matchingservice.DescribeTaskQueuePartitionResponse, error) {
+	pm.versionedQueuesLock.RLock()
+	defer pm.versionedQueuesLock.RUnlock()
+
+	// Active means that the physical queue for that version is loaded.
+	// An empty string refers to the unversioned queue, which is always loaded.
+	// In the future, active will mean that the physical queue for that version has had a task added recently or a recent poller.
+	if includeAllActive {
+		for k := range pm.versionedQueues {
+			buildIds[k] = true
+		}
+	}
+
+	versionsInfo := make([]*taskqueuespb.TaskQueueVersionInfoInternal, 0)
+	for bid := range buildIds {
+		vInfo := &taskqueuespb.TaskQueueVersionInfoInternal{
+			BuildId:               bid,
+			PhysicalTaskQueueInfo: &taskqueuespb.PhysicalTaskQueueInfo{},
+		}
+		var physicalQueue physicalTaskQueueManager
+		if vq, ok := pm.versionedQueues[bid]; ok {
+			physicalQueue = vq
+		} else if bid == "" {
+			physicalQueue = pm.defaultQueue
+		}
+		if physicalQueue != nil {
+			if reportPollers {
+				vInfo.PhysicalTaskQueueInfo.Pollers = physicalQueue.GetAllPollerInfo()
+			}
+			if reportBacklogInfo {
+				vInfo.PhysicalTaskQueueInfo.BacklogInfo = physicalQueue.GetBacklogInfo()
+			}
+		}
+		versionsInfo = append(versionsInfo, vInfo)
+	}
+
+	return &matchingservice.DescribeTaskQueuePartitionResponse{
+		VersionsInfoInternal: versionsInfo,
+	}, nil
 }
 
 func (pm *taskQueuePartitionManagerImpl) String() string {
