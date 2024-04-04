@@ -260,7 +260,6 @@ func (c *backlogManagerImpl) completeTask(task *persistencespb.AllocatedTaskInfo
 		c.taskReader.Signal()
 	}
 
-	// This call updates the ackLevel and the completedTaskCount inside of AckManager
 	ackLevel := c.taskAckManager.completeTask(task.GetTaskId())
 
 	// TODO: completeTaskFunc and task.finish() should take in a context

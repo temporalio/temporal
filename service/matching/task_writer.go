@@ -28,6 +28,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"sync"
 	"sync/atomic"
 	"time"
 
@@ -71,6 +72,7 @@ type (
 		logger       log.Logger
 		writeLoop    *goro.Handle
 		idAlloc      idBlockAllocator
+		sync.RWMutex
 	}
 )
 
@@ -244,18 +246,35 @@ writerLoop:
 				maxReadLevel = taskIDs[i]
 			}
 
-			resp, err := w.appendTasks(ctx, tasks)
-			// Update the maxReadLevel after the writes are completed, but before we send the response,
-			// so that taskReader is guaranteed to see the new read level when SpoolTask wakes it up.
-			if maxReadLevel > 0 {
-				atomic.StoreInt64(&w.maxReadLevel, maxReadLevel)
-			}
+			resp, err := w.appendTasksUpdateMaxReadLevel(ctx, tasks, maxReadLevel)
+
 			w.sendWriteResponse(reqs, resp, err)
 
 		case <-ctx.Done():
 			return ctx.Err()
 		}
 	}
+}
+
+func (w *taskWriter) appendTasksUpdateMaxReadLevel(ctx context.Context,
+	tasks []*persistencespb.AllocatedTaskInfo,
+	maxReadLevel int64,
+) (*persistence.CreateTasksResponse, error) {
+	w.Lock()
+	defer w.Unlock()
+
+	resp, err := w.appendTasks(ctx, tasks)
+
+	// Update the maxReadLevel after the writes are completed, but before we send the response,
+	// so that taskReader is guaranteed to see the new read level when SpoolTask wakes it up.
+
+	// TODO Shivam: What happens if we are not able to appendTasks to the DB? Why do we increase the maxReadLevel on failure?
+	if maxReadLevel > 0 {
+		atomic.StoreInt64(&w.maxReadLevel, maxReadLevel)
+	}
+
+	return resp, err
+
 }
 
 func (w *taskWriter) getWriteBatch(reqs []*writeTaskRequest) []*writeTaskRequest {
