@@ -61,7 +61,7 @@ func IsUnversionedOrAssignedBuildIdSearchAttribute(buildId string) bool {
 		strings.HasPrefix(buildId, buildIdSearchAttributePrefixAssigned+BuildIdSearchAttributeDelimiter)
 }
 
-// VersionedBuildIdSearchAttribute returns the search attribute value for an unversioned build id
+// VersionedBuildIdSearchAttribute returns the search attribute value for a versioned build id
 func VersionedBuildIdSearchAttribute(buildId string) string {
 	return buildIdSearchAttributePrefixVersioned + BuildIdSearchAttributeDelimiter + buildId
 }
