@@ -206,7 +206,7 @@ func (s *ClientFunctionalSuite) TestNexusStartOperation_Outcomes() {
 	}
 
 	// Wait to make sure all incoming services are loaded into memory before starting tests.
-	time.Sleep(500 * time.Millisecond)
+	time.Sleep(1 * time.Second)
 
 	for _, tc := range testCases {
 		tc := tc
@@ -342,7 +342,7 @@ func (s *ClientFunctionalSuite) TestNexusStartOperation_Forbidden() {
 	}
 
 	// Wait to make sure all incoming services are loaded into memory before starting tests.
-	time.Sleep(500 * time.Millisecond)
+	time.Sleep(1 * time.Second)
 
 	for _, tc := range testCases {
 		tc := tc
@@ -450,7 +450,7 @@ func (s *ClientFunctionalSuite) TestNexusStartOperation_Claims() {
 	}
 
 	// Wait to make sure all incoming services are loaded into memory before starting tests.
-	time.Sleep(500 * time.Millisecond)
+	time.Sleep(1 * time.Second)
 
 	for _, tc := range testCases {
 		tc := tc
@@ -560,7 +560,7 @@ func (s *ClientFunctionalSuite) TestNexusCancelOperation_Outcomes() {
 	}
 
 	// Wait to make sure all incoming services are loaded into memory before starting tests.
-	time.Sleep(500 * time.Millisecond)
+	time.Sleep(1 * time.Second)
 
 	for _, tc := range testCases {
 		tc := tc
