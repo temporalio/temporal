@@ -44,6 +44,7 @@ import (
 	hlc "go.temporal.io/server/common/clock/hybrid_logical_clock"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence/visibility/manager"
+	"go.temporal.io/server/common/resource"
 	"go.temporal.io/server/common/searchattribute"
 	"go.temporal.io/server/common/util"
 	"go.temporal.io/server/common/worker_versioning"
@@ -563,14 +564,37 @@ func getSourcesForTarget(buildId string, redirectRules []*taskqueue.TimestampedC
 	return sources
 }
 
-func existsBackloggedActivityOrWFAssignedTo(buildId string, typesInfo []*taskqueue.TaskQueueTypeInfo) bool {
-	// todo carly: needs Shivam's work which has a backlog count
-	// for _, typeInfo := range typesInfo {
-	//	 if typeInfo.GetBacklogInfo().GetApproximateBacklogCount() > 0 {
-	//		 return true
-	//	 }
-	// }
-	return false
+func existsBackloggedActivityOrWFAssignedToAny(ctx context.Context,
+	nsID,
+	nsName,
+	taskQueue string,
+	buildIdsOfInterest []string,
+	c resource.MatchingRawClient,
+) (bool, error) {
+	//resp, err := c.DescribeTaskQueue(ctx, &matchingservice.DescribeTaskQueueRequest{
+	//	NamespaceId: nsID,
+	//	DescRequest: &workflowservice.DescribeTaskQueueRequest{
+	//		Namespace:              nsName,
+	//		TaskQueue:              &taskqueue.TaskQueue{Name: taskQueue, Kind: enums.TASK_QUEUE_KIND_NORMAL},
+	//		ApiMode:                enums.DESCRIBE_TASK_QUEUE_MODE_ENHANCED,
+	//		Versions:               &taskqueue.TaskQueueVersionSelection{BuildIds: buildIdsOfInterest},
+	//		TaskQueueTypes:         nil, // both
+	//		ReportPollers:          false,
+	//		ReportTaskReachability: false, // important!
+	//		// ReportBacklogInfo: true, // todo carly: needs Shivam's work which has a backlog count
+	//	},
+	//})
+	//if err != nil {
+	//	return false, err
+	//}
+	//for _, vInfo := range resp.GetDescResponse().GetVersionsInfo() {
+	//	for _, tInfo := range vInfo.GetTypesInfo() {
+	//		if tInfo.GetBacklogInfo().GetApproximateBacklogCount() > 0 {
+	//			return true, nil
+	//		}
+	//	}
+	//}
+	return false, nil
 }
 
 func isReachableAssignmentRuleTarget(buildId string, assignmentRules []*taskqueue.TimestampedBuildIdAssignmentRule) bool {

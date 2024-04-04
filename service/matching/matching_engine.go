@@ -844,7 +844,7 @@ func (e *matchingEngineImpl) DescribeTaskQueue(
 					Pollers: physicalInfo.Pollers,
 				})
 			}
-			reachability, err := e.getBuildIdTaskReachability(ctx, request.GetNamespaceId(), req.GetNamespace(), req.GetTaskQueue().GetName(), bid, typesInfo)
+			reachability, err := e.getBuildIdTaskReachability(ctx, request.GetNamespaceId(), req.GetNamespace(), req.GetTaskQueue().GetName(), bid)
 			if err != nil {
 				return nil, err
 			}
@@ -929,7 +929,6 @@ func (e *matchingEngineImpl) getBuildIdTaskReachability(
 	nsName,
 	taskQueue,
 	buildId string,
-	typesInfo []*taskqueuepb.TaskQueueTypeInfo,
 ) (enumspb.BuildIdTaskReachability, error) {
 	getResp, err := e.GetWorkerVersioningRules(ctx, &matchingservice.GetWorkerVersioningRulesRequest{
 		NamespaceId:                nsID,
@@ -952,18 +951,19 @@ func (e *matchingEngineImpl) getBuildIdTaskReachability(
 	buildIdsOfInterest := append(upstreamBuildIds, buildId)
 
 	// 2. Cases for REACHABLE
-	// 2a. If buildId could be reached from the backlog
-	for _, bid := range buildIdsOfInterest {
-		if existsBackloggedActivityOrWFAssignedTo(bid, typesInfo) {
-			return enumspb.BUILD_ID_TASK_REACHABILITY_REACHABLE, nil
-		}
-	}
-
-	// 2b. If buildId is assignable to new tasks
+	// 2a. If buildId is assignable to new tasks
 	for _, bid := range buildIdsOfInterest {
 		if isReachableAssignmentRuleTarget(bid, assignmentRules) {
 			return enumspb.BUILD_ID_TASK_REACHABILITY_REACHABLE, nil
 		}
+	}
+
+	// 2b. If buildId could be reached from the backlog
+	if existsBacklog, err := existsBackloggedActivityOrWFAssignedToAny(
+		ctx, nsID, nsName, taskQueue, buildIdsOfInterest, e.matchingRawClient); err != nil {
+		return enumspb.BUILD_ID_TASK_REACHABILITY_UNSPECIFIED, err
+	} else if existsBacklog {
+		return enumspb.BUILD_ID_TASK_REACHABILITY_REACHABLE, nil
 	}
 
 	// Note: The below cases are not applicable to activity-only task queues, since we don't record those in visibility
