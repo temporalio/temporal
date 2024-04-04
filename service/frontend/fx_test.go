@@ -103,12 +103,9 @@ type rateLimitMetricsTestcase struct {
 	// frontendServiceCount is the number of frontend services returned by ServiceResolver to rate limiter
 	frontendServiceCount int
 	// Rate limiter config values
-	rps                        int
-	globalRPS                  int
-	globalNamespaceRPS         int
-	maxNamespaceRPSPerInstance int
-	expectedHostLimit          int
-	expectedNamespaceHostLimit int
+	rps               int
+	globalRPS         int
+	expectedHostLimit int
 }
 
 func TestRateLimitInterceptorProvider(t *testing.T) {
@@ -599,7 +596,6 @@ func TestNamespaceRateLimitInterceptorProvider(t *testing.T) {
 				&config,
 				mockRegistry,
 				serviceResolver,
-				metrics.NoopMetricsHandler,
 			)
 
 			// Create a gRPC server for the fake workflow service.
@@ -727,34 +723,25 @@ func getTestConfig(tc namespaceRateLimitInterceptorTestCase) Config {
 func TestNamespaceRateLimitMetrics(t *testing.T) {
 	testCases := []rateLimitMetricsTestcase{
 		{
-			name:                       "global limit is emitted when set",
-			rps:                        100,
-			globalRPS:                  10,
-			frontendServiceCount:       5,
-			globalNamespaceRPS:         100,
-			maxNamespaceRPSPerInstance: 100,
-			expectedHostLimit:          2,  // This should be globalRPS/frontendServiceCount
-			expectedNamespaceHostLimit: 20, // This should be globalNamespaceRPS/frontendServiceCount
+			name:                 "global limit is emitted when set",
+			rps:                  100,
+			globalRPS:            10,
+			frontendServiceCount: 5,
+			expectedHostLimit:    2, // This should be globalRPS/frontendServiceCount
 		},
 		{
-			name:                       "host limit emitted when global limit is not set",
-			rps:                        10,
-			globalRPS:                  -1,
-			globalNamespaceRPS:         -1,
-			frontendServiceCount:       0,
-			maxNamespaceRPSPerInstance: 30,
-			expectedHostLimit:          10,
-			expectedNamespaceHostLimit: 30,
+			name:                 "host limit emitted when global limit is not set",
+			rps:                  10,
+			globalRPS:            -1,
+			frontendServiceCount: 0,
+			expectedHostLimit:    10,
 		},
 		{
-			name:                       "host limit emitted when frontend service count is not set",
-			rps:                        10,
-			globalRPS:                  100,
-			globalNamespaceRPS:         100,
-			frontendServiceCount:       0,
-			maxNamespaceRPSPerInstance: 20,
-			expectedHostLimit:          10,
-			expectedNamespaceHostLimit: 20,
+			name:                 "host limit emitted when frontend service count is not set",
+			rps:                  10,
+			globalRPS:            100,
+			frontendServiceCount: 0,
+			expectedHostLimit:    10,
 		},
 	}
 	for _, tc := range testCases {
@@ -777,53 +764,17 @@ func TestNamespaceRateLimitMetrics(t *testing.T) {
 				GlobalRPS: func() int {
 					return getOrDefaultLimit(tc.globalRPS)
 				},
-				MaxNamespaceRPSPerInstance: func(namespace string) int {
-					return getOrDefaultLimit(tc.maxNamespaceRPSPerInstance)
-				},
-				GlobalNamespaceRPS: func(namespace string) int {
-					return getOrDefaultLimit(tc.globalNamespaceRPS)
-				},
-				// fields below this are not used in this test. But they are required to initialize namespace rps interceptor.
-				NamespaceReplicationInducingAPIsRPS: func() int {
-					return 0
-				},
+				// Values below this are not used in this test. But they are required to initialize rate limiter.
 				OperatorRPSRatio: func() float64 {
 					return 0.2
 				},
-				GlobalNamespaceVisibilityRPS: func(namespace string) int {
-					return 100
-				},
-				GlobalNamespaceNamespaceReplicationInducingAPIsRPS: func(namespace string) int {
-					return 100
-				},
-
-				MaxNamespaceBurstRatioPerInstance: func(namespace string) float64 {
-					return 100
-				},
-				MaxNamespaceVisibilityRPSPerInstance: func(namespace string) int {
-					return 100
-				},
-				MaxNamespaceVisibilityBurstRatioPerInstance: func(namespace string) float64 {
-					return 100
-				},
-				MaxNamespaceNamespaceReplicationInducingAPIsRPSPerInstance: func(namespace string) int {
-					return 100
-				},
-				MaxNamespaceNamespaceReplicationInducingAPIsBurstRatioPerInstance: func(namespace string) float64 {
-					return 100
+				NamespaceReplicationInducingAPIsRPS: func() int {
+					return 1
 				},
 			}
 
 			// Create a rate limit interceptor which uses the per-instance and global RPS limits from the test case.
 			rateLimitInterceptor := RateLimitInterceptorProvider(config, serviceResolver, metricsHandler)
-			// Create a rate limit interceptor.
-			namespaceRateLimitInterceptor := NamespaceRateLimitInterceptorProvider(
-				primitives.FrontendService,
-				config,
-				mockRegistry,
-				serviceResolver,
-				metricsHandler,
-			)
 
 			// Create a gRPC server for the fake workflow service.
 			svc := &testSvc{}
@@ -831,7 +782,6 @@ func TestNamespaceRateLimitMetrics(t *testing.T) {
 				grpc.ChainUnaryInterceptor(
 					rpc.NewServiceErrorInterceptor(log.NewTestLogger()),
 					rateLimitInterceptor.Intercept,
-					namespaceRateLimitInterceptor.Intercept,
 				),
 			)
 			workflowservice.RegisterWorkflowServiceServer(server, svc)
@@ -872,11 +822,6 @@ func TestNamespaceRateLimitMetrics(t *testing.T) {
 			snapshot := capture.Snapshot()
 			for _, limit := range snapshot[metrics.HostRPSLimit.Name()] {
 				assert.Equal(t, float64(tc.expectedHostLimit), limit.Value)
-			}
-
-			for _, limit := range snapshot[metrics.NamespaceHostRPSLimit.Name()] {
-				assert.Equal(t, float64(tc.expectedNamespaceHostLimit), limit.Value)
-				assert.Equal(t, testNS, limit.Tags["namespace"])
 			}
 		})
 	}

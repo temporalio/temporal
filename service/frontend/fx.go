@@ -377,20 +377,11 @@ func RateLimitInterceptorProvider(
 	)
 }
 
-func getNamespaceRateFnWithMetrics(rateFn func(ns string) float64, handler metrics.Handler) quotas.NamespaceRateFn {
-	return func(ns string) float64 {
-		rate := rateFn(ns)
-		metrics.NamespaceHostRPSLimit.With(handler.WithTags(metrics.NamespaceTag(ns))).Record(rate)
-		return rate
-	}
-}
-
 func NamespaceRateLimitInterceptorProvider(
 	serviceName primitives.ServiceName,
 	serviceConfig *Config,
 	namespaceRegistry namespace.Registry,
 	frontendServiceResolver membership.ServiceResolver,
-	handler metrics.Handler,
 ) *interceptor.NamespaceRateLimitInterceptor {
 	var globalNamespaceRPS, globalNamespaceVisibilityRPS, globalNamespaceNamespaceReplicationInducingAPIsRPS dynamicconfig.IntPropertyFnWithNamespaceFilter
 
@@ -408,11 +399,11 @@ func NamespaceRateLimitInterceptorProvider(
 		panic("invalid service name")
 	}
 
-	namespaceRateFn := getNamespaceRateFnWithMetrics(quotas.ClusterAwareNamespaceSpecificQuotaCalculator{
+	namespaceRateFn := quotas.ClusterAwareNamespaceSpecificQuotaCalculator{
 		MemberCounter:    frontendServiceResolver,
 		PerInstanceQuota: serviceConfig.MaxNamespaceRPSPerInstance,
 		GlobalQuota:      globalNamespaceRPS,
-	}.GetQuota, handler)
+	}.GetQuota
 	visibilityRateFn := quotas.ClusterAwareNamespaceSpecificQuotaCalculator{
 		MemberCounter:    frontendServiceResolver,
 		PerInstanceQuota: serviceConfig.MaxNamespaceVisibilityRPSPerInstance,
