@@ -37,7 +37,6 @@ import (
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence/versionhistory"
-	"go.temporal.io/server/common/worker_versioning"
 	"go.temporal.io/server/service/history/consts"
 	"go.temporal.io/server/service/history/tasks"
 	"go.temporal.io/server/service/history/workflow"
@@ -183,7 +182,7 @@ func newWorkflowTaskPostActionInfo(
 		return nil, err
 	}
 
-	directive := worker_versioning.MakeDirectiveForWorkflowTask(mutableState.GetAssignedBuildId(), mutableState.GetMostRecentWorkerVersionStamp(), mutableState.GetLastWorkflowTaskStartedEventID())
+	directive := MakeDirectiveForWorkflowTask(mutableState)
 
 	return &workflowTaskPostActionInfo{
 		historyResendInfo:                  resendInfo,
