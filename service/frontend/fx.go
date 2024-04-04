@@ -115,8 +115,10 @@ var Module = fx.Options(
 	fx.Provide(HTTPAPIServerProvider),
 	fx.Provide(NewServiceProvider),
 	fx.Provide(IncomingServiceClientProvider),
+	fx.Provide(IncomingServiceRegistryProvider),
 	fx.Provide(OutgoingServiceRegistryProvider),
 	fx.Invoke(ServiceLifetimeHooks),
+	fx.Invoke(IncomingServiceRegistryLifetimeHooks),
 )
 
 func NewServiceProvider(
@@ -675,6 +677,7 @@ func NexusHTTPHandlerProvider(
 	matchingClient resource.MatchingClient,
 	metricsHandler metrics.Handler,
 	namespaceRegistry namespace.Registry,
+	incomingServiceRegistry *nexus.IncomingServiceRegistry,
 	authInterceptor *authorization.Interceptor,
 	namespaceRateLimiterInterceptor *interceptor.NamespaceRateLimitInterceptor,
 	namespaceCountLimiterInterceptor *interceptor.ConcurrentRequestLimitInterceptor,
@@ -687,6 +690,7 @@ func NexusHTTPHandlerProvider(
 		matchingClient,
 		metricsHandler,
 		namespaceRegistry,
+		incomingServiceRegistry,
 		authInterceptor,
 		namespaceValidatorInterceptor,
 		namespaceRateLimiterInterceptor,
@@ -762,6 +766,25 @@ func IncomingServiceClientProvider(
 		incomingServiceManager,
 		logger,
 	)
+}
+
+func IncomingServiceRegistryProvider(
+	matchingClient resource.MatchingClient,
+	incomingServiceManager persistence.NexusIncomingServiceManager,
+	logger log.Logger,
+	dc *dynamicconfig.Collection,
+) *nexus.IncomingServiceRegistry {
+	registryConfig := nexus.NewIncomingServiceRegistryConfig(dc)
+	return nexus.NewIncomingServiceRegistry(
+		registryConfig,
+		matchingClient,
+		incomingServiceManager,
+		logger,
+	)
+}
+
+func IncomingServiceRegistryLifetimeHooks(lc fx.Lifecycle, registry *nexus.IncomingServiceRegistry) {
+	lc.Append(fx.StartStopHook(registry.StartLifecycle, registry.StopLifecycle))
 }
 
 func OutgoingServiceRegistryProvider(

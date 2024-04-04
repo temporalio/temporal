@@ -34,6 +34,9 @@ import (
 	nexuspb "go.temporal.io/api/nexus/v1"
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/api/taskqueue/v1"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
+
 	"go.temporal.io/server/api/matchingservice/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/authorization"
@@ -43,8 +46,6 @@ import (
 	"go.temporal.io/server/common/namespace"
 	commonnexus "go.temporal.io/server/common/nexus"
 	"go.temporal.io/server/common/rpc/interceptor"
-	"google.golang.org/grpc/codes"
-	"google.golang.org/grpc/status"
 )
 
 // Generic Nexus context that is not bound to a specific operation.
@@ -54,6 +55,7 @@ type nexusContext struct {
 	apiName                              string
 	namespaceName                        string
 	taskQueue                            string
+	serviceName                          string
 	claims                               *authorization.Claims
 	namespaceValidationInterceptor       *interceptor.NamespaceValidatorInterceptor
 	namespaceRateLimitInterceptor        *interceptor.NamespaceRateLimitInterceptor
@@ -167,9 +169,14 @@ func (h *nexusHandler) getOperationContext(ctx context.Context, method string) (
 	}
 	oc := operationContext{nexusContext: nc, auth: h.auth, cleanupFunctions: make([]func(), 0)}
 
-	oc.metricsHandlerForInterceptors = h.metricsHandler.WithTags(metrics.OperationTag(nc.apiName), metrics.NamespaceTag(nc.namespaceName))
+	oc.metricsHandlerForInterceptors = h.metricsHandler.WithTags(
+		metrics.OperationTag(nc.apiName),
+		metrics.NamespaceTag(nc.namespaceName),
+		metrics.NexusServiceTag(nc.serviceName),
+	)
 	oc.metricsHandler = h.metricsHandler.WithTags(
 		metrics.NamespaceTag(nc.namespaceName),
+		metrics.NexusServiceTag(nc.serviceName),
 		metrics.NexusMethodTag(method),
 		// default to internal error unless overridden by handler
 		metrics.NexusOutcomeTag("internal_error"),
