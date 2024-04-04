@@ -176,6 +176,9 @@ func (s *ClientFunctionalSuite) TestNexusStartOperation_Outcomes() {
 		// },
 	}
 
+	// Wait to make sure all incoming services are loaded into memory before starting tests.
+	time.Sleep(200 * time.Millisecond)
+
 	testFn := func(t *testing.T, tc testcase, dispatchURL string) {
 		ctx := NewContext()
 
@@ -522,6 +525,9 @@ func (s *ClientFunctionalSuite) TestNexusCancelOperation_Outcomes() {
 		// 	},
 		// },
 	}
+
+	// Wait to make sure all incoming services are loaded into memory before starting tests.
+	time.Sleep(200 * time.Millisecond)
 
 	testFn := func(t *testing.T, tc testcase, dispatchURL string) {
 		ctx := NewContext()
