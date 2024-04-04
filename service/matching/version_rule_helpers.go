@@ -140,7 +140,7 @@ func DeleteAssignmentRule(timestamp *hlc.Clock,
 	return data, checkAssignmentConditions(data, 0, hadUnconditional && !req.GetForce())
 }
 
-func InsertCompatibleRedirectRule(timestamp *hlc.Clock,
+func AddCompatibleRedirectRule(timestamp *hlc.Clock,
 	data *persistencespb.VersioningData,
 	req *workflowservice.UpdateWorkerVersioningRulesRequest_AddCompatibleBuildIdRedirectRule,
 	maxRedirectRules int) (*persistencespb.VersioningData, error) {

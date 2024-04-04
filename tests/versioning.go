@@ -3582,8 +3582,8 @@ func (s *VersioningIntegSuite) insertRedirectRule(
 		Namespace:     s.namespace,
 		TaskQueue:     tq,
 		ConflictToken: conflictToken,
-		Operation: &workflowservice.UpdateWorkerVersioningRulesRequest_InsertCompatibleRedirectRule{
-			InsertCompatibleRedirectRule: &workflowservice.UpdateWorkerVersioningRulesRequest_AddCompatibleBuildIdRedirectRule{
+		Operation: &workflowservice.UpdateWorkerVersioningRulesRequest_AddCompatibleRedirectRule{
+			AddCompatibleRedirectRule: &workflowservice.UpdateWorkerVersioningRulesRequest_AddCompatibleBuildIdRedirectRule{
 				Rule: &taskqueuepb.CompatibleBuildIdRedirectRule{
 					SourceBuildId: sourceBuildId,
 					TargetBuildId: targetBuildId,
