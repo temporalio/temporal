@@ -172,7 +172,6 @@ func (h *nexusHandler) getOperationContext(ctx context.Context, method string) (
 	oc.metricsHandlerForInterceptors = h.metricsHandler.WithTags(
 		metrics.OperationTag(nc.apiName),
 		metrics.NamespaceTag(nc.namespaceName),
-		metrics.NexusServiceTag(nc.serviceName),
 	)
 	oc.metricsHandler = h.metricsHandler.WithTags(
 		metrics.NamespaceTag(nc.namespaceName),
