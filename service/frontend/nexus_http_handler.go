@@ -197,7 +197,7 @@ func (h *NexusHTTPHandler) dispatchNexusTaskByService(w http.ResponseWriter, r *
 		switch {
 		case errors.As(err, &notFound):
 			h.writeNexusFailure(w, http.StatusNotFound, &nexus.Failure{Message: err.Error()})
-		case errors.As(err, &context.DeadlineExceeded):
+		case errors.Is(err, context.DeadlineExceeded):
 			h.writeNexusFailure(w, http.StatusRequestTimeout, &nexus.Failure{Message: err.Error()})
 		default:
 			h.writeNexusFailure(w, http.StatusInternalServerError, &nexus.Failure{Message: err.Error()})
