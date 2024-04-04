@@ -232,7 +232,7 @@ func TestRateLimitInterceptorProvider(t *testing.T) {
 				OperatorRPSRatio: func() float64 {
 					return tc.operatorRPSRatio
 				},
-			}, tc.serviceResolver)
+			}, tc.serviceResolver, log.NewTestLogger())
 
 			// Create a gRPC server for the fake workflow service.
 			svc := &testSvc{}
@@ -583,6 +583,7 @@ func TestNamespaceRateLimitInterceptorProvider(t *testing.T) {
 				&config,
 				mockRegistry,
 				serviceResolver,
+				log.NewTestLogger(),
 			)
 
 			// Create a gRPC server for the fake workflow service.

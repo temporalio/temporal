@@ -25,18 +25,18 @@
 package shard
 
 import (
-	"go.temporal.io/server/common/quotas"
+	"go.temporal.io/server/common/quotas/calculator"
 )
 
 type (
 	OwnershipAwareQuotaCalculator struct {
-		quotas.ClusterAwareQuotaCalculator
+		calculator.ClusterAwareQuotaCalculator
 
 		scaler OwnershipBasedQuotaScaler
 	}
 
 	OwnershipAwareNamespaceQuotaCalculator struct {
-		quotas.ClusterAwareNamespaceSpecificQuotaCalculator
+		calculator.ClusterAwareNamespaceQuotaCalculator
 
 		scaler OwnershipBasedQuotaScaler
 	}
@@ -44,12 +44,12 @@ type (
 
 func NewOwnershipAwareQuotaCalculator(
 	scaler OwnershipBasedQuotaScaler,
-	memberCounter quotas.MemberCounter,
+	memberCounter calculator.MemberCounter,
 	perInstanceQuota func() int,
 	globalQuota func() int,
 ) *OwnershipAwareQuotaCalculator {
 	return &OwnershipAwareQuotaCalculator{
-		ClusterAwareQuotaCalculator: quotas.ClusterAwareQuotaCalculator{
+		ClusterAwareQuotaCalculator: calculator.ClusterAwareQuotaCalculator{
 			MemberCounter:    memberCounter,
 			PerInstanceQuota: perInstanceQuota,
 			GlobalQuota:      globalQuota,
@@ -67,12 +67,12 @@ func (c *OwnershipAwareQuotaCalculator) GetQuota() float64 {
 
 func NewOwnershipAwareNamespaceQuotaCalculator(
 	scaler OwnershipBasedQuotaScaler,
-	memberCounter quotas.MemberCounter,
+	memberCounter calculator.MemberCounter,
 	perInstanceQuota func(namespace string) int,
 	globalQuota func(namespace string) int,
 ) *OwnershipAwareNamespaceQuotaCalculator {
 	return &OwnershipAwareNamespaceQuotaCalculator{
-		ClusterAwareNamespaceSpecificQuotaCalculator: quotas.ClusterAwareNamespaceSpecificQuotaCalculator{
+		ClusterAwareNamespaceQuotaCalculator: calculator.ClusterAwareNamespaceQuotaCalculator{
 			MemberCounter:    memberCounter,
 			PerInstanceQuota: perInstanceQuota,
 			GlobalQuota:      globalQuota,
@@ -85,7 +85,7 @@ func (c *OwnershipAwareNamespaceQuotaCalculator) GetQuota(namespace string) floa
 	if quota, ok := getOwnershipScaledQuota(c.scaler, c.GlobalQuota(namespace)); ok {
 		return quota
 	}
-	return c.ClusterAwareNamespaceSpecificQuotaCalculator.GetQuota(namespace)
+	return c.ClusterAwareNamespaceQuotaCalculator.GetQuota(namespace)
 }
 
 func getOwnershipScaledQuota(

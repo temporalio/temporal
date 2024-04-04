@@ -27,7 +27,9 @@ package history
 import (
 	"context"
 
+	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/persistence"
+	"go.temporal.io/server/common/quotas/calculator"
 	"go.uber.org/fx"
 
 	"go.temporal.io/server/common/clock"
@@ -161,20 +163,28 @@ func QueueSchedulerRateLimiterProvider(
 	serviceResolver membership.ServiceResolver,
 	config *configs.Config,
 	timeSource clock.TimeSource,
+	logger log.SnTaggedLogger,
 ) (queues.SchedulerRateLimiter, error) {
 	return queues.NewPrioritySchedulerRateLimiter(
-		shard.NewOwnershipAwareNamespaceQuotaCalculator(
-			ownershipBasedQuotaScaler,
-			serviceResolver,
-			config.TaskSchedulerNamespaceMaxQPS,
-			config.TaskSchedulerGlobalNamespaceMaxQPS,
+		calculator.NewLoggedNamespaceCalculator(
+			shard.NewOwnershipAwareNamespaceQuotaCalculator(
+				ownershipBasedQuotaScaler,
+				serviceResolver,
+				config.TaskSchedulerNamespaceMaxQPS,
+				config.TaskSchedulerGlobalNamespaceMaxQPS,
+			),
+			log.With(logger, tag.ComponentTaskScheduler, tag.ScopeNamespace),
 		).GetQuota,
-		shard.NewOwnershipAwareQuotaCalculator(
-			ownershipBasedQuotaScaler,
-			serviceResolver,
-			config.TaskSchedulerMaxQPS,
-			config.TaskSchedulerGlobalMaxQPS,
+		calculator.NewLoggedCalculator(
+			shard.NewOwnershipAwareQuotaCalculator(
+				ownershipBasedQuotaScaler,
+				serviceResolver,
+				config.TaskSchedulerMaxQPS,
+				config.TaskSchedulerGlobalMaxQPS,
+			),
+			log.With(logger, tag.ComponentTaskScheduler, tag.ScopeHost),
 		).GetQuota,
+		// TODO: reuse persistence rate limit calculator in PersistenceRateLimitingParamsProvider
 		shard.NewOwnershipAwareNamespaceQuotaCalculator(
 			ownershipBasedQuotaScaler,
 			serviceResolver,
@@ -223,25 +233,13 @@ func (f *QueueFactoryBase) Stop() {
 	}
 }
 
-func NewQueueHostRateLimiter(
-	hostRPS dynamicconfig.IntPropertyFn,
-	persistenceMaxRPS dynamicconfig.IntPropertyFn,
-	persistenceMaxRPSRatio float64,
-) quotas.RateLimiter {
-	return quotas.NewDefaultOutgoingRateLimiter(
-		NewHostRateLimiterRateFn(
-			hostRPS,
-			persistenceMaxRPS,
-			persistenceMaxRPSRatio,
-		),
-	)
-}
-
 func NewHostRateLimiterRateFn(
 	hostRPS dynamicconfig.IntPropertyFn,
 	persistenceMaxRPS dynamicconfig.IntPropertyFn,
 	persistenceMaxRPSRatio float64,
 ) quotas.RateFn {
+	// TODO: reuse persistence rate limit calculator in PersistenceRateLimitingParamsProvider
+
 	return func() float64 {
 		if maxPollHostRps := hostRPS(); maxPollHostRps > 0 {
 			return float64(maxPollHostRps)

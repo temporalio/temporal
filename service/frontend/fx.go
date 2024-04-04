@@ -57,6 +57,7 @@ import (
 	esclient "go.temporal.io/server/common/persistence/visibility/store/elasticsearch/client"
 	"go.temporal.io/server/common/primitives"
 	"go.temporal.io/server/common/quotas"
+	"go.temporal.io/server/common/quotas/calculator"
 	"go.temporal.io/server/common/resolver"
 	"go.temporal.io/server/common/resource"
 	"go.temporal.io/server/common/rpc"
@@ -348,12 +349,16 @@ func TelemetryInterceptorProvider(
 func RateLimitInterceptorProvider(
 	serviceConfig *Config,
 	frontendServiceResolver membership.ServiceResolver,
+	logger log.SnTaggedLogger,
 ) *interceptor.RateLimitInterceptor {
-	rateFn := quotas.ClusterAwareQuotaCalculator{
-		MemberCounter:    frontendServiceResolver,
-		PerInstanceQuota: serviceConfig.RPS,
-		GlobalQuota:      serviceConfig.GlobalRPS,
-	}.GetQuota
+	rateFn := calculator.NewLoggedCalculator(
+		calculator.ClusterAwareQuotaCalculator{
+			MemberCounter:    frontendServiceResolver,
+			PerInstanceQuota: serviceConfig.RPS,
+			GlobalQuota:      serviceConfig.GlobalRPS,
+		},
+		log.With(logger, tag.ComponentRPCHandler, tag.ScopeHost),
+	).GetQuota
 	namespaceReplicationInducingRateFn := func() float64 {
 		return float64(serviceConfig.NamespaceReplicationInducingAPIsRPS())
 	}
@@ -374,6 +379,7 @@ func NamespaceRateLimitInterceptorProvider(
 	serviceConfig *Config,
 	namespaceRegistry namespace.Registry,
 	frontendServiceResolver membership.ServiceResolver,
+	logger log.SnTaggedLogger,
 ) *interceptor.NamespaceRateLimitInterceptor {
 	var globalNamespaceRPS, globalNamespaceVisibilityRPS, globalNamespaceNamespaceReplicationInducingAPIsRPS dynamicconfig.IntPropertyFnWithNamespaceFilter
 
@@ -391,21 +397,30 @@ func NamespaceRateLimitInterceptorProvider(
 		panic("invalid service name")
 	}
 
-	namespaceRateFn := quotas.ClusterAwareNamespaceSpecificQuotaCalculator{
-		MemberCounter:    frontendServiceResolver,
-		PerInstanceQuota: serviceConfig.MaxNamespaceRPSPerInstance,
-		GlobalQuota:      globalNamespaceRPS,
-	}.GetQuota
-	visibilityRateFn := quotas.ClusterAwareNamespaceSpecificQuotaCalculator{
-		MemberCounter:    frontendServiceResolver,
-		PerInstanceQuota: serviceConfig.MaxNamespaceVisibilityRPSPerInstance,
-		GlobalQuota:      globalNamespaceVisibilityRPS,
-	}.GetQuota
-	namespaceReplicationInducingRateFn := quotas.ClusterAwareNamespaceSpecificQuotaCalculator{
-		MemberCounter:    frontendServiceResolver,
-		PerInstanceQuota: serviceConfig.MaxNamespaceNamespaceReplicationInducingAPIsRPSPerInstance,
-		GlobalQuota:      globalNamespaceNamespaceReplicationInducingAPIsRPS,
-	}.GetQuota
+	namespaceRateFn := calculator.NewLoggedNamespaceCalculator(
+		calculator.ClusterAwareNamespaceQuotaCalculator{
+			MemberCounter:    frontendServiceResolver,
+			PerInstanceQuota: serviceConfig.MaxNamespaceRPSPerInstance,
+			GlobalQuota:      globalNamespaceRPS,
+		},
+		log.With(logger, tag.ComponentRPCHandler, tag.ScopeNamespace),
+	).GetQuota
+	visibilityRateFn := calculator.NewLoggedNamespaceCalculator(
+		calculator.ClusterAwareNamespaceQuotaCalculator{
+			MemberCounter:    frontendServiceResolver,
+			PerInstanceQuota: serviceConfig.MaxNamespaceVisibilityRPSPerInstance,
+			GlobalQuota:      globalNamespaceVisibilityRPS,
+		},
+		log.With(logger, tag.ComponentVisibilityHandler, tag.ScopeNamespace),
+	).GetQuota
+	namespaceReplicationInducingRateFn := calculator.NewLoggedNamespaceCalculator(
+		calculator.ClusterAwareNamespaceQuotaCalculator{
+			MemberCounter:    frontendServiceResolver,
+			PerInstanceQuota: serviceConfig.MaxNamespaceNamespaceReplicationInducingAPIsRPSPerInstance,
+			GlobalQuota:      globalNamespaceNamespaceReplicationInducingAPIsRPS,
+		},
+		log.With(logger, tag.ComponentNamespaceReplication, tag.ScopeNamespace),
+	).GetQuota
 	namespaceRateLimiter := quotas.NewNamespaceRequestRateLimiter(
 		func(req quotas.Request) quotas.RequestRateLimiter {
 			return configs.NewRequestToRateLimiter(
@@ -459,6 +474,7 @@ func CallerInfoInterceptorProvider(
 func PersistenceRateLimitingParamsProvider(
 	serviceConfig *Config,
 	persistenceLazyLoadedServiceResolver service.PersistenceLazyLoadedServiceResolver,
+	logger log.SnTaggedLogger,
 ) service.PersistenceRateLimitingParams {
 	return service.NewPersistenceRateLimitingParams(
 		serviceConfig.PersistenceMaxQPS,
@@ -470,6 +486,7 @@ func PersistenceRateLimitingParamsProvider(
 		serviceConfig.OperatorRPSRatio,
 		serviceConfig.PersistenceDynamicRateLimitingParams,
 		persistenceLazyLoadedServiceResolver,
+		logger,
 	)
 }
 
