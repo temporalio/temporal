@@ -134,6 +134,20 @@ func (mr *MockphysicalTaskQueueManagerMockRecorder) GetAllPollerInfo() *gomock.C
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetAllPollerInfo", reflect.TypeOf((*MockphysicalTaskQueueManager)(nil).GetAllPollerInfo))
 }
 
+// GetBacklogInfo mocks base method.
+func (m *MockphysicalTaskQueueManager) GetBacklogInfo() *v1.BacklogInfo {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetBacklogInfo")
+	ret0, _ := ret[0].(*v1.BacklogInfo)
+	return ret0
+}
+
+// GetBacklogInfo indicates an expected call of GetBacklogInfo.
+func (mr *MockphysicalTaskQueueManagerMockRecorder) GetBacklogInfo() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetBacklogInfo", reflect.TypeOf((*MockphysicalTaskQueueManager)(nil).GetBacklogInfo))
+}
+
 // HasPollerAfter mocks base method.
 func (m *MockphysicalTaskQueueManager) HasPollerAfter(accessTime time.Time) bool {
 	m.ctrl.T.Helper()
