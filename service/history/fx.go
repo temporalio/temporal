@@ -193,9 +193,11 @@ func TelemetryInterceptorProvider(
 	logger log.Logger,
 	namespaceRegistry namespace.Registry,
 	metricsHandler metrics.Handler,
+	serializer common.TaskTokenSerializer,
 ) *interceptor.TelemetryInterceptor {
 	return interceptor.NewTelemetryInterceptor(
 		namespaceRegistry,
+		serializer,
 		metricsHandler,
 		logger,
 	)
