@@ -173,7 +173,7 @@ var (
 type (
 	NamespaceRateBurstImpl struct {
 		namespaceName string
-		rateFn        dynamicconfig.FloatPropertyFnWithNamespaceFilter
+		rateFn        quotas.NamespaceRateFn
 		burstFn       dynamicconfig.IntPropertyFnWithNamespaceFilter
 	}
 
@@ -188,7 +188,7 @@ var _ quotas.RateBurst = (*operatorRateBurstImpl)(nil)
 
 func NewNamespaceRateBurst(
 	namespaceName string,
-	rateFn dynamicconfig.FloatPropertyFnWithNamespaceFilter,
+	rateFn quotas.NamespaceRateFn,
 	burstRatioFn dynamicconfig.FloatPropertyFnWithNamespaceFilter,
 ) *NamespaceRateBurstImpl {
 	return &NamespaceRateBurstImpl{

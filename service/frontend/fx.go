@@ -346,9 +346,18 @@ func TelemetryInterceptorProvider(
 	)
 }
 
+func getRateFnWithMetrics(rateFn quotas.RateFn, handler metrics.Handler) quotas.RateFn {
+	return func() float64 {
+		rate := rateFn()
+		metrics.HostRPSLimit.With(handler).Record(rate)
+		return rate
+	}
+}
+
 func RateLimitInterceptorProvider(
 	serviceConfig *Config,
 	frontendServiceResolver membership.ServiceResolver,
+	handler metrics.Handler,
 	logger log.SnTaggedLogger,
 ) *interceptor.RateLimitInterceptor {
 	rateFn := calculator.NewLoggedCalculator(
@@ -359,13 +368,15 @@ func RateLimitInterceptorProvider(
 		},
 		log.With(logger, tag.ComponentRPCHandler, tag.ScopeHost),
 	).GetQuota
+	rateFnWithMetrics := getRateFnWithMetrics(rateFn, handler)
+
 	namespaceReplicationInducingRateFn := func() float64 {
 		return float64(serviceConfig.NamespaceReplicationInducingAPIsRPS())
 	}
 
 	return interceptor.NewRateLimitInterceptor(
 		configs.NewRequestToRateLimiter(
-			quotas.NewDefaultIncomingRateBurst(rateFn),
+			quotas.NewDefaultIncomingRateBurst(rateFnWithMetrics),
 			quotas.NewDefaultIncomingRateBurst(rateFn),
 			quotas.NewDefaultIncomingRateBurst(namespaceReplicationInducingRateFn),
 			serviceConfig.OperatorRPSRatio,
