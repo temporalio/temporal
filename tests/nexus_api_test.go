@@ -175,7 +175,7 @@ func (s *ClientFunctionalSuite) TestNexusStartOperation_Outcomes() {
 	}
 
 	// Wait to make sure all incoming services are loaded into memory before starting tests.
-	time.Sleep(200 * time.Millisecond)
+	time.Sleep(100 * time.Millisecond)
 
 	testFn := func(t *testing.T, tc testcase, dispatchURL string) {
 		ctx := NewContext()
@@ -274,6 +274,9 @@ func (s *ClientFunctionalSuite) TestNexusStartOperation_Forbidden() {
 	taskQueue := s.randomizeStr("task-queue")
 	testService := s.createNexusIncomingService(s.randomizeStr("test-service"), taskQueue)
 
+	// Wait to make sure all incoming services are loaded into memory before starting tests.
+	time.Sleep(100 * time.Millisecond)
+
 	type testcase struct {
 		name           string
 		onAuthorize    func(context.Context, *authorization.Claims, *authorization.CallTarget) (authorization.Result, error)
@@ -360,6 +363,9 @@ func (s *ClientFunctionalSuite) TestNexusStartOperation_Forbidden() {
 func (s *ClientFunctionalSuite) TestNexusStartOperation_Claims() {
 	taskQueue := s.randomizeStr("task-queue")
 	testService := s.createNexusIncomingService(s.randomizeStr("test-service"), taskQueue)
+
+	// Wait to make sure all incoming services are loaded into memory before starting tests.
+	time.Sleep(100 * time.Millisecond)
 
 	type testcase struct {
 		name      string
@@ -525,7 +531,7 @@ func (s *ClientFunctionalSuite) TestNexusCancelOperation_Outcomes() {
 	}
 
 	// Wait to make sure all incoming services are loaded into memory before starting tests.
-	time.Sleep(200 * time.Millisecond)
+	time.Sleep(100 * time.Millisecond)
 
 	testFn := func(t *testing.T, tc testcase, dispatchURL string) {
 		ctx := NewContext()
