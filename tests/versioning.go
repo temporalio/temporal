@@ -29,12 +29,15 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strings"
 	"sync/atomic"
 	"time"
 
 	"github.com/dgryski/go-farm"
 	"github.com/stretchr/testify/require"
+	"go.temporal.io/server/common/searchattribute"
 	"go.temporal.io/server/common/tqid"
+	"go.temporal.io/server/common/worker_versioning"
 	"google.golang.org/protobuf/types/known/durationpb"
 
 	commandpb "go.temporal.io/api/command/v1"
@@ -552,7 +555,7 @@ func (s *VersioningIntegSuite) dispatchNewWorkflow(newVersioning bool) {
 	s.NoError(run.Get(ctx, &out))
 	s.Equal("done!", out)
 
-	s.validateWorkflowBuildId(ctx, run.GetID(), run.GetRunID(), v1, newVersioning, true, "")
+	s.validateWorkflowBuildId(ctx, run.GetID(), run.GetRunID(), v1, newVersioning, true, "", nil)
 	if newVersioning {
 		s.validateWorkflowEventsVersionStamps(ctx, run.GetID(), run.GetRunID(), []string{v1}, "")
 	} else {
@@ -675,7 +678,7 @@ func (s *VersioningIntegSuite) workflowStaysInBuildId() {
 	s.NoError(err)
 
 	s.waitForChan(ctx, act1Done)
-	s.validateWorkflowBuildId(ctx, run.GetID(), run.GetRunID(), v1, true, true, "")
+	s.validateWorkflowBuildId(ctx, run.GetID(), run.GetRunID(), v1, true, true, "", nil)
 
 	// update rules with v2 as the default build
 	rule = s.addAssignmentRule(ctx, tq, v2)
@@ -690,7 +693,7 @@ func (s *VersioningIntegSuite) workflowStaysInBuildId() {
 	var out string
 	s.NoError(run.Get(ctx, &out))
 	s.Equal("done!", out)
-	s.validateWorkflowBuildId(ctx, run.GetID(), run.GetRunID(), v1, true, true, "")
+	s.validateWorkflowBuildId(ctx, run.GetID(), run.GetRunID(), v1, true, true, "", nil)
 	s.validateWorkflowEventsVersionStamps(ctx, run.GetID(), run.GetRunID(), []string{v1, v1, v1, v1, v1}, "")
 }
 
@@ -751,7 +754,7 @@ func (s *VersioningIntegSuite) unversionedWorkflowStaysUnversioned() {
 	s.NoError(err)
 
 	s.waitForChan(ctx, act1Done)
-	s.validateWorkflowBuildId(ctx, run.GetID(), run.GetRunID(), "", true, true, "")
+	s.validateWorkflowBuildId(ctx, run.GetID(), run.GetRunID(), "", true, true, "", nil)
 
 	// update rules with v1 as the default build
 	rule := s.addAssignmentRule(ctx, tq, v1)
@@ -766,7 +769,7 @@ func (s *VersioningIntegSuite) unversionedWorkflowStaysUnversioned() {
 	var out string
 	s.NoError(run.Get(ctx, &out))
 	s.Equal("done!", out)
-	s.validateWorkflowBuildId(ctx, run.GetID(), run.GetRunID(), "", true, true, "")
+	s.validateWorkflowBuildId(ctx, run.GetID(), run.GetRunID(), "", true, true, "", nil)
 	s.validateWorkflowEventsVersionStamps(ctx, run.GetID(), run.GetRunID(), []string{"", "", "", "", ""}, "")
 }
 
@@ -797,7 +800,7 @@ func (s *VersioningIntegSuite) firstWorkflowTaskAssignmentSpooled() {
 	time.Sleep(100 * time.Millisecond)
 
 	// MS should have the correct build ID
-	s.validateWorkflowBuildId(ctx, run.GetID(), run.GetRunID(), v1, true, false, "")
+	s.validateWorkflowBuildId(ctx, run.GetID(), run.GetRunID(), v1, true, false, "", nil)
 
 	// update latest build to v2
 	rule = s.addAssignmentRule(ctx, tq, v2)
@@ -823,7 +826,7 @@ func (s *VersioningIntegSuite) firstWorkflowTaskAssignmentSpooled() {
 	time.Sleep(100 * time.Millisecond)
 
 	// After scheduling the second time, now MS should be assigned to v2
-	s.validateWorkflowBuildId(ctx, run.GetID(), run.GetRunID(), v2, true, false, "")
+	s.validateWorkflowBuildId(ctx, run.GetID(), run.GetRunID(), v2, true, false, "", []string{v1})
 
 	// update latest build to v3
 	rule = s.addAssignmentRule(ctx, tq, v3)
@@ -851,7 +854,7 @@ func (s *VersioningIntegSuite) firstWorkflowTaskAssignmentSpooled() {
 	time.Sleep(1100 * time.Millisecond)
 
 	// After scheduling the third time, now MS should be assigned to v3
-	s.validateWorkflowBuildId(ctx, run.GetID(), run.GetRunID(), v3, true, false, "")
+	s.validateWorkflowBuildId(ctx, run.GetID(), run.GetRunID(), v3, true, false, "", []string{v1, v2})
 
 	wf3 := func(ctx workflow.Context) (string, error) {
 		return "done on v3!", nil
@@ -870,7 +873,7 @@ func (s *VersioningIntegSuite) firstWorkflowTaskAssignmentSpooled() {
 	var out string
 	s.NoError(run.Get(ctx, &out))
 	s.Equal("done on v3!", out)
-	s.validateWorkflowBuildId(ctx, run.GetID(), run.GetRunID(), v3, true, true, "")
+	s.validateWorkflowBuildId(ctx, run.GetID(), run.GetRunID(), v3, true, true, "", []string{v1, v2})
 	s.validateWorkflowEventsVersionStamps(
 		ctx, run.GetID(), run.GetRunID(), []string{
 			v1, // failed wf task
@@ -923,7 +926,7 @@ func (s *VersioningIntegSuite) firstWorkflowTaskAssignmentSyncMatch() {
 	time.Sleep(100 * time.Millisecond)
 
 	// MS should have the correct build ID
-	s.validateWorkflowBuildId(ctx, run.GetID(), run.GetRunID(), v1, true, false, "")
+	s.validateWorkflowBuildId(ctx, run.GetID(), run.GetRunID(), v1, true, false, "", nil)
 
 	// v2 times out the task
 	timedoutTask := make(chan struct{})
@@ -951,7 +954,7 @@ func (s *VersioningIntegSuite) firstWorkflowTaskAssignmentSyncMatch() {
 	time.Sleep(1100 * time.Millisecond)
 
 	// After scheduling the second time, now MS should be assigned to v2
-	s.validateWorkflowBuildId(ctx, run.GetID(), run.GetRunID(), v2, true, false, "")
+	s.validateWorkflowBuildId(ctx, run.GetID(), run.GetRunID(), v2, true, false, "", []string{v1})
 
 	s.waitForChan(ctx, timedoutTask)
 
@@ -977,7 +980,7 @@ func (s *VersioningIntegSuite) firstWorkflowTaskAssignmentSyncMatch() {
 	var out string
 	s.NoError(run.Get(ctx, &out))
 	s.Equal("done on v3!", out)
-	s.validateWorkflowBuildId(ctx, run.GetID(), run.GetRunID(), v3, true, true, "")
+	s.validateWorkflowBuildId(ctx, run.GetID(), run.GetRunID(), v3, true, true, "", []string{v1, v2})
 	s.validateWorkflowEventsVersionStamps(
 		ctx, run.GetID(), run.GetRunID(), []string{
 			v1, // failed wf task
@@ -1299,6 +1302,7 @@ func (s *VersioningIntegSuite) independentActivityTaskAssignmentSyncMatch(versio
 	if versionedWf {
 		wfBuild = wfV1
 	}
+	s.validateWorkflowBuildId(ctx, run.GetID(), run.GetRunID(), wfBuild, true, true, "", nil)
 	s.validateWorkflowEventsVersionStamps(
 		ctx, run.GetID(), run.GetRunID(), []string{
 			wfBuild,
@@ -1361,7 +1365,7 @@ func (s *VersioningIntegSuite) dispatchNotUsingVersioning(newVersioning bool) {
 	s.NoError(run.Get(ctx, &out))
 	s.Equal("done with versioning!", out)
 
-	s.validateWorkflowBuildId(ctx, run.GetID(), run.GetRunID(), v1, newVersioning, true, "")
+	s.validateWorkflowBuildId(ctx, run.GetID(), run.GetRunID(), v1, newVersioning, true, "", nil)
 }
 
 func (s *VersioningIntegSuite) TestDispatchNewWorkflowStartWorkerFirst() {
@@ -1401,7 +1405,7 @@ func (s *VersioningIntegSuite) dispatchNewWorkflowStartWorkerFirst() {
 	s.NoError(run.Get(ctx, &out))
 	s.Equal("done!", out)
 
-	s.validateWorkflowBuildId(ctx, run.GetID(), run.GetRunID(), v1, false, true, "")
+	s.validateWorkflowBuildId(ctx, run.GetID(), run.GetRunID(), v1, false, true, "", nil)
 }
 
 func (s *VersioningIntegSuite) TestDispatchUnversionedRemainsUnversioned() {
@@ -1444,7 +1448,7 @@ func (s *VersioningIntegSuite) dispatchUnversionedRemainsUnversioned() {
 	s.NoError(run.Get(ctx, &out))
 	s.Equal("done!", out)
 
-	s.validateWorkflowBuildId(ctx, run.GetID(), run.GetRunID(), "", false, true, "")
+	s.validateWorkflowBuildId(ctx, run.GetID(), run.GetRunID(), "", false, true, "", nil)
 }
 
 func (s *VersioningIntegSuite) TestDispatchUpgradeStopOld() {
@@ -1528,7 +1532,7 @@ func (s *VersioningIntegSuite) dispatchUpgrade(stopOld bool) {
 	s.NoError(run.Get(ctx, &out))
 	s.Equal("done from 1.1!", out)
 
-	s.validateWorkflowBuildId(ctx, run.GetID(), run.GetRunID(), v11, false, true, "")
+	s.validateWorkflowBuildId(ctx, run.GetID(), run.GetRunID(), v11, false, true, "", []string{v1})
 }
 
 type activityFailMode int
@@ -1723,7 +1727,7 @@ func (s *VersioningIntegSuite) dispatchActivity(failMode activityFailMode, newVe
 		s.Equal("v1v2", out)
 	}
 
-	s.validateWorkflowBuildId(ctx, run.GetID(), run.GetRunID(), v1, newVersioning, true, "")
+	s.validateWorkflowBuildId(ctx, run.GetID(), run.GetRunID(), v1, newVersioning, true, "", nil)
 }
 
 func (s *VersioningIntegSuite) TestDispatchActivityCompatible() {
@@ -1799,7 +1803,7 @@ func (s *VersioningIntegSuite) dispatchActivityCompatible() {
 	s.NoError(run.Get(ctx, &out))
 	s.Equal("v1.1", out)
 
-	s.validateWorkflowBuildId(ctx, run.GetID(), run.GetRunID(), v11, false, true, "")
+	s.validateWorkflowBuildId(ctx, run.GetID(), run.GetRunID(), v11, false, true, "", []string{v1})
 }
 
 func (s *VersioningIntegSuite) TestDispatchActivityEager() {
@@ -1972,6 +1976,7 @@ func (s *VersioningIntegSuite) dispatchChildWorkflow(newVersioning bool, crossTq
 			newVersioning,
 			!newVersioning && expectedBuildId == v1,
 			expectedInheritedBuildId,
+			nil,
 		)
 		if newVersioning {
 			s.validateWorkflowEventsVersionStamps(ctx, exec.ID, exec.RunID, []string{expectedBuildId}, expectedInheritedBuildId)
@@ -2096,7 +2101,7 @@ func (s *VersioningIntegSuite) dispatchChildWorkflow(newVersioning bool, crossTq
 		s.Equal("v1v2", out)
 	}
 
-	s.validateWorkflowBuildId(ctx, run.GetID(), run.GetRunID(), v1, newVersioning, true, "")
+	s.validateWorkflowBuildId(ctx, run.GetID(), run.GetRunID(), v1, newVersioning, true, "", nil)
 }
 
 func (s *VersioningIntegSuite) TestDispatchChildWorkflowUpgrade() {
@@ -2115,12 +2120,12 @@ func (s *VersioningIntegSuite) dispatchChildWorkflowUpgrade() {
 
 	child1 := func(cctx workflow.Context) (string, error) {
 		exec := workflow.GetInfo(cctx).WorkflowExecution
-		s.validateWorkflowBuildId(ctx, exec.ID, exec.RunID, v1, false, true, "")
+		s.validateWorkflowBuildId(ctx, exec.ID, exec.RunID, v1, false, true, "", nil)
 		return "v1", nil
 	}
 	child11 := func(cctx workflow.Context) (string, error) {
 		exec := workflow.GetInfo(cctx).WorkflowExecution
-		s.validateWorkflowBuildId(ctx, exec.ID, exec.RunID, v11, false, true, "")
+		s.validateWorkflowBuildId(ctx, exec.ID, exec.RunID, v11, false, true, "", nil)
 		return "v1.1", nil
 	}
 	wf1 := func(ctx workflow.Context) (string, error) {
@@ -2175,7 +2180,7 @@ func (s *VersioningIntegSuite) dispatchChildWorkflowUpgrade() {
 	var out string
 	s.NoError(run.Get(ctx, &out))
 	s.Equal("v1.1", out)
-	s.validateWorkflowBuildId(ctx, run.GetID(), run.GetRunID(), v11, false, true, "")
+	s.validateWorkflowBuildId(ctx, run.GetID(), run.GetRunID(), v11, false, true, "", []string{v1})
 }
 
 func (s *VersioningIntegSuite) TestDispatchChildWorkflowCrossTQFails() {
@@ -2388,7 +2393,7 @@ func (s *VersioningIntegSuite) dispatchContinueAsNew(newVersioning bool, crossTq
 			return "", workflow.NewContinueAsNewError(newCtx, "wf", attempt+1)
 		case 1:
 			exec := workflow.GetInfo(wctx).WorkflowExecution
-			s.validateWorkflowBuildId(ctx, exec.ID, exec.RunID, v1, newVersioning, !newVersioning, inheritedBuildId)
+			s.validateWorkflowBuildId(ctx, exec.ID, exec.RunID, v1, newVersioning, !newVersioning, inheritedBuildId, nil)
 			if newVersioning {
 				s.validateWorkflowEventsVersionStamps(ctx, exec.ID, exec.RunID, []string{v1}, inheritedBuildId)
 			}
@@ -2412,7 +2417,7 @@ func (s *VersioningIntegSuite) dispatchContinueAsNew(newVersioning bool, crossTq
 	wf2 := func(wctx workflow.Context, attempt int) (string, error) {
 		if attempt == 2 {
 			exec := workflow.GetInfo(wctx).WorkflowExecution
-			s.validateWorkflowBuildId(ctx, exec.ID, exec.RunID, v2, newVersioning, false, "")
+			s.validateWorkflowBuildId(ctx, exec.ID, exec.RunID, v2, newVersioning, false, "", nil)
 			if crossTq {
 				s.Equal(canxTq, workflow.GetInfo(wctx).TaskQueueName)
 			} else {
@@ -2468,7 +2473,7 @@ func (s *VersioningIntegSuite) dispatchContinueAsNew(newVersioning bool, crossTq
 	// add another 100ms to make sure it got to sticky queues also
 	time.Sleep(100 * time.Millisecond)
 
-	s.validateWorkflowBuildId(ctx, run.GetID(), run.GetRunID(), v1, newVersioning, true, "")
+	s.validateWorkflowBuildId(ctx, run.GetID(), run.GetRunID(), v1, newVersioning, true, "", nil)
 
 	// start workers for v2
 	w2 := worker.New(s.sdkClient, tq, worker.Options{
@@ -2499,7 +2504,7 @@ func (s *VersioningIntegSuite) dispatchContinueAsNew(newVersioning bool, crossTq
 	var out string
 	s.NoError(run.Get(ctx, &out))
 	s.Equal("done!", out)
-	s.validateWorkflowBuildId(ctx, run.GetID(), "", v2, newVersioning, true, "")
+	s.validateWorkflowBuildId(ctx, run.GetID(), "", v2, newVersioning, true, "", nil)
 	if newVersioning {
 		s.validateWorkflowEventsVersionStamps(ctx, run.GetID(), "", []string{v2}, "")
 	}
@@ -2610,7 +2615,7 @@ func (s *VersioningIntegSuite) dispatchContinueAsNewUpgrade() {
 	// then continue-as-new onto v11
 	s.waitForChan(ctx, started11)
 
-	s.validateWorkflowBuildId(ctx, run.GetID(), run.GetRunID(), v11, false, true, "")
+	s.validateWorkflowBuildId(ctx, run.GetID(), run.GetRunID(), v11, false, true, "", []string{v1})
 
 	// unblock the second run. it should continue on v11 then continue-as-new onto v2, then
 	// complete.
@@ -2619,7 +2624,7 @@ func (s *VersioningIntegSuite) dispatchContinueAsNewUpgrade() {
 	var out string
 	s.NoError(run.Get(ctx, &out))
 	s.Equal("done!", out)
-	s.validateWorkflowBuildId(ctx, run.GetID(), "", v2, false, true, "")
+	s.validateWorkflowBuildId(ctx, run.GetID(), "", v2, false, true, "", nil)
 }
 
 func (s *VersioningIntegSuite) TestDispatchRetryOld() {
@@ -2734,7 +2739,7 @@ func (s *VersioningIntegSuite) dispatchRetryOld() {
 	var out string
 	s.NoError(run.Get(ctx, &out))
 	s.Equal("done!", out)
-	s.validateWorkflowBuildId(ctx, run.GetID(), run.GetRunID(), v11, false, true, "")
+	s.validateWorkflowBuildId(ctx, run.GetID(), run.GetRunID(), v11, false, true, "", nil)
 }
 
 func (s *VersioningIntegSuite) TestDispatchRetry() {
@@ -2825,7 +2830,7 @@ func (s *VersioningIntegSuite) dispatchRetry() {
 	var out string
 	s.NoError(run.Get(ctx, &out))
 	s.Equal("done!", out)
-	s.validateWorkflowBuildId(ctx, run.GetID(), run.GetRunID(), v2, true, true, "")
+	s.validateWorkflowBuildId(ctx, run.GetID(), run.GetRunID(), v2, true, true, "", nil)
 }
 
 func (s *VersioningIntegSuite) TestDispatchCronOld() {
@@ -2932,10 +2937,10 @@ func (s *VersioningIntegSuite) dispatchCron(newVersioning bool) {
 	s.GreaterOrEqual(runs2.Load(), int32(3))
 
 	for _, runid := range runIds1 {
-		s.validateWorkflowBuildId(ctx, run.GetID(), runid, v1, newVersioning, true, "")
+		s.validateWorkflowBuildId(ctx, run.GetID(), runid, v1, newVersioning, true, "", nil)
 	}
 	for _, runid := range runIds2 {
-		s.validateWorkflowBuildId(ctx, run.GetID(), runid, v2, newVersioning, true, "")
+		s.validateWorkflowBuildId(ctx, run.GetID(), runid, v2, newVersioning, true, "", nil)
 	}
 }
 
@@ -3200,7 +3205,7 @@ func (s *VersioningIntegSuite) validateBuildIdAfterReset(ctx context.Context, wf
 	tq := dw.GetWorkflowExecutionInfo().GetTaskQueue()
 	inheritedBuildId := dw.GetWorkflowExecutionInfo().GetInheritedBuildId()
 	s.Equal(expectedInherit, inheritedBuildId != "")
-	s.validateWorkflowBuildId(ctx, run.GetID(), run.GetRunID(), v1, true, true, inheritedBuildId)
+	s.validateWorkflowBuildId(ctx, run.GetID(), run.GetRunID(), v1, true, true, inheritedBuildId, nil)
 
 	// update rules with v2 as the default build
 	rule := s.addAssignmentRule(ctx, tq, v2)
@@ -3225,7 +3230,7 @@ func (s *VersioningIntegSuite) validateBuildIdAfterReset(ctx context.Context, wf
 	run2 := s.sdkClient.GetWorkflow(ctx, run.GetID(), wfr.GetRunId())
 	s.NoError(run2.Get(ctx, &out))
 	s.Equal("done!", out)
-	s.validateWorkflowBuildId(ctx, run2.GetID(), run2.GetRunID(), expectedBuildId, true, true, inheritedBuildId)
+	s.validateWorkflowBuildId(ctx, run2.GetID(), run2.GetRunID(), expectedBuildId, true, true, inheritedBuildId, nil)
 	s.validateWorkflowEventsVersionStamps(ctx, run2.GetID(), run2.GetRunID(), []string{expectedBuildId, expectedBuildId, expectedBuildId}, inheritedBuildId)
 
 	// now reset the original wf to second wf task and make sure it remains in v1
@@ -3242,7 +3247,7 @@ func (s *VersioningIntegSuite) validateBuildIdAfterReset(ctx context.Context, wf
 	run3 := s.sdkClient.GetWorkflow(ctx, run.GetID(), wfr.GetRunId())
 	s.NoError(run3.Get(ctx, &out))
 	s.Equal("done!", out)
-	s.validateWorkflowBuildId(ctx, run3.GetID(), run3.GetRunID(), v1, true, true, inheritedBuildId)
+	s.validateWorkflowBuildId(ctx, run3.GetID(), run3.GetRunID(), v1, true, true, inheritedBuildId, nil)
 	s.validateWorkflowEventsVersionStamps(ctx, run3.GetID(), run3.GetRunID(), []string{v1, v1, v1}, inheritedBuildId)
 }
 
@@ -3926,15 +3931,27 @@ func (s *VersioningIntegSuite) validateWorkflowBuildId(
 	newVersioning bool,
 	expectingStamp bool,
 	expectedInheritedBuildId string,
+	extraSearchAttrBuildIds []string,
 ) {
 	dw, err := s.sdkClient.DescribeWorkflowExecution(ctx, wfId, runId)
+	s.NoError(err)
+	saPayload := dw.GetWorkflowExecutionInfo().GetSearchAttributes().GetIndexedFields()["BuildIds"]
+	searchAttrAny, err := searchattribute.DecodeValue(saPayload, enumspb.INDEXED_VALUE_TYPE_KEYWORD_LIST, true)
+	var searchAttr []string
+	if searchAttrAny != nil {
+		searchAttr = searchAttrAny.([]string)
+	}
 	s.NoError(err)
 	if expectedBuildId == "" {
 		if expectingStamp {
 			s.NotNil(dw.GetWorkflowExecutionInfo().GetMostRecentWorkerVersionStamp())
 			s.False(dw.GetWorkflowExecutionInfo().GetMostRecentWorkerVersionStamp().GetUseVersioning())
+			s.Equal(2+len(extraSearchAttrBuildIds), len(searchAttr))
+			s.Equal(worker_versioning.UnversionedSearchAttribute, searchAttr[0])
+			s.True(strings.HasPrefix(searchAttr[1], worker_versioning.UnversionedSearchAttribute))
 		} else {
 			s.Nil(dw.GetWorkflowExecutionInfo().GetMostRecentWorkerVersionStamp())
+			s.Equal(0, len(searchAttr))
 		}
 	} else {
 		if expectingStamp {
@@ -3945,11 +3962,27 @@ func (s *VersioningIntegSuite) validateWorkflowBuildId(
 		}
 		if newVersioning {
 			s.Equal(expectedBuildId, dw.GetWorkflowExecutionInfo().GetAssignedBuildId())
+			s.Equal(2+len(extraSearchAttrBuildIds), len(searchAttr))
+			s.Equal(worker_versioning.AssignedBuildIdSearchAttribute(expectedBuildId), searchAttr[0])
+			s.Contains(searchAttr, worker_versioning.VersionedBuildIdSearchAttribute(expectedBuildId))
 		} else {
 			s.Equal("", dw.GetWorkflowExecutionInfo().GetAssignedBuildId())
+			if expectingStamp {
+				s.Equal(1+len(extraSearchAttrBuildIds), len(searchAttr))
+				s.Contains(searchAttr, worker_versioning.VersionedBuildIdSearchAttribute(expectedBuildId))
+			} else {
+				s.Equal(0, len(searchAttr))
+			}
 		}
 	}
 	s.Equal(expectedInheritedBuildId, dw.GetWorkflowExecutionInfo().GetInheritedBuildId())
+	for _, b := range extraSearchAttrBuildIds {
+		if expectedBuildId == "" {
+			s.Contains(searchAttr, worker_versioning.UnversionedBuildIdSearchAttribute(b))
+		} else {
+			s.Contains(searchAttr, worker_versioning.VersionedBuildIdSearchAttribute(b))
+		}
+	}
 }
 
 func (s *VersioningIntegSuite) validateWorkflowEventsVersionStamps(
