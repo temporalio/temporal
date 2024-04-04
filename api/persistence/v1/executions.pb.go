@@ -257,8 +257,8 @@ type WorkflowExecutionInfo struct {
 	// Build ID inherited from a previous/parent execution. If present, assigned_build_id will be set to this, instead
 	// of using the assignment rules.
 	InheritedBuildId string `protobuf:"bytes,81,opt,name=inherited_build_id,json=inheritedBuildId,proto3" json:"inherited_build_id,omitempty"`
-	// Tracks the number of times a redirect rule is applied to this workflow. Used to synchronize the redirects
-	// based on history events.
+	// Tracks the number of times a redirect rule is applied to this workflow. Used to apply redirects in the right
+	// order when mutable state is rebuilt from history events.
 	BuildIdRedirectCounter int64 `protobuf:"varint,82,opt,name=build_id_redirect_counter,json=buildIdRedirectCounter,proto3" json:"build_id_redirect_counter,omitempty"`
 	// index of update IDs and pointers to associated history events.
 	UpdateInfos map[string]*v16.UpdateInfo `protobuf:"bytes,79,rep,name=update_infos,json=updateInfos,proto3" json:"update_infos,omitempty" protobuf_key:"bytes,1,opt,name=key,proto3" protobuf_val:"bytes,2,opt,name=value,proto3"`

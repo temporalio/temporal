@@ -177,8 +177,8 @@ message WorkflowExecutionInfo {
     // Build ID inherited from a previous/parent execution. If present, assigned_build_id will be set to this, instead
     // of using the assignment rules.
     string inherited_build_id = 81;
-    // Tracks the number of times a redirect rule is applied to this workflow. Used to synchronize the redirects
-    // based on history events.
+    // Tracks the number of times a redirect rule is applied to this workflow. Used to apply redirects in the right
+    // order when mutable state is rebuilt from history events.
     int64 build_id_redirect_counter = 82;
 
     // index of update IDs and pointers to associated history events.
