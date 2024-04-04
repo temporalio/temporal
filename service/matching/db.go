@@ -208,6 +208,8 @@ func (db *taskQueueDB) updateApproximateBacklogCount(
 }
 
 func (db *taskQueueDB) getApproximateBacklogCount() int64 {
+	db.Lock()
+	defer db.Unlock()
 	return db.approximateBacklogCount
 }
 
