@@ -388,8 +388,6 @@ const (
 	FrontendEnableSchedules = "frontend.enableSchedules"
 	// FrontendEnableNexusAPIs enables serving Nexus HTTP requests in the frontend.
 	FrontendEnableNexusAPIs = "frontend.enableNexusAPIs"
-	// FrontendInitializeNexusIncomingServicesTimeout is the maximum time allowed for initializing Nexus incoming services.
-	FrontendInitializeNexusIncomingServicesTimeout = "frontend.initializeNexusIncomingServicesTimeout"
 	// FrontendRefreshNexusIncomingServicesLongPollTimeout is the maximum duration of background long poll requests to update Nexus incoming services.
 	FrontendRefreshNexusIncomingServicesLongPollTimeout = "frontend.refreshNexusIncomingServicesLongPollTimeout"
 	// FrontendRefreshNexusIncomingServicesMinWait is the minimum wait time between background long poll requests to update Nexus incoming services.
