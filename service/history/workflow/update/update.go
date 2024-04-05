@@ -198,9 +198,8 @@ func (u *Update) WaitLifecycleStage(
 			return nil, ctx.Err()
 		}
 
-		if stCtx.Err() != nil {
-			// Noop because if softTimeout has expired then check if ACCEPTED is reached.
-		}
+		// Only get here if there is an error and this error is stCtx.Err().
+		// Which means that softTimeout has expired => check if update has reached ACCEPTED state.
 	}
 
 	// Update is not completed but maybe it is accepted.
