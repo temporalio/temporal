@@ -109,7 +109,7 @@ func Invoke(
 		ctx,
 		func(lease api.WorkflowLease) error {
 			workflowCtx = lease.GetContext()
-			_, updateErr = updater.Apply(ctx, lease)
+			_, updateErr = updater.ApplyRequest(ctx, lease)
 			return updateErr
 		},
 	)

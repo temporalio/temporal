@@ -110,7 +110,7 @@ func (u *Updater) Invoke(
 		nil,
 		api.BypassMutableStateConsistencyPredicate,
 		wfKey,
-		func(lease api.WorkflowLease) (*api.UpdateWorkflowAction, error) { return u.Apply(ctx, lease) },
+		func(lease api.WorkflowLease) (*api.UpdateWorkflowAction, error) { return u.ApplyRequest(ctx, lease) },
 		nil,
 		u.shardCtx,
 		u.workflowConsistencyChecker,
@@ -123,7 +123,7 @@ func (u *Updater) Invoke(
 	return u.OnSuccess(ctx)
 }
 
-func (u *Updater) Apply(
+func (u *Updater) ApplyRequest(
 	ctx context.Context,
 	workflowLease api.WorkflowLease,
 ) (*api.UpdateWorkflowAction, error) {
