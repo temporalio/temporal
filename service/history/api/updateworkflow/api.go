@@ -117,8 +117,8 @@ func (u *Updater) Invoke(
 	)
 
 	if err != nil {
-		u.OnError(err)
-		return nil, err
+		rejResp := u.OnError(err)
+		return rejResp, err
 	}
 	return u.OnSuccess(ctx)
 }
