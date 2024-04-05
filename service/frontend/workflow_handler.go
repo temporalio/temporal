@@ -489,7 +489,7 @@ func (wh *WorkflowHandler) ExecuteMultiOperation(
 	}
 
 	if !wh.config.EnableExecuteMultiOperation(request.Namespace) {
-		return nil, errUpdateWorkflowExecutionAPINotAllowed
+		return nil, errMultiOperationAPINotAllowed
 	}
 
 	// TODO: validation
