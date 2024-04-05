@@ -164,24 +164,24 @@ message ResetStickyTaskQueueResponse {
 message ExecuteMultiOperationRequest {
     string namespace_id = 1;
     string workflow_id = 2;
-    repeated WorkflowOperation operations = 3;
-}
+    repeated Operation operations = 3;
 
-message WorkflowOperation {
-    oneof operation {
-        StartWorkflowExecutionRequest start_workflow = 1;
-        UpdateWorkflowExecutionRequest update_workflow = 2;
+    message Operation {
+        oneof operation {
+            StartWorkflowExecutionRequest start_workflow = 1;
+            UpdateWorkflowExecutionRequest update_workflow = 2;
+        }
     }
 }
 
 message ExecuteMultiOperationResponse {
-    repeated WorkflowOperationResult results = 1;
-}
+    repeated Response responses = 1;
 
-message WorkflowOperationResult {
-    oneof result {
-        StartWorkflowExecutionResponse start_workflow = 1;
-        UpdateWorkflowExecutionResponse update_workflow = 2;
+    message Response {
+        oneof response {
+            StartWorkflowExecutionResponse start_workflow = 1;
+            UpdateWorkflowExecutionResponse update_workflow = 2;
+        }
     }
 }
 

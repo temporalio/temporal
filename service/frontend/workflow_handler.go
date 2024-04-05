@@ -504,13 +504,13 @@ func (wh *WorkflowHandler) ExecuteMultiOperation(
 	historyReq := &historyservice.ExecuteMultiOperationRequest{
 		NamespaceId: namespaceID.String(),
 		WorkflowId:  workflowId,
-		Operations:  make([]*historyservice.WorkflowOperation, len(request.Operations)),
+		Operations:  make([]*historyservice.ExecuteMultiOperationRequest_Operation, len(request.Operations)),
 	}
 	for i, op := range request.Operations {
-		var opReq *historyservice.WorkflowOperation
+		var opReq *historyservice.ExecuteMultiOperationRequest_Operation
 		if startReq := op.GetStartWorkflow(); startReq != nil {
-			opReq = &historyservice.WorkflowOperation{
-				Operation: &historyservice.WorkflowOperation_StartWorkflow{
+			opReq = &historyservice.ExecuteMultiOperationRequest_Operation{
+				Operation: &historyservice.ExecuteMultiOperationRequest_Operation_StartWorkflow{
 					StartWorkflow: common.CreateHistoryStartWorkflowRequest(
 						namespaceID.String(),
 						startReq,
@@ -520,8 +520,8 @@ func (wh *WorkflowHandler) ExecuteMultiOperation(
 				},
 			}
 		} else if updateReq := op.GetUpdateWorkflow(); updateReq != nil {
-			opReq = &historyservice.WorkflowOperation{
-				Operation: &historyservice.WorkflowOperation_UpdateWorkflow{
+			opReq = &historyservice.ExecuteMultiOperationRequest_Operation{
+				Operation: &historyservice.ExecuteMultiOperationRequest_Operation_UpdateWorkflow{
 					UpdateWorkflow: &historyservice.UpdateWorkflowExecutionRequest{
 						NamespaceId: namespaceID.String(),
 						Request:     updateReq,
@@ -540,9 +540,9 @@ func (wh *WorkflowHandler) ExecuteMultiOperation(
 	}
 
 	resp := &workflowservice.ExecuteMultiOperationResponse{
-		Responses: make([]*workflowservice.ExecuteMultiOperationResponse_Response, len(historyResp.Results)),
+		Responses: make([]*workflowservice.ExecuteMultiOperationResponse_Response, len(historyResp.Responses)),
 	}
-	for i, op := range historyResp.Results {
+	for i, op := range historyResp.Responses {
 		var opResp *workflowservice.ExecuteMultiOperationResponse_Response
 		if startResp := op.GetStartWorkflow(); startResp != nil {
 			opResp = &workflowservice.ExecuteMultiOperationResponse_Response{
@@ -563,7 +563,7 @@ func (wh *WorkflowHandler) ExecuteMultiOperation(
 				},
 			}
 		} else {
-			return nil, serviceerror.NewInternal(fmt.Sprintf("unexpected operation result: %T", op.Result))
+			return nil, serviceerror.NewInternal(fmt.Sprintf("unexpected operation result: %T", op.Response))
 		}
 		resp.Responses[i] = opResp
 	}

@@ -362,43 +362,6 @@ func (this *ExecuteMultiOperationRequest) Equal(that interface{}) bool {
 	return proto.Equal(this, that1)
 }
 
-// Marshal an object of type WorkflowOperation to the protobuf v3 wire format
-func (val *WorkflowOperation) Marshal() ([]byte, error) {
-	return proto.Marshal(val)
-}
-
-// Unmarshal an object of type WorkflowOperation from the protobuf v3 wire format
-func (val *WorkflowOperation) Unmarshal(buf []byte) error {
-	return proto.Unmarshal(buf, val)
-}
-
-// Size returns the size of the object, in bytes, once serialized
-func (val *WorkflowOperation) Size() int {
-	return proto.Size(val)
-}
-
-// Equal returns whether two WorkflowOperation values are equivalent by recursively
-// comparing the message's fields.
-// For more information see the documentation for
-// https://pkg.go.dev/google.golang.org/protobuf/proto#Equal
-func (this *WorkflowOperation) Equal(that interface{}) bool {
-	if that == nil {
-		return this == nil
-	}
-
-	var that1 *WorkflowOperation
-	switch t := that.(type) {
-	case *WorkflowOperation:
-		that1 = t
-	case WorkflowOperation:
-		that1 = &t
-	default:
-		return false
-	}
-
-	return proto.Equal(this, that1)
-}
-
 // Marshal an object of type ExecuteMultiOperationResponse to the protobuf v3 wire format
 func (val *ExecuteMultiOperationResponse) Marshal() ([]byte, error) {
 	return proto.Marshal(val)
@@ -428,43 +391,6 @@ func (this *ExecuteMultiOperationResponse) Equal(that interface{}) bool {
 	case *ExecuteMultiOperationResponse:
 		that1 = t
 	case ExecuteMultiOperationResponse:
-		that1 = &t
-	default:
-		return false
-	}
-
-	return proto.Equal(this, that1)
-}
-
-// Marshal an object of type WorkflowOperationResult to the protobuf v3 wire format
-func (val *WorkflowOperationResult) Marshal() ([]byte, error) {
-	return proto.Marshal(val)
-}
-
-// Unmarshal an object of type WorkflowOperationResult from the protobuf v3 wire format
-func (val *WorkflowOperationResult) Unmarshal(buf []byte) error {
-	return proto.Unmarshal(buf, val)
-}
-
-// Size returns the size of the object, in bytes, once serialized
-func (val *WorkflowOperationResult) Size() int {
-	return proto.Size(val)
-}
-
-// Equal returns whether two WorkflowOperationResult values are equivalent by recursively
-// comparing the message's fields.
-// For more information see the documentation for
-// https://pkg.go.dev/google.golang.org/protobuf/proto#Equal
-func (this *WorkflowOperationResult) Equal(that interface{}) bool {
-	if that == nil {
-		return this == nil
-	}
-
-	var that1 *WorkflowOperationResult
-	switch t := that.(type) {
-	case *WorkflowOperationResult:
-		that1 = t
-	case WorkflowOperationResult:
 		that1 = &t
 	default:
 		return false

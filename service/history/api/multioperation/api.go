@@ -117,22 +117,24 @@ func Invoke(
 		// TODO: send per-operation error details
 		return nil, err
 	}
-	startResult := &historyservicepb.WorkflowOperationResult{
-		Result: &historyservicepb.WorkflowOperationResult_StartWorkflow{
+	startOpResp := &historyservicepb.ExecuteMultiOperationResponse_Response{
+		Response: &historyservicepb.ExecuteMultiOperationResponse_Response_StartWorkflow{
 			StartWorkflow: startResp,
 		},
 	}
 
 	if updateErr != nil {
 		updateResp := updater.OnError(updateErr)
-		return makeResponse(
-			startResult,
-			&historyservicepb.WorkflowOperationResult{
-				Result: &historyservicepb.WorkflowOperationResult_UpdateWorkflow{
-					UpdateWorkflow: updateResp,
+		return &historyservicepb.ExecuteMultiOperationResponse{
+			Responses: []*historyservicepb.ExecuteMultiOperationResponse_Response{
+				startOpResp,
+				{
+					Response: &historyservicepb.ExecuteMultiOperationResponse_Response_UpdateWorkflow{
+						UpdateWorkflow: updateResp,
+					},
 				},
 			},
-		), nil
+		}, nil
 	}
 
 	// TODO: eventually, we'll want to put the MS into the cache as well
@@ -151,23 +153,14 @@ func Invoke(
 		// TODO: send Update outcome failure instead
 		return nil, err
 	}
-	return makeResponse(
-		startResult,
-		&historyservicepb.WorkflowOperationResult{
-			Result: &historyservicepb.WorkflowOperationResult_UpdateWorkflow{
-				UpdateWorkflow: updateResp,
-			},
-		}), nil
-}
-
-func makeResponse(
-	startResult *historyservicepb.WorkflowOperationResult,
-	updateResult *historyservicepb.WorkflowOperationResult,
-) *historyservicepb.ExecuteMultiOperationResponse {
 	return &historyservicepb.ExecuteMultiOperationResponse{
-		Results: []*historyservicepb.WorkflowOperationResult{
-			startResult,
-			updateResult,
+		Responses: []*historyservicepb.ExecuteMultiOperationResponse_Response{
+			startOpResp,
+			{
+				Response: &historyservicepb.ExecuteMultiOperationResponse_Response_UpdateWorkflow{
+					UpdateWorkflow: updateResp,
+				},
+			},
 		},
-	}
+	}, nil
 }

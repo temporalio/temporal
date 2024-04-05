@@ -188,6 +188,7 @@ type HistoryServiceClient interface {
 	// and record WorkflowExecutionStarted and WorkflowExecutionSignaled event in case of success.
 	// It will return `WorkflowExecutionAlreadyStartedError` if start workflow failed with given policy.
 	SignalWithStartWorkflowExecution(ctx context.Context, in *SignalWithStartWorkflowExecutionRequest, opts ...grpc.CallOption) (*SignalWithStartWorkflowExecutionResponse, error)
+	// ExecuteMultiOperation executes multiple operations within a single workflow.
 	ExecuteMultiOperation(ctx context.Context, in *ExecuteMultiOperationRequest, opts ...grpc.CallOption) (*ExecuteMultiOperationResponse, error)
 	// RemoveSignalMutableState is used to remove a signal request Id that was previously recorded.  This is currently
 	// used to clean execution info when signal workflow task finished.
@@ -982,6 +983,7 @@ type HistoryServiceServer interface {
 	// and record WorkflowExecutionStarted and WorkflowExecutionSignaled event in case of success.
 	// It will return `WorkflowExecutionAlreadyStartedError` if start workflow failed with given policy.
 	SignalWithStartWorkflowExecution(context.Context, *SignalWithStartWorkflowExecutionRequest) (*SignalWithStartWorkflowExecutionResponse, error)
+	// ExecuteMultiOperation executes multiple operations within a single workflow.
 	ExecuteMultiOperation(context.Context, *ExecuteMultiOperationRequest) (*ExecuteMultiOperationResponse, error)
 	// RemoveSignalMutableState is used to remove a signal request Id that was previously recorded.  This is currently
 	// used to clean execution info when signal workflow task finished.
