@@ -985,8 +985,6 @@ func (s *FunctionalSuite) TestWorkflowRetryFailures() {
 }
 
 func (s *FunctionalSuite) TestExecuteMultiOperation() {
-	identity := "worker1"
-
 	s.Run("Start Workflow and send Update", func() {
 		tv := testvars.New(s.T().Name())
 
@@ -1024,7 +1022,7 @@ func (s *FunctionalSuite) TestExecuteMultiOperation() {
 			Engine:    s.engine,
 			Namespace: s.namespace,
 			TaskQueue: tv.TaskQueue(),
-			Identity:  identity,
+			Identity:  tv.WorkerIdentity(),
 			WorkflowTaskHandler: func(execution *commonpb.WorkflowExecution, wt *commonpb.WorkflowType, previousStartedEventID, startedEventID int64, history *historypb.History) ([]*commandpb.Command, error) {
 				return nil, nil
 			},
