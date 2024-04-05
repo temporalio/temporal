@@ -48,12 +48,13 @@ const (
 
 type (
 	taskQueueDB struct {
-		sync.Mutex
-		queue    *PhysicalTaskQueueKey
-		rangeID  int64
-		ackLevel int64
-		store    persistence.TaskManager
-		logger   log.Logger
+		sync.RWMutex
+		queue        *PhysicalTaskQueueKey
+		rangeID      int64
+		ackLevel     int64
+		store        persistence.TaskManager
+		maxReadLevel int64
+		logger       log.Logger
 	}
 	taskQueueState struct {
 		rangeID  int64
@@ -77,9 +78,10 @@ func newTaskQueueDB(
 	logger log.Logger,
 ) *taskQueueDB {
 	return &taskQueueDB{
-		queue:  queue,
-		store:  store,
-		logger: logger,
+		queue:        queue,
+		store:        store,
+		logger:       logger,
+		maxReadLevel: 0,
 	}
 }
 
@@ -88,6 +90,20 @@ func (db *taskQueueDB) RangeID() int64 {
 	db.Lock()
 	defer db.Unlock()
 	return db.rangeID
+}
+
+// GetMaxReadLevel returns the current maxReadLevel
+func (db *taskQueueDB) GetMaxReadLevel() int64 {
+	db.RLock()
+	defer db.RUnlock()
+	return db.maxReadLevel
+}
+
+// SetMaxReadLevel sets the current maxReadLevel
+func (db *taskQueueDB) SetMaxReadLevel(maxReadLevel int64) {
+	db.Lock()
+	defer db.Unlock()
+	db.maxReadLevel = maxReadLevel
 }
 
 // RenewLease renews the lease on a taskqueue. If there is no previous lease,
@@ -188,11 +204,24 @@ func (db *taskQueueDB) UpdateState(
 // CreateTasks creates a batch of given tasks for this task queue
 func (db *taskQueueDB) CreateTasks(
 	ctx context.Context,
-	tasks []*persistencespb.AllocatedTaskInfo,
+	taskIDs []int64,
+	reqs []*writeTaskRequest,
 ) (*persistence.CreateTasksResponse, error) {
 	db.Lock()
 	defer db.Unlock()
-	return db.store.CreateTasks(
+
+	maxReadLevel := int64(0)
+	var tasks []*persistencespb.AllocatedTaskInfo
+	for i, req := range reqs {
+		tasks = append(tasks, &persistencespb.AllocatedTaskInfo{
+			TaskId: taskIDs[i],
+			Data:   req.taskInfo,
+		})
+		maxReadLevel = taskIDs[i]
+	}
+
+	db.maxReadLevel = maxReadLevel
+	resp, err := db.store.CreateTasks(
 		ctx,
 		&persistence.CreateTasksRequest{
 			TaskQueueInfo: &persistence.PersistedTaskQueueInfo{
@@ -201,6 +230,8 @@ func (db *taskQueueDB) CreateTasks(
 			},
 			Tasks: tasks,
 		})
+
+	return resp, err
 }
 
 // GetTasks returns a batch of tasks between the given range
