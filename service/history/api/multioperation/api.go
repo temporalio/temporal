@@ -137,6 +137,7 @@ func Invoke(
 		}, nil
 	}
 
+	// Without this, there's no Update registry on the call from Matching back to History.
 	// TODO: eventually, we'll want to put the MS into the cache as well
 	if err = workflowConsistencyChecker.GetWorkflowCache().Put(
 		shardContext,
