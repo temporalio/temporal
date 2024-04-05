@@ -64,7 +64,7 @@ type (
 			execution *commonpb.WorkflowExecution,
 			workflowCtx workflow.Context,
 			handler metrics.Handler,
-		) error
+		) (workflow.Context, error)
 
 		GetOrCreateCurrentWorkflowExecution(
 			ctx context.Context,
@@ -242,14 +242,14 @@ func (c *CacheImpl) Put(
 	execution *commonpb.WorkflowExecution,
 	workflowCtx workflow.Context,
 	handler metrics.Handler,
-) error {
+) (workflow.Context, error) {
 	cacheKey := makeCacheKey(shardContext, namespaceID, execution)
-	_, err := c.PutIfNotExist(cacheKey, workflowCtx)
+	existing, err := c.PutIfNotExist(cacheKey, workflowCtx)
 	if err != nil {
 		metrics.CacheFailures.With(handler).Record(1)
-		return err
+		return nil, err
 	}
-	return nil
+	return existing.(workflow.Context), nil
 }
 
 func (c *CacheImpl) getOrCreateWorkflowExecutionInternal(
@@ -262,7 +262,6 @@ func (c *CacheImpl) getOrCreateWorkflowExecutionInternal(
 	lockPriority workflow.LockPriority,
 ) (workflow.Context, ReleaseCacheFunc, error) {
 	cacheKey := makeCacheKey(shardContext, namespaceID, execution)
-
 	workflowCtx, cacheHit := c.Get(cacheKey).(workflow.Context)
 	if !cacheHit {
 		metrics.CacheMissCounter.With(handler).Record(1)
@@ -273,7 +272,9 @@ func (c *CacheImpl) getOrCreateWorkflowExecutionInternal(
 			shardContext.GetThrottledLogger(),
 			shardContext.GetMetricsHandler(),
 		)
-		err := c.Put(shardContext, namespaceID, execution, workflowCtx, handler)
+
+		var err error
+		workflowCtx, err = c.Put(shardContext, namespaceID, execution, workflowCtx, handler)
 		if err != nil {
 			return nil, nil, err
 		}
@@ -469,9 +470,8 @@ func makeCacheKey(
 	namespaceID namespace.ID,
 	execution *commonpb.WorkflowExecution,
 ) Key {
-	cacheKey := Key{
+	return Key{
 		WorkflowKey: definition.NewWorkflowKey(namespaceID.String(), execution.GetWorkflowId(), execution.GetRunId()),
 		ShardUUID:   shardContext.GetOwner(),
 	}
-	return cacheKey
 }

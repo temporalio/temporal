@@ -139,7 +139,7 @@ func Invoke(
 
 	// Without this, there's no Update registry on the call from Matching back to History.
 	// TODO: eventually, we'll want to put the MS into the cache as well
-	if err = workflowConsistencyChecker.GetWorkflowCache().Put(
+	if _, err = workflowConsistencyChecker.GetWorkflowCache().Put(
 		shardContext,
 		namespaceID,
 		&commonpb.WorkflowExecution{WorkflowId: req.WorkflowId, RunId: startResp.RunId},
