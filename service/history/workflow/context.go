@@ -913,6 +913,7 @@ func (c *ContextImpl) ReapplyEvents(
 	return err
 }
 
+// TODO: remove `ms` parameter again (added since it's not possible to initialize a new Context with a specific MutableState)
 func (c *ContextImpl) UpdateRegistry(ctx context.Context, ms MutableState) update.Registry {
 	if c.updateRegistry == nil {
 		if ms == nil {
