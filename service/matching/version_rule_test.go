@@ -145,7 +145,7 @@ func insertRedirectRule(rule *taskqueuepb.CompatibleBuildIdRedirectRule,
 	clock *hlc.Clock,
 	maxAssignmentRules int,
 ) (*persistencepb.VersioningData, error) {
-	return InsertCompatibleRedirectRule(clock, data, mkNewInsertRedirectReq(rule), maxAssignmentRules)
+	return AddCompatibleRedirectRule(clock, data, mkNewInsertRedirectReq(rule), maxAssignmentRules)
 }
 
 func replaceAssignmentRule(rule *taskqueuepb.BuildIdAssignmentRule,

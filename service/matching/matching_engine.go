@@ -1106,11 +1106,11 @@ func (e *matchingEngineImpl) UpdateWorkerVersioningRules(
 				data.GetVersioningData(),
 				req.GetDeleteAssignmentRule(),
 			)
-		case *workflowservice.UpdateWorkerVersioningRulesRequest_InsertCompatibleRedirectRule:
-			versioningData, err = InsertCompatibleRedirectRule(
+		case *workflowservice.UpdateWorkerVersioningRulesRequest_AddCompatibleRedirectRule:
+			versioningData, err = AddCompatibleRedirectRule(
 				updatedClock,
 				data.GetVersioningData(),
-				req.GetInsertCompatibleRedirectRule(),
+				req.GetAddCompatibleRedirectRule(),
 				e.config.RedirectRuleLimitPerQueue(ns.Name().String()),
 			)
 		case *workflowservice.UpdateWorkerVersioningRulesRequest_ReplaceCompatibleRedirectRule:
