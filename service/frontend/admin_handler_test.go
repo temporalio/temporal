@@ -1478,7 +1478,7 @@ func (s *adminHandlerSuite) TestDescribeDLQJob() {
 			}
 			jobTokenBytes, _ := jobToken.Marshal()
 			response, err := s.handler.DescribeDLQJob(context.Background(), &adminservice.DescribeDLQJobRequest{
-				JobToken: string(jobTokenBytes),
+				JobToken: base64.StdEncoding.EncodeToString(jobTokenBytes),
 			})
 			if tc.err != nil {
 				s.ErrorIs(err, tc.err)
@@ -1583,9 +1583,8 @@ func (s *adminHandlerSuite) TestCancelDLQJob() {
 				describeExpectation.Return(&tc.workflowExecution, nil)
 			}
 			jobTokenBytes, _ := jobToken.Marshal()
-			jobTokenString := base64.StdEncoding.EncodeToString(jobTokenBytes)
 			response, err := s.handler.CancelDLQJob(context.Background(), &adminservice.CancelDLQJobRequest{
-				JobToken: jobTokenString,
+				JobToken: base64.StdEncoding.EncodeToString(jobTokenBytes),
 				Reason:   "test-reason",
 			})
 			if tc.describeErr != nil {
