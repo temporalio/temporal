@@ -26,6 +26,7 @@ package frontend
 
 import (
 	"context"
+	"encoding/base64"
 	"errors"
 	"fmt"
 	"math/rand"
@@ -1308,8 +1309,10 @@ func (s *adminHandlerSuite) TestPurgeDLQTasks() {
 			}
 			s.NoError(err)
 			s.NotNil(response)
+			tokenBytes, err := base64.StdEncoding.DecodeString(response.JobToken)
+			s.NoError(err)
 			var token adminservice.DLQJobToken
-			err = token.Unmarshal(response.JobToken)
+			err = token.Unmarshal(tokenBytes)
 			s.NoError(err)
 			s.Equal("manage-dlq-tasks-1_test-source-cluster_test-target-cluster_aG2oua8T", token.WorkflowId)
 			s.Equal("test-run-id", token.RunId)

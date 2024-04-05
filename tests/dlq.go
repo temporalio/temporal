@@ -27,6 +27,7 @@ package tests
 import (
 	"bytes"
 	"context"
+	"encoding/base64"
 	"errors"
 	"fmt"
 	"io"
@@ -535,11 +536,14 @@ func (s *DLQSuite) purgeMessages(ctx context.Context, maxMessageIDToDelete int64
 	s.NoError(protojson.Unmarshal(output, &response))
 
 	var token adminservice.DLQJobToken
-	s.NoError(proto.Unmarshal(response.GetJobToken(), &token))
-
+	tokenBytes := make([]byte, base64.StdEncoding.DecodedLen(len(response.JobToken)))
+	_, err = base64.StdEncoding.Decode(tokenBytes, response.JobToken)
+	s.NoError(err)
+	s.NoError(proto.Unmarshal(tokenBytes, &token))
 	systemSDKClient := s.sdkClientFactory.GetSystemClient()
 	run := systemSDKClient.GetWorkflow(ctx, token.WorkflowId, token.RunId)
 	s.NoError(run.Get(ctx, nil))
+
 	return response.GetJobToken()
 }
 
@@ -547,7 +551,10 @@ func (s *DLQSuite) purgeMessages(ctx context.Context, maxMessageIDToDelete int64
 func (s *DLQSuite) mergeMessages(ctx context.Context, maxMessageID int64) []byte {
 	tokenBytes := s.mergeMessagesWithoutBlocking(ctx, maxMessageID)
 	var token adminservice.DLQJobToken
-	s.NoError(token.Unmarshal(tokenBytes))
+	encodedTokenBytes := make([]byte, base64.StdEncoding.DecodedLen(len(tokenBytes)))
+	_, err := base64.StdEncoding.Decode(encodedTokenBytes, tokenBytes)
+	s.NoError(err)
+	s.NoError(token.Unmarshal(encodedTokenBytes))
 
 	systemSDKClient := s.sdkClientFactory.GetSystemClient()
 	run := systemSDKClient.GetWorkflow(ctx, token.WorkflowId, token.RunId)

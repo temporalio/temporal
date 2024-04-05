@@ -26,6 +26,7 @@ package frontend
 
 import (
 	"context"
+	"encoding/base64"
 	"errors"
 	"fmt"
 	"io"
@@ -48,7 +49,6 @@ import (
 	"go.temporal.io/server/common/channel"
 	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/primitives"
-	"go.temporal.io/server/common/utf8validator"
 	"go.temporal.io/server/common/util"
 	"go.temporal.io/server/service/worker/dlq"
 
@@ -1817,12 +1817,10 @@ func (adh *AdminHandler) PurgeDLQTasks(
 		WorkflowId: workflowID,
 		RunId:      runID,
 	}
-	if err := utf8validator.Validate(&jobToken, utf8validator.SourceRPCResponse); err != nil {
-		return nil, err
-	}
 	jobTokenBytes, _ := jobToken.Marshal()
+	jobTokenString := base64.StdEncoding.EncodeToString(jobTokenBytes)
 	return &adminservice.PurgeDLQTasksResponse{
-		JobToken: jobTokenBytes,
+		JobToken: jobTokenString,
 	}, nil
 }
 
@@ -1856,21 +1854,20 @@ func (adh *AdminHandler) MergeDLQTasks(ctx context.Context, request *adminservic
 		WorkflowId: workflowID,
 		RunId:      runID,
 	}
-	if err := utf8validator.Validate(&jobToken, utf8validator.SourceRPCResponse); err != nil {
-		return nil, err
-	}
 	jobTokenBytes, _ := jobToken.Marshal()
+	jobTokenString := base64.StdEncoding.EncodeToString(jobTokenBytes)
 	return &adminservice.MergeDLQTasksResponse{
-		JobToken: jobTokenBytes,
+		JobToken: jobTokenString,
 	}, nil
 }
 
 func (adh *AdminHandler) DescribeDLQJob(ctx context.Context, request *adminservice.DescribeDLQJobRequest) (*adminservice.DescribeDLQJobResponse, error) {
-	jt := adminservice.DLQJobToken{}
-	err := jt.Unmarshal([]byte(request.JobToken))
-	if err == nil {
-		err = utf8validator.Validate(&jt, utf8validator.SourceRPCRequest)
+	token, err := base64.StdEncoding.DecodeString(request.JobToken)
+	if err != nil {
+		return nil, fmt.Errorf("%w: %v", errInvalidDLQJobToken, err)
 	}
+	jt := adminservice.DLQJobToken{}
+	err = jt.Unmarshal(token)
 	if err != nil {
 		return nil, fmt.Errorf("%w: %v", errInvalidDLQJobToken, err)
 	}
@@ -1922,11 +1919,12 @@ func (adh *AdminHandler) DescribeDLQJob(ctx context.Context, request *adminservi
 }
 
 func (adh *AdminHandler) CancelDLQJob(ctx context.Context, request *adminservice.CancelDLQJobRequest) (*adminservice.CancelDLQJobResponse, error) {
-	jt := adminservice.DLQJobToken{}
-	err := jt.Unmarshal([]byte(request.JobToken))
-	if err == nil {
-		err = utf8validator.Validate(&jt, utf8validator.SourceRPCRequest)
+	token, err := base64.StdEncoding.DecodeString(request.JobToken)
+	if err != nil {
+		return nil, fmt.Errorf("%w: %v", errInvalidDLQJobToken, err)
 	}
+	jt := adminservice.DLQJobToken{}
+	err = jt.Unmarshal(token)
 	if err != nil {
 		return nil, fmt.Errorf("%w: %v", errInvalidDLQJobToken, err)
 	}

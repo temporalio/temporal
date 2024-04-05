@@ -470,7 +470,7 @@ message PurgeDLQTasksRequest {
 
 message PurgeDLQTasksResponse {
   // job_token is a token that can be used to query the status of the purge operation.
-  bytes job_token = 1;
+  string job_token = 1;
 }
 
 // DLQJobToken identifies a DLQ job. This proto is for internal use only and clients should not use it.
@@ -491,7 +491,7 @@ message MergeDLQTasksRequest {
 }
 
 message MergeDLQTasksResponse {
-  bytes job_token = 1;
+  string job_token = 1;
 }
 
 message DescribeDLQJobRequest {
