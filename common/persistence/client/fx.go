@@ -46,6 +46,7 @@ type (
 	PersistencePerShardNamespaceMaxQPS dynamicconfig.IntPropertyFnWithNamespaceFilter
 	EnablePriorityRateLimiting         dynamicconfig.BoolPropertyFn
 	OperatorRPSRatio                   dynamicconfig.FloatPropertyFn
+	PersistenceBurstRatio              dynamicconfig.FloatPropertyFn
 
 	DynamicRateLimitingParams dynamicconfig.MapPropertyFn
 
@@ -62,6 +63,7 @@ type (
 		PersistencePerShardNamespaceMaxQPS PersistencePerShardNamespaceMaxQPS
 		EnablePriorityRateLimiting         EnablePriorityRateLimiting
 		OperatorRPSRatio                   OperatorRPSRatio
+		PersistenceBurstRatio              PersistenceBurstRatio
 		ClusterName                        ClusterName
 		ServiceName                        primitives.ServiceName
 		MetricsHandler                     metrics.Handler
@@ -104,6 +106,7 @@ func FactoryProvider(
 				params.PersistenceMaxQPS,
 				RequestPriorityFn,
 				params.OperatorRPSRatio,
+				params.PersistenceBurstRatio,
 				params.HealthSignals,
 				params.DynamicRateLimitingParams,
 				params.MetricsHandler,
@@ -115,10 +118,11 @@ func FactoryProvider(
 				params.PersistencePerShardNamespaceMaxQPS,
 				RequestPriorityFn,
 				params.OperatorRPSRatio,
+				params.PersistenceBurstRatio,
 			)
 		} else {
-			systemRequestRateLimiter = NewNoopPriorityRateLimiter(params.PersistenceMaxQPS)
-			namespaceRequestRateLimiter = NewNoopPriorityRateLimiter(params.PersistenceMaxQPS)
+			systemRequestRateLimiter = NewNoopPriorityRateLimiter(params.PersistenceMaxQPS, params.PersistenceBurstRatio)
+			namespaceRequestRateLimiter = NewNoopPriorityRateLimiter(params.PersistenceMaxQPS, params.PersistenceBurstRatio)
 		}
 	}
 
