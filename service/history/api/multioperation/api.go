@@ -29,8 +29,8 @@ import (
 
 	commonpb "go.temporal.io/api/common/v1"
 	"go.temporal.io/api/serviceerror"
-	historyservicepb "go.temporal.io/server/api/historyservice/v1"
-	matchinservicepb "go.temporal.io/server/api/matchingservice/v1"
+	"go.temporal.io/server/api/historyservice/v1"
+	"go.temporal.io/server/api/matchingservice/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/namespace"
@@ -44,13 +44,13 @@ import (
 
 func Invoke(
 	ctx context.Context,
-	req *historyservicepb.ExecuteMultiOperationRequest,
+	req *historyservice.ExecuteMultiOperationRequest,
 	shardContext shard.Context,
 	workflowConsistencyChecker api.WorkflowConsistencyChecker,
 	tokenSerializer common.TaskTokenSerializer,
 	visibilityManager manager.VisibilityManager,
-	matchingClient matchinservicepb.MatchingServiceClient,
-) (_ *historyservicepb.ExecuteMultiOperationResponse, retError error) {
+	matchingClient matchingservice.MatchingServiceClient,
+) (_ *historyservice.ExecuteMultiOperationResponse, retError error) {
 	namespaceEntry, err := api.GetActiveNamespace(shardContext, namespace.ID(req.GetNamespaceId()))
 	if err != nil {
 		return nil, err
@@ -117,19 +117,19 @@ func Invoke(
 		// TODO: send per-operation error details
 		return nil, err
 	}
-	startOpResp := &historyservicepb.ExecuteMultiOperationResponse_Response{
-		Response: &historyservicepb.ExecuteMultiOperationResponse_Response_StartWorkflow{
+	startOpResp := &historyservice.ExecuteMultiOperationResponse_Response{
+		Response: &historyservice.ExecuteMultiOperationResponse_Response_StartWorkflow{
 			StartWorkflow: startResp,
 		},
 	}
 
 	if updateErr != nil {
 		updateResp := updater.OnError(updateErr)
-		return &historyservicepb.ExecuteMultiOperationResponse{
-			Responses: []*historyservicepb.ExecuteMultiOperationResponse_Response{
+		return &historyservice.ExecuteMultiOperationResponse{
+			Responses: []*historyservice.ExecuteMultiOperationResponse_Response{
 				startOpResp,
 				{
-					Response: &historyservicepb.ExecuteMultiOperationResponse_Response_UpdateWorkflow{
+					Response: &historyservice.ExecuteMultiOperationResponse_Response_UpdateWorkflow{
 						UpdateWorkflow: updateResp,
 					},
 				},
@@ -153,11 +153,11 @@ func Invoke(
 		// TODO: send Update outcome failure instead
 		return nil, err
 	}
-	return &historyservicepb.ExecuteMultiOperationResponse{
-		Responses: []*historyservicepb.ExecuteMultiOperationResponse_Response{
+	return &historyservice.ExecuteMultiOperationResponse{
+		Responses: []*historyservice.ExecuteMultiOperationResponse_Response{
 			startOpResp,
 			{
-				Response: &historyservicepb.ExecuteMultiOperationResponse_Response_UpdateWorkflow{
+				Response: &historyservice.ExecuteMultiOperationResponse_Response_UpdateWorkflow{
 					UpdateWorkflow: updateResp,
 				},
 			},
