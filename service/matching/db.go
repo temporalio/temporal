@@ -28,6 +28,7 @@ import (
 	"context"
 	"fmt"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	enumspb "go.temporal.io/api/enums/v1"
@@ -56,6 +57,7 @@ type (
 		store                   persistence.TaskManager
 		logger                  log.Logger
 		approximateBacklogCount int64
+		maxReadLevel            atomic.Int64 // note that even though this is an atomic, it should only be written to while holding the db lock
 	}
 	taskQueueState struct {
 		rangeID  int64
@@ -92,6 +94,18 @@ func (db *taskQueueDB) RangeID() int64 {
 	db.Lock()
 	defer db.Unlock()
 	return db.rangeID
+}
+
+// GetMaxReadLevel returns the current maxReadLevel
+func (db *taskQueueDB) GetMaxReadLevel() int64 {
+	return db.maxReadLevel.Load()
+}
+
+// SetMaxReadLevel sets the current maxReadLevel
+func (db *taskQueueDB) SetMaxReadLevel(maxReadLevel int64) {
+	db.Lock()
+	defer db.Unlock()
+	db.maxReadLevel.Store(maxReadLevel)
 }
 
 // RenewLease renews the lease on a taskqueue. If there is no previous lease,
@@ -215,14 +229,29 @@ func (db *taskQueueDB) getApproximateBacklogCount() int64 {
 // CreateTasks creates a batch of given tasks for this task queue
 func (db *taskQueueDB) CreateTasks(
 	ctx context.Context,
-	tasks []*persistencespb.AllocatedTaskInfo,
+	taskIDs []int64,
+	reqs []*writeTaskRequest,
 ) (*persistence.CreateTasksResponse, error) {
 	db.Lock()
 	defer db.Unlock()
 
+	if len(reqs) == 0 {
+		return &persistence.CreateTasksResponse{}, nil
+	}
+
+	maxReadLevel := int64(0)
+	var tasks []*persistencespb.AllocatedTaskInfo
+	for i, req := range reqs {
+		tasks = append(tasks, &persistencespb.AllocatedTaskInfo{
+			TaskId: taskIDs[i],
+			Data:   req.taskInfo,
+		})
+		maxReadLevel = taskIDs[i]
+	}
 	db.approximateBacklogCount += int64(len(tasks))
+
 	// TODO Shivam: Is it possible for only some tasks, from a batch, to be created while others fail?
-	CreateTaskResponse, err := db.store.CreateTasks(
+	resp, err := db.store.CreateTasks(
 		ctx,
 		&persistence.CreateTasksRequest{
 			TaskQueueInfo: &persistence.PersistedTaskQueueInfo{
@@ -232,11 +261,15 @@ func (db *taskQueueDB) CreateTasks(
 			Tasks: tasks,
 		})
 
+	// Update the maxReadLevel after the writes are completed, but before we send the response,
+	// so that taskReader is guaranteed to see the new read level when SpoolTask wakes it up.
+	db.maxReadLevel.Store(maxReadLevel)
+
 	// TODO Shivam: Check error codes since writing of tasks could have succeeded
 	if err != nil {
 		db.approximateBacklogCount -= int64(len(tasks))
 	}
-	return CreateTaskResponse, err
+	return resp, err
 }
 
 // GetTasks returns a batch of tasks between the given range
