@@ -25,8 +25,12 @@
 package matching
 
 import (
+	"context"
 	"fmt"
+	"github.com/golang/mock/gomock"
+	"go.temporal.io/server/common/persistence/visibility/manager"
 	"slices"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -146,6 +150,29 @@ func TestIsReachableAssignmentRuleTarget(t *testing.T) {
 
 func TestExistsWFAssignedToAny(t *testing.T) {
 	t.Parallel()
+	ctx := context.Background()
+
+	tq := "test-exists-tq"
+	nsID := "test-namespace-id"
+	nsName := "test-namespace"
+	buildIdsOfInterest := []string{"0", "1", "2", ""}
+
+	visibilityMgr, mockStore := newMockVisibilityForReachability(t)
+
+	// populate mockStore with an unversioned, non-running workflow
+	mockStore["run1"] = mockVisibilityEntry{
+		taskQueue:              tq,
+		buildIdsList:           nil,
+		executionStatusRunning: false,
+	}
+
+	exists, err := existsWFAssignedToAny(ctx, visibilityMgr, nsID, nsName, tq, buildIdsOfInterest, true)
+	assert.Nil(t, err)
+	assert.False(t, exists)
+
+	exists, err = existsWFAssignedToAny(ctx, visibilityMgr, nsID, nsName, tq, buildIdsOfInterest, false)
+	assert.Nil(t, err)
+	assert.True(t, exists)
 }
 
 func TestMakeBuildIdQuery(t *testing.T) {
@@ -153,18 +180,133 @@ func TestMakeBuildIdQuery(t *testing.T) {
 	tq := "test-query-tq"
 
 	buildIdsOfInterest := []string{"0", "1", "2", ""}
-	queryOpen := makeBuildIdQuery(buildIdsOfInterest, tq, true)
-	expectedQueryOpen := "TaskQueue = 'test-query-tq' AND (BuildIds IS NULL OR BuildIds IN ('assigned:0','assigned:1','assigned:2',unversioned)) AND ExecutionStatus = \"Running\""
-	assert.Equal(t, expectedQueryOpen, queryOpen)
-	queryClosed := makeBuildIdQuery(buildIdsOfInterest, tq, false)
-	expectedQueryClosed := "TaskQueue = 'test-query-tq' AND (BuildIds IS NULL OR BuildIds IN ('versioned:0','versioned:1','versioned:2',unversioned)) AND ExecutionStatus != \"Running\""
-	assert.Equal(t, expectedQueryClosed, queryClosed)
+	query := makeBuildIdQuery(buildIdsOfInterest, tq, true)
+	expectedQuery := "TaskQueue = 'test-query-tq' AND (BuildIds IS NULL OR BuildIds IN ('assigned:0','assigned:1','assigned:2',unversioned)) AND ExecutionStatus = \"Running\""
+	assert.Equal(t, expectedQuery, query)
+
+	query = makeBuildIdQuery(buildIdsOfInterest, tq, false)
+	expectedQuery = "TaskQueue = 'test-query-tq' AND (BuildIds IS NULL OR BuildIds IN ('versioned:0','versioned:1','versioned:2',unversioned)) AND ExecutionStatus != \"Running\""
+	assert.Equal(t, expectedQuery, query)
 
 	buildIdsOfInterest = []string{"0", "1", "2"}
-	queryOpen = makeBuildIdQuery(buildIdsOfInterest, tq, true)
-	expectedQueryOpen = "TaskQueue = 'test-query-tq' AND BuildIds IN ('assigned:0','assigned:1','assigned:2') AND ExecutionStatus = \"Running\""
-	assert.Equal(t, expectedQueryOpen, queryOpen)
-	queryClosed = makeBuildIdQuery(buildIdsOfInterest, tq, false)
-	expectedQueryClosed = "TaskQueue = 'test-query-tq' AND BuildIds IN ('versioned:0','versioned:1','versioned:2') AND ExecutionStatus != \"Running\""
-	assert.Equal(t, expectedQueryClosed, queryClosed)
+	query = makeBuildIdQuery(buildIdsOfInterest, tq, true)
+	expectedQuery = "TaskQueue = 'test-query-tq' AND BuildIds IN ('assigned:0','assigned:1','assigned:2') AND ExecutionStatus = \"Running\""
+	assert.Equal(t, expectedQuery, query)
+
+	query = makeBuildIdQuery(buildIdsOfInterest, tq, false)
+	expectedQuery = "TaskQueue = 'test-query-tq' AND BuildIds IN ('versioned:0','versioned:1','versioned:2') AND ExecutionStatus != \"Running\""
+	assert.Equal(t, expectedQuery, query)
+}
+
+// Helpers for mock Visibility Manager
+type mockRunId string
+
+type mockVisibilityStore map[mockRunId]mockVisibilityEntry
+
+type mockVisibilityEntry struct {
+	taskQueue              string
+	buildIdsList           []string
+	executionStatusRunning bool
+}
+
+func newMockVisibilityForReachability(t *testing.T) (*manager.MockVisibilityManager, mockVisibilityStore) {
+	ctrl := gomock.NewController(t)
+	vm := manager.NewMockVisibilityManager(ctrl)
+	mockStore := mockVisibilityStore(make(map[mockRunId]mockVisibilityEntry))
+	vm.EXPECT().CountWorkflowExecutions(gomock.Any(), gomock.Any()).DoAndReturn(func(
+		ctx context.Context,
+		request *manager.CountWorkflowExecutionsRequest,
+	) (*manager.CountWorkflowExecutionsResponse, error) {
+		mockEntry, checkBuildIdNull := parseReachabilityQuery(request.Query)
+		count := 0
+		for _, e := range mockStore {
+			if e.taskQueue == mockEntry.taskQueue {
+				if e.executionStatusRunning != mockEntry.executionStatusRunning {
+					continue
+				}
+				if e.buildIdsList == nil {
+					if checkBuildIdNull {
+						count++
+						continue
+					}
+					continue
+				}
+				for _, bidSA := range mockEntry.buildIdsList {
+					if slices.Contains(e.buildIdsList, bidSA) {
+						count++
+						break
+					}
+				}
+			}
+		}
+		return &manager.CountWorkflowExecutionsResponse{Count: int64(count)}, nil
+	}).AnyTimes()
+
+	return vm, mockStore
+}
+
+func parseReachabilityQuery(query string) (mockVisibilityEntry, bool) {
+	ret := mockVisibilityEntry{}
+	checkBuildIdNull := false
+	for _, c := range strings.Split(query, " AND ") {
+		if strings.Contains(c, "TaskQueue") {
+			ret.taskQueue = strings.ReplaceAll(strings.Split(c, " = ")[1], "'", "")
+		} else if strings.Contains(c, "ExecutionStatus") {
+			ret.executionStatusRunning = strings.Contains(c, "ExecutionStatus = \"Running\"")
+		} else {
+			checkBuildIdNull = strings.Contains(c, "BuildIds IS NULL")
+			splits := strings.Split(c, "BuildIds")
+			buildIdsIdx := 1
+			if len(splits) == 3 {
+				buildIdsIdx = 2
+			}
+			trimFront := strings.ReplaceAll(splits[buildIdsIdx], " IN (", "")
+			trimBack := strings.ReplaceAll(trimFront, ")", "")
+			ret.buildIdsList = strings.Split(trimBack, ",")
+		}
+	}
+	return ret, checkBuildIdNull
+}
+
+func TestParseBuildIdQuery(t *testing.T) {
+	t.Parallel()
+	tq := "test-parse-tq"
+
+	buildIdsOfInterest := []string{"0", "1", "2", ""}
+	mockEntry, checkNull := parseReachabilityQuery(makeBuildIdQuery(buildIdsOfInterest, tq, true))
+	expectedMockEntry := mockVisibilityEntry{
+		taskQueue:              tq,
+		buildIdsList:           []string{"'assigned:0'", "'assigned:1'", "'assigned:2'", "unversioned"},
+		executionStatusRunning: true,
+	}
+	assert.Equal(t, expectedMockEntry, mockEntry)
+	assert.True(t, checkNull)
+
+	mockEntry, checkNull = parseReachabilityQuery(makeBuildIdQuery(buildIdsOfInterest, tq, false))
+	expectedMockEntry = mockVisibilityEntry{
+		taskQueue:              tq,
+		buildIdsList:           []string{"'versioned:0'", "'versioned:1'", "'versioned:2'", "unversioned"},
+		executionStatusRunning: false,
+	}
+	assert.Equal(t, expectedMockEntry, mockEntry)
+	assert.True(t, checkNull)
+
+	buildIdsOfInterest = []string{"0", "1", "2"}
+	mockEntry, checkNull = parseReachabilityQuery(makeBuildIdQuery(buildIdsOfInterest, tq, true))
+	expectedMockEntry = mockVisibilityEntry{
+		taskQueue:              tq,
+		buildIdsList:           []string{"'assigned:0'", "'assigned:1'", "'assigned:2'"},
+		executionStatusRunning: true,
+	}
+	assert.Equal(t, expectedMockEntry, mockEntry)
+	assert.False(t, checkNull)
+
+	mockEntry, checkNull = parseReachabilityQuery(makeBuildIdQuery(buildIdsOfInterest, tq, false))
+	expectedMockEntry = mockVisibilityEntry{
+		taskQueue:              tq,
+		buildIdsList:           []string{"'versioned:0'", "'versioned:1'", "'versioned:2'"},
+		executionStatusRunning: false,
+	}
+	assert.Equal(t, expectedMockEntry, mockEntry)
+	assert.False(t, checkNull)
 }
