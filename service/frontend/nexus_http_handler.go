@@ -138,8 +138,8 @@ func (h *NexusHTTPHandler) dispatchNexusTaskByNamespaceAndTaskQueue(w http.Respo
 	}
 
 	var err error
-	nc := h.getBaseNexusContext(configs.DispatchNexusTaskByNamespaceAndTaskQueueAPIName)
-	params := parseRequestParams(commonnexus.RouteDispatchNexusTaskByNamespaceAndTaskQueue, w, r)
+	nc := h.baseNexusContext(configs.DispatchNexusTaskByNamespaceAndTaskQueueAPIName)
+	params := prepareRequest(commonnexus.RouteDispatchNexusTaskByNamespaceAndTaskQueue, w, r)
 
 	if nc.taskQueue, err = url.PathUnescape(params.TaskQueue); err != nil {
 		h.logger.Error("invalid URL", tag.Error(err))
@@ -151,7 +151,7 @@ func (h *NexusHTTPHandler) dispatchNexusTaskByNamespaceAndTaskQueue(w http.Respo
 		h.writeNexusFailure(w, http.StatusBadRequest, &nexus.Failure{Message: "invalid URL"})
 		return
 	}
-	if err := h.namespaceValidationInterceptor.ValidateName(nc.namespaceName); err != nil {
+	if err = h.namespaceValidationInterceptor.ValidateName(nc.namespaceName); err != nil {
 		h.logger.Error("invalid namespace name", tag.Error(err))
 		h.writeNexusFailure(w, http.StatusBadRequest, &nexus.Failure{Message: err.Error()})
 		return
@@ -181,7 +181,7 @@ func (h *NexusHTTPHandler) dispatchNexusTaskByService(w http.ResponseWriter, r *
 		return
 	}
 
-	service := parseRequestParams(commonnexus.RouteDispatchNexusTaskByService, w, r)
+	service := prepareRequest(commonnexus.RouteDispatchNexusTaskByService, w, r)
 
 	serviceID, err := url.PathUnescape(*service)
 	if err != nil {
@@ -196,16 +196,16 @@ func (h *NexusHTTPHandler) dispatchNexusTaskByService(w http.ResponseWriter, r *
 		var notFound *serviceerror.NotFound
 		switch {
 		case errors.As(err, &notFound):
-			h.writeNexusFailure(w, http.StatusNotFound, &nexus.Failure{Message: err.Error()})
+			h.writeNexusFailure(w, http.StatusNotFound, &nexus.Failure{Message: "nexus incoming service not found"})
 		case errors.Is(err, context.DeadlineExceeded):
-			h.writeNexusFailure(w, http.StatusRequestTimeout, &nexus.Failure{Message: err.Error()})
+			h.writeNexusFailure(w, http.StatusRequestTimeout, &nexus.Failure{Message: "request timed out waiting to resolve nexus incoming service"})
 		default:
-			h.writeNexusFailure(w, http.StatusInternalServerError, &nexus.Failure{Message: err.Error()})
+			h.writeNexusFailure(w, http.StatusInternalServerError, &nexus.Failure{Message: "internal error"})
 		}
 		return
 	}
 
-	nc := h.getNexusContextFromService(serviceInfo)
+	nc := h.nexusContextFromService(serviceInfo)
 
 	r, err = h.parseTlsAndAuthInfo(r, &nc)
 	if err != nil {
@@ -224,7 +224,7 @@ func (h *NexusHTTPHandler) dispatchNexusTaskByService(w http.ResponseWriter, r *
 	h.serveResolvedURL(w, r, u)
 }
 
-func (h *NexusHTTPHandler) getBaseNexusContext(apiName string) nexusContext {
+func (h *NexusHTTPHandler) baseNexusContext(apiName string) nexusContext {
 	return nexusContext{
 		namespaceValidationInterceptor:       h.namespaceValidationInterceptor,
 		namespaceRateLimitInterceptor:        h.namespaceRateLimitInterceptor,
@@ -234,15 +234,15 @@ func (h *NexusHTTPHandler) getBaseNexusContext(apiName string) nexusContext {
 	}
 }
 
-func (h *NexusHTTPHandler) getNexusContextFromService(service *nexuspb.IncomingService) nexusContext {
-	nc := h.getBaseNexusContext(configs.DispatchNexusTaskByServiceAPIName)
+func (h *NexusHTTPHandler) nexusContextFromService(service *nexuspb.IncomingService) nexusContext {
+	nc := h.baseNexusContext(configs.DispatchNexusTaskByServiceAPIName)
 	nc.namespaceName = service.Spec.Namespace
 	nc.taskQueue = service.Spec.TaskQueue
 	nc.serviceName = service.Spec.Name
 	return nc
 }
 
-func parseRequestParams[T any](route routing.Route[T], w http.ResponseWriter, r *http.Request) *T {
+func prepareRequest[T any](route routing.Route[T], w http.ResponseWriter, r *http.Request) *T {
 	// Limit the request body to max allowed Payload size.
 	// Content headers are transformed to Payload metadata and contribute to the Payload size as well. A separate
 	// limit is enforced on top of this in the nexusHandler.StartOperation method.
