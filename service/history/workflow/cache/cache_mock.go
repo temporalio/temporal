@@ -34,6 +34,7 @@ import (
 
 	gomock "github.com/golang/mock/gomock"
 	v1 "go.temporal.io/api/common/v1"
+	metrics "go.temporal.io/server/common/metrics"
 	namespace "go.temporal.io/server/common/namespace"
 	shard "go.temporal.io/server/service/history/shard"
 	workflow "go.temporal.io/server/service/history/workflow"
@@ -91,4 +92,18 @@ func (m *MockCache) GetOrCreateWorkflowExecution(ctx context.Context, shardConte
 func (mr *MockCacheMockRecorder) GetOrCreateWorkflowExecution(ctx, shardContext, namespaceID, execution, lockPriority interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetOrCreateWorkflowExecution", reflect.TypeOf((*MockCache)(nil).GetOrCreateWorkflowExecution), ctx, shardContext, namespaceID, execution, lockPriority)
+}
+
+// Put mocks base method.
+func (m *MockCache) Put(shardContext shard.Context, namespaceID namespace.ID, execution *v1.WorkflowExecution, workflowCtx workflow.Context, handler metrics.Handler) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "Put", shardContext, namespaceID, execution, workflowCtx, handler)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// Put indicates an expected call of Put.
+func (mr *MockCacheMockRecorder) Put(shardContext, namespaceID, execution, workflowCtx, handler interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Put", reflect.TypeOf((*MockCache)(nil).Put), shardContext, namespaceID, execution, workflowCtx, handler)
 }
