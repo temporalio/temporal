@@ -249,6 +249,7 @@ func (c *CacheImpl) Put(
 		metrics.CacheFailures.With(handler).Record(1)
 		return nil, err
 	}
+	//nolint:revive
 	return existing.(workflow.Context), nil
 }
 
