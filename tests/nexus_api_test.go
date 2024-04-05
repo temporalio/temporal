@@ -639,6 +639,22 @@ func (s *ClientFunctionalSuite) TestNexus_RespondNexusTaskMethods_VerifiesTaskTo
 	s.ErrorContains(err, "Operation requested with a token from a different namespace.")
 }
 
+func (s *ClientFunctionalSuite) TestNexusStartOperation_ByService_ServiceNotFound() {
+	u := getDispatchByServiceURL(s.httpAPIAddress, uuid.NewString())
+	client, err := nexus.NewClient(nexus.ClientOptions{ServiceBaseURL: u})
+	s.NoError(err)
+	ctx := NewContext()
+	capture := s.testCluster.host.captureMetricsHandler.StartCapture()
+	defer s.testCluster.host.captureMetricsHandler.StopCapture(capture)
+	_, err = nexus.StartOperation(ctx, client, op, "input", nexus.StartOperationOptions{})
+	var unexpectedResponse *nexus.UnexpectedResponseError
+	s.ErrorAs(err, &unexpectedResponse)
+	s.Equal(http.StatusNotFound, unexpectedResponse.Response.StatusCode)
+	s.Equal("nexus incoming service not found", unexpectedResponse.Failure.Message)
+	snap := capture.Snapshot()
+	s.Equal(1, len(snap["nexus_request_preprocess_errors"]))
+}
+
 func (s *ClientFunctionalSuite) echoNexusTaskPoller(ctx context.Context, taskQueue string) {
 	s.nexusTaskPoller(ctx, taskQueue, nexusEchoHandler)
 }

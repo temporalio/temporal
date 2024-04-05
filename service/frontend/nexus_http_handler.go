@@ -32,6 +32,8 @@ import (
 	"github.com/gorilla/mux"
 	"github.com/nexus-rpc/sdk-go/nexus"
 	nexuspb "go.temporal.io/api/nexus/v1"
+	"go.temporal.io/api/serviceerror"
+	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/credentials"
 	"google.golang.org/grpc/status"
 
@@ -191,17 +193,18 @@ func (h *NexusHTTPHandler) dispatchNexusTaskByService(w http.ResponseWriter, r *
 	serviceInfo, err := h.incomingServiceRegistry.Get(r.Context(), serviceID)
 	if err != nil {
 		h.logger.Error("invalid Nexus incoming service ID", tag.Error(err))
-
-		s, _ := status.FromError(err)
+		s, ok := status.FromError(err)
+		if !ok {
+			s = serviceerror.ToStatus(err)
+		}
 		switch s.Code() {
-		case http.StatusNotFound:
+		case codes.NotFound:
 			h.writeNexusFailure(w, http.StatusNotFound, &nexus.Failure{Message: "nexus incoming service not found"})
-		case http.StatusRequestTimeout:
+		case codes.DeadlineExceeded:
 			h.writeNexusFailure(w, http.StatusRequestTimeout, &nexus.Failure{Message: "request timed out waiting to resolve nexus incoming service"})
 		default:
 			h.writeNexusFailure(w, http.StatusInternalServerError, &nexus.Failure{Message: "internal error"})
 		}
-
 		return
 	}
 
