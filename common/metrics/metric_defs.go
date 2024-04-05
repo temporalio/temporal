@@ -41,6 +41,7 @@ const (
 	ErrorTypeTagName            = "error_type"
 	httpStatusTagName           = "http_status"
 	nexusMethodTagName          = "method"
+	nexusServiceTagName         = "service"
 	nexusOutcomeTagName         = "outcome"
 	versionedTagName            = "versioned"
 	resourceExhaustedTag        = "resource_exhausted_cause"

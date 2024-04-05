@@ -29,6 +29,7 @@ import (
 	"strings"
 
 	enumspb "go.temporal.io/api/enums/v1"
+
 	enumsspb "go.temporal.io/server/api/enums/v1"
 
 	"go.temporal.io/server/common/primitives"
@@ -264,6 +265,13 @@ func NexusOutcomeTag(outcome string) Tag {
 
 func NexusMethodTag(value string) Tag {
 	return &tagImpl{key: nexusMethodTagName, value: value}
+}
+
+func NexusServiceTag(value string) Tag {
+	if len(value) == 0 {
+		value = unknownValue
+	}
+	return &tagImpl{key: nexusServiceTagName, value: value}
 }
 
 // HttpStatusTag returns a new httpStatusTag.
