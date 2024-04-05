@@ -26,14 +26,12 @@ package update
 
 import (
 	"context"
-	"fmt"
 	"time"
 
 	enumspb "go.temporal.io/api/enums/v1"
 	failurepb "go.temporal.io/api/failure/v1"
 	historypb "go.temporal.io/api/history/v1"
 	protocolpb "go.temporal.io/api/protocol/v1"
-	"go.temporal.io/api/serviceerror"
 	updatepb "go.temporal.io/api/update/v1"
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/anypb"
@@ -99,11 +97,6 @@ type (
 	}
 
 	updateOpt func(*Update)
-
-	UpdateStatus struct {
-		Stage   enumspb.UpdateWorkflowExecutionLifecycleStage
-		Outcome *updatepb.Outcome
-	}
 )
 
 // New creates a new Update instance with the provided ID that will call the
@@ -170,100 +163,75 @@ func newCompleted(
 	return upd
 }
 
-// WaitLifecycleStage waits until the Update has reached at least `waitStage` or
-// a timeout. If the Update reaches `waitStage` with no timeout, the most
-// advanced stage known to have been reached is returned, along with the outcome
-// if any. If there is a timeout due to the supplied soft timeout, then
-// unspecified stage and nil outcome are returned, without an error. If there is
-// a timeout due to context deadline expiry, then the error is returned as usual.
+// WaitLifecycleStage waits until the Update has reached waitStage or a timeout.
+// If the Update reaches waitStage with no timeout, outcome (if any) is returned.
+// If there is a timeout due to the supplied soft timeout,
+// then the most advanced stage known to have been reached is returned together with empty outcome.
+// If there is a timeout due to supplied context deadline expiry,
+// then the error is returned.
+// If waitStage is UNSPECIFIED, current reached Status is returned immediately (even if ctx is expired).
 func (u *Update) WaitLifecycleStage(
 	ctx context.Context,
 	waitStage enumspb.UpdateWorkflowExecutionLifecycleStage,
-	softTimeout time.Duration) (UpdateStatus, error) {
+	softTimeout time.Duration,
+) (*Status, error) {
 
-	switch waitStage {
-	case enumspb.UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_ACCEPTED:
-		return u.waitLifecycleStage(ctx, u.WaitAccepted, softTimeout)
-	case enumspb.UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_COMPLETED:
-		return u.waitLifecycleStage(ctx, u.WaitOutcome, softTimeout)
-	default:
-		err := serviceerror.NewInvalidArgument(fmt.Sprintf("%v is not implemented", waitStage))
-		return UpdateStatus{enumspb.UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_UNSPECIFIED, nil}, err
-	}
-}
+	stCtx, stCancel := context.WithTimeout(ctx, softTimeout)
+	defer stCancel()
 
-func (u *Update) waitLifecycleStage(
-	ctx context.Context,
-	waitFn func(ctx context.Context) (UpdateStatus, error),
-	softTimeout time.Duration) (UpdateStatus, error) {
-
-	innerCtx, cancel := context.WithTimeout(context.Background(), softTimeout)
-	defer cancel()
-	status, err := waitFn(innerCtx)
-	if ctx.Err() != nil {
-		// Handle a context deadline expiry as usual.
-		return UpdateStatus{enumspb.UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_UNSPECIFIED, nil}, ctx.Err()
-	}
-	if innerCtx.Err() != nil {
-		// Handle the deadline expiry as a violation of a soft deadline:
-		// return non-error empty response.
-		return UpdateStatus{enumspb.UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_UNSPECIFIED, nil}, nil
-	}
-	return status, err
-}
-
-// Status returns an UpdateStatus containing the
-// enumspb.UpdateWorkflowExecutionLifecycleStage corresponding to the current
-// state of this Update, and the Outcome if it has one.
-func (u *Update) Status() (UpdateStatus, error) {
-	stage, err := u.state.LifecycleStage()
-	if err != nil {
-		return UpdateStatus{enumspb.UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_UNSPECIFIED, nil}, err
-	}
-	var outcome *updatepb.Outcome
-	if u.outcome.Ready() {
-		outcome, err = u.outcome.Get(context.Background())
-	}
-	if err != nil {
-		return UpdateStatus{enumspb.UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_UNSPECIFIED, nil}, err
-	}
-	return UpdateStatus{stage, outcome}, err
-}
-
-// WaitOutcome observes this Update's completion, returning when the Outcome is
-// available. This call will block until the Outcome is known or the provided
-// context.Context expires. It is safe to call this method outside of workflow
-// lock.
-func (u *Update) WaitOutcome(ctx context.Context) (UpdateStatus, error) {
-	outcome, err := u.outcome.Get(ctx)
-	if err != nil {
-		return UpdateStatus{enumspb.UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_UNSPECIFIED, outcome}, err
-	}
-	return UpdateStatus{enumspb.UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_COMPLETED, outcome}, nil
-}
-
-// WaitAccepted blocks on the acceptance of this update, returning nil if it has
-// been accepted but not yet completed, or the overall Outcome if the update has
-// been completed (including completed by rejection). This call will block until
-// the acceptance occurs or the provided context.Context expires.
-// It is safe to call this method outside of workflow lock.
-func (u *Update) WaitAccepted(ctx context.Context) (UpdateStatus, error) {
-	if u.outcome.Ready() {
-		// Being complete implies being accepted; return the completed outcome
-		// here because we can.
-		return u.WaitOutcome(ctx)
-	}
-	fail, err := u.accepted.Get(ctx)
-	if err != nil {
-		return UpdateStatus{enumspb.UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_UNSPECIFIED, nil}, err
-	}
-	if fail != nil {
-		outcome := &updatepb.Outcome{
-			Value: &updatepb.Outcome_Failure{Failure: fail},
+	if u.outcome.Ready() || waitStage == enumspb.UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_COMPLETED {
+		outcome, err := u.outcome.Get(stCtx)
+		if err == nil {
+			return statusCompleted(outcome), nil
 		}
-		return UpdateStatus{enumspb.UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_COMPLETED, outcome}, nil
+
+		// If err is not nil (checked above), and is not coming from context,
+		// then it means that the error is from the future itself.
+		// Update doesn't set error on the future, therefore this should never happen.
+		// But if it ever does, this error should be returned to the caller.
+		if ctx.Err() == nil && stCtx.Err() == nil {
+			return nil, err
+		}
+
+		if ctx.Err() != nil {
+			// Handle root context deadline expiry as normal error which is returned to the caller.
+			return nil, ctx.Err()
+		}
+
+		// Only get here if there is an error and this error is stCtx.Err().
+		// Which means that softTimeout has expired => check if update has reached ACCEPTED state.
 	}
-	return UpdateStatus{enumspb.UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_ACCEPTED, nil}, nil
+
+	// Update is not completed but maybe it is accepted.
+	if u.accepted.Ready() || waitStage == enumspb.UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_ACCEPTED {
+		// Using same context which might be already expired, but if accepted future is ready
+		// then it will return immediately without checking context deadline.
+		rejection, err := u.accepted.Get(stCtx)
+		if err == nil {
+			if rejection != nil {
+				return statusRejected(rejection), nil
+			}
+			return statusAccepted(), nil
+		}
+
+		// See comment for the same check in "completed" branch.
+		if ctx.Err() == nil && stCtx.Err() == nil {
+			return nil, err
+		}
+
+		if ctx.Err() != nil {
+			// Handle root context deadline expiry as normal error which is returned to the caller.
+			return nil, ctx.Err()
+		}
+
+		if stCtx.Err() != nil {
+			return statusAdmitted(), nil
+		}
+	}
+
+	// Only get here if waitStage=ADMITTED or UNSPECIFIED and neither ACCEPTED nor COMPLETED are reached.
+	// Return ADMITTED (as the most reached state) and empty outcome.
+	return statusAdmitted(), nil
 }
 
 // Request works if the Update is in any state but if the state is anything
