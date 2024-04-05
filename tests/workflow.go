@@ -989,9 +989,6 @@ func (s *FunctionalSuite) TestExecuteMultiOperation() {
 
 	s.Run("Start Workflow and send Update", func() {
 		tv := testvars.New(s.T().Name())
-		id := tv.WorkflowID()
-		wt := tv.WorkflowType()
-		tl := tv.TaskQueue()
 
 		request := &workflowservice.ExecuteMultiOperationRequest{
 			Namespace: s.namespace,
@@ -1000,9 +997,9 @@ func (s *FunctionalSuite) TestExecuteMultiOperation() {
 					Operation: &workflowservice.ExecuteMultiOperationRequest_Operation_StartWorkflow{
 						StartWorkflow: &workflowservice.StartWorkflowExecutionRequest{
 							RequestId:    uuid.New(),
-							WorkflowId:   id,
-							WorkflowType: wt,
-							TaskQueue:    tl,
+							WorkflowId:   tv.WorkflowID(),
+							WorkflowType: tv.WorkflowType(),
+							TaskQueue:    tv.TaskQueue(),
 							Input:        nil,
 							Identity:     identity,
 						},
@@ -1015,7 +1012,7 @@ func (s *FunctionalSuite) TestExecuteMultiOperation() {
 								Meta:  &updatepb.Meta{UpdateId: "UPDATE_ID"},
 								Input: &updatepb.Input{Name: "UPDATE"},
 							},
-							WorkflowExecution: &commonpb.WorkflowExecution{WorkflowId: id},
+							WorkflowExecution: &commonpb.WorkflowExecution{WorkflowId: tv.WorkflowID()},
 							WaitPolicy:        &updatepb.WaitPolicy{LifecycleStage: enumspb.UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_COMPLETED},
 						},
 					},
