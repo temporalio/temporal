@@ -151,27 +151,53 @@ func TestIsReachableAssignmentRuleTarget(t *testing.T) {
 func TestExistsWFAssignedToAny(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
-
 	tq := "test-exists-tq"
 	nsID := "test-namespace-id"
 	nsName := "test-namespace"
-	buildIdsOfInterest := []string{"0", "1", "2", ""}
-
 	visibilityMgr, mockStore := newMockVisibilityForReachability(t)
 
 	// populate mockStore with an unversioned, non-running workflow
-	mockStore["run1"] = mockVisibilityEntry{
+	mockStore["run0"] = mockVisibilityEntry{
 		taskQueue:              tq,
 		buildIdsList:           nil,
 		executionStatusRunning: false,
 	}
+	exists, _ := existsWFAssignedToAny(ctx, visibilityMgr, nsID, nsName, tq, []string{""}, true)
+	assert.False(t, exists)
+	exists, _ = existsWFAssignedToAny(ctx, visibilityMgr, nsID, nsName, tq, []string{""}, false)
+	assert.True(t, exists)
 
-	exists, err := existsWFAssignedToAny(ctx, visibilityMgr, nsID, nsName, tq, buildIdsOfInterest, true)
-	assert.Nil(t, err)
+	// populate mockStore with a versioned workflow assigned to build id 1
+	mockStore["run1"] = mockVisibilityEntry{
+		taskQueue:              tq,
+		buildIdsList:           []string{"'assigned:1'"},
+		executionStatusRunning: true,
+	}
+	exists, _ = existsWFAssignedToAny(ctx, visibilityMgr, nsID, nsName, tq, []string{"1"}, true)
+	assert.True(t, exists)
+	exists, _ = existsWFAssignedToAny(ctx, visibilityMgr, nsID, nsName, tq, []string{"1"}, false)
 	assert.False(t, exists)
 
-	exists, err = existsWFAssignedToAny(ctx, visibilityMgr, nsID, nsName, tq, buildIdsOfInterest, false)
-	assert.Nil(t, err)
+	// update mockStore entry for run1 to have a new version (i.e. after a redirect rule (1 -> 2) was applied)
+	mockStore["run1"] = mockVisibilityEntry{
+		taskQueue:              tq,
+		buildIdsList:           []string{"'assigned:2'", "'versioned:1'"},
+		executionStatusRunning: true,
+	}
+	exists, _ = existsWFAssignedToAny(ctx, visibilityMgr, nsID, nsName, tq, []string{"1"}, true)
+	assert.False(t, exists)
+	exists, _ = existsWFAssignedToAny(ctx, visibilityMgr, nsID, nsName, tq, []string{"1"}, false)
+	assert.False(t, exists)
+
+	// update mockStore entry for run1 to close the wf
+	mockStore["run1"] = mockVisibilityEntry{
+		taskQueue:              tq,
+		buildIdsList:           []string{"'assigned:2'", "'versioned:1'"},
+		executionStatusRunning: false,
+	}
+	exists, _ = existsWFAssignedToAny(ctx, visibilityMgr, nsID, nsName, tq, []string{"1"}, true)
+	assert.False(t, exists)
+	exists, _ = existsWFAssignedToAny(ctx, visibilityMgr, nsID, nsName, tq, []string{"1"}, false)
 	assert.True(t, exists)
 }
 
