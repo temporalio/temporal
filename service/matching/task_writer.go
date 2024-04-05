@@ -178,6 +178,8 @@ func (w *taskWriter) appendTask(
 }
 
 func (w *taskWriter) GetMaxReadLevel() int64 {
+	w.RLock()
+	defer w.RUnlock()
 	return atomic.LoadInt64(&w.maxReadLevel)
 }
 

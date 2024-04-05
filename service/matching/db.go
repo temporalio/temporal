@@ -178,11 +178,8 @@ func (db *taskQueueDB) UpdateState(
 	db.Lock()
 	defer db.Unlock()
 
-	// TODO Shivam: Do we want to fetch the latest ackLevel from taskAckManager?
-	//ackLevel := db.backlogMgr.taskAckManager.getAckLevel() // latest value of ackLevel
-
-	maxReadLevel := db.backlogMgr.taskWriter.GetMaxReadLevel()
 	// Resetting approximateBacklogCounter to fix the count divergence issue
+	maxReadLevel := db.backlogMgr.taskWriter.GetMaxReadLevel()
 	if (ackLevel == maxReadLevel) || db.approximateBacklogCount < 0 {
 		db.approximateBacklogCount = 0
 	}
