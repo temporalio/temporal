@@ -3086,7 +3086,10 @@ func (wh *WorkflowHandler) annotateSearchAttributes(
 }
 
 // Changes the configuration or state of an existing schedule.
-func (wh *WorkflowHandler) UpdateSchedule(ctx context.Context, request *workflowservice.UpdateScheduleRequest) (_ *workflowservice.UpdateScheduleResponse, retError error) {
+func (wh *WorkflowHandler) UpdateSchedule(
+	ctx context.Context,
+	request *workflowservice.UpdateScheduleRequest,
+) (_ *workflowservice.UpdateScheduleResponse, retError error) {
 	defer log.CapturePanic(wh.logger, &retError)
 
 	if request == nil {
@@ -3117,12 +3120,24 @@ func (wh *WorkflowHandler) UpdateSchedule(ctx context.Context, request *workflow
 		return nil, err
 	}
 
-	if err = wh.validateStartWorkflowArgsForSchedule(namespaceName, request.GetSchedule().GetAction().GetStartWorkflow()); err != nil {
+	// Need to validate the custom search attributes, but need to pass the original
+	// custom search attributes map to FullUpdateRequest because it needs to call
+	// UpsertSearchAttributes which expects aliased names.
+	_, err = wh.unaliasedSearchAttributesFrom(request.GetSearchAttributes(), namespaceName)
+	if err != nil {
+		return nil, err
+	}
+
+	if err = wh.validateStartWorkflowArgsForSchedule(
+		namespaceName,
+		request.GetSchedule().GetAction().GetStartWorkflow(),
+	); err != nil {
 		return nil, err
 	}
 
 	input := &schedspb.FullUpdateRequest{
-		Schedule: request.Schedule,
+		Schedule:         request.Schedule,
+		SearchAttributes: request.SearchAttributes,
 	}
 	if len(request.ConflictToken) >= 8 {
 		input.ConflictToken = int64(binary.BigEndian.Uint64(request.ConflictToken))
