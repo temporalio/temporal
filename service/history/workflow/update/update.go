@@ -185,8 +185,10 @@ func (u *Update) WaitLifecycleStage(
 			return statusCompleted(outcome), nil
 		}
 
-		// If err is not nil, and is not coming from context, then it means that the error is from the future itself.
-		// Update doesn't set error to future, therefore this should never happen.
+		// If err is not nil (checked above), and is not coming from context,
+		// then it means that the error is from the future itself.
+		// Update doesn't set error on the future, therefore this should never happen.
+		// But if it ever does, this error should be returned to the caller.
 		if ctx.Err() == nil && stCtx.Err() == nil {
 			return nil, err
 		}
@@ -194,6 +196,10 @@ func (u *Update) WaitLifecycleStage(
 		if ctx.Err() != nil {
 			// Handle root context deadline expiry as normal error which is returned to the caller.
 			return nil, ctx.Err()
+		}
+
+		if stCtx.Err() != nil {
+			// Noop because if softTimeout has expired then check if ACCEPTED is reached.
 		}
 	}
 
@@ -218,16 +224,14 @@ func (u *Update) WaitLifecycleStage(
 			// Handle root context deadline expiry as normal error which is returned to the caller.
 			return nil, ctx.Err()
 		}
+
+		if stCtx.Err() != nil {
+			return statusAdmitted(), nil
+		}
 	}
 
-	// Only get here:
-	//   if stCtx.Err() is not nil, which means that soft timeout (but not user timeout)
-	//     waiting for ACCEPTED/COMPLETED has expired,
-	//   or
-	//     waitStage is ADMITTED,
-	//   or
-	//     waitStage is UNSPECIFIED and neither ACCEPTED nor COMPLETED are reached.
-	// In all cases behavior is the same: return ADMITTED (as the most reached state) and empty outcome.
+	// Only get here if waitStage=ADMITTED or UNSPECIFIED and neither ACCEPTED nor COMPLETED are reached.
+	// Return ADMITTED (as the most reached state) and empty outcome.
 	return statusAdmitted(), nil
 }
 
