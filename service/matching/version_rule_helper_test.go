@@ -114,6 +114,13 @@ func createFullAssignmentRule(buildId string) *persistencespb.AssignmentRule {
 	return &persistencespb.AssignmentRule{Rule: &taskqueuepb.BuildIdAssignmentRule{TargetBuildId: buildId}}
 }
 
+func createAssignmentRuleWithRamp(buildId string, ramp float32) *persistencespb.AssignmentRule {
+	return &persistencespb.AssignmentRule{Rule: &taskqueuepb.BuildIdAssignmentRule{
+		TargetBuildId: buildId,
+		Ramp:          mkNewAssignmentPercentageRamp(ramp),
+	}}
+}
+
 func TestIsTimestampedRedirectRuleSource(t *testing.T) {
 	t.Parallel()
 }
@@ -278,13 +285,6 @@ func TestMakeBuildIdQuery(t *testing.T) {
 	query = makeBuildIdQuery(buildIdsOfInterest, tq, false)
 	expectedQuery = "TaskQueue = 'test-query-tq' AND BuildIds IN ('versioned:0','versioned:1','versioned:2') AND ExecutionStatus != \"Running\""
 	assert.Equal(t, expectedQuery, query)
-}
-
-func createAssignmentRuleWithRamp(buildId string, ramp float32) *persistencespb.AssignmentRule {
-	return &persistencespb.AssignmentRule{Rule: &taskqueuepb.BuildIdAssignmentRule{
-		TargetBuildId: buildId,
-		Ramp:          mkNewAssignmentPercentageRamp(ramp),
-	}}
 }
 
 // Helpers for mock Visibility Manager
