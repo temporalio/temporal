@@ -333,11 +333,9 @@ func TelemetryInterceptorProvider(
 	logger log.Logger,
 	metricsHandler metrics.Handler,
 	namespaceRegistry namespace.Registry,
-	serializer common.TaskTokenSerializer,
 ) *interceptor.TelemetryInterceptor {
 	return interceptor.NewTelemetryInterceptor(
 		namespaceRegistry,
-		serializer,
 		metricsHandler,
 		logger,
 	)

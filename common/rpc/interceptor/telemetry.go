@@ -113,13 +113,12 @@ var (
 
 func NewTelemetryInterceptor(
 	namespaceRegistry namespace.Registry,
-	serializer common.TaskTokenSerializer,
 	metricsHandler metrics.Handler,
 	logger log.Logger,
 ) *TelemetryInterceptor {
 	return &TelemetryInterceptor{
 		namespaceRegistry: namespaceRegistry,
-		serializer:        serializer,
+		serializer:        common.NewProtoTaskTokenSerializer(),
 		metricsHandler:    metricsHandler,
 		logger:            logger,
 	}
