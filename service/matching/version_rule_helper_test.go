@@ -28,7 +28,10 @@ import (
 	"context"
 	"fmt"
 	"github.com/golang/mock/gomock"
+	"github.com/temporalio/sqlparser"
+	"go.temporal.io/api/common/v1"
 	"go.temporal.io/server/common/persistence/visibility/manager"
+	"go.temporal.io/server/common/worker_versioning"
 	"slices"
 	"strings"
 	"testing"
@@ -233,6 +236,31 @@ type mockVisibilityEntry struct {
 	taskQueue              string
 	buildIdsList           []string
 	executionStatusRunning bool
+}
+
+func (s mockVisibilityStore) RecordWorkflowExecutionStarted(runId mockRunId, taskQueue string, versionCapabilities *common.WorkerVersionCapabilities) {
+	record := mockVisibilityEntry{
+		taskQueue:              taskQueue,
+		buildIdsList:           nil,
+		executionStatusRunning: true,
+	}
+	if versionCapabilities != nil {
+		if versionCapabilities.UseVersioning {
+			record.buildIdsList = []string{sqlparser.String(sqlparser.NewStrVal([]byte(worker_versioning.AssignedBuildIdSearchAttribute(versionCapabilities.BuildId))))}
+		} else if versionCapabilities.BuildId != "" {
+			record.buildIdsList = []string{sqlparser.String(sqlparser.NewStrVal([]byte(worker_versioning.UnversionedBuildIdSearchAttribute(versionCapabilities.BuildId))))}
+		}
+	}
+	s[runId] = record
+}
+
+func (s mockVisibilityStore) UpsertWorkflowExecution(runId mockRunId, versionCapabilities *common.WorkerVersionCapabilities) {
+}
+
+func (s mockVisibilityStore) RecordWorkflowExecutionClosed(runId mockRunId, versionCapabilities *common.WorkerVersionCapabilities) {
+}
+
+func (s mockVisibilityStore) DeleteWorkflowExecution(runId mockRunId, versionCapabilities *common.WorkerVersionCapabilities) {
 }
 
 func newMockVisibilityForReachability(t *testing.T) (*manager.MockVisibilityManager, mockVisibilityStore) {
