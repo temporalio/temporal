@@ -1001,7 +1001,7 @@ func (s *FunctionalSuite) TestExecuteMultiOperation() {
 							WorkflowType: tv.WorkflowType(),
 							TaskQueue:    tv.TaskQueue(),
 							Input:        nil,
-							Identity:     identity,
+							Identity:     tv.WorkerIdentity(),
 						},
 					},
 				},
