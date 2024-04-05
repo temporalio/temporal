@@ -199,9 +199,9 @@ func (h *NexusHTTPHandler) dispatchNexusTaskByService(w http.ResponseWriter, r *
 		}
 		switch s.Code() {
 		case codes.NotFound:
-			h.writeNexusFailure(w, http.StatusNotFound, &nexus.Failure{Message: "nexus incoming service not found"})
+			h.writeNexusFailure(w, http.StatusNotFound, &nexus.Failure{Message: "nexus service not found"})
 		case codes.DeadlineExceeded:
-			h.writeNexusFailure(w, http.StatusRequestTimeout, &nexus.Failure{Message: "request timed out waiting to resolve nexus incoming service"})
+			h.writeNexusFailure(w, http.StatusRequestTimeout, &nexus.Failure{Message: "request timed out"})
 		default:
 			h.writeNexusFailure(w, http.StatusInternalServerError, &nexus.Failure{Message: "internal error"})
 		}
