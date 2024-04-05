@@ -26,6 +26,7 @@ package tests
 
 import (
 	"context"
+	"encoding/base64"
 	"time"
 
 	"github.com/stretchr/testify/require"
@@ -190,7 +191,9 @@ func (s *PurgeDLQTasksSuite) TestPurgeDLQTasks() {
 			client := s.sdkClientFactory.GetSystemClient()
 
 			var jobToken adminservice.DLQJobToken
-			err = jobToken.Unmarshal(purgeDLQTasksResponse.JobToken)
+			decodedJobTokenBytes, err := base64.StdEncoding.DecodeString(purgeDLQTasksResponse.JobToken)
+			s.NoError(err)
+			err = jobToken.Unmarshal(decodedJobTokenBytes)
 			s.NoError(err)
 
 			workflow := client.GetWorkflow(ctx, jobToken.WorkflowId, jobToken.RunId)

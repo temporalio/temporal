@@ -518,7 +518,7 @@ func (s *DLQSuite) executeWorkflow(ctx context.Context, workflowID string) sdkcl
 }
 
 // purgeMessages from the DLQ up to and including the specified message ID, blocking until the purge workflow completes.
-func (s *DLQSuite) purgeMessages(ctx context.Context, maxMessageIDToDelete int64) []byte {
+func (s *DLQSuite) purgeMessages(ctx context.Context, maxMessageIDToDelete int64) string {
 	args := []string{
 		"tdbg",
 		"--" + tdbg.FlagYes,
@@ -536,8 +536,7 @@ func (s *DLQSuite) purgeMessages(ctx context.Context, maxMessageIDToDelete int64
 	s.NoError(protojson.Unmarshal(output, &response))
 
 	var token adminservice.DLQJobToken
-	tokenBytes := make([]byte, base64.StdEncoding.DecodedLen(len(response.JobToken)))
-	_, err = base64.StdEncoding.Decode(tokenBytes, response.JobToken)
+	tokenBytes, err := base64.StdEncoding.DecodeString(response.JobToken)
 	s.NoError(err)
 	s.NoError(proto.Unmarshal(tokenBytes, &token))
 	systemSDKClient := s.sdkClientFactory.GetSystemClient()
@@ -548,22 +547,21 @@ func (s *DLQSuite) purgeMessages(ctx context.Context, maxMessageIDToDelete int64
 }
 
 // mergeMessages from the DLQ up to and including the specified message ID, blocking until the merge workflow completes.
-func (s *DLQSuite) mergeMessages(ctx context.Context, maxMessageID int64) []byte {
-	tokenBytes := s.mergeMessagesWithoutBlocking(ctx, maxMessageID)
+func (s *DLQSuite) mergeMessages(ctx context.Context, maxMessageID int64) string {
+	tokenString := s.mergeMessagesWithoutBlocking(ctx, maxMessageID)
 	var token adminservice.DLQJobToken
-	encodedTokenBytes := make([]byte, base64.StdEncoding.DecodedLen(len(tokenBytes)))
-	_, err := base64.StdEncoding.Decode(encodedTokenBytes, tokenBytes)
+	decodedTokenBytes, err := base64.StdEncoding.DecodeString(tokenString)
 	s.NoError(err)
-	s.NoError(token.Unmarshal(encodedTokenBytes))
+	s.NoError(token.Unmarshal(decodedTokenBytes))
 
 	systemSDKClient := s.sdkClientFactory.GetSystemClient()
 	run := systemSDKClient.GetWorkflow(ctx, token.WorkflowId, token.RunId)
 	s.NoError(run.Get(ctx, nil))
-	return tokenBytes
+	return tokenString
 }
 
 // mergeMessages from the DLQ up to and including the specified message ID, returns immediately after running tdbg command.
-func (s *DLQSuite) mergeMessagesWithoutBlocking(ctx context.Context, maxMessageID int64) []byte {
+func (s *DLQSuite) mergeMessagesWithoutBlocking(ctx context.Context, maxMessageID int64) string {
 	args := []string{
 		"tdbg",
 		"--" + tdbg.FlagYes,
@@ -601,14 +599,14 @@ func (s *DLQSuite) readDLQTasks(ctx context.Context) []tdbgtest.DLQMessage[*pers
 }
 
 // Calls describe dlq job and verify the output
-func (s *DLQSuite) describeJob(ctx context.Context, token []byte) *adminservice.DescribeDLQJobResponse {
+func (s *DLQSuite) describeJob(ctx context.Context, token string) *adminservice.DescribeDLQJobResponse {
 	args := []string{
 		"tdbg",
 		"dlq",
 		"--" + tdbg.FlagDLQVersion, "v2",
 		"job",
 		"describe",
-		"--" + tdbg.FlagJobToken, string(token),
+		"--" + tdbg.FlagJobToken, token,
 	}
 	err := s.tdbgApp.RunContext(ctx, args)
 	s.NoError(err)
@@ -621,14 +619,14 @@ func (s *DLQSuite) describeJob(ctx context.Context, token []byte) *adminservice.
 }
 
 // Calls delete dlq job and verify the output
-func (s *DLQSuite) cancelJob(ctx context.Context, token []byte) *adminservice.CancelDLQJobResponse {
+func (s *DLQSuite) cancelJob(ctx context.Context, token string) *adminservice.CancelDLQJobResponse {
 	args := []string{
 		"tdbg",
 		"dlq",
 		"--" + tdbg.FlagDLQVersion, "v2",
 		"job",
 		"cancel",
-		"--" + tdbg.FlagJobToken, string(token),
+		"--" + tdbg.FlagJobToken, token,
 		"--" + tdbg.FlagReason, "testing cancel",
 	}
 	err := s.tdbgApp.RunContext(ctx, args)
