@@ -650,7 +650,7 @@ func (s *ClientFunctionalSuite) TestNexusStartOperation_ByService_ServiceNotFoun
 	var unexpectedResponse *nexus.UnexpectedResponseError
 	s.ErrorAs(err, &unexpectedResponse)
 	s.Equal(http.StatusNotFound, unexpectedResponse.Response.StatusCode)
-	s.Equal("nexus incoming service not found", unexpectedResponse.Failure.Message)
+	s.Equal("nexus service not found", unexpectedResponse.Failure.Message)
 	snap := capture.Snapshot()
 	s.Equal(1, len(snap["nexus_request_preprocess_errors"]))
 }
