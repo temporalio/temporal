@@ -86,7 +86,7 @@ type (
 		// accessed only while holding workflow lock
 		id              string
 		state           state
-		request         *anypb.Any // of type *updatepb.Request, nil when not in stateRequested or stateSent.
+		request         *anypb.Any // of type *updatepb.Request, nil when not in stateAdmitted or stateSent.
 		acceptedEventID int64
 		onComplete      func()
 		instrumentation *instrumentation
@@ -104,7 +104,7 @@ type (
 func New(id string, opts ...updateOpt) *Update {
 	upd := &Update{
 		id:              id,
-		state:           stateAdmitted,
+		state:           stateCreated,
 		onComplete:      func() {},
 		instrumentation: &noopInstrumentation,
 		accepted:        future.NewFuture[*failurepb.Failure](),
@@ -235,16 +235,16 @@ func (u *Update) WaitLifecycleStage(
 }
 
 // Request works if the Update is in any state but if the state is anything
-// other than stateAdmitted then it just early returns a nil error. This
+// other than stateCreated then it just early returns a nil error. This
 // effectively gives us update request deduplication by update ID. If the Update
-// is in stateAdmitted then it builds a protocolpb.Message that will be sent on
+// is in stateCreated then it builds a protocolpb.Message that will be sent on
 // ensuing calls to PollOutgoingMessages until the update is accepted.
 func (u *Update) Request(
 	ctx context.Context,
 	req *updatepb.Request,
 	eventStore EventStore,
 ) error {
-	if u.state != stateAdmitted {
+	if u.state != stateCreated {
 		return nil
 	}
 	if err := validateRequestMsg(u.id, req); err != nil {
@@ -265,9 +265,9 @@ func (u *Update) Request(
 		return invalidArgf("unable to marshal request: %v", err)
 	}
 	u.request = reqAny
-	u.setState(stateProvisionallyRequested)
-	eventStore.OnAfterCommit(func(context.Context) { u.setState(stateRequested) })
-	eventStore.OnAfterRollback(func(context.Context) { u.setState(stateAdmitted) })
+	u.setState(stateProvisionallyAdmitted)
+	eventStore.OnAfterCommit(func(context.Context) { u.setState(stateAdmitted) })
+	eventStore.OnAfterRollback(func(context.Context) { u.setState(stateCreated) })
 	return nil
 }
 
@@ -328,15 +328,15 @@ func (u *Update) OnProtocolMessage(
 // If includeAlreadySent is set to true then it will return true even if update was already sent but not processed by worker.
 func (u *Update) needToSend(includeAlreadySent bool) bool {
 	if includeAlreadySent {
-		return u.state.Matches(stateSet(stateRequested | stateProvisionallySent | stateSent))
+		return u.state.Matches(stateSet(stateAdmitted | stateProvisionallySent | stateSent))
 	}
-	return u.state.Matches(stateSet(stateRequested))
+	return u.state.Matches(stateSet(stateAdmitted))
 }
 
-// Send moves update from stateRequested to stateSent and returns the message to be sent to worker.
-// If update is not in expected stateRequested, Send does nothing and returns nil.
+// Send moves update from stateAdmitted to stateSent and returns the message to be sent to worker.
+// If update is not in expected stateAdmitted, Send does nothing and returns nil.
 // If includeAlreadySent is set to true then Send will return message even if update was already sent but not processed by worker.
-// Note: once update moved to stateSent it never moves back to stateRequested.
+// Note: once update moved to stateSent it never moves back to stateAdmitted.
 func (u *Update) Send(
 	_ context.Context,
 	includeAlreadySent bool,
@@ -347,10 +347,10 @@ func (u *Update) Send(
 		return nil
 	}
 
-	if u.state == stateRequested {
+	if u.state == stateAdmitted {
 		u.setState(stateProvisionallySent)
 		eventStore.OnAfterCommit(func(context.Context) { u.setState(stateSent) })
-		eventStore.OnAfterRollback(func(context.Context) { u.setState(stateRequested) })
+		eventStore.OnAfterRollback(func(context.Context) { u.setState(stateAdmitted) })
 	}
 
 	return &protocolpb.Message{
@@ -499,11 +499,11 @@ func (u *Update) isIncomplete() bool {
 }
 
 // CancelIncomplete cancels update if it wasn't completed yet:
-//   - if in stateAdmitted, stateRequested, or stateSent -> reject,
+//   - if in stateCreated, stateAdmitted, or stateSent -> reject,
 //   - if in stateAccepted -> do nothing,
 //   - if in stateCompleted -> do nothing.
 func (u *Update) CancelIncomplete(ctx context.Context, reason CancelReason, eventStore EventStore) error {
-	if u.state.Matches(stateSet(stateAdmitted | stateProvisionallyRequested | stateRequested | stateProvisionallySent | stateSent)) {
+	if u.state.Matches(stateSet(stateCreated | stateProvisionallyAdmitted | stateAdmitted | stateProvisionallySent | stateSent)) {
 		return u.reject(ctx, reason.RejectionFailure(), eventStore)
 	}
 
