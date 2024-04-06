@@ -25,15 +25,12 @@
 package matching
 
 import (
-	"context"
 	"fmt"
 	"math"
 	"slices"
-	"strings"
 	"time"
 
 	"github.com/dgryski/go-farm"
-	"github.com/temporalio/sqlparser"
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/api/taskqueue/v1"
 	"go.temporal.io/api/workflowservice/v1"
@@ -44,11 +41,7 @@ import (
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common"
 	hlc "go.temporal.io/server/common/clock/hybrid_logical_clock"
-	"go.temporal.io/server/common/namespace"
-	"go.temporal.io/server/common/persistence/visibility/manager"
-	"go.temporal.io/server/common/searchattribute"
 	"go.temporal.io/server/common/util"
-	"go.temporal.io/server/common/worker_versioning"
 )
 
 func cloneOrMkData(data *persistencespb.VersioningData) *persistencespb.VersioningData {
@@ -536,130 +529,4 @@ func FindAssignmentBuildId(rules []*persistencespb.AssignmentRule, runId string)
 func calcRampThreshold(id string) float64 {
 	h := farm.Fingerprint32([]byte(id))
 	return 100 * (float64(h) / (float64(math.MaxUint32) + 1))
-}
-
-/*
-e.g.
-Redirect Rules:
-10
-^
-|
-1 <------ 2
-^
-|
-5 <------ 3 <------ 4
-
-Assignment Rules:
-[ (3, 50%), (2, nil) ]
-*/
-func getUpstreamBuildIds(
-	buildId string,
-	redirectRules []*persistencespb.RedirectRule) []string {
-	var upstream []string
-	directSources := getSourcesForTarget(buildId, redirectRules)
-
-	for _, src := range directSources {
-		upstream = append(upstream, src)
-		upstream = append(upstream, getUpstreamBuildIds(src, redirectRules)...)
-	}
-
-	return upstream
-}
-
-// getSourcesForTarget gets the first-degree sources for any redirect rule targeting buildId
-func getSourcesForTarget(buildId string, redirectRules []*persistencespb.RedirectRule) []string {
-	var sources []string
-	for _, rr := range redirectRules {
-		if rr.GetRule().GetTargetBuildId() == buildId {
-			sources = append(sources, rr.GetRule().GetSourceBuildId())
-		}
-	}
-
-	return sources
-}
-
-func existsBackloggedActivityOrWFAssignedToAny(ctx context.Context,
-	nsID,
-	nsName,
-	taskQueue string,
-	buildIdsOfInterest []string,
-) (bool, error) {
-	// todo backlog
-	return false, nil
-}
-
-func isReachableAssignmentRuleTarget(buildId string, assignmentRules []*persistencespb.AssignmentRule) bool {
-	for _, r := range assignmentRules {
-		if r.GetRule().GetTargetBuildId() == buildId {
-			return true
-		}
-		if r.GetRule().GetPercentageRamp() == nil {
-			// rules after an unconditional rule will not be reached
-			break
-		}
-	}
-	return false
-}
-
-func existsWFAssignedToAny(
-	ctx context.Context,
-	visibilityMgr manager.VisibilityManager,
-	nsID,
-	nsName,
-	query string,
-) (bool, error) {
-	countResponse, err := visibilityMgr.CountWorkflowExecutions(ctx, &manager.CountWorkflowExecutionsRequest{
-		NamespaceID: namespace.ID(nsID),
-		Namespace:   namespace.Name(nsName),
-		Query:       query,
-	})
-	if err != nil {
-		return false, err
-	}
-	return countResponse.Count > 0, nil
-}
-
-func makeBuildIdQuery(
-	buildIdsOfInterest []string,
-	taskQueue string,
-	open bool,
-) string {
-	escapedTaskQueue := sqlparser.String(sqlparser.NewStrVal([]byte(taskQueue)))
-	var statusFilter string
-	var escapedBuildIds []string
-	var includeNull bool
-	if open {
-		statusFilter = fmt.Sprintf(` AND %s = "Running"`, searchattribute.ExecutionStatus)
-		// want: currently assigned to that build-id
-		// (b1, b2) --> (assigned:b1, assigned:b2)
-		// (b1, b2, "") --> (assigned:b1, assigned:b2, unversioned, null)
-		// ("") --> (unversioned, null)
-		for _, bid := range buildIdsOfInterest {
-			if bid == "" {
-				escapedBuildIds = append(escapedBuildIds, sqlparser.String(sqlparser.NewStrVal([]byte(worker_versioning.UnversionedSearchAttribute))))
-				includeNull = true
-			} else {
-				escapedBuildIds = append(escapedBuildIds, sqlparser.String(sqlparser.NewStrVal([]byte(worker_versioning.AssignedBuildIdSearchAttribute(bid)))))
-			}
-		}
-	} else {
-		statusFilter = fmt.Sprintf(` AND %s != "Running"`, searchattribute.ExecutionStatus)
-		// want: closed AT that build id, and once used that build id
-		// (b1, b2) --> (versioned:b1, versioned:b2)
-		// (b1, b2, "") --> (versioned:b1, versioned:b2, unversioned, null)
-		// ("") --> (unversioned, null)
-		for _, bid := range buildIdsOfInterest {
-			if bid == "" {
-				escapedBuildIds = append(escapedBuildIds, sqlparser.String(sqlparser.NewStrVal([]byte(worker_versioning.UnversionedSearchAttribute))))
-				includeNull = true
-			} else {
-				escapedBuildIds = append(escapedBuildIds, sqlparser.String(sqlparser.NewStrVal([]byte(worker_versioning.VersionedBuildIdSearchAttribute(bid)))))
-			}
-		}
-	}
-	buildIdsFilter := fmt.Sprintf("%s IN (%s)", searchattribute.BuildIds, strings.Join(escapedBuildIds, ","))
-	if includeNull {
-		buildIdsFilter = fmt.Sprintf("(%s IS NULL OR %s)", searchattribute.BuildIds, buildIdsFilter)
-	}
-	return fmt.Sprintf("%s = %s AND %s%s", searchattribute.TaskQueue, escapedTaskQueue, buildIdsFilter, statusFilter)
 }

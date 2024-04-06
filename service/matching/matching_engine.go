@@ -945,66 +945,6 @@ func (e *matchingEngineImpl) getDefaultBuildId(tqMgr taskQueuePartitionManager) 
 	return "", nil
 }
 
-func getBuildIdTaskReachability(
-	ctx context.Context,
-	data *persistencespb.VersioningData,
-	visibilityMgr manager.VisibilityManager,
-	nsID,
-	nsName,
-	taskQueue,
-	buildId string,
-) (enumspb.BuildIdTaskReachability, error) {
-	assignmentRules := data.GetAssignmentRules()
-	redirectRules := data.GetRedirectRules()
-
-	// 1. Easy UNREACHABLE case
-	if isRedirectRuleSource(buildId, redirectRules) {
-		return enumspb.BUILD_ID_TASK_REACHABILITY_UNREACHABLE, nil
-	}
-
-	// Gather list of all build ids that could point to buildId -> upstreamBuildIds
-	upstreamBuildIds := getUpstreamBuildIds(buildId, redirectRules)
-	buildIdsOfInterest := append(upstreamBuildIds, buildId)
-
-	// 2. Cases for REACHABLE
-	// 2a. If buildId is assignable to new tasks
-	for _, bid := range buildIdsOfInterest {
-		if isReachableAssignmentRuleTarget(bid, assignmentRules) {
-			return enumspb.BUILD_ID_TASK_REACHABILITY_REACHABLE, nil
-		}
-	}
-
-	// 2b. If buildId could be reached from the backlog
-	if existsBacklog, err := existsBackloggedActivityOrWFAssignedToAny(ctx, nsID, nsName, taskQueue, buildIdsOfInterest); err != nil {
-		return enumspb.BUILD_ID_TASK_REACHABILITY_UNSPECIFIED, err
-	} else if existsBacklog {
-		return enumspb.BUILD_ID_TASK_REACHABILITY_REACHABLE, nil
-	}
-
-	// Note: The below cases are not applicable to activity-only task queues, since we don't record those in visibility
-
-	// 2c. If buildId is assignable to tasks from open workflows
-	existsOpenWFAssignedToBuildId, err := existsWFAssignedToAny(ctx, visibilityMgr, nsID, nsName, makeBuildIdQuery(buildIdsOfInterest, taskQueue, true))
-	if err != nil {
-		return enumspb.BUILD_ID_TASK_REACHABILITY_UNSPECIFIED, err
-	}
-	if existsOpenWFAssignedToBuildId {
-		return enumspb.BUILD_ID_TASK_REACHABILITY_REACHABLE, nil
-	}
-
-	// 3. Cases for CLOSED_WORKFLOWS_ONLY
-	existsClosedWFAssignedToBuildId, err := existsWFAssignedToAny(ctx, visibilityMgr, nsID, nsName, makeBuildIdQuery(buildIdsOfInterest, taskQueue, false))
-	if err != nil {
-		return enumspb.BUILD_ID_TASK_REACHABILITY_UNSPECIFIED, err
-	}
-	if existsClosedWFAssignedToBuildId {
-		return enumspb.BUILD_ID_TASK_REACHABILITY_CLOSED_WORKFLOWS_ONLY, nil
-	}
-
-	// 4. Otherwise, UNREACHABLE
-	return enumspb.BUILD_ID_TASK_REACHABILITY_UNREACHABLE, nil
-}
-
 func (e *matchingEngineImpl) ListTaskQueuePartitions(
 	_ context.Context,
 	request *matchingservice.ListTaskQueuePartitionsRequest,
