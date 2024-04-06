@@ -257,10 +257,9 @@ message UpdateWorkerBuildIdCompatibilityResponse {}
 message GetWorkerVersioningRulesRequest {
     string namespace_id = 1;
     string task_queue = 2;
-    google.protobuf.Duration deleted_rule_inclusion_period = 3;
 
     oneof command {
-        temporal.api.workflowservice.v1.GetWorkerVersioningRulesRequest request = 4;
+        temporal.api.workflowservice.v1.GetWorkerVersioningRulesRequest request = 3;
     }
 }
 

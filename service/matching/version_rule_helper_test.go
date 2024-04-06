@@ -27,6 +27,7 @@ package matching
 import (
 	"context"
 	"fmt"
+	"go.temporal.io/server/common/namespace"
 	"slices"
 	"strconv"
 	"strings"
@@ -168,7 +169,7 @@ Redirect Rules:
 |
 5 <------ 3 <------ 4
 */
-func TestGetUpstreamBuildIds(t *testing.T) {
+func TestGetUpstreamBuildIds_NoCycle(t *testing.T) {
 	t.Parallel()
 	redirectRules := []*taskqueuepb.TimestampedCompatibleBuildIdRedirectRule{
 		{Rule: mkRedirectRule("1", "10")},
@@ -188,6 +189,11 @@ func TestGetUpstreamBuildIds(t *testing.T) {
 	assert.Equal(t, len(expectedUpstreamBuildIds), len(upstreamBuildIds))
 }
 
+func TestGetUpstreamBuildIds_WithCycle(t *testing.T) {
+	t.Parallel()
+	// todo
+}
+
 func TestExistsBackloggedActivityOrWFAssignedTo(t *testing.T) {
 	t.Parallel()
 	// todo after we have backlog info
@@ -196,6 +202,8 @@ func TestExistsBackloggedActivityOrWFAssignedTo(t *testing.T) {
 /*
 Assignment Rules:
 [ (3, 50%), (2, nil) (1, nil) ]
+
+Expect 3 and 2 are reachable, but not 1 since it is behind an unconditional rule.
 */
 func TestIsReachableAssignmentRuleTarget(t *testing.T) {
 	t.Parallel()
@@ -211,57 +219,74 @@ func TestIsReachableAssignmentRuleTarget(t *testing.T) {
 	assert.False(t, isReachableAssignmentRuleTarget("0", assignmentRules))
 }
 
-func TestExistsWFAssignedToAny(t *testing.T) {
+// mock visibility
+func TestGetReachability_NoRules(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
 	tq := "test-exists-tq"
 	nsID := "test-namespace-id"
 	nsName := "test-namespace"
-	visibilityMgr, mockStore := newMockVisibilityForReachability(t)
 
-	// populate mockStore with an unversioned, non-running workflow
-	mockStore["run0"] = mockVisibilityEntry{
-		taskQueue:              tq,
-		buildIdsList:           nil,
-		executionStatusRunning: false,
-	}
-	exists, _ := existsWFAssignedToAny(ctx, visibilityMgr, nsID, nsName, tq, []string{""}, true)
+	ctrl := gomock.NewController(t)
+	vm := manager.NewMockVisibilityManager(ctrl)
+	mockStore := mockVisibilityStore(make(map[mockRunId]mockVisibilityEntry))
+
+	// 1. imagine there is 1 only closed workflows in visibility, with BuildIds == NULL
+	// getReachability("") --> CLOSED_ONLY
+	queryOpen := makeBuildIdQuery([]string{""}, tq, true)
+	vm.EXPECT().CountWorkflowExecutions(gomock.Any(), &manager.CountWorkflowExecutionsRequest{
+		NamespaceID: namespace.ID(nsID),
+		Namespace:   namespace.Name(nsName),
+		Query:       queryOpen,
+	}).Return(0)
+	queryClosed := makeBuildIdQuery([]string{""}, tq, false)
+	vm.EXPECT().CountWorkflowExecutions(gomock.Any(), &manager.CountWorkflowExecutionsRequest{
+		NamespaceID: namespace.ID(nsID),
+		Namespace:   namespace.Name(nsName),
+		Query:       queryClosed,
+	}).Return(1)
+	existsWFAssignedToAny(ctx, vm, nsID, nsName, makeBuildIdQuery([]string{""}, tq, true))
+	exists, _ := existsWFAssignedToAny(ctx, vm, nsID, nsName, tq, []string{""}, true)
 	assert.False(t, exists)
-	exists, _ = existsWFAssignedToAny(ctx, visibilityMgr, nsID, nsName, tq, []string{""}, false)
+	exists, _ = existsWFAssignedToAny(ctx, vm, nsID, nsName, tq, []string{""}, false)
 	assert.True(t, exists)
 
-	// populate mockStore with a versioned workflow assigned to build id 1
+	// 2. getReachability(1) --> UNREACHABLE
+
+	// 3. populate mockStore with a versioned workflow assigned to build id 1
+	// now you start a versioned workflow assigned to build id 1, and it is running
+	// getReachability(1) --> REACHABLE
 	mockStore["run1"] = mockVisibilityEntry{
 		taskQueue:              tq,
-		buildIdsList:           []string{"'assigned:1'"},
+		buildIdsList:           []string{"'assigned:1'", "'versioned:1'"},
 		executionStatusRunning: true,
 	}
-	exists, _ = existsWFAssignedToAny(ctx, visibilityMgr, nsID, nsName, tq, []string{"1"}, true)
-	assert.True(t, exists)
-	exists, _ = existsWFAssignedToAny(ctx, visibilityMgr, nsID, nsName, tq, []string{"1"}, false)
-	assert.False(t, exists)
+}
 
-	// update mockStore entry for run1 to have a new version (i.e. after a redirect rule (1 -> 2) was applied)
-	mockStore["run1"] = mockVisibilityEntry{
-		taskQueue:              tq,
-		buildIdsList:           []string{"'assigned:2'", "'versioned:1'"},
-		executionStatusRunning: true,
-	}
-	exists, _ = existsWFAssignedToAny(ctx, visibilityMgr, nsID, nsName, tq, []string{"1"}, true)
-	assert.False(t, exists)
-	exists, _ = existsWFAssignedToAny(ctx, visibilityMgr, nsID, nsName, tq, []string{"1"}, false)
-	assert.False(t, exists)
+// nothing in visibility for this test
+func TestGetReachability_WithActiveRules(t *testing.T) {
+	// Assignment: [ A, D ]. Redirect: (A->B), (B->C)
 
-	// update mockStore entry for run1 to close the wf
-	mockStore["run1"] = mockVisibilityEntry{
-		taskQueue:              tq,
-		buildIdsList:           []string{"'assigned:2'", "'versioned:1'"},
-		executionStatusRunning: false,
-	}
-	exists, _ = existsWFAssignedToAny(ctx, visibilityMgr, nsID, nsName, tq, []string{"1"}, true)
-	assert.False(t, exists)
-	exists, _ = existsWFAssignedToAny(ctx, visibilityMgr, nsID, nsName, tq, []string{"1"}, false)
-	assert.True(t, exists)
+	// getReachability(A) --> unreachable (redirect rule source)
+	// getReachability(C) --> reachable (redirect rule target of reachable source)
+	// getReachability(D) --> reachable (assignment rule target)
+}
+
+// nothing in visibility for this test
+func TestGetReachability_WithDeletedRules(t *testing.T) {
+	// recently-deleted redirect rule source --> reachable
+	// recently-deleted assignment rule target --> reachable
+	// deleted assignment rule target --> not reachable
+	// recently-deleted redirect rule target of reachable source --> reachable
+	// deleted redirect rule target of reachable source --> unreachable
+
+	// Assignment: [ (C, active), (B, recently deleted), (A, deleted) ]. Redirect: (A->B, active), (C->B, recently deleted)
+
+	// todo
+	// getReachability(A) --> unreachable (active redirect rule source)
+	// getReachability(A) --> unreachable (active redirect rule source)
+	// getReachability(C) --> reachable (redirect rule target of reachable source)
+	// getReachability(D) --> reachable (assignment rule target)
 }
 
 func TestMakeBuildIdQuery(t *testing.T) {
@@ -270,11 +295,11 @@ func TestMakeBuildIdQuery(t *testing.T) {
 
 	buildIdsOfInterest := []string{"0", "1", "2", ""}
 	query := makeBuildIdQuery(buildIdsOfInterest, tq, true)
-	expectedQuery := "TaskQueue = 'test-query-tq' AND (BuildIds IS NULL OR BuildIds IN ('assigned:0','assigned:1','assigned:2',unversioned)) AND ExecutionStatus = \"Running\""
+	expectedQuery := "TaskQueue = 'test-query-tq' AND (BuildIds IS NULL OR BuildIds IN ('assigned:0','assigned:1','assigned:2','unversioned')) AND ExecutionStatus = \"Running\""
 	assert.Equal(t, expectedQuery, query)
 
 	query = makeBuildIdQuery(buildIdsOfInterest, tq, false)
-	expectedQuery = "TaskQueue = 'test-query-tq' AND (BuildIds IS NULL OR BuildIds IN ('versioned:0','versioned:1','versioned:2',unversioned)) AND ExecutionStatus != \"Running\""
+	expectedQuery = "TaskQueue = 'test-query-tq' AND (BuildIds IS NULL OR BuildIds IN ('versioned:0','versioned:1','versioned:2','unversioned')) AND ExecutionStatus != \"Running\""
 	assert.Equal(t, expectedQuery, query)
 
 	buildIdsOfInterest = []string{"0", "1", "2"}

@@ -46,7 +46,6 @@ import (
 	hlc "go.temporal.io/server/common/clock/hybrid_logical_clock"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence/visibility/manager"
-	"go.temporal.io/server/common/resource"
 	"go.temporal.io/server/common/searchattribute"
 	"go.temporal.io/server/common/util"
 	"go.temporal.io/server/common/worker_versioning"
@@ -297,7 +296,6 @@ func CommitBuildID(timestamp *hlc.Clock,
 func GetWorkerVersioningRules(
 	versioningData *persistencespb.VersioningData,
 	clk *hlc.Clock,
-	deletedRuleInclusionPeriod *durationpb.Duration,
 ) (*matchingservice.GetWorkerVersioningRulesResponse, error) {
 	var cT []byte
 	var err error
@@ -306,7 +304,7 @@ func GetWorkerVersioningRules(
 	}
 	activeAssignmentRules := make([]*taskqueue.TimestampedBuildIdAssignmentRule, 0)
 	for _, ar := range versioningData.GetAssignmentRules() {
-		if ar.GetDeleteTimestamp() == nil || withinDeletedRuleInclusionPeriod(ar.GetDeleteTimestamp(), deletedRuleInclusionPeriod) {
+		if ar.GetDeleteTimestamp() == nil {
 			activeAssignmentRules = append(activeAssignmentRules, &taskqueue.TimestampedBuildIdAssignmentRule{
 				Rule:       ar.GetRule(),
 				CreateTime: hlc.ProtoTimestamp(ar.GetCreateTimestamp()),
@@ -315,7 +313,7 @@ func GetWorkerVersioningRules(
 	}
 	activeRedirectRules := make([]*taskqueue.TimestampedCompatibleBuildIdRedirectRule, 0)
 	for _, rr := range versioningData.GetRedirectRules() {
-		if rr.GetDeleteTimestamp() == nil || withinDeletedRuleInclusionPeriod(rr.GetDeleteTimestamp(), deletedRuleInclusionPeriod) {
+		if rr.GetDeleteTimestamp() == nil {
 			activeRedirectRules = append(activeRedirectRules, &taskqueue.TimestampedCompatibleBuildIdRedirectRule{
 				Rule:       rr.GetRule(),
 				CreateTime: hlc.ProtoTimestamp(rr.GetCreateTimestamp()),
@@ -556,7 +554,7 @@ Assignment Rules:
 */
 func getUpstreamBuildIds(
 	buildId string,
-	redirectRules []*taskqueue.TimestampedCompatibleBuildIdRedirectRule) []string {
+	redirectRules []*persistencespb.RedirectRule) []string {
 	var upstream []string
 	directSources := getSourcesForTarget(buildId, redirectRules)
 
@@ -569,7 +567,7 @@ func getUpstreamBuildIds(
 }
 
 // getSourcesForTarget gets the first-degree sources for any redirect rule targeting buildId
-func getSourcesForTarget(buildId string, redirectRules []*taskqueue.TimestampedCompatibleBuildIdRedirectRule) []string {
+func getSourcesForTarget(buildId string, redirectRules []*persistencespb.RedirectRule) []string {
 	var sources []string
 	for _, rr := range redirectRules {
 		if rr.GetRule().GetTargetBuildId() == buildId {
@@ -585,35 +583,12 @@ func existsBackloggedActivityOrWFAssignedToAny(ctx context.Context,
 	nsName,
 	taskQueue string,
 	buildIdsOfInterest []string,
-	c resource.MatchingRawClient,
 ) (bool, error) {
-	//resp, err := c.DescribeTaskQueue(ctx, &matchingservice.DescribeTaskQueueRequest{
-	//	NamespaceId: nsID,
-	//	DescRequest: &workflowservice.DescribeTaskQueueRequest{
-	//		Namespace:              nsName,
-	//		TaskQueue:              &taskqueue.TaskQueue{Name: taskQueue, Kind: enums.TASK_QUEUE_KIND_NORMAL},
-	//		ApiMode:                enums.DESCRIBE_TASK_QUEUE_MODE_ENHANCED,
-	//		Versions:               &taskqueue.TaskQueueVersionSelection{BuildIds: buildIdsOfInterest},
-	//		TaskQueueTypes:         nil, // both
-	//		ReportPollers:          false,
-	//		ReportTaskReachability: false, // important!
-	//		// ReportBacklogInfo: true, // todo carly: needs Shivam's work which has a backlog count
-	//	},
-	//})
-	//if err != nil {
-	//	return false, err
-	//}
-	//for _, vInfo := range resp.GetDescResponse().GetVersionsInfo() {
-	//	for _, tInfo := range vInfo.GetTypesInfo() {
-	//		if tInfo.GetBacklogInfo().GetApproximateBacklogCount() > 0 {
-	//			return true, nil
-	//		}
-	//	}
-	//}
+	// todo backlog
 	return false, nil
 }
 
-func isReachableAssignmentRuleTarget(buildId string, assignmentRules []*taskqueue.TimestampedBuildIdAssignmentRule) bool {
+func isReachableAssignmentRuleTarget(buildId string, assignmentRules []*persistencespb.AssignmentRule) bool {
 	for _, r := range assignmentRules {
 		if r.GetRule().GetTargetBuildId() == buildId {
 			return true
@@ -631,14 +606,12 @@ func existsWFAssignedToAny(
 	visibilityMgr manager.VisibilityManager,
 	nsID,
 	nsName,
-	taskQueue string,
-	buildIdsOfInterest []string,
-	open bool,
+	query string,
 ) (bool, error) {
 	countResponse, err := visibilityMgr.CountWorkflowExecutions(ctx, &manager.CountWorkflowExecutionsRequest{
 		NamespaceID: namespace.ID(nsID),
 		Namespace:   namespace.Name(nsName),
-		Query:       makeBuildIdQuery(buildIdsOfInterest, taskQueue, open),
+		Query:       query,
 	})
 	if err != nil {
 		return false, err
@@ -663,7 +636,7 @@ func makeBuildIdQuery(
 		// ("") --> (unversioned, null)
 		for _, bid := range buildIdsOfInterest {
 			if bid == "" {
-				escapedBuildIds = append(escapedBuildIds, worker_versioning.UnversionedSearchAttribute)
+				escapedBuildIds = append(escapedBuildIds, sqlparser.String(sqlparser.NewStrVal([]byte(worker_versioning.UnversionedSearchAttribute))))
 				includeNull = true
 			} else {
 				escapedBuildIds = append(escapedBuildIds, sqlparser.String(sqlparser.NewStrVal([]byte(worker_versioning.AssignedBuildIdSearchAttribute(bid)))))
@@ -677,7 +650,7 @@ func makeBuildIdQuery(
 		// ("") --> (unversioned, null)
 		for _, bid := range buildIdsOfInterest {
 			if bid == "" {
-				escapedBuildIds = append(escapedBuildIds, worker_versioning.UnversionedSearchAttribute)
+				escapedBuildIds = append(escapedBuildIds, sqlparser.String(sqlparser.NewStrVal([]byte(worker_versioning.UnversionedSearchAttribute))))
 				includeNull = true
 			} else {
 				escapedBuildIds = append(escapedBuildIds, sqlparser.String(sqlparser.NewStrVal([]byte(worker_versioning.VersionedBuildIdSearchAttribute(bid)))))
