@@ -197,7 +197,7 @@ func TestRequestSendAcceptComplete(t *testing.T) {
 		require.ErrorAsf(t, err, &invalidArg,
 			"expected InvalidArgument from %T while in Admitted state", &resp)
 
-		err = upd.Request(ctx, &req, store)
+		err = upd.Admit(ctx, &req, store)
 		require.NoError(t, err)
 		require.False(t, completed)
 
@@ -283,7 +283,7 @@ func TestRequestSendReject(t *testing.T) {
 	)
 
 	t.Run("request", func(t *testing.T) {
-		err := upd.Request(ctx, &req, store)
+		err := upd.Admit(ctx, &req, store)
 		require.NoError(t, err)
 		require.False(t, completed)
 		effects.Apply(ctx)
@@ -386,7 +386,7 @@ func TestSend(t *testing.T) {
 		require.False(t, upd.IsSent())
 	})
 	t.Run("requested", func(t *testing.T) {
-		require.NoError(t, upd.Request(ctx, &req, store))
+		require.NoError(t, upd.Admit(ctx, &req, store))
 		effects.Apply(ctx)
 		require.True(t, upd.NeedToSend(false))
 		msg := upd.Send(ctx, false, sequencingID, store)
@@ -460,7 +460,7 @@ func TestAcceptanceAndResponseInSameMessageBatch(t *testing.T) {
 		sequencingID = &protocolpb.Message_EventId{EventId: testSequencingEventID}
 	)
 
-	require.NoError(t, upd.Request(ctx, &req, store))
+	require.NoError(t, upd.Admit(ctx, &req, store))
 	effects.Apply(ctx)
 
 	_ = upd.Send(ctx, false, sequencingID, store)
@@ -485,7 +485,7 @@ func TestDuplicateRequestNoError(t *testing.T) {
 		upd          = update.NewAccepted(updateID, testAcceptedEventID)
 	)
 
-	err := upd.Request(ctx, &updatepb.Request{}, eventStoreUnused)
+	err := upd.Admit(ctx, &updatepb.Request{}, eventStoreUnused)
 	require.NoError(t, err,
 		"a second request message should be ignored, not cause an error")
 
@@ -507,13 +507,13 @@ func TestMessageValidation(t *testing.T) {
 
 	t.Run("invalid request msg", func(t *testing.T) {
 		upd := update.New("")
-		err := upd.Request(ctx, &updatepb.Request{}, eventStoreUnused)
+		err := upd.Admit(ctx, &updatepb.Request{}, eventStoreUnused)
 		require.ErrorAs(t, err, &invalidArg)
 		require.ErrorContains(t, err, "invalid")
 	})
 	t.Run("invalid accept msg", func(t *testing.T) {
 		upd := update.New(updateID)
-		err := upd.Request(ctx, &req, store)
+		err := upd.Admit(ctx, &req, store)
 		require.NoError(t, err)
 		_ = upd.Send(ctx, true, sequencingID, store)
 
@@ -569,7 +569,7 @@ func TestDoubleRollback(t *testing.T) {
 	)
 
 	upd := update.New(meta.UpdateId, update.ObserveCompletion(&completed))
-	require.NoError(t, upd.Request(ctx, &req, store))
+	require.NoError(t, upd.Admit(ctx, &req, store))
 	effects.Apply(ctx)
 
 	_ = upd.Send(ctx, false, sequencingID, store)
@@ -671,7 +671,7 @@ func TestRejectionWithAcceptanceWaiter(t *testing.T) {
 	time.Sleep(5 * time.Millisecond)
 
 	t.Log("deliver request and rejection messages")
-	require.NoError(t, upd.Request(ctx, &req, store))
+	require.NoError(t, upd.Admit(ctx, &req, store))
 
 	_ = upd.Send(ctx, false, sequencingID, store)
 
@@ -727,7 +727,7 @@ func TestAcceptEventIDInCompletedEvent(t *testing.T) {
 		return &historypb.HistoryEvent{}, nil
 	}
 
-	require.NoError(t, upd.Request(ctx, &req, store))
+	require.NoError(t, upd.Admit(ctx, &req, store))
 	effects.Apply(ctx)
 	_ = upd.Send(ctx, false, sequencingID, store)
 	effects.Apply(ctx)
@@ -873,7 +873,7 @@ func TestWaitLifecycleStage(t *testing.T) {
 	}
 
 	applyRequest := func(ctx context.Context, req *updatepb.Request, upd *update.Update) {
-		err := upd.Request(ctx, req, store)
+		err := upd.Admit(ctx, req, store)
 		require.NoError(t, err)
 		effects.Apply(ctx)
 	}
@@ -1029,7 +1029,7 @@ func TestCompletedWorkflow(t *testing.T) {
 
 	t.Run("new update is rejected if workflow is completed", func(t *testing.T) {
 		upd := update.New(meta.UpdateId)
-		err := upd.Request(ctx, &req, roStore)
+		err := upd.Admit(ctx, &req, roStore)
 		require.NoError(t, err)
 
 		oneMsCtx, cancel := context.WithTimeout(ctx, 1*time.Millisecond)
@@ -1043,7 +1043,7 @@ func TestCompletedWorkflow(t *testing.T) {
 
 	t.Run("sent update is rejected if completed workflow tries to accept it", func(t *testing.T) {
 		upd := update.New(meta.UpdateId)
-		_ = upd.Request(ctx, &req, store)
+		_ = upd.Admit(ctx, &req, store)
 		upd.Send(ctx, false, &protocolpb.Message_EventId{EventId: testSequencingEventID}, store)
 
 		acpt := protocolpb.Message{Body: mustMarshalAny(t, &updatepb.Acceptance{AcceptedRequestSequencingEventId: 2208})}
@@ -1061,7 +1061,7 @@ func TestCompletedWorkflow(t *testing.T) {
 
 	t.Run("sent update is rejected with user rejection if completed workflow rejects it", func(t *testing.T) {
 		upd := update.New(meta.UpdateId)
-		_ = upd.Request(ctx, &req, store)
+		_ = upd.Admit(ctx, &req, store)
 		upd.Send(ctx, false, &protocolpb.Message_EventId{EventId: testSequencingEventID}, store)
 
 		rej := protocolpb.Message{Body: mustMarshalAny(t, &updatepb.Rejection{
