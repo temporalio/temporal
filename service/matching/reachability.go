@@ -45,7 +45,7 @@ func getBuildIdTaskReachability(
 	}
 
 	// 2b. If buildId could be reached from the backlog
-	if existsBacklog, err := existsBackloggedActivityOrWFAssignedToAny(ctx, nsID, nsName, taskQueue, buildIdsOfInterest); err != nil {
+	if existsBacklog, err := existsBackloggedActivityOrWFTaskAssignedToAny(ctx, nsID, nsName, taskQueue, buildIdsOfInterest); err != nil {
 		return enumspb.BUILD_ID_TASK_REACHABILITY_UNSPECIFIED, err
 	} else if existsBacklog {
 		return enumspb.BUILD_ID_TASK_REACHABILITY_REACHABLE, nil
@@ -100,6 +100,16 @@ func getUpstreamBuildIds(
 		upstream = append(upstream, getUpstreamBuildIds(src, redirectRules)...)
 	}
 
+	// dedupe
+	upstreamUnique := make(map[string]bool)
+	for _, bid := range upstream {
+		upstreamUnique[bid] = true
+	}
+	upstream = make([]string, 0)
+	for k := range upstreamUnique {
+		upstream = append(upstream, k)
+	}
+
 	return upstream
 }
 
@@ -115,7 +125,7 @@ func getSourcesForTarget(buildId string, redirectRules []*persistencespb.Redirec
 	return sources
 }
 
-func existsBackloggedActivityOrWFAssignedToAny(ctx context.Context,
+func existsBackloggedActivityOrWFTaskAssignedToAny(ctx context.Context,
 	nsID,
 	nsName,
 	taskQueue string,
