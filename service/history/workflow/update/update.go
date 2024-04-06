@@ -128,10 +128,10 @@ func withInstrumentation(i *instrumentation) updateOpt {
 	}
 }
 
-func newRequested(id string, request *anypb.Any, opts ...updateOpt) *Update {
+func newAdmitted(id string, request *anypb.Any, opts ...updateOpt) *Update {
 	upd := &Update{
 		id:              id,
-		state:           stateRequested,
+		state:           stateAdmitted,
 		request:         request,
 		onComplete:      func() {},
 		instrumentation: &noopInstrumentation,
@@ -371,7 +371,7 @@ func (u *Update) Send(
 	}
 
 	if u.request == nil {
-		// This implies that the update in the registry derives from an UpdateRequested event exists; this event (which
+		// This implies that the update in the registry derives from an UpdateAdmitted event exists; this event (which
 		// contains the request payload) is how the update request will be communicated to the worker.
 		return nil
 	}
@@ -417,13 +417,13 @@ func (u *Update) onAcceptanceMsg(
 	// validator, since we may use it to create reapplied updates on a new history branch, which will be submitted to
 	// the validator again).
 	//
-	// If the in-registry update lacks a request payload, this implies that there is an UpdateRequested event in
-	// history. In this case we write the UpdateAccepted event without a request payload, since the UpdateRequested
+	// If the in-registry update lacks a request payload, this implies that there is an UpdateAdmitted event in
+	// history. In this case we write the UpdateAccepted event without a request payload, since the UpdateAdmitted
 	// event has it.
 	//
 	// Thus, the following sequences of events are all possible, and SDK workers must handle them correctly:
-	// UpdateRequested(requestPayload)
-	// UpdateRequested(requestPayload) ... UpdateAccepted(nil)
+	// UpdateAdmitted(requestPayload)
+	// UpdateAdmitted(requestPayload) ... UpdateAccepted(nil)
 	// UpdateAccepted(requestPayload)
 	var acceptedRequest *updatepb.Request
 	if u.request != nil {

@@ -168,13 +168,13 @@ func NewRegistry(
 			// A update entry in the registry may have a request payload: we use this to write the payload to an
 			// UpdateAccepted event, in the event that the update is accepted. However, when populating the registry
 			// from mutable state, we do not have access to update request payloads. In this situation it is correct to
-			// create a registry entry in state Requested with a nil payload for the following reason: the fact that we
-			// have encountered an UpdateInfo in state Requested in mutable state implies that there is an
-			// UpdateRequested event in history; and when there is an UpdateRequested event in history, we will not
+			// create a registry entry in state Admitted with a nil payload for the following reason: the fact that we
+			// have encountered an UpdateInfo in state Admitted in mutable state implies that there is an
+			// UpdateAdmitted event in history; and when there is an UpdateAdmitted event in history, we will not
 			// attempt to write the request payload to the UpdateAccepted event, since the request payload is already
-			// present in the UpdateRequested event.
+			// present in the UpdateAdmitted event.
 			var request *anypb.Any
-			r.updates[updID] = newRequested(
+			r.updates[updID] = newAdmitted(
 				updID,
 				request,
 				r.remover(updID),

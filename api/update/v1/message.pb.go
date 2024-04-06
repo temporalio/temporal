@@ -152,7 +152,7 @@ func (x *CompletionInfo) GetEventBatchId() int64 {
 
 // RequestInfo contains information about a durable update request. Note that
 // update requests are typically non-durable (i.e. do not have a corresponding
-// event in history). A WorkflowExecutionUpdateRequestedEvent event is created
+// event in history). A WorkflowExecutionUpdateAdmittedEvent event is created
 // when an accepted update (on one branch of workflow history) is converted into
 // a requested update (on anther branch).
 type RequestInfo struct {
@@ -326,7 +326,7 @@ type RequestInfo_HistoryPointer struct {
 	sizeCache     protoimpl.SizeCache
 	unknownFields protoimpl.UnknownFields
 
-	// the event ID of the WorkflowExecutionUpdateRequestedEvent
+	// the event ID of the WorkflowExecutionUpdateAdmittedEvent
 	EventId int64 `protobuf:"varint,1,opt,name=event_id,json=eventId,proto3" json:"event_id,omitempty"`
 	// the ID of the event batch containing the event_id
 	EventBatchId int64 `protobuf:"varint,2,opt,name=event_batch_id,json=eventBatchId,proto3" json:"event_batch_id,omitempty"`

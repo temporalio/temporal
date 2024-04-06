@@ -128,10 +128,10 @@ func (s *nDCEventReapplicationSuite) TestReapplyEvents_AppliedEvent_Update() {
 	for _, event := range []*historypb.HistoryEvent{
 		{
 			EventId:   105,
-			EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_UPDATE_REQUESTED,
-			Attributes: &historypb.HistoryEvent_WorkflowExecutionUpdateRequestedEventAttributes{WorkflowExecutionUpdateRequestedEventAttributes: &historypb.WorkflowExecutionUpdateRequestedEventAttributes{
+			EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_UPDATE_ADMITTED,
+			Attributes: &historypb.HistoryEvent_WorkflowExecutionUpdateAdmittedEventAttributes{WorkflowExecutionUpdateAdmittedEventAttributes: &historypb.WorkflowExecutionUpdateAdmittedEventAttributes{
 				Request: &update.Request{Input: &update.Input{Args: payloads.EncodeString("update-request-payload")}},
-				Origin:  enumspb.UPDATE_REQUESTED_EVENT_ORIGIN_UNSPECIFIED,
+				Origin:  enumspb.UPDATE_ADMITTED_EVENT_ORIGIN_UNSPECIFIED,
 			}},
 		},
 		{
@@ -148,17 +148,17 @@ func (s *nDCEventReapplicationSuite) TestReapplyEvents_AppliedEvent_Update() {
 		msCurrent.EXPECT().GetLastWriteVersion().Return(int64(1), nil).AnyTimes()
 		msCurrent.EXPECT().GetExecutionInfo().Return(execution).AnyTimes()
 		switch event.EventType {
-		case enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_UPDATE_REQUESTED:
-			attr := event.GetWorkflowExecutionUpdateRequestedEventAttributes()
-			msCurrent.EXPECT().AddWorkflowExecutionUpdateRequestedEvent(
+		case enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_UPDATE_ADMITTED:
+			attr := event.GetWorkflowExecutionUpdateAdmittedEventAttributes()
+			msCurrent.EXPECT().AddWorkflowExecutionUpdateAdmittedEvent(
 				attr.GetRequest(),
-				enumspb.UPDATE_REQUESTED_EVENT_ORIGIN_UNSPECIFIED,
+				enumspb.UPDATE_ADMITTED_EVENT_ORIGIN_UNSPECIFIED,
 			).Return(event, nil)
 		case enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_UPDATE_ACCEPTED:
 			attr := event.GetWorkflowExecutionUpdateAcceptedEventAttributes()
-			msCurrent.EXPECT().AddWorkflowExecutionUpdateRequestedEvent(
+			msCurrent.EXPECT().AddWorkflowExecutionUpdateAdmittedEvent(
 				attr.GetAcceptedRequest(),
-				enumspb.UPDATE_REQUESTED_EVENT_ORIGIN_REAPPLY,
+				enumspb.UPDATE_ADMITTED_EVENT_ORIGIN_REAPPLY,
 			).Return(event, nil)
 		}
 		msCurrent.EXPECT().IsWorkflowPendingOnWorkflowTaskBackoff().Return(true)

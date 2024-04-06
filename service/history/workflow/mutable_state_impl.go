@@ -3784,23 +3784,23 @@ func (ms *MutableStateImpl) RejectWorkflowExecutionUpdate(_ string, _ *updatepb.
 	return nil
 }
 
-// AddWorkflowExecutionUpdateRequestedEvent adds a WorkflowExecutionUpdateRequestedEvent to in-memory history.
-func (ms *MutableStateImpl) AddWorkflowExecutionUpdateRequestedEvent(request *updatepb.Request, origin enumspb.UpdateRequestedEventOrigin) (*historypb.HistoryEvent, error) {
-	if err := ms.checkMutability(tag.WorkflowActionUpdateRequested); err != nil {
+// AddWorkflowExecutionUpdateAdmittedEvent adds a WorkflowExecutionUpdateAdmittedEvent to in-memory history.
+func (ms *MutableStateImpl) AddWorkflowExecutionUpdateAdmittedEvent(request *updatepb.Request, origin enumspb.UpdateAdmittedEventOrigin) (*historypb.HistoryEvent, error) {
+	if err := ms.checkMutability(tag.WorkflowActionUpdateAdmitted); err != nil {
 		return nil, err
 	}
-	event, batchId := ms.hBuilder.AddWorkflowExecutionUpdateRequestedEvent(request, origin)
-	if err := ms.ApplyWorkflowExecutionUpdateRequestedEvent(event, batchId); err != nil {
+	event, batchId := ms.hBuilder.AddWorkflowExecutionUpdateAdmittedEvent(request, origin)
+	if err := ms.ApplyWorkflowExecutionUpdateAdmittedEvent(event, batchId); err != nil {
 		return nil, err
 	}
 	return event, nil
 }
 
-// ApplyWorkflowExecutionUpdateRequestedEvent applies a WorkflowExecutionUpdateRequestedEvent to mutable state.
-func (ms *MutableStateImpl) ApplyWorkflowExecutionUpdateRequestedEvent(event *historypb.HistoryEvent, batchId int64) error {
-	attrs := event.GetWorkflowExecutionUpdateRequestedEventAttributes()
+// ApplyWorkflowExecutionUpdateAdmittedEvent applies a WorkflowExecutionUpdateAdmittedEvent to mutable state.
+func (ms *MutableStateImpl) ApplyWorkflowExecutionUpdateAdmittedEvent(event *historypb.HistoryEvent, batchId int64) error {
+	attrs := event.GetWorkflowExecutionUpdateAdmittedEventAttributes()
 	if attrs == nil {
-		return serviceerror.NewInternal("wrong event type in call to ApplyWorkflowExecutionUpdateRequestedEvent")
+		return serviceerror.NewInternal("wrong event type in call to ApplyWorkflowExecutionUpdateAdmittedEvent")
 	}
 	if ms.executionInfo.UpdateInfos == nil {
 		ms.executionInfo.UpdateInfos = make(map[string]*updatespb.UpdateInfo, 1)

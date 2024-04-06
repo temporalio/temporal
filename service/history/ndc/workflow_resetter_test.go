@@ -825,11 +825,11 @@ func (s *workflowResetterSuite) TestReapplyEvents() {
 	}
 	event4 := &historypb.HistoryEvent{
 		EventId:   104,
-		EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_UPDATE_REQUESTED,
-		Attributes: &historypb.HistoryEvent_WorkflowExecutionUpdateRequestedEventAttributes{
-			WorkflowExecutionUpdateRequestedEventAttributes: &historypb.WorkflowExecutionUpdateRequestedEventAttributes{
+		EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_UPDATE_ADMITTED,
+		Attributes: &historypb.HistoryEvent_WorkflowExecutionUpdateAdmittedEventAttributes{
+			WorkflowExecutionUpdateAdmittedEventAttributes: &historypb.WorkflowExecutionUpdateAdmittedEventAttributes{
 				Request: &update.Request{Input: &update.Input{Args: payloads.EncodeString("update-request-payload-1")}},
-				Origin:  enumspb.UPDATE_REQUESTED_EVENT_ORIGIN_UNSPECIFIED,
+				Origin:  enumspb.UPDATE_ADMITTED_EVENT_ORIGIN_UNSPECIFIED,
 			},
 		},
 	}
@@ -865,17 +865,17 @@ func (s *workflowResetterSuite) TestReapplyEvents() {
 				attr.GetHeader(),
 				attr.GetSkipGenerateWorkflowTask(),
 			).Return(&historypb.HistoryEvent{}, nil)
-		case enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_UPDATE_REQUESTED:
-			attr := event.GetWorkflowExecutionUpdateRequestedEventAttributes()
-			ms.EXPECT().AddWorkflowExecutionUpdateRequestedEvent(
+		case enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_UPDATE_ADMITTED:
+			attr := event.GetWorkflowExecutionUpdateAdmittedEventAttributes()
+			ms.EXPECT().AddWorkflowExecutionUpdateAdmittedEvent(
 				attr.GetRequest(),
-				enumspb.UPDATE_REQUESTED_EVENT_ORIGIN_UNSPECIFIED,
+				enumspb.UPDATE_ADMITTED_EVENT_ORIGIN_UNSPECIFIED,
 			).Return(&historypb.HistoryEvent{}, nil)
 		case enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_UPDATE_ACCEPTED:
 			attr := event.GetWorkflowExecutionUpdateAcceptedEventAttributes()
-			ms.EXPECT().AddWorkflowExecutionUpdateRequestedEvent(
+			ms.EXPECT().AddWorkflowExecutionUpdateAdmittedEvent(
 				attr.GetAcceptedRequest(),
-				enumspb.UPDATE_REQUESTED_EVENT_ORIGIN_REAPPLY,
+				enumspb.UPDATE_ADMITTED_EVENT_ORIGIN_REAPPLY,
 			).Return(&historypb.HistoryEvent{}, nil)
 		}
 	}

@@ -716,12 +716,12 @@ func reapplyEvents(
 			); err != nil {
 				return err
 			}
-		case enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_UPDATE_REQUESTED:
+		case enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_UPDATE_ADMITTED:
 			if excludeUpdate {
 				continue
 			}
-			attr := event.GetWorkflowExecutionUpdateRequestedEventAttributes()
-			if _, err := mutableState.AddWorkflowExecutionUpdateRequestedEvent(
+			attr := event.GetWorkflowExecutionUpdateAdmittedEventAttributes()
+			if _, err := mutableState.AddWorkflowExecutionUpdateAdmittedEvent(
 				attr.GetRequest(),
 				attr.Origin,
 			); err != nil {
@@ -734,15 +734,15 @@ func reapplyEvents(
 			attr := event.GetWorkflowExecutionUpdateAcceptedEventAttributes()
 			request := attr.GetAcceptedRequest()
 			if request == nil {
-				// An UpdateAccepted event lacks a request payload if and only if it is preceded by an UpdateRequested
-				// event (these always have the payload). If an UpdateAccepted event has no preceding UpdateRequested
-				// event then we reapply it (converting it to UpdateRequested on the new branch). But if there is a
-				// preceding UpdateRequested event then we do not reapply the UpdateAccepted event.
+				// An UpdateAccepted event lacks a request payload if and only if it is preceded by an UpdateAdmitted
+				// event (these always have the payload). If an UpdateAccepted event has no preceding UpdateAdmitted
+				// event then we reapply it (converting it to UpdateAdmitted on the new branch). But if there is a
+				// preceding UpdateAdmitted event then we do not reapply the UpdateAccepted event.
 				continue
 			}
-			if _, err := mutableState.AddWorkflowExecutionUpdateRequestedEvent(
+			if _, err := mutableState.AddWorkflowExecutionUpdateAdmittedEvent(
 				request,
-				enumspb.UPDATE_REQUESTED_EVENT_ORIGIN_REAPPLY,
+				enumspb.UPDATE_ADMITTED_EVENT_ORIGIN_REAPPLY,
 			); err != nil {
 				return err
 			}

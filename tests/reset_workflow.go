@@ -462,8 +462,8 @@ func (t *resetTest) run() {
   2 WorkflowTaskScheduled
   3 WorkflowTaskStarted
   4 WorkflowTaskFailed
-  5 WorkflowExecutionUpdateRequested
-  6 WorkflowExecutionUpdateRequested
+  5 WorkflowExecutionUpdateAdmitted
+  6 WorkflowExecutionUpdateAdmitted
   7 WorkflowTaskScheduled
 `, events)
 	} else if signals && !updates {
@@ -484,8 +484,8 @@ func (t *resetTest) run() {
   4 WorkflowTaskFailed
   5 WorkflowExecutionSignaled
   6 WorkflowExecutionSignaled
-  7 WorkflowExecutionUpdateRequested
-  8 WorkflowExecutionUpdateRequested
+  7 WorkflowExecutionUpdateAdmitted
+  8 WorkflowExecutionUpdateAdmitted
   9 WorkflowTaskScheduled
 `, events)
 		resetToEventId := int64(4)
@@ -499,8 +499,8 @@ func (t *resetTest) run() {
   4 WorkflowTaskFailed
   5 WorkflowExecutionSignaled
   6 WorkflowExecutionSignaled
-  7 WorkflowExecutionUpdateRequested
-  8 WorkflowExecutionUpdateRequested
+  7 WorkflowExecutionUpdateAdmitted
+  8 WorkflowExecutionUpdateAdmitted
   9 WorkflowTaskScheduled
 `, events)
 	}

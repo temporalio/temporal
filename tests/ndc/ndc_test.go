@@ -1448,8 +1448,8 @@ func (s *NDCFunctionalTestSuite) TestEventsReapply_NonCurrentBranch_Signal() {
 	s.testEventsReapplyNonCurrentBranch(enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_SIGNALED)
 }
 
-func (s *NDCFunctionalTestSuite) TestEventsReapply_NonCurrentBranch_UpdateRequested() {
-	s.testEventsReapplyNonCurrentBranch(enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_UPDATE_REQUESTED)
+func (s *NDCFunctionalTestSuite) TestEventsReapply_NonCurrentBranch_UpdateAdmitted() {
+	s.testEventsReapplyNonCurrentBranch(enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_UPDATE_ADMITTED)
 }
 
 func (s *NDCFunctionalTestSuite) TestEventsReapply_NonCurrentBranch_UpdateAccepted() {
@@ -1559,10 +1559,10 @@ func (s *NDCFunctionalTestSuite) testEventsReapplyNonCurrentBranch(staleEventTyp
 			Input:      payloads.EncodeBytes([]byte{}),
 			Identity:   "ndc_functional_test",
 		}}
-	} else if staleEventType == enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_UPDATE_REQUESTED {
-		staleBranch[0].Events[0].Attributes = &historypb.HistoryEvent_WorkflowExecutionUpdateRequestedEventAttributes{WorkflowExecutionUpdateRequestedEventAttributes: &historypb.WorkflowExecutionUpdateRequestedEventAttributes{
+	} else if staleEventType == enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_UPDATE_ADMITTED {
+		staleBranch[0].Events[0].Attributes = &historypb.HistoryEvent_WorkflowExecutionUpdateAdmittedEventAttributes{WorkflowExecutionUpdateAdmittedEventAttributes: &historypb.WorkflowExecutionUpdateAdmittedEventAttributes{
 			Request: &update.Request{Input: &update.Input{Args: payloads.EncodeString("update-request-payload")}},
-			Origin:  enumspb.UPDATE_REQUESTED_EVENT_ORIGIN_UNSPECIFIED,
+			Origin:  enumspb.UPDATE_ADMITTED_EVENT_ORIGIN_UNSPECIFIED,
 		}}
 	} else if staleEventType == enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_UPDATE_ACCEPTED {
 		staleBranch[0].Events[0].Attributes = &historypb.HistoryEvent_WorkflowExecutionUpdateAcceptedEventAttributes{WorkflowExecutionUpdateAcceptedEventAttributes: &historypb.WorkflowExecutionUpdateAcceptedEventAttributes{

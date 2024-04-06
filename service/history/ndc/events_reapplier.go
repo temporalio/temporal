@@ -83,7 +83,7 @@ func (r *EventsReapplierImpl) ReapplyEvents(
 				continue
 			}
 			reappliedEvents = append(reappliedEvents, event)
-		case enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_UPDATE_REQUESTED:
+		case enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_UPDATE_ADMITTED:
 			// Test coverage: TestNDCEventReapplicationSuite/TestReapplyEvents_AppliedEvent_Update
 			dedupResource := definition.NewEventReappliedID(runID, event.GetEventId(), event.GetVersion())
 			if ms.IsResourceDuplicated(dedupResource) {
@@ -94,10 +94,10 @@ func (r *EventsReapplierImpl) ReapplyEvents(
 			attr := event.GetWorkflowExecutionUpdateAcceptedEventAttributes()
 			request := attr.GetAcceptedRequest()
 			if request == nil {
-				// An UpdateAccepted event lacks a request payload if and only if it is preceded by an UpdateRequested
-				// event (these always have the payload). If an UpdateAccepted event has no preceding UpdateRequested
-				// event then we reapply it (converting it to UpdateRequested on the new branch). But if there is a
-				// preceding UpdateRequested event then we do not reapply the UpdateAccepted event.
+				// An UpdateAccepted event lacks a request payload if and only if it is preceded by an UpdateAdmitted
+				// event (these always have the payload). If an UpdateAccepted event has no preceding UpdateAdmitted
+				// event then we reapply it (converting it to UpdateAdmitted on the new branch). But if there is a
+				// preceding UpdateAdmitted event then we do not reapply the UpdateAccepted event.
 				continue
 			}
 			// Test coverage: TestNDCEventReapplicationSuite/TestReapplyEvents_AppliedEvent_Update
@@ -133,9 +133,9 @@ func (r *EventsReapplierImpl) ReapplyEvents(
 			); err != nil {
 				return nil, err
 			}
-		case enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_UPDATE_REQUESTED:
-			attr := event.GetWorkflowExecutionUpdateRequestedEventAttributes()
-			if _, err := ms.AddWorkflowExecutionUpdateRequestedEvent(
+		case enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_UPDATE_ADMITTED:
+			attr := event.GetWorkflowExecutionUpdateAdmittedEventAttributes()
+			if _, err := ms.AddWorkflowExecutionUpdateAdmittedEvent(
 				attr.GetRequest(),
 				attr.Origin,
 			); err != nil {
@@ -144,9 +144,9 @@ func (r *EventsReapplierImpl) ReapplyEvents(
 			shouldScheduleWorkflowTask = true
 		case enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_UPDATE_ACCEPTED:
 			attr := event.GetWorkflowExecutionUpdateAcceptedEventAttributes()
-			if _, err := ms.AddWorkflowExecutionUpdateRequestedEvent(
+			if _, err := ms.AddWorkflowExecutionUpdateAdmittedEvent(
 				attr.GetAcceptedRequest(),
-				enumspb.UPDATE_REQUESTED_EVENT_ORIGIN_REAPPLY,
+				enumspb.UPDATE_ADMITTED_EVENT_ORIGIN_REAPPLY,
 			); err != nil {
 				return nil, err
 			}

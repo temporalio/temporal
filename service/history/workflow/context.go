@@ -844,7 +844,7 @@ func (c *ContextImpl) ReapplyEvents(
 			event := e
 			switch event.GetEventType() {
 			case enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_SIGNALED,
-				enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_UPDATE_REQUESTED,
+				enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_UPDATE_ADMITTED,
 				enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_UPDATE_ACCEPTED:
 
 				reapplyEvents = append(reapplyEvents, event)
