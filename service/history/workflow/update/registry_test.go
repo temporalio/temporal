@@ -118,7 +118,7 @@ func TestHasOutgoingMessages(t *testing.T) {
 		Meta:  &updatepb.Meta{UpdateId: updateID},
 		Input: &updatepb.Input{Name: "not_empty"},
 	}
-	require.NoError(t, upd.Request(ctx, &req, evStore))
+	require.NoError(t, upd.Admit(ctx, &req, evStore))
 	require.True(t, reg.HasOutgoingMessages(false))
 
 	msg := reg.Send(ctx, false, testSequencingEventID, evStore)
@@ -278,7 +278,7 @@ func TestSendMessageGathering(t *testing.T) {
 	require.False(t, upd1.IsSent())
 	require.False(t, upd2.IsSent())
 
-	err = upd1.Request(ctx, &updatepb.Request{
+	err = upd1.Admit(ctx, &updatepb.Request{
 		Meta:  &updatepb.Meta{UpdateId: updateID1},
 		Input: &updatepb.Input{Name: t.Name() + "-update-func"},
 	}, evStore)
@@ -299,7 +299,7 @@ func TestSendMessageGathering(t *testing.T) {
 	require.True(t, upd1.IsSent())
 	require.False(t, upd2.IsSent())
 
-	err = upd2.Request(ctx, &updatepb.Request{
+	err = upd2.Admit(ctx, &updatepb.Request{
 		Meta:  &updatepb.Meta{UpdateId: updateID2},
 		Input: &updatepb.Input{Name: t.Name() + "-update-func"},
 	}, evStore)
@@ -356,7 +356,7 @@ func TestInFlightLimit(t *testing.T) {
 		Meta:  &updatepb.Meta{UpdateId: "update1"},
 		Input: &updatepb.Input{Name: "not_empty"},
 	}
-	require.NoError(t, upd1.Request(ctx, &req, evStore))
+	require.NoError(t, upd1.Admit(ctx, &req, evStore))
 
 	_ = upd1.Send(ctx, false, sequencingID, evStore)
 
@@ -436,7 +436,7 @@ func TestTotalLimit(t *testing.T) {
 		Meta:  &updatepb.Meta{UpdateId: "update1"},
 		Input: &updatepb.Input{Name: "not_empty"},
 	}
-	require.NoError(t, upd1.Request(ctx, &req, evStore))
+	require.NoError(t, upd1.Admit(ctx, &req, evStore))
 
 	_ = upd1.Send(ctx, false, sequencingID, evStore)
 
@@ -532,12 +532,12 @@ func TestRejectUnprocessed(t *testing.T) {
 	require.NoError(t, err)
 	require.Empty(t, rejectedIDs, "updates in stateCreated should not be rejected")
 
-	err = upd1.Request(ctx, &updatepb.Request{
+	err = upd1.Admit(ctx, &updatepb.Request{
 		Meta:  &updatepb.Meta{UpdateId: updateID1},
 		Input: &updatepb.Input{Name: t.Name() + "-update-func"},
 	}, evStore)
 	require.NoError(t, err)
-	err = upd2.Request(ctx, &updatepb.Request{
+	err = upd2.Admit(ctx, &updatepb.Request{
 		Meta:  &updatepb.Meta{UpdateId: updateID2},
 		Input: &updatepb.Input{Name: t.Name() + "-update-func"},
 	}, evStore)
@@ -555,7 +555,7 @@ func TestRejectUnprocessed(t *testing.T) {
 
 	upd3, _, err := reg.FindOrCreate(ctx, updateID3)
 	require.NoError(t, err)
-	err = upd3.Request(ctx, &updatepb.Request{
+	err = upd3.Admit(ctx, &updatepb.Request{
 		Meta:  &updatepb.Meta{UpdateId: updateID3},
 		Input: &updatepb.Input{Name: t.Name() + "-update-func"},
 	}, evStore)
@@ -583,13 +583,13 @@ func TestCancelIncomplete(t *testing.T) {
 	updCreated, _, _ := reg.FindOrCreate(ctx, updateID1)
 
 	updAdmitted, _, _ := reg.FindOrCreate(ctx, updateID2)
-	_ = updAdmitted.Request(ctx, &updatepb.Request{
+	_ = updAdmitted.Admit(ctx, &updatepb.Request{
 		Meta:  &updatepb.Meta{UpdateId: updateID2},
 		Input: &updatepb.Input{Name: t.Name() + "-update-func"},
 	}, evStore)
 
 	updSent, _, _ := reg.FindOrCreate(ctx, updateID3)
-	_ = updSent.Request(ctx, &updatepb.Request{
+	_ = updSent.Admit(ctx, &updatepb.Request{
 		Meta:  &updatepb.Meta{UpdateId: updateID3},
 		Input: &updatepb.Input{Name: t.Name() + "-update-func"},
 	}, evStore)
@@ -600,7 +600,7 @@ func TestCancelIncomplete(t *testing.T) {
 		Input: &updatepb.Input{Name: t.Name() + "-update-func"},
 	}
 	updAccepted, _, _ := reg.FindOrCreate(ctx, updateID4)
-	_ = updAccepted.Request(ctx, msgRequest4, evStore)
+	_ = updAccepted.Admit(ctx, msgRequest4, evStore)
 	updAccepted.Send(ctx, false, sequencingID, evStore)
 	_ = updAccepted.OnProtocolMessage(ctx, &protocolpb.Message{Body: mustMarshalAny(t, &updatepb.Acceptance{
 		AcceptedRequestMessageId:         "random",
@@ -613,7 +613,7 @@ func TestCancelIncomplete(t *testing.T) {
 		Input: &updatepb.Input{Name: t.Name() + "-update-func"},
 	}
 	updCompleted, _, _ := reg.FindOrCreate(ctx, updateID5)
-	_ = updCompleted.Request(ctx, msgRequest5, evStore)
+	_ = updCompleted.Admit(ctx, msgRequest5, evStore)
 	updCompleted.Send(ctx, false, sequencingID, evStore)
 	_ = updCompleted.OnProtocolMessage(ctx, &protocolpb.Message{Body: mustMarshalAny(t, &updatepb.Acceptance{
 		AcceptedRequestMessageId:         "random",

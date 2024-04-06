@@ -400,7 +400,7 @@ func (s *WorkflowTaskHandlerCallbacksUpdateSuite) createSentUpdate(tv *testvars.
 
 	eventStore := workflow.WithEffects(effect.Immediate(ctx), ms)
 
-	err = upd.Request(ctx, updReq, eventStore)
+	err = upd.Admit(ctx, updReq, eventStore)
 	s.NoError(err)
 
 	seqID := &protocolpb.Message_EventId{EventId: tv.Any().EventID()}

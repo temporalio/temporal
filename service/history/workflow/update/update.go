@@ -234,12 +234,12 @@ func (u *Update) WaitLifecycleStage(
 	return statusAdmitted(), nil
 }
 
-// Request works if the Update is in any state but if the state is anything
+// Admit works if the Update is in any state but if the state is anything
 // other than stateCreated then it just early returns a nil error. This
 // effectively gives us update request deduplication by update ID. If the Update
-// is in stateCreated then it builds a protocolpb.Message that will be sent on
-// ensuing calls to PollOutgoingMessages until the update is accepted.
-func (u *Update) Request(
+// is in stateCreated then it builds a protocolpb.Message that will be sent
+// when Send is called.
+func (u *Update) Admit(
 	ctx context.Context,
 	req *updatepb.Request,
 	eventStore EventStore,

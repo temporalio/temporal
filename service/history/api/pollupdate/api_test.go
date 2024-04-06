@@ -250,7 +250,7 @@ func TestPollOutcome(t *testing.T) {
 		}()
 
 		evStore := mockUpdateEventStore{}
-		require.NoError(t, upd.Request(context.TODO(), &reqMsg, evStore))
+		require.NoError(t, upd.Admit(context.TODO(), &reqMsg, evStore))
 		upd.Send(context.TODO(), false, &protocolpb.Message_EventId{EventId: 2208}, evStore)
 		require.NoError(t, upd.OnProtocolMessage(context.TODO(), &rejMsg, evStore))
 
