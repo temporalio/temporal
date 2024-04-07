@@ -11,18 +11,19 @@ import (
 	"go.temporal.io/server/common/persistence/visibility/manager"
 )
 
-/*
-Redirect Rules:
-10
-^
-|
-1 <------ 2
-^
-|
-5 <------ 3 <------ 4
-*/
 func TestGetUpstreamBuildIds_NoCycle(t *testing.T) {
 	t.Parallel()
+	/*
+		e.g.
+		Redirect Rules:
+		10
+		^
+		|
+		1 <------ 2
+		^
+		|
+		5 <------ 3 <------ 4
+	*/
 	redirectRules := []*persistencespb.RedirectRule{
 		{Rule: mkRedirectRule("1", "10")},
 		{Rule: mkRedirectRule("2", "1")},
@@ -32,7 +33,7 @@ func TestGetUpstreamBuildIds_NoCycle(t *testing.T) {
 	}
 
 	expectedUpstreamBuildIds := []string{"2", "5", "3", "4"}
-	upstreamBuildIds := getUpstreamBuildIds("1", redirectRules)
+	upstreamBuildIds := getUpstreamBuildIds("1", redirectRules, nil)
 
 	for _, bid := range expectedUpstreamBuildIds {
 		assert.Contains(t, upstreamBuildIds, bid)
@@ -40,27 +41,47 @@ func TestGetUpstreamBuildIds_NoCycle(t *testing.T) {
 	assert.Equal(t, len(expectedUpstreamBuildIds), len(upstreamBuildIds))
 }
 
-/*
-e.g.
-Redirect Rules:
-1 ------> 2
-^         |
-|         v
-5 <------ 3 ------> 4
-*/
 func TestGetUpstreamBuildIds_WithCycle(t *testing.T) {
 	t.Parallel()
-	t.Parallel()
+	/*
+		e.g.
+		Redirect Rules:
+		1 ------> 2
+		^         |
+		|         v
+		5 <------ 3 ------> 4
+	*/
 	redirectRules := []*persistencespb.RedirectRule{
 		{Rule: mkRedirectRule("1", "2")},
 		{Rule: mkRedirectRule("2", "3")},
 		{Rule: mkRedirectRule("3", "4")},
+		{Rule: mkRedirectRule("3", "5")},
 		{Rule: mkRedirectRule("5", "1")},
 	}
-
 	expectedUpstreamBuildIds := []string{"5", "3", "2"}
-	upstreamBuildIds := getUpstreamBuildIds("1", redirectRules)
+	upstreamBuildIds := getUpstreamBuildIds("1", redirectRules, nil)
+	for _, bid := range expectedUpstreamBuildIds {
+		assert.Contains(t, upstreamBuildIds, bid)
+	}
+	assert.Equal(t, len(expectedUpstreamBuildIds), len(upstreamBuildIds))
 
+	/*
+		e.g.
+		Redirect Rules:
+		1         2 <---
+		^         |     \
+		|         v      \
+		5 <------ 3 ------> 4
+	*/
+	redirectRules = []*persistencespb.RedirectRule{
+		{Rule: mkRedirectRule("2", "3")},
+		{Rule: mkRedirectRule("3", "4")},
+		{Rule: mkRedirectRule("3", "5")},
+		{Rule: mkRedirectRule("4", "2")},
+		{Rule: mkRedirectRule("5", "1")},
+	}
+	expectedUpstreamBuildIds = []string{"5", "3", "2", "4"}
+	upstreamBuildIds = getUpstreamBuildIds("1", redirectRules, nil)
 	for _, bid := range expectedUpstreamBuildIds {
 		assert.Contains(t, upstreamBuildIds, bid)
 	}

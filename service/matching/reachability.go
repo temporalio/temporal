@@ -3,6 +3,7 @@ package matching
 import (
 	"context"
 	"fmt"
+	"golang.org/x/exp/slices"
 	"strings"
 
 	"github.com/temporalio/sqlparser"
@@ -33,7 +34,7 @@ func getBuildIdTaskReachability(
 	}
 
 	// Gather list of all build ids that could point to buildId -> upstreamBuildIds
-	upstreamBuildIds := getUpstreamBuildIds(buildId, redirectRules)
+	upstreamBuildIds := getUpstreamBuildIds(buildId, redirectRules, nil)
 	buildIdsOfInterest := append(upstreamBuildIds, buildId)
 
 	// 2. Cases for REACHABLE
@@ -75,29 +76,19 @@ func getBuildIdTaskReachability(
 	return enumspb.BUILD_ID_TASK_REACHABILITY_UNREACHABLE, nil
 }
 
-/*
-e.g.
-Redirect Rules:
-10
-^
-|
-1 <------ 2
-^
-|
-5 <------ 3 <------ 4
-
-Assignment Rules:
-[ (3, 50%), (2, nil) ]
-*/
 func getUpstreamBuildIds(
 	buildId string,
-	redirectRules []*persistencespb.RedirectRule) []string {
+	redirectRules []*persistencespb.RedirectRule,
+	visited []string) []string {
 	var upstream []string
+	visited = append(visited, buildId)
 	directSources := getSourcesForTarget(buildId, redirectRules)
 
 	for _, src := range directSources {
-		upstream = append(upstream, src)
-		upstream = append(upstream, getUpstreamBuildIds(src, redirectRules)...)
+		if !slices.Contains(visited, src) {
+			upstream = append(upstream, src)
+			upstream = append(upstream, getUpstreamBuildIds(src, redirectRules, visited)...)
+		}
 	}
 
 	// dedupe
@@ -109,7 +100,6 @@ func getUpstreamBuildIds(
 	for k := range upstreamUnique {
 		upstream = append(upstream, k)
 	}
-
 	return upstream
 }
 
