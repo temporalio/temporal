@@ -25,8 +25,11 @@
 package scheduler
 
 import (
+	"fmt"
+
 	"go.uber.org/fx"
 
+	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/workflowservice/v1"
 	sdkworker "go.temporal.io/sdk/worker"
 	"go.temporal.io/sdk/workflow"
@@ -38,12 +41,25 @@ import (
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/quotas"
 	"go.temporal.io/server/common/resource"
+	"go.temporal.io/server/common/searchattribute"
 	workercommon "go.temporal.io/server/service/worker/common"
 )
 
 const (
 	WorkflowType      = "temporal-sys-scheduler-workflow"
 	NamespaceDivision = "TemporalScheduler"
+)
+
+var (
+	VisibilityBaseListQuery = fmt.Sprintf(
+		"%s = '%s' AND %s = '%s' AND %s = '%s'",
+		searchattribute.WorkflowType,
+		WorkflowType,
+		searchattribute.TemporalNamespaceDivision,
+		NamespaceDivision,
+		searchattribute.ExecutionStatus,
+		enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING.String(),
+	)
 )
 
 type (

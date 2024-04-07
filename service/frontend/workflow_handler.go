@@ -3226,6 +3226,13 @@ func (wh *WorkflowHandler) ListSchedules(
 		return nil, errListNotAllowed
 	}
 
+	query := ""
+	if strings.TrimSpace(request.Query) != "" {
+		query = fmt.Sprintf("%s AND (%s)", scheduler.VisibilityBaseListQuery, request.Query)
+	} else {
+		query = scheduler.VisibilityBaseListQuery
+	}
+
 	persistenceResp, err := wh.visibilityMgr.ListWorkflowExecutions(
 		ctx,
 		&manager.ListWorkflowExecutionsRequestV2{
@@ -3233,15 +3240,7 @@ func (wh *WorkflowHandler) ListSchedules(
 			Namespace:     namespaceName,
 			PageSize:      int(request.GetMaximumPageSize()),
 			NextPageToken: request.NextPageToken,
-			Query: fmt.Sprintf(
-				"%s = '%s' AND %s = '%s' AND %s = '%s'",
-				searchattribute.WorkflowType,
-				scheduler.WorkflowType,
-				searchattribute.TemporalNamespaceDivision,
-				scheduler.NamespaceDivision,
-				searchattribute.ExecutionStatus,
-				enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING.String(),
-			),
+			Query:         query,
 		},
 	)
 	if err != nil {
