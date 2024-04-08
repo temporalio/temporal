@@ -508,6 +508,7 @@ func (handler *workflowTaskHandlerImpl) handlePostCommandEagerExecuteActivity(
 		uuid.New(),
 		handler.identity,
 		stamp,
+		nil,
 	); err != nil {
 		return nil, err
 	}

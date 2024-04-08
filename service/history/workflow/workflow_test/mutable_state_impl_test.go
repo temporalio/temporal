@@ -153,7 +153,7 @@ func (c *mutationTestCase) startWFT(
 		t.Fatal(err)
 	}
 
-	_, wft, err = ms.AddWorkflowTaskStartedEvent(wft.ScheduledEventID, wft.RequestID, wft.TaskQueue, "", nil)
+	_, wft, err = ms.AddWorkflowTaskStartedEvent(wft.ScheduledEventID, wft.RequestID, wft.TaskQueue, "", nil, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -458,6 +458,7 @@ func TestGetNexusCompletion(t *testing.T) {
 				"---",
 				&taskqueuepb.TaskQueue{Name: "irrelevant"},
 				"---",
+				nil,
 				nil,
 			)
 			require.NoError(t, err)

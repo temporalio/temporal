@@ -37,6 +37,7 @@ import (
 	enumspb "go.temporal.io/api/enums/v1"
 	querypb "go.temporal.io/api/query/v1"
 	"go.temporal.io/api/serviceerror"
+	taskqueuespb "go.temporal.io/server/api/taskqueue/v1"
 	"go.temporal.io/server/common/tqid"
 	"go.uber.org/atomic"
 	"google.golang.org/protobuf/types/known/timestamppb"
@@ -121,7 +122,7 @@ func (t *MatcherTestSuite) TestLocalSyncMatch() {
 
 	<-pollStarted
 	time.Sleep(10 * time.Millisecond)
-	task := newInternalTask(randomTaskInfo(), nil, enumsspb.TASK_SOURCE_HISTORY, "", true)
+	task := newInternalTaskForSyncMatch(randomTaskInfo().Data, nil)
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
 	syncMatch, err := t.matcher.Offer(ctx, task)
 	cancel()
@@ -171,7 +172,13 @@ func (t *MatcherTestSuite) testRemoteSyncMatch(taskSource enumsspb.TaskSource) {
 		},
 	).Return(&remotePollResp, remotePollErr).AnyTimes()
 
-	task := newInternalTask(randomTaskInfo(), nil, taskSource, "", true)
+	task := newInternalTaskForSyncMatch(randomTaskInfo().Data, nil)
+	if taskSource == enumsspb.TASK_SOURCE_DB_BACKLOG {
+		task = newInternalTaskForSyncMatch(randomTaskInfo().Data, &taskqueuespb.TaskForwardInfo{
+			TaskSource:      enumsspb.TASK_SOURCE_DB_BACKLOG,
+			SourcePartition: "p123",
+		})
+	}
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
 
 	var err error
@@ -180,7 +187,7 @@ func (t *MatcherTestSuite) testRemoteSyncMatch(taskSource enumsspb.TaskSource) {
 	t.client.EXPECT().AddWorkflowTask(gomock.Any(), gomock.Any(), gomock.Any()).Do(
 		func(arg0 context.Context, arg1 *matchingservice.AddWorkflowTaskRequest, arg2 ...interface{}) {
 			req = arg1
-			task.forwardedFrom = req.GetForwardedSource()
+			task.forwardInfo = req.GetForwardInfo()
 			close(pollSigC)
 			if taskSource != enumsspb.TASK_SOURCE_DB_BACKLOG {
 				// when task is not from backlog, wait a bit for poller
@@ -198,12 +205,12 @@ func (t *MatcherTestSuite) testRemoteSyncMatch(taskSource enumsspb.TaskSource) {
 	t.NotNil(req)
 	t.NoError(err)
 	t.True(remoteSyncMatch)
-	t.Equal(t.queue.PersistenceName(), req.GetForwardedSource())
+	t.Equal(t.queue.PersistenceName(), req.GetForwardInfo().GetSourcePartition())
 	t.Equal(mustParent(t.queue.partition.(*tqid.NormalPartition), 20).RpcName(), req.GetTaskQueue().GetName())
 }
 
 func (t *MatcherTestSuite) TestRejectSyncMatchWhenBacklog() {
-	historyTask := newInternalTask(randomTaskInfo(), nil, enumsspb.TASK_SOURCE_HISTORY, "", true)
+	historyTask := newInternalTaskForSyncMatch(randomTaskInfo().Data, nil)
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
 
 	// sync match happens when there is no backlog
@@ -216,7 +223,7 @@ func (t *MatcherTestSuite) TestRejectSyncMatchWhenBacklog() {
 	t.Nil(err)
 
 	intruptC := make(chan struct{})
-	youngBacklogTask := newInternalTask(randomTaskInfoWithAge(time.Second), nil, enumsspb.TASK_SOURCE_DB_BACKLOG, "", false)
+	youngBacklogTask := newInternalTaskFromBacklog(randomTaskInfoWithAge(time.Second), nil)
 	t.client.EXPECT().AddWorkflowTask(gomock.Any(), gomock.Any(), gomock.Any()).Return(&matchingservice.AddWorkflowTaskResponse{}, errMatchingHostThrottleTest)
 	go t.matcher.MustOffer(ctx, youngBacklogTask, intruptC) //nolint:errcheck
 	time.Sleep(time.Millisecond)
@@ -228,7 +235,7 @@ func (t *MatcherTestSuite) TestRejectSyncMatchWhenBacklog() {
 	t.False(happened) // sync match did not happen, but we called the forwarder client
 
 	// should not allow sync match when there is an old task in backlog
-	oldBacklogTask := newInternalTask(randomTaskInfoWithAge(time.Minute), nil, enumsspb.TASK_SOURCE_DB_BACKLOG, "", false)
+	oldBacklogTask := newInternalTaskFromBacklog(randomTaskInfoWithAge(time.Minute), nil)
 	go t.matcher.MustOffer(ctx, oldBacklogTask, intruptC) //nolint:errcheck
 	time.Sleep(time.Millisecond)
 	happened, err = t.matcher.Offer(ctx, historyTask)
@@ -255,7 +262,7 @@ func (t *MatcherTestSuite) TestRejectSyncMatchWhenBacklog() {
 }
 
 func (t *MatcherTestSuite) TestForwardingWhenBacklogIsYoung() {
-	historyTask := newInternalTask(randomTaskInfo(), nil, enumsspb.TASK_SOURCE_HISTORY, "", true)
+	historyTask := newInternalTaskForSyncMatch(randomTaskInfo().Data, nil)
 
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
 	intruptC := make(chan struct{})
@@ -266,7 +273,7 @@ func (t *MatcherTestSuite) TestForwardingWhenBacklogIsYoung() {
 	time.Sleep(time.Millisecond)
 
 	// task is not forwarded because there is a poller waiting
-	youngBacklogTask := newInternalTask(randomTaskInfoWithAge(time.Second), nil, enumsspb.TASK_SOURCE_DB_BACKLOG, "", false)
+	youngBacklogTask := newInternalTaskFromBacklog(randomTaskInfoWithAge(time.Second), nil)
 	err := t.matcher.MustOffer(ctx, historyTask, intruptC)
 	t.Nil(err)
 	cancel()
@@ -290,7 +297,7 @@ func (t *MatcherTestSuite) TestAvoidForwardingWhenBacklogIsOld() {
 	cancel()
 
 	// old task is not forwarded (forwarded client is not called)
-	oldBacklogTask := newInternalTask(randomTaskInfoWithAge(time.Minute), nil, enumsspb.TASK_SOURCE_DB_BACKLOG, "", false)
+	oldBacklogTask := newInternalTaskFromBacklog(randomTaskInfoWithAge(time.Minute), nil)
 	ctx, cancel = context.WithTimeout(context.Background(), time.Second)
 	go t.matcher.MustOffer(ctx, oldBacklogTask, intruptC) //nolint:errcheck
 	time.Sleep(time.Millisecond)
@@ -312,7 +319,7 @@ func (t *MatcherTestSuite) TestAvoidForwardingWhenBacklogIsOld() {
 func (t *MatcherTestSuite) TestBacklogAge() {
 	t.Equal(emptyBacklogAge, t.rootMatcher.getBacklogAge())
 
-	youngBacklogTask := newInternalTask(randomTaskInfoWithAge(time.Second), nil, enumsspb.TASK_SOURCE_DB_BACKLOG, "", false)
+	youngBacklogTask := newInternalTaskFromBacklog(randomTaskInfoWithAge(time.Second), nil)
 
 	intruptC := make(chan struct{})
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
@@ -326,7 +333,7 @@ func (t *MatcherTestSuite) TestBacklogAge() {
 	time.Sleep(time.Millisecond)
 	t.InEpsilon(t.rootMatcher.getBacklogAge(), time.Second, float64(10*time.Millisecond))
 
-	oldBacklogTask := newInternalTask(randomTaskInfoWithAge(time.Minute), nil, enumsspb.TASK_SOURCE_DB_BACKLOG, "", false)
+	oldBacklogTask := newInternalTaskFromBacklog(randomTaskInfoWithAge(time.Minute), nil)
 	go t.rootMatcher.MustOffer(ctx, oldBacklogTask, intruptC) //nolint:errcheck
 	time.Sleep(time.Millisecond)
 	t.InEpsilon(t.rootMatcher.getBacklogAge(), time.Minute, float64(10*time.Millisecond))
@@ -348,7 +355,7 @@ func (t *MatcherTestSuite) TestBacklogAge() {
 }
 
 func (t *MatcherTestSuite) TestSyncMatchFailure() {
-	task := newInternalTask(randomTaskInfo(), nil, enumsspb.TASK_SOURCE_HISTORY, "", true)
+	task := newInternalTaskForSyncMatch(randomTaskInfo().Data, nil)
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
 
 	var req *matchingservice.AddWorkflowTaskRequest
@@ -383,7 +390,7 @@ func (t *MatcherTestSuite) TestQueryNoCurrentPollersButRecentPollers() {
 	task := newInternalQueryTask(uuid.New(), &matchingservice.QueryWorkflowRequest{})
 	t.client.EXPECT().QueryWorkflow(gomock.Any(), gomock.Any(), gomock.Any()).Do(
 		func(ctx context.Context, req *matchingservice.QueryWorkflowRequest, arg2 ...interface{}) {
-			task.forwardedFrom = req.GetForwardedSource()
+			task.forwardInfo = req.GetForwardInfo()
 			resp, err := t.rootMatcher.OfferQuery(ctx, task)
 			t.Nil(resp)
 			t.Assert().Error(err, context.DeadlineExceeded)
@@ -422,7 +429,7 @@ func (t *MatcherTestSuite) TestQueryNoRecentPoller() {
 	task := newInternalQueryTask(uuid.New(), &matchingservice.QueryWorkflowRequest{})
 	t.client.EXPECT().QueryWorkflow(gomock.Any(), gomock.Any(), gomock.Any()).Do(
 		func(ctx context.Context, req *matchingservice.QueryWorkflowRequest, arg2 ...interface{}) {
-			task.forwardedFrom = req.GetForwardedSource()
+			task.forwardInfo = req.GetForwardInfo()
 			resp, err := t.rootMatcher.OfferQuery(ctx, task)
 			t.Nil(resp)
 			t.Assert().Error(err, errNoRecentPoller)
@@ -440,7 +447,7 @@ func (t *MatcherTestSuite) TestQueryNoPollerAtAll() {
 
 	t.client.EXPECT().QueryWorkflow(gomock.Any(), gomock.Any(), gomock.Any()).Do(
 		func(ctx context.Context, req *matchingservice.QueryWorkflowRequest, arg2 ...interface{}) {
-			task.forwardedFrom = req.GetForwardedSource()
+			task.forwardInfo = req.GetForwardInfo()
 			resp, err := t.rootMatcher.OfferQuery(ctx, task)
 			t.Nil(resp)
 			t.Assert().Error(err, errNoRecentPoller)
@@ -518,7 +525,7 @@ func (t *MatcherTestSuite) TestQueryRemoteSyncMatch() {
 	t.client.EXPECT().QueryWorkflow(gomock.Any(), gomock.Any(), gomock.Any()).Do(
 		func(arg0 context.Context, arg1 *matchingservice.QueryWorkflowRequest, arg2 ...interface{}) {
 			req = arg1
-			task.forwardedFrom = req.GetForwardedSource()
+			//task.forwardedFrom = req.GetForwardedSource()
 			close(pollSigC)
 			time.Sleep(10 * time.Millisecond)
 			_, err := t.rootMatcher.OfferQuery(ctx, task)
@@ -537,7 +544,7 @@ func (t *MatcherTestSuite) TestQueryRemoteSyncMatch() {
 	err = payloads.Decode(result.GetQueryResult(), &answer)
 	t.NoError(err)
 	t.Equal("answer", answer)
-	t.Equal(t.queue.PersistenceName(), req.GetForwardedSource())
+	t.Equal(t.queue.PersistenceName(), req.GetForwardInfo().GetSourcePartition())
 	t.Equal(mustParent(t.queue.partition.(*tqid.NormalPartition), 20).RpcName(), req.GetTaskQueue().GetName())
 }
 
@@ -598,7 +605,7 @@ func (t *MatcherTestSuite) TestMustOfferLocalMatch() {
 
 	<-pollStarted
 	time.Sleep(10 * time.Millisecond)
-	task := newInternalTask(randomTaskInfo(), nil, enumsspb.TASK_SOURCE_HISTORY, "", false)
+	task := newInternalTaskForSyncMatch(randomTaskInfo().Data, nil)
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
 	err := t.matcher.MustOffer(ctx, task, nil)
 	cancel()
@@ -641,7 +648,7 @@ func (t *MatcherTestSuite) TestMustOfferRemoteMatch() {
 		taskCompleted = true
 	}
 
-	task := newInternalTask(randomTaskInfo(), completionFunc, enumsspb.TASK_SOURCE_DB_BACKLOG, "", false)
+	task := newInternalTaskFromBacklog(randomTaskInfo(), completionFunc)
 	ctx, cancel := context.WithTimeout(context.Background(), 4*time.Second)
 
 	var err error
@@ -651,7 +658,7 @@ func (t *MatcherTestSuite) TestMustOfferRemoteMatch() {
 	t.client.EXPECT().AddWorkflowTask(gomock.Any(), gomock.Any(), gomock.Any()).Do(
 		func(arg0 context.Context, arg1 *matchingservice.AddWorkflowTaskRequest, arg2 ...interface{}) {
 			req = arg1
-			task := newInternalTask(task.event.AllocatedTaskInfo, nil, enumsspb.TASK_SOURCE_DB_BACKLOG, req.GetForwardedSource(), true)
+			task := newInternalTaskForSyncMatch(task.event.AllocatedTaskInfo.Data, req.ForwardInfo)
 			close(pollSigC)
 			remoteSyncMatch, err = t.rootMatcher.Offer(ctx, task)
 		},
@@ -669,7 +676,7 @@ func (t *MatcherTestSuite) TestMustOfferRemoteMatch() {
 	t.NoError(err)
 	t.True(remoteSyncMatch)
 	t.True(taskCompleted)
-	t.Equal(t.queue.PersistenceName(), req.GetForwardedSource())
+	t.Equal(t.queue.PersistenceName(), req.GetForwardInfo().GetSourcePartition())
 	t.Equal(mustParent(t.queue.partition.(*tqid.NormalPartition), 20).RpcName(), req.GetTaskQueue().GetName())
 }
 

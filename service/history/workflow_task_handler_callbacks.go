@@ -262,12 +262,14 @@ func (handler *workflowTaskHandlerCallbacksImpl) handleWorkflowTaskStarted(
 				mutableState.ClearStickyTaskQueue()
 			}
 
+			versioningStamp := worker_versioning.StampFromCapabilities(req.PollRequest.WorkerVersionCapabilities)
 			_, workflowTask, err = mutableState.AddWorkflowTaskStartedEvent(
 				scheduledEventID,
 				requestID,
 				req.PollRequest.TaskQueue,
 				req.PollRequest.Identity,
-				worker_versioning.StampFromCapabilities(req.PollRequest.WorkerVersionCapabilities),
+				versioningStamp,
+				req.GetBuildIdRedirectInfo(),
 			)
 			if err != nil {
 				// Unable to add WorkflowTaskStarted event to history
@@ -722,6 +724,22 @@ func (handler *workflowTaskHandlerCallbacksImpl) handleWorkflowTaskCompleted(
 	var newWorkflowTask *workflow.WorkflowTaskInfo
 	// Speculative workflow task will be created after mutable state is persisted.
 	if newWorkflowTaskType == enumsspb.WORKFLOW_TASK_TYPE_NORMAL {
+		versioningStamp := request.WorkerVersionStamp
+		if versioningStamp.GetUseVersioning() {
+			if ms.GetAssignedBuildId() == "" {
+				// old versioning is used. making sure the versioning stamp does not go through otherwise the
+				// workflow will start using new versioning which may surprise users.
+				// TODO: remove this block when deleting old wv [cleanup-old-wv]
+				versioningStamp = nil
+			} else {
+				// new versioning is used. do not return new wft to worker if stamp build id does not match wf build id
+				// let the task go through matching and get dispatched to the right worker
+				if versioningStamp.GetBuildId() != ms.GetAssignedBuildId() {
+					bypassTaskGeneration = false
+				}
+			}
+		}
+
 		var newWTErr error
 		// If we checked WT heartbeat timeout before and WT wasn't timed out,
 		// then OriginalScheduledTime needs to be carried over to the new WT.
@@ -740,13 +758,6 @@ func (handler *workflowTaskHandlerCallbacksImpl) handleWorkflowTaskCompleted(
 
 		// skip transfer task for workflow task if request asking to return new workflow task
 		if bypassTaskGeneration {
-			versioningStamp := request.WorkerVersionStamp
-			if versioningStamp.GetUseVersioning() && ms.GetAssignedBuildId() == "" {
-				// old versioning is used. making sure the versioning stamp does not go through otherwise the
-				// workflow will start using new versioning which may surprise users.
-				// TODO: remove this block when deleting old wv [cleanup-old-wv]
-				versioningStamp = nil
-			}
 			// start the new workflow task if request asked to do so
 			// TODO: replace the poll request
 			_, newWorkflowTask, err = ms.AddWorkflowTaskStartedEvent(
@@ -755,6 +766,7 @@ func (handler *workflowTaskHandlerCallbacksImpl) handleWorkflowTaskCompleted(
 				newWorkflowTask.TaskQueue,
 				request.Identity,
 				versioningStamp,
+				nil,
 			)
 			if err != nil {
 				return nil, err
@@ -845,6 +857,7 @@ func (handler *workflowTaskHandlerCallbacksImpl) handleWorkflowTaskCompleted(
 			newWorkflowTask.TaskQueue,
 			request.Identity,
 			nil,
+			nil,
 		)
 		if err != nil {
 			return nil, err
@@ -867,8 +880,7 @@ func (handler *workflowTaskHandlerCallbacksImpl) handleWorkflowTaskCompleted(
 	}
 
 	resp := &historyservice.RespondWorkflowTaskCompletedResponse{}
-	//nolint:staticcheck
-	if request.GetReturnNewWorkflowTask() && newWorkflowTask != nil {
+	if newWorkflowTask != nil && bypassTaskGeneration {
 		resp.StartedResponse, err = handler.createRecordWorkflowTaskStartedResponse(ctx, ms, weContext.UpdateRegistry(ctx, nil), newWorkflowTask, request.GetIdentity(), request.GetForceCreateNewWorkflowTask())
 		if err != nil {
 			return nil, err

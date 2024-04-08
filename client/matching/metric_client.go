@@ -78,7 +78,7 @@ func (c *metricClient) AddActivityTask(
 
 	c.emitForwardedSourceStats(
 		scope,
-		request.GetForwardedSource(),
+		request.GetForwardInfo().GetSourcePartition(),
 		request.TaskQueue,
 	)
 
@@ -98,7 +98,7 @@ func (c *metricClient) AddWorkflowTask(
 
 	c.emitForwardedSourceStats(
 		scope,
-		request.GetForwardedSource(),
+		request.GetForwardInfo().GetSourcePartition(),
 		request.TaskQueue,
 	)
 
@@ -162,7 +162,7 @@ func (c *metricClient) QueryWorkflow(
 
 	c.emitForwardedSourceStats(
 		scope,
-		request.GetForwardedSource(),
+		request.GetForwardInfo().GetSourcePartition(),
 		request.TaskQueue,
 	)
 

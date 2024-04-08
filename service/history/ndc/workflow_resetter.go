@@ -460,6 +460,7 @@ func (r *workflowResetterImpl) failWorkflowTask(
 			workflowTask.TaskQueue,
 			consts.IdentityHistoryService,
 			nil,
+			nil,
 		)
 		if err != nil {
 			return err

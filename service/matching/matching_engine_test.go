@@ -34,6 +34,7 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/assert"
+	taskqueuespb "go.temporal.io/server/api/taskqueue/v1"
 	"go.temporal.io/server/common/metrics/metricstest"
 	"go.temporal.io/server/common/worker_versioning"
 
@@ -646,7 +647,7 @@ func (s *matchingEngineSuite) AddTasksTest(taskType enumspb.TaskQueueType, isFor
 				ScheduleToStartTimeout: timestamp.DurationFromSeconds(100),
 			}
 			if isForwarded {
-				addRequest.ForwardedSource = forwardedFrom
+				addRequest.ForwardInfo = &taskqueuespb.TaskForwardInfo{SourcePartition: forwardedFrom}
 			}
 			_, _, err = s.matchingEngine.AddActivityTask(context.Background(), &addRequest)
 		} else {
@@ -658,7 +659,7 @@ func (s *matchingEngineSuite) AddTasksTest(taskType enumspb.TaskQueueType, isFor
 				ScheduleToStartTimeout: timestamp.DurationFromSeconds(100),
 			}
 			if isForwarded {
-				addRequest.ForwardedSource = forwardedFrom
+				addRequest.ForwardInfo = &taskqueuespb.TaskForwardInfo{SourcePartition: forwardedFrom}
 			}
 			_, _, err = s.matchingEngine.AddWorkflowTask(context.Background(), &addRequest)
 		}

@@ -65,7 +65,7 @@ type (
 		PollTask(ctx context.Context, pollMetadata *pollMetadata) (*internalTask, bool, error)
 		// ProcessSpooledTask dispatches a task to a poller. When there are no pollers to pick
 		// up the task, this method will return error. Task will not be persisted to db
-		ProcessSpooledTask(ctx context.Context, task *internalTask, sourceBuildId string) error
+		ProcessSpooledTask(ctx context.Context, task *internalTask, assignedBuildId string) error
 		// DispatchQueryTask will dispatch query to local or remote poller. If forwarded then result or error is returned,
 		// if dispatched to local poller then nil and nil is returned.
 		DispatchQueryTask(ctx context.Context, taskId string, request *matchingservice.QueryWorkflowRequest) (*matchingservice.QueryWorkflowResponse, error)
@@ -200,13 +200,29 @@ func (pm *taskQueuePartitionManagerImpl) AddTask(
 	ctx context.Context,
 	params addTaskParams,
 ) (buildId string, syncMatched bool, err error) {
-	// We don't need the userDataChanged channel here because:
-	// - if we sync match, we're done
-	// - if we spool to db, we'll re-resolve when it comes out of the db
-	directive := params.taskInfo.VersionDirective
-	spoolQueue, syncMatchQueue, _, err := pm.getPhysicalQueuesForAdd(ctx, directive, params.taskInfo.GetRunId())
-	if err != nil {
-		return "", false, err
+	var spoolQueue, syncMatchQueue physicalTaskQueueManager
+	syncMatchTask := newInternalTaskForSyncMatch(params.taskInfo, params.forwardInfo)
+
+	if syncMatchTask.isForwarded() {
+		// forwarded from child partition - only do sync match
+		// child partition will persist the task when sync match fails
+		// no need to calculate build id, just dispatch based on source partition's instruction
+		syncMatchQueue, err = pm.getVersionedQueue(ctx, syncMatchTask.forwardInfo.DispatchVersionSet, syncMatchTask.forwardInfo.DispatchBuildId, true)
+		if err != nil {
+			return "", false, err
+		}
+	} else {
+		// task is not forwarded. calculate the spool and sync-match physical queues base in the directive
+		spoolQueue, syncMatchQueue, _, err = pm.getPhysicalQueuesForAdd(ctx, params.directive, params.taskInfo.GetRunId())
+		if err != nil {
+			return "", false, err
+		}
+		// set redirect info if spoolQueue and syncMatchQueue build ids are different
+		if spoolQueue.QueueKey().BuildId() != syncMatchQueue.QueueKey().BuildId() {
+			syncMatchTask.redirectInfo = &taskqueuespb.BuildIdRedirectInfo{
+				AssignedBuildId: spoolQueue.QueueKey().BuildId(),
+			}
+		}
 	}
 
 	if pm.defaultQueue != syncMatchQueue {
@@ -225,7 +241,7 @@ func (pm *taskQueuePartitionManagerImpl) AddTask(
 	}
 
 	if isActive {
-		syncMatched, err = syncMatchQueue.TrySyncMatch(ctx, params)
+		syncMatched, err = syncMatchQueue.TrySyncMatch(ctx, syncMatchTask)
 		if syncMatched {
 			// Build ID is not returned for sync match. The returned build ID is used by History to update
 			// mutable state (and visibility) when the first workflow task is spooled.
@@ -235,19 +251,17 @@ func (pm *taskQueuePartitionManagerImpl) AddTask(
 		}
 	}
 
-	if params.forwardedFrom != "" {
-		// forwarded from child partition - only do sync match
-		// child partition will persist the task when sync match fails
+	if syncMatchTask.isForwarded() {
 		return "", false, errRemoteSyncMatchFailed
 	}
 
 	var assignedBuildId string
-	if directive.GetUseAssignmentRules() != nil {
+	if params.directive.GetUseAssignmentRules() != nil {
 		// return build ID only if a new one is assigned.
 		assignedBuildId = spoolQueue.QueueKey().BuildId()
 	}
 
-	return assignedBuildId, false, spoolQueue.SpoolTask(params)
+	return assignedBuildId, false, spoolQueue.SpoolTask(params.taskInfo)
 }
 
 func (pm *taskQueuePartitionManagerImpl) isActiveInCluster() (bool, error) {
@@ -321,21 +335,30 @@ func (pm *taskQueuePartitionManagerImpl) PollTask(
 func (pm *taskQueuePartitionManagerImpl) ProcessSpooledTask(
 	ctx context.Context,
 	task *internalTask,
-	sourceBuildId string,
+	assignedBuildId string,
 ) error {
 	taskInfo := task.event.GetData()
 	// This task came from taskReader so task.event is always set here.
 	// TODO: in WV2 we should not look at a spooled task directive anymore [cleanup-old-wv]
 	directive := taskInfo.GetVersionDirective()
-	if sourceBuildId != "" {
+	if assignedBuildId != "" {
 		// construct directive based on the build id of the spool queue
-		directive = worker_versioning.MakeBuildIdDirective(sourceBuildId)
+		directive = worker_versioning.MakeBuildIdDirective(assignedBuildId)
 	}
 	// Redirect and re-resolve if we're blocked in matcher and user data changes.
 	for {
 		_, syncMatchQueue, userDataChanged, err := pm.getPhysicalQueuesForAdd(ctx, directive, taskInfo.GetRunId())
 		if err != nil {
 			return err
+		}
+		// set redirect info if spoolQueue and syncMatchQueue build ids are different
+		if assignedBuildId != syncMatchQueue.QueueKey().BuildId() {
+			task.redirectInfo = &taskqueuespb.BuildIdRedirectInfo{
+				AssignedBuildId: assignedBuildId,
+			}
+		} else {
+			// make sure to reset redirectInfo in case it was set in a previous loop cycle
+			task.redirectInfo = nil
 		}
 		err = syncMatchQueue.DispatchSpooledTask(ctx, task, userDataChanged)
 		if err != errInterrupted { // nolint:goerr113

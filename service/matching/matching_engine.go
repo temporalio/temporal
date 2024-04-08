@@ -453,9 +453,9 @@ func (e *matchingEngineImpl) AddWorkflowTask(
 	}
 
 	return pm.AddTask(ctx, addTaskParams{
-		taskInfo:      taskInfo,
-		source:        addRequest.GetSource(),
-		forwardedFrom: addRequest.GetForwardedSource(),
+		taskInfo:    taskInfo,
+		directive:   addRequest.VersionDirective,
+		forwardInfo: addRequest.ForwardInfo,
 	})
 }
 
@@ -491,9 +491,9 @@ func (e *matchingEngineImpl) AddActivityTask(
 	}
 
 	return pm.AddTask(ctx, addTaskParams{
-		taskInfo:      taskInfo,
-		source:        addRequest.GetSource(),
-		forwardedFrom: addRequest.GetForwardedSource(),
+		taskInfo:    taskInfo,
+		directive:   addRequest.VersionDirective,
+		forwardInfo: addRequest.ForwardInfo,
 	})
 }
 
@@ -606,7 +606,6 @@ pollLoop:
 					tag.WorkflowNamespaceID(task.event.Data.GetNamespaceId()),
 					tag.WorkflowID(task.event.Data.GetWorkflowId()),
 					tag.WorkflowRunID(task.event.Data.GetRunId()),
-					tag.WorkflowTaskQueueName(taskQueueName),
 					tag.TaskID(task.event.GetTaskId()),
 					tag.TaskVisibilityTimestamp(timestamp.TimeValue(task.event.Data.GetCreateTime())),
 					tag.WorkflowEventID(task.event.Data.GetScheduledEventId()),
@@ -615,6 +614,17 @@ pollLoop:
 				task.finish(nil)
 			case *serviceerrors.TaskAlreadyStarted:
 				e.logger.Debug("Duplicated workflow task", tag.WorkflowTaskQueueName(taskQueueName), tag.TaskID(task.event.GetTaskId()))
+				task.finish(nil)
+			case *serviceerrors.InvalidDispatchBuildId:
+				// history should've scheduled another task on the right build id. dropping this one.
+				e.logger.Debug("dropping task due to invalid build ID",
+					tag.WorkflowTaskQueueName(taskQueueName),
+					tag.WorkflowNamespaceID(task.event.Data.GetNamespaceId()),
+					tag.WorkflowID(task.event.Data.GetWorkflowId()),
+					tag.WorkflowRunID(task.event.Data.GetRunId()),
+					tag.TaskID(task.event.GetTaskId()),
+					tag.TaskVisibilityTimestamp(timestamp.TimeValue(task.event.Data.GetCreateTime())),
+				)
 				task.finish(nil)
 			default:
 				task.finish(err)
@@ -2043,12 +2053,13 @@ func (e *matchingEngineImpl) recordWorkflowTaskStarted(
 	defer cancel()
 
 	return e.historyClient.RecordWorkflowTaskStarted(ctx, &historyservice.RecordWorkflowTaskStartedRequest{
-		NamespaceId:       task.event.Data.GetNamespaceId(),
-		WorkflowExecution: task.workflowExecution(),
-		ScheduledEventId:  task.event.Data.GetScheduledEventId(),
-		Clock:             task.event.Data.GetClock(),
-		RequestId:         uuid.New(),
-		PollRequest:       pollReq,
+		NamespaceId:         task.event.Data.GetNamespaceId(),
+		WorkflowExecution:   task.workflowExecution(),
+		ScheduledEventId:    task.event.Data.GetScheduledEventId(),
+		Clock:               task.event.Data.GetClock(),
+		RequestId:           uuid.New(),
+		PollRequest:         pollReq,
+		BuildIdRedirectInfo: task.redirectInfo,
 	})
 }
 
@@ -2061,12 +2072,13 @@ func (e *matchingEngineImpl) recordActivityTaskStarted(
 	defer cancel()
 
 	return e.historyClient.RecordActivityTaskStarted(ctx, &historyservice.RecordActivityTaskStartedRequest{
-		NamespaceId:       task.event.Data.GetNamespaceId(),
-		WorkflowExecution: task.workflowExecution(),
-		ScheduledEventId:  task.event.Data.GetScheduledEventId(),
-		Clock:             task.event.Data.GetClock(),
-		RequestId:         uuid.New(),
-		PollRequest:       pollReq,
+		NamespaceId:         task.event.Data.GetNamespaceId(),
+		WorkflowExecution:   task.workflowExecution(),
+		ScheduledEventId:    task.event.Data.GetScheduledEventId(),
+		Clock:               task.event.Data.GetClock(),
+		RequestId:           uuid.New(),
+		PollRequest:         pollReq,
+		BuildIdRedirectInfo: task.redirectInfo,
 	})
 }
 

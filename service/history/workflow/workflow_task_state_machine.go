@@ -39,6 +39,7 @@ import (
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	updatepb "go.temporal.io/api/update/v1"
 	"go.temporal.io/api/workflowservice/v1"
+	taskqueuespb "go.temporal.io/server/api/taskqueue/v1"
 	"go.temporal.io/server/common/worker_versioning"
 	"google.golang.org/protobuf/types/known/durationpb"
 	"google.golang.org/protobuf/types/known/timestamppb"
@@ -460,6 +461,7 @@ func (m *workflowTaskStateMachine) AddWorkflowTaskStartedEvent(
 	taskQueue *taskqueuepb.TaskQueue,
 	identity string,
 	versioningStamp *commonpb.WorkerVersionStamp,
+	redirectInfo *taskqueuespb.BuildIdRedirectInfo,
 ) (*historypb.HistoryEvent, *WorkflowTaskInfo, error) {
 	opTag := tag.WorkflowActionWorkflowTaskStarted
 	workflowTask := m.GetWorkflowTaskByID(scheduledEventID)
@@ -483,7 +485,7 @@ func (m *workflowTaskStateMachine) AddWorkflowTaskStartedEvent(
 	// that resulted in the successful completion.
 	suggestContinueAsNew, historySizeBytes := m.getHistorySizeInfo()
 
-	workflowTask, scheduledEventCreatedForRedirect, err := m.applyBuildIdRedirect(versioningStamp, workflowTask)
+	workflowTask, scheduledEventCreatedForRedirect, err := m.applyBuildIdRedirect(versioningStamp, workflowTask, redirectInfo)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -554,18 +556,20 @@ func (m *workflowTaskStateMachine) AddWorkflowTaskStartedEvent(
 	return startedEvent, workflowTask, err
 }
 
-// applyBuildIdRedirect applies redirect based on the versioningStamp (if applicable).
+// applyBuildIdRedirect applies redirect, if applicable, based on the versioningStamp and redirectInfo.
 // Returns a possibly new workflowTaskInfo and a boolean indicating if transient wf task was failed and a new wf task
-// scheduled event is created.
+// scheduled event is created due build id being changed by the current wft.
 func (m *workflowTaskStateMachine) applyBuildIdRedirect(
 	versioningStamp *commonpb.WorkerVersionStamp,
 	workflowTask *WorkflowTaskInfo,
+	redirectInfo *taskqueuespb.BuildIdRedirectInfo,
 ) (*WorkflowTaskInfo, bool, error) {
 	if !versioningStamp.GetUseVersioning() || versioningStamp.GetBuildId() == "" {
 		return workflowTask, false, nil
 	}
 	buildId := versioningStamp.GetBuildId()
-	err := m.ms.UpdateBuildIdAssignment(buildId)
+
+	err := m.ms.processBuildIdRedirect(workflowTask.ScheduledEventID, versioningStamp, redirectInfo)
 	if err != nil {
 		return nil, false, err
 	}
@@ -587,6 +591,7 @@ func (m *workflowTaskStateMachine) applyBuildIdRedirect(
 	}
 	return workflowTask, false, nil
 }
+
 func (m *workflowTaskStateMachine) skipWorkflowTaskCompletedEvent(workflowTaskType enumsspb.WorkflowTaskType, request *workflowservice.RespondWorkflowTaskCompletedRequest) bool {
 	if workflowTaskType != enumsspb.WORKFLOW_TASK_TYPE_SPECULATIVE {
 		// Only Speculative WT can skip WorkflowTaskCompletedEvent.
@@ -932,7 +937,7 @@ func (m *workflowTaskStateMachine) GetStartedWorkflowTask() *WorkflowTaskInfo {
 }
 
 func (m *workflowTaskStateMachine) HadOrHasWorkflowTask() bool {
-	return m.HasPendingWorkflowTask() || m.ms.GetLastWorkflowTaskStartedEventID() != common.EmptyEventID
+	return m.HasPendingWorkflowTask() || m.ms.HasCompletedAnyWorkflowTask()
 }
 
 // GetWorkflowTaskByID returns details about the current workflow task by scheduled event ID.

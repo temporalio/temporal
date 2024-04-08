@@ -35,7 +35,6 @@ import (
 
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	taskqueuespb "go.temporal.io/server/api/taskqueue/v1"
-	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence/visibility/manager"
 	"go.temporal.io/server/common/searchattribute"
@@ -125,13 +124,13 @@ func StampIfUsingVersioning(stamp *commonpb.WorkerVersionStamp) *commonpb.Worker
 // - inheritedBuildId: build ID inherited from a past/previous wf execution (for Child WF or CaN)
 // - assignedBuildId: the build id to which the WF is currently assigned (i.e. mutable state's AssginedBuildId)
 // - stamp: the latest versioning stamp of the execution (only needed for old versioning)
-// - lastWorkflowTaskStartedEventID: to determine if this is the first WF task
-func MakeDirectiveForWorkflowTask(inheritedBuildId string, assignedBuildId string, stamp *commonpb.WorkerVersionStamp, lastWorkflowTaskStartedEventID int64) *taskqueuespb.TaskVersionDirective {
+// - hasCompletedWorkflowTask: if the wf has completed any wft
+func MakeDirectiveForWorkflowTask(inheritedBuildId string, assignedBuildId string, stamp *commonpb.WorkerVersionStamp, hasCompletedWorkflowTask bool) *taskqueuespb.TaskVersionDirective {
 	if id := StampIfUsingVersioning(stamp).GetBuildId(); id != "" && assignedBuildId == "" {
 		// TODO: old versioning only [cleanup-old-wv]
 		return MakeBuildIdDirective(id)
-	} else if lastWorkflowTaskStartedEventID == common.EmptyEventID && inheritedBuildId == "" {
-		// first workflow task and build ID not inherited. if this is retry we reassign build ID
+	} else if !hasCompletedWorkflowTask && inheritedBuildId == "" {
+		// first workflow task (or a retry of) and build ID not inherited. if this is retry we reassign build ID
 		// if WF has an inherited build id, we do not allow usage of assignment rules
 		return MakeUseAssignmentRulesDirective()
 	} else if assignedBuildId != "" {

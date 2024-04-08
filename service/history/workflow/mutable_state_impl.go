@@ -42,6 +42,8 @@ import (
 	updatepb "go.temporal.io/api/update/v1"
 	workflowpb "go.temporal.io/api/workflow/v1"
 	"go.temporal.io/api/workflowservice/v1"
+	"go.temporal.io/server/api/taskqueue/v1"
+	serviceerrors "go.temporal.io/server/common/serviceerror"
 	"golang.org/x/exp/slices"
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/durationpb"
@@ -1699,8 +1701,8 @@ func (ms *MutableStateImpl) GetNextEventID() int64 {
 	return ms.hBuilder.NextEventID()
 }
 
-// GetLastWorkflowTaskStartedEventID returns last started workflow task event ID
-func (ms *MutableStateImpl) GetLastWorkflowTaskStartedEventID() int64 {
+// GetStartedEventIdForLastCompletedWorkflowTask returns last started workflow task event ID
+func (ms *MutableStateImpl) GetStartedEventIdOfLastCompletedWorkflowTask() int64 {
 	return ms.executionInfo.LastWorkflowTaskStartedEventId
 }
 
@@ -2222,12 +2224,13 @@ func (ms *MutableStateImpl) AddWorkflowTaskStartedEvent(
 	taskQueue *taskqueuepb.TaskQueue,
 	identity string,
 	versioningStamp *commonpb.WorkerVersionStamp,
+	redirectInfo *taskqueue.BuildIdRedirectInfo,
 ) (*historypb.HistoryEvent, *WorkflowTaskInfo, error) {
 	opTag := tag.WorkflowActionWorkflowTaskStarted
 	if err := ms.checkMutability(opTag); err != nil {
 		return nil, nil, err
 	}
-	return ms.workflowTaskManager.AddWorkflowTaskStartedEvent(scheduledEventID, requestID, taskQueue, identity, versioningStamp)
+	return ms.workflowTaskManager.AddWorkflowTaskStartedEvent(scheduledEventID, requestID, taskQueue, identity, versioningStamp, redirectInfo)
 }
 
 func (ms *MutableStateImpl) ApplyWorkflowTaskStartedEvent(
@@ -2309,6 +2312,66 @@ func (ms *MutableStateImpl) addResetPointFromCompletion(
 		Points: util.SliceTail(append(resetPoints, newPoint), maxResetPoints),
 	}
 	return true
+}
+
+// processBuildIdRedirect validates build id for the task being dispatched and applies possible redirect to
+// mutable state.
+// If a valid redirect is happening, assigned build id of the wf will be updated and all scheduled but not
+// started tasks will be rescheduled to be put on the matching queue of the right build id.
+// If the given versioning stamp and redirect info is not valid based on the wf's assigned build id
+// InvalidDispatchBuildId error will be returned.
+func (ms *MutableStateImpl) processBuildIdRedirect(
+	startingTaskScheduledEventId int64,
+	versioningStamp *commonpb.WorkerVersionStamp,
+	redirectInfo *taskqueue.BuildIdRedirectInfo,
+) error {
+	if !versioningStamp.GetUseVersioning() || versioningStamp.GetBuildId() != ms.GetAssignedBuildId() {
+		// dispatch build id is the same as wf assigned build id, hence noop.
+		return nil
+	}
+
+	if redirectInfo == nil || redirectInfo.GetAssignedBuildId() != ms.GetAssignedBuildId() {
+		// no redirect or a redirect based on a wrong assinged build id is reported. this must be a task
+		// backlogged on an old build id. rejecting this task, there should be another task scheduled on
+		// the right build id.
+		return serviceerrors.NewInvalidDispatchBuildId()
+	}
+
+	// redirect is valid, updating mutable state and re-scheduling pending tasks which are not started yet.
+	newBuildId := versioningStamp.GetBuildId()
+	err := ms.UpdateBuildIdAssignment(newBuildId)
+	if err != nil {
+		return err
+	}
+
+	if ms.HasPendingWorkflowTask() && !ms.HasStartedWorkflowTask() &&
+		ms.GetPendingWorkflowTask().ScheduledEventID != startingTaskScheduledEventId &&
+		// speculative tasks do not go to matching
+		ms.GetPendingWorkflowTask().Type != enumsspb.WORKFLOW_TASK_TYPE_SPECULATIVE {
+		// sticky queue should be cleared by UpdateBuildIdAssignment already, so the following call only generates
+		// a WorkflowTask, not a WorkflowTaskTimeoutTask.
+		err = ms.taskGenerator.GenerateScheduleWorkflowTaskTasks(ms.GetPendingWorkflowTask().ScheduledEventID)
+		if err != nil {
+			return err
+		}
+	}
+
+	for _, ai := range ms.GetPendingActivityInfos() {
+		if ai.ScheduledEventId == startingTaskScheduledEventId ||
+			// activity already started
+			ai.StartedEventId != common.EmptyEventID ||
+			// activity does not depend on wf build id
+			ai.GetUseWorkflowBuildId() == nil {
+			continue
+		}
+		// we only need to resend the activities to matching, no need to update timer tasks.
+		err = ms.taskGenerator.GenerateActivityTasks(&historypb.HistoryEvent{EventId: ai.ScheduledEventId})
+		if err != nil {
+			return err
+		}
+	}
+
+	return nil
 }
 
 // ApplyBuildIdRedirect used for applying redirects from History events when rebuilding MS
@@ -2686,6 +2749,7 @@ func (ms *MutableStateImpl) AddActivityTaskStartedEvent(
 	requestID string,
 	identity string,
 	versioningStamp *commonpb.WorkerVersionStamp,
+	redirectInfo *taskqueue.BuildIdRedirectInfo,
 ) (*historypb.HistoryEvent, error) {
 
 	opTag := tag.WorkflowActionActivityTaskStarted
@@ -2699,7 +2763,7 @@ func (ms *MutableStateImpl) AddActivityTaskStartedEvent(
 		// TODO: cleanup this comment [cleanup-old-wv]
 		if useWf := ai.GetUseWorkflowBuildId(); useWf != nil {
 			// when a dependent activity is redirected, we update workflow's assigned build ID as well
-			err := ms.UpdateBuildIdAssignment(versioningStamp.GetBuildId())
+			err := ms.processBuildIdRedirect(scheduledEventID, versioningStamp, redirectInfo)
 			if err != nil {
 				return nil, err
 			}
@@ -5670,4 +5734,8 @@ func (ms *MutableStateImpl) logDataInconsistency() {
 		tag.WorkflowID(workflowID),
 		tag.WorkflowRunID(runID),
 	)
+}
+
+func (ms *MutableStateImpl) HasCompletedAnyWorkflowTask() bool {
+	return ms.GetStartedEventIdOfLastCompletedWorkflowTask() != common.EmptyEventID
 }

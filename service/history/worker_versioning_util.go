@@ -30,7 +30,6 @@ import (
 	"go.temporal.io/api/serviceerror"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	taskqueuespb "go.temporal.io/server/api/taskqueue/v1"
-	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
@@ -136,7 +135,9 @@ func updateIndependentActivityBuildId(
 	)
 }
 
-func updateWorkflowAssignedBuildId(
+// initializeWorkflowAssignedBuildId sets the wf assigned build id after scheduling the first workflow task, based on
+// the build id returned by matching.
+func initializeWorkflowAssignedBuildId(
 	ctx context.Context,
 	transferTask *tasks.WorkflowTask,
 	buildId string,
@@ -195,11 +196,9 @@ func updateWorkflowAssignedBuildId(
 		return err
 	}
 
-	workflowTaskStarted := mutableState.GetLastWorkflowTaskStartedEventID() != common.EmptyEventID
-
-	if workflowTaskStarted {
-		// this scheduled event is stale now, so don't write build ID here.
-		// The build ID should be already updated via RecordWorkflowTaskStarted
+	if mutableState.HasCompletedAnyWorkflowTask() {
+		// workflow has already completed a wft. buildId is stale and useless.
+		// workflow's assigned build id should be already updated via RecordWorkflowTaskStarted
 		return nil
 	}
 
@@ -224,7 +223,7 @@ func MakeDirectiveForWorkflowTask(ms workflow.MutableState) *taskqueuespb.TaskVe
 		ms.GetInheritedBuildId(),
 		ms.GetAssignedBuildId(),
 		ms.GetMostRecentWorkerVersionStamp(),
-		ms.GetLastWorkflowTaskStartedEventID(),
+		ms.HasCompletedAnyWorkflowTask(),
 	)
 }
 

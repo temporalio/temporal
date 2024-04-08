@@ -503,6 +503,7 @@ func (s *mutableStateSuite) TestTransientWorkflowTaskStart_CurrentVersionChanged
 		&taskqueuepb.TaskQueue{Name: f.TaskQueue(enumspb.TASK_QUEUE_TYPE_WORKFLOW).NormalPartition(5).RpcName()},
 		"random identity",
 		nil,
+		nil,
 	)
 	s.NoError(err)
 	s.Equal(0, s.mutableState.hBuilder.NumBufferedEvents())
@@ -1181,7 +1182,9 @@ func (s *mutableStateSuite) TestRetryActivity_TruncateRetryableFailure() {
 		activityInfo.ScheduledEventId,
 		uuid.New(),
 		"worker-identity",
-		nil)
+		nil,
+		nil,
+	)
 	s.NoError(err)
 
 	failureSizeErrorLimit := s.mockConfig.MutableStateActivityFailureSizeLimitError(

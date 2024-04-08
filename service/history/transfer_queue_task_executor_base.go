@@ -201,7 +201,7 @@ func (t *transferQueueTaskExecutorBase) pushWorkflowTask(
 		return nil
 	}
 
-	return updateWorkflowAssignedBuildId(
+	return initializeWorkflowAssignedBuildId(
 		ctx,
 		task,
 		resp.AssignedBuildId,

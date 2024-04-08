@@ -410,15 +410,9 @@ func (tm *TaskMatcher) emitDispatchLatency(task *internalTask, forwarded bool) {
 		return // should not happen but for safety
 	}
 
-	source := task.source
-	if source == enumsspb.TASK_SOURCE_UNSPECIFIED {
-		// history may not specify the source
-		source = enumsspb.TASK_SOURCE_HISTORY
-	}
-
 	metrics.TaskDispatchLatencyPerTaskQueue.With(tm.metricsHandler).Record(
 		time.Since(timestamp.TimeValue(task.event.Data.CreateTime)),
-		metrics.StringTag("source", source.String()),
+		metrics.StringTag("source", task.source.String()),
 		metrics.StringTag("forwarded", strconv.FormatBool(forwarded)),
 	)
 }
