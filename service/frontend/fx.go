@@ -497,6 +497,7 @@ func PersistenceRateLimitingParamsProvider(
 		serviceConfig.PersistencePerShardNamespaceMaxQPS,
 		serviceConfig.EnablePersistencePriorityRateLimiting,
 		serviceConfig.OperatorRPSRatio,
+		serviceConfig.PersistenceQPSBurstRatio,
 		serviceConfig.PersistenceDynamicRateLimitingParams,
 		persistenceLazyLoadedServiceResolver,
 		logger,
