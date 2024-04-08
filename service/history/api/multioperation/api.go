@@ -26,6 +26,7 @@ package multioperation
 
 import (
 	"context"
+	"errors"
 	"fmt"
 
 	commonpb "go.temporal.io/api/common/v1"
@@ -73,13 +74,13 @@ func Invoke(
 		),
 		workflow.LockPriorityHigh,
 	)
-	switch err.(type) {
-	case nil:
-		defer func() { currentWorkflowLease.GetReleaseFn()(retError) }()
-	case *serviceerror.NotFound:
+	var notFound *serviceerror.NotFound
+	if errors.As(err, &notFound) {
 		currentWorkflowLease = nil
-	default:
+	} else if err != nil {
 		return nil, err
+	} else {
+		defer func() { currentWorkflowLease.GetReleaseFn()(retError) }()
 	}
 
 	if currentWorkflowLease != nil {
