@@ -82,6 +82,7 @@ func Invoke(
 	}
 
 	if currentWorkflowLease != nil {
+		// TODO: support for already-running Workflow
 		return nil, serviceerror.NewUnimplemented("not implemented yet")
 	}
 
