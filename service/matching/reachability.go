@@ -19,6 +19,15 @@ import (
 	"go.temporal.io/server/common/worker_versioning"
 )
 
+type reachabilityCalculator struct {
+	visibilityMgr   manager.VisibilityManager
+	nsID            namespace.ID
+	nsName          namespace.Name
+	taskQueue       string
+	assignmentRules []*persistencespb.AssignmentRule
+	redirectRules   []*persistencespb.RedirectRule
+}
+
 func getBuildIdTaskReachability(
 	ctx context.Context,
 	data *persistencespb.VersioningData,
@@ -28,27 +37,37 @@ func getBuildIdTaskReachability(
 	taskQueue,
 	buildId string,
 ) (enumspb.BuildIdTaskReachability, error) {
-	assignmentRules := data.GetAssignmentRules()
-	redirectRules := data.GetRedirectRules()
+	rc := &reachabilityCalculator{
+		visibilityMgr:   visibilityMgr,
+		nsID:            nsID,
+		nsName:          nsName,
+		taskQueue:       taskQueue,
+		assignmentRules: data.GetAssignmentRules(),
+		redirectRules:   data.GetRedirectRules(),
+	}
 
+	return rc.getReachability(ctx, buildId)
+}
+
+func (rc *reachabilityCalculator) getReachability(ctx context.Context, buildId string) (enumspb.BuildIdTaskReachability, error) {
 	// 1. Easy UNREACHABLE case
-	if isActiveRedirectRuleSource(buildId, redirectRules) {
+	if isActiveRedirectRuleSource(buildId, rc.redirectRules) {
 		return enumspb.BUILD_ID_TASK_REACHABILITY_UNREACHABLE, nil
 	}
 
 	// Gather list of all build ids that could point to buildId
-	buildIdsOfInterest := append(getUpstreamBuildIds(buildId, redirectRules, false), buildId)
+	buildIdsOfInterest := append(rc.getUpstreamBuildIds(buildId, false), buildId)
 
 	// 2. Cases for REACHABLE
 	// 2a. If buildId is assignable to new tasks
 	for _, bid := range buildIdsOfInterest {
-		if isReachableActiveAssignmentRuleTarget(bid, assignmentRules) {
+		if rc.isReachableActiveAssignmentRuleTarget(bid) {
 			return enumspb.BUILD_ID_TASK_REACHABILITY_REACHABLE, nil
 		}
 	}
 
 	// 2b. If buildId could be reached from the backlog
-	if existsBacklog, err := existsBackloggedActivityOrWFTaskAssignedToAny(ctx, nsID, nsName, taskQueue, buildIdsOfInterest); err != nil {
+	if existsBacklog, err := rc.existsBackloggedActivityOrWFTaskAssignedToAny(ctx, buildIdsOfInterest); err != nil {
 		return enumspb.BUILD_ID_TASK_REACHABILITY_UNSPECIFIED, err
 	} else if existsBacklog {
 		return enumspb.BUILD_ID_TASK_REACHABILITY_REACHABLE, nil
@@ -57,10 +76,10 @@ func getBuildIdTaskReachability(
 	// Note: The below cases are not applicable to activity-only task queues, since we don't record those in visibility
 
 	// Gather list of all build ids that could point to buildId, now including deleted rules to account for the delay in updating visibility
-	buildIdsOfInterest = append(getUpstreamBuildIds(buildId, redirectRules, true), buildId)
+	buildIdsOfInterest = append(rc.getUpstreamBuildIds(buildId, true), buildId)
 
 	// 2c. If buildId is assignable to tasks from open workflows
-	existsOpenWFAssignedToBuildId, err := existsWFAssignedToAny(ctx, visibilityMgr, makeBuildIdCountRequest(nsID, nsName, buildIdsOfInterest, taskQueue, true))
+	existsOpenWFAssignedToBuildId, err := rc.existsWFAssignedToAny(ctx, rc.makeBuildIdCountRequest(buildIdsOfInterest, true))
 	if err != nil {
 		return enumspb.BUILD_ID_TASK_REACHABILITY_UNSPECIFIED, err
 	}
@@ -69,7 +88,7 @@ func getBuildIdTaskReachability(
 	}
 
 	// 3. Cases for CLOSED_WORKFLOWS_ONLY
-	existsClosedWFAssignedToBuildId, err := existsWFAssignedToAny(ctx, visibilityMgr, makeBuildIdCountRequest(nsID, nsName, buildIdsOfInterest, taskQueue, false))
+	existsClosedWFAssignedToBuildId, err := rc.existsWFAssignedToAny(ctx, rc.makeBuildIdCountRequest(buildIdsOfInterest, false))
 	if err != nil {
 		return enumspb.BUILD_ID_TASK_REACHABILITY_UNSPECIFIED, err
 	}
@@ -85,26 +104,24 @@ func getBuildIdTaskReachability(
 // It considers rules if the deletion time is within versioningReachabilityDeletedRuleInclusionPeriod
 // This list will be used to query visibility, and it;s
 // It is important to avoid false-negative reachability results, so we need to be sure that we
-func getUpstreamBuildIds(
+func (rc *reachabilityCalculator) getUpstreamBuildIds(
 	buildId string,
-	redirectRules []*persistencespb.RedirectRule,
 	includeRecentlyDeleted bool) []string {
-	return getUpstreamHelper(buildId, redirectRules, includeRecentlyDeleted, nil)
+	return rc.getUpstreamHelper(buildId, includeRecentlyDeleted, nil)
 }
 
-func getUpstreamHelper(
+func (rc *reachabilityCalculator) getUpstreamHelper(
 	buildId string,
-	redirectRules []*persistencespb.RedirectRule,
 	includeRecentlyDeleted bool,
 	visited []string) []string {
 	var upstream []string
 	visited = append(visited, buildId)
-	directSources := getSourcesForTarget(buildId, redirectRules, includeRecentlyDeleted)
+	directSources := rc.getSourcesForTarget(buildId, includeRecentlyDeleted)
 
 	for _, src := range directSources {
 		if !slices.Contains(visited, src) {
 			upstream = append(upstream, src)
-			upstream = append(upstream, getUpstreamHelper(src, redirectRules, includeRecentlyDeleted, visited)...)
+			upstream = append(upstream, rc.getUpstreamHelper(src, includeRecentlyDeleted, visited)...)
 		}
 	}
 
@@ -121,11 +138,12 @@ func getUpstreamHelper(
 }
 
 // getSourcesForTarget gets the first-degree sources for any redirect rule targeting buildId
-func getSourcesForTarget(buildId string, redirectRules []*persistencespb.RedirectRule, includeRecentlyDeleted bool) []string {
+func (rc *reachabilityCalculator) getSourcesForTarget(buildId string, includeRecentlyDeleted bool) []string {
 	var sources []string
-	for _, rr := range redirectRules {
+	for _, rr := range rc.redirectRules {
 		if rr.GetRule().GetTargetBuildId() == buildId &&
-			withinDeletedRuleInclusionPeriod(rr.GetDeleteTimestamp(), durationpb.New(versioningReachabilityDeletedRuleInclusionPeriod)) {
+			((!includeRecentlyDeleted && rr.GetDeleteTimestamp() == nil) ||
+				(includeRecentlyDeleted && rc.withinDeletedRuleInclusionPeriod(rr.GetDeleteTimestamp()))) {
 			sources = append(sources, rr.GetRule().GetSourceBuildId())
 		}
 	}
@@ -133,22 +151,18 @@ func getSourcesForTarget(buildId string, redirectRules []*persistencespb.Redirec
 	return sources
 }
 
-func withinDeletedRuleInclusionPeriod(clk *clock.HybridLogicalClock, period *durationpb.Duration) bool {
-	return clk == nil || (period != nil && hlc.Since(clk) <= period.AsDuration())
+func (rc *reachabilityCalculator) withinDeletedRuleInclusionPeriod(clk *clock.HybridLogicalClock) bool {
+	period := durationpb.New(versioningReachabilityDeletedRuleInclusionPeriod)
+	return clk == nil || hlc.Since(clk) <= period.AsDuration()
 }
 
-func existsBackloggedActivityOrWFTaskAssignedToAny(ctx context.Context,
-	nsID namespace.ID,
-	nsName namespace.Name,
-	taskQueue string,
-	buildIdsOfInterest []string,
-) (bool, error) {
+func (rc *reachabilityCalculator) existsBackloggedActivityOrWFTaskAssignedToAny(ctx context.Context, buildIdsOfInterest []string) (bool, error) {
 	// todo backlog
 	return false, nil
 }
 
-func isReachableActiveAssignmentRuleTarget(buildId string, assignmentRules []*persistencespb.AssignmentRule) bool {
-	for _, r := range getActiveAssignmentRules(assignmentRules) {
+func (rc *reachabilityCalculator) isReachableActiveAssignmentRuleTarget(buildId string) bool {
+	for _, r := range getActiveAssignmentRules(rc.assignmentRules) {
 		if r.GetRule().GetTargetBuildId() == buildId {
 			return true
 		}
@@ -160,38 +174,33 @@ func isReachableActiveAssignmentRuleTarget(buildId string, assignmentRules []*pe
 	return false
 }
 
-func existsWFAssignedToAny(
+func (rc *reachabilityCalculator) existsWFAssignedToAny(
 	ctx context.Context,
-	visibilityMgr manager.VisibilityManager,
 	countRequest *manager.CountWorkflowExecutionsRequest,
 ) (bool, error) {
-	countResponse, err := visibilityMgr.CountWorkflowExecutions(ctx, countRequest)
+	countResponse, err := rc.visibilityMgr.CountWorkflowExecutions(ctx, countRequest)
 	if err != nil {
 		return false, err
 	}
 	return countResponse.Count > 0, nil
 }
 
-func makeBuildIdCountRequest(
-	nsID namespace.ID,
-	nsName namespace.Name,
+func (rc *reachabilityCalculator) makeBuildIdCountRequest(
 	buildIdsOfInterest []string,
-	taskQueue string,
 	open bool,
 ) *manager.CountWorkflowExecutionsRequest {
 	return &manager.CountWorkflowExecutionsRequest{
-		NamespaceID: nsID,
-		Namespace:   nsName,
-		Query:       makeBuildIdQuery(buildIdsOfInterest, taskQueue, open),
+		NamespaceID: rc.nsID,
+		Namespace:   rc.nsName,
+		Query:       rc.makeBuildIdQuery(buildIdsOfInterest, open),
 	}
 }
 
-func makeBuildIdQuery(
+func (rc *reachabilityCalculator) makeBuildIdQuery(
 	buildIdsOfInterest []string,
-	taskQueue string,
 	open bool,
 ) string {
-	escapedTaskQueue := sqlparser.String(sqlparser.NewStrVal([]byte(taskQueue)))
+	escapedTaskQueue := sqlparser.String(sqlparser.NewStrVal([]byte(rc.taskQueue)))
 	var statusFilter string
 	var escapedBuildIds []string
 	var includeNull bool
