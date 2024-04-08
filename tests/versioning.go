@@ -3257,10 +3257,28 @@ func (s *VersioningIntegSuite) TestDescribeTaskQueueEnhanced_Versioned_BasicReac
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
-	s.addAssignmentRule(ctx, tq, "A")
+	s.getBuildIdReachability(ctx, tq, nil, map[string]enumspb.BuildIdTaskReachability{
+		"": enumspb.BUILD_ID_TASK_REACHABILITY_REACHABLE, // reachable because unversioned is default
+	},
+	)
 
-	// start workflow and worker with new default assignment rule
-	wf := func(ctx workflow.Context) (string, error) { return "ok", nil }
+	s.addAssignmentRule(ctx, tq, "A")
+	s.getBuildIdReachability(ctx, tq, &taskqueuepb.TaskQueueVersionSelection{BuildIds: []string{"", "A"}}, map[string]enumspb.BuildIdTaskReachability{
+		"A": enumspb.BUILD_ID_TASK_REACHABILITY_REACHABLE,   // reachable by assignment rule
+		"":  enumspb.BUILD_ID_TASK_REACHABILITY_UNREACHABLE, // unreachable because no longer default
+	},
+	)
+
+	// start workflow and worker with new default assignment rule "A", and wait for it to start
+	started := make(chan struct{}, 10)
+	wf := func(ctx workflow.Context) (string, error) {
+		started <- struct{}{}
+		workflow.GetSignalChannel(ctx, "wait").Receive(ctx, nil)
+		if workflow.GetInfo(ctx).Attempt == 1 {
+			return "", errors.New("try again")
+		}
+		panic("oops")
+	}
 	wId := s.randomizeStr("id")
 	w := worker.New(s.sdkClient, tq, worker.Options{
 		UseBuildIDForVersioning: true,
@@ -3270,30 +3288,38 @@ func (s *VersioningIntegSuite) TestDescribeTaskQueueEnhanced_Versioned_BasicReac
 	w.RegisterWorkflow(wf)
 	s.NoError(w.Start())
 	defer w.Stop()
-	s.getBuildIdReachability(ctx, tq, nil, map[string]enumspb.BuildIdTaskReachability{
-		"A": enumspb.BUILD_ID_TASK_REACHABILITY_REACHABLE,
-	},
-	)
+	run, err := s.sdkClient.ExecuteWorkflow(ctx, sdkclient.StartWorkflowOptions{TaskQueue: tq}, wf)
+	s.NoError(err)
+	s.waitForChan(ctx, started)
 
 	// commit a different build id --> A should now only be reachable via visibility query, B reachable as default
 	s.commitBuildId(ctx, tq, "B", true, s.getVersioningRules(ctx, tq).GetConflictToken(), true)
-
 	s.getBuildIdReachability(ctx, tq, nil, map[string]enumspb.BuildIdTaskReachability{
 		"B": enumspb.BUILD_ID_TASK_REACHABILITY_REACHABLE,
 	},
 	)
-
-	time.Sleep(time.Minute)
-
-	// todo carly: expected A to be CLOSED_WORKFLOWS_ONLY, or REACHABLE, but it is returning UNREACHABLE
-	// I tried sleeping for 1 minute to see if there was a delay in updating visibility, but it still returned unreachable.
-	// How can I make sure the started worker properly registers its workflow execution with visibility?
 	s.getBuildIdReachability(ctx, tq, &taskqueuepb.TaskQueueVersionSelection{BuildIds: []string{"A", "B"}}, map[string]enumspb.BuildIdTaskReachability{
-		"A": enumspb.BUILD_ID_TASK_REACHABILITY_UNREACHABLE, // wrong
+		"A": enumspb.BUILD_ID_TASK_REACHABILITY_REACHABLE,
 		"B": enumspb.BUILD_ID_TASK_REACHABILITY_REACHABLE,
 	},
 	)
 
+	// unblock the workflow on A and wait for it to close
+	s.NoError(s.sdkClient.SignalWorkflow(ctx, run.GetID(), "", "wait", nil))
+	s.Eventually(func() bool {
+		listResp, err := s.engine.ListClosedWorkflowExecutions(ctx, &workflowservice.ListClosedWorkflowExecutionsRequest{
+			Namespace:       s.namespace,
+			MaximumPageSize: 10,
+		})
+		s.Nil(err)
+		return len(listResp.GetExecutions()) > 0
+	}, 3*time.Second, 50*time.Millisecond)
+	// now A is only reachable by closed workflows
+	s.getBuildIdReachability(ctx, tq, &taskqueuepb.TaskQueueVersionSelection{BuildIds: []string{"A", "B"}}, map[string]enumspb.BuildIdTaskReachability{
+		"A": enumspb.BUILD_ID_TASK_REACHABILITY_CLOSED_WORKFLOWS_ONLY,
+		"B": enumspb.BUILD_ID_TASK_REACHABILITY_REACHABLE,
+	},
+	)
 }
 
 func (s *VersioningIntegSuite) TestDescribeTaskQueueEnhanced_Unversioned() {
