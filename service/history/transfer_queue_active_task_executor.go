@@ -203,7 +203,7 @@ func (t *transferQueueActiveTaskExecutor) processActivityTask(
 		return consts.ErrActivityTaskNotFound
 	}
 
-	err = CheckTaskVersion(t.shardContext, t.logger, mutableState.GetNamespaceEntry(), ai.Version, task.Version, task)
+	err = checkTaskVersion(t.shardContext, t.logger, mutableState.GetNamespaceEntry(), ai.Version, task.Version, task)
 	if err != nil {
 		return err
 	}
@@ -248,7 +248,7 @@ func (t *transferQueueActiveTaskExecutor) processWorkflowTask(
 	if workflowTask == nil {
 		return nil
 	}
-	err = CheckTaskVersion(t.shardContext, t.logger, mutableState.GetNamespaceEntry(), workflowTask.Version, transferTask.Version, transferTask)
+	err = checkTaskVersion(t.shardContext, t.logger, mutableState.GetNamespaceEntry(), workflowTask.Version, transferTask.Version, transferTask)
 	if err != nil {
 		return err
 	}
@@ -319,7 +319,7 @@ func (t *transferQueueActiveTaskExecutor) processCloseExecution(
 		if err != nil {
 			return err
 		}
-		err = CheckTaskVersion(t.shardContext, t.logger, mutableState.GetNamespaceEntry(), lastWriteVersion, task.Version, task)
+		err = checkTaskVersion(t.shardContext, t.logger, mutableState.GetNamespaceEntry(), lastWriteVersion, task.Version, task)
 		if err != nil {
 			return err
 		}
@@ -437,7 +437,7 @@ func (t *transferQueueActiveTaskExecutor) processCancelExecution(
 	if !ok {
 		return nil
 	}
-	err = CheckTaskVersion(t.shardContext, t.logger, mutableState.GetNamespaceEntry(), requestCancelInfo.Version, task.Version, task)
+	err = checkTaskVersion(t.shardContext, t.logger, mutableState.GetNamespaceEntry(), requestCancelInfo.Version, task.Version, task)
 	if err != nil {
 		return err
 	}
@@ -561,7 +561,7 @@ func (t *transferQueueActiveTaskExecutor) processSignalExecution(
 		// To do that, probably need to add the SignalRequestID in transfer task.
 		return nil
 	}
-	err = CheckTaskVersion(t.shardContext, t.logger, mutableState.GetNamespaceEntry(), signalInfo.Version, task.Version, task)
+	err = checkTaskVersion(t.shardContext, t.logger, mutableState.GetNamespaceEntry(), signalInfo.Version, task.Version, task)
 	if err != nil {
 		return err
 	}
@@ -712,7 +712,7 @@ func (t *transferQueueActiveTaskExecutor) processStartChildExecution(
 		release(nil) // release(nil) so that the mutable state is not unloaded from cache
 		return consts.ErrChildExecutionNotFound
 	}
-	err = CheckTaskVersion(t.shardContext, t.logger, mutableState.GetNamespaceEntry(), childInfo.Version, task.Version, task)
+	err = checkTaskVersion(t.shardContext, t.logger, mutableState.GetNamespaceEntry(), childInfo.Version, task.Version, task)
 	if err != nil {
 		return err
 	}
@@ -927,7 +927,7 @@ func (t *transferQueueActiveTaskExecutor) processResetWorkflow(
 		return err
 	}
 
-	err = CheckTaskVersion(t.shardContext, t.logger, currentMutableState.GetNamespaceEntry(), currentStartVersion, task.Version, task)
+	err = checkTaskVersion(t.shardContext, t.logger, currentMutableState.GetNamespaceEntry(), currentStartVersion, task.Version, task)
 	if err != nil {
 		return err
 	}
@@ -965,6 +965,7 @@ func (t *transferQueueActiveTaskExecutor) processResetWorkflow(
 			t.shardContext,
 			t.cache,
 			definition.NewWorkflowKey(task.NamespaceID, task.WorkflowID, resetPoint.GetRunId()),
+			workflow.LockPriorityLow,
 		)
 		if err != nil {
 			return err

@@ -76,6 +76,7 @@ var (
 		"ArchivalArchiveExecution":     26,
 		"StateMachineOutbound":         27,
 		"StateMachineTimer":            28,
+		"WorkflowExecutionTimeout":     29,
 	}
 )
 

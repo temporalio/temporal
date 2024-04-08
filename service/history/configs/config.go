@@ -82,6 +82,7 @@ type Config struct {
 	HistoryCacheNonUserContextLockTimeout dynamicconfig.DurationPropertyFn
 	EnableHostLevelHistoryCache           dynamicconfig.BoolPropertyFn
 	EnableMutableStateTransitionHistory   dynamicconfig.BoolPropertyFn
+	EnableWorkflowExecutionTimeoutTimer   dynamicconfig.BoolPropertyFn
 
 	// EventsCache settings
 	// Change of these configs require shard restart
@@ -392,6 +393,7 @@ func NewConfig(
 		HistoryCacheNonUserContextLockTimeout: dc.GetDurationProperty(dynamicconfig.HistoryCacheNonUserContextLockTimeout, 500*time.Millisecond),
 		EnableHostLevelHistoryCache:           dc.GetBoolProperty(dynamicconfig.EnableHostHistoryCache, false),
 		EnableMutableStateTransitionHistory:   dc.GetBoolProperty(dynamicconfig.EnableMutableStateTransitionHistory, false),
+		EnableWorkflowExecutionTimeoutTimer:   dc.GetBoolProperty(dynamicconfig.EnableWorkflowExecutionTimeoutTimer, false),
 
 		EventsShardLevelCacheMaxSizeBytes: dc.GetIntProperty(dynamicconfig.EventsCacheMaxSizeBytes, 512*1024),              // 512KB
 		EventsHostLevelCacheMaxSizeBytes:  dc.GetIntProperty(dynamicconfig.EventsHostLevelCacheMaxSizeBytes, 512*512*1024), // 256MB

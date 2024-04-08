@@ -599,6 +599,11 @@ const (
 	// The feature is used in the hierarchical state machine framework and is considered unstable as the structure may
 	// change with the pending replication design.
 	EnableMutableStateTransitionHistory = "history.enableMutableStateTransitionHistory"
+	// EnableWorkflowExecutionTimeoutTimer controls whether to enable the new logic for generating a workflow execution
+	// timeout timer when execution timeout is specified when starting a workflow.
+	// For backward compatibility, this feature is disabled by default and should only be enabled after server version
+	// containing this flag is deployed to all history service nodes in the cluster.
+	EnableWorkflowExecutionTimeoutTimer = "history.enableWorkflowExecutionTimeoutTimer"
 	// HistoryStartupMembershipJoinDelay is the duration a history instance waits
 	// before joining membership after starting.
 	HistoryStartupMembershipJoinDelay = "history.startupMembershipJoinDelay"
