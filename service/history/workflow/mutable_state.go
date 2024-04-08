@@ -217,6 +217,7 @@ type (
 		GetChildExecutionInitiatedEvent(context.Context, int64) (*historypb.HistoryEvent, error)
 		GetCompletionEvent(context.Context) (*historypb.HistoryEvent, error)
 		GetWorkflowCloseTime(ctx context.Context) (time.Time, error)
+		GetWorkflowExecutionDuration(ctx context.Context) (time.Duration, error)
 		GetWorkflowTaskByID(scheduledEventID int64) *WorkflowTaskInfo
 		GetNamespaceEntry() *namespace.Namespace
 		GetStartEvent(context.Context) (*historypb.HistoryEvent, error)
