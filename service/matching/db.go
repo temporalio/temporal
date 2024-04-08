@@ -210,6 +210,10 @@ func (db *taskQueueDB) CreateTasks(
 	db.Lock()
 	defer db.Unlock()
 
+	if len(reqs) == 0 {
+		return &persistence.CreateTasksResponse{}, nil
+	}
+
 	maxReadLevel := int64(0)
 	var tasks []*persistencespb.AllocatedTaskInfo
 	for i, req := range reqs {
@@ -220,7 +224,6 @@ func (db *taskQueueDB) CreateTasks(
 		maxReadLevel = taskIDs[i]
 	}
 
-	db.maxReadLevel = maxReadLevel
 	resp, err := db.store.CreateTasks(
 		ctx,
 		&persistence.CreateTasksRequest{
@@ -231,6 +234,9 @@ func (db *taskQueueDB) CreateTasks(
 			Tasks: tasks,
 		})
 
+	// Update the maxReadLevel after the writes are completed, but before we send the response,
+	// so that taskReader is guaranteed to see the new read level when SpoolTask wakes it up.
+	db.maxReadLevel = maxReadLevel
 	return resp, err
 }
 
