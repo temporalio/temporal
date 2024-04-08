@@ -59,8 +59,17 @@ func Invoke(
 	}
 	namespaceID := namespaceEntry.ID()
 
+	if len(req.Operations) != 2 {
+		return nil, serviceerror.NewInternal("expected exactly 2 operations")
+	}
 	startReq := req.Operations[0].GetStartWorkflow()
+	if startReq == nil {
+		return nil, serviceerror.NewInternal("expected first operation to be Start Workflow")
+	}
 	updateReq := req.Operations[1].GetUpdateWorkflow()
+	if updateReq == nil {
+		return nil, serviceerror.NewInternal("expected second operation to be Update Workflow")
+	}
 
 	// grab current Workflow lease, if there is one
 	currentWorkflowLease, err := workflowConsistencyChecker.GetWorkflowLease(
