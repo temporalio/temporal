@@ -26,6 +26,7 @@ package multioperation
 
 import (
 	"context"
+	"fmt"
 
 	commonpb "go.temporal.io/api/common/v1"
 	"go.temporal.io/api/serviceerror"
@@ -95,7 +96,7 @@ func Invoke(
 	)
 	if err != nil {
 		// TODO: send per-operation error details
-		return nil, err
+		return nil, fmt.Errorf("failed create workflow starter: %w", err)
 	}
 
 	var workflowCtx workflow.Context
@@ -116,7 +117,7 @@ func Invoke(
 	)
 	if err != nil {
 		// TODO: send per-operation error details
-		return nil, err
+		return nil, fmt.Errorf("failed to start workflow: %w", err)
 	}
 	startOpResp := &historyservice.ExecuteMultiOperationResponse_Response{
 		Response: &historyservice.ExecuteMultiOperationResponse_Response_StartWorkflow{
@@ -153,7 +154,7 @@ func Invoke(
 	updateResp, err := updater.OnSuccess(ctx)
 	if err != nil {
 		// TODO: send Update outcome failure instead
-		return nil, err
+		return nil, fmt.Errorf("failed to complete Workflow Update: %w", err)
 	}
 	return &historyservice.ExecuteMultiOperationResponse{
 		Responses: []*historyservice.ExecuteMultiOperationResponse_Response{
