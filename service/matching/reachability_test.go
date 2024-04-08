@@ -3,7 +3,10 @@ package matching
 import (
 	"context"
 	enumspb "go.temporal.io/api/enums/v1"
+	commonclock "go.temporal.io/server/common/clock"
+	hlc "go.temporal.io/server/common/clock/hybrid_logical_clock"
 	"testing"
+	"time"
 
 	"github.com/golang/mock/gomock"
 	"github.com/stretchr/testify/assert"
@@ -25,16 +28,17 @@ func TestGetUpstreamBuildIds_NoCycle(t *testing.T) {
 		|
 		5 <------ 3 <------ 4
 	*/
+	createTs := hlc.Zero(1)
 	redirectRules := []*persistencespb.RedirectRule{
-		{Rule: mkRedirectRule("1", "10")},
-		{Rule: mkRedirectRule("2", "1")},
-		{Rule: mkRedirectRule("3", "5")},
-		{Rule: mkRedirectRule("4", "3")},
-		{Rule: mkRedirectRule("5", "1")},
+		mkRedirectRulePersistence(mkRedirectRule("1", "10"), createTs, nil),
+		mkRedirectRulePersistence(mkRedirectRule("2", "1"), createTs, nil),
+		mkRedirectRulePersistence(mkRedirectRule("3", "5"), createTs, nil),
+		mkRedirectRulePersistence(mkRedirectRule("4", "3"), createTs, nil),
+		mkRedirectRulePersistence(mkRedirectRule("5", "1"), createTs, nil),
 	}
 
 	expectedUpstreamBuildIds := []string{"2", "5", "3", "4"}
-	upstreamBuildIds := getUpstreamBuildIds("1", redirectRules, nil)
+	upstreamBuildIds := getUpstreamBuildIds("1", redirectRules, true)
 
 	for _, bid := range expectedUpstreamBuildIds {
 		assert.Contains(t, upstreamBuildIds, bid)
@@ -52,15 +56,16 @@ func TestGetUpstreamBuildIds_WithCycle(t *testing.T) {
 		|         v
 		5 <------ 3 ------> 4
 	*/
+	createTs := hlc.Zero(1)
 	redirectRules := []*persistencespb.RedirectRule{
-		{Rule: mkRedirectRule("1", "2")},
-		{Rule: mkRedirectRule("2", "3")},
-		{Rule: mkRedirectRule("3", "4")},
-		{Rule: mkRedirectRule("3", "5")},
-		{Rule: mkRedirectRule("5", "1")},
+		mkRedirectRulePersistence(mkRedirectRule("1", "2"), createTs, nil),
+		mkRedirectRulePersistence(mkRedirectRule("2", "3"), createTs, nil),
+		mkRedirectRulePersistence(mkRedirectRule("3", "4"), createTs, nil),
+		mkRedirectRulePersistence(mkRedirectRule("3", "5"), createTs, nil),
+		mkRedirectRulePersistence(mkRedirectRule("5", "1"), createTs, nil),
 	}
 	expectedUpstreamBuildIds := []string{"5", "3", "2"}
-	upstreamBuildIds := getUpstreamBuildIds("1", redirectRules, nil)
+	upstreamBuildIds := getUpstreamBuildIds("1", redirectRules, true)
 	for _, bid := range expectedUpstreamBuildIds {
 		assert.Contains(t, upstreamBuildIds, bid)
 	}
@@ -75,14 +80,14 @@ func TestGetUpstreamBuildIds_WithCycle(t *testing.T) {
 		5 <------ 3 ------> 4
 	*/
 	redirectRules = []*persistencespb.RedirectRule{
-		{Rule: mkRedirectRule("2", "3")},
-		{Rule: mkRedirectRule("3", "4")},
-		{Rule: mkRedirectRule("3", "5")},
-		{Rule: mkRedirectRule("4", "2")},
-		{Rule: mkRedirectRule("5", "1")},
+		mkRedirectRulePersistence(mkRedirectRule("2", "3"), createTs, nil),
+		mkRedirectRulePersistence(mkRedirectRule("3", "4"), createTs, nil),
+		mkRedirectRulePersistence(mkRedirectRule("3", "5"), createTs, nil),
+		mkRedirectRulePersistence(mkRedirectRule("4", "2"), createTs, nil),
+		mkRedirectRulePersistence(mkRedirectRule("5", "1"), createTs, nil),
 	}
 	expectedUpstreamBuildIds = []string{"5", "3", "2", "4"}
-	upstreamBuildIds = getUpstreamBuildIds("1", redirectRules, nil)
+	upstreamBuildIds = getUpstreamBuildIds("1", redirectRules, true)
 	for _, bid := range expectedUpstreamBuildIds {
 		assert.Contains(t, upstreamBuildIds, bid)
 	}
@@ -101,16 +106,20 @@ Expect 3 and 2 are reachable, but not 1 since it is behind an unconditional rule
 */
 func TestIsReachableAssignmentRuleTarget(t *testing.T) {
 	t.Parallel()
+	createTs := hlc.Zero(1)
+	deleteTs := hlc.Next(createTs, commonclock.NewRealTimeSource())
 	assignmentRules := []*persistencespb.AssignmentRule{
-		{Rule: mkAssignmentRule("3", mkNewAssignmentPercentageRamp(50))},
-		{Rule: mkAssignmentRule("2", nil)},
-		{Rule: mkAssignmentRule("1", nil)},
+		mkAssignmentRulePersistence(mkAssignmentRule("3", mkNewAssignmentPercentageRamp(50)), createTs, nil),
+		mkAssignmentRulePersistence(mkAssignmentRule("2.5", nil), createTs, deleteTs),
+		mkAssignmentRulePersistence(mkAssignmentRule("2", nil), createTs, nil),
+		mkAssignmentRulePersistence(mkAssignmentRule("1", nil), createTs, nil),
 	}
 
-	assert.True(t, isReachableAssignmentRuleTarget("3", assignmentRules))
-	assert.True(t, isReachableAssignmentRuleTarget("2", assignmentRules))
-	assert.False(t, isReachableAssignmentRuleTarget("1", assignmentRules))
-	assert.False(t, isReachableAssignmentRuleTarget("0", assignmentRules))
+	assert.True(t, isReachableActiveAssignmentRuleTarget("3", assignmentRules))
+	assert.False(t, isReachableActiveAssignmentRuleTarget("2.5", assignmentRules))
+	assert.True(t, isReachableActiveAssignmentRuleTarget("2", assignmentRules))
+	assert.False(t, isReachableActiveAssignmentRuleTarget("1", assignmentRules))
+	assert.False(t, isReachableActiveAssignmentRuleTarget("0", assignmentRules))
 }
 
 func TestMakeBuildIdQuery(t *testing.T) {
@@ -143,8 +152,8 @@ func mkCountResponse(count int64) (*manager.CountWorkflowExecutionsResponse, err
 	}, nil
 }
 
-// nothing in assignment rules for this test
-func TestGetReachability_NoRules(t *testing.T) {
+// nothing in assignment rules for this test --> buildIdsOfInterest list will always just contain the original build id
+func TestGetReachability_WithVisibility_WithoutRules(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
 	tq := "test-reachability-tq"
@@ -155,12 +164,13 @@ func TestGetReachability_NoRules(t *testing.T) {
 	rules := &persistencespb.VersioningData{}
 
 	// 1. getReachability("") --> CLOSED_ONLY
-	// Scenario: There is 1 closed workflow in visibility, unversioned with no build id --> BuildIds == NULL
+	// Scenario:
+	//	- There is 1 closed workflow in visibility, unversioned with no build id --> BuildIds == NULL
 	// Expect no matching open workflow executions
 	reqOpen := makeBuildIdCountRequest(nsID, nsName, []string{""}, tq, true)
 	vm.EXPECT().CountWorkflowExecutions(gomock.Any(), reqOpen).AnyTimes().Return(mkCountResponse(0))
-	reqClosed := makeBuildIdCountRequest(nsID, nsName, []string{""}, tq, false)
 	// Expect yes matching closed workflow execution
+	reqClosed := makeBuildIdCountRequest(nsID, nsName, []string{""}, tq, false)
 	vm.EXPECT().CountWorkflowExecutions(gomock.Any(), reqClosed).AnyTimes().Return(mkCountResponse(1))
 	// Check reachability
 	reachability, err := getBuildIdTaskReachability(ctx, rules, vm, nsID, nsName, tq, "")
@@ -168,30 +178,134 @@ func TestGetReachability_NoRules(t *testing.T) {
 	assert.Equal(t, enumspb.BUILD_ID_TASK_REACHABILITY_CLOSED_WORKFLOWS_ONLY, reachability)
 
 	// 2. getReachability(1) --> UNREACHABLE
+	// Scenario:
+	//	- There is 1 closed workflow in visibility, unversioned with no build id --> BuildIds == NULL
+	// Expect no matching open workflow executions
+	reqOpen = makeBuildIdCountRequest(nsID, nsName, []string{"1"}, tq, true)
+	vm.EXPECT().CountWorkflowExecutions(gomock.Any(), reqOpen).AnyTimes().Return(mkCountResponse(0))
+	// Expect no matching closed workflow execution
+	reqClosed = makeBuildIdCountRequest(nsID, nsName, []string{"1"}, tq, false)
+	vm.EXPECT().CountWorkflowExecutions(gomock.Any(), reqClosed).AnyTimes().Return(mkCountResponse(0))
+	// Check reachability
+	reachability, err = getBuildIdTaskReachability(ctx, rules, vm, nsID, nsName, tq, "1")
+	assert.Nil(t, err)
+	assert.Equal(t, enumspb.BUILD_ID_TASK_REACHABILITY_UNREACHABLE, reachability)
 
-	// 3. populate mockStore with a versioned workflow assigned to build id 1
-	// now you start a versioned workflow assigned to build id 1, and it is running
-	// getReachability(1) --> REACHABLE
+	// 3. getReachability(1) --> REACHABLE
+	// Scenario:
+	//	- There is 1 closed workflow in visibility, unversioned with no build id --> BuildIds == NULL
+	//	- There is one running workflow execution assigned to build id 2
+	// Expect yes matching open workflow executions
+	reqOpen = makeBuildIdCountRequest(nsID, nsName, []string{"2"}, tq, true)
+	vm.EXPECT().CountWorkflowExecutions(gomock.Any(), reqOpen).AnyTimes().Return(mkCountResponse(1))
+	// Expect no matching closed workflow execution
+	reqClosed = makeBuildIdCountRequest(nsID, nsName, []string{"2"}, tq, false)
+	vm.EXPECT().CountWorkflowExecutions(gomock.Any(), reqClosed).AnyTimes().Return(mkCountResponse(0))
+	// Check reachability
+	reachability, err = getBuildIdTaskReachability(ctx, rules, vm, nsID, nsName, tq, "2")
+	assert.Nil(t, err)
+	assert.Equal(t, enumspb.BUILD_ID_TASK_REACHABILITY_REACHABLE, reachability)
 }
 
-// nothing in visibility for this test
-func TestGetReachability_WithActiveRules(t *testing.T) {
-	// Assignment: [ A, D ]. Redirect: (A->B), (B->C)
+// no expected calls to visibility in this test
+func TestGetReachability_WithoutVisibility_WithRules(t *testing.T) {
+	// Assignment: [ (D, 50%), (A, nil) ]
+	// Redirect: (A->B), (B->C), (F->G)
+	t.Parallel()
+	ctx := context.Background()
+	tq := "test-reachability-tq"
+	nsID := namespace.ID("test-namespace-id")
+	nsName := namespace.Name("test-namespace")
+	ctrl := gomock.NewController(t)
+	vm := manager.NewMockVisibilityManager(ctrl)
+	createTs := hlc.Zero(1)
+	rules := &persistencespb.VersioningData{
+		AssignmentRules: []*persistencespb.AssignmentRule{
+			mkAssignmentRulePersistence(mkAssignmentRule("D", mkNewAssignmentPercentageRamp(50)), createTs, nil),
+			mkAssignmentRulePersistence(mkAssignmentRule("A", nil), createTs, nil),
+		},
+		RedirectRules: []*persistencespb.RedirectRule{
+			mkRedirectRulePersistence(mkRedirectRule("A", "B"), createTs, nil),
+			mkRedirectRulePersistence(mkRedirectRule("B", "C"), createTs, nil),
+			mkRedirectRulePersistence(mkRedirectRule("F", "G"), createTs, nil),
+		},
+	}
 
-	// getReachability(A) --> unreachable (redirect rule source)
-	// getReachability(C) --> reachable (redirect rule target of reachable source)
-	// getReachability(D) --> reachable (assignment rule target)
+	// 1. getReachability(A) --> unreachable (assignment rule target, but redirect rule source)
+	reachability, err := getBuildIdTaskReachability(ctx, rules, vm, nsID, nsName, tq, "A")
+	assert.Nil(t, err)
+	assert.Equal(t, enumspb.BUILD_ID_TASK_REACHABILITY_UNREACHABLE, reachability)
+
+	// 2. getReachability(C) --> reachable (redirect rule target of reachable source)
+	reachability, err = getBuildIdTaskReachability(ctx, rules, vm, nsID, nsName, tq, "C")
+	assert.Nil(t, err)
+	assert.Equal(t, enumspb.BUILD_ID_TASK_REACHABILITY_REACHABLE, reachability)
+
+	// 3. getReachability(D) --> reachable (assignment rule target)
+	reachability, err = getBuildIdTaskReachability(ctx, rules, vm, nsID, nsName, tq, "D")
+	assert.Nil(t, err)
+	assert.Equal(t, enumspb.BUILD_ID_TASK_REACHABILITY_REACHABLE, reachability)
 }
 
-// nothing in visibility for this test
-func TestGetReachability_WithDeletedRules(t *testing.T) {
-	// recently-deleted redirect rule source --> reachable
-	// recently-deleted assignment rule target --> reachable
-	// deleted assignment rule target --> not reachable
-	// recently-deleted redirect rule target of reachable source --> reachable
-	// deleted redirect rule target of reachable source --> unreachable
+// todo: test reachability of rules that are only reachable by the buildIdsOfInterest list
+// todo: test deleted rules
+func TestGetReachability_WithVisibility_WithRules(t *testing.T) {
+	t.Skip()
+	// 1. recently-deleted redirect rule source --> reachable, we only consider active rules for that check
+	// 2. recently-deleted assignment rule target --> reachable -- how?
+	// 3. deleted assignment rule target --> unreachable
+	// 4. recently-deleted redirect rule target of assignment-rule-reachable source --> reachable -- how?
+	// 5. deleted redirect rule target of reachable source --> unreachable
 
-	// Assignment: [ (C, active), (B, recently deleted), (A, deleted) ]. Redirect: (A->B, active), (C->B, recently deleted)
+	// Assignment: [ (D, 50%, active), (C, 50%, recently deleted), (B, nil, deleted),  (A, nil, active) ]
+	// Redirect: (B->C, active), (D->C, recently deleted)
+	t.Parallel()
+	ctx := context.Background()
+	tq := "test-reachability-tq"
+	nsID := namespace.ID("test-namespace-id")
+	nsName := namespace.Name("test-namespace")
+	ctrl := gomock.NewController(t)
+	vm := manager.NewMockVisibilityManager(ctrl) // no EXPECT() on this, because it shouldn't get used
+	// start time one hour ago
+	timesource := commonclock.NewEventTimeSource().Update(time.Now().Add(-1 * time.Hour))
+	clock1HourAgo := hlc.Next(hlc.Zero(1), timesource)
+	timesource.Advance(30 * time.Minute)
+	clock30MinAgo := hlc.Next(clock1HourAgo, timesource)
+	timesource.Advance(25 * time.Minute)
+	clock5MinAgo := hlc.Next(clock30MinAgo, timesource)
+	rules := &persistencespb.VersioningData{
+		AssignmentRules: []*persistencespb.AssignmentRule{
+			mkAssignmentRulePersistence(mkAssignmentRule("D", mkNewAssignmentPercentageRamp(50)), clock1HourAgo, nil),
+			mkAssignmentRulePersistence(mkAssignmentRule("C", mkNewAssignmentPercentageRamp(50)), clock1HourAgo, clock5MinAgo),
+			mkAssignmentRulePersistence(mkAssignmentRule("B", nil), clock1HourAgo, clock30MinAgo),
+			mkAssignmentRulePersistence(mkAssignmentRule("A", nil), clock1HourAgo, nil),
+		},
+		RedirectRules: []*persistencespb.RedirectRule{
+			mkRedirectRulePersistence(mkRedirectRule("A", "B"), clock1HourAgo, nil),
+			mkRedirectRulePersistence(mkRedirectRule("B", "C"), clock1HourAgo, clock5MinAgo),
+		},
+	}
+
+	// 1. getReachability(A) --> unreachable (assignment rule target, but redirect rule source)
+	reachability, err := getBuildIdTaskReachability(ctx, rules, vm, nsID, nsName, tq, "A")
+	assert.Nil(t, err)
+	assert.Equal(t, enumspb.BUILD_ID_TASK_REACHABILITY_UNREACHABLE, reachability)
+
+	// 2. getReachability(C) --> reachable (redirect rule target of reachable source)
+	reachability, err = getBuildIdTaskReachability(ctx, rules, vm, nsID, nsName, tq, "C")
+	assert.Nil(t, err)
+	assert.Equal(t, enumspb.BUILD_ID_TASK_REACHABILITY_REACHABLE, reachability)
+
+	// 3. getReachability(D) --> reachable (assignment rule target)
+	reachability, err = getBuildIdTaskReachability(ctx, rules, vm, nsID, nsName, tq, "D")
+	assert.Nil(t, err)
+	assert.Equal(t, enumspb.BUILD_ID_TASK_REACHABILITY_REACHABLE, reachability)
+
+	// scenarios that require visibility
+	// 3. getReachability(G) --> unreachable (redirect rule target of unreachable source)
+	reachability, err = getBuildIdTaskReachability(ctx, rules, vm, nsID, nsName, tq, "G")
+	assert.Nil(t, err)
+	assert.Equal(t, enumspb.BUILD_ID_TASK_REACHABILITY_UNREACHABLE, reachability)
 
 	// todo
 	// getReachability(A) --> unreachable (active redirect rule source)

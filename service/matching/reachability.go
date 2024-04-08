@@ -3,7 +3,10 @@ package matching
 import (
 	"context"
 	"fmt"
+	"go.temporal.io/server/api/clock/v1"
+	hlc "go.temporal.io/server/common/clock/hybrid_logical_clock"
 	"golang.org/x/exp/slices"
+	"google.golang.org/protobuf/types/known/durationpb"
 	"strings"
 
 	"github.com/temporalio/sqlparser"
@@ -29,18 +32,17 @@ func getBuildIdTaskReachability(
 	redirectRules := data.GetRedirectRules()
 
 	// 1. Easy UNREACHABLE case
-	if isRedirectRuleSource(buildId, redirectRules) {
+	if isActiveRedirectRuleSource(buildId, redirectRules) {
 		return enumspb.BUILD_ID_TASK_REACHABILITY_UNREACHABLE, nil
 	}
 
-	// Gather list of all build ids that could point to buildId -> upstreamBuildIds
-	upstreamBuildIds := getUpstreamBuildIds(buildId, redirectRules, nil)
-	buildIdsOfInterest := append(upstreamBuildIds, buildId)
+	// Gather list of all build ids that could point to buildId
+	buildIdsOfInterest := append(getUpstreamBuildIds(buildId, redirectRules, false), buildId)
 
 	// 2. Cases for REACHABLE
 	// 2a. If buildId is assignable to new tasks
 	for _, bid := range buildIdsOfInterest {
-		if isReachableAssignmentRuleTarget(bid, assignmentRules) {
+		if isReachableActiveAssignmentRuleTarget(bid, assignmentRules) {
 			return enumspb.BUILD_ID_TASK_REACHABILITY_REACHABLE, nil
 		}
 	}
@@ -53,6 +55,9 @@ func getBuildIdTaskReachability(
 	}
 
 	// Note: The below cases are not applicable to activity-only task queues, since we don't record those in visibility
+
+	// Gather list of all build ids that could point to buildId, now including deleted rules to account for the delay in updating visibility
+	buildIdsOfInterest = append(getUpstreamBuildIds(buildId, redirectRules, true), buildId)
 
 	// 2c. If buildId is assignable to tasks from open workflows
 	existsOpenWFAssignedToBuildId, err := existsWFAssignedToAny(ctx, visibilityMgr, makeBuildIdCountRequest(nsID, nsName, buildIdsOfInterest, taskQueue, true))
@@ -76,18 +81,30 @@ func getBuildIdTaskReachability(
 	return enumspb.BUILD_ID_TASK_REACHABILITY_UNREACHABLE, nil
 }
 
+// getUpstreamBuildIds returns a list of build ids that point to the given buildId in the graph of redirect rules.
+// It considers rules if the deletion time is within versioningReachabilityDeletedRuleInclusionPeriod
+// This list will be used to query visibility, and it;s
+// It is important to avoid false-negative reachability results, so we need to be sure that we
 func getUpstreamBuildIds(
 	buildId string,
 	redirectRules []*persistencespb.RedirectRule,
+	includeRecentlyDeleted bool) []string {
+	return getUpstreamHelper(buildId, redirectRules, includeRecentlyDeleted, nil)
+}
+
+func getUpstreamHelper(
+	buildId string,
+	redirectRules []*persistencespb.RedirectRule,
+	includeRecentlyDeleted bool,
 	visited []string) []string {
 	var upstream []string
 	visited = append(visited, buildId)
-	directSources := getSourcesForTarget(buildId, redirectRules)
+	directSources := getSourcesForTarget(buildId, redirectRules, includeRecentlyDeleted)
 
 	for _, src := range directSources {
 		if !slices.Contains(visited, src) {
 			upstream = append(upstream, src)
-			upstream = append(upstream, getUpstreamBuildIds(src, redirectRules, visited)...)
+			upstream = append(upstream, getUpstreamHelper(src, redirectRules, includeRecentlyDeleted, visited)...)
 		}
 	}
 
@@ -104,15 +121,20 @@ func getUpstreamBuildIds(
 }
 
 // getSourcesForTarget gets the first-degree sources for any redirect rule targeting buildId
-func getSourcesForTarget(buildId string, redirectRules []*persistencespb.RedirectRule) []string {
+func getSourcesForTarget(buildId string, redirectRules []*persistencespb.RedirectRule, includeRecentlyDeleted bool) []string {
 	var sources []string
 	for _, rr := range redirectRules {
-		if rr.GetRule().GetTargetBuildId() == buildId {
+		if rr.GetRule().GetTargetBuildId() == buildId &&
+			withinDeletedRuleInclusionPeriod(rr.GetDeleteTimestamp(), durationpb.New(versioningReachabilityDeletedRuleInclusionPeriod)) {
 			sources = append(sources, rr.GetRule().GetSourceBuildId())
 		}
 	}
 
 	return sources
+}
+
+func withinDeletedRuleInclusionPeriod(clk *clock.HybridLogicalClock, period *durationpb.Duration) bool {
+	return clk == nil || (period != nil && hlc.Since(clk) <= period.AsDuration())
 }
 
 func existsBackloggedActivityOrWFTaskAssignedToAny(ctx context.Context,
@@ -125,8 +147,8 @@ func existsBackloggedActivityOrWFTaskAssignedToAny(ctx context.Context,
 	return false, nil
 }
 
-func isReachableAssignmentRuleTarget(buildId string, assignmentRules []*persistencespb.AssignmentRule) bool {
-	for _, r := range assignmentRules {
+func isReachableActiveAssignmentRuleTarget(buildId string, assignmentRules []*persistencespb.AssignmentRule) bool {
+	for _, r := range getActiveAssignmentRules(assignmentRules) {
 		if r.GetRule().GetTargetBuildId() == buildId {
 			return true
 		}

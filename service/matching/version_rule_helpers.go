@@ -34,9 +34,6 @@ import (
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/api/taskqueue/v1"
 	"go.temporal.io/api/workflowservice/v1"
-	"google.golang.org/protobuf/types/known/durationpb"
-
-	"go.temporal.io/server/api/clock/v1"
 	"go.temporal.io/server/api/matchingservice/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common"
@@ -70,7 +67,7 @@ func InsertAssignmentRule(timestamp *hlc.Clock,
 		return nil, serviceerror.NewFailedPrecondition(
 			"update breaks requirement, target build id is already a member of a version set")
 	}
-	if rule.GetRamp() != nil && isRedirectRuleSource(target, data.GetRedirectRules()) {
+	if rule.GetRamp() != nil && isActiveRedirectRuleSource(target, data.GetRedirectRules()) {
 		return nil, serviceerror.NewFailedPrecondition(
 			"update breaks requirement, this target build id cannot have a ramp because it is the source of a redirect rule")
 	}
@@ -104,7 +101,7 @@ func ReplaceAssignmentRule(timestamp *hlc.Clock,
 		return nil, serviceerror.NewFailedPrecondition(
 			"update breaks requirement, target build id is already a member of a version set")
 	}
-	if rule.GetRamp() != nil && isRedirectRuleSource(target, data.GetRedirectRules()) {
+	if rule.GetRamp() != nil && isActiveRedirectRuleSource(target, data.GetRedirectRules()) {
 		return nil, serviceerror.NewFailedPrecondition(
 			"update breaks requirement, this target build id cannot have a ramp because it is the source of a redirect rule")
 	}
@@ -322,10 +319,6 @@ func GetWorkerVersioningRules(
 	}, nil
 }
 
-func withinDeletedRuleInclusionPeriod(clk *clock.HybridLogicalClock, period *durationpb.Duration) bool {
-	return period != nil && hlc.Since(clk) <= period.AsDuration()
-}
-
 // checkAssignmentConditions checks for validity conditions that must be assessed by looking at the entire set of rules.
 // It returns an error if the new set of assignment rules don't meet the following requirements:
 // - No more rules than dynamicconfig.VersionAssignmentRuleLimitPerQueue
@@ -369,7 +362,7 @@ func getActiveRedirectRules(rules []*persistencespb.RedirectRule) []*persistence
 	})
 }
 
-func isRedirectRuleSource(buildID string, redirectRules []*persistencespb.RedirectRule) bool {
+func isActiveRedirectRuleSource(buildID string, redirectRules []*persistencespb.RedirectRule) bool {
 	for _, r := range getActiveRedirectRules(redirectRules) {
 		if buildID == r.GetRule().GetSourceBuildId() {
 			return true
