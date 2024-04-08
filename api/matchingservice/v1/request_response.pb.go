@@ -1355,13 +1355,9 @@ type DescribeTaskQueuePartitionRequest struct {
 	sizeCache     protoimpl.SizeCache
 	unknownFields protoimpl.UnknownFields
 
-	NamespaceId        string                  `protobuf:"bytes,1,opt,name=namespace_id,json=namespaceId,proto3" json:"namespace_id,omitempty"`
-	TaskQueuePartition *v19.TaskQueuePartition `protobuf:"bytes,2,opt,name=task_queue_partition,json=taskQueuePartition,proto3" json:"task_queue_partition,omitempty"`
-	// If not provided, the result for the default Build ID will be returned. The default Build ID is the one
-	// mentioned in the first unconditional Assignment Rule. If there is no default Build ID, the result for the
-	// unversioned queue will be returned.
-	// (-- api-linter: core::0140::prepositions --)
-	Versions *v14.TaskQueueVersionSelection `protobuf:"bytes,3,opt,name=versions,proto3" json:"versions,omitempty"`
+	NamespaceId        string                         `protobuf:"bytes,1,opt,name=namespace_id,json=namespaceId,proto3" json:"namespace_id,omitempty"`
+	TaskQueuePartition *v19.TaskQueuePartition        `protobuf:"bytes,2,opt,name=task_queue_partition,json=taskQueuePartition,proto3" json:"task_queue_partition,omitempty"`
+	Versions           *v14.TaskQueueVersionSelection `protobuf:"bytes,3,opt,name=versions,proto3" json:"versions,omitempty"`
 	// Report backlog info for the requested task queue types and versions
 	ReportBacklogInfo bool `protobuf:"varint,4,opt,name=report_backlog_info,json=reportBacklogInfo,proto3" json:"report_backlog_info,omitempty"`
 	// Report list of pollers for requested task queue types and versions

@@ -241,3 +241,15 @@ func (rc *reachabilityCalculator) makeBuildIdQuery(
 	}
 	return fmt.Sprintf("%s = %s AND %s%s", searchattribute.TaskQueue, escapedTaskQueue, buildIdsFilter, statusFilter)
 }
+
+// getDefaultBuildId gets the build id mentioned in the first unconditional Assignment Rule.
+// If there is no default Build ID, the result for the unversioned queue will be returned.
+// This should only be called on the root.
+func getDefaultBuildId(assignmentRules []*persistencespb.AssignmentRule) string {
+	for _, ar := range getActiveAssignmentRules(assignmentRules) {
+		if isUnconditional(ar.GetRule()) {
+			return ar.GetRule().GetTargetBuildId()
+		}
+	}
+	return ""
+}

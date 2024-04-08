@@ -129,6 +129,21 @@ func TestIsReachableAssignmentRuleTarget(t *testing.T) {
 	assert.False(t, rc.isReachableActiveAssignmentRuleTarget("0"))
 }
 
+func TestGetDefaultBuildId(t *testing.T) {
+	t.Parallel()
+	assert.Equal(t, "", getDefaultBuildId([]*persistencespb.AssignmentRule{}))
+
+	createTs := hlc.Zero(1)
+	deleteTs := hlc.Next(createTs, commonclock.NewRealTimeSource())
+	assignmentRules := []*persistencespb.AssignmentRule{
+		mkAssignmentRulePersistence(mkAssignmentRule("3", mkNewAssignmentPercentageRamp(50)), createTs, nil),
+		mkAssignmentRulePersistence(mkAssignmentRule("2.5", nil), createTs, deleteTs),
+		mkAssignmentRulePersistence(mkAssignmentRule("2", nil), createTs, nil),
+		mkAssignmentRulePersistence(mkAssignmentRule("1", nil), createTs, nil),
+	}
+	assert.Equal(t, "2", getDefaultBuildId(assignmentRules))
+}
+
 func TestMakeBuildIdQuery(t *testing.T) {
 	t.Parallel()
 	rc := &reachabilityCalculator{

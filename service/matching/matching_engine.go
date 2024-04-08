@@ -800,6 +800,19 @@ func (e *matchingEngineImpl) DescribeTaskQueue(
 		if !rootPartition.IsRoot() || rootPartition.Kind() == enumspb.TASK_QUEUE_KIND_STICKY || rootPartition.TaskType() != enumspb.TASK_QUEUE_TYPE_WORKFLOW {
 			return nil, serviceerror.NewInvalidArgument("DescribeTaskQueue must be called on the root partition if api mode is DESCRIBE_TASK_QUEUE_MODE_ENHANCED")
 		}
+		rootPartitionMgr, err := e.getTaskQueuePartitionManager(ctx, rootPartition, true)
+		if err != nil {
+			return nil, err
+		}
+		userData, _, err := rootPartitionMgr.GetUserDataManager().GetUserData()
+		if err != nil {
+			return nil, err
+		}
+		rootVersioningData := userData.GetData().GetVersioningData()
+		if req.GetVersions() == nil {
+			defaultBuildId := getDefaultBuildId(rootVersioningData.GetAssignmentRules())
+			req.Versions = &taskqueuepb.TaskQueueVersionSelection{BuildIds: []string{defaultBuildId}}
+		}
 
 		// collect internal info
 		physicalInfoByBuildId := make(map[string]map[enumspb.TaskQueueType]*taskqueuespb.PhysicalTaskQueueInfo)
@@ -849,16 +862,8 @@ func (e *matchingEngineImpl) DescribeTaskQueue(
 					Pollers: physicalInfo.Pollers,
 				})
 			}
-			rootPartitionMgr, err := e.getTaskQueuePartitionManager(ctx, rootPartition, true)
-			if err != nil {
-				return nil, err
-			}
-			userData, _, err := rootPartitionMgr.GetUserDataManager().GetUserData()
-			if err != nil {
-				return nil, err
-			}
 			reachability, err := getBuildIdTaskReachability(ctx,
-				userData.GetData().GetVersioningData(),
+				rootVersioningData,
 				e.visibilityManager,
 				request.GetNamespaceId(),
 				req.GetNamespace(),
@@ -896,20 +901,21 @@ func (e *matchingEngineImpl) DescribeTaskQueuePartition(
 	ctx context.Context,
 	request *matchingservice.DescribeTaskQueuePartitionRequest,
 ) (*matchingservice.DescribeTaskQueuePartitionResponse, error) {
+	if request.GetVersions() == nil {
+		return nil, serviceerror.NewInvalidArgument("versions must not be nil, to describe the default queue, pass the default build id as a member of the BuildIds list")
+	}
 	pm, err := e.getTaskQueuePartitionManager(ctx, tqid.PartitionFromPartitionProto(request.GetTaskQueuePartition(), request.GetNamespaceId()), true)
 	if err != nil {
 		return nil, err
 	}
-	buildIds, err := e.getBuildIds(request.GetVersions(), pm)
+	buildIds, err := e.getBuildIds(request.GetVersions())
 	if err != nil {
 		return nil, err
 	}
 	return pm.Describe(buildIds, request.GetVersions().GetAllActive(), request.GetReportBacklogInfo(), request.GetReportPollers())
 }
 
-func (e *matchingEngineImpl) getBuildIds(
-	versions *taskqueuepb.TaskQueueVersionSelection,
-	tqMgr taskQueuePartitionManager) (map[string]bool, error) {
+func (e *matchingEngineImpl) getBuildIds(versions *taskqueuepb.TaskQueueVersionSelection) (map[string]bool, error) {
 	buildIds := make(map[string]bool)
 	if versions != nil {
 		for _, bid := range versions.GetBuildIds() {
@@ -918,29 +924,8 @@ func (e *matchingEngineImpl) getBuildIds(
 		if versions.GetUnversioned() {
 			buildIds[""] = true
 		}
-	} else {
-		defaultBuildId, err := e.getDefaultBuildId(tqMgr)
-		if err != nil {
-			return nil, err
-		}
-		buildIds[defaultBuildId] = true
 	}
 	return buildIds, nil
-}
-
-// getDefaultBuildId gets the build id mentioned in the first unconditional Assignment Rule.
-// If there is no default Build ID, the result for the unversioned queue will be returned.
-func (e *matchingEngineImpl) getDefaultBuildId(tqMgr taskQueuePartitionManager) (string, error) {
-	resp, err := e.getWorkerVersioningRules(tqMgr)
-	if err != nil {
-		return "", err
-	}
-	for _, ar := range resp.GetResponse().GetAssignmentRules() {
-		if isUnconditional(ar.GetRule()) {
-			return ar.GetRule().GetTargetBuildId(), nil
-		}
-	}
-	return "", nil
 }
 
 func (e *matchingEngineImpl) ListTaskQueuePartitions(
