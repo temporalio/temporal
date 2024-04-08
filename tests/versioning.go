@@ -3252,6 +3252,61 @@ func (s *VersioningIntegSuite) validateBuildIdAfterReset(ctx context.Context, wf
 	s.validateWorkflowEventsVersionStamps(ctx, run3.GetID(), run3.GetRunID(), []string{v1, v1, v1}, inheritedBuildId)
 }
 
+func (s *VersioningIntegSuite) TestDescribeTaskQueueEnhanced_Versioned_BasicReachability() {
+	tq := s.randomizeStr(s.T().Name())
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+
+	s.addAssignmentRule(ctx, tq, "A")
+
+	// start workflow and worker with new default assignment rule
+	wf := func(ctx workflow.Context) (string, error) { return "ok", nil }
+	wId := s.randomizeStr("id")
+	w := worker.New(s.sdkClient, tq, worker.Options{
+		UseBuildIDForVersioning: true,
+		BuildID:                 "A",
+		Identity:                wId,
+	})
+	w.RegisterWorkflow(wf)
+	s.NoError(w.Start())
+	defer w.Stop()
+
+	expectedReachability := map[string]enumspb.BuildIdTaskReachability{"A": enumspb.BUILD_ID_TASK_REACHABILITY_REACHABLE}
+
+	s.getBuildIdReachability(ctx, tq, nil, expectedReachability)
+
+}
+
+func (s *VersioningIntegSuite) getBuildIdReachability(
+	ctx context.Context,
+	taskQueue string,
+	versions *taskqueuepb.TaskQueueVersionSelection,
+	expectedReachability map[string]enumspb.BuildIdTaskReachability) {
+	s.Eventually(func() bool {
+		resp, err := s.engine.DescribeTaskQueue(ctx, &workflowservice.DescribeTaskQueueRequest{
+			Namespace:              s.namespace,
+			TaskQueue:              &taskqueuepb.TaskQueue{Name: taskQueue, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
+			ApiMode:                enumspb.DESCRIBE_TASK_QUEUE_MODE_ENHANCED,
+			Versions:               versions,
+			TaskQueueTypes:         nil, // both types
+			ReportPollers:          false,
+			ReportTaskReachability: true,
+		})
+		s.NoError(err)
+		s.NotNil(resp)
+		allTrue := true
+		asExpected := false
+		for _, vi := range resp.GetVersionsInfo() {
+			asExpected = expectedReachability[vi.GetBuildId()] == vi.GetTaskReachability()
+			if allTrue {
+				allTrue = asExpected
+			}
+		}
+		return allTrue
+	}, 3*time.Second, 50*time.Millisecond)
+
+}
+
 func (s *VersioningIntegSuite) TestDescribeTaskQueueEnhanced_Unversioned() {
 	tq := s.randomizeStr(s.T().Name())
 	wf := func(ctx workflow.Context) (string, error) { return "ok", nil }
@@ -3286,7 +3341,7 @@ func (s *VersioningIntegSuite) TestDescribeTaskQueueEnhanced_Unversioned() {
 		s.NotNil(resp)
 		s.Assert().Equal(1, len(resp.GetVersionsInfo()), "should be 1 because only default/unversioned queue")
 		versionInfo := resp.GetVersionsInfo()[0]
-		s.Assert().Equal(enumspb.BUILD_ID_TASK_REACHABILITY_REACHABLE, versionInfo.GetTaskReachability(), "not yet implemented")
+		s.Assert().Equal(enumspb.BUILD_ID_TASK_REACHABILITY_REACHABLE, versionInfo.GetTaskReachability())
 		var pollersInfo []*taskqueuepb.PollerInfo
 		for _, t := range versionInfo.GetTypesInfo() {
 			pollersInfo = append(pollersInfo, t.GetPollers()...)
