@@ -35,15 +35,13 @@ import (
 	"time"
 
 	"github.com/pborman/uuid"
-	"go.temporal.io/server/common/tqid"
-	"google.golang.org/protobuf/types/known/timestamppb"
-
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/history/v1"
 	"go.temporal.io/api/serviceerror"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	"go.temporal.io/api/workflowservice/v1"
+	"google.golang.org/protobuf/types/known/timestamppb"
 
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	"go.temporal.io/server/api/historyservice/v1"
@@ -69,6 +67,7 @@ import (
 	"go.temporal.io/server/common/resource"
 	serviceerrors "go.temporal.io/server/common/serviceerror"
 	"go.temporal.io/server/common/tasktoken"
+	"go.temporal.io/server/common/tqid"
 	"go.temporal.io/server/common/worker_versioning"
 )
 
@@ -799,8 +798,7 @@ func (e *matchingEngineImpl) DescribeTaskQueue(
 			return nil, err
 		}
 		if !rootPartition.IsRoot() || rootPartition.Kind() == enumspb.TASK_QUEUE_KIND_STICKY || rootPartition.TaskType() != enumspb.TASK_QUEUE_TYPE_WORKFLOW {
-			return nil, serviceerror.NewInvalidArgument("DescribeTaskQueue must be called on the root partition in enhanced mode")
-			// todo: write error
+			return nil, serviceerror.NewInvalidArgument("DescribeTaskQueue must be called on the root partition if api mode is DESCRIBE_TASK_QUEUE_MODE_ENHANCED")
 		}
 
 		// collect internal info

@@ -34,6 +34,7 @@ import (
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/api/taskqueue/v1"
 	"go.temporal.io/api/workflowservice/v1"
+
 	"go.temporal.io/server/api/matchingservice/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common"
@@ -364,15 +365,6 @@ func getActiveRedirectRules(rules []*persistencespb.RedirectRule) []*persistence
 
 func isActiveRedirectRuleSource(buildID string, redirectRules []*persistencespb.RedirectRule) bool {
 	for _, r := range getActiveRedirectRules(redirectRules) {
-		if buildID == r.GetRule().GetSourceBuildId() {
-			return true
-		}
-	}
-	return false
-}
-
-func isTimestampedRedirectRuleSource(buildID string, redirectRules []*taskqueue.TimestampedCompatibleBuildIdRedirectRule) bool {
-	for _, r := range redirectRules {
 		if buildID == r.GetRule().GetSourceBuildId() {
 			return true
 		}

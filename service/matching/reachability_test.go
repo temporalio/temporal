@@ -2,15 +2,16 @@ package matching
 
 import (
 	"context"
-	enumspb "go.temporal.io/api/enums/v1"
-	commonclock "go.temporal.io/server/common/clock"
-	hlc "go.temporal.io/server/common/clock/hybrid_logical_clock"
 	"testing"
 	"time"
 
 	"github.com/golang/mock/gomock"
 	"github.com/stretchr/testify/assert"
+	enumspb "go.temporal.io/api/enums/v1"
+
 	persistencespb "go.temporal.io/server/api/persistence/v1"
+	commonclock "go.temporal.io/server/common/clock"
+	hlc "go.temporal.io/server/common/clock/hybrid_logical_clock"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence/visibility/manager"
 )

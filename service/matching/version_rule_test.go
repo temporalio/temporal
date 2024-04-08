@@ -33,6 +33,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	"go.temporal.io/api/workflowservice/v1"
+
 	persistencepb "go.temporal.io/server/api/persistence/v1"
 	commonclock "go.temporal.io/server/common/clock"
 	hlc "go.temporal.io/server/common/clock/hybrid_logical_clock"
@@ -1005,4 +1006,37 @@ func TestCommitBuildIDMaxAssignmentRules(t *testing.T) {
 	// commit a new target, no rules to be deleted --> fail
 	_, err = CommitBuildID(clock2, data, mkNewCommitBuildIdReq("1000", false), false, maxRules)
 	assert.Error(t, err)
+}
+
+/*
+e.g.
+Redirect Rules:
+1 ------> 2
+^         |
+|         v
+5 <------ 3 ------> 4
+*/
+func TestIsCycle(t *testing.T) {
+	rules := []*persistencepb.RedirectRule{
+		{Rule: &taskqueuepb.CompatibleBuildIdRedirectRule{SourceBuildId: "1", TargetBuildId: "2"}},
+		{Rule: &taskqueuepb.CompatibleBuildIdRedirectRule{SourceBuildId: "5", TargetBuildId: "1"}},
+		{Rule: &taskqueuepb.CompatibleBuildIdRedirectRule{SourceBuildId: "3", TargetBuildId: "4"}},
+		{Rule: &taskqueuepb.CompatibleBuildIdRedirectRule{SourceBuildId: "3", TargetBuildId: "5"}},
+		{Rule: &taskqueuepb.CompatibleBuildIdRedirectRule{SourceBuildId: "2", TargetBuildId: "3"}},
+	}
+	if !isCyclic(rules) {
+		t.Fail()
+	}
+
+	rules = slices.Delete(rules, 3, 4)
+	if isCyclic(rules) {
+		t.Fail()
+	}
+
+	rules = append(rules, &persistencepb.RedirectRule{
+		Rule: &taskqueuepb.CompatibleBuildIdRedirectRule{SourceBuildId: "4", TargetBuildId: "2"},
+	})
+	if !isCyclic(rules) {
+		t.Fail()
+	}
 }

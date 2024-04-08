@@ -25,7 +25,6 @@
 package matching
 
 import (
-	"slices"
 	"strconv"
 	"testing"
 
@@ -111,41 +110,4 @@ func createAssignmentRuleWithRamp(buildId string, ramp float32) *persistencespb.
 		TargetBuildId: buildId,
 		Ramp:          mkNewAssignmentPercentageRamp(ramp),
 	}}
-}
-
-func TestIsTimestampedRedirectRuleSource(t *testing.T) {
-	t.Parallel()
-}
-
-/*
-e.g.
-Redirect Rules:
-1 ------> 2
-^         |
-|         v
-5 <------ 3 ------> 4
-*/
-func TestIsCycle(t *testing.T) {
-	rules := []*persistencespb.RedirectRule{
-		{Rule: &taskqueuepb.CompatibleBuildIdRedirectRule{SourceBuildId: "1", TargetBuildId: "2"}},
-		{Rule: &taskqueuepb.CompatibleBuildIdRedirectRule{SourceBuildId: "5", TargetBuildId: "1"}},
-		{Rule: &taskqueuepb.CompatibleBuildIdRedirectRule{SourceBuildId: "3", TargetBuildId: "4"}},
-		{Rule: &taskqueuepb.CompatibleBuildIdRedirectRule{SourceBuildId: "3", TargetBuildId: "5"}},
-		{Rule: &taskqueuepb.CompatibleBuildIdRedirectRule{SourceBuildId: "2", TargetBuildId: "3"}},
-	}
-	if !isCyclic(rules) {
-		t.Fail()
-	}
-
-	rules = slices.Delete(rules, 3, 4)
-	if isCyclic(rules) {
-		t.Fail()
-	}
-
-	rules = append(rules, &persistencespb.RedirectRule{
-		Rule: &taskqueuepb.CompatibleBuildIdRedirectRule{SourceBuildId: "4", TargetBuildId: "2"},
-	})
-	if !isCyclic(rules) {
-		t.Fail()
-	}
 }
