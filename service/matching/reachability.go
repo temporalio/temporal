@@ -64,7 +64,7 @@ func (rc *reachabilityCalculator) getReachability(ctx context.Context, buildId s
 	// 2. Cases for REACHABLE
 	// 2a. If buildId is assignable to new tasks
 	for _, bid := range buildIdsOfInterest {
-		if rc.isReachableActiveAssignmentRuleTarget(bid) {
+		if rc.isReachableActiveAssignmentRuleTargetOrDefault(bid) {
 			return enumspb.BUILD_ID_TASK_REACHABILITY_REACHABLE, nil
 		}
 	}
@@ -163,15 +163,21 @@ func (rc *reachabilityCalculator) existsBackloggedActivityOrWFTaskAssignedToAny(
 	return false, nil
 }
 
-func (rc *reachabilityCalculator) isReachableActiveAssignmentRuleTarget(buildId string) bool {
+func (rc *reachabilityCalculator) isReachableActiveAssignmentRuleTargetOrDefault(buildId string) bool {
+	foundUnconditionalRule := false
 	for _, r := range getActiveAssignmentRules(rc.assignmentRules) {
 		if r.GetRule().GetTargetBuildId() == buildId {
 			return true
 		}
 		if r.GetRule().GetPercentageRamp() == nil {
 			// rules after an unconditional rule will not be reached
+			foundUnconditionalRule = true
 			break
 		}
+	}
+	if !foundUnconditionalRule && buildId == "" {
+		// unversioned is the default, and is reachable
+		return true
 	}
 	return false
 }
