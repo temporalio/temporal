@@ -157,7 +157,7 @@ func (s *storageWrapper) Query(ctx context.Context, URI archiver.URI, fileNamePr
 
 }
 
-// QueryWithFilter, retieves filenames that match filter parameters. PageSize is optional, 0 means all records.
+// QueryWithFilters, retieves filenames that match filter parameters. PageSize is optional, 0 means all records.
 func (s *storageWrapper) QueryWithFilters(ctx context.Context, URI archiver.URI, fileNamePrefix string, pageSize, offset int, filters []Precondition) ([]string, bool, int, error) {
 	var err error
 	currentPos := offset

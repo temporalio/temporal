@@ -370,12 +370,12 @@ func (c *lru) deleteInternal(element *list.Element) {
 	delete(c.byKey, entry.key)
 }
 
-// tryEvictUntilSizeUnderLimit tries to evict entries until c.currSize is less than c.maxSize.
+// tryEvictUntilCacheSizeUnderLimit tries to evict entries until c.currSize is less than c.maxSize.
 func (c *lru) tryEvictUntilCacheSizeUnderLimit() {
 	c.tryEvictUntilEnoughSpaceWithSkipEntry(0, nil)
 }
 
-// tryEvictUntilEnoughSpace try to evict entries until there is enough space for the new entry without
+// tryEvictUntilEnoughSpaceWithSkipEntry try to evict entries until there is enough space for the new entry without
 // evicting the existing entry. the existing entry is skipped because it is being updated.
 func (c *lru) tryEvictUntilEnoughSpaceWithSkipEntry(newEntrySize int, existingEntry *entryImpl) {
 	element := c.byAccess.Back()

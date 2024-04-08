@@ -321,7 +321,7 @@ func (r *registry) GetNamespace(name Name) (*Namespace, error) {
 	return r.getOrReadthroughNamespace(name)
 }
 
-// GetNamespaceByIDWithOptions retrieves a namespace entry by name, with behavior controlled by options.
+// GetNamespaceWithOptions retrieves a namespace entry by name, with behavior controlled by options.
 func (r *registry) GetNamespaceWithOptions(name Name, opts GetNamespaceOptions) (*Namespace, error) {
 	if name == "" {
 		return nil, serviceerror.NewInvalidArgument("Namespace is empty.")

@@ -174,7 +174,7 @@ func WorkflowTaskTimeoutSeconds(s int64) ZapTag {
 	return NewInt64("workflow-task-timeout", s)
 }
 
-// WorkflowTaskTimeoutSeconds returns tag for WorkflowTaskTimeoutSeconds
+// WorkflowTaskTimeout returns tag for WorkflowTaskTimeoutSeconds
 func WorkflowTaskTimeout(s time.Duration) ZapTag {
 	return NewDurationTag("workflow-task-timeout", s)
 }
