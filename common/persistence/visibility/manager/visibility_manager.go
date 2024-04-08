@@ -95,6 +95,7 @@ type (
 	RecordWorkflowExecutionClosedRequest struct {
 		*VisibilityRequestBase
 		CloseTime            time.Time
+		ExecutionDuration    time.Duration
 		HistoryLength        int64
 		HistorySizeBytes     int64
 		StateTransitionCount int64
