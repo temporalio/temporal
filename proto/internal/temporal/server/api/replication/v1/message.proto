@@ -31,6 +31,7 @@ import "google/protobuf/timestamp.proto";
 import "temporal/server/api/enums/v1/replication.proto";
 import "temporal/server/api/enums/v1/task.proto";
 import "temporal/server/api/history/v1/message.proto";
+import "temporal/server/api/persistence/v1/nexus.proto";
 import "temporal/server/api/persistence/v1/workflow_mutable_state.proto";
 import "temporal/server/api/persistence/v1/task_queues.proto";
 
@@ -116,6 +117,7 @@ message NamespaceTaskAttributes {
     int64 config_version = 6;
     int64 failover_version = 7;
     repeated temporal.api.replication.v1.FailoverStatus failover_history = 8;
+    repeated temporal.server.api.persistence.v1.NexusOutgoingService nexus_outgoing_services = 9;
 }
 
 message SyncShardStatusTaskAttributes {

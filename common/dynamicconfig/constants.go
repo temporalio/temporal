@@ -128,6 +128,17 @@ const (
 	// How many extra goroutines can be created per root.
 	DeadlockMaxWorkersPerRoot = "system.deadlock.MaxWorkersPerRoot"
 
+	// utf-8 validation
+	// The *Sample* keys control the sample rate of messages to examine as a fraction in [0.0, 1.0].
+	// The *Fail* keys control whether a validation failure causes an error (rpc error for rpc
+	// request/response, [de]serialization error for persistence).
+	ValidateUTF8SampleRPCRequest  = "system.validateUTF8.sample.rpcRequest"
+	ValidateUTF8SampleRPCResponse = "system.validateUTF8.sample.rpcResponse"
+	ValidateUTF8SamplePersistence = "system.validateUTF8.sample.persistence"
+	ValidateUTF8FailRPCRequest    = "system.validateUTF8.fail.rpcRequest"
+	ValidateUTF8FailRPCResponse   = "system.validateUTF8.fail.rpcResponse"
+	ValidateUTF8FailPersistence   = "system.validateUTF8.fail.persistence"
+
 	// keys for size limit
 
 	// BlobSizeLimitError is the per event blob size limit
@@ -208,13 +219,22 @@ const (
 	ReachabilityQuerySetDurationSinceDefault = "frontend.reachabilityQuerySetDurationSinceDefault"
 	// TaskQueuesPerBuildIdLimit limits the number of task queue names that can be mapped to a single build id.
 	TaskQueuesPerBuildIdLimit = "limit.taskQueuesPerBuildId"
-	// NexusOutgoingServiceURLMaxLength is the maximum length of an outgoing service URL
+
+	// NexusIncomingServiceNameMaxLength is the maximum length of a Nexus incoming service name.
+	NexusIncomingServiceNameMaxLength = "limit.incomingServiceNameMaxLength"
+	// NexusIncomingServiceMaxSize is the maximum size of a Nexus incoming service in bytes.
+	NexusIncomingServiceMaxSize = "limit.incomingServiceMaxSize"
+	// NexusIncomingServiceListDefaultPageSize is the default page size for listing Nexus incoming services.
+	NexusIncomingServiceListDefaultPageSize = "limit.incomingServiceListDefaultPageSize"
+	// NexusIncomingServiceListMaxPageSize is the maximum page size for listing Nexus incoming services.
+	NexusIncomingServiceListMaxPageSize = "limit.incomingServiceListMaxPageSize"
+	// NexusOutgoingServiceURLMaxLength is the maximum length of an outgoing service URL.
 	NexusOutgoingServiceURLMaxLength = "limit.outgoingServiceURLMaxLength"
-	// NexusOutgoingServiceNameMaxLength is the maximum length of an outgoing service name
+	// NexusOutgoingServiceNameMaxLength is the maximum length of an outgoing service name.
 	NexusOutgoingServiceNameMaxLength = "limit.outgoingServiceNameMaxLength"
-	// NexusOutgoingServiceListDefaultPageSize is the default page size for listing outgoing services
+	// NexusOutgoingServiceListDefaultPageSize is the default page size for listing outgoing services.
 	NexusOutgoingServiceListDefaultPageSize = "limit.outgoingServiceListDefaultPageSize"
-	// NexusOutgoingServiceListMaxPageSize is the maximum page size for listing outgoing services
+	// NexusOutgoingServiceListMaxPageSize is the maximum page size for listing outgoing services.
 	NexusOutgoingServiceListMaxPageSize = "limit.outgoingServiceListMaxPageSize"
 
 	// RemovableBuildIdDurationSinceDefault is the minimum duration since a build id was last default in its containing
@@ -366,8 +386,12 @@ const (
 	KeepAliveTimeout = "frontend.keepAliveTimeout"
 	// FrontendEnableSchedules enables schedule-related RPCs in the frontend
 	FrontendEnableSchedules = "frontend.enableSchedules"
-	// FrontendEnableNexusHTTPHandler enables serving Nexus HTTP requests in the frontend.
-	FrontendEnableNexusHTTPHandler = "frontend.enableNexusHTTPHandler"
+	// FrontendEnableNexusAPIs enables serving Nexus HTTP requests in the frontend.
+	FrontendEnableNexusAPIs = "frontend.enableNexusAPIs"
+	// FrontendRefreshNexusIncomingServicesLongPollTimeout is the maximum duration of background long poll requests to update Nexus incoming services.
+	FrontendRefreshNexusIncomingServicesLongPollTimeout = "frontend.refreshNexusIncomingServicesLongPollTimeout"
+	// FrontendRefreshNexusIncomingServicesMinWait is the minimum wait time between background long poll requests to update Nexus incoming services.
+	FrontendRefreshNexusIncomingServicesMinWait = "frontend.refreshNexusIncomingServicesMinWait"
 	// FrontendEnableCallbackAttachment enables attaching callbacks to workflows.
 	FrontendEnableCallbackAttachment = "frontend.enableCallbackAttachment"
 	// FrontendMaxConcurrentBatchOperationPerNamespace is the max concurrent batch operation job count per namespace
@@ -389,6 +413,10 @@ const (
 	// The UpdateWorkflowExecution API has gone through rigorous testing efforts but this config's default is `false` until the
 	// feature gets more time in production.
 	FrontendEnableUpdateWorkflowExecution = "frontend.enableUpdateWorkflowExecution"
+
+	// FrontendEnableExecuteMultiOperation enables the ExecuteMultiOperation API in the frontend.
+	// The API is under active development.
+	FrontendEnableExecuteMultiOperation = "frontend.enableExecuteMultiOperation"
 
 	// FrontendEnableUpdateWorkflowExecutionAsyncAccepted enables the form of
 	// asynchronous workflow execution update that waits on the "Accepted"
@@ -564,8 +592,6 @@ const (
 	// HistoryCacheHostLevelMaxSizeBytes is the maximum size of the host level history cache. This is only used if
 	// HistoryCacheSizeBasedLimit is set to true.
 	HistoryCacheHostLevelMaxSizeBytes = "history.hostLevelCacheMaxSizeBytes"
-	// EnableAPIGetCurrentRunIDLock controls if a lock should be acquired before getting current run ID for API requests
-	EnableAPIGetCurrentRunIDLock = "history.enableAPIGetCurrentRunIDLock"
 	// EnableMutableStateTransitionHistory controls whether to record state transition history in mutable state records.
 	// The feature is used in the hierarchical state machine framework and is considered unstable as the structure may
 	// change with the pending replication design.

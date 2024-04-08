@@ -189,7 +189,7 @@ func TestPollOutcome(t *testing.T) {
 		resp, err := pollupdate.Invoke(ctx, &req, shardContext, wfcc)
 		require.NoError(t, err)
 		require.Nil(t, resp.GetResponse().Outcome)
-		require.Equal(t, enumspb.UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_UNSPECIFIED, resp.Response.GetStage())
+		require.Equal(t, enumspb.UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_ADMITTED, resp.Response.GetStage())
 	})
 	t.Run("non-blocking poll with omitted/unspecified wait policy", func(t *testing.T) {
 		for _, req := range []*historyservice.PollWorkflowExecutionUpdateRequest{{
@@ -250,7 +250,7 @@ func TestPollOutcome(t *testing.T) {
 		}()
 
 		evStore := mockUpdateEventStore{}
-		require.NoError(t, upd.Request(context.TODO(), &reqMsg, evStore))
+		require.NoError(t, upd.Admit(context.TODO(), &reqMsg, evStore))
 		upd.Send(context.TODO(), false, &protocolpb.Message_EventId{EventId: 2208}, evStore)
 		require.NoError(t, upd.OnProtocolMessage(context.TODO(), &rejMsg, evStore))
 

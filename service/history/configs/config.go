@@ -80,7 +80,6 @@ type Config struct {
 	HistoryCacheTTL                       dynamicconfig.DurationPropertyFn
 	HistoryCacheNonUserContextLockTimeout dynamicconfig.DurationPropertyFn
 	EnableHostLevelHistoryCache           dynamicconfig.BoolPropertyFn
-	EnableAPIGetCurrentRunIDLock          dynamicconfig.BoolPropertyFn
 	EnableMutableStateTransitionHistory   dynamicconfig.BoolPropertyFn
 	EnableWorkflowExecutionTimeoutTimer   dynamicconfig.BoolPropertyFn
 
@@ -391,7 +390,6 @@ func NewConfig(
 		HistoryCacheTTL:                       dc.GetDurationProperty(dynamicconfig.HistoryCacheTTL, time.Hour),
 		HistoryCacheNonUserContextLockTimeout: dc.GetDurationProperty(dynamicconfig.HistoryCacheNonUserContextLockTimeout, 500*time.Millisecond),
 		EnableHostLevelHistoryCache:           dc.GetBoolProperty(dynamicconfig.EnableHostHistoryCache, false),
-		EnableAPIGetCurrentRunIDLock:          dc.GetBoolProperty(dynamicconfig.EnableAPIGetCurrentRunIDLock, false),
 		EnableMutableStateTransitionHistory:   dc.GetBoolProperty(dynamicconfig.EnableMutableStateTransitionHistory, false),
 		EnableWorkflowExecutionTimeoutTimer:   dc.GetBoolProperty(dynamicconfig.EnableWorkflowExecutionTimeoutTimer, false),
 
@@ -406,7 +404,7 @@ func NewConfig(
 		ShardIOConcurrency:             dc.GetIntProperty(dynamicconfig.ShardIOConcurrency, 1),
 		ShardLingerOwnershipCheckQPS:   dc.GetIntProperty(dynamicconfig.ShardLingerOwnershipCheckQPS, 4),
 		ShardLingerTimeLimit:           dc.GetDurationProperty(dynamicconfig.ShardLingerTimeLimit, 0),
-		ShardOwnershipAssertionEnabled: dc.GetBoolProperty(dynamicconfig.ShardOwnershipAssertionEnabled, true),
+		ShardOwnershipAssertionEnabled: dc.GetBoolProperty(dynamicconfig.ShardOwnershipAssertionEnabled, false),
 
 		HistoryClientOwnershipCachingEnabled: dc.GetBoolProperty(dynamicconfig.HistoryClientOwnershipCachingEnabled, false),
 

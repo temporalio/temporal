@@ -198,6 +198,10 @@ func (s *SequentialScheduler[T]) workerMonitor() {
 			return
 		case <-timer.C:
 			targetWorkerNum := s.options.WorkerCount()
+			if targetWorkerNum < 0 {
+				s.logger.Error("Target worker pool size is negative. Please fix the dynamic config.", tag.Key("worker-pool-size"), tag.Value(targetWorkerNum))
+				continue
+			}
 			currentWorkerNum := len(s.workerShutdownCh)
 
 			if targetWorkerNum == currentWorkerNum {

@@ -65,7 +65,7 @@ jobs:
           token: ${{ secrets.GITHUB_TOKEN }}
           ref: ${{ env.COMMIT }}
 
-      - run: docker-compose -f ${{ env.DOCKER_COMPOSE_FILE }} pull
+      - run: docker compose -f ${{ env.DOCKER_COMPOSE_FILE }} pull
 
   unit-test:
     name: Unit test
@@ -115,7 +115,7 @@ jobs:
 
       - name: Start containerized dependencies
         run: |
-          docker-compose -f ${{ env.DOCKER_COMPOSE_FILE }} up -d cassandra mysql postgresql
+          docker compose -f ${{ env.DOCKER_COMPOSE_FILE }} up -d cassandra mysql postgresql
 
       - name: Run integration test
         timeout-minutes: 15
@@ -124,7 +124,7 @@ jobs:
       - name: Tear down docker compose
         if: ${{ always() }}
         run: |
-          docker-compose -f ${{ env.DOCKER_COMPOSE_FILE }} down -v
+          docker compose -f ${{ env.DOCKER_COMPOSE_FILE }} down -v
 
   functional-test:
     name: Functional test
@@ -184,7 +184,7 @@ jobs:
       - name: Start containerized dependencies
         if: ${{ toJson(matrix.containers) != '[]' }}
         run: |
-          docker-compose -f ${{ env.DOCKER_COMPOSE_FILE }} up -d ${{ join(matrix.containers, ' ') }}
+          docker compose -f ${{ env.DOCKER_COMPOSE_FILE }} up -d ${{ join(matrix.containers, ' ') }}
 
       - name: Run functional test
         timeout-minutes: 15
@@ -193,7 +193,7 @@ jobs:
       - name: Tear down docker compose
         if: ${{ always() }}
         run: |
-          docker-compose -f ${{ env.DOCKER_COMPOSE_FILE }} down -v
+          docker compose -f ${{ env.DOCKER_COMPOSE_FILE }} down -v
 
   functional-test-xdc:
     name: Functional test xdc
@@ -246,7 +246,7 @@ jobs:
       - name: Start containerized dependencies
         if: ${{ toJson(matrix.containers) != '[]' }}
         run: |
-          docker-compose -f ${{ env.DOCKER_COMPOSE_FILE }} up -d ${{ join(matrix.containers, ' ') }}
+          docker compose -f ${{ env.DOCKER_COMPOSE_FILE }} up -d ${{ join(matrix.containers, ' ') }}
 
       - name: Run functional test xdc
         timeout-minutes: 15
@@ -255,7 +255,7 @@ jobs:
       - name: Tear down docker compose
         if: ${{ always() }}
         run: |
-          docker-compose -f ${{ env.DOCKER_COMPOSE_FILE }} down -v
+          docker compose -f ${{ env.DOCKER_COMPOSE_FILE }} down -v
 
   functional-test-ndc:
     name: Functional test ndc
@@ -308,7 +308,7 @@ jobs:
       - name: Start containerized dependencies
         if: ${{ toJson(matrix.containers) != '[]' }}
         run: |
-          docker-compose -f ${{ env.DOCKER_COMPOSE_FILE }} up -d ${{ join(matrix.containers, ' ') }}
+          docker compose -f ${{ env.DOCKER_COMPOSE_FILE }} up -d ${{ join(matrix.containers, ' ') }}
 
       - name: Run functional test ndc
         timeout-minutes: 15
@@ -317,7 +317,7 @@ jobs:
       - name: Tear down docker compose
         if: ${{ always() }}
         run: |
-          docker-compose -f ${{ env.DOCKER_COMPOSE_FILE }} down -v
+          docker compose -f ${{ env.DOCKER_COMPOSE_FILE }} down -v
 
   test-status:
     name: Test Status
@@ -329,10 +329,11 @@ jobs:
       - functional-test-ndc
     runs-on: ubuntu-latest
     if: always()
+    env:
+      RESULTS: ${{ toJSON(needs.*.result) }}
     steps:
-      - name: Success
-        if: ${{ !(contains(needs.*.result, 'failure')) }}
-        run: exit 0
-      - name: Failure
-        if: ${{ contains(needs.*.result, 'failure') }}
-        run: exit 1
+      - name: Check results
+        run: |
+          if [[ -n $(echo "$RESULTS" | jq '.[] | select (. != "success")') ]]; then
+            exit 1
+          fi

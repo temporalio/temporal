@@ -32,6 +32,7 @@ import (
 	commonpb "go.temporal.io/api/common/v1"
 	"go.temporal.io/api/serviceerror"
 
+	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common/headers"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
@@ -1254,6 +1255,19 @@ func (p *nexusIncomingServicePersistenceClient) GetNexusIncomingServicesTableVer
 		p.recordRequestMetrics(metrics.PersistenceListNexusIncomingServicesScope, caller, time.Since(startTime), retErr)
 	}()
 	return p.persistence.GetNexusIncomingServicesTableVersion(ctx)
+}
+
+func (p *nexusIncomingServicePersistenceClient) GetNexusIncomingService(
+	ctx context.Context,
+	request *GetNexusIncomingServiceRequest,
+) (_ *persistencespb.NexusIncomingServiceEntry, retErr error) {
+	caller := headers.GetCallerInfo(ctx).CallerName
+	startTime := time.Now().UTC()
+	defer func() {
+		p.healthSignals.Record(CallerSegmentMissing, caller, time.Since(startTime), retErr)
+		p.recordRequestMetrics(metrics.PersistenceGetNexusIncomingServiceScope, caller, time.Since(startTime), retErr)
+	}()
+	return p.persistence.GetNexusIncomingService(ctx, request)
 }
 
 func (p *nexusIncomingServicePersistenceClient) ListNexusIncomingServices(

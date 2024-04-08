@@ -2305,8 +2305,8 @@ func (ms *MutableStateImpl) addBuildIdToLoadedSearchAttribute(existingValues []s
 	var added []string
 	for _, newValue := range newValues {
 		found := false
-		for _, exisitingValue := range existingValues {
-			if exisitingValue == newValue {
+		for _, existingValue := range existingValues {
+			if existingValue == newValue {
 				found = true
 				break
 			}

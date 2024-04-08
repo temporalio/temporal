@@ -24,33 +24,21 @@ package nexus
 
 import "go.temporal.io/server/common/routing"
 
-// Routes returns a RouteSet for the Nexus HTTP API. These routes can be used by both the server and clients for
-// type-safe URL construction and parsing. It's a function instead of a variable so that the underlying
-// set cannot be modified by the caller.
-func Routes() RouteSet {
-	return routes
-}
-
-type RouteSet struct {
-	DispatchNexusTaskByNamespaceAndTaskQueue routing.Route[NamespaceAndTaskQueue]
-	DispatchNexusTaskByService               routing.Route[string]
-}
-
 type NamespaceAndTaskQueue struct {
 	Namespace string
 	TaskQueue string
 }
 
-var routes = RouteSet{
-	DispatchNexusTaskByNamespaceAndTaskQueue: routing.NewBuilder[NamespaceAndTaskQueue]().
-		Constant("api", "v1", "namespaces").
-		StringVariable("namespace", func(params *NamespaceAndTaskQueue) *string { return &params.Namespace }).
-		Constant("task-queues").
-		StringVariable("task_queue", func(params *NamespaceAndTaskQueue) *string { return &params.TaskQueue }).
-		Constant("dispatch-nexus-task").
-		Build(),
-	DispatchNexusTaskByService: routing.NewBuilder[string]().
-		Constant("api", "v1", "services").
-		StringVariable("service", func(service *string) *string { return service }).
-		Build(),
-}
+var RouteDispatchNexusTaskByNamespaceAndTaskQueue = routing.NewBuilder[NamespaceAndTaskQueue]().
+	Constant("api", "v1", "namespaces").
+	StringVariable("namespace", func(params *NamespaceAndTaskQueue) *string { return &params.Namespace }).
+	Constant("task-queues").
+	StringVariable("task_queue", func(params *NamespaceAndTaskQueue) *string { return &params.TaskQueue }).
+	Constant("nexus-operations").
+	Build()
+
+var RouteDispatchNexusTaskByService = routing.NewBuilder[string]().
+	Constant("api", "v1", "nexus", "services").
+	StringVariable("service", func(service *string) *string { return service }).
+	Constant("operations").
+	Build()

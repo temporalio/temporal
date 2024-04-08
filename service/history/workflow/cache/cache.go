@@ -402,19 +402,17 @@ func GetCurrentRunID(
 	workflowID string,
 	lockPriority workflow.LockPriority,
 ) (runID string, retErr error) {
-	if shardContext.GetConfig().EnableAPIGetCurrentRunIDLock() {
-		currentRelease, err := workflowCache.GetOrCreateCurrentWorkflowExecution(
-			ctx,
-			shardContext,
-			namespace.ID(namespaceID),
-			workflowID,
-			lockPriority,
-		)
-		if err != nil {
-			return "", err
-		}
-		defer currentRelease(retErr)
+	currentRelease, err := workflowCache.GetOrCreateCurrentWorkflowExecution(
+		ctx,
+		shardContext,
+		namespace.ID(namespaceID),
+		workflowID,
+		lockPriority,
+	)
+	if err != nil {
+		return "", err
 	}
+	defer currentRelease(retErr)
 
 	resp, err := shardContext.GetCurrentExecution(
 		ctx,

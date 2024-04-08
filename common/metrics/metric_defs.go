@@ -41,6 +41,7 @@ const (
 	ErrorTypeTagName            = "error_type"
 	httpStatusTagName           = "http_status"
 	nexusMethodTagName          = "method"
+	nexusServiceTagName         = "service"
 	nexusOutcomeTagName         = "outcome"
 	versionedTagName            = "versioned"
 	resourceExhaustedTag        = "resource_exhausted_cause"
@@ -271,6 +272,8 @@ const (
 	PersistenceListNamespacesScope = "ListNamespaces"
 	// PersistenceGetMetadataScope tracks DeleteNamespaceByName calls made by service to persistence layer
 	PersistenceGetMetadataScope = "GetMetadata"
+	// PersistenceGetNexusIncomingServiceScope tracks GetNexusIncomingService calls made by service to persistence layer
+	PersistenceGetNexusIncomingServiceScope = "GetNexusIncomingService"
 	// PersistenceListNexusIncomingServicesScope tracks ListNexusIncomingService calls made by service to persistence layer
 	PersistenceListNexusIncomingServicesScope = "ListNexusIncomingServices"
 	// PersistenceCreateOrUpdateNexusIncomingServiceScope tracks CreateOrUpdateNexusIncomingService calls made by service to persistence layer
@@ -649,6 +652,10 @@ var (
 		"wf_too_many_pending_external_workflow_signals",
 		WithDescription("The number of Workflow Tasks failed because they would cause the limit on the number of pending signals to external workflows to be exceeded. See https://t.mp/limits for more information."),
 	)
+	UTF8ValidationErrors = NewCounterDef(
+		"utf8_validation_errors",
+		WithDescription("Number of times the service encountered a proto message with invalid UTF-8 in a string field"),
+	)
 
 	// Frontend
 	AddSearchAttributesWorkflowSuccessCount  = NewCounterDef("add_search_attributes_workflow_success")
@@ -675,6 +682,8 @@ var (
 		"nexus_latency",
 		WithDescription("Latency histogram of Nexus requests."),
 	)
+	HostRPSLimit          = NewGaugeDef("host_rps_limit")
+	NamespaceHostRPSLimit = NewGaugeDef("namespace_host_rps_limit")
 
 	// History
 	CacheRequests                                = NewCounterDef("cache_requests")

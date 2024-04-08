@@ -155,14 +155,33 @@ func (s *UpdateTaskTestSuite) TestReadSchemaDirWithEmptyDir_ReturnsError() {
 func (s *UpdateTaskTestSuite) TestReadManifest() {
 	tmpDir := testutils.MkdirTemp(s.T(), "", "update_schema_test")
 
-	input := `{
-		"CurrVersion": "0.4",
-		"MinCompatibleVersion": "0.1",
-		"Description": "base version of schema",
-		"SchemaUpdateCqlFiles": ["base1.cql", "base2.cql", "base3.cql"]
-	}`
-	files := []string{"base1.cql", "base2.cql", "base3.cql"}
-	s.runReadManifestTest(tmpDir, input, "0.4", "0.1", "base version of schema", files, false)
+	validCases := []struct {
+		schema string
+		files  []string
+	}{
+		{
+			schema: `{
+				"CurrVersion": "0.4",
+				"MinCompatibleVersion": "0.1",
+				"Description": "upgrade",
+				"SchemaUpdateCqlFiles": ["base1.cql", "base2.cql", "base3.cql"]
+			}`,
+
+			files: []string{"base1.cql", "base2.cql", "base3.cql"},
+		},
+		{
+			schema: `{
+				"CurrVersion": "0.4",
+				"MinCompatibleVersion": "0.1",
+				"Description": "upgrade",
+				"AllowNoCqlFiles": true
+			}`,
+			files: nil,
+		},
+	}
+	for _, c := range validCases {
+		s.runReadManifestTest(tmpDir, c.schema, "0.4", "0.1", "upgrade", c.files, false)
+	}
 
 	errInputs := []string{
 		`{

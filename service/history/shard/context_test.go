@@ -165,7 +165,6 @@ func (s *contextSuite) TestOverwriteScheduledTaskTimestamp() {
 				ShardID:     s.mockShard.GetShardID(),
 				NamespaceID: workflowKey.NamespaceID,
 				WorkflowID:  workflowKey.WorkflowID,
-				RunID:       workflowKey.RunID,
 				Tasks:       testTasks,
 			},
 		)
@@ -190,7 +189,6 @@ func (s *contextSuite) TestAddTasks_Success() {
 		ShardID:     s.mockShard.GetShardID(),
 		NamespaceID: tests.NamespaceID.String(),
 		WorkflowID:  tests.WorkflowID,
-		RunID:       tests.RunID,
 
 		Tasks: testTasks,
 	}

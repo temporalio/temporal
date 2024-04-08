@@ -31,6 +31,12 @@ import (
 
 	"github.com/gorilla/mux"
 	"github.com/nexus-rpc/sdk-go/nexus"
+	nexuspb "go.temporal.io/api/nexus/v1"
+	"go.temporal.io/api/serviceerror"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/credentials"
+	"google.golang.org/grpc/status"
+
 	"go.temporal.io/server/api/matchingservice/v1"
 	"go.temporal.io/server/common/authorization"
 	"go.temporal.io/server/common/log"
@@ -38,16 +44,17 @@ import (
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
 	commonnexus "go.temporal.io/server/common/nexus"
+	"go.temporal.io/server/common/routing"
 	"go.temporal.io/server/common/rpc"
 	"go.temporal.io/server/common/rpc/interceptor"
 	"go.temporal.io/server/service/frontend/configs"
-	"google.golang.org/grpc/credentials"
 )
 
 // Small wrapper that does some pre-processing before handing requests over to the Nexus SDK's HTTP handler.
 type NexusHTTPHandler struct {
 	logger                               log.Logger
 	nexusHandler                         http.Handler
+	incomingServiceRegistry              *commonnexus.IncomingServiceRegistry
 	preprocessErrorCounter               metrics.CounterFunc
 	auth                                 *authorization.Interceptor
 	namespaceValidationInterceptor       *interceptor.NamespaceValidatorInterceptor
@@ -62,6 +69,7 @@ func NewNexusHTTPHandler(
 	matchingClient matchingservice.MatchingServiceClient,
 	metricsHandler metrics.Handler,
 	namespaceRegistry namespace.Registry,
+	incomingServiceRegistry *commonnexus.IncomingServiceRegistry,
 	authInterceptor *authorization.Interceptor,
 	namespaceValidationInterceptor *interceptor.NamespaceValidatorInterceptor,
 	namespaceRateLimitInterceptor *interceptor.NamespaceRateLimitInterceptor,
@@ -71,12 +79,13 @@ func NewNexusHTTPHandler(
 ) *NexusHTTPHandler {
 	return &NexusHTTPHandler{
 		logger:                               logger,
+		incomingServiceRegistry:              incomingServiceRegistry,
 		auth:                                 authInterceptor,
 		namespaceValidationInterceptor:       namespaceValidationInterceptor,
 		namespaceRateLimitInterceptor:        namespaceRateLimitInterceptor,
 		namespaceConcurrencyLimitInterceptor: namespaceConcurrencyLimitIntercptor,
 		rateLimitInterceptor:                 rateLimitInterceptor,
-		enabled:                              serviceConfig.EnableNexusHTTPHandler,
+		enabled:                              serviceConfig.EnableNexusAPIs,
 		preprocessErrorCounter:               metricsHandler.Counter(metrics.NexusRequestPreProcessErrors.Name()).Record,
 		nexusHandler: nexus.NewHTTPHandler(nexus.HandlerOptions{
 			Handler: &nexusHandler{
@@ -94,9 +103,9 @@ func NewNexusHTTPHandler(
 }
 
 func (h *NexusHTTPHandler) RegisterRoutes(r *mux.Router) {
-	r.PathPrefix("/" + commonnexus.Routes().DispatchNexusTaskByNamespaceAndTaskQueue.Representation() + "/").
+	r.PathPrefix("/" + commonnexus.RouteDispatchNexusTaskByNamespaceAndTaskQueue.Representation() + "/").
 		HandlerFunc(h.dispatchNexusTaskByNamespaceAndTaskQueue)
-	r.PathPrefix("/" + commonnexus.Routes().DispatchNexusTaskByService.Representation() + "/").
+	r.PathPrefix("/" + commonnexus.RouteDispatchNexusTaskByService.Representation() + "/").
 		HandlerFunc(h.dispatchNexusTaskByService)
 }
 
@@ -128,38 +137,125 @@ func (h *NexusHTTPHandler) dispatchNexusTaskByNamespaceAndTaskQueue(w http.Respo
 		h.writeNexusFailure(w, http.StatusNotFound, &nexus.Failure{Message: "nexus endpoints disabled"})
 		return
 	}
-	// Limit the request body to max allowed Payload size.
-	// Content headers are transformed to Payload metadata and contribute to the Payload size as well. A separate
-	// limit is enforced on top of this in the nexusHandler.StartOperation method.
-	r.Body = http.MaxBytesReader(w, r.Body, rpc.MaxNexusAPIRequestBodyBytes)
 
 	var err error
-	vars := mux.Vars(r)
-	nc := nexusContext{
-		namespaceValidationInterceptor:       h.namespaceValidationInterceptor,
-		namespaceRateLimitInterceptor:        h.namespaceRateLimitInterceptor,
-		namespaceConcurrencyLimitInterceptor: h.namespaceConcurrencyLimitInterceptor,
-		rateLimitInterceptor:                 h.rateLimitInterceptor,
-		apiName:                              configs.DispatchNexusTaskAPIName,
-	}
+	nc := h.baseNexusContext(configs.DispatchNexusTaskByNamespaceAndTaskQueueAPIName)
+	params := prepareRequest(commonnexus.RouteDispatchNexusTaskByNamespaceAndTaskQueue, w, r)
 
-	params := commonnexus.Routes().DispatchNexusTaskByNamespaceAndTaskQueue.Deserialize(vars)
-
-	if nc.namespaceName, err = url.PathUnescape(params.Namespace); err != nil {
-		h.logger.Error("invalid URL", tag.Error(err))
-		h.writeNexusFailure(w, http.StatusBadRequest, &nexus.Failure{Message: "invalid URL"})
-		return
-	}
 	if nc.taskQueue, err = url.PathUnescape(params.TaskQueue); err != nil {
 		h.logger.Error("invalid URL", tag.Error(err))
 		h.writeNexusFailure(w, http.StatusBadRequest, &nexus.Failure{Message: "invalid URL"})
 		return
 	}
-	if err := h.namespaceValidationInterceptor.ValidateName(nc.namespaceName); err != nil {
+	if nc.namespaceName, err = url.PathUnescape(params.Namespace); err != nil {
+		h.logger.Error("invalid URL", tag.Error(err))
+		h.writeNexusFailure(w, http.StatusBadRequest, &nexus.Failure{Message: "invalid URL"})
+		return
+	}
+	if err = h.namespaceValidationInterceptor.ValidateName(nc.namespaceName); err != nil {
 		h.logger.Error("invalid namespace name", tag.Error(err))
 		h.writeNexusFailure(w, http.StatusBadRequest, &nexus.Failure{Message: err.Error()})
 		return
 	}
+
+	r, err = h.parseTlsAndAuthInfo(r, &nc)
+	if err != nil {
+		h.logger.Error("failed to get claims", tag.Error(err))
+		h.writeNexusFailure(w, http.StatusUnauthorized, &nexus.Failure{Message: "unauthorized"})
+		return
+	}
+
+	u, err := mux.CurrentRoute(r).URL("namespace", params.Namespace, "task_queue", params.TaskQueue)
+	if err != nil {
+		h.logger.Error("invalid URL", tag.Error(err))
+		h.writeNexusFailure(w, http.StatusInternalServerError, &nexus.Failure{Message: "internal error"})
+		return
+	}
+
+	h.serveResolvedURL(w, r, u)
+}
+
+// Handler for [nexushttp.RouteSet.DispatchNexusTaskByService].
+func (h *NexusHTTPHandler) dispatchNexusTaskByService(w http.ResponseWriter, r *http.Request) {
+	if !h.enabled() {
+		h.writeNexusFailure(w, http.StatusNotFound, &nexus.Failure{Message: "nexus endpoints disabled"})
+		return
+	}
+
+	service := prepareRequest(commonnexus.RouteDispatchNexusTaskByService, w, r)
+
+	serviceID, err := url.PathUnescape(*service)
+	if err != nil {
+		h.logger.Error("invalid URL", tag.Error(err))
+		h.writeNexusFailure(w, http.StatusBadRequest, &nexus.Failure{Message: "invalid URL"})
+		return
+	}
+	serviceInfo, err := h.incomingServiceRegistry.Get(r.Context(), serviceID)
+	if err != nil {
+		h.logger.Error("invalid Nexus incoming service ID", tag.Error(err))
+		s, ok := status.FromError(err)
+		if !ok {
+			s = serviceerror.ToStatus(err)
+		}
+		switch s.Code() {
+		case codes.NotFound:
+			h.writeNexusFailure(w, http.StatusNotFound, &nexus.Failure{Message: "nexus service not found"})
+		case codes.DeadlineExceeded:
+			h.writeNexusFailure(w, http.StatusRequestTimeout, &nexus.Failure{Message: "request timed out"})
+		default:
+			h.writeNexusFailure(w, http.StatusInternalServerError, &nexus.Failure{Message: "internal error"})
+		}
+		return
+	}
+
+	nc := h.nexusContextFromService(serviceInfo)
+
+	r, err = h.parseTlsAndAuthInfo(r, &nc)
+	if err != nil {
+		h.logger.Error("failed to get claims", tag.Error(err))
+		h.writeNexusFailure(w, http.StatusUnauthorized, &nexus.Failure{Message: "unauthorized"})
+		return
+	}
+
+	u, err := mux.CurrentRoute(r).URL("service", *service)
+	if err != nil {
+		h.logger.Error("invalid URL", tag.Error(err))
+		h.writeNexusFailure(w, http.StatusInternalServerError, &nexus.Failure{Message: "internal error"})
+		return
+	}
+
+	h.serveResolvedURL(w, r, u)
+}
+
+func (h *NexusHTTPHandler) baseNexusContext(apiName string) nexusContext {
+	return nexusContext{
+		namespaceValidationInterceptor:       h.namespaceValidationInterceptor,
+		namespaceRateLimitInterceptor:        h.namespaceRateLimitInterceptor,
+		namespaceConcurrencyLimitInterceptor: h.namespaceConcurrencyLimitInterceptor,
+		rateLimitInterceptor:                 h.rateLimitInterceptor,
+		apiName:                              apiName,
+	}
+}
+
+func (h *NexusHTTPHandler) nexusContextFromService(service *nexuspb.IncomingService) nexusContext {
+	nc := h.baseNexusContext(configs.DispatchNexusTaskByServiceAPIName)
+	nc.namespaceName = service.Spec.Namespace
+	nc.taskQueue = service.Spec.TaskQueue
+	nc.serviceName = service.Spec.Name
+	return nc
+}
+
+func prepareRequest[T any](route routing.Route[T], w http.ResponseWriter, r *http.Request) *T {
+	// Limit the request body to max allowed Payload size.
+	// Content headers are transformed to Payload metadata and contribute to the Payload size as well. A separate
+	// limit is enforced on top of this in the nexusHandler.StartOperation method.
+	r.Body = http.MaxBytesReader(w, r.Body, rpc.MaxNexusAPIRequestBodyBytes)
+
+	vars := mux.Vars(r)
+	return route.Deserialize(vars)
+}
+
+func (h *NexusHTTPHandler) parseTlsAndAuthInfo(r *http.Request, nc *nexusContext) (*http.Request, error) {
 	var tlsInfo *credentials.TLSInfo
 	if r.TLS != nil {
 		tlsInfo = &credentials.TLSInfo{
@@ -171,26 +267,22 @@ func (h *NexusHTTPHandler) dispatchNexusTaskByNamespaceAndTaskQueue(w http.Respo
 	authInfo := h.auth.GetAuthInfo(tlsInfo, r.Header, func() string {
 		return "" // TODO: support audience getter
 	})
+
+	var err error
 	if authInfo != nil {
 		nc.claims, err = h.auth.GetClaims(authInfo)
 		if err != nil {
-			h.logger.Error("failed to get claims", tag.Error(err))
-			h.writeNexusFailure(w, http.StatusUnauthorized, &nexus.Failure{Message: "unauthorized"})
-			return
+			return nil, err
 		}
 		// Make the auth info and claims available on the context.
 		r = r.WithContext(h.auth.EnhanceContext(r.Context(), authInfo, nc.claims))
 	}
 
-	r = r.WithContext(context.WithValue(r.Context(), nexusContextKey{}, nc))
+	return r.WithContext(context.WithValue(r.Context(), nexusContextKey{}, *nc)), nil
+}
 
-	// This whole mess is required to support escaped path vars for namespace and task queue.
-	u, err := mux.CurrentRoute(r).URL("namespace", params.Namespace, "task_queue", params.TaskQueue)
-	if err != nil {
-		h.logger.Error("invalid URL", tag.Error(err))
-		h.writeNexusFailure(w, http.StatusInternalServerError, &nexus.Failure{Message: "internal error"})
-		return
-	}
+func (h *NexusHTTPHandler) serveResolvedURL(w http.ResponseWriter, r *http.Request, u *url.URL) {
+	// This whole mess is required to support escaped path vars for service.
 	prefix, err := url.PathUnescape(u.Path)
 	if err != nil {
 		h.logger.Error("invalid URL", tag.Error(err))
@@ -200,14 +292,4 @@ func (h *NexusHTTPHandler) dispatchNexusTaskByNamespaceAndTaskQueue(w http.Respo
 	prefix = path.Dir(prefix)
 	r.URL.RawPath = ""
 	http.StripPrefix(prefix, h.nexusHandler).ServeHTTP(w, r)
-}
-
-// Handler for [nexushttp.RouteSet.DispatchNexusTaskByService].
-func (h *NexusHTTPHandler) dispatchNexusTaskByService(w http.ResponseWriter, r *http.Request) {
-	if !h.enabled() {
-		h.writeNexusFailure(w, http.StatusNotFound, &nexus.Failure{Message: "nexus endpoints disabled"})
-		return
-	}
-	// To be implemented once the service registry is implemented.
-	w.WriteHeader(http.StatusNotImplemented)
 }

@@ -57,6 +57,8 @@ func (s *FunctionalSuite) SetupSuite() {
 		dynamicconfig.EnableEagerWorkflowStart:            true,
 		dynamicconfig.EnableMutableStateTransitionHistory: true,
 		dynamicconfig.OutboundProcessorEnabled:            true,
+		dynamicconfig.FrontendEnableExecuteMultiOperation: true,
+		dynamicconfig.FrontendEnableNexusAPIs:             true,
 	}
 	s.setupSuite("testdata/es_cluster.yaml")
 }

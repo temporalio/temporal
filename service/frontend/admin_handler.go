@@ -48,6 +48,7 @@ import (
 	"go.temporal.io/server/common/channel"
 	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/primitives"
+	"go.temporal.io/server/common/utf8validator"
 	"go.temporal.io/server/common/util"
 	"go.temporal.io/server/service/worker/dlq"
 
@@ -141,7 +142,7 @@ type (
 		NamespaceReplicationQueue           persistence.NamespaceReplicationQueue
 		ReplicatorNamespaceReplicationQueue persistence.NamespaceReplicationQueue
 		EsClient                            esclient.Client
-		VisibilityMrg                       manager.VisibilityManager
+		visibilityMgr                       manager.VisibilityManager
 		Logger                              log.Logger
 		TaskManager                         persistence.TaskManager
 		ClusterMetadataManager              persistence.ClusterMetadataManager
@@ -195,7 +196,7 @@ func NewAdminHandler(
 			args.Logger,
 		),
 		eventSerializer:             args.EventSerializer,
-		visibilityMgr:               args.VisibilityMrg,
+		visibilityMgr:               args.visibilityMgr,
 		ESClient:                    args.EsClient,
 		persistenceExecutionManager: args.PersistenceExecutionManager,
 		namespaceReplicationQueue:   args.NamespaceReplicationQueue,
@@ -1135,6 +1136,7 @@ func (adh *AdminHandler) AddOrUpdateRemoteCluster(
 			HistoryShardCount:        resp.GetHistoryShardCount(),
 			ClusterId:                resp.GetClusterId(),
 			ClusterAddress:           request.GetFrontendAddress(),
+			HttpAddress:              request.GetFrontendHttpAddress(),
 			FailoverVersionIncrement: resp.GetFailoverVersionIncrement(),
 			InitialFailoverVersion:   resp.GetInitialFailoverVersion(),
 			IsGlobalNamespaceEnabled: resp.GetIsGlobalNamespaceEnabled(),
@@ -1760,6 +1762,7 @@ func (adh *AdminHandler) GetNamespace(ctx context.Context, request *adminservice
 		FailoverVersion:   resp.Namespace.GetFailoverVersion(),
 		IsGlobalNamespace: resp.IsGlobalNamespace,
 		FailoverHistory:   convertFailoverHistoryToReplicationProto(resp.Namespace.GetReplicationConfig().GetFailoverHistory()),
+		OutgoingServices:  resp.Namespace.GetOutgoingServices(),
 	}
 	return nsResponse, nil
 }
@@ -1814,6 +1817,9 @@ func (adh *AdminHandler) PurgeDLQTasks(
 		WorkflowId: workflowID,
 		RunId:      runID,
 	}
+	if err := utf8validator.Validate(&jobToken, utf8validator.SourceRPCResponse); err != nil {
+		return nil, err
+	}
 	jobTokenBytes, _ := jobToken.Marshal()
 	return &adminservice.PurgeDLQTasksResponse{
 		JobToken: jobTokenBytes,
@@ -1850,6 +1856,9 @@ func (adh *AdminHandler) MergeDLQTasks(ctx context.Context, request *adminservic
 		WorkflowId: workflowID,
 		RunId:      runID,
 	}
+	if err := utf8validator.Validate(&jobToken, utf8validator.SourceRPCResponse); err != nil {
+		return nil, err
+	}
 	jobTokenBytes, _ := jobToken.Marshal()
 	return &adminservice.MergeDLQTasksResponse{
 		JobToken: jobTokenBytes,
@@ -1859,6 +1868,9 @@ func (adh *AdminHandler) MergeDLQTasks(ctx context.Context, request *adminservic
 func (adh *AdminHandler) DescribeDLQJob(ctx context.Context, request *adminservice.DescribeDLQJobRequest) (*adminservice.DescribeDLQJobResponse, error) {
 	jt := adminservice.DLQJobToken{}
 	err := jt.Unmarshal([]byte(request.JobToken))
+	if err == nil {
+		err = utf8validator.Validate(&jt, utf8validator.SourceRPCRequest)
+	}
 	if err != nil {
 		return nil, fmt.Errorf("%w: %v", errInvalidDLQJobToken, err)
 	}
@@ -1912,6 +1924,9 @@ func (adh *AdminHandler) DescribeDLQJob(ctx context.Context, request *adminservi
 func (adh *AdminHandler) CancelDLQJob(ctx context.Context, request *adminservice.CancelDLQJobRequest) (*adminservice.CancelDLQJobResponse, error) {
 	jt := adminservice.DLQJobToken{}
 	err := jt.Unmarshal([]byte(request.JobToken))
+	if err == nil {
+		err = utf8validator.Validate(&jt, utf8validator.SourceRPCRequest)
+	}
 	if err != nil {
 		return nil, fmt.Errorf("%w: %v", errInvalidDLQJobToken, err)
 	}

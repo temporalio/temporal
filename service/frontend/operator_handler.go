@@ -29,12 +29,13 @@ import (
 	"fmt"
 	"sync/atomic"
 
-	cnexus "go.temporal.io/server/common/nexus"
 	"golang.org/x/exp/maps"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/health"
 	healthpb "google.golang.org/grpc/health/grpc_health_v1"
 	"google.golang.org/grpc/status"
+
+	cnexus "go.temporal.io/server/common/nexus"
 
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
@@ -91,6 +92,7 @@ type (
 		clusterMetadataManager  persistence.ClusterMetadataManager
 		clusterMetadata         clustermetadata.Metadata
 		clientFactory           svc.Factory
+		incomingServiceClient   *NexusIncomingServiceClient
 		outgoingServiceRegistry *cnexus.OutgoingServiceRegistry
 	}
 
@@ -107,6 +109,7 @@ type (
 		clusterMetadataManager  persistence.ClusterMetadataManager
 		clusterMetadata         clustermetadata.Metadata
 		clientFactory           svc.Factory
+		incomingServiceClient   *NexusIncomingServiceClient
 		outgoingServiceRegistry *cnexus.OutgoingServiceRegistry
 	}
 )
@@ -136,6 +139,7 @@ func NewOperatorHandlerImpl(
 		clusterMetadataManager:  args.clusterMetadataManager,
 		clusterMetadata:         args.clusterMetadata,
 		clientFactory:           args.clientFactory,
+		incomingServiceClient:   args.incomingServiceClient,
 		outgoingServiceRegistry: args.outgoingServiceRegistry,
 	}
 
@@ -711,6 +715,7 @@ func (h *OperatorHandlerImpl) AddOrUpdateRemoteCluster(
 			HistoryShardCount:        resp.GetHistoryShardCount(),
 			ClusterId:                resp.GetClusterId(),
 			ClusterAddress:           request.GetFrontendAddress(),
+			HttpAddress:              request.GetFrontendHttpAddress(),
 			FailoverVersionIncrement: resp.GetFailoverVersionIncrement(),
 			InitialFailoverVersion:   resp.GetInitialFailoverVersion(),
 			IsGlobalNamespaceEnabled: resp.GetIsGlobalNamespaceEnabled(),
@@ -828,57 +833,112 @@ func (h *OperatorHandlerImpl) validateRemoteClusterMetadata(metadata *adminservi
 	return nil
 }
 
-func (*OperatorHandlerImpl) CreateNexusIncomingService(context.Context, *operatorservice.CreateNexusIncomingServiceRequest) (*operatorservice.CreateNexusIncomingServiceResponse, error) {
-	return nil, status.Error(codes.Unimplemented, "unimplemented")
+func (h *OperatorHandlerImpl) CreateNexusIncomingService(
+	ctx context.Context,
+	request *operatorservice.CreateNexusIncomingServiceRequest,
+) (_ *operatorservice.CreateNexusIncomingServiceResponse, retErr error) {
+	defer log.CapturePanic(h.logger, &retErr)
+	if !h.config.EnableNexusAPIs() {
+		return nil, status.Error(codes.NotFound, "Nexus APIs are disabled")
+	}
+	return h.incomingServiceClient.Create(ctx, request)
 }
 
-func (*OperatorHandlerImpl) UpdateNexusIncomingService(context.Context, *operatorservice.UpdateNexusIncomingServiceRequest) (*operatorservice.UpdateNexusIncomingServiceResponse, error) {
-	return nil, status.Error(codes.Unimplemented, "unimplemented")
+func (h *OperatorHandlerImpl) UpdateNexusIncomingService(
+	ctx context.Context,
+	request *operatorservice.UpdateNexusIncomingServiceRequest,
+) (_ *operatorservice.UpdateNexusIncomingServiceResponse, retErr error) {
+	defer log.CapturePanic(h.logger, &retErr)
+	if !h.config.EnableNexusAPIs() {
+		return nil, status.Error(codes.NotFound, "Nexus APIs are disabled")
+	}
+	return h.incomingServiceClient.Update(ctx, request)
 }
 
-func (*OperatorHandlerImpl) DeleteNexusIncomingService(context.Context, *operatorservice.DeleteNexusIncomingServiceRequest) (*operatorservice.DeleteNexusIncomingServiceResponse, error) {
-	return nil, status.Error(codes.Unimplemented, "unimplemented")
+func (h *OperatorHandlerImpl) DeleteNexusIncomingService(
+	ctx context.Context,
+	request *operatorservice.DeleteNexusIncomingServiceRequest,
+) (_ *operatorservice.DeleteNexusIncomingServiceResponse, retErr error) {
+	defer log.CapturePanic(h.logger, &retErr)
+	if !h.config.EnableNexusAPIs() {
+		return nil, status.Error(codes.NotFound, "Nexus APIs are disabled")
+	}
+	return h.incomingServiceClient.Delete(ctx, request)
 }
 
-func (*OperatorHandlerImpl) GetNexusIncomingService(context.Context, *operatorservice.GetNexusIncomingServiceRequest) (*operatorservice.GetNexusIncomingServiceResponse, error) {
-	return nil, status.Error(codes.Unimplemented, "unimplemented")
+func (h *OperatorHandlerImpl) GetNexusIncomingService(
+	ctx context.Context,
+	request *operatorservice.GetNexusIncomingServiceRequest,
+) (_ *operatorservice.GetNexusIncomingServiceResponse, retErr error) {
+	defer log.CapturePanic(h.logger, &retErr)
+	if !h.config.EnableNexusAPIs() {
+		return nil, status.Error(codes.NotFound, "Nexus APIs are disabled")
+	}
+	return h.incomingServiceClient.Get(ctx, request)
 }
 
-func (*OperatorHandlerImpl) ListNexusIncomingServices(context.Context, *operatorservice.ListNexusIncomingServicesRequest) (*operatorservice.ListNexusIncomingServicesResponse, error) {
-	return nil, status.Error(codes.Unimplemented, "unimplemented")
+func (h *OperatorHandlerImpl) ListNexusIncomingServices(
+	ctx context.Context,
+	request *operatorservice.ListNexusIncomingServicesRequest,
+) (_ *operatorservice.ListNexusIncomingServicesResponse, retErr error) {
+	defer log.CapturePanic(h.logger, &retErr)
+	if !h.config.EnableNexusAPIs() {
+		return nil, status.Error(codes.NotFound, "Nexus APIs are disabled")
+	}
+	return h.incomingServiceClient.List(ctx, request)
 }
 
 func (h *OperatorHandlerImpl) GetNexusOutgoingService(
 	ctx context.Context,
 	req *operatorservice.GetNexusOutgoingServiceRequest,
-) (*operatorservice.GetNexusOutgoingServiceResponse, error) {
+) (_ *operatorservice.GetNexusOutgoingServiceResponse, retErr error) {
+	defer log.CapturePanic(h.logger, &retErr)
+	if !h.config.EnableNexusAPIs() {
+		return nil, status.Error(codes.NotFound, "Nexus APIs are disabled")
+	}
 	return h.outgoingServiceRegistry.Get(ctx, req)
 }
 
 func (h *OperatorHandlerImpl) CreateNexusOutgoingService(
 	ctx context.Context,
 	req *operatorservice.CreateNexusOutgoingServiceRequest,
-) (*operatorservice.CreateNexusOutgoingServiceResponse, error) {
+) (_ *operatorservice.CreateNexusOutgoingServiceResponse, retErr error) {
+	defer log.CapturePanic(h.logger, &retErr)
+	if !h.config.EnableNexusAPIs() {
+		return nil, status.Error(codes.NotFound, "Nexus APIs are disabled")
+	}
 	return h.outgoingServiceRegistry.Create(ctx, req)
 }
 
 func (h *OperatorHandlerImpl) UpdateNexusOutgoingService(
 	ctx context.Context,
 	req *operatorservice.UpdateNexusOutgoingServiceRequest,
-) (*operatorservice.UpdateNexusOutgoingServiceResponse, error) {
+) (_ *operatorservice.UpdateNexusOutgoingServiceResponse, retErr error) {
+	defer log.CapturePanic(h.logger, &retErr)
+	if !h.config.EnableNexusAPIs() {
+		return nil, status.Error(codes.NotFound, "Nexus APIs are disabled")
+	}
 	return h.outgoingServiceRegistry.Update(ctx, req)
 }
 
 func (h *OperatorHandlerImpl) DeleteNexusOutgoingService(
 	ctx context.Context,
 	req *operatorservice.DeleteNexusOutgoingServiceRequest,
-) (*operatorservice.DeleteNexusOutgoingServiceResponse, error) {
+) (_ *operatorservice.DeleteNexusOutgoingServiceResponse, retErr error) {
+	defer log.CapturePanic(h.logger, &retErr)
+	if !h.config.EnableNexusAPIs() {
+		return nil, status.Error(codes.NotFound, "Nexus APIs are disabled")
+	}
 	return h.outgoingServiceRegistry.Delete(ctx, req)
 }
 
 func (h *OperatorHandlerImpl) ListNexusOutgoingServices(
 	ctx context.Context,
 	req *operatorservice.ListNexusOutgoingServicesRequest,
-) (*operatorservice.ListNexusOutgoingServicesResponse, error) {
+) (_ *operatorservice.ListNexusOutgoingServicesResponse, retErr error) {
+	defer log.CapturePanic(h.logger, &retErr)
+	if !h.config.EnableNexusAPIs() {
+		return nil, status.Error(codes.NotFound, "Nexus APIs are disabled")
+	}
 	return h.outgoingServiceRegistry.List(ctx, req)
 }

@@ -49,12 +49,13 @@ import (
 	"go.temporal.io/server/common/archiver"
 	"go.temporal.io/server/common/authorization"
 	"go.temporal.io/server/common/cluster"
-	"go.temporal.io/server/common/collection"
 	"go.temporal.io/server/common/config"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/headers"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
+	"go.temporal.io/server/common/membership/ringpop"
+	"go.temporal.io/server/common/membership/static"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/persistence/cassandra"
@@ -73,6 +74,7 @@ import (
 	"go.temporal.io/server/service/history"
 	"go.temporal.io/server/service/history/replication"
 	"go.temporal.io/server/service/history/tasks"
+	"go.temporal.io/server/service/history/workflow"
 	"go.temporal.io/server/service/matching"
 	"go.temporal.io/server/service/worker"
 )
@@ -80,6 +82,7 @@ import (
 var (
 	clusterMetadataInitErr           = errors.New("failed to initialize current cluster metadata")
 	missingCurrentClusterMetadataErr = errors.New("missing current cluster metadata under clusterMetadata.ClusterInformation")
+	missingServiceInStaticHosts      = errors.New("hosts are missing in static hosts for service: ")
 )
 
 type (
@@ -127,6 +130,7 @@ type (
 		Authorizer                 authorization.Authorizer
 		ClaimMapper                authorization.ClaimMapper
 		AudienceGetter             authorization.JWTAudienceMapper
+		ServiceHosts               map[primitives.ServiceName]static.Hosts
 
 		// below are things that could be over write by server options or may have default if not supplied by serverOptions.
 		Logger                log.Logger
@@ -269,6 +273,16 @@ func ServerOptionsProvider(opts []ServerOption) (serverOptionsProvider, error) {
 		}
 	}
 
+	// check that when static hosts are defined, they are defined for all required hosts
+	if len(so.hostsByService) > 0 {
+		for _, service := range DefaultServices {
+			hosts := so.hostsByService[primitives.ServiceName(service)]
+			if len(hosts.All) == 0 {
+				return serverOptionsProvider{}, fmt.Errorf("%w: %v", missingServiceInStaticHosts, service)
+			}
+		}
+	}
+
 	return serverOptionsProvider{
 		ServerOptions:              so,
 		StopChan:                   stopChan,
@@ -279,6 +293,7 @@ func ServerOptionsProvider(opts []ServerOption) (serverOptionsProvider, error) {
 		LogConfig:   so.config.Log,
 
 		ServiceNames:    so.serviceNames,
+		ServiceHosts:    so.hostsByService,
 		NamespaceLogger: so.namespaceLogger,
 
 		ServiceResolver:        so.persistenceServiceResolver,
@@ -359,7 +374,8 @@ type (
 		DataStoreFactory           persistenceClient.AbstractDataStoreFactory
 		VisibilityStoreFactory     visibility.VisibilityStoreFactory
 		SpanExporters              []otelsdktrace.SpanExporter
-		InstanceID                 resource.InstanceID `optional:"true"`
+		InstanceID                 resource.InstanceID                     `optional:"true"`
+		StaticServiceHosts         map[primitives.ServiceName]static.Hosts `optional:"true"`
 		TaskCategoryRegistry       tasks.TaskCategoryRegistry
 	}
 )
@@ -372,6 +388,11 @@ type (
 // into fx providers here. Essentially, we want an `fx.In` object in the server graph, and an `fx.Out` object in the
 // service graphs. This is a workaround to achieve something similar.
 func (params ServiceProviderParamsCommon) GetCommonServiceOptions(serviceName primitives.ServiceName) fx.Option {
+	membershipModule := ringpop.MembershipModule
+	if len(params.StaticServiceHosts) > 0 {
+		membershipModule = static.MembershipModule(params.StaticServiceHosts)
+	}
+
 	return fx.Options(
 		fx.Supply(
 			serviceName,
@@ -432,6 +453,7 @@ func (params ServiceProviderParamsCommon) GetCommonServiceOptions(serviceName pr
 		),
 		ServiceTracingModule,
 		resource.DefaultOptions,
+		membershipModule,
 		FxLogAdapter,
 	)
 }
@@ -477,6 +499,7 @@ func HistoryServiceProvider(
 	}
 
 	app := fx.New(
+		fx.Provide(workflow.NewTaskGeneratorProvider),
 		params.GetCommonServiceOptions(serviceName),
 		history.QueueModule,
 		history.Module,
@@ -671,64 +694,12 @@ func ApplyClusterMetadataConfigProvider(
 		return svc.ClusterMetadata, svc.Persistence, fmt.Errorf("error while fetching cluster metadata: %w", err)
 	}
 
-	err = loadClusterInformationFromStore(ctx, svc, clusterMetadataManager, logger)
+	clusterLoader := NewClusterMetadataLoader(clusterMetadataManager, logger)
+	err = clusterLoader.LoadAndMergeWithStaticConfig(ctx, svc)
 	if err != nil {
 		return svc.ClusterMetadata, svc.Persistence, fmt.Errorf("error while loading metadata from cluster: %w", err)
 	}
 	return svc.ClusterMetadata, svc.Persistence, nil
-}
-
-// TODO: move this to cluster.fx
-func loadClusterInformationFromStore(ctx context.Context, svc *config.Config, clusterMsg persistence.ClusterMetadataManager, logger log.Logger) error {
-	iter := collection.NewPagingIterator(func(paginationToken []byte) ([]interface{}, []byte, error) {
-		request := &persistence.ListClusterMetadataRequest{
-			PageSize:      100,
-			NextPageToken: nil,
-		}
-		resp, err := clusterMsg.ListClusterMetadata(ctx, request)
-		if err != nil {
-			return nil, nil, err
-		}
-		var pageItem []interface{}
-		for _, metadata := range resp.ClusterMetadata {
-			pageItem = append(pageItem, metadata)
-		}
-		return pageItem, resp.NextPageToken, nil
-	})
-
-	for iter.HasNext() {
-		item, err := iter.Next()
-		if err != nil {
-			return err
-		}
-		metadata := item.(*persistence.GetClusterMetadataResponse)
-		shardCount := metadata.HistoryShardCount
-		if shardCount == 0 {
-			// This is to add backward compatibility to the svc based cluster connection.
-			shardCount = svc.Persistence.NumHistoryShards
-		}
-		newMetadata := cluster.ClusterInformation{
-			Enabled:                metadata.IsConnectionEnabled,
-			InitialFailoverVersion: metadata.InitialFailoverVersion,
-			RPCAddress:             metadata.ClusterAddress,
-			ShardCount:             shardCount,
-			Tags:                   metadata.Tags,
-		}
-		if staticClusterMetadata, ok := svc.ClusterMetadata.ClusterInformation[metadata.ClusterName]; ok {
-			if metadata.ClusterName != svc.ClusterMetadata.CurrentClusterName {
-				logger.Warn(
-					"ClusterInformation in ClusterMetadata svc is deprecated. Please use TCTL tool to configure remote cluster connections",
-					tag.Key("clusterInformation"),
-					tag.IgnoredValue(staticClusterMetadata),
-					tag.Value(newMetadata))
-			} else {
-				newMetadata.RPCAddress = staticClusterMetadata.RPCAddress
-				logger.Info(fmt.Sprintf("Use rpc address %v for cluster %v.", newMetadata.RPCAddress, metadata.ClusterName))
-			}
-		}
-		svc.ClusterMetadata.ClusterInformation[metadata.ClusterName] = newMetadata
-	}
-	return nil
 }
 
 func initCurrentClusterMetadataRecord(
@@ -758,6 +729,7 @@ func initCurrentClusterMetadataRecord(
 				ClusterName:              currentClusterName,
 				ClusterId:                clusterId,
 				ClusterAddress:           currentClusterInfo.RPCAddress,
+				HttpAddress:              currentClusterInfo.HTTPAddress,
 				FailoverVersionIncrement: svc.ClusterMetadata.FailoverVersionIncrement,
 				InitialFailoverVersion:   currentClusterInfo.InitialFailoverVersion,
 				IsGlobalNamespaceEnabled: svc.ClusterMetadata.EnableGlobalNamespace,
@@ -798,6 +770,10 @@ func updateCurrentClusterMetadataRecord(
 	}
 	if currentClusterDBRecord.ClusterAddress != currentCLusterInfo.RPCAddress {
 		currentClusterDBRecord.ClusterAddress = currentCLusterInfo.RPCAddress
+		updateDBRecord = true
+	}
+	if currentClusterDBRecord.HttpAddress != currentCLusterInfo.HTTPAddress {
+		currentClusterDBRecord.HttpAddress = currentCLusterInfo.HTTPAddress
 		updateDBRecord = true
 	}
 	if !maps.Equal(currentClusterDBRecord.Tags, svc.ClusterMetadata.Tags) {

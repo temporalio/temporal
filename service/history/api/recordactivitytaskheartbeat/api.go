@@ -99,6 +99,11 @@ func Invoke(
 				return nil, consts.ErrActivityTaskNotFound
 			}
 
+			// update worker identity if available
+			if req.HeartbeatRequest.Identity != "" {
+				ai.RetryLastWorkerIdentity = req.HeartbeatRequest.Identity
+			}
+
 			cancelRequested = ai.CancelRequested
 
 			// Save progress and last HB reported time.
