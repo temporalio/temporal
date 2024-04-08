@@ -81,9 +81,10 @@ func (s *VersioningIntegSuite) SetupSuite() {
 		dynamicconfig.MatchingForwarderMaxChildrenPerNode:        partitionTreeDegree,
 		dynamicconfig.TaskQueuesPerBuildIdLimit:                  3,
 
-		dynamicconfig.AssignmentRuleLimitPerQueue:      10,
-		dynamicconfig.RedirectRuleLimitPerQueue:        10,
-		dynamicconfig.MatchingDeletedRuleRetentionTime: 24 * time.Hour,
+		dynamicconfig.AssignmentRuleLimitPerQueue:              10,
+		dynamicconfig.RedirectRuleLimitPerQueue:                10,
+		dynamicconfig.MatchingDeletedRuleRetentionTime:         24 * time.Hour,
+		dynamicconfig.ReachabilityBuildIdVisibilityGracePeriod: 3 * time.Minute,
 
 		// Make sure we don't hit the rate limiter in tests
 		dynamicconfig.FrontendMaxNamespaceNamespaceReplicationInducingAPIsRPSPerInstance:   1000,

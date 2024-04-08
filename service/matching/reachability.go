@@ -6,8 +6,8 @@ import (
 	"go.temporal.io/server/api/clock/v1"
 	hlc "go.temporal.io/server/common/clock/hybrid_logical_clock"
 	"golang.org/x/exp/slices"
-	"google.golang.org/protobuf/types/known/durationpb"
 	"strings"
+	"time"
 
 	"github.com/temporalio/sqlparser"
 	enumspb "go.temporal.io/api/enums/v1"
@@ -20,30 +20,33 @@ import (
 )
 
 type reachabilityCalculator struct {
-	visibilityMgr   manager.VisibilityManager
-	nsID            namespace.ID
-	nsName          namespace.Name
-	taskQueue       string
-	assignmentRules []*persistencespb.AssignmentRule
-	redirectRules   []*persistencespb.RedirectRule
+	visibilityMgr                manager.VisibilityManager
+	nsID                         namespace.ID
+	nsName                       namespace.Name
+	taskQueue                    string
+	assignmentRules              []*persistencespb.AssignmentRule
+	redirectRules                []*persistencespb.RedirectRule
+	buildIdVisibilityGracePeriod time.Duration
 }
 
 func getBuildIdTaskReachability(
 	ctx context.Context,
 	data *persistencespb.VersioningData,
 	visibilityMgr manager.VisibilityManager,
-	nsID namespace.ID,
-	nsName namespace.Name,
+	nsID,
+	nsName,
 	taskQueue,
 	buildId string,
+	buildIdVisibilityGracePeriod time.Duration,
 ) (enumspb.BuildIdTaskReachability, error) {
 	rc := &reachabilityCalculator{
-		visibilityMgr:   visibilityMgr,
-		nsID:            nsID,
-		nsName:          nsName,
-		taskQueue:       taskQueue,
-		assignmentRules: data.GetAssignmentRules(),
-		redirectRules:   data.GetRedirectRules(),
+		visibilityMgr:                visibilityMgr,
+		nsID:                         namespace.ID(nsID),
+		nsName:                       namespace.Name(nsName),
+		taskQueue:                    taskQueue,
+		assignmentRules:              data.GetAssignmentRules(),
+		redirectRules:                data.GetRedirectRules(),
+		buildIdVisibilityGracePeriod: buildIdVisibilityGracePeriod,
 	}
 
 	return rc.getReachability(ctx, buildId)
@@ -152,8 +155,7 @@ func (rc *reachabilityCalculator) getSourcesForTarget(buildId string, includeRec
 }
 
 func (rc *reachabilityCalculator) withinDeletedRuleInclusionPeriod(clk *clock.HybridLogicalClock) bool {
-	period := durationpb.New(versioningReachabilityDeletedRuleInclusionPeriod)
-	return clk == nil || hlc.Since(clk) <= period.AsDuration()
+	return clk == nil || hlc.Since(clk) <= rc.buildIdVisibilityGracePeriod
 }
 
 func (rc *reachabilityCalculator) existsBackloggedActivityOrWFTaskAssignedToAny(ctx context.Context, buildIdsOfInterest []string) (bool, error) {

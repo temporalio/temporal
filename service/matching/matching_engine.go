@@ -78,10 +78,9 @@ const (
 	stickyPollerUnavailableWindow = 10 * time.Second
 	// If a compatible poller hasn't been seen for this time, we fail the CommitBuildId
 	// Set to 70s so that it's a little over the max time a poller should be kept waiting.
-	versioningPollerSeenWindow                       = 70 * time.Second
-	versioningReachabilityDeletedRuleInclusionPeriod = 2 * time.Minute
-	recordTaskStartedDefaultTimeout                  = 10 * time.Second
-	recordTaskStartedSyncMatchTimeout                = 1 * time.Second
+	versioningPollerSeenWindow        = 70 * time.Second
+	recordTaskStartedDefaultTimeout   = 10 * time.Second
+	recordTaskStartedSyncMatchTimeout = 1 * time.Second
 )
 
 type (
@@ -863,10 +862,11 @@ func (e *matchingEngineImpl) DescribeTaskQueue(
 			reachability, err := getBuildIdTaskReachability(ctx,
 				userData.GetData().GetVersioningData(),
 				e.visibilityManager,
-				namespace.ID(request.GetNamespaceId()),
-				namespace.Name(req.GetNamespace()),
+				request.GetNamespaceId(),
+				req.GetNamespace(),
 				req.GetTaskQueue().GetName(),
-				bid)
+				bid,
+				e.config.ReachabilityBuildIdVisibilityGracePeriod(req.GetNamespace()))
 			if err != nil {
 				return nil, err
 			}
