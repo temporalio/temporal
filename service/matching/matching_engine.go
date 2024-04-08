@@ -798,7 +798,7 @@ func (e *matchingEngineImpl) DescribeTaskQueue(
 			return nil, err
 		}
 		if !rootPartition.IsRoot() || rootPartition.Kind() == enumspb.TASK_QUEUE_KIND_STICKY || rootPartition.TaskType() != enumspb.TASK_QUEUE_TYPE_WORKFLOW {
-			return nil, serviceerror.NewInvalidArgument("DescribeTaskQueue must be called on the root partition if api mode is DESCRIBE_TASK_QUEUE_MODE_ENHANCED")
+			return nil, serviceerror.NewInvalidArgument("DescribeTaskQueue must be called on the root partition of workflow task queue if api mode is DESCRIBE_TASK_QUEUE_MODE_ENHANCED")
 		}
 		rootPartitionMgr, err := e.getTaskQueuePartitionManager(ctx, rootPartition, true)
 		if err != nil {
