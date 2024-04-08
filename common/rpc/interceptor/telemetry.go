@@ -403,7 +403,7 @@ func (ti *TelemetryInterceptor) getWorkflowTags(
 		}
 		// Special case for avoiding deprecated RespondQueryTaskCompleted API token which does not have workflow id.
 		if _, ok := req.(*workflowservice.RespondQueryTaskCompletedRequest); ok {
-		        return []tag.Tag{}
+			return []tag.Tag{}
 		}
 		taskToken, err := ti.serializer.Deserialize(taskTokenBytes)
 		if err != nil {
