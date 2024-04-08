@@ -2,12 +2,10 @@ package matching
 
 import (
 	"context"
-	"testing"
-	"time"
-
 	"github.com/golang/mock/gomock"
 	"github.com/stretchr/testify/assert"
 	enumspb "go.temporal.io/api/enums/v1"
+	"testing"
 
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	commonclock "go.temporal.io/server/common/clock"
@@ -223,15 +221,17 @@ func TestGetReachability_WithVisibility_WithoutRules(t *testing.T) {
 	assert.Equal(t, enumspb.BUILD_ID_TASK_REACHABILITY_REACHABLE, reachability)
 }
 
-// no expected calls to visibility in this test
 func TestGetReachability_WithoutVisibility_WithRules(t *testing.T) {
 	// Assignment: [ (D, 50%), (A, nil) ]
 	// Redirect: (A->B), (B->C), (F->G)
 	t.Parallel()
 	ctx := context.Background()
+	createTs := hlc.Zero(1)
+
+	// make a visibility manager with no records
 	ctrl := gomock.NewController(t)
 	vm := manager.NewMockVisibilityManager(ctrl)
-	createTs := hlc.Zero(1)
+	vm.EXPECT().CountWorkflowExecutions(gomock.Any(), gomock.Any()).AnyTimes().Return(mkCountResponse(0))
 
 	rc := &reachabilityCalculator{
 		visibilityMgr: vm,
@@ -249,7 +249,7 @@ func TestGetReachability_WithoutVisibility_WithRules(t *testing.T) {
 		},
 	}
 
-	// 1. getReachability(A) --> unreachable (assignment rule target, but redirect rule source)
+	// 1. getReachability(A) --> unreachable (assignment rule target, and also redirect rule source)
 	reachability, err := rc.getReachability(ctx, "A")
 	assert.Nil(t, err)
 	assert.Equal(t, enumspb.BUILD_ID_TASK_REACHABILITY_UNREACHABLE, reachability)
@@ -259,74 +259,29 @@ func TestGetReachability_WithoutVisibility_WithRules(t *testing.T) {
 	assert.Nil(t, err)
 	assert.Equal(t, enumspb.BUILD_ID_TASK_REACHABILITY_REACHABLE, reachability)
 
-	// 3. getReachability(D) --> reachable (assignment rule target)
+	// 3. getReachability(D) --> reachable (assignment rule target, nothing else)
 	reachability, err = rc.getReachability(ctx, "D")
 	assert.Nil(t, err)
 	assert.Equal(t, enumspb.BUILD_ID_TASK_REACHABILITY_REACHABLE, reachability)
+
+	// 4. getReachability(G) --> unreachable (redirect rule target of unreachable source [F not reachable by rules or visibility])
+	reachability, err = rc.getReachability(ctx, "G")
+	assert.Nil(t, err)
+	assert.Equal(t, enumspb.BUILD_ID_TASK_REACHABILITY_UNREACHABLE, reachability)
 }
 
 // todo: test reachability of rules that are only reachable by the buildIdsOfInterest list
 // todo: test deleted rules
-func TestGetReachability_WithVisibility_WithRules(t *testing.T) {
+func TestGetReachability_WithVisibility_WithDeletedRules(t *testing.T) {
 	t.Skip()
-	// 1. recently-deleted redirect rule source --> reachable, we only consider active rules for that check
-	// 2. recently-deleted assignment rule target --> reachable -- how?
-	// 3. deleted assignment rule target --> unreachable
-	// 4. recently-deleted redirect rule target of assignment-rule-reachable source --> reachable -- how?
-	// 5. deleted redirect rule target of reachable source --> unreachable
+	// recently-deleted redirect rule source --> reachable
+	// recently-deleted assignment rule target --> reachable only if we include recently-deleted rules for non-visibility buildIdsOfInterest list
+	// deleted assignment rule target --> not reachable
+	// recently-deleted redirect rule target of reachable source --> reachable only if we include recently-deleted rules for non-visibility buildIdsOfInterest list
+	// deleted redirect rule target of reachable source --> unreachable
 
-	// Assignment: [ (D, 50%, active), (C, 50%, recently deleted), (B, nil, deleted),  (A, nil, active) ]
-	// Redirect: (B->C, active), (D->C, recently deleted)
-	t.Parallel()
-	ctx := context.Background()
-	ctrl := gomock.NewController(t)
-	vm := manager.NewMockVisibilityManager(ctrl) // no EXPECT() on this, because it shouldn't get used
-	// start time one hour ago
-	timesource := commonclock.NewEventTimeSource().Update(time.Now().Add(-1 * time.Hour))
-	clock1HourAgo := hlc.Next(hlc.Zero(1), timesource)
-	timesource.Advance(30 * time.Minute)
-	clock30MinAgo := hlc.Next(clock1HourAgo, timesource)
-	timesource.Advance(25 * time.Minute)
-	clock5MinAgo := hlc.Next(clock30MinAgo, timesource)
-	rc := &reachabilityCalculator{
-		visibilityMgr: vm,
-		nsID:          namespace.ID("test-namespace-id"),
-		nsName:        namespace.Name("test-namespace"),
-		taskQueue:     "test-reachability-tq",
-		assignmentRules: []*persistencespb.AssignmentRule{
-			mkAssignmentRulePersistence(mkAssignmentRule("D", mkNewAssignmentPercentageRamp(50)), clock1HourAgo, nil),
-			mkAssignmentRulePersistence(mkAssignmentRule("C", mkNewAssignmentPercentageRamp(50)), clock1HourAgo, clock5MinAgo),
-			mkAssignmentRulePersistence(mkAssignmentRule("B", nil), clock1HourAgo, clock30MinAgo),
-			mkAssignmentRulePersistence(mkAssignmentRule("A", nil), clock1HourAgo, nil),
-		},
-		redirectRules: []*persistencespb.RedirectRule{
-			mkRedirectRulePersistence(mkRedirectRule("A", "B"), clock1HourAgo, nil),
-			mkRedirectRulePersistence(mkRedirectRule("B", "C"), clock1HourAgo, clock5MinAgo),
-		},
-	}
+	// Assignment: [ (C, active), (B, recently deleted), (A, deleted) ]. Redirect: (A->B, active), (C->B, recently deleted)
 
-	// 1. getReachability(A) --> unreachable (assignment rule target, but redirect rule source)
-	reachability, err := rc.getReachability(ctx, "A")
-	assert.Nil(t, err)
-	assert.Equal(t, enumspb.BUILD_ID_TASK_REACHABILITY_UNREACHABLE, reachability)
-
-	// 2. getReachability(C) --> reachable (redirect rule target of reachable source)
-	reachability, err = rc.getReachability(ctx, "C")
-	assert.Nil(t, err)
-	assert.Equal(t, enumspb.BUILD_ID_TASK_REACHABILITY_REACHABLE, reachability)
-
-	// 3. getReachability(D) --> reachable (assignment rule target)
-	reachability, err = rc.getReachability(ctx, "D")
-	assert.Nil(t, err)
-	assert.Equal(t, enumspb.BUILD_ID_TASK_REACHABILITY_REACHABLE, reachability)
-
-	// scenarios that require visibility
-	// 3. getReachability(G) --> unreachable (redirect rule target of unreachable source)
-	reachability, err = rc.getReachability(ctx, "G")
-	assert.Nil(t, err)
-	assert.Equal(t, enumspb.BUILD_ID_TASK_REACHABILITY_UNREACHABLE, reachability)
-
-	// todo
 	// getReachability(A) --> unreachable (active redirect rule source)
 	// getReachability(A) --> unreachable (active redirect rule source)
 	// getReachability(C) --> reachable (redirect rule target of reachable source)
