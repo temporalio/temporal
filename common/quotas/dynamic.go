@@ -38,6 +38,9 @@ type (
 	// BurstFn returns an int as the burst / bucket size
 	BurstFn func() int
 
+	// BurstRatioFn returns a float as the ratio of burst to rate
+	BurstRatioFn func() float64
+
 	// NamespaceBurstFn returns an int as the burst / bucket size for the given namespace
 	NamespaceBurstFn func(namespace string) float64
 
@@ -78,29 +81,35 @@ func NewRateBurst(
 func NewDefaultIncomingRateBurst(
 	rateFn RateFn,
 ) *RateBurstImpl {
-	return newDefaultRateBurst(rateFn, defaultIncomingRateBurstRatio)
+	return NewDefaultRateBurst(rateFn, func() float64 {
+		return defaultIncomingRateBurstRatio
+	})
 }
 
 func NewDefaultOutgoingRateBurst(
 	rateFn RateFn,
 ) *RateBurstImpl {
-	return newDefaultRateBurst(rateFn, defaultOutgoingRateBurstRatio)
+	return NewDefaultRateBurst(rateFn, func() float64 {
+		return defaultOutgoingRateBurstRatio
+	})
 }
 
-func newDefaultRateBurst(
+func NewDefaultRateBurst(
 	rateFn RateFn,
-	rateToBurstRatio float64,
+	rateToBurstRatio BurstRatioFn,
 ) *RateBurstImpl {
 	burstFn := func() int {
 		rate := rateFn()
 		if rate < 0 {
 			rate = 0
 		}
-		if rateToBurstRatio < 0 {
-			rateToBurstRatio = 0
+
+		ratio := rateToBurstRatio()
+		if ratio < 0 {
+			ratio = 0
 		}
-		burst := int(rate * rateToBurstRatio)
-		if burst == 0 && rate > 0 && rateToBurstRatio > 0 {
+		burst := int(rate * ratio)
+		if burst == 0 && rate > 0 && ratio > 0 {
 			burst = 1
 		}
 		return burst

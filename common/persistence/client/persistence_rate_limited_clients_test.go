@@ -126,12 +126,15 @@ func TestRateLimitedPersistenceClients(t *testing.T) {
 			taskStore.EXPECT().GetTasks(gomock.Any(), gomock.Any()).AnyTimes().Return(nil, nil)
 			dataStoreFactory.EXPECT().NewTaskStore().AnyTimes().Return(taskStore, nil)
 
+			burstRatioFn := func() float64 {
+				return 1.0
+			}
 			systemRequestRateLimiter := client.NewNoopPriorityRateLimiter(func() int {
 				return tc.systemRPS
-			})
+			}, burstRatioFn)
 			namespaceRequestRateLimiter := client.NewNoopPriorityRateLimiter(func() int {
 				return tc.namespaceRPS
-			})
+			}, burstRatioFn)
 			factory := client.NewFactory(
 				dataStoreFactory,
 				&config.Persistence{

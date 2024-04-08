@@ -2282,6 +2282,21 @@ func (mr *MockMutableStateMockRecorder) GetWorkflowCloseTime(ctx interface{}) *g
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetWorkflowCloseTime", reflect.TypeOf((*MockMutableState)(nil).GetWorkflowCloseTime), ctx)
 }
 
+// GetWorkflowExecutionDuration mocks base method.
+func (m *MockMutableState) GetWorkflowExecutionDuration(ctx context.Context) (time.Duration, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetWorkflowExecutionDuration", ctx)
+	ret0, _ := ret[0].(time.Duration)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// GetWorkflowExecutionDuration indicates an expected call of GetWorkflowExecutionDuration.
+func (mr *MockMutableStateMockRecorder) GetWorkflowExecutionDuration(ctx interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetWorkflowExecutionDuration", reflect.TypeOf((*MockMutableState)(nil).GetWorkflowExecutionDuration), ctx)
+}
+
 // GetWorkflowKey mocks base method.
 func (m *MockMutableState) GetWorkflowKey() definition.WorkflowKey {
 	m.ctrl.T.Helper()

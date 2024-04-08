@@ -291,12 +291,13 @@ func convertToExecutionInfo(record *archiverspb.VisibilityRecord, saTypeMap sear
 		Type: &commonpb.WorkflowType{
 			Name: record.WorkflowTypeName,
 		},
-		StartTime:        record.StartTime,
-		ExecutionTime:    record.ExecutionTime,
-		CloseTime:        record.CloseTime,
-		Status:           record.Status,
-		HistoryLength:    record.HistoryLength,
-		Memo:             record.Memo,
-		SearchAttributes: searchAttributes,
+		StartTime:         record.StartTime,
+		ExecutionTime:     record.ExecutionTime,
+		CloseTime:         record.CloseTime,
+		ExecutionDuration: record.ExecutionDuration,
+		Status:            record.Status,
+		HistoryLength:     record.HistoryLength,
+		Memo:              record.Memo,
+		SearchAttributes:  searchAttributes,
 	}, nil
 }

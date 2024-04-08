@@ -325,12 +325,24 @@ func (s *ScheduleFunctionalSuite) TestBasics() {
 	wfResp, err = s.engine.ListWorkflowExecutions(NewContext(), &workflowservice.ListWorkflowExecutionsRequest{
 		Namespace: s.namespace,
 		PageSize:  5,
-		Query:     fmt.Sprintf("%s = \"%s\"", searchattribute.TemporalNamespaceDivision, scheduler.NamespaceDivision),
+		Query:     fmt.Sprintf("%s = '%s'", searchattribute.TemporalNamespaceDivision, scheduler.NamespaceDivision),
 	})
 	s.NoError(err)
 	s.EqualValues(1, len(wfResp.Executions), "should see scheduler workflow")
 	ex0 = wfResp.Executions[0]
 	s.Equal(scheduler.WorkflowType, ex0.Type.Name)
+
+	// list schedules with search attribute filter
+
+	listResp, err := s.engine.ListSchedules(NewContext(), &workflowservice.ListSchedulesRequest{
+		Namespace:       s.namespace,
+		MaximumPageSize: 5,
+		Query:           "CustomKeywordField = 'schedule sa value'",
+	})
+	s.NoError(err)
+	s.Len(listResp.Schedules, 1)
+	entry := listResp.Schedules[0]
+	s.Equal(sid, entry.ScheduleId)
 
 	// update
 
@@ -392,13 +404,13 @@ func (s *ScheduleFunctionalSuite) TestBasics() {
 	s.Equal("because I said so", describeResp.Schedule.State.Notes)
 
 	// don't loop to wait for visibility, we already waited 7s from the patch
-	listResp, err := s.engine.ListSchedules(NewContext(), &workflowservice.ListSchedulesRequest{
+	listResp, err = s.engine.ListSchedules(NewContext(), &workflowservice.ListSchedulesRequest{
 		Namespace:       s.namespace,
 		MaximumPageSize: 5,
 	})
 	s.NoError(err)
 	s.Equal(1, len(listResp.Schedules))
-	entry := listResp.Schedules[0]
+	entry = listResp.Schedules[0]
 	s.Equal(sid, entry.ScheduleId)
 	s.True(entry.Info.Paused)
 	s.Equal("because I said so", entry.Info.Notes)

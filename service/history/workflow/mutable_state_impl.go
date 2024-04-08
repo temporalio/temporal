@@ -1186,6 +1186,19 @@ func (ms *MutableStateImpl) GetWorkflowCloseTime(ctx context.Context) (time.Time
 	return ms.executionInfo.CloseTime.AsTime(), nil
 }
 
+// GetWorkflowExecutionDuration returns the workflow execution duration.
+// Returns zero for open workflow.
+func (ms *MutableStateImpl) GetWorkflowExecutionDuration(ctx context.Context) (time.Duration, error) {
+	closeTime, err := ms.GetWorkflowCloseTime(ctx)
+	if err != nil {
+		return 0, err
+	}
+	if closeTime.IsZero() || ms.executionInfo.ExecutionTime == nil {
+		return 0, nil
+	}
+	return closeTime.Sub(ms.executionInfo.ExecutionTime.AsTime()), nil
+}
+
 // GetStartEvent retrieves the workflow start event from mutable state
 func (ms *MutableStateImpl) GetStartEvent(
 	ctx context.Context,

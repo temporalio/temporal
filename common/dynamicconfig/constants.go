@@ -116,6 +116,9 @@ const (
 	// OperatorRPSRatio is the percentage of the rate limit provided to priority rate limiters that should be used for
 	// operator API calls (highest priority). Should be >0.0 and <= 1.0 (defaults to 20% if not specified)
 	OperatorRPSRatio = "system.operatorRPSRatio"
+	// PersistenceQPSBurstRatio is the burst ratio for persistence QPS.
+	// This flag controls the burst ratio for all services.
+	PersistenceQPSBurstRatio = "system.persistenceQPSBurstRatio"
 
 	// Whether the deadlock detector should dump goroutines
 	DeadlockDumpGoroutines = "system.deadlock.DumpGoroutines"

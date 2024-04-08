@@ -57,6 +57,7 @@ type (
 		PersistencePerShardNamespaceMaxQPS persistenceClient.PersistencePerShardNamespaceMaxQPS
 		EnablePriorityRateLimiting         persistenceClient.EnablePriorityRateLimiting
 		OperatorRPSRatio                   persistenceClient.OperatorRPSRatio
+		PersistenceBurstRatio              persistenceClient.PersistenceBurstRatio
 		DynamicRateLimitingParams          persistenceClient.DynamicRateLimitingParams
 	}
 
@@ -107,6 +108,7 @@ func NewPersistenceRateLimitingParams(
 	perShardNamespaceMaxQps dynamicconfig.IntPropertyFnWithNamespaceFilter,
 	enablePriorityRateLimiting dynamicconfig.BoolPropertyFn,
 	operatorRPSRatio dynamicconfig.FloatPropertyFn,
+	burstRatio dynamicconfig.FloatPropertyFn,
 	dynamicRateLimitingParams dynamicconfig.MapPropertyFn,
 	lazyLoadedServiceResolver PersistenceLazyLoadedServiceResolver,
 	logger log.Logger,
@@ -137,6 +139,7 @@ func NewPersistenceRateLimitingParams(
 		PersistencePerShardNamespaceMaxQPS: persistenceClient.PersistencePerShardNamespaceMaxQPS(perShardNamespaceMaxQps),
 		EnablePriorityRateLimiting:         persistenceClient.EnablePriorityRateLimiting(enablePriorityRateLimiting),
 		OperatorRPSRatio:                   persistenceClient.OperatorRPSRatio(operatorRPSRatio),
+		PersistenceBurstRatio:              persistenceClient.PersistenceBurstRatio(burstRatio),
 		DynamicRateLimitingParams:          persistenceClient.DynamicRateLimitingParams(dynamicRateLimitingParams),
 	}
 }

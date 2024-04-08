@@ -615,6 +615,9 @@ func (s *VisibilityStore) rowToInfo(
 	if row.CloseTime != nil {
 		info.CloseTime = *row.CloseTime
 	}
+	if row.ExecutionDuration != nil {
+		info.ExecutionDuration = *row.ExecutionDuration
+	}
 	if row.HistoryLength != nil {
 		info.HistoryLength = *row.HistoryLength
 	}
