@@ -505,7 +505,6 @@ func PersistenceRateLimitingParamsProvider(
 		serviceConfig.PersistenceNamespaceMaxQPS,
 		serviceConfig.PersistenceGlobalNamespaceMaxQPS,
 		serviceConfig.PersistencePerShardNamespaceMaxQPS,
-		serviceConfig.EnablePersistencePriorityRateLimiting,
 		serviceConfig.OperatorRPSRatio,
 		serviceConfig.PersistenceQPSBurstRatio,
 		serviceConfig.PersistenceDynamicRateLimitingParams,
