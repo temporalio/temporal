@@ -2,6 +2,7 @@ package matching
 
 import (
 	"context"
+	enumspb "go.temporal.io/api/enums/v1"
 	"testing"
 
 	"github.com/golang/mock/gomock"
@@ -112,35 +113,59 @@ func TestIsReachableAssignmentRuleTarget(t *testing.T) {
 	assert.False(t, isReachableAssignmentRuleTarget("0", assignmentRules))
 }
 
+func TestMakeBuildIdQuery(t *testing.T) {
+	t.Parallel()
+	tq := "test-query-tq"
+
+	buildIdsOfInterest := []string{"0", "1", "2", ""}
+	query := makeBuildIdQuery(buildIdsOfInterest, tq, true)
+	expectedQuery := "TaskQueue = 'test-query-tq' AND (BuildIds IS NULL OR BuildIds IN ('assigned:0','assigned:1','assigned:2','unversioned')) AND ExecutionStatus = \"Running\""
+	assert.Equal(t, expectedQuery, query)
+
+	query = makeBuildIdQuery(buildIdsOfInterest, tq, false)
+	expectedQuery = "TaskQueue = 'test-query-tq' AND (BuildIds IS NULL OR BuildIds IN ('versioned:0','versioned:1','versioned:2','unversioned')) AND ExecutionStatus != \"Running\""
+	assert.Equal(t, expectedQuery, query)
+
+	buildIdsOfInterest = []string{"0", "1", "2"}
+	query = makeBuildIdQuery(buildIdsOfInterest, tq, true)
+	expectedQuery = "TaskQueue = 'test-query-tq' AND BuildIds IN ('assigned:0','assigned:1','assigned:2') AND ExecutionStatus = \"Running\""
+	assert.Equal(t, expectedQuery, query)
+
+	query = makeBuildIdQuery(buildIdsOfInterest, tq, false)
+	expectedQuery = "TaskQueue = 'test-query-tq' AND BuildIds IN ('versioned:0','versioned:1','versioned:2') AND ExecutionStatus != \"Running\""
+	assert.Equal(t, expectedQuery, query)
+}
+
+func mkCountResponse(count int64) (*manager.CountWorkflowExecutionsResponse, error) {
+	return &manager.CountWorkflowExecutionsResponse{
+		Count:  count,
+		Groups: nil,
+	}, nil
+}
+
 // nothing in assignment rules for this test
 func TestGetReachability_NoRules(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
-	tq := "test-exists-tq"
-	nsID := "test-namespace-id"
-	nsName := "test-namespace"
+	tq := "test-reachability-tq"
+	nsID := namespace.ID("test-namespace-id")
+	nsName := namespace.Name("test-namespace")
 	ctrl := gomock.NewController(t)
 	vm := manager.NewMockVisibilityManager(ctrl)
+	rules := &persistencespb.VersioningData{}
 
-	// 1. imagine there is 1 only closed workflows in visibility, with BuildIds == NULL
-	// getReachability("") --> CLOSED_ONLY
-	queryOpen := makeBuildIdQuery([]string{""}, tq, true)
-	vm.EXPECT().CountWorkflowExecutions(gomock.Any(), &manager.CountWorkflowExecutionsRequest{
-		NamespaceID: namespace.ID(nsID),
-		Namespace:   namespace.Name(nsName),
-		Query:       queryOpen,
-	}).Return(0)
-	queryClosed := makeBuildIdQuery([]string{""}, tq, false)
-	vm.EXPECT().CountWorkflowExecutions(gomock.Any(), &manager.CountWorkflowExecutionsRequest{
-		NamespaceID: namespace.ID(nsID),
-		Namespace:   namespace.Name(nsName),
-		Query:       queryClosed,
-	}).Return(1)
-
-	exists, _ := existsWFAssignedToAny(ctx, vm, nsID, nsName, makeBuildIdQuery([]string{""}, tq, true))
-	assert.False(t, exists)
-	exists, _ = existsWFAssignedToAny(ctx, vm, nsID, nsName, makeBuildIdQuery([]string{""}, tq, false))
-	assert.True(t, exists)
+	// 1. getReachability("") --> CLOSED_ONLY
+	// Scenario: There is 1 closed workflow in visibility, unversioned with no build id --> BuildIds == NULL
+	// Expect no matching open workflow executions
+	reqOpen := makeBuildIdCountRequest(nsID, nsName, []string{""}, tq, true)
+	vm.EXPECT().CountWorkflowExecutions(gomock.Any(), reqOpen).AnyTimes().Return(mkCountResponse(0))
+	reqClosed := makeBuildIdCountRequest(nsID, nsName, []string{""}, tq, false)
+	// Expect yes matching closed workflow execution
+	vm.EXPECT().CountWorkflowExecutions(gomock.Any(), reqClosed).AnyTimes().Return(mkCountResponse(1))
+	// Check reachability
+	reachability, err := getBuildIdTaskReachability(ctx, rules, vm, nsID, nsName, tq, "")
+	assert.Nil(t, err)
+	assert.Equal(t, enumspb.BUILD_ID_TASK_REACHABILITY_CLOSED_WORKFLOWS_ONLY, reachability)
 
 	// 2. getReachability(1) --> UNREACHABLE
 
@@ -173,27 +198,4 @@ func TestGetReachability_WithDeletedRules(t *testing.T) {
 	// getReachability(A) --> unreachable (active redirect rule source)
 	// getReachability(C) --> reachable (redirect rule target of reachable source)
 	// getReachability(D) --> reachable (assignment rule target)
-}
-
-func TestMakeBuildIdQuery(t *testing.T) {
-	t.Parallel()
-	tq := "test-query-tq"
-
-	buildIdsOfInterest := []string{"0", "1", "2", ""}
-	query := makeBuildIdQuery(buildIdsOfInterest, tq, true)
-	expectedQuery := "TaskQueue = 'test-query-tq' AND (BuildIds IS NULL OR BuildIds IN ('assigned:0','assigned:1','assigned:2','unversioned')) AND ExecutionStatus = \"Running\""
-	assert.Equal(t, expectedQuery, query)
-
-	query = makeBuildIdQuery(buildIdsOfInterest, tq, false)
-	expectedQuery = "TaskQueue = 'test-query-tq' AND (BuildIds IS NULL OR BuildIds IN ('versioned:0','versioned:1','versioned:2','unversioned')) AND ExecutionStatus != \"Running\""
-	assert.Equal(t, expectedQuery, query)
-
-	buildIdsOfInterest = []string{"0", "1", "2"}
-	query = makeBuildIdQuery(buildIdsOfInterest, tq, true)
-	expectedQuery = "TaskQueue = 'test-query-tq' AND BuildIds IN ('assigned:0','assigned:1','assigned:2') AND ExecutionStatus = \"Running\""
-	assert.Equal(t, expectedQuery, query)
-
-	query = makeBuildIdQuery(buildIdsOfInterest, tq, false)
-	expectedQuery = "TaskQueue = 'test-query-tq' AND BuildIds IN ('versioned:0','versioned:1','versioned:2') AND ExecutionStatus != \"Running\""
-	assert.Equal(t, expectedQuery, query)
 }

@@ -20,8 +20,8 @@ func getBuildIdTaskReachability(
 	ctx context.Context,
 	data *persistencespb.VersioningData,
 	visibilityMgr manager.VisibilityManager,
-	nsID,
-	nsName,
+	nsID namespace.ID,
+	nsName namespace.Name,
 	taskQueue,
 	buildId string,
 ) (enumspb.BuildIdTaskReachability, error) {
@@ -55,7 +55,7 @@ func getBuildIdTaskReachability(
 	// Note: The below cases are not applicable to activity-only task queues, since we don't record those in visibility
 
 	// 2c. If buildId is assignable to tasks from open workflows
-	existsOpenWFAssignedToBuildId, err := existsWFAssignedToAny(ctx, visibilityMgr, nsID, nsName, makeBuildIdQuery(buildIdsOfInterest, taskQueue, true))
+	existsOpenWFAssignedToBuildId, err := existsWFAssignedToAny(ctx, visibilityMgr, makeBuildIdCountRequest(nsID, nsName, buildIdsOfInterest, taskQueue, true))
 	if err != nil {
 		return enumspb.BUILD_ID_TASK_REACHABILITY_UNSPECIFIED, err
 	}
@@ -64,7 +64,7 @@ func getBuildIdTaskReachability(
 	}
 
 	// 3. Cases for CLOSED_WORKFLOWS_ONLY
-	existsClosedWFAssignedToBuildId, err := existsWFAssignedToAny(ctx, visibilityMgr, nsID, nsName, makeBuildIdQuery(buildIdsOfInterest, taskQueue, false))
+	existsClosedWFAssignedToBuildId, err := existsWFAssignedToAny(ctx, visibilityMgr, makeBuildIdCountRequest(nsID, nsName, buildIdsOfInterest, taskQueue, false))
 	if err != nil {
 		return enumspb.BUILD_ID_TASK_REACHABILITY_UNSPECIFIED, err
 	}
@@ -116,8 +116,8 @@ func getSourcesForTarget(buildId string, redirectRules []*persistencespb.Redirec
 }
 
 func existsBackloggedActivityOrWFTaskAssignedToAny(ctx context.Context,
-	nsID,
-	nsName,
+	nsID namespace.ID,
+	nsName namespace.Name,
 	taskQueue string,
 	buildIdsOfInterest []string,
 ) (bool, error) {
@@ -141,19 +141,27 @@ func isReachableAssignmentRuleTarget(buildId string, assignmentRules []*persiste
 func existsWFAssignedToAny(
 	ctx context.Context,
 	visibilityMgr manager.VisibilityManager,
-	nsID,
-	nsName,
-	query string,
+	countRequest *manager.CountWorkflowExecutionsRequest,
 ) (bool, error) {
-	countResponse, err := visibilityMgr.CountWorkflowExecutions(ctx, &manager.CountWorkflowExecutionsRequest{
-		NamespaceID: namespace.ID(nsID),
-		Namespace:   namespace.Name(nsName),
-		Query:       query,
-	})
+	countResponse, err := visibilityMgr.CountWorkflowExecutions(ctx, countRequest)
 	if err != nil {
 		return false, err
 	}
 	return countResponse.Count > 0, nil
+}
+
+func makeBuildIdCountRequest(
+	nsID namespace.ID,
+	nsName namespace.Name,
+	buildIdsOfInterest []string,
+	taskQueue string,
+	open bool,
+) *manager.CountWorkflowExecutionsRequest {
+	return &manager.CountWorkflowExecutionsRequest{
+		NamespaceID: nsID,
+		Namespace:   nsName,
+		Query:       makeBuildIdQuery(buildIdsOfInterest, taskQueue, open),
+	}
 }
 
 func makeBuildIdQuery(

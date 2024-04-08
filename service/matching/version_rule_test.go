@@ -791,7 +791,7 @@ func TestGetWorkerVersioningRules(t *testing.T) {
 
 	// Call list successfully
 	dummyClock := hlc.Zero(99) // used to generate conflict token, but not in this test
-	resp, err := GetWorkerVersioningRules(data, dummyClock, nil)
+	resp, err := GetWorkerVersioningRules(data, dummyClock)
 	assert.NoError(t, err)
 
 	// check assignment rules

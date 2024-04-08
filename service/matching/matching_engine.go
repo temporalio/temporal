@@ -863,8 +863,8 @@ func (e *matchingEngineImpl) DescribeTaskQueue(
 			reachability, err := getBuildIdTaskReachability(ctx,
 				userData.GetData().GetVersioningData(),
 				e.visibilityManager,
-				request.GetNamespaceId(),
-				req.GetNamespace(),
+				namespace.ID(request.GetNamespaceId()),
+				namespace.Name(req.GetNamespace()),
 				req.GetTaskQueue().GetName(),
 				bid)
 			if err != nil {
