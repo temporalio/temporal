@@ -488,8 +488,6 @@ func (wh *WorkflowHandler) ExecuteMultiOperation(
 		return nil, errRequestNotSet
 	}
 
-	// TODO: validation
-
 	namespaceName := namespace.Name(request.Namespace)
 	namespaceID, err := wh.namespaceRegistry.GetNamespaceID(namespaceName)
 	if err != nil {
@@ -499,6 +497,12 @@ func (wh *WorkflowHandler) ExecuteMultiOperation(
 	if !wh.config.EnableExecuteMultiOperation(request.Namespace) {
 		return nil, errMultiOperationAPINotAllowed
 	}
+
+	if len(request.Operations) == 0 {
+		return nil, errMissingOperations
+	}
+
+	// TODO: validation
 
 	workflowId := request.Operations[0].GetStartWorkflow().WorkflowId
 	historyReq := &historyservice.ExecuteMultiOperationRequest{

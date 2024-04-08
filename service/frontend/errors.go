@@ -87,6 +87,7 @@ var (
 	errUseEnhancedDescribeOnStickyQueue                   = serviceerror.NewInvalidArgument("Enhanced DescribeTaskQueue is not valid for a sticky queue, use api_mode=UNSPECIFIED or a normal queue.")
 	errUseEnhancedDescribeOnNonRootQueue                  = serviceerror.NewInvalidArgument("Enhanced DescribeTaskQueue is not valid for non-root queue partitions, use api_mode=UNSPECIFIED or a normal queue root name.")
 	errTaskQueuePartitionInvalid                          = serviceerror.NewInvalidArgument("Task Queue Partition invalid, use a different Task Queue or Task Queue Type")
+	errMissingOperations                                  = serviceerror.NewInvalidArgument("Missing operations.")
 
 	errUpdateMetaNotSet       = serviceerror.NewInvalidArgument("Update meta is not set on request.")
 	errUpdateInputNotSet      = serviceerror.NewInvalidArgument("Update input is not set on request.")
