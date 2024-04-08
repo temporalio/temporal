@@ -1220,7 +1220,7 @@ type (
 
 	HistoryTaskQueueManagerImpl struct {
 		queue      QueueV2
-		serializer *serialization.TaskSerializer
+		serializer serialization.Serializer
 	}
 
 	// QueueKey identifies a history task queue. It is converted to a queue name using the GetQueueName method.
