@@ -122,11 +122,11 @@ func TestIsReachableAssignmentRuleTarget(t *testing.T) {
 		},
 	}
 
-	assert.True(t, rc.isReachableActiveAssignmentRuleTarget("3"))
-	assert.False(t, rc.isReachableActiveAssignmentRuleTarget("2.5"))
-	assert.True(t, rc.isReachableActiveAssignmentRuleTarget("2"))
-	assert.False(t, rc.isReachableActiveAssignmentRuleTarget("1"))
-	assert.False(t, rc.isReachableActiveAssignmentRuleTarget("0"))
+	assert.True(t, rc.isReachableActiveAssignmentRuleTargetOrDefault("3"))
+	assert.False(t, rc.isReachableActiveAssignmentRuleTargetOrDefault("2.5"))
+	assert.True(t, rc.isReachableActiveAssignmentRuleTargetOrDefault("2"))
+	assert.False(t, rc.isReachableActiveAssignmentRuleTargetOrDefault("1"))
+	assert.False(t, rc.isReachableActiveAssignmentRuleTargetOrDefault("0"))
 }
 
 func TestGetDefaultBuildId(t *testing.T) {
@@ -201,10 +201,16 @@ func TestGetReachability_WithVisibility_WithoutRules(t *testing.T) {
 	// Expect yes matching closed workflow execution
 	reqClosed := rc.makeBuildIdCountRequest([]string{""}, false)
 	vm.EXPECT().CountWorkflowExecutions(gomock.Any(), reqClosed).AnyTimes().Return(mkCountResponse(1))
-	// Check reachability
+	// Check reachability --> REACHABLE because it's the default build id
 	reachability, err := rc.getReachability(ctx, "")
 	assert.Nil(t, err)
+	assert.Equal(t, enumspb.BUILD_ID_TASK_REACHABILITY_REACHABLE, reachability)
+	// Add an assignment rule so that it's not the default build id, and check again now that "" is not default
+	rc.assignmentRules = []*persistencespb.AssignmentRule{mkAssignmentRulePersistence(mkAssignmentRule("A", nil), nil, nil)}
+	reachability, err = rc.getReachability(ctx, "")
+	assert.Nil(t, err)
 	assert.Equal(t, enumspb.BUILD_ID_TASK_REACHABILITY_CLOSED_WORKFLOWS_ONLY, reachability)
+	rc.assignmentRules = nil // remove rule for rest of test
 
 	// 2. getReachability(1) --> UNREACHABLE
 	// Scenario:
