@@ -45,8 +45,8 @@ import (
 	"go.temporal.io/server/service/history/workflow"
 )
 
-// checkTaskVersion will return an error if task version check fails
-func checkTaskVersion(
+// CheckTaskVersion will return an error if task version check fails
+func CheckTaskVersion(
 	shard shard.Context,
 	logger log.Logger,
 	namespace *namespace.Namespace,

@@ -349,7 +349,7 @@ func (e *archivalQueueTaskExecutor) loadAndVersionCheckMutableState(
 		return nil, err
 	}
 	namespaceEntry := mutableState.GetNamespaceEntry()
-	err = checkTaskVersion(
+	err = CheckTaskVersion(
 		e.shardContext,
 		logger,
 		namespaceEntry,
