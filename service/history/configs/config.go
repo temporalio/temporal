@@ -52,14 +52,16 @@ type Config struct {
 	PersistencePerShardNamespaceMaxQPS    dynamicconfig.IntPropertyFnWithNamespaceFilter
 	EnablePersistencePriorityRateLimiting dynamicconfig.BoolPropertyFn
 	PersistenceDynamicRateLimitingParams  dynamicconfig.MapPropertyFn
+	PersistenceQPSBurstRatio              dynamicconfig.FloatPropertyFn
 
-	VisibilityPersistenceMaxReadQPS   dynamicconfig.IntPropertyFn
-	VisibilityPersistenceMaxWriteQPS  dynamicconfig.IntPropertyFn
-	EnableReadFromSecondaryVisibility dynamicconfig.BoolPropertyFnWithNamespaceFilter
-	SecondaryVisibilityWritingMode    dynamicconfig.StringPropertyFn
-	VisibilityDisableOrderByClause    dynamicconfig.BoolPropertyFnWithNamespaceFilter
-	VisibilityEnableManualPagination  dynamicconfig.BoolPropertyFnWithNamespaceFilter
-	VisibilityAllowList               dynamicconfig.BoolPropertyFnWithNamespaceFilter
+	VisibilityPersistenceMaxReadQPS       dynamicconfig.IntPropertyFn
+	VisibilityPersistenceMaxWriteQPS      dynamicconfig.IntPropertyFn
+	EnableReadFromSecondaryVisibility     dynamicconfig.BoolPropertyFnWithNamespaceFilter
+	SecondaryVisibilityWritingMode        dynamicconfig.StringPropertyFn
+	VisibilityDisableOrderByClause        dynamicconfig.BoolPropertyFnWithNamespaceFilter
+	VisibilityEnableManualPagination      dynamicconfig.BoolPropertyFnWithNamespaceFilter
+	VisibilityAllowList                   dynamicconfig.BoolPropertyFnWithNamespaceFilter
+	SuppressErrorSetSystemSearchAttribute dynamicconfig.BoolPropertyFnWithNamespaceFilter
 
 	EmitShardLagLog            dynamicconfig.BoolPropertyFn
 	MaxAutoResetPoints         dynamicconfig.IntPropertyFnWithNamespaceFilter
@@ -70,18 +72,25 @@ type Config struct {
 
 	// HistoryCache settings
 	// Change of these configs require shard restart
+	HistoryCacheLimitSizeBased            bool
 	HistoryCacheInitialSize               dynamicconfig.IntPropertyFn
-	HistoryCacheMaxSize                   dynamicconfig.IntPropertyFn
+	HistoryShardLevelCacheMaxSize         dynamicconfig.IntPropertyFn
+	HistoryShardLevelCacheMaxSizeBytes    dynamicconfig.IntPropertyFn
+	HistoryHostLevelCacheMaxSize          dynamicconfig.IntPropertyFn
+	HistoryHostLevelCacheMaxSizeBytes     dynamicconfig.IntPropertyFn
 	HistoryCacheTTL                       dynamicconfig.DurationPropertyFn
 	HistoryCacheNonUserContextLockTimeout dynamicconfig.DurationPropertyFn
 	EnableHostLevelHistoryCache           dynamicconfig.BoolPropertyFn
-	HistoryShardLevelCacheMaxSize         dynamicconfig.IntPropertyFn
-	EnableAPIGetCurrentRunIDLock          dynamicconfig.BoolPropertyFn
+	EnableMutableStateTransitionHistory   dynamicconfig.BoolPropertyFn
+	EnableWorkflowExecutionTimeoutTimer   dynamicconfig.BoolPropertyFn
 
 	// EventsCache settings
 	// Change of these configs require shard restart
-	EventsCacheMaxSizeBytes dynamicconfig.IntPropertyFn
-	EventsCacheTTL          dynamicconfig.DurationPropertyFn
+	EventsShardLevelCacheMaxSizeBytes dynamicconfig.IntPropertyFn
+	EventsCacheTTL                    dynamicconfig.DurationPropertyFn
+	// Change of these configs require service restart
+	EnableHostLevelEventsCache       dynamicconfig.BoolPropertyFn
+	EventsHostLevelCacheMaxSizeBytes dynamicconfig.IntPropertyFn
 
 	// ShardController settings
 	RangeSizeBits                  uint
@@ -107,6 +116,7 @@ type Config struct {
 	TaskDLQEnabled                 dynamicconfig.BoolPropertyFn
 	TaskDLQUnexpectedErrorAttempts dynamicconfig.IntPropertyFn
 	TaskDLQInternalErrors          dynamicconfig.BoolPropertyFn
+	TaskDLQErrorPattern            dynamicconfig.StringPropertyFn
 
 	TaskSchedulerEnableRateLimiter           dynamicconfig.BoolPropertyFn
 	TaskSchedulerEnableRateLimiterShadowMode dynamicconfig.BoolPropertyFn
@@ -149,6 +159,17 @@ type Config struct {
 	TransferProcessorEnsureCloseBeforeDelete            dynamicconfig.BoolPropertyFn
 	TransferQueueMaxReaderCount                         dynamicconfig.IntPropertyFn
 
+	// OutboundQueueProcessor settings
+	OutboundTaskBatchSize                               dynamicconfig.IntPropertyFn
+	OutboundProcessorMaxPollRPS                         dynamicconfig.IntPropertyFn
+	OutboundProcessorMaxPollHostRPS                     dynamicconfig.IntPropertyFn
+	OutboundProcessorMaxPollInterval                    dynamicconfig.DurationPropertyFn
+	OutboundProcessorMaxPollIntervalJitterCoefficient   dynamicconfig.FloatPropertyFn
+	OutboundProcessorUpdateAckInterval                  dynamicconfig.DurationPropertyFn
+	OutboundProcessorUpdateAckIntervalJitterCoefficient dynamicconfig.FloatPropertyFn
+	OutboundProcessorPollBackoffInterval                dynamicconfig.DurationPropertyFn
+	OutboundQueueMaxReaderCount                         dynamicconfig.IntPropertyFn
+
 	// ReplicatorQueueProcessor settings
 	ReplicatorProcessorMaxPollInterval                  dynamicconfig.DurationPropertyFn
 	ReplicatorProcessorMaxPollIntervalJitterCoefficient dynamicconfig.FloatPropertyFn
@@ -162,6 +183,9 @@ type Config struct {
 
 	// ShardUpdateMinInterval is the minimum time interval within which the shard info can be updated.
 	ShardUpdateMinInterval dynamicconfig.DurationPropertyFn
+	// ShardUpdateMinTasksCompleted is the minimum number of tasks which must be completed before the shard info can be updated before
+	// history.shardUpdateMinInterval has passed
+	ShardUpdateMinTasksCompleted dynamicconfig.IntPropertyFn
 	// ShardSyncMinInterval is the minimum time interval within which the shard info can be synced to the remote.
 	ShardSyncMinInterval            dynamicconfig.DurationPropertyFn
 	ShardSyncTimerJitterCoefficient dynamicconfig.FloatPropertyFn
@@ -239,6 +263,7 @@ type Config struct {
 	ReplicationTaskProcessorHostQPS                      dynamicconfig.FloatPropertyFn
 	ReplicationTaskProcessorShardQPS                     dynamicconfig.FloatPropertyFn
 	ReplicationEnableDLQMetrics                          dynamicconfig.BoolPropertyFn
+	ReplicationEnableUpdateWithNewTaskMerge              dynamicconfig.BoolPropertyFn
 
 	ReplicationStreamSyncStatusDuration      dynamicconfig.DurationPropertyFn
 	ReplicationProcessorSchedulerQueueSize   dynamicconfig.IntPropertyFn
@@ -340,31 +365,40 @@ func NewConfig(
 		PersistencePerShardNamespaceMaxQPS:    dc.GetIntPropertyFilteredByNamespace(dynamicconfig.HistoryPersistencePerShardNamespaceMaxQPS, 0),
 		EnablePersistencePriorityRateLimiting: dc.GetBoolProperty(dynamicconfig.HistoryEnablePersistencePriorityRateLimiting, true),
 		PersistenceDynamicRateLimitingParams:  dc.GetMapProperty(dynamicconfig.HistoryPersistenceDynamicRateLimitingParams, dynamicconfig.DefaultDynamicRateLimitingParams),
+		PersistenceQPSBurstRatio:              dc.GetFloat64Property(dynamicconfig.PersistenceQPSBurstRatio, 1.0),
 		ShutdownDrainDuration:                 dc.GetDurationProperty(dynamicconfig.HistoryShutdownDrainDuration, 0*time.Second),
 		StartupMembershipJoinDelay:            dc.GetDurationProperty(dynamicconfig.HistoryStartupMembershipJoinDelay, 0*time.Second),
 		MaxAutoResetPoints:                    dc.GetIntPropertyFilteredByNamespace(dynamicconfig.HistoryMaxAutoResetPoints, DefaultHistoryMaxAutoResetPoints),
 		DefaultWorkflowTaskTimeout:            dc.GetDurationPropertyFilteredByNamespace(dynamicconfig.DefaultWorkflowTaskTimeout, common.DefaultWorkflowTaskTimeout),
 		ContinueAsNewMinInterval:              dc.GetDurationPropertyFilteredByNamespace(dynamicconfig.ContinueAsNewMinInterval, time.Second),
 
-		VisibilityPersistenceMaxReadQPS:   visibility.GetVisibilityPersistenceMaxReadQPS(dc),
-		VisibilityPersistenceMaxWriteQPS:  visibility.GetVisibilityPersistenceMaxWriteQPS(dc),
-		EnableReadFromSecondaryVisibility: visibility.GetEnableReadFromSecondaryVisibilityConfig(dc),
-		SecondaryVisibilityWritingMode:    visibility.GetSecondaryVisibilityWritingModeConfig(dc),
-		VisibilityDisableOrderByClause:    dc.GetBoolPropertyFnWithNamespaceFilter(dynamicconfig.VisibilityDisableOrderByClause, true),
-		VisibilityEnableManualPagination:  dc.GetBoolPropertyFnWithNamespaceFilter(dynamicconfig.VisibilityEnableManualPagination, true),
-		VisibilityAllowList:               dc.GetBoolPropertyFnWithNamespaceFilter(dynamicconfig.VisibilityAllowList, true),
+		VisibilityPersistenceMaxReadQPS:       visibility.GetVisibilityPersistenceMaxReadQPS(dc),
+		VisibilityPersistenceMaxWriteQPS:      visibility.GetVisibilityPersistenceMaxWriteQPS(dc),
+		EnableReadFromSecondaryVisibility:     visibility.GetEnableReadFromSecondaryVisibilityConfig(dc),
+		SecondaryVisibilityWritingMode:        visibility.GetSecondaryVisibilityWritingModeConfig(dc),
+		VisibilityDisableOrderByClause:        dc.GetBoolPropertyFnWithNamespaceFilter(dynamicconfig.VisibilityDisableOrderByClause, true),
+		VisibilityEnableManualPagination:      dc.GetBoolPropertyFnWithNamespaceFilter(dynamicconfig.VisibilityEnableManualPagination, true),
+		VisibilityAllowList:                   dc.GetBoolPropertyFnWithNamespaceFilter(dynamicconfig.VisibilityAllowList, true),
+		SuppressErrorSetSystemSearchAttribute: dc.GetBoolPropertyFnWithNamespaceFilter(dynamicconfig.SuppressErrorSetSystemSearchAttribute, false),
 
-		EmitShardLagLog:                       dc.GetBoolProperty(dynamicconfig.EmitShardLagLog, false),
+		EmitShardLagLog: dc.GetBoolProperty(dynamicconfig.EmitShardLagLog, false),
+		// HistoryCacheLimitSizeBased should not change during runtime.
+		HistoryCacheLimitSizeBased:            dc.GetBoolProperty(dynamicconfig.HistoryCacheSizeBasedLimit, false)(),
 		HistoryCacheInitialSize:               dc.GetIntProperty(dynamicconfig.HistoryCacheInitialSize, 128),
-		HistoryCacheMaxSize:                   dc.GetIntProperty(dynamicconfig.HistoryCacheMaxSize, 256000),
+		HistoryShardLevelCacheMaxSize:         dc.GetIntProperty(dynamicconfig.HistoryCacheMaxSize, 512),
+		HistoryShardLevelCacheMaxSizeBytes:    dc.GetIntProperty(dynamicconfig.HistoryCacheMaxSizeBytes, 512*4*1024),
+		HistoryHostLevelCacheMaxSize:          dc.GetIntProperty(dynamicconfig.HistoryCacheHostLevelMaxSize, 256000),
+		HistoryHostLevelCacheMaxSizeBytes:     dc.GetIntProperty(dynamicconfig.HistoryCacheHostLevelMaxSizeBytes, 256000*4*1024),
 		HistoryCacheTTL:                       dc.GetDurationProperty(dynamicconfig.HistoryCacheTTL, time.Hour),
 		HistoryCacheNonUserContextLockTimeout: dc.GetDurationProperty(dynamicconfig.HistoryCacheNonUserContextLockTimeout, 500*time.Millisecond),
 		EnableHostLevelHistoryCache:           dc.GetBoolProperty(dynamicconfig.EnableHostHistoryCache, false),
-		HistoryShardLevelCacheMaxSize:         dc.GetIntProperty(dynamicconfig.HistoryCacheShardLevelMaxSize, 512),
-		EnableAPIGetCurrentRunIDLock:          dc.GetBoolProperty(dynamicconfig.EnableAPIGetCurrentRunIDLock, false),
+		EnableMutableStateTransitionHistory:   dc.GetBoolProperty(dynamicconfig.EnableMutableStateTransitionHistory, false),
+		EnableWorkflowExecutionTimeoutTimer:   dc.GetBoolProperty(dynamicconfig.EnableWorkflowExecutionTimeoutTimer, false),
 
-		EventsCacheMaxSizeBytes: dc.GetIntProperty(dynamicconfig.EventsCacheMaxSizeBytes, 512*1024), // 512KB
-		EventsCacheTTL:          dc.GetDurationProperty(dynamicconfig.EventsCacheTTL, time.Hour),
+		EventsShardLevelCacheMaxSizeBytes: dc.GetIntProperty(dynamicconfig.EventsCacheMaxSizeBytes, 512*1024),              // 512KB
+		EventsHostLevelCacheMaxSizeBytes:  dc.GetIntProperty(dynamicconfig.EventsHostLevelCacheMaxSizeBytes, 512*512*1024), // 256MB
+		EventsCacheTTL:                    dc.GetDurationProperty(dynamicconfig.EventsCacheTTL, time.Hour),
+		EnableHostLevelEventsCache:        dc.GetBoolProperty(dynamicconfig.EnableHostLevelEventsCache, false),
 
 		RangeSizeBits:                  20, // 20 bits for sequencer, 2^20 sequence number for any range
 		AcquireShardInterval:           dc.GetDurationProperty(dynamicconfig.AcquireShardInterval, time.Minute),
@@ -372,7 +406,7 @@ func NewConfig(
 		ShardIOConcurrency:             dc.GetIntProperty(dynamicconfig.ShardIOConcurrency, 1),
 		ShardLingerOwnershipCheckQPS:   dc.GetIntProperty(dynamicconfig.ShardLingerOwnershipCheckQPS, 4),
 		ShardLingerTimeLimit:           dc.GetDurationProperty(dynamicconfig.ShardLingerTimeLimit, 0),
-		ShardOwnershipAssertionEnabled: dc.GetBoolProperty(dynamicconfig.ShardOwnershipAssertionEnabled, true),
+		ShardOwnershipAssertionEnabled: dc.GetBoolProperty(dynamicconfig.ShardOwnershipAssertionEnabled, false),
 
 		HistoryClientOwnershipCachingEnabled: dc.GetBoolProperty(dynamicconfig.HistoryClientOwnershipCachingEnabled, false),
 
@@ -388,6 +422,7 @@ func NewConfig(
 		TaskDLQEnabled:                 dc.GetBoolProperty(dynamicconfig.HistoryTaskDLQEnabled, true),
 		TaskDLQUnexpectedErrorAttempts: dc.GetIntProperty(dynamicconfig.HistoryTaskDLQUnexpectedErrorAttempts, 100),
 		TaskDLQInternalErrors:          dc.GetBoolProperty(dynamicconfig.HistoryTaskDLQInternalErrors, false),
+		TaskDLQErrorPattern:            dc.GetStringProperty(dynamicconfig.HistoryTaskDLQErrorPattern, ""),
 
 		TaskSchedulerEnableRateLimiter:           dc.GetBoolProperty(dynamicconfig.TaskSchedulerEnableRateLimiter, false),
 		TaskSchedulerEnableRateLimiterShadowMode: dc.GetBoolProperty(dynamicconfig.TaskSchedulerEnableRateLimiterShadowMode, true),
@@ -428,6 +463,16 @@ func NewConfig(
 		TransferProcessorEnsureCloseBeforeDelete:            dc.GetBoolProperty(dynamicconfig.TransferProcessorEnsureCloseBeforeDelete, true),
 		TimerQueueMaxReaderCount:                            dc.GetIntProperty(dynamicconfig.TimerQueueMaxReaderCount, 2),
 
+		OutboundTaskBatchSize:                               dc.GetIntProperty(dynamicconfig.OutboundTaskBatchSize, 100),
+		OutboundProcessorMaxPollRPS:                         dc.GetIntProperty(dynamicconfig.OutboundProcessorMaxPollRPS, 20),
+		OutboundProcessorMaxPollHostRPS:                     dc.GetIntProperty(dynamicconfig.OutboundProcessorMaxPollHostRPS, 0),
+		OutboundProcessorMaxPollInterval:                    dc.GetDurationProperty(dynamicconfig.OutboundProcessorMaxPollInterval, 1*time.Minute),
+		OutboundProcessorMaxPollIntervalJitterCoefficient:   dc.GetFloat64Property(dynamicconfig.OutboundProcessorMaxPollIntervalJitterCoefficient, 0.15),
+		OutboundProcessorUpdateAckInterval:                  dc.GetDurationProperty(dynamicconfig.OutboundProcessorUpdateAckInterval, 30*time.Second),
+		OutboundProcessorUpdateAckIntervalJitterCoefficient: dc.GetFloat64Property(dynamicconfig.OutboundProcessorUpdateAckIntervalJitterCoefficient, 0.15),
+		OutboundProcessorPollBackoffInterval:                dc.GetDurationProperty(dynamicconfig.OutboundProcessorPollBackoffInterval, 5*time.Second),
+		OutboundQueueMaxReaderCount:                         dc.GetIntProperty(dynamicconfig.OutboundQueueMaxReaderCount, 4),
+
 		ReplicatorProcessorMaxPollInterval:                  dc.GetDurationProperty(dynamicconfig.ReplicatorProcessorMaxPollInterval, 1*time.Minute),
 		ReplicatorProcessorMaxPollIntervalJitterCoefficient: dc.GetFloat64Property(dynamicconfig.ReplicatorProcessorMaxPollIntervalJitterCoefficient, 0.15),
 		ReplicatorProcessorFetchTasksBatchSize:              dc.GetIntProperty(dynamicconfig.ReplicatorTaskBatchSize, 25),
@@ -435,18 +480,19 @@ func NewConfig(
 		ReplicationTaskProcessorHostQPS:                     dc.GetFloat64Property(dynamicconfig.ReplicationTaskProcessorHostQPS, 1500),
 		ReplicationTaskProcessorShardQPS:                    dc.GetFloat64Property(dynamicconfig.ReplicationTaskProcessorShardQPS, 30),
 		ReplicationEnableDLQMetrics:                         dc.GetBoolProperty(dynamicconfig.ReplicationEnableDLQMetrics, true),
-
-		ReplicationStreamSyncStatusDuration:      dc.GetDurationProperty(dynamicconfig.ReplicationStreamSyncStatusDuration, 1*time.Second),
-		ReplicationProcessorSchedulerQueueSize:   dc.GetIntProperty(dynamicconfig.ReplicationProcessorSchedulerQueueSize, 128),
-		ReplicationProcessorSchedulerWorkerCount: dc.GetIntProperty(dynamicconfig.ReplicationProcessorSchedulerWorkerCount, 512),
-		EnableReplicationEagerRefreshNamespace:   dc.GetBoolProperty(dynamicconfig.EnableEagerNamespaceRefresher, false),
-		EnableReplicationTaskBatching:            dc.GetBoolProperty(dynamicconfig.EnableReplicationTaskBatching, false),
-		EnableReplicateLocalGeneratedEvent:       dc.GetBoolProperty(dynamicconfig.EnableReplicateLocalGeneratedEvents, false),
+		ReplicationEnableUpdateWithNewTaskMerge:             dc.GetBoolProperty(dynamicconfig.ReplicationEnableUpdateWithNewTaskMerge, false),
+		ReplicationStreamSyncStatusDuration:                 dc.GetDurationProperty(dynamicconfig.ReplicationStreamSyncStatusDuration, 1*time.Second),
+		ReplicationProcessorSchedulerQueueSize:              dc.GetIntProperty(dynamicconfig.ReplicationProcessorSchedulerQueueSize, 128),
+		ReplicationProcessorSchedulerWorkerCount:            dc.GetIntProperty(dynamicconfig.ReplicationProcessorSchedulerWorkerCount, 512),
+		EnableReplicationEagerRefreshNamespace:              dc.GetBoolProperty(dynamicconfig.EnableEagerNamespaceRefresher, false),
+		EnableReplicationTaskBatching:                       dc.GetBoolProperty(dynamicconfig.EnableReplicationTaskBatching, false),
+		EnableReplicateLocalGeneratedEvent:                  dc.GetBoolProperty(dynamicconfig.EnableReplicateLocalGeneratedEvents, false),
 
 		MaximumBufferedEventsBatch:       dc.GetIntProperty(dynamicconfig.MaximumBufferedEventsBatch, 100),
 		MaximumBufferedEventsSizeInBytes: dc.GetIntProperty(dynamicconfig.MaximumBufferedEventsSizeInBytes, 2*1024*1024),
 		MaximumSignalsPerExecution:       dc.GetIntPropertyFilteredByNamespace(dynamicconfig.MaximumSignalsPerExecution, 10000),
 		ShardUpdateMinInterval:           dc.GetDurationProperty(dynamicconfig.ShardUpdateMinInterval, 5*time.Minute),
+		ShardUpdateMinTasksCompleted:     dc.GetIntProperty(dynamicconfig.ShardUpdateMinTasksCompleted, 1000),
 		ShardSyncMinInterval:             dc.GetDurationProperty(dynamicconfig.ShardSyncMinInterval, 5*time.Minute),
 		ShardSyncTimerJitterCoefficient:  dc.GetFloat64Property(dynamicconfig.TransferProcessorMaxPollIntervalJitterCoefficient, 0.15),
 

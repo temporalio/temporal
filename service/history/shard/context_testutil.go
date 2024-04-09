@@ -27,6 +27,7 @@ package shard
 import (
 	"context"
 	"fmt"
+	"sync"
 
 	"github.com/golang/mock/gomock"
 	"golang.org/x/sync/semaphore"
@@ -42,6 +43,7 @@ import (
 	"go.temporal.io/server/common/resourcetest"
 	"go.temporal.io/server/service/history/configs"
 	"go.temporal.io/server/service/history/events"
+	"go.temporal.io/server/service/history/hsm"
 	"go.temporal.io/server/service/history/tasks"
 )
 
@@ -154,6 +156,7 @@ func newTestContext(t *resourcetest.Test, eventsCache events.Cache, config Conte
 		throttledLogger:     t.GetThrottledLogger(),
 		lifecycleCtx:        lifecycleCtx,
 		lifecycleCancel:     lifecycleCancel,
+		queueMetricEmitter:  sync.Once{},
 
 		state:              contextStateAcquired,
 		engineFuture:       future.NewFuture[Engine](),
@@ -202,6 +205,11 @@ func (s *ContextTest) SetEventsCacheForTesting(c events.Cache) {
 // SetHistoryClientForTesting sets history client. Only used by tests.
 func (s *ContextTest) SetHistoryClientForTesting(client historyservice.HistoryServiceClient) {
 	s.historyClient = client
+}
+
+// SetStateMachineRegistry sets the state machine registry on this shard.
+func (s *ContextTest) SetStateMachineRegistry(reg *hsm.Registry) {
+	s.stateMachineRegistry = reg
 }
 
 // StopForTest calls FinishStop(). In general only the controller

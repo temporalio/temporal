@@ -132,11 +132,6 @@ type (
 
 		// Tasks related APIs
 
-		// Hints for persistence implementaion regarding hisotry task readers
-		RegisterHistoryTaskReader(ctx context.Context, request *RegisterHistoryTaskReaderRequest) error
-		UnregisterHistoryTaskReader(ctx context.Context, request *UnregisterHistoryTaskReaderRequest)
-		UpdateHistoryTaskReaderProgress(ctx context.Context, request *UpdateHistoryTaskReaderProgressRequest)
-
 		AddHistoryTasks(ctx context.Context, request *InternalAddHistoryTasksRequest) error
 		GetHistoryTasks(ctx context.Context, request *GetHistoryTasksRequest) (*InternalGetHistoryTasksResponse, error)
 		CompleteHistoryTask(ctx context.Context, request *CompleteHistoryTaskRequest) error
@@ -161,8 +156,8 @@ type (
 		ForkHistoryBranch(ctx context.Context, request *InternalForkHistoryBranchRequest) error
 		// DeleteHistoryBranch removes a branch
 		DeleteHistoryBranch(ctx context.Context, request *InternalDeleteHistoryBranchRequest) error
-		// GetHistoryTree returns all branch information of a tree
-		GetHistoryTree(ctx context.Context, request *GetHistoryTreeRequest) (*InternalGetHistoryTreeResponse, error)
+		// GetHistoryTreeContainingBranch returns all branch information of the tree containing the specified branch
+		GetHistoryTreeContainingBranch(ctx context.Context, request *InternalGetHistoryTreeContainingBranchRequest) (*InternalGetHistoryTreeContainingBranchResponse, error)
 		// GetAllHistoryTreeBranches returns all branches of all trees.
 		// Note that branches may be skipped or duplicated across pages if there are branches created or deleted while
 		// paginating through results.
@@ -185,6 +180,16 @@ type (
 		RangeDeleteMessagesFromDLQ(ctx context.Context, firstMessageID int64, lastMessageID int64) error
 		UpdateDLQAckLevel(ctx context.Context, metadata *InternalQueueMetadata) error
 		GetDLQAckLevels(ctx context.Context) (*InternalQueueMetadata, error)
+	}
+
+	// NexusIncomingServiceStore is a store for managing Nexus services
+	NexusIncomingServiceStore interface {
+		Closeable
+		GetName() string
+		CreateOrUpdateNexusIncomingService(ctx context.Context, request *InternalCreateOrUpdateNexusIncomingServiceRequest) error
+		DeleteNexusIncomingService(ctx context.Context, request *DeleteNexusIncomingServiceRequest) error
+		GetNexusIncomingService(ctx context.Context, request *GetNexusIncomingServiceRequest) (*InternalNexusIncomingService, error)
+		ListNexusIncomingServices(ctx context.Context, request *ListNexusIncomingServicesRequest) (*InternalListNexusIncomingServicesResponse, error)
 	}
 
 	// QueueMessage is the message that stores in the queue
@@ -402,7 +407,6 @@ type (
 
 		NamespaceID string
 		WorkflowID  string
-		RunID       string
 
 		Tasks map[tasks.Category][]InternalHistoryTask
 	}
@@ -640,9 +644,17 @@ type (
 		Data     []byte // HistoryTreeInfo blob
 	}
 
-	// InternalGetHistoryTreeResponse is response to GetHistoryTree
+	// InternalGetHistoryTreeContainingBranchRequest is used to retrieve branch info of a history tree
+	InternalGetHistoryTreeContainingBranchRequest struct {
+		// The raw branch token
+		BranchToken []byte
+		// Get data from this shard
+		ShardID int32
+	}
+
+	// InternalGetHistoryTreeContainingBranchResponse is response to GetHistoryTreeContainingBranch
 	// Only used by persistence layer
-	InternalGetHistoryTreeResponse struct {
+	InternalGetHistoryTreeContainingBranchResponse struct {
 		// TreeInfos
 		TreeInfos []*commonpb.DataBlob
 	}
@@ -728,6 +740,23 @@ type (
 	InternalUpsertClusterMembershipRequest struct {
 		ClusterMember
 		RecordExpiry time.Time
+	}
+
+	InternalNexusIncomingService struct {
+		ServiceID string
+		Version   int64
+		Data      *commonpb.DataBlob
+	}
+
+	InternalCreateOrUpdateNexusIncomingServiceRequest struct {
+		LastKnownTableVersion int64
+		Service               InternalNexusIncomingService
+	}
+
+	InternalListNexusIncomingServicesResponse struct {
+		TableVersion  int64
+		NextPageToken []byte
+		Services      []InternalNexusIncomingService
 	}
 
 	// QueueV2 is an interface for a generic FIFO queue. It should eventually replace the Queue interface. Why do we

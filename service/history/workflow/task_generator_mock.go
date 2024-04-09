@@ -34,7 +34,7 @@ import (
 
 	gomock "github.com/golang/mock/gomock"
 	v1 "go.temporal.io/api/history/v1"
-	v10 "go.temporal.io/server/api/persistence/v1"
+	hsm "go.temporal.io/server/service/history/hsm"
 	tasks "go.temporal.io/server/service/history/tasks"
 )
 
@@ -62,17 +62,17 @@ func (m *MockTaskGenerator) EXPECT() *MockTaskGeneratorMockRecorder {
 }
 
 // GenerateActivityRetryTasks mocks base method.
-func (m *MockTaskGenerator) GenerateActivityRetryTasks(activity *v10.ActivityInfo, nextAttempt int32) error {
+func (m *MockTaskGenerator) GenerateActivityRetryTasks(eventID int64, visibilityTimestamp time.Time, nextAttempt int32) error {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "GenerateActivityRetryTasks", activity, nextAttempt)
+	ret := m.ctrl.Call(m, "GenerateActivityRetryTasks", eventID, visibilityTimestamp, nextAttempt)
 	ret0, _ := ret[0].(error)
 	return ret0
 }
 
 // GenerateActivityRetryTasks indicates an expected call of GenerateActivityRetryTasks.
-func (mr *MockTaskGeneratorMockRecorder) GenerateActivityRetryTasks(activity, nextAttempt interface{}) *gomock.Call {
+func (mr *MockTaskGeneratorMockRecorder) GenerateActivityRetryTasks(eventID, visibilityTimestamp, nextAttempt interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GenerateActivityRetryTasks", reflect.TypeOf((*MockTaskGenerator)(nil).GenerateActivityRetryTasks), activity, nextAttempt)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GenerateActivityRetryTasks", reflect.TypeOf((*MockTaskGenerator)(nil).GenerateActivityRetryTasks), eventID, visibilityTimestamp, nextAttempt)
 }
 
 // GenerateActivityTasks mocks base method.
@@ -158,6 +158,20 @@ func (m *MockTaskGenerator) GenerateDeleteHistoryEventTask(closeTime time.Time) 
 func (mr *MockTaskGeneratorMockRecorder) GenerateDeleteHistoryEventTask(closeTime interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GenerateDeleteHistoryEventTask", reflect.TypeOf((*MockTaskGenerator)(nil).GenerateDeleteHistoryEventTask), closeTime)
+}
+
+// GenerateDirtySubStateMachineTasks mocks base method.
+func (m *MockTaskGenerator) GenerateDirtySubStateMachineTasks(stateMachineRegistry *hsm.Registry) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GenerateDirtySubStateMachineTasks", stateMachineRegistry)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// GenerateDirtySubStateMachineTasks indicates an expected call of GenerateDirtySubStateMachineTasks.
+func (mr *MockTaskGeneratorMockRecorder) GenerateDirtySubStateMachineTasks(stateMachineRegistry interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GenerateDirtySubStateMachineTasks", reflect.TypeOf((*MockTaskGenerator)(nil).GenerateDirtySubStateMachineTasks), stateMachineRegistry)
 }
 
 // GenerateHistoryReplicationTasks mocks base method.
@@ -331,11 +345,12 @@ func (mr *MockTaskGeneratorMockRecorder) GenerateWorkflowResetTasks() *gomock.Ca
 }
 
 // GenerateWorkflowStartTasks mocks base method.
-func (m *MockTaskGenerator) GenerateWorkflowStartTasks(startEvent *v1.HistoryEvent) error {
+func (m *MockTaskGenerator) GenerateWorkflowStartTasks(startEvent *v1.HistoryEvent) (int32, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "GenerateWorkflowStartTasks", startEvent)
-	ret0, _ := ret[0].(error)
-	return ret0
+	ret0, _ := ret[0].(int32)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
 }
 
 // GenerateWorkflowStartTasks indicates an expected call of GenerateWorkflowStartTasks.

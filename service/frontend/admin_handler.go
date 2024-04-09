@@ -48,8 +48,8 @@ import (
 	"go.temporal.io/server/common/channel"
 	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/primitives"
+	"go.temporal.io/server/common/utf8validator"
 	"go.temporal.io/server/common/util"
-	"go.temporal.io/server/service/history/api"
 	"go.temporal.io/server/service/worker/dlq"
 
 	"github.com/pborman/uuid"
@@ -86,7 +86,6 @@ import (
 	"go.temporal.io/server/common/persistence/visibility/manager"
 	"go.temporal.io/server/common/persistence/visibility/store/elasticsearch"
 	esclient "go.temporal.io/server/common/persistence/visibility/store/elasticsearch/client"
-	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/common/sdk"
 	"go.temporal.io/server/common/searchattribute"
 	"go.temporal.io/server/common/xdc"
@@ -131,10 +130,10 @@ type (
 		clusterMetadata            cluster.Metadata
 		healthServer               *health.Server
 
-		// DEPRECATED
+		// DEPRECATED: only history service on server side is supposed to
+		// use the following components.
 		persistenceExecutionManager persistence.ExecutionManager
-
-		taskCategoryRegistry tasks.TaskCategoryRegistry
+		taskCategoryRegistry        tasks.TaskCategoryRegistry
 	}
 
 	NewAdminHandlerArgs struct {
@@ -143,7 +142,7 @@ type (
 		NamespaceReplicationQueue           persistence.NamespaceReplicationQueue
 		ReplicatorNamespaceReplicationQueue persistence.NamespaceReplicationQueue
 		EsClient                            esclient.Client
-		VisibilityMrg                       manager.VisibilityManager
+		visibilityMgr                       manager.VisibilityManager
 		Logger                              log.Logger
 		TaskManager                         persistence.TaskManager
 		ClusterMetadataManager              persistence.ClusterMetadataManager
@@ -163,10 +162,10 @@ type (
 		EventSerializer                     serialization.Serializer
 		TimeSource                          clock.TimeSource
 
-		// DEPRECATED
+		// DEPRECATED: only history service on server side is supposed to
+		// use the following components.
 		PersistenceExecutionManager persistence.ExecutionManager
-
-		CategoryRegistry tasks.TaskCategoryRegistry
+		CategoryRegistry            tasks.TaskCategoryRegistry
 	}
 )
 
@@ -197,7 +196,7 @@ func NewAdminHandler(
 			args.Logger,
 		),
 		eventSerializer:             args.EventSerializer,
-		visibilityMgr:               args.VisibilityMrg,
+		visibilityMgr:               args.visibilityMgr,
 		ESClient:                    args.EsClient,
 		persistenceExecutionManager: args.PersistenceExecutionManager,
 		namespaceReplicationQueue:   args.NamespaceReplicationQueue,
@@ -364,7 +363,7 @@ func (adh *AdminHandler) addSearchAttributesSQL(
 		&workflowservice.DescribeNamespaceRequest{Namespace: nsName},
 	)
 	if err != nil {
-		return serviceerror.NewUnavailable(fmt.Sprintf(errUnableToGetNamespaceInfoMessage, nsName))
+		return serviceerror.NewUnavailable(fmt.Sprintf(errUnableToGetNamespaceInfoMessage, nsName, err))
 	}
 
 	dbCustomSearchAttributes := searchattribute.GetSqlDbIndexSearchAttributes().CustomSearchAttributes
@@ -508,7 +507,7 @@ func (adh *AdminHandler) removeSearchAttributesSQL(
 		&workflowservice.DescribeNamespaceRequest{Namespace: nsName},
 	)
 	if err != nil {
-		return serviceerror.NewUnavailable(fmt.Sprintf(errUnableToGetNamespaceInfoMessage, nsName))
+		return serviceerror.NewUnavailable(fmt.Sprintf(errUnableToGetNamespaceInfoMessage, nsName, err))
 	}
 
 	upsertFieldToAliasMap := make(map[string]string)
@@ -630,7 +629,7 @@ func (adh *AdminHandler) getSearchAttributesSQL(
 	)
 	if err != nil {
 		return nil, serviceerror.NewUnavailable(
-			fmt.Sprintf(errUnableToGetNamespaceInfoMessage, nsName),
+			fmt.Sprintf(errUnableToGetNamespaceInfoMessage, nsName, err),
 		)
 	}
 
@@ -804,79 +803,24 @@ func (adh *AdminHandler) ListHistoryTasks(
 	if request == nil {
 		return nil, errRequestNotSet
 	}
-	taskRange := request.GetTaskRange()
-	if taskRange == nil {
+
+	if request.GetTaskRange() == nil {
 		return nil, errTaskRangeNotSet
 	}
 
-	taskCategory, ok := adh.taskCategoryRegistry.GetCategoryByID(int(request.Category))
-	if !ok {
-		return nil, &serviceerror.InvalidArgument{
-			Message: fmt.Sprintf("unknown task category: %v", request.Category),
-		}
+	if !adh.config.AdminEnableListHistoryTasks() {
+		return nil, errListHistoryTasksNotAllowed
 	}
 
-	var minTaskKey, maxTaskKey tasks.Key
-	if taskRange.InclusiveMinTaskKey != nil {
-		minTaskKey = tasks.NewKey(
-			timestamp.TimeValue(taskRange.InclusiveMinTaskKey.FireTime),
-			taskRange.InclusiveMinTaskKey.TaskId,
-		)
-		if err := tasks.ValidateKey(minTaskKey); err != nil {
-			return nil, &serviceerror.InvalidArgument{
-				Message: fmt.Sprintf("invalid minTaskKey: %v", err.Error()),
-			}
-		}
-	}
-	if taskRange.ExclusiveMaxTaskKey != nil {
-		maxTaskKey = tasks.NewKey(
-			timestamp.TimeValue(taskRange.ExclusiveMaxTaskKey.FireTime),
-			taskRange.ExclusiveMaxTaskKey.TaskId,
-		)
-		if err := tasks.ValidateKey(maxTaskKey); err != nil {
-			return nil, &serviceerror.InvalidArgument{
-				Message: fmt.Sprintf("invalid maxTaskKey: %v", err.Error()),
-			}
-		}
-	}
-
-	// Queue reader registration is only meaning for history service
-	// we are on frontend service, so no need to do registration
-	// TODO: move the logic to history service
-
-	resp, err := adh.persistenceExecutionManager.GetHistoryTasks(ctx, &persistence.GetHistoryTasksRequest{
-		ShardID:             request.ShardId,
-		TaskCategory:        taskCategory,
-		ReaderID:            common.DefaultQueueReaderID,
-		InclusiveMinTaskKey: minTaskKey,
-		ExclusiveMaxTaskKey: maxTaskKey,
-		BatchSize:           int(request.BatchSize),
-		NextPageToken:       request.NextPageToken,
-	})
+	resp, err := adh.historyClient.ListTasks(
+		ctx, &historyservice.ListTasksRequest{
+			Request: request,
+		},
+	)
 	if err != nil {
 		return nil, err
 	}
-
-	return &adminservice.ListHistoryTasksResponse{
-		Tasks:         toAdminTask(resp.Tasks),
-		NextPageToken: resp.NextPageToken,
-	}, nil
-}
-
-func toAdminTask(tasks []tasks.Task) []*adminservice.Task {
-	var adminTasks []*adminservice.Task
-	for _, task := range tasks {
-		adminTasks = append(adminTasks, &adminservice.Task{
-			NamespaceId: task.GetNamespaceID(),
-			WorkflowId:  task.GetWorkflowID(),
-			RunId:       task.GetRunID(),
-			TaskId:      task.GetTaskID(),
-			TaskType:    task.GetType(),
-			FireTime:    timestamppb.New(task.GetKey().FireTime),
-			Version:     task.GetVersion(),
-		})
-	}
-	return adminTasks
+	return resp.Response, nil
 }
 
 // DescribeHistoryHost returns information about the internal states of a history host
@@ -1192,6 +1136,7 @@ func (adh *AdminHandler) AddOrUpdateRemoteCluster(
 			HistoryShardCount:        resp.GetHistoryShardCount(),
 			ClusterId:                resp.GetClusterId(),
 			ClusterAddress:           request.GetFrontendAddress(),
+			HttpAddress:              request.GetFrontendHttpAddress(),
 			FailoverVersionIncrement: resp.GetFailoverVersionIncrement(),
 			InitialFailoverVersion:   resp.GetInitialFailoverVersion(),
 			IsGlobalNamespaceEnabled: resp.GetIsGlobalNamespaceEnabled(),
@@ -1817,6 +1762,7 @@ func (adh *AdminHandler) GetNamespace(ctx context.Context, request *adminservice
 		FailoverVersion:   resp.Namespace.GetFailoverVersion(),
 		IsGlobalNamespace: resp.IsGlobalNamespace,
 		FailoverHistory:   convertFailoverHistoryToReplicationProto(resp.Namespace.GetReplicationConfig().GetFailoverHistory()),
+		OutgoingServices:  resp.Namespace.GetOutgoingServices(),
 	}
 	return nsResponse, nil
 }
@@ -1843,11 +1789,11 @@ func (adh *AdminHandler) PurgeDLQTasks(
 	ctx context.Context,
 	request *adminservice.PurgeDLQTasksRequest,
 ) (*adminservice.PurgeDLQTasksResponse, error) {
-	key, err := adh.parseDLQKey(request.DlqKey)
-	if err != nil {
+	if err := validateHistoryDLQKey(request.DlqKey); err != nil {
 		return nil, err
 	}
-	workflowID := adh.getDLQWorkflowID(key)
+
+	workflowID := adh.getDLQWorkflowID(request.DlqKey)
 	client := adh.sdkClientFactory.GetSystemClient()
 	run, err := client.ExecuteWorkflow(ctx, sdkclient.StartWorkflowOptions{
 		ID:        workflowID,
@@ -1856,9 +1802,9 @@ func (adh *AdminHandler) PurgeDLQTasks(
 		WorkflowType: dlq.WorkflowTypeDelete,
 		DeleteParams: dlq.DeleteParams{
 			Key: dlq.Key{
-				TaskCategoryID: key.Category.ID(),
-				SourceCluster:  key.SourceCluster,
-				TargetCluster:  key.TargetCluster,
+				TaskCategoryID: int(request.DlqKey.TaskCategory),
+				SourceCluster:  request.DlqKey.SourceCluster,
+				TargetCluster:  request.DlqKey.TargetCluster,
 			},
 			MaxMessageID: request.InclusiveMaxTaskMetadata.MessageId,
 		},
@@ -1871,6 +1817,9 @@ func (adh *AdminHandler) PurgeDLQTasks(
 		WorkflowId: workflowID,
 		RunId:      runID,
 	}
+	if err := utf8validator.Validate(&jobToken, utf8validator.SourceRPCResponse); err != nil {
+		return nil, err
+	}
 	jobTokenBytes, _ := jobToken.Marshal()
 	return &adminservice.PurgeDLQTasksResponse{
 		JobToken: jobTokenBytes,
@@ -1878,11 +1827,11 @@ func (adh *AdminHandler) PurgeDLQTasks(
 }
 
 func (adh *AdminHandler) MergeDLQTasks(ctx context.Context, request *adminservice.MergeDLQTasksRequest) (*adminservice.MergeDLQTasksResponse, error) {
-	key, err := adh.parseDLQKey(request.DlqKey)
-	if err != nil {
+	if err := validateHistoryDLQKey(request.DlqKey); err != nil {
 		return nil, err
 	}
-	workflowID := adh.getDLQWorkflowID(key)
+
+	workflowID := adh.getDLQWorkflowID(request.DlqKey)
 	client := adh.sdkClientFactory.GetSystemClient()
 	run, err := client.ExecuteWorkflow(ctx, sdkclient.StartWorkflowOptions{
 		ID:        workflowID,
@@ -1891,9 +1840,9 @@ func (adh *AdminHandler) MergeDLQTasks(ctx context.Context, request *adminservic
 		WorkflowType: dlq.WorkflowTypeMerge,
 		MergeParams: dlq.MergeParams{
 			Key: dlq.Key{
-				TaskCategoryID: key.Category.ID(),
-				SourceCluster:  key.SourceCluster,
-				TargetCluster:  key.TargetCluster,
+				TaskCategoryID: int(request.DlqKey.TaskCategory),
+				SourceCluster:  request.DlqKey.SourceCluster,
+				TargetCluster:  request.DlqKey.TargetCluster,
 			},
 			MaxMessageID: request.InclusiveMaxTaskMetadata.MessageId,
 			BatchSize:    int(request.BatchSize), // Let the workflow code validate and set the default value if needed.
@@ -1907,6 +1856,9 @@ func (adh *AdminHandler) MergeDLQTasks(ctx context.Context, request *adminservic
 		WorkflowId: workflowID,
 		RunId:      runID,
 	}
+	if err := utf8validator.Validate(&jobToken, utf8validator.SourceRPCResponse); err != nil {
+		return nil, err
+	}
 	jobTokenBytes, _ := jobToken.Marshal()
 	return &adminservice.MergeDLQTasksResponse{
 		JobToken: jobTokenBytes,
@@ -1916,6 +1868,9 @@ func (adh *AdminHandler) MergeDLQTasks(ctx context.Context, request *adminservic
 func (adh *AdminHandler) DescribeDLQJob(ctx context.Context, request *adminservice.DescribeDLQJobRequest) (*adminservice.DescribeDLQJobResponse, error) {
 	jt := adminservice.DLQJobToken{}
 	err := jt.Unmarshal([]byte(request.JobToken))
+	if err == nil {
+		err = utf8validator.Validate(&jt, utf8validator.SourceRPCRequest)
+	}
 	if err != nil {
 		return nil, fmt.Errorf("%w: %v", errInvalidDLQJobToken, err)
 	}
@@ -1969,6 +1924,9 @@ func (adh *AdminHandler) DescribeDLQJob(ctx context.Context, request *adminservi
 func (adh *AdminHandler) CancelDLQJob(ctx context.Context, request *adminservice.CancelDLQJobRequest) (*adminservice.CancelDLQJobResponse, error) {
 	jt := adminservice.DLQJobToken{}
 	err := jt.Unmarshal([]byte(request.JobToken))
+	if err == nil {
+		err = utf8validator.Validate(&jt, utf8validator.SourceRPCRequest)
+	}
 	if err != nil {
 		return nil, fmt.Errorf("%w: %v", errInvalidDLQJobToken, err)
 	}
@@ -2036,29 +1994,34 @@ func (adh *AdminHandler) ListQueues(
 	}, nil
 }
 
-func (adh *AdminHandler) getDLQWorkflowID(key *persistence.QueueKey) string {
-	return fmt.Sprintf("manage-dlq-tasks-%s", key.GetQueueName())
+func (adh *AdminHandler) getDLQWorkflowID(
+	key *commonspb.HistoryDLQKey,
+) string {
+	return fmt.Sprintf(
+		"manage-dlq-tasks-%s",
+		persistence.GetHistoryTaskQueueName(
+			int(key.TaskCategory),
+			key.SourceCluster,
+			key.TargetCluster,
+		),
+	)
 }
 
-func (adh *AdminHandler) parseDLQKey(key *commonspb.HistoryDLQKey) (*persistence.QueueKey, error) {
-	category, err := api.GetTaskCategory(int(key.TaskCategory), adh.taskCategoryRegistry)
-	if err != nil {
-		return nil, err
+func validateHistoryDLQKey(
+	key *commonspb.HistoryDLQKey,
+) error {
+	if len(key.SourceCluster) == 0 {
+		return errSourceClusterNotSet
 	}
-	sourceCluster := key.SourceCluster
-	if len(sourceCluster) == 0 {
-		return nil, errSourceClusterNotSet
+
+	if len(key.TargetCluster) == 0 {
+		return errTargetClusterNotSet
 	}
-	targetCluster := key.TargetCluster
-	if len(targetCluster) == 0 {
-		return nil, errTargetClusterNotSet
-	}
-	return &persistence.QueueKey{
-		QueueType:     persistence.QueueTypeHistoryDLQ,
-		Category:      category,
-		SourceCluster: sourceCluster,
-		TargetCluster: key.TargetCluster,
-	}, nil
+
+	// history service is responsible for validating
+	// categoryID using task category registry
+
+	return nil
 }
 
 func convertClusterReplicationConfigToProto(

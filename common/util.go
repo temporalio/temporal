@@ -32,6 +32,7 @@ import (
 	"strings"
 	"sync"
 	"time"
+	"unicode/utf8"
 
 	"github.com/dgryski/go-farm"
 	commonpb "go.temporal.io/api/common/v1"
@@ -160,11 +161,17 @@ var (
 // Returns true if the Wait() call succeeded before the timeout
 // Returns false if the Wait() did not return before the timeout
 func AwaitWaitGroup(wg *sync.WaitGroup, timeout time.Duration) bool {
+	return BlockWithTimeout(wg.Wait, timeout)
+}
 
+// BlockWithTimeout invokes fn and waits for it to complete until the timeout.
+// Returns true if the call completed before the timeout, otherwise returns false.
+// fn is expected to be a blocking call and will continue to occupy a goroutine until it finally completes.
+func BlockWithTimeout(fn func(), timeout time.Duration) bool {
 	doneC := make(chan struct{})
 
 	go func() {
-		wg.Wait()
+		fn()
 		close(doneC)
 	}()
 
@@ -463,17 +470,24 @@ func VerifyShardIDMapping(
 	)
 }
 
+// TaskQueueRoutingKey returns the string that should be passed to Lookup to find the owner of
+// a task queue partition.
+func TaskQueueRoutingKey(namespaceId string, fullName string, tqType enumspb.TaskQueueType) string {
+	return fmt.Sprintf("%s:%s:%d", namespaceId, fullName, tqType)
+}
+
 func PrettyPrint[T proto.Message](msgs []T, header ...string) {
 	var sb strings.Builder
 	_, _ = sb.WriteString("==========================================================================\n")
 	for _, h := range header {
 		_, _ = sb.WriteString(h)
-		_, _ = sb.WriteString("\n")
+		_, _ = sb.WriteRune('\n')
 	}
 	_, _ = sb.WriteString("--------------------------------------------------------------------------\n")
 	for _, m := range msgs {
 		bs, _ := prototext.Marshal(m)
 		sb.Write(bs)
+		sb.WriteRune('\n')
 	}
 	fmt.Print(sb.String())
 }
@@ -712,9 +726,9 @@ func CheckEventBlobSizeLimit(
 	return nil
 }
 
-// ValidateLongPollContextTimeout check if the context timeout for a long poll handler is too short or below a normal value.
-// If the timeout is not set or too short, it logs an error, and return ErrContextTimeoutNotSet or ErrContextTimeoutTooShort
-// accordingly. If the timeout is only below a normal value, it just logs an info and return nil.
+// ValidateLongPollContextTimeout checks if the context timeout for a long poll handler is too short or below a normal value.
+// If the timeout is not set or too short, it logs an error, and returns ErrContextTimeoutNotSet or ErrContextTimeoutTooShort
+// accordingly. If the timeout is only below a normal value, it just logs an info and returns nil.
 func ValidateLongPollContextTimeout(
 	ctx context.Context,
 	handlerName string,
@@ -804,4 +818,11 @@ func OverrideWorkflowTaskTimeout(
 // CloneProto is a generic typed version of proto.Clone from proto.
 func CloneProto[T proto.Message](v T) T {
 	return proto.Clone(v).(T)
+}
+
+func ValidateUTF8String(fieldName string, strValue string) error {
+	if !utf8.ValidString(strValue) {
+		return serviceerror.NewInvalidArgument(fmt.Sprintf("%s %v is not a valid UTF-8 string", fieldName, strValue))
+	}
+	return nil
 }

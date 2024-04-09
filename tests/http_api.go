@@ -35,6 +35,8 @@ import (
 	"google.golang.org/grpc/metadata"
 	"google.golang.org/protobuf/encoding/protojson"
 
+	"gopkg.in/yaml.v3"
+
 	"go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/query/v1"
@@ -363,8 +365,10 @@ func (s *ClientFunctionalSuite) TestHTTPAPIPretty() {
 func (s *ClientFunctionalSuite) httpGet(expectedStatus int, url, contentType string) (*http.Response, []byte) {
 	req, err := http.NewRequest("GET", url, nil)
 	s.Require().NoError(err)
-	req.Header.Add("Accept", contentType)
-	req.Header.Add("Content-Type", contentType)
+	if contentType != "" {
+		req.Header.Add("Accept", contentType)
+		req.Header.Add("Content-Type", contentType)
+	}
 	s.T().Logf("GET %s (Accept: %s)", url, contentType)
 	return s.httpRequest(expectedStatus, req)
 }
@@ -392,4 +396,46 @@ func (s *ClientFunctionalSuite) httpRequest(expectedStatus int, req *http.Reques
 	s.Require().NoError(err)
 	s.Require().Equal(expectedStatus, resp.StatusCode, "Bad status, body: %s", body)
 	return resp, body
+}
+
+func (s *ClientFunctionalSuite) TestHTTPAPI_OperatorService_ListSearchAttributes() {
+	_, respBody := s.httpGet(
+		http.StatusOK,
+		"/api/v1/namespaces/"+s.namespace+"/search-attributes",
+		"application/json",
+	)
+	s.T().Log(string(respBody))
+	var searchAttrsResp struct {
+		CustomAttributes map[string]string `json:"customAttributes"`
+		SystemAttributes map[string]string `json:"systemAttributes"`
+		StorageSchema    map[string]string `json:"storageSchema"`
+	}
+	s.Require().NoError(json.Unmarshal(respBody, &searchAttrsResp))
+	// We don't allow for creating search attributes from the HTTP API yet, so
+	// we just check that a few defaults exist. We don't want to check for all
+	// of them as that's brittle and will break the tests if we ever add a new type
+	s.Require().Contains(searchAttrsResp.CustomAttributes, "CustomIntField")
+	s.Require().Equal(searchAttrsResp.CustomAttributes["CustomIntField"], "INDEXED_VALUE_TYPE_INT")
+}
+
+func (s *ClientFunctionalSuite) TestHTTPAPI_Serves_OpenAPIv2_Docs() {
+	_, respBody := s.httpGet(
+		http.StatusOK,
+		"/api/v1/swagger.json",
+		"",
+	)
+	var spec map[string]interface{}
+	// We're not going to validate it here, just verify that it's valid
+	s.Require().NoError(json.Unmarshal(respBody, &spec), string(respBody))
+}
+
+func (s *ClientFunctionalSuite) TestHTTPAPI_Serves_OpenAPIv3_Docs() {
+	_, respBody := s.httpGet(
+		http.StatusOK,
+		"/api/v1/openapi.yaml",
+		"",
+	)
+	var spec map[string]interface{}
+	// We're not going to validate it here, just verify that it's valid
+	s.Require().NoError(yaml.Unmarshal(respBody, &spec), string(respBody))
 }

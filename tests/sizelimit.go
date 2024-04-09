@@ -43,6 +43,7 @@ import (
 	"go.temporal.io/server/common/convert"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/payloads"
+	"go.temporal.io/server/common/testing/historyrequire"
 	"go.temporal.io/server/service/history/consts"
 	"google.golang.org/protobuf/types/known/durationpb"
 	"google.golang.org/protobuf/types/known/timestamppb"
@@ -52,6 +53,7 @@ type SizeLimitFunctionalSuite struct {
 	// override suite.Suite.Assertions with require.Assertions; this means that s.NotNil(nil) will stop the test,
 	// not merely log an error
 	*require.Assertions
+	historyrequire.HistoryRequire
 	FunctionalTestBase
 }
 
@@ -67,6 +69,7 @@ func (s *SizeLimitFunctionalSuite) TearDownSuite() {
 func (s *SizeLimitFunctionalSuite) SetupTest() {
 	// Have to define our overridden assertions in the test setup. If we did it earlier, s.T() will return nil
 	s.Assertions = require.New(s.T())
+	s.HistoryRequire = historyrequire.New(s.T())
 }
 
 func (s *SizeLimitFunctionalSuite) TestTerminateWorkflowCausedByHistoryCountLimit() {
@@ -194,23 +197,33 @@ SignalLoop:
 	s.EqualError(signalErr, common.FailureReasonHistoryCountExceedsLimit)
 	s.IsType(&serviceerror.InvalidArgument{}, signalErr)
 
-	s.printWorkflowHistory(s.namespace, &commonpb.WorkflowExecution{
+	historyEvents := s.getHistory(s.namespace, &commonpb.WorkflowExecution{
 		WorkflowId: id,
 		RunId:      we.GetRunId(),
 	})
-
-	// verify last event is terminated event
-	historyResponse, err := s.engine.GetWorkflowExecutionHistory(NewContext(), &workflowservice.GetWorkflowExecutionHistoryRequest{
-		Namespace: s.namespace,
-		Execution: &commonpb.WorkflowExecution{
-			WorkflowId: id,
-			RunId:      we.GetRunId(),
-		},
-	})
-	s.NoError(err)
-	history := historyResponse.History
-	lastEvent := history.Events[len(history.Events)-1]
-	s.Equal(enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_TERMINATED, lastEvent.GetEventType())
+	s.EqualHistoryEvents(`
+  1 WorkflowExecutionStarted
+  2 WorkflowTaskScheduled
+  3 WorkflowTaskStarted
+  4 WorkflowTaskCompleted
+  5 ActivityTaskScheduled
+  6 ActivityTaskStarted
+  7 ActivityTaskCompleted
+  8 WorkflowTaskScheduled
+  9 WorkflowTaskStarted
+ 10 WorkflowTaskCompleted
+ 11 ActivityTaskScheduled
+ 12 ActivityTaskStarted
+ 13 ActivityTaskCompleted
+ 14 WorkflowTaskScheduled
+ 15 WorkflowTaskStarted
+ 16 WorkflowTaskCompleted
+ 17 ActivityTaskScheduled
+ 18 ActivityTaskStarted
+ 19 ActivityTaskCompleted
+ 20 WorkflowTaskScheduled
+ 21 WorkflowExecutionSignaled
+ 22 WorkflowExecutionTerminated`, historyEvents)
 
 	// verify visibility is correctly processed from open to close
 	s.Eventually(
@@ -321,24 +334,23 @@ func (s *SizeLimitFunctionalSuite) TestWorkflowFailed_PayloadSizeTooLarge() {
 	s.NoError(err)
 	close(sigSendDoneChan)
 
-	verifyWorkflowFailed := false
+	// Wait for workflow to fail.
+	var historyEvents []*historypb.HistoryEvent
 	for i := 0; i < 10; i++ {
-		lastEvent := s.getLastEvent(s.namespace, &commonpb.WorkflowExecution{WorkflowId: id, RunId: we.GetRunId()})
-		if enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_FAILED == lastEvent.GetEventType() {
-			verifyWorkflowFailed = true
+		historyEvents = s.getHistory(s.namespace, &commonpb.WorkflowExecution{WorkflowId: id, RunId: we.GetRunId()})
+		lastEvent := historyEvents[len(historyEvents)-1]
+		if lastEvent.GetEventType() == enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_FAILED {
+			break
 		}
 		time.Sleep(time.Second)
 	}
-	if !verifyWorkflowFailed {
-		s.Fail("The workflow is expected to fail but it is not.")
-	}
-	histories := s.getHistory(s.namespace, &commonpb.WorkflowExecution{WorkflowId: id, RunId: we.GetRunId()})
-	for _, event := range histories {
-		if event.GetEventType() == enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_SIGNALED {
-			return
-		}
-	}
-	s.Fail("Missing signal event")
+	s.EqualHistoryEvents(`
+  1 WorkflowExecutionStarted
+  2 WorkflowTaskScheduled
+  3 WorkflowTaskStarted
+  4 WorkflowTaskFailed
+  5 WorkflowExecutionSignaled
+  6 WorkflowExecutionFailed`, historyEvents)
 }
 
 func (s *SizeLimitFunctionalSuite) TestTerminateWorkflowCausedByMsSizeLimit() {
@@ -451,23 +463,16 @@ func (s *SizeLimitFunctionalSuite) TestTerminateWorkflowCausedByMsSizeLimit() {
 	s.EqualError(signalErr, consts.ErrWorkflowCompleted.Error())
 	s.IsType(&serviceerror.NotFound{}, signalErr)
 
-	s.printWorkflowHistory(s.namespace, &commonpb.WorkflowExecution{
+	historyEvents := s.getHistory(s.namespace, &commonpb.WorkflowExecution{
 		WorkflowId: id,
 		RunId:      we.GetRunId(),
 	})
-
-	// verify last event is terminated event
-	historyResponse, err := s.engine.GetWorkflowExecutionHistory(NewContext(), &workflowservice.GetWorkflowExecutionHistoryRequest{
-		Namespace: s.namespace,
-		Execution: &commonpb.WorkflowExecution{
-			WorkflowId: id,
-			RunId:      we.GetRunId(),
-		},
-	})
-	s.NoError(err)
-	history := historyResponse.History
-	lastEvent := history.Events[len(history.Events)-1]
-	s.Equal(enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_TERMINATED, lastEvent.GetEventType())
+	s.EqualHistoryEvents(`
+  1 WorkflowExecutionStarted
+  2 WorkflowTaskScheduled
+  3 WorkflowTaskStarted
+  4 WorkflowTaskFailed
+  5 WorkflowExecutionTerminated`, historyEvents)
 
 	// verify visibility is correctly processed from open to close
 	s.Eventually(
@@ -552,23 +557,23 @@ SignalLoop:
 	s.EqualError(signalErr, common.FailureReasonHistorySizeExceedsLimit)
 	s.IsType(&serviceerror.InvalidArgument{}, signalErr)
 
-	s.printWorkflowHistory(s.namespace, &commonpb.WorkflowExecution{
+	historyEvents := s.getHistory(s.namespace, &commonpb.WorkflowExecution{
 		WorkflowId: id,
 		RunId:      we.GetRunId(),
 	})
-
-	// verify last event is terminated event
-	historyResponse, err := s.engine.GetWorkflowExecutionHistory(NewContext(), &workflowservice.GetWorkflowExecutionHistoryRequest{
-		Namespace: s.namespace,
-		Execution: &commonpb.WorkflowExecution{
-			WorkflowId: id,
-			RunId:      we.GetRunId(),
-		},
-	})
-	s.NoError(err)
-	history := historyResponse.History
-	lastEvent := history.Events[len(history.Events)-1]
-	s.Equal(enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_TERMINATED, lastEvent.GetEventType())
+	s.EqualHistoryEvents(`
+  1 WorkflowExecutionStarted
+  2 WorkflowTaskScheduled
+  3 WorkflowExecutionSignaled
+  4 WorkflowExecutionSignaled
+  5 WorkflowExecutionSignaled
+  6 WorkflowExecutionSignaled
+  7 WorkflowExecutionSignaled
+  8 WorkflowExecutionSignaled
+  9 WorkflowExecutionSignaled
+ 10 WorkflowExecutionSignaled
+ 11 WorkflowExecutionSignaled
+ 12 WorkflowExecutionTerminated`, historyEvents)
 
 	// verify visibility is correctly processed from open to close
 	s.Eventually(

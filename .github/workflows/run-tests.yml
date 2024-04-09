@@ -37,12 +37,12 @@ jobs:
           ref: ${{ env.COMMIT }}
           submodules: true
 
-      - uses: actions/setup-go@v4
+      - uses: actions/setup-go@v5
         with:
           go-version-file: 'go.mod'
           check-latest: true
 
-      - uses: arduino/setup-protoc@v2
+      - uses: arduino/setup-protoc@v3
 
       - run: make ci-build-misc
 
@@ -65,7 +65,7 @@ jobs:
           token: ${{ secrets.GITHUB_TOKEN }}
           ref: ${{ env.COMMIT }}
 
-      - run: docker-compose -f ${{ env.DOCKER_COMPOSE_FILE }} pull
+      - run: docker compose -f ${{ env.DOCKER_COMPOSE_FILE }} pull
 
   unit-test:
     name: Unit test
@@ -81,7 +81,7 @@ jobs:
           token: ${{ secrets.GITHUB_TOKEN }}
           ref: ${{ env.COMMIT }}
 
-      - uses: actions/setup-go@v4
+      - uses: actions/setup-go@v5
         with:
           go-version-file: 'go.mod'
           check-latest: true
@@ -108,14 +108,14 @@ jobs:
           token: ${{ secrets.GITHUB_TOKEN }}
           ref: ${{ env.COMMIT }}
 
-      - uses: actions/setup-go@v4
+      - uses: actions/setup-go@v5
         with:
           go-version-file: 'go.mod'
           check-latest: true
 
       - name: Start containerized dependencies
         run: |
-          docker-compose -f ${{ env.DOCKER_COMPOSE_FILE }} up -d cassandra mysql postgresql
+          docker compose -f ${{ env.DOCKER_COMPOSE_FILE }} up -d cassandra mysql postgresql
 
       - name: Run integration test
         timeout-minutes: 15
@@ -124,7 +124,7 @@ jobs:
       - name: Tear down docker compose
         if: ${{ always() }}
         run: |
-          docker-compose -f ${{ env.DOCKER_COMPOSE_FILE }} down -v
+          docker compose -f ${{ env.DOCKER_COMPOSE_FILE }} down -v
 
   functional-test:
     name: Functional test
@@ -133,7 +133,7 @@ jobs:
       fail-fast: false
       matrix:
         runs-on: [ubuntu-latest]
-        name: [cass_es, cass_es8, sqlite, mysql, mysql8, postgres, postgres_pgx, postgres12, postgres12_pgx]
+        name: [cass_es, cass_es8, sqlite, mysql8, postgres12, postgres12_pgx]
         shard_index: [0, 1, 2]
         include:
           - name: cass_es
@@ -148,22 +148,10 @@ jobs:
             persistence_type: sql
             persistence_driver: sqlite
             containers: []
-          - name: mysql
-            persistence_type: sql
-            persistence_driver: mysql
-            containers: [mysql, elasticsearch]
           - name: mysql8
             persistence_type: sql
             persistence_driver: mysql8
             containers: [mysql]
-          - name: postgres
-            persistence_type: sql
-            persistence_driver: postgres
-            containers: [postgresql, elasticsearch]
-          - name: postgres_pgx
-            persistence_type: sql
-            persistence_driver: postgres_pgx
-            containers: [postgresql, elasticsearch]
           - name: postgres12
             persistence_type: sql
             persistence_driver: postgres12
@@ -188,7 +176,7 @@ jobs:
           token: ${{ secrets.GITHUB_TOKEN }}
           ref: ${{ env.COMMIT }}
 
-      - uses: actions/setup-go@v4
+      - uses: actions/setup-go@v5
         with:
           go-version-file: 'go.mod'
           check-latest: true
@@ -196,7 +184,7 @@ jobs:
       - name: Start containerized dependencies
         if: ${{ toJson(matrix.containers) != '[]' }}
         run: |
-          docker-compose -f ${{ env.DOCKER_COMPOSE_FILE }} up -d ${{ join(matrix.containers, ' ') }}
+          docker compose -f ${{ env.DOCKER_COMPOSE_FILE }} up -d ${{ join(matrix.containers, ' ') }}
 
       - name: Run functional test
         timeout-minutes: 15
@@ -205,7 +193,7 @@ jobs:
       - name: Tear down docker compose
         if: ${{ always() }}
         run: |
-          docker-compose -f ${{ env.DOCKER_COMPOSE_FILE }} down -v
+          docker compose -f ${{ env.DOCKER_COMPOSE_FILE }} down -v
 
   functional-test-xdc:
     name: Functional test xdc
@@ -214,7 +202,7 @@ jobs:
       fail-fast: false
       matrix:
         runs-on: [ubuntu-latest]
-        name: [cass_es, cass_es8, mysql, mysql8, postgres, postgres_pgx, postgres12, postgres12_pgx]
+        name: [cass_es, cass_es8, mysql8, postgres12, postgres12_pgx]
         include:
           - name: cass_es
             persistence_type: nosql
@@ -224,22 +212,10 @@ jobs:
             persistence_type: nosql
             persistence_driver: elasticsearch
             containers: [cassandra, elasticsearch8]
-          - name: mysql
-            persistence_type: sql
-            persistence_driver: mysql
-            containers: [mysql, elasticsearch]
           - name: mysql8
             persistence_type: sql
             persistence_driver: mysql8
             containers: [mysql]
-          - name: postgres
-            persistence_type: sql
-            persistence_driver: postgres12
-            containers: [postgresql, elasticsearch]
-          - name: postgres_pgx
-            persistence_type: sql
-            persistence_driver: postgres12_pgx
-            containers: [postgresql, elasticsearch]
           - name: postgres12
             persistence_type: sql
             persistence_driver: postgres12
@@ -262,7 +238,7 @@ jobs:
           token: ${{ secrets.GITHUB_TOKEN }}
           ref: ${{ env.COMMIT }}
 
-      - uses: actions/setup-go@v4
+      - uses: actions/setup-go@v5
         with:
           go-version-file: 'go.mod'
           check-latest: true
@@ -270,7 +246,7 @@ jobs:
       - name: Start containerized dependencies
         if: ${{ toJson(matrix.containers) != '[]' }}
         run: |
-          docker-compose -f ${{ env.DOCKER_COMPOSE_FILE }} up -d ${{ join(matrix.containers, ' ') }}
+          docker compose -f ${{ env.DOCKER_COMPOSE_FILE }} up -d ${{ join(matrix.containers, ' ') }}
 
       - name: Run functional test xdc
         timeout-minutes: 15
@@ -279,7 +255,7 @@ jobs:
       - name: Tear down docker compose
         if: ${{ always() }}
         run: |
-          docker-compose -f ${{ env.DOCKER_COMPOSE_FILE }} down -v
+          docker compose -f ${{ env.DOCKER_COMPOSE_FILE }} down -v
 
   functional-test-ndc:
     name: Functional test ndc
@@ -288,7 +264,7 @@ jobs:
       fail-fast: false
       matrix:
         runs-on: [ubuntu-latest]
-        name: [cass_es, cass_es8, mysql, mysql8, postgres, postgres_pgx, postgres12, postgres12_pgx]
+        name: [cass_es, cass_es8, mysql8, postgres12, postgres12_pgx]
         include:
           - name: cass_es
             persistence_type: nosql
@@ -298,22 +274,10 @@ jobs:
             persistence_type: nosql
             persistence_driver: elasticsearch
             containers: [cassandra, elasticsearch8]
-          - name: mysql
-            persistence_type: sql
-            persistence_driver: mysql
-            containers: [mysql, elasticsearch]
           - name: mysql8
             persistence_type: sql
             persistence_driver: mysql8
             containers: [mysql]
-          - name: postgres
-            persistence_type: sql
-            persistence_driver: postgres12
-            containers: [postgresql, elasticsearch]
-          - name: postgres_pgx
-            persistence_type: sql
-            persistence_driver: postgres12_pgx
-            containers: [postgresql, elasticsearch]
           - name: postgres12
             persistence_type: sql
             persistence_driver: postgres12
@@ -336,7 +300,7 @@ jobs:
           token: ${{ secrets.GITHUB_TOKEN }}
           ref: ${{ env.COMMIT }}
 
-      - uses: actions/setup-go@v4
+      - uses: actions/setup-go@v5
         with:
           go-version-file: 'go.mod'
           check-latest: true
@@ -344,7 +308,7 @@ jobs:
       - name: Start containerized dependencies
         if: ${{ toJson(matrix.containers) != '[]' }}
         run: |
-          docker-compose -f ${{ env.DOCKER_COMPOSE_FILE }} up -d ${{ join(matrix.containers, ' ') }}
+          docker compose -f ${{ env.DOCKER_COMPOSE_FILE }} up -d ${{ join(matrix.containers, ' ') }}
 
       - name: Run functional test ndc
         timeout-minutes: 15
@@ -353,7 +317,7 @@ jobs:
       - name: Tear down docker compose
         if: ${{ always() }}
         run: |
-          docker-compose -f ${{ env.DOCKER_COMPOSE_FILE }} down -v
+          docker compose -f ${{ env.DOCKER_COMPOSE_FILE }} down -v
 
   test-status:
     name: Test Status
@@ -365,10 +329,11 @@ jobs:
       - functional-test-ndc
     runs-on: ubuntu-latest
     if: always()
+    env:
+      RESULTS: ${{ toJSON(needs.*.result) }}
     steps:
-      - name: Success
-        if: ${{ !(contains(needs.*.result, 'failure')) }}
-        run: exit 0
-      - name: Failure
-        if: ${{ contains(needs.*.result, 'failure') }}
-        run: exit 1
+      - name: Check results
+        run: |
+          if [[ -n $(echo "$RESULTS" | jq '.[] | select (. != "success")') ]]; then
+            exit 1
+          fi

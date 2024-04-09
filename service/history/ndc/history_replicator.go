@@ -58,7 +58,7 @@ const (
 )
 
 type (
-	stateBuilderProvider func(
+	mutableStateRebuilderProvider func(
 		mutableState workflow.MutableState,
 		logger log.Logger,
 	) workflow.MutableStateRebuilder
@@ -111,6 +111,7 @@ type (
 			versionHistoryItems []*historyspb.VersionHistoryItem,
 			events [][]*historypb.HistoryEvent,
 			newEvents []*historypb.HistoryEvent,
+			newRunID string,
 		) error
 	}
 
@@ -231,6 +232,7 @@ func (r *HistoryReplicatorImpl) ReplicateHistoryEvents(
 	versionHistoryItems []*historyspb.VersionHistoryItem,
 	eventsSlice [][]*historypb.HistoryEvent,
 	newEvents []*historypb.HistoryEvent,
+	newRunID string,
 ) error {
 	task, err := newReplicationTaskFromBatch(
 		r.clusterMetadata,
@@ -240,6 +242,7 @@ func (r *HistoryReplicatorImpl) ReplicateHistoryEvents(
 		versionHistoryItems,
 		eventsSlice,
 		newEvents,
+		newRunID,
 	)
 	if err != nil {
 		return err
@@ -280,7 +283,7 @@ func (r *HistoryReplicatorImpl) doApplyEvents(
 
 	default:
 		// apply events, other than simple start workflow execution
-		// the continue as new + start workflow execution combination will also be processed here
+		// the update + start workflow execution combination will also be processed here
 		mutableState, err := wfContext.LoadMutableState(ctx, r.shardContext)
 		switch err.(type) {
 		case nil:
@@ -292,7 +295,7 @@ func (r *HistoryReplicatorImpl) doApplyEvents(
 			if err != nil {
 				return err
 			} else if !prepareHistoryBranchOut.DoContinue {
-				r.metricsHandler.Counter(metrics.DuplicateReplicationEventsCounter.Name()).Record(
+				metrics.DuplicateReplicationEventsCounter.With(r.metricsHandler).Record(
 					1,
 					metrics.OperationTag(metrics.ReplicateHistoryEventsScope))
 				return nil
@@ -347,6 +350,8 @@ func (r *HistoryReplicatorImpl) applyStartEvents(
 		r.shardContext.GetEventsCache(),
 		task.getLogger(),
 		namespaceEntry,
+		task.getWorkflowID(),
+		task.getRunID(),
 		timestamp.TimeValue(task.getFirstEvent().GetEventTime()),
 	)
 	mutableState, newMutableState, err := r.mutableStateMapper.ApplyEvents(ctx, wfContext, mutableState, task)

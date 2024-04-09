@@ -146,6 +146,7 @@ func getModuleDependencies(controller *gomock.Controller, c *moduleTestCase) fx.
 		cfg,
 		fx.Annotate(registry, fx.As(new(tasks.TaskCategoryRegistry))),
 		fx.Annotate(metrics.NoopMetricsHandler, fx.As(new(metrics.Handler))),
+		fx.Annotate(log.NewTestLogger(), fx.As(new(log.SnTaggedLogger))),
 		fx.Annotate(clusterMetadata, fx.As(new(cluster.Metadata))),
 		lazyLoadedOwnershipBasedQuotaScaler,
 	)
@@ -159,7 +160,6 @@ type unusedDependencies struct {
 	clock.TimeSource
 	membership.ServiceResolver
 	namespace.Registry
-	log.SnTaggedLogger
 	client.Bean
 	sdk.ClientFactory
 	resource.MatchingRawClient

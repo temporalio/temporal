@@ -42,6 +42,7 @@ import (
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	workflowspb "go.temporal.io/server/api/workflow/v1"
 	"go.temporal.io/server/common"
+	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
@@ -504,7 +505,7 @@ func (t *transferQueueActiveTaskExecutor) processCancelExecution(
 		case *serviceerror.NamespaceNotFound:
 			failedCause = enumspb.CANCEL_EXTERNAL_WORKFLOW_EXECUTION_FAILED_CAUSE_NAMESPACE_NOT_FOUND
 		default:
-			t.logger.Error("Unexpected error type returned from RequestCancelWorkflowExecution API call.", tag.ErrorType(err), tag.Error(err))
+			t.logger.Error("Unexpected error type returned from RequestCancelWorkflowExecution API call.", tag.ServiceErrorType(err), tag.Error(err))
 			return err
 		}
 		return t.requestCancelExternalExecutionFailed(
@@ -637,7 +638,7 @@ func (t *transferQueueActiveTaskExecutor) processSignalExecution(
 		case *serviceerror.InvalidArgument:
 			failedCause = enumspb.SIGNAL_EXTERNAL_WORKFLOW_EXECUTION_FAILED_CAUSE_SIGNAL_COUNT_LIMIT_EXCEEDED
 		default:
-			t.logger.Error("Unexpected error type returned from SignalWorkflowExecution API call.", tag.ErrorType(err), tag.Error(err))
+			t.logger.Error("Unexpected error type returned from SignalWorkflowExecution API call.", tag.ServiceErrorType(err), tag.Error(err))
 			return err
 		}
 		return t.signalExternalExecutionFailed(
@@ -835,7 +836,7 @@ func (t *transferQueueActiveTaskExecutor) processStartChildExecution(
 		case *serviceerror.NamespaceNotFound:
 			failedCause = enumspb.START_CHILD_WORKFLOW_EXECUTION_FAILED_CAUSE_NAMESPACE_NOT_FOUND
 		default:
-			t.logger.Error("Unexpected error type returned from StartWorkflowExecution API call for child workflow.", tag.ErrorType(err), tag.Error(err))
+			t.logger.Error("Unexpected error type returned from StartWorkflowExecution API call for child workflow.", tag.ServiceErrorType(err), tag.Error(err))
 			return err
 		}
 
@@ -963,11 +964,8 @@ func (t *transferQueueActiveTaskExecutor) processResetWorkflow(
 			ctx,
 			t.shardContext,
 			t.cache,
-			namespace.ID(task.NamespaceID),
-			&commonpb.WorkflowExecution{
-				WorkflowId: task.WorkflowID,
-				RunId:      resetPoint.GetRunId(),
-			},
+			definition.NewWorkflowKey(task.NamespaceID, task.WorkflowID, resetPoint.GetRunId()),
+			workflow.LockPriorityLow,
 		)
 		if err != nil {
 			return err
@@ -1406,7 +1404,7 @@ func (t *transferQueueActiveTaskExecutor) resetWorkflow(
 		),
 		reason,
 		nil,
-		enumspb.RESET_REAPPLY_TYPE_SIGNAL,
+		nil,
 	)
 
 	switch err.(type) {
@@ -1416,7 +1414,7 @@ func (t *transferQueueActiveTaskExecutor) resetWorkflow(
 	case *serviceerror.NotFound, *serviceerror.NamespaceNotFound:
 		// This means the reset point is corrupted and not retry able.
 		// There must be a bug in our system that we must fix.(for example, history is not the same in active/passive)
-		t.metricHandler.Counter(metrics.AutoResetPointCorruptionCounter.Name()).Record(
+		metrics.AutoResetPointCorruptionCounter.With(t.metricHandler).Record(
 			1,
 			metrics.OperationTag(metrics.OperationTransferQueueProcessorScope),
 		)
@@ -1491,13 +1489,13 @@ func (t *transferQueueActiveTaskExecutor) processParentClosePolicy(
 		err := t.applyParentClosePolicy(ctx, parentExecution, childInfo)
 		switch err.(type) {
 		case nil:
-			scope.Counter(metrics.ParentClosePolicyProcessorSuccess.Name()).Record(1)
+			metrics.ParentClosePolicyProcessorSuccess.With(scope).Record(1)
 		case *serviceerror.NotFound:
 			// If child execution is deleted there is nothing to close.
 		case *serviceerror.NamespaceNotFound:
 			// If child namespace is deleted there is nothing to close.
 		default:
-			scope.Counter(metrics.ParentClosePolicyProcessorFailures.Name()).Record(1)
+			metrics.ParentClosePolicyProcessorFailures.With(scope).Record(1)
 			return err
 		}
 	}

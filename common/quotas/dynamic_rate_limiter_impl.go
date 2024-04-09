@@ -64,7 +64,8 @@ func NewDynamicRateLimiter(
 }
 
 // NewDefaultIncomingRateLimiter returns a default rate limiter
-// for incoming traffic
+// for incoming traffic, using fixed burst ratio of 2
+// and fixed 1 minute refresh interval
 func NewDefaultIncomingRateLimiter(
 	rateFn RateFn,
 ) *DynamicRateLimiterImpl {
@@ -75,12 +76,25 @@ func NewDefaultIncomingRateLimiter(
 }
 
 // NewDefaultOutgoingRateLimiter returns a default rate limiter
-// for outgoing traffic
+// for outgoing traffic, using fixed burst ratio of 2
+// and fixed 1 minute refresh interval
 func NewDefaultOutgoingRateLimiter(
 	rateFn RateFn,
 ) *DynamicRateLimiterImpl {
 	return NewDynamicRateLimiter(
 		NewDefaultOutgoingRateBurst(rateFn),
+		defaultRefreshInterval,
+	)
+}
+
+// NewDefaultRateLimiter returns a default rate limiter with a dynamic burst ratio
+// and fixed 1 minute refresh interval
+func NewDefaultRateLimiter(
+	rateFn RateFn,
+	burstRatioFn BurstRatioFn,
+) *DynamicRateLimiterImpl {
+	return NewDynamicRateLimiter(
+		NewDefaultRateBurst(rateFn, burstRatioFn),
 		defaultRefreshInterval,
 	)
 }

@@ -112,6 +112,7 @@ func (s *futureEventsHandlerSuite) TestHandleFutureHistoryEvents() {
 		versionHistory.Items,
 		historyEvents,
 		nil,
+		"",
 	).Times(1)
 
 	err := s.futureEventHandler.HandleRemoteGeneratedHistoryEvents(
@@ -121,6 +122,7 @@ func (s *futureEventsHandlerSuite) TestHandleFutureHistoryEvents() {
 		versionHistory.Items,
 		historyEvents,
 		nil,
+		"",
 	)
 	s.Nil(err)
 }

@@ -62,8 +62,8 @@ func Invoke(
 			request.WorkflowExecution.WorkflowId,
 			request.WorkflowExecution.RunId,
 		),
-		func(workflowContext api.WorkflowContext) (*api.UpdateWorkflowAction, error) {
-			mutableState := workflowContext.GetMutableState()
+		func(workflowLease api.WorkflowLease) (*api.UpdateWorkflowAction, error) {
+			mutableState := workflowLease.GetMutableState()
 			if !mutableState.IsWorkflowExecutionRunning() {
 				return nil, consts.ErrWorkflowCompleted
 			}
@@ -77,7 +77,7 @@ func Invoke(
 			// First check to see if cache needs to be refreshed as we could potentially have stale workflow execution in
 			// some extreme cassandra failure cases.
 			if !isRunning && scheduledEventID >= mutableState.GetNextEventID() {
-				taggedMetrics.Counter(metrics.StaleMutableStateCounter.Name()).Record(1)
+				metrics.StaleMutableStateCounter.With(taggedMetrics).Record(1)
 				return nil, consts.ErrStaleState
 			}
 
@@ -122,12 +122,13 @@ func Invoke(
 			namespaceName := namespaceEntry.Name()
 			taskQueueName := ai.GetTaskQueue()
 
-			metrics.GetPerTaskQueueScope(
-				taggedMetrics,
-				namespaceName.String(),
-				taskQueueName,
-				enumspb.TASK_QUEUE_KIND_NORMAL,
-			).Timer(metrics.TaskScheduleToStartLatency.Name()).Record(
+			metrics.TaskScheduleToStartLatency.With(
+				metrics.GetPerTaskQueueScope(
+					taggedMetrics,
+					namespaceName.String(),
+					taskQueueName,
+					enumspb.TASK_QUEUE_KIND_NORMAL,
+				)).Record(
 				scheduleToStartLatency,
 				metrics.TaskQueueTypeTag(enumspb.TASK_QUEUE_TYPE_ACTIVITY),
 			)

@@ -29,9 +29,11 @@ import (
 	"strings"
 
 	enumspb "go.temporal.io/api/enums/v1"
+
 	enumsspb "go.temporal.io/server/api/enums/v1"
 
 	"go.temporal.io/server/common/primitives"
+	"go.temporal.io/server/common/util"
 )
 
 const (
@@ -254,7 +256,22 @@ func VersionedTag(versioned bool) Tag {
 }
 
 func ServiceErrorTypeTag(err error) Tag {
-	return &tagImpl{key: ErrorTypeTagName, value: strings.TrimPrefix(errorType(err), errorPrefix)}
+	return &tagImpl{key: ErrorTypeTagName, value: strings.TrimPrefix(util.ErrorType(err), errorPrefix)}
+}
+
+func NexusOutcomeTag(outcome string) Tag {
+	return &tagImpl{key: nexusOutcomeTagName, value: outcome}
+}
+
+func NexusMethodTag(value string) Tag {
+	return &tagImpl{key: nexusMethodTagName, value: value}
+}
+
+func NexusServiceTag(value string) Tag {
+	if len(value) == 0 {
+		value = unknownValue
+	}
+	return &tagImpl{key: nexusServiceTagName, value: value}
 }
 
 // HttpStatusTag returns a new httpStatusTag.

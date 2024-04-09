@@ -52,8 +52,7 @@ func Tags(
 		tag.WorkflowNamespaceID(task.GetNamespaceID()),
 		tag.WorkflowID(task.GetWorkflowID()),
 		tag.WorkflowRunID(task.GetRunID()),
-		tag.TaskID(task.GetTaskID()),
-		tag.TaskVisibilityTimestamp(task.GetVisibilityTime()),
+		tag.TaskKey(task.GetKey()),
 		tag.TaskType(task.GetType()),
 		tag.Task(task),
 		tag.WorkflowEventID(taskEventID),
@@ -116,7 +115,9 @@ func GetTimerTaskEventID(
 		eventID = common.FirstEventID
 	case *ActivityRetryTimerTask:
 		eventID = task.EventID
-	case *WorkflowTimeoutTask:
+	case *WorkflowRunTimeoutTask:
+		eventID = common.FirstEventID
+	case *WorkflowExecutionTimeoutTask:
 		eventID = common.FirstEventID
 	case *DeleteHistoryEventTask:
 		eventID = common.FirstEventID

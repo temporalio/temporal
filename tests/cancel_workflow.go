@@ -123,19 +123,17 @@ func (s *FunctionalSuite) TestExternalRequestCancelWorkflowExecution() {
 	s.Logger.Info("PollAndProcessWorkflowTask", tag.Error(err))
 	s.NoError(err)
 
-	historyResponse, err := s.engine.GetWorkflowExecutionHistory(NewContext(), &workflowservice.GetWorkflowExecutionHistoryRequest{
-		Namespace: s.namespace,
-		Execution: &commonpb.WorkflowExecution{
-			WorkflowId: id,
-			RunId:      we.RunId,
-		},
+	historyEvents := s.getHistory(s.namespace, &commonpb.WorkflowExecution{
+		WorkflowId: id,
+		RunId:      we.RunId,
 	})
-	s.NoError(err)
-	history := historyResponse.History
-
-	lastEvent := history.Events[len(history.Events)-1]
-	cancelledEventAttributes := lastEvent.GetWorkflowExecutionCanceledEventAttributes()
-	s.Equal("Cancelled", s.decodePayloadsString(cancelledEventAttributes.GetDetails()))
+	s.EqualHistoryEvents(`
+  1 WorkflowExecutionStarted
+  2 WorkflowTaskScheduled
+  3 WorkflowExecutionCancelRequested
+  4 WorkflowTaskStarted
+  5 WorkflowTaskCompleted
+  6 WorkflowExecutionCanceled {"Details":{"Payloads":[{"Data":"\"Cancelled\""}]}}`, historyEvents)
 }
 
 func (s *FunctionalSuite) TestRequestCancelWorkflowCommandExecution_TargetRunning() {
@@ -627,17 +625,31 @@ func (s *FunctionalSuite) TestImmediateChildCancellation_WorkflowTaskFailed() {
 	s.IsType(&serviceerror.InvalidArgument{}, err)
 	s.Equal(fmt.Sprintf("BadRequestCancelExternalWorkflowExecutionAttributes: Start and RequestCancel for child workflow is not allowed in same workflow task. WorkflowId=%s RunId= Namespace=%s", childWorkflowID, s.namespace), err.Error())
 
-	s.printWorkflowHistory(s.namespace, &commonpb.WorkflowExecution{
+	s.EqualHistoryEvents(`
+  1 WorkflowExecutionStarted
+  2 WorkflowTaskScheduled
+  3 WorkflowExecutionCancelRequested
+  4 WorkflowTaskStarted
+  5 WorkflowTaskFailed`, s.getHistory(s.namespace, &commonpb.WorkflowExecution{
 		WorkflowId: id,
-	})
+	}))
 
 	s.Logger.Info("Process second workflow task which observes child workflow is cancelled and completes")
 	_, err = poller.PollAndProcessWorkflowTask()
 	s.NoError(err)
 
-	s.printWorkflowHistory(s.namespace, &commonpb.WorkflowExecution{
+	s.EqualHistoryEvents(`
+  1 WorkflowExecutionStarted
+  2 WorkflowTaskScheduled
+  3 WorkflowExecutionCancelRequested
+  4 WorkflowTaskStarted
+  5 WorkflowTaskFailed
+  6 WorkflowTaskScheduled
+  7 WorkflowTaskStarted
+  8 WorkflowTaskCompleted
+  9 WorkflowExecutionCompleted`, s.getHistory(s.namespace, &commonpb.WorkflowExecution{
 		WorkflowId: id,
-	})
+	}))
 
 	_, err = s.engine.DescribeWorkflowExecution(NewContext(), &workflowservice.DescribeWorkflowExecutionRequest{
 		Namespace: s.namespace,
@@ -646,9 +658,9 @@ func (s *FunctionalSuite) TestImmediateChildCancellation_WorkflowTaskFailed() {
 		},
 	})
 	if err == nil {
-		s.printWorkflowHistory(s.namespace, &commonpb.WorkflowExecution{
+		s.PrintHistoryEvents(s.getHistory(s.namespace, &commonpb.WorkflowExecution{
 			WorkflowId: childWorkflowID,
-		})
+		}))
 	}
 	s.Logger.Error("Describe error", tag.Error(err))
 	s.Error(err, "Child workflow execution started instead of getting cancelled")

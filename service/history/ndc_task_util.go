@@ -82,7 +82,7 @@ func loadMutableStateForTransferTask(
 	logger log.Logger,
 ) (workflow.MutableState, error) {
 	logger = tasks.InitializeLogger(transferTask, logger)
-	mutableState, err := LoadMutableStateForTask(
+	mutableState, err := loadMutableStateForTask(
 		ctx,
 		shardContext,
 		wfContext,
@@ -128,7 +128,7 @@ func loadMutableStateForTimerTask(
 	logger log.Logger,
 ) (workflow.MutableState, error) {
 	logger = tasks.InitializeLogger(timerTask, logger)
-	return LoadMutableStateForTask(
+	return loadMutableStateForTask(
 		ctx,
 		shardContext,
 		wfContext,
@@ -139,7 +139,7 @@ func loadMutableStateForTimerTask(
 	)
 }
 
-func LoadMutableStateForTask(
+func loadMutableStateForTask(
 	ctx context.Context,
 	shardContext shard.Context,
 	wfContext workflow.Context,
@@ -174,7 +174,7 @@ func LoadMutableStateForTask(
 		return mutableState, nil
 	}
 
-	metricsHandler.Counter(metrics.StaleMutableStateCounter.Name()).Record(1)
+	metrics.StaleMutableStateCounter.With(metricsHandler).Record(1)
 	wfContext.Clear()
 
 	mutableState, err = wfContext.LoadMutableState(ctx, shardContext)
@@ -183,7 +183,7 @@ func LoadMutableStateForTask(
 	}
 	// after refresh, still mutable state's next event ID <= task's event ID
 	if eventID >= mutableState.GetNextEventID() {
-		metricsHandler.Counter(metrics.TaskSkipped.Name()).Record(1)
+		metrics.TaskSkipped.With(metricsHandler).Record(1)
 		logger.Info("Task Processor: task event ID >= MS NextEventID, skip.",
 			tag.WorkflowNextEventID(mutableState.GetNextEventID()),
 		)

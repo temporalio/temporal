@@ -34,6 +34,7 @@ import (
 	"github.com/golang/mock/gomock"
 	"github.com/pborman/uuid"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	batchpb "go.temporal.io/api/batch/v1"
@@ -611,8 +612,115 @@ func (s *workflowHandlerSuite) TestStartWorkflowExecution_Failed_InvalidStartDel
 		RequestId:          uuid.New(),
 		WorkflowStartDelay: durationpb.New(-10 * time.Second),
 	}
+
 	_, err := wh.StartWorkflowExecution(context.Background(), startWorkflowExecutionRequest)
+
 	s.ErrorIs(err, errInvalidWorkflowStartDelaySeconds)
+}
+
+func (s *workflowHandlerSuite) TestStartWorkflowExecution_InvalidWorkflowIdReusePolicy_TerminateIfRunning() {
+	config := s.newConfig()
+	config.EnableWorkflowIdConflictPolicy = func(string) bool { return true }
+	wh := s.getWorkflowHandler(config)
+	req := &workflowservice.StartWorkflowExecutionRequest{
+		WorkflowId:               testWorkflowID,
+		WorkflowType:             &commonpb.WorkflowType{Name: "WORKFLOW"},
+		TaskQueue:                &taskqueuepb.TaskQueue{Name: "TASK_QUEUE", Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
+		WorkflowIdReusePolicy:    enumspb.WORKFLOW_ID_REUSE_POLICY_TERMINATE_IF_RUNNING,
+		WorkflowIdConflictPolicy: enumspb.WORKFLOW_ID_CONFLICT_POLICY_FAIL,
+	}
+
+	resp, err := wh.StartWorkflowExecution(context.Background(), req)
+
+	s.Nil(resp)
+	s.Equal(err, serviceerror.NewInvalidArgument(
+		"Invalid WorkflowIDReusePolicy: WORKFLOW_ID_REUSE_POLICY_TERMINATE_IF_RUNNING cannot be used together with a WorkflowIDConflictPolicy."))
+}
+
+func (s *workflowHandlerSuite) TestStartWorkflowExecution_DefaultWorkflowIdDuplicationPolicies() {
+	s.mockSearchAttributesMapperProvider.EXPECT().GetMapper(gomock.Any()).Return(nil, nil)
+	s.mockNamespaceCache.EXPECT().GetNamespaceID(gomock.Any()).Return(namespace.NewID(), nil)
+	s.mockHistoryClient.EXPECT().StartWorkflowExecution(gomock.Any(), mock.MatchedBy(
+		func(request *historyservice.StartWorkflowExecutionRequest) bool {
+			return request.StartRequest.WorkflowIdReusePolicy == enumspb.WORKFLOW_ID_REUSE_POLICY_ALLOW_DUPLICATE &&
+				request.StartRequest.WorkflowIdConflictPolicy == enumspb.WORKFLOW_ID_CONFLICT_POLICY_FAIL
+		},
+	)).Return(&historyservice.StartWorkflowExecutionResponse{Started: true}, nil)
+
+	wh := s.getWorkflowHandler(s.newConfig())
+	req := &workflowservice.StartWorkflowExecutionRequest{
+		WorkflowId:   testWorkflowID,
+		WorkflowType: &commonpb.WorkflowType{Name: "WORKFLOW"},
+		TaskQueue:    &taskqueuepb.TaskQueue{Name: "TASK_QUEUE", Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
+		// both policies are not specified
+	}
+
+	resp, err := wh.StartWorkflowExecution(context.Background(), req)
+	s.NoError(err)
+	s.True(resp.Started)
+}
+
+func (s *workflowHandlerSuite) TestSignalWithStartWorkflowExecution_InvalidWorkflowIdConflictPolicy() {
+	config := s.newConfig()
+	config.EnableWorkflowIdConflictPolicy = func(string) bool { return true }
+	wh := s.getWorkflowHandler(config)
+	req := &workflowservice.SignalWithStartWorkflowExecutionRequest{
+		WorkflowId:               testWorkflowID,
+		WorkflowType:             &commonpb.WorkflowType{Name: "WORKFLOW"},
+		TaskQueue:                &taskqueuepb.TaskQueue{Name: "TASK_QUEUE", Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
+		SignalName:               "SIGNAL",
+		WorkflowIdConflictPolicy: enumspb.WORKFLOW_ID_CONFLICT_POLICY_FAIL,
+	}
+
+	resp, err := wh.SignalWithStartWorkflowExecution(context.Background(), req)
+
+	s.Nil(resp)
+	s.Equal(err, serviceerror.NewInvalidArgument(
+		"Invalid WorkflowIDConflictPolicy: WORKFLOW_ID_CONFLICT_POLICY_FAIL is not supported for this operation."))
+}
+
+func (s *workflowHandlerSuite) TestSignalWithStartWorkflowExecution_InvalidWorkflowIdReusePolicy_TerminateIfRunning() {
+	config := s.newConfig()
+	config.EnableWorkflowIdConflictPolicy = func(string) bool { return true }
+	wh := s.getWorkflowHandler(config)
+	req := &workflowservice.SignalWithStartWorkflowExecutionRequest{
+		WorkflowId:               testWorkflowID,
+		WorkflowType:             &commonpb.WorkflowType{Name: "WORKFLOW"},
+		TaskQueue:                &taskqueuepb.TaskQueue{Name: "TASK_QUEUE", Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
+		SignalName:               "SIGNAL",
+		WorkflowIdReusePolicy:    enumspb.WORKFLOW_ID_REUSE_POLICY_TERMINATE_IF_RUNNING,
+		WorkflowIdConflictPolicy: enumspb.WORKFLOW_ID_CONFLICT_POLICY_FAIL,
+	}
+
+	resp, err := wh.SignalWithStartWorkflowExecution(context.Background(), req)
+
+	s.Nil(resp)
+	s.Equal(err, serviceerror.NewInvalidArgument(
+		"Invalid WorkflowIDReusePolicy: WORKFLOW_ID_REUSE_POLICY_TERMINATE_IF_RUNNING cannot be used together with a WorkflowIDConflictPolicy."))
+}
+
+func (s *workflowHandlerSuite) TestSignalWithStartWorkflowExecution_DefaultWorkflowIdDuplicationPolicies() {
+	s.mockSearchAttributesMapperProvider.EXPECT().GetMapper(gomock.Any()).Return(nil, nil)
+	s.mockNamespaceCache.EXPECT().GetNamespaceID(gomock.Any()).Return(namespace.NewID(), nil)
+	s.mockHistoryClient.EXPECT().SignalWithStartWorkflowExecution(gomock.Any(), mock.MatchedBy(
+		func(request *historyservice.SignalWithStartWorkflowExecutionRequest) bool {
+			return request.SignalWithStartRequest.WorkflowIdReusePolicy == enumspb.WORKFLOW_ID_REUSE_POLICY_ALLOW_DUPLICATE &&
+				request.SignalWithStartRequest.WorkflowIdConflictPolicy == enumspb.WORKFLOW_ID_CONFLICT_POLICY_USE_EXISTING
+		},
+	)).Return(&historyservice.SignalWithStartWorkflowExecutionResponse{Started: true}, nil)
+
+	wh := s.getWorkflowHandler(s.newConfig())
+	req := &workflowservice.SignalWithStartWorkflowExecutionRequest{
+		WorkflowId:   testWorkflowID,
+		WorkflowType: &commonpb.WorkflowType{Name: "WORKFLOW"},
+		TaskQueue:    &taskqueuepb.TaskQueue{Name: "TASK_QUEUE", Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
+		SignalName:   "SIGNAL",
+		// both policies are not specified
+	}
+
+	resp, err := wh.SignalWithStartWorkflowExecution(context.Background(), req)
+	s.NoError(err)
+	s.True(resp.Started)
 }
 
 func (s *workflowHandlerSuite) TestRegisterNamespace_Failure_InvalidArchivalURI() {
@@ -2535,6 +2643,18 @@ func TestContextNearDeadline(t *testing.T) {
 	assert.False(t, contextNearDeadline(ctx, time.Millisecond))
 }
 
+func TestValidateRequestId(t *testing.T) {
+	req := workflowservice.StartWorkflowExecutionRequest{RequestId: ""}
+	err := validateRequestId(&req.RequestId, 100)
+	assert.Nil(t, err)
+	assert.Len(t, req.RequestId, 36) // new UUID length
+
+	req.RequestId = "\x87\x01"
+	err = validateRequestId(&req.RequestId, 100)
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "not a valid UTF-8 string")
+}
+
 func (s *workflowHandlerSuite) Test_DeleteWorkflowExecution() {
 	config := s.newConfig()
 	wh := s.getWorkflowHandler(config)
@@ -2602,4 +2722,22 @@ func (s *workflowHandlerSuite) Test_DeleteWorkflowExecution() {
 	})
 	s.NoError(err)
 	s.NotNil(resp)
+}
+
+func (s *workflowHandlerSuite) Test_ValidateTaskQueue() {
+	wh := s.getWorkflowHandler(s.newConfig())
+
+	tq := taskqueuepb.TaskQueue{Name: "\x87\x01"}
+	err := wh.validateTaskQueue(&tq)
+	s.Error(err)
+	s.Contains(err.Error(), "is not a valid UTF-8 string")
+
+	tq = taskqueuepb.TaskQueue{Name: "valid-tq-name"}
+	err = wh.validateTaskQueue(&tq)
+	s.NoError(err)
+
+	tq = taskqueuepb.TaskQueue{Name: "valid-tq-name", NormalName: "\x87\x01", Kind: enumspb.TASK_QUEUE_KIND_STICKY}
+	err = wh.validateTaskQueue(&tq)
+	s.Error(err)
+	s.Contains(err.Error(), "is not a valid UTF-8 string")
 }

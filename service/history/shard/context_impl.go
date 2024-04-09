@@ -73,6 +73,7 @@ import (
 	"go.temporal.io/server/service/history/configs"
 	"go.temporal.io/server/service/history/consts"
 	"go.temporal.io/server/service/history/events"
+	"go.temporal.io/server/service/history/hsm"
 	"go.temporal.io/server/service/history/tasks"
 	"go.temporal.io/server/service/history/vclock"
 )
@@ -89,6 +90,8 @@ const (
 
 const (
 	shardIOTimeout = 5 * time.Second * debug.TimeoutMultiplier
+	// ShardUpdateQueueMetricsInterval is the minimum amount of time between updates to a shard's queue metrics
+	queueMetricUpdateInterval = 5 * time.Minute
 
 	pendingMaxReplicationTaskID = math.MaxInt64
 )
@@ -114,6 +117,7 @@ type (
 		throttledLogger     log.Logger
 		engineFactory       EngineFactory
 		engineFuture        *future.FutureImpl[Engine]
+		queueMetricEmitter  sync.Once
 
 		persistenceShardManager persistence.ShardManager
 		clientBean              client.Bean
@@ -146,9 +150,10 @@ type (
 		stopReason stopReason
 
 		// All following fields are protected by rwLock, and only valid if state >= Acquiring:
-		rwLock      sync.RWMutex
-		lastUpdated time.Time
-		shardInfo   *persistencespb.ShardInfo
+		rwLock                        sync.RWMutex
+		lastUpdated                   time.Time
+		tasksCompletedSinceLastUpdate int
+		shardInfo                     *persistencespb.ShardInfo
 
 		// All methods of the taskKeyManager, except the completionFn returned by
 		// setAndTrackTaskKeys, must be invoked within rwLock.
@@ -161,6 +166,8 @@ type (
 		remoteClusterInfos      map[string]*remoteClusterInfo
 		handoverNamespaces      map[namespace.Name]*namespaceHandOverInfo // keyed on namespace name
 		acquireShardRetryPolicy backoff.RetryPolicy
+
+		stateMachineRegistry *hsm.Registry
 	}
 
 	remoteClusterInfo struct {
@@ -374,19 +381,22 @@ func (s *ContextImpl) GetQueueState(
 
 func (s *ContextImpl) SetQueueState(
 	category tasks.Category,
+	tasksCompleted int,
 	state *persistencespb.QueueState,
 ) error {
-	return s.updateShardInfo(func() {
-		categoryID := category.ID()
-		s.shardInfo.QueueStates[int32(categoryID)] = state
-	})
+	return s.updateShardInfo(tasksCompleted,
+		func() {
+			categoryID := category.ID()
+			s.shardInfo.QueueStates[int32(categoryID)] = state
+		})
 }
 
 func (s *ContextImpl) UpdateReplicationQueueReaderState(
 	readerID int64,
 	readerState *persistencespb.QueueReaderState,
 ) error {
-	return s.updateShardInfo(func() {
+	// TODO(timods): Determine whether this makes sense for replication
+	return s.updateShardInfo(0, func() {
 		categoryID := tasks.CategoryReplication.ID()
 		queueState, ok := s.shardInfo.QueueStates[int32(categoryID)]
 		if !ok {
@@ -459,13 +469,14 @@ func (s *ContextImpl) UpdateReplicatorDLQAckLevel(
 	sourceCluster string,
 	ackLevel int64,
 ) error {
-	if err := s.updateShardInfo(func() {
+	// TODO(timods): Determine whether this makes sense for replication
+	if err := s.updateShardInfo(0, func() {
 		s.shardInfo.ReplicationDlqAckLevel[sourceCluster] = ackLevel
 	}); err != nil {
 		return err
 	}
 
-	s.GetMetricsHandler().Gauge(metrics.ReplicationDLQAckLevelGauge.Name()).
+	metrics.ReplicationDLQAckLevelGauge.With(s.GetMetricsHandler()).
 		Record(float64(ackLevel),
 			metrics.OperationTag(metrics.ReplicationDLQStatsScope),
 			metrics.TargetClusterTag(sourceCluster),
@@ -907,9 +918,9 @@ func (s *ContextImpl) AppendHistoryEvents(
 		// N.B. - Dual emit here makes sense so that we can see aggregate timer stats across all
 		// namespaces along with the individual namespaces stats
 		handler := s.GetMetricsHandler().WithTags(metrics.OperationTag(metrics.SessionStatsScope))
-		handler.Histogram(metrics.HistorySize.Name(), metrics.HistorySize.Unit()).Record(int64(size))
+		metrics.HistorySize.With(handler).Record(int64(size))
 		if entry, err := s.GetNamespaceRegistry().GetNamespaceByID(namespaceID); err == nil && entry != nil {
-			handler.Histogram(metrics.HistorySize.Name(), metrics.HistorySize.Unit()).
+			metrics.HistorySize.With(handler).
 				Record(int64(size), metrics.NamespaceTag(entry.Name().String()))
 		}
 		if size >= historySizeLogThreshold {
@@ -1015,7 +1026,6 @@ func (s *ContextImpl) DeleteWorkflowExecution(
 					ShardID:     s.shardID,
 					NamespaceID: key.NamespaceID,
 					WorkflowID:  key.WorkflowID,
-					RunID:       key.RunID,
 
 					Tasks: newTasks,
 				}
@@ -1194,7 +1204,26 @@ func (s *ContextImpl) renewRangeLocked(isStealing bool) error {
 	return nil
 }
 
+func (s *ContextImpl) monitorQueueMetrics() {
+	timer := time.NewTimer(queueMetricUpdateInterval)
+	defer timer.Stop()
+
+	done := s.lifecycleCtx.Done()
+	for {
+		select {
+		case <-done:
+			return
+		case <-timer.C:
+			s.emitShardInfoMetricsLogs()
+			// We reset the timer (rather than using a ticker) so that delays in grabbing the shard lock
+			// don't cause us to pile up
+			timer.Reset(queueMetricUpdateInterval)
+		}
+	}
+}
+
 func (s *ContextImpl) updateShardInfo(
+	tasksCompleted int,
 	updateFnLocked func(),
 ) error {
 	s.wLock()
@@ -1203,21 +1232,29 @@ func (s *ContextImpl) updateShardInfo(
 		return err
 	}
 
+	s.tasksCompletedSinceLastUpdate += tasksCompleted
 	updateFnLocked()
 	s.shardInfo.StolenSinceRenew = 0
 
-	now := cclock.NewRealTimeSource().Now()
-	if s.lastUpdated.Add(s.config.ShardUpdateMinInterval()).After(now) {
+	now := s.timeSource.Now()
+	tooEarly := s.lastUpdated.Add(s.config.ShardUpdateMinInterval()).After(now)
+	minTasksUntilUpdate := s.config.ShardUpdateMinTasksCompleted()
+	// If ShardUpdateMinTasksCompleted is set to 0 then we only care about whether enough time has passed
+	tooFewTasksCompleted := minTasksUntilUpdate <= 0 || s.tasksCompletedSinceLastUpdate < minTasksUntilUpdate
+	if tooFewTasksCompleted && tooEarly {
 		s.wUnlock()
 		return nil
 	}
 
 	// update lastUpdate here so that we don't have to grab shard lock again if UpdateShard is successful
 	previousLastUpdate := s.lastUpdated
+	metrics.TasksCompletedPerShardInfoUpdate.With(s.metricsHandler).Record(int64(s.tasksCompletedSinceLastUpdate))
+	metrics.TimeBetweenShardInfoUpdates.With(s.metricsHandler).Record(now.Sub(previousLastUpdate))
+
 	s.lastUpdated = now
+	s.tasksCompletedSinceLastUpdate = 0
 
 	updatedShardInfo := trimShardInfo(s.clusterMetadata.GetAllClusterInfo(), copyShardInfo(s.shardInfo))
-	s.emitShardInfoMetricsLogsLocked(updatedShardInfo.QueueStates)
 	request := &persistence.UpdateShardRequest{
 		ShardInfo:       updatedShardInfo,
 		PreviousRangeID: s.shardInfo.GetRangeId(),
@@ -1244,9 +1281,12 @@ func (s *ContextImpl) updateShardInfo(
 	return nil
 }
 
-func (s *ContextImpl) emitShardInfoMetricsLogsLocked(
-	queueStates map[int32]*persistencespb.QueueState,
-) {
+// Take the shard lock and update queue metrics
+func (s *ContextImpl) emitShardInfoMetricsLogs() {
+	s.rLock()
+	defer s.rUnlock()
+
+	queueStates := trimShardInfo(s.clusterMetadata.GetAllClusterInfo(), copyShardInfo(s.shardInfo)).QueueStates
 	emitShardLagLog := s.config.EmitShardLagLog()
 
 	metricsHandler := s.GetMetricsHandler().WithTags(metrics.OperationTag(metrics.ShardInfoScope))
@@ -1271,10 +1311,9 @@ Loop:
 					tag.ShardQueueAcks(category.Name(), minTaskKey.TaskID),
 				)
 			}
-			metricsHandler.Histogram(
-				metrics.ShardInfoImmediateQueueLagHistogram.Name(),
-				metrics.ShardInfoImmediateQueueLagHistogram.Unit(),
-			).Record(lag, metrics.TaskCategoryTag(category.Name()))
+			metrics.ShardInfoImmediateQueueLagHistogram.
+				With(metricsHandler).
+				Record(lag, metrics.TaskCategoryTag(category.Name()))
 
 		case tasks.CategoryTypeScheduled:
 			minTaskKey := getMinTaskKey(queueState)
@@ -1288,9 +1327,8 @@ Loop:
 					tag.ShardQueueAcks(category.Name(), minTaskKey.FireTime),
 				)
 			}
-			metricsHandler.Timer(
-				metrics.ShardInfoScheduledQueueLagTimer.Name(),
-			).Record(lag, metrics.TaskCategoryTag(category.Name()))
+			metrics.ShardInfoScheduledQueueLagTimer.With(metricsHandler).
+				Record(lag, metrics.TaskCategoryTag(category.Name()))
 		default:
 			s.contextTaggedLogger.Error("Unknown task category type", tag.NewStringTag("task-category", category.Type().String()))
 		}
@@ -1404,7 +1442,7 @@ func (s *ContextImpl) handleWriteErrorLocked(
 
 func (s *ContextImpl) maybeRecordShardAcquisitionLatency(ownershipChanged bool) {
 	if ownershipChanged {
-		s.GetMetricsHandler().Timer(metrics.ShardContextAcquisitionLatency.Name()).
+		metrics.ShardContextAcquisitionLatency.With(s.GetMetricsHandler()).
 			Record(s.GetCurrentTime(s.GetClusterMetadata().GetCurrentClusterName()).Sub(s.getLastUpdatedTime()),
 				metrics.OperationTag(metrics.ShardInfoScope),
 			)
@@ -1459,18 +1497,18 @@ func (s *ContextImpl) stoppedForOwnershipLost() bool {
 
 func (s *ContextImpl) wLock() {
 	handler := s.metricsHandler.WithTags(metrics.OperationTag(metrics.ShardInfoScope))
-	handler.Counter(metrics.LockRequests.Name()).Record(1)
+	metrics.LockRequests.With(handler).Record(1)
 	startTime := time.Now().UTC()
-	defer func() { handler.Timer(metrics.LockLatency.Name()).Record(time.Since(startTime)) }()
+	defer func() { metrics.LockLatency.With(handler).Record(time.Since(startTime)) }()
 
 	s.rwLock.Lock()
 }
 
 func (s *ContextImpl) rLock() {
 	handler := s.metricsHandler.WithTags(metrics.OperationTag(metrics.ShardInfoScope))
-	handler.Counter(metrics.LockRequests.Name()).Record(1)
+	metrics.LockRequests.With(handler).Record(1)
 	startTime := time.Now().UTC()
-	defer func() { handler.Timer(metrics.LockLatency.Name()).Record(time.Since(startTime)) }()
+	defer func() { metrics.LockLatency.With(handler).Record(time.Since(startTime)) }()
 
 	s.rwLock.RLock()
 }
@@ -1487,12 +1525,12 @@ func (s *ContextImpl) ioSemaphoreAcquire(
 	ctx context.Context,
 ) (retErr error) {
 	handler := s.metricsHandler.WithTags(metrics.OperationTag(metrics.ShardInfoScope))
-	handler.Counter(metrics.SemaphoreRequests.Name()).Record(1)
+	metrics.SemaphoreRequests.With(handler).Record(1)
 	startTime := time.Now().UTC()
 	defer func() {
-		handler.Timer(metrics.SemaphoreLatency.Name()).Record(time.Since(startTime))
+		metrics.SemaphoreLatency.With(handler).Record(time.Since(startTime))
 		if retErr != nil {
-			handler.Counter(metrics.SemaphoreFailures.Name()).Record(1)
+			metrics.SemaphoreFailures.With(handler).Record(1)
 		}
 	}()
 
@@ -1949,6 +1987,10 @@ func (s *ContextImpl) acquireShard() {
 		// we know engineFuture must be ready here, and we can notify queue processor
 		// to trigger a load as queue max level can be updated to a newer value
 		s.notifyQueueProcessor()
+		// This runs until the lifecycleCtx is cancelled, so we only need to start it once
+		s.queueMetricEmitter.Do(func() {
+			go s.monitorQueueMetrics()
+		})
 
 		s.updateHandoverNamespacePendingTaskID()
 
@@ -2010,6 +2052,8 @@ func newContext(
 	archivalMetadata archiver.ArchivalMetadata,
 	hostInfoProvider membership.HostInfoProvider,
 	taskCategoryRegistry tasks.TaskCategoryRegistry,
+	eventsCache events.Cache,
+	stateMachineRegistry *hsm.Registry,
 ) (*ContextImpl, error) {
 	hostIdentity := hostInfoProvider.HostInfo().Identity()
 	sequenceID := atomic.AddInt64(&shardContextSequenceID, 1)
@@ -2053,7 +2097,9 @@ func newContext(
 		lifecycleCtx:            lifecycleCtx,
 		lifecycleCancel:         lifecycleCancel,
 		engineFuture:            future.NewFuture[Engine](),
+		queueMetricEmitter:      sync.Once{},
 		ioSemaphore:             semaphore.NewWeighted(int64(ioConcurrency)),
+		stateMachineRegistry:    stateMachineRegistry,
 	}
 	shardContext.taskKeyManager = newTaskKeyManager(
 		shardContext.taskCategoryRegistry,
@@ -2064,16 +2110,17 @@ func newContext(
 			return shardContext.renewRangeLocked(false)
 		},
 	)
-	shardContext.eventsCache = events.NewEventsCache(
-		shardContext.GetShardID(),
-		shardContext.GetConfig().EventsCacheMaxSizeBytes(),
-		shardContext.GetConfig().EventsCacheTTL(),
-		shardContext.GetExecutionManager(),
-		false,
-		shardContext.GetLogger(),
-		shardContext.GetMetricsHandler(),
-	)
-
+	if shardContext.GetConfig().EnableHostLevelEventsCache() {
+		shardContext.eventsCache = eventsCache
+	} else {
+		shardContext.eventsCache = events.NewShardLevelEventsCache(
+			shardContext.executionManager,
+			shardContext.config,
+			shardContext.metricsHandler,
+			shardContext.contextTaggedLogger,
+			false,
+		)
+	}
 	return shardContext, nil
 }
 
@@ -2136,6 +2183,10 @@ func (s *ContextImpl) GetClusterMetadata() cluster.Metadata {
 
 func (s *ContextImpl) GetArchivalMetadata() archiver.ArchivalMetadata {
 	return s.archivalMetadata
+}
+
+func (s *ContextImpl) StateMachineRegistry() *hsm.Registry {
+	return s.stateMachineRegistry
 }
 
 // newDetachedContext creates a detached context with the same deadline

@@ -35,5 +35,7 @@ type (
 		Deserialize(data []byte) (*tokenspb.Task, error)
 		SerializeQueryTaskToken(token *tokenspb.QueryTask) ([]byte, error)
 		DeserializeQueryTaskToken(data []byte) (*tokenspb.QueryTask, error)
+		SerializeNexusTaskToken(token *tokenspb.NexusTask) ([]byte, error)
+		DeserializeNexusTaskToken(data []byte) (*tokenspb.NexusTask, error)
 	}
 )

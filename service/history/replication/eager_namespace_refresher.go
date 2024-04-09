@@ -176,7 +176,7 @@ func (e *eagerNamespaceRefresherImpl) SyncNamespaceFromSourceCluster(
 		}
 	}
 	if !hasCurrentCluster {
-		e.metricsHandler.Counter(metrics.ReplicationOutlierNamespace.Name()).Record(1)
+		metrics.ReplicationOutlierNamespace.With(e.metricsHandler).Record(1)
 		return nil, serviceerror.NewFailedPrecondition("Namespace does not belong to current cluster")
 	}
 	task := &replicationspb.NamespaceTaskAttributes{
@@ -185,6 +185,7 @@ func (e *eagerNamespaceRefresherImpl) SyncNamespaceFromSourceCluster(
 		Info:               resp.GetInfo(),
 		Config:             resp.GetConfig(),
 		ReplicationConfig:  resp.GetReplicationConfig(),
+		NexusOutgoingServices: resp.GetOutgoingServices(),
 		ConfigVersion:      resp.GetConfigVersion(),
 		FailoverVersion:    resp.GetFailoverVersion(),
 		FailoverHistory:    resp.GetFailoverHistory(),

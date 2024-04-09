@@ -1,4 +1,4 @@
-[![Build status](https://badge.buildkite.com/98c157ed502d55722ef7f28e6470aa20702c76d6989a0a5a89.svg?branch=main)](https://buildkite.com/temporal/temporal-public)
+[![Build status](https://github.com/temporalio/temporal/actions/workflows/run-tests.yml/badge.svg?branch=main)](https://github.com/temporalio/temporal/commits/main/)
 [![Coverage Status](https://coveralls.io/repos/github/temporalio/temporal/badge.svg?branch=main)](https://coveralls.io/github/temporalio/temporal?branch=main)
 [![Discourse](https://img.shields.io/static/v1?label=Discourse&message=Get%20Help&color=informational)](https://community.temporal.io)
 [![Go Report Card][go-report-image]][go-report-url]
@@ -20,7 +20,7 @@ Learn more:
 
 - [Courses](https://learn.temporal.io/courses/temporal_101/)
 - [Docs](https://docs.temporal.io)
-- Internal architecture: [docs/](./docs/README.md)
+- Internal architecture: [docs/](./docs/architecture/README.md)
 
 ## Getting Started
 
@@ -59,7 +59,7 @@ This repository contains the source code of the Temporal server. To implement Wo
 
 ## Contributing
 
-We'd love your help in making Temporal great. Please review the [internal architecture docs](./docs/README.md) and our [contribution guide](CONTRIBUTING.md).
+We'd love your help in making Temporal great. Please review the [internal architecture docs](./docs/architecture/README.md) and our [contribution guide](CONTRIBUTING.md).
 
 If you'd like to work on or propose a new feature, first peruse [feature requests](https://community.temporal.io/c/feature-requests/6) and our [proposals repo](https://github.com/temporalio/proposals) to discover existing active and accepted proposals.
 

@@ -46,6 +46,7 @@ import (
 	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/failure"
 	"go.temporal.io/server/common/log"
+	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/payloads"
 	"go.temporal.io/server/common/persistence"
@@ -112,7 +113,7 @@ func (s *workflowResetterSuite) SetupTest() {
 
 	s.workflowResetter = NewWorkflowResetter(
 		s.mockShard,
-		wcache.NewHostLevelCache(s.mockShard.GetConfig()),
+		wcache.NewHostLevelCache(s.mockShard.GetConfig(), metrics.NoopMetricsHandler),
 		s.logger,
 	)
 	s.workflowResetter.newStateRebuilder = func() StateRebuilder {
@@ -605,6 +606,7 @@ func (s *workflowResetterSuite) TestReapplyContinueAsNewWorkflowEvents_WithOutCo
 		baseBranchToken,
 		baseFirstEventID,
 		baseNextEventID,
+		nil,
 	)
 	s.NoError(err)
 	s.Equal(s.baseRunID, lastVisitedRunID)
@@ -722,6 +724,7 @@ func (s *workflowResetterSuite) TestReapplyContinueAsNewWorkflowEvents_WithConti
 		baseBranchToken,
 		baseFirstEventID,
 		baseNextEventID,
+		nil,
 	)
 	s.NoError(err)
 	s.Equal(newRunID, lastVisitedRunID)
@@ -782,6 +785,7 @@ func (s *workflowResetterSuite) TestReapplyWorkflowEvents() {
 		firstEventID,
 		nextEventID,
 		branchToken,
+		nil,
 	)
 	s.NoError(err)
 	s.Equal(newRunID, nextRunID)
@@ -830,7 +834,7 @@ func (s *workflowResetterSuite) TestReapplyEvents() {
 		}
 	}
 
-	err := s.workflowResetter.reapplyEvents(mutableState, events)
+	err := reapplyEvents(mutableState, events, nil)
 	s.NoError(err)
 }
 

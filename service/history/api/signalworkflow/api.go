@@ -60,8 +60,8 @@ func Invoke(
 			request.WorkflowExecution.WorkflowId,
 			request.WorkflowExecution.RunId,
 		),
-		func(workflowContext api.WorkflowContext) (*api.UpdateWorkflowAction, error) {
-			mutableState := workflowContext.GetMutableState()
+		func(workflowLease api.WorkflowLease) (*api.UpdateWorkflowAction, error) {
+			mutableState := workflowLease.GetMutableState()
 			if request.GetRequestId() != "" && mutableState.IsSignalRequested(request.GetRequestId()) {
 				return &api.UpdateWorkflowAction{
 					Noop:               true,
@@ -69,7 +69,7 @@ func Invoke(
 				}, nil
 			}
 
-			releaseFn := workflowContext.GetReleaseFn()
+			releaseFn := workflowLease.GetReleaseFn()
 			if !mutableState.IsWorkflowExecutionRunning() {
 				// in-memory mutable state is still clean, release the lock with nil error to prevent
 				// clearing and reloading mutable state

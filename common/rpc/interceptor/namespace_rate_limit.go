@@ -30,9 +30,9 @@ import (
 
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
-	"go.temporal.io/server/common/api"
 	"go.temporal.io/server/common/headers"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/metadata"
 
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/quotas"
@@ -43,7 +43,11 @@ const (
 )
 
 var (
-	ErrNamespaceRateLimitServerBusy = serviceerror.NewResourceExhausted(enumspb.RESOURCE_EXHAUSTED_CAUSE_RPS_LIMIT, "namespace rate limit exceeded")
+	ErrNamespaceRateLimitServerBusy = &serviceerror.ResourceExhausted{
+		Cause:   enumspb.RESOURCE_EXHAUSTED_CAUSE_RPS_LIMIT,
+		Scope:   enumspb.RESOURCE_EXHAUSTED_SCOPE_NAMESPACE,
+		Message: "namespace rate limit exceeded",
+	}
 )
 
 type (
@@ -74,22 +78,29 @@ func (ni *NamespaceRateLimitInterceptor) Intercept(
 	info *grpc.UnaryServerInfo,
 	handler grpc.UnaryHandler,
 ) (interface{}, error) {
-	methodName := api.MethodName(info.FullMethod)
+	ns := MustGetNamespaceName(ni.namespaceRegistry, req)
+	md, _ := metadata.FromIncomingContext(ctx)
+	if err := ni.Allow(ns, info.FullMethod, headers.GRPCHeaderGetter{Metadata: md}); err != nil {
+		return nil, err
+	}
+	return handler(ctx, req)
+}
+
+func (ni *NamespaceRateLimitInterceptor) Allow(namespaceName namespace.Name, methodName string, headerGetter headers.HeaderGetter) error {
 	token, ok := ni.tokens[methodName]
 	if !ok {
 		token = NamespaceRateLimitDefaultToken
 	}
 
-	namespace := MustGetNamespaceName(ni.namespaceRegistry, req)
 	if !ni.rateLimiter.Allow(time.Now().UTC(), quotas.NewRequest(
 		methodName,
 		token,
-		namespace.String(),
-		headers.GetValues(ctx, headers.CallerTypeHeaderName)[0],
+		namespaceName.String(),
+		headerGetter.Get(headers.CallerTypeHeaderName),
 		0,  // this interceptor layer does not throttle based on caller segment
 		"", // this interceptor layer does not throttle based on call initiation
 	)) {
-		return nil, ErrNamespaceRateLimitServerBusy
+		return ErrNamespaceRateLimitServerBusy
 	}
-	return handler(ctx, req)
+	return nil
 }

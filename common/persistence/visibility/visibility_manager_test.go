@@ -75,7 +75,7 @@ func (s *VisibilityManagerSuite) SetupTest() {
 
 	s.controller = gomock.NewController(s.T())
 	s.visibilityStore = store.NewMockVisibilityStore(s.controller)
-	s.visibilityStore.EXPECT().GetName().Return(mysql.PluginNameV8).AnyTimes()
+	s.visibilityStore.EXPECT().GetName().Return(mysql.PluginName).AnyTimes()
 	s.visibilityStore.EXPECT().GetIndexName().Return("test-index-name").AnyTimes()
 	s.metricsHandler = metrics.NewMockHandler(s.controller)
 	s.visibilityManager = newVisibilityManager(
@@ -93,16 +93,38 @@ func (s *VisibilityManagerSuite) TearDownTest() {
 }
 
 func (s *VisibilityManagerSuite) TestRecordWorkflowExecutionStarted() {
+	startTime := time.Now().UTC()
+	executionTime := startTime.Add(1 * time.Minute)
 	request := &manager.RecordWorkflowExecutionStartedRequest{
 		VisibilityRequestBase: &manager.VisibilityRequestBase{
 			NamespaceID:      testNamespaceUUID,
 			Namespace:        testNamespace,
 			Execution:        &testWorkflowExecution,
 			WorkflowTypeName: testWorkflowTypeName,
-			StartTime:        time.Now().UTC(),
+			StartTime:        startTime,
+			ExecutionTime:    executionTime,
+			Status:           enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
 		},
 	}
-	s.visibilityStore.EXPECT().RecordWorkflowExecutionStarted(gomock.Any(), gomock.Any()).Return(nil)
+
+	memoBlob, err := serializeMemo(request.Memo)
+	s.NoError(err)
+
+	s.visibilityStore.EXPECT().RecordWorkflowExecutionStarted(
+		gomock.Any(),
+		&store.InternalRecordWorkflowExecutionStartedRequest{
+			InternalVisibilityRequestBase: &store.InternalVisibilityRequestBase{
+				NamespaceID:      request.NamespaceID.String(),
+				WorkflowID:       request.Execution.GetWorkflowId(),
+				RunID:            request.Execution.GetRunId(),
+				WorkflowTypeName: request.WorkflowTypeName,
+				StartTime:        request.StartTime,
+				ExecutionTime:    request.ExecutionTime,
+				Status:           request.Status,
+				Memo:             memoBlob,
+			},
+		},
+	).Return(nil)
 	s.metricsHandler.EXPECT().
 		WithTags(
 			metrics.OperationTag(metrics.VisibilityPersistenceRecordWorkflowExecutionStartedScope),
@@ -112,23 +134,49 @@ func (s *VisibilityManagerSuite) TestRecordWorkflowExecutionStarted() {
 	s.NoError(s.visibilityManager.RecordWorkflowExecutionStarted(context.Background(), request))
 
 	// no remaining tokens
-	err := s.visibilityManager.RecordWorkflowExecutionStarted(context.Background(), request)
+	err = s.visibilityManager.RecordWorkflowExecutionStarted(context.Background(), request)
 	s.Error(err)
 	s.ErrorIs(err, persistence.ErrPersistenceLimitExceeded)
 }
 
 func (s *VisibilityManagerSuite) TestRecordWorkflowExecutionClosed() {
+	startTime := time.Now().UTC()
+	executionTime := startTime.Add(1 * time.Minute)
+	closeTime := startTime.Add(2 * time.Minute)
 	request := &manager.RecordWorkflowExecutionClosedRequest{
 		VisibilityRequestBase: &manager.VisibilityRequestBase{
 			NamespaceID:      testNamespaceUUID,
 			Namespace:        testNamespace,
 			Execution:        &testWorkflowExecution,
 			WorkflowTypeName: testWorkflowTypeName,
+			StartTime:        startTime,
+			ExecutionTime:    executionTime,
 			Status:           enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED,
 		},
+		CloseTime:         closeTime,
+		ExecutionDuration: closeTime.Sub(executionTime),
 	}
 
-	s.visibilityStore.EXPECT().RecordWorkflowExecutionClosed(gomock.Any(), gomock.Any()).Return(nil)
+	memoBlob, err := serializeMemo(request.Memo)
+	s.NoError(err)
+
+	s.visibilityStore.EXPECT().RecordWorkflowExecutionClosed(
+		gomock.Any(),
+		&store.InternalRecordWorkflowExecutionClosedRequest{
+			InternalVisibilityRequestBase: &store.InternalVisibilityRequestBase{
+				NamespaceID:      request.NamespaceID.String(),
+				WorkflowID:       request.Execution.GetWorkflowId(),
+				RunID:            request.Execution.GetRunId(),
+				WorkflowTypeName: request.WorkflowTypeName,
+				StartTime:        request.StartTime,
+				ExecutionTime:    request.ExecutionTime,
+				Status:           request.Status,
+				Memo:             memoBlob,
+			},
+			CloseTime:         request.CloseTime,
+			ExecutionDuration: request.ExecutionDuration,
+		},
+	).Return(nil)
 	s.metricsHandler.EXPECT().
 		WithTags(metrics.OperationTag(
 			metrics.VisibilityPersistenceRecordWorkflowExecutionClosedScope),
@@ -137,7 +185,7 @@ func (s *VisibilityManagerSuite) TestRecordWorkflowExecutionClosed() {
 		Return(metrics.NoopMetricsHandler).Times(2)
 	s.NoError(s.visibilityManager.RecordWorkflowExecutionClosed(context.Background(), request))
 
-	err := s.visibilityManager.RecordWorkflowExecutionClosed(context.Background(), request)
+	err = s.visibilityManager.RecordWorkflowExecutionClosed(context.Background(), request)
 	s.Error(err)
 	s.ErrorIs(err, persistence.ErrPersistenceLimitExceeded)
 }

@@ -36,6 +36,7 @@ import (
 	"go.temporal.io/server/common/config"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
+	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/membership"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
@@ -45,6 +46,7 @@ import (
 	"go.temporal.io/server/common/persistence/visibility/store/elasticsearch"
 	esclient "go.temporal.io/server/common/persistence/visibility/store/elasticsearch/client"
 	"go.temporal.io/server/common/primitives"
+	"go.temporal.io/server/common/quotas/calculator"
 	"go.temporal.io/server/common/resolver"
 	"go.temporal.io/server/common/resource"
 	"go.temporal.io/server/common/rpc/interceptor"
@@ -55,15 +57,20 @@ import (
 	"go.temporal.io/server/service/history/configs"
 	"go.temporal.io/server/service/history/consts"
 	"go.temporal.io/server/service/history/events"
+	"go.temporal.io/server/service/history/hsm"
 	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/workflow"
 	"go.temporal.io/server/service/history/workflow/cache"
+
+	"go.temporal.io/server/plugins/callbacks"
 )
 
 var Module = fx.Options(
 	resource.Module,
+	fx.Provide(hsm.NewRegistry),
 	workflow.Module,
 	shard.Module,
+	events.Module,
 	cache.Module,
 	archival.Module,
 	fx.Provide(dynamicconfig.NewCollection),
@@ -83,6 +90,8 @@ var Module = fx.Options(
 	fx.Provide(HandlerProvider),
 	fx.Provide(ServiceProvider),
 	fx.Invoke(ServiceLifetimeHooks),
+
+	callbacks.Module,
 )
 
 func ServiceProvider(
@@ -220,22 +229,29 @@ func PersistenceRateLimitingParamsProvider(
 	serviceConfig *configs.Config,
 	persistenceLazyLoadedServiceResolver service.PersistenceLazyLoadedServiceResolver,
 	ownershipBasedQuotaScaler shard.LazyLoadedOwnershipBasedQuotaScaler,
+	logger log.SnTaggedLogger,
 ) service.PersistenceRateLimitingParams {
-	calculator := shard.NewOwnershipAwareQuotaCalculator(
-		ownershipBasedQuotaScaler,
-		persistenceLazyLoadedServiceResolver,
-		serviceConfig.PersistenceMaxQPS,
-		serviceConfig.PersistenceGlobalMaxQPS,
+	hostCalculator := calculator.NewLoggedCalculator(
+		shard.NewOwnershipAwareQuotaCalculator(
+			ownershipBasedQuotaScaler,
+			persistenceLazyLoadedServiceResolver,
+			serviceConfig.PersistenceMaxQPS,
+			serviceConfig.PersistenceGlobalMaxQPS,
+		),
+		log.With(logger, tag.ComponentPersistence, tag.ScopeHost),
 	)
-	namespaceCalculator := shard.NewOwnershipAwareNamespaceQuotaCalculator(
-		ownershipBasedQuotaScaler,
-		persistenceLazyLoadedServiceResolver,
-		serviceConfig.PersistenceNamespaceMaxQPS,
-		serviceConfig.PersistenceGlobalNamespaceMaxQPS,
+	namespaceCalculator := calculator.NewLoggedNamespaceCalculator(
+		shard.NewOwnershipAwareNamespaceQuotaCalculator(
+			ownershipBasedQuotaScaler,
+			persistenceLazyLoadedServiceResolver,
+			serviceConfig.PersistenceNamespaceMaxQPS,
+			serviceConfig.PersistenceGlobalNamespaceMaxQPS,
+		),
+		log.With(logger, tag.ComponentPersistence, tag.ScopeNamespace),
 	)
 	return service.PersistenceRateLimitingParams{
 		PersistenceMaxQps: func() int {
-			return int(calculator.GetQuota())
+			return int(hostCalculator.GetQuota())
 		},
 		PersistenceNamespaceMaxQps: func(namespace string) int {
 			return int(namespaceCalculator.GetQuota(namespace))
@@ -243,6 +259,7 @@ func PersistenceRateLimitingParamsProvider(
 		PersistencePerShardNamespaceMaxQPS: persistenceClient.PersistencePerShardNamespaceMaxQPS(serviceConfig.PersistencePerShardNamespaceMaxQPS),
 		EnablePriorityRateLimiting:         persistenceClient.EnablePriorityRateLimiting(serviceConfig.EnablePersistencePriorityRateLimiting),
 		OperatorRPSRatio:                   persistenceClient.OperatorRPSRatio(serviceConfig.OperatorRPSRatio),
+		PersistenceBurstRatio:              persistenceClient.PersistenceBurstRatio(serviceConfig.PersistenceQPSBurstRatio),
 		DynamicRateLimitingParams:          persistenceClient.DynamicRateLimitingParams(serviceConfig.PersistenceDynamicRateLimitingParams),
 	}
 }

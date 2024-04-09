@@ -128,6 +128,7 @@ func NewTaskProcessorManager(
 					versionHistory,
 					[][]*historypb.HistoryEvent{events},
 					nil,
+					"",
 				)
 			},
 			shard.GetPayloadSerializer(),
@@ -269,7 +270,7 @@ func (r *taskProcessorManagerImpl) completeReplicationTaskLoop() {
 		case <-cleanupTimer.C:
 			if err := r.cleanupReplicationTasks(); err != nil {
 				r.logger.Error("Failed to clean up replication messages.", tag.Error(err))
-				r.metricsHandler.Counter(metrics.ReplicationTaskCleanupFailure.Name()).Record(
+				metrics.ReplicationTaskCleanupFailure.With(r.metricsHandler).Record(
 					1,
 					metrics.OperationTag(metrics.ReplicationTaskCleanupScope),
 				)
@@ -330,11 +331,11 @@ func (r *taskProcessorManagerImpl) cleanupReplicationTasks() error {
 	}
 
 	r.logger.Debug("cleaning up replication task queue", tag.ReadLevel(minAckedTaskID))
-	r.metricsHandler.Counter(metrics.ReplicationTaskCleanupCount.Name()).Record(
+	metrics.ReplicationTaskCleanupCount.With(r.metricsHandler).Record(
 		1,
 		metrics.OperationTag(metrics.ReplicationTaskCleanupScope),
 	)
-	r.metricsHandler.Histogram(metrics.ReplicationTasksLag.Name(), metrics.ReplicationTasksLag.Unit()).Record(
+	metrics.ReplicationTasksLag.With(r.metricsHandler).Record(
 		r.shard.GetQueueExclusiveHighReadWatermark(tasks.CategoryReplication).Prev().TaskID-minAckedTaskID,
 		metrics.TargetClusterTag(currentClusterName),
 		metrics.OperationTag(metrics.ReplicationTaskCleanupScope),
@@ -344,21 +345,12 @@ func (r *taskProcessorManagerImpl) cleanupReplicationTasks() error {
 	ctx = headers.SetCallerInfo(ctx, headers.SystemPreemptableCallerInfo)
 	defer cancel()
 
-	inclusiveMinPendingTaskKey := tasks.NewImmediateKey(minAckedTaskID + 1)
-	r.shard.GetExecutionManager().UpdateHistoryTaskReaderProgress(ctx, &persistence.UpdateHistoryTaskReaderProgressRequest{
-		ShardID:                    r.shard.GetShardID(),
-		ShardOwner:                 r.shard.GetOwner(),
-		TaskCategory:               tasks.CategoryReplication,
-		ReaderID:                   common.DefaultQueueReaderID,
-		InclusiveMinPendingTaskKey: inclusiveMinPendingTaskKey,
-	})
-
 	err := r.shard.GetExecutionManager().RangeCompleteHistoryTasks(
 		ctx,
 		&persistence.RangeCompleteHistoryTasksRequest{
 			ShardID:             r.shard.GetShardID(),
 			TaskCategory:        tasks.CategoryReplication,
-			ExclusiveMaxTaskKey: inclusiveMinPendingTaskKey,
+			ExclusiveMaxTaskKey: tasks.NewImmediateKey(minAckedTaskID + 1),
 		},
 	)
 	if err == nil {
@@ -390,7 +382,7 @@ func (r *taskProcessorManagerImpl) checkReplicationDLQSize() {
 			return
 		}
 		if !isEmpty {
-			r.metricsHandler.Counter(metrics.ReplicationNonEmptyDLQCount.Name()).Record(1, metrics.OperationTag(metrics.ReplicationDLQStatsScope))
+			metrics.ReplicationNonEmptyDLQCount.With(r.metricsHandler).Record(1, metrics.OperationTag(metrics.ReplicationDLQStatsScope))
 			break
 		}
 	}

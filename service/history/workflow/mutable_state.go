@@ -35,6 +35,7 @@ import (
 	enumspb "go.temporal.io/api/enums/v1"
 	failurepb "go.temporal.io/api/failure/v1"
 	historypb "go.temporal.io/api/history/v1"
+	"go.temporal.io/api/serviceerror"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	updatepb "go.temporal.io/api/update/v1"
 	workflowpb "go.temporal.io/api/workflow/v1"
@@ -52,7 +53,9 @@ import (
 	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence"
+	"go.temporal.io/server/plugins/callbacks"
 	"go.temporal.io/server/service/history/historybuilder"
+	"go.temporal.io/server/service/history/hsm"
 	"go.temporal.io/server/service/history/tasks"
 )
 
@@ -68,6 +71,31 @@ func (policy TransactionPolicy) Ptr() *TransactionPolicy {
 }
 
 var emptyTasks = []tasks.Task{}
+
+// Mutable state is a top-level state machine in the state machines framework.
+var StateMachineType = hsm.MachineType{
+	ID:   1,
+	Name: "workflow.MutableState",
+}
+
+type stateMachineDefinition struct{}
+
+func (stateMachineDefinition) Deserialize([]byte) (any, error) {
+	return nil, serviceerror.NewUnimplemented("workflow mutable state persistence is not supported in the HSM framework")
+}
+
+// Serialize is a noop as Deserialize is not supported.
+func (stateMachineDefinition) Serialize(any) ([]byte, error) {
+	return nil, nil
+}
+
+func (stateMachineDefinition) Type() hsm.MachineType {
+	return StateMachineType
+}
+
+func RegisterStateMachine(reg *hsm.Registry) error {
+	return reg.RegisterMachine(stateMachineDefinition{})
+}
 
 type (
 	// TODO: This should be part of persistence layer
@@ -109,6 +137,8 @@ type (
 	}
 
 	MutableState interface {
+		callbacks.CanGetNexusCompletion
+
 		AddActivityTaskCancelRequestedEvent(int64, int64, string) (*historypb.HistoryEvent, *persistencespb.ActivityInfo, error)
 		AddActivityTaskCanceledEvent(int64, int64, int64, *commonpb.Payloads, string) (*historypb.HistoryEvent, error)
 		AddActivityTaskCompletedEvent(int64, int64, *workflowservice.RespondActivityTaskCompletedRequest) (*historypb.HistoryEvent, error)
@@ -187,6 +217,7 @@ type (
 		GetChildExecutionInitiatedEvent(context.Context, int64) (*historypb.HistoryEvent, error)
 		GetCompletionEvent(context.Context) (*historypb.HistoryEvent, error)
 		GetWorkflowCloseTime(ctx context.Context) (time.Time, error)
+		GetWorkflowExecutionDuration(ctx context.Context) (time.Duration, error)
 		GetWorkflowTaskByID(scheduledEventID int64) *WorkflowTaskInfo
 		GetNamespaceEntry() *namespace.Namespace
 		GetStartEvent(context.Context) (*historypb.HistoryEvent, error)
@@ -289,7 +320,7 @@ type (
 		ApplyWorkflowExecutionUpdateCompletedEvent(event *historypb.HistoryEvent, batchID int64) error
 		SetCurrentBranchToken(branchToken []byte) error
 		SetHistoryBuilder(hBuilder *historybuilder.HistoryBuilder)
-		SetHistoryTree(ctx context.Context, executionTimeout *durationpb.Duration, runTimeout *durationpb.Duration, treeID string) error
+		SetHistoryTree(executionTimeout *durationpb.Duration, runTimeout *durationpb.Duration, treeID string) error
 		SetBaseWorkflow(
 			baseRunID string,
 			baseRunLowestCommonAncestorEventID int64,
@@ -325,5 +356,7 @@ type (
 		// If current backoff comply with minimal ContinueAsNew interval requirement, current backoff will be returned.
 		// Current backoff could be nil which means it does not have a backoff.
 		ContinueAsNewMinBackoff(backoffDuration *durationpb.Duration) *durationpb.Duration
+
+		HSM() *hsm.Node
 	}
 )

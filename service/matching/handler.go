@@ -74,12 +74,14 @@ func NewHandler(
 	taskManager persistence.TaskManager,
 	historyClient resource.HistoryClient,
 	matchingRawClient resource.MatchingRawClient,
+	hostInfoProvider membership.HostInfoProvider,
 	matchingServiceResolver membership.ServiceResolver,
 	metricsHandler metrics.Handler,
 	namespaceRegistry namespace.Registry,
 	clusterMetadata cluster.Metadata,
 	namespaceReplicationQueue persistence.NamespaceReplicationQueue,
 	visibilityManager manager.VisibilityManager,
+	nexusIncomingServiceManager persistence.NexusIncomingServiceManager,
 ) *Handler {
 	handler := &Handler{
 		config:          config,
@@ -95,10 +97,12 @@ func NewHandler(
 			throttledLogger,
 			metricsHandler,
 			namespaceRegistry,
+			hostInfoProvider,
 			matchingServiceResolver,
 			clusterMetadata,
 			namespaceReplicationQueue,
 			visibilityManager,
+			nexusIncomingServiceManager,
 		),
 		namespaceRegistry: namespaceRegistry,
 	}
@@ -151,7 +155,7 @@ func (h *Handler) AddActivityTask(
 
 	syncMatch, err := h.engine.AddActivityTask(ctx, request)
 	if syncMatch {
-		opMetrics.Timer(metrics.SyncMatchLatencyPerTaskQueue.Name()).Record(time.Since(startT))
+		metrics.SyncMatchLatencyPerTaskQueue.With(opMetrics).Record(time.Since(startT))
 	}
 
 	return &matchingservice.AddActivityTaskResponse{}, err
@@ -176,7 +180,7 @@ func (h *Handler) AddWorkflowTask(
 
 	syncMatch, err := h.engine.AddWorkflowTask(ctx, request)
 	if syncMatch {
-		opMetrics.Timer(metrics.SyncMatchLatencyPerTaskQueue.Name()).Record(time.Since(startT))
+		metrics.SyncMatchLatencyPerTaskQueue.With(opMetrics).Record(time.Since(startT))
 	}
 	return &matchingservice.AddWorkflowTaskResponse{}, err
 }
@@ -364,6 +368,75 @@ func (h *Handler) ReplicateTaskQueueUserData(
 	return h.engine.ReplicateTaskQueueUserData(ctx, request)
 }
 
+func (h *Handler) DispatchNexusTask(ctx context.Context, request *matchingservice.DispatchNexusTaskRequest) (_ *matchingservice.DispatchNexusTaskResponse, retError error) {
+	defer log.CapturePanic(h.logger, &retError)
+	return h.engine.DispatchNexusTask(ctx, request)
+}
+
+func (h *Handler) PollNexusTaskQueue(ctx context.Context, request *matchingservice.PollNexusTaskQueueRequest) (_ *matchingservice.PollNexusTaskQueueResponse, retError error) {
+	defer log.CapturePanic(h.logger, &retError)
+	opMetrics := h.opMetricsHandler(
+		namespace.ID(request.GetNamespaceId()),
+		request.GetRequest().GetTaskQueue(),
+		metrics.MatchingPollWorkflowTaskQueueScope,
+	)
+
+	if request.GetForwardedSource() != "" {
+		h.reportForwardedPerTaskQueueCounter(opMetrics, namespace.ID(request.GetNamespaceId()))
+	}
+
+	if _, err := common.ValidateLongPollContextTimeoutIsSet(
+		ctx,
+		"PollNexusTaskQueue",
+		h.throttledLogger,
+	); err != nil {
+		return nil, err
+	}
+	return h.engine.PollNexusTaskQueue(ctx, request, opMetrics)
+}
+
+func (h *Handler) RespondNexusTaskCompleted(ctx context.Context, request *matchingservice.RespondNexusTaskCompletedRequest) (_ *matchingservice.RespondNexusTaskCompletedResponse, retError error) {
+	defer log.CapturePanic(h.logger, &retError)
+	opMetrics := h.opMetricsHandler(
+		namespace.ID(request.GetNamespaceId()),
+		request.GetTaskQueue(),
+		metrics.MatchingRespondNexusTaskCompletedScope,
+	)
+
+	return h.engine.RespondNexusTaskCompleted(ctx, request, opMetrics)
+}
+
+func (h *Handler) RespondNexusTaskFailed(ctx context.Context, request *matchingservice.RespondNexusTaskFailedRequest) (_ *matchingservice.RespondNexusTaskFailedResponse, retError error) {
+	defer log.CapturePanic(h.logger, &retError)
+	opMetrics := h.opMetricsHandler(
+		namespace.ID(request.GetNamespaceId()),
+		request.GetTaskQueue(),
+		metrics.MatchingRespondNexusTaskFailedScope,
+	)
+
+	return h.engine.RespondNexusTaskFailed(ctx, request, opMetrics)
+}
+
+func (h *Handler) CreateNexusIncomingService(ctx context.Context, request *matchingservice.CreateNexusIncomingServiceRequest) (_ *matchingservice.CreateNexusIncomingServiceResponse, retError error) {
+	defer log.CapturePanic(h.logger, &retError)
+	return h.engine.CreateNexusIncomingService(ctx, request)
+}
+
+func (h *Handler) UpdateNexusIncomingService(ctx context.Context, request *matchingservice.UpdateNexusIncomingServiceRequest) (_ *matchingservice.UpdateNexusIncomingServiceResponse, retError error) {
+	defer log.CapturePanic(h.logger, &retError)
+	return h.engine.UpdateNexusIncomingService(ctx, request)
+}
+
+func (h *Handler) DeleteNexusIncomingService(ctx context.Context, request *matchingservice.DeleteNexusIncomingServiceRequest) (_ *matchingservice.DeleteNexusIncomingServiceResponse, retError error) {
+	defer log.CapturePanic(h.logger, &retError)
+	return h.engine.DeleteNexusIncomingService(ctx, request)
+}
+
+func (h *Handler) ListNexusIncomingServices(ctx context.Context, request *matchingservice.ListNexusIncomingServicesRequest) (_ *matchingservice.ListNexusIncomingServicesResponse, retError error) {
+	defer log.CapturePanic(h.logger, &retError)
+	return h.engine.ListNexusIncomingServices(ctx, request)
+}
+
 func (h *Handler) namespaceName(id namespace.ID) namespace.Name {
 	entry, err := h.namespaceRegistry.GetNamespaceByID(id)
 	if err != nil {
@@ -373,8 +446,8 @@ func (h *Handler) namespaceName(id namespace.ID) namespace.Name {
 }
 
 func (h *Handler) reportForwardedPerTaskQueueCounter(opMetrics metrics.Handler, namespaceId namespace.ID) {
-	opMetrics.Counter(metrics.ForwardedPerTaskQueueCounter.Name()).Record(1)
-	h.metricsHandler.Counter(metrics.MatchingClientForwardedCounter.Name()).
+	metrics.ForwardedPerTaskQueueCounter.With(opMetrics).Record(1)
+	metrics.MatchingClientForwardedCounter.With(h.metricsHandler).
 		Record(
 			1,
 			metrics.OperationTag(metrics.MatchingAddWorkflowTaskScope),

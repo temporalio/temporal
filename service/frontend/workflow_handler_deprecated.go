@@ -517,7 +517,7 @@ func (wh *WorkflowHandler) getRawHistory(
 	rawHistory := resp.HistoryEventBlobs
 	if len(resp.NextPageToken) == 0 && transientWorkflowTaskInfo != nil {
 		if err := wh.validateTransientWorkflowTaskEvents(nextEventID, transientWorkflowTaskInfo); err != nil {
-			metricsHandler.Counter(metrics.ServiceErrIncompleteHistoryCounter.Name()).Record(1)
+			metrics.ServiceErrIncompleteHistoryCounter.With(metricsHandler).Record(1)
 			wh.logger.Error("getHistory error",
 				tag.WorkflowNamespaceID(namespaceID.String()),
 				tag.WorkflowID(execution.GetWorkflowId()),
@@ -592,7 +592,7 @@ func (wh *WorkflowHandler) getHistory(
 		isFirstPage,
 		isLastPage,
 		int(pageSize)); err != nil {
-		metricsHandler.Counter(metrics.ServiceErrIncompleteHistoryCounter.Name()).Record(1)
+		metrics.ServiceErrIncompleteHistoryCounter.With(metricsHandler).Record(1)
 		wh.logger.Error("getHistory: incomplete history",
 			tag.WorkflowNamespaceID(namespaceID.String()),
 			tag.WorkflowID(execution.GetWorkflowId()),
@@ -602,7 +602,7 @@ func (wh *WorkflowHandler) getHistory(
 
 	if len(nextPageToken) == 0 && transientWorkflowTaskInfo != nil {
 		if err := wh.validateTransientWorkflowTaskEvents(nextEventID, transientWorkflowTaskInfo); err != nil {
-			metricsHandler.Counter(metrics.ServiceErrIncompleteHistoryCounter.Name()).Record(1)
+			metrics.ServiceErrIncompleteHistoryCounter.With(metricsHandler).Record(1)
 			wh.logger.Error("getHistory error",
 				tag.WorkflowNamespaceID(namespaceID.String()),
 				tag.WorkflowID(execution.GetWorkflowId()),
@@ -876,7 +876,7 @@ func (wh *WorkflowHandler) trimHistoryNode(
 
 // DEPRECATED: DO NOT MODIFY UNLESS ALSO APPLIED TO ./service/history/api/utils/get_history_util.go
 func (wh *WorkflowHandler) processOutgoingSearchAttributes(events []*historypb.HistoryEvent, namespace namespace.Name) error {
-	saTypeMap, err := wh.saProvider.GetSearchAttributes(wh.visibilityMrg.GetIndexName(), false)
+	saTypeMap, err := wh.saProvider.GetSearchAttributes(wh.visibilityMgr.GetIndexName(), false)
 	if err != nil {
 		return serviceerror.NewUnavailable(fmt.Sprintf(errUnableToGetSearchAttributesMessage, err))
 	}

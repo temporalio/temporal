@@ -272,27 +272,6 @@ func makeTestBlocAlloc(f func() (taskQueueState, error)) taskQueueManagerOpt {
 	return withIDBlockAllocator(&testIDBlockAlloc{alloc: f})
 }
 
-func TestSyncMatchLeasingUnavailable(t *testing.T) {
-	tqm := mustCreateTestTaskQueueManager(t, gomock.NewController(t),
-		makeTestBlocAlloc(func() (taskQueueState, error) {
-			// any error other than ConditionFailedError indicates an
-			// availability problem at a lower layer so the TQM should NOT
-			// unload itself because resilient sync match is enabled.
-			return taskQueueState{}, errors.New(t.Name())
-		}))
-	tqm.Start()
-	defer tqm.Stop()
-	poller, _ := runOneShotPoller(context.Background(), tqm)
-	defer poller.Cancel()
-
-	sync, err := tqm.AddTask(context.TODO(), addTaskParams{
-		execution: &commonpb.WorkflowExecution{},
-		taskInfo:  &persistencespb.TaskInfo{},
-		source:    enumsspb.TASK_SOURCE_HISTORY})
-	require.NoError(t, err)
-	require.True(t, sync)
-}
-
 func TestForeignPartitionOwnerCausesUnload(t *testing.T) {
 	cfg := NewConfig(dynamicconfig.NewNoopCollection())
 	cfg.RangeSize = 1 // TaskID block size
@@ -439,7 +418,7 @@ func createTestTaskQueueManagerWithConfig(
 	mockHistoryClient := historyservicemock.NewMockHistoryServiceClient(controller)
 	mockHistoryClient.EXPECT().IsWorkflowTaskValid(gomock.Any(), gomock.Any()).Return(&historyservice.IsWorkflowTaskValidResponse{IsValid: true}, nil).AnyTimes()
 	mockHistoryClient.EXPECT().IsActivityTaskValid(gomock.Any(), gomock.Any()).Return(&historyservice.IsActivityTaskValidResponse{IsValid: true}, nil).AnyTimes()
-	me := newMatchingEngine(testOpts.config, tm, mockHistoryClient, logger, mockNamespaceCache, testOpts.matchingClientMock, mockVisibilityManager)
+	me := newMatchingEngine(testOpts.config, tm, mockHistoryClient, logger, mockNamespaceCache, testOpts.matchingClientMock, mockVisibilityManager, nil, nil)
 	tlMgr, err := newTaskQueueManager(me, testOpts.tqId, normalStickyInfo, testOpts.config, opts...)
 	if err != nil {
 		return nil, err
@@ -841,8 +820,7 @@ func TestUserData_FetchesOnInit(t *testing.T) {
 			WaitNewData:              false, // first fetch is not long poll
 		}).
 		Return(&matchingservice.GetTaskQueueUserDataResponse{
-			TaskQueueHasUserData: true,
-			UserData:             data1,
+			UserData: data1,
 		}, nil)
 
 	tq := mustCreateTestTaskQueueManagerWithConfig(t, controller, tqCfg)
@@ -887,8 +865,7 @@ func TestUserData_FetchesAndFetchesAgain(t *testing.T) {
 			WaitNewData:              false, // first is not long poll
 		}).
 		Return(&matchingservice.GetTaskQueueUserDataResponse{
-			TaskQueueHasUserData: true,
-			UserData:             data1,
+			UserData: data1,
 		}, nil)
 
 	tqCfg.matchingClientMock.EXPECT().GetTaskQueueUserData(
@@ -901,8 +878,7 @@ func TestUserData_FetchesAndFetchesAgain(t *testing.T) {
 			WaitNewData:              true, // second is long poll
 		}).
 		Return(&matchingservice.GetTaskQueueUserDataResponse{
-			TaskQueueHasUserData: true,
-			UserData:             data2,
+			UserData: data2,
 		}, nil)
 
 	tqCfg.matchingClientMock.EXPECT().GetTaskQueueUserData(
@@ -968,8 +944,7 @@ func TestUserData_FetchDisableEnable(t *testing.T) {
 			WaitNewData:              false, // first is not long poll
 		}).
 		Return(&matchingservice.GetTaskQueueUserDataResponse{
-			TaskQueueHasUserData: true,
-			UserData:             data1,
+			UserData: data1,
 		}, nil)
 
 	tqCfg.matchingClientMock.EXPECT().GetTaskQueueUserData(
@@ -982,8 +957,7 @@ func TestUserData_FetchDisableEnable(t *testing.T) {
 			WaitNewData:              true, // second is long poll
 		}).
 		Return(&matchingservice.GetTaskQueueUserDataResponse{
-			TaskQueueHasUserData: true,
-			UserData:             data2,
+			UserData: data2,
 		}, nil)
 
 	// after enabling again:
@@ -998,8 +972,7 @@ func TestUserData_FetchDisableEnable(t *testing.T) {
 			WaitNewData:              false,
 		}).
 		Return(&matchingservice.GetTaskQueueUserDataResponse{
-			TaskQueueHasUserData: true,
-			UserData:             data3,
+			UserData: data3,
 		}, nil)
 
 	tqCfg.matchingClientMock.EXPECT().GetTaskQueueUserData(
@@ -1087,8 +1060,7 @@ func TestUserData_RetriesFetchOnUnavailable(t *testing.T) {
 		DoAndReturn(func(ctx context.Context, in *matchingservice.GetTaskQueueUserDataRequest, opts ...grpc.CallOption) (*matchingservice.GetTaskQueueUserDataResponse, error) {
 			<-ch
 			return &matchingservice.GetTaskQueueUserDataResponse{
-				TaskQueueHasUserData: true,
-				UserData:             data1,
+				UserData: data1,
 			}, nil
 		})
 
@@ -1161,8 +1133,7 @@ func TestUserData_RetriesFetchOnUnImplemented(t *testing.T) {
 		DoAndReturn(func(ctx context.Context, in *matchingservice.GetTaskQueueUserDataRequest, opts ...grpc.CallOption) (*matchingservice.GetTaskQueueUserDataResponse, error) {
 			<-ch
 			return &matchingservice.GetTaskQueueUserDataResponse{
-				TaskQueueHasUserData: true,
-				UserData:             data1,
+				UserData: data1,
 			}, nil
 		})
 
@@ -1220,8 +1191,7 @@ func TestUserData_FetchesUpTree(t *testing.T) {
 			WaitNewData:              false,
 		}).
 		Return(&matchingservice.GetTaskQueueUserDataResponse{
-			TaskQueueHasUserData: true,
-			UserData:             data1,
+			UserData: data1,
 		}, nil)
 
 	tq := mustCreateTestTaskQueueManagerWithConfig(t, controller, tqCfg)
@@ -1261,8 +1231,7 @@ func TestUserData_FetchesActivityToWorkflow(t *testing.T) {
 			WaitNewData:              false,
 		}).
 		Return(&matchingservice.GetTaskQueueUserDataResponse{
-			TaskQueueHasUserData: true,
-			UserData:             data1,
+			UserData: data1,
 		}, nil)
 
 	tq := mustCreateTestTaskQueueManagerWithConfig(t, controller, tqCfg)
@@ -1305,8 +1274,7 @@ func TestUserData_FetchesStickyToNormal(t *testing.T) {
 			WaitNewData:              false,
 		}).
 		Return(&matchingservice.GetTaskQueueUserDataResponse{
-			TaskQueueHasUserData: true,
-			UserData:             data1,
+			UserData: data1,
 		}, nil)
 
 	// have to create manually to get sticky
@@ -1317,7 +1285,7 @@ func TestUserData_FetchesStickyToNormal(t *testing.T) {
 	mockNamespaceCache.EXPECT().GetNamespaceName(gomock.Any()).Return(namespace.Name("ns-name"), nil).AnyTimes()
 	mockVisibilityManager := manager.NewMockVisibilityManager(controller)
 	mockVisibilityManager.EXPECT().Close().AnyTimes()
-	me := newMatchingEngine(tqCfg.config, tm, nil, logger, mockNamespaceCache, tqCfg.matchingClientMock, mockVisibilityManager)
+	me := newMatchingEngine(tqCfg.config, tm, nil, logger, mockNamespaceCache, tqCfg.matchingClientMock, mockVisibilityManager, nil, nil)
 	stickyInfo := stickyInfo{
 		kind:       enumspb.TASK_QUEUE_KIND_STICKY,
 		normalName: normalName,

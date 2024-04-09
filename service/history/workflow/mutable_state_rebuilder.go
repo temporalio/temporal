@@ -57,6 +57,7 @@ type (
 			execution *commonpb.WorkflowExecution,
 			history [][]*historypb.HistoryEvent,
 			newRunHistory []*historypb.HistoryEvent,
+			newRunID string,
 		) (MutableState, error)
 	}
 
@@ -99,14 +100,15 @@ func (b *MutableStateRebuilderImpl) ApplyEvents(
 	execution *commonpb.WorkflowExecution,
 	history [][]*historypb.HistoryEvent,
 	newRunHistory []*historypb.HistoryEvent,
+	newRunID string,
 ) (MutableState, error) {
 	for i := 0; i < len(history)-1; i++ {
-		_, err := b.applyEvents(ctx, namespaceID, requestID, execution, history[i], nil)
+		_, err := b.applyEvents(ctx, namespaceID, requestID, execution, history[i], nil, "")
 		if err != nil {
 			return nil, err
 		}
 	}
-	newMutableState, err := b.applyEvents(ctx, namespaceID, requestID, execution, history[len(history)-1], newRunHistory)
+	newMutableState, err := b.applyEvents(ctx, namespaceID, requestID, execution, history[len(history)-1], newRunHistory, newRunID)
 	if err != nil {
 		return nil, err
 	}
@@ -129,6 +131,7 @@ func (b *MutableStateRebuilderImpl) applyEvents(
 	execution *commonpb.WorkflowExecution,
 	history []*historypb.HistoryEvent,
 	newRunHistory []*historypb.HistoryEvent,
+	newRunID string,
 ) (MutableState, error) {
 
 	if len(history) == 0 {
@@ -136,7 +139,6 @@ func (b *MutableStateRebuilderImpl) applyEvents(
 	}
 	firstEvent := history[0]
 	lastEvent := history[len(history)-1]
-	var newRunMutableState MutableState
 
 	taskGenerator := taskGeneratorProvider.NewTaskGenerator(b.shard, b.mutableState)
 
@@ -190,9 +192,11 @@ func (b *MutableStateRebuilderImpl) applyEvents(
 				return nil, err
 			}
 
-			if err := taskGenerator.GenerateWorkflowStartTasks(
+			var err error
+			executionInfo.WorkflowExecutionTimerTaskStatus, err = taskGenerator.GenerateWorkflowStartTasks(
 				event,
-			); err != nil {
+			)
+			if err != nil {
 				return nil, err
 			}
 
@@ -205,7 +209,6 @@ func (b *MutableStateRebuilderImpl) applyEvents(
 			}
 
 			if err := b.mutableState.SetHistoryTree(
-				ctx,
 				executionInfo.WorkflowExecutionTimeout,
 				executionInfo.WorkflowRunTimeout,
 				execution.GetRunId(),
@@ -625,42 +628,23 @@ func (b *MutableStateRebuilderImpl) applyEvents(
 			}
 
 		case enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_CONTINUED_AS_NEW:
-
-			// The length of newRunHistory can be zero in resend case
-			if len(newRunHistory) != 0 {
-				newRunMutableState = NewMutableState(
-					b.shard,
-					b.shard.GetEventsCache(),
-					b.logger,
-					b.mutableState.GetNamespaceEntry(),
-					timestamp.TimeValue(newRunHistory[0].GetEventTime()),
-				)
-
-				newRunStateBuilder := NewMutableStateRebuilder(b.shard, b.logger, newRunMutableState)
-
-				newRunID := event.GetWorkflowExecutionContinuedAsNewEventAttributes().GetNewExecutionRunId()
-				newExecution := commonpb.WorkflowExecution{
-					WorkflowId: execution.WorkflowId,
-					RunId:      newRunID,
-				}
-				_, err := newRunStateBuilder.ApplyEvents(
-					ctx,
-					namespaceID,
-					uuid.New(),
-					&newExecution,
-					[][]*historypb.HistoryEvent{newRunHistory},
-					nil,
-				)
-				if err != nil {
-					return nil, err
-				}
+			// This is for backward compatibility, old replication tasks generated for continuedAsNew case
+			// doesn't have newRunID field set. In that case, we need to get newRunID from the last event.
+			continuedAsNewRunID := event.GetWorkflowExecutionContinuedAsNewEventAttributes().GetNewExecutionRunId()
+			if newRunID == "" {
+				newRunID = continuedAsNewRunID
+			} else if newRunID != continuedAsNewRunID {
+				return nil, serviceerror.NewInternal(fmt.Sprintf(
+					"ApplyEvents encounted newRunID mismatch for continuedAsNew event, task newRunID: %v, event newRunID: %v",
+					newRunID,
+					continuedAsNewRunID,
+				))
 			}
 
-			err := b.mutableState.ApplyWorkflowExecutionContinuedAsNewEvent(
+			if err := b.mutableState.ApplyWorkflowExecutionContinuedAsNewEvent(
 				firstEvent.GetEventId(),
 				event,
-			)
-			if err != nil {
+			); err != nil {
 				return nil, err
 			}
 
@@ -689,5 +673,81 @@ func (b *MutableStateRebuilderImpl) applyEvents(
 			return nil, serviceerror.NewInvalidArgument(fmt.Sprintf("Unknown event type: %v", event.GetEventType()))
 		}
 	}
+
+	// The length of newRunHistory can be zero in resend case
+	if len(newRunHistory) == 0 {
+		return nil, nil
+	}
+
+	if b.mutableState.GetExecutionState().Status == enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING {
+		return nil, serviceerror.NewInternal("Cannot apply events for new run when current run is still running")
+	}
+
+	return b.applyNewRunHistory(
+		ctx,
+		namespaceID,
+		&commonpb.WorkflowExecution{
+			WorkflowId: execution.WorkflowId,
+			RunId:      newRunID,
+		},
+		newRunHistory,
+	)
+}
+
+func (b *MutableStateRebuilderImpl) applyNewRunHistory(
+	ctx context.Context,
+	namespaceID namespace.ID,
+	newExecution *commonpb.WorkflowExecution,
+	newRunHistory []*historypb.HistoryEvent,
+) (MutableState, error) {
+
+	// TODO: replication task should contain enough information to determine whether the new run is part of the same chain
+	// and not relying on a specific event type to make that decision
+	sameWorkflowChain := false
+	newRunFirstEvent := newRunHistory[0]
+	if newRunFirstEvent.GetEventType() == enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_STARTED {
+		newRunFirstRunID := newRunFirstEvent.GetWorkflowExecutionStartedEventAttributes().FirstExecutionRunId
+		sameWorkflowChain = newRunFirstRunID == b.mutableState.GetExecutionInfo().FirstExecutionRunId
+	}
+
+	var newRunMutableState MutableState
+	if sameWorkflowChain {
+		newRunMutableState = NewMutableStateInChain(
+			b.shard,
+			b.shard.GetEventsCache(),
+			b.logger,
+			b.mutableState.GetNamespaceEntry(),
+			newExecution.WorkflowId,
+			newExecution.RunId,
+			timestamp.TimeValue(newRunHistory[0].GetEventTime()),
+			b.mutableState,
+		)
+	} else {
+		newRunMutableState = NewMutableState(
+			b.shard,
+			b.shard.GetEventsCache(),
+			b.logger,
+			b.mutableState.GetNamespaceEntry(),
+			newExecution.WorkflowId,
+			newExecution.RunId,
+			timestamp.TimeValue(newRunHistory[0].GetEventTime()),
+		)
+	}
+
+	newRunStateBuilder := NewMutableStateRebuilder(b.shard, b.logger, newRunMutableState)
+
+	_, err := newRunStateBuilder.ApplyEvents(
+		ctx,
+		namespaceID,
+		uuid.New(),
+		newExecution,
+		[][]*historypb.HistoryEvent{newRunHistory},
+		nil,
+		"",
+	)
+	if err != nil {
+		return nil, err
+	}
+
 	return newRunMutableState, nil
 }

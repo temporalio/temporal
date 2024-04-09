@@ -30,8 +30,8 @@ import (
 	"go.temporal.io/server/common/membership"
 )
 
-// Module provides membership objects given the types in factoryParams.
-var Module = fx.Provide(
+// MembershipModule provides membership objects given the types in factoryParams.
+var MembershipModule = fx.Provide(
 	provideFactory,
 	provideMembership,
 	provideHostInfoProvider,

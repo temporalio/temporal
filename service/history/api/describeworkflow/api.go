@@ -32,6 +32,7 @@ import (
 	"go.temporal.io/api/serviceerror"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	workflowpb "go.temporal.io/api/workflow/v1"
+	"google.golang.org/protobuf/types/known/durationpb"
 	"google.golang.org/protobuf/types/known/timestamppb"
 
 	enumsspb "go.temporal.io/server/api/enums/v1"
@@ -41,6 +42,7 @@ import (
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence/visibility/manager"
+	"go.temporal.io/server/plugins/callbacks"
 	"go.temporal.io/server/service/history/api"
 	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/workflow"
@@ -74,7 +76,7 @@ func Invoke(
 		return nil, err
 	}
 
-	weCtx, err := workflowConsistencyChecker.GetWorkflowContext(
+	workflowLease, err := workflowConsistencyChecker.GetWorkflowLease(
 		ctx,
 		nil,
 		api.BypassMutableStateConsistencyPredicate,
@@ -91,9 +93,9 @@ func Invoke(
 	// We release the lock on this workflow just before we return from this method, at which point mutable state might
 	// be mutated. Take extra care to clone all response methods as marshalling happens after we return and it is unsafe
 	// to mutate proto fields during marshalling.
-	defer func() { weCtx.GetReleaseFn()(retError) }()
+	defer func() { workflowLease.GetReleaseFn()(retError) }()
 
-	mutableState := weCtx.GetMutableState()
+	mutableState := workflowLease.GetMutableState()
 	executionInfo := mutableState.GetExecutionInfo()
 	executionState := mutableState.GetExecutionState()
 
@@ -141,7 +143,12 @@ func Invoke(
 		if err != nil {
 			return nil, err
 		}
+		executionDuration, err := mutableState.GetWorkflowExecutionDuration(ctx)
+		if err != nil {
+			return nil, err
+		}
 		result.WorkflowExecutionInfo.CloseTime = timestamppb.New(closeTime)
+		result.WorkflowExecutionInfo.ExecutionDuration = durationpb.New(executionDuration)
 	}
 
 	for _, ai := range mutableState.GetPendingActivityInfos() {
@@ -227,6 +234,25 @@ func Invoke(
 	}
 	result.WorkflowExecutionInfo.SearchAttributes = &commonpb.SearchAttributes{
 		IndexedFields: clonePayloadMap(relocatableAttributes.SearchAttributes.GetIndexedFields()),
+	}
+	coll := callbacks.MachineCollection(mutableState.HSM())
+	cbs := coll.List()
+	result.Callbacks = make([]*workflowpb.CallbackInfo, 0, len(cbs))
+	for _, entry := range cbs {
+		callback, err := coll.Data(entry.Key.ID)
+		if err != nil {
+			shard.GetLogger().Error(
+				"failed to load callback data while building describe response",
+				tag.WorkflowNamespaceID(namespaceID.String()),
+				tag.WorkflowID(executionInfo.WorkflowId),
+				tag.WorkflowRunID(executionState.RunId),
+				tag.Error(err),
+			)
+			return nil, serviceerror.NewInternal("failed to construct describe response")
+		}
+		// HSM data is mutable and must be cloned to avoid a data race during serialization, which happens after we
+		// release the lock on this workflow.
+		result.Callbacks = append(result.Callbacks, common.CloneProto(callback.PublicInfo))
 	}
 
 	return result, nil

@@ -35,6 +35,7 @@ import (
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common/archiver"
 	"go.temporal.io/server/common/config"
+	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/service/history/tasks"
@@ -53,6 +54,7 @@ func TestInitCurrentClusterMetadataRecord(t *testing.T) {
 			require.Equal(t, cfg.ClusterMetadata.EnableGlobalNamespace, request.IsGlobalNamespaceEnabled)
 			require.Equal(t, cfg.ClusterMetadata.CurrentClusterName, request.ClusterName)
 			require.Equal(t, cfg.ClusterMetadata.ClusterInformation[cfg.ClusterMetadata.CurrentClusterName].RPCAddress, request.ClusterAddress)
+			require.Equal(t, cfg.ClusterMetadata.ClusterInformation[cfg.ClusterMetadata.CurrentClusterName].HTTPAddress, request.HttpAddress)
 			require.Equal(t, cfg.ClusterMetadata.ClusterInformation[cfg.ClusterMetadata.CurrentClusterName].InitialFailoverVersion, request.InitialFailoverVersion)
 			require.Equal(t, cfg.Persistence.NumHistoryShards, request.HistoryShardCount)
 			require.Equal(t, cfg.ClusterMetadata.FailoverVersionIncrement, request.FailoverVersionIncrement)
@@ -82,6 +84,7 @@ func TestUpdateCurrentClusterMetadataRecord(t *testing.T) {
 			require.Equal(t, cfg.ClusterMetadata.EnableGlobalNamespace, request.IsGlobalNamespaceEnabled)
 			require.Equal(t, "", request.ClusterName)
 			require.Equal(t, cfg.ClusterMetadata.ClusterInformation[cfg.ClusterMetadata.CurrentClusterName].RPCAddress, request.ClusterAddress)
+			require.Equal(t, cfg.ClusterMetadata.ClusterInformation[cfg.ClusterMetadata.CurrentClusterName].HTTPAddress, request.HttpAddress)
 			require.Equal(t, cfg.ClusterMetadata.ClusterInformation[cfg.ClusterMetadata.CurrentClusterName].InitialFailoverVersion, request.InitialFailoverVersion)
 			require.Equal(t, int32(0), request.HistoryShardCount)
 			require.Equal(t, cfg.ClusterMetadata.FailoverVersionIncrement, request.FailoverVersionIncrement)
@@ -132,6 +135,7 @@ func TestTaskCategoryRegistryProvider(t *testing.T) {
 		historyState           archiver.ArchivalState
 		visibilityState        archiver.ArchivalState
 		expectArchivalCategory bool
+		expectCallbackCategory bool
 	}{
 		{
 			name:                   "both disabled",
@@ -157,6 +161,13 @@ func TestTaskCategoryRegistryProvider(t *testing.T) {
 			visibilityState:        archiver.ArchivalEnabled,
 			expectArchivalCategory: true,
 		},
+		{
+			name:                   "callbacks enabled, archival disabled",
+			historyState:           archiver.ArchivalDisabled,
+			visibilityState:        archiver.ArchivalDisabled,
+			expectArchivalCategory: false,
+			expectCallbackCategory: true,
+		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			ctrl := gomock.NewController(t)
@@ -167,13 +178,17 @@ func TestTaskCategoryRegistryProvider(t *testing.T) {
 			visibilityArchivalConfig := archiver.NewMockArchivalConfig(ctrl)
 			visibilityArchivalConfig.EXPECT().StaticClusterState().Return(tc.visibilityState).AnyTimes()
 			archivalMetadata.EXPECT().GetVisibilityConfig().Return(visibilityArchivalConfig).AnyTimes()
-			registry := TaskCategoryRegistryProvider(archivalMetadata)
+			dcClient := dynamicconfig.StaticClient{dynamicconfig.OutboundProcessorEnabled: tc.expectCallbackCategory}
+			dcc := dynamicconfig.NewCollection(dcClient, log.NewNoopLogger())
+			registry := TaskCategoryRegistryProvider(archivalMetadata, dcc)
 			_, ok := registry.GetCategoryByID(tasks.CategoryIDArchival)
 			if tc.expectArchivalCategory {
 				require.True(t, ok)
 			} else {
 				require.False(t, ok)
 			}
+			_, ok = registry.GetCategoryByID(tasks.CategoryIDOutbound)
+			require.Equal(t, tc.expectCallbackCategory, ok)
 		})
 	}
 }

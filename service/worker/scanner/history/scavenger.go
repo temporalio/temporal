@@ -231,7 +231,7 @@ func (s *Scavenger) filterTask(
 ) *taskDetail {
 
 	if time.Now().UTC().Add(-s.historyDataMinAge()).Before(timestamp.TimeValue(branch.ForkTime)) {
-		s.metricsHandler.Counter(metrics.HistoryScavengerSkipCount.Name()).Record(1)
+		metrics.HistoryScavengerSkipCount.With(s.metricsHandler).Record(1)
 
 		s.Lock()
 		defer s.Unlock()
@@ -242,7 +242,7 @@ func (s *Scavenger) filterTask(
 	namespaceID, workflowID, runID, err := persistence.SplitHistoryGarbageCleanupInfo(branch.Info)
 	if err != nil {
 		s.logger.Error("unable to parse the history cleanup info", tag.DetailInfo(branch.Info), tag.Error(err))
-		s.metricsHandler.Counter(metrics.HistoryScavengerErrorCount.Name()).Record(1)
+		metrics.HistoryScavengerErrorCount.With(s.metricsHandler).Record(1)
 
 		s.Lock()
 		defer s.Unlock()
@@ -254,7 +254,7 @@ func (s *Scavenger) filterTask(
 	branchToken, err := serialization.HistoryBranchToBlob(branch.BranchInfo)
 	if err != nil {
 		s.logger.Error("unable to serialize the history branch token", tag.DetailInfo(branch.Info), tag.Error(err))
-		s.metricsHandler.Counter(metrics.HistoryScavengerErrorCount.Name()).Record(1)
+		metrics.HistoryScavengerErrorCount.With(s.metricsHandler).Record(1)
 
 		s.Lock()
 		defer s.Unlock()
@@ -316,12 +316,12 @@ func (s *Scavenger) handleErr(
 	s.Lock()
 	defer s.Unlock()
 	if err != nil {
-		s.metricsHandler.Counter(metrics.HistoryScavengerErrorCount.Name()).Record(1)
+		metrics.HistoryScavengerErrorCount.With(s.metricsHandler).Record(1)
 		s.hbd.ErrorCount++
 		return
 	}
 
-	s.metricsHandler.Counter(metrics.HistoryScavengerSuccessCount.Name()).Record(1)
+	metrics.HistoryScavengerSuccessCount.With(s.metricsHandler).Record(1)
 	s.hbd.SuccessCount++
 }
 

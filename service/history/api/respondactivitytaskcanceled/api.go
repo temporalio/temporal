@@ -72,8 +72,8 @@ func Invoke(
 			token.WorkflowId,
 			token.RunId,
 		),
-		func(workflowContext api.WorkflowContext) (*api.UpdateWorkflowAction, error) {
-			mutableState := workflowContext.GetMutableState()
+		func(workflowLease api.WorkflowLease) (*api.UpdateWorkflowAction, error) {
+			mutableState := workflowLease.GetMutableState()
 			workflowTypeName = mutableState.GetWorkflowType().GetName()
 			if !mutableState.IsWorkflowExecutionRunning() {
 				return nil, consts.ErrWorkflowCompleted
@@ -91,7 +91,7 @@ func Invoke(
 			// First check to see if cache needs to be refreshed as we could potentially have stale workflow execution in
 			// some extreme cassandra failure cases.
 			if !isRunning && scheduledEventID >= mutableState.GetNextEventID() {
-				shard.GetMetricsHandler().Counter(metrics.StaleMutableStateCounter.Name()).Record(
+				metrics.StaleMutableStateCounter.With(shard.GetMetricsHandler()).Record(
 					1,
 					metrics.OperationTag(metrics.HistoryRespondActivityTaskCanceledScope))
 				return nil, consts.ErrStaleState
@@ -132,7 +132,7 @@ func Invoke(
 	)
 
 	if err == nil && !activityStartedTime.IsZero() {
-		shard.GetMetricsHandler().Timer(metrics.ActivityE2ELatency.Name()).Record(
+		metrics.ActivityE2ELatency.With(shard.GetMetricsHandler()).Record(
 			time.Since(activityStartedTime),
 			metrics.OperationTag(metrics.HistoryRespondActivityTaskCanceledScope),
 			metrics.NamespaceTag(namespace.String()),

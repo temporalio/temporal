@@ -146,6 +146,7 @@ func (s *commandAttrValidatorSuite) SetupTest() {
 			config.SearchAttributesTotalSizeLimit,
 			s.mockVisibilityManager,
 			dynamicconfig.GetBoolPropertyFnFilteredByNamespace(false),
+			dynamicconfig.GetBoolPropertyFnFilteredByNamespace(false),
 		))
 }
 

@@ -112,6 +112,7 @@ var (
 	ComponentHistoryCache             = component("history-cache")
 	ComponentEventsCache              = component("events-cache")
 	ComponentTransferQueue            = component("transfer-queue-processor")
+	ComponentOutboundQueue            = component("outbound-queue-processor")
 	ComponentVisibilityQueue          = component("visibility-queue-processor")
 	ComponentArchivalQueue            = component("archival-queue-processor")
 	ComponentTimerQueue               = component("timer-queue-processor")
@@ -137,7 +138,19 @@ var (
 	ComponentServiceResolver          = component("service-resolver")
 	ComponentMetadataInitializer      = component("metadata-initializer")
 	ComponentAddSearchAttributes      = component("add-search-attributes")
+	ComponentRPCHandler               = component("rpc-handler")
+	ComponentLongPollHandler          = component("long-poll-handler")
+	ComponentVisibilityHandler        = component("visibility-handler")
+	ComponentNamespaceReplication     = component("namespace-replication")
+	ComponentPersistence              = component("persistence")
+	ComponentTaskScheduler            = component("task-scheduler")
 	VersionChecker                    = component("version-checker")
+)
+
+// Pre-defined values for scope tag
+var (
+	ScopeHost      = scope("host")
+	ScopeNamespace = scope("namespace")
 )
 
 // Pre-defined values for TagSysLifecycle

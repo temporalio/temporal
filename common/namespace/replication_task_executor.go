@@ -64,10 +64,10 @@ var (
 	ErrNameUUIDCollision = serviceerror.NewInvalidArgument("namespace replication encountered name / UUID collision")
 )
 
-// NOTE: the counterpart of namespace replication transmission logic is in service/fropntend package
+// NOTE: the counterpart of namespace replication transmission logic is in service/frontend package
 
 type (
-	// ReplicationTaskExecutor is the interface which is to execute namespace replication task
+	// ReplicationTaskExecutor is the interface for executing namespace replication tasks
 	ReplicationTaskExecutor interface {
 		Execute(ctx context.Context, task *replicationspb.NamespaceTaskAttributes) error
 	}
@@ -79,7 +79,7 @@ type (
 	}
 )
 
-// NewReplicationTaskExecutor create a new instance of namespace replicator
+// NewReplicationTaskExecutor creates a new instance of namespace replicator
 func NewReplicationTaskExecutor(
 	currentCluster string,
 	metadataManagerV2 persistence.MetadataManager,
@@ -313,6 +313,7 @@ func (h *namespaceReplicationTaskExecutorImpl) handleNamespaceUpdateReplicationT
 		}
 		request.Namespace.ReplicationConfig.Clusters = ConvertClusterReplicationConfigFromProto(task.ReplicationConfig.Clusters)
 		request.Namespace.ConfigVersion = task.GetConfigVersion()
+		request.Namespace.OutgoingServices = task.GetNexusOutgoingServices()
 	}
 	if resp.Namespace.FailoverVersion < task.GetFailoverVersion() {
 		recordUpdated = true

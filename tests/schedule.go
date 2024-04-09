@@ -43,6 +43,7 @@ import (
 	"go.temporal.io/sdk/converter"
 	"go.temporal.io/sdk/worker"
 	"go.temporal.io/sdk/workflow"
+	"go.temporal.io/server/common/testing/historyrequire"
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/durationpb"
 
@@ -73,6 +74,7 @@ type (
 	ScheduleFunctionalSuite struct {
 		*require.Assertions
 		protorequire.ProtoAssertions
+		historyrequire.HistoryRequire
 		FunctionalTestBase
 		sdkClient     sdkclient.Client
 		worker        worker.Worker
@@ -98,6 +100,7 @@ func (s *ScheduleFunctionalSuite) TearDownSuite() {
 func (s *ScheduleFunctionalSuite) SetupTest() {
 	s.Assertions = require.New(s.T())
 	s.ProtoAssertions = protorequire.New(s.T())
+	s.HistoryRequire = historyrequire.New(s.T())
 	s.dataConverter = newTestDataConverter()
 	sdkClient, err := sdkclient.Dial(sdkclient.Options{
 		HostPort:      s.hostPort,
@@ -244,6 +247,7 @@ func (s *ScheduleFunctionalSuite) TestBasics() {
 	s.Equal(schSAValue.Data, describeResp.SearchAttributes.IndexedFields[csa].Data)
 	s.Nil(describeResp.SearchAttributes.IndexedFields[searchattribute.BinaryChecksums])
 	s.Nil(describeResp.SearchAttributes.IndexedFields[searchattribute.BuildIds])
+	s.Nil(describeResp.SearchAttributes.IndexedFields[searchattribute.TemporalNamespaceDivision])
 	s.Equal(schMemo.Data, describeResp.Memo.Fields["schedmemo1"].Data)
 	fmt.Printf("StartWorkflowAction: %x", describeResp)
 	s.Equal(wfSAValue.Data, describeResp.Schedule.Action.GetStartWorkflow().SearchAttributes.IndexedFields[csa].Data)
@@ -265,6 +269,9 @@ func (s *ScheduleFunctionalSuite) TestBasics() {
 	visibilityResponse := s.getScheduleEntryFomVisibility(sid)
 	s.Equal(sid, visibilityResponse.ScheduleId)
 	s.Equal(schSAValue.Data, visibilityResponse.SearchAttributes.IndexedFields[csa].Data)
+	s.Nil(visibilityResponse.SearchAttributes.IndexedFields[searchattribute.BinaryChecksums])
+	s.Nil(visibilityResponse.SearchAttributes.IndexedFields[searchattribute.BuildIds])
+	s.Nil(visibilityResponse.SearchAttributes.IndexedFields[searchattribute.TemporalNamespaceDivision])
 	s.Equal(schMemo.Data, visibilityResponse.Memo.Fields["schedmemo1"].Data)
 	checkSpec(visibilityResponse.Info.Spec)
 	s.Equal(wt, visibilityResponse.Info.WorkflowType.Name)
@@ -318,12 +325,24 @@ func (s *ScheduleFunctionalSuite) TestBasics() {
 	wfResp, err = s.engine.ListWorkflowExecutions(NewContext(), &workflowservice.ListWorkflowExecutionsRequest{
 		Namespace: s.namespace,
 		PageSize:  5,
-		Query:     fmt.Sprintf("%s = \"%s\"", searchattribute.TemporalNamespaceDivision, scheduler.NamespaceDivision),
+		Query:     fmt.Sprintf("%s = '%s'", searchattribute.TemporalNamespaceDivision, scheduler.NamespaceDivision),
 	})
 	s.NoError(err)
 	s.EqualValues(1, len(wfResp.Executions), "should see scheduler workflow")
 	ex0 = wfResp.Executions[0]
 	s.Equal(scheduler.WorkflowType, ex0.Type.Name)
+
+	// list schedules with search attribute filter
+
+	listResp, err := s.engine.ListSchedules(NewContext(), &workflowservice.ListSchedulesRequest{
+		Namespace:       s.namespace,
+		MaximumPageSize: 5,
+		Query:           "CustomKeywordField = 'schedule sa value'",
+	})
+	s.NoError(err)
+	s.Len(listResp.Schedules, 1)
+	entry := listResp.Schedules[0]
+	s.Equal(sid, entry.ScheduleId)
 
 	// update
 
@@ -385,13 +404,13 @@ func (s *ScheduleFunctionalSuite) TestBasics() {
 	s.Equal("because I said so", describeResp.Schedule.State.Notes)
 
 	// don't loop to wait for visibility, we already waited 7s from the patch
-	listResp, err := s.engine.ListSchedules(NewContext(), &workflowservice.ListSchedulesRequest{
+	listResp, err = s.engine.ListSchedules(NewContext(), &workflowservice.ListSchedulesRequest{
 		Namespace:       s.namespace,
 		MaximumPageSize: 5,
 	})
 	s.NoError(err)
 	s.Equal(1, len(listResp.Schedules))
-	entry := listResp.Schedules[0]
+	entry = listResp.Schedules[0]
 	s.Equal(sid, entry.ScheduleId)
 	s.True(entry.Info.Paused)
 	s.Equal("because I said so", entry.Info.Notes)
@@ -627,13 +646,32 @@ func (s *ScheduleFunctionalSuite) TestRefresh() {
 	s.EqualValues(1, len(describeResp.Info.RunningWorkflows))
 
 	events1 := s.getHistory(s.namespace, &commonpb.WorkflowExecution{WorkflowId: scheduler.WorkflowIDPrefix + sid})
+	expectedHistory := `
+ 1 WorkflowExecutionStarted
+  2 WorkflowTaskScheduled
+  3 WorkflowTaskStarted
+  4 WorkflowTaskCompleted
+  5 MarkerRecorded
+  6 MarkerRecorded
+  7 UpsertWorkflowSearchAttributes
+  8 TimerStarted
+  9 TimerFired
+ 10 WorkflowTaskScheduled
+ 11 WorkflowTaskStarted
+ 12 WorkflowTaskCompleted
+ 13 MarkerRecorded
+ 14 MarkerRecorded
+ 15 WorkflowPropertiesModified
+ 16 TimerStarted`
+
+	s.EqualHistoryEvents(expectedHistory, events1)
 
 	time.Sleep(4 * time.Second)
 	// now it has timed out, but the scheduler hasn't noticed yet. we can prove it by checking
 	// its history.
 
 	events2 := s.getHistory(s.namespace, &commonpb.WorkflowExecution{WorkflowId: scheduler.WorkflowIDPrefix + sid})
-	s.Equal(len(events1), len(events2))
+	s.EqualHistoryEvents(expectedHistory, events2)
 
 	// when we describe we'll force a refresh and see it timed out
 	describeResp, err = s.engine.DescribeSchedule(NewContext(), &workflowservice.DescribeScheduleRequest{

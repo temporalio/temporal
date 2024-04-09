@@ -81,7 +81,7 @@ type (
 		nonUserContextLockTimeout time.Duration
 	}
 
-	NewCacheFn func(config *configs.Config) Cache
+	NewCacheFn func(config *configs.Config, handler metrics.Handler) Cache
 
 	Key struct {
 		// Those are exported because some unit tests uses the cache directly.
@@ -104,21 +104,33 @@ const (
 
 func NewHostLevelCache(
 	config *configs.Config,
+	handler metrics.Handler,
 ) Cache {
+	maxSize := config.HistoryHostLevelCacheMaxSize()
+	if config.HistoryCacheLimitSizeBased {
+		maxSize = config.HistoryHostLevelCacheMaxSizeBytes()
+	}
 	return newCache(
-		config.HistoryCacheMaxSize(),
+		maxSize,
 		config.HistoryCacheTTL(),
 		config.HistoryCacheNonUserContextLockTimeout(),
+		handler,
 	)
 }
 
 func NewShardLevelCache(
 	config *configs.Config,
+	handler metrics.Handler,
 ) Cache {
+	maxSize := config.HistoryShardLevelCacheMaxSize()
+	if config.HistoryCacheLimitSizeBased {
+		maxSize = config.HistoryShardLevelCacheMaxSizeBytes()
+	}
 	return newCache(
-		config.HistoryShardLevelCacheMaxSize(),
+		maxSize,
 		config.HistoryCacheTTL(),
 		config.HistoryCacheNonUserContextLockTimeout(),
+		handler,
 	)
 }
 
@@ -126,13 +138,14 @@ func newCache(
 	size int,
 	ttl time.Duration,
 	nonUserContextLockTimeout time.Duration,
+	handler metrics.Handler,
 ) Cache {
 	opts := &cache.Options{}
 	opts.TTL = ttl
 	opts.Pin = true
 
 	return &CacheImpl{
-		Cache:                     cache.New(size, opts),
+		Cache:                     cache.New(size, opts, handler.WithTags(metrics.CacheTypeTag(metrics.MutableStateCacheTypeTagValue))),
 		nonUserContextLockTimeout: nonUserContextLockTimeout,
 	}
 }
@@ -153,9 +166,9 @@ func (c *CacheImpl) GetOrCreateCurrentWorkflowExecution(
 		metrics.OperationTag(metrics.HistoryCacheGetOrCreateCurrentScope),
 		metrics.CacheTypeTag(metrics.MutableStateCacheTypeTagValue),
 	)
-	handler.Counter(metrics.CacheRequests.Name()).Record(1)
+	metrics.CacheRequests.With(handler).Record(1)
 	start := time.Now()
-	defer func() { handler.Timer(metrics.CacheLatency.Name()).Record(time.Since(start)) }()
+	defer func() { metrics.CacheLatency.With(handler).Record(time.Since(start)) }()
 
 	execution := commonpb.WorkflowExecution{
 		WorkflowId: workflowID,
@@ -173,7 +186,8 @@ func (c *CacheImpl) GetOrCreateCurrentWorkflowExecution(
 		lockPriority,
 	)
 
-	metrics.ContextCounterAdd(ctx, metrics.HistoryWorkflowExecutionCacheLatency.Name(), time.Since(start).Nanoseconds())
+	metrics.ContextCounterAdd(ctx, metrics.HistoryWorkflowExecutionCacheLatency.Name(),
+		time.Since(start).Nanoseconds())
 
 	return weReleaseFn, err
 }
@@ -186,7 +200,7 @@ func (c *CacheImpl) GetOrCreateWorkflowExecution(
 	lockPriority workflow.LockPriority,
 ) (workflow.Context, ReleaseCacheFunc, error) {
 
-	if err := c.validateWorkflowExecutionInfo(ctx, shardContext, namespaceID, execution); err != nil {
+	if err := c.validateWorkflowExecutionInfo(ctx, shardContext, namespaceID, execution, lockPriority); err != nil {
 		return nil, nil, err
 	}
 
@@ -194,9 +208,9 @@ func (c *CacheImpl) GetOrCreateWorkflowExecution(
 		metrics.OperationTag(metrics.HistoryCacheGetOrCreateScope),
 		metrics.CacheTypeTag(metrics.MutableStateCacheTypeTagValue),
 	)
-	handler.Counter(metrics.CacheRequests.Name()).Record(1)
+	metrics.CacheRequests.With(handler).Record(1)
 	start := time.Now()
-	defer func() { handler.Timer(metrics.CacheLatency.Name()).Record(time.Since(start)) }()
+	defer func() { metrics.CacheLatency.With(handler).Record(time.Since(start)) }()
 
 	weCtx, weReleaseFunc, err := c.getOrCreateWorkflowExecutionInternal(
 		ctx,
@@ -208,7 +222,8 @@ func (c *CacheImpl) GetOrCreateWorkflowExecution(
 		lockPriority,
 	)
 
-	metrics.ContextCounterAdd(ctx, metrics.HistoryWorkflowExecutionCacheLatency.Name(), time.Since(start).Nanoseconds())
+	metrics.ContextCounterAdd(ctx, metrics.HistoryWorkflowExecutionCacheLatency.Name(),
+		time.Since(start).Nanoseconds())
 
 	return weCtx, weReleaseFunc, err
 }
@@ -229,12 +244,12 @@ func (c *CacheImpl) getOrCreateWorkflowExecutionInternal(
 	}
 	workflowCtx, cacheHit := c.Get(cacheKey).(workflow.Context)
 	if !cacheHit {
-		handler.Counter(metrics.CacheMissCounter.Name()).Record(1)
+		metrics.CacheMissCounter.With(handler).Record(1)
 		// Let's create the workflow execution workflowCtx
 		workflowCtx = workflow.NewContext(shardContext.GetConfig(), cacheKey.WorkflowKey, shardContext.GetLogger(), shardContext.GetThrottledLogger(), shardContext.GetMetricsHandler())
 		elem, err := c.PutIfNotExist(cacheKey, workflowCtx)
 		if err != nil {
-			handler.Counter(metrics.CacheFailures.Name()).Record(1)
+			metrics.CacheFailures.With(handler).Record(1)
 			return nil, nil, err
 		}
 		workflowCtx = elem.(workflow.Context)
@@ -244,8 +259,8 @@ func (c *CacheImpl) getOrCreateWorkflowExecutionInternal(
 	releaseFunc := c.makeReleaseFunc(cacheKey, shardContext, workflowCtx, forceClearContext, lockPriority)
 
 	if err := c.lockWorkflowExecution(ctx, workflowCtx, cacheKey, lockPriority); err != nil {
-		handler.Counter(metrics.CacheFailures.Name()).Record(1)
-		handler.Counter(metrics.AcquireLockFailedCounter.Name()).Record(1)
+		metrics.CacheFailures.With(handler).Record(1)
+		metrics.AcquireLockFailedCounter.With(handler).Record(1)
 		return nil, nil, err
 	}
 
@@ -333,6 +348,7 @@ func (c *CacheImpl) validateWorkflowExecutionInfo(
 	shardContext shard.Context,
 	namespaceID namespace.ID,
 	execution *commonpb.WorkflowExecution,
+	lockPriority workflow.LockPriority,
 ) error {
 
 	if err := c.validateWorkflowID(execution.GetWorkflowId()); err != nil {
@@ -341,17 +357,21 @@ func (c *CacheImpl) validateWorkflowExecutionInfo(
 
 	// RunID is not provided, lets try to retrieve the RunID for current active execution
 	if execution.GetRunId() == "" {
-		response, err := shardContext.GetCurrentExecution(ctx, &persistence.GetCurrentExecutionRequest{
-			ShardID:     shardContext.GetShardID(),
-			NamespaceID: namespaceID.String(),
-			WorkflowID:  execution.GetWorkflowId(),
-		})
-
+		shardOwnershipAsserted := false
+		runID, err := GetCurrentRunID(
+			ctx,
+			shardContext,
+			c,
+			&shardOwnershipAsserted,
+			namespaceID.String(),
+			execution.GetWorkflowId(),
+			lockPriority,
+		)
 		if err != nil {
 			return err
 		}
 
-		execution.RunId = response.RunID
+		execution.RunId = runID
 	} else if uuid.Parse(execution.GetRunId()) == nil { // immediately return if invalid runID
 		return serviceerror.NewInvalidArgument("RunId is not valid UUID.")
 	}
@@ -371,4 +391,50 @@ func (c *CacheImpl) validateWorkflowID(
 	}
 
 	return nil
+}
+
+func GetCurrentRunID(
+	ctx context.Context,
+	shardContext shard.Context,
+	workflowCache Cache,
+	shardOwnershipAsserted *bool,
+	namespaceID string,
+	workflowID string,
+	lockPriority workflow.LockPriority,
+) (runID string, retErr error) {
+	currentRelease, err := workflowCache.GetOrCreateCurrentWorkflowExecution(
+		ctx,
+		shardContext,
+		namespace.ID(namespaceID),
+		workflowID,
+		lockPriority,
+	)
+	if err != nil {
+		return "", err
+	}
+	defer currentRelease(retErr)
+
+	resp, err := shardContext.GetCurrentExecution(
+		ctx,
+		&persistence.GetCurrentExecutionRequest{
+			ShardID:     shardContext.GetShardID(),
+			NamespaceID: namespaceID,
+			WorkflowID:  workflowID,
+		},
+	)
+	switch err.(type) {
+	case nil:
+		return resp.RunID, nil
+	case *serviceerror.NotFound:
+		if err := shard.AssertShardOwnership(
+			ctx,
+			shardContext,
+			shardOwnershipAsserted,
+		); err != nil {
+			return "", err
+		}
+		return "", err
+	default:
+		return "", err
+	}
 }

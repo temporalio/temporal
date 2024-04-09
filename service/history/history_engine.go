@@ -33,6 +33,7 @@ import (
 	commonpb "go.temporal.io/api/common/v1"
 	historypb "go.temporal.io/api/history/v1"
 	"go.temporal.io/server/service/history/api/getworkflowexecutionrawhistory"
+	"go.temporal.io/server/service/history/api/listtasks"
 
 	historyspb "go.temporal.io/server/api/history/v1"
 	workflowpb "go.temporal.io/server/api/workflow/v1"
@@ -268,6 +269,7 @@ func NewEngineWithShardContext(
 			persistenceVisibilityMgr.GetStoreNames(),
 			config.VisibilityAllowList,
 		),
+		config.SuppressErrorSetSystemSearchAttribute,
 	)
 
 	historyEngImpl.workflowTaskHandler = newWorkflowTaskHandlerCallback(historyEngImpl)
@@ -333,9 +335,6 @@ func (e *historyEngineImpl) Stop() {
 		queueProcessor.Stop()
 	}
 	e.replicationProcessorMgr.Stop()
-	if e.replicationAckMgr != nil {
-		e.replicationAckMgr.Close()
-	}
 	// unset the failover callback
 	e.shardContext.GetNamespaceRegistry().UnregisterStateChangeCallback(e)
 }
@@ -378,7 +377,7 @@ func (e *historyEngineImpl) StartWorkflowExecution(
 	if err != nil {
 		return nil, err
 	}
-	return starter.Invoke(ctx)
+	return starter.Invoke(ctx, nil)
 }
 
 // GetMutableState retrieves the mutable state of the workflow execution
@@ -578,7 +577,13 @@ func (e *historyEngineImpl) UpdateWorkflowExecution(
 	ctx context.Context,
 	req *historyservice.UpdateWorkflowExecutionRequest,
 ) (*historyservice.UpdateWorkflowExecutionResponse, error) {
-	return updateworkflow.Invoke(ctx, req, e.shardContext, e.workflowConsistencyChecker, e.matchingClient)
+	updater := updateworkflow.NewUpdater(
+		e.shardContext,
+		e.workflowConsistencyChecker,
+		e.matchingClient,
+		req,
+	)
+	return updater.Invoke(ctx)
 }
 
 func (e *historyEngineImpl) PollWorkflowExecutionUpdate(
@@ -655,6 +660,7 @@ func (e *historyEngineImpl) ReplicateHistoryEvents(
 	versionHistoryItems []*historyspb.VersionHistoryItem,
 	historyEvents [][]*historypb.HistoryEvent,
 	newEvents []*historypb.HistoryEvent,
+	newRunID string,
 ) error {
 	return e.nDCHistoryReplicator.ReplicateHistoryEvents(
 		ctx,
@@ -663,6 +669,7 @@ func (e *historyEngineImpl) ReplicateHistoryEvents(
 		versionHistoryItems,
 		historyEvents,
 		newEvents,
+		newRunID,
 	)
 }
 
@@ -924,5 +931,17 @@ func (e *historyEngineImpl) AddTasks(
 		int(e.config.NumberOfShards),
 		request,
 		e.taskCategoryRegistry,
+	)
+}
+
+func (e *historyEngineImpl) ListTasks(
+	ctx context.Context,
+	request *historyservice.ListTasksRequest,
+) (_ *historyservice.ListTasksResponse, retError error) {
+	return listtasks.Invoke(
+		ctx,
+		e.taskCategoryRegistry,
+		e.executionManager,
+		request,
 	)
 }

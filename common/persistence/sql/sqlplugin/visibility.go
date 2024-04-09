@@ -29,6 +29,7 @@ import (
 	"database/sql"
 	"database/sql/driver"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"reflect"
 	"strings"
@@ -39,6 +40,10 @@ import (
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/server/common/searchattribute"
+)
+
+var (
+	ErrInvalidKeywordListDataType = errors.New("Unexpected data type in keyword list")
 )
 
 type (
@@ -145,7 +150,11 @@ func (vsa VisibilitySearchAttributes) Value() (driver.Value, error) {
 	if vsa == nil {
 		return nil, nil
 	}
-	return json.Marshal(vsa)
+	bs, err := json.Marshal(vsa)
+	if err != nil {
+		return nil, err
+	}
+	return string(bs), nil
 }
 
 func ParseCountGroupByRows(rows *sql.Rows, groupBy []string) ([]VisibilityCountRow, error) {

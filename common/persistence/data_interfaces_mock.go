@@ -33,6 +33,7 @@ import (
 	reflect "reflect"
 
 	gomock "github.com/golang/mock/gomock"
+	v1 "go.temporal.io/server/api/persistence/v1"
 )
 
 // MockCloseable is a mock of Closeable interface.
@@ -415,21 +416,6 @@ func (mr *MockExecutionManagerMockRecorder) GetHistoryTasks(ctx, request interfa
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetHistoryTasks", reflect.TypeOf((*MockExecutionManager)(nil).GetHistoryTasks), ctx, request)
 }
 
-// GetHistoryTree mocks base method.
-func (m *MockExecutionManager) GetHistoryTree(ctx context.Context, request *GetHistoryTreeRequest) (*GetHistoryTreeResponse, error) {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "GetHistoryTree", ctx, request)
-	ret0, _ := ret[0].(*GetHistoryTreeResponse)
-	ret1, _ := ret[1].(error)
-	return ret0, ret1
-}
-
-// GetHistoryTree indicates an expected call of GetHistoryTree.
-func (mr *MockExecutionManagerMockRecorder) GetHistoryTree(ctx, request interface{}) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetHistoryTree", reflect.TypeOf((*MockExecutionManager)(nil).GetHistoryTree), ctx, request)
-}
-
 // GetName mocks base method.
 func (m *MockExecutionManager) GetName() string {
 	m.ctrl.T.Helper()
@@ -606,20 +592,6 @@ func (mr *MockExecutionManagerMockRecorder) ReadRawHistoryBranch(ctx, request in
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ReadRawHistoryBranch", reflect.TypeOf((*MockExecutionManager)(nil).ReadRawHistoryBranch), ctx, request)
 }
 
-// RegisterHistoryTaskReader mocks base method.
-func (m *MockExecutionManager) RegisterHistoryTaskReader(ctx context.Context, request *RegisterHistoryTaskReaderRequest) error {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "RegisterHistoryTaskReader", ctx, request)
-	ret0, _ := ret[0].(error)
-	return ret0
-}
-
-// RegisterHistoryTaskReader indicates an expected call of RegisterHistoryTaskReader.
-func (mr *MockExecutionManagerMockRecorder) RegisterHistoryTaskReader(ctx, request interface{}) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RegisterHistoryTaskReader", reflect.TypeOf((*MockExecutionManager)(nil).RegisterHistoryTaskReader), ctx, request)
-}
-
 // SetWorkflowExecution mocks base method.
 func (m *MockExecutionManager) SetWorkflowExecution(ctx context.Context, request *SetWorkflowExecutionRequest) (*SetWorkflowExecutionResponse, error) {
 	m.ctrl.T.Helper()
@@ -648,30 +620,6 @@ func (m *MockExecutionManager) TrimHistoryBranch(ctx context.Context, request *T
 func (mr *MockExecutionManagerMockRecorder) TrimHistoryBranch(ctx, request interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "TrimHistoryBranch", reflect.TypeOf((*MockExecutionManager)(nil).TrimHistoryBranch), ctx, request)
-}
-
-// UnregisterHistoryTaskReader mocks base method.
-func (m *MockExecutionManager) UnregisterHistoryTaskReader(ctx context.Context, request *UnregisterHistoryTaskReaderRequest) {
-	m.ctrl.T.Helper()
-	m.ctrl.Call(m, "UnregisterHistoryTaskReader", ctx, request)
-}
-
-// UnregisterHistoryTaskReader indicates an expected call of UnregisterHistoryTaskReader.
-func (mr *MockExecutionManagerMockRecorder) UnregisterHistoryTaskReader(ctx, request interface{}) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UnregisterHistoryTaskReader", reflect.TypeOf((*MockExecutionManager)(nil).UnregisterHistoryTaskReader), ctx, request)
-}
-
-// UpdateHistoryTaskReaderProgress mocks base method.
-func (m *MockExecutionManager) UpdateHistoryTaskReaderProgress(ctx context.Context, request *UpdateHistoryTaskReaderProgressRequest) {
-	m.ctrl.T.Helper()
-	m.ctrl.Call(m, "UpdateHistoryTaskReaderProgress", ctx, request)
-}
-
-// UpdateHistoryTaskReaderProgress indicates an expected call of UpdateHistoryTaskReaderProgress.
-func (mr *MockExecutionManagerMockRecorder) UpdateHistoryTaskReaderProgress(ctx, request interface{}) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdateHistoryTaskReaderProgress", reflect.TypeOf((*MockExecutionManager)(nil).UpdateHistoryTaskReaderProgress), ctx, request)
 }
 
 // UpdateWorkflowExecution mocks base method.
@@ -1288,6 +1236,129 @@ func (m *MockClusterMetadataManager) UpsertClusterMembership(ctx context.Context
 func (mr *MockClusterMetadataManagerMockRecorder) UpsertClusterMembership(ctx, request interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpsertClusterMembership", reflect.TypeOf((*MockClusterMetadataManager)(nil).UpsertClusterMembership), ctx, request)
+}
+
+// MockNexusIncomingServiceManager is a mock of NexusIncomingServiceManager interface.
+type MockNexusIncomingServiceManager struct {
+	ctrl     *gomock.Controller
+	recorder *MockNexusIncomingServiceManagerMockRecorder
+}
+
+// MockNexusIncomingServiceManagerMockRecorder is the mock recorder for MockNexusIncomingServiceManager.
+type MockNexusIncomingServiceManagerMockRecorder struct {
+	mock *MockNexusIncomingServiceManager
+}
+
+// NewMockNexusIncomingServiceManager creates a new mock instance.
+func NewMockNexusIncomingServiceManager(ctrl *gomock.Controller) *MockNexusIncomingServiceManager {
+	mock := &MockNexusIncomingServiceManager{ctrl: ctrl}
+	mock.recorder = &MockNexusIncomingServiceManagerMockRecorder{mock}
+	return mock
+}
+
+// EXPECT returns an object that allows the caller to indicate expected use.
+func (m *MockNexusIncomingServiceManager) EXPECT() *MockNexusIncomingServiceManagerMockRecorder {
+	return m.recorder
+}
+
+// Close mocks base method.
+func (m *MockNexusIncomingServiceManager) Close() {
+	m.ctrl.T.Helper()
+	m.ctrl.Call(m, "Close")
+}
+
+// Close indicates an expected call of Close.
+func (mr *MockNexusIncomingServiceManagerMockRecorder) Close() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Close", reflect.TypeOf((*MockNexusIncomingServiceManager)(nil).Close))
+}
+
+// CreateOrUpdateNexusIncomingService mocks base method.
+func (m *MockNexusIncomingServiceManager) CreateOrUpdateNexusIncomingService(ctx context.Context, request *CreateOrUpdateNexusIncomingServiceRequest) (*CreateOrUpdateNexusIncomingServiceResponse, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "CreateOrUpdateNexusIncomingService", ctx, request)
+	ret0, _ := ret[0].(*CreateOrUpdateNexusIncomingServiceResponse)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// CreateOrUpdateNexusIncomingService indicates an expected call of CreateOrUpdateNexusIncomingService.
+func (mr *MockNexusIncomingServiceManagerMockRecorder) CreateOrUpdateNexusIncomingService(ctx, request interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CreateOrUpdateNexusIncomingService", reflect.TypeOf((*MockNexusIncomingServiceManager)(nil).CreateOrUpdateNexusIncomingService), ctx, request)
+}
+
+// DeleteNexusIncomingService mocks base method.
+func (m *MockNexusIncomingServiceManager) DeleteNexusIncomingService(ctx context.Context, request *DeleteNexusIncomingServiceRequest) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "DeleteNexusIncomingService", ctx, request)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// DeleteNexusIncomingService indicates an expected call of DeleteNexusIncomingService.
+func (mr *MockNexusIncomingServiceManagerMockRecorder) DeleteNexusIncomingService(ctx, request interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DeleteNexusIncomingService", reflect.TypeOf((*MockNexusIncomingServiceManager)(nil).DeleteNexusIncomingService), ctx, request)
+}
+
+// GetName mocks base method.
+func (m *MockNexusIncomingServiceManager) GetName() string {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetName")
+	ret0, _ := ret[0].(string)
+	return ret0
+}
+
+// GetName indicates an expected call of GetName.
+func (mr *MockNexusIncomingServiceManagerMockRecorder) GetName() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetName", reflect.TypeOf((*MockNexusIncomingServiceManager)(nil).GetName))
+}
+
+// GetNexusIncomingService mocks base method.
+func (m *MockNexusIncomingServiceManager) GetNexusIncomingService(ctx context.Context, request *GetNexusIncomingServiceRequest) (*v1.NexusIncomingServiceEntry, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetNexusIncomingService", ctx, request)
+	ret0, _ := ret[0].(*v1.NexusIncomingServiceEntry)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// GetNexusIncomingService indicates an expected call of GetNexusIncomingService.
+func (mr *MockNexusIncomingServiceManagerMockRecorder) GetNexusIncomingService(ctx, request interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetNexusIncomingService", reflect.TypeOf((*MockNexusIncomingServiceManager)(nil).GetNexusIncomingService), ctx, request)
+}
+
+// GetNexusIncomingServicesTableVersion mocks base method.
+func (m *MockNexusIncomingServiceManager) GetNexusIncomingServicesTableVersion(ctx context.Context) (int64, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetNexusIncomingServicesTableVersion", ctx)
+	ret0, _ := ret[0].(int64)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// GetNexusIncomingServicesTableVersion indicates an expected call of GetNexusIncomingServicesTableVersion.
+func (mr *MockNexusIncomingServiceManagerMockRecorder) GetNexusIncomingServicesTableVersion(ctx interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetNexusIncomingServicesTableVersion", reflect.TypeOf((*MockNexusIncomingServiceManager)(nil).GetNexusIncomingServicesTableVersion), ctx)
+}
+
+// ListNexusIncomingServices mocks base method.
+func (m *MockNexusIncomingServiceManager) ListNexusIncomingServices(ctx context.Context, request *ListNexusIncomingServicesRequest) (*ListNexusIncomingServicesResponse, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "ListNexusIncomingServices", ctx, request)
+	ret0, _ := ret[0].(*ListNexusIncomingServicesResponse)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// ListNexusIncomingServices indicates an expected call of ListNexusIncomingServices.
+func (mr *MockNexusIncomingServiceManagerMockRecorder) ListNexusIncomingServices(ctx, request interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ListNexusIncomingServices", reflect.TypeOf((*MockNexusIncomingServiceManager)(nil).ListNexusIncomingServices), ctx, request)
 }
 
 // MockHistoryTaskQueueManager is a mock of HistoryTaskQueueManager interface.
