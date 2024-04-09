@@ -27,6 +27,8 @@ import (
 	"encoding/json"
 
 	tokenspb "go.temporal.io/server/api/token/v1"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/proto"
 )
 
@@ -68,4 +70,27 @@ func (g *CallbackTokenGenerator) Tokenize(completion *tokenspb.NexusOperationCom
 		return "", err
 	}
 	return string(b), nil
+}
+
+// DecodeCompletion decodes a callback token unwrapping the contained NexusOperationCompletion proto struct.
+func (g *CallbackTokenGenerator) DecodeCompletion(token *CallbackToken) (*tokenspb.NexusOperationCompletion, error) {
+	plaintext, err := base64.URLEncoding.DecodeString(token.Data)
+	if err != nil {
+		return nil, err
+	}
+
+	completion := &tokenspb.NexusOperationCompletion{}
+	return completion, proto.Unmarshal(plaintext, completion)
+}
+
+// DecodeCallbackToken unmarshals the given token applying minimal data verification.
+func DecodeCallbackToken(encoded string) (token *CallbackToken, err error) {
+	err = json.Unmarshal([]byte(encoded), &token)
+	if err != nil {
+		return nil, err
+	}
+	if token.Version != TokenVersion {
+		return nil, status.Errorf(codes.InvalidArgument, "unsupported token version: %d", token.Version)
+	}
+	return
 }

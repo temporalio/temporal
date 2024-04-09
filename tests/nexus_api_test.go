@@ -28,7 +28,6 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
-	"net/url"
 	"testing"
 	"time"
 
@@ -42,7 +41,6 @@ import (
 	"go.temporal.io/api/workflowservice/v1"
 	sdkclient "go.temporal.io/sdk/client"
 	"go.temporal.io/sdk/converter"
-	"google.golang.org/protobuf/types/known/structpb"
 
 	tokenspb "go.temporal.io/server/api/token/v1"
 	"go.temporal.io/server/common/authorization"
@@ -120,7 +118,7 @@ func (s *ClientFunctionalSuite) TestNexusStartOperation_Outcomes() {
 									Failure: &nexuspb.Failure{
 										Message:  "deliberate test failure",
 										Metadata: map[string]string{"k": "v"},
-										Details:  structpb.NewStringValue("details"),
+										Details:  []byte(`"details"`),
 									},
 								},
 							},
@@ -735,7 +733,7 @@ func getDispatchByNsAndTqURL(address string, namespace string, taskQueue string)
 		address,
 		cnexus.RouteDispatchNexusTaskByNamespaceAndTaskQueue.
 			Path(cnexus.NamespaceAndTaskQueue{
-				Namespace: url.PathEscape(namespace),
+				Namespace: namespace,
 				TaskQueue: taskQueue,
 			}),
 	)

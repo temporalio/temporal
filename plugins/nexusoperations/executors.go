@@ -36,6 +36,7 @@ import (
 	historypb "go.temporal.io/api/history/v1"
 	nexuspb "go.temporal.io/api/nexus/v1"
 	"go.temporal.io/server/api/token/v1"
+	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/namespace"
 	commonnexus "go.temporal.io/server/common/nexus"
 	"go.temporal.io/server/service/history/consts"
@@ -111,13 +112,15 @@ func (e activeExecutor) executeInvocationTask(ctx context.Context, env hsm.Envir
 		return fmt.Errorf("failed to get a client: %w", err)
 	}
 
+	smRef := common.CloneProto(ref.StateMachineRef)
+	// Reset the machine transition count to 0 so it is ignored in the completion staleness check.
+	smRef.MachineTransitionCount = 0
+
 	token, err := e.CallbackTokenGenerator.Tokenize(&token.NexusOperationCompletion{
-		WorkflowId:               ref.WorkflowKey.WorkflowID,
-		RunId:                    ref.WorkflowKey.RunID,
-		NamespaceId:              ref.WorkflowKey.NamespaceID,
-		OperationRequestId:       args.requestID,
-		Path:                     ref.StateMachineRef.Path,
-		NamespaceFailoverVersion: args.namespaceFailoverVersion,
+		NamespaceId: ref.WorkflowKey.NamespaceID,
+		WorkflowId:  ref.WorkflowKey.WorkflowID,
+		RunId:       ref.WorkflowKey.RunID,
+		Ref:         smRef,
 	})
 	if err != nil {
 		return fmt.Errorf("%w: %w", queues.NewUnprocessableTaskError("failed to generate a callback token"), err)
@@ -224,20 +227,8 @@ func (e activeExecutor) saveResult(ctx context.Context, env hsm.Environment, ref
 				})
 			}
 			// Operation completed synchronously. Store the result and update the state machine.
-			node.AddHistoryEvent(enumspb.EVENT_TYPE_NEXUS_OPERATION_COMPLETED, func(e *historypb.HistoryEvent) {
-				//nolint:revive
-				e.Attributes = &historypb.HistoryEvent_NexusOperationCompletedEventAttributes{
-					NexusOperationCompletedEventAttributes: &historypb.NexusOperationCompletedEventAttributes{
-						ScheduledEventId: eventID,
-						Result:           result.Successful,
-					},
-				}
-			})
 			attemptTime := env.Now()
-			return TransitionSucceeded.Apply(operation, EventSucceeded{
-				AttemptTime: &attemptTime,
-				Node:        node,
-			})
+			return handleSuccessfulOperationResult(node, operation, result.Successful, &attemptTime)
 		})
 	})
 }
@@ -250,56 +241,8 @@ func (e activeExecutor) handleStartOperationError(env hsm.Environment, node *hsm
 	var unexpectedResponseError *nexus.UnexpectedResponseError
 	var opFailedError *nexus.UnsuccessfulOperationError
 	if errors.As(callErr, &opFailedError) {
-		switch opFailedError.State {
-		case nexus.OperationStateFailed:
-			node.AddHistoryEvent(enumspb.EVENT_TYPE_NEXUS_OPERATION_FAILED, func(e *historypb.HistoryEvent) {
-				// nolint:revive
-				e.Attributes = &historypb.HistoryEvent_NexusOperationFailedEventAttributes{
-					NexusOperationFailedEventAttributes: &historypb.NexusOperationFailedEventAttributes{
-						Failure: nexusOperationFailure(
-							operation,
-							eventID,
-							commonnexus.UnsuccessfulOperationErrorToTemporalFailure(opFailedError),
-						),
-						ScheduledEventId: eventID,
-					},
-				}
-			})
-
-			return TransitionFailed.Apply(operation, EventFailed{
-				AttemptFailure: &AttemptFailure{
-					Time: env.Now(),
-					Err:  callErr,
-				},
-				Node: node,
-			})
-		case nexus.OperationStateCanceled:
-			node.AddHistoryEvent(enumspb.EVENT_TYPE_NEXUS_OPERATION_CANCELED, func(e *historypb.HistoryEvent) {
-				// nolint:revive
-				e.Attributes = &historypb.HistoryEvent_NexusOperationCanceledEventAttributes{
-					NexusOperationCanceledEventAttributes: &historypb.NexusOperationCanceledEventAttributes{
-						Failure: nexusOperationFailure(
-							operation,
-							eventID,
-							commonnexus.UnsuccessfulOperationErrorToTemporalFailure(opFailedError),
-						),
-						ScheduledEventId: eventID,
-					},
-				}
-			})
-
-			return TransitionCanceled.Apply(operation, EventCanceled{
-				AttemptFailure: &AttemptFailure{
-					Time: env.Now(),
-					Err:  callErr,
-				},
-				Node: node,
-			})
-		default:
-			// The client would return this as UnexpectedResponseError but we don't rely on that here, treat it as a retryable failure.
-			// Fall through to the AttemptFailed transition.
-			callErr = fmt.Errorf("unexpected operation state returned from handler: %v", opFailedError.State) // nolint:goerr113
-		}
+		attemptTime := env.Now()
+		return handleUnsuccessfulOperationError(node, operation, opFailedError, &attemptTime)
 	} else if errors.As(callErr, &unexpectedResponseError) {
 		response := unexpectedResponseError.Response
 		if response.StatusCode >= 400 && response.StatusCode < 500 && !slices.Contains(retryable4xxErrorTypes, response.StatusCode) {

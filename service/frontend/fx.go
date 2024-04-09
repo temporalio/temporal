@@ -67,6 +67,7 @@ import (
 	"go.temporal.io/server/common/searchattribute"
 	"go.temporal.io/server/common/telemetry"
 	"go.temporal.io/server/common/utf8validator"
+	nexusfrontend "go.temporal.io/server/plugins/nexusoperations/frontend"
 	"go.temporal.io/server/service"
 	"go.temporal.io/server/service/frontend/configs"
 	"go.temporal.io/server/service/history/tasks"
@@ -84,6 +85,8 @@ type (
 var Module = fx.Options(
 	resource.Module,
 	scheduler.Module,
+	fx.Provide(MuxRouterProvider),
+	nexusfrontend.Module,
 	fx.Provide(dynamicconfig.NewCollection),
 	fx.Provide(ConfigProvider),
 	fx.Provide(NamespaceLogInterceptorProvider),
@@ -111,8 +114,8 @@ var Module = fx.Options(
 	fx.Provide(OperatorHandlerProvider),
 	fx.Provide(NewVersionChecker),
 	fx.Provide(ServiceResolverProvider),
-	fx.Provide(NexusHTTPHandlerProvider),
-	fx.Provide(OpenAPIHTTPHandlerProvider),
+	fx.Invoke(RegisterNexusHTTPHandler),
+	fx.Invoke(RegisterOpenAPIHTTPHandler),
 	fx.Provide(HTTPAPIServerProvider),
 	fx.Provide(NewServiceProvider),
 	fx.Provide(IncomingServiceClientProvider),
@@ -702,7 +705,7 @@ func HandlerProvider(
 	return wfHandler
 }
 
-func NexusHTTPHandlerProvider(
+func RegisterNexusHTTPHandler(
 	serviceConfig *Config,
 	serviceName primitives.ServiceName,
 	matchingClient resource.MatchingClient,
@@ -715,8 +718,9 @@ func NexusHTTPHandlerProvider(
 	namespaceValidatorInterceptor *interceptor.NamespaceValidatorInterceptor,
 	rateLimitInterceptor *interceptor.RateLimitInterceptor,
 	logger log.Logger,
-) *NexusHTTPHandler {
-	return NewNexusHTTPHandler(
+	router *mux.Router,
+) {
+	h := NewNexusHTTPHandler(
 		serviceConfig,
 		matchingClient,
 		metricsHandler,
@@ -729,16 +733,25 @@ func NexusHTTPHandlerProvider(
 		rateLimitInterceptor,
 		logger,
 	)
+	h.RegisterRoutes(router)
 }
 
-func OpenAPIHTTPHandlerProvider(
+func RegisterOpenAPIHTTPHandler(
 	rateLimitInterceptor *interceptor.RateLimitInterceptor,
 	logger log.Logger,
+	router *mux.Router,
 ) *OpenAPIHTTPHandler {
-	return NewOpenAPIHTTPHandler(
+	h := NewOpenAPIHTTPHandler(
 		rateLimitInterceptor,
 		logger,
 	)
+	h.RegisterRoutes(router)
+	return h
+}
+
+func MuxRouterProvider() *mux.Router {
+	// Instantiate a router to support additional route prefixes.
+	return mux.NewRouter().UseEncodedPath()
 }
 
 // HTTPAPIServerProvider provides an HTTP API server if enabled or nil
@@ -755,8 +768,7 @@ func HTTPAPIServerProvider(
 	metricsHandler metrics.Handler,
 	namespaceRegistry namespace.Registry,
 	logger log.Logger,
-	openAPIHTTPHandler *OpenAPIHTTPHandler,
-	nexusHTTPHandler *NexusHTTPHandler,
+	router *mux.Router,
 ) (*HTTPAPIServer, error) {
 	// If the service is not the frontend service, HTTP API is disabled
 	if serviceName != primitives.FrontendService {
@@ -776,7 +788,7 @@ func HTTPAPIServerProvider(
 		operatorHandler,
 		grpcServerOptions.UnaryInterceptors,
 		metricsHandler,
-		[]func(*mux.Router){nexusHTTPHandler.RegisterRoutes, openAPIHTTPHandler.RegisterRoutes},
+		router,
 		namespaceRegistry,
 		logger,
 	)

@@ -52,8 +52,15 @@ var (
 	ErrDuplicate = errors.New("duplicate task, completing it")
 	// ErrLocateCurrentWorkflowExecution is the error returned when current workflow execution can't be located
 	ErrLocateCurrentWorkflowExecution = serviceerror.NewUnavailable("unable to locate current workflow execution")
+	// ErrStaleReference is an indicator that a task or an API request cannot be executed because it contains a stale reference.
+	// This is expected in certain situations and it is safe to drop the task or fail a request with a non-retryable error.
+	// An example of a stale reference is when the task is pointing to a state machine in mutable state that has a newer
+	// version than the version that task was created from, that is the state machine has already transitioned and the
+	// task is no longer needed.
+	// It is also a NotFoundError to indicate to API callers that the object they're targeting is not found.
+	ErrStaleReference = serviceerror.NewNotFound("stale reference")
 	// ErrStaleState is the error returned during state update indicating that cached mutable state could be stale
-	ErrStaleState = errors.New("cache mutable state could potentially be stale")
+	ErrStaleState = staleStateError{}
 	// ErrActivityTaskNotFound is the error to indicate activity task could be duplicate and activity already completed
 	ErrActivityTaskNotFound = serviceerror.NewNotFound("invalid activityID or activity already timed out or invoking workflow is completed")
 	// ErrActivityTaskNotCancelRequested is the error to indicate activity to be canceled is not cancel requested
@@ -142,3 +149,18 @@ var (
 		enumspb.WORKFLOW_EXECUTION_STATUS_TIMED_OUT:  {},
 	}
 )
+
+// StaleStateError is an indicator that after loading the state for a task it was detected as stale. It's possible that
+// state reload solves this issue but otherwise it is unexpected and considered terminal.
+type staleStateError struct {
+	Message string
+}
+
+func (staleStateError) Error() string {
+	return "cached mutable state could potentially be stale"
+}
+
+// IsTerminalTaskError marks this error as terminal to be handled appropriately.
+func (staleStateError) IsTerminalTaskError() bool {
+	return true
+}

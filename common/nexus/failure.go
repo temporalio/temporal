@@ -23,30 +23,37 @@
 package nexus
 
 import (
-	"encoding/json"
+	"errors"
 
 	"github.com/nexus-rpc/sdk-go/nexus"
 	commonpb "go.temporal.io/api/common/v1"
 	failurepb "go.temporal.io/api/failure/v1"
 	nexuspb "go.temporal.io/api/nexus/v1"
+	"go.temporal.io/api/serviceerror"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 )
 
 // ProtoFailureToNexusFailure converts a proto Nexus Failure to a Nexus SDK Failure.
 // Always returns a non-nil value.
 func ProtoFailureToNexusFailure(failure *nexuspb.Failure) *nexus.Failure {
-	var details json.RawMessage
-	if failure.GetDetails() != nil {
-		b, err := json.Marshal(failure.Details)
-		// This should never happen, a google.protobuf.Value is always serializable.
-		if err != nil {
-			panic(err)
-		}
-		details = json.RawMessage(b)
-	}
 	return &nexus.Failure{
 		Message:  failure.GetMessage(),
 		Metadata: failure.GetMetadata(),
-		Details:  details,
+		Details:  failure.GetDetails(),
+	}
+}
+
+// NexusFailureToProtoFailure converts a Nexus SDK Failure to a proto Nexus Failure.
+// Always returns a non-nil value.
+func NexusFailureToProtoFailure(failure *nexus.Failure) *nexuspb.Failure {
+	if failure == nil {
+		return &nexuspb.Failure{Message: "unknown error"}
+	}
+	return &nexuspb.Failure{
+		Message:  failure.Message,
+		Metadata: failure.Metadata,
+		Details:  failure.Details,
 	}
 }
 
@@ -98,4 +105,89 @@ func nexusFailureMetadataToPayloads(failure nexus.Failure) *commonpb.Payloads {
 			},
 		},
 	}
+}
+
+// ConvertGRPCError converts either a serviceerror or a gRPC status error into a Nexus HandlerError if possible.
+// If exposeDetails is true, the error message from the given error is exposed in the converted HandlerError, otherwise,
+// a default message with minimal information is attached to the returned error.
+// Roughly taken from https://github.com/googleapis/googleapis/blob/master/google/rpc/code.proto
+// and
+// https://github.com/grpc-ecosystem/grpc-gateway/blob/a7cf811e6ffabeaddcfb4ff65602c12671ff326e/runtime/errors.go#L56.
+func ConvertGRPCError(err error, exposeDetails bool) error {
+	var st *status.Status
+	stGetter, ok := err.(interface{ Status() *status.Status })
+	if ok {
+		st = stGetter.Status()
+	} else {
+		st, ok = status.FromError(err)
+		if !ok {
+			// The Nexus SDK will translate this into an internal server error and will not expose the error details.
+			return err
+		}
+	}
+
+	errMessage := err.Error()
+
+	switch st.Code() {
+	case codes.AlreadyExists, codes.Canceled, codes.InvalidArgument, codes.FailedPrecondition, codes.OutOfRange:
+		if !exposeDetails {
+			errMessage = "bad request"
+		}
+		return nexus.HandlerErrorf(nexus.HandlerErrorTypeBadRequest, errMessage)
+	case codes.Aborted, codes.Unavailable:
+		if !exposeDetails {
+			errMessage = "service unavailable"
+		}
+		return nexus.HandlerErrorf(nexus.HandlerErrorTypeUnavailable, errMessage)
+	case codes.DataLoss, codes.Internal, codes.Unknown:
+		if !exposeDetails {
+			errMessage = "internal error"
+		}
+		return nexus.HandlerErrorf(nexus.HandlerErrorTypeInternal, errMessage)
+	case codes.Unauthenticated:
+		if !exposeDetails {
+			errMessage = "authentication failed"
+		}
+		return nexus.HandlerErrorf(nexus.HandlerErrorTypeUnauthenticated, errMessage)
+	case codes.PermissionDenied:
+		if !exposeDetails {
+			errMessage = "permission denied"
+		}
+		return nexus.HandlerErrorf(nexus.HandlerErrorTypeUnauthorized, errMessage)
+	case codes.NotFound:
+		if !exposeDetails {
+			errMessage = "not found"
+		}
+		return nexus.HandlerErrorf(nexus.HandlerErrorTypeNotFound, errMessage)
+	case codes.ResourceExhausted:
+		if !exposeDetails {
+			errMessage = "resource exhausted"
+		}
+		return nexus.HandlerErrorf(nexus.HandlerErrorTypeResourceExhausted, errMessage)
+	case codes.Unimplemented:
+		if !exposeDetails {
+			errMessage = "not implemented"
+		}
+		return nexus.HandlerErrorf(nexus.HandlerErrorTypeNotImplemented, errMessage)
+	case codes.DeadlineExceeded:
+		if !exposeDetails {
+			errMessage = "request timeout"
+		}
+		return nexus.HandlerErrorf(nexus.HandlerErrorTypeDownstreamTimeout, errMessage)
+	case codes.OK:
+		return nil
+	}
+	if !exposeDetails {
+		return nexus.HandlerErrorf(nexus.HandlerErrorTypeInternal, "internal error")
+	}
+	return err
+}
+
+func AdaptAuthorizeError(err error) error {
+	// Authorize err is either an explicitly set reason, or a generic "Request unauthorized." message.
+	var permissionDeniedError *serviceerror.PermissionDenied
+	if errors.As(err, &permissionDeniedError) && permissionDeniedError.Reason != "" {
+		return nexus.HandlerErrorf(nexus.HandlerErrorTypeUnauthorized, "permission denied: %s", permissionDeniedError.Reason)
+	}
+	return nexus.HandlerErrorf(nexus.HandlerErrorTypeUnauthorized, "permission denied")
 }

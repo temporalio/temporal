@@ -26,8 +26,8 @@ import (
 	"fmt"
 	"time"
 
+	"go.temporal.io/server/service/history/consts"
 	"go.temporal.io/server/service/history/hsm"
-	"go.temporal.io/server/service/history/queues"
 )
 
 var (
@@ -80,7 +80,7 @@ func (t TimeoutTask) Validate(node *hsm.Node) error {
 	if !TransitionTimedOut.Possible(op) {
 		return fmt.Errorf(
 			"%w: %w: cannot timeout machine in state %v",
-			queues.ErrStaleTask,
+			consts.ErrStaleReference,
 			hsm.ErrInvalidTransition,
 			op.State(),
 		)

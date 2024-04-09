@@ -187,6 +187,7 @@ func makeGetHistoryClient(reqType reflect.Type) string {
 	shardIdField := findNestedField(t, "ShardId", "request", 1)
 	workflowIdField := findNestedField(t, "WorkflowId", "request", 4)
 	taskTokenField := findNestedField(t, "TaskToken", "request", 2)
+	namespaceIdField := findNestedField(t, "NamespaceId", "request", 2)
 	taskInfosField := findNestedField(t, "TaskInfos", "request", 1)
 
 	found := len(shardIdField) + len(workflowIdField) + len(taskTokenField) + len(taskInfosField)
@@ -201,6 +202,9 @@ func makeGetHistoryClient(reqType reflect.Type) string {
 	case len(shardIdField) == 1:
 		return fmt.Sprintf("shardID := %s", shardIdField[0].path)
 	case len(workflowIdField) == 1:
+		if len(namespaceIdField) == 1 {
+			return fmt.Sprintf("shardID := c.shardIDFromWorkflowID(%s, %s)", namespaceIdField[0].path, workflowIdField[0].path)
+		}
 		return fmt.Sprintf("shardID := c.shardIDFromWorkflowID(request.NamespaceId, %s)", workflowIdField[0].path)
 	case len(taskTokenField) == 1:
 		return fmt.Sprintf(`taskToken, err := c.tokenSerializer.Deserialize(%s)
