@@ -505,6 +505,28 @@ func (wh *WorkflowHandler) ExecuteMultiOperation(
 	// TODO: validation
 
 	workflowId := request.Operations[0].GetStartWorkflow().WorkflowId
+	historyReq, err := convertToHistoryMultiOperation(namespaceID, workflowId, request)
+	if err != nil {
+		return nil, err
+	}
+
+	historyResp, err := wh.historyClient.ExecuteMultiOperation(ctx, historyReq)
+	if err != nil {
+		return nil, err
+	}
+
+	response, err := convertToMultiOperationResponse(historyResp)
+	if err != nil {
+		return nil, err
+	}
+	return response, nil
+}
+
+func convertToHistoryMultiOperation(
+	namespaceID namespace.ID,
+	workflowId string,
+	request *workflowservice.ExecuteMultiOperationRequest,
+) (*historyservice.ExecuteMultiOperationRequest, error) {
 	historyReq := &historyservice.ExecuteMultiOperationRequest{
 		NamespaceId: namespaceID.String(),
 		WorkflowId:  workflowId,
@@ -537,12 +559,12 @@ func (wh *WorkflowHandler) ExecuteMultiOperation(
 		}
 		historyReq.Operations[i] = opReq
 	}
+	return historyReq, nil
+}
 
-	historyResp, err := wh.historyClient.ExecuteMultiOperation(ctx, historyReq)
-	if err != nil {
-		return nil, err
-	}
-
+func convertToMultiOperationResponse(
+	historyResp *historyservice.ExecuteMultiOperationResponse,
+) (*workflowservice.ExecuteMultiOperationResponse, error) {
 	resp := &workflowservice.ExecuteMultiOperationResponse{
 		Responses: make([]*workflowservice.ExecuteMultiOperationResponse_Response, len(historyResp.Responses)),
 	}
@@ -571,7 +593,6 @@ func (wh *WorkflowHandler) ExecuteMultiOperation(
 		}
 		resp.Responses[i] = opResp
 	}
-
 	return resp, nil
 }
 
