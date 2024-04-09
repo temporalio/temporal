@@ -106,6 +106,7 @@ var (
 		"/temporal.api.workflowservice.v1.WorkflowService/DescribeWorkflowExecution":     3,
 		"/temporal.api.workflowservice.v1.WorkflowService/DescribeTaskQueue":             3,
 		"/temporal.api.workflowservice.v1.WorkflowService/GetWorkerBuildIdCompatibility": 3,
+		"/temporal.api.workflowservice.v1.WorkflowService/GetWorkerVersioningRules":      3,
 		"/temporal.api.workflowservice.v1.WorkflowService/ListTaskQueuePartitions":       3,
 		"/temporal.api.workflowservice.v1.WorkflowService/QueryWorkflow":                 3,
 		"/temporal.api.workflowservice.v1.WorkflowService/DescribeSchedule":              3,
@@ -165,6 +166,7 @@ var (
 		"/temporal.api.workflowservice.v1.WorkflowService/RegisterNamespace":                1,
 		"/temporal.api.workflowservice.v1.WorkflowService/UpdateNamespace":                  1,
 		"/temporal.api.workflowservice.v1.WorkflowService/UpdateWorkerBuildIdCompatibility": 2,
+		"/temporal.api.workflowservice.v1.WorkflowService/UpdateWorkerVersioningRules":      2,
 	}
 
 	NamespaceReplicationInducingAPIPrioritiesOrdered = []int{0, 1, 2}

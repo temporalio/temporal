@@ -260,6 +260,21 @@ func (c *retryableClient) GetWorkerTaskReachability(
 	return resp, err
 }
 
+func (c *retryableClient) GetWorkerVersioningRules(
+	ctx context.Context,
+	request *workflowservice.GetWorkerVersioningRulesRequest,
+	opts ...grpc.CallOption,
+) (*workflowservice.GetWorkerVersioningRulesResponse, error) {
+	var resp *workflowservice.GetWorkerVersioningRulesResponse
+	op := func(ctx context.Context) error {
+		var err error
+		resp, err = c.client.GetWorkerVersioningRules(ctx, request, opts...)
+		return err
+	}
+	err := backoff.ThrottleRetryContext(ctx, op, c.policy, c.isRetryable)
+	return resp, err
+}
+
 func (c *retryableClient) GetWorkflowExecutionHistory(
 	ctx context.Context,
 	request *workflowservice.GetWorkflowExecutionHistoryRequest,
@@ -914,6 +929,21 @@ func (c *retryableClient) UpdateWorkerBuildIdCompatibility(
 	op := func(ctx context.Context) error {
 		var err error
 		resp, err = c.client.UpdateWorkerBuildIdCompatibility(ctx, request, opts...)
+		return err
+	}
+	err := backoff.ThrottleRetryContext(ctx, op, c.policy, c.isRetryable)
+	return resp, err
+}
+
+func (c *retryableClient) UpdateWorkerVersioningRules(
+	ctx context.Context,
+	request *workflowservice.UpdateWorkerVersioningRulesRequest,
+	opts ...grpc.CallOption,
+) (*workflowservice.UpdateWorkerVersioningRulesResponse, error) {
+	var resp *workflowservice.UpdateWorkerVersioningRulesResponse
+	op := func(ctx context.Context) error {
+		var err error
+		resp, err = c.client.UpdateWorkerVersioningRules(ctx, request, opts...)
 		return err
 	}
 	err := backoff.ThrottleRetryContext(ctx, op, c.policy, c.isRetryable)
