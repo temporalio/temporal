@@ -75,7 +75,7 @@ func TestAddChild(t *testing.T) {
 						Service:   "service",
 						Operation: "operation",
 						RequestId: "request-id",
-						Timeout:   durationpb.New(tc.timeout),
+						ScheduleToCloseTimeout:   durationpb.New(tc.timeout),
 					},
 				},
 			}
@@ -92,7 +92,7 @@ func TestAddChild(t *testing.T) {
 			require.Equal(t, "operation", op.Operation)
 			require.Equal(t, schedTime, op.ScheduledTime)
 			require.Equal(t, "request-id", op.RequestId)
-			require.Equal(t, tc.timeout, op.Timeout.AsDuration())
+			require.Equal(t, tc.timeout, op.ScheduleToCloseTimeout.AsDuration())
 			require.Equal(t, int32(0), op.Attempt)
 			require.Equal(t, []byte("token"), op.ScheduledEventToken)
 		})

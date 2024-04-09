@@ -443,9 +443,9 @@ func TestTaskGenerator_GenerateDirtySubStateMachineTasks(t *testing.T) {
 	opNode, err := nexusoperations.AddChild(node, "ID", &historypb.HistoryEvent{
 		Attributes: &historypb.HistoryEvent_NexusOperationScheduledEventAttributes{
 			NexusOperationScheduledEventAttributes: &historypb.NexusOperationScheduledEventAttributes{
-				Service:   "some-service",
-				Operation: "some-op",
-				Timeout:   durationpb.New(time.Hour),
+				Service:                "some-service",
+				Operation:              "some-op",
+				ScheduleToCloseTimeout: durationpb.New(time.Hour),
 			},
 		},
 	}, []byte("token"), false)

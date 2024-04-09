@@ -94,9 +94,9 @@ func (ch *commandHandler) HandleScheduleCommand(
 
 	// Trim timeout to workflow run timeout.
 	runTimeout := ms.GetExecutionInfo().WorkflowRunTimeout.AsDuration()
-	opTimeout := attrs.Timeout.AsDuration()
+	opTimeout := attrs.ScheduleToCloseTimeout.AsDuration()
 	if runTimeout > 0 && (opTimeout == 0 || opTimeout > runTimeout) {
-		attrs.Timeout = ms.GetExecutionInfo().WorkflowRunTimeout
+		attrs.ScheduleToCloseTimeout = ms.GetExecutionInfo().WorkflowRunTimeout
 	}
 
 	event := ms.AddHistoryEvent(enumspb.EVENT_TYPE_NEXUS_OPERATION_SCHEDULED, func(he *historypb.HistoryEvent) {
@@ -105,7 +105,7 @@ func (ch *commandHandler) HandleScheduleCommand(
 				Service:                      attrs.Service,
 				Operation:                    attrs.Operation,
 				Input:                        attrs.Input,
-				Timeout:                      attrs.Timeout,
+				ScheduleToCloseTimeout:                      attrs.ScheduleToCloseTimeout,
 				Header:                       attrs.Header,
 				RequestId:                    uuid.NewString(),
 				WorkflowTaskCompletedEventId: workflowTaskCompletedEventID,
