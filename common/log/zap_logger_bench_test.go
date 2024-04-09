@@ -45,7 +45,7 @@ BenchmarkLoggerWithoutFields-4            162109              7211 ns/op
 */
 
 func BenchmarkZapLoggerWithFields(b *testing.B) {
-	zLogger := buildZapLogger(Config{Level: "info"}, false)
+	zLogger, _ := buildZapLogger(Config{Level: "info"}, false)
 
 	for i := 0; i < b.N; i++ {
 		zLoggerWith := zLogger.With(zap.Int64("wf-schedule-id", int64(i)), zap.String("cluster-name", "this is a very long value: 1234567890 1234567890 1234567890 1234567890"))
@@ -57,7 +57,8 @@ func BenchmarkZapLoggerWithFields(b *testing.B) {
 }
 
 func BenchmarkLoggerWithFields(b *testing.B) {
-	logger := NewZapLogger(buildZapLogger(Config{Level: "info"}, true))
+	zLogger, _ := buildZapLogger(Config{Level: "info"}, true)
+	logger := NewZapLogger(zLogger)
 
 	for i := 0; i < b.N; i++ {
 		loggerWith := logger.With(tag.WorkflowScheduledEventID(int64(i)), tag.ClusterName("this is a very long value: 1234567890 1234567890 1234567890 1234567890"))
@@ -69,7 +70,7 @@ func BenchmarkLoggerWithFields(b *testing.B) {
 }
 
 func BenchmarkZapLoggerWithoutFields(b *testing.B) {
-	zLogger := buildZapLogger(Config{Level: "info"}, false)
+	zLogger, _ := buildZapLogger(Config{Level: "info"}, false)
 
 	for i := 0; i < b.N; i++ {
 		zLogger.Info("msg to print log, 1234567890 1234567890 1234567890 1234567890 1234567890 1234567890 1234567890 1234567890 1234567890",
@@ -82,7 +83,8 @@ func BenchmarkZapLoggerWithoutFields(b *testing.B) {
 }
 
 func BenchmarkLoggerWithoutFields(b *testing.B) {
-	logger := NewZapLogger(buildZapLogger(Config{Level: "info"}, true))
+	zLogger, _ := buildZapLogger(Config{Level: "info"}, true)
+	logger := NewZapLogger(zLogger)
 
 	for i := 0; i < b.N; i++ {
 		logger.Info("msg to print log, 1234567890 1234567890 1234567890 1234567890 1234567890 1234567890 1234567890 1234567890 1234567890",

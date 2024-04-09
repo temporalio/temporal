@@ -52,11 +52,12 @@ func (s *serviceErrorWithDPanicSuite) TestNewDPanicInProd() {
 	cfg := log.Config{
 		Level: "info",
 	}
-
-	logger := log.NewZapLogger(log.BuildZapLogger(cfg))
+	zLogger, err := log.BuildZapLogger(cfg)
+	s.NoError(err)
+	logger := log.NewZapLogger(zLogger)
 	s.NotNil(logger)
 
-	err := NewInternalErrorWithDPanic(logger, "Must not panic!")
+	err = NewInternalErrorWithDPanic(logger, "Must not panic!")
 	s.NotNil(err)
 	_, ok := err.(*serviceerror.Internal)
 	s.True(ok)
@@ -67,8 +68,9 @@ func (s *serviceErrorWithDPanicSuite) TestNewDPanicInDev() {
 		Level:       "info",
 		Development: true,
 	}
-
-	logger := log.NewZapLogger(log.BuildZapLogger(cfg))
+	zLogger, err := log.BuildZapLogger(cfg)
+	s.NoError(err)
+	logger := log.NewZapLogger(zLogger)
 	s.NotNil(logger)
 
 	s.Panics(nil, func() {

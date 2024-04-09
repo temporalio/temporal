@@ -25,6 +25,7 @@
 package log
 
 import (
+	"errors"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -35,6 +36,7 @@ import (
 	"go.uber.org/zap/zapcore"
 
 	"go.temporal.io/server/common/log/tag"
+	lumberjack "gopkg.in/natefinch/lumberjack.v2"
 )
 
 const (
@@ -43,6 +45,8 @@ const (
 	defaultMsgForEmpty  = "none"
 	testLogFormatEnvVar = "TEMPORAL_TEST_LOG_FORMAT" // set to "json" for json logs in tests
 	testLogLevelEnvVar  = "TEMPORAL_TEST_LOG_LEVEL"  // set to "debug" for debug level logs in tests
+	ConsoleEncoding     = "console"
+	JSONEncoding        = "json"
 )
 
 type (
@@ -59,10 +63,10 @@ var _ Logger = (*zapLogger)(nil)
 func NewTestLogger() *zapLogger {
 	format := os.Getenv(testLogFormatEnvVar)
 	if format == "" {
-		format = "console"
+		format = ConsoleEncoding
 	}
 
-	logger := BuildZapLogger(Config{
+	logger, _ := BuildZapLogger(Config{
 		Level:       os.Getenv(testLogLevelEnvVar),
 		Format:      format,
 		Development: true,
@@ -88,7 +92,7 @@ func NewZapLogger(zl *zap.Logger) *zapLogger {
 }
 
 // BuildZapLogger builds and returns a new zap.Logger for this logging configuration
-func BuildZapLogger(cfg Config) *zap.Logger {
+func BuildZapLogger(cfg Config) (*zap.Logger, error) {
 	return buildZapLogger(cfg, true)
 }
 
@@ -198,7 +202,7 @@ func (l *zapLogger) Skip(extraSkip int) Logger {
 	}
 }
 
-func buildZapLogger(cfg Config, disableCaller bool) *zap.Logger {
+func buildZapLogger(cfg Config, disableCaller bool) (*zap.Logger, error) {
 	encodeConfig := zapcore.EncoderConfig{
 		TimeKey:        "ts",
 		LevelKey:       "level",
@@ -225,9 +229,9 @@ func buildZapLogger(cfg Config, disableCaller bool) *zap.Logger {
 	if cfg.Stdout {
 		outputPath = "stdout"
 	}
-	encoding := "json"
-	if cfg.Format == "console" {
-		encoding = "console"
+	encoding := JSONEncoding
+	if cfg.Format == ConsoleEncoding {
+		encoding = ConsoleEncoding
 	}
 	config := zap.Config{
 		Level:            zap.NewAtomicLevelAt(parseZapLevel(cfg.Level)),
@@ -239,8 +243,46 @@ func buildZapLogger(cfg Config, disableCaller bool) *zap.Logger {
 		ErrorOutputPaths: []string{outputPath},
 		DisableCaller:    disableCaller,
 	}
-	logger, _ := config.Build()
-	return logger
+	var logger *zap.Logger
+	if cfg.EnableRotation && len(cfg.OutputFile) > 0 {
+		core, err := rotationZapCore(cfg, config)
+		if err != nil {
+			return nil, err
+		}
+		logger = zap.New(core)
+		return logger, nil
+	} else {
+		return config.Build()
+	}
+}
+
+func rotationZapCore(cfg Config, zapCfg zap.Config) (zapcore.Core, error) {
+	w := zapcore.AddSync(&lumberjack.Logger{
+		Filename:   cfg.OutputFile,
+		MaxSize:    cfg.MaxSize, // megabytes
+		MaxBackups: cfg.MaxBackups,
+		MaxAge:     cfg.MaxAge, // days
+	})
+	encoder, err := newEncoder(zapCfg.Encoding, zapCfg.EncoderConfig)
+	if err != nil {
+		return nil, err
+	}
+	core := zapcore.NewCore(
+		encoder,
+		w,
+		zapCfg.Level,
+	)
+	return core, nil
+}
+
+func newEncoder(name string, encoderConfig zapcore.EncoderConfig) (zapcore.Encoder, error) {
+	if name == ConsoleEncoding {
+		return zapcore.NewConsoleEncoder(encoderConfig), nil
+	}
+	if name == JSONEncoding {
+		return zapcore.NewJSONEncoder(encoderConfig), nil
+	}
+	return nil, errors.New("invalid encoder")
 }
 
 func buildCLIZapLogger() *zap.Logger {
@@ -264,7 +306,7 @@ func buildCLIZapLogger() *zap.Logger {
 		Development:       false,
 		DisableStacktrace: os.Getenv("TEMPORAL_CLI_SHOW_STACKS") == "",
 		Sampling:          nil,
-		Encoding:          "console",
+		Encoding:          ConsoleEncoding,
 		EncoderConfig:     encodeConfig,
 		OutputPaths:       []string{"stderr"},
 		ErrorOutputPaths:  []string{"stderr"},

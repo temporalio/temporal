@@ -29,6 +29,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"sort"
 	"strconv"
 	"strings"
 	"testing"
@@ -74,9 +75,10 @@ func (s *LogSuite) TestNewLogger() {
 		OutputFile: dir + "/test.log",
 	}
 
-	log := BuildZapLogger(cfg)
+	log, err := BuildZapLogger(cfg)
+	s.NoError(err)
 	s.NotNil(log)
-	_, err := os.Stat(dir + "/test.log")
+	_, err = os.Stat(dir + "/test.log")
 	s.Nil(err)
 	log.DPanic("Development default is false; should not panic here!")
 	s.Panics(nil, func() {
@@ -88,7 +90,8 @@ func (s *LogSuite) TestNewLogger() {
 		OutputFile:  dir + "/test.log",
 		Development: true,
 	}
-	log = BuildZapLogger(cfg)
+	log, err = BuildZapLogger(cfg)
+	s.NoError(err)
 	s.NotNil(log)
 	_, err = os.Stat(dir + "/test.log")
 	s.Nil(err)
@@ -187,4 +190,56 @@ func TestEmptyMsg(t *testing.T) {
 	lineNum := fmt.Sprintf("%v", par+1)
 	fmt.Println(out, lineNum)
 	assert.Equal(t, `{"level":"info","msg":"`+defaultMsgForEmpty+`","error":"test error","wf-action":"add-workflow-started-event","logging-call-at":"zap_logger_test.go:`+lineNum+`"}`+"\n", out)
+}
+
+func TestRotationLogger(t *testing.T) {
+	dir := testutils.MkdirTemp(t, "", "testRotationLogger")
+	cfg := Config{
+		Level:          "info",
+		OutputFile:     dir + "/test.log",
+		EnableRotation: true,
+		MaxSize:        1,
+	}
+
+	log, err := BuildZapLogger(cfg)
+	assert.NoError(t, err)
+	assert.NotNil(t, log)
+	for i := 0; i < 20000; i++ {
+		log.Info("this is dump log")
+	}
+	files, err := os.ReadDir(dir)
+	assert.NoError(t, err)
+	assert.Equal(t, 2, len(files))
+	sort.Slice(files, func(i, j int) bool {
+		fileI, _ := files[i].Info()
+		fileJ, _ := files[j].Info()
+		return fileI.Size() < fileJ.Size()
+	})
+	rotatedFile, _ := files[1].Info()
+	currentFile, _ := files[0].Info()
+	assert.LessOrEqual(t, int64(1024*1024)-rotatedFile.Size(), int64(100))
+	assert.Less(t, currentFile.Size(), int64(1024*1024))
+}
+
+func TestNoRotationLogger(t *testing.T) {
+	dir := testutils.MkdirTemp(t, "", "testRotationLogger")
+	cfg := Config{
+		Level:          "info",
+		OutputFile:     dir + "/test.log",
+		EnableRotation: false,
+		MaxSize:        1,
+	}
+
+	log, err := BuildZapLogger(cfg)
+	assert.NoError(t, err)
+	assert.NotNil(t, log)
+	for i := 0; i < 20000; i++ {
+		log.Info("this is dump log")
+	}
+	files, err := os.ReadDir(dir)
+	assert.NoError(t, err)
+	// Make sure no other files were created.
+	assert.Equal(t, 1, len(files))
+	logFile, _ := files[0].Info()
+	assert.Greater(t, logFile.Size(), int64(1024*1024))
 }

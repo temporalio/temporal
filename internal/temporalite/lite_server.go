@@ -193,17 +193,22 @@ func (cfg *LiteServerConfig) apply(serverConfig *config.Config, provider *PortPr
 	}
 }
 
-func (cfg *LiteServerConfig) applyDefaults() {
+func (cfg *LiteServerConfig) applyDefaults() error {
 	if cfg.BaseConfig == nil {
 		cfg.BaseConfig = &config.Config{}
 	}
 	if cfg.Logger == nil {
-		cfg.Logger = log.NewZapLogger(log.BuildZapLogger(log.Config{
+		zLogger, err := log.BuildZapLogger(log.Config{
 			Stdout:     true,
 			Level:      "info",
 			OutputFile: "",
-		}))
+		})
+		if err != nil {
+			return err
+		}
+		cfg.Logger = log.NewZapLogger(zLogger)
 	}
+	return nil
 }
 
 func (cfg *LiteServerConfig) validate() error {
@@ -237,7 +242,7 @@ type LiteServer struct {
 // Always use BaseConfig instead of the WithConfig server option, as WithConfig overrides all
 // LiteServer specific settings.
 func NewLiteServer(liteConfig *LiteServerConfig, opts ...temporal.ServerOption) (*LiteServer, error) {
-	liteConfig.applyDefaults()
+	err := liteConfig.applyDefaults()
 	if err := liteConfig.validate(); err != nil {
 		return nil, err
 	}
