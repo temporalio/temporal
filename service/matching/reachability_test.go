@@ -1,3 +1,27 @@
+// The MIT License
+//
+// Copyright (c) 2020 Temporal Technologies Inc.  All rights reserved.
+//
+// Copyright (c) 2020 Uber Technologies, Inc.
+//
+// Permission is hereby granted, free of charge, to any person obtaining a copy
+// of this software and associated documentation files (the "Software"), to deal
+// in the Software without restriction, including without limitation the rights
+// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+// copies of the Software, and to permit persons to whom the Software is
+// furnished to do so, subject to the following conditions:
+//
+// The above copyright notice and this permission notice shall be included in
+// all copies or substantial portions of the Software.
+//
+// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
+// THE SOFTWARE.
+
 package matching
 
 import (
@@ -174,28 +198,27 @@ func TestMakeBuildIdQuery(t *testing.T) {
 
 // nothing in assignment rules for this test --> buildIdsOfInterest list will always just contain the original build id
 func TestGetReachability_WithVisibility_WithoutRules(t *testing.T) {
+	// Visibility: [ (NULL, closed), (A, open) ]
 	t.Parallel()
 	ctx := context.Background()
 	rc := mkTestReachabilityCalculator()
 
-	// Visibility: [ (NULL, closed), (A, open) ]
-	setVisibilityExpect(t, rc, []string{""}, 0, 1)
-	setVisibilityExpect(t, rc, []string{"A"}, 1, 0)
-	setVisibilityExpect(t, rc, []string{"B"}, 0, 0)
+	// reachability("") --> reachable (it's the default build id)
+	checkReachability(ctx, t, rc, "", enumspb.BUILD_ID_TASK_REACHABILITY_REACHABLE)
 
-	// getReachability("") --> reachable (it's the default build id)
-	getAndCheckReachability(t, ctx, rc, "", enumspb.BUILD_ID_TASK_REACHABILITY_REACHABLE)
-
-	// getReachability("") --> closed_workflows_only (now that "" is not default)
+	// reachability("") --> closed_workflows_only (now that "" is not default)
 	rc.assignmentRules = []*persistencespb.AssignmentRule{mkAssignmentRulePersistence(mkAssignmentRule("A", nil), nil, nil)}
-	getAndCheckReachability(t, ctx, rc, "", enumspb.BUILD_ID_TASK_REACHABILITY_CLOSED_WORKFLOWS_ONLY)
+	setVisibilityExpect(t, rc, []string{""}, 0, 1)
+	checkReachability(ctx, t, rc, "", enumspb.BUILD_ID_TASK_REACHABILITY_CLOSED_WORKFLOWS_ONLY)
 	rc.assignmentRules = nil // remove rule for rest of test
 
-	// getReachability(A) --> reachable (open workflow in visibility)
-	getAndCheckReachability(t, ctx, rc, "A", enumspb.BUILD_ID_TASK_REACHABILITY_REACHABLE)
+	// reachability(A) --> reachable (open workflow in visibility)
+	setVisibilityExpect(t, rc, []string{"A"}, 1, 0)
+	checkReachability(ctx, t, rc, "A", enumspb.BUILD_ID_TASK_REACHABILITY_REACHABLE)
 
-	// getReachability(B) --> unreachable (not mentioned in rules or visibility)
-	getAndCheckReachability(t, ctx, rc, "B", enumspb.BUILD_ID_TASK_REACHABILITY_UNREACHABLE)
+	// reachability(B) --> unreachable (not mentioned in rules or visibility)
+	setVisibilityExpect(t, rc, []string{"B"}, 0, 0)
+	checkReachability(ctx, t, rc, "B", enumspb.BUILD_ID_TASK_REACHABILITY_UNREACHABLE)
 }
 
 func TestGetReachability_WithoutVisibility_WithRules(t *testing.T) {
@@ -216,17 +239,17 @@ func TestGetReachability_WithoutVisibility_WithRules(t *testing.T) {
 	}
 	setVisibilityExpectEmptyAlways(t, rc)
 
-	// getReachability(A) --> unreachable (assignment rule target, and also redirect rule source)
-	getAndCheckReachability(t, ctx, rc, "A", enumspb.BUILD_ID_TASK_REACHABILITY_UNREACHABLE)
+	// reachability(A) --> unreachable (assignment rule target, and also redirect rule source)
+	checkReachability(ctx, t, rc, "A", enumspb.BUILD_ID_TASK_REACHABILITY_UNREACHABLE)
 
-	// getReachability(C) --> reachable (redirect rule target of reachable source)
-	getAndCheckReachability(t, ctx, rc, "C", enumspb.BUILD_ID_TASK_REACHABILITY_REACHABLE)
+	// reachability(C) --> reachable (redirect rule target of reachable source)
+	checkReachability(ctx, t, rc, "C", enumspb.BUILD_ID_TASK_REACHABILITY_REACHABLE)
 
-	// getReachability(D) --> reachable (assignment rule target, nothing else)
-	getAndCheckReachability(t, ctx, rc, "D", enumspb.BUILD_ID_TASK_REACHABILITY_REACHABLE)
+	// reachability(D) --> reachable (assignment rule target, nothing else)
+	checkReachability(ctx, t, rc, "D", enumspb.BUILD_ID_TASK_REACHABILITY_REACHABLE)
 
-	// getReachability(G) --> unreachable (redirect rule target of unreachable source [F not reachable by rules or visibility])
-	getAndCheckReachability(t, ctx, rc, "G", enumspb.BUILD_ID_TASK_REACHABILITY_UNREACHABLE)
+	// reachability(G) --> unreachable (redirect rule target of unreachable source [F not reachable by rules or visibility])
+	checkReachability(ctx, t, rc, "G", enumspb.BUILD_ID_TASK_REACHABILITY_UNREACHABLE)
 }
 
 // test reachability of build ids that are only reachable by the buildIdsOfInterest list + visibility
@@ -242,13 +265,13 @@ func TestGetReachability_WithVisibility_WithRules(t *testing.T) {
 		mkRedirectRulePersistence(mkRedirectRule("B", "D"), createTs, nil),
 	}
 
-	// getReachability(C) --> closed_workflows_only (via upstream closed wf execution A)
+	// reachability(C) --> closed_workflows_only (via upstream closed wf execution A)
 	setVisibilityExpect(t, rc, []string{"C", "A"}, 0, 1)
-	getAndCheckReachability(t, ctx, rc, "C", enumspb.BUILD_ID_TASK_REACHABILITY_CLOSED_WORKFLOWS_ONLY)
+	checkReachability(ctx, t, rc, "C", enumspb.BUILD_ID_TASK_REACHABILITY_CLOSED_WORKFLOWS_ONLY)
 
-	// getReachability(D) --> reachable (via upstream running wf execution B)
+	// reachability(D) --> reachable (via upstream running wf execution B)
 	setVisibilityExpect(t, rc, []string{"D", "B"}, 1, 0)
-	getAndCheckReachability(t, ctx, rc, "D", enumspb.BUILD_ID_TASK_REACHABILITY_REACHABLE)
+	checkReachability(ctx, t, rc, "D", enumspb.BUILD_ID_TASK_REACHABILITY_REACHABLE)
 }
 
 // test reachability of build ids that are only reachable by buildIdsOfInterest + visibility
@@ -274,21 +297,21 @@ func TestGetReachability_WithVisibility_WithDeletedRules(t *testing.T) {
 		mkRedirectRulePersistence(mkRedirectRule("Y", "ZZ"), createTs, oldDeleteTs),
 	}
 
-	// getReachability(C) --> closed_workflows_only (via upstream closed wf execution A, rule included due to recent delete)
+	// reachability(C) --> closed_workflows_only (via upstream closed wf execution A, rule included due to recent delete)
 	setVisibilityExpect(t, rc, []string{"C", "A"}, 0, 1)
-	getAndCheckReachability(t, ctx, rc, "C", enumspb.BUILD_ID_TASK_REACHABILITY_CLOSED_WORKFLOWS_ONLY)
+	checkReachability(ctx, t, rc, "C", enumspb.BUILD_ID_TASK_REACHABILITY_CLOSED_WORKFLOWS_ONLY)
 
-	// getReachability(D) --> reachable (via upstream running wf execution B, rule included due to recent delete)
+	// reachability(D) --> reachable (via upstream running wf execution B, rule included due to recent delete)
 	setVisibilityExpect(t, rc, []string{"D", "B"}, 1, 0)
-	getAndCheckReachability(t, ctx, rc, "D", enumspb.BUILD_ID_TASK_REACHABILITY_REACHABLE)
+	checkReachability(ctx, t, rc, "D", enumspb.BUILD_ID_TASK_REACHABILITY_REACHABLE)
 
-	// getReachability(Z) --> unreachable (despite upstream closed wf execution X, rule excluded due to old delete)
+	// reachability(Z) --> unreachable (despite upstream closed wf execution X, rule excluded due to old delete)
 	setVisibilityExpect(t, rc, []string{"Z"}, 0, 0)
-	getAndCheckReachability(t, ctx, rc, "Z", enumspb.BUILD_ID_TASK_REACHABILITY_UNREACHABLE)
+	checkReachability(ctx, t, rc, "Z", enumspb.BUILD_ID_TASK_REACHABILITY_UNREACHABLE)
 
-	// getReachability(ZZ) --> unreachable (despite upstream running wf execution Y, rule excluded due to recent delete)
+	// reachability(ZZ) --> unreachable (despite upstream running wf execution Y, rule excluded due to recent delete)
 	setVisibilityExpect(t, rc, []string{"ZZ"}, 0, 0)
-	getAndCheckReachability(t, ctx, rc, "ZZ", enumspb.BUILD_ID_TASK_REACHABILITY_UNREACHABLE)
+	checkReachability(ctx, t, rc, "ZZ", enumspb.BUILD_ID_TASK_REACHABILITY_UNREACHABLE)
 }
 
 // test reachability via deleted rules within the rule propagation delay
@@ -297,12 +320,12 @@ func TestGetReachability_WithoutVisibility_WithDeletedRules(t *testing.T) {
 	// todo carly
 }
 
-func getAndCheckReachability(t *testing.T,
-	ctx context.Context,
+func checkReachability(ctx context.Context,
+	t *testing.T,
 	rc *reachabilityCalculator,
 	buildId string,
 	expectedReachability enumspb.BuildIdTaskReachability) {
-	reachability, err := rc.getReachability(ctx, buildId)
+	reachability, err := rc.run(ctx, buildId)
 	assert.Nil(t, err)
 	assert.Equal(t, expectedReachability, reachability)
 }
