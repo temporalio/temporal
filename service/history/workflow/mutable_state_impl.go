@@ -3708,17 +3708,13 @@ func (ms *MutableStateImpl) ApplyWorkflowExecutionUpdateAdmittedEvent(event *his
 			},
 		},
 	}
-	var sizeDelta int
-	if ui, ok := ms.executionInfo.UpdateInfos[updateID]; ok {
-		sizeBefore := ui.Size()
-		ui.Value = request
-		sizeDelta = ui.Size() - sizeBefore
-	} else {
-		ui := updatespb.UpdateInfo{Value: request}
-		ms.executionInfo.UpdateInfos[updateID] = &ui
-		ms.executionInfo.UpdateCount++
-		sizeDelta = ui.Size() + len(updateID)
+	if _, ok := ms.executionInfo.UpdateInfos[updateID]; ok {
+		return serviceerror.NewInternal(fmt.Sprintf("Update ID %s is already present in registry", updateID))
 	}
+	ui := updatespb.UpdateInfo{Value: request}
+	ms.executionInfo.UpdateInfos[updateID] = &ui
+	ms.executionInfo.UpdateCount++
+	sizeDelta := ui.Size() + len(updateID)
 	ms.approximateSize += sizeDelta
 	ms.writeEventToCache(event)
 	return nil
