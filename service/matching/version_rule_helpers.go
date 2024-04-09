@@ -68,7 +68,7 @@ func InsertAssignmentRule(timestamp *hlc.Clock,
 		return nil, serviceerror.NewFailedPrecondition(
 			"update breaks requirement, target build id is already a member of a version set")
 	}
-	if rule.GetRamp() != nil && isRedirectRuleSource(target, data.GetRedirectRules()) {
+	if rule.GetRamp() != nil && isActiveRedirectRuleSource(target, data.GetRedirectRules()) {
 		return nil, serviceerror.NewFailedPrecondition(
 			"update breaks requirement, this target build id cannot have a ramp because it is the source of a redirect rule")
 	}
@@ -102,7 +102,7 @@ func ReplaceAssignmentRule(timestamp *hlc.Clock,
 		return nil, serviceerror.NewFailedPrecondition(
 			"update breaks requirement, target build id is already a member of a version set")
 	}
-	if rule.GetRamp() != nil && isRedirectRuleSource(target, data.GetRedirectRules()) {
+	if rule.GetRamp() != nil && isActiveRedirectRuleSource(target, data.GetRedirectRules()) {
 		return nil, serviceerror.NewFailedPrecondition(
 			"update breaks requirement, this target build id cannot have a ramp because it is the source of a redirect rule")
 	}
@@ -284,7 +284,7 @@ func CommitBuildID(timestamp *hlc.Clock,
 	return data, nil
 }
 
-func GetWorkerVersioningRules(
+func GetTimestampedWorkerVersioningRules(
 	versioningData *persistencespb.VersioningData,
 	clk *hlc.Clock,
 ) (*matchingservice.GetWorkerVersioningRulesResponse, error) {
@@ -363,7 +363,7 @@ func getActiveRedirectRules(rules []*persistencespb.RedirectRule) []*persistence
 	})
 }
 
-func isRedirectRuleSource(buildID string, redirectRules []*persistencespb.RedirectRule) bool {
+func isActiveRedirectRuleSource(buildID string, redirectRules []*persistencespb.RedirectRule) bool {
 	for _, r := range getActiveRedirectRules(redirectRules) {
 		if buildID == r.GetRule().GetSourceBuildId() {
 			return true

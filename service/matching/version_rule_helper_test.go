@@ -29,8 +29,9 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
-	"go.temporal.io/api/taskqueue/v1"
-	"go.temporal.io/server/api/persistence/v1"
+	taskqueuepb "go.temporal.io/api/taskqueue/v1"
+
+	persistencespb "go.temporal.io/server/api/persistence/v1"
 )
 
 func TestFindAssignmentBuildId_NoRules(t *testing.T) {
@@ -40,7 +41,7 @@ func TestFindAssignmentBuildId_NoRules(t *testing.T) {
 
 func TestFindAssignmentBuildId_OneFullRule(t *testing.T) {
 	buildId := "bld"
-	b := FindAssignmentBuildId([]*persistence.AssignmentRule{createFullAssignmentRule(buildId)}, "")
+	b := FindAssignmentBuildId([]*persistencespb.AssignmentRule{createFullAssignmentRule(buildId)}, "")
 	assert.Equal(t, buildId, b)
 }
 
@@ -48,7 +49,7 @@ func TestFindAssignmentBuildId_TwoFullRules(t *testing.T) {
 	buildId := "bld"
 	buildId2 := "bld2"
 	b := FindAssignmentBuildId(
-		[]*persistence.AssignmentRule{
+		[]*persistencespb.AssignmentRule{
 			createFullAssignmentRule(buildId),
 			createFullAssignmentRule(buildId2),
 		},
@@ -64,7 +65,7 @@ func TestFindAssignmentBuildId_WithRamp(t *testing.T) {
 	buildId4 := "bld4"
 	buildId5 := "bld5"
 
-	rules := []*persistence.AssignmentRule{
+	rules := []*persistencespb.AssignmentRule{
 		createAssignmentRuleWithRamp(buildId1, 0),
 		createAssignmentRuleWithRamp(buildId2, 20),
 		createAssignmentRuleWithRamp(buildId3, 70),
@@ -100,12 +101,12 @@ func TestCalcRampThresholdUniform(t *testing.T) {
 	}
 }
 
-func createFullAssignmentRule(buildId string) *persistence.AssignmentRule {
-	return &persistence.AssignmentRule{Rule: &taskqueue.BuildIdAssignmentRule{TargetBuildId: buildId}}
+func createFullAssignmentRule(buildId string) *persistencespb.AssignmentRule {
+	return &persistencespb.AssignmentRule{Rule: &taskqueuepb.BuildIdAssignmentRule{TargetBuildId: buildId}}
 }
 
-func createAssignmentRuleWithRamp(buildId string, ramp float32) *persistence.AssignmentRule {
-	return &persistence.AssignmentRule{Rule: &taskqueue.BuildIdAssignmentRule{
+func createAssignmentRuleWithRamp(buildId string, ramp float32) *persistencespb.AssignmentRule {
+	return &persistencespb.AssignmentRule{Rule: &taskqueuepb.BuildIdAssignmentRule{
 		TargetBuildId: buildId,
 		Ramp:          mkNewAssignmentPercentageRamp(ramp),
 	}}

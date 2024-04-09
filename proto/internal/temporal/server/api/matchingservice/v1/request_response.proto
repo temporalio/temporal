@@ -197,10 +197,6 @@ message DescribeTaskQueuePartitionRequest {
     string namespace_id = 1;
     temporal.server.api.taskqueue.v1.TaskQueuePartition task_queue_partition = 2;
 
-    // If not provided, the result for the default Build ID will be returned. The default Build ID is the one
-    // mentioned in the first unconditional Assignment Rule. If there is no default Build ID, the result for the
-    // unversioned queue will be returned.
-    // (-- api-linter: core::0140::prepositions --)
     temporal.api.taskqueue.v1.TaskQueueVersionSelection versions = 3;
 
     // Report backlog info for the requested task queue types and versions
@@ -259,7 +255,7 @@ message GetWorkerVersioningRulesRequest {
     string task_queue = 2;
 
     oneof command {
-        temporal.api.workflowservice.v1.GetWorkerVersioningRulesRequest request = 4;
+        temporal.api.workflowservice.v1.GetWorkerVersioningRulesRequest request = 3;
     }
 }
 
