@@ -213,8 +213,8 @@ var (
 		BackfillsPerIteration:             10,
 		AllowZeroSleep:                    true,
 		ReuseTimer:                        true,
-		NextTimeCacheV2Size:               14,                   // see note below
-		Version:                           DontTrackOverlapping, // TODO: upgrade to UpdateFromPrevious
+		NextTimeCacheV2Size:               14, // see note below
+		Version:                           UpdateFromPrevious,
 	}
 
 	// Note on NextTimeCacheV2Size: This value must be > FutureActionCountForList. Each
