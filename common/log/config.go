@@ -41,7 +41,7 @@ type (
 		// Production mode.  Default is Production.  Production-stage disables panics from
 		// DPanic logging.
 		Development bool `yaml:"development"`
-		// EnableRotation where file rotation is enabled. If this enabled, output file must be provided
+EnableRotation specifies whether file rotation is enabled. If this enabled, the output file must be provided
 		EnableRotation bool `yaml:"enableRotation"`
 		// MaxSize is the maximum size in megabytes of the log file before it gets
 		// rotated. It defaults to 100 megabytes.
