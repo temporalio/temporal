@@ -54,7 +54,7 @@ type (
 		rangeID      int64
 		ackLevel     int64
 		store        persistence.TaskManager
-		maxReadLevel atomic.Int64
+		maxReadLevel atomic.Int64 // note that even though this is an atomic, it should only be written to while holding the db lock
 		logger       log.Logger
 	}
 	taskQueueState struct {
