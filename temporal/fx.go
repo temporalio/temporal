@@ -199,7 +199,11 @@ func ServerOptionsProvider(opts []ServerOption) (serverOptionsProvider, error) {
 	// Logger
 	logger := so.logger
 	if logger == nil {
-		logger = log.NewZapLogger(log.BuildZapLogger(so.config.Log))
+		zLogger, err := log.BuildZapLogger(so.config.Log)
+		if err != nil {
+			return serverOptionsProvider{}, fmt.Errorf("unable to init logger: %w", err)
+		}
+		logger = log.NewZapLogger(zLogger)
 	}
 
 	// ClientFactoryProvider

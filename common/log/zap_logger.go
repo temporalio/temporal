@@ -66,7 +66,7 @@ func NewTestLogger() *zapLogger {
 		format = ConsoleEncoding
 	}
 
-	logger := BuildZapLogger(Config{
+	logger, _ := BuildZapLogger(Config{
 		Level:       os.Getenv(testLogLevelEnvVar),
 		Format:      format,
 		Development: true,
@@ -92,7 +92,7 @@ func NewZapLogger(zl *zap.Logger) *zapLogger {
 }
 
 // BuildZapLogger builds and returns a new zap.Logger for this logging configuration
-func BuildZapLogger(cfg Config) *zap.Logger {
+func BuildZapLogger(cfg Config) (*zap.Logger, error) {
 	return buildZapLogger(cfg, true)
 }
 
@@ -202,7 +202,7 @@ func (l *zapLogger) Skip(extraSkip int) Logger {
 	}
 }
 
-func buildZapLogger(cfg Config, disableCaller bool) *zap.Logger {
+func buildZapLogger(cfg Config, disableCaller bool) (*zap.Logger, error) {
 	encodeConfig := zapcore.EncoderConfig{
 		TimeKey:        "ts",
 		LevelKey:       "level",
@@ -245,12 +245,15 @@ func buildZapLogger(cfg Config, disableCaller bool) *zap.Logger {
 	}
 	var logger *zap.Logger
 	if cfg.EnableRotation && len(cfg.OutputFile) > 0 {
-		core, _ := rotationZapCore(cfg, config)
+		core, err := rotationZapCore(cfg, config)
+		if err != nil {
+			return nil, err
+		}
 		logger = zap.New(core)
+		return logger, nil
 	} else {
-		logger, _ = config.Build()
+		return config.Build()
 	}
-	return logger
 }
 
 func rotationZapCore(cfg Config, zapCfg zap.Config) (zapcore.Core, error) {

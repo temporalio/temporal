@@ -75,9 +75,10 @@ func (s *LogSuite) TestNewLogger() {
 		OutputFile: dir + "/test.log",
 	}
 
-	log := BuildZapLogger(cfg)
+	log, err := BuildZapLogger(cfg)
+	s.NoError(err)
 	s.NotNil(log)
-	_, err := os.Stat(dir + "/test.log")
+	_, err = os.Stat(dir + "/test.log")
 	s.Nil(err)
 	log.DPanic("Development default is false; should not panic here!")
 	s.Panics(nil, func() {
@@ -89,7 +90,8 @@ func (s *LogSuite) TestNewLogger() {
 		OutputFile:  dir + "/test.log",
 		Development: true,
 	}
-	log = BuildZapLogger(cfg)
+	log, err = BuildZapLogger(cfg)
+	s.NoError(err)
 	s.NotNil(log)
 	_, err = os.Stat(dir + "/test.log")
 	s.Nil(err)
@@ -199,7 +201,8 @@ func TestRotationLogger(t *testing.T) {
 		MaxSize:        1,
 	}
 
-	log := BuildZapLogger(cfg)
+	log, err := BuildZapLogger(cfg)
+	assert.NoError(t, err)
 	assert.NotNil(t, log)
 	for i := 0; i < 20000; i++ {
 		log.Info("this is dump log")
@@ -227,7 +230,8 @@ func TestNoRotationLogger(t *testing.T) {
 		MaxSize:        1,
 	}
 
-	log := BuildZapLogger(cfg)
+	log, err := BuildZapLogger(cfg)
+	assert.NoError(t, err)
 	assert.NotNil(t, log)
 	for i := 0; i < 20000; i++ {
 		log.Info("this is dump log")

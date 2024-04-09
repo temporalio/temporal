@@ -144,7 +144,11 @@ func buildCLI() *cli.App {
 					return cli.Exit(fmt.Sprintf("Unable to load configuration: %v.", err), 1)
 				}
 
-				logger := log.NewZapLogger(log.BuildZapLogger(cfg.Log))
+				zLogger, err := log.BuildZapLogger(cfg.Log)
+				if err != nil {
+					return cli.Exit(fmt.Sprintf("Unable to init zap logger: %v", err), 1)
+				}
+				logger := log.NewZapLogger(zLogger)
 				logger.Info("Build info.",
 					tag.NewTimeTag("git-time", build.InfoData.GitTime),
 					tag.NewStringTag("git-revision", build.InfoData.GitRevision),
