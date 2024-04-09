@@ -86,7 +86,9 @@ func (b *EventFactory) CreateWorkflowExecutionStartedEvent(
 		WorkflowId:                      req.WorkflowId,
 		SourceVersionStamp:              request.SourceVersionStamp,
 		CompletionCallbacks:             req.CompletionCallbacks,
+		RootWorkflowExecution:           request.RootExecutionInfo.GetExecution(),
 	}
+
 	parentInfo := request.ParentExecutionInfo
 	if parentInfo != nil {
 		attributes.ParentWorkflowNamespaceId = parentInfo.NamespaceId
@@ -95,6 +97,7 @@ func (b *EventFactory) CreateWorkflowExecutionStartedEvent(
 		attributes.ParentInitiatedEventId = parentInfo.InitiatedId
 		attributes.ParentInitiatedEventVersion = parentInfo.InitiatedVersion
 	}
+
 	event.Attributes = &historypb.HistoryEvent_WorkflowExecutionStartedEventAttributes{
 		WorkflowExecutionStartedEventAttributes: attributes,
 	}
@@ -403,6 +406,17 @@ func (b *EventFactory) CreateWorkflowExecutionUpdateCompletedEvent(
 			AcceptedEventId: acceptedEventID,
 			Meta:            updResp.GetMeta(),
 			Outcome:         updResp.GetOutcome(),
+		},
+	}
+	return event
+}
+
+func (b *EventFactory) CreateWorkflowExecutionUpdateAdmittedEvent(request *updatepb.Request, origin enumspb.UpdateAdmittedEventOrigin) *historypb.HistoryEvent {
+	event := b.createHistoryEvent(enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_UPDATE_ADMITTED, b.timeSource.Now())
+	event.Attributes = &historypb.HistoryEvent_WorkflowExecutionUpdateAdmittedEventAttributes{
+		WorkflowExecutionUpdateAdmittedEventAttributes: &historypb.WorkflowExecutionUpdateAdmittedEventAttributes{
+			Request: request,
+			Origin:  origin,
 		},
 	}
 	return event
