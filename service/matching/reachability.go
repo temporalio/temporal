@@ -59,7 +59,7 @@ func (rc *reachabilityCalculator) getReachability(ctx context.Context, buildId s
 	}
 
 	// Gather list of all build ids that could point to buildId
-	buildIdsOfInterest := append(rc.getUpstreamBuildIds(buildId, false), buildId)
+	buildIdsOfInterest := rc.getBuildIdsOfInterest(buildId, false)
 
 	// 2. Cases for REACHABLE
 	// 2a. If buildId is assignable to new tasks
@@ -79,7 +79,7 @@ func (rc *reachabilityCalculator) getReachability(ctx context.Context, buildId s
 	// Note: The below cases are not applicable to activity-only task queues, since we don't record those in visibility
 
 	// Gather list of all build ids that could point to buildId, now including deleted rules to account for the delay in updating visibility
-	buildIdsOfInterest = append(rc.getUpstreamBuildIds(buildId, true), buildId)
+	buildIdsOfInterest = rc.getBuildIdsOfInterest(buildId, true)
 
 	// 2c. If buildId is assignable to tasks from open workflows
 	existsOpenWFAssignedToBuildId, err := rc.existsWFAssignedToAny(ctx, rc.makeBuildIdCountRequest(buildIdsOfInterest, true))
@@ -103,14 +103,15 @@ func (rc *reachabilityCalculator) getReachability(ctx context.Context, buildId s
 	return enumspb.BUILD_ID_TASK_REACHABILITY_UNREACHABLE, nil
 }
 
-// getUpstreamBuildIds returns a list of build ids that point to the given buildId in the graph of redirect rules.
+// getBuildIdsOfInterest returns a list of build ids that point to the given buildId in the graph of redirect rules
+// and adds the given build id to that list.
 // It considers rules if the deletion time is within versioningReachabilityDeletedRuleInclusionPeriod
 // This list will be used to query visibility, and it;s
 // It is important to avoid false-negative reachability results, so we need to be sure that we
-func (rc *reachabilityCalculator) getUpstreamBuildIds(
+func (rc *reachabilityCalculator) getBuildIdsOfInterest(
 	buildId string,
 	includeRecentlyDeleted bool) []string {
-	return rc.getUpstreamHelper(buildId, includeRecentlyDeleted, nil)
+	return append(rc.getUpstreamHelper(buildId, includeRecentlyDeleted, nil), buildId)
 }
 
 func (rc *reachabilityCalculator) getUpstreamHelper(
@@ -197,6 +198,7 @@ func (rc *reachabilityCalculator) makeBuildIdCountRequest(
 	buildIdsOfInterest []string,
 	open bool,
 ) *manager.CountWorkflowExecutionsRequest {
+	slices.Sort(buildIdsOfInterest)
 	return &manager.CountWorkflowExecutionsRequest{
 		NamespaceID: rc.nsID,
 		Namespace:   rc.nsName,
