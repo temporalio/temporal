@@ -3,12 +3,12 @@ package matching
 import (
 	"context"
 	"fmt"
+	"slices"
 	"strings"
 	"time"
 
 	"github.com/temporalio/sqlparser"
 	enumspb "go.temporal.io/api/enums/v1"
-	"golang.org/x/exp/slices"
 
 	"go.temporal.io/server/api/clock/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
