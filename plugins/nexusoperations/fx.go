@@ -67,7 +67,7 @@ type clientProviderCacheKey struct {
 
 func ClientProviderFactory(namespaceRegistry namespace.Registry, httpTransportProvider NexusTransportProvider) ClientProvider {
 	// TODO(bergundy): This should use an LRU or other form of cache that supports eviction.
-	m := collection.NewFalliableOnceMap(func(key clientProviderCacheKey) (*nexus.Client, error) {
+	m := collection.NewFallibleOnceMap(func(key clientProviderCacheKey) (*nexus.Client, error) {
 		transport := httpTransportProvider(key.NamespaceID, key.Destination)
 		httpClient := &http.Client{
 			Transport: ResponseSizeLimiter{transport},
