@@ -66,6 +66,9 @@ message StartWorkflowExecutionRequest {
     // For child or continued-as-new workflows, including a version here from the source
     // (parent/previous) will set the initial version stamp of this workflow.
     temporal.api.common.v1.WorkerVersionStamp source_version_stamp = 10;
+    // The root execution info of the new workflow.
+    // For top-level workflows (ie., without parent), this field must be nil.
+    temporal.server.api.workflow.v1.RootExecutionInfo root_execution_info = 11;
 }
 
 message StartWorkflowExecutionResponse {

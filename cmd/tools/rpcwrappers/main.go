@@ -129,6 +129,8 @@ var (
 		"TerminateWorkflowExecutionRequest.ExternalWorkflowExecution": true,
 		// this is the parent for starting a child workflow
 		"StartWorkflowExecutionRequest.ParentExecutionInfo": true,
+		// this is the root for starting a child workflow
+		"StartWorkflowExecutionRequest.RootExecutionInfo": true,
 		// these get routed to the parent
 		"RecordChildExecutionCompletedRequest.ChildExecution":          true,
 		"VerifyChildExecutionCompletionRecordedRequest.ChildExecution": true,

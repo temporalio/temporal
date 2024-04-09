@@ -177,6 +177,12 @@ message WorkflowExecutionInfo {
     // NOTE: Task status is clsuter specific information, so when replicating mutable state, this
     // field need to be sanitized.
     int32 workflow_execution_timer_task_status = 82;
+
+    // The root workflow execution is defined as follows:
+    // 1. A workflow without parent workflow is its own root workflow.
+    // 2. A workflow that has a parent workflow has the same root workflow as its parent workflow.
+    string root_workflow_id = 83;
+    string root_run_id = 84;
 }
 
 message ExecutionStats {
