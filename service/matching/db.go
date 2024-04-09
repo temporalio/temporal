@@ -54,7 +54,7 @@ type (
 		rangeID      int64
 		ackLevel     int64
 		store        persistence.TaskManager
-		maxReadLevel int64
+		maxReadLevel atomic.Int64
 		logger       log.Logger
 	}
 	taskQueueState struct {
@@ -79,10 +79,9 @@ func newTaskQueueDB(
 	logger log.Logger,
 ) *taskQueueDB {
 	return &taskQueueDB{
-		queue:        queue,
-		store:        store,
-		logger:       logger,
-		maxReadLevel: 0,
+		queue:  queue,
+		store:  store,
+		logger: logger,
 	}
 }
 
@@ -95,14 +94,14 @@ func (db *taskQueueDB) RangeID() int64 {
 
 // GetMaxReadLevel returns the current maxReadLevel
 func (db *taskQueueDB) GetMaxReadLevel() int64 {
-	return atomic.LoadInt64(&db.maxReadLevel)
+	return db.maxReadLevel.Load()
 }
 
 // SetMaxReadLevel sets the current maxReadLevel
 func (db *taskQueueDB) SetMaxReadLevel(maxReadLevel int64) {
 	db.Lock()
 	defer db.Unlock()
-	atomic.StoreInt64(&db.maxReadLevel, maxReadLevel)
+	db.maxReadLevel.Store(maxReadLevel)
 }
 
 // RenewLease renews the lease on a taskqueue. If there is no previous lease,
@@ -233,7 +232,9 @@ func (db *taskQueueDB) CreateTasks(
 			Tasks: tasks,
 		})
 
-	atomic.StoreInt64(&db.maxReadLevel, maxReadLevel)
+	// Update the maxReadLevel after the writes are completed, but before we send the response,
+	// so that taskReader is guaranteed to see the new read level when SpoolTask wakes it up.
+	db.maxReadLevel.Store(maxReadLevel)
 	return resp, err
 }
 
