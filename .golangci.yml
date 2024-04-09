@@ -10,12 +10,17 @@ linters:
     - staticcheck
     - vet
     - forbidigo
+    - exhaustive
+    - godox
 run:
   skip-dirs:
     - ^api
     - ^proto
     - ^.git
 linters-settings:
+  godox:
+    keywords:
+      - FIXME # marks TODOs that must be fixed before merging
   govet:
     fieldalignment: 0
   forbidigo:
