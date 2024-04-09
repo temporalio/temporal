@@ -233,6 +233,8 @@ func (db *taskQueueDB) CreateTasks(
 			Tasks: tasks,
 		})
 
+	// Update the maxReadLevel after the writes are completed, but before we send the response,
+	// so that taskReader is guaranteed to see the new read level when SpoolTask wakes it up
 	atomic.StoreInt64(&db.maxReadLevel, maxReadLevel)
 	return resp, err
 }
