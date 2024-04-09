@@ -539,22 +539,6 @@ func (s *scheduler) fillNextTimeCacheV2(start time.Time) {
 	// Run this logic in a SideEffect so that we can fix bugs there without breaking
 	// existing schedule workflows.
 	val := workflow.SideEffect(s.ctx, func(ctx workflow.Context) interface{} {
-		// Continue returning json temporarily for forwards-compatibility.
-		// TODO: remove this after releasing a version that understands proto.
-		if true {
-			cache := jsonNextTimeCacheV2{Version: s.tweakables.Version, Start: start}
-			for t := start; len(cache.Results) < s.tweakables.NextTimeCacheV2Size; {
-				next := s.cspec.getNextTime(s.jitterSeed(), t)
-				if next.Next.IsZero() {
-					cache.Completed = true
-					break
-				}
-				cache.Results = append(cache.Results, next)
-				t = next.Next
-			}
-			return cache
-		}
-
 		cache := &schedspb.NextTimeCache{
 			Version:      int64(s.tweakables.Version),
 			StartTime:    timestamppb.New(start),
