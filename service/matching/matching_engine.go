@@ -35,15 +35,13 @@ import (
 	"time"
 
 	"github.com/pborman/uuid"
-	"go.temporal.io/server/common/tqid"
-	"google.golang.org/protobuf/types/known/timestamppb"
-
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/history/v1"
 	"go.temporal.io/api/serviceerror"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	"go.temporal.io/api/workflowservice/v1"
+	"google.golang.org/protobuf/types/known/timestamppb"
 
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	"go.temporal.io/server/api/historyservice/v1"
@@ -69,6 +67,7 @@ import (
 	"go.temporal.io/server/common/resource"
 	serviceerrors "go.temporal.io/server/common/serviceerror"
 	"go.temporal.io/server/common/tasktoken"
+	"go.temporal.io/server/common/tqid"
 	"go.temporal.io/server/common/worker_versioning"
 )
 
@@ -794,6 +793,21 @@ func (e *matchingEngineImpl) DescribeTaskQueue(
 ) (*matchingservice.DescribeTaskQueueResponse, error) {
 	req := request.GetDescRequest()
 	if req.ApiMode == enumspb.DESCRIBE_TASK_QUEUE_MODE_ENHANCED {
+		rootPartition, err := tqid.PartitionFromProto(req.GetTaskQueue(), request.GetNamespaceId(), req.GetTaskQueueType())
+		if err != nil {
+			return nil, err
+		}
+		if !rootPartition.IsRoot() || rootPartition.Kind() == enumspb.TASK_QUEUE_KIND_STICKY || rootPartition.TaskType() != enumspb.TASK_QUEUE_TYPE_WORKFLOW {
+			return nil, serviceerror.NewInvalidArgument("DescribeTaskQueue must be called on the root partition of workflow task queue if api mode is DESCRIBE_TASK_QUEUE_MODE_ENHANCED")
+		}
+		userData, err := e.getUserDataClone(ctx, rootPartition)
+		if err != nil {
+			return nil, err
+		}
+		if req.GetVersions() == nil {
+			defaultBuildId := getDefaultBuildId(userData.GetVersioningData().GetAssignmentRules())
+			req.Versions = &taskqueuepb.TaskQueueVersionSelection{BuildIds: []string{defaultBuildId}}
+		}
 		// collect internal info
 		physicalInfoByBuildId := make(map[string]map[enumspb.TaskQueueType]*taskqueuespb.PhysicalTaskQueueInfo)
 		for _, taskQueueType := range req.TaskQueueTypes {
@@ -842,10 +856,21 @@ func (e *matchingEngineImpl) DescribeTaskQueue(
 					Pollers: physicalInfo.Pollers,
 				})
 			}
+			reachability, err := getBuildIdTaskReachability(ctx,
+				userData.GetVersioningData(),
+				e.visibilityManager,
+				request.GetNamespaceId(),
+				req.GetNamespace(),
+				req.GetTaskQueue().GetName(),
+				bid,
+				e.config.ReachabilityBuildIdVisibilityGracePeriod(req.GetNamespace()))
+			if err != nil {
+				return nil, err
+			}
 			versionsInfo = append(versionsInfo, &taskqueuepb.TaskQueueVersionInfo{
 				BuildId:          bid,
 				TypesInfo:        typesInfo,
-				TaskReachability: enumspb.BUILD_ID_TASK_REACHABILITY_UNSPECIFIED,
+				TaskReachability: reachability,
 			})
 		}
 		return &matchingservice.DescribeTaskQueueResponse{
@@ -870,20 +895,21 @@ func (e *matchingEngineImpl) DescribeTaskQueuePartition(
 	ctx context.Context,
 	request *matchingservice.DescribeTaskQueuePartitionRequest,
 ) (*matchingservice.DescribeTaskQueuePartitionResponse, error) {
+	if request.GetVersions() == nil {
+		return nil, serviceerror.NewInvalidArgument("versions must not be nil, to describe the default queue, pass the default build id as a member of the BuildIds list")
+	}
 	pm, err := e.getTaskQueuePartitionManager(ctx, tqid.PartitionFromPartitionProto(request.GetTaskQueuePartition(), request.GetNamespaceId()), true)
 	if err != nil {
 		return nil, err
 	}
-	buildIds, err := e.getBuildIds(request.GetVersions(), pm)
+	buildIds, err := e.getBuildIds(request.GetVersions())
 	if err != nil {
 		return nil, err
 	}
 	return pm.Describe(buildIds, request.GetVersions().GetAllActive(), request.GetReportBacklogInfo(), request.GetReportPollers())
 }
 
-func (e *matchingEngineImpl) getBuildIds(
-	versions *taskqueuepb.TaskQueueVersionSelection,
-	tqMgr taskQueuePartitionManager) (map[string]bool, error) {
+func (e *matchingEngineImpl) getBuildIds(versions *taskqueuepb.TaskQueueVersionSelection) (map[string]bool, error) {
 	buildIds := make(map[string]bool)
 	if versions != nil {
 		for _, bid := range versions.GetBuildIds() {
@@ -892,29 +918,8 @@ func (e *matchingEngineImpl) getBuildIds(
 		if versions.GetUnversioned() {
 			buildIds[""] = true
 		}
-	} else {
-		defaultBuildId, err := e.getDefaultBuildId(tqMgr)
-		if err != nil {
-			return nil, err
-		}
-		buildIds[defaultBuildId] = true
 	}
 	return buildIds, nil
-}
-
-// getDefaultBuildId gets the build id mentioned in the first unconditional Assignment Rule.
-// If there is no default Build ID, the result for the unversioned queue will be returned.
-func (e *matchingEngineImpl) getDefaultBuildId(tqMgr taskQueuePartitionManager) (string, error) {
-	resp, err := e.getWorkerVersioningRules(tqMgr)
-	if err != nil {
-		return "", err
-	}
-	for _, ar := range resp.GetResponse().GetAssignmentRules() {
-		if isUnconditional(ar.GetRule()) {
-			return ar.GetRule().GetTargetBuildId(), nil
-		}
-	}
-	return "", nil
 }
 
 func (e *matchingEngineImpl) ListTaskQueuePartitions(
@@ -1067,7 +1072,7 @@ func (e *matchingEngineImpl) UpdateWorkerVersioningRules(
 		}
 
 		// Get versioning data formatted for response
-		getResp, err = GetWorkerVersioningRules(versioningData, updatedClock)
+		getResp, err = GetTimestampedWorkerVersioningRules(versioningData, updatedClock)
 		if err != nil {
 			return nil, false, err
 		}
@@ -1115,29 +1120,32 @@ func (e *matchingEngineImpl) GetWorkerVersioningRules(
 	if err != nil {
 		return nil, err
 	}
-	tqMgr, err := e.getTaskQueuePartitionManager(ctx, taskQueueFamily.TaskQueue(enumspb.TASK_QUEUE_TYPE_WORKFLOW).RootPartition(), true)
+	userData, err := e.getUserDataClone(ctx, taskQueueFamily.TaskQueue(enumspb.TASK_QUEUE_TYPE_WORKFLOW).RootPartition())
 	if err != nil {
 		return nil, err
 	}
-
-	return e.getWorkerVersioningRules(tqMgr)
-}
-
-func (e *matchingEngineImpl) getWorkerVersioningRules(tqMgr taskQueuePartitionManager) (*matchingservice.GetWorkerVersioningRulesResponse, error) {
-	data, _, err := tqMgr.GetUserDataManager().GetUserData()
-	if err != nil {
-		return nil, err
-	}
-	if data == nil {
-		data = &persistencespb.VersionedTaskQueueUserData{Data: &persistencespb.TaskQueueUserData{}}
-	} else {
-		data = common.CloneProto(data)
-	}
-	clk := data.GetData().GetClock()
+	clk := userData.GetClock()
 	if clk == nil {
 		clk = hlc.Zero(e.clusterMeta.GetClusterID())
 	}
-	return GetWorkerVersioningRules(data.GetData().GetVersioningData(), clk)
+	return GetTimestampedWorkerVersioningRules(userData.GetVersioningData(), clk)
+}
+
+func (e *matchingEngineImpl) getUserDataClone(ctx context.Context, rootPartition tqid.Partition) (*persistencespb.TaskQueueUserData, error) {
+	rootPartitionMgr, err := e.getTaskQueuePartitionManager(ctx, rootPartition, true)
+	if err != nil {
+		return nil, err
+	}
+	userData, _, err := rootPartitionMgr.GetUserDataManager().GetUserData()
+	if err != nil {
+		return nil, err
+	}
+	if userData == nil {
+		userData = &persistencespb.VersionedTaskQueueUserData{Data: &persistencespb.TaskQueueUserData{}}
+	} else {
+		userData = common.CloneProto(userData)
+	}
+	return userData.GetData(), nil
 }
 
 func (e *matchingEngineImpl) UpdateWorkerBuildIdCompatibility(

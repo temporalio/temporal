@@ -208,6 +208,9 @@ const (
 	// MatchingDeletedRuleRetentionTime is the length of time that deleted Version Assignment Rules and
 	// Deleted Redirect Rules will be kept in the DB (with DeleteTimestamp). After this time, the tombstones are deleted at the next time update of versioning data for the task queue.
 	MatchingDeletedRuleRetentionTime = "matching.wv.DeletedRuleRetentionTime"
+	// ReachabilityBuildIdVisibilityGracePeriod is the time period for which deleted versioning rules are still considered active
+	// to account for the delay in updating the build id field in visibility.
+	ReachabilityBuildIdVisibilityGracePeriod = "matching.wv.ReachabilityBuildIdVisibilityGracePeriod"
 	// ReachabilityTaskQueueScanLimit limits the number of task queues to scan when responding to a
 	// GetWorkerTaskReachability query.
 	ReachabilityTaskQueueScanLimit = "limit.reachabilityTaskQueueScan"

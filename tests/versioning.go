@@ -81,9 +81,10 @@ func (s *VersioningIntegSuite) SetupSuite() {
 		dynamicconfig.MatchingForwarderMaxChildrenPerNode:        partitionTreeDegree,
 		dynamicconfig.TaskQueuesPerBuildIdLimit:                  3,
 
-		dynamicconfig.AssignmentRuleLimitPerQueue:      10,
-		dynamicconfig.RedirectRuleLimitPerQueue:        10,
-		dynamicconfig.MatchingDeletedRuleRetentionTime: 24 * time.Hour,
+		dynamicconfig.AssignmentRuleLimitPerQueue:              10,
+		dynamicconfig.RedirectRuleLimitPerQueue:                10,
+		dynamicconfig.MatchingDeletedRuleRetentionTime:         24 * time.Hour,
+		dynamicconfig.ReachabilityBuildIdVisibilityGracePeriod: 3 * time.Minute,
 
 		// Make sure we don't hit the rate limiter in tests
 		dynamicconfig.FrontendMaxNamespaceNamespaceReplicationInducingAPIsRPSPerInstance:   1000,
@@ -134,17 +135,17 @@ func (s *VersioningIntegSuite) TestVersionRuleConflictToken() {
 	s.insertAssignmentRule(ctx, tq, "1", 0, nil, false)
 
 	// correct token from List --> success
-	cT1 := s.listVersioningRules(ctx, tq).GetConflictToken()
+	cT1 := s.getVersioningRules(ctx, tq).GetConflictToken()
 	cT2 := s.insertAssignmentRule(ctx, tq, "2", 0, cT1, true)
 
 	// confirm token changed on insert but not on list
-	cT3 := s.listVersioningRules(ctx, tq).GetConflictToken()
+	cT3 := s.getVersioningRules(ctx, tq).GetConflictToken()
 	s.NotEqual(cT1, cT2)
 	s.Equal(cT2, cT3)
 
 	// correct token from List or most recent mutation --> success
 	cT4 := s.insertAssignmentRule(ctx, tq, "3", 0, cT2, true)
-	s.listVersioningRules(ctx, tq)
+	s.getVersioningRules(ctx, tq)
 
 	// wrong token fails, same request with nil token also fails
 	s.insertAssignmentRule(ctx, tq, "4", 0, cT1, false)
@@ -153,7 +154,7 @@ func (s *VersioningIntegSuite) TestVersionRuleConflictToken() {
 	// wrong token fails, same request with correct token from Update succeeds
 	s.replaceAssignmentRule(ctx, tq, "20", 0, cT2, false)
 	cT5 := s.replaceAssignmentRule(ctx, tq, "20", 0, cT4, true)
-	cT6 := s.listVersioningRules(ctx, tq).GetConflictToken()
+	cT6 := s.getVersioningRules(ctx, tq).GetConflictToken()
 
 	// confirm that list didn't change the conflict token again
 	s.Equal(cT5, cT6)
@@ -172,20 +173,20 @@ func (s *VersioningIntegSuite) TestAssignmentRuleInsert() {
 	tq := "test-assignment-rule-insert"
 
 	// get initial conflict token
-	cT := s.listVersioningRules(ctx, tq).GetConflictToken()
+	cT := s.getVersioningRules(ctx, tq).GetConflictToken()
 
 	// success
 	cT = s.insertAssignmentRule(ctx, tq, "1", 0, cT, true)
-	res1 := s.listVersioningRules(ctx, tq)
+	res1 := s.getVersioningRules(ctx, tq)
 	s.Equal("1", res1.GetAssignmentRules()[0].GetRule().GetTargetBuildId())
 
 	// failure due to out of bounds index
 	s.insertAssignmentRule(ctx, tq, "2", -1, cT, false)
-	s.Equal(res1, s.listVersioningRules(ctx, tq))
+	s.Equal(res1, s.getVersioningRules(ctx, tq))
 
 	// success with conflict token returned by last successful call, same as above
 	s.insertAssignmentRule(ctx, tq, "2", 1, cT, true)
-	s.Equal("2", s.listVersioningRules(ctx, tq).GetAssignmentRules()[1].GetRule().GetTargetBuildId())
+	s.Equal("2", s.getVersioningRules(ctx, tq).GetAssignmentRules()[1].GetRule().GetTargetBuildId())
 }
 
 func (s *VersioningIntegSuite) TestAssignmentRuleReplace() {
@@ -194,22 +195,22 @@ func (s *VersioningIntegSuite) TestAssignmentRuleReplace() {
 	tq := "test-assignment-rule-replace"
 
 	// get initial conflict token + do initial inserts
-	cT := s.listVersioningRules(ctx, tq).GetConflictToken()
+	cT := s.getVersioningRules(ctx, tq).GetConflictToken()
 	cT = s.insertAssignmentRule(ctx, tq, "1", 0, cT, true)
 	cT = s.insertAssignmentRule(ctx, tq, "2", 0, cT, true)
 
 	// success
 	cT = s.replaceAssignmentRule(ctx, tq, "3", 0, cT, true)
-	res := s.listVersioningRules(ctx, tq)
+	res := s.getVersioningRules(ctx, tq)
 	s.Equal("3", res.GetAssignmentRules()[0].GetRule().GetTargetBuildId())
 
 	// failure due to index out of bounds
 	s.replaceAssignmentRule(ctx, tq, "4", 10, cT, false)
-	s.Equal(res, s.listVersioningRules(ctx, tq))
+	s.Equal(res, s.getVersioningRules(ctx, tq))
 
 	// success with conflict token returned by last successful call, same as above
 	s.replaceAssignmentRule(ctx, tq, "4", 0, cT, true)
-	s.Equal("4", s.listVersioningRules(ctx, tq).GetAssignmentRules()[0].GetRule().GetTargetBuildId())
+	s.Equal("4", s.getVersioningRules(ctx, tq).GetAssignmentRules()[0].GetRule().GetTargetBuildId())
 }
 
 func (s *VersioningIntegSuite) TestAssignmentRuleDelete() {
@@ -218,18 +219,18 @@ func (s *VersioningIntegSuite) TestAssignmentRuleDelete() {
 	tq := "test-assignment-rule-delete"
 
 	// get initial conflict token + do initial inserts
-	cT := s.listVersioningRules(ctx, tq).GetConflictToken()
+	cT := s.getVersioningRules(ctx, tq).GetConflictToken()
 	cT = s.insertAssignmentRule(ctx, tq, "1", 0, cT, true)
 	cT = s.insertAssignmentRule(ctx, tq, "2", 0, cT, true)
 
 	// success
 	cT = s.deleteAssignmentRule(ctx, tq, 0, cT, true)
-	res := s.listVersioningRules(ctx, tq)
+	res := s.getVersioningRules(ctx, tq)
 	s.Equal(1, len(res.GetAssignmentRules()))
 
 	// failure due to requirement that once an unconditional rule exists, at least one must always exist
 	s.deleteAssignmentRule(ctx, tq, 0, cT, false)
-	s.Equal(res, s.listVersioningRules(ctx, tq))
+	s.Equal(res, s.getVersioningRules(ctx, tq))
 
 	// insert another rule to prove that the conflict token was not the issue above
 	cT = s.insertAssignmentRule(ctx, tq, "2", 0, cT, true)
@@ -246,18 +247,18 @@ func (s *VersioningIntegSuite) TestRedirectRuleInsert() {
 	tq := "test-redirect-rule-insert"
 
 	// get initial conflict token
-	cT := s.listVersioningRules(ctx, tq).GetConflictToken()
+	cT := s.getVersioningRules(ctx, tq).GetConflictToken()
 
 	// success
 	cT = s.insertRedirectRule(ctx, tq, "1", "0", cT, true)
-	res := s.listVersioningRules(ctx, tq)
+	res := s.getVersioningRules(ctx, tq)
 	rulesMap := mkRedirectRulesMap(res.GetCompatibleRedirectRules())
 	s.Contains(rulesMap, "1")
 	s.Equal(rulesMap["1"], "0")
 
 	// failure due to cycle
 	s.insertRedirectRule(ctx, tq, "0", "1", cT, false)
-	s.Equal(res, s.listVersioningRules(ctx, tq))
+	s.Equal(res, s.getVersioningRules(ctx, tq))
 
 	// success with same conflict token but no cycle
 	s.insertRedirectRule(ctx, tq, "0", "2", cT, true)
@@ -269,19 +270,19 @@ func (s *VersioningIntegSuite) TestRedirectRuleReplace() {
 	tq := "test-redirect-rule-replace"
 
 	// get initial conflict token + do initial insert
-	cT := s.listVersioningRules(ctx, tq).GetConflictToken()
+	cT := s.getVersioningRules(ctx, tq).GetConflictToken()
 	cT = s.insertRedirectRule(ctx, tq, "1", "0", cT, true)
 
 	// success
 	cT = s.replaceRedirectRule(ctx, tq, "1", "2", cT, true)
-	res := s.listVersioningRules(ctx, tq)
+	res := s.getVersioningRules(ctx, tq)
 	rulesMap := mkRedirectRulesMap(res.GetCompatibleRedirectRules())
 	s.Contains(rulesMap, "1")
 	s.Equal(rulesMap["1"], "2")
 
 	// failure due to source not found
 	s.replaceRedirectRule(ctx, tq, "10", "3", cT, false)
-	s.Equal(res, s.listVersioningRules(ctx, tq))
+	s.Equal(res, s.getVersioningRules(ctx, tq))
 
 	// success with same conflict token and correct source
 	s.replaceRedirectRule(ctx, tq, "1", "3", cT, true)
@@ -293,18 +294,18 @@ func (s *VersioningIntegSuite) TestRedirectRuleDelete() {
 	tq := "test-redirect-rule-delete"
 
 	// get initial conflict token + do initial inserts
-	cT := s.listVersioningRules(ctx, tq).GetConflictToken()
+	cT := s.getVersioningRules(ctx, tq).GetConflictToken()
 	cT = s.insertRedirectRule(ctx, tq, "1", "0", cT, true)
 	cT = s.insertRedirectRule(ctx, tq, "2", "0", cT, true)
 
 	// success
 	cT = s.deleteRedirectRule(ctx, tq, "1", cT, true)
-	res := s.listVersioningRules(ctx, tq)
+	res := s.getVersioningRules(ctx, tq)
 	s.Equal(1, len(res.GetCompatibleRedirectRules()))
 
 	// failure due to source not found
 	s.deleteRedirectRule(ctx, tq, "1", cT, false)
-	s.Equal(res, s.listVersioningRules(ctx, tq))
+	s.Equal(res, s.getVersioningRules(ctx, tq))
 
 	// success with same conflict token and valid source
 	s.deleteRedirectRule(ctx, tq, "2", cT, true)
@@ -316,31 +317,31 @@ func (s *VersioningIntegSuite) TestCommitBuildID() {
 	tq := "test-commit-build-id"
 
 	// get initial conflict token
-	cT := s.listVersioningRules(ctx, tq).GetConflictToken()
+	cT := s.getVersioningRules(ctx, tq).GetConflictToken()
 
 	// no recent poller --> failure
 	s.commitBuildId(ctx, tq, "1", false, cT, false)
 
 	// no recent poller + force --> success
 	cT = s.commitBuildId(ctx, tq, "1", true, cT, true)
-	res := s.listVersioningRules(ctx, tq)
+	res := s.getVersioningRules(ctx, tq)
 	s.Equal(1, len(res.GetAssignmentRules()))
 	s.Equal(0, len(res.GetCompatibleRedirectRules()))
 	s.Equal("1", res.GetAssignmentRules()[0].GetRule().GetTargetBuildId())
 	s.Equal(nil, res.GetAssignmentRules()[0].GetRule().GetRamp())
 
 	// recent versioned poller on wrong build id --> failure
-	s.pollVersionedTaskQueue(tq, "3", true)
+	s.registerWorkflowAndPollVersionedTaskQueue(tq, "3", true)
 	s.commitBuildId(ctx, tq, "2", false, cT, false)
 
 	// recent unversioned poller on build id 2 --> failure
-	s.pollVersionedTaskQueue(tq, "2", false)
+	s.registerWorkflowAndPollVersionedTaskQueue(tq, "2", false)
 	s.commitBuildId(ctx, tq, "2", false, cT, false)
 
 	// recent versioned poller on build id 2 --> success
-	s.pollVersionedTaskQueue(tq, "2", true)
+	s.registerWorkflowAndPollVersionedTaskQueue(tq, "2", true)
 	s.commitBuildId(ctx, tq, "2", false, cT, true)
-	res = s.listVersioningRules(ctx, tq)
+	res = s.getVersioningRules(ctx, tq)
 	s.Equal(1, len(res.GetAssignmentRules()))
 	s.Equal(0, len(res.GetCompatibleRedirectRules()))
 	s.Equal("2", res.GetAssignmentRules()[0].GetRule().GetTargetBuildId())
@@ -3251,6 +3252,71 @@ func (s *VersioningIntegSuite) validateBuildIdAfterReset(ctx context.Context, wf
 	s.validateWorkflowEventsVersionStamps(ctx, run3.GetID(), run3.GetRunID(), []string{v1, v1, v1}, inheritedBuildId)
 }
 
+func (s *VersioningIntegSuite) TestDescribeTaskQueueEnhanced_Versioned_BasicReachability() {
+	tq := s.randomizeStr(s.T().Name())
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+
+	s.getBuildIdReachability(ctx, tq, nil, map[string]enumspb.BuildIdTaskReachability{
+		"": enumspb.BUILD_ID_TASK_REACHABILITY_REACHABLE, // reachable because unversioned is default
+	})
+
+	s.addAssignmentRule(ctx, tq, "A")
+	s.getBuildIdReachability(ctx, tq, &taskqueuepb.TaskQueueVersionSelection{BuildIds: []string{"", "A"}}, map[string]enumspb.BuildIdTaskReachability{
+		"A": enumspb.BUILD_ID_TASK_REACHABILITY_REACHABLE,   // reachable by default assignment rule
+		"":  enumspb.BUILD_ID_TASK_REACHABILITY_UNREACHABLE, // unreachable because no longer default
+	})
+
+	// start workflow and worker with new default assignment rule "A", and wait for it to start
+	started := make(chan struct{}, 10)
+	wf := func(ctx workflow.Context) (string, error) {
+		started <- struct{}{}
+		workflow.GetSignalChannel(ctx, "wait").Receive(ctx, nil)
+		if workflow.GetInfo(ctx).Attempt == 1 {
+			return "", errors.New("try again")
+		}
+		panic("oops")
+	}
+	wId := s.randomizeStr("id")
+	w := worker.New(s.sdkClient, tq, worker.Options{
+		UseBuildIDForVersioning: true,
+		BuildID:                 "A",
+		Identity:                wId,
+	})
+	w.RegisterWorkflow(wf)
+	s.NoError(w.Start())
+	defer w.Stop()
+	run, err := s.sdkClient.ExecuteWorkflow(ctx, sdkclient.StartWorkflowOptions{TaskQueue: tq}, wf)
+	s.NoError(err)
+	s.waitForChan(ctx, started)
+
+	// commit a different build id --> A should now only be reachable via visibility query, B reachable as default
+	s.commitBuildId(ctx, tq, "B", true, s.getVersioningRules(ctx, tq).GetConflictToken(), true)
+	s.getBuildIdReachability(ctx, tq, nil, map[string]enumspb.BuildIdTaskReachability{
+		"B": enumspb.BUILD_ID_TASK_REACHABILITY_REACHABLE, // reachable by default assignment rule
+	})
+	s.getBuildIdReachability(ctx, tq, &taskqueuepb.TaskQueueVersionSelection{BuildIds: []string{"A", "B"}}, map[string]enumspb.BuildIdTaskReachability{
+		"A": enumspb.BUILD_ID_TASK_REACHABILITY_REACHABLE, // reachable by visibility
+		"B": enumspb.BUILD_ID_TASK_REACHABILITY_REACHABLE, // reachable by default assignment rule
+	})
+
+	// unblock the workflow on A and wait for it to close
+	s.NoError(s.sdkClient.SignalWorkflow(ctx, run.GetID(), "", "wait", nil))
+	s.Eventually(func() bool {
+		listResp, err := s.engine.ListClosedWorkflowExecutions(ctx, &workflowservice.ListClosedWorkflowExecutionsRequest{
+			Namespace:       s.namespace,
+			MaximumPageSize: 10,
+		})
+		s.Nil(err)
+		return len(listResp.GetExecutions()) > 0
+	}, 3*time.Second, 50*time.Millisecond)
+	// now A is only reachable by closed workflows
+	s.getBuildIdReachability(ctx, tq, &taskqueuepb.TaskQueueVersionSelection{BuildIds: []string{"A", "B"}}, map[string]enumspb.BuildIdTaskReachability{
+		"A": enumspb.BUILD_ID_TASK_REACHABILITY_CLOSED_WORKFLOWS_ONLY, // closed_workflows_only by visibility
+		"B": enumspb.BUILD_ID_TASK_REACHABILITY_REACHABLE,             // reachable by default assignment rule
+	})
+}
+
 func (s *VersioningIntegSuite) TestDescribeTaskQueueEnhanced_Unversioned() {
 	tq := s.randomizeStr(s.T().Name())
 	wf := func(ctx workflow.Context) (string, error) { return "ok", nil }
@@ -3285,7 +3351,7 @@ func (s *VersioningIntegSuite) TestDescribeTaskQueueEnhanced_Unversioned() {
 		s.NotNil(resp)
 		s.Assert().Equal(1, len(resp.GetVersionsInfo()), "should be 1 because only default/unversioned queue")
 		versionInfo := resp.GetVersionsInfo()[0]
-		s.Assert().Equal(enumspb.BUILD_ID_TASK_REACHABILITY_UNSPECIFIED, versionInfo.GetTaskReachability(), "not yet implemented")
+		s.Assert().Equal(enumspb.BUILD_ID_TASK_REACHABILITY_REACHABLE, versionInfo.GetTaskReachability())
 		var pollersInfo []*taskqueuepb.PollerInfo
 		for _, t := range versionInfo.GetTypesInfo() {
 			pollersInfo = append(pollersInfo, t.GetPollers()...)
@@ -3461,7 +3527,7 @@ func (s *VersioningIntegSuite) prefixed(buildId string) string {
 }
 
 // listVersioningRules lists rules and checks that the result is successful, returning the response.
-func (s *VersioningIntegSuite) listVersioningRules(
+func (s *VersioningIntegSuite) getVersioningRules(
 	ctx context.Context, tq string) *workflowservice.GetWorkerVersioningRulesResponse {
 	res, err := s.engine.GetWorkerVersioningRules(ctx, &workflowservice.GetWorkerVersioningRulesRequest{
 		Namespace: s.namespace,
@@ -3734,7 +3800,7 @@ func (s *VersioningIntegSuite) commitBuildId(
 	}
 }
 
-func (s *VersioningIntegSuite) pollVersionedTaskQueue(tq, buildID string, useVersioning bool) {
+func (s *VersioningIntegSuite) registerWorkflowAndPollVersionedTaskQueue(tq, buildID string, useVersioning bool) {
 	wf := func(ctx workflow.Context) (string, error) {
 		return "done!", nil
 	}
@@ -3750,6 +3816,29 @@ func (s *VersioningIntegSuite) pollVersionedTaskQueue(tq, buildID string, useVer
 
 	// wait for it to start polling
 	time.Sleep(200 * time.Millisecond)
+}
+
+func (s *VersioningIntegSuite) getBuildIdReachability(
+	ctx context.Context,
+	taskQueue string,
+	versions *taskqueuepb.TaskQueueVersionSelection,
+	expectedReachability map[string]enumspb.BuildIdTaskReachability) {
+	resp, err := s.engine.DescribeTaskQueue(ctx, &workflowservice.DescribeTaskQueueRequest{
+		Namespace:              s.namespace,
+		TaskQueue:              &taskqueuepb.TaskQueue{Name: taskQueue, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
+		ApiMode:                enumspb.DESCRIBE_TASK_QUEUE_MODE_ENHANCED,
+		Versions:               versions,
+		TaskQueueTypes:         nil, // both types
+		ReportPollers:          false,
+		ReportTaskReachability: true,
+	})
+	s.NoError(err)
+	s.NotNil(resp)
+	for _, vi := range resp.GetVersionsInfo() {
+		expected, ok := expectedReachability[vi.GetBuildId()]
+		s.Assert().True(ok, "build id %s was not expected", vi.GetBuildId())
+		s.Assert().Equal(expected, vi.GetTaskReachability())
+	}
 }
 
 // addNewDefaultBuildId updates build id info on a task queue with a new build id in a new default set.
@@ -3785,7 +3874,7 @@ func (s *VersioningIntegSuite) addAssignmentRuleWithRamp(ctx context.Context, tq
 }
 
 func (s *VersioningIntegSuite) doAddAssignmentRule(ctx context.Context, tq string, rule *taskqueuepb.BuildIdAssignmentRule) *taskqueuepb.BuildIdAssignmentRule {
-	cT := s.listVersioningRules(ctx, tq).GetConflictToken()
+	cT := s.getVersioningRules(ctx, tq).GetConflictToken()
 	res, err := s.engine.UpdateWorkerVersioningRules(ctx, &workflowservice.UpdateWorkerVersioningRulesRequest{
 		Namespace:     s.namespace,
 		TaskQueue:     tq,
