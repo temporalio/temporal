@@ -1,18 +1,22 @@
 ############################# Main targets #############################
 # Install all tools and builds binaries.
-install: update-tools bins
+install: bins
 
 # Rebuild binaries (used by Dockerfile).
 bins: temporal-server temporal-cassandra-tool temporal-sql-tool tdbg
 
 # Install all tools, recompile proto files, run all possible checks and tests (long but comprehensive).
-all: update-tools clean proto bins check test
+all: clean proto bins check test
 
 # Used in CI
-ci-build-misc: print-go-version ci-update-tools proto bins shell-check copyright-check go-generate gomodtidy ensure-no-changes
+ci-build-misc: print-go-version proto bins shell-check copyright-check go-generate gomodtidy ensure-no-changes
 
 # Delete all build artifacts
 clean: clean-bins clean-test-results
+	rm -rf $(STAMPDIR)
+	rm -rf $(TEST_OUTPUT_ROOT)
+	rm -rf $(PROTO_OUT)
+	rm -rf ./.bin
 
 # Recompile proto files.
 proto: clean-proto buf-lint api-linter protoc service-clients goimports-proto proto-mocks copyright-proto
@@ -21,10 +25,11 @@ proto: clean-proto buf-lint api-linter protoc service-clients goimports-proto pr
 update-proto: update-proto-submodule proto gomodtidy
 ########################################################################
 
-.PHONY: proto proto-mocks protoc
+.PHONY: proto proto-mocks protoc install bins ci-build-misc clean
 
 ##### Arguments ######
 
+ROOT        := $(shell git rev-parse --show-toplevel)
 GOOS        ?= $(shell go env GOOS)
 GOARCH      ?= $(shell go env GOARCH)
 GOPATH      ?= $(shell go env GOPATH)
@@ -50,8 +55,10 @@ TEST_TAG_FLAG := -tags $(ALL_TEST_TAGS)
 
 ##### Variables ######
 
-GOBIN := $(if $(shell go env GOBIN),$(shell go env GOBIN),$(GOPATH)/bin)
-PATH := $(GOBIN):$(PATH)
+LOCALBIN := .bin
+STAMPDIR := .stamp
+PATH := $(LOCALBIN):$(PATH)
+GOINSTALL := GOBIN=$(shell pwd)/$(LOCALBIN) go install
 
 MODULE_ROOT := $(lastword $(shell grep -e "^module " go.mod))
 COLOR := "\e[1;36m%s\e[0m\n"
@@ -63,7 +70,6 @@ define NEWLINE
 endef
 
 TEST_TIMEOUT := 30m
-
 
 PROTO_ROOT := proto
 PROTO_FILES = $(shell find ./$(PROTO_ROOT)/internal -name "*.proto")
@@ -126,34 +132,70 @@ endef
 print-go-version:
 	@go version
 
-update-goimports:
-	@printf $(COLOR) "Install/update goimports..."
-	@go install golang.org/x/tools/cmd/goimports@latest
+$(STAMPDIR):
+	@mkdir -p $(STAMPDIR)
 
-update-linters:
-	@printf $(COLOR) "Install/update linters..."
-	# When updating the version, update the golangci-lint GHA workflow as well.
-	@go install github.com/golangci/golangci-lint/cmd/golangci-lint@v1.57.2
+$(LOCALBIN):
+	@mkdir -p $(LOCALBIN)
 
-update-mockgen:
-	@printf $(COLOR) "Install/update mockgen tool..."
-	@go install github.com/golang/mock/mockgen@v1.7.0-rc.1
+# When updating the version, update the golangci-lint GHA workflow as well.
+.PHONY: golangci-lint
+GOLANGCI_LINT_VERSION := v1.57.2
+GOLANGCI_LINT := $(LOCALBIN)/golangci-lint-$(GOLANGCI_LINT_VERSION)
+$(GOLANGCI_LINT): $(LOCALBIN)
+	$(call go-install-tool,$(GOLANGCI_LINT),github.com/golangci/golangci-lint/cmd/golangci-lint,$(GOLANGCI_LINT_VERSION))
 
-update-gotestsum:
-	@printf $(COLOR) "Install/update gotestsum..."
-	@go install gotest.tools/gotestsum@v1.11
+GOIMPORTS_VER := v0.20.0
+GOIMPORTS := $(LOCALBIN)/goimports-$(GOIMPORTS_VER)
+$(GOIMPORTS): | $(LOCALBIN)
+	$(call go-install-tool,$(GOIMPORTS),golang.org/x/tools/cmd/goimports,$(GOIMPORTS_VER))
 
-update-proto-plugins:
-	@printf $(COLOR) "Install/update proto plugins..."
-	@go install google.golang.org/protobuf/cmd/protoc-gen-go@latest
-	@go install google.golang.org/grpc/cmd/protoc-gen-go-grpc@latest
-	@go install -modfile build/go.mod go.temporal.io/api/cmd/protoc-gen-go-helpers
-	@go install -modfile build/go.mod go.temporal.io/api/cmd/protogen
+MOCKGEN_VER := v1.7.0-rc.1
+MOCKGEN := $(LOCALBIN)/mockgen-$(MOCKGEN_VER)
+$(MOCKGEN): | $(LOCALBIN)
+	$(call go-install-tool,$(MOCKGEN),github.com/golang/mock/mockgen,$(MOCKGEN_VER))
 
-update-proto-linters:
-	@printf $(COLOR) "Install/update proto linters..."
-	@go install github.com/googleapis/api-linter/cmd/api-linter@v1.32.3
-	@go install github.com/bufbuild/buf/cmd/buf@v1.6.0
+GOTESTSUM_VER := v1.11
+GOTESTSUM := $(LOCALBIN)/gotestsum-$(GOTESTSUM_VER)
+$(GOTESTSUM): | $(LOCALBIN)
+	$(call go-install-tool,$(GOTESTSUM),gotest.tools/gotestsum,$(GOTESTSUM_VER))
+
+API_LINTER_VER := v1.32.3
+API_LINTER := $(LOCALBIN)/api-linter-$(API_LINTER_VER)
+$(API_LINTER): | $(LOCALBIN)
+	$(call go-install-tool,$(API_LINTER),github.com/googleapis/api-linter/cmd/api-linter,$(API_LINTER_VER))
+
+BUF_VER := v1.6.0
+BUF := $(LOCALBIN)/buf-$(BUF_VER)
+$(BUF): | $(LOCALBIN)
+	$(call go-install-tool,$(BUF),github.com/bufbuild/buf/cmd/buf,$(BUF_VER))
+
+GO_API_VER := v1.29.0
+PROTOGEN := $(LOCALBIN)/protogen-$(GO_API_VER)
+$(PROTOGEN): | $(LOCALBIN)
+	$(call go-install-tool,$(PROTOGEN),go.temporal.io/api/cmd/protogen,$(GO_API_VER))
+
+# protoc needs these to have a consistent name, so we use a versioned stamp file to ensure the true actual version is installed
+# while installing an unversioned binary
+PROTOC_GEN_GO_VER := v1.33.0
+PROTOC_GEN_GO := $(LOCALBIN)/protoc-gen-go
+$(STAMPDIR)/protoc-gen-go-$(PROTOC_GEN_GO_VER): | $(STAMPDIR)
+	$(call go-install-tool,$(PROTOC_GEN_GO),google.golang.org/protobuf/cmd/protoc-gen-go,$(PROTOC_GEN_GO_VER))
+	@touch $@
+$(PROTOC_GEN_GO): $(STAMPDIR)/protoc-gen-go-$(PROTOC_GEN_GO_VER)
+
+PROTOC_GEN_GO_GRPC_VER := v1.3.0
+PROTOC_GEN_GO_GRPC := $(LOCALBIN)/protoc-gen-go-grpc
+$(STAMPDIR)/protoc-gen-go-grpc-$(PROTOC_GEN_GO_GRPC_VER): | $(STAMPDIR)
+	$(call go-install-tool,$(PROTOC_GEN_GO_GRPC),google.golang.org/grpc/cmd/protoc-gen-go-grpc,$(PROTOC_GEN_GO_GRPC_VER))
+	@touch $@
+$(PROTOC_GEN_GO_GRPC): $(STAMPDIR)/protoc-gen-go-grpc-$(PROTOC_GEN_GO_GRPC_VER)
+
+PROTOC_GEN_GO_HELPERS := $(LOCALBIN)/protoc-gen-go-helpers
+$(STAMPDIR)/protoc-gen-go-helpers-$(GO_API_VER): | $(STAMPDIR)
+	$(call go-install-tool,$(PROTOC_GEN_GO_HELPERS),go.temporal.io/api/cmd/protoc-gen-go-helpers,$(GO_API_VER))
+	@touch $@
+$(PROTOC_GEN_GO_HELPERS): $(STAMPDIR)/protoc-gen-go-helpers-$(GO_API_VER)
 
 update-tctl:
 	@printf $(COLOR) "Install/update tctl..."
@@ -167,10 +209,25 @@ update-ui:
 	@printf $(COLOR) "Install/update temporal ui-server..."
 	@go install github.com/temporalio/ui-server/cmd/server@latest
 
-update-tools: update-goimports update-linters update-mockgen update-proto-plugins update-proto-linters update-gotestsum
+# go-install-tool will 'go install' any package with custom target and name of binary, if it doesn't exist
+# $1 - target path with name of binary (ideally with version)
+# $2 - package url which can be installed
+# $3 - specific version of package
+# This is courtesy of https://github.com/kubernetes-sigs/kubebuilder/pull/3718
+define go-install-tool
+@[ -f $(1) ] || { \
+set -e; \
+package=$(2)@$(3) ;\
+printf $(COLOR) "Downloading $${package}" ;\
+GOBIN=$(shell pwd)/$(LOCALBIN) go install $${package} ;\
+mv "$$(echo "$(1)" | sed "s/-$(3)$$//")" $(1) ;\
+}
+endef
+
+#update-tools: update-goimports $(GOLANGCI_LINT) $(MOCKGEN) $(PROTOC_GEN_GO) $(PROTOC_GEN_GO_HELPERS) $(PROTOGEN) update-proto-plugins update-proto-linters $(GOTESTSUM)
 
 # update-linters is not included because in CI linters are run by github actions.
-ci-update-tools: update-goimports update-mockgen update-proto-plugins update-proto-linters update-gotestsum
+#ci-update-tools: $(GOIMPORTS_BIN) $(MOCKGEN) update-proto-plugins update-proto-linters $(GOTESTSUM)
 
 ##### Proto #####
 $(PROTO_OUT):
@@ -189,7 +246,7 @@ install-proto-submodule:
 	@printf $(COLOR) "Install proto submodule..."
 	git submodule update --init $(PROTO_ROOT)/api
 
-protoc: clean-proto $(PROTO_OUT)
+protoc: clean-proto $(PROTO_OUT) $(PROTOGEN) $(PROTOC_GEN_GO) $(PROTOC_GEN_GO_GRPC) $(PROTOC_GEN_GO_HELPERS)
 	@protogen \
 		-I=proto/api \
 		-I=proto/dependencies \
@@ -204,11 +261,11 @@ PROTO_GRPC_SERVICES = $(patsubst $(PROTO_OUT)/%,%,$(shell find $(PROTO_OUT) -nam
 service_name = $(firstword $(subst /, ,$(1)))
 mock_file_name = $(call service_name,$(1))mock/$(subst $(call service_name,$(1))/,,$(1:go=mock.go))
 
-proto-mocks: protoc
+proto-mocks: protoc $(MOCKGEN)
 	@printf $(COLOR) "Generate proto mocks..."
 	$(foreach PROTO_GRPC_SERVICE,$(PROTO_GRPC_SERVICES),\
 		@cd $(PROTO_OUT) && \
-		mockgen -copyright_file ../LICENSE -package $(call service_name,$(PROTO_GRPC_SERVICE))mock -source $(PROTO_GRPC_SERVICE) -destination $(call mock_file_name,$(PROTO_GRPC_SERVICE)) \
+		$(ROOT)/$(MOCKGEN) -copyright_file ../LICENSE -package $(call service_name,$(PROTO_GRPC_SERVICE))mock -source $(PROTO_GRPC_SERVICE) -destination $(call mock_file_name,$(PROTO_GRPC_SERVICE)) \
 	$(NEWLINE))
 
 service-clients:
@@ -219,9 +276,9 @@ update-go-api:
 	@printf $(COLOR) "Update go.temporal.io/api@master..."
 	@go get -u go.temporal.io/api@master
 
-goimports-proto:
+goimports-proto: $(GOIMPORTS)
 	@printf $(COLOR) "Run goimports for proto files..."
-	@goimports -w $(PROTO_OUT)
+	@$(GOIMPORTS) -w $(PROTO_OUT)
 
 copyright-proto:
 	@printf $(COLOR) "Update license headers for proto files..."
@@ -270,27 +327,27 @@ goimports:
 	@printf $(COLOR) "Run goimports for modified files..."
 	@printf "Merge base: $(MERGE_BASE)\n"
 	@printf "Modified files: $(MODIFIED_FILES)\n"
-	@goimports -w $(filter %.go, $(MODIFIED_FILES))
+	@$(GOIMPORTS_BIN) -w $(filter %.go, $(MODIFIED_FILES))
 
-lint:
+lint: $(GOLANGCI_LINT)
 	@printf $(COLOR) "Run linters..."
-	@golangci-lint run --verbose --timeout 10m --fix=true --new-from-rev=$(MAIN_BRANCH) --config=.golangci.yml
+	@$(GOLANGCI_LINT) run --verbose --timeout 10m --fix=true --new-from-rev=$(MAIN_BRANCH) --config=.golangci.yml
 
-api-linter:
+api-linter: $(API_LINTER)
 	@printf $(COLOR) "Run api-linter..."
-	$(call silent_exec, api-linter --set-exit-status $(PROTO_IMPORTS) --config=$(PROTO_ROOT)/api-linter.yaml $(PROTO_FILES))
+	$(call silent_exec, $(API_LINTER) --set-exit-status $(PROTO_IMPORTS) --config=$(PROTO_ROOT)/api-linter.yaml $(PROTO_FILES))
 
-buf-lint:
+buf-lint: $(BUF)
 	@printf $(COLOR) "Run buf linter..."
-	@(cd $(PROTO_ROOT) && buf lint)
+	@(cd $(PROTO_ROOT) && $(ROOT)/$(BUF) lint)
 
-buf-build:
+buf-build: $(BUF)
 	@printf $(COLOR) "Build image.bin with buf..."
-	@(cd $(PROTO_ROOT) && buf build -o image.bin)
+	@(cd $(PROTO_ROOT) && $(ROOT)/$(BUF) build -o image.bin)
 
-buf-breaking:
+buf-breaking: $(BUF)
 	@printf $(COLOR) "Run buf breaking changes check against image.bin..."
-	@(cd $(PROTO_ROOT) && buf check breaking --against image.bin)
+	@(cd $(PROTO_ROOT) && $(ROOT)/$(BUF) check breaking --against image.bin)
 
 shell-check:
 	@printf $(COLOR) "Run shellcheck for script files..."
@@ -339,16 +396,16 @@ test: unit-test integration-test functional-test functional-with-fault-injection
 $(TEST_OUTPUT_ROOT):
 	@mkdir -p $(TEST_OUTPUT_ROOT)
 
-prepare-coverage-test: update-gotestsum $(TEST_OUTPUT_ROOT)
+prepare-coverage-test: $(GOTESTSUM) $(TEST_OUTPUT_ROOT)
 
 unit-test-coverage: prepare-coverage-test
 	@printf $(COLOR) "Run unit tests with coverage..."
-	@gotestsum --junitfile $(NEW_REPORT) -- \
+	@$(GOTESTSUM) --junitfile $(NEW_REPORT) -- \
 		$(UNIT_TEST_DIRS) -timeout=$(TEST_TIMEOUT) -race $(TEST_TAG_FLAG) -coverprofile=$(NEW_COVER_PROFILE)
 
 integration-test-coverage: prepare-coverage-test
 	@printf $(COLOR) "Run integration tests with coverage..."
-	@gotestsum --junitfile $(NEW_REPORT) -- \
+	@$(GOTESTSUM) --junitfile $(NEW_REPORT) -- \
 		$(INTEGRATION_TEST_DIRS) -timeout=$(TEST_TIMEOUT) $(TEST_TAG_FLAG) $(INTEGRATION_TEST_COVERPKG) -coverprofile=$(NEW_COVER_PROFILE)
 
 # This should use the same build flags as functional-test-coverage for best build caching.
@@ -357,17 +414,17 @@ pre-build-functional-test-coverage: prepare-coverage-test
 
 functional-test-coverage: prepare-coverage-test
 	@printf $(COLOR) "Run functional tests with coverage with $(PERSISTENCE_DRIVER) driver..."
-	@gotestsum --junitfile $(NEW_REPORT) -- \
+	@$(GOTESTSUM) --junitfile $(NEW_REPORT) -- \
 		$(FUNCTIONAL_TEST_ROOT) -timeout=$(TEST_TIMEOUT) $(TEST_ARGS) $(TEST_TAG_FLAG) -persistenceType=$(PERSISTENCE_TYPE) -persistenceDriver=$(PERSISTENCE_DRIVER) $(FUNCTIONAL_TEST_COVERPKG) -coverprofile=$(NEW_COVER_PROFILE)
 
 functional-test-xdc-coverage: prepare-coverage-test
 	@printf $(COLOR) "Run functional test for cross DC with coverage with $(PERSISTENCE_DRIVER) driver..."
-	@gotestsum --junitfile $(NEW_REPORT) -- \
+	@$(GOTESTSUM) --junitfile $(NEW_REPORT) -- \
 		$(FUNCTIONAL_TEST_XDC_ROOT) -timeout=$(TEST_TIMEOUT) $(TEST_TAG_FLAG) -persistenceType=$(PERSISTENCE_TYPE) -persistenceDriver=$(PERSISTENCE_DRIVER) $(FUNCTIONAL_TEST_COVERPKG) -coverprofile=$(NEW_COVER_PROFILE)
 
 functional-test-ndc-coverage: prepare-coverage-test
 	@printf $(COLOR) "Run functional test for NDC with coverage with $(PERSISTENCE_DRIVER) driver..."
-	@gotestsum --junitfile $(NEW_REPORT) -- \
+	@$(GOTESTSUM) --junitfile $(NEW_REPORT) -- \
 		$(FUNCTIONAL_TEST_NDC_ROOT) -timeout=$(TEST_TIMEOUT) $(TEST_ARGS) $(TEST_TAG_FLAG) -persistenceType=$(PERSISTENCE_TYPE) -persistenceDriver=$(PERSISTENCE_DRIVER) $(FUNCTIONAL_TEST_COVERPKG) -coverprofile=$(NEW_COVER_PROFILE)
 
 .PHONY: $(SUMMARY_COVER_PROFILE)
@@ -521,7 +578,7 @@ update-dependencies:
 	@go get -u -t $(PINNED_DEPENDENCIES) ./...
 	@go mod tidy
 
-go-generate:
+go-generate: $(MOCKGEN)
 	@printf $(COLOR) "Process go:generate directives..."
 	@go generate ./...
 
