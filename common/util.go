@@ -662,6 +662,7 @@ func CreateHistoryStartWorkflowRequest(
 	namespaceID string,
 	startRequest *workflowservice.StartWorkflowExecutionRequest,
 	parentExecutionInfo *workflowspb.ParentExecutionInfo,
+	rootExecutionInfo *workflowspb.RootExecutionInfo,
 	now time.Time,
 ) *historyservice.StartWorkflowExecutionRequest {
 	histRequest := &historyservice.StartWorkflowExecutionRequest{
@@ -673,6 +674,7 @@ func CreateHistoryStartWorkflowRequest(
 		FirstWorkflowTaskBackoff: durationpb.New(backoff.GetBackoffForNextScheduleNonNegative(startRequest.GetCronSchedule(), now, now)),
 		ContinuedFailure:         startRequest.ContinuedFailure,
 		LastCompletionResult:     startRequest.LastCompletionResult,
+		RootExecutionInfo:        rootExecutionInfo,
 	}
 	startRequest.ContinuedFailure = nil
 	startRequest.LastCompletionResult = nil

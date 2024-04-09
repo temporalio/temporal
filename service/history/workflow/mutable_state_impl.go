@@ -1780,6 +1780,7 @@ func (ms *MutableStateImpl) addWorkflowExecutionStartedEventForContinueAsNew(
 	previousExecutionState MutableState,
 	command *commandpb.ContinueAsNewWorkflowExecutionCommandAttributes,
 	firstRunID string,
+	rootExecutionInfo *workflowspb.RootExecutionInfo,
 ) (*historypb.HistoryEvent, error) {
 
 	previousExecutionInfo := previousExecutionState.GetExecutionInfo()
@@ -1849,6 +1850,7 @@ func (ms *MutableStateImpl) addWorkflowExecutionStartedEventForContinueAsNew(
 		// enforce minimal interval between runs to prevent tight loop continue as new spin.
 		FirstWorkflowTaskBackoff: previousExecutionState.ContinueAsNewMinBackoff(command.BackoffStartInterval),
 		SourceVersionStamp:       sourceVersionStamp,
+		RootExecutionInfo:        rootExecutionInfo,
 	}
 	if command.GetInitiator() == enumspb.CONTINUE_AS_NEW_INITIATOR_RETRY {
 		req.Attempt = previousExecutionState.GetExecutionInfo().Attempt + 1
@@ -2048,6 +2050,14 @@ func (ms *MutableStateImpl) ApplyWorkflowExecutionStartedEvent(
 		ms.executionInfo.ParentInitiatedVersion = event.GetParentInitiatedEventVersion()
 	} else {
 		ms.executionInfo.ParentInitiatedVersion = common.EmptyVersion
+	}
+
+	if event.RootWorkflowExecution != nil {
+		ms.executionInfo.RootWorkflowId = event.RootWorkflowExecution.GetWorkflowId()
+		ms.executionInfo.RootRunId = event.RootWorkflowExecution.GetRunId()
+	} else {
+		ms.executionInfo.RootWorkflowId = execution.GetWorkflowId()
+		ms.executionInfo.RootRunId = execution.GetRunId()
 	}
 
 	ms.executionInfo.ExecutionTime = timestamppb.New(
@@ -3922,6 +3932,7 @@ func (ms *MutableStateImpl) AddContinueAsNewEvent(
 
 	// Extract ParentExecutionInfo from current run so it can be passed down to the next
 	var parentInfo *workflowspb.ParentExecutionInfo
+	var rootInfo *workflowspb.RootExecutionInfo
 	if ms.HasParentExecution() {
 		parentInfo = &workflowspb.ParentExecutionInfo{
 			NamespaceId: ms.executionInfo.ParentNamespaceId,
@@ -3933,6 +3944,12 @@ func (ms *MutableStateImpl) AddContinueAsNewEvent(
 			InitiatedId:      ms.executionInfo.ParentInitiatedId,
 			InitiatedVersion: ms.executionInfo.ParentInitiatedVersion,
 			Clock:            ms.executionInfo.ParentClock,
+		}
+		rootInfo = &workflowspb.RootExecutionInfo{
+			Execution: &commonpb.WorkflowExecution{
+				WorkflowId: ms.executionInfo.RootWorkflowId,
+				RunId:      ms.executionInfo.RootRunId,
+			},
 		}
 	}
 
@@ -3963,6 +3980,7 @@ func (ms *MutableStateImpl) AddContinueAsNewEvent(
 		ms,
 		command,
 		firstRunID,
+		rootInfo,
 	); err != nil {
 		return nil, nil, err
 	}
