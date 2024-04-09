@@ -237,7 +237,7 @@ func (c *WorkflowConsistencyCheckerImpl) getWorkflowLeaseValidatedByCheck(
 		return NewWorkflowLease(wfContext, release, mutableState), nil
 	case *serviceerror.NotFound, *serviceerror.NamespaceNotFound:
 		release(err)
-		if err := assertShardOwnership(
+		if err := shard.AssertShardOwnership(
 			ctx,
 			c.shardContext,
 			shardOwnershipAsserted,
@@ -309,59 +309,15 @@ func (c *WorkflowConsistencyCheckerImpl) getCurrentRunID(
 	workflowID string,
 	lockPriority workflow.LockPriority,
 ) (runID string, retErr error) {
-	if c.shardContext.GetConfig().EnableAPIGetCurrentRunIDLock() {
-		currentRelease, err := c.workflowCache.GetOrCreateCurrentWorkflowExecution(
-			ctx,
-			c.shardContext,
-			namespace.ID(namespaceID),
-			workflowID,
-			lockPriority,
-		)
-		if err != nil {
-			return "", err
-		}
-		defer currentRelease(retErr)
-	}
-
-	resp, err := c.shardContext.GetCurrentExecution(
+	return wcache.GetCurrentRunID(
 		ctx,
-		&persistence.GetCurrentExecutionRequest{
-			ShardID:     c.shardContext.GetShardID(),
-			NamespaceID: namespaceID,
-			WorkflowID:  workflowID,
-		},
+		c.shardContext,
+		c.workflowCache,
+		shardOwnershipAsserted,
+		namespaceID,
+		workflowID,
+		lockPriority,
 	)
-	switch err.(type) {
-	case nil:
-		return resp.RunID, nil
-	case *serviceerror.NotFound:
-		if err := assertShardOwnership(
-			ctx,
-			c.shardContext,
-			shardOwnershipAsserted,
-		); err != nil {
-			return "", err
-		}
-		return "", err
-	default:
-		return "", err
-	}
-}
-
-func assertShardOwnership(
-	ctx context.Context,
-	shardContext shard.Context,
-	shardOwnershipAsserted *bool,
-) error {
-	if !shardContext.GetConfig().ShardOwnershipAssertionEnabled() {
-		return nil
-	}
-
-	if !*shardOwnershipAsserted {
-		*shardOwnershipAsserted = true
-		return shardContext.AssertOwnership(ctx)
-	}
-	return nil
 }
 
 func BypassMutableStateConsistencyPredicate(

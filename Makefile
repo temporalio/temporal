@@ -523,7 +523,6 @@ update-dependencies:
 
 go-generate:
 	@printf $(COLOR) "Process go:generate directives..."
-	@go install ./cmd/tools/mocksync
 	@go generate ./...
 
 ensure-no-changes:

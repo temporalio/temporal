@@ -22,7 +22,7 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-//go:generate mocksync -copyright_file ../../../LICENSE -package $GOPACKAGE -source $GOFILE -destination state_rebuilder_mock.go
+//go:generate mockgen -copyright_file ../../../LICENSE -package $GOPACKAGE -source $GOFILE -destination state_rebuilder_mock.go
 
 package ndc
 
@@ -195,6 +195,9 @@ func (r *StateRebuilderImpl) Rebuild(
 	rebuiltMutableState.GetExecutionInfo().LastFirstEventTxnId = lastTxnId
 
 	// refresh tasks to be generated
+	// TODO: ideally the executionTimeoutTimerTaskStatus field should be carried over
+	// from the base run. However, RefreshTasks always resets that field and
+	// force regenerates the execution timeout timer task.
 	if err := r.taskRefresher.RefreshTasks(ctx, rebuiltMutableState); err != nil {
 		return nil, 0, err
 	}

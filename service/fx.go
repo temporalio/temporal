@@ -38,7 +38,7 @@ import (
 	"go.temporal.io/server/common/metrics"
 	persistenceClient "go.temporal.io/server/common/persistence/client"
 	"go.temporal.io/server/common/primitives"
-	"go.temporal.io/server/common/quotas"
+	"go.temporal.io/server/common/quotas/calculator"
 	"go.temporal.io/server/common/rpc"
 	"go.temporal.io/server/common/rpc/interceptor"
 	"go.temporal.io/server/common/telemetry"
@@ -57,6 +57,7 @@ type (
 		PersistencePerShardNamespaceMaxQPS persistenceClient.PersistencePerShardNamespaceMaxQPS
 		EnablePriorityRateLimiting         persistenceClient.EnablePriorityRateLimiting
 		OperatorRPSRatio                   persistenceClient.OperatorRPSRatio
+		PersistenceBurstRatio              persistenceClient.PersistenceBurstRatio
 		DynamicRateLimitingParams          persistenceClient.DynamicRateLimitingParams
 	}
 
@@ -107,22 +108,30 @@ func NewPersistenceRateLimitingParams(
 	perShardNamespaceMaxQps dynamicconfig.IntPropertyFnWithNamespaceFilter,
 	enablePriorityRateLimiting dynamicconfig.BoolPropertyFn,
 	operatorRPSRatio dynamicconfig.FloatPropertyFn,
+	burstRatio dynamicconfig.FloatPropertyFn,
 	dynamicRateLimitingParams dynamicconfig.MapPropertyFn,
 	lazyLoadedServiceResolver PersistenceLazyLoadedServiceResolver,
+	logger log.Logger,
 ) PersistenceRateLimitingParams {
-	calculator := quotas.ClusterAwareQuotaCalculator{
-		MemberCounter:    lazyLoadedServiceResolver,
-		PerInstanceQuota: maxQps,
-		GlobalQuota:      globalMaxQps,
-	}
-	namespaceCalculator := quotas.ClusterAwareNamespaceSpecificQuotaCalculator{
-		MemberCounter:    lazyLoadedServiceResolver,
-		PerInstanceQuota: namespaceMaxQps,
-		GlobalQuota:      globalNamespaceMaxQps,
-	}
+	hostCalculator := calculator.NewLoggedCalculator(
+		calculator.ClusterAwareQuotaCalculator{
+			MemberCounter:    lazyLoadedServiceResolver,
+			PerInstanceQuota: maxQps,
+			GlobalQuota:      globalMaxQps,
+		},
+		log.With(logger, tag.ComponentPersistence, tag.ScopeHost),
+	)
+	namespaceCalculator := calculator.NewLoggedNamespaceCalculator(
+		calculator.ClusterAwareNamespaceQuotaCalculator{
+			MemberCounter:    lazyLoadedServiceResolver,
+			PerInstanceQuota: namespaceMaxQps,
+			GlobalQuota:      globalNamespaceMaxQps,
+		},
+		log.With(logger, tag.ComponentPersistence, tag.ScopeNamespace),
+	)
 	return PersistenceRateLimitingParams{
 		PersistenceMaxQps: func() int {
-			return int(calculator.GetQuota())
+			return int(hostCalculator.GetQuota())
 		},
 		PersistenceNamespaceMaxQps: func(namespace string) int {
 			return int(namespaceCalculator.GetQuota(namespace))
@@ -130,6 +139,7 @@ func NewPersistenceRateLimitingParams(
 		PersistencePerShardNamespaceMaxQPS: persistenceClient.PersistencePerShardNamespaceMaxQPS(perShardNamespaceMaxQps),
 		EnablePriorityRateLimiting:         persistenceClient.EnablePriorityRateLimiting(enablePriorityRateLimiting),
 		OperatorRPSRatio:                   persistenceClient.OperatorRPSRatio(operatorRPSRatio),
+		PersistenceBurstRatio:              persistenceClient.PersistenceBurstRatio(burstRatio),
 		DynamicRateLimitingParams:          persistenceClient.DynamicRateLimitingParams(dynamicRateLimitingParams),
 	}
 }

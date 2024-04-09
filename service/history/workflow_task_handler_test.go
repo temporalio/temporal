@@ -308,7 +308,7 @@ func TestCommandProtocolMessage(t *testing.T) {
 		t.Log("create the expected protocol instance")
 		upd, _, err := tc.updates.FindOrCreate(context.Background(), updateID)
 		require.NoError(t, err)
-		err = upd.Request(context.Background(), req, workflow.WithEffects(effect.Immediate(context.Background()), tc.handler.mutableState))
+		err = upd.Admit(context.Background(), req, workflow.WithEffects(effect.Immediate(context.Background()), tc.handler.mutableState))
 		require.NoError(t, err)
 		_ = upd.Send(context.Background(), true, &protocolpb.Message_EventId{EventId: 2208}, workflow.WithEffects(effect.Immediate(context.Background()), tc.handler.mutableState))
 

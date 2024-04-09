@@ -56,7 +56,7 @@ func TestGet(t *testing.T) {
 	testService := newIncomingService(t.Name())
 	mocks := newTestMocks(t)
 
-	// lazy load
+	// initial load
 	mocks.matchingClient.EXPECT().ListNexusIncomingServices(gomock.Any(), gomock.Any()).Return(&matchingservice.ListNexusIncomingServicesResponse{
 		Services:      []*nexus.IncomingService{testService},
 		TableVersion:  1,
@@ -92,7 +92,7 @@ func TestGetNotFound(t *testing.T) {
 	testService := newIncomingService(t.Name())
 	mocks := newTestMocks(t)
 
-	// lazy load
+	// initial load
 	mocks.matchingClient.EXPECT().ListNexusIncomingServices(gomock.Any(), gomock.Any()).Return(&matchingservice.ListNexusIncomingServicesResponse{
 		Services:      []*nexus.IncomingService{testService},
 		TableVersion:  1,
@@ -124,7 +124,7 @@ func TestGetNotFound(t *testing.T) {
 	assert.NotEmpty(t, reg.services)
 }
 
-func TestLazyLoadFallback(t *testing.T) {
+func TestInitializationFallback(t *testing.T) {
 	t.Parallel()
 
 	testService := newIncomingService(t.Name())
@@ -297,8 +297,10 @@ func TestTableVersionErrorResetsPersistencePagination(t *testing.T) {
 
 func newTestMocks(t *testing.T) *testMocks {
 	ctrl := gomock.NewController(t)
+	testConfig := NewIncomingServiceRegistryConfig(dynamicconfig.NewNoopCollection())
+	testConfig.nexusAPIsEnabled = dynamicconfig.GetBoolPropertyFn(true)
 	return &testMocks{
-		config:         NewIncomingServiceRegistryConfig(dynamicconfig.NewNoopCollection()),
+		config:         testConfig,
 		matchingClient: matchingservicemock.NewMockMatchingServiceClient(ctrl),
 		persistence:    persistence.NewMockNexusIncomingServiceManager(ctrl),
 	}
@@ -310,7 +312,7 @@ func newIncomingService(name string) *nexus.IncomingService {
 		Version:     1,
 		Id:          id,
 		CreatedTime: timestamppb.Now(),
-		UrlPrefix:   "/" + Routes().DispatchNexusTaskByService.Path(id),
+		UrlPrefix:   "/" + RouteDispatchNexusTaskByService.Path(id),
 		Spec: &nexus.IncomingServiceSpec{
 			Name:      name,
 			Namespace: name + "-namespace",

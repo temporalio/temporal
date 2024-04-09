@@ -22,7 +22,7 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-//go:generate mocksync -copyright_file ../../LICENSE -package $GOPACKAGE -source $GOFILE -destination data_interfaces_mock.go
+//go:generate mockgen -copyright_file ../../LICENSE -package $GOPACKAGE -source $GOFILE -destination data_interfaces_mock.go
 
 package persistence
 
@@ -1220,7 +1220,7 @@ type (
 
 	HistoryTaskQueueManagerImpl struct {
 		queue      QueueV2
-		serializer *serialization.TaskSerializer
+		serializer serialization.Serializer
 	}
 
 	// QueueKey identifies a history task queue. It is converted to a queue name using the GetQueueName method.

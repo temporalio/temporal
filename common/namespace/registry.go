@@ -22,7 +22,7 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-//go:generate mocksync -copyright_file ../../LICENSE -package $GOPACKAGE -source $GOFILE -destination registry_mock.go
+//go:generate mockgen -copyright_file ../../LICENSE -package $GOPACKAGE -source $GOFILE -destination registry_mock.go
 
 package namespace
 
@@ -324,7 +324,7 @@ func (r *registry) GetNamespace(name Name) (*Namespace, error) {
 	return r.getOrReadthroughNamespace(name)
 }
 
-// GetNamespaceByIDWithOptions retrieves a namespace entry by name, with behavior controlled by options.
+// GetNamespaceWithOptions retrieves a namespace entry by name, with behavior controlled by options.
 func (r *registry) GetNamespaceWithOptions(name Name, opts GetNamespaceOptions) (*Namespace, error) {
 	if name == "" {
 		return nil, serviceerror.NewInvalidArgument("Namespace is empty.")

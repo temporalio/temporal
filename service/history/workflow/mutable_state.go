@@ -22,7 +22,7 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-//go:generate mocksync -copyright_file ../../../LICENSE -package $GOPACKAGE -source $GOFILE -destination mutable_state_mock.go
+//go:generate mockgen -copyright_file ../../../LICENSE -package $GOPACKAGE -source $GOFILE -destination mutable_state_mock.go
 
 package workflow
 
@@ -219,6 +219,7 @@ type (
 		GetChildExecutionInitiatedEvent(context.Context, int64) (*historypb.HistoryEvent, error)
 		GetCompletionEvent(context.Context) (*historypb.HistoryEvent, error)
 		GetWorkflowCloseTime(ctx context.Context) (time.Time, error)
+		GetWorkflowExecutionDuration(ctx context.Context) (time.Duration, error)
 		GetWorkflowTaskByID(scheduledEventID int64) *WorkflowTaskInfo
 		GetNamespaceEntry() *namespace.Namespace
 		GetStartEvent(context.Context) (*historypb.HistoryEvent, error)

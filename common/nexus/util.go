@@ -43,6 +43,6 @@ func IncomingServicePersistedEntryToExternalAPI(entry *persistencepb.NexusIncomi
 		Spec:             entry.Service.Spec,
 		CreatedTime:      entry.Service.CreatedTime,
 		LastModifiedTime: lastModifiedTime,
-		UrlPrefix:        "/" + Routes().DispatchNexusTaskByService.Path(entry.Id),
+		UrlPrefix:        "/" + RouteDispatchNexusTaskByService.Path(entry.Id),
 	}
 }

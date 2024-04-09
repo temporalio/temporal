@@ -30,6 +30,7 @@ import (
 	"time"
 
 	"github.com/golang/mock/gomock"
+	"github.com/pborman/uuid"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 
@@ -196,4 +197,57 @@ func (s *timerQueueTaskExecutorBaseSuite) TestArchiveHistory_DeleteFailed() {
 		context.Background(),
 		task)
 	s.Error(err)
+}
+
+func (s *timerQueueTaskExecutorBaseSuite) TestIsValidExecutionTimeoutTask() {
+
+	testCases := []struct {
+		name            string
+		firstRunIDMatch bool
+		workflowRunning bool
+		isValid         bool
+	}{
+		{
+			name:            "different chain",
+			firstRunIDMatch: false,
+			isValid:         false,
+		},
+		{
+			name:            "same chain, workflow running",
+			firstRunIDMatch: true,
+			workflowRunning: true,
+			isValid:         true,
+		},
+		{
+			name:            "same chain, workflow completed",
+			firstRunIDMatch: true,
+			workflowRunning: false,
+			isValid:         false,
+		},
+	}
+
+	for _, tc := range testCases {
+		s.Run(tc.name, func() {
+			timerTask := &tasks.WorkflowExecutionTimeoutTask{
+				NamespaceID:         tests.NamespaceID.String(),
+				WorkflowID:          tests.WorkflowID,
+				FirstRunID:          uuid.New(),
+				VisibilityTimestamp: s.testShardContext.GetTimeSource().Now(),
+				TaskID:              100,
+			}
+			mutableStateFirstRunID := timerTask.FirstRunID
+			if !tc.firstRunIDMatch {
+				mutableStateFirstRunID = uuid.New()
+			}
+
+			mockMutableState := workflow.NewMockMutableState(s.controller)
+			mockMutableState.EXPECT().GetExecutionInfo().Return(&persistencespb.WorkflowExecutionInfo{
+				FirstExecutionRunId: mutableStateFirstRunID,
+			}).AnyTimes()
+			mockMutableState.EXPECT().IsWorkflowExecutionRunning().Return(tc.workflowRunning).AnyTimes()
+
+			isValid := s.timerQueueTaskExecutorBase.isValidExecutionTimeoutTask(mockMutableState, timerTask)
+			s.Equal(tc.isValid, isValid)
+		})
+	}
 }

@@ -22,7 +22,7 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-//go:generate mocksync -copyright_file ../../../LICENSE -package $GOPACKAGE -source $GOFILE -destination task_refresher_mock.go
+//go:generate mockgen -copyright_file ../../../LICENSE -package $GOPACKAGE -source $GOFILE -destination task_refresher_mock.go
 
 package workflow
 
@@ -167,9 +167,14 @@ func (r *TaskRefresherImpl) refreshTasksForWorkflowStart(
 		return err
 	}
 
-	if err := taskGenerator.GenerateWorkflowStartTasks(
+	// first clear execution timeout timer task status
+	executionInfo := mutableState.GetExecutionInfo()
+	executionInfo.WorkflowExecutionTimerTaskStatus = TimerTaskStatusNone
+
+	executionInfo.WorkflowExecutionTimerTaskStatus, err = taskGenerator.GenerateWorkflowStartTasks(
 		startEvent,
-	); err != nil {
+	)
+	if err != nil {
 		return err
 	}
 

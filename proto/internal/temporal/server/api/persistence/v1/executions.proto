@@ -169,6 +169,16 @@ message WorkflowExecutionInfo {
     // (-- api-linter: core::0140::prepositions=disabled
     //     aip.dev/not-precedent: "by" is used to clarify the keys and values. --)
     map<int32, StateMachineMap> sub_state_machines_by_type = 81;
+
+    // This field is for tracking if the workflow execution timer task is created or not.
+    // We don't need this field if we always create the execution timer task when the first
+    // workflow in a workflow chain starts. However, this execution timer logic is later added. 
+    // To maintain backward compatibility, we need to track if the execution timer task is created
+    // for a workflow chain since later workflows in the chain also need to create the execution 
+    // timer task if it is not created yet.
+    // NOTE: Task status is clsuter specific information, so when replicating mutable state, this
+    // field need to be sanitized.
+    int32 workflow_execution_timer_task_status = 82;
 }
 
 message ExecutionStats {
@@ -266,6 +276,10 @@ message TimerTaskInfo {
 
     // If task addresses a sub-statemachine (e.g. callback), this field will be set.
     StateMachineTaskInfo state_machine_info = 14;
+
+    // If specified, the task is a for a workflow chain instead of a specific workflow run.
+    // A workflow chain is identified by the run_id of the first workflow in the chain.
+    string first_run_id = 15;
 }
 
 message ArchivalTaskInfo {

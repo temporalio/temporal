@@ -762,7 +762,7 @@ func (handler *workflowTaskHandlerImpl) handleCommandFailWorkflow(
 
 	// Handle retry or cron
 	if retryBackoff != backoff.NoBackoff {
-		return handler.handleRetry(ctx, retryBackoff, retryState, attr.GetFailure(), newExecutionRunID)
+		return handler.handleRetry(ctx, retryBackoff, attr.GetFailure(), newExecutionRunID)
 	} else if cronBackoff != backoff.NoBackoff {
 		return handler.handleCron(ctx, cronBackoff, nil, attr.GetFailure(), newExecutionRunID)
 	}
@@ -1297,7 +1297,6 @@ func payloadsMapSize(fields map[string]*commonpb.Payload) int {
 func (handler *workflowTaskHandlerImpl) handleRetry(
 	ctx context.Context,
 	backoffInterval time.Duration,
-	retryState enumspb.RetryState,
 	failure *failurepb.Failure,
 	newRunID string,
 ) error {
@@ -1307,7 +1306,7 @@ func (handler *workflowTaskHandlerImpl) handleRetry(
 	}
 	startAttr := startEvent.GetWorkflowExecutionStartedEventAttributes()
 
-	newMutableState := workflow.NewMutableState(
+	newMutableState := workflow.NewMutableStateInChain(
 		handler.shard,
 		handler.shard.GetEventsCache(),
 		handler.shard.GetLogger(),
@@ -1315,6 +1314,7 @@ func (handler *workflowTaskHandlerImpl) handleRetry(
 		handler.mutableState.GetWorkflowKey().WorkflowID,
 		newRunID,
 		handler.shard.GetTimeSource().Now(),
+		handler.mutableState,
 	)
 
 	err = workflow.SetupNewWorkflowForRetryOrCron(
@@ -1362,7 +1362,7 @@ func (handler *workflowTaskHandlerImpl) handleCron(
 		lastCompletionResult = startAttr.LastCompletionResult
 	}
 
-	newMutableState := workflow.NewMutableState(
+	newMutableState := workflow.NewMutableStateInChain(
 		handler.shard,
 		handler.shard.GetEventsCache(),
 		handler.shard.GetLogger(),
@@ -1370,6 +1370,7 @@ func (handler *workflowTaskHandlerImpl) handleCron(
 		handler.mutableState.GetWorkflowKey().WorkflowID,
 		newRunID,
 		handler.shard.GetTimeSource().Now(),
+		handler.mutableState,
 	)
 
 	err = workflow.SetupNewWorkflowForRetryOrCron(

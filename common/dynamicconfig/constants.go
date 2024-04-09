@@ -116,6 +116,9 @@ const (
 	// OperatorRPSRatio is the percentage of the rate limit provided to priority rate limiters that should be used for
 	// operator API calls (highest priority). Should be >0.0 and <= 1.0 (defaults to 20% if not specified)
 	OperatorRPSRatio = "system.operatorRPSRatio"
+	// PersistenceQPSBurstRatio is the burst ratio for persistence QPS.
+	// This flag controls the burst ratio for all services.
+	PersistenceQPSBurstRatio = "system.persistenceQPSBurstRatio"
 
 	// Whether the deadlock detector should dump goroutines
 	DeadlockDumpGoroutines = "system.deadlock.DumpGoroutines"
@@ -127,6 +130,17 @@ const (
 	DeadlockInterval = "system.deadlock.Interval"
 	// How many extra goroutines can be created per root.
 	DeadlockMaxWorkersPerRoot = "system.deadlock.MaxWorkersPerRoot"
+
+	// utf-8 validation
+	// The *Sample* keys control the sample rate of messages to examine as a fraction in [0.0, 1.0].
+	// The *Fail* keys control whether a validation failure causes an error (rpc error for rpc
+	// request/response, [de]serialization error for persistence).
+	ValidateUTF8SampleRPCRequest  = "system.validateUTF8.sample.rpcRequest"
+	ValidateUTF8SampleRPCResponse = "system.validateUTF8.sample.rpcResponse"
+	ValidateUTF8SamplePersistence = "system.validateUTF8.sample.persistence"
+	ValidateUTF8FailRPCRequest    = "system.validateUTF8.fail.rpcRequest"
+	ValidateUTF8FailRPCResponse   = "system.validateUTF8.fail.rpcResponse"
+	ValidateUTF8FailPersistence   = "system.validateUTF8.fail.persistence"
 
 	// keys for size limit
 
@@ -377,8 +391,6 @@ const (
 	FrontendEnableSchedules = "frontend.enableSchedules"
 	// FrontendEnableNexusAPIs enables serving Nexus HTTP requests in the frontend.
 	FrontendEnableNexusAPIs = "frontend.enableNexusAPIs"
-	// FrontendInitializeNexusIncomingServicesTimeout is the maximum time allowed for initializing Nexus incoming services.
-	FrontendInitializeNexusIncomingServicesTimeout = "frontend.initializeNexusIncomingServicesTimeout"
 	// FrontendRefreshNexusIncomingServicesLongPollTimeout is the maximum duration of background long poll requests to update Nexus incoming services.
 	FrontendRefreshNexusIncomingServicesLongPollTimeout = "frontend.refreshNexusIncomingServicesLongPollTimeout"
 	// FrontendRefreshNexusIncomingServicesMinWait is the minimum wait time between background long poll requests to update Nexus incoming services.
@@ -583,12 +595,15 @@ const (
 	// HistoryCacheHostLevelMaxSizeBytes is the maximum size of the host level history cache. This is only used if
 	// HistoryCacheSizeBasedLimit is set to true.
 	HistoryCacheHostLevelMaxSizeBytes = "history.hostLevelCacheMaxSizeBytes"
-	// EnableAPIGetCurrentRunIDLock controls if a lock should be acquired before getting current run ID for API requests
-	EnableAPIGetCurrentRunIDLock = "history.enableAPIGetCurrentRunIDLock"
 	// EnableMutableStateTransitionHistory controls whether to record state transition history in mutable state records.
 	// The feature is used in the hierarchical state machine framework and is considered unstable as the structure may
 	// change with the pending replication design.
 	EnableMutableStateTransitionHistory = "history.enableMutableStateTransitionHistory"
+	// EnableWorkflowExecutionTimeoutTimer controls whether to enable the new logic for generating a workflow execution
+	// timeout timer when execution timeout is specified when starting a workflow.
+	// For backward compatibility, this feature is disabled by default and should only be enabled after server version
+	// containing this flag is deployed to all history service nodes in the cluster.
+	EnableWorkflowExecutionTimeoutTimer = "history.enableWorkflowExecutionTimeoutTimer"
 	// HistoryStartupMembershipJoinDelay is the duration a history instance waits
 	// before joining membership after starting.
 	HistoryStartupMembershipJoinDelay = "history.startupMembershipJoinDelay"

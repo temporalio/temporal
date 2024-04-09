@@ -76,6 +76,7 @@ import (
 	"go.temporal.io/server/service/history"
 	"go.temporal.io/server/service/history/replication"
 	"go.temporal.io/server/service/history/tasks"
+	"go.temporal.io/server/service/history/workflow"
 	"go.temporal.io/server/service/matching"
 	"go.temporal.io/server/service/worker"
 	"go.temporal.io/server/temporal"
@@ -546,6 +547,7 @@ func (c *temporalImpl) startHistory(
 			fx.Provide(resource.DefaultSnTaggedLoggerProvider),
 			fx.Provide(func() *esclient.Config { return c.esConfig }),
 			fx.Provide(func() esclient.Client { return c.esClient }),
+			fx.Provide(workflow.NewTaskGeneratorProvider),
 			fx.Provide(c.GetTLSConfigProvider),
 			fx.Provide(c.GetTaskCategoryRegistry),
 			fx.Supply(c.spanExporters),
@@ -847,8 +849,6 @@ func (c *temporalImpl) overrideHistoryDynamicConfig(t *testing.T, client *dcClie
 	// For DeleteWorkflowExecution tests
 	client.OverrideValue(t, dynamicconfig.TransferProcessorUpdateAckInterval, 1*time.Second)
 	client.OverrideValue(t, dynamicconfig.VisibilityProcessorUpdateAckInterval, 1*time.Second)
-
-	client.OverrideValue(t, dynamicconfig.EnableAPIGetCurrentRunIDLock, true)
 }
 
 func (c *temporalImpl) newRPCFactory(

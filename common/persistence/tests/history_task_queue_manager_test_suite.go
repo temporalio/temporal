@@ -39,6 +39,7 @@ import (
 	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/persistence/persistencetest"
+	"go.temporal.io/server/common/persistence/serialization"
 	"go.temporal.io/server/service/history/api/deletedlqtasks/deletedlqtaskstest"
 	"go.temporal.io/server/service/history/api/getdlqtasks/getdlqtaskstest"
 	"go.temporal.io/server/service/history/api/listqueues/listqueuestest"
@@ -108,7 +109,7 @@ func (q faultyQueue) ListQueues(
 // RunHistoryTaskQueueManagerTestSuite runs all tests for the history task queue manager against a given queue provided by a
 // particular database. This test suite should be re-used to test all queue implementations.
 func RunHistoryTaskQueueManagerTestSuite(t *testing.T, queue persistence.QueueV2) {
-	historyTaskQueueManager := persistence.NewHistoryTaskQueueManager(queue)
+	historyTaskQueueManager := persistence.NewHistoryTaskQueueManager(queue, serialization.NewSerializer())
 	t.Run("ListQueues", func(t *testing.T) {
 		listqueuestest.TestInvoke(t, historyTaskQueueManager)
 	})
@@ -155,7 +156,7 @@ func testHistoryTaskQueueManagerCreateQueueErr(t *testing.T, queue persistence.Q
 	manager := persistence.NewHistoryTaskQueueManager(faultyQueue{
 		base:           queue,
 		createQueueErr: retErr,
-	})
+	}, serialization.NewSerializer())
 	_, err := manager.CreateQueue(context.Background(), &persistence.CreateQueueRequest{
 		QueueKey: persistencetest.GetQueueKey(t),
 	})
@@ -216,7 +217,7 @@ func testHistoryTaskQueueManagerEnqueueTasksErr(t *testing.T, queue persistence.
 	manager := persistence.NewHistoryTaskQueueManager(faultyQueue{
 		base:       queue,
 		enqueueErr: retErr,
-	})
+	}, serialization.NewSerializer())
 	queueKey := persistencetest.GetQueueKey(t)
 	_, err := manager.CreateQueue(ctx, &persistence.CreateQueueRequest{
 		QueueKey: queueKey,
@@ -326,7 +327,7 @@ func testHistoryTaskQueueManagerDeleteTasksErr(t *testing.T, queue persistence.Q
 	manager := persistence.NewHistoryTaskQueueManager(faultyQueue{
 		base:                   queue,
 		rangeDeleteMessagesErr: retErr,
-	})
+	}, serialization.NewSerializer())
 	queueKey := persistencetest.GetQueueKey(t)
 	_, err := manager.CreateQueue(ctx, &persistence.CreateQueueRequest{
 		QueueKey: queueKey,

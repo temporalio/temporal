@@ -75,7 +75,7 @@ type (
 		RejectUnprocessed(ctx context.Context, eventStore EventStore) ([]string, error)
 
 		// CancelIncomplete cancels all incomplete updates in the registry:
-		//   - updates in stateAdmitted, stateRequested, or stateSent are rejected,
+		//   - updates in stateCreated, stateAdmitted, or stateSent are rejected,
 		//   - updates in stateAccepted are ignored (see CancelIncomplete() in update.go for details),
 		//   - updates in stateCompleted are ignored.
 		CancelIncomplete(ctx context.Context, reason CancelReason, eventStore EventStore) error
@@ -200,7 +200,7 @@ func (r *registry) Find(ctx context.Context, id string) (*Update, bool) {
 }
 
 // CancelIncomplete cancels all incomplete updates in the registry:
-//   - updates in stateAdmitted, stateRequested, or stateSent are rejected,
+//   - updates in stateCreated, stateAdmitted, or stateSent are rejected,
 //   - updates in stateAccepted are ignored (see CancelIncomplete() in update.go for details),
 //   - updates in stateCompleted are ignored.
 func (r *registry) CancelIncomplete(ctx context.Context, reason CancelReason, eventStore EventStore) error {

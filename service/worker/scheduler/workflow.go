@@ -48,10 +48,12 @@ import (
 
 	schedspb "go.temporal.io/server/api/schedule/v1"
 	"go.temporal.io/server/common"
+	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/payload"
 	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/common/searchattribute"
+	"go.temporal.io/server/common/utf8validator"
 	"go.temporal.io/server/common/util"
 )
 
@@ -1016,6 +1018,7 @@ func (s *scheduler) updateMemoAndSearchAttributes() {
 		currentInfo.Unmarshal(currentInfoBytes) != nil ||
 		!proto.Equal(&currentInfo, newInfo) {
 		// marshal manually to get proto encoding (default dataconverter will use json)
+		s.logUTF8ValidationErrors(&currentInfo, newInfo)
 		newInfoBytes, err := newInfo.Marshal()
 		if err == nil {
 			err = workflow.UpsertMemo(s.ctx, map[string]interface{}{
@@ -1038,6 +1041,18 @@ func (s *scheduler) updateMemoAndSearchAttributes() {
 		if err != nil {
 			s.logger.Error("error updating search attributes", "error", err)
 		}
+	}
+}
+
+func (s *scheduler) logUTF8ValidationErrors(msgs ...proto.Message) {
+	for _, msg := range msgs {
+		// log errors only, don't affect control flow
+		_ = utf8validator.Validate(
+			msg,
+			utf8validator.SourcePersistence,
+			tag.WorkflowNamespace(s.State.Namespace),
+			tag.ScheduleID(s.State.ScheduleId),
+		)
 	}
 }
 

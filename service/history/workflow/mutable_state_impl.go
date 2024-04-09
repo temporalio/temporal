@@ -451,6 +451,10 @@ func NewSanitizedMutableState(
 	}
 
 	// sanitize data
+	// Some values stored in mutable state are cluster or shard specific.
+	// E.g task status (if task is created or not), taskID (derived from shard rangeID), txnID (derived from shard rangeID), etc.
+	// Those fields should not be replicated across clusters and should be sanitized.
+	mutableState.executionInfo.WorkflowExecutionTimerTaskStatus = TimerTaskStatusNone
 	mutableState.executionInfo.LastFirstEventTxnId = lastFirstEventTxnID
 	mutableState.executionInfo.CloseVisibilityTaskId = common.EmptyVersion
 	mutableState.executionInfo.CloseTransferTaskId = common.EmptyVersion
@@ -461,6 +465,35 @@ func NewSanitizedMutableState(
 	}
 	mutableState.currentVersion = lastWriteVersion
 	return mutableState, nil
+}
+
+func NewMutableStateInChain(
+	shardContext shard.Context,
+	eventsCache events.Cache,
+	logger log.Logger,
+	namespaceEntry *namespace.Namespace,
+	workflowID string,
+	runID string,
+	startTime time.Time,
+	currentMutableState MutableState,
+) MutableState {
+	newMutableState := NewMutableState(
+		shardContext,
+		eventsCache,
+		logger,
+		namespaceEntry,
+		workflowID,
+		runID,
+		startTime,
+	)
+
+	// carry over necessary fields from current mutable state
+	newMutableState.executionInfo.WorkflowExecutionTimerTaskStatus = currentMutableState.GetExecutionInfo().WorkflowExecutionTimerTaskStatus
+
+	// TODO: Today other information like autoResetPoints, previousRunID, firstRunID, etc.
+	// are carried over in AddWorkflowExecutionStartedEventWithOptions. Ideally all information
+	// should be carried over here since some information is not part of the startedEvent.
+	return newMutableState
 }
 
 func (ms *MutableStateImpl) mustInitHSM() {
@@ -1252,6 +1285,19 @@ func (ms *MutableStateImpl) GetWorkflowCloseTime(ctx context.Context) (time.Time
 	return ms.executionInfo.CloseTime.AsTime(), nil
 }
 
+// GetWorkflowExecutionDuration returns the workflow execution duration.
+// Returns zero for open workflow.
+func (ms *MutableStateImpl) GetWorkflowExecutionDuration(ctx context.Context) (time.Duration, error) {
+	closeTime, err := ms.GetWorkflowCloseTime(ctx)
+	if err != nil {
+		return 0, err
+	}
+	if closeTime.IsZero() || ms.executionInfo.ExecutionTime == nil {
+		return 0, nil
+	}
+	return closeTime.Sub(ms.executionInfo.ExecutionTime.AsTime()), nil
+}
+
 // GetStartEvent retrieves the workflow start event from mutable state
 func (ms *MutableStateImpl) GetStartEvent(
 	ctx context.Context,
@@ -1977,11 +2023,14 @@ func (ms *MutableStateImpl) AddWorkflowExecutionStartedEventWithOptions(
 	}
 
 	// TODO merge active & passive task generation
-	if err := ms.taskGenerator.GenerateWorkflowStartTasks(
+	var err error
+	ms.executionInfo.WorkflowExecutionTimerTaskStatus, err = ms.taskGenerator.GenerateWorkflowStartTasks(
 		event,
-	); err != nil {
+	)
+	if err != nil {
 		return nil, err
 	}
+
 	if err := ms.taskGenerator.GenerateRecordWorkflowStartedTasks(
 		event,
 	); err != nil {
@@ -2074,6 +2123,7 @@ func (ms *MutableStateImpl) ApplyWorkflowExecutionStartedEvent(
 
 	ms.executionInfo.Attempt = event.GetAttempt()
 	if !timestamp.TimeValue(event.GetWorkflowExecutionExpirationTime()).IsZero() {
+		// TODO: for workflow reset case, re-calculate the expiration time instead of reusing the one in the event
 		ms.executionInfo.WorkflowExecutionExpirationTime = event.GetWorkflowExecutionExpirationTime()
 	}
 
@@ -2334,8 +2384,8 @@ func (ms *MutableStateImpl) addBuildIdToLoadedSearchAttribute(existingValues []s
 	var added []string
 	for _, newValue := range newValues {
 		found := false
-		for _, exisitingValue := range existingValues {
-			if exisitingValue == newValue {
+		for _, existingValue := range existingValues {
+			if existingValue == newValue {
 				found = true
 				break
 			}

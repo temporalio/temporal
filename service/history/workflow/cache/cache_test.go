@@ -38,8 +38,12 @@ import (
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	commonpb "go.temporal.io/api/common/v1"
+	enumspb "go.temporal.io/api/enums/v1"
+	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/server/common/cache"
+	"go.temporal.io/server/common/persistence"
 
+	enumsspb "go.temporal.io/server/api/enums/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/dynamicconfig"
@@ -456,7 +460,6 @@ func (s *workflowCacheSuite) TestHistoryCache_CacheLatencyMetricContext() {
 	latency2, ok := metrics.ContextCounterGet(ctx, metrics.HistoryWorkflowExecutionCacheLatency.Name())
 	s.True(ok)
 	s.Greater(latency2, latency1)
-
 }
 
 func (s *workflowCacheSuite) TestCacheImpl_lockWorkflowExecution() {
@@ -778,4 +781,74 @@ func (s *workflowCacheSuite) TestCacheImpl_CheckCacheLimitSizeBasedFlag() {
 	s.NoError(err)
 	s.Equal(mockMS1, ctx.(*workflow.ContextImpl).MutableState)
 	release1(nil)
+}
+
+func (s *workflowCacheSuite) TestCacheImpl_GetCurrentRunID_CurrentRunExists() {
+	s.cache = NewHostLevelCache(s.mockShard.GetConfig(), metrics.NoopMetricsHandler)
+
+	namespaceID := namespace.ID("test_namespace_id")
+	execution := commonpb.WorkflowExecution{
+		WorkflowId: "some random workflow ID",
+		RunId:      "",
+	}
+
+	currentRunID := uuid.New()
+
+	mockExecutionManager := s.mockShard.Resource.ExecutionMgr
+	mockExecutionManager.EXPECT().GetCurrentExecution(gomock.Any(), &persistence.GetCurrentExecutionRequest{
+		ShardID:     s.mockShard.GetShardID(),
+		NamespaceID: namespaceID.String(),
+		WorkflowID:  execution.GetWorkflowId(),
+	}).Return(&persistence.GetCurrentExecutionResponse{
+		StartRequestID: uuid.New(),
+		RunID:          currentRunID,
+		State:          enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED,
+		Status:         enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED,
+	}, nil).Times(1)
+
+	ctx, release, err := s.cache.GetOrCreateWorkflowExecution(
+		context.Background(),
+		s.mockShard,
+		namespaceID,
+		&execution,
+		workflow.LockPriorityHigh,
+	)
+	s.NoError(err)
+
+	s.Equal(currentRunID, ctx.GetWorkflowKey().RunID)
+	release(nil)
+}
+
+func (s *workflowCacheSuite) TestCacheImpl_GetCurrentRunID_NoCurrentRun() {
+	s.cache = NewHostLevelCache(s.mockShard.GetConfig(), metrics.NoopMetricsHandler)
+
+	namespaceID := namespace.ID("test_namespace_id")
+	execution := commonpb.WorkflowExecution{
+		WorkflowId: "some random workflow ID",
+		RunId:      "",
+	}
+
+	mockExecutionManager := s.mockShard.Resource.ExecutionMgr
+	mockExecutionManager.EXPECT().GetCurrentExecution(gomock.Any(), &persistence.GetCurrentExecutionRequest{
+		ShardID:     s.mockShard.GetShardID(),
+		NamespaceID: namespaceID.String(),
+		WorkflowID:  execution.GetWorkflowId(),
+	}).Return(nil, serviceerror.NewNotFound("current worflow not found")).Times(1)
+	mockShardManager := s.mockShard.Resource.ShardMgr
+	mockShardManager.EXPECT().AssertShardOwnership(gomock.Any(), &persistence.AssertShardOwnershipRequest{
+		ShardID: s.mockShard.GetShardID(),
+		RangeID: s.mockShard.GetRangeID(),
+	}).Return(nil).Times(1)
+
+	ctx, release, err := s.cache.GetOrCreateWorkflowExecution(
+		context.Background(),
+		s.mockShard,
+		namespaceID,
+		&execution,
+		workflow.LockPriorityHigh,
+	)
+	var notFound *serviceerror.NotFound
+	s.ErrorAs(err, &notFound)
+	s.Nil(ctx)
+	s.Nil(release)
 }

@@ -25,6 +25,8 @@
 package shard
 
 import (
+	"context"
+
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/service/history/tasks"
@@ -104,4 +106,27 @@ func getMinTaskKey(
 		}
 	}
 	return minTaskKey
+}
+
+// TODO: deprecate this function after disabling ShardOwnershipAssertionEnabled
+func AssertShardOwnership(
+	ctx context.Context,
+	shardContext Context,
+	shardOwnershipAsserted *bool,
+) error {
+	if !shardContext.GetConfig().ShardOwnershipAssertionEnabled() {
+		return nil
+	}
+
+	if shardOwnershipAsserted == nil || !*shardOwnershipAsserted {
+		if err := shardContext.AssertOwnership(ctx); err != nil {
+			return err
+		}
+
+		if shardOwnershipAsserted != nil {
+			*shardOwnershipAsserted = true
+		}
+	}
+
+	return nil
 }

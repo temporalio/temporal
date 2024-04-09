@@ -41,7 +41,6 @@ import (
 	historyspb "go.temporal.io/server/api/history/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	p "go.temporal.io/server/common/persistence"
-	"go.temporal.io/server/common/shuffle"
 	"go.temporal.io/server/common/testing/fakedata"
 	"go.temporal.io/server/service/history/tasks"
 )
@@ -65,9 +64,10 @@ func RandomSnapshot(
 	state enumsspb.WorkflowExecutionState,
 	status enumspb.WorkflowExecutionStatus,
 	dbRecordVersion int64,
+	historyBranchUtil p.HistoryBranchUtil,
 ) *p.WorkflowSnapshot {
 	return &p.WorkflowSnapshot{
-		ExecutionInfo:  RandomExecutionInfo(namespaceID, workflowID, lastWriteVersion),
+		ExecutionInfo:  RandomExecutionInfo(namespaceID, workflowID, lastWriteVersion, historyBranchUtil),
 		ExecutionState: RandomExecutionState(runID, state, status),
 
 		NextEventID: rand.Int63(),
@@ -99,9 +99,10 @@ func RandomMutation(
 	state enumsspb.WorkflowExecutionState,
 	status enumspb.WorkflowExecutionStatus,
 	dbRecordVersion int64,
+	historyBranchUtil p.HistoryBranchUtil,
 ) *p.WorkflowMutation {
 	mutation := &p.WorkflowMutation{
-		ExecutionInfo:  RandomExecutionInfo(namespaceID, workflowID, lastWriteVersion),
+		ExecutionInfo:  RandomExecutionInfo(namespaceID, workflowID, lastWriteVersion, historyBranchUtil),
 		ExecutionState: RandomExecutionState(runID, state, status),
 
 		NextEventID: rand.Int63(),
@@ -152,12 +153,13 @@ func RandomExecutionInfo(
 	namespaceID string,
 	workflowID string,
 	lastWriteVersion int64,
+	historyBranchUtil p.HistoryBranchUtil,
 ) *persistencespb.WorkflowExecutionInfo {
 	var executionInfo persistencespb.WorkflowExecutionInfo
 	_ = fakedata.FakeStruct(&executionInfo)
 	executionInfo.NamespaceId = namespaceID
 	executionInfo.WorkflowId = workflowID
-	executionInfo.VersionHistories = RandomVersionHistory(lastWriteVersion)
+	executionInfo.VersionHistories = RandomVersionHistory(lastWriteVersion, historyBranchUtil)
 	return &executionInfo
 }
 
@@ -265,11 +267,23 @@ func RandomPayload() *commonpb.Payload {
 
 func RandomVersionHistory(
 	lastWriteVersion int64,
+	historyBranchUtil p.HistoryBranchUtil,
 ) *historyspb.VersionHistories {
+	randomBranchToken, _ := historyBranchUtil.NewHistoryBranch(
+		uuid.NewString(),
+		uuid.NewString(),
+		uuid.NewString(),
+		uuid.NewString(),
+		nil,
+		nil,
+		0,
+		0,
+		0,
+	)
 	return &historyspb.VersionHistories{
 		CurrentVersionHistoryIndex: 0,
 		Histories: []*historyspb.VersionHistory{{
-			BranchToken: shuffle.Bytes([]byte("random branch token")),
+			BranchToken: randomBranchToken,
 			Items: []*historyspb.VersionHistoryItem{{
 				EventId: rand.Int63(),
 				Version: lastWriteVersion,

@@ -35,6 +35,7 @@ import (
 
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
+	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/service/history/tasks"
 )
@@ -167,8 +168,10 @@ func (s *TaskSerializer) serializeTimerTask(
 		timerTask = s.timerActivityRetryTaskToProto(task)
 	case *tasks.UserTimerTask:
 		timerTask = s.timerUserTaskToProto(task)
-	case *tasks.WorkflowTimeoutTask:
+	case *tasks.WorkflowRunTimeoutTask:
 		timerTask = s.timerWorkflowRunToProto(task)
+	case *tasks.WorkflowExecutionTimeoutTask:
+		timerTask = s.timerWorkflowExecutionToProto(task)
 	case *tasks.DeleteHistoryEventTask:
 		timerTask = s.timerWorkflowCleanupTaskToProto(task)
 	case *tasks.StateMachineTimerTask:
@@ -201,6 +204,8 @@ func (s *TaskSerializer) deserializeTimerTasks(
 		timer = s.timerUserTaskFromProto(timerTask)
 	case enumsspb.TASK_TYPE_WORKFLOW_RUN_TIMEOUT:
 		timer = s.timerWorkflowRunFromProto(timerTask)
+	case enumsspb.TASK_TYPE_WORKFLOW_EXECUTION_TIMEOUT:
+		timer = s.timerWorkflowExecutionFromProto(timerTask)
 	case enumsspb.TASK_TYPE_DELETE_HISTORY_EVENT:
 		timer = s.timerWorkflowCleanupTaskFromProto(timerTask)
 	case enumsspb.TASK_TYPE_STATE_MACHINE_TIMER:
@@ -808,35 +813,66 @@ func (s *TaskSerializer) timerUserTaskFromProto(
 }
 
 func (s *TaskSerializer) timerWorkflowRunToProto(
-	workflowTimer *tasks.WorkflowTimeoutTask,
+	workflowRunTimer *tasks.WorkflowRunTimeoutTask,
 ) *persistencespb.TimerTaskInfo {
 	return &persistencespb.TimerTaskInfo{
-		NamespaceId:         workflowTimer.WorkflowKey.NamespaceID,
-		WorkflowId:          workflowTimer.WorkflowKey.WorkflowID,
-		RunId:               workflowTimer.WorkflowKey.RunID,
+		NamespaceId:         workflowRunTimer.WorkflowKey.NamespaceID,
+		WorkflowId:          workflowRunTimer.WorkflowKey.WorkflowID,
+		RunId:               workflowRunTimer.WorkflowKey.RunID,
 		TaskType:            enumsspb.TASK_TYPE_WORKFLOW_RUN_TIMEOUT,
 		TimeoutType:         enumspb.TIMEOUT_TYPE_UNSPECIFIED,
 		WorkflowBackoffType: enumsspb.WORKFLOW_BACKOFF_TYPE_UNSPECIFIED,
-		Version:             workflowTimer.Version,
+		Version:             workflowRunTimer.Version,
 		ScheduleAttempt:     0,
 		EventId:             0,
-		TaskId:              workflowTimer.TaskID,
-		VisibilityTime:      timestamppb.New(workflowTimer.VisibilityTimestamp),
+		TaskId:              workflowRunTimer.TaskID,
+		VisibilityTime:      timestamppb.New(workflowRunTimer.VisibilityTimestamp),
+	}
+}
+
+func (s *TaskSerializer) timerWorkflowExecutionToProto(
+	workflowExecutionTimer *tasks.WorkflowExecutionTimeoutTask,
+) *persistencespb.TimerTaskInfo {
+	return &persistencespb.TimerTaskInfo{
+		NamespaceId:         workflowExecutionTimer.GetNamespaceID(),
+		WorkflowId:          workflowExecutionTimer.GetWorkflowID(),
+		RunId:               workflowExecutionTimer.GetRunID(),
+		FirstRunId:          workflowExecutionTimer.FirstRunID,
+		TaskType:            enumsspb.TASK_TYPE_WORKFLOW_EXECUTION_TIMEOUT,
+		TimeoutType:         enumspb.TIMEOUT_TYPE_UNSPECIFIED,
+		WorkflowBackoffType: enumsspb.WORKFLOW_BACKOFF_TYPE_UNSPECIFIED,
+		Version:             common.EmptyVersion,
+		ScheduleAttempt:     0,
+		EventId:             0,
+		TaskId:              workflowExecutionTimer.TaskID,
+		VisibilityTime:      timestamppb.New(workflowExecutionTimer.VisibilityTimestamp),
 	}
 }
 
 func (s *TaskSerializer) timerWorkflowRunFromProto(
-	workflowTimer *persistencespb.TimerTaskInfo,
-) *tasks.WorkflowTimeoutTask {
-	return &tasks.WorkflowTimeoutTask{
+	workflowRunTimer *persistencespb.TimerTaskInfo,
+) *tasks.WorkflowRunTimeoutTask {
+	return &tasks.WorkflowRunTimeoutTask{
 		WorkflowKey: definition.NewWorkflowKey(
-			workflowTimer.NamespaceId,
-			workflowTimer.WorkflowId,
-			workflowTimer.RunId,
+			workflowRunTimer.NamespaceId,
+			workflowRunTimer.WorkflowId,
+			workflowRunTimer.RunId,
 		),
-		VisibilityTimestamp: workflowTimer.VisibilityTime.AsTime(),
-		TaskID:              workflowTimer.TaskId,
-		Version:             workflowTimer.Version,
+		VisibilityTimestamp: workflowRunTimer.VisibilityTime.AsTime(),
+		TaskID:              workflowRunTimer.TaskId,
+		Version:             workflowRunTimer.Version,
+	}
+}
+
+func (s *TaskSerializer) timerWorkflowExecutionFromProto(
+	workflowExecutionTimer *persistencespb.TimerTaskInfo,
+) *tasks.WorkflowExecutionTimeoutTask {
+	return &tasks.WorkflowExecutionTimeoutTask{
+		NamespaceID:         workflowExecutionTimer.NamespaceId,
+		WorkflowID:          workflowExecutionTimer.WorkflowId,
+		FirstRunID:          workflowExecutionTimer.FirstRunId,
+		VisibilityTimestamp: workflowExecutionTimer.VisibilityTime.AsTime(),
+		TaskID:              workflowExecutionTimer.TaskId,
 	}
 }
 

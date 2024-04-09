@@ -23,14 +23,17 @@
 package nexus
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"net/url"
 	"regexp"
-	"strings"
 
 	"go.temporal.io/api/nexus/v1"
 	"go.temporal.io/api/operatorservice/v1"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
+
 	"go.temporal.io/server/api/enums/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common/collection"
@@ -38,8 +41,6 @@ import (
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/rpc"
-	"google.golang.org/grpc/codes"
-	"google.golang.org/grpc/status"
 )
 
 // OutgoingServiceRegistry manages the registration and retrieval of "outgoing" services from the namespace metadata in
@@ -73,7 +74,7 @@ func NewOutgoingServiceRegistry(
 		config:              config,
 		sortedSetManager: collection.NewSortedSetManager[[]*persistencespb.NexusOutgoingService, *persistencespb.NexusOutgoingService, string](
 			func(service *persistencespb.NexusOutgoingService, name string) int {
-				return strings.Compare(service.Name, name)
+				return bytes.Compare([]byte(service.Name), []byte(name))
 			},
 			func(service *persistencespb.NexusOutgoingService) string {
 				return service.Name

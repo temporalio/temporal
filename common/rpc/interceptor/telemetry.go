@@ -29,6 +29,7 @@ import (
 	"strings"
 	"time"
 
+	commonpb "go.temporal.io/api/common/v1"
 	"go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/api/workflowservice/v1"
@@ -50,8 +51,21 @@ type (
 
 	TelemetryInterceptor struct {
 		namespaceRegistry namespace.Registry
+		serializer        common.TaskTokenSerializer
 		metricsHandler    metrics.Handler
 		logger            log.Logger
+	}
+	ExecutionGetter interface {
+		GetExecution() *commonpb.WorkflowExecution
+	}
+	WorkflowExecutionGetter interface {
+		GetWorkflowExecution() *commonpb.WorkflowExecution
+	}
+	WorkflowIdGetter interface {
+		GetWorkflowId() string
+	}
+	RunIdGetter interface {
+		GetRunId() string
 	}
 )
 
@@ -104,6 +118,7 @@ func NewTelemetryInterceptor(
 ) *TelemetryInterceptor {
 	return &TelemetryInterceptor{
 		namespaceRegistry: namespaceRegistry,
+		serializer:        common.NewProtoTaskTokenSerializer(),
 		metricsHandler:    metricsHandler,
 		logger:            logger,
 	}
@@ -174,7 +189,7 @@ func (ti *TelemetryInterceptor) UnaryIntercept(
 	}
 
 	if err != nil {
-		ti.handleError(metricsHandler, logTags, err)
+		ti.handleError(req, metricsHandler, logTags, err)
 		return nil, err
 	}
 
@@ -196,7 +211,7 @@ func (ti *TelemetryInterceptor) StreamIntercept(
 
 	err := handler(service, serverStream)
 	if err != nil {
-		ti.handleError(metricsHandler, logTags, err)
+		ti.handleError(nil, metricsHandler, logTags, err)
 		return err
 	}
 	return nil
@@ -304,6 +319,7 @@ func (ti *TelemetryInterceptor) streamMetricsHandlerLogTags(
 }
 
 func (ti *TelemetryInterceptor) handleError(
+	req interface{},
 	metricsHandler metrics.Handler,
 	logTags []tag.Tag,
 	err error,
@@ -364,8 +380,46 @@ func (ti *TelemetryInterceptor) handleError(
 			}
 		}
 		metrics.ServiceFailures.With(metricsHandler).Record(1)
+		logTags = append(logTags, ti.getWorkflowTags(req)...)
 		ti.logger.Error("service failures", append(logTags, tag.Error(err))...)
 	}
+}
+
+func (ti *TelemetryInterceptor) getWorkflowTags(
+	req interface{},
+) []tag.Tag {
+	if executionGetter, ok := req.(ExecutionGetter); ok {
+		execution := executionGetter.GetExecution()
+		return []tag.Tag{tag.WorkflowID(execution.WorkflowId), tag.WorkflowRunID(execution.RunId)}
+	}
+	if workflowExecutionGetter, ok := req.(WorkflowExecutionGetter); ok {
+		execution := workflowExecutionGetter.GetWorkflowExecution()
+		return []tag.Tag{tag.WorkflowID(execution.WorkflowId), tag.WorkflowRunID(execution.RunId)}
+	}
+	if taskTokenGetter, ok := req.(TaskTokenGetter); ok {
+		taskTokenBytes := taskTokenGetter.GetTaskToken()
+		if len(taskTokenBytes) == 0 {
+			return []tag.Tag{}
+		}
+		// Special case for avoiding deprecated RespondQueryTaskCompleted API token which does not have workflow id.
+		if _, ok := req.(*workflowservice.RespondQueryTaskCompletedRequest); ok {
+			return []tag.Tag{}
+		}
+		taskToken, err := ti.serializer.Deserialize(taskTokenBytes)
+		if err != nil {
+			ti.logger.Error("unable to deserialize task token", tag.Error(err))
+			return []tag.Tag{}
+		}
+		return []tag.Tag{tag.WorkflowID(taskToken.WorkflowId), tag.WorkflowRunID(taskToken.RunId)}
+	}
+	if workflowIdGetter, ok := req.(WorkflowIdGetter); ok {
+		workflowTags := []tag.Tag{tag.WorkflowID(workflowIdGetter.GetWorkflowId())}
+		if runIdGetter, ok := req.(RunIdGetter); ok {
+			workflowTags = append(workflowTags, tag.WorkflowRunID(runIdGetter.GetRunId()))
+		}
+		return workflowTags
+	}
+	return []tag.Tag{}
 }
 
 func GetMetricsHandlerFromContext(

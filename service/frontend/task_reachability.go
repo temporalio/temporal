@@ -240,7 +240,7 @@ func (wh *WorkflowHandler) getTaskQueueReachability(ctx context.Context, request
 		}
 	}
 
-	reachability, err := wh.queryVisibilityForExisitingWorkflowsReachability(ctx, request.namespace, request.taskQueue, buildIdsFilter, request.reachabilityType)
+	reachability, err := wh.queryVisibilityForExistingWorkflowsReachability(ctx, request.namespace, request.taskQueue, buildIdsFilter, request.reachabilityType)
 	if err != nil {
 		return nil, err
 	}
@@ -248,7 +248,7 @@ func (wh *WorkflowHandler) getTaskQueueReachability(ctx context.Context, request
 	return &taskQueueReachability, nil
 }
 
-func (wh *WorkflowHandler) queryVisibilityForExisitingWorkflowsReachability(
+func (wh *WorkflowHandler) queryVisibilityForExistingWorkflowsReachability(
 	ctx context.Context,
 	ns *namespace.Namespace,
 	taskQueue,
@@ -281,7 +281,7 @@ func (wh *WorkflowHandler) queryVisibilityForExisitingWorkflowsReachability(
 	}
 
 	// TODO(bergundy): is count more efficient than select with page size of 1?
-	countResponse, err := wh.visibilityMrg.CountWorkflowExecutions(ctx, &req)
+	countResponse, err := wh.visibilityMgr.CountWorkflowExecutions(ctx, &req)
 	if err != nil {
 		return nil, err
 	} else if countResponse.Count == 0 {

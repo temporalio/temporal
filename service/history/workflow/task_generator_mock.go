@@ -345,11 +345,12 @@ func (mr *MockTaskGeneratorMockRecorder) GenerateWorkflowResetTasks() *gomock.Ca
 }
 
 // GenerateWorkflowStartTasks mocks base method.
-func (m *MockTaskGenerator) GenerateWorkflowStartTasks(startEvent *v1.HistoryEvent) error {
+func (m *MockTaskGenerator) GenerateWorkflowStartTasks(startEvent *v1.HistoryEvent) (int32, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "GenerateWorkflowStartTasks", startEvent)
-	ret0, _ := ret[0].(error)
-	return ret0
+	ret0, _ := ret[0].(int32)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
 }
 
 // GenerateWorkflowStartTasks indicates an expected call of GenerateWorkflowStartTasks.

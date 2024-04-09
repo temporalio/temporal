@@ -22,7 +22,7 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-//go:generate mocksync -copyright_file ../../../LICENSE -package $GOPACKAGE -source $GOFILE -destination archiver_mock.go
+//go:generate mockgen -copyright_file ../../../LICENSE -package $GOPACKAGE -source $GOFILE -destination archiver_mock.go
 
 package archival
 
@@ -38,6 +38,7 @@ import (
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/server/common/persistence/visibility/manager"
 	"go.uber.org/multierr"
+	"google.golang.org/protobuf/types/known/durationpb"
 	"google.golang.org/protobuf/types/known/timestamppb"
 
 	archiverspb "go.temporal.io/server/api/archiver/v1"
@@ -66,14 +67,15 @@ type (
 		HistoryURI carchiver.URI
 
 		// visibility archival
-		WorkflowTypeName string
-		StartTime        *timestamppb.Timestamp
-		ExecutionTime    *timestamppb.Timestamp
-		CloseTime        *timestamppb.Timestamp
-		Status           enumspb.WorkflowExecutionStatus
-		HistoryLength    int64
-		Memo             *commonpb.Memo
-		SearchAttributes *commonpb.SearchAttributes
+		WorkflowTypeName  string
+		StartTime         *timestamppb.Timestamp
+		ExecutionTime     *timestamppb.Timestamp
+		CloseTime         *timestamppb.Timestamp
+		ExecutionDuration *durationpb.Duration
+		Status            enumspb.WorkflowExecutionStatus
+		HistoryLength     int64
+		Memo              *commonpb.Memo
+		SearchAttributes  *commonpb.SearchAttributes
 		// VisibilityURI is the URI of the visibility archival backend.
 		VisibilityURI carchiver.URI
 
@@ -262,6 +264,7 @@ func (a *archiver) archiveVisibility(ctx context.Context, request *Request, logg
 		StartTime:          request.StartTime,
 		ExecutionTime:      request.ExecutionTime,
 		CloseTime:          request.CloseTime,
+		ExecutionDuration:  request.ExecutionDuration,
 		Status:             request.Status,
 		HistoryLength:      request.HistoryLength,
 		Memo:               request.Memo,

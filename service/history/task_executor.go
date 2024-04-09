@@ -54,7 +54,13 @@ func getWorkflowExecutionContextForTask(
 	workflowCache wcache.Cache,
 	task tasks.Task,
 ) (workflow.Context, wcache.ReleaseCacheFunc, error) {
-	return getWorkflowExecutionContext(ctx, shardContext, workflowCache, taskWorkflowKey(task))
+	return getWorkflowExecutionContext(
+		ctx,
+		shardContext,
+		workflowCache,
+		taskWorkflowKey(task),
+		workflow.LockPriorityLow,
+	)
 }
 
 func getWorkflowExecutionContext(
@@ -62,7 +68,19 @@ func getWorkflowExecutionContext(
 	shardContext shard.Context,
 	workflowCache wcache.Cache,
 	key definition.WorkflowKey,
+	lockPriority workflow.LockPriority,
 ) (workflow.Context, wcache.ReleaseCacheFunc, error) {
+	if key.GetRunID() == "" {
+		return getCurrentWorkflowExecutionContext(
+			ctx,
+			shardContext,
+			workflowCache,
+			key.NamespaceID,
+			key.WorkflowID,
+			lockPriority,
+		)
+	}
+
 	namespaceID := namespace.ID(key.GetNamespaceID())
 	execution := &commonpb.WorkflowExecution{
 		WorkflowId: key.GetWorkflowID(),
@@ -75,12 +93,82 @@ func getWorkflowExecutionContext(
 		shardContext,
 		namespaceID,
 		execution,
-		workflow.LockPriorityLow,
+		lockPriority,
 	)
 	if common.IsContextDeadlineExceededErr(err) {
 		err = consts.ErrResourceExhaustedBusyWorkflow
 	}
 	return weContext, release, err
+}
+
+func getCurrentWorkflowExecutionContext(
+	ctx context.Context,
+	shardContext shard.Context,
+	workflowCache wcache.Cache,
+	namespaceID string,
+	workflowID string,
+	lockPriority workflow.LockPriority,
+) (workflow.Context, wcache.ReleaseCacheFunc, error) {
+	shardOwnershipAsserted := false
+	currentRunID, err := wcache.GetCurrentRunID(
+		ctx,
+		shardContext,
+		workflowCache,
+		&shardOwnershipAsserted,
+		namespaceID,
+		workflowID,
+		lockPriority,
+	)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	wfContext, release, err := getWorkflowExecutionContext(
+		ctx,
+		shardContext,
+		workflowCache,
+		definition.NewWorkflowKey(namespaceID, workflowID, currentRunID),
+		lockPriority,
+	)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	mutableState, err := wfContext.LoadMutableState(ctx, shardContext)
+	if err != nil {
+		release(err)
+		return nil, nil, err
+	}
+
+	if mutableState.IsWorkflowExecutionRunning() {
+		return wfContext, release, nil
+	}
+
+	// for close workflow we need to check if it is still the current run
+	// since it's possible that the workflowID has a newer run before it's locked
+
+	currentRunID, err = wcache.GetCurrentRunID(
+		ctx,
+		shardContext,
+		workflowCache,
+		&shardOwnershipAsserted,
+		namespaceID,
+		workflowID,
+		lockPriority,
+	)
+	if err != nil {
+		// release with nil error to prevent mutable state from being unloaded from the cache
+		release(nil)
+		return nil, nil, err
+	}
+
+	if currentRunID != wfContext.GetWorkflowKey().RunID {
+		// release with nil error to prevent mutable state from being unloaded from the cache
+		release(nil)
+		return nil, nil, consts.ErrLocateCurrentWorkflowExecution
+	}
+
+	return wfContext, release, nil
 }
 
 // taskExecutor provides basic functionality for task execution.
@@ -160,7 +248,7 @@ func (t *taskExecutor) getValidatedMutableState(
 	key definition.WorkflowKey,
 	validate func(workflow.MutableState) error,
 ) (workflow.Context, wcache.ReleaseCacheFunc, workflow.MutableState, error) {
-	wfCtx, release, err := getWorkflowExecutionContext(ctx, t.shardContext, t.cache, key)
+	wfCtx, release, err := getWorkflowExecutionContext(ctx, t.shardContext, t.cache, key, workflow.LockPriorityLow)
 	if err != nil {
 		return nil, nil, nil, err
 	}

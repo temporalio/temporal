@@ -24,7 +24,7 @@
 
 // Code generated: TODO put <- here to avoid linter, this file need to be rewritten
 
-//go:generate mocksync -copyright_file ../../../LICENSE -package $GOPACKAGE -source $GOFILE -destination mutable_state_rebuilder_mock.go
+//go:generate mockgen -copyright_file ../../../LICENSE -package $GOPACKAGE -source $GOFILE -destination mutable_state_rebuilder_mock.go
 
 package workflow
 
@@ -192,9 +192,11 @@ func (b *MutableStateRebuilderImpl) applyEvents(
 				return nil, err
 			}
 
-			if err := taskGenerator.GenerateWorkflowStartTasks(
+			var err error
+			executionInfo.WorkflowExecutionTimerTaskStatus, err = taskGenerator.GenerateWorkflowStartTasks(
 				event,
-			); err != nil {
+			)
+			if err != nil {
 				return nil, err
 			}
 
@@ -699,15 +701,38 @@ func (b *MutableStateRebuilderImpl) applyNewRunHistory(
 	newRunHistory []*historypb.HistoryEvent,
 ) (MutableState, error) {
 
-	newRunMutableState := NewMutableState(
-		b.shard,
-		b.shard.GetEventsCache(),
-		b.logger,
-		b.mutableState.GetNamespaceEntry(),
-		newExecution.WorkflowId,
-		newExecution.RunId,
-		timestamp.TimeValue(newRunHistory[0].GetEventTime()),
-	)
+	// TODO: replication task should contain enough information to determine whether the new run is part of the same chain
+	// and not relying on a specific event type to make that decision
+	sameWorkflowChain := false
+	newRunFirstEvent := newRunHistory[0]
+	if newRunFirstEvent.GetEventType() == enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_STARTED {
+		newRunFirstRunID := newRunFirstEvent.GetWorkflowExecutionStartedEventAttributes().FirstExecutionRunId
+		sameWorkflowChain = newRunFirstRunID == b.mutableState.GetExecutionInfo().FirstExecutionRunId
+	}
+
+	var newRunMutableState MutableState
+	if sameWorkflowChain {
+		newRunMutableState = NewMutableStateInChain(
+			b.shard,
+			b.shard.GetEventsCache(),
+			b.logger,
+			b.mutableState.GetNamespaceEntry(),
+			newExecution.WorkflowId,
+			newExecution.RunId,
+			timestamp.TimeValue(newRunHistory[0].GetEventTime()),
+			b.mutableState,
+		)
+	} else {
+		newRunMutableState = NewMutableState(
+			b.shard,
+			b.shard.GetEventsCache(),
+			b.logger,
+			b.mutableState.GetNamespaceEntry(),
+			newExecution.WorkflowId,
+			newExecution.RunId,
+			timestamp.TimeValue(newRunHistory[0].GetEventTime()),
+		)
+	}
 
 	newRunStateBuilder := NewMutableStateRebuilder(b.shard, b.logger, newRunMutableState)
 
