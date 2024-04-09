@@ -28,6 +28,7 @@ import (
 	"context"
 	"fmt"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	enumspb "go.temporal.io/api/enums/v1"
@@ -48,7 +49,7 @@ const (
 
 type (
 	taskQueueDB struct {
-		sync.RWMutex
+		sync.Mutex
 		queue        *PhysicalTaskQueueKey
 		rangeID      int64
 		ackLevel     int64
@@ -94,16 +95,14 @@ func (db *taskQueueDB) RangeID() int64 {
 
 // GetMaxReadLevel returns the current maxReadLevel
 func (db *taskQueueDB) GetMaxReadLevel() int64 {
-	db.RLock()
-	defer db.RUnlock()
-	return db.maxReadLevel
+	return atomic.LoadInt64(&db.maxReadLevel)
 }
 
 // SetMaxReadLevel sets the current maxReadLevel
 func (db *taskQueueDB) SetMaxReadLevel(maxReadLevel int64) {
 	db.Lock()
 	defer db.Unlock()
-	db.maxReadLevel = maxReadLevel
+	atomic.StoreInt64(&db.maxReadLevel, maxReadLevel)
 }
 
 // RenewLease renews the lease on a taskqueue. If there is no previous lease,
@@ -234,9 +233,7 @@ func (db *taskQueueDB) CreateTasks(
 			Tasks: tasks,
 		})
 
-	// Update the maxReadLevel after the writes are completed, but before we send the response,
-	// so that taskReader is guaranteed to see the new read level when SpoolTask wakes it up.
-	db.maxReadLevel = maxReadLevel
+	atomic.StoreInt64(&db.maxReadLevel, maxReadLevel)
 	return resp, err
 }
 
