@@ -3676,6 +3676,54 @@ func (ms *MutableStateImpl) AddWorkflowExecutionTerminatedEvent(
 	return event, nil
 }
 
+// AddWorkflowExecutionUpdateAdmittedEvent adds a WorkflowExecutionUpdateAdmittedEvent to in-memory history.
+func (ms *MutableStateImpl) AddWorkflowExecutionUpdateAdmittedEvent(request *updatepb.Request, origin enumspb.UpdateAdmittedEventOrigin) (*historypb.HistoryEvent, error) {
+	if err := ms.checkMutability(tag.WorkflowActionUpdateAdmitted); err != nil {
+		return nil, err
+	}
+	event, batchId := ms.hBuilder.AddWorkflowExecutionUpdateAdmittedEvent(request, origin)
+	if err := ms.ApplyWorkflowExecutionUpdateAdmittedEvent(event, batchId); err != nil {
+		return nil, err
+	}
+	return event, nil
+}
+
+// ApplyWorkflowExecutionUpdateAdmittedEvent applies a WorkflowExecutionUpdateAdmittedEvent to mutable state.
+func (ms *MutableStateImpl) ApplyWorkflowExecutionUpdateAdmittedEvent(event *historypb.HistoryEvent, batchId int64) error {
+	attrs := event.GetWorkflowExecutionUpdateAdmittedEventAttributes()
+	if attrs == nil {
+		return serviceerror.NewInternal("wrong event type in call to ApplyWorkflowExecutionUpdateAdmittedEvent")
+	}
+	if ms.executionInfo.UpdateInfos == nil {
+		ms.executionInfo.UpdateInfos = make(map[string]*updatespb.UpdateInfo, 1)
+	}
+	updateID := attrs.GetRequest().GetMeta().GetUpdateId()
+	request := &updatespb.UpdateInfo_Request{
+		Request: &updatespb.RequestInfo{
+			Location: &updatespb.RequestInfo_HistoryPointer_{
+				HistoryPointer: &updatespb.RequestInfo_HistoryPointer{
+					EventId:      event.EventId,
+					EventBatchId: batchId,
+				},
+			},
+		},
+	}
+	var sizeDelta int
+	if ui, ok := ms.executionInfo.UpdateInfos[updateID]; ok {
+		sizeBefore := ui.Size()
+		ui.Value = request
+		sizeDelta = ui.Size() - sizeBefore
+	} else {
+		ui := updatespb.UpdateInfo{Value: request}
+		ms.executionInfo.UpdateInfos[updateID] = &ui
+		ms.executionInfo.UpdateCount++
+		sizeDelta = ui.Size() + len(updateID)
+	}
+	ms.approximateSize += sizeDelta
+	ms.writeEventToCache(event)
+	return nil
+}
+
 func (ms *MutableStateImpl) AddWorkflowExecutionUpdateAcceptedEvent(
 	protocolInstanceID string,
 	acceptedRequestMessageId string,
@@ -3781,54 +3829,6 @@ func (ms *MutableStateImpl) ApplyWorkflowExecutionUpdateCompletedEvent(
 
 func (ms *MutableStateImpl) RejectWorkflowExecutionUpdate(_ string, _ *updatepb.Rejection) error {
 	// TODO (alex-update): This method is noop because we don't currently write rejections to the history.
-	return nil
-}
-
-// AddWorkflowExecutionUpdateAdmittedEvent adds a WorkflowExecutionUpdateAdmittedEvent to in-memory history.
-func (ms *MutableStateImpl) AddWorkflowExecutionUpdateAdmittedEvent(request *updatepb.Request, origin enumspb.UpdateAdmittedEventOrigin) (*historypb.HistoryEvent, error) {
-	if err := ms.checkMutability(tag.WorkflowActionUpdateAdmitted); err != nil {
-		return nil, err
-	}
-	event, batchId := ms.hBuilder.AddWorkflowExecutionUpdateAdmittedEvent(request, origin)
-	if err := ms.ApplyWorkflowExecutionUpdateAdmittedEvent(event, batchId); err != nil {
-		return nil, err
-	}
-	return event, nil
-}
-
-// ApplyWorkflowExecutionUpdateAdmittedEvent applies a WorkflowExecutionUpdateAdmittedEvent to mutable state.
-func (ms *MutableStateImpl) ApplyWorkflowExecutionUpdateAdmittedEvent(event *historypb.HistoryEvent, batchId int64) error {
-	attrs := event.GetWorkflowExecutionUpdateAdmittedEventAttributes()
-	if attrs == nil {
-		return serviceerror.NewInternal("wrong event type in call to ApplyWorkflowExecutionUpdateAdmittedEvent")
-	}
-	if ms.executionInfo.UpdateInfos == nil {
-		ms.executionInfo.UpdateInfos = make(map[string]*updatespb.UpdateInfo, 1)
-	}
-	updateID := attrs.GetRequest().GetMeta().GetUpdateId()
-	request := &updatespb.UpdateInfo_Request{
-		Request: &updatespb.RequestInfo{
-			Location: &updatespb.RequestInfo_HistoryPointer_{
-				HistoryPointer: &updatespb.RequestInfo_HistoryPointer{
-					EventId:      event.EventId,
-					EventBatchId: batchId,
-				},
-			},
-		},
-	}
-	var sizeDelta int
-	if ui, ok := ms.executionInfo.UpdateInfos[updateID]; ok {
-		sizeBefore := ui.Size()
-		ui.Value = request
-		sizeDelta = ui.Size() - sizeBefore
-	} else {
-		ui := updatespb.UpdateInfo{Value: request}
-		ms.executionInfo.UpdateInfos[updateID] = &ui
-		ms.executionInfo.UpdateCount++
-		sizeDelta = ui.Size() + len(updateID)
-	}
-	ms.approximateSize += sizeDelta
-	ms.writeEventToCache(event)
 	return nil
 }
 
