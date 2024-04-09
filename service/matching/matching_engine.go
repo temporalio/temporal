@@ -800,15 +800,14 @@ func (e *matchingEngineImpl) DescribeTaskQueue(
 		if !rootPartition.IsRoot() || rootPartition.Kind() == enumspb.TASK_QUEUE_KIND_STICKY || rootPartition.TaskType() != enumspb.TASK_QUEUE_TYPE_WORKFLOW {
 			return nil, serviceerror.NewInvalidArgument("DescribeTaskQueue must be called on the root partition of workflow task queue if api mode is DESCRIBE_TASK_QUEUE_MODE_ENHANCED")
 		}
-		versioningData, err := e.getVersioningDataInternal(ctx, rootPartition)
+		userData, err := e.getUserDataClone(ctx, rootPartition)
 		if err != nil {
 			return nil, err
 		}
 		if req.GetVersions() == nil {
-			defaultBuildId := getDefaultBuildId(versioningData.GetAssignmentRules())
+			defaultBuildId := getDefaultBuildId(userData.GetVersioningData().GetAssignmentRules())
 			req.Versions = &taskqueuepb.TaskQueueVersionSelection{BuildIds: []string{defaultBuildId}}
 		}
-
 		// collect internal info
 		physicalInfoByBuildId := make(map[string]map[enumspb.TaskQueueType]*taskqueuespb.PhysicalTaskQueueInfo)
 		for _, taskQueueType := range req.TaskQueueTypes {
@@ -858,7 +857,7 @@ func (e *matchingEngineImpl) DescribeTaskQueue(
 				})
 			}
 			reachability, err := getBuildIdTaskReachability(ctx,
-				versioningData,
+				userData.GetVersioningData(),
 				e.visibilityManager,
 				request.GetNamespaceId(),
 				req.GetNamespace(),
@@ -908,18 +907,6 @@ func (e *matchingEngineImpl) DescribeTaskQueuePartition(
 		return nil, err
 	}
 	return pm.Describe(buildIds, request.GetVersions().GetAllActive(), request.GetReportBacklogInfo(), request.GetReportPollers())
-}
-
-func (e *matchingEngineImpl) getVersioningDataInternal(ctx context.Context, rootPartition tqid.Partition) (*persistencespb.VersioningData, error) {
-	rootPartitionMgr, err := e.getTaskQueuePartitionManager(ctx, rootPartition, true)
-	if err != nil {
-		return nil, err
-	}
-	userData, _, err := rootPartitionMgr.GetUserDataManager().GetUserData()
-	if err != nil {
-		return nil, err
-	}
-	return userData.GetData().GetVersioningData(), nil
 }
 
 func (e *matchingEngineImpl) getBuildIds(versions *taskqueuepb.TaskQueueVersionSelection) (map[string]bool, error) {
@@ -1085,7 +1072,7 @@ func (e *matchingEngineImpl) UpdateWorkerVersioningRules(
 		}
 
 		// Get versioning data formatted for response
-		getResp, err = GetWorkerVersioningRules(versioningData, updatedClock)
+		getResp, err = GetTimestampedWorkerVersioningRules(versioningData, updatedClock)
 		if err != nil {
 			return nil, false, err
 		}
@@ -1133,29 +1120,32 @@ func (e *matchingEngineImpl) GetWorkerVersioningRules(
 	if err != nil {
 		return nil, err
 	}
-	tqMgr, err := e.getTaskQueuePartitionManager(ctx, taskQueueFamily.TaskQueue(enumspb.TASK_QUEUE_TYPE_WORKFLOW).RootPartition(), true)
+	userData, err := e.getUserDataClone(ctx, taskQueueFamily.TaskQueue(enumspb.TASK_QUEUE_TYPE_WORKFLOW).RootPartition())
 	if err != nil {
 		return nil, err
 	}
-
-	return e.getWorkerVersioningRules(tqMgr)
-}
-
-func (e *matchingEngineImpl) getWorkerVersioningRules(tqMgr taskQueuePartitionManager) (*matchingservice.GetWorkerVersioningRulesResponse, error) {
-	data, _, err := tqMgr.GetUserDataManager().GetUserData()
-	if err != nil {
-		return nil, err
-	}
-	if data == nil {
-		data = &persistencespb.VersionedTaskQueueUserData{Data: &persistencespb.TaskQueueUserData{}}
-	} else {
-		data = common.CloneProto(data)
-	}
-	clk := data.GetData().GetClock()
+	clk := userData.GetClock()
 	if clk == nil {
 		clk = hlc.Zero(e.clusterMeta.GetClusterID())
 	}
-	return GetWorkerVersioningRules(data.GetData().GetVersioningData(), clk)
+	return GetTimestampedWorkerVersioningRules(userData.GetVersioningData(), clk)
+}
+
+func (e *matchingEngineImpl) getUserDataClone(ctx context.Context, rootPartition tqid.Partition) (*persistencespb.TaskQueueUserData, error) {
+	rootPartitionMgr, err := e.getTaskQueuePartitionManager(ctx, rootPartition, true)
+	if err != nil {
+		return nil, err
+	}
+	userData, _, err := rootPartitionMgr.GetUserDataManager().GetUserData()
+	if err != nil {
+		return nil, err
+	}
+	if userData == nil {
+		userData = &persistencespb.VersionedTaskQueueUserData{Data: &persistencespb.TaskQueueUserData{}}
+	} else {
+		userData = common.CloneProto(userData)
+	}
+	return userData.GetData(), nil
 }
 
 func (e *matchingEngineImpl) UpdateWorkerBuildIdCompatibility(

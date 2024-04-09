@@ -335,8 +335,8 @@ func setVisibilityExpect(t *testing.T,
 	buildIdsOfInterest []string,
 	countOpen, countClosed int64) {
 	vm := manager.NewMockVisibilityManager(gomock.NewController(t))
-	vm.EXPECT().CountWorkflowExecutions(gomock.Any(), rc.makeBuildIdCountRequest(buildIdsOfInterest, true)).AnyTimes().Return(mkCountResponse(countOpen))
-	vm.EXPECT().CountWorkflowExecutions(gomock.Any(), rc.makeBuildIdCountRequest(buildIdsOfInterest, false)).AnyTimes().Return(mkCountResponse(countClosed))
+	vm.EXPECT().CountWorkflowExecutions(gomock.Any(), rc.makeBuildIdCountRequest(buildIdsOfInterest, true)).MaxTimes(1).Return(mkCountResponse(countOpen))
+	vm.EXPECT().CountWorkflowExecutions(gomock.Any(), rc.makeBuildIdCountRequest(buildIdsOfInterest, false)).MaxTimes(1).Return(mkCountResponse(countClosed))
 	rc.visibilityMgr = vm
 }
 

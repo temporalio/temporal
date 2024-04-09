@@ -284,7 +284,7 @@ func CommitBuildID(timestamp *hlc.Clock,
 	return data, nil
 }
 
-func GetWorkerVersioningRules(
+func GetTimestampedWorkerVersioningRules(
 	versioningData *persistencespb.VersioningData,
 	clk *hlc.Clock,
 ) (*matchingservice.GetWorkerVersioningRulesResponse, error) {

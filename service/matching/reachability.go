@@ -127,11 +127,9 @@ func (rc *reachabilityCalculator) run(ctx context.Context, buildId string) (enum
 	return enumspb.BUILD_ID_TASK_REACHABILITY_UNREACHABLE, nil
 }
 
-// getBuildIdsOfInterest returns a list of build ids that point to the given buildId in the graph of redirect rules
-// and adds the given build id to that list.
-// It considers rules if the deletion time is within versioningReachabilityDeletedRuleInclusionPeriod
-// This list will be used to query visibility, and it;s
-// It is important to avoid false-negative reachability results, so we need to be sure that we
+// getBuildIdsOfInterest returns a list of build ids that point to the given buildId in the graph
+// of redirect rules and adds the given build id to that list.
+// It considers rules if the deletion time is within versioningReachabilityDeletedRuleInclusionPeriod.
 func (rc *reachabilityCalculator) getBuildIdsOfInterest(
 	buildId string,
 	includeRecentlyDeleted bool) []string {

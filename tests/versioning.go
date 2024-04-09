@@ -3259,15 +3259,13 @@ func (s *VersioningIntegSuite) TestDescribeTaskQueueEnhanced_Versioned_BasicReac
 
 	s.getBuildIdReachability(ctx, tq, nil, map[string]enumspb.BuildIdTaskReachability{
 		"": enumspb.BUILD_ID_TASK_REACHABILITY_REACHABLE, // reachable because unversioned is default
-	},
-	)
+	})
 
 	s.addAssignmentRule(ctx, tq, "A")
 	s.getBuildIdReachability(ctx, tq, &taskqueuepb.TaskQueueVersionSelection{BuildIds: []string{"", "A"}}, map[string]enumspb.BuildIdTaskReachability{
-		"A": enumspb.BUILD_ID_TASK_REACHABILITY_REACHABLE,   // reachable by assignment rule
+		"A": enumspb.BUILD_ID_TASK_REACHABILITY_REACHABLE,   // reachable by default assignment rule
 		"":  enumspb.BUILD_ID_TASK_REACHABILITY_UNREACHABLE, // unreachable because no longer default
-	},
-	)
+	})
 
 	// start workflow and worker with new default assignment rule "A", and wait for it to start
 	started := make(chan struct{}, 10)
@@ -3295,14 +3293,12 @@ func (s *VersioningIntegSuite) TestDescribeTaskQueueEnhanced_Versioned_BasicReac
 	// commit a different build id --> A should now only be reachable via visibility query, B reachable as default
 	s.commitBuildId(ctx, tq, "B", true, s.getVersioningRules(ctx, tq).GetConflictToken(), true)
 	s.getBuildIdReachability(ctx, tq, nil, map[string]enumspb.BuildIdTaskReachability{
-		"B": enumspb.BUILD_ID_TASK_REACHABILITY_REACHABLE,
-	},
-	)
+		"B": enumspb.BUILD_ID_TASK_REACHABILITY_REACHABLE, // reachable by default assignment rule
+	})
 	s.getBuildIdReachability(ctx, tq, &taskqueuepb.TaskQueueVersionSelection{BuildIds: []string{"A", "B"}}, map[string]enumspb.BuildIdTaskReachability{
-		"A": enumspb.BUILD_ID_TASK_REACHABILITY_REACHABLE,
-		"B": enumspb.BUILD_ID_TASK_REACHABILITY_REACHABLE,
-	},
-	)
+		"A": enumspb.BUILD_ID_TASK_REACHABILITY_REACHABLE, // reachable by visibility
+		"B": enumspb.BUILD_ID_TASK_REACHABILITY_REACHABLE, // reachable by default assignment rule
+	})
 
 	// unblock the workflow on A and wait for it to close
 	s.NoError(s.sdkClient.SignalWorkflow(ctx, run.GetID(), "", "wait", nil))
@@ -3316,10 +3312,9 @@ func (s *VersioningIntegSuite) TestDescribeTaskQueueEnhanced_Versioned_BasicReac
 	}, 3*time.Second, 50*time.Millisecond)
 	// now A is only reachable by closed workflows
 	s.getBuildIdReachability(ctx, tq, &taskqueuepb.TaskQueueVersionSelection{BuildIds: []string{"A", "B"}}, map[string]enumspb.BuildIdTaskReachability{
-		"A": enumspb.BUILD_ID_TASK_REACHABILITY_CLOSED_WORKFLOWS_ONLY,
-		"B": enumspb.BUILD_ID_TASK_REACHABILITY_REACHABLE,
-	},
-	)
+		"A": enumspb.BUILD_ID_TASK_REACHABILITY_CLOSED_WORKFLOWS_ONLY, // closed_workflows_only by visibility
+		"B": enumspb.BUILD_ID_TASK_REACHABILITY_REACHABLE,             // reachable by default assignment rule
+	})
 }
 
 func (s *VersioningIntegSuite) TestDescribeTaskQueueEnhanced_Unversioned() {
