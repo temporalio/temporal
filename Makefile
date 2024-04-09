@@ -16,7 +16,7 @@ clean: clean-bins clean-test-results
 	rm -rf $(STAMPDIR)
 	rm -rf $(TEST_OUTPUT_ROOT)
 	rm -rf $(PROTO_OUT)
-	rm -rf ./.bin
+	rm -rf $(LOCALBIN)
 
 # Recompile proto files.
 proto: clean-proto buf-lint api-linter protoc service-clients goimports-proto proto-mocks copyright-proto
