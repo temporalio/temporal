@@ -716,6 +716,21 @@ func (mr *MockMutableStateMockRecorder) AddWorkflowExecutionUpdateAcceptedEvent(
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "AddWorkflowExecutionUpdateAcceptedEvent", reflect.TypeOf((*MockMutableState)(nil).AddWorkflowExecutionUpdateAcceptedEvent), protocolInstanceID, acceptedRequestMessageId, acceptedRequestSequencingEventId, acceptedRequest)
 }
 
+// AddWorkflowExecutionUpdateAdmittedEvent mocks base method.
+func (m *MockMutableState) AddWorkflowExecutionUpdateAdmittedEvent(request *v15.Request, origin v11.UpdateAdmittedEventOrigin) (*v13.HistoryEvent, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "AddWorkflowExecutionUpdateAdmittedEvent", request, origin)
+	ret0, _ := ret[0].(*v13.HistoryEvent)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// AddWorkflowExecutionUpdateAdmittedEvent indicates an expected call of AddWorkflowExecutionUpdateAdmittedEvent.
+func (mr *MockMutableStateMockRecorder) AddWorkflowExecutionUpdateAdmittedEvent(request, origin interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "AddWorkflowExecutionUpdateAdmittedEvent", reflect.TypeOf((*MockMutableState)(nil).AddWorkflowExecutionUpdateAdmittedEvent), request, origin)
+}
+
 // AddWorkflowExecutionUpdateCompletedEvent mocks base method.
 func (m *MockMutableState) AddWorkflowExecutionUpdateCompletedEvent(acceptedEventID int64, updResp *v15.Response) (*v13.HistoryEvent, error) {
 	m.ctrl.T.Helper()
@@ -1358,6 +1373,20 @@ func (m *MockMutableState) ApplyWorkflowExecutionUpdateAcceptedEvent(arg0 *v13.H
 func (mr *MockMutableStateMockRecorder) ApplyWorkflowExecutionUpdateAcceptedEvent(arg0 interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ApplyWorkflowExecutionUpdateAcceptedEvent", reflect.TypeOf((*MockMutableState)(nil).ApplyWorkflowExecutionUpdateAcceptedEvent), arg0)
+}
+
+// ApplyWorkflowExecutionUpdateAdmittedEvent mocks base method.
+func (m *MockMutableState) ApplyWorkflowExecutionUpdateAdmittedEvent(event *v13.HistoryEvent, batchId int64) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "ApplyWorkflowExecutionUpdateAdmittedEvent", event, batchId)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// ApplyWorkflowExecutionUpdateAdmittedEvent indicates an expected call of ApplyWorkflowExecutionUpdateAdmittedEvent.
+func (mr *MockMutableStateMockRecorder) ApplyWorkflowExecutionUpdateAdmittedEvent(event, batchId interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ApplyWorkflowExecutionUpdateAdmittedEvent", reflect.TypeOf((*MockMutableState)(nil).ApplyWorkflowExecutionUpdateAdmittedEvent), event, batchId)
 }
 
 // ApplyWorkflowExecutionUpdateCompletedEvent mocks base method.

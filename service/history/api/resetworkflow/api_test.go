@@ -41,52 +41,64 @@ func TestResetWorkflowSuite(t *testing.T) {
 }
 
 func (s *resetWorkflowSuite) TestGetResetReapplyExcludeTypes() {
-	// Include all with no exclusions is no exclusions
+	// Include all with no exclusions => no exclusions
 	s.Equal(
+		map[enums.ResetReapplyExcludeType]bool{},
 		GetResetReapplyExcludeTypes(
 			[]enums.ResetReapplyExcludeType{},
 			enums.RESET_REAPPLY_TYPE_ALL_ELIGIBLE,
 		),
-		map[enums.ResetReapplyExcludeType]bool{},
 	)
-	// Include all with one exclusion is one exclusion
+	// Include all with one exclusion => one exclusion (honor exclude in presence of default value of deprecated option)
 	s.Equal(
+		map[enums.ResetReapplyExcludeType]bool{enums.RESET_REAPPLY_EXCLUDE_TYPE_SIGNAL: true},
 		GetResetReapplyExcludeTypes(
 			[]enums.ResetReapplyExcludeType{enums.RESET_REAPPLY_EXCLUDE_TYPE_SIGNAL},
 			enums.RESET_REAPPLY_TYPE_ALL_ELIGIBLE,
 		),
-		map[enums.ResetReapplyExcludeType]bool{enums.RESET_REAPPLY_EXCLUDE_TYPE_SIGNAL: true},
 	)
-	// Include signal with no exclusions is no exclusions
+	// Include signal with no exclusions => exclude updates
+	// (honor non-default value of deprecated option in presence of default value of non-deprecated option)
 	s.Equal(
+		map[enums.ResetReapplyExcludeType]bool{enums.RESET_REAPPLY_EXCLUDE_TYPE_UPDATE: true},
 		GetResetReapplyExcludeTypes(
 			[]enums.ResetReapplyExcludeType{},
 			enums.RESET_REAPPLY_TYPE_SIGNAL,
 		),
-		map[enums.ResetReapplyExcludeType]bool{},
 	)
-	// Include signal with exclude signal: exclude trumps deprecated include
+	// Include signal with exclude signal => include signal means they want to exclude updates, and then the explicit
+	// exclusion of signal trumps the deprecated inclusion
 	s.Equal(
+		map[enums.ResetReapplyExcludeType]bool{
+			enums.RESET_REAPPLY_EXCLUDE_TYPE_SIGNAL: true,
+			enums.RESET_REAPPLY_EXCLUDE_TYPE_UPDATE: true,
+		},
 		GetResetReapplyExcludeTypes(
 			[]enums.ResetReapplyExcludeType{enums.RESET_REAPPLY_EXCLUDE_TYPE_SIGNAL},
 			enums.RESET_REAPPLY_TYPE_SIGNAL,
 		),
-		map[enums.ResetReapplyExcludeType]bool{enums.RESET_REAPPLY_EXCLUDE_TYPE_SIGNAL: true},
 	)
-	// Include none with no exclusions is all excluded
+	// Include none with no exclusions => all excluded
+	// (honor non-default value of deprecated option in presence of default value of non-deprecated option)
 	s.Equal(
+		map[enums.ResetReapplyExcludeType]bool{
+			enums.RESET_REAPPLY_EXCLUDE_TYPE_SIGNAL: true,
+			enums.RESET_REAPPLY_EXCLUDE_TYPE_UPDATE: true,
+		},
 		GetResetReapplyExcludeTypes(
 			[]enums.ResetReapplyExcludeType{},
 			enums.RESET_REAPPLY_TYPE_NONE,
 		),
-		map[enums.ResetReapplyExcludeType]bool{enums.RESET_REAPPLY_EXCLUDE_TYPE_SIGNAL: true},
 	)
 	// Include none with exclude signal is all excluded
 	s.Equal(
+		map[enums.ResetReapplyExcludeType]bool{
+			enums.RESET_REAPPLY_EXCLUDE_TYPE_SIGNAL: true,
+			enums.RESET_REAPPLY_EXCLUDE_TYPE_UPDATE: true,
+		},
 		GetResetReapplyExcludeTypes(
 			[]enums.ResetReapplyExcludeType{enums.RESET_REAPPLY_EXCLUDE_TYPE_SIGNAL},
 			enums.RESET_REAPPLY_TYPE_NONE,
 		),
-		map[enums.ResetReapplyExcludeType]bool{enums.RESET_REAPPLY_EXCLUDE_TYPE_SIGNAL: true},
 	)
 }

@@ -103,6 +103,43 @@ func (this *CompletionInfo) Equal(that interface{}) bool {
 	return proto.Equal(this, that1)
 }
 
+// Marshal an object of type RequestInfo to the protobuf v3 wire format
+func (val *RequestInfo) Marshal() ([]byte, error) {
+	return proto.Marshal(val)
+}
+
+// Unmarshal an object of type RequestInfo from the protobuf v3 wire format
+func (val *RequestInfo) Unmarshal(buf []byte) error {
+	return proto.Unmarshal(buf, val)
+}
+
+// Size returns the size of the object, in bytes, once serialized
+func (val *RequestInfo) Size() int {
+	return proto.Size(val)
+}
+
+// Equal returns whether two RequestInfo values are equivalent by recursively
+// comparing the message's fields.
+// For more information see the documentation for
+// https://pkg.go.dev/google.golang.org/protobuf/proto#Equal
+func (this *RequestInfo) Equal(that interface{}) bool {
+	if that == nil {
+		return this == nil
+	}
+
+	var that1 *RequestInfo
+	switch t := that.(type) {
+	case *RequestInfo:
+		that1 = t
+	case RequestInfo:
+		that1 = &t
+	default:
+		return false
+	}
+
+	return proto.Equal(this, that1)
+}
+
 // Marshal an object of type UpdateInfo to the protobuf v3 wire format
 func (val *UpdateInfo) Marshal() ([]byte, error) {
 	return proto.Marshal(val)

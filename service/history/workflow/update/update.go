@@ -128,6 +128,22 @@ func withInstrumentation(i *instrumentation) updateOpt {
 	}
 }
 
+func newAdmitted(id string, request *anypb.Any, opts ...updateOpt) *Update {
+	upd := &Update{
+		id:              id,
+		state:           stateAdmitted,
+		request:         request,
+		onComplete:      func() {},
+		instrumentation: &noopInstrumentation,
+		accepted:        future.NewFuture[*failurepb.Failure](),
+		outcome:         future.NewFuture[*updatepb.Outcome](),
+	}
+	for _, opt := range opts {
+		opt(upd)
+	}
+	return upd
+}
+
 func newAccepted(id string, acceptedEventID int64, opts ...updateOpt) *Update {
 	upd := &Update{
 		id:              id,
@@ -336,7 +352,8 @@ func (u *Update) needToSend(includeAlreadySent bool) bool {
 // Send moves update from stateAdmitted to stateSent and returns the message to be sent to worker.
 // If update is not in expected stateAdmitted, Send does nothing and returns nil.
 // If includeAlreadySent is set to true then Send will return message even if update was already sent but not processed by worker.
-// Note: once update moved to stateSent it never moves back to stateAdmitted.
+// If update lacks a request then return nil; the request will be communicated to the worker via an UpdateAdmitted event.
+// Note: once update moved to stateSent it never moves back to stateRequested.
 func (u *Update) Send(
 	_ context.Context,
 	includeAlreadySent bool,
@@ -353,6 +370,11 @@ func (u *Update) Send(
 		eventStore.OnAfterRollback(func(context.Context) { u.setState(stateAdmitted) })
 	}
 
+	if u.request == nil {
+		// This implies that the update in the registry derives from an UpdateAdmitted event exists; this event (which
+		// contains the request payload) is how the update request will be communicated to the worker.
+		return nil
+	}
 	return &protocolpb.Message{
 		ProtocolInstanceId: u.id,
 		Id:                 u.outgoingMessageID(),
@@ -388,15 +410,27 @@ func (u *Update) onAcceptanceMsg(
 	}
 	u.instrumentation.CountAcceptanceMsg()
 
-	// AcceptedRequest is not sent back by the worker to the server.
-	// Instead, the server store it in update registry and use it to generate event.
-	// There are at least two scenarios when getting it from the worker would make sense:
-	// 1. If validation handler on worker side mutates original request and accepts it.
-	//   Then server should store this mutated request but not original one.
-	// 2. To support scenario when update acceptance message is processed even if registry is lost.
-	acceptedRequest := &updatepb.Request{}
-	if err := u.request.UnmarshalTo(acceptedRequest); err != nil {
-		return internalErrorf("unable to unmarshal original request: %v", err)
+	// The accepted request payload is not sent back by the worker to the server. Instead, the server stores it in the
+	// update registry and it is written to the event here. It could make sense to obtain it from the worker, in order
+	// to support scenarios in which the registry has been lost, but we still want to process an update acceptance
+	// message. (If we were to do that, SDKs would have to guarantee that the payload has not been altered by the
+	// validator, since we may use it to create reapplied updates on a new history branch, which will be submitted to
+	// the validator again).
+	//
+	// If the in-registry update lacks a request payload, this implies that there is an UpdateAdmitted event in
+	// history. In this case we write the UpdateAccepted event without a request payload, since the UpdateAdmitted
+	// event has it.
+	//
+	// Thus, the following sequences of events are all possible, and SDK workers must handle them correctly:
+	// UpdateAdmitted(requestPayload)
+	// UpdateAdmitted(requestPayload) ... UpdateAccepted(nil)
+	// UpdateAccepted(requestPayload)
+	var acceptedRequest *updatepb.Request
+	if u.request != nil {
+		acceptedRequest = &updatepb.Request{}
+		if err := u.request.UnmarshalTo(acceptedRequest); err != nil {
+			return internalErrorf("unable to unmarshal original request: %v", err)
+		}
 	}
 	// utf8validator: we just marshaled u.request ourself earlier, so we don't need to validate it for utf8 strings here
 

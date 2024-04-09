@@ -408,6 +408,17 @@ func (b *EventFactory) CreateWorkflowExecutionUpdateCompletedEvent(
 	return event
 }
 
+func (b *EventFactory) CreateWorkflowExecutionUpdateAdmittedEvent(request *updatepb.Request, origin enumspb.UpdateAdmittedEventOrigin) *historypb.HistoryEvent {
+	event := b.createHistoryEvent(enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_UPDATE_ADMITTED, b.timeSource.Now())
+	event.Attributes = &historypb.HistoryEvent_WorkflowExecutionUpdateAdmittedEventAttributes{
+		WorkflowExecutionUpdateAdmittedEventAttributes: &historypb.WorkflowExecutionUpdateAdmittedEventAttributes{
+			Request: request,
+			Origin:  origin,
+		},
+	}
+	return event
+}
+
 func (b EventFactory) CreateContinuedAsNewEvent(
 	workflowTaskCompletedEventID int64,
 	newRunID string,

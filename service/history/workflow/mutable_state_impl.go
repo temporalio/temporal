@@ -1357,12 +1357,11 @@ func (ms *MutableStateImpl) DeletePendingSignal(
 func (ms *MutableStateImpl) writeEventToCache(
 	event *historypb.HistoryEvent,
 ) {
-	// For start event: store it within events cache so the recordWorkflowStarted transfer task doesn't need to
-	// load it from database
-	// For completion event: store it within events cache so we can communicate the result to parent execution
-	// during the processing of DeleteTransferTask without loading this event from database
-	// For Update Accepted/Completed event: store it in here so that Update
-	// disposition lookups can be fast
+	// For start event: store it here so the recordWorkflowStarted transfer task doesn't need to
+	// load it from database.
+	// For completion event: store it here so we can communicate the result to parent execution
+	// during the processing of DeleteTransferTask without loading this event from database.
+	// For Update events: store it here so that Update disposition lookups can be fast.
 	ms.eventsCache.PutEvent(
 		events.EventKey{
 			NamespaceID: namespace.ID(ms.executionInfo.NamespaceId),
@@ -3675,6 +3674,50 @@ func (ms *MutableStateImpl) AddWorkflowExecutionTerminatedEvent(
 		return nil, err
 	}
 	return event, nil
+}
+
+// AddWorkflowExecutionUpdateAdmittedEvent adds a WorkflowExecutionUpdateAdmittedEvent to in-memory history.
+func (ms *MutableStateImpl) AddWorkflowExecutionUpdateAdmittedEvent(request *updatepb.Request, origin enumspb.UpdateAdmittedEventOrigin) (*historypb.HistoryEvent, error) {
+	if err := ms.checkMutability(tag.WorkflowActionUpdateAdmitted); err != nil {
+		return nil, err
+	}
+	event, batchId := ms.hBuilder.AddWorkflowExecutionUpdateAdmittedEvent(request, origin)
+	if err := ms.ApplyWorkflowExecutionUpdateAdmittedEvent(event, batchId); err != nil {
+		return nil, err
+	}
+	return event, nil
+}
+
+// ApplyWorkflowExecutionUpdateAdmittedEvent applies a WorkflowExecutionUpdateAdmittedEvent to mutable state.
+func (ms *MutableStateImpl) ApplyWorkflowExecutionUpdateAdmittedEvent(event *historypb.HistoryEvent, batchId int64) error {
+	attrs := event.GetWorkflowExecutionUpdateAdmittedEventAttributes()
+	if attrs == nil {
+		return serviceerror.NewInternal("wrong event type in call to ApplyWorkflowExecutionUpdateAdmittedEvent")
+	}
+	if ms.executionInfo.UpdateInfos == nil {
+		ms.executionInfo.UpdateInfos = make(map[string]*updatespb.UpdateInfo, 1)
+	}
+	updateID := attrs.GetRequest().GetMeta().GetUpdateId()
+	request := &updatespb.UpdateInfo_Request{
+		Request: &updatespb.RequestInfo{
+			Location: &updatespb.RequestInfo_HistoryPointer_{
+				HistoryPointer: &updatespb.RequestInfo_HistoryPointer{
+					EventId:      event.EventId,
+					EventBatchId: batchId,
+				},
+			},
+		},
+	}
+	if _, ok := ms.executionInfo.UpdateInfos[updateID]; ok {
+		return serviceerror.NewInternal(fmt.Sprintf("Update ID %s is already present in registry", updateID))
+	}
+	ui := updatespb.UpdateInfo{Value: request}
+	ms.executionInfo.UpdateInfos[updateID] = &ui
+	ms.executionInfo.UpdateCount++
+	sizeDelta := ui.Size() + len(updateID)
+	ms.approximateSize += sizeDelta
+	ms.writeEventToCache(event)
+	return nil
 }
 
 func (ms *MutableStateImpl) AddWorkflowExecutionUpdateAcceptedEvent(
