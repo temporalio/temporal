@@ -1034,23 +1034,29 @@ func (s *FunctionalSuite) TestExecuteMultiOperation() {
 			T:      s.T(),
 		}
 
-		resultCh := make(chan *workflowservice.ExecuteMultiOperationResponse)
+		respChan := make(chan *workflowservice.ExecuteMultiOperationResponse)
 		go func() {
 			resp, err := s.engine.ExecuteMultiOperation(NewContext(), request)
 			s.NoError(err)
-			resultCh <- resp
+			respChan <- resp
 		}()
 
 		_, err := poller.PollAndProcessWorkflowTask(WithDumpHistory)
 		s.NoError(err)
 
-		resp := <-resultCh
-		s.Len(resp.Responses, 2)
+		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		defer cancel()
+		select {
+		case <-ctx.Done():
+			s.Fail("timed out waiting for result of ExecuteMultiOperation")
+		case resp := <-respChan:
+			s.Len(resp.Responses, 2)
 
-		startRes := resp.Responses[0].Response.(*workflowservice.ExecuteMultiOperationResponse_Response_StartWorkflow).StartWorkflow
-		s.NotZero(startRes.RunId)
+			startRes := resp.Responses[0].Response.(*workflowservice.ExecuteMultiOperationResponse_Response_StartWorkflow).StartWorkflow
+			s.NotZero(startRes.RunId)
 
-		updateRes := resp.Responses[1].Response.(*workflowservice.ExecuteMultiOperationResponse_Response_UpdateWorkflow).UpdateWorkflow
-		s.NotZero(updateRes.Outcome.String())
+			updateRes := resp.Responses[1].Response.(*workflowservice.ExecuteMultiOperationResponse_Response_UpdateWorkflow).UpdateWorkflow
+			s.NotZero(updateRes.Outcome.String())
+		}
 	})
 }
