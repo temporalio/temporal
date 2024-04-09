@@ -165,14 +165,14 @@ func (s *historyReplicationConflictTestSuite) TestConflictResolutionReappliesSig
 	1 WorkflowExecutionStarted
 	2 WorkflowTaskScheduled
 	3 WorkflowExecutionSignaled {"Input": {"Payloads": [{"Data": "\"cluster1-signal\""}]}}
-	`, s.getHistory(ctx, s.cluster1, runId), []int{1, 1, 1})
+	`, []int{1, 1, 1}, s.getHistory(ctx, s.cluster1, runId))
 
 	// cluster2 has also accepted a signal (with failover version 2 since it is endogenous to cluster 2)
 	s.HistoryRequire.EqualHistoryEventsAndVersions(`
 	1 WorkflowExecutionStarted
 	2 WorkflowTaskScheduled
 	3 WorkflowExecutionSignaled {"Input": {"Payloads": [{"Data": "\"cluster2-signal\""}]}}
-	`, s.getHistory(ctx, s.cluster2, runId), []int{1, 1, 2})
+	`, []int{1, 1, 2}, s.getHistory(ctx, s.cluster2, runId))
 
 	// Execute pending history replication tasks. Both clusters believe they are active, therefore each cluster sends
 	// its signal to the other, triggering conflict resolution.
@@ -184,7 +184,7 @@ func (s *historyReplicationConflictTestSuite) TestConflictResolutionReappliesSig
 	1 WorkflowExecutionStarted
 	2 WorkflowTaskScheduled
 	3 WorkflowExecutionSignaled {"Input": {"Payloads": [{"Data": "\"cluster2-signal\""}]}}
-	`, s.getHistory(ctx, s.cluster1, runId), []int{1, 1, 2})
+	`, []int{1, 1, 2}, s.getHistory(ctx, s.cluster1, runId))
 
 	// cluster1 sends its signal to cluster1. Since it has a lower failover version, it is reapplied after the
 	// endogenous cluster 2 signal.
@@ -194,7 +194,7 @@ func (s *historyReplicationConflictTestSuite) TestConflictResolutionReappliesSig
 	2 WorkflowTaskScheduled
 	3 WorkflowExecutionSignaled {"Input": {"Payloads": [{"Data": "\"cluster2-signal\""}]}}
 	4 WorkflowExecutionSignaled {"Input": {"Payloads": [{"Data": "\"cluster1-signal\""}]}}
-	`, s.getHistory(ctx, s.cluster2, runId), []int{1, 1, 2, 2})
+	`, []int{1, 1, 2, 2}, s.getHistory(ctx, s.cluster2, runId))
 
 	// Cluster2 sends the reapplied signal to cluster1, bringing the cluster histories into agreement.
 	s.executeHistoryReplicationTasksFromClusterUntil("cluster2", enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_SIGNALED)
@@ -330,11 +330,11 @@ func (s *historyReplicationConflictTestSuite) startWorkflow(ctx context.Context,
 	s.HistoryRequire.EqualHistoryEventsAndVersions(`
 	1 WorkflowExecutionStarted
   	2 WorkflowTaskScheduled
-  	`, s.getHistory(ctx, s.cluster1, runId), []int{1, 1})
+  	`, []int{1, 1}, s.getHistory(ctx, s.cluster1, runId))
 	s.HistoryRequire.EqualHistoryEventsAndVersions(`
 	1 WorkflowExecutionStarted
 	2 WorkflowTaskScheduled
-	`, s.getHistory(ctx, s.cluster2, runId), []int{1, 1})
+	`, []int{1, 1}, s.getHistory(ctx, s.cluster2, runId))
 
 	return runId
 }

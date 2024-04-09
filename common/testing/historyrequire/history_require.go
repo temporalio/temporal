@@ -84,11 +84,11 @@ func (h HistoryRequire) EqualHistoryEvents(expectedHistory string, actualHistory
 // EqualHistoryEventsAndVersions makes an assertion about the events in history and their failover versions.
 // TODO(dan) instead of passing versions slice, support an optional version field after eventId in the event format?
 // E.g. `3 2 WorkflowExecutionSignaled`
-func (h HistoryRequire) EqualHistoryEventsAndVersions(expectedHistory string, actualHistoryEvents []*historypb.HistoryEvent, versions []int) {
-	h.EqualHistoryEvents(expectedHistory, actualHistoryEvents)
-	require.Equal(h.t, len(versions), len(actualHistoryEvents))
-	for i := range versions {
-		require.Equal(h.t, int64(versions[i]), actualHistoryEvents[i].Version)
+func (h HistoryRequire) EqualHistoryEventsAndVersions(expectedHistory string, expectedVersions []int, actualHistory []*historypb.HistoryEvent) {
+	h.EqualHistoryEvents(expectedHistory, actualHistory)
+	require.Equal(h.t, len(expectedVersions), len(actualHistory))
+	for i := range expectedVersions {
+		require.Equal(h.t, int64(expectedVersions[i]), actualHistory[i].Version)
 	}
 }
 
