@@ -800,17 +800,12 @@ func (e *matchingEngineImpl) DescribeTaskQueue(
 		if !rootPartition.IsRoot() || rootPartition.Kind() == enumspb.TASK_QUEUE_KIND_STICKY || rootPartition.TaskType() != enumspb.TASK_QUEUE_TYPE_WORKFLOW {
 			return nil, serviceerror.NewInvalidArgument("DescribeTaskQueue must be called on the root partition of workflow task queue if api mode is DESCRIBE_TASK_QUEUE_MODE_ENHANCED")
 		}
-		rootPartitionMgr, err := e.getTaskQueuePartitionManager(ctx, rootPartition, true)
+		versioningData, err := e.getVersioningDataInternal(ctx, rootPartition)
 		if err != nil {
 			return nil, err
 		}
-		userData, _, err := rootPartitionMgr.GetUserDataManager().GetUserData()
-		if err != nil {
-			return nil, err
-		}
-		rootVersioningData := userData.GetData().GetVersioningData()
 		if req.GetVersions() == nil {
-			defaultBuildId := getDefaultBuildId(rootVersioningData.GetAssignmentRules())
+			defaultBuildId := getDefaultBuildId(versioningData.GetAssignmentRules())
 			req.Versions = &taskqueuepb.TaskQueueVersionSelection{BuildIds: []string{defaultBuildId}}
 		}
 
@@ -863,7 +858,7 @@ func (e *matchingEngineImpl) DescribeTaskQueue(
 				})
 			}
 			reachability, err := getBuildIdTaskReachability(ctx,
-				rootVersioningData,
+				versioningData,
 				e.visibilityManager,
 				request.GetNamespaceId(),
 				req.GetNamespace(),
@@ -913,6 +908,18 @@ func (e *matchingEngineImpl) DescribeTaskQueuePartition(
 		return nil, err
 	}
 	return pm.Describe(buildIds, request.GetVersions().GetAllActive(), request.GetReportBacklogInfo(), request.GetReportPollers())
+}
+
+func (e *matchingEngineImpl) getVersioningDataInternal(ctx context.Context, rootPartition tqid.Partition) (*persistencespb.VersioningData, error) {
+	rootPartitionMgr, err := e.getTaskQueuePartitionManager(ctx, rootPartition, true)
+	if err != nil {
+		return nil, err
+	}
+	userData, _, err := rootPartitionMgr.GetUserDataManager().GetUserData()
+	if err != nil {
+		return nil, err
+	}
+	return userData.GetData().GetVersioningData(), nil
 }
 
 func (e *matchingEngineImpl) getBuildIds(versions *taskqueuepb.TaskQueueVersionSelection) (map[string]bool, error) {
