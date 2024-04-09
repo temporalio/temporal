@@ -45,6 +45,8 @@ const (
 	defaultMsgForEmpty  = "none"
 	testLogFormatEnvVar = "TEMPORAL_TEST_LOG_FORMAT" // set to "json" for json logs in tests
 	testLogLevelEnvVar  = "TEMPORAL_TEST_LOG_LEVEL"  // set to "debug" for debug level logs in tests
+	ConsoleEncoding     = "console"
+	JSONEncoding        = "json"
 )
 
 type (
@@ -61,7 +63,7 @@ var _ Logger = (*zapLogger)(nil)
 func NewTestLogger() *zapLogger {
 	format := os.Getenv(testLogFormatEnvVar)
 	if format == "" {
-		format = "console"
+		format = ConsoleEncoding
 	}
 
 	logger := BuildZapLogger(Config{
@@ -227,9 +229,9 @@ func buildZapLogger(cfg Config, disableCaller bool) *zap.Logger {
 	if cfg.Stdout {
 		outputPath = "stdout"
 	}
-	encoding := "json"
-	if cfg.Format == "console" {
-		encoding = "console"
+	encoding := JSONEncoding
+	if cfg.Format == ConsoleEncoding {
+		encoding = ConsoleEncoding
 	}
 	config := zap.Config{
 		Level:            zap.NewAtomicLevelAt(parseZapLevel(cfg.Level)),
@@ -271,10 +273,10 @@ func rotationZapCore(cfg Config, zapCfg zap.Config) (zapcore.Core, error) {
 }
 
 func newEncoder(name string, encoderConfig zapcore.EncoderConfig) (zapcore.Encoder, error) {
-	if name == "console" {
+	if name == ConsoleEncoding {
 		return zapcore.NewConsoleEncoder(encoderConfig), nil
 	}
-	if name == "json" {
+	if name == JSONEncoding {
 		return zapcore.NewJSONEncoder(encoderConfig), nil
 	}
 	return nil, errors.New("invalid encoder")
@@ -301,7 +303,7 @@ func buildCLIZapLogger() *zap.Logger {
 		Development:       false,
 		DisableStacktrace: os.Getenv("TEMPORAL_CLI_SHOW_STACKS") == "",
 		Sampling:          nil,
-		Encoding:          "console",
+		Encoding:          ConsoleEncoding,
 		EncoderConfig:     encodeConfig,
 		OutputPaths:       []string{"stderr"},
 		ErrorOutputPaths:  []string{"stderr"},
