@@ -66,7 +66,7 @@ func TestGetBuildIdsOfInterest_NoCycle(t *testing.T) {
 	}
 
 	expectedUpstreamBuildIds := []string{"2", "5", "3", "4", "1"}
-	upstreamBuildIds := rc.getBuildIdsOfInterest("1", true)
+	upstreamBuildIds := rc.getBuildIdsOfInterest("1", nil)
 
 	for _, bid := range expectedUpstreamBuildIds {
 		assert.Contains(t, upstreamBuildIds, bid)
@@ -95,7 +95,7 @@ func TestGetBuildIdsOfInterest_WithCycle(t *testing.T) {
 		},
 	}
 	expectedUpstreamBuildIds := []string{"5", "3", "2", "1"}
-	upstreamBuildIds := rc.getBuildIdsOfInterest("1", true)
+	upstreamBuildIds := rc.getBuildIdsOfInterest("1", nil)
 	for _, bid := range expectedUpstreamBuildIds {
 		assert.Contains(t, upstreamBuildIds, bid)
 	}
@@ -119,7 +119,7 @@ func TestGetBuildIdsOfInterest_WithCycle(t *testing.T) {
 		},
 	}
 	expectedUpstreamBuildIds = []string{"5", "3", "2", "4", "1"}
-	upstreamBuildIds = rc.getBuildIdsOfInterest("1", true)
+	upstreamBuildIds = rc.getBuildIdsOfInterest("1", nil)
 	for _, bid := range expectedUpstreamBuildIds {
 		assert.Contains(t, upstreamBuildIds, bid)
 	}

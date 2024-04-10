@@ -144,9 +144,10 @@ func insertAssignmentRule(rule *taskqueuepb.BuildIdAssignmentRule,
 func insertRedirectRule(rule *taskqueuepb.CompatibleBuildIdRedirectRule,
 	data *persistencepb.VersioningData,
 	clock *hlc.Clock,
-	maxAssignmentRules int,
+	maxRedirectRules,
+	maxRedirectRuleChain int,
 ) (*persistencepb.VersioningData, error) {
-	return AddCompatibleRedirectRule(clock, data, mkNewInsertRedirectReq(rule), maxAssignmentRules)
+	return AddCompatibleRedirectRule(clock, data, mkNewInsertRedirectReq(rule), maxRedirectRules, maxRedirectRuleChain)
 }
 
 func replaceAssignmentRule(rule *taskqueuepb.BuildIdAssignmentRule,
@@ -161,8 +162,9 @@ func replaceAssignmentRule(rule *taskqueuepb.BuildIdAssignmentRule,
 func replaceRedirectRule(rule *taskqueuepb.CompatibleBuildIdRedirectRule,
 	data *persistencepb.VersioningData,
 	clock *hlc.Clock,
+	maxRedirectRuleChain int,
 ) (*persistencepb.VersioningData, error) {
-	return ReplaceCompatibleRedirectRule(clock, data, mkNewReplaceRedirectReq(rule))
+	return ReplaceCompatibleRedirectRule(clock, data, mkNewReplaceRedirectReq(rule), maxRedirectRuleChain)
 }
 
 func deleteAssignmentRule(data *persistencepb.VersioningData,
@@ -282,7 +284,7 @@ func TestInsertAssignmentRuleTerminalBuildID(t *testing.T) {
 	t.Parallel()
 	maxRules := 3
 	clock := hlc.Zero(1)
-	data, err := insertRedirectRule(mkRedirectRule("0", "1"), mkInitialData(0, clock), clock, maxRules)
+	data, err := insertRedirectRule(mkRedirectRule("0", "1"), mkInitialData(0, clock), clock, maxRules, maxRules)
 	assert.NoError(t, err)
 
 	// insert 1 --> failure
@@ -502,7 +504,7 @@ func TestInsertRedirectRuleBasic(t *testing.T) {
 	expectedSet := make([]*persistencepb.RedirectRule, 0)
 
 	rule1 := mkRedirectRule("1", "0")
-	data, err := insertRedirectRule(rule1, initialData, clock, maxRules)
+	data, err := insertRedirectRule(rule1, initialData, clock, maxRules, maxRules)
 	assert.NoError(t, err)
 	expectedSet = append(expectedSet, mkRedirectRulePersistence(rule1, clock, nil))
 	for _, r := range data.RedirectRules {
@@ -510,7 +512,7 @@ func TestInsertRedirectRuleBasic(t *testing.T) {
 	}
 
 	rule2 := mkRedirectRule("2", "0")
-	data, err = insertRedirectRule(rule2, data, clock, maxRules)
+	data, err = insertRedirectRule(rule2, data, clock, maxRules, maxRules)
 	assert.NoError(t, err)
 	expectedSet = append(expectedSet, mkRedirectRulePersistence(rule2, clock, nil))
 	for _, r := range data.RedirectRules {
@@ -518,7 +520,7 @@ func TestInsertRedirectRuleBasic(t *testing.T) {
 	}
 
 	rule3 := mkRedirectRule("3", "0")
-	data, err = insertRedirectRule(rule3, data, clock, maxRules)
+	data, err = insertRedirectRule(rule3, data, clock, maxRules, maxRules)
 	assert.NoError(t, err)
 	expectedSet = append(expectedSet, mkRedirectRulePersistence(rule3, clock, nil))
 	for _, r := range data.RedirectRules {
@@ -539,12 +541,12 @@ func TestInsertRedirectRuleMaxRules(t *testing.T) {
 	for i := 0; i < 3; i++ {
 		src := fmt.Sprintf("%d", i)
 		dst := fmt.Sprintf("%d", i+1)
-		data, err = insertRedirectRule(mkRedirectRule(src, dst), data, clock, maxRules)
+		data, err = insertRedirectRule(mkRedirectRule(src, dst), data, clock, maxRules, maxRules)
 		assert.NoError(t, err)
 	}
 
 	// insert fourth --> error
-	_, err = insertRedirectRule(mkRedirectRule("10", "20"), data, clock, maxRules)
+	_, err = insertRedirectRule(mkRedirectRule("10", "20"), data, clock, maxRules, maxRules)
 	assert.Error(t, err)
 }
 
@@ -556,19 +558,19 @@ func TestInsertRedirectRuleInVersionSet(t *testing.T) {
 	initialData := mkInitialData(1, clock)
 
 	// insert with source build id "0" --> failure
-	_, err := insertRedirectRule(mkRedirectRule("0", "1"), initialData, clock, maxRules)
+	_, err := insertRedirectRule(mkRedirectRule("0", "1"), initialData, clock, maxRules, maxRules)
 	assert.Error(t, err)
 
 	// insert with target build id "0" --> failure
-	_, err = insertRedirectRule(mkRedirectRule("1", "0"), initialData, clock, maxRules)
+	_, err = insertRedirectRule(mkRedirectRule("1", "0"), initialData, clock, maxRules, maxRules)
 	assert.Error(t, err)
 
 	// insert with non-zero source build id --> success
-	_, err = insertRedirectRule(mkRedirectRule("1", "2"), initialData, clock, maxRules)
+	_, err = insertRedirectRule(mkRedirectRule("1", "2"), initialData, clock, maxRules, maxRules)
 	assert.NoError(t, err)
 
 	// insert with non-zero target build id --> success
-	_, err = insertRedirectRule(mkRedirectRule("2", "1"), initialData, clock, maxRules)
+	_, err = insertRedirectRule(mkRedirectRule("2", "1"), initialData, clock, maxRules, maxRules)
 	assert.NoError(t, err)
 }
 
@@ -583,11 +585,11 @@ func TestInsertRedirectRuleSourceIsRampedAssignmentRuleTarget(t *testing.T) {
 	}
 
 	// insert redirect rule with target 1 --> failure
-	_, err := insertRedirectRule(mkRedirectRule("1", "0"), data, clock, maxRules)
+	_, err := insertRedirectRule(mkRedirectRule("1", "0"), data, clock, maxRules, maxRules)
 	assert.Error(t, err)
 
 	// insert redirect rule with target 2 --> success
-	_, err = insertRedirectRule(mkRedirectRule("2", "0"), data, clock, maxRules)
+	_, err = insertRedirectRule(mkRedirectRule("2", "0"), data, clock, maxRules, maxRules)
 	assert.NoError(t, err)
 }
 
@@ -598,11 +600,11 @@ func TestInsertRedirectRuleAlreadyExists(t *testing.T) {
 	initialData := mkInitialData(0, clock)
 
 	// insert with source build id "0"
-	data, err := insertRedirectRule(mkRedirectRule("0", "1"), initialData, clock, maxRules)
+	data, err := insertRedirectRule(mkRedirectRule("0", "1"), initialData, clock, maxRules, maxRules)
 	assert.NoError(t, err)
 
 	// insert with source build id "0" --> failure
-	_, err = insertRedirectRule(mkRedirectRule("0", "6"), data, clock, maxRules)
+	_, err = insertRedirectRule(mkRedirectRule("0", "6"), data, clock, maxRules, maxRules)
 	assert.Error(t, err)
 }
 
@@ -613,15 +615,15 @@ func TestInsertRedirectRuleCreateCycle(t *testing.T) {
 	initialData := mkInitialData(0, clock)
 
 	// insert with source -> target == "0" -> "0" --> failure
-	_, err := insertRedirectRule(mkRedirectRule("0", "0"), initialData, clock, maxRules)
+	_, err := insertRedirectRule(mkRedirectRule("0", "0"), initialData, clock, maxRules, maxRules)
 	assert.Error(t, err)
 
 	// insert with source -> target == "0" -> "1" --> success
-	data, err := insertRedirectRule(mkRedirectRule("0", "1"), initialData, clock, maxRules)
+	data, err := insertRedirectRule(mkRedirectRule("0", "1"), initialData, clock, maxRules, maxRules)
 	assert.NoError(t, err)
 
 	// insert with source build id "1" -> "0" --> failure
-	_, err = insertRedirectRule(mkRedirectRule("1", "0"), data, clock, maxRules)
+	_, err = insertRedirectRule(mkRedirectRule("1", "0"), data, clock, maxRules, maxRules)
 	assert.Error(t, err)
 }
 
@@ -640,7 +642,7 @@ func TestReplaceRedirectRuleBasic(t *testing.T) {
 	replaceTest := func(source, target string) {
 		prevRule := getActiveRedirectRuleBySrc(source, data)
 		rule := mkRedirectRule(source, target)
-		data, err = replaceRedirectRule(rule, data, clock)
+		data, err = replaceRedirectRule(rule, data, clock, len(data.GetRedirectRules()))
 		assert.NoError(t, err)
 		newActive := getActiveRedirectRuleBySrc(source, data)
 		protoassert.ProtoEqual(t, newActive.GetRule(), rule)
@@ -670,11 +672,11 @@ func TestReplaceRedirectRuleInVersionSet(t *testing.T) {
 	var err error
 
 	// replace with target 0 --> failure
-	_, err = replaceRedirectRule(mkRedirectRule("1", "0"), data, clock)
+	_, err = replaceRedirectRule(mkRedirectRule("1", "0"), data, clock, len(data.GetRedirectRules()))
 	assert.Error(t, err)
 
 	// replace with non-zero target --> success
-	_, err = replaceRedirectRule(mkRedirectRule("1", "10"), data, clock)
+	_, err = replaceRedirectRule(mkRedirectRule("1", "10"), data, clock, len(data.GetRedirectRules()))
 	assert.NoError(t, err)
 }
 
@@ -689,16 +691,16 @@ func TestReplaceRedirectRuleCreateCycle(t *testing.T) {
 	}
 	var err error
 
-	_, err = replaceRedirectRule(mkRedirectRule("0", "0"), data, clock)
+	_, err = replaceRedirectRule(mkRedirectRule("0", "0"), data, clock, len(data.GetRedirectRules()))
 	assert.Error(t, err)
 
-	_, err = replaceRedirectRule(mkRedirectRule("2", "0"), data, clock)
+	_, err = replaceRedirectRule(mkRedirectRule("2", "0"), data, clock, len(data.GetRedirectRules()))
 	assert.Error(t, err)
 
-	_, err = replaceRedirectRule(mkRedirectRule("1", "0"), data, clock)
+	_, err = replaceRedirectRule(mkRedirectRule("1", "0"), data, clock, len(data.GetRedirectRules()))
 	assert.Error(t, err)
 
-	_, err = replaceRedirectRule(mkRedirectRule("2", "1"), data, clock)
+	_, err = replaceRedirectRule(mkRedirectRule("2", "1"), data, clock, len(data.GetRedirectRules()))
 	assert.Error(t, err)
 }
 
@@ -709,7 +711,7 @@ func TestReplaceRedirectRuleNotFound(t *testing.T) {
 	var err error
 
 	// fails because no rules to replace
-	_, err = replaceRedirectRule(mkRedirectRule("1", "100"), data, clock)
+	_, err = replaceRedirectRule(mkRedirectRule("1", "100"), data, clock, len(data.GetRedirectRules()))
 	assert.Error(t, err)
 
 	data.RedirectRules = []*persistencepb.RedirectRule{
@@ -717,7 +719,7 @@ func TestReplaceRedirectRuleNotFound(t *testing.T) {
 	}
 
 	// fails because source doesnt exist
-	_, err = replaceRedirectRule(mkRedirectRule("1", "100"), data, clock)
+	_, err = replaceRedirectRule(mkRedirectRule("1", "100"), data, clock, len(data.GetRedirectRules()))
 	assert.Error(t, err)
 }
 
@@ -852,13 +854,13 @@ func TestCleanupRedirectRuleTombstones(t *testing.T) {
 	// insert 3x to get three rules in there
 	rule1 := mkRedirectRule("1", "10")
 	clock1 := hlc.Next(clock, timesource)
-	data, err := insertRedirectRule(rule1, initialData, clock1, maxRules)
+	data, err := insertRedirectRule(rule1, initialData, clock1, maxRules, maxRules)
 	assert.NoError(t, err)
 	rule2 := mkRedirectRule("2", "10")
-	data, err = insertRedirectRule(rule2, data, clock1, maxRules)
+	data, err = insertRedirectRule(rule2, data, clock1, maxRules, maxRules)
 	assert.NoError(t, err)
 	rule3 := mkRedirectRule("3", "10")
-	data, err = insertRedirectRule(rule3, data, clock1, maxRules)
+	data, err = insertRedirectRule(rule3, data, clock1, maxRules, maxRules)
 	assert.NoError(t, err)
 
 	// delete "now," ~1 hour ago

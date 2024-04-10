@@ -143,7 +143,8 @@ func DeleteAssignmentRule(timestamp *hlc.Clock,
 func AddCompatibleRedirectRule(timestamp *hlc.Clock,
 	data *persistencespb.VersioningData,
 	req *workflowservice.UpdateWorkerVersioningRulesRequest_AddCompatibleBuildIdRedirectRule,
-	maxRedirectRules int) (*persistencespb.VersioningData, error) {
+	maxRedirectRules,
+	maxRedirectRuleChain int) (*persistencespb.VersioningData, error) {
 	data = cloneOrMkData(data)
 	rule := req.GetRule()
 	source := rule.GetSourceBuildId()
@@ -174,12 +175,13 @@ func AddCompatibleRedirectRule(timestamp *hlc.Clock,
 		CreateTimestamp: timestamp,
 		DeleteTimestamp: nil,
 	})
-	return data, checkRedirectConditions(data, maxRedirectRules)
+	return data, checkRedirectConditions(data, maxRedirectRules, maxRedirectRuleChain)
 }
 
 func ReplaceCompatibleRedirectRule(timestamp *hlc.Clock,
 	data *persistencespb.VersioningData,
 	req *workflowservice.UpdateWorkerVersioningRulesRequest_ReplaceCompatibleBuildIdRedirectRule,
+	maxRedirectRuleChain int,
 ) (*persistencespb.VersioningData, error) {
 	data = cloneOrMkData(data)
 	rule := req.GetRule()
@@ -202,7 +204,7 @@ func ReplaceCompatibleRedirectRule(timestamp *hlc.Clock,
 				CreateTimestamp: timestamp,
 				DeleteTimestamp: nil,
 			})
-			return data, checkRedirectConditions(data, 0)
+			return data, checkRedirectConditions(data, 0, maxRedirectRuleChain)
 		}
 	}
 	return nil, serviceerror.NewNotFound(fmt.Sprintf("cannot replace: no redirect rule found with source ID %s", source))
@@ -217,7 +219,7 @@ func DeleteCompatibleRedirectRule(timestamp *hlc.Clock,
 	for _, r := range data.GetRedirectRules() {
 		if r.GetDeleteTimestamp() == nil && r.GetRule().GetSourceBuildId() == source {
 			r.DeleteTimestamp = timestamp
-			return data, nil // no need to check cycle because removing a node cannot create a cycle
+			return data, nil // no need to check cycle or chain because removing a node cannot create a cycle or create a link
 		}
 	}
 	return nil, serviceerror.NewNotFound(fmt.Sprintf("cannot delete: no redirect rule found with source ID %s", source))
@@ -339,7 +341,8 @@ func checkAssignmentConditions(g *persistencespb.VersioningData, maxARs int, req
 // It returns an error if the new set of redirect rules don't meet the following requirements:
 // - No more rules than dynamicconfig.VersionRedirectRuleLimitPerQueue
 // - The DAG of redirect rules must not contain a cycle
-func checkRedirectConditions(g *persistencespb.VersioningData, maxRRs int) error {
+// - The DAG of redirect rules must not contain a chain of connected rules longer than dynamicconfig.VersionRedirectRuleChainLimitPerQueue
+func checkRedirectConditions(g *persistencespb.VersioningData, maxRRs, maxChain int) error {
 	activeRules := getActiveRedirectRules(g.GetRedirectRules())
 	if maxRRs > 0 && len(activeRules) > maxRRs {
 		return serviceerror.NewFailedPrecondition(
@@ -347,6 +350,13 @@ func checkRedirectConditions(g *persistencespb.VersioningData, maxRRs int) error
 	}
 	if isCyclic(activeRules) {
 		return serviceerror.NewFailedPrecondition("update would break acyclic requirement")
+	}
+	for _, r := range activeRules {
+		upstream := getUpstreamBuildIds(r.GetRule().GetTargetBuildId(), activeRules)
+		if len(upstream) > maxChain {
+			return serviceerror.NewFailedPrecondition(
+				fmt.Sprintf("update exceeds number of chained redirect rules permitted in namespace (%v/%v)", len(upstream), maxChain))
+		}
 	}
 	return nil
 }
@@ -489,6 +499,51 @@ func dfs(curr string, visited, inStack map[string]bool, nodes map[string][]strin
 	}
 	inStack[curr] = false
 	return false
+}
+
+// getUpstreamBuildIds returns a list of build ids that point to the given buildId in the graph of redirect rules.
+// It considers all rules in the input list, so the caller should provide a filtered list as needed.
+// The result will contain no duplicates.
+func getUpstreamBuildIds(buildId string, redirectRules []*persistencespb.RedirectRule) []string {
+	return getUpstreamHelper(buildId, redirectRules, nil)
+}
+
+func getUpstreamHelper(
+	buildId string,
+	redirectRules []*persistencespb.RedirectRule,
+	visited []string) []string {
+	var upstream []string
+	visited = append(visited, buildId)
+	directSources := getSourcesForTarget(buildId, redirectRules)
+
+	for _, src := range directSources {
+		if !slices.Contains(visited, src) {
+			upstream = append(upstream, src)
+			upstream = append(upstream, getUpstreamHelper(src, redirectRules, visited)...)
+		}
+	}
+
+	// dedupe
+	upstreamUnique := make(map[string]bool)
+	for _, bid := range upstream {
+		upstreamUnique[bid] = true
+	}
+	upstream = make([]string, 0)
+	for k := range upstreamUnique {
+		upstream = append(upstream, k)
+	}
+	return upstream
+}
+
+// getSourcesForTarget gets the first-degree sources for any redirect rule targeting buildId
+func getSourcesForTarget(buildId string, redirectRules []*persistencespb.RedirectRule) []string {
+	var sources []string
+	for _, rr := range redirectRules {
+		if rr.GetRule().GetTargetBuildId() == buildId {
+			sources = append(sources, rr.GetRule().GetSourceBuildId())
+		}
+	}
+	return sources
 }
 
 func FindAssignmentBuildId(rules []*persistencespb.AssignmentRule, runId string) string {
