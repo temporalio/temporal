@@ -1355,13 +1355,9 @@ type DescribeTaskQueuePartitionRequest struct {
 	sizeCache     protoimpl.SizeCache
 	unknownFields protoimpl.UnknownFields
 
-	NamespaceId        string                  `protobuf:"bytes,1,opt,name=namespace_id,json=namespaceId,proto3" json:"namespace_id,omitempty"`
-	TaskQueuePartition *v19.TaskQueuePartition `protobuf:"bytes,2,opt,name=task_queue_partition,json=taskQueuePartition,proto3" json:"task_queue_partition,omitempty"`
-	// If not provided, the result for the default Build ID will be returned. The default Build ID is the one
-	// mentioned in the first unconditional Assignment Rule. If there is no default Build ID, the result for the
-	// unversioned queue will be returned.
-	// (-- api-linter: core::0140::prepositions --)
-	Versions *v14.TaskQueueVersionSelection `protobuf:"bytes,3,opt,name=versions,proto3" json:"versions,omitempty"`
+	NamespaceId        string                         `protobuf:"bytes,1,opt,name=namespace_id,json=namespaceId,proto3" json:"namespace_id,omitempty"`
+	TaskQueuePartition *v19.TaskQueuePartition        `protobuf:"bytes,2,opt,name=task_queue_partition,json=taskQueuePartition,proto3" json:"task_queue_partition,omitempty"`
+	Versions           *v14.TaskQueueVersionSelection `protobuf:"bytes,3,opt,name=versions,proto3" json:"versions,omitempty"`
 	// Report backlog info for the requested task queue types and versions
 	ReportBacklogInfo bool `protobuf:"varint,4,opt,name=report_backlog_info,json=reportBacklogInfo,proto3" json:"report_backlog_info,omitempty"`
 	// Report list of pollers for requested task queue types and versions
@@ -1837,7 +1833,7 @@ type isGetWorkerVersioningRulesRequest_Command interface {
 }
 
 type GetWorkerVersioningRulesRequest_Request struct {
-	Request *v1.GetWorkerVersioningRulesRequest `protobuf:"bytes,4,opt,name=request,proto3,oneof"`
+	Request *v1.GetWorkerVersioningRulesRequest `protobuf:"bytes,3,opt,name=request,proto3,oneof"`
 }
 
 func (*GetWorkerVersioningRulesRequest_Request) isGetWorkerVersioningRulesRequest_Command() {}
@@ -3434,7 +3430,7 @@ var file_temporal_server_api_matchingservice_v1_request_response_proto_rawDesc =
 	0x0b, 0x6e, 0x61, 0x6d, 0x65, 0x73, 0x70, 0x61, 0x63, 0x65, 0x49, 0x64, 0x12, 0x1d, 0x0a, 0x0a,
 	0x74, 0x61, 0x73, 0x6b, 0x5f, 0x71, 0x75, 0x65, 0x75, 0x65, 0x18, 0x02, 0x20, 0x01, 0x28, 0x09,
 	0x52, 0x09, 0x74, 0x61, 0x73, 0x6b, 0x51, 0x75, 0x65, 0x75, 0x65, 0x12, 0x5c, 0x0a, 0x07, 0x72,
-	0x65, 0x71, 0x75, 0x65, 0x73, 0x74, 0x18, 0x04, 0x20, 0x01, 0x28, 0x0b, 0x32, 0x40, 0x2e, 0x74,
+	0x65, 0x71, 0x75, 0x65, 0x73, 0x74, 0x18, 0x03, 0x20, 0x01, 0x28, 0x0b, 0x32, 0x40, 0x2e, 0x74,
 	0x65, 0x6d, 0x70, 0x6f, 0x72, 0x61, 0x6c, 0x2e, 0x61, 0x70, 0x69, 0x2e, 0x77, 0x6f, 0x72, 0x6b,
 	0x66, 0x6c, 0x6f, 0x77, 0x73, 0x65, 0x72, 0x76, 0x69, 0x63, 0x65, 0x2e, 0x76, 0x31, 0x2e, 0x47,
 	0x65, 0x74, 0x57, 0x6f, 0x72, 0x6b, 0x65, 0x72, 0x56, 0x65, 0x72, 0x73, 0x69, 0x6f, 0x6e, 0x69,
