@@ -62,15 +62,14 @@ type (
 
 	// taskWriter writes tasks sequentially to persistence
 	taskWriter struct {
-		status       int32
-		backlogMgr   *backlogManagerImpl
-		config       *taskQueueConfig
-		appendCh     chan *writeTaskRequest
-		taskIDBlock  taskIDBlock
-		maxReadLevel int64
-		logger       log.Logger
-		writeLoop    *goro.Handle
-		idAlloc      idBlockAllocator
+		status      int32
+		backlogMgr  *backlogManagerImpl
+		config      *taskQueueConfig
+		appendCh    chan *writeTaskRequest
+		taskIDBlock taskIDBlock
+		logger      log.Logger
+		writeLoop   *goro.Handle
+		idAlloc     idBlockAllocator
 	}
 )
 
@@ -86,15 +85,14 @@ func newTaskWriter(
 	backlogMgr *backlogManagerImpl,
 ) *taskWriter {
 	return &taskWriter{
-		status:       common.DaemonStatusInitialized,
-		backlogMgr:   backlogMgr,
-		config:       backlogMgr.config,
-		appendCh:     make(chan *writeTaskRequest, backlogMgr.config.OutstandingTaskAppendsThreshold()),
-		taskIDBlock:  noTaskIDs,
-		maxReadLevel: noTaskIDs.start - 1,
-		logger:       backlogMgr.logger,
-		idAlloc:      backlogMgr.db,
-		writeLoop:    goro.NewHandle(backlogMgr.contextInfoProvider(context.Background())),
+		status:      common.DaemonStatusInitialized,
+		backlogMgr:  backlogMgr,
+		config:      backlogMgr.config,
+		appendCh:    make(chan *writeTaskRequest, backlogMgr.config.OutstandingTaskAppendsThreshold()),
+		taskIDBlock: noTaskIDs,
+		logger:      backlogMgr.logger,
+		idAlloc:     backlogMgr.db,
+		writeLoop:   goro.NewHandle(backlogMgr.contextInfoProvider(context.Background())),
 	}
 }
 
@@ -133,7 +131,7 @@ func (w *taskWriter) initReadWriteState(ctx context.Context) error {
 		return err
 	}
 	w.taskIDBlock = rangeIDToTaskIDBlock(state.rangeID, w.config.RangeSize)
-	atomic.StoreInt64(&w.maxReadLevel, w.taskIDBlock.start-1)
+	w.backlogMgr.db.SetMaxReadLevel(w.taskIDBlock.start - 1)
 	w.backlogMgr.taskAckManager.setAckLevel(state.ackLevel)
 	return nil
 }
@@ -177,10 +175,6 @@ func (w *taskWriter) appendTask(
 	}
 }
 
-func (w *taskWriter) GetMaxReadLevel() int64 {
-	return atomic.LoadInt64(&w.maxReadLevel)
-}
-
 func (w *taskWriter) allocTaskIDs(ctx context.Context, count int) ([]int64, error) {
 	result := make([]int64, count)
 	for i := 0; i < count; i++ {
@@ -200,10 +194,11 @@ func (w *taskWriter) allocTaskIDs(ctx context.Context, count int) ([]int64, erro
 
 func (w *taskWriter) appendTasks(
 	ctx context.Context,
-	tasks []*persistencespb.AllocatedTaskInfo,
+	taskIDs []int64,
+	reqs []*writeTaskRequest,
 ) (*persistence.CreateTasksResponse, error) {
 
-	resp, err := w.backlogMgr.db.CreateTasks(ctx, tasks)
+	resp, err := w.backlogMgr.db.CreateTasks(ctx, taskIDs, reqs)
 	if err != nil {
 		w.backlogMgr.signalIfFatal(err)
 		w.logger.Error("Persistent store operation failure",
@@ -229,29 +224,13 @@ writerLoop:
 			reqs = w.getWriteBatch(reqs)
 			batchSize := len(reqs)
 
-			maxReadLevel := int64(0)
-
 			taskIDs, err := w.allocTaskIDs(ctx, batchSize)
 			if err != nil {
 				w.sendWriteResponse(reqs, nil, err)
 				continue writerLoop
 			}
 
-			var tasks []*persistencespb.AllocatedTaskInfo
-			for i, req := range reqs {
-				tasks = append(tasks, &persistencespb.AllocatedTaskInfo{
-					TaskId: taskIDs[i],
-					Data:   req.taskInfo,
-				})
-				maxReadLevel = taskIDs[i]
-			}
-
-			resp, err := w.appendTasks(ctx, tasks)
-			// Update the maxReadLevel after the writes are completed, but before we send the response,
-			// so that taskReader is guaranteed to see the new read level when SpoolTask wakes it up.
-			if maxReadLevel > 0 {
-				atomic.StoreInt64(&w.maxReadLevel, maxReadLevel)
-			}
+			resp, err := w.appendTasks(ctx, taskIDs, reqs)
 			w.sendWriteResponse(reqs, resp, err)
 
 		case <-ctx.Done():
