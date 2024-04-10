@@ -27,8 +27,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"net"
-	"net/http"
 	"testing"
 	"time"
 
@@ -47,45 +45,12 @@ import (
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/namespace"
 	commonnexus "go.temporal.io/server/common/nexus"
+	"go.temporal.io/server/common/nexus/nexustest"
 	"go.temporal.io/server/common/testing/protorequire"
-	"go.temporal.io/server/internal/temporalite"
 	"go.temporal.io/server/plugins/nexusoperations"
 	"go.temporal.io/server/service/history/hsm"
 	"go.temporal.io/server/service/history/queues"
 )
-
-func allocListenAddress(t *testing.T) string {
-	pp := temporalite.NewPortProvider()
-	listenAddr := fmt.Sprintf("localhost:%d", pp.MustGetFreePort())
-	require.NoError(t, pp.Close())
-	return listenAddr
-}
-
-func newNexusServer(t *testing.T, listenAddr string, handler nexus.Handler) func() error {
-	hh := nexus.NewHTTPHandler(nexus.HandlerOptions{
-		Handler: handler,
-	})
-	srv := &http.Server{Addr: listenAddr, Handler: hh}
-	listener, err := net.Listen("tcp", listenAddr)
-	require.NoError(t, err)
-	errCh := make(chan error, 1)
-	go func() {
-		errCh <- srv.Serve(listener)
-	}()
-
-	return func() error {
-		// Graceful shutdown
-		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-		defer cancel()
-		if err := srv.Shutdown(ctx); err != nil {
-			return err
-		}
-		if err := <-errCh; err != nil && !errors.Is(err, http.ErrServerClosed) {
-			return err
-		}
-		return nil
-	}
-}
 
 func mustToPayload(t *testing.T, input any) *commonpb.Payload {
 	conv := converter.GetDefaultDataConverter()
@@ -274,15 +239,10 @@ func TestProcessInvocationTask(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 			ctrl := gomock.NewController(t)
-			listenAddr := allocListenAddress(t)
+			listenAddr := nexustest.AllocListenAddress(t)
 			h := handler{}
 			h.OnStartOperation = tc.onStartOperation
-			shutdownServer := newNexusServer(t, listenAddr, h)
-			defer func() {
-				if err := shutdownServer(); err != nil {
-					panic(err)
-				}
-			}()
+			nexustest.NewNexusServer(t, listenAddr, h)
 
 			reg := newRegistry(t)
 			backend := &nodeBackend{}

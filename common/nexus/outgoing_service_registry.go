@@ -310,7 +310,7 @@ func (h *OutgoingServiceRegistry) updateNamespace(
 	err := h.namespaceService.UpdateNamespace(ctx, &persistence.UpdateNamespaceRequest{
 		Namespace:         ns,
 		IsGlobalNamespace: response.IsGlobalNamespace,
-		// TODO: This is wrong. It's not how it's done in namespace_handler.
+		// TODO(bergundy): This is wrong. It's not how it's done in namespace_handler.
 		NotificationVersion: response.NotificationVersion + 1,
 	})
 	if err != nil {

@@ -83,7 +83,7 @@ type activeExecutor struct {
 func (e activeExecutor) executeInvocationTask(ctx context.Context, env hsm.Environment, ref hsm.Ref, task InvocationTask) error {
 	ns, err := e.NamespaceRegistry.GetNamespaceByID(namespace.ID(ref.WorkflowKey.NamespaceID))
 	if err != nil {
-		return err
+		return fmt.Errorf("failed to get namespace by ID: %w", err)
 	}
 	ctx, cancel := context.WithTimeout(ctx, e.Config.InvocationTaskTimeout(ns.Name().String()))
 	defer cancel()
@@ -96,36 +96,36 @@ func (e activeExecutor) executeInvocationTask(ctx context.Context, env hsm.Envir
 			// should immediately fail.
 			return queues.NewUnprocessableTaskError(fmt.Sprintf("cannot find service in namespace outgoing task mapping: %s", task.Destination))
 		}
-		return err
+		return fmt.Errorf("failed to get nexus outgoing service: %w", err)
 	}
 
-	operationName, requestID, userHeader, input, err := e.loadOperationArgs(ctx, env, ref)
+	args, err := e.loadOperationArgs(ctx, env, ref)
 	if err != nil {
-		return err
+		return fmt.Errorf("failed to load operation args: %w", err)
 	}
 
-	header := nexus.Header(userHeader)
+	header := nexus.Header(args.header)
 	callbackURL := service.PublicCallbackUrl
 	client, err := e.ClientProvider(queues.NamespaceIDAndDestination{NamespaceID: ref.WorkflowKey.GetNamespaceID(), Destination: task.Destination}, service)
 	if err != nil {
-		return err
+		return fmt.Errorf("failed to get a client: %w", err)
 	}
 
 	token, err := e.CallbackTokenGenerator.Tokenize(&token.NexusOperationCompletion{
 		WorkflowId:               ref.WorkflowKey.WorkflowID,
 		RunId:                    ref.WorkflowKey.RunID,
 		NamespaceId:              ref.WorkflowKey.NamespaceID,
-		OperationRequestId:       requestID,
+		OperationRequestId:       args.requestID,
 		Path:                     ref.StateMachineRef.Path,
-		NamespaceFailoverVersion: 0, // TODO(bergundy): Figure out how to populate this
+		NamespaceFailoverVersion: args.namespaceFailoverVersion,
 	})
 	if err != nil {
 		return fmt.Errorf("%w: %w", queues.NewUnprocessableTaskError("failed to generate a callback token"), err)
 	}
-	rawResult, callErr := client.StartOperation(ctx, operationName, input, nexus.StartOperationOptions{
+	rawResult, callErr := client.StartOperation(ctx, args.operationName, args.payload, nexus.StartOperationOptions{
 		Header:      header,
 		CallbackURL: callbackURL,
-		RequestID:   requestID,
+		RequestID:   args.requestID,
 		CallbackHeader: nexus.Header{
 			commonnexus.CallbackTokenHeader: token,
 		},
@@ -153,10 +153,21 @@ func (e activeExecutor) executeInvocationTask(ctx context.Context, env hsm.Envir
 		}
 	}
 
-	return e.saveResult(ctx, env, ref, result, callErr)
+	if err := e.saveResult(ctx, env, ref, result, callErr); err != nil {
+		return fmt.Errorf("failed to save result: %w", err)
+	}
+	return nil
 }
 
-func (e activeExecutor) loadOperationArgs(ctx context.Context, env hsm.Environment, ref hsm.Ref) (operationName string, requestID string, header map[string]string, payload *commonpb.Payload, err error) {
+type operationArgs struct {
+	operationName            string
+	requestID                string
+	header                   map[string]string
+	payload                  *commonpb.Payload
+	namespaceFailoverVersion int64
+}
+
+func (e activeExecutor) loadOperationArgs(ctx context.Context, env hsm.Environment, ref hsm.Ref) (args operationArgs, err error) {
 	var eventToken []byte
 	err = env.Access(ctx, ref, hsm.AccessRead, func(node *hsm.Node) error {
 		if err := checkParentIsRunning(node); err != nil {
@@ -166,15 +177,16 @@ func (e activeExecutor) loadOperationArgs(ctx context.Context, env hsm.Environme
 		if err != nil {
 			return err
 		}
-		operationName = operation.Operation
-		requestID = operation.RequestId
+		args.operationName = operation.Operation
+		args.requestID = operation.RequestId
 		eventToken = operation.ScheduledEventToken
 		event, err := node.LoadHistoryEvent(ctx, eventToken)
 		if err != nil {
 			return nil
 		}
-		payload = event.GetNexusOperationScheduledEventAttributes().GetInput()
-		header = event.GetNexusOperationScheduledEventAttributes().GetHeader()
+		args.payload = event.GetNexusOperationScheduledEventAttributes().GetInput()
+		args.header = event.GetNexusOperationScheduledEventAttributes().GetHeader()
+		args.namespaceFailoverVersion = event.Version
 		return nil
 	})
 	return
@@ -205,9 +217,6 @@ func (e activeExecutor) saveResult(ctx context.Context, env hsm.Environment, ref
 						},
 					}
 				})
-				if err != nil {
-					return hsm.TransitionOutput{}, err
-				}
 				return TransitionStarted.Apply(operation, EventStarted{
 					Time:       env.Now(),
 					Node:       node,

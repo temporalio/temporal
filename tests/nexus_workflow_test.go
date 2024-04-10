@@ -24,16 +24,10 @@ package tests
 
 import (
 	"context"
-	"errors"
-	"fmt"
-	"net"
-	"net/http"
 	"slices"
-	"testing"
 	"time"
 
 	"github.com/nexus-rpc/sdk-go/nexus"
-	"github.com/stretchr/testify/require"
 	commandpb "go.temporal.io/api/command/v1"
 	commonpb "go.temporal.io/api/common/v1"
 	"go.temporal.io/api/enums/v1"
@@ -43,7 +37,7 @@ import (
 	"go.temporal.io/api/taskqueue/v1"
 	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/sdk/client"
-	"go.temporal.io/server/internal/temporalite"
+	"go.temporal.io/server/common/nexus/nexustest"
 	"google.golang.org/protobuf/types/known/durationpb"
 )
 
@@ -134,13 +128,13 @@ func (s *ClientFunctionalSuite) TestNexusOperationSyncCompletion() {
 	taskQueue := s.randomizeStr(s.T().Name())
 	serviceName := s.randomizeStr(s.T().Name())
 
-	h := handler{
+	h := nexustest.Handler{
 		OnStartOperation: func(ctx context.Context, operation string, input *nexus.LazyValue, options nexus.StartOperationOptions) (nexus.HandlerStartOperationResult[any], error) {
 			return &nexus.HandlerStartOperationResultSync[any]{Value: "result"}, nil
 		},
 	}
-	listenAddr := allocListenAddress(s.T())
-	newNexusServer(s.T(), listenAddr, h)
+	listenAddr := nexustest.AllocListenAddress(s.T())
+	nexustest.NewNexusServer(s.T(), listenAddr, h)
 
 	_, err := s.engine.RegisterNamespace(ctx, &workflowservice.RegisterNamespaceRequest{
 		Namespace:                        namespace,
@@ -231,45 +225,4 @@ func (s *ClientFunctionalSuite) TestNexusOperationSyncCompletion() {
 	var result string
 	s.NoError(run.Get(ctx, &result))
 	s.Equal("result", result)
-}
-
-func allocListenAddress(t *testing.T) string {
-	pp := temporalite.NewPortProvider()
-	listenAddr := fmt.Sprintf("localhost:%d", pp.MustGetFreePort())
-	require.NoError(t, pp.Close())
-	return listenAddr
-}
-
-func newNexusServer(t *testing.T, listenAddr string, handler nexus.Handler) {
-	hh := nexus.NewHTTPHandler(nexus.HandlerOptions{
-		Handler: handler,
-	})
-	srv := &http.Server{Addr: listenAddr, Handler: hh}
-	listener, err := net.Listen("tcp", listenAddr)
-	require.NoError(t, err)
-	errCh := make(chan error, 1)
-	go func() {
-		errCh <- srv.Serve(listener)
-	}()
-
-	t.Cleanup(func() {
-		// Graceful shutdown
-		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-		defer cancel()
-		if err := srv.Shutdown(ctx); err != nil {
-			panic(err)
-		}
-		if err := <-errCh; err != nil && !errors.Is(err, http.ErrServerClosed) {
-			panic(err)
-		}
-	})
-}
-
-type handler struct {
-	nexus.UnimplementedHandler
-	OnStartOperation func(ctx context.Context, operation string, input *nexus.LazyValue, options nexus.StartOperationOptions) (nexus.HandlerStartOperationResult[any], error)
-}
-
-func (h handler) StartOperation(ctx context.Context, operation string, input *nexus.LazyValue, options nexus.StartOperationOptions) (nexus.HandlerStartOperationResult[any], error) {
-	return h.OnStartOperation(ctx, operation, input, options)
 }
