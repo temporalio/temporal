@@ -354,6 +354,10 @@ type (
 		MaxConns int `yaml:"maxConns"`
 		// ConnectTimeout is a timeout for initial dial to cassandra server (default: 600 milliseconds)
 		ConnectTimeout time.Duration `yaml:"connectTimeout"`
+		// Timeout is a timeout for reads and, unless otherwise specified, writes. If not specified, ConnectTimeout is used.
+		Timeout time.Duration `yaml:"timeout"`
+		// WriteTimeout is a timeout for writing a query. If not specified, Timeout is used.
+		WriteTimeout time.Duration `yaml:"writeTimeout"`
 		// TLS configuration
 		TLS *auth.TLS `yaml:"tls"`
 		// Consistency configuration (defaults to LOCAL_QUORUM / LOCAL_SERIAL for all stores if this field not set)

@@ -21,7 +21,6 @@ env:
   COMMIT: ${{ github.event.inputs.commit || github.sha }}
   DOCKER_COMPOSE_FILE: ./develop/github/docker-compose.yml
   TEMPORAL_VERSION_CHECK_DISABLED: 1
-  BUILD_ENV: ci # Set the build environment to ci so that tools (Make targets) can adjust their behavior
 
 jobs:
   misc-checks:

@@ -65,10 +65,10 @@ var (
 	ErrShardIDInvalid               = errors.New("shard ID must be greater than 0")
 )
 
-func NewHistoryTaskQueueManager(queue QueueV2) *HistoryTaskQueueManagerImpl {
+func NewHistoryTaskQueueManager(queue QueueV2, serializer serialization.Serializer) *HistoryTaskQueueManagerImpl {
 	return &HistoryTaskQueueManagerImpl{
 		queue:      queue,
-		serializer: serialization.NewTaskSerializer(),
+		serializer: serializer,
 	}
 }
 

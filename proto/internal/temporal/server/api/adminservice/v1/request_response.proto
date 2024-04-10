@@ -496,7 +496,7 @@ message MergeDLQTasksResponse {
 
 message DescribeDLQJobRequest {
   // Job token of MergeDLQTasks or PurgeDLQTasks job.
-  string job_token = 1;
+  bytes job_token = 1;
 }
 
 message DescribeDLQJobResponse {
@@ -517,7 +517,7 @@ message DescribeDLQJobResponse {
 
 message CancelDLQJobRequest {
   // Job token of MergeDLQTasks or PurgeDLQTasks job to cancel.
-  string job_token = 1;
+  bytes job_token = 1;
   // The reason for cancellation.
   string reason = 2;
 }

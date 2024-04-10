@@ -197,7 +197,7 @@ func TestRequestSendAcceptComplete(t *testing.T) {
 		require.ErrorAsf(t, err, &invalidArg,
 			"expected InvalidArgument from %T while in Admitted state", &resp)
 
-		err = upd.Request(ctx, &req, store)
+		err = upd.Admit(ctx, &req, store)
 		require.NoError(t, err)
 		require.False(t, completed)
 
@@ -225,15 +225,15 @@ func TestRequestSendAcceptComplete(t *testing.T) {
 
 		ctx, cncl := context.WithTimeout(ctx, 5*time.Millisecond)
 		t.Cleanup(cncl)
-		status, err := upd.WaitAccepted(ctx)
+		status, err := upd.WaitLifecycleStage(ctx, enumspb.UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_ACCEPTED, 1*time.Second)
 		require.ErrorIs(t, err, context.DeadlineExceeded,
 			"update acceptance should not be observable until effects are applied")
-		require.Equal(t, enumspb.UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_UNSPECIFIED, status.Stage)
+		require.Nil(t, status)
 
 		effects.Apply(ctx)
 		t.Log("update state should now be Accepted")
 
-		status, err = upd.WaitAccepted(ctx)
+		status, err = upd.WaitLifecycleStage(ctx, enumspb.UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_ACCEPTED, 1*time.Second)
 		require.NoError(t, err)
 		require.Equal(t, enumspb.UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_ACCEPTED, status.Stage)
 		require.Nil(t, status.Outcome,
@@ -247,14 +247,14 @@ func TestRequestSendAcceptComplete(t *testing.T) {
 
 		ctx, cncl := context.WithTimeout(ctx, 5*time.Millisecond)
 		t.Cleanup(cncl)
-		_, err = upd.WaitOutcome(ctx)
+		_, err = upd.WaitLifecycleStage(ctx, enumspb.UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_COMPLETED, 1*time.Second)
 		require.ErrorIs(t, err, context.DeadlineExceeded,
 			"update outcome should not be observable until effects are applied")
 
 		effects.Apply(ctx)
 		t.Log("update state should now be Completed")
 
-		status, err := upd.WaitOutcome(ctx)
+		status, err := upd.WaitLifecycleStage(ctx, enumspb.UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_COMPLETED, 1*time.Second)
 		require.NoError(t, err)
 		require.Equal(t, enumspb.UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_COMPLETED, status.Stage)
 		require.Equal(t, mustUnmarshalBody[*updatepb.Response](t, &resp).Outcome, status.Outcome)
@@ -283,7 +283,7 @@ func TestRequestSendReject(t *testing.T) {
 	)
 
 	t.Run("request", func(t *testing.T) {
-		err := upd.Request(ctx, &req, store)
+		err := upd.Admit(ctx, &req, store)
 		require.NoError(t, err)
 		require.False(t, completed)
 		effects.Apply(ctx)
@@ -306,14 +306,14 @@ func TestRequestSendReject(t *testing.T) {
 		{
 			ctx, cncl := context.WithTimeout(ctx, 5*time.Millisecond)
 			t.Cleanup(cncl)
-			_, err := upd.WaitAccepted(ctx)
+			_, err := upd.WaitLifecycleStage(ctx, enumspb.UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_ACCEPTED, 1*time.Second)
 			require.ErrorIs(t, err, context.DeadlineExceeded,
 				"update acceptance failure should not be observable until effects are applied")
 		}
 		{
 			ctx, cncl := context.WithTimeout(ctx, 5*time.Millisecond)
 			t.Cleanup(cncl)
-			_, err := upd.WaitOutcome(ctx)
+			_, err := upd.WaitLifecycleStage(ctx, enumspb.UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_COMPLETED, 1*time.Second)
 			require.ErrorIs(t, err, context.DeadlineExceeded,
 				"update acceptance failure should not be observable until effects are applied")
 		}
@@ -321,12 +321,12 @@ func TestRequestSendReject(t *testing.T) {
 		effects.Apply(ctx)
 		t.Log("update state should now be Completed")
 
-		status, err := upd.WaitAccepted(ctx)
+		status, err := upd.WaitLifecycleStage(ctx, enumspb.UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_ACCEPTED, 1*time.Second)
 		require.NoError(t, err)
 		require.Equal(t, enumspb.UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_COMPLETED, status.Stage)
 		require.Equal(t, mustUnmarshalBody[*updatepb.Rejection](t, &rej).Failure, status.Outcome.GetFailure())
 
-		status, err = upd.WaitOutcome(ctx)
+		status, err = upd.WaitLifecycleStage(ctx, enumspb.UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_COMPLETED, 1*time.Second)
 		require.NoError(t, err)
 		require.Equal(t, enumspb.UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_COMPLETED, status.Stage)
 		require.Equal(t, mustUnmarshalBody[*updatepb.Rejection](t, &rej).Failure, status.Outcome.GetFailure())
@@ -386,7 +386,7 @@ func TestSend(t *testing.T) {
 		require.False(t, upd.IsSent())
 	})
 	t.Run("requested", func(t *testing.T) {
-		require.NoError(t, upd.Request(ctx, &req, store))
+		require.NoError(t, upd.Admit(ctx, &req, store))
 		effects.Apply(ctx)
 		require.True(t, upd.NeedToSend(false))
 		msg := upd.Send(ctx, false, sequencingID, store)
@@ -460,7 +460,7 @@ func TestAcceptanceAndResponseInSameMessageBatch(t *testing.T) {
 		sequencingID = &protocolpb.Message_EventId{EventId: testSequencingEventID}
 	)
 
-	require.NoError(t, upd.Request(ctx, &req, store))
+	require.NoError(t, upd.Admit(ctx, &req, store))
 	effects.Apply(ctx)
 
 	_ = upd.Send(ctx, false, sequencingID, store)
@@ -485,7 +485,7 @@ func TestDuplicateRequestNoError(t *testing.T) {
 		upd          = update.NewAccepted(updateID, testAcceptedEventID)
 	)
 
-	err := upd.Request(ctx, &updatepb.Request{}, eventStoreUnused)
+	err := upd.Admit(ctx, &updatepb.Request{}, eventStoreUnused)
 	require.NoError(t, err,
 		"a second request message should be ignored, not cause an error")
 
@@ -507,13 +507,13 @@ func TestMessageValidation(t *testing.T) {
 
 	t.Run("invalid request msg", func(t *testing.T) {
 		upd := update.New("")
-		err := upd.Request(ctx, &updatepb.Request{}, eventStoreUnused)
+		err := upd.Admit(ctx, &updatepb.Request{}, eventStoreUnused)
 		require.ErrorAs(t, err, &invalidArg)
 		require.ErrorContains(t, err, "invalid")
 	})
 	t.Run("invalid accept msg", func(t *testing.T) {
 		upd := update.New(updateID)
-		err := upd.Request(ctx, &req, store)
+		err := upd.Admit(ctx, &req, store)
 		require.NoError(t, err)
 		_ = upd.Send(ctx, true, sequencingID, store)
 
@@ -569,7 +569,7 @@ func TestDoubleRollback(t *testing.T) {
 	)
 
 	upd := update.New(meta.UpdateId, update.ObserveCompletion(&completed))
-	require.NoError(t, upd.Request(ctx, &req, store))
+	require.NoError(t, upd.Admit(ctx, &req, store))
 	effects.Apply(ctx)
 
 	_ = upd.Send(ctx, false, sequencingID, store)
@@ -585,13 +585,13 @@ func TestDoubleRollback(t *testing.T) {
 	t.Run("not accepted", func(t *testing.T) {
 		ctx, cncl := context.WithTimeout(ctx, 5*time.Millisecond)
 		t.Cleanup(cncl)
-		_, err := upd.WaitAccepted(ctx)
+		_, err := upd.WaitLifecycleStage(ctx, enumspb.UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_ACCEPTED, 1*time.Second)
 		require.ErrorIs(t, err, context.DeadlineExceeded)
 	})
 	t.Run("not completed", func(t *testing.T) {
 		ctx, cncl := context.WithTimeout(ctx, 5*time.Millisecond)
 		t.Cleanup(cncl)
-		_, err := upd.WaitOutcome(ctx)
+		_, err := upd.WaitLifecycleStage(ctx, enumspb.UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_COMPLETED, 1*time.Second)
 		require.ErrorIs(t, err, context.DeadlineExceeded)
 	})
 	t.Run("back to requested state", func(t *testing.T) {
@@ -628,7 +628,7 @@ func TestRollbackCompletion(t *testing.T) {
 	t.Run("not completed", func(t *testing.T) {
 		ctx, cncl := context.WithTimeout(ctx, 5*time.Millisecond)
 		t.Cleanup(cncl)
-		_, err := upd.WaitOutcome(ctx)
+		_, err := upd.WaitLifecycleStage(ctx, enumspb.UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_COMPLETED, 1*time.Second)
 		require.ErrorIs(t, err, context.DeadlineExceeded)
 		require.False(t, completed)
 	})
@@ -660,18 +660,18 @@ func TestRejectionWithAcceptanceWaiter(t *testing.T) {
 	)
 	ch := make(chan any, 1)
 	go func() {
-		status, err := upd.WaitAccepted(ctx)
+		status, err := upd.WaitLifecycleStage(ctx, enumspb.UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_ACCEPTED, 1*time.Second)
 		if err != nil {
 			ch <- err
 			return
 		}
 		ch <- status.Outcome
 	}()
-	t.Log("give 5ms for the goro to get to the Future.Get call in WaitAccepted")
+	t.Log("give 5ms for the goro to get to the Future.Get call in WaitLifecycleStage")
 	time.Sleep(5 * time.Millisecond)
 
 	t.Log("deliver request and rejection messages")
-	require.NoError(t, upd.Request(ctx, &req, store))
+	require.NoError(t, upd.Admit(ctx, &req, store))
 
 	_ = upd.Send(ctx, false, sequencingID, store)
 
@@ -679,7 +679,7 @@ func TestRejectionWithAcceptanceWaiter(t *testing.T) {
 
 	retVal := <-ch
 	outcome, ok := retVal.(*updatepb.Outcome)
-	require.Truef(t, ok, "WaitAccepted returned an unexpected type: %T", retVal)
+	require.Truef(t, ok, "WaitLifecycleStage returned an unexpected type: %T", retVal)
 	require.Equal(t, mustUnmarshalBody[*updatepb.Rejection](t, &rej).Failure, outcome.GetFailure())
 }
 
@@ -727,7 +727,7 @@ func TestAcceptEventIDInCompletedEvent(t *testing.T) {
 		return &historypb.HistoryEvent{}, nil
 	}
 
-	require.NoError(t, upd.Request(ctx, &req, store))
+	require.NoError(t, upd.Admit(ctx, &req, store))
 	effects.Apply(ctx)
 	_ = upd.Send(ctx, false, sequencingID, store)
 	effects.Apply(ctx)
@@ -787,23 +787,23 @@ func TestWaitLifecycleStage(t *testing.T) {
 	)
 
 	assertAdmitted := func(ctx context.Context, t *testing.T, upd *update.Update) {
-		assert := func(status update.UpdateStatus, err error) {
+		assert := func(status *update.Status, err error) {
 			require.NoError(t, err)
 			require.Equal(t, enumspb.UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_ADMITTED, status.Stage)
 			require.Nil(t, status.Outcome)
 		}
-		status, err := upd.Status()
+		status, err := upd.WaitLifecycleStage(ctx, enumspb.UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_ADMITTED, time.Duration(0))
 		assert(status, err)
 	}
 
 	assertAccepted := func(ctx context.Context, t *testing.T, upd *update.Update, alreadyInState bool) {
-		assert := func(status update.UpdateStatus, err error) {
+		assert := func(status *update.Status, err error) {
 			require.NoError(t, err)
 			require.Equal(t, enumspb.UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_ACCEPTED, status.Stage)
 			require.Nil(t, status.Outcome)
 		}
 		if alreadyInState {
-			status, err := upd.Status()
+			status, err := upd.WaitLifecycleStage(ctx, enumspb.UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_ACCEPTED, time.Duration(0))
 			assert(status, err)
 		}
 		status, err := upd.WaitLifecycleStage(ctx, enumspb.UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_ACCEPTED, serverTimeout)
@@ -811,7 +811,7 @@ func TestWaitLifecycleStage(t *testing.T) {
 	}
 
 	assertSuccess := func(ctx context.Context, t *testing.T, upd *update.Update, alreadyInState bool) {
-		assert := func(status update.UpdateStatus, err error) {
+		assert := func(status *update.Status, err error) {
 			require.NoError(t, err)
 			require.Equal(t, enumspb.UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_COMPLETED, status.Stage)
 			require.Nil(t, status.Outcome.GetFailure())
@@ -819,7 +819,7 @@ func TestWaitLifecycleStage(t *testing.T) {
 			require.Equal(t, mustUnmarshalBody[*updatepb.Response](t, &resp).Outcome, status.Outcome)
 		}
 		if alreadyInState {
-			status, err := upd.Status()
+			status, err := upd.WaitLifecycleStage(ctx, enumspb.UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_COMPLETED, time.Duration(0))
 			assert(status, err)
 		}
 		status, err := upd.WaitLifecycleStage(ctx, enumspb.UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_COMPLETED, serverTimeout)
@@ -827,7 +827,7 @@ func TestWaitLifecycleStage(t *testing.T) {
 	}
 
 	assertFailure := func(ctx context.Context, t *testing.T, upd *update.Update, alreadyInState bool) {
-		assert := func(status update.UpdateStatus, err error) {
+		assert := func(status *update.Status, err error) {
 			require.NoError(t, err)
 			require.Equal(t, enumspb.UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_COMPLETED, status.Stage)
 			require.NotNil(t, status.Outcome.GetFailure())
@@ -835,7 +835,7 @@ func TestWaitLifecycleStage(t *testing.T) {
 			require.Equal(t, mustUnmarshalBody[*updatepb.Rejection](t, &rej).Failure, status.Outcome.GetFailure())
 		}
 		if alreadyInState {
-			status, err := upd.Status()
+			status, err := upd.WaitLifecycleStage(ctx, enumspb.UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_COMPLETED, time.Duration(0))
 			assert(status, err)
 		}
 		status, err := upd.WaitLifecycleStage(ctx, enumspb.UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_COMPLETED, serverTimeout)
@@ -845,7 +845,14 @@ func TestWaitLifecycleStage(t *testing.T) {
 	assertSoftTimeoutWhileWaitingForAccepted := func(ctx context.Context, t *testing.T, upd *update.Update) {
 		status, err := upd.WaitLifecycleStage(ctx, enumspb.UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_ACCEPTED, serverTimeout)
 		require.NoError(t, err)
-		require.Equal(t, enumspb.UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_UNSPECIFIED, status.Stage)
+		require.Equal(t, enumspb.UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_ADMITTED, status.Stage)
+		require.Nil(t, status.Outcome)
+	}
+
+	assertSoftTimeoutWhileWaitingForCompleted := func(ctx context.Context, t *testing.T, upd *update.Update) {
+		status, err := upd.WaitLifecycleStage(ctx, enumspb.UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_COMPLETED, serverTimeout)
+		require.NoError(t, err)
+		require.Equal(t, enumspb.UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_ACCEPTED, status.Stage)
 		require.Nil(t, status.Outcome)
 	}
 
@@ -857,8 +864,16 @@ func TestWaitLifecycleStage(t *testing.T) {
 		require.True(t, common.IsContextDeadlineExceededErr(ctx.Err()))
 	}
 
+	assertContextDeadlineExceededWhileWaitingForCompleted := func(ctx context.Context, t *testing.T, upd *update.Update) {
+		_, err := upd.WaitLifecycleStage(ctx, enumspb.UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_COMPLETED, serverTimeout)
+		require.Error(t, err)
+		require.Error(t, ctx.Err())
+		require.True(t, common.IsContextDeadlineExceededErr(err))
+		require.True(t, common.IsContextDeadlineExceededErr(ctx.Err()))
+	}
+
 	applyRequest := func(ctx context.Context, req *updatepb.Request, upd *update.Update) {
-		err := upd.Request(ctx, req, store)
+		err := upd.Admit(ctx, req, store)
 		require.NoError(t, err)
 		effects.Apply(ctx)
 	}
@@ -932,7 +947,7 @@ func TestWaitLifecycleStage(t *testing.T) {
 		<-done
 	})
 
-	t.Run("timeout is soft iff due to server-imposed deadline", func(t *testing.T) {
+	t.Run("timeout is soft iff due to server-imposed deadline (accepted)", func(t *testing.T) {
 		upd := update.New(meta.UpdateId, update.ObserveCompletion(&completed))
 		ctx, cancel := context.WithTimeout(context.Background(), serverTimeout*2)
 		defer cancel()
@@ -942,13 +957,60 @@ func TestWaitLifecycleStage(t *testing.T) {
 		assertContextDeadlineExceededWhileWaitingForAccepted(ctx, t, upd)
 	})
 
-	t.Run("may not wait for Unspecified nor Admitted states", func(t *testing.T) {
-		ctx := context.Background()
+	t.Run("timeout is soft iff due to server-imposed deadline (completed)", func(t *testing.T) {
+		ctx, cancel := context.WithTimeout(context.Background(), serverTimeout*2)
+		defer cancel()
 		upd := update.New(meta.UpdateId, update.ObserveCompletion(&completed))
-		_, err := upd.WaitLifecycleStage(ctx, enumspb.UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_UNSPECIFIED, serverTimeout)
-		require.Error(t, err)
-		_, err = upd.WaitLifecycleStage(ctx, enumspb.UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_ADMITTED, serverTimeout)
-		require.Error(t, err)
+		assertAdmitted(ctx, t, upd)
+		applyRequest(ctx, &req, upd)  // => Requested
+		send(ctx, upd)                // => Sent
+		applyMessage(ctx, &acpt, upd) // => Accepted
+		assertAccepted(ctx, t, upd, true)
+		assertSoftTimeoutWhileWaitingForCompleted(ctx, t, upd)
+		ctx, cancel = context.WithTimeout(context.Background(), serverTimeout/2)
+		defer cancel()
+		assertContextDeadlineExceededWhileWaitingForCompleted(ctx, t, upd)
+	})
+
+	t.Run("wait for Unspecified or Admitted states returns current status immediately", func(t *testing.T) {
+		ctx, cancel := context.WithTimeout(context.Background(), time.Duration(0))
+		defer cancel()
+		upd := update.New(meta.UpdateId, update.ObserveCompletion(&completed))
+		status, err := upd.WaitLifecycleStage(ctx, enumspb.UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_UNSPECIFIED, time.Duration(0))
+		require.NoError(t, err)
+		require.Equal(t, enumspb.UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_ADMITTED, status.Stage)
+		require.Nil(t, status.Outcome)
+
+		status, err = upd.WaitLifecycleStage(ctx, enumspb.UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_ADMITTED, time.Duration(0))
+		require.NoError(t, err)
+		require.Equal(t, enumspb.UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_ADMITTED, status.Stage)
+		require.Nil(t, status.Outcome)
+
+		applyRequest(ctx, &req, upd)  // => Requested
+		send(ctx, upd)                // => Sent
+		applyMessage(ctx, &acpt, upd) // => Accepted
+
+		status, err = upd.WaitLifecycleStage(ctx, enumspb.UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_UNSPECIFIED, time.Duration(0))
+		require.NoError(t, err)
+		require.Equal(t, enumspb.UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_ACCEPTED, status.Stage)
+		require.Nil(t, status.Outcome)
+
+		status, err = upd.WaitLifecycleStage(ctx, enumspb.UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_ADMITTED, time.Duration(0))
+		require.NoError(t, err)
+		require.Equal(t, enumspb.UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_ACCEPTED, status.Stage)
+		require.Nil(t, status.Outcome)
+
+		applyMessage(ctx, &resp, upd) // => Completed (success)
+
+		status, err = upd.WaitLifecycleStage(ctx, enumspb.UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_UNSPECIFIED, time.Duration(0))
+		require.NoError(t, err)
+		require.Equal(t, enumspb.UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_COMPLETED, status.Stage)
+		require.NotNil(t, status.Outcome)
+
+		status, err = upd.WaitLifecycleStage(ctx, enumspb.UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_ADMITTED, time.Duration(0))
+		require.NoError(t, err)
+		require.Equal(t, enumspb.UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_COMPLETED, status.Stage)
+		require.NotNil(t, status.Outcome)
 	})
 }
 
@@ -967,12 +1029,12 @@ func TestCompletedWorkflow(t *testing.T) {
 
 	t.Run("new update is rejected if workflow is completed", func(t *testing.T) {
 		upd := update.New(meta.UpdateId)
-		err := upd.Request(ctx, &req, roStore)
+		err := upd.Admit(ctx, &req, roStore)
 		require.NoError(t, err)
 
 		oneMsCtx, cancel := context.WithTimeout(ctx, 1*time.Millisecond)
 		defer cancel()
-		status, err := upd.WaitOutcome(oneMsCtx)
+		status, err := upd.WaitLifecycleStage(oneMsCtx, enumspb.UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_COMPLETED, 1*time.Second)
 		require.NoError(t, err)
 		require.Equal(t, enumspb.UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_COMPLETED, status.Stage)
 		require.Equal(t, "Workflow Update is rejected because Workflow Execution is completed.", status.Outcome.GetFailure().GetMessage())
@@ -981,7 +1043,7 @@ func TestCompletedWorkflow(t *testing.T) {
 
 	t.Run("sent update is rejected if completed workflow tries to accept it", func(t *testing.T) {
 		upd := update.New(meta.UpdateId)
-		_ = upd.Request(ctx, &req, store)
+		_ = upd.Admit(ctx, &req, store)
 		upd.Send(ctx, false, &protocolpb.Message_EventId{EventId: testSequencingEventID}, store)
 
 		acpt := protocolpb.Message{Body: mustMarshalAny(t, &updatepb.Acceptance{AcceptedRequestSequencingEventId: 2208})}
@@ -990,7 +1052,7 @@ func TestCompletedWorkflow(t *testing.T) {
 
 		oneMsCtx, cancel := context.WithTimeout(ctx, 1*time.Millisecond)
 		defer cancel()
-		status, err := upd.WaitOutcome(oneMsCtx)
+		status, err := upd.WaitLifecycleStage(oneMsCtx, enumspb.UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_COMPLETED, 1*time.Second)
 		require.NoError(t, err)
 		require.Equal(t, enumspb.UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_COMPLETED, status.Stage)
 		require.Equal(t, "Workflow Update is rejected because Workflow Execution is completed.", status.Outcome.GetFailure().GetMessage())
@@ -999,7 +1061,7 @@ func TestCompletedWorkflow(t *testing.T) {
 
 	t.Run("sent update is rejected with user rejection if completed workflow rejects it", func(t *testing.T) {
 		upd := update.New(meta.UpdateId)
-		_ = upd.Request(ctx, &req, store)
+		_ = upd.Admit(ctx, &req, store)
 		upd.Send(ctx, false, &protocolpb.Message_EventId{EventId: testSequencingEventID}, store)
 
 		rej := protocolpb.Message{Body: mustMarshalAny(t, &updatepb.Rejection{
@@ -1011,7 +1073,7 @@ func TestCompletedWorkflow(t *testing.T) {
 
 		oneMsCtx, cancel := context.WithTimeout(ctx, 1*time.Millisecond)
 		defer cancel()
-		status, err := upd.WaitOutcome(oneMsCtx)
+		status, err := upd.WaitLifecycleStage(oneMsCtx, enumspb.UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_COMPLETED, 1*time.Second)
 		require.NoError(t, err)
 		require.Equal(t, enumspb.UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_COMPLETED, status.Stage)
 		require.Equal(t, "An intentional failure", status.Outcome.GetFailure().GetMessage())
@@ -1026,12 +1088,12 @@ func TestCompletedWorkflow(t *testing.T) {
 
 		oneMsCtx, cancel := context.WithTimeout(ctx, 1*time.Millisecond)
 		defer cancel()
-		status, err := upd.WaitOutcome(oneMsCtx)
+		status, err := upd.WaitLifecycleStage(oneMsCtx, enumspb.UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_COMPLETED, 1*time.Second)
 		require.Error(t, err)
 
 		require.ErrorIs(t, err, context.DeadlineExceeded,
 			"expected DeadlineExceeded error when workflow is completed and update is in Accepted state")
-		require.Nil(t, status.Outcome)
+		require.Nil(t, status)
 	})
 }
 

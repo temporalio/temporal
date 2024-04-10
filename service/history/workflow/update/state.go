@@ -36,9 +36,9 @@ type (
 )
 
 const (
-	stateAdmitted state = 1 << iota
-	stateProvisionallyRequested
-	stateRequested
+	stateCreated state = 1 << iota
+	stateProvisionallyAdmitted
+	stateAdmitted
 	stateProvisionallySent
 	stateSent
 	stateProvisionallyAccepted
@@ -49,12 +49,12 @@ const (
 
 func (s state) String() string {
 	switch s {
+	case stateCreated:
+		return "Created"
+	case stateProvisionallyAdmitted:
+		return "ProvisionallyAdmitted"
 	case stateAdmitted:
 		return "Admitted"
-	case stateProvisionallyRequested:
-		return "ProvisionallyRequested"
-	case stateRequested:
-		return "Requested"
 	case stateProvisionallySent:
 		return "ProvisionallySent"
 	case stateSent:
@@ -75,11 +75,11 @@ func (s state) String() string {
 // enumspb.UpdateWorkflowExecutionLifecycleStage.
 func (s state) LifecycleStage() (enumspb.UpdateWorkflowExecutionLifecycleStage, error) {
 	switch s {
+	case stateCreated:
+		return enumspb.UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_ADMITTED, nil
+	case stateProvisionallyAdmitted:
+		return enumspb.UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_ADMITTED, nil
 	case stateAdmitted:
-		return enumspb.UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_ADMITTED, nil
-	case stateProvisionallyRequested:
-		return enumspb.UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_ADMITTED, nil
-	case stateRequested:
 		return enumspb.UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_ADMITTED, nil
 	case stateProvisionallySent:
 		return enumspb.UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_ADMITTED, nil

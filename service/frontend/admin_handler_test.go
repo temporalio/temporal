@@ -1475,7 +1475,7 @@ func (s *adminHandlerSuite) TestDescribeDLQJob() {
 			}
 			jobTokenBytes, _ := jobToken.Marshal()
 			response, err := s.handler.DescribeDLQJob(context.Background(), &adminservice.DescribeDLQJobRequest{
-				JobToken: string(jobTokenBytes),
+				JobToken: jobTokenBytes,
 			})
 			if tc.err != nil {
 				s.ErrorIs(err, tc.err)
@@ -1489,7 +1489,7 @@ func (s *adminHandlerSuite) TestDescribeDLQJob() {
 }
 
 func (s *adminHandlerSuite) TestDescribeDLQJob_InvalidJobToken() {
-	_, err := s.handler.DescribeDLQJob(context.Background(), &adminservice.DescribeDLQJobRequest{JobToken: "invalid_token"})
+	_, err := s.handler.DescribeDLQJob(context.Background(), &adminservice.DescribeDLQJobRequest{JobToken: []byte("invalid_token")})
 	s.Error(err)
 	s.ErrorContains(err, "Invalid DLQ job token")
 
@@ -1581,7 +1581,7 @@ func (s *adminHandlerSuite) TestCancelDLQJob() {
 			}
 			jobTokenBytes, _ := jobToken.Marshal()
 			response, err := s.handler.CancelDLQJob(context.Background(), &adminservice.CancelDLQJobRequest{
-				JobToken: string(jobTokenBytes),
+				JobToken: jobTokenBytes,
 				Reason:   "test-reason",
 			})
 			if tc.describeErr != nil {
@@ -1600,7 +1600,7 @@ func (s *adminHandlerSuite) TestCancelDLQJob() {
 }
 
 func (s *adminHandlerSuite) TestCancelDLQJob_InvalidJobToken() {
-	_, err := s.handler.CancelDLQJob(context.Background(), &adminservice.CancelDLQJobRequest{JobToken: "invalid_token", Reason: "test-reason"})
+	_, err := s.handler.CancelDLQJob(context.Background(), &adminservice.CancelDLQJobRequest{JobToken: []byte("invalid_token"), Reason: "test-reason"})
 	s.Error(err)
 	s.ErrorContains(err, "Invalid DLQ job token")
 }

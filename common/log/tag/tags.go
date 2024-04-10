@@ -174,7 +174,7 @@ func WorkflowTaskTimeoutSeconds(s int64) ZapTag {
 	return NewInt64("workflow-task-timeout", s)
 }
 
-// WorkflowTaskTimeoutSeconds returns tag for WorkflowTaskTimeoutSeconds
+// WorkflowTaskTimeout returns tag for WorkflowTaskTimeoutSeconds
 func WorkflowTaskTimeout(s time.Duration) ZapTag {
 	return NewDurationTag("workflow-task-timeout", s)
 }
@@ -380,6 +380,12 @@ func errorType(errorType string) ZapTag {
 // Shardupdate returns tag for Shardupdate
 func shardupdate(shardupdate string) ZapTag {
 	return NewStringTag("shard-update", shardupdate)
+}
+
+// scope returns a tag for scope
+// Pre-defined scope tags are in values.go.
+func scope(scope string) ZapTag {
+	return NewStringTag("scope", scope)
 }
 
 // general
@@ -933,4 +939,8 @@ func Endpoint(endpoint string) ZapTag {
 
 func BuildId(buildId string) ZapTag {
 	return NewStringTag("build-id", buildId)
+}
+
+func Cause(cause string) ZapTag {
+	return NewStringTag("cause", cause)
 }

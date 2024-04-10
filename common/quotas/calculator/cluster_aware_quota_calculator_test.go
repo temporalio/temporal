@@ -22,20 +22,19 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-package quotas_test
+package calculator
 
 import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
 	"go.temporal.io/server/common/dynamicconfig"
-	"go.temporal.io/server/common/quotas"
 	"go.temporal.io/server/common/quotas/quotastest"
 )
 
 type quotaCalculatorTestCase struct {
 	name          string
-	memberCounter quotas.MemberCounter
+	memberCounter MemberCounter
 	instanceLimit int
 	clusterLimit  int
 	expected      float64
@@ -80,7 +79,7 @@ func TestClusterAwareQuotaCalculator_GetQuota(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 
-			assert.Equal(t, tc.expected, quotas.ClusterAwareQuotaCalculator{
+			assert.Equal(t, tc.expected, ClusterAwareQuotaCalculator{
 				MemberCounter:    tc.memberCounter,
 				PerInstanceQuota: dynamicconfig.GetIntPropertyFn(tc.instanceLimit),
 				GlobalQuota:      dynamicconfig.GetIntPropertyFn(tc.clusterLimit),
@@ -114,7 +113,7 @@ func TestClusterAwareNamespaceSpecificQuotaCalculator_GetQuota(t *testing.T) {
 
 			clusterLimit := perNamespaceQuota{t: t, quota: tc.clusterLimit}
 
-			assert.Equal(t, tc.expected, quotas.ClusterAwareNamespaceSpecificQuotaCalculator{
+			assert.Equal(t, tc.expected, ClusterAwareNamespaceQuotaCalculator{
 				MemberCounter:    tc.memberCounter,
 				PerInstanceQuota: instanceLimit.getQuota,
 				GlobalQuota:      clusterLimit.getQuota,

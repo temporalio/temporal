@@ -22,58 +22,33 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-package tasks
+package utf8validator
 
 import (
-	"time"
+	"go.uber.org/fx"
 
-	enumsspb "go.temporal.io/server/api/enums/v1"
-	"go.temporal.io/server/common/definition"
+	"go.temporal.io/server/common/dynamicconfig"
+	"go.temporal.io/server/common/log"
+	"go.temporal.io/server/common/metrics"
 )
 
-var _ Task = (*WorkflowTimeoutTask)(nil)
-
-type (
-	WorkflowTimeoutTask struct {
-		definition.WorkflowKey
-		VisibilityTimestamp time.Time
-		TaskID              int64
-		Version             int64
-	}
+var Module = fx.Options(
+	fx.Provide(utf8ValidatorProvider),
 )
 
-func (u *WorkflowTimeoutTask) GetKey() Key {
-	return NewKey(u.VisibilityTimestamp, u.TaskID)
-}
-
-func (u *WorkflowTimeoutTask) GetVersion() int64 {
-	return u.Version
-}
-
-func (u *WorkflowTimeoutTask) SetVersion(version int64) {
-	u.Version = version
-}
-
-func (u *WorkflowTimeoutTask) GetTaskID() int64 {
-	return u.TaskID
-}
-
-func (u *WorkflowTimeoutTask) SetTaskID(id int64) {
-	u.TaskID = id
-}
-
-func (u *WorkflowTimeoutTask) GetVisibilityTime() time.Time {
-	return u.VisibilityTimestamp
-}
-
-func (u *WorkflowTimeoutTask) SetVisibilityTime(t time.Time) {
-	u.VisibilityTimestamp = t
-}
-
-func (u *WorkflowTimeoutTask) GetCategory() Category {
-	return CategoryTimer
-}
-
-func (u *WorkflowTimeoutTask) GetType() enumsspb.TaskType {
-	return enumsspb.TASK_TYPE_WORKFLOW_RUN_TIMEOUT
+func utf8ValidatorProvider(
+	logger log.Logger,
+	metrics metrics.Handler,
+	col *dynamicconfig.Collection,
+) *Validator {
+	return newValidator(
+		logger,
+		metrics,
+		col.GetFloat64Property(dynamicconfig.ValidateUTF8SampleRPCRequest, 0.0),
+		col.GetFloat64Property(dynamicconfig.ValidateUTF8SampleRPCResponse, 0.0),
+		col.GetFloat64Property(dynamicconfig.ValidateUTF8SamplePersistence, 0.0),
+		col.GetBoolProperty(dynamicconfig.ValidateUTF8FailRPCRequest, false),
+		col.GetBoolProperty(dynamicconfig.ValidateUTF8FailRPCResponse, false),
+		col.GetBoolProperty(dynamicconfig.ValidateUTF8FailPersistence, false),
+	)
 }

@@ -158,7 +158,7 @@ func (u *Updater) Apply(
 	if u.upd, alreadyExisted, err = updateReg.FindOrCreate(ctx, updateID); err != nil {
 		return nil, err
 	}
-	if err = u.upd.Request(ctx, u.req.GetRequest().GetRequest(), workflow.WithEffects(effect.Immediate(ctx), ms)); err != nil {
+	if err = u.upd.Admit(ctx, u.req.GetRequest().GetRequest(), workflow.WithEffects(effect.Immediate(ctx), ms)); err != nil {
 		return nil, err
 	}
 
@@ -194,8 +194,9 @@ func (u *Updater) Apply(
 		return nil, err
 	}
 	if newWorkflowTask.Type != enumsspb.WORKFLOW_TASK_TYPE_SPECULATIVE {
-		// This should never happen because WT is created as normal (despite speculative is requested)
-		// only if there were buffered events and because there were no pending WT, there can't be buffered events.
+		// This means that a normal WFT was created despite a speculative WFT having been requested. It implies that
+		// there were buffered events. But because there was no pending WFT, there can't be buffered events. Therefore
+		// this should never happen.
 		return nil, consts.ErrWorkflowTaskStateInconsistent
 	}
 

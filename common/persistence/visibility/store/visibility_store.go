@@ -25,7 +25,7 @@
 package store
 
 // -aux_files is required here due to Closeable interface being in another file.
-//go:generate mocksync -copyright_file ../../../../LICENSE -package $GOPACKAGE -source $GOFILE -destination visibility_store_mock.go -aux_files go.temporal.io/server/common/persistence=../../data_interfaces.go
+//go:generate mockgen -copyright_file ../../../../LICENSE -package $GOPACKAGE -source $GOFILE -destination visibility_store_mock.go -aux_files go.temporal.io/server/common/persistence=../../data_interfaces.go
 
 import (
 	"context"
@@ -78,6 +78,7 @@ type (
 		StartTime            time.Time
 		ExecutionTime        time.Time
 		CloseTime            time.Time
+		ExecutionDuration    time.Duration
 		Status               enumspb.WorkflowExecutionStatus
 		HistoryLength        int64
 		HistorySizeBytes     int64

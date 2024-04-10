@@ -50,6 +50,7 @@ import (
 	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
+	"go.temporal.io/server/common/testing/protorequire"
 	"go.temporal.io/server/service/history/tests"
 )
 
@@ -80,6 +81,9 @@ var (
 	testParentRunID            = uuid.New()
 	testParentInitiatedID      = rand.Int63()
 	testParentInitiatedVersion = rand.Int63()
+
+	testRootWorkflowID = "test root workflow ID"
+	testRootRunID      = uuid.New()
 
 	testIdentity  = "test identity"
 	testRequestID = uuid.New()
@@ -197,6 +201,12 @@ func (s *historyBuilderSuite) TestWorkflowExecutionStarted() {
 		ContinuedFailure:                testFailure,
 		LastCompletionResult:            testPayloads,
 		FirstWorkflowTaskBackoff:        firstWorkflowTaskBackoff,
+		RootExecutionInfo: &workflowspb.RootExecutionInfo{
+			Execution: &commonpb.WorkflowExecution{
+				WorkflowId: testRootWorkflowID,
+				RunId:      testRootRunID,
+			},
+		},
 
 		StartRequest: &workflowservice.StartWorkflowExecutionRequest{
 			Namespace:                testNamespaceName.String(),
@@ -227,49 +237,58 @@ func (s *historyBuilderSuite) TestWorkflowExecutionStarted() {
 		originalRunID,
 	)
 	s.Equal(event, s.flush())
-	s.Equal(&historypb.HistoryEvent{
-		EventId:   s.nextEventID,
-		TaskId:    s.nextTaskID,
-		EventTime: timestamppb.New(s.now),
-		EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_STARTED,
-		Version:   s.version,
-		Attributes: &historypb.HistoryEvent_WorkflowExecutionStartedEventAttributes{
-			WorkflowExecutionStartedEventAttributes: &historypb.WorkflowExecutionStartedEventAttributes{
-				WorkflowType:                    testWorkflowType,
-				TaskQueue:                       testTaskQueue,
-				Header:                          testHeader,
-				Input:                           testPayloads,
-				WorkflowRunTimeout:              workflowRunTimeout,
-				WorkflowExecutionTimeout:        workflowExecutionTimeout,
-				WorkflowTaskTimeout:             workflowTaskStartToCloseTimeout,
-				ContinuedExecutionRunId:         prevRunID,
-				PrevAutoResetPoints:             resetPoints,
-				Identity:                        testIdentity,
-				RetryPolicy:                     testRetryPolicy,
-				Attempt:                         attempt,
-				WorkflowExecutionExpirationTime: workflowExecutionExpirationTime,
-				CronSchedule:                    testCronSchedule,
-				LastCompletionResult:            testPayloads,
-				ContinuedFailure:                testFailure,
-				Initiator:                       continueAsNewInitiator,
-				FirstWorkflowTaskBackoff:        firstWorkflowTaskBackoff,
-				FirstExecutionRunId:             firstRunID,
-				OriginalExecutionRunId:          originalRunID,
-				Memo:                            testMemo,
-				SearchAttributes:                testSearchAttributes,
-				WorkflowId:                      testWorkflowID,
+	protorequire.ProtoEqual(
+		s.T(),
+		&historypb.HistoryEvent{
+			EventId:   s.nextEventID,
+			TaskId:    s.nextTaskID,
+			EventTime: timestamppb.New(s.now),
+			EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_STARTED,
+			Version:   s.version,
+			Attributes: &historypb.HistoryEvent_WorkflowExecutionStartedEventAttributes{
+				WorkflowExecutionStartedEventAttributes: &historypb.WorkflowExecutionStartedEventAttributes{
+					WorkflowType:                    testWorkflowType,
+					TaskQueue:                       testTaskQueue,
+					Header:                          testHeader,
+					Input:                           testPayloads,
+					WorkflowRunTimeout:              workflowRunTimeout,
+					WorkflowExecutionTimeout:        workflowExecutionTimeout,
+					WorkflowTaskTimeout:             workflowTaskStartToCloseTimeout,
+					ContinuedExecutionRunId:         prevRunID,
+					PrevAutoResetPoints:             resetPoints,
+					Identity:                        testIdentity,
+					RetryPolicy:                     testRetryPolicy,
+					Attempt:                         attempt,
+					WorkflowExecutionExpirationTime: workflowExecutionExpirationTime,
+					CronSchedule:                    testCronSchedule,
+					LastCompletionResult:            testPayloads,
+					ContinuedFailure:                testFailure,
+					Initiator:                       continueAsNewInitiator,
+					FirstWorkflowTaskBackoff:        firstWorkflowTaskBackoff,
+					FirstExecutionRunId:             firstRunID,
+					OriginalExecutionRunId:          originalRunID,
+					Memo:                            testMemo,
+					SearchAttributes:                testSearchAttributes,
+					WorkflowId:                      testWorkflowID,
 
-				ParentWorkflowNamespace:   testParentNamespaceName,
-				ParentWorkflowNamespaceId: testParentNamespaceID,
-				ParentWorkflowExecution: &commonpb.WorkflowExecution{
-					WorkflowId: testParentWorkflowID,
-					RunId:      testParentRunID,
+					ParentWorkflowNamespace:   testParentNamespaceName,
+					ParentWorkflowNamespaceId: testParentNamespaceID,
+					ParentWorkflowExecution: &commonpb.WorkflowExecution{
+						WorkflowId: testParentWorkflowID,
+						RunId:      testParentRunID,
+					},
+					ParentInitiatedEventId:      testParentInitiatedID,
+					ParentInitiatedEventVersion: testParentInitiatedVersion,
+
+					RootWorkflowExecution: &commonpb.WorkflowExecution{
+						WorkflowId: testRootWorkflowID,
+						RunId:      testRootRunID,
+					},
 				},
-				ParentInitiatedEventId:      testParentInitiatedID,
-				ParentInitiatedEventVersion: testParentInitiatedVersion,
 			},
 		},
-	}, event)
+		event,
+	)
 }
 
 func (s *historyBuilderSuite) TestWorkflowExecutionCancelRequested() {

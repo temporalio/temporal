@@ -74,6 +74,7 @@ import (
 	"go.temporal.io/server/service/history"
 	"go.temporal.io/server/service/history/replication"
 	"go.temporal.io/server/service/history/tasks"
+	"go.temporal.io/server/service/history/workflow"
 	"go.temporal.io/server/service/matching"
 	"go.temporal.io/server/service/worker"
 )
@@ -498,6 +499,7 @@ func HistoryServiceProvider(
 	}
 
 	app := fx.New(
+		fx.Provide(workflow.NewTaskGeneratorProvider),
 		params.GetCommonServiceOptions(serviceName),
 		history.QueueModule,
 		history.Module,

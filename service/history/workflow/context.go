@@ -22,7 +22,7 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-//go:generate mocksync -copyright_file ../../../LICENSE -package $GOPACKAGE -source $GOFILE -destination context_mock.go
+//go:generate mockgen -copyright_file ../../../LICENSE -package $GOPACKAGE -source $GOFILE -destination context_mock.go
 
 package workflow
 
@@ -843,7 +843,10 @@ func (c *ContextImpl) ReapplyEvents(
 		for _, e := range events.Events {
 			event := e
 			switch event.GetEventType() {
-			case enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_SIGNALED:
+			case enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_SIGNALED,
+				enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_UPDATE_ADMITTED,
+				enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_UPDATE_ACCEPTED:
+
 				reapplyEvents = append(reapplyEvents, event)
 			}
 		}

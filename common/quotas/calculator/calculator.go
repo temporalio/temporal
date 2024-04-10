@@ -1,6 +1,8 @@
 // The MIT License
 //
-// Copyright (c) 2024 Temporal Technologies Inc.  All rights reserved.
+// Copyright (c) 2020 Temporal Technologies Inc.  All rights reserved.
+//
+// Copyright (c) 2020 Uber Technologies, Inc.
 //
 // Permission is hereby granted, free of charge, to any person obtaining a copy
 // of this software and associated documentation files (the "Software"), to deal
@@ -20,27 +22,14 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-package main
+package calculator
 
-import (
-	"fmt"
-	"os"
+type (
+	Calculator interface {
+		GetQuota() float64
+	}
 
-	"go.temporal.io/server/tools/mocksync"
+	NamespaceCalculator interface {
+		GetQuota(namespace string) float64
+	}
 )
-
-func main() {
-	if err := run(os.Args[1:]); err != nil {
-		_, _ = fmt.Fprintf(os.Stderr, "%+v\n", err)
-		os.Exit(1)
-	}
-}
-
-func run(args []string) error {
-	execFn := mocksync.RealExecFn
-	if os.Getenv("BUILD_ENV") == "ci" {
-		// Just run mockgen without caching if we're in the CI environment
-		return execFn(args)
-	}
-	return mocksync.Run(execFn, args)
-}

@@ -22,7 +22,7 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-//go:generate mocksync -copyright_file ../../../LICENSE -package $GOPACKAGE -source $GOFILE -destination bean_mock.go
+//go:generate mockgen -copyright_file ../../../LICENSE -package $GOPACKAGE -source $GOFILE -destination bean_mock.go
 
 package client
 
@@ -212,7 +212,9 @@ func (s *BeanImpl) Close() {
 	s.namespaceReplicationQueue.Stop()
 	s.shardManager.Close()
 	s.executionManager.Close()
-	s.nexusIncomingServiceManager.Close()
+	if s.nexusIncomingServiceManager != nil {
+		s.nexusIncomingServiceManager.Close()
+	}
 
 	s.factory.Close()
 	s.isClosed = true

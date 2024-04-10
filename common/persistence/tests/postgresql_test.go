@@ -29,6 +29,7 @@ import (
 
 	"github.com/stretchr/testify/suite"
 
+	"go.temporal.io/server/common/persistence"
 	persistencetests "go.temporal.io/server/common/persistence/persistence-tests"
 	"go.temporal.io/server/common/persistence/serialization"
 	"go.temporal.io/server/common/persistence/sql"
@@ -79,6 +80,7 @@ func (p *PostgreSQLSuite) TestPostgreSQLExecutionMutableStateStoreSuite() {
 		shardStore,
 		executionStore,
 		serialization.NewSerializer(),
+		&persistence.HistoryBranchUtilImpl{},
 		testData.Logger,
 	)
 	suite.Run(p.T(), s)

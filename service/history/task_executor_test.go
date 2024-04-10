@@ -43,6 +43,7 @@ import (
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/cluster"
+	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence"
@@ -54,6 +55,7 @@ import (
 	"go.temporal.io/server/service/history/tasks"
 	"go.temporal.io/server/service/history/tests"
 	"go.temporal.io/server/service/history/workflow"
+	"go.temporal.io/server/service/history/workflow/cache"
 	wcache "go.temporal.io/server/service/history/workflow/cache"
 )
 
@@ -131,7 +133,7 @@ func newTaskExecutorTestContext(t *testing.T) *taskExecutorTestContext {
 	return &s
 }
 
-func (s *taskExecutorTestContext) tearDown() {
+func (s *taskExecutorTestContext) TearDown() {
 	s.controller.Finish()
 	s.mockShard.StopForTest()
 }
@@ -339,4 +341,116 @@ func (s *taskExecutorTestContext) prepareMutableStateWithTriggeredNexusCompletio
 	require.NoError(s.t, err)
 
 	return mutableState
+}
+
+func TestGetCurrentWorkflowExecutionContext(t *testing.T) {
+	namespaceID := tests.NamespaceID
+	workflowID := tests.WorkflowID
+
+	testCases := []struct {
+		name              string
+		currentRunRunning bool
+		currentRunChanged bool
+	}{
+		{
+			name:              "current run running",
+			currentRunRunning: true,
+			currentRunChanged: false,
+		},
+		{
+			name:              "current run closed, no new run",
+			currentRunRunning: false,
+			currentRunChanged: false,
+		},
+		{
+			name:              "current run closed, with new run",
+			currentRunRunning: false,
+			currentRunChanged: true,
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			controller := gomock.NewController(t)
+
+			currentRunID := uuid.NewString()
+
+			mockShard := shard.NewTestContext(
+				controller,
+				&persistencespb.ShardInfo{
+					ShardId: 1,
+					RangeId: 1,
+				},
+				tests.NewDynamicConfig(),
+			)
+
+			mockMutableState := workflow.NewMockMutableState(controller)
+			mockMutableState.EXPECT().IsWorkflowExecutionRunning().Return(tc.currentRunRunning).Times(1)
+
+			mockWorkflowContext := workflow.NewMockContext(controller)
+			mockWorkflowContext.EXPECT().LoadMutableState(gomock.Any(), mockShard).Return(mockMutableState, nil).Times(1)
+			mockWorkflowContext.EXPECT().GetWorkflowKey().Return(definition.NewWorkflowKey(namespaceID.String(), workflowID, currentRunID)).AnyTimes()
+
+			mockWorkflowCache := cache.NewMockCache(controller)
+			mockWorkflowCache.EXPECT().GetOrCreateCurrentWorkflowExecution(
+				gomock.Any(),
+				mockShard,
+				namespaceID,
+				workflowID,
+				workflow.LockPriorityLow,
+			).Return(cache.NoopReleaseFn, nil).AnyTimes()
+			mockWorkflowCache.EXPECT().GetOrCreateWorkflowExecution(
+				gomock.Any(),
+				mockShard,
+				namespaceID,
+				&commonpb.WorkflowExecution{
+					WorkflowId: workflowID,
+					RunId:      currentRunID,
+				},
+				workflow.LockPriorityLow,
+			).Return(mockWorkflowContext, cache.NoopReleaseFn, nil).Times(1)
+
+			mockExecutionManager := mockShard.Resource.ExecutionMgr
+			mockExecutionManager.EXPECT().GetCurrentExecution(gomock.Any(), &persistence.GetCurrentExecutionRequest{
+				ShardID:     mockShard.GetShardID(),
+				NamespaceID: namespaceID.String(),
+				WorkflowID:  workflowID,
+			}).Return(&persistence.GetCurrentExecutionResponse{
+				RunID: currentRunID,
+			}, nil).Times(1)
+
+			if !tc.currentRunRunning {
+				if tc.currentRunChanged {
+					currentRunID = uuid.NewString()
+				}
+
+				mockExecutionManager.EXPECT().GetCurrentExecution(gomock.Any(), &persistence.GetCurrentExecutionRequest{
+					ShardID:     mockShard.GetShardID(),
+					NamespaceID: namespaceID.String(),
+					WorkflowID:  workflowID,
+				}).Return(&persistence.GetCurrentExecutionResponse{
+					RunID: currentRunID,
+				}, nil).Times(1)
+			}
+
+			workflowContext, release, err := getCurrentWorkflowExecutionContext(
+				context.Background(),
+				mockShard,
+				mockWorkflowCache,
+				namespaceID.String(),
+				workflowID,
+				workflow.LockPriorityLow,
+			)
+			if tc.currentRunChanged {
+				require.Error(t, err)
+				require.Nil(t, workflowContext)
+				require.Nil(t, release)
+			} else {
+				require.NoError(t, err)
+				require.NotNil(t, workflowContext)
+				require.Equal(t, currentRunID, workflowContext.GetWorkflowKey().RunID)
+				release(nil)
+			}
+		})
+	}
 }

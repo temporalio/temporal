@@ -32,6 +32,7 @@ import (
 	"go.temporal.io/api/serviceerror"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	workflowpb "go.temporal.io/api/workflow/v1"
+	"google.golang.org/protobuf/types/known/durationpb"
 	"google.golang.org/protobuf/types/known/timestamppb"
 
 	enumsspb "go.temporal.io/server/api/enums/v1"
@@ -123,6 +124,10 @@ func Invoke(
 			TaskQueue:            executionInfo.TaskQueue,
 			StateTransitionCount: executionInfo.StateTransitionCount,
 			HistorySizeBytes:     executionInfo.GetExecutionStats().GetHistorySize(),
+			RootExecution: &commonpb.WorkflowExecution{
+				WorkflowId: executionInfo.RootWorkflowId,
+				RunId:      executionInfo.RootRunId,
+			},
 
 			MostRecentWorkerVersionStamp: executionInfo.WorkerVersionStamp,
 		},
@@ -142,7 +147,12 @@ func Invoke(
 		if err != nil {
 			return nil, err
 		}
+		executionDuration, err := mutableState.GetWorkflowExecutionDuration(ctx)
+		if err != nil {
+			return nil, err
+		}
 		result.WorkflowExecutionInfo.CloseTime = timestamppb.New(closeTime)
+		result.WorkflowExecutionInfo.ExecutionDuration = durationpb.New(executionDuration)
 	}
 
 	for _, ai := range mutableState.GetPendingActivityInfos() {

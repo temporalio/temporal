@@ -179,6 +179,11 @@ func (s *ArchivalSuite) TestVisibilityArchival() {
 		s.NotZero(execution.StartTime)
 		s.NotZero(execution.ExecutionTime)
 		s.NotZero(execution.CloseTime)
+		s.NotZero(execution.ExecutionDuration)
+		s.Equal(
+			execution.CloseTime.AsTime().Sub(execution.ExecutionTime.AsTime()),
+			execution.ExecutionDuration.AsDuration(),
+		)
 	}
 }
 

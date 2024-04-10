@@ -29,7 +29,10 @@ import (
 
 	"github.com/golang/mock/gomock"
 	"github.com/stretchr/testify/assert"
+	commonpb "go.temporal.io/api/common/v1"
 	"go.temporal.io/api/workflowservice/v1"
+	"go.temporal.io/server/api/token/v1"
+	"go.temporal.io/server/common"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 
@@ -137,7 +140,7 @@ func TestHandleError(t *testing.T) {
 				times = 1
 			}
 			metricsHandler.EXPECT().Counter(metrics.ServiceFailures.Name()).Return(metrics.NoopCounterMetricFunc).Times(times)
-			telemetry.handleError(metricsHandler, []tag.Tag{}, tt.err)
+			telemetry.handleError(nil, metricsHandler, []tag.Tag{}, tt.err)
 		})
 	}
 }
@@ -174,6 +177,88 @@ func TestOperationOverwrite(t *testing.T) {
 		t.Run(tt.methodName, func(t *testing.T) {
 			operation := telemetry.overrideOperationTag(tt.fullName, tt.methodName)
 			assert.Equal(t, tt.expectedOperation, operation)
+		})
+	}
+}
+
+func TestGetWorkflowTags(t *testing.T) {
+	controller := gomock.NewController(t)
+	registry := namespace.NewMockRegistry(controller)
+	metricsHandler := metrics.NewMockHandler(controller)
+	serializer := common.NewProtoTaskTokenSerializer()
+	telemetry := NewTelemetryInterceptor(registry, metricsHandler, log.NewTestLogger())
+
+	wid := "test_workflow_id"
+	rid := "test_run_id"
+	taskToken := token.Task{
+		WorkflowId: wid,
+		RunId:      rid,
+	}
+	taskTokenBytes, err := serializer.Serialize(&taskToken)
+	assert.NoError(t, err)
+
+	testCases := []struct {
+		name       string
+		req        interface{}
+		workflowID string
+		runID      string
+	}{
+		{
+			name:       "Request with only workflowID",
+			req:        &workflowservice.StartWorkflowExecutionRequest{WorkflowId: wid},
+			workflowID: wid,
+		},
+		{
+			name:       "Request with workflowID and runID",
+			req:        &workflowservice.RecordActivityTaskHeartbeatByIdRequest{WorkflowId: wid, RunId: rid},
+			workflowID: wid,
+			runID:      rid,
+		},
+		{
+			name: "Request with execution",
+			req: &workflowservice.GetWorkflowExecutionHistoryRequest{
+				Execution: &commonpb.WorkflowExecution{
+					WorkflowId: wid,
+					RunId:      rid,
+				},
+			},
+			workflowID: wid,
+			runID:      rid,
+		},
+		{
+			name: "Request with workflow_execution",
+			req: &workflowservice.RequestCancelWorkflowExecutionRequest{
+				WorkflowExecution: &commonpb.WorkflowExecution{
+					WorkflowId: wid,
+					RunId:      rid,
+				},
+			},
+			workflowID: wid,
+			runID:      rid,
+		},
+		{
+			name: "Request with task_token",
+			req: &workflowservice.RespondActivityTaskCompletedRequest{
+				TaskToken: taskTokenBytes,
+			},
+			workflowID: wid,
+			runID:      rid,
+		},
+		{
+			name: "Nil request",
+			req:  nil,
+		},
+	}
+
+	for _, tt := range testCases {
+		t.Run(tt.name, func(t *testing.T) {
+			tags := telemetry.getWorkflowTags(tt.req)
+			if len(tt.workflowID) > 0 {
+				assert.Contains(t, tags, tag.WorkflowID(tt.workflowID))
+			}
+			if len(tt.runID) > 0 {
+				assert.Contains(t, tags, tag.WorkflowRunID(tt.runID))
+			}
 		})
 	}
 }

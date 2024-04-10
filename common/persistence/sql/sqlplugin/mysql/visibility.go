@@ -108,11 +108,11 @@ func (mdb *db) InsertIntoVisibility(
 	}()
 	result, err = tx.NamedExecContext(ctx, templateInsertWorkflowExecution, finalRow)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("unable to insert workflow execution: %w", err)
 	}
 	_, err = tx.NamedExecContext(ctx, templateInsertCustomSearchAttributes, finalRow)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("unable to insert custom search attributes: %w", err)
 	}
 	err = tx.Commit()
 	if err != nil {
@@ -141,11 +141,11 @@ func (mdb *db) ReplaceIntoVisibility(
 	}()
 	result, err = tx.NamedExecContext(ctx, templateUpsertWorkflowExecution, finalRow)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("unable to upsert workflow execution: %w", err)
 	}
 	_, err = tx.NamedExecContext(ctx, templateUpsertCustomSearchAttributes, finalRow)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("unable to upsert custom search attributes: %w", err)
 	}
 	err = tx.Commit()
 	if err != nil {
@@ -173,11 +173,11 @@ func (mdb *db) DeleteFromVisibility(
 	}()
 	_, err = mdb.conn.NamedExecContext(ctx, templateDeleteCustomSearchAttributes, filter)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("unable to delete custom search attributes: %w", err)
 	}
 	result, err = mdb.conn.NamedExecContext(ctx, templateDeleteWorkflowExecution_v8, filter)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("unable to delete workflow execution: %w", err)
 	}
 	err = tx.Commit()
 	if err != nil {

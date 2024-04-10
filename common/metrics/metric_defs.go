@@ -41,6 +41,7 @@ const (
 	ErrorTypeTagName            = "error_type"
 	httpStatusTagName           = "http_status"
 	nexusMethodTagName          = "method"
+	nexusServiceTagName         = "service"
 	nexusOutcomeTagName         = "outcome"
 	versionedTagName            = "versioned"
 	resourceExhaustedTag        = "resource_exhausted_cause"
@@ -540,42 +541,44 @@ const (
 
 // History task type
 const (
-	TaskTypeTransferActiveTaskActivity             = "TransferActiveTaskActivity"
-	TaskTypeTransferActiveTaskWorkflowTask         = "TransferActiveTaskWorkflowTask"
-	TaskTypeTransferActiveTaskCloseExecution       = "TransferActiveTaskCloseExecution"
-	TaskTypeTransferActiveTaskCancelExecution      = "TransferActiveTaskCancelExecution"
-	TaskTypeTransferActiveTaskSignalExecution      = "TransferActiveTaskSignalExecution"
-	TaskTypeTransferActiveTaskStartChildExecution  = "TransferActiveTaskStartChildExecution"
-	TaskTypeTransferActiveTaskResetWorkflow        = "TransferActiveTaskResetWorkflow"
-	TaskTypeTransferActiveTaskDeleteExecution      = "TransferActiveTaskDeleteExecution"
-	TaskTypeTransferStandbyTaskActivity            = "TransferStandbyTaskActivity"
-	TaskTypeTransferStandbyTaskWorkflowTask        = "TransferStandbyTaskWorkflowTask"
-	TaskTypeTransferStandbyTaskCloseExecution      = "TransferStandbyTaskCloseExecution"
-	TaskTypeTransferStandbyTaskCancelExecution     = "TransferStandbyTaskCancelExecution"
-	TaskTypeTransferStandbyTaskSignalExecution     = "TransferStandbyTaskSignalExecution"
-	TaskTypeTransferStandbyTaskStartChildExecution = "TransferStandbyTaskStartChildExecution"
-	TaskTypeTransferStandbyTaskResetWorkflow       = "TransferStandbyTaskResetWorkflow"
-	TaskTypeTransferStandbyTaskDeleteExecution     = "TransferStandbyTaskDeleteExecution"
-	TaskTypeVisibilityTaskStartExecution           = "VisibilityTaskStartExecution"
-	TaskTypeVisibilityTaskUpsertExecution          = "VisibilityTaskUpsertExecution"
-	TaskTypeVisibilityTaskCloseExecution           = "VisibilityTaskCloseExecution"
-	TaskTypeVisibilityTaskDeleteExecution          = "VisibilityTaskDeleteExecution"
-	TaskTypeArchivalTaskArchiveExecution           = "ArchivalTaskArchiveExecution"
-	TaskTypeTimerActiveTaskActivityTimeout         = "TimerActiveTaskActivityTimeout"
-	TaskTypeTimerActiveTaskWorkflowTaskTimeout     = "TimerActiveTaskWorkflowTaskTimeout"
-	TaskTypeTimerActiveTaskUserTimer               = "TimerActiveTaskUserTimer"
-	TaskTypeTimerActiveTaskWorkflowTimeout         = "TimerActiveTaskWorkflowTimeout"
-	TaskTypeTimerActiveTaskActivityRetryTimer      = "TimerActiveTaskActivityRetryTimer"
-	TaskTypeTimerActiveTaskWorkflowBackoffTimer    = "TimerActiveTaskWorkflowBackoffTimer"
-	TaskTypeTimerActiveTaskDeleteHistoryEvent      = "TimerActiveTaskDeleteHistoryEvent"
-	TaskTypeTimerStandbyTaskActivityTimeout        = "TimerStandbyTaskActivityTimeout"
-	TaskTypeTimerStandbyTaskWorkflowTaskTimeout    = "TimerStandbyTaskWorkflowTaskTimeout"
-	TaskTypeTimerStandbyTaskUserTimer              = "TimerStandbyTaskUserTimer"
-	TaskTypeTimerStandbyTaskWorkflowTimeout        = "TimerStandbyTaskWorkflowTimeout"
-	TaskTypeTimerStandbyTaskActivityRetryTimer     = "TimerStandbyTaskActivityRetryTimer"
-	TaskTypeTimerStandbyTaskWorkflowBackoffTimer   = "TimerStandbyTaskWorkflowBackoffTimer"
-	TaskTypeTimerStandbyTaskDeleteHistoryEvent     = "TimerStandbyTaskDeleteHistoryEvent"
-	TaskTypeMemoryScheduledTaskWorkflowTaskTimeout = "MemoryScheduledTaskWorkflowTaskTimeout"
+	TaskTypeTransferActiveTaskActivity               = "TransferActiveTaskActivity"
+	TaskTypeTransferActiveTaskWorkflowTask           = "TransferActiveTaskWorkflowTask"
+	TaskTypeTransferActiveTaskCloseExecution         = "TransferActiveTaskCloseExecution"
+	TaskTypeTransferActiveTaskCancelExecution        = "TransferActiveTaskCancelExecution"
+	TaskTypeTransferActiveTaskSignalExecution        = "TransferActiveTaskSignalExecution"
+	TaskTypeTransferActiveTaskStartChildExecution    = "TransferActiveTaskStartChildExecution"
+	TaskTypeTransferActiveTaskResetWorkflow          = "TransferActiveTaskResetWorkflow"
+	TaskTypeTransferActiveTaskDeleteExecution        = "TransferActiveTaskDeleteExecution"
+	TaskTypeTransferStandbyTaskActivity              = "TransferStandbyTaskActivity"
+	TaskTypeTransferStandbyTaskWorkflowTask          = "TransferStandbyTaskWorkflowTask"
+	TaskTypeTransferStandbyTaskCloseExecution        = "TransferStandbyTaskCloseExecution"
+	TaskTypeTransferStandbyTaskCancelExecution       = "TransferStandbyTaskCancelExecution"
+	TaskTypeTransferStandbyTaskSignalExecution       = "TransferStandbyTaskSignalExecution"
+	TaskTypeTransferStandbyTaskStartChildExecution   = "TransferStandbyTaskStartChildExecution"
+	TaskTypeTransferStandbyTaskResetWorkflow         = "TransferStandbyTaskResetWorkflow"
+	TaskTypeTransferStandbyTaskDeleteExecution       = "TransferStandbyTaskDeleteExecution"
+	TaskTypeVisibilityTaskStartExecution             = "VisibilityTaskStartExecution"
+	TaskTypeVisibilityTaskUpsertExecution            = "VisibilityTaskUpsertExecution"
+	TaskTypeVisibilityTaskCloseExecution             = "VisibilityTaskCloseExecution"
+	TaskTypeVisibilityTaskDeleteExecution            = "VisibilityTaskDeleteExecution"
+	TaskTypeArchivalTaskArchiveExecution             = "ArchivalTaskArchiveExecution"
+	TaskTypeTimerActiveTaskActivityTimeout           = "TimerActiveTaskActivityTimeout"
+	TaskTypeTimerActiveTaskWorkflowTaskTimeout       = "TimerActiveTaskWorkflowTaskTimeout"
+	TaskTypeTimerActiveTaskUserTimer                 = "TimerActiveTaskUserTimer"
+	TaskTypeTimerActiveTaskWorkflowRunTimeout        = "TimerActiveTaskWorkflowRunTimeout"
+	TaskTypeTimerActiveTaskWorkflowExecutionTimeout  = "TimerActiveTaskWorkflowExecutionTimeout"
+	TaskTypeTimerActiveTaskActivityRetryTimer        = "TimerActiveTaskActivityRetryTimer"
+	TaskTypeTimerActiveTaskWorkflowBackoffTimer      = "TimerActiveTaskWorkflowBackoffTimer"
+	TaskTypeTimerActiveTaskDeleteHistoryEvent        = "TimerActiveTaskDeleteHistoryEvent"
+	TaskTypeTimerStandbyTaskActivityTimeout          = "TimerStandbyTaskActivityTimeout"
+	TaskTypeTimerStandbyTaskWorkflowTaskTimeout      = "TimerStandbyTaskWorkflowTaskTimeout"
+	TaskTypeTimerStandbyTaskUserTimer                = "TimerStandbyTaskUserTimer"
+	TaskTypeTimerStandbyTaskWorkflowRunTimeout       = "TimerStandbyTaskWorkflowRunTimeout"
+	TaskTypeTimerStandbyTaskWorkflowExecutionTimeout = "TimerStandbyTaskWorkflowExecutionTimeout"
+	TaskTypeTimerStandbyTaskActivityRetryTimer       = "TimerStandbyTaskActivityRetryTimer"
+	TaskTypeTimerStandbyTaskWorkflowBackoffTimer     = "TimerStandbyTaskWorkflowBackoffTimer"
+	TaskTypeTimerStandbyTaskDeleteHistoryEvent       = "TimerStandbyTaskDeleteHistoryEvent"
+	TaskTypeMemoryScheduledTaskWorkflowTaskTimeout   = "MemoryScheduledTaskWorkflowTaskTimeout"
 )
 
 // Schedule action types
@@ -649,6 +652,10 @@ var (
 		"wf_too_many_pending_external_workflow_signals",
 		WithDescription("The number of Workflow Tasks failed because they would cause the limit on the number of pending signals to external workflows to be exceeded. See https://t.mp/limits for more information."),
 	)
+	UTF8ValidationErrors = NewCounterDef(
+		"utf8_validation_errors",
+		WithDescription("Number of times the service encountered a proto message with invalid UTF-8 in a string field"),
+	)
 
 	// Frontend
 	AddSearchAttributesWorkflowSuccessCount  = NewCounterDef("add_search_attributes_workflow_success")
@@ -675,6 +682,8 @@ var (
 		"nexus_latency",
 		WithDescription("Latency histogram of Nexus requests."),
 	)
+	HostRPSLimit          = NewGaugeDef("host_rps_limit")
+	NamespaceHostRPSLimit = NewGaugeDef("namespace_host_rps_limit")
 
 	// History
 	CacheRequests                                = NewCounterDef("cache_requests")

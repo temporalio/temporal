@@ -61,6 +61,7 @@ type Config struct {
 	PersistencePerShardNamespaceMaxQPS    dynamicconfig.IntPropertyFnWithNamespaceFilter
 	EnablePersistencePriorityRateLimiting dynamicconfig.BoolPropertyFn
 	PersistenceDynamicRateLimitingParams  dynamicconfig.MapPropertyFn
+	PersistenceQPSBurstRatio              dynamicconfig.FloatPropertyFn
 
 	VisibilityPersistenceMaxReadQPS       dynamicconfig.IntPropertyFn
 	VisibilityPersistenceMaxWriteQPS      dynamicconfig.IntPropertyFn
@@ -216,6 +217,7 @@ func NewConfig(
 		PersistencePerShardNamespaceMaxQPS:    dynamicconfig.DefaultPerShardNamespaceRPSMax,
 		EnablePersistencePriorityRateLimiting: dc.GetBoolProperty(dynamicconfig.FrontendEnablePersistencePriorityRateLimiting, true),
 		PersistenceDynamicRateLimitingParams:  dc.GetMapProperty(dynamicconfig.FrontendPersistenceDynamicRateLimitingParams, dynamicconfig.DefaultDynamicRateLimitingParams),
+		PersistenceQPSBurstRatio:              dc.GetFloat64Property(dynamicconfig.PersistenceQPSBurstRatio, 1),
 
 		VisibilityPersistenceMaxReadQPS:       visibility.GetVisibilityPersistenceMaxReadQPS(dc),
 		VisibilityPersistenceMaxWriteQPS:      visibility.GetVisibilityPersistenceMaxWriteQPS(dc),
@@ -233,7 +235,7 @@ func NewConfig(
 		NamespaceReplicationInducingAPIsRPS: dc.GetIntProperty(dynamicconfig.FrontendNamespaceReplicationInducingAPIsRPS, 20),
 
 		MaxNamespaceRPSPerInstance:                                        dc.GetIntPropertyFilteredByNamespace(dynamicconfig.FrontendMaxNamespaceRPSPerInstance, 2400),
-		MaxNamespaceBurstRatioPerInstance:                                 dc.GetFloatPropertyFilteredByNamespace(dynamicconfig.FrontendMaxNamespaceBurstRatioPerInstance, 1),
+		MaxNamespaceBurstRatioPerInstance:                                 dc.GetFloatPropertyFilteredByNamespace(dynamicconfig.FrontendMaxNamespaceBurstRatioPerInstance, 2),
 		MaxConcurrentLongRunningRequestsPerInstance:                       dc.GetIntPropertyFilteredByNamespace(dynamicconfig.FrontendMaxConcurrentLongRunningRequestsPerInstance, 1200),
 		MaxGlobalConcurrentLongRunningRequests:                            dc.GetIntPropertyFilteredByNamespace(dynamicconfig.FrontendGlobalMaxConcurrentLongRunningRequests, 0),
 		MaxNamespaceVisibilityRPSPerInstance:                              dc.GetIntPropertyFilteredByNamespace(dynamicconfig.FrontendMaxNamespaceVisibilityRPSPerInstance, 10),

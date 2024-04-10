@@ -451,6 +451,10 @@ func NewSanitizedMutableState(
 	}
 
 	// sanitize data
+	// Some values stored in mutable state are cluster or shard specific.
+	// E.g task status (if task is created or not), taskID (derived from shard rangeID), txnID (derived from shard rangeID), etc.
+	// Those fields should not be replicated across clusters and should be sanitized.
+	mutableState.executionInfo.WorkflowExecutionTimerTaskStatus = TimerTaskStatusNone
 	mutableState.executionInfo.LastFirstEventTxnId = lastFirstEventTxnID
 	mutableState.executionInfo.CloseVisibilityTaskId = common.EmptyVersion
 	mutableState.executionInfo.CloseTransferTaskId = common.EmptyVersion
@@ -461,6 +465,35 @@ func NewSanitizedMutableState(
 	}
 	mutableState.currentVersion = lastWriteVersion
 	return mutableState, nil
+}
+
+func NewMutableStateInChain(
+	shardContext shard.Context,
+	eventsCache events.Cache,
+	logger log.Logger,
+	namespaceEntry *namespace.Namespace,
+	workflowID string,
+	runID string,
+	startTime time.Time,
+	currentMutableState MutableState,
+) MutableState {
+	newMutableState := NewMutableState(
+		shardContext,
+		eventsCache,
+		logger,
+		namespaceEntry,
+		workflowID,
+		runID,
+		startTime,
+	)
+
+	// carry over necessary fields from current mutable state
+	newMutableState.executionInfo.WorkflowExecutionTimerTaskStatus = currentMutableState.GetExecutionInfo().WorkflowExecutionTimerTaskStatus
+
+	// TODO: Today other information like autoResetPoints, previousRunID, firstRunID, etc.
+	// are carried over in AddWorkflowExecutionStartedEventWithOptions. Ideally all information
+	// should be carried over here since some information is not part of the startedEvent.
+	return newMutableState
 }
 
 func (ms *MutableStateImpl) mustInitHSM() {
@@ -1252,6 +1285,19 @@ func (ms *MutableStateImpl) GetWorkflowCloseTime(ctx context.Context) (time.Time
 	return ms.executionInfo.CloseTime.AsTime(), nil
 }
 
+// GetWorkflowExecutionDuration returns the workflow execution duration.
+// Returns zero for open workflow.
+func (ms *MutableStateImpl) GetWorkflowExecutionDuration(ctx context.Context) (time.Duration, error) {
+	closeTime, err := ms.GetWorkflowCloseTime(ctx)
+	if err != nil {
+		return 0, err
+	}
+	if closeTime.IsZero() || ms.executionInfo.ExecutionTime == nil {
+		return 0, nil
+	}
+	return closeTime.Sub(ms.executionInfo.ExecutionTime.AsTime()), nil
+}
+
 // GetStartEvent retrieves the workflow start event from mutable state
 func (ms *MutableStateImpl) GetStartEvent(
 	ctx context.Context,
@@ -1377,12 +1423,11 @@ func (ms *MutableStateImpl) DeletePendingSignal(
 func (ms *MutableStateImpl) writeEventToCache(
 	event *historypb.HistoryEvent,
 ) {
-	// For start event: store it within events cache so the recordWorkflowStarted transfer task doesn't need to
-	// load it from database
-	// For completion event: store it within events cache so we can communicate the result to parent execution
-	// during the processing of DeleteTransferTask without loading this event from database
-	// For Update Accepted/Completed event: store it in here so that Update
-	// disposition lookups can be fast
+	// For start event: store it here so the recordWorkflowStarted transfer task doesn't need to
+	// load it from database.
+	// For completion event: store it here so we can communicate the result to parent execution
+	// during the processing of DeleteTransferTask without loading this event from database.
+	// For Update events: store it here so that Update disposition lookups can be fast.
 	ms.eventsCache.PutEvent(
 		events.EventKey{
 			NamespaceID: namespace.ID(ms.executionInfo.NamespaceId),
@@ -1801,6 +1846,7 @@ func (ms *MutableStateImpl) addWorkflowExecutionStartedEventForContinueAsNew(
 	previousExecutionState MutableState,
 	command *commandpb.ContinueAsNewWorkflowExecutionCommandAttributes,
 	firstRunID string,
+	rootExecutionInfo *workflowspb.RootExecutionInfo,
 ) (*historypb.HistoryEvent, error) {
 
 	previousExecutionInfo := previousExecutionState.GetExecutionInfo()
@@ -1870,6 +1916,7 @@ func (ms *MutableStateImpl) addWorkflowExecutionStartedEventForContinueAsNew(
 		// enforce minimal interval between runs to prevent tight loop continue as new spin.
 		FirstWorkflowTaskBackoff: previousExecutionState.ContinueAsNewMinBackoff(command.BackoffStartInterval),
 		SourceVersionStamp:       sourceVersionStamp,
+		RootExecutionInfo:        rootExecutionInfo,
 	}
 	if command.GetInitiator() == enumspb.CONTINUE_AS_NEW_INITIATOR_RETRY {
 		req.Attempt = previousExecutionState.GetExecutionInfo().Attempt + 1
@@ -1977,11 +2024,14 @@ func (ms *MutableStateImpl) AddWorkflowExecutionStartedEventWithOptions(
 	}
 
 	// TODO merge active & passive task generation
-	if err := ms.taskGenerator.GenerateWorkflowStartTasks(
+	var err error
+	ms.executionInfo.WorkflowExecutionTimerTaskStatus, err = ms.taskGenerator.GenerateWorkflowStartTasks(
 		event,
-	); err != nil {
+	)
+	if err != nil {
 		return nil, err
 	}
+
 	if err := ms.taskGenerator.GenerateRecordWorkflowStartedTasks(
 		event,
 	); err != nil {
@@ -2068,12 +2118,21 @@ func (ms *MutableStateImpl) ApplyWorkflowExecutionStartedEvent(
 		ms.executionInfo.ParentInitiatedVersion = common.EmptyVersion
 	}
 
+	if event.RootWorkflowExecution != nil {
+		ms.executionInfo.RootWorkflowId = event.RootWorkflowExecution.GetWorkflowId()
+		ms.executionInfo.RootRunId = event.RootWorkflowExecution.GetRunId()
+	} else {
+		ms.executionInfo.RootWorkflowId = execution.GetWorkflowId()
+		ms.executionInfo.RootRunId = execution.GetRunId()
+	}
+
 	ms.executionInfo.ExecutionTime = timestamppb.New(
 		ms.executionInfo.StartTime.AsTime().Add(event.GetFirstWorkflowTaskBackoff().AsDuration()),
 	)
 
 	ms.executionInfo.Attempt = event.GetAttempt()
 	if !timestamp.TimeValue(event.GetWorkflowExecutionExpirationTime()).IsZero() {
+		// TODO: for workflow reset case, re-calculate the expiration time instead of reusing the one in the event
 		ms.executionInfo.WorkflowExecutionExpirationTime = event.GetWorkflowExecutionExpirationTime()
 	}
 
@@ -2334,8 +2393,8 @@ func (ms *MutableStateImpl) addBuildIdToLoadedSearchAttribute(existingValues []s
 	var added []string
 	for _, newValue := range newValues {
 		found := false
-		for _, exisitingValue := range existingValues {
-			if exisitingValue == newValue {
+		for _, existingValue := range existingValues {
+			if existingValue == newValue {
 				found = true
 				break
 			}
@@ -3693,6 +3752,50 @@ func (ms *MutableStateImpl) AddWorkflowExecutionTerminatedEvent(
 	return event, nil
 }
 
+// AddWorkflowExecutionUpdateAdmittedEvent adds a WorkflowExecutionUpdateAdmittedEvent to in-memory history.
+func (ms *MutableStateImpl) AddWorkflowExecutionUpdateAdmittedEvent(request *updatepb.Request, origin enumspb.UpdateAdmittedEventOrigin) (*historypb.HistoryEvent, error) {
+	if err := ms.checkMutability(tag.WorkflowActionUpdateAdmitted); err != nil {
+		return nil, err
+	}
+	event, batchId := ms.hBuilder.AddWorkflowExecutionUpdateAdmittedEvent(request, origin)
+	if err := ms.ApplyWorkflowExecutionUpdateAdmittedEvent(event, batchId); err != nil {
+		return nil, err
+	}
+	return event, nil
+}
+
+// ApplyWorkflowExecutionUpdateAdmittedEvent applies a WorkflowExecutionUpdateAdmittedEvent to mutable state.
+func (ms *MutableStateImpl) ApplyWorkflowExecutionUpdateAdmittedEvent(event *historypb.HistoryEvent, batchId int64) error {
+	attrs := event.GetWorkflowExecutionUpdateAdmittedEventAttributes()
+	if attrs == nil {
+		return serviceerror.NewInternal("wrong event type in call to ApplyWorkflowExecutionUpdateAdmittedEvent")
+	}
+	if ms.executionInfo.UpdateInfos == nil {
+		ms.executionInfo.UpdateInfos = make(map[string]*updatespb.UpdateInfo, 1)
+	}
+	updateID := attrs.GetRequest().GetMeta().GetUpdateId()
+	request := &updatespb.UpdateInfo_Request{
+		Request: &updatespb.RequestInfo{
+			Location: &updatespb.RequestInfo_HistoryPointer_{
+				HistoryPointer: &updatespb.RequestInfo_HistoryPointer{
+					EventId:      event.EventId,
+					EventBatchId: batchId,
+				},
+			},
+		},
+	}
+	if _, ok := ms.executionInfo.UpdateInfos[updateID]; ok {
+		return serviceerror.NewInternal(fmt.Sprintf("Update ID %s is already present in registry", updateID))
+	}
+	ui := updatespb.UpdateInfo{Value: request}
+	ms.executionInfo.UpdateInfos[updateID] = &ui
+	ms.executionInfo.UpdateCount++
+	sizeDelta := ui.Size() + len(updateID)
+	ms.approximateSize += sizeDelta
+	ms.writeEventToCache(event)
+	return nil
+}
+
 func (ms *MutableStateImpl) AddWorkflowExecutionUpdateAcceptedEvent(
 	protocolInstanceID string,
 	acceptedRequestMessageId string,
@@ -3895,6 +3998,7 @@ func (ms *MutableStateImpl) AddContinueAsNewEvent(
 
 	// Extract ParentExecutionInfo from current run so it can be passed down to the next
 	var parentInfo *workflowspb.ParentExecutionInfo
+	var rootInfo *workflowspb.RootExecutionInfo
 	if ms.HasParentExecution() {
 		parentInfo = &workflowspb.ParentExecutionInfo{
 			NamespaceId: ms.executionInfo.ParentNamespaceId,
@@ -3906,6 +4010,12 @@ func (ms *MutableStateImpl) AddContinueAsNewEvent(
 			InitiatedId:      ms.executionInfo.ParentInitiatedId,
 			InitiatedVersion: ms.executionInfo.ParentInitiatedVersion,
 			Clock:            ms.executionInfo.ParentClock,
+		}
+		rootInfo = &workflowspb.RootExecutionInfo{
+			Execution: &commonpb.WorkflowExecution{
+				WorkflowId: ms.executionInfo.RootWorkflowId,
+				RunId:      ms.executionInfo.RootRunId,
+			},
 		}
 	}
 
@@ -3936,6 +4046,7 @@ func (ms *MutableStateImpl) AddContinueAsNewEvent(
 		ms,
 		command,
 		firstRunID,
+		rootInfo,
 	); err != nil {
 		return nil, nil, err
 	}

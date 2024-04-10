@@ -108,8 +108,15 @@ func (s *quotasSuite) TestPriorityNamespaceRateLimiter_DoesLimit() {
 	namespaceMaxRPS := func(namespace string) int { return 1 }
 	hostMaxRPS := func() int { return 1 }
 	operatorRPSRatioFn := func() float64 { return 0.2 }
+	burstRatio := func() float64 { return 1 }
 
-	limiter := newPriorityNamespaceRateLimiter(namespaceMaxRPS, hostMaxRPS, RequestPriorityFn, operatorRPSRatioFn)
+	limiter := newPriorityNamespaceRateLimiter(
+		namespaceMaxRPS,
+		hostMaxRPS,
+		RequestPriorityFn,
+		operatorRPSRatioFn,
+		burstRatio,
+	)
 
 	request := quotas.NewRequest(
 		"test-api",
@@ -136,8 +143,15 @@ func (s *quotasSuite) TestPerShardNamespaceRateLimiter_DoesLimit() {
 	perShardNamespaceMaxRPS := func(namespace string) int { return 1 }
 	hostMaxRPS := func() int { return 1 }
 	operatorRPSRatioFn := func() float64 { return 0.2 }
+	burstRatio := func() float64 { return 1 }
 
-	limiter := newPerShardPerNamespacePriorityRateLimiter(perShardNamespaceMaxRPS, hostMaxRPS, RequestPriorityFn, operatorRPSRatioFn)
+	limiter := newPerShardPerNamespacePriorityRateLimiter(
+		perShardNamespaceMaxRPS,
+		hostMaxRPS,
+		RequestPriorityFn,
+		operatorRPSRatioFn,
+		burstRatio,
+	)
 
 	request := quotas.NewRequest(
 		"test-api",
@@ -163,7 +177,13 @@ func (s *quotasSuite) TestPerShardNamespaceRateLimiter_DoesLimit() {
 func (s *quotasSuite) TestOperatorPrioritized() {
 	rateFn := func() float64 { return 5 }
 	operatorRPSRatioFn := func() float64 { return 0.2 }
-	limiter := newPriorityRateLimiter(rateFn, RequestPriorityFn, operatorRPSRatioFn)
+	burstRatio := func() float64 { return 1 }
+	limiter := newPriorityRateLimiter(
+		rateFn,
+		RequestPriorityFn,
+		operatorRPSRatioFn,
+		burstRatio,
+	)
 
 	operatorRequest := quotas.NewRequest(
 		"DescribeWorkflowExecution",

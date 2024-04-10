@@ -65,7 +65,9 @@ type (
 		MinCompatibleVersion string
 		Description          string
 		SchemaUpdateCqlFiles []string
-		md5                  string
+		// If set, the manifest is intentionally opting out of schema updates.
+		AllowNoCqlFiles bool
+		md5             string
 	}
 
 	// changeSet represents all the changes
@@ -263,7 +265,7 @@ func (task *UpdateTask) parseSQLStmts(fsys fs.FS, dir string, manifest *manifest
 		result = append(result, stmts...)
 	}
 
-	if len(result) == 0 {
+	if len(result) == 0 && !manifest.AllowNoCqlFiles {
 		return nil, fmt.Errorf("found 0 updates in dir %v", dir)
 	}
 
@@ -314,7 +316,7 @@ func readManifest(fsys fs.FS, dirPath string) (*manifest, error) {
 	}
 	manifest.MinCompatibleVersion = minVer
 
-	if len(manifest.SchemaUpdateCqlFiles) == 0 {
+	if len(manifest.SchemaUpdateCqlFiles) == 0 && !manifest.AllowNoCqlFiles {
 		return nil, fmt.Errorf("manifest missing SchemaUpdateCqlFiles")
 	}
 

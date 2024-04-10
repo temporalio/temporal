@@ -56,6 +56,7 @@ import (
 	"go.temporal.io/server/common/rpc"
 	"go.temporal.io/server/common/rpc/encryption"
 	"go.temporal.io/server/common/rpc/interceptor"
+	"go.temporal.io/server/common/utf8validator"
 )
 
 // HTTPAPIServer is an HTTP API server that forwards requests to gRPC via the
@@ -309,7 +310,12 @@ func (h *HTTPAPIServer) errorHandler(
 	s := serviceerror.ToStatus(err)
 	w.Header().Set("Content-Type", marshaler.ContentType(struct{}{}))
 
-	buf, merr := marshaler.Marshal(s.Proto())
+	sProto := s.Proto()
+	var buf []byte
+	merr := utf8validator.Validate(sProto, utf8validator.SourceRPCResponse)
+	if merr == nil {
+		buf, merr = marshaler.Marshal(sProto)
+	}
 	if merr != nil {
 		h.logger.Warn("Failed to marshal error message", tag.Error(merr))
 		w.Header().Set("Content-Type", "application/json")

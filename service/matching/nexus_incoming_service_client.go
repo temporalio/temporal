@@ -23,7 +23,7 @@
 package matching
 
 import (
-	"cmp"
+	"bytes"
 	"context"
 	"errors"
 	"fmt"
@@ -66,18 +66,15 @@ type (
 		timeSource  clock.TimeSource
 	}
 
-	// incomingNexusServiceManager manages cache and persistence access for Nexus incoming services.
-	// incomingNexusServiceManager contains a RWLock to enforce serial updates to prevent
+	// nexusIncomingServiceClient manages cache and persistence access for Nexus incoming services.
+	// nexusIncomingServiceClient contains a RWLock to enforce serial updates to prevent
 	// nexus_incoming_services table version conflicts.
 	//
-	// incomingNexusServiceManager should only be used within matching service because it assumes
+	// nexusIncomingServiceClient should only be used within matching service because it assumes
 	// that it is running on the matching node that owns the nexus_incoming_services table.
 	// There is no explicit listener for membership changes because table ownership changes
 	// will be detected by version conflicts and eventually settle through retries.
-	//
-	// Not to be confused with persistence.NexusIncomingServiceManager which is responsible for
-	// persistence-layer CRUD APIs for Nexus incoming services.
-	incomingNexusServiceManager struct {
+	nexusIncomingServiceClient struct {
 		hasLoadedServices atomic.Bool
 
 		sync.RWMutex        // protects tableVersion, services, servicesByID, servicesByName, and tableVersionChanged
@@ -91,16 +88,16 @@ type (
 	}
 )
 
-func newIncomingServiceManager(
+func newIncomingServiceClient(
 	persistence p.NexusIncomingServiceManager,
-) *incomingNexusServiceManager {
-	return &incomingNexusServiceManager{
+) *nexusIncomingServiceClient {
+	return &nexusIncomingServiceClient{
 		persistence:         persistence,
 		tableVersionChanged: make(chan struct{}),
 	}
 }
 
-func (m *incomingNexusServiceManager) CreateNexusIncomingService(
+func (m *nexusIncomingServiceClient) CreateNexusIncomingService(
 	ctx context.Context,
 	request *internalCreateRequest,
 ) (*matchingservice.CreateNexusIncomingServiceResponse, error) {
@@ -151,7 +148,7 @@ func (m *incomingNexusServiceManager) CreateNexusIncomingService(
 	}, nil
 }
 
-func (m *incomingNexusServiceManager) UpdateNexusIncomingService(
+func (m *nexusIncomingServiceClient) UpdateNexusIncomingService(
 	ctx context.Context,
 	request *internalUpdateRequest,
 ) (*matchingservice.UpdateNexusIncomingServiceResponse, error) {
@@ -206,9 +203,9 @@ func (m *incomingNexusServiceManager) UpdateNexusIncomingService(
 	}, nil
 }
 
-func (m *incomingNexusServiceManager) insertServiceLocked(entry *persistencepb.NexusIncomingServiceEntry) {
+func (m *nexusIncomingServiceClient) insertServiceLocked(entry *persistencepb.NexusIncomingServiceEntry) {
 	idx, found := slices.BinarySearchFunc(m.services, entry, func(a *persistencepb.NexusIncomingServiceEntry, b *persistencepb.NexusIncomingServiceEntry) int {
-		return cmp.Compare(a.Id, b.Id)
+		return bytes.Compare([]byte(a.Id), []byte(b.Id))
 	})
 
 	if found {
@@ -218,7 +215,7 @@ func (m *incomingNexusServiceManager) insertServiceLocked(entry *persistencepb.N
 	}
 }
 
-func (m *incomingNexusServiceManager) DeleteNexusIncomingService(
+func (m *nexusIncomingServiceClient) DeleteNexusIncomingService(
 	ctx context.Context,
 	request *matchingservice.DeleteNexusIncomingServiceRequest,
 ) (*matchingservice.DeleteNexusIncomingServiceResponse, error) {
@@ -258,7 +255,7 @@ func (m *incomingNexusServiceManager) DeleteNexusIncomingService(
 	return &matchingservice.DeleteNexusIncomingServiceResponse{}, nil
 }
 
-func (m *incomingNexusServiceManager) ListNexusIncomingServices(
+func (m *nexusIncomingServiceClient) ListNexusIncomingServices(
 	ctx context.Context,
 	request *matchingservice.ListNexusIncomingServicesRequest,
 ) (*matchingservice.ListNexusIncomingServicesResponse, chan struct{}, error) {
@@ -291,7 +288,7 @@ func (m *incomingNexusServiceManager) ListNexusIncomingServices(
 			m.services,
 			&persistencepb.NexusIncomingServiceEntry{Id: nextServiceID},
 			func(a *persistencepb.NexusIncomingServiceEntry, b *persistencepb.NexusIncomingServiceEntry) int {
-				return cmp.Compare(a.Id, b.Id)
+				return bytes.Compare([]byte(a.Id), []byte(b.Id))
 			})
 
 		if !startFound {
@@ -324,7 +321,7 @@ func (m *incomingNexusServiceManager) ListNexusIncomingServices(
 	return resp, m.tableVersionChanged, nil
 }
 
-func (m *incomingNexusServiceManager) loadServices(ctx context.Context) error {
+func (m *nexusIncomingServiceClient) loadServices(ctx context.Context) error {
 	m.Lock()
 	defer m.Unlock()
 
@@ -371,7 +368,7 @@ func (m *incomingNexusServiceManager) loadServices(ctx context.Context) error {
 	return ctx.Err()
 }
 
-func (m *incomingNexusServiceManager) resetCacheStateLocked() {
+func (m *nexusIncomingServiceClient) resetCacheStateLocked() {
 	m.tableVersion = 0
 	m.services = []*persistencepb.NexusIncomingServiceEntry{}
 	m.servicesByID = make(map[string]*persistencepb.NexusIncomingServiceEntry)

@@ -46,6 +46,8 @@ const (
 
 	// TrimHistoryBranch will only dump metadata, relatively cheap
 	trimHistoryBranchPageSize = 1000
+	errNonContiguousEventID   = "corrupted history event batch, eventID is not contiguous"
+	errWrongVersion           = "corrupted history event batch, wrong version and IDs"
 )
 
 var _ ExecutionManager = (*executionManagerImpl)(nil)
@@ -940,19 +942,21 @@ func (m *executionManagerImpl) readHistoryBranch(
 
 		if firstEvent.GetVersion() != lastEvent.GetVersion() || firstEvent.GetEventId()+int64(eventCount-1) != lastEvent.GetEventId() {
 			// in a single batch, version should be the same, and ID should be contiguous
-			m.logger.Error("Corrupted event batch",
+			m.logger.Error("Potential data loss",
+				tag.Cause(errWrongVersion),
 				tag.FirstEventVersion(firstEvent.GetVersion()), tag.WorkflowFirstEventID(firstEvent.GetEventId()),
 				tag.LastEventVersion(lastEvent.GetVersion()), tag.WorkflowNextEventID(lastEvent.GetEventId()),
 				tag.Counter(eventCount))
-			return historyEvents, historyEventBatches, transactionIDs, nil, dataSize, serviceerror.NewDataLoss("corrupted history event batch, wrong version and IDs")
+			return historyEvents, historyEventBatches, transactionIDs, nil, dataSize, serviceerror.NewDataLoss(errWrongVersion)
 		}
 		if firstEvent.GetEventId() != token.LastEventID+1 {
-			m.logger.Error("Corrupted non-contiguous event batch",
+			m.logger.Error("Potential data loss",
+				tag.Cause(errNonContiguousEventID),
 				tag.WorkflowFirstEventID(firstEvent.GetEventId()),
 				tag.WorkflowNextEventID(lastEvent.GetEventId()),
 				tag.TokenLastEventID(token.LastEventID),
 				tag.Counter(eventCount))
-			return historyEvents, historyEventBatches, transactionIDs, nil, dataSize, serviceerror.NewDataLoss("corrupted history event batch, eventID is not contiguous")
+			return historyEvents, historyEventBatches, transactionIDs, nil, dataSize, serviceerror.NewDataLoss(errNonContiguousEventID)
 		}
 
 		if byBatch {
