@@ -56,7 +56,7 @@ TEST_TAG_FLAG := -tags $(ALL_TEST_TAGS)
 ROOT := $(shell git rev-parse --show-toplevel)
 LOCALBIN := .bin
 STAMPDIR := .stamp
-PATH := $(LOCALBIN):$(PATH)
+export PATH := $(ROOT)/$(LOCALBIN):$(PATH)
 GOINSTALL := GOBIN=$(ROOT)/$(LOCALBIN) go install
 
 MODULE_ROOT := $(lastword $(shell grep -e "^module " go.mod))
@@ -149,11 +149,6 @@ GOIMPORTS := $(LOCALBIN)/goimports-$(GOIMPORTS_VER)
 $(GOIMPORTS): | $(LOCALBIN)
 	$(call go-install-tool,$(GOIMPORTS),golang.org/x/tools/cmd/goimports,$(GOIMPORTS_VER))
 
-MOCKGEN_VER := v1.7.0-rc.1
-MOCKGEN := $(LOCALBIN)/mockgen-$(MOCKGEN_VER)
-$(MOCKGEN): | $(LOCALBIN)
-	$(call go-install-tool,$(MOCKGEN),github.com/golang/mock/mockgen,$(MOCKGEN_VER))
-
 GOTESTSUM_VER := v1.11
 GOTESTSUM := $(LOCALBIN)/gotestsum-$(GOTESTSUM_VER)
 $(GOTESTSUM): | $(LOCALBIN)
@@ -173,6 +168,14 @@ GO_API_VER := v1.29.0
 PROTOGEN := $(LOCALBIN)/protogen-$(GO_API_VER)
 $(PROTOGEN): | $(LOCALBIN)
 	$(call go-install-tool,$(PROTOGEN),go.temporal.io/api/cmd/protogen,$(GO_API_VER))
+
+# Mockgen is called by name throughout the codebase, so we need to keep the binary name consistent
+MOCKGEN_VER := v1.7.0-rc.1
+MOCKGEN := $(LOCALBIN)/mockgen
+$(STAMPDIR)/mockgen-$(MOCKGEN_VER): | $(STAMPDIR)
+	$(call go-install-tool,$(MOCKGEN),github.com/golang/mock/mockgen,$(MOCKGEN_VER))
+	@touch $@
+$(MOCKGEN): $(STAMPDIR)/mockgen-$(MOCKGEN_VER)
 
 # protoc needs these to have a consistent name, so we use a versioned stamp file to ensure the true actual version is installed
 # while installing an unversioned binary
