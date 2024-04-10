@@ -29,6 +29,8 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	esclient "go.temporal.io/server/common/persistence/visibility/store/elasticsearch/client"
+	"strconv"
 	"strings"
 	"sync/atomic"
 	"time"
@@ -102,7 +104,45 @@ func (s *VersioningIntegSuite) SetupSuite() {
 		dynamicconfig.MatchingNumTaskqueueReadPartitions:  4,
 		dynamicconfig.MatchingNumTaskqueueWritePartitions: 4,
 	}
+
+	if UsingSQLAdvancedVisibility() {
+		s.setupSuite("testdata/cluster.yaml")
+		s.Logger.Info(fmt.Sprintf("Running advanced visibility test with %s/%s persistence", TestFlags.PersistenceType, TestFlags.PersistenceDriver))
+	} else {
+		s.setupSuite("testdata/es_cluster.yaml")
+		s.Logger.Info("Running advanced visibility test with Elasticsearch persistence")
+		// To ensure that Elasticsearch won't return more than defaultPageSize documents,
+		// but returns error if page size on request is greater than defaultPageSize.
+		// Probably can be removed and replaced with assert on items count in response.
+		s.updateMaxResultWindow()
+	}
+
 	s.setupSuite("testdata/cluster.yaml")
+}
+
+// copied from (s *AdvancedVisibilitySuite) updateMaxResultWindow()
+func (s *VersioningIntegSuite) updateMaxResultWindow() {
+	esConfig := s.testClusterConfig.ESConfig
+
+	esClient, err := esclient.NewFunctionalTestsClient(esConfig, s.Logger)
+	s.Require().NoError(err)
+
+	acknowledged, err := esClient.IndexPutSettings(
+		context.Background(),
+		esConfig.GetVisibilityIndex(),
+		fmt.Sprintf(`{"max_result_window" : %d}`, defaultPageSize))
+	s.Require().NoError(err)
+	s.Require().True(acknowledged)
+
+	for i := 0; i < numOfRetry; i++ {
+		settings, err := esClient.IndexGetSettings(context.Background(), esConfig.GetVisibilityIndex())
+		s.Require().NoError(err)
+		if settings[esConfig.GetVisibilityIndex()].Settings["index"].(map[string]interface{})["max_result_window"].(string) == strconv.Itoa(defaultPageSize) {
+			return
+		}
+		time.Sleep(waitTimeInMs * time.Millisecond)
+	}
+	s.FailNow(fmt.Sprintf("ES max result window size hasn't reach target size within %v", (numOfRetry*waitTimeInMs)*time.Millisecond))
 }
 
 func (s *VersioningIntegSuite) TearDownSuite() {
