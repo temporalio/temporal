@@ -193,7 +193,7 @@ func (db *taskQueueDB) UpdateState(
 	defer db.Unlock()
 
 	// Resetting approximateBacklogCounter to fix the count divergence issue
-	maxReadLevel := db.backlogMgr.taskWriter.GetMaxReadLevel()
+	maxReadLevel := db.maxReadLevel.Load()
 	if (ackLevel == maxReadLevel) || db.approximateBacklogCount < 0 {
 		db.approximateBacklogCount = 0
 	}
