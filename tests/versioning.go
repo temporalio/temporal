@@ -116,8 +116,6 @@ func (s *VersioningIntegSuite) SetupSuite() {
 		// Probably can be removed and replaced with assert on items count in response.
 		s.updateMaxResultWindow()
 	}
-
-	s.setupSuite("testdata/cluster.yaml")
 }
 
 // copied from (s *AdvancedVisibilitySuite) updateMaxResultWindow()
@@ -3330,6 +3328,16 @@ func (s *VersioningIntegSuite) TestDescribeTaskQueueEnhanced_Versioned_BasicReac
 	s.NoError(err)
 	s.waitForChan(ctx, started)
 
+	// wait for it to show as open in visibility
+	s.Eventually(func() bool {
+		listResp, err := s.engine.ListOpenWorkflowExecutions(ctx, &workflowservice.ListOpenWorkflowExecutionsRequest{
+			Namespace:       s.namespace,
+			MaximumPageSize: defaultPageSize,
+		})
+		s.Nil(err)
+		return len(listResp.GetExecutions()) > 0
+	}, 3*time.Second, 50*time.Millisecond)
+
 	// commit a different build id --> A should now only be reachable via visibility query, B reachable as default
 	s.commitBuildId(ctx, tq, "B", true, s.getVersioningRules(ctx, tq).GetConflictToken(), true)
 	s.getBuildIdReachability(ctx, tq, nil, map[string]enumspb.BuildIdTaskReachability{
@@ -3345,7 +3353,7 @@ func (s *VersioningIntegSuite) TestDescribeTaskQueueEnhanced_Versioned_BasicReac
 	s.Eventually(func() bool {
 		listResp, err := s.engine.ListClosedWorkflowExecutions(ctx, &workflowservice.ListClosedWorkflowExecutionsRequest{
 			Namespace:       s.namespace,
-			MaximumPageSize: 10,
+			MaximumPageSize: defaultPageSize,
 		})
 		s.Nil(err)
 		return len(listResp.GetExecutions()) > 0
