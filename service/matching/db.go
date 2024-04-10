@@ -193,7 +193,7 @@ func (db *taskQueueDB) UpdateState(
 	defer db.Unlock()
 
 	// Resetting approximateBacklogCounter to fix the count divergence issue
-	maxReadLevel := db.maxReadLevel.Load()
+	maxReadLevel := db.GetMaxReadLevel()
 	if (ackLevel == maxReadLevel) || db.approximateBacklogCount < 0 {
 		db.approximateBacklogCount = 0
 	}
@@ -221,8 +221,6 @@ func (db *taskQueueDB) updateApproximateBacklogCount(
 }
 
 func (db *taskQueueDB) getApproximateBacklogCount() int64 {
-	db.Lock()
-	defer db.Unlock()
 	return db.approximateBacklogCount
 }
 
@@ -250,7 +248,6 @@ func (db *taskQueueDB) CreateTasks(
 	}
 	db.approximateBacklogCount += int64(len(tasks))
 
-	// TODO Shivam: Is it possible for only some tasks, from a batch, to be created while others fail?
 	resp, err := db.store.CreateTasks(
 		ctx,
 		&persistence.CreateTasksRequest{

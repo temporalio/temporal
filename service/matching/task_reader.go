@@ -276,10 +276,6 @@ func (tr *taskReader) addTasksToBuffer(
 			// Also increment readLevel for expired tasks otherwise it could result in
 			// looping over the same tasks if all tasks read in the batch are expired
 			tr.backlogMgr.taskAckManager.setReadLevel(t.GetTaskId())
-			// Decreasing the approximateBacklogCounter as this task will no longer be part of the backlog and
-			// gets deleted by task_gc eventually. This task won't be seen by the ack_manager as it is never added
-			// to the outstanding tasks map, thus requiring to decrease the counter here
-			tr.backlogMgr.db.updateApproximateBacklogCount(-1)
 			continue
 		}
 		if err := tr.addSingleTaskToBuffer(ctx, t); err != nil {
