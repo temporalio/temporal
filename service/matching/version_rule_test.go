@@ -595,7 +595,7 @@ func TestInsertRedirectRuleSourceIsRampedAssignmentRuleTarget(t *testing.T) {
 
 func TestInsertRedirectRuleAlreadyExists(t *testing.T) {
 	t.Parallel()
-	maxRules := 3
+	maxRules := 10
 	clock := hlc.Zero(1)
 	initialData := mkInitialData(0, clock)
 
@@ -624,6 +624,29 @@ func TestInsertRedirectRuleCreateCycle(t *testing.T) {
 
 	// insert with source build id "1" -> "0" --> failure
 	_, err = insertRedirectRule(mkRedirectRule("1", "0"), data, clock, maxRules, maxRules)
+	assert.Error(t, err)
+}
+
+func TestInsertRedirectRuleMaxChain(t *testing.T) {
+	t.Parallel()
+	maxRules := 10
+	maxChain := 3
+	clock := hlc.Zero(1)
+	data := mkInitialData(0, clock)
+
+	// insert (4->5)
+	// 4 ---> 5
+	data, err := insertRedirectRule(mkRedirectRule("4", "5"), data, clock, maxRules, maxChain)
+	assert.NoError(t, err)
+
+	// insert (5->6)
+	// 4 ---> 5 ---> 6
+	data, err = insertRedirectRule(mkRedirectRule("5", "6"), data, clock, maxRules, maxChain)
+	assert.NoError(t, err)
+
+	// insert (6->7)
+	// 4 ---> 5 ---> 6 ---> 7
+	_, err = insertRedirectRule(mkRedirectRule("6", "7"), data, clock, maxRules, maxChain)
 	assert.Error(t, err)
 }
 
@@ -701,6 +724,39 @@ func TestReplaceRedirectRuleCreateCycle(t *testing.T) {
 	assert.Error(t, err)
 
 	_, err = replaceRedirectRule(mkRedirectRule("2", "1"), data, clock, len(data.GetRedirectRules()))
+	assert.Error(t, err)
+}
+
+func TestReplaceRedirectRuleMaxChain(t *testing.T) {
+	t.Parallel()
+	maxRules := 10
+	maxChain := 3
+	clock := hlc.Zero(1)
+	data := mkInitialData(0, clock)
+
+	// insert (2->3)
+	// 2 ---> 3
+	data, err := insertRedirectRule(mkRedirectRule("2", "3"), data, clock, maxRules, maxChain)
+	assert.NoError(t, err)
+
+	// insert (4->5)
+	// 2 ---> 3, 4 ---> 5
+	data, err = insertRedirectRule(mkRedirectRule("4", "5"), data, clock, maxRules, maxChain)
+	assert.NoError(t, err)
+
+	// insert (5->6)
+	// 2 ---> 3, 4 ---> 5 ---> 6
+	data, err = insertRedirectRule(mkRedirectRule("5", "6"), data, clock, maxRules, maxChain)
+	assert.NoError(t, err)
+
+	// replace(2, new_target=1)
+	// 2 ---> 1, 4 ---> 5 ---> 6
+	data, err = replaceRedirectRule(mkRedirectRule("2", "1"), data, clock, maxChain)
+	assert.NoError(t, err)
+
+	// replace(2, new_target=4)
+	// 2 ---> 4 ---> 5 ---> 6
+	_, err = replaceRedirectRule(mkRedirectRule("2", "4"), data, clock, maxChain)
 	assert.Error(t, err)
 }
 

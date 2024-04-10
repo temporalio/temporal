@@ -353,7 +353,7 @@ func checkRedirectConditions(g *persistencespb.VersioningData, maxRRs, maxChain 
 	}
 	for _, r := range activeRules {
 		upstream := getUpstreamBuildIds(r.GetRule().GetTargetBuildId(), activeRules)
-		if len(upstream) > maxChain {
+		if len(upstream)+1 > maxChain {
 			return serviceerror.NewFailedPrecondition(
 				fmt.Sprintf("update exceeds number of chained redirect rules permitted in namespace (%v/%v)", len(upstream), maxChain))
 		}
