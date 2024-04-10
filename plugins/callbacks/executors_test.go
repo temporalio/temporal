@@ -33,7 +33,6 @@ import (
 	"github.com/stretchr/testify/require"
 	"go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
-	"go.temporal.io/api/history/v1"
 	workflowpb "go.temporal.io/api/workflow/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common/definition"
@@ -45,10 +44,6 @@ import (
 
 type fakeEnv struct {
 	node *hsm.Node
-}
-
-func (s fakeEnv) LoadHistoryEvent(ctx context.Context, key definition.WorkflowKey, token []byte) (*history.HistoryEvent, error) {
-	panic("unimplemented - not used in this test")
 }
 
 func (s fakeEnv) Access(ctx context.Context, ref hsm.Ref, accessType hsm.AccessType, accessor func(*hsm.Node) error) error {

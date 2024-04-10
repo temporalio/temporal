@@ -216,6 +216,8 @@ func (h *nexusHandler) StartOperation(ctx context.Context, operation string, inp
 		oc.logger.Warn("invalid input", tag.Error(err))
 		return nil, nexus.HandlerErrorf(nexus.HandlerErrorTypeBadRequest, "invalid input")
 	}
+	// TODO(bergundy): Limit payload size.
+
 	// Dispatch the request to be sync matched with a worker polling on the nexusContext taskQueue.
 	// matchingClient sets a context timeout of 60 seconds for this request, this should be enough for any Nexus
 	// RPC.
@@ -308,7 +310,7 @@ func convertNexusHandlerError(t nexus.HandlerErrorType) nexus.HandlerErrorType {
 	switch t {
 	case nexus.HandlerErrorTypeDownstreamTimeout,
 		nexus.HandlerErrorTypeUnauthenticated,
-		nexus.HandlerErrorTypeForbidden,
+		nexus.HandlerErrorTypeUnauthorized,
 		nexus.HandlerErrorTypeBadRequest,
 		nexus.HandlerErrorTypeNotFound,
 		nexus.HandlerErrorTypeNotImplemented:
@@ -321,9 +323,9 @@ func adaptAuthorizeError(err error) error {
 	// Authorize err is either an explicitly set reason, or a generic "Request unauthorized." message.
 	var permissionDeniedError *serviceerror.PermissionDenied
 	if errors.As(err, &permissionDeniedError) && permissionDeniedError.Reason != "" {
-		return nexus.HandlerErrorf(nexus.HandlerErrorTypeForbidden, "permission denied: %s", permissionDeniedError.Reason)
+		return nexus.HandlerErrorf(nexus.HandlerErrorTypeUnauthorized, "permission denied: %s", permissionDeniedError.Reason)
 	}
-	return nexus.HandlerErrorf(nexus.HandlerErrorTypeForbidden, "permission denied")
+	return nexus.HandlerErrorf(nexus.HandlerErrorTypeUnauthorized, "permission denied")
 }
 
 type grpcStatusGetter interface {
@@ -354,7 +356,7 @@ func convertGRPCError(err error, exposeDetails bool) error {
 	case codes.Unauthenticated:
 		return nexus.HandlerErrorf(nexus.HandlerErrorTypeUnauthenticated, errMessage)
 	case codes.PermissionDenied:
-		return nexus.HandlerErrorf(nexus.HandlerErrorTypeForbidden, errMessage)
+		return nexus.HandlerErrorf(nexus.HandlerErrorTypeUnauthorized, errMessage)
 	case codes.NotFound:
 		return nexus.HandlerErrorf(nexus.HandlerErrorTypeNotFound, errMessage)
 	case codes.ResourceExhausted:

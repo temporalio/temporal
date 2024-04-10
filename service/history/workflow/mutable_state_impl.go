@@ -210,6 +210,9 @@ type (
 		logger           log.Logger
 		metricsHandler   metrics.Handler
 		stateMachineNode *hsm.Node
+
+		// Tracks all events added via the AddHistoryEvent method that is used by the state machine framework.
+		currentTransactionAddedStateMachineEventTypes []enumspb.EventType
 	}
 )
 
@@ -773,6 +776,7 @@ func (ms *MutableStateImpl) GetNamespaceEntry() *namespace.Namespace {
 func (ms *MutableStateImpl) AddHistoryEvent(t enumspb.EventType, setAttributes func(*history.HistoryEvent)) *history.HistoryEvent {
 	event := ms.hBuilder.AddHistoryEvent(t, setAttributes)
 	ms.writeEventToCache(event)
+	ms.currentTransactionAddedStateMachineEventTypes = append(ms.currentTransactionAddedStateMachineEventTypes, t)
 	return event
 }
 
@@ -4864,8 +4868,24 @@ func (ms *MutableStateImpl) prepareCloseTransaction(
 	if err := ms.taskGenerator.GenerateDirtySubStateMachineTasks(ms.shard.StateMachineRegistry()); err != nil {
 		return err
 	}
-	// Clear outputs for the next transaction.
-	ms.stateMachineNode.ClearTransactionState()
+
+	for _, t := range ms.currentTransactionAddedStateMachineEventTypes {
+		def, ok := ms.shard.StateMachineRegistry().EventDefinition(t)
+		if !ok {
+			return serviceerror.NewInternal(fmt.Sprintf("no event definition registered for %v", t))
+		}
+		if def.IsWorkflowTaskTrigger() {
+			if !ms.HasPendingWorkflowTask() {
+				if _, err := ms.AddWorkflowTaskScheduledEvent(
+					false,
+					enumsspb.WORKFLOW_TASK_TYPE_NORMAL,
+				); err != nil {
+					return err
+				}
+			}
+			break
+		}
+	}
 
 	ms.closeTransactionCollapseVisibilityTasks()
 
@@ -4880,7 +4900,6 @@ func (ms *MutableStateImpl) prepareCloseTransaction(
 func (ms *MutableStateImpl) cleanupTransaction(
 	_ TransactionPolicy,
 ) error {
-
 	ms.updateActivityInfos = make(map[int64]*persistencespb.ActivityInfo)
 	ms.deleteActivityInfos = make(map[int64]struct{})
 	ms.syncActivityTasks = make(map[int64]struct{})
@@ -4914,6 +4933,11 @@ func (ms *MutableStateImpl) cleanupTransaction(
 	)
 
 	ms.InsertTasks = make(map[tasks.Category][]tasks.Task)
+
+	// Clear outputs for the next transaction.
+	ms.stateMachineNode.ClearTransactionState()
+	// Clear out transient state machine state.
+	ms.currentTransactionAddedStateMachineEventTypes = nil
 
 	return nil
 }

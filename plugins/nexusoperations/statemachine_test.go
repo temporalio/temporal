@@ -29,13 +29,11 @@ import (
 
 	"github.com/stretchr/testify/require"
 	enumspb "go.temporal.io/api/enums/v1"
-	"go.temporal.io/api/history/v1"
+	historypb "go.temporal.io/api/history/v1"
 	enumsspb "go.temporal.io/server/api/enums/v1"
-	"go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/plugins/nexusoperations"
 	"go.temporal.io/server/service/history/hsm"
-	"go.temporal.io/server/service/history/workflow"
 	"google.golang.org/protobuf/types/known/durationpb"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
@@ -68,12 +66,12 @@ func TestAddChild(t *testing.T) {
 	for _, tc := range cases {
 		tc := tc
 		t.Run(tc.name, func(t *testing.T) {
-			root := newRoot(t)
+			root := newRoot(t, &nodeBackend{})
 			schedTime := timestamppb.Now()
-			event := &history.HistoryEvent{
+			event := &historypb.HistoryEvent{
 				EventTime: schedTime,
-				Attributes: &history.HistoryEvent_NexusOperationScheduledEventAttributes{
-					NexusOperationScheduledEventAttributes: &history.NexusOperationScheduledEventAttributes{
+				Attributes: &historypb.HistoryEvent_NexusOperationScheduledEventAttributes{
+					NexusOperationScheduledEventAttributes: &historypb.NexusOperationScheduledEventAttributes{
 						Service:   "service",
 						Operation: "operation",
 						RequestId: "request-id",
@@ -174,7 +172,7 @@ func TestRegenerateTasks(t *testing.T) {
 	for _, tc := range cases {
 		tc := tc
 		t.Run(tc.name, func(t *testing.T) {
-			node := newOperationNode(t, time.Now(), tc.timeout)
+			node := newOperationNode(t, &nodeBackend{}, time.Now(), tc.timeout)
 
 			if tc.state == enumsspb.NEXUS_OPERATION_STATE_BACKING_OFF {
 				require.NoError(t, hsm.MachineTransition(node, func(op nexusoperations.Operation) (hsm.TransitionOutput, error) {
@@ -204,7 +202,7 @@ func TestRegenerateTasks(t *testing.T) {
 }
 
 func TestRetry(t *testing.T) {
-	node := newOperationNode(t, time.Now(), time.Minute)
+	node := newOperationNode(t, &nodeBackend{}, time.Now(), time.Minute)
 	// Reset any outputs generated from nexusoperations.AddChild, we tested those already.
 	node.ClearTransactionState()
 	require.NoError(t, hsm.MachineTransition(node, func(op nexusoperations.Operation) (hsm.TransitionOutput, error) {
@@ -318,7 +316,7 @@ func TestCompleteFromAttempt(t *testing.T) {
 				return nexusoperations.TransitionStarted.Apply(op, nexusoperations.EventStarted{
 					Node: node,
 					Time: time.Now(),
-					Attributes: &history.NexusOperationStartedEventAttributes{
+					Attributes: &historypb.NexusOperationStartedEventAttributes{
 						OperationId: "op-id",
 					},
 				})
@@ -334,7 +332,7 @@ func TestCompleteFromAttempt(t *testing.T) {
 	for _, tc := range cases {
 		tc := tc
 		t.Run(tc.name, func(t *testing.T) {
-			node := newOperationNode(t, time.Now(), time.Minute)
+			node := newOperationNode(t, &nodeBackend{}, time.Now(), time.Minute)
 			// Reset any outputs generated from nexusoperations.AddChild, we tested those already.
 			node.ClearTransactionState()
 			require.NoError(t, hsm.MachineTransition(node, func(op nexusoperations.Operation) (hsm.TransitionOutput, error) {
@@ -359,13 +357,13 @@ func TestCompleteExternally(t *testing.T) {
 		{
 			name: "scheduled",
 			fn: func(t *testing.T) *hsm.Node {
-				return newOperationNode(t, time.Now(), time.Minute)
+				return newOperationNode(t, &nodeBackend{}, time.Now(), time.Minute)
 			},
 		},
 		{
 			name: "backing off",
 			fn: func(t *testing.T) *hsm.Node {
-				node := newOperationNode(t, time.Now(), time.Minute)
+				node := newOperationNode(t, &nodeBackend{}, time.Now(), time.Minute)
 				require.NoError(t, hsm.MachineTransition(node, func(op nexusoperations.Operation) (hsm.TransitionOutput, error) {
 					return nexusoperations.TransitionAttemptFailed.Apply(op, nexusoperations.EventAttemptFailed{
 						Node: node,
@@ -381,12 +379,12 @@ func TestCompleteExternally(t *testing.T) {
 		{
 			name: "started",
 			fn: func(t *testing.T) *hsm.Node {
-				node := newOperationNode(t, time.Now(), time.Minute)
+				node := newOperationNode(t, &nodeBackend{}, time.Now(), time.Minute)
 				require.NoError(t, hsm.MachineTransition(node, func(op nexusoperations.Operation) (hsm.TransitionOutput, error) {
 					return nexusoperations.TransitionStarted.Apply(op, nexusoperations.EventStarted{
 						Node: node,
 						Time: time.Now(),
-						Attributes: &history.NexusOperationStartedEventAttributes{
+						Attributes: &historypb.NexusOperationStartedEventAttributes{
 							OperationId: "op-id",
 						},
 					})
@@ -469,7 +467,7 @@ func TestCompleteExternally(t *testing.T) {
 
 func TestCancelationValidTransitions(t *testing.T) {
 	// Setup
-	root := newOperationNode(t, time.Now(), time.Hour)
+	root := newOperationNode(t, &nodeBackend{}, time.Now(), time.Hour)
 	require.NoError(t, hsm.MachineTransition(root, func(op nexusoperations.Operation) (hsm.TransitionOutput, error) {
 		return op.Cancel(root, time.Now())
 	}))
@@ -564,31 +562,4 @@ func TestCancelationValidTransitions(t *testing.T) {
 
 	// Assert no additional tasks are generated
 	require.Equal(t, 0, len(out.Tasks))
-}
-
-func newRoot(t *testing.T) *hsm.Node {
-	reg := hsm.NewRegistry()
-	require.NoError(t, workflow.RegisterStateMachine(reg))
-	require.NoError(t, nexusoperations.RegisterStateMachines(reg))
-	// Backend is nil because we don't need to generate history events for this test.
-	root, err := hsm.NewRoot(reg, workflow.StateMachineType.ID, nil, make(map[int32]*persistence.StateMachineMap), nil)
-	require.NoError(t, err)
-	return root
-}
-
-func newOperationNode(t *testing.T, schedTime time.Time, timeout time.Duration) *hsm.Node {
-	root := newRoot(t)
-	event := &history.HistoryEvent{
-		EventTime: timestamppb.New(schedTime),
-		Attributes: &history.HistoryEvent_NexusOperationScheduledEventAttributes{
-			NexusOperationScheduledEventAttributes: &history.NexusOperationScheduledEventAttributes{
-				Service:   "service",
-				Operation: "operation",
-				Timeout:   durationpb.New(timeout),
-			},
-		},
-	}
-	node, err := nexusoperations.AddChild(root, "test-id", event, []byte("token"), false)
-	require.NoError(t, err)
-	return node
 }
