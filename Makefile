@@ -144,11 +144,6 @@ GOLANGCI_LINT := $(LOCALBIN)/golangci-lint-$(GOLANGCI_LINT_VERSION)
 $(GOLANGCI_LINT): $(LOCALBIN)
 	$(call go-install-tool,$(GOLANGCI_LINT),github.com/golangci/golangci-lint/cmd/golangci-lint,$(GOLANGCI_LINT_VERSION))
 
-GOIMPORTS_VER := v0.20.0
-GOIMPORTS := $(LOCALBIN)/goimports-$(GOIMPORTS_VER)
-$(GOIMPORTS): | $(LOCALBIN)
-	$(call go-install-tool,$(GOIMPORTS),golang.org/x/tools/cmd/goimports,$(GOIMPORTS_VER))
-
 GOTESTSUM_VER := v1.11
 GOTESTSUM := $(LOCALBIN)/gotestsum-$(GOTESTSUM_VER)
 $(GOTESTSUM): | $(LOCALBIN)
@@ -169,32 +164,39 @@ PROTOGEN := $(LOCALBIN)/protogen-$(GO_API_VER)
 $(PROTOGEN): | $(LOCALBIN)
 	$(call go-install-tool,$(PROTOGEN),go.temporal.io/api/cmd/protogen,$(GO_API_VER))
 
+
+# The following tools need to have a consistent name, so we use a versioned stamp file to ensure the version we want is installed
+# while installing to an unversioned binary name.
+GOIMPORTS_VER := v0.20.0
+GOIMPORTS := $(LOCALBIN)/goimports
+$(STAMPDIR)/goimports-$(GOIMPORTS_VER): | $(STAMPDIR) $(LOCALBIN)
+	$(call go-install-tool,$(GOIMPORTS),golang.org/x/tools/cmd/goimports,$(GOIMPORTS_VER))
+	@touch $@
+$(GOIMPORTS): $(STAMPDIR)/goimports-$(GOIMPORTS_VER)
+
 # Mockgen is called by name throughout the codebase, so we need to keep the binary name consistent
 MOCKGEN_VER := v1.7.0-rc.1
 MOCKGEN := $(LOCALBIN)/mockgen
-$(STAMPDIR)/mockgen-$(MOCKGEN_VER): | $(STAMPDIR)
+$(STAMPDIR)/mockgen-$(MOCKGEN_VER): | $(STAMPDIR) $(LOCALBIN)
 	$(call go-install-tool,$(MOCKGEN),github.com/golang/mock/mockgen,$(MOCKGEN_VER))
 	@touch $@
 $(MOCKGEN): $(STAMPDIR)/mockgen-$(MOCKGEN_VER)
-
-# protoc needs these to have a consistent name, so we use a versioned stamp file to ensure the true actual version is installed
-# while installing an unversioned binary
 PROTOC_GEN_GO_VER := v1.33.0
 PROTOC_GEN_GO := $(LOCALBIN)/protoc-gen-go
-$(STAMPDIR)/protoc-gen-go-$(PROTOC_GEN_GO_VER): | $(STAMPDIR)
+$(STAMPDIR)/protoc-gen-go-$(PROTOC_GEN_GO_VER): | $(STAMPDIR) $(LOCALBIN)
 	$(call go-install-tool,$(PROTOC_GEN_GO),google.golang.org/protobuf/cmd/protoc-gen-go,$(PROTOC_GEN_GO_VER))
 	@touch $@
 $(PROTOC_GEN_GO): $(STAMPDIR)/protoc-gen-go-$(PROTOC_GEN_GO_VER)
 
 PROTOC_GEN_GO_GRPC_VER := v1.3.0
 PROTOC_GEN_GO_GRPC := $(LOCALBIN)/protoc-gen-go-grpc
-$(STAMPDIR)/protoc-gen-go-grpc-$(PROTOC_GEN_GO_GRPC_VER): | $(STAMPDIR)
+$(STAMPDIR)/protoc-gen-go-grpc-$(PROTOC_GEN_GO_GRPC_VER): | $(STAMPDIR) $(LOCALBIN)
 	$(call go-install-tool,$(PROTOC_GEN_GO_GRPC),google.golang.org/grpc/cmd/protoc-gen-go-grpc,$(PROTOC_GEN_GO_GRPC_VER))
 	@touch $@
 $(PROTOC_GEN_GO_GRPC): $(STAMPDIR)/protoc-gen-go-grpc-$(PROTOC_GEN_GO_GRPC_VER)
 
 PROTOC_GEN_GO_HELPERS := $(LOCALBIN)/protoc-gen-go-helpers
-$(STAMPDIR)/protoc-gen-go-helpers-$(GO_API_VER): | $(STAMPDIR)
+$(STAMPDIR)/protoc-gen-go-helpers-$(GO_API_VER): | $(STAMPDIR) $(LOCALBIN)
 	$(call go-install-tool,$(PROTOC_GEN_GO_HELPERS),go.temporal.io/api/cmd/protoc-gen-go-helpers,$(GO_API_VER))
 	@touch $@
 $(PROTOC_GEN_GO_HELPERS): $(STAMPDIR)/protoc-gen-go-helpers-$(GO_API_VER)
