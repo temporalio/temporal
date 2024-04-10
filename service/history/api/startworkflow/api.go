@@ -30,9 +30,11 @@ import (
 
 	"github.com/google/uuid"
 	commonpb "go.temporal.io/api/common/v1"
+	enumspb "go.temporal.io/api/enums/v1"
 	historypb "go.temporal.io/api/history/v1"
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/api/workflowservice/v1"
+	"go.temporal.io/server/common/enums"
 	"google.golang.org/protobuf/types/known/timestamppb"
 
 	"go.temporal.io/server/api/historyservice/v1"
@@ -118,6 +120,11 @@ func NewStarter(
 func (s *Starter) prepare(ctx context.Context) error {
 	request := s.request.StartRequest
 	metricsHandler := s.shardContext.GetMetricsHandler()
+
+	// TODO: remove this call in 1.25
+	enums.SetDefaultWorkflowIdConflictPolicy(
+		&request.WorkflowIdConflictPolicy,
+		enumspb.WORKFLOW_ID_CONFLICT_POLICY_FAIL)
 
 	api.MigrateWorkflowIdReusePolicyForRunningWorkflow(
 		&request.WorkflowIdReusePolicy,
