@@ -201,18 +201,6 @@ $(STAMPDIR)/protoc-gen-go-helpers-$(GO_API_VER): | $(STAMPDIR) $(LOCALBIN)
 	@touch $@
 $(PROTOC_GEN_GO_HELPERS): $(STAMPDIR)/protoc-gen-go-helpers-$(GO_API_VER)
 
-update-tctl:
-	@printf $(COLOR) "Install/update tctl..."
-	@go install github.com/temporalio/tctl/cmd/tctl@latest
-
-update-cli:
-	@printf $(COLOR) "Install/update cli..."
-	curl -sSf https://temporal.download/cli.sh | sh
-
-update-ui:
-	@printf $(COLOR) "Install/update temporal ui-server..."
-	@go install github.com/temporalio/ui-server/cmd/server@latest
-
 # go-install-tool will 'go install' any package with custom target and name of binary, if it doesn't exist
 # $1 - target path with name of binary (ideally with version)
 # $2 - package url which can be installed
