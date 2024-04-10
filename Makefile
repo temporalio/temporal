@@ -209,6 +209,8 @@ update-ui:
 	@printf $(COLOR) "Install/update temporal ui-server..."
 	@go install github.com/temporalio/ui-server/cmd/server@latest
 
+$(TEMPDIR) := $(shell mktemp -d)
+
 # go-install-tool will 'go install' any package with custom target and name of binary, if it doesn't exist
 # $1 - target path with name of binary (ideally with version)
 # $2 - package url which can be installed
@@ -219,7 +221,7 @@ define go-install-tool
 set -e; \
 package=$(2)@$(3) ;\
 printf $(COLOR) "Downloading $${package}" ;\
-GOBIN=$(shell pwd)/$(LOCALBIN) go install $${package} ;\
+GOBIN=$(shell pwd)/$(TEMPDIR) go install $${package} ;\
 mv "$$(echo "$(1)" | sed "s/-$(3)$$//")" $(1) ;\
 }
 endef
