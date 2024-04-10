@@ -174,8 +174,8 @@ func (s *historyReplicationConflictTestSuite) TestConflictResolutionReappliesSig
 	3 WorkflowExecutionSignaled {"Input": {"Payloads": [{"Data": "\"cluster2-signal\""}]}}
 	`, []int{1, 1, 2}, s.getHistory(ctx, s.cluster2, runId))
 
-	// Execute pending history replication tasks. Both clusters believe they are active, therefore each cluster sends
-	// its signal to the other, triggering conflict resolution.
+	// Execute pending history replication tasks. Each cluster sends its signal to the other, but these have the same
+	// event ID; this conflict is resolved by reapplying one of the signals after the other.
 
 	// cluster2 sends its signal to cluster1. Since it has a higher failover version, it supersedes the endogenous
 	// signal in cluster1.
@@ -186,7 +186,7 @@ func (s *historyReplicationConflictTestSuite) TestConflictResolutionReappliesSig
 	3 WorkflowExecutionSignaled {"Input": {"Payloads": [{"Data": "\"cluster2-signal\""}]}}
 	`, []int{1, 1, 2}, s.getHistory(ctx, s.cluster1, runId))
 
-	// cluster1 sends its signal to cluster1. Since it has a lower failover version, it is reapplied after the
+	// cluster1 sends its signal to cluster2. Since it has a lower failover version, it is reapplied after the
 	// endogenous cluster 2 signal.
 	s.executeHistoryReplicationTasksFromClusterUntil("cluster1", enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_SIGNALED)
 	s.HistoryRequire.EqualHistoryEventsAndVersions(`
