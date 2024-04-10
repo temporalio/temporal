@@ -29,7 +29,6 @@ import (
 	"errors"
 	"fmt"
 	"sync"
-	"sync/atomic"
 	"testing"
 	"time"
 
@@ -1755,11 +1754,11 @@ func (s *matchingEngineSuite) TestTaskQueueManagerGetTaskBatch() {
 
 	// setReadLevel should NEVER be called without updating ackManager.outstandingTasks
 	// This is only for unit test purpose
-	tlMgr.backlogMgr.taskAckManager.setReadLevel(tlMgr.backlogMgr.taskWriter.GetMaxReadLevel())
+	tlMgr.backlogMgr.taskAckManager.setReadLevel(tlMgr.backlogMgr.db.GetMaxReadLevel())
 	batch, err := tlMgr.backlogMgr.taskReader.getTaskBatch(context.Background())
 	s.Nil(err)
 	s.EqualValues(0, len(batch.tasks))
-	s.EqualValues(tlMgr.backlogMgr.taskWriter.GetMaxReadLevel(), batch.readLevel)
+	s.EqualValues(tlMgr.backlogMgr.db.GetMaxReadLevel(), batch.readLevel)
 	s.True(batch.isReadBatchDone)
 
 	tlMgr.backlogMgr.taskAckManager.setReadLevel(0)
@@ -1824,7 +1823,7 @@ func (s *matchingEngineSuite) TestTaskQueueManagerGetTaskBatch_ReadBatchDone() {
 	time.Sleep(100 * time.Millisecond)
 
 	tlMgr.backlogMgr.taskAckManager.setReadLevel(0)
-	atomic.StoreInt64(&tlMgr.backlogMgr.taskWriter.maxReadLevel, maxReadLevel)
+	tlMgr.backlogMgr.db.SetMaxReadLevel(maxReadLevel)
 	batch, err := tlMgr.backlogMgr.taskReader.getTaskBatch(context.Background())
 	s.Empty(batch.tasks)
 	s.Equal(int64(rangeSize*10), batch.readLevel)
