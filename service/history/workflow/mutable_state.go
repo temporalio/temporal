@@ -211,6 +211,7 @@ type (
 		GetQueryRegistry() QueryRegistry
 		GetBaseWorkflowInfo() *workflowspb.BaseExecutionInfo
 		GetAssignedBuildId() string
+		GetInheritedBuildId() string
 		GetMostRecentWorkerVersionStamp() *commonpb.WorkerVersionStamp
 		IsTransientWorkflowTask() bool
 		ClearTransientWorkflowTask() error

@@ -2421,7 +2421,7 @@ func (wh *WorkflowHandler) DescribeTaskQueue(ctx context.Context, request *workf
 		return nil, err
 	}
 
-	if request.TaskQueueType == enumspb.TASK_QUEUE_TYPE_UNSPECIFIED {
+	if request.TaskQueueType == enumspb.TASK_QUEUE_TYPE_UNSPECIFIED || request.ApiMode == enumspb.DESCRIBE_TASK_QUEUE_MODE_ENHANCED {
 		request.TaskQueueType = enumspb.TASK_QUEUE_TYPE_WORKFLOW
 	}
 
@@ -2433,12 +2433,10 @@ func (wh *WorkflowHandler) DescribeTaskQueue(ctx context.Context, request *workf
 		if request.TaskQueue.Kind == enumspb.TASK_QUEUE_KIND_STICKY {
 			return nil, errUseEnhancedDescribeOnStickyQueue
 		}
-		for _, qtype := range request.TaskQueueTypes {
-			if partition, err := tqid.PartitionFromProto(request.TaskQueue, namespaceID.String(), qtype); err != nil {
-				return nil, errTaskQueuePartitionInvalid
-			} else if !partition.IsRoot() {
-				return nil, errUseEnhancedDescribeOnNonRootQueue
-			}
+		if partition, err := tqid.PartitionFromProto(request.TaskQueue, namespaceID.String(), enumspb.TASK_QUEUE_TYPE_WORKFLOW); err != nil {
+			return nil, errTaskQueuePartitionInvalid
+		} else if !partition.IsRoot() {
+			return nil, errUseEnhancedDescribeOnNonRootQueue
 		}
 	}
 

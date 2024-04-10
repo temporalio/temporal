@@ -26,9 +26,11 @@ package matching
 
 import (
 	"fmt"
+	"math"
 	"slices"
 	"time"
 
+	"github.com/dgryski/go-farm"
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/api/taskqueue/v1"
 	"go.temporal.io/api/workflowservice/v1"
@@ -66,7 +68,7 @@ func InsertAssignmentRule(timestamp *hlc.Clock,
 		return nil, serviceerror.NewFailedPrecondition(
 			"update breaks requirement, target build id is already a member of a version set")
 	}
-	if rule.GetRamp() != nil && isRedirectRuleSource(target, data.GetRedirectRules()) {
+	if rule.GetRamp() != nil && isActiveRedirectRuleSource(target, data.GetRedirectRules()) {
 		return nil, serviceerror.NewFailedPrecondition(
 			"update breaks requirement, this target build id cannot have a ramp because it is the source of a redirect rule")
 	}
@@ -100,7 +102,7 @@ func ReplaceAssignmentRule(timestamp *hlc.Clock,
 		return nil, serviceerror.NewFailedPrecondition(
 			"update breaks requirement, target build id is already a member of a version set")
 	}
-	if rule.GetRamp() != nil && isRedirectRuleSource(target, data.GetRedirectRules()) {
+	if rule.GetRamp() != nil && isActiveRedirectRuleSource(target, data.GetRedirectRules()) {
 		return nil, serviceerror.NewFailedPrecondition(
 			"update breaks requirement, this target build id cannot have a ramp because it is the source of a redirect rule")
 	}
@@ -138,7 +140,7 @@ func DeleteAssignmentRule(timestamp *hlc.Clock,
 	return data, checkAssignmentConditions(data, 0, hadUnconditional && !req.GetForce())
 }
 
-func InsertCompatibleRedirectRule(timestamp *hlc.Clock,
+func AddCompatibleRedirectRule(timestamp *hlc.Clock,
 	data *persistencespb.VersioningData,
 	req *workflowservice.UpdateWorkerVersioningRulesRequest_AddCompatibleBuildIdRedirectRule,
 	maxRedirectRules int) (*persistencespb.VersioningData, error) {
@@ -282,7 +284,7 @@ func CommitBuildID(timestamp *hlc.Clock,
 	return data, nil
 }
 
-func GetWorkerVersioningRules(
+func GetTimestampedWorkerVersioningRules(
 	versioningData *persistencespb.VersioningData,
 	clk *hlc.Clock,
 ) (*matchingservice.GetWorkerVersioningRulesResponse, error) {
@@ -361,7 +363,7 @@ func getActiveRedirectRules(rules []*persistencespb.RedirectRule) []*persistence
 	})
 }
 
-func isRedirectRuleSource(buildID string, redirectRules []*persistencespb.RedirectRule) bool {
+func isActiveRedirectRuleSource(buildID string, redirectRules []*persistencespb.RedirectRule) bool {
 	for _, r := range getActiveRedirectRules(redirectRules) {
 		if buildID == r.GetRule().GetSourceBuildId() {
 			return true
@@ -489,13 +491,27 @@ func dfs(curr string, visited, inStack map[string]bool, nodes map[string][]strin
 	return false
 }
 
-func FindAssignmentBuildId(rules []*persistencespb.AssignmentRule) string {
+func FindAssignmentBuildId(rules []*persistencespb.AssignmentRule, runId string) string {
+	rampThreshold := -1.
 	for _, r := range rules {
 		if r.GetDeleteTimestamp() != nil {
 			continue
 		}
-		// TODO: implement filter and ramp
+		if ramp := r.GetRule().GetPercentageRamp(); ramp != nil {
+			if rampThreshold == -1. {
+				rampThreshold = calcRampThreshold(runId)
+			}
+			if float64(ramp.GetRampPercentage()) <= rampThreshold {
+				continue
+			}
+		}
 		return r.GetRule().GetTargetBuildId()
 	}
 	return ""
+}
+
+// calcRampThreshold returns a number in [0, 100) that is deterministically calculated based on the passed id
+func calcRampThreshold(id string) float64 {
+	h := farm.Fingerprint32([]byte(id))
+	return 100 * (float64(h) / (float64(math.MaxUint32) + 1))
 }

@@ -210,8 +210,9 @@ func (m *workflowTaskStateMachine) ApplyWorkflowTaskStartedEvent(
 
 	m.UpdateWorkflowTask(workflowTask)
 
-	if versioningStamp.GetUseVersioning() && m.ms.GetLastWorkflowTaskStartedEventID() == common.EmptyEventTaskID {
-		// if this is the first workflow task, we update the wf assigned build ID
+	if versioningStamp.GetUseVersioning() && m.ms.GetLastWorkflowTaskStartedEventID() == common.EmptyEventTaskID &&
+		m.ms.GetInheritedBuildId() == "" {
+		// if this is the first workflow task and the build ID is not inherited, we update the wf assigned build ID
 		err := m.ms.UpdateBuildIdAssignment(versioningStamp.GetBuildId())
 		if err != nil {
 			return nil, err
@@ -942,6 +943,8 @@ func (m *workflowTaskStateMachine) afterAddWorkflowTaskCompletedEvent(
 		event.GetEventId(),
 		limits.MaxResetPoints,
 	)
+	// For versioned workflows the search attributes should be already up-to-date based on the task started events.
+	// This is still useful for unversioned workers who report build ID.
 	if err := m.ms.updateBuildIdsSearchAttribute(attrs.GetWorkerVersion(), limits.MaxSearchAttributeValueSize); err != nil {
 		return err
 	}

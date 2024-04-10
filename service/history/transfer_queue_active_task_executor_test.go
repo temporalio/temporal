@@ -2533,7 +2533,7 @@ func (s *transferQueueActiveTaskExecutorSuite) createAddWorkflowTaskRequest(
 		timeout = executionInfo.StickyScheduleToStartTimeout
 	}
 
-	directive := worker_versioning.MakeDirectiveForWorkflowTask(mutableState.GetAssignedBuildId(), mutableState.GetMostRecentWorkerVersionStamp(), mutableState.GetLastWorkflowTaskStartedEventID())
+	directive := MakeDirectiveForWorkflowTask(mutableState)
 
 	return protomock.Eq(&matchingservice.AddWorkflowTaskRequest{
 		NamespaceId: task.NamespaceID,

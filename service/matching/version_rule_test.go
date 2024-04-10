@@ -33,6 +33,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	"go.temporal.io/api/workflowservice/v1"
+
 	persistencepb "go.temporal.io/server/api/persistence/v1"
 	commonclock "go.temporal.io/server/common/clock"
 	hlc "go.temporal.io/server/common/clock/hybrid_logical_clock"
@@ -145,7 +146,7 @@ func insertRedirectRule(rule *taskqueuepb.CompatibleBuildIdRedirectRule,
 	clock *hlc.Clock,
 	maxAssignmentRules int,
 ) (*persistencepb.VersioningData, error) {
-	return InsertCompatibleRedirectRule(clock, data, mkNewInsertRedirectReq(rule), maxAssignmentRules)
+	return AddCompatibleRedirectRule(clock, data, mkNewInsertRedirectReq(rule), maxAssignmentRules)
 }
 
 func replaceAssignmentRule(rule *taskqueuepb.BuildIdAssignmentRule,
@@ -791,7 +792,7 @@ func TestGetWorkerVersioningRules(t *testing.T) {
 
 	// Call list successfully
 	dummyClock := hlc.Zero(99) // used to generate conflict token, but not in this test
-	resp, err := GetWorkerVersioningRules(data, dummyClock)
+	resp, err := GetTimestampedWorkerVersioningRules(data, dummyClock)
 	assert.NoError(t, err)
 
 	// check assignment rules
@@ -1007,11 +1008,14 @@ func TestCommitBuildIDMaxAssignmentRules(t *testing.T) {
 	assert.Error(t, err)
 }
 
-// eg.
-// 1 ------> 2
-// ^        |
-// |        v
-// 5 <------ 3 ------> 4
+/*
+e.g.
+Redirect Rules:
+1 ------> 2
+^         |
+|         v
+5 <------ 3 ------> 4
+*/
 func TestIsCycle(t *testing.T) {
 	rules := []*persistencepb.RedirectRule{
 		{Rule: &taskqueuepb.CompatibleBuildIdRedirectRule{SourceBuildId: "1", TargetBuildId: "2"}},

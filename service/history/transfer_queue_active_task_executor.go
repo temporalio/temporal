@@ -260,7 +260,7 @@ func (t *transferQueueActiveTaskExecutor) processWorkflowTask(
 
 	normalTaskQueueName := mutableState.GetExecutionInfo().TaskQueue
 
-	directive := worker_versioning.MakeDirectiveForWorkflowTask(mutableState.GetAssignedBuildId(), mutableState.GetMostRecentWorkerVersionStamp(), mutableState.GetLastWorkflowTaskStartedEventID())
+	directive := MakeDirectiveForWorkflowTask(mutableState)
 
 	// NOTE: Do not access mutableState after this lock is released.
 	// It is important to release the workflow lock here, because pushWorkflowTask will call matching,
@@ -817,12 +817,19 @@ func (t *transferQueueActiveTaskExecutor) processStartChildExecution(
 		targetNamespaceName = namespaceEntry.Name()
 	}
 
-	// copy version stamp from parent to child if:
-	// - command says to use compatible version
-	// - parent is using versioning
 	var sourceVersionStamp *commonpb.WorkerVersionStamp
+	var inheritedBuildId string
 	if attributes.InheritBuildId {
-		sourceVersionStamp = worker_versioning.StampIfUsingVersioning(mutableState.GetMostRecentWorkerVersionStamp())
+		// setting inheritedBuildId of the child wf to the assignedBuildId of the parent
+		inheritedBuildId = mutableState.GetAssignedBuildId()
+		if inheritedBuildId == "" {
+			// TODO: this is only needed for old versioning. get rid of StartWorkflowExecutionRequest.SourceVersionStamp
+			// [cleanup-old-wv]
+			// Copy version stamp to new workflow only if:
+			// - command says to use compatible version
+			// - using versioning
+			sourceVersionStamp = worker_versioning.StampIfUsingVersioning(mutableState.GetMostRecentWorkerVersionStamp())
+		}
 	}
 
 	childRunID, childClock, err := t.startWorkflow(
@@ -833,6 +840,7 @@ func (t *transferQueueActiveTaskExecutor) processStartChildExecution(
 		childInfo.CreateRequestId,
 		attributes,
 		sourceVersionStamp,
+		inheritedBuildId,
 	)
 	if err != nil {
 		t.logger.Debug("Failed to start child workflow execution", tag.Error(err))
@@ -1320,6 +1328,7 @@ func (t *transferQueueActiveTaskExecutor) startWorkflow(
 	childRequestID string,
 	attributes *historypb.StartChildWorkflowExecutionInitiatedEventAttributes,
 	sourceVersionStamp *commonpb.WorkerVersionStamp,
+	inheritedBuildId string,
 ) (string, *clockspb.VectorClock, error) {
 	request := common.CreateHistoryStartWorkflowRequest(
 		task.TargetNamespaceID,
@@ -1357,6 +1366,7 @@ func (t *transferQueueActiveTaskExecutor) startWorkflow(
 	)
 
 	request.SourceVersionStamp = sourceVersionStamp
+	request.InheritedBuildId = inheritedBuildId
 
 	response, err := t.historyRawClient.StartWorkflowExecution(ctx, request)
 	if err != nil {
