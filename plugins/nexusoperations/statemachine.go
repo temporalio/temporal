@@ -71,12 +71,12 @@ func AddChild(node *hsm.Node, id string, event *historypb.HistoryEvent, eventTok
 
 	node, err := node.AddChild(hsm.Key{Type: OperationMachineType.ID, ID: id}, Operation{
 		&persistencespb.NexusOperationInfo{
-			Service:       attrs.Service,
-			Operation:     attrs.Operation,
-			ScheduledTime: event.EventTime,
-			Timeout:       attrs.Timeout,
-			RequestId:     attrs.RequestId,
-			State:         enumsspb.NEXUS_OPERATION_STATE_UNSPECIFIED,
+			Service:                attrs.Service,
+			Operation:              attrs.Operation,
+			ScheduledTime:          event.EventTime,
+			ScheduleToCloseTimeout: attrs.ScheduleToCloseTimeout,
+			RequestId:              attrs.RequestId,
+			State:                  enumsspb.NEXUS_OPERATION_STATE_UNSPECIFIED,
 			// TODO(bergundy): actually delete on completion if this is set.
 			DeleteOnCompletion:  deleteOnCompletion,
 			ScheduledEventToken: eventToken,
@@ -146,8 +146,8 @@ func (o Operation) creationTasks(node *hsm.Node) ([]hsm.Task, error) {
 		return nil, err
 	}
 
-	if o.Timeout.AsDuration() != 0 {
-		return []hsm.Task{TimeoutTask{Deadline: o.ScheduledTime.AsTime().Add(o.Timeout.AsDuration())}}, nil
+	if o.ScheduleToCloseTimeout.AsDuration() != 0 {
+		return []hsm.Task{TimeoutTask{Deadline: o.ScheduledTime.AsTime().Add(o.ScheduleToCloseTimeout.AsDuration())}}, nil
 	}
 	return nil, nil
 }

@@ -234,15 +234,15 @@ func TestHandleScheduleCommand(t *testing.T) {
 			err := tcx.scheduleHandler(tcx.ms, commandValidator{maxPayloadSize: 1}, 1, &commandpb.Command{
 				Attributes: &commandpb.Command_ScheduleNexusOperationCommandAttributes{
 					ScheduleNexusOperationCommandAttributes: &commandpb.ScheduleNexusOperationCommandAttributes{
-						Service:   "service",
-						Operation: "op",
-						Timeout:   tc.commandTimeout,
+						Service:                "service",
+						Operation:              "op",
+						ScheduleToCloseTimeout: tc.commandTimeout,
 					},
 				},
 			})
 			require.NoError(t, err)
 			require.Equal(t, 1, len(tcx.history.Events))
-			require.Equal(t, tc.expectedTimeout.AsDuration(), tcx.history.Events[0].GetNexusOperationScheduledEventAttributes().Timeout.AsDuration())
+			require.Equal(t, tc.expectedTimeout.AsDuration(), tcx.history.Events[0].GetNexusOperationScheduledEventAttributes().ScheduleToCloseTimeout.AsDuration())
 		})
 	}
 
@@ -255,7 +255,7 @@ func TestHandleScheduleCommand(t *testing.T) {
 			Header: map[string]string{
 				"key": "value",
 			},
-			Timeout: durationpb.New(time.Hour),
+			ScheduleToCloseTimeout: durationpb.New(time.Hour),
 		}
 		err := tcx.scheduleHandler(tcx.ms, commandValidator{maxPayloadSize: 1}, 1, &commandpb.Command{
 			Attributes: &commandpb.Command_ScheduleNexusOperationCommandAttributes{
@@ -269,7 +269,7 @@ func TestHandleScheduleCommand(t *testing.T) {
 		require.Equal(t, cAttrs.Service, eAttrs.Service)
 		require.Equal(t, cAttrs.Operation, eAttrs.Operation)
 		require.Equal(t, cAttrs.Input, eAttrs.Input)
-		require.Equal(t, cAttrs.Timeout, eAttrs.Timeout)
+		require.Equal(t, cAttrs.ScheduleToCloseTimeout, eAttrs.ScheduleToCloseTimeout)
 		require.Equal(t, cAttrs.Header, eAttrs.Header)
 		require.Equal(t, int64(1), eAttrs.WorkflowTaskCompletedEventId)
 		child, err := tcx.ms.HSM().Child([]hsm.Key{{Type: nexusoperations.OperationMachineType.ID, ID: strconv.FormatInt(event.EventId, 10)}})
