@@ -134,20 +134,22 @@ func (rc *reachabilityCalculator) run(ctx context.Context, buildId string) (enum
 func (rc *reachabilityCalculator) getBuildIdsOfInterest(
 	buildId string,
 	deletedRuleInclusionPeriod *time.Duration) []string {
-	includedRules := util.FilterSlice(slices.Clone(rc.redirectRules), func(rr *persistencespb.RedirectRule) bool {
-		return rr.DeleteTimestamp == nil || rc.withinRuleInclusionPeriod(rr.DeleteTimestamp, deletedRuleInclusionPeriod)
-	})
-	return append(getUpstreamBuildIds(buildId, includedRules), buildId)
-}
 
-func (rc *reachabilityCalculator) withinRuleInclusionPeriod(clk *clock.HybridLogicalClock, maxTimeSinceDeleted *time.Duration) bool {
-	if clk == nil {
-		return true
+	withinRuleInclusionPeriod := func(clk *clock.HybridLogicalClock) bool {
+		if clk == nil {
+			return true
+		}
+		if deletedRuleInclusionPeriod == nil {
+			return false
+		}
+		return hlc.Since(clk) <= *deletedRuleInclusionPeriod
 	}
-	if maxTimeSinceDeleted == nil {
-		return false
-	}
-	return hlc.Since(clk) <= *maxTimeSinceDeleted
+
+	includedRules := util.FilterSlice(slices.Clone(rc.redirectRules), func(rr *persistencespb.RedirectRule) bool {
+		return rr.DeleteTimestamp == nil || withinRuleInclusionPeriod(rr.DeleteTimestamp)
+	})
+
+	return append(getUpstreamBuildIds(buildId, includedRules), buildId)
 }
 
 func (rc *reachabilityCalculator) existsBackloggedActivityOrWFTaskAssignedToAny(ctx context.Context, buildIdsOfInterest []string) (bool, error) {
