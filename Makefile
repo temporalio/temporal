@@ -243,7 +243,7 @@ install-proto-submodule:
 	git submodule update --init $(PROTO_ROOT)/api
 
 protoc: clean-proto $(PROTO_OUT) $(PROTOGEN) $(PROTOC_GEN_GO) $(PROTOC_GEN_GO_GRPC) $(PROTOC_GEN_GO_HELPERS)
-	@protogen \
+	@$(PROTOGEN) \
 		-I=proto/api \
 		-I=proto/dependencies \
 		--root=proto/internal \
