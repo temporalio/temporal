@@ -1018,7 +1018,7 @@ Redirect Rules:
 |         v
 5 <------ 3 ------> 4
 */
-func TestIsCycle(t *testing.T) {
+func TestIsCyclic(t *testing.T) {
 	rules := []*persistencepb.RedirectRule{
 		{Rule: &taskqueuepb.CompatibleBuildIdRedirectRule{SourceBuildId: "1", TargetBuildId: "2"}},
 		{Rule: &taskqueuepb.CompatibleBuildIdRedirectRule{SourceBuildId: "5", TargetBuildId: "1"}},
@@ -1041,4 +1041,80 @@ func TestIsCycle(t *testing.T) {
 	if !isCyclic(rules) {
 		t.Fail()
 	}
+}
+
+func TestGetUpstreamBuildIds_NoCycle(t *testing.T) {
+	t.Parallel()
+	/*
+		e.g.
+		Redirect Rules:
+		10
+		^
+		|
+		1 <------ 2
+		^
+		|
+		5 <------ 3 <------ 4
+	*/
+	createTs := hlc.Zero(1)
+
+	redirectRules := []*persistencepb.RedirectRule{
+		mkRedirectRulePersistence(mkRedirectRule("1", "10"), createTs, nil),
+		mkRedirectRulePersistence(mkRedirectRule("2", "1"), createTs, nil),
+		mkRedirectRulePersistence(mkRedirectRule("3", "5"), createTs, nil),
+		mkRedirectRulePersistence(mkRedirectRule("4", "3"), createTs, nil),
+		mkRedirectRulePersistence(mkRedirectRule("5", "1"), createTs, nil),
+	}
+
+	expectedUpstreamBuildIds := []string{"2", "5", "3", "4"}
+	upstreamBuildIds := getUpstreamBuildIds("1", redirectRules)
+	slices.Sort(expectedUpstreamBuildIds)
+	slices.Sort(upstreamBuildIds)
+	assert.Equal(t, expectedUpstreamBuildIds, upstreamBuildIds)
+}
+
+func TestGetUpstreamBuildIds_WithCycle(t *testing.T) {
+	t.Parallel()
+	/*
+		e.g.
+		Redirect Rules:
+		1 ------> 2
+		^         |
+		|         v
+		5 <------ 3 ------> 4
+	*/
+	createTs := hlc.Zero(1)
+	redirectRules := []*persistencepb.RedirectRule{
+		mkRedirectRulePersistence(mkRedirectRule("1", "2"), createTs, nil),
+		mkRedirectRulePersistence(mkRedirectRule("2", "3"), createTs, nil),
+		mkRedirectRulePersistence(mkRedirectRule("3", "4"), createTs, nil),
+		mkRedirectRulePersistence(mkRedirectRule("3", "5"), createTs, nil),
+		mkRedirectRulePersistence(mkRedirectRule("5", "1"), createTs, nil),
+	}
+	expectedUpstreamBuildIds := []string{"5", "3", "2"}
+	upstreamBuildIds := getUpstreamBuildIds("1", redirectRules)
+	slices.Sort(expectedUpstreamBuildIds)
+	slices.Sort(upstreamBuildIds)
+	assert.Equal(t, expectedUpstreamBuildIds, upstreamBuildIds)
+
+	/*
+		e.g.
+		Redirect Rules:
+		1         2 <---
+		^         |     \
+		|         v      \
+		5 <------ 3 ------> 4
+	*/
+	redirectRules = []*persistencepb.RedirectRule{
+		mkRedirectRulePersistence(mkRedirectRule("2", "3"), createTs, nil),
+		mkRedirectRulePersistence(mkRedirectRule("3", "4"), createTs, nil),
+		mkRedirectRulePersistence(mkRedirectRule("3", "5"), createTs, nil),
+		mkRedirectRulePersistence(mkRedirectRule("4", "2"), createTs, nil),
+		mkRedirectRulePersistence(mkRedirectRule("5", "1"), createTs, nil),
+	}
+	expectedUpstreamBuildIds = []string{"5", "3", "2", "4"}
+	upstreamBuildIds = getUpstreamBuildIds("1", redirectRules)
+	slices.Sort(expectedUpstreamBuildIds)
+	slices.Sort(upstreamBuildIds)
+	assert.Equal(t, expectedUpstreamBuildIds, upstreamBuildIds)
 }
