@@ -382,10 +382,8 @@ func (h *OutgoingServiceRegistry) validateUpsertRequest(req upsertRequest) error
 			u, err := url.Parse(req.GetSpec().GetUrl())
 			if err != nil {
 				issues.Appendf("malformed outgoing service URL: %v", err)
-			} else {
-				if u.Scheme != "http" && u.Scheme != "https" {
-					issues.Appendf("outgoing service URL must have http or https scheme but has %q", u.Scheme)
-				}
+			} else if u.Scheme != "http" && u.Scheme != "https" {
+				issues.Appendf("outgoing service URL must have http or https scheme but has %q", u.Scheme)
 			}
 		}
 
@@ -399,10 +397,8 @@ func (h *OutgoingServiceRegistry) validateUpsertRequest(req upsertRequest) error
 			u, err := url.Parse(req.GetSpec().GetPublicCallbackUrl())
 			if err != nil {
 				issues.Appendf("malformed outgoing service public callback URL: %v", err)
-			} else {
-				if u.Scheme != "http" && u.Scheme != "https" {
-					issues.Appendf("outgoing service public callback URL must have http or https scheme but has %q", u.Scheme)
-				}
+			} else if u.Scheme != "http" && u.Scheme != "https" {
+				issues.Appendf("outgoing service public callback URL must have http or https scheme but has %q", u.Scheme)
 			}
 		}
 	}

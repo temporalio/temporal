@@ -363,7 +363,7 @@ func TestCreate_NoSpec(t *testing.T) {
 	require.ErrorContains(t, err, nexus.IssueSpecNotSet)
 }
 
-func TestCreate_NoURL(t *testing.T) {
+func TestCreate_FailsWhen_NoURL(t *testing.T) {
 	t.Parallel()
 	registry := nexus.NewOutgoingServiceRegistry(nil, nil, newConfig())
 	_, err := registry.Create(
@@ -379,7 +379,7 @@ func TestCreate_NoURL(t *testing.T) {
 	require.ErrorContains(t, err, nexus.IssueURLNotSet)
 }
 
-func TestCreate_NoPublicCallbackURL(t *testing.T) {
+func TestCreate_FailsWhen_NoPublicCallbackURL(t *testing.T) {
 	t.Parallel()
 	registry := nexus.NewOutgoingServiceRegistry(nil, nil, newConfig())
 	_, err := registry.Create(
@@ -395,7 +395,7 @@ func TestCreate_NoPublicCallbackURL(t *testing.T) {
 	require.ErrorContains(t, err, nexus.IssueURLNotSet)
 }
 
-func TestCreate_URLTooLong(t *testing.T) {
+func TestCreate_FailsWhen_URLTooLong(t *testing.T) {
 	t.Parallel()
 	config := newConfig()
 	registry := nexus.NewOutgoingServiceRegistry(nil, nil, config)
@@ -417,7 +417,7 @@ func TestCreate_URLTooLong(t *testing.T) {
 	assert.ErrorContains(t, err, strconv.Itoa(config.MaxURLLength()))
 }
 
-func TestCreate_PublicCallbackURLTooLong(t *testing.T) {
+func TestCreate_FailsWhen_PublicCallbackURLTooLong(t *testing.T) {
 	t.Parallel()
 	config := newConfig()
 	registry := nexus.NewOutgoingServiceRegistry(nil, nil, config)

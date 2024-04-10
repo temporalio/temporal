@@ -140,12 +140,7 @@ func (s *ClientFunctionalSuite) TestNexusOperationSyncCompletion() {
 		},
 	}
 	listenAddr := allocListenAddress(s.T())
-	shutdownServer := newNexusServer(s.T(), listenAddr, h)
-	defer func() {
-		if err := shutdownServer(); err != nil {
-			panic(err)
-		}
-	}()
+	newNexusServer(s.T(), listenAddr, h)
 
 	_, err := s.engine.RegisterNamespace(ctx, &workflowservice.RegisterNamespaceRequest{
 		Namespace:                        namespace,
@@ -245,7 +240,7 @@ func allocListenAddress(t *testing.T) string {
 	return listenAddr
 }
 
-func newNexusServer(t *testing.T, listenAddr string, handler nexus.Handler) func() error {
+func newNexusServer(t *testing.T, listenAddr string, handler nexus.Handler) {
 	hh := nexus.NewHTTPHandler(nexus.HandlerOptions{
 		Handler: handler,
 	})
@@ -257,18 +252,17 @@ func newNexusServer(t *testing.T, listenAddr string, handler nexus.Handler) func
 		errCh <- srv.Serve(listener)
 	}()
 
-	return func() error {
+	t.Cleanup(func() {
 		// Graceful shutdown
 		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 		defer cancel()
 		if err := srv.Shutdown(ctx); err != nil {
-			return err
+			panic(err)
 		}
 		if err := <-errCh; err != nil && !errors.Is(err, http.ErrServerClosed) {
-			return err
+			panic(err)
 		}
-		return nil
-	}
+	})
 }
 
 type handler struct {

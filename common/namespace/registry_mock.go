@@ -302,18 +302,18 @@ func (mr *MockRegistryMockRecorder) GetPingChecks() *gomock.Call {
 }
 
 // NexusOutgoingService mocks base method.
-func (m *MockRegistry) NexusOutgoingService(namespaceID ID, name string) (*v1.OutgoingServiceSpec, error) {
+func (m *MockRegistry) NexusOutgoingService(namespaceID ID, serviceName string) (*v1.OutgoingServiceSpec, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "NexusOutgoingService", namespaceID, name)
+	ret := m.ctrl.Call(m, "NexusOutgoingService", namespaceID, serviceName)
 	ret0, _ := ret[0].(*v1.OutgoingServiceSpec)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
 // NexusOutgoingService indicates an expected call of NexusOutgoingService.
-func (mr *MockRegistryMockRecorder) NexusOutgoingService(namespaceID, name interface{}) *gomock.Call {
+func (mr *MockRegistryMockRecorder) NexusOutgoingService(namespaceID, serviceName interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "NexusOutgoingService", reflect.TypeOf((*MockRegistry)(nil).NexusOutgoingService), namespaceID, name)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "NexusOutgoingService", reflect.TypeOf((*MockRegistry)(nil).NexusOutgoingService), namespaceID, serviceName)
 }
 
 // RegisterStateChangeCallback mocks base method.

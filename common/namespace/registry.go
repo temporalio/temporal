@@ -149,7 +149,7 @@ type (
 		// GetCustomSearchAttributesMapper is a temporary solution to be able to get search attributes
 		// with from persistence if forceSearchAttributesCacheRefreshOnRead is true.
 		GetCustomSearchAttributesMapper(name Name) (CustomSearchAttributesMapper, error)
-		NexusOutgoingService(namespaceID ID, name string) (*nexuspb.OutgoingServiceSpec, error)
+		NexusOutgoingService(namespaceID ID, serviceName string) (*nexuspb.OutgoingServiceSpec, error)
 		Start()
 		Stop()
 	}

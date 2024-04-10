@@ -27,94 +27,94 @@ import (
 	"go.temporal.io/server/service/history/hsm"
 )
 
-type NexusOperationScheduledEventDefinition struct{}
+type ScheduledEventDefinition struct{}
 
-func (n NexusOperationScheduledEventDefinition) IsWorkflowTaskTrigger() bool {
+func (n ScheduledEventDefinition) IsWorkflowTaskTrigger() bool {
 	return false
 }
 
-func (n NexusOperationScheduledEventDefinition) Type() enumspb.EventType {
+func (n ScheduledEventDefinition) Type() enumspb.EventType {
 	return enumspb.EVENT_TYPE_NEXUS_OPERATION_SCHEDULED
 }
 
-type NexusOperationCancelRequestedEventDefinition struct{}
+type CancelRequestedEventDefinition struct{}
 
-func (n NexusOperationCancelRequestedEventDefinition) IsWorkflowTaskTrigger() bool {
+func (n CancelRequestedEventDefinition) IsWorkflowTaskTrigger() bool {
 	return false
 }
 
-func (n NexusOperationCancelRequestedEventDefinition) Type() enumspb.EventType {
+func (n CancelRequestedEventDefinition) Type() enumspb.EventType {
 	return enumspb.EVENT_TYPE_NEXUS_OPERATION_CANCEL_REQUESTED
 }
 
-type NexusOperationStartedEventDefinition struct{}
+type StartedEventDefinition struct{}
 
-func (n NexusOperationStartedEventDefinition) IsWorkflowTaskTrigger() bool {
+func (n StartedEventDefinition) IsWorkflowTaskTrigger() bool {
 	return true
 }
 
-func (n NexusOperationStartedEventDefinition) Type() enumspb.EventType {
+func (n StartedEventDefinition) Type() enumspb.EventType {
 	return enumspb.EVENT_TYPE_NEXUS_OPERATION_STARTED
 }
 
-type NexusOperationCompletedEventDefinition struct{}
+type CompletedEventDefinition struct{}
 
-func (n NexusOperationCompletedEventDefinition) IsWorkflowTaskTrigger() bool {
+func (n CompletedEventDefinition) IsWorkflowTaskTrigger() bool {
 	return true
 }
 
-func (n NexusOperationCompletedEventDefinition) Type() enumspb.EventType {
+func (n CompletedEventDefinition) Type() enumspb.EventType {
 	return enumspb.EVENT_TYPE_NEXUS_OPERATION_COMPLETED
 }
 
-type NexusOperationFailedEventDefinition struct{}
+type FailedEventDefinition struct{}
 
-func (n NexusOperationFailedEventDefinition) IsWorkflowTaskTrigger() bool {
+func (n FailedEventDefinition) IsWorkflowTaskTrigger() bool {
 	return true
 }
 
-func (n NexusOperationFailedEventDefinition) Type() enumspb.EventType {
+func (n FailedEventDefinition) Type() enumspb.EventType {
 	return enumspb.EVENT_TYPE_NEXUS_OPERATION_FAILED
 }
 
-type NexusOperationCanceledEventDefinition struct{}
+type CanceledEventDefinition struct{}
 
-func (n NexusOperationCanceledEventDefinition) IsWorkflowTaskTrigger() bool {
+func (n CanceledEventDefinition) IsWorkflowTaskTrigger() bool {
 	return true
 }
 
-func (n NexusOperationCanceledEventDefinition) Type() enumspb.EventType {
+func (n CanceledEventDefinition) Type() enumspb.EventType {
 	return enumspb.EVENT_TYPE_NEXUS_OPERATION_CANCELED
 }
 
-type NexusOperationTimedOutEventDefinition struct{}
+type TimedOutEventDefinition struct{}
 
-func (n NexusOperationTimedOutEventDefinition) IsWorkflowTaskTrigger() bool {
+func (n TimedOutEventDefinition) IsWorkflowTaskTrigger() bool {
 	return true
 }
 
-func (n NexusOperationTimedOutEventDefinition) Type() enumspb.EventType {
+func (n TimedOutEventDefinition) Type() enumspb.EventType {
 	return enumspb.EVENT_TYPE_NEXUS_OPERATION_TIMED_OUT
 }
 
 func RegisterEventDefinitions(reg *hsm.Registry) error {
-	if err := reg.RegisterEventDefinition(NexusOperationScheduledEventDefinition{}); err != nil {
+	if err := reg.RegisterEventDefinition(ScheduledEventDefinition{}); err != nil {
 		return err
 	}
-	if err := reg.RegisterEventDefinition(NexusOperationCancelRequestedEventDefinition{}); err != nil {
+	if err := reg.RegisterEventDefinition(CancelRequestedEventDefinition{}); err != nil {
 		return err
 	}
-	if err := reg.RegisterEventDefinition(NexusOperationStartedEventDefinition{}); err != nil {
+	if err := reg.RegisterEventDefinition(StartedEventDefinition{}); err != nil {
 		return err
 	}
-	if err := reg.RegisterEventDefinition(NexusOperationCompletedEventDefinition{}); err != nil {
+	if err := reg.RegisterEventDefinition(CompletedEventDefinition{}); err != nil {
 		return err
 	}
-	if err := reg.RegisterEventDefinition(NexusOperationFailedEventDefinition{}); err != nil {
+	if err := reg.RegisterEventDefinition(FailedEventDefinition{}); err != nil {
 		return err
 	}
-	if err := reg.RegisterEventDefinition(NexusOperationCanceledEventDefinition{}); err != nil {
+	if err := reg.RegisterEventDefinition(CanceledEventDefinition{}); err != nil {
 		return err
 	}
-	return reg.RegisterEventDefinition(NexusOperationTimedOutEventDefinition{})
+	return reg.RegisterEventDefinition(TimedOutEventDefinition{})
 }
