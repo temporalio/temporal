@@ -1129,12 +1129,14 @@ func (e *matchingEngineImpl) UpdateWorkerVersioningRules(
 				data.GetVersioningData(),
 				req.GetAddCompatibleRedirectRule(),
 				e.config.RedirectRuleLimitPerQueue(ns.Name().String()),
+				e.config.RedirectRuleChainLimitPerQueue(ns.Name().String()),
 			)
 		case *workflowservice.UpdateWorkerVersioningRulesRequest_ReplaceCompatibleRedirectRule:
 			versioningData, err = ReplaceCompatibleRedirectRule(
 				updatedClock,
 				data.GetVersioningData(),
 				req.GetReplaceCompatibleRedirectRule(),
+				e.config.RedirectRuleChainLimitPerQueue(ns.Name().String()),
 			)
 		case *workflowservice.UpdateWorkerVersioningRulesRequest_DeleteCompatibleRedirectRule:
 			versioningData, err = DeleteCompatibleRedirectRule(

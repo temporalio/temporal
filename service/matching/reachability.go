@@ -40,6 +40,7 @@ import (
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence/visibility/manager"
 	"go.temporal.io/server/common/searchattribute"
+	"go.temporal.io/server/common/util"
 	"go.temporal.io/server/common/worker_versioning"
 )
 
@@ -83,7 +84,7 @@ func (rc *reachabilityCalculator) run(ctx context.Context, buildId string) (enum
 	}
 
 	// Gather list of all build ids that could point to buildId
-	buildIdsOfInterest := rc.getBuildIdsOfInterest(buildId, false)
+	buildIdsOfInterest := rc.getBuildIdsOfInterest(buildId, time.Duration(0))
 
 	// 2. Cases for REACHABLE
 	// 2a. If buildId is assignable to new tasks
@@ -103,7 +104,7 @@ func (rc *reachabilityCalculator) run(ctx context.Context, buildId string) (enum
 	// Note: The below cases are not applicable to activity-only task queues, since we don't record those in visibility
 
 	// Gather list of all build ids that could point to buildId, now including deleted rules to account for the delay in updating visibility
-	buildIdsOfInterest = rc.getBuildIdsOfInterest(buildId, true)
+	buildIdsOfInterest = rc.getBuildIdsOfInterest(buildId, rc.buildIdVisibilityGracePeriod)
 
 	// 2c. If buildId is assignable to tasks from open workflows
 	existsOpenWFAssignedToBuildId, err := rc.existsWFAssignedToAny(ctx, rc.makeBuildIdCountRequest(buildIdsOfInterest, true))
@@ -129,56 +130,23 @@ func (rc *reachabilityCalculator) run(ctx context.Context, buildId string) (enum
 
 // getBuildIdsOfInterest returns a list of build ids that point to the given buildId in the graph
 // of redirect rules and adds the given build id to that list.
-// It considers rules if the deletion time is within versioningReachabilityDeletedRuleInclusionPeriod.
+// It considers rules if the deletion time is nil or within the given deletedRuleInclusionPeriod.
 func (rc *reachabilityCalculator) getBuildIdsOfInterest(
 	buildId string,
-	includeRecentlyDeleted bool) []string {
-	return append(rc.getUpstreamHelper(buildId, includeRecentlyDeleted, nil), buildId)
-}
+	deletedRuleInclusionPeriod time.Duration) []string {
 
-func (rc *reachabilityCalculator) getUpstreamHelper(
-	buildId string,
-	includeRecentlyDeleted bool,
-	visited []string) []string {
-	var upstream []string
-	visited = append(visited, buildId)
-	directSources := rc.getSourcesForTarget(buildId, includeRecentlyDeleted)
-
-	for _, src := range directSources {
-		if !slices.Contains(visited, src) {
-			upstream = append(upstream, src)
-			upstream = append(upstream, rc.getUpstreamHelper(src, includeRecentlyDeleted, visited)...)
+	withinRuleInclusionPeriod := func(clk *clock.HybridLogicalClock) bool {
+		if clk == nil {
+			return true
 		}
+		return hlc.Since(clk) <= deletedRuleInclusionPeriod
 	}
 
-	// dedupe
-	upstreamUnique := make(map[string]bool)
-	for _, bid := range upstream {
-		upstreamUnique[bid] = true
-	}
-	upstream = make([]string, 0)
-	for k := range upstreamUnique {
-		upstream = append(upstream, k)
-	}
-	return upstream
-}
+	includedRules := util.FilterSlice(slices.Clone(rc.redirectRules), func(rr *persistencespb.RedirectRule) bool {
+		return rr.DeleteTimestamp == nil || withinRuleInclusionPeriod(rr.DeleteTimestamp)
+	})
 
-// getSourcesForTarget gets the first-degree sources for any redirect rule targeting buildId
-func (rc *reachabilityCalculator) getSourcesForTarget(buildId string, includeRecentlyDeleted bool) []string {
-	var sources []string
-	for _, rr := range rc.redirectRules {
-		if rr.GetRule().GetTargetBuildId() == buildId &&
-			((!includeRecentlyDeleted && rr.GetDeleteTimestamp() == nil) ||
-				(includeRecentlyDeleted && rc.withinDeletedRuleInclusionPeriod(rr.GetDeleteTimestamp()))) {
-			sources = append(sources, rr.GetRule().GetSourceBuildId())
-		}
-	}
-
-	return sources
-}
-
-func (rc *reachabilityCalculator) withinDeletedRuleInclusionPeriod(clk *clock.HybridLogicalClock) bool {
-	return clk == nil || hlc.Since(clk) <= rc.buildIdVisibilityGracePeriod
+	return append(getUpstreamBuildIds(buildId, includedRules), buildId)
 }
 
 func (rc *reachabilityCalculator) existsBackloggedActivityOrWFTaskAssignedToAny(ctx context.Context, buildIdsOfInterest []string) (bool, error) {
