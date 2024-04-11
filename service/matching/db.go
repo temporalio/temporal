@@ -268,7 +268,7 @@ func (db *taskQueueDB) CreateTasks(
 	// so that taskReader is guaranteed to see the new read level when SpoolTask wakes it up.
 	db.maxReadLevel.Store(maxReadLevel)
 
-	switch _ := err.(type) {
+	switch err.(type) {
 	// tasks were not created, restore the counter
 	case *persistence.ConditionFailedError:
 		db.approximateBacklogCount.Add(-int64(len(tasks)))
