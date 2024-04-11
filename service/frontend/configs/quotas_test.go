@@ -140,6 +140,7 @@ func (s *quotasSuite) TestNamespaceReplicationInducingAPIs() {
 		"/temporal.api.workflowservice.v1.WorkflowService/RegisterNamespace":                {},
 		"/temporal.api.workflowservice.v1.WorkflowService/UpdateNamespace":                  {},
 		"/temporal.api.workflowservice.v1.WorkflowService/UpdateWorkerBuildIdCompatibility": {},
+		"/temporal.api.workflowservice.v1.WorkflowService/UpdateWorkerVersioningRules":      {},
 	}
 
 	var service workflowservice.WorkflowServiceServer

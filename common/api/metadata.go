@@ -127,6 +127,8 @@ var (
 		"ListSchedules":                      {Scope: ScopeNamespace, Access: AccessReadOnly},
 		"UpdateWorkerBuildIdCompatibility":   {Scope: ScopeNamespace, Access: AccessWrite},
 		"GetWorkerBuildIdCompatibility":      {Scope: ScopeNamespace, Access: AccessReadOnly},
+		"UpdateWorkerVersioningRules":        {Scope: ScopeNamespace, Access: AccessWrite},
+		"GetWorkerVersioningRules":           {Scope: ScopeNamespace, Access: AccessReadOnly},
 		"GetWorkerTaskReachability":          {Scope: ScopeNamespace, Access: AccessReadOnly},
 		"UpdateWorkflowExecution":            {Scope: ScopeNamespace, Access: AccessWrite},
 		"PollWorkflowExecutionUpdate":        {Scope: ScopeNamespace, Access: AccessReadOnly},
