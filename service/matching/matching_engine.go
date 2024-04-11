@@ -826,35 +826,29 @@ func (e *matchingEngineImpl) DescribeTaskQueue(
 				if err != nil {
 					return nil, err
 				}
-				for _, vii := range partitionResp.VersionsInfoInternal {
-					if _, ok := physicalInfoByBuildId[vii.BuildId]; !ok {
-						physicalInfoByBuildId[vii.BuildId] = make(map[enumspb.TaskQueueType]*taskqueuespb.PhysicalTaskQueueInfo)
+				for buildId, vii := range partitionResp.VersionsInfoInternal {
+					if _, ok := physicalInfoByBuildId[buildId]; !ok {
+						physicalInfoByBuildId[buildId] = make(map[enumspb.TaskQueueType]*taskqueuespb.PhysicalTaskQueueInfo)
 					}
-					if physInfo, ok := physicalInfoByBuildId[vii.BuildId][taskQueueType]; !ok {
-						physicalInfoByBuildId[vii.BuildId][taskQueueType] = vii.PhysicalTaskQueueInfo
+					if physInfo, ok := physicalInfoByBuildId[buildId][taskQueueType]; !ok {
+						physicalInfoByBuildId[buildId][taskQueueType] = vii.PhysicalTaskQueueInfo
 					} else {
-						var bInfo *taskqueuepb.BacklogInfo
-						if i == 0 { // root partition
-							bInfo = vii.PhysicalTaskQueueInfo.BacklogInfo
-						}
 						merged := &taskqueuespb.PhysicalTaskQueueInfo{
 							Pollers:     append(physInfo.GetPollers(), vii.PhysicalTaskQueueInfo.GetPollers()...),
-							BacklogInfo: bInfo,
 						}
-						physicalInfoByBuildId[vii.BuildId][taskQueueType] = merged
+						physicalInfoByBuildId[buildId][taskQueueType] = merged
 					}
 				}
 			}
 		}
 		// smush internal info into versions info
-		versionsInfo := make([]*taskqueuepb.TaskQueueVersionInfo, 0)
+		versionsInfo := make(map[string]*taskqueuepb.TaskQueueVersionInfo, 0)
 		for bid, typeMap := range physicalInfoByBuildId {
-			typesInfo := make([]*taskqueuepb.TaskQueueTypeInfo, 0)
+			typesInfo := make(map[int32]*taskqueuepb.TaskQueueTypeInfo, 0)
 			for taskQueueType, physicalInfo := range typeMap {
-				typesInfo = append(typesInfo, &taskqueuepb.TaskQueueTypeInfo{
-					Type:    taskQueueType,
+				typesInfo[int32(taskQueueType)] = &taskqueuepb.TaskQueueTypeInfo{
 					Pollers: physicalInfo.Pollers,
-				})
+				}
 			}
 			reachability, err := getBuildIdTaskReachability(ctx,
 				userData.GetVersioningData(),
@@ -867,11 +861,10 @@ func (e *matchingEngineImpl) DescribeTaskQueue(
 			if err != nil {
 				return nil, err
 			}
-			versionsInfo = append(versionsInfo, &taskqueuepb.TaskQueueVersionInfo{
-				BuildId:          bid,
+			versionsInfo[bid] = &taskqueuepb.TaskQueueVersionInfo{
 				TypesInfo:        typesInfo,
 				TaskReachability: reachability,
-			})
+			}
 		}
 		return &matchingservice.DescribeTaskQueueResponse{
 			DescResponse: &workflowservice.DescribeTaskQueueResponse{

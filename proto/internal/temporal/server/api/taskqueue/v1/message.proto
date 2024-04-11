@@ -50,8 +50,6 @@ message TaskVersionDirective {
 }
 
 message TaskQueueVersionInfoInternal {
-    // Empty means unversioned.
-    string build_id = 1;
     PhysicalTaskQueueInfo physical_task_queue_info = 2;
 }
 

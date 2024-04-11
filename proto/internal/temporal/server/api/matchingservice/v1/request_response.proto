@@ -206,7 +206,7 @@ message DescribeTaskQueuePartitionRequest {
 }
 
 message DescribeTaskQueuePartitionResponse {
-    repeated temporal.server.api.taskqueue.v1.TaskQueueVersionInfoInternal versions_info_internal = 1;
+    map<string, temporal.server.api.taskqueue.v1.TaskQueueVersionInfoInternal> versions_info_internal = 1;
 }
 
 message ListTaskQueuePartitionsRequest {
