@@ -196,24 +196,24 @@ func NewEngine(
 	nexusIncomingServiceManager persistence.NexusIncomingServiceManager,
 ) Engine {
 	return &matchingEngineImpl{
-		status:                    common.DaemonStatusInitialized,
-		taskManager:               taskManager,
-		historyClient:             historyClient,
-		matchingRawClient:         matchingRawClient,
-		tokenSerializer:           common.NewProtoTaskTokenSerializer(),
-		historySerializer:         serialization.NewSerializer(),
-		logger:                    log.With(logger, tag.ComponentMatchingEngine),
-		throttledLogger:           log.With(throttledLogger, tag.ComponentMatchingEngine),
-		namespaceRegistry:         namespaceRegistry,
-		hostInfoProvider:          hostInfoProvider,
-		serviceResolver:           resolver,
-		membershipChangedCh:       make(chan *membership.ChangedEvent, 1), // allow one signal to be buffered while we're working
-		clusterMeta:               clusterMeta,
-		timeSource:                clock.NewRealTimeSource(), // No need to mock this at the moment
-		visibilityManager:         visibilityManager,
-		incomingServiceClient:     newIncomingServiceClient(nexusIncomingServiceManager),
-		metricsHandler:            metricsHandler.WithTags(metrics.OperationTag(metrics.MatchingEngineScope)),
-		partitions:        make(map[tqid.PartitionKey]taskQueuePartitionManager),
+		status:                common.DaemonStatusInitialized,
+		taskManager:           taskManager,
+		historyClient:         historyClient,
+		matchingRawClient:     matchingRawClient,
+		tokenSerializer:       common.NewProtoTaskTokenSerializer(),
+		historySerializer:     serialization.NewSerializer(),
+		logger:                log.With(logger, tag.ComponentMatchingEngine),
+		throttledLogger:       log.With(throttledLogger, tag.ComponentMatchingEngine),
+		namespaceRegistry:     namespaceRegistry,
+		hostInfoProvider:      hostInfoProvider,
+		serviceResolver:       resolver,
+		membershipChangedCh:   make(chan *membership.ChangedEvent, 1), // allow one signal to be buffered while we're working
+		clusterMeta:           clusterMeta,
+		timeSource:            clock.NewRealTimeSource(), // No need to mock this at the moment
+		visibilityManager:     visibilityManager,
+		incomingServiceClient: newIncomingServiceClient(nexusIncomingServiceManager),
+		metricsHandler:        metricsHandler.WithTags(metrics.OperationTag(metrics.MatchingEngineScope)),
+		partitions:            make(map[tqid.PartitionKey]taskQueuePartitionManager),
 		gaugeMetrics: gaugeMetrics{
 			loadedTaskQueueFamilyCount:    make(map[taskQueueCounterKey]int),
 			loadedTaskQueueCount:          make(map[taskQueueCounterKey]int),

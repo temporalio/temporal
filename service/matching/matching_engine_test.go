@@ -1074,7 +1074,9 @@ func (s *matchingEngineSuite) concurrentPublishConsumeActivities(
 	s.taskManager.getQueueManager(dbq).rangeID = initialRangeID
 	mgr := s.newPartitionManager(dbq.partition, s.matchingEngine.config)
 
-	mgrImpl := mgr.(*taskQueuePartitionManagerImpl).defaultQueue.(*physicalTaskQueueManagerImpl)
+	mgrImpl, ok := mgr.(*taskQueuePartitionManagerImpl).defaultQueue.(*physicalTaskQueueManagerImpl)
+	s.Assert().True(ok)
+
 	mgrImpl.matcher.config.MinTaskThrottlingBurstSize = func() int { return 0 }
 	mgrImpl.matcher.rateLimiter = quotas.NewRateLimiter(
 		defaultTaskDispatchRPS,

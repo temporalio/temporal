@@ -432,7 +432,8 @@ func TestTQMDoesFinalUpdateOnIdleUnload(t *testing.T) {
 	tqCfg.config = cfg
 
 	tqm := mustCreateTestTaskQueueManagerWithConfig(t, controller, tqCfg)
-	tm := tqm.partitionMgr.engine.taskManager.(*testTaskManager)
+	tm, ok := tqm.partitionMgr.engine.taskManager.(*testTaskManager)
+	require.True(t, ok)
 
 	tqm.Start()
 	time.Sleep(2 * time.Second) // will unload due to idleness
@@ -451,7 +452,8 @@ func TestTQMDoesNotDoFinalUpdateOnOwnershipLost(t *testing.T) {
 	tqCfg.config = cfg
 
 	tqm := mustCreateTestTaskQueueManagerWithConfig(t, controller, tqCfg)
-	tm := tqm.partitionMgr.engine.taskManager.(*testTaskManager)
+	tm, ok := tqm.partitionMgr.engine.taskManager.(*testTaskManager)
+	require.True(t, ok)
 
 	tqm.Start()
 	time.Sleep(1 * time.Second)

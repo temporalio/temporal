@@ -254,7 +254,9 @@ func TestInvalidRpcNames(t *testing.T) {
 func mustParseNormalPartition(t *testing.T, rpcName string, taskType enumspb.TaskQueueType) *NormalPartition {
 	p, err := PartitionFromProto(&taskqueuepb.TaskQueue{Name: rpcName}, "", taskType)
 	require.NoError(t, err)
-	return p.(*NormalPartition)
+	res, ok := p.(*NormalPartition)
+	require.True(t, ok)
+	return res
 }
 
 func mustParent(p Partition, n int) *NormalPartition {
