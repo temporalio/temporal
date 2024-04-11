@@ -205,6 +205,10 @@ const (
 	// in the versioning data for a task queue. Update requests which would cause the versioning data to exceed this
 	// number will fail with a FailedPrecondition error.
 	RedirectRuleLimitPerQueue = "limit.wv.RedirectRuleLimitPerQueue"
+	// RedirectRuleChainLimitPerQueue is the max number of compatible redirect rules allowed to be connected
+	// in one chain in the versioning data for a task queue. Update requests which would cause the versioning data
+	// to exceed this number will fail with a FailedPrecondition error.
+	RedirectRuleChainLimitPerQueue = "limit.wv.RedirectRuleChainLimitPerQueue"
 	// MatchingDeletedRuleRetentionTime is the length of time that deleted Version Assignment Rules and
 	// Deleted Redirect Rules will be kept in the DB (with DeleteTimestamp). After this time, the tombstones are deleted at the next time update of versioning data for the task queue.
 	MatchingDeletedRuleRetentionTime = "matching.wv.DeletedRuleRetentionTime"

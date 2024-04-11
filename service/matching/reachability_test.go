@@ -26,6 +26,7 @@ package matching
 
 import (
 	"context"
+	"slices"
 	"testing"
 	"time"
 
@@ -41,8 +42,17 @@ import (
 
 const testBuildIdVisibilityGracePeriod = 2 * time.Minute
 
-func TestGetBuildIdsOfInterest_NoCycle(t *testing.T) {
+func TestGetBuildIdsOfInterest(t *testing.T) {
 	t.Parallel()
+	rc := mkTestReachabilityCalculator()
+
+	// start time 3x rc.buildIdVisibilityGracePeriod ago
+	timesource := commonclock.NewEventTimeSource().Update(time.Now().Add(-3*rc.buildIdVisibilityGracePeriod + time.Second))
+	createTs := hlc.Next(hlc.Zero(1), timesource)
+	timesource.Advance(rc.buildIdVisibilityGracePeriod)
+	oldDeleteTs := hlc.Next(createTs, timesource)
+	timesource.Advance(rc.buildIdVisibilityGracePeriod)
+	recentDeleteTs := hlc.Next(oldDeleteTs, timesource) // this should be within the grace period by 1s
 	/*
 		e.g.
 		Redirect Rules:
@@ -52,78 +62,45 @@ func TestGetBuildIdsOfInterest_NoCycle(t *testing.T) {
 		1 <------ 2
 		^
 		|
-		5 <------ 3 <------ 4
+		5 <------ 3 <------ 4 (recently-deleted) <------ 6 (old-deleted) <------ 7 (recently-deleted)
 	*/
-	createTs := hlc.Zero(1)
-	rc := &reachabilityCalculator{
-		redirectRules: []*persistencespb.RedirectRule{
-			mkRedirectRulePersistence(mkRedirectRule("1", "10"), createTs, nil),
-			mkRedirectRulePersistence(mkRedirectRule("2", "1"), createTs, nil),
-			mkRedirectRulePersistence(mkRedirectRule("3", "5"), createTs, nil),
-			mkRedirectRulePersistence(mkRedirectRule("4", "3"), createTs, nil),
-			mkRedirectRulePersistence(mkRedirectRule("5", "1"), createTs, nil),
-		},
+	rc.redirectRules = []*persistencespb.RedirectRule{
+		mkRedirectRulePersistence(mkRedirectRule("1", "10"), createTs, nil),
+		mkRedirectRulePersistence(mkRedirectRule("2", "1"), createTs, nil),
+		mkRedirectRulePersistence(mkRedirectRule("3", "5"), createTs, nil),
+		mkRedirectRulePersistence(mkRedirectRule("4", "3"), createTs, recentDeleteTs),
+		mkRedirectRulePersistence(mkRedirectRule("5", "1"), createTs, nil),
+		mkRedirectRulePersistence(mkRedirectRule("6", "4"), createTs, oldDeleteTs),
+		mkRedirectRulePersistence(mkRedirectRule("7", "6"), createTs, recentDeleteTs),
 	}
 
-	expectedUpstreamBuildIds := []string{"2", "5", "3", "4", "1"}
-	upstreamBuildIds := rc.getBuildIdsOfInterest("1", true)
+	// getBuildIdsOfInterest(1, deletedRuleInclusionPeriod=nil)
+	buildIdsOfInterest := rc.getBuildIdsOfInterest("1", time.Duration(0))
+	expectedBuildIdsOfInterest := []string{"2", "5", "3", "1"}
+	slices.Sort(expectedBuildIdsOfInterest)
+	slices.Sort(buildIdsOfInterest)
+	assert.Equal(t, expectedBuildIdsOfInterest, buildIdsOfInterest)
 
-	for _, bid := range expectedUpstreamBuildIds {
-		assert.Contains(t, upstreamBuildIds, bid)
-	}
-	assert.Equal(t, len(expectedUpstreamBuildIds), len(upstreamBuildIds))
-}
+	// getBuildIdsOfInterest(1, deletedRuleInclusionPeriod=rc.buildIdVisibilityGracePeriod)
+	buildIdsOfInterest = rc.getBuildIdsOfInterest("1", rc.buildIdVisibilityGracePeriod)
+	expectedBuildIdsOfInterest = []string{"2", "5", "3", "4", "1"}
+	slices.Sort(expectedBuildIdsOfInterest)
+	slices.Sort(buildIdsOfInterest)
+	assert.Equal(t, expectedBuildIdsOfInterest, buildIdsOfInterest)
 
-func TestGetBuildIdsOfInterest_WithCycle(t *testing.T) {
-	t.Parallel()
-	/*
-		e.g.
-		Redirect Rules:
-		1 ------> 2
-		^         |
-		|         v
-		5 <------ 3 ------> 4
-	*/
-	createTs := hlc.Zero(1)
-	rc := &reachabilityCalculator{
-		redirectRules: []*persistencespb.RedirectRule{
-			mkRedirectRulePersistence(mkRedirectRule("1", "2"), createTs, nil),
-			mkRedirectRulePersistence(mkRedirectRule("2", "3"), createTs, nil),
-			mkRedirectRulePersistence(mkRedirectRule("3", "4"), createTs, nil),
-			mkRedirectRulePersistence(mkRedirectRule("3", "5"), createTs, nil),
-			mkRedirectRulePersistence(mkRedirectRule("5", "1"), createTs, nil),
-		},
-	}
-	expectedUpstreamBuildIds := []string{"5", "3", "2", "1"}
-	upstreamBuildIds := rc.getBuildIdsOfInterest("1", true)
-	for _, bid := range expectedUpstreamBuildIds {
-		assert.Contains(t, upstreamBuildIds, bid)
-	}
-	assert.Equal(t, len(expectedUpstreamBuildIds), len(upstreamBuildIds))
+	// getBuildIdsOfInterest(6, deletedRuleInclusionPeriod=nil)
+	buildIdsOfInterest = rc.getBuildIdsOfInterest("6", time.Duration(0))
+	expectedBuildIdsOfInterest = []string{"6"}
+	slices.Sort(expectedBuildIdsOfInterest)
+	slices.Sort(buildIdsOfInterest)
+	assert.Equal(t, expectedBuildIdsOfInterest, buildIdsOfInterest)
 
-	/*
-		e.g.
-		Redirect Rules:
-		1         2 <---
-		^         |     \
-		|         v      \
-		5 <------ 3 ------> 4
-	*/
-	rc = &reachabilityCalculator{
-		redirectRules: []*persistencespb.RedirectRule{
-			mkRedirectRulePersistence(mkRedirectRule("2", "3"), createTs, nil),
-			mkRedirectRulePersistence(mkRedirectRule("3", "4"), createTs, nil),
-			mkRedirectRulePersistence(mkRedirectRule("3", "5"), createTs, nil),
-			mkRedirectRulePersistence(mkRedirectRule("4", "2"), createTs, nil),
-			mkRedirectRulePersistence(mkRedirectRule("5", "1"), createTs, nil),
-		},
-	}
-	expectedUpstreamBuildIds = []string{"5", "3", "2", "4", "1"}
-	upstreamBuildIds = rc.getBuildIdsOfInterest("1", true)
-	for _, bid := range expectedUpstreamBuildIds {
-		assert.Contains(t, upstreamBuildIds, bid)
-	}
-	assert.Equal(t, len(expectedUpstreamBuildIds), len(upstreamBuildIds))
+	// getBuildIdsOfInterest(6, deletedRuleInclusionPeriod=rc.buildIdVisibilityGracePeriod)
+	buildIdsOfInterest = rc.getBuildIdsOfInterest("6", rc.buildIdVisibilityGracePeriod)
+	expectedBuildIdsOfInterest = []string{"7", "6"}
+	slices.Sort(expectedBuildIdsOfInterest)
+	slices.Sort(buildIdsOfInterest)
+	assert.Equal(t, expectedBuildIdsOfInterest, buildIdsOfInterest)
 }
 
 func TestExistsBackloggedActivityOrWFAssignedTo(t *testing.T) {

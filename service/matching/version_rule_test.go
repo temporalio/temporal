@@ -41,6 +41,11 @@ import (
 	"google.golang.org/protobuf/proto"
 )
 
+const (
+	ignoreMaxRules = 1000
+	ignoreMaxChain = 1000
+)
+
 func mkNewInsertAssignmentReq(rule *taskqueuepb.BuildIdAssignmentRule, ruleIdx int32) *workflowservice.UpdateWorkerVersioningRulesRequest_InsertBuildIdAssignmentRule {
 	return &workflowservice.UpdateWorkerVersioningRulesRequest_InsertBuildIdAssignmentRule{
 		RuleIndex: ruleIdx,
@@ -144,9 +149,10 @@ func insertAssignmentRule(rule *taskqueuepb.BuildIdAssignmentRule,
 func insertRedirectRule(rule *taskqueuepb.CompatibleBuildIdRedirectRule,
 	data *persistencepb.VersioningData,
 	clock *hlc.Clock,
-	maxAssignmentRules int,
+	maxRedirectRules,
+	maxRedirectRuleChain int,
 ) (*persistencepb.VersioningData, error) {
-	return AddCompatibleRedirectRule(clock, data, mkNewInsertRedirectReq(rule), maxAssignmentRules)
+	return AddCompatibleRedirectRule(clock, data, mkNewInsertRedirectReq(rule), maxRedirectRules, maxRedirectRuleChain)
 }
 
 func replaceAssignmentRule(rule *taskqueuepb.BuildIdAssignmentRule,
@@ -161,8 +167,9 @@ func replaceAssignmentRule(rule *taskqueuepb.BuildIdAssignmentRule,
 func replaceRedirectRule(rule *taskqueuepb.CompatibleBuildIdRedirectRule,
 	data *persistencepb.VersioningData,
 	clock *hlc.Clock,
+	maxRedirectRuleChain int,
 ) (*persistencepb.VersioningData, error) {
-	return ReplaceCompatibleRedirectRule(clock, data, mkNewReplaceRedirectReq(rule))
+	return ReplaceCompatibleRedirectRule(clock, data, mkNewReplaceRedirectReq(rule), maxRedirectRuleChain)
 }
 
 func deleteAssignmentRule(data *persistencepb.VersioningData,
@@ -265,32 +272,30 @@ func TestInsertAssignmentRuleMaxRules(t *testing.T) {
 // Test requirement that target id isn't in a version set (success and failure)
 func TestInsertAssignmentRuleInVersionSet(t *testing.T) {
 	t.Parallel()
-	maxRules := 3
 	clock := hlc.Zero(1)
 	data := mkInitialData(1, clock)
 
 	// target 0 --> failure
-	_, err := insertAssignmentRule(mkAssignmentRule("0", nil), data, clock, 0, maxRules)
+	_, err := insertAssignmentRule(mkAssignmentRule("0", nil), data, clock, 0, ignoreMaxRules)
 	assert.Error(t, err)
 
 	// insert 1 --> success
-	_, err = insertAssignmentRule(mkAssignmentRule("1", nil), data, clock, 0, maxRules)
+	_, err = insertAssignmentRule(mkAssignmentRule("1", nil), data, clock, 0, ignoreMaxRules)
 	assert.NoError(t, err)
 }
 
 func TestInsertAssignmentRuleTerminalBuildID(t *testing.T) {
 	t.Parallel()
-	maxRules := 3
 	clock := hlc.Zero(1)
-	data, err := insertRedirectRule(mkRedirectRule("0", "1"), mkInitialData(0, clock), clock, maxRules)
+	data, err := insertRedirectRule(mkRedirectRule("0", "1"), mkInitialData(0, clock), clock, ignoreMaxRules, ignoreMaxChain)
 	assert.NoError(t, err)
 
 	// insert 1 --> failure
-	_, err = insertAssignmentRule(mkAssignmentRule("0", mkNewAssignmentPercentageRamp(10)), data, clock, 0, maxRules)
+	_, err = insertAssignmentRule(mkAssignmentRule("0", mkNewAssignmentPercentageRamp(10)), data, clock, 0, ignoreMaxRules)
 	assert.Error(t, err)
 
 	// insert 2 --> success
-	_, err = insertAssignmentRule(mkAssignmentRule("1", mkNewAssignmentPercentageRamp(10)), data, clock, 0, maxRules)
+	_, err = insertAssignmentRule(mkAssignmentRule("1", mkNewAssignmentPercentageRamp(10)), data, clock, 0, ignoreMaxRules)
 	assert.NoError(t, err)
 }
 
@@ -393,7 +398,7 @@ func TestReplaceAssignmentRuleTerminalBuildID(t *testing.T) {
 	assert.NoError(t, err)
 }
 
-func TestReplaceAssignmentRuleTestrequireUnconditional(t *testing.T) {
+func TestReplaceAssignmentRuleTestRequireUnconditional(t *testing.T) {
 	t.Parallel()
 	clock := hlc.Zero(1)
 	data := mkInitialData(0, clock)
@@ -496,13 +501,12 @@ func TestDeleteAssignmentRuleTestrequireUnconditional(t *testing.T) {
 
 func TestInsertRedirectRuleBasic(t *testing.T) {
 	t.Parallel()
-	maxRules := 10
 	clock := hlc.Zero(1)
 	initialData := mkInitialData(0, clock)
 	expectedSet := make([]*persistencepb.RedirectRule, 0)
 
 	rule1 := mkRedirectRule("1", "0")
-	data, err := insertRedirectRule(rule1, initialData, clock, maxRules)
+	data, err := insertRedirectRule(rule1, initialData, clock, ignoreMaxRules, ignoreMaxChain)
 	assert.NoError(t, err)
 	expectedSet = append(expectedSet, mkRedirectRulePersistence(rule1, clock, nil))
 	for _, r := range data.RedirectRules {
@@ -510,7 +514,7 @@ func TestInsertRedirectRuleBasic(t *testing.T) {
 	}
 
 	rule2 := mkRedirectRule("2", "0")
-	data, err = insertRedirectRule(rule2, data, clock, maxRules)
+	data, err = insertRedirectRule(rule2, data, clock, ignoreMaxRules, ignoreMaxChain)
 	assert.NoError(t, err)
 	expectedSet = append(expectedSet, mkRedirectRulePersistence(rule2, clock, nil))
 	for _, r := range data.RedirectRules {
@@ -518,7 +522,7 @@ func TestInsertRedirectRuleBasic(t *testing.T) {
 	}
 
 	rule3 := mkRedirectRule("3", "0")
-	data, err = insertRedirectRule(rule3, data, clock, maxRules)
+	data, err = insertRedirectRule(rule3, data, clock, ignoreMaxRules, ignoreMaxChain)
 	assert.NoError(t, err)
 	expectedSet = append(expectedSet, mkRedirectRulePersistence(rule3, clock, nil))
 	for _, r := range data.RedirectRules {
@@ -539,42 +543,40 @@ func TestInsertRedirectRuleMaxRules(t *testing.T) {
 	for i := 0; i < 3; i++ {
 		src := fmt.Sprintf("%d", i)
 		dst := fmt.Sprintf("%d", i+1)
-		data, err = insertRedirectRule(mkRedirectRule(src, dst), data, clock, maxRules)
+		data, err = insertRedirectRule(mkRedirectRule(src, dst), data, clock, maxRules, ignoreMaxChain)
 		assert.NoError(t, err)
 	}
 
 	// insert fourth --> error
-	_, err = insertRedirectRule(mkRedirectRule("10", "20"), data, clock, maxRules)
+	_, err = insertRedirectRule(mkRedirectRule("10", "20"), data, clock, maxRules, ignoreMaxChain)
 	assert.Error(t, err)
 }
 
 func TestInsertRedirectRuleInVersionSet(t *testing.T) {
 	t.Parallel()
-	maxRules := 3
 	clock := hlc.Zero(1)
 	// make version set with build id "0" in it
 	initialData := mkInitialData(1, clock)
 
 	// insert with source build id "0" --> failure
-	_, err := insertRedirectRule(mkRedirectRule("0", "1"), initialData, clock, maxRules)
+	_, err := insertRedirectRule(mkRedirectRule("0", "1"), initialData, clock, ignoreMaxRules, ignoreMaxChain)
 	assert.Error(t, err)
 
 	// insert with target build id "0" --> failure
-	_, err = insertRedirectRule(mkRedirectRule("1", "0"), initialData, clock, maxRules)
+	_, err = insertRedirectRule(mkRedirectRule("1", "0"), initialData, clock, ignoreMaxRules, ignoreMaxChain)
 	assert.Error(t, err)
 
 	// insert with non-zero source build id --> success
-	_, err = insertRedirectRule(mkRedirectRule("1", "2"), initialData, clock, maxRules)
+	_, err = insertRedirectRule(mkRedirectRule("1", "2"), initialData, clock, ignoreMaxRules, ignoreMaxChain)
 	assert.NoError(t, err)
 
 	// insert with non-zero target build id --> success
-	_, err = insertRedirectRule(mkRedirectRule("2", "1"), initialData, clock, maxRules)
+	_, err = insertRedirectRule(mkRedirectRule("2", "1"), initialData, clock, ignoreMaxRules, ignoreMaxChain)
 	assert.NoError(t, err)
 }
 
 func TestInsertRedirectRuleSourceIsRampedAssignmentRuleTarget(t *testing.T) {
 	t.Parallel()
-	maxRules := 3
 	clock := hlc.Zero(1)
 	data := mkInitialData(0, clock)
 	data.AssignmentRules = []*persistencepb.AssignmentRule{
@@ -583,45 +585,65 @@ func TestInsertRedirectRuleSourceIsRampedAssignmentRuleTarget(t *testing.T) {
 	}
 
 	// insert redirect rule with target 1 --> failure
-	_, err := insertRedirectRule(mkRedirectRule("1", "0"), data, clock, maxRules)
+	_, err := insertRedirectRule(mkRedirectRule("1", "0"), data, clock, ignoreMaxRules, ignoreMaxChain)
 	assert.Error(t, err)
 
 	// insert redirect rule with target 2 --> success
-	_, err = insertRedirectRule(mkRedirectRule("2", "0"), data, clock, maxRules)
+	_, err = insertRedirectRule(mkRedirectRule("2", "0"), data, clock, ignoreMaxRules, ignoreMaxChain)
 	assert.NoError(t, err)
 }
 
 func TestInsertRedirectRuleAlreadyExists(t *testing.T) {
 	t.Parallel()
-	maxRules := 3
 	clock := hlc.Zero(1)
 	initialData := mkInitialData(0, clock)
 
 	// insert with source build id "0"
-	data, err := insertRedirectRule(mkRedirectRule("0", "1"), initialData, clock, maxRules)
+	data, err := insertRedirectRule(mkRedirectRule("0", "1"), initialData, clock, ignoreMaxRules, ignoreMaxChain)
 	assert.NoError(t, err)
 
 	// insert with source build id "0" --> failure
-	_, err = insertRedirectRule(mkRedirectRule("0", "6"), data, clock, maxRules)
+	_, err = insertRedirectRule(mkRedirectRule("0", "6"), data, clock, ignoreMaxRules, ignoreMaxChain)
 	assert.Error(t, err)
 }
 
 func TestInsertRedirectRuleCreateCycle(t *testing.T) {
 	t.Parallel()
-	maxRules := 3
 	clock := hlc.Zero(1)
 	initialData := mkInitialData(0, clock)
 
 	// insert with source -> target == "0" -> "0" --> failure
-	_, err := insertRedirectRule(mkRedirectRule("0", "0"), initialData, clock, maxRules)
+	_, err := insertRedirectRule(mkRedirectRule("0", "0"), initialData, clock, ignoreMaxRules, ignoreMaxChain)
 	assert.Error(t, err)
 
 	// insert with source -> target == "0" -> "1" --> success
-	data, err := insertRedirectRule(mkRedirectRule("0", "1"), initialData, clock, maxRules)
+	data, err := insertRedirectRule(mkRedirectRule("0", "1"), initialData, clock, ignoreMaxRules, ignoreMaxChain)
 	assert.NoError(t, err)
 
 	// insert with source build id "1" -> "0" --> failure
-	_, err = insertRedirectRule(mkRedirectRule("1", "0"), data, clock, maxRules)
+	_, err = insertRedirectRule(mkRedirectRule("1", "0"), data, clock, ignoreMaxRules, ignoreMaxChain)
+	assert.Error(t, err)
+}
+
+func TestInsertRedirectRuleMaxChain(t *testing.T) {
+	t.Parallel()
+	maxChain := 3
+	clock := hlc.Zero(1)
+	data := mkInitialData(0, clock)
+
+	// insert (4->5)
+	// 4 ---> 5
+	data, err := insertRedirectRule(mkRedirectRule("4", "5"), data, clock, ignoreMaxRules, maxChain)
+	assert.NoError(t, err)
+
+	// insert (5->6)
+	// 4 ---> 5 ---> 6
+	data, err = insertRedirectRule(mkRedirectRule("5", "6"), data, clock, ignoreMaxRules, maxChain)
+	assert.NoError(t, err)
+
+	// insert (6->7)
+	// 4 ---> 5 ---> 6 ---> 7
+	_, err = insertRedirectRule(mkRedirectRule("6", "7"), data, clock, ignoreMaxRules, maxChain)
 	assert.Error(t, err)
 }
 
@@ -640,7 +662,7 @@ func TestReplaceRedirectRuleBasic(t *testing.T) {
 	replaceTest := func(source, target string) {
 		prevRule := getActiveRedirectRuleBySrc(source, data)
 		rule := mkRedirectRule(source, target)
-		data, err = replaceRedirectRule(rule, data, clock)
+		data, err = replaceRedirectRule(rule, data, clock, ignoreMaxChain)
 		assert.NoError(t, err)
 		newActive := getActiveRedirectRuleBySrc(source, data)
 		protoassert.ProtoEqual(t, newActive.GetRule(), rule)
@@ -670,11 +692,11 @@ func TestReplaceRedirectRuleInVersionSet(t *testing.T) {
 	var err error
 
 	// replace with target 0 --> failure
-	_, err = replaceRedirectRule(mkRedirectRule("1", "0"), data, clock)
+	_, err = replaceRedirectRule(mkRedirectRule("1", "0"), data, clock, ignoreMaxChain)
 	assert.Error(t, err)
 
 	// replace with non-zero target --> success
-	_, err = replaceRedirectRule(mkRedirectRule("1", "10"), data, clock)
+	_, err = replaceRedirectRule(mkRedirectRule("1", "10"), data, clock, ignoreMaxChain)
 	assert.NoError(t, err)
 }
 
@@ -689,16 +711,48 @@ func TestReplaceRedirectRuleCreateCycle(t *testing.T) {
 	}
 	var err error
 
-	_, err = replaceRedirectRule(mkRedirectRule("0", "0"), data, clock)
+	_, err = replaceRedirectRule(mkRedirectRule("0", "0"), data, clock, ignoreMaxChain)
 	assert.Error(t, err)
 
-	_, err = replaceRedirectRule(mkRedirectRule("2", "0"), data, clock)
+	_, err = replaceRedirectRule(mkRedirectRule("2", "0"), data, clock, ignoreMaxChain)
 	assert.Error(t, err)
 
-	_, err = replaceRedirectRule(mkRedirectRule("1", "0"), data, clock)
+	_, err = replaceRedirectRule(mkRedirectRule("1", "0"), data, clock, ignoreMaxChain)
 	assert.Error(t, err)
 
-	_, err = replaceRedirectRule(mkRedirectRule("2", "1"), data, clock)
+	_, err = replaceRedirectRule(mkRedirectRule("2", "1"), data, clock, ignoreMaxChain)
+	assert.Error(t, err)
+}
+
+func TestReplaceRedirectRuleMaxChain(t *testing.T) {
+	t.Parallel()
+	maxChain := 3
+	clock := hlc.Zero(1)
+	data := mkInitialData(0, clock)
+
+	// insert (2->3)
+	// 2 ---> 3
+	data, err := insertRedirectRule(mkRedirectRule("2", "3"), data, clock, ignoreMaxRules, maxChain)
+	assert.NoError(t, err)
+
+	// insert (4->5)
+	// 2 ---> 3, 4 ---> 5
+	data, err = insertRedirectRule(mkRedirectRule("4", "5"), data, clock, ignoreMaxRules, maxChain)
+	assert.NoError(t, err)
+
+	// insert (5->6)
+	// 2 ---> 3, 4 ---> 5 ---> 6
+	data, err = insertRedirectRule(mkRedirectRule("5", "6"), data, clock, ignoreMaxRules, maxChain)
+	assert.NoError(t, err)
+
+	// replace(2, new_target=1)
+	// 2 ---> 1, 4 ---> 5 ---> 6
+	data, err = replaceRedirectRule(mkRedirectRule("2", "1"), data, clock, maxChain)
+	assert.NoError(t, err)
+
+	// replace(2, new_target=4)
+	// 2 ---> 4 ---> 5 ---> 6
+	_, err = replaceRedirectRule(mkRedirectRule("2", "4"), data, clock, maxChain)
 	assert.Error(t, err)
 }
 
@@ -709,7 +763,7 @@ func TestReplaceRedirectRuleNotFound(t *testing.T) {
 	var err error
 
 	// fails because no rules to replace
-	_, err = replaceRedirectRule(mkRedirectRule("1", "100"), data, clock)
+	_, err = replaceRedirectRule(mkRedirectRule("1", "100"), data, clock, ignoreMaxChain)
 	assert.Error(t, err)
 
 	data.RedirectRules = []*persistencepb.RedirectRule{
@@ -717,7 +771,7 @@ func TestReplaceRedirectRuleNotFound(t *testing.T) {
 	}
 
 	// fails because source doesnt exist
-	_, err = replaceRedirectRule(mkRedirectRule("1", "100"), data, clock)
+	_, err = replaceRedirectRule(mkRedirectRule("1", "100"), data, clock, ignoreMaxChain)
 	assert.Error(t, err)
 }
 
@@ -842,7 +896,6 @@ func TestGetWorkerVersioningRules(t *testing.T) {
 
 func TestCleanupRedirectRuleTombstones(t *testing.T) {
 	t.Parallel()
-	maxRules := 10
 	clock := hlc.Zero(1)
 	initialData := mkInitialData(0, clock)
 
@@ -852,13 +905,13 @@ func TestCleanupRedirectRuleTombstones(t *testing.T) {
 	// insert 3x to get three rules in there
 	rule1 := mkRedirectRule("1", "10")
 	clock1 := hlc.Next(clock, timesource)
-	data, err := insertRedirectRule(rule1, initialData, clock1, maxRules)
+	data, err := insertRedirectRule(rule1, initialData, clock1, ignoreMaxRules, ignoreMaxChain)
 	assert.NoError(t, err)
 	rule2 := mkRedirectRule("2", "10")
-	data, err = insertRedirectRule(rule2, data, clock1, maxRules)
+	data, err = insertRedirectRule(rule2, data, clock1, ignoreMaxRules, ignoreMaxChain)
 	assert.NoError(t, err)
 	rule3 := mkRedirectRule("3", "10")
-	data, err = insertRedirectRule(rule3, data, clock1, maxRules)
+	data, err = insertRedirectRule(rule3, data, clock1, ignoreMaxRules, ignoreMaxChain)
 	assert.NoError(t, err)
 
 	// delete "now," ~1 hour ago
@@ -899,7 +952,6 @@ func TestCleanupRedirectRuleTombstones(t *testing.T) {
 
 func TestCommitBuildIDBasic(t *testing.T) {
 	t.Parallel()
-	maxRules := 10
 	timesource := commonclock.NewRealTimeSource()
 	clock1 := hlc.Zero(1)
 	clock2 := hlc.Next(clock1, timesource)
@@ -920,7 +972,7 @@ func TestCommitBuildIDBasic(t *testing.T) {
 	}
 	var err error
 
-	data, err = CommitBuildID(clock2, data, mkNewCommitBuildIdReq("10", false), true, maxRules)
+	data, err = CommitBuildID(clock2, data, mkNewCommitBuildIdReq("10", false), true, ignoreMaxRules)
 	assert.NoError(t, err)
 	protoassert.ProtoEqual(t, expected, data)
 
@@ -935,7 +987,7 @@ func TestCommitBuildIDBasic(t *testing.T) {
 			mkAssignmentRulePersistence(mkAssignmentRule("10", nil), clock3, nil),
 		},
 	}
-	data, err = CommitBuildID(clock3, data, mkNewCommitBuildIdReq("10", false), true, maxRules)
+	data, err = CommitBuildID(clock3, data, mkNewCommitBuildIdReq("10", false), true, ignoreMaxRules)
 	assert.NoError(t, err)
 	protoassert.ProtoEqual(t, expected, data)
 }
@@ -943,7 +995,6 @@ func TestCommitBuildIDBasic(t *testing.T) {
 func TestCommitBuildIDNoRecentPoller(t *testing.T) {
 	// note: correctly generating hasRecentPoller needs to be tested in the end-to-end tests
 	t.Parallel()
-	maxRules := 10
 	timesource := commonclock.NewRealTimeSource()
 	clock1 := hlc.Zero(1)
 	clock2 := hlc.Next(clock1, timesource)
@@ -957,17 +1008,16 @@ func TestCommitBuildIDNoRecentPoller(t *testing.T) {
 	var err error
 
 	// without force --> fail
-	_, err = CommitBuildID(clock2, data, mkNewCommitBuildIdReq("10", false), false, maxRules)
+	_, err = CommitBuildID(clock2, data, mkNewCommitBuildIdReq("10", false), false, ignoreMaxRules)
 	assert.Error(t, err)
 
 	// with force --> success
-	_, err = CommitBuildID(clock2, data, mkNewCommitBuildIdReq("10", true), false, maxRules)
+	_, err = CommitBuildID(clock2, data, mkNewCommitBuildIdReq("10", true), false, ignoreMaxRules)
 	assert.NoError(t, err)
 }
 
 func TestCommitBuildIDInVersionSet(t *testing.T) {
 	t.Parallel()
-	maxRules := 10
 	timesource := commonclock.NewRealTimeSource()
 	clock1 := hlc.Zero(1)
 	clock2 := hlc.Next(clock1, timesource)
@@ -980,11 +1030,11 @@ func TestCommitBuildIDInVersionSet(t *testing.T) {
 	var err error
 
 	// with target 0 --> fail
-	_, err = CommitBuildID(clock2, data, mkNewCommitBuildIdReq("0", false), true, maxRules)
+	_, err = CommitBuildID(clock2, data, mkNewCommitBuildIdReq("0", false), true, ignoreMaxRules)
 	assert.Error(t, err)
 
 	// with target 10 --> success
-	_, err = CommitBuildID(clock2, data, mkNewCommitBuildIdReq("10", false), true, maxRules)
+	_, err = CommitBuildID(clock2, data, mkNewCommitBuildIdReq("10", false), true, ignoreMaxRules)
 	assert.NoError(t, err)
 }
 
@@ -1016,7 +1066,7 @@ Redirect Rules:
 |         v
 5 <------ 3 ------> 4
 */
-func TestIsCycle(t *testing.T) {
+func TestIsCyclic(t *testing.T) {
 	rules := []*persistencepb.RedirectRule{
 		{Rule: &taskqueuepb.CompatibleBuildIdRedirectRule{SourceBuildId: "1", TargetBuildId: "2"}},
 		{Rule: &taskqueuepb.CompatibleBuildIdRedirectRule{SourceBuildId: "5", TargetBuildId: "1"}},
@@ -1039,4 +1089,80 @@ func TestIsCycle(t *testing.T) {
 	if !isCyclic(rules) {
 		t.Fail()
 	}
+}
+
+func TestGetUpstreamBuildIds_NoCycle(t *testing.T) {
+	t.Parallel()
+	/*
+		e.g.
+		Redirect Rules:
+		10
+		^
+		|
+		1 <------ 2
+		^
+		|
+		5 <------ 3 <------ 4
+	*/
+	createTs := hlc.Zero(1)
+
+	redirectRules := []*persistencepb.RedirectRule{
+		mkRedirectRulePersistence(mkRedirectRule("1", "10"), createTs, nil),
+		mkRedirectRulePersistence(mkRedirectRule("2", "1"), createTs, nil),
+		mkRedirectRulePersistence(mkRedirectRule("3", "5"), createTs, nil),
+		mkRedirectRulePersistence(mkRedirectRule("4", "3"), createTs, nil),
+		mkRedirectRulePersistence(mkRedirectRule("5", "1"), createTs, nil),
+	}
+
+	expectedUpstreamBuildIds := []string{"2", "5", "3", "4"}
+	upstreamBuildIds := getUpstreamBuildIds("1", redirectRules)
+	slices.Sort(expectedUpstreamBuildIds)
+	slices.Sort(upstreamBuildIds)
+	assert.Equal(t, expectedUpstreamBuildIds, upstreamBuildIds)
+}
+
+func TestGetUpstreamBuildIds_WithCycle(t *testing.T) {
+	t.Parallel()
+	/*
+		e.g.
+		Redirect Rules:
+		1 ------> 2
+		^         |
+		|         v
+		5 <------ 3 ------> 4
+	*/
+	createTs := hlc.Zero(1)
+	redirectRules := []*persistencepb.RedirectRule{
+		mkRedirectRulePersistence(mkRedirectRule("1", "2"), createTs, nil),
+		mkRedirectRulePersistence(mkRedirectRule("2", "3"), createTs, nil),
+		mkRedirectRulePersistence(mkRedirectRule("3", "4"), createTs, nil),
+		mkRedirectRulePersistence(mkRedirectRule("3", "5"), createTs, nil),
+		mkRedirectRulePersistence(mkRedirectRule("5", "1"), createTs, nil),
+	}
+	expectedUpstreamBuildIds := []string{"5", "3", "2"}
+	upstreamBuildIds := getUpstreamBuildIds("1", redirectRules)
+	slices.Sort(expectedUpstreamBuildIds)
+	slices.Sort(upstreamBuildIds)
+	assert.Equal(t, expectedUpstreamBuildIds, upstreamBuildIds)
+
+	/*
+		e.g.
+		Redirect Rules:
+		1         2 <---
+		^         |     \
+		|         v      \
+		5 <------ 3 ------> 4
+	*/
+	redirectRules = []*persistencepb.RedirectRule{
+		mkRedirectRulePersistence(mkRedirectRule("2", "3"), createTs, nil),
+		mkRedirectRulePersistence(mkRedirectRule("3", "4"), createTs, nil),
+		mkRedirectRulePersistence(mkRedirectRule("3", "5"), createTs, nil),
+		mkRedirectRulePersistence(mkRedirectRule("4", "2"), createTs, nil),
+		mkRedirectRulePersistence(mkRedirectRule("5", "1"), createTs, nil),
+	}
+	expectedUpstreamBuildIds = []string{"5", "3", "2", "4"}
+	upstreamBuildIds = getUpstreamBuildIds("1", redirectRules)
+	slices.Sort(expectedUpstreamBuildIds)
+	slices.Sort(upstreamBuildIds)
+	assert.Equal(t, expectedUpstreamBuildIds, upstreamBuildIds)
 }
