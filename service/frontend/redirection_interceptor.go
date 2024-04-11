@@ -116,7 +116,7 @@ var (
 		"UpdateWorkerBuildIdCompatibility": func() any { return &workflowservice.UpdateWorkerBuildIdCompatibilityResponse{} },
 		"GetWorkerBuildIdCompatibility":    func() any { return &workflowservice.GetWorkerBuildIdCompatibilityResponse{} },
 		"UpdateWorkerVersioningRules":      func() any { return &workflowservice.UpdateWorkerVersioningRulesResponse{} },
-		"GetWorkerVersioningRules":        func() any { return &workflowservice.GetWorkerVersioningRulesResponse{} },
+		"GetWorkerVersioningRules":         func() any { return &workflowservice.GetWorkerVersioningRulesResponse{} },
 		"GetWorkerTaskReachability":        func() any { return &workflowservice.GetWorkerTaskReachabilityResponse{} },
 
 		"StartBatchOperation":    func() any { return &workflowservice.StartBatchOperationResponse{} },
