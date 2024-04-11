@@ -31,6 +31,8 @@ import (
 	"time"
 
 	"go.temporal.io/server/common/log"
+	"go.temporal.io/server/common/log/tag"
+	"go.temporal.io/server/common/metrics"
 	ctasks "go.temporal.io/server/common/tasks"
 )
 
@@ -55,7 +57,8 @@ type (
 		Cancel()
 	}
 	ExecutableTaskTrackerImpl struct {
-		logger log.Logger
+		logger         log.Logger
+		metricsHandler metrics.Handler
 
 		sync.Mutex
 		cancelled                  bool
@@ -69,9 +72,11 @@ var _ ExecutableTaskTracker = (*ExecutableTaskTrackerImpl)(nil)
 
 func NewExecutableTaskTracker(
 	logger log.Logger,
+	metricsHandler metrics.Handler,
 ) *ExecutableTaskTrackerImpl {
 	return &ExecutableTaskTrackerImpl{
-		logger: logger,
+		logger:         logger,
+		metricsHandler: metricsHandler,
 
 		exclusiveHighWatermarkInfo: nil,
 		taskQueue:                  list.New(),
@@ -144,6 +149,11 @@ Loop:
 			element = nextElement
 		case ctasks.TaskStateNacked:
 			if err := task.MarkPoisonPill(); err != nil {
+				t.logger.Error("unable to save poison pill", tag.Error(err), tag.TaskID(task.TaskID()))
+				metrics.ReplicationDLQFailed.With(t.metricsHandler).Record(
+					1,
+					metrics.OperationTag(metrics.ReplicationTaskTrackerScope),
+				)
 				// unable to save poison pill, retry later
 				element = element.Next()
 				continue Loop
