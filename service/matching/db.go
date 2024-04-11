@@ -56,7 +56,7 @@ type (
 		ackLevel                int64
 		store                   persistence.TaskManager
 		logger                  log.Logger
-		approximateBacklogCount int64
+		approximateBacklogCount atomic.Int64
 		maxReadLevel            atomic.Int64 // note that even though this is an atomic, it should only be written to while holding the db lock
 	}
 	taskQueueState struct {
@@ -150,7 +150,7 @@ func (db *taskQueueDB) takeOverTaskQueueLocked(
 		}
 		db.ackLevel = response.TaskQueueInfo.AckLevel
 		db.rangeID = response.RangeID + 1
-		db.approximateBacklogCount = response.TaskQueueInfo.ApproximateBacklogCount
+		db.approximateBacklogCount.Store(response.TaskQueueInfo.ApproximateBacklogCount)
 		return nil
 
 	case *serviceerror.NotFound:
@@ -194,8 +194,8 @@ func (db *taskQueueDB) UpdateState(
 
 	// Resetting approximateBacklogCounter to fix the count divergence issue
 	maxReadLevel := db.GetMaxReadLevel()
-	if (ackLevel == maxReadLevel) || db.approximateBacklogCount < 0 {
-		db.approximateBacklogCount = 0
+	if ackLevel == maxReadLevel {
+		db.approximateBacklogCount.Store(0)
 	}
 
 	queueInfo := db.cachedQueueInfo()
@@ -211,17 +211,23 @@ func (db *taskQueueDB) UpdateState(
 	return err
 }
 
-// updateApproximateBacklogCount updates the in-memory DB state with the given approximateBacklogCount value
+// updateApproximateBacklogCount updates the in-memory DB state with the given delta value
 func (db *taskQueueDB) updateApproximateBacklogCount(
-	approximateBacklogCount int64,
+	delta int64,
 ) {
 	db.Lock()
 	defer db.Unlock()
-	db.approximateBacklogCount += approximateBacklogCount
+
+	// Preventing under-counting
+	if db.approximateBacklogCount.Load()+delta < 0 {
+		db.approximateBacklogCount.Store(0)
+	} else {
+		db.approximateBacklogCount.Add(delta)
+	}
 }
 
 func (db *taskQueueDB) getApproximateBacklogCount() int64 {
-	return db.approximateBacklogCount
+	return db.approximateBacklogCount.Load()
 }
 
 // CreateTasks creates a batch of given tasks for this task queue
@@ -246,7 +252,7 @@ func (db *taskQueueDB) CreateTasks(
 		})
 		maxReadLevel = taskIDs[i]
 	}
-	db.approximateBacklogCount += int64(len(tasks))
+	db.approximateBacklogCount.Add(int64(len(tasks)))
 
 	resp, err := db.store.CreateTasks(
 		ctx,
@@ -262,9 +268,10 @@ func (db *taskQueueDB) CreateTasks(
 	// so that taskReader is guaranteed to see the new read level when SpoolTask wakes it up.
 	db.maxReadLevel.Store(maxReadLevel)
 
-	// TODO Shivam: Check error codes since writing of tasks could have succeeded
-	if err != nil {
-		db.approximateBacklogCount -= int64(len(tasks))
+	switch _ := err.(type) {
+	// tasks were not created, restore the counter
+	case *persistence.ConditionFailedError:
+		db.approximateBacklogCount.Add(-int64(len(tasks)))
 	}
 	return resp, err
 }
@@ -333,6 +340,6 @@ func (db *taskQueueDB) cachedQueueInfo() *persistencespb.TaskQueueInfo {
 		AckLevel:                db.ackLevel,
 		ExpiryTime:              db.expiryTime(),
 		LastUpdateTime:          timestamp.TimeNowPtrUtc(),
-		ApproximateBacklogCount: db.approximateBacklogCount,
+		ApproximateBacklogCount: db.approximateBacklogCount.Load(),
 	}
 }

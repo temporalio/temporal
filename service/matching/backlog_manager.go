@@ -159,7 +159,6 @@ func (c *backlogManagerImpl) Stop() {
 		defer cancel()
 
 		_ = c.db.UpdateState(ctx, ackLevel)
-		// TODO: Says we should ignore any errors, but can an error occur when UpdatingState?
 		c.taskGC.RunNow(ctx, ackLevel)
 	}
 	c.taskWriter.Stop()
