@@ -27,6 +27,7 @@ package matching
 import (
 	"context"
 	"fmt"
+	"go.temporal.io/server/common/metrics"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -220,6 +221,9 @@ func (db *taskQueueDB) updateApproximateBacklogCount(
 
 	// Preventing under-counting
 	if db.approximateBacklogCount.Load()+delta < 0 {
+		// logging as an error here since our counter could have become negative which would mean we were undercounting
+		db.logger.Error("ApproximateBacklogCounter could have under-counted",
+			tag.WorkerBuildId(db.queue.BuildId()), tag.WorkerBuildId(db.queue.Partition().NamespaceId().String()))
 		db.approximateBacklogCount.Store(0)
 	} else {
 		db.approximateBacklogCount.Add(delta)
@@ -269,7 +273,8 @@ func (db *taskQueueDB) CreateTasks(
 	db.maxReadLevel.Store(maxReadLevel)
 
 	if _, ok := err.(*persistence.ConditionFailedError); ok {
-		// tasks were not created, restore the counter
+		// tasks definitely were not created, restore the counter. For other errors tasks may or may not be created.
+		// In those cases we keep the count incremented, hence it may be an overestimate.
 		db.approximateBacklogCount.Add(-int64(len(tasks)))
 	}
 	return resp, err
@@ -341,4 +346,10 @@ func (db *taskQueueDB) cachedQueueInfo() *persistencespb.TaskQueueInfo {
 		LastUpdateTime:          timestamp.TimeNowPtrUtc(),
 		ApproximateBacklogCount: db.approximateBacklogCount.Load(),
 	}
+}
+
+func (db *taskQueueDB) emitApproximateBacklogCount() {
+	// note: this metric is called after persisting the updated BacklogCount
+	approximateBacklogCount := db.getApproximateBacklogCount()
+	db.backlogMgr.metricsHandler.Gauge(metrics.ApproximateBacklogCount.Name()).Record(float64(approximateBacklogCount))
 }

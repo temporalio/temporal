@@ -303,7 +303,7 @@ func (tr *taskReader) persistAckBacklogCountLevel(ctx context.Context) error {
 	tr.emitTaskLagMetric(ackLevel)
 	err := tr.backlogMgr.db.UpdateState(ctx, ackLevel)
 	if err == nil {
-		tr.emitApproximateBacklogCount()
+		tr.backlogMgr.db.emitApproximateBacklogCount()
 	}
 	return err
 }
