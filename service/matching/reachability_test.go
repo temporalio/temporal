@@ -75,28 +75,28 @@ func TestGetBuildIdsOfInterest(t *testing.T) {
 	}
 
 	// getBuildIdsOfInterest(1, deletedRuleInclusionPeriod=nil)
-	buildIdsOfInterest := rc.getBuildIdsOfInterest("1", nil)
+	buildIdsOfInterest := rc.getBuildIdsOfInterest("1", time.Duration(0))
 	expectedBuildIdsOfInterest := []string{"2", "5", "3", "1"}
 	slices.Sort(expectedBuildIdsOfInterest)
 	slices.Sort(buildIdsOfInterest)
 	assert.Equal(t, expectedBuildIdsOfInterest, buildIdsOfInterest)
 
 	// getBuildIdsOfInterest(1, deletedRuleInclusionPeriod=rc.buildIdVisibilityGracePeriod)
-	buildIdsOfInterest = rc.getBuildIdsOfInterest("1", &rc.buildIdVisibilityGracePeriod)
+	buildIdsOfInterest = rc.getBuildIdsOfInterest("1", rc.buildIdVisibilityGracePeriod)
 	expectedBuildIdsOfInterest = []string{"2", "5", "3", "4", "1"}
 	slices.Sort(expectedBuildIdsOfInterest)
 	slices.Sort(buildIdsOfInterest)
 	assert.Equal(t, expectedBuildIdsOfInterest, buildIdsOfInterest)
 
 	// getBuildIdsOfInterest(6, deletedRuleInclusionPeriod=nil)
-	buildIdsOfInterest = rc.getBuildIdsOfInterest("6", nil)
+	buildIdsOfInterest = rc.getBuildIdsOfInterest("6", time.Duration(0))
 	expectedBuildIdsOfInterest = []string{"6"}
 	slices.Sort(expectedBuildIdsOfInterest)
 	slices.Sort(buildIdsOfInterest)
 	assert.Equal(t, expectedBuildIdsOfInterest, buildIdsOfInterest)
 
 	// getBuildIdsOfInterest(6, deletedRuleInclusionPeriod=rc.buildIdVisibilityGracePeriod)
-	buildIdsOfInterest = rc.getBuildIdsOfInterest("6", &rc.buildIdVisibilityGracePeriod)
+	buildIdsOfInterest = rc.getBuildIdsOfInterest("6", rc.buildIdVisibilityGracePeriod)
 	expectedBuildIdsOfInterest = []string{"7", "6"}
 	slices.Sort(expectedBuildIdsOfInterest)
 	slices.Sort(buildIdsOfInterest)

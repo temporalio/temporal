@@ -511,13 +511,16 @@ func getUpstreamBuildIds(buildId string, redirectRules []*persistencespb.Redirec
 func getUpstreamHelper(
 	buildId string,
 	redirectRules []*persistencespb.RedirectRule,
-	visited []string) []string {
+	visited map[string]bool) []string {
 	var upstream []string
-	visited = append(visited, buildId)
+	if visited == nil {
+		visited = make(map[string]bool)
+	}
+	visited[buildId] = true
 	directSources := getSourcesForTarget(buildId, redirectRules)
 
 	for _, src := range directSources {
-		if !slices.Contains(visited, src) {
+		if !visited[src] {
 			upstream = append(upstream, src)
 			upstream = append(upstream, getUpstreamHelper(src, redirectRules, visited)...)
 		}
@@ -528,9 +531,11 @@ func getUpstreamHelper(
 	for _, bid := range upstream {
 		upstreamUnique[bid] = true
 	}
-	upstream = make([]string, 0)
+	upstream = make([]string, len(upstreamUnique))
+	i := 0
 	for k := range upstreamUnique {
-		upstream = append(upstream, k)
+		upstream[i] = k
+		i++
 	}
 	return upstream
 }

@@ -84,7 +84,7 @@ func (rc *reachabilityCalculator) run(ctx context.Context, buildId string) (enum
 	}
 
 	// Gather list of all build ids that could point to buildId
-	buildIdsOfInterest := rc.getBuildIdsOfInterest(buildId, nil)
+	buildIdsOfInterest := rc.getBuildIdsOfInterest(buildId, time.Duration(0))
 
 	// 2. Cases for REACHABLE
 	// 2a. If buildId is assignable to new tasks
@@ -104,7 +104,7 @@ func (rc *reachabilityCalculator) run(ctx context.Context, buildId string) (enum
 	// Note: The below cases are not applicable to activity-only task queues, since we don't record those in visibility
 
 	// Gather list of all build ids that could point to buildId, now including deleted rules to account for the delay in updating visibility
-	buildIdsOfInterest = rc.getBuildIdsOfInterest(buildId, &rc.buildIdVisibilityGracePeriod)
+	buildIdsOfInterest = rc.getBuildIdsOfInterest(buildId, rc.buildIdVisibilityGracePeriod)
 
 	// 2c. If buildId is assignable to tasks from open workflows
 	existsOpenWFAssignedToBuildId, err := rc.existsWFAssignedToAny(ctx, rc.makeBuildIdCountRequest(buildIdsOfInterest, true))
@@ -133,16 +133,13 @@ func (rc *reachabilityCalculator) run(ctx context.Context, buildId string) (enum
 // It considers rules if the deletion time is nil or within the given deletedRuleInclusionPeriod.
 func (rc *reachabilityCalculator) getBuildIdsOfInterest(
 	buildId string,
-	deletedRuleInclusionPeriod *time.Duration) []string {
+	deletedRuleInclusionPeriod time.Duration) []string {
 
 	withinRuleInclusionPeriod := func(clk *clock.HybridLogicalClock) bool {
 		if clk == nil {
 			return true
 		}
-		if deletedRuleInclusionPeriod == nil {
-			return false
-		}
-		return hlc.Since(clk) <= *deletedRuleInclusionPeriod
+		return hlc.Since(clk) <= deletedRuleInclusionPeriod
 	}
 
 	includedRules := util.FilterSlice(slices.Clone(rc.redirectRules), func(rr *persistencespb.RedirectRule) bool {
