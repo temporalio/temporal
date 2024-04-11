@@ -1256,11 +1256,6 @@ func (s *workflowSuite) TestBackfill() {
 }
 
 func (s *workflowSuite) TestBackfillInclusiveStartEnd() {
-	// TODO: remove once default version is InclusiveBackfillStartTime
-	currentVersion := currentTweakablePolicies.Version
-	currentTweakablePolicies.Version = InclusiveBackfillStartTime
-	defer func() { currentTweakablePolicies.Version = currentVersion }()
-
 	s.runAcrossContinue(
 		[]workflowRun{
 			// if start and end time were not inclusive, this backfill run would not exist
@@ -1322,9 +1317,7 @@ func (s *workflowSuite) TestBackfillInclusiveStartEnd() {
 }
 
 func (s *workflowSuite) TestHugeBackfillAllowAll() {
-	// TODO: remove once default version is IncrementalBackfill
 	prevTweakables := currentTweakablePolicies
-	currentTweakablePolicies.Version = IncrementalBackfill
 	currentTweakablePolicies.MaxBufferSize = 30 // make smaller for testing
 	defer func() { currentTweakablePolicies = prevTweakables }()
 
@@ -1386,9 +1379,7 @@ func (s *workflowSuite) TestHugeBackfillAllowAll() {
 }
 
 func (s *workflowSuite) TestHugeBackfillBuffer() {
-	// TODO: remove once default version is IncrementalBackfill
 	prevTweakables := currentTweakablePolicies
-	currentTweakablePolicies.Version = IncrementalBackfill
 	currentTweakablePolicies.MaxBufferSize = 30 // make smaller for testing
 	defer func() { currentTweakablePolicies = prevTweakables }()
 
@@ -1673,11 +1664,6 @@ func (s *workflowSuite) TestUpdateNotRetroactive() {
 // Tests that an update between a nominal time and jittered time for a start, that doesn't
 // modify that start, will still start it.
 func (s *workflowSuite) TestUpdateBetweenNominalAndJitter() {
-	// TODO: remove once default version is UpdateFromPrevious
-	prevTweakables := currentTweakablePolicies
-	currentTweakablePolicies.Version = UpdateFromPrevious
-	defer func() { currentTweakablePolicies = prevTweakables }()
-
 	spec := &schedpb.ScheduleSpec{
 		Interval: []*schedpb.IntervalSpec{{
 			Interval: durationpb.New(1 * time.Hour),

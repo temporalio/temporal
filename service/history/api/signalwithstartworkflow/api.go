@@ -27,7 +27,9 @@ package signalwithstartworkflow
 import (
 	"context"
 
+	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
+	"go.temporal.io/server/common/enums"
 
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/common/definition"
@@ -70,6 +72,11 @@ func Invoke(
 	default:
 		return nil, err
 	}
+
+	// TODO: remove this call in 1.25
+	enums.SetDefaultWorkflowIdConflictPolicy(
+		&signalWithStartRequest.SignalWithStartRequest.WorkflowIdConflictPolicy,
+		enumspb.WORKFLOW_ID_CONFLICT_POLICY_USE_EXISTING)
 
 	api.MigrateWorkflowIdReusePolicyForRunningWorkflow(
 		&signalWithStartRequest.SignalWithStartRequest.WorkflowIdReusePolicy,

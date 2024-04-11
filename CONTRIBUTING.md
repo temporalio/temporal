@@ -14,7 +14,6 @@ This doc is for contributors to Temporal Server (hopefully that's you!)
   - Download all other versions from [protoc release page](https://github.com/protocolbuffers/protobuf/releases).
 * [Temporal CLI](https://github.com/temporalio/cli)
   - Homebrew `brew install temporal`
-  - Go install `make update-cli`
   - Or download it from here https://github.com/temporalio/cli
 
 
