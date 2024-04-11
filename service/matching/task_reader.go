@@ -327,12 +327,6 @@ func (tr *taskReader) emitTaskLagMetric(ackLevel int64) {
 	tr.taggedMetricsHandler().Gauge(metrics.TaskLagPerTaskQueueGauge.Name()).Record(float64(maxReadLevel - ackLevel))
 }
 
-func (tr *taskReader) emitApproximateBacklogCount() {
-	// note: this metric is called after persisting the updated BacklogCount
-	approximateBacklogCount := tr.backlogMgr.db.getApproximateBacklogCount()
-	tr.taggedMetricsHandler().Gauge(metrics.ApproximateBacklogCount.Name()).Record(float64(approximateBacklogCount))
-}
-
 func (tr *taskReader) reEnqueueAfterDelay(duration time.Duration) {
 	tr.backoffTimerLock.Lock()
 	defer tr.backoffTimerLock.Unlock()
