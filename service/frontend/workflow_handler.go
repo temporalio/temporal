@@ -2521,6 +2521,12 @@ func (wh *WorkflowHandler) DescribeTaskQueue(ctx context.Context, request *workf
 		request.TaskQueueTypes = []enumspb.TaskQueueType{enumspb.TASK_QUEUE_TYPE_WORKFLOW, enumspb.TASK_QUEUE_TYPE_ACTIVITY}
 	}
 
+	if request.GetReportTaskReachability() &&
+		len(request.GetVersions().GetBuildIds()) > wh.config.ReachabilityQueryBuildIdLimit() {
+		return nil, serviceerror.NewInvalidArgument(fmt.Sprintf(
+			"Too many build ids queried at once with ReportTaskReachability==true, limit: %d", wh.config.ReachabilityQueryBuildIdLimit()))
+	}
+
 	if request.ApiMode == enumspb.DESCRIBE_TASK_QUEUE_MODE_ENHANCED {
 		if request.TaskQueue.Kind == enumspb.TASK_QUEUE_KIND_STICKY {
 			return nil, errUseEnhancedDescribeOnStickyQueue
