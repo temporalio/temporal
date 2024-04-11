@@ -105,7 +105,8 @@ func TestUserData_LoadOnInit_OnlyOnceWhenNoData(t *testing.T) {
 	tqCfg.dbq = dbq
 
 	m := createUserDataManager(t, controller, tqCfg)
-	tm := m.store.(*testTaskManager)
+	tm, ok := m.store.(*testTaskManager)
+	require.True(t, ok)
 
 	require.Equal(t, 0, tm.getGetUserDataCount(dbq))
 
