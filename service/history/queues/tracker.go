@@ -27,7 +27,6 @@ package queues
 import (
 	"fmt"
 
-	"go.temporal.io/server/common/namespace"
 	ctasks "go.temporal.io/server/common/tasks"
 	"go.temporal.io/server/service/history/tasks"
 )
@@ -36,15 +35,17 @@ type (
 	// TODO: make task tracking a standalone component
 	// currently it's used as a implementation detail in SliceImpl
 	executableTracker struct {
-		pendingExecutables  map[tasks.Key]Executable
-		pendingPerNamespace map[namespace.ID]int
+		pendingExecutables map[tasks.Key]Executable
+		grouper            Grouper
+		pendingPerKey      map[any]int
 	}
 )
 
-func newExecutableTracker() *executableTracker {
+func newExecutableTracker(grouper Grouper) *executableTracker {
 	return &executableTracker{
-		pendingExecutables:  make(map[tasks.Key]Executable),
-		pendingPerNamespace: make(map[namespace.ID]int),
+		pendingExecutables: make(map[tasks.Key]Executable),
+		grouper:            grouper,
+		pendingPerKey:      make(map[any]int, 0),
 	}
 }
 
@@ -52,8 +53,11 @@ func (t *executableTracker) split(
 	thisScope Scope,
 	thatScope Scope,
 ) (*executableTracker, *executableTracker) {
-	thatPendingExecutables := make(map[tasks.Key]Executable, len(t.pendingExecutables)/2)
-	thatPendingPerNamespace := make(map[namespace.ID]int, len(t.pendingPerNamespace))
+	that := executableTracker{
+		pendingExecutables: make(map[tasks.Key]Executable, len(t.pendingExecutables)/2),
+		grouper:            t.grouper,
+		pendingPerKey:      make(map[any]int, len(t.pendingPerKey)),
+	}
 
 	for key, executable := range t.pendingExecutables {
 		if thisScope.Contains(executable) {
@@ -65,24 +69,20 @@ func (t *executableTracker) split(
 				thisScope, thatScope, executable.GetTask(), executable.GetType()))
 		}
 
-		namespaceID := namespace.ID(executable.GetNamespaceID())
-
 		delete(t.pendingExecutables, key)
-		t.pendingPerNamespace[namespaceID]--
+		that.pendingExecutables[key] = executable
 
-		thatPendingExecutables[key] = executable
-		thatPendingPerNamespace[namespaceID]++
+		groupKey := t.grouper.Key(executable)
+		t.pendingPerKey[groupKey]--
+		that.pendingPerKey[groupKey]++
 	}
 
-	return t, &executableTracker{
-		pendingExecutables:  thatPendingExecutables,
-		pendingPerNamespace: thatPendingPerNamespace,
-	}
+	return t, &that
 }
 
 func (t *executableTracker) merge(incomingTracker *executableTracker) *executableTracker {
-	thisExecutables, thisPendingTasks := t.pendingExecutables, t.pendingPerNamespace
-	thatExecutables, thatPendingTasks := incomingTracker.pendingExecutables, incomingTracker.pendingPerNamespace
+	thisExecutables, thisPendingTasks := t.pendingExecutables, t.pendingPerKey
+	thatExecutables, thatPendingTasks := incomingTracker.pendingExecutables, incomingTracker.pendingPerKey
 	if len(thisExecutables) < len(thatExecutables) {
 		thisExecutables, thatExecutables = thatExecutables, thisExecutables
 		thisPendingTasks = thatPendingTasks
@@ -90,11 +90,11 @@ func (t *executableTracker) merge(incomingTracker *executableTracker) *executabl
 
 	for key, executable := range thatExecutables {
 		thisExecutables[key] = executable
-		thisPendingTasks[namespace.ID(executable.GetNamespaceID())]++
+		key := t.grouper.Key(executable)
+		thisPendingTasks[key]++
 	}
-
 	t.pendingExecutables = thisExecutables
-	t.pendingPerNamespace = thisPendingTasks
+	t.pendingPerKey = thisPendingTasks
 	return t
 }
 
@@ -102,28 +102,31 @@ func (t *executableTracker) add(
 	executable Executable,
 ) {
 	t.pendingExecutables[executable.GetKey()] = executable
-	t.pendingPerNamespace[namespace.ID(executable.GetNamespaceID())]++
+	key := t.grouper.Key(executable)
+	t.pendingPerKey[key]++
 }
 
-func (t *executableTracker) shrink() tasks.Key {
+func (t *executableTracker) shrink() (tasks.Key, int) {
+	var tasksCompleted int
 	minPendingTaskKey := tasks.MaximumKey
 	for key, executable := range t.pendingExecutables {
 		if executable.State() == ctasks.TaskStateAcked {
-			t.pendingPerNamespace[namespace.ID(executable.GetNamespaceID())]--
+			t.pendingPerKey[t.grouper.Key(executable)]--
 			delete(t.pendingExecutables, key)
+			tasksCompleted++
 			continue
 		}
 
 		minPendingTaskKey = tasks.MinKey(minPendingTaskKey, key)
 	}
 
-	for namespaceID, numPending := range t.pendingPerNamespace {
+	for key, numPending := range t.pendingPerKey {
 		if numPending == 0 {
-			delete(t.pendingPerNamespace, namespaceID)
+			delete(t.pendingPerKey, key)
 		}
 	}
 
-	return minPendingTaskKey
+	return minPendingTaskKey, tasksCompleted
 }
 
 func (t *executableTracker) clear() {
@@ -132,5 +135,5 @@ func (t *executableTracker) clear() {
 	}
 
 	t.pendingExecutables = make(map[tasks.Key]Executable)
-	t.pendingPerNamespace = make(map[namespace.ID]int)
+	t.pendingPerKey = make(map[any]int, 0)
 }

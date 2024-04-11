@@ -106,6 +106,12 @@ type (
 		lastEventVersion int64
 	}
 
+	executionTimerPostActionInfo struct {
+		*historyResendInfo
+
+		currentRunID string
+	}
+
 	activityTaskPostActionInfo struct {
 		*historyResendInfo
 
@@ -131,6 +137,20 @@ func newHistoryResendInfo(
 		lastEventID:      lastEventID,
 		lastEventVersion: lastEventVersion,
 	}
+}
+
+func newExecutionTimerPostActionInfo(
+	mutableState workflow.MutableState,
+) (*executionTimerPostActionInfo, error) {
+	resendInfo, err := getHistoryResendInfo(mutableState)
+	if err != nil {
+		return nil, err
+	}
+
+	return &executionTimerPostActionInfo{
+		historyResendInfo: resendInfo,
+		currentRunID:      mutableState.GetExecutionState().RunId,
+	}, nil
 }
 
 func newActivityTaskPostActionInfo(

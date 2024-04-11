@@ -55,20 +55,19 @@ type (
 )
 
 func NewWorkflowWithSignal(
-	ctx context.Context,
 	shard shard.Context,
 	namespaceEntry *namespace.Namespace,
 	workflowID string,
 	runID string,
 	startRequest *historyservice.StartWorkflowExecutionRequest,
 	signalWithStartRequest *workflowservice.SignalWithStartWorkflowExecutionRequest,
-) (WorkflowContext, error) {
+) (WorkflowLease, error) {
 	newMutableState, err := CreateMutableState(
-		ctx,
 		shard,
 		namespaceEntry,
 		startRequest.StartRequest.WorkflowExecutionTimeout,
 		startRequest.StartRequest.WorkflowRunTimeout,
+		workflowID,
 		runID,
 	)
 	if err != nil {
@@ -138,15 +137,15 @@ func NewWorkflowWithSignal(
 		shard.GetThrottledLogger(),
 		shard.GetMetricsHandler(),
 	)
-	return NewWorkflowContext(newWorkflowContext, wcache.NoopReleaseFn, newMutableState), nil
+	return NewWorkflowLease(newWorkflowContext, wcache.NoopReleaseFn, newMutableState), nil
 }
 
 func CreateMutableState(
-	ctx context.Context,
 	shard shard.Context,
 	namespaceEntry *namespace.Namespace,
 	executionTimeout *durationpb.Duration,
 	runTimeout *durationpb.Duration,
+	workflowID string,
 	runID string,
 ) (workflow.MutableState, error) {
 	newMutableState := workflow.NewMutableState(
@@ -154,9 +153,11 @@ func CreateMutableState(
 		shard.GetEventsCache(),
 		shard.GetLogger(),
 		namespaceEntry,
+		workflowID,
+		runID,
 		shard.GetTimeSource().Now(),
 	)
-	if err := newMutableState.SetHistoryTree(ctx, executionTimeout, runTimeout, runID); err != nil {
+	if err := newMutableState.SetHistoryTree(executionTimeout, runTimeout, runID); err != nil {
 		return nil, err
 	}
 	return newMutableState, nil
@@ -226,7 +227,7 @@ func ValidateStart(
 	}
 
 	handler := interceptor.GetMetricsHandlerFromContext(ctx, logger).WithTags(metrics.CommandTypeTag(operation))
-	handler.Histogram(metrics.MemoSize.Name(), metrics.MemoSize.Unit()).Record(int64(workflowMemoSize))
+	metrics.MemoSize.With(handler).Record(int64(workflowMemoSize))
 	if err := common.CheckEventBlobSizeLimit(
 		workflowMemoSize,
 		config.MemoSizeLimitWarn(namespaceName),
@@ -316,7 +317,7 @@ func OverrideStartWorkflowExecutionRequest(
 	)
 	if workflowRunTimeout != timestamp.DurationValue(request.GetWorkflowRunTimeout()) {
 		request.WorkflowRunTimeout = durationpb.New(workflowRunTimeout)
-		metricsHandler.Counter(metrics.WorkflowRunTimeoutOverrideCount.Name()).Record(
+		metrics.WorkflowRunTimeoutOverrideCount.With(metricsHandler).Record(
 			1,
 			metrics.OperationTag(operation),
 			metrics.NamespaceTag(namespace),
@@ -331,7 +332,7 @@ func OverrideStartWorkflowExecutionRequest(
 	)
 	if workflowTaskStartToCloseTimeout != timestamp.DurationValue(request.GetWorkflowTaskTimeout()) {
 		request.WorkflowTaskTimeout = durationpb.New(workflowTaskStartToCloseTimeout)
-		metricsHandler.Counter(metrics.WorkflowTaskTimeoutOverrideCount.Name()).Record(
+		metrics.WorkflowTaskTimeoutOverrideCount.With(metricsHandler).Record(
 			1,
 			metrics.OperationTag(operation),
 			metrics.NamespaceTag(namespace),

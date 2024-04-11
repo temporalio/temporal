@@ -1,4 +1,6 @@
 .tmp/
+.bin/
+.stamp/
 
 .idea/
 .vscode/settings.json

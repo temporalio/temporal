@@ -35,6 +35,7 @@ import (
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/workflowservice/v1"
+	"go.temporal.io/server/common/cluster/clustertest"
 
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	"go.temporal.io/server/api/historyservice/v1"
@@ -68,7 +69,7 @@ type (
 		workflowCache              *wcache.MockCache
 		workflowConsistencyChecker api.WorkflowConsistencyChecker
 
-		currentContext      *workflow.MockContext
+		workflowContext     *workflow.MockContext
 		currentMutableState *workflow.MockMutableState
 
 		activityInfo *persistencepb.ActivityInfo
@@ -132,7 +133,7 @@ func (s *workflowSuite) Test_NormalFlowShouldRescheduleActivity_UpdatesWorkflowE
 	s.setupStubs(uc)
 
 	s.expectTimerMetricsRecorded(uc, s.shardContext)
-	s.currentContext.EXPECT().UpdateWorkflowExecutionAsActive(ctx, s.shardContext).Return(nil)
+	s.workflowContext.EXPECT().UpdateWorkflowExecutionAsActive(ctx, s.shardContext).Return(nil)
 
 	_, err := Invoke(ctx, request, s.shardContext, s.workflowConsistencyChecker)
 	s.NoError(err)
@@ -261,7 +262,7 @@ func (s *workflowSuite) Test_LastHeartBeatDetailsExist_UpdatesMutableState() {
 	request := s.newRespondActivityTaskFailedRequest(uc)
 
 	ctx := context.Background()
-	s.currentContext.EXPECT().UpdateWorkflowExecutionAsActive(ctx, s.shardContext).Return(nil)
+	s.workflowContext.EXPECT().UpdateWorkflowExecutionAsActive(ctx, s.shardContext).Return(nil)
 	s.currentMutableState.EXPECT().UpdateActivityProgress(s.activityInfo, &workflowservice.RecordActivityTaskHeartbeatRequest{
 		TaskToken: request.FailedRequest.GetTaskToken(),
 		Details:   request.FailedRequest.GetLastHeartbeatDetails(),
@@ -327,7 +328,7 @@ func (s *workflowSuite) Test_NoMoreRetriesAndMutableStateHasNoPendingTasks_WillR
 		request.FailedRequest.WorkerVersion,
 	).Return(nil, nil)
 	s.currentMutableState.EXPECT().AddWorkflowTaskScheduledEvent(false, enumsspb.WORKFLOW_TASK_TYPE_NORMAL)
-	s.currentContext.EXPECT().UpdateWorkflowExecutionAsActive(ctx, s.shardContext).Return(nil)
+	s.workflowContext.EXPECT().UpdateWorkflowExecutionAsActive(ctx, s.shardContext).Return(nil)
 
 	_, err := Invoke(ctx, request, s.shardContext, s.workflowConsistencyChecker)
 
@@ -393,8 +394,8 @@ func (s *workflowSuite) setupStubs(uc UsecaseConfig) {
 	s.currentMutableState = s.setupMutableState(uc, s.activityInfo)
 	s.namespaceRegistry = s.setupNamespaceRegistry(uc)
 	s.shardContext = s.setupShardContext(s.namespaceRegistry)
-	s.currentContext = s.setupWorkflowContext(s.currentMutableState)
-	s.workflowCache = s.setupCache(s.currentContext)
+	s.workflowContext = s.setupWorkflowContext(s.currentMutableState)
+	s.workflowCache = s.setupCache()
 
 	s.workflowConsistencyChecker = api.NewWorkflowConsistencyChecker(s.shardContext, s.workflowCache)
 }
@@ -429,16 +430,16 @@ func (s *workflowSuite) newRespondActivityTaskFailedRequest(uc UsecaseConfig) *h
 }
 
 func (s *workflowSuite) setupWorkflowContext(mutableState *workflow.MockMutableState) *workflow.MockContext {
-	currentContext := workflow.NewMockContext(s.controller)
-	currentContext.EXPECT().LoadMutableState(gomock.Any(), s.shardContext).Return(mutableState, nil).AnyTimes()
-	return currentContext
+	workflowContext := workflow.NewMockContext(s.controller)
+	workflowContext.EXPECT().LoadMutableState(gomock.Any(), s.shardContext).Return(mutableState, nil).AnyTimes()
+	return workflowContext
 }
 
-func (s *workflowSuite) setupCache(currentContext *workflow.MockContext) *wcache.MockCache {
+func (s *workflowSuite) setupCache() *wcache.MockCache {
 	workflowCache := wcache.NewMockCache(s.controller)
 	workflowCache.EXPECT().GetOrCreateWorkflowExecution(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), workflow.LockPriorityHigh).
-		Return(s.currentContext, wcache.NoopReleaseFn, nil).AnyTimes()
-	workflowCache.EXPECT().GetOrCreateCurrentWorkflowExecution(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), workflow.LockPriorityHigh).Return(currentContext, wcache.NoopReleaseFn, nil).AnyTimes()
+		Return(s.workflowContext, wcache.NoopReleaseFn, nil).AnyTimes()
+	workflowCache.EXPECT().GetOrCreateCurrentWorkflowExecution(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), workflow.LockPriorityHigh).Return(wcache.NoopReleaseFn, nil).AnyTimes()
 	return workflowCache
 }
 
@@ -450,7 +451,7 @@ func (s *workflowSuite) setupShardContext(registry namespace.Registry) *shard.Mo
 	shardContext.EXPECT().GetThrottledLogger().Return(log.NewTestLogger()).AnyTimes()
 
 	shardContext.EXPECT().GetTimeSource().Return(clock.NewRealTimeSource()).AnyTimes()
-	shardContext.EXPECT().GetClusterMetadata().Return(cluster.NewMetadataForTest(cluster.NewTestClusterMetadataConfig(true, true))).AnyTimes()
+	shardContext.EXPECT().GetClusterMetadata().Return(clustertest.NewMetadataForTest(cluster.NewTestClusterMetadataConfig(true, true))).AnyTimes()
 	shardContext.EXPECT().GetShardID().Return(int32(1)).AnyTimes()
 	response := &persistencespb.GetCurrentExecutionResponse{
 		RunID: tests.RunID,

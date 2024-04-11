@@ -87,9 +87,9 @@ func (s *VersioningIntegSuite) SetupSuite() {
 		dynamicconfig.ReachabilityBuildIdVisibilityGracePeriod: 3 * time.Minute,
 
 		// Make sure we don't hit the rate limiter in tests
-		dynamicconfig.FrontendMaxNamespaceNamespaceReplicationInducingAPIsRPSPerInstance:   1000,
-		dynamicconfig.FrontendMaxNamespaceNamespaceReplicationInducingAPIsBurstPerInstance: 1000,
-		dynamicconfig.FrontendNamespaceReplicationInducingAPIsRPS:                          1000,
+		dynamicconfig.FrontendGlobalNamespaceNamespaceReplicationInducingAPIsRPS:                1000,
+		dynamicconfig.FrontendMaxNamespaceNamespaceReplicationInducingAPIsBurstRatioPerInstance: 1,
+		dynamicconfig.FrontendNamespaceReplicationInducingAPIsRPS:                               1000,
 
 		// The dispatch tests below rely on being able to see the effects of changing
 		// versioning data relatively quickly. In general, we only promise to act on new
@@ -102,7 +102,7 @@ func (s *VersioningIntegSuite) SetupSuite() {
 		dynamicconfig.MatchingNumTaskqueueReadPartitions:  4,
 		dynamicconfig.MatchingNumTaskqueueWritePartitions: 4,
 	}
-	s.setupSuite("testdata/cluster.yaml")
+	s.setupSuite("testdata/es_cluster.yaml")
 }
 
 func (s *VersioningIntegSuite) TearDownSuite() {

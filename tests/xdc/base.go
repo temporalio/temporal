@@ -36,6 +36,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	replicationpb "go.temporal.io/api/replication/v1"
+	"go.temporal.io/server/common/testing/historyrequire"
 	"gopkg.in/yaml.v3"
 
 	"go.temporal.io/server/api/adminservice/v1"
@@ -54,6 +55,7 @@ type (
 		// not merely log an error
 		*require.Assertions
 		protorequire.ProtoAssertions
+		historyrequire.HistoryRequire
 		clusterNames []string
 		suite.Suite
 
@@ -107,10 +109,14 @@ func (s *xdcBaseSuite) setupSuite(clusterNames []string, opts ...tests.Option) {
 		clusterConfigs[i].ClusterMetadata.CurrentClusterName = s.clusterNames[i]
 		clusterConfigs[i].Persistence.DBName = "func_" + s.clusterNames[i]
 		clusterConfigs[i].ClusterMetadata.ClusterInformation = make(map[string]cluster.ClusterInformation)
+		// TODO: make tests.temporalImpl actually use these ports. Right now, we're just setting these to the values
+		// that the tests.temporalImpl uses by default, so that our info here is right, but these aren't actually used
+		// by NewCluster.
 		clusterConfigs[i].ClusterMetadata.ClusterInformation[s.clusterNames[i]] = cluster.ClusterInformation{
 			Enabled:                true,
 			InitialFailoverVersion: int64(i + 1),
 			RPCAddress:             fmt.Sprintf("127.0.0.1:%d134", 7+i),
+			HTTPAddress:            fmt.Sprintf("http://127.0.0.1:%d144", 7+i),
 		}
 		clusterConfigs[i].ServiceFxOptions = params.ServiceOptions
 	}
@@ -123,12 +129,13 @@ func (s *xdcBaseSuite) setupSuite(clusterNames []string, opts ...tests.Option) {
 	s.Require().NoError(err)
 	s.cluster2 = c
 
-	cluster1Address := clusterConfigs[0].ClusterMetadata.ClusterInformation[clusterConfigs[0].ClusterMetadata.CurrentClusterName].RPCAddress
-	cluster2Address := clusterConfigs[1].ClusterMetadata.ClusterInformation[clusterConfigs[1].ClusterMetadata.CurrentClusterName].RPCAddress
+	cluster1Info := clusterConfigs[0].ClusterMetadata.ClusterInformation[clusterConfigs[0].ClusterMetadata.CurrentClusterName]
+	cluster2Info := clusterConfigs[1].ClusterMetadata.ClusterInformation[clusterConfigs[1].ClusterMetadata.CurrentClusterName]
 	_, err = s.cluster1.GetAdminClient().AddOrUpdateRemoteCluster(
 		tests.NewContext(),
 		&adminservice.AddOrUpdateRemoteClusterRequest{
-			FrontendAddress:               cluster2Address,
+			FrontendAddress:               cluster2Info.RPCAddress,
+			FrontendHttpAddress:           cluster2Info.HTTPAddress,
 			EnableRemoteClusterConnection: true,
 		})
 	s.Require().NoError(err)
@@ -136,7 +143,8 @@ func (s *xdcBaseSuite) setupSuite(clusterNames []string, opts ...tests.Option) {
 	_, err = s.cluster2.GetAdminClient().AddOrUpdateRemoteCluster(
 		tests.NewContext(),
 		&adminservice.AddOrUpdateRemoteClusterRequest{
-			FrontendAddress:               cluster1Address,
+			FrontendAddress:               cluster1Info.RPCAddress,
+			FrontendHttpAddress:           cluster1Info.HTTPAddress,
 			EnableRemoteClusterConnection: true,
 		})
 	s.Require().NoError(err)
@@ -153,4 +161,5 @@ func (s *xdcBaseSuite) setupTest() {
 	// Have to define our overridden assertions in the test setup. If we did it earlier, s.T() will return nil
 	s.Assertions = require.New(s.T())
 	s.ProtoAssertions = protorequire.New(s.T())
+	s.HistoryRequire = historyrequire.New(s.T())
 }

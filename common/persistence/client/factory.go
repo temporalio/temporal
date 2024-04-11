@@ -26,6 +26,7 @@ package client
 
 import (
 	"go.temporal.io/api/serviceerror"
+
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/config"
 	"go.temporal.io/server/common/log"
@@ -60,18 +61,21 @@ type (
 		NewClusterMetadataManager() (p.ClusterMetadataManager, error)
 		// NewHistoryTaskQueueManager returns a new manager for history task queues
 		NewHistoryTaskQueueManager() (p.HistoryTaskQueueManager, error)
+		// NewNexusIncomingServiceManager returns a new manager for nexus services
+		NewNexusIncomingServiceManager() (p.NexusIncomingServiceManager, error)
 	}
 
 	factoryImpl struct {
-		dataStoreFactory DataStoreFactory
-		config           *config.Persistence
-		serializer       serialization.Serializer
-		eventBlobCache   p.XDCCache
-		metricsHandler   metrics.Handler
-		logger           log.Logger
-		clusterName      string
-		ratelimiter      quotas.RequestRateLimiter
-		healthSignals    p.HealthSignalAggregator
+		dataStoreFactory     DataStoreFactory
+		config               *config.Persistence
+		serializer           serialization.Serializer
+		eventBlobCache       p.XDCCache
+		metricsHandler       metrics.Handler
+		logger               log.Logger
+		clusterName          string
+		systemRateLimiter    quotas.RequestRateLimiter
+		namespaceRateLimiter quotas.RequestRateLimiter
+		healthSignals        p.HealthSignalAggregator
 	}
 )
 
@@ -85,7 +89,8 @@ type (
 func NewFactory(
 	dataStoreFactory DataStoreFactory,
 	cfg *config.Persistence,
-	ratelimiter quotas.RequestRateLimiter,
+	systemRateLimiter quotas.RequestRateLimiter,
+	namespaceRateLimiter quotas.RequestRateLimiter,
 	serializer serialization.Serializer,
 	eventBlobCache p.XDCCache,
 	clusterName string,
@@ -94,15 +99,16 @@ func NewFactory(
 	healthSignals p.HealthSignalAggregator,
 ) Factory {
 	factory := &factoryImpl{
-		dataStoreFactory: dataStoreFactory,
-		config:           cfg,
-		serializer:       serializer,
-		eventBlobCache:   eventBlobCache,
-		metricsHandler:   metricsHandler,
-		logger:           logger,
-		clusterName:      clusterName,
-		ratelimiter:      ratelimiter,
-		healthSignals:    healthSignals,
+		dataStoreFactory:     dataStoreFactory,
+		config:               cfg,
+		serializer:           serializer,
+		eventBlobCache:       eventBlobCache,
+		metricsHandler:       metricsHandler,
+		logger:               logger,
+		clusterName:          clusterName,
+		systemRateLimiter:    systemRateLimiter,
+		namespaceRateLimiter: namespaceRateLimiter,
+		healthSignals:        healthSignals,
 	}
 	factory.initDependencies()
 	return factory
@@ -116,8 +122,8 @@ func (f *factoryImpl) NewTaskManager() (p.TaskManager, error) {
 	}
 
 	result := p.NewTaskManager(taskStore, f.serializer)
-	if f.ratelimiter != nil {
-		result = p.NewTaskPersistenceRateLimitedClient(result, f.ratelimiter, f.logger)
+	if f.systemRateLimiter != nil && f.namespaceRateLimiter != nil {
+		result = p.NewTaskPersistenceRateLimitedClient(result, f.systemRateLimiter, f.namespaceRateLimiter, f.logger)
 	}
 	if f.metricsHandler != nil && f.healthSignals != nil {
 		result = p.NewTaskPersistenceMetricsClient(result, f.metricsHandler, f.healthSignals, f.logger)
@@ -134,8 +140,8 @@ func (f *factoryImpl) NewShardManager() (p.ShardManager, error) {
 	}
 
 	result := p.NewShardManager(shardStore, f.serializer)
-	if f.ratelimiter != nil {
-		result = p.NewShardPersistenceRateLimitedClient(result, f.ratelimiter, f.logger)
+	if f.systemRateLimiter != nil && f.namespaceRateLimiter != nil {
+		result = p.NewShardPersistenceRateLimitedClient(result, f.systemRateLimiter, f.namespaceRateLimiter, f.logger)
 	}
 	if f.metricsHandler != nil && f.healthSignals != nil {
 		result = p.NewShardPersistenceMetricsClient(result, f.metricsHandler, f.healthSignals, f.logger)
@@ -152,8 +158,8 @@ func (f *factoryImpl) NewMetadataManager() (p.MetadataManager, error) {
 	}
 
 	result := p.NewMetadataManagerImpl(store, f.serializer, f.logger, f.clusterName)
-	if f.ratelimiter != nil {
-		result = p.NewMetadataPersistenceRateLimitedClient(result, f.ratelimiter, f.logger)
+	if f.systemRateLimiter != nil && f.namespaceRateLimiter != nil {
+		result = p.NewMetadataPersistenceRateLimitedClient(result, f.systemRateLimiter, f.namespaceRateLimiter, f.logger)
 	}
 	if f.metricsHandler != nil && f.healthSignals != nil {
 		result = p.NewMetadataPersistenceMetricsClient(result, f.metricsHandler, f.healthSignals, f.logger)
@@ -170,8 +176,8 @@ func (f *factoryImpl) NewClusterMetadataManager() (p.ClusterMetadataManager, err
 	}
 
 	result := p.NewClusterMetadataManagerImpl(store, f.serializer, f.clusterName, f.logger)
-	if f.ratelimiter != nil {
-		result = p.NewClusterMetadataPersistenceRateLimitedClient(result, f.ratelimiter, f.logger)
+	if f.systemRateLimiter != nil && f.namespaceRateLimiter != nil {
+		result = p.NewClusterMetadataPersistenceRateLimitedClient(result, f.systemRateLimiter, f.namespaceRateLimiter, f.logger)
 	}
 	if f.metricsHandler != nil && f.healthSignals != nil {
 		result = p.NewClusterMetadataPersistenceMetricsClient(result, f.metricsHandler, f.healthSignals, f.logger)
@@ -188,8 +194,8 @@ func (f *factoryImpl) NewExecutionManager() (p.ExecutionManager, error) {
 	}
 
 	result := p.NewExecutionManager(store, f.serializer, f.eventBlobCache, f.logger, f.config.TransactionSizeLimit)
-	if f.ratelimiter != nil {
-		result = p.NewExecutionPersistenceRateLimitedClient(result, f.ratelimiter, f.logger)
+	if f.systemRateLimiter != nil && f.namespaceRateLimiter != nil {
+		result = p.NewExecutionPersistenceRateLimitedClient(result, f.systemRateLimiter, f.namespaceRateLimiter, f.logger)
 	}
 	if f.metricsHandler != nil && f.healthSignals != nil {
 		result = p.NewExecutionPersistenceMetricsClient(result, f.metricsHandler, f.healthSignals, f.logger)
@@ -204,8 +210,8 @@ func (f *factoryImpl) NewNamespaceReplicationQueue() (p.NamespaceReplicationQueu
 		return nil, err
 	}
 
-	if f.ratelimiter != nil {
-		result = p.NewQueuePersistenceRateLimitedClient(result, f.ratelimiter, f.logger)
+	if f.systemRateLimiter != nil && f.namespaceRateLimiter != nil {
+		result = p.NewQueuePersistenceRateLimitedClient(result, f.systemRateLimiter, f.namespaceRateLimiter, f.logger)
 	}
 	if f.metricsHandler != nil && f.healthSignals != nil {
 		result = p.NewQueuePersistenceMetricsClient(result, f.metricsHandler, f.healthSignals, f.logger)
@@ -219,7 +225,24 @@ func (f *factoryImpl) NewHistoryTaskQueueManager() (p.HistoryTaskQueueManager, e
 	if err != nil {
 		return nil, err
 	}
-	return p.NewHistoryTaskQueueManager(q), nil
+	return p.NewHistoryTaskQueueManager(q, serialization.NewSerializer()), nil
+}
+
+func (f *factoryImpl) NewNexusIncomingServiceManager() (p.NexusIncomingServiceManager, error) {
+	store, err := f.dataStoreFactory.NewNexusIncomingServiceStore()
+	if err != nil {
+		return nil, err
+	}
+
+	result := p.NewNexusIncomingServiceManager(store, f.serializer, f.logger)
+	if f.systemRateLimiter != nil && f.namespaceRateLimiter != nil {
+		result = p.NewNexusIncomingServicePersistenceRateLimitedClient(result, f.systemRateLimiter, f.namespaceRateLimiter, f.logger)
+	}
+	if f.metricsHandler != nil && f.healthSignals != nil {
+		result = p.NewNexusIncomingServicePersistenceMetricsClient(result, f.metricsHandler, f.healthSignals, f.logger)
+	}
+	result = p.NewNexusIncomingServicePersistenceRetryableClient(result, retryPolicy, IsPersistenceTransientError)
+	return result, nil
 }
 
 // Close closes this factory

@@ -40,110 +40,54 @@ const (
 	SecondaryVisibilityWritingModeDual = "dual"
 )
 
-// DefaultAdvancedVisibilityWritingMode returns default advancedVisibilityWritingMode based on whether related config exists in static config file.
-func DefaultAdvancedVisibilityWritingMode(advancedVisibilityConfigExist bool) string {
-	if advancedVisibilityConfigExist {
-		return SecondaryVisibilityWritingModeOn
-	}
-	return SecondaryVisibilityWritingModeOff
-}
-
 //nolint:revive
 func GetVisibilityPersistenceMaxReadQPS(
 	dc *dynamicconfig.Collection,
-	advancedVisibilityStoreConfigExists bool,
 ) dynamicconfig.IntPropertyFn {
-	if dc.HasKey(dynamicconfig.VisibilityPersistenceMaxReadQPS) {
-		return dc.GetIntProperty(dynamicconfig.VisibilityPersistenceMaxReadQPS, 9000)
-	}
-	if advancedVisibilityStoreConfigExists {
-		return dc.GetIntProperty(dynamicconfig.AdvancedVisibilityPersistenceMaxReadQPS, 9000)
-	}
-	return dc.GetIntProperty(dynamicconfig.StandardVisibilityPersistenceMaxReadQPS, 9000)
+	return dc.GetIntProperty(dynamicconfig.VisibilityPersistenceMaxReadQPS, 9000)
 }
 
 //nolint:revive
 func GetVisibilityPersistenceMaxWriteQPS(
 	dc *dynamicconfig.Collection,
-	advancedVisibilityStoreConfigExists bool,
 ) dynamicconfig.IntPropertyFn {
-	if dc.HasKey(dynamicconfig.VisibilityPersistenceMaxWriteQPS) {
-		return dc.GetIntProperty(dynamicconfig.VisibilityPersistenceMaxWriteQPS, 9000)
-	}
-	if advancedVisibilityStoreConfigExists {
-		return dc.GetIntProperty(dynamicconfig.AdvancedVisibilityPersistenceMaxWriteQPS, 9000)
-	}
-	return dc.GetIntProperty(dynamicconfig.StandardVisibilityPersistenceMaxWriteQPS, 9000)
+	return dc.GetIntProperty(dynamicconfig.VisibilityPersistenceMaxWriteQPS, 9000)
 }
 
 //nolint:revive
 func GetEnableReadFromSecondaryVisibilityConfig(
 	dc *dynamicconfig.Collection,
-	visibilityStoreConfigExists bool,
-	advancedVisibilityStoreConfigExists bool,
 ) dynamicconfig.BoolPropertyFnWithNamespaceFilter {
-	if dc.HasKey(dynamicconfig.EnableReadFromSecondaryVisibility) {
-		return dc.GetBoolPropertyFnWithNamespaceFilter(
-			dynamicconfig.EnableReadFromSecondaryVisibility,
-			false,
-		)
-	}
-	if visibilityStoreConfigExists && advancedVisibilityStoreConfigExists {
-		return dc.GetBoolPropertyFnWithNamespaceFilter(
-			dynamicconfig.EnableReadVisibilityFromES,
-			advancedVisibilityStoreConfigExists,
-		)
-	}
-	if advancedVisibilityStoreConfigExists {
-		return dc.GetBoolPropertyFnWithNamespaceFilter(
-			dynamicconfig.EnableReadFromSecondaryAdvancedVisibility,
-			false,
-		)
-	}
-	return dynamicconfig.GetBoolPropertyFnFilteredByNamespace(false)
+	return dc.GetBoolPropertyFnWithNamespaceFilter(
+		dynamicconfig.EnableReadFromSecondaryVisibility,
+		false,
+	)
 }
 
 //nolint:revive
 func GetSecondaryVisibilityWritingModeConfig(
 	dc *dynamicconfig.Collection,
-	visibilityStoreConfigExists bool,
-	advancedVisibilityStoreConfigExists bool,
 ) dynamicconfig.StringPropertyFn {
-	if dc.HasKey(dynamicconfig.SecondaryVisibilityWritingMode) {
-		return dc.GetStringProperty(
-			dynamicconfig.SecondaryVisibilityWritingMode,
-			SecondaryVisibilityWritingModeOff,
-		)
-	}
-	if visibilityStoreConfigExists && advancedVisibilityStoreConfigExists {
-		return dc.GetStringProperty(
-			dynamicconfig.AdvancedVisibilityWritingMode,
-			DefaultAdvancedVisibilityWritingMode(advancedVisibilityStoreConfigExists),
-		)
-	}
-	if advancedVisibilityStoreConfigExists {
-		enableWriteToSecondaryAdvancedVisibility := dc.GetBoolProperty(
-			dynamicconfig.EnableWriteToSecondaryAdvancedVisibility,
-			false,
-		)
-		if enableWriteToSecondaryAdvancedVisibility() {
-			return dynamicconfig.GetStringPropertyFn(SecondaryVisibilityWritingModeDual)
-		}
-	}
-	return dynamicconfig.GetStringPropertyFn(SecondaryVisibilityWritingModeOff)
+	return dc.GetStringProperty(
+		dynamicconfig.SecondaryVisibilityWritingMode,
+		SecondaryVisibilityWritingModeOff,
+	)
 }
 
-func AllowListForValidation(storeNames []string) bool {
+func AllowListForValidation(
+	storeNames []string,
+	allowList dynamicconfig.BoolPropertyFnWithNamespaceFilter,
+) dynamicconfig.BoolPropertyFnWithNamespaceFilter {
 	if len(storeNames) == 0 {
-		return false
+		return dynamicconfig.GetBoolPropertyFnFilteredByNamespace(false)
 	}
 
 	switch storeNames[0] {
-	case mysql.PluginNameV8, postgresql.PluginNameV12, postgresql.PluginNameV12PGX, sqlite.PluginName:
+	case mysql.PluginName, postgresql.PluginName, postgresql.PluginNamePGX, sqlite.PluginName:
 		// Advanced visibility with SQL DB don't support list of values
-		return false
+		return dynamicconfig.GetBoolPropertyFnFilteredByNamespace(false)
 	default:
-		// Otherwise, enable for backward compatibility.
-		return true
+		// Otherwise (ES), check dynamic config
+		return allowList
 	}
 }

@@ -36,6 +36,7 @@ import (
 	protocolpb "go.temporal.io/api/protocol/v1"
 	"go.temporal.io/api/serviceerror"
 	updatepb "go.temporal.io/api/update/v1"
+	"google.golang.org/protobuf/types/known/anypb"
 
 	updatespb "go.temporal.io/server/api/update/v1"
 	"go.temporal.io/server/common/future"
@@ -75,13 +76,16 @@ type (
 		RejectUnprocessed(ctx context.Context, eventStore EventStore) ([]string, error)
 
 		// CancelIncomplete cancels all incomplete updates in the registry:
-		//   - updates in stateAdmitted, stateRequested, or stateSent are rejected,
+		//   - updates in stateCreated, stateAdmitted, or stateSent are rejected,
 		//   - updates in stateAccepted are ignored (see CancelIncomplete() in update.go for details),
 		//   - updates in stateCompleted are ignored.
 		CancelIncomplete(ctx context.Context, reason CancelReason, eventStore EventStore) error
 
 		// Len observes the number of incomplete updates in this Registry.
 		Len() int
+
+		// GetSize returns the size of the update object
+		GetSize() int
 	}
 
 	// Store represents the update package's requirements for reading updates from the store.
@@ -160,16 +164,30 @@ func NewRegistry(
 	}
 
 	getStoreFn().VisitUpdates(func(updID string, updInfo *updatespb.UpdateInfo) {
-		// need to eager load here so that Len and admit are correct.
-		if acc := updInfo.GetAcceptance(); acc != nil {
+		if updInfo.GetRequest() != nil {
+			// A update entry in the registry may have a request payload: we use this to write the payload to an
+			// UpdateAccepted event, in the event that the update is accepted. However, when populating the registry
+			// from mutable state, we do not have access to update request payloads. In this situation it is correct to
+			// create a registry entry in state Admitted with a nil payload for the following reason: the fact that we
+			// have encountered an UpdateInfo in state Admitted in mutable state implies that there is an
+			// UpdateAdmitted event in history; and when there is an UpdateAdmitted event in history, we will not
+			// attempt to write the request payload to the UpdateAccepted event, since the request payload is already
+			// present in the UpdateAdmitted event.
+			var request *anypb.Any
+			r.updates[updID] = newAdmitted(
+				updID,
+				request,
+				r.remover(updID),
+				withInstrumentation(&r.instrumentation),
+			)
+		} else if acc := updInfo.GetAcceptance(); acc != nil {
 			r.updates[updID] = newAccepted(
 				updID,
 				acc.EventId,
 				r.remover(updID),
 				withInstrumentation(&r.instrumentation),
 			)
-		}
-		if updInfo.GetCompletion() != nil {
+		} else if updInfo.GetCompletion() != nil {
 			r.completedCount++
 		}
 	})
@@ -197,7 +215,7 @@ func (r *registry) Find(ctx context.Context, id string) (*Update, bool) {
 }
 
 // CancelIncomplete cancels all incomplete updates in the registry:
-//   - updates in stateAdmitted, stateRequested, or stateSent are rejected,
+//   - updates in stateCreated, stateAdmitted, or stateSent are rejected,
 //   - updates in stateAccepted are ignored (see CancelIncomplete() in update.go for details),
 //   - updates in stateCompleted are ignored.
 func (r *registry) CancelIncomplete(ctx context.Context, reason CancelReason, eventStore EventStore) error {
@@ -301,10 +319,11 @@ func (r *registry) remover(id string) updateOpt {
 
 func (r *registry) admit(ctx context.Context) error {
 	if len(r.updates) >= r.maxInFlight() {
-		return serviceerror.NewResourceExhausted(
-			enumspb.RESOURCE_EXHAUSTED_CAUSE_CONCURRENT_LIMIT,
-			fmt.Sprintf("limit on number of concurrent in-flight updates has been reached (%v)", r.maxInFlight()),
-		)
+		return &serviceerror.ResourceExhausted{
+			Cause:   enumspb.RESOURCE_EXHAUSTED_CAUSE_CONCURRENT_LIMIT,
+			Scope:   enumspb.RESOURCE_EXHAUSTED_SCOPE_NAMESPACE,
+			Message: fmt.Sprintf("limit on number of concurrent in-flight updates has been reached (%v)", r.maxInFlight()),
+		}
 	}
 
 	if len(r.updates)+r.completedCount >= r.maxTotal() {
@@ -357,4 +376,12 @@ func (r *registry) filter(predicate func(u *Update) bool) []*Update {
 		}
 	}
 	return res
+}
+
+func (r *registry) GetSize() int {
+	var size int
+	for key, update := range r.updates {
+		size += len(key) + update.GetSize()
+	}
+	return size
 }

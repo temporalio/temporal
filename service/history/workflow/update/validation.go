@@ -85,6 +85,8 @@ func validateRequestMsgPrefix(
 func validateAcceptanceMsg(msg *updatepb.Acceptance) error {
 	return validate(
 		notZero(msg, "body", msg),
+		notZero(msg.GetAcceptedRequestSequencingEventId(), "accepted_request_sequencing_event_id", msg),
+		notZero(msg.GetAcceptedRequestMessageId(), "accepted_request_message_id", msg),
 	)
 }
 

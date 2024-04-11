@@ -1,0 +1,59 @@
+// Copyright (c) 2019 Temporal Technologies, Inc.
+//
+// Permission is hereby granted, free of charge, to any person obtaining a copy
+// of this software and associated documentation files (the "Software"), to deal
+// in the Software without restriction, including without limitation the rights
+// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+// copies of the Software, and to permit persons to whom the Software is
+// furnished to do so, subject to the following conditions:
+//
+// The above copyright notice and this permission notice shall be included in
+// all copies or substantial portions of the Software.
+//
+// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
+// THE SOFTWARE.
+
+syntax = "proto3";
+
+package temporal.server.api.persistence.v1;
+option go_package = "go.temporal.io/server/api/persistence/v1;persistence";
+
+import "google/protobuf/timestamp.proto";
+import "temporal/api/nexus/v1/message.proto";
+import "temporal/server/api/clock/v1/message.proto";
+
+message NexusIncomingService {
+    // The last recorded cluster-local Hybrid Logical Clock timestamp for _this_ service.
+    // Updated whenever the service is directly updated due to a user action but not when applying replication events.
+    // The clock is referenced when new timestamps are generated to ensure it produces monotonically increasing
+    // timestamps.
+    temporal.server.api.clock.v1.HybridLogicalClock clock = 1;
+    // Service specification. This is a mirror of the public API and is intended to be mutable.
+    temporal.api.nexus.v1.IncomingServiceSpec spec = 2;
+    // The date and time when the service was created.
+    // (-- api-linter: core::0142::time-field-names=disabled
+    //     aip.dev/not-precedent: Not following linter rules. --)
+    google.protobuf.Timestamp created_time = 3;
+}
+
+// Container for a version, a UUID, and a NexusIncomingService.
+message NexusIncomingServiceEntry {
+    int64 version = 1;
+    string id = 2;
+    NexusIncomingService service = 3;
+}
+
+// Nexus outgoing service info, scoped to a namespace.
+message NexusOutgoingService {
+    // Current record version of this service. Incremented with each update.
+    int64 version = 1;
+    // Service name. Must be unique for this namespace and match [go.temporal.io/server/common/nexus.ServiceNameRegex].
+    string name = 2;
+    // Service specification. This is a mirror of the public API and is intended to be mutable.
+    temporal.api.nexus.v1.OutgoingServiceSpec spec = 3;
+}

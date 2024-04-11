@@ -30,8 +30,6 @@ global:
     port: 9936
   metrics:
     prometheus:
-#      # specify framework to use new approach for initializing metrics and/or use opentelemetry
-#      framework: "opentelemetry"
       framework: "opentelemetry"
       timerType: "histogram"
       listenAddress: "127.0.0.1:8002"
@@ -91,7 +89,7 @@ clusterMetadata:
 #      rpcAddress: "localhost:8233"
 
 dcRedirectionPolicy:
-  policy: "selected-apis-forwarding"
+  policy: "all-apis-forwarding"
 
 archival:
   history:

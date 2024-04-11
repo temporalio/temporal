@@ -26,6 +26,7 @@ package common
 
 import (
 	tokenspb "go.temporal.io/server/api/token/v1"
+	"go.temporal.io/server/common/utf8validator"
 )
 
 type (
@@ -41,12 +42,18 @@ func (s *protoTaskTokenSerializer) Serialize(taskToken *tokenspb.Task) ([]byte, 
 	if taskToken == nil {
 		return nil, nil
 	}
+	if err := utf8validator.Validate(taskToken, utf8validator.SourceRPCResponse); err != nil {
+		return nil, err
+	}
 	return taskToken.Marshal()
 }
 
 func (s *protoTaskTokenSerializer) Deserialize(data []byte) (*tokenspb.Task, error) {
 	taskToken := &tokenspb.Task{}
 	err := taskToken.Unmarshal(data)
+	if err == nil {
+		err = utf8validator.Validate(taskToken, utf8validator.SourceRPCRequest)
+	}
 	return taskToken, err
 }
 
@@ -54,11 +61,36 @@ func (s *protoTaskTokenSerializer) SerializeQueryTaskToken(taskToken *tokenspb.Q
 	if taskToken == nil {
 		return nil, nil
 	}
+	if err := utf8validator.Validate(taskToken, utf8validator.SourceRPCResponse); err != nil {
+		return nil, err
+	}
 	return taskToken.Marshal()
 }
 
 func (s *protoTaskTokenSerializer) DeserializeQueryTaskToken(data []byte) (*tokenspb.QueryTask, error) {
 	taskToken := tokenspb.QueryTask{}
 	err := taskToken.Unmarshal(data)
+	if err == nil {
+		err = utf8validator.Validate(&taskToken, utf8validator.SourceRPCRequest)
+	}
+	return &taskToken, err
+}
+
+func (s *protoTaskTokenSerializer) SerializeNexusTaskToken(taskToken *tokenspb.NexusTask) ([]byte, error) {
+	if taskToken == nil {
+		return nil, nil
+	}
+	if err := utf8validator.Validate(taskToken, utf8validator.SourceRPCResponse); err != nil {
+		return nil, err
+	}
+	return taskToken.Marshal()
+}
+
+func (s *protoTaskTokenSerializer) DeserializeNexusTaskToken(data []byte) (*tokenspb.NexusTask, error) {
+	taskToken := tokenspb.NexusTask{}
+	err := taskToken.Unmarshal(data)
+	if err == nil {
+		err = utf8validator.Validate(&taskToken, utf8validator.SourceRPCRequest)
+	}
 	return &taskToken, err
 }

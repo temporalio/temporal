@@ -46,7 +46,7 @@ func Invoke(
 		return err
 	}
 
-	wfContext, err := workflowConsistencyChecker.GetWorkflowContext(
+	workflowLease, err := workflowConsistencyChecker.GetWorkflowLease(
 		ctx,
 		nil,
 		api.BypassMutableStateConsistencyPredicate,
@@ -56,9 +56,9 @@ func Invoke(
 	if err != nil {
 		return err
 	}
-	defer func() { wfContext.GetReleaseFn()(retError) }()
+	defer func() { workflowLease.GetReleaseFn()(retError) }()
 
-	mutableState := wfContext.GetMutableState()
+	mutableState := workflowLease.GetMutableState()
 	mutableStateTaskRefresher := workflow.NewTaskRefresher(
 		shard,
 		shard.GetConfig(),
@@ -76,7 +76,6 @@ func Invoke(
 		// RangeID is set by shard
 		NamespaceID: workflowKey.NamespaceID,
 		WorkflowID:  workflowKey.WorkflowID,
-		RunID:       workflowKey.RunID,
 		Tasks:       mutableState.PopTasks(),
 	})
 }

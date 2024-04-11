@@ -27,6 +27,7 @@ package tests
 import (
 	"context"
 	"errors"
+	"fmt"
 	"sort"
 	"time"
 
@@ -148,15 +149,8 @@ func (s *FunctionalSuite) TestCronWorkflow() {
 	}
 	searchAttr := &commonpb.SearchAttributes{
 		IndexedFields: map[string]*commonpb.Payload{
-			"CustomKeywordField": payload.EncodeString(`"1"`),
+			"CustomKeywordField": payload.EncodeString("keyword-value"),
 		},
-	}
-
-	// can't do simply s.Equal because "type" is added
-	checkSearchAttrs := func(sa *commonpb.SearchAttributes) {
-		field := sa.IndexedFields["CustomKeywordField"]
-		s.Equal(searchAttr.IndexedFields["CustomKeywordField"].Data, field.Data)
-		s.Equal([]byte("Keyword"), field.Metadata["type"])
 	}
 
 	request := &workflowservice.StartWorkflowExecutionRequest{
@@ -285,30 +279,24 @@ func (s *FunctionalSuite) TestCronWorkflow() {
 	// first two should be failures
 	for i := 0; i < 2; i++ {
 		events := s.getHistory(s.namespace, executions[i])
-
-		startAttrs := events[0].GetWorkflowExecutionStartedEventAttributes()
-		s.ProtoEqual(memo, startAttrs.Memo)
-		checkSearchAttrs(startAttrs.SearchAttributes)
-
-		lastEvent := events[len(events)-1]
-		s.Equal(enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_FAILED, lastEvent.GetEventType())
-		failAttrs := lastEvent.GetWorkflowExecutionFailedEventAttributes()
-		s.Equal("cron-test-error", failAttrs.GetFailure().GetMessage())
-		s.Equal(executions[i+1].RunId, failAttrs.GetNewExecutionRunId())
+		s.EqualHistoryEvents(fmt.Sprintf(`
+  1 WorkflowExecutionStarted {"Memo":{"Fields":{"memoKey":{"Data":"\"memoVal\""}}},"SearchAttributes":{"IndexedFields":{"CustomKeywordField":{"Data":"\"keyword-value\"","Metadata":{"type":"Keyword"}}}}}
+  2 WorkflowTaskScheduled
+  3 WorkflowTaskStarted
+  4 WorkflowTaskCompleted
+  5 WorkflowExecutionFailed {"Failure":{"Message":"cron-test-error"},"NewExecutionRunId":"%s"}
+`, executions[i+1].RunId), events)
 	}
 
 	// third should be completed
 	events := s.getHistory(s.namespace, executions[2])
-
-	startAttrs := events[0].GetWorkflowExecutionStartedEventAttributes()
-	s.ProtoEqual(memo, startAttrs.Memo)
-	checkSearchAttrs(startAttrs.SearchAttributes)
-
-	lastEvent := events[len(events)-1]
-	s.Equal(enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_COMPLETED, lastEvent.GetEventType())
-
-	completedAttrs := lastEvent.GetWorkflowExecutionCompletedEventAttributes()
-	s.Equal("cron-test-result", s.decodePayloadsString(completedAttrs.Result))
+	s.EqualHistoryEvents(`
+  1 WorkflowExecutionStarted {"Memo":{"Fields":{"memoKey":{"Data":"\"memoVal\""}}},"SearchAttributes":{"IndexedFields":{"CustomKeywordField":{"Data":"\"keyword-value\"","Metadata":{"type":"Keyword"}}}}}
+  2 WorkflowTaskScheduled
+  3 WorkflowTaskStarted
+  4 WorkflowTaskCompleted
+  5 WorkflowExecutionCompleted {"Result":{"Payloads":[{"Data":"\"cron-test-result\""}]}}
+`, events)
 
 	startFilter.LatestTime = timestamppb.New(time.Now().UTC())
 	var closedExecutions []*workflowpb.WorkflowExecutionInfo
@@ -460,14 +448,12 @@ func (s *ClientFunctionalSuite) TestCronWorkflowCompletionStates() {
 	exec := s.listOpenWorkflowExecutions(startTs, time.Now(), id, 1)[0]
 	firstRunID := exec.GetExecution().RunId
 	s.Equal(enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING, exec.GetStatus())
-	lastEvent := s.getLastEvent(s.namespace, exec.GetExecution())
-	s.Equal(enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_STARTED, lastEvent.GetEventType())
-	attrs0 := lastEvent.GetWorkflowExecutionStartedEventAttributes()
-	s.Equal(cronSchedule, attrs0.CronSchedule)
-	s.DurationNear(attrs0.FirstWorkflowTaskBackoff.AsDuration(), targetBackoffDuration, tolerance)
-	s.Equal(firstRunID, attrs0.FirstExecutionRunId)
-	s.Equal(enumspb.CONTINUE_AS_NEW_INITIATOR_CRON_SCHEDULE, attrs0.Initiator)
-	s.Equal("", attrs0.ContinuedExecutionRunId)
+	historyEvents := s.getHistory(s.namespace, exec.GetExecution())
+	s.EqualHistoryEvents(fmt.Sprintf(`
+  1 WorkflowExecutionStarted {"ContinuedExecutionRunId":"","CronSchedule":"@every 3s","FirstExecutionRunId":"%s", "Initiator":3}`, firstRunID), historyEvents)
+	attrs1 := historyEvents[0].GetWorkflowExecutionStartedEventAttributes()
+	// not `"FirstWorkflowTaskBackoff":{"Nanos":0,"Seconds":3}` in the history above because DurationNear is not supported by EqualHistoryEvents.
+	s.DurationNear(attrs1.FirstWorkflowTaskBackoff.AsDuration(), targetBackoffDuration, tolerance)
 
 	// wait for first run
 	s.Equal(<-wfCh, 1)
@@ -484,14 +470,12 @@ func (s *ClientFunctionalSuite) TestCronWorkflowCompletionStates() {
 		250*time.Millisecond,
 	)
 	s.Equal(enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING, exec.GetStatus())
-	lastEvent = s.getLastEvent(s.namespace, exec.GetExecution())
-	s.Equal(enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_STARTED, lastEvent.GetEventType())
-	attrs0 = lastEvent.GetWorkflowExecutionStartedEventAttributes()
-	s.Equal(cronSchedule, attrs0.CronSchedule)
-	s.DurationNear(attrs0.FirstWorkflowTaskBackoff.AsDuration(), targetBackoffDuration, tolerance)
-	s.Equal(firstRunID, attrs0.FirstExecutionRunId)
-	s.Equal(enumspb.CONTINUE_AS_NEW_INITIATOR_CRON_SCHEDULE, attrs0.Initiator)
-	s.Equal(firstRunID, attrs0.ContinuedExecutionRunId)
+	historyEvents = s.getHistory(s.namespace, exec.GetExecution())
+	s.EqualHistoryEvents(fmt.Sprintf(`
+  1 WorkflowExecutionStarted {"ContinuedExecutionRunId":"%s","CronSchedule":"@every 3s","FirstExecutionRunId":"%s", "Initiator":%d}`, firstRunID, firstRunID, enumspb.CONTINUE_AS_NEW_INITIATOR_CRON_SCHEDULE), historyEvents)
+	attrs2 := historyEvents[0].GetWorkflowExecutionStartedEventAttributes()
+	// not `"FirstWorkflowTaskBackoff":{"Nanos":0,"Seconds":3}` in the history above because DurationNear is not supported by EqualHistoryEvents.
+	s.DurationNear(attrs2.FirstWorkflowTaskBackoff.AsDuration(), targetBackoffDuration, tolerance)
 
 	// wait for second run
 	s.Equal(<-wfCh, 2)
@@ -524,46 +508,61 @@ func (s *ClientFunctionalSuite) TestCronWorkflowCompletionStates() {
 
 	exec = closedExecutions[5] // first: success
 	s.Equal(enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED, exec.GetStatus())
-	lastEvent = s.getLastEvent(s.namespace, exec.GetExecution())
-	s.Equal(enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_COMPLETED, lastEvent.GetEventType())
-	attrs1 := lastEvent.GetWorkflowExecutionCompletedEventAttributes()
-	s.Equal("pass", s.decodePayloadsString(attrs1.GetResult()))
+	historyEvents = s.getHistory(s.namespace, exec.GetExecution())
+	s.EqualHistoryEvents(`
+  1 WorkflowExecutionStarted
+  2 WorkflowTaskScheduled
+  3 WorkflowTaskStarted
+  4 WorkflowTaskCompleted
+  5 WorkflowExecutionCompleted {"Result":{"Payloads":[{"Data":"\"pass\""}]}}`, historyEvents)
 
 	exec = closedExecutions[4] // second: fail
 	s.Equal(enumspb.WORKFLOW_EXECUTION_STATUS_FAILED, exec.GetStatus())
-	lastEvent = s.getLastEvent(s.namespace, exec.GetExecution())
-	s.Equal(enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_FAILED, lastEvent.GetEventType())
-	attrs2 := lastEvent.GetWorkflowExecutionFailedEventAttributes()
-	s.Equal("second error", attrs2.GetFailure().GetMessage())
+	historyEvents = s.getHistory(s.namespace, exec.GetExecution())
+	s.EqualHistoryEvents(`
+  1 WorkflowExecutionStarted
+  2 WorkflowTaskScheduled
+  3 WorkflowTaskStarted
+  4 WorkflowTaskCompleted
+  5 WorkflowExecutionFailed {"Failure":{"Message":"second error"}}`, historyEvents)
 
 	exec = closedExecutions[3] // third: timed out
 	s.Equal(enumspb.WORKFLOW_EXECUTION_STATUS_TIMED_OUT, exec.GetStatus())
-	lastEvent = s.getLastEvent(s.namespace, exec.GetExecution())
-	s.Equal(enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_TIMED_OUT, lastEvent.GetEventType())
-	attrs3 := lastEvent.GetWorkflowExecutionTimedOutEventAttributes()
-	s.Equal(attrs3.GetRetryState(), enumspb.RETRY_STATE_RETRY_POLICY_NOT_SET)
+	historyEvents = s.getHistory(s.namespace, exec.GetExecution())
+	s.EqualHistoryEvents(`
+  1 WorkflowExecutionStarted
+  2 WorkflowTaskScheduled
+  3 WorkflowTaskStarted
+  4 WorkflowTaskCompleted
+  5 TimerStarted
+  6 WorkflowExecutionTimedOut {"RetryState":5} // enumspb.RETRY_STATE_RETRY_POLICY_NOT_SET`, historyEvents)
 
 	exec = closedExecutions[2] // fourth: success
 	s.Equal(enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED, exec.GetStatus())
-	lastEvent = s.getLastEvent(s.namespace, exec.GetExecution())
-	s.Equal(enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_COMPLETED, lastEvent.GetEventType())
-	attrs1 = lastEvent.GetWorkflowExecutionCompletedEventAttributes()
-	s.Equal("pass again", s.decodePayloadsString(attrs1.GetResult()))
+	historyEvents = s.getHistory(s.namespace, exec.GetExecution())
+	s.EqualHistoryEvents(`
+  1 WorkflowExecutionStarted
+  2 WorkflowTaskScheduled
+  3 WorkflowTaskStarted
+  4 WorkflowTaskCompleted
+  5 WorkflowExecutionCompleted {"Result":{"Payloads":[{"Data":"\"pass again\""}]}}`, historyEvents)
 
 	exec = closedExecutions[1] // fifth: success
 	s.Equal(enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED, exec.GetStatus())
-	lastEvent = s.getLastEvent(s.namespace, exec.GetExecution())
-	s.Equal(enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_COMPLETED, lastEvent.GetEventType())
-	attrs1 = lastEvent.GetWorkflowExecutionCompletedEventAttributes()
-	s.Equal("final pass", s.decodePayloadsString(attrs1.GetResult()))
+	historyEvents = s.getHistory(s.namespace, exec.GetExecution())
+	s.EqualHistoryEvents(`
+  1 WorkflowExecutionStarted
+  2 WorkflowTaskScheduled
+  3 WorkflowTaskStarted
+  4 WorkflowTaskCompleted
+  5 WorkflowExecutionCompleted {"Result":{"Payloads":[{"Data":"\"final pass\""}]}}`, historyEvents)
 
 	exec = closedExecutions[0] // sixth: terminated
 	s.Equal(enumspb.WORKFLOW_EXECUTION_STATUS_TERMINATED, exec.GetStatus())
 	events := s.getHistory(s.namespace, exec.GetExecution())
-	s.Equal(2, len(events)) // only started and terminated
-	lastEvent = events[len(events)-1]
-	attrs4 := lastEvent.GetWorkflowExecutionTerminatedEventAttributes()
-	s.Equal("test is over", attrs4.GetReason())
+	s.EqualHistoryEvents(`
+  1 WorkflowExecutionStarted
+  2 WorkflowExecutionTerminated {"Reason":"test is over"}`, events)
 }
 
 func (s *ClientFunctionalSuite) listOpenWorkflowExecutions(start, end time.Time, id string, expectedNumber int) []*workflowpb.WorkflowExecutionInfo {

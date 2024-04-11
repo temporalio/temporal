@@ -35,6 +35,7 @@ import (
 	"golang.org/x/exp/slices"
 
 	enumsspb "go.temporal.io/server/api/enums/v1"
+	"go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common/predicates"
 )
 
@@ -149,6 +150,72 @@ func (s *predicatesSuite) TestTypePredicate_Equals() {
 	s.False(p.Equals(predicates.Universal[Task]()))
 }
 
+func (s *predicatesSuite) TestDestinationPredicate_Test() {
+	destinations := []string{uuid.New(), uuid.New()}
+
+	p := NewDestinationPredicate(destinations)
+	for _, dest := range destinations {
+		mockTask := &StateMachineOutboundTask{Destination: dest}
+		s.True(p.Test(mockTask))
+	}
+
+	mockTask := &StateMachineOutboundTask{Destination: uuid.New()}
+	s.False(p.Test(mockTask))
+}
+
+func (s *predicatesSuite) TestDestinationPredicate_Equals() {
+	destinations := []string{uuid.New(), uuid.New()}
+
+	p := NewDestinationPredicate(destinations)
+
+	s.True(p.Equals(p))
+	s.True(p.Equals(NewDestinationPredicate(destinations)))
+	rand.Shuffle(
+		len(destinations),
+		func(i, j int) {
+			destinations[i], destinations[j] = destinations[j], destinations[i]
+		},
+	)
+	s.True(p.Equals(NewDestinationPredicate(destinations)))
+
+	s.False(p.Equals(NewDestinationPredicate([]string{uuid.New(), uuid.New()})))
+	s.False(p.Equals(NewTypePredicate([]enumsspb.TaskType{enumsspb.TASK_TYPE_ACTIVITY_RETRY_TIMER})))
+	s.False(p.Equals(predicates.Universal[Task]()))
+}
+
+func (s *predicatesSuite) TestStateMachineTaskTypePredicate_Test() {
+	types := []int32{1, 2}
+
+	p := NewStateMachineTaskTypePredicate(types)
+	for _, t := range types {
+		mockTask := &StateMachineOutboundTask{StateMachineTask: StateMachineTask{Info: &persistence.StateMachineTaskInfo{Type: t}}}
+		s.True(p.Test(mockTask))
+	}
+
+	mockTask := &StateMachineOutboundTask{StateMachineTask: StateMachineTask{Info: &persistence.StateMachineTaskInfo{Type: 3}}}
+	s.False(p.Test(mockTask))
+}
+
+func (s *predicatesSuite) TestStateMachineTaskTypePredicate_Equals() {
+	types := []int32{1, 2}
+
+	p := NewStateMachineTaskTypePredicate(types)
+
+	s.True(p.Equals(p))
+	s.True(p.Equals(NewStateMachineTaskTypePredicate(types)))
+	rand.Shuffle(
+		len(types),
+		func(i, j int) {
+			types[i], types[j] = types[j], types[i]
+		},
+	)
+	s.True(p.Equals(NewStateMachineTaskTypePredicate(types)))
+
+	s.False(p.Equals(NewStateMachineTaskTypePredicate([]int32{3, 4})))
+	s.False(p.Equals(NewTypePredicate([]enumsspb.TaskType{enumsspb.TASK_TYPE_ACTIVITY_RETRY_TIMER})))
+	s.False(p.Equals(predicates.Universal[Task]()))
+}
+
 func (s *predicatesSuite) TestAndPredicates() {
 	testCases := []struct {
 		predicateA     Predicate
@@ -171,6 +238,11 @@ func (s *predicatesSuite) TestAndPredicates() {
 			expectedResult: NewTypePredicate([]enumsspb.TaskType{
 				enumsspb.TASK_TYPE_ACTIVITY_TIMEOUT,
 			}),
+		},
+		{
+			predicateA:     NewDestinationPredicate([]string{"dest1", "dest2"}),
+			predicateB:     NewDestinationPredicate([]string{"dest2", "dest3"}),
+			expectedResult: NewDestinationPredicate([]string{"dest2"}),
 		},
 		{
 			predicateA:     NewNamespacePredicate([]string{"namespace1", "namespace2"}),
@@ -219,6 +291,11 @@ func (s *predicatesSuite) TestOrPredicates() {
 				enumsspb.TASK_TYPE_ACTIVITY_TIMEOUT,
 				enumsspb.TASK_TYPE_DELETE_HISTORY_EVENT,
 			}),
+		},
+		{
+			predicateA:     NewDestinationPredicate([]string{"dest1", "dest2"}),
+			predicateB:     NewDestinationPredicate([]string{"dest2", "dest3"}),
+			expectedResult: NewDestinationPredicate([]string{"dest1", "dest2", "dest3"}),
 		},
 		{
 			predicateA:     NewNamespacePredicate([]string{"namespace1", "namespace2"}),

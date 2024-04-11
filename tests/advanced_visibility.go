@@ -48,6 +48,7 @@ import (
 	"go.temporal.io/sdk/temporal"
 	"go.temporal.io/sdk/worker"
 	"go.temporal.io/sdk/workflow"
+	"go.temporal.io/server/common/testing/historyrequire"
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/durationpb"
 	"google.golang.org/protobuf/types/known/timestamppb"
@@ -76,6 +77,7 @@ type AdvancedVisibilitySuite struct {
 	// not merely log an error
 	*require.Assertions
 	protorequire.ProtoAssertions
+	historyrequire.HistoryRequire
 	FunctionalTestBase
 	isElasticsearchEnabled bool
 
@@ -145,6 +147,7 @@ func (s *AdvancedVisibilitySuite) SetupTest() {
 	// Have to define our overridden assertions in the test setup. If we did it earlier, s.T() will return nil
 	s.Assertions = require.New(s.T())
 	s.ProtoAssertions = protorequire.New(s.T())
+	s.HistoryRequire = historyrequire.New(s.T())
 	s.testSearchAttributeKey = "CustomTextField"
 	s.testSearchAttributeVal = "test value"
 }
@@ -559,78 +562,6 @@ func (s *AdvancedVisibilitySuite) TestListWorkflow_KeywordQuery() {
 	s.Len(resp.GetExecutions(), 0)
 }
 
-func (s *AdvancedVisibilitySuite) TestListWorkflow_LikeQuery() {
-	if !s.isElasticsearchEnabled {
-		s.T().Skip("This test is only for Elasticsearch")
-	}
-
-	id := "es-functional-list-workflow-keyword-query-like-test"
-	wt := "es-functional-list-workflow-keyword-query-like-test-type"
-	tl := "es-functional-list-workflow-keyword-query-like-test-taskqueue"
-	request := s.createStartWorkflowExecutionRequest(id, wt, tl)
-
-	searchAttr := &commonpb.SearchAttributes{
-		IndexedFields: map[string]*commonpb.Payload{
-			"CustomKeywordField": payload.EncodeString("foo bar"),
-		},
-	}
-	request.SearchAttributes = searchAttr
-	_, err := s.engine.StartWorkflowExecution(NewContext(), request)
-	s.NoError(err)
-
-	time.Sleep(waitForESToSettle)
-
-	// LIKE exact match on Keyword (supported)
-	listRequest := &workflowservice.ListWorkflowExecutionsRequest{
-		Namespace: s.namespace,
-		PageSize:  defaultPageSize,
-		Query:     `CustomKeywordField LIKE "%foo bar%"`,
-	}
-	resp, err := s.engine.ListWorkflowExecutions(NewContext(), listRequest)
-	s.NoError(err)
-	s.Len(resp.GetExecutions(), 1)
-
-	// LIKE %word% on Keyword (not supported)
-	listRequest = &workflowservice.ListWorkflowExecutionsRequest{
-		Namespace: s.namespace,
-		PageSize:  defaultPageSize,
-		Query:     `CustomKeywordField LIKE "%foo%"`,
-	}
-	resp, err = s.engine.ListWorkflowExecutions(NewContext(), listRequest)
-	s.NoError(err)
-	s.Len(resp.GetExecutions(), 0)
-
-	// LIKE %chars% on Keyword (not supported)
-	listRequest = &workflowservice.ListWorkflowExecutionsRequest{
-		Namespace: s.namespace,
-		PageSize:  defaultPageSize,
-		Query:     `CustomKeywordField LIKE "%oo%"`,
-	}
-	resp, err = s.engine.ListWorkflowExecutions(NewContext(), listRequest)
-	s.NoError(err)
-	s.Len(resp.GetExecutions(), 0)
-
-	// LIKE NOT %chars% on Keyword (not supported)
-	listRequest = &workflowservice.ListWorkflowExecutionsRequest{
-		Namespace: s.namespace,
-		PageSize:  defaultPageSize,
-		Query:     `CustomKeywordField NOT LIKE "%oo%"`,
-	}
-	resp, err = s.engine.ListWorkflowExecutions(NewContext(), listRequest)
-	s.NoError(err)
-	executionCount := 0
-	for _, execution := range resp.GetExecutions() {
-		saPayload := execution.SearchAttributes.GetIndexedFields()["CustomKeywordField"]
-		var saValue string
-		err = payload.Decode(saPayload, &saValue)
-		s.NoError(err)
-		if strings.Contains(saValue, "oo") {
-			executionCount++ // execution will be found because NOT LIKE is not supported.
-		}
-	}
-	s.Equal(executionCount, 1)
-}
-
 func (s *AdvancedVisibilitySuite) TestListWorkflow_StringQuery() {
 	id := "es-functional-list-workflow-string-query-test"
 	wt := "es-functional-list-workflow-string-query-test-type"
@@ -692,59 +623,6 @@ func (s *AdvancedVisibilitySuite) TestListWorkflow_StringQuery() {
 	resp, err = s.engine.ListWorkflowExecutions(NewContext(), listRequest)
 	s.NoError(err)
 	s.Len(resp.GetExecutions(), 1)
-
-	if s.isElasticsearchEnabled {
-		// LIKE is supported on Elasticsearch only.
-		// LIKE %word% on String (supported)
-		listRequest = &workflowservice.ListWorkflowExecutionsRequest{
-			Namespace: s.namespace,
-			PageSize:  defaultPageSize,
-			Query:     `CustomTextField LIKE "%else%"`,
-		}
-		resp, err = s.engine.ListWorkflowExecutions(NewContext(), listRequest)
-		s.NoError(err)
-		s.Len(resp.GetExecutions(), 1)
-
-		// LIKE word on String (supported)
-		listRequest = &workflowservice.ListWorkflowExecutionsRequest{
-			Namespace: s.namespace,
-			PageSize:  defaultPageSize,
-			Query:     `CustomTextField LIKE "else"`, // Same as previous because % just removed for LIKE queries.
-		}
-		resp, err = s.engine.ListWorkflowExecutions(NewContext(), listRequest)
-		s.NoError(err)
-		s.Len(resp.GetExecutions(), 1)
-
-		// LIKE %chars% on String (not supported)
-		listRequest = &workflowservice.ListWorkflowExecutionsRequest{
-			Namespace: s.namespace,
-			PageSize:  defaultPageSize,
-			Query:     `CustomTextField LIKE "%ls%"`,
-		}
-		resp, err = s.engine.ListWorkflowExecutions(NewContext(), listRequest)
-		s.NoError(err)
-		s.Len(resp.GetExecutions(), 0)
-
-		// LIKE NOT %word% on String (supported)
-		listRequest = &workflowservice.ListWorkflowExecutionsRequest{
-			Namespace: s.namespace,
-			PageSize:  defaultPageSize,
-			Query:     `CustomTextField NOT LIKE "%else%"`,
-		}
-		resp, err = s.engine.ListWorkflowExecutions(NewContext(), listRequest)
-		s.NoError(err)
-		executionCount := 0
-		for _, execution := range resp.GetExecutions() {
-			saPayload := execution.SearchAttributes.GetIndexedFields()["CustomTextField"]
-			var saValue string
-			err = payload.Decode(saPayload, &saValue)
-			s.NoError(err)
-			if strings.Contains(saValue, "else") {
-				executionCount++
-			}
-		}
-		s.Equal(executionCount, 0)
-	}
 }
 
 // To test last page search trigger max window size error
@@ -1929,26 +1807,25 @@ func (s *AdvancedVisibilitySuite) TestUpsertWorkflowExecution_InvalidKey() {
 	_, err := poller.PollAndProcessWorkflowTask()
 	s.Error(err)
 	s.IsType(&serviceerror.InvalidArgument{}, err)
+	historyEvents := s.getHistory(s.namespace, &commonpb.WorkflowExecution{
+		WorkflowId: id,
+		RunId:      we.RunId,
+	})
 	if s.isElasticsearchEnabled {
 		s.ErrorContains(err, "BadSearchAttributes: search attribute INVALIDKEY is not defined")
+		s.EqualHistoryEvents(`
+  1 WorkflowExecutionStarted
+  2 WorkflowTaskScheduled
+  3 WorkflowTaskStarted
+  4 WorkflowTaskFailed {"Cause":23,"Failure":{"Message":"BadSearchAttributes: search attribute INVALIDKEY is not defined"}}`, historyEvents)
 	} else {
 		s.ErrorContains(err, fmt.Sprintf("BadSearchAttributes: Namespace %s has no mapping defined for search attribute INVALIDKEY", s.namespace))
+		s.EqualHistoryEvents(fmt.Sprintf(`
+  1 WorkflowExecutionStarted
+  2 WorkflowTaskScheduled
+  3 WorkflowTaskStarted
+  4 WorkflowTaskFailed {"Cause":23,"Failure":{"Message":"BadSearchAttributes: Namespace %s has no mapping defined for search attribute INVALIDKEY"}}`, s.namespace), historyEvents)
 	}
-
-	historyResponse, err := s.engine.GetWorkflowExecutionHistory(NewContext(), &workflowservice.GetWorkflowExecutionHistoryRequest{
-		Namespace: s.namespace,
-		Execution: &commonpb.WorkflowExecution{
-			WorkflowId: id,
-			RunId:      we.RunId,
-		},
-	})
-	s.NoError(err)
-	history := historyResponse.History
-	workflowTaskFailedEvent := history.GetEvents()[3]
-	s.Equal(enumspb.EVENT_TYPE_WORKFLOW_TASK_FAILED, workflowTaskFailedEvent.GetEventType())
-	failedEventAttr := workflowTaskFailedEvent.GetWorkflowTaskFailedEventAttributes()
-	s.Equal(enumspb.WORKFLOW_TASK_FAILED_CAUSE_BAD_SEARCH_ATTRIBUTES, failedEventAttr.GetCause())
-	s.NotNil(failedEventAttr.GetFailure())
 }
 
 func (s *AdvancedVisibilitySuite) TestChildWorkflow_ParentWorkflow() {

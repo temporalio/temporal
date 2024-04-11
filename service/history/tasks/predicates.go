@@ -45,6 +45,14 @@ type (
 		NamespaceIDs map[string]struct{}
 	}
 
+	DestinationPredicate struct {
+		Destinations map[string]struct{}
+	}
+
+	StateMachineTaskTypePredicate struct {
+		Types map[int32]struct{}
+	}
+
 	TypePredicate struct {
 		Types map[enumsspb.TaskType]struct{}
 	}
@@ -69,12 +77,74 @@ func (n *NamespacePredicate) Test(task Task) bool {
 }
 
 func (n *NamespacePredicate) Equals(predicate Predicate) bool {
-	nsPrediate, ok := predicate.(*NamespacePredicate)
+	nsPredicate, ok := predicate.(*NamespacePredicate)
 	if !ok {
 		return false
 	}
 
-	return maps.Equal(n.NamespaceIDs, nsPrediate.NamespaceIDs)
+	return maps.Equal(n.NamespaceIDs, nsPredicate.NamespaceIDs)
+}
+
+func NewDestinationPredicate(
+	destinations []string,
+) *DestinationPredicate {
+	destinationsMap := make(map[string]struct{}, len(destinations))
+	for _, id := range destinations {
+		destinationsMap[id] = struct{}{}
+	}
+
+	return &DestinationPredicate{
+		Destinations: destinationsMap,
+	}
+}
+
+func (n *DestinationPredicate) Test(task Task) bool {
+	dTask, ok := task.(HasDestination)
+	if !ok {
+		return false
+	}
+	_, ok = n.Destinations[dTask.GetDestination()]
+	return ok
+}
+
+func (n *DestinationPredicate) Equals(predicate Predicate) bool {
+	dPredicate, ok := predicate.(*DestinationPredicate)
+	if !ok {
+		return false
+	}
+
+	return maps.Equal(n.Destinations, dPredicate.Destinations)
+}
+
+func NewStateMachineTaskTypePredicate(
+	types []int32,
+) *StateMachineTaskTypePredicate {
+	typesMap := make(map[int32]struct{}, len(types))
+	for _, id := range types {
+		typesMap[id] = struct{}{}
+	}
+
+	return &StateMachineTaskTypePredicate{
+		Types: typesMap,
+	}
+}
+
+func (n *StateMachineTaskTypePredicate) Test(task Task) bool {
+	smTask, ok := task.(HasStateMachineTaskType)
+	if !ok {
+		return false
+	}
+	_, ok = n.Types[smTask.StateMachineTaskType()]
+	return ok
+}
+
+func (n *StateMachineTaskTypePredicate) Equals(predicate Predicate) bool {
+	smPredicate, ok := predicate.(*StateMachineTaskTypePredicate)
+	if !ok {
+		return false
+	}
+
+	return maps.Equal(n.Types, smPredicate.Types)
 }
 
 func NewTypePredicate(
@@ -126,6 +196,16 @@ func AndPredicates(a Predicate, b Predicate) Predicate {
 				Types: intersection,
 			}
 		}
+	case *DestinationPredicate:
+		if b, ok := b.(*DestinationPredicate); ok {
+			intersection := intersect(a.Destinations, b.Destinations)
+			if len(intersection) == 0 {
+				return predicates.Empty[Task]()
+			}
+			return &DestinationPredicate{
+				Destinations: intersection,
+			}
+		}
 	}
 
 	return predicates.And(a, b)
@@ -143,6 +223,12 @@ func OrPredicates(a Predicate, b Predicate) Predicate {
 		if b, ok := b.(*TypePredicate); ok {
 			return &TypePredicate{
 				Types: union(a.Types, b.Types),
+			}
+		}
+	case *DestinationPredicate:
+		if b, ok := b.(*DestinationPredicate); ok {
+			return &DestinationPredicate{
+				Destinations: union(a.Destinations, b.Destinations),
 			}
 		}
 	}

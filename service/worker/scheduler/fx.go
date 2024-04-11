@@ -25,8 +25,11 @@
 package scheduler
 
 import (
+	"fmt"
+
 	"go.uber.org/fx"
 
+	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/workflowservice/v1"
 	sdkworker "go.temporal.io/sdk/worker"
 	"go.temporal.io/sdk/workflow"
@@ -38,6 +41,7 @@ import (
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/quotas"
 	"go.temporal.io/server/common/resource"
+	"go.temporal.io/server/common/searchattribute"
 	workercommon "go.temporal.io/server/service/worker/common"
 )
 
@@ -46,12 +50,25 @@ const (
 	NamespaceDivision = "TemporalScheduler"
 )
 
+var (
+	VisibilityBaseListQuery = fmt.Sprintf(
+		"%s = '%s' AND %s = '%s' AND %s = '%s'",
+		searchattribute.WorkflowType,
+		WorkflowType,
+		searchattribute.TemporalNamespaceDivision,
+		NamespaceDivision,
+		searchattribute.ExecutionStatus,
+		enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING.String(),
+	)
+)
+
 type (
 	workerComponent struct {
 		specBuilder              *SpecBuilder // workflow dep
 		activityDeps             activityDeps
 		enabledForNs             dynamicconfig.BoolPropertyFnWithNamespaceFilter
 		globalNSStartWorkflowRPS dynamicconfig.FloatPropertyFnWithNamespaceFilter
+		maxBlobSize              dynamicconfig.IntPropertyFnWithNamespaceFilter
 	}
 
 	activityDeps struct {
@@ -86,6 +103,8 @@ func NewResult(
 				dynamicconfig.WorkerEnableScheduler, true),
 			globalNSStartWorkflowRPS: dcCollection.GetFloatPropertyFilteredByNamespace(
 				dynamicconfig.SchedulerNamespaceStartWorkflowRPS, 30.0),
+			maxBlobSize: dcCollection.GetIntPropertyFilteredByNamespace(
+				dynamicconfig.BlobSizeLimitError, eventStorageSize),
 		},
 	}
 }
@@ -109,9 +128,10 @@ func (s *workerComponent) activities(name namespace.Name, id namespace.ID, detai
 		return float64(details.Multiplicity) * s.globalNSStartWorkflowRPS(name.String()) / float64(details.TotalWorkers)
 	}
 	return &activities{
-		activityDeps:             s.activityDeps,
-		namespace:                name,
-		namespaceID:              id,
-		startWorkflowRateLimiter: quotas.NewDefaultOutgoingRateLimiter(localRPS),
+		activityDeps:                 s.activityDeps,
+		namespace:                    name,
+		namespaceID:                  id,
+		startWorkflowRateLimiter:     quotas.NewDefaultOutgoingRateLimiter(localRPS),
+		singleResultStorageSizePerNs: s.maxBlobSize,
 	}
 }

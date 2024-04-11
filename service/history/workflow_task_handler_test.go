@@ -31,6 +31,7 @@ import (
 
 	"github.com/golang/mock/gomock"
 	"github.com/stretchr/testify/require"
+	historypb "go.temporal.io/api/history/v1"
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/anypb"
 
@@ -90,7 +91,7 @@ func TestCommandProtocolMessage(t *testing.T) {
 		var effects effect.Buffer
 		config := configs.NewConfig(
 			dynamicconfig.NewCollection(
-				dynamicconfig.StaticClient(out.conf), logger), 1, false, false)
+				dynamicconfig.StaticClient(out.conf), logger), 1)
 		mockMeta := persistence.NewMockMetadataManager(gomock.NewController(t))
 		nsReg := namespace.NewRegistry(
 			mockMeta,
@@ -280,14 +281,19 @@ func TestCommandProtocolMessage(t *testing.T) {
 		setup(t, &tc, defaultBlobSizeLimit)
 		var (
 			updateID = t.Name() + "-update-id"
-			msgID    = t.Name() + "-message-id"
+			msgID    = updateID + "/request"
 			command  = msgCommand(msgID) // blank is invalid
-			msg      = &protocolpb.Message{
+			req      = &updatepb.Request{
+				Meta:  &updatepb.Meta{UpdateId: updateID},
+				Input: &updatepb.Input{Name: "not_empty"},
+			}
+			msg = &protocolpb.Message{
 				Id:                 msgID,
 				ProtocolInstanceId: updateID,
-				Body: mustMarshalAny(t, &updatepb.Request{
-					Meta:  &updatepb.Meta{UpdateId: updateID},
-					Input: &updatepb.Input{Name: "not_empty"},
+				Body: mustMarshalAny(t, &updatepb.Acceptance{
+					AcceptedRequestMessageId:         msgID,
+					AcceptedRequestSequencingEventId: 2208,
+					AcceptedRequest:                  req,
 				}),
 			}
 			msgs = newMsgList(msg)
@@ -296,14 +302,18 @@ func TestCommandProtocolMessage(t *testing.T) {
 		tc.ms.EXPECT().GetExecutionState().AnyTimes().Return(&persistencespb.WorkflowExecutionState{})
 		tc.ms.EXPECT().GetUpdateOutcome(gomock.Any(), updateID).Return(nil, serviceerror.NewNotFound(""))
 		tc.ms.EXPECT().IsWorkflowExecutionRunning().AnyTimes().Return(true)
+		tc.ms.EXPECT().AddWorkflowExecutionUpdateAcceptedEvent(updateID, msgID, int64(2208), gomock.Any()).Return(&historypb.HistoryEvent{}, nil)
 
 		t.Log("create the expected protocol instance")
-		_, _, err := tc.updates.FindOrCreate(context.Background(), updateID)
+		upd, _, err := tc.updates.FindOrCreate(context.Background(), updateID)
 		require.NoError(t, err)
+		err = upd.Admit(context.Background(), req, workflow.WithEffects(effect.Immediate(context.Background()), tc.handler.mutableState))
+		require.NoError(t, err)
+		_ = upd.Send(context.Background(), true, &protocolpb.Message_EventId{EventId: 2208}, workflow.WithEffects(effect.Immediate(context.Background()), tc.handler.mutableState))
 
 		_, err = tc.handler.handleCommand(context.Background(), command, msgs)
 		require.NoError(t, err,
-			"delivering a request message to an update in the admitted state should succeed")
+			"delivering a acceptance message to an update in the sent state should succeed")
 		require.Nil(t, tc.handler.workflowTaskFailedCause)
 	})
 }

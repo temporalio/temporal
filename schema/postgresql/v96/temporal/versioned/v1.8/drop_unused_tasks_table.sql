@@ -1,1 +1,0 @@
-DROP TABLE tiered_storage_tasks;

@@ -40,19 +40,20 @@ import (
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	namespacepb "go.temporal.io/api/namespace/v1"
+	nexuspb "go.temporal.io/api/nexus/v1"
 	"go.temporal.io/api/serviceerror"
 	workflowpb "go.temporal.io/api/workflow/v1"
 	"go.temporal.io/api/workflowservice/v1"
+	"go.temporal.io/server/api/adminservice/v1"
+	"go.temporal.io/server/api/adminservicemock/v1"
 	enumsspb "go.temporal.io/server/api/enums/v1"
+	"go.temporal.io/server/api/historyservice/v1"
+	"go.temporal.io/server/api/historyservicemock/v1"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/health"
 	"google.golang.org/grpc/metadata"
 
-	"go.temporal.io/server/api/adminservice/v1"
-	"go.temporal.io/server/api/adminservicemock/v1"
 	commonspb "go.temporal.io/server/api/common/v1"
-	"go.temporal.io/server/api/historyservice/v1"
-	"go.temporal.io/server/api/historyservicemock/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	clientmocks "go.temporal.io/server/client"
 	historyclient "go.temporal.io/server/client/history"
@@ -71,6 +72,7 @@ import (
 	"go.temporal.io/server/common/resourcetest"
 	"go.temporal.io/server/common/searchattribute"
 	"go.temporal.io/server/common/testing/mocksdk"
+	"go.temporal.io/server/common/testing/protorequire"
 	"go.temporal.io/server/service/history/tasks"
 	"go.temporal.io/server/service/worker/dlq"
 )
@@ -140,8 +142,9 @@ func (s *adminHandlerSuite) SetupTest() {
 	}
 
 	cfg := &Config{
-		NumHistoryShards:      4,
-		AccessHistoryFraction: dynamicconfig.GetFloatPropertyFn(0.0),
+		NumHistoryShards:                 4,
+		AccessHistoryFraction:            dynamicconfig.GetFloatPropertyFn(0.0),
+		AdminDeleteAccessHistoryFraction: dynamicconfig.GetFloatPropertyFn(0.0),
 	}
 	args := NewAdminHandlerArgs{
 		persistenceConfig,
@@ -517,6 +520,7 @@ func (s *adminHandlerSuite) Test_RemoveRemoteCluster_Error() {
 
 func (s *adminHandlerSuite) Test_AddOrUpdateRemoteCluster_RecordFound_Success() {
 	var rpcAddress = uuid.New()
+	var FrontendHttpAddress = uuid.New()
 	var clusterName = uuid.New()
 	var clusterId = uuid.New()
 	var recordVersion int64 = 5
@@ -545,18 +549,23 @@ func (s *adminHandlerSuite) Test_AddOrUpdateRemoteCluster_RecordFound_Success() 
 			HistoryShardCount:        4,
 			ClusterId:                clusterId,
 			ClusterAddress:           rpcAddress,
+			HttpAddress:              FrontendHttpAddress,
 			FailoverVersionIncrement: 0,
 			InitialFailoverVersion:   0,
 			IsGlobalNamespaceEnabled: true,
 		},
 		Version: recordVersion,
 	}).Return(true, nil)
-	_, err := s.handler.AddOrUpdateRemoteCluster(context.Background(), &adminservice.AddOrUpdateRemoteClusterRequest{FrontendAddress: rpcAddress})
+	_, err := s.handler.AddOrUpdateRemoteCluster(context.Background(), &adminservice.AddOrUpdateRemoteClusterRequest{
+		FrontendAddress:     rpcAddress,
+		FrontendHttpAddress: FrontendHttpAddress,
+	})
 	s.NoError(err)
 }
 
 func (s *adminHandlerSuite) Test_AddOrUpdateRemoteCluster_RecordNotFound_Success() {
 	var rpcAddress = uuid.New()
+	var FrontendHttpAddress = uuid.New()
 	var clusterName = uuid.New()
 	var clusterId = uuid.New()
 
@@ -584,13 +593,17 @@ func (s *adminHandlerSuite) Test_AddOrUpdateRemoteCluster_RecordNotFound_Success
 			HistoryShardCount:        4,
 			ClusterId:                clusterId,
 			ClusterAddress:           rpcAddress,
+			HttpAddress:              FrontendHttpAddress,
 			FailoverVersionIncrement: 0,
 			InitialFailoverVersion:   0,
 			IsGlobalNamespaceEnabled: true,
 		},
 		Version: 0,
 	}).Return(true, nil)
-	_, err := s.handler.AddOrUpdateRemoteCluster(context.Background(), &adminservice.AddOrUpdateRemoteClusterRequest{FrontendAddress: rpcAddress})
+	_, err := s.handler.AddOrUpdateRemoteCluster(context.Background(), &adminservice.AddOrUpdateRemoteClusterRequest{
+		FrontendAddress:     rpcAddress,
+		FrontendHttpAddress: FrontendHttpAddress,
+	})
 	s.NoError(err)
 }
 
@@ -663,6 +676,7 @@ func (s *adminHandlerSuite) Test_AddOrUpdateRemoteCluster_ValidationError_ShardC
 
 func (s *adminHandlerSuite) Test_AddOrUpdateRemoteCluster_ShardCount_Multiple() {
 	var rpcAddress = uuid.New()
+	var FrontendHttpAddress = uuid.New()
 	var clusterName = uuid.New()
 	var clusterId = uuid.New()
 	var recordVersion int64 = 5
@@ -691,13 +705,17 @@ func (s *adminHandlerSuite) Test_AddOrUpdateRemoteCluster_ShardCount_Multiple() 
 			HistoryShardCount:        16,
 			ClusterId:                clusterId,
 			ClusterAddress:           rpcAddress,
+			HttpAddress:              FrontendHttpAddress,
 			FailoverVersionIncrement: 0,
 			InitialFailoverVersion:   0,
 			IsGlobalNamespaceEnabled: true,
 		},
 		Version: recordVersion,
 	}).Return(true, nil)
-	_, err := s.handler.AddOrUpdateRemoteCluster(context.Background(), &adminservice.AddOrUpdateRemoteClusterRequest{FrontendAddress: rpcAddress})
+	_, err := s.handler.AddOrUpdateRemoteCluster(context.Background(), &adminservice.AddOrUpdateRemoteClusterRequest{
+		FrontendAddress:     rpcAddress,
+		FrontendHttpAddress: FrontendHttpAddress,
+	})
 	s.NoError(err)
 }
 
@@ -793,6 +811,7 @@ func (s *adminHandlerSuite) Test_AddOrUpdateRemoteCluster_GetClusterMetadata_Err
 
 func (s *adminHandlerSuite) Test_AddOrUpdateRemoteCluster_SaveClusterMetadata_Error() {
 	var rpcAddress = uuid.New()
+	var FrontendHttpAddress = uuid.New()
 	var clusterName = uuid.New()
 	var clusterId = uuid.New()
 
@@ -820,18 +839,23 @@ func (s *adminHandlerSuite) Test_AddOrUpdateRemoteCluster_SaveClusterMetadata_Er
 			HistoryShardCount:        4,
 			ClusterId:                clusterId,
 			ClusterAddress:           rpcAddress,
+			HttpAddress:              FrontendHttpAddress,
 			FailoverVersionIncrement: 0,
 			InitialFailoverVersion:   0,
 			IsGlobalNamespaceEnabled: true,
 		},
 		Version: 0,
 	}).Return(false, fmt.Errorf("test error"))
-	_, err := s.handler.AddOrUpdateRemoteCluster(context.Background(), &adminservice.AddOrUpdateRemoteClusterRequest{FrontendAddress: rpcAddress})
+	_, err := s.handler.AddOrUpdateRemoteCluster(context.Background(), &adminservice.AddOrUpdateRemoteClusterRequest{
+		FrontendAddress:     rpcAddress,
+		FrontendHttpAddress: FrontendHttpAddress,
+	})
 	s.Error(err)
 }
 
 func (s *adminHandlerSuite) Test_AddOrUpdateRemoteCluster_SaveClusterMetadata_NotApplied_Error() {
 	var rpcAddress = uuid.New()
+	var FrontendHttpAddress = uuid.New()
 	var clusterName = uuid.New()
 	var clusterId = uuid.New()
 
@@ -859,13 +883,17 @@ func (s *adminHandlerSuite) Test_AddOrUpdateRemoteCluster_SaveClusterMetadata_No
 			HistoryShardCount:        4,
 			ClusterId:                clusterId,
 			ClusterAddress:           rpcAddress,
+			HttpAddress:              FrontendHttpAddress,
 			FailoverVersionIncrement: 0,
 			InitialFailoverVersion:   0,
 			IsGlobalNamespaceEnabled: true,
 		},
 		Version: 0,
 	}).Return(false, nil)
-	_, err := s.handler.AddOrUpdateRemoteCluster(context.Background(), &adminservice.AddOrUpdateRemoteClusterRequest{FrontendAddress: rpcAddress})
+	_, err := s.handler.AddOrUpdateRemoteCluster(context.Background(), &adminservice.AddOrUpdateRemoteClusterRequest{
+		FrontendAddress:     rpcAddress,
+		FrontendHttpAddress: FrontendHttpAddress,
+	})
 	s.Error(err)
 	s.IsType(&serviceerror.InvalidArgument{}, err)
 }
@@ -1081,6 +1109,13 @@ func (s *adminHandlerSuite) TestGetNamespace_WithIDSuccess() {
 				},
 			},
 			FailoverNotificationVersion: 0,
+			OutgoingServices: []*persistencespb.NexusOutgoingService{
+				{
+					Version: 1,
+					Name:    "svc",
+					Spec:    &nexuspb.OutgoingServiceSpec{},
+				},
+			},
 		},
 	}
 	s.mockResource.MetadataMgr.EXPECT().GetNamespace(gomock.Any(), &persistence.GetNamespaceRequest{
@@ -1093,7 +1128,7 @@ func (s *adminHandlerSuite) TestGetNamespace_WithIDSuccess() {
 	})
 	s.NoError(err)
 	s.Equal(namespaceID, resp.GetInfo().GetId())
-	s.Equal(cluster.TestAlternativeClusterName, resp.GetReplicationConfig().GetActiveClusterName())
+	protorequire.ProtoSliceEqual(s.T(), nsResponse.Namespace.OutgoingServices, resp.OutgoingServices)
 }
 
 func (s *adminHandlerSuite) TestGetNamespace_WithNameSuccess() {
@@ -1282,11 +1317,11 @@ func (s *adminHandlerSuite) TestPurgeDLQTasks() {
 	}
 }
 
-func (s *adminHandlerSuite) TestPurgeDLQTasks_InvalidCategory() {
+func (s *adminHandlerSuite) TestPurgeDLQTasks_ClusterNotSet() {
 	_, err := s.handler.PurgeDLQTasks(context.Background(), &adminservice.PurgeDLQTasksRequest{
 		DlqKey: &commonspb.HistoryDLQKey{
-			TaskCategory:  -1,
-			SourceCluster: "test-source-cluster",
+			TaskCategory:  1,
+			SourceCluster: "",
 			TargetCluster: "test-target-cluster",
 		},
 		InclusiveMaxTaskMetadata: &commonspb.HistoryDLQTaskMetadata{
@@ -1295,8 +1330,7 @@ func (s *adminHandlerSuite) TestPurgeDLQTasks_InvalidCategory() {
 	})
 	s.Error(err)
 	s.Equal(codes.InvalidArgument, serviceerror.ToStatus(err).Code())
-	s.ErrorContains(err, "task category")
-	s.ErrorContains(err, "-1")
+	s.ErrorContains(err, errSourceClusterNotSet.Error())
 }
 
 func (s *adminHandlerSuite) TestDescribeDLQJob() {
@@ -1441,7 +1475,7 @@ func (s *adminHandlerSuite) TestDescribeDLQJob() {
 			}
 			jobTokenBytes, _ := jobToken.Marshal()
 			response, err := s.handler.DescribeDLQJob(context.Background(), &adminservice.DescribeDLQJobRequest{
-				JobToken: string(jobTokenBytes),
+				JobToken: jobTokenBytes,
 			})
 			if tc.err != nil {
 				s.ErrorIs(err, tc.err)
@@ -1455,7 +1489,7 @@ func (s *adminHandlerSuite) TestDescribeDLQJob() {
 }
 
 func (s *adminHandlerSuite) TestDescribeDLQJob_InvalidJobToken() {
-	_, err := s.handler.DescribeDLQJob(context.Background(), &adminservice.DescribeDLQJobRequest{JobToken: "invalid_token"})
+	_, err := s.handler.DescribeDLQJob(context.Background(), &adminservice.DescribeDLQJobRequest{JobToken: []byte("invalid_token")})
 	s.Error(err)
 	s.ErrorContains(err, "Invalid DLQ job token")
 
@@ -1547,7 +1581,7 @@ func (s *adminHandlerSuite) TestCancelDLQJob() {
 			}
 			jobTokenBytes, _ := jobToken.Marshal()
 			response, err := s.handler.CancelDLQJob(context.Background(), &adminservice.CancelDLQJobRequest{
-				JobToken: string(jobTokenBytes),
+				JobToken: jobTokenBytes,
 				Reason:   "test-reason",
 			})
 			if tc.describeErr != nil {
@@ -1566,7 +1600,7 @@ func (s *adminHandlerSuite) TestCancelDLQJob() {
 }
 
 func (s *adminHandlerSuite) TestCancelDLQJob_InvalidJobToken() {
-	_, err := s.handler.CancelDLQJob(context.Background(), &adminservice.CancelDLQJobRequest{JobToken: "invalid_token", Reason: "test-reason"})
+	_, err := s.handler.CancelDLQJob(context.Background(), &adminservice.CancelDLQJobRequest{JobToken: []byte("invalid_token"), Reason: "test-reason"})
 	s.Error(err)
 	s.ErrorContains(err, "Invalid DLQ job token")
 }

@@ -78,6 +78,7 @@ type (
 		StartTime            time.Time
 		ExecutionTime        time.Time
 		CloseTime            time.Time
+		ExecutionDuration    time.Duration
 		Status               enumspb.WorkflowExecutionStatus
 		HistoryLength        int64
 		HistorySizeBytes     int64

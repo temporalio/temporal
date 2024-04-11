@@ -48,6 +48,10 @@ const (
 	MatchingService_AddActivityTask_FullMethodName                        = "/temporal.server.api.matchingservice.v1.MatchingService/AddActivityTask"
 	MatchingService_QueryWorkflow_FullMethodName                          = "/temporal.server.api.matchingservice.v1.MatchingService/QueryWorkflow"
 	MatchingService_RespondQueryTaskCompleted_FullMethodName              = "/temporal.server.api.matchingservice.v1.MatchingService/RespondQueryTaskCompleted"
+	MatchingService_DispatchNexusTask_FullMethodName                      = "/temporal.server.api.matchingservice.v1.MatchingService/DispatchNexusTask"
+	MatchingService_PollNexusTaskQueue_FullMethodName                     = "/temporal.server.api.matchingservice.v1.MatchingService/PollNexusTaskQueue"
+	MatchingService_RespondNexusTaskCompleted_FullMethodName              = "/temporal.server.api.matchingservice.v1.MatchingService/RespondNexusTaskCompleted"
+	MatchingService_RespondNexusTaskFailed_FullMethodName                 = "/temporal.server.api.matchingservice.v1.MatchingService/RespondNexusTaskFailed"
 	MatchingService_CancelOutstandingPoll_FullMethodName                  = "/temporal.server.api.matchingservice.v1.MatchingService/CancelOutstandingPoll"
 	MatchingService_DescribeTaskQueue_FullMethodName                      = "/temporal.server.api.matchingservice.v1.MatchingService/DescribeTaskQueue"
 	MatchingService_DescribeTaskQueuePartition_FullMethodName             = "/temporal.server.api.matchingservice.v1.MatchingService/DescribeTaskQueuePartition"
@@ -62,6 +66,10 @@ const (
 	MatchingService_ForceUnloadTaskQueue_FullMethodName                   = "/temporal.server.api.matchingservice.v1.MatchingService/ForceUnloadTaskQueue"
 	MatchingService_UpdateTaskQueueUserData_FullMethodName                = "/temporal.server.api.matchingservice.v1.MatchingService/UpdateTaskQueueUserData"
 	MatchingService_ReplicateTaskQueueUserData_FullMethodName             = "/temporal.server.api.matchingservice.v1.MatchingService/ReplicateTaskQueueUserData"
+	MatchingService_CreateNexusIncomingService_FullMethodName             = "/temporal.server.api.matchingservice.v1.MatchingService/CreateNexusIncomingService"
+	MatchingService_UpdateNexusIncomingService_FullMethodName             = "/temporal.server.api.matchingservice.v1.MatchingService/UpdateNexusIncomingService"
+	MatchingService_DeleteNexusIncomingService_FullMethodName             = "/temporal.server.api.matchingservice.v1.MatchingService/DeleteNexusIncomingService"
+	MatchingService_ListNexusIncomingServices_FullMethodName              = "/temporal.server.api.matchingservice.v1.MatchingService/ListNexusIncomingServices"
 )
 
 // MatchingServiceClient is the client API for MatchingService service.
@@ -84,6 +92,14 @@ type MatchingServiceClient interface {
 	QueryWorkflow(ctx context.Context, in *QueryWorkflowRequest, opts ...grpc.CallOption) (*QueryWorkflowResponse, error)
 	// RespondQueryTaskCompleted is called by frontend to respond query completed.
 	RespondQueryTaskCompleted(ctx context.Context, in *RespondQueryTaskCompletedRequest, opts ...grpc.CallOption) (*RespondQueryTaskCompletedResponse, error)
+	// Request from frontend to synchronously dispatch a nexus task to a worker.
+	DispatchNexusTask(ctx context.Context, in *DispatchNexusTaskRequest, opts ...grpc.CallOption) (*DispatchNexusTaskResponse, error)
+	// Request from worker (via frontend) to long poll on nexus tasks.
+	PollNexusTaskQueue(ctx context.Context, in *PollNexusTaskQueueRequest, opts ...grpc.CallOption) (*PollNexusTaskQueueResponse, error)
+	// Response from a worker (via frontend) to a Nexus task, unblocks the corresponding DispatchNexusTask request.
+	RespondNexusTaskCompleted(ctx context.Context, in *RespondNexusTaskCompletedRequest, opts ...grpc.CallOption) (*RespondNexusTaskCompletedResponse, error)
+	// Response from a worker (via frontend) to a Nexus task, unblocks the corresponding DispatchNexusTask request.
+	RespondNexusTaskFailed(ctx context.Context, in *RespondNexusTaskFailedRequest, opts ...grpc.CallOption) (*RespondNexusTaskFailedResponse, error)
 	// CancelOutstandingPoll is called by frontend to unblock long polls on matching for zombie pollers.
 	// Our rpc stack does not support context propagation, so when a client connection goes away frontend sees
 	// cancellation of context for that handler, but any corresponding calls (long-poll) to matching service does not
@@ -147,6 +163,38 @@ type MatchingServiceClient interface {
 	UpdateTaskQueueUserData(ctx context.Context, in *UpdateTaskQueueUserDataRequest, opts ...grpc.CallOption) (*UpdateTaskQueueUserDataResponse, error)
 	// Replicate task queue user data across clusters, must be done via the owning node for updates in namespace.
 	ReplicateTaskQueueUserData(ctx context.Context, in *ReplicateTaskQueueUserDataRequest, opts ...grpc.CallOption) (*ReplicateTaskQueueUserDataResponse, error)
+	// Optimistically create or update a Nexus incoming service based on provided version.
+	// Set version to 0 to create a new service.
+	// If this request is accepted, the input is considered the "current" state of this service at the time it was
+	// persisted and the updated version is returned.
+	// (-- api-linter: core::0133::method-signature=disabled
+	//
+	//	aip.dev/not-precedent: CreateNexusIncomingService RPC doesn't follow Google API format. --)
+	//
+	// (-- api-linter: core::0133::response-message-name=disabled
+	//
+	//	aip.dev/not-precedent: CreateNexusIncomingService RPC doesn't follow Google API format. --)
+	//
+	// (-- api-linter: core::0133::http-uri-parent=disabled
+	//
+	//	aip.dev/not-precedent: CreateNexusIncomingService RPC doesn't follow Google API format. --)
+	CreateNexusIncomingService(ctx context.Context, in *CreateNexusIncomingServiceRequest, opts ...grpc.CallOption) (*CreateNexusIncomingServiceResponse, error)
+	// (-- api-linter: core::0134::method-signature=disabled
+	//
+	//	aip.dev/not-precedent: UpdateNexusIncomingService RPC doesn't follow Google API format. --)
+	//
+	// (-- api-linter: core::0134::response-message-name=disabled
+	//
+	//	aip.dev/not-precedent: UpdateNexusIncomingService RPC doesn't follow Google API format. --)
+	//
+	// (-- api-linter: core::0134::request-resource-required=disabled
+	//
+	//	aip.dev/not-precedent: UpdateNexusIncomingService RPC doesn't follow Google API format. --)
+	UpdateNexusIncomingService(ctx context.Context, in *UpdateNexusIncomingServiceRequest, opts ...grpc.CallOption) (*UpdateNexusIncomingServiceResponse, error)
+	// Delete a service by its name.
+	DeleteNexusIncomingService(ctx context.Context, in *DeleteNexusIncomingServiceRequest, opts ...grpc.CallOption) (*DeleteNexusIncomingServiceResponse, error)
+	// List all registered services.
+	ListNexusIncomingServices(ctx context.Context, in *ListNexusIncomingServicesRequest, opts ...grpc.CallOption) (*ListNexusIncomingServicesResponse, error)
 }
 
 type matchingServiceClient struct {
@@ -205,6 +253,42 @@ func (c *matchingServiceClient) QueryWorkflow(ctx context.Context, in *QueryWork
 func (c *matchingServiceClient) RespondQueryTaskCompleted(ctx context.Context, in *RespondQueryTaskCompletedRequest, opts ...grpc.CallOption) (*RespondQueryTaskCompletedResponse, error) {
 	out := new(RespondQueryTaskCompletedResponse)
 	err := c.cc.Invoke(ctx, MatchingService_RespondQueryTaskCompleted_FullMethodName, in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *matchingServiceClient) DispatchNexusTask(ctx context.Context, in *DispatchNexusTaskRequest, opts ...grpc.CallOption) (*DispatchNexusTaskResponse, error) {
+	out := new(DispatchNexusTaskResponse)
+	err := c.cc.Invoke(ctx, MatchingService_DispatchNexusTask_FullMethodName, in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *matchingServiceClient) PollNexusTaskQueue(ctx context.Context, in *PollNexusTaskQueueRequest, opts ...grpc.CallOption) (*PollNexusTaskQueueResponse, error) {
+	out := new(PollNexusTaskQueueResponse)
+	err := c.cc.Invoke(ctx, MatchingService_PollNexusTaskQueue_FullMethodName, in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *matchingServiceClient) RespondNexusTaskCompleted(ctx context.Context, in *RespondNexusTaskCompletedRequest, opts ...grpc.CallOption) (*RespondNexusTaskCompletedResponse, error) {
+	out := new(RespondNexusTaskCompletedResponse)
+	err := c.cc.Invoke(ctx, MatchingService_RespondNexusTaskCompleted_FullMethodName, in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *matchingServiceClient) RespondNexusTaskFailed(ctx context.Context, in *RespondNexusTaskFailedRequest, opts ...grpc.CallOption) (*RespondNexusTaskFailedResponse, error) {
+	out := new(RespondNexusTaskFailedResponse)
+	err := c.cc.Invoke(ctx, MatchingService_RespondNexusTaskFailed_FullMethodName, in, out, opts...)
 	if err != nil {
 		return nil, err
 	}
@@ -337,6 +421,42 @@ func (c *matchingServiceClient) ReplicateTaskQueueUserData(ctx context.Context, 
 	return out, nil
 }
 
+func (c *matchingServiceClient) CreateNexusIncomingService(ctx context.Context, in *CreateNexusIncomingServiceRequest, opts ...grpc.CallOption) (*CreateNexusIncomingServiceResponse, error) {
+	out := new(CreateNexusIncomingServiceResponse)
+	err := c.cc.Invoke(ctx, MatchingService_CreateNexusIncomingService_FullMethodName, in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *matchingServiceClient) UpdateNexusIncomingService(ctx context.Context, in *UpdateNexusIncomingServiceRequest, opts ...grpc.CallOption) (*UpdateNexusIncomingServiceResponse, error) {
+	out := new(UpdateNexusIncomingServiceResponse)
+	err := c.cc.Invoke(ctx, MatchingService_UpdateNexusIncomingService_FullMethodName, in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *matchingServiceClient) DeleteNexusIncomingService(ctx context.Context, in *DeleteNexusIncomingServiceRequest, opts ...grpc.CallOption) (*DeleteNexusIncomingServiceResponse, error) {
+	out := new(DeleteNexusIncomingServiceResponse)
+	err := c.cc.Invoke(ctx, MatchingService_DeleteNexusIncomingService_FullMethodName, in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *matchingServiceClient) ListNexusIncomingServices(ctx context.Context, in *ListNexusIncomingServicesRequest, opts ...grpc.CallOption) (*ListNexusIncomingServicesResponse, error) {
+	out := new(ListNexusIncomingServicesResponse)
+	err := c.cc.Invoke(ctx, MatchingService_ListNexusIncomingServices_FullMethodName, in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // MatchingServiceServer is the server API for MatchingService service.
 // All implementations must embed UnimplementedMatchingServiceServer
 // for forward compatibility
@@ -357,6 +477,14 @@ type MatchingServiceServer interface {
 	QueryWorkflow(context.Context, *QueryWorkflowRequest) (*QueryWorkflowResponse, error)
 	// RespondQueryTaskCompleted is called by frontend to respond query completed.
 	RespondQueryTaskCompleted(context.Context, *RespondQueryTaskCompletedRequest) (*RespondQueryTaskCompletedResponse, error)
+	// Request from frontend to synchronously dispatch a nexus task to a worker.
+	DispatchNexusTask(context.Context, *DispatchNexusTaskRequest) (*DispatchNexusTaskResponse, error)
+	// Request from worker (via frontend) to long poll on nexus tasks.
+	PollNexusTaskQueue(context.Context, *PollNexusTaskQueueRequest) (*PollNexusTaskQueueResponse, error)
+	// Response from a worker (via frontend) to a Nexus task, unblocks the corresponding DispatchNexusTask request.
+	RespondNexusTaskCompleted(context.Context, *RespondNexusTaskCompletedRequest) (*RespondNexusTaskCompletedResponse, error)
+	// Response from a worker (via frontend) to a Nexus task, unblocks the corresponding DispatchNexusTask request.
+	RespondNexusTaskFailed(context.Context, *RespondNexusTaskFailedRequest) (*RespondNexusTaskFailedResponse, error)
 	// CancelOutstandingPoll is called by frontend to unblock long polls on matching for zombie pollers.
 	// Our rpc stack does not support context propagation, so when a client connection goes away frontend sees
 	// cancellation of context for that handler, but any corresponding calls (long-poll) to matching service does not
@@ -420,6 +548,38 @@ type MatchingServiceServer interface {
 	UpdateTaskQueueUserData(context.Context, *UpdateTaskQueueUserDataRequest) (*UpdateTaskQueueUserDataResponse, error)
 	// Replicate task queue user data across clusters, must be done via the owning node for updates in namespace.
 	ReplicateTaskQueueUserData(context.Context, *ReplicateTaskQueueUserDataRequest) (*ReplicateTaskQueueUserDataResponse, error)
+	// Optimistically create or update a Nexus incoming service based on provided version.
+	// Set version to 0 to create a new service.
+	// If this request is accepted, the input is considered the "current" state of this service at the time it was
+	// persisted and the updated version is returned.
+	// (-- api-linter: core::0133::method-signature=disabled
+	//
+	//	aip.dev/not-precedent: CreateNexusIncomingService RPC doesn't follow Google API format. --)
+	//
+	// (-- api-linter: core::0133::response-message-name=disabled
+	//
+	//	aip.dev/not-precedent: CreateNexusIncomingService RPC doesn't follow Google API format. --)
+	//
+	// (-- api-linter: core::0133::http-uri-parent=disabled
+	//
+	//	aip.dev/not-precedent: CreateNexusIncomingService RPC doesn't follow Google API format. --)
+	CreateNexusIncomingService(context.Context, *CreateNexusIncomingServiceRequest) (*CreateNexusIncomingServiceResponse, error)
+	// (-- api-linter: core::0134::method-signature=disabled
+	//
+	//	aip.dev/not-precedent: UpdateNexusIncomingService RPC doesn't follow Google API format. --)
+	//
+	// (-- api-linter: core::0134::response-message-name=disabled
+	//
+	//	aip.dev/not-precedent: UpdateNexusIncomingService RPC doesn't follow Google API format. --)
+	//
+	// (-- api-linter: core::0134::request-resource-required=disabled
+	//
+	//	aip.dev/not-precedent: UpdateNexusIncomingService RPC doesn't follow Google API format. --)
+	UpdateNexusIncomingService(context.Context, *UpdateNexusIncomingServiceRequest) (*UpdateNexusIncomingServiceResponse, error)
+	// Delete a service by its name.
+	DeleteNexusIncomingService(context.Context, *DeleteNexusIncomingServiceRequest) (*DeleteNexusIncomingServiceResponse, error)
+	// List all registered services.
+	ListNexusIncomingServices(context.Context, *ListNexusIncomingServicesRequest) (*ListNexusIncomingServicesResponse, error)
 	mustEmbedUnimplementedMatchingServiceServer()
 }
 
@@ -444,6 +604,18 @@ func (UnimplementedMatchingServiceServer) QueryWorkflow(context.Context, *QueryW
 }
 func (UnimplementedMatchingServiceServer) RespondQueryTaskCompleted(context.Context, *RespondQueryTaskCompletedRequest) (*RespondQueryTaskCompletedResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method RespondQueryTaskCompleted not implemented")
+}
+func (UnimplementedMatchingServiceServer) DispatchNexusTask(context.Context, *DispatchNexusTaskRequest) (*DispatchNexusTaskResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method DispatchNexusTask not implemented")
+}
+func (UnimplementedMatchingServiceServer) PollNexusTaskQueue(context.Context, *PollNexusTaskQueueRequest) (*PollNexusTaskQueueResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method PollNexusTaskQueue not implemented")
+}
+func (UnimplementedMatchingServiceServer) RespondNexusTaskCompleted(context.Context, *RespondNexusTaskCompletedRequest) (*RespondNexusTaskCompletedResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method RespondNexusTaskCompleted not implemented")
+}
+func (UnimplementedMatchingServiceServer) RespondNexusTaskFailed(context.Context, *RespondNexusTaskFailedRequest) (*RespondNexusTaskFailedResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method RespondNexusTaskFailed not implemented")
 }
 func (UnimplementedMatchingServiceServer) CancelOutstandingPoll(context.Context, *CancelOutstandingPollRequest) (*CancelOutstandingPollResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method CancelOutstandingPoll not implemented")
@@ -486,6 +658,18 @@ func (UnimplementedMatchingServiceServer) UpdateTaskQueueUserData(context.Contex
 }
 func (UnimplementedMatchingServiceServer) ReplicateTaskQueueUserData(context.Context, *ReplicateTaskQueueUserDataRequest) (*ReplicateTaskQueueUserDataResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method ReplicateTaskQueueUserData not implemented")
+}
+func (UnimplementedMatchingServiceServer) CreateNexusIncomingService(context.Context, *CreateNexusIncomingServiceRequest) (*CreateNexusIncomingServiceResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method CreateNexusIncomingService not implemented")
+}
+func (UnimplementedMatchingServiceServer) UpdateNexusIncomingService(context.Context, *UpdateNexusIncomingServiceRequest) (*UpdateNexusIncomingServiceResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method UpdateNexusIncomingService not implemented")
+}
+func (UnimplementedMatchingServiceServer) DeleteNexusIncomingService(context.Context, *DeleteNexusIncomingServiceRequest) (*DeleteNexusIncomingServiceResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method DeleteNexusIncomingService not implemented")
+}
+func (UnimplementedMatchingServiceServer) ListNexusIncomingServices(context.Context, *ListNexusIncomingServicesRequest) (*ListNexusIncomingServicesResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method ListNexusIncomingServices not implemented")
 }
 func (UnimplementedMatchingServiceServer) mustEmbedUnimplementedMatchingServiceServer() {}
 
@@ -604,6 +788,78 @@ func _MatchingService_RespondQueryTaskCompleted_Handler(srv interface{}, ctx con
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
 		return srv.(MatchingServiceServer).RespondQueryTaskCompleted(ctx, req.(*RespondQueryTaskCompletedRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _MatchingService_DispatchNexusTask_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(DispatchNexusTaskRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(MatchingServiceServer).DispatchNexusTask(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: MatchingService_DispatchNexusTask_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(MatchingServiceServer).DispatchNexusTask(ctx, req.(*DispatchNexusTaskRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _MatchingService_PollNexusTaskQueue_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(PollNexusTaskQueueRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(MatchingServiceServer).PollNexusTaskQueue(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: MatchingService_PollNexusTaskQueue_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(MatchingServiceServer).PollNexusTaskQueue(ctx, req.(*PollNexusTaskQueueRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _MatchingService_RespondNexusTaskCompleted_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(RespondNexusTaskCompletedRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(MatchingServiceServer).RespondNexusTaskCompleted(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: MatchingService_RespondNexusTaskCompleted_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(MatchingServiceServer).RespondNexusTaskCompleted(ctx, req.(*RespondNexusTaskCompletedRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _MatchingService_RespondNexusTaskFailed_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(RespondNexusTaskFailedRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(MatchingServiceServer).RespondNexusTaskFailed(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: MatchingService_RespondNexusTaskFailed_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(MatchingServiceServer).RespondNexusTaskFailed(ctx, req.(*RespondNexusTaskFailedRequest))
 	}
 	return interceptor(ctx, in, info, handler)
 }
@@ -860,6 +1116,78 @@ func _MatchingService_ReplicateTaskQueueUserData_Handler(srv interface{}, ctx co
 	return interceptor(ctx, in, info, handler)
 }
 
+func _MatchingService_CreateNexusIncomingService_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(CreateNexusIncomingServiceRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(MatchingServiceServer).CreateNexusIncomingService(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: MatchingService_CreateNexusIncomingService_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(MatchingServiceServer).CreateNexusIncomingService(ctx, req.(*CreateNexusIncomingServiceRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _MatchingService_UpdateNexusIncomingService_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(UpdateNexusIncomingServiceRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(MatchingServiceServer).UpdateNexusIncomingService(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: MatchingService_UpdateNexusIncomingService_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(MatchingServiceServer).UpdateNexusIncomingService(ctx, req.(*UpdateNexusIncomingServiceRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _MatchingService_DeleteNexusIncomingService_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(DeleteNexusIncomingServiceRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(MatchingServiceServer).DeleteNexusIncomingService(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: MatchingService_DeleteNexusIncomingService_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(MatchingServiceServer).DeleteNexusIncomingService(ctx, req.(*DeleteNexusIncomingServiceRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _MatchingService_ListNexusIncomingServices_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(ListNexusIncomingServicesRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(MatchingServiceServer).ListNexusIncomingServices(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: MatchingService_ListNexusIncomingServices_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(MatchingServiceServer).ListNexusIncomingServices(ctx, req.(*ListNexusIncomingServicesRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 // MatchingService_ServiceDesc is the grpc.ServiceDesc for MatchingService service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -890,6 +1218,22 @@ var MatchingService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "RespondQueryTaskCompleted",
 			Handler:    _MatchingService_RespondQueryTaskCompleted_Handler,
+		},
+		{
+			MethodName: "DispatchNexusTask",
+			Handler:    _MatchingService_DispatchNexusTask_Handler,
+		},
+		{
+			MethodName: "PollNexusTaskQueue",
+			Handler:    _MatchingService_PollNexusTaskQueue_Handler,
+		},
+		{
+			MethodName: "RespondNexusTaskCompleted",
+			Handler:    _MatchingService_RespondNexusTaskCompleted_Handler,
+		},
+		{
+			MethodName: "RespondNexusTaskFailed",
+			Handler:    _MatchingService_RespondNexusTaskFailed_Handler,
 		},
 		{
 			MethodName: "CancelOutstandingPoll",
@@ -946,6 +1290,22 @@ var MatchingService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "ReplicateTaskQueueUserData",
 			Handler:    _MatchingService_ReplicateTaskQueueUserData_Handler,
+		},
+		{
+			MethodName: "CreateNexusIncomingService",
+			Handler:    _MatchingService_CreateNexusIncomingService_Handler,
+		},
+		{
+			MethodName: "UpdateNexusIncomingService",
+			Handler:    _MatchingService_UpdateNexusIncomingService_Handler,
+		},
+		{
+			MethodName: "DeleteNexusIncomingService",
+			Handler:    _MatchingService_DeleteNexusIncomingService_Handler,
+		},
+		{
+			MethodName: "ListNexusIncomingServices",
+			Handler:    _MatchingService_ListNexusIncomingServices_Handler,
 		},
 	},
 	Streams:  []grpc.StreamDesc{},

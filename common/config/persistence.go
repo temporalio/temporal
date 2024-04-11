@@ -70,8 +70,6 @@ func (c *Persistence) Validate() error {
 	// If secondaryVisibilityStore is set, it's always the secondary.
 	//
 	// Valid dual visibility combinations (order: primary, secondary):
-	// - visibilityStore (standard),      secondaryVisibilityStore (any)
-	// - visibilityStore (standard),      advancedVisibilityStore (es)
 	// - visibilityStore (advanced sql),  secondaryVisibilityStore (advanced sql)
 	// - visibilityStore (es),            visibilityStore (es) [via elasticsearch.indices config]
 	// - advancedVisibilityStore (es),    advancedVisibilityStore (es) [via elasticsearch.indices config]
@@ -141,8 +139,8 @@ func (c *Persistence) Validate() error {
 	return nil
 }
 
-// StandardVisibilityConfigExist returns whether user specified visibilityStore in config
-func (c *Persistence) StandardVisibilityConfigExist() bool {
+// VisibilityConfigExist returns whether user specified visibilityStore in config
+func (c *Persistence) VisibilityConfigExist() bool {
 	return c.VisibilityStore != ""
 }
 
@@ -157,7 +155,7 @@ func (c *Persistence) AdvancedVisibilityConfigExist() bool {
 }
 
 func (c *Persistence) IsSQLVisibilityStore() bool {
-	return (c.StandardVisibilityConfigExist() && c.DataStores[c.VisibilityStore].SQL != nil) ||
+	return (c.VisibilityConfigExist() && c.DataStores[c.VisibilityStore].SQL != nil) ||
 		(c.SecondaryVisibilityConfigExist() && c.DataStores[c.SecondaryVisibilityStore].SQL != nil)
 }
 

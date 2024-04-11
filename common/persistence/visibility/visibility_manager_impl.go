@@ -33,13 +33,17 @@ import (
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
 	workflowpb "go.temporal.io/api/workflow/v1"
+	"go.temporal.io/server/common/persistence/serialization"
 	"google.golang.org/protobuf/proto"
+	"google.golang.org/protobuf/types/known/durationpb"
 	"google.golang.org/protobuf/types/known/timestamppb"
 
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence/visibility/manager"
 	"go.temporal.io/server/common/persistence/visibility/store"
+	"go.temporal.io/server/common/searchattribute"
+	"go.temporal.io/server/common/utf8validator"
 )
 
 type (
@@ -123,7 +127,7 @@ func (p *visibilityManagerImpl) RecordWorkflowExecutionClosed(
 		CloseTime:                     request.CloseTime,
 		HistoryLength:                 request.HistoryLength,
 		HistorySizeBytes:              request.HistorySizeBytes,
-		ExecutionDuration:             request.CloseTime.Sub(request.StartTime),
+		ExecutionDuration:             request.ExecutionDuration,
 		StateTransitionCount:          request.StateTransitionCount,
 	}
 	return p.store.RecordWorkflowExecutionClosed(ctx, req)
@@ -290,9 +294,24 @@ func (p *visibilityManagerImpl) newInternalVisibilityRequestBase(
 	if request == nil {
 		return nil, nil
 	}
-	memoBlob, err := p.serializeMemo(request.Memo)
+	memoBlob, err := serializeMemo(request.Memo)
 	if err != nil {
 		return nil, err
+	}
+
+	var searchAttrs *commonpb.SearchAttributes
+	if len(request.SearchAttributes.GetIndexedFields()) > 0 {
+		// Remove any system search attribute from the map.
+		// This is necessary because the validation can supress errors when trying
+		// to set a value on a system search attribute.
+		searchAttrs = &commonpb.SearchAttributes{
+			IndexedFields: make(map[string]*commonpb.Payload),
+		}
+		for key, value := range request.SearchAttributes.IndexedFields {
+			if !searchattribute.IsSystem(key) {
+				searchAttrs.IndexedFields[key] = value
+			}
+		}
 	}
 
 	var (
@@ -316,7 +335,7 @@ func (p *visibilityManagerImpl) newInternalVisibilityRequestBase(
 		ShardID:          request.ShardID,
 		TaskQueue:        request.TaskQueue,
 		Memo:             memoBlob,
-		SearchAttributes: request.SearchAttributes,
+		SearchAttributes: searchAttrs,
 		ParentWorkflowID: parentWorkflowID,
 		ParentRunID:      parentRunID,
 	}, nil
@@ -349,7 +368,7 @@ func (p *visibilityManagerImpl) convertInternalWorkflowExecutionInfo(
 	if internalExecution == nil {
 		return nil, nil
 	}
-	memo, err := p.deserializeMemo(internalExecution.Memo)
+	memo, err := deserializeMemo(internalExecution.Memo)
 	if err != nil {
 		return nil, err
 	}
@@ -380,6 +399,7 @@ func (p *visibilityManagerImpl) convertInternalWorkflowExecutionInfo(
 	// for close records
 	if internalExecution.Status != enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING {
 		executionInfo.CloseTime = timestamppb.New(internalExecution.CloseTime)
+		executionInfo.ExecutionDuration = durationpb.New(internalExecution.ExecutionDuration)
 		executionInfo.HistoryLength = internalExecution.HistoryLength
 		executionInfo.HistorySizeBytes = internalExecution.HistorySizeBytes
 		executionInfo.StateTransitionCount = internalExecution.StateTransitionCount
@@ -395,7 +415,8 @@ func (p *visibilityManagerImpl) convertInternalWorkflowExecutionInfo(
 
 	return executionInfo, nil
 }
-func (p *visibilityManagerImpl) deserializeMemo(data *commonpb.DataBlob) (*commonpb.Memo, error) {
+
+func deserializeMemo(data *commonpb.DataBlob) (*commonpb.Memo, error) {
 	if data == nil || len(data.Data) == 0 {
 		return &commonpb.Memo{}, nil
 	}
@@ -405,16 +426,20 @@ func (p *visibilityManagerImpl) deserializeMemo(data *commonpb.DataBlob) (*commo
 	case enumspb.ENCODING_TYPE_PROTO3:
 		memo := &commonpb.Memo{}
 		err := proto.Unmarshal(data.Data, memo)
+		if err == nil {
+			err = utf8validator.Validate(memo, utf8validator.SourcePersistence)
+		}
 		if err != nil {
-			return nil, serviceerror.NewInternal(fmt.Sprintf("Unable to deserialize memo from data blob: %v", err))
+			return nil, serialization.NewDeserializationError(
+				enumspb.ENCODING_TYPE_PROTO3, fmt.Errorf("unable to deserialize memo from data blob: %w", err))
 		}
 		return memo, nil
 	default:
-		return nil, serviceerror.NewInternal(fmt.Sprintf("Invalid memo encoding in database: %s", data.GetEncodingType().String()))
+		return nil, serialization.NewUnknownEncodingTypeError(data.GetEncodingType().String(), enumspb.ENCODING_TYPE_PROTO3)
 	}
 }
 
-func (p *visibilityManagerImpl) serializeMemo(memo *commonpb.Memo) (*commonpb.DataBlob, error) {
+func serializeMemo(memo *commonpb.Memo) (*commonpb.DataBlob, error) {
 	if memo == nil {
 		memo = &commonpb.Memo{}
 	}

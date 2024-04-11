@@ -287,12 +287,6 @@ func (b *EventStore) bufferEvent(
 		return false
 
 	case // events generated directly from commands should not be buffered
-		// workflow complete, failed, cancelled and continue-as-new events are duplication of above
-		// just put is here for reference
-		// workflow.EventTypeWorkflowExecutionCompleted,
-		// workflow.EventTypeWorkflowExecutionFailed,
-		// workflow.EventTypeWorkflowExecutionCanceled,
-		// workflow.EventTypeWorkflowExecutionContinuedAsNew,
 		enumspb.EVENT_TYPE_ACTIVITY_TASK_SCHEDULED,
 		enumspb.EVENT_TYPE_ACTIVITY_TASK_CANCEL_REQUESTED,
 		enumspb.EVENT_TYPE_TIMER_STARTED,
@@ -313,7 +307,6 @@ func (b *EventStore) bufferEvent(
 		enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_UPDATE_REJECTED,
 		enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_UPDATE_ACCEPTED,
 		enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_UPDATE_COMPLETED:
-		// do not buffer event if event is directly generated from a message
 		return false
 
 	default:
@@ -471,7 +464,7 @@ func (b *EventStore) emitInorderedBufferedEvents(bufferedEvents []*historypb.His
 	}
 
 	if inorderedEventsCount > 0 && b.metricsHandler != nil {
-		b.metricsHandler.Counter(metrics.InorderBufferedEventsCounter.Name()).Record(inorderedEventsCount)
+		metrics.InorderBufferedEventsCounter.With(b.metricsHandler).Record(inorderedEventsCount)
 	}
 }
 

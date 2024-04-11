@@ -46,6 +46,7 @@ type (
 	PersistencePerShardNamespaceMaxQPS dynamicconfig.IntPropertyFnWithNamespaceFilter
 	EnablePriorityRateLimiting         dynamicconfig.BoolPropertyFn
 	OperatorRPSRatio                   dynamicconfig.FloatPropertyFn
+	PersistenceBurstRatio              dynamicconfig.FloatPropertyFn
 
 	DynamicRateLimitingParams dynamicconfig.MapPropertyFn
 
@@ -62,6 +63,7 @@ type (
 		PersistencePerShardNamespaceMaxQPS PersistencePerShardNamespaceMaxQPS
 		EnablePriorityRateLimiting         EnablePriorityRateLimiting
 		OperatorRPSRatio                   OperatorRPSRatio
+		PersistenceBurstRatio              PersistenceBurstRatio
 		ClusterName                        ClusterName
 		ServiceName                        primitives.ServiceName
 		MetricsHandler                     metrics.Handler
@@ -97,29 +99,38 @@ func EventBlobCacheProvider(
 func FactoryProvider(
 	params NewFactoryParams,
 ) Factory {
-	var requestRatelimiter quotas.RequestRateLimiter
+	var systemRequestRateLimiter, namespaceRequestRateLimiter quotas.RequestRateLimiter
 	if params.PersistenceMaxQPS != nil && params.PersistenceMaxQPS() > 0 {
 		if params.EnablePriorityRateLimiting != nil && params.EnablePriorityRateLimiting() {
-			requestRatelimiter = NewPriorityRateLimiter(
-				params.PersistenceNamespaceMaxQPS,
+			systemRequestRateLimiter = NewPriorityRateLimiter(
 				params.PersistenceMaxQPS,
-				params.PersistencePerShardNamespaceMaxQPS,
 				RequestPriorityFn,
 				params.OperatorRPSRatio,
+				params.PersistenceBurstRatio,
 				params.HealthSignals,
 				params.DynamicRateLimitingParams,
 				params.MetricsHandler,
 				params.Logger,
 			)
+			namespaceRequestRateLimiter = NewPriorityNamespaceRateLimiter(
+				params.PersistenceMaxQPS,
+				params.PersistenceNamespaceMaxQPS,
+				params.PersistencePerShardNamespaceMaxQPS,
+				RequestPriorityFn,
+				params.OperatorRPSRatio,
+				params.PersistenceBurstRatio,
+			)
 		} else {
-			requestRatelimiter = NewNoopPriorityRateLimiter(params.PersistenceMaxQPS)
+			systemRequestRateLimiter = NewNoopPriorityRateLimiter(params.PersistenceMaxQPS, params.PersistenceBurstRatio)
+			namespaceRequestRateLimiter = NewNoopPriorityRateLimiter(params.PersistenceMaxQPS, params.PersistenceBurstRatio)
 		}
 	}
 
 	return NewFactory(
 		params.DataStoreFactory,
 		params.Cfg,
-		requestRatelimiter,
+		systemRequestRateLimiter,
+		namespaceRequestRateLimiter,
 		serialization.NewSerializer(),
 		params.EventBlobCache,
 		string(params.ClusterName),

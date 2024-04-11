@@ -41,6 +41,7 @@ import "temporal/server/api/enums/v1/task.proto";
 import "temporal/server/api/enums/v1/workflow_task_type.proto";
 import "temporal/server/api/history/v1/message.proto";
 import "temporal/server/api/persistence/v1/queues.proto";
+import "temporal/server/api/persistence/v1/hsm.proto";
 import "temporal/server/api/update/v1/message.proto";
 import "temporal/server/api/workflow/v1/message.proto";
 
@@ -173,6 +174,27 @@ message WorkflowExecutionInfo {
 
     // index of update IDs and pointers to associated history events.
     map<string, temporal.server.api.update.v1.UpdateInfo> update_infos = 79;
+    repeated VersionedTransition transition_history = 80;
+    // Map of state machine type to map of machine by ID.
+    // (-- api-linter: core::0140::prepositions=disabled
+    //     aip.dev/not-precedent: "by" is used to clarify the keys and values. --)
+    map<int32, StateMachineMap> sub_state_machines_by_type = 81;
+
+    // This field is for tracking if the workflow execution timer task is created or not.
+    // We don't need this field if we always create the execution timer task when the first
+    // workflow in a workflow chain starts. However, this execution timer logic is later added. 
+    // To maintain backward compatibility, we need to track if the execution timer task is created
+    // for a workflow chain since later workflows in the chain also need to create the execution 
+    // timer task if it is not created yet.
+    // NOTE: Task status is clsuter specific information, so when replicating mutable state, this
+    // field need to be sanitized.
+    int32 workflow_execution_timer_task_status = 82;
+
+    // The root workflow execution is defined as follows:
+    // 1. A workflow without parent workflow is its own root workflow.
+    // 2. A workflow that has a parent workflow has the same root workflow as its parent workflow.
+    string root_workflow_id = 83;
+    string root_run_id = 84;
 }
 
 message ExecutionStats {
@@ -246,8 +268,8 @@ message VisibilityTaskInfo {
     int64 version = 5;
     int64 task_id = 6;
     google.protobuf.Timestamp visibility_time = 7;
-    google.protobuf.Timestamp close_time = 8;
-    google.protobuf.Timestamp start_time = 9;
+    reserved 8;
+    reserved 9;
     int64 close_visibility_task_id = 10;
 }
 
@@ -267,8 +289,14 @@ message TimerTaskInfo {
     bytes branch_token = 12;
     // If this is true, we can bypass archival before deleting. Only defined for DeleteHistoryEventTasks.
     bool already_archived = 13;
-}
 
+    // If task addresses a sub-statemachine (e.g. callback), this field will be set.
+    StateMachineTaskInfo state_machine_info = 14;
+
+    // If specified, the task is a for a workflow chain instead of a specific workflow run.
+    // A workflow chain is identified by the run_id of the first workflow in the chain.
+    string first_run_id = 15;
+}
 
 message ArchivalTaskInfo {
     int64 task_id = 1;
@@ -278,6 +306,22 @@ message ArchivalTaskInfo {
     temporal.server.api.enums.v1.TaskType task_type = 5;
     int64 version = 6;
     google.protobuf.Timestamp visibility_time = 7;
+}
+
+message OutboundTaskInfo {
+    string namespace_id = 1;
+    string workflow_id = 2;
+    string run_id = 3;
+
+    temporal.server.api.enums.v1.TaskType task_type = 4;
+    int64 task_id = 5;
+    google.protobuf.Timestamp visibility_time = 6;
+
+    // Destination of this task (e.g. protocol+host+port for callbacks).
+    // Outbound tasks are grouped by this field (and the namespace ID) when scheduling.
+    string destination = 7;
+    // If task addresses a sub-statemachine (e.g. callback), this field will be set.
+    StateMachineTaskInfo state_machine_info = 8;
 }
 
 // activity_map column
@@ -394,3 +438,6 @@ message Checksum {
     bytes value = 3;
 }
 
+message CallbackInfo {
+    temporal.api.workflow.v1.CallbackInfo public_info = 1;
+}

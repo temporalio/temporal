@@ -25,6 +25,7 @@
 package tdbg
 
 import (
+	"encoding/base64"
 	"fmt"
 	"io"
 
@@ -52,10 +53,14 @@ func NewDLQJobService(
 func (ac *DLQJobService) DescribeJob(c *cli.Context) error {
 	adminClient := ac.clientFactory.AdminClient(c)
 	jobToken := c.String(FlagJobToken)
+	jobTokenBytes, err := base64.StdEncoding.DecodeString(jobToken)
+	if err != nil {
+		return fmt.Errorf("unable to parse job token: %w", err)
+	}
 	ctx, cancel := newContext(c)
 	defer cancel()
 	response, err := adminClient.DescribeDLQJob(ctx, &adminservice.DescribeDLQJobRequest{
-		JobToken: jobToken,
+		JobToken: jobTokenBytes,
 	})
 	if err != nil {
 		return fmt.Errorf("call to DescribeDLQJob failed: %w", err)
@@ -70,11 +75,15 @@ func (ac *DLQJobService) DescribeJob(c *cli.Context) error {
 func (ac *DLQJobService) CancelJob(c *cli.Context) error {
 	adminClient := ac.clientFactory.AdminClient(c)
 	jobToken := c.String(FlagJobToken)
+	jobTokenBytes, err := base64.StdEncoding.DecodeString(jobToken)
+	if err != nil {
+		return fmt.Errorf("unable to parse job token: %w", err)
+	}
 	reason := c.String(FlagReason)
 	ctx, cancel := newContext(c)
 	defer cancel()
 	response, err := adminClient.CancelDLQJob(ctx, &adminservice.CancelDLQJobRequest{
-		JobToken: jobToken,
+		JobToken: jobTokenBytes,
 		Reason:   reason,
 	})
 	if err != nil {

@@ -371,13 +371,18 @@ func (h *HistoryStore) GetAllHistoryTreeBranches(
 	return response, nil
 }
 
-// GetHistoryTree returns all branch information of a tree
-func (h *HistoryStore) GetHistoryTree(
+// GetHistoryTreeContainingBranch returns all branch information of a tree
+func (h *HistoryStore) GetHistoryTreeContainingBranch(
 	ctx context.Context,
-	request *p.GetHistoryTreeRequest,
-) (*p.InternalGetHistoryTreeResponse, error) {
+	request *p.InternalGetHistoryTreeContainingBranchRequest,
+) (*p.InternalGetHistoryTreeContainingBranchResponse, error) {
 
-	treeID, err := primitives.ValidateUUID(request.TreeID)
+	branch, err := h.GetHistoryBranchUtil().ParseHistoryBranchInfo(request.BranchToken)
+	if err != nil {
+		return nil, err
+	}
+
+	treeID, err := primitives.ValidateUUID(branch.TreeId)
 	if err != nil {
 		return nil, serviceerror.NewInternal(fmt.Sprintf("ReadHistoryBranch. Gocql TreeId UUID cast failed. Error: %v", err))
 	}
@@ -412,7 +417,7 @@ func (h *HistoryStore) GetHistoryTree(
 		}
 	}
 
-	return &p.InternalGetHistoryTreeResponse{
+	return &p.InternalGetHistoryTreeContainingBranchResponse{
 		TreeInfos: treeInfos,
 	}, nil
 }

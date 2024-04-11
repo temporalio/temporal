@@ -115,11 +115,11 @@ func (h *historyArchiver) Archive(ctx context.Context, URI archiver.URI, request
 		if err != nil {
 
 			if err.Error() != errUploadNonRetryable.Error() {
-				handler.Counter(metrics.HistoryArchiverArchiveTransientErrorCount.Name()).Record(1)
+				metrics.HistoryArchiverArchiveTransientErrorCount.With(handler).Record(1)
 				return
 			}
 
-			handler.Counter(metrics.HistoryArchiverArchiveNonRetryableErrorCount.Name()).Record(1)
+			metrics.HistoryArchiverArchiveNonRetryableErrorCount.With(handler).Record(1)
 			if featureCatalog.NonRetryableError != nil {
 				err = featureCatalog.NonRetryableError()
 			}
@@ -157,7 +157,7 @@ func (h *historyArchiver) Archive(ctx context.Context, URI archiver.URI, request
 				// this may happen even in the middle of iterating history as two archival signals
 				// can be processed concurrently.
 				logger.Info(archiver.ArchiveSkippedInfoMsg)
-				handler.Counter(metrics.HistoryArchiverDuplicateArchivalsCount.Name()).Record(1)
+				metrics.HistoryArchiverDuplicateArchivalsCount.With(handler).Record(1)
 				return nil
 			}
 
@@ -185,7 +185,7 @@ func (h *historyArchiver) Archive(ctx context.Context, URI archiver.URI, request
 		if exist, _ := h.gcloudStorage.Exist(ctx, URI, filename); !exist {
 			if err := h.gcloudStorage.Upload(ctx, URI, filename, encodedHistoryPart); err != nil {
 				logger.Error(archiver.ArchiveTransientErrorMsg, tag.ArchivalArchiveFailReason(errWriteFile), tag.Error(err))
-				handler.Counter(metrics.HistoryArchiverArchiveTransientErrorCount.Name()).Record(1)
+				metrics.HistoryArchiverArchiveTransientErrorCount.With(handler).Record(1)
 				return err
 			}
 
@@ -197,9 +197,9 @@ func (h *historyArchiver) Archive(ctx context.Context, URI archiver.URI, request
 		}
 	}
 
-	handler.Counter(metrics.HistoryArchiverTotalUploadSize.Name()).Record(totalUploadSize)
-	handler.Counter(metrics.HistoryArchiverHistorySize.Name()).Record(totalUploadSize)
-	handler.Counter(metrics.HistoryArchiverArchiveSuccessCount.Name()).Record(1)
+	metrics.HistoryArchiverTotalUploadSize.With(handler).Record(totalUploadSize)
+	metrics.HistoryArchiverHistorySize.With(handler).Record(totalUploadSize)
+	metrics.HistoryArchiverArchiveSuccessCount.With(handler).Record(1)
 	return
 }
 

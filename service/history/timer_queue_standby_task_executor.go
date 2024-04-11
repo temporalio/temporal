@@ -113,12 +113,14 @@ func (t *timerQueueStandbyTaskExecutor) Execute(
 		err = t.executeWorkflowBackoffTimerTask(ctx, task)
 	case *tasks.ActivityRetryTimerTask:
 		err = t.executeActivityRetryTimerTask(ctx, task)
-	case *tasks.WorkflowTimeoutTask:
-		err = t.executeWorkflowTimeoutTask(ctx, task)
+	case *tasks.WorkflowRunTimeoutTask:
+		err = t.executeWorkflowRunTimeoutTask(ctx, task)
+	case *tasks.WorkflowExecutionTimeoutTask:
+		err = t.executeWorkflowExecutionTimeoutTask(ctx, task)
 	case *tasks.DeleteHistoryEventTask:
 		err = t.executeDeleteHistoryEventTask(ctx, task)
 	default:
-		err = errUnknownTimerTask
+		err = queues.NewUnprocessableTaskError("unknown task type")
 	}
 
 	return queues.ExecuteResponse{
@@ -391,14 +393,11 @@ func (t *timerQueueStandbyTaskExecutor) executeWorkflowBackoffTimerTask(
 	)
 }
 
-func (t *timerQueueStandbyTaskExecutor) executeWorkflowTimeoutTask(
+func (t *timerQueueStandbyTaskExecutor) executeWorkflowRunTimeoutTask(
 	ctx context.Context,
-	timerTask *tasks.WorkflowTimeoutTask,
+	timerTask *tasks.WorkflowRunTimeoutTask,
 ) error {
 	actionFn := func(_ context.Context, wfContext workflow.Context, mutableState workflow.MutableState) (interface{}, error) {
-		// we do not need to notify new timer to base, since if there is no new event being replicated
-		// checking again if the timer can be completed is meaningless
-
 		startVersion, err := mutableState.GetStartVersion()
 		if err != nil {
 			return nil, err
@@ -409,6 +408,44 @@ func (t *timerQueueStandbyTaskExecutor) executeWorkflowTimeoutTask(
 		}
 
 		return getHistoryResendInfo(mutableState)
+	}
+
+	return t.processTimer(
+		ctx,
+		timerTask,
+		actionFn,
+		getStandbyPostActionFn(
+			timerTask,
+			t.getCurrentTime,
+			t.config.StandbyTaskMissingEventsResendDelay(timerTask.GetType()),
+			t.config.StandbyTaskMissingEventsDiscardDelay(timerTask.GetType()),
+			t.fetchHistoryFromRemote,
+			standbyTimerTaskPostActionTaskDiscarded,
+		),
+	)
+}
+
+func (t *timerQueueStandbyTaskExecutor) executeWorkflowExecutionTimeoutTask(
+	ctx context.Context,
+	timerTask *tasks.WorkflowExecutionTimeoutTask,
+) error {
+	actionFn := func(
+		_ context.Context,
+		wfContext workflow.Context,
+		mutableState workflow.MutableState,
+	) (interface{}, error) {
+
+		if !t.isValidExecutionTimeoutTask(mutableState, timerTask) {
+			return nil, nil
+		}
+
+		// If the task is valid, it means the workflow should be timed out but it is still running.
+		// The standby logic should continue to wait for the workflow timeout event to be replicated from the active side.
+		//
+		// Return non-nil post action info to indicate that verification is not done yet.
+		// The returned post action info can be used to resend history fron active side.
+
+		return newExecutionTimerPostActionInfo(mutableState)
 	}
 
 	return t.processTimer(
@@ -462,7 +499,7 @@ func (t *timerQueueStandbyTaskExecutor) processTimer(
 		}
 	}()
 
-	mutableState, err := loadMutableStateForTimerTask(ctx, t.shardContext, executionContext, timerTask, t.metricHandler, t.logger)
+	mutableState, err := loadMutableStateForTimerTask(ctx, t.shardContext, executionContext, timerTask, t.metricsHandler, t.logger)
 	if err != nil {
 		return err
 	}
@@ -491,12 +528,17 @@ func (t *timerQueueStandbyTaskExecutor) fetchHistoryFromRemote(
 	postActionInfo interface{},
 	logger log.Logger,
 ) error {
+	workflowKey := taskWorkflowKey(taskInfo)
+
 	var resendInfo *historyResendInfo
 	switch postActionInfo := postActionInfo.(type) {
 	case nil:
 		return nil
 	case *historyResendInfo:
 		resendInfo = postActionInfo
+	case *executionTimerPostActionInfo:
+		resendInfo = postActionInfo.historyResendInfo
+		workflowKey.RunID = postActionInfo.currentRunID
 	case *activityTaskPostActionInfo:
 		resendInfo = postActionInfo.historyResendInfo
 	default:
@@ -506,23 +548,23 @@ func (t *timerQueueStandbyTaskExecutor) fetchHistoryFromRemote(
 	remoteClusterName, err := getRemoteClusterName(
 		t.currentClusterName,
 		t.registry,
-		taskInfo.GetNamespaceID(),
+		workflowKey.GetNamespaceID(),
 	)
 	if err != nil {
 		return err
 	}
 
-	scope := t.metricHandler.WithTags(metrics.OperationTag(metrics.HistoryRereplicationByTimerTaskScope))
-	scope.Counter(metrics.ClientRequests.Name()).Record(1)
+	scope := t.metricsHandler.WithTags(metrics.OperationTag(metrics.HistoryRereplicationByTimerTaskScope))
+	metrics.ClientRequests.With(scope).Record(1)
 	startTime := time.Now()
-	defer func() { scope.Timer(metrics.ClientLatency.Name()).Record(time.Since(startTime)) }()
+	defer func() { metrics.ClientLatency.With(scope).Record(time.Since(startTime)) }()
 
 	if resendInfo.lastEventID == common.EmptyEventID || resendInfo.lastEventVersion == common.EmptyVersion {
 		t.logger.Error("Error re-replicating history from remote: timerQueueStandbyProcessor encountered empty historyResendInfo.",
 			tag.ShardID(t.shardContext.GetShardID()),
-			tag.WorkflowNamespaceID(taskInfo.GetNamespaceID()),
-			tag.WorkflowID(taskInfo.GetWorkflowID()),
-			tag.WorkflowRunID(taskInfo.GetRunID()),
+			tag.WorkflowNamespaceID(workflowKey.GetNamespaceID()),
+			tag.WorkflowID(workflowKey.GetWorkflowID()),
+			tag.WorkflowRunID(workflowKey.GetRunID()),
 			tag.ClusterName(remoteClusterName))
 
 		return consts.ErrTaskRetry
@@ -533,9 +575,9 @@ func (t *timerQueueStandbyTaskExecutor) fetchHistoryFromRemote(
 	if err = t.nDCHistoryResender.SendSingleWorkflowHistory(
 		ctx,
 		remoteClusterName,
-		namespace.ID(taskInfo.GetNamespaceID()),
-		taskInfo.GetWorkflowID(),
-		taskInfo.GetRunID(),
+		namespace.ID(workflowKey.GetNamespaceID()),
+		workflowKey.GetWorkflowID(),
+		workflowKey.GetRunID(),
 		resendInfo.lastEventID,
 		resendInfo.lastEventVersion,
 		common.EmptyEventID,
@@ -547,9 +589,9 @@ func (t *timerQueueStandbyTaskExecutor) fetchHistoryFromRemote(
 		}
 		t.logger.Error("Error re-replicating history from remote.",
 			tag.ShardID(t.shardContext.GetShardID()),
-			tag.WorkflowNamespaceID(taskInfo.GetNamespaceID()),
-			tag.WorkflowID(taskInfo.GetWorkflowID()),
-			tag.WorkflowRunID(taskInfo.GetRunID()),
+			tag.WorkflowNamespaceID(workflowKey.GetNamespaceID()),
+			tag.WorkflowID(workflowKey.GetWorkflowID()),
+			tag.WorkflowRunID(workflowKey.GetRunID()),
 			tag.ClusterName(remoteClusterName),
 			tag.Error(err))
 	}

@@ -83,6 +83,7 @@ var (
 		"client.frontend.PollActivityTaskQueue":          true,
 		"client.frontend.PollWorkflowTaskQueue":          true,
 		"client.matching.GetTaskQueueUserData":           true,
+		"client.matching.ListNexusIncomingServices":      true,
 	}
 	largeTimeoutContext = map[string]bool{
 		"client.admin.GetReplicationMessages": true,
@@ -103,6 +104,7 @@ var (
 		"client.history.GetDLQTasks":            true,
 		"client.history.DeleteDLQTasks":         true,
 		"client.history.ListQueues":             true,
+		"client.history.ListTasks":              true,
 		// these need to pick a partition. too complicated.
 		"client.matching.AddActivityTask":       true,
 		"client.matching.AddWorkflowTask":       true,
@@ -126,6 +128,8 @@ var (
 		"TerminateWorkflowExecutionRequest.ExternalWorkflowExecution": true,
 		// this is the parent for starting a child workflow
 		"StartWorkflowExecutionRequest.ParentExecutionInfo": true,
+		// this is the root for starting a child workflow
+		"StartWorkflowExecutionRequest.RootExecutionInfo": true,
 		// these get routed to the parent
 		"RecordChildExecutionCompletedRequest.ChildExecution":          true,
 		"VerifyChildExecutionCompletionRecordedRequest.ChildExecution": true,
@@ -222,19 +226,20 @@ func makeGetMatchingClient(reqType reflect.Type) string {
 	// this magically figures out how to get a MatchingServiceClient from a request
 	t := reqType.Elem() // we know it's a pointer
 
-	nsID := findOneNestedField(t, "NamespaceId", "request", 1)
+	var nsID, tq, tqt fieldWithPath
 
-	var tq, tqt fieldWithPath
 	switch t.Name() {
 	case "GetBuildIdTaskQueueMappingRequest":
 		// Pick a random node for this request, it's not associated with a specific task queue.
 		tq = fieldWithPath{path: "fmt.Sprintf(\"not-applicable-%d\", rand.Int())"}
 		tqt = fieldWithPath{path: "enumspb.TASK_QUEUE_TYPE_UNSPECIFIED"}
+		nsID = findOneNestedField(t, "NamespaceId", "request", 1)
 	case "UpdateTaskQueueUserDataRequest",
 		"ReplicateTaskQueueUserDataRequest":
 		// Always route these requests to the same matching node by namespace.
 		tq = fieldWithPath{path: "\"not-applicable\""}
 		tqt = fieldWithPath{path: "enumspb.TASK_QUEUE_TYPE_UNSPECIFIED"}
+		nsID = findOneNestedField(t, "NamespaceId", "request", 1)
 	case "GetWorkerBuildIdCompatibilityRequest",
 		"UpdateWorkerBuildIdCompatibilityRequest",
 		"RespondQueryTaskCompletedRequest",
@@ -244,9 +249,26 @@ func makeGetMatchingClient(reqType reflect.Type) string {
 		"UpdateWorkerVersioningRulesRequest":
 		tq = findOneNestedField(t, "TaskQueue", "request", 2)
 		tqt = fieldWithPath{path: "enumspb.TASK_QUEUE_TYPE_WORKFLOW"}
+		nsID = findOneNestedField(t, "NamespaceId", "request", 1)
+	case "DispatchNexusTaskRequest",
+		"PollNexusTaskQueueRequest",
+		"RespondNexusTaskCompletedRequest",
+		"RespondNexusTaskFailedRequest":
+		tq = findOneNestedField(t, "TaskQueue", "request", 2)
+		tqt = fieldWithPath{path: "enumspb.TASK_QUEUE_TYPE_NEXUS"}
+		nsID = findOneNestedField(t, "NamespaceId", "request", 1)
+	case "CreateNexusIncomingServiceRequest",
+		"UpdateNexusIncomingServiceRequest",
+		"ListNexusIncomingServicesRequest",
+		"DeleteNexusIncomingServiceRequest":
+		// Always route these requests to the same matching node by namespace.
+		tq = fieldWithPath{path: "&taskqueuepb.TaskQueue{Name: \"not-applicable\"}"}
+		tqt = fieldWithPath{path: "enumspb.TASK_QUEUE_TYPE_UNSPECIFIED"}
+		nsID = fieldWithPath{path: `"not-applicable"`}
 	default:
 		tq = findOneNestedField(t, "TaskQueue", "request", 2)
 		tqt = findOneNestedField(t, "TaskQueueType", "request", 2)
+		nsID = findOneNestedField(t, "NamespaceId", "request", 1)
 	}
 
 	if nsID.path != "" && tq.path != "" && tqt.path != "" {

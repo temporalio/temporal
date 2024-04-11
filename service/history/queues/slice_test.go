@@ -98,7 +98,7 @@ func (s *sliceSuite) TestCanSplitByRange() {
 	r := NewRandomRange()
 	scope := NewScope(r, predicates.Universal[tasks.Task]())
 
-	slice := NewSlice(nil, s.executableFactory, s.monitor, scope)
+	slice := NewSlice(nil, s.executableFactory, s.monitor, scope, GrouperNamespaceID{})
 	s.Equal(scope, slice.Scope())
 
 	s.True(slice.CanSplitByRange(r.InclusiveMin))
@@ -159,7 +159,7 @@ func (s *sliceSuite) TestCanMergeWithSlice() {
 	r := NewRandomRange()
 	namespaceIDs := []string{uuid.New(), uuid.New(), uuid.New(), uuid.New()}
 	predicate := tasks.NewNamespacePredicate(namespaceIDs)
-	slice := NewSlice(nil, nil, s.monitor, NewScope(r, predicate))
+	slice := NewSlice(nil, nil, s.monitor, NewScope(r, predicate), GrouperNamespaceID{})
 
 	testPredicates := []tasks.Predicate{
 		predicate,
@@ -171,22 +171,22 @@ func (s *sliceSuite) TestCanMergeWithSlice() {
 	s.False(predicate.Equals(testPredicates[2]))
 
 	for _, mergePredicate := range testPredicates {
-		testSlice := NewSlice(nil, nil, s.monitor, NewScope(r, mergePredicate))
+		testSlice := NewSlice(nil, nil, s.monitor, NewScope(r, mergePredicate), GrouperNamespaceID{})
 		s.True(slice.CanMergeWithSlice(testSlice))
 
-		testSlice = NewSlice(nil, nil, s.monitor, NewScope(NewRange(tasks.MinimumKey, r.InclusiveMin), mergePredicate))
+		testSlice = NewSlice(nil, nil, s.monitor, NewScope(NewRange(tasks.MinimumKey, r.InclusiveMin), mergePredicate), GrouperNamespaceID{})
 		s.True(slice.CanMergeWithSlice(testSlice))
 
-		testSlice = NewSlice(nil, nil, s.monitor, NewScope(NewRange(r.ExclusiveMax, tasks.MaximumKey), mergePredicate))
+		testSlice = NewSlice(nil, nil, s.monitor, NewScope(NewRange(r.ExclusiveMax, tasks.MaximumKey), mergePredicate), GrouperNamespaceID{})
 		s.True(slice.CanMergeWithSlice(testSlice))
 
-		testSlice = NewSlice(nil, nil, s.monitor, NewScope(NewRange(tasks.MinimumKey, NewRandomKeyInRange(r)), mergePredicate))
+		testSlice = NewSlice(nil, nil, s.monitor, NewScope(NewRange(tasks.MinimumKey, NewRandomKeyInRange(r)), mergePredicate), GrouperNamespaceID{})
 		s.True(slice.CanMergeWithSlice(testSlice))
 
-		testSlice = NewSlice(nil, nil, s.monitor, NewScope(NewRange(NewRandomKeyInRange(r), tasks.MaximumKey), mergePredicate))
+		testSlice = NewSlice(nil, nil, s.monitor, NewScope(NewRange(NewRandomKeyInRange(r), tasks.MaximumKey), mergePredicate), GrouperNamespaceID{})
 		s.True(slice.CanMergeWithSlice(testSlice))
 
-		testSlice = NewSlice(nil, nil, s.monitor, NewScope(NewRange(tasks.MinimumKey, tasks.MaximumKey), mergePredicate))
+		testSlice = NewSlice(nil, nil, s.monitor, NewScope(NewRange(tasks.MinimumKey, tasks.MaximumKey), mergePredicate), GrouperNamespaceID{})
 		s.True(slice.CanMergeWithSlice(testSlice))
 	}
 
@@ -195,13 +195,13 @@ func (s *sliceSuite) TestCanMergeWithSlice() {
 	testSlice := NewSlice(nil, nil, s.monitor, NewScope(NewRange(
 		tasks.MinimumKey,
 		tasks.NewKey(r.InclusiveMin.FireTime, r.InclusiveMin.TaskID-1),
-	), predicate))
+	), predicate), GrouperNamespaceID{})
 	s.False(slice.CanMergeWithSlice(testSlice))
 
 	testSlice = NewSlice(nil, nil, s.monitor, NewScope(NewRange(
 		tasks.NewKey(r.ExclusiveMax.FireTime, r.ExclusiveMax.TaskID+1),
 		tasks.MaximumKey,
-	), predicate))
+	), predicate), GrouperNamespaceID{})
 	s.False(slice.CanMergeWithSlice(testSlice))
 }
 
@@ -345,7 +345,7 @@ func (s *sliceSuite) TestShrinkScope_ShrinkRange() {
 	r := NewRandomRange()
 	predicate := predicates.Universal[tasks.Task]()
 
-	slice := NewSlice(nil, s.executableFactory, s.monitor, NewScope(r, predicate))
+	slice := NewSlice(nil, s.executableFactory, s.monitor, NewScope(r, predicate), GrouperNamespaceID{})
 	slice.iterators = s.randomIteratorsInRange(r, rand.Intn(2), nil)
 
 	executables := s.randomExecutablesInRange(r, 5)
@@ -374,7 +374,7 @@ func (s *sliceSuite) TestShrinkScope_ShrinkRange() {
 		slice.pendingExecutables[executable.GetKey()] = executable
 	}
 
-	slice.ShrinkScope()
+	s.Equal(numAcked, slice.ShrinkScope())
 	s.Len(slice.pendingExecutables, len(executables)-numAcked)
 	s.validateSliceState(slice)
 
@@ -394,7 +394,7 @@ func (s *sliceSuite) TestShrinkScope_ShrinkPredicate() {
 	r := NewRandomRange()
 	predicate := predicates.Universal[tasks.Task]()
 
-	slice := NewSlice(nil, s.executableFactory, s.monitor, NewScope(r, predicate))
+	slice := NewSlice(nil, s.executableFactory, s.monitor, NewScope(r, predicate), GrouperNamespaceID{})
 	slice.iterators = []Iterator{} // manually set iterators to be empty to trigger predicate update
 
 	executables := s.randomExecutablesInRange(r, 100)
@@ -403,7 +403,7 @@ func (s *sliceSuite) TestShrinkScope_ShrinkPredicate() {
 	})
 
 	pendingNamespaceID := []string{uuid.New(), uuid.New()}
-	s.True(len(pendingNamespaceID) <= shrinkPredicateMaxPendingNamespaces)
+	s.True(len(pendingNamespaceID) <= shrinkPredicateMaxPendingKeys)
 	for _, executable := range executables {
 		mockExecutable := executable.(*MockExecutable)
 
@@ -437,7 +437,7 @@ func (s *sliceSuite) TestSelectTasks_NoError() {
 	predicate := tasks.NewNamespacePredicate(namespaceIDs)
 
 	numTasks := 20
-	paginationFnProvider := func(_ int64, paginationRange Range) collection.PaginationFn[tasks.Task] {
+	paginationFnProvider := func(paginationRange Range) collection.PaginationFn[tasks.Task] {
 		return func(paginationToken []byte) ([]tasks.Task, []byte, error) {
 
 			mockTasks := make([]tasks.Task, 0, numTasks)
@@ -463,7 +463,7 @@ func (s *sliceSuite) TestSelectTasks_NoError() {
 	}
 
 	for _, batchSize := range []int{1, 2, 5, 10, 20, 100} {
-		slice := NewSlice(paginationFnProvider, s.executableFactory, s.monitor, NewScope(r, predicate))
+		slice := NewSlice(paginationFnProvider, s.executableFactory, s.monitor, NewScope(r, predicate), GrouperNamespaceID{})
 
 		executables := make([]Executable, 0, numTasks)
 		for {
@@ -487,7 +487,7 @@ func (s *sliceSuite) TestSelectTasks_Error_NoLoadedTasks() {
 
 	numTasks := 20
 	loadErr := true
-	paginationFnProvider := func(_ int64, paginationRange Range) collection.PaginationFn[tasks.Task] {
+	paginationFnProvider := func(paginationRange Range) collection.PaginationFn[tasks.Task] {
 		return func(paginationToken []byte) ([]tasks.Task, []byte, error) {
 			if loadErr {
 				loadErr = false
@@ -511,7 +511,7 @@ func (s *sliceSuite) TestSelectTasks_Error_NoLoadedTasks() {
 		}
 	}
 
-	slice := NewSlice(paginationFnProvider, s.executableFactory, s.monitor, NewScope(r, predicate))
+	slice := NewSlice(paginationFnProvider, s.executableFactory, s.monitor, NewScope(r, predicate), GrouperNamespaceID{})
 	_, err := slice.SelectTasks(DefaultReaderId, 100)
 	s.Error(err)
 
@@ -527,7 +527,7 @@ func (s *sliceSuite) TestSelectTasks_Error_WithLoadedTasks() {
 
 	numTasks := 20
 	loadErr := false
-	paginationFnProvider := func(_ int64, paginationRange Range) collection.PaginationFn[tasks.Task] {
+	paginationFnProvider := func(paginationRange Range) collection.PaginationFn[tasks.Task] {
 		return func(paginationToken []byte) ([]tasks.Task, []byte, error) {
 			defer func() {
 				loadErr = !loadErr
@@ -554,7 +554,7 @@ func (s *sliceSuite) TestSelectTasks_Error_WithLoadedTasks() {
 		}
 	}
 
-	slice := NewSlice(paginationFnProvider, s.executableFactory, s.monitor, NewScope(r, predicate))
+	slice := NewSlice(paginationFnProvider, s.executableFactory, s.monitor, NewScope(r, predicate), GrouperNamespaceID{})
 	executables, err := slice.SelectTasks(DefaultReaderId, 100)
 	s.NoError(err)
 	s.Len(executables, numTasks)
@@ -613,7 +613,7 @@ func (s *sliceSuite) newTestSlice(
 		taskTypes = []enumsspb.TaskType{enumsspb.TASK_TYPE_TRANSFER_CLOSE_EXECUTION}
 	}
 
-	slice := NewSlice(nil, s.executableFactory, s.monitor, NewScope(r, predicate))
+	slice := NewSlice(nil, s.executableFactory, s.monitor, NewScope(r, predicate), GrouperNamespaceID{})
 	for _, executable := range s.randomExecutablesInRange(r, rand.Intn(20)) {
 		slice.pendingExecutables[executable.GetKey()] = executable
 

@@ -81,7 +81,7 @@
 		{
 			"type": "promptString",
 			"id": "functionalTestSuiteMethod",
-			"description": "The method name withing the functional test suite that you wish to debug.",
+			"description": "The method name within the functional test suite that you wish to debug.",
 			"default": "."
 		}
 	]

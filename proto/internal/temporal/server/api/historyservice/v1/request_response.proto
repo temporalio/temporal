@@ -67,8 +67,11 @@ message StartWorkflowExecutionRequest {
     // (parent/previous) will set the initial version stamp of this workflow.
     // Deprecated. use `inherited_build_id`
     temporal.api.common.v1.WorkerVersionStamp source_version_stamp = 10;
+    // The root execution info of the new workflow.
+    // For top-level workflows (ie., without parent), this field must be nil.
+    temporal.server.api.workflow.v1.RootExecutionInfo root_execution_info = 11;
     // inherited build ID from parent/previous execution
-    string inherited_build_id = 11;
+    string inherited_build_id = 12;
 }
 
 message StartWorkflowExecutionResponse {
@@ -76,6 +79,7 @@ message StartWorkflowExecutionResponse {
     temporal.server.api.clock.v1.VectorClock clock = 2;
     // Set if request_eager_execution is set on the start request 
     temporal.api.workflowservice.v1.PollWorkflowTaskQueueResponse eager_workflow_task = 3;
+    bool started = 4;
 }
 
 message GetMutableStateRequest {
@@ -309,6 +313,7 @@ message SignalWithStartWorkflowExecutionRequest {
 
 message SignalWithStartWorkflowExecutionResponse {
     string run_id = 1;
+    bool started = 2;
 }
 
 message RemoveSignalMutableStateRequest {
@@ -423,6 +428,7 @@ message DescribeWorkflowExecutionResponse {
     repeated temporal.api.workflow.v1.PendingActivityInfo pending_activities = 3;
     repeated temporal.api.workflow.v1.PendingChildExecutionInfo pending_children = 4;
     temporal.api.workflow.v1.PendingWorkflowTaskInfo pending_workflow_task = 5;
+    repeated temporal.api.workflow.v1.CallbackInfo callbacks = 6;
 }
 
 message ReplicateEventsV2Request {
@@ -433,6 +439,7 @@ message ReplicateEventsV2Request {
     // New run events does not need version history since there is no prior events.
     temporal.api.common.v1.DataBlob new_run_events = 5;
     temporal.server.api.workflow.v1.BaseExecutionInfo base_execution_info = 6;
+    string new_run_id = 7;
 }
 
 message ReplicateEventsV2Response {
@@ -847,3 +854,11 @@ message AddTasksRequest {
 }
 
 message AddTasksResponse {}
+
+message ListTasksRequest {
+    temporal.server.api.adminservice.v1.ListHistoryTasksRequest request = 1;
+}
+
+message ListTasksResponse {
+    temporal.server.api.adminservice.v1.ListHistoryTasksResponse response = 1;
+}

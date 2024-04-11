@@ -73,13 +73,13 @@ func TestUserDataReplicationTestSuite(t *testing.T) {
 func (s *UserDataReplicationTestSuite) SetupSuite() {
 	s.dynamicConfigOverrides = map[dynamicconfig.Key]interface{}{
 		// Make sure we don't hit the rate limiter in tests
-		dynamicconfig.FrontendMaxNamespaceNamespaceReplicationInducingAPIsRPSPerInstance:   1000,
-		dynamicconfig.FrontendMaxNamespaceNamespaceReplicationInducingAPIsBurstPerInstance: 1000,
-		dynamicconfig.FrontendNamespaceReplicationInducingAPIsRPS:                          1000,
-		dynamicconfig.FrontendEnableWorkerVersioningDataAPIs:                               true,
-		dynamicconfig.FrontendEnableWorkerVersioningWorkflowAPIs:                           true,
+		dynamicconfig.FrontendGlobalNamespaceNamespaceReplicationInducingAPIsRPS:                1000,
+		dynamicconfig.FrontendMaxNamespaceNamespaceReplicationInducingAPIsBurstRatioPerInstance: 1,
+		dynamicconfig.FrontendNamespaceReplicationInducingAPIsRPS:                               1000,
+		dynamicconfig.FrontendEnableWorkerVersioningDataAPIs:                                    true,
+		dynamicconfig.FrontendEnableWorkerVersioningWorkflowAPIs:                                true,
 		dynamicconfig.FrontendEnableWorkerVersioningRuleAPIs:                               true,
-		dynamicconfig.BuildIdScavengerEnabled:                                              true,
+		dynamicconfig.BuildIdScavengerEnabled:                                                   true,
 		// Ensure the scavenger can immediately delete build ids that are not in use.
 		dynamicconfig.RemovableBuildIdDurationSinceDefault: time.Microsecond,
 	}
@@ -176,6 +176,10 @@ func (s *UserDataReplicationTestSuite) TestUserDataIsReplicatedFromPassiveToActi
 }
 
 func (s *UserDataReplicationTestSuite) TestUserDataEntriesAreReplicatedOnDemand() {
+	if !tests.UsingSQLAdvancedVisibility() {
+		s.T().Skip("Test requires advanced visibility")
+	}
+
 	ctx := tests.NewContext()
 	namespace := s.T().Name() + "-" + common.GenerateRandomString(5)
 	activeFrontendClient := s.cluster1.GetFrontendClient()
@@ -257,9 +261,6 @@ func (s *UserDataReplicationTestSuite) TestUserDataEntriesAreReplicatedOnDemand(
 }
 
 func (s *UserDataReplicationTestSuite) TestUserDataTombstonesAreReplicated() {
-	if !tests.UsingSQLAdvancedVisibility() {
-		s.T().Skip("Test requires advanced visibility")
-	}
 	ctx := tests.NewContext()
 	namespace := s.T().Name() + "-" + common.GenerateRandomString(5)
 	activeFrontendClient := s.cluster1.GetFrontendClient()
@@ -407,9 +408,6 @@ func (s *UserDataReplicationTestSuite) TestUserDataTombstonesAreReplicated() {
 }
 
 func (s *UserDataReplicationTestSuite) TestApplyReplicationEventRevivesInUseTombstones() {
-	if !tests.UsingSQLAdvancedVisibility() {
-		s.T().Skip("Test requires advanced visibility")
-	}
 	ctx := tests.NewContext()
 	namespace := s.T().Name() + "-" + common.GenerateRandomString(5)
 	taskQueue := "test-task-queue"

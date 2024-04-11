@@ -32,6 +32,7 @@ import (
 
 	commonpb "go.temporal.io/api/common/v1"
 	"go.temporal.io/api/serviceerror"
+
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/backoff"
@@ -182,7 +183,7 @@ func (e *ExecutableTaskImpl) Nack(err error) {
 	if item != nil {
 		namespaceName = item.(namespace.Name).String()
 	}
-	e.MetricsHandler.Counter(metrics.ReplicationTasksFailed.Name()).Record(
+	metrics.ReplicationTasksFailed.With(e.MetricsHandler).Record(
 		1,
 		metrics.OperationTag(e.metricsTag),
 		metrics.NamespaceTag(namespaceName),
@@ -234,7 +235,7 @@ func (e *ExecutableTaskImpl) Reschedule() {
 
 func (e *ExecutableTaskImpl) IsRetryableError(err error) bool {
 	switch err.(type) {
-	case *serviceerror.InvalidArgument:
+	case *serviceerror.InvalidArgument, *serviceerror.DataLoss:
 		return false
 	default:
 		return true
@@ -266,12 +267,17 @@ func (e *ExecutableTaskImpl) emitFinishMetrics(
 	if item != nil {
 		nsTag = metrics.NamespaceTag(item.(namespace.Name).String())
 	}
-	e.MetricsHandler.Timer(metrics.ServiceLatency.Name()).Record(
+	metrics.ServiceLatency.With(e.MetricsHandler).Record(
 		now.Sub(e.taskReceivedTime),
 		metrics.OperationTag(e.metricsTag),
 		nsTag,
 	)
-	e.MetricsHandler.Timer(metrics.ReplicationLatency.Name()).Record(
+	metrics.ReplicationLatency.With(e.MetricsHandler).Record(
+		now.Sub(e.taskCreationTime),
+		metrics.OperationTag(e.metricsTag),
+		nsTag,
+	)
+	metrics.ReplicationTaskTransmissionLatency.With(e.MetricsHandler).Record(
 		e.taskReceivedTime.Sub(e.taskCreationTime),
 		metrics.OperationTag(e.metricsTag),
 		nsTag,
@@ -297,13 +303,13 @@ func (e *ExecutableTaskImpl) Resend(
 		return false, ErrResendAttemptExceeded
 	}
 
-	e.MetricsHandler.Counter(metrics.ClientRequests.Name()).Record(
+	metrics.ClientRequests.With(e.MetricsHandler).Record(
 		1,
 		metrics.OperationTag(e.metricsTag+"Resend"),
 	)
 	startTime := time.Now().UTC()
 	defer func() {
-		e.MetricsHandler.Timer(metrics.ClientLatency.Name()).Record(
+		metrics.ClientLatency.With(e.MetricsHandler).Record(
 			time.Since(startTime),
 			metrics.OperationTag(e.metricsTag+"Resend"),
 		)
@@ -350,16 +356,30 @@ func (e *ExecutableTaskImpl) Resend(
 		//  c. attempt failed due to old workflow does not exist
 		//  d. return error to resend new workflow before the branching point
 
+		if resendErr.NamespaceId == retryErr.NamespaceId &&
+			resendErr.WorkflowId == retryErr.WorkflowId &&
+			resendErr.RunId == retryErr.RunId {
+			e.Logger.Error("error resend history on the same workflow run",
+				tag.WorkflowNamespaceID(retryErr.NamespaceId),
+				tag.WorkflowID(retryErr.WorkflowId),
+				tag.WorkflowRunID(retryErr.RunId),
+				tag.NewStringTag("first-resend-error", retryErr.Error()),
+				tag.NewStringTag("second-resend-error", resendErr.Error()),
+			)
+			return false, serviceerror.NewDataLoss("failed to get requested data while resending history")
+		}
 		// handle 2nd resend error, then 1st resend error
-		if _, err := e.Resend(ctx, remoteCluster, resendErr, remainingAttempt); err == nil {
+		_, err := e.Resend(ctx, remoteCluster, resendErr, remainingAttempt)
+		if err == nil {
 			return e.Resend(ctx, remoteCluster, retryErr, remainingAttempt)
 		}
-		e.Logger.Error("error resend history for history event",
-			tag.WorkflowNamespaceID(retryErr.NamespaceId),
-			tag.WorkflowID(retryErr.WorkflowId),
-			tag.WorkflowRunID(retryErr.RunId),
-			tag.Value(retryErr),
-			tag.Error(resendErr),
+		e.Logger.Error("error resend 2nd workflow history for history event",
+			tag.WorkflowNamespaceID(resendErr.NamespaceId),
+			tag.WorkflowID(resendErr.WorkflowId),
+			tag.WorkflowRunID(resendErr.RunId),
+			tag.NewStringTag("first-resend-error", retryErr.Error()),
+			tag.NewStringTag("second-resend-error", resendErr.Error()),
+			tag.Error(err),
 		)
 		return false, resendErr
 	default:
@@ -367,8 +387,8 @@ func (e *ExecutableTaskImpl) Resend(
 			tag.WorkflowNamespaceID(retryErr.NamespaceId),
 			tag.WorkflowID(retryErr.WorkflowId),
 			tag.WorkflowRunID(retryErr.RunId),
-			tag.Value(retryErr),
-			tag.Error(resendErr),
+			tag.NewStringTag("first-resend-error", retryErr.Error()),
+			tag.NewStringTag("second-resend-error", resendErr.Error()),
 		)
 		return false, resendErr
 	}

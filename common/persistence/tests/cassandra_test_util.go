@@ -53,7 +53,6 @@ const (
 	// TODO hard code this dir for now
 	//  need to merge persistence test config / initialization in one place
 	testCassandraExecutionSchema  = "../../../schema/cassandra/temporal/schema.cql"
-	testCassandraVisibilitySchema = "../../../schema/cassandra/visibility/schema.cql"
 )
 
 // TODO merge the initialization with existing persistence setup
@@ -127,7 +126,6 @@ func SetUpCassandraDatabase(cfg *config.Cassandra, logger log.Logger) {
 
 func SetUpCassandraSchema(cfg *config.Cassandra, logger log.Logger) {
 	ApplySchemaUpdate(cfg, testCassandraExecutionSchema, logger)
-	ApplySchemaUpdate(cfg, testCassandraVisibilitySchema, logger)
 }
 
 func ApplySchemaUpdate(cfg *config.Cassandra, schemaFile string, logger log.Logger) {

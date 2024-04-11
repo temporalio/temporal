@@ -106,7 +106,7 @@ func (s *readerSuite) TestStartLoadStop() {
 	r := NewRandomRange()
 	scopes := []Scope{NewScope(r, predicates.Universal[tasks.Task]())}
 
-	paginationFnProvider := func(_ int64, paginationRange Range) collection.PaginationFn[tasks.Task] {
+	paginationFnProvider := func(paginationRange Range) collection.PaginationFn[tasks.Task] {
 		s.Equal(r, paginationRange)
 		return func(paginationToken []byte) ([]tasks.Task, []byte, error) {
 			mockTask := tasks.NewMockTask(s.controller)
@@ -191,7 +191,7 @@ func (s *readerSuite) TestMergeSlices() {
 	incomingScopes := NewRandomScopes(rand.Intn(10))
 	incomingSlices := make([]Slice, 0, len(incomingScopes))
 	for _, incomingScope := range incomingScopes {
-		incomingSlices = append(incomingSlices, NewSlice(nil, s.executableFactory, s.monitor, incomingScope))
+		incomingSlices = append(incomingSlices, NewSlice(nil, s.executableFactory, s.monitor, incomingScope, GrouperNamespaceID{}))
 	}
 
 	reader.MergeSlices(incomingSlices...)
@@ -218,7 +218,7 @@ func (s *readerSuite) TestAppendSlices() {
 	incomingScopes := scopes[totalScopes/2:]
 	incomingSlices := make([]Slice, 0, len(incomingScopes))
 	for _, incomingScope := range incomingScopes {
-		incomingSlices = append(incomingSlices, NewSlice(nil, s.executableFactory, s.monitor, incomingScope))
+		incomingSlices = append(incomingSlices, NewSlice(nil, s.executableFactory, s.monitor, incomingScope, GrouperNamespaceID{}))
 	}
 
 	reader.AppendSlices(incomingSlices...)
@@ -248,7 +248,8 @@ func (s *readerSuite) TestShrinkSlices() {
 	}
 
 	reader := s.newTestReader(scopes, nil, NoopReaderCompletionFn)
-	reader.ShrinkSlices()
+	completed := reader.ShrinkSlices()
+	s.Equal(0, completed)
 
 	actualScopes := reader.Scopes()
 	s.Len(actualScopes, numScopes-len(emptyIdx))
@@ -286,7 +287,7 @@ func (s *readerSuite) TestNotify() {
 func (s *readerSuite) TestPause() {
 	scopes := NewRandomScopes(1)
 
-	paginationFnProvider := func(_ int64, _ Range) collection.PaginationFn[tasks.Task] {
+	paginationFnProvider := func(_ Range) collection.PaginationFn[tasks.Task] {
 		return func(paginationToken []byte) ([]tasks.Task, []byte, error) {
 			mockTask := tasks.NewMockTask(s.controller)
 			mockTask.EXPECT().GetKey().Return(NewRandomKeyInRange(scopes[0].Range)).AnyTimes()
@@ -353,7 +354,7 @@ func (s *readerSuite) TestLoadAndSubmitTasks_TooManyPendingTasks() {
 func (s *readerSuite) TestLoadAndSubmitTasks_MoreTasks() {
 	scopes := NewRandomScopes(1)
 
-	paginationFnProvider := func(_ int64, _ Range) collection.PaginationFn[tasks.Task] {
+	paginationFnProvider := func(_ Range) collection.PaginationFn[tasks.Task] {
 		return func(paginationToken []byte) ([]tasks.Task, []byte, error) {
 			result := make([]tasks.Task, 0, 100)
 			for i := 0; i != 100; i++ {
@@ -390,7 +391,7 @@ func (s *readerSuite) TestLoadAndSubmitTasks_MoreTasks() {
 func (s *readerSuite) TestLoadAndSubmitTasks_NoMoreTasks_HasNextSlice() {
 	scopes := NewRandomScopes(2)
 
-	paginationFnProvider := func(_ int64, _ Range) collection.PaginationFn[tasks.Task] {
+	paginationFnProvider := func(_ Range) collection.PaginationFn[tasks.Task] {
 		return func(paginationToken []byte) ([]tasks.Task, []byte, error) {
 			mockTask := tasks.NewMockTask(s.controller)
 			mockTask.EXPECT().GetKey().Return(NewRandomKeyInRange(scopes[0].Range)).AnyTimes()
@@ -422,7 +423,7 @@ func (s *readerSuite) TestLoadAndSubmitTasks_NoMoreTasks_HasNextSlice() {
 func (s *readerSuite) TestLoadAndSubmitTasks_NoMoreTasks_NoNextSlice() {
 	scopes := NewRandomScopes(1)
 
-	paginationFnProvider := func(_ int64, _ Range) collection.PaginationFn[tasks.Task] {
+	paginationFnProvider := func(_ Range) collection.PaginationFn[tasks.Task] {
 		return func(paginationToken []byte) ([]tasks.Task, []byte, error) {
 			mockTask := tasks.NewMockTask(s.controller)
 			mockTask.EXPECT().GetKey().Return(NewRandomKeyInRange(scopes[0].Range)).AnyTimes()
@@ -501,7 +502,7 @@ func (s *readerSuite) newTestReader(
 ) *ReaderImpl {
 	slices := make([]Slice, 0, len(scopes))
 	for _, scope := range scopes {
-		slice := NewSlice(paginationFnProvider, s.executableFactory, s.monitor, scope)
+		slice := NewSlice(paginationFnProvider, s.executableFactory, s.monitor, scope, GrouperNamespaceID{})
 		slices = append(slices, slice)
 	}
 

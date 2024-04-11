@@ -270,6 +270,10 @@ func (t *visibilityQueueTaskExecutor) processCloseExecution(
 	if err != nil {
 		return err
 	}
+	wfExecutionDuration, err := mutableState.GetWorkflowExecutionDuration(ctx)
+	if err != nil {
+		return err
+	}
 	historyLength := mutableState.GetNextEventID() - 1
 	executionInfo := mutableState.GetExecutionInfo()
 	stateTransitionCount := executionInfo.GetStateTransitionCount()
@@ -286,6 +290,7 @@ func (t *visibilityQueueTaskExecutor) processCloseExecution(
 		&manager.RecordWorkflowExecutionClosedRequest{
 			VisibilityRequestBase: requestBase,
 			CloseTime:             wfCloseTime,
+			ExecutionDuration:     wfExecutionDuration,
 			HistoryLength:         historyLength,
 			HistorySizeBytes:      historySizeBytes,
 			StateTransitionCount:  stateTransitionCount,
@@ -318,8 +323,6 @@ func (t *visibilityQueueTaskExecutor) processDeleteExecution(
 		WorkflowID:  task.WorkflowID,
 		RunID:       task.RunID,
 		TaskID:      task.TaskID,
-		StartTime:   task.StartTime,
-		CloseTime:   task.CloseTime,
 	}
 	if t.ensureCloseBeforeDelete() {
 		// If visibility delete task is executed before visibility close task then visibility close task

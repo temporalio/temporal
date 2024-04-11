@@ -28,6 +28,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/binary"
+	"fmt"
 	"math"
 	"strconv"
 	"time"
@@ -42,7 +43,6 @@ import (
 	"go.temporal.io/api/workflowservice/v1"
 	"google.golang.org/protobuf/types/known/durationpb"
 
-	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/convert"
 	"go.temporal.io/server/common/failure"
 	"go.temporal.io/server/common/headers"
@@ -52,104 +52,133 @@ import (
 )
 
 func (s *FunctionalSuite) TestStartWorkflowExecution() {
-	id := "functional-start-workflow-test"
 	wt := "functional-start-workflow-test-type"
 	tl := "functional-start-workflow-test-taskqueue"
-	identity := "worker1"
 
-	request := &workflowservice.StartWorkflowExecutionRequest{
-		RequestId:          uuid.New(),
-		Namespace:          s.namespace,
-		WorkflowId:         id,
-		WorkflowType:       &commonpb.WorkflowType{Name: wt},
-		TaskQueue:          &taskqueuepb.TaskQueue{Name: tl, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
-		Input:              nil,
-		WorkflowRunTimeout: durationpb.New(100 * time.Second),
-		Identity:           identity,
+	makeRequest := func() *workflowservice.StartWorkflowExecutionRequest {
+		return &workflowservice.StartWorkflowExecutionRequest{
+			RequestId:          uuid.New(),
+			Namespace:          s.namespace,
+			WorkflowId:         s.randomizeStr(s.T().Name()),
+			WorkflowType:       &commonpb.WorkflowType{Name: wt},
+			TaskQueue:          &taskqueuepb.TaskQueue{Name: tl, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
+			Input:              nil,
+			WorkflowRunTimeout: durationpb.New(100 * time.Second),
+			Identity:           "worker1",
+		}
 	}
 
-	we0, err0 := s.engine.StartWorkflowExecution(NewContext(), request)
-	s.NoError(err0)
+	s.Run("start", func() {
+		request := makeRequest()
+		we, err := s.engine.StartWorkflowExecution(NewContext(), request)
+		s.NoError(err)
+		s.True(we.Started)
 
-	// Validate the default value for WorkflowTaskTimeoutSeconds
-	historyResponse, err := s.engine.GetWorkflowExecutionHistory(NewContext(), &workflowservice.GetWorkflowExecutionHistoryRequest{
-		Namespace: s.namespace,
-		Execution: &commonpb.WorkflowExecution{
-			WorkflowId: id,
-			RunId:      we0.RunId,
-		},
+		// Validate the default value for WorkflowTaskTimeoutSeconds
+		historyEvents := s.getHistory(s.namespace, &commonpb.WorkflowExecution{
+			WorkflowId: request.WorkflowId,
+			RunId:      we.RunId,
+		})
+		s.EqualHistoryEvents(`
+  1 WorkflowExecutionStarted {"Attempt":1,"WorkflowTaskTimeout":{"Nanos":0,"Seconds":10}}
+  2 WorkflowTaskScheduled`, historyEvents)
 	})
-	s.NoError(err)
-	history := historyResponse.History
-	startedEvent := history.Events[0].GetWorkflowExecutionStartedEventAttributes()
-	s.Equal(10*time.Second, timestamp.DurationValue(startedEvent.GetWorkflowTaskTimeout()))
 
-	we1, err1 := s.engine.StartWorkflowExecution(NewContext(), request)
-	s.NoError(err1)
-	s.Equal(we0.RunId, we1.RunId)
+	s.Run("start twice - same request", func() {
+		request := makeRequest()
 
-	newRequest := &workflowservice.StartWorkflowExecutionRequest{
-		RequestId:           uuid.New(),
-		Namespace:           s.namespace,
-		WorkflowId:          id,
-		WorkflowType:        &commonpb.WorkflowType{Name: wt},
-		TaskQueue:           &taskqueuepb.TaskQueue{Name: tl, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
-		Input:               nil,
-		WorkflowRunTimeout:  durationpb.New(100 * time.Second),
-		WorkflowTaskTimeout: durationpb.New(1 * time.Second),
-		Identity:            identity,
-	}
-	we2, err2 := s.engine.StartWorkflowExecution(NewContext(), newRequest)
-	s.NotNil(err2)
-	s.IsType(&serviceerror.WorkflowExecutionAlreadyStarted{}, err2)
-	s.Nil(we2)
+		we0, err0 := s.engine.StartWorkflowExecution(NewContext(), request)
+		s.NoError(err0)
+		s.True(we0.Started)
+
+		we1, err1 := s.engine.StartWorkflowExecution(NewContext(), request)
+		s.NoError(err1)
+		s.True(we1.Started)
+
+		s.Equal(we0.RunId, we1.RunId)
+	})
+
+	s.Run("fail when already started", func() {
+		request := makeRequest()
+		we, err := s.engine.StartWorkflowExecution(NewContext(), request)
+		s.NoError(err)
+		s.True(we.Started)
+
+		request.RequestId = uuid.New()
+
+		we2, err := s.engine.StartWorkflowExecution(NewContext(), request)
+		s.Error(err)
+		var alreadyStarted *serviceerror.WorkflowExecutionAlreadyStarted
+		s.ErrorAs(err, &alreadyStarted)
+		s.Nil(we2)
+	})
 }
 
-func (s *FunctionalSuite) TestStartWorkflowExecution_TerminateIfRunning() {
-	id := "functional-start-workflow-terminate-if-running-test"
-	wt := "functional-start-workflow-terminate-if-running-test-type"
-	tl := "functional-start-workflow-terminate-if-running-test-taskqueue"
-	identity := "worker1"
-
-	request := &workflowservice.StartWorkflowExecutionRequest{
-		RequestId:          uuid.New(),
-		Namespace:          s.namespace,
-		WorkflowId:         id,
-		WorkflowType:       &commonpb.WorkflowType{Name: wt},
-		TaskQueue:          &taskqueuepb.TaskQueue{Name: tl, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
-		Input:              nil,
-		WorkflowRunTimeout: durationpb.New(100 * time.Second),
-		Identity:           identity,
+func (s *FunctionalSuite) TestStartWorkflowExecution_Terminate() {
+	testCases := []struct {
+		name                     string
+		WorkflowIdReusePolicy    enumspb.WorkflowIdReusePolicy
+		WorkflowIdConflictPolicy enumspb.WorkflowIdConflictPolicy
+	}{
+		{
+			"TerminateIfRunning id workflow reuse policy",
+			enumspb.WORKFLOW_ID_REUSE_POLICY_TERMINATE_IF_RUNNING,
+			enumspb.WORKFLOW_ID_CONFLICT_POLICY_UNSPECIFIED,
+		},
+		{
+			"TerminateExisting id workflow conflict policy",
+			enumspb.WORKFLOW_ID_REUSE_POLICY_UNSPECIFIED,
+			enumspb.WORKFLOW_ID_CONFLICT_POLICY_TERMINATE_EXISTING,
+		},
 	}
 
-	we0, err0 := s.engine.StartWorkflowExecution(NewContext(), request)
-	s.NoError(err0)
+	for i, tc := range testCases {
+		tc := tc
+		s.Run(tc.name, func() {
+			id := fmt.Sprintf("functional-start-workflow-terminate-test-%v", i)
 
-	request.RequestId = uuid.New()
-	request.WorkflowIdReusePolicy = enumspb.WORKFLOW_ID_REUSE_POLICY_TERMINATE_IF_RUNNING
-	we1, err1 := s.engine.StartWorkflowExecution(NewContext(), request)
-	s.NoError(err1)
-	s.NotEqual(we0.RunId, we1.RunId)
+			request := &workflowservice.StartWorkflowExecutionRequest{
+				RequestId:          uuid.New(),
+				Namespace:          s.namespace,
+				WorkflowId:         id,
+				WorkflowType:       &commonpb.WorkflowType{Name: "functional-start-workflow-terminate-test-type"},
+				TaskQueue:          &taskqueuepb.TaskQueue{Name: "functional-start-workflow-terminate-test-taskqueue", Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
+				Input:              nil,
+				WorkflowRunTimeout: durationpb.New(100 * time.Second),
+				Identity:           "worker1",
+			}
 
-	descResp, err := s.engine.DescribeWorkflowExecution(NewContext(), &workflowservice.DescribeWorkflowExecutionRequest{
-		Namespace: s.namespace,
-		Execution: &commonpb.WorkflowExecution{
-			WorkflowId: id,
-			RunId:      we0.RunId,
-		},
-	})
-	s.NoError(err)
-	s.Equal(enumspb.WORKFLOW_EXECUTION_STATUS_TERMINATED, descResp.WorkflowExecutionInfo.Status)
+			we0, err0 := s.engine.StartWorkflowExecution(NewContext(), request)
+			s.NoError(err0)
 
-	descResp, err = s.engine.DescribeWorkflowExecution(NewContext(), &workflowservice.DescribeWorkflowExecutionRequest{
-		Namespace: s.namespace,
-		Execution: &commonpb.WorkflowExecution{
-			WorkflowId: id,
-			RunId:      we1.RunId,
-		},
-	})
-	s.NoError(err)
-	s.Equal(enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING, descResp.WorkflowExecutionInfo.Status)
+			request.RequestId = uuid.New()
+			request.WorkflowIdReusePolicy = tc.WorkflowIdReusePolicy
+			request.WorkflowIdConflictPolicy = tc.WorkflowIdConflictPolicy
+			we1, err1 := s.engine.StartWorkflowExecution(NewContext(), request)
+			s.NoError(err1)
+			s.NotEqual(we0.RunId, we1.RunId)
+
+			descResp, err := s.engine.DescribeWorkflowExecution(NewContext(), &workflowservice.DescribeWorkflowExecutionRequest{
+				Namespace: s.namespace,
+				Execution: &commonpb.WorkflowExecution{
+					WorkflowId: id,
+					RunId:      we0.RunId,
+				},
+			})
+			s.NoError(err)
+			s.Equal(enumspb.WORKFLOW_EXECUTION_STATUS_TERMINATED, descResp.WorkflowExecutionInfo.Status)
+
+			descResp, err = s.engine.DescribeWorkflowExecution(NewContext(), &workflowservice.DescribeWorkflowExecutionRequest{
+				Namespace: s.namespace,
+				Execution: &commonpb.WorkflowExecution{
+					WorkflowId: id,
+					RunId:      we1.RunId,
+				},
+			})
+			s.NoError(err)
+			s.Equal(enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING, descResp.WorkflowExecutionInfo.Status)
+		})
+	}
 }
 
 func (s *FunctionalSuite) TestStartWorkflowExecutionWithDelay() {
@@ -292,49 +321,42 @@ func (s *FunctionalSuite) TestTerminateWorkflow() {
 	s.Logger.Info("PollAndProcessWorkflowTask", tag.Error(err))
 	s.NoError(err)
 
-	terminateReason := "terminate reason"
-	terminateDetails := payloads.EncodeString("terminate details")
 	_, err = s.engine.TerminateWorkflowExecution(NewContext(), &workflowservice.TerminateWorkflowExecutionRequest{
 		Namespace: s.namespace,
 		WorkflowExecution: &commonpb.WorkflowExecution{
 			WorkflowId: id,
 			RunId:      we.RunId,
 		},
-		Reason:   terminateReason,
-		Details:  terminateDetails,
+		Reason:   "terminate reason",
+		Details:  payloads.EncodeString("terminate details"),
 		Identity: identity,
 	})
 	s.NoError(err)
 
-	executionTerminated := false
+	var historyEvents []*historypb.HistoryEvent
 GetHistoryLoop:
 	for i := 0; i < 10; i++ {
-		historyResponse, err := s.engine.GetWorkflowExecutionHistory(NewContext(), &workflowservice.GetWorkflowExecutionHistoryRequest{
-			Namespace: s.namespace,
-			Execution: &commonpb.WorkflowExecution{
-				WorkflowId: id,
-				RunId:      we.RunId,
-			},
+		historyEvents = s.getHistory(s.namespace, &commonpb.WorkflowExecution{
+			WorkflowId: id,
+			RunId:      we.RunId,
 		})
-		s.NoError(err)
-		history := historyResponse.History
 
-		lastEvent := history.Events[len(history.Events)-1]
+		lastEvent := historyEvents[len(historyEvents)-1]
 		if lastEvent.EventType != enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_TERMINATED {
 			s.Logger.Warn("Execution not terminated yet")
 			time.Sleep(100 * time.Millisecond)
 			continue GetHistoryLoop
 		}
-
-		terminateEventAttributes := lastEvent.GetWorkflowExecutionTerminatedEventAttributes()
-		s.Equal(terminateReason, terminateEventAttributes.Reason)
-		s.ProtoEqual(terminateDetails, terminateEventAttributes.Details)
-		s.Equal(identity, terminateEventAttributes.Identity)
-		executionTerminated = true
 		break GetHistoryLoop
 	}
 
-	s.True(executionTerminated)
+	s.EqualHistoryEvents(`
+  1 WorkflowExecutionStarted
+  2 WorkflowTaskScheduled
+  3 WorkflowTaskStarted
+  4 WorkflowTaskCompleted
+  5 ActivityTaskScheduled
+  6 WorkflowExecutionTerminated {"Details":{"Payloads":[{"Data":"\"terminate details\""}]},"Identity":"worker1","Reason":"terminate reason"}`, historyEvents)
 
 	newExecutionStarted := false
 StartNewExecutionLoop:
@@ -628,16 +650,10 @@ func (s *FunctionalSuite) TestWorkflowTaskAndActivityTaskTimeoutsWorkflow() {
 			_, err = poller.PollAndProcessWorkflowTask(WithDumpHistory, WithExpectedAttemptCount(2))
 		}
 		if err != nil {
-			historyResponse, err := s.engine.GetWorkflowExecutionHistory(NewContext(), &workflowservice.GetWorkflowExecutionHistoryRequest{
-				Namespace: s.namespace,
-				Execution: &commonpb.WorkflowExecution{
-					WorkflowId: id,
-					RunId:      we.RunId,
-				},
-			})
-			s.NoError(err)
-			history := historyResponse.History
-			common.PrettyPrint(history.Events)
+			s.PrintHistoryEventsCompact(s.getHistory(s.namespace, &commonpb.WorkflowExecution{
+				WorkflowId: id,
+				RunId:      we.RunId,
+			}))
 		}
 		s.True(err == nil || err == errNoTasks, err)
 		if !dropWorkflowTask {
@@ -736,11 +752,20 @@ func (s *FunctionalSuite) TestWorkflowRetry() {
 		s.NoError(err)
 		events := s.getHistory(s.namespace, executions[i-1])
 		if i == maximumAttempts {
-			s.Equal(enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_COMPLETED, events[len(events)-1].GetEventType())
+			s.EqualHistoryEvents(fmt.Sprintf(`
+  1 WorkflowExecutionStarted {"Attempt":%d}
+  2 WorkflowTaskScheduled
+  3 WorkflowTaskStarted
+  4 WorkflowTaskCompleted
+  5 WorkflowExecutionCompleted`, i), events)
 		} else {
-			s.Equal(enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_FAILED, events[len(events)-1].GetEventType())
+			s.EqualHistoryEvents(fmt.Sprintf(`
+  1 WorkflowExecutionStarted {"Attempt":%d}
+  2 WorkflowTaskScheduled
+  3 WorkflowTaskStarted
+  4 WorkflowTaskCompleted
+  5 WorkflowExecutionFailed`, i), events)
 		}
-		s.Equal(int32(i), events[0].GetWorkflowExecutionStartedEventAttributes().GetAttempt())
 
 		dweResponse, err := describeWorkflowExecution(executions[i-1])
 		s.NoError(err)
@@ -759,24 +784,27 @@ func (s *FunctionalSuite) TestWorkflowRetry() {
 	// Check run id links
 	for i := 0; i < maximumAttempts; i++ {
 		events := s.getHistory(s.namespace, executions[i])
-		// backwards
-		startEvent := events[0]
-		s.Equal(enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_STARTED, startEvent.GetEventType())
-		attrs := startEvent.GetWorkflowExecutionStartedEventAttributes()
 		if i == 0 {
-			s.Equal("", attrs.ContinuedExecutionRunId)
+			s.EqualHistoryEvents(fmt.Sprintf(`
+  1 WorkflowExecutionStarted {"ContinuedExecutionRunId":""}
+  2 WorkflowTaskScheduled
+  3 WorkflowTaskStarted
+  4 WorkflowTaskCompleted
+  5 WorkflowExecutionFailed {"NewExecutionRunId":"%s"}`, executions[i+1].RunId), events)
+		} else if i == maximumAttempts-1 {
+			s.EqualHistoryEvents(fmt.Sprintf(`
+  1 WorkflowExecutionStarted {"ContinuedExecutionRunId":"%s"}
+  2 WorkflowTaskScheduled
+  3 WorkflowTaskStarted
+  4 WorkflowTaskCompleted
+  5 WorkflowExecutionCompleted {"NewExecutionRunId":""}`, executions[i-1].RunId), events)
 		} else {
-			s.Equal(executions[i-1].RunId, attrs.ContinuedExecutionRunId)
-		}
-		// forwards
-		if i == maximumAttempts-1 {
-			s.Equal(enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_COMPLETED, events[len(events)-1].GetEventType())
-			attrs := events[len(events)-1].GetWorkflowExecutionCompletedEventAttributes()
-			s.Equal("", attrs.NewExecutionRunId)
-		} else {
-			s.Equal(enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_FAILED, events[len(events)-1].GetEventType())
-			attrs := events[len(events)-1].GetWorkflowExecutionFailedEventAttributes()
-			s.Equal(executions[i+1].RunId, attrs.NewExecutionRunId)
+			s.EqualHistoryEvents(fmt.Sprintf(`
+  1 WorkflowExecutionStarted {"ContinuedExecutionRunId":"%s"}
+  2 WorkflowTaskScheduled
+  3 WorkflowTaskStarted
+  4 WorkflowTaskCompleted
+  5 WorkflowExecutionFailed {"NewExecutionRunId":"%s"}`, executions[i-1].RunId, executions[i+1].RunId), events)
 		}
 
 		// Test get history from old SDKs
@@ -793,15 +821,12 @@ func (s *FunctionalSuite) TestWorkflowRetry() {
 		cancel()
 		s.NoError(err)
 		events = resp.History.Events
-		s.Equal(1, len(events))
 		if i == maximumAttempts-1 {
-			s.Equal(enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_COMPLETED, events[0].GetEventType())
-			attrs := events[0].GetWorkflowExecutionCompletedEventAttributes()
-			s.Equal("", attrs.NewExecutionRunId)
+			s.EqualHistoryEvents(`
+  5 WorkflowExecutionCompleted {"NewExecutionRunId":""}`, events)
 		} else {
-			s.Equal(enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_CONTINUED_AS_NEW, events[0].GetEventType())
-			attrs := events[0].GetWorkflowExecutionContinuedAsNewEventAttributes()
-			s.Equal(executions[i+1].RunId, attrs.NewExecutionRunId)
+			s.EqualHistoryEvents(fmt.Sprintf(`
+  5 WorkflowExecutionContinuedAsNew {"NewExecutionRunId":"%s"}`, executions[i+1].RunId), events)
 		}
 	}
 }
@@ -881,20 +906,32 @@ func (s *FunctionalSuite) TestWorkflowRetryFailures() {
 	_, err := poller.PollAndProcessWorkflowTask()
 	s.NoError(err)
 	events := s.getHistory(s.namespace, executions[0])
-	s.Equal(enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_FAILED, events[len(events)-1].GetEventType())
-	s.Equal(int32(1), events[0].GetWorkflowExecutionStartedEventAttributes().GetAttempt())
+	s.EqualHistoryEvents(`
+  1 WorkflowExecutionStarted {"Attempt":1}
+  2 WorkflowTaskScheduled
+  3 WorkflowTaskStarted
+  4 WorkflowTaskCompleted
+  5 WorkflowExecutionFailed`, events)
 
 	_, err = poller.PollAndProcessWorkflowTask()
 	s.NoError(err)
 	events = s.getHistory(s.namespace, executions[1])
-	s.Equal(enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_FAILED, events[len(events)-1].GetEventType())
-	s.Equal(int32(2), events[0].GetWorkflowExecutionStartedEventAttributes().GetAttempt())
+	s.EqualHistoryEvents(`
+  1 WorkflowExecutionStarted {"Attempt":2}
+  2 WorkflowTaskScheduled
+  3 WorkflowTaskStarted
+  4 WorkflowTaskCompleted
+  5 WorkflowExecutionFailed`, events)
 
 	_, err = poller.PollAndProcessWorkflowTask()
 	s.NoError(err)
 	events = s.getHistory(s.namespace, executions[2])
-	s.Equal(enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_FAILED, events[len(events)-1].GetEventType())
-	s.Equal(int32(3), events[0].GetWorkflowExecutionStartedEventAttributes().GetAttempt())
+	s.EqualHistoryEvents(`
+  1 WorkflowExecutionStarted {"Attempt":3}
+  2 WorkflowTaskScheduled
+  3 WorkflowTaskStarted
+  4 WorkflowTaskCompleted
+  5 WorkflowExecutionFailed`, events)
 
 	// Fail error reason
 	request = &workflowservice.StartWorkflowExecutionRequest{
@@ -936,6 +973,10 @@ func (s *FunctionalSuite) TestWorkflowRetryFailures() {
 	_, err = poller.PollAndProcessWorkflowTask()
 	s.NoError(err)
 	events = s.getHistory(s.namespace, executions[0])
-	s.Equal(enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_FAILED, events[len(events)-1].GetEventType())
-	s.Equal(int32(1), events[0].GetWorkflowExecutionStartedEventAttributes().GetAttempt())
+	s.EqualHistoryEvents(`
+  1 WorkflowExecutionStarted {"Attempt":1}
+  2 WorkflowTaskScheduled
+  3 WorkflowTaskStarted
+  4 WorkflowTaskCompleted
+  5 WorkflowExecutionFailed`, events)
 }

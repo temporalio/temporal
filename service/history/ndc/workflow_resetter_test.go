@@ -37,6 +37,7 @@ import (
 	enumspb "go.temporal.io/api/enums/v1"
 	historypb "go.temporal.io/api/history/v1"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
+	"go.temporal.io/api/update/v1"
 	"google.golang.org/protobuf/types/known/timestamppb"
 
 	historyspb "go.temporal.io/server/api/history/v1"
@@ -46,6 +47,7 @@ import (
 	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/failure"
 	"go.temporal.io/server/common/log"
+	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/payloads"
 	"go.temporal.io/server/common/persistence"
@@ -112,7 +114,7 @@ func (s *workflowResetterSuite) SetupTest() {
 
 	s.workflowResetter = NewWorkflowResetter(
 		s.mockShard,
-		wcache.NewHostLevelCache(s.mockShard.GetConfig()),
+		wcache.NewHostLevelCache(s.mockShard.GetConfig(), metrics.NoopMetricsHandler),
 		s.logger,
 	)
 	s.workflowResetter.newStateRebuilder = func() StateRebuilder {
@@ -610,6 +612,7 @@ func (s *workflowResetterSuite) TestReapplyContinueAsNewWorkflowEvents_WithOutCo
 		baseBranchToken,
 		baseFirstEventID,
 		baseNextEventID,
+		nil,
 	)
 	s.NoError(err)
 	s.Equal(s.baseRunID, lastVisitedRunID)
@@ -727,6 +730,7 @@ func (s *workflowResetterSuite) TestReapplyContinueAsNewWorkflowEvents_WithConti
 		baseBranchToken,
 		baseFirstEventID,
 		baseNextEventID,
+		nil,
 	)
 	s.NoError(err)
 	s.Equal(newRunID, lastVisitedRunID)
@@ -787,6 +791,7 @@ func (s *workflowResetterSuite) TestReapplyWorkflowEvents() {
 		firstEventID,
 		nextEventID,
 		branchToken,
+		nil,
 	)
 	s.NoError(err)
 	s.Equal(newRunID, nextRunID)
@@ -798,44 +803,89 @@ func (s *workflowResetterSuite) TestReapplyEvents() {
 		EventId:   101,
 		EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_SIGNALED,
 		Attributes: &historypb.HistoryEvent_WorkflowExecutionSignaledEventAttributes{WorkflowExecutionSignaledEventAttributes: &historypb.WorkflowExecutionSignaledEventAttributes{
-			SignalName: "some random signal name",
-			Input:      payloads.EncodeString("some random signal input"),
-			Identity:   "some random signal identity",
+			SignalName: "signal-name-1",
+			Input:      payloads.EncodeString("signal-input-1"),
+			Identity:   "signal-identity-1",
 			Header:     &commonpb.Header{Fields: map[string]*commonpb.Payload{"myheader": {Data: []byte("myheader")}}},
 		}},
 	}
+	// This event is not reapplied
 	event2 := &historypb.HistoryEvent{
-		EventId:    102,
-		EventType:  enumspb.EVENT_TYPE_WORKFLOW_TASK_SCHEDULED,
-		Attributes: &historypb.HistoryEvent_WorkflowTaskScheduledEventAttributes{WorkflowTaskScheduledEventAttributes: &historypb.WorkflowTaskScheduledEventAttributes{}},
+		EventId:   102,
+		EventType: enumspb.EVENT_TYPE_WORKFLOW_TASK_SCHEDULED,
+		Attributes: &historypb.HistoryEvent_WorkflowTaskScheduledEventAttributes{
+			WorkflowTaskScheduledEventAttributes: &historypb.WorkflowTaskScheduledEventAttributes{},
+		},
 	}
 	event3 := &historypb.HistoryEvent{
 		EventId:   103,
 		EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_SIGNALED,
-		Attributes: &historypb.HistoryEvent_WorkflowExecutionSignaledEventAttributes{WorkflowExecutionSignaledEventAttributes: &historypb.WorkflowExecutionSignaledEventAttributes{
-			SignalName: "another random signal name",
-			Input:      payloads.EncodeString("another random signal input"),
-			Identity:   "another random signal identity",
-		}},
+		Attributes: &historypb.HistoryEvent_WorkflowExecutionSignaledEventAttributes{
+			WorkflowExecutionSignaledEventAttributes: &historypb.WorkflowExecutionSignaledEventAttributes{
+				SignalName: "signal-name-2",
+				Input:      payloads.EncodeString("signal-input-2"),
+				Identity:   "signal-identity-2",
+			},
+		},
 	}
-	events := []*historypb.HistoryEvent{event1, event2, event3}
+	event4 := &historypb.HistoryEvent{
+		EventId:   104,
+		EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_UPDATE_ADMITTED,
+		Attributes: &historypb.HistoryEvent_WorkflowExecutionUpdateAdmittedEventAttributes{
+			WorkflowExecutionUpdateAdmittedEventAttributes: &historypb.WorkflowExecutionUpdateAdmittedEventAttributes{
+				Request: &update.Request{Input: &update.Input{Args: payloads.EncodeString("update-request-payload-1")}},
+				Origin:  enumspb.UPDATE_ADMITTED_EVENT_ORIGIN_UNSPECIFIED,
+			},
+		},
+	}
+	event5 := &historypb.HistoryEvent{
+		EventId:   105,
+		EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_UPDATE_ACCEPTED,
+		Attributes: &historypb.HistoryEvent_WorkflowExecutionUpdateAcceptedEventAttributes{
+			WorkflowExecutionUpdateAcceptedEventAttributes: &historypb.WorkflowExecutionUpdateAcceptedEventAttributes{
+				AcceptedRequest: &update.Request{Input: &update.Input{Args: payloads.EncodeString("update-request-payload-1")}},
+			},
+		},
+	}
+	// This event is not reapplied
+	event6 := &historypb.HistoryEvent{
+		EventId:   105,
+		EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_UPDATE_COMPLETED,
+		Attributes: &historypb.HistoryEvent_WorkflowExecutionUpdateCompletedEventAttributes{
+			WorkflowExecutionUpdateCompletedEventAttributes: &historypb.WorkflowExecutionUpdateCompletedEventAttributes{},
+		},
+	}
+	events := []*historypb.HistoryEvent{event1, event2, event3, event4, event5, event6}
 
-	mutableState := workflow.NewMockMutableState(s.controller)
+	ms := workflow.NewMockMutableState(s.controller)
 
 	for _, event := range events {
-		if event.GetEventType() == enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_SIGNALED {
+		switch event.GetEventType() {
+		case enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_SIGNALED:
 			attr := event.GetWorkflowExecutionSignaledEventAttributes()
-			mutableState.EXPECT().AddWorkflowExecutionSignaled(
+			ms.EXPECT().AddWorkflowExecutionSignaled(
 				attr.GetSignalName(),
 				attr.GetInput(),
 				attr.GetIdentity(),
 				attr.GetHeader(),
 				attr.GetSkipGenerateWorkflowTask(),
 			).Return(&historypb.HistoryEvent{}, nil)
+		case enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_UPDATE_ADMITTED:
+			attr := event.GetWorkflowExecutionUpdateAdmittedEventAttributes()
+			ms.EXPECT().AddWorkflowExecutionUpdateAdmittedEvent(
+				attr.GetRequest(),
+				enumspb.UPDATE_ADMITTED_EVENT_ORIGIN_UNSPECIFIED,
+			).Return(&historypb.HistoryEvent{}, nil)
+		case enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_UPDATE_ACCEPTED:
+			attr := event.GetWorkflowExecutionUpdateAcceptedEventAttributes()
+			ms.EXPECT().AddWorkflowExecutionUpdateAdmittedEvent(
+				attr.GetAcceptedRequest(),
+				enumspb.UPDATE_ADMITTED_EVENT_ORIGIN_REAPPLY,
+			).Return(&historypb.HistoryEvent{}, nil)
 		}
 	}
 
-	err := s.workflowResetter.reapplyEvents(mutableState, events)
+	err := reapplyEvents(ms, events, nil)
 	s.NoError(err)
 }
 

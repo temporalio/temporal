@@ -38,6 +38,8 @@ import (
 	"go.temporal.io/api/serviceerror"
 	updatepb "go.temporal.io/api/update/v1"
 	"go.temporal.io/api/workflowservice/v1"
+	"go.temporal.io/server/common/testing/protorequire"
+	"google.golang.org/protobuf/types/known/anypb"
 
 	clockspb "go.temporal.io/server/api/clock/v1"
 	"go.temporal.io/server/api/historyservice/v1"
@@ -61,14 +63,13 @@ type (
 			consistencyPredicate api.MutableStateConsistencyPredicate,
 			workflowKey definition.WorkflowKey,
 			lockPriority workflow.LockPriority,
-		) (api.WorkflowContext, error)
+		) (api.WorkflowLease, error)
 	}
 
-	mockAPICtx struct {
-		api.WorkflowContext
-		GetUpdateRegistryFunc func(context.Context) update.Registry
-		GetReleaseFnFunc      func() wcache.ReleaseCacheFunc
-		GetWorkflowKeyFunc    func() definition.WorkflowKey
+	mockWorkflowLeaseCtx struct {
+		api.WorkflowLease
+		GetContextFn   func() workflow.Context
+		GetReleaseFnFn func() wcache.ReleaseCacheFunc
 	}
 
 	mockReg struct {
@@ -83,27 +84,24 @@ type (
 
 func (mockUpdateEventStore) OnAfterCommit(f func(context.Context))   { f(context.TODO()) }
 func (mockUpdateEventStore) OnAfterRollback(f func(context.Context)) {}
+func (mockUpdateEventStore) CanAddEvent() bool                       { return true }
 
-func (m mockWFConsistencyChecker) GetWorkflowContext(
+func (m mockWFConsistencyChecker) GetWorkflowLease(
 	ctx context.Context,
 	clock *clockspb.VectorClock,
 	pred api.MutableStateConsistencyPredicate,
 	wfKey definition.WorkflowKey,
 	prio workflow.LockPriority,
-) (api.WorkflowContext, error) {
+) (api.WorkflowLease, error) {
 	return m.GetWorkflowContextFunc(ctx, clock, pred, wfKey, prio)
 }
 
-func (m mockAPICtx) GetReleaseFn() wcache.ReleaseCacheFunc {
-	return m.GetReleaseFnFunc()
+func (m mockWorkflowLeaseCtx) GetReleaseFn() wcache.ReleaseCacheFunc {
+	return m.GetReleaseFnFn()
 }
 
-func (m mockAPICtx) GetUpdateRegistry(ctx context.Context) update.Registry {
-	return m.GetUpdateRegistryFunc(ctx)
-}
-
-func (m mockAPICtx) GetWorkflowKey() definition.WorkflowKey {
-	return m.GetWorkflowKeyFunc()
+func (m mockWorkflowLeaseCtx) GetContext() workflow.Context {
+	return m.GetContextFn()
 }
 
 func (m mockReg) Find(ctx context.Context, updateID string) (*update.Update, bool) {
@@ -115,14 +113,18 @@ func TestPollOutcome(t *testing.T) {
 	workflowId := t.Name() + "-workflow-id"
 	runId := t.Name() + "-run-id"
 	updateID := t.Name() + "-update-id"
-	reg := mockReg{}
-	apiCtx := mockAPICtx{
-		GetReleaseFnFunc: func() wcache.ReleaseCacheFunc { return func(error) {} },
-		GetUpdateRegistryFunc: func(context.Context) update.Registry {
-			return reg
-		},
-		GetWorkflowKeyFunc: func() definition.WorkflowKey {
-			return definition.WorkflowKey{NamespaceID: namespaceId, WorkflowID: workflowId, RunID: runId}
+	reg := &mockReg{}
+
+	mockController := gomock.NewController(t)
+
+	wfCtx := workflow.NewMockContext(mockController)
+	wfCtx.EXPECT().GetWorkflowKey().Return(definition.WorkflowKey{NamespaceID: namespaceId, WorkflowID: workflowId, RunID: runId}).AnyTimes()
+	wfCtx.EXPECT().UpdateRegistry(gomock.Any()).Return(reg).AnyTimes()
+
+	apiCtx := mockWorkflowLeaseCtx{
+		GetReleaseFnFn: func() wcache.ReleaseCacheFunc { return func(error) {} },
+		GetContextFn: func() workflow.Context {
+			return wfCtx
 		},
 	}
 	wfcc := mockWFConsistencyChecker{
@@ -132,13 +134,12 @@ func TestPollOutcome(t *testing.T) {
 			consistencyPredicate api.MutableStateConsistencyPredicate,
 			workflowKey definition.WorkflowKey,
 			lockPriority workflow.LockPriority,
-		) (api.WorkflowContext, error) {
+		) (api.WorkflowLease, error) {
 			return apiCtx, nil
 		},
 	}
 
 	serverImposedTimeout := 10 * time.Millisecond
-	mockController := gomock.NewController(t)
 	mockNamespaceRegistry := namespace.NewMockRegistry(mockController)
 	mockNamespaceRegistry.EXPECT().GetNamespaceByID(gomock.Any()).Return(tests.GlobalNamespaceEntry, nil).AnyTimes()
 	shardContext := shard.NewMockContext(mockController)
@@ -188,7 +189,7 @@ func TestPollOutcome(t *testing.T) {
 		resp, err := pollupdate.Invoke(ctx, &req, shardContext, wfcc)
 		require.NoError(t, err)
 		require.Nil(t, resp.GetResponse().Outcome)
-		require.Equal(t, enumspb.UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_UNSPECIFIED, resp.Response.GetStage())
+		require.Equal(t, enumspb.UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_ADMITTED, resp.Response.GetStage())
 	})
 	t.Run("non-blocking poll with omitted/unspecified wait policy", func(t *testing.T) {
 		for _, req := range []*historyservice.PollWorkflowExecutionUpdateRequest{{
@@ -230,11 +231,15 @@ func TestPollOutcome(t *testing.T) {
 		}
 		fail := failurepb.Failure{Message: "intentional failure in " + t.Name()}
 		wantOutcome := updatepb.Outcome{Value: &updatepb.Outcome_Failure{Failure: &fail}}
-		rejMsg := updatepb.Rejection{
+
+		rejBody := &updatepb.Rejection{
 			RejectedRequestMessageId: updateID + "/request",
 			RejectedRequest:          &reqMsg,
 			Failure:                  &fail,
 		}
+		var rejBodyAny anypb.Any
+		require.NoError(t, rejBodyAny.MarshalFrom(rejBody))
+		rejMsg := protocolpb.Message{Body: &rejBodyAny}
 
 		errCh := make(chan error, 1)
 		respCh := make(chan *historyservice.PollWorkflowExecutionUpdateResponse, 1)
@@ -245,13 +250,13 @@ func TestPollOutcome(t *testing.T) {
 		}()
 
 		evStore := mockUpdateEventStore{}
-		require.NoError(t, upd.OnMessage(context.TODO(), &reqMsg, true, evStore))
+		require.NoError(t, upd.Admit(context.TODO(), &reqMsg, evStore))
 		upd.Send(context.TODO(), false, &protocolpb.Message_EventId{EventId: 2208}, evStore)
-		require.NoError(t, upd.OnMessage(context.TODO(), &rejMsg, true, evStore))
+		require.NoError(t, upd.OnProtocolMessage(context.TODO(), &rejMsg, evStore))
 
 		require.NoError(t, <-errCh)
 		resp := <-respCh
-		require.Equal(t, &wantOutcome, resp.GetResponse().Outcome)
+		protorequire.ProtoEqual(t, &wantOutcome, resp.GetResponse().Outcome)
 		require.Equal(t, enumspb.UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_COMPLETED, resp.Response.GetStage())
 	})
 }

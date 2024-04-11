@@ -31,30 +31,14 @@ func (k Key) String() string {
 const (
 	// keys for admin
 
+	// AdminEnableListHistoryTasks is the key for enabling listing history tasks
+	AdminEnableListHistoryTasks = "admin.enableListHistoryTasks"
 	// AdminMatchingNamespaceToPartitionDispatchRate is the max qps of any task queue partition for a given namespace
 	AdminMatchingNamespaceToPartitionDispatchRate = "admin.matchingNamespaceToPartitionDispatchRate"
 	// AdminMatchingNamespaceTaskqueueToPartitionDispatchRate is the max qps of a task queue partition for a given namespace & task queue
 	AdminMatchingNamespaceTaskqueueToPartitionDispatchRate = "admin.matchingNamespaceTaskqueueToPartitionDispatchRate"
 
 	// keys for system
-
-	// DEPRECATED: the following block of configs are deprecated and replaced by the next block of configs
-	// StandardVisibilityPersistenceMaxReadQPS is the max QPC system host can query standard visibility DB (SQL or Cassandra) for read.
-	StandardVisibilityPersistenceMaxReadQPS = "system.standardVisibilityPersistenceMaxReadQPS"
-	// StandardVisibilityPersistenceMaxWriteQPS is the max QPC system host can query standard visibility DB (SQL or Cassandra) for write.
-	StandardVisibilityPersistenceMaxWriteQPS = "system.standardVisibilityPersistenceMaxWriteQPS"
-	// AdvancedVisibilityPersistenceMaxReadQPS is the max QPC system host can query advanced visibility DB (Elasticsearch) for read.
-	AdvancedVisibilityPersistenceMaxReadQPS = "system.advancedVisibilityPersistenceMaxReadQPS"
-	// AdvancedVisibilityPersistenceMaxWriteQPS is the max QPC system host can query advanced visibility DB (Elasticsearch) for write.
-	AdvancedVisibilityPersistenceMaxWriteQPS = "system.advancedVisibilityPersistenceMaxWriteQPS"
-	// AdvancedVisibilityWritingMode is key for how to write to advanced visibility
-	AdvancedVisibilityWritingMode = "system.advancedVisibilityWritingMode"
-	// EnableWriteToSecondaryAdvancedVisibility is the config to enable write to secondary visibility for Elasticsearch
-	EnableWriteToSecondaryAdvancedVisibility = "system.enableWriteToSecondaryAdvancedVisibility"
-	// EnableReadVisibilityFromES is key for enable read from Elasticsearch
-	EnableReadVisibilityFromES = "system.enableReadVisibilityFromES"
-	// EnableReadFromSecondaryAdvancedVisibility is the config to enable read from secondary Elasticsearch
-	EnableReadFromSecondaryAdvancedVisibility = "system.enableReadFromSecondaryAdvancedVisibility"
 
 	// VisibilityPersistenceMaxReadQPS is the max QPC system host can query visibility DB for read.
 	VisibilityPersistenceMaxReadQPS = "system.visibilityPersistenceMaxReadQPS"
@@ -68,6 +52,11 @@ const (
 	VisibilityDisableOrderByClause = "system.visibilityDisableOrderByClause"
 	// VisibilityEnableManualPagination is the config to enable manual pagination for Elasticsearch
 	VisibilityEnableManualPagination = "system.visibilityEnableManualPagination"
+	// VisibilityAllowList is the config to allow list of values for regular types
+	VisibilityAllowList = "system.visibilityAllowList"
+	// SuppressErrorSetSystemSearchAttribute suppresses errors when trying to set
+	// values in system search attributes.
+	SuppressErrorSetSystemSearchAttribute = "system.suppressErrorSetSystemSearchAttribute"
 
 	// HistoryArchivalState is key for the state of history archival
 	HistoryArchivalState = "system.historyArchivalState"
@@ -94,7 +83,12 @@ const (
 	// get the latest data from DB. This effectively bypasses cache value and is used to facilitate testing of changes in
 	// search attributes. This should not be turned on in production.
 	ForceSearchAttributesCacheRefreshOnRead = "system.forceSearchAttributesCacheRefreshOnRead"
-	EnableRingpopTLS                        = "system.enableRingpopTLS"
+	// EnableRingpopTLS controls whether to use TLS for ringpop, using the same "internode" TLS
+	// config as the other services.
+	EnableRingpopTLS = "system.enableRingpopTLS"
+	// RingpopApproximateMaxPropagationTime is used for timing certain startup and shutdown processes.
+	// (It is not and doesn't have to be a guarantee.)
+	RingpopApproximateMaxPropagationTime = "system.ringpopApproximateMaxPropagationTime"
 	// EnableParentClosePolicyWorker decides whether or not enable system workers for processing parent close policy task
 	EnableParentClosePolicyWorker = "system.enableParentClosePolicyWorker"
 	// EnableStickyQuery indicates if sticky query should be enabled per namespace
@@ -122,6 +116,9 @@ const (
 	// OperatorRPSRatio is the percentage of the rate limit provided to priority rate limiters that should be used for
 	// operator API calls (highest priority). Should be >0.0 and <= 1.0 (defaults to 20% if not specified)
 	OperatorRPSRatio = "system.operatorRPSRatio"
+	// PersistenceQPSBurstRatio is the burst ratio for persistence QPS.
+	// This flag controls the burst ratio for all services.
+	PersistenceQPSBurstRatio = "system.persistenceQPSBurstRatio"
 
 	// Whether the deadlock detector should dump goroutines
 	DeadlockDumpGoroutines = "system.deadlock.DumpGoroutines"
@@ -133,6 +130,17 @@ const (
 	DeadlockInterval = "system.deadlock.Interval"
 	// How many extra goroutines can be created per root.
 	DeadlockMaxWorkersPerRoot = "system.deadlock.MaxWorkersPerRoot"
+
+	// utf-8 validation
+	// The *Sample* keys control the sample rate of messages to examine as a fraction in [0.0, 1.0].
+	// The *Fail* keys control whether a validation failure causes an error (rpc error for rpc
+	// request/response, [de]serialization error for persistence).
+	ValidateUTF8SampleRPCRequest  = "system.validateUTF8.sample.rpcRequest"
+	ValidateUTF8SampleRPCResponse = "system.validateUTF8.sample.rpcResponse"
+	ValidateUTF8SamplePersistence = "system.validateUTF8.sample.persistence"
+	ValidateUTF8FailRPCRequest    = "system.validateUTF8.fail.rpcRequest"
+	ValidateUTF8FailRPCResponse   = "system.validateUTF8.fail.rpcResponse"
+	ValidateUTF8FailPersistence   = "system.validateUTF8.fail.persistence"
 
 	// keys for size limit
 
@@ -228,6 +236,24 @@ const (
 	ReachabilityQuerySetDurationSinceDefault = "frontend.reachabilityQuerySetDurationSinceDefault"
 	// TaskQueuesPerBuildIdLimit limits the number of task queue names that can be mapped to a single build id.
 	TaskQueuesPerBuildIdLimit = "limit.taskQueuesPerBuildId"
+
+	// NexusIncomingServiceNameMaxLength is the maximum length of a Nexus incoming service name.
+	NexusIncomingServiceNameMaxLength = "limit.incomingServiceNameMaxLength"
+	// NexusIncomingServiceMaxSize is the maximum size of a Nexus incoming service in bytes.
+	NexusIncomingServiceMaxSize = "limit.incomingServiceMaxSize"
+	// NexusIncomingServiceListDefaultPageSize is the default page size for listing Nexus incoming services.
+	NexusIncomingServiceListDefaultPageSize = "limit.incomingServiceListDefaultPageSize"
+	// NexusIncomingServiceListMaxPageSize is the maximum page size for listing Nexus incoming services.
+	NexusIncomingServiceListMaxPageSize = "limit.incomingServiceListMaxPageSize"
+	// NexusOutgoingServiceURLMaxLength is the maximum length of an outgoing service URL.
+	NexusOutgoingServiceURLMaxLength = "limit.outgoingServiceURLMaxLength"
+	// NexusOutgoingServiceNameMaxLength is the maximum length of an outgoing service name.
+	NexusOutgoingServiceNameMaxLength = "limit.outgoingServiceNameMaxLength"
+	// NexusOutgoingServiceListDefaultPageSize is the default page size for listing outgoing services.
+	NexusOutgoingServiceListDefaultPageSize = "limit.outgoingServiceListDefaultPageSize"
+	// NexusOutgoingServiceListMaxPageSize is the maximum page size for listing outgoing services.
+	NexusOutgoingServiceListMaxPageSize = "limit.outgoingServiceListMaxPageSize"
+
 	// RemovableBuildIdDurationSinceDefault is the minimum duration since a build id was last default in its containing
 	// set for it to be considered for removal, used by the build id scavenger.
 	// This setting allows some propagation delay of versioning data, which may happen for the following reasons:
@@ -268,8 +294,9 @@ const (
 	FrontendNamespaceReplicationInducingAPIsRPS = "frontend.rps.namespaceReplicationInducingAPIs"
 	// FrontendMaxNamespaceRPSPerInstance is workflow namespace rate limit per second
 	FrontendMaxNamespaceRPSPerInstance = "frontend.namespaceRPS"
-	// FrontendMaxNamespaceBurstPerInstance is workflow namespace burst limit
-	FrontendMaxNamespaceBurstPerInstance = "frontend.namespaceBurst"
+	// FrontendMaxNamespaceBurstRatioPerInstance is workflow namespace burst limit as a ratio of namespace RPS. The RPS
+	// used here will be the effective RPS from global and per-instance limits. The value must be 1 or higher.
+	FrontendMaxNamespaceBurstRatioPerInstance = "frontend.namespaceBurstRatio"
 	// FrontendMaxConcurrentLongRunningRequestsPerInstance limits concurrent long-running requests per-instance,
 	// per-API. Example requests include long-poll requests, and `Query` requests (which need to wait for WFTs). The
 	// limit is applied individually to each API method. This value is ignored if
@@ -291,13 +318,16 @@ const (
 	// namespace replication inducing APIs (e.g. RegisterNamespace, UpdateNamespace, UpdateWorkerBuildIdCompatibility).
 	// This config is EXPERIMENTAL and may be changed or removed in a later release.
 	FrontendMaxNamespaceNamespaceReplicationInducingAPIsRPSPerInstance = "frontend.namespaceRPS.namespaceReplicationInducingAPIs"
-	// FrontendMaxNamespaceVisibilityBurstPerInstance is namespace burst limit for visibility APIs.
-	// This config is EXPERIMENTAL and may be changed or removed in a later release.
-	FrontendMaxNamespaceVisibilityBurstPerInstance = "frontend.namespaceBurst.visibility"
-	// FrontendMaxNamespaceNamespaceReplicationInducingAPIsBurstPerInstance is a per host/per namespace burst limit for
-	// namespace replication inducing APIs (e.g. RegisterNamespace, UpdateNamespace, UpdateWorkerBuildIdCompatibility).
-	// This config is EXPERIMENTAL and may be changed or removed in a later release.
-	FrontendMaxNamespaceNamespaceReplicationInducingAPIsBurstPerInstance = "frontend.namespaceBurst.namespaceReplicationInducingAPIs"
+	// FrontendMaxNamespaceVisibilityBurstRatioPerInstance is namespace burst limit for visibility APIs as a ratio of
+	// namespace visibility RPS. The RPS used here will be the effective RPS from global and per-instance limits. This
+	// config is EXPERIMENTAL and may be changed or removed in a later release. The value must be 1 or higher.
+	FrontendMaxNamespaceVisibilityBurstRatioPerInstance = "frontend.namespaceBurstRatio.visibility"
+	// FrontendMaxNamespaceNamespaceReplicationInducingAPIsBurstRatioPerInstance is a per host/per namespace burst limit for
+	// namespace replication inducing APIs (e.g. RegisterNamespace, UpdateNamespace, UpdateWorkerBuildIdCompatibility)
+	// as a ratio of namespace ReplicationInducingAPIs RPS. The RPS used here will be the effective RPS from global and
+	// per-instance limits. This config is EXPERIMENTAL and may be changed or removed in a later release. The value must
+	// be 1 or higher.
+	FrontendMaxNamespaceNamespaceReplicationInducingAPIsBurstRatioPerInstance = "frontend.namespaceBurstRatio.namespaceReplicationInducingAPIs"
 	// FrontendGlobalNamespaceRPS is workflow namespace rate limit per second for the whole cluster.
 	// The limit is evenly distributed among available frontend service instances.
 	// If this is set, it overwrites per instance limit "frontend.namespaceRPS".
@@ -373,6 +403,14 @@ const (
 	KeepAliveTimeout = "frontend.keepAliveTimeout"
 	// FrontendEnableSchedules enables schedule-related RPCs in the frontend
 	FrontendEnableSchedules = "frontend.enableSchedules"
+	// FrontendEnableNexusAPIs enables serving Nexus HTTP requests in the frontend.
+	FrontendEnableNexusAPIs = "frontend.enableNexusAPIs"
+	// FrontendRefreshNexusIncomingServicesLongPollTimeout is the maximum duration of background long poll requests to update Nexus incoming services.
+	FrontendRefreshNexusIncomingServicesLongPollTimeout = "frontend.refreshNexusIncomingServicesLongPollTimeout"
+	// FrontendRefreshNexusIncomingServicesMinWait is the minimum wait time between background long poll requests to update Nexus incoming services.
+	FrontendRefreshNexusIncomingServicesMinWait = "frontend.refreshNexusIncomingServicesMinWait"
+	// FrontendEnableCallbackAttachment enables attaching callbacks to workflows.
+	FrontendEnableCallbackAttachment = "frontend.enableCallbackAttachment"
 	// FrontendMaxConcurrentBatchOperationPerNamespace is the max concurrent batch operation job count per namespace
 	FrontendMaxConcurrentBatchOperationPerNamespace = "frontend.MaxConcurrentBatchOperationPerNamespace"
 	// FrontendMaxExecutionCountBatchOperationPerNamespace is the max execution count batch operation supports per namespace
@@ -381,17 +419,29 @@ const (
 	FrontendEnableBatcher = "frontend.enableBatcher"
 	// FrontendAccessHistoryFraction (0.0~1.0) is the fraction of history operations that are sent to the history
 	// service using the new RPCs. The remaining access history via the existing implementation.
-	FrontendAccessHistoryFraction = "frontend.accessHistoryFraction" // TODO: remove once migration complete
+	// TODO: remove once migration completes.
+	FrontendAccessHistoryFraction = "frontend.accessHistoryFraction"
+	// FrontendAdminDeleteAccessHistoryFraction (0.0~1.0) is the fraction of admin DeleteWorkflowExecution requests
+	// that are sent to the history service using the new RPCs. The remaining access history via the existing implementation.
+	// TODO: remove once migration completes.
+	FrontendAdminDeleteAccessHistoryFraction = "frontend.adminDeleteAccessHistoryFraction"
 
 	// FrontendEnableUpdateWorkflowExecution enables UpdateWorkflowExecution API in the frontend.
 	// The UpdateWorkflowExecution API has gone through rigorous testing efforts but this config's default is `false` until the
 	// feature gets more time in production.
 	FrontendEnableUpdateWorkflowExecution = "frontend.enableUpdateWorkflowExecution"
 
+	// FrontendEnableExecuteMultiOperation enables the ExecuteMultiOperation API in the frontend.
+	// The API is under active development.
+	FrontendEnableExecuteMultiOperation = "frontend.enableExecuteMultiOperation"
+
 	// FrontendEnableUpdateWorkflowExecutionAsyncAccepted enables the form of
 	// asynchronous workflow execution update that waits on the "Accepted"
 	// lifecycle stage. Default value is `false`.
 	FrontendEnableUpdateWorkflowExecutionAsyncAccepted = "frontend.enableUpdateWorkflowExecutionAsyncAccepted"
+
+	// EnableWorkflowIdConflictPolicy enables the `WorkflowIdConflictPolicy` option for Start and Signal-with-Start
+	EnableWorkflowIdConflictPolicy = "frontend.enableWorkflowIdConflictPolicy"
 
 	// FrontendEnableWorkerVersioningDataAPIs enables worker versioning data read / write APIs.
 	FrontendEnableWorkerVersioningDataAPIs = "frontend.workerVersioningDataAPIs"
@@ -476,6 +526,9 @@ const (
 	MatchingForwarderMaxRatePerSecond = "matching.forwarderMaxRatePerSecond"
 	// MatchingForwarderMaxChildrenPerNode is the max number of children per node in the task queue partition tree
 	MatchingForwarderMaxChildrenPerNode = "matching.forwarderMaxChildrenPerNode"
+	// MatchingAlignMembershipChange is a duration to align matching's membership changes to.
+	// This can help reduce effects of task queue movement.
+	MatchingAlignMembershipChange = "matching.alignMembershipChange"
 	// MatchingShutdownDrainDuration is the duration of traffic drain during shutdown
 	MatchingShutdownDrainDuration = "matching.shutdownDrainDuration"
 	// MatchingGetUserDataLongPollTimeout is the max length of long polls for GetUserData calls between partitions.
@@ -486,6 +539,16 @@ const (
 	// MatchingMaxWaitForPollerBeforeFwd in presence of a non-negligible backlog, we resume forwarding tasks if the
 	// duration since last poll exceeds this threshold.
 	MatchingMaxWaitForPollerBeforeFwd = "matching.maxWaitForPollerBeforeFwd"
+	// QueryPollerUnavailableWindow WF Queries are rejected after a while if no poller has been seen within the window
+	QueryPollerUnavailableWindow = "matching.queryPollerUnavailableWindow"
+	// MatchingListNexusIncomingServicesLongPollTimeout is the max length of long polls for ListNexusIncomingServices calls.
+	MatchingListNexusIncomingServicesLongPollTimeout = "matching.listNexusIncomingServicesLongPollTimeout"
+	// MatchingMembershipUnloadDelay is how long to wait to re-confirm loss of ownership before unloading a task queue.
+	// Set to zero to disable proactive unload.
+	MatchingMembershipUnloadDelay = "matching.membershipUnloadDelay"
+	// MatchingQueryWorkflowTaskTimeoutLogRate defines the sampling rate for logs when a query workflow task times out. Since
+	// these log lines can be noisy, we want to be able to turn on and sample selectively for each affected namespace.
+	MatchingQueryWorkflowTaskTimeoutLogRate = "matching.queryWorkflowTaskTimeoutLogRate"
 
 	// for matching testing only:
 
@@ -525,10 +588,17 @@ const (
 	HistoryPersistenceDynamicRateLimitingParams = "history.persistenceDynamicRateLimitingParams"
 	// HistoryLongPollExpirationInterval is the long poll expiration interval in the history service
 	HistoryLongPollExpirationInterval = "history.longPollExpirationInterval"
+	// HistoryCacheSizeBasedLimit if true, size of the history cache will be limited by HistoryCacheMaxSizeBytes
+	// and HistoryCacheHostLevelMaxSizeBytes. Otherwise, entry count in the history cache will be limited by
+	// HistoryCacheMaxSize and HistoryCacheHostLevelMaxSize.
+	HistoryCacheSizeBasedLimit = "history.cacheSizeBasedLimit"
 	// HistoryCacheInitialSize is initial size of history cache
 	HistoryCacheInitialSize = "history.cacheInitialSize"
-	// HistoryCacheMaxSize is max size of history cache
+	// HistoryCacheMaxSize is the maximum number of entries in the shard level history cache
 	HistoryCacheMaxSize = "history.cacheMaxSize"
+	// HistoryCacheMaxSizeBytes is the maximum size of the shard level history cache in bytes. This is only used if
+	// HistoryCacheSizeBasedLimit is set to true.
+	HistoryCacheMaxSizeBytes = "history.cacheMaxSizeBytes"
 	// HistoryCacheTTL is TTL of history cache
 	HistoryCacheTTL = "history.cacheTTL"
 	// HistoryCacheNonUserContextLockTimeout controls how long non-user call (callerType != API or Operator)
@@ -536,10 +606,20 @@ const (
 	HistoryCacheNonUserContextLockTimeout = "history.cacheNonUserContextLockTimeout"
 	// EnableHostHistoryCache controls if the history cache is host level
 	EnableHostHistoryCache = "history.enableHostHistoryCache"
-	// HistoryCacheShardLevelMaxSize is max size of history shard level cache
-	HistoryCacheShardLevelMaxSize = "history.shardLevelCacheMaxSize"
-	// EnableAPIGetCurrentRunIDLock controls if a lock should be acquired before getting current run ID for API requests
-	EnableAPIGetCurrentRunIDLock = "history.enableAPIGetCurrentRunIDLock"
+	// HistoryCacheHostLevelMaxSize is the maximum number of entries in the host level history cache
+	HistoryCacheHostLevelMaxSize = "history.hostLevelCacheMaxSize"
+	// HistoryCacheHostLevelMaxSizeBytes is the maximum size of the host level history cache. This is only used if
+	// HistoryCacheSizeBasedLimit is set to true.
+	HistoryCacheHostLevelMaxSizeBytes = "history.hostLevelCacheMaxSizeBytes"
+	// EnableMutableStateTransitionHistory controls whether to record state transition history in mutable state records.
+	// The feature is used in the hierarchical state machine framework and is considered unstable as the structure may
+	// change with the pending replication design.
+	EnableMutableStateTransitionHistory = "history.enableMutableStateTransitionHistory"
+	// EnableWorkflowExecutionTimeoutTimer controls whether to enable the new logic for generating a workflow execution
+	// timeout timer when execution timeout is specified when starting a workflow.
+	// For backward compatibility, this feature is disabled by default and should only be enabled after server version
+	// containing this flag is deployed to all history service nodes in the cluster.
+	EnableWorkflowExecutionTimeoutTimer = "history.enableWorkflowExecutionTimeoutTimer"
 	// HistoryStartupMembershipJoinDelay is the duration a history instance waits
 	// before joining membership after starting.
 	HistoryStartupMembershipJoinDelay = "history.startupMembershipJoinDelay"
@@ -547,10 +627,14 @@ const (
 	HistoryShutdownDrainDuration = "history.shutdownDrainDuration"
 	// XDCCacheMaxSizeBytes is max size of events cache in bytes
 	XDCCacheMaxSizeBytes = "history.xdcCacheMaxSizeBytes"
-	// EventsCacheMaxSizeBytes is max size of events cache in bytes
+	// EventsCacheMaxSizeBytes is max size of the shard level events cache in bytes
 	EventsCacheMaxSizeBytes = "history.eventsCacheMaxSizeBytes"
+	// EventsHostLevelCacheMaxSizeBytes is max size of the host level events cache in bytes
+	EventsHostLevelCacheMaxSizeBytes = "history.eventsHostLevelCacheMaxSizeBytes"
 	// EventsCacheTTL is TTL of events cache
 	EventsCacheTTL = "history.eventsCacheTTL"
+	// EnableHostLevelEventsCache controls if the events cache is host level
+	EnableHostLevelEventsCache = "history.enableHostLevelEventsCache"
 	// AcquireShardInterval is interval that timer used to acquire shard
 	AcquireShardInterval = "history.acquireShardInterval"
 	// AcquireShardConcurrency is number of goroutines that can be used to acquire shards in the shard controller.
@@ -603,8 +687,6 @@ const (
 	// limit should not be hit and task unloading should happen once critical count is exceeded. But
 	// since queue action is async, we need this hard limit.
 	QueuePendingTaskMaxCount = "history.queuePendingTasksMaxCount"
-	// QueueMaxReaderCount is the max number of readers in one multi-cursor queue
-	QueueMaxReaderCount = "history.queueMaxReaderCount"
 	// ContinueAsNewMinInterval is the minimal interval between continue_as_new executions.
 	// This is needed to prevent tight loop continue_as_new spin. Default is 1s.
 	ContinueAsNewMinInterval = "history.continueAsNewMinInterval"
@@ -641,10 +723,6 @@ const (
 	TimerProcessorUpdateAckInterval = "history.timerProcessorUpdateAckInterval"
 	// TimerProcessorUpdateAckIntervalJitterCoefficient is the update interval jitter coefficient
 	TimerProcessorUpdateAckIntervalJitterCoefficient = "history.timerProcessorUpdateAckIntervalJitterCoefficient"
-	// TimerProcessorCompleteTimerInterval is complete timer interval for timer processor
-	TimerProcessorCompleteTimerInterval = "history.timerProcessorCompleteTimerInterval"
-	// TimerProcessorFailoverMaxPollRPS is max poll rate per second for timer processor
-	TimerProcessorFailoverMaxPollRPS = "history.timerProcessorFailoverMaxPollRPS"
 	// TimerProcessorMaxPollRPS is max poll rate per second for timer processor
 	TimerProcessorMaxPollRPS = "history.timerProcessorMaxPollRPS"
 	// TimerProcessorMaxPollHostRPS is max poll rate per second for all timer processor on a host
@@ -657,6 +735,8 @@ const (
 	TimerProcessorPollBackoffInterval = "history.timerProcessorPollBackoffInterval"
 	// TimerProcessorMaxTimeShift is the max shift timer processor can have
 	TimerProcessorMaxTimeShift = "history.timerProcessorMaxTimeShift"
+	// TimerQueueMaxReaderCount is the max number of readers in one multi-cursor timer queue
+	TimerQueueMaxReaderCount = "history.timerQueueMaxReaderCount"
 	// RetentionTimerJitterDuration is a time duration jitter to distribute timer from T0 to T0 + jitter duration
 	RetentionTimerJitterDuration = "history.retentionTimerJitterDuration"
 
@@ -665,8 +745,6 @@ const (
 
 	// TransferTaskBatchSize is batch size for transferQueueProcessor
 	TransferTaskBatchSize = "history.transferTaskBatchSize"
-	// TransferProcessorFailoverMaxPollRPS is max poll rate per second for transferQueueProcessor
-	TransferProcessorFailoverMaxPollRPS = "history.transferProcessorFailoverMaxPollRPS"
 	// TransferProcessorMaxPollRPS is max poll rate per second for transferQueueProcessor
 	TransferProcessorMaxPollRPS = "history.transferProcessorMaxPollRPS"
 	// TransferProcessorMaxPollHostRPS is max poll rate per second for all transferQueueProcessor on a host
@@ -677,8 +755,6 @@ const (
 	TransferProcessorSchedulerActiveRoundRobinWeights = "history.transferProcessorSchedulerActiveRoundRobinWeights"
 	// TransferProcessorSchedulerStandbyRoundRobinWeights is the priority round robin weights used by transfer task scheduler for standby namespaces
 	TransferProcessorSchedulerStandbyRoundRobinWeights = "history.transferProcessorSchedulerStandbyRoundRobinWeights"
-	// TransferProcessorUpdateShardTaskCount is update shard count for transferQueueProcessor
-	TransferProcessorUpdateShardTaskCount = "history.transferProcessorUpdateShardTaskCount"
 	// TransferProcessorMaxPollInterval max poll interval for transferQueueProcessor
 	TransferProcessorMaxPollInterval = "history.transferProcessorMaxPollInterval"
 	// TransferProcessorMaxPollIntervalJitterCoefficient is the max poll interval jitter coefficient
@@ -687,12 +763,35 @@ const (
 	TransferProcessorUpdateAckInterval = "history.transferProcessorUpdateAckInterval"
 	// TransferProcessorUpdateAckIntervalJitterCoefficient is the update interval jitter coefficient
 	TransferProcessorUpdateAckIntervalJitterCoefficient = "history.transferProcessorUpdateAckIntervalJitterCoefficient"
-	// TransferProcessorCompleteTransferInterval is complete timer interval for transferQueueProcessor
-	TransferProcessorCompleteTransferInterval = "history.transferProcessorCompleteTransferInterval"
 	// TransferProcessorPollBackoffInterval is the poll backoff interval if task redispatcher's size exceeds limit for transferQueueProcessor
 	TransferProcessorPollBackoffInterval = "history.transferProcessorPollBackoffInterval"
 	// TransferProcessorEnsureCloseBeforeDelete means we ensure the execution is closed before we delete it
 	TransferProcessorEnsureCloseBeforeDelete = "history.transferProcessorEnsureCloseBeforeDelete"
+	// TransferQueueMaxReaderCount is the max number of readers in one multi-cursor transfer queue
+	TransferQueueMaxReaderCount = "history.transferQueueMaxReaderCount"
+
+	// OutboundProcessorEnabled enables starting the outbound queue processor.
+	OutboundProcessorEnabled = "history.outboundProcessorEnabled"
+	// OutboundTaskBatchSize is batch size for outboundQueueFactory
+	OutboundTaskBatchSize = "history.outboundTaskBatchSize"
+	// OutboundProcessorMaxPollRPS is max poll rate per second for outboundQueueFactory
+	OutboundProcessorMaxPollRPS = "history.outboundProcessorMaxPollRPS"
+	// OutboundProcessorMaxPollHostRPS is max poll rate per second for all outboundQueueFactory on a host
+	OutboundProcessorMaxPollHostRPS = "history.outboundProcessorMaxPollHostRPS"
+	// OutboundProcessorUpdateShardTaskCount is update shard count for outboundQueueFactory
+	OutboundProcessorUpdateShardTaskCount = "history.outboundProcessorUpdateShardTaskCount"
+	// OutboundProcessorMaxPollInterval max poll interval for outboundQueueFactory
+	OutboundProcessorMaxPollInterval = "history.outboundProcessorMaxPollInterval"
+	// OutboundProcessorMaxPollIntervalJitterCoefficient is the max poll interval jitter coefficient
+	OutboundProcessorMaxPollIntervalJitterCoefficient = "history.outboundProcessorMaxPollIntervalJitterCoefficient"
+	// OutboundProcessorUpdateAckInterval is update interval for outboundQueueFactory
+	OutboundProcessorUpdateAckInterval = "history.outboundProcessorUpdateAckInterval"
+	// OutboundProcessorUpdateAckIntervalJitterCoefficient is the update interval jitter coefficient
+	OutboundProcessorUpdateAckIntervalJitterCoefficient = "history.outboundProcessorUpdateAckIntervalJitterCoefficient"
+	// OutboundProcessorPollBackoffInterval is the poll backoff interval if task redispatcher's size exceeds limit for outboundQueueFactory
+	OutboundProcessorPollBackoffInterval = "history.outboundProcessorPollBackoffInterval"
+	// OutboundQueueMaxReaderCount is the max number of readers in one multi-cursor outbound queue
+	OutboundQueueMaxReaderCount = "history.outboundQueueMaxReaderCount"
 
 	// VisibilityTaskBatchSize is batch size for visibilityQueueProcessor
 	VisibilityTaskBatchSize = "history.visibilityTaskBatchSize"
@@ -714,8 +813,6 @@ const (
 	VisibilityProcessorUpdateAckInterval = "history.visibilityProcessorUpdateAckInterval"
 	// VisibilityProcessorUpdateAckIntervalJitterCoefficient is the update interval jitter coefficient
 	VisibilityProcessorUpdateAckIntervalJitterCoefficient = "history.visibilityProcessorUpdateAckIntervalJitterCoefficient"
-	// VisibilityProcessorCompleteTaskInterval is complete timer interval for visibilityQueueProcessor
-	VisibilityProcessorCompleteTaskInterval = "history.visibilityProcessorCompleteTaskInterval"
 	// VisibilityProcessorPollBackoffInterval is the poll backoff interval if task redispatcher's size exceeds limit for visibilityQueueProcessor
 	VisibilityProcessorPollBackoffInterval = "history.visibilityProcessorPollBackoffInterval"
 	// VisibilityProcessorEnsureCloseBeforeDelete means we ensure the visibility of an execution is closed before we delete its visibility records
@@ -724,6 +821,8 @@ const (
 	// close task has been processed. Must use Elasticsearch as visibility store, otherwise workflow
 	// data (eg: search attributes) will be lost after workflow is closed.
 	VisibilityProcessorEnableCloseWorkflowCleanup = "history.visibilityProcessorEnableCloseWorkflowCleanup"
+	// VisibilityQueueMaxReaderCount is the max number of readers in one multi-cursor visibility queue
+	VisibilityQueueMaxReaderCount = "history.visibilityQueueMaxReaderCount"
 
 	// ArchivalTaskBatchSize is batch size for archivalQueueProcessor
 	ArchivalTaskBatchSize = "history.archivalTaskBatchSize"
@@ -749,6 +848,8 @@ const (
 	ArchivalProcessorArchiveDelay = "history.archivalProcessorArchiveDelay"
 	// ArchivalBackendMaxRPS is the maximum rate of requests per second to the archival backend
 	ArchivalBackendMaxRPS = "history.archivalBackendMaxRPS"
+	// ArchivalQueueMaxReaderCount is the max number of readers in one multi-cursor archival queue
+	ArchivalQueueMaxReaderCount = "history.archivalQueueMaxReaderCount"
 
 	// WorkflowExecutionMaxInFlightUpdates is the max number of updates that can be in-flight (admitted but not yet completed) for any given workflow execution.
 	WorkflowExecutionMaxInFlightUpdates = "history.maxInFlightUpdates"
@@ -759,20 +860,10 @@ const (
 	ReplicatorTaskBatchSize = "history.replicatorTaskBatchSize"
 	// ReplicatorMaxSkipTaskCount is maximum number of tasks that can be skipped during tasks pagination due to not meeting filtering conditions (e.g. missed namespace).
 	ReplicatorMaxSkipTaskCount = "history.replicatorMaxSkipTaskCount"
-	// ReplicatorTaskWorkerCount is number of worker for ReplicatorProcessor
-	ReplicatorTaskWorkerCount = "history.replicatorTaskWorkerCount"
-	// ReplicatorProcessorMaxPollRPS is max poll rate per second for ReplicatorProcessor
-	ReplicatorProcessorMaxPollRPS = "history.replicatorProcessorMaxPollRPS"
 	// ReplicatorProcessorMaxPollInterval is max poll interval for ReplicatorProcessor
 	ReplicatorProcessorMaxPollInterval = "history.replicatorProcessorMaxPollInterval"
 	// ReplicatorProcessorMaxPollIntervalJitterCoefficient is the max poll interval jitter coefficient
 	ReplicatorProcessorMaxPollIntervalJitterCoefficient = "history.replicatorProcessorMaxPollIntervalJitterCoefficient"
-	// ReplicatorProcessorUpdateAckInterval is update interval for ReplicatorProcessor
-	ReplicatorProcessorUpdateAckInterval = "history.replicatorProcessorUpdateAckInterval"
-	// ReplicatorProcessorUpdateAckIntervalJitterCoefficient is the update interval jitter coefficient
-	ReplicatorProcessorUpdateAckIntervalJitterCoefficient = "history.replicatorProcessorUpdateAckIntervalJitterCoefficient"
-	// ReplicatorProcessorEnablePriorityTaskProcessor indicates whether priority task processor should be used for ReplicatorProcessor
-	ReplicatorProcessorEnablePriorityTaskProcessor = "history.replicatorProcessorEnablePriorityTaskProcessor"
 	// MaximumBufferedEventsBatch is the maximum permissible number of buffered events for any given mutable state.
 	MaximumBufferedEventsBatch = "history.maximumBufferedEventsBatch"
 	// MaximumBufferedEventsSizeInBytes is the maximum permissible size of all buffered events for any given mutable
@@ -782,6 +873,10 @@ const (
 	MaximumSignalsPerExecution = "history.maximumSignalsPerExecution"
 	// ShardUpdateMinInterval is the minimal time interval which the shard info can be updated
 	ShardUpdateMinInterval = "history.shardUpdateMinInterval"
+	// ShardUpdateMinTasksCompleted is the minimum number of tasks which must be completed (across all queues) before the shard info can be updated.
+	// Note that once history.shardUpdateMinInterval amount of time has passed we'll update the shard info regardless of the number of tasks completed.
+	// When the this config is zero or lower we will only update shard info at most once every history.shardUpdateMinInterval.
+	ShardUpdateMinTasksCompleted = "history.shardUpdateMinTasksCompleted"
 	// ShardSyncMinInterval is the minimal time interval which the shard info should be sync to remote
 	ShardSyncMinInterval = "history.shardSyncMinInterval"
 	// EmitShardLagLog whether emit the shard lag log
@@ -858,13 +953,22 @@ const (
 	ReplicationTaskProcessorHostQPS = "history.ReplicationTaskProcessorHostQPS"
 	// ReplicationTaskProcessorShardQPS is the qps of task processing rate limiter on shard level
 	ReplicationTaskProcessorShardQPS = "history.ReplicationTaskProcessorShardQPS"
-	// ReplicationBypassCorruptedData is the flag to bypass corrupted workflow data in source cluster
-	ReplicationBypassCorruptedData = "history.ReplicationBypassCorruptedData"
 	// ReplicationEnableDLQMetrics is the flag to emit DLQ metrics
 	ReplicationEnableDLQMetrics = "history.ReplicationEnableDLQMetrics"
+	// ReplicationEnableUpdateWithNewTaskMerge is the flag controlling whether replication task merging logic
+	// should be enabled for non continuedAsNew workflow UpdateWithNew case.
+	ReplicationEnableUpdateWithNewTaskMerge = "history.ReplicationEnableUpdateWithNewTaskMerge"
 	// HistoryTaskDLQEnabled enables the history task DLQ. This applies to internal tasks like transfer and timer tasks.
 	// Do not turn this on if you aren't using Cassandra as the history task DLQ is not implemented for other databases.
 	HistoryTaskDLQEnabled = "history.TaskDLQEnabled"
+	// HistoryTaskDLQUnexpectedErrorAttempts is the number of task execution attempts before sending the task to DLQ.
+	HistoryTaskDLQUnexpectedErrorAttempts = "history.TaskDLQUnexpectedErrorAttempts"
+	// HistoryTaskDLQInternalErrors causes history task processing to send tasks failing with serviceerror.Internal to
+	// the dlq (or will drop them if not enabled)
+	HistoryTaskDLQInternalErrors = "history.TaskDLQInternalErrors"
+	// HistoryTaskDLQErrorPattern specifies a regular expression. If a task processing error matches with this regex,
+	// that task will be sent to DLQ.
+	HistoryTaskDLQErrorPattern = "history.TaskDLQErrorPattern"
 
 	// ReplicationStreamSyncStatusDuration sync replication status duration
 	ReplicationStreamSyncStatusDuration = "history.ReplicationStreamSyncStatusDuration"

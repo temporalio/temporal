@@ -29,7 +29,6 @@ package matching
 
 import (
 	"context"
-	"fmt"
 	"time"
 
 	enumspb "go.temporal.io/api/enums/v1"
@@ -220,8 +219,12 @@ func (c *clientImpl) createLongPollContext(parent context.Context) (context.Cont
 	return context.WithTimeout(parent, c.longPollTimeout)
 }
 
-func (c *clientImpl) getClientForTaskQueuePartition(tqPrtn tqid.Partition) (matchingservice.MatchingServiceClient, error) {
-	key := fmt.Sprintf("%s:%s:%d", tqPrtn.NamespaceId(), tqPrtn.RpcName(), int(tqPrtn.TaskType()))
+func (c *clientImpl) getClientForTaskqueue(
+	namespaceID string,
+	taskQueue *taskqueuepb.TaskQueue,
+	taskQueueType enumspb.TaskQueueType,
+) (matchingservice.MatchingServiceClient, error) {
+	key := common.TaskQueueRoutingKey(namespaceID, taskQueue.Name, taskQueueType)
 	client, err := c.clients.GetClientForKey(key)
 	if err != nil {
 		return nil, err

@@ -36,6 +36,7 @@ import (
 	"go.temporal.io/server/common/config"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
+	"go.temporal.io/server/common/membership/static"
 	"go.temporal.io/server/common/metrics"
 	persistenceClient "go.temporal.io/server/common/persistence/client"
 	"go.temporal.io/server/common/persistence/visibility"
@@ -54,10 +55,11 @@ type (
 	serverOptions struct {
 		serviceNames map[primitives.ServiceName]struct{}
 
-		config    *config.Config
-		configDir string
-		env       string
-		zone      string
+		config         *config.Config
+		configDir      string
+		env            string
+		zone           string
+		hostsByService map[primitives.ServiceName]static.Hosts
 
 		startupSynchronizationMode synchronizationModeParams
 
@@ -74,7 +76,7 @@ type (
 		customVisibilityStoreFactory visibility.VisibilityStoreFactory
 		clientFactoryProvider        client.FactoryProvider
 		searchAttributesMapper       searchattribute.Mapper
-		customInterceptors           []grpc.UnaryServerInterceptor
+		customFrontendInterceptors   []grpc.UnaryServerInterceptor
 		metricHandler                metrics.Handler
 	}
 )

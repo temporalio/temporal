@@ -131,7 +131,7 @@ dispatchLoop:
 				}
 
 				// if task is still valid (truly valid or unable to verify if task is valid)
-				tr.taggedMetricsHandler().Counter(metrics.BufferThrottlePerTaskQueueCounter.Name()).Record(1)
+				metrics.BufferThrottlePerTaskQueueCounter.With(tr.taggedMetricsHandler()).Record(1)
 				if !errors.Is(err, context.DeadlineExceeded) && !errors.Is(err, context.Canceled) {
 					// Don't log here if encounters missing user data error when dispatch a versioned task.
 					tr.throttledLogger().Error("taskReader: unexpected error dispatching task", tag.Error(err))
@@ -272,7 +272,7 @@ func (tr *taskReader) addTasksToBuffer(
 ) error {
 	for _, t := range tasks {
 		if IsTaskExpired(t) {
-			tr.taggedMetricsHandler().Counter(metrics.ExpiredTasksPerTaskQueueCounter.Name()).Record(1)
+			metrics.ExpiredTasksPerTaskQueueCounter.With(tr.taggedMetricsHandler()).Record(1)
 			// Also increment readLevel for expired tasks otherwise it could result in
 			// looping over the same tasks if all tasks read in the batch are expired
 			tr.backlogMgr.taskAckManager.setReadLevel(t.GetTaskId())
@@ -320,7 +320,7 @@ func (tr *taskReader) emitTaskLagMetric(ackLevel int64) {
 	// note: this metric is only an estimation for the lag.
 	// taskID in DB may not be continuous, especially when task list ownership changes.
 	maxReadLevel := tr.backlogMgr.taskWriter.GetMaxReadLevel()
-	tr.taggedMetricsHandler().Gauge(metrics.TaskLagPerTaskQueueGauge.Name()).Record(float64(maxReadLevel - ackLevel))
+	metrics.TaskLagPerTaskQueueGauge.With(tr.taggedMetricsHandler()).Record(float64(maxReadLevel - ackLevel))
 }
 
 func (tr *taskReader) reEnqueueAfterDelay(duration time.Duration) {
