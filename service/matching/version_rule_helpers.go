@@ -511,7 +511,8 @@ func getUpstreamBuildIds(buildId string, redirectRules []*persistencespb.Redirec
 func getUpstreamHelper(
 	buildId string,
 	redirectRules []*persistencespb.RedirectRule,
-	visited map[string]bool) []string {
+	visited map[string]bool,
+) []string {
 	var upstream []string
 	if visited == nil {
 		visited = make(map[string]bool)
