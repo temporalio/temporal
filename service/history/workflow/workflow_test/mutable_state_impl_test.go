@@ -458,6 +458,7 @@ func TestGetNexusCompletion(t *testing.T) {
 				"---",
 				&taskqueuepb.TaskQueue{Name: "irrelevant"},
 				"---",
+				nil,
 			)
 			require.NoError(t, err)
 			_, err = ms.AddWorkflowTaskCompletedEvent(workflowTask, &workflowservice.RespondWorkflowTaskCompletedRequest{

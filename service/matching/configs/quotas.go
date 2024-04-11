@@ -62,8 +62,8 @@ var (
 		"/temporal.server.api.matchingservice.v1.MatchingService/UpdateNexusIncomingService":             1,
 		"/temporal.server.api.matchingservice.v1.MatchingService/ListNexusIncomingServices":              1,
 		"/temporal.server.api.matchingservice.v1.MatchingService/DeleteNexusIncomingService":             1,
-		"/temporal.server.api.matchingservice.v1.MatchingService/UpdateWorkerVersioningRules":              1,
-		"/temporal.server.api.matchingservice.v1.MatchingService/GetWorkerVersioningRules":             1,
+		"/temporal.server.api.matchingservice.v1.MatchingService/UpdateWorkerVersioningRules":            1,
+		"/temporal.server.api.matchingservice.v1.MatchingService/GetWorkerVersioningRules":               1,
 		"/temporal.server.api.matchingservice.v1.MatchingService/DescribeTaskQueuePartition":             1,
 	}
 

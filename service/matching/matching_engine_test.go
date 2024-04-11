@@ -123,7 +123,14 @@ func createTestMatchingEngine(
 	mockHistoryClient := historyservicemock.NewMockHistoryServiceClient(controller)
 	mockHistoryClient.EXPECT().IsWorkflowTaskValid(gomock.Any(), gomock.Any()).Return(&historyservice.IsWorkflowTaskValidResponse{IsValid: true}, nil).AnyTimes()
 	mockHistoryClient.EXPECT().IsActivityTaskValid(gomock.Any(), gomock.Any()).Return(&historyservice.IsActivityTaskValidResponse{IsValid: true}, nil).AnyTimes()
-	return newMatchingEngine(config, tm, mockHistoryClient, logger, namespaceRegistry, matchingClient, mockVisibilityManager)
+	mockHostInfoProvider := membership.NewMockHostInfoProvider(controller)
+	hostInfo := membership.NewHostInfoFromAddress("self")
+	mockHostInfoProvider.EXPECT().HostInfo().Return(hostInfo).AnyTimes()
+	mockServiceResolver := membership.NewMockServiceResolver(controller)
+	mockServiceResolver.EXPECT().Lookup(gomock.Any()).Return(hostInfo, nil).AnyTimes()
+	mockServiceResolver.EXPECT().AddListener(gomock.Any(), gomock.Any()).AnyTimes()
+	mockServiceResolver.EXPECT().RemoveListener(gomock.Any()).AnyTimes()
+	return newMatchingEngine(config, tm, mockHistoryClient, logger, namespaceRegistry, matchingClient, mockVisibilityManager, mockHostInfoProvider, mockServiceResolver)
 }
 
 func createMockNamespaceCache(controller *gomock.Controller, nsName namespace.Name) (*namespace.Namespace, *namespace.MockRegistry) {
@@ -193,8 +200,8 @@ func newMatchingEngine(
 	mockVisibilityManager manager.VisibilityManager, mockHostInfoProvider membership.HostInfoProvider, mockServiceResolver membership.ServiceResolver,
 ) *matchingEngineImpl {
 	return &matchingEngineImpl{
-		taskManager:         taskMgr,
-		historyClient:       mockHistoryClient,
+		taskManager:   taskMgr,
+		historyClient: mockHistoryClient,
 		partitions:    make(map[tqid.PartitionKey]taskQueuePartitionManager),
 		gaugeMetrics: gaugeMetrics{
 			loadedTaskQueueFamilyCount:    make(map[taskQueueCounterKey]int),
@@ -2489,38 +2496,40 @@ func (s *matchingEngineSuite) TestUnloadOnMembershipChange() {
 	e.Start()
 	defer e.Stop()
 
-	tq1 := newTestTaskQueueID(namespace.ID(uuid.New()), "makeToast", enumspb.TASK_QUEUE_TYPE_WORKFLOW)
-	tq2 := newTestTaskQueueID(namespace.ID(uuid.New()), "makeToast", enumspb.TASK_QUEUE_TYPE_ACTIVITY)
-
-	_, err := e.getTaskQueueManager(context.Background(), tq1, normalStickyInfo, true)
+	p1, err := tqid.NormalPartitionFromRpcName("makeToast", uuid.New(), enumspb.TASK_QUEUE_TYPE_WORKFLOW)
 	s.NoError(err)
-	_, err = e.getTaskQueueManager(context.Background(), tq2, normalStickyInfo, true)
+	p2, err := tqid.NormalPartitionFromRpcName("makeToast", uuid.New(), enumspb.TASK_QUEUE_TYPE_ACTIVITY)
 	s.NoError(err)
 
-	s.Equal(2, len(e.getTaskQueues(1000)))
+	_, err = e.getTaskQueuePartitionManager(context.Background(), p1, true)
+	s.NoError(err)
+	_, err = e.getTaskQueuePartitionManager(context.Background(), p2, true)
+	s.NoError(err)
+
+	s.Equal(2, len(e.getTaskQueuePartitions(1000)))
 
 	// signal membership changed and give time for loop to wake up
-	s.mockServiceResolver.EXPECT().Lookup(tq1.routingKey()).Return(self, nil)
-	s.mockServiceResolver.EXPECT().Lookup(tq2.routingKey()).Return(self, nil)
+	s.mockServiceResolver.EXPECT().Lookup(p1.RoutingKey()).Return(self, nil)
+	s.mockServiceResolver.EXPECT().Lookup(p2.RoutingKey()).Return(self, nil)
 	e.membershipChangedCh <- nil
 	time.Sleep(50 * time.Millisecond)
-	s.Equal(2, len(e.getTaskQueues(1000)), "nothing should be unloaded yet")
+	s.Equal(2, len(e.getTaskQueuePartitions(1000)), "nothing should be unloaded yet")
 
-	// signal again but tq2 doesn't belong to us anymore
-	s.mockServiceResolver.EXPECT().Lookup(tq1.routingKey()).Return(self, nil)
-	s.mockServiceResolver.EXPECT().Lookup(tq2.routingKey()).Return(other, nil).Times(2)
+	// signal again but p2 doesn't belong to us anymore
+	s.mockServiceResolver.EXPECT().Lookup(p1.RoutingKey()).Return(self, nil)
+	s.mockServiceResolver.EXPECT().Lookup(p2.RoutingKey()).Return(other, nil).Times(2)
 	e.membershipChangedCh <- nil
 	s.Eventually(func() bool {
-		return len(e.getTaskQueues(1000)) == 1
-	}, 100*time.Millisecond, 10*time.Millisecond, "tq2 should have been unloaded")
+		return len(e.getTaskQueuePartitions(1000)) == 1
+	}, 100*time.Millisecond, 10*time.Millisecond, "p2 should have been unloaded")
 
-	isLoaded := func(tq *taskQueueID) bool {
-		tqm, err := e.getTaskQueueManager(context.Background(), tq, normalStickyInfo, false)
+	isLoaded := func(p tqid.Partition) bool {
+		tqm, err := e.getTaskQueuePartitionManager(context.Background(), p, false)
 		s.NoError(err)
 		return tqm != nil
 	}
-	s.True(isLoaded(tq1))
-	s.False(isLoaded(tq2))
+	s.True(isLoaded(p1))
+	s.False(isLoaded(p2))
 }
 
 func (s *matchingEngineSuite) TaskQueueMetricValidator(capture *metricstest.Capture, familyCounterLength int, familyCounter float64, queueCounterLength int, queueCounter float64, queuePartitionCounterLength int, queuePartitionCounter float64) {
@@ -3058,6 +3067,7 @@ func (m *testTaskManager) GetTasks(
 	_ context.Context,
 	request *persistence.GetTasksRequest,
 ) (*persistence.GetTasksResponse, error) {
+	fmt.Printf("shahab> gettasks called\n")
 	m.logger.Debug("testTaskManager.GetTasks", tag.MinLevel(request.InclusiveMinTaskID), tag.MaxLevel(request.ExclusiveMaxTaskID))
 
 	dbq, err := ParsePhysicalTaskQueueKey(request.TaskQueue, request.NamespaceID, request.TaskType)

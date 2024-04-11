@@ -261,9 +261,6 @@ func newTaskQueueConfig(tq *tqid.TaskQueue, config *Config, ns namespace.Name) *
 		},
 		QueryPollerUnavailableWindow: config.QueryPollerUnavailableWindow,
 		TestDisableSyncMatch:         config.TestDisableSyncMatch,
-		LoadUserData: func() bool {
-			return config.LoadUserData(namespace.String(), taskQueueName, taskType)
-		},
 		LongPollExpirationInterval: func() time.Duration {
 			return config.LongPollExpirationInterval(ns.String(), taskQueueName, taskType)
 		},

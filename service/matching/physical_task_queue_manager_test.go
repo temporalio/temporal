@@ -117,7 +117,7 @@ func TestSyncMatchLeasingUnavailable(t *testing.T) {
 }
 
 func TestForeignPartitionOwnerCausesUnload(t *testing.T) {
-	cfg := NewConfig(dynamicconfig.NewNoopCollection(), false, false)
+	cfg := NewConfig(dynamicconfig.NewNoopCollection())
 	cfg.RangeSize = 1 // TaskID block size
 	var leaseErr error
 	tqm := mustCreateTestPhysicalTaskQueueManager(t, gomock.NewController(t),
@@ -341,7 +341,7 @@ func TestCheckIdleTaskQueue(t *testing.T) {
 	controller := gomock.NewController(t)
 	defer controller.Finish()
 
-	cfg := NewConfig(dynamicconfig.NewNoopCollection(), false, false)
+	cfg := NewConfig(dynamicconfig.NewNoopCollection())
 	cfg.MaxTaskQueueIdleTime = dynamicconfig.GetDurationPropertyFnFilteredByTaskQueueInfo(2 * time.Second)
 	tqCfg := defaultTqmTestOpts(controller)
 	tqCfg.config = cfg
@@ -426,7 +426,7 @@ func TestTQMDoesFinalUpdateOnIdleUnload(t *testing.T) {
 
 	controller := gomock.NewController(t)
 
-	cfg := NewConfig(dynamicconfig.NewNoopCollection(), false, false)
+	cfg := NewConfig(dynamicconfig.NewNoopCollection())
 	cfg.MaxTaskQueueIdleTime = dynamicconfig.GetDurationPropertyFnFilteredByTaskQueueInfo(1 * time.Second)
 	tqCfg := defaultTqmTestOpts(controller)
 	tqCfg.config = cfg
@@ -445,7 +445,7 @@ func TestTQMDoesNotDoFinalUpdateOnOwnershipLost(t *testing.T) {
 
 	controller := gomock.NewController(t)
 
-	cfg := NewConfig(dynamicconfig.NewNoopCollection(), false, false)
+	cfg := NewConfig(dynamicconfig.NewNoopCollection())
 	cfg.UpdateAckInterval = dynamicconfig.GetDurationPropertyFnFilteredByTaskQueueInfo(2 * time.Second)
 	tqCfg := defaultTqmTestOpts(controller)
 	tqCfg.config = cfg

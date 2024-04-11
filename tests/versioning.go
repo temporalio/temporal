@@ -3351,7 +3351,7 @@ func (s *VersioningIntegSuite) TestDescribeTaskQueueEnhanced_Unversioned() {
 		s.NoError(err)
 		s.NotNil(resp)
 		s.Assert().Equal(1, len(resp.GetVersionsInfo()), "should be 1 because only default/unversioned queue")
-		versionInfo := resp.GetVersionsInfo()[0]
+		versionInfo := resp.GetVersionsInfo()[""]
 		s.Assert().Equal(enumspb.BUILD_ID_TASK_REACHABILITY_REACHABLE, versionInfo.GetTaskReachability())
 		var pollersInfo []*taskqueuepb.PollerInfo
 		for _, t := range versionInfo.GetTypesInfo() {
@@ -3835,9 +3835,9 @@ func (s *VersioningIntegSuite) getBuildIdReachability(
 	})
 	s.NoError(err)
 	s.NotNil(resp)
-	for _, vi := range resp.GetVersionsInfo() {
-		expected, ok := expectedReachability[vi.GetBuildId()]
-		s.Assert().True(ok, "build id %s was not expected", vi.GetBuildId())
+	for buildId, vi := range resp.GetVersionsInfo() {
+		expected, ok := expectedReachability[buildId]
+		s.Assert().True(ok, "build id %s was not expected", buildId)
 		s.Assert().Equal(expected, vi.GetTaskReachability())
 	}
 }

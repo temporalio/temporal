@@ -36,7 +36,6 @@ import (
 	"time"
 
 	"github.com/pborman/uuid"
-	"google.golang.org/protobuf/types/known/emptypb"
 	"google.golang.org/protobuf/types/known/timestamppb"
 
 	commonpb "go.temporal.io/api/common/v1"
@@ -45,14 +44,10 @@ import (
 	"go.temporal.io/api/serviceerror"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	"go.temporal.io/api/workflowservice/v1"
-	"google.golang.org/protobuf/types/known/timestamppb"
 
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/api/matchingservice/v1"
-	taskqueuespb "go.temporal.io/server/api/taskqueue/v1"
-
-	enumsspb "go.temporal.io/server/api/enums/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	replicationspb "go.temporal.io/server/api/replication/v1"
 	taskqueuespb "go.temporal.io/server/api/taskqueue/v1"
@@ -141,9 +136,9 @@ type (
 		visibilityManager     manager.VisibilityManager
 		incomingServiceClient *nexusIncomingServiceClient
 		metricsHandler        metrics.Handler
-		partitionsLock       sync.RWMutex // locks mutation of partitions
-		partitions           map[tqid.PartitionKey]taskQueuePartitionManager
-		gaugeMetrics         gaugeMetrics // per-namespace task queue counters
+		partitionsLock        sync.RWMutex // locks mutation of partitions
+		partitions            map[tqid.PartitionKey]taskQueuePartitionManager
+		gaugeMetrics          gaugeMetrics // per-namespace task queue counters
 		config                *Config
 		// queryResults maps query TaskID (which is a UUID generated in QueryWorkflow() call) to a channel
 		// that QueryWorkflow() will block on. The channel is unblocked either by worker sending response through
@@ -259,7 +254,7 @@ func (e *matchingEngineImpl) Stop() {
 	_ = e.serviceResolver.RemoveListener(e.listenerKey())
 	close(e.membershipChangedCh)
 
-	for _, l := range e.getTaskQueues(math.MaxInt32) {
+	for _, l := range e.getTaskQueuePartitions(math.MaxInt32) {
 		l.Stop()
 	}
 }
@@ -277,47 +272,47 @@ func (e *matchingEngineImpl) watchMembership() {
 			continue
 		}
 
-		// Check all our loaded task queues to see if we lost ownership of any of them.
-		e.taskQueuesLock.RLock()
-		ids := make([]*taskQueueID, 0, len(e.taskQueues))
-		for id := range e.taskQueues {
-			ids = append(ids, util.Ptr(id))
+		// Check all our loaded partitions to see if we lost ownership of any of them.
+		e.partitionsLock.RLock()
+		partitions := make([]tqid.Partition, 0, len(e.partitions))
+		for _, pm := range e.partitions {
+			partitions = append(partitions, pm.Partition())
 		}
-		e.taskQueuesLock.RUnlock()
+		e.partitionsLock.RUnlock()
 
-		ids = util.FilterSlice(ids, func(id *taskQueueID) bool {
-			owner, err := e.serviceResolver.Lookup(id.routingKey())
+		partitions = util.FilterSlice(partitions, func(p tqid.Partition) bool {
+			owner, err := e.serviceResolver.Lookup(p.RoutingKey())
 			return err == nil && owner.Identity() != self
 		})
 
 		const batchSize = 100
-		for i := 0; i < len(ids); i += batchSize {
+		for i := 0; i < len(partitions); i += batchSize {
 			// We don't own these anymore, but don't unload them immediately, wait a few seconds to ensure
 			// the membership update has propagated everywhere so that they won't get immediately re-loaded.
 			// Note that we don't verify ownership at load time, so this is the only guard against a task
 			// queue bouncing back and forth due to long membership propagation time.
-			batch := ids[i:min(len(ids), i+batchSize)]
+			batch := partitions[i:min(len(partitions), i+batchSize)]
 			wait := backoff.Jitter(delay, 0.1)
 			time.AfterFunc(wait, func() {
 				// maybe the whole engine stopped
 				if atomic.LoadInt32(&e.status) != common.DaemonStatusStarted {
 					return
 				}
-				for _, id := range batch {
+				for _, p := range batch {
 					// maybe ownership changed again
-					owner, err := e.serviceResolver.Lookup(id.routingKey())
+					owner, err := e.serviceResolver.Lookup(p.RoutingKey())
 					if err != nil || owner.Identity() == self {
 						return
 					}
 					// now we can unload
-					e.unloadTaskQueueById(id, nil)
+					e.unloadTaskQueuePartitionByKey(p, nil)
 				}
 			})
 		}
 	}
 }
 
-func (e *matchingEngineImpl) getTaskQueues(maxCount int) (lists []taskQueueManager) {
+func (e *matchingEngineImpl) getTaskQueuePartitions(maxCount int) (lists []taskQueuePartitionManager) {
 	e.partitionsLock.RLock()
 	defer e.partitionsLock.RUnlock()
 	lists = make([]taskQueuePartitionManager, 0, len(e.partitions))
@@ -335,7 +330,7 @@ func (e *matchingEngineImpl) getTaskQueues(maxCount int) (lists []taskQueueManag
 func (e *matchingEngineImpl) String() string {
 	// Executes taskQueue.String() on each task queue outside of lock
 	buf := new(bytes.Buffer)
-	for _, l := range e.getTaskQueues(1000) {
+	for _, l := range e.getTaskQueuePartitions(1000) {
 		fmt.Fprintf(buf, "\n%s", l.String())
 	}
 	return buf.String()
@@ -826,13 +821,13 @@ func (e *matchingEngineImpl) QueryWorkflow(
 		}
 	case <-ctx.Done():
 		// task timed out. log (optionally) and return the timeout error
-		ns, err := e.namespaceRegistry.GetNamespaceByID(namespaceID)
+		ns, err := e.namespaceRegistry.GetNamespaceByID(partition.NamespaceId())
 		if err != nil {
 			e.logger.Error("Failed to get the namespace by ID",
-				tag.WorkflowNamespaceID(string(namespaceID)),
+				tag.WorkflowNamespaceID(partition.NamespaceId().String()),
 				tag.Error(err))
 		} else {
-			sampleRate := e.config.QueryWorkflowTaskTimeoutLogRate(ns.Name().String(), taskQueueName, enumspb.TASK_QUEUE_TYPE_WORKFLOW)
+			sampleRate := e.config.QueryWorkflowTaskTimeoutLogRate(ns.Name().String(), partition.TaskQueue().Name(), enumspb.TASK_QUEUE_TYPE_WORKFLOW)
 			if rand.Float64() < sampleRate {
 				e.logger.Info("Workflow Query Task timed out",
 					tag.WorkflowNamespaceID(ns.ID().String()),
@@ -840,7 +835,7 @@ func (e *matchingEngineImpl) QueryWorkflow(
 					tag.WorkflowID(queryRequest.GetQueryRequest().GetExecution().GetWorkflowId()),
 					tag.WorkflowRunID(queryRequest.GetQueryRequest().GetExecution().GetRunId()),
 					tag.WorkflowTaskRequestId(taskID),
-					tag.WorkflowTaskQueueName(taskQueueName))
+					tag.WorkflowTaskQueueName(partition.TaskQueue().Name()))
 			}
 		}
 		return nil, ctx.Err()
@@ -926,7 +921,7 @@ func (e *matchingEngineImpl) DescribeTaskQueue(
 						physicalInfoByBuildId[buildId][taskQueueType] = vii.PhysicalTaskQueueInfo
 					} else {
 						merged := &taskqueuespb.PhysicalTaskQueueInfo{
-							Pollers:     append(physInfo.GetPollers(), vii.PhysicalTaskQueueInfo.GetPollers()...),
+							Pollers: append(physInfo.GetPollers(), vii.PhysicalTaskQueueInfo.GetPollers()...),
 						}
 						physicalInfoByBuildId[buildId][taskQueueType] = merged
 					}
@@ -1500,7 +1495,7 @@ func (e *matchingEngineImpl) ForceUnloadTaskQueue(
 	if err != nil {
 		return nil, err
 	}
-	wasLoaded := e.unloadTaskQueuePartitionById(taskQueue, nil)
+	wasLoaded := e.unloadTaskQueuePartitionByKey(p, nil)
 	return &matchingservice.ForceUnloadTaskQueueResponse{WasLoaded: wasLoaded}, nil
 }
 
@@ -1551,29 +1546,17 @@ type nexusResult struct {
 }
 
 func (e *matchingEngineImpl) DispatchNexusTask(ctx context.Context, request *matchingservice.DispatchNexusTaskRequest) (*matchingservice.DispatchNexusTaskResponse, error) {
-	namespaceID := namespace.ID(request.GetNamespaceId())
-	taskQueueName := request.TaskQueue.GetName()
-
-	origTaskQueue, err := newTaskQueueID(namespaceID, taskQueueName, enumspb.TASK_QUEUE_TYPE_NEXUS)
+	partition, err := tqid.PartitionFromProto(request.GetTaskQueue(), request.GetNamespaceId(), enumspb.TASK_QUEUE_TYPE_NEXUS)
 	if err != nil {
 		return nil, err
 	}
-
-	baseTqm, err := e.getTaskQueueManager(ctx, origTaskQueue, normalStickyInfo, true)
+	pm, err := e.getTaskQueuePartitionManager(ctx, partition, true)
 	if err != nil {
 		return nil, err
-	}
-	tqm, _, err := baseTqm.RedirectToVersionedQueueForAdd(ctx, &taskqueuespb.TaskVersionDirective{
-		Value: &taskqueuespb.TaskVersionDirective_UseDefault{UseDefault: &emptypb.Empty{}},
-	})
-	if err != nil {
-		return nil, err
-	} else if tqm.QueueID().VersionSet() == dlqVersionSet {
-		return nil, serviceerror.NewFailedPrecondition("versioning is disabled")
 	}
 
 	taskID := uuid.New()
-	resp, err := tqm.DispatchNexusTask(ctx, taskID, request)
+	resp, err := pm.DispatchNexusTask(ctx, taskID, request)
 
 	// if we get a response or error it means that the Nexus task was handled by forwarding to another matching host
 	// this remote host's result can be returned directly
@@ -1622,20 +1605,19 @@ pollLoop:
 		if err != nil {
 			return nil, err
 		}
-
-		taskQueue, err := newTaskQueueID(namespaceID, taskQueueName, enumspb.TASK_QUEUE_TYPE_NEXUS)
-		if err != nil {
-			return nil, err
-		}
-
 		// Add frontend generated pollerID to context so taskqueueMgr can support cancellation of
 		// long-poll when frontend calls CancelOutstandingPoll API
 		pollerCtx := context.WithValue(ctx, pollerIDKey, pollerID)
 		pollerCtx = context.WithValue(pollerCtx, identityKey, request.GetIdentity())
+		partition, err := tqid.PartitionFromProto(request.TaskQueue, req.NamespaceId, enumspb.TASK_QUEUE_TYPE_NEXUS)
+		if err != nil {
+			return nil, err
+		}
 		pollMetadata := &pollMetadata{
 			workerVersionCapabilities: request.WorkerVersionCapabilities,
+			forwardedFrom:             req.GetForwardedSource(),
 		}
-		task, err := e.pollTask(pollerCtx, taskQueue, normalStickyInfo, pollMetadata)
+		task, _, err := e.pollTask(pollerCtx, partition, pollMetadata)
 		if err != nil {
 			if errors.Is(err, errNoTasks) {
 				return &matchingservice.PollNexusTaskQueueResponse{}, nil
@@ -1830,17 +1812,19 @@ func (e *matchingEngineImpl) pollTask(
 // Unloads the given task queue partition. If it has already been unloaded (i.e. it's not present in the loaded
 // partitions map), then does nothing.
 func (e *matchingEngineImpl) unloadTaskQueuePartition(unloadPM taskQueuePartitionManager) {
-	e.unloadTaskQueuePartitionById(unloadPM.QueueID(), unloadPM)
+	e.unloadTaskQueuePartitionByKey(unloadPM.Partition(), unloadPM)
 }
 
 // Unloads a task queue partition by id. If unloadPM is given and the loaded partition for queueID does not match
-// unloadPM, then nothing is unloaded. Returns true if it unloaded a partition and false if not.
-func (e *matchingEngineImpl) unloadTaskQueuePartitionById(queueID *taskQueueID, unloadPM taskQueuePartitionManager) bool {
-	key := unloadPM.Partition().Key()
+// unloadPM, then nothing is unloaded from matching engine (but unloadPM will be stopped).
+// Returns true if it unloaded a partition and false if not.
+func (e *matchingEngineImpl) unloadTaskQueuePartitionByKey(partition tqid.Partition, unloadPM taskQueuePartitionManager) bool {
+	key := partition.Key()
 	e.partitionsLock.Lock()
 	foundTQM, ok := e.partitions[key]
 	if !ok || (unloadPM != nil && foundTQM != unloadPM) {
 		e.partitionsLock.Unlock()
+		unloadPM.Stop()
 		return false
 	}
 	delete(e.partitions, key)

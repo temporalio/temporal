@@ -3494,8 +3494,7 @@ func (wh *WorkflowHandler) UpdateWorkerVersioningRules(ctx context.Context, requ
 	}
 
 	taskQueue := &taskqueuepb.TaskQueue{Name: request.GetTaskQueue(), Kind: enumspb.TASK_QUEUE_KIND_NORMAL}
-	namespaceName := namespace.Name(request.GetNamespace())
-	if err := wh.validateTaskQueue(taskQueue, namespaceName); err != nil {
+	if err := wh.validateTaskQueue(taskQueue); err != nil {
 		return nil, err
 	}
 
@@ -3531,8 +3530,7 @@ func (wh *WorkflowHandler) GetWorkerVersioningRules(ctx context.Context, request
 	}
 
 	taskQueue := &taskqueuepb.TaskQueue{Name: request.GetTaskQueue(), Kind: enumspb.TASK_QUEUE_KIND_NORMAL}
-	namespaceName := namespace.Name(request.GetNamespace())
-	if err := wh.validateTaskQueue(taskQueue, namespaceName); err != nil {
+	if err := wh.validateTaskQueue(taskQueue); err != nil {
 		return nil, err
 	}
 
@@ -3557,14 +3555,6 @@ func (wh *WorkflowHandler) GetWorkerVersioningRules(ctx context.Context, request
 	}
 
 	return matchingResponse.Response, err
-}
-
-func (wh *WorkflowHandler) UpdateWorkerVersioningRules(ctx context.Context, request *workflowservice.UpdateWorkerVersioningRulesRequest) (_ *workflowservice.UpdateWorkerVersioningRulesResponse, retError error) {
-	return nil, serviceerror.NewUnimplemented("not implemented")
-}
-
-func (wh *WorkflowHandler) GetWorkerVersioningRules(ctx context.Context, request *workflowservice.GetWorkerVersioningRulesRequest) (_ *workflowservice.GetWorkerVersioningRulesResponse, retError error) {
-	return nil, serviceerror.NewUnimplemented("not implemented")
 }
 
 func (wh *WorkflowHandler) GetWorkerTaskReachability(ctx context.Context, request *workflowservice.GetWorkerTaskReachabilityRequest) (_ *workflowservice.GetWorkerTaskReachabilityResponse, retError error) {

@@ -210,12 +210,8 @@ func (fwdr *Forwarder) ForwardQueryTask(
 
 // ForwardNexusTask forwards a nexus task to parent task queue partition, if it exists.
 func (fwdr *Forwarder) ForwardNexusTask(ctx context.Context, task *internalTask) (*matchingservice.DispatchNexusTaskResponse, error) {
-	if fwdr.taskQueueKind == enumspb.TASK_QUEUE_KIND_STICKY {
-		return nil, errTaskQueueKind
-	}
-
 	degree := fwdr.cfg.ForwarderMaxChildrenPerNode()
-	target, err := fwdr.taskQueueID.Parent(degree)
+	target, err := fwdr.partition.ParentPartition(degree)
 	if err != nil {
 		return nil, err
 	}
@@ -223,11 +219,11 @@ func (fwdr *Forwarder) ForwardNexusTask(ctx context.Context, task *internalTask)
 	resp, err := fwdr.client.DispatchNexusTask(ctx, &matchingservice.DispatchNexusTaskRequest{
 		NamespaceId: task.nexus.request.GetNamespaceId(),
 		TaskQueue: &taskqueuepb.TaskQueue{
-			Name: target.FullName(),
-			Kind: fwdr.taskQueueKind,
+			Name: target.RpcName(),
+			Kind: fwdr.partition.Kind(),
 		},
 		Request:         task.nexus.request.Request,
-		ForwardedSource: fwdr.taskQueueID.FullName(),
+		ForwardedSource: fwdr.partition.RpcName(),
 	})
 
 	return resp, fwdr.handleErr(err)

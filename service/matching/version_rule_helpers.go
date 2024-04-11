@@ -27,6 +27,7 @@ package matching
 import (
 	"fmt"
 	"math"
+	"math/rand"
 	"slices"
 	"time"
 
@@ -552,6 +553,8 @@ func getSourcesForTarget(buildId string, redirectRules []*persistencespb.Redirec
 	return sources
 }
 
+// FindAssignmentBuildId finds a build ID for the given runId based on the given rules.
+// Non-empty runId is deterministically mapped to a ramp threshold, while empty runId is mapped randomly each time.
 func FindAssignmentBuildId(rules []*persistencespb.AssignmentRule, runId string) string {
 	rampThreshold := -1.
 	for _, r := range rules {
@@ -573,6 +576,9 @@ func FindAssignmentBuildId(rules []*persistencespb.AssignmentRule, runId string)
 
 // calcRampThreshold returns a number in [0, 100) that is deterministically calculated based on the passed id
 func calcRampThreshold(id string) float64 {
+	if id == "" {
+		return rand.Float64()
+	}
 	h := farm.Fingerprint32([]byte(id))
 	return 100 * (float64(h) / (float64(math.MaxUint32) + 1))
 }

@@ -103,6 +103,20 @@ func (c *metricClient) DescribeTaskQueue(
 	return c.client.DescribeTaskQueue(ctx, request, opts...)
 }
 
+func (c *metricClient) DescribeTaskQueuePartition(
+	ctx context.Context,
+	request *matchingservice.DescribeTaskQueuePartitionRequest,
+	opts ...grpc.CallOption,
+) (_ *matchingservice.DescribeTaskQueuePartitionResponse, retError error) {
+
+	metricsHandler, startTime := c.startMetricsRecording(ctx, "MatchingClientDescribeTaskQueuePartition")
+	defer func() {
+		c.finishMetricsRecording(metricsHandler, startTime, retError)
+	}()
+
+	return c.client.DescribeTaskQueuePartition(ctx, request, opts...)
+}
+
 func (c *metricClient) DispatchNexusTask(
 	ctx context.Context,
 	request *matchingservice.DispatchNexusTaskRequest,
@@ -171,6 +185,20 @@ func (c *metricClient) GetWorkerBuildIdCompatibility(
 	}()
 
 	return c.client.GetWorkerBuildIdCompatibility(ctx, request, opts...)
+}
+
+func (c *metricClient) GetWorkerVersioningRules(
+	ctx context.Context,
+	request *matchingservice.GetWorkerVersioningRulesRequest,
+	opts ...grpc.CallOption,
+) (_ *matchingservice.GetWorkerVersioningRulesResponse, retError error) {
+
+	metricsHandler, startTime := c.startMetricsRecording(ctx, "MatchingClientGetWorkerVersioningRules")
+	defer func() {
+		c.finishMetricsRecording(metricsHandler, startTime, retError)
+	}()
+
+	return c.client.GetWorkerVersioningRules(ctx, request, opts...)
 }
 
 func (c *metricClient) ListNexusIncomingServices(
@@ -311,4 +339,18 @@ func (c *metricClient) UpdateWorkerBuildIdCompatibility(
 	}()
 
 	return c.client.UpdateWorkerBuildIdCompatibility(ctx, request, opts...)
+}
+
+func (c *metricClient) UpdateWorkerVersioningRules(
+	ctx context.Context,
+	request *matchingservice.UpdateWorkerVersioningRulesRequest,
+	opts ...grpc.CallOption,
+) (_ *matchingservice.UpdateWorkerVersioningRulesResponse, retError error) {
+
+	metricsHandler, startTime := c.startMetricsRecording(ctx, "MatchingClientUpdateWorkerVersioningRules")
+	defer func() {
+		c.finishMetricsRecording(metricsHandler, startTime, retError)
+	}()
+
+	return c.client.UpdateWorkerVersioningRules(ctx, request, opts...)
 }

@@ -261,8 +261,8 @@ func makeGetMatchingClient(reqType reflect.Type) string {
 		"UpdateNexusIncomingServiceRequest",
 		"ListNexusIncomingServicesRequest",
 		"DeleteNexusIncomingServiceRequest":
-		// Always route these requests to the same matching node by namespace.
-		tq = fieldWithPath{path: "&taskqueuepb.TaskQueue{Name: \"not-applicable\"}"}
+		// Always route these requests to the same matching node for all namespaces.
+		tq = fieldWithPath{path: "\"not-applicable\""}
 		tqt = fieldWithPath{path: "enumspb.TASK_QUEUE_TYPE_UNSPECIFIED"}
 		nsID = fieldWithPath{path: `"not-applicable"`}
 	default:

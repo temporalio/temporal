@@ -219,13 +219,10 @@ func (c *clientImpl) createLongPollContext(parent context.Context) (context.Cont
 	return context.WithTimeout(parent, c.longPollTimeout)
 }
 
-func (c *clientImpl) getClientForTaskqueue(
-	namespaceID string,
-	taskQueue *taskqueuepb.TaskQueue,
-	taskQueueType enumspb.TaskQueueType,
+func (c *clientImpl) getClientForTaskQueuePartition(
+	partition tqid.Partition,
 ) (matchingservice.MatchingServiceClient, error) {
-	key := common.TaskQueueRoutingKey(namespaceID, taskQueue.Name, taskQueueType)
-	client, err := c.clients.GetClientForKey(key)
+	client, err := c.clients.GetClientForKey(partition.RoutingKey())
 	if err != nil {
 		return nil, err
 	}
