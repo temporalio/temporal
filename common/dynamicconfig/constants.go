@@ -73,8 +73,6 @@ const (
 	TransactionSizeLimit = "system.transactionSizeLimit"
 	// DisallowQuery is the key to disallow query for a namespace
 	DisallowQuery = "system.disallowQuery"
-	// EnableAuthorization is the key to enable authorization for a namespace
-	EnableAuthorization = "system.enableAuthorization"
 	// EnableCrossNamespaceCommands is the key to enable commands for external namespaces
 	EnableCrossNamespaceCommands = "system.enableCrossNamespaceCommands"
 	// ClusterMetadataRefreshInterval is config to manage cluster metadata table refresh interval
@@ -762,8 +760,6 @@ const (
 	OutboundProcessorMaxPollRPS = "history.outboundProcessorMaxPollRPS"
 	// OutboundProcessorMaxPollHostRPS is max poll rate per second for all outboundQueueFactory on a host
 	OutboundProcessorMaxPollHostRPS = "history.outboundProcessorMaxPollHostRPS"
-	// OutboundProcessorUpdateShardTaskCount is update shard count for outboundQueueFactory
-	OutboundProcessorUpdateShardTaskCount = "history.outboundProcessorUpdateShardTaskCount"
 	// OutboundProcessorMaxPollInterval max poll interval for outboundQueueFactory
 	OutboundProcessorMaxPollInterval = "history.outboundProcessorMaxPollInterval"
 	// OutboundProcessorMaxPollIntervalJitterCoefficient is the max poll interval jitter coefficient
@@ -931,8 +927,6 @@ const (
 	ReplicationTaskProcessorCleanupInterval = "history.ReplicationTaskProcessorCleanupInterval"
 	// ReplicationTaskProcessorCleanupJitterCoefficient is the jitter for cleanup timer
 	ReplicationTaskProcessorCleanupJitterCoefficient = "history.ReplicationTaskProcessorCleanupJitterCoefficient"
-	// ReplicationTaskProcessorStartWait is the wait time before each task processing batch
-	ReplicationTaskProcessorStartWait = "history.ReplicationTaskProcessorStartWait"
 	// ReplicationTaskProcessorHostQPS is the qps of task processing rate limiter on host level
 	ReplicationTaskProcessorHostQPS = "history.ReplicationTaskProcessorHostQPS"
 	// ReplicationTaskProcessorShardQPS is the qps of task processing rate limiter on shard level
@@ -956,8 +950,6 @@ const (
 
 	// ReplicationStreamSyncStatusDuration sync replication status duration
 	ReplicationStreamSyncStatusDuration = "history.ReplicationStreamSyncStatusDuration"
-	// ReplicationStreamMinReconnectDuration minimal replication stream reconnection duration
-	ReplicationStreamMinReconnectDuration = "history.ReplicationStreamMinReconnectDuration"
 	// ReplicationProcessorSchedulerQueueSize is the replication task executor queue size
 	ReplicationProcessorSchedulerQueueSize = "history.ReplicationProcessorSchedulerQueueSize"
 	// ReplicationProcessorSchedulerWorkerCount is the replication task executor worker count
