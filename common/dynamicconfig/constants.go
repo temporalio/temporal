@@ -219,7 +219,7 @@ const (
 	// GetWorkerTaskReachability query.
 	ReachabilityTaskQueueScanLimit = "limit.reachabilityTaskQueueScan"
 	// ReachabilityQueryBuildIdLimit limits the number of build ids that can be requested in a single call to the
-	// GetWorkerTaskReachability API.
+	// DescribeTaskQueue API with ReportTaskQueueReachability==true, or to the GetWorkerTaskReachability API.
 	ReachabilityQueryBuildIdLimit = "limit.reachabilityQueryBuildIds"
 	// ReachabilityQuerySetDurationSinceDefault is the minimum period since a version set was demoted from being the
 	// queue default before it is considered unreachable by new workflows.
