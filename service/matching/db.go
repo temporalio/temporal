@@ -27,10 +27,11 @@ package matching
 import (
 	"context"
 	"fmt"
-	"go.temporal.io/server/common/metrics"
 	"sync"
 	"sync/atomic"
 	"time"
+
+	"go.temporal.io/server/common/metrics"
 
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
