@@ -155,7 +155,7 @@ func AddCompatibleRedirectRule(timestamp *hlc.Clock,
 	target := rule.GetTargetBuildId()
 	if target == unversionedBuildId {
 		return nil, serviceerror.NewInvalidArgument(
-			"the unversioned build id '' cannot be the target of a redirect rule")
+			fmt.Sprintf("the unversioned build id '%s' cannot be the target of a redirect rule", unversionedBuildId))
 	}
 	if isInVersionSets(source, data.GetVersionSets()) {
 		return nil, serviceerror.NewFailedPrecondition(
@@ -197,7 +197,7 @@ func ReplaceCompatibleRedirectRule(timestamp *hlc.Clock,
 	target := rule.GetTargetBuildId()
 	if target == unversionedBuildId {
 		return nil, serviceerror.NewInvalidArgument(
-			"the unversioned build id '' cannot be the target of a redirect rule")
+			fmt.Sprintf("the unversioned build id '%s' cannot be the target of a redirect rule", unversionedBuildId))
 	}
 	if isInVersionSets(source, data.GetVersionSets()) {
 		return nil, serviceerror.NewFailedPrecondition(
