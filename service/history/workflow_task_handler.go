@@ -449,7 +449,7 @@ func (handler *workflowTaskHandlerImpl) handleCommandScheduleActivity(
 	// or 2. workflow uses versioning and activity intends to use a compatible version (since a
 	// worker is obviously compatible with itself and we are okay dispatching an eager task knowing that there may be a
 	// newer "default" compatible version).
-	// Note that if `UseCompatibleVersion` is false, it implies that the activity should run on the "default" version
+	// Note that if `UseWorkflowBuildId` is false, it implies that the activity should run on the "default" version
 	// for the task queue.
 	eagerStartActivity := attr.RequestEagerExecution && handler.config.EnableActivityEagerExecution(namespace) &&
 		(!handler.mutableState.GetWorkerVersionStamp().GetUseVersioning() || attr.UseWorkflowBuildId)
