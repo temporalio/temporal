@@ -227,10 +227,14 @@ func (s *matchingEngineSuite) TestAckManager() {
 	const t6 = 380
 
 	m.addTask(t1)
+	// Incrementing the backlog as otherwise we would get an error that it is under-counting;
+	// this happens since we decrease the counter on completion of a task
+	backlogMgr.db.updateApproximateBacklogCount(1)
 	s.EqualValues(100, m.getAckLevel())
 	s.EqualValues(t1, m.getReadLevel())
 
 	m.addTask(t2)
+	backlogMgr.db.updateApproximateBacklogCount(1)
 	s.EqualValues(100, m.getAckLevel())
 	s.EqualValues(t2, m.getReadLevel())
 
@@ -247,10 +251,12 @@ func (s *matchingEngineSuite) TestAckManager() {
 	s.EqualValues(300, m.getReadLevel())
 
 	m.addTask(t3)
+	backlogMgr.db.updateApproximateBacklogCount(1)
 	s.EqualValues(300, m.getAckLevel())
 	s.EqualValues(t3, m.getReadLevel())
 
 	m.addTask(t4)
+	backlogMgr.db.updateApproximateBacklogCount(1)
 	s.EqualValues(300, m.getAckLevel())
 	s.EqualValues(t4, m.getReadLevel())
 
