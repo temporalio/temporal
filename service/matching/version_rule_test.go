@@ -41,8 +41,6 @@ import (
 	"google.golang.org/protobuf/proto"
 )
 
-// todo: test errInvalidNegativeIndex, errInvalidRampPercentage, errAssignmentRuleIndexOutOfBounds
-
 const (
 	ignoreMaxRules = 1000
 	ignoreMaxChain = 1000
@@ -296,6 +294,38 @@ func TestInsertAssignmentRuleRampedRuleIsRedirectSource(t *testing.T) {
 	assert.Equal(t, errRampedAssignmentRuleIsRedirectRuleSource, err)
 }
 
+func TestInsertAssignmentRuleInvalidNegativeIndex(t *testing.T) {
+	t.Parallel()
+	clock := hlc.Zero(1)
+	data := mkInitialData(0, clock)
+
+	// insert @ -1 --> failure
+	_, err := insertAssignmentRule(mkAssignmentRule("0", nil), data, clock, -1, ignoreMaxRules)
+	assert.Error(t, err)
+	assert.Equal(t, errInvalidNegativeIndex, err)
+}
+
+func TestInsertAssignmentRuleInvalidRampPercentage(t *testing.T) {
+	t.Parallel()
+	clock := hlc.Zero(1)
+	data := mkInitialData(0, clock)
+
+	// insert with ramp percent < 0 --> failure
+	_, err := insertAssignmentRule(mkAssignmentRule("0", mkNewAssignmentPercentageRamp(-1)), data, clock, 0, ignoreMaxRules)
+	assert.Error(t, err)
+	assert.Equal(t, errInvalidRampPercentage, err)
+
+	// insert with ramp percent == 100 --> failure
+	_, err = insertAssignmentRule(mkAssignmentRule("0", mkNewAssignmentPercentageRamp(100)), data, clock, 0, ignoreMaxRules)
+	assert.Error(t, err)
+	assert.Equal(t, errInvalidRampPercentage, err)
+
+	// insert with ramp percent > 100 --> failure
+	_, err = insertAssignmentRule(mkAssignmentRule("0", mkNewAssignmentPercentageRamp(101)), data, clock, 0, ignoreMaxRules)
+	assert.Error(t, err)
+	assert.Equal(t, errInvalidRampPercentage, err)
+}
+
 func TestReplaceAssignmentRuleBasic(t *testing.T) {
 	t.Parallel()
 	clock := hlc.Zero(1)
@@ -411,6 +441,49 @@ func TestReplaceAssignmentRuleTestRequireUnconditional(t *testing.T) {
 	assert.NoError(t, err)
 }
 
+func TestReplaceAssignmentRuleIndexOutOfBounds(t *testing.T) {
+	t.Parallel()
+	clock := hlc.Zero(1)
+	data := mkInitialData(0, clock)
+	data.AssignmentRules = []*persistencepb.AssignmentRule{
+		mkAssignmentRulePersistence(mkAssignmentRule("1", nil), clock, nil),
+	}
+
+	// replace @ -1 --> failure
+	_, err := replaceAssignmentRule(mkAssignmentRule("0", nil), data, clock, -1, false)
+	assert.Error(t, err)
+	assert.Equal(t, errAssignmentRuleIndexOutOfBounds(-1, len(data.AssignmentRules)), err)
+
+	// replace @ 1 --> failure
+	_, err = replaceAssignmentRule(mkAssignmentRule("0", nil), data, clock, 1, false)
+	assert.Error(t, err)
+	assert.Equal(t, errAssignmentRuleIndexOutOfBounds(1, len(data.AssignmentRules)), err)
+}
+
+func TestReplaceAssignmentRuleInvalidRampPercentage(t *testing.T) {
+	t.Parallel()
+	clock := hlc.Zero(1)
+	data := mkInitialData(0, clock)
+	data.AssignmentRules = []*persistencepb.AssignmentRule{
+		mkAssignmentRulePersistence(mkAssignmentRule("1", nil), clock, nil),
+	}
+
+	// replace with ramp percent < 0 --> failure
+	_, err := replaceAssignmentRule(mkAssignmentRule("0", mkNewAssignmentPercentageRamp(-1)), data, clock, 0, false)
+	assert.Error(t, err)
+	assert.Equal(t, errInvalidRampPercentage, err)
+
+	// replace with ramp percent == 100 --> failure
+	_, err = replaceAssignmentRule(mkAssignmentRule("0", mkNewAssignmentPercentageRamp(100)), data, clock, 0, false)
+	assert.Error(t, err)
+	assert.Equal(t, errInvalidRampPercentage, err)
+
+	// replace with ramp percent > 100 --> failure
+	_, err = replaceAssignmentRule(mkAssignmentRule("0", mkNewAssignmentPercentageRamp(101)), data, clock, 0, false)
+	assert.Error(t, err)
+	assert.Equal(t, errInvalidRampPercentage, err)
+}
+
 func TestDeleteAssignmentRuleBasic(t *testing.T) {
 	t.Parallel()
 	clock := hlc.Zero(1)
@@ -482,6 +555,25 @@ func TestDeleteAssignmentRuleTestRequireUnconditional(t *testing.T) {
 	}
 	_, err = deleteAssignmentRule(data, clock, 0, false)
 	assert.NoError(t, err)
+}
+
+func TestDeleteAssignmentRuleIndexOutOfBounds(t *testing.T) {
+	t.Parallel()
+	clock := hlc.Zero(1)
+	data := mkInitialData(0, clock)
+	data.AssignmentRules = []*persistencepb.AssignmentRule{
+		mkAssignmentRulePersistence(mkAssignmentRule("1", nil), clock, nil),
+	}
+
+	// delete @ -1 --> failure
+	_, err := deleteAssignmentRule(data, clock, -1, false)
+	assert.Error(t, err)
+	assert.Equal(t, errAssignmentRuleIndexOutOfBounds(-1, len(data.AssignmentRules)), err)
+
+	// delete @ 1 --> failure
+	_, err = deleteAssignmentRule(data, clock, 1, false)
+	assert.Error(t, err)
+	assert.Equal(t, errAssignmentRuleIndexOutOfBounds(1, len(data.AssignmentRules)), err)
 }
 
 func TestInsertRedirectRuleBasic(t *testing.T) {
