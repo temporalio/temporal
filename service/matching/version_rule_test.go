@@ -647,6 +647,20 @@ func TestInsertRedirectRuleMaxChain(t *testing.T) {
 	assert.Error(t, err)
 }
 
+func TestInsertRedirectRuleUnversionedTarget(t *testing.T) {
+	t.Parallel()
+	clock := hlc.Zero(1)
+	data := mkInitialData(0, clock)
+
+	// insert (1->"") errors
+	_, err := insertRedirectRule(mkRedirectRule("1", ""), data, clock, ignoreMaxRules, ignoreMaxChain)
+	assert.Error(t, err)
+
+	// insert (""->1) succeeds
+	_, err = insertRedirectRule(mkRedirectRule("", "1"), data, clock, ignoreMaxRules, ignoreMaxChain)
+	assert.NoError(t, err)
+}
+
 func TestReplaceRedirectRuleBasic(t *testing.T) {
 	t.Parallel()
 	clock := hlc.Zero(1)
@@ -753,6 +767,20 @@ func TestReplaceRedirectRuleMaxChain(t *testing.T) {
 	// replace(2, new_target=4)
 	// 2 ---> 4 ---> 5 ---> 6
 	_, err = replaceRedirectRule(mkRedirectRule("2", "4"), data, clock, maxChain)
+	assert.Error(t, err)
+}
+
+func TestReplaceRedirectRuleUnversionedTarget(t *testing.T) {
+	t.Parallel()
+	clock := hlc.Zero(1)
+	data := mkInitialData(0, clock)
+
+	// insert (1->2) so that we can replace
+	data, err := insertRedirectRule(mkRedirectRule("1", "2"), data, clock, ignoreMaxRules, ignoreMaxChain)
+	assert.NoError(t, err)
+
+	// replace (1->"") errors
+	_, err = replaceRedirectRule(mkRedirectRule("1", ""), data, clock, ignoreMaxChain)
 	assert.Error(t, err)
 }
 

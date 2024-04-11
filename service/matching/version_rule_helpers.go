@@ -42,6 +42,10 @@ import (
 	"go.temporal.io/server/common/util"
 )
 
+const (
+	unversionedBuildId = ""
+)
+
 func cloneOrMkData(data *persistencespb.VersioningData) *persistencespb.VersioningData {
 	if data == nil {
 		return &persistencespb.VersioningData{
@@ -148,11 +152,15 @@ func AddCompatibleRedirectRule(timestamp *hlc.Clock,
 	data = cloneOrMkData(data)
 	rule := req.GetRule()
 	source := rule.GetSourceBuildId()
+	target := rule.GetTargetBuildId()
+	if target == unversionedBuildId {
+		return nil, serviceerror.NewInvalidArgument(
+			"the unversioned build id '' cannot be the target of a redirect rule")
+	}
 	if isInVersionSets(source, data.GetVersionSets()) {
 		return nil, serviceerror.NewFailedPrecondition(
 			"update breaks requirement, resource build ID is already a member of a version set")
 	}
-	target := rule.GetTargetBuildId()
 	if isInVersionSets(target, data.GetVersionSets()) {
 		return nil, serviceerror.NewFailedPrecondition(
 			"update breaks requirement, target build ID is already a member of a version set")
@@ -186,11 +194,15 @@ func ReplaceCompatibleRedirectRule(timestamp *hlc.Clock,
 	data = cloneOrMkData(data)
 	rule := req.GetRule()
 	source := rule.GetSourceBuildId()
+	target := rule.GetTargetBuildId()
+	if target == unversionedBuildId {
+		return nil, serviceerror.NewInvalidArgument(
+			"the unversioned build id '' cannot be the target of a redirect rule")
+	}
 	if isInVersionSets(source, data.GetVersionSets()) {
 		return nil, serviceerror.NewFailedPrecondition(
 			"update breaks requirement, resource build ID is already a member of a version set")
 	}
-	target := rule.GetTargetBuildId()
 	if isInVersionSets(target, data.GetVersionSets()) {
 		return nil, serviceerror.NewFailedPrecondition(
 			"update breaks requirement, target build ID is already a member of a version set")
