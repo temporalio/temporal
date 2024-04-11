@@ -1328,6 +1328,12 @@ func (e *matchingEngineImpl) DispatchNexusTask(ctx context.Context, request *mat
 		return nil, serviceerror.NewFailedPrecondition("versioning is disabled")
 	}
 
+	if deadline, set := ctx.Deadline(); set {
+		// Update the Request-Timeout header to subtract processing time till now so the worker that receives this
+		// task knows how much time it has left to complete it.
+		request.Request.Header["Request-Timeout"] = time.Until(deadline).String()
+	}
+
 	taskID := uuid.New()
 	resp, err := tqm.DispatchNexusTask(ctx, taskID, request)
 
@@ -1337,8 +1343,8 @@ func (e *matchingEngineImpl) DispatchNexusTask(ctx context.Context, request *mat
 		return resp, err
 	}
 
-	// if we get here it means that dispatch of query task has occurred locally
-	// must wait on result channel to get query result
+	// if we get here it means that dispatch of Nexus task has occurred locally
+	// must wait on result channel to get Nexus result
 	resultCh := make(chan *nexusResult, 1)
 	e.nexusResults.Set(taskID, resultCh)
 	defer e.nexusResults.Delete(taskID)

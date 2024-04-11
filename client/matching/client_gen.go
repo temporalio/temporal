@@ -112,21 +112,6 @@ func (c *clientImpl) DescribeTaskQueue(
 	return client.DescribeTaskQueue(ctx, request, opts...)
 }
 
-func (c *clientImpl) DispatchNexusTask(
-	ctx context.Context,
-	request *matchingservice.DispatchNexusTaskRequest,
-	opts ...grpc.CallOption,
-) (*matchingservice.DispatchNexusTaskResponse, error) {
-
-	client, err := c.getClientForTaskqueue(request.GetNamespaceId(), request.GetTaskQueue(), enumspb.TASK_QUEUE_TYPE_NEXUS)
-	if err != nil {
-		return nil, err
-	}
-	ctx, cancel := c.createContext(ctx)
-	defer cancel()
-	return client.DispatchNexusTask(ctx, request, opts...)
-}
-
 func (c *clientImpl) ForceUnloadTaskQueue(
 	ctx context.Context,
 	request *matchingservice.ForceUnloadTaskQueueRequest,

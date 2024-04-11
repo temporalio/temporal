@@ -106,6 +106,8 @@ var (
 		"client.history.DeleteDLQTasks":         true,
 		"client.history.ListQueues":             true,
 		"client.history.ListTasks":              true,
+		// this has special timeout handling. do not generate.
+		"client.matching.DispatchNexusTask": true,
 		// these need to pick a partition. too complicated.
 		"client.matching.AddActivityTask":       true,
 		"client.matching.AddWorkflowTask":       true,

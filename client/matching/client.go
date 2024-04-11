@@ -193,6 +193,26 @@ func (c *clientImpl) QueryWorkflow(ctx context.Context, request *matchingservice
 	return client.QueryWorkflow(ctx, request, opts...)
 }
 
+func (c *clientImpl) DispatchNexusTask(
+	ctx context.Context,
+	request *matchingservice.DispatchNexusTaskRequest,
+	opts ...grpc.CallOption,
+) (*matchingservice.DispatchNexusTaskResponse, error) {
+	client, err := c.getClientForTaskqueue(request.GetNamespaceId(), request.GetTaskQueue(), enumspb.TASK_QUEUE_TYPE_NEXUS)
+	if err != nil {
+		return nil, err
+	}
+
+	timeout := c.timeout
+	if deadline, set := ctx.Deadline(); set {
+		timeout = min(c.timeout, time.Until(deadline))
+	}
+
+	ctx, cancel := context.WithTimeout(ctx, timeout)
+	defer cancel()
+	return client.DispatchNexusTask(ctx, request, opts...)
+}
+
 func (c *clientImpl) createContext(parent context.Context) (context.Context, context.CancelFunc) {
 	return context.WithTimeout(parent, c.timeout)
 }
@@ -212,4 +232,12 @@ func (c *clientImpl) getClientForTaskqueue(
 		return nil, err
 	}
 	return client.(matchingservice.MatchingServiceClient), nil
+}
+
+func (c *clientImpl) getDispatchNexusTaskTimeout(ctx context.Context, request *matchingservice.DispatchNexusTaskRequest) time.Duration {
+	deadline, set := ctx.Deadline()
+	if !set {
+		return c.timeout
+	}
+	return min(c.timeout, time.Until(deadline))
 }
