@@ -234,7 +234,11 @@ func (s *matchingEngineSuite) newPartitionManager(prtn tqid.Partition, config *C
 }
 
 func (s *matchingEngineSuite) TestAckManager() {
-	m := newAckManager(s.logger)
+	controller := gomock.NewController(s.T())
+	defer controller.Finish()
+	backlogMgr := newBacklogMgr(controller)
+	m := newAckManager(backlogMgr)
+
 	m.setAckLevel(100)
 	s.EqualValues(100, m.getAckLevel())
 	s.EqualValues(100, m.getReadLevel())
@@ -246,10 +250,14 @@ func (s *matchingEngineSuite) TestAckManager() {
 	const t6 = 380
 
 	m.addTask(t1)
+	// Incrementing the backlog as otherwise we would get an error that it is under-counting;
+	// this happens since we decrease the counter on completion of a task
+	backlogMgr.db.updateApproximateBacklogCount(1)
 	s.EqualValues(100, m.getAckLevel())
 	s.EqualValues(t1, m.getReadLevel())
 
 	m.addTask(t2)
+	backlogMgr.db.updateApproximateBacklogCount(1)
 	s.EqualValues(100, m.getAckLevel())
 	s.EqualValues(t2, m.getReadLevel())
 
@@ -266,10 +274,12 @@ func (s *matchingEngineSuite) TestAckManager() {
 	s.EqualValues(300, m.getReadLevel())
 
 	m.addTask(t3)
+	backlogMgr.db.updateApproximateBacklogCount(1)
 	s.EqualValues(300, m.getAckLevel())
 	s.EqualValues(t3, m.getReadLevel())
 
 	m.addTask(t4)
+	backlogMgr.db.updateApproximateBacklogCount(1)
 	s.EqualValues(300, m.getAckLevel())
 	s.EqualValues(t4, m.getReadLevel())
 
@@ -291,7 +301,11 @@ func (s *matchingEngineSuite) TestAckManager() {
 }
 
 func (s *matchingEngineSuite) TestAckManager_Sort() {
-	m := newAckManager(s.logger)
+	controller := gomock.NewController(s.T())
+	defer controller.Finish()
+	backlogMgr := newBacklogMgr(controller)
+	m := newAckManager(backlogMgr)
+
 	const t0 = 100
 	m.setAckLevel(t0)
 	s.EqualValues(t0, m.getAckLevel())
@@ -307,6 +321,10 @@ func (s *matchingEngineSuite) TestAckManager_Sort() {
 	m.addTask(t3)
 	m.addTask(t4)
 	m.addTask(t5)
+
+	// Incrementing the backlog as otherwise we would get an error that it is under-counting;
+	// this happens since we decrease the counter on completion of a task
+	backlogMgr.db.updateApproximateBacklogCount(5)
 
 	m.completeTask(t2)
 	s.EqualValues(t0, m.getAckLevel())

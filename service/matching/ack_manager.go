@@ -38,16 +38,18 @@ import (
 // Used to convert out of order acks into ackLevel movement.
 type ackManager struct {
 	sync.RWMutex
-	outstandingTasks *treemap.Map // TaskID->acked
-	readLevel        int64        // Maximum TaskID inserted into outstandingTasks
-	ackLevel         int64        // Maximum TaskID below which all tasks are acked
+	backlogMgr       *backlogManagerImpl // accessing approximateBacklogCounter
+	outstandingTasks *treemap.Map        // TaskID->acked
+	readLevel        int64               // Maximum TaskID inserted into outstandingTasks
+	ackLevel         int64               // Maximum TaskID below which all tasks are acked
 	backlogCounter   atomic.Int64
 	logger           log.Logger
 }
 
-func newAckManager(logger log.Logger) ackManager {
+func newAckManager(backlogMgr *backlogManagerImpl) ackManager {
 	return ackManager{
-		logger:           logger,
+		backlogMgr:       backlogMgr,
+		logger:           backlogMgr.logger,
 		outstandingTasks: treemap.NewWith(godsutils.Int64Comparator),
 		readLevel:        -1,
 		ackLevel:         -1}
@@ -144,7 +146,10 @@ func (m *ackManager) completeTask(taskID int64) int64 {
 		}
 		m.ackLevel = min.(int64)
 		m.outstandingTasks.Remove(min)
+		// reducing our backlog since a task gets acked
+		m.backlogMgr.db.updateApproximateBacklogCount(int64(-1))
 	}
+
 }
 
 func (m *ackManager) getBacklogCountHint() int64 {
