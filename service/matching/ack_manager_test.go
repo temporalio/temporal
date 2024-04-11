@@ -52,12 +52,17 @@ func TestAckManager_CompleteTaskMovesAckLevelUpToGap(t *testing.T) {
 	backlogMgr := newBacklogMgr(controller)
 
 	backlogMgr.taskAckManager.addTask(1)
+
+	// Incrementing the backlog as otherwise we would get an error that it is under-counting;
+	// this happens since we decrease the counter on completion of a task
+	backlogMgr.db.updateApproximateBacklogCount(1)
 	require.Equal(t, int64(-1), backlogMgr.taskAckManager.getAckLevel(), "should only move ack level on completion")
 	require.Equal(t, int64(1), backlogMgr.taskAckManager.completeTask(1), "should move ack level on completion")
 
 	backlogMgr.taskAckManager.addTask(2)
 	backlogMgr.taskAckManager.addTask(3)
 	backlogMgr.taskAckManager.addTask(12)
+	backlogMgr.db.updateApproximateBacklogCount(3)
 
 	require.Equal(t, int64(1), backlogMgr.taskAckManager.completeTask(3), "task 2 is not complete, we should not move ack level")
 	require.Equal(t, int64(3), backlogMgr.taskAckManager.completeTask(2), "both tasks 2 and 3 are complete")

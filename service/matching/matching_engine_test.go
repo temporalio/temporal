@@ -293,6 +293,10 @@ func (s *matchingEngineSuite) TestAckManager_Sort() {
 	m.addTask(t4)
 	m.addTask(t5)
 
+	// Incrementing the backlog as otherwise we would get an error that it is under-counting;
+	// this happens since we decrease the counter on completion of a task
+	backlogMgr.db.updateApproximateBacklogCount(5)
+
 	m.completeTask(t2)
 	s.EqualValues(t0, m.getAckLevel())
 

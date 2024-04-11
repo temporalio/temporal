@@ -209,6 +209,7 @@ func (db *taskQueueDB) UpdateState(
 	})
 	if err == nil {
 		db.ackLevel = ackLevel
+		db.emitApproximateBacklogCount()
 	}
 	return err
 }
