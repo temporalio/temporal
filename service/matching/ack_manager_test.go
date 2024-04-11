@@ -25,9 +25,10 @@
 package matching
 
 import (
-	"github.com/golang/mock/gomock"
 	"math/rand"
 	"testing"
+
+	"github.com/golang/mock/gomock"
 
 	"github.com/stretchr/testify/require"
 )
