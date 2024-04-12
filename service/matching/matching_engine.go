@@ -49,6 +49,7 @@ import (
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/api/matchingservice/v1"
 	taskqueuespb "go.temporal.io/server/api/taskqueue/v1"
+	"go.temporal.io/server/common/nexus"
 
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
@@ -1416,13 +1417,8 @@ pollLoop:
 		}
 		serializedToken, _ := e.tokenSerializer.SerializeNexusTaskToken(taskToken)
 
-		deadline := task.nexus.deadline
-		if pollDeadline, set := ctx.Deadline(); set && pollDeadline.Before(deadline) {
-			deadline = pollDeadline
-		}
-
 		nexusReq := task.nexus.request.GetRequest()
-		nexusReq.Header["Request-Timeout"] = time.Until(deadline).String()
+		nexusReq.Header[nexus.HeaderRequestTimeout] = time.Until(task.nexus.deadline).String()
 
 		return &matchingservice.PollNexusTaskQueueResponse{
 			Response: &workflowservice.PollNexusTaskQueueResponse{
