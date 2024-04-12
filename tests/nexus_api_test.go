@@ -190,9 +190,6 @@ func (s *ClientFunctionalSuite) TestNexusStartOperation_Outcomes() {
 		s.Equal(metrics.MetricUnit(metrics.Milliseconds), snap["nexus_latency"][0].Unit)
 	}
 
-	// Wait to make sure all incoming services are loaded into memory before starting tests.
-	time.Sleep(2 * time.Second)
-
 	for _, tc := range testCases {
 		tc := tc
 		s.T().Run(tc.outcome, func(t *testing.T) {
@@ -315,9 +312,6 @@ func (s *ClientFunctionalSuite) TestNexusStartOperation_Timeout() {
 		tc.assertion(resp, err)
 	}
 
-	// Wait to make sure all incoming services are loaded into memory before starting tests.
-	time.Sleep(2 * time.Second)
-
 	for _, tc := range testCases {
 		tc := tc
 		s.T().Run(tc.name, func(t *testing.T) {
@@ -334,8 +328,6 @@ func (s *ClientFunctionalSuite) TestNexusStartOperation_Timeout() {
 func (s *ClientFunctionalSuite) TestNexusStartOperation_Forbidden() {
 	taskQueue := s.randomizeStr("task-queue")
 	testService := s.createNexusIncomingService(s.randomizeStr("test-service"), taskQueue)
-	// Wait to make sure incoming service is loaded into memory before starting tests.
-	time.Sleep(2 * time.Second)
 
 	type testcase struct {
 		name           string
@@ -423,8 +415,6 @@ func (s *ClientFunctionalSuite) TestNexusStartOperation_Forbidden() {
 func (s *ClientFunctionalSuite) TestNexusStartOperation_Claims() {
 	taskQueue := s.randomizeStr("task-queue")
 	testService := s.createNexusIncomingService(s.randomizeStr("test-service"), taskQueue)
-	// Wait to make sure incoming service is loaded into memory before starting tests.
-	time.Sleep(2 * time.Second)
 
 	type testcase struct {
 		name      string
@@ -602,7 +592,7 @@ func (s *ClientFunctionalSuite) TestNexusCancelOperation_Outcomes() {
 	}
 
 	// Wait to make sure all incoming services are loaded into memory before starting tests.
-	time.Sleep(2 * time.Second)
+	//time.Sleep(2 * time.Second)
 
 	for _, tc := range testCases {
 		tc := tc
@@ -672,9 +662,6 @@ func (s *ClientFunctionalSuite) TestNexusCancelOperation_Timeouts() {
 		err = handle.Cancel(clientCtx, nexus.CancelOperationOptions{Header: headers})
 		tc.assertion(err)
 	}
-
-	// Wait to make sure all incoming services are loaded into memory before starting tests.
-	time.Sleep(2 * time.Second)
 
 	for _, tc := range testCases {
 		tc := tc
