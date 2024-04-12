@@ -124,16 +124,11 @@ func (r *IncomingServiceRegistry) Get(ctx context.Context, id string) (*nexus.In
 	}
 
 	r.dataLock.RLock()
-	service, ok := r.services[id]
-	r.dataLock.RUnlock()
+	defer r.dataLock.RUnlock()
 
+	service, ok := r.services[id]
 	if !ok {
-		// If service is not in-memory read through to persistence but do not update cache (will be handled by background process).
-		persisted, err := r.persistence.GetNexusIncomingService(ctx, &p.GetNexusIncomingServiceRequest{ServiceID: id})
-		if err != nil {
-			return nil, serviceerror.NewNotFound(fmt.Sprintf("could not find Nexus incoming service with ID: %v", id))
-		}
-		return IncomingServicePersistedEntryToExternalAPI(persisted), nil
+		return nil, serviceerror.NewNotFound(fmt.Sprintf("could not find Nexus incoming service with ID: %v", id))
 	}
 
 	return service, nil
