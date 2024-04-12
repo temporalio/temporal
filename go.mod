@@ -153,3 +153,5 @@ require (
 	modernc.org/strutil v1.1.3 // indirect
 	modernc.org/token v1.1.0 // indirect
 )
+
+replace go.temporal.io/api => github.com/stephanos/api-go v0.0.0-20240412162647-897725a29658

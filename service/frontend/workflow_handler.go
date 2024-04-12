@@ -541,6 +541,7 @@ func convertToHistoryMultiOperation(
 						namespaceID.String(),
 						startReq,
 						nil,
+						nil,
 						time.Now().UTC(),
 					),
 				},
