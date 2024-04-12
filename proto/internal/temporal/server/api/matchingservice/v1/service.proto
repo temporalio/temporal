@@ -25,6 +25,8 @@ syntax = "proto3";
 package temporal.server.api.matchingservice.v1;
 option go_package = "go.temporal.io/server/api/matchingservice/v1;matchingservice";
 
+import "google/api/annotations.proto";
+
 import "temporal/server/api/matchingservice/v1/request_response.proto";
 
 // MatchingService API is exposed to provide support for polling from long running applications.
@@ -92,6 +94,10 @@ service MatchingService {
     rpc DescribeTaskQueue (DescribeTaskQueueRequest) returns (DescribeTaskQueueResponse) {
     }
 
+    // DescribeTaskQueuePartition returns information about the target task queue partition.
+    rpc DescribeTaskQueuePartition (DescribeTaskQueuePartitionRequest) returns (DescribeTaskQueuePartitionResponse) {
+    }
+
     // ListTaskQueuePartitions returns a map of partitionKey and hostAddress for a task queue.
     rpc  ListTaskQueuePartitions(ListTaskQueuePartitionsRequest) returns (ListTaskQueuePartitionsResponse){
     }
@@ -104,6 +110,24 @@ service MatchingService {
     rpc GetWorkerBuildIdCompatibility (GetWorkerBuildIdCompatibilityRequest) returns (GetWorkerBuildIdCompatibilityResponse) {}
     // Fetch user data for a task queue, this request should always be routed to the node holding the root partition of the workflow task queue.
     rpc GetTaskQueueUserData (GetTaskQueueUserDataRequest) returns (GetTaskQueueUserDataResponse) {}
+
+    // Allows updating the Build ID assignment and redirect rules for a given Task Queue.
+    // (-- api-linter: core::0134::method-signature=disabled
+    //     aip.dev/not-precedent: UpdateWorkerVersioningRulesRequest RPC doesn't follow Google API format. --)
+    // (-- api-linter: core::0134::response-message-name=disabled
+    //     aip.dev/not-precedent: UpdateWorkerVersioningRulesRequest RPC doesn't follow Google API format. --)
+    rpc UpdateWorkerVersioningRules (UpdateWorkerVersioningRulesRequest) returns (UpdateWorkerVersioningRulesResponse) {}
+
+    // Fetches the Build ID assignment and redirect rules for a Task Queue
+    // (-- api-linter: core::0127::resource-name-extraction=disabled
+    //     aip.dev/not-precedent: GetWorkerVersioningRulesRequest RPC doesn't follow Google API format. --)
+    // (-- api-linter: core::0131::http-uri-name=disabled
+    //     aip.dev/not-precedent: GetWorkerVersioningRulesRequest RPC doesn't follow Google API format. --)
+    rpc GetWorkerVersioningRules (GetWorkerVersioningRulesRequest) returns (GetWorkerVersioningRulesResponse) {
+        option (google.api.http) = {
+            get: "/api/v1/namespaces/{namespace}/task-queues/{task_queue}/worker-versioning-rules"
+        };
+    }
 
     // Apply a user data replication event.
     rpc ApplyTaskQueueUserDataReplicationEvent (ApplyTaskQueueUserDataReplicationEventRequest) returns (ApplyTaskQueueUserDataReplicationEventResponse) {}

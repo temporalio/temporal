@@ -71,7 +71,7 @@ func ToBuildIdOrderingResponse(data *persistencespb.VersioningData, maxSets int)
 	return &workflowservice.GetWorkerBuildIdCompatibilityResponse{MajorVersionSets: versionSets}
 }
 
-func checkLimits(g *persistencespb.VersioningData, maxSets, maxBuildIds int) error {
+func checkVersionSetLimits(g *persistencespb.VersioningData, maxSets, maxBuildIds int) error {
 	sets := g.GetVersionSets()
 	if maxSets > 0 && len(sets) > maxSets {
 		return serviceerror.NewFailedPrecondition(fmt.Sprintf("update would exceed number of compatible version sets permitted in namespace dynamic config (%v/%v)", len(sets), maxSets))
@@ -154,7 +154,9 @@ func hashBuildId(buildID string) string {
 
 func shallowCloneVersioningData(data *persistencespb.VersioningData) *persistencespb.VersioningData {
 	return &persistencespb.VersioningData{
-		VersionSets: slices.Clone(data.GetVersionSets()),
+		VersionSets:     slices.Clone(data.GetVersionSets()),
+		AssignmentRules: slices.Clone(data.GetAssignmentRules()),
+		RedirectRules:   slices.Clone(data.GetRedirectRules()),
 	}
 }
 
@@ -199,15 +201,15 @@ func UpdateVersionSets(clock *hlc.Clock, data *persistencespb.VersioningData, re
 	} else {
 		data = common.CloneProto(data)
 	}
-	data, err := updateImpl(clock, data, req)
+	data, err := updateVersionSetImpl(clock, data, req)
 	if err != nil {
 		return nil, err
 	}
-	return data, checkLimits(data, maxSets, maxBuildIds)
+	return data, checkVersionSetLimits(data, maxSets, maxBuildIds)
 }
 
 //nolint:revive // cyclomatic complexity
-func updateImpl(timestamp *hlc.Clock, data *persistencespb.VersioningData, req *workflowservice.UpdateWorkerBuildIdCompatibilityRequest) (*persistencespb.VersioningData, error) {
+func updateVersionSetImpl(timestamp *hlc.Clock, data *persistencespb.VersioningData, req *workflowservice.UpdateWorkerBuildIdCompatibilityRequest) (*persistencespb.VersioningData, error) {
 	// First find if the targeted version is already in the sets
 	targetedVersion := extractTargetedVersion(req)
 	targetSetIdx, versionInSetIdx := worker_versioning.FindBuildId(data, targetedVersion)
@@ -386,7 +388,7 @@ func lookupVersionSetForPoll(data *persistencespb.VersioningData, caps *commonpb
 // lookupVersionSetForPoll is that we never redirect, we just need to return an error or not.
 // Requires: caps is not nil
 // Returns:
-// - whether the build id was not found
+// - whether the build id was found
 // - error (can only be nil or serviceerror.NewerBuildExists)
 func checkVersionForStickyPoll(data *persistencespb.VersioningData, caps *commonpb.WorkerVersionCapabilities) (bool, error) {
 	// For poll, only the latest version in the compatible set can get tasks.
@@ -397,14 +399,14 @@ func checkVersionForStickyPoll(data *persistencespb.VersioningData, caps *common
 		// A poller is using a build ID, but we don't know about that build ID. See comments in
 		// lookupVersionSetForPoll. If we consider it the default for its set, then we should
 		// leave it on the sticky queue here.
-		return true, nil
+		return false, nil
 	}
 	set := data.VersionSets[setIdx]
 	lastIndex := len(set.BuildIds) - 1
 	if indexInSet != lastIndex {
-		return false, serviceerror.NewNewerBuildExists(set.BuildIds[lastIndex].Id)
+		return true, serviceerror.NewNewerBuildExists(set.BuildIds[lastIndex].Id)
 	}
-	return false, nil
+	return true, nil
 }
 
 // Looks up a version set in versioning data based on a build id associated with a task to

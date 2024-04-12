@@ -389,12 +389,14 @@ func (s *workflowResetterSuite) TestFailWorkflowTask_WorkflowTaskScheduled() {
 		workflowTaskSchedule.RequestID,
 		workflowTaskSchedule.TaskQueue,
 		consts.IdentityHistoryService,
+		nil,
 	).Return(&historypb.HistoryEvent{}, workflowTaskStart, nil)
 	mutableState.EXPECT().AddWorkflowTaskFailedEvent(
 		workflowTaskStart,
 		enumspb.WORKFLOW_TASK_FAILED_CAUSE_RESET_WORKFLOW,
 		failure.NewResetWorkflowFailure(resetReason, nil),
 		consts.IdentityHistoryService,
+		nil,
 		"",
 		baseRunID,
 		resetRunID,
@@ -435,6 +437,7 @@ func (s *workflowResetterSuite) TestFailWorkflowTask_WorkflowTaskStarted() {
 		enumspb.WORKFLOW_TASK_FAILED_CAUSE_RESET_WORKFLOW,
 		failure.NewResetWorkflowFailure(resetReason, nil),
 		consts.IdentityHistoryService,
+		nil,
 		"",
 		baseRunID,
 		resetRunID,
@@ -483,6 +486,7 @@ func (s *workflowResetterSuite) TestFailInflightActivity() {
 		failure.NewResetWorkflowFailure(terminateReason, activity1.LastHeartbeatDetails),
 		enumspb.RETRY_STATE_NON_RETRYABLE_FAILURE,
 		activity1.StartedIdentity,
+		activity1.LastWorkerVersionStamp,
 	).Return(&historypb.HistoryEvent{}, nil)
 
 	mutableState.EXPECT().UpdateActivity(&persistencespb.ActivityInfo{
@@ -537,6 +541,7 @@ func (s *workflowResetterSuite) TestTerminateWorkflow() {
 		enumspb.WORKFLOW_TASK_FAILED_CAUSE_FORCE_CLOSE_COMMAND,
 		nil,
 		consts.IdentityHistoryService,
+		nil,
 		"",
 		"",
 		"",

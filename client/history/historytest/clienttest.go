@@ -62,6 +62,8 @@ func (f fakeTracerProvider) Tracer(string, ...trace.TracerOption) trace.Tracer {
 	return nil
 }
 
+var _ trace.TracerProvider = (*fakeTracerProvider)(nil)
+
 // TestClient works by doing the following:
 //  1. Enqueue some tasks
 //  2. Start a server which serves the DLQ endpoints

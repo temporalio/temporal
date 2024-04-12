@@ -153,12 +153,11 @@ func (h *Handler) AddActivityTask(
 		h.reportForwardedPerTaskQueueCounter(opMetrics, namespace.ID(request.GetNamespaceId()))
 	}
 
-	syncMatch, err := h.engine.AddActivityTask(ctx, request)
+	assignedBuildId, syncMatch, err := h.engine.AddActivityTask(ctx, request)
 	if syncMatch {
 		metrics.SyncMatchLatencyPerTaskQueue.With(opMetrics).Record(time.Since(startT))
 	}
-
-	return &matchingservice.AddActivityTaskResponse{}, err
+	return &matchingservice.AddActivityTaskResponse{AssignedBuildId: assignedBuildId}, err
 }
 
 // AddWorkflowTask - adds a workflow task.
@@ -178,11 +177,11 @@ func (h *Handler) AddWorkflowTask(
 		h.reportForwardedPerTaskQueueCounter(opMetrics, namespace.ID(request.GetNamespaceId()))
 	}
 
-	syncMatch, err := h.engine.AddWorkflowTask(ctx, request)
+	assignedBuildId, syncMatch, err := h.engine.AddWorkflowTask(ctx, request)
 	if syncMatch {
 		metrics.SyncMatchLatencyPerTaskQueue.With(opMetrics).Record(time.Since(startT))
 	}
-	return &matchingservice.AddWorkflowTaskResponse{}, err
+	return &matchingservice.AddWorkflowTaskResponse{AssignedBuildId: assignedBuildId}, err
 }
 
 // PollActivityTaskQueue - long poll for an activity task.
@@ -293,6 +292,15 @@ func (h *Handler) DescribeTaskQueue(
 	return h.engine.DescribeTaskQueue(ctx, request)
 }
 
+// DescribeTaskQueuePartition returns information about the target task queue partition.
+func (h *Handler) DescribeTaskQueuePartition(
+	ctx context.Context,
+	request *matchingservice.DescribeTaskQueuePartitionRequest,
+) (_ *matchingservice.DescribeTaskQueuePartitionResponse, retError error) {
+	defer log.CapturePanic(h.logger, &retError)
+	return h.engine.DescribeTaskQueuePartition(ctx, request)
+}
+
 // ListTaskQueuePartitions returns information about partitions for a taskQueue
 func (h *Handler) ListTaskQueuePartitions(
 	ctx context.Context,
@@ -300,6 +308,24 @@ func (h *Handler) ListTaskQueuePartitions(
 ) (_ *matchingservice.ListTaskQueuePartitionsResponse, retError error) {
 	defer log.CapturePanic(h.logger, &retError)
 	return h.engine.ListTaskQueuePartitions(ctx, request)
+}
+
+// UpdateWorkerVersioningRules allows updating the Build ID assignment and redirect rules for a given Task Queue.
+func (h *Handler) UpdateWorkerVersioningRules(
+	ctx context.Context,
+	request *matchingservice.UpdateWorkerVersioningRulesRequest,
+) (_ *matchingservice.UpdateWorkerVersioningRulesResponse, retError error) {
+	defer log.CapturePanic(h.logger, &retError)
+	return h.engine.UpdateWorkerVersioningRules(ctx, request)
+}
+
+// GetWorkerVersioningRules fetches the Build ID assignment and redirect rules for a Task Queue
+func (h *Handler) GetWorkerVersioningRules(
+	ctx context.Context,
+	request *matchingservice.GetWorkerVersioningRulesRequest,
+) (_ *matchingservice.GetWorkerVersioningRulesResponse, retError error) {
+	defer log.CapturePanic(h.logger, &retError)
+	return h.engine.GetWorkerVersioningRules(ctx, request)
 }
 
 // UpdateWorkerBuildIdCompatibility allows changing the worker versioning graph for a task queue

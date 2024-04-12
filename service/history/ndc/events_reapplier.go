@@ -120,7 +120,7 @@ func (r *EventsReapplierImpl) ReapplyEvents(
 
 	shouldScheduleWorkflowTask := false
 	for _, event := range reappliedEvents {
-		switch event.GetEventType() {
+		switch event.GetEventType() { //nolint:exhaustive
 		case enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_SIGNALED:
 			signal := event.GetWorkflowExecutionSignaledEventAttributes()
 			shouldScheduleWorkflowTask = shouldScheduleWorkflowTask || !signal.GetSkipGenerateWorkflowTask()

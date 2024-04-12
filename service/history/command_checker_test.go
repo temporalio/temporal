@@ -127,9 +127,9 @@ func (s *commandAttrValidatorSuite) SetupTest() {
 
 	config := &configs.Config{
 		MaxIDLengthLimit:                  dynamicconfig.GetIntPropertyFn(1000),
-		SearchAttributesNumberOfKeysLimit: dynamicconfig.GetIntPropertyFilteredByNamespace(100),
-		SearchAttributesSizeOfValueLimit:  dynamicconfig.GetIntPropertyFilteredByNamespace(2 * 1024),
-		SearchAttributesTotalSizeLimit:    dynamicconfig.GetIntPropertyFilteredByNamespace(40 * 1024),
+		SearchAttributesNumberOfKeysLimit: dynamicconfig.GetIntPropertyFnFilteredByNamespace(100),
+		SearchAttributesSizeOfValueLimit:  dynamicconfig.GetIntPropertyFnFilteredByNamespace(2 * 1024),
+		SearchAttributesTotalSizeLimit:    dynamicconfig.GetIntPropertyFnFilteredByNamespace(40 * 1024),
 		DefaultActivityRetryPolicy:        dynamicconfig.GetMapPropertyFnWithNamespaceFilter(common.GetDefaultRetryPolicyConfigOptions()),
 		DefaultWorkflowRetryPolicy:        dynamicconfig.GetMapPropertyFnWithNamespaceFilter(common.GetDefaultRetryPolicyConfigOptions()),
 		EnableCrossNamespaceCommands:      dynamicconfig.GetBoolPropertyFn(true),

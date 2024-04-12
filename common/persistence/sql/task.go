@@ -430,27 +430,6 @@ func (m *sqlTaskManager) GetTasks(
 	return response, nil
 }
 
-func (m *sqlTaskManager) CompleteTask(
-	ctx context.Context,
-	request *persistence.CompleteTaskRequest,
-) error {
-	nidBytes, err := primitives.ParseUUID(request.TaskQueue.NamespaceID)
-	if err != nil {
-		return serviceerror.NewUnavailable(err.Error())
-	}
-
-	taskID := request.TaskID
-	tqId, tqHash := m.taskQueueIdAndHash(nidBytes, request.TaskQueue.TaskQueueName, request.TaskQueue.TaskQueueType)
-	_, err = m.Db.DeleteFromTasks(ctx, sqlplugin.TasksFilter{
-		RangeHash:   tqHash,
-		TaskQueueID: tqId,
-		TaskID:      &taskID})
-	if err != nil && err != sql.ErrNoRows {
-		return serviceerror.NewUnavailable(err.Error())
-	}
-	return nil
-}
-
 func (m *sqlTaskManager) CompleteTasksLessThan(
 	ctx context.Context,
 	request *persistence.CompleteTasksLessThanRequest,

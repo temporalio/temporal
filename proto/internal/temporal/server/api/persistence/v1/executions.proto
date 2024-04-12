@@ -26,6 +26,7 @@ package temporal.server.api.persistence.v1;
 option go_package = "go.temporal.io/server/api/persistence/v1;persistence";
 
 import "google/protobuf/duration.proto";
+import "google/protobuf/empty.proto";
 import "google/protobuf/timestamp.proto";
 
 import "temporal/api/common/v1/message.proto";
@@ -87,6 +88,7 @@ message WorkflowExecutionInfo {
     reserved 16;
     int64 last_event_task_id = 17;
     int64 last_first_event_id = 18;
+    // Started event id for the last *completed* workflow task
     int64 last_workflow_task_started_event_id = 19;
     google.protobuf.Timestamp start_time = 20;
     google.protobuf.Timestamp last_update_time = 21;
@@ -156,9 +158,19 @@ message WorkflowExecutionInfo {
     google.protobuf.Timestamp close_time = 66;
     bool close_visibility_task_completed = 67;
     temporal.server.api.workflow.v1.BaseExecutionInfo base_execution_info = 76;
-    // If using build-id based versioning: version stamp of the last worker to process a
-    // workflow taks for this workflow.
-    temporal.api.common.v1.WorkerVersionStamp worker_version_stamp = 78;
+    // If using build-id based versioning: version stamp of the last worker to complete a
+    // workflow tasks for this workflow.
+    temporal.api.common.v1.WorkerVersionStamp most_recent_worker_version_stamp = 78;
+    // The currently assigned build ID for this execution. Presence of this value means worker versioning is used
+    // for this execution. Assigned build ID is selected by matching based on Worker Versioning Assignment Rules
+    // when the first workflow task of the execution is scheduled. If the first workflow task fails and is scheduled
+    // again, the assigned build ID may change according to the latest versioning rules.
+    // Assigned build ID can also change in the middle of a execution if Compatible Redirect Rules are applied to
+    // this execution.
+    string assigned_build_id = 85;
+    // Build ID inherited from a previous/parent execution. If present, assigned_build_id will be set to this, instead
+    // of using the assignment rules.
+    string inherited_build_id = 86;
 
     // index of update IDs and pointers to associated history events.
     map<string, temporal.server.api.update.v1.UpdateInfo> update_infos = 79;
@@ -352,8 +364,23 @@ message ActivityInfo {
     int64 scheduled_event_id = 30;
     temporal.api.common.v1.Payloads last_heartbeat_details = 31;
     google.protobuf.Timestamp last_heartbeat_update_time = 32;
+    // When true, it means the activity is assigned to the build ID of its workflow (only set for old versioning)
+    // Deprecated. use `use_workflow_build_id`
     bool use_compatible_version = 33;
     temporal.api.common.v1.ActivityType activity_type = 34;
+    // Absence of `assigned_build_id` generally means this task is on an "unversioned" task queue.
+    // In rare cases, it can also mean that the task queue is versioned but we failed to write activity's
+    // independently-assigned build ID to the database. This case heals automatically once the task is dispatched.
+    oneof assigned_build_id {
+        // When true, it means this activity is assigned to the build ID of its workflow.
+        google.protobuf.Empty use_workflow_build_id = 35;
+        // This means the activity is independently versioned and not bound to the build ID of its workflow.
+        // If the task fails and is scheduled again, the assigned build ID may change according to the latest versioning
+        // rules.
+        string last_independently_assigned_build_id = 36;
+    }
+    // The version stamp of the worker to whom this activity was most-recently dispatched
+    temporal.api.common.v1.WorkerVersionStamp last_worker_version_stamp = 37;
 }
 
 // timer_map column

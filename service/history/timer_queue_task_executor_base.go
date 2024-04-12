@@ -59,6 +59,7 @@ type (
 		deleteManager      deletemanager.DeleteManager
 		matchingRawClient  resource.MatchingRawClient
 		config             *configs.Config
+		metricHandler      metrics.Handler
 	}
 )
 
@@ -83,6 +84,7 @@ func newTimerQueueTaskExecutorBase(
 		deleteManager:      deleteManager,
 		matchingRawClient:  matchingRawClient,
 		config:             config,
+		metricHandler:      metricsHandler,
 	}
 }
 

@@ -121,6 +121,7 @@ func Execute(ctx context.Context, r *Registry, env Environment, ref Ref, task Ta
 	fn := reflect.ValueOf(executor)
 	values := fn.Call([]reflect.Value{reflect.ValueOf(ctx), reflect.ValueOf(env), reflect.ValueOf(ref), reflect.ValueOf(task)})
 	if !values[0].IsNil() {
+		//nolint:revive // type cast result is unchecked
 		return values[0].Interface().(error)
 	}
 	return nil

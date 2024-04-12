@@ -459,6 +459,7 @@ func (r *workflowResetterImpl) failWorkflowTask(
 			workflowTask.RequestID,
 			workflowTask.TaskQueue,
 			consts.IdentityHistoryService,
+			nil,
 		)
 		if err != nil {
 			return err
@@ -470,6 +471,7 @@ func (r *workflowResetterImpl) failWorkflowTask(
 		enumspb.WORKFLOW_TASK_FAILED_CAUSE_RESET_WORKFLOW,
 		failure.NewResetWorkflowFailure(resetReason, nil),
 		consts.IdentityHistoryService,
+		nil,
 		"",
 		baseRunID,
 		resetRunID,
@@ -506,6 +508,7 @@ func (r *workflowResetterImpl) failInflightActivity(
 				failure.NewResetWorkflowFailure(terminateReason, ai.LastHeartbeatDetails),
 				enumspb.RETRY_STATE_NON_RETRYABLE_FAILURE,
 				ai.StartedIdentity,
+				nil,
 			); err != nil {
 				return err
 			}

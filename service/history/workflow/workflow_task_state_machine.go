@@ -31,6 +31,7 @@ import (
 	"math"
 	"time"
 
+	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	failurepb "go.temporal.io/api/failure/v1"
 	historypb "go.temporal.io/api/history/v1"
@@ -48,7 +49,7 @@ import (
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/primitives/timestamp"
-	"go.temporal.io/server/common/tqname"
+	"go.temporal.io/server/common/tqid"
 )
 
 type (
@@ -167,6 +168,7 @@ func (m *workflowTaskStateMachine) ApplyWorkflowTaskStartedEvent(
 	startedTime time.Time,
 	suggestContinueAsNew bool,
 	historySizeBytes int64,
+	versioningStamp *commonpb.WorkerVersionStamp,
 ) (*WorkflowTaskInfo, error) {
 	// When this function is called from ApplyEvents, workflowTask is nil.
 	// It is safe to look up the workflow task as it does not have to deal with transient workflow task case.
@@ -207,6 +209,15 @@ func (m *workflowTaskStateMachine) ApplyWorkflowTaskStartedEvent(
 	}
 
 	m.UpdateWorkflowTask(workflowTask)
+
+	if versioningStamp.GetUseVersioning() && m.ms.GetLastWorkflowTaskStartedEventID() == common.EmptyEventTaskID &&
+		m.ms.GetInheritedBuildId() == "" {
+		// if this is the first workflow task and the build ID is not inherited, we update the wf assigned build ID
+		err := m.ms.UpdateBuildIdAssignment(versioningStamp.GetBuildId())
+		if err != nil {
+			return nil, err
+		}
+	}
 	return workflowTask, nil
 }
 
@@ -422,6 +433,7 @@ func (m *workflowTaskStateMachine) AddWorkflowTaskStartedEvent(
 	requestID string,
 	taskQueue *taskqueuepb.TaskQueue,
 	identity string,
+	versioningStamp *commonpb.WorkerVersionStamp,
 ) (*historypb.HistoryEvent, *WorkflowTaskInfo, error) {
 	opTag := tag.WorkflowActionWorkflowTaskStarted
 	workflowTask := m.GetWorkflowTaskByID(scheduledEventID)
@@ -458,7 +470,7 @@ func (m *workflowTaskStateMachine) AddWorkflowTaskStartedEvent(
 		scheduledEvent := m.ms.hBuilder.AddWorkflowTaskScheduledEvent(
 			// taskQueue may come directly from RecordWorkflowTaskStarted from matching, which will
 			// contain a specific partition name. We only want to record the base name here.
-			cleanTaskQueue(taskQueue),
+			cleanTaskQueue(taskQueue, enumspb.TASK_QUEUE_TYPE_WORKFLOW),
 			durationpb.New(workflowTask.WorkflowTaskTimeout),
 			workflowTask.Attempt,
 			startTime,
@@ -477,14 +489,22 @@ func (m *workflowTaskStateMachine) AddWorkflowTaskStartedEvent(
 			startTime,
 			suggestContinueAsNew,
 			historySizeBytes,
+			versioningStamp,
 		)
 		m.ms.hBuilder.FlushAndCreateNewBatch()
 		startedEventID = startedEvent.GetEventId()
 	}
 
 	workflowTask, err := m.ApplyWorkflowTaskStartedEvent(
-		workflowTask, m.ms.GetCurrentVersion(), scheduledEventID, startedEventID, requestID, startTime,
-		suggestContinueAsNew, historySizeBytes,
+		workflowTask,
+		m.ms.GetCurrentVersion(),
+		scheduledEventID,
+		startedEventID,
+		requestID,
+		startTime,
+		suggestContinueAsNew,
+		historySizeBytes,
+		versioningStamp,
 	)
 
 	m.emitWorkflowTaskAttemptStats(workflowTask.Attempt)
@@ -559,6 +579,7 @@ func (m *workflowTaskStateMachine) AddWorkflowTaskCompletedEvent(
 			workflowTask.StartedTime,
 			workflowTask.SuggestContinueAsNew,
 			workflowTask.HistorySizeBytes,
+			request.WorkerVersionStamp,
 		)
 		m.ms.hBuilder.FlushAndCreateNewBatch()
 		workflowTask.StartedEventID = startedEvent.GetEventId()
@@ -587,6 +608,7 @@ func (m *workflowTaskStateMachine) AddWorkflowTaskFailedEvent(
 	cause enumspb.WorkflowTaskFailedCause,
 	failure *failurepb.Failure,
 	identity string,
+	versioningStamp *commonpb.WorkerVersionStamp,
 	binaryChecksum string,
 	baseRunID string,
 	newRunID string,
@@ -613,6 +635,7 @@ func (m *workflowTaskStateMachine) AddWorkflowTaskFailedEvent(
 			workflowTask.StartedTime,
 			workflowTask.SuggestContinueAsNew,
 			workflowTask.HistorySizeBytes,
+			versioningStamp,
 		)
 		m.ms.hBuilder.FlushAndCreateNewBatch()
 		workflowTask.StartedEventID = startedEvent.GetEventId()
@@ -676,6 +699,7 @@ func (m *workflowTaskStateMachine) AddWorkflowTaskTimedOutEvent(
 			workflowTask.StartedTime,
 			workflowTask.SuggestContinueAsNew,
 			workflowTask.HistorySizeBytes,
+			nil,
 		)
 		m.ms.hBuilder.FlushAndCreateNewBatch()
 		workflowTask.StartedEventID = startedEvent.GetEventId()
@@ -912,14 +936,16 @@ func (m *workflowTaskStateMachine) afterAddWorkflowTaskCompletedEvent(
 ) error {
 	attrs := event.GetWorkflowTaskCompletedEventAttributes()
 	m.ms.executionInfo.LastWorkflowTaskStartedEventId = attrs.GetStartedEventId()
-	m.ms.executionInfo.WorkerVersionStamp = attrs.GetWorkerVersion()
+	m.ms.executionInfo.MostRecentWorkerVersionStamp = attrs.GetWorkerVersion()
 	addedResetPoint := m.ms.addResetPointFromCompletion(
 		attrs.GetBinaryChecksum(),
 		attrs.GetWorkerVersion().GetBuildId(),
 		event.GetEventId(),
 		limits.MaxResetPoints,
 	)
-	if err := m.ms.updateBuildIdsSearchAttribute(attrs.GetWorkerVersion(), event.GetEventId(), limits.MaxSearchAttributeValueSize); err != nil {
+	// For versioned workflows the search attributes should be already up-to-date based on the task started events.
+	// This is still useful for unversioned workers who report build ID.
+	if err := m.ms.updateBuildIdsSearchAttribute(attrs.GetWorkerVersion(), limits.MaxSearchAttributeValueSize); err != nil {
 		return err
 	}
 	if addedResetPoint && len(attrs.GetBinaryChecksum()) > 0 {
@@ -928,7 +954,6 @@ func (m *workflowTaskStateMachine) afterAddWorkflowTaskCompletedEvent(
 		}
 	}
 	return nil
-
 }
 
 func (m *workflowTaskStateMachine) emitWorkflowTaskAttemptStats(
@@ -1031,10 +1056,11 @@ func (m *workflowTaskStateMachine) convertSpeculativeWorkflowTaskToNormal() erro
 		_ = m.ms.hBuilder.AddWorkflowTaskStartedEvent(
 			scheduledEvent.EventId,
 			wt.RequestID,
-			"", // identity is not stored in the mutable state.
+			"",
 			wt.StartedTime,
 			wt.SuggestContinueAsNew,
 			wt.HistorySizeBytes,
+			nil,
 		)
 		m.ms.hBuilder.FlushAndCreateNewBatch()
 
@@ -1054,16 +1080,16 @@ func (m *workflowTaskStateMachine) convertSpeculativeWorkflowTaskToNormal() erro
 	return nil
 }
 
-func cleanTaskQueue(tq *taskqueuepb.TaskQueue) *taskqueuepb.TaskQueue {
-	if tq == nil {
-		return tq
+func cleanTaskQueue(proto *taskqueuepb.TaskQueue, taskType enumspb.TaskQueueType) *taskqueuepb.TaskQueue {
+	if proto == nil {
+		return proto
 	}
-	name, err := tqname.Parse(tq.Name)
+	partition, err := tqid.PartitionFromProto(proto, "", taskType)
 	if err != nil {
-		return tq
+		return proto
 	}
 
-	cleanTq := common.CloneProto(tq)
-	cleanTq.Name = name.BaseNameString()
+	cleanTq := common.CloneProto(proto)
+	cleanTq.Name = partition.TaskQueue().Name()
 	return cleanTq
 }

@@ -660,17 +660,6 @@ func (p *taskRetryablePersistenceClient) GetTasks(
 	return response, err
 }
 
-func (p *taskRetryablePersistenceClient) CompleteTask(
-	ctx context.Context,
-	request *CompleteTaskRequest,
-) error {
-	op := func(ctx context.Context) error {
-		return p.persistence.CompleteTask(ctx, request)
-	}
-
-	return backoff.ThrottleRetryContext(ctx, op, p.policy, p.isRetryable)
-}
-
 func (p *taskRetryablePersistenceClient) CompleteTasksLessThan(
 	ctx context.Context,
 	request *CompleteTasksLessThanRequest,
