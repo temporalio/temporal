@@ -193,7 +193,7 @@ func GetResetReapplyExcludeTypes(
 		exclude[enumspb.RESET_REAPPLY_EXCLUDE_TYPE_SIGNAL] = true
 		exclude[enumspb.RESET_REAPPLY_EXCLUDE_TYPE_UPDATE] = true
 	case enumspb.RESET_REAPPLY_TYPE_UNSPECIFIED, enumspb.RESET_REAPPLY_TYPE_ALL_ELIGIBLE:
-		 // Do nothing.
+		// Do nothing.
 	}
 	for _, e := range excludeTypes {
 		exclude[e] = true
