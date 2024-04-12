@@ -153,3 +153,6 @@ require (
 	modernc.org/strutil v1.1.3 // indirect
 	modernc.org/token v1.1.0 // indirect
 )
+
+// TODO(pj): REMOVE ONCE TAGGED IN MAIN REPO
+replace github.com/nexus-rpc/sdk-go => github.com/pdoerner/sdk-go v0.0.8
