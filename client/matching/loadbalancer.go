@@ -67,8 +67,8 @@ type (
 
 	defaultLoadBalancer struct {
 		namespaceIDToName   func(id namespace.ID) (namespace.Name, error)
-		nReadPartitions     dynamicconfig.IntPropertyFnWithTaskQueueInfoFilters
-		nWritePartitions    dynamicconfig.IntPropertyFnWithTaskQueueInfoFilters
+		nReadPartitions     dynamicconfig.IntPropertyFnWithTaskQueueFilter
+		nWritePartitions    dynamicconfig.IntPropertyFnWithTaskQueueFilter
 		forceReadPartition  dynamicconfig.IntPropertyFn
 		forceWritePartition dynamicconfig.IntPropertyFn
 

@@ -46,7 +46,7 @@ type (
 		EnablePersistencePriorityRateLimiting dynamicconfig.BoolPropertyFn
 		PersistenceDynamicRateLimitingParams  dynamicconfig.MapPropertyFn
 		PersistenceQPSBurstRatio              dynamicconfig.FloatPropertyFn
-		SyncMatchWaitDuration                 dynamicconfig.DurationPropertyFnWithTaskQueueInfoFilters
+		SyncMatchWaitDuration                 dynamicconfig.DurationPropertyFnWithTaskQueueFilters
 		TestDisableSyncMatch                  dynamicconfig.BoolPropertyFn
 		RPS                                   dynamicconfig.IntPropertyFn
 		OperatorRPSRatio                      dynamicconfig.FloatPropertyFn
@@ -57,38 +57,38 @@ type (
 		// taskQueueManager configuration
 
 		RangeSize                         int64
-		GetTasksBatchSize                 dynamicconfig.IntPropertyFnWithTaskQueueInfoFilters
-		UpdateAckInterval                 dynamicconfig.DurationPropertyFnWithTaskQueueInfoFilters
-		MaxTaskQueueIdleTime              dynamicconfig.DurationPropertyFnWithTaskQueueInfoFilters
-		NumTaskqueueWritePartitions       dynamicconfig.IntPropertyFnWithTaskQueueInfoFilters
-		NumTaskqueueReadPartitions        dynamicconfig.IntPropertyFnWithTaskQueueInfoFilters
-		ForwarderMaxOutstandingPolls      dynamicconfig.IntPropertyFnWithTaskQueueInfoFilters
-		ForwarderMaxOutstandingTasks      dynamicconfig.IntPropertyFnWithTaskQueueInfoFilters
-		ForwarderMaxRatePerSecond         dynamicconfig.IntPropertyFnWithTaskQueueInfoFilters
-		ForwarderMaxChildrenPerNode       dynamicconfig.IntPropertyFnWithTaskQueueInfoFilters
+		GetTasksBatchSize                 dynamicconfig.IntPropertyFnWithTaskQueueFilter
+		UpdateAckInterval                 dynamicconfig.DurationPropertyFnWithTaskQueueFilters
+		MaxTaskQueueIdleTime              dynamicconfig.DurationPropertyFnWithTaskQueueFilters
+		NumTaskqueueWritePartitions       dynamicconfig.IntPropertyFnWithTaskQueueFilter
+		NumTaskqueueReadPartitions        dynamicconfig.IntPropertyFnWithTaskQueueFilter
+		ForwarderMaxOutstandingPolls      dynamicconfig.IntPropertyFnWithTaskQueueFilter
+		ForwarderMaxOutstandingTasks      dynamicconfig.IntPropertyFnWithTaskQueueFilter
+		ForwarderMaxRatePerSecond         dynamicconfig.IntPropertyFnWithTaskQueueFilter
+		ForwarderMaxChildrenPerNode       dynamicconfig.IntPropertyFnWithTaskQueueFilter
 		VersionCompatibleSetLimitPerQueue dynamicconfig.IntPropertyFnWithNamespaceFilter
 		VersionBuildIdLimitPerQueue       dynamicconfig.IntPropertyFnWithNamespaceFilter
 		TaskQueueLimitPerBuildId          dynamicconfig.IntPropertyFnWithNamespaceFilter
 		GetUserDataLongPollTimeout        dynamicconfig.DurationPropertyFn
-		BacklogNegligibleAge              dynamicconfig.DurationPropertyFnWithTaskQueueInfoFilters
-		MaxWaitForPollerBeforeFwd         dynamicconfig.DurationPropertyFnWithTaskQueueInfoFilters
+		BacklogNegligibleAge              dynamicconfig.DurationPropertyFnWithTaskQueueFilters
+		MaxWaitForPollerBeforeFwd         dynamicconfig.DurationPropertyFnWithTaskQueueFilters
 		QueryPollerUnavailableWindow      dynamicconfig.DurationPropertyFn
-		QueryWorkflowTaskTimeoutLogRate   dynamicconfig.FloatPropertyFnWithTaskQueueInfoFilters
+		QueryWorkflowTaskTimeoutLogRate   dynamicconfig.FloatPropertyFnWithTaskQueueFilters
 		MembershipUnloadDelay             dynamicconfig.DurationPropertyFn
 
 		// Time to hold a poll request before returning an empty response if there are no tasks
-		LongPollExpirationInterval dynamicconfig.DurationPropertyFnWithTaskQueueInfoFilters
-		MinTaskThrottlingBurstSize dynamicconfig.IntPropertyFnWithTaskQueueInfoFilters
-		MaxTaskDeleteBatchSize     dynamicconfig.IntPropertyFnWithTaskQueueInfoFilters
+		LongPollExpirationInterval dynamicconfig.DurationPropertyFnWithTaskQueueFilters
+		MinTaskThrottlingBurstSize dynamicconfig.IntPropertyFnWithTaskQueueFilter
+		MaxTaskDeleteBatchSize     dynamicconfig.IntPropertyFnWithTaskQueueFilter
 
 		// taskWriter configuration
-		OutstandingTaskAppendsThreshold dynamicconfig.IntPropertyFnWithTaskQueueInfoFilters
-		MaxTaskBatchSize                dynamicconfig.IntPropertyFnWithTaskQueueInfoFilters
+		OutstandingTaskAppendsThreshold dynamicconfig.IntPropertyFnWithTaskQueueFilter
+		MaxTaskBatchSize                dynamicconfig.IntPropertyFnWithTaskQueueFilter
 
 		ThrottledLogRPS dynamicconfig.IntPropertyFn
 
 		AdminNamespaceToPartitionDispatchRate          dynamicconfig.FloatPropertyFnWithNamespaceFilter
-		AdminNamespaceTaskqueueToPartitionDispatchRate dynamicconfig.FloatPropertyFnWithTaskQueueInfoFilters
+		AdminNamespaceTaskqueueToPartitionDispatchRate dynamicconfig.FloatPropertyFnWithTaskQueueFilters
 
 		VisibilityPersistenceMaxReadQPS   dynamicconfig.IntPropertyFn
 		VisibilityPersistenceMaxWriteQPS  dynamicconfig.IntPropertyFn
@@ -96,7 +96,7 @@ type (
 		VisibilityDisableOrderByClause    dynamicconfig.BoolPropertyFnWithNamespaceFilter
 		VisibilityEnableManualPagination  dynamicconfig.BoolPropertyFnWithNamespaceFilter
 
-		LoadUserData dynamicconfig.BoolPropertyFnWithTaskQueueInfoFilters
+		LoadUserData dynamicconfig.BoolPropertyFnWithTaskQueueFilters
 
 		ListNexusIncomingServicesLongPollTimeout dynamicconfig.DurationPropertyFn
 
