@@ -267,8 +267,8 @@ func (s *ClientFunctionalSuite) TestNexusStartOperation_Timeout() {
 		{
 			name:            "header timeout > client timeout",
 			incomingService: s.createNexusIncomingService(s.randomizeStr("test-service"), s.randomizeStr("task-queue")),
-			headerTimeout:   200 * time.Millisecond,
-			clientTimeout:   100 * time.Millisecond,
+			headerTimeout:   3 * time.Second,
+			clientTimeout:   2 * time.Second,
 			assertion: func(res *nexus.ClientStartOperationResult[string], err error) {
 				s.ErrorIs(err, context.DeadlineExceeded)
 			},
@@ -276,8 +276,8 @@ func (s *ClientFunctionalSuite) TestNexusStartOperation_Timeout() {
 		{
 			name:            "header timeout < client timeout",
 			incomingService: s.createNexusIncomingService(s.randomizeStr("test-service"), s.randomizeStr("task-queue")),
-			headerTimeout:   100 * time.Millisecond,
-			clientTimeout:   200 * time.Millisecond,
+			headerTimeout:   2 * time.Second,
+			clientTimeout:   3 * time.Second,
 			assertion: func(res *nexus.ClientStartOperationResult[string], err error) {
 				var unexpectedError *nexus.UnexpectedResponseError
 				s.ErrorAs(err, &unexpectedError)
@@ -301,8 +301,7 @@ func (s *ClientFunctionalSuite) TestNexusStartOperation_Timeout() {
 		}
 
 		pollCtx, pollCtxCancel := NewContextWithTimeout(5 * time.Second)
-		defer pollCtxCancel()
-		go s.timeoutNexusTaskPoller(pollCtx, tc.incomingService.Spec.TaskQueue, expectedDeadline)
+		go s.timeoutNexusTaskPoller(pollCtx, pollCtxCancel, tc.incomingService.Spec.TaskQueue, expectedDeadline)
 
 		client, err := nexus.NewClient(nexus.ClientOptions{ServiceBaseURL: dispatchURL})
 		s.NoError(err)
@@ -322,6 +321,7 @@ func (s *ClientFunctionalSuite) TestNexusStartOperation_Timeout() {
 	for _, tc := range testCases {
 		tc := tc
 		s.T().Run(tc.name, func(t *testing.T) {
+			t.Parallel()
 			t.Run("ByNamespaceAndTaskQueue", func(t *testing.T) {
 				testFn(t, tc, getDispatchByNsAndTqURL(s.httpAPIAddress, s.namespace, tc.incomingService.Spec.TaskQueue))
 			})
@@ -632,8 +632,8 @@ func (s *ClientFunctionalSuite) TestNexusCancelOperation_Timeouts() {
 		{
 			name:            "header timeout > client timeout",
 			incomingService: s.createNexusIncomingService(s.randomizeStr("test-service"), s.randomizeStr("task-queue")),
-			headerTimeout:   200 * time.Millisecond,
-			clientTimeout:   100 * time.Millisecond,
+			headerTimeout:   3 * time.Second,
+			clientTimeout:   2 * time.Second,
 			assertion: func(err error) {
 				s.ErrorIs(err, context.DeadlineExceeded)
 			},
@@ -641,8 +641,8 @@ func (s *ClientFunctionalSuite) TestNexusCancelOperation_Timeouts() {
 		{
 			name:            "header timeout < client timeout",
 			incomingService: s.createNexusIncomingService(s.randomizeStr("test-service"), s.randomizeStr("task-queue")),
-			headerTimeout:   100 * time.Millisecond,
-			clientTimeout:   200 * time.Millisecond,
+			headerTimeout:   2 * time.Second,
+			clientTimeout:   3 * time.Second,
 			assertion: func(err error) {
 				var unexpectedError *nexus.UnexpectedResponseError
 				s.ErrorAs(err, &unexpectedError)
@@ -666,8 +666,7 @@ func (s *ClientFunctionalSuite) TestNexusCancelOperation_Timeouts() {
 		}
 
 		pollCtx, pollCtxCancel := NewContextWithTimeout(5 * time.Second)
-		defer pollCtxCancel()
-		go s.timeoutNexusTaskPoller(pollCtx, tc.incomingService.Spec.TaskQueue, expectedDeadline)
+		go s.timeoutNexusTaskPoller(pollCtx, pollCtxCancel, tc.incomingService.Spec.TaskQueue, expectedDeadline)
 
 		client, err := nexus.NewClient(nexus.ClientOptions{ServiceBaseURL: dispatchURL})
 		s.NoError(err)
@@ -683,6 +682,7 @@ func (s *ClientFunctionalSuite) TestNexusCancelOperation_Timeouts() {
 	for _, tc := range testCases {
 		tc := tc
 		s.T().Run(tc.name, func(t *testing.T) {
+			t.Parallel()
 			t.Run("ByNamespaceAndTaskQueue", func(t *testing.T) {
 				testFn(t, tc, getDispatchByNsAndTqURL(s.httpAPIAddress, s.namespace, tc.incomingService.Spec.TaskQueue))
 			})
@@ -777,15 +777,16 @@ func (s *ClientFunctionalSuite) echoNexusTaskPoller(ctx context.Context, taskQue
 	s.nexusTaskPoller(ctx, taskQueue, nexusEchoHandler)
 }
 
-func (s *ClientFunctionalSuite) timeoutNexusTaskPoller(ctx context.Context, taskQueue string, expectedDeadline time.Time) {
+func (s *ClientFunctionalSuite) timeoutNexusTaskPoller(ctx context.Context, cancel context.CancelFunc, taskQueue string, expectedDeadline time.Time) {
 	s.nexusTaskPoller(ctx, taskQueue, func(res *workflowservice.PollNexusTaskQueueResponse) (*nexuspb.Response, *nexuspb.HandlerError) {
+		defer cancel()
 		s.NotNil(res.Request)
 		timeoutStr, set := res.Request.Header[cnexus.HeaderRequestTimeout]
 		s.True(set)
 		timeout, err := time.ParseDuration(timeoutStr)
 		s.NoError(err)
 		s.LessOrEqual(time.Until(expectedDeadline), timeout)
-		time.Sleep(timeout + 50*time.Millisecond)
+		time.Sleep(timeout + (100 * time.Millisecond)) // Extra time to make sure the request times out.
 		return nexusEchoHandler(res)
 	})
 }
