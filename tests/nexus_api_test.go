@@ -283,8 +283,9 @@ func (s *ClientFunctionalSuite) TestNexusStartOperation_TimeoutPropagated() {
 			},
 		},
 		{
-			name:        "short poll timeout",
-			pollTimeout: 2 * time.Second, // frontend long poll tail room is 1 second
+			name:          "short poll timeout",
+			pollTimeout:   2 * time.Second, // frontend long poll tail room is 1 second
+			headerTimeout: 3 * time.Second,
 			assertion: func(res *nexus.ClientStartOperationResult[string], err error) {
 				var unexpectedError *nexus.UnexpectedResponseError
 				s.ErrorAs(err, &unexpectedError)
@@ -302,13 +303,15 @@ func (s *ClientFunctionalSuite) TestNexusStartOperation_TimeoutPropagated() {
 	testFn := func(t *testing.T, tc testcase, dispatchURL string) {
 		clientCtx, clientCtxCancel := NewContextWithTimeout(tc.clientTimeout)
 		defer clientCtxCancel()
+		expectedDeadline, _ := clientCtx.Deadline()
 
 		headers := nexus.Header{"key": "value"}
 		if tc.headerTimeout > 0 {
 			headers[cnexus.HeaderRequestTimeout] = tc.headerTimeout.String()
+			if headerDeadline := time.Now().Add(tc.headerTimeout); headerDeadline.Before(expectedDeadline) {
+				expectedDeadline = headerDeadline
+			}
 		}
-
-		expectedDeadline := time.Now().Add(min(tc.clientTimeout, tc.clientTimeout))
 
 		pollCtx, pollCtxCancel := NewContextWithTimeout(tc.pollTimeout)
 		defer pollCtxCancel()
@@ -656,8 +659,9 @@ func (s *ClientFunctionalSuite) TestNexusCancelOperation_TimeoutPropagated() {
 			},
 		},
 		{
-			name:        "short poll timeout",
-			pollTimeout: 2 * time.Second, // frontend long poll tail room is 1 second
+			name:          "short poll timeout",
+			pollTimeout:   2 * time.Second, // frontend long poll tail room is 1 second
+			headerTimeout: 3 * time.Second,
 			assertion: func(err error) {
 				var unexpectedError *nexus.UnexpectedResponseError
 				s.ErrorAs(err, &unexpectedError)
@@ -675,13 +679,15 @@ func (s *ClientFunctionalSuite) TestNexusCancelOperation_TimeoutPropagated() {
 	testFn := func(t *testing.T, tc testcase, dispatchURL string) {
 		clientCtx, clientCtxCancel := NewContextWithTimeout(tc.clientTimeout)
 		defer clientCtxCancel()
+		expectedDeadline, _ := clientCtx.Deadline()
 
 		headers := nexus.Header{"key": "value"}
 		if tc.headerTimeout > 0 {
 			headers[cnexus.HeaderRequestTimeout] = tc.headerTimeout.String()
+			if headerDeadline := time.Now().Add(tc.headerTimeout); headerDeadline.Before(expectedDeadline) {
+				expectedDeadline = headerDeadline
+			}
 		}
-
-		expectedDeadline := time.Now().Add(min(tc.clientTimeout, tc.clientTimeout))
 
 		pollCtx, pollCtxCancel := NewContextWithTimeout(tc.pollTimeout)
 		defer pollCtxCancel()
