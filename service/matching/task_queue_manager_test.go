@@ -1173,7 +1173,7 @@ func TestUserData_FetchesUpTree(t *testing.T) {
 	tqId, err := newTaskQueueIDWithPartition(defaultNamespaceId, defaultRootTqID, enumspb.TASK_QUEUE_TYPE_WORKFLOW, 31)
 	require.NoError(t, err)
 	tqCfg := defaultTqmTestOpts(controller)
-	tqCfg.config.ForwarderMaxChildrenPerNode = dynamicconfig.GetIntPropertyFilteredByTaskQueueInfo(3)
+	tqCfg.config.ForwarderMaxChildrenPerNode = dynamicconfig.GetIntPropertyFnFilteredByTaskQueue(3)
 	tqCfg.tqId = tqId
 
 	data1 := &persistencespb.VersionedTaskQueueUserData{

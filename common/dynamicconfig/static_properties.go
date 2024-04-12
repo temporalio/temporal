@@ -37,13 +37,13 @@ func GetIntPropertyFn(value int) func() int {
 	return func() int { return value }
 }
 
-// GetIntPropertyFilteredByNamespace returns values as IntPropertyFnWithNamespaceFilters
-func GetIntPropertyFilteredByNamespace(value int) func(namespace string) int {
+// GetIntPropertyFnFilteredByNamespace returns values as IntPropertyFnWithNamespaceFilters
+func GetIntPropertyFnFilteredByNamespace(value int) func(namespace string) int {
 	return func(namespace string) int { return value }
 }
 
-// GetIntPropertyFilteredByTaskQueueInfo returns value as IntPropertyFnWithTaskQueueInfoFilters
-func GetIntPropertyFilteredByTaskQueueInfo(value int) func(namespace string, taskQueue string, taskType enumspb.TaskQueueType) int {
+// GetIntPropertyFnFilteredByTaskQueue returns value as IntPropertyFnWithTaskQueueInfoFilters
+func GetIntPropertyFnFilteredByTaskQueue(value int) func(namespace string, taskQueue string, taskType enumspb.TaskQueueType) int {
 	return func(namespace string, taskQueue string, taskType enumspb.TaskQueueType) int { return value }
 }
 
