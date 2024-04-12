@@ -18,6 +18,11 @@ run:
     - ^proto
     - ^.git
 linters-settings:
+  exhaustive:
+    # Presence of "default" case in switch statements satisfies exhaustiveness,
+    # even if all enum members are not listed.
+    # Default: false
+    default-signifies-exhaustive: true
   godox:
     keywords:
       - FIXME # marks TODOs that must be fixed before merging

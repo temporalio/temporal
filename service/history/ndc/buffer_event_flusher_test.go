@@ -178,6 +178,7 @@ func (s *bufferEventFlusherSuite) TestFlushBufferedEvents() {
 		enumspb.WORKFLOW_TASK_FAILED_CAUSE_FAILOVER_CLOSE_COMMAND,
 		nil,
 		consts.IdentityHistoryService,
+		nil,
 		"",
 		"",
 		"",

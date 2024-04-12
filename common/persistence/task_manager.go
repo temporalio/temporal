@@ -235,13 +235,6 @@ func (m *taskManagerImpl) GetTasks(
 	return &GetTasksResponse{Tasks: tasks, NextPageToken: internalResp.NextPageToken}, nil
 }
 
-func (m *taskManagerImpl) CompleteTask(
-	ctx context.Context,
-	request *CompleteTaskRequest,
-) error {
-	return m.taskStore.CompleteTask(ctx, request)
-}
-
 func (m *taskManagerImpl) CompleteTasksLessThan(
 	ctx context.Context,
 	request *CompleteTasksLessThanRequest,

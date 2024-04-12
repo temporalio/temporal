@@ -35,6 +35,7 @@ import (
 	"time"
 
 	"github.com/pborman/uuid"
+
 	batchpb "go.temporal.io/api/batch/v1"
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
@@ -88,6 +89,7 @@ import (
 	"go.temporal.io/server/common/searchattribute"
 	"go.temporal.io/server/common/tasktoken"
 	"go.temporal.io/server/common/timer"
+	"go.temporal.io/server/common/tqid"
 	"go.temporal.io/server/common/utf8validator"
 	"go.temporal.io/server/common/util"
 	"go.temporal.io/server/service/worker/batcher"
@@ -2511,8 +2513,29 @@ func (wh *WorkflowHandler) DescribeTaskQueue(ctx context.Context, request *workf
 		return nil, err
 	}
 
-	if request.TaskQueueType == enumspb.TASK_QUEUE_TYPE_UNSPECIFIED {
+	if request.TaskQueueType == enumspb.TASK_QUEUE_TYPE_UNSPECIFIED || request.ApiMode == enumspb.DESCRIBE_TASK_QUEUE_MODE_ENHANCED {
 		request.TaskQueueType = enumspb.TASK_QUEUE_TYPE_WORKFLOW
+	}
+
+	if len(request.TaskQueueTypes) == 0 {
+		request.TaskQueueTypes = []enumspb.TaskQueueType{enumspb.TASK_QUEUE_TYPE_WORKFLOW, enumspb.TASK_QUEUE_TYPE_ACTIVITY}
+	}
+
+	if request.GetReportTaskReachability() &&
+		len(request.GetVersions().GetBuildIds()) > wh.config.ReachabilityQueryBuildIdLimit() {
+		return nil, serviceerror.NewInvalidArgument(fmt.Sprintf(
+			"Too many build ids queried at once with ReportTaskReachability==true, limit: %d", wh.config.ReachabilityQueryBuildIdLimit()))
+	}
+
+	if request.ApiMode == enumspb.DESCRIBE_TASK_QUEUE_MODE_ENHANCED {
+		if request.TaskQueue.Kind == enumspb.TASK_QUEUE_KIND_STICKY {
+			return nil, errUseEnhancedDescribeOnStickyQueue
+		}
+		if partition, err := tqid.PartitionFromProto(request.TaskQueue, namespaceID.String(), enumspb.TASK_QUEUE_TYPE_WORKFLOW); err != nil {
+			return nil, errTaskQueuePartitionInvalid
+		} else if !partition.IsRoot() {
+			return nil, errUseEnhancedDescribeOnNonRootQueue
+		}
 	}
 
 	matchingResponse, err := wh.matchingClient.DescribeTaskQueue(ctx, &matchingservice.DescribeTaskQueueRequest{
@@ -2523,10 +2546,7 @@ func (wh *WorkflowHandler) DescribeTaskQueue(ctx context.Context, request *workf
 		return nil, err
 	}
 
-	return &workflowservice.DescribeTaskQueueResponse{
-		Pollers:         matchingResponse.Pollers,
-		TaskQueueStatus: matchingResponse.TaskQueueStatus,
-	}, nil
+	return matchingResponse.DescResponse, nil
 }
 
 // GetClusterInfo return information about Temporal deployment.
@@ -3469,11 +3489,78 @@ func (wh *WorkflowHandler) GetWorkerBuildIdCompatibility(ctx context.Context, re
 }
 
 func (wh *WorkflowHandler) UpdateWorkerVersioningRules(ctx context.Context, request *workflowservice.UpdateWorkerVersioningRulesRequest) (_ *workflowservice.UpdateWorkerVersioningRulesResponse, retError error) {
-	return nil, serviceerror.NewUnimplemented("not implemented")
+	defer log.CapturePanic(wh.logger, &retError)
+
+	if request == nil {
+		return nil, errRequestNotSet
+	}
+
+	if !wh.config.EnableWorkerVersioningRules(request.Namespace) {
+		return nil, errWorkerVersioningNotAllowed
+	}
+
+	taskQueue := &taskqueuepb.TaskQueue{Name: request.GetTaskQueue(), Kind: enumspb.TASK_QUEUE_KIND_NORMAL}
+	if err := wh.validateTaskQueue(taskQueue); err != nil {
+		return nil, err
+	}
+
+	namespaceID, err := wh.namespaceRegistry.GetNamespaceID(namespace.Name(request.GetNamespace()))
+	if err != nil {
+		return nil, err
+	}
+
+	matchingResponse, err := wh.matchingClient.UpdateWorkerVersioningRules(ctx, &matchingservice.UpdateWorkerVersioningRulesRequest{
+		NamespaceId: namespaceID.String(),
+		TaskQueue:   request.GetTaskQueue(),
+		Command: &matchingservice.UpdateWorkerVersioningRulesRequest_Request{
+			Request: request,
+		},
+	})
+
+	if matchingResponse == nil {
+		return nil, err
+	}
+
+	return matchingResponse.Response, err
 }
 
 func (wh *WorkflowHandler) GetWorkerVersioningRules(ctx context.Context, request *workflowservice.GetWorkerVersioningRulesRequest) (_ *workflowservice.GetWorkerVersioningRulesResponse, retError error) {
-	return nil, serviceerror.NewUnimplemented("not implemented")
+	defer log.CapturePanic(wh.logger, &retError)
+
+	if request == nil {
+		return nil, errRequestNotSet
+	}
+
+	if !wh.config.EnableWorkerVersioningRules(request.Namespace) {
+		return nil, errWorkerVersioningNotAllowed
+	}
+
+	taskQueue := &taskqueuepb.TaskQueue{Name: request.GetTaskQueue(), Kind: enumspb.TASK_QUEUE_KIND_NORMAL}
+	if err := wh.validateTaskQueue(taskQueue); err != nil {
+		return nil, err
+	}
+
+	namespaceID, err := wh.namespaceRegistry.GetNamespaceID(namespace.Name(request.GetNamespace()))
+	if err != nil {
+		return nil, err
+	}
+
+	matchingResponse, err := wh.matchingClient.GetWorkerVersioningRules(ctx, &matchingservice.GetWorkerVersioningRulesRequest{
+		NamespaceId: namespaceID.String(),
+		TaskQueue:   request.GetTaskQueue(),
+		Command: &matchingservice.GetWorkerVersioningRulesRequest_Request{
+			Request: &workflowservice.GetWorkerVersioningRulesRequest{
+				Namespace: request.GetNamespace(),
+				TaskQueue: request.GetTaskQueue(),
+			},
+		},
+	})
+
+	if matchingResponse == nil {
+		return nil, err
+	}
+
+	return matchingResponse.Response, err
 }
 
 func (wh *WorkflowHandler) GetWorkerTaskReachability(ctx context.Context, request *workflowservice.GetWorkerTaskReachabilityRequest) (_ *workflowservice.GetWorkerTaskReachabilityResponse, retError error) {

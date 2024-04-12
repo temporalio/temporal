@@ -199,15 +199,33 @@ const (
 	// task queue. Update requests which would cause the versioning data to exceed this number will fail with a
 	// FailedPrecondition error.
 	VersionBuildIdLimitPerQueue = "limit.versionBuildIdLimitPerQueue"
+	// AssignmentRuleLimitPerQueue is the max number of Build ID assignment rules allowed to be defined in the
+	// versioning data for a task queue. Update requests which would cause the versioning data to exceed this number
+	// will fail with a FailedPrecondition error.
+	AssignmentRuleLimitPerQueue = "limit.wv.AssignmentRuleLimitPerQueue"
+	// RedirectRuleLimitPerQueue is the max number of compatible redirect rules allowed to be defined
+	// in the versioning data for a task queue. Update requests which would cause the versioning data to exceed this
+	// number will fail with a FailedPrecondition error.
+	RedirectRuleLimitPerQueue = "limit.wv.RedirectRuleLimitPerQueue"
+	// RedirectRuleChainLimitPerQueue is the max number of compatible redirect rules allowed to be connected
+	// in one chain in the versioning data for a task queue. Update requests which would cause the versioning data
+	// to exceed this number will fail with a FailedPrecondition error.
+	RedirectRuleChainLimitPerQueue = "limit.wv.RedirectRuleChainLimitPerQueue"
+	// MatchingDeletedRuleRetentionTime is the length of time that deleted Version Assignment Rules and
+	// Deleted Redirect Rules will be kept in the DB (with DeleteTimestamp). After this time, the tombstones are deleted at the next time update of versioning data for the task queue.
+	MatchingDeletedRuleRetentionTime = "matching.wv.DeletedRuleRetentionTime"
+	// ReachabilityBuildIdVisibilityGracePeriod is the time period for which deleted versioning rules are still considered active
+	// to account for the delay in updating the build id field in visibility.
+	ReachabilityBuildIdVisibilityGracePeriod = "matching.wv.ReachabilityBuildIdVisibilityGracePeriod"
 	// ReachabilityTaskQueueScanLimit limits the number of task queues to scan when responding to a
 	// GetWorkerTaskReachability query.
 	ReachabilityTaskQueueScanLimit = "limit.reachabilityTaskQueueScan"
 	// ReachabilityQueryBuildIdLimit limits the number of build ids that can be requested in a single call to the
-	// GetWorkerTaskReachability API.
+	// DescribeTaskQueue API with ReportTaskQueueReachability==true, or to the GetWorkerTaskReachability API.
 	ReachabilityQueryBuildIdLimit = "limit.reachabilityQueryBuildIds"
 	// ReachabilityQuerySetDurationSinceDefault is the minimum period since a version set was demoted from being the
 	// queue default before it is considered unreachable by new workflows.
-	// This setting allows some propogation delay of versioning data for the reachability queries, which may happen for
+	// This setting allows some propagation delay of versioning data for the reachability queries, which may happen for
 	// the following reasons:
 	// 1. There are no workflows currently marked as open in the visibility store but a worker for the demoted version
 	// is currently processing a task.
@@ -236,14 +254,14 @@ const (
 
 	// RemovableBuildIdDurationSinceDefault is the minimum duration since a build id was last default in its containing
 	// set for it to be considered for removal, used by the build id scavenger.
-	// This setting allows some propogation delay of versioning data, which may happen for the following reasons:
+	// This setting allows some propagation delay of versioning data, which may happen for the following reasons:
 	// 1. There are no workflows currently marked as open in the visibility store but a worker for the demoted version
 	// is currently processing a task.
 	// 2. There are delays in the visibility task processor (which is asynchronous).
 	// 3. There's propagation delay of the versioning data between matching nodes.
 	RemovableBuildIdDurationSinceDefault = "worker.removableBuildIdDurationSinceDefault"
 	// BuildIdScavengerVisibilityRPS is the rate limit for visibility calls from the build id scavenger
-	BuildIdScavenengerVisibilityRPS = "worker.buildIdScavengerVisibilityRPS"
+	BuildIdScavengerVisibilityRPS = "worker.buildIdScavengerVisibilityRPS"
 
 	// keys for frontend
 
@@ -253,7 +271,7 @@ const (
 	FrontendPersistenceGlobalMaxQPS = "frontend.persistenceGlobalMaxQPS"
 	// FrontendPersistenceNamespaceMaxQPS is the max qps each namespace on frontend host can query DB
 	FrontendPersistenceNamespaceMaxQPS = "frontend.persistenceNamespaceMaxQPS"
-	// FrontendPersistenceNamespaceMaxQPS is the max qps each namespace in frontend cluster can query DB
+	// FrontendPersistenceGlobalNamespaceMaxQPS is the max qps each namespace in frontend cluster can query DB
 	FrontendPersistenceGlobalNamespaceMaxQPS = "frontend.persistenceGlobalNamespaceMaxQPS"
 	// FrontendEnablePersistencePriorityRateLimiting indicates if priority rate limiting is enabled in frontend persistence client
 	FrontendEnablePersistencePriorityRateLimiting = "frontend.enablePersistencePriorityRateLimiting"
@@ -427,6 +445,8 @@ const (
 	FrontendEnableWorkerVersioningDataAPIs = "frontend.workerVersioningDataAPIs"
 	// FrontendEnableWorkerVersioningWorkflowAPIs enables worker versioning in workflow progress APIs.
 	FrontendEnableWorkerVersioningWorkflowAPIs = "frontend.workerVersioningWorkflowAPIs"
+	// FrontendEnableWorkerVersioningRuleAPIs enables worker versioning in workflow progress APIs.
+	FrontendEnableWorkerVersioningRuleAPIs = "frontend.workerVersioningRuleAPIs"
 
 	// DeleteNamespaceDeleteActivityRPS is an RPS per every parallel delete executions activity.
 	// Total RPS is equal to DeleteNamespaceDeleteActivityRPS * DeleteNamespaceConcurrentDeleteExecutionsActivities.

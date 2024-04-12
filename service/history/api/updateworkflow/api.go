@@ -208,7 +208,9 @@ func (u *Updater) Apply(
 	u.taskQueue = common.CloneProto(newWorkflowTask.TaskQueue)
 	u.normalTaskQueueName = ms.GetExecutionInfo().TaskQueue
 	u.directive = worker_versioning.MakeDirectiveForWorkflowTask(
-		ms.GetWorkerVersionStamp(),
+		ms.GetInheritedBuildId(),
+		ms.GetAssignedBuildId(),
+		ms.GetMostRecentWorkerVersionStamp(),
 		ms.GetLastWorkflowTaskStartedEventID(),
 	)
 

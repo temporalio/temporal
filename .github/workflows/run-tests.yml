@@ -187,7 +187,7 @@ jobs:
           docker compose -f ${{ env.DOCKER_COMPOSE_FILE }} up -d ${{ join(matrix.containers, ' ') }}
 
       - name: Run functional test
-        timeout-minutes: 15
+        timeout-minutes: 25
         run: make functional-test-coverage
 
       - name: Tear down docker compose

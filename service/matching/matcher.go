@@ -266,7 +266,7 @@ func syncOfferTask[T any](
 			if err == nil {
 				return resp, nil
 			}
-			if err == errForwarderSlowDown {
+			if errors.Is(err, errForwarderSlowDown) {
 				// if we are rate limited, try only local match for the remainder of the context timeout
 				// left
 				fwdrTokenC = nil
@@ -306,7 +306,7 @@ func (tm *TaskMatcher) OfferNexusTask(ctx context.Context, task *internalTask) (
 // The passed in context MUST NOT have a deadline associated with it
 // Note that calling MustOffer is the only way that matcher knows there are spooled tasks in the
 // backlog, in absence of a pending MustOffer call, the forwarding logic assumes that backlog is empty.
-func (tm *TaskMatcher) MustOffer(ctx context.Context, task *internalTask, interruptCh chan struct{}) error {
+func (tm *TaskMatcher) MustOffer(ctx context.Context, task *internalTask, interruptCh <-chan struct{}) error {
 	tm.registerBacklogTask(task)
 	defer tm.unregisterBacklogTask(task)
 
