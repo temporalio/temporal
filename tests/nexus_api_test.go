@@ -321,7 +321,6 @@ func (s *ClientFunctionalSuite) TestNexusStartOperation_Timeout() {
 	for _, tc := range testCases {
 		tc := tc
 		s.T().Run(tc.name, func(t *testing.T) {
-			t.Parallel()
 			t.Run("ByNamespaceAndTaskQueue", func(t *testing.T) {
 				testFn(t, tc, getDispatchByNsAndTqURL(s.httpAPIAddress, s.namespace, tc.incomingService.Spec.TaskQueue))
 			})
@@ -335,6 +334,8 @@ func (s *ClientFunctionalSuite) TestNexusStartOperation_Timeout() {
 func (s *ClientFunctionalSuite) TestNexusStartOperation_Forbidden() {
 	taskQueue := s.randomizeStr("task-queue")
 	testService := s.createNexusIncomingService(s.randomizeStr("test-service"), taskQueue)
+	// Wait to make sure incoming service is loaded into memory before starting tests.
+	time.Sleep(2 * time.Second)
 
 	type testcase struct {
 		name           string
@@ -403,9 +404,6 @@ func (s *ClientFunctionalSuite) TestNexusStartOperation_Forbidden() {
 		s.Equal(int64(1), snap["nexus_requests"][0].Value)
 	}
 
-	// Wait to make sure all incoming services are loaded into memory before starting tests.
-	time.Sleep(2 * time.Second)
-
 	for _, tc := range testCases {
 		tc := tc
 		s.T().Run(tc.name, func(t *testing.T) {
@@ -425,6 +423,8 @@ func (s *ClientFunctionalSuite) TestNexusStartOperation_Forbidden() {
 func (s *ClientFunctionalSuite) TestNexusStartOperation_Claims() {
 	taskQueue := s.randomizeStr("task-queue")
 	testService := s.createNexusIncomingService(s.randomizeStr("test-service"), taskQueue)
+	// Wait to make sure incoming service is loaded into memory before starting tests.
+	time.Sleep(2 * time.Second)
 
 	type testcase struct {
 		name      string
@@ -510,9 +510,6 @@ func (s *ClientFunctionalSuite) TestNexusStartOperation_Claims() {
 		snap := capture.Snapshot()
 		tc.assertion(result, err, snap)
 	}
-
-	// Wait to make sure all incoming services are loaded into memory before starting tests.
-	time.Sleep(2 * time.Second)
 
 	for _, tc := range testCases {
 		tc := tc
@@ -682,7 +679,6 @@ func (s *ClientFunctionalSuite) TestNexusCancelOperation_Timeouts() {
 	for _, tc := range testCases {
 		tc := tc
 		s.T().Run(tc.name, func(t *testing.T) {
-			t.Parallel()
 			t.Run("ByNamespaceAndTaskQueue", func(t *testing.T) {
 				testFn(t, tc, getDispatchByNsAndTqURL(s.httpAPIAddress, s.namespace, tc.incomingService.Spec.TaskQueue))
 			})
