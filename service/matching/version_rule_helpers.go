@@ -46,6 +46,10 @@ const (
 	unversionedBuildId = ""
 )
 
+var (
+	errUnversionedRedirectRuleTarget = serviceerror.NewInvalidArgument(fmt.Sprintf("the unversioned build id '%s' cannot be the target of a redirect rule", unversionedBuildId))
+)
+
 func cloneOrMkData(data *persistencespb.VersioningData) *persistencespb.VersioningData {
 	if data == nil {
 		return &persistencespb.VersioningData{
@@ -154,8 +158,7 @@ func AddCompatibleRedirectRule(timestamp *hlc.Clock,
 	source := rule.GetSourceBuildId()
 	target := rule.GetTargetBuildId()
 	if target == unversionedBuildId {
-		return nil, serviceerror.NewInvalidArgument(
-			fmt.Sprintf("the unversioned build id '%s' cannot be the target of a redirect rule", unversionedBuildId))
+		return nil, errUnversionedRedirectRuleTarget
 	}
 	if isInVersionSets(source, data.GetVersionSets()) {
 		return nil, serviceerror.NewFailedPrecondition(
@@ -196,8 +199,7 @@ func ReplaceCompatibleRedirectRule(timestamp *hlc.Clock,
 	source := rule.GetSourceBuildId()
 	target := rule.GetTargetBuildId()
 	if target == unversionedBuildId {
-		return nil, serviceerror.NewInvalidArgument(
-			fmt.Sprintf("the unversioned build id '%s' cannot be the target of a redirect rule", unversionedBuildId))
+		return nil, errUnversionedRedirectRuleTarget
 	}
 	if isInVersionSets(source, data.GetVersionSets()) {
 		return nil, serviceerror.NewFailedPrecondition(

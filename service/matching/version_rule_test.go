@@ -655,10 +655,7 @@ func TestInsertRedirectRuleUnversionedTarget(t *testing.T) {
 	// insert (1->"") errors
 	_, err := insertRedirectRule(mkRedirectRule("1", ""), data, clock, ignoreMaxRules, ignoreMaxChain)
 	assert.Error(t, err)
-
-	// insert (""->1) succeeds
-	_, err = insertRedirectRule(mkRedirectRule("", "1"), data, clock, ignoreMaxRules, ignoreMaxChain)
-	assert.NoError(t, err)
+	assert.Equal(t, errUnversionedRedirectRuleTarget, err)
 }
 
 func TestReplaceRedirectRuleBasic(t *testing.T) {
@@ -782,6 +779,7 @@ func TestReplaceRedirectRuleUnversionedTarget(t *testing.T) {
 	// replace (1->"") errors
 	_, err = replaceRedirectRule(mkRedirectRule("1", ""), data, clock, ignoreMaxChain)
 	assert.Error(t, err)
+	assert.Equal(t, errUnversionedRedirectRuleTarget, err)
 }
 
 func TestReplaceRedirectRuleNotFound(t *testing.T) {
