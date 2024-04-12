@@ -68,6 +68,7 @@ import (
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/persistence/versionhistory"
 	"go.temporal.io/server/common/persistence/visibility/manager"
+	"go.temporal.io/server/common/primitives"
 	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/common/searchattribute"
 	"go.temporal.io/server/common/testing/protomock"
@@ -126,7 +127,7 @@ type (
 	}
 )
 
-var defaultWorkflowTaskCompletionLimits = workflow.WorkflowTaskCompletionLimits{MaxResetPoints: configs.DefaultHistoryMaxAutoResetPoints, MaxSearchAttributeValueSize: 2048}
+var defaultWorkflowTaskCompletionLimits = workflow.WorkflowTaskCompletionLimits{MaxResetPoints: primitives.DefaultHistoryMaxAutoResetPoints, MaxSearchAttributeValueSize: 2048}
 
 func TestTransferQueueActiveTaskExecutorSuite(t *testing.T) {
 	s := new(transferQueueActiveTaskExecutorSuite)

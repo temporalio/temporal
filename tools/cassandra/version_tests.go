@@ -33,8 +33,8 @@ import (
 
 	"go.temporal.io/server/common/config"
 	"go.temporal.io/server/common/log"
+	"go.temporal.io/server/common/primitives"
 
-	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/persistence/cassandra"
 	"go.temporal.io/server/common/resolver"
@@ -76,7 +76,7 @@ func (s *VersionTestSuite) TestVerifyCompatibleVersion() {
 		DataStores: map[string]config.DataStore{
 			"default": {Cassandra: &defaultCfg},
 		},
-		TransactionSizeLimit: dynamicconfig.GetIntPropertyFn(common.DefaultTransactionSizeLimit),
+		TransactionSizeLimit: dynamicconfig.GetIntPropertyFn(primitives.DefaultTransactionSizeLimit),
 	}
 	s.NoError(cassandra.VerifyCompatibleVersion(cfg, resolver.NewNoopResolver()))
 }

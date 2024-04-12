@@ -849,8 +849,8 @@ func (v *commandAttrValidator) validateActivityRetryPolicy(
 		attributes.RetryPolicy = &commonpb.RetryPolicy{}
 	}
 
-	defaultActivityRetrySettings := common.FromConfigToDefaultRetrySettings(v.getDefaultActivityRetrySettings(namespaceID.String()))
-	common.EnsureRetryPolicyDefaults(attributes.RetryPolicy, defaultActivityRetrySettings)
+	defaultActivityRetrySettings := dynamicconfig.FromConfigToDefaultRetrySettings(v.getDefaultActivityRetrySettings(namespaceID.String()))
+	dynamicconfig.EnsureRetryPolicyDefaults(attributes.RetryPolicy, defaultActivityRetrySettings)
 	return common.ValidateRetryPolicy(attributes.RetryPolicy)
 }
 
@@ -864,8 +864,8 @@ func (v *commandAttrValidator) validateWorkflowRetryPolicy(
 	}
 
 	// Otherwise, for any unset fields on the retry policy, set with defaults
-	defaultWorkflowRetrySettings := common.FromConfigToDefaultRetrySettings(v.getDefaultWorkflowRetrySettings(namespaceName.String()))
-	common.EnsureRetryPolicyDefaults(retryPolicy, defaultWorkflowRetrySettings)
+	defaultWorkflowRetrySettings := dynamicconfig.FromConfigToDefaultRetrySettings(v.getDefaultWorkflowRetrySettings(namespaceName.String()))
+	dynamicconfig.EnsureRetryPolicyDefaults(retryPolicy, defaultWorkflowRetrySettings)
 	return common.ValidateRetryPolicy(retryPolicy)
 }
 

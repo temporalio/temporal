@@ -51,6 +51,7 @@ import (
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/payloads"
 	"go.temporal.io/server/common/persistence/visibility/manager"
+	"go.temporal.io/server/common/primitives"
 	"go.temporal.io/server/common/searchattribute"
 	"go.temporal.io/server/service/history/configs"
 	"go.temporal.io/server/service/history/tests"
@@ -130,10 +131,10 @@ func (s *commandAttrValidatorSuite) SetupTest() {
 		SearchAttributesNumberOfKeysLimit: dynamicconfig.GetIntPropertyFilteredByNamespace(100),
 		SearchAttributesSizeOfValueLimit:  dynamicconfig.GetIntPropertyFilteredByNamespace(2 * 1024),
 		SearchAttributesTotalSizeLimit:    dynamicconfig.GetIntPropertyFilteredByNamespace(40 * 1024),
-		DefaultActivityRetryPolicy:        dynamicconfig.GetMapPropertyFnWithNamespaceFilter(common.GetDefaultRetryPolicyConfigOptions()),
-		DefaultWorkflowRetryPolicy:        dynamicconfig.GetMapPropertyFnWithNamespaceFilter(common.GetDefaultRetryPolicyConfigOptions()),
+		DefaultActivityRetryPolicy:        dynamicconfig.GetMapPropertyFnWithNamespaceFilter(dynamicconfig.GetDefaultRetryPolicyConfigOptions()),
+		DefaultWorkflowRetryPolicy:        dynamicconfig.GetMapPropertyFnWithNamespaceFilter(dynamicconfig.GetDefaultRetryPolicyConfigOptions()),
 		EnableCrossNamespaceCommands:      dynamicconfig.GetBoolPropertyFn(true),
-		DefaultWorkflowTaskTimeout:        dynamicconfig.GetDurationPropertyFnFilteredByNamespace(common.DefaultWorkflowTaskTimeout),
+		DefaultWorkflowTaskTimeout:        dynamicconfig.GetDurationPropertyFnFilteredByNamespace(primitives.DefaultWorkflowTaskTimeout),
 	}
 	s.validator = newCommandAttrValidator(
 		s.mockNamespaceCache,

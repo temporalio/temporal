@@ -24,10 +24,6 @@
 
 package dynamicconfig
 
-func (k Key) String() string {
-	return string(k)
-}
-
 const (
 	// keys for admin
 
