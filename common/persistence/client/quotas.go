@@ -84,11 +84,10 @@ var (
 )
 
 func NewPriorityRateLimiter(
-	namespaceMaxQPS PersistenceNamespaceMaxQps,
 	hostMaxQPS PersistenceMaxQps,
-	perShardNamespaceMaxQPS PersistencePerShardNamespaceMaxQPS,
 	requestPriorityFn quotas.RequestPriorityFn,
 	operatorRPSRatio OperatorRPSRatio,
+	burstRatio PersistenceBurstRatio,
 	healthSignals p.HealthSignalAggregator,
 	dynamicParams DynamicRateLimitingParams,
 	metricsHandler metrics.Handler,
@@ -97,14 +96,53 @@ func NewPriorityRateLimiter(
 	hostRateFn := func() float64 { return float64(hostMaxQPS()) }
 
 	return quotas.NewMultiRequestRateLimiter(
-		// per shardID+namespaceID rate limiters
-		newPerShardPerNamespacePriorityRateLimiter(perShardNamespaceMaxQPS, hostMaxQPS, requestPriorityFn, operatorRPSRatio),
-		// per namespaceID rate limiters
-		newPriorityNamespaceRateLimiter(namespaceMaxQPS, hostMaxQPS, requestPriorityFn, operatorRPSRatio),
 		// host-level dynamic rate limiter
-		newPriorityDynamicRateLimiter(hostRateFn, requestPriorityFn, operatorRPSRatio, healthSignals, dynamicParams, metricsHandler, logger),
+		newPriorityDynamicRateLimiter(
+			hostRateFn,
+			requestPriorityFn,
+			operatorRPSRatio,
+			burstRatio,
+			healthSignals,
+			dynamicParams,
+			metricsHandler,
+			logger,
+		),
 		// basic host-level rate limiter
-		newPriorityRateLimiter(hostRateFn, requestPriorityFn, operatorRPSRatio),
+		newPriorityRateLimiter(
+			hostRateFn,
+			requestPriorityFn,
+			operatorRPSRatio,
+			burstRatio,
+		),
+	)
+}
+
+func NewPriorityNamespaceRateLimiter(
+	hostMaxQPS PersistenceMaxQps,
+	namespaceMaxQPS PersistenceNamespaceMaxQps,
+	perShardNamespaceMaxQPS PersistencePerShardNamespaceMaxQPS,
+	requestPriorityFn quotas.RequestPriorityFn,
+	operatorRPSRatio OperatorRPSRatio,
+	burstRatio PersistenceBurstRatio,
+) quotas.RequestRateLimiter {
+
+	return quotas.NewMultiRequestRateLimiter(
+		// per shardID+namespaceID rate limiters
+		newPerShardPerNamespacePriorityRateLimiter(
+			perShardNamespaceMaxQPS,
+			hostMaxQPS,
+			requestPriorityFn,
+			operatorRPSRatio,
+			burstRatio,
+		),
+		// per namespaceID rate limiters
+		newPriorityNamespaceRateLimiter(
+			namespaceMaxQPS,
+			hostMaxQPS,
+			requestPriorityFn,
+			operatorRPSRatio,
+			burstRatio,
+		),
 	)
 }
 
@@ -113,6 +151,7 @@ func newPerShardPerNamespacePriorityRateLimiter(
 	hostMaxQPS PersistenceMaxQps,
 	requestPriorityFn quotas.RequestPriorityFn,
 	operatorRPSRatio OperatorRPSRatio,
+	burstRatio PersistenceBurstRatio,
 ) quotas.RequestRateLimiter {
 	return quotas.NewMapRequestRateLimiter(func(req quotas.Request) quotas.RequestRateLimiter {
 		if hasCaller(req) && hasCallerSegment(req) {
@@ -124,6 +163,7 @@ func newPerShardPerNamespacePriorityRateLimiter(
 			},
 				requestPriorityFn,
 				operatorRPSRatio,
+				burstRatio,
 			)
 		}
 		return quotas.NoopRequestRateLimiter
@@ -144,6 +184,7 @@ func newPriorityNamespaceRateLimiter(
 	hostMaxQPS PersistenceMaxQps,
 	requestPriorityFn quotas.RequestPriorityFn,
 	operatorRPSRatio OperatorRPSRatio,
+	burstRatio PersistenceBurstRatio,
 ) quotas.RequestRateLimiter {
 	return quotas.NewNamespaceRequestRateLimiter(func(req quotas.Request) quotas.RequestRateLimiter {
 		if hasCaller(req) {
@@ -162,6 +203,7 @@ func newPriorityNamespaceRateLimiter(
 				},
 				requestPriorityFn,
 				operatorRPSRatio,
+				burstRatio,
 			)
 		}
 		return quotas.NoopRequestRateLimiter
@@ -172,13 +214,24 @@ func newPriorityRateLimiter(
 	rateFn quotas.RateFn,
 	requestPriorityFn quotas.RequestPriorityFn,
 	operatorRPSRatio OperatorRPSRatio,
+	burstRatio PersistenceBurstRatio,
 ) quotas.RequestRateLimiter {
 	rateLimiters := make(map[int]quotas.RequestRateLimiter)
 	for priority := range RequestPrioritiesOrdered {
 		if priority == CallerTypeDefaultPriority[headers.CallerTypeOperator] {
-			rateLimiters[priority] = quotas.NewRequestRateLimiterAdapter(quotas.NewDefaultOutgoingRateLimiter(operatorRateFn(rateFn, operatorRPSRatio)))
+			rateLimiters[priority] = quotas.NewRequestRateLimiterAdapter(
+				quotas.NewDefaultRateLimiter(
+					operatorRateFn(rateFn, operatorRPSRatio),
+					quotas.BurstRatioFn(burstRatio),
+				),
+			)
 		} else {
-			rateLimiters[priority] = quotas.NewRequestRateLimiterAdapter(quotas.NewDefaultOutgoingRateLimiter(rateFn))
+			rateLimiters[priority] = quotas.NewRequestRateLimiterAdapter(
+				quotas.NewDefaultRateLimiter(
+					rateFn,
+					quotas.BurstRatioFn(burstRatio),
+				),
+			)
 		}
 	}
 
@@ -192,6 +245,7 @@ func newPriorityDynamicRateLimiter(
 	rateFn quotas.RateFn,
 	requestPriorityFn quotas.RequestPriorityFn,
 	operatorRPSRatio OperatorRPSRatio,
+	burstRatio PersistenceBurstRatio,
 	healthSignals p.HealthSignalAggregator,
 	dynamicParams DynamicRateLimitingParams,
 	metricsHandler metrics.Handler,
@@ -201,9 +255,23 @@ func newPriorityDynamicRateLimiter(
 	for priority := range RequestPrioritiesOrdered {
 		// TODO: refactor this so dynamic rate adjustment is global for all priorities
 		if priority == CallerTypeDefaultPriority[headers.CallerTypeOperator] {
-			rateLimiters[priority] = NewHealthRequestRateLimiterImpl(healthSignals, operatorRateFn(rateFn, operatorRPSRatio), dynamicParams, metricsHandler, logger)
+			rateLimiters[priority] = NewHealthRequestRateLimiterImpl(
+				healthSignals,
+				operatorRateFn(rateFn, operatorRPSRatio),
+				dynamicParams,
+				burstRatio,
+				metricsHandler,
+				logger,
+			)
 		} else {
-			rateLimiters[priority] = NewHealthRequestRateLimiterImpl(healthSignals, rateFn, dynamicParams, metricsHandler, logger)
+			rateLimiters[priority] = NewHealthRequestRateLimiterImpl(
+				healthSignals,
+				rateFn,
+				dynamicParams,
+				burstRatio,
+				metricsHandler,
+				logger,
+			)
 		}
 	}
 
@@ -215,15 +283,19 @@ func newPriorityDynamicRateLimiter(
 
 func NewNoopPriorityRateLimiter(
 	maxQPS PersistenceMaxQps,
+	burstRatio PersistenceBurstRatio,
 ) quotas.RequestRateLimiter {
 	priority := RequestPrioritiesOrdered[0]
 
 	return quotas.NewPriorityRateLimiter(
 		func(_ quotas.Request) int { return priority },
 		map[int]quotas.RequestRateLimiter{
-			priority: quotas.NewRequestRateLimiterAdapter(quotas.NewDefaultOutgoingRateLimiter(
-				func() float64 { return float64(maxQPS()) },
-			)),
+			priority: quotas.NewRequestRateLimiterAdapter(
+				quotas.NewDefaultRateLimiter(
+					func() float64 { return float64(maxQPS()) },
+					quotas.BurstRatioFn(burstRatio),
+				),
+			),
 		},
 	)
 }

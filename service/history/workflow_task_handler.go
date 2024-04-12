@@ -276,7 +276,7 @@ func (handler *workflowTaskHandlerImpl) handleCommand(
 	msgs *collection.IndexedTakeList[string, *protocolpb.Message],
 ) (*handleCommandResponse, error) {
 
-	handler.metricsHandler.Counter(metrics.CommandCounter.Name()).
+	metrics.CommandCounter.With(handler.metricsHandler).
 		Record(1, metrics.CommandTypeTag(command.GetCommandType().String()))
 
 	switch command.GetCommandType() {
@@ -356,10 +356,9 @@ func (handler *workflowTaskHandlerImpl) handleMessage(
 				serviceerror.NewNotFound(fmt.Sprintf("update %q not found", message.ProtocolInstanceId)))
 		}
 
-		if err := upd.OnMessage(
+		if err := upd.OnProtocolMessage(
 			ctx,
 			message,
-			handler.mutableState.IsWorkflowExecutionRunning(),
 			workflow.WithEffects(handler.effects, handler.mutableState)); err != nil {
 			return handler.failWorkflowTaskOnInvalidArgument(
 				enumspb.WORKFLOW_TASK_FAILED_CAUSE_BAD_UPDATE_WORKFLOW_EXECUTION_MESSAGE, err)
@@ -378,7 +377,7 @@ func (handler *workflowTaskHandlerImpl) handleCommandProtocolMessage(
 	attr *commandpb.ProtocolMessageCommandAttributes,
 	msgs *collection.IndexedTakeList[string, *protocolpb.Message],
 ) error {
-	handler.metricsHandler.Counter(metrics.CommandTypeProtocolMessage.Name()).Record(1)
+	metrics.CommandCounter.With(handler.metricsHandler).Record(1)
 
 	executionInfo := handler.mutableState.GetExecutionInfo()
 	namespaceID := namespace.ID(executionInfo.NamespaceId)
@@ -408,8 +407,7 @@ func (handler *workflowTaskHandlerImpl) handleCommandScheduleActivity(
 	_ context.Context,
 	attr *commandpb.ScheduleActivityTaskCommandAttributes,
 ) (*handleCommandResponse, error) {
-
-	handler.metricsHandler.Counter(metrics.CommandTypeScheduleActivityCounter.Name()).Record(1)
+	metrics.CommandCounter.With(handler.metricsHandler).Record(1)
 
 	executionInfo := handler.mutableState.GetExecutionInfo()
 	namespaceID := namespace.ID(executionInfo.NamespaceId)
@@ -430,7 +428,7 @@ func (handler *workflowTaskHandlerImpl) handleCommandScheduleActivity(
 		// TODO: this is supported in new versioning [cleanup-old-wv]
 		if attr.UseWorkflowBuildId && attr.TaskQueue.GetName() != "" && attr.TaskQueue.Name != handler.mutableState.GetExecutionInfo().TaskQueue {
 			err := serviceerror.NewInvalidArgument("Activity with UseCompatibleVersion cannot run on different task queue.")
-			return nil, handler.failWorkflow(enumspb.WORKFLOW_TASK_FAILED_CAUSE_BAD_SCHEDULE_ACTIVITY_ATTRIBUTES, err)
+			return nil, handler.failWorkflowTask(enumspb.WORKFLOW_TASK_FAILED_CAUSE_BAD_SCHEDULE_ACTIVITY_ATTRIBUTES, err)
 		}
 	}
 
@@ -457,7 +455,7 @@ func (handler *workflowTaskHandlerImpl) handleCommandScheduleActivity(
 	// or 2. workflow uses versioning and activity intends to use a compatible version (since a
 	// worker is obviously compatible with itself and we are okay dispatching an eager task knowing that there may be a
 	// newer "default" compatible version).
-	// Note that if `UseCompatibleVersion` is false, it implies that the activity should run on the "default" version
+	// Note that if `UseWorkflowBuildId` is false, it implies that the activity should run on the "default" version
 	// for the task queue.
 	eagerStartActivity := attr.RequestEagerExecution && handler.config.EnableActivityEagerExecution(namespace) &&
 		(!versioningUsed || attr.UseWorkflowBuildId)
@@ -560,9 +558,7 @@ func (handler *workflowTaskHandlerImpl) handlePostCommandEagerExecuteActivity(
 		WorkflowType:                handler.mutableState.GetWorkflowType(),
 		WorkflowNamespace:           handler.mutableState.GetNamespaceEntry().Name().String(),
 	}
-	handler.metricsHandler.Counter(
-		metrics.ActivityEagerExecutionCounter.Name(),
-	).Record(
+	metrics.ActivityEagerExecutionCounter.With(handler.metricsHandler).Record(
 		1,
 		metrics.NamespaceTag(string(handler.mutableState.GetNamespaceEntry().Name())),
 		metrics.TaskQueueTag(ai.TaskQueue),
@@ -578,8 +574,7 @@ func (handler *workflowTaskHandlerImpl) handleCommandRequestCancelActivity(
 	_ context.Context,
 	attr *commandpb.RequestCancelActivityTaskCommandAttributes,
 ) error {
-
-	handler.metricsHandler.Counter(metrics.CommandTypeCancelActivityCounter.Name()).Record(1)
+	metrics.CommandCounter.With(handler.metricsHandler).Record(1)
 
 	if err := handler.validateCommandAttr(
 		func() (enumspb.WorkflowTaskFailedCause, error) {
@@ -625,8 +620,7 @@ func (handler *workflowTaskHandlerImpl) handleCommandStartTimer(
 	_ context.Context,
 	attr *commandpb.StartTimerCommandAttributes,
 ) error {
-
-	handler.metricsHandler.Counter(metrics.CommandTypeStartTimerCounter.Name()).Record(1)
+	metrics.CommandCounter.With(handler.metricsHandler).Record(1)
 
 	if err := handler.validateCommandAttr(
 		func() (enumspb.WorkflowTaskFailedCause, error) {
@@ -647,8 +641,7 @@ func (handler *workflowTaskHandlerImpl) handleCommandCompleteWorkflow(
 	ctx context.Context,
 	attr *commandpb.CompleteWorkflowExecutionCommandAttributes,
 ) error {
-
-	handler.metricsHandler.Counter(metrics.CommandTypeCompleteWorkflowCounter.Name()).Record(1)
+	metrics.CommandCounter.With(handler.metricsHandler).Record(1)
 
 	if handler.hasBufferedEvents {
 		return handler.failWorkflowTask(enumspb.WORKFLOW_TASK_FAILED_CAUSE_UNHANDLED_COMMAND, nil)
@@ -672,7 +665,7 @@ func (handler *workflowTaskHandlerImpl) handleCommandCompleteWorkflow(
 
 	// If the workflow task has more than one completion event than just pick the first one
 	if !handler.mutableState.IsWorkflowExecutionRunning() {
-		handler.metricsHandler.Counter(metrics.MultipleCompletionCommandsCounter.Name()).Record(1)
+		metrics.MultipleCompletionCommandsCounter.With(handler.metricsHandler).Record(1)
 		handler.logger.Warn(
 			"Multiple completion commands",
 			tag.WorkflowCommandType(enumspb.COMMAND_TYPE_COMPLETE_WORKFLOW_EXECUTION),
@@ -705,8 +698,7 @@ func (handler *workflowTaskHandlerImpl) handleCommandFailWorkflow(
 	ctx context.Context,
 	attr *commandpb.FailWorkflowExecutionCommandAttributes,
 ) error {
-
-	handler.metricsHandler.Counter(metrics.CommandTypeFailWorkflowCounter.Name()).Record(1)
+	metrics.CommandCounter.With(handler.metricsHandler).Record(1)
 
 	if handler.hasBufferedEvents {
 		return handler.failWorkflowTask(enumspb.WORKFLOW_TASK_FAILED_CAUSE_UNHANDLED_COMMAND, nil)
@@ -731,7 +723,7 @@ func (handler *workflowTaskHandlerImpl) handleCommandFailWorkflow(
 
 	// If the workflow task has more than one completion event than just pick the first one
 	if !handler.mutableState.IsWorkflowExecutionRunning() {
-		handler.metricsHandler.Counter(metrics.MultipleCompletionCommandsCounter.Name()).Record(1)
+		metrics.MultipleCompletionCommandsCounter.With(handler.metricsHandler).Record(1)
 		handler.logger.Warn(
 			"Multiple completion commands",
 			tag.WorkflowCommandType(enumspb.COMMAND_TYPE_FAIL_WORKFLOW_EXECUTION),
@@ -765,7 +757,7 @@ func (handler *workflowTaskHandlerImpl) handleCommandFailWorkflow(
 
 	// Handle retry or cron
 	if retryBackoff != backoff.NoBackoff {
-		return handler.handleRetry(ctx, retryBackoff, retryState, attr.GetFailure(), newExecutionRunID)
+		return handler.handleRetry(ctx, retryBackoff, attr.GetFailure(), newExecutionRunID)
 	} else if cronBackoff != backoff.NoBackoff {
 		return handler.handleCron(ctx, cronBackoff, nil, attr.GetFailure(), newExecutionRunID)
 	}
@@ -778,8 +770,7 @@ func (handler *workflowTaskHandlerImpl) handleCommandCancelTimer(
 	_ context.Context,
 	attr *commandpb.CancelTimerCommandAttributes,
 ) error {
-
-	handler.metricsHandler.Counter(metrics.CommandTypeCancelTimerCounter.Name()).Record(1)
+	metrics.CommandCounter.With(handler.metricsHandler).Record(1)
 
 	if err := handler.validateCommandAttr(
 		func() (enumspb.WorkflowTaskFailedCause, error) {
@@ -807,8 +798,7 @@ func (handler *workflowTaskHandlerImpl) handleCommandCancelWorkflow(
 	ctx context.Context,
 	attr *commandpb.CancelWorkflowExecutionCommandAttributes,
 ) error {
-
-	handler.metricsHandler.Counter(metrics.CommandTypeCancelWorkflowCounter.Name()).Record(1)
+	metrics.CommandCounter.With(handler.metricsHandler).Record(1)
 
 	if handler.hasBufferedEvents {
 		return handler.failWorkflowTask(enumspb.WORKFLOW_TASK_FAILED_CAUSE_UNHANDLED_COMMAND, nil)
@@ -824,7 +814,7 @@ func (handler *workflowTaskHandlerImpl) handleCommandCancelWorkflow(
 
 	// If the workflow task has more than one completion event than just pick the first one
 	if !handler.mutableState.IsWorkflowExecutionRunning() {
-		handler.metricsHandler.Counter(metrics.MultipleCompletionCommandsCounter.Name()).Record(1)
+		metrics.MultipleCompletionCommandsCounter.With(handler.metricsHandler).Record(1)
 		handler.logger.Warn(
 			"Multiple completion commands",
 			tag.WorkflowCommandType(enumspb.COMMAND_TYPE_CANCEL_WORKFLOW_EXECUTION),
@@ -841,8 +831,7 @@ func (handler *workflowTaskHandlerImpl) handleCommandRequestCancelExternalWorkfl
 	_ context.Context,
 	attr *commandpb.RequestCancelExternalWorkflowExecutionCommandAttributes,
 ) error {
-
-	handler.metricsHandler.Counter(metrics.CommandTypeCancelExternalWorkflowCounter.Name()).Record(1)
+	metrics.CommandCounter.With(handler.metricsHandler).Record(1)
 
 	executionInfo := handler.mutableState.GetExecutionInfo()
 	namespaceID := namespace.ID(executionInfo.NamespaceId)
@@ -883,8 +872,7 @@ func (handler *workflowTaskHandlerImpl) handleCommandRecordMarker(
 	_ context.Context,
 	attr *commandpb.RecordMarkerCommandAttributes,
 ) error {
-
-	handler.metricsHandler.Counter(metrics.CommandTypeRecordMarkerCounter.Name()).Record(1)
+	metrics.CommandCounter.With(handler.metricsHandler).Record(1)
 
 	if err := handler.validateCommandAttr(
 		func() (enumspb.WorkflowTaskFailedCause, error) {
@@ -910,8 +898,7 @@ func (handler *workflowTaskHandlerImpl) handleCommandContinueAsNewWorkflow(
 	ctx context.Context,
 	attr *commandpb.ContinueAsNewWorkflowExecutionCommandAttributes,
 ) error {
-
-	handler.metricsHandler.Counter(metrics.CommandTypeContinueAsNewCounter.Name()).Record(1)
+	metrics.CommandCounter.With(handler.metricsHandler).Record(1)
 
 	if handler.hasBufferedEvents {
 		return handler.failWorkflowTask(enumspb.WORKFLOW_TASK_FAILED_CAUSE_UNHANDLED_COMMAND, nil)
@@ -927,7 +914,7 @@ func (handler *workflowTaskHandlerImpl) handleCommandContinueAsNewWorkflow(
 	if err != nil {
 		return handler.failWorkflowTaskOnInvalidArgument(enumspb.WORKFLOW_TASK_FAILED_CAUSE_BAD_SEARCH_ATTRIBUTES, err)
 	}
-	if unaliasedSas != nil {
+	if unaliasedSas != attr.GetSearchAttributes() {
 		// Create a copy of the `attr` to avoid modification of original `attr`,
 		// which can be needed again in case of retry.
 		newAttr := common.CloneProto(attr)
@@ -951,7 +938,7 @@ func (handler *workflowTaskHandlerImpl) handleCommandContinueAsNewWorkflow(
 		// TODO: this is supported in new versioning [cleanup-old-wv]
 		if attr.InheritBuildId && attr.TaskQueue.GetName() != "" && attr.TaskQueue.Name != handler.mutableState.GetExecutionInfo().TaskQueue {
 			err := serviceerror.NewInvalidArgument("ContinueAsNew with UseCompatibleVersion cannot run on different task queue.")
-			return handler.failWorkflow(enumspb.WORKFLOW_TASK_FAILED_CAUSE_BAD_CONTINUE_AS_NEW_ATTRIBUTES, err)
+			return handler.failWorkflowTask(enumspb.WORKFLOW_TASK_FAILED_CAUSE_BAD_CONTINUE_AS_NEW_ATTRIBUTES, err)
 		}
 	}
 
@@ -982,7 +969,7 @@ func (handler *workflowTaskHandlerImpl) handleCommandContinueAsNewWorkflow(
 
 	// If the workflow task has more than one completion event than just pick the first one
 	if !handler.mutableState.IsWorkflowExecutionRunning() {
-		handler.metricsHandler.Counter(metrics.MultipleCompletionCommandsCounter.Name()).Record(1)
+		metrics.MultipleCompletionCommandsCounter.With(handler.metricsHandler).Record(1)
 		handler.logger.Warn(
 			"Multiple completion commands",
 			tag.WorkflowCommandType(enumspb.COMMAND_TYPE_CONTINUE_AS_NEW_WORKFLOW_EXECUTION),
@@ -1020,8 +1007,7 @@ func (handler *workflowTaskHandlerImpl) handleCommandStartChildWorkflow(
 	_ context.Context,
 	attr *commandpb.StartChildWorkflowExecutionCommandAttributes,
 ) error {
-
-	handler.metricsHandler.Counter(metrics.CommandTypeChildWorkflowCounter.Name()).Record(1)
+	metrics.CommandCounter.With(handler.metricsHandler).Record(1)
 
 	parentNamespaceEntry := handler.mutableState.GetNamespaceEntry()
 	parentNamespaceID := parentNamespaceEntry.ID()
@@ -1047,7 +1033,7 @@ func (handler *workflowTaskHandlerImpl) handleCommandStartChildWorkflow(
 	if err != nil {
 		return handler.failWorkflowTaskOnInvalidArgument(enumspb.WORKFLOW_TASK_FAILED_CAUSE_BAD_SEARCH_ATTRIBUTES, err)
 	}
-	if unaliasedSas != nil {
+	if unaliasedSas != attr.GetSearchAttributes() {
 		// Create a copy of the `attr` to avoid modification of original `attr`,
 		// which can be needed again in case of retry.
 		newAttr := common.CloneProto(attr)
@@ -1074,7 +1060,7 @@ func (handler *workflowTaskHandlerImpl) handleCommandStartChildWorkflow(
 		// TODO: this is supported in new versioning [cleanup-old-wv]
 		if attr.InheritBuildId && attr.TaskQueue.GetName() != "" && attr.TaskQueue.Name != handler.mutableState.GetExecutionInfo().TaskQueue {
 			err := serviceerror.NewInvalidArgument("StartChildWorkflowExecution with UseCompatibleVersion cannot run on different task queue.")
-			return handler.failWorkflow(enumspb.WORKFLOW_TASK_FAILED_CAUSE_BAD_START_CHILD_EXECUTION_ATTRIBUTES, err)
+			return handler.failWorkflowTask(enumspb.WORKFLOW_TASK_FAILED_CAUSE_BAD_START_CHILD_EXECUTION_ATTRIBUTES, err)
 		}
 	}
 
@@ -1132,8 +1118,7 @@ func (handler *workflowTaskHandlerImpl) handleCommandSignalExternalWorkflow(
 	_ context.Context,
 	attr *commandpb.SignalExternalWorkflowExecutionCommandAttributes,
 ) error {
-
-	handler.metricsHandler.Counter(metrics.CommandTypeSignalExternalWorkflowCounter.Name()).Record(1)
+	metrics.CommandCounter.With(handler.metricsHandler).Record(1)
 
 	executionInfo := handler.mutableState.GetExecutionInfo()
 	namespaceID := namespace.ID(executionInfo.NamespaceId)
@@ -1180,8 +1165,7 @@ func (handler *workflowTaskHandlerImpl) handleCommandUpsertWorkflowSearchAttribu
 	_ context.Context,
 	attr *commandpb.UpsertWorkflowSearchAttributesCommandAttributes,
 ) error {
-
-	handler.metricsHandler.Counter(metrics.CommandTypeUpsertWorkflowSearchAttributesCounter.Name()).Record(1)
+	metrics.CommandCounter.With(handler.metricsHandler).Record(1)
 
 	// get namespace name
 	executionInfo := handler.mutableState.GetExecutionInfo()
@@ -1200,7 +1184,7 @@ func (handler *workflowTaskHandlerImpl) handleCommandUpsertWorkflowSearchAttribu
 	if err != nil {
 		return handler.failWorkflowTaskOnInvalidArgument(enumspb.WORKFLOW_TASK_FAILED_CAUSE_BAD_SEARCH_ATTRIBUTES, err)
 	}
-	if unaliasedSas != nil {
+	if unaliasedSas != attr.GetSearchAttributes() {
 		// Create a copy of the `attr` to avoid modification of original `attr`,
 		// which can be needed again in case of retry.
 		newAttr := common.CloneProto(attr)
@@ -1252,8 +1236,7 @@ func (handler *workflowTaskHandlerImpl) handleCommandModifyWorkflowProperties(
 	_ context.Context,
 	attr *commandpb.ModifyWorkflowPropertiesCommandAttributes,
 ) error {
-
-	handler.metricsHandler.Counter(metrics.CommandTypeModifyWorkflowPropertiesCounter.Name()).Record(1)
+	metrics.CommandCounter.With(handler.metricsHandler).Record(1)
 
 	// get namespace name
 	executionInfo := handler.mutableState.GetExecutionInfo()
@@ -1313,7 +1296,6 @@ func payloadsMapSize(fields map[string]*commonpb.Payload) int {
 func (handler *workflowTaskHandlerImpl) handleRetry(
 	ctx context.Context,
 	backoffInterval time.Duration,
-	retryState enumspb.RetryState,
 	failure *failurepb.Failure,
 	newRunID string,
 ) error {
@@ -1323,12 +1305,15 @@ func (handler *workflowTaskHandlerImpl) handleRetry(
 	}
 	startAttr := startEvent.GetWorkflowExecutionStartedEventAttributes()
 
-	newMutableState := workflow.NewMutableState(
+	newMutableState := workflow.NewMutableStateInChain(
 		handler.shard,
 		handler.shard.GetEventsCache(),
 		handler.shard.GetLogger(),
 		handler.mutableState.GetNamespaceEntry(),
+		handler.mutableState.GetWorkflowKey().WorkflowID,
+		newRunID,
 		handler.shard.GetTimeSource().Now(),
+		handler.mutableState,
 	)
 
 	err = workflow.SetupNewWorkflowForRetryOrCron(
@@ -1347,7 +1332,6 @@ func (handler *workflowTaskHandlerImpl) handleRetry(
 	}
 
 	err = newMutableState.SetHistoryTree(
-		ctx,
 		newMutableState.GetExecutionInfo().WorkflowExecutionTimeout,
 		newMutableState.GetExecutionInfo().WorkflowRunTimeout,
 		newRunID,
@@ -1377,12 +1361,15 @@ func (handler *workflowTaskHandlerImpl) handleCron(
 		lastCompletionResult = startAttr.LastCompletionResult
 	}
 
-	newMutableState := workflow.NewMutableState(
+	newMutableState := workflow.NewMutableStateInChain(
 		handler.shard,
 		handler.shard.GetEventsCache(),
 		handler.shard.GetLogger(),
 		handler.mutableState.GetNamespaceEntry(),
+		handler.mutableState.GetWorkflowKey().WorkflowID,
+		newRunID,
 		handler.shard.GetTimeSource().Now(),
+		handler.mutableState,
 	)
 
 	err = workflow.SetupNewWorkflowForRetryOrCron(
@@ -1401,7 +1388,6 @@ func (handler *workflowTaskHandlerImpl) handleCron(
 	}
 
 	err = newMutableState.SetHistoryTree(
-		ctx,
 		newMutableState.GetExecutionInfo().WorkflowExecutionTimeout,
 		newMutableState.GetExecutionInfo().WorkflowRunTimeout,
 		newRunID,

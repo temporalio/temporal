@@ -208,6 +208,27 @@ func (fwdr *Forwarder) ForwardQueryTask(
 	return resp, fwdr.handleErr(err)
 }
 
+// ForwardNexusTask forwards a nexus task to parent task queue partition, if it exists.
+func (fwdr *Forwarder) ForwardNexusTask(ctx context.Context, task *internalTask) (*matchingservice.DispatchNexusTaskResponse, error) {
+	degree := fwdr.cfg.ForwarderMaxChildrenPerNode()
+	target, err := fwdr.partition.ParentPartition(degree)
+	if err != nil {
+		return nil, err
+	}
+
+	resp, err := fwdr.client.DispatchNexusTask(ctx, &matchingservice.DispatchNexusTaskRequest{
+		NamespaceId: task.nexus.request.GetNamespaceId(),
+		TaskQueue: &taskqueuepb.TaskQueue{
+			Name: target.RpcName(),
+			Kind: fwdr.partition.Kind(),
+		},
+		Request:         task.nexus.request.Request,
+		ForwardedSource: fwdr.partition.RpcName(),
+	})
+
+	return resp, fwdr.handleErr(err)
+}
+
 // ForwardPoll forwards a poll request to parent task queue partition if it exist
 func (fwdr *Forwarder) ForwardPoll(ctx context.Context, pollMetadata *pollMetadata) (*internalTask, error) {
 	degree := fwdr.cfg.ForwarderMaxChildrenPerNode()

@@ -105,7 +105,8 @@ func TestUserData_LoadOnInit_OnlyOnceWhenNoData(t *testing.T) {
 	tqCfg.dbq = dbq
 
 	m := createUserDataManager(t, controller, tqCfg)
-	tm := m.store.(*testTaskManager)
+	tm, ok := m.store.(*testTaskManager)
+	require.True(t, ok)
 
 	require.Equal(t, 0, tm.getGetUserDataCount(dbq))
 
@@ -154,8 +155,7 @@ func TestUserData_FetchesOnInit(t *testing.T) {
 			WaitNewData:              false, // first fetch is not long poll
 		}).
 		Return(&matchingservice.GetTaskQueueUserDataResponse{
-			TaskQueueHasUserData: true,
-			UserData:             data1,
+			UserData: data1,
 		}, nil)
 
 	m := createUserDataManager(t, controller, tqCfg)
@@ -199,8 +199,7 @@ func TestUserData_FetchesAndFetchesAgain(t *testing.T) {
 			WaitNewData:              false, // first is not long poll
 		}).
 		Return(&matchingservice.GetTaskQueueUserDataResponse{
-			TaskQueueHasUserData: true,
-			UserData:             data1,
+			UserData: data1,
 		}, nil)
 
 	tqCfg.matchingClientMock.EXPECT().GetTaskQueueUserData(
@@ -213,8 +212,7 @@ func TestUserData_FetchesAndFetchesAgain(t *testing.T) {
 			WaitNewData:              true, // second is long poll
 		}).
 		Return(&matchingservice.GetTaskQueueUserDataResponse{
-			TaskQueueHasUserData: true,
-			UserData:             data2,
+			UserData: data2,
 		}, nil)
 
 	tqCfg.matchingClientMock.EXPECT().GetTaskQueueUserData(
@@ -282,8 +280,7 @@ func TestUserData_RetriesFetchOnUnavailable(t *testing.T) {
 		DoAndReturn(func(ctx context.Context, in *matchingservice.GetTaskQueueUserDataRequest, opts ...grpc.CallOption) (*matchingservice.GetTaskQueueUserDataResponse, error) {
 			<-ch
 			return &matchingservice.GetTaskQueueUserDataResponse{
-				TaskQueueHasUserData: true,
-				UserData:             data1,
+				UserData: data1,
 			}, nil
 		})
 
@@ -355,8 +352,7 @@ func TestUserData_RetriesFetchOnUnImplemented(t *testing.T) {
 		DoAndReturn(func(ctx context.Context, in *matchingservice.GetTaskQueueUserDataRequest, opts ...grpc.CallOption) (*matchingservice.GetTaskQueueUserDataResponse, error) {
 			<-ch
 			return &matchingservice.GetTaskQueueUserDataResponse{
-				TaskQueueHasUserData: true,
-				UserData:             data1,
+				UserData: data1,
 			}, nil
 		})
 
@@ -414,8 +410,7 @@ func TestUserData_FetchesUpTree(t *testing.T) {
 			WaitNewData:              false,
 		}).
 		Return(&matchingservice.GetTaskQueueUserDataResponse{
-			TaskQueueHasUserData: true,
-			UserData:             data1,
+			UserData: data1,
 		}, nil)
 
 	m := createUserDataManager(t, controller, tqCfg)
@@ -454,8 +449,7 @@ func TestUserData_FetchesActivityToWorkflow(t *testing.T) {
 			WaitNewData:              false,
 		}).
 		Return(&matchingservice.GetTaskQueueUserDataResponse{
-			TaskQueueHasUserData: true,
-			UserData:             data1,
+			UserData: data1,
 		}, nil)
 
 	m := createUserDataManager(t, controller, tqCfg)
@@ -498,8 +492,7 @@ func TestUserData_FetchesStickyToNormal(t *testing.T) {
 			WaitNewData:              false,
 		}).
 		Return(&matchingservice.GetTaskQueueUserDataResponse{
-			TaskQueueHasUserData: true,
-			UserData:             data1,
+			UserData: data1,
 		}, nil)
 
 	m := createUserDataManager(t, controller, tqCfg)

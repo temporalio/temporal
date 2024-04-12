@@ -51,6 +51,7 @@ func ConvertToStartRequest(
 		Identity:                 request.GetIdentity(),
 		RequestId:                request.GetRequestId(),
 		WorkflowIdReusePolicy:    request.GetWorkflowIdReusePolicy(),
+		WorkflowIdConflictPolicy: request.GetWorkflowIdConflictPolicy(),
 		RetryPolicy:              request.GetRetryPolicy(),
 		CronSchedule:             request.GetCronSchedule(),
 		Memo:                     request.GetMemo(),
@@ -59,5 +60,5 @@ func ConvertToStartRequest(
 		WorkflowStartDelay:       request.GetWorkflowStartDelay(),
 	}
 
-	return common.CreateHistoryStartWorkflowRequest(namespaceID.String(), req, nil, now)
+	return common.CreateHistoryStartWorkflowRequest(namespaceID.String(), req, nil, nil, now)
 }

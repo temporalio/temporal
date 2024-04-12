@@ -32,7 +32,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/server/common/dynamicconfig"
-	"go.temporal.io/server/common/quotas"
+	"go.temporal.io/server/common/quotas/calculator"
 	"go.temporal.io/server/common/quotas/quotastest"
 	"google.golang.org/grpc"
 
@@ -48,7 +48,7 @@ type nsCountLimitTestCase struct {
 	// numBlockedRequests is the number of pending requests that will be blocked including the final request.
 	numBlockedRequests int
 	// memberCounter returns the number of members in the namespace.
-	memberCounter quotas.MemberCounter
+	memberCounter calculator.MemberCounter
 	// perInstanceLimit is the limit on the number of pending requests per-instance.
 	perInstanceLimit int
 	// globalLimit is the limit on the number of pending requests across all instances.
@@ -76,7 +76,7 @@ func TestNamespaceCountLimitInterceptor_Intercept(t *testing.T) {
 			memberCounter:      quotastest.NewFakeMemberCounter(2),
 			methodName:         "/temporal.api.workflowservice.v1.WorkflowService/DescribeNamespace",
 			tokens: map[string]int{
-				"DescribeNamespace": 1,
+				"/temporal.api.workflowservice.v1.WorkflowService/DescribeNamespace": 1,
 			},
 			expectRateLimit: false,
 		},
@@ -89,7 +89,7 @@ func TestNamespaceCountLimitInterceptor_Intercept(t *testing.T) {
 			memberCounter:      quotastest.NewFakeMemberCounter(2),
 			methodName:         "/temporal.api.workflowservice.v1.WorkflowService/DescribeNamespace",
 			tokens: map[string]int{
-				"DescribeNamespace": 1,
+				"/temporal.api.workflowservice.v1.WorkflowService/DescribeNamespace": 1,
 			},
 			expectRateLimit: true,
 		},
@@ -102,7 +102,7 @@ func TestNamespaceCountLimitInterceptor_Intercept(t *testing.T) {
 			memberCounter:      quotastest.NewFakeMemberCounter(2),
 			methodName:         "/temporal.api.workflowservice.v1.WorkflowService/DescribeNamespace",
 			tokens: map[string]int{
-				"DescribeNamespace": 1,
+				"/temporal.api.workflowservice.v1.WorkflowService/DescribeNamespace": 1,
 			},
 			expectRateLimit: true,
 		},
@@ -115,7 +115,7 @@ func TestNamespaceCountLimitInterceptor_Intercept(t *testing.T) {
 			memberCounter:      quotastest.NewFakeMemberCounter(2),
 			methodName:         "/temporal.api.workflowservice.v1.WorkflowService/DescribeNamespace",
 			tokens: map[string]int{
-				"DescribeNamespace": 1,
+				"/temporal.api.workflowservice.v1.WorkflowService/DescribeNamespace": 1,
 			},
 			expectRateLimit: false,
 		},
@@ -139,7 +139,7 @@ func TestNamespaceCountLimitInterceptor_Intercept(t *testing.T) {
 			memberCounter:      quotastest.NewFakeMemberCounter(2),
 			methodName:         "/temporal.api.workflowservice.v1.WorkflowService/GetWorkflowExecutionHistory",
 			tokens: map[string]int{
-				"GetWorkflowExecutionHistory": 1,
+				"/temporal.api.workflowservice.v1.WorkflowService/GetWorkflowExecutionHistory": 1,
 			},
 			expectRateLimit: true,
 		},
@@ -152,7 +152,7 @@ func TestNamespaceCountLimitInterceptor_Intercept(t *testing.T) {
 			memberCounter:      quotastest.NewFakeMemberCounter(2),
 			methodName:         "/temporal.api.workflowservice.v1.WorkflowService/GetWorkflowExecutionHistory",
 			tokens: map[string]int{
-				"GetWorkflowExecutionHistory": 1,
+				"/temporal.api.workflowservice.v1.WorkflowService/GetWorkflowExecutionHistory": 1,
 			},
 			expectRateLimit: false,
 		},

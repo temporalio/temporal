@@ -79,6 +79,7 @@ var (
 		"CountWorkflowExecutions":            func() any { return &workflowservice.CountWorkflowExecutionsResponse{} },
 		"PollActivityTaskQueue":              func() any { return &workflowservice.PollActivityTaskQueueResponse{} },
 		"PollWorkflowTaskQueue":              func() any { return &workflowservice.PollWorkflowTaskQueueResponse{} },
+		"PollNexusTaskQueue":                 func() any { return &workflowservice.PollNexusTaskQueueResponse{} },
 		"QueryWorkflow":                      func() any { return &workflowservice.QueryWorkflowResponse{} },
 		"RecordActivityTaskHeartbeat":        func() any { return &workflowservice.RecordActivityTaskHeartbeatResponse{} },
 		"RecordActivityTaskHeartbeatById":    func() any { return &workflowservice.RecordActivityTaskHeartbeatByIdResponse{} },
@@ -94,6 +95,8 @@ var (
 		"RespondWorkflowTaskCompleted":       func() any { return &workflowservice.RespondWorkflowTaskCompletedResponse{} },
 		"RespondWorkflowTaskFailed":          func() any { return &workflowservice.RespondWorkflowTaskFailedResponse{} },
 		"RespondQueryTaskCompleted":          func() any { return &workflowservice.RespondQueryTaskCompletedResponse{} },
+		"RespondNexusTaskCompleted":          func() any { return &workflowservice.RespondNexusTaskCompletedResponse{} },
+		"RespondNexusTaskFailed":             func() any { return &workflowservice.RespondNexusTaskFailedResponse{} },
 		"SignalWithStartWorkflowExecution":   func() any { return &workflowservice.SignalWithStartWorkflowExecutionResponse{} },
 		"SignalWorkflowExecution":            func() any { return &workflowservice.SignalWorkflowExecutionResponse{} },
 		"StartWorkflowExecution":             func() any { return &workflowservice.StartWorkflowExecutionResponse{} },
@@ -269,10 +272,10 @@ func (i *RedirectionInterceptor) afterCall(
 	retError error,
 ) {
 	metricsHandler = metricsHandler.WithTags(metrics.TargetClusterTag(clusterName))
-	metricsHandler.Counter(metrics.ClientRedirectionRequests.Name()).Record(1)
-	metricsHandler.Timer(metrics.ClientRedirectionLatency.Name()).Record(i.timeSource.Now().Sub(startTime))
+	metrics.ClientRedirectionRequests.With(metricsHandler).Record(1)
+	metrics.ClientRedirectionLatency.With(metricsHandler).Record(i.timeSource.Now().Sub(startTime))
 	if retError != nil {
-		metricsHandler.Counter(metrics.ClientRedirectionFailures.Name()).Record(1)
+		metrics.ClientRedirectionFailures.With(metricsHandler).Record(1)
 	}
 }
 

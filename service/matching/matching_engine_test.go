@@ -44,6 +44,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	"github.com/uber-go/tally/v4"
+	"go.temporal.io/server/common/cluster/clustertest"
 	"google.golang.org/protobuf/types/known/durationpb"
 	"google.golang.org/protobuf/types/known/timestamppb"
 	"google.golang.org/protobuf/types/known/wrapperspb"
@@ -68,9 +69,11 @@ import (
 	"go.temporal.io/server/common/clock"
 	hlc "go.temporal.io/server/common/clock/hybrid_logical_clock"
 	"go.temporal.io/server/common/cluster"
+	"go.temporal.io/server/common/collection"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
+	"go.temporal.io/server/common/membership"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/payload"
@@ -94,6 +97,8 @@ type (
 		ns                    *namespace.Namespace
 		mockNamespaceCache    *namespace.MockRegistry
 		mockVisibilityManager *manager.MockVisibilityManager
+		mockHostInfoProvider  *membership.MockHostInfoProvider
+		mockServiceResolver   *membership.MockServiceResolver
 
 		matchingEngine *matchingEngineImpl
 		taskManager    *testTaskManager
@@ -118,7 +123,14 @@ func createTestMatchingEngine(
 	mockHistoryClient := historyservicemock.NewMockHistoryServiceClient(controller)
 	mockHistoryClient.EXPECT().IsWorkflowTaskValid(gomock.Any(), gomock.Any()).Return(&historyservice.IsWorkflowTaskValidResponse{IsValid: true}, nil).AnyTimes()
 	mockHistoryClient.EXPECT().IsActivityTaskValid(gomock.Any(), gomock.Any()).Return(&historyservice.IsActivityTaskValidResponse{IsValid: true}, nil).AnyTimes()
-	return newMatchingEngine(config, tm, mockHistoryClient, logger, namespaceRegistry, matchingClient, mockVisibilityManager)
+	mockHostInfoProvider := membership.NewMockHostInfoProvider(controller)
+	hostInfo := membership.NewHostInfoFromAddress("self")
+	mockHostInfoProvider.EXPECT().HostInfo().Return(hostInfo).AnyTimes()
+	mockServiceResolver := membership.NewMockServiceResolver(controller)
+	mockServiceResolver.EXPECT().Lookup(gomock.Any()).Return(hostInfo, nil).AnyTimes()
+	mockServiceResolver.EXPECT().AddListener(gomock.Any(), gomock.Any()).AnyTimes()
+	mockServiceResolver.EXPECT().RemoveListener(gomock.Any()).AnyTimes()
+	return newMatchingEngine(config, tm, mockHistoryClient, logger, namespaceRegistry, matchingClient, mockVisibilityManager, mockHostInfoProvider, mockServiceResolver)
 }
 
 func createMockNamespaceCache(controller *gomock.Controller, nsName namespace.Name) (*namespace.Namespace, *namespace.MockRegistry) {
@@ -158,6 +170,13 @@ func (s *matchingEngineSuite) SetupTest() {
 	s.ns, s.mockNamespaceCache = createMockNamespaceCache(s.controller, matchingTestNamespace)
 	s.mockVisibilityManager = manager.NewMockVisibilityManager(s.controller)
 	s.mockVisibilityManager.EXPECT().Close().AnyTimes()
+	s.mockHostInfoProvider = membership.NewMockHostInfoProvider(s.controller)
+	hostInfo := membership.NewHostInfoFromAddress("self")
+	s.mockHostInfoProvider.EXPECT().HostInfo().Return(hostInfo).AnyTimes()
+	s.mockServiceResolver = membership.NewMockServiceResolver(s.controller)
+	s.mockServiceResolver.EXPECT().Lookup(gomock.Any()).Return(hostInfo, nil).AnyTimes()
+	s.mockServiceResolver.EXPECT().AddListener(gomock.Any(), gomock.Any()).AnyTimes()
+	s.mockServiceResolver.EXPECT().RemoveListener(gomock.Any()).AnyTimes()
 
 	s.matchingEngine = s.newMatchingEngine(defaultTestConfig(), s.taskManager)
 	s.matchingEngine.Start()
@@ -171,13 +190,14 @@ func (s *matchingEngineSuite) TearDownTest() {
 func (s *matchingEngineSuite) newMatchingEngine(
 	config *Config, taskMgr persistence.TaskManager,
 ) *matchingEngineImpl {
-	return newMatchingEngine(config, taskMgr, s.mockHistoryClient, s.logger, s.mockNamespaceCache, s.mockMatchingClient, s.mockVisibilityManager)
+	return newMatchingEngine(config, taskMgr, s.mockHistoryClient, s.logger, s.mockNamespaceCache, s.mockMatchingClient, s.mockVisibilityManager,
+		s.mockHostInfoProvider, s.mockServiceResolver)
 }
 
 func newMatchingEngine(
 	config *Config, taskMgr persistence.TaskManager, mockHistoryClient historyservice.HistoryServiceClient,
 	logger log.Logger, mockNamespaceCache namespace.Registry, mockMatchingClient matchingservice.MatchingServiceClient,
-	mockVisibilityManager manager.VisibilityManager,
+	mockVisibilityManager manager.VisibilityManager, mockHostInfoProvider membership.HostInfoProvider, mockServiceResolver membership.ServiceResolver,
 ) *matchingEngineImpl {
 	return &matchingEngineImpl{
 		taskManager:   taskMgr,
@@ -189,17 +209,20 @@ func newMatchingEngine(
 			loadedTaskQueuePartitionCount: make(map[taskQueueCounterKey]int),
 			loadedPhysicalTaskQueueCount:  make(map[taskQueueCounterKey]int),
 		},
-		lockableQueryTaskMap: lockableQueryTaskMap{queryTaskMap: make(map[string]chan *queryResult)},
-		logger:               logger,
-		throttledLogger:      log.ThrottledLogger(logger),
-		metricsHandler:       metrics.NoopMetricsHandler,
-		matchingRawClient:    mockMatchingClient,
-		tokenSerializer:      common.NewProtoTaskTokenSerializer(),
-		config:               config,
-		namespaceRegistry:    mockNamespaceCache,
-		clusterMeta:          cluster.NewMetadataForTest(cluster.NewTestClusterMetadataConfig(false, true)),
-		timeSource:           clock.NewRealTimeSource(),
-		visibilityManager:    mockVisibilityManager,
+		queryResults:        collection.NewSyncMap[string, chan *queryResult](),
+		logger:              logger,
+		throttledLogger:     log.ThrottledLogger(logger),
+		metricsHandler:      metrics.NoopMetricsHandler,
+		matchingRawClient:   mockMatchingClient,
+		tokenSerializer:     common.NewProtoTaskTokenSerializer(),
+		config:              config,
+		namespaceRegistry:   mockNamespaceCache,
+		hostInfoProvider:    mockHostInfoProvider,
+		serviceResolver:     mockServiceResolver,
+		membershipChangedCh: make(chan *membership.ChangedEvent, 1),
+		clusterMeta:         clustertest.NewMetadataForTest(cluster.NewTestClusterMetadataConfig(false, true)),
+		timeSource:          clock.NewRealTimeSource(),
+		visibilityManager:   mockVisibilityManager,
 	}
 }
 
@@ -1051,7 +1074,9 @@ func (s *matchingEngineSuite) concurrentPublishConsumeActivities(
 	s.taskManager.getQueueManager(dbq).rangeID = initialRangeID
 	mgr := s.newPartitionManager(dbq.partition, s.matchingEngine.config)
 
-	mgrImpl := mgr.(*taskQueuePartitionManagerImpl).defaultQueue.(*physicalTaskQueueManagerImpl)
+	mgrImpl, ok := mgr.(*taskQueuePartitionManagerImpl).defaultQueue.(*physicalTaskQueueManagerImpl)
+	s.Assert().True(ok)
+
 	mgrImpl.matcher.config.MinTaskThrottlingBurstSize = func() int { return 0 }
 	mgrImpl.matcher.rateLimiter = quotas.NewRateLimiter(
 		defaultTaskDispatchRPS,
@@ -1165,8 +1190,6 @@ func (s *matchingEngineSuite) concurrentPublishConsumeActivities(
 				resultToken, err := s.matchingEngine.tokenSerializer.Deserialize(result.TaskToken)
 				s.NoError(err)
 
-				// taskToken, _ := s.matchingEngine.tokenSerializer.Serialize(token)
-				// s.EqualValues(taskToken, result.Task, fmt.Sprintf("%v!=%v", string(taskToken)))
 				s.EqualValues(taskToken, resultToken, fmt.Sprintf("%v!=%v", taskToken, resultToken))
 				i++
 			}
@@ -1296,8 +1319,6 @@ func (s *matchingEngineSuite) TestConcurrentPublishConsumeWorkflowTasks() {
 					panic(err)
 				}
 
-				// taskToken, _ := s.matchingEngine.tokenSerializer.Serialize(token)
-				// s.EqualValues(taskToken, result.Task, fmt.Sprintf("%v!=%v", string(taskToken)))
 				s.EqualValues(taskToken, resultToken, fmt.Sprintf("%v!=%v", taskToken, resultToken))
 				i++
 			}
@@ -2080,7 +2101,6 @@ func (s *matchingEngineSuite) TestGetTaskQueueUserData_NoData() {
 		LastKnownUserDataVersion: 0,
 	})
 	s.NoError(err)
-	s.False(res.TaskQueueHasUserData)
 	s.Nil(res.UserData.GetData())
 }
 
@@ -2107,7 +2127,6 @@ func (s *matchingEngineSuite) TestGetTaskQueueUserData_ReturnsData() {
 		LastKnownUserDataVersion: 0,
 	})
 	s.NoError(err)
-	s.True(res.TaskQueueHasUserData)
 	s.Equal(res.UserData, userData)
 }
 
@@ -2134,7 +2153,6 @@ func (s *matchingEngineSuite) TestGetTaskQueueUserData_ReturnsEmpty() {
 		LastKnownUserDataVersion: userData.Version,
 	})
 	s.NoError(err)
-	s.True(res.TaskQueueHasUserData)
 	s.Nil(res.UserData.GetData())
 }
 
@@ -2167,7 +2185,6 @@ func (s *matchingEngineSuite) TestGetTaskQueueUserData_LongPoll_Expires() {
 		WaitNewData:              true,
 	})
 	s.NoError(err)
-	s.True(res.TaskQueueHasUserData)
 	s.Nil(res.UserData.GetData())
 	elapsed := time.Since(start)
 	s.Greater(elapsed, 900*time.Millisecond)
@@ -2209,7 +2226,6 @@ func (s *matchingEngineSuite) TestGetTaskQueueUserData_LongPoll_WakesUp_FromNoth
 		WaitNewData:              true,
 	})
 	s.NoError(err)
-	s.True(res.TaskQueueHasUserData)
 	s.NotNil(res.UserData.Data.VersioningData)
 }
 
@@ -2261,7 +2277,6 @@ func (s *matchingEngineSuite) TestGetTaskQueueUserData_LongPoll_WakesUp_From2to3
 		WaitNewData:              true,
 	})
 	s.NoError(err)
-	s.True(res.TaskQueueHasUserData)
 	s.True(hlc.Greater(res.UserData.Data.Clock, userData.Data.Clock))
 	s.NotNil(res.UserData.Data.VersioningData)
 }
@@ -2282,14 +2297,14 @@ func (s *matchingEngineSuite) TestGetTaskQueueUserData_LongPoll_Closes() {
 		})
 	}()
 
-	_, err := s.matchingEngine.GetTaskQueueUserData(ctx, &matchingservice.GetTaskQueueUserDataRequest{
+	res, err := s.matchingEngine.GetTaskQueueUserData(ctx, &matchingservice.GetTaskQueueUserDataRequest{
 		NamespaceId:   namespaceID.String(),
 		TaskQueue:     tq,
 		TaskQueueType: enumspb.TASK_QUEUE_TYPE_WORKFLOW,
 		WaitNewData:   true,
 	})
-	s.ErrorAs(err, new(*serviceerror.Unavailable))
-
+	s.NoError(err)
+	s.Nil(res.UserData)
 }
 
 func (s *matchingEngineSuite) TestUpdateUserData_FailsOnKnownVersionMismatch() {
@@ -2466,6 +2481,57 @@ func (s *matchingEngineSuite) TestDemotedMatch() {
 	s.Equal("wf", task.event.Data.WorkflowId)
 	s.Equal(int64(123), task.event.Data.ScheduledEventId)
 	task.finish(nil)
+}
+
+func (s *matchingEngineSuite) TestUnloadOnMembershipChange() {
+	// need to create a new engine for this test to customize mockServiceResolver
+	s.mockServiceResolver = membership.NewMockServiceResolver(s.controller)
+	s.mockServiceResolver.EXPECT().AddListener(gomock.Any(), gomock.Any()).AnyTimes()
+	s.mockServiceResolver.EXPECT().RemoveListener(gomock.Any()).AnyTimes()
+
+	self := s.mockHostInfoProvider.HostInfo()
+	other := membership.NewHostInfoFromAddress("other")
+
+	config := defaultTestConfig()
+	config.MembershipUnloadDelay = dynamicconfig.GetDurationPropertyFn(10 * time.Millisecond)
+	e := s.newMatchingEngine(config, s.taskManager)
+	e.Start()
+	defer e.Stop()
+
+	p1, err := tqid.NormalPartitionFromRpcName("makeToast", uuid.New(), enumspb.TASK_QUEUE_TYPE_WORKFLOW)
+	s.NoError(err)
+	p2, err := tqid.NormalPartitionFromRpcName("makeToast", uuid.New(), enumspb.TASK_QUEUE_TYPE_ACTIVITY)
+	s.NoError(err)
+
+	_, err = e.getTaskQueuePartitionManager(context.Background(), p1, true)
+	s.NoError(err)
+	_, err = e.getTaskQueuePartitionManager(context.Background(), p2, true)
+	s.NoError(err)
+
+	s.Equal(2, len(e.getTaskQueuePartitions(1000)))
+
+	// signal membership changed and give time for loop to wake up
+	s.mockServiceResolver.EXPECT().Lookup(p1.RoutingKey()).Return(self, nil)
+	s.mockServiceResolver.EXPECT().Lookup(p2.RoutingKey()).Return(self, nil)
+	e.membershipChangedCh <- nil
+	time.Sleep(50 * time.Millisecond)
+	s.Equal(2, len(e.getTaskQueuePartitions(1000)), "nothing should be unloaded yet")
+
+	// signal again but p2 doesn't belong to us anymore
+	s.mockServiceResolver.EXPECT().Lookup(p1.RoutingKey()).Return(self, nil)
+	s.mockServiceResolver.EXPECT().Lookup(p2.RoutingKey()).Return(other, nil).Times(2)
+	e.membershipChangedCh <- nil
+	s.Eventually(func() bool {
+		return len(e.getTaskQueuePartitions(1000)) == 1
+	}, 100*time.Millisecond, 10*time.Millisecond, "p2 should have been unloaded")
+
+	isLoaded := func(p tqid.Partition) bool {
+		tqm, err := e.getTaskQueuePartitionManager(context.Background(), p, false)
+		s.NoError(err)
+		return tqm != nil
+	}
+	s.True(isLoaded(p1))
+	s.False(isLoaded(p2))
 }
 
 func (s *matchingEngineSuite) TaskQueueMetricValidator(capture *metricstest.Capture, familyCounterLength int, familyCounter float64, queueCounterLength int, queueCounter float64, queuePartitionCounterLength int, queuePartitionCounter float64) {
@@ -3003,6 +3069,7 @@ func (m *testTaskManager) GetTasks(
 	_ context.Context,
 	request *persistence.GetTasksRequest,
 ) (*persistence.GetTasksResponse, error) {
+	fmt.Printf("shahab> gettasks called\n")
 	m.logger.Debug("testTaskManager.GetTasks", tag.MinLevel(request.InclusiveMinTaskID), tag.MaxLevel(request.ExclusiveMaxTaskID))
 
 	dbq, err := ParsePhysicalTaskQueueKey(request.TaskQueue, request.NamespaceID, request.TaskType)
@@ -3155,7 +3222,7 @@ func validateTimeRange(t time.Time, expectedDuration time.Duration) bool {
 }
 
 func defaultTestConfig() *Config {
-	config := NewConfig(dynamicconfig.NewNoopCollection(), false, false)
+	config := NewConfig(dynamicconfig.NewNoopCollection())
 	config.LongPollExpirationInterval = dynamicconfig.GetDurationPropertyFnFilteredByTaskQueueInfo(100 * time.Millisecond)
 	config.MaxTaskDeleteBatchSize = dynamicconfig.GetIntPropertyFilteredByTaskQueueInfo(1)
 	config.FrontendAccessHistoryFraction = dynamicconfig.GetFloatPropertyFn(1.0)

@@ -28,14 +28,11 @@ import (
 	"bytes"
 	"context"
 	"encoding/binary"
-	"encoding/json"
 	"fmt"
 	"maps"
 	"os"
-	"reflect"
-	"regexp"
 	"strconv"
-	"strings"
+	"testing"
 	"time"
 
 	"github.com/dgryski/go-farm"
@@ -109,8 +106,9 @@ func WithFxOptionsForService(serviceName primitives.ServiceName, options ...fx.O
 }
 
 func (s *FunctionalTestBase) setupSuite(defaultClusterConfigFile string, options ...Option) {
+	checkTestShard(s.T())
+
 	s.testClusterFactory = NewTestClusterFactory()
-	s.checkTestShard()
 
 	params := ApplyTestClusterParams(options)
 
@@ -130,9 +128,11 @@ func (s *FunctionalTestBase) setupSuite(defaultClusterConfigFile string, options
 		dynamicconfig.TaskQueueScannerEnabled:  false,
 		dynamicconfig.ExecutionsScannerEnabled: false,
 		dynamicconfig.BuildIdScavengerEnabled:  false,
+		dynamicconfig.FrontendEnableNexusAPIs:  true,
 	})
 	maps.Copy(clusterConfig.DynamicConfigOverrides, s.dynamicConfigOverrides)
 	clusterConfig.ServiceFxOptions = params.ServiceOptions
+	clusterConfig.EnableMetricsCapture = true
 	s.testClusterConfig = clusterConfig
 
 	if clusterConfig.FrontendAddress != "" {
@@ -159,10 +159,10 @@ func (s *FunctionalTestBase) setupSuite(defaultClusterConfigFile string, options
 	}
 
 	s.namespace = s.randomizeStr("functional-test-namespace")
-	s.Require().NoError(s.registerNamespace(s.namespace, 24*time.Hour, enumspb.ARCHIVAL_STATE_DISABLED, "", enumspb.ARCHIVAL_STATE_DISABLED, ""))
+	s.Require().NoError(s.registerNamespaceWithDefaults(s.namespace))
 
 	s.foreignNamespace = s.randomizeStr("functional-foreign-test-namespace")
-	s.Require().NoError(s.registerNamespace(s.foreignNamespace, 24*time.Hour, enumspb.ARCHIVAL_STATE_DISABLED, "", enumspb.ARCHIVAL_STATE_DISABLED, ""))
+	s.Require().NoError(s.registerNamespaceWithDefaults(s.foreignNamespace))
 
 	if clusterConfig.EnableArchival {
 		s.archivalNamespace = s.randomizeStr("functional-archival-enabled-namespace")
@@ -172,6 +172,10 @@ func (s *FunctionalTestBase) setupSuite(defaultClusterConfigFile string, options
 	// For tests using SQL visibility, we need to wait for search attributes to be available as part of the ns config
 	// TODO: remove after https://github.com/temporalio/temporal/issues/4017 is resolved
 	time.Sleep(2 * NamespaceCacheRefreshInterval)
+}
+
+func (s *FunctionalTestBase) registerNamespaceWithDefaults(name string) error {
+	return s.registerNamespace(name, 24*time.Hour, enumspb.ARCHIVAL_STATE_DISABLED, "", enumspb.ARCHIVAL_STATE_DISABLED, "")
 }
 
 func ApplyTestClusterParams(options []Option) TestClusterParams {
@@ -194,31 +198,32 @@ func (s *FunctionalTestBase) setupLogger() {
 }
 
 // checkTestShard supports test sharding based on environment variables.
-func (s *FunctionalTestBase) checkTestShard() {
+func checkTestShard(t *testing.T) {
 	totalStr := os.Getenv("TEST_TOTAL_SHARDS")
 	indexStr := os.Getenv("TEST_SHARD_INDEX")
 	if totalStr == "" || indexStr == "" {
 		return
 	}
 	total, err := strconv.Atoi(totalStr)
-	s.NoError(err)
-	s.GreaterOrEqual(total, 1)
+	if err != nil || total < 1 {
+		t.Fatal("Couldn't convert TEST_TOTAL_SHARDS")
+	}
 	index, err := strconv.Atoi(indexStr)
-	s.NoError(err)
-	s.GreaterOrEqual(index, 0)
-	s.Less(index, total)
+	if err != nil || index < 0 || index >= total {
+		t.Fatal("Couldn't convert TEST_SHARD_INDEX")
+	}
 
 	// This was determined empirically to distribute our existing test names + run times
 	// reasonably well. This can be adjusted from time to time.
 	// For parallelism 4, use 11. For 3, use 26. For 2, use 20.
 	const salt = "-salt-26"
 
-	nameToHash := s.T().Name() + salt
+	nameToHash := t.Name() + salt
 	testIndex := int(farm.Fingerprint32([]byte(nameToHash))) % total
 	if testIndex != index {
-		s.T().Skipf("Skipping %s in test shard %d/%d (it runs in %d)", s.T().Name(), index, total, testIndex)
+		t.Skipf("Skipping %s in test shard %d/%d (it runs in %d)", t.Name(), index+1, total, testIndex+1)
 	}
-	s.T().Logf("Running %s in test shard %d/%d", s.T().Name(), index, total)
+	t.Logf("Running %s in test shard %d/%d", t.Name(), index+1, total)
 }
 
 // GetTestClusterConfig return test cluster config
@@ -322,17 +327,6 @@ func (s *FunctionalTestBase) randomizeStr(id string) string {
 	return fmt.Sprintf("%v-%v", id, uuid.New())
 }
 
-func (s *FunctionalTestBase) printWorkflowHistory(namespace string, execution *commonpb.WorkflowExecution) {
-	events := s.getHistory(namespace, execution)
-	_, _ = fmt.Println(s.formatHistory(&historypb.History{Events: events}))
-}
-
-//lint:ignore U1000 used for debugging.
-func (s *FunctionalTestBase) printWorkflowHistoryCompact(namespace string, execution *commonpb.WorkflowExecution) {
-	events := s.getHistory(namespace, execution)
-	_, _ = fmt.Println(s.formatHistoryCompact(&historypb.History{Events: events}))
-}
-
 func (s *FunctionalTestBase) getHistory(namespace string, execution *commonpb.WorkflowExecution) []*historypb.HistoryEvent {
 	historyResponse, err := s.engine.GetWorkflowExecutionHistory(NewContext(), &workflowservice.GetWorkflowExecutionHistoryRequest{
 		Namespace:       namespace,
@@ -353,12 +347,6 @@ func (s *FunctionalTestBase) getHistory(namespace string, execution *commonpb.Wo
 	}
 
 	return events
-}
-
-func (s *FunctionalTestBase) getLastEvent(namespace string, execution *commonpb.WorkflowExecution) *historypb.HistoryEvent {
-	events := s.getHistory(namespace, execution)
-	s.Require().NotEmpty(events)
-	return events[len(events)-1]
 }
 
 func (s *FunctionalTestBase) decodePayloadsString(ps *commonpb.Payloads) string {
@@ -427,157 +415,4 @@ func (s *FunctionalTestBase) registerArchivalNamespace(archivalNamespace string)
 		tag.WorkflowNamespaceID(response.ID),
 	)
 	return err
-}
-
-func (s *FunctionalTestBase) formatHistoryCompact(history *historypb.History) string {
-	s.T().Helper()
-	var sb strings.Builder
-	for _, event := range history.Events {
-		_, _ = sb.WriteString(fmt.Sprintf("%3d %s\n", event.GetEventId(), event.GetEventType()))
-	}
-	if sb.Len() > 0 {
-		return sb.String()[:sb.Len()-1]
-	}
-	return ""
-}
-
-func (s *FunctionalTestBase) formatHistory(history *historypb.History) string {
-	s.T().Helper()
-	var sb strings.Builder
-	for _, event := range history.Events {
-		eventAttrs := reflect.ValueOf(event.Attributes).Elem().Field(0).Elem().Interface()
-		eventAttrsMap := s.structToMap(eventAttrs)
-		eventAttrsJson, err := json.Marshal(eventAttrsMap)
-		s.NoError(err)
-		_, _ = sb.WriteString(fmt.Sprintf("%3d %s %s\n", event.GetEventId(), event.GetEventType(), string(eventAttrsJson)))
-	}
-	if sb.Len() > 0 {
-		return sb.String()[:sb.Len()-1]
-	}
-	return ""
-}
-
-var publicRgx = regexp.MustCompile("^[A-Z]")
-
-func (s *FunctionalTestBase) structToMap(strct any) map[string]any {
-	strctV := reflect.ValueOf(strct)
-	strctT := strctV.Type()
-
-	ret := map[string]any{}
-
-	for i := 0; i < strctV.NumField(); i++ {
-		field := strctV.Field(i)
-		// Skip unexported members
-		if !publicRgx.MatchString(strctT.Field(i).Name) {
-			continue
-		}
-
-		var fieldData any
-		if field.Kind() == reflect.Pointer && field.IsNil() {
-			continue
-		} else if field.Kind() == reflect.Pointer && field.Elem().Kind() == reflect.Struct {
-			fieldData = s.structToMap(field.Elem().Interface())
-		} else if field.Kind() == reflect.Struct {
-			fieldData = s.structToMap(field.Interface())
-		} else {
-			fieldData = field.Interface()
-		}
-		ret[strctT.Field(i).Name] = fieldData
-	}
-
-	return ret
-}
-
-func (s *FunctionalTestBase) EqualHistoryEvents(expectedHistory string, actualHistoryEvents []*historypb.HistoryEvent) {
-	s.T().Helper()
-	s.EqualHistory(expectedHistory, &historypb.History{Events: actualHistoryEvents})
-}
-
-func (s *FunctionalTestBase) EqualHistory(expectedHistory string, actualHistory *historypb.History) {
-	s.T().Helper()
-	expectedCompactHistory, expectedEventsAttributes := s.parseHistory(expectedHistory)
-	actualCompactHistory := s.formatHistoryCompact(actualHistory)
-	s.Equal(expectedCompactHistory, actualCompactHistory)
-	for _, actualHistoryEvent := range actualHistory.Events {
-		if expectedEventAttributes, ok := expectedEventsAttributes[actualHistoryEvent.EventId]; ok {
-			actualEventAttributes := reflect.ValueOf(actualHistoryEvent.Attributes).Elem().Field(0).Elem()
-			s.equalStructToMap(expectedEventAttributes, actualEventAttributes, actualHistoryEvent.EventId, "")
-		}
-	}
-}
-
-func (s *FunctionalTestBase) equalStructToMap(expectedMap map[string]any, actualStructV reflect.Value, eventID int64, attrPrefix string) {
-	s.T().Helper()
-
-	for attrName, expectedValue := range expectedMap {
-		actualFieldV := actualStructV.FieldByName(attrName)
-		if actualFieldV.Kind() == reflect.Invalid {
-			s.Failf("", "Expected property %s%s wasn't found for EventID=%v", attrPrefix, attrName, eventID)
-		}
-
-		if ep, ok := expectedValue.(map[string]any); ok {
-			if actualFieldV.IsNil() {
-				s.Failf("", "Value of property %s%s for EventID=%v expected to be struct but was nil", attrPrefix, attrName, eventID)
-			}
-			if actualFieldV.Kind() == reflect.Pointer {
-				actualFieldV = actualFieldV.Elem()
-			}
-			if actualFieldV.Kind() != reflect.Struct {
-				s.Failf("", "Value of property %s%s for EventID=%v expected to be struct but was of type %s", attrPrefix, attrName, eventID, actualFieldV.Type().String())
-			}
-			s.equalStructToMap(ep, actualFieldV, eventID, attrPrefix+attrName+".")
-			continue
-		}
-		actualFieldValue := actualFieldV.Interface()
-		s.EqualValues(expectedValue, actualFieldValue, "Values of %s%s property are not equal for EventID=%v", attrPrefix, attrName, eventID)
-	}
-}
-
-// parseHistory accept history in a formatHistory format and returns compact history string and map of eventID to map of event attributes.
-func (s *FunctionalTestBase) parseHistory(expectedHistory string) (string, map[int64]map[string]any) {
-	s.T().Helper()
-	h := &historypb.History{}
-	eventsAttrs := make(map[int64]map[string]any)
-	prevEventID := 0
-	for lineNum, eventLine := range strings.Split(expectedHistory, "\n") {
-		fields := strings.Fields(eventLine)
-		if len(fields) == 0 {
-			continue
-		}
-		if len(fields) < 2 {
-			s.FailNowf("", "Not enough fields on line %d", lineNum+1)
-		}
-		eventID, err := strconv.Atoi(fields[0])
-		if err != nil {
-			s.FailNowf(err.Error(), "Failed to parse EventID on line %d", lineNum+1)
-		}
-		if eventID != prevEventID+1 && prevEventID != 0 {
-			s.FailNowf("", "Wrong EventID sequence after EventID %d on line %d", prevEventID, lineNum+1)
-		}
-		prevEventID = eventID
-		eventType, err := enumspb.EventTypeFromString(fields[1])
-		if err != nil {
-			s.FailNowf("", "Unknown event type %s for EventID=%d", fields[1], lineNum+1)
-		}
-		h.Events = append(h.Events, &historypb.HistoryEvent{
-			EventId:   int64(eventID),
-			EventType: enumspb.EventType(eventType),
-		})
-		var jb strings.Builder
-		for i := 2; i < len(fields); i++ {
-			if strings.HasPrefix(fields[i], "//") {
-				break
-			}
-			_, _ = jb.WriteString(fields[i])
-		}
-		if jb.Len() > 0 {
-			var eventAttrs map[string]any
-			err := json.Unmarshal([]byte(jb.String()), &eventAttrs)
-			if err != nil {
-				s.FailNowf(err.Error(), "Failed to unmarshal attributes %q for EventID=%d", jb.String(), lineNum+1)
-			}
-			eventsAttrs[int64(eventID)] = eventAttrs
-		}
-	}
-	return s.formatHistoryCompact(h), eventsAttrs
 }

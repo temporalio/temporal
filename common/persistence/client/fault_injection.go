@@ -42,13 +42,14 @@ type (
 		config         *config.FaultInjection
 		ErrorGenerator ErrorGenerator
 
-		TaskStore      *FaultInjectionTaskStore
-		ShardStore     *FaultInjectionShardStore
-		MetadataStore  *FaultInjectionMetadataStore
-		ExecutionStore *FaultInjectionExecutionStore
-		Queue          *FaultInjectionQueue
-		QueueV2        *FaultInjectionQueueV2
-		ClusterMDStore *FaultInjectionClusterMetadataStore
+		TaskStore                 *FaultInjectionTaskStore
+		ShardStore                *FaultInjectionShardStore
+		MetadataStore             *FaultInjectionMetadataStore
+		ExecutionStore            *FaultInjectionExecutionStore
+		Queue                     *FaultInjectionQueue
+		QueueV2                   *FaultInjectionQueueV2
+		ClusterMDStore            *FaultInjectionClusterMetadataStore
+		NexusIncomingServiceStore *FaultInjectionNexusIncomingServiceStore
 	}
 
 	FaultInjectionShardStore struct {
@@ -86,6 +87,11 @@ type (
 		baseQueue      persistence.QueueV2
 		ErrorGenerator ErrorGenerator
 	}
+
+	FaultInjectionNexusIncomingServiceStore struct {
+		baseNexusIncomingServiceStore persistence.NexusIncomingServiceStore
+		ErrorGenerator                ErrorGenerator
+	}
 )
 
 // from errors.go ConvertError
@@ -104,8 +110,11 @@ var defaultErrors = []FaultWeight{
 	},
 	{
 		errFactory: func(msg string) error {
-			return serviceerror.NewResourceExhausted(enumspb.RESOURCE_EXHAUSTED_CAUSE_SYSTEM_OVERLOADED,
-				fmt.Sprintf("serviceerror.NewResourceExhausted: %s", msg))
+			return &serviceerror.ResourceExhausted{
+				Cause:   enumspb.RESOURCE_EXHAUSTED_CAUSE_SYSTEM_OVERLOADED,
+				Scope:   enumspb.RESOURCE_EXHAUSTED_SCOPE_SYSTEM,
+				Message: fmt.Sprintf("serviceerror.NewResourceExhausted: %s", msg),
+			}
 		},
 		weight: 1,
 	},
@@ -147,6 +156,7 @@ func (d *FaultInjectionDataStoreFactory) UpdateRate(rate float64) {
 	d.ExecutionStore.UpdateRate(rate)
 	d.Queue.UpdateRate(rate)
 	d.ClusterMDStore.UpdateRate(rate)
+	d.NexusIncomingServiceStore.UpdateRate(rate)
 }
 
 func (d *FaultInjectionDataStoreFactory) NewTaskStore() (persistence.TaskStore, error) {
@@ -292,6 +302,27 @@ func (d *FaultInjectionDataStoreFactory) NewClusterMetadataStore() (persistence.
 
 	}
 	return d.ClusterMDStore, nil
+}
+
+func (d *FaultInjectionDataStoreFactory) NewNexusIncomingServiceStore() (persistence.NexusIncomingServiceStore, error) {
+	if d.NexusIncomingServiceStore == nil {
+		baseStore, err := d.baseFactory.NewNexusIncomingServiceStore()
+		if err != nil {
+			return nil, err
+		}
+		if storeConfig, ok := d.config.Targets.DataStores[config.NexusIncomingServiceStoreName]; ok {
+			d.NexusIncomingServiceStore = &FaultInjectionNexusIncomingServiceStore{
+				baseNexusIncomingServiceStore: baseStore,
+				ErrorGenerator:                NewTargetedDataStoreErrorGenerator(&storeConfig),
+			}
+		} else {
+			d.NexusIncomingServiceStore, err = NewFaultInjectionNexusIncomingServiceStore(d.ErrorGenerator.Rate(), baseStore)
+			if err != nil {
+				return nil, err
+			}
+		}
+	}
+	return d.NexusIncomingServiceStore, nil
 }
 
 func NewFaultInjectionQueue(rate float64, baseQueue persistence.Queue) (*FaultInjectionQueue, error) {
@@ -621,30 +652,6 @@ func (e *FaultInjectionExecutionStore) ListConcreteExecutions(
 	return e.baseExecutionStore.ListConcreteExecutions(ctx, request)
 }
 
-func (e *FaultInjectionExecutionStore) RegisterHistoryTaskReader(
-	ctx context.Context,
-	request *persistence.RegisterHistoryTaskReaderRequest,
-) error {
-	// hint methods don't actually hint DB, so don't inject any failure
-	return e.baseExecutionStore.RegisterHistoryTaskReader(ctx, request)
-}
-
-func (e *FaultInjectionExecutionStore) UnregisterHistoryTaskReader(
-	ctx context.Context,
-	request *persistence.UnregisterHistoryTaskReaderRequest,
-) {
-	// hint methods don't actually hint DB, so don't inject any failure
-	e.baseExecutionStore.UnregisterHistoryTaskReader(ctx, request)
-}
-
-func (e *FaultInjectionExecutionStore) UpdateHistoryTaskReaderProgress(
-	ctx context.Context,
-	request *persistence.UpdateHistoryTaskReaderProgressRequest,
-) {
-	// hint methods don't actually hint DB, so don't inject any failure
-	e.baseExecutionStore.UpdateHistoryTaskReaderProgress(ctx, request)
-}
-
 func (e *FaultInjectionExecutionStore) AddHistoryTasks(
 	ctx context.Context,
 	request *persistence.InternalAddHistoryTasksRequest,
@@ -788,14 +795,14 @@ func (e *FaultInjectionExecutionStore) DeleteHistoryBranch(
 	return e.baseExecutionStore.DeleteHistoryBranch(ctx, request)
 }
 
-func (e *FaultInjectionExecutionStore) GetHistoryTree(
+func (e *FaultInjectionExecutionStore) GetHistoryTreeContainingBranch(
 	ctx context.Context,
-	request *persistence.GetHistoryTreeRequest,
-) (*persistence.InternalGetHistoryTreeResponse, error) {
+	request *persistence.InternalGetHistoryTreeContainingBranchRequest,
+) (*persistence.InternalGetHistoryTreeContainingBranchResponse, error) {
 	if err := e.ErrorGenerator.Generate(); err != nil {
 		return nil, err
 	}
-	return e.baseExecutionStore.GetHistoryTree(ctx, request)
+	return e.baseExecutionStore.GetHistoryTreeContainingBranch(ctx, request)
 }
 
 func (e *FaultInjectionExecutionStore) GetAllHistoryTreeBranches(
@@ -1213,4 +1220,67 @@ func (s *FaultInjectionShardStore) AssertShardOwnership(
 
 func (s *FaultInjectionShardStore) UpdateRate(rate float64) {
 	s.ErrorGenerator.UpdateRate(rate)
+}
+
+func NewFaultInjectionNexusIncomingServiceStore(
+	rate float64,
+	baseNexusIncomingServiceStore persistence.NexusIncomingServiceStore,
+) (*FaultInjectionNexusIncomingServiceStore, error) {
+	errorGenerator := newErrorGenerator(rate, defaultErrors)
+	return &FaultInjectionNexusIncomingServiceStore{
+		baseNexusIncomingServiceStore: baseNexusIncomingServiceStore,
+		ErrorGenerator:                errorGenerator,
+	}, nil
+}
+
+func (n *FaultInjectionNexusIncomingServiceStore) GetName() string {
+	return n.baseNexusIncomingServiceStore.GetName()
+}
+
+func (n *FaultInjectionNexusIncomingServiceStore) Close() {
+	n.baseNexusIncomingServiceStore.Close()
+}
+
+func (n *FaultInjectionNexusIncomingServiceStore) GetNexusIncomingService(
+	ctx context.Context,
+	request *persistence.GetNexusIncomingServiceRequest,
+) (*persistence.InternalNexusIncomingService, error) {
+	if err := n.ErrorGenerator.Generate(); err != nil {
+		return nil, err
+	}
+	return n.baseNexusIncomingServiceStore.GetNexusIncomingService(ctx, request)
+}
+
+func (n *FaultInjectionNexusIncomingServiceStore) ListNexusIncomingServices(
+	ctx context.Context,
+	request *persistence.ListNexusIncomingServicesRequest,
+) (*persistence.InternalListNexusIncomingServicesResponse, error) {
+	if err := n.ErrorGenerator.Generate(); err != nil {
+		return nil, err
+	}
+	return n.baseNexusIncomingServiceStore.ListNexusIncomingServices(ctx, request)
+}
+
+func (n *FaultInjectionNexusIncomingServiceStore) CreateOrUpdateNexusIncomingService(
+	ctx context.Context,
+	request *persistence.InternalCreateOrUpdateNexusIncomingServiceRequest,
+) error {
+	if err := n.ErrorGenerator.Generate(); err != nil {
+		return err
+	}
+	return n.baseNexusIncomingServiceStore.CreateOrUpdateNexusIncomingService(ctx, request)
+}
+
+func (n *FaultInjectionNexusIncomingServiceStore) DeleteNexusIncomingService(
+	ctx context.Context,
+	request *persistence.DeleteNexusIncomingServiceRequest,
+) error {
+	if err := n.ErrorGenerator.Generate(); err != nil {
+		return err
+	}
+	return n.baseNexusIncomingServiceStore.DeleteNexusIncomingService(ctx, request)
+}
+
+func (n *FaultInjectionNexusIncomingServiceStore) UpdateRate(rate float64) {
+	n.ErrorGenerator.UpdateRate(rate)
 }

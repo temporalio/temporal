@@ -50,6 +50,7 @@ import (
 	"go.temporal.io/sdk/temporal"
 	"go.temporal.io/sdk/worker"
 	"go.temporal.io/sdk/workflow"
+	"go.temporal.io/server/common/testing/historyrequire"
 	"go.uber.org/multierr"
 
 	"go.temporal.io/server/api/adminservice/v1"
@@ -69,6 +70,7 @@ type (
 		// not merely log an error
 		*require.Assertions
 		FunctionalTestBase
+		historyrequire.HistoryRequire
 		sdkClient                 sdkclient.Client
 		worker                    worker.Worker
 		taskQueue                 string
@@ -92,10 +94,14 @@ func (s *ClientFunctionalSuite) SetupSuite() {
 	s.maxPendingCancelRequests = limit
 	s.maxPendingSignals = limit
 	s.dynamicConfigOverrides = map[dynamicconfig.Key]interface{}{
-		dynamicconfig.NumPendingChildExecutionsLimitError: s.maxPendingChildExecutions,
-		dynamicconfig.NumPendingActivitiesLimitError:      s.maxPendingActivities,
-		dynamicconfig.NumPendingCancelRequestsLimitError:  s.maxPendingCancelRequests,
-		dynamicconfig.NumPendingSignalsLimitError:         s.maxPendingSignals,
+		dynamicconfig.NumPendingChildExecutionsLimitError:             s.maxPendingChildExecutions,
+		dynamicconfig.NumPendingActivitiesLimitError:                  s.maxPendingActivities,
+		dynamicconfig.NumPendingCancelRequestsLimitError:              s.maxPendingCancelRequests,
+		dynamicconfig.NumPendingSignalsLimitError:                     s.maxPendingSignals,
+		dynamicconfig.FrontendEnableNexusAPIs:                         true,
+		dynamicconfig.FrontendEnableWorkerVersioningDataAPIs:          true,
+		dynamicconfig.FrontendEnableWorkerVersioningWorkflowAPIs:      true,
+		dynamicconfig.FrontendMaxConcurrentBatchOperationPerNamespace: limit,
 	}
 	s.setupSuite("testdata/client_cluster.yaml")
 }
@@ -107,6 +113,7 @@ func (s *ClientFunctionalSuite) TearDownSuite() {
 func (s *ClientFunctionalSuite) SetupTest() {
 	// Have to define our overridden assertions in the test setup. If we did it earlier, s.T() will return nil
 	s.Assertions = require.New(s.T())
+	s.HistoryRequire = historyrequire.New(s.T())
 
 	sdkClient, err := sdkclient.Dial(sdkclient.Options{
 		HostPort:  s.hostPort,
@@ -1348,9 +1355,38 @@ func (s *ClientFunctionalSuite) Test_InvalidCommandAttribute() {
 		return nil
 	}
 
-	var calledTime []time.Time
+	var startedTime []time.Time
 	workflowFn := func(ctx workflow.Context) error {
-		calledTime = append(calledTime, time.Now().UTC())
+		info := workflow.GetInfo(ctx)
+
+		// Simply record time.Now() and check if the difference between the recorded time
+		// is higher than the workflow task timeout will not work, because there is a delay
+		// between server starts the workflow task and this code is executed.
+
+		var currentAttemptStartedTime time.Time
+		err := workflow.SideEffect(ctx, func(_ workflow.Context) interface{} {
+			rpcCtx := context.Background()
+			if deadline, ok := ctx.Deadline(); ok {
+				var cancel context.CancelFunc
+				rpcCtx, cancel = context.WithDeadline(rpcCtx, deadline)
+				defer cancel()
+			}
+
+			resp, err := s.sdkClient.DescribeWorkflowExecution(
+				rpcCtx,
+				info.WorkflowExecution.ID,
+				info.WorkflowExecution.RunID,
+			)
+			if err != nil {
+				panic(err)
+			}
+			return resp.PendingWorkflowTask.StartedTime.AsTime()
+		}).Get(&currentAttemptStartedTime)
+		if err != nil {
+			return err
+		}
+
+		startedTime = append(startedTime, currentAttemptStartedTime)
 		ao := workflow.ActivityOptions{} // invalid activity option without StartToClose timeout
 		ctx = workflow.WithActivityOptions(ctx, ao)
 
@@ -1396,10 +1432,10 @@ func (s *ClientFunctionalSuite) Test_InvalidCommandAttribute() {
 	s.assertHistory(id, workflowRun.GetRunID(), expectedHistory)
 
 	// assert workflow task retried 3 times
-	s.Equal(3, len(calledTime))
+	s.Equal(3, len(startedTime))
 
-	s.True(calledTime[1].Sub(calledTime[0]) < time.Second)   // retry immediately
-	s.True(calledTime[2].Sub(calledTime[1]) > time.Second*3) // retry after WorkflowTaskTimeout
+	s.True(startedTime[1].Sub(startedTime[0]) < time.Second)   // retry immediately
+	s.True(startedTime[2].Sub(startedTime[1]) > time.Second*3) // retry after WorkflowTaskTimeout
 }
 
 func (s *ClientFunctionalSuite) Test_BufferedQuery() {
@@ -1620,10 +1656,6 @@ func (s *ClientFunctionalSuite) TestBatchReset() {
 }
 
 func (s *ClientFunctionalSuite) TestBatchResetByBuildId() {
-	if !UsingSQLAdvancedVisibility() {
-		s.T().Skip("Test requires advanced visibility")
-	}
-
 	tq := s.randomizeStr(s.T().Name())
 	buildPrefix := uuid.New()[:6] + "-"
 	v1 := buildPrefix + "v1"

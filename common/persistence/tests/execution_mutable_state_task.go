@@ -40,7 +40,6 @@ import (
 	"google.golang.org/protobuf/types/known/timestamppb"
 
 	persistencespb "go.temporal.io/server/api/persistence/v1"
-	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/debug"
 	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/dynamicconfig"
@@ -142,16 +141,6 @@ func (s *ExecutionMutableStateTaskSuite) SetupTest() {
 		uuid.New().String(),
 		uuid.New().String(),
 	)
-
-	for _, category := range taskCategories {
-		err := s.ExecutionManager.RegisterHistoryTaskReader(s.Ctx, &p.RegisterHistoryTaskReaderRequest{
-			ShardID:      s.ShardID,
-			ShardOwner:   s.Owner,
-			TaskCategory: category,
-			ReaderID:     common.DefaultQueueReaderID,
-		})
-		s.NoError(err)
-	}
 }
 
 func (s *ExecutionMutableStateTaskSuite) TearDownTest() {
@@ -171,15 +160,6 @@ func (s *ExecutionMutableStateTaskSuite) TearDownTest() {
 		ExclusiveMaxTaskKey: tasks.NewKey(time.Unix(0, math.MaxInt64), 0),
 	})
 	s.NoError(err)
-
-	for _, category := range taskCategories {
-		s.ExecutionManager.UnregisterHistoryTaskReader(s.Ctx, &p.UnregisterHistoryTaskReaderRequest{
-			ShardID:      s.ShardID,
-			ShardOwner:   s.Owner,
-			TaskCategory: category,
-			ReaderID:     common.DefaultQueueReaderID,
-		})
-	}
 
 	s.Cancel()
 }
@@ -508,7 +488,6 @@ func (s *ExecutionMutableStateTaskSuite) TestGetTimerTasksOrdered() {
 		RangeID:     s.RangeID,
 		NamespaceID: s.WorkflowKey.NamespaceID,
 		WorkflowID:  s.WorkflowKey.WorkflowID,
-		RunID:       s.WorkflowKey.RunID,
 		Tasks: map[tasks.Category][]tasks.Task{
 			tasks.CategoryTimer: timerTasks,
 		},
@@ -550,7 +529,6 @@ func (s *ExecutionMutableStateTaskSuite) TestGetScheduledTasksOrdered() {
 		RangeID:     s.RangeID,
 		NamespaceID: s.WorkflowKey.NamespaceID,
 		WorkflowID:  s.WorkflowKey.WorkflowID,
-		RunID:       s.WorkflowKey.RunID,
 		Tasks: map[tasks.Category][]tasks.Task{
 			fakeScheduledTaskCategory: scheduledTasks,
 		},
@@ -580,7 +558,6 @@ func (s *ExecutionMutableStateTaskSuite) TestGetScheduledTasksOrdered() {
 	response, err := s.ExecutionManager.GetHistoryTasks(s.Ctx, &p.GetHistoryTasksRequest{
 		ShardID:             s.ShardID,
 		TaskCategory:        fakeScheduledTaskCategory,
-		ReaderID:            common.DefaultQueueReaderID,
 		InclusiveMinTaskKey: tasks.NewKey(now, 0),
 		ExclusiveMaxTaskKey: tasks.NewKey(now.Add(time.Second), 0),
 		BatchSize:           10,
@@ -609,7 +586,6 @@ func (s *ExecutionMutableStateTaskSuite) AddRandomTasks(
 		RangeID:     s.RangeID,
 		NamespaceID: s.WorkflowKey.NamespaceID,
 		WorkflowID:  s.WorkflowKey.WorkflowID,
-		RunID:       s.WorkflowKey.RunID,
 		Tasks: map[tasks.Category][]tasks.Task{
 			category: randomTasks,
 		},
@@ -628,7 +604,6 @@ func (s *ExecutionMutableStateTaskSuite) PaginateTasks(
 	request := &p.GetHistoryTasksRequest{
 		ShardID:             s.ShardID,
 		TaskCategory:        category,
-		ReaderID:            common.DefaultQueueReaderID,
 		InclusiveMinTaskKey: inclusiveMinTaskKey,
 		ExclusiveMaxTaskKey: exclusiveMaxTaskKey,
 		BatchSize:           batchSize,
@@ -752,7 +727,7 @@ func (s *testSerializer) DeserializeTask(
 
 	taskInfo := &persistencespb.TransferTaskInfo{}
 	if err := proto.Unmarshal(blob.Data, taskInfo); err != nil {
-		return nil, err
+		return nil, serialization.NewDeserializationError(enumspb.ENCODING_TYPE_PROTO3, err)
 	}
 
 	fakeTask := tasks.NewFakeTask(

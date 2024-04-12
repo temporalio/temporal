@@ -101,6 +101,14 @@ func TestCalcRampThresholdUniform(t *testing.T) {
 	}
 }
 
+func TestCalcRampThresholdDeterministic(t *testing.T) {
+	// same input should always may to the same output
+	assert.Equal(t, calcRampThreshold("A"), calcRampThreshold("A"))
+
+	// unless it's an empty string which maps randomly each time
+	assert.NotEqual(t, calcRampThreshold(""), calcRampThreshold(""))
+}
+
 func createFullAssignmentRule(buildId string) *persistencespb.AssignmentRule {
 	return &persistencespb.AssignmentRule{Rule: &taskqueuepb.BuildIdAssignmentRule{TargetBuildId: buildId}}
 }

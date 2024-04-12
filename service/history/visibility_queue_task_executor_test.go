@@ -61,6 +61,7 @@ import (
 	"go.temporal.io/server/common/worker_versioning"
 	"go.temporal.io/server/service/history/consts"
 	"go.temporal.io/server/service/history/events"
+	"go.temporal.io/server/service/history/hsm"
 	"go.temporal.io/server/service/history/queues"
 	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/tasks"
@@ -124,14 +125,18 @@ func (s *visibilityQueueTaskExecutorSuite) SetupTest() {
 		},
 		config,
 	)
-	s.mockShard.SetEventsCacheForTesting(events.NewEventsCache(
-		s.mockShard.GetShardID(),
-		s.mockShard.GetConfig().EventsCacheMaxSizeBytes(),
-		s.mockShard.GetConfig().EventsCacheTTL(),
+
+	reg := hsm.NewRegistry()
+	err := workflow.RegisterStateMachine(reg)
+	s.NoError(err)
+	s.mockShard.SetStateMachineRegistry(reg)
+
+	s.mockShard.SetEventsCacheForTesting(events.NewHostLevelEventsCache(
 		s.mockShard.GetExecutionManager(),
-		false,
-		s.mockShard.GetLogger(),
+		s.mockShard.GetConfig(),
 		s.mockShard.GetMetricsHandler(),
+		s.mockShard.GetLogger(),
+		false,
 	))
 	s.mockShard.Resource.TimeSource = s.timeSource
 
@@ -149,7 +154,7 @@ func (s *visibilityQueueTaskExecutorSuite) SetupTest() {
 	mockClusterMetadata.EXPECT().IsGlobalNamespaceEnabled().Return(true).AnyTimes()
 	mockClusterMetadata.EXPECT().ClusterNameForFailoverVersion(true, s.version).Return(mockClusterMetadata.GetCurrentClusterName()).AnyTimes()
 
-	s.workflowCache = wcache.NewHostLevelCache(s.mockShard.GetConfig())
+	s.workflowCache = wcache.NewHostLevelCache(s.mockShard.GetConfig(), metrics.NoopMetricsHandler)
 	s.logger = s.mockShard.GetLogger()
 
 	h := &historyEngineImpl{
@@ -198,7 +203,7 @@ func (s *visibilityQueueTaskExecutorSuite) TestProcessCloseExecution() {
 		RunId:      uuid.New(),
 	}
 
-	mutableState := workflow.TestGlobalMutableState(s.mockShard, s.mockShard.GetEventsCache(), s.logger, s.version, execution.GetRunId())
+	mutableState := workflow.TestGlobalMutableState(s.mockShard, s.mockShard.GetEventsCache(), s.logger, s.version, execution.GetWorkflowId(), execution.GetRunId())
 	_, err := mutableState.AddWorkflowExecutionStartedEvent(
 		execution,
 		&historyservice.StartWorkflowExecutionRequest{
@@ -282,7 +287,7 @@ func (s *visibilityQueueTaskExecutorSuite) TestProcessCloseExecutionWithWorkflow
 		RunId:      uuid.New(),
 	}
 
-	mutableState := workflow.TestGlobalMutableState(s.mockShard, s.mockShard.GetEventsCache(), s.logger, s.version, execution.GetRunId())
+	mutableState := workflow.TestGlobalMutableState(s.mockShard, s.mockShard.GetEventsCache(), s.logger, s.version, execution.GetWorkflowId(), execution.GetRunId())
 	_, err := mutableState.AddWorkflowExecutionStartedEvent(
 		execution,
 		&historyservice.StartWorkflowExecutionRequest{
@@ -358,7 +363,7 @@ func (s *visibilityQueueTaskExecutorSuite) TestProcessRecordWorkflowStartedTask(
 	cronSchedule := "@every 5s"
 	backoff := 5 * time.Second
 
-	mutableState := workflow.TestGlobalMutableState(s.mockShard, s.mockShard.GetEventsCache(), s.logger, s.version, execution.GetRunId())
+	mutableState := workflow.TestGlobalMutableState(s.mockShard, s.mockShard.GetEventsCache(), s.logger, s.version, execution.GetWorkflowId(), execution.GetRunId())
 
 	event, err := mutableState.AddWorkflowExecutionStartedEvent(
 		execution,
@@ -410,7 +415,7 @@ func (s *visibilityQueueTaskExecutorSuite) TestProcessUpsertWorkflowSearchAttrib
 	workflowType := "some random workflow type"
 	taskQueueName := "some random task queue"
 
-	mutableState := workflow.TestGlobalMutableState(s.mockShard, s.mockShard.GetEventsCache(), s.logger, s.version, execution.GetRunId())
+	mutableState := workflow.TestGlobalMutableState(s.mockShard, s.mockShard.GetEventsCache(), s.logger, s.version, execution.GetWorkflowId(), execution.GetRunId())
 
 	_, err := mutableState.AddWorkflowExecutionStartedEvent(
 		execution,
@@ -464,6 +469,7 @@ func (s *visibilityQueueTaskExecutorSuite) TestProcessModifyWorkflowProperties()
 		s.mockShard.GetEventsCache(),
 		s.logger,
 		s.version,
+		execution.GetWorkflowId(),
 		execution.GetRunId(),
 	)
 
@@ -534,7 +540,7 @@ func (s *visibilityQueueTaskExecutorSuite) TestProcessorDeleteExecution() {
 	})
 	s.Run("MultiCursorQueue", func() {
 		const highWatermark int64 = 5
-		s.NoError(s.mockShard.SetQueueState(tasks.CategoryVisibility, &persistencespb.QueueState{
+		s.NoError(s.mockShard.SetQueueState(tasks.CategoryVisibility, 1, &persistencespb.QueueState{
 			ReaderStates: nil,
 			ExclusiveReaderHighWatermark: &persistencespb.TaskKey{
 				TaskId:   highWatermark,

@@ -484,3 +484,40 @@ func (mr *MockExecutorWrapperMockRecorder) Wrap(delegate interface{}) *gomock.Ca
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Wrap", reflect.TypeOf((*MockExecutorWrapper)(nil).Wrap), delegate)
 }
+
+// MockMaybeTerminalTaskError is a mock of MaybeTerminalTaskError interface.
+type MockMaybeTerminalTaskError struct {
+	ctrl     *gomock.Controller
+	recorder *MockMaybeTerminalTaskErrorMockRecorder
+}
+
+// MockMaybeTerminalTaskErrorMockRecorder is the mock recorder for MockMaybeTerminalTaskError.
+type MockMaybeTerminalTaskErrorMockRecorder struct {
+	mock *MockMaybeTerminalTaskError
+}
+
+// NewMockMaybeTerminalTaskError creates a new mock instance.
+func NewMockMaybeTerminalTaskError(ctrl *gomock.Controller) *MockMaybeTerminalTaskError {
+	mock := &MockMaybeTerminalTaskError{ctrl: ctrl}
+	mock.recorder = &MockMaybeTerminalTaskErrorMockRecorder{mock}
+	return mock
+}
+
+// EXPECT returns an object that allows the caller to indicate expected use.
+func (m *MockMaybeTerminalTaskError) EXPECT() *MockMaybeTerminalTaskErrorMockRecorder {
+	return m.recorder
+}
+
+// IsTerminalTaskError mocks base method.
+func (m *MockMaybeTerminalTaskError) IsTerminalTaskError() bool {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "IsTerminalTaskError")
+	ret0, _ := ret[0].(bool)
+	return ret0
+}
+
+// IsTerminalTaskError indicates an expected call of IsTerminalTaskError.
+func (mr *MockMaybeTerminalTaskErrorMockRecorder) IsTerminalTaskError() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "IsTerminalTaskError", reflect.TypeOf((*MockMaybeTerminalTaskError)(nil).IsTerminalTaskError))
+}

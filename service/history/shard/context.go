@@ -47,6 +47,7 @@ import (
 	"go.temporal.io/server/common/searchattribute"
 	"go.temporal.io/server/service/history/configs"
 	"go.temporal.io/server/service/history/events"
+	"go.temporal.io/server/service/history/hsm"
 	"go.temporal.io/server/service/history/tasks"
 )
 
@@ -87,7 +88,7 @@ type (
 
 		GetQueueExclusiveHighReadWatermark(category tasks.Category) tasks.Key
 		GetQueueState(category tasks.Category) (*persistencespb.QueueState, bool)
-		SetQueueState(category tasks.Category, state *persistencespb.QueueState) error
+		SetQueueState(category tasks.Category, tasksCompleted int, state *persistencespb.QueueState) error
 		UpdateReplicationQueueReaderState(readerID int64, readerState *persistencespb.QueueReaderState) error
 
 		GetReplicatorDLQAckLevel(sourceCluster string) int64
@@ -115,9 +116,11 @@ type (
 		GetWorkflowExecution(ctx context.Context, request *persistence.GetWorkflowExecutionRequest) (*persistence.GetWorkflowExecutionResponse, error)
 		// DeleteWorkflowExecution add task to delete visibility, current workflow execution, and deletes workflow execution.
 		// If branchToken != nil, then delete history also, otherwise leave history.
-		DeleteWorkflowExecution(ctx context.Context, workflowKey definition.WorkflowKey, branchToken []byte, startTime time.Time, closeTime time.Time, closeExecutionVisibilityTaskID int64, stage *tasks.DeleteWorkflowExecutionStage) error
+		DeleteWorkflowExecution(ctx context.Context, workflowKey definition.WorkflowKey, branchToken []byte, closeExecutionVisibilityTaskID int64, stage *tasks.DeleteWorkflowExecutionStage) error
 
 		UnloadForOwnershipLost()
+
+		StateMachineRegistry() *hsm.Registry
 	}
 
 	// A ControllableContext is a Context plus other methods needed by

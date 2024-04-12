@@ -29,6 +29,7 @@ import (
 
 	"github.com/stretchr/testify/suite"
 
+	"go.temporal.io/server/common/persistence"
 	persistencetests "go.temporal.io/server/common/persistence/persistence-tests"
 	"go.temporal.io/server/common/persistence/serialization"
 	"go.temporal.io/server/common/persistence/sql"
@@ -79,6 +80,7 @@ func (p *PostgreSQLSuite) TestPostgreSQLExecutionMutableStateStoreSuite() {
 		shardStore,
 		executionStore,
 		serialization.NewSerializer(),
+		&persistence.HistoryBranchUtilImpl{},
 		testData.Logger,
 	)
 	suite.Run(p.T(), s)
@@ -153,13 +155,6 @@ func (p *PostgreSQLSuite) TestPostgreSQLVisibilityPersistenceSuite() {
 	suite.Run(p.T(), s)
 }
 
-func (p *PostgreSQLSuite) TestPostgreSQL12VisibilityPersistenceSuite() {
-	s := &VisibilityPersistenceSuite{
-		TestBase: persistencetests.NewTestBaseWithSQL(persistencetests.GetPostgreSQL12TestClusterOption()),
-	}
-	suite.Run(p.T(), s)
-}
-
 // TODO: Merge persistence-tests into the tests directory.
 
 func (p *PostgreSQLSuite) TestPostgreSQLHistoryV2PersistenceSuite() {
@@ -183,41 +178,9 @@ func (p *PostgreSQLSuite) TestPostgreSQLClusterMetadataPersistence() {
 	suite.Run(p.T(), s)
 }
 
-// TODO flaky test in buildkite
-// https://go.temporal.io/server/issues/2877
-/*
-FAIL: TestPostgreSQLQueuePersistence/TestNamespaceReplicationQueue (0.26s)
-        queuePersistenceTest.go:102:
-            	Error Trace:	queuePersistenceTest.go:102
-            	Error:      	Not equal:
-            	            	expected: 99
-            	            	actual  : 98
-            	Test:       	TestPostgreSQLQueuePersistence/TestNamespaceReplicationQueue
-*/
-// func (p *PostgreSQLSuite) TestPostgreSQLQueuePersistence() {
-// 	s := new(persistencetests.QueuePersistenceSuite)
-// 	s.TestBase = persistencetests.NewTestBaseWithSQL(persistencetests.GetPostgreSQLTestClusterOption())
-// 	s.TestBase.Setup(nil)
-// 	suite.Run(p.T(), s)
-// }
-
-func (p *PostgreSQLSuite) TestPostgreSQL12HistoryV2PersistenceSuite() {
-	s := new(persistencetests.HistoryV2PersistenceSuite)
-	s.TestBase = persistencetests.NewTestBaseWithSQL(persistencetests.GetPostgreSQL12TestClusterOption())
-	s.TestBase.Setup(nil)
-	suite.Run(p.T(), s)
-}
-
-func (p *PostgreSQLSuite) TestPostgreSQL12MetadataPersistenceSuiteV2() {
-	s := new(persistencetests.MetadataPersistenceSuiteV2)
-	s.TestBase = persistencetests.NewTestBaseWithSQL(persistencetests.GetPostgreSQL12TestClusterOption())
-	s.TestBase.Setup(nil)
-	suite.Run(p.T(), s)
-}
-
-func (p *PostgreSQLSuite) TestPostgreSQL12ClusterMetadataPersistence() {
-	s := new(persistencetests.ClusterMetadataManagerSuite)
-	s.TestBase = persistencetests.NewTestBaseWithSQL(persistencetests.GetPostgreSQL12TestClusterOption())
+func (p *PostgreSQLSuite) TestPostgreSQLQueuePersistence() {
+	s := new(persistencetests.QueuePersistenceSuite)
+	s.TestBase = persistencetests.NewTestBaseWithSQL(persistencetests.GetPostgreSQLTestClusterOption())
 	s.TestBase.Setup(nil)
 	suite.Run(p.T(), s)
 }
@@ -627,6 +590,12 @@ func (p *PostgreSQLSuite) TestPGQueueV2() {
 	testData, tearDown := setUpPostgreSQLTest(p.T(), p.pluginName)
 	p.T().Cleanup(tearDown)
 	RunQueueV2TestSuiteForSQL(p.T(), testData.Factory)
+}
+
+func (p *PostgreSQLSuite) TestPostgreSQLNexusIncomingServicePersistence() {
+	testData, tearDown := setUpPostgreSQLTest(p.T(), p.pluginName)
+	p.T().Cleanup(tearDown)
+	RunNexusIncomingServiceTestSuiteForSQL(p.T(), testData.Factory)
 }
 
 func TestPQ(t *testing.T) {

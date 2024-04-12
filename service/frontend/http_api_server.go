@@ -34,6 +34,7 @@ import (
 	"reflect"
 	"time"
 
+	"github.com/gorilla/mux"
 	"github.com/grpc-ecosystem/grpc-gateway/v2/runtime"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
@@ -43,6 +44,7 @@ import (
 	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/proto"
 
+	"go.temporal.io/api/operatorservice/v1"
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/server/common/config"
@@ -54,6 +56,7 @@ import (
 	"go.temporal.io/server/common/rpc"
 	"go.temporal.io/server/common/rpc/encryption"
 	"go.temporal.io/server/common/rpc/interceptor"
+	"go.temporal.io/server/common/utf8validator"
 )
 
 // HTTPAPIServer is an HTTP API server that forwards requests to gRPC via the
@@ -82,14 +85,18 @@ var (
 )
 
 // NewHTTPAPIServer creates an [HTTPAPIServer].
+//
+// routes registered with additionalRouteRegistrationFuncs take precedence over the auto generated grpc proxy routes.
 func NewHTTPAPIServer(
 	serviceConfig *Config,
 	rpcConfig config.RPC,
 	grpcListener net.Listener,
 	tlsConfigProvider encryption.TLSConfigProvider,
 	handler Handler,
+	operatorHandler *OperatorHandlerImpl,
 	interceptors []grpc.UnaryServerInterceptor,
 	metricsHandler metrics.Handler,
+	additionalRouteRegistrationFuncs []func(*mux.Router),
 	namespaceRegistry namespace.Registry,
 	logger log.Logger,
 ) (*HTTPAPIServer, error) {
@@ -151,7 +158,10 @@ func NewHTTPAPIServer(
 
 	// Create inline client connection
 	clientConn := newInlineClientConn(
-		map[string]any{"temporal.api.workflowservice.v1.WorkflowService": handler},
+		map[string]any{
+			"temporal.api.workflowservice.v1.WorkflowService": handler,
+			"temporal.api.operatorservice.v1.OperatorService": operatorHandler,
+		},
 		interceptors,
 		metricsHandler,
 		namespaceRegistry,
@@ -159,16 +169,35 @@ func NewHTTPAPIServer(
 
 	// Create serve mux
 	h.serveMux = runtime.NewServeMux(opts...)
+
 	err = workflowservice.RegisterWorkflowServiceHandlerClient(
 		context.Background(),
 		h.serveMux,
 		workflowservice.NewWorkflowServiceClient(clientConn),
 	)
 	if err != nil {
-		return nil, fmt.Errorf("failed registering HTTP API handler: %w", err)
+		return nil, fmt.Errorf("failed registering workflowservice HTTP API handler: %w", err)
 	}
-	// Set the handler as our function that wraps serve mux
-	h.server.Handler = http.HandlerFunc(h.serveHTTP)
+
+	err = operatorservice.RegisterOperatorServiceHandlerClient(
+		context.Background(),
+		h.serveMux,
+		operatorservice.NewOperatorServiceClient(clientConn),
+	)
+	if err != nil {
+		return nil, fmt.Errorf("failed registering operatorservice HTTP API handler: %w", err)
+	}
+
+	// Instantiate a router to support additional route prefixes.
+	r := mux.NewRouter().UseEncodedPath()
+	for _, f := range additionalRouteRegistrationFuncs {
+		f(r)
+	}
+
+	// Set the / handler as our function that wraps serve mux.
+	r.PathPrefix("/").HandlerFunc(h.serveHTTP)
+	// Register the router as the HTTP server handler.
+	h.server.Handler = r
 
 	// Put the remote address on the context
 	h.server.ConnContext = func(ctx context.Context, c net.Conn) context.Context {
@@ -281,7 +310,12 @@ func (h *HTTPAPIServer) errorHandler(
 	s := serviceerror.ToStatus(err)
 	w.Header().Set("Content-Type", marshaler.ContentType(struct{}{}))
 
-	buf, merr := marshaler.Marshal(s.Proto())
+	sProto := s.Proto()
+	var buf []byte
+	merr := utf8validator.Validate(sProto, utf8validator.SourceRPCResponse)
+	if merr == nil {
+		buf, merr = marshaler.Marshal(sProto)
+	}
 	if merr != nil {
 		h.logger.Warn("Failed to marshal error message", tag.Error(merr))
 		w.Header().Set("Content-Type", "application/json")
@@ -370,7 +404,7 @@ func newInlineClientConn(
 	return &inlineClientConn{
 		methods:           methods,
 		interceptor:       chainUnaryServerInterceptors(interceptors),
-		requestsCounter:   metricsHandler.Counter(metrics.HTTPServiceRequests.Name()),
+		requestsCounter:   metrics.HTTPServiceRequests.With(metricsHandler),
 		namespaceRegistry: namespaceRegistry,
 	}
 }

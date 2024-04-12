@@ -10,12 +10,22 @@ linters:
     - staticcheck
     - vet
     - forbidigo
+    - exhaustive
+    - godox
 run:
   skip-dirs:
     - ^api
     - ^proto
     - ^.git
 linters-settings:
+  exhaustive:
+    # Presence of "default" case in switch statements satisfies exhaustiveness,
+    # even if all enum members are not listed.
+    # Default: false
+    default-signifies-exhaustive: true
+  godox:
+    keywords:
+      - FIXME # marks TODOs that must be fixed before merging
   govet:
     fieldalignment: 0
   forbidigo:
@@ -81,6 +91,8 @@ linters-settings:
       - name: empty-block
         disabled: true
       - name: flag-parameter
+        disabled: true
+      - name: unnecessary-stmt
         disabled: true
 
       # Rule tuning

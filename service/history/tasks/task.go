@@ -49,6 +49,15 @@ type (
 		SetTaskID(id int64)
 		SetVisibilityTime(timestamp time.Time)
 	}
+
+	// HasStateMachineTaskType must be implemented by all HSM state machine tasks.
+	HasStateMachineTaskType interface {
+		StateMachineTaskType() int32
+	}
+	// HasDestination must be implemented by all tasks used in the outbound queue.
+	HasDestination interface {
+		GetDestination() string
+	}
 )
 
 // GetShardIDForTask computes the shardID for a given task using the task's namespace, workflow ID and the number of

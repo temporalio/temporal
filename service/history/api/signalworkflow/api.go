@@ -48,7 +48,7 @@ func Invoke(
 	namespaceID := namespaceEntry.ID()
 
 	request := req.SignalRequest
-	parentExecution := req.ExternalWorkflowExecution
+	externalWorkflowExecution := req.ExternalWorkflowExecution
 	childWorkflowOnly := req.GetChildWorkflowOnly()
 
 	err = api.GetAndUpdateWorkflowWithNew(
@@ -60,8 +60,8 @@ func Invoke(
 			request.WorkflowExecution.WorkflowId,
 			request.WorkflowExecution.RunId,
 		),
-		func(workflowContext api.WorkflowContext) (*api.UpdateWorkflowAction, error) {
-			mutableState := workflowContext.GetMutableState()
+		func(workflowLease api.WorkflowLease) (*api.UpdateWorkflowAction, error) {
+			mutableState := workflowLease.GetMutableState()
 			if request.GetRequestId() != "" && mutableState.IsSignalRequested(request.GetRequestId()) {
 				return &api.UpdateWorkflowAction{
 					Noop:               true,
@@ -69,7 +69,7 @@ func Invoke(
 				}, nil
 			}
 
-			releaseFn := workflowContext.GetReleaseFn()
+			releaseFn := workflowLease.GetReleaseFn()
 			if !mutableState.IsWorkflowExecutionRunning() {
 				// in-memory mutable state is still clean, release the lock with nil error to prevent
 				// clearing and reloading mutable state
@@ -96,8 +96,8 @@ func Invoke(
 			if childWorkflowOnly {
 				parentWorkflowID := executionInfo.ParentWorkflowId
 				parentRunID := executionInfo.ParentRunId
-				if parentExecution.GetWorkflowId() != parentWorkflowID ||
-					parentExecution.GetRunId() != parentRunID {
+				if externalWorkflowExecution.GetWorkflowId() != parentWorkflowID ||
+					externalWorkflowExecution.GetRunId() != parentRunID {
 					releaseFn(nil)
 					return nil, consts.ErrWorkflowParent
 				}
@@ -106,12 +106,15 @@ func Invoke(
 			if request.GetRequestId() != "" {
 				mutableState.AddSignalRequested(request.GetRequestId())
 			}
-			if _, err := mutableState.AddWorkflowExecutionSignaled(
+			_, err := mutableState.AddWorkflowExecutionSignaledEvent(
 				request.GetSignalName(),
 				request.GetInput(),
 				request.GetIdentity(),
 				request.GetHeader(),
-				request.GetSkipGenerateWorkflowTask()); err != nil {
+				request.GetSkipGenerateWorkflowTask(),
+				externalWorkflowExecution,
+			)
+			if err != nil {
 				return nil, err
 			}
 

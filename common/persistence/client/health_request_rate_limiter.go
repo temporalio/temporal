@@ -56,8 +56,7 @@ type (
 
 		refreshTimer *time.Ticker
 
-		rateFn           quotas.RateFn
-		rateToBurstRatio float64
+		rateBurst quotas.RateBurst
 
 		curRateMultiplier atomic.Pointer[float64]
 
@@ -91,19 +90,20 @@ func NewHealthRequestRateLimiterImpl(
 	healthSignals persistence.HealthSignalAggregator,
 	rateFn quotas.RateFn,
 	params DynamicRateLimitingParams,
+	burstRatio PersistenceBurstRatio,
 	metricsHandler metrics.Handler,
 	logger log.Logger,
 ) *HealthRequestRateLimiterImpl {
+	rateBurst := quotas.NewDefaultRateBurst(rateFn, quotas.BurstRatioFn(burstRatio))
 	limiter := &HealthRequestRateLimiterImpl{
-		enabled:          atomic.Bool{},
-		rateLimiter:      quotas.NewRateLimiter(rateFn(), int(DefaultRateBurstRatio*rateFn())),
-		healthSignals:    healthSignals,
-		rateFn:           rateFn,
-		params:           params,
-		refreshTimer:     time.NewTicker(DefaultRefreshInterval),
-		rateToBurstRatio: DefaultRateBurstRatio,
-		metricsHandler:   metricsHandler,
-		logger:           logger,
+		enabled:        atomic.Bool{},
+		rateLimiter:    quotas.NewRateLimiter(rateBurst.Rate(), rateBurst.Burst()),
+		healthSignals:  healthSignals,
+		rateBurst:      rateBurst,
+		params:         params,
+		refreshTimer:   time.NewTicker(DefaultRefreshInterval),
+		metricsHandler: metricsHandler,
+		logger:         logger,
 	}
 	curRateMultiplier := new(float64)
 	*curRateMultiplier = DefaultInitialRateMultiplier
@@ -156,7 +156,7 @@ func (rl *HealthRequestRateLimiterImpl) refreshRate() {
 	if rl.latencyThresholdExceeded() || rl.errorThresholdExceeded() {
 		// limit exceeded, do backoff
 		curRateMultiplier = math.Max(curOptions.RateMultiMin, curRateMultiplier-curOptions.RateBackoffStepSize)
-		rl.metricsHandler.Gauge(metrics.DynamicRateLimiterMultiplier.Name()).Record(curRateMultiplier)
+		metrics.DynamicRateLimiterMultiplier.With(rl.metricsHandler).Record(curRateMultiplier)
 		rl.logger.Info(
 			"Health threshold exceeded, reducing rate limit.",
 			tag.NewFloat64("newMulti", curRateMultiplier),
@@ -167,7 +167,7 @@ func (rl *HealthRequestRateLimiterImpl) refreshRate() {
 	} else if curRateMultiplier < curOptions.RateMultiMax {
 		// already doing backoff and under thresholds, increase limit
 		curRateMultiplier = math.Min(curOptions.RateMultiMax, curRateMultiplier+curOptions.RateIncreaseStepSize)
-		rl.metricsHandler.Gauge(metrics.DynamicRateLimiterMultiplier.Name()).Record(curRateMultiplier)
+		metrics.DynamicRateLimiterMultiplier.With(rl.metricsHandler).Record(curRateMultiplier)
 		rl.logger.Info(
 			"System healthy, increasing rate limit.",
 			tag.NewFloat64("newMulti", curRateMultiplier),
@@ -178,8 +178,8 @@ func (rl *HealthRequestRateLimiterImpl) refreshRate() {
 	}
 	rl.curRateMultiplier.Store(&curRateMultiplier)
 	// Always set rate to pickup changes to underlying rate limit dynamic config
-	rl.rateLimiter.SetRPS(curRateMultiplier * rl.rateFn())
-	rl.rateLimiter.SetBurst(int(rl.rateToBurstRatio * rl.rateFn()))
+	rl.rateLimiter.SetRPS(curRateMultiplier * rl.rateBurst.Rate())
+	rl.rateLimiter.SetBurst(int(curRateMultiplier * float64(rl.rateBurst.Burst())))
 }
 
 func (rl *HealthRequestRateLimiterImpl) refreshDynamicParams() {

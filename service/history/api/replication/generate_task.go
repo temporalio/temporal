@@ -49,7 +49,7 @@ func GenerateTask(
 	}
 	namespaceID := namespaceEntry.ID()
 
-	wfContext, err := workflowConsistencyChecker.GetWorkflowContext(
+	workflowLease, err := workflowConsistencyChecker.GetWorkflowLease(
 		ctx,
 		nil,
 		api.BypassMutableStateConsistencyPredicate,
@@ -63,9 +63,9 @@ func GenerateTask(
 	if err != nil {
 		return nil, err
 	}
-	defer func() { wfContext.GetReleaseFn()(retError) }()
+	defer func() { workflowLease.GetReleaseFn()(retError) }()
 
-	mutableState := wfContext.GetMutableState()
+	mutableState := workflowLease.GetMutableState()
 	replicationTasks, stateTransitionCount, err := mutableState.GenerateMigrationTasks()
 	if err != nil {
 		return nil, err
@@ -76,7 +76,6 @@ func GenerateTask(
 		// RangeID is set by shard
 		NamespaceID: string(namespaceID),
 		WorkflowID:  request.Execution.WorkflowId,
-		RunID:       request.Execution.RunId,
 		Tasks: map[tasks.Category][]tasks.Task{
 			tasks.CategoryReplication: replicationTasks,
 		},

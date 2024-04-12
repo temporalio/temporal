@@ -28,7 +28,6 @@ package replication
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"sync"
 	"time"
@@ -39,12 +38,10 @@ import (
 
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	replicationspb "go.temporal.io/server/api/replication/v1"
-	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/backoff"
 	"go.temporal.io/server/common/collection"
 	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/dynamicconfig"
-	"go.temporal.io/server/common/headers"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
@@ -63,7 +60,6 @@ type (
 		GetMaxTaskInfo() (int64, time.Time)
 		GetTasks(ctx context.Context, pollingCluster string, queryMessageID int64) (*replicationspb.ReplicationMessages, error)
 		GetTask(ctx context.Context, taskInfo *replicationspb.ReplicationTaskInfo) (*replicationspb.ReplicationTask, error)
-		Close()
 
 		SubscribeNotification() (<-chan struct{}, string)
 		UnsubscribeNotification(string)
@@ -98,7 +94,6 @@ type (
 		maxTaskID                  *int64
 		maxTaskVisibilityTimestamp time.Time
 		sanityCheckTime            time.Time
-		registeredQueueReaders     map[int64]struct{}
 
 		subscriberLock sync.Mutex
 		subscribers    map[string]chan struct{}
@@ -107,10 +102,6 @@ type (
 
 var (
 	errUnknownReplicationTask = serviceerror.NewInternal("unknown replication task")
-)
-
-var (
-	closeAckMangerTimeout = 10 * time.Second
 )
 
 func NewAckManager(
@@ -142,9 +133,8 @@ func NewAckManager(
 		pageSize:           config.ReplicatorProcessorFetchTasksBatchSize,
 		maxSkipTaskCount:   config.ReplicatorProcessorMaxSkipTaskCount,
 
-		maxTaskID:              nil,
-		sanityCheckTime:        time.Time{},
-		registeredQueueReaders: make(map[int64]struct{}),
+		maxTaskID:       nil,
+		sanityCheckTime: time.Time{},
 
 		subscribers: make(map[string]chan struct{}),
 	}
@@ -266,13 +256,13 @@ func (p *ackMgrImpl) GetTasks(
 	}
 
 	// Note this is a very rough indicator of how much the remote DC is behind on this shard.
-	p.metricsHandler.Histogram(metrics.ReplicationTasksLag.Name(), metrics.ReplicationTasksLag.Unit()).Record(
+	metrics.ReplicationTasksLag.With(p.metricsHandler).Record(
 		maxTaskID-lastTaskID,
 		metrics.TargetClusterTag(pollingCluster),
 		metrics.OperationTag(metrics.ReplicationTaskFetcherScope),
 	)
 
-	p.metricsHandler.Histogram(metrics.ReplicationTasksFetched.Name(), metrics.ReplicationTasksFetched.Unit()).
+	metrics.ReplicationTasksFetched.With(p.metricsHandler).
 		Record(int64(len(replicationTasks)))
 
 	replicationEventTime := timestamppb.New(p.shardContext.GetTimeSource().Now())
@@ -289,32 +279,6 @@ func (p *ackMgrImpl) GetTasks(
 	}, nil
 }
 
-func (p *ackMgrImpl) Close() {
-	p.Lock()
-	defer p.Unlock()
-
-	if p.registeredQueueReaders == nil {
-		// Close called multiple times
-		// should not happen
-		return
-	}
-
-	closeCtx, cancel := context.WithTimeout(context.Background(), closeAckMangerTimeout)
-	closeCtx = headers.SetCallerInfo(closeCtx, headers.SystemPreemptableCallerInfo)
-	defer cancel()
-
-	for readerID := range p.registeredQueueReaders {
-		p.executionMgr.UnregisterHistoryTaskReader(closeCtx, &persistence.UnregisterHistoryTaskReaderRequest{
-			ShardID:      p.shardContext.GetShardID(),
-			ShardOwner:   p.shardContext.GetOwner(),
-			TaskCategory: tasks.CategoryReplication,
-			ReaderID:     readerID,
-		})
-	}
-
-	p.registeredQueueReaders = nil
-}
-
 func (p *ackMgrImpl) getTasks(
 	ctx context.Context,
 	pollingCluster string,
@@ -327,15 +291,10 @@ func (p *ackMgrImpl) getTasks(
 		return nil, maxTaskID, nil
 	}
 
-	readerID, err := p.clusterToReaderID(ctx, pollingCluster)
-	if err != nil {
-		return nil, 0, err
-	}
-
 	replicationTasks := make([]*replicationspb.ReplicationTask, 0, p.pageSize())
 	skippedTaskCount := 0
 	lastTaskID := maxTaskID // If no tasks are returned, then it means there are no tasks bellow maxTaskID.
-	iter := collection.NewPagingIterator(p.getReplicationTasksFn(ctx, readerID, minTaskID, maxTaskID, p.pageSize()))
+	iter := collection.NewPagingIterator(p.getReplicationTasksFn(ctx, minTaskID, maxTaskID, p.pageSize()))
 	// iter.HasNext() should be the last check to avoid extra page read in case if replicationTasks is already full.
 	for len(replicationTasks) < p.pageSize() && skippedTaskCount <= p.maxSkipTaskCount() && iter.HasNext() {
 		task, err := iter.Next()
@@ -382,7 +341,6 @@ func (p *ackMgrImpl) getTasks(
 
 func (p *ackMgrImpl) getReplicationTasksFn(
 	ctx context.Context,
-	readerID int64,
 	minTaskID int64,
 	maxTaskID int64,
 	batchSize int,
@@ -391,7 +349,6 @@ func (p *ackMgrImpl) getReplicationTasksFn(
 		response, err := p.executionMgr.GetHistoryTasks(ctx, &persistence.GetHistoryTasksRequest{
 			ShardID:             p.shardContext.GetShardID(),
 			TaskCategory:        tasks.CategoryReplication,
-			ReaderID:            readerID,
 			InclusiveMinTaskKey: tasks.NewImmediateKey(minTaskID + 1),
 			ExclusiveMaxTaskKey: tasks.NewImmediateKey(maxTaskID + 1),
 			BatchSize:           batchSize,
@@ -441,37 +398,6 @@ func (p *ackMgrImpl) taskIDsRange(
 	}
 
 	return minTaskID, maxTaskID
-}
-
-func (p *ackMgrImpl) clusterToReaderID(
-	ctx context.Context,
-	pollingCluster string,
-) (int64, error) {
-	// TODO: need different readerID for different remote clusters
-	// e.g. use cluster's initial failover version
-	readerID := common.DefaultQueueReaderID
-
-	p.Lock()
-	defer p.Unlock()
-
-	if p.registeredQueueReaders == nil {
-		return readerID, errors.New("replication ack manager already closed")
-	}
-
-	if _, ok := p.registeredQueueReaders[readerID]; !ok {
-		err := p.executionMgr.RegisterHistoryTaskReader(ctx, &persistence.RegisterHistoryTaskReaderRequest{
-			ShardID:      p.shardContext.GetShardID(),
-			ShardOwner:   p.shardContext.GetOwner(),
-			TaskCategory: tasks.CategoryReplication,
-			ReaderID:     readerID,
-		})
-		if err != nil {
-			return readerID, err
-		}
-		p.registeredQueueReaders[readerID] = struct{}{}
-	}
-
-	return readerID, nil
 }
 
 // TODO split the ack manager into 2 components
@@ -553,15 +479,10 @@ func (p *ackMgrImpl) GetReplicationTasksIter(
 	minInclusiveTaskID int64,
 	maxExclusiveTaskID int64,
 ) (collection.Iterator[tasks.Task], error) {
-	readerID, err := p.clusterToReaderID(ctx, pollingCluster)
-	if err != nil {
-		return nil, err
-	}
 	return collection.NewPagingIterator(func(paginationToken []byte) ([]tasks.Task, []byte, error) {
 		response, err := p.executionMgr.GetHistoryTasks(ctx, &persistence.GetHistoryTasksRequest{
 			ShardID:             p.shardContext.GetShardID(),
 			TaskCategory:        tasks.CategoryReplication,
-			ReaderID:            readerID,
 			InclusiveMinTaskKey: tasks.NewImmediateKey(minInclusiveTaskID),
 			ExclusiveMaxTaskKey: tasks.NewImmediateKey(maxExclusiveTaskID),
 			BatchSize:           p.config.ReplicatorProcessorFetchTasksBatchSize(),

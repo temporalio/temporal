@@ -117,6 +117,7 @@ func ThrottledLoggerRpsFnProvider(serviceConfig *Config) resource.ThrottledLogge
 func PersistenceRateLimitingParamsProvider(
 	serviceConfig *Config,
 	persistenceLazyLoadedServiceResolver service.PersistenceLazyLoadedServiceResolver,
+	logger log.SnTaggedLogger,
 ) service.PersistenceRateLimitingParams {
 	return service.NewPersistenceRateLimitingParams(
 		serviceConfig.PersistenceMaxQPS,
@@ -126,8 +127,10 @@ func PersistenceRateLimitingParamsProvider(
 		serviceConfig.PersistencePerShardNamespaceMaxQPS,
 		serviceConfig.EnablePersistencePriorityRateLimiting,
 		serviceConfig.OperatorRPSRatio,
+		serviceConfig.PersistenceQPSBurstRatio,
 		serviceConfig.PersistenceDynamicRateLimitingParams,
 		persistenceLazyLoadedServiceResolver,
+		logger,
 	)
 }
 
@@ -144,8 +147,6 @@ func ConfigProvider(
 	return NewConfig(
 		dc,
 		persistenceConfig,
-		persistenceConfig.StandardVisibilityConfigExist(),
-		persistenceConfig.AdvancedVisibilityConfigExist(),
 	)
 }
 

@@ -28,18 +28,27 @@
 package workflow_test
 
 import (
+	"context"
 	"fmt"
+	"io"
 	"math"
 	"testing"
 	"time"
 
 	"github.com/golang/mock/gomock"
+	"google.golang.org/protobuf/types/known/durationpb"
+
+	"github.com/nexus-rpc/sdk-go/nexus"
+	"github.com/stretchr/testify/require"
+	commandpb "go.temporal.io/api/command/v1"
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
-	"go.temporal.io/api/history/v1"
+	failurepb "go.temporal.io/api/failure/v1"
+	historypb "go.temporal.io/api/history/v1"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	"go.temporal.io/api/workflowservice/v1"
-	"go.temporal.io/server/api/enums/v1"
+
+	enumsspb "go.temporal.io/server/api/enums/v1"
 	historyspb "go.temporal.io/server/api/history/v1"
 	"go.temporal.io/server/api/historyservice/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
@@ -47,12 +56,13 @@ import (
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence"
+	"go.temporal.io/server/common/persistence/versionhistory"
 	"go.temporal.io/server/service/history/configs"
 	"go.temporal.io/server/service/history/events"
+	"go.temporal.io/server/service/history/hsm"
 	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/tests"
 	"go.temporal.io/server/service/history/workflow"
-	"google.golang.org/protobuf/types/known/durationpb"
 )
 
 func TestMutableStateImpl_ForceFlushBufferedEvents(t *testing.T) {
@@ -110,14 +120,14 @@ func (c *mutationTestCase) Run(t *testing.T) {
 	t.Parallel()
 
 	nsEntry := tests.LocalNamespaceEntry
-	ms := c.createMutableState(t, nsEntry)
+	ms, _ := createMutableState(t, nsEntry, c.createConfig())
 
-	c.startWorkflowExecution(t, ms, nsEntry)
+	startWorkflowExecution(t, ms, nsEntry)
 
 	wft := c.startWFT(t, ms)
 
 	for i := 0; i < c.signals; i++ {
-		c.addWorkflowExecutionSignaled(t, i, ms)
+		addWorkflowExecutionSignaled(t, i, ms)
 	}
 
 	_, workflowEvents, err := ms.CloseTransactionAsMutation(c.transactionPolicy)
@@ -138,7 +148,7 @@ func (c *mutationTestCase) startWFT(
 ) *workflow.WorkflowTaskInfo {
 	t.Helper()
 
-	wft, err := ms.AddWorkflowTaskScheduledEvent(false, enums.WORKFLOW_TASK_TYPE_NORMAL)
+	wft, err := ms.AddWorkflowTaskScheduledEvent(false, enumsspb.WORKFLOW_TASK_TYPE_NORMAL)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -151,7 +161,7 @@ func (c *mutationTestCase) startWFT(
 	return wft
 }
 
-func (c *mutationTestCase) startWorkflowExecution(
+func startWorkflowExecution(
 	t *testing.T,
 	ms *workflow.MutableStateImpl,
 	nsEntry *namespace.Namespace,
@@ -160,8 +170,8 @@ func (c *mutationTestCase) startWorkflowExecution(
 
 	_, err := ms.AddWorkflowExecutionStartedEvent(
 		&commonpb.WorkflowExecution{
-			WorkflowId: "694B31C3-1FDC-4C9E-87BC-747D539BF0CD",
-			RunId:      "3E1836B8-8692-440D-9495-45D9EABDED6B",
+			WorkflowId: ms.GetWorkflowKey().WorkflowID,
+			RunId:      ms.GetWorkflowKey().RunID,
 		},
 		&historyservice.StartWorkflowExecutionRequest{
 			Attempt:     1,
@@ -179,7 +189,7 @@ func (c *mutationTestCase) startWorkflowExecution(
 	}
 }
 
-func (c *mutationTestCase) addWorkflowExecutionSignaled(t *testing.T, i int, ms *workflow.MutableStateImpl) {
+func addWorkflowExecutionSignaled(t *testing.T, i int, ms *workflow.MutableStateImpl) {
 	t.Helper()
 
 	payload := &commonpb.Payloads{}
@@ -198,12 +208,15 @@ func (c *mutationTestCase) addWorkflowExecutionSignaled(t *testing.T, i int, ms 
 	}
 }
 
-func (c *mutationTestCase) createMutableState(t *testing.T, nsEntry *namespace.Namespace) *workflow.MutableStateImpl {
+func createMutableState(t *testing.T, nsEntry *namespace.Namespace, cfg *configs.Config) (*workflow.MutableStateImpl, *events.MockCache) {
 	t.Helper()
 
 	ctrl := gomock.NewController(t)
-	cfg := c.createConfig()
 	shardContext := shard.NewTestContext(ctrl, &persistencespb.ShardInfo{}, cfg)
+	reg := hsm.NewRegistry()
+	err := workflow.RegisterStateMachine(reg)
+	require.NoError(t, err)
+	shardContext.SetStateMachineRegistry(reg)
 
 	nsRegistry := shardContext.Resource.NamespaceCache
 	nsRegistry.EXPECT().GetNamespaceByID(nsEntry.ID()).Return(nsEntry, nil).AnyTimes()
@@ -226,6 +239,8 @@ func (c *mutationTestCase) createMutableState(t *testing.T, nsEntry *namespace.N
 		eventsCache,
 		logger,
 		nsEntry,
+		tests.WorkflowID,
+		tests.RunID,
 		startTime,
 	)
 	ms.GetExecutionInfo().NamespaceId = nsEntry.ID().String()
@@ -234,7 +249,7 @@ func (c *mutationTestCase) createMutableState(t *testing.T, nsEntry *namespace.N
 		{Version: 0, EventId: 1},
 	}
 
-	return ms
+	return ms, eventsCache
 }
 
 func (c *mutationTestCase) createConfig() *configs.Config {
@@ -256,7 +271,7 @@ func (c *mutationTestCase) getMaxSizeInBytes() int {
 func (c *mutationTestCase) testWFTFailedEvent(
 	t *testing.T,
 	wft *workflow.WorkflowTaskInfo,
-	event *history.HistoryEvent,
+	event *historypb.HistoryEvent,
 ) {
 	t.Helper()
 
@@ -278,7 +293,7 @@ func (c *mutationTestCase) testWFTFailedEvent(
 }
 
 func (c *mutationTestCase) findWFTEvent(eventType enumspb.EventType, workflowEvents []*persistence.WorkflowEvents) (
-	*history.HistoryEvent,
+	*historypb.HistoryEvent,
 	bool,
 ) {
 	for _, batch := range workflowEvents {
@@ -346,5 +361,119 @@ func (c *mutationTestCase) testSuccess(
 	wftAttempt := ms.GetExecutionInfo().GetWorkflowTaskAttempt()
 	if wftAttempt != 1 {
 		t.Errorf("Expected WFT attempt number to be unchanged if the WFT succeeded, but is now %d", wftAttempt)
+	}
+}
+
+func sealMutableState(t *testing.T, mutableState workflow.MutableState, lastEvent *historypb.HistoryEvent) {
+	currentVersionHistory, err := versionhistory.GetCurrentVersionHistory(mutableState.GetExecutionInfo().GetVersionHistories())
+	require.NoError(t, err)
+	err = versionhistory.AddOrUpdateVersionHistoryItem(currentVersionHistory, versionhistory.NewVersionHistoryItem(
+		lastEvent.EventId, lastEvent.Version,
+	))
+	require.NoError(t, err)
+}
+
+func TestGetNexusCompletion(t *testing.T) {
+	cases := []struct {
+		name             string
+		mutateState      func(workflow.MutableState) (*historypb.HistoryEvent, error)
+		verifyCompletion func(*testing.T, nexus.OperationCompletion)
+	}{
+		{
+			name: "success",
+			mutateState: func(mutableState workflow.MutableState) (*historypb.HistoryEvent, error) {
+				return mutableState.AddCompletedWorkflowEvent(mutableState.GetNextEventID(), &commandpb.CompleteWorkflowExecutionCommandAttributes{
+					Result: &commonpb.Payloads{
+						Payloads: []*commonpb.Payload{
+							{
+								Metadata: map[string][]byte{"encoding": []byte("json/plain")},
+								Data:     []byte("3"),
+							},
+						},
+					},
+				}, "")
+			},
+			verifyCompletion: func(t *testing.T, completion nexus.OperationCompletion) {
+				success, ok := completion.(*nexus.OperationCompletionSuccessful)
+				require.True(t, ok)
+				require.Equal(t, "application/json", success.Header.Get("content-type"))
+				require.Equal(t, "1", success.Header.Get("content-length"))
+				buf, err := io.ReadAll(success.Body)
+				require.NoError(t, err)
+				require.Equal(t, []byte("3"), buf)
+			},
+		},
+		{
+			name: "failure",
+			mutateState: func(mutableState workflow.MutableState) (*historypb.HistoryEvent, error) {
+				return mutableState.AddFailWorkflowEvent(mutableState.GetNextEventID(), enumspb.RETRY_STATE_NON_RETRYABLE_FAILURE, &commandpb.FailWorkflowExecutionCommandAttributes{
+					Failure: &failurepb.Failure{
+						Message: "workflow failed",
+					},
+				}, "")
+			},
+			verifyCompletion: func(t *testing.T, completion nexus.OperationCompletion) {
+				failure, ok := completion.(*nexus.OperationCompletionUnsuccessful)
+				require.True(t, ok)
+				require.Equal(t, nexus.OperationStateFailed, failure.State)
+				require.Equal(t, "workflow failed", failure.Failure.Message)
+			},
+		},
+		{
+			name: "termination",
+			mutateState: func(mutableState workflow.MutableState) (*historypb.HistoryEvent, error) {
+				return mutableState.AddWorkflowExecutionTerminatedEvent(mutableState.GetNextEventID(), "dont care", nil, "identity", false)
+			},
+			verifyCompletion: func(t *testing.T, completion nexus.OperationCompletion) {
+				failure, ok := completion.(*nexus.OperationCompletionUnsuccessful)
+				require.True(t, ok)
+				require.Equal(t, nexus.OperationStateFailed, failure.State)
+				require.Equal(t, "operation terminated", failure.Failure.Message)
+			},
+		},
+		{
+			name: "cancelation",
+			mutateState: func(mutableState workflow.MutableState) (*historypb.HistoryEvent, error) {
+				return mutableState.AddWorkflowExecutionCanceledEvent(mutableState.GetNextEventID(), &commandpb.CancelWorkflowExecutionCommandAttributes{})
+			},
+			verifyCompletion: func(t *testing.T, completion nexus.OperationCompletion) {
+				failure, ok := completion.(*nexus.OperationCompletionUnsuccessful)
+				require.True(t, ok)
+				require.Equal(t, nexus.OperationStateCanceled, failure.State)
+				require.Equal(t, "operation canceled", failure.Failure.Message)
+			},
+		},
+	}
+
+	for _, tc := range cases {
+		tc := tc
+		t.Run(tc.name, func(t *testing.T) {
+			nsEntry := tests.LocalNamespaceEntry
+			ms, events := createMutableState(t, nsEntry, tests.NewDynamicConfig())
+			startWorkflowExecution(t, ms, nsEntry)
+			workflowTask, err := ms.AddWorkflowTaskScheduledEvent(false, enumsspb.WORKFLOW_TASK_TYPE_NORMAL)
+			require.NoError(t, err)
+			_, _, err = ms.AddWorkflowTaskStartedEvent(
+				workflowTask.ScheduledEventID,
+				"---",
+				&taskqueuepb.TaskQueue{Name: "irrelevant"},
+				"---",
+				nil,
+			)
+			require.NoError(t, err)
+			_, err = ms.AddWorkflowTaskCompletedEvent(workflowTask, &workflowservice.RespondWorkflowTaskCompletedRequest{
+				Identity: "some random identity",
+			}, workflow.WorkflowTaskCompletionLimits{MaxResetPoints: 10, MaxSearchAttributeValueSize: 10})
+			require.NoError(t, err)
+
+			event, err := tc.mutateState(ms)
+			require.NoError(t, err)
+			sealMutableState(t, ms, event)
+
+			events.EXPECT().GetEvent(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Return(event, nil).Times(1)
+			completion, err := ms.GetNexusCompletion(context.Background())
+			require.NoError(t, err)
+			tc.verifyCompletion(t, completion)
+		})
 	}
 }

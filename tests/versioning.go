@@ -86,11 +86,12 @@ func (s *VersioningIntegSuite) SetupSuite() {
 		dynamicconfig.RedirectRuleChainLimitPerQueue:           10,
 		dynamicconfig.MatchingDeletedRuleRetentionTime:         24 * time.Hour,
 		dynamicconfig.ReachabilityBuildIdVisibilityGracePeriod: 3 * time.Minute,
+		dynamicconfig.ReachabilityQueryBuildIdLimit:            4,
 
 		// Make sure we don't hit the rate limiter in tests
-		dynamicconfig.FrontendMaxNamespaceNamespaceReplicationInducingAPIsRPSPerInstance:   1000,
-		dynamicconfig.FrontendMaxNamespaceNamespaceReplicationInducingAPIsBurstPerInstance: 1000,
-		dynamicconfig.FrontendNamespaceReplicationInducingAPIsRPS:                          1000,
+		dynamicconfig.FrontendGlobalNamespaceNamespaceReplicationInducingAPIsRPS:                1000,
+		dynamicconfig.FrontendMaxNamespaceNamespaceReplicationInducingAPIsBurstRatioPerInstance: 1,
+		dynamicconfig.FrontendNamespaceReplicationInducingAPIsRPS:                               1000,
 
 		// The dispatch tests below rely on being able to see the effects of changing
 		// versioning data relatively quickly. In general, we only promise to act on new
@@ -103,7 +104,7 @@ func (s *VersioningIntegSuite) SetupSuite() {
 		dynamicconfig.MatchingNumTaskqueueReadPartitions:  4,
 		dynamicconfig.MatchingNumTaskqueueWritePartitions: 4,
 	}
-	s.setupSuite("testdata/cluster.yaml")
+	s.setupSuite("testdata/es_cluster.yaml")
 }
 
 func (s *VersioningIntegSuite) TearDownSuite() {
@@ -3291,6 +3292,16 @@ func (s *VersioningIntegSuite) TestDescribeTaskQueueEnhanced_Versioned_BasicReac
 	s.NoError(err)
 	s.waitForChan(ctx, started)
 
+	// wait for visibility to show A as started
+	s.Eventually(func() bool {
+		listResp, err := s.engine.ListOpenWorkflowExecutions(ctx, &workflowservice.ListOpenWorkflowExecutionsRequest{
+			Namespace:       s.namespace,
+			MaximumPageSize: 10,
+		})
+		s.Nil(err)
+		return len(listResp.GetExecutions()) > 0
+	}, 3*time.Second, 50*time.Millisecond)
+
 	// commit a different build id --> A should now only be reachable via visibility query, B reachable as default
 	s.commitBuildId(ctx, tq, "B", true, s.getVersioningRules(ctx, tq).GetConflictToken(), true)
 	s.getBuildIdReachability(ctx, tq, nil, map[string]enumspb.BuildIdTaskReachability{
@@ -3351,7 +3362,7 @@ func (s *VersioningIntegSuite) TestDescribeTaskQueueEnhanced_Unversioned() {
 		s.NoError(err)
 		s.NotNil(resp)
 		s.Assert().Equal(1, len(resp.GetVersionsInfo()), "should be 1 because only default/unversioned queue")
-		versionInfo := resp.GetVersionsInfo()[0]
+		versionInfo := resp.GetVersionsInfo()[""]
 		s.Assert().Equal(enumspb.BUILD_ID_TASK_REACHABILITY_REACHABLE, versionInfo.GetTaskReachability())
 		var pollersInfo []*taskqueuepb.PollerInfo
 		for _, t := range versionInfo.GetTypesInfo() {
@@ -3371,6 +3382,38 @@ func (s *VersioningIntegSuite) TestDescribeTaskQueueEnhanced_Unversioned() {
 		return foundN == workerN
 	}, 3*time.Second, 50*time.Millisecond)
 
+}
+
+func (s *VersioningIntegSuite) TestDescribeTaskQueueEnhanced_TooManyBuildIds() {
+	tq := s.randomizeStr(s.T().Name())
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+
+	buildIds := []string{"A", "B", "C", "D"}
+	resp, err := s.engine.DescribeTaskQueue(ctx, &workflowservice.DescribeTaskQueueRequest{
+		Namespace:              s.namespace,
+		TaskQueue:              &taskqueuepb.TaskQueue{Name: tq, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
+		ApiMode:                enumspb.DESCRIBE_TASK_QUEUE_MODE_ENHANCED,
+		Versions:               &taskqueuepb.TaskQueueVersionSelection{BuildIds: buildIds},
+		TaskQueueTypes:         nil, // both types
+		ReportPollers:          false,
+		ReportTaskReachability: true,
+	})
+	s.NoError(err)
+	s.NotNil(resp)
+
+	buildIds = []string{"A", "B", "C", "D", "E"}
+	resp, err = s.engine.DescribeTaskQueue(ctx, &workflowservice.DescribeTaskQueueRequest{
+		Namespace:              s.namespace,
+		TaskQueue:              &taskqueuepb.TaskQueue{Name: tq, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
+		ApiMode:                enumspb.DESCRIBE_TASK_QUEUE_MODE_ENHANCED,
+		Versions:               &taskqueuepb.TaskQueueVersionSelection{BuildIds: buildIds},
+		TaskQueueTypes:         nil, // both types
+		ReportPollers:          false,
+		ReportTaskReachability: true,
+	})
+	s.Error(err)
+	s.Nil(resp)
 }
 
 func (s *VersioningIntegSuite) TestDescribeTaskQueueLegacy_VersionSets() {
@@ -3835,9 +3878,9 @@ func (s *VersioningIntegSuite) getBuildIdReachability(
 	})
 	s.NoError(err)
 	s.NotNil(resp)
-	for _, vi := range resp.GetVersionsInfo() {
-		expected, ok := expectedReachability[vi.GetBuildId()]
-		s.Assert().True(ok, "build id %s was not expected", vi.GetBuildId())
+	for buildId, vi := range resp.GetVersionsInfo() {
+		expected, ok := expectedReachability[buildId]
+		s.Assert().True(ok, "build id %s was not expected", buildId)
 		s.Assert().Equal(expected, vi.GetTaskReachability())
 	}
 }

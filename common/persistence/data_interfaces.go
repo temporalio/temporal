@@ -39,6 +39,7 @@ import (
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	historypb "go.temporal.io/api/history/v1"
+
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common/persistence/serialization"
@@ -203,7 +204,6 @@ type (
 
 		NamespaceID string
 		WorkflowID  string
-		RunID       string
 
 		Tasks map[tasks.Category][]tasks.Task
 	}
@@ -406,37 +406,12 @@ type (
 		RunID       string
 	}
 
-	// RegisterHistoryTaskReaderRequest is a hint for underlying persistence implementation
-	// that a new queue reader is created by queue processing logic
-	RegisterHistoryTaskReaderRequest struct {
-		ShardID      int32
-		ShardOwner   string
-		TaskCategory tasks.Category
-		ReaderID     int64
-	}
-
-	// UnregisterHistoryTaskReaderRequest is a hint for underlying persistence implementation
-	// that queue processing logic is done using an existing queue reader
-	UnregisterHistoryTaskReaderRequest RegisterHistoryTaskReaderRequest
-
-	// UpdateHistoryTaskReaderProgressRequest is a hint for underlying persistence implementation
-	// that a certain queue reader's process and the fact that it won't try to load tasks with
-	// key less than InclusiveMinPendingTaskKey
-	UpdateHistoryTaskReaderProgressRequest struct {
-		ShardID                    int32
-		ShardOwner                 string
-		TaskCategory               tasks.Category
-		ReaderID                   int64
-		InclusiveMinPendingTaskKey tasks.Key
-	}
-
 	// GetHistoryTasksRequest is used to get a range of history tasks
 	// Either max TaskID or FireTime is required depending on the
 	// task category type. Min TaskID or FireTime is optional.
 	GetHistoryTasksRequest struct {
 		ShardID             int32
 		TaskCategory        tasks.Category
-		ReaderID            int64
 		InclusiveMinTaskKey tasks.Key
 		ExclusiveMaxTaskKey tasks.Key
 		BatchSize           int
@@ -944,24 +919,11 @@ type (
 	TrimHistoryBranchResponse struct {
 	}
 
-	// GetHistoryTreeRequest is used to retrieve branch info of a history tree
-	GetHistoryTreeRequest struct {
-		// A UUID of a tree
-		TreeID string
-		// Get data from this shard
-		ShardID int32
-	}
-
 	// HistoryBranchDetail contains detailed information of a branch
 	HistoryBranchDetail struct {
 		BranchInfo *persistencespb.HistoryBranch
 		ForkTime   *timestamppb.Timestamp
 		Info       string
-	}
-
-	// GetHistoryTreeResponse is a response to GetHistoryTreeRequest
-	GetHistoryTreeResponse struct {
-		BranchInfos []*persistencespb.HistoryBranch
 	}
 
 	// GetAllHistoryTreeBranchesRequest is a request of GetAllHistoryTreeBranches
@@ -1057,6 +1019,36 @@ type (
 		MaxRecordsPruned int
 	}
 
+	GetNexusIncomingServiceRequest struct {
+		ServiceID string
+	}
+
+	ListNexusIncomingServicesRequest struct {
+		LastKnownTableVersion int64
+		NextPageToken         []byte
+		PageSize              int
+	}
+
+	ListNexusIncomingServicesResponse struct {
+		TableVersion  int64
+		NextPageToken []byte
+		Entries       []*persistencespb.NexusIncomingServiceEntry
+	}
+
+	CreateOrUpdateNexusIncomingServiceRequest struct {
+		LastKnownTableVersion int64
+		Entry                 *persistencespb.NexusIncomingServiceEntry
+	}
+
+	CreateOrUpdateNexusIncomingServiceResponse struct {
+		Version int64
+	}
+
+	DeleteNexusIncomingServiceRequest struct {
+		LastKnownTableVersion int64
+		ServiceID             string
+	}
+
 	// Closeable is an interface for any entity that supports a close operation to release resources
 	// TODO: allow this method to return errors
 	Closeable interface {
@@ -1094,11 +1086,6 @@ type (
 
 		// Tasks related APIs
 
-		// Hints for persistence implementation regarding history task readers
-		RegisterHistoryTaskReader(ctx context.Context, request *RegisterHistoryTaskReaderRequest) error
-		UnregisterHistoryTaskReader(ctx context.Context, request *UnregisterHistoryTaskReaderRequest)
-		UpdateHistoryTaskReaderProgress(ctx context.Context, request *UpdateHistoryTaskReaderProgressRequest)
-
 		AddHistoryTasks(ctx context.Context, request *AddHistoryTasksRequest) error
 		GetHistoryTasks(ctx context.Context, request *GetHistoryTasksRequest) (*GetHistoryTasksResponse, error)
 		CompleteHistoryTask(ctx context.Context, request *CompleteHistoryTaskRequest) error
@@ -1134,8 +1121,6 @@ type (
 		DeleteHistoryBranch(ctx context.Context, request *DeleteHistoryBranchRequest) error
 		// TrimHistoryBranch validate & trim a history branch
 		TrimHistoryBranch(ctx context.Context, request *TrimHistoryBranchRequest) (*TrimHistoryBranchResponse, error)
-		// GetHistoryTree returns all branch information of a tree
-		GetHistoryTree(ctx context.Context, request *GetHistoryTreeRequest) (*GetHistoryTreeResponse, error)
 		// GetAllHistoryTreeBranches returns all branches of all trees
 		GetAllHistoryTreeBranches(ctx context.Context, request *GetAllHistoryTreeBranchesRequest) (*GetAllHistoryTreeBranchesResponse, error)
 	}
@@ -1205,6 +1190,17 @@ type (
 		DeleteClusterMetadata(ctx context.Context, request *DeleteClusterMetadataRequest) error
 	}
 
+	// NexusIncomingServiceManager is used to manage CRUD for Nexus services
+	NexusIncomingServiceManager interface {
+		Closeable
+		GetName() string
+		GetNexusIncomingServicesTableVersion(ctx context.Context) (int64, error)
+		GetNexusIncomingService(ctx context.Context, request *GetNexusIncomingServiceRequest) (*persistencespb.NexusIncomingServiceEntry, error)
+		ListNexusIncomingServices(ctx context.Context, request *ListNexusIncomingServicesRequest) (*ListNexusIncomingServicesResponse, error)
+		CreateOrUpdateNexusIncomingService(ctx context.Context, request *CreateOrUpdateNexusIncomingServiceRequest) (*CreateOrUpdateNexusIncomingServiceResponse, error)
+		DeleteNexusIncomingService(ctx context.Context, request *DeleteNexusIncomingServiceRequest) error
+	}
+
 	// HistoryTaskQueueManager is responsible for managing a queue of internal history tasks. This is called a history
 	// task queue manager, but the actual history task queues are not managed by this object. Instead, this object is
 	// responsible for managing a generic queue of history tasks (which is what the history task DLQ is).
@@ -1223,7 +1219,7 @@ type (
 
 	HistoryTaskQueueManagerImpl struct {
 		queue      QueueV2
-		serializer *serialization.TaskSerializer
+		serializer serialization.Serializer
 	}
 
 	// QueueKey identifies a history task queue. It is converted to a queue name using the GetQueueName method.

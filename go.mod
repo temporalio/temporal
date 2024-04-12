@@ -11,15 +11,17 @@ require (
 	github.com/emirpasic/gods v1.18.1
 	github.com/fatih/color v1.15.0
 	github.com/go-faker/faker/v4 v4.2.0
-	github.com/go-sql-driver/mysql v1.5.0
+	github.com/go-sql-driver/mysql v1.7.1
 	github.com/gocql/gocql v1.5.2
 	github.com/golang-jwt/jwt/v4 v4.5.0
 	github.com/golang/mock v1.7.0-rc.1
 	github.com/google/go-cmp v0.6.0
 	github.com/google/uuid v1.6.0
+	github.com/gorilla/mux v1.8.0
 	github.com/iancoleman/strcase v0.3.0
 	github.com/jmoiron/sqlx v1.3.4
 	github.com/lib/pq v1.10.9
+	github.com/nexus-rpc/sdk-go v0.0.6
 	github.com/olekukonko/tablewriter v0.0.5
 	github.com/olivere/elastic/v7 v7.0.32
 	github.com/pborman/uuid v1.2.1
@@ -41,8 +43,8 @@ require (
 	go.opentelemetry.io/otel/metric v1.22.0
 	go.opentelemetry.io/otel/sdk v1.21.0
 	go.opentelemetry.io/otel/sdk/metric v1.19.0
-	go.temporal.io/api v1.26.1-0.20240404224430-8c7db125941e
-	go.temporal.io/sdk v1.26.1-0.20240316210457-d428d6757909
+	go.temporal.io/api v1.32.0
+	go.temporal.io/sdk v1.26.1
 	go.temporal.io/version v0.3.0
 	go.uber.org/atomic v1.11.0
 	go.uber.org/automaxprocs v1.5.2
@@ -54,7 +56,7 @@ require (
 	golang.org/x/sync v0.6.0
 	golang.org/x/time v0.5.0
 	google.golang.org/api v0.162.0
-	google.golang.org/grpc v1.63.0
+	google.golang.org/grpc v1.63.2
 	google.golang.org/grpc/examples v0.0.0-20230623203957-0b3a81eabc28
 	gopkg.in/square/go-jose.v2 v2.6.0
 	gopkg.in/validator.v2 v2.0.1
@@ -67,6 +69,7 @@ require (
 	github.com/gogo/protobuf v1.3.2 // indirect
 	github.com/jackc/pgpassfile v1.0.0 // indirect
 	github.com/jackc/pgservicefile v0.0.0-20221227161230-091c0ba34f0a // indirect
+	github.com/jackc/puddle/v2 v2.2.1 // indirect
 	go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp v0.47.0 // indirect
 )
 
@@ -97,7 +100,7 @@ require (
 	github.com/grpc-ecosystem/go-grpc-middleware v1.4.0 // indirect
 	github.com/grpc-ecosystem/grpc-gateway/v2 v2.19.1
 	github.com/hailocab/go-hostpool v0.0.0-20160125115350-e80d13ce29ed // indirect
-	github.com/jackc/pgx/v5 v5.4.3
+	github.com/jackc/pgx/v5 v5.5.4
 	github.com/jmespath/go-jmespath v0.4.0 // indirect
 	github.com/josharian/intern v1.0.0 // indirect
 	github.com/kballard/go-shellquote v0.0.0-20180428030007-95032a82bc51 // indirect

@@ -51,6 +51,12 @@ import (
 	"go.temporal.io/server/common/worker_versioning"
 )
 
+type BackoffCalculatorAlgorithmFunc func(duration *durationpb.Duration, coefficient float64, currentAttempt int32) time.Duration
+
+func ExponentialBackoffAlgorithm(initInterval *durationpb.Duration, backoffCoefficient float64, currentAttempt int32) time.Duration {
+	return time.Duration(int64(float64(initInterval.AsDuration().Nanoseconds()) * math.Pow(backoffCoefficient, float64(currentAttempt-1))))
+}
+
 // TODO treat 0 as 0, not infinite
 
 func getBackoffInterval(
@@ -69,7 +75,7 @@ func getBackoffInterval(
 		return backoff.NoBackoff, enumspb.RETRY_STATE_NON_RETRYABLE_FAILURE
 	}
 
-	return nextBackoffInterval(now, currentAttempt, maxAttempts, initInterval, maxInterval, expirationTime, backoffCoefficient)
+	return nextBackoffInterval(now, currentAttempt, maxAttempts, initInterval, maxInterval, expirationTime, backoffCoefficient, ExponentialBackoffAlgorithm)
 }
 
 func nextBackoffInterval(
@@ -80,6 +86,7 @@ func nextBackoffInterval(
 	maxInterval *durationpb.Duration,
 	expirationTime *timestamppb.Timestamp,
 	backoffCoefficient float64,
+	intervalCalculator BackoffCalculatorAlgorithmFunc,
 ) (time.Duration, enumspb.RetryState) {
 	// TODO remove below checks, most are already set with correct values
 	if currentAttempt < 1 {
@@ -101,7 +108,7 @@ func nextBackoffInterval(
 		return backoff.NoBackoff, enumspb.RETRY_STATE_MAXIMUM_ATTEMPTS_REACHED
 	}
 
-	interval := time.Duration(int64(float64(initInterval.AsDuration().Nanoseconds()) * math.Pow(backoffCoefficient, float64(currentAttempt-1))))
+	interval := intervalCalculator(initInterval, backoffCoefficient, currentAttempt)
 	if maxInterval.AsDuration() == 0 && interval <= 0 {
 		return backoff.NoBackoff, enumspb.RETRY_STATE_TIMEOUT
 	}
@@ -169,8 +176,9 @@ func SetupNewWorkflowForRetryOrCron(
 	initiator enumspb.ContinueAsNewInitiator,
 ) error {
 
-	// Extract ParentExecutionInfo from current run so it can be passed down to the next
+	// Extract ParentExecutionInfo and RootExecutionInfo from current run so it can be passed down to the next
 	var parentInfo *workflowspb.ParentExecutionInfo
+	var rootInfo *workflowspb.RootExecutionInfo
 	previousExecutionInfo := previousMutableState.GetExecutionInfo()
 	if previousMutableState.HasParentExecution() {
 		parentInfo = &workflowspb.ParentExecutionInfo{
@@ -183,6 +191,12 @@ func SetupNewWorkflowForRetryOrCron(
 			InitiatedId:      previousExecutionInfo.ParentInitiatedId,
 			InitiatedVersion: previousExecutionInfo.ParentInitiatedVersion,
 			Clock:            previousExecutionInfo.ParentClock,
+		}
+		rootInfo = &workflowspb.RootExecutionInfo{
+			Execution: &commonpb.WorkflowExecution{
+				WorkflowId: previousExecutionInfo.RootWorkflowId,
+				RunId:      previousExecutionInfo.RootRunId,
+			},
 		}
 	}
 
@@ -268,6 +282,7 @@ func SetupNewWorkflowForRetryOrCron(
 		FirstWorkflowTaskBackoff: previousMutableState.ContinueAsNewMinBackoff(durationpb.New(backoffInterval)),
 		Attempt:                  attempt,
 		SourceVersionStamp:       sourceVersionStamp,
+		RootExecutionInfo:        rootInfo,
 		InheritedBuildId:         startAttr.InheritedBuildId,
 	}
 	workflowTimeoutTime := timestamp.TimeValue(previousExecutionInfo.WorkflowExecutionExpirationTime)

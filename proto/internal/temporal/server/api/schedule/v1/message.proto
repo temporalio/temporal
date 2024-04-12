@@ -48,12 +48,11 @@ message BufferedStart {
 message InternalState {
     string namespace = 1;
     string namespace_id = 2;
-    // this is just the workflow id of the scheduler, but accessing that from the workflow is
-    // currently not available during replay, so we just pass it in here.
     string schedule_id = 8;
 
     google.protobuf.Timestamp last_processed_time = 3;
     repeated BufferedStart buffered_starts = 4;
+    repeated temporal.api.schedule.v1.BackfillRequest ongoing_backfills = 10;
 
     // last completion/failure
     temporal.api.common.v1.Payloads last_completion_result = 5;

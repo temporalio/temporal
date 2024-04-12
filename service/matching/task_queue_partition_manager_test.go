@@ -65,7 +65,7 @@ func TestPartitionManagerSuite(t *testing.T) {
 func (s *PartitionManagerTestSuite) SetupTest() {
 	s.controller = gomock.NewController(s.T())
 	ns, registry := createMockNamespaceCache(s.controller, namespace.Name(namespaceName))
-	config := NewConfig(dynamicconfig.NewNoopCollection(), false, false)
+	config := NewConfig(dynamicconfig.NewNoopCollection())
 	matchingClientMock := matchingservicemock.NewMockMatchingServiceClient(s.controller)
 	me := createTestMatchingEngine(s.controller, config, matchingClientMock, registry)
 	f, err := tqid.NewTaskQueueFamily(namespaceId, taskQueueName)

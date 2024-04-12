@@ -94,7 +94,10 @@ type (
 		DispatchSpooledTask(ctx context.Context, task *internalTask, userDataChanged <-chan struct{}) error
 		// DispatchQueryTask will dispatch query to local or remote poller. If forwarded then result or error is returned,
 		// if dispatched to local poller then nil and nil is returned.
-		DispatchQueryTask(ctx context.Context, taskID string, request *matchingservice.QueryWorkflowRequest) (*matchingservice.QueryWorkflowResponse, error)
+		DispatchQueryTask(ctx context.Context, taskId string, request *matchingservice.QueryWorkflowRequest) (*matchingservice.QueryWorkflowResponse, error)
+		// DispatchNexusTask dispatches a nexus task to a local or remote poller. If forwarded then result or
+		// error is returned, if dispatched to local poller then nil and nil is returned.
+		DispatchNexusTask(ctx context.Context, taskId string, request *matchingservice.DispatchNexusTaskRequest) (*matchingservice.DispatchNexusTaskResponse, error)
 		UpdatePollerInfo(pollerIdentity, *pollMetadata)
 		GetAllPollerInfo() []*taskqueuepb.PollerInfo
 		HasPollerAfter(accessTime time.Time) bool
@@ -102,7 +105,6 @@ type (
 		LegacyDescribeTaskQueue(includeTaskQueueStatus bool) *matchingservice.DescribeTaskQueueResponse
 		// Describe returns information about the physical task queue
 		Describe() *taskqueuespb.PhysicalTaskQueueInfo
-		GetBacklogInfo() *taskqueuepb.BacklogInfo
 		UnloadFromPartitionManager()
 		String() string
 		QueueKey() *PhysicalTaskQueueKey
@@ -357,11 +359,20 @@ func (c *physicalTaskQueueManagerImpl) ProcessSpooledTask(
 // if dispatched to local poller then nil and nil is returned.
 func (c *physicalTaskQueueManagerImpl) DispatchQueryTask(
 	ctx context.Context,
-	taskID string,
+	taskId string,
 	request *matchingservice.QueryWorkflowRequest,
 ) (*matchingservice.QueryWorkflowResponse, error) {
-	task := newInternalQueryTask(taskID, request)
+	task := newInternalQueryTask(taskId, request)
 	return c.matcher.OfferQuery(ctx, task)
+}
+
+func (c *physicalTaskQueueManagerImpl) DispatchNexusTask(
+	ctx context.Context,
+	taskId string,
+	request *matchingservice.DispatchNexusTaskRequest,
+) (*matchingservice.DispatchNexusTaskResponse, error) {
+	task := newInternalNexusTask(taskId, request)
+	return c.matcher.OfferNexusTask(ctx, task)
 }
 
 func (c *physicalTaskQueueManagerImpl) UpdatePollerInfo(id pollerIdentity, pollMetadata *pollMetadata) {
@@ -405,13 +416,8 @@ func (c *physicalTaskQueueManagerImpl) LegacyDescribeTaskQueue(includeTaskQueueS
 
 func (c *physicalTaskQueueManagerImpl) Describe() *taskqueuespb.PhysicalTaskQueueInfo {
 	return &taskqueuespb.PhysicalTaskQueueInfo{
-		Pollers:     c.GetAllPollerInfo(),
-		BacklogInfo: c.GetBacklogInfo(),
+		Pollers: c.GetAllPollerInfo(),
 	}
-}
-
-func (c *physicalTaskQueueManagerImpl) GetBacklogInfo() *taskqueuepb.BacklogInfo {
-	return nil
 }
 
 func (c *physicalTaskQueueManagerImpl) String() string {

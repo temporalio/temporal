@@ -30,6 +30,7 @@ import (
 	"testing"
 
 	"github.com/golang/mock/gomock"
+	"github.com/pborman/uuid"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	commonpb "go.temporal.io/api/common/v1"
@@ -108,8 +109,8 @@ func TestInvoke(t *testing.T) {
 				for i := 0; i < numWorkflows; i++ {
 					workflowKey := definition.NewWorkflowKey(
 						string(tests.NamespaceID),
-						tests.WorkflowID,
 						strconv.Itoa(i),
+						uuid.New(),
 					)
 					// each workflow has two transfer tasks and one timer task
 					for _, task := range []tasks.Task{
@@ -136,9 +137,9 @@ func TestInvoke(t *testing.T) {
 					require.NoError(t, err)
 					assert.NotNil(t, resp)
 					require.Len(t, requests, numWorkflows, "We should send one request for each workflow")
-					runIDs := make([]string, numWorkflows)
+					workflowIDs := make([]string, numWorkflows)
 					for i, request := range requests {
-						runIDs[i] = request.RunID
+						workflowIDs[i] = request.WorkflowID
 						assert.Len(t, request.Tasks[tasks.CategoryTransfer], 2,
 							"There were two transfer tasks for each workflow")
 						assert.Len(t, request.Tasks[tasks.CategoryTimer], 1,
@@ -146,8 +147,8 @@ func TestInvoke(t *testing.T) {
 					}
 					// The requests could go in any order because we do map iteration, so compare the elements while
 					// ignoring their order.
-					assert.ElementsMatch(t, []string{"0", "1"}, runIDs,
-						"The requests should be for the expected run IDs")
+					assert.ElementsMatch(t, []string{"0", "1"}, workflowIDs,
+						"The requests should be for the expected workflowIDs")
 				}
 			},
 		},

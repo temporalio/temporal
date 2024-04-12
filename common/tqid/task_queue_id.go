@@ -87,6 +87,8 @@ type (
 		// use mangled names, they use the bare base name.
 		RpcName() string
 		Key() PartitionKey
+		// RoutingKey returns the string that should be used to find the owner of a task queue partition.
+		RoutingKey() string
 	}
 
 	// NormalPartition is used to distribute load of a TaskQueue in multiple Matching instances. A normal partition is
@@ -271,6 +273,10 @@ func (s *StickyPartition) Key() PartitionKey {
 	}
 }
 
+func (s *StickyPartition) RoutingKey() string {
+	return fmt.Sprintf("%s:%s:%d", s.NamespaceId().String(), s.RpcName(), s.TaskType())
+}
+
 func (p *NormalPartition) TaskQueue() *TaskQueue {
 	return p.taskQueue
 }
@@ -320,6 +326,10 @@ func (p *NormalPartition) Key() PartitionKey {
 		partitionId: p.partitionId,
 		taskType:    p.TaskType(),
 	}
+}
+
+func (p *NormalPartition) RoutingKey() string {
+	return fmt.Sprintf("%s:%s:%d", p.NamespaceId().String(), p.RpcName(), p.TaskType())
 }
 
 // parseRpcName takes the rpc name of a task queue partition and returns a ParseTaskQueuePartition.

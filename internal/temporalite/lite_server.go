@@ -94,7 +94,7 @@ type LiteServerConfig struct {
 	DynamicConfig dynamicconfig.StaticClient
 }
 
-func (cfg *LiteServerConfig) apply(serverConfig *config.Config, provider *portProvider) {
+func (cfg *LiteServerConfig) apply(serverConfig *config.Config, provider *PortProvider) {
 	sqliteConfig := config.SQL{
 		PluginName:        sqliteplugin.PluginName,
 		ConnectAttributes: make(map[string]string),
@@ -242,7 +242,7 @@ func NewLiteServer(liteConfig *LiteServerConfig, opts ...temporal.ServerOption) 
 		return nil, err
 	}
 
-	p := newPortProvider()
+	p := NewPortProvider()
 	liteConfig.apply(liteConfig.BaseConfig, p)
 	if err := p.Close(); err != nil {
 		return nil, err
@@ -368,7 +368,7 @@ func getAllowedPragmas() []string {
 	return allowedPragmaList
 }
 
-func (cfg *LiteServerConfig) mustGetService(frontendPortOffset int, provider *portProvider) config.Service {
+func (cfg *LiteServerConfig) mustGetService(frontendPortOffset int, provider *PortProvider) config.Service {
 	svc := config.Service{
 		RPC: config.RPC{
 			GRPCPort:        cfg.FrontendPort + frontendPortOffset,

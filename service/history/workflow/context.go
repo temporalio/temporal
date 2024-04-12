@@ -140,9 +140,23 @@ type (
 			updateWorkflowTransactionPolicy TransactionPolicy,
 			newWorkflowTransactionPolicy *TransactionPolicy,
 		) error
+		// SetWorkflowExecution is an alias to SubmitClosedWorkflowSnapshot with TransactionPolicyPassive.
 		SetWorkflowExecution(
 			ctx context.Context,
 			shardContext shard.Context,
+		) error
+		// SubmitClosedWorkflowSnapshot closes the current mutable state transaction with the given
+		// transactionPolicy and updates the workflow execution record in the DB. Does not check the "current"
+		// run status for the execution.
+		// Closes the transaction as snapshot, which errors out if there are any buffered events that need
+		// flushing and generally does not expect new history events to be generated (expected for closed
+		// workflows).
+		// NOTE: in the future, we'd like to have the ability to close the transaction as mutation to avoid the
+		// overhead of overwriting the entire DB record.
+		SubmitClosedWorkflowSnapshot(
+			ctx context.Context,
+			shardContext shard.Context,
+			transactionPolicy TransactionPolicy,
 		) error
 		// TODO (alex-update): move this from workflow context.
 		UpdateRegistry(ctx context.Context) update.Registry
@@ -217,7 +231,7 @@ func (c *ContextImpl) IsDirty() bool {
 }
 
 func (c *ContextImpl) Clear() {
-	c.metricsHandler.Counter(metrics.WorkflowContextCleared.Name()).Record(1)
+	metrics.WorkflowContextCleared.With(c.metricsHandler).Record(1)
 	if c.MutableState != nil {
 		c.MutableState.GetQueryRegistry().Clear()
 	}
@@ -603,8 +617,7 @@ func (c *ContextImpl) UpdateWorkflowExecutionWithNew(
 		}
 	}
 
-	if err := c.mergeContinueAsNewReplicationTasks(
-		updateMode,
+	if err := c.mergeUpdateWithNewReplicationTasks(
 		updateWorkflow,
 		newWorkflow,
 	); err != nil {
@@ -653,6 +666,14 @@ func (c *ContextImpl) SetWorkflowExecution(
 	ctx context.Context,
 	shardContext shard.Context,
 ) (retError error) {
+	return c.SubmitClosedWorkflowSnapshot(ctx, shardContext, TransactionPolicyPassive)
+}
+
+func (c *ContextImpl) SubmitClosedWorkflowSnapshot(
+	ctx context.Context,
+	shardContext shard.Context,
+	transactionPolicy TransactionPolicy,
+) (retError error) {
 	defer func() {
 		if retError != nil {
 			c.Clear()
@@ -660,13 +681,13 @@ func (c *ContextImpl) SetWorkflowExecution(
 	}()
 
 	resetWorkflowSnapshot, resetWorkflowEventsSeq, err := c.MutableState.CloseTransactionAsSnapshot(
-		TransactionPolicyPassive,
+		transactionPolicy,
 	)
 	if err != nil {
 		return err
 	}
 	if len(resetWorkflowEventsSeq) != 0 {
-		c.metricsHandler.Counter(metrics.ClosedWorkflowBufferEventCount.Name()).Record(1)
+		metrics.ClosedWorkflowBufferEventCount.With(c.metricsHandler).Record(1)
 		c.logger.Warn("SetWorkflowExecution encountered new events")
 	}
 
@@ -676,48 +697,86 @@ func (c *ContextImpl) SetWorkflowExecution(
 	)
 }
 
-func (c *ContextImpl) mergeContinueAsNewReplicationTasks(
-	updateMode persistence.UpdateWorkflowMode,
+func (c *ContextImpl) mergeUpdateWithNewReplicationTasks(
 	currentWorkflowMutation *persistence.WorkflowMutation,
 	newWorkflowSnapshot *persistence.WorkflowSnapshot,
 ) error {
 
-	if currentWorkflowMutation.ExecutionState.Status != enumspb.WORKFLOW_EXECUTION_STATUS_CONTINUED_AS_NEW {
-		return nil
-	} else if updateMode == persistence.UpdateWorkflowModeBypassCurrent && newWorkflowSnapshot == nil {
-		// update current workflow as zombie & continue as new without new zombie workflow
-		// this case can be valid if new workflow is already created by resend
+	if newWorkflowSnapshot == nil {
 		return nil
 	}
 
-	// current workflow is doing continue as new
+	if currentWorkflowMutation.ExecutionState.Status != enumspb.WORKFLOW_EXECUTION_STATUS_CONTINUED_AS_NEW &&
+		!c.config.ReplicationEnableUpdateWithNewTaskMerge() {
+		// we need to make sure target cell is able to handle updateWithNew
+		// for non continuedAsNew case before enabling this feature
+		return nil
+	}
 
+	// namespace could be local or global with only one cluster,
+	// or current cluster is standby cluster for the namespace,
+	// so no replication task is generated.
+	//
+	// TODO: What does the following comment mean?
 	// it is possible that continue as new is done as part of passive logic
-	if len(currentWorkflowMutation.Tasks[tasks.CategoryReplication]) == 0 {
+	numCurrentReplicationTasks := len(currentWorkflowMutation.Tasks[tasks.CategoryReplication])
+	numNewReplicationTasks := len(newWorkflowSnapshot.Tasks[tasks.CategoryReplication])
+
+	if numCurrentReplicationTasks == 0 && numNewReplicationTasks == 0 {
+		return nil
+	}
+	if numCurrentReplicationTasks == 0 {
+		c.logger.Info("Current workflow has no replication task, while new workflow has replication task",
+			tag.WorkflowNamespaceID(c.workflowKey.NamespaceID),
+			tag.WorkflowID(c.workflowKey.WorkflowID),
+			tag.WorkflowRunID(c.workflowKey.RunID),
+			tag.WorkflowNewRunID(newWorkflowSnapshot.ExecutionState.RunId),
+		)
+		return nil
+	}
+	if numNewReplicationTasks == 0 {
+		c.logger.Info("New workflow has no replication task, while current workflow has replication task",
+			tag.WorkflowNamespaceID(c.workflowKey.NamespaceID),
+			tag.WorkflowID(c.workflowKey.WorkflowID),
+			tag.WorkflowRunID(c.workflowKey.RunID),
+			tag.WorkflowNewRunID(newWorkflowSnapshot.ExecutionState.RunId),
+		)
+		return nil
+	}
+	if numNewReplicationTasks > 1 {
+		// This could happen when importing a workflow and current running workflow is being terminated.
+		// TODO: support more than one replication tasks (batch of events) in the new workflow
+		c.logger.Info("Skipped merging replication tasks because new run has more than one replication tasks",
+			tag.WorkflowNamespaceID(c.workflowKey.NamespaceID),
+			tag.WorkflowID(c.workflowKey.WorkflowID),
+			tag.WorkflowRunID(c.workflowKey.RunID),
+			tag.WorkflowNewRunID(newWorkflowSnapshot.ExecutionState.RunId),
+		)
 		return nil
 	}
 
-	if newWorkflowSnapshot == nil || len(newWorkflowSnapshot.Tasks[tasks.CategoryReplication]) != 1 {
-		return serviceerror.NewInternal("unable to find replication task from new workflow for continue as new replication")
-	}
-
-	// merge the new run first event batch replication task
-	// to current event batch replication task
+	// current workflow is closing with new workflow
+	// merge the new run's replication task to current workflow's replication task
+	// so that they can be applied transactionally in the standby cluster.
+	// TODO: this logic should be more generic so that the first replication task
+	// in the new run doesn't have to be HistoryReplicationTask
 	newRunTask := newWorkflowSnapshot.Tasks[tasks.CategoryReplication][0].(*tasks.HistoryReplicationTask)
 	delete(newWorkflowSnapshot.Tasks, tasks.CategoryReplication)
 
 	newRunBranchToken := newRunTask.BranchToken
 	newRunID := newRunTask.RunID
 	taskUpdated := false
-	for _, replicationTask := range currentWorkflowMutation.Tasks[tasks.CategoryReplication] {
+	for idx := numCurrentReplicationTasks - 1; idx >= 0; idx-- {
+		replicationTask := currentWorkflowMutation.Tasks[tasks.CategoryReplication][idx]
 		if task, ok := replicationTask.(*tasks.HistoryReplicationTask); ok {
 			taskUpdated = true
 			task.NewRunBranchToken = newRunBranchToken
 			task.NewRunID = newRunID
+			break
 		}
 	}
 	if !taskUpdated {
-		return serviceerror.NewInternal("unable to find replication task from current workflow for continue as new replication")
+		return serviceerror.NewInternal("unable to find HistoryReplicationTask from current workflow for update-with-new replication")
 	}
 	return nil
 }
@@ -784,7 +843,10 @@ func (c *ContextImpl) ReapplyEvents(
 		for _, e := range events.Events {
 			event := e
 			switch event.GetEventType() {
-			case enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_SIGNALED:
+			case enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_SIGNALED,
+				enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_UPDATE_ADMITTED,
+				enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_UPDATE_ACCEPTED:
+
 				reapplyEvents = append(reapplyEvents, event)
 			}
 		}
@@ -983,6 +1045,7 @@ func (c *ContextImpl) maxMutableStateSizeExceeded() bool {
 	mutableStateSizeLimitWarn := c.config.MutableStateSizeLimitWarn()
 
 	mutableStateSize := c.MutableState.GetApproximatePersistedSize()
+	metrics.PersistedMutableStateSize.With(c.metricsHandler).Record(int64(mutableStateSize))
 
 	if mutableStateSize > mutableStateSizeLimitError {
 		c.logger.Warn("mutable state size exceeds error limit.",
@@ -1030,6 +1093,22 @@ func (c *ContextImpl) forceTerminateWorkflow(
 		consts.IdentityHistoryService,
 		false,
 	)
+}
+
+// CacheSize estimates the in-memory size of the object for cache limits. For proto objects, it uses proto.Size()
+// which returns the serialized size. Note: In-memory size will be slightly larger than the serialized size.
+func (c *ContextImpl) CacheSize() int {
+	if !c.config.HistoryCacheLimitSizeBased {
+		return 1
+	}
+	size := len(c.workflowKey.WorkflowID) + len(c.workflowKey.RunID) + len(c.workflowKey.NamespaceID)
+	if c.MutableState != nil {
+		size += c.MutableState.GetApproximatePersistedSize()
+	}
+	if c.updateRegistry != nil {
+		size += c.updateRegistry.GetSize()
+	}
+	return size
 }
 
 func emitStateTransitionCount(

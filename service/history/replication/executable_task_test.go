@@ -37,6 +37,7 @@ import (
 	"github.com/stretchr/testify/suite"
 	commonpb "go.temporal.io/api/common/v1"
 	"go.temporal.io/api/serviceerror"
+
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/service/history/configs"
 	"go.temporal.io/server/service/history/replication/eventhandler"
@@ -351,7 +352,7 @@ func (s *executableTaskSuite) TestResend_ResendError_Success() {
 	anotherResendErr := &serviceerrors.RetryReplication{
 		NamespaceId:       resendErr.NamespaceId,
 		WorkflowId:        resendErr.WorkflowId,
-		RunId:             resendErr.RunId,
+		RunId:             uuid.NewString(),
 		StartEventId:      rand.Int63(),
 		StartEventVersion: rand.Int63(),
 		EndEventId:        rand.Int63(),
@@ -414,7 +415,7 @@ func (s *executableTaskSuite) TestResend_ResendError_Error() {
 	anotherResendErr := &serviceerrors.RetryReplication{
 		NamespaceId:       resendErr.NamespaceId,
 		WorkflowId:        resendErr.WorkflowId,
-		RunId:             resendErr.RunId,
+		RunId:             uuid.NewString(),
 		StartEventId:      rand.Int63(),
 		StartEventVersion: rand.Int63(),
 		EndEventId:        rand.Int63(),
@@ -448,6 +449,46 @@ func (s *executableTaskSuite) TestResend_ResendError_Error() {
 
 	doContinue, err := s.task.Resend(context.Background(), remoteCluster, resendErr, ResendAttempt)
 	s.Error(err)
+	s.False(doContinue)
+}
+
+func (s *executableTaskSuite) TestResend_SecondResendError_SameWorkflowRun() {
+	remoteCluster := cluster.TestAlternativeClusterName
+	resendErr := &serviceerrors.RetryReplication{
+		NamespaceId:       uuid.NewString(),
+		WorkflowId:        uuid.NewString(),
+		RunId:             uuid.NewString(),
+		StartEventId:      rand.Int63(),
+		StartEventVersion: rand.Int63(),
+		EndEventId:        rand.Int63(),
+		EndEventVersion:   rand.Int63(),
+	}
+
+	anotherResendErr := &serviceerrors.RetryReplication{
+		NamespaceId:       resendErr.NamespaceId,
+		WorkflowId:        resendErr.WorkflowId,
+		RunId:             resendErr.RunId,
+		StartEventId:      rand.Int63(),
+		StartEventVersion: rand.Int63(),
+		EndEventId:        rand.Int63(),
+		EndEventVersion:   rand.Int63(),
+	}
+
+	s.ndcHistoryResender.EXPECT().SendSingleWorkflowHistory(
+		gomock.Any(),
+		remoteCluster,
+		namespace.ID(resendErr.NamespaceId),
+		resendErr.WorkflowId,
+		resendErr.RunId,
+		resendErr.StartEventId,
+		resendErr.StartEventVersion,
+		resendErr.EndEventId,
+		resendErr.EndEventVersion,
+	).Return(anotherResendErr)
+
+	doContinue, err := s.task.Resend(context.Background(), remoteCluster, resendErr, ResendAttempt)
+	var dataLossErr *serviceerror.DataLoss
+	s.ErrorAs(err, &dataLossErr)
 	s.False(doContinue)
 }
 

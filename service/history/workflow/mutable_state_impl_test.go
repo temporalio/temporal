@@ -68,6 +68,7 @@ import (
 	"go.temporal.io/server/service/history/configs"
 	"go.temporal.io/server/service/history/events"
 	"go.temporal.io/server/service/history/historybuilder"
+	"go.temporal.io/server/service/history/hsm"
 	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/tasks"
 	"go.temporal.io/server/service/history/tests"
@@ -127,6 +128,9 @@ func (s *mutableStateSuite) SetupTest() {
 		},
 		s.mockConfig,
 	)
+	reg := hsm.NewRegistry()
+	s.Require().NoError(RegisterStateMachine(reg))
+	s.mockShard.SetStateMachineRegistry(reg)
 	// set the checksum probabilities to 100% for exercising during test
 	s.mockConfig.MutableStateChecksumGenProbability = func(namespace string) int { return 100 }
 	s.mockConfig.MutableStateChecksumVerifyProbability = func(namespace string) int { return 100 }
@@ -137,7 +141,7 @@ func (s *mutableStateSuite) SetupTest() {
 	s.testScope = s.mockShard.Resource.MetricsScope.(tally.TestScope)
 	s.logger = s.mockShard.GetLogger()
 
-	s.mutableState = NewMutableState(s.mockShard, s.mockEventsCache, s.logger, tests.LocalNamespaceEntry, time.Now().UTC())
+	s.mutableState = NewMutableState(s.mockShard, s.mockEventsCache, s.logger, tests.LocalNamespaceEntry, tests.WorkflowID, tests.RunID, time.Now().UTC())
 }
 
 func (s *mutableStateSuite) TearDownTest() {
@@ -147,16 +151,18 @@ func (s *mutableStateSuite) TearDownTest() {
 
 func (s *mutableStateSuite) TestTransientWorkflowTaskCompletionFirstBatchApplied_ApplyWorkflowTaskCompleted() {
 	version := int64(12)
+	workflowID := "some random workflow ID"
 	runID := uuid.New()
 	s.mutableState = TestGlobalMutableState(
 		s.mockShard,
 		s.mockEventsCache,
 		s.logger,
 		version,
+		workflowID,
 		runID,
 	)
 
-	newWorkflowTaskScheduleEvent, newWorkflowTaskStartedEvent := s.prepareTransientWorkflowTaskCompletionFirstBatchApplied(version, runID)
+	newWorkflowTaskScheduleEvent, newWorkflowTaskStartedEvent := s.prepareTransientWorkflowTaskCompletionFirstBatchApplied(version, workflowID, runID)
 
 	newWorkflowTaskCompletedEvent := &historypb.HistoryEvent{
 		Version:   version,
@@ -179,16 +185,18 @@ func (s *mutableStateSuite) TestTransientWorkflowTaskCompletionFirstBatchApplied
 
 func (s *mutableStateSuite) TestTransientWorkflowTaskCompletionFirstBatchApplied_FailoverWorkflowTaskTimeout() {
 	version := int64(12)
+	workflowID := "some random workflow ID"
 	runID := uuid.New()
 	s.mutableState = TestGlobalMutableState(
 		s.mockShard,
 		s.mockEventsCache,
 		s.logger,
 		version,
+		workflowID,
 		runID,
 	)
 
-	newWorkflowTaskScheduleEvent, _ := s.prepareTransientWorkflowTaskCompletionFirstBatchApplied(version, runID)
+	newWorkflowTaskScheduleEvent, _ := s.prepareTransientWorkflowTaskCompletionFirstBatchApplied(version, workflowID, runID)
 
 	newWorkflowTask := s.mutableState.GetWorkflowTaskByID(newWorkflowTaskScheduleEvent.GetEventId())
 	s.NotNil(newWorkflowTask)
@@ -202,16 +210,18 @@ func (s *mutableStateSuite) TestTransientWorkflowTaskCompletionFirstBatchApplied
 
 func (s *mutableStateSuite) TestTransientWorkflowTaskCompletionFirstBatchApplied_FailoverWorkflowTaskFailed() {
 	version := int64(12)
+	workflowID := "some random workflow ID"
 	runID := uuid.New()
 	s.mutableState = TestGlobalMutableState(
 		s.mockShard,
 		s.mockEventsCache,
 		s.logger,
 		version,
+		workflowID,
 		runID,
 	)
 
-	newWorkflowTaskScheduleEvent, _ := s.prepareTransientWorkflowTaskCompletionFirstBatchApplied(version, runID)
+	newWorkflowTaskScheduleEvent, _ := s.prepareTransientWorkflowTaskCompletionFirstBatchApplied(version, workflowID, runID)
 
 	newWorkflowTask := s.mutableState.GetWorkflowTaskByID(newWorkflowTaskScheduleEvent.GetEventId())
 	s.NotNil(newWorkflowTask)
@@ -419,15 +429,17 @@ func (s *mutableStateSuite) TestEventReapplied() {
 
 func (s *mutableStateSuite) TestTransientWorkflowTaskSchedule_CurrentVersionChanged() {
 	version := int64(2000)
+	workflowID := "some random workflow ID"
 	runID := uuid.New()
 	s.mutableState = TestGlobalMutableState(
 		s.mockShard,
 		s.mockEventsCache,
 		s.logger,
 		version,
+		workflowID,
 		runID,
 	)
-	_, _ = s.prepareTransientWorkflowTaskCompletionFirstBatchApplied(version, runID)
+	_, _ = s.prepareTransientWorkflowTaskCompletionFirstBatchApplied(version, workflowID, runID)
 	err := s.mutableState.ApplyWorkflowTaskFailedEvent()
 	s.NoError(err)
 
@@ -452,15 +464,17 @@ func (s *mutableStateSuite) TestTransientWorkflowTaskSchedule_CurrentVersionChan
 
 func (s *mutableStateSuite) TestTransientWorkflowTaskStart_CurrentVersionChanged() {
 	version := int64(2000)
+	workflowID := "some random workflow ID"
 	runID := uuid.New()
 	s.mutableState = TestGlobalMutableState(
 		s.mockShard,
 		s.mockEventsCache,
 		s.logger,
 		version,
+		workflowID,
 		runID,
 	)
-	_, _ = s.prepareTransientWorkflowTaskCompletionFirstBatchApplied(version, runID)
+	_, _ = s.prepareTransientWorkflowTaskCompletionFirstBatchApplied(version, workflowID, runID)
 	err := s.mutableState.ApplyWorkflowTaskFailedEvent()
 	s.NoError(err)
 
@@ -502,6 +516,42 @@ func (s *mutableStateSuite) TestTransientWorkflowTaskStart_CurrentVersionChanged
 	s.Equal("tq", attrs.TaskQueue.Name)
 }
 
+func (s *mutableStateSuite) TestNewMutableStateInChain() {
+	executionTimerTaskStatuses := []int32{
+		TimerTaskStatusNone,
+		TimerTaskStatusCreated,
+	}
+
+	for _, taskStatus := range executionTimerTaskStatuses {
+		s.T().Run(
+			fmt.Sprintf("TimerTaskStatus: %v", taskStatus),
+			func(t *testing.T) {
+				currentMutableState := TestGlobalMutableState(
+					s.mockShard,
+					s.mockEventsCache,
+					s.logger,
+					1000,
+					tests.WorkflowID,
+					uuid.New(),
+				)
+				currentMutableState.GetExecutionInfo().WorkflowExecutionTimerTaskStatus = taskStatus
+
+				newMutableState := NewMutableStateInChain(
+					s.mockShard,
+					s.mockEventsCache,
+					s.logger,
+					tests.GlobalNamespaceEntry,
+					tests.WorkflowID,
+					uuid.New(),
+					s.mockShard.GetTimeSource().Now(),
+					currentMutableState,
+				)
+				s.Equal(taskStatus, newMutableState.GetExecutionInfo().WorkflowExecutionTimerTaskStatus)
+			},
+		)
+	}
+}
+
 func (s *mutableStateSuite) TestSanitizedMutableState() {
 	txnID := int64(2000)
 	runID := uuid.New()
@@ -510,6 +560,7 @@ func (s *mutableStateSuite) TestSanitizedMutableState() {
 		s.mockEventsCache,
 		s.logger,
 		1000,
+		tests.WorkflowID,
 		runID,
 	)
 
@@ -524,6 +575,7 @@ func (s *mutableStateSuite) TestSanitizedMutableState() {
 			Clock:   1,
 		},
 	}}
+	mutableState.executionInfo.WorkflowExecutionTimerTaskStatus = TimerTaskStatusCreated
 
 	mutableStateProto := mutableState.CloneToProto()
 	sanitizedMutableState, err := NewSanitizedMutableState(s.mockShard, s.mockEventsCache, s.logger, tests.LocalNamespaceEntry, mutableStateProto, 0, 0)
@@ -533,12 +585,13 @@ func (s *mutableStateSuite) TestSanitizedMutableState() {
 	for _, childInfo := range sanitizedMutableState.pendingChildExecutionInfoIDs {
 		s.Nil(childInfo.Clock)
 	}
+	s.Equal(int32(TimerTaskStatusNone), sanitizedMutableState.executionInfo.WorkflowExecutionTimerTaskStatus)
 }
 
-func (s *mutableStateSuite) prepareTransientWorkflowTaskCompletionFirstBatchApplied(version int64, runID string) (*historypb.HistoryEvent, *historypb.HistoryEvent) {
+func (s *mutableStateSuite) prepareTransientWorkflowTaskCompletionFirstBatchApplied(version int64, workflowID, runID string) (*historypb.HistoryEvent, *historypb.HistoryEvent) {
 	namespaceID := tests.NamespaceID
 	execution := &commonpb.WorkflowExecution{
-		WorkflowId: "some random workflow ID",
+		WorkflowId: workflowID,
 		RunId:      runID,
 	}
 

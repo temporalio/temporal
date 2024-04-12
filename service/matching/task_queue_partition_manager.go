@@ -43,6 +43,7 @@ import (
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/tqid"
+	"go.temporal.io/server/common/worker_versioning"
 )
 
 type (
@@ -65,7 +66,10 @@ type (
 		ProcessSpooledTask(ctx context.Context, task *internalTask, sourceBuildId string) error
 		// DispatchQueryTask will dispatch query to local or remote poller. If forwarded then result or error is returned,
 		// if dispatched to local poller then nil and nil is returned.
-		DispatchQueryTask(ctx context.Context, taskID string, request *matchingservice.QueryWorkflowRequest) (*matchingservice.QueryWorkflowResponse, error)
+		DispatchQueryTask(ctx context.Context, taskId string, request *matchingservice.QueryWorkflowRequest) (*matchingservice.QueryWorkflowResponse, error)
+		// DispatchNexusTask dispatches a nexus task to a local or remote poller. If forwarded then result or
+		// error is returned, if dispatched to local poller then nil and nil is returned.
+		DispatchNexusTask(ctx context.Context, taskId string, request *matchingservice.DispatchNexusTaskRequest) (*matchingservice.DispatchNexusTaskResponse, error)
 		GetUserDataManager() userDataManager
 		// MarkAlive updates the liveness timer to keep this partition manager alive.
 		MarkAlive()
@@ -342,6 +346,30 @@ func (pm *taskQueuePartitionManagerImpl) DispatchQueryTask(
 	return pq.DispatchQueryTask(ctx, taskID, request)
 }
 
+func (pm *taskQueuePartitionManagerImpl) DispatchNexusTask(
+	ctx context.Context,
+	taskId string,
+	request *matchingservice.DispatchNexusTaskRequest,
+) (*matchingservice.DispatchNexusTaskResponse, error) {
+	pq, _, err := pm.getPhysicalQueueForAdd(
+		ctx,
+		// Nexus tasks always use assignment rules (if present) because they don't have a workflow.
+		worker_versioning.MakeUseAssignmentRulesDirective(),
+		// There is no run ID, each request is mapped to a random ramp threshold.
+		"",
+	)
+	if err != nil {
+		return nil, err
+	}
+
+	if pm.defaultQueue != pq {
+		// default queue should stay alive even if requests go to other queues
+		pm.defaultQueue.MarkAlive()
+	}
+
+	return pq.DispatchNexusTask(ctx, taskId, request)
+}
+
 func (pm *taskQueuePartitionManagerImpl) GetUserDataManager() userDataManager {
 	return pm.userDataManager
 }
@@ -412,10 +440,9 @@ func (pm *taskQueuePartitionManagerImpl) Describe(
 		}
 	}
 
-	versionsInfo := make([]*taskqueuespb.TaskQueueVersionInfoInternal, 0)
+	versionsInfo := make(map[string]*taskqueuespb.TaskQueueVersionInfoInternal, 0)
 	for bid := range buildIds {
 		vInfo := &taskqueuespb.TaskQueueVersionInfoInternal{
-			BuildId:               bid,
 			PhysicalTaskQueueInfo: &taskqueuespb.PhysicalTaskQueueInfo{},
 		}
 		var physicalQueue physicalTaskQueueManager
@@ -428,11 +455,8 @@ func (pm *taskQueuePartitionManagerImpl) Describe(
 			if reportPollers {
 				vInfo.PhysicalTaskQueueInfo.Pollers = physicalQueue.GetAllPollerInfo()
 			}
-			if reportBacklogInfo {
-				vInfo.PhysicalTaskQueueInfo.BacklogInfo = physicalQueue.GetBacklogInfo()
-			}
 		}
-		versionsInfo = append(versionsInfo, vInfo)
+		versionsInfo[bid] = vInfo
 	}
 
 	return &matchingservice.DescribeTaskQueuePartitionResponse{

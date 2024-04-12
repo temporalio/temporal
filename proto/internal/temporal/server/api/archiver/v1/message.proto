@@ -26,6 +26,7 @@ package temporal.server.api.archiver.v1;
 
 option go_package = "go.temporal.io/server/api/archiver/v1;archiver";
 
+import "google/protobuf/duration.proto";
 import "google/protobuf/timestamp.proto";
 
 import "temporal/api/common/v1/message.proto";
@@ -65,4 +66,5 @@ message VisibilityRecord {
     temporal.api.common.v1.Memo memo = 11;
     map<string, string> search_attributes = 12;
     string history_archival_uri = 13;
+    google.protobuf.Duration execution_duration = 14;
 }

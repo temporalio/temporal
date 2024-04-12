@@ -89,7 +89,7 @@ func (w *batchedTask) MarkPoisonPill() error {
 }
 
 func (w *batchedTask) Ack() {
-	w.metricsHandler.Gauge(metrics.BatchableTaskBatchCount.Name()).Record(
+	metrics.BatchableTaskBatchCount.With(w.metricsHandler).Record(
 		float64(len(w.individualTasks)),
 	)
 	w.callIndividual(TrackableExecutableTask.Ack)
@@ -138,7 +138,7 @@ func (w *batchedTask) Nack(err error) {
 
 func (w *batchedTask) Reschedule() {
 	if len(w.individualTasks) == 1 {
-		w.Reschedule()
+		w.batchedTask.Reschedule()
 	} else {
 		w.handleIndividualTasks()
 	}

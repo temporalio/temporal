@@ -131,6 +131,7 @@ func (r *StateRebuilderImpl) Rebuild(
 
 	rebuiltMutableState, stateBuilder := r.initializeBuilders(
 		namespaceEntry,
+		targetWorkflowIdentifier,
 		now,
 	)
 
@@ -194,6 +195,9 @@ func (r *StateRebuilderImpl) Rebuild(
 	rebuiltMutableState.GetExecutionInfo().LastFirstEventTxnId = lastTxnId
 
 	// refresh tasks to be generated
+	// TODO: ideally the executionTimeoutTimerTaskStatus field should be carried over
+	// from the base run. However, RefreshTasks always resets that field and
+	// force regenerates the execution timeout timer task.
 	if err := r.taskRefresher.RefreshTasks(ctx, rebuiltMutableState); err != nil {
 		return nil, 0, err
 	}
@@ -203,6 +207,7 @@ func (r *StateRebuilderImpl) Rebuild(
 
 func (r *StateRebuilderImpl) initializeBuilders(
 	namespaceEntry *namespace.Namespace,
+	workflowIdentifier definition.WorkflowKey,
 	now time.Time,
 ) (workflow.MutableState, workflow.MutableStateRebuilder) {
 	resetMutableState := workflow.NewMutableState(
@@ -210,6 +215,8 @@ func (r *StateRebuilderImpl) initializeBuilders(
 		r.shard.GetEventsCache(),
 		r.logger,
 		namespaceEntry,
+		workflowIdentifier.GetWorkflowID(),
+		workflowIdentifier.GetRunID(),
 		now,
 	)
 	stateBuilder := workflow.NewMutableStateRebuilder(
@@ -238,6 +245,7 @@ func (r *StateRebuilderImpl) applyEvents(
 		},
 		[][]*historypb.HistoryEvent{events},
 		nil, // no new run history when rebuilding mutable state
+		"",
 	)
 	if err != nil {
 		r.logger.Error("StateRebuilder unable to Rebuild mutable state.", tag.Error(err))

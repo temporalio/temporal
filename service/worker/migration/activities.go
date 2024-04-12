@@ -55,6 +55,7 @@ import (
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/quotas"
+	"go.temporal.io/server/common/searchattribute"
 )
 
 type (
@@ -222,7 +223,7 @@ func (a *activities) checkReplicationOnce(ctx context.Context, waitRequest waitR
 	}
 
 	// emit metrics about how many shards are ready
-	a.metricsHandler.Gauge(metrics.CatchUpReadyShardCountGauge.Name()).Record(
+	metrics.CatchUpReadyShardCountGauge.With(a.metricsHandler).Record(
 		float64(readyShardCount),
 		metrics.OperationTag(metrics.MigrationWorkflowScope),
 		metrics.TargetClusterTag(waitRequest.RemoteCluster))
@@ -300,7 +301,7 @@ func (a *activities) checkHandoverOnce(ctx context.Context, waitRequest waitHand
 	}
 
 	// emit metrics about how many shards are ready
-	a.metricsHandler.Gauge(metrics.HandoverReadyShardCountGauge.Name()).Record(
+	metrics.HandoverReadyShardCountGauge.With(a.metricsHandler).Record(
 		float64(readyShardCount),
 		metrics.OperationTag(metrics.MigrationWorkflowScope),
 		metrics.TargetClusterTag(waitRequest.RemoteCluster),
@@ -401,6 +402,9 @@ func (a *activities) UpdateActiveCluster(ctx context.Context, req updateActiveCl
 func (a *activities) ListWorkflows(ctx context.Context, request *workflowservice.ListWorkflowExecutionsRequest) (*listWorkflowsResponse, error) {
 	ctx = headers.SetCallerInfo(ctx, headers.NewCallerInfo(request.Namespace, headers.CallerTypePreemptable, ""))
 
+	// modify query to include all namespace divisions
+	request.Query = searchattribute.QueryWithAnyNamespaceDivision(request.Query)
+
 	resp, err := a.frontendClient.ListWorkflowExecutions(ctx, request)
 	if err != nil {
 		return nil, err
@@ -428,7 +432,7 @@ func (a *activities) GenerateReplicationTasks(ctx context.Context, request *gene
 
 	start := time.Now()
 	defer func() {
-		a.forceReplicationMetricsHandler.Timer(metrics.GenerateReplicationTasksLatency.Name()).Record(time.Since(start))
+		metrics.GenerateReplicationTasksLatency.With(a.forceReplicationMetricsHandler).Record(time.Since(start))
 	}()
 
 	startIndex := 0
@@ -582,7 +586,7 @@ func (a *activities) checkSkipWorkflowExecution(
 		if isNotFoundServiceError(err) {
 			// The outstanding workflow execution may be deleted (due to retention) on source cluster after replication tasks were generated.
 			// Since retention runs on both source/target clusters, such execution may also be deleted (hence not found) from target cluster.
-			a.forceReplicationMetricsHandler.Counter(metrics.EncounterNotFoundWorkflowCount.Name()).Record(1)
+			metrics.EncounterNotFoundWorkflowCount.With(a.forceReplicationMetricsHandler).Record(1)
 			return verifyResult{
 				status: skipped,
 				reason: reasonWorkflowNotFound,
@@ -597,7 +601,7 @@ func (a *activities) checkSkipWorkflowExecution(
 	// Zombie workflow should be a transient state. However, if there is Zombie workflow on the source cluster,
 	// it is skipped to avoid such workflow being processed on the target cluster.
 	if resp.GetDatabaseMutableState().GetExecutionState().GetState() == enumsspb.WORKFLOW_EXECUTION_STATE_ZOMBIE {
-		a.forceReplicationMetricsHandler.Counter(metrics.EncounterZombieWorkflowCount.Name()).Record(1)
+		metrics.EncounterZombieWorkflowCount.With(a.forceReplicationMetricsHandler).Record(1)
 		a.logger.Info("createReplicationTasks skip Zombie workflow", tags...)
 		return verifyResult{
 			status: skipped,
@@ -609,7 +613,7 @@ func (a *activities) checkSkipWorkflowExecution(
 	if closeTime := resp.GetDatabaseMutableState().GetExecutionInfo().GetCloseTime(); closeTime != nil && ns != nil && ns.Retention() > 0 {
 		deleteTime := closeTime.AsTime().Add(ns.Retention())
 		if deleteTime.Before(time.Now()) {
-			a.forceReplicationMetricsHandler.Counter(metrics.EncounterPassRetentionWorkflowCount.Name()).Record(1)
+			metrics.EncounterPassRetentionWorkflowCount.With(a.forceReplicationMetricsHandler).Record(1)
 			return verifyResult{
 				status: skipped,
 				reason: reasonWorkflowCloseToRetention,
@@ -635,17 +639,17 @@ func (a *activities) verifySingleReplicationTask(
 		Namespace: request.Namespace,
 		Execution: we,
 	})
-	a.forceReplicationMetricsHandler.Timer(metrics.VerifyDescribeMutableStateLatency.Name()).Record(time.Since(s))
+	metrics.VerifyDescribeMutableStateLatency.With(a.forceReplicationMetricsHandler).Record(time.Since(s))
 
 	switch err.(type) {
 	case nil:
-		a.forceReplicationMetricsHandler.WithTags(metrics.NamespaceTag(request.Namespace)).Counter(metrics.VerifyReplicationTaskSuccess.Name()).Record(1)
+		metrics.VerifyReplicationTaskSuccess.With(a.forceReplicationMetricsHandler.WithTags(metrics.NamespaceTag(request.Namespace))).Record(1)
 		return verifyResult{
 			status: verified,
 		}, nil
 
 	case *serviceerror.NotFound:
-		a.forceReplicationMetricsHandler.WithTags(metrics.NamespaceTag(request.Namespace)).Counter(metrics.VerifyReplicationTaskNotFound.Name()).Record(1)
+		metrics.VerifyReplicationTaskNotFound.With(a.forceReplicationMetricsHandler.WithTags(metrics.NamespaceTag(request.Namespace))).Record(1)
 		// Calling checkSkipWorkflowExecution for every NotFound is sub-optimal as most common case to skip is workfow being deleted due to retention.
 		// A better solution is to only check the existence for workflow which is close to retention period.
 		return a.checkSkipWorkflowExecution(ctx, request, we, ns)
@@ -656,8 +660,8 @@ func (a *activities) verifySingleReplicationTask(
 		}, temporal.NewNonRetryableApplicationError("remoteClient.DescribeMutableState call failed", "NamespaceNotFound", err)
 
 	default:
-		a.forceReplicationMetricsHandler.WithTags(metrics.NamespaceTag(request.Namespace), metrics.ServiceErrorTypeTag(err)).
-			Counter(metrics.VerifyReplicationTaskFailed.Name()).Record(1)
+		metrics.VerifyReplicationTaskFailed.With(a.forceReplicationMetricsHandler.
+			WithTags(metrics.NamespaceTag(request.Namespace), metrics.ServiceErrorTypeTag(err))).Record(1)
 
 		return verifyResult{
 			status: notVerified,
@@ -682,7 +686,7 @@ func (a *activities) verifyReplicationTasks(
 		}
 
 		heartbeat(*details)
-		a.forceReplicationMetricsHandler.Timer(metrics.VerifyReplicationTasksLatency.Name()).Record(time.Since(start))
+		metrics.VerifyReplicationTasksLatency.With(a.forceReplicationMetricsHandler).Record(time.Since(start))
 	}()
 
 	for ; details.NextIndex < len(request.Executions); details.NextIndex++ {

@@ -26,7 +26,6 @@ package tag
 
 import (
 	"fmt"
-	"strings"
 	"time"
 
 	enumspb "go.temporal.io/api/enums/v1"
@@ -34,6 +33,7 @@ import (
 
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	"go.temporal.io/server/common/primitives"
+	"go.temporal.io/server/common/util"
 )
 
 // All logging tags are defined in this file.
@@ -46,9 +46,6 @@ import (
 // LoggingCallAtKey is reserved tag
 const (
 	LoggingCallAtKey = "logging-call-at"
-
-	getType     = "%T"
-	errorPrefix = "*"
 )
 
 // ==========  Common tags defined here ==========
@@ -63,9 +60,9 @@ func Error(err error) ZapTag {
 	return NewErrorTag(err)
 }
 
-// ErrorType returns tag for ErrorType
-func ErrorType(err error) ZapTag {
-	return NewStringTag("service-error-type", strings.TrimPrefix(fmt.Sprintf(getType, err), errorPrefix))
+// ServiceErrorType returns tag for ServiceErrorType
+func ServiceErrorType(err error) ZapTag {
+	return NewStringTag("service-error-type", util.ErrorType(err))
 }
 
 // IsRetryable returns tag for IsRetryable
@@ -132,6 +129,11 @@ func WorkflowRunID(runID string) ZapTag {
 	return NewStringTag("wf-run-id", runID)
 }
 
+// WorkflowNewRunID returns tag for WorkflowNewRunID
+func WorkflowNewRunID(newRunID string) ZapTag {
+	return NewStringTag("wf-new-run-id", newRunID)
+}
+
 // WorkflowResetBaseRunID returns tag for WorkflowResetBaseRunID
 func WorkflowResetBaseRunID(runID string) ZapTag {
 	return NewStringTag("wf-reset-base-run-id", runID)
@@ -172,7 +174,7 @@ func WorkflowTaskTimeoutSeconds(s int64) ZapTag {
 	return NewInt64("workflow-task-timeout", s)
 }
 
-// WorkflowTaskTimeoutSeconds returns tag for WorkflowTaskTimeoutSeconds
+// WorkflowTaskTimeout returns tag for WorkflowTaskTimeoutSeconds
 func WorkflowTaskTimeout(s time.Duration) ZapTag {
 	return NewDurationTag("workflow-task-timeout", s)
 }
@@ -374,6 +376,11 @@ func operationResult(operationResult string) ZapTag {
 }
 
 // ErrorType returns tag for ErrorType
+func ErrorType(err error) ZapTag {
+	return errorType(util.ErrorType(err))
+}
+
+// errorType returns tag for ErrorType given a string
 func errorType(errorType string) ZapTag {
 	return NewStringTag("error-type", errorType)
 }
@@ -381,6 +388,12 @@ func errorType(errorType string) ZapTag {
 // Shardupdate returns tag for Shardupdate
 func shardupdate(shardupdate string) ZapTag {
 	return NewStringTag("shard-update", shardupdate)
+}
+
+// scope returns a tag for scope
+// Pre-defined scope tags are in values.go.
+func scope(scope string) ZapTag {
+	return NewStringTag("scope", scope)
 }
 
 // general
@@ -593,6 +606,11 @@ func TaskID(taskID int64) ZapTag {
 	return NewInt64("queue-task-id", taskID)
 }
 
+// TaskKey returns tag for TaskKey
+func TaskKey(key interface{}) ZapTag {
+	return NewAnyTag("queue-task-key", key)
+}
+
 // TaskVersion returns tag for TaskVersion
 func TaskVersion(taskVersion int64) ZapTag {
 	return NewInt64("queue-task-version", taskVersion)
@@ -636,6 +654,11 @@ func DLQMessageID(dlqMessageID int64) ZapTag {
 // Attempt returns tag for Attempt
 func Attempt(attempt int32) ZapTag {
 	return NewInt32("attempt", attempt)
+}
+
+// UnexpectedErrorAttempts returns tag for UnexpectedErrorAttempts
+func UnexpectedErrorAttempts(attempt int32) ZapTag {
+	return NewInt32("unexpected-error-attempts", attempt)
 }
 
 func WorkflowTaskType(wtType string) ZapTag {
@@ -737,6 +760,14 @@ func SourceCluster(sourceCluster string) ZapTag {
 // TargetCluster returns tag for TargetCluster
 func TargetCluster(targetCluster string) ZapTag {
 	return NewStringTag("xdc-target-cluster", targetCluster)
+}
+
+func SourceShardID(shardID int32) ZapTag {
+	return NewInt32("xdc-source-shard-id", shardID)
+}
+
+func TargetShardID(shardID int32) ZapTag {
+	return NewInt32("xdc-target-shard-id", shardID)
 }
 
 // PrevActiveCluster returns tag for PrevActiveCluster
@@ -916,4 +947,8 @@ func Endpoint(endpoint string) ZapTag {
 
 func BuildId(buildId string) ZapTag {
 	return NewStringTag("build-id", buildId)
+}
+
+func Cause(cause string) ZapTag {
+	return NewStringTag("cause", cause)
 }

@@ -28,7 +28,6 @@ import (
 	"context"
 
 	"github.com/google/uuid"
-	enumspb "go.temporal.io/api/enums/v1"
 	historypb "go.temporal.io/api/history/v1"
 	"go.temporal.io/api/serviceerror"
 
@@ -74,9 +73,9 @@ func Invoke(
 			workflowID,
 			"",
 		),
-		func(workflowContext api.WorkflowContext) (*api.UpdateWorkflowAction, error) {
-			context := workflowContext.GetContext()
-			mutableState := workflowContext.GetMutableState()
+		func(workflowLease api.WorkflowLease) (*api.UpdateWorkflowAction, error) {
+			context := workflowLease.GetContext()
+			mutableState := workflowLease.GetMutableState()
 			// Filter out reapply event from the same cluster
 			toReapplyEvents := make([]*historypb.HistoryEvent, 0, len(reapplyEvents))
 			lastWriteVersion, err := mutableState.GetLastWriteVersion()
@@ -118,7 +117,7 @@ func Invoke(
 						tag.WorkflowNamespaceID(namespaceID.String()),
 						tag.WorkflowID(workflowID),
 					)
-					shard.GetMetricsHandler().Counter(metrics.EventReapplySkippedCount.Name()).Record(
+					metrics.EventReapplySkippedCount.With(shard.GetMetricsHandler()).Record(
 						1,
 						metrics.OperationTag(metrics.HistoryReapplyEventsScope))
 					return &api.UpdateWorkflowAction{
@@ -158,7 +157,7 @@ func Invoke(
 					),
 					ndc.EventsReapplicationResetWorkflowReason,
 					toReapplyEvents,
-					enumspb.RESET_REAPPLY_TYPE_SIGNAL,
+					nil,
 				)
 				switch err.(type) {
 				case *serviceerror.InvalidArgument:

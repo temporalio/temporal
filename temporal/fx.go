@@ -28,7 +28,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"strings"
+	"os"
 
 	"github.com/pborman/uuid"
 	"go.opentelemetry.io/otel"
@@ -49,12 +49,13 @@ import (
 	"go.temporal.io/server/common/archiver"
 	"go.temporal.io/server/common/authorization"
 	"go.temporal.io/server/common/cluster"
-	"go.temporal.io/server/common/collection"
 	"go.temporal.io/server/common/config"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/headers"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
+	"go.temporal.io/server/common/membership/ringpop"
+	"go.temporal.io/server/common/membership/static"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/persistence/cassandra"
@@ -81,6 +82,7 @@ import (
 var (
 	clusterMetadataInitErr           = errors.New("failed to initialize current cluster metadata")
 	missingCurrentClusterMetadataErr = errors.New("missing current cluster metadata under clusterMetadata.ClusterInformation")
+	missingServiceInStaticHosts      = errors.New("hosts are missing in static hosts for service: ")
 )
 
 type (
@@ -123,11 +125,12 @@ type (
 		CustomDataStoreFactory persistenceClient.AbstractDataStoreFactory
 		CustomVisibilityStore  visibility.VisibilityStoreFactory
 
-		SearchAttributesMapper searchattribute.Mapper
-		CustomInterceptors     []grpc.UnaryServerInterceptor `group:"frontendInterceptors"`
-		Authorizer             authorization.Authorizer
-		ClaimMapper            authorization.ClaimMapper
-		AudienceGetter         authorization.JWTAudienceMapper
+		SearchAttributesMapper     searchattribute.Mapper
+		CustomFrontendInterceptors []grpc.UnaryServerInterceptor
+		Authorizer                 authorization.Authorizer
+		ClaimMapper                authorization.ClaimMapper
+		AudienceGetter             authorization.JWTAudienceMapper
+		ServiceHosts               map[primitives.ServiceName]static.Hosts
 
 		// below are things that could be over write by server options or may have default if not supplied by serverOptions.
 		Logger                log.Logger
@@ -243,7 +246,7 @@ func ServerOptionsProvider(opts []ServerOption) (serverOptionsProvider, error) {
 	var esConfig *esclient.Config
 	var esClient esclient.Client
 
-	if persistenceConfig.StandardVisibilityConfigExist() &&
+	if persistenceConfig.VisibilityConfigExist() &&
 		persistenceConfig.DataStores[persistenceConfig.VisibilityStore].Elasticsearch != nil {
 		esConfig = persistenceConfig.DataStores[persistenceConfig.VisibilityStore].Elasticsearch
 	} else if persistenceConfig.SecondaryVisibilityConfigExist() &&
@@ -270,6 +273,16 @@ func ServerOptionsProvider(opts []ServerOption) (serverOptionsProvider, error) {
 		}
 	}
 
+	// check that when static hosts are defined, they are defined for all required hosts
+	if len(so.hostsByService) > 0 {
+		for _, service := range DefaultServices {
+			hosts := so.hostsByService[primitives.ServiceName(service)]
+			if len(hosts.All) == 0 {
+				return serverOptionsProvider{}, fmt.Errorf("%w: %v", missingServiceInStaticHosts, service)
+			}
+		}
+	}
+
 	return serverOptionsProvider{
 		ServerOptions:              so,
 		StopChan:                   stopChan,
@@ -280,17 +293,18 @@ func ServerOptionsProvider(opts []ServerOption) (serverOptionsProvider, error) {
 		LogConfig:   so.config.Log,
 
 		ServiceNames:    so.serviceNames,
+		ServiceHosts:    so.hostsByService,
 		NamespaceLogger: so.namespaceLogger,
 
 		ServiceResolver:        so.persistenceServiceResolver,
 		CustomDataStoreFactory: so.customDataStoreFactory,
 		CustomVisibilityStore:  so.customVisibilityStoreFactory,
 
-		SearchAttributesMapper: so.searchAttributesMapper,
-		CustomInterceptors:     so.customInterceptors,
-		Authorizer:             so.authorizer,
-		ClaimMapper:            so.claimMapper,
-		AudienceGetter:         so.audienceGetter,
+		SearchAttributesMapper:     so.searchAttributesMapper,
+		CustomFrontendInterceptors: so.customFrontendInterceptors,
+		Authorizer:                 so.authorizer,
+		ClaimMapper:                so.claimMapper,
+		AudienceGetter:             so.audienceGetter,
 
 		Logger:                logger,
 		ClientFactoryProvider: clientFactoryProvider,
@@ -354,13 +368,14 @@ type (
 		PersistenceServiceResolver resolver.ServiceResolver
 		PersistenceFactoryProvider persistenceClient.FactoryProviderFn
 		SearchAttributesMapper     searchattribute.Mapper
-		CustomInterceptors         []grpc.UnaryServerInterceptor `group:"frontendInterceptors"`
+		CustomFrontendInterceptors []grpc.UnaryServerInterceptor
 		Authorizer                 authorization.Authorizer
 		ClaimMapper                authorization.ClaimMapper
 		DataStoreFactory           persistenceClient.AbstractDataStoreFactory
 		VisibilityStoreFactory     visibility.VisibilityStoreFactory
 		SpanExporters              []otelsdktrace.SpanExporter
-		InstanceID                 resource.InstanceID `optional:"true"`
+		InstanceID                 resource.InstanceID                     `optional:"true"`
+		StaticServiceHosts         map[primitives.ServiceName]static.Hosts `optional:"true"`
 		TaskCategoryRegistry       tasks.TaskCategoryRegistry
 	}
 )
@@ -373,6 +388,11 @@ type (
 // into fx providers here. Essentially, we want an `fx.In` object in the server graph, and an `fx.Out` object in the
 // service graphs. This is a workaround to achieve something similar.
 func (params ServiceProviderParamsCommon) GetCommonServiceOptions(serviceName primitives.ServiceName) fx.Option {
+	membershipModule := ringpop.MembershipModule
+	if len(params.StaticServiceHosts) > 0 {
+		membershipModule = static.MembershipModule(params.StaticServiceHosts)
+	}
+
 	return fx.Options(
 		fx.Supply(
 			serviceName,
@@ -433,6 +453,7 @@ func (params ServiceProviderParamsCommon) GetCommonServiceOptions(serviceName pr
 		),
 		ServiceTracingModule,
 		resource.DefaultOptions,
+		membershipModule,
 		FxLogAdapter,
 	)
 }
@@ -443,13 +464,17 @@ func (params ServiceProviderParamsCommon) GetCommonServiceOptions(serviceName pr
 // it, we also do validation on request task categories in the frontend service. As a result, we need to initialize the
 // registry in the server graph, and then propagate it to the service graphs. Otherwise, it would be isolated to the
 // history service's graph.
-func TaskCategoryRegistryProvider(archivalMetadata archiver.ArchivalMetadata) tasks.TaskCategoryRegistry {
+func TaskCategoryRegistryProvider(archivalMetadata archiver.ArchivalMetadata, dc *dynamicconfig.Collection) tasks.TaskCategoryRegistry {
 	registry := tasks.NewDefaultTaskCategoryRegistry()
-	if archivalMetadata.GetHistoryConfig().StaticClusterState() != archiver.ArchivalEnabled &&
-		archivalMetadata.GetVisibilityConfig().StaticClusterState() != archiver.ArchivalEnabled {
-		return registry
+	if archivalMetadata.GetHistoryConfig().StaticClusterState() == archiver.ArchivalEnabled ||
+		archivalMetadata.GetVisibilityConfig().StaticClusterState() == archiver.ArchivalEnabled {
+		registry.AddCategory(tasks.CategoryArchival)
 	}
-	registry.AddCategory(tasks.CategoryArchival)
+	// Can't use history service configs.Config because this provider is applied to all services (see docstring for this
+	// function for more info).
+	if dc.GetBoolProperty(dynamicconfig.OutboundProcessorEnabled, false)() {
+		registry.AddCategory(tasks.CategoryOutbound)
+	}
 	return registry
 }
 
@@ -474,8 +499,8 @@ func HistoryServiceProvider(
 	}
 
 	app := fx.New(
-		params.GetCommonServiceOptions(serviceName),
 		fx.Provide(workflow.NewTaskGeneratorProvider),
+		params.GetCommonServiceOptions(serviceName),
 		history.QueueModule,
 		history.Module,
 		replication.Module,
@@ -525,9 +550,7 @@ func genericFrontendServiceProvider(
 
 	app := fx.New(
 		params.GetCommonServiceOptions(serviceName),
-		fx.Provide(fx.Annotate(
-			func() []grpc.UnaryServerInterceptor { return params.CustomInterceptors },
-			fx.ParamTags(`group:"frontendInterceptors"`))),
+		fx.Supply(params.CustomFrontendInterceptors),
 		fx.Decorate(func() authorization.ClaimMapper {
 			switch serviceName {
 			case primitives.FrontendService:
@@ -671,64 +694,12 @@ func ApplyClusterMetadataConfigProvider(
 		return svc.ClusterMetadata, svc.Persistence, fmt.Errorf("error while fetching cluster metadata: %w", err)
 	}
 
-	err = loadClusterInformationFromStore(ctx, svc, clusterMetadataManager, logger)
+	clusterLoader := NewClusterMetadataLoader(clusterMetadataManager, logger)
+	err = clusterLoader.LoadAndMergeWithStaticConfig(ctx, svc)
 	if err != nil {
 		return svc.ClusterMetadata, svc.Persistence, fmt.Errorf("error while loading metadata from cluster: %w", err)
 	}
 	return svc.ClusterMetadata, svc.Persistence, nil
-}
-
-// TODO: move this to cluster.fx
-func loadClusterInformationFromStore(ctx context.Context, svc *config.Config, clusterMsg persistence.ClusterMetadataManager, logger log.Logger) error {
-	iter := collection.NewPagingIterator(func(paginationToken []byte) ([]interface{}, []byte, error) {
-		request := &persistence.ListClusterMetadataRequest{
-			PageSize:      100,
-			NextPageToken: nil,
-		}
-		resp, err := clusterMsg.ListClusterMetadata(ctx, request)
-		if err != nil {
-			return nil, nil, err
-		}
-		var pageItem []interface{}
-		for _, metadata := range resp.ClusterMetadata {
-			pageItem = append(pageItem, metadata)
-		}
-		return pageItem, resp.NextPageToken, nil
-	})
-
-	for iter.HasNext() {
-		item, err := iter.Next()
-		if err != nil {
-			return err
-		}
-		metadata := item.(*persistence.GetClusterMetadataResponse)
-		shardCount := metadata.HistoryShardCount
-		if shardCount == 0 {
-			// This is to add backward compatibility to the svc based cluster connection.
-			shardCount = svc.Persistence.NumHistoryShards
-		}
-		newMetadata := cluster.ClusterInformation{
-			Enabled:                metadata.IsConnectionEnabled,
-			InitialFailoverVersion: metadata.InitialFailoverVersion,
-			RPCAddress:             metadata.ClusterAddress,
-			ShardCount:             shardCount,
-			Tags:                   metadata.Tags,
-		}
-		if staticClusterMetadata, ok := svc.ClusterMetadata.ClusterInformation[metadata.ClusterName]; ok {
-			if metadata.ClusterName != svc.ClusterMetadata.CurrentClusterName {
-				logger.Warn(
-					"ClusterInformation in ClusterMetadata svc is deprecated. Please use TCTL tool to configure remote cluster connections",
-					tag.Key("clusterInformation"),
-					tag.IgnoredValue(staticClusterMetadata),
-					tag.Value(newMetadata))
-			} else {
-				newMetadata.RPCAddress = staticClusterMetadata.RPCAddress
-				logger.Info(fmt.Sprintf("Use rpc address %v for cluster %v.", newMetadata.RPCAddress, metadata.ClusterName))
-			}
-		}
-		svc.ClusterMetadata.ClusterInformation[metadata.ClusterName] = newMetadata
-	}
-	return nil
 }
 
 func initCurrentClusterMetadataRecord(
@@ -758,6 +729,7 @@ func initCurrentClusterMetadataRecord(
 				ClusterName:              currentClusterName,
 				ClusterId:                clusterId,
 				ClusterAddress:           currentClusterInfo.RPCAddress,
+				HttpAddress:              currentClusterInfo.HTTPAddress,
 				FailoverVersionIncrement: svc.ClusterMetadata.FailoverVersionIncrement,
 				InitialFailoverVersion:   currentClusterInfo.InitialFailoverVersion,
 				IsGlobalNamespaceEnabled: svc.ClusterMetadata.EnableGlobalNamespace,
@@ -798,6 +770,10 @@ func updateCurrentClusterMetadataRecord(
 	}
 	if currentClusterDBRecord.ClusterAddress != currentCLusterInfo.RPCAddress {
 		currentClusterDBRecord.ClusterAddress = currentCLusterInfo.RPCAddress
+		updateDBRecord = true
+	}
+	if currentClusterDBRecord.HttpAddress != currentCLusterInfo.HTTPAddress {
+		currentClusterDBRecord.HttpAddress = currentCLusterInfo.HTTPAddress
 		updateDBRecord = true
 	}
 	if !maps.Equal(currentClusterDBRecord.Tags, svc.ClusterMetadata.Tags) {
@@ -900,16 +876,26 @@ var TraceExportModule = fx.Options(
 	fx.Invoke(func(log log.Logger) {
 		otel.SetErrorHandler(otel.ErrorHandlerFunc(
 			func(err error) {
-				log.Warn("OTEL error", tag.Error(err), tag.ErrorType(err))
+				log.Warn("OTEL error", tag.Error(err), tag.ServiceErrorType(err))
 			}),
 		)
 	}),
 
 	fx.Provide(func(lc fx.Lifecycle, c *config.Config) ([]otelsdktrace.SpanExporter, error) {
-		exporters, err := c.ExporterConfig.SpanExporters()
+		exportersByType, err := c.ExporterConfig.SpanExporters()
 		if err != nil {
 			return nil, err
 		}
+
+		exportersByTypeFromEnv, err := telemetry.SpanExportersFromEnv(os.LookupEnv)
+		if err != nil {
+			return nil, err
+		}
+
+		// config-defined exporters override env-defined exporters with the same type
+		maps.Copy(exportersByType, exportersByTypeFromEnv)
+
+		exporters := maps.Values(exportersByType)
 		lc.Append(fx.Hook{
 			OnStart: startAll(exporters),
 			OnStop:  shutdownAll(exporters),
@@ -952,21 +938,14 @@ var ServiceTracingModule = fx.Options(
 	fx.Provide(
 		fx.Annotate(
 			func(rsn primitives.ServiceName, rsi resource.InstanceID) (*otelresource.Resource, error) {
-				// map "internal-frontend" to "frontend" for the purpose of tracing
-				if rsn == primitives.InternalFrontendService {
-					rsn = primitives.FrontendService
-				}
-				serviceName := string(rsn)
-				if !strings.HasPrefix(serviceName, "io.temporal.") {
-					serviceName = fmt.Sprintf("io.temporal.%s", serviceName)
-				}
 				attrs := []attribute.KeyValue{
-					semconv.ServiceNameKey.String(serviceName),
+					semconv.ServiceNameKey.String(telemetry.ResourceServiceName(rsn, os.LookupEnv)),
 					semconv.ServiceVersionKey.String(headers.ServerVersion),
 				}
 				if rsi != "" {
 					attrs = append(attrs, semconv.ServiceInstanceIDKey.String(string(rsi)))
 				}
+
 				return otelresource.New(context.Background(),
 					otelresource.WithProcess(),
 					otelresource.WithOS(),

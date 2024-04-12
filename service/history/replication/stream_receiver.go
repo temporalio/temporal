@@ -79,8 +79,13 @@ func NewStreamReceiver(
 	clientShardKey ClusterShardKey,
 	serverShardKey ClusterShardKey,
 ) *StreamReceiverImpl {
-	logger := log.With(processToolBox.Logger, tag.ShardID(clientShardKey.ShardID))
-	taskTracker := NewExecutableTaskTracker(logger)
+	logger := log.With(
+		processToolBox.Logger,
+		tag.SourceCluster(processToolBox.ClusterMetadata.ClusterNameForFailoverVersion(true, int64(serverShardKey.ClusterID))),
+		tag.SourceShardID(serverShardKey.ShardID),
+		tag.ShardID(clientShardKey.ShardID), // client is the local cluster (target cluster, passive cluster)
+	)
+	taskTracker := NewExecutableTaskTracker(logger, processToolBox.MetricsHandler)
 	return &StreamReceiverImpl{
 		ProcessToolBox: processToolBox,
 
@@ -147,7 +152,7 @@ func (r *StreamReceiverImpl) sendEventLoop() error {
 	var panicErr error
 	defer func() {
 		if panicErr != nil {
-			r.MetricsHandler.Counter(metrics.ReplicationStreamPanic.Name()).Record(1)
+			metrics.ReplicationStreamPanic.With(r.MetricsHandler).Record(1)
 		}
 	}()
 	defer log.CapturePanic(r.logger, &panicErr)
@@ -173,7 +178,7 @@ func (r *StreamReceiverImpl) recvEventLoop() error {
 	var panicErr error
 	defer func() {
 		if panicErr != nil {
-			r.MetricsHandler.Counter(metrics.ReplicationStreamPanic.Name()).Record(1)
+			metrics.ReplicationStreamPanic.With(r.MetricsHandler).Record(1)
 		}
 	}()
 	defer log.CapturePanic(r.logger, &panicErr)
@@ -202,12 +207,12 @@ func (r *StreamReceiverImpl) ackMessage(
 	}); err != nil {
 		return err
 	}
-	r.MetricsHandler.Histogram(metrics.ReplicationTasksRecvBacklog.Name(), metrics.ReplicationTasksRecvBacklog.Unit()).Record(
+	metrics.ReplicationTasksRecvBacklog.With(r.MetricsHandler).Record(
 		int64(size),
 		metrics.FromClusterIDTag(r.serverShardKey.ClusterID),
 		metrics.ToClusterIDTag(r.clientShardKey.ClusterID),
 	)
-	r.MetricsHandler.Counter(metrics.ReplicationTasksSend.Name()).Record(
+	metrics.ReplicationTasksSend.With(r.MetricsHandler).Record(
 		int64(1),
 		metrics.FromClusterIDTag(r.clientShardKey.ClusterID),
 		metrics.ToClusterIDTag(r.serverShardKey.ClusterID),

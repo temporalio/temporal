@@ -86,12 +86,7 @@ func (s *redirectionInterceptorSuite) SetupTest() {
 	s.clusterMetadata.EXPECT().GetCurrentClusterName().Return(cluster.TestCurrentClusterName).AnyTimes()
 
 	s.redirector = NewRedirectionInterceptor(
-		NewConfig(
-			dynamicconfig.NewNoopCollection(),
-			1,
-			true,
-			false,
-		),
+		NewConfig(dynamicconfig.NewNoopCollection(), 1),
 		s.namespaceCache,
 		config.DCRedirectionPolicy{
 			Policy: DCRedirectionPolicyAllAPIsForwarding,
@@ -144,6 +139,7 @@ func (s *redirectionInterceptorSuite) TestGlobalAPI() {
 		"CountWorkflowExecutions":            {},
 		"PollActivityTaskQueue":              {},
 		"PollWorkflowTaskQueue":              {},
+		"PollNexusTaskQueue":                 {},
 		"QueryWorkflow":                      {},
 		"RecordActivityTaskHeartbeat":        {},
 		"RecordActivityTaskHeartbeatById":    {},
@@ -159,6 +155,8 @@ func (s *redirectionInterceptorSuite) TestGlobalAPI() {
 		"RespondWorkflowTaskCompleted":       {},
 		"RespondWorkflowTaskFailed":          {},
 		"RespondQueryTaskCompleted":          {},
+		"RespondNexusTaskCompleted":          {},
+		"RespondNexusTaskFailed":             {},
 		"SignalWithStartWorkflowExecution":   {},
 		"SignalWorkflowExecution":            {},
 		"StartWorkflowExecution":             {},
