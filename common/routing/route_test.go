@@ -105,7 +105,7 @@ func ExampleConstant() {
 	// Output: api/v1/namespaces
 }
 
-func ExampleVariable() {
+func ExampleStringVariable() {
 	fmt.Println(routing.StringVariable("namespace", func(params *QualifiedWorkflow) *string { return &params.Namespace }).Representation())
 	// Output: {namespace}
 }

@@ -559,19 +559,6 @@ func (p *taskPersistenceClient) GetTasks(
 	return p.persistence.GetTasks(ctx, request)
 }
 
-func (p *taskPersistenceClient) CompleteTask(
-	ctx context.Context,
-	request *CompleteTaskRequest,
-) (retErr error) {
-	caller := headers.GetCallerInfo(ctx).CallerName
-	startTime := time.Now().UTC()
-	defer func() {
-		p.healthSignals.Record(CallerSegmentMissing, caller, time.Since(startTime), retErr)
-		p.recordRequestMetrics(metrics.PersistenceCompleteTaskScope, caller, time.Since(startTime), retErr)
-	}()
-	return p.persistence.CompleteTask(ctx, request)
-}
-
 func (p *taskPersistenceClient) CompleteTasksLessThan(
 	ctx context.Context,
 	request *CompleteTasksLessThanRequest,

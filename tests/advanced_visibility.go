@@ -94,6 +94,7 @@ func (s *AdvancedVisibilitySuite) SetupSuite() {
 		dynamicconfig.VisibilityDisableOrderByClause:             false,
 		dynamicconfig.FrontendEnableWorkerVersioningDataAPIs:     true,
 		dynamicconfig.FrontendEnableWorkerVersioningWorkflowAPIs: true,
+		dynamicconfig.FrontendEnableWorkerVersioningRuleAPIs:     true,
 		dynamicconfig.ReachabilityTaskQueueScanLimit:             2,
 		dynamicconfig.ReachabilityQueryBuildIdLimit:              1,
 		dynamicconfig.BuildIdScavengerEnabled:                    true,

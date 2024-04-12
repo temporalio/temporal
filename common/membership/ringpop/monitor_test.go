@@ -171,8 +171,10 @@ func (s *RpoSuite) TestScheduledUpdates() {
 	s.NoError(err)
 
 	start = time.Now()
-	testService.rings[1].EvictSelfAt(start.Add(2 * time.Second))
-	testService.rings[0].EvictSelfAt(start.Add(4 * time.Second))
+	_, err = testService.rings[1].EvictSelfAt(start.Add(2 * time.Second))
+	s.NoError(err)
+	_, err = testService.rings[0].EvictSelfAt(start.Add(4 * time.Second))
+	s.NoError(err)
 
 	waitAndCheckMembers([]string{testService.hostAddrs[0], testService.hostAddrs[2]})
 	s.Greater(time.Since(start), 1*time.Second)

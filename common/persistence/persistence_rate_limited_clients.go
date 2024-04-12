@@ -493,17 +493,6 @@ func (p *taskRateLimitedPersistenceClient) GetTasks(
 	return response, err
 }
 
-func (p *taskRateLimitedPersistenceClient) CompleteTask(
-	ctx context.Context,
-	request *CompleteTaskRequest,
-) error {
-	if err := allow(ctx, "CompleteTask", CallerSegmentMissing, p.systemRateLimiter, p.namespaceRateLimiter); err != nil {
-		return err
-	}
-
-	return p.persistence.CompleteTask(ctx, request)
-}
-
 func (p *taskRateLimitedPersistenceClient) CompleteTasksLessThan(
 	ctx context.Context,
 	request *CompleteTasksLessThanRequest,
