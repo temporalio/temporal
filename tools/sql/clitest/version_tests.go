@@ -31,11 +31,10 @@ import (
 	"github.com/stretchr/testify/suite"
 
 	"go.temporal.io/server/common/config"
-	"go.temporal.io/server/common/primitives"
-
 	"go.temporal.io/server/common/dynamicconfig"
 	persistencetests "go.temporal.io/server/common/persistence/persistence-tests"
 	persistencesql "go.temporal.io/server/common/persistence/sql"
+	"go.temporal.io/server/common/primitives"
 	"go.temporal.io/server/common/resolver"
 	"go.temporal.io/server/tools/sql"
 )

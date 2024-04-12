@@ -32,11 +32,10 @@ import (
 	"github.com/stretchr/testify/suite"
 
 	"go.temporal.io/server/common/config"
-	"go.temporal.io/server/common/log"
-	"go.temporal.io/server/common/primitives"
-
 	"go.temporal.io/server/common/dynamicconfig"
+	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/persistence/cassandra"
+	"go.temporal.io/server/common/primitives"
 	"go.temporal.io/server/common/resolver"
 	"go.temporal.io/server/environment"
 )
