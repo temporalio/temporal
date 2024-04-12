@@ -804,24 +804,16 @@ func TestReplaceRedirectRuleMaxChain(t *testing.T) {
 	clock := hlc.Zero(1)
 	data := mkInitialData(0, clock)
 
-	// insert (2->3)
-	// 2 ---> 3
-	data, err := insertRedirectRule(mkRedirectRule("2", "3"), data, clock, ignoreMaxRules, maxChain)
-	assert.NoError(t, err)
-
-	// insert (4->5)
-	// 2 ---> 3, 4 ---> 5
-	data, err = insertRedirectRule(mkRedirectRule("4", "5"), data, clock, ignoreMaxRules, maxChain)
-	assert.NoError(t, err)
-
-	// insert (5->6)
 	// 2 ---> 3, 4 ---> 5 ---> 6
-	data, err = insertRedirectRule(mkRedirectRule("5", "6"), data, clock, ignoreMaxRules, maxChain)
-	assert.NoError(t, err)
+	data.RedirectRules = []*persistencepb.RedirectRule{
+		mkRedirectRulePersistence(mkRedirectRule("2", "3"), clock, nil),
+		mkRedirectRulePersistence(mkRedirectRule("4", "5"), clock, nil),
+		mkRedirectRulePersistence(mkRedirectRule("5", "6"), clock, nil),
+	}
 
 	// replace(2, new_target=1)
 	// 2 ---> 1, 4 ---> 5 ---> 6
-	data, err = replaceRedirectRule(mkRedirectRule("2", "1"), data, clock, maxChain)
+	data, err := replaceRedirectRule(mkRedirectRule("2", "1"), data, clock, maxChain)
 	assert.NoError(t, err)
 
 	// replace(2, new_target=4)
