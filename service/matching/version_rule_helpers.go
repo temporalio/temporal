@@ -58,7 +58,7 @@ var (
 	errSourceNotFound = func(source string) error {
 		return serviceerror.NewNotFound(fmt.Sprintf("no redirect rule found with source ID %s", source))
 	}
-	errNoRecentPoller = func(target string) error {
+	errNoRecentPollerOnCommitVersion = func(target string) error {
 		return serviceerror.NewFailedPrecondition(fmt.Sprintf("no versioned poller with build ID '%s' seen within the last %s, use force=true to commit anyways", target, versioningPollerSeenWindow.String()))
 	}
 	errExceedsMaxAssignmentRules = func(cnt, max int) error {
@@ -276,7 +276,7 @@ func CommitBuildID(timestamp *hlc.Clock,
 	data = cloneOrMkData(data)
 	target := req.GetTargetBuildId()
 	if !hasRecentPoller && !req.GetForce() {
-		return nil, errNoRecentPoller(target)
+		return nil, errNoRecentPollerOnCommitVersion(target)
 	}
 	if isInVersionSets(target, data.GetVersionSets()) {
 		return nil, errTargetIsVersionSetMember

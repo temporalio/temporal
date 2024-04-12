@@ -1081,7 +1081,7 @@ func TestCommitBuildIDNoRecentPoller(t *testing.T) {
 	// without force --> fail
 	_, err = CommitBuildID(clock2, data, mkNewCommitBuildIdReq("10", false), false, ignoreMaxRules)
 	assert.Error(t, err)
-	assert.Equal(t, errNoRecentPoller("10"), err)
+	assert.Equal(t, errNoRecentPollerOnCommitVersion("10"), err)
 
 	// with force --> success
 	_, err = CommitBuildID(clock2, data, mkNewCommitBuildIdReq("10", true), false, ignoreMaxRules)
