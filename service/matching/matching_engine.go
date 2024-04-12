@@ -1415,10 +1415,19 @@ pollLoop:
 			TaskId:      task.nexus.taskID,
 		}
 		serializedToken, _ := e.tokenSerializer.SerializeNexusTaskToken(taskToken)
+
+		deadline := task.nexus.deadline
+		if pollDeadline, set := ctx.Deadline(); set && pollDeadline.Before(deadline) {
+			deadline = pollDeadline
+		}
+
+		nexusReq := task.nexus.request.GetRequest()
+		nexusReq.Header["Request-Timeout"] = time.Until(deadline).String()
+
 		return &matchingservice.PollNexusTaskQueueResponse{
 			Response: &workflowservice.PollNexusTaskQueueResponse{
 				TaskToken: serializedToken,
-				Request:   task.nexus.request.GetRequest(),
+				Request:   nexusReq,
 			},
 		}, nil
 	}
