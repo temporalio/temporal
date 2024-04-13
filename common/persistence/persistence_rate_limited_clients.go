@@ -768,7 +768,7 @@ func (p *executionRateLimitedPersistenceClient) ReadHistoryBranchByBatch(
 	return response, err
 }
 
-// ReadHistoryBranchByBatch returns history node data for a branch
+// ReadRawHistoryBranch returns history node data for a branch
 func (p *executionRateLimitedPersistenceClient) ReadRawHistoryBranch(
 	ctx context.Context,
 	request *ReadHistoryBranchRequest,

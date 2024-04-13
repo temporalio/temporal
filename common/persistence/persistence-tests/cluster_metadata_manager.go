@@ -82,7 +82,7 @@ func (s *ClusterMetadataManagerSuite) TestClusterMembershipEmptyInitially() {
 	s.Empty(resp.ActiveMembers)
 }
 
-// TestClusterMembershipUpsertCanRead verifies that we can UpsertClusterMembership and read our result
+// TestClusterMembershipUpsertCanReadAny verifies that we can UpsertClusterMembership and read our result
 func (s *ClusterMetadataManagerSuite) TestClusterMembershipUpsertCanReadAny() {
 	req := &p.UpsertClusterMembershipRequest{
 		HostID:       []byte{0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1},
@@ -103,7 +103,7 @@ func (s *ClusterMetadataManagerSuite) TestClusterMembershipUpsertCanReadAny() {
 	s.NotEmpty(resp.ActiveMembers)
 }
 
-// TestClusterMembershipUpsertCanRead verifies that we can UpsertClusterMembership and read our result
+// TestClusterMembershipUpsertCanPageRead verifies that we can UpsertClusterMembership and read our result
 func (s *ClusterMetadataManagerSuite) TestClusterMembershipUpsertCanPageRead() {
 	// Expire previous records
 	// Todo: MetaMgr should provide api to clear all members
