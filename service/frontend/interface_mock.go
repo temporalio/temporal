@@ -210,6 +210,21 @@ func (mr *MockHandlerMockRecorder) DescribeWorkflowExecution(arg0, arg1 interfac
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DescribeWorkflowExecution", reflect.TypeOf((*MockHandler)(nil).DescribeWorkflowExecution), arg0, arg1)
 }
 
+// ExecuteMultiOperation mocks base method.
+func (m *MockHandler) ExecuteMultiOperation(arg0 context.Context, arg1 *v10.ExecuteMultiOperationRequest) (*v10.ExecuteMultiOperationResponse, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "ExecuteMultiOperation", arg0, arg1)
+	ret0, _ := ret[0].(*v10.ExecuteMultiOperationResponse)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// ExecuteMultiOperation indicates an expected call of ExecuteMultiOperation.
+func (mr *MockHandlerMockRecorder) ExecuteMultiOperation(arg0, arg1 interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ExecuteMultiOperation", reflect.TypeOf((*MockHandler)(nil).ExecuteMultiOperation), arg0, arg1)
+}
+
 // GetClusterInfo mocks base method.
 func (m *MockHandler) GetClusterInfo(arg0 context.Context, arg1 *v10.GetClusterInfoRequest) (*v10.GetClusterInfoResponse, error) {
 	m.ctrl.T.Helper()

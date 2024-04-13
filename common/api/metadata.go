@@ -112,6 +112,7 @@ var (
 		"GetSearchAttributes":                {Scope: ScopeCluster, Access: AccessReadOnly},
 		"RespondQueryTaskCompleted":          {Scope: ScopeNamespace, Access: AccessWrite},
 		"ResetStickyTaskQueue":               {Scope: ScopeNamespace, Access: AccessWrite},
+		"ExecuteMultiOperation":              {Scope: ScopeNamespace, Access: AccessWrite},
 		"QueryWorkflow":                      {Scope: ScopeNamespace, Access: AccessReadOnly},
 		"DescribeWorkflowExecution":          {Scope: ScopeNamespace, Access: AccessReadOnly},
 		"DescribeTaskQueue":                  {Scope: ScopeNamespace, Access: AccessReadOnly},
