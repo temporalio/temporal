@@ -28,6 +28,7 @@ import (
 	"fmt"
 	"net"
 	"net/http"
+	"net/url"
 	"testing"
 	"time"
 
@@ -39,7 +40,9 @@ import (
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	workflowpb "go.temporal.io/api/workflow/v1"
 	"go.temporal.io/api/workflowservice/v1"
+	"go.temporal.io/sdk/activity"
 	"go.temporal.io/sdk/client"
+	"go.temporal.io/sdk/temporal"
 	"go.temporal.io/sdk/worker"
 	"go.temporal.io/sdk/workflow"
 	"go.temporal.io/server/common/dynamicconfig"
@@ -254,5 +257,124 @@ func (s *FunctionalSuite) TestWorkflowNexusCallbacks_CarriedOverContinueAsNew() 
 			s.Equal(enumspb.CALLBACK_STATE_SUCCEEDED, callbackInfo.State)
 			s.Nil(callbackInfo.LastAttemptFailure)
 		}
+	}
+}
+
+func (s *FunctionalSuite) TestWorkflowCallbacks_ForceActivityComplete() {
+	dc := s.testCluster.host.dcClient
+	dc.OverrideValue(s.T(), dynamicconfig.FrontendEnableCallbackAttachment, true)
+	defer dc.RemoveOverride(dynamicconfig.FrontendEnableCallbackAttachment)
+
+	sdkClient, err := client.Dial(client.Options{
+		HostPort:  s.testCluster.GetHost().FrontendGRPCAddress(),
+		Namespace: s.namespace,
+	})
+	s.NoError(err)
+
+	pp := temporalite.NewPortProvider()
+	callbackAddress := fmt.Sprintf("localhost:%d", pp.MustGetFreePort())
+	s.NoError(pp.Close())
+
+	ach := &serveHTTPHandler{
+		sdkClient:         sdkClient,
+		requestCompleteCh: make(chan error, 1),
+		activityErr:       make(chan error, 1),
+	}
+
+	mockErrorActivity := func(ctx context.Context) error {
+		ai := activity.GetInfo(ctx)
+		formData := url.Values{}
+		formData.Add("name_space", ai.WorkflowNamespace)
+		formData.Add("workflow_id", ai.WorkflowExecution.ID)
+		formData.Add("run_id", ai.WorkflowExecution.RunID)
+		formData.Add("activity_id", ai.ActivityID)
+
+		httpUrl := fmt.Sprintf("http://%s", callbackAddress)
+		_, err := http.PostForm(httpUrl, formData)
+		if err != nil {
+			panic(err)
+		}
+		err = errors.New("mock error")
+		ach.activityErr <- err
+		return err
+	}
+
+	wf := func(ctx workflow.Context) error {
+		ao := workflow.ActivityOptions{
+			StartToCloseTimeout: 3 * time.Minute,
+			RetryPolicy: &temporal.RetryPolicy{
+				InitialInterval: 2 * time.Minute,
+			},
+		}
+		ctx2 := workflow.WithActivityOptions(ctx, ao)
+		var err error
+		workflow.ExecuteActivity(ctx2, mockErrorActivity).Get(ctx2, &err)
+		return err
+	}
+
+	taskQueue := s.randomizeStr(s.T().Name())
+	workflowType := "test"
+	s.NoError(err)
+
+	shutdownServer := s.runCompletionHTTPServer(ach, callbackAddress)
+	defer func() {
+		err := shutdownServer()
+		if err != nil {
+			panic(err)
+		}
+	}()
+
+	w := worker.New(sdkClient, taskQueue, worker.Options{})
+	w.RegisterWorkflowWithOptions(wf, workflow.RegisterOptions{Name: workflowType})
+	w.RegisterActivity(mockErrorActivity)
+	s.NoError(w.Start())
+	defer w.Stop()
+
+	ctx := NewContext()
+	workflowOptions := client.StartWorkflowOptions{
+		ID:        uuid.New(),
+		TaskQueue: taskQueue,
+	}
+	_, err = sdkClient.ExecuteWorkflow(ctx, workflowOptions, wf)
+	s.NoError(err)
+	// mock activity will return an error and be rescheduled
+	err = <-ach.activityErr
+	s.Equal("mock error", err.Error())
+	// Async call to complete activity by id will not raise an error
+	err = <-ach.requestCompleteCh
+	s.NoError(err)
+}
+
+type serveHTTPHandler struct {
+	sdkClient         client.Client
+	requestCompleteCh chan error
+	activityErr       chan error
+}
+
+func (a *serveHTTPHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	nameSpace := r.PostFormValue("name_space")
+	workflowId := r.PostFormValue("workflow_id")
+	runId := r.PostFormValue("run_id")
+	activityId := r.PostFormValue("activity_id")
+
+	err := a.sdkClient.CompleteActivityByID(context.Background(), nameSpace, workflowId, runId, activityId, nil, nil)
+	a.requestCompleteCh <- err
+	if err != nil {
+		panic(err)
+	}
+}
+
+func (s *FunctionalSuite) runCompletionHTTPServer(h *serveHTTPHandler, listenAddr string) func() error {
+	srv := &http.Server{Addr: listenAddr, Handler: h}
+	listener, _ := net.Listen("tcp", listenAddr)
+	errCh := make(chan error, 1)
+	go func() {
+		errCh <- srv.Serve(listener)
+	}()
+
+	return func() error {
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
+		defer cancel()
+		return srv.Shutdown(ctx)
 	}
 }
