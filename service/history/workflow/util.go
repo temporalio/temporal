@@ -50,6 +50,7 @@ func failWorkflowTask(
 		workflowTaskFailureCause,
 		nil,
 		consts.IdentityHistoryService,
+		nil,
 		"",
 		"",
 		"",

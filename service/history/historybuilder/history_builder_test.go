@@ -661,6 +661,7 @@ func (s *historyBuilderSuite) TestWorkflowTaskStarted() {
 		s.now,
 		false,
 		123678,
+		nil,
 	)
 	s.Equal(event, s.flush())
 	s.Equal(&historypb.HistoryEvent{
@@ -839,12 +840,14 @@ func (s *historyBuilderSuite) TestActivityTaskScheduled() {
 func (s *historyBuilderSuite) TestActivityTaskStarted() {
 	scheduledEventID := rand.Int63()
 	attempt := rand.Int31()
+	stamp := &commonpb.WorkerVersionStamp{BuildId: "bld", UseVersioning: false}
 	event := s.historyBuilder.AddActivityTaskStartedEvent(
 		scheduledEventID,
 		attempt,
 		testRequestID,
 		testIdentity,
 		testFailure,
+		stamp,
 	)
 	s.Equal(event, s.flush())
 	s.Equal(&historypb.HistoryEvent{
@@ -860,6 +863,7 @@ func (s *historyBuilderSuite) TestActivityTaskStarted() {
 				Identity:         testIdentity,
 				RequestId:        testRequestID,
 				LastFailure:      testFailure,
+				WorkerVersion:    stamp,
 			},
 		},
 	}, event)

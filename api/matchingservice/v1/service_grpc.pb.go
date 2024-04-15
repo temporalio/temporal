@@ -54,10 +54,13 @@ const (
 	MatchingService_RespondNexusTaskFailed_FullMethodName                 = "/temporal.server.api.matchingservice.v1.MatchingService/RespondNexusTaskFailed"
 	MatchingService_CancelOutstandingPoll_FullMethodName                  = "/temporal.server.api.matchingservice.v1.MatchingService/CancelOutstandingPoll"
 	MatchingService_DescribeTaskQueue_FullMethodName                      = "/temporal.server.api.matchingservice.v1.MatchingService/DescribeTaskQueue"
+	MatchingService_DescribeTaskQueuePartition_FullMethodName             = "/temporal.server.api.matchingservice.v1.MatchingService/DescribeTaskQueuePartition"
 	MatchingService_ListTaskQueuePartitions_FullMethodName                = "/temporal.server.api.matchingservice.v1.MatchingService/ListTaskQueuePartitions"
 	MatchingService_UpdateWorkerBuildIdCompatibility_FullMethodName       = "/temporal.server.api.matchingservice.v1.MatchingService/UpdateWorkerBuildIdCompatibility"
 	MatchingService_GetWorkerBuildIdCompatibility_FullMethodName          = "/temporal.server.api.matchingservice.v1.MatchingService/GetWorkerBuildIdCompatibility"
 	MatchingService_GetTaskQueueUserData_FullMethodName                   = "/temporal.server.api.matchingservice.v1.MatchingService/GetTaskQueueUserData"
+	MatchingService_UpdateWorkerVersioningRules_FullMethodName            = "/temporal.server.api.matchingservice.v1.MatchingService/UpdateWorkerVersioningRules"
+	MatchingService_GetWorkerVersioningRules_FullMethodName               = "/temporal.server.api.matchingservice.v1.MatchingService/GetWorkerVersioningRules"
 	MatchingService_ApplyTaskQueueUserDataReplicationEvent_FullMethodName = "/temporal.server.api.matchingservice.v1.MatchingService/ApplyTaskQueueUserDataReplicationEvent"
 	MatchingService_GetBuildIdTaskQueueMapping_FullMethodName             = "/temporal.server.api.matchingservice.v1.MatchingService/GetBuildIdTaskQueueMapping"
 	MatchingService_ForceUnloadTaskQueue_FullMethodName                   = "/temporal.server.api.matchingservice.v1.MatchingService/ForceUnloadTaskQueue"
@@ -108,6 +111,8 @@ type MatchingServiceClient interface {
 	// DescribeTaskQueue returns information about the target task queue, right now this API returns the
 	// pollers which polled this task queue in last few minutes.
 	DescribeTaskQueue(ctx context.Context, in *DescribeTaskQueueRequest, opts ...grpc.CallOption) (*DescribeTaskQueueResponse, error)
+	// DescribeTaskQueuePartition returns information about the target task queue partition.
+	DescribeTaskQueuePartition(ctx context.Context, in *DescribeTaskQueuePartitionRequest, opts ...grpc.CallOption) (*DescribeTaskQueuePartitionResponse, error)
 	// ListTaskQueuePartitions returns a map of partitionKey and hostAddress for a task queue.
 	ListTaskQueuePartitions(ctx context.Context, in *ListTaskQueuePartitionsRequest, opts ...grpc.CallOption) (*ListTaskQueuePartitionsResponse, error)
 	// (-- api-linter: core::0134::response-message-name=disabled
@@ -121,6 +126,24 @@ type MatchingServiceClient interface {
 	GetWorkerBuildIdCompatibility(ctx context.Context, in *GetWorkerBuildIdCompatibilityRequest, opts ...grpc.CallOption) (*GetWorkerBuildIdCompatibilityResponse, error)
 	// Fetch user data for a task queue, this request should always be routed to the node holding the root partition of the workflow task queue.
 	GetTaskQueueUserData(ctx context.Context, in *GetTaskQueueUserDataRequest, opts ...grpc.CallOption) (*GetTaskQueueUserDataResponse, error)
+	// Allows updating the Build ID assignment and redirect rules for a given Task Queue.
+	// (-- api-linter: core::0134::method-signature=disabled
+	//
+	//	aip.dev/not-precedent: UpdateWorkerVersioningRulesRequest RPC doesn't follow Google API format. --)
+	//
+	// (-- api-linter: core::0134::response-message-name=disabled
+	//
+	//	aip.dev/not-precedent: UpdateWorkerVersioningRulesRequest RPC doesn't follow Google API format. --)
+	UpdateWorkerVersioningRules(ctx context.Context, in *UpdateWorkerVersioningRulesRequest, opts ...grpc.CallOption) (*UpdateWorkerVersioningRulesResponse, error)
+	// Fetches the Build ID assignment and redirect rules for a Task Queue
+	// (-- api-linter: core::0127::resource-name-extraction=disabled
+	//
+	//	aip.dev/not-precedent: GetWorkerVersioningRulesRequest RPC doesn't follow Google API format. --)
+	//
+	// (-- api-linter: core::0131::http-uri-name=disabled
+	//
+	//	aip.dev/not-precedent: GetWorkerVersioningRulesRequest RPC doesn't follow Google API format. --)
+	GetWorkerVersioningRules(ctx context.Context, in *GetWorkerVersioningRulesRequest, opts ...grpc.CallOption) (*GetWorkerVersioningRulesResponse, error)
 	// Apply a user data replication event.
 	ApplyTaskQueueUserDataReplicationEvent(ctx context.Context, in *ApplyTaskQueueUserDataReplicationEventRequest, opts ...grpc.CallOption) (*ApplyTaskQueueUserDataReplicationEventResponse, error)
 	// Gets all task queue names mapped to a given build ID
@@ -290,6 +313,15 @@ func (c *matchingServiceClient) DescribeTaskQueue(ctx context.Context, in *Descr
 	return out, nil
 }
 
+func (c *matchingServiceClient) DescribeTaskQueuePartition(ctx context.Context, in *DescribeTaskQueuePartitionRequest, opts ...grpc.CallOption) (*DescribeTaskQueuePartitionResponse, error) {
+	out := new(DescribeTaskQueuePartitionResponse)
+	err := c.cc.Invoke(ctx, MatchingService_DescribeTaskQueuePartition_FullMethodName, in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 func (c *matchingServiceClient) ListTaskQueuePartitions(ctx context.Context, in *ListTaskQueuePartitionsRequest, opts ...grpc.CallOption) (*ListTaskQueuePartitionsResponse, error) {
 	out := new(ListTaskQueuePartitionsResponse)
 	err := c.cc.Invoke(ctx, MatchingService_ListTaskQueuePartitions_FullMethodName, in, out, opts...)
@@ -320,6 +352,24 @@ func (c *matchingServiceClient) GetWorkerBuildIdCompatibility(ctx context.Contex
 func (c *matchingServiceClient) GetTaskQueueUserData(ctx context.Context, in *GetTaskQueueUserDataRequest, opts ...grpc.CallOption) (*GetTaskQueueUserDataResponse, error) {
 	out := new(GetTaskQueueUserDataResponse)
 	err := c.cc.Invoke(ctx, MatchingService_GetTaskQueueUserData_FullMethodName, in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *matchingServiceClient) UpdateWorkerVersioningRules(ctx context.Context, in *UpdateWorkerVersioningRulesRequest, opts ...grpc.CallOption) (*UpdateWorkerVersioningRulesResponse, error) {
+	out := new(UpdateWorkerVersioningRulesResponse)
+	err := c.cc.Invoke(ctx, MatchingService_UpdateWorkerVersioningRules_FullMethodName, in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *matchingServiceClient) GetWorkerVersioningRules(ctx context.Context, in *GetWorkerVersioningRulesRequest, opts ...grpc.CallOption) (*GetWorkerVersioningRulesResponse, error) {
+	out := new(GetWorkerVersioningRulesResponse)
+	err := c.cc.Invoke(ctx, MatchingService_GetWorkerVersioningRules_FullMethodName, in, out, opts...)
 	if err != nil {
 		return nil, err
 	}
@@ -446,6 +496,8 @@ type MatchingServiceServer interface {
 	// DescribeTaskQueue returns information about the target task queue, right now this API returns the
 	// pollers which polled this task queue in last few minutes.
 	DescribeTaskQueue(context.Context, *DescribeTaskQueueRequest) (*DescribeTaskQueueResponse, error)
+	// DescribeTaskQueuePartition returns information about the target task queue partition.
+	DescribeTaskQueuePartition(context.Context, *DescribeTaskQueuePartitionRequest) (*DescribeTaskQueuePartitionResponse, error)
 	// ListTaskQueuePartitions returns a map of partitionKey and hostAddress for a task queue.
 	ListTaskQueuePartitions(context.Context, *ListTaskQueuePartitionsRequest) (*ListTaskQueuePartitionsResponse, error)
 	// (-- api-linter: core::0134::response-message-name=disabled
@@ -459,6 +511,24 @@ type MatchingServiceServer interface {
 	GetWorkerBuildIdCompatibility(context.Context, *GetWorkerBuildIdCompatibilityRequest) (*GetWorkerBuildIdCompatibilityResponse, error)
 	// Fetch user data for a task queue, this request should always be routed to the node holding the root partition of the workflow task queue.
 	GetTaskQueueUserData(context.Context, *GetTaskQueueUserDataRequest) (*GetTaskQueueUserDataResponse, error)
+	// Allows updating the Build ID assignment and redirect rules for a given Task Queue.
+	// (-- api-linter: core::0134::method-signature=disabled
+	//
+	//	aip.dev/not-precedent: UpdateWorkerVersioningRulesRequest RPC doesn't follow Google API format. --)
+	//
+	// (-- api-linter: core::0134::response-message-name=disabled
+	//
+	//	aip.dev/not-precedent: UpdateWorkerVersioningRulesRequest RPC doesn't follow Google API format. --)
+	UpdateWorkerVersioningRules(context.Context, *UpdateWorkerVersioningRulesRequest) (*UpdateWorkerVersioningRulesResponse, error)
+	// Fetches the Build ID assignment and redirect rules for a Task Queue
+	// (-- api-linter: core::0127::resource-name-extraction=disabled
+	//
+	//	aip.dev/not-precedent: GetWorkerVersioningRulesRequest RPC doesn't follow Google API format. --)
+	//
+	// (-- api-linter: core::0131::http-uri-name=disabled
+	//
+	//	aip.dev/not-precedent: GetWorkerVersioningRulesRequest RPC doesn't follow Google API format. --)
+	GetWorkerVersioningRules(context.Context, *GetWorkerVersioningRulesRequest) (*GetWorkerVersioningRulesResponse, error)
 	// Apply a user data replication event.
 	ApplyTaskQueueUserDataReplicationEvent(context.Context, *ApplyTaskQueueUserDataReplicationEventRequest) (*ApplyTaskQueueUserDataReplicationEventResponse, error)
 	// Gets all task queue names mapped to a given build ID
@@ -553,6 +623,9 @@ func (UnimplementedMatchingServiceServer) CancelOutstandingPoll(context.Context,
 func (UnimplementedMatchingServiceServer) DescribeTaskQueue(context.Context, *DescribeTaskQueueRequest) (*DescribeTaskQueueResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method DescribeTaskQueue not implemented")
 }
+func (UnimplementedMatchingServiceServer) DescribeTaskQueuePartition(context.Context, *DescribeTaskQueuePartitionRequest) (*DescribeTaskQueuePartitionResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method DescribeTaskQueuePartition not implemented")
+}
 func (UnimplementedMatchingServiceServer) ListTaskQueuePartitions(context.Context, *ListTaskQueuePartitionsRequest) (*ListTaskQueuePartitionsResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method ListTaskQueuePartitions not implemented")
 }
@@ -564,6 +637,12 @@ func (UnimplementedMatchingServiceServer) GetWorkerBuildIdCompatibility(context.
 }
 func (UnimplementedMatchingServiceServer) GetTaskQueueUserData(context.Context, *GetTaskQueueUserDataRequest) (*GetTaskQueueUserDataResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method GetTaskQueueUserData not implemented")
+}
+func (UnimplementedMatchingServiceServer) UpdateWorkerVersioningRules(context.Context, *UpdateWorkerVersioningRulesRequest) (*UpdateWorkerVersioningRulesResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method UpdateWorkerVersioningRules not implemented")
+}
+func (UnimplementedMatchingServiceServer) GetWorkerVersioningRules(context.Context, *GetWorkerVersioningRulesRequest) (*GetWorkerVersioningRulesResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method GetWorkerVersioningRules not implemented")
 }
 func (UnimplementedMatchingServiceServer) ApplyTaskQueueUserDataReplicationEvent(context.Context, *ApplyTaskQueueUserDataReplicationEventRequest) (*ApplyTaskQueueUserDataReplicationEventResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method ApplyTaskQueueUserDataReplicationEvent not implemented")
@@ -821,6 +900,24 @@ func _MatchingService_DescribeTaskQueue_Handler(srv interface{}, ctx context.Con
 	return interceptor(ctx, in, info, handler)
 }
 
+func _MatchingService_DescribeTaskQueuePartition_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(DescribeTaskQueuePartitionRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(MatchingServiceServer).DescribeTaskQueuePartition(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: MatchingService_DescribeTaskQueuePartition_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(MatchingServiceServer).DescribeTaskQueuePartition(ctx, req.(*DescribeTaskQueuePartitionRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 func _MatchingService_ListTaskQueuePartitions_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
 	in := new(ListTaskQueuePartitionsRequest)
 	if err := dec(in); err != nil {
@@ -889,6 +986,42 @@ func _MatchingService_GetTaskQueueUserData_Handler(srv interface{}, ctx context.
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
 		return srv.(MatchingServiceServer).GetTaskQueueUserData(ctx, req.(*GetTaskQueueUserDataRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _MatchingService_UpdateWorkerVersioningRules_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(UpdateWorkerVersioningRulesRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(MatchingServiceServer).UpdateWorkerVersioningRules(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: MatchingService_UpdateWorkerVersioningRules_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(MatchingServiceServer).UpdateWorkerVersioningRules(ctx, req.(*UpdateWorkerVersioningRulesRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _MatchingService_GetWorkerVersioningRules_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(GetWorkerVersioningRulesRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(MatchingServiceServer).GetWorkerVersioningRules(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: MatchingService_GetWorkerVersioningRules_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(MatchingServiceServer).GetWorkerVersioningRules(ctx, req.(*GetWorkerVersioningRulesRequest))
 	}
 	return interceptor(ctx, in, info, handler)
 }
@@ -1111,6 +1244,10 @@ var MatchingService_ServiceDesc = grpc.ServiceDesc{
 			Handler:    _MatchingService_DescribeTaskQueue_Handler,
 		},
 		{
+			MethodName: "DescribeTaskQueuePartition",
+			Handler:    _MatchingService_DescribeTaskQueuePartition_Handler,
+		},
+		{
 			MethodName: "ListTaskQueuePartitions",
 			Handler:    _MatchingService_ListTaskQueuePartitions_Handler,
 		},
@@ -1125,6 +1262,14 @@ var MatchingService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "GetTaskQueueUserData",
 			Handler:    _MatchingService_GetTaskQueueUserData_Handler,
+		},
+		{
+			MethodName: "UpdateWorkerVersioningRules",
+			Handler:    _MatchingService_UpdateWorkerVersioningRules_Handler,
+		},
+		{
+			MethodName: "GetWorkerVersioningRules",
+			Handler:    _MatchingService_GetWorkerVersioningRules_Handler,
 		},
 		{
 			MethodName: "ApplyTaskQueueUserDataReplicationEvent",

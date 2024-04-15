@@ -2408,7 +2408,7 @@ func (s *transferQueueActiveTaskExecutorSuite) createAddActivityTaskRequest(
 		ScheduledEventId:       task.ScheduledEventID,
 		ScheduleToStartTimeout: ai.ScheduleToStartTimeout,
 		Clock:                  vclock.NewVectorClock(s.mockClusterMetadata.GetClusterID(), s.mockShard.GetShardID(), task.TaskID),
-		VersionDirective:       worker_versioning.MakeDirectiveForActivityTask(nil, false),
+		VersionDirective:       worker_versioning.MakeUseAssignmentRulesDirective(),
 	}
 }
 
@@ -2561,10 +2561,7 @@ func (s *transferQueueActiveTaskExecutorSuite) createAddWorkflowTaskRequest(
 		timeout = executionInfo.StickyScheduleToStartTimeout
 	}
 
-	directive := worker_versioning.MakeDirectiveForWorkflowTask(
-		mutableState.GetWorkerVersionStamp(),
-		mutableState.GetLastWorkflowTaskStartedEventID(),
-	)
+	directive := MakeDirectiveForWorkflowTask(mutableState)
 
 	return protomock.Eq(&matchingservice.AddWorkflowTaskRequest{
 		NamespaceId: task.NamespaceID,

@@ -88,6 +88,8 @@ type (
 		SearchAttributes     *commonpb.SearchAttributes
 		ParentWorkflowID     string
 		ParentRunID          string
+		RootWorkflowID       string
+		RootRunID            string
 	}
 
 	// InternalListWorkflowExecutionsResponse is response from ListWorkflowExecutions
@@ -119,6 +121,8 @@ type (
 		SearchAttributes *commonpb.SearchAttributes
 		ParentWorkflowID *string
 		ParentRunID      *string
+		RootWorkflowID   string
+		RootRunID        string
 	}
 
 	// InternalRecordWorkflowExecutionStartedRequest request to RecordWorkflowExecutionStarted

@@ -87,6 +87,7 @@ var (
 		"/temporal.server.api.historyservice.v1.HistoryService/DeleteWorkflowVisibilityRecord":         1,
 		"/temporal.server.api.historyservice.v1.HistoryService/UpdateWorkflowExecution":                1,
 		"/temporal.server.api.historyservice.v1.HistoryService/PollWorkflowExecutionUpdate":            1,
+		"/temporal.server.api.historyservice.v1.HistoryService/ExecuteMultiOperation":                  1,
 		"/temporal.server.api.historyservice.v1.HistoryService/StreamWorkflowReplicationMessages":      1,
 		"/temporal.server.api.historyservice.v1.HistoryService/GetWorkflowExecutionHistory":            1,
 		"/temporal.server.api.historyservice.v1.HistoryService/GetWorkflowExecutionHistoryReverse":     1,

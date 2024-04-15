@@ -180,8 +180,6 @@ type Config struct {
 	MaxConcurrentBatchOperation     dynamicconfig.IntPropertyFnWithNamespaceFilter
 	MaxExecutionCountBatchOperation dynamicconfig.IntPropertyFnWithNamespaceFilter
 
-	EnableWorkflowIdConflictPolicy dynamicconfig.BoolPropertyFnWithNamespaceFilter
-
 	EnableUpdateWorkflowExecution              dynamicconfig.BoolPropertyFnWithNamespaceFilter
 	EnableUpdateWorkflowExecutionAsyncAccepted dynamicconfig.BoolPropertyFnWithNamespaceFilter
 
@@ -189,6 +187,7 @@ type Config struct {
 
 	EnableWorkerVersioningData     dynamicconfig.BoolPropertyFnWithNamespaceFilter
 	EnableWorkerVersioningWorkflow dynamicconfig.BoolPropertyFnWithNamespaceFilter
+	EnableWorkerVersioningRules    dynamicconfig.BoolPropertyFnWithNamespaceFilter
 
 	// AccessHistoryFraction are interim flags across 2 minor releases and will be removed once fully enabled.
 	AccessHistoryFraction            dynamicconfig.FloatPropertyFn
@@ -292,8 +291,6 @@ func NewConfig(
 		MaxConcurrentBatchOperation:     dc.GetIntPropertyFilteredByNamespace(dynamicconfig.FrontendMaxConcurrentBatchOperationPerNamespace, 1),
 		MaxExecutionCountBatchOperation: dc.GetIntPropertyFilteredByNamespace(dynamicconfig.FrontendMaxExecutionCountBatchOperationPerNamespace, 1000),
 
-		EnableWorkflowIdConflictPolicy: dc.GetBoolPropertyFnWithNamespaceFilter(dynamicconfig.EnableWorkflowIdConflictPolicy, false),
-
 		EnableExecuteMultiOperation: dc.GetBoolPropertyFnWithNamespaceFilter(dynamicconfig.FrontendEnableExecuteMultiOperation, false),
 
 		EnableUpdateWorkflowExecution:              dc.GetBoolPropertyFnWithNamespaceFilter(dynamicconfig.FrontendEnableUpdateWorkflowExecution, false),
@@ -301,6 +298,7 @@ func NewConfig(
 
 		EnableWorkerVersioningData:     dc.GetBoolPropertyFnWithNamespaceFilter(dynamicconfig.FrontendEnableWorkerVersioningDataAPIs, false),
 		EnableWorkerVersioningWorkflow: dc.GetBoolPropertyFnWithNamespaceFilter(dynamicconfig.FrontendEnableWorkerVersioningWorkflowAPIs, false),
+		EnableWorkerVersioningRules:    dc.GetBoolPropertyFnWithNamespaceFilter(dynamicconfig.FrontendEnableWorkerVersioningRuleAPIs, false),
 
 		AccessHistoryFraction:            dc.GetFloat64Property(dynamicconfig.FrontendAccessHistoryFraction, 0.0),
 		AdminDeleteAccessHistoryFraction: dc.GetFloat64Property(dynamicconfig.FrontendAdminDeleteAccessHistoryFraction, 0.0),

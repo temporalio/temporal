@@ -28,6 +28,7 @@ import (
 	"context"
 
 	enumspb "go.temporal.io/api/enums/v1"
+	"go.temporal.io/server/common/worker_versioning"
 
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/common"
@@ -114,6 +115,7 @@ func Invoke(
 
 			if _, err := mutableState.AddActivityTaskStartedEvent(
 				ai, scheduledEventID, requestID, request.PollRequest.GetIdentity(),
+				worker_versioning.StampFromCapabilities(request.PollRequest.WorkerVersionCapabilities),
 			); err != nil {
 				return nil, err
 			}

@@ -63,7 +63,7 @@ import (
 	"go.temporal.io/server/common/persistence/versionhistory"
 	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/common/searchattribute"
-	"go.temporal.io/server/common/tqname"
+	"go.temporal.io/server/common/tqid"
 	"go.temporal.io/server/common/worker_versioning"
 	"go.temporal.io/server/service/history/configs"
 	"go.temporal.io/server/service/history/events"
@@ -231,7 +231,11 @@ func (s *mutableStateSuite) TestTransientWorkflowTaskCompletionFirstBatchApplied
 		enumspb.WORKFLOW_TASK_FAILED_CAUSE_WORKFLOW_WORKER_UNHANDLED_FAILURE,
 		failure.NewServerFailure("some random workflow task failure details", false),
 		"some random workflow task failure identity",
-		"", "", "", 0,
+		nil,
+		"",
+		"",
+		"",
+		0,
 	)
 	s.NoError(err)
 	s.Equal(0, s.mutableState.hBuilder.NumBufferedEvents())
@@ -490,14 +494,15 @@ func (s *mutableStateSuite) TestTransientWorkflowTaskStart_CurrentVersionChanged
 	err = s.mutableState.UpdateCurrentVersion(version+1, true)
 	s.NoError(err)
 
-	name, err := tqname.FromBaseName("tq")
+	f, err := tqid.NewTaskQueueFamily("", "tq")
 	s.NoError(err)
 
 	_, _, err = s.mutableState.AddWorkflowTaskStartedEvent(
 		s.mutableState.GetNextEventID(),
 		uuid.New(),
-		&taskqueuepb.TaskQueue{Name: name.WithPartition(5).FullName()},
+		&taskqueuepb.TaskQueue{Name: f.TaskQueue(enumspb.TASK_QUEUE_TYPE_WORKFLOW).NormalPartition(5).RpcName()},
 		"random identity",
+		nil,
 	)
 	s.NoError(err)
 	s.Equal(0, s.mutableState.hBuilder.NumBufferedEvents())
@@ -684,7 +689,8 @@ func (s *mutableStateSuite) prepareTransientWorkflowTaskCompletionFirstBatchAppl
 	s.Nil(err)
 	s.NotNil(wt)
 
-	wt, err = s.mutableState.ApplyWorkflowTaskStartedEvent(nil,
+	wt, err = s.mutableState.ApplyWorkflowTaskStartedEvent(
+		nil,
 		workflowTaskStartedEvent.GetVersion(),
 		workflowTaskScheduleEvent.GetEventId(),
 		workflowTaskStartedEvent.GetEventId(),
@@ -692,6 +698,7 @@ func (s *mutableStateSuite) prepareTransientWorkflowTaskCompletionFirstBatchAppl
 		timestamp.TimeValue(workflowTaskStartedEvent.GetEventTime()),
 		false,
 		123678,
+		nil,
 	)
 	s.Nil(err)
 	s.NotNil(wt)
@@ -738,7 +745,8 @@ func (s *mutableStateSuite) prepareTransientWorkflowTaskCompletionFirstBatchAppl
 	s.Nil(err)
 	s.NotNil(wt)
 
-	wt, err = s.mutableState.ApplyWorkflowTaskStartedEvent(nil,
+	wt, err = s.mutableState.ApplyWorkflowTaskStartedEvent(
+		nil,
 		newWorkflowTaskStartedEvent.GetVersion(),
 		newWorkflowTaskScheduleEvent.GetEventId(),
 		newWorkflowTaskStartedEvent.GetEventId(),
@@ -746,6 +754,7 @@ func (s *mutableStateSuite) prepareTransientWorkflowTaskCompletionFirstBatchAppl
 		timestamp.TimeValue(newWorkflowTaskStartedEvent.GetEventTime()),
 		false,
 		123678,
+		nil,
 	)
 	s.Nil(err)
 	s.NotNil(wt)
@@ -1170,7 +1179,7 @@ func (s *mutableStateSuite) TestRetryActivity_TruncateRetryableFailure() {
 		activityInfo.ScheduledEventId,
 		uuid.New(),
 		"worker-identity",
-	)
+		nil)
 	s.NoError(err)
 
 	failureSizeErrorLimit := s.mockConfig.MutableStateActivityFailureSizeLimitError(
@@ -1241,25 +1250,25 @@ func (s *mutableStateSuite) TestUpdateBuildIdsSearchAttribute() {
 			s.NoError(err)
 
 			// Max 0
-			err = s.mutableState.updateBuildIdsSearchAttribute(c.stamp("0.1"), 4, 0)
+			err = s.mutableState.updateBuildIdsSearchAttribute(c.stamp("0.1"), 0)
 			s.NoError(err)
 			s.Equal([]string{}, s.getBuildIdsFromMutableState())
 
-			err = s.mutableState.updateBuildIdsSearchAttribute(c.stamp("0.1"), 4, 40)
+			err = s.mutableState.updateBuildIdsSearchAttribute(c.stamp("0.1"), 40)
 			s.NoError(err)
 			s.Equal(c.searchAttribute("0.1"), s.getBuildIdsFromMutableState())
 
 			// Add the same build ID
-			err = s.mutableState.updateBuildIdsSearchAttribute(c.stamp("0.1"), 4, 40)
+			err = s.mutableState.updateBuildIdsSearchAttribute(c.stamp("0.1"), 40)
 			s.NoError(err)
 			s.Equal(c.searchAttribute("0.1"), s.getBuildIdsFromMutableState())
 
-			err = s.mutableState.updateBuildIdsSearchAttribute(c.stamp("0.2"), 4, 40)
+			err = s.mutableState.updateBuildIdsSearchAttribute(c.stamp("0.2"), 40)
 			s.NoError(err)
 			s.Equal(c.searchAttribute("0.1", "0.2"), s.getBuildIdsFromMutableState())
 
 			// Limit applies
-			err = s.mutableState.updateBuildIdsSearchAttribute(c.stamp("0.3"), 4, 40)
+			err = s.mutableState.updateBuildIdsSearchAttribute(c.stamp("0.3"), 40)
 			s.NoError(err)
 			s.Equal(c.searchAttribute("0.2", "0.3"), s.getBuildIdsFromMutableState())
 		})

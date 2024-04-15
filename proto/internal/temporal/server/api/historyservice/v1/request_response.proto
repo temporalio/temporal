@@ -65,10 +65,13 @@ message StartWorkflowExecutionRequest {
     google.protobuf.Duration first_workflow_task_backoff = 9;
     // For child or continued-as-new workflows, including a version here from the source
     // (parent/previous) will set the initial version stamp of this workflow.
+    // Deprecated. use `inherited_build_id`
     temporal.api.common.v1.WorkerVersionStamp source_version_stamp = 10;
     // The root execution info of the new workflow.
     // For top-level workflows (ie., without parent), this field must be nil.
     temporal.server.api.workflow.v1.RootExecutionInfo root_execution_info = 11;
+    // inherited build ID from parent/previous execution
+    string inherited_build_id = 12;
 }
 
 message StartWorkflowExecutionResponse {
@@ -112,7 +115,11 @@ message GetMutableStateResponse {
     string first_execution_run_id = 20;
     // If using build-id based versioning: version stamp of last worker to complete a workflow
     // task for this workflow.
-    temporal.api.common.v1.WorkerVersionStamp worker_version_stamp = 21;
+    temporal.api.common.v1.WorkerVersionStamp most_recent_worker_version_stamp = 21;
+    // The currently assigned build ID for this execution. Presence of this value means worker versioning is used
+    // for this execution.
+    string assigned_build_id = 22;
+    string inherited_build_id = 23;
 }
 
 message PollMutableStateRequest {
@@ -152,6 +159,30 @@ message ResetStickyTaskQueueRequest {
 }
 
 message ResetStickyTaskQueueResponse {
+}
+
+message ExecuteMultiOperationRequest {
+    string namespace_id = 1;
+    string workflow_id = 2;
+    repeated Operation operations = 3;
+
+    message Operation {
+        oneof operation {
+            StartWorkflowExecutionRequest start_workflow = 1;
+            UpdateWorkflowExecutionRequest update_workflow = 2;
+        }
+    }
+}
+
+message ExecuteMultiOperationResponse {
+    repeated Response responses = 1;
+
+    message Response {
+        oneof response {
+            StartWorkflowExecutionResponse start_workflow = 1;
+            UpdateWorkflowExecutionResponse update_workflow = 2;
+        }
+    }
 }
 
 message RecordWorkflowTaskStartedRequest {

@@ -100,6 +100,7 @@ var (
 		"SignalWithStartWorkflowExecution":   func() any { return &workflowservice.SignalWithStartWorkflowExecutionResponse{} },
 		"SignalWorkflowExecution":            func() any { return &workflowservice.SignalWorkflowExecutionResponse{} },
 		"StartWorkflowExecution":             func() any { return &workflowservice.StartWorkflowExecutionResponse{} },
+		"ExecuteMultiOperation":              func() any { return &workflowservice.ExecuteMultiOperationResponse{} },
 		"UpdateWorkflowExecution":            func() any { return &workflowservice.UpdateWorkflowExecutionResponse{} },
 		"PollWorkflowExecutionUpdate":        func() any { return &workflowservice.PollWorkflowExecutionUpdateResponse{} },
 		"TerminateWorkflowExecution":         func() any { return &workflowservice.TerminateWorkflowExecutionResponse{} },
@@ -115,6 +116,8 @@ var (
 		"ListScheduleMatchingTimes":        func() any { return &workflowservice.ListScheduleMatchingTimesResponse{} },
 		"UpdateWorkerBuildIdCompatibility": func() any { return &workflowservice.UpdateWorkerBuildIdCompatibilityResponse{} },
 		"GetWorkerBuildIdCompatibility":    func() any { return &workflowservice.GetWorkerBuildIdCompatibilityResponse{} },
+		"UpdateWorkerVersioningRules":      func() any { return &workflowservice.UpdateWorkerVersioningRulesResponse{} },
+		"GetWorkerVersioningRules":         func() any { return &workflowservice.GetWorkerVersioningRulesResponse{} },
 		"GetWorkerTaskReachability":        func() any { return &workflowservice.GetWorkerTaskReachabilityResponse{} },
 
 		"StartBatchOperation":    func() any { return &workflowservice.StartBatchOperationResponse{} },
