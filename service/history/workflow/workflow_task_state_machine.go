@@ -39,6 +39,7 @@ import (
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	updatepb "go.temporal.io/api/update/v1"
 	"go.temporal.io/api/workflowservice/v1"
+	"go.temporal.io/server/common/worker_versioning"
 	"google.golang.org/protobuf/types/known/durationpb"
 	"google.golang.org/protobuf/types/known/timestamppb"
 
@@ -223,7 +224,7 @@ func (m *workflowTaskStateMachine) ApplyWorkflowTaskStartedEvent(
 		BuildIdRedirectCounter: redirectCounter,
 	}
 
-	if buildId := versioningStamp.GetBuildId(); buildId != "" && versioningStamp.GetUseVersioning() {
+	if buildId := worker_versioning.StampIfUsingVersioning(versioningStamp).GetBuildId(); buildId != "" {
 		if redirectCounter == 0 {
 			// this is the initial build ID, it should normally be persisted after scheduling the wf task,
 			// but setting it here again in case it failed to be persisted before.
@@ -889,6 +890,7 @@ func (m *workflowTaskStateMachine) UpdateWorkflowTask(
 	m.ms.executionInfo.WorkflowTaskHistorySizeBytes = workflowTask.HistorySizeBytes
 
 	m.ms.executionInfo.WorkflowTaskBuildId = workflowTask.BuildId
+	m.ms.executionInfo.WorkflowTaskBuildIdRedirectCounter = workflowTask.BuildIdRedirectCounter
 
 	// NOTE: do not update task queue in execution info
 

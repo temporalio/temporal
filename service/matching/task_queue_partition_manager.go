@@ -26,6 +26,7 @@ package matching
 
 import (
 	"context"
+	"errors"
 	"sync"
 	"time"
 
@@ -366,7 +367,7 @@ func (pm *taskQueuePartitionManagerImpl) DispatchNexusTask(
 	taskId string,
 	request *matchingservice.DispatchNexusTaskRequest,
 ) (*matchingservice.DispatchNexusTaskResponse, error) {
-	pq, _, err := pm.getPhysicalQueueForAdd(
+	_, syncMatchQueue, _, err := pm.getPhysicalQueuesForAdd(
 		ctx,
 		// Nexus tasks always use assignment rules (if present) because they don't have a workflow.
 		worker_versioning.MakeUseAssignmentRulesDirective(),
@@ -377,12 +378,12 @@ func (pm *taskQueuePartitionManagerImpl) DispatchNexusTask(
 		return nil, err
 	}
 
-	if pm.defaultQueue != pq {
+	if pm.defaultQueue != syncMatchQueue {
 		// default queue should stay alive even if requests go to other queues
 		pm.defaultQueue.MarkAlive()
 	}
 
-	return pq.DispatchNexusTask(ctx, taskId, request)
+	return syncMatchQueue.DispatchNexusTask(ctx, taskId, request)
 }
 
 func (pm *taskQueuePartitionManagerImpl) GetUserDataManager() userDataManager {
@@ -526,7 +527,6 @@ func (pm *taskQueuePartitionManagerImpl) unloadFromEngine() {
 	pm.engine.unloadTaskQueuePartition(pm)
 }
 
-// Pass either versionSet or build ID
 func (pm *taskQueuePartitionManagerImpl) getPhysicalQueue(ctx context.Context, buildId string) (physicalTaskQueueManager, error) {
 	if buildId == "" {
 		return pm.defaultQueue, nil
@@ -639,7 +639,7 @@ func (pm *taskQueuePartitionManagerImpl) getPhysicalQueuesForAdd(
 	ctx context.Context,
 	directive *taskqueuespb.TaskVersionDirective,
 	runId string,
-) (physicalTaskQueueManager, physicalTaskQueueManager, <-chan struct{}, error) {
+) (spoolQueue physicalTaskQueueManager, syncMatchQueue physicalTaskQueueManager, userDataChanged <-chan struct{}, err error) {
 	if directive.GetBuildId() == nil {
 		// This means the tasks is a middle task belonging to an unversioned execution. Keep using unversioned.
 		return pm.defaultQueue, pm.defaultQueue, nil, nil
@@ -691,7 +691,7 @@ func (pm *taskQueuePartitionManagerImpl) getPhysicalQueuesForAdd(
 		// - task queue is still using the old API but a failover happened before verisoning data fully propagate.
 		// the second case is unlikely, and we do not support it anymore considering the old API is deprecated.
 		// TODO: [cleanup-old-wv]
-		_, err := checkVersionForStickyAdd(data, directive.GetAssignedBuildId())
+		_, err = checkVersionForStickyAdd(data, directive.GetAssignedBuildId())
 		if err != nil {
 			return nil, nil, nil, err
 		}
@@ -703,7 +703,6 @@ func (pm *taskQueuePartitionManagerImpl) getPhysicalQueuesForAdd(
 		return pm.defaultQueue, pm.defaultQueue, userDataChanged, nil
 	}
 
-	var spoolQueue, syncMatchQueue physicalTaskQueueManager
 	if versionSet != "" {
 		spoolQueue = pm.defaultQueue
 		syncMatchQueue, err = pm.getVersionedQueue(ctx, versionSet, "", true)
@@ -738,7 +737,7 @@ func (pm *taskQueuePartitionManagerImpl) getVersionSetForAdd(directive *taskqueu
 	}
 
 	versionSet, unknownBuild, err := lookupVersionSetForAdd(data, buildId)
-	if err == errEmptyVersioningData { // nolint:goerr113
+	if errors.Is(err, errEmptyVersioningData) {
 		// default was requested for an unversioned queue
 		return "", nil
 	} else if err != nil {

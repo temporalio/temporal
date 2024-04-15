@@ -2638,7 +2638,7 @@ func (ms *MutableStateImpl) ApplyActivityTaskScheduledEvent(
 	return ai, nil
 }
 
-func (ms *MutableStateImpl) addTransientActivityStartedEvent(
+func (ms *MutableStateImpl) addStartedEventForTransientActivity(
 	scheduledEventID int64,
 	versioningStamp *commonpb.WorkerVersionStamp,
 ) error {
@@ -2647,20 +2647,20 @@ func (ms *MutableStateImpl) addTransientActivityStartedEvent(
 		return nil
 	}
 
-	startedBuildId := ai.GetLastIndependentlyAssignedBuildId()
-	if useWf := ai.GetUseWorkflowBuildId(); useWf != nil {
-		startedBuildId = useWf.GetLastUsedBuildId()
-	}
-
-	if startedBuildId != "" {
-		if versioningStamp == nil {
-			// activity timeout, cancellation, and failed by reseter do not have stamp available.
-			// Here we reconstruct it based on pending activity data, if versioning is used.
+	if versioningStamp == nil {
+		// We want to add version stamp to the started event being added now with delay. The task may be now completed,
+		// failed, cancelled, or timed out. For some cases such as timeout, cancellation, and failed by Resetter we do
+		// not receive a stamp because worker is not involved, therefore, we reconstruct the stamp base on pending
+		// activity data, if versioning is used.
+		// Find the build ID of the worker to whom the task was dispatched base on whether it was an independently-
+		// assigned activity or not.
+		startedBuildId := ai.GetLastIndependentlyAssignedBuildId()
+		if useWf := ai.GetUseWorkflowBuildId(); useWf != nil {
+			startedBuildId = useWf.GetLastUsedBuildId()
+		}
+		if startedBuildId != "" {
+			// If a build ID is found, i.e. versioning is used for the activity, set versioning stamp.
 			versioningStamp = &commonpb.WorkerVersionStamp{UseVersioning: true, BuildId: startedBuildId}
-		} else {
-			if versioningStamp.GetBuildId() != startedBuildId {
-				return serviceerror.NewInvalidArgument("activity was started in a different Build ID")
-			}
 		}
 	}
 
@@ -2805,7 +2805,7 @@ func (ms *MutableStateImpl) AddActivityTaskCompletedEvent(
 		return nil, ms.createInternalServerError(opTag)
 	}
 
-	if err := ms.addTransientActivityStartedEvent(scheduledEventID, request.WorkerVersion); err != nil {
+	if err := ms.addStartedEventForTransientActivity(scheduledEventID, request.WorkerVersion); err != nil {
 		return nil, err
 	}
 	event := ms.hBuilder.AddActivityTaskCompletedEvent(
@@ -2855,7 +2855,7 @@ func (ms *MutableStateImpl) AddActivityTaskFailedEvent(
 		return nil, ms.createInternalServerError(opTag)
 	}
 
-	if err := ms.addTransientActivityStartedEvent(scheduledEventID, versioningStamp); err != nil {
+	if err := ms.addStartedEventForTransientActivity(scheduledEventID, versioningStamp); err != nil {
 		return nil, err
 	}
 	event := ms.hBuilder.AddActivityTaskFailedEvent(
@@ -2910,7 +2910,7 @@ func (ms *MutableStateImpl) AddActivityTaskTimedOutEvent(
 
 	timeoutFailure.Cause = ai.RetryLastFailure
 
-	if err := ms.addTransientActivityStartedEvent(scheduledEventID, nil); err != nil {
+	if err := ms.addStartedEventForTransientActivity(scheduledEventID, nil); err != nil {
 		return nil, err
 	}
 	event := ms.hBuilder.AddActivityTaskTimedOutEvent(
@@ -3045,7 +3045,7 @@ func (ms *MutableStateImpl) AddActivityTaskCanceledEvent(
 		return nil, ms.createInternalServerError(opTag)
 	}
 
-	if err := ms.addTransientActivityStartedEvent(scheduledEventID, nil); err != nil {
+	if err := ms.addStartedEventForTransientActivity(scheduledEventID, nil); err != nil {
 		return nil, err
 	}
 	event := ms.hBuilder.AddActivityTaskCanceledEvent(

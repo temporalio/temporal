@@ -1952,7 +1952,8 @@ func (s *VersioningIntegSuite) TestDispatchActivityUpgrade() {
 	}
 	wf := func(ctx workflow.Context) (string, error) {
 		startedWf <- struct{}{}
-		// wait for adding v1 -> v1.1 redirect rule
+		// Wait for adding v1 -> v1.1 redirect rule. We use a channel instead of WF signal to make sure the rules are
+		// added between WFT started and completed and next task seeing the updated rules is an activity, not a WFT.
 		<-proceedWf
 
 		var val1, val2 string
@@ -1966,7 +1967,8 @@ func (s *VersioningIntegSuite) TestDispatchActivityUpgrade() {
 		s.NoError(err1)
 
 		startedWf <- struct{}{}
-		// wait for adding v1.1 -> v1.2 redirect rule
+		// Wait for adding v1.1 -> v1.2 redirect rule. We use a channel instead of WF signal to make sure the rules are
+		// added between WFT started and completed and next task seeing the updated rules is an activity, not a WFT.
 		<-proceedWf
 
 		err2 := workflow.ExecuteActivity(workflow.WithActivityOptions(ctx, workflow.ActivityOptions{
@@ -3009,10 +3011,8 @@ func (s *VersioningIntegSuite) dispatchContinueAsNewUpgrade(newVersioning bool) 
 	s.validateWorkflowBuildId(ctx, run.GetID(), run.GetRunID(), v11, newVersioning, v11, "", []string{v1})
 
 	inheritedBuildId := ""
-	//extraSA := []string{v1}
 	if newVersioning {
 		inheritedBuildId = v11
-		//extraSA = nil
 	}
 	// first CaN
 	s.validateWorkflowBuildId(ctx, run.GetID(), "", v11, newVersioning, v11, inheritedBuildId, nil)
