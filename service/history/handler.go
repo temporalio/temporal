@@ -2016,11 +2016,10 @@ func (h *Handler) StreamWorkflowReplicationMessages(
 		h.replicationTaskConverterProvider(
 			engine,
 			shardContext,
-			clientShardCount,
 			clientClusterName,
-			replication.NewClusterShardKey(clientClusterShardID.ClusterID, clientClusterShardID.ShardID),
 		),
 		clientClusterName,
+		clientShardCount,
 		replication.NewClusterShardKey(clientClusterShardID.ClusterID, clientClusterShardID.ShardID),
 		replication.NewClusterShardKey(serverClusterShardID.ClusterID, serverClusterShardID.ShardID),
 	)

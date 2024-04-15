@@ -44,6 +44,7 @@ import (
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
+	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/tasks"
@@ -63,10 +64,12 @@ type (
 		metrics       metrics.Handler
 		logger        log.Logger
 
-		status         int32
-		clientShardKey ClusterShardKey
-		serverShardKey ClusterShardKey
-		shutdownChan   channel.ShutdownOnce
+		status                  int32
+		clientClusterName       string
+		clientShardKey          ClusterShardKey
+		serverShardKey          ClusterShardKey
+		clientClusterShardCount int32
+		shutdownChan            channel.ShutdownOnce
 	}
 )
 
@@ -76,6 +79,7 @@ func NewStreamSender(
 	historyEngine shard.Engine,
 	taskConverter SourceTaskConverter,
 	clientClusterName string,
+	clientClusterShardCount int32,
 	clientShardKey ClusterShardKey,
 	serverShardKey ClusterShardKey,
 ) *StreamSenderImpl {
@@ -92,10 +96,12 @@ func NewStreamSender(
 		metrics:       shardContext.GetMetricsHandler(),
 		logger:        logger,
 
-		status:         common.DaemonStatusInitialized,
-		clientShardKey: clientShardKey,
-		serverShardKey: serverShardKey,
-		shutdownChan:   channel.NewShutdownOnce(),
+		status:                  common.DaemonStatusInitialized,
+		clientClusterName:       clientClusterName,
+		clientShardKey:          clientShardKey,
+		serverShardKey:          serverShardKey,
+		clientClusterShardCount: clientClusterShardCount,
+		shutdownChan:            channel.NewShutdownOnce(),
 	}
 }
 
@@ -347,6 +353,10 @@ Loop:
 		if err != nil {
 			return err
 		}
+		clientShardID := common.WorkflowIDToHistoryShard(item.GetNamespaceID(), item.GetWorkflowID(), s.clientClusterShardCount)
+		if clientShardID != s.clientShardKey.ShardID {
+			continue
+		}
 		task, err := s.taskConverter.Convert(item)
 		if err != nil {
 			return err
@@ -389,4 +399,32 @@ func (s *StreamSenderImpl) sendToStream(payload *historyservice.StreamWorkflowRe
 		return NewStreamError("Stream send error", err)
 	}
 	return nil
+}
+
+func (s *StreamSenderImpl) shouldProcessTask(item tasks.Task) bool {
+	clientShardID := common.WorkflowIDToHistoryShard(item.GetNamespaceID(), item.GetWorkflowID(), s.clientClusterShardCount)
+	if clientShardID != s.clientShardKey.ShardID {
+		return false
+	}
+
+	var shouldProcessTask bool
+	namespaceEntry, err := s.shardContext.GetNamespaceRegistry().GetNamespaceByID(
+		namespace.ID(item.GetNamespaceID()),
+	)
+	if err != nil {
+		// if there is error, then blindly send the task, better safe than sorry
+		shouldProcessTask = true
+	}
+
+	if namespaceEntry != nil {
+	FilterLoop:
+		for _, targetCluster := range namespaceEntry.ClusterNames() {
+			if s.clientClusterName == targetCluster {
+				shouldProcessTask = true
+				break FilterLoop
+			}
+		}
+	}
+
+	return shouldProcessTask
 }

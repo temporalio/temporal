@@ -28,11 +28,12 @@ import (
 	"context"
 
 	historypb "go.temporal.io/api/history/v1"
+	"go.uber.org/fx"
+
 	historyspb "go.temporal.io/server/api/history/v1"
 	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/service/history/queues"
 	"go.temporal.io/server/service/history/replication/eventhandler"
-	"go.uber.org/fx"
 
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/persistence"
@@ -97,16 +98,11 @@ func replicationTaskConverterFactoryProvider() SourceTaskConverterProvider {
 	return func(
 		historyEngine shard.Engine,
 		shardContext shard.Context,
-		clientClusterShardCount int32,
 		clientClusterName string,
-		clientShardKey ClusterShardKey,
 	) SourceTaskConverter {
 		return NewSourceTaskConverter(
 			historyEngine,
-			shardContext.GetNamespaceRegistry(),
-			clientClusterShardCount,
-			clientClusterName,
-			clientShardKey)
+			shardContext.GetNamespaceRegistry())
 	}
 }
 
