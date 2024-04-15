@@ -4333,7 +4333,7 @@ func (s *VersioningIntegSuite) doAddAssignmentRule(ctx context.Context, tq strin
 }
 
 func (s *VersioningIntegSuite) addRedirectRule(ctx context.Context, tq, source string, target string) *taskqueuepb.CompatibleBuildIdRedirectRule {
-	cT := s.listVersioningRules(ctx, tq).GetConflictToken()
+	cT := s.getVersioningRules(ctx, tq).GetConflictToken()
 	rule := &taskqueuepb.CompatibleBuildIdRedirectRule{
 		SourceBuildId: source,
 		TargetBuildId: target,
