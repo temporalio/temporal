@@ -379,6 +379,10 @@ func (t *visibilityQueueTaskExecutor) getVisibilityRequestBase(
 		TaskQueue:        executionInfo.TaskQueue,
 		SearchAttributes: searchAttributes,
 		ParentExecution:  parentExecution,
+		RootExecution: &commonpb.WorkflowExecution{
+			WorkflowId: executionInfo.RootWorkflowId,
+			RunId:      executionInfo.RootRunId,
+		},
 	}
 }
 

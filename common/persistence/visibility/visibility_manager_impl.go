@@ -338,6 +338,8 @@ func (p *visibilityManagerImpl) newInternalVisibilityRequestBase(
 		SearchAttributes: searchAttrs,
 		ParentWorkflowID: parentWorkflowID,
 		ParentRunID:      parentRunID,
+		RootWorkflowID:   request.RootExecution.GetWorkflowId(),
+		RootRunID:        request.RootExecution.GetRunId(),
 	}, nil
 }
 
@@ -387,6 +389,10 @@ func (p *visibilityManagerImpl) convertInternalWorkflowExecutionInfo(
 		SearchAttributes: internalExecution.SearchAttributes,
 		TaskQueue:        internalExecution.TaskQueue,
 		Status:           internalExecution.Status,
+		RootExecution: &commonpb.WorkflowExecution{
+			WorkflowId: internalExecution.RootWorkflowID,
+			RunId:      internalExecution.RootRunID,
+		},
 	}
 
 	if internalExecution.ParentWorkflowID != "" {

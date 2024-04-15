@@ -202,6 +202,10 @@ func (s *visibilityQueueTaskExecutorSuite) TestProcessCloseExecution() {
 		WorkflowId: "some random parent workflow ID",
 		RunId:      uuid.New(),
 	}
+	rootExecution := &commonpb.WorkflowExecution{
+		WorkflowId: "some random root workflow ID",
+		RunId:      uuid.New(),
+	}
 
 	mutableState := workflow.TestGlobalMutableState(s.mockShard, s.mockShard.GetEventsCache(), s.logger, s.version, execution.GetWorkflowId(), execution.GetRunId())
 	_, err := mutableState.AddWorkflowExecutionStartedEvent(
@@ -254,10 +258,8 @@ func (s *visibilityQueueTaskExecutorSuite) TestProcessCloseExecution() {
 			visibilityTask,
 			mutableState,
 			taskQueueName,
-			&commonpb.WorkflowExecution{
-				WorkflowId: parentExecution.GetWorkflowId(),
-				RunId:      parentExecution.GetRunId(),
-			},
+			parentExecution,
+			rootExecution,
 			map[string]any{
 				searchattribute.BuildIds: []string{worker_versioning.UnversionedSearchAttribute},
 			},
@@ -284,6 +286,10 @@ func (s *visibilityQueueTaskExecutorSuite) TestProcessCloseExecutionWithWorkflow
 	parentNamespace := "some random parent namespace Name"
 	parentExecution := &commonpb.WorkflowExecution{
 		WorkflowId: "some random parent workflow ID",
+		RunId:      uuid.New(),
+	}
+	rootExecution := &commonpb.WorkflowExecution{
+		WorkflowId: "some random root workflow ID",
 		RunId:      uuid.New(),
 	}
 
@@ -339,10 +345,8 @@ func (s *visibilityQueueTaskExecutorSuite) TestProcessCloseExecutionWithWorkflow
 			visibilityTask,
 			mutableState,
 			taskQueueName,
-			&commonpb.WorkflowExecution{
-				WorkflowId: parentExecution.GetWorkflowId(),
-				RunId:      parentExecution.GetRunId(),
-			},
+			parentExecution,
+			rootExecution,
 			map[string]any{
 				searchattribute.BuildIds: []string{worker_versioning.UnversionedSearchAttribute},
 			},
@@ -575,6 +579,7 @@ func (s *visibilityQueueTaskExecutorSuite) createVisibilityRequestBase(
 	mutableState workflow.MutableState,
 	taskQueueName string,
 	parentExecution *commonpb.WorkflowExecution,
+	rootExecution *commonpb.WorkflowExecution,
 	searchAttributes map[string]any,
 ) *manager.VisibilityRequestBase {
 	encodedSearchAttributes, err := searchattribute.Encode(
@@ -589,6 +594,17 @@ func (s *visibilityQueueTaskExecutorSuite) createVisibilityRequestBase(
 	}
 	executionInfo := mutableState.GetExecutionInfo()
 
+	if rootExecution == nil {
+		if parentExecution != nil {
+			rootExecution = parentExecution
+		} else {
+			rootExecution = &commonpb.WorkflowExecution{
+				WorkflowId: execution.WorkflowId,
+				RunId:      execution.RunId,
+			}
+		}
+	}
+
 	return &manager.VisibilityRequestBase{
 		NamespaceID:      namespace.ID(task.GetNamespaceID()),
 		Namespace:        namespaceName,
@@ -601,6 +617,7 @@ func (s *visibilityQueueTaskExecutorSuite) createVisibilityRequestBase(
 		ShardID:          s.mockShard.GetShardID(),
 		TaskQueue:        taskQueueName,
 		ParentExecution:  parentExecution,
+		RootExecution:    rootExecution,
 		SearchAttributes: encodedSearchAttributes,
 	}
 }
@@ -621,6 +638,7 @@ func (s *visibilityQueueTaskExecutorSuite) createRecordWorkflowExecutionStartedR
 			taskQueueName,
 			nil,
 			nil,
+			nil,
 		),
 	})
 }
@@ -639,6 +657,7 @@ func (s *visibilityQueueTaskExecutorSuite) createUpsertWorkflowRequest(
 			taskQueueName,
 			nil,
 			nil,
+			nil,
 		),
 	})
 }
@@ -649,6 +668,7 @@ func (s *visibilityQueueTaskExecutorSuite) createRecordWorkflowExecutionClosedRe
 	mutableState workflow.MutableState,
 	taskQueueName string,
 	parentExecution *commonpb.WorkflowExecution,
+	rootExecution *commonpb.WorkflowExecution,
 	searchAttributes map[string]any,
 ) gomock.Matcher {
 	executionInfo := mutableState.GetExecutionInfo()
@@ -659,6 +679,7 @@ func (s *visibilityQueueTaskExecutorSuite) createRecordWorkflowExecutionClosedRe
 			mutableState,
 			taskQueueName,
 			parentExecution,
+			rootExecution,
 			searchAttributes,
 		),
 		CloseTime:            timestamp.TimeValue(executionInfo.GetCloseTime()),
