@@ -353,10 +353,11 @@ Loop:
 		if err != nil {
 			return err
 		}
-		clientShardID := common.WorkflowIDToHistoryShard(item.GetNamespaceID(), item.GetWorkflowID(), s.clientClusterShardCount)
-		if clientShardID != s.clientShardKey.ShardID {
+
+		if !s.shouldProcessTask(item) {
 			continue
 		}
+
 		task, err := s.taskConverter.Convert(item)
 		if err != nil {
 			return err
