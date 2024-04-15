@@ -3894,16 +3894,17 @@ func (wh *WorkflowHandler) StartBatchOperation(
 	searchattribute.AddSearchAttribute(&searchAttributes, searchattribute.TemporalNamespaceDivision, payload.EncodeString(batcher.NamespaceDivision))
 
 	startReq := &workflowservice.StartWorkflowExecutionRequest{
-		Namespace:             request.Namespace,
-		WorkflowId:            request.GetJobId(),
-		WorkflowType:          &commonpb.WorkflowType{Name: batcher.BatchWFTypeName},
-		TaskQueue:             &taskqueuepb.TaskQueue{Name: primitives.PerNSWorkerTaskQueue},
-		Input:                 inputPayload,
-		Identity:              identity,
-		RequestId:             uuid.New(),
-		WorkflowIdReusePolicy: enumspb.WORKFLOW_ID_REUSE_POLICY_REJECT_DUPLICATE,
-		Memo:                  memo,
-		SearchAttributes:      searchAttributes,
+		Namespace:                request.Namespace,
+		WorkflowId:               request.GetJobId(),
+		WorkflowType:             &commonpb.WorkflowType{Name: batcher.BatchWFTypeName},
+		TaskQueue:                &taskqueuepb.TaskQueue{Name: primitives.PerNSWorkerTaskQueue},
+		Input:                    inputPayload,
+		Identity:                 identity,
+		RequestId:                uuid.New(),
+		WorkflowIdConflictPolicy: enumspb.WORKFLOW_ID_CONFLICT_POLICY_FAIL,
+		WorkflowIdReusePolicy:    enumspb.WORKFLOW_ID_REUSE_POLICY_REJECT_DUPLICATE,
+		Memo:                     memo,
+		SearchAttributes:         searchAttributes,
 	}
 
 	_, err = wh.historyClient.StartWorkflowExecution(
