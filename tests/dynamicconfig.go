@@ -54,7 +54,6 @@ var (
 		dynamicconfig.FrontendEnableUpdateWorkflowExecution:               true,
 		dynamicconfig.FrontendEnableUpdateWorkflowExecutionAsyncAccepted:  true,
 		dynamicconfig.FrontendAccessHistoryFraction:                       0.5,
-		dynamicconfig.EnableWorkflowIdConflictPolicy:                      true,
 		dynamicconfig.ReplicationEnableUpdateWithNewTaskMerge:             true,
 		dynamicconfig.ValidateUTF8SampleRPCRequest:                        1.0,
 		dynamicconfig.ValidateUTF8SampleRPCResponse:                       1.0,

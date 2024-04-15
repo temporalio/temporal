@@ -442,9 +442,6 @@ const (
 	// lifecycle stage. Default value is `false`.
 	FrontendEnableUpdateWorkflowExecutionAsyncAccepted = "frontend.enableUpdateWorkflowExecutionAsyncAccepted"
 
-	// EnableWorkflowIdConflictPolicy enables the `WorkflowIdConflictPolicy` option for Start and Signal-with-Start
-	EnableWorkflowIdConflictPolicy = "frontend.enableWorkflowIdConflictPolicy"
-
 	// FrontendEnableWorkerVersioningDataAPIs enables worker versioning data read / write APIs.
 	FrontendEnableWorkerVersioningDataAPIs = "frontend.workerVersioningDataAPIs"
 	// FrontendEnableWorkerVersioningWorkflowAPIs enables worker versioning in workflow progress APIs.
