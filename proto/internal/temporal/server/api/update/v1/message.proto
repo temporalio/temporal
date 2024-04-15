@@ -65,7 +65,7 @@ message UpdateInfo {
         AcceptanceInfo acceptance = 1;
         // update has been completed and this is the completion metadata
         CompletionInfo completion = 2;
-        // update has been requested and this is the request metadata
+        // update has been admitted and this is the admission metadata
         AdmissionInfo admission = 3;
     }
 }

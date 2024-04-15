@@ -311,7 +311,7 @@ type UpdateInfo_Completion struct {
 }
 
 type UpdateInfo_Admission struct {
-	// update has been requested and this is the request metadata
+	// update has been admitted and this is the admission metadata
 	Admission *AdmissionInfo `protobuf:"bytes,3,opt,name=admission,proto3,oneof"`
 }
 
