@@ -34,6 +34,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/nexus-rpc/sdk-go/nexus"
+	"github.com/stretchr/testify/assert"
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	nexuspb "go.temporal.io/api/nexus/v1"
@@ -65,6 +66,7 @@ func (s *ClientFunctionalSuite) TestNexusStartOperation_Outcomes() {
 	type testcase struct {
 		outcome         string
 		incomingService *nexuspb.IncomingService
+		timeout         time.Duration
 		handler         func(*workflowservice.PollNexusTaskQueueResponse) (*nexuspb.Response, *nexuspb.HandlerError)
 		assertion       func(*nexus.ClientStartOperationResult[string], error)
 	}
@@ -157,6 +159,26 @@ func (s *ClientFunctionalSuite) TestNexusStartOperation_Outcomes() {
 				s.Equal("deliberate internal failure", unexpectedError.Failure.Message)
 			},
 		},
+		{
+			outcome:         "handler_timeout",
+			incomingService: s.createNexusIncomingService(s.randomizeStr("test-service"), s.randomizeStr("task-queue")),
+			timeout:         1100 * time.Millisecond,
+			handler: func(res *workflowservice.PollNexusTaskQueueResponse) (*nexuspb.Response, *nexuspb.HandlerError) {
+				timeoutStr, set := res.Request.Header[nexus.HeaderRequestTimeout]
+				s.True(set)
+				timeout, err := time.ParseDuration(timeoutStr)
+				s.NoError(err)
+				time.Sleep(timeout)
+				return nil, nil
+			},
+			assertion: func(res *nexus.ClientStartOperationResult[string], err error) {
+				var unexpectedError *nexus.UnexpectedResponseError
+				s.ErrorAs(err, &unexpectedError)
+				// TODO: nexus should export this
+				s.Equal(521, unexpectedError.Response.StatusCode)
+				s.Equal("downstream timeout", unexpectedError.Failure.Message)
+			},
+		},
 	}
 
 	testFn := func(t *testing.T, tc testcase, dispatchURL string) {
@@ -169,12 +191,22 @@ func (s *ClientFunctionalSuite) TestNexusStartOperation_Outcomes() {
 
 		go s.nexusTaskPoller(ctx, tc.incomingService.Spec.TaskQueue, tc.handler)
 
-		result, err := nexus.StartOperation(ctx, client, op, "input", nexus.StartOperationOptions{
-			CallbackURL: "http://localhost/callback",
-			RequestID:   "request-id",
-			Header:      nexus.Header{"key": "value"},
-		})
-		tc.assertion(result, err)
+		eventuallyTick := 500 * time.Millisecond
+		header := nexus.Header{"key": "value"}
+		if tc.timeout > 0 {
+			eventuallyTick = tc.timeout + (100 * time.Millisecond)
+			header[nexus.HeaderRequestTimeout] = tc.timeout.String()
+		}
+
+		// Use EventuallyWithT to retry if incoming service has not been loaded into memory when the test starts.
+		s.EventuallyWithT(func(c *assert.CollectT) {
+			result, err := nexus.StartOperation(ctx, client, op, "input", nexus.StartOperationOptions{
+				CallbackURL: "http://localhost/callback",
+				RequestID:   "request-id",
+				Header:      header,
+			})
+			tc.assertion(result, err)
+		}, 5*time.Second, eventuallyTick)
 
 		snap := capture.Snapshot()
 
@@ -189,9 +221,6 @@ func (s *ClientFunctionalSuite) TestNexusStartOperation_Outcomes() {
 		s.Contains(snap["nexus_latency"][0].Tags, "service")
 		s.Equal(metrics.MetricUnit(metrics.Milliseconds), snap["nexus_latency"][0].Unit)
 	}
-
-	// Wait to make sure all incoming services are loaded into memory before starting tests.
-	time.Sleep(3 * time.Second)
 
 	for _, tc := range testCases {
 		tc := tc
@@ -255,87 +284,9 @@ func (s *ClientFunctionalSuite) TestNexusStartOperation_WithNamespaceAndTaskQueu
 	s.Equal(1, len(snap["nexus_request_preprocess_errors"]))
 }
 
-func (s *ClientFunctionalSuite) TestNexusStartOperation_Timeout() {
-	type testcase struct {
-		name            string
-		incomingService *nexuspb.IncomingService
-		headerTimeout   time.Duration
-		clientTimeout   time.Duration
-		assertion       func(*nexus.ClientStartOperationResult[string], error)
-	}
-	testCases := []testcase{
-		{
-			name:            "header timeout > client timeout",
-			incomingService: s.createNexusIncomingService(s.randomizeStr("test-service"), s.randomizeStr("task-queue")),
-			headerTimeout:   3 * time.Second,
-			clientTimeout:   2 * time.Second,
-			assertion: func(res *nexus.ClientStartOperationResult[string], err error) {
-				s.ErrorIs(err, context.DeadlineExceeded)
-			},
-		},
-		{
-			name:            "header timeout < client timeout",
-			incomingService: s.createNexusIncomingService(s.randomizeStr("test-service"), s.randomizeStr("task-queue")),
-			headerTimeout:   2 * time.Second,
-			clientTimeout:   3 * time.Second,
-			assertion: func(res *nexus.ClientStartOperationResult[string], err error) {
-				var unexpectedError *nexus.UnexpectedResponseError
-				s.ErrorAs(err, &unexpectedError)
-				s.Equal(521, unexpectedError.Response.StatusCode)
-				s.Equal("downstream timeout", unexpectedError.Failure.Message)
-			},
-		},
-	}
-
-	testFn := func(t *testing.T, tc testcase, dispatchURL string) {
-		clientCtx, cancel := NewContextWithTimeout(tc.clientTimeout)
-		defer cancel()
-		expectedDeadline, _ := clientCtx.Deadline()
-
-		headers := nexus.Header{"key": "value"}
-		if tc.headerTimeout > 0 {
-			headers[cnexus.HeaderRequestTimeout] = tc.headerTimeout.String()
-			if headerDeadline := time.Now().Add(tc.headerTimeout); headerDeadline.Before(expectedDeadline) {
-				expectedDeadline = headerDeadline
-			}
-		}
-
-		pollCtx, pollCtxCancel := NewContextWithTimeout(5 * time.Second)
-		go s.timeoutNexusTaskPoller(pollCtx, pollCtxCancel, tc.incomingService.Spec.TaskQueue, expectedDeadline)
-
-		client, err := nexus.NewClient(nexus.ClientOptions{ServiceBaseURL: dispatchURL})
-		s.NoError(err)
-
-		resp, err := nexus.StartOperation(clientCtx, client, op, "input", nexus.StartOperationOptions{
-			CallbackURL: "http://localhost/callback",
-			RequestID:   "request-id",
-			Header:      headers,
-		})
-
-		tc.assertion(resp, err)
-	}
-
-	// Wait to make sure all incoming services are loaded into memory before starting tests.
-	time.Sleep(3 * time.Second)
-
-	for _, tc := range testCases {
-		tc := tc
-		s.T().Run(tc.name, func(t *testing.T) {
-			t.Run("ByNamespaceAndTaskQueue", func(t *testing.T) {
-				testFn(t, tc, getDispatchByNsAndTqURL(s.httpAPIAddress, s.namespace, tc.incomingService.Spec.TaskQueue))
-			})
-			t.Run("ByService", func(t *testing.T) {
-				testFn(t, tc, getDispatchByServiceURL(s.httpAPIAddress, tc.incomingService.Id))
-			})
-		})
-	}
-}
-
 func (s *ClientFunctionalSuite) TestNexusStartOperation_Forbidden() {
 	taskQueue := s.randomizeStr("task-queue")
 	testService := s.createNexusIncomingService(s.randomizeStr("test-service"), taskQueue)
-	// Wait to make sure incoming service is loaded into memory before starting tests.
-	time.Sleep(3 * time.Second)
 
 	type testcase struct {
 		name           string
@@ -391,11 +342,15 @@ func (s *ClientFunctionalSuite) TestNexusStartOperation_Forbidden() {
 
 		capture := s.testCluster.host.captureMetricsHandler.StartCapture()
 		defer s.testCluster.host.captureMetricsHandler.StopCapture(capture)
-		_, err = nexus.StartOperation(ctx, client, op, "input", nexus.StartOperationOptions{})
-		var unexpectedResponse *nexus.UnexpectedResponseError
-		s.ErrorAs(err, &unexpectedResponse)
-		s.Equal(http.StatusForbidden, unexpectedResponse.Response.StatusCode)
-		s.Equal(tc.failureMessage, unexpectedResponse.Failure.Message)
+
+		// Use EventuallyWithT to retry if incoming service has not been loaded into memory when the test starts.
+		s.EventuallyWithT(func(c *assert.CollectT) {
+			_, err = nexus.StartOperation(ctx, client, op, "input", nexus.StartOperationOptions{})
+			var unexpectedResponse *nexus.UnexpectedResponseError
+			s.ErrorAs(err, &unexpectedResponse)
+			s.Equal(http.StatusForbidden, unexpectedResponse.Response.StatusCode)
+			s.Equal(tc.failureMessage, unexpectedResponse.Failure.Message)
+		}, 5*time.Second, 500*time.Millisecond)
 
 		snap := capture.Snapshot()
 
@@ -423,8 +378,6 @@ func (s *ClientFunctionalSuite) TestNexusStartOperation_Forbidden() {
 func (s *ClientFunctionalSuite) TestNexusStartOperation_Claims() {
 	taskQueue := s.randomizeStr("task-queue")
 	testService := s.createNexusIncomingService(s.randomizeStr("test-service"), taskQueue)
-	// Wait to make sure incoming service is loaded into memory before starting tests.
-	time.Sleep(3 * time.Second)
 
 	type testcase struct {
 		name      string
@@ -503,12 +456,15 @@ func (s *ClientFunctionalSuite) TestNexusStartOperation_Claims() {
 		capture := s.testCluster.host.captureMetricsHandler.StartCapture()
 		defer s.testCluster.host.captureMetricsHandler.StopCapture(capture)
 
-		result, err := nexus.StartOperation(ctx, client, op, "input", nexus.StartOperationOptions{
-			Header: tc.header,
-		})
+		// Use EventuallyWithT to retry if incoming service has not been loaded into memory when the test starts.
+		s.EventuallyWithT(func(c *assert.CollectT) {
+			result, err := nexus.StartOperation(ctx, client, op, "input", nexus.StartOperationOptions{
+				Header: tc.header,
+			})
 
-		snap := capture.Snapshot()
-		tc.assertion(result, err, snap)
+			snap := capture.Snapshot()
+			tc.assertion(result, err, snap)
+		}, 5*time.Second, 500*time.Millisecond)
 	}
 
 	for _, tc := range testCases {
@@ -528,6 +484,7 @@ func (s *ClientFunctionalSuite) TestNexusCancelOperation_Outcomes() {
 	type testcase struct {
 		outcome         string
 		incomingService *nexuspb.IncomingService
+		timeout         time.Duration
 		handler         func(*workflowservice.PollNexusTaskQueueResponse) (*nexuspb.Response, *nexuspb.HandlerError)
 		assertion       func(error)
 	}
@@ -570,6 +527,26 @@ func (s *ClientFunctionalSuite) TestNexusCancelOperation_Outcomes() {
 				s.Equal("deliberate internal failure", unexpectedError.Failure.Message)
 			},
 		},
+		{
+			outcome:         "handler_timeout",
+			incomingService: s.createNexusIncomingService(s.randomizeStr("test-service"), s.randomizeStr("task-queue")),
+			timeout:         1100 * time.Millisecond,
+			handler: func(res *workflowservice.PollNexusTaskQueueResponse) (*nexuspb.Response, *nexuspb.HandlerError) {
+				timeoutStr, set := res.Request.Header[nexus.HeaderRequestTimeout]
+				s.True(set)
+				timeout, err := time.ParseDuration(timeoutStr)
+				s.NoError(err)
+				time.Sleep(timeout)
+				return nil, nil
+			},
+			assertion: func(err error) {
+				var unexpectedError *nexus.UnexpectedResponseError
+				s.ErrorAs(err, &unexpectedError)
+				// TODO: nexus should export this
+				s.Equal(521, unexpectedError.Response.StatusCode)
+				s.Equal("downstream timeout", unexpectedError.Failure.Message)
+			},
+		},
 	}
 
 	testFn := func(t *testing.T, tc testcase, dispatchURL string) {
@@ -584,8 +561,19 @@ func (s *ClientFunctionalSuite) TestNexusCancelOperation_Outcomes() {
 
 		handle, err := client.NewHandle("operation", "id")
 		s.NoError(err)
-		err = handle.Cancel(ctx, nexus.CancelOperationOptions{Header: nexus.Header{"key": "value"}})
-		tc.assertion(err)
+
+		eventuallyTick := 500 * time.Millisecond
+		header := nexus.Header{"key": "value"}
+		if tc.timeout > 0 {
+			eventuallyTick = tc.timeout + (100 * time.Millisecond)
+			header[nexus.HeaderRequestTimeout] = tc.timeout.String()
+		}
+
+		// Use EventuallyWithT to retry if incoming service has not been loaded into memory when the test starts.
+		s.EventuallyWithT(func(c *assert.CollectT) {
+			err = handle.Cancel(ctx, nexus.CancelOperationOptions{Header: header})
+			tc.assertion(err)
+		}, 5*time.Second, eventuallyTick)
 
 		snap := capture.Snapshot()
 
@@ -601,84 +589,9 @@ func (s *ClientFunctionalSuite) TestNexusCancelOperation_Outcomes() {
 		s.Equal(metrics.MetricUnit(metrics.Milliseconds), snap["nexus_latency"][0].Unit)
 	}
 
-	// Wait to make sure all incoming services are loaded into memory before starting tests.
-	time.Sleep(3 * time.Second)
-
 	for _, tc := range testCases {
 		tc := tc
 		s.T().Run(tc.outcome, func(t *testing.T) {
-			t.Run("ByNamespaceAndTaskQueue", func(t *testing.T) {
-				testFn(t, tc, getDispatchByNsAndTqURL(s.httpAPIAddress, s.namespace, tc.incomingService.Spec.TaskQueue))
-			})
-			t.Run("ByService", func(t *testing.T) {
-				testFn(t, tc, getDispatchByServiceURL(s.httpAPIAddress, tc.incomingService.Id))
-			})
-		})
-	}
-}
-
-func (s *ClientFunctionalSuite) TestNexusCancelOperation_Timeouts() {
-	type testcase struct {
-		name            string
-		incomingService *nexuspb.IncomingService
-		headerTimeout   time.Duration
-		clientTimeout   time.Duration
-		assertion       func(error)
-	}
-	testCases := []testcase{
-		{
-			name:            "header timeout > client timeout",
-			incomingService: s.createNexusIncomingService(s.randomizeStr("test-service"), s.randomizeStr("task-queue")),
-			headerTimeout:   3 * time.Second,
-			clientTimeout:   2 * time.Second,
-			assertion: func(err error) {
-				s.ErrorIs(err, context.DeadlineExceeded)
-			},
-		},
-		{
-			name:            "header timeout < client timeout",
-			incomingService: s.createNexusIncomingService(s.randomizeStr("test-service"), s.randomizeStr("task-queue")),
-			headerTimeout:   2 * time.Second,
-			clientTimeout:   3 * time.Second,
-			assertion: func(err error) {
-				var unexpectedError *nexus.UnexpectedResponseError
-				s.ErrorAs(err, &unexpectedError)
-				s.Equal(521, unexpectedError.Response.StatusCode)
-				s.Equal("downstream timeout", unexpectedError.Failure.Message)
-			},
-		},
-	}
-
-	testFn := func(t *testing.T, tc testcase, dispatchURL string) {
-		clientCtx, cancel := NewContextWithTimeout(tc.clientTimeout)
-		defer cancel()
-		expectedDeadline, _ := clientCtx.Deadline()
-
-		headers := nexus.Header{"key": "value"}
-		if tc.headerTimeout > 0 {
-			headers[cnexus.HeaderRequestTimeout] = tc.headerTimeout.String()
-			if headerDeadline := time.Now().Add(tc.headerTimeout); headerDeadline.Before(expectedDeadline) {
-				expectedDeadline = headerDeadline
-			}
-		}
-
-		pollCtx, pollCtxCancel := NewContextWithTimeout(5 * time.Second)
-		go s.timeoutNexusTaskPoller(pollCtx, pollCtxCancel, tc.incomingService.Spec.TaskQueue, expectedDeadline)
-
-		client, err := nexus.NewClient(nexus.ClientOptions{ServiceBaseURL: dispatchURL})
-		s.NoError(err)
-		handle, err := client.NewHandle("operation", "id")
-		s.NoError(err)
-		err = handle.Cancel(clientCtx, nexus.CancelOperationOptions{Header: headers})
-		tc.assertion(err)
-	}
-
-	// Wait to make sure all incoming services are loaded into memory before starting tests.
-	time.Sleep(3 * time.Second)
-
-	for _, tc := range testCases {
-		tc := tc
-		s.T().Run(tc.name, func(t *testing.T) {
 			t.Run("ByNamespaceAndTaskQueue", func(t *testing.T) {
 				testFn(t, tc, getDispatchByNsAndTqURL(s.httpAPIAddress, s.namespace, tc.incomingService.Spec.TaskQueue))
 			})
@@ -771,20 +684,6 @@ func (s *ClientFunctionalSuite) TestNexusStartOperation_ByService_ServiceNotFoun
 
 func (s *ClientFunctionalSuite) echoNexusTaskPoller(ctx context.Context, taskQueue string) {
 	s.nexusTaskPoller(ctx, taskQueue, nexusEchoHandler)
-}
-
-func (s *ClientFunctionalSuite) timeoutNexusTaskPoller(ctx context.Context, cancel context.CancelFunc, taskQueue string, expectedDeadline time.Time) {
-	s.nexusTaskPoller(ctx, taskQueue, func(res *workflowservice.PollNexusTaskQueueResponse) (*nexuspb.Response, *nexuspb.HandlerError) {
-		defer cancel()
-		s.NotNil(res.Request)
-		timeoutStr, set := res.Request.Header[cnexus.HeaderRequestTimeout]
-		s.True(set)
-		timeout, err := time.ParseDuration(timeoutStr)
-		s.NoError(err)
-		s.LessOrEqual(time.Until(expectedDeadline), timeout)
-		time.Sleep(timeout + (100 * time.Millisecond)) // Extra time to make sure the request times out.
-		return nexusEchoHandler(res)
-	})
 }
 
 func (s *ClientFunctionalSuite) nexusTaskPoller(ctx context.Context, taskQueue string, handler func(*workflowservice.PollNexusTaskQueueResponse) (*nexuspb.Response, *nexuspb.HandlerError)) {

@@ -32,18 +32,8 @@ import (
 	"go.temporal.io/server/common/rpc"
 )
 
-const defaultTimeout = 90 * time.Second * debug.TimeoutMultiplier
-
 // NewContext create new context with default timeout 90 seconds.
 func NewContext() context.Context {
-	ctx, _ := rpc.NewContextWithTimeoutAndVersionHeaders(defaultTimeout)
+	ctx, _ := rpc.NewContextWithTimeoutAndVersionHeaders(90 * time.Second * debug.TimeoutMultiplier)
 	return ctx
-}
-
-// NewContextWithTimeout creates a new context with the specified duration. If timeout is 0, the default is used.
-func NewContextWithTimeout(timeout time.Duration) (context.Context, context.CancelFunc) {
-	if timeout == 0 {
-		timeout = defaultTimeout
-	}
-	return rpc.NewContextWithTimeoutAndVersionHeaders(timeout)
 }

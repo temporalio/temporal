@@ -21,7 +21,7 @@ require (
 	github.com/iancoleman/strcase v0.3.0
 	github.com/jmoiron/sqlx v1.3.4
 	github.com/lib/pq v1.10.9
-	github.com/nexus-rpc/sdk-go v0.0.7
+	github.com/nexus-rpc/sdk-go v0.0.8-0.20240416165501-deaa711b224e
 	github.com/olekukonko/tablewriter v0.0.5
 	github.com/olivere/elastic/v7 v7.0.32
 	github.com/pborman/uuid v1.2.1
@@ -153,6 +153,3 @@ require (
 	modernc.org/strutil v1.1.3 // indirect
 	modernc.org/token v1.1.0 // indirect
 )
-
-// TODO(pj): REMOVE ONCE TAGGED IN MAIN REPO
-replace github.com/nexus-rpc/sdk-go => github.com/pdoerner/sdk-go v0.0.8
