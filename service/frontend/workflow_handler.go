@@ -3375,6 +3375,9 @@ func (wh *WorkflowHandler) ListSchedules(
 
 	query := ""
 	if strings.TrimSpace(request.Query) != "" {
+		if err := scheduler.ValidateVisibilityQuery(request.Query); err != nil {
+			return nil, err
+		}
 		query = fmt.Sprintf("%s AND (%s)", scheduler.VisibilityBaseListQuery, request.Query)
 	} else {
 		query = scheduler.VisibilityBaseListQuery

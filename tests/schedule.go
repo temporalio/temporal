@@ -337,12 +337,21 @@ func (s *ScheduleFunctionalSuite) TestBasics() {
 	listResp, err := s.engine.ListSchedules(NewContext(), &workflowservice.ListSchedulesRequest{
 		Namespace:       s.namespace,
 		MaximumPageSize: 5,
-		Query:           "CustomKeywordField = 'schedule sa value'",
+		Query:           "CustomKeywordField = 'schedule sa value' AND TemporalSchedulePaused = false",
 	})
 	s.NoError(err)
 	s.Len(listResp.Schedules, 1)
 	entry := listResp.Schedules[0]
 	s.Equal(sid, entry.ScheduleId)
+
+	// list schedules with invalid search attribute filter
+
+	_, err = s.engine.ListSchedules(NewContext(), &workflowservice.ListSchedulesRequest{
+		Namespace:       s.namespace,
+		MaximumPageSize: 5,
+		Query:           "ExecutionDuration > '1s'",
+	})
+	s.Error(err)
 
 	// update
 
