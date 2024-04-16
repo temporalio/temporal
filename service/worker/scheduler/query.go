@@ -27,10 +27,11 @@ import (
 	"fmt"
 
 	"go.temporal.io/api/serviceerror"
+	"golang.org/x/exp/maps"
+
 	"go.temporal.io/server/common/persistence/visibility/store/elasticsearch"
 	"go.temporal.io/server/common/persistence/visibility/store/query"
 	"go.temporal.io/server/common/searchattribute"
-	"golang.org/x/exp/maps"
 )
 
 type (
@@ -42,9 +43,7 @@ type (
 var _ query.FieldNameInterceptor = (*fieldNameAggInterceptor)(nil)
 
 func (i *fieldNameAggInterceptor) Name(name string, _ query.FieldNameUsage) (string, error) {
-	if i != nil {
-		i.names[name] = true
-	}
+	i.names[name] = true
 	return name, nil
 }
 
