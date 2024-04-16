@@ -159,6 +159,7 @@ var (
 		"/temporal.api.workflowservice.v1.WorkflowService/GetWorkerTaskReachability": 1,
 		"/temporal.api.workflowservice.v1.WorkflowService/ListSchedules":             1,
 		"/temporal.api.workflowservice.v1.WorkflowService/ListBatchOperations":       1,
+		"/temporal.api.workflowservice.v1.WorkflowService/DescribeTaskQueue":         1,
 	}
 
 	VisibilityAPIPrioritiesOrdered = []int{0, 1}
