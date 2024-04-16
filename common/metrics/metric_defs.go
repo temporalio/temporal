@@ -1012,6 +1012,15 @@ var (
 	UnknownBuildTasksCounter                  = NewCounterDef("unknown_build_tasks")
 	TaskDispatchLatencyPerTaskQueue           = NewTimerDef("task_dispatch_latency")
 
+	// Versioning and Reachability
+	BuildIdAssignmentRuleCounter                       = NewGaugeDef("build_id_assignment_rule_count")
+	CompatibleBuildIdRedirectRuleCounter               = NewGaugeDef("compatible_build_id_redirect_rule_count")
+	ReachabilityCheckedRuleSourcesCounter              = NewCounterDef("reachability_checked_rule_sources_count")
+	ReachabilityCheckedRuleTargetsCounter              = NewCounterDef("reachability_checked_rule_targets_count")
+	ReachabilityCheckedBacklogCounter                  = NewCounterDef("reachability_checked_backlog_count")
+	ReachabilityCheckedOpenWorkflowExecutionsCounter   = NewCounterDef("reachability_checked_open_workflow_executions_count")
+	ReachabilityCheckedClosedWorkflowExecutionsCounter = NewCounterDef("reachability_checked_closed_workflow_executions_count")
+
 	// Worker
 	ExecutorTasksDoneCount                          = NewCounterDef("executor_done")
 	ExecutorTasksErrCount                           = NewCounterDef("executor_err")

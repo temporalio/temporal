@@ -181,21 +181,21 @@ func TestGetReachability_WithVisibility_WithoutRules(t *testing.T) {
 	rc := mkTestReachabilityCalculator()
 
 	// reachability("") --> reachable (it's the default build id)
-	checkReachability(ctx, t, rc, "", enumspb.BUILD_ID_TASK_REACHABILITY_REACHABLE)
+	checkReachability(ctx, t, rc, "", enumspb.BUILD_ID_TASK_REACHABILITY_REACHABLE, checkedRuleTargetsForUpstream)
 
 	// reachability("") --> closed_workflows_only (now that "" is not default)
 	rc.assignmentRules = []*persistencespb.AssignmentRule{mkAssignmentRulePersistence(mkAssignmentRule("A", nil), nil, nil)}
 	setVisibilityExpect(t, rc, []string{""}, 0, 1)
-	checkReachability(ctx, t, rc, "", enumspb.BUILD_ID_TASK_REACHABILITY_CLOSED_WORKFLOWS_ONLY)
+	checkReachability(ctx, t, rc, "", enumspb.BUILD_ID_TASK_REACHABILITY_CLOSED_WORKFLOWS_ONLY, checkedClosedWorkflowExecutionsForUpstream)
 	rc.assignmentRules = nil // remove rule for rest of test
 
 	// reachability(A) --> reachable (open workflow in visibility)
 	setVisibilityExpect(t, rc, []string{"A"}, 1, 0)
-	checkReachability(ctx, t, rc, "A", enumspb.BUILD_ID_TASK_REACHABILITY_REACHABLE)
+	checkReachability(ctx, t, rc, "A", enumspb.BUILD_ID_TASK_REACHABILITY_REACHABLE, checkedOpenWorkflowExecutionsForUpstream)
 
 	// reachability(B) --> unreachable (not mentioned in rules or visibility)
 	setVisibilityExpect(t, rc, []string{"B"}, 0, 0)
-	checkReachability(ctx, t, rc, "B", enumspb.BUILD_ID_TASK_REACHABILITY_UNREACHABLE)
+	checkReachability(ctx, t, rc, "B", enumspb.BUILD_ID_TASK_REACHABILITY_UNREACHABLE, checkedClosedWorkflowExecutionsForUpstream)
 }
 
 func TestGetReachability_WithoutVisibility_WithRules(t *testing.T) {
@@ -217,16 +217,16 @@ func TestGetReachability_WithoutVisibility_WithRules(t *testing.T) {
 	setVisibilityExpectEmptyAlways(t, rc)
 
 	// reachability(A) --> unreachable (assignment rule target, and also redirect rule source)
-	checkReachability(ctx, t, rc, "A", enumspb.BUILD_ID_TASK_REACHABILITY_UNREACHABLE)
+	checkReachability(ctx, t, rc, "A", enumspb.BUILD_ID_TASK_REACHABILITY_UNREACHABLE, checkedRuleSourcesForInput)
 
 	// reachability(C) --> reachable (redirect rule target of reachable source)
-	checkReachability(ctx, t, rc, "C", enumspb.BUILD_ID_TASK_REACHABILITY_REACHABLE)
+	checkReachability(ctx, t, rc, "C", enumspb.BUILD_ID_TASK_REACHABILITY_REACHABLE, checkedRuleTargetsForUpstream)
 
 	// reachability(D) --> reachable (assignment rule target, nothing else)
-	checkReachability(ctx, t, rc, "D", enumspb.BUILD_ID_TASK_REACHABILITY_REACHABLE)
+	checkReachability(ctx, t, rc, "D", enumspb.BUILD_ID_TASK_REACHABILITY_REACHABLE, checkedRuleTargetsForUpstream)
 
 	// reachability(G) --> unreachable (redirect rule target of unreachable source [F not reachable by rules or visibility])
-	checkReachability(ctx, t, rc, "G", enumspb.BUILD_ID_TASK_REACHABILITY_UNREACHABLE)
+	checkReachability(ctx, t, rc, "G", enumspb.BUILD_ID_TASK_REACHABILITY_UNREACHABLE, checkedClosedWorkflowExecutionsForUpstream)
 }
 
 // test reachability of build ids that are only reachable by the buildIdsOfInterest list + visibility
@@ -244,11 +244,11 @@ func TestGetReachability_WithVisibility_WithRules(t *testing.T) {
 
 	// reachability(C) --> closed_workflows_only (via upstream closed wf execution A)
 	setVisibilityExpect(t, rc, []string{"C", "A"}, 0, 1)
-	checkReachability(ctx, t, rc, "C", enumspb.BUILD_ID_TASK_REACHABILITY_CLOSED_WORKFLOWS_ONLY)
+	checkReachability(ctx, t, rc, "C", enumspb.BUILD_ID_TASK_REACHABILITY_CLOSED_WORKFLOWS_ONLY, checkedClosedWorkflowExecutionsForUpstream)
 
 	// reachability(D) --> reachable (via upstream running wf execution B)
 	setVisibilityExpect(t, rc, []string{"D", "B"}, 1, 0)
-	checkReachability(ctx, t, rc, "D", enumspb.BUILD_ID_TASK_REACHABILITY_REACHABLE)
+	checkReachability(ctx, t, rc, "D", enumspb.BUILD_ID_TASK_REACHABILITY_REACHABLE, checkedOpenWorkflowExecutionsForUpstream)
 }
 
 // test reachability of build ids that are only reachable by buildIdsOfInterest + visibility
@@ -276,19 +276,19 @@ func TestGetReachability_WithVisibility_WithDeletedRules(t *testing.T) {
 
 	// reachability(C) --> closed_workflows_only (via upstream closed wf execution A, rule included due to recent delete)
 	setVisibilityExpect(t, rc, []string{"C", "A"}, 0, 1)
-	checkReachability(ctx, t, rc, "C", enumspb.BUILD_ID_TASK_REACHABILITY_CLOSED_WORKFLOWS_ONLY)
+	checkReachability(ctx, t, rc, "C", enumspb.BUILD_ID_TASK_REACHABILITY_CLOSED_WORKFLOWS_ONLY, checkedClosedWorkflowExecutionsForUpstream)
 
 	// reachability(D) --> reachable (via upstream running wf execution B, rule included due to recent delete)
 	setVisibilityExpect(t, rc, []string{"D", "B"}, 1, 0)
-	checkReachability(ctx, t, rc, "D", enumspb.BUILD_ID_TASK_REACHABILITY_REACHABLE)
+	checkReachability(ctx, t, rc, "D", enumspb.BUILD_ID_TASK_REACHABILITY_REACHABLE, checkedOpenWorkflowExecutionsForUpstream)
 
 	// reachability(Z) --> unreachable (despite upstream closed wf execution X, rule excluded due to old delete)
 	setVisibilityExpect(t, rc, []string{"Z"}, 0, 0)
-	checkReachability(ctx, t, rc, "Z", enumspb.BUILD_ID_TASK_REACHABILITY_UNREACHABLE)
+	checkReachability(ctx, t, rc, "Z", enumspb.BUILD_ID_TASK_REACHABILITY_UNREACHABLE, checkedClosedWorkflowExecutionsForUpstream)
 
 	// reachability(ZZ) --> unreachable (despite upstream running wf execution Y, rule excluded due to recent delete)
 	setVisibilityExpect(t, rc, []string{"ZZ"}, 0, 0)
-	checkReachability(ctx, t, rc, "ZZ", enumspb.BUILD_ID_TASK_REACHABILITY_UNREACHABLE)
+	checkReachability(ctx, t, rc, "ZZ", enumspb.BUILD_ID_TASK_REACHABILITY_UNREACHABLE, checkedClosedWorkflowExecutionsForUpstream)
 }
 
 // test reachability via deleted rules within the rule propagation delay
@@ -301,10 +301,13 @@ func checkReachability(ctx context.Context,
 	t *testing.T,
 	rc *reachabilityCalculator,
 	buildId string,
-	expectedReachability enumspb.BuildIdTaskReachability) {
-	reachability, err := rc.run(ctx, buildId)
+	expectedReachability enumspb.BuildIdTaskReachability,
+	expectedCalcStage reachabilityCalcStage,
+) {
+	reachability, calcStage, err := rc.run(ctx, buildId)
 	assert.Nil(t, err)
 	assert.Equal(t, expectedReachability, reachability)
+	assert.Equal(t, expectedCalcStage, calcStage)
 }
 
 func setVisibilityExpect(t *testing.T,

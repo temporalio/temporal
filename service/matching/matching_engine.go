@@ -940,6 +940,7 @@ func (e *matchingEngineImpl) DescribeTaskQueue(
 			reachability, err := getBuildIdTaskReachability(ctx,
 				userData.GetVersioningData(),
 				e.visibilityManager,
+				e.metricsHandler,
 				request.GetNamespaceId(),
 				req.GetNamespace(),
 				req.GetTaskQueue().GetName(),
