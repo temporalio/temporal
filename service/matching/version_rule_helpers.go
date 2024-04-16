@@ -43,6 +43,10 @@ import (
 	"go.temporal.io/server/common/util"
 )
 
+const (
+	unversionedBuildId = ""
+)
+
 var (
 	errInvalidNegativeIndex                     = serviceerror.NewInvalidArgument("rule index cannot be negative")
 	errInvalidRampPercentage                    = serviceerror.NewInvalidArgument("ramp percentage must be in range [0, 100)")
@@ -73,6 +77,7 @@ var (
 	errExceedsMaxRuleChain = func(cnt, max int) error {
 		return serviceerror.NewFailedPrecondition(fmt.Sprintf("update exceeds number of chained redirect rules permitted in namespace (%v/%v)", cnt, max))
 	}
+	errUnversionedRedirectRuleTarget = serviceerror.NewInvalidArgument(fmt.Sprintf("the unversioned build id '%s' cannot be the target of a redirect rule", unversionedBuildId))
 )
 
 func cloneOrMkData(data *persistencespb.VersioningData) *persistencespb.VersioningData {
@@ -175,10 +180,13 @@ func AddCompatibleRedirectRule(timestamp *hlc.Clock,
 	data = cloneOrMkData(data)
 	rule := req.GetRule()
 	source := rule.GetSourceBuildId()
+	target := rule.GetTargetBuildId()
+	if target == unversionedBuildId {
+		return nil, errUnversionedRedirectRuleTarget
+	}
 	if isInVersionSets(source, data.GetVersionSets()) {
 		return nil, errSourceIsVersionSetMember
 	}
-	target := rule.GetTargetBuildId()
 	if isInVersionSets(target, data.GetVersionSets()) {
 		return nil, errTargetIsVersionSetMember
 	}
@@ -207,10 +215,13 @@ func ReplaceCompatibleRedirectRule(timestamp *hlc.Clock,
 	data = cloneOrMkData(data)
 	rule := req.GetRule()
 	source := rule.GetSourceBuildId()
+	target := rule.GetTargetBuildId()
+	if target == unversionedBuildId {
+		return nil, errUnversionedRedirectRuleTarget
+	}
 	if isInVersionSets(source, data.GetVersionSets()) {
 		return nil, errSourceIsVersionSetMember
 	}
-	target := rule.GetTargetBuildId()
 	if isInVersionSets(target, data.GetVersionSets()) {
 		return nil, errTargetIsVersionSetMember
 	}

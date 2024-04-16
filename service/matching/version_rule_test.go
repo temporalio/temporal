@@ -576,7 +576,7 @@ func TestDeleteAssignmentRuleIndexOutOfBounds(t *testing.T) {
 	assert.Equal(t, errAssignmentRuleIndexOutOfBounds(1, len(data.AssignmentRules)), err)
 }
 
-func TestInsertRedirectRuleBasic(t *testing.T) {
+func TestAddRedirectRuleBasic(t *testing.T) {
 	t.Parallel()
 	clock := hlc.Zero(1)
 	initialData := mkInitialData(0, clock)
@@ -609,7 +609,7 @@ func TestInsertRedirectRuleBasic(t *testing.T) {
 	protoassert.ProtoEqual(t, mkInitialData(0, clock), initialData)
 }
 
-func TestInsertRedirectRuleMaxRules(t *testing.T) {
+func TestAddRedirectRuleMaxRules(t *testing.T) {
 	t.Parallel()
 	maxRules := 3
 	clock := hlc.Zero(1)
@@ -630,7 +630,7 @@ func TestInsertRedirectRuleMaxRules(t *testing.T) {
 	assert.Equal(t, errExceedsMaxRedirectRules(4, maxRules), err)
 }
 
-func TestInsertRedirectRuleInVersionSet(t *testing.T) {
+func TestAddRedirectRuleInVersionSet(t *testing.T) {
 	t.Parallel()
 	clock := hlc.Zero(1)
 	// make version set with build id "0" in it
@@ -647,7 +647,7 @@ func TestInsertRedirectRuleInVersionSet(t *testing.T) {
 	assert.Equal(t, errTargetIsVersionSetMember, err)
 }
 
-func TestInsertRedirectRuleSourceIsConditionalAssignmentRuleTarget(t *testing.T) {
+func TestAddRedirectRuleSourceIsConditionalAssignmentRuleTarget(t *testing.T) {
 	t.Parallel()
 	clock := hlc.Zero(1)
 	data := mkInitialData(0, clock)
@@ -662,7 +662,7 @@ func TestInsertRedirectRuleSourceIsConditionalAssignmentRuleTarget(t *testing.T)
 	assert.Equal(t, errSourceIsConditionalAssignmentRuleTarget, err)
 }
 
-func TestInsertRedirectRuleAlreadyExists(t *testing.T) {
+func TestAddRedirectRuleAlreadyExists(t *testing.T) {
 	t.Parallel()
 	clock := hlc.Zero(1)
 	initialData := mkInitialData(0, clock)
@@ -677,7 +677,7 @@ func TestInsertRedirectRuleAlreadyExists(t *testing.T) {
 	assert.Equal(t, errSourceAlreadyExists("0", "1"), err)
 }
 
-func TestInsertRedirectRuleCreateCycle(t *testing.T) {
+func TestAddRedirectRuleCreateCycle(t *testing.T) {
 	t.Parallel()
 	clock := hlc.Zero(1)
 	initialData := mkInitialData(0, clock)
@@ -697,7 +697,7 @@ func TestInsertRedirectRuleCreateCycle(t *testing.T) {
 	assert.Equal(t, errIsCyclic, err)
 }
 
-func TestInsertRedirectRuleMaxChain(t *testing.T) {
+func TestAddRedirectRuleMaxChain(t *testing.T) {
 	t.Parallel()
 	maxChain := 3
 	clock := hlc.Zero(1)
@@ -718,6 +718,17 @@ func TestInsertRedirectRuleMaxChain(t *testing.T) {
 	_, err = insertRedirectRule(mkRedirectRule("6", "7"), data, clock, ignoreMaxRules, maxChain)
 	assert.Error(t, err)
 	assert.Equal(t, errExceedsMaxRuleChain(4, maxChain), err)
+}
+
+func TestAddRedirectRuleUnversionedTarget(t *testing.T) {
+	t.Parallel()
+	clock := hlc.Zero(1)
+	data := mkInitialData(0, clock)
+
+	// insert (1->"") errors
+	_, err := insertRedirectRule(mkRedirectRule("1", ""), data, clock, ignoreMaxRules, ignoreMaxChain)
+	assert.Error(t, err)
+	assert.Equal(t, errUnversionedRedirectRuleTarget, err)
 }
 
 func TestReplaceRedirectRuleBasic(t *testing.T) {
@@ -821,6 +832,21 @@ func TestReplaceRedirectRuleMaxChain(t *testing.T) {
 	_, err = replaceRedirectRule(mkRedirectRule("2", "4"), data, clock, maxChain)
 	assert.Error(t, err)
 	assert.Equal(t, errExceedsMaxRuleChain(4, maxChain), err)
+}
+
+func TestReplaceRedirectRuleUnversionedTarget(t *testing.T) {
+	t.Parallel()
+	clock := hlc.Zero(1)
+	data := mkInitialData(0, clock)
+
+	// insert (1->2) so that we can replace
+	data, err := insertRedirectRule(mkRedirectRule("1", "2"), data, clock, ignoreMaxRules, ignoreMaxChain)
+	assert.NoError(t, err)
+
+	// replace (1->"") errors
+	_, err = replaceRedirectRule(mkRedirectRule("1", ""), data, clock, ignoreMaxChain)
+	assert.Error(t, err)
+	assert.Equal(t, errUnversionedRedirectRuleTarget, err)
 }
 
 func TestReplaceRedirectRuleNotFound(t *testing.T) {
