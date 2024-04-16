@@ -85,7 +85,7 @@ func NewStreamReceiver(
 		tag.SourceShardID(serverShardKey.ShardID),
 		tag.ShardID(clientShardKey.ShardID), // client is the local cluster (target cluster, passive cluster)
 	)
-	taskTracker := NewExecutableTaskTracker(logger)
+	taskTracker := NewExecutableTaskTracker(logger, processToolBox.MetricsHandler)
 	return &StreamReceiverImpl{
 		ProcessToolBox: processToolBox,
 

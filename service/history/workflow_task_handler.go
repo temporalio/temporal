@@ -441,10 +441,12 @@ func (handler *workflowTaskHandlerImpl) handleCommandScheduleActivity(
 		return nil, err
 	}
 
-	// TODO: relax this restriction after matching can support this
-	if attr.UseCompatibleVersion && attr.TaskQueue.GetName() != "" && attr.TaskQueue.Name != handler.mutableState.GetExecutionInfo().TaskQueue {
-		err := serviceerror.NewInvalidArgument("Activity with UseCompatibleVersion cannot run on different task queue.")
-		return nil, handler.failWorkflowTask(enumspb.WORKFLOW_TASK_FAILED_CAUSE_BAD_SCHEDULE_ACTIVITY_ATTRIBUTES, err)
+	if handler.mutableState.GetAssignedBuildId() == "" {
+		// TODO: this is supported in new versioning [cleanup-old-wv]
+		if attr.UseWorkflowBuildId && attr.TaskQueue.GetName() != "" && attr.TaskQueue.Name != handler.mutableState.GetExecutionInfo().TaskQueue {
+			err := serviceerror.NewInvalidArgument("Activity with UseCompatibleVersion cannot run on different task queue.")
+			return nil, handler.failWorkflowTask(enumspb.WORKFLOW_TASK_FAILED_CAUSE_BAD_SCHEDULE_ACTIVITY_ATTRIBUTES, err)
+		}
 	}
 
 	if err := handler.sizeLimitChecker.checkIfPayloadSizeExceedsLimit(
@@ -462,14 +464,18 @@ func (handler *workflowTaskHandlerImpl) handleCommandScheduleActivity(
 
 	namespace := handler.mutableState.GetNamespaceEntry().Name().String()
 
+	oldVersioningUsed := handler.mutableState.GetMostRecentWorkerVersionStamp().GetUseVersioning()
+	newVersioningUsed := handler.mutableState.GetExecutionInfo().GetAssignedBuildId() != ""
+	versioningUsed := oldVersioningUsed || newVersioningUsed
+
 	// Enable eager activity start if dynamic config enables it and either 1. workflow doesn't use versioning,
 	// or 2. workflow uses versioning and activity intends to use a compatible version (since a
 	// worker is obviously compatible with itself and we are okay dispatching an eager task knowing that there may be a
 	// newer "default" compatible version).
-	// Note that if `UseCompatibleVersion` is false, it implies that the activity should run on the "default" version
+	// Note that if `UseWorkflowBuildId` is false, it implies that the activity should run on the "default" version
 	// for the task queue.
 	eagerStartActivity := attr.RequestEagerExecution && handler.config.EnableActivityEagerExecution(namespace) &&
-		(!handler.mutableState.GetWorkerVersionStamp().GetUseVersioning() || attr.UseCompatibleVersion)
+		(!versioningUsed || attr.UseWorkflowBuildId)
 
 	_, _, err := handler.mutableState.AddActivityTaskScheduledEvent(
 		handler.workflowTaskCompletedID,
@@ -508,11 +514,17 @@ func (handler *workflowTaskHandlerImpl) handlePostCommandEagerExecuteActivity(
 		return nil, nil
 	}
 
+	var stamp *commonpb.WorkerVersionStamp
+	// eager activity always uses workflow's build ID
+	buildId := handler.mutableState.GetAssignedBuildId()
+	stamp = &commonpb.WorkerVersionStamp{UseVersioning: buildId != "", BuildId: buildId}
+
 	if _, err := handler.mutableState.AddActivityTaskStartedEvent(
 		ai,
 		ai.GetScheduledEventId(),
 		uuid.New(),
 		handler.identity,
+		stamp,
 	); err != nil {
 		return nil, err
 	}
@@ -939,10 +951,12 @@ func (handler *workflowTaskHandlerImpl) handleCommandContinueAsNewWorkflow(
 		return err
 	}
 
-	// TODO: relax this restriction after matching can support this
-	if attr.UseCompatibleVersion && attr.TaskQueue.GetName() != "" && attr.TaskQueue.Name != handler.mutableState.GetExecutionInfo().TaskQueue {
-		err := serviceerror.NewInvalidArgument("ContinueAsNew with UseCompatibleVersion cannot run on different task queue.")
-		return handler.failWorkflowTask(enumspb.WORKFLOW_TASK_FAILED_CAUSE_BAD_CONTINUE_AS_NEW_ATTRIBUTES, err)
+	if handler.mutableState.GetAssignedBuildId() == "" {
+		// TODO: this is supported in new versioning [cleanup-old-wv]
+		if attr.InheritBuildId && attr.TaskQueue.GetName() != "" && attr.TaskQueue.Name != handler.mutableState.GetExecutionInfo().TaskQueue {
+			err := serviceerror.NewInvalidArgument("ContinueAsNew with UseCompatibleVersion cannot run on different task queue.")
+			return handler.failWorkflowTask(enumspb.WORKFLOW_TASK_FAILED_CAUSE_BAD_CONTINUE_AS_NEW_ATTRIBUTES, err)
+		}
 	}
 
 	if err := handler.sizeLimitChecker.checkIfPayloadSizeExceedsLimit(
@@ -1059,10 +1073,12 @@ func (handler *workflowTaskHandlerImpl) handleCommandStartChildWorkflow(
 		return err
 	}
 
-	// TODO: relax this restriction after matching can support this
-	if attr.UseCompatibleVersion && attr.TaskQueue.GetName() != "" && attr.TaskQueue.Name != handler.mutableState.GetExecutionInfo().TaskQueue {
-		err := serviceerror.NewInvalidArgument("StartChildWorkflowExecution with UseCompatibleVersion cannot run on different task queue.")
-		return handler.failWorkflowTask(enumspb.WORKFLOW_TASK_FAILED_CAUSE_BAD_START_CHILD_EXECUTION_ATTRIBUTES, err)
+	if handler.mutableState.GetAssignedBuildId() == "" {
+		// TODO: this is supported in new versioning [cleanup-old-wv]
+		if attr.InheritBuildId && attr.TaskQueue.GetName() != "" && attr.TaskQueue.Name != handler.mutableState.GetExecutionInfo().TaskQueue {
+			err := serviceerror.NewInvalidArgument("StartChildWorkflowExecution with UseCompatibleVersion cannot run on different task queue.")
+			return handler.failWorkflowTask(enumspb.WORKFLOW_TASK_FAILED_CAUSE_BAD_START_CHILD_EXECUTION_ATTRIBUTES, err)
+		}
 	}
 
 	if err := handler.sizeLimitChecker.checkIfPayloadSizeExceedsLimit(

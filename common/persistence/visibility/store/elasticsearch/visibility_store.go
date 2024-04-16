@@ -1024,6 +1024,8 @@ func (s *visibilityStore) generateESDoc(
 		searchattribute.ExecutionTime:     request.ExecutionTime,
 		searchattribute.ExecutionStatus:   request.Status.String(),
 		searchattribute.TaskQueue:         request.TaskQueue,
+		searchattribute.RootWorkflowID:    request.RootWorkflowID,
+		searchattribute.RootRunID:         request.RootRunID,
 	}
 
 	if request.ParentWorkflowID != nil {
@@ -1168,6 +1170,10 @@ func (s *visibilityStore) parseESDoc(
 			record.ParentWorkflowID = fieldValueParsed.(string)
 		case searchattribute.ParentRunID:
 			record.ParentRunID = fieldValueParsed.(string)
+		case searchattribute.RootWorkflowID:
+			record.RootWorkflowID = fieldValueParsed.(string)
+		case searchattribute.RootRunID:
+			record.RootRunID = fieldValueParsed.(string)
 		default:
 			// All custom and predefined search attributes are handled here.
 			if customSearchAttributes == nil {

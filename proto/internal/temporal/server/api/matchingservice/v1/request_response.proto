@@ -124,6 +124,8 @@ message AddWorkflowTaskRequest {
 }
 
 message AddWorkflowTaskResponse {
+    // When present, it means that the task is spooled to a versioned queue of this build ID
+    string assigned_build_id = 1;
 }
 
 message AddActivityTaskRequest {
@@ -144,6 +146,8 @@ message AddActivityTaskRequest {
 }
 
 message AddActivityTaskResponse {
+    // When present, it means that the task is spooled to a versioned queue of this build ID
+    string assigned_build_id = 1;
 }
 
 message QueryWorkflowRequest {
@@ -187,8 +191,23 @@ message DescribeTaskQueueRequest {
 }
 
 message DescribeTaskQueueResponse {
-    repeated temporal.api.taskqueue.v1.PollerInfo pollers = 1;
-    temporal.api.taskqueue.v1.TaskQueueStatus task_queue_status = 2;
+    temporal.api.workflowservice.v1.DescribeTaskQueueResponse desc_response = 1;
+}
+
+message DescribeTaskQueuePartitionRequest {
+    string namespace_id = 1;
+    temporal.server.api.taskqueue.v1.TaskQueuePartition task_queue_partition = 2;
+
+    temporal.api.taskqueue.v1.TaskQueueVersionSelection versions = 3;
+
+    // Report backlog info for the requested task queue types and versions
+    bool report_backlog_info = 4;
+    // Report list of pollers for requested task queue types and versions
+    bool report_pollers = 5;
+}
+
+message DescribeTaskQueuePartitionResponse {
+    map<string, temporal.server.api.taskqueue.v1.TaskQueueVersionInfoInternal> versions_info_internal = 1;
 }
 
 message ListTaskQueuePartitionsRequest {
@@ -229,7 +248,38 @@ message UpdateWorkerBuildIdCompatibilityRequest {
         string persist_unknown_build_id = 5;
     }
 }
+
 message UpdateWorkerBuildIdCompatibilityResponse {}
+
+message GetWorkerVersioningRulesRequest {
+    string namespace_id = 1;
+    string task_queue = 2;
+
+    oneof command {
+        temporal.api.workflowservice.v1.GetWorkerVersioningRulesRequest request = 3;
+    }
+}
+
+message GetWorkerVersioningRulesResponse {
+    temporal.api.workflowservice.v1.GetWorkerVersioningRulesResponse response = 1;
+}
+
+// (-- api-linter: core::0134::request-mask-required=disabled
+//     aip.dev/not-precedent: UpdateWorkerVersioningRulesRequest doesn't follow Google API format --)
+// (-- api-linter: core::0134::request-resource-required=disabled
+//     aip.dev/not-precedent: UpdateWorkerVersioningRulesRequest RPC doesn't follow Google API format. --)
+message UpdateWorkerVersioningRulesRequest {
+    string namespace_id = 1;
+    string task_queue = 2;
+
+    oneof command {
+        temporal.api.workflowservice.v1.UpdateWorkerVersioningRulesRequest request = 3;
+    }
+}
+
+message UpdateWorkerVersioningRulesResponse {
+    temporal.api.workflowservice.v1.UpdateWorkerVersioningRulesResponse response = 1;
+}
 
 message GetWorkerBuildIdCompatibilityRequest {
     string namespace_id = 1;

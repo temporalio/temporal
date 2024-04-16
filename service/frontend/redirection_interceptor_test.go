@@ -160,6 +160,7 @@ func (s *redirectionInterceptorSuite) TestGlobalAPI() {
 		"SignalWithStartWorkflowExecution":   {},
 		"SignalWorkflowExecution":            {},
 		"StartWorkflowExecution":             {},
+		"ExecuteMultiOperation":              {},
 		"UpdateWorkflowExecution":            {},
 		"PollWorkflowExecutionUpdate":        {},
 		"TerminateWorkflowExecution":         {},
@@ -175,6 +176,8 @@ func (s *redirectionInterceptorSuite) TestGlobalAPI() {
 		"ListScheduleMatchingTimes":        {},
 		"UpdateWorkerBuildIdCompatibility": {},
 		"GetWorkerBuildIdCompatibility":    {},
+		"UpdateWorkerVersioningRules":      {},
+		"GetWorkerVersioningRules":         {},
 		"GetWorkerTaskReachability":        {},
 
 		"StartBatchOperation":    {},

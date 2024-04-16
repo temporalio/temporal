@@ -816,8 +816,6 @@ func (c *temporalImpl) frontendConfigProvider() *config.Config {
 }
 
 func (c *temporalImpl) overrideHistoryDynamicConfig(t *testing.T, client *dcClient) {
-	client.OverrideValue(t, dynamicconfig.ReplicationTaskProcessorStartWait, time.Nanosecond)
-
 	if c.esConfig != nil {
 		client.OverrideValue(t, dynamicconfig.SecondaryVisibilityWritingMode, visibility.SecondaryVisibilityWritingModeDual)
 	}

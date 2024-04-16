@@ -32,13 +32,13 @@ import (
 	"go.opentelemetry.io/otel/trace"
 	commonpb "go.temporal.io/api/common/v1"
 	historypb "go.temporal.io/api/history/v1"
-	"go.temporal.io/server/service/history/api/getworkflowexecutionrawhistory"
-	"go.temporal.io/server/service/history/api/listtasks"
-	"go.temporal.io/server/service/history/workflow"
-
 	historyspb "go.temporal.io/server/api/history/v1"
 	workflowpb "go.temporal.io/server/api/workflow/v1"
 	"go.temporal.io/server/service/history/api/addtasks"
+	"go.temporal.io/server/service/history/api/getworkflowexecutionrawhistory"
+	"go.temporal.io/server/service/history/api/listtasks"
+	"go.temporal.io/server/service/history/api/multioperation"
+	"go.temporal.io/server/service/history/workflow"
 
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/api/matchingservice/v1"
@@ -382,6 +382,21 @@ func (e *historyEngineImpl) StartWorkflowExecution(
 		return nil, err
 	}
 	return starter.Invoke(ctx, nil)
+}
+
+func (e *historyEngineImpl) ExecuteMultiOperation(
+	ctx context.Context,
+	request *historyservice.ExecuteMultiOperationRequest,
+) (*historyservice.ExecuteMultiOperationResponse, error) {
+	return multioperation.Invoke(
+		ctx,
+		request,
+		e.shardContext,
+		e.workflowConsistencyChecker,
+		e.tokenSerializer,
+		e.persistenceVisibilityMgr,
+		e.matchingClient,
+	)
 }
 
 // GetMutableState retrieves the mutable state of the workflow execution

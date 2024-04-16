@@ -118,8 +118,9 @@ func (t *transferQueueTaskExecutorBase) pushActivity(
 	task *tasks.ActivityTask,
 	activityScheduleToStartTimeout time.Duration,
 	directive *taskqueuespb.TaskVersionDirective,
+	transactionPolicy workflow.TransactionPolicy,
 ) error {
-	_, err := t.matchingRawClient.AddActivityTask(ctx, &matchingservice.AddActivityTaskRequest{
+	resp, err := t.matchingRawClient.AddActivityTask(ctx, &matchingservice.AddActivityTaskRequest{
 		NamespaceId: task.NamespaceID,
 		Execution: &commonpb.WorkflowExecution{
 			WorkflowId: task.WorkflowID,
@@ -140,7 +141,25 @@ func (t *transferQueueTaskExecutorBase) pushActivity(
 		tasks.InitializeLogger(task, t.logger).Error("Matching returned not found error for AddActivityTask", tag.Error(err))
 	}
 
-	return err
+	if err != nil {
+		return err
+	}
+
+	if directive.GetUseAssignmentRules() == nil {
+		// activity is not getting a new build id, so no need to update MS
+		return nil
+	}
+
+	return updateIndependentActivityBuildId(
+		ctx,
+		task,
+		resp.AssignedBuildId,
+		t.shardContext,
+		transactionPolicy,
+		t.cache,
+		t.metricHandler,
+		t.logger,
+	)
 }
 
 func (t *transferQueueTaskExecutorBase) pushWorkflowTask(
@@ -149,12 +168,13 @@ func (t *transferQueueTaskExecutorBase) pushWorkflowTask(
 	taskqueue *taskqueuepb.TaskQueue,
 	workflowTaskScheduleToStartTimeout time.Duration,
 	directive *taskqueuespb.TaskVersionDirective,
+	transactionPolicy workflow.TransactionPolicy,
 ) error {
 	var sst *durationpb.Duration
 	if workflowTaskScheduleToStartTimeout > 0 {
 		sst = durationpb.New(workflowTaskScheduleToStartTimeout)
 	}
-	_, err := t.matchingRawClient.AddWorkflowTask(ctx, &matchingservice.AddWorkflowTaskRequest{
+	resp, err := t.matchingRawClient.AddWorkflowTask(ctx, &matchingservice.AddWorkflowTaskRequest{
 		NamespaceId: task.NamespaceID,
 		Execution: &commonpb.WorkflowExecution{
 			WorkflowId: task.WorkflowID,
@@ -172,7 +192,25 @@ func (t *transferQueueTaskExecutorBase) pushWorkflowTask(
 		tasks.InitializeLogger(task, t.logger).Error("Matching returned not found error for AddWorkflowTask", tag.Error(err))
 	}
 
-	return err
+	if err != nil {
+		return err
+	}
+
+	if directive.GetUseAssignmentRules() == nil {
+		// assignment rules are not used, so no need to update MS
+		return nil
+	}
+
+	return updateWorkflowAssignedBuildId(
+		ctx,
+		task,
+		resp.AssignedBuildId,
+		t.shardContext,
+		transactionPolicy,
+		t.cache,
+		t.metricHandler,
+		t.logger,
+	)
 }
 
 func (t *transferQueueTaskExecutorBase) processDeleteExecutionTask(

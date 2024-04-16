@@ -45,6 +45,7 @@ const (
 	nexusOutcomeTagName         = "outcome"
 	versionedTagName            = "versioned"
 	resourceExhaustedTag        = "resource_exhausted_cause"
+	PartitionTypeName           = "partition_type"
 )
 
 // This package should hold all the metrics and tags for temporal
@@ -424,6 +425,8 @@ const (
 	WorkflowCompletionStatsScope = "CompletionStats"
 	// ReplicationTaskFetcherScope is scope used by all metrics emitted by ReplicationTaskFetcher
 	ReplicationTaskFetcherScope = "ReplicationTaskFetcher"
+	// ReplicationTaskTrackerScope is scope used by all metrics emitted by ExecutableTaskTracker
+	ReplicationTaskTrackerScope = "ReplicationTaskTracker"
 	// ReplicationTaskCleanupScope is scope used by all metrics emitted by ReplicationTaskProcessor cleanup
 	ReplicationTaskCleanupScope = "ReplicationTaskCleanup"
 	// ReplicationDLQStatsScope is scope used by all metrics emitted related to replication DLQ
@@ -470,6 +473,8 @@ const (
 	MatchingAddWorkflowTaskScope = "AddWorkflowTask"
 	// MatchingTaskQueueMgrScope is the metrics scope for matching.TaskQueueManager component
 	MatchingTaskQueueMgrScope = "TaskQueueMgr"
+	// MatchingTaskQueuePartitionManagerScope is the metrics scope for matching.TaskQueuePartitionManager component
+	MatchingTaskQueuePartitionManagerScope = "TaskQueuePartitionManager"
 	// MatchingEngineScope is the metrics scope for matchingEngine component
 	MatchingEngineScope = "MatchingEngine"
 	// MatchingQueryWorkflowScope tracks AddWorkflowTask API calls received by service
@@ -972,6 +977,7 @@ var (
 	// Matching
 	MatchingClientForwardedCounter            = NewCounterDef("forwarded")
 	MatchingClientInvalidTaskQueueName        = NewCounterDef("invalid_task_queue_name")
+	MatchingClientInvalidTaskQueuePartition   = NewCounterDef("invalid_task_queue_partition")
 	SyncMatchLatencyPerTaskQueue              = NewTimerDef("syncmatch_latency")
 	AsyncMatchLatencyPerTaskQueue             = NewTimerDef("asyncmatch_latency")
 	PollSuccessPerTaskQueueCounter            = NewCounterDef("poll_success")
@@ -992,7 +998,10 @@ var (
 	LocalToRemoteMatchPerTaskQueueCounter     = NewCounterDef("local_to_remote_matches")
 	RemoteToLocalMatchPerTaskQueueCounter     = NewCounterDef("remote_to_local_matches")
 	RemoteToRemoteMatchPerTaskQueueCounter    = NewCounterDef("remote_to_remote_matches")
+	LoadedTaskQueueFamilyGauge                = NewGaugeDef("loaded_task_queue_family_count")
 	LoadedTaskQueueGauge                      = NewGaugeDef("loaded_task_queue_count")
+	LoadedTaskQueuePartitionGauge             = NewGaugeDef("loaded_task_queue_partition_count")
+	LoadedPhysicalTaskQueueGauge              = NewGaugeDef("loaded_physical_task_queue_count")
 	TaskQueueStartedCounter                   = NewCounterDef("task_queue_started")
 	TaskQueueStoppedCounter                   = NewCounterDef("task_queue_stopped")
 	TaskWriteThrottlePerTaskQueueCounter      = NewCounterDef("task_write_throttle_count")

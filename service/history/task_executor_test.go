@@ -56,7 +56,6 @@ import (
 	"go.temporal.io/server/service/history/tests"
 	"go.temporal.io/server/service/history/workflow"
 	"go.temporal.io/server/service/history/workflow/cache"
-	wcache "go.temporal.io/server/service/history/workflow/cache"
 )
 
 type taskExecutorTestContext struct {
@@ -65,7 +64,7 @@ type taskExecutorTestContext struct {
 	namespaceEntry *namespace.Namespace
 	controller     *gomock.Controller
 	mockShard      *shard.ContextTest
-	workflowCache  wcache.Cache
+	workflowCache  cache.Cache
 	now            time.Time
 	version        int64
 	timeSource     *clock.EventTimeSource
@@ -103,7 +102,7 @@ func newTaskExecutorTestContext(t *testing.T) *taskExecutorTestContext {
 	require.NoError(t, callbacks.RegisterStateMachine(reg))
 	require.NoError(t, callbacks.RegisterTaskSerializers(reg))
 	s.mockShard.SetStateMachineRegistry(reg)
-	s.workflowCache = wcache.NewHostLevelCache(s.mockShard.GetConfig(), s.mockShard.GetMetricsHandler())
+	s.workflowCache = cache.NewHostLevelCache(s.mockShard.GetConfig(), s.mockShard.GetMetricsHandler())
 
 	mockClusterMetadata := s.mockShard.Resource.ClusterMetadata
 	mockClusterMetadata.EXPECT().GetCurrentClusterName().Return(cluster.TestCurrentClusterName).AnyTimes()
