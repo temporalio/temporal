@@ -1013,8 +1013,8 @@ var (
 	TaskDispatchLatencyPerTaskQueue           = NewTimerDef("task_dispatch_latency")
 
 	// Versioning and Reachability
-	BuildIdAssignmentRuleCounter                       = NewGaugeDef("build_id_assignment_rule_count")
-	CompatibleBuildIdRedirectRuleCounter               = NewGaugeDef("compatible_build_id_redirect_rule_count")
+	VersioningAssignmentRuleCounter                    = NewGaugeDef("versioning_assignment_rule_count")
+	VersioningRedirectRuleCounter                      = NewGaugeDef("versioning_redirect_rule_count")
 	ReachabilityCheckedRuleSourcesCounter              = NewCounterDef("reachability_checked_rule_sources_count")
 	ReachabilityCheckedRuleTargetsCounter              = NewCounterDef("reachability_checked_rule_targets_count")
 	ReachabilityCheckedBacklogCounter                  = NewCounterDef("reachability_checked_backlog_count")

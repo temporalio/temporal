@@ -1175,6 +1175,10 @@ func (e *matchingEngineImpl) UpdateWorkerVersioningRules(
 		return nil, err
 	}
 
+	// record metrics
+	e.metricsHandler.Gauge(metrics.VersioningAssignmentRuleCounter.Name()).Record(float64(len(getResp.GetResponse().GetAssignmentRules())))
+	e.metricsHandler.Gauge(metrics.VersioningRedirectRuleCounter.Name()).Record(float64(len(getResp.GetResponse().GetCompatibleRedirectRules())))
+
 	return &matchingservice.UpdateWorkerVersioningRulesResponse{Response: &workflowservice.UpdateWorkerVersioningRulesResponse{
 		AssignmentRules:         getResp.GetResponse().GetAssignmentRules(),
 		CompatibleRedirectRules: getResp.GetResponse().GetCompatibleRedirectRules(),
