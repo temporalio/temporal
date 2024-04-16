@@ -81,6 +81,8 @@ type (
 		//   - updates in stateCompleted are ignored.
 		CancelIncomplete(ctx context.Context, reason CancelReason, eventStore EventStore) error
 
+		Clear()
+
 		// UpdateFromStore adds updates to the registry from the update store.
 		UpdateFromStore()
 
@@ -100,7 +102,7 @@ type (
 	registry struct {
 		mu               sync.RWMutex
 		updates          map[string]*Update
-		getStoreFn       func() Store
+		getStoreFn       func() Store // TODO: revert it back to Store
 		instrumentation  instrumentation
 		maxInFlight      func() int
 		maxTotal         func() int
@@ -327,6 +329,16 @@ func (r *registry) Send(
 		}
 	}
 	return outgoingMessages
+}
+
+func (r *registry) Clear() {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	for _, upd := range r.updates {
+		upd.abortWaiters()
+	}
+	r.updates = nil
+	r.completedCount = 0
 }
 
 func (r *registry) Len() int {

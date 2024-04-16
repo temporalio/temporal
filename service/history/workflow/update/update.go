@@ -26,12 +26,14 @@ package update
 
 import (
 	"context"
+	"errors"
 	"time"
 
 	enumspb "go.temporal.io/api/enums/v1"
 	failurepb "go.temporal.io/api/failure/v1"
 	historypb "go.temporal.io/api/history/v1"
 	protocolpb "go.temporal.io/api/protocol/v1"
+	"go.temporal.io/api/serviceerror"
 	updatepb "go.temporal.io/api/update/v1"
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/anypb"
@@ -205,8 +207,11 @@ func (u *Update) WaitLifecycleStage(
 		// then it means that the error is from the future itself.
 		// Update doesn't set error on the future, therefore this should never happen.
 		// But if it ever does, this error should be returned to the caller.
+		// TODO: besides aborted....
 		if ctx.Err() == nil && stCtx.Err() == nil {
-			return nil, err
+			if !errors.Is(err, abortWaitersErr) {
+				return nil, err
+			}
 		}
 
 		if ctx.Err() != nil {
@@ -216,6 +221,8 @@ func (u *Update) WaitLifecycleStage(
 
 		// Only get here if there is an error and this error is stCtx.Err().
 		// Which means that softTimeout has expired => check if update has reached ACCEPTED state.
+
+		// TODO: ...and aborted
 	}
 
 	// Update is not completed but maybe it is accepted.
@@ -231,8 +238,12 @@ func (u *Update) WaitLifecycleStage(
 		}
 
 		// See comment for the same check in "completed" branch.
+		// TODO: WorkflowUpdateAborted goes to the caller
 		if ctx.Err() == nil && stCtx.Err() == nil {
-			return nil, err
+			if !errors.Is(err, abortWaitersErr) {
+				return nil, err
+			}
+			return nil, serviceerror.NewUnavailable("Workflow Update is aborted.")
 		}
 
 		if ctx.Err() != nil {
@@ -248,6 +259,30 @@ func (u *Update) WaitLifecycleStage(
 	// Only get here if waitStage=ADMITTED or UNSPECIFIED and neither ACCEPTED nor COMPLETED are reached.
 	// Return ADMITTED (as the most reached state) and empty outcome.
 	return statusAdmitted(), nil
+}
+
+var (
+	abortWaitersErr = errors.New("lifecycle stage waiter is aborted")
+)
+
+// abort fails update futures with WorkflowUpdateAborted error and set state to stateCompleted.
+func (u *Update) abortWaiters() {
+	if u.state.Matches(stateSet(stateCreated | stateProvisionallyAdmitted | stateAdmitted | stateProvisionallySent | stateSent)) {
+		u.accepted.(*future.FutureImpl[*failurepb.Failure]).Set(nil, abortWaitersErr)
+		u.outcome.(*future.FutureImpl[*updatepb.Outcome]).Set(nil, abortWaitersErr)
+	}
+
+	if u.state.Matches(stateSet(stateProvisionallyAccepted | stateAccepted)) {
+		// Accepted updates can't be aborted because they are already persisted and
+		// will be recreated in the registry after reload from the store.
+		// Set error to WorkflowUpdateAborted to unify handling logic on waiter side (WaitLifecycleStage).
+		u.outcome.(*future.FutureImpl[*updatepb.Outcome]).Set(nil, abortWaitersErr)
+	}
+
+	// To protect futures from being set twice.
+	if !u.state.Matches(stateSet(stateCompleted)) {
+		u.setState(stateCompleted)
+	}
 }
 
 // Admit works if the Update is in any state but if the state is anything

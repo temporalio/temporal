@@ -234,8 +234,12 @@ func (c *ContextImpl) Clear() {
 	metrics.WorkflowContextCleared.With(c.metricsHandler).Record(1)
 	if c.MutableState != nil {
 		c.MutableState.GetQueryRegistry().Clear()
+		c.MutableState = nil
 	}
-	c.MutableState = nil
+	if c.updateRegistry != nil {
+		c.updateRegistry.Clear()
+		c.updateRegistry = nil
+	}
 }
 
 func (c *ContextImpl) GetWorkflowKey() definition.WorkflowKey {
