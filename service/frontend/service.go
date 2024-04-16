@@ -302,8 +302,8 @@ func NewConfig(
 		EnableWorkerVersioningWorkflow: dc.GetBoolPropertyFnWithNamespaceFilter(dynamicconfig.FrontendEnableWorkerVersioningWorkflowAPIs, false),
 		EnableWorkerVersioningRules:    dc.GetBoolPropertyFnWithNamespaceFilter(dynamicconfig.FrontendEnableWorkerVersioningRuleAPIs, false),
 
-		AccessHistoryFraction:            dc.GetFloat64Property(dynamicconfig.FrontendAccessHistoryFraction, 0.0),
-		AdminDeleteAccessHistoryFraction: dc.GetFloat64Property(dynamicconfig.FrontendAdminDeleteAccessHistoryFraction, 0.0),
+		AccessHistoryFraction:            dc.GetFloat64Property(dynamicconfig.FrontendAccessHistoryFraction, 1.0),
+		AdminDeleteAccessHistoryFraction: dc.GetFloat64Property(dynamicconfig.FrontendAdminDeleteAccessHistoryFraction, 1.0),
 
 		EnableNexusAPIs:             dc.GetBoolProperty(dynamicconfig.FrontendEnableNexusAPIs, false),
 		EnableCallbackAttachment:    dc.GetBoolPropertyFnWithNamespaceFilter(dynamicconfig.FrontendEnableCallbackAttachment, false),

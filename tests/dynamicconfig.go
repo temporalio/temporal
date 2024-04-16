@@ -53,7 +53,7 @@ var (
 		dynamicconfig.NamespaceCacheRefreshInterval:                       NamespaceCacheRefreshInterval,
 		dynamicconfig.FrontendEnableUpdateWorkflowExecution:               true,
 		dynamicconfig.FrontendEnableUpdateWorkflowExecutionAsyncAccepted:  true,
-		dynamicconfig.FrontendAccessHistoryFraction:                       0.5,
+		dynamicconfig.FrontendAccessHistoryFraction:                       1.0,
 		dynamicconfig.ReplicationEnableUpdateWithNewTaskMerge:             true,
 		dynamicconfig.ValidateUTF8SampleRPCRequest:                        1.0,
 		dynamicconfig.ValidateUTF8SampleRPCResponse:                       1.0,

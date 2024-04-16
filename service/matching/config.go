@@ -228,7 +228,7 @@ func NewConfig(
 
 		ListNexusIncomingServicesLongPollTimeout: dc.GetDurationProperty(dynamicconfig.MatchingListNexusIncomingServicesLongPollTimeout, 5*time.Minute-10*time.Second), // Use -10 seconds so that we send back empty response instead of timeout
 
-		FrontendAccessHistoryFraction: dc.GetFloat64Property(dynamicconfig.FrontendAccessHistoryFraction, 0.0),
+		FrontendAccessHistoryFraction: dc.GetFloat64Property(dynamicconfig.FrontendAccessHistoryFraction, 1.0),
 	}
 }
 
