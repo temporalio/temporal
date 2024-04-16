@@ -347,7 +347,10 @@ func (wh *WorkflowHandler) DeprecateNamespace(ctx context.Context, request *work
 // 'WorkflowExecutionStarted' event in history and also schedule the first WorkflowTask for the worker to make the
 // first workflow task for this instance.  It will return 'WorkflowExecutionAlreadyStartedError', if an instance already
 // exists with same workflowId.
-func (wh *WorkflowHandler) StartWorkflowExecution(ctx context.Context, request *workflowservice.StartWorkflowExecutionRequest) (_ *workflowservice.StartWorkflowExecutionResponse, retError error) {
+func (wh *WorkflowHandler) StartWorkflowExecution(
+	ctx context.Context,
+	request *workflowservice.StartWorkflowExecutionRequest,
+) (_ *workflowservice.StartWorkflowExecutionResponse, retError error) {
 	defer log.CapturePanic(wh.logger, &retError)
 
 	if request == nil {
@@ -416,22 +419,11 @@ func (wh *WorkflowHandler) StartWorkflowExecution(ctx context.Context, request *
 		request.SearchAttributes = sa
 	}
 
-	for _, callback := range request.GetCompletionCallbacks() {
-		if !wh.config.EnableCallbackAttachment(request.GetNamespace()) {
-			return nil, status.Error(codes.InvalidArgument, "attaching workflow callbacks is disabled for this namespace")
-		}
-		if callback, ok := callback.GetVariant().(*commonpb.Callback_Nexus_); ok {
-			u, err := url.Parse(callback.Nexus.GetUrl())
-			if err != nil {
-				return nil, status.Errorf(codes.InvalidArgument, "invalid url: %v", err)
-			}
-			if !(u.Scheme == "http" || u.Scheme == "https") {
-				return nil, status.Errorf(codes.InvalidArgument, "invalid url scheme for url: %v", u)
-			}
-			// TODO: check in dynamic config that address is valid and that http is only accepted if "insecure" is
-			// allowed for address.
-			// TODO: validate callback URL length against dynamic config.
-		}
+	if err := wh.validateWorkflowCompletionCallbacks(
+		namespaceName,
+		request.GetCompletionCallbacks(),
+	); err != nil {
+		return nil, err
 	}
 
 	wh.logger.Debug("Start workflow execution request namespace.", tag.WorkflowNamespace(namespaceName.String()))
@@ -4325,6 +4317,46 @@ func (wh *WorkflowHandler) validateWorkflowIdReusePolicy(
 	if conflictPolicy != enumspb.WORKFLOW_ID_CONFLICT_POLICY_UNSPECIFIED &&
 		reusePolicy == enumspb.WORKFLOW_ID_REUSE_POLICY_TERMINATE_IF_RUNNING {
 		return errIncompatibleIDReusePolicy
+	}
+	return nil
+}
+
+func (wh *WorkflowHandler) validateWorkflowCompletionCallbacks(
+	ns namespace.Name,
+	callbacks []*commonpb.Callback,
+) error {
+	if len(callbacks) > 0 && !wh.config.EnableCallbackAttachment(ns.String()) {
+		return status.Error(
+			codes.InvalidArgument,
+			"attaching workflow callbacks is disabled for this namespace",
+		)
+	}
+
+	for _, callback := range callbacks {
+		switch cb := callback.GetVariant().(type) {
+		case *commonpb.Callback_Nexus_:
+			if len(cb.Nexus.GetUrl()) > wh.config.CallbackURLMaxLength(ns.String()) {
+				return status.Error(
+					codes.InvalidArgument,
+					fmt.Sprintf(
+						"invalid url: url length longer than max length allowed of %d",
+						wh.config.CallbackURLMaxLength(ns.String()),
+					),
+				)
+			}
+			u, err := url.Parse(cb.Nexus.GetUrl())
+			if err != nil {
+				return status.Errorf(codes.InvalidArgument, "invalid url: %v", err)
+			}
+			if !(u.Scheme == "http" || u.Scheme == "https") {
+				return status.Errorf(codes.InvalidArgument, "invalid url: unknown scheme: %v", u)
+			}
+			// TODO: check in dynamic config that address is valid and that http is only accepted
+			// if "insecure" is allowed for address.
+
+		default:
+			return status.Error(codes.Unimplemented, fmt.Sprintf("unknown callback variant: %T", cb))
+		}
 	}
 	return nil
 }
