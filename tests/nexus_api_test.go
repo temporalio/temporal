@@ -717,10 +717,6 @@ func (s *ClientFunctionalSuite) versionedNexusTaskPoller(ctx context.Context, ta
 		panic(err)
 	}
 	response, handlerError := handler(res)
-	// The test is written in a way that expects the task handler to time out.
-	if ctx.Err() != nil {
-		return
-	}
 	if handlerError != nil {
 		_, err = s.testCluster.GetFrontendClient().RespondNexusTaskFailed(ctx, &workflowservice.RespondNexusTaskFailedRequest{
 			Namespace: s.namespace,

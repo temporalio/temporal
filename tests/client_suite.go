@@ -50,6 +50,7 @@ import (
 	"go.temporal.io/sdk/temporal"
 	"go.temporal.io/sdk/worker"
 	"go.temporal.io/sdk/workflow"
+
 	"go.uber.org/multierr"
 
 	"go.temporal.io/server/common/testing/historyrequire"
