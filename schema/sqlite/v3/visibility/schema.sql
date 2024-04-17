@@ -17,6 +17,8 @@ CREATE TABLE executions_visibility (
   search_attributes       TEXT          NULL,
   parent_workflow_id      VARCHAR(255)  NULL,
   parent_run_id           VARCHAR(255)  NULL,
+  root_workflow_id        VARCHAR(255)  NULL,
+  root_run_id             VARCHAR(255)  NULL,
 
   -- Predefined search attributes
   TemporalChangeVersion         TEXT          GENERATED ALWAYS AS (JSON_EXTRACT(search_attributes, "$.TemporalChangeVersion")) STORED,
@@ -73,6 +75,8 @@ CREATE INDEX by_state_transition_count  ON executions_visibility (namespace_id, 
 CREATE INDEX by_task_queue              ON executions_visibility (namespace_id, task_queue,             (COALESCE(close_time, '9999-12-31 23:59:59+00:00')) DESC, start_time DESC, run_id);
 CREATE INDEX by_parent_workflow_id      ON executions_visibility (namespace_id, parent_workflow_id,     (COALESCE(close_time, '9999-12-31 23:59:59+00:00')) DESC, start_time DESC, run_id);
 CREATE INDEX by_parent_run_id           ON executions_visibility (namespace_id, parent_run_id,          (COALESCE(close_time, '9999-12-31 23:59:59+00:00')) DESC, start_time DESC, run_id);
+CREATE INDEX by_root_workflow_id        ON executions_visibility (namespace_id, root_workflow_id,       (COALESCE(close_time, '9999-12-31 23:59:59+00:00')) DESC, start_time DESC, run_id);
+CREATE INDEX by_root_run_id             ON executions_visibility (namespace_id, root_run_id,            (COALESCE(close_time, '9999-12-31 23:59:59+00:00')) DESC, start_time DESC, run_id);
 
 -- Indexes for the predefined search attributes
 CREATE INDEX by_batcher_user                  ON executions_visibility (namespace_id, BatcherUser,                (COALESCE(close_time, '9999-12-31 23:59:59+00:00')) DESC, start_time DESC, run_id);

@@ -1302,7 +1302,7 @@ func (adh *AdminHandler) GetDLQMessages(
 	}
 
 	if request.GetMaximumPageSize() <= 0 {
-		request.MaximumPageSize = common.ReadDLQMessagesPageSize
+		request.MaximumPageSize = primitives.ReadDLQMessagesPageSize
 	}
 
 	if request.GetInclusiveEndMessageId() <= 0 {

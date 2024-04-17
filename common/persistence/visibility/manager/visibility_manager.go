@@ -84,6 +84,7 @@ type (
 		TaskQueue        string
 		SearchAttributes *commonpb.SearchAttributes
 		ParentExecution  *commonpb.WorkflowExecution
+		RootExecution    *commonpb.WorkflowExecution
 	}
 
 	// RecordWorkflowExecutionStartedRequest is used to add a record of a newly started execution

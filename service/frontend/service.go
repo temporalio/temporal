@@ -45,10 +45,11 @@ import (
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/membership"
 	"go.temporal.io/server/common/metrics"
-	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence/client"
 	"go.temporal.io/server/common/persistence/visibility"
 	"go.temporal.io/server/common/persistence/visibility/manager"
+	"go.temporal.io/server/common/primitives"
+	"go.temporal.io/server/common/retrypolicy"
 )
 
 // Config represents configuration for frontend service
@@ -180,8 +181,6 @@ type Config struct {
 	MaxConcurrentBatchOperation     dynamicconfig.IntPropertyFnWithNamespaceFilter
 	MaxExecutionCountBatchOperation dynamicconfig.IntPropertyFnWithNamespaceFilter
 
-	EnableWorkflowIdConflictPolicy dynamicconfig.BoolPropertyFnWithNamespaceFilter
-
 	EnableUpdateWorkflowExecution              dynamicconfig.BoolPropertyFnWithNamespaceFilter
 	EnableUpdateWorkflowExecutionAsyncAccepted dynamicconfig.BoolPropertyFnWithNamespaceFilter
 
@@ -201,6 +200,7 @@ type Config struct {
 
 	// EnableCallbackAttachment enables attaching callbacks to workflows.
 	EnableCallbackAttachment    dynamicconfig.BoolPropertyFnWithNamespaceFilter
+	CallbackURLMaxLength        dynamicconfig.IntPropertyFnWithNamespaceFilter
 	AdminEnableListHistoryTasks dynamicconfig.BoolPropertyFn
 }
 
@@ -229,7 +229,7 @@ func NewConfig(
 		VisibilityAllowList:                   dc.GetBoolPropertyFnWithNamespaceFilter(dynamicconfig.VisibilityAllowList, true),
 		SuppressErrorSetSystemSearchAttribute: dc.GetBoolPropertyFnWithNamespaceFilter(dynamicconfig.SuppressErrorSetSystemSearchAttribute, false),
 
-		HistoryMaxPageSize:                  dc.GetIntPropertyFilteredByNamespace(dynamicconfig.FrontendHistoryMaxPageSize, common.GetHistoryMaxPageSize),
+		HistoryMaxPageSize:                  dc.GetIntPropertyFilteredByNamespace(dynamicconfig.FrontendHistoryMaxPageSize, primitives.GetHistoryMaxPageSize),
 		RPS:                                 dc.GetIntProperty(dynamicconfig.FrontendRPS, 2400),
 		GlobalRPS:                           dc.GetIntProperty(dynamicconfig.FrontendGlobalRPS, 0),
 		OperatorRPSRatio:                    dc.GetFloat64Property(dynamicconfig.OperatorRPSRatio, common.DefaultOperatorRPSRatio),
@@ -255,7 +255,7 @@ func NewConfig(
 		ReachabilityTaskQueueScanLimit:           dc.GetIntProperty(dynamicconfig.ReachabilityTaskQueueScanLimit, 20),
 		ReachabilityQueryBuildIdLimit:            dc.GetIntProperty(dynamicconfig.ReachabilityQueryBuildIdLimit, 5),
 		ReachabilityQuerySetDurationSinceDefault: dc.GetDurationProperty(dynamicconfig.ReachabilityQuerySetDurationSinceDefault, 5*time.Minute),
-		MaxBadBinaries:                           dc.GetIntPropertyFilteredByNamespace(dynamicconfig.FrontendMaxBadBinaries, namespace.MaxBadBinaries),
+		MaxBadBinaries:                           dc.GetIntPropertyFilteredByNamespace(dynamicconfig.FrontendMaxBadBinaries, 10),
 		DisableListVisibilityByFilter:            dc.GetBoolPropertyFnWithNamespaceFilter(dynamicconfig.DisableListVisibilityByFilter, false),
 		BlobSizeLimitError:                       dc.GetIntPropertyFilteredByNamespace(dynamicconfig.BlobSizeLimitError, 2*1024*1024),
 		BlobSizeLimitWarn:                        dc.GetIntPropertyFilteredByNamespace(dynamicconfig.BlobSizeLimitWarn, 256*1024),
@@ -269,8 +269,8 @@ func NewConfig(
 		VisibilityArchivalQueryMaxPageSize:       dc.GetIntProperty(dynamicconfig.VisibilityArchivalQueryMaxPageSize, 10000),
 		DisallowQuery:                            dc.GetBoolPropertyFnWithNamespaceFilter(dynamicconfig.DisallowQuery, false),
 		SendRawWorkflowHistory:                   dc.GetBoolPropertyFnWithNamespaceFilter(dynamicconfig.SendRawWorkflowHistory, false),
-		DefaultWorkflowRetryPolicy:               dc.GetMapPropertyFnWithNamespaceFilter(dynamicconfig.DefaultWorkflowRetryPolicy, common.GetDefaultRetryPolicyConfigOptions()),
-		DefaultWorkflowTaskTimeout:               dc.GetDurationPropertyFilteredByNamespace(dynamicconfig.DefaultWorkflowTaskTimeout, common.DefaultWorkflowTaskTimeout),
+		DefaultWorkflowRetryPolicy:               dc.GetMapPropertyFnWithNamespaceFilter(dynamicconfig.DefaultWorkflowRetryPolicy, retrypolicy.GetDefault()),
+		DefaultWorkflowTaskTimeout:               dc.GetDurationPropertyFilteredByNamespace(dynamicconfig.DefaultWorkflowTaskTimeout, primitives.DefaultWorkflowTaskTimeout),
 		EnableServerVersionCheck:                 dc.GetBoolProperty(dynamicconfig.EnableServerVersionCheck, os.Getenv("TEMPORAL_VERSION_CHECK_DISABLED") == ""),
 		EnableTokenNamespaceEnforcement:          dc.GetBoolProperty(dynamicconfig.EnableTokenNamespaceEnforcement, true),
 		KeepAliveMinTime:                         dc.GetDurationProperty(dynamicconfig.KeepAliveMinTime, 10*time.Second),
@@ -293,8 +293,6 @@ func NewConfig(
 		MaxConcurrentBatchOperation:     dc.GetIntPropertyFilteredByNamespace(dynamicconfig.FrontendMaxConcurrentBatchOperationPerNamespace, 1),
 		MaxExecutionCountBatchOperation: dc.GetIntPropertyFilteredByNamespace(dynamicconfig.FrontendMaxExecutionCountBatchOperationPerNamespace, 1000),
 
-		EnableWorkflowIdConflictPolicy: dc.GetBoolPropertyFnWithNamespaceFilter(dynamicconfig.EnableWorkflowIdConflictPolicy, false),
-
 		EnableExecuteMultiOperation: dc.GetBoolPropertyFnWithNamespaceFilter(dynamicconfig.FrontendEnableExecuteMultiOperation, false),
 
 		EnableUpdateWorkflowExecution:              dc.GetBoolPropertyFnWithNamespaceFilter(dynamicconfig.FrontendEnableUpdateWorkflowExecution, false),
@@ -309,6 +307,7 @@ func NewConfig(
 
 		EnableNexusAPIs:             dc.GetBoolProperty(dynamicconfig.FrontendEnableNexusAPIs, false),
 		EnableCallbackAttachment:    dc.GetBoolPropertyFnWithNamespaceFilter(dynamicconfig.FrontendEnableCallbackAttachment, false),
+		CallbackURLMaxLength:        dc.GetIntPropertyFilteredByNamespace(dynamicconfig.FrontendCallbackURLMaxLength, 1000),
 		AdminEnableListHistoryTasks: dc.GetBoolProperty(dynamicconfig.AdminEnableListHistoryTasks, true),
 	}
 }

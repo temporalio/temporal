@@ -41,6 +41,7 @@ import (
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/primitives/timestamp"
+	"go.temporal.io/server/common/retrypolicy"
 	"go.temporal.io/server/common/rpc/interceptor"
 	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/workflow"
@@ -286,7 +287,7 @@ func ValidateStartWorkflowExecutionRequest(
 	if len(request.WorkflowType.GetName()) > maxIDLengthLimit {
 		return serviceerror.NewInvalidArgument("WorkflowType exceeds length limit.")
 	}
-	if err := common.ValidateRetryPolicy(request.RetryPolicy); err != nil {
+	if err := retrypolicy.Validate(request.RetryPolicy); err != nil {
 		return err
 	}
 	return ValidateStart(

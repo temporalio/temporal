@@ -37,8 +37,8 @@ import (
 
 	"go.temporal.io/server/common/failure"
 	"go.temporal.io/server/common/number"
+	"go.temporal.io/server/common/retrypolicy"
 
-	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/backoff"
 )
 
@@ -68,7 +68,7 @@ func Test_IsRetryable(t *testing.T) {
 		}},
 	}
 	a.True(isRetryable(f, nil))
-	a.False(isRetryable(f, []string{common.TimeoutFailureTypePrefix + enumspb.TIMEOUT_TYPE_START_TO_CLOSE.String()}))
+	a.False(isRetryable(f, []string{retrypolicy.TimeoutFailureTypePrefix + enumspb.TIMEOUT_TYPE_START_TO_CLOSE.String()}))
 
 	f = &failurepb.Failure{
 		FailureInfo: &failurepb.Failure_TimeoutFailureInfo{TimeoutFailureInfo: &failurepb.TimeoutFailureInfo{
@@ -76,7 +76,7 @@ func Test_IsRetryable(t *testing.T) {
 		}},
 	}
 	a.False(isRetryable(f, nil))
-	a.False(isRetryable(f, []string{common.TimeoutFailureTypePrefix + enumspb.TIMEOUT_TYPE_SCHEDULE_TO_START.String()}))
+	a.False(isRetryable(f, []string{retrypolicy.TimeoutFailureTypePrefix + enumspb.TIMEOUT_TYPE_SCHEDULE_TO_START.String()}))
 
 	f = &failurepb.Failure{
 		FailureInfo: &failurepb.Failure_TimeoutFailureInfo{TimeoutFailureInfo: &failurepb.TimeoutFailureInfo{
@@ -84,7 +84,7 @@ func Test_IsRetryable(t *testing.T) {
 		}},
 	}
 	a.False(isRetryable(f, nil))
-	a.False(isRetryable(f, []string{common.TimeoutFailureTypePrefix + enumspb.TIMEOUT_TYPE_SCHEDULE_TO_CLOSE.String()}))
+	a.False(isRetryable(f, []string{retrypolicy.TimeoutFailureTypePrefix + enumspb.TIMEOUT_TYPE_SCHEDULE_TO_CLOSE.String()}))
 
 	f = &failurepb.Failure{
 		FailureInfo: &failurepb.Failure_TimeoutFailureInfo{TimeoutFailureInfo: &failurepb.TimeoutFailureInfo{
@@ -92,9 +92,9 @@ func Test_IsRetryable(t *testing.T) {
 		}},
 	}
 	a.True(isRetryable(f, nil))
-	a.False(isRetryable(f, []string{common.TimeoutFailureTypePrefix + enumspb.TIMEOUT_TYPE_HEARTBEAT.String()}))
-	a.True(isRetryable(f, []string{common.TimeoutFailureTypePrefix + enumspb.TIMEOUT_TYPE_START_TO_CLOSE.String()}))
-	a.True(isRetryable(f, []string{common.TimeoutFailureTypePrefix + "unknown timeout type string"}))
+	a.False(isRetryable(f, []string{retrypolicy.TimeoutFailureTypePrefix + enumspb.TIMEOUT_TYPE_HEARTBEAT.String()}))
+	a.True(isRetryable(f, []string{retrypolicy.TimeoutFailureTypePrefix + enumspb.TIMEOUT_TYPE_START_TO_CLOSE.String()}))
+	a.True(isRetryable(f, []string{retrypolicy.TimeoutFailureTypePrefix + "unknown timeout type string"}))
 
 	f = &failurepb.Failure{
 		FailureInfo: &failurepb.Failure_ServerFailureInfo{ServerFailureInfo: &failurepb.ServerFailureInfo{

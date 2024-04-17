@@ -173,6 +173,20 @@ func (c *metricClient) DescribeWorkflowExecution(
 	return c.client.DescribeWorkflowExecution(ctx, request, opts...)
 }
 
+func (c *metricClient) ExecuteMultiOperation(
+	ctx context.Context,
+	request *workflowservice.ExecuteMultiOperationRequest,
+	opts ...grpc.CallOption,
+) (_ *workflowservice.ExecuteMultiOperationResponse, retError error) {
+
+	metricsHandler, startTime := c.startMetricsRecording(ctx, "FrontendClientExecuteMultiOperation")
+	defer func() {
+		c.finishMetricsRecording(metricsHandler, startTime, retError)
+	}()
+
+	return c.client.ExecuteMultiOperation(ctx, request, opts...)
+}
+
 func (c *metricClient) GetClusterInfo(
 	ctx context.Context,
 	request *workflowservice.GetClusterInfoRequest,
