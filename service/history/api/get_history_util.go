@@ -43,8 +43,8 @@ import (
 	"go.temporal.io/server/common/rpc/interceptor"
 	"go.temporal.io/server/common/searchattribute"
 	"go.temporal.io/server/service/history/consts"
+	"go.temporal.io/server/service/history/events"
 	"go.temporal.io/server/service/history/shard"
-	"go.temporal.io/server/service/history/workflow"
 )
 
 func GetRawHistory(
@@ -149,7 +149,7 @@ func GetHistory(
 	metrics.HistorySize.With(metricsHandler).Record(int64(size))
 
 	isLastPage := len(nextPageToken) == 0
-	if err := workflow.VerifyHistoryIsComplete(
+	if err := events.VerifyHistoryIsComplete(
 		historyEvents,
 		firstEventID,
 		nextEventID-1,

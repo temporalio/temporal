@@ -48,7 +48,7 @@ import (
 	"go.temporal.io/server/common/persistence/versionhistory"
 	"go.temporal.io/server/common/searchattribute"
 	"go.temporal.io/server/common/tasktoken"
-	"go.temporal.io/server/service/history/workflow"
+	"go.temporal.io/server/service/history/events"
 )
 
 // DEPRECATED: DO NOT MODIFY UNLESS ALSO APPLIED TO ./service/history/api/getworkflowexecutionhistory/api.go
@@ -586,7 +586,7 @@ func (wh *WorkflowHandler) getHistory(
 	metricsHandler.Histogram(metrics.HistorySize.Name(), metrics.HistorySize.Unit()).Record(int64(size))
 
 	isLastPage := len(nextPageToken) == 0
-	if err := workflow.VerifyHistoryIsComplete(
+	if err := events.VerifyHistoryIsComplete(
 		historyEvents,
 		firstEventID,
 		nextEventID-1,
