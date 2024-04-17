@@ -58,7 +58,11 @@ func RegisterExecutor(
 	config *Config,
 ) error {
 	exec := activeExecutor{options: options, config: config}
-	if err := hsm.RegisterExecutor(registry, TaskTypeInvocation.ID, exec.executeInvocationTask); err != nil {
+	if err := hsm.RegisterExecutor(
+		registry,
+		TaskTypeInvocation.ID,
+		exec.executeInvocationTask,
+	); err != nil {
 		return err
 	}
 	return hsm.RegisterExecutor(registry, TaskTypeBackoff.ID, exec.executeBackoffTask)
@@ -69,7 +73,12 @@ type activeExecutor struct {
 	config  *Config
 }
 
-func (e activeExecutor) executeInvocationTask(ctx context.Context, env hsm.Environment, ref hsm.Ref, task InvocationTask) error {
+func (e activeExecutor) executeInvocationTask(
+	ctx context.Context,
+	env hsm.Environment,
+	ref hsm.Ref,
+	task InvocationTask,
+) error {
 	ctx, cancel := context.WithTimeout(ctx, e.config.InvocationTaskTimeout())
 	defer cancel()
 
@@ -80,23 +89,43 @@ func (e activeExecutor) executeInvocationTask(ctx context.Context, env hsm.Envir
 
 	request, err := nexus.NewCompletionHTTPRequest(ctx, url, completion)
 	if err != nil {
-		return queues.NewUnprocessableTaskError(fmt.Sprintf("failed to construct Nexus request: %v", err))
+		return queues.NewUnprocessableTaskError(
+			fmt.Sprintf("failed to construct Nexus request: %v", err),
+		)
 	}
 
-	caller := e.options.CallerProvider(queues.NamespaceIDAndDestination{NamespaceID: ref.WorkflowKey.GetNamespaceID(), Destination: task.Destination})
+	caller := e.options.CallerProvider(queues.NamespaceIDAndDestination{
+		NamespaceID: ref.WorkflowKey.GetNamespaceID(),
+		Destination: task.Destination,
+	})
 	response, callErr := caller(request)
 	if callErr == nil {
 		// Body is not read but should be discarded to keep the underlying TCP connection alive.
-		// Just in case something unexpected happens while discarding or closing the body, propagate errors to the machine.
+		// Just in case something unexpected happens while discarding or closing the body,
+		// propagate errors to the machine.
 		if _, callErr = io.Copy(io.Discard, response.Body); callErr == nil {
 			callErr = response.Body.Close()
 		}
 	}
 
-	return e.saveResult(ctx, env, ref, response, callErr)
+	err = e.saveResult(ctx, env, ref, response, callErr)
+
+	if callErr != nil {
+		err = queues.NewDestinationDownError(callErr.Error(), err)
+	} else if isRetryableHTTPResponse(response) {
+		err = queues.NewDestinationDownError(
+			fmt.Sprintf("response returned retryable status code %d", response.StatusCode),
+			err,
+		)
+	}
+	return err
 }
 
-func (e activeExecutor) loadUrlAndCallback(ctx context.Context, env hsm.Environment, ref hsm.Ref) (string, nexus.OperationCompletion, error) {
+func (e activeExecutor) loadUrlAndCallback(
+	ctx context.Context,
+	env hsm.Environment,
+	ref hsm.Ref,
+) (string, nexus.OperationCompletion, error) {
 	var url string
 	var completion nexus.OperationCompletion
 	err := env.Access(ctx, ref, hsm.AccessRead, func(node *hsm.Node) error {
@@ -116,14 +145,22 @@ func (e activeExecutor) loadUrlAndCallback(ctx context.Context, env hsm.Environm
 				return err
 			}
 		default:
-			return queues.NewUnprocessableTaskError(fmt.Sprintf("unprocessable callback variant: %v", variant))
+			return queues.NewUnprocessableTaskError(
+				fmt.Sprintf("unprocessable callback variant: %v", variant),
+			)
 		}
 		return nil
 	})
 	return url, completion, err
 }
 
-func (e activeExecutor) saveResult(ctx context.Context, env hsm.Environment, ref hsm.Ref, response *http.Response, callErr error) error {
+func (e activeExecutor) saveResult(
+	ctx context.Context,
+	env hsm.Environment,
+	ref hsm.Ref,
+	response *http.Response,
+	callErr error,
+) error {
 	return env.Access(ctx, ref, hsm.AccessWrite, func(node *hsm.Node) error {
 		return hsm.MachineTransition(node, func(callback Callback) (hsm.TransitionOutput, error) {
 			if callErr == nil {
@@ -131,7 +168,7 @@ func (e activeExecutor) saveResult(ctx context.Context, env hsm.Environment, ref
 					return TransitionSucceeded.Apply(callback, EventSucceeded{})
 				}
 				callErr = fmt.Errorf("request failed with: %v", response.Status) // nolint:goerr113
-				if response.StatusCode >= 400 && response.StatusCode < 500 && !slices.Contains(retryable4xxErrorTypes, response.StatusCode) {
+				if !isRetryableHTTPResponse(response) {
 					return TransitionFailed.Apply(callback, EventFailed{
 						Time: env.Now(),
 						Err:  callErr,
@@ -146,10 +183,19 @@ func (e activeExecutor) saveResult(ctx context.Context, env hsm.Environment, ref
 	})
 }
 
-func (e activeExecutor) executeBackoffTask(ctx context.Context, env hsm.Environment, ref hsm.Ref, task BackoffTask) error {
+func (e activeExecutor) executeBackoffTask(
+	ctx context.Context,
+	env hsm.Environment,
+	ref hsm.Ref,
+	task BackoffTask,
+) error {
 	return env.Access(ctx, ref, hsm.AccessWrite, func(node *hsm.Node) error {
 		return hsm.MachineTransition(node, func(callback Callback) (hsm.TransitionOutput, error) {
 			return TransitionRescheduled.Apply(callback, EventRescheduled{})
 		})
 	})
+}
+
+func isRetryableHTTPResponse(response *http.Response) bool {
+	return response.StatusCode >= 500 || slices.Contains(retryable4xxErrorTypes, response.StatusCode)
 }

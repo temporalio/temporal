@@ -36,6 +36,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/sony/gobreaker"
 	"go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
 
@@ -815,4 +816,75 @@ func EstimateTaskMetricTag(
 		metrics.OperationTag(taskType), // for backward compatibility
 		// TODO: add task priority tag here as well
 	}
+}
+
+// CircuitBreakerExecutable wraps Executable with a circuit breaker.
+// If the executable returns DestinationDownError, it will signal the circuit breaker
+// of failure, and return the inner error.
+type CircuitBreakerExecutable struct {
+	Executable
+	cb *gobreaker.TwoStepCircuitBreaker
+}
+
+func NewCircuitBreakerExecutable(
+	e Executable,
+	cb *gobreaker.TwoStepCircuitBreaker,
+) *CircuitBreakerExecutable {
+	return &CircuitBreakerExecutable{
+		Executable: e,
+		cb:         cb,
+	}
+}
+
+// This is roughly the same implementation of the `gobreaker.CircuitBreaker.Execute` function,
+// but checks if the error is `DestinationDownError` to report success, and unwrap it.
+func (e *CircuitBreakerExecutable) Execute() error {
+	doneCb, err := e.cb.Allow()
+	if err != nil {
+		return err
+	}
+
+	defer func() {
+		e := recover()
+		if e != nil {
+			doneCb(false)
+			panic(e)
+		}
+	}()
+
+	err = e.Executable.Execute()
+	destinationDownErr, destinationDown := err.(*DestinationDownError)
+	if destinationDown {
+		err = destinationDownErr.Unwrap()
+	}
+
+	doneCb(!destinationDown)
+	return err
+}
+
+// DestinationDownError indicates the destination is down and wraps another error.
+// It is a useful specific error that can be used, for example, in a circuit breaker
+// to distinguish when a destination service is down and an internal error.
+type DestinationDownError struct {
+	Message string
+	err     error
+}
+
+func NewDestinationDownError(msg string, err error) *DestinationDownError {
+	return &DestinationDownError{
+		Message: "destination down: " + msg,
+		err:     err,
+	}
+}
+
+func (e *DestinationDownError) Error() string {
+	msg := e.Message
+	if e.err != nil {
+		msg += "\n" + e.err.Error()
+	}
+	return msg
+}
+
+func (e *DestinationDownError) Unwrap() error {
+	return e.err
 }
