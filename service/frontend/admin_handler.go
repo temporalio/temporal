@@ -74,7 +74,6 @@ import (
 	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/config"
 	"go.temporal.io/server/common/convert"
-	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/headers"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
@@ -113,6 +112,7 @@ type (
 		namespaceDLQHandler        namespace.DLQMessageHandler
 		eventSerializer            serialization.Serializer
 		visibilityMgr              manager.VisibilityManager
+		persistenceExecutionName   string
 		namespaceReplicationQueue  persistence.NamespaceReplicationQueue
 		taskManager                persistence.TaskManager
 		clusterMetadataManager     persistence.ClusterMetadataManager
@@ -129,11 +129,7 @@ type (
 		saManager                  searchattribute.Manager
 		clusterMetadata            cluster.Metadata
 		healthServer               *health.Server
-
-		// DEPRECATED: only history service on server side is supposed to
-		// use the following components.
-		persistenceExecutionManager persistence.ExecutionManager
-		taskCategoryRegistry        tasks.TaskCategoryRegistry
+		taskCategoryRegistry       tasks.TaskCategoryRegistry
 	}
 
 	NewAdminHandlerArgs struct {
@@ -145,6 +141,7 @@ type (
 		visibilityMgr                       manager.VisibilityManager
 		Logger                              log.Logger
 		TaskManager                         persistence.TaskManager
+		persistenceExecutionManager         persistence.ExecutionManager
 		ClusterMetadataManager              persistence.ClusterMetadataManager
 		PersistenceMetadataManager          persistence.MetadataManager
 		ClientFactory                       serverClient.Factory
@@ -161,11 +158,7 @@ type (
 		HealthServer                        *health.Server
 		EventSerializer                     serialization.Serializer
 		TimeSource                          clock.TimeSource
-
-		// DEPRECATED: only history service on server side is supposed to
-		// use the following components.
-		PersistenceExecutionManager persistence.ExecutionManager
-		CategoryRegistry            tasks.TaskCategoryRegistry
+		CategoryRegistry                    tasks.TaskCategoryRegistry
 	}
 )
 
@@ -195,27 +188,27 @@ func NewAdminHandler(
 			args.NamespaceReplicationQueue,
 			args.Logger,
 		),
-		eventSerializer:             args.EventSerializer,
-		visibilityMgr:               args.visibilityMgr,
-		ESClient:                    args.EsClient,
-		persistenceExecutionManager: args.PersistenceExecutionManager,
-		namespaceReplicationQueue:   args.NamespaceReplicationQueue,
-		taskManager:                 args.TaskManager,
-		clusterMetadataManager:      args.ClusterMetadataManager,
-		persistenceMetadataManager:  args.PersistenceMetadataManager,
-		clientFactory:               args.ClientFactory,
-		clientBean:                  args.ClientBean,
-		historyClient:               args.HistoryClient,
-		sdkClientFactory:            args.sdkClientFactory,
-		membershipMonitor:           args.MembershipMonitor,
-		hostInfoProvider:            args.HostInfoProvider,
-		metricsHandler:              args.MetricsHandler,
-		namespaceRegistry:           args.NamespaceRegistry,
-		saProvider:                  args.SaProvider,
-		saManager:                   args.SaManager,
-		clusterMetadata:             args.ClusterMetadata,
-		healthServer:                args.HealthServer,
-		taskCategoryRegistry:        args.CategoryRegistry,
+		eventSerializer:            args.EventSerializer,
+		visibilityMgr:              args.visibilityMgr,
+		ESClient:                   args.EsClient,
+		persistenceExecutionName:   args.persistenceExecutionManager.GetName(),
+		namespaceReplicationQueue:  args.NamespaceReplicationQueue,
+		taskManager:                args.TaskManager,
+		clusterMetadataManager:     args.ClusterMetadataManager,
+		persistenceMetadataManager: args.PersistenceMetadataManager,
+		clientFactory:              args.ClientFactory,
+		clientBean:                 args.ClientBean,
+		historyClient:              args.HistoryClient,
+		sdkClientFactory:           args.sdkClientFactory,
+		membershipMonitor:          args.MembershipMonitor,
+		hostInfoProvider:           args.HostInfoProvider,
+		metricsHandler:             args.MetricsHandler,
+		namespaceRegistry:          args.NamespaceRegistry,
+		saProvider:                 args.SaProvider,
+		saManager:                  args.SaManager,
+		clusterMetadata:            args.ClusterMetadata,
+		healthServer:               args.HealthServer,
+		taskCategoryRegistry:       args.CategoryRegistry,
 	}
 }
 
@@ -903,21 +896,15 @@ func (adh *AdminHandler) GetWorkflowExecutionRawHistoryV2(ctx context.Context, r
 		return nil, err
 	}
 
-	if dynamicconfig.AccessHistory(
-		adh.config.AccessHistoryFraction,
-		adh.metricsHandler.WithTags(metrics.OperationTag(metrics.AdminGetWorkflowExecutionRawHistoryV2Tag)),
-	) {
-		response, err := adh.historyClient.GetWorkflowExecutionRawHistoryV2(ctx,
-			&historyservice.GetWorkflowExecutionRawHistoryV2Request{
-				NamespaceId: request.NamespaceId,
-				Request:     request,
-			})
-		if err != nil {
-			return nil, err
-		}
-		return response.Response, nil
+	response, err := adh.historyClient.GetWorkflowExecutionRawHistoryV2(ctx,
+		&historyservice.GetWorkflowExecutionRawHistoryV2Request{
+			NamespaceId: request.NamespaceId,
+			Request:     request,
+		})
+	if err != nil {
+		return nil, err
 	}
-	return adh.getWorkflowExecutionRawHistoryV2(ctx, request)
+	return response.Response, nil
 }
 
 func (adh *AdminHandler) validateGetWorkflowExecutionRawHistoryV2Request(
@@ -1019,7 +1006,7 @@ func (adh *AdminHandler) DescribeCluster(
 		ClusterId:                metadata.GetClusterId(),
 		ClusterName:              metadata.GetClusterName(),
 		HistoryShardCount:        metadata.GetHistoryShardCount(),
-		PersistenceStore:         adh.persistenceExecutionManager.GetName(),
+		PersistenceStore:         adh.persistenceExecutionName,
 		VisibilityStore:          strings.Join(adh.visibilityMgr.GetStoreNames(), ","),
 		VersionInfo:              metadata.GetVersionInfo(),
 		FailoverVersionIncrement: metadata.GetFailoverVersionIncrement(),
@@ -1608,21 +1595,15 @@ func (adh *AdminHandler) DeleteWorkflowExecution(
 		return nil, err
 	}
 
-	if dynamicconfig.AccessHistory(
-		adh.config.AdminDeleteAccessHistoryFraction,
-		adh.metricsHandler.WithTags(metrics.OperationTag(metrics.AdminDeleteWorkflowExecutionTag)),
-	) {
-		response, err := adh.historyClient.ForceDeleteWorkflowExecution(ctx,
-			&historyservice.ForceDeleteWorkflowExecutionRequest{
-				NamespaceId: namespaceID.String(),
-				Request:     request,
-			})
-		if err != nil {
-			return nil, err
-		}
-		return response.Response, nil
+	response, err := adh.historyClient.ForceDeleteWorkflowExecution(ctx,
+		&historyservice.ForceDeleteWorkflowExecutionRequest{
+			NamespaceId: namespaceID.String(),
+			Request:     request,
+		})
+	if err != nil {
+		return nil, err
 	}
-	return adh.deleteWorkflowExecution(ctx, request)
+	return response.Response, nil
 }
 
 func (adh *AdminHandler) validateRemoteClusterMetadata(metadata *adminservice.DescribeClusterResponse) error {

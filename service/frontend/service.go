@@ -190,10 +190,6 @@ type Config struct {
 	EnableWorkerVersioningWorkflow dynamicconfig.BoolPropertyFnWithNamespaceFilter
 	EnableWorkerVersioningRules    dynamicconfig.BoolPropertyFnWithNamespaceFilter
 
-	// AccessHistoryFraction are interim flags across 2 minor releases and will be removed once fully enabled.
-	AccessHistoryFraction            dynamicconfig.FloatPropertyFn
-	AdminDeleteAccessHistoryFraction dynamicconfig.FloatPropertyFn
-
 	// EnableNexusAPIs controls whether to allow invoking Nexus related APIs and whether to register a handler for Nexus
 	// HTTP requests.
 	EnableNexusAPIs dynamicconfig.BoolPropertyFn
@@ -301,9 +297,6 @@ func NewConfig(
 		EnableWorkerVersioningData:     dc.GetBoolPropertyFnWithNamespaceFilter(dynamicconfig.FrontendEnableWorkerVersioningDataAPIs, false),
 		EnableWorkerVersioningWorkflow: dc.GetBoolPropertyFnWithNamespaceFilter(dynamicconfig.FrontendEnableWorkerVersioningWorkflowAPIs, false),
 		EnableWorkerVersioningRules:    dc.GetBoolPropertyFnWithNamespaceFilter(dynamicconfig.FrontendEnableWorkerVersioningRuleAPIs, false),
-
-		AccessHistoryFraction:            dc.GetFloat64Property(dynamicconfig.FrontendAccessHistoryFraction, 1.0),
-		AdminDeleteAccessHistoryFraction: dc.GetFloat64Property(dynamicconfig.FrontendAdminDeleteAccessHistoryFraction, 1.0),
 
 		EnableNexusAPIs:             dc.GetBoolProperty(dynamicconfig.FrontendEnableNexusAPIs, false),
 		EnableCallbackAttachment:    dc.GetBoolPropertyFnWithNamespaceFilter(dynamicconfig.FrontendEnableCallbackAttachment, false),
