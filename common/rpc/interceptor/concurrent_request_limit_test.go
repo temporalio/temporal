@@ -228,8 +228,8 @@ func (tc *nsCountLimitTestCase) createInterceptor(ctrl *gomock.Controller) *Conc
 		registry,
 		tc.memberCounter,
 		log.NewNoopLogger(),
-		dynamicconfig.GetIntPropertyFilteredByNamespace(tc.perInstanceLimit),
-		dynamicconfig.GetIntPropertyFilteredByNamespace(tc.globalLimit),
+		dynamicconfig.GetIntPropertyFnFilteredByNamespace(tc.perInstanceLimit),
+		dynamicconfig.GetIntPropertyFnFilteredByNamespace(tc.globalLimit),
 		tc.tokens,
 	)
 
