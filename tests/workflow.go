@@ -38,9 +38,12 @@ import (
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	historypb "go.temporal.io/api/history/v1"
+	protocolpb "go.temporal.io/api/protocol/v1"
 	"go.temporal.io/api/serviceerror"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
+	updatepb "go.temporal.io/api/update/v1"
 	"go.temporal.io/api/workflowservice/v1"
+	"go.temporal.io/server/common/testing/testvars"
 	"google.golang.org/protobuf/types/known/durationpb"
 
 	"go.temporal.io/server/common/convert"
@@ -979,4 +982,81 @@ func (s *FunctionalSuite) TestWorkflowRetryFailures() {
   3 WorkflowTaskStarted
   4 WorkflowTaskCompleted
   5 WorkflowExecutionFailed`, events)
+}
+
+func (s *FunctionalSuite) TestExecuteMultiOperation() {
+	s.Run("Start Workflow and send Update", func() {
+		tv := testvars.New(s.T().Name())
+
+		request := &workflowservice.ExecuteMultiOperationRequest{
+			Namespace: s.namespace,
+			Operations: []*workflowservice.ExecuteMultiOperationRequest_Operation{
+				{
+					Operation: &workflowservice.ExecuteMultiOperationRequest_Operation_StartWorkflow{
+						StartWorkflow: &workflowservice.StartWorkflowExecutionRequest{
+							RequestId:    uuid.New(),
+							WorkflowId:   tv.WorkflowID(),
+							WorkflowType: tv.WorkflowType(),
+							TaskQueue:    tv.TaskQueue(),
+							Input:        nil,
+							Identity:     tv.WorkerIdentity(),
+						},
+					},
+				},
+				{
+					Operation: &workflowservice.ExecuteMultiOperationRequest_Operation_UpdateWorkflow{
+						UpdateWorkflow: &workflowservice.UpdateWorkflowExecutionRequest{
+							Request: &updatepb.Request{
+								Meta:  &updatepb.Meta{UpdateId: "UPDATE_ID"},
+								Input: &updatepb.Input{Name: "UPDATE"},
+							},
+							WorkflowExecution: &commonpb.WorkflowExecution{WorkflowId: tv.WorkflowID()},
+							WaitPolicy:        &updatepb.WaitPolicy{LifecycleStage: enumspb.UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_COMPLETED},
+						},
+					},
+				},
+			},
+		}
+
+		poller := &TaskPoller{
+			Engine:    s.engine,
+			Namespace: s.namespace,
+			TaskQueue: tv.TaskQueue(),
+			Identity:  tv.WorkerIdentity(),
+			WorkflowTaskHandler: func(execution *commonpb.WorkflowExecution, wt *commonpb.WorkflowType, previousStartedEventID, startedEventID int64, history *historypb.History) ([]*commandpb.Command, error) {
+				return nil, nil
+			},
+			MessageHandler: func(task *workflowservice.PollWorkflowTaskQueueResponse) ([]*protocolpb.Message, error) {
+				updRequestMsg := task.Messages[0]
+				return s.UpdateAcceptCompleteMessages(tv, updRequestMsg, "1"), nil
+			},
+			Logger: s.Logger,
+			T:      s.T(),
+		}
+
+		respChan := make(chan *workflowservice.ExecuteMultiOperationResponse)
+		go func() {
+			resp, err := s.engine.ExecuteMultiOperation(NewContext(), request)
+			s.NoError(err)
+			respChan <- resp
+		}()
+
+		_, err := poller.PollAndProcessWorkflowTask(WithDumpHistory)
+		s.NoError(err)
+
+		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		defer cancel()
+		select {
+		case <-ctx.Done():
+			s.Fail("timed out waiting for result of ExecuteMultiOperation")
+		case resp := <-respChan:
+			s.Len(resp.Responses, 2)
+
+			startRes := resp.Responses[0].Response.(*workflowservice.ExecuteMultiOperationResponse_Response_StartWorkflow).StartWorkflow
+			s.NotZero(startRes.RunId)
+
+			updateRes := resp.Responses[1].Response.(*workflowservice.ExecuteMultiOperationResponse_Response_UpdateWorkflow).UpdateWorkflow
+			s.NotZero(updateRes.Outcome.String())
+		}
+	})
 }

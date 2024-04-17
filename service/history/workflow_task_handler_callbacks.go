@@ -203,7 +203,7 @@ func (handler *workflowTaskHandlerCallbacksImpl) handleWorkflowTaskStarted(
 		),
 		func(workflowLease api.WorkflowLease) (*api.UpdateWorkflowAction, error) {
 			mutableState := workflowLease.GetMutableState()
-			updateRegistry = workflowLease.GetContext().UpdateRegistry(ctx)
+			updateRegistry = workflowLease.GetContext().UpdateRegistry(ctx, nil)
 			if !mutableState.IsWorkflowExecutionRunning() {
 				return nil, consts.ErrWorkflowCompleted
 			}
@@ -571,7 +571,7 @@ func (handler *workflowTaskHandlerCallbacksImpl) handleWorkflowTaskCompleted(
 			request.GetIdentity(),
 			completedEvent.GetEventId(), // If completedEvent is nil, then GetEventId() returns 0 and this value shouldn't be used in workflowTaskHandler.
 			ms,
-			weContext.UpdateRegistry(ctx),
+			weContext.UpdateRegistry(ctx, nil),
 			&effects,
 			handler.commandAttrValidator,
 			workflowSizeChecker,
@@ -614,7 +614,7 @@ func (handler *workflowTaskHandlerCallbacksImpl) handleWorkflowTaskCompleted(
 			// Because all unprocessed updates were already rejected, incomplete updates in the registry are:
 			// - updates that were received while this WT was running,
 			// - updates that were accepted but not completed by this WT.
-			err = weContext.UpdateRegistry(ctx).CancelIncomplete(ctx, update.CancelReasonWorkflowCompleted, workflow.WithEffects(&effects, ms))
+			err = weContext.UpdateRegistry(ctx, nil).CancelIncomplete(ctx, update.CancelReasonWorkflowCompleted, workflow.WithEffects(&effects, ms))
 			if err != nil {
 				// Just log error here because it is more important to complete workflow than canceling updates.
 				handler.logger.Warn("Unable to cancel incomplete updates while completing the workflow.",
@@ -692,7 +692,7 @@ func (handler *workflowTaskHandlerCallbacksImpl) handleWorkflowTaskCompleted(
 			// There shouldn't be any sent updates in the registry because
 			// all sent but not processed updates were rejected by server.
 			// Therefore, it doesn't matter if to includeAlreadySent or not.
-		} else if weContext.UpdateRegistry(ctx).HasOutgoingMessages(true) {
+		} else if weContext.UpdateRegistry(ctx, nil).HasOutgoingMessages(true) {
 			if completedEvent == nil || ms.GetNextEventID() == completedEvent.GetEventId()+1 {
 				newWorkflowTaskType = enumsspb.WORKFLOW_TASK_TYPE_SPECULATIVE
 			} else {
@@ -851,8 +851,9 @@ func (handler *workflowTaskHandlerCallbacksImpl) handleWorkflowTaskCompleted(
 	}
 
 	resp := &historyservice.RespondWorkflowTaskCompletedResponse{}
+	//nolint:staticcheck
 	if request.GetReturnNewWorkflowTask() && newWorkflowTask != nil {
-		resp.StartedResponse, err = handler.createRecordWorkflowTaskStartedResponse(ctx, ms, weContext.UpdateRegistry(ctx), newWorkflowTask, request.GetIdentity(), request.GetForceCreateNewWorkflowTask())
+		resp.StartedResponse, err = handler.createRecordWorkflowTaskStartedResponse(ctx, ms, weContext.UpdateRegistry(ctx, nil), newWorkflowTask, request.GetIdentity(), request.GetForceCreateNewWorkflowTask())
 		if err != nil {
 			return nil, err
 		}

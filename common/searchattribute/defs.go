@@ -53,6 +53,8 @@ const (
 	HistorySizeBytes      = "HistorySizeBytes"
 	ParentWorkflowID      = "ParentWorkflowId"
 	ParentRunID           = "ParentRunId"
+	RootWorkflowID        = "RootWorkflowId"
+	RootRunID             = "RootRunId"
 
 	TemporalNamespaceDivision = "TemporalNamespaceDivision"
 
@@ -92,6 +94,8 @@ var (
 		HistorySizeBytes:     enumspb.INDEXED_VALUE_TYPE_INT,
 		ParentWorkflowID:     enumspb.INDEXED_VALUE_TYPE_KEYWORD,
 		ParentRunID:          enumspb.INDEXED_VALUE_TYPE_KEYWORD,
+		RootWorkflowID:       enumspb.INDEXED_VALUE_TYPE_KEYWORD,
+		RootRunID:            enumspb.INDEXED_VALUE_TYPE_KEYWORD,
 	}
 
 	// predefined are internal search attributes which are passed and stored in SearchAttributes object together with custom search attributes.
@@ -134,6 +138,8 @@ var (
 		MemoEncoding:         "encoding",
 		ParentWorkflowID:     "parent_workflow_id",
 		ParentRunID:          "parent_run_id",
+		RootWorkflowID:       "root_workflow_id",
+		RootRunID:            "root_run_id",
 	}
 
 	sqlDbCustomSearchAttributes = map[string]enumspb.IndexedValueType{
