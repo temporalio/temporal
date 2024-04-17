@@ -130,8 +130,8 @@ func (s *commandAttrValidatorSuite) SetupTest() {
 		SearchAttributesNumberOfKeysLimit: dynamicconfig.GetIntPropertyFnFilteredByNamespace(100),
 		SearchAttributesSizeOfValueLimit:  dynamicconfig.GetIntPropertyFnFilteredByNamespace(2 * 1024),
 		SearchAttributesTotalSizeLimit:    dynamicconfig.GetIntPropertyFnFilteredByNamespace(40 * 1024),
-		DefaultActivityRetryPolicy:        dynamicconfig.GetMapPropertyFnWithNamespaceFilter(common.GetDefaultRetryPolicyConfigOptions()),
-		DefaultWorkflowRetryPolicy:        dynamicconfig.GetMapPropertyFnWithNamespaceFilter(common.GetDefaultRetryPolicyConfigOptions()),
+		DefaultActivityRetryPolicy:        dynamicconfig.GetMapPropertyFnFilteredByNamespace(common.GetDefaultRetryPolicyConfigOptions()),
+		DefaultWorkflowRetryPolicy:        dynamicconfig.GetMapPropertyFnFilteredByNamespace(common.GetDefaultRetryPolicyConfigOptions()),
 		EnableCrossNamespaceCommands:      dynamicconfig.GetBoolPropertyFn(true),
 		DefaultWorkflowTaskTimeout:        dynamicconfig.GetDurationPropertyFnFilteredByNamespace(common.DefaultWorkflowTaskTimeout),
 	}
