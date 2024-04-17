@@ -172,7 +172,7 @@ func (r *workflowResetterImpl) ResetWorkflow(
 
 			if lastVisitedRunID == currentMutableState.GetExecutionState().RunId {
 				for _, event := range currentWorkflowEventsSeq {
-					if err := reapplyEvents(resetMutableState, event.Events, resetReapplyExcludeTypes); err != nil {
+					if _, err := reapplyEvents(resetMutableState, event.Events, resetReapplyExcludeTypes, ""); err != nil {
 						return err
 					}
 				}
@@ -218,7 +218,7 @@ func (r *workflowResetterImpl) ResetWorkflow(
 	if err := reapplyEventsFn(ctx, resetMS); err != nil {
 		return err
 	}
-	if err := reapplyEvents(resetMS, additionalReapplyEvents, nil); err != nil {
+	if _, err := reapplyEvents(resetMS, additionalReapplyEvents, nil, ""); err != nil {
 		return err
 	}
 
@@ -681,7 +681,7 @@ func (r *workflowResetterImpl) reapplyWorkflowEvents(
 			return "", err
 		}
 		lastEvents = batch.Events
-		if err := reapplyEvents(mutableState, lastEvents, resetReapplyExcludeTypes); err != nil {
+		if _, err := reapplyEvents(mutableState, lastEvents, resetReapplyExcludeTypes, ""); err != nil {
 			return "", err
 		}
 	}
@@ -695,15 +695,28 @@ func (r *workflowResetterImpl) reapplyWorkflowEvents(
 	return nextRunID, nil
 }
 
-// TODO (dan) this function is almost identical to EventsReapplierImpl.ReapplyEvents in events_reapplier.go: unify them.
 func reapplyEvents(
 	mutableState workflow.MutableState,
 	events []*historypb.HistoryEvent,
 	resetReapplyExcludeTypes map[enumspb.ResetReapplyExcludeType]bool,
-) error {
+	runIdForDeduplication string,
+) ([]*historypb.HistoryEvent, error) {
+	// TODO (dan): This implementation is the result of unifying two previous implementations, one of which did
+	// deduplication. Can we always/never do this deduplication, or must it be decided by the caller?
+	isDuplicate := func(event *historypb.HistoryEvent) bool {
+		if runIdForDeduplication == "" {
+			return false
+		}
+		resource := definition.NewEventReappliedID(runIdForDeduplication, event.GetEventId(), event.GetVersion())
+		return mutableState.IsResourceDuplicated(resource)
+	}
 	excludeSignal := resetReapplyExcludeTypes[enumspb.RESET_REAPPLY_EXCLUDE_TYPE_SIGNAL]
 	excludeUpdate := resetReapplyExcludeTypes[enumspb.RESET_REAPPLY_EXCLUDE_TYPE_UPDATE]
+	reappliedEvents := []*historypb.HistoryEvent{}
 	for _, event := range events {
+		if isDuplicate(event) {
+			continue
+		}
 		switch event.GetEventType() {
 		case enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_SIGNALED:
 			if excludeSignal {
@@ -717,8 +730,9 @@ func reapplyEvents(
 				attr.GetHeader(),
 				attr.GetSkipGenerateWorkflowTask(),
 			); err != nil {
-				return err
+				return reappliedEvents, err
 			}
+			reappliedEvents = append(reappliedEvents, event)
 		case enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_UPDATE_ADMITTED:
 			if excludeUpdate {
 				continue
@@ -728,8 +742,9 @@ func reapplyEvents(
 				attr.GetRequest(),
 				attr.Origin,
 			); err != nil {
-				return err
+				return reappliedEvents, err
 			}
+			reappliedEvents = append(reappliedEvents, event)
 		case enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_UPDATE_ACCEPTED:
 			if excludeUpdate {
 				continue
@@ -747,13 +762,18 @@ func reapplyEvents(
 				request,
 				enumspb.UPDATE_ADMITTED_EVENT_ORIGIN_REAPPLY,
 			); err != nil {
-				return err
+				return reappliedEvents, err
 			}
+			reappliedEvents = append(reappliedEvents, event)
 		default:
 			// Other event types are not reapplied.
 		}
+		if runIdForDeduplication != "" {
+			deDupResource := definition.NewEventReappliedID(runIdForDeduplication, event.GetEventId(), event.GetVersion())
+			mutableState.UpdateDuplicatedResource(deDupResource)
+		}
 	}
-	return nil
+	return reappliedEvents, nil
 }
 
 func (r *workflowResetterImpl) getPaginationFn(
