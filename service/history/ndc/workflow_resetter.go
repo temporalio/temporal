@@ -714,12 +714,9 @@ func reapplyEvents(
 	excludeUpdate := resetReapplyExcludeTypes[enumspb.RESET_REAPPLY_EXCLUDE_TYPE_UPDATE]
 	reappliedEvents := []*historypb.HistoryEvent{}
 	for _, event := range events {
-		if isDuplicate(event) {
-			continue
-		}
 		switch event.GetEventType() {
 		case enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_SIGNALED:
-			if excludeSignal {
+			if excludeSignal || isDuplicate(event) {
 				continue
 			}
 			attr := event.GetWorkflowExecutionSignaledEventAttributes()
@@ -734,7 +731,7 @@ func reapplyEvents(
 			}
 			reappliedEvents = append(reappliedEvents, event)
 		case enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_UPDATE_ADMITTED:
-			if excludeUpdate {
+			if excludeUpdate || isDuplicate(event) {
 				continue
 			}
 			attr := event.GetWorkflowExecutionUpdateAdmittedEventAttributes()
@@ -746,7 +743,7 @@ func reapplyEvents(
 			}
 			reappliedEvents = append(reappliedEvents, event)
 		case enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_UPDATE_ACCEPTED:
-			if excludeUpdate {
+			if excludeUpdate || isDuplicate(event) {
 				continue
 			}
 			attr := event.GetWorkflowExecutionUpdateAcceptedEventAttributes()
@@ -767,6 +764,7 @@ func reapplyEvents(
 			reappliedEvents = append(reappliedEvents, event)
 		default:
 			// Other event types are not reapplied.
+			continue
 		}
 		if runIdForDeduplication != "" {
 			deDupResource := definition.NewEventReappliedID(runIdForDeduplication, event.GetEventId(), event.GetVersion())
