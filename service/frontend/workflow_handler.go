@@ -83,6 +83,7 @@ import (
 	"go.temporal.io/server/common/persistence/visibility/store"
 	"go.temporal.io/server/common/primitives"
 	"go.temporal.io/server/common/primitives/timestamp"
+	"go.temporal.io/server/common/retrypolicy"
 	"go.temporal.io/server/common/rpc"
 	"go.temporal.io/server/common/rpc/interceptor"
 	"go.temporal.io/server/common/sdk"
@@ -347,7 +348,10 @@ func (wh *WorkflowHandler) DeprecateNamespace(ctx context.Context, request *work
 // 'WorkflowExecutionStarted' event in history and also schedule the first WorkflowTask for the worker to make the
 // first workflow task for this instance.  It will return 'WorkflowExecutionAlreadyStartedError', if an instance already
 // exists with same workflowId.
-func (wh *WorkflowHandler) StartWorkflowExecution(ctx context.Context, request *workflowservice.StartWorkflowExecutionRequest) (_ *workflowservice.StartWorkflowExecutionResponse, retError error) {
+func (wh *WorkflowHandler) StartWorkflowExecution(
+	ctx context.Context,
+	request *workflowservice.StartWorkflowExecutionRequest,
+) (_ *workflowservice.StartWorkflowExecutionResponse, retError error) {
 	defer log.CapturePanic(wh.logger, &retError)
 
 	if request == nil {
@@ -398,7 +402,6 @@ func (wh *WorkflowHandler) StartWorkflowExecution(ctx context.Context, request *
 	}
 
 	if err := wh.validateWorkflowIdReusePolicy(
-		namespaceName,
 		request.WorkflowIdReusePolicy,
 		request.WorkflowIdConflictPolicy,
 	); err != nil {
@@ -417,22 +420,11 @@ func (wh *WorkflowHandler) StartWorkflowExecution(ctx context.Context, request *
 		request.SearchAttributes = sa
 	}
 
-	for _, callback := range request.GetCompletionCallbacks() {
-		if !wh.config.EnableCallbackAttachment(request.GetNamespace()) {
-			return nil, status.Error(codes.InvalidArgument, "attaching workflow callbacks is disabled for this namespace")
-		}
-		if callback, ok := callback.GetVariant().(*commonpb.Callback_Nexus_); ok {
-			u, err := url.Parse(callback.Nexus.GetUrl())
-			if err != nil {
-				return nil, status.Errorf(codes.InvalidArgument, "invalid url: %v", err)
-			}
-			if !(u.Scheme == "http" || u.Scheme == "https") {
-				return nil, status.Errorf(codes.InvalidArgument, "invalid url scheme for url: %v", u)
-			}
-			// TODO: check in dynamic config that address is valid and that http is only accepted if "insecure" is
-			// allowed for address.
-			// TODO: validate callback URL length against dynamic config.
-		}
+	if err := wh.validateWorkflowCompletionCallbacks(
+		namespaceName,
+		request.GetCompletionCallbacks(),
+	); err != nil {
+		return nil, err
 	}
 
 	wh.logger.Debug("Start workflow execution request namespace.", tag.WorkflowNamespace(namespaceName.String()))
@@ -622,12 +614,12 @@ func (wh *WorkflowHandler) GetWorkflowExecutionHistory(ctx context.Context, requ
 	}
 
 	// force limit page size if exceed
-	if request.GetMaximumPageSize() > common.GetHistoryMaxPageSize {
+	if request.GetMaximumPageSize() > primitives.GetHistoryMaxPageSize {
 		wh.throttledLogger.Warn("GetHistory page size is larger than threshold",
 			tag.WorkflowID(request.Execution.GetWorkflowId()),
 			tag.WorkflowRunID(request.Execution.GetRunId()),
 			tag.WorkflowNamespaceID(namespaceID.String()), tag.WorkflowSize(int64(request.GetMaximumPageSize())))
-		request.MaximumPageSize = common.GetHistoryMaxPageSize
+		request.MaximumPageSize = primitives.GetHistoryMaxPageSize
 	}
 
 	if !request.GetSkipArchival() {
@@ -675,12 +667,12 @@ func (wh *WorkflowHandler) GetWorkflowExecutionHistoryReverse(ctx context.Contex
 	}
 
 	// force limit page size if exceed
-	if request.GetMaximumPageSize() > common.GetHistoryMaxPageSize {
+	if request.GetMaximumPageSize() > primitives.GetHistoryMaxPageSize {
 		wh.throttledLogger.Warn("GetHistory page size is larger than threshold",
 			tag.WorkflowID(request.Execution.GetWorkflowId()),
 			tag.WorkflowRunID(request.Execution.GetRunId()),
 			tag.WorkflowNamespaceID(namespaceID.String()), tag.WorkflowSize(int64(request.GetMaximumPageSize())))
-		request.MaximumPageSize = common.GetHistoryMaxPageSize
+		request.MaximumPageSize = primitives.GetHistoryMaxPageSize
 	}
 
 	if dynamicconfig.AccessHistory(wh.config.AccessHistoryFraction, wh.metricsScope(ctx).WithTags(metrics.OperationTag(metrics.FrontendGetWorkflowExecutionHistoryReverseTag))) {
@@ -1879,7 +1871,6 @@ func (wh *WorkflowHandler) SignalWithStartWorkflowExecution(ctx context.Context,
 	}
 
 	if err := wh.validateWorkflowIdReusePolicy(
-		namespaceName,
 		request.WorkflowIdReusePolicy,
 		request.WorkflowIdConflictPolicy,
 	); err != nil {
@@ -3385,6 +3376,9 @@ func (wh *WorkflowHandler) ListSchedules(
 
 	query := ""
 	if strings.TrimSpace(request.Query) != "" {
+		if err := scheduler.ValidateVisibilityQuery(request.Query); err != nil {
+			return nil, err
+		}
 		query = fmt.Sprintf("%s AND (%s)", scheduler.VisibilityBaseListQuery, request.Query)
 	} else {
 		query = scheduler.VisibilityBaseListQuery
@@ -3894,16 +3888,17 @@ func (wh *WorkflowHandler) StartBatchOperation(
 	searchattribute.AddSearchAttribute(&searchAttributes, searchattribute.TemporalNamespaceDivision, payload.EncodeString(batcher.NamespaceDivision))
 
 	startReq := &workflowservice.StartWorkflowExecutionRequest{
-		Namespace:             request.Namespace,
-		WorkflowId:            request.GetJobId(),
-		WorkflowType:          &commonpb.WorkflowType{Name: batcher.BatchWFTypeName},
-		TaskQueue:             &taskqueuepb.TaskQueue{Name: primitives.PerNSWorkerTaskQueue},
-		Input:                 inputPayload,
-		Identity:              identity,
-		RequestId:             uuid.New(),
-		WorkflowIdReusePolicy: enumspb.WORKFLOW_ID_REUSE_POLICY_REJECT_DUPLICATE,
-		Memo:                  memo,
-		SearchAttributes:      searchAttributes,
+		Namespace:                request.Namespace,
+		WorkflowId:               request.GetJobId(),
+		WorkflowType:             &commonpb.WorkflowType{Name: batcher.BatchWFTypeName},
+		TaskQueue:                &taskqueuepb.TaskQueue{Name: primitives.PerNSWorkerTaskQueue},
+		Input:                    inputPayload,
+		Identity:                 identity,
+		RequestId:                uuid.New(),
+		WorkflowIdConflictPolicy: enumspb.WORKFLOW_ID_CONFLICT_POLICY_FAIL,
+		WorkflowIdReusePolicy:    enumspb.WORKFLOW_ID_REUSE_POLICY_REJECT_DUPLICATE,
+		Memo:                     memo,
+		SearchAttributes:         searchAttributes,
 	}
 
 	_, err = wh.historyClient.StartWorkflowExecution(
@@ -4320,16 +4315,51 @@ func (wh *WorkflowHandler) validateTaskQueue(t *taskqueuepb.TaskQueue) error {
 }
 
 func (wh *WorkflowHandler) validateWorkflowIdReusePolicy(
-	ns namespace.Name,
 	reusePolicy enumspb.WorkflowIdReusePolicy,
 	conflictPolicy enumspb.WorkflowIdConflictPolicy,
 ) error {
-	if conflictPolicy != enumspb.WORKFLOW_ID_CONFLICT_POLICY_UNSPECIFIED {
-		if !wh.config.EnableWorkflowIdConflictPolicy(ns.String()) {
-			return errWorkflowIdConflictPolicyNotAllowed
-		}
-		if reusePolicy == enumspb.WORKFLOW_ID_REUSE_POLICY_TERMINATE_IF_RUNNING {
-			return errIncompatibleIDReusePolicy
+	if conflictPolicy != enumspb.WORKFLOW_ID_CONFLICT_POLICY_UNSPECIFIED &&
+		reusePolicy == enumspb.WORKFLOW_ID_REUSE_POLICY_TERMINATE_IF_RUNNING {
+		return errIncompatibleIDReusePolicy
+	}
+	return nil
+}
+
+func (wh *WorkflowHandler) validateWorkflowCompletionCallbacks(
+	ns namespace.Name,
+	callbacks []*commonpb.Callback,
+) error {
+	if len(callbacks) > 0 && !wh.config.EnableCallbackAttachment(ns.String()) {
+		return status.Error(
+			codes.InvalidArgument,
+			"attaching workflow callbacks is disabled for this namespace",
+		)
+	}
+
+	for _, callback := range callbacks {
+		switch cb := callback.GetVariant().(type) {
+		case *commonpb.Callback_Nexus_:
+			if len(cb.Nexus.GetUrl()) > wh.config.CallbackURLMaxLength(ns.String()) {
+				return status.Error(
+					codes.InvalidArgument,
+					fmt.Sprintf(
+						"invalid url: url length longer than max length allowed of %d",
+						wh.config.CallbackURLMaxLength(ns.String()),
+					),
+				)
+			}
+			u, err := url.Parse(cb.Nexus.GetUrl())
+			if err != nil {
+				return status.Errorf(codes.InvalidArgument, "invalid url: %v", err)
+			}
+			if !(u.Scheme == "http" || u.Scheme == "https") {
+				return status.Errorf(codes.InvalidArgument, "invalid url: unknown scheme: %v", u)
+			}
+			// TODO: check in dynamic config that address is valid and that http is only accepted
+			// if "insecure" is allowed for address.
+
+		default:
+			return status.Error(codes.Unimplemented, fmt.Sprintf("unknown callback variant: %T", cb))
 		}
 	}
 	return nil
@@ -4527,9 +4557,9 @@ func (wh *WorkflowHandler) validateRetryPolicy(namespaceName namespace.Name, ret
 		return nil
 	}
 
-	defaultWorkflowRetrySettings := common.FromConfigToDefaultRetrySettings(wh.getDefaultWorkflowRetrySettings(namespaceName.String()))
-	common.EnsureRetryPolicyDefaults(retryPolicy, defaultWorkflowRetrySettings)
-	return common.ValidateRetryPolicy(retryPolicy)
+	defaultWorkflowRetrySettings := retrypolicy.FromConfigToDefault(wh.getDefaultWorkflowRetrySettings(namespaceName.String()))
+	retrypolicy.EnsureDefaults(retryPolicy, defaultWorkflowRetrySettings)
+	return retrypolicy.Validate(retryPolicy)
 }
 
 func validateRequestId(requestID *string, lenLimit int) error {

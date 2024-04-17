@@ -31,7 +31,6 @@ import (
 	"strings"
 	"time"
 
-	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/backoff"
 	"go.temporal.io/server/common/config"
 	"go.temporal.io/server/common/dynamicconfig"
@@ -39,6 +38,7 @@ import (
 	"go.temporal.io/server/common/log/tag"
 	p "go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/persistence/sql/sqlplugin"
+	"go.temporal.io/server/common/primitives"
 	"go.temporal.io/server/common/resolver"
 	"go.temporal.io/server/tests/testutils"
 )
@@ -117,7 +117,7 @@ func (s *TestCluster) Config() config.Persistence {
 		DataStores: map[string]config.DataStore{
 			"test": {SQL: &cfg, FaultInjection: s.faultInjection},
 		},
-		TransactionSizeLimit: dynamicconfig.GetIntPropertyFn(common.DefaultTransactionSizeLimit),
+		TransactionSizeLimit: dynamicconfig.GetIntPropertyFn(primitives.DefaultTransactionSizeLimit),
 	}
 }
 
