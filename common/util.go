@@ -530,47 +530,6 @@ func CreateMatchingPollWorkflowTaskQueueResponse(historyResponse *historyservice
 	return matchingResp
 }
 
-// ValidateRetryPolicy validates a retry policy
-func ValidateRetryPolicy(policy *commonpb.RetryPolicy) error {
-	if policy == nil {
-		// nil policy is valid which means no retry
-		return nil
-	}
-
-	if policy.GetMaximumAttempts() == 1 {
-		// One maximum attempt effectively disable retries. Validating the
-		// rest of the arguments is pointless
-		return nil
-	}
-	if timestamp.DurationValue(policy.GetInitialInterval()) < 0 {
-		return serviceerror.NewInvalidArgument("InitialInterval cannot be negative on retry policy.")
-	}
-	if policy.GetBackoffCoefficient() < 1 {
-		return serviceerror.NewInvalidArgument("BackoffCoefficient cannot be less than 1 on retry policy.")
-	}
-	if timestamp.DurationValue(policy.GetMaximumInterval()) < 0 {
-		return serviceerror.NewInvalidArgument("MaximumInterval cannot be negative on retry policy.")
-	}
-	if timestamp.DurationValue(policy.GetMaximumInterval()) > 0 && timestamp.DurationValue(policy.GetMaximumInterval()) < timestamp.DurationValue(policy.GetInitialInterval()) {
-		return serviceerror.NewInvalidArgument("MaximumInterval cannot be less than InitialInterval on retry policy.")
-	}
-	if policy.GetMaximumAttempts() < 0 {
-		return serviceerror.NewInvalidArgument("MaximumAttempts cannot be negative on retry policy.")
-	}
-
-	for _, nrt := range policy.NonRetryableErrorTypes {
-		if strings.HasPrefix(nrt, TimeoutFailureTypePrefix) {
-			timeoutTypeValue := nrt[len(TimeoutFailureTypePrefix):]
-			timeoutType, err := enumspb.TimeoutTypeFromString(timeoutTypeValue)
-			if err != nil || enumspb.TimeoutType(timeoutType) == enumspb.TIMEOUT_TYPE_UNSPECIFIED {
-				return serviceerror.NewInvalidArgument(fmt.Sprintf("Invalid timeout type value: %v.", timeoutTypeValue))
-			}
-		}
-	}
-
-	return nil
-}
-
 // CreateHistoryStartWorkflowRequest create a start workflow request for history.
 // Note: this mutates startRequest by unsetting the fields ContinuedFailure and
 // LastCompletionResult (these should only be set on workflows created by the scheduler

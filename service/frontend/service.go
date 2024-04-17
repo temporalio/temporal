@@ -49,6 +49,7 @@ import (
 	"go.temporal.io/server/common/persistence/visibility"
 	"go.temporal.io/server/common/persistence/visibility/manager"
 	"go.temporal.io/server/common/primitives"
+	"go.temporal.io/server/common/retrypolicy"
 )
 
 // Config represents configuration for frontend service
@@ -269,7 +270,7 @@ func NewConfig(
 		VisibilityArchivalQueryMaxPageSize:       dc.GetIntProperty(dynamicconfig.VisibilityArchivalQueryMaxPageSize, 10000),
 		DisallowQuery:                            dc.GetBoolPropertyFnWithNamespaceFilter(dynamicconfig.DisallowQuery, false),
 		SendRawWorkflowHistory:                   dc.GetBoolPropertyFnWithNamespaceFilter(dynamicconfig.SendRawWorkflowHistory, false),
-		DefaultWorkflowRetryPolicy:               dc.GetMapPropertyFnWithNamespaceFilter(dynamicconfig.DefaultWorkflowRetryPolicy, dynamicconfig.GetDefaultRetryPolicyConfigOptions()),
+		DefaultWorkflowRetryPolicy:               dc.GetMapPropertyFnWithNamespaceFilter(dynamicconfig.DefaultWorkflowRetryPolicy, retrypolicy.GetDefault()),
 		DefaultWorkflowTaskTimeout:               dc.GetDurationPropertyFilteredByNamespace(dynamicconfig.DefaultWorkflowTaskTimeout, primitives.DefaultWorkflowTaskTimeout),
 		EnableServerVersionCheck:                 dc.GetBoolProperty(dynamicconfig.EnableServerVersionCheck, os.Getenv("TEMPORAL_VERSION_CHECK_DISABLED") == ""),
 		EnableTokenNamespaceEnforcement:          dc.GetBoolProperty(dynamicconfig.EnableTokenNamespaceEnforcement, true),

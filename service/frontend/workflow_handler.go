@@ -83,6 +83,7 @@ import (
 	"go.temporal.io/server/common/persistence/visibility/store"
 	"go.temporal.io/server/common/primitives"
 	"go.temporal.io/server/common/primitives/timestamp"
+	"go.temporal.io/server/common/retrypolicy"
 	"go.temporal.io/server/common/rpc"
 	"go.temporal.io/server/common/rpc/interceptor"
 	"go.temporal.io/server/common/sdk"
@@ -4408,9 +4409,9 @@ func (wh *WorkflowHandler) validateRetryPolicy(namespaceName namespace.Name, ret
 		return nil
 	}
 
-	defaultWorkflowRetrySettings := dynamicconfig.FromConfigToDefaultRetrySettings(wh.getDefaultWorkflowRetrySettings(namespaceName.String()))
-	dynamicconfig.EnsureRetryPolicyDefaults(retryPolicy, defaultWorkflowRetrySettings)
-	return common.ValidateRetryPolicy(retryPolicy)
+	defaultWorkflowRetrySettings := retrypolicy.FromConfigToDefault(wh.getDefaultWorkflowRetrySettings(namespaceName.String()))
+	retrypolicy.EnsureDefaults(retryPolicy, defaultWorkflowRetrySettings)
+	return retrypolicy.Validate(retryPolicy)
 }
 
 func validateRequestId(requestID *string, lenLimit int) error {
