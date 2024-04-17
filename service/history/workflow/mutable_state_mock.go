@@ -2237,7 +2237,7 @@ func (mr *MockMutableStateMockRecorder) GetStartVersion() *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetStartVersion", reflect.TypeOf((*MockMutableState)(nil).GetStartVersion))
 }
 
-// GetStartedEventIdForLastCompletedWorkflowTask mocks base method.
+// GetStartedEventIdOfLastCompletedWorkflowTask mocks base method.
 func (m *MockMutableState) GetStartedEventIdOfLastCompletedWorkflowTask() int64 {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "GetStartedEventIdOfLastCompletedWorkflowTask")
@@ -2482,7 +2482,7 @@ func (mr *MockMutableStateMockRecorder) HasBufferedEvents() *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "HasBufferedEvents", reflect.TypeOf((*MockMutableState)(nil).HasBufferedEvents))
 }
 
-// HasCompletedWorkflowTask mocks base method.
+// HasCompletedAnyWorkflowTask mocks base method.
 func (m *MockMutableState) HasCompletedAnyWorkflowTask() bool {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "HasCompletedAnyWorkflowTask")
@@ -2490,8 +2490,8 @@ func (m *MockMutableState) HasCompletedAnyWorkflowTask() bool {
 	return ret0
 }
 
-// HasCompletedWorkflowTask indicates an expected call of HasCompletedWorkflowTask.
-func (mr *MockMutableStateMockRecorder) HasCompletedWorkflowTask() *gomock.Call {
+// HasCompletedAnyWorkflowTask indicates an expected call of HasCompletedAnyWorkflowTask.
+func (mr *MockMutableStateMockRecorder) HasCompletedAnyWorkflowTask() *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "HasCompletedAnyWorkflowTask", reflect.TypeOf((*MockMutableState)(nil).HasCompletedAnyWorkflowTask))
 }
