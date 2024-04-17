@@ -81,6 +81,9 @@ type (
 		//   - updates in stateCompleted are ignored.
 		CancelIncomplete(ctx context.Context, reason CancelReason, eventStore EventStore) error
 
+		// UpdateFromStore adds updates to the registry from the update store.
+		UpdateFromStore()
+
 		// Len observes the number of incomplete updates in this Registry.
 		Len() int
 
@@ -95,13 +98,13 @@ type (
 	}
 
 	registry struct {
-		mu              sync.RWMutex
-		updates         map[string]*Update
-		getStoreFn      func() Store
-		instrumentation instrumentation
-		maxInFlight     func() int
-		maxTotal        func() int
-		completedCount  int
+		mu               sync.RWMutex
+		updates          map[string]*Update
+		getStoreFn       func() Store
+		instrumentation  instrumentation
+		maxInFlight      func() int
+		maxTotal         func() int
+		completedUpdates map[string]bool
 	}
 
 	Option func(*registry)
@@ -153,17 +156,24 @@ func NewRegistry(
 	opts ...Option,
 ) Registry {
 	r := &registry{
-		updates:         make(map[string]*Update),
-		getStoreFn:      getStoreFn,
-		instrumentation: noopInstrumentation,
-		maxInFlight:     func() int { return math.MaxInt },
-		maxTotal:        func() int { return math.MaxInt },
+		updates:          make(map[string]*Update),
+		getStoreFn:       getStoreFn,
+		instrumentation:  noopInstrumentation,
+		maxInFlight:      func() int { return math.MaxInt },
+		maxTotal:         func() int { return math.MaxInt },
+		completedUpdates: make(map[string]bool),
 	}
 	for _, opt := range opts {
 		opt(r)
 	}
+	r.UpdateFromStore()
+	return r
+}
 
-	getStoreFn().VisitUpdates(func(updID string, updInfo *updatespb.UpdateInfo) {
+// updateFromStore creates an entry in the registry for every update that is in the store but not in the registry.
+func (r *registry) UpdateFromStore() {
+	r.getStoreFn().VisitUpdates(func(updID string, updInfo *updatespb.UpdateInfo) {
+		// TODO (dan): only "upgrade"; don't "downgrade"
 		if updInfo.GetAdmission() != nil {
 			// A update entry in the registry may have a request payload: we use this to write the payload to an
 			// UpdateAccepted event, in the event that the update is accepted. However, when populating the registry
@@ -188,10 +198,10 @@ func NewRegistry(
 				withInstrumentation(&r.instrumentation),
 			)
 		} else if updInfo.GetCompletion() != nil {
-			r.completedCount++
+			delete(r.updates, updID)
+			r.completedUpdates[updID] = true
 		}
 	})
-	return r
 }
 
 func (r *registry) FindOrCreate(ctx context.Context, id string) (*Update, bool, error) {
@@ -312,7 +322,7 @@ func (r *registry) remover(id string) updateOpt {
 			r.mu.Lock()
 			defer r.mu.Unlock()
 			delete(r.updates, id)
-			r.completedCount++
+			r.completedUpdates[id] = true
 		},
 	)
 }
@@ -326,7 +336,7 @@ func (r *registry) admit(ctx context.Context) error {
 		}
 	}
 
-	if len(r.updates)+r.completedCount >= r.maxTotal() {
+	if len(r.updates)+len(r.completedUpdates) >= r.maxTotal() {
 		return serviceerror.NewFailedPrecondition(
 			fmt.Sprintf("limit on number of total updates has been reached (%v)", r.maxTotal()),
 		)
