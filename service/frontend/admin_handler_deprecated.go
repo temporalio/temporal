@@ -28,8 +28,6 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/pborman/uuid"
-
 	commonpb "go.temporal.io/api/common/v1"
 	historypb "go.temporal.io/api/history/v1"
 	"go.temporal.io/api/serviceerror"
@@ -271,37 +269,6 @@ func (adh *AdminHandler) deleteWorkflowExecution(
 	return &adminservice.DeleteWorkflowExecutionResponse{
 		Warnings: warnings,
 	}, nil
-}
-
-// DEPRECATED: DO NOT MODIFY UNLESS ALSO APPLIED TO ./service/history/api/getworkflowexecutionrawhistoryv2/api.go
-func (adh *AdminHandler) validateGetWorkflowExecutionRawHistoryV2Request(
-	request *adminservice.GetWorkflowExecutionRawHistoryV2Request,
-) error {
-
-	execution := request.Execution
-	if execution.GetWorkflowId() == "" {
-		return errWorkflowIDNotSet
-	}
-	// TODO currently, this API is only going to be used by re-send history events
-	// to remote cluster if kafka is lossy again, in the future, this API can be used
-	// by CLI and client, then empty runID (meaning the current workflow) should be allowed
-	if execution.GetRunId() == "" || uuid.Parse(execution.GetRunId()) == nil {
-		return errInvalidRunID
-	}
-
-	pageSize := int(request.GetMaximumPageSize())
-	if pageSize <= 0 {
-		return errInvalidPageSize
-	}
-
-	if request.GetStartEventId() == common.EmptyEventID &&
-		request.GetStartEventVersion() == common.EmptyVersion &&
-		request.GetEndEventId() == common.EmptyEventID &&
-		request.GetEndEventVersion() == common.EmptyVersion {
-		return errInvalidEventQueryRange
-	}
-
-	return nil
 }
 
 // DEPRECATED: DO NOT MODIFY UNLESS ALSO APPLIED TO ./service/history/api/getworkflowexecutionrawhistoryv2/api.go

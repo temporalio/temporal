@@ -76,6 +76,7 @@ import (
 	"go.temporal.io/server/common/resourcetest"
 	"go.temporal.io/server/common/rpc/interceptor"
 	"go.temporal.io/server/common/searchattribute"
+	"go.temporal.io/server/service/history/workflow"
 	"go.temporal.io/server/service/worker/batcher"
 	"go.temporal.io/server/service/worker/scheduler"
 )
@@ -1740,8 +1741,6 @@ func (s *workflowHandlerSuite) TestCountWorkflowExecutions() {
 }
 
 func (s *workflowHandlerSuite) TestVerifyHistoryIsComplete() {
-	wh := s.getWorkflowHandler(s.newConfig())
-
 	events := make([]*historypb.HistoryEvent, 50)
 	for i := 0; i < len(events); i++ {
 		events[i] = &historypb.HistoryEvent{EventId: int64(i + 1)}
@@ -1785,7 +1784,7 @@ func (s *workflowHandlerSuite) TestVerifyHistoryIsComplete() {
 	}
 
 	for i, tc := range testCases {
-		err := wh.verifyHistoryIsComplete(tc.events, tc.firstEventID, tc.lastEventID, tc.isFirstPage, tc.isLastPage, tc.pageSize)
+		err := workflow.VerifyHistoryIsComplete(tc.events, tc.firstEventID, tc.lastEventID, tc.isFirstPage, tc.isLastPage, tc.pageSize)
 		if tc.isResultErr {
 			s.Error(err, "testcase %v failed", i)
 		} else {

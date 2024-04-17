@@ -48,6 +48,7 @@ import (
 	"go.temporal.io/server/common/persistence/versionhistory"
 	"go.temporal.io/server/common/searchattribute"
 	"go.temporal.io/server/common/tasktoken"
+	"go.temporal.io/server/service/history/workflow"
 )
 
 // DEPRECATED: DO NOT MODIFY UNLESS ALSO APPLIED TO ./service/history/api/getworkflowexecutionhistory/api.go
@@ -585,7 +586,7 @@ func (wh *WorkflowHandler) getHistory(
 	metricsHandler.Histogram(metrics.HistorySize.Name(), metrics.HistorySize.Unit()).Record(int64(size))
 
 	isLastPage := len(nextPageToken) == 0
-	if err := wh.verifyHistoryIsComplete(
+	if err := workflow.VerifyHistoryIsComplete(
 		historyEvents,
 		firstEventID,
 		nextEventID-1,
@@ -925,61 +926,4 @@ func (wh *WorkflowHandler) validateTransientWorkflowTaskEvents(
 	}
 
 	return nil
-}
-
-// DEPRECATED: DO NOT MODIFY UNLESS ALSO APPLIED TO ./service/history/api/utils/get_history_util.go
-func (wh *WorkflowHandler) verifyHistoryIsComplete(
-	events []*historypb.HistoryEvent,
-	expectedFirstEventID int64,
-	expectedLastEventID int64,
-	isFirstPage bool,
-	isLastPage bool,
-	pageSize int,
-) error {
-
-	nEvents := len(events)
-	if nEvents == 0 {
-		if isLastPage {
-			// we seem to be returning a non-nil pageToken on the lastPage which
-			// in turn cases the client to call getHistory again - only to find
-			// there are no more events to consume - bail out if this is the case here
-			return nil
-		}
-		return serviceerror.NewDataLoss("History contains zero events.")
-	}
-
-	firstEventID := events[0].GetEventId()
-	lastEventID := events[nEvents-1].GetEventId()
-
-	if !isFirstPage { // at least one page of history has been read previously
-		if firstEventID <= expectedFirstEventID {
-			// not first page and no events have been read in the previous pages - not possible
-			return serviceerror.NewDataLoss(fmt.Sprintf("Invalid history: expected first eventID to be > %v but got %v", expectedFirstEventID, firstEventID))
-		}
-		expectedFirstEventID = firstEventID
-	}
-
-	if !isLastPage {
-		// estimate lastEventID based on pageSize. This is a lower bound
-		// since the persistence layer counts "batch of events" as a single page
-		expectedLastEventID = expectedFirstEventID + int64(pageSize) - 1
-	}
-
-	nExpectedEvents := expectedLastEventID - expectedFirstEventID + 1
-
-	if firstEventID == expectedFirstEventID &&
-		((isLastPage && lastEventID == expectedLastEventID && int64(nEvents) == nExpectedEvents) ||
-			(!isLastPage && lastEventID >= expectedLastEventID && int64(nEvents) >= nExpectedEvents)) {
-		return nil
-	}
-
-	return serviceerror.NewDataLoss(fmt.Sprintf("Incomplete history: expected events [%v-%v] but got events [%v-%v] of length %v: isFirstPage=%v,isLastPage=%v,pageSize=%v",
-		expectedFirstEventID,
-		expectedLastEventID,
-		firstEventID,
-		lastEventID,
-		nEvents,
-		isFirstPage,
-		isLastPage,
-		pageSize))
 }
