@@ -409,6 +409,8 @@ const (
 	FrontendRefreshNexusIncomingServicesMinWait = "frontend.refreshNexusIncomingServicesMinWait"
 	// FrontendEnableCallbackAttachment enables attaching callbacks to workflows.
 	FrontendEnableCallbackAttachment = "frontend.enableCallbackAttachment"
+	// FrontendCallbackURLMaxLength is the maximum length of callback URL
+	FrontendCallbackURLMaxLength = "frontend.callbackURLMaxLength"
 	// FrontendMaxConcurrentBatchOperationPerNamespace is the max concurrent batch operation job count per namespace
 	FrontendMaxConcurrentBatchOperationPerNamespace = "frontend.MaxConcurrentBatchOperationPerNamespace"
 	// FrontendMaxExecutionCountBatchOperationPerNamespace is the max execution count batch operation supports per namespace
@@ -437,9 +439,6 @@ const (
 	// asynchronous workflow execution update that waits on the "Accepted"
 	// lifecycle stage. Default value is `false`.
 	FrontendEnableUpdateWorkflowExecutionAsyncAccepted = "frontend.enableUpdateWorkflowExecutionAsyncAccepted"
-
-	// EnableWorkflowIdConflictPolicy enables the `WorkflowIdConflictPolicy` option for Start and Signal-with-Start
-	EnableWorkflowIdConflictPolicy = "frontend.enableWorkflowIdConflictPolicy"
 
 	// FrontendEnableWorkerVersioningDataAPIs enables worker versioning data read / write APIs.
 	FrontendEnableWorkerVersioningDataAPIs = "frontend.workerVersioningDataAPIs"

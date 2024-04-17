@@ -101,12 +101,20 @@ func (s *FunctionalSuite) TestWorkflowCallbacks_InvalidArgument() {
 			name:    "invalid-scheme",
 			url:     "invalid",
 			allow:   true,
-			message: "invalid url scheme for url: invalid",
+			message: "invalid url: unknown scheme: invalid",
+		},
+		{
+			name:    "url-length-too-long",
+			url:     "http://some-very-very-very-very-very-very-very-long-url",
+			allow:   true,
+			message: "invalid url: url length longer than max length allowed of 50",
 		},
 	}
 
 	dc := s.testCluster.host.dcClient
+	dc.OverrideValue(s.T(), dynamicconfig.FrontendCallbackURLMaxLength, 50)
 	defer dc.RemoveOverride(dynamicconfig.FrontendEnableCallbackAttachment)
+	defer dc.RemoveOverride(dynamicconfig.FrontendCallbackURLMaxLength)
 
 	for _, tc := range cases {
 		tc := tc

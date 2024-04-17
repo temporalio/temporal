@@ -64,6 +64,9 @@ var (
 		"/temporal.api.workflowservice.v1.WorkflowService/GetWorkflowExecutionHistory": 1,
 		"/temporal.api.workflowservice.v1.WorkflowService/PollNexusTaskQueue":          1,
 
+		// potentially long-running, depending on the operations
+		"/temporal.api.workflowservice.v1.WorkflowService/ExecuteMultiOperation": 1,
+
 		// Dispatching a Nexus task is a potentially long running RPC, it's classified in the same bucket as QueryWorkflow.
 		DispatchNexusTaskByNamespaceAndTaskQueueAPIName: 1,
 		DispatchNexusTaskByServiceAPIName:               1,
@@ -86,6 +89,7 @@ var (
 		"/temporal.api.workflowservice.v1.WorkflowService/SignalWithStartWorkflowExecution": 1,
 		"/temporal.api.workflowservice.v1.WorkflowService/StartWorkflowExecution":           1,
 		"/temporal.api.workflowservice.v1.WorkflowService/UpdateWorkflowExecution":          1,
+		"/temporal.api.workflowservice.v1.WorkflowService/ExecuteMultiOperation":            1,
 		"/temporal.api.workflowservice.v1.WorkflowService/CreateSchedule":                   1,
 		"/temporal.api.workflowservice.v1.WorkflowService/StartBatchOperation":              1,
 		DispatchNexusTaskByNamespaceAndTaskQueueAPIName:                                     1,
