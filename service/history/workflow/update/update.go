@@ -564,8 +564,8 @@ func (u *Update) checkStateSet(msg proto.Message, allowed stateSet) error {
 		return nil
 	}
 	u.instrumentation.CountInvalidStateTransition()
-	return invalidArgf("invalid state transition attempted: "+
-		"received %T message while in state %q", msg, u.state)
+	return invalidArgf("invalid state transition attempted for Update %s: "+
+		"received %T message while in state %q", u.id, msg, u.state)
 }
 
 // setState assigns the current state to a new value returning the original value.
