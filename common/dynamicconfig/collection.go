@@ -67,17 +67,17 @@ type (
 	BoolPropertyFn                          func() bool
 	BoolPropertyFnWithNamespaceFilter       func(namespace string) bool
 	BoolPropertyFnWithNamespaceIDFilter     func(namespaceID string) bool
-	BoolPropertyFnWithTaskQueueFilters      func(namespace string, taskQueue string, taskType enumspb.TaskQueueType) bool
+	BoolPropertyFnWithTaskQueueFilter       func(namespace string, taskQueue string, taskType enumspb.TaskQueueType) bool
 	DurationPropertyFn                      func() time.Duration
 	DurationPropertyFnWithNamespaceFilter   func(namespace string) time.Duration
 	DurationPropertyFnWithNamespaceIDFilter func(namespaceID string) time.Duration
 	DurationPropertyFnWithShardIDFilter     func(shardID int32) time.Duration
-	DurationPropertyFnWithTaskQueueFilters  func(namespace string, taskQueue string, taskType enumspb.TaskQueueType) time.Duration
+	DurationPropertyFnWithTaskQueueFilter   func(namespace string, taskQueue string, taskType enumspb.TaskQueueType) time.Duration
 	DurationPropertyFnWithTaskTypeFilter    func(task enumsspb.TaskType) time.Duration
 	FloatPropertyFn                         func() float64
 	FloatPropertyFnWithNamespaceFilter      func(namespace string) float64
 	FloatPropertyFnWithShardIDFilter        func(shardID int32) float64
-	FloatPropertyFnWithTaskQueueFilters     func(namespace string, taskQueue string, taskType enumspb.TaskQueueType) float64
+	FloatPropertyFnWithTaskQueueFilter      func(namespace string, taskQueue string, taskType enumspb.TaskQueueType) float64
 	IntPropertyFn                           func() int
 	IntPropertyFnWithNamespaceFilter        func(namespace string) int
 	IntPropertyFnWithShardIDFilter          func(shardID int32) int
@@ -207,7 +207,7 @@ func (c *Collection) GetFloatPropertyFilteredByNamespace(key Key, defaultValue a
 }
 
 // GetFloatPropertyFilteredByTaskQueueInfo gets property with taskQueueInfo as filters and asserts that it's a float64
-func (c *Collection) GetFloatPropertyFilteredByTaskQueueInfo(key Key, defaultValue any) FloatPropertyFnWithTaskQueueFilters {
+func (c *Collection) GetFloatPropertyFilteredByTaskQueueInfo(key Key, defaultValue any) FloatPropertyFnWithTaskQueueFilter {
 	return func(namespace string, taskQueue string, taskType enumspb.TaskQueueType) float64 {
 		return matchAndConvert(
 			c,
@@ -259,7 +259,7 @@ func (c *Collection) GetDurationPropertyFilteredByNamespaceID(key Key, defaultVa
 }
 
 // GetDurationPropertyFilteredByTaskQueueInfo gets property with taskQueueInfo as filters and asserts that it's a duration
-func (c *Collection) GetDurationPropertyFilteredByTaskQueueInfo(key Key, defaultValue any) DurationPropertyFnWithTaskQueueFilters {
+func (c *Collection) GetDurationPropertyFilteredByTaskQueueInfo(key Key, defaultValue any) DurationPropertyFnWithTaskQueueFilter {
 	return func(namespace string, taskQueue string, taskType enumspb.TaskQueueType) time.Duration {
 		return matchAndConvert(
 			c,
@@ -402,7 +402,7 @@ func (c *Collection) GetBoolPropertyFnWithNamespaceIDFilter(key Key, defaultValu
 }
 
 // GetBoolPropertyFilteredByTaskQueueInfo gets property with taskQueueInfo as filters and asserts that it's a bool
-func (c *Collection) GetBoolPropertyFilteredByTaskQueueInfo(key Key, defaultValue any) BoolPropertyFnWithTaskQueueFilters {
+func (c *Collection) GetBoolPropertyFilteredByTaskQueueInfo(key Key, defaultValue any) BoolPropertyFnWithTaskQueueFilter {
 	return func(namespace string, taskQueue string, taskType enumspb.TaskQueueType) bool {
 		return matchAndConvert(
 			c,

@@ -42,7 +42,7 @@ func GetIntPropertyFnFilteredByNamespace(value int) func(namespace string) int {
 	return func(namespace string) int { return value }
 }
 
-// GetIntPropertyFnFilteredByTaskQueue returns value as IntPropertyFnWithTaskQueueFilters
+// GetIntPropertyFnFilteredByTaskQueue returns value as IntPropertyFnWithTaskQueueFilter
 func GetIntPropertyFnFilteredByTaskQueue(value int) func(namespace string, taskQueue string, taskType enumspb.TaskQueueType) int {
 	return func(namespace string, taskQueue string, taskType enumspb.TaskQueueType) int { return value }
 }
@@ -62,7 +62,7 @@ func GetBoolPropertyFnFilteredByNamespace(value bool) func(namespace string) boo
 	return func(namespace string) bool { return value }
 }
 
-// GetBoolPropertyFnFilteredByTaskQueueInfo returns value as BoolPropertyFnWithTaskQueueFilters
+// GetBoolPropertyFnFilteredByTaskQueueInfo returns value as BoolPropertyFnWithTaskQueueFilter
 func GetBoolPropertyFnFilteredByTaskQueueInfo(value bool) func(namespace string, taskQueue string, taskType enumspb.TaskQueueType) bool {
 	return func(namespace string, taskQueue string, taskType enumspb.TaskQueueType) bool { return value }
 }
@@ -77,7 +77,7 @@ func GetDurationPropertyFn(value time.Duration) func() time.Duration {
 	return func() time.Duration { return value }
 }
 
-// GetDurationPropertyFnFilteredByTaskQueueInfo returns value as DurationPropertyFnWithTaskQueueFilters
+// GetDurationPropertyFnFilteredByTaskQueueInfo returns value as DurationPropertyFnWithTaskQueueFilter
 func GetDurationPropertyFnFilteredByTaskQueueInfo(value time.Duration) func(namespace string, taskQueue string, taskType enumspb.TaskQueueType) time.Duration {
 	return func(namespace string, taskQueue string, taskType enumspb.TaskQueueType) time.Duration { return value }
 }
