@@ -52,6 +52,7 @@ import (
 	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/workflow"
 	wcache "go.temporal.io/server/service/history/workflow/cache"
+	"go.temporal.io/server/service/history/workflow/update"
 )
 
 type (
@@ -138,6 +139,7 @@ func (r *workflowResetterImpl) ResetWorkflow(
 	var currentWorkflowEventsSeq []*persistence.WorkflowEvents
 	var reapplyEventsFn workflowResetReapplyEventsFn
 	currentMutableState := currentWorkflow.GetMutableState()
+	currentUpdateRegistry := currentWorkflow.GetContext().UpdateRegistry(ctx, currentMutableState)
 	if currentMutableState.IsWorkflowExecutionRunning() {
 		if err := r.terminateWorkflow(
 			currentMutableState,
@@ -158,6 +160,7 @@ func (r *workflowResetterImpl) ResetWorkflow(
 			lastVisitedRunID, err := r.reapplyContinueAsNewWorkflowEvents(
 				ctx,
 				resetMutableState,
+				currentUpdateRegistry,
 				namespaceID,
 				workflowID,
 				baseRunID,
@@ -172,7 +175,7 @@ func (r *workflowResetterImpl) ResetWorkflow(
 
 			if lastVisitedRunID == currentMutableState.GetExecutionState().RunId {
 				for _, event := range currentWorkflowEventsSeq {
-					if _, err := reapplyEvents(resetMutableState, event.Events, resetReapplyExcludeTypes, ""); err != nil {
+					if _, err := reapplyEvents(resetMutableState, currentUpdateRegistry, event.Events, resetReapplyExcludeTypes, ""); err != nil {
 						return err
 					}
 				}
@@ -184,6 +187,7 @@ func (r *workflowResetterImpl) ResetWorkflow(
 			_, err := r.reapplyContinueAsNewWorkflowEvents(
 				ctx,
 				resetMutableState,
+				currentUpdateRegistry,
 				namespaceID,
 				workflowID,
 				baseRunID,
@@ -218,7 +222,7 @@ func (r *workflowResetterImpl) ResetWorkflow(
 	if err := reapplyEventsFn(ctx, resetMS); err != nil {
 		return err
 	}
-	if _, err := reapplyEvents(resetMS, additionalReapplyEvents, nil, ""); err != nil {
+	if _, err := reapplyEvents(resetMS, currentUpdateRegistry, additionalReapplyEvents, nil, ""); err != nil {
 		return err
 	}
 
@@ -558,6 +562,7 @@ func (r *workflowResetterImpl) terminateWorkflow(
 func (r *workflowResetterImpl) reapplyContinueAsNewWorkflowEvents(
 	ctx context.Context,
 	resetMutableState workflow.MutableState,
+	currentUpdateRegistry update.Registry,
 	namespaceID namespace.ID,
 	workflowID string,
 	baseRunID string,
@@ -576,6 +581,7 @@ func (r *workflowResetterImpl) reapplyContinueAsNewWorkflowEvents(
 	nextRunID, err := r.reapplyWorkflowEvents(
 		ctx,
 		resetMutableState,
+		currentUpdateRegistry,
 		baseRebuildNextEventID,
 		baseNextEventID,
 		baseBranchToken,
@@ -633,6 +639,7 @@ func (r *workflowResetterImpl) reapplyContinueAsNewWorkflowEvents(
 		nextRunID, err = r.reapplyWorkflowEvents(
 			ctx,
 			resetMutableState,
+			currentUpdateRegistry,
 			common.FirstEventID,
 			nextWorkflowNextEventID,
 			nextWorkflowBranchToken,
@@ -655,6 +662,7 @@ func (r *workflowResetterImpl) reapplyContinueAsNewWorkflowEvents(
 func (r *workflowResetterImpl) reapplyWorkflowEvents(
 	ctx context.Context,
 	mutableState workflow.MutableState,
+	currentUpdateRegistry update.Registry,
 	firstEventID int64,
 	nextEventID int64,
 	branchToken []byte,
@@ -681,7 +689,7 @@ func (r *workflowResetterImpl) reapplyWorkflowEvents(
 			return "", err
 		}
 		lastEvents = batch.Events
-		if _, err := reapplyEvents(mutableState, lastEvents, resetReapplyExcludeTypes, ""); err != nil {
+		if _, err := reapplyEvents(mutableState, currentUpdateRegistry, lastEvents, resetReapplyExcludeTypes, ""); err != nil {
 			return "", err
 		}
 	}
@@ -697,6 +705,7 @@ func (r *workflowResetterImpl) reapplyWorkflowEvents(
 
 func reapplyEvents(
 	mutableState workflow.MutableState,
+	updateRegistry update.Registry,
 	events []*historypb.HistoryEvent,
 	resetReapplyExcludeTypes map[enumspb.ResetReapplyExcludeType]bool,
 	runIdForDeduplication string,
