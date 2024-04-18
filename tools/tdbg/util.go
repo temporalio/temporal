@@ -261,10 +261,12 @@ func printTable(items []interface{}, writer io.Writer) error {
 	}
 
 	var fields []string
+	var exportedFields []int
 	t := e.Type()
 	for i := 0; i < e.NumField(); i++ {
 		if exportRgx.MatchString(t.Field(i).Name) {
 			fields = append(fields, t.Field(i).Name)
+			exportedFields = append(exportedFields, i)
 		}
 	}
 
@@ -279,7 +281,7 @@ func printTable(items []interface{}, writer io.Writer) error {
 			item = item.Elem()
 		}
 		var columns []string
-		for j := 0; j < len(fields); j++ {
+		for _, j := range exportedFields {
 			col := item.Field(j)
 			columns = append(columns, fmt.Sprintf("%v", col.Interface()))
 		}

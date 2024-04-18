@@ -377,7 +377,7 @@ func (handler *workflowTaskHandlerImpl) handleCommandProtocolMessage(
 	attr *commandpb.ProtocolMessageCommandAttributes,
 	msgs *collection.IndexedTakeList[string, *protocolpb.Message],
 ) error {
-	metrics.CommandCounter.With(handler.metricsHandler).Record(1)
+	metrics.CommandTypeProtocolMessage.With(handler.metricsHandler).Record(1)
 
 	executionInfo := handler.mutableState.GetExecutionInfo()
 	namespaceID := namespace.ID(executionInfo.NamespaceId)
@@ -407,7 +407,7 @@ func (handler *workflowTaskHandlerImpl) handleCommandScheduleActivity(
 	_ context.Context,
 	attr *commandpb.ScheduleActivityTaskCommandAttributes,
 ) (*handleCommandResponse, error) {
-	metrics.CommandCounter.With(handler.metricsHandler).Record(1)
+	metrics.CommandTypeScheduleActivityCounter.With(handler.metricsHandler).Record(1)
 
 	executionInfo := handler.mutableState.GetExecutionInfo()
 	namespaceID := namespace.ID(executionInfo.NamespaceId)
@@ -574,7 +574,7 @@ func (handler *workflowTaskHandlerImpl) handleCommandRequestCancelActivity(
 	_ context.Context,
 	attr *commandpb.RequestCancelActivityTaskCommandAttributes,
 ) error {
-	metrics.CommandCounter.With(handler.metricsHandler).Record(1)
+	metrics.CommandTypeCancelActivityCounter.With(handler.metricsHandler).Record(1)
 
 	if err := handler.validateCommandAttr(
 		func() (enumspb.WorkflowTaskFailedCause, error) {
@@ -620,7 +620,7 @@ func (handler *workflowTaskHandlerImpl) handleCommandStartTimer(
 	_ context.Context,
 	attr *commandpb.StartTimerCommandAttributes,
 ) error {
-	metrics.CommandCounter.With(handler.metricsHandler).Record(1)
+	metrics.CommandTypeStartTimerCounter.With(handler.metricsHandler).Record(1)
 
 	if err := handler.validateCommandAttr(
 		func() (enumspb.WorkflowTaskFailedCause, error) {
@@ -641,7 +641,7 @@ func (handler *workflowTaskHandlerImpl) handleCommandCompleteWorkflow(
 	ctx context.Context,
 	attr *commandpb.CompleteWorkflowExecutionCommandAttributes,
 ) error {
-	metrics.CommandCounter.With(handler.metricsHandler).Record(1)
+	metrics.CommandTypeCompleteWorkflowCounter.With(handler.metricsHandler).Record(1)
 
 	if handler.hasBufferedEvents {
 		return handler.failWorkflowTask(enumspb.WORKFLOW_TASK_FAILED_CAUSE_UNHANDLED_COMMAND, nil)
@@ -698,7 +698,7 @@ func (handler *workflowTaskHandlerImpl) handleCommandFailWorkflow(
 	ctx context.Context,
 	attr *commandpb.FailWorkflowExecutionCommandAttributes,
 ) error {
-	metrics.CommandCounter.With(handler.metricsHandler).Record(1)
+	metrics.CommandTypeFailWorkflowCounter.With(handler.metricsHandler).Record(1)
 
 	if handler.hasBufferedEvents {
 		return handler.failWorkflowTask(enumspb.WORKFLOW_TASK_FAILED_CAUSE_UNHANDLED_COMMAND, nil)
@@ -770,7 +770,7 @@ func (handler *workflowTaskHandlerImpl) handleCommandCancelTimer(
 	_ context.Context,
 	attr *commandpb.CancelTimerCommandAttributes,
 ) error {
-	metrics.CommandCounter.With(handler.metricsHandler).Record(1)
+	metrics.CommandTypeCancelTimerCounter.With(handler.metricsHandler).Record(1)
 
 	if err := handler.validateCommandAttr(
 		func() (enumspb.WorkflowTaskFailedCause, error) {
@@ -798,7 +798,7 @@ func (handler *workflowTaskHandlerImpl) handleCommandCancelWorkflow(
 	ctx context.Context,
 	attr *commandpb.CancelWorkflowExecutionCommandAttributes,
 ) error {
-	metrics.CommandCounter.With(handler.metricsHandler).Record(1)
+	metrics.CommandTypeCancelWorkflowCounter.With(handler.metricsHandler).Record(1)
 
 	if handler.hasBufferedEvents {
 		return handler.failWorkflowTask(enumspb.WORKFLOW_TASK_FAILED_CAUSE_UNHANDLED_COMMAND, nil)
@@ -831,7 +831,7 @@ func (handler *workflowTaskHandlerImpl) handleCommandRequestCancelExternalWorkfl
 	_ context.Context,
 	attr *commandpb.RequestCancelExternalWorkflowExecutionCommandAttributes,
 ) error {
-	metrics.CommandCounter.With(handler.metricsHandler).Record(1)
+	metrics.CommandTypeCancelExternalWorkflowCounter.With(handler.metricsHandler).Record(1)
 
 	executionInfo := handler.mutableState.GetExecutionInfo()
 	namespaceID := namespace.ID(executionInfo.NamespaceId)
@@ -872,7 +872,7 @@ func (handler *workflowTaskHandlerImpl) handleCommandRecordMarker(
 	_ context.Context,
 	attr *commandpb.RecordMarkerCommandAttributes,
 ) error {
-	metrics.CommandCounter.With(handler.metricsHandler).Record(1)
+	metrics.CommandTypeRecordMarkerCounter.With(handler.metricsHandler).Record(1)
 
 	if err := handler.validateCommandAttr(
 		func() (enumspb.WorkflowTaskFailedCause, error) {
@@ -898,7 +898,7 @@ func (handler *workflowTaskHandlerImpl) handleCommandContinueAsNewWorkflow(
 	ctx context.Context,
 	attr *commandpb.ContinueAsNewWorkflowExecutionCommandAttributes,
 ) error {
-	metrics.CommandCounter.With(handler.metricsHandler).Record(1)
+	metrics.CommandTypeContinueAsNewCounter.With(handler.metricsHandler).Record(1)
 
 	if handler.hasBufferedEvents {
 		return handler.failWorkflowTask(enumspb.WORKFLOW_TASK_FAILED_CAUSE_UNHANDLED_COMMAND, nil)
@@ -1007,7 +1007,7 @@ func (handler *workflowTaskHandlerImpl) handleCommandStartChildWorkflow(
 	_ context.Context,
 	attr *commandpb.StartChildWorkflowExecutionCommandAttributes,
 ) error {
-	metrics.CommandCounter.With(handler.metricsHandler).Record(1)
+	metrics.CommandTypeChildWorkflowCounter.With(handler.metricsHandler).Record(1)
 
 	parentNamespaceEntry := handler.mutableState.GetNamespaceEntry()
 	parentNamespaceID := parentNamespaceEntry.ID()
@@ -1118,7 +1118,7 @@ func (handler *workflowTaskHandlerImpl) handleCommandSignalExternalWorkflow(
 	_ context.Context,
 	attr *commandpb.SignalExternalWorkflowExecutionCommandAttributes,
 ) error {
-	metrics.CommandCounter.With(handler.metricsHandler).Record(1)
+	metrics.CommandTypeSignalExternalWorkflowCounter.With(handler.metricsHandler).Record(1)
 
 	executionInfo := handler.mutableState.GetExecutionInfo()
 	namespaceID := namespace.ID(executionInfo.NamespaceId)
@@ -1165,7 +1165,7 @@ func (handler *workflowTaskHandlerImpl) handleCommandUpsertWorkflowSearchAttribu
 	_ context.Context,
 	attr *commandpb.UpsertWorkflowSearchAttributesCommandAttributes,
 ) error {
-	metrics.CommandCounter.With(handler.metricsHandler).Record(1)
+	metrics.CommandTypeUpsertWorkflowSearchAttributesCounter.With(handler.metricsHandler).Record(1)
 
 	// get namespace name
 	executionInfo := handler.mutableState.GetExecutionInfo()
@@ -1236,7 +1236,7 @@ func (handler *workflowTaskHandlerImpl) handleCommandModifyWorkflowProperties(
 	_ context.Context,
 	attr *commandpb.ModifyWorkflowPropertiesCommandAttributes,
 ) error {
-	metrics.CommandCounter.With(handler.metricsHandler).Record(1)
+	metrics.CommandTypeModifyWorkflowPropertiesCounter.With(handler.metricsHandler).Record(1)
 
 	// get namespace name
 	executionInfo := handler.mutableState.GetExecutionInfo()

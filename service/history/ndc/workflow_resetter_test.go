@@ -885,7 +885,7 @@ func (s *workflowResetterSuite) TestReapplyEvents() {
 		}
 	}
 
-	err := reapplyEvents(ms, events, nil)
+	_, err := reapplyEvents(ms, events, nil, "")
 	s.NoError(err)
 }
 

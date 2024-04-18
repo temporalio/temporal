@@ -130,7 +130,7 @@ var supportedWhereGroupByCases = map[string]struct {
 }
 
 func TestSupportedSelectWhere(t *testing.T) {
-	c := newQueryConverter(nil, nil)
+	c := NewQueryConverter(nil, nil)
 
 	for sql, expectedJson := range supportedWhereCases {
 		queryParams, err := c.ConvertWhereOrderBy(sql)
@@ -144,7 +144,7 @@ func TestSupportedSelectWhere(t *testing.T) {
 }
 
 func TestEmptySelectWhere(t *testing.T) {
-	c := newQueryConverter(nil, nil)
+	c := NewQueryConverter(nil, nil)
 
 	queryParams, err := c.ConvertWhereOrderBy("")
 	assert.NoError(t, err)
@@ -161,7 +161,7 @@ func TestEmptySelectWhere(t *testing.T) {
 }
 
 func TestSupportedSelectWhereOrder(t *testing.T) {
-	c := newQueryConverter(nil, nil)
+	c := NewQueryConverter(nil, nil)
 
 	for sql, expectedJson := range supportedWhereOrderCases {
 		queryParams, err := c.ConvertWhereOrderBy(sql)
@@ -182,7 +182,7 @@ func TestSupportedSelectWhereOrder(t *testing.T) {
 }
 
 func TestSupportedSelectWhereGroupBy(t *testing.T) {
-	c := newQueryConverter(nil, nil)
+	c := NewQueryConverter(nil, nil)
 
 	for sql, expectedJson := range supportedWhereGroupByCases {
 		queryParams, err := c.ConvertWhereOrderBy(sql)
@@ -200,7 +200,7 @@ func TestSupportedSelectWhereGroupBy(t *testing.T) {
 }
 
 func TestErrors(t *testing.T) {
-	c := newQueryConverter(nil, nil)
+	c := NewQueryConverter(nil, nil)
 	for sql, expectedErrMessage := range errorCases {
 		_, err := c.ConvertSql(sql)
 		assert.Contains(t, err.Error(), expectedErrMessage, sql)
