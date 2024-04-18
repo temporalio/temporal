@@ -65,8 +65,8 @@ func RandomSnapshot(
 	status enumspb.WorkflowExecutionStatus,
 	dbRecordVersion int64,
 	historyBranchUtil p.HistoryBranchUtil,
-) *p.WorkflowSnapshot {
-	return &p.WorkflowSnapshot{
+) (*p.WorkflowSnapshot, []*p.WorkflowEvents) {
+	snapshot := &p.WorkflowSnapshot{
 		ExecutionInfo:  RandomExecutionInfo(namespaceID, workflowID, lastWriteVersion, historyBranchUtil),
 		ExecutionState: RandomExecutionState(runID, state, status),
 
@@ -89,6 +89,17 @@ func RandomSnapshot(
 		Condition:       rand.Int63(),
 		DBRecordVersion: dbRecordVersion,
 	}
+	history := snapshot.ExecutionInfo.VersionHistories.Histories[0]
+	events := &p.WorkflowEvents{
+		NamespaceID: namespaceID,
+		WorkflowID:  workflowID,
+		RunID:       runID,
+		BranchToken: history.BranchToken,
+		Events:      []*historypb.HistoryEvent{RandomHistoryEvent()},
+	}
+	events.Events[0].EventId = history.Items[0].EventId
+	events.Events[0].Version = history.Items[0].Version
+	return snapshot, []*p.WorkflowEvents{events}
 }
 
 func RandomMutation(
@@ -100,7 +111,7 @@ func RandomMutation(
 	status enumspb.WorkflowExecutionStatus,
 	dbRecordVersion int64,
 	historyBranchUtil p.HistoryBranchUtil,
-) *p.WorkflowMutation {
+) (*p.WorkflowMutation, []*p.WorkflowEvents) {
 	mutation := &p.WorkflowMutation{
 		ExecutionInfo:  RandomExecutionInfo(namespaceID, workflowID, lastWriteVersion, historyBranchUtil),
 		ExecutionState: RandomExecutionState(runID, state, status),
@@ -146,7 +157,19 @@ func RandomMutation(
 	default:
 		panic("broken test")
 	}
-	return mutation
+
+	history := mutation.ExecutionInfo.VersionHistories.Histories[0]
+	events := &p.WorkflowEvents{
+		NamespaceID: namespaceID,
+		WorkflowID:  workflowID,
+		RunID:       runID,
+		BranchToken: history.BranchToken,
+		Events:      []*historypb.HistoryEvent{RandomHistoryEvent()},
+	}
+	events.Events[0].EventId = history.Items[0].EventId
+	events.Events[0].Version = history.Items[0].Version
+
+	return mutation, []*p.WorkflowEvents{events}
 }
 
 func RandomExecutionInfo(

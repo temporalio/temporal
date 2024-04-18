@@ -136,7 +136,7 @@ func (s *ExecutionMutableStateSuite) TearDownTest() {
 }
 
 func (s *ExecutionMutableStateSuite) TestCreate_BrandNew() {
-	newSnapshot := s.CreateWorkflow(
+	newSnapshot, _ := s.CreateWorkflow(
 		rand.Int63(),
 		enumsspb.WORKFLOW_EXECUTION_STATE_CREATED,
 		enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
@@ -148,12 +148,15 @@ func (s *ExecutionMutableStateSuite) TestCreate_BrandNew() {
 
 func (s *ExecutionMutableStateSuite) TestCreate_BrandNew_CurrentConflict() {
 	lastWriteVersion := rand.Int63()
-	newSnapshot := s.CreateWorkflow(
+	newSnapshot, newEvents := s.CreateWorkflow(
 		lastWriteVersion,
 		enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED,
 		enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED,
 		rand.Int63(),
 	)
+
+	// Remember original execution stats because the CreateWorkflowExecution mutates the stats before failing to persist
+	executionStats := proto.Clone(newSnapshot.ExecutionInfo.ExecutionStats).(*persistencespb.ExecutionStats)
 
 	_, err := s.ExecutionManager.CreateWorkflowExecution(s.Ctx, &p.CreateWorkflowExecutionRequest{
 		ShardID: s.ShardID,
@@ -164,7 +167,7 @@ func (s *ExecutionMutableStateSuite) TestCreate_BrandNew_CurrentConflict() {
 		PreviousLastWriteVersion: 0,
 
 		NewWorkflowSnapshot: *newSnapshot,
-		NewWorkflowEvents:   nil,
+		NewWorkflowEvents:   newEvents,
 	})
 	if err, ok := err.(*p.CurrentWorkflowConditionFailedError); ok {
 		err.Msg = ""
@@ -178,19 +181,21 @@ func (s *ExecutionMutableStateSuite) TestCreate_BrandNew_CurrentConflict() {
 		LastWriteVersion: lastWriteVersion,
 	}, err)
 
+	// Restore origin execution stats so GetWorkflowExecution matches with the pre-failed snapshot stats above
+	newSnapshot.ExecutionInfo.ExecutionStats = executionStats
 	s.AssertEqualWithDB(newSnapshot)
 }
 
 func (s *ExecutionMutableStateSuite) TestCreate_Reuse() {
 	prevLastWriteVersion := rand.Int63()
-	prevSnapshot := s.CreateWorkflow(
+	prevSnapshot, _ := s.CreateWorkflow(
 		prevLastWriteVersion,
 		enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED,
 		enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED,
 		rand.Int63(),
 	)
 
-	newSnapshot := RandomSnapshot(
+	newSnapshot, newEvents := RandomSnapshot(
 		s.NamespaceID,
 		s.WorkflowID,
 		uuid.New().String(),
@@ -210,7 +215,7 @@ func (s *ExecutionMutableStateSuite) TestCreate_Reuse() {
 		PreviousLastWriteVersion: prevLastWriteVersion,
 
 		NewWorkflowSnapshot: *newSnapshot,
-		NewWorkflowEvents:   nil,
+		NewWorkflowEvents:   newEvents,
 	})
 	s.NoError(err)
 
@@ -219,12 +224,15 @@ func (s *ExecutionMutableStateSuite) TestCreate_Reuse() {
 
 func (s *ExecutionMutableStateSuite) TestCreate_Reuse_CurrentConflict() {
 	prevLastWriteVersion := rand.Int63()
-	prevSnapshot := s.CreateWorkflow(
+	prevSnapshot, prevEvents := s.CreateWorkflow(
 		prevLastWriteVersion,
 		enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED,
 		enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED,
 		rand.Int63(),
 	)
+
+	// Remember original execution stats because the CreateWorkflowExecution mutates the stats before failing to persist
+	executionStats := proto.Clone(prevSnapshot.ExecutionInfo.ExecutionStats).(*persistencespb.ExecutionStats)
 
 	_, err := s.ExecutionManager.CreateWorkflowExecution(s.Ctx, &p.CreateWorkflowExecutionRequest{
 		ShardID: s.ShardID,
@@ -235,7 +243,7 @@ func (s *ExecutionMutableStateSuite) TestCreate_Reuse_CurrentConflict() {
 		PreviousLastWriteVersion: rand.Int63(),
 
 		NewWorkflowSnapshot: *prevSnapshot,
-		NewWorkflowEvents:   nil,
+		NewWorkflowEvents:   prevEvents,
 	})
 	if err, ok := err.(*p.CurrentWorkflowConditionFailedError); ok {
 		err.Msg = ""
@@ -249,19 +257,21 @@ func (s *ExecutionMutableStateSuite) TestCreate_Reuse_CurrentConflict() {
 		LastWriteVersion: prevLastWriteVersion,
 	}, err)
 
+	// Restore origin execution stats so GetWorkflowExecution matches with the pre-failed snapshot stats above
+	prevSnapshot.ExecutionInfo.ExecutionStats = executionStats
 	s.AssertEqualWithDB(prevSnapshot)
 }
 
 func (s *ExecutionMutableStateSuite) TestCreate_Zombie() {
 	prevLastWriteVersion := rand.Int63()
-	_ = s.CreateWorkflow(
+	_, _ = s.CreateWorkflow(
 		prevLastWriteVersion,
 		enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED,
 		enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED,
 		rand.Int63(),
 	)
 
-	newSnapshot := RandomSnapshot(
+	newSnapshot, newEvents := RandomSnapshot(
 		s.NamespaceID,
 		s.WorkflowID,
 		uuid.New().String(),
@@ -281,7 +291,7 @@ func (s *ExecutionMutableStateSuite) TestCreate_Zombie() {
 		PreviousLastWriteVersion: 0,
 
 		NewWorkflowSnapshot: *newSnapshot,
-		NewWorkflowEvents:   nil,
+		NewWorkflowEvents:   newEvents,
 	})
 	s.NoError(err)
 
@@ -290,7 +300,7 @@ func (s *ExecutionMutableStateSuite) TestCreate_Zombie() {
 
 func (s *ExecutionMutableStateSuite) TestCreate_Conflict() {
 	lastWriteVersion := rand.Int63()
-	newSnapshot := s.CreateWorkflow(
+	newSnapshot, newEvents := s.CreateWorkflow(
 		lastWriteVersion,
 		enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED,
 		enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED,
@@ -306,13 +316,13 @@ func (s *ExecutionMutableStateSuite) TestCreate_Conflict() {
 		PreviousLastWriteVersion: lastWriteVersion,
 
 		NewWorkflowSnapshot: *newSnapshot,
-		NewWorkflowEvents:   nil,
+		NewWorkflowEvents:   newEvents,
 	})
 	s.IsType(&p.WorkflowConditionFailedError{}, err)
 }
 
 func (s *ExecutionMutableStateSuite) TestCreate_ClosedWorkflow_BrandNew() {
-	newSnapshot := s.CreateWorkflow(
+	newSnapshot, _ := s.CreateWorkflow(
 		rand.Int63(),
 		enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED,
 		enumspb.WORKFLOW_EXECUTION_STATUS_TERMINATED,
@@ -324,14 +334,14 @@ func (s *ExecutionMutableStateSuite) TestCreate_ClosedWorkflow_BrandNew() {
 
 func (s *ExecutionMutableStateSuite) TestCreate_ClosedWorkflow_Bypass() {
 	prevLastWriteVersion := rand.Int63()
-	_ = s.CreateWorkflow(
+	_, _ = s.CreateWorkflow(
 		prevLastWriteVersion,
 		enumsspb.WORKFLOW_EXECUTION_STATE_CREATED,
 		enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
 		rand.Int63(),
 	)
 
-	newSnapshot := RandomSnapshot(
+	newSnapshot, newEvents := RandomSnapshot(
 		s.NamespaceID,
 		s.WorkflowID,
 		uuid.New().String(),
@@ -351,7 +361,7 @@ func (s *ExecutionMutableStateSuite) TestCreate_ClosedWorkflow_Bypass() {
 		PreviousLastWriteVersion: 0,
 
 		NewWorkflowSnapshot: *newSnapshot,
-		NewWorkflowEvents:   nil,
+		NewWorkflowEvents:   newEvents,
 	})
 	s.NoError(err)
 
@@ -360,14 +370,14 @@ func (s *ExecutionMutableStateSuite) TestCreate_ClosedWorkflow_Bypass() {
 
 func (s *ExecutionMutableStateSuite) TestCreate_ClosedWorkflow_UpdateCurrent() {
 	prevLastWriteVersion := rand.Int63()
-	prevSnapshot := s.CreateWorkflow(
+	prevSnapshot, _ := s.CreateWorkflow(
 		prevLastWriteVersion,
 		enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED,
 		enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED,
 		rand.Int63(),
 	)
 
-	newSnapshot := RandomSnapshot(
+	newSnapshot, newEvents := RandomSnapshot(
 		s.NamespaceID,
 		s.WorkflowID,
 		uuid.New().String(),
@@ -387,7 +397,7 @@ func (s *ExecutionMutableStateSuite) TestCreate_ClosedWorkflow_UpdateCurrent() {
 		PreviousLastWriteVersion: prevLastWriteVersion,
 
 		NewWorkflowSnapshot: *newSnapshot,
-		NewWorkflowEvents:   nil,
+		NewWorkflowEvents:   newEvents,
 	})
 	s.NoError(err)
 
@@ -395,14 +405,14 @@ func (s *ExecutionMutableStateSuite) TestCreate_ClosedWorkflow_UpdateCurrent() {
 }
 
 func (s *ExecutionMutableStateSuite) TestUpdate_NotZombie() {
-	currentSnapshot := s.CreateWorkflow(
+	currentSnapshot, _ := s.CreateWorkflow(
 		rand.Int63(),
 		enumsspb.WORKFLOW_EXECUTION_STATE_CREATED,
 		enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
 		rand.Int63(),
 	)
 
-	currentMutation := RandomMutation(
+	currentMutation, currentEvents := RandomMutation(
 		s.NamespaceID,
 		s.WorkflowID,
 		s.RunID,
@@ -418,7 +428,7 @@ func (s *ExecutionMutableStateSuite) TestUpdate_NotZombie() {
 		Mode:    p.UpdateWorkflowModeUpdateCurrent,
 
 		UpdateWorkflowMutation: *currentMutation,
-		UpdateWorkflowEvents:   nil,
+		UpdateWorkflowEvents:   currentEvents,
 
 		NewWorkflowSnapshot: nil,
 		NewWorkflowEvents:   nil,
@@ -429,14 +439,14 @@ func (s *ExecutionMutableStateSuite) TestUpdate_NotZombie() {
 }
 
 func (s *ExecutionMutableStateSuite) TestUpdate_NotZombie_CurrentConflict() {
-	_ = s.CreateWorkflow(
+	_, _ = s.CreateWorkflow(
 		rand.Int63(),
 		enumsspb.WORKFLOW_EXECUTION_STATE_CREATED,
 		enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
 		rand.Int63(),
 	)
 
-	currentMutation := RandomMutation(
+	currentMutation, currentEvents := RandomMutation(
 		s.NamespaceID,
 		s.WorkflowID,
 		uuid.New().String(),
@@ -452,7 +462,7 @@ func (s *ExecutionMutableStateSuite) TestUpdate_NotZombie_CurrentConflict() {
 		Mode:    p.UpdateWorkflowModeUpdateCurrent,
 
 		UpdateWorkflowMutation: *currentMutation,
-		UpdateWorkflowEvents:   nil,
+		UpdateWorkflowEvents:   currentEvents,
 
 		NewWorkflowSnapshot: nil,
 		NewWorkflowEvents:   nil,
@@ -467,14 +477,14 @@ func (s *ExecutionMutableStateSuite) TestUpdate_NotZombie_CurrentConflict() {
 }
 
 func (s *ExecutionMutableStateSuite) TestUpdate_NotZombie_Conflict() {
-	currentSnapshot := s.CreateWorkflow(
+	currentSnapshot, _ := s.CreateWorkflow(
 		rand.Int63(),
 		enumsspb.WORKFLOW_EXECUTION_STATE_CREATED,
 		enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
 		rand.Int63(),
 	)
 
-	currentMutation := RandomMutation(
+	currentMutation, currentEvents := RandomMutation(
 		s.NamespaceID,
 		s.WorkflowID,
 		s.RunID,
@@ -490,7 +500,7 @@ func (s *ExecutionMutableStateSuite) TestUpdate_NotZombie_Conflict() {
 		Mode:    p.UpdateWorkflowModeUpdateCurrent,
 
 		UpdateWorkflowMutation: *currentMutation,
-		UpdateWorkflowEvents:   nil,
+		UpdateWorkflowEvents:   currentEvents,
 
 		NewWorkflowSnapshot: nil,
 		NewWorkflowEvents:   nil,
@@ -501,14 +511,14 @@ func (s *ExecutionMutableStateSuite) TestUpdate_NotZombie_Conflict() {
 }
 
 func (s *ExecutionMutableStateSuite) TestUpdate_NotZombie_WithNew() {
-	currentSnapshot := s.CreateWorkflow(
+	currentSnapshot, _ := s.CreateWorkflow(
 		rand.Int63(),
 		enumsspb.WORKFLOW_EXECUTION_STATE_CREATED,
 		enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
 		rand.Int63(),
 	)
 
-	currentMutation := RandomMutation(
+	currentMutation, currentEvents := RandomMutation(
 		s.NamespaceID,
 		s.WorkflowID,
 		s.RunID,
@@ -518,7 +528,7 @@ func (s *ExecutionMutableStateSuite) TestUpdate_NotZombie_WithNew() {
 		currentSnapshot.DBRecordVersion+1,
 		s.historyBranchUtil,
 	)
-	newSnapshot := RandomSnapshot(
+	newSnapshot, newEvents := RandomSnapshot(
 		s.NamespaceID,
 		s.WorkflowID,
 		uuid.New().String(),
@@ -534,10 +544,10 @@ func (s *ExecutionMutableStateSuite) TestUpdate_NotZombie_WithNew() {
 		Mode:    p.UpdateWorkflowModeUpdateCurrent,
 
 		UpdateWorkflowMutation: *currentMutation,
-		UpdateWorkflowEvents:   nil,
+		UpdateWorkflowEvents:   currentEvents,
 
 		NewWorkflowSnapshot: newSnapshot,
-		NewWorkflowEvents:   nil,
+		NewWorkflowEvents:   newEvents,
 	})
 	s.NoError(err)
 
@@ -546,14 +556,14 @@ func (s *ExecutionMutableStateSuite) TestUpdate_NotZombie_WithNew() {
 }
 
 func (s *ExecutionMutableStateSuite) TestUpdate_Zombie() {
-	_ = s.CreateWorkflow(
+	_, _ = s.CreateWorkflow(
 		rand.Int63(),
 		enumsspb.WORKFLOW_EXECUTION_STATE_CREATED,
 		enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
 		rand.Int63(),
 	)
 	runID := uuid.New().String()
-	zombieSnapshot := RandomSnapshot(
+	zombieSnapshot, zombieEvents := RandomSnapshot(
 		s.NamespaceID,
 		s.WorkflowID,
 		runID,
@@ -572,11 +582,11 @@ func (s *ExecutionMutableStateSuite) TestUpdate_Zombie() {
 		PreviousLastWriteVersion: 0,
 
 		NewWorkflowSnapshot: *zombieSnapshot,
-		NewWorkflowEvents:   nil,
+		NewWorkflowEvents:   zombieEvents,
 	})
 	s.NoError(err)
 
-	zombieMutation := RandomMutation(
+	zombieMutation, zombieEvents := RandomMutation(
 		s.NamespaceID,
 		s.WorkflowID,
 		runID,
@@ -592,7 +602,7 @@ func (s *ExecutionMutableStateSuite) TestUpdate_Zombie() {
 		Mode:    p.UpdateWorkflowModeBypassCurrent,
 
 		UpdateWorkflowMutation: *zombieMutation,
-		UpdateWorkflowEvents:   nil,
+		UpdateWorkflowEvents:   zombieEvents,
 
 		NewWorkflowSnapshot: nil,
 		NewWorkflowEvents:   nil,
@@ -603,14 +613,14 @@ func (s *ExecutionMutableStateSuite) TestUpdate_Zombie() {
 }
 
 func (s *ExecutionMutableStateSuite) TestUpdate_Zombie_CurrentConflict() {
-	currentSnapshot := s.CreateWorkflow(
+	currentSnapshot, _ := s.CreateWorkflow(
 		rand.Int63(),
 		enumsspb.WORKFLOW_EXECUTION_STATE_CREATED,
 		enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
 		rand.Int63(),
 	)
 
-	currentMutation := RandomMutation(
+	currentMutation, currentEvents := RandomMutation(
 		s.NamespaceID,
 		s.WorkflowID,
 		s.RunID,
@@ -626,7 +636,7 @@ func (s *ExecutionMutableStateSuite) TestUpdate_Zombie_CurrentConflict() {
 		Mode:    p.UpdateWorkflowModeBypassCurrent,
 
 		UpdateWorkflowMutation: *currentMutation,
-		UpdateWorkflowEvents:   nil,
+		UpdateWorkflowEvents:   currentEvents,
 
 		NewWorkflowSnapshot: nil,
 		NewWorkflowEvents:   nil,
@@ -637,14 +647,14 @@ func (s *ExecutionMutableStateSuite) TestUpdate_Zombie_CurrentConflict() {
 }
 
 func (s *ExecutionMutableStateSuite) TestUpdate_Zombie_Conflict() {
-	_ = s.CreateWorkflow(
+	_, _ = s.CreateWorkflow(
 		rand.Int63(),
 		enumsspb.WORKFLOW_EXECUTION_STATE_CREATED,
 		enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
 		rand.Int63(),
 	)
 	runID := uuid.New().String()
-	zombieSnapshot := RandomSnapshot(
+	zombieSnapshot, zombieEvents := RandomSnapshot(
 		s.NamespaceID,
 		s.WorkflowID,
 		runID,
@@ -663,11 +673,11 @@ func (s *ExecutionMutableStateSuite) TestUpdate_Zombie_Conflict() {
 		PreviousLastWriteVersion: 0,
 
 		NewWorkflowSnapshot: *zombieSnapshot,
-		NewWorkflowEvents:   nil,
+		NewWorkflowEvents:   zombieEvents,
 	})
 	s.NoError(err)
 
-	zombieMutation := RandomMutation(
+	zombieMutation, zombieEvents := RandomMutation(
 		s.NamespaceID,
 		s.WorkflowID,
 		runID,
@@ -683,7 +693,7 @@ func (s *ExecutionMutableStateSuite) TestUpdate_Zombie_Conflict() {
 		Mode:    p.UpdateWorkflowModeBypassCurrent,
 
 		UpdateWorkflowMutation: *zombieMutation,
-		UpdateWorkflowEvents:   nil,
+		UpdateWorkflowEvents:   zombieEvents,
 
 		NewWorkflowSnapshot: nil,
 		NewWorkflowEvents:   nil,
@@ -694,14 +704,14 @@ func (s *ExecutionMutableStateSuite) TestUpdate_Zombie_Conflict() {
 }
 
 func (s *ExecutionMutableStateSuite) TestUpdate_Zombie_WithNew() {
-	_ = s.CreateWorkflow(
+	_, _ = s.CreateWorkflow(
 		rand.Int63(),
 		enumsspb.WORKFLOW_EXECUTION_STATE_CREATED,
 		enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
 		rand.Int63(),
 	)
 	runID := uuid.New().String()
-	zombieSnapshot := RandomSnapshot(
+	zombieSnapshot, zombieEvents := RandomSnapshot(
 		s.NamespaceID,
 		s.WorkflowID,
 		runID,
@@ -720,11 +730,11 @@ func (s *ExecutionMutableStateSuite) TestUpdate_Zombie_WithNew() {
 		PreviousLastWriteVersion: 0,
 
 		NewWorkflowSnapshot: *zombieSnapshot,
-		NewWorkflowEvents:   nil,
+		NewWorkflowEvents:   zombieEvents,
 	})
 	s.NoError(err)
 
-	zombieMutation := RandomMutation(
+	zombieMutation, zombieEvents := RandomMutation(
 		s.NamespaceID,
 		s.WorkflowID,
 		runID,
@@ -734,7 +744,7 @@ func (s *ExecutionMutableStateSuite) TestUpdate_Zombie_WithNew() {
 		zombieSnapshot.DBRecordVersion+1,
 		s.historyBranchUtil,
 	)
-	newZombieSnapshot := RandomSnapshot(
+	newZombieSnapshot, newZombieEvents := RandomSnapshot(
 		s.NamespaceID,
 		s.WorkflowID,
 		uuid.New().String(),
@@ -750,10 +760,10 @@ func (s *ExecutionMutableStateSuite) TestUpdate_Zombie_WithNew() {
 		Mode:    p.UpdateWorkflowModeBypassCurrent,
 
 		UpdateWorkflowMutation: *zombieMutation,
-		UpdateWorkflowEvents:   nil,
+		UpdateWorkflowEvents:   zombieEvents,
 
 		NewWorkflowSnapshot: newZombieSnapshot,
-		NewWorkflowEvents:   nil,
+		NewWorkflowEvents:   newZombieEvents,
 	})
 	s.NoError(err)
 
@@ -762,7 +772,7 @@ func (s *ExecutionMutableStateSuite) TestUpdate_Zombie_WithNew() {
 }
 
 func (s *ExecutionMutableStateSuite) TestConflictResolve_SuppressCurrent() {
-	currentSnapshot := s.CreateWorkflow(
+	currentSnapshot, _ := s.CreateWorkflow(
 		rand.Int63(),
 		enumsspb.WORKFLOW_EXECUTION_STATE_CREATED,
 		enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
@@ -770,7 +780,7 @@ func (s *ExecutionMutableStateSuite) TestConflictResolve_SuppressCurrent() {
 	)
 
 	runID := uuid.New().String()
-	baseSnapshot := RandomSnapshot(
+	baseSnapshot, baseEvents := RandomSnapshot(
 		s.NamespaceID,
 		s.WorkflowID,
 		runID,
@@ -789,11 +799,11 @@ func (s *ExecutionMutableStateSuite) TestConflictResolve_SuppressCurrent() {
 		PreviousLastWriteVersion: 0,
 
 		NewWorkflowSnapshot: *baseSnapshot,
-		NewWorkflowEvents:   nil,
+		NewWorkflowEvents:   baseEvents,
 	})
 	s.NoError(err)
 
-	resetSnapshot := RandomSnapshot(
+	resetSnapshot, resetEvents := RandomSnapshot(
 		s.NamespaceID,
 		s.WorkflowID,
 		runID,
@@ -803,7 +813,7 @@ func (s *ExecutionMutableStateSuite) TestConflictResolve_SuppressCurrent() {
 		baseSnapshot.DBRecordVersion+1,
 		s.historyBranchUtil,
 	)
-	currentMutation := RandomMutation(
+	currentMutation, currentEvents := RandomMutation(
 		s.NamespaceID,
 		s.WorkflowID,
 		s.RunID,
@@ -819,13 +829,13 @@ func (s *ExecutionMutableStateSuite) TestConflictResolve_SuppressCurrent() {
 		Mode:    p.ConflictResolveWorkflowModeUpdateCurrent,
 
 		ResetWorkflowSnapshot: *resetSnapshot,
-		ResetWorkflowEvents:   nil,
+		ResetWorkflowEvents:   resetEvents,
 
 		NewWorkflowSnapshot: nil,
 		NewWorkflowEvents:   nil,
 
 		CurrentWorkflowMutation: currentMutation,
-		CurrentWorkflowEvents:   nil,
+		CurrentWorkflowEvents:   currentEvents,
 	})
 	s.NoError(err)
 
@@ -834,7 +844,7 @@ func (s *ExecutionMutableStateSuite) TestConflictResolve_SuppressCurrent() {
 }
 
 func (s *ExecutionMutableStateSuite) TestConflictResolve_SuppressCurrent_CurrentConflict() {
-	currentSnapshot := s.CreateWorkflow(
+	currentSnapshot, _ := s.CreateWorkflow(
 		rand.Int63(),
 		enumsspb.WORKFLOW_EXECUTION_STATE_CREATED,
 		enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
@@ -842,7 +852,7 @@ func (s *ExecutionMutableStateSuite) TestConflictResolve_SuppressCurrent_Current
 	)
 
 	runID := uuid.New().String()
-	baseSnapshot := RandomSnapshot(
+	baseSnapshot, baseEvents := RandomSnapshot(
 		s.NamespaceID,
 		s.WorkflowID,
 		runID,
@@ -861,11 +871,11 @@ func (s *ExecutionMutableStateSuite) TestConflictResolve_SuppressCurrent_Current
 		PreviousLastWriteVersion: 0,
 
 		NewWorkflowSnapshot: *baseSnapshot,
-		NewWorkflowEvents:   nil,
+		NewWorkflowEvents:   baseEvents,
 	})
 	s.NoError(err)
 
-	resetSnapshot := RandomSnapshot(
+	resetSnapshot, resetEvents := RandomSnapshot(
 		s.NamespaceID,
 		s.WorkflowID,
 		runID,
@@ -875,7 +885,7 @@ func (s *ExecutionMutableStateSuite) TestConflictResolve_SuppressCurrent_Current
 		baseSnapshot.DBRecordVersion+1,
 		s.historyBranchUtil,
 	)
-	currentMutation := RandomMutation(
+	currentMutation, currentEvents := RandomMutation(
 		s.NamespaceID,
 		s.WorkflowID,
 		uuid.New().String(),
@@ -891,13 +901,13 @@ func (s *ExecutionMutableStateSuite) TestConflictResolve_SuppressCurrent_Current
 		Mode:    p.ConflictResolveWorkflowModeUpdateCurrent,
 
 		ResetWorkflowSnapshot: *resetSnapshot,
-		ResetWorkflowEvents:   nil,
+		ResetWorkflowEvents:   resetEvents,
 
 		NewWorkflowSnapshot: nil,
 		NewWorkflowEvents:   nil,
 
 		CurrentWorkflowMutation: currentMutation,
-		CurrentWorkflowEvents:   nil,
+		CurrentWorkflowEvents:   currentEvents,
 	})
 	s.IsType(&p.CurrentWorkflowConditionFailedError{}, err)
 
@@ -906,7 +916,7 @@ func (s *ExecutionMutableStateSuite) TestConflictResolve_SuppressCurrent_Current
 }
 
 func (s *ExecutionMutableStateSuite) TestConflictResolve_SuppressCurrent_Conflict_Case1() {
-	currentSnapshot := s.CreateWorkflow(
+	currentSnapshot, _ := s.CreateWorkflow(
 		rand.Int63(),
 		enumsspb.WORKFLOW_EXECUTION_STATE_CREATED,
 		enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
@@ -914,7 +924,7 @@ func (s *ExecutionMutableStateSuite) TestConflictResolve_SuppressCurrent_Conflic
 	)
 
 	runID := uuid.New().String()
-	baseSnapshot := RandomSnapshot(
+	baseSnapshot, baseEvents := RandomSnapshot(
 		s.NamespaceID,
 		s.WorkflowID,
 		runID,
@@ -933,11 +943,11 @@ func (s *ExecutionMutableStateSuite) TestConflictResolve_SuppressCurrent_Conflic
 		PreviousLastWriteVersion: 0,
 
 		NewWorkflowSnapshot: *baseSnapshot,
-		NewWorkflowEvents:   nil,
+		NewWorkflowEvents:   baseEvents,
 	})
 	s.NoError(err)
 
-	resetSnapshot := RandomSnapshot(
+	resetSnapshot, resetEvents := RandomSnapshot(
 		s.NamespaceID,
 		s.WorkflowID,
 		runID,
@@ -947,7 +957,7 @@ func (s *ExecutionMutableStateSuite) TestConflictResolve_SuppressCurrent_Conflic
 		baseSnapshot.DBRecordVersion+1,
 		s.historyBranchUtil,
 	)
-	currentMutation := RandomMutation(
+	currentMutation, currentEvents := RandomMutation(
 		s.NamespaceID,
 		s.WorkflowID,
 		s.RunID,
@@ -963,13 +973,13 @@ func (s *ExecutionMutableStateSuite) TestConflictResolve_SuppressCurrent_Conflic
 		Mode:    p.ConflictResolveWorkflowModeUpdateCurrent,
 
 		ResetWorkflowSnapshot: *resetSnapshot,
-		ResetWorkflowEvents:   nil,
+		ResetWorkflowEvents:   resetEvents,
 
 		NewWorkflowSnapshot: nil,
 		NewWorkflowEvents:   nil,
 
 		CurrentWorkflowMutation: currentMutation,
-		CurrentWorkflowEvents:   nil,
+		CurrentWorkflowEvents:   currentEvents,
 	})
 	s.IsType(&p.WorkflowConditionFailedError{}, err)
 
@@ -978,7 +988,7 @@ func (s *ExecutionMutableStateSuite) TestConflictResolve_SuppressCurrent_Conflic
 }
 
 func (s *ExecutionMutableStateSuite) TestConflictResolve_SuppressCurrent_Conflict_Case2() {
-	currentSnapshot := s.CreateWorkflow(
+	currentSnapshot, _ := s.CreateWorkflow(
 		rand.Int63(),
 		enumsspb.WORKFLOW_EXECUTION_STATE_CREATED,
 		enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
@@ -986,7 +996,7 @@ func (s *ExecutionMutableStateSuite) TestConflictResolve_SuppressCurrent_Conflic
 	)
 
 	runID := uuid.New().String()
-	baseSnapshot := RandomSnapshot(
+	baseSnapshot, baseEvents := RandomSnapshot(
 		s.NamespaceID,
 		s.WorkflowID,
 		runID,
@@ -1005,11 +1015,11 @@ func (s *ExecutionMutableStateSuite) TestConflictResolve_SuppressCurrent_Conflic
 		PreviousLastWriteVersion: 0,
 
 		NewWorkflowSnapshot: *baseSnapshot,
-		NewWorkflowEvents:   nil,
+		NewWorkflowEvents:   baseEvents,
 	})
 	s.NoError(err)
 
-	resetSnapshot := RandomSnapshot(
+	resetSnapshot, resetEvents := RandomSnapshot(
 		s.NamespaceID,
 		s.WorkflowID,
 		runID,
@@ -1019,7 +1029,7 @@ func (s *ExecutionMutableStateSuite) TestConflictResolve_SuppressCurrent_Conflic
 		rand.Int63(),
 		s.historyBranchUtil,
 	)
-	currentMutation := RandomMutation(
+	currentMutation, currentEvents := RandomMutation(
 		s.NamespaceID,
 		s.WorkflowID,
 		s.RunID,
@@ -1035,13 +1045,13 @@ func (s *ExecutionMutableStateSuite) TestConflictResolve_SuppressCurrent_Conflic
 		Mode:    p.ConflictResolveWorkflowModeUpdateCurrent,
 
 		ResetWorkflowSnapshot: *resetSnapshot,
-		ResetWorkflowEvents:   nil,
+		ResetWorkflowEvents:   resetEvents,
 
 		NewWorkflowSnapshot: nil,
 		NewWorkflowEvents:   nil,
 
 		CurrentWorkflowMutation: currentMutation,
-		CurrentWorkflowEvents:   nil,
+		CurrentWorkflowEvents:   currentEvents,
 	})
 	s.IsType(&p.WorkflowConditionFailedError{}, err)
 
@@ -1050,7 +1060,7 @@ func (s *ExecutionMutableStateSuite) TestConflictResolve_SuppressCurrent_Conflic
 }
 
 func (s *ExecutionMutableStateSuite) TestConflictResolve_SuppressCurrent_WithNew() {
-	currentSnapshot := s.CreateWorkflow(
+	currentSnapshot, _ := s.CreateWorkflow(
 		rand.Int63(),
 		enumsspb.WORKFLOW_EXECUTION_STATE_CREATED,
 		enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
@@ -1058,7 +1068,7 @@ func (s *ExecutionMutableStateSuite) TestConflictResolve_SuppressCurrent_WithNew
 	)
 
 	runID := uuid.New().String()
-	baseSnapshot := RandomSnapshot(
+	baseSnapshot, baseEvents := RandomSnapshot(
 		s.NamespaceID,
 		s.WorkflowID,
 		runID,
@@ -1077,11 +1087,11 @@ func (s *ExecutionMutableStateSuite) TestConflictResolve_SuppressCurrent_WithNew
 		PreviousLastWriteVersion: 0,
 
 		NewWorkflowSnapshot: *baseSnapshot,
-		NewWorkflowEvents:   nil,
+		NewWorkflowEvents:   baseEvents,
 	})
 	s.NoError(err)
 
-	resetSnapshot := RandomSnapshot(
+	resetSnapshot, resetEvents := RandomSnapshot(
 		s.NamespaceID,
 		s.WorkflowID,
 		runID,
@@ -1091,7 +1101,7 @@ func (s *ExecutionMutableStateSuite) TestConflictResolve_SuppressCurrent_WithNew
 		baseSnapshot.DBRecordVersion+1,
 		s.historyBranchUtil,
 	)
-	newSnapshot := RandomSnapshot(
+	newSnapshot, newEvents := RandomSnapshot(
 		s.NamespaceID,
 		s.WorkflowID,
 		uuid.New().String(),
@@ -1101,7 +1111,7 @@ func (s *ExecutionMutableStateSuite) TestConflictResolve_SuppressCurrent_WithNew
 		rand.Int63(),
 		s.historyBranchUtil,
 	)
-	currentMutation := RandomMutation(
+	currentMutation, currentEvents := RandomMutation(
 		s.NamespaceID,
 		s.WorkflowID,
 		s.RunID,
@@ -1117,13 +1127,13 @@ func (s *ExecutionMutableStateSuite) TestConflictResolve_SuppressCurrent_WithNew
 		Mode:    p.ConflictResolveWorkflowModeUpdateCurrent,
 
 		ResetWorkflowSnapshot: *resetSnapshot,
-		ResetWorkflowEvents:   nil,
+		ResetWorkflowEvents:   resetEvents,
 
 		NewWorkflowSnapshot: newSnapshot,
-		NewWorkflowEvents:   nil,
+		NewWorkflowEvents:   newEvents,
 
 		CurrentWorkflowMutation: currentMutation,
-		CurrentWorkflowEvents:   nil,
+		CurrentWorkflowEvents:   currentEvents,
 	})
 	s.NoError(err)
 
@@ -1133,14 +1143,14 @@ func (s *ExecutionMutableStateSuite) TestConflictResolve_SuppressCurrent_WithNew
 }
 
 func (s *ExecutionMutableStateSuite) TestConflictResolve_ResetCurrent() {
-	baseSnapshot := s.CreateWorkflow(
+	baseSnapshot, _ := s.CreateWorkflow(
 		rand.Int63(),
 		enumsspb.WORKFLOW_EXECUTION_STATE_CREATED,
 		enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
 		rand.Int63(),
 	)
 
-	resetSnapshot := RandomSnapshot(
+	resetSnapshot, resetEvents := RandomSnapshot(
 		s.NamespaceID,
 		s.WorkflowID,
 		s.RunID,
@@ -1156,7 +1166,7 @@ func (s *ExecutionMutableStateSuite) TestConflictResolve_ResetCurrent() {
 		Mode:    p.ConflictResolveWorkflowModeUpdateCurrent,
 
 		ResetWorkflowSnapshot: *resetSnapshot,
-		ResetWorkflowEvents:   nil,
+		ResetWorkflowEvents:   resetEvents,
 
 		NewWorkflowSnapshot: nil,
 		NewWorkflowEvents:   nil,
@@ -1170,14 +1180,14 @@ func (s *ExecutionMutableStateSuite) TestConflictResolve_ResetCurrent() {
 }
 
 func (s *ExecutionMutableStateSuite) TestConflictResolve_ResetCurrent_CurrentConflict() {
-	_ = s.CreateWorkflow(
+	_, _ = s.CreateWorkflow(
 		rand.Int63(),
 		enumsspb.WORKFLOW_EXECUTION_STATE_CREATED,
 		enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
 		rand.Int63(),
 	)
 	runID := uuid.New().String()
-	baseSnapshot := RandomSnapshot(
+	baseSnapshot, baseEvents := RandomSnapshot(
 		s.NamespaceID,
 		s.WorkflowID,
 		runID,
@@ -1196,11 +1206,11 @@ func (s *ExecutionMutableStateSuite) TestConflictResolve_ResetCurrent_CurrentCon
 		PreviousLastWriteVersion: 0,
 
 		NewWorkflowSnapshot: *baseSnapshot,
-		NewWorkflowEvents:   nil,
+		NewWorkflowEvents:   baseEvents,
 	})
 	s.NoError(err)
 
-	resetSnapshot := RandomSnapshot(
+	resetSnapshot, resetEvents := RandomSnapshot(
 		s.NamespaceID,
 		s.WorkflowID,
 		runID,
@@ -1216,7 +1226,7 @@ func (s *ExecutionMutableStateSuite) TestConflictResolve_ResetCurrent_CurrentCon
 		Mode:    p.ConflictResolveWorkflowModeUpdateCurrent,
 
 		ResetWorkflowSnapshot: *resetSnapshot,
-		ResetWorkflowEvents:   nil,
+		ResetWorkflowEvents:   resetEvents,
 
 		NewWorkflowSnapshot: nil,
 		NewWorkflowEvents:   nil,
@@ -1230,14 +1240,14 @@ func (s *ExecutionMutableStateSuite) TestConflictResolve_ResetCurrent_CurrentCon
 }
 
 func (s *ExecutionMutableStateSuite) TestConflictResolve_ResetCurrent_Conflict() {
-	baseSnapshot := s.CreateWorkflow(
+	baseSnapshot, _ := s.CreateWorkflow(
 		rand.Int63(),
 		enumsspb.WORKFLOW_EXECUTION_STATE_CREATED,
 		enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
 		rand.Int63(),
 	)
 
-	resetSnapshot := RandomSnapshot(
+	resetSnapshot, resetEvents := RandomSnapshot(
 		s.NamespaceID,
 		s.WorkflowID,
 		s.RunID,
@@ -1253,7 +1263,7 @@ func (s *ExecutionMutableStateSuite) TestConflictResolve_ResetCurrent_Conflict()
 		Mode:    p.ConflictResolveWorkflowModeUpdateCurrent,
 
 		ResetWorkflowSnapshot: *resetSnapshot,
-		ResetWorkflowEvents:   nil,
+		ResetWorkflowEvents:   resetEvents,
 
 		NewWorkflowSnapshot: nil,
 		NewWorkflowEvents:   nil,
@@ -1267,14 +1277,14 @@ func (s *ExecutionMutableStateSuite) TestConflictResolve_ResetCurrent_Conflict()
 }
 
 func (s *ExecutionMutableStateSuite) TestConflictResolve_ResetCurrent_WithNew() {
-	baseSnapshot := s.CreateWorkflow(
+	baseSnapshot, _ := s.CreateWorkflow(
 		rand.Int63(),
 		enumsspb.WORKFLOW_EXECUTION_STATE_CREATED,
 		enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
 		rand.Int63(),
 	)
 
-	resetSnapshot := RandomSnapshot(
+	resetSnapshot, resetEvents := RandomSnapshot(
 		s.NamespaceID,
 		s.WorkflowID,
 		s.RunID,
@@ -1284,7 +1294,7 @@ func (s *ExecutionMutableStateSuite) TestConflictResolve_ResetCurrent_WithNew() 
 		baseSnapshot.DBRecordVersion+1,
 		s.historyBranchUtil,
 	)
-	newSnapshot := RandomSnapshot(
+	newSnapshot, newEvents := RandomSnapshot(
 		s.NamespaceID,
 		s.WorkflowID,
 		uuid.New().String(),
@@ -1300,10 +1310,10 @@ func (s *ExecutionMutableStateSuite) TestConflictResolve_ResetCurrent_WithNew() 
 		Mode:    p.ConflictResolveWorkflowModeUpdateCurrent,
 
 		ResetWorkflowSnapshot: *resetSnapshot,
-		ResetWorkflowEvents:   nil,
+		ResetWorkflowEvents:   resetEvents,
 
 		NewWorkflowSnapshot: newSnapshot,
-		NewWorkflowEvents:   nil,
+		NewWorkflowEvents:   newEvents,
 
 		CurrentWorkflowMutation: nil,
 		CurrentWorkflowEvents:   nil,
@@ -1315,14 +1325,14 @@ func (s *ExecutionMutableStateSuite) TestConflictResolve_ResetCurrent_WithNew() 
 }
 
 func (s *ExecutionMutableStateSuite) TestConflictResolve_Zombie() {
-	_ = s.CreateWorkflow(
+	_, _ = s.CreateWorkflow(
 		rand.Int63(),
 		enumsspb.WORKFLOW_EXECUTION_STATE_CREATED,
 		enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
 		rand.Int63(),
 	)
 	runID := uuid.New().String()
-	baseSnapshot := RandomSnapshot(
+	baseSnapshot, baseEvents := RandomSnapshot(
 		s.NamespaceID,
 		s.WorkflowID,
 		runID,
@@ -1341,11 +1351,11 @@ func (s *ExecutionMutableStateSuite) TestConflictResolve_Zombie() {
 		PreviousLastWriteVersion: 0,
 
 		NewWorkflowSnapshot: *baseSnapshot,
-		NewWorkflowEvents:   nil,
+		NewWorkflowEvents:   baseEvents,
 	})
 	s.NoError(err)
 
-	resetSnapshot := RandomSnapshot(
+	resetSnapshot, resetEvents := RandomSnapshot(
 		s.NamespaceID,
 		s.WorkflowID,
 		runID,
@@ -1361,7 +1371,7 @@ func (s *ExecutionMutableStateSuite) TestConflictResolve_Zombie() {
 		Mode:    p.ConflictResolveWorkflowModeBypassCurrent,
 
 		ResetWorkflowSnapshot: *resetSnapshot,
-		ResetWorkflowEvents:   nil,
+		ResetWorkflowEvents:   resetEvents,
 
 		NewWorkflowSnapshot: nil,
 		NewWorkflowEvents:   nil,
@@ -1375,14 +1385,14 @@ func (s *ExecutionMutableStateSuite) TestConflictResolve_Zombie() {
 }
 
 func (s *ExecutionMutableStateSuite) TestConflictResolve_Zombie_CurrentConflict() {
-	baseSnapshot := s.CreateWorkflow(
+	baseSnapshot, _ := s.CreateWorkflow(
 		rand.Int63(),
 		enumsspb.WORKFLOW_EXECUTION_STATE_CREATED,
 		enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
 		rand.Int63(),
 	)
 
-	resetSnapshot := RandomSnapshot(
+	resetSnapshot, resetEvents := RandomSnapshot(
 		s.NamespaceID,
 		s.WorkflowID,
 		s.RunID,
@@ -1398,7 +1408,7 @@ func (s *ExecutionMutableStateSuite) TestConflictResolve_Zombie_CurrentConflict(
 		Mode:    p.ConflictResolveWorkflowModeBypassCurrent,
 
 		ResetWorkflowSnapshot: *resetSnapshot,
-		ResetWorkflowEvents:   nil,
+		ResetWorkflowEvents:   resetEvents,
 
 		NewWorkflowSnapshot: nil,
 		NewWorkflowEvents:   nil,
@@ -1412,14 +1422,14 @@ func (s *ExecutionMutableStateSuite) TestConflictResolve_Zombie_CurrentConflict(
 }
 
 func (s *ExecutionMutableStateSuite) TestConflictResolve_Zombie_Conflict() {
-	_ = s.CreateWorkflow(
+	_, _ = s.CreateWorkflow(
 		rand.Int63(),
 		enumsspb.WORKFLOW_EXECUTION_STATE_CREATED,
 		enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
 		rand.Int63(),
 	)
 	runID := uuid.New().String()
-	baseSnapshot := RandomSnapshot(
+	baseSnapshot, baseEvents := RandomSnapshot(
 		s.NamespaceID,
 		s.WorkflowID,
 		runID,
@@ -1438,11 +1448,11 @@ func (s *ExecutionMutableStateSuite) TestConflictResolve_Zombie_Conflict() {
 		PreviousLastWriteVersion: 0,
 
 		NewWorkflowSnapshot: *baseSnapshot,
-		NewWorkflowEvents:   nil,
+		NewWorkflowEvents:   baseEvents,
 	})
 	s.NoError(err)
 
-	resetSnapshot := RandomSnapshot(
+	resetSnapshot, resetEvents := RandomSnapshot(
 		s.NamespaceID,
 		s.WorkflowID,
 		runID,
@@ -1458,7 +1468,7 @@ func (s *ExecutionMutableStateSuite) TestConflictResolve_Zombie_Conflict() {
 		Mode:    p.ConflictResolveWorkflowModeBypassCurrent,
 
 		ResetWorkflowSnapshot: *resetSnapshot,
-		ResetWorkflowEvents:   nil,
+		ResetWorkflowEvents:   resetEvents,
 
 		NewWorkflowSnapshot: nil,
 		NewWorkflowEvents:   nil,
@@ -1472,14 +1482,14 @@ func (s *ExecutionMutableStateSuite) TestConflictResolve_Zombie_Conflict() {
 }
 
 func (s *ExecutionMutableStateSuite) TestConflictResolve_Zombie_WithNew() {
-	_ = s.CreateWorkflow(
+	_, _ = s.CreateWorkflow(
 		rand.Int63(),
 		enumsspb.WORKFLOW_EXECUTION_STATE_CREATED,
 		enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
 		rand.Int63(),
 	)
 	runID := uuid.New().String()
-	baseSnapshot := RandomSnapshot(
+	baseSnapshot, baseEvents := RandomSnapshot(
 		s.NamespaceID,
 		s.WorkflowID,
 		runID,
@@ -1498,11 +1508,11 @@ func (s *ExecutionMutableStateSuite) TestConflictResolve_Zombie_WithNew() {
 		PreviousLastWriteVersion: 0,
 
 		NewWorkflowSnapshot: *baseSnapshot,
-		NewWorkflowEvents:   nil,
+		NewWorkflowEvents:   baseEvents,
 	})
 	s.NoError(err)
 
-	resetSnapshot := RandomSnapshot(
+	resetSnapshot, resetEvents := RandomSnapshot(
 		s.NamespaceID,
 		s.WorkflowID,
 		runID,
@@ -1512,7 +1522,7 @@ func (s *ExecutionMutableStateSuite) TestConflictResolve_Zombie_WithNew() {
 		baseSnapshot.DBRecordVersion+1,
 		s.historyBranchUtil,
 	)
-	newSnapshot := RandomSnapshot(
+	newSnapshot, newEvents := RandomSnapshot(
 		s.NamespaceID,
 		s.WorkflowID,
 		uuid.New().String(),
@@ -1528,10 +1538,10 @@ func (s *ExecutionMutableStateSuite) TestConflictResolve_Zombie_WithNew() {
 		Mode:    p.ConflictResolveWorkflowModeBypassCurrent,
 
 		ResetWorkflowSnapshot: *resetSnapshot,
-		ResetWorkflowEvents:   nil,
+		ResetWorkflowEvents:   resetEvents,
 
 		NewWorkflowSnapshot: newSnapshot,
-		NewWorkflowEvents:   nil,
+		NewWorkflowEvents:   newEvents,
 
 		CurrentWorkflowMutation: nil,
 		CurrentWorkflowEvents:   nil,
@@ -1543,7 +1553,7 @@ func (s *ExecutionMutableStateSuite) TestConflictResolve_Zombie_WithNew() {
 }
 
 func (s *ExecutionMutableStateSuite) TestSet_NotExists() {
-	setSnapshot := RandomSnapshot(
+	setSnapshot, _ := RandomSnapshot(
 		s.NamespaceID,
 		s.WorkflowID,
 		s.RunID,
@@ -1565,14 +1575,14 @@ func (s *ExecutionMutableStateSuite) TestSet_NotExists() {
 }
 
 func (s *ExecutionMutableStateSuite) TestSet_Conflict() {
-	snapshot := s.CreateWorkflow(
+	snapshot, _ := s.CreateWorkflow(
 		rand.Int63(),
 		enumsspb.WORKFLOW_EXECUTION_STATE_CREATED,
 		enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
 		rand.Int63(),
 	)
 
-	setSnapshot := RandomSnapshot(
+	setSnapshot, _ := RandomSnapshot(
 		s.NamespaceID,
 		s.WorkflowID,
 		s.RunID,
@@ -1594,14 +1604,14 @@ func (s *ExecutionMutableStateSuite) TestSet_Conflict() {
 }
 
 func (s *ExecutionMutableStateSuite) TestSet() {
-	snapshot := s.CreateWorkflow(
+	snapshot, _ := s.CreateWorkflow(
 		rand.Int63(),
 		enumsspb.WORKFLOW_EXECUTION_STATE_CREATED,
 		enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
 		rand.Int63(),
 	)
 
-	setSnapshot := RandomSnapshot(
+	setSnapshot, _ := RandomSnapshot(
 		s.NamespaceID,
 		s.WorkflowID,
 		s.RunID,
@@ -1623,7 +1633,7 @@ func (s *ExecutionMutableStateSuite) TestSet() {
 }
 
 func (s *ExecutionMutableStateSuite) TestDeleteCurrent_IsCurrent() {
-	newSnapshot := s.CreateWorkflow(
+	newSnapshot, _ := s.CreateWorkflow(
 		rand.Int63(),
 		enumsspb.WORKFLOW_EXECUTION_STATE_CREATED,
 		enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
@@ -1649,7 +1659,7 @@ func (s *ExecutionMutableStateSuite) TestDeleteCurrent_IsCurrent() {
 }
 
 func (s *ExecutionMutableStateSuite) TestDeleteCurrent_NotCurrent() {
-	newSnapshot := RandomSnapshot(
+	newSnapshot, newEvents := RandomSnapshot(
 		s.NamespaceID,
 		s.WorkflowID,
 		s.RunID,
@@ -1669,7 +1679,7 @@ func (s *ExecutionMutableStateSuite) TestDeleteCurrent_NotCurrent() {
 		PreviousLastWriteVersion: 0,
 
 		NewWorkflowSnapshot: *newSnapshot,
-		NewWorkflowEvents:   nil,
+		NewWorkflowEvents:   newEvents,
 	})
 	s.NoError(err)
 
@@ -1692,7 +1702,7 @@ func (s *ExecutionMutableStateSuite) TestDeleteCurrent_NotCurrent() {
 }
 
 func (s *ExecutionMutableStateSuite) TestDelete_Exists() {
-	newSnapshot := RandomSnapshot(
+	newSnapshot, newEvents := RandomSnapshot(
 		s.NamespaceID,
 		s.WorkflowID,
 		s.RunID,
@@ -1712,7 +1722,7 @@ func (s *ExecutionMutableStateSuite) TestDelete_Exists() {
 		PreviousLastWriteVersion: 0,
 
 		NewWorkflowSnapshot: *newSnapshot,
-		NewWorkflowEvents:   nil,
+		NewWorkflowEvents:   newEvents,
 	})
 	s.NoError(err)
 
@@ -1744,8 +1754,8 @@ func (s *ExecutionMutableStateSuite) CreateWorkflow(
 	state enumsspb.WorkflowExecutionState,
 	status enumspb.WorkflowExecutionStatus,
 	dbRecordVersion int64,
-) *p.WorkflowSnapshot {
-	snapshot := RandomSnapshot(
+) (*p.WorkflowSnapshot, []*p.WorkflowEvents) {
+	snapshot, events := RandomSnapshot(
 		s.NamespaceID,
 		s.WorkflowID,
 		s.RunID,
@@ -1764,10 +1774,10 @@ func (s *ExecutionMutableStateSuite) CreateWorkflow(
 		PreviousLastWriteVersion: 0,
 
 		NewWorkflowSnapshot: *snapshot,
-		NewWorkflowEvents:   nil,
+		NewWorkflowEvents:   events,
 	})
 	s.NoError(err)
-	return snapshot
+	return snapshot, events
 }
 
 func (s *ExecutionMutableStateSuite) AssertMissingFromDB(
