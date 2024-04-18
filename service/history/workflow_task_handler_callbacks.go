@@ -453,6 +453,11 @@ func (handler *workflowTaskHandlerCallbacksImpl) handleWorkflowTaskCompleted(
 		// about the way this function exits so while we have this defer here
 		// there is _also_ code to call effects.Cancel at key points.
 		if retError != nil {
+			handler.logger.Info("Cancel effects due to error.",
+				tag.Error(retError),
+				tag.WorkflowID(token.GetWorkflowId()),
+				tag.WorkflowRunID(token.GetRunId()),
+				tag.WorkflowNamespaceID(namespaceEntry.ID().String()))
 			effects.Cancel(ctx)
 		}
 	}()
