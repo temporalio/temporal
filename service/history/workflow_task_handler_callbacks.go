@@ -40,8 +40,6 @@ import (
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	"go.temporal.io/api/workflowservice/v1"
 
-	"go.temporal.io/server/common/dynamicconfig"
-
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/api/matchingservice/v1"
@@ -306,10 +304,8 @@ func (handler *workflowTaskHandlerCallbacksImpl) handleWorkflowTaskStarted(
 		return nil, err
 	}
 
-	if dynamicconfig.AccessHistory(handler.config.FrontendAccessHistoryFraction, handler.metricsHandler.WithTags(metrics.OperationTag(metrics.HistoryHandleWorkflowTaskStartedTag))) {
-		maxHistoryPageSize := int32(handler.config.HistoryMaxPageSize(namespaceEntry.Name().String()))
-		err = handler.setHistoryForRecordWfTaskStartedResp(ctx, workflowKey, maxHistoryPageSize, resp)
-	}
+	maxHistoryPageSize := int32(handler.config.HistoryMaxPageSize(namespaceEntry.Name().String()))
+	err = handler.setHistoryForRecordWfTaskStartedResp(ctx, workflowKey, maxHistoryPageSize, resp)
 	if err != nil {
 		return nil, err
 	}
@@ -453,6 +449,11 @@ func (handler *workflowTaskHandlerCallbacksImpl) handleWorkflowTaskCompleted(
 		// about the way this function exits so while we have this defer here
 		// there is _also_ code to call effects.Cancel at key points.
 		if retError != nil {
+			handler.logger.Info("Cancel effects due to error.",
+				tag.Error(retError),
+				tag.WorkflowID(token.GetWorkflowId()),
+				tag.WorkflowRunID(token.GetRunId()),
+				tag.WorkflowNamespaceID(namespaceEntry.ID().String()))
 			effects.Cancel(ctx)
 		}
 	}()

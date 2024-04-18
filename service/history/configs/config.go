@@ -33,6 +33,8 @@ import (
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence/visibility"
+	"go.temporal.io/server/common/primitives"
+	"go.temporal.io/server/common/retrypolicy"
 )
 
 // Config represents configuration for history service
@@ -335,14 +337,7 @@ type Config struct {
 	WorkflowExecutionMaxTotalUpdates    dynamicconfig.IntPropertyFnWithNamespaceFilter
 
 	SendRawWorkflowHistory dynamicconfig.BoolPropertyFnWithNamespaceFilter
-
-	// FrontendAccessHistoryFraction is an interim flag across 2 minor releases and will be removed once fully enabled.
-	FrontendAccessHistoryFraction dynamicconfig.FloatPropertyFn
 }
-
-const (
-	DefaultHistoryMaxAutoResetPoints = 20
-)
 
 // NewConfig returns new service config with default values
 func NewConfig(
@@ -352,7 +347,7 @@ func NewConfig(
 	cfg := &Config{
 		NumberOfShards: numberOfShards,
 
-		EnableReplicationStream: dc.GetBoolProperty(dynamicconfig.EnableReplicationStream, false),
+		EnableReplicationStream: dc.GetBoolProperty(dynamicconfig.EnableReplicationStream, true),
 		HistoryReplicationDLQV2: dc.GetBoolProperty(dynamicconfig.EnableHistoryReplicationDLQV2, false),
 
 		RPS:                                   dc.GetIntProperty(dynamicconfig.HistoryRPS, 3000),
@@ -368,8 +363,8 @@ func NewConfig(
 		PersistenceQPSBurstRatio:              dc.GetFloat64Property(dynamicconfig.PersistenceQPSBurstRatio, 1.0),
 		ShutdownDrainDuration:                 dc.GetDurationProperty(dynamicconfig.HistoryShutdownDrainDuration, 0*time.Second),
 		StartupMembershipJoinDelay:            dc.GetDurationProperty(dynamicconfig.HistoryStartupMembershipJoinDelay, 0*time.Second),
-		MaxAutoResetPoints:                    dc.GetIntPropertyFilteredByNamespace(dynamicconfig.HistoryMaxAutoResetPoints, DefaultHistoryMaxAutoResetPoints),
-		DefaultWorkflowTaskTimeout:            dc.GetDurationPropertyFilteredByNamespace(dynamicconfig.DefaultWorkflowTaskTimeout, common.DefaultWorkflowTaskTimeout),
+		MaxAutoResetPoints:                    dc.GetIntPropertyFilteredByNamespace(dynamicconfig.HistoryMaxAutoResetPoints, primitives.DefaultHistoryMaxAutoResetPoints),
+		DefaultWorkflowTaskTimeout:            dc.GetDurationPropertyFilteredByNamespace(dynamicconfig.DefaultWorkflowTaskTimeout, primitives.DefaultWorkflowTaskTimeout),
 		ContinueAsNewMinInterval:              dc.GetDurationPropertyFilteredByNamespace(dynamicconfig.ContinueAsNewMinInterval, time.Second),
 
 		VisibilityPersistenceMaxReadQPS:       visibility.GetVisibilityPersistenceMaxReadQPS(dc),
@@ -519,7 +514,7 @@ func NewConfig(
 		HistoryCountLimitError:                    dc.GetIntPropertyFilteredByNamespace(dynamicconfig.HistoryCountLimitError, 50*1024),
 		HistoryCountLimitWarn:                     dc.GetIntPropertyFilteredByNamespace(dynamicconfig.HistoryCountLimitWarn, 10*1024),
 		HistoryCountSuggestContinueAsNew:          dc.GetIntPropertyFilteredByNamespace(dynamicconfig.HistoryCountSuggestContinueAsNew, 4*1024),
-		HistoryMaxPageSize:                        dc.GetIntPropertyFilteredByNamespace(dynamicconfig.HistoryMaxPageSize, common.GetHistoryMaxPageSize),
+		HistoryMaxPageSize:                        dc.GetIntPropertyFilteredByNamespace(dynamicconfig.HistoryMaxPageSize, primitives.GetHistoryMaxPageSize),
 		MutableStateActivityFailureSizeLimitError: dc.GetIntPropertyFilteredByNamespace(dynamicconfig.MutableStateActivityFailureSizeLimitError, 4*1024),
 		MutableStateActivityFailureSizeLimitWarn:  dc.GetIntPropertyFilteredByNamespace(dynamicconfig.MutableStateActivityFailureSizeLimitWarn, 2*1024),
 		MutableStateSizeLimitError:                dc.GetIntProperty(dynamicconfig.MutableStateSizeLimitError, 8*1024*1024),
@@ -528,8 +523,8 @@ func NewConfig(
 		ThrottledLogRPS:   dc.GetIntProperty(dynamicconfig.HistoryThrottledLogRPS, 4),
 		EnableStickyQuery: dc.GetBoolPropertyFnWithNamespaceFilter(dynamicconfig.EnableStickyQuery, true),
 
-		DefaultActivityRetryPolicy:   dc.GetMapPropertyFnWithNamespaceFilter(dynamicconfig.DefaultActivityRetryPolicy, common.GetDefaultRetryPolicyConfigOptions()),
-		DefaultWorkflowRetryPolicy:   dc.GetMapPropertyFnWithNamespaceFilter(dynamicconfig.DefaultWorkflowRetryPolicy, common.GetDefaultRetryPolicyConfigOptions()),
+		DefaultActivityRetryPolicy:   dc.GetMapPropertyFnWithNamespaceFilter(dynamicconfig.DefaultActivityRetryPolicy, retrypolicy.GetDefault()),
+		DefaultWorkflowRetryPolicy:   dc.GetMapPropertyFnWithNamespaceFilter(dynamicconfig.DefaultWorkflowRetryPolicy, retrypolicy.GetDefault()),
 		WorkflowTaskHeartbeatTimeout: dc.GetDurationPropertyFilteredByNamespace(dynamicconfig.WorkflowTaskHeartbeatTimeout, time.Minute*30),
 		WorkflowTaskCriticalAttempts: dc.GetIntProperty(dynamicconfig.WorkflowTaskCriticalAttempts, 10),
 		WorkflowTaskRetryMaxInterval: dc.GetDurationProperty(dynamicconfig.WorkflowTaskRetryMaxInterval, time.Minute*10),
@@ -613,8 +608,6 @@ func NewConfig(
 		WorkflowExecutionMaxTotalUpdates:    dc.GetIntPropertyFilteredByNamespace(dynamicconfig.WorkflowExecutionMaxTotalUpdates, 2000),
 
 		SendRawWorkflowHistory: dc.GetBoolPropertyFnWithNamespaceFilter(dynamicconfig.SendRawWorkflowHistory, false),
-
-		FrontendAccessHistoryFraction: dc.GetFloat64Property(dynamicconfig.FrontendAccessHistoryFraction, 0.0),
 	}
 
 	return cfg

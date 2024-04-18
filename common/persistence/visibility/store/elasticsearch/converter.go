@@ -45,7 +45,7 @@ var allowedComparisonOperators = map[string]struct{}{
 	sqlparser.NotStartsWithStr: {},
 }
 
-func newQueryConverter(
+func NewQueryConverter(
 	fnInterceptor query.FieldNameInterceptor,
 	fvInterceptor query.FieldValuesInterceptor,
 ) *query.Converter {

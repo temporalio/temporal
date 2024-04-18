@@ -190,6 +190,7 @@ func (s *nDCEventReapplicationSuite) TestReapplyEvents_Noop() {
 	msCurrent := workflow.NewMockMutableState(s.controller)
 	dedupResource := definition.NewEventReappliedID(runID, event.GetEventId(), event.GetVersion())
 	msCurrent.EXPECT().IsResourceDuplicated(dedupResource).Return(true)
+	msCurrent.EXPECT().IsWorkflowExecutionRunning().Return(true)
 	events := []*historypb.HistoryEvent{
 		{EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_STARTED},
 		event,
