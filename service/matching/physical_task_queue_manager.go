@@ -416,8 +416,13 @@ func (c *physicalTaskQueueManagerImpl) LegacyDescribeTaskQueue(includeTaskQueueS
 
 func (c *physicalTaskQueueManagerImpl) Describe() *taskqueuespb.PhysicalTaskQueueInfo {
 	return &taskqueuespb.PhysicalTaskQueueInfo{
-		Pollers: c.GetAllPollerInfo(),
+		Pollers:     c.GetAllPollerInfo(),
+		BacklogInfo: c.GetBacklogInfo(),
 	}
+}
+
+func (c *physicalTaskQueueManagerImpl) GetBacklogInfo() *taskqueuepb.BacklogInfo {
+	return nil
 }
 
 func (c *physicalTaskQueueManagerImpl) String() string {

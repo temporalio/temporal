@@ -455,6 +455,9 @@ func (pm *taskQueuePartitionManagerImpl) Describe(
 			if reportPollers {
 				vInfo.PhysicalTaskQueueInfo.Pollers = physicalQueue.GetAllPollerInfo()
 			}
+			if reportBacklogInfo {
+				vInfo.PhysicalTaskQueueInfo.BacklogInfo = physicalQueue.Describe()
+			}
 		}
 		versionsInfo[bid] = vInfo
 	}
