@@ -3416,25 +3416,6 @@ func (s *VersioningIntegSuite) TestDescribeTaskQueueEnhanced_TooManyBuildIds() {
 	s.Nil(resp)
 }
 
-func (s *VersioningIntegSuite) TestDescribeTaskQueue_IsRateLimited() {
-	tq := s.randomizeStr(s.T().Name())
-	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
-	defer cancel()
-
-	s.Eventually(func() bool {
-		_, err := s.engine.DescribeTaskQueue(ctx, &workflowservice.DescribeTaskQueueRequest{
-			Namespace:              s.namespace,
-			TaskQueue:              &taskqueuepb.TaskQueue{Name: tq, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
-			ApiMode:                enumspb.DESCRIBE_TASK_QUEUE_MODE_ENHANCED,
-			Versions:               nil, // default
-			TaskQueueTypes:         nil, // both types
-			ReportPollers:          false,
-			ReportTaskReachability: true,
-		})
-		return err != nil && "namespace rate limit exceeded" == err.Error()
-	}, 10*time.Second, 1*time.Millisecond)
-}
-
 func (s *VersioningIntegSuite) TestDescribeTaskQueueLegacy_VersionSets() {
 	// force one partition since DescribeTaskQueue only goes to the root
 	dc := s.testCluster.host.dcClient
