@@ -266,8 +266,7 @@ func TestInsertAssignmentRuleMaxRules(t *testing.T) {
 
 	// insert fourth --> error
 	_, err = insertAssignmentRule(mkAssignmentRule("1", nil), data, clock, 0, maxRules)
-	assert.Error(t, err)
-	assert.Equal(t, errExceedsMaxAssignmentRules(4, maxRules), err)
+	assert.ErrorContains(t, err, errExceedsMaxAssignmentRules(4, maxRules).Error())
 }
 
 // Test requirement that target id isn't in a version set
@@ -278,8 +277,7 @@ func TestInsertAssignmentRuleInVersionSet(t *testing.T) {
 
 	// target 0 --> failure
 	_, err := insertAssignmentRule(mkAssignmentRule("0", nil), data, clock, 0, ignoreMaxRules)
-	assert.Error(t, err)
-	assert.Equal(t, errTargetIsVersionSetMember, err)
+	assert.ErrorIs(t, err, errTargetIsVersionSetMember)
 }
 
 func TestInsertAssignmentRuleRampedRuleIsRedirectSource(t *testing.T) {
@@ -290,8 +288,7 @@ func TestInsertAssignmentRuleRampedRuleIsRedirectSource(t *testing.T) {
 
 	// insert 1 --> failure
 	_, err = insertAssignmentRule(mkAssignmentRule("0", mkNewAssignmentPercentageRamp(10)), data, clock, 0, ignoreMaxRules)
-	assert.Error(t, err)
-	assert.Equal(t, errRampedAssignmentRuleIsRedirectRuleSource, err)
+	assert.ErrorIs(t, err, errRampedAssignmentRuleIsRedirectRuleSource)
 }
 
 func TestInsertAssignmentRuleInvalidNegativeIndex(t *testing.T) {
@@ -301,8 +298,7 @@ func TestInsertAssignmentRuleInvalidNegativeIndex(t *testing.T) {
 
 	// insert @ -1 --> failure
 	_, err := insertAssignmentRule(mkAssignmentRule("0", nil), data, clock, -1, ignoreMaxRules)
-	assert.Error(t, err)
-	assert.Equal(t, errInvalidNegativeIndex, err)
+	assert.ErrorIs(t, err, errInvalidNegativeIndex)
 }
 
 func TestInsertAssignmentRuleInvalidRampPercentage(t *testing.T) {
@@ -312,18 +308,15 @@ func TestInsertAssignmentRuleInvalidRampPercentage(t *testing.T) {
 
 	// insert with ramp percent < 0 --> failure
 	_, err := insertAssignmentRule(mkAssignmentRule("0", mkNewAssignmentPercentageRamp(-1)), data, clock, 0, ignoreMaxRules)
-	assert.Error(t, err)
-	assert.Equal(t, errInvalidRampPercentage, err)
+	assert.ErrorIs(t, err, errInvalidRampPercentage)
 
 	// insert with ramp percent == 100 --> failure
 	_, err = insertAssignmentRule(mkAssignmentRule("0", mkNewAssignmentPercentageRamp(100)), data, clock, 0, ignoreMaxRules)
-	assert.Error(t, err)
-	assert.Equal(t, errInvalidRampPercentage, err)
+	assert.ErrorIs(t, err, errInvalidRampPercentage)
 
 	// insert with ramp percent > 100 --> failure
 	_, err = insertAssignmentRule(mkAssignmentRule("0", mkNewAssignmentPercentageRamp(101)), data, clock, 0, ignoreMaxRules)
-	assert.Error(t, err)
-	assert.Equal(t, errInvalidRampPercentage, err)
+	assert.ErrorIs(t, err, errInvalidRampPercentage)
 }
 
 func TestReplaceAssignmentRuleBasic(t *testing.T) {
@@ -379,10 +372,10 @@ func TestReplaceAssignmentRuleBasic(t *testing.T) {
 
 	// out-of-bounds indices --> failure
 	_, err = replaceAssignmentRule(rule11, data, clock, 99, false)
-	assert.Error(t, err)
+	assert.ErrorContains(t, err, errAssignmentRuleIndexOutOfBounds(99, 3).Error())
 
-	_, err = replaceAssignmentRule(rule11, data, clock, 99, false)
-	assert.Error(t, err)
+	_, err = replaceAssignmentRule(rule11, data, clock, -1, false)
+	assert.ErrorContains(t, err, errAssignmentRuleIndexOutOfBounds(-1, 3).Error())
 }
 
 func TestReplaceAssignmentRuleInVersionSet(t *testing.T) {
@@ -396,8 +389,7 @@ func TestReplaceAssignmentRuleInVersionSet(t *testing.T) {
 
 	// replace 0 --> failure
 	_, err = replaceAssignmentRule(mkAssignmentRule("0", nil), data, clock, 0, false)
-	assert.Error(t, err)
-	assert.Equal(t, errTargetIsVersionSetMember, err)
+	assert.ErrorIs(t, err, errTargetIsVersionSetMember)
 }
 
 func TestReplaceAssignmentRuleRampedRuleIsRedirectSource(t *testing.T) {
@@ -415,8 +407,7 @@ func TestReplaceAssignmentRuleRampedRuleIsRedirectSource(t *testing.T) {
 	// replace with target isSource and ramp != nil --> failure
 	_, err := replaceAssignmentRule(mkAssignmentRule("0", mkNewAssignmentPercentageRamp(10)), data, clock, 0, false)
 	t.Log(err)
-	assert.Error(t, err)
-	assert.Equal(t, errRampedAssignmentRuleIsRedirectRuleSource, err)
+	assert.ErrorIs(t, err, errRampedAssignmentRuleIsRedirectRuleSource)
 }
 
 func TestReplaceAssignmentRuleTestRequireUnconditional(t *testing.T) {
@@ -433,8 +424,7 @@ func TestReplaceAssignmentRuleTestRequireUnconditional(t *testing.T) {
 		mkAssignmentRulePersistence(mkAssignmentRule("1", nil), clock, nil),
 	}
 	_, err = replaceAssignmentRule(mkAssignmentRule("2", mkNewAssignmentPercentageRamp(20)), data, clock, 0, false)
-	assert.Error(t, err)
-	assert.Equal(t, errRequireUnconditionalAssignmentRule, err)
+	assert.ErrorIs(t, err, errRequireUnconditionalAssignmentRule)
 
 	// same as above but with force --> success
 	_, err = replaceAssignmentRule(mkAssignmentRule("4", mkNewAssignmentPercentageRamp(20)), data, clock, 0, true)
@@ -451,13 +441,11 @@ func TestReplaceAssignmentRuleIndexOutOfBounds(t *testing.T) {
 
 	// replace @ -1 --> failure
 	_, err := replaceAssignmentRule(mkAssignmentRule("0", nil), data, clock, -1, false)
-	assert.Error(t, err)
-	assert.Equal(t, errAssignmentRuleIndexOutOfBounds(-1, len(data.AssignmentRules)), err)
+	assert.ErrorContains(t, err, errAssignmentRuleIndexOutOfBounds(-1, len(data.AssignmentRules)).Error())
 
 	// replace @ 1 --> failure
 	_, err = replaceAssignmentRule(mkAssignmentRule("0", nil), data, clock, 1, false)
-	assert.Error(t, err)
-	assert.Equal(t, errAssignmentRuleIndexOutOfBounds(1, len(data.AssignmentRules)), err)
+	assert.ErrorContains(t, err, errAssignmentRuleIndexOutOfBounds(1, len(data.AssignmentRules)).Error())
 }
 
 func TestReplaceAssignmentRuleInvalidRampPercentage(t *testing.T) {
@@ -470,18 +458,15 @@ func TestReplaceAssignmentRuleInvalidRampPercentage(t *testing.T) {
 
 	// replace with ramp percent < 0 --> failure
 	_, err := replaceAssignmentRule(mkAssignmentRule("0", mkNewAssignmentPercentageRamp(-1)), data, clock, 0, false)
-	assert.Error(t, err)
-	assert.Equal(t, errInvalidRampPercentage, err)
+	assert.ErrorIs(t, err, errInvalidRampPercentage)
 
 	// replace with ramp percent == 100 --> failure
 	_, err = replaceAssignmentRule(mkAssignmentRule("0", mkNewAssignmentPercentageRamp(100)), data, clock, 0, false)
-	assert.Error(t, err)
-	assert.Equal(t, errInvalidRampPercentage, err)
+	assert.ErrorIs(t, err, errInvalidRampPercentage)
 
 	// replace with ramp percent > 100 --> failure
 	_, err = replaceAssignmentRule(mkAssignmentRule("0", mkNewAssignmentPercentageRamp(101)), data, clock, 0, false)
-	assert.Error(t, err)
-	assert.Equal(t, errInvalidRampPercentage, err)
+	assert.ErrorIs(t, err, errInvalidRampPercentage)
 }
 
 func TestDeleteAssignmentRuleBasic(t *testing.T) {
@@ -521,10 +506,10 @@ func TestDeleteAssignmentRuleBasic(t *testing.T) {
 
 	// out-of-bounds index --> failure
 	_, err = deleteAssignmentRule(data, nextClock(), 99, false)
-	assert.Error(t, err)
+	assert.ErrorContains(t, err, errAssignmentRuleIndexOutOfBounds(99, 1).Error())
 
 	_, err = deleteAssignmentRule(data, nextClock(), -1, false)
-	assert.Error(t, err)
+	assert.ErrorContains(t, err, errAssignmentRuleIndexOutOfBounds(-1, 1).Error())
 }
 
 func TestDeleteAssignmentRuleTestRequireUnconditional(t *testing.T) {
@@ -541,8 +526,7 @@ func TestDeleteAssignmentRuleTestRequireUnconditional(t *testing.T) {
 		mkAssignmentRulePersistence(mkAssignmentRule("1", nil), clock, nil),
 	}
 	_, err = deleteAssignmentRule(data, clock, 0, false)
-	assert.Error(t, err)
-	assert.Equal(t, errRequireUnconditionalAssignmentRule, err)
+	assert.ErrorIs(t, err, errRequireUnconditionalAssignmentRule)
 
 	// same as above but with force --> success
 	_, err = deleteAssignmentRule(data, clock, 0, true)
@@ -567,13 +551,11 @@ func TestDeleteAssignmentRuleIndexOutOfBounds(t *testing.T) {
 
 	// delete @ -1 --> failure
 	_, err := deleteAssignmentRule(data, clock, -1, false)
-	assert.Error(t, err)
-	assert.Equal(t, errAssignmentRuleIndexOutOfBounds(-1, len(data.AssignmentRules)), err)
+	assert.ErrorContains(t, err, errAssignmentRuleIndexOutOfBounds(-1, len(data.AssignmentRules)).Error())
 
 	// delete @ 1 --> failure
 	_, err = deleteAssignmentRule(data, clock, 1, false)
-	assert.Error(t, err)
-	assert.Equal(t, errAssignmentRuleIndexOutOfBounds(1, len(data.AssignmentRules)), err)
+	assert.ErrorContains(t, err, errAssignmentRuleIndexOutOfBounds(1, len(data.AssignmentRules)).Error())
 }
 
 func TestInsertRedirectRuleBasic(t *testing.T) {
@@ -626,8 +608,7 @@ func TestInsertRedirectRuleMaxRules(t *testing.T) {
 
 	// insert fourth --> error
 	_, err = insertRedirectRule(mkRedirectRule("10", "20"), data, clock, maxRules, ignoreMaxChain)
-	assert.Error(t, err)
-	assert.Equal(t, errExceedsMaxRedirectRules(4, maxRules), err)
+	assert.ErrorContains(t, err, errExceedsMaxRedirectRules(4, maxRules).Error())
 }
 
 func TestInsertRedirectRuleInVersionSet(t *testing.T) {
@@ -638,13 +619,11 @@ func TestInsertRedirectRuleInVersionSet(t *testing.T) {
 
 	// insert with source build id "0" --> failure
 	_, err := insertRedirectRule(mkRedirectRule("0", "1"), initialData, clock, ignoreMaxRules, ignoreMaxChain)
-	assert.Error(t, err)
-	assert.Equal(t, errSourceIsVersionSetMember, err)
+	assert.ErrorIs(t, err, errSourceIsVersionSetMember)
 
 	// insert with target build id "0" --> failure
 	_, err = insertRedirectRule(mkRedirectRule("1", "0"), initialData, clock, ignoreMaxRules, ignoreMaxChain)
-	assert.Error(t, err)
-	assert.Equal(t, errTargetIsVersionSetMember, err)
+	assert.ErrorIs(t, err, errTargetIsVersionSetMember)
 }
 
 func TestInsertRedirectRuleSourceIsConditionalAssignmentRuleTarget(t *testing.T) {
@@ -658,8 +637,7 @@ func TestInsertRedirectRuleSourceIsConditionalAssignmentRuleTarget(t *testing.T)
 
 	// insert redirect rule with target 1 --> failure
 	_, err := insertRedirectRule(mkRedirectRule("1", "0"), data, clock, ignoreMaxRules, ignoreMaxChain)
-	assert.Error(t, err)
-	assert.Equal(t, errSourceIsConditionalAssignmentRuleTarget, err)
+	assert.ErrorIs(t, err, errSourceIsConditionalAssignmentRuleTarget)
 }
 
 func TestInsertRedirectRuleAlreadyExists(t *testing.T) {
@@ -673,8 +651,7 @@ func TestInsertRedirectRuleAlreadyExists(t *testing.T) {
 
 	// insert with source build id "0" --> failure
 	_, err = insertRedirectRule(mkRedirectRule("0", "6"), data, clock, ignoreMaxRules, ignoreMaxChain)
-	assert.Error(t, err)
-	assert.Equal(t, errSourceAlreadyExists("0", "1"), err)
+	assert.ErrorContains(t, err, errSourceAlreadyExists("0", "1").Error())
 }
 
 func TestInsertRedirectRuleCreateCycle(t *testing.T) {
@@ -684,8 +661,7 @@ func TestInsertRedirectRuleCreateCycle(t *testing.T) {
 
 	// insert with source -> target == "0" -> "0" --> failure
 	_, err := insertRedirectRule(mkRedirectRule("0", "0"), initialData, clock, ignoreMaxRules, ignoreMaxChain)
-	assert.Error(t, err)
-	assert.Equal(t, errIsCyclic, err)
+	assert.ErrorIs(t, err, errIsCyclic)
 
 	// insert with source -> target == "0" -> "1" --> success
 	data, err := insertRedirectRule(mkRedirectRule("0", "1"), initialData, clock, ignoreMaxRules, ignoreMaxChain)
@@ -693,8 +669,7 @@ func TestInsertRedirectRuleCreateCycle(t *testing.T) {
 
 	// insert with source build id "1" -> "0" --> failure
 	_, err = insertRedirectRule(mkRedirectRule("1", "0"), data, clock, ignoreMaxRules, ignoreMaxChain)
-	assert.Error(t, err)
-	assert.Equal(t, errIsCyclic, err)
+	assert.ErrorIs(t, err, errIsCyclic)
 }
 
 func TestInsertRedirectRuleMaxChain(t *testing.T) {
@@ -716,8 +691,7 @@ func TestInsertRedirectRuleMaxChain(t *testing.T) {
 	// insert (6->7)
 	// 4 ---> 5 ---> 6 ---> 7
 	_, err = insertRedirectRule(mkRedirectRule("6", "7"), data, clock, ignoreMaxRules, maxChain)
-	assert.Error(t, err)
-	assert.Equal(t, errExceedsMaxRuleChain(4, maxChain), err)
+	assert.ErrorContains(t, err, errExceedsMaxRuleChain(4, maxChain).Error())
 }
 
 func TestReplaceRedirectRuleBasic(t *testing.T) {
@@ -766,8 +740,7 @@ func TestReplaceRedirectRuleInVersionSet(t *testing.T) {
 
 	// replace with target 0 --> failure
 	_, err = replaceRedirectRule(mkRedirectRule("1", "0"), data, clock, ignoreMaxChain)
-	assert.Error(t, err)
-	assert.Equal(t, errTargetIsVersionSetMember, err)
+	assert.ErrorIs(t, err, errTargetIsVersionSetMember)
 }
 
 func TestReplaceRedirectRuleCreateCycle(t *testing.T) {
@@ -782,20 +755,17 @@ func TestReplaceRedirectRuleCreateCycle(t *testing.T) {
 	var err error
 
 	_, err = replaceRedirectRule(mkRedirectRule("0", "0"), data, clock, ignoreMaxChain)
-	assert.Error(t, err)
-	assert.Equal(t, errIsCyclic, err)
+	assert.ErrorIs(t, err, errIsCyclic)
 
 	_, err = replaceRedirectRule(mkRedirectRule("2", "0"), data, clock, ignoreMaxChain)
-	assert.Error(t, err)
-	assert.Equal(t, errIsCyclic, err)
+	assert.ErrorIs(t, err, errIsCyclic)
 
 	_, err = replaceRedirectRule(mkRedirectRule("1", "0"), data, clock, ignoreMaxChain)
-	assert.Error(t, err)
-	assert.Equal(t, errIsCyclic, err)
+	assert.ErrorIs(t, err, errIsCyclic)
 
 	_, err = replaceRedirectRule(mkRedirectRule("2", "1"), data, clock, ignoreMaxChain)
-	assert.Error(t, err)
-	assert.Equal(t, errIsCyclic, err)
+	assert.ErrorIs(t, err, errIsCyclic)
+
 }
 
 func TestReplaceRedirectRuleMaxChain(t *testing.T) {
@@ -819,8 +789,7 @@ func TestReplaceRedirectRuleMaxChain(t *testing.T) {
 	// replace(2, new_target=4)
 	// 2 ---> 4 ---> 5 ---> 6
 	_, err = replaceRedirectRule(mkRedirectRule("2", "4"), data, clock, maxChain)
-	assert.Error(t, err)
-	assert.Equal(t, errExceedsMaxRuleChain(4, maxChain), err)
+	assert.ErrorContains(t, err, errExceedsMaxRuleChain(4, maxChain).Error())
 }
 
 func TestReplaceRedirectRuleNotFound(t *testing.T) {
@@ -831,8 +800,7 @@ func TestReplaceRedirectRuleNotFound(t *testing.T) {
 
 	// fails because no rules to replace
 	_, err = replaceRedirectRule(mkRedirectRule("1", "100"), data, clock, ignoreMaxChain)
-	assert.Error(t, err)
-	assert.Equal(t, errSourceNotFound("1"), err)
+	assert.ErrorContains(t, err, errSourceNotFound("1").Error())
 
 	data.RedirectRules = []*persistencepb.RedirectRule{
 		mkRedirectRulePersistence(mkRedirectRule("0", "1"), clock, nil),
@@ -840,8 +808,7 @@ func TestReplaceRedirectRuleNotFound(t *testing.T) {
 
 	// fails because source doesnt exist
 	_, err = replaceRedirectRule(mkRedirectRule("1", "100"), data, clock, ignoreMaxChain)
-	assert.Error(t, err)
-	assert.Equal(t, errSourceNotFound("1"), err)
+	assert.ErrorContains(t, err, errSourceNotFound("1").Error())
 }
 
 func TestDeleteRedirectRuleBasic(t *testing.T) {
@@ -882,8 +849,7 @@ func TestDeleteRedirectRuleNotFound(t *testing.T) {
 
 	// fails because no rules to delete
 	_, err := deleteRedirectRule("1", data, clock)
-	assert.Error(t, err)
-	assert.Equal(t, errSourceNotFound("1"), err)
+	assert.ErrorContains(t, err, errSourceNotFound("1").Error())
 
 	// insert a rule to replace
 	data.RedirectRules = []*persistencepb.RedirectRule{
@@ -892,8 +858,7 @@ func TestDeleteRedirectRuleNotFound(t *testing.T) {
 
 	// fails because no rule with that source
 	_, err = deleteRedirectRule("1", data, clock)
-	assert.Error(t, err)
-	assert.Equal(t, errSourceNotFound("1"), err)
+	assert.ErrorContains(t, err, errSourceNotFound("1").Error())
 }
 
 func TestGetWorkerVersioningRules(t *testing.T) {
@@ -1080,8 +1045,7 @@ func TestCommitBuildIDNoRecentPoller(t *testing.T) {
 
 	// without force --> fail
 	_, err = CommitBuildID(clock2, data, mkNewCommitBuildIdReq("10", false), false, ignoreMaxRules)
-	assert.Error(t, err)
-	assert.Equal(t, errNoRecentPollerOnCommitVersion("10"), err)
+	assert.ErrorContains(t, err, errNoRecentPollerOnCommitVersion("10").Error())
 
 	// with force --> success
 	_, err = CommitBuildID(clock2, data, mkNewCommitBuildIdReq("10", true), false, ignoreMaxRules)
@@ -1103,8 +1067,7 @@ func TestCommitBuildIDInVersionSet(t *testing.T) {
 
 	// with target 0 --> fail
 	_, err = CommitBuildID(clock2, data, mkNewCommitBuildIdReq("0", false), true, ignoreMaxRules)
-	assert.Error(t, err)
-	assert.Equal(t, errTargetIsVersionSetMember, err)
+	assert.ErrorIs(t, err, errTargetIsVersionSetMember)
 }
 
 func TestCommitBuildIDMaxAssignmentRules(t *testing.T) {
@@ -1124,8 +1087,7 @@ func TestCommitBuildIDMaxAssignmentRules(t *testing.T) {
 
 	// commit a new target, no rules to be deleted --> fail
 	_, err = CommitBuildID(clock2, data, mkNewCommitBuildIdReq("1000", false), true, maxRules)
-	assert.Error(t, err)
-	assert.Equal(t, errExceedsMaxAssignmentRules(4, maxRules), err)
+	assert.ErrorContains(t, err, errExceedsMaxAssignmentRules(4, maxRules).Error())
 }
 
 /*
