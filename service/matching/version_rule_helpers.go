@@ -77,7 +77,7 @@ var (
 	errExceedsMaxRuleChain = func(cnt, max int) error {
 		return serviceerror.NewFailedPrecondition(fmt.Sprintf("update exceeds number of chained redirect rules permitted in namespace (%v/%v)", cnt, max))
 	}
-	errUnversionedRedirectRuleTarget = serviceerror.NewInvalidArgument(fmt.Sprintf("the unversioned build id '%s' cannot be the target of a redirect rule", unversionedBuildId))
+	errUnversionedRedirectRuleTarget = serviceerror.NewInvalidArgument(fmt.Sprintf("the unversioned build id cannot be the target of a redirect rule", unversionedBuildId))
 )
 
 func cloneOrMkData(data *persistencespb.VersioningData) *persistencespb.VersioningData {
