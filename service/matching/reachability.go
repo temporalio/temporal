@@ -55,16 +55,6 @@ const (
 	checkedClosedWorkflowExecutionsForUpstream reachabilityCalcStage = 4
 )
 
-var (
-	calcStage2MetricName = map[reachabilityCalcStage]string{
-		checkedRuleSourcesForInput:                 metrics.ReachabilityCheckedRuleSourcesCounter.Name(),
-		checkedRuleTargetsForUpstream:              metrics.ReachabilityCheckedRuleTargetsCounter.Name(),
-		checkedBacklogForUpstream:                  metrics.ReachabilityCheckedBacklogCounter.Name(),
-		checkedOpenWorkflowExecutionsForUpstream:   metrics.ReachabilityCheckedOpenWorkflowExecutionsCounter.Name(),
-		checkedClosedWorkflowExecutionsForUpstream: metrics.ReachabilityCheckedClosedWorkflowExecutionsCounter.Name(),
-	}
-)
-
 type reachabilityCalculator struct {
 	visibilityMgr                manager.VisibilityManager
 	nsID                         namespace.ID
@@ -96,8 +86,23 @@ func getBuildIdTaskReachability(
 		buildIdVisibilityGracePeriod: buildIdVisibilityGracePeriod,
 	}
 	reachability, calcStage, err := rc.run(ctx, buildId)
-	metricsHandler.Counter(calcStage2MetricName[calcStage]).Record(1)
+	recordCalcStage(metricsHandler, calcStage)
 	return reachability, err
+}
+
+func recordCalcStage(handler metrics.Handler, stage reachabilityCalcStage) {
+	switch stage {
+	case checkedRuleSourcesForInput:
+		metrics.ReachabilityCheckedRuleSourcesCounter.With(handler).Record(1)
+	case checkedRuleTargetsForUpstream:
+		metrics.ReachabilityCheckedRuleTargetsCounter.With(handler).Record(1)
+	case checkedBacklogForUpstream:
+		metrics.ReachabilityCheckedBacklogCounter.With(handler).Record(1)
+	case checkedOpenWorkflowExecutionsForUpstream:
+		metrics.ReachabilityCheckedOpenWorkflowExecutionsCounter.With(handler).Record(1)
+	case checkedClosedWorkflowExecutionsForUpstream:
+		metrics.ReachabilityCheckedClosedWorkflowExecutionsCounter.With(handler).Record(1)
+	}
 }
 
 func (rc *reachabilityCalculator) run(ctx context.Context, buildId string) (enumspb.BuildIdTaskReachability, reachabilityCalcStage, error) {
