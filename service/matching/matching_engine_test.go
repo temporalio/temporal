@@ -2534,7 +2534,21 @@ func (s *matchingEngineSuite) TestUnloadOnMembershipChange() {
 	s.False(isLoaded(p2))
 }
 
-func (s *matchingEngineSuite) TaskQueueMetricValidator(capture *metricstest.Capture, familyCounterLength int, familyCounter float64, queueCounterLength int, queueCounter float64, queuePartitionCounterLength int, queuePartitionCounter float64) {
+func (s *matchingEngineSuite) VersioningRuleMetricsValidator(
+	capture *metricstest.Capture,
+) {
+	// todo carly
+}
+
+func (s *matchingEngineSuite) TaskQueueMetricValidator(
+	capture *metricstest.Capture,
+	familyCounterLength int,
+	familyCounter float64,
+	queueCounterLength int,
+	queueCounter float64,
+	queuePartitionCounterLength int,
+	queuePartitionCounter float64,
+) {
 	// checks the metrics according to the values passed in the parameters
 	snapshot := capture.Snapshot()
 	familyCounterRecordings := snapshot[metrics.LoadedTaskQueueFamilyGauge.Name()]
@@ -2550,7 +2564,11 @@ func (s *matchingEngineSuite) TaskQueueMetricValidator(capture *metricstest.Capt
 	s.Equal(queuePartitionCounter, queuePartitionCounterRecordings[queuePartitionCounterLength-1].Value.(float64))
 }
 
-func (s *matchingEngineSuite) PhysicalQueueMetricValidator(capture *metricstest.Capture, physicalTaskQueueLength int, physicalTaskQueueCounter float64) {
+func (s *matchingEngineSuite) PhysicalQueueMetricValidator(
+	capture *metricstest.Capture,
+	physicalTaskQueueLength int,
+	physicalTaskQueueCounter float64,
+) {
 	// checks the metrics according to the values passed in the parameters
 	snapshot := capture.Snapshot()
 	physicalTaskQueueRecordings := snapshot[metrics.LoadedPhysicalTaskQueueGauge.Name()]
