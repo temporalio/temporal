@@ -576,6 +576,14 @@ func (u *Update) setState(newState state) state {
 	return prevState
 }
 
+func (u *Update) advanceTo(newState state) error {
+	if !u.state.isStrictlyAncestralTo(newState) {
+		return invalidArgf("cannot advance to state %q from state %q", newState, u.state)
+	}
+	u.setState(newState)
+	return nil
+}
+
 func (u *Update) GetSize() int {
 	size := len(u.id)
 	size += proto.Size(u.request)

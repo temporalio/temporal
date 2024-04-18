@@ -170,19 +170,27 @@ func NewRegistry(
 	return r
 }
 
-// updateFromStore creates an entry in the registry for every update that is in the store but not in the registry.
+// updateFromStore performs a unidirectional sync from store to registry. Specifically, for every update that is in the
+// store, we do the following:
+// - if the update is not in the registry then we create an entry in the registry,
+// - alternatively, if the update is in the registry and the state in the store is more advanced, then we advance the update in the registry.
+//
+//nolint:revive // cognitive complexity 27 (> max enabled 25)
 func (r *registry) UpdateFromStore() {
 	r.getStoreFn().VisitUpdates(func(updID string, updInfo *updatespb.UpdateInfo) {
-		// TODO (dan): only "upgrade"; don't "downgrade"
 		if updInfo.GetAdmission() != nil {
-			// A update entry in the registry may have a request payload: we use this to write the payload to an
+			if upd := r.updates[updID]; upd != nil {
+				_ = upd.advanceTo(stateAdmitted)
+				return
+			}
+			// An update entry in the registry may have a request payload: we use this to write the payload to an
 			// UpdateAccepted event, in the event that the update is accepted. However, when populating the registry
-			// from mutable state, we do not have access to update request payloads. In this situation it is correct to
-			// create a registry entry in state Admitted with a nil payload for the following reason: the fact that we
-			// have encountered an UpdateInfo in state Admitted in mutable state implies that there is an
+			// from mutable state, we do not have access to update request payloads. In this situation it is correct
+			// to create a registry entry in state Admitted with a nil payload for the following reason: the fact
+			// that we have encountered an UpdateInfo in state Admitted in mutable state implies that there is an
 			// UpdateAdmitted event in history; and when there is an UpdateAdmitted event in history, we will not
-			// attempt to write the request payload to the UpdateAccepted event, since the request payload is already
-			// present in the UpdateAdmitted event.
+			// attempt to write the request payload to the UpdateAccepted event, since the request payload is
+			// already present in the UpdateAdmitted event.
 			var request *anypb.Any
 			r.updates[updID] = newAdmitted(
 				updID,
@@ -191,6 +199,10 @@ func (r *registry) UpdateFromStore() {
 				withInstrumentation(&r.instrumentation),
 			)
 		} else if acc := updInfo.GetAcceptance(); acc != nil {
+			if upd := r.updates[updID]; upd != nil {
+				_ = upd.advanceTo(stateAccepted)
+				return
+			}
 			r.updates[updID] = newAccepted(
 				updID,
 				acc.EventId,
@@ -198,7 +210,12 @@ func (r *registry) UpdateFromStore() {
 				withInstrumentation(&r.instrumentation),
 			)
 		} else if updInfo.GetCompletion() != nil {
-			delete(r.updates, updID)
+			if upd := r.updates[updID]; upd != nil {
+				if err := upd.advanceTo(stateCompleted); err == nil {
+					upd.onComplete()
+				}
+				return
+			}
 			r.completedUpdates[updID] = true
 		}
 	})
