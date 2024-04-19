@@ -112,11 +112,13 @@ func (tc *dlqTestCase) Run(t *testing.T, firstAppRun chan struct{}) {
 	}
 	runArgs = appendArg(runArgs, tdbg.FlagDLQVersion, p.dlqVersion)
 	runArgs = append(runArgs, p.command)
-	runArgs = appendArg(runArgs, tdbg.FlagDLQType, p.dlqType)
-	runArgs = appendArg(runArgs, tdbg.FlagCluster, p.sourceCluster)
-	runArgs = appendArg(runArgs, tdbg.FlagTargetCluster, p.targetCluster)
-	runArgs = appendArg(runArgs, tdbg.FlagMaxMessageCount, p.maxMessageCount)
-	runArgs = appendArg(runArgs, tdbg.FlagLastMessageID, p.lastMessageID)
+	if p.command != "list" {
+		runArgs = appendArg(runArgs, tdbg.FlagDLQType, p.dlqType)
+		runArgs = appendArg(runArgs, tdbg.FlagCluster, p.sourceCluster)
+		runArgs = appendArg(runArgs, tdbg.FlagTargetCluster, p.targetCluster)
+		runArgs = appendArg(runArgs, tdbg.FlagMaxMessageCount, p.maxMessageCount)
+		runArgs = appendArg(runArgs, tdbg.FlagLastMessageID, p.lastMessageID)
+	}
 	runArgs = appendArg(runArgs, tdbg.FlagOutputFilename, p.outputFileName)
 
 	// TODO: this is a hack to make sure that the first app.Run() call is finished before the second one starts because
@@ -259,6 +261,49 @@ func TestDLQCommand_V2(t *testing.T) {
 			},
 		},
 		{
+			name: "list no queues",
+			override: func(p *dlqTestParams) {
+				p.adminClient.err = nil
+				p.command = "list"
+			},
+		},
+		{
+			name: "list queues, paginated",
+			override: func(p *dlqTestParams) {
+				p.adminClient.err = nil
+				p.command = "list"
+				p.adminClient.listQueueResponses = []*adminservice.ListQueuesResponse{
+					{
+						Queues: []*adminservice.ListQueuesResponse_QueueInfo{
+							{
+								QueueName:    "queueOne",
+								MessageCount: 13,
+							}, {
+								QueueName:    "queueTwo",
+								MessageCount: 42,
+							},
+						},
+						NextPageToken: []byte{0x41, 0x41, 0x41},
+					}, {
+						Queues: []*adminservice.ListQueuesResponse_QueueInfo{
+							{
+								QueueName:    "queueThree",
+								MessageCount: 0,
+							},
+						},
+						NextPageToken: nil,
+					},
+				}
+			},
+			validateStdout: func(t *testing.T, b *bytes.Buffer) {
+				// One line per queue. For my own sanity we just expect them all to exist; I'm not validating formatting or order here
+				patterns := []string{`queueOne\s.*?|\s*13\b`, `queueTwo\s.*?|\s*42\b`, `queueThree\s.*?|\s*0\b`}
+				for _, p := range patterns {
+					assert.Regexp(t, p, b.String())
+				}
+
+			},
+		},
 	} {
 		tc := tc
 		t.Run(tc.name, func(t *testing.T) {
@@ -275,6 +320,25 @@ func (f fakeClientFactory) WorkflowClient(*cli.Context) workflowservice.Workflow
 
 func (f fakeClientFactory) AdminClient(*cli.Context) adminservice.AdminServiceClient {
 	return f.adminClient
+}
+
+// The fake admin client accepts and returns canned responses
+// It tracks whether the correct page token is passed in the request when iterating
+func (f *fakeAdminClient) ListQueues(_ context.Context, req *adminservice.ListQueuesRequest, _ ...grpc.CallOption) (*adminservice.ListQueuesResponse, error) {
+	if f.err != nil {
+		return nil, f.err
+	}
+	if f.nextListQueueResponse >= len(f.listQueueResponses) {
+		return &adminservice.ListQueuesResponse{}, nil
+	}
+	if bytes.Compare(f.previousPageToken, req.NextPageToken) != 0 {
+		return nil, fmt.Errorf("expected page token %v, got %v", f.previousPageToken, req.NextPageToken)
+	}
+
+	resp := f.listQueueResponses[f.nextListQueueResponse]
+	f.nextListQueueResponse++
+	f.previousPageToken = resp.NextPageToken
+	return resp, nil
 }
 
 func (f *fakeAdminClient) DescribeCluster(
