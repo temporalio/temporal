@@ -102,6 +102,11 @@ func ArchivalTaskInfoFromBlob(blob []byte, encoding string) (*persistencespb.Arc
 	return result, proto3Decode(blob, encoding, result)
 }
 
+func OutboundTaskInfoFromBlob(blob []byte, encoding string) (*persistencespb.OutboundTaskInfo, error) {
+	result := &persistencespb.OutboundTaskInfo{}
+	return result, proto3Decode(blob, encoding, result)
+}
+
 func QueueMetadataToBlob(metadata *persistencespb.QueueMetadata) (*commonpb.DataBlob, error) {
 	// TODO change ENCODING_TYPE_JSON to ENCODING_TYPE_PROTO3
 	return encode(metadata, enumspb.ENCODING_TYPE_JSON)

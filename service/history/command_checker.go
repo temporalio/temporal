@@ -45,6 +45,7 @@ import (
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/primitives/timestamp"
+	"go.temporal.io/server/common/retrypolicy"
 	"go.temporal.io/server/common/searchattribute"
 	"go.temporal.io/server/common/timer"
 	"go.temporal.io/server/service/history/configs"
@@ -849,9 +850,9 @@ func (v *commandAttrValidator) validateActivityRetryPolicy(
 		attributes.RetryPolicy = &commonpb.RetryPolicy{}
 	}
 
-	defaultActivityRetrySettings := common.FromConfigToDefaultRetrySettings(v.getDefaultActivityRetrySettings(namespaceID.String()))
-	common.EnsureRetryPolicyDefaults(attributes.RetryPolicy, defaultActivityRetrySettings)
-	return common.ValidateRetryPolicy(attributes.RetryPolicy)
+	defaultActivityRetrySettings := retrypolicy.FromConfigToDefault(v.getDefaultActivityRetrySettings(namespaceID.String()))
+	retrypolicy.EnsureDefaults(attributes.RetryPolicy, defaultActivityRetrySettings)
+	return retrypolicy.Validate(attributes.RetryPolicy)
 }
 
 func (v *commandAttrValidator) validateWorkflowRetryPolicy(
@@ -864,9 +865,9 @@ func (v *commandAttrValidator) validateWorkflowRetryPolicy(
 	}
 
 	// Otherwise, for any unset fields on the retry policy, set with defaults
-	defaultWorkflowRetrySettings := common.FromConfigToDefaultRetrySettings(v.getDefaultWorkflowRetrySettings(namespaceName.String()))
-	common.EnsureRetryPolicyDefaults(retryPolicy, defaultWorkflowRetrySettings)
-	return common.ValidateRetryPolicy(retryPolicy)
+	defaultWorkflowRetrySettings := retrypolicy.FromConfigToDefault(v.getDefaultWorkflowRetrySettings(namespaceName.String()))
+	retrypolicy.EnsureDefaults(retryPolicy, defaultWorkflowRetrySettings)
+	return retrypolicy.Validate(retryPolicy)
 }
 
 func (v *commandAttrValidator) validateCrossNamespaceCall(

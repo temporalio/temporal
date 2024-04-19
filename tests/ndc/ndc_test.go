@@ -143,6 +143,7 @@ func (s *NDCFunctionalTestSuite) SetupSuite() {
 			},
 		},
 	}, nil).AnyTimes()
+	mockStreamClient.EXPECT().CloseSend().Return(nil).AnyTimes()
 
 	s.standByReplicationTasksChan = make(chan *replicationspb.ReplicationTask, 100)
 

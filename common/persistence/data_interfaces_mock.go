@@ -1317,21 +1317,6 @@ func (mr *MockNexusIncomingServiceManagerMockRecorder) GetNexusIncomingService(c
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetNexusIncomingService", reflect.TypeOf((*MockNexusIncomingServiceManager)(nil).GetNexusIncomingService), ctx, request)
 }
 
-// GetNexusIncomingServicesTableVersion mocks base method.
-func (m *MockNexusIncomingServiceManager) GetNexusIncomingServicesTableVersion(ctx context.Context) (int64, error) {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "GetNexusIncomingServicesTableVersion", ctx)
-	ret0, _ := ret[0].(int64)
-	ret1, _ := ret[1].(error)
-	return ret0, ret1
-}
-
-// GetNexusIncomingServicesTableVersion indicates an expected call of GetNexusIncomingServicesTableVersion.
-func (mr *MockNexusIncomingServiceManagerMockRecorder) GetNexusIncomingServicesTableVersion(ctx interface{}) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetNexusIncomingServicesTableVersion", reflect.TypeOf((*MockNexusIncomingServiceManager)(nil).GetNexusIncomingServicesTableVersion), ctx)
-}
-
 // ListNexusIncomingServices mocks base method.
 func (m *MockNexusIncomingServiceManager) ListNexusIncomingServices(ctx context.Context, request *ListNexusIncomingServicesRequest) (*ListNexusIncomingServicesResponse, error) {
 	m.ctrl.T.Helper()

@@ -22,16 +22,31 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-package common
+package primitives
 
-import "time"
+import (
+	"time"
 
-// DefaultRetrySettings indicates what the "default" retry settings
-// are if it is not specified on an Activity or for any unset fields
-// if a policy is explicitly set on a workflow
-type DefaultRetrySettings struct {
-	InitialInterval            time.Duration
-	MaximumIntervalCoefficient float64
-	BackoffCoefficient         float64
-	MaximumAttempts            int32
-}
+	"go.temporal.io/server/common/debug"
+)
+
+const (
+	// DefaultTransactionSizeLimit is the largest allowed transaction size to persistence
+	DefaultTransactionSizeLimit = 4 * 1024 * 1024
+)
+
+const (
+	// DefaultWorkflowTaskTimeout sets the Default Workflow Task timeout for a Workflow
+	DefaultWorkflowTaskTimeout = 10 * time.Second * debug.TimeoutMultiplier
+)
+
+const (
+	// GetHistoryMaxPageSize is the max page size for get history
+	GetHistoryMaxPageSize = 256
+	// ReadDLQMessagesPageSize is the max page size for read DLQ messages
+	ReadDLQMessagesPageSize = 1000
+)
+
+const (
+	DefaultHistoryMaxAutoResetPoints = 20
+)

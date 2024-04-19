@@ -77,20 +77,6 @@ func (m *nexusIncomingServiceManagerImpl) Close() {
 	m.persistence.Close()
 }
 
-// GetNexusIncomingServicesTableVersion is a convenience method for getting the current nexus_incoming_services table
-// version by calling ListNexusIncomingServices with LastKnownTableVersion=0 and PageSize=0
-func (m *nexusIncomingServiceManagerImpl) GetNexusIncomingServicesTableVersion(ctx context.Context) (int64, error) {
-	tableVersion := int64(0)
-	resp, err := m.ListNexusIncomingServices(ctx, &ListNexusIncomingServicesRequest{
-		LastKnownTableVersion: 0,
-		PageSize:              0,
-	})
-	if resp != nil {
-		tableVersion = resp.TableVersion
-	}
-	return tableVersion, err
-}
-
 func (m *nexusIncomingServiceManagerImpl) GetNexusIncomingService(
 	ctx context.Context,
 	request *GetNexusIncomingServiceRequest,

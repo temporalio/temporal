@@ -24,10 +24,6 @@
 
 package dynamicconfig
 
-func (k Key) String() string {
-	return string(k)
-}
-
 const (
 	// keys for admin
 
@@ -413,20 +409,14 @@ const (
 	FrontendRefreshNexusIncomingServicesMinWait = "frontend.refreshNexusIncomingServicesMinWait"
 	// FrontendEnableCallbackAttachment enables attaching callbacks to workflows.
 	FrontendEnableCallbackAttachment = "frontend.enableCallbackAttachment"
+	// FrontendCallbackURLMaxLength is the maximum length of callback URL
+	FrontendCallbackURLMaxLength = "frontend.callbackURLMaxLength"
 	// FrontendMaxConcurrentBatchOperationPerNamespace is the max concurrent batch operation job count per namespace
 	FrontendMaxConcurrentBatchOperationPerNamespace = "frontend.MaxConcurrentBatchOperationPerNamespace"
 	// FrontendMaxExecutionCountBatchOperationPerNamespace is the max execution count batch operation supports per namespace
 	FrontendMaxExecutionCountBatchOperationPerNamespace = "frontend.MaxExecutionCountBatchOperationPerNamespace"
 	// FrontendEnableBatcher enables batcher-related RPCs in the frontend
 	FrontendEnableBatcher = "frontend.enableBatcher"
-	// FrontendAccessHistoryFraction (0.0~1.0) is the fraction of history operations that are sent to the history
-	// service using the new RPCs. The remaining access history via the existing implementation.
-	// TODO: remove once migration completes.
-	FrontendAccessHistoryFraction = "frontend.accessHistoryFraction"
-	// FrontendAdminDeleteAccessHistoryFraction (0.0~1.0) is the fraction of admin DeleteWorkflowExecution requests
-	// that are sent to the history service using the new RPCs. The remaining access history via the existing implementation.
-	// TODO: remove once migration completes.
-	FrontendAdminDeleteAccessHistoryFraction = "frontend.adminDeleteAccessHistoryFraction"
 
 	// FrontendEnableUpdateWorkflowExecution enables UpdateWorkflowExecution API in the frontend.
 	// The UpdateWorkflowExecution API has gone through rigorous testing efforts but this config's default is `false` until the
