@@ -144,18 +144,20 @@ func (s *ReplicationMigrationBackTestSuite) SetupSuite() {
 	s.passiveCluster = cluster
 
 	s.registerNamespace()
-	s.passiveCluster.GetFrontendClient().UpdateNamespace(context.Background(), &workflowservice.UpdateNamespaceRequest{
+	_, err = s.passiveCluster.GetFrontendClient().UpdateNamespace(context.Background(), &workflowservice.UpdateNamespaceRequest{
 		Namespace: s.namespace.String(),
 		ReplicationConfig: &replicationpb.NamespaceReplicationConfig{
 			ActiveClusterName: "cluster-b",
 		},
 	})
-	s.passiveCluster.GetFrontendClient().UpdateNamespace(context.Background(), &workflowservice.UpdateNamespaceRequest{
+	s.Require().NoError(err)
+	_, err = s.passiveCluster.GetFrontendClient().UpdateNamespace(context.Background(), &workflowservice.UpdateNamespaceRequest{
 		Namespace: s.namespace.String(),
 		ReplicationConfig: &replicationpb.NamespaceReplicationConfig{
 			ActiveClusterName: "cluster-a",
 		},
 	})
+	s.Require().NoError(err)
 	time.Sleep(2 * tests.NamespaceCacheRefreshInterval) // we have to wait for namespace cache to pick the change
 }
 
@@ -251,6 +253,7 @@ func (s *ReplicationMigrationBackTestSuite) TestHistoryReplication_LongRunningMi
 		nil,
 		[]*historypb.History{{Events: run1Slices[0]}, {Events: run1Slices[1]}, {Events: run1Slices[2]}},
 	)
+	s.Require().NoError(err)
 	// when handle migration back case, passive will need to fetch the history from active cluster
 	s.mockActiveGetRawHistoryApiCalls(workflowId, runId1, run1Slices, history, version)
 
