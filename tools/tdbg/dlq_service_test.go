@@ -25,8 +25,10 @@
 package tdbg_test
 
 import (
+	"bytes"
 	"context"
 	"errors"
+	"fmt"
 	"strconv"
 	"testing"
 
@@ -61,6 +63,8 @@ type (
 		name           string
 		version        string
 		override       func(p *dlqTestParams)
+		validateStdout func(t *testing.T, b *bytes.Buffer)
+		validateStderr func(t *testing.T, b *bytes.Buffer)
 	}
 	fakeClientFactory struct {
 		adminClient adminservice.AdminServiceClient
@@ -95,8 +99,11 @@ func (tc *dlqTestCase) Run(t *testing.T, firstAppRun chan struct{}) {
 		clientFactory:         fakeClientFactory{adminClient: faultyAdminClient},
 	}
 	tc.override(&p)
+	var stdout, stderr bytes.Buffer
 	app := tdbgtest.NewCliApp(func(params *tdbg.Params) {
 		params.ClientFactory = p.clientFactory
+		params.Writer = &stdout
+		params.ErrWriter = &stderr
 	})
 	runArgs := []string{
 		"tdbg",
@@ -129,6 +136,13 @@ func (tc *dlqTestCase) Run(t *testing.T, firstAppRun chan struct{}) {
 		}
 	} else {
 		assert.NoError(t, err)
+	}
+
+	if tc.validateStdout != nil {
+		tc.validateStdout(t, &stdout)
+	}
+	if tc.validateStderr != nil {
+		tc.validateStderr(t, &stderr)
 	}
 }
 
