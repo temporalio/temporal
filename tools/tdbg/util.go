@@ -62,7 +62,7 @@ func prettyPrintJSONObject(c *cli.Context, o interface{}) {
 	}
 
 	_, _ = c.App.Writer.Write(b)
-	c.App.Writer.Write([]byte("\n"))
+	_, _ = c.App.Writer.Write([]byte("\n"))
 }
 
 func getRequiredOption(c *cli.Context, optionName string) (string, error) {
