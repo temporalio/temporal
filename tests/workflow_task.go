@@ -25,6 +25,7 @@
 package tests
 
 import (
+	"context"
 	"time"
 
 	"github.com/pborman/uuid"
@@ -959,4 +960,118 @@ func (s *FunctionalSuite) TestWorkflowTerminationSignalAfterTransientWorkflowTas
   5 WorkflowExecutionSignaled
   6 WorkflowTaskScheduled
   7 WorkflowExecutionTerminated`, s.getHistory(s.namespace, we))
+}
+
+func (s *FunctionalSuite) TestAddTask_BacklogInfo() {
+	id := uuid.New()
+	wt := "functional-workflow-workflow-task-heartbeating-local-activities"
+	tl := id
+	identity := "worker1"
+
+	workflowType := &commonpb.WorkflowType{Name: wt}
+
+	tq := &taskqueuepb.TaskQueue{Name: tl, Kind: enumspb.TASK_QUEUE_KIND_NORMAL}
+	request := &workflowservice.StartWorkflowExecutionRequest{
+		RequestId:           uuid.New(),
+		Namespace:           s.namespace,
+		WorkflowId:          id,
+		WorkflowType:        workflowType,
+		TaskQueue:           tq,
+		Input:               nil,
+		WorkflowRunTimeout:  durationpb.New(20 * time.Second),
+		WorkflowTaskTimeout: durationpb.New(3 * time.Second),
+		Identity:            identity,
+	}
+
+	resp0, err0 := s.engine.StartWorkflowExecution(NewContext(), request)
+	s.NoError(err0)
+
+	we := &commonpb.WorkflowExecution{
+		WorkflowId: id,
+		RunId:      resp0.RunId,
+	}
+
+	s.EqualHistoryEvents(`
+  1 WorkflowExecutionStarted
+  2 WorkflowTaskScheduled`, s.getHistory(s.namespace, we))
+
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+
+	s.Eventually(func() bool {
+		resp, err := s.engine.DescribeTaskQueue(ctx, &workflowservice.DescribeTaskQueueRequest{
+			Namespace:              s.namespace,
+			TaskQueue:              &taskqueuepb.TaskQueue{Name: tl, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
+			ApiMode:                enumspb.DESCRIBE_TASK_QUEUE_MODE_ENHANCED,
+			Versions:               nil, // default version, in this case unversioned queue
+			TaskQueueTypes:         nil, // both types
+			ReportPollers:          true,
+			ReportTaskReachability: true,
+			ReportBacklogInfo:      true,
+		})
+		s.NoError(err)
+		s.NotNil(resp)
+		s.Assert().Equal(1, len(resp.GetVersionsInfo()), "should be 1 because only default/unversioned queue")
+		versionInfo := resp.GetVersionsInfo()[""]
+		s.Assert().Equal(enumspb.BUILD_ID_TASK_REACHABILITY_REACHABLE, versionInfo.GetTaskReachability())
+
+		addedTasks := int64(1)
+		checker := true
+		for queueType, t := range versionInfo.GetTypesInfo() {
+			if queueType == 1 {
+				if t.BacklogInfo.ApproximateBacklogCount != addedTasks {
+					checker = false
+				}
+			} else if queueType == 2 {
+				if t.BacklogInfo.ApproximateBacklogCount > addedTasks {
+					checker = false
+				}
+			} else {
+				checker = false
+			}
+		}
+
+		return checker == true
+	}, 3*time.Second, 50*time.Millisecond)
+
+	// start workflow task
+	resp1, err1 := s.engine.PollWorkflowTaskQueue(NewContext(), &workflowservice.PollWorkflowTaskQueueRequest{
+		Namespace: s.namespace,
+		TaskQueue: tq,
+		Identity:  identity,
+	})
+	s.NoError(err1)
+	s.Equal(int32(1), resp1.GetAttempt())
+	s.EqualHistoryEvents(`
+  1 WorkflowExecutionStarted
+  2 WorkflowTaskScheduled
+  3 WorkflowTaskStarted`, s.getHistory(s.namespace, we))
+
+	// call describeTaskQueue to verify if the backlog decreased (should decrease since we only had one task)
+	s.Eventually(func() bool {
+		resp, err := s.engine.DescribeTaskQueue(ctx, &workflowservice.DescribeTaskQueueRequest{
+			Namespace:              s.namespace,
+			TaskQueue:              &taskqueuepb.TaskQueue{Name: tl, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
+			ApiMode:                enumspb.DESCRIBE_TASK_QUEUE_MODE_ENHANCED,
+			Versions:               nil, // default version, in this case unversioned queue
+			TaskQueueTypes:         nil, // both types
+			ReportPollers:          true,
+			ReportTaskReachability: true,
+			ReportBacklogInfo:      true,
+		})
+		s.NoError(err)
+		s.NotNil(resp)
+		s.Assert().Equal(1, len(resp.GetVersionsInfo()), "should be 1 because only default/unversioned queue")
+		versionInfo := resp.GetVersionsInfo()[""]
+		s.Assert().Equal(enumspb.BUILD_ID_TASK_REACHABILITY_REACHABLE, versionInfo.GetTaskReachability())
+		checker := true
+
+		for _, t := range versionInfo.GetTypesInfo() {
+			if t.BacklogInfo.ApproximateBacklogCount > int64(0) {
+				checker = false
+			}
+		}
+		return checker == true
+	}, 3*time.Second, 50*time.Millisecond)
+
 }
