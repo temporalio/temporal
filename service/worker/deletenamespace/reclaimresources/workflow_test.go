@@ -41,6 +41,7 @@ import (
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/persistence/visibility/manager"
+	"go.temporal.io/server/common/searchattribute"
 	"go.temporal.io/server/service/worker/deletenamespace/deleteexecutions"
 	"go.temporal.io/server/service/worker/deletenamespace/errors"
 )
@@ -201,6 +202,7 @@ func Test_ReclaimResourcesWorkflow_NoActivityMocks_Success(t *testing.T) {
 	visibilityManager.EXPECT().CountWorkflowExecutions(gomock.Any(), &manager.CountWorkflowExecutionsRequest{
 		NamespaceID: "namespace-id",
 		Namespace:   "namespace",
+		Query:       searchattribute.QueryWithAnyNamespaceDivision(""),
 	}).Return(&manager.CountWorkflowExecutionsResponse{
 		Count: 1,
 	}, nil)
@@ -210,6 +212,7 @@ func Test_ReclaimResourcesWorkflow_NoActivityMocks_Success(t *testing.T) {
 	visibilityManager.EXPECT().CountWorkflowExecutions(gomock.Any(), &manager.CountWorkflowExecutionsRequest{
 		NamespaceID: "namespace-id",
 		Namespace:   "namespace",
+		Query:       searchattribute.QueryWithAnyNamespaceDivision(""),
 	}).DoAndReturn(func(_ context.Context, request *manager.CountWorkflowExecutionsRequest) (*manager.CountWorkflowExecutionsResponse, error) {
 		if countWorkflowExecutionsCallTimes == 8 {
 			return &manager.CountWorkflowExecutionsResponse{
@@ -293,6 +296,7 @@ func Test_ReclaimResourcesWorkflow_NoActivityMocks_NoProgressMade(t *testing.T) 
 	visibilityManager.EXPECT().CountWorkflowExecutions(gomock.Any(), &manager.CountWorkflowExecutionsRequest{
 		NamespaceID: "namespace-id",
 		Namespace:   "namespace",
+		Query:       searchattribute.QueryWithAnyNamespaceDivision(""),
 	}).Return(&manager.CountWorkflowExecutionsResponse{
 		Count: 1,
 	}, nil)
@@ -301,6 +305,7 @@ func Test_ReclaimResourcesWorkflow_NoActivityMocks_NoProgressMade(t *testing.T) 
 	visibilityManager.EXPECT().CountWorkflowExecutions(gomock.Any(), &manager.CountWorkflowExecutionsRequest{
 		NamespaceID: "namespace-id",
 		Namespace:   "namespace",
+		Query:       searchattribute.QueryWithAnyNamespaceDivision(""),
 	}).Return(&manager.CountWorkflowExecutionsResponse{
 		Count: 1,
 	}, nil).
