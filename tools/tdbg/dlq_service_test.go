@@ -117,6 +117,7 @@ func (tc *dlqTestCase) Run(t *testing.T, firstAppRun chan struct{}) {
 	// it at the same time. This workaround only protects the first call because it's ok if subsequent calls happen in
 	// parallel since the help command is already initialized.
 	_, isFirstRun := <-firstAppRun
+	t.Logf("Running %v", runArgs)
 	err := app.Run(runArgs)
 	if isFirstRun {
 		close(firstAppRun)
