@@ -756,6 +756,9 @@ func reapplyEvents(
 				continue
 			}
 			attr := event.GetWorkflowExecutionUpdateAcceptedEventAttributes()
+			if updateRegistry.IsIncomplete(attr.ProtocolInstanceId) {
+				continue
+			}
 			request := attr.GetAcceptedRequest()
 			if request == nil {
 				// An UpdateAccepted event lacks a request payload if and only if it is preceded by an UpdateAdmitted
