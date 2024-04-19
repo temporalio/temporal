@@ -164,6 +164,10 @@ PROTOGEN := $(LOCALBIN)/protogen-$(GO_API_VER)
 $(PROTOGEN): | $(LOCALBIN)
 	$(call go-install-tool,$(PROTOGEN),go.temporal.io/api/cmd/protogen,$(GO_API_VER))
 
+ACTIONLINT_VER := v1.6.27
+ACTIONLINT := $(LOCALBIN)/actionlint-$(ACTIONLINT_VER)
+$(ACTIONLINT): | $(LOCALBIN)
+	$(call go-install-tool,$(ACTIONLINT),github.com/rhysd/actionlint/cmd/actionlint,$(ACTIONLINT_VER))
 
 # The following tools need to have a consistent name, so we use a versioned stamp file to ensure the version we want is installed
 # while installing to an unversioned binary name.
