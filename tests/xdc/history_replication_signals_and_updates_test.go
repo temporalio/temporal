@@ -356,10 +356,6 @@ func (s *hrsuTestSuite) TestConflictResolutionReappliesUpdates() {
 // active. Both clusters then accept an update and write it to their own history, but those updates have the same update
 // ID.
 func (s *hrsuTestSuite) TestConflictResolutionReappliesUpdatesSameIds() {
-	// TODO (dan) The event-reapply implementation should drop the update since its update ID conflicts with an
-	// in-flight update. Currently this is not done and hence replication fails with "Update ID update-id is already
-	// present in mutable state"
-	s.T().SkipNow()
 	t, ctx, cancel := s.startHrsuTest()
 	defer cancel()
 
@@ -369,6 +365,21 @@ func (s *hrsuTestSuite) TestConflictResolutionReappliesUpdatesSameIds() {
 	// resolution.
 	t.cluster1.executeHistoryReplicationTasksUntil(enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_UPDATE_ACCEPTED)
 	t.cluster2.executeHistoryReplicationTasksUntil(enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_UPDATE_ACCEPTED)
+
+	// Cluster1 has received an update with failover version 2, which superseded its own update.
+	// Cluster2 has received an update from cluster 1 with a lower failover version. Normally, such an update would be
+	// reapplied. But since it has the same update ID as the cluster 1 update, and since that update is not completed,
+	// we must not reapply it.
+	// The result is that both clusters have the same history; the update accepted in cluster 1 has been dropped.
+	for _, c := range []hrsuTestCluster{t.cluster1, t.cluster2} {
+		t.s.HistoryRequire.EqualHistoryEventsAndVersions(`
+	1 WorkflowExecutionStarted
+	2 WorkflowTaskScheduled
+	3 WorkflowTaskStarted
+	4 WorkflowTaskCompleted
+	5 WorkflowExecutionUpdateAccepted {"ProtocolInstanceId": "update-id", "AcceptedRequest": {"Input": {"Args": {"Payloads": [{"Data": "\"cluster2-update-input\""}]}}}}
+	`, []int{1, 1, 2, 2, 2}, c.getHistory(ctx))
+	}
 }
 
 // Start update in cluster 1, run it through to acceptance, replicate it to cluster 2, then failover to 2 and complete
