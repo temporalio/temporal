@@ -19,7 +19,7 @@ jobs:
 
       - name: lint code
         run: |
-          make GOLANGCI_LINT_FIX=false GOLANGCI_LINT_BASE=HEAD~ lint-code
+          make GOLANGCI_LINT_FIX=false GOLANGCI_LINT_BASE_REV=HEAD~ lint-code
 
       - name: check-is-dirty
         run: |
