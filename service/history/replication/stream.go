@@ -71,7 +71,7 @@ func WrapEventLoop(
 ) {
 	defer streamStopper()
 
-	for retryCount := 0; retryCount < 11; retryCount++ {
+	for {
 		err := originalEventLoop()
 
 		if err == nil { // shutdown case
@@ -86,6 +86,13 @@ func WrapEventLoop(
 				metrics.ToClusterIDTag(toClusterKey.ClusterID),
 			)
 			return
+		} else {
+			metrics.ReplicationError.With(metricsHandler).Record(
+				int64(1),
+				metrics.ServiceErrorTypeTag(err),
+				metrics.FromClusterIDTag(fromClusterKey.ClusterID),
+				metrics.ToClusterIDTag(toClusterKey.ClusterID),
+			)
 		}
 		time.Sleep(retryInterval)
 	}
