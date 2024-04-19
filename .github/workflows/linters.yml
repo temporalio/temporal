@@ -1,11 +1,10 @@
-name: golangci-lint
+name: linters
 on:
   pull_request:
 permissions:
   contents: read
 jobs:
-  golangci:
-    name: lint
+  lint-actions:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -17,18 +16,41 @@ jobs:
           go-version-file: 'go.mod'
           check-latest: true
 
-      - name: golangci-lint
-        uses: golangci/golangci-lint-action@v4
-        with:
-          # When updating the version, update the update-linters target in Makefile as well.
-          version: v1.57.2
-          args: --verbose --timeout 10m --fix=false --new-from-rev=HEAD~ --config=.golangci.yml
-
-      - name: check-is-dirty
+      - name: lint actions
         run: |
-          if [[ -n $(git status --porcelain) ]]; then
-            echo "Detected uncommitted changes."
-            git status
-            git diff
-            exit 1
-          fi
+          echo "::add-matcher::.github/actionlint-matcher.json"
+          bash <(curl https://raw.githubusercontent.com/rhysd/actionlint/main/scripts/download-actionlint.bash)
+          make lint-actions
+        shell: bash
+
+  lint-protos:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: 'go.mod'
+          check-latest: true
+
+      - name: lint protobuf definitions
+        run: |
+          make lint-protos
+
+  lint-api:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: 'go.mod'
+          check-latest: true
+
+      - name: lint protobuf API definitions
+        run: |
+          make lint-apis
