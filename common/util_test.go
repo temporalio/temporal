@@ -32,6 +32,7 @@ import (
 
 	"github.com/pborman/uuid"
 	"github.com/stretchr/testify/require"
+	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
 
 	"go.temporal.io/server/common/dynamicconfig"
@@ -283,4 +284,65 @@ func TestVerifyShardIDMapping_2VS4(t *testing.T) {
 	require.NoError(t, VerifyShardIDMapping(2, 4, 2, 2))
 	require.Error(t, VerifyShardIDMapping(2, 4, 2, 3))
 	require.NoError(t, VerifyShardIDMapping(2, 4, 2, 4))
+}
+
+func TestIsServiceClientTransientError_ResourceExhausted(t *testing.T) {
+	require.False(t, IsServiceClientTransientError(
+		&serviceerror.ResourceExhausted{
+			Cause:   enumspb.RESOURCE_EXHAUSTED_CAUSE_RPS_LIMIT,
+			Scope:   enumspb.RESOURCE_EXHAUSTED_SCOPE_NAMESPACE,
+			Message: "Namespace RPS limit exceeded",
+		},
+	))
+	require.False(t, IsServiceClientTransientError(
+		&serviceerror.ResourceExhausted{
+			Cause:   enumspb.RESOURCE_EXHAUSTED_CAUSE_CONCURRENT_LIMIT,
+			Scope:   enumspb.RESOURCE_EXHAUSTED_SCOPE_NAMESPACE,
+			Message: "Max number of conconcurrent pollers/updates/batch operation reached.",
+		},
+	))
+	require.False(t, IsServiceClientTransientError(
+		&serviceerror.ResourceExhausted{
+			Cause:   enumspb.RESOURCE_EXHAUSTED_CAUSE_PERSISTENCE_LIMIT,
+			Scope:   enumspb.RESOURCE_EXHAUSTED_SCOPE_NAMESPACE,
+			Message: "Namespace persistence RPS reached.",
+		},
+	))
+	require.False(t, IsServiceClientTransientError(
+		&serviceerror.ResourceExhausted{
+			Cause:   enumspb.RESOURCE_EXHAUSTED_CAUSE_BUSY_WORKFLOW,
+			Scope:   enumspb.RESOURCE_EXHAUSTED_SCOPE_NAMESPACE,
+			Message: "Workflow is busy.",
+		},
+	))
+	require.False(t, IsServiceClientTransientError(
+		&serviceerror.ResourceExhausted{
+			Cause:   enumspb.RESOURCE_EXHAUSTED_CAUSE_APS_LIMIT,
+			Scope:   enumspb.RESOURCE_EXHAUSTED_SCOPE_NAMESPACE,
+			Message: "APS limit exceeded",
+		},
+	))
+
+	require.True(t, IsServiceClientTransientError(
+		&serviceerror.ResourceExhausted{
+			Cause:   enumspb.RESOURCE_EXHAUSTED_CAUSE_RPS_LIMIT,
+			Scope:   enumspb.RESOURCE_EXHAUSTED_SCOPE_SYSTEM,
+			Message: "System level RPS limit exceeded",
+		},
+	))
+	require.True(t, IsServiceClientTransientError(
+		&serviceerror.ResourceExhausted{
+			Cause:   enumspb.RESOURCE_EXHAUSTED_CAUSE_PERSISTENCE_LIMIT,
+			Scope:   enumspb.RESOURCE_EXHAUSTED_SCOPE_SYSTEM,
+			Message: "System level persistence RPS reached.",
+		},
+	))
+	require.True(t, IsServiceClientTransientError(
+		&serviceerror.ResourceExhausted{
+			Cause:   enumspb.RESOURCE_EXHAUSTED_CAUSE_SYSTEM_OVERLOADED,
+			Scope:   enumspb.RESOURCE_EXHAUSTED_SCOPE_SYSTEM,
+			Message: "Mutable state cache is full",
+		},
+	))
+
 }
