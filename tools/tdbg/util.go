@@ -29,7 +29,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"os"
 	"reflect"
 	"regexp"
 	"strconv"
@@ -47,7 +46,7 @@ import (
 	"go.temporal.io/server/common/namespace"
 )
 
-func prettyPrintJSONObject(o interface{}) {
+func prettyPrintJSONObject(c *cli.Context, o interface{}) {
 	var b []byte
 	var err error
 	if pb, ok := o.(proto.Message); ok {
@@ -61,8 +60,9 @@ func prettyPrintJSONObject(o interface{}) {
 		fmt.Printf("Error when try to print pretty: %v\n", err)
 		fmt.Println(o)
 	}
-	_, _ = os.Stdout.Write(b)
-	fmt.Println()
+
+	_, _ = c.App.Writer.Write(b)
+	c.App.Writer.Write([]byte("\n"))
 }
 
 func getRequiredOption(c *cli.Context, optionName string) (string, error) {
@@ -231,11 +231,11 @@ func paginate[V any](c *cli.Context, paginationFn collection.PaginationFn[V], pa
 		pageItems = append(pageItems, item)
 		if len(pageItems) == pageSize || !iter.HasNext() {
 			if isTableView {
-				if err := printTable(pageItems, os.Stdout); err != nil {
+				if err := printTable(pageItems, c.App.Writer); err != nil {
 					return err
 				}
 			} else {
-				prettyPrintJSONObject(pageItems)
+				prettyPrintJSONObject(c, pageItems)
 			}
 
 			if !more || !showNextPage() {

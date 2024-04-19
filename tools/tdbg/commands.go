@@ -255,10 +255,10 @@ func AdminDescribeWorkflow(c *cli.Context, clientFactory ClientFactory) error {
 	if resp != nil {
 		fmt.Println(color.Green(c, "Cache mutable state:"))
 		if resp.GetCacheMutableState() != nil {
-			prettyPrintJSONObject(resp.GetCacheMutableState())
+			prettyPrintJSONObject(c, resp.GetCacheMutableState())
 		}
 		fmt.Println(color.Green(c, "Database mutable state:"))
-		prettyPrintJSONObject(resp.GetDatabaseMutableState())
+		prettyPrintJSONObject(c, resp.GetDatabaseMutableState())
 
 		fmt.Println(color.Green(c, "Current branch token:"))
 		versionHistories := resp.GetDatabaseMutableState().GetExecutionInfo().GetVersionHistories()
@@ -272,7 +272,7 @@ func AdminDescribeWorkflow(c *cli.Context, clientFactory ClientFactory) error {
 			if err != nil {
 				fmt.Println(color.Red(c, "Unable to unmarshal current branch token:"), err)
 			} else {
-				prettyPrintJSONObject(&currentBranchToken)
+				prettyPrintJSONObject(c, &currentBranchToken)
 			}
 		}
 
@@ -495,7 +495,7 @@ func AdminDescribeShard(c *cli.Context, clientFactory ClientFactory) error {
 		return fmt.Errorf("unable to initialize Shard Manager: %s", err)
 	}
 
-	prettyPrintJSONObject(response.ShardInfo)
+	prettyPrintJSONObject(c, response.ShardInfo)
 	return nil
 }
 
@@ -541,7 +541,7 @@ func AdminListGossipMembers(c *cli.Context, clientFactory ClientFactory) error {
 		}
 	}
 
-	prettyPrintJSONObject(members)
+	prettyPrintJSONObject(c, members)
 	return nil
 }
 
@@ -571,7 +571,7 @@ func AdminListClusterMembers(c *cli.Context, clientFactory ClientFactory) error 
 
 	members := resp.ActiveMembers
 
-	prettyPrintJSONObject(members)
+	prettyPrintJSONObject(c, members)
 	return nil
 }
 
@@ -620,7 +620,7 @@ func AdminDescribeHistoryHost(c *cli.Context, clientFactory ClientFactory) error
 	if !printFully {
 		resp.ShardIds = nil
 	}
-	prettyPrintJSONObject(resp)
+	prettyPrintJSONObject(c, resp)
 	return nil
 }
 
