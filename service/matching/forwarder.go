@@ -295,7 +295,6 @@ func (fwdr *Forwarder) ForwardPoll(ctx context.Context, pollMetadata *pollMetada
 		if err != nil {
 			return nil, fwdr.handleErr(err)
 		}
-		_ = resp
 		return newInternalStartedTask(&startedTaskInfo{nexusTaskInfo: resp}), nil
 	default:
 		return nil, errInvalidTaskQueueType

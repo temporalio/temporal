@@ -114,6 +114,8 @@ func (e activeExecutor) executeInvocationTask(ctx context.Context, env hsm.Envir
 
 	smRef := common.CloneProto(ref.StateMachineRef)
 	// Reset the machine transition count to 0 so it is ignored in the completion staleness check.
+	// This is to account for either the operation transitioning to STARTED state after a successful call but also to
+	// account for the task timing out before we get a successful result and a transition to BACKING_OFF.
 	smRef.MachineTransitionCount = 0
 
 	token, err := e.CallbackTokenGenerator.Tokenize(&token.NexusOperationCompletion{

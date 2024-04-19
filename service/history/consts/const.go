@@ -59,7 +59,8 @@ var (
 	// task is no longer needed.
 	// It is also a NotFoundError to indicate to API callers that the object they're targeting is not found.
 	ErrStaleReference = serviceerror.NewNotFound("stale reference")
-	// ErrStaleState is the error returned during state update indicating that cached mutable state could be stale
+	// ErrStaleState is the error returned during state update indicating that cached mutable state could be stale after
+	// a reload attempt.
 	ErrStaleState = staleStateError{}
 	// ErrActivityTaskNotFound is the error to indicate activity task could be duplicate and activity already completed
 	ErrActivityTaskNotFound = serviceerror.NewNotFound("invalid activityID or activity already timed out or invoking workflow is completed")

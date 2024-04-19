@@ -204,8 +204,13 @@ func makeGetHistoryClient(reqType reflect.Type) string {
 	case len(workflowIdField) == 1:
 		if len(namespaceIdField) == 1 {
 			return fmt.Sprintf("shardID := c.shardIDFromWorkflowID(%s, %s)", namespaceIdField[0].path, workflowIdField[0].path)
+		} else if len(namespaceIdField) == 0 {
+			panic(fmt.Sprintf("expected at least one namespace ID field in request with nesting of 2 in %s", t))
+		} else {
+			// There's more than one, assume there's a top level one (e.g.
+			// historyservice.GetWorkflowExecutionHistoryRequest)
+			return fmt.Sprintf("shardID := c.shardIDFromWorkflowID(request.NamespaceId, %s)", workflowIdField[0].path)
 		}
-		return fmt.Sprintf("shardID := c.shardIDFromWorkflowID(request.NamespaceId, %s)", workflowIdField[0].path)
 	case len(taskTokenField) == 1:
 		return fmt.Sprintf(`taskToken, err := c.tokenSerializer.Deserialize(%s)
 	if err != nil {

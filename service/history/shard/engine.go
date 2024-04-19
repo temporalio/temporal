@@ -116,6 +116,7 @@ type (
 		NotifyNewHistoryEvent(event *events.Notification)
 		NotifyNewTasks(tasks map[tasks.Category][]tasks.Task)
 		AddSpeculativeWorkflowTaskTimeoutTask(task *tasks.WorkflowTaskTimeoutTask)
+		// TODO(bergundy): This Environment should be host level once shard level workflow cache is deprecated.
 		StateMachineEnvironment() hsm.Environment
 
 		ReplicationStream

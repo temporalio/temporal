@@ -2293,9 +2293,9 @@ func (h *Handler) CompleteNexusOperation(ctx context.Context, request *historyse
 			Failure: *commonnexus.ProtoFailureToNexusFailure(request.GetFailure()),
 		}
 	}
-	err = nexusoperations.CompletionHandler(ctx, engine.StateMachineEnvironment(), ref, request.Result, opErr)
+	err = nexusoperations.CompletionHandler(ctx, engine.StateMachineEnvironment(), ref, request.GetSuccess(), opErr)
 	if err != nil {
-		return nil, err
+		return nil, h.convertError(err)
 	}
 	return &historyservice.CompleteNexusOperationResponse{}, nil
 }

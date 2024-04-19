@@ -66,6 +66,8 @@ func transitionHistoryRangeForVersion(history []*persistencespb.VersionedTransit
 // transitions `4-5` are valid, while task B `{v: 2, t: 6}` **is** referencing stale state because the transition count
 // is out of range for version `2`. Furthermore, task C `{v: 1, t: 4}` itself is stale because it is referencing an
 // impossible state, likely due to post split-brain reconciliation.
+// NOTE: This function should only be used when there is reloading logic on top of it, since the error returned is a
+// terminal error.
 func TransitionHistoryStalenessCheck(history []*persistencespb.VersionedTransition, refNamespaceFailoverVersion, refStateTransitionCount int64) error {
 	if len(history) == 0 {
 		return queues.NewUnprocessableTaskError("state has empty transition history")

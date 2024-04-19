@@ -34,6 +34,7 @@ import (
 
 	"github.com/gorilla/mux"
 	"github.com/nexus-rpc/sdk-go/nexus"
+	commonpb "go.temporal.io/api/common/v1"
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/common/authorization"
@@ -161,11 +162,17 @@ func (h *completionHandler) CompleteOperation(ctx context.Context, r *nexus.Comp
 	}
 	switch r.State {
 	case nexus.OperationStateFailed, nexus.OperationStateCanceled:
-		hr.Failure = commonnexus.NexusFailureToProtoFailure(r.Failure)
+		hr.Outcome = &historyservice.CompleteNexusOperationRequest_Failure{
+			Failure: commonnexus.NexusFailureToProtoFailure(r.Failure),
+		}
 	case nexus.OperationStateSucceeded:
-		if err := r.Result.Consume(&hr.Result); err != nil {
+		var result *commonpb.Payload
+		if err := r.Result.Consume(&result); err != nil {
 			logger.Error("cannot deserialize payload from completion result", tag.Error(err))
 			return nexus.HandlerErrorf(nexus.HandlerErrorTypeBadRequest, "invalid result content")
+		}
+		hr.Outcome = &historyservice.CompleteNexusOperationRequest_Success{
+			Success: result,
 		}
 		// TODO(bergundy): Limit payload size.
 	default:

@@ -894,10 +894,12 @@ message CompleteNexusOperationRequest {
     temporal.server.api.token.v1.NexusOperationCompletion completion = 1;
     // Operation state - may only be successful / failed / canceled.
     string state = 2;
-    // Result of a successful operation, only set if state == successful.
-    temporal.api.common.v1.Payload result = 3;
-    // Operation failure, only set if state != successful.
-    temporal.api.nexus.v1.Failure failure = 4;
+    oneof outcome {
+        // Result of a successful operation, only set if state == successful.
+        temporal.api.common.v1.Payload success = 3;
+        // Operation failure, only set if state != successful.
+        temporal.api.nexus.v1.Failure failure = 4;
+    }
 }
 
 message CompleteNexusOperationResponse {
