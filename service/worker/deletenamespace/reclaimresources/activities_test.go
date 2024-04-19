@@ -48,6 +48,7 @@ func Test_EnsureNoExecutionsAdvVisibilityActivity_NoExecutions(t *testing.T) {
 	visibilityManager.EXPECT().CountWorkflowExecutions(gomock.Any(), &manager.CountWorkflowExecutionsRequest{
 		NamespaceID: "namespace-id",
 		Namespace:   "namespace",
+		Query:       searchattribute.QueryWithAnyNamespaceDivision(""),
 	}).Return(&manager.CountWorkflowExecutionsResponse{
 		Count: 0,
 	}, nil)
@@ -72,6 +73,7 @@ func Test_EnsureNoExecutionsAdvVisibilityActivity_ExecutionsExist(t *testing.T) 
 	visibilityManager.EXPECT().CountWorkflowExecutions(gomock.Any(), &manager.CountWorkflowExecutionsRequest{
 		NamespaceID: "namespace-id",
 		Namespace:   "namespace",
+		Query:       searchattribute.QueryWithAnyNamespaceDivision(""),
 	}).Return(&manager.CountWorkflowExecutionsResponse{
 		Count: 1,
 	}, nil)
@@ -100,6 +102,7 @@ func Test_EnsureNoExecutionsAdvVisibilityActivity_NotDeletedExecutionsExist(t *t
 	visibilityManager.EXPECT().CountWorkflowExecutions(gomock.Any(), &manager.CountWorkflowExecutionsRequest{
 		NamespaceID: "namespace-id",
 		Namespace:   "namespace",
+		Query:       searchattribute.QueryWithAnyNamespaceDivision(""),
 	}).Return(&manager.CountWorkflowExecutionsResponse{
 		Count: 10,
 	}, nil)
