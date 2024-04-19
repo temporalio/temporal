@@ -115,7 +115,7 @@ func AdminShowWorkflow(c *cli.Context, clientFactory ClientFactory) error {
 	totalSize := 0
 	for idx, b := range histories {
 		totalSize += len(b.Data)
-		fmt.Printf("======== batch %v, blob len: %v ======\n", idx+1, len(b.Data))
+		fmt.Fprintf(c.App.Writer, "======== batch %v, blob len: %v ======\n", idx+1, len(b.Data))
 		historyBatch, err := serializer.DeserializeEvents(b)
 		if err != nil {
 			return fmt.Errorf("unable to deserialize Events: %s", err)
@@ -126,9 +126,9 @@ func AdminShowWorkflow(c *cli.Context, clientFactory ClientFactory) error {
 		if err != nil {
 			return fmt.Errorf("unable to encode History Events: %s", err)
 		}
-		fmt.Println(string(data))
+		fmt.Fprintln(c.App.Writer, string(data))
 	}
-	fmt.Printf("======== total batches %v, total blob len: %v ======\n", len(histories), totalSize)
+	fmt.Fprintf(c.App.Writer, "======== total batches %v, total blob len: %v ======\n", len(histories), totalSize)
 
 	if outputFileName != "" {
 		encoder := codec.NewJSONPBEncoder()
@@ -253,31 +253,31 @@ func AdminDescribeWorkflow(c *cli.Context, clientFactory ClientFactory) error {
 	}
 
 	if resp != nil {
-		fmt.Println(color.Green(c, "Cache mutable state:"))
+		fmt.Fprintln(c.App.Writer, color.Green(c, "Cache mutable state:"))
 		if resp.GetCacheMutableState() != nil {
 			prettyPrintJSONObject(c, resp.GetCacheMutableState())
 		}
-		fmt.Println(color.Green(c, "Database mutable state:"))
+		fmt.Fprintln(c.App.Writer, color.Green(c, "Database mutable state:"))
 		prettyPrintJSONObject(c, resp.GetDatabaseMutableState())
 
-		fmt.Println(color.Green(c, "Current branch token:"))
+		fmt.Fprintln(c.App.Writer, color.Green(c, "Current branch token:"))
 		versionHistories := resp.GetDatabaseMutableState().GetExecutionInfo().GetVersionHistories()
 		// if VersionHistories is set, then all branch infos are stored in VersionHistories
 		currentVersionHistory, err := versionhistory.GetCurrentVersionHistory(versionHistories)
 		if err != nil {
-			fmt.Println(color.Red(c, "Unable to get current version history:"), err)
+			fmt.Fprintln(c.App.Writer, color.Red(c, "Unable to get current version history:"), err)
 		} else {
 			currentBranchToken := persistencespb.HistoryBranch{}
 			err := currentBranchToken.Unmarshal(currentVersionHistory.BranchToken)
 			if err != nil {
-				fmt.Println(color.Red(c, "Unable to unmarshal current branch token:"), err)
+				fmt.Fprintln(c.App.Writer, color.Red(c, "Unable to unmarshal current branch token:"), err)
 			} else {
 				prettyPrintJSONObject(c, &currentBranchToken)
 			}
 		}
 
-		fmt.Printf("History service address: %s\n", resp.GetHistoryAddr())
-		fmt.Printf("Shard Id: %s\n", resp.GetShardId())
+		fmt.Fprintf(c.App.Writer, "History service address: %s\n", resp.GetHistoryAddr())
+		fmt.Fprintf(c.App.Writer, "Shard Id: %s\n", resp.GetShardId())
 	}
 	return nil
 }
@@ -347,14 +347,14 @@ func AdminDeleteWorkflow(c *cli.Context, clientFactory ClientFactory, prompter *
 	}
 
 	if len(resp.Warnings) != 0 {
-		fmt.Println("Warnings:")
+		fmt.Fprintln(c.App.Writer, "Warnings:")
 		for _, warning := range resp.Warnings {
-			fmt.Printf("- %s\n", warning)
+			fmt.Fprintf(c.App.Writer, "- %s\n", warning)
 		}
-		fmt.Println("")
+		fmt.Fprintln(c.App.Writer, "")
 	}
 
-	fmt.Println("Workflow execution deleted.")
+	fmt.Fprintln(c.App.Writer, "Workflow execution deleted.")
 
 	return nil
 }
@@ -372,7 +372,7 @@ func AdminGetShardID(c *cli.Context) error {
 		return fmt.Errorf("missing required parameter number of Shards")
 	}
 	shardID := common.WorkflowIDToHistoryShard(namespaceID, wid, numberOfShards)
-	fmt.Printf("ShardId for namespace, workflowId: %v, %v is %v \n", namespaceID, wid, shardID)
+	fmt.Fprintf(c.App.Writer, "ShardId for namespace, workflowId: %v, %v is %v \n", namespaceID, wid, shardID)
 	return nil
 }
 
@@ -657,7 +657,7 @@ func AdminRefreshWorkflowTasks(c *cli.Context, clientFactory ClientFactory) erro
 	if err != nil {
 		return fmt.Errorf("unable to refresh Workflow Task: %s", err)
 	} else {
-		fmt.Println("Refresh workflow task succeeded.")
+		fmt.Fprintln(c.App.Writer, "Refresh workflow task succeeded.")
 	}
 	return nil
 }
@@ -689,7 +689,7 @@ func AdminRebuildMutableState(c *cli.Context, clientFactory ClientFactory) error
 	if err != nil {
 		return fmt.Errorf("rebuild mutable state failed: %s", err)
 	} else {
-		fmt.Println("rebuild mutable state succeeded.")
+		fmt.Fprintln(c.App.Writer, "rebuild mutable state succeeded.")
 	}
 	return nil
 }

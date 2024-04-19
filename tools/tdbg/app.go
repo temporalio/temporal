@@ -144,7 +144,6 @@ func NewCliApp(opts ...Option) *cli.App {
 		params.TaskCategoryRegistry,
 		prompterFactory,
 		params.TaskBlobEncoder,
-		params.Writer,
 	)
 	app.ExitErrHandler = handleError
 	app.Writer = params.Writer

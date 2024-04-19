@@ -57,8 +57,8 @@ func prettyPrintJSONObject(c *cli.Context, o interface{}) {
 	}
 
 	if err != nil {
-		fmt.Printf("Error when try to print pretty: %v\n", err)
-		fmt.Println(o)
+		fmt.Fprintf(c.App.ErrWriter, "Error when trying to pretty-print: %v\n%v\n", err, o)
+		return
 	}
 
 	_, _ = c.App.Writer.Write(b)
@@ -238,7 +238,7 @@ func paginate[V any](c *cli.Context, paginationFn collection.PaginationFn[V], pa
 				prettyPrintJSONObject(c, pageItems)
 			}
 
-			if !more || !showNextPage() {
+			if !more || !showNextPage(c.App.Writer) {
 				break
 			}
 			pageItems = pageItems[:0]
@@ -293,8 +293,8 @@ func printTable(items []interface{}, writer io.Writer) error {
 	return nil
 }
 
-func showNextPage() bool {
-	fmt.Printf("Press %s to show next page, press %s to quit: ",
+func showNextPage(wr io.Writer) bool {
+	fmt.Fprintf(wr, "Press %s to show next page, press %s to quit: ",
 		color.GreenString("Enter"), color.RedString("any other key then Enter"))
 	var input string
 	_, _ = fmt.Scanln(&input)
