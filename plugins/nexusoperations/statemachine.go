@@ -126,6 +126,18 @@ func (o Operation) cancelRequested(node *hsm.Node) (bool, error) {
 	return false, err
 }
 
+func (o Operation) Cancelation(node *hsm.Node) (*Cancelation, error) {
+	child, err := node.Child([]hsm.Key{CancelationMachineKey})
+	if errors.Is(err, hsm.ErrStateMachineNotFound) {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	cancelation, err := hsm.MachineData[Cancelation](child)
+	return &cancelation, err
+}
+
 // transitionTasks returns tasks that are emitted as transition outputs.
 func (o Operation) transitionTasks(node *hsm.Node) ([]hsm.Task, error) {
 	if canceled, err := o.cancelRequested(node); canceled || err != nil {
@@ -136,8 +148,9 @@ func (o Operation) transitionTasks(node *hsm.Node) ([]hsm.Task, error) {
 		return []hsm.Task{BackoffTask{Deadline: o.NextAttemptScheduleTime.AsTime()}}, nil
 	case enumsspb.NEXUS_OPERATION_STATE_SCHEDULED:
 		return []hsm.Task{InvocationTask{Destination: o.Service}}, nil
+	default:
+		return nil, nil
 	}
-	return nil, nil
 }
 
 // creationTasks returns tasks that are emitted when the machine is created.
@@ -448,8 +461,9 @@ func (c Cancelation) RegenerateTasks(node *hsm.Node) ([]hsm.Task, error) {
 		return []hsm.Task{CancelationTask{Destination: op.Service}}, nil
 	case enumspb.NEXUS_OPERATION_CANCELATION_STATE_BACKING_OFF:
 		return []hsm.Task{CancelationBackedTask{Deadline: c.NextAttemptScheduleTime.AsTime()}}, nil
+	default:
+		return nil, nil
 	}
-	return nil, nil
 }
 
 func (c Cancelation) output(node *hsm.Node) (hsm.TransitionOutput, error) {

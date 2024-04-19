@@ -72,10 +72,10 @@ func TestAddChild(t *testing.T) {
 				EventTime: schedTime,
 				Attributes: &historypb.HistoryEvent_NexusOperationScheduledEventAttributes{
 					NexusOperationScheduledEventAttributes: &historypb.NexusOperationScheduledEventAttributes{
-						Service:   "service",
-						Operation: "operation",
-						RequestId: "request-id",
-						ScheduleToCloseTimeout:   durationpb.New(tc.timeout),
+						Service:                "service",
+						Operation:              "operation",
+						RequestId:              "request-id",
+						ScheduleToCloseTimeout: durationpb.New(tc.timeout),
 					},
 				},
 			}

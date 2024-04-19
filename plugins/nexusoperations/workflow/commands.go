@@ -105,7 +105,7 @@ func (ch *commandHandler) HandleScheduleCommand(
 				Service:                      attrs.Service,
 				Operation:                    attrs.Operation,
 				Input:                        attrs.Input,
-				ScheduleToCloseTimeout:                      attrs.ScheduleToCloseTimeout,
+				ScheduleToCloseTimeout:       attrs.ScheduleToCloseTimeout,
 				Header:                       attrs.Header,
 				RequestId:                    uuid.NewString(),
 				WorkflowTaskCompletedEventId: workflowTaskCompletedEventID,

@@ -118,13 +118,6 @@ const (
 	taskCriticalLogMetricAttempts = 30
 )
 
-// ErrStaleTask is an indicator that a task cannot be executed because it is stale. This is expected in certain
-// situations and it is safe to drop the task.
-// An example of a stale task is when the task is pointing to a state machine in mutable state that has a newer version
-// than the version that task was created from, that is the state machine has already transitioned and the task is no
-// longer needed.
-var ErrStaleTask = errors.New("task stale")
-
 // UnprocessableTaskError is an indicator that an executor does not know how to handle a task. Considered terminal.
 type UnprocessableTaskError struct {
 	Message string
@@ -141,26 +134,6 @@ func (e UnprocessableTaskError) Error() string {
 
 // IsTerminalTaskError marks this error as terminal to be handled appropriately.
 func (UnprocessableTaskError) IsTerminalTaskError() bool {
-	return true
-}
-
-// StaleStateError is an indicator that after loading the state for a task it was detected as stale. It's possible that
-// state reload solves this issue but otherwise it is unexpected and considered terminal.
-type StaleStateError struct {
-	Message string
-}
-
-// NewStateStaleError returns a new StateStaleError from given message.
-func NewStateStaleError(message string) StaleStateError {
-	return StaleStateError{Message: message}
-}
-
-func (e StaleStateError) Error() string {
-	return "state stale: " + e.Message
-}
-
-// IsTerminalTaskError marks this error as terminal to be handled appropriately.
-func (StaleStateError) IsTerminalTaskError() bool {
 	return true
 }
 
@@ -383,6 +356,15 @@ func (e *executableImpl) writeToDLQ(ctx context.Context) error {
 }
 
 func (e *executableImpl) isSafeToDropError(err error) bool {
+	if errors.Is(err, consts.ErrStaleReference) {
+		// The task is stale and is safe to be dropped.
+		// Even though ErrStaleReference is castable to serviceerror.NotFound, we give this error special treatment
+		// because we're interested in the metric.
+		metrics.TaskSkipped.With(e.taggedMetricsHandler).Record(1)
+		e.logger.Info("Skipped task due with stale reference", tag.Error(err))
+		return true
+	}
+
 	if _, isNotFound := err.(*serviceerror.NotFound); isNotFound {
 		return true
 	}
@@ -455,12 +437,6 @@ func (e *executableImpl) isExpectedRetryableError(err error) (isRetryable bool, 
 	if err.Error() == consts.ErrNamespaceHandover.Error() {
 		metrics.TaskNamespaceHandoverCounter.With(e.taggedMetricsHandler).Record(1)
 		return true, consts.ErrNamespaceHandover
-	}
-	if errors.Is(err, ErrStaleTask) {
-		// The task is stale and is safe to be dropped.
-		metrics.TaskSkipped.With(e.taggedMetricsHandler).Record(1)
-		e.logger.Info("Skipped task due to task being stale", tag.Error(err))
-		return true, err
 	}
 
 	return false, nil

@@ -45,6 +45,7 @@ const (
 	OpenAPIV2APIName                                = "/temporal.api.openapi.v1.OpenAPIService/GetOpenAPIV2Docs"
 	DispatchNexusTaskByNamespaceAndTaskQueueAPIName = "/temporal.api.nexusservice.v1.NexusService/DispatchByNamespaceAndTaskQueue"
 	DispatchNexusTaskByServiceAPIName               = "/temporal.api.nexusservice.v1.NexusService/DispatchByService"
+	CompleteNexusOperation                          = "/temporal.api.nexusservice.v1.NexusService/CompleteNexusOperation"
 )
 
 var (
@@ -131,6 +132,7 @@ var (
 		"/temporal.api.workflowservice.v1.WorkflowService/RespondQueryTaskCompleted":        4,
 		"/temporal.api.workflowservice.v1.WorkflowService/RespondNexusTaskCompleted":        4,
 		"/temporal.api.workflowservice.v1.WorkflowService/RespondNexusTaskFailed":           4,
+		CompleteNexusOperation: 4,
 
 		// P5: Poll APIs and other low priority APIs
 		"/temporal.api.workflowservice.v1.WorkflowService/PollWorkflowTaskQueue":              5,
