@@ -34,7 +34,7 @@ import (
 	"github.com/stretchr/testify/require"
 	commandpb "go.temporal.io/api/command/v1"
 	commonpb "go.temporal.io/api/common/v1"
-	"go.temporal.io/api/enums/v1"
+	enumspb "go.temporal.io/api/enums/v1"
 	historypb "go.temporal.io/api/history/v1"
 	nexuspb "go.temporal.io/api/nexus/v1"
 	"go.temporal.io/api/operatorservice/v1"
@@ -67,7 +67,7 @@ func (s *ClientFunctionalSuite) TestNexusScheduleAndCancelCommands() {
 		Namespace: s.namespace,
 		TaskQueue: &taskqueue.TaskQueue{
 			Name: taskQueue,
-			Kind: enums.TASK_QUEUE_KIND_NORMAL,
+			Kind: enumspb.TASK_QUEUE_KIND_NORMAL,
 		},
 		Identity: "test",
 	})
@@ -77,7 +77,7 @@ func (s *ClientFunctionalSuite) TestNexusScheduleAndCancelCommands() {
 		TaskToken: pollResp.TaskToken,
 		Commands: []*commandpb.Command{
 			{
-				CommandType: enums.COMMAND_TYPE_SCHEDULE_NEXUS_OPERATION,
+				CommandType: enumspb.COMMAND_TYPE_SCHEDULE_NEXUS_OPERATION,
 				Attributes: &commandpb.Command_ScheduleNexusOperationCommandAttributes{
 					ScheduleNexusOperationCommandAttributes: &commandpb.ScheduleNexusOperationCommandAttributes{
 						Service:   "service",
@@ -87,7 +87,7 @@ func (s *ClientFunctionalSuite) TestNexusScheduleAndCancelCommands() {
 			},
 			{
 				// Start a timer to get a new workflow task.
-				CommandType: enums.COMMAND_TYPE_START_TIMER,
+				CommandType: enumspb.COMMAND_TYPE_START_TIMER,
 				Attributes: &commandpb.Command_StartTimerCommandAttributes{
 					StartTimerCommandAttributes: &commandpb.StartTimerCommandAttributes{
 						TimerId:            "1",
@@ -102,7 +102,7 @@ func (s *ClientFunctionalSuite) TestNexusScheduleAndCancelCommands() {
 		Namespace: s.namespace,
 		TaskQueue: &taskqueue.TaskQueue{
 			Name: taskQueue,
-			Kind: enums.TASK_QUEUE_KIND_NORMAL,
+			Kind: enumspb.TASK_QUEUE_KIND_NORMAL,
 		},
 		Identity: "test",
 	})
@@ -117,7 +117,7 @@ func (s *ClientFunctionalSuite) TestNexusScheduleAndCancelCommands() {
 		TaskToken: pollResp.TaskToken,
 		Commands: []*commandpb.Command{
 			{
-				CommandType: enums.COMMAND_TYPE_REQUEST_CANCEL_NEXUS_OPERATION,
+				CommandType: enumspb.COMMAND_TYPE_REQUEST_CANCEL_NEXUS_OPERATION,
 				Attributes: &commandpb.Command_RequestCancelNexusOperationCommandAttributes{
 					RequestCancelNexusOperationCommandAttributes: &commandpb.RequestCancelNexusOperationCommandAttributes{
 						ScheduledEventId: pollResp.History.Events[scheduledEventIdx].EventId,
@@ -127,6 +127,14 @@ func (s *ClientFunctionalSuite) TestNexusScheduleAndCancelCommands() {
 		},
 	})
 	s.NoError(err)
+	desc, err := s.sdkClient.DescribeWorkflowExecution(ctx, run.GetID(), run.GetRunID())
+	s.NoError(err)
+	s.Equal(1, len(desc.PendingNexusOperations))
+	op := desc.PendingNexusOperations[0]
+	s.Equal("service", op.Service)
+	s.Equal("operation", op.Operation)
+	s.True(op.State == enumspb.PENDING_NEXUS_OPERATION_STATE_BACKING_OFF || op.State == enumspb.PENDING_NEXUS_OPERATION_STATE_SCHEDULED)
+	s.True(op.CancelationInfo.State == enumspb.NEXUS_OPERATION_CANCELATION_STATE_BACKING_OFF || op.State == enumspb.PENDING_NEXUS_OPERATION_STATE_SCHEDULED)
 	err = s.sdkClient.TerminateWorkflow(ctx, run.GetID(), run.GetRunID(), "test")
 	s.NoError(err)
 }
@@ -174,7 +182,7 @@ func (s *ClientFunctionalSuite) TestNexusOperationSyncCompletion() {
 		Namespace: namespace,
 		TaskQueue: &taskqueue.TaskQueue{
 			Name: taskQueue,
-			Kind: enums.TASK_QUEUE_KIND_NORMAL,
+			Kind: enumspb.TASK_QUEUE_KIND_NORMAL,
 		},
 		Identity: "test",
 	})
@@ -184,7 +192,7 @@ func (s *ClientFunctionalSuite) TestNexusOperationSyncCompletion() {
 		TaskToken: pollResp.TaskToken,
 		Commands: []*commandpb.Command{
 			{
-				CommandType: enums.COMMAND_TYPE_SCHEDULE_NEXUS_OPERATION,
+				CommandType: enumspb.COMMAND_TYPE_SCHEDULE_NEXUS_OPERATION,
 				Attributes: &commandpb.Command_ScheduleNexusOperationCommandAttributes{
 					ScheduleNexusOperationCommandAttributes: &commandpb.ScheduleNexusOperationCommandAttributes{
 						Service:   serviceName,
@@ -200,7 +208,7 @@ func (s *ClientFunctionalSuite) TestNexusOperationSyncCompletion() {
 		Namespace: namespace,
 		TaskQueue: &taskqueue.TaskQueue{
 			Name: taskQueue,
-			Kind: enums.TASK_QUEUE_KIND_NORMAL,
+			Kind: enumspb.TASK_QUEUE_KIND_NORMAL,
 		},
 		Identity: "test",
 	})
@@ -215,7 +223,7 @@ func (s *ClientFunctionalSuite) TestNexusOperationSyncCompletion() {
 		TaskToken: pollResp.TaskToken,
 		Commands: []*commandpb.Command{
 			{
-				CommandType: enums.COMMAND_TYPE_COMPLETE_WORKFLOW_EXECUTION,
+				CommandType: enumspb.COMMAND_TYPE_COMPLETE_WORKFLOW_EXECUTION,
 				Attributes: &commandpb.Command_CompleteWorkflowExecutionCommandAttributes{
 					CompleteWorkflowExecutionCommandAttributes: &commandpb.CompleteWorkflowExecutionCommandAttributes{
 						Result: &commonpb.Payloads{
@@ -282,7 +290,7 @@ func (s *ClientFunctionalSuite) TestNexusOperationAsyncCompletion() {
 		Namespace: namespace,
 		TaskQueue: &taskqueue.TaskQueue{
 			Name: taskQueue,
-			Kind: enums.TASK_QUEUE_KIND_NORMAL,
+			Kind: enumspb.TASK_QUEUE_KIND_NORMAL,
 		},
 		Identity: "test",
 	})
@@ -292,7 +300,7 @@ func (s *ClientFunctionalSuite) TestNexusOperationAsyncCompletion() {
 		TaskToken: pollResp.TaskToken,
 		Commands: []*commandpb.Command{
 			{
-				CommandType: enums.COMMAND_TYPE_SCHEDULE_NEXUS_OPERATION,
+				CommandType: enumspb.COMMAND_TYPE_SCHEDULE_NEXUS_OPERATION,
 				Attributes: &commandpb.Command_ScheduleNexusOperationCommandAttributes{
 					ScheduleNexusOperationCommandAttributes: &commandpb.ScheduleNexusOperationCommandAttributes{
 						Service:   serviceName,
@@ -310,7 +318,7 @@ func (s *ClientFunctionalSuite) TestNexusOperationAsyncCompletion() {
 		Namespace: namespace,
 		TaskQueue: &taskqueue.TaskQueue{
 			Name: taskQueue,
-			Kind: enums.TASK_QUEUE_KIND_NORMAL,
+			Kind: enumspb.TASK_QUEUE_KIND_NORMAL,
 		},
 		Identity: "test",
 	})
@@ -383,7 +391,7 @@ func (s *ClientFunctionalSuite) TestNexusOperationAsyncCompletion() {
 		Namespace: namespace,
 		TaskQueue: &taskqueue.TaskQueue{
 			Name: taskQueue,
-			Kind: enums.TASK_QUEUE_KIND_NORMAL,
+			Kind: enumspb.TASK_QUEUE_KIND_NORMAL,
 		},
 		Identity: "test",
 	})
@@ -398,7 +406,7 @@ func (s *ClientFunctionalSuite) TestNexusOperationAsyncCompletion() {
 		TaskToken: pollResp.TaskToken,
 		Commands: []*commandpb.Command{
 			{
-				CommandType: enums.COMMAND_TYPE_COMPLETE_WORKFLOW_EXECUTION,
+				CommandType: enumspb.COMMAND_TYPE_COMPLETE_WORKFLOW_EXECUTION,
 				Attributes: &commandpb.Command_CompleteWorkflowExecutionCommandAttributes{
 					CompleteWorkflowExecutionCommandAttributes: &commandpb.CompleteWorkflowExecutionCommandAttributes{
 						Result: &commonpb.Payloads{
@@ -465,7 +473,7 @@ func (s *ClientFunctionalSuite) TestNexusOperationAsyncFailure() {
 		Namespace: namespace,
 		TaskQueue: &taskqueue.TaskQueue{
 			Name: taskQueue,
-			Kind: enums.TASK_QUEUE_KIND_NORMAL,
+			Kind: enumspb.TASK_QUEUE_KIND_NORMAL,
 		},
 		Identity: "test",
 	})
@@ -475,7 +483,7 @@ func (s *ClientFunctionalSuite) TestNexusOperationAsyncFailure() {
 		TaskToken: pollResp.TaskToken,
 		Commands: []*commandpb.Command{
 			{
-				CommandType: enums.COMMAND_TYPE_SCHEDULE_NEXUS_OPERATION,
+				CommandType: enumspb.COMMAND_TYPE_SCHEDULE_NEXUS_OPERATION,
 				Attributes: &commandpb.Command_ScheduleNexusOperationCommandAttributes{
 					ScheduleNexusOperationCommandAttributes: &commandpb.ScheduleNexusOperationCommandAttributes{
 						Service:   serviceName,
@@ -493,7 +501,7 @@ func (s *ClientFunctionalSuite) TestNexusOperationAsyncFailure() {
 		Namespace: namespace,
 		TaskQueue: &taskqueue.TaskQueue{
 			Name: taskQueue,
-			Kind: enums.TASK_QUEUE_KIND_NORMAL,
+			Kind: enumspb.TASK_QUEUE_KIND_NORMAL,
 		},
 		Identity: "test",
 	})
@@ -526,7 +534,7 @@ func (s *ClientFunctionalSuite) TestNexusOperationAsyncFailure() {
 		Namespace: namespace,
 		TaskQueue: &taskqueue.TaskQueue{
 			Name: taskQueue,
-			Kind: enums.TASK_QUEUE_KIND_NORMAL,
+			Kind: enumspb.TASK_QUEUE_KIND_NORMAL,
 		},
 		Identity: "test",
 	})
@@ -541,7 +549,7 @@ func (s *ClientFunctionalSuite) TestNexusOperationAsyncFailure() {
 		TaskToken: pollResp.TaskToken,
 		Commands: []*commandpb.Command{
 			{
-				CommandType: enums.COMMAND_TYPE_FAIL_WORKFLOW_EXECUTION,
+				CommandType: enumspb.COMMAND_TYPE_FAIL_WORKFLOW_EXECUTION,
 				Attributes: &commandpb.Command_FailWorkflowExecutionCommandAttributes{
 					FailWorkflowExecutionCommandAttributes: &commandpb.FailWorkflowExecutionCommandAttributes{
 						Failure: pollResp.History.Events[completedEventIdx].GetNexusOperationFailedEventAttributes().Failure,

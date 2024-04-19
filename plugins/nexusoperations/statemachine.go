@@ -126,6 +126,18 @@ func (o Operation) cancelRequested(node *hsm.Node) (bool, error) {
 	return false, err
 }
 
+func (o Operation) Cancelation(node *hsm.Node) (*Cancelation, error) {
+	child, err := node.Child([]hsm.Key{CancelationMachineKey})
+	if errors.Is(err, hsm.ErrStateMachineNotFound) {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	cancelation, err := hsm.MachineData[Cancelation](child)
+	return &cancelation, err
+}
+
 // transitionTasks returns tasks that are emitted as transition outputs.
 func (o Operation) transitionTasks(node *hsm.Node) ([]hsm.Task, error) {
 	if canceled, err := o.cancelRequested(node); canceled || err != nil {
