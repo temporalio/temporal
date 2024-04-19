@@ -54,3 +54,20 @@ jobs:
       - name: lint protobuf API definitions
         run: |
           make lint-api
+
+  linters-succeed:
+    name: All Linters Succeed
+    needs:
+      - lint-api
+      - lint-protos
+      - lint-actions
+    runs-on: ubuntu-latest
+    if: always()
+    env:
+      RESULTS: ${{ toJSON(needs.*.result) }}
+    steps:
+      - name: Check results
+        run: |
+          if [[ -n $(echo "$RESULTS" | jq '.[] | select (. != "success")') ]]; then
+            exit 1
+          fi
