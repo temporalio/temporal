@@ -78,11 +78,11 @@ type (
 		autoIncrementTaskID         int64
 		passiveClusterName          string
 
-		controller      *gomock.Controller
-		passtiveCluster *tests.TestCluster
-		generator       test.Generator
-		serializer      serialization.Serializer
-		logger          log.Logger
+		controller     *gomock.Controller
+		passiveCluster *tests.TestCluster
+		generator      test.Generator
+		serializer     serialization.Serializer
+		logger         log.Logger
 	}
 )
 
@@ -141,16 +141,16 @@ func (s *ReplicationMigrationBackTestSuite) SetupSuite() {
 	delete(passiveClusterConfig.ClusterMetadata.ClusterInformation, "cluster-c") // ndc_clusters.yaml has 3 clusters, but we only need 2 for this test
 	cluster, err := s.testClusterFactory.NewCluster(s.T(), passiveClusterConfig, log.With(s.logger, tag.ClusterName(clusterName[0])))
 	s.Require().NoError(err)
-	s.passtiveCluster = cluster
+	s.passiveCluster = cluster
 
 	s.registerNamespace()
-	s.passtiveCluster.GetFrontendClient().UpdateNamespace(context.Background(), &workflowservice.UpdateNamespaceRequest{
+	s.passiveCluster.GetFrontendClient().UpdateNamespace(context.Background(), &workflowservice.UpdateNamespaceRequest{
 		Namespace: s.namespace.String(),
 		ReplicationConfig: &replicationpb.NamespaceReplicationConfig{
 			ActiveClusterName: "cluster-b",
 		},
 	})
-	s.passtiveCluster.GetFrontendClient().UpdateNamespace(context.Background(), &workflowservice.UpdateNamespaceRequest{
+	s.passiveCluster.GetFrontendClient().UpdateNamespace(context.Background(), &workflowservice.UpdateNamespaceRequest{
 		Namespace: s.namespace.String(),
 		ReplicationConfig: &replicationpb.NamespaceReplicationConfig{
 			ActiveClusterName: "cluster-a",
@@ -164,7 +164,7 @@ func (s *ReplicationMigrationBackTestSuite) TearDownSuite() {
 		s.generator.Reset()
 	}
 	s.controller.Finish()
-	s.NoError(s.passtiveCluster.TearDownCluster())
+	s.NoError(s.passiveCluster.TearDownCluster())
 }
 
 func (s *ReplicationMigrationBackTestSuite) SetupTest() {
@@ -219,7 +219,7 @@ func (s *ReplicationMigrationBackTestSuite) TestHistoryReplication_MultiRunMigra
 
 	time.Sleep(1 * time.Second) // wait for 1 sec to let the run2 events replicated
 
-	res1, err := s.passtiveCluster.GetAdminClient().DescribeMutableState(context.Background(), &adminservice.DescribeMutableStateRequest{
+	res1, err := s.passiveCluster.GetAdminClient().DescribeMutableState(context.Background(), &adminservice.DescribeMutableStateRequest{
 		Namespace: s.namespace.String(),
 		Execution: &commonpb.WorkflowExecution{
 			WorkflowId: workflowId,
@@ -228,7 +228,7 @@ func (s *ReplicationMigrationBackTestSuite) TestHistoryReplication_MultiRunMigra
 	})
 	s.NoError(err)
 
-	res2, err := s.passtiveCluster.GetAdminClient().DescribeMutableState(context.Background(), &adminservice.DescribeMutableStateRequest{
+	res2, err := s.passiveCluster.GetAdminClient().DescribeMutableState(context.Background(), &adminservice.DescribeMutableStateRequest{
 		Namespace: s.namespace.String(),
 		Execution: &commonpb.WorkflowExecution{
 			WorkflowId: workflowId,
@@ -281,7 +281,7 @@ func (s *ReplicationMigrationBackTestSuite) TestHistoryReplication_LongRunningMi
 
 	time.Sleep(1 * time.Second) // wait for 1 sec to let the run1 events replicated
 
-	res1, err := s.passtiveCluster.GetAdminClient().DescribeMutableState(context.Background(), &adminservice.DescribeMutableStateRequest{
+	res1, err := s.passiveCluster.GetAdminClient().DescribeMutableState(context.Background(), &adminservice.DescribeMutableStateRequest{
 		Namespace: s.namespace.String(),
 		Execution: &commonpb.WorkflowExecution{
 			WorkflowId: workflowId,
@@ -429,7 +429,7 @@ func (s *ReplicationMigrationBackTestSuite) getEventSlices(version int64, timeDr
 
 func (s *ReplicationMigrationBackTestSuite) registerNamespace() {
 	s.namespace = namespace.Name("test-simple-workflow-ndc-" + common.GenerateRandomString(5))
-	passiveFrontend := s.passtiveCluster.GetFrontendClient() //
+	passiveFrontend := s.passiveCluster.GetFrontendClient() //
 	replicationConfig := []*replicationpb.ClusterReplicationConfig{
 		{ClusterName: clusterName[0]},
 		{ClusterName: clusterName[1]},
