@@ -87,7 +87,7 @@ func WrapEventLoop(
 			)
 			return
 		} else {
-			metrics.ReplicationError.With(metricsHandler).Record(
+			metrics.ReplicationServiceError.With(metricsHandler).Record(
 				int64(1),
 				metrics.ServiceErrorTypeTag(err),
 				metrics.FromClusterIDTag(fromClusterKey.ClusterID),
