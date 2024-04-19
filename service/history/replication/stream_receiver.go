@@ -197,6 +197,7 @@ func (r *StreamReceiverImpl) recvEventLoop() error {
 	return err
 }
 
+// ackMessage returns the inclusive low watermark if present.
 func (r *StreamReceiverImpl) ackMessage(
 	stream Stream,
 ) (int64, error) {
@@ -259,7 +260,6 @@ func (r *StreamReceiverImpl) processMessages(
 			Watermark: exclusiveHighWatermark,
 			Timestamp: exclusiveHighWatermarkTime,
 		}, tasks...) {
-			r.logger.Debug("StreamReceiver processMessages submit task to scheduler", tag.TaskID(task.TaskID()))
 			r.ProcessToolBox.TaskScheduler.Submit(task)
 		}
 	}
