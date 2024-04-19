@@ -91,19 +91,34 @@ func (mr *MockphysicalTaskQueueManagerMockRecorder) Describe() *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Describe", reflect.TypeOf((*MockphysicalTaskQueueManager)(nil).Describe))
 }
 
-// DispatchQueryTask mocks base method.
-func (m *MockphysicalTaskQueueManager) DispatchQueryTask(ctx context.Context, taskID string, request *v10.QueryWorkflowRequest) (*v10.QueryWorkflowResponse, error) {
+// DispatchNexusTask mocks base method.
+func (m *MockphysicalTaskQueueManager) DispatchNexusTask(ctx context.Context, taskId string, request *v10.DispatchNexusTaskRequest) (*v10.DispatchNexusTaskResponse, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "DispatchQueryTask", ctx, taskID, request)
+	ret := m.ctrl.Call(m, "DispatchNexusTask", ctx, taskId, request)
+	ret0, _ := ret[0].(*v10.DispatchNexusTaskResponse)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// DispatchNexusTask indicates an expected call of DispatchNexusTask.
+func (mr *MockphysicalTaskQueueManagerMockRecorder) DispatchNexusTask(ctx, taskId, request interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DispatchNexusTask", reflect.TypeOf((*MockphysicalTaskQueueManager)(nil).DispatchNexusTask), ctx, taskId, request)
+}
+
+// DispatchQueryTask mocks base method.
+func (m *MockphysicalTaskQueueManager) DispatchQueryTask(ctx context.Context, taskId string, request *v10.QueryWorkflowRequest) (*v10.QueryWorkflowResponse, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "DispatchQueryTask", ctx, taskId, request)
 	ret0, _ := ret[0].(*v10.QueryWorkflowResponse)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
 // DispatchQueryTask indicates an expected call of DispatchQueryTask.
-func (mr *MockphysicalTaskQueueManagerMockRecorder) DispatchQueryTask(ctx, taskID, request interface{}) *gomock.Call {
+func (mr *MockphysicalTaskQueueManagerMockRecorder) DispatchQueryTask(ctx, taskId, request interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DispatchQueryTask", reflect.TypeOf((*MockphysicalTaskQueueManager)(nil).DispatchQueryTask), ctx, taskID, request)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DispatchQueryTask", reflect.TypeOf((*MockphysicalTaskQueueManager)(nil).DispatchQueryTask), ctx, taskId, request)
 }
 
 // DispatchSpooledTask mocks base method.
