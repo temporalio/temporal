@@ -3403,56 +3403,13 @@ func (wh *WorkflowHandler) UpdateWorkflowExecution(
 ) (_ *workflowservice.UpdateWorkflowExecutionResponse, retError error) {
 	defer log.CapturePanic(wh.logger, &retError)
 
-	if request == nil {
-		return nil, errRequestNotSet
-	}
-
-	if err := validateExecution(request.GetWorkflowExecution()); err != nil {
+	if err := wh.prepareUpdateWorkflowRequest(request); err != nil {
 		return nil, err
-	}
-
-	if request.GetRequest().GetMeta() == nil {
-		return nil, errUpdateMetaNotSet
-	}
-
-	if len(request.GetRequest().GetMeta().GetUpdateId()) > wh.config.MaxIDLengthLimit() {
-		return nil, errUpdateIDTooLong
-	}
-
-	if request.GetRequest().GetMeta().GetUpdateId() == "" {
-		request.GetRequest().GetMeta().UpdateId = uuid.New()
-	}
-
-	if request.GetRequest().GetInput() == nil {
-		return nil, errUpdateInputNotSet
-	}
-
-	if request.GetRequest().GetInput().GetName() == "" {
-		return nil, errUpdateNameNotSet
-	}
-
-	if request.GetWaitPolicy() == nil {
-		request.WaitPolicy = &updatepb.WaitPolicy{}
 	}
 
 	nsID, err := wh.namespaceRegistry.GetNamespaceID(namespace.Name(request.GetNamespace()))
 	if err != nil {
 		return nil, err
-	}
-
-	if !wh.config.EnableUpdateWorkflowExecution(request.Namespace) {
-		return nil, errUpdateWorkflowExecutionAPINotAllowed
-	}
-
-	enums.SetDefaultUpdateWorkflowExecutionLifecycleStage(&request.GetWaitPolicy().LifecycleStage)
-
-	if request.WaitPolicy.LifecycleStage == enumspb.UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_ADMITTED {
-		return nil, errUpdateWorkflowExecutionAsyncAdmittedNotAllowed
-	}
-
-	if request.WaitPolicy.LifecycleStage == enumspb.UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_ACCEPTED &&
-		!wh.config.EnableUpdateWorkflowExecutionAsyncAccepted(request.Namespace) {
-		return nil, errUpdateWorkflowExecutionAsyncAcceptedNotAllowed
 	}
 
 	histResp, err := wh.historyClient.UpdateWorkflowExecution(ctx, &historyservice.UpdateWorkflowExecutionRequest{
@@ -3461,6 +3418,59 @@ func (wh *WorkflowHandler) UpdateWorkflowExecution(
 	})
 
 	return histResp.GetResponse(), err
+}
+
+func (wh *WorkflowHandler) prepareUpdateWorkflowRequest(
+	request *workflowservice.UpdateWorkflowExecutionRequest,
+) error {
+	if request == nil {
+		return errRequestNotSet
+	}
+
+	if err := validateExecution(request.GetWorkflowExecution()); err != nil {
+		return err
+	}
+
+	if request.GetRequest().GetMeta() == nil {
+		return errUpdateMetaNotSet
+	}
+
+	if len(request.GetRequest().GetMeta().GetUpdateId()) > wh.config.MaxIDLengthLimit() {
+		return errUpdateIDTooLong
+	}
+
+	if request.GetRequest().GetMeta().GetUpdateId() == "" {
+		request.GetRequest().GetMeta().UpdateId = uuid.New()
+	}
+
+	if request.GetRequest().GetInput() == nil {
+		return errUpdateInputNotSet
+	}
+
+	if request.GetRequest().GetInput().GetName() == "" {
+		return errUpdateNameNotSet
+	}
+
+	if request.GetWaitPolicy() == nil {
+		request.WaitPolicy = &updatepb.WaitPolicy{}
+	}
+
+	if !wh.config.EnableUpdateWorkflowExecution(request.Namespace) {
+		return errUpdateWorkflowExecutionAPINotAllowed
+	}
+
+	enums.SetDefaultUpdateWorkflowExecutionLifecycleStage(&request.GetWaitPolicy().LifecycleStage)
+
+	if request.WaitPolicy.LifecycleStage == enumspb.UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_ADMITTED {
+		return errUpdateWorkflowExecutionAsyncAdmittedNotAllowed
+	}
+
+	if request.WaitPolicy.LifecycleStage == enumspb.UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_ACCEPTED &&
+		!wh.config.EnableUpdateWorkflowExecutionAsyncAccepted(request.Namespace) {
+		return errUpdateWorkflowExecutionAsyncAcceptedNotAllowed
+	}
+
+	return nil
 }
 
 func (wh *WorkflowHandler) PollWorkflowExecutionUpdate(
