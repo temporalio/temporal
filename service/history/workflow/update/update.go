@@ -581,6 +581,10 @@ func (u *Update) advanceTo(newState state) error {
 		return invalidArgf("cannot advance to state %q from state %q", newState, u.state)
 	}
 	u.setState(newState)
+	if newState == stateCompleted {
+		u.onComplete()
+	}
+	// TODO: resolve the accepted / completed futures
 	return nil
 }
 

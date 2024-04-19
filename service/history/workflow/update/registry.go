@@ -211,9 +211,7 @@ func (r *registry) UpdateFromStore() {
 			)
 		} else if updInfo.GetCompletion() != nil {
 			if upd := r.updates[updID]; upd != nil {
-				if err := upd.advanceTo(stateCompleted); err == nil {
-					upd.onComplete()
-				}
+				_ = upd.advanceTo(stateCompleted)
 				return
 			}
 			r.completedUpdates[updID] = true
