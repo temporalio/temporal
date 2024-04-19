@@ -26,7 +26,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"net/http"
 	"net/url"
 	"runtime/debug"
 	"strings"
@@ -45,7 +44,6 @@ import (
 	"go.temporal.io/server/common/namespace"
 	commonnexus "go.temporal.io/server/common/nexus"
 	"go.temporal.io/server/common/resource"
-	"go.temporal.io/server/common/rpc"
 	"go.temporal.io/server/common/rpc/interceptor"
 	"go.temporal.io/server/service/frontend/configs"
 	"go.uber.org/fx"
@@ -54,23 +52,10 @@ import (
 	"google.golang.org/grpc/status"
 )
 
-var Module = fx.Module(
-	"plugin.nexusoperations.frontend",
-	fx.Provide(ConfigProvider),
-	fx.Provide(commonnexus.NewCallbackTokenGenerator),
-	fx.Invoke(RegisterHTTPHandler),
-)
-
 var apiName = configs.CompleteNexusOperation
 
 type Config struct {
 	Enabled dynamicconfig.BoolPropertyFn
-}
-
-func ConfigProvider(coll *dynamicconfig.Collection) *Config {
-	return &Config{
-		Enabled: coll.GetBoolProperty(dynamicconfig.FrontendEnableNexusAPIs, false),
-	}
 }
 
 type HandlerOptions struct {
@@ -91,25 +76,27 @@ type HandlerOptions struct {
 
 type completionHandler struct {
 	HandlerOptions
+	preProcessErrorsCounter metrics.CounterIface
 }
 
 // CompleteOperation implements nexus.CompletionHandler.
 func (h *completionHandler) CompleteOperation(ctx context.Context, r *nexus.CompletionRequest) (retErr error) {
+	startTime := time.Now()
 	if !h.Config.Enabled() {
-		h.MetricsHandler.Counter(metrics.NexusCompletionRequestPreProcessErrors.Name()).Record(1)
+		h.preProcessErrorsCounter.Record(1)
 		return nexus.HandlerErrorf(nexus.HandlerErrorTypeNotFound, "Nexus APIs are disabled")
 	}
 	nsNameEscaped := commonnexus.RouteCompletionCallback.Deserialize(mux.Vars(r.HTTPRequest))
 	nsName, err := url.PathUnescape(nsNameEscaped)
 	if err != nil {
 		h.Logger.Error("failed to extract namespace from request", tag.Error(err))
-		h.MetricsHandler.Counter(metrics.NexusCompletionRequestPreProcessErrors.Name()).Record(1)
+		h.preProcessErrorsCounter.Record(1)
 		return nexus.HandlerErrorf(nexus.HandlerErrorTypeBadRequest, "invalid URL")
 	}
 	ns, err := h.NamespaceRegistry.GetNamespace(namespace.Name(nsName))
 	if err != nil {
 		h.Logger.Error("failed to get namespace for nexus completion request", tag.WorkflowNamespace(nsName), tag.Error(err))
-		h.MetricsHandler.Counter(metrics.NexusCompletionRequestPreProcessErrors.Name()).Record(1)
+		h.preProcessErrorsCounter.Record(1)
 		var nfe *serviceerror.NamespaceNotFound
 		if errors.As(err, &nfe) {
 			return nexus.HandlerErrorf(nexus.HandlerErrorTypeNotFound, "namespace %q not found", nsName)
@@ -126,7 +113,7 @@ func (h *completionHandler) CompleteOperation(ctx context.Context, r *nexus.Comp
 			metrics.OperationTag(apiName),
 			metrics.NamespaceTag(nsName),
 		),
-		requestStartTime: time.Now(),
+		requestStartTime: startTime,
 	}
 	defer rCtx.capturePanicAndRecordMetrics(&retErr)
 
@@ -153,7 +140,12 @@ func (h *completionHandler) CompleteOperation(ctx context.Context, r *nexus.Comp
 		tag.WorkflowRunID(completion.GetRunId()),
 	)
 	if completion.GetNamespaceId() != ns.ID().String() {
-		logger.Error("namespace ID in token doesn't match the token", tag.WorkflowNamespaceID(ns.ID().String()), tag.Error(err), tag.NewStringTag("completion-namespace-id", completion.GetNamespaceId()))
+		logger.Error(
+			"namespace ID in token doesn't match the token",
+			tag.WorkflowNamespaceID(ns.ID().String()),
+			tag.Error(err),
+			tag.NewStringTag("completion-namespace-id", completion.GetNamespaceId()),
+		)
 		return nexus.HandlerErrorf(nexus.HandlerErrorTypeBadRequest, "invalid callback token")
 	}
 	hr := &historyservice.CompleteNexusOperationRequest{
@@ -191,21 +183,6 @@ func (h *completionHandler) CompleteOperation(ctx context.Context, r *nexus.Comp
 	return nil
 }
 
-func RegisterHTTPHandler(options HandlerOptions, logger log.Logger, router *mux.Router) {
-	h := nexus.NewCompletionHTTPHandler(nexus.CompletionHandlerOptions{
-		Handler:    &completionHandler{options},
-		Logger:     log.NewSlogLogger(logger),
-		Serializer: commonnexus.PayloadSerializer,
-	})
-	router.Path("/" + commonnexus.RouteCompletionCallback.Representation()).HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		// Limit the request body to max allowed Payload size.
-		// Content headers are transformed to Payload metadata and contribute to the Payload size as well. A separate
-		// limit is enforced on top of this in the CompleteOperation method.
-		r.Body = http.MaxBytesReader(w, r.Body, rpc.MaxNexusAPIRequestBodyBytes)
-		h.ServeHTTP(w, r)
-	})
-}
-
 type requestContext struct {
 	*completionHandler
 	logger                        log.Logger
@@ -232,16 +209,14 @@ func (c *requestContext) capturePanicAndRecordMetrics(errPtr *error) {
 	}
 	if *errPtr == nil {
 		c.metricsHandler = c.metricsHandler.WithTags(metrics.NexusOutcomeTag("success"))
+	} else if c.outcomeTag != nil {
+		c.metricsHandler = c.metricsHandler.WithTags(c.outcomeTag)
 	} else {
-		if c.outcomeTag != nil {
-			c.metricsHandler = c.metricsHandler.WithTags(c.outcomeTag)
+		var he *nexus.HandlerError
+		if errors.As(*errPtr, &he) {
+			c.metricsHandler = c.metricsHandler.WithTags(metrics.NexusOutcomeTag("error_" + strings.ToLower(string(he.Type))))
 		} else {
-			var he *nexus.HandlerError
-			if errors.As(*errPtr, &he) {
-				c.metricsHandler = c.metricsHandler.WithTags(metrics.NexusOutcomeTag("error_" + strings.ToLower(string(he.Type))))
-			} else {
-				c.metricsHandler = c.metricsHandler.WithTags(metrics.NexusOutcomeTag("error_internal"))
-			}
+			c.metricsHandler = c.metricsHandler.WithTags(metrics.NexusOutcomeTag("error_internal"))
 		}
 	}
 
