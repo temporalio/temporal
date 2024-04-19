@@ -61,8 +61,8 @@ func transitionHistoryRangeForVersion(history []*persistencespb.VersionedTransit
 // the given transition history.
 //
 // When a task or API request is being processed, the history is compared with the imprinted state reference to verify
-// that the state is not stale or that the task or request itself is not stale. For example, if the state has a history
-// of `[{v: 1, t: 3}, {v: 2, t: 5}]`, task A `{v: 2, t: 4}` **is not** referencing stale state because for version `2`
+// that the state is not stale or that the task/request itself is not stale. For example, if the state has a history of
+// `[{v: 1, t: 3}, {v: 2, t: 5}]`, task A `{v: 2, t: 4}` **is not** referencing stale state because for version `2`
 // transitions `4-5` are valid, while task B `{v: 2, t: 6}` **is** referencing stale state because the transition count
 // is out of range for version `2`. Furthermore, task C `{v: 1, t: 4}` itself is stale because it is referencing an
 // impossible state, likely due to post split-brain reconciliation.

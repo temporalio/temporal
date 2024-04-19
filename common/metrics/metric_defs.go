@@ -683,7 +683,7 @@ var (
 		"nexus_request_preprocess_errors",
 		WithDescription("The number of Nexus requests for which pre-processing failed."),
 	)
-	NexusLatencyHistogram = NewCounterDef(
+	NexusLatencyHistogram = NewTimerDef(
 		"nexus_latency",
 		WithDescription("Latency histogram of Nexus requests."),
 	)
@@ -691,7 +691,7 @@ var (
 		"nexus_completion_requests",
 		WithDescription("The number of Nexus completion (callback) requests received by the service."),
 	)
-	NexusCompletionLatencyHistogram = NewCounterDef(
+	NexusCompletionLatencyHistogram = NewTimerDef(
 		"nexus_completion_latency",
 		WithDescription("Latency histogram of Nexus completion (callback) requests."),
 	)

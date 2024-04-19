@@ -38,7 +38,9 @@ import (
 	"google.golang.org/grpc/status"
 )
 
-func handleSuccessfulOperationResult(node *hsm.Node, operation Operation,
+func handleSuccessfulOperationResult(
+	node *hsm.Node,
+	operation Operation,
 	result *commonpb.Payload,
 	attemptTime *time.Time,
 ) (hsm.TransitionOutput, error) {
@@ -47,7 +49,7 @@ func handleSuccessfulOperationResult(node *hsm.Node, operation Operation,
 		return hsm.TransitionOutput{}, err
 	}
 	node.AddHistoryEvent(enumspb.EVENT_TYPE_NEXUS_OPERATION_COMPLETED, func(e *historypb.HistoryEvent) {
-		//nolint:revive
+		//nolint:revive We must assign to this property, linter doesn't like this.
 		e.Attributes = &historypb.HistoryEvent_NexusOperationCompletedEventAttributes{
 			NexusOperationCompletedEventAttributes: &historypb.NexusOperationCompletedEventAttributes{
 				ScheduledEventId: eventID,
@@ -74,7 +76,7 @@ func handleUnsuccessfulOperationError(
 	switch opFailedError.State {
 	case nexus.OperationStateFailed:
 		node.AddHistoryEvent(enumspb.EVENT_TYPE_NEXUS_OPERATION_FAILED, func(e *historypb.HistoryEvent) {
-			// nolint:revive
+			//nolint:revive We must assign to this property, linter doesn't like this.
 			e.Attributes = &historypb.HistoryEvent_NexusOperationFailedEventAttributes{
 				NexusOperationFailedEventAttributes: &historypb.NexusOperationFailedEventAttributes{
 					Failure: nexusOperationFailure(
@@ -101,7 +103,7 @@ func handleUnsuccessfulOperationError(
 		})
 	case nexus.OperationStateCanceled:
 		node.AddHistoryEvent(enumspb.EVENT_TYPE_NEXUS_OPERATION_CANCELED, func(e *historypb.HistoryEvent) {
-			// nolint:revive
+			//nolint:revive We must assign to this property, linter doesn't like this.
 			e.Attributes = &historypb.HistoryEvent_NexusOperationCanceledEventAttributes{
 				NexusOperationCanceledEventAttributes: &historypb.NexusOperationCanceledEventAttributes{
 					Failure: nexusOperationFailure(

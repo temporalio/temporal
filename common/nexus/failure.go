@@ -180,6 +180,7 @@ func ConvertGRPCError(err error, exposeDetails bool) error {
 	if !exposeDetails {
 		return nexus.HandlerErrorf(nexus.HandlerErrorTypeInternal, "internal error")
 	}
+	// Let the nexus SDK handle this for us (log and convert to an internal error).
 	return err
 }
 
