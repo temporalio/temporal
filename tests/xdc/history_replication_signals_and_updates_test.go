@@ -52,6 +52,7 @@ import (
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/namespace"
+	"go.temporal.io/server/common/payloads"
 	"go.temporal.io/server/common/persistence/serialization"
 	"go.temporal.io/server/common/primitives"
 	"go.temporal.io/server/common/testing/protoutils"
@@ -668,7 +669,7 @@ func (c *hrsuTestCluster) pollAndCompleteUpdate(updateId string) error {
 		TaskQueue:           c.t.tv.TaskQueue(),
 		Identity:            c.t.tv.WorkerIdentity(),
 		WorkflowTaskHandler: c.t.completeUpdateWFTHandler,
-		MessageHandler:      c.t.completeUpdateMessageHandler(updateId),
+		MessageHandler:      c.completeUpdateMessageHandler(updateId),
 		Logger:              c.t.s.logger,
 		T:                   c.t.s.T(),
 	}
@@ -733,21 +734,21 @@ func (t *hrsuTest) acceptUpdateWFTHandler(_ *commonpb.WorkflowExecution, _ *comm
 	}}, nil
 }
 
-func (t *hrsuTest) completeUpdateMessageHandler(updateId string) func(resp *workflowservice.PollWorkflowTaskQueueResponse) ([]*protocolpb.Message, error) {
+func (c *hrsuTestCluster) completeUpdateMessageHandler(updateId string) func(resp *workflowservice.PollWorkflowTaskQueueResponse) ([]*protocolpb.Message, error) {
 	return func(resp *workflowservice.PollWorkflowTaskQueueResponse) ([]*protocolpb.Message, error) {
 		return []*protocolpb.Message{
 			{
 				Id:                 "completion-msg-id",
 				ProtocolInstanceId: updateId,
 				SequencingId:       nil,
-				Body: protoutils.MarshalAny(t.s.T(), &updatepb.Response{
+				Body: protoutils.MarshalAny(c.t.s.T(), &updatepb.Response{
 					Meta: &updatepb.Meta{
 						UpdateId: updateId,
-						Identity: t.tv.WorkerIdentity(),
+						Identity: c.t.tv.WorkerIdentity(),
 					},
 					Outcome: &updatepb.Outcome{
 						Value: &updatepb.Outcome_Success{
-							Success: t.tv.Any().Payloads(),
+							Success: payloads.EncodeString(c.updateResult(updateId)),
 						},
 					},
 				}),
@@ -755,6 +756,11 @@ func (t *hrsuTest) completeUpdateMessageHandler(updateId string) func(resp *work
 		}, nil
 
 	}
+}
+
+// updateResult returns the update result sent by the worker in this cluster.
+func (c *hrsuTestCluster) updateResult(updateId string) string {
+	return fmt.Sprintf("%s-%s-result", c.name, updateId)
 }
 
 func (t *hrsuTest) completeUpdateWFTHandler(_ *commonpb.WorkflowExecution, _ *commonpb.WorkflowType, _ int64, _ int64, _ *historypb.History) ([]*commandpb.Command, error) {
