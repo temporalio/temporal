@@ -646,32 +646,6 @@ func (c *hrsuTestCluster) sendUpdateAndWaitUntilAccepted(ctx context.Context, up
 	c.t.s.NoError(<-processWorkflowTaskResponse)
 }
 
-func (c *hrsuTestCluster) sendUpdate(ctx context.Context, updateId string, arg string) {
-	updateResponse := make(chan error)
-	processWorkflowTaskResponse := make(chan error)
-	go func() {
-		_, err := c.client.UpdateWorkflowWithOptions(ctx, &sdkclient.UpdateWorkflowWithOptionsRequest{
-			UpdateID:   updateId,
-			WorkflowID: c.t.tv.WorkflowID(),
-			RunID:      c.t.runId,
-			UpdateName: "the-test-doesn't-use-this",
-			Args:       []interface{}{arg},
-			WaitPolicy: &updatepb.WaitPolicy{
-				LifecycleStage: enumspb.UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_ACCEPTED,
-			},
-		})
-		c.t.s.NoError(err)
-		updateResponse <- err
-	}()
-	go func() {
-		// Blocks until the update request causes a WFT to be dispatched; then sends the update acceptance message
-		// required for the update request to return.
-		processWorkflowTaskResponse <- c.pollAndAcceptUpdate()
-	}()
-	c.t.s.NoError(<-updateResponse)
-	c.t.s.NoError(<-processWorkflowTaskResponse)
-}
-
 func (c *hrsuTestCluster) pollAndAcceptUpdate() error {
 	poller := &tests.TaskPoller{
 		Engine:              c.testCluster.GetFrontendClient(),
