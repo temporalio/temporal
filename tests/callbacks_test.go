@@ -28,7 +28,6 @@ import (
 	"fmt"
 	"net"
 	"net/http"
-	"net/url"
 	"testing"
 	"time"
 
@@ -40,7 +39,6 @@ import (
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	workflowpb "go.temporal.io/api/workflow/v1"
 	"go.temporal.io/api/workflowservice/v1"
-	"go.temporal.io/sdk/activity"
 	"go.temporal.io/sdk/client"
 	"go.temporal.io/sdk/temporal"
 	"go.temporal.io/sdk/worker"
@@ -271,34 +269,12 @@ func (s *FunctionalSuite) TestWorkflowCallbacks_ForceActivityComplete() {
 	})
 	s.NoError(err)
 
-	pp := temporalite.NewPortProvider()
-	callbackAddress := fmt.Sprintf("localhost:%d", pp.MustGetFreePort())
-	s.NoError(pp.Close())
-
-	ach := &serveHTTPHandler{
-		sdkClient:         sdkClient,
-		requestCompleteCh: make(chan error, 1),
-		activityErr:       make(chan error, 1),
-	}
-
+	activityErrCh := make(chan error, 1)
 	mockErrorActivity := func(ctx context.Context) error {
-		ai := activity.GetInfo(ctx)
-		formData := url.Values{}
-		formData.Add("name_space", ai.WorkflowNamespace)
-		formData.Add("workflow_id", ai.WorkflowExecution.ID)
-		formData.Add("run_id", ai.WorkflowExecution.RunID)
-		formData.Add("activity_id", ai.ActivityID)
-
-		httpUrl := fmt.Sprintf("http://%s", callbackAddress)
-		_, err := http.PostForm(httpUrl, formData)
-		if err != nil {
-			panic(err)
-		}
 		err = errors.New("mock error")
-		ach.activityErr <- err
+		activityErrCh <- err
 		return err
 	}
-
 	wf := func(ctx workflow.Context) error {
 		ao := workflow.ActivityOptions{
 			StartToCloseTimeout: 3 * time.Minute,
@@ -316,14 +292,6 @@ func (s *FunctionalSuite) TestWorkflowCallbacks_ForceActivityComplete() {
 	workflowType := "test"
 	s.NoError(err)
 
-	shutdownServer := s.runCompletionHTTPServer(ach, callbackAddress)
-	defer func() {
-		err := shutdownServer()
-		if err != nil {
-			panic(err)
-		}
-	}()
-
 	w := worker.New(sdkClient, taskQueue, worker.Options{})
 	w.RegisterWorkflowWithOptions(wf, workflow.RegisterOptions{Name: workflowType})
 	w.RegisterActivity(mockErrorActivity)
@@ -337,44 +305,15 @@ func (s *FunctionalSuite) TestWorkflowCallbacks_ForceActivityComplete() {
 	}
 	_, err = sdkClient.ExecuteWorkflow(ctx, workflowOptions, wf)
 	s.NoError(err)
-	// mock activity will return an error and be rescheduled
-	err = <-ach.activityErr
-	s.Equal("mock error", err.Error())
-	// Async call to complete activity by id will not raise an error
-	err = <-ach.requestCompleteCh
+ 	<-activityErrCh
+	description, err := sdkClient.DescribeWorkflowExecution(ctx, workflowOptions.ID, "")
+	s.Equal("mock error", description.PendingActivities[0].LastFailure.Message)
+	activityId := description.PendingActivities[0].ActivityId
+	run := sdkClient.GetWorkflow(ctx, workflowOptions.ID, "")
+	
+	err = sdkClient.CompleteActivityByID(ctx, s.namespace, run.GetID(), run.GetRunID(), activityId, nil, nil)
+	s.NoError(err)
+	description, err = sdkClient.DescribeWorkflowExecution(ctx, workflowOptions.ID, "")
 	s.NoError(err)
 }
 
-type serveHTTPHandler struct {
-	sdkClient         client.Client
-	requestCompleteCh chan error
-	activityErr       chan error
-}
-
-func (a *serveHTTPHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	nameSpace := r.PostFormValue("name_space")
-	workflowId := r.PostFormValue("workflow_id")
-	runId := r.PostFormValue("run_id")
-	activityId := r.PostFormValue("activity_id")
-
-	err := a.sdkClient.CompleteActivityByID(context.Background(), nameSpace, workflowId, runId, activityId, nil, nil)
-	a.requestCompleteCh <- err
-	if err != nil {
-		panic(err)
-	}
-}
-
-func (s *FunctionalSuite) runCompletionHTTPServer(h *serveHTTPHandler, listenAddr string) func() error {
-	srv := &http.Server{Addr: listenAddr, Handler: h}
-	listener, _ := net.Listen("tcp", listenAddr)
-	errCh := make(chan error, 1)
-	go func() {
-		errCh <- srv.Serve(listener)
-	}()
-
-	return func() error {
-		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
-		defer cancel()
-		return srv.Shutdown(ctx)
-	}
-}
