@@ -299,6 +299,7 @@ func (s *ReplicationMigrationBackTestSuite) longRunningMigrationBackReplicationT
 
 	// last imported event (event 10) is a timer started event, so it should have a timer in mutablestate
 	s.Equal(1, len(res1.DatabaseMutableState.TimerInfos))
+	s.assertHistoryEvents(context.Background(), s.namespaceID.String(), workflowID, runID, 1, 1, 10, 2, eventBatches[0:7])
 }
 
 // Test scenario: workflow was running in cluster-1, then migrated to cluster-2, then migrated to cluster-1, then we want to migrate to cluster-2.
