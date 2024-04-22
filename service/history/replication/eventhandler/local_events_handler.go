@@ -148,23 +148,28 @@ func (h *localEventsHandlerImpl) HandleLocalGeneratedHistoryEvents(
 	}
 
 	lastBatch := localEvents[len(localEvents)-1]
-	lastLocalEvent := lastBatch[len(lastBatch)-1]
+	lastEvent := lastBatch[len(lastBatch)-1]
 
-	if lastLocalEvent.EventId == localVersionHistory[len(localVersionHistory)-1].EventId {
-		// all local events were imported successfully
+	if lastEvent.EventId == localVersionHistory[len(localVersionHistory)-1].EventId {
+		// all local events were imported successfully, we call commit to finish the transaction
 		_, err := h.invokeImportWorkflowExecutionCall(ctx, engine, workflowKey, nil, versionHistory, response.Token)
 		if err != nil {
 			return err
 		}
 		return nil
 	}
+	nextEventId := lastEvent.EventId + 1
+	nextEventVersion, err := versionhistory.GetVersionHistoryEventVersion(versionHistory, nextEventId)
+	if err != nil {
+		return err
+	}
 	return h.importEvents(
 		ctx,
 		sourceClusterName,
 		engine,
 		workflowKey,
-		lastLocalEvent.EventId+1,
-		lastLocalEvent.Version,
+		nextEventId,
+		nextEventVersion,
 		localVersionHistory[len(localVersionHistory)-1].EventId,
 		localVersionHistory[len(localVersionHistory)-1].Version,
 		response.Token,
