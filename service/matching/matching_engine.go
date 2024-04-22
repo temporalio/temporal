@@ -920,7 +920,7 @@ func (e *matchingEngineImpl) DescribeTaskQueue(
 					if physInfo, ok := physicalInfoByBuildId[buildId][taskQueueType]; !ok {
 						physicalInfoByBuildId[buildId][taskQueueType] = vii.PhysicalTaskQueueInfo
 					} else {
-						bInfo_Root := physicalInfoByBuildId[buildId][taskQueueType].BacklogInfo // BacklogInfo of the root partition
+						bInfo_Root := physicalInfoByBuildId[buildId][taskQueueType].BacklogInfo // BacklogInfo of the previous partition
 						bInfo_Partition := vii.PhysicalTaskQueueInfo.BacklogInfo
 
 						// Aggregating counts; for now, we only aggregate approximateBacklogCount
