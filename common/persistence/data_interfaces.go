@@ -1194,7 +1194,6 @@ type (
 	NexusIncomingServiceManager interface {
 		Closeable
 		GetName() string
-		GetNexusIncomingServicesTableVersion(ctx context.Context) (int64, error)
 		GetNexusIncomingService(ctx context.Context, request *GetNexusIncomingServiceRequest) (*persistencespb.NexusIncomingServiceEntry, error)
 		ListNexusIncomingServices(ctx context.Context, request *ListNexusIncomingServicesRequest) (*ListNexusIncomingServicesResponse, error)
 		CreateOrUpdateNexusIncomingService(ctx context.Context, request *CreateOrUpdateNexusIncomingServiceRequest) (*CreateOrUpdateNexusIncomingServiceResponse, error)

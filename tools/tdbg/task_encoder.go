@@ -101,6 +101,8 @@ func (d PredefinedTaskBlobDeserializer) Deserialize(categoryID int, blob *common
 		return serialization.ReplicationTaskInfoFromBlob(blob.Data, blob.EncodingType.String())
 	case tasks.CategoryIDArchival:
 		return serialization.ArchivalTaskInfoFromBlob(blob.Data, blob.EncodingType.String())
+	case tasks.CategoryIDOutbound:
+		return serialization.OutboundTaskInfoFromBlob(blob.Data, blob.EncodingType.String())
 	default:
 		return nil, fmt.Errorf("unsupported task category %v", categoryID)
 	}

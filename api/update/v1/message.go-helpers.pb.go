@@ -29,6 +29,43 @@ import (
 	"google.golang.org/protobuf/proto"
 )
 
+// Marshal an object of type AdmissionInfo to the protobuf v3 wire format
+func (val *AdmissionInfo) Marshal() ([]byte, error) {
+	return proto.Marshal(val)
+}
+
+// Unmarshal an object of type AdmissionInfo from the protobuf v3 wire format
+func (val *AdmissionInfo) Unmarshal(buf []byte) error {
+	return proto.Unmarshal(buf, val)
+}
+
+// Size returns the size of the object, in bytes, once serialized
+func (val *AdmissionInfo) Size() int {
+	return proto.Size(val)
+}
+
+// Equal returns whether two AdmissionInfo values are equivalent by recursively
+// comparing the message's fields.
+// For more information see the documentation for
+// https://pkg.go.dev/google.golang.org/protobuf/proto#Equal
+func (this *AdmissionInfo) Equal(that interface{}) bool {
+	if that == nil {
+		return this == nil
+	}
+
+	var that1 *AdmissionInfo
+	switch t := that.(type) {
+	case *AdmissionInfo:
+		that1 = t
+	case AdmissionInfo:
+		that1 = &t
+	default:
+		return false
+	}
+
+	return proto.Equal(this, that1)
+}
+
 // Marshal an object of type AcceptanceInfo to the protobuf v3 wire format
 func (val *AcceptanceInfo) Marshal() ([]byte, error) {
 	return proto.Marshal(val)
@@ -95,43 +132,6 @@ func (this *CompletionInfo) Equal(that interface{}) bool {
 	case *CompletionInfo:
 		that1 = t
 	case CompletionInfo:
-		that1 = &t
-	default:
-		return false
-	}
-
-	return proto.Equal(this, that1)
-}
-
-// Marshal an object of type RequestInfo to the protobuf v3 wire format
-func (val *RequestInfo) Marshal() ([]byte, error) {
-	return proto.Marshal(val)
-}
-
-// Unmarshal an object of type RequestInfo from the protobuf v3 wire format
-func (val *RequestInfo) Unmarshal(buf []byte) error {
-	return proto.Unmarshal(buf, val)
-}
-
-// Size returns the size of the object, in bytes, once serialized
-func (val *RequestInfo) Size() int {
-	return proto.Size(val)
-}
-
-// Equal returns whether two RequestInfo values are equivalent by recursively
-// comparing the message's fields.
-// For more information see the documentation for
-// https://pkg.go.dev/google.golang.org/protobuf/proto#Equal
-func (this *RequestInfo) Equal(that interface{}) bool {
-	if that == nil {
-		return this == nil
-	}
-
-	var that1 *RequestInfo
-	switch t := that.(type) {
-	case *RequestInfo:
-		that1 = t
-	case RequestInfo:
 		that1 = &t
 	default:
 		return false

@@ -3790,10 +3790,10 @@ func (ms *MutableStateImpl) ApplyWorkflowExecutionUpdateAdmittedEvent(event *his
 		ms.executionInfo.UpdateInfos = make(map[string]*updatespb.UpdateInfo, 1)
 	}
 	updateID := attrs.GetRequest().GetMeta().GetUpdateId()
-	request := &updatespb.UpdateInfo_Request{
-		Request: &updatespb.RequestInfo{
-			Location: &updatespb.RequestInfo_HistoryPointer_{
-				HistoryPointer: &updatespb.RequestInfo_HistoryPointer{
+	admission := &updatespb.UpdateInfo_Admission{
+		Admission: &updatespb.AdmissionInfo{
+			Location: &updatespb.AdmissionInfo_HistoryPointer_{
+				HistoryPointer: &updatespb.AdmissionInfo_HistoryPointer{
 					EventId:      event.EventId,
 					EventBatchId: batchId,
 				},
@@ -3803,7 +3803,7 @@ func (ms *MutableStateImpl) ApplyWorkflowExecutionUpdateAdmittedEvent(event *his
 	if _, ok := ms.executionInfo.UpdateInfos[updateID]; ok {
 		return serviceerror.NewInternal(fmt.Sprintf("Update ID %s is already present in registry", updateID))
 	}
-	ui := updatespb.UpdateInfo{Value: request}
+	ui := updatespb.UpdateInfo{Value: admission}
 	ms.executionInfo.UpdateInfos[updateID] = &ui
 	ms.executionInfo.UpdateCount++
 	sizeDelta := ui.Size() + len(updateID)

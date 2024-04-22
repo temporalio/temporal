@@ -916,13 +916,19 @@ func (c *ContextImpl) ReapplyEvents(
 // TODO: remove `ms` parameter again (added since it's not possible to initialize a new Context with a specific MutableState)
 func (c *ContextImpl) UpdateRegistry(ctx context.Context, ms MutableState) update.Registry {
 	if c.updateRegistry == nil {
-		if ms == nil {
-			ms = c.MutableState
+		var nsIDStr string
+		if c.MutableState != nil {
+			nsIDStr = c.MutableState.GetNamespaceEntry().ID().String()
+		} else {
+			nsIDStr = ms.GetNamespaceEntry().ID().String()
 		}
-
-		nsIDStr := ms.GetNamespaceEntry().ID().String()
 		c.updateRegistry = update.NewRegistry(
-			func() update.Store { return ms },
+			func() update.Store {
+				if c.MutableState != nil {
+					return c.MutableState
+				}
+				return ms
+			},
 			update.WithLogger(c.logger),
 			update.WithMetrics(c.metricsHandler),
 			update.WithTracerProvider(trace.SpanFromContext(ctx).TracerProvider()),

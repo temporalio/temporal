@@ -78,11 +78,11 @@ type (
 		autoIncrementTaskID         int64
 		passiveClusterName          string
 
-		controller      *gomock.Controller
-		passtiveCluster *tests.TestCluster
-		generator       test.Generator
-		serializer      serialization.Serializer
-		logger          log.Logger
+		controller     *gomock.Controller
+		passiveCluster *tests.TestCluster
+		generator      test.Generator
+		serializer     serialization.Serializer
+		logger         log.Logger
 	}
 )
 
@@ -117,6 +117,7 @@ func (s *ReplicationMigrationBackTestSuite) SetupSuite() {
 		dynamicconfig.EnableReplicationStream:             true,
 		dynamicconfig.EnableEagerNamespaceRefresher:       true,
 		dynamicconfig.EnableReplicateLocalGeneratedEvents: true,
+		dynamicconfig.NamespaceCacheRefreshInterval:       tests.NamespaceCacheRefreshInterval,
 	}
 	s.controller = gomock.NewController(s.T())
 	mockActiveStreamClient := adminservicemock.NewMockAdminService_StreamWorkflowReplicationMessagesClient(s.controller)
@@ -140,9 +141,24 @@ func (s *ReplicationMigrationBackTestSuite) SetupSuite() {
 	delete(passiveClusterConfig.ClusterMetadata.ClusterInformation, "cluster-c") // ndc_clusters.yaml has 3 clusters, but we only need 2 for this test
 	cluster, err := s.testClusterFactory.NewCluster(s.T(), passiveClusterConfig, log.With(s.logger, tag.ClusterName(clusterName[0])))
 	s.Require().NoError(err)
-	s.passtiveCluster = cluster
+	s.passiveCluster = cluster
 
 	s.registerNamespace()
+	_, err = s.passiveCluster.GetFrontendClient().UpdateNamespace(context.Background(), &workflowservice.UpdateNamespaceRequest{
+		Namespace: s.namespace.String(),
+		ReplicationConfig: &replicationpb.NamespaceReplicationConfig{
+			ActiveClusterName: "cluster-b",
+		},
+	})
+	s.Require().NoError(err)
+	_, err = s.passiveCluster.GetFrontendClient().UpdateNamespace(context.Background(), &workflowservice.UpdateNamespaceRequest{
+		Namespace: s.namespace.String(),
+		ReplicationConfig: &replicationpb.NamespaceReplicationConfig{
+			ActiveClusterName: "cluster-a",
+		},
+	})
+	s.Require().NoError(err)
+	time.Sleep(2 * tests.NamespaceCacheRefreshInterval) // we have to wait for namespace cache to pick the change
 }
 
 func (s *ReplicationMigrationBackTestSuite) TearDownSuite() {
@@ -150,7 +166,7 @@ func (s *ReplicationMigrationBackTestSuite) TearDownSuite() {
 		s.generator.Reset()
 	}
 	s.controller.Finish()
-	s.NoError(s.passtiveCluster.TearDownCluster())
+	s.NoError(s.passiveCluster.TearDownCluster())
 }
 
 func (s *ReplicationMigrationBackTestSuite) SetupTest() {
@@ -163,8 +179,8 @@ func (s *ReplicationMigrationBackTestSuite) SetupTest() {
 // The workflow history events' version is passive cluster. Without the support of migration back,
 // workflow replication will fail. While with support of migration back, workflow replication will succeed and
 // both run will exist in passive cluster and in a completed status.
-func (s *ReplicationMigrationBackTestSuite) TestHistoryReplication_MigrationBackCase() {
-	workflowId := "ndc-test-migration-back"
+func (s *ReplicationMigrationBackTestSuite) TestHistoryReplication_MultiRunMigrationBack() {
+	workflowId := "ndc-test-migration-back-0"
 	version := int64(2) // this version has to point to passive cluster to trigger migration back case
 	runId1 := uuid.New()
 	runId2 := uuid.New()
@@ -205,7 +221,7 @@ func (s *ReplicationMigrationBackTestSuite) TestHistoryReplication_MigrationBack
 
 	time.Sleep(1 * time.Second) // wait for 1 sec to let the run2 events replicated
 
-	res1, err := s.passtiveCluster.GetAdminClient().DescribeMutableState(context.Background(), &adminservice.DescribeMutableStateRequest{
+	res1, err := s.passiveCluster.GetAdminClient().DescribeMutableState(context.Background(), &adminservice.DescribeMutableStateRequest{
 		Namespace: s.namespace.String(),
 		Execution: &commonpb.WorkflowExecution{
 			WorkflowId: workflowId,
@@ -214,7 +230,7 @@ func (s *ReplicationMigrationBackTestSuite) TestHistoryReplication_MigrationBack
 	})
 	s.NoError(err)
 
-	res2, err := s.passtiveCluster.GetAdminClient().DescribeMutableState(context.Background(), &adminservice.DescribeMutableStateRequest{
+	res2, err := s.passiveCluster.GetAdminClient().DescribeMutableState(context.Background(), &adminservice.DescribeMutableStateRequest{
 		Namespace: s.namespace.String(),
 		Execution: &commonpb.WorkflowExecution{
 			WorkflowId: workflowId,
@@ -225,6 +241,59 @@ func (s *ReplicationMigrationBackTestSuite) TestHistoryReplication_MigrationBack
 	s.NoError(err)
 	s.Equal(enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED, res1.DatabaseMutableState.ExecutionState.State)
 	s.Equal(enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED, res2.DatabaseMutableState.ExecutionState.State)
+}
+
+func (s *ReplicationMigrationBackTestSuite) TestHistoryReplication_LongRunningMigrationBack() {
+	workflowId := "ndc-test-migration-back-1"
+	version := int64(2) // this version has to point to passive cluster to trigger migration back case
+	runId1 := uuid.New()
+	run1Slices := s.getEventSlices(version, 0)
+
+	history, err := tests.EventBatchesToVersionHistory(
+		nil,
+		[]*historypb.History{{Events: run1Slices[0]}, {Events: run1Slices[1]}, {Events: run1Slices[2]}},
+	)
+	s.Require().NoError(err)
+	// when handle migration back case, passive will need to fetch the history from active cluster
+	s.mockActiveGetRawHistoryApiCalls(workflowId, runId1, run1Slices, history, version)
+
+	s.standByReplicationTasksChan <- s.createHistoryEventReplicationTaskFromHistoryEventBatch(
+		s.namespaceID.String(),
+		workflowId,
+		runId1,
+		run1Slices[0],
+		nil,
+		history.Items,
+	)
+	s.standByReplicationTasksChan <- s.createHistoryEventReplicationTaskFromHistoryEventBatch(
+		s.namespaceID.String(),
+		workflowId,
+		runId1,
+		run1Slices[1],
+		nil,
+		history.Items,
+	)
+	s.standByReplicationTasksChan <- s.createHistoryEventReplicationTaskFromHistoryEventBatch(
+		s.namespaceID.String(),
+		workflowId,
+		runId1,
+		run1Slices[2],
+		nil,
+		history.Items,
+	)
+
+	time.Sleep(1 * time.Second) // wait for 1 sec to let the run1 events replicated
+
+	res1, err := s.passiveCluster.GetAdminClient().DescribeMutableState(context.Background(), &adminservice.DescribeMutableStateRequest{
+		Namespace: s.namespace.String(),
+		Execution: &commonpb.WorkflowExecution{
+			WorkflowId: workflowId,
+			RunId:      runId1,
+		},
+	})
+	s.NoError(err)
+
+	s.Equal(enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED, res1.DatabaseMutableState.ExecutionState.State)
 }
 
 func (s *ReplicationMigrationBackTestSuite) serializeEvents(events []*historypb.HistoryEvent) *commonpb.DataBlob {
@@ -363,7 +432,7 @@ func (s *ReplicationMigrationBackTestSuite) getEventSlices(version int64, timeDr
 
 func (s *ReplicationMigrationBackTestSuite) registerNamespace() {
 	s.namespace = namespace.Name("test-simple-workflow-ndc-" + common.GenerateRandomString(5))
-	passiveFrontend := s.passtiveCluster.GetFrontendClient() //
+	passiveFrontend := s.passiveCluster.GetFrontendClient() //
 	replicationConfig := []*replicationpb.ClusterReplicationConfig{
 		{ClusterName: clusterName[0]},
 		{ClusterName: clusterName[1]},
