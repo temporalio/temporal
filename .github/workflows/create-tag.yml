@@ -62,7 +62,7 @@ jobs:
         run: |
           if [[ "${TAG}" =~ ^v.* ]]; then
               echo "tag_with_v=${TAG}" >> "$GITHUB_OUTPUT"
-              echo "tag_no_v=${TAG#v}"
+              echo "tag_no_v=${TAG#v}" >> "$GITHUB_OUTPUT"
           else
               echo "tag_with_v=v${TAG}" >> "$GITHUB_OUTPUT"
               echo "tag_no_v=${TAG}" >> "$GITHUB_OUTPUT"
