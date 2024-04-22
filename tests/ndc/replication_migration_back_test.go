@@ -261,8 +261,8 @@ func (s *ReplicationMigrationBackTestSuite) longRunningMigrationBackReplicationT
 	workflowID string,
 	runID string,
 	supplyBatchIndex int,
-	expectedRetrievingBatchesStartIndex int, //inclusive
-	expectedRetrievingBatchesEndIndex int, //exclusive
+	expectedRetrievingBatchesStartIndex int, // inclusive
+	expectedRetrievingBatchesEndIndex int, // exclusive
 ) {
 	eventBatches, history, err := GetEventBatchesFromTestEvents("migration_back_forth.json", "workflow_1")
 	s.Require().NoError(err)

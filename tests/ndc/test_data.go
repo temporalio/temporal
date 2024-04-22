@@ -48,9 +48,6 @@ var (
 
 func GetEventBatchesFromTestEvents(fileName string, workflowId string) ([][]*historypb.HistoryEvent, *historyspb.VersionHistory, error) {
 	filePath := "./testevents/" + fileName
-	if tests.TestFlags.TestClusterConfigFile != "" {
-		fileName = tests.TestFlags.TestClusterConfigFile
-	}
 	content, err := os.ReadFile(filePath)
 	if err != nil {
 		return nil, nil, err
