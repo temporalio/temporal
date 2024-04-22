@@ -160,7 +160,8 @@ func (c *clientImpl) Get(ctx context.Context, index string, docID string) (*elas
 func (c *clientImpl) Search(ctx context.Context, p *SearchParameters) (*elastic.SearchResult, error) {
 	searchSource := elastic.NewSearchSource().
 		Query(p.Query).
-		SortBy(p.Sorter...)
+		SortBy(p.Sorter...).
+		TrackTotalHits(false)
 
 	if p.PointInTime != nil {
 		searchSource.PointInTime(p.PointInTime)
@@ -192,6 +193,7 @@ func (c *clientImpl) OpenScroll(
 		Index(p.Index).
 		Query(p.Query).
 		SortBy(p.Sorter...).
+		TrackTotalHits(false).
 		KeepAlive(keepAliveInterval)
 	if p.PageSize != 0 {
 		scrollService.Size(p.PageSize)
@@ -263,6 +265,7 @@ func (c *clientImpl) CountGroupBy(
 	searchSource := elastic.NewSearchSource().
 		Query(query).
 		Size(0).
+		TrackTotalHits(false).
 		Aggregation(aggName, agg)
 	return c.esClient.Search(index).SearchSource(searchSource).Do(ctx)
 }

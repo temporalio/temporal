@@ -1232,18 +1232,6 @@ func (p *nexusIncomingServicePersistenceClient) Close() {
 	p.persistence.Close()
 }
 
-func (p *nexusIncomingServicePersistenceClient) GetNexusIncomingServicesTableVersion(
-	ctx context.Context,
-) (_ int64, retErr error) {
-	caller := headers.GetCallerInfo(ctx).CallerName
-	startTime := time.Now().UTC()
-	defer func() {
-		p.healthSignals.Record(CallerSegmentMissing, caller, time.Since(startTime), retErr)
-		p.recordRequestMetrics(metrics.PersistenceListNexusIncomingServicesScope, caller, time.Since(startTime), retErr)
-	}()
-	return p.persistence.GetNexusIncomingServicesTableVersion(ctx)
-}
-
 func (p *nexusIncomingServicePersistenceClient) GetNexusIncomingService(
 	ctx context.Context,
 	request *GetNexusIncomingServiceRequest,
