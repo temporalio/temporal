@@ -249,8 +249,8 @@ func (s *ReplicationMigrationBackTestSuite) TestHistoryReplication_MultiRunMigra
 // Test scenario: workflow was running in cluster-1, then migrated to cluster-2, then migrated to cluster-1, then we want to migrate to cluster-2.
 // passive cluster is cluster 2.
 // events are organized in 8 batches: [{1,1}], [{2,1}], [{3,1}], [{4,1},{5,1}], [{6,2},{7,2}], [{8,2}], [{9,2},{10,2}], [{11,11},{12,11}]
-// version history is [{5,1},{10,2},{12,11}], when history replication task with any event(s) from 1 to 5 is supplied, it should import events 1 to 5 (inclusive).
-// i.e. when history replication task with batch [{2,1}] is supplied, it should import events [1 to 10].
+// version history is [{5,1},{10,2},{12,11}], when any event(s) id from 1 to 10 is supplied, it should import events 1 to 10 (inclusive).
+// i.e. when history replication task with batch [{2,1}] is supplied, it should import all events [1 to 10].
 func (s *ReplicationMigrationBackTestSuite) TestHistoryReplication_LongRunningMigrationBack_ReplicationTaskContainsLocalEvents() {
 	for i := 0; i < 7; i++ {
 		s.longRunningMigrationBackReplicationTaskContainsLocalEventsTestBase(fmt.Sprintf("ndc-test-migration-back-local-%d", i), uuid.New(), i, 0, 7)
@@ -305,8 +305,8 @@ func (s *ReplicationMigrationBackTestSuite) longRunningMigrationBackReplicationT
 // Test scenario: workflow was running in cluster-1, then migrated to cluster-2, then migrated to cluster-1, then we want to migrate to cluster-2.
 // passive cluster is cluster 2.
 // events are organized in 8 batches: [{1,1}], [{2,1}], [{3,1}], [{4,1},{5,1}], [{6,2},{7,2}], [{8,2}], [{9,2},{10,2}], [{11,11},{12,11}]
-// version history is [{5,1},{10,2},{12,11}], when history replication task with any event(s) from 1 to 5 is supplied, it should import events 1 to 5 (inclusive).
-// i.e. when history replication task with batch [{11,11},{12,11}] is supplied, it should import events [1 to 10], then apply event 11 and 12.
+// version history is [{5,1},{10,2},{12,11}], when history replication task with events [{11,11},{12,11}] is supplied, it should first import events with id 1 to 10 (inclusive),
+// then apply the task with events [{11,11},{12,11}].
 func (s *ReplicationMigrationBackTestSuite) TestHistoryReplication_LongRunningMigrationBack_ReplicationTaskContainsRemoteEvents() {
 	workflowId := "ndc-test-migration-back-remote-events"
 
