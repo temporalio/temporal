@@ -47,13 +47,13 @@ cause them to be retried).
 ## Resolution
 
 ### Deleting Tasks
-To purge a message, execute the command `tdbg dlq --dlq-version v2 purge --dlq-type {type} --last_message_id {message_id}`. 
+To purge a message, execute the command `tdbg dlq --dlq-version v2 purge --dlq-type {type} --last-message-id {message_id}`. 
 Note that this command will purge all messages with an ID less than or equal to the specified `message_id`. 
 The output of this command will have a job token which can be used to manage the purge job.
 Before executing this command, you can list the messages in the queue using the command mentioned in step 6 above to make sure more messages are not purged by mistake.
 
 ### Retrying Tasks
-To merge a message, execute the command `tdbg dlq --dlq-version v2 merge --dlq-type {type} --last_message_id {message_id}`.
+To merge a message, execute the command `tdbg dlq --dlq-version v2 merge --dlq-type {type} --last-message-id {message_id}`.
 This command will merge all messages with an ID less than or equal to `message_id` back into the original queue for reprocessing.
 The output of this command will have a job token that can be used to manage the merge job.
 
