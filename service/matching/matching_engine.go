@@ -617,13 +617,14 @@ pollLoop:
 				task.finish(nil)
 			case *serviceerrors.InvalidDispatchBuildId:
 				// history should've scheduled another task on the right build id. dropping this one.
-				e.logger.Debug("dropping task due to invalid build ID",
+				e.logger.Info("dropping workflow task due to invalid build ID",
 					tag.WorkflowTaskQueueName(taskQueueName),
 					tag.WorkflowNamespaceID(task.event.Data.GetNamespaceId()),
 					tag.WorkflowID(task.event.Data.GetWorkflowId()),
 					tag.WorkflowRunID(task.event.Data.GetRunId()),
 					tag.TaskID(task.event.GetTaskId()),
 					tag.TaskVisibilityTimestamp(timestamp.TimeValue(task.event.Data.GetCreateTime())),
+					tag.BuildId(requestClone.WorkerVersionCapabilities.GetBuildId()),
 				)
 				task.finish(nil)
 			default:
@@ -758,6 +759,18 @@ pollLoop:
 				task.finish(nil)
 			case *serviceerrors.TaskAlreadyStarted:
 				e.logger.Debug("Duplicated activity task", tag.WorkflowTaskQueueName(taskQueueName), tag.TaskID(task.event.GetTaskId()))
+				task.finish(nil)
+			case *serviceerrors.InvalidDispatchBuildId:
+				// history should've scheduled another task on the right build id. dropping this one.
+				e.logger.Info("dropping activity task due to invalid build ID",
+					tag.WorkflowTaskQueueName(taskQueueName),
+					tag.WorkflowNamespaceID(task.event.Data.GetNamespaceId()),
+					tag.WorkflowID(task.event.Data.GetWorkflowId()),
+					tag.WorkflowRunID(task.event.Data.GetRunId()),
+					tag.TaskID(task.event.GetTaskId()),
+					tag.TaskVisibilityTimestamp(timestamp.TimeValue(task.event.Data.GetCreateTime())),
+					tag.BuildId(requestClone.WorkerVersionCapabilities.GetBuildId()),
+				)
 				task.finish(nil)
 			default:
 				task.finish(err)

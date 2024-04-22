@@ -2325,13 +2325,16 @@ func (ms *MutableStateImpl) processBuildIdRedirect(
 	versioningStamp *commonpb.WorkerVersionStamp,
 	redirectInfo *taskqueue.BuildIdRedirectInfo,
 ) error {
-	if !versioningStamp.GetUseVersioning() || versioningStamp.GetBuildId() != ms.GetAssignedBuildId() {
+	assignedBuildId := ms.GetAssignedBuildId()
+	if !versioningStamp.GetUseVersioning() || versioningStamp.GetBuildId() == assignedBuildId {
 		// dispatch build id is the same as wf assigned build id, hence noop.
 		return nil
 	}
 
-	if redirectInfo == nil || redirectInfo.GetAssignedBuildId() != ms.GetAssignedBuildId() {
-		// no redirect or a redirect based on a wrong assinged build id is reported. this must be a task
+	if (assignedBuildId != "" || ms.HasCompletedAnyWorkflowTask()) &&
+		(redirectInfo == nil || redirectInfo.GetAssignedBuildId() != assignedBuildId) {
+		// Workflow is already assigned to a build ID (or completed tasks by unversioned workers) but no redirect
+		// or a redirect based on a wrong assigned build id is reported. This must be a task
 		// backlogged on an old build id. rejecting this task, there should be another task scheduled on
 		// the right build id.
 		return serviceerrors.NewInvalidDispatchBuildId()

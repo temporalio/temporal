@@ -55,15 +55,15 @@ func (e *InvalidDispatchBuildId) Status() *status.Status {
 		return e.st
 	}
 
-	st := status.New(codes.Unavailable, e.Message)
+	st := status.New(codes.FailedPrecondition, e.Message)
 	st, _ = st.WithDetails(
-		&errordetails.StickyWorkerUnavailableFailure{},
+		&errordetails.InvalidDispatchBuildIdFailure{},
 	)
 	return st
 }
 
 func newInvalidDispatchBuildId(st *status.Status) error {
-	return &StickyWorkerUnavailable{
+	return &InvalidDispatchBuildId{
 		Message: st.Message(),
 		st:      st,
 	}
