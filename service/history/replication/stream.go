@@ -79,23 +79,22 @@ func WrapEventLoop(
 			return
 		}
 		// if it is stream error, we will not retry and terminate the stream, then let the stream_receiver_monitor to restart it
-		if IsStreamError(err) {
-			streamErr, _ := err.(*StreamError)
+		if streamError, ok := err.(*StreamError); ok {
 			metrics.ReplicationStreamError.With(metricsHandler).Record(
 				int64(1),
-				metrics.ServiceErrorTypeTag(streamErr.cause),
+				metrics.ServiceErrorTypeTag(streamError.cause),
 				metrics.FromClusterIDTag(fromClusterKey.ClusterID),
 				metrics.ToClusterIDTag(toClusterKey.ClusterID),
 			)
 			return
-		} else {
-			metrics.ReplicationServiceError.With(metricsHandler).Record(
-				int64(1),
-				metrics.ServiceErrorTypeTag(err),
-				metrics.FromClusterIDTag(fromClusterKey.ClusterID),
-				metrics.ToClusterIDTag(toClusterKey.ClusterID),
-			)
 		}
+		metrics.ReplicationServiceError.With(metricsHandler).Record(
+			int64(1),
+			metrics.ServiceErrorTypeTag(err),
+			metrics.FromClusterIDTag(fromClusterKey.ClusterID),
+			metrics.ToClusterIDTag(toClusterKey.ClusterID),
+		)
+
 		time.Sleep(retryInterval)
 	}
 }
