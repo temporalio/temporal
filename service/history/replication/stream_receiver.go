@@ -28,6 +28,7 @@ package replication
 
 import (
 	"context"
+	"errors"
 	"sync/atomic"
 	"time"
 
@@ -188,8 +189,11 @@ func (r *StreamReceiverImpl) recvEventLoop() error {
 	defer log.CapturePanic(r.logger, &panicErr)
 
 	err := r.processMessages(r.stream)
-
-	if streamError, ok := err.(*StreamError); ok {
+	if err == nil {
+		return nil
+	}
+	var streamError *StreamError
+	if errors.As(err, &streamError) {
 		r.logger.Error("ReplicationStreamError StreamReceiver exit recv loop", tag.Error(streamError))
 	} else {
 		r.logger.Error("ReplicationServiceError StreamReceiver exit recv loop", tag.Error(err))

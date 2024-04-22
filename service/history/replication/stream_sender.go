@@ -156,8 +156,8 @@ func (s *StreamSenderImpl) recvEventLoop() (retErr error) {
 	for !s.shutdownChan.IsShutdown() {
 		req, err := s.server.Recv()
 		if err != nil {
-			s.logger.Error("GrpcStreamError StreamSender failed to receive", tag.Error(err))
-			return NewStreamError("GrpcStreamError recv error", err)
+			s.logger.Error("ReplicationStreamError StreamSender failed to receive", tag.Error(err))
+			return NewStreamError("StreamError recv error", err)
 		}
 		switch attr := req.GetAttributes().(type) {
 		case *historyservice.StreamWorkflowReplicationMessagesRequest_SyncReplicationState:
