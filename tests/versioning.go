@@ -1350,7 +1350,7 @@ func (s *VersioningIntegSuite) testWorkflowTaskRedirectInRetry(firstTask bool) {
 	failedTask := make(chan struct{})
 	wf1 := func(ctx workflow.Context) (string, error) {
 		if !firstTask {
-			// add an activity to move workflow past first wft
+			// add an activity to move workflow past first WFT
 			var out interface{}
 			err := workflow.ExecuteActivity(workflow.WithActivityOptions(ctx, workflow.ActivityOptions{
 				StartToCloseTimeout: 1 * time.Second}), act).Get(ctx, &out)
@@ -1398,7 +1398,7 @@ func (s *VersioningIntegSuite) testWorkflowTaskRedirectInRetry(firstTask bool) {
 	timedoutTask := make(chan struct{})
 	wf11 := func(ctx workflow.Context) (string, error) {
 		if !firstTask {
-			// add an activity to move workflow past first wft
+			// add an activity to move workflow past first WFT
 			var out interface{}
 			err := workflow.ExecuteActivity(workflow.WithActivityOptions(ctx, workflow.ActivityOptions{
 				StartToCloseTimeout: 1 * time.Second}), act).Get(ctx, &out)
@@ -1435,7 +1435,7 @@ func (s *VersioningIntegSuite) testWorkflowTaskRedirectInRetry(firstTask bool) {
 	// v12 can process the task
 	wf12 := func(ctx workflow.Context) (string, error) {
 		if !firstTask {
-			// add an activity to move workflow past first wft
+			// add an activity to move workflow past first WFT
 			var out interface{}
 			err := workflow.ExecuteActivity(workflow.WithActivityOptions(ctx, workflow.ActivityOptions{
 				StartToCloseTimeout: 1 * time.Second}), act).Get(ctx, &out)

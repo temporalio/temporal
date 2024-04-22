@@ -840,12 +840,19 @@ func (handler *workflowTaskHandlerCallbacksImpl) handleWorkflowTaskCompleted(
 		if err != nil {
 			return nil, err
 		}
+		versioningStamp := request.WorkerVersionStamp
+		if versioningStamp.GetUseVersioning() && ms.GetAssignedBuildId() == "" {
+			// old versioning is used. making sure the versioning stamp does not go through otherwise the
+			// workflow will start using new versioning which may surprise users.
+			// TODO: remove this block when deleting old wv [cleanup-old-wv]
+			versioningStamp = nil
+		}
 		_, newWorkflowTask, err = ms.AddWorkflowTaskStartedEvent(
 			newWorkflowTask.ScheduledEventID,
 			"request-from-RespondWorkflowTaskCompleted",
 			newWorkflowTask.TaskQueue,
 			request.Identity,
-			nil,
+			versioningStamp,
 		)
 		if err != nil {
 			return nil, err
