@@ -28,7 +28,6 @@ package replication
 
 import (
 	"context"
-	"errors"
 	"sync/atomic"
 	"time"
 
@@ -166,8 +165,8 @@ func (r *StreamReceiverImpl) sendEventLoop() error {
 		case <-timer.C:
 			timer.Reset(r.Config.ReplicationStreamSyncStatusDuration())
 			if err := r.ackMessage(r.stream); err != nil {
-				if streamError, ok := err.(*StreamError); ok {
-					r.logger.Error("ReplicationStreamError StreamReceiver exit send loop", tag.Error(streamError))
+				if IsStreamError(err) {
+					r.logger.Error("ReplicationStreamError StreamReceiver exit send loop", tag.Error(err))
 				} else {
 					r.logger.Error("ReplicationServiceError StreamReceiver exit send loop", tag.Error(err))
 				}
@@ -192,9 +191,8 @@ func (r *StreamReceiverImpl) recvEventLoop() error {
 	if err == nil {
 		return nil
 	}
-	var streamError *StreamError
-	if errors.As(err, &streamError) {
-		r.logger.Error("ReplicationStreamError StreamReceiver exit recv loop", tag.Error(streamError))
+	if IsStreamError(err) {
+		r.logger.Error("ReplicationStreamError StreamReceiver exit recv loop", tag.Error(err))
 	} else {
 		r.logger.Error("ReplicationServiceError StreamReceiver exit recv loop", tag.Error(err))
 	}

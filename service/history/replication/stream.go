@@ -25,6 +25,7 @@
 package replication
 
 import (
+	"errors"
 	"fmt"
 	"time"
 
@@ -78,10 +79,11 @@ func WrapEventLoop(
 			return
 		}
 		// if it is stream error, we will not retry and terminate the stream, then let the stream_receiver_monitor to restart it
-		if streamError, ok := err.(*StreamError); ok {
+		if IsStreamError(err) {
+			streamErr, _ := err.(*StreamError)
 			metrics.ReplicationStreamError.With(metricsHandler).Record(
 				int64(1),
-				metrics.ServiceErrorTypeTag(streamError.cause),
+				metrics.ServiceErrorTypeTag(streamErr.cause),
 				metrics.FromClusterIDTag(fromClusterKey.ClusterID),
 				metrics.ToClusterIDTag(toClusterKey.ClusterID),
 			)
@@ -96,4 +98,8 @@ func WrapEventLoop(
 		}
 		time.Sleep(retryInterval)
 	}
+}
+func IsStreamError(err error) bool {
+	var streamError *StreamError
+	return errors.As(err, &streamError)
 }
