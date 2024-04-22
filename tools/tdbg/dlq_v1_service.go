@@ -157,7 +157,7 @@ func (ac *DLQV1Service) PurgeMessages(c *cli.Context) error {
 	}); err != nil {
 		return fmt.Errorf("failed to purge DLQ")
 	}
-	fmt.Println("Successfully purged DLQ Messages.")
+	fmt.Fprintln(c.App.Writer, "Successfully purged DLQ Messages.")
 	return nil
 }
 
@@ -199,9 +199,9 @@ func (ac *DLQV1Service) MergeMessages(c *cli.Context) error {
 		}
 
 		request.NextPageToken = response.NextPageToken
-		fmt.Printf("Successfully merged %v messages. More messages to merge.\n", defaultPageSize)
+		fmt.Fprintf(c.App.Writer, "Successfully merged %v messages. More messages to merge.\n", defaultPageSize)
 	}
-	fmt.Println("Successfully merged all messages.")
+	fmt.Fprintln(c.App.Writer, "Successfully merged all messages.")
 	return nil
 }
 

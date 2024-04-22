@@ -27,6 +27,7 @@ require (
 	github.com/pborman/uuid v1.2.1
 	github.com/prometheus/client_golang v1.16.0
 	github.com/robfig/cron/v3 v3.0.1
+	github.com/sony/gobreaker v0.5.0
 	github.com/stretchr/testify v1.9.0
 	github.com/temporalio/ringpop-go v0.0.0-20230606200434-b5c079f412d3
 	github.com/temporalio/sqlparser v0.0.0-20231115171017-f4060bcfa6cb
