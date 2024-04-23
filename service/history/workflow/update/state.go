@@ -103,3 +103,10 @@ func (s state) LifecycleStage() (enumspb.UpdateWorkflowExecutionLifecycleStage, 
 func (s state) Matches(mask stateSet) bool {
 	return uint32(s)&uint32(mask) == uint32(s)
 }
+
+// isStrictlyAncestralTo returns true if the target state can be reached from the source state, and they are not the
+// same state.
+func (s state) isStrictlyAncestralTo(t state) bool {
+	// Currently, the DAG is linear.
+	return s < t
+}

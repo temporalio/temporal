@@ -29,6 +29,7 @@ import (
 	"time"
 
 	commonpb "go.temporal.io/api/common/v1"
+	"go.temporal.io/api/serviceerror"
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/definition"
@@ -37,7 +38,6 @@ import (
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/service/history/consts"
 	"go.temporal.io/server/service/history/hsm"
-	"go.temporal.io/server/service/history/queues"
 	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/tasks"
 	"go.temporal.io/server/service/history/workflow"
@@ -96,6 +96,7 @@ func getWorkflowExecutionContext(
 		lockPriority,
 	)
 	if common.IsContextDeadlineExceededErr(err) {
+		// TODO: make sure this doesn't count against our SLA if this happens while handling an API request.
 		err = consts.ErrResourceExhaustedBusyWorkflow
 	}
 	return weContext, release, err
@@ -171,8 +172,8 @@ func getCurrentWorkflowExecutionContext(
 	return wfContext, release, nil
 }
 
-// taskExecutor provides basic functionality for task execution.
-type taskExecutor struct {
+// stateMachineEnvironment provides basic functionality for state machine task execution and handling of API requests.
+type stateMachineEnvironment struct {
 	shardContext   shard.Context
 	cache          wcache.Cache
 	metricsHandler metrics.Handler
@@ -183,12 +184,12 @@ type taskExecutor struct {
 // Propagages errors returned from validate.
 // Does **not** reload mutable state if validate reports it is stale. Not meant to be called directly, call
 // [loadAndValidateMutableState] instead.
-func (t *taskExecutor) loadAndValidateMutableStateNoReload(
+func (e *stateMachineEnvironment) loadAndValidateMutableStateNoReload(
 	ctx context.Context,
 	wfCtx workflow.Context,
 	validate func(workflow.MutableState) error,
 ) (workflow.MutableState, error) {
-	mutableState, err := wfCtx.LoadMutableState(ctx, t.shardContext)
+	mutableState, err := wfCtx.LoadMutableState(ctx, e.shardContext)
 	if err != nil {
 		return nil, err
 	}
@@ -199,28 +200,27 @@ func (t *taskExecutor) loadAndValidateMutableStateNoReload(
 // loadAndValidateMutableState loads mutable state and validates it.
 // Propagages errors returned from validate.
 // Reloads mutable state and retries if validator returns a [queues.StaleStateError].
-func (t *taskExecutor) loadAndValidateMutableState(
+func (e *stateMachineEnvironment) loadAndValidateMutableState(
 	ctx context.Context,
 	wfCtx workflow.Context,
 	validate func(workflow.MutableState) error,
 ) (workflow.MutableState, error) {
-	mutableState, err := t.loadAndValidateMutableStateNoReload(ctx, wfCtx, validate)
+	mutableState, err := e.loadAndValidateMutableStateNoReload(ctx, wfCtx, validate)
 	if err == nil {
 		return mutableState, nil
 	}
 
-	var sve queues.StaleStateError
-	if !errors.As(err, &sve) {
+	if !errors.Is(err, consts.ErrStaleState) {
 		return nil, err
 	}
-	t.metricsHandler.Counter(metrics.StaleMutableStateCounter.Name()).Record(1)
+	e.metricsHandler.Counter(metrics.StaleMutableStateCounter.Name()).Record(1)
 	wfCtx.Clear()
 
-	return t.loadAndValidateMutableStateNoReload(ctx, wfCtx, validate)
+	return e.loadAndValidateMutableStateNoReload(ctx, wfCtx, validate)
 }
 
-// validateStateMachineTask compares the task and associated state machine's version and transition count to detect staleness.
-func (t *taskExecutor) validateStateMachineTask(ms workflow.MutableState, ref hsm.Ref) error {
+// validateStateMachineRef compares the ref and associated state machine's version and transition count to detect staleness.
+func (e *stateMachineEnvironment) validateStateMachineRef(ms workflow.MutableState, ref hsm.Ref) error {
 	err := workflow.TransitionHistoryStalenessCheck(
 		ms.GetExecutionInfo().GetTransitionHistory(),
 		ref.StateMachineRef.MutableStateNamespaceFailoverVersion,
@@ -231,29 +231,32 @@ func (t *taskExecutor) validateStateMachineTask(ms workflow.MutableState, ref hs
 	}
 	node, err := ms.HSM().Child(ref.StateMachinePath())
 	if err != nil {
-		return fmt.Errorf("%w: %w", queues.NewUnprocessableTaskError("node lookup failed"), err)
+		if errors.Is(err, hsm.ErrStateMachineNotFound) {
+			return fmt.Errorf("%w: %w", consts.ErrStaleReference, err)
+		}
+		return fmt.Errorf("%w: %w", serviceerror.NewInternal("node lookup failed"), err)
 	}
 
 	// Only check for strict equality if the ref has non zero MachineTransitionCount, which marks the task as non-concurrent.
 	if ref.StateMachineRef.MachineTransitionCount != 0 && node.TransitionCount() != ref.StateMachineRef.MachineTransitionCount {
-		return fmt.Errorf("%w: state machine transitions != task transitions", queues.ErrStaleTask)
+		return fmt.Errorf("%w: state machine transitions != task transitions", consts.ErrStaleReference)
 	}
 	return nil
 }
 
 // getValidatedMutableState loads mutable state and validates it with the given function.
 // validate must not mutate the state.
-func (t *taskExecutor) getValidatedMutableState(
+func (e *stateMachineEnvironment) getValidatedMutableState(
 	ctx context.Context,
 	key definition.WorkflowKey,
 	validate func(workflow.MutableState) error,
 ) (workflow.Context, wcache.ReleaseCacheFunc, workflow.MutableState, error) {
-	wfCtx, release, err := getWorkflowExecutionContext(ctx, t.shardContext, t.cache, key, workflow.LockPriorityLow)
+	wfCtx, release, err := getWorkflowExecutionContext(ctx, e.shardContext, e.cache, key, workflow.LockPriorityLow)
 	if err != nil {
 		return nil, nil, nil, err
 	}
 
-	ms, err := t.loadAndValidateMutableState(ctx, wfCtx, validate)
+	ms, err := e.loadAndValidateMutableState(ctx, wfCtx, validate)
 
 	if err != nil {
 		// Release now with no error to prevent mutable state from being unloaded from the cache.
@@ -263,10 +266,10 @@ func (t *taskExecutor) getValidatedMutableState(
 	return wfCtx, release, ms, nil
 }
 
-func (t *taskExecutor) Access(ctx context.Context, ref hsm.Ref, accessType hsm.AccessType, accessor func(*hsm.Node) error) (retErr error) {
-	wfCtx, release, ms, err := t.getValidatedMutableState(
+func (e *stateMachineEnvironment) Access(ctx context.Context, ref hsm.Ref, accessType hsm.AccessType, accessor func(*hsm.Node) error) (retErr error) {
+	wfCtx, release, ms, err := e.getValidatedMutableState(
 		ctx, ref.WorkflowKey, func(ms workflow.MutableState) error {
-			return t.validateStateMachineTask(ms, ref)
+			return e.validateStateMachineRef(ms, ref)
 		},
 	)
 	if err != nil {
@@ -295,11 +298,11 @@ func (t *taskExecutor) Access(ctx context.Context, ref hsm.Ref, accessType hsm.A
 	if ms.GetExecutionState().State == enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED {
 		// Can't use UpdateWorkflowExecutionAsActive since it updates the current run, and we are operating on closed
 		// workflows.
-		return wfCtx.SubmitClosedWorkflowSnapshot(ctx, t.shardContext, workflow.TransactionPolicyActive)
+		return wfCtx.SubmitClosedWorkflowSnapshot(ctx, e.shardContext, workflow.TransactionPolicyActive)
 	}
-	return wfCtx.UpdateWorkflowExecutionAsActive(ctx, t.shardContext)
+	return wfCtx.UpdateWorkflowExecutionAsActive(ctx, e.shardContext)
 }
 
-func (t *taskExecutor) Now() time.Time {
-	return t.shardContext.GetTimeSource().Now()
+func (e *stateMachineEnvironment) Now() time.Time {
+	return e.shardContext.GetTimeSource().Now()
 }

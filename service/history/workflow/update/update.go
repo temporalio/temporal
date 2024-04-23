@@ -564,8 +564,8 @@ func (u *Update) checkStateSet(msg proto.Message, allowed stateSet) error {
 		return nil
 	}
 	u.instrumentation.CountInvalidStateTransition()
-	return invalidArgf("invalid state transition attempted: "+
-		"received %T message while in state %q", msg, u.state)
+	return invalidArgf("invalid state transition attempted for Update %s: "+
+		"received %T message while in state %q", u.id, msg, u.state)
 }
 
 // setState assigns the current state to a new value returning the original value.
@@ -574,6 +574,18 @@ func (u *Update) setState(newState state) state {
 	u.state = newState
 	u.instrumentation.StateChange(u.id, prevState, newState)
 	return prevState
+}
+
+func (u *Update) advanceTo(newState state) error {
+	if !u.state.isStrictlyAncestralTo(newState) {
+		return invalidArgf("cannot advance to state %q from state %q", newState, u.state)
+	}
+	u.setState(newState)
+	if newState == stateCompleted {
+		u.onComplete()
+	}
+	// TODO: resolve the accepted / completed futures
+	return nil
 }
 
 func (u *Update) GetSize() int {

@@ -32,6 +32,7 @@
 package routing
 
 import (
+	"net/url"
 	"strings"
 )
 
@@ -121,12 +122,12 @@ func (r Route[T]) serialize(f func(c Component[T]) string) string {
 }
 
 // Deserialize the given vars into a new instance of the params type, T.
-func (r Route[T]) Deserialize(vars map[string]string) *T {
+func (r Route[T]) Deserialize(vars map[string]string) T {
 	var t T
 	for _, c := range r.components {
 		c.Deserialize(vars, &t)
 	}
-	return &t
+	return t
 }
 
 // Constant returns a [Component] that represents a series of constant HTTP path components in a Route.
@@ -162,7 +163,7 @@ func (s stringVariable[T]) Representation() string {
 }
 
 func (s stringVariable[T]) Serialize(t T) string {
-	return *s.getter(&t)
+	return url.PathEscape(*s.getter(&t))
 }
 
 func (s stringVariable[T]) Deserialize(vars map[string]string, t *T) {
