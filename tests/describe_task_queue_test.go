@@ -36,8 +36,6 @@ import (
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/server/common/dynamicconfig"
-	"go.temporal.io/server/common/testing/protorequire"
-	"go.temporal.io/server/common/testing/updateutils"
 	"google.golang.org/protobuf/types/known/durationpb"
 )
 
@@ -46,8 +44,6 @@ import (
 type (
 	DescribeTaskQueueSuite struct {
 		*require.Assertions
-		protorequire.ProtoAssertions
-		updateutils.UpdateUtils
 		FunctionalTestBase
 	}
 )
@@ -68,8 +64,6 @@ func (s *DescribeTaskQueueSuite) TearDownSuite() {
 func (s *DescribeTaskQueueSuite) SetupTest() {
 	// Have to define our overridden assertions in the test setup. If we did it earlier, s.T() will return nil
 	s.Assertions = require.New(s.T())
-	s.ProtoAssertions = protorequire.New(s.T())
-	s.UpdateUtils = updateutils.New(s.T())
 }
 
 func (s *DescribeTaskQueueSuite) TestAddNoTasks_ValidateBacklogInfo() {
@@ -121,7 +115,7 @@ func (s *DescribeTaskQueueSuite) publishConsumeWorkflowTasksValidateBacklogInfo(
 	expectedBacklogCount[enumspb.TASK_QUEUE_TYPE_WORKFLOW] = int64(workflows)
 	s.validateDescribeTaskQueue(tl, expectedBacklogCount)
 
-	// Completing the tasks
+	// Polling the tasks
 	for i := 0; i < workflows; i++ {
 		resp1, err1 := s.engine.PollWorkflowTaskQueue(NewContext(), &workflowservice.PollWorkflowTaskQueueRequest{
 			Namespace: s.namespace,
@@ -161,7 +155,7 @@ func (s *DescribeTaskQueueSuite) validateDescribeTaskQueue(tl string, expectedBa
 		versionInfo := resp.GetVersionsInfo()[""]
 		s.Assert().Equal(enumspb.BUILD_ID_TASK_REACHABILITY_REACHABLE, versionInfo.GetTaskReachability())
 		types := versionInfo.GetTypesInfo()
-		s.Assert().Equal(len(types), 2)
+		s.Assert().Equal(len(types), len(expectedBacklogCount))
 
 		validator := true
 		for qT, t := range types {
