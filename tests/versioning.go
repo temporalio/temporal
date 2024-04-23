@@ -1340,7 +1340,7 @@ func (s *VersioningIntegSuite) testWorkflowTaskRedirectInRetry(firstTask bool) {
 	v11 := s.prefixed("v1.1")
 	v12 := s.prefixed("v1.2")
 
-	ctx, cancel := context.WithTimeout(context.Background(), 3000*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
 	rule := s.addAssignmentRule(ctx, tq, v1)
@@ -2093,7 +2093,7 @@ func (s *VersioningIntegSuite) TestRedirectWithConcurrentActivities() {
 	tq := s.randomizeStr(s.T().Name())
 	v1 := s.prefixed("v1.0")
 
-	ctx, cancel := context.WithTimeout(context.Background(), 300*time.Minute)
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Minute)
 	defer cancel()
 	rule := s.addAssignmentRule(ctx, tq, v1)
 	s.waitForAssignmentRulePropagation(ctx, tq, rule)
