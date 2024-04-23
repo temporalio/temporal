@@ -2271,7 +2271,7 @@ func (s *VersioningIntegSuite) TestRedirectWithConcurrentActivities() {
 	s.True(activityRetried, "no activity retried")
 	s.True(sawUnorderedEvents)
 
-	for _, w :=  range workers {
+	for _, w := range workers {
 		w.Stop()
 	}
 }

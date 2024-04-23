@@ -191,7 +191,7 @@ func (fwdr *Forwarder) getForwardInfo(task *internalTask) *taskqueuespb.TaskForw
 			SourcePartition:    fwdr.partition.RpcName(),
 			DispatchBuildId:    fwdr.queue.BuildId(),
 			DispatchVersionSet: fwdr.queue.VersionSet(),
-			RedirectInfo: task.redirectInfo,
+			RedirectInfo:       task.redirectInfo,
 		}
 		return forwardInfo
 	}
@@ -236,8 +236,8 @@ func (fwdr *Forwarder) ForwardNexusTask(ctx context.Context, task *internalTask)
 			Name: target.RpcName(),
 			Kind: fwdr.partition.Kind(),
 		},
-		Request:         task.nexus.request.Request,
-		ForwardInfo:      fwdr.getForwardInfo(task),
+		Request:     task.nexus.request.Request,
+		ForwardInfo: fwdr.getForwardInfo(task),
 	})
 
 	return resp, fwdr.handleErr(err)
