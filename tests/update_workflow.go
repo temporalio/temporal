@@ -5155,7 +5155,6 @@ func (s *FunctionalSuite) TestUpdateWorkflow_UpdateMessageInLastWFT() {
 	tv := testvars.New(s.T().Name())
 	tv = s.startWorkflow(tv)
 
-	updateId := tv.UpdateID()
 	messageId := "my-message-id"
 
 	poller := &TaskPoller{
@@ -5184,7 +5183,7 @@ func (s *FunctionalSuite) TestUpdateWorkflow_UpdateMessageInLastWFT() {
 	updateResponse := make(chan error)
 	pollResponse := make(chan error)
 	go func() {
-		_, err := s.sendUpdateWaitPolicyAccepted(tv, updateId)
+		_, err := s.sendUpdateWaitPolicyAccepted(tv, tv.UpdateID())
 		updateResponse <- err
 	}()
 	go func() {
