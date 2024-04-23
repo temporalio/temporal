@@ -1058,8 +1058,11 @@ func (s *FunctionalSuite) TestExecuteMultiOperation() {
 							Operation: &workflowservice.ExecuteMultiOperationRequest_Operation_UpdateWorkflow{
 								UpdateWorkflow: &workflowservice.UpdateWorkflowExecutionRequest{
 									Request: &updatepb.Request{
-										Meta:  &updatepb.Meta{UpdateId: "UPDATE_ID"},
-										Input: &updatepb.Input{Name: "UPDATE"},
+										Meta: &updatepb.Meta{UpdateId: tv.UpdateID("1")},
+										Input: &updatepb.Input{
+											Name: tv.Any().String(),
+											Args: tv.Any().Payloads(),
+										},
 									},
 									WorkflowExecution: &commonpb.WorkflowExecution{WorkflowId: tv.WorkflowID()},
 									WaitPolicy:        &updatepb.WaitPolicy{LifecycleStage: enumspb.UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_COMPLETED},
