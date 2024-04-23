@@ -30,11 +30,14 @@ import (
 	"github.com/golang/mock/gomock"
 	"github.com/stretchr/testify/assert"
 	commonpb "go.temporal.io/api/common/v1"
+	protocolpb "go.temporal.io/api/protocol/v1"
+	updatepb "go.temporal.io/api/update/v1"
 	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/server/api/token/v1"
 	"go.temporal.io/server/common"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
+	"google.golang.org/protobuf/types/known/anypb"
 
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/server/common/api"
@@ -55,10 +58,20 @@ func TestEmitActionMetric(t *testing.T) {
 	metricsHandler := metrics.NewMockHandler(controller)
 	telemetry := NewTelemetryInterceptor(register, metricsHandler, log.NewNoopLogger())
 
+	var updateAcceptanceMessageBody anypb.Any
+	_ = updateAcceptanceMessageBody.MarshalFrom(&updatepb.Acceptance{})
+
+	var updateRejectionMessageBody anypb.Any
+	_ = updateRejectionMessageBody.MarshalFrom(&updatepb.Rejection{})
+
+	var updateCompletionMessageBody anypb.Any
+	_ = updateCompletionMessageBody.MarshalFrom(&updatepb.Outcome{})
+
 	testCases := []struct {
 		methodName        string
 		fullName          string
 		expectEmitMetrics bool
+		req               any
 		resp              any
 	}{
 		{
@@ -85,6 +98,47 @@ func TestEmitActionMetric(t *testing.T) {
 			methodName: metrics.MatchingClientAddWorkflowTaskScope,
 			fullName:   api.WorkflowServicePrefix + queryWorkflow,
 		},
+		{
+			methodName: "UpdateWorkflowExecution",
+			fullName:   api.WorkflowServicePrefix + queryWorkflow,
+		}, {
+			methodName: metrics.HistoryRespondWorkflowTaskCompletedScope,
+			fullName:   api.WorkflowServicePrefix + "RespondWorkflowTaskCompleted",
+			req: &workflowservice.RespondWorkflowTaskCompletedRequest{
+				Messages: []*protocolpb.Message{
+					{
+						Id:   "MESSAGE_ID",
+						Body: &updateAcceptanceMessageBody,
+					},
+				},
+			},
+			expectEmitMetrics: true,
+		},
+		{
+			methodName: metrics.HistoryRespondWorkflowTaskCompletedScope,
+			fullName:   api.WorkflowServicePrefix + "RespondWorkflowTaskCompleted",
+			req: &workflowservice.RespondWorkflowTaskCompletedRequest{
+				Messages: []*protocolpb.Message{
+					{
+						Id:   "MESSAGE_ID",
+						Body: &updateRejectionMessageBody,
+					},
+				},
+			},
+			expectEmitMetrics: true,
+		},
+		{
+			methodName: metrics.HistoryRespondWorkflowTaskCompletedScope,
+			fullName:   api.WorkflowServicePrefix + "RespondWorkflowTaskCompleted",
+			req: &workflowservice.RespondWorkflowTaskCompletedRequest{
+				Messages: []*protocolpb.Message{
+					{
+						Id:   "MESSAGE_ID",
+						Body: &updateCompletionMessageBody,
+					},
+				},
+			},
+		},
 	}
 
 	for _, tt := range testCases {
@@ -94,7 +148,7 @@ func TestEmitActionMetric(t *testing.T) {
 			} else {
 				metricsHandler.EXPECT().Counter(gomock.Any()).Return(metrics.NoopCounterMetricFunc).Times(0)
 			}
-			telemetry.emitActionMetric(tt.methodName, tt.fullName, nil, metricsHandler, tt.resp)
+			telemetry.emitActionMetric(tt.methodName, tt.fullName, tt.req, metricsHandler, tt.resp)
 		})
 	}
 }

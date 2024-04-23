@@ -32,6 +32,7 @@ import (
 	commonpb "go.temporal.io/api/common/v1"
 	"go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
+	updatepb "go.temporal.io/api/update/v1"
 	"go.temporal.io/api/workflowservice/v1"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
@@ -76,7 +77,6 @@ var (
 	_ grpc.StreamServerInterceptor = (*TelemetryInterceptor)(nil).StreamIntercept
 )
 
-// static variables used to emit action metrics.
 var (
 	respondWorkflowTaskCompleted = "RespondWorkflowTaskCompleted"
 	pollActivityTaskQueue        = "PollActivityTaskQueue"
@@ -96,9 +96,9 @@ var (
 		"UpdateSchedule":                   {},
 		"DeleteSchedule":                   {},
 		"PatchSchedule":                    {},
-		"UpdateWorkflowExecution":          {},
 	}
 
+	// commandActions is a subset of all the commands that are counted as actions.
 	commandActions = map[enums.CommandType]struct{}{
 		enums.COMMAND_TYPE_RECORD_MARKER:                      {},
 		enums.COMMAND_TYPE_START_TIMER:                        {},
@@ -248,27 +248,50 @@ func (ti *TelemetryInterceptor) emitActionMetric(
 
 		hasMarker := false
 		for _, command := range completedRequest.Commands {
-			if _, ok := commandActions[command.CommandType]; ok {
-				switch command.CommandType {
-				case enums.COMMAND_TYPE_RECORD_MARKER:
-					// handle RecordMarker command, they are used for localActivity, sideEffect, versioning etc.
-					hasMarker = true
-				case enums.COMMAND_TYPE_START_CHILD_WORKFLOW_EXECUTION:
-					// Each child workflow counts as 2 actions. We use separate tags to track them separately.
-					metrics.ActionCounter.With(metricsHandler).Record(1, metrics.ActionType("command_"+command.CommandType.String()))
-					metrics.ActionCounter.With(metricsHandler).Record(1, metrics.ActionType("command_"+command.CommandType.String()+"_Extra"))
-				default:
-					// handle all other command action
-					metrics.ActionCounter.With(metricsHandler).Record(1, metrics.ActionType("command_"+command.CommandType.String()))
-				}
+			if _, ok := commandActions[command.CommandType]; !ok {
+				continue
+			}
+
+			switch command.CommandType { // nolint:exhaustive
+			case enums.COMMAND_TYPE_RECORD_MARKER:
+				// handle RecordMarker command, they are used for localActivity, sideEffect, versioning etc.
+				hasMarker = true
+			case enums.COMMAND_TYPE_START_CHILD_WORKFLOW_EXECUTION:
+				// Each child workflow counts as 2 actions. We use separate tags to track them separately.
+				metrics.ActionCounter.With(metricsHandler).Record(1, metrics.ActionType("command_"+command.CommandType.String()))
+				metrics.ActionCounter.With(metricsHandler).Record(1, metrics.ActionType("command_"+command.CommandType.String()+"_Extra"))
+			default:
+				// handle all other command action
+				metrics.ActionCounter.With(metricsHandler).Record(1, metrics.ActionType("command_"+command.CommandType.String()))
 			}
 		}
+
 		if hasMarker {
 			// Emit separate action metric for batch of markers.
 			// One workflow task response may contain multiple marker commands. Each marker will emit one
 			// command_RecordMarker_Xxx action metric. Depending on pricing model, you may want to ignore all individual
 			// command_RecordMarker_Xxx and use command_BatchMarkers instead.
 			metrics.ActionCounter.With(metricsHandler).Record(1, metrics.ActionType("command_BatchMarkers"))
+		}
+
+		var updates int64
+		for _, msg := range completedRequest.Messages {
+			if msg == nil || msg.Body == nil {
+				continue
+			}
+			body, err := msg.Body.UnmarshalNew()
+			if err != nil {
+				continue
+			}
+			switch body.(type) {
+			case *updatepb.Acceptance:
+				updates += 1
+			case *updatepb.Rejection:
+				updates += 1
+			}
+		}
+		if updates > 0 {
+			metrics.ActionCounter.With(metricsHandler).Record(updates, metrics.ActionType("command_UpdateWorkflowExecution"))
 		}
 
 	case pollActivityTaskQueue:
