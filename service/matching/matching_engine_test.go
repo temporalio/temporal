@@ -3038,6 +3038,7 @@ func (s *matchingEngineSuite) TestUnloadingTQMValidateBacklogCounter() {
 	s.Equal(ok, true)
 
 	tlMgr, ok = tqm_loaded_Impl.defaultQueue.(*physicalTaskQueueManagerImpl)
+	s.Equal(ok, true)
 	s.EqualValues(tlMgr.backlogMgr.db.getApproximateBacklogCount(), taskCount+1) // should read "taskCount + 1", not 1
 
 }
