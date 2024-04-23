@@ -652,9 +652,6 @@ func (s *FunctionalSuite) testResetWorkflowReapplyBuffer(
 }
 
 func (s *FunctionalSuite) TestUpdateMessageInLastWFT() {
-	// set this to false to make the test pass
-	completeWFT := true
-
 	tv := testvars.New(s.T().Name())
 	workflowId := "wfid"
 	workflowTypeName := "wftype"
@@ -678,25 +675,21 @@ func (s *FunctionalSuite) TestUpdateMessageInLastWFT() {
 	s.NoError(err)
 
 	wtHandler := func(*commonpb.WorkflowExecution, *commonpb.WorkflowType, int64, int64, *historypb.History) ([]*commandpb.Command, error) {
-		if completeWFT {
-			return []*commandpb.Command{
-				{
-					CommandType: enumspb.COMMAND_TYPE_PROTOCOL_MESSAGE,
-					Attributes: &commandpb.Command_ProtocolMessageCommandAttributes{ProtocolMessageCommandAttributes: &commandpb.ProtocolMessageCommandAttributes{
-						MessageId: tv.MessageID("accept-msg"),
-					}},
-				},
-				{
-					CommandType: enumspb.COMMAND_TYPE_COMPLETE_WORKFLOW_EXECUTION,
-					Attributes: &commandpb.Command_CompleteWorkflowExecutionCommandAttributes{
-						CompleteWorkflowExecutionCommandAttributes: &commandpb.CompleteWorkflowExecutionCommandAttributes{
-							Result: payloads.EncodeString("Done"),
-						},
+		return []*commandpb.Command{
+			{
+				CommandType: enumspb.COMMAND_TYPE_PROTOCOL_MESSAGE,
+				Attributes: &commandpb.Command_ProtocolMessageCommandAttributes{ProtocolMessageCommandAttributes: &commandpb.ProtocolMessageCommandAttributes{
+					MessageId: tv.MessageID("accept-msg"),
+				}},
+			},
+			{
+				CommandType: enumspb.COMMAND_TYPE_COMPLETE_WORKFLOW_EXECUTION,
+				Attributes: &commandpb.Command_CompleteWorkflowExecutionCommandAttributes{
+					CompleteWorkflowExecutionCommandAttributes: &commandpb.CompleteWorkflowExecutionCommandAttributes{
+						Result: payloads.EncodeString("Done"),
 					},
-				}}, nil
-		} else {
-			return []*commandpb.Command{}, nil
-		}
+				},
+			}}, nil
 	}
 
 	messageHandler := func(*workflowservice.PollWorkflowTaskQueueResponse) ([]*protocolpb.Message, error) {
