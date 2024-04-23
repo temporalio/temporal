@@ -25,6 +25,9 @@ package tests
 import (
 	"context"
 	"flag"
+	"testing"
+	"time"
+
 	"github.com/pborman/uuid"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
@@ -37,8 +40,6 @@ import (
 	"go.temporal.io/server/common/testing/protorequire"
 	"go.temporal.io/server/common/testing/updateutils"
 	"google.golang.org/protobuf/types/known/durationpb"
-	"testing"
-	"time"
 )
 
 // making a new test suite here
@@ -120,7 +121,6 @@ func (s *DescribeTaskQueueSuite) PublishConsumeWorkflowTasksValidateBacklogInfo(
 	tl := "backlog-counter-task-queue"
 	tq := &taskqueuepb.TaskQueue{Name: tl, Kind: enumspb.TASK_QUEUE_KIND_NORMAL}
 	identity := "worker-multiple-tasks"
-	var workflowExecutions []*commonpb.WorkflowExecution
 
 	for i := 0; i < workflows; i++ {
 
@@ -147,7 +147,6 @@ func (s *DescribeTaskQueueSuite) PublishConsumeWorkflowTasksValidateBacklogInfo(
 			WorkflowId: id,
 			RunId:      resp0.RunId,
 		}
-		workflowExecutions = append(workflowExecutions, we)
 
 		s.EqualHistoryEvents(`
   1 WorkflowExecutionStarted

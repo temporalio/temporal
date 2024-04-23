@@ -91,7 +91,7 @@ func NewTestCluster(keyspace, username, password, host string, port int, schemaD
 func (s *TestCluster) Config() config.Persistence {
 	cfg := s.cfg
 	return config.Persistence{
-		DefaultStore:    "test",
+		DefaultStore: "test",
 		DataStores: map[string]config.DataStore{
 			"test": {Cassandra: &cfg, FaultInjection: s.faultInjection},
 		},
