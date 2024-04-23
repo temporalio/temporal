@@ -152,7 +152,7 @@ func (h *completionHandler) CompleteOperation(ctx context.Context, r *nexus.Comp
 		Completion: completion,
 		State:      string(r.State),
 	}
-	switch r.State {
+	switch r.State { // nolint:exhaustive
 	case nexus.OperationStateFailed, nexus.OperationStateCanceled:
 		hr.Outcome = &historyservice.CompleteNexusOperationRequest_Failure{
 			Failure: commonnexus.NexusFailureToProtoFailure(r.Failure),

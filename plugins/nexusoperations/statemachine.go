@@ -143,7 +143,7 @@ func (o Operation) transitionTasks(node *hsm.Node) ([]hsm.Task, error) {
 	if canceled, err := o.cancelRequested(node); canceled || err != nil {
 		return nil, err
 	}
-	switch o.State() {
+	switch o.State() { // nolint:exhaustive
 	case enumsspb.NEXUS_OPERATION_STATE_BACKING_OFF:
 		return []hsm.Task{BackoffTask{Deadline: o.NextAttemptScheduleTime.AsTime()}}, nil
 	case enumsspb.NEXUS_OPERATION_STATE_SCHEDULED:
@@ -456,7 +456,7 @@ func (c Cancelation) RegenerateTasks(node *hsm.Node) ([]hsm.Task, error) {
 	if err != nil {
 		return nil, err
 	}
-	switch c.State() {
+	switch c.State() { // nolint:exhaustive
 	case enumspb.NEXUS_OPERATION_CANCELLATION_STATE_SCHEDULED:
 		return []hsm.Task{CancelationTask{Destination: op.Service}}, nil
 	case enumspb.NEXUS_OPERATION_CANCELLATION_STATE_BACKING_OFF:
