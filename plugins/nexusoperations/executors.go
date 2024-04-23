@@ -190,7 +190,7 @@ func (e activeExecutor) loadOperationArgs(ctx context.Context, env hsm.Environme
 			return nil
 		}
 		args.payload = event.GetNexusOperationScheduledEventAttributes().GetInput()
-		args.header = event.GetNexusOperationScheduledEventAttributes().GetHeader()
+		args.header = event.GetNexusOperationScheduledEventAttributes().GetNexusHeader()
 		args.namespaceFailoverVersion = event.Version
 		return nil
 	})

@@ -134,7 +134,7 @@ func (s *ClientFunctionalSuite) TestNexusScheduleAndCancelCommands() {
 	s.Equal("service", op.Service)
 	s.Equal("operation", op.Operation)
 	s.True(op.State == enumspb.PENDING_NEXUS_OPERATION_STATE_BACKING_OFF || op.State == enumspb.PENDING_NEXUS_OPERATION_STATE_SCHEDULED)
-	s.True(op.CancelationInfo.State == enumspb.NEXUS_OPERATION_CANCELATION_STATE_BACKING_OFF || op.State == enumspb.PENDING_NEXUS_OPERATION_STATE_SCHEDULED)
+	s.True(op.CancellationInfo.State == enumspb.NEXUS_OPERATION_CANCELLATION_STATE_BACKING_OFF || op.State == enumspb.PENDING_NEXUS_OPERATION_STATE_SCHEDULED)
 	err = s.sdkClient.TerminateWorkflow(ctx, run.GetID(), run.GetRunID(), "test")
 	s.NoError(err)
 }

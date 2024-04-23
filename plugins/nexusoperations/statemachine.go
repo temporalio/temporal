@@ -399,7 +399,7 @@ var TransitionTimedOut = hsm.NewTransition(
 // the SCHEDULED state.
 func (o Operation) Cancel(node *hsm.Node, t time.Time) (hsm.TransitionOutput, error) {
 	child, err := node.AddChild(CancelationMachineKey, Cancelation{
-		NexusOperationCancelationInfo: &persistencespb.NexusOperationCancelationInfo{},
+		NexusOperationCancellationInfo: &persistencespb.NexusOperationCancellationInfo{},
 	})
 	if err != nil {
 		// TODO(bergundy): should AlreadyExists errors be ignored to make cancelation idempotent?
@@ -417,13 +417,13 @@ func (o Operation) Cancel(node *hsm.Node, t time.Time) (hsm.TransitionOutput, er
 type cancelationMachineDefinition struct{}
 
 func (cancelationMachineDefinition) Deserialize(d []byte) (any, error) {
-	info := &persistencespb.NexusOperationCancelationInfo{}
+	info := &persistencespb.NexusOperationCancellationInfo{}
 	return Cancelation{info}, proto.Unmarshal(d, info)
 }
 
 func (cancelationMachineDefinition) Serialize(state any) ([]byte, error) {
 	if state, ok := state.(Cancelation); ok {
-		return proto.Marshal(state.NexusOperationCancelationInfo)
+		return proto.Marshal(state.NexusOperationCancellationInfo)
 	}
 	return nil, fmt.Errorf("invalid cancelation provided: %v", state) // nolint:goerr113
 }
@@ -434,21 +434,21 @@ func (cancelationMachineDefinition) Type() hsm.MachineType {
 
 // Cancelation state machine for canceling an operation.
 type Cancelation struct {
-	*persistencespb.NexusOperationCancelationInfo
+	*persistencespb.NexusOperationCancellationInfo
 }
 
-func (c Cancelation) State() enumspb.NexusOperationCancelationState {
-	return c.NexusOperationCancelationInfo.State
+func (c Cancelation) State() enumspb.NexusOperationCancellationState {
+	return c.NexusOperationCancellationInfo.State
 }
 
-func (c Cancelation) SetState(state enumspb.NexusOperationCancelationState) {
-	c.NexusOperationCancelationInfo.State = state
+func (c Cancelation) SetState(state enumspb.NexusOperationCancellationState) {
+	c.NexusOperationCancellationInfo.State = state
 }
 
 func (c Cancelation) recordAttempt(ts time.Time) {
-	c.NexusOperationCancelationInfo.Attempt++
-	c.NexusOperationCancelationInfo.LastAttemptCompleteTime = timestamppb.New(ts)
-	c.NexusOperationCancelationInfo.LastAttemptFailure = nil
+	c.NexusOperationCancellationInfo.Attempt++
+	c.NexusOperationCancellationInfo.LastAttemptCompleteTime = timestamppb.New(ts)
+	c.NexusOperationCancellationInfo.LastAttemptFailure = nil
 }
 
 func (c Cancelation) RegenerateTasks(node *hsm.Node) ([]hsm.Task, error) {
@@ -457,9 +457,9 @@ func (c Cancelation) RegenerateTasks(node *hsm.Node) ([]hsm.Task, error) {
 		return nil, err
 	}
 	switch c.State() {
-	case enumspb.NEXUS_OPERATION_CANCELATION_STATE_SCHEDULED:
+	case enumspb.NEXUS_OPERATION_CANCELLATION_STATE_SCHEDULED:
 		return []hsm.Task{CancelationTask{Destination: op.Service}}, nil
-	case enumspb.NEXUS_OPERATION_CANCELATION_STATE_BACKING_OFF:
+	case enumspb.NEXUS_OPERATION_CANCELLATION_STATE_BACKING_OFF:
 		return []hsm.Task{CancelationBackedTask{Deadline: c.NextAttemptScheduleTime.AsTime()}}, nil
 	default:
 		return nil, nil
@@ -482,8 +482,8 @@ type EventCancelationScheduled struct {
 }
 
 var TranstionCancelationScheduled = hsm.NewTransition(
-	[]enumspb.NexusOperationCancelationState{enumspb.NEXUS_OPERATION_CANCELATION_STATE_UNSPECIFIED},
-	enumspb.NEXUS_OPERATION_CANCELATION_STATE_SCHEDULED,
+	[]enumspb.NexusOperationCancellationState{enumspb.NEXUS_OPERATION_CANCELLATION_STATE_UNSPECIFIED},
+	enumspb.NEXUS_OPERATION_CANCELLATION_STATE_SCHEDULED,
 	func(op Cancelation, event EventCancelationScheduled) (hsm.TransitionOutput, error) {
 		op.RequestedTime = timestamppb.New(event.Time)
 		return op.output(event.Node)
@@ -497,8 +497,8 @@ type EventCancelationRescheduled struct {
 }
 
 var TransitionCancelationRescheduled = hsm.NewTransition(
-	[]enumspb.NexusOperationCancelationState{enumspb.NEXUS_OPERATION_CANCELATION_STATE_BACKING_OFF},
-	enumspb.NEXUS_OPERATION_CANCELATION_STATE_SCHEDULED,
+	[]enumspb.NexusOperationCancellationState{enumspb.NEXUS_OPERATION_CANCELLATION_STATE_BACKING_OFF},
+	enumspb.NEXUS_OPERATION_CANCELLATION_STATE_SCHEDULED,
 	func(c Cancelation, event EventCancelationRescheduled) (hsm.TransitionOutput, error) {
 		c.NextAttemptScheduleTime = nil
 		return c.output(event.Node)
@@ -513,8 +513,8 @@ type EventCancelationAttemptFailed struct {
 }
 
 var TransitionCancelationAttemptFailed = hsm.NewTransition(
-	[]enumspb.NexusOperationCancelationState{enumspb.NEXUS_OPERATION_CANCELATION_STATE_SCHEDULED},
-	enumspb.NEXUS_OPERATION_CANCELATION_STATE_BACKING_OFF,
+	[]enumspb.NexusOperationCancellationState{enumspb.NEXUS_OPERATION_CANCELLATION_STATE_SCHEDULED},
+	enumspb.NEXUS_OPERATION_CANCELLATION_STATE_BACKING_OFF,
 	func(c Cancelation, event EventCancelationAttemptFailed) (hsm.TransitionOutput, error) {
 		c.recordAttempt(event.Time)
 		// Use 0 for elapsed time as we don't limit the retry by time (for now).
@@ -542,8 +542,8 @@ type EventCancelationFailed struct {
 }
 
 var TransitionCancelationFailed = hsm.NewTransition(
-	[]enumspb.NexusOperationCancelationState{enumspb.NEXUS_OPERATION_CANCELATION_STATE_SCHEDULED},
-	enumspb.NEXUS_OPERATION_CANCELATION_STATE_FAILED,
+	[]enumspb.NexusOperationCancellationState{enumspb.NEXUS_OPERATION_CANCELLATION_STATE_SCHEDULED},
+	enumspb.NEXUS_OPERATION_CANCELLATION_STATE_FAILED,
 	func(c Cancelation, event EventCancelationFailed) (hsm.TransitionOutput, error) {
 		c.recordAttempt(event.Time)
 		c.LastAttemptFailure = &failurepb.Failure{
@@ -565,8 +565,8 @@ type EventCancelationSucceeded struct {
 }
 
 var TransitionCancelationSucceeded = hsm.NewTransition(
-	[]enumspb.NexusOperationCancelationState{enumspb.NEXUS_OPERATION_CANCELATION_STATE_SCHEDULED},
-	enumspb.NEXUS_OPERATION_CANCELATION_STATE_SUCCEEDED,
+	[]enumspb.NexusOperationCancellationState{enumspb.NEXUS_OPERATION_CANCELLATION_STATE_SCHEDULED},
+	enumspb.NEXUS_OPERATION_CANCELLATION_STATE_SUCCEEDED,
 	func(c Cancelation, event EventCancelationSucceeded) (hsm.TransitionOutput, error) {
 		c.recordAttempt(event.Time)
 		return c.output(event.Node)

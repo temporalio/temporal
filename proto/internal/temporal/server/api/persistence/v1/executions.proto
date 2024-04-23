@@ -487,12 +487,12 @@ message NexusOperationInfo {
     google.protobuf.Timestamp next_attempt_schedule_time = 13;
 }
 
-// NexusOperationCancelationInfo contains the state of a nexus operation cancelation.
-message NexusOperationCancelationInfo {
+// NexusOperationCancellationInfo contains the state of a nexus operation cancelation.
+message NexusOperationCancellationInfo {
     // The time when cancelation was requested.
     google.protobuf.Timestamp requested_time = 1;
 
-    temporal.api.enums.v1.NexusOperationCancelationState state = 2;
+    temporal.api.enums.v1.NexusOperationCancellationState state = 2;
 
     // The number of attempts made to deliver the cancel operation request.
     // This number represents a minimum bound since the attempt is incremented after the request completes.

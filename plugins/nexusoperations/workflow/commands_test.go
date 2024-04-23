@@ -61,8 +61,8 @@ type testContext struct {
 
 var defaultConfig = &nexusoperations.Config{
 	Enabled:                 dynamicconfig.GetBoolPropertyFnFilteredByNamespace(true),
-	MaxOperationNameLength:  dynamicconfig.GetIntPropertyFilteredByNamespace(5),
-	MaxConcurrentOperations: dynamicconfig.GetIntPropertyFilteredByNamespace(2),
+	MaxOperationNameLength:  dynamicconfig.GetIntPropertyFnFilteredByNamespace(5),
+	MaxConcurrentOperations: dynamicconfig.GetIntPropertyFnFilteredByNamespace(2),
 }
 
 func newTestContext(t *testing.T, cfg *nexusoperations.Config) testContext {
@@ -252,7 +252,7 @@ func TestHandleScheduleCommand(t *testing.T) {
 			Service:   "service",
 			Operation: "op",
 			Input:     &common.Payload{},
-			Header: map[string]string{
+			NexusHeader: map[string]string{
 				"key": "value",
 			},
 			ScheduleToCloseTimeout: durationpb.New(time.Hour),
@@ -270,7 +270,7 @@ func TestHandleScheduleCommand(t *testing.T) {
 		require.Equal(t, cAttrs.Operation, eAttrs.Operation)
 		require.Equal(t, cAttrs.Input, eAttrs.Input)
 		require.Equal(t, cAttrs.ScheduleToCloseTimeout, eAttrs.ScheduleToCloseTimeout)
-		require.Equal(t, cAttrs.Header, eAttrs.Header)
+		require.Equal(t, cAttrs.NexusHeader, eAttrs.NexusHeader)
 		require.Equal(t, int64(1), eAttrs.WorkflowTaskCompletedEventId)
 		child, err := tcx.ms.HSM().Child([]hsm.Key{{Type: nexusoperations.OperationMachineType.ID, ID: strconv.FormatInt(event.EventId, 10)}})
 		require.NoError(t, err)

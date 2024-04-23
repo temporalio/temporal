@@ -319,9 +319,9 @@ func Invoke(
 			)
 			return nil, serviceerror.NewInternal("failed to construct describe response")
 		}
-		var cancelationInfo *workflowpb.NexusOperationCancelationInfo
+		var cancellationInfo *workflowpb.NexusOperationCancellationInfo
 		if cancelation != nil {
-			cancelationInfo = &workflowpb.NexusOperationCancelationInfo{
+			cancellationInfo = &workflowpb.NexusOperationCancellationInfo{
 				RequestedTime:           cancelation.RequestedTime,
 				State:                   cancelation.State(),
 				Attempt:                 cancelation.Attempt,
@@ -341,7 +341,7 @@ func Invoke(
 			LastAttemptCompleteTime: op.LastAttemptCompleteTime,
 			LastAttemptFailure:      op.LastAttemptFailure,
 			NextAttemptScheduleTime: op.NextAttemptScheduleTime,
-			CancelationInfo:         cancelationInfo,
+			CancellationInfo:        cancellationInfo,
 		})
 	}
 

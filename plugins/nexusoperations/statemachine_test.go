@@ -486,7 +486,7 @@ func TestCancelationValidTransitions(t *testing.T) {
 	require.NoError(t, err)
 
 	// Assert info object is updated
-	require.Equal(t, enumspb.NEXUS_OPERATION_CANCELATION_STATE_BACKING_OFF, cancelation.State())
+	require.Equal(t, enumspb.NEXUS_OPERATION_CANCELLATION_STATE_BACKING_OFF, cancelation.State())
 	require.Equal(t, int32(1), cancelation.Attempt)
 	require.Equal(t, "test", cancelation.LastAttemptFailure.Message)
 	require.False(t, cancelation.LastAttemptFailure.GetApplicationFailureInfo().NonRetryable)
@@ -506,7 +506,7 @@ func TestCancelationValidTransitions(t *testing.T) {
 	require.NoError(t, err)
 
 	// Assert info object is updated only where needed
-	require.Equal(t, enumspb.NEXUS_OPERATION_CANCELATION_STATE_SCHEDULED, cancelation.State())
+	require.Equal(t, enumspb.NEXUS_OPERATION_CANCELLATION_STATE_SCHEDULED, cancelation.State())
 	require.Equal(t, int32(1), cancelation.Attempt)
 	require.Equal(t, "test", cancelation.LastAttemptFailure.Message)
 	// Remains unmodified
@@ -519,7 +519,7 @@ func TestCancelationValidTransitions(t *testing.T) {
 	require.Equal(t, "service", cbTask.Destination)
 
 	// Store the pre-succeeded state to test Failed later
-	dup := nexusoperations.Cancelation{common.CloneProto(cancelation.NexusOperationCancelationInfo)}
+	dup := nexusoperations.Cancelation{common.CloneProto(cancelation.NexusOperationCancellationInfo)}
 
 	// Succeeded
 	currentTime = currentTime.Add(time.Second)
@@ -530,7 +530,7 @@ func TestCancelationValidTransitions(t *testing.T) {
 	require.NoError(t, err)
 
 	// Assert info object is updated only where needed
-	require.Equal(t, enumspb.NEXUS_OPERATION_CANCELATION_STATE_SUCCEEDED, cancelation.State())
+	require.Equal(t, enumspb.NEXUS_OPERATION_CANCELLATION_STATE_SUCCEEDED, cancelation.State())
 	require.Equal(t, int32(2), cancelation.Attempt)
 	require.Nil(t, cancelation.LastAttemptFailure)
 	require.Equal(t, currentTime, cancelation.LastAttemptCompleteTime.AsTime())
@@ -553,7 +553,7 @@ func TestCancelationValidTransitions(t *testing.T) {
 	require.NoError(t, err)
 
 	// Assert info object is updated only where needed
-	require.Equal(t, enumspb.NEXUS_OPERATION_CANCELATION_STATE_FAILED, cancelation.State())
+	require.Equal(t, enumspb.NEXUS_OPERATION_CANCELLATION_STATE_FAILED, cancelation.State())
 	require.Equal(t, int32(2), cancelation.Attempt)
 	require.Equal(t, "failed", cancelation.LastAttemptFailure.Message)
 	require.True(t, cancelation.LastAttemptFailure.GetApplicationFailureInfo().NonRetryable)
