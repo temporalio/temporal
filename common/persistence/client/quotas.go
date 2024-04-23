@@ -281,25 +281,6 @@ func newPriorityDynamicRateLimiter(
 	)
 }
 
-func NewNoopPriorityRateLimiter(
-	maxQPS PersistenceMaxQps,
-	burstRatio PersistenceBurstRatio,
-) quotas.RequestRateLimiter {
-	priority := RequestPrioritiesOrdered[0]
-
-	return quotas.NewPriorityRateLimiter(
-		func(_ quotas.Request) int { return priority },
-		map[int]quotas.RequestRateLimiter{
-			priority: quotas.NewRequestRateLimiterAdapter(
-				quotas.NewDefaultRateLimiter(
-					func() float64 { return float64(maxQPS()) },
-					quotas.BurstRatioFn(burstRatio),
-				),
-			),
-		},
-	)
-}
-
 func RequestPriorityFn(req quotas.Request) int {
 	switch req.CallerType {
 	case headers.CallerTypeOperator:

@@ -273,8 +273,6 @@ const (
 	FrontendPersistenceNamespaceMaxQPS = "frontend.persistenceNamespaceMaxQPS"
 	// FrontendPersistenceGlobalNamespaceMaxQPS is the max qps each namespace in frontend cluster can query DB
 	FrontendPersistenceGlobalNamespaceMaxQPS = "frontend.persistenceGlobalNamespaceMaxQPS"
-	// FrontendEnablePersistencePriorityRateLimiting indicates if priority rate limiting is enabled in frontend persistence client
-	FrontendEnablePersistencePriorityRateLimiting = "frontend.enablePersistencePriorityRateLimiting"
 	// FrontendPersistenceDynamicRateLimitingParams is a map that contains all adjustable dynamic rate limiting params
 	// see DefaultDynamicRateLimitingParams for available options and defaults
 	FrontendPersistenceDynamicRateLimitingParams = "frontend.persistenceDynamicRateLimitingParams"
@@ -470,8 +468,6 @@ const (
 	MatchingPersistenceNamespaceMaxQPS = "matching.persistenceNamespaceMaxQPS"
 	// MatchingPersistenceNamespaceMaxQPS is the max qps each namespace in matching cluster can query DB
 	MatchingPersistenceGlobalNamespaceMaxQPS = "matching.persistenceGlobalNamespaceMaxQPS"
-	// MatchingEnablePersistencePriorityRateLimiting indicates if priority rate limiting is enabled in matching persistence client
-	MatchingEnablePersistencePriorityRateLimiting = "matching.enablePersistencePriorityRateLimiting"
 	// MatchingPersistenceDynamicRateLimitingParams is a map that contains all adjustable dynamic rate limiting params
 	// see DefaultDynamicRateLimitingParams for available options and defaults
 	MatchingPersistenceDynamicRateLimitingParams = "matching.persistenceDynamicRateLimitingParams"
@@ -570,8 +566,6 @@ const (
 	HistoryPersistenceGlobalNamespaceMaxQPS = "history.persistenceGlobalNamespaceMaxQPS"
 	// HistoryPersistencePerShardNamespaceMaxQPS is the max qps each namespace on a shard can query DB
 	HistoryPersistencePerShardNamespaceMaxQPS = "history.persistencePerShardNamespaceMaxQPS"
-	// HistoryEnablePersistencePriorityRateLimiting indicates if priority rate limiting is enabled in history persistence client
-	HistoryEnablePersistencePriorityRateLimiting = "history.enablePersistencePriorityRateLimiting"
 	// HistoryPersistenceDynamicRateLimitingParams is a map that contains all adjustable dynamic rate limiting params
 	// see DefaultDynamicRateLimitingParams for available options and defaults
 	HistoryPersistenceDynamicRateLimitingParams = "history.persistenceDynamicRateLimitingParams"
@@ -978,8 +972,6 @@ const (
 	WorkerPersistenceNamespaceMaxQPS = "worker.persistenceNamespaceMaxQPS"
 	// WorkerPersistenceNamespaceMaxQPS is the max qps each namespace in worker cluster can query DB
 	WorkerPersistenceGlobalNamespaceMaxQPS = "worker.persistenceGlobalNamespaceMaxQPS"
-	// WorkerEnablePersistencePriorityRateLimiting indicates if priority rate limiting is enabled in worker persistence client
-	WorkerEnablePersistencePriorityRateLimiting = "worker.enablePersistencePriorityRateLimiting"
 	// WorkerPersistenceDynamicRateLimitingParams is a map that contains all adjustable dynamic rate limiting params
 	// see DefaultDynamicRateLimitingParams for available options and defaults
 	WorkerPersistenceDynamicRateLimitingParams = "worker.persistenceDynamicRateLimitingParams"
