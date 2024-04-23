@@ -920,17 +920,21 @@ func (e *matchingEngineImpl) DescribeTaskQueue(
 					if physInfo, ok := physicalInfoByBuildId[buildId][taskQueueType]; !ok {
 						physicalInfoByBuildId[buildId][taskQueueType] = vii.PhysicalTaskQueueInfo
 					} else {
-						bInfo_Root := physicalInfoByBuildId[buildId][taskQueueType].BacklogInfo // BacklogInfo of the root partition
-						bInfo_Partition := vii.PhysicalTaskQueueInfo.BacklogInfo
+						var bInfo *taskqueuepb.BacklogInfo
 
-						// Aggregating counts; for now, we only aggregate approximateBacklogCount
-						bInfo := &taskqueuepb.BacklogInfo{
-							ApproximateBacklogCount: bInfo_Root.ApproximateBacklogCount + bInfo_Partition.ApproximateBacklogCount,
-							ApproximateBacklogAge:   nil,
-							TasksAddRate:            float32(0),
-							TasksDispatchRate:       float32(0),
+						// only report BacklogInformation if requested.
+						if req.GetReportBacklogInfo() {
+							bInfo_Root := physicalInfoByBuildId[buildId][taskQueueType].BacklogInfo // BacklogInfo of the previous partition
+							bInfo_Partition := vii.PhysicalTaskQueueInfo.BacklogInfo
+
+							// Aggregating counts; for now, we only aggregate approximateBacklogCount
+							bInfo = &taskqueuepb.BacklogInfo{
+								ApproximateBacklogCount: bInfo_Root.ApproximateBacklogCount + bInfo_Partition.ApproximateBacklogCount,
+								ApproximateBacklogAge:   nil,
+								TasksAddRate:            float32(0),
+								TasksDispatchRate:       float32(0),
+							}
 						}
-
 						merged := &taskqueuespb.PhysicalTaskQueueInfo{
 							Pollers:     append(physInfo.GetPollers(), vii.PhysicalTaskQueueInfo.GetPollers()...),
 							BacklogInfo: bInfo,
