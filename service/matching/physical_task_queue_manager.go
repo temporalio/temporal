@@ -105,6 +105,7 @@ type (
 		LegacyDescribeTaskQueue(includeTaskQueueStatus bool) *matchingservice.DescribeTaskQueueResponse
 		// Describe returns information about the physical task queue
 		Describe() *taskqueuespb.PhysicalTaskQueueInfo
+		GetBacklogInfo() *taskqueuepb.BacklogInfo
 		UnloadFromPartitionManager()
 		String() string
 		QueueKey() *PhysicalTaskQueueKey
@@ -416,7 +417,17 @@ func (c *physicalTaskQueueManagerImpl) LegacyDescribeTaskQueue(includeTaskQueueS
 
 func (c *physicalTaskQueueManagerImpl) Describe() *taskqueuespb.PhysicalTaskQueueInfo {
 	return &taskqueuespb.PhysicalTaskQueueInfo{
-		Pollers: c.GetAllPollerInfo(),
+		Pollers:     c.GetAllPollerInfo(),
+		BacklogInfo: c.GetBacklogInfo(),
+	}
+}
+
+func (c *physicalTaskQueueManagerImpl) GetBacklogInfo() *taskqueuepb.BacklogInfo {
+	return &taskqueuepb.BacklogInfo{
+		ApproximateBacklogCount: c.backlogMgr.db.getApproximateBacklogCount(),
+		ApproximateBacklogAge:   nil,        // TODO: Shivam - add this feature
+		TasksAddRate:            float32(0), // TODO: Shivam - add this feature
+		TasksDispatchRate:       float32(0), // TODO: Shivam - add this feature
 	}
 }
 

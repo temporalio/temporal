@@ -248,7 +248,7 @@ func newBacklogMgr(controller *gomock.Controller) *backlogManagerImpl {
 	matchingClient := matchingservicemock.NewMockMatchingServiceClient(controller)
 	handler := metrics.NewMockHandler(controller)
 
-	cfg := NewConfig(dynamicconfig.NewNoopCollection(), false, false)
+	cfg := NewConfig(dynamicconfig.NewNoopCollection())
 	f, _ := tqid.NewTaskQueueFamily("", "test-queue")
 	prtn := f.TaskQueue(enumspb.TASK_QUEUE_TYPE_WORKFLOW).NormalPartition(0)
 	queue := UnversionedQueueKey(prtn)
