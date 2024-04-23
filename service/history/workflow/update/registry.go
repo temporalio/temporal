@@ -81,7 +81,7 @@ type (
 		//   - updates in stateCompleted are ignored.
 		CancelIncomplete(ctx context.Context, reason CancelReason, eventStore EventStore) error
 
-		IsIncomplete(protocolInstanceID string) bool
+		Contains(protocolInstanceID string) bool
 
 		// UpdateFromStore adds updates to the registry from the update store.
 		UpdateFromStore()
@@ -255,12 +255,9 @@ func (r *registry) CancelIncomplete(ctx context.Context, reason CancelReason, ev
 	return nil
 }
 
-// IsIncomplete returns true iff the update ID exists in the registry and is incomplete.
-func (r *registry) IsIncomplete(id string) bool {
-	if upd := r.updates[id]; upd != nil {
-		return upd.isIncomplete()
-	}
-	return false
+// Contains returns true iff the update ID exists in the registry.
+func (r *registry) Contains(id string) bool {
+	return r.updates[id] != nil
 }
 
 // RejectUnprocessed reject all updates that are waiting for workflow task to be completed.

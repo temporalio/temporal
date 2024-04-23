@@ -756,7 +756,7 @@ func reapplyEvents(
 				continue
 			}
 			attr := event.GetWorkflowExecutionUpdateAcceptedEventAttributes()
-			if updateRegistry.IsIncomplete(attr.ProtocolInstanceId) {
+			if updateRegistry.Contains(attr.ProtocolInstanceId) {
 				continue
 			}
 			request := attr.GetAcceptedRequest()
