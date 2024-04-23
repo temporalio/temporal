@@ -674,35 +674,22 @@ func (s *FunctionalSuite) TestUpdateMessageInLastWFT() {
 	})
 	s.NoError(err)
 
+	messageId := "my-message-id"
+
 	wtHandler := func(*commonpb.WorkflowExecution, *commonpb.WorkflowType, int64, int64, *historypb.History) ([]*commandpb.Command, error) {
-		return []*commandpb.Command{
-			{
-				CommandType: enumspb.COMMAND_TYPE_PROTOCOL_MESSAGE,
-				Attributes: &commandpb.Command_ProtocolMessageCommandAttributes{ProtocolMessageCommandAttributes: &commandpb.ProtocolMessageCommandAttributes{
-					MessageId: tv.MessageID("accept-msg"),
-				}},
-			},
-			{
-				CommandType: enumspb.COMMAND_TYPE_COMPLETE_WORKFLOW_EXECUTION,
-				Attributes: &commandpb.Command_CompleteWorkflowExecutionCommandAttributes{
-					CompleteWorkflowExecutionCommandAttributes: &commandpb.CompleteWorkflowExecutionCommandAttributes{
-						Result: payloads.EncodeString("Done"),
-					},
+		completeWorkflowCommand := &commandpb.Command{
+			CommandType: enumspb.COMMAND_TYPE_COMPLETE_WORKFLOW_EXECUTION,
+			Attributes: &commandpb.Command_CompleteWorkflowExecutionCommandAttributes{
+				CompleteWorkflowExecutionCommandAttributes: &commandpb.CompleteWorkflowExecutionCommandAttributes{
+					Result: payloads.EncodeString("Done"),
 				},
-			}}, nil
+			},
+		}
+		return append(s.UpdateAcceptCommands(tv, messageId), completeWorkflowCommand), nil
 	}
 
-	messageHandler := func(*workflowservice.PollWorkflowTaskQueueResponse) ([]*protocolpb.Message, error) {
-		return []*protocolpb.Message{
-			{
-				Id:                 tv.MessageID("accept-msg"),
-				ProtocolInstanceId: updateId,
-				Body: protoutils.MarshalAny(s.T(), &updatepb.Acceptance{
-					AcceptedRequestMessageId:         "request-msg",
-					AcceptedRequestSequencingEventId: int64(1),
-				}),
-			},
-		}, nil
+	messageHandler := func(task *workflowservice.PollWorkflowTaskQueueResponse) ([]*protocolpb.Message, error) {
+		return s.UpdateAcceptMessages(tv, task.Messages[0], messageId), nil
 	}
 
 	poller := &TaskPoller{
