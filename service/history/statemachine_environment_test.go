@@ -29,7 +29,7 @@ import (
 	"time"
 
 	"github.com/golang/mock/gomock"
-	"github.com/pborman/uuid"
+	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 	commandpb "go.temporal.io/api/command/v1"
 	commonpb "go.temporal.io/api/common/v1"
@@ -48,6 +48,7 @@ import (
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/plugins/callbacks"
+	"go.temporal.io/server/service/history/consts"
 	"go.temporal.io/server/service/history/events"
 	"go.temporal.io/server/service/history/hsm"
 	"go.temporal.io/server/service/history/queues"
@@ -100,7 +101,7 @@ func newTaskExecutorTestContext(t *testing.T) *taskExecutorTestContext {
 	reg := hsm.NewRegistry()
 	require.NoError(t, workflow.RegisterStateMachine(reg))
 	require.NoError(t, callbacks.RegisterStateMachine(reg))
-	require.NoError(t, callbacks.RegisterTaskSerializer(reg))
+	require.NoError(t, callbacks.RegisterTaskSerializers(reg))
 	s.mockShard.SetStateMachineRegistry(reg)
 	s.workflowCache = cache.NewHostLevelCache(s.mockShard.GetConfig(), s.mockShard.GetMetricsHandler())
 
@@ -149,7 +150,7 @@ func TestValidateStateMachineTask(t *testing.T) {
 				ref.StateMachineRef.MutableStateNamespaceFailoverVersion++
 			},
 			assertOutcome: func(t *testing.T, err error) {
-				require.ErrorAs(t, err, new(queues.StaleStateError))
+				require.ErrorIs(t, err, consts.ErrStaleState)
 			},
 		},
 		{
@@ -158,7 +159,7 @@ func TestValidateStateMachineTask(t *testing.T) {
 				ref.StateMachineRef.Path[0].Id = "not-found"
 			},
 			assertOutcome: func(t *testing.T, err error) {
-				require.ErrorAs(t, err, new(queues.UnprocessableTaskError))
+				require.ErrorIs(t, err, consts.ErrStaleReference)
 			},
 		},
 		{
@@ -167,7 +168,7 @@ func TestValidateStateMachineTask(t *testing.T) {
 				ref.StateMachineRef.MachineTransitionCount++
 			},
 			assertOutcome: func(t *testing.T, err error) {
-				require.ErrorIs(t, err, queues.ErrStaleTask)
+				require.ErrorIs(t, err, consts.ErrStaleReference)
 			},
 		},
 		{
@@ -187,7 +188,7 @@ func TestValidateStateMachineTask(t *testing.T) {
 			snapshot, _, err := mutableState.CloseTransactionAsMutation(workflow.TransactionPolicyActive)
 			require.NoError(t, err)
 			task := snapshot.Tasks[tasks.CategoryOutbound][0]
-			exec := taskExecutor{
+			exec := stateMachineEnvironment{
 				shardContext:   s.mockShard,
 				cache:          s.workflowCache,
 				metricsHandler: s.mockShard.GetMetricsHandler(),
@@ -200,7 +201,7 @@ func TestValidateStateMachineTask(t *testing.T) {
 				StateMachineRef: cbt.Info.Ref,
 			}
 			tc.mutateRef(&ref)
-			err = exec.validateStateMachineTask(mutableState, ref)
+			err = exec.validateStateMachineRef(mutableState, ref)
 			tc.assertOutcome(t, err)
 		})
 	}
@@ -271,7 +272,7 @@ func TestAccess(t *testing.T) {
 			em.EXPECT().GetWorkflowExecution(gomock.Any(), gomock.Any()).Return(&persistence.GetWorkflowExecutionResponse{State: persistenceMutableState}, nil)
 			em.EXPECT().SetWorkflowExecution(gomock.Any(), gomock.Any()).Return(&persistence.SetWorkflowExecutionResponse{}, nil).Times(tc.expectedSetRequests)
 			task := snapshot.Tasks[tasks.CategoryOutbound][0]
-			exec := taskExecutor{
+			exec := stateMachineEnvironment{
 				shardContext:   s.mockShard,
 				cache:          s.workflowCache,
 				metricsHandler: s.mockShard.GetMetricsHandler(),
@@ -294,7 +295,7 @@ func (s *taskExecutorTestContext) prepareMutableStateWithReadyNexusCompletionCal
 
 	execution := &commonpb.WorkflowExecution{
 		WorkflowId: "some random workflow ID",
-		RunId:      uuid.New(),
+		RunId:      uuid.NewString(),
 	}
 	mutableState := workflow.TestGlobalMutableState(s.mockShard, s.mockShard.GetEventsCache(), s.mockShard.GetLogger(), s.namespaceEntry.FailoverVersion(), execution.GetWorkflowId(), execution.GetRunId())
 	_, err := mutableState.AddWorkflowExecutionStartedEvent(
@@ -330,7 +331,7 @@ func (s *taskExecutorTestContext) prepareMutableStateWithTriggeredNexusCompletio
 	mutableState := s.prepareMutableStateWithReadyNexusCompletionCallback()
 	wt := addWorkflowTaskScheduledEvent(mutableState)
 	taskQueueName := "irrelevant"
-	event := addWorkflowTaskStartedEvent(mutableState, wt.ScheduledEventID, taskQueueName, uuid.New())
+	event := addWorkflowTaskStartedEvent(mutableState, wt.ScheduledEventID, taskQueueName, uuid.NewString())
 	wt.StartedEventID = event.GetEventId()
 	_, err := mutableState.AddWorkflowTaskCompletedEvent(wt, &workflowservice.RespondWorkflowTaskCompletedRequest{
 		Identity: "some random identity",
@@ -372,7 +373,7 @@ func TestGetCurrentWorkflowExecutionContext(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			controller := gomock.NewController(t)
 
-			currentRunID := uuid.New()
+			currentRunID := uuid.NewString()
 
 			mockShard := shard.NewTestContext(
 				controller,
@@ -420,7 +421,7 @@ func TestGetCurrentWorkflowExecutionContext(t *testing.T) {
 
 			if !tc.currentRunRunning {
 				if tc.currentRunChanged {
-					currentRunID = uuid.New()
+					currentRunID = uuid.NewString()
 				}
 
 				mockExecutionManager.EXPECT().GetCurrentExecution(gomock.Any(), &persistence.GetCurrentExecutionRequest{

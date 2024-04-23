@@ -29,7 +29,7 @@ import (
 )
 
 // InvocationTaskTimeout is the timeout for executing a single callback invocation task.
-const InvocationTaskTimeout = "plugin.callback.invocation.taskTimeout"
+const InvocationTaskTimeout = dynamicconfig.Key("plugin.callback.invocation.taskTimeout")
 
 type Config struct {
 	InvocationTaskTimeout dynamicconfig.DurationPropertyFn
@@ -37,6 +37,6 @@ type Config struct {
 
 func ConfigProvider(dc *dynamicconfig.Collection) *Config {
 	return &Config{
-		InvocationTaskTimeout: dc.GetDurationProperty(dynamicconfig.Key(InvocationTaskTimeout), time.Second*10),
+		InvocationTaskTimeout: dc.GetDurationProperty(InvocationTaskTimeout, time.Second*10),
 	}
 }

@@ -2582,12 +2582,13 @@ func (wh *WorkflowHandler) DescribeWorkflowExecution(ctx context.Context, reques
 	}
 
 	return &workflowservice.DescribeWorkflowExecutionResponse{
-		ExecutionConfig:       response.GetExecutionConfig(),
-		WorkflowExecutionInfo: response.GetWorkflowExecutionInfo(),
-		PendingActivities:     response.GetPendingActivities(),
-		PendingChildren:       response.GetPendingChildren(),
-		PendingWorkflowTask:   response.GetPendingWorkflowTask(),
-		Callbacks:             response.GetCallbacks(),
+		ExecutionConfig:        response.GetExecutionConfig(),
+		WorkflowExecutionInfo:  response.GetWorkflowExecutionInfo(),
+		PendingActivities:      response.GetPendingActivities(),
+		PendingChildren:        response.GetPendingChildren(),
+		PendingWorkflowTask:    response.GetPendingWorkflowTask(),
+		Callbacks:              response.GetCallbacks(),
+		PendingNexusOperations: response.GetPendingNexusOperations(),
 	}, nil
 }
 

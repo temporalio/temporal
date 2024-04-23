@@ -89,7 +89,7 @@ func TestValidTransitions(t *testing.T) {
 	require.Equal(t, "http://address:666", cbTask.Destination)
 
 	// Store the pre-succeeded state to test Failed later
-	infoDup := callbacks.Callback{common.CloneProto(callback.CallbackInfo)}
+	dup := callbacks.Callback{common.CloneProto(callback.CallbackInfo)}
 
 	// Succeeded
 	currentTime = currentTime.Add(time.Second)
@@ -107,8 +107,8 @@ func TestValidTransitions(t *testing.T) {
 	require.Equal(t, 0, len(out.Tasks))
 
 	// Reset back to scheduled
-	callback = infoDup
-	callback.PublicInfo.State = enumspb.CALLBACK_STATE_SCHEDULED
+	callback = dup
+	// Increment the time to ensure it's updated in the transition
 	currentTime = currentTime.Add(time.Second)
 
 	// Failed

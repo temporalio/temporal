@@ -63,6 +63,8 @@ import (
 	"go.temporal.io/server/service/history/workflow/cache"
 
 	"go.temporal.io/server/plugins/callbacks"
+	"go.temporal.io/server/plugins/nexusoperations"
+	nexusworkflow "go.temporal.io/server/plugins/nexusoperations/workflow"
 )
 
 var Module = fx.Options(
@@ -75,6 +77,7 @@ var Module = fx.Options(
 	archival.Module,
 	fx.Provide(dynamicconfig.NewCollection),
 	fx.Provide(ConfigProvider), // might be worth just using provider for configs.Config directly
+	fx.Provide(workflow.NewCommandHandlerRegistry),
 	fx.Provide(RetryableInterceptorProvider),
 	fx.Provide(TelemetryInterceptorProvider),
 	fx.Provide(RateLimitInterceptorProvider),
@@ -92,6 +95,8 @@ var Module = fx.Options(
 	fx.Invoke(ServiceLifetimeHooks),
 
 	callbacks.Module,
+	nexusoperations.Module,
+	fx.Invoke(nexusworkflow.RegisterCommandHandlers),
 )
 
 func ServiceProvider(

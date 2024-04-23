@@ -89,7 +89,7 @@ func (c Callback) recordAttempt(ts time.Time) {
 	c.PublicInfo.LastAttemptCompleteTime = timestamppb.New(ts)
 }
 
-func (c Callback) RegenerateTasks() ([]hsm.Task, error) {
+func (c Callback) RegenerateTasks(*hsm.Node) ([]hsm.Task, error) {
 	switch c.PublicInfo.State {
 	case enumspb.CALLBACK_STATE_BACKING_OFF:
 		return []hsm.Task{BackoffTask{Deadline: c.PublicInfo.NextAttemptScheduleTime.AsTime()}}, nil
@@ -113,7 +113,8 @@ func (c Callback) RegenerateTasks() ([]hsm.Task, error) {
 
 func (c Callback) output() (hsm.TransitionOutput, error) {
 	// Task logic is the same when regenerating tasks for a given state and when transitioning to that state.
-	tasks, err := c.RegenerateTasks()
+	// Node is ignored here.
+	tasks, err := c.RegenerateTasks(nil)
 	return hsm.TransitionOutput{Tasks: tasks}, err
 }
 

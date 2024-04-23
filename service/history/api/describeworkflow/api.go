@@ -44,6 +44,7 @@ import (
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence/visibility/manager"
 	"go.temporal.io/server/plugins/callbacks"
+	"go.temporal.io/server/plugins/nexusoperations"
 	"go.temporal.io/server/service/history/api"
 	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/workflow"
@@ -249,11 +250,11 @@ func Invoke(
 	result.WorkflowExecutionInfo.SearchAttributes = &commonpb.SearchAttributes{
 		IndexedFields: clonePayloadMap(relocatableAttributes.SearchAttributes.GetIndexedFields()),
 	}
-	coll := callbacks.MachineCollection(mutableState.HSM())
-	cbs := coll.List()
+	cbColl := callbacks.MachineCollection(mutableState.HSM())
+	cbs := cbColl.List()
 	result.Callbacks = make([]*workflowpb.CallbackInfo, 0, len(cbs))
-	for _, entry := range cbs {
-		callback, err := coll.Data(entry.Key.ID)
+	for _, node := range cbs {
+		callback, err := cbColl.Data(node.Key.ID)
 		if err != nil {
 			shard.GetLogger().Error(
 				"failed to load callback data while building describe response",
@@ -267,6 +268,81 @@ func Invoke(
 		// HSM data is mutable and must be cloned to avoid a data race during serialization, which happens after we
 		// release the lock on this workflow.
 		result.Callbacks = append(result.Callbacks, common.CloneProto(callback.PublicInfo))
+	}
+	opColl := nexusoperations.MachineCollection(mutableState.HSM())
+	ops := opColl.List()
+	result.PendingNexusOperations = make([]*workflowpb.PendingNexusOperationInfo, 0, len(ops))
+	for _, node := range ops {
+		op, err := opColl.Data(node.Key.ID)
+		if err != nil {
+			shard.GetLogger().Error(
+				"failed to load operation data while building describe response",
+				tag.WorkflowNamespaceID(namespaceID.String()),
+				tag.WorkflowID(executionInfo.WorkflowId),
+				tag.WorkflowRunID(executionState.RunId),
+				tag.Error(err),
+			)
+			return nil, serviceerror.NewInternal("failed to construct describe response")
+		}
+		var state enumspb.PendingNexusOperationState
+		switch op.State() {
+		case enumsspb.NEXUS_OPERATION_STATE_UNSPECIFIED:
+			shard.GetLogger().Error(
+				"unexpected error: got an operation with an UNSPECIFIED state",
+				tag.WorkflowNamespaceID(namespaceID.String()),
+				tag.WorkflowID(executionInfo.WorkflowId),
+				tag.WorkflowRunID(executionState.RunId),
+				tag.Error(err),
+			)
+			return nil, serviceerror.NewInternal("failed to construct describe response")
+		case enumsspb.NEXUS_OPERATION_STATE_BACKING_OFF:
+			state = enumspb.PENDING_NEXUS_OPERATION_STATE_BACKING_OFF
+		case enumsspb.NEXUS_OPERATION_STATE_SCHEDULED:
+			state = enumspb.PENDING_NEXUS_OPERATION_STATE_SCHEDULED
+		case enumsspb.NEXUS_OPERATION_STATE_STARTED:
+			state = enumspb.PENDING_NEXUS_OPERATION_STATE_STARTED
+		case enumsspb.NEXUS_OPERATION_STATE_CANCELED,
+			enumsspb.NEXUS_OPERATION_STATE_FAILED,
+			enumsspb.NEXUS_OPERATION_STATE_SUCCEEDED,
+			enumsspb.NEXUS_OPERATION_STATE_TIMED_OUT:
+			// Operation is not pending
+			continue
+		}
+		cancelation, err := op.Cancelation(node)
+		if err != nil {
+			shard.GetLogger().Error(
+				"failed to load operation cancelation data while building describe response",
+				tag.WorkflowNamespaceID(namespaceID.String()),
+				tag.WorkflowID(executionInfo.WorkflowId),
+				tag.WorkflowRunID(executionState.RunId),
+				tag.Error(err),
+			)
+			return nil, serviceerror.NewInternal("failed to construct describe response")
+		}
+		var cancellationInfo *workflowpb.NexusOperationCancellationInfo
+		if cancelation != nil {
+			cancellationInfo = &workflowpb.NexusOperationCancellationInfo{
+				RequestedTime:           cancelation.RequestedTime,
+				State:                   cancelation.State(),
+				Attempt:                 cancelation.Attempt,
+				LastAttemptCompleteTime: cancelation.LastAttemptCompleteTime,
+				LastAttemptFailure:      cancelation.LastAttemptFailure,
+				NextAttemptScheduleTime: cancelation.NextAttemptScheduleTime,
+			}
+		}
+		result.PendingNexusOperations = append(result.PendingNexusOperations, &workflowpb.PendingNexusOperationInfo{
+			Service:                 op.Service,
+			Operation:               op.Operation,
+			OperationId:             op.OperationId,
+			ScheduleToCloseTimeout:  op.ScheduleToCloseTimeout,
+			ScheduledTime:           op.ScheduledTime,
+			State:                   state,
+			Attempt:                 op.Attempt,
+			LastAttemptCompleteTime: op.LastAttemptCompleteTime,
+			LastAttemptFailure:      op.LastAttemptFailure,
+			NextAttemptScheduleTime: op.NextAttemptScheduleTime,
+			CancellationInfo:        cancellationInfo,
+		})
 	}
 
 	return result, nil
