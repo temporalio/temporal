@@ -29,20 +29,20 @@ import (
 )
 
 // Enabled toggles accepting of API requests and workflow commands that create or modify Nexus operations.
-const Enabled = dynamicconfig.Key("plugin.nexusoperations.enabled")
+const Enabled = dynamicconfig.Key("component.nexusoperations.enabled")
 
 // InvocationTaskTimeout is the timeout for executing a single nexus invocation task (controls both cancel and start
 // requests).
-const InvocationTaskTimeout = dynamicconfig.Key("plugin.nexusoperations.invocation.taskTimeout")
+const InvocationTaskTimeout = dynamicconfig.Key("component.nexusoperations.invocation.taskTimeout")
 
 // MaxConcurrentOperations limits the maximum allowed concurrent Nexus Operations for a given workflow execution.
 // Once the limit is reached, ScheduleNexusOperation commands will be rejected.
-const MaxConcurrentOperations = dynamicconfig.Key("plugin.nexusoperations.limit.operation.concurrency")
+const MaxConcurrentOperations = dynamicconfig.Key("component.nexusoperations.limit.operation.concurrency")
 
 // MaxOperationNameLength limits the maximum allowed length for a Nexus Operation name.
 // ScheduleNexusOperation commands with an operation name that exceeds this limit will be rejected.
 // Uses Go's len() function to determine the length.
-const MaxOperationNameLength = dynamicconfig.Key("plugin.nexusoperations.limit.operation.name.length")
+const MaxOperationNameLength = dynamicconfig.Key("component.nexusoperations.limit.operation.name.length")
 
 type Config struct {
 	Enabled                 dynamicconfig.BoolPropertyFnWithNamespaceFilter

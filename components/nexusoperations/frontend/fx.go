@@ -37,7 +37,7 @@ import (
 )
 
 var Module = fx.Module(
-	"plugin.nexusoperations.frontend",
+	"component.nexusoperations.frontend",
 	fx.Provide(ConfigProvider),
 	fx.Provide(commonnexus.NewCallbackTokenGenerator),
 	fx.Invoke(RegisterHTTPHandler),

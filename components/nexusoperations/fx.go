@@ -36,7 +36,7 @@ import (
 )
 
 var Module = fx.Module(
-	"plugin.nexusoperations",
+	"component.nexusoperations",
 	fx.Provide(ConfigProvider),
 	fx.Provide(ClientProviderFactory),
 	fx.Provide(DefaultNexusTransportProvider),
