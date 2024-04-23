@@ -729,18 +729,17 @@ func (s *FunctionalSuite) TestUpdateMessageInLastWFT() {
 	s.NoError(<-updateResponse)
 	s.NoError(<-pollResponse)
 
-	events := s.getHistory(s.namespace, &commonpb.WorkflowExecution{
+	s.HistoryRequire.EqualHistoryEvents(`
+	1 WorkflowExecutionStarted
+	2 WorkflowTaskScheduled
+	3 WorkflowTaskStarted
+	4 WorkflowTaskCompleted
+	5 WorkflowExecutionUpdateAccepted
+	6 WorkflowExecutionCompleted
+	`, s.getHistory(s.namespace, &commonpb.WorkflowExecution{
 		WorkflowId: workflowId,
 		RunId:      we.RunId,
-	})
-	updateCount := 0
-	for _, event := range events {
-		switch event.GetEventType() {
-		case enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_UPDATE_ACCEPTED:
-			updateCount++
-		}
-	}
-	s.Equal(1, updateCount)
+	}))
 }
 
 func (s *FunctionalSuite) TestResetWorkflow_WorkflowTask_Schedule() {
