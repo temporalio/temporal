@@ -108,7 +108,7 @@ func Invoke(
 	)
 	if err != nil {
 		// TODO: send per-operation error details
-		return nil, fmt.Errorf("failed create workflow starter: %w", err)
+		return nil, serviceerror.NewUnavailable(fmt.Errorf("failed create workflow starter: %w", err).Error())
 	}
 	workflowCache := workflowConsistencyChecker.GetWorkflowCache()
 	return startAndUpdateWorkflow(ctx, shardContext, workflowCache, starter, updater)
@@ -151,7 +151,7 @@ func updateWorkflow(
 	updateResp, err := updater.OnSuccess(ctx)
 	if err != nil {
 		// TODO: send Update outcome failure instead
-		return nil, fmt.Errorf("failed to complete Workflow Update: %w", err)
+		return nil, serviceerror.NewUnavailable(fmt.Errorf("failed to complete Workflow Update: %w", err).Error())
 	}
 
 	return &historyservice.ExecuteMultiOperationResponse{
@@ -202,7 +202,7 @@ func startAndUpdateWorkflow(
 
 		// a start error occurred
 		// TODO: send per-operation error details
-		return nil, fmt.Errorf("failed to start workflow: %w", err)
+		return nil, serviceerror.NewUnavailable(fmt.Errorf("failed to start workflow: %w", err).Error())
 	}
 
 	// without this, there's no Update registry on the call from Matching back to History
@@ -221,7 +221,7 @@ func startAndUpdateWorkflow(
 	updateResp, err := updater.OnSuccess(ctx)
 	if err != nil {
 		// TODO: send Update outcome failure instead
-		return nil, fmt.Errorf("failed to complete Workflow Update: %w", err)
+		return nil, serviceerror.NewUnavailable(fmt.Errorf("failed to complete Workflow Update: %w", err).Error())
 	}
 
 	return &historyservice.ExecuteMultiOperationResponse{
@@ -256,5 +256,5 @@ func onUpdateError(
 	}
 
 	// TODO: send per-operation error details
-	return nil, fmt.Errorf("failed to update workflow: %w", updateErr)
+	return nil, serviceerror.NewUnavailable(fmt.Errorf("failed to update workflow: %w", updateErr).Error())
 }
