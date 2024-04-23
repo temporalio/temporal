@@ -119,8 +119,8 @@ func (m *workflowTaskStateMachine) ApplyWorkflowTaskScheduledEvent(
 
 // if this is a transient WF task (attempt > 1), we make sure to keep the following from the previous attempt:
 //   - BuildId of the previous attempt to be able to compare it with next attempt and renew tasks if it changes
-//   - BuildIdRedirectCounter so add the right BuildIdRedirectCounter to the wft started event that will be
-//     created at wft completion time
+//   - BuildIdRedirectCounter so add the right BuildIdRedirectCounter to the WFT started event that will be
+//     created at WFT completion time
 func (m *workflowTaskStateMachine) retainWorkflowTaskBuildIdInfo(workflowTask *WorkflowTaskInfo) {
 	if workflowTask.Attempt > 1 {
 		workflowTask.BuildId = m.ms.executionInfo.WorkflowTaskBuildId
@@ -620,6 +620,7 @@ func (m *workflowTaskStateMachine) skipWorkflowTaskCompletedEvent(workflowTaskTy
 	// Empty messages list is equivalent to only rejection messages because server will reject all sent updates (if any).
 	return true
 }
+
 func (m *workflowTaskStateMachine) AddWorkflowTaskCompletedEvent(
 	workflowTask *WorkflowTaskInfo,
 	request *workflowservice.RespondWorkflowTaskCompletedRequest,

@@ -337,9 +337,6 @@ type Config struct {
 	WorkflowExecutionMaxTotalUpdates    dynamicconfig.IntPropertyFnWithNamespaceFilter
 
 	SendRawWorkflowHistory dynamicconfig.BoolPropertyFnWithNamespaceFilter
-
-	// FrontendAccessHistoryFraction is an interim flag across 2 minor releases and will be removed once fully enabled.
-	FrontendAccessHistoryFraction dynamicconfig.FloatPropertyFn
 }
 
 // NewConfig returns new service config with default values
@@ -350,7 +347,7 @@ func NewConfig(
 	cfg := &Config{
 		NumberOfShards: numberOfShards,
 
-		EnableReplicationStream: dc.GetBoolProperty(dynamicconfig.EnableReplicationStream, false),
+		EnableReplicationStream: dc.GetBoolProperty(dynamicconfig.EnableReplicationStream, true),
 		HistoryReplicationDLQV2: dc.GetBoolProperty(dynamicconfig.EnableHistoryReplicationDLQV2, false),
 
 		RPS:                                   dc.GetIntProperty(dynamicconfig.HistoryRPS, 3000),
@@ -611,8 +608,6 @@ func NewConfig(
 		WorkflowExecutionMaxTotalUpdates:    dc.GetIntPropertyFilteredByNamespace(dynamicconfig.WorkflowExecutionMaxTotalUpdates, 2000),
 
 		SendRawWorkflowHistory: dc.GetBoolPropertyFnWithNamespaceFilter(dynamicconfig.SendRawWorkflowHistory, false),
-
-		FrontendAccessHistoryFraction: dc.GetFloat64Property(dynamicconfig.FrontendAccessHistoryFraction, 0.0),
 	}
 
 	return cfg
