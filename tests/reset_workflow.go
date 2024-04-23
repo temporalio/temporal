@@ -42,6 +42,7 @@ import (
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	updatepb "go.temporal.io/api/update/v1"
 	"go.temporal.io/api/workflowservice/v1"
+	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/payloads"
 	"go.temporal.io/server/common/testing/protoutils"
@@ -652,6 +653,9 @@ func (s *FunctionalSuite) testResetWorkflowReapplyBuffer(
 }
 
 func (s *FunctionalSuite) TestUpdateMessageInLastWFT() {
+	s.dynamicConfigOverrides = map[dynamicconfig.Key]interface{}{
+		dynamicconfig.FrontendEnableUpdateWorkflowExecutionAsyncAccepted: true,
+	}
 	tv := testvars.New(s.T().Name())
 	workflowId := "wfid"
 	workflowTypeName := "wftype"
