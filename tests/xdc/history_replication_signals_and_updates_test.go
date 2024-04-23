@@ -581,7 +581,12 @@ func (s *hrsuTestSuite) executeHistoryReplicationTask(task *hrsuTestExecutableTa
 func (e *hrsuTestNamespaceReplicationTaskExecutor) Execute(ctx context.Context, task *replicationspb.NamespaceTaskAttributes) error {
 	// TODO (dan) Use one channel per cluster, as we do for history replication tasks in this test suite. This is
 	// currently blocked by the fact that namespace tasks don't expose the current cluster name.
-	test := e.s.testsByNamespaceName[task.Info.Name]
+	ns := task.Info.Name
+	test := e.s.testsByNamespaceName[ns]
+	if test == nil {
+		// This can happen after a test has completed
+		return fmt.Errorf("failed to retrieve test for namespace %s", ns)
+	}
 	test.namespaceReplicationTasks <- task
 	// Report success, although we have merely buffered the task and will execute it later.
 	return nil
@@ -611,6 +616,9 @@ func (t *hrsuTestExecutableTaskConverter) Convert(
 // Execute pushes the task to a buffer and waits for it to be executed.
 func (task *hrsuTestExecutableTask) Execute() error {
 	test := task.s.testsByWorkflowId[task.workflowId()]
+	if test == nil {
+		return fmt.Errorf("failed to retrieve test for workflow %s", task.workflowId())
+	}
 	switch task.sourceCluster {
 	case "cluster1":
 		test.cluster2.inboundHistoryReplicationTasks <- task
