@@ -184,17 +184,16 @@ func (fwdr *Forwarder) getForwardInfo(task *internalTask) *taskqueuespb.TaskForw
 		clone := common.CloneProto(task.forwardInfo)
 		clone.SourcePartition = fwdr.partition.RpcName()
 		return clone
-	} else {
-		// task is forwarded for the first time
-		forwardInfo := &taskqueuespb.TaskForwardInfo{
-			TaskSource:         task.source,
-			SourcePartition:    fwdr.partition.RpcName(),
-			DispatchBuildId:    fwdr.queue.BuildId(),
-			DispatchVersionSet: fwdr.queue.VersionSet(),
-			RedirectInfo:       task.redirectInfo,
-		}
-		return forwardInfo
 	}
+	// task is forwarded for the first time
+	forwardInfo := &taskqueuespb.TaskForwardInfo{
+		TaskSource:         task.source,
+		SourcePartition:    fwdr.partition.RpcName(),
+		DispatchBuildId:    fwdr.queue.BuildId(),
+		DispatchVersionSet: fwdr.queue.VersionSet(),
+		RedirectInfo:       task.redirectInfo,
+	}
+	return forwardInfo
 }
 
 // ForwardQueryTask forwards a query task to parent task queue partition, if it exists

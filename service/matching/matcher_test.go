@@ -525,7 +525,6 @@ func (t *MatcherTestSuite) TestQueryRemoteSyncMatch() {
 	t.client.EXPECT().QueryWorkflow(gomock.Any(), gomock.Any(), gomock.Any()).Do(
 		func(arg0 context.Context, arg1 *matchingservice.QueryWorkflowRequest, arg2 ...interface{}) {
 			req = arg1
-			//task.forwardedFrom = req.GetForwardedSource()
 			close(pollSigC)
 			time.Sleep(10 * time.Millisecond)
 			_, err := t.rootMatcher.OfferQuery(ctx, task)

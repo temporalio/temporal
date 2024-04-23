@@ -167,11 +167,11 @@ func (s *PartitionManagerTestSuite) TestAddTaskWithAssignmentRulesAndVersionSets
 		VersionSets:     []*persistence.CompatibleVersionSet{vs},
 	}
 
-	//taskBld := "task-bld"
-	//s.validateAddTask("", false, versioningData, worker_versioning.MakeBuildIdDirective(taskBld))
-	//// make sure version set queue is not loaded
-	//s.Assert().Nil(s.partitionMgr.versionedQueues[vs.SetIds[0]])
-	//s.validatePollTask(taskBld, true)
+	taskBld := "task-bld"
+	s.validateAddTask("", false, versioningData, worker_versioning.MakeBuildIdDirective(taskBld))
+	// make sure version set queue is not loaded
+	s.Assert().Nil(s.partitionMgr.versionedQueues[vs.SetIds[0]])
+	s.validatePollTask(taskBld, true)
 
 	// now use the version set build id
 	s.validateAddTask("", false, versioningData, worker_versioning.MakeBuildIdDirective(vs.BuildIds[0].Id))
