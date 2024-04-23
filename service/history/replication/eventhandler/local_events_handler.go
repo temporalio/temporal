@@ -33,6 +33,7 @@ import (
 	"go.temporal.io/api/serviceerror"
 	historyspb "go.temporal.io/server/api/history/v1"
 	"go.temporal.io/server/api/historyservice/v1"
+	common2 "go.temporal.io/server/common"
 	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/log"
@@ -125,19 +126,22 @@ func (h *localEventsHandlerImpl) HandleLocalGeneratedHistoryEvents(
 	})
 
 	switch err.(type) {
-	// if mutable state not found, we import from beginning
+	case nil:
 	case *serviceerror.NotFound:
+		// if mutable state not found, we import from beginning
 		return h.importEvents(
 			ctx,
 			sourceClusterName,
 			engine,
 			workflowKey,
-			1,
+			common2.FirstEventID,
 			localVersionHistory[0].Version,
 			localVersionHistory[len(localVersionHistory)-1].EventId,
 			localVersionHistory[len(localVersionHistory)-1].Version,
 			nil,
 		)
+	default:
+		return err
 	}
 	response, err := h.invokeImportWorkflowExecutionCall(ctx, engine, workflowKey, localEventsBlobs, versionHistory, nil)
 	if err != nil {
