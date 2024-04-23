@@ -104,7 +104,7 @@ type (
 		instrumentation  instrumentation
 		maxInFlight      func() int
 		maxTotal         func() int
-		completedUpdates map[string]bool
+		completedUpdates map[string]struct{}
 	}
 
 	Option func(*registry)
@@ -161,7 +161,7 @@ func NewRegistry(
 		instrumentation:  noopInstrumentation,
 		maxInFlight:      func() int { return math.MaxInt },
 		maxTotal:         func() int { return math.MaxInt },
-		completedUpdates: make(map[string]bool),
+		completedUpdates: make(map[string]struct{}),
 	}
 	for _, opt := range opts {
 		opt(r)
@@ -214,7 +214,7 @@ func (r *registry) UpdateFromStore() {
 				_ = upd.advanceTo(stateCompleted)
 				return
 			}
-			r.completedUpdates[updID] = true
+			r.completedUpdates[updID] = struct{}{}
 		}
 	})
 }
@@ -337,7 +337,7 @@ func (r *registry) remover(id string) updateOpt {
 			r.mu.Lock()
 			defer r.mu.Unlock()
 			delete(r.updates, id)
-			r.completedUpdates[id] = true
+			r.completedUpdates[id] = struct{}{}
 		},
 	)
 }
