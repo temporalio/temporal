@@ -42,7 +42,6 @@ import (
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	updatepb "go.temporal.io/api/update/v1"
 	"go.temporal.io/api/workflowservice/v1"
-	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/payloads"
 	"go.temporal.io/server/common/testing/protoutils"
@@ -650,100 +649,6 @@ func (s *FunctionalSuite) testResetWorkflowReapplyBuffer(
 		panic(fmt.Sprintf("unknown reset reapply type: %v", reapplyType))
 	}
 
-}
-
-func (s *FunctionalSuite) TestUpdateMessageInLastWFT() {
-	s.dynamicConfigOverrides = map[dynamicconfig.Key]interface{}{
-		dynamicconfig.FrontendEnableUpdateWorkflowExecutionAsyncAccepted: true,
-	}
-	tv := testvars.New(s.T().Name())
-	workflowId := "wfid"
-	workflowTypeName := "wftype"
-	taskQueueName := "tq"
-	identity := "worker1"
-	workflowType := &commonpb.WorkflowType{Name: workflowTypeName}
-	taskQueue := &taskqueuepb.TaskQueue{Name: taskQueueName, Kind: enumspb.TASK_QUEUE_KIND_NORMAL}
-	updateId := tv.UpdateID("update-id")
-
-	we, err := s.engine.StartWorkflowExecution(NewContext(), &workflowservice.StartWorkflowExecutionRequest{
-		RequestId:           uuid.New(),
-		Namespace:           s.namespace,
-		WorkflowId:          workflowId,
-		WorkflowType:        workflowType,
-		TaskQueue:           taskQueue,
-		Input:               nil,
-		WorkflowRunTimeout:  durationpb.New(100 * time.Second),
-		WorkflowTaskTimeout: durationpb.New(1 * time.Second),
-		Identity:            identity,
-	})
-	s.NoError(err)
-
-	messageId := "my-message-id"
-
-	poller := &TaskPoller{
-		Engine:    s.engine,
-		Namespace: s.namespace,
-		TaskQueue: taskQueue,
-		Identity:  identity,
-		WorkflowTaskHandler: func(*commonpb.WorkflowExecution, *commonpb.WorkflowType, int64, int64, *historypb.History) ([]*commandpb.Command, error) {
-			completeWorkflowCommand := &commandpb.Command{
-				CommandType: enumspb.COMMAND_TYPE_COMPLETE_WORKFLOW_EXECUTION,
-				Attributes: &commandpb.Command_CompleteWorkflowExecutionCommandAttributes{
-					CompleteWorkflowExecutionCommandAttributes: &commandpb.CompleteWorkflowExecutionCommandAttributes{
-						Result: payloads.EncodeString("Done"),
-					},
-				},
-			}
-			return append(s.UpdateAcceptCommands(tv, messageId), completeWorkflowCommand), nil
-		},
-		MessageHandler: func(task *workflowservice.PollWorkflowTaskQueueResponse) ([]*protocolpb.Message, error) {
-			return s.UpdateAcceptMessages(tv, task.Messages[0], messageId), nil
-		},
-		Logger: s.Logger,
-		T:      s.T(),
-	}
-
-	updateResponse := make(chan error)
-	pollResponse := make(chan error)
-	request := &workflowservice.UpdateWorkflowExecutionRequest{
-		Namespace: s.namespace,
-		WorkflowExecution: &commonpb.WorkflowExecution{
-			WorkflowId: workflowId,
-			RunId:      we.RunId,
-		},
-		WaitPolicy: &updatepb.WaitPolicy{LifecycleStage: enumspb.UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_ACCEPTED},
-		Request: &updatepb.Request{
-			Meta: &updatepb.Meta{UpdateId: updateId, Identity: identity},
-			Input: &updatepb.Input{
-				Name: tv.HandlerName(),
-				Args: payloads.EncodeString("args-value-of-" + updateId),
-			},
-		},
-	}
-	go func() {
-		_, err := s.engine.UpdateWorkflowExecution(NewContext(), request)
-		updateResponse <- err
-	}()
-	go func() {
-		// Blocks until the update request causes a WFT to be dispatched; then sends the update complete message
-		// required for the update request to return.
-		_, err := poller.PollAndProcessWorkflowTask(WithDumpHistory)
-		pollResponse <- err
-	}()
-	s.NoError(<-updateResponse)
-	s.NoError(<-pollResponse)
-
-	s.HistoryRequire.EqualHistoryEvents(`
-	1 WorkflowExecutionStarted
-	2 WorkflowTaskScheduled
-	3 WorkflowTaskStarted
-	4 WorkflowTaskCompleted
-	5 WorkflowExecutionUpdateAccepted
-	6 WorkflowExecutionCompleted
-	`, s.getHistory(s.namespace, &commonpb.WorkflowExecution{
-		WorkflowId: workflowId,
-		RunId:      we.RunId,
-	}))
 }
 
 func (s *FunctionalSuite) TestResetWorkflow_WorkflowTask_Schedule() {

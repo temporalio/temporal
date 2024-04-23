@@ -40,6 +40,7 @@ import (
 	"go.temporal.io/api/serviceerror"
 	updatepb "go.temporal.io/api/update/v1"
 	"go.temporal.io/api/workflowservice/v1"
+	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/testing/protoutils"
 	"go.temporal.io/server/common/testing/runtime"
 	"go.temporal.io/server/service/history/workflow/update"
@@ -5145,4 +5146,62 @@ func (s *FunctionalSuite) TestUpdateWorkflow_NewSpeculativeWorkflowTask_WorkerSk
   8 WorkflowExecutionUpdateAccepted
   9 WorkflowExecutionUpdateCompleted
  10 WorkflowExecutionCompleted`, events)
+}
+
+func (s *FunctionalSuite) TestUpdateWorkflow_UpdateMessageInLastWFT() {
+	s.dynamicConfigOverrides = map[dynamicconfig.Key]interface{}{
+		dynamicconfig.FrontendEnableUpdateWorkflowExecutionAsyncAccepted: true,
+	}
+	tv := testvars.New(s.T().Name())
+	tv = s.startWorkflow(tv)
+
+	updateId := tv.UpdateID()
+	messageId := "my-message-id"
+
+	poller := &TaskPoller{
+		Engine:    s.engine,
+		Namespace: s.namespace,
+		TaskQueue: tv.TaskQueue(),
+		Identity:  tv.WorkerIdentity(),
+		WorkflowTaskHandler: func(*commonpb.WorkflowExecution, *commonpb.WorkflowType, int64, int64, *historypb.History) ([]*commandpb.Command, error) {
+			completeWorkflowCommand := &commandpb.Command{
+				CommandType: enumspb.COMMAND_TYPE_COMPLETE_WORKFLOW_EXECUTION,
+				Attributes: &commandpb.Command_CompleteWorkflowExecutionCommandAttributes{
+					CompleteWorkflowExecutionCommandAttributes: &commandpb.CompleteWorkflowExecutionCommandAttributes{
+						Result: payloads.EncodeString("Done"),
+					},
+				},
+			}
+			return append(s.UpdateAcceptCommands(tv, messageId), completeWorkflowCommand), nil
+		},
+		MessageHandler: func(task *workflowservice.PollWorkflowTaskQueueResponse) ([]*protocolpb.Message, error) {
+			return s.UpdateAcceptMessages(tv, task.Messages[0], messageId), nil
+		},
+		Logger: s.Logger,
+		T:      s.T(),
+	}
+
+	updateResponse := make(chan error)
+	pollResponse := make(chan error)
+	go func() {
+		_, err := s.sendUpdateWaitPolicyAccepted(tv, updateId)
+		updateResponse <- err
+	}()
+	go func() {
+		// Blocks until the update request causes a WFT to be dispatched; then sends the update complete message
+		// required for the update request to return.
+		_, err := poller.PollAndProcessWorkflowTask(WithDumpHistory)
+		pollResponse <- err
+	}()
+	s.NoError(<-updateResponse)
+	s.NoError(<-pollResponse)
+
+	s.HistoryRequire.EqualHistoryEvents(`
+	1 WorkflowExecutionStarted
+	2 WorkflowTaskScheduled
+	3 WorkflowTaskStarted
+	4 WorkflowTaskCompleted
+	5 WorkflowExecutionUpdateAccepted
+	6 WorkflowExecutionCompleted
+	`, s.getHistory(s.namespace, tv.WorkflowExecution()))
 }
