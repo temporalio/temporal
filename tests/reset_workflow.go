@@ -676,31 +676,27 @@ func (s *FunctionalSuite) TestUpdateMessageInLastWFT() {
 
 	messageId := "my-message-id"
 
-	wtHandler := func(*commonpb.WorkflowExecution, *commonpb.WorkflowType, int64, int64, *historypb.History) ([]*commandpb.Command, error) {
-		completeWorkflowCommand := &commandpb.Command{
-			CommandType: enumspb.COMMAND_TYPE_COMPLETE_WORKFLOW_EXECUTION,
-			Attributes: &commandpb.Command_CompleteWorkflowExecutionCommandAttributes{
-				CompleteWorkflowExecutionCommandAttributes: &commandpb.CompleteWorkflowExecutionCommandAttributes{
-					Result: payloads.EncodeString("Done"),
-				},
-			},
-		}
-		return append(s.UpdateAcceptCommands(tv, messageId), completeWorkflowCommand), nil
-	}
-
-	messageHandler := func(task *workflowservice.PollWorkflowTaskQueueResponse) ([]*protocolpb.Message, error) {
-		return s.UpdateAcceptMessages(tv, task.Messages[0], messageId), nil
-	}
-
 	poller := &TaskPoller{
-		Engine:              s.engine,
-		Namespace:           s.namespace,
-		TaskQueue:           taskQueue,
-		Identity:            identity,
-		WorkflowTaskHandler: wtHandler,
-		MessageHandler:      messageHandler,
-		Logger:              s.Logger,
-		T:                   s.T(),
+		Engine:    s.engine,
+		Namespace: s.namespace,
+		TaskQueue: taskQueue,
+		Identity:  identity,
+		WorkflowTaskHandler: func(*commonpb.WorkflowExecution, *commonpb.WorkflowType, int64, int64, *historypb.History) ([]*commandpb.Command, error) {
+			completeWorkflowCommand := &commandpb.Command{
+				CommandType: enumspb.COMMAND_TYPE_COMPLETE_WORKFLOW_EXECUTION,
+				Attributes: &commandpb.Command_CompleteWorkflowExecutionCommandAttributes{
+					CompleteWorkflowExecutionCommandAttributes: &commandpb.CompleteWorkflowExecutionCommandAttributes{
+						Result: payloads.EncodeString("Done"),
+					},
+				},
+			}
+			return append(s.UpdateAcceptCommands(tv, messageId), completeWorkflowCommand), nil
+		},
+		MessageHandler: func(task *workflowservice.PollWorkflowTaskQueueResponse) ([]*protocolpb.Message, error) {
+			return s.UpdateAcceptMessages(tv, task.Messages[0], messageId), nil
+		},
+		Logger: s.Logger,
+		T:      s.T(),
 	}
 
 	updateResponse := make(chan error)
