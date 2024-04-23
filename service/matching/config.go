@@ -39,21 +39,20 @@ import (
 type (
 	// Config represents configuration for matching service
 	Config struct {
-		PersistenceMaxQPS                     dynamicconfig.IntPropertyFn
-		PersistenceGlobalMaxQPS               dynamicconfig.IntPropertyFn
-		PersistenceNamespaceMaxQPS            dynamicconfig.IntPropertyFnWithNamespaceFilter
-		PersistenceGlobalNamespaceMaxQPS      dynamicconfig.IntPropertyFnWithNamespaceFilter
-		PersistencePerShardNamespaceMaxQPS    dynamicconfig.IntPropertyFnWithNamespaceFilter
-		EnablePersistencePriorityRateLimiting dynamicconfig.BoolPropertyFn
-		PersistenceDynamicRateLimitingParams  dynamicconfig.MapPropertyFn
-		PersistenceQPSBurstRatio              dynamicconfig.FloatPropertyFn
-		SyncMatchWaitDuration                 dynamicconfig.DurationPropertyFnWithTaskQueueFilter
-		TestDisableSyncMatch                  dynamicconfig.BoolPropertyFn
-		RPS                                   dynamicconfig.IntPropertyFn
-		OperatorRPSRatio                      dynamicconfig.FloatPropertyFn
-		AlignMembershipChange                 dynamicconfig.DurationPropertyFn
-		ShutdownDrainDuration                 dynamicconfig.DurationPropertyFn
-		HistoryMaxPageSize                    dynamicconfig.IntPropertyFnWithNamespaceFilter
+		PersistenceMaxQPS                    dynamicconfig.IntPropertyFn
+		PersistenceGlobalMaxQPS              dynamicconfig.IntPropertyFn
+		PersistenceNamespaceMaxQPS           dynamicconfig.IntPropertyFnWithNamespaceFilter
+		PersistenceGlobalNamespaceMaxQPS     dynamicconfig.IntPropertyFnWithNamespaceFilter
+		PersistencePerShardNamespaceMaxQPS   dynamicconfig.IntPropertyFnWithNamespaceFilter
+		PersistenceDynamicRateLimitingParams dynamicconfig.MapPropertyFn
+		PersistenceQPSBurstRatio             dynamicconfig.FloatPropertyFn
+		SyncMatchWaitDuration                dynamicconfig.DurationPropertyFnWithTaskQueueFilter
+		TestDisableSyncMatch                 dynamicconfig.BoolPropertyFn
+		RPS                                  dynamicconfig.IntPropertyFn
+		OperatorRPSRatio                     dynamicconfig.FloatPropertyFn
+		AlignMembershipChange                dynamicconfig.DurationPropertyFn
+		ShutdownDrainDuration                dynamicconfig.DurationPropertyFn
+		HistoryMaxPageSize                   dynamicconfig.IntPropertyFnWithNamespaceFilter
 
 		// task queue configuration
 
@@ -172,7 +171,6 @@ func NewConfig(
 		PersistenceNamespaceMaxQPS:               dc.GetIntPropertyFilteredByNamespace(dynamicconfig.MatchingPersistenceNamespaceMaxQPS, 0),
 		PersistenceGlobalNamespaceMaxQPS:         dc.GetIntPropertyFilteredByNamespace(dynamicconfig.MatchingPersistenceGlobalNamespaceMaxQPS, 0),
 		PersistencePerShardNamespaceMaxQPS:       dynamicconfig.DefaultPerShardNamespaceRPSMax,
-		EnablePersistencePriorityRateLimiting:    dc.GetBoolProperty(dynamicconfig.MatchingEnablePersistencePriorityRateLimiting, true),
 		PersistenceDynamicRateLimitingParams:     dc.GetMapProperty(dynamicconfig.MatchingPersistenceDynamicRateLimitingParams, dynamicconfig.DefaultDynamicRateLimitingParams),
 		PersistenceQPSBurstRatio:                 dc.GetFloat64Property(dynamicconfig.PersistenceQPSBurstRatio, 1),
 		SyncMatchWaitDuration:                    dc.GetDurationPropertyFilteredByTaskQueueInfo(dynamicconfig.MatchingSyncMatchWaitDuration, 200*time.Millisecond),

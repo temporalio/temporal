@@ -28,6 +28,7 @@ import (
 	"net/http"
 	"net/url"
 	"path"
+	"time"
 
 	"github.com/gorilla/mux"
 	"github.com/nexus-rpc/sdk-go/nexus"
@@ -184,7 +185,7 @@ func (h *NexusHTTPHandler) dispatchNexusTaskByService(w http.ResponseWriter, r *
 
 	service := prepareRequest(commonnexus.RouteDispatchNexusTaskByService, w, r)
 
-	serviceID, err := url.PathUnescape(*service)
+	serviceID, err := url.PathUnescape(service)
 	if err != nil {
 		h.logger.Error("invalid URL", tag.Error(err))
 		h.writeNexusFailure(w, http.StatusBadRequest, &nexus.Failure{Message: "invalid URL"})
@@ -217,7 +218,7 @@ func (h *NexusHTTPHandler) dispatchNexusTaskByService(w http.ResponseWriter, r *
 		return
 	}
 
-	u, err := mux.CurrentRoute(r).URL("service", *service)
+	u, err := mux.CurrentRoute(r).URL("service", service)
 	if err != nil {
 		h.logger.Error("invalid URL", tag.Error(err))
 		h.writeNexusFailure(w, http.StatusInternalServerError, &nexus.Failure{Message: "internal error"})
@@ -234,6 +235,7 @@ func (h *NexusHTTPHandler) baseNexusContext(apiName string) nexusContext {
 		namespaceConcurrencyLimitInterceptor: h.namespaceConcurrencyLimitInterceptor,
 		rateLimitInterceptor:                 h.rateLimitInterceptor,
 		apiName:                              apiName,
+		requestStartTime:                     time.Now(),
 	}
 }
 
@@ -245,7 +247,7 @@ func (h *NexusHTTPHandler) nexusContextFromService(service *nexuspb.IncomingServ
 	return nc
 }
 
-func prepareRequest[T any](route routing.Route[T], w http.ResponseWriter, r *http.Request) *T {
+func prepareRequest[T any](route routing.Route[T], w http.ResponseWriter, r *http.Request) T {
 	// Limit the request body to max allowed Payload size.
 	// Content headers are transformed to Payload metadata and contribute to the Payload size as well. A separate
 	// limit is enforced on top of this in the nexusHandler.StartOperation method.

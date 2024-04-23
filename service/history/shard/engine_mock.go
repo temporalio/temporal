@@ -44,6 +44,7 @@ import (
 	definition "go.temporal.io/server/common/definition"
 	namespace "go.temporal.io/server/common/namespace"
 	events "go.temporal.io/server/service/history/events"
+	hsm "go.temporal.io/server/service/history/hsm"
 	tasks "go.temporal.io/server/service/history/tasks"
 )
 
@@ -843,6 +844,20 @@ func (m *MockEngine) StartWorkflowExecution(ctx context.Context, request *histor
 func (mr *MockEngineMockRecorder) StartWorkflowExecution(ctx, request interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "StartWorkflowExecution", reflect.TypeOf((*MockEngine)(nil).StartWorkflowExecution), ctx, request)
+}
+
+// StateMachineEnvironment mocks base method.
+func (m *MockEngine) StateMachineEnvironment() hsm.Environment {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "StateMachineEnvironment")
+	ret0, _ := ret[0].(hsm.Environment)
+	return ret0
+}
+
+// StateMachineEnvironment indicates an expected call of StateMachineEnvironment.
+func (mr *MockEngineMockRecorder) StateMachineEnvironment() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "StateMachineEnvironment", reflect.TypeOf((*MockEngine)(nil).StateMachineEnvironment))
 }
 
 // Stop mocks base method.
