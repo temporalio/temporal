@@ -558,7 +558,7 @@ func (m *workflowTaskStateMachine) AddWorkflowTaskStartedEvent(
 
 // applyBuildIdRedirect applies redirect, if applicable, based on the versioningStamp and redirectInfo.
 // Returns a possibly new workflowTaskInfo and a boolean indicating if transient wf task was failed and a new wf task
-// scheduled event is created due build id being changed by the current wft.
+// scheduled event is created due to build id being changed by the current wft.
 func (m *workflowTaskStateMachine) applyBuildIdRedirect(
 	versioningStamp *commonpb.WorkerVersionStamp,
 	workflowTask *WorkflowTaskInfo,
