@@ -33,7 +33,7 @@ import (
 	workflowpb "go.temporal.io/api/workflow/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common"
-	"go.temporal.io/server/plugins/callbacks"
+	"go.temporal.io/server/components/callbacks"
 )
 
 func TestValidTransitions(t *testing.T) {

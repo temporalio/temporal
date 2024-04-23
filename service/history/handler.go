@@ -63,7 +63,7 @@ import (
 	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/common/searchattribute"
 	serviceerrors "go.temporal.io/server/common/serviceerror"
-	"go.temporal.io/server/plugins/nexusoperations"
+	"go.temporal.io/server/components/nexusoperations"
 	"go.temporal.io/server/service/history/api"
 	"go.temporal.io/server/service/history/api/deletedlqtasks"
 	"go.temporal.io/server/service/history/api/forcedeleteworkflowexecution"

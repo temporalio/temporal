@@ -35,7 +35,7 @@ import (
 	"go.temporal.io/sdk/converter"
 	"go.temporal.io/server/api/persistence/v1"
 	tokenspb "go.temporal.io/server/api/token/v1"
-	"go.temporal.io/server/plugins/nexusoperations"
+	"go.temporal.io/server/components/nexusoperations"
 	"go.temporal.io/server/service/history/hsm"
 	"go.temporal.io/server/service/history/workflow"
 	"google.golang.org/protobuf/proto"

@@ -51,7 +51,7 @@ import (
 	"go.temporal.io/sdk/worker"
 	"go.temporal.io/sdk/workflow"
 	"go.temporal.io/server/common/testing/historyrequire"
-	"go.temporal.io/server/plugins/nexusoperations"
+	"go.temporal.io/server/components/nexusoperations"
 	"go.uber.org/multierr"
 
 	"go.temporal.io/server/api/adminservice/v1"

@@ -62,9 +62,9 @@ import (
 	"go.temporal.io/server/service/history/workflow"
 	"go.temporal.io/server/service/history/workflow/cache"
 
-	"go.temporal.io/server/plugins/callbacks"
-	"go.temporal.io/server/plugins/nexusoperations"
-	nexusworkflow "go.temporal.io/server/plugins/nexusoperations/workflow"
+	"go.temporal.io/server/components/callbacks"
+	"go.temporal.io/server/components/nexusoperations"
+	nexusworkflow "go.temporal.io/server/components/nexusoperations/workflow"
 )
 
 var Module = fx.Options(

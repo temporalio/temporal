@@ -67,7 +67,7 @@ import (
 	"go.temporal.io/server/common/searchattribute"
 	"go.temporal.io/server/common/telemetry"
 	"go.temporal.io/server/common/utf8validator"
-	nexusfrontend "go.temporal.io/server/plugins/nexusoperations/frontend"
+	nexusfrontend "go.temporal.io/server/components/nexusoperations/frontend"
 	"go.temporal.io/server/service"
 	"go.temporal.io/server/service/frontend/configs"
 	"go.temporal.io/server/service/history/tasks"
