@@ -934,10 +934,7 @@ func (e *matchingEngineImpl) DescribeTaskQueue(
 								TasksAddRate:            float32(0),
 								TasksDispatchRate:       float32(0),
 							}
-						} else {
-							bInfo = nil
 						}
-
 						merged := &taskqueuespb.PhysicalTaskQueueInfo{
 							Pollers:     append(physInfo.GetPollers(), vii.PhysicalTaskQueueInfo.GetPollers()...),
 							BacklogInfo: bInfo,
