@@ -24,8 +24,9 @@ package tests
 
 import (
 	"flag"
-	"github.com/stretchr/testify/suite"
 	"testing"
+
+	"github.com/stretchr/testify/suite"
 )
 
 func TestDescribeTaskQueueSuite(t *testing.T) {
