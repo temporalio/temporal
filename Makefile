@@ -19,7 +19,7 @@ clean: clean-bins clean-test-results
 	rm -rf $(LOCALBIN)
 
 # Recompile proto files.
-proto: clean-proto buf-lint api-linter protoc service-clients goimports-proto proto-mocks copyright-proto
+proto: clean-proto lint-protos lint-api protoc service-clients goimports-proto proto-mocks copyright-proto
 
 # Update proto submodule from remote and recompile proto files.
 update-proto: update-proto-submodule proto gomodtidy
@@ -139,6 +139,8 @@ $(LOCALBIN):
 
 # When updating the version, update the golangci-lint GHA workflow as well.
 .PHONY: golangci-lint
+GOLANGCI_LINT_BASE_REV ?= $(MAIN_BRANCH)
+GOLANGCI_LINT_FIX ?= true
 GOLANGCI_LINT_VERSION := v1.57.2
 GOLANGCI_LINT := $(LOCALBIN)/golangci-lint-$(GOLANGCI_LINT_VERSION)
 $(GOLANGCI_LINT): $(LOCALBIN)
@@ -164,6 +166,10 @@ PROTOGEN := $(LOCALBIN)/protogen-$(GO_API_VER)
 $(PROTOGEN): | $(LOCALBIN)
 	$(call go-install-tool,$(PROTOGEN),go.temporal.io/api/cmd/protogen,$(GO_API_VER))
 
+ACTIONLINT_VER := v1.6.27
+ACTIONLINT := $(LOCALBIN)/actionlint-$(ACTIONLINT_VER)
+$(ACTIONLINT): | $(LOCALBIN)
+	$(call go-install-tool,$(ACTIONLINT),github.com/rhysd/actionlint/cmd/actionlint,$(ACTIONLINT_VER))
 
 # The following tools need to have a consistent name, so we use a versioned stamp file to ensure the version we want is installed
 # while installing to an unversioned binary name.
@@ -318,16 +324,23 @@ goimports:
 	@printf "Modified files: $(MODIFIED_FILES)\n"
 	@$(GOIMPORTS_BIN) -w $(filter %.go, $(MODIFIED_FILES))
 
-lint: $(GOLANGCI_LINT)
-	@printf $(COLOR) "Run linters..."
-	@$(GOLANGCI_LINT) run --verbose --timeout 10m --fix=true --new-from-rev=$(MAIN_BRANCH) --config=.golangci.yml
+lint-actions: $(ACTIONLINT)
+	@printf $(COLOR) "Linting GitHub actions..."
+	@$(ACTIONLINT)
 
-api-linter: $(API_LINTER)
-	@printf $(COLOR) "Run api-linter..."
+lint-code: $(GOLANGCI_LINT)
+	@printf $(COLOR) "Linting code..."
+	@$(GOLANGCI_LINT) run --verbose --timeout 10m --fix=$(GOLANGCI_LINT_FIX) --new-from-rev=$(GOLANGCI_LINT_BASE_REV) --config=.golangci.yml
+
+lint: lint-code lint-actions lint-api lint-protos
+	@printf $(COLOR) "Run linters..."
+
+lint-api: $(API_LINTER)
+	@printf $(COLOR) "Linting proto API..."
 	$(call silent_exec, $(API_LINTER) --set-exit-status $(PROTO_IMPORTS) --config=$(PROTO_ROOT)/api-linter.yaml $(PROTO_FILES))
 
-buf-lint: $(BUF)
-	@printf $(COLOR) "Run buf linter..."
+lint-protos: $(BUF)
+	@printf $(COLOR) "Linting proto definitions..."
 	@(cd $(PROTO_ROOT) && $(ROOT)/$(BUF) lint)
 
 buf-build: $(BUF)

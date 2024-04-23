@@ -71,10 +71,10 @@ jobs:
           TAG: 'v${{ github.event.inputs.tag }}'
           BRANCH: ${{ github.event.inputs.branch }}
         run: |
-          if [ -z "$(git tag -l $TAG)" ]; then
+          if [ -z "$(git tag -l "$TAG")" ]; then
             git tag "$TAG"
             git push origin "$TAG"
-          elif [ "$(git rev-list -n 1 $TAG)" != "$(git rev-parse HEAD)" ]; then
+          elif [ "$(git rev-list -n 1 "$TAG")" != "$(git rev-parse HEAD)" ]; then
             echo "::error::Tag already exists and it doesn't reference current HEAD of branch $BRANCH"
             exit 1
           fi
@@ -86,13 +86,13 @@ jobs:
           BASE_TAG: ${{ github.event.inputs.base_tag }}
           TAG: 'v${{ github.event.inputs.tag}}'
         run: |
-          if [ -z "$BASE_TAG" ] || [ -z "$(git tag -l $BASE_TAG)" ]; then
+          if [ -z "$BASE_TAG" ] || [ -z "$(git tag -l "$BASE_TAG")" ]; then
             echo "::error::Base tag not specified or does not exist"
             exit 1
           fi
 
           TEMPFILE=$(mktemp)
-          cat > $TEMPFILE <<- EOF
+          cat > "$TEMPFILE" <<- EOF
           ## Breaking Changes
           Document them here, if any
 
@@ -117,4 +117,4 @@ jobs:
           EOF
 
           gh repo set-default ${{ github.repository }}
-          gh release create "$TAG" --verify-tag --draft --title "$TAG" -F $TEMPFILE
+          gh release create "$TAG" --verify-tag --draft --title "$TAG" -F "$TEMPFILE"
