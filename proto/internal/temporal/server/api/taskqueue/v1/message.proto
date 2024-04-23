@@ -57,6 +57,7 @@ message TaskQueueVersionInfoInternal {
 message PhysicalTaskQueueInfo {
     // Unversioned workers (with `useVersioning=false`) are reported in unversioned result even if they set a Build ID.
     repeated temporal.api.taskqueue.v1.PollerInfo pollers = 1;
+    temporal.api.taskqueue.v1.BacklogInfo backlog_info = 2;
 }
 
 // Represents a normal or sticky partition of a task queue.

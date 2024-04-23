@@ -2,8 +2,6 @@ module go.temporal.io/server
 
 go 1.22.3
 
-replace go.temporal.io/api => ../api-go
-
 require (
 	cloud.google.com/go/storage v1.40.0
 	github.com/aws/aws-sdk-go v1.51.27
@@ -153,3 +151,5 @@ require (
 	modernc.org/strutil v1.2.0 // indirect
 	modernc.org/token v1.1.0 // indirect
 )
+
+replace go.temporal.io/api => ../api-go

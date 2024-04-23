@@ -29,6 +29,8 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"go.temporal.io/api/history/v1"
+	"go.temporal.io/api/workflowservice/v1"
 	"math"
 	"math/rand"
 	"sync"
@@ -41,11 +43,8 @@ import (
 
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
-	"go.temporal.io/api/history/v1"
 	"go.temporal.io/api/serviceerror"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
-	"go.temporal.io/api/workflowservice/v1"
-
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/api/matchingservice/v1"
@@ -940,7 +939,7 @@ func (e *matchingEngineImpl) DescribeTaskQueue(
 						PartitionId:   &taskqueuespb.TaskQueuePartition_NormalPartitionId{NormalPartitionId: int32(i)},
 					},
 					Versions:          req.GetVersions(),
-					ReportBacklogInfo: false,
+					ReportBacklogInfo: req.GetReportBacklogInfo(),
 					ReportPollers:     req.GetReportPollers(),
 				})
 				if err != nil {
@@ -953,8 +952,24 @@ func (e *matchingEngineImpl) DescribeTaskQueue(
 					if physInfo, ok := physicalInfoByBuildId[buildId][taskQueueType]; !ok {
 						physicalInfoByBuildId[buildId][taskQueueType] = vii.PhysicalTaskQueueInfo
 					} else {
+						var bInfo *taskqueuepb.BacklogInfo
+
+						// only report BacklogInformation if requested.
+						if req.GetReportBacklogInfo() {
+							bInfo_Root := physicalInfoByBuildId[buildId][taskQueueType].BacklogInfo // BacklogInfo of the previous partition
+							bInfo_Partition := vii.PhysicalTaskQueueInfo.BacklogInfo
+
+							// Aggregating counts; for now, we only aggregate approximateBacklogCount
+							bInfo = &taskqueuepb.BacklogInfo{
+								ApproximateBacklogCount: bInfo_Root.ApproximateBacklogCount + bInfo_Partition.ApproximateBacklogCount,
+								ApproximateBacklogAge:   nil,
+								TasksAddRate:            float32(0),
+								TasksDispatchRate:       float32(0),
+							}
+						}
 						merged := &taskqueuespb.PhysicalTaskQueueInfo{
-							Pollers: dedupPollers(append(physInfo.GetPollers(), vii.PhysicalTaskQueueInfo.GetPollers()...)),
+							Pollers:     dedupPollers(append(physInfo.GetPollers(), vii.PhysicalTaskQueueInfo.GetPollers()...)),
+							BacklogInfo: bInfo,
 						}
 						physicalInfoByBuildId[buildId][taskQueueType] = merged
 					}
@@ -967,7 +982,8 @@ func (e *matchingEngineImpl) DescribeTaskQueue(
 			typesInfo := make(map[int32]*taskqueuepb.TaskQueueTypeInfo, 0)
 			for taskQueueType, physicalInfo := range typeMap {
 				typesInfo[int32(taskQueueType)] = &taskqueuepb.TaskQueueTypeInfo{
-					Pollers: physicalInfo.Pollers,
+					Pollers:     physicalInfo.Pollers,
+					BacklogInfo: physicalInfo.BacklogInfo,
 				}
 			}
 			var reachability enumspb.BuildIdTaskReachability
