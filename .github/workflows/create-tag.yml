@@ -55,10 +55,23 @@ jobs:
           [ -z "$CURRENT_VERSION" ] && exit 1
           echo "CURRENT_VERSION=$CURRENT_VERSION" >> "$GITHUB_OUTPUT"
 
+      - name: Prepare new version string
+        id: new_version
+        env:
+          TAG: '${{ github.event.inputs.tag }}'
+        run: |
+          if [[ "${TAG}" =~ ^v.* ]]; then
+              echo "tag_with_v=${TAG}" >> "$GITHUB_OUTPUT"
+              echo "tag_no_v=${TAG#v}" >> "$GITHUB_OUTPUT"
+          else
+              echo "tag_with_v=v${TAG}" >> "$GITHUB_OUTPUT"
+              echo "tag_no_v=${TAG}" >> "$GITHUB_OUTPUT"
+          fi
+
       - name: Update Server version
         if: ${{ steps.get_current_version.outputs.CURRENT_VERSION != github.event.inputs.tag }}
         env:
-          TAG: ${{ github.event.inputs.tag }}
+          TAG: ${{ steps.new_version.outputs.tag_no_v }}
           BRANCH: ${{ github.event.inputs.branch }}
         run: |
           sed -i -e "s/ServerVersion = \".*\"$/ServerVersion = \"$TAG\"/g" common/headers/version_checker.go
@@ -68,7 +81,7 @@ jobs:
 
       - name: Create and push tag
         env:
-          TAG: 'v${{ github.event.inputs.tag }}'
+          TAG: ${{ steps.new_version.outputs.tag_with_v }}
           BRANCH: ${{ github.event.inputs.branch }}
         run: |
           if [ -z "$(git tag -l "$TAG")" ]; then
@@ -84,7 +97,7 @@ jobs:
         env:
           GH_TOKEN: ${{ steps.generate_token.outputs.token }}
           BASE_TAG: ${{ github.event.inputs.base_tag }}
-          TAG: 'v${{ github.event.inputs.tag}}'
+          TAG: ${{ steps.new_version.outputs.tag_with_v }}
         run: |
           if [ -z "$BASE_TAG" ] || [ -z "$(git tag -l "$BASE_TAG")" ]; then
             echo "::error::Base tag not specified or does not exist"
