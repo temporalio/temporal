@@ -140,7 +140,7 @@ func updateWorkflow(
 		nil,
 	)
 
-	// release lock!
+	// release lock since all changes to Workflow have completed here now
 	currentWorkflowLease.GetReleaseFn()(err)
 
 	if err != nil {
