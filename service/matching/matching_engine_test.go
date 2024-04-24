@@ -2802,67 +2802,68 @@ func (s *matchingEngineSuite) createTQAndPTQForBacklogTests() (*taskqueuepb.Task
 	return taskQueue, ptq
 }
 
+func (s *matchingEngineSuite) addWorkflowTask(workflowExecution *commonpb.WorkflowExecution, taskQueue *taskqueuepb.TaskQueue) {
+	addRequest := matchingservice.AddWorkflowTaskRequest{
+		NamespaceId:            namespaceId,
+		Execution:              workflowExecution,
+		ScheduledEventId:       1,
+		TaskQueue:              taskQueue,
+		ScheduleToStartTimeout: timestamp.DurationFromSeconds(100),
+	}
+	_, _, err := s.matchingEngine.AddWorkflowTask(context.Background(), &addRequest)
+	if err != nil {
+		panic(err)
+	}
+}
+
+func (s *matchingEngineSuite) createPollWorkflowTaskRequestAndPoll(taskQueue *taskqueuepb.TaskQueue) {
+	result, err := s.matchingEngine.PollWorkflowTaskQueue(context.Background(), &matchingservice.PollWorkflowTaskQueueRequest{
+		NamespaceId: namespaceId,
+		PollRequest: &workflowservice.PollWorkflowTaskQueueRequest{
+			TaskQueue: taskQueue,
+			Identity:  "nobody",
+		},
+	}, metrics.NoopMetricsHandler)
+	if err != nil {
+		panic(err)
+	}
+	s.NotNil(result)
+	if len(result.TaskToken) == 0 {
+		panic("Empty poll returned")
+	}
+}
+
 // addWorkflowTasks is a helper that adds taskCount number of tasks for each numWorker
-func (s *matchingEngineSuite) addWorkflowTasks(numWorkers int, taskCount int,
+func (s *matchingEngineSuite) addWorkflowTasks(concurrently bool, numWorkers int, taskCount int,
 	taskQueue *taskqueuepb.TaskQueue, workflowExecution *commonpb.WorkflowExecution, wg *sync.WaitGroup) {
-	if numWorkers > 1 {
+	if concurrently {
 		for p := 0; p < numWorkers; p++ {
 			go func() {
 				for i := 0; i < taskCount; i++ {
-					addRequest := matchingservice.AddWorkflowTaskRequest{
-						NamespaceId:            namespaceId,
-						Execution:              workflowExecution,
-						ScheduledEventId:       1,
-						TaskQueue:              taskQueue,
-						ScheduleToStartTimeout: timestamp.DurationFromSeconds(100),
-					}
-					_, _, err := s.matchingEngine.AddWorkflowTask(context.Background(), &addRequest)
-					if err != nil {
-						panic(err)
-					}
+					s.addWorkflowTask(workflowExecution, taskQueue)
 				}
 				wg.Done()
 			}()
 		}
 	} else {
-		// Add tasks using the same goroutine since we have one worker
-		for i := 0; i < taskCount; i++ {
-			addRequest := matchingservice.AddWorkflowTaskRequest{
-				NamespaceId:            namespaceId,
-				Execution:              workflowExecution,
-				ScheduledEventId:       1,
-				TaskQueue:              taskQueue,
-				ScheduleToStartTimeout: timestamp.DurationFromSeconds(10),
+		// Add tasks sequentially
+		for p := 0; p < numWorkers; p++ {
+			for i := 0; i < taskCount; i++ {
+				s.addWorkflowTask(workflowExecution, taskQueue)
 			}
-			_, _, err := s.matchingEngine.AddWorkflowTask(context.Background(), &addRequest)
-			s.NoError(err)
 		}
 	}
 }
 
 // pollWorkflowTasks polls tasks using numWorkers
-func (s *matchingEngineSuite) pollWorkflowTasks(numPollers int, taskCount int, tlMgr *physicalTaskQueueManagerImpl,
+func (s *matchingEngineSuite) pollWorkflowTasks(concurrently bool, numPollers int, taskCount int, tlMgr *physicalTaskQueueManagerImpl,
 	taskQueue *taskqueuepb.TaskQueue, wg *sync.WaitGroup) {
 
-	if numPollers > 1 {
+	if concurrently {
 		for p := 0; p < numPollers; p++ {
 			go func() {
 				for i := 0; i < taskCount; {
-					result, err := s.matchingEngine.PollWorkflowTaskQueue(context.Background(), &matchingservice.PollWorkflowTaskQueueRequest{
-						NamespaceId: namespaceId,
-						PollRequest: &workflowservice.PollWorkflowTaskQueueRequest{
-							TaskQueue: taskQueue,
-							Identity:  "nobody",
-						},
-					}, metrics.NoopMetricsHandler)
-					if err != nil {
-						panic(err)
-					}
-					s.NotNil(result)
-					if len(result.TaskToken) == 0 {
-						s.logger.Debug("empty poll returned")
-						continue
-					}
+					s.createPollWorkflowTaskRequestAndPoll(taskQueue)
 					i++
 				}
 				wg.Done()
@@ -2870,18 +2871,8 @@ func (s *matchingEngineSuite) pollWorkflowTasks(numPollers int, taskCount int, t
 		}
 	} else {
 		tasksCompleted := 0
-		for i := 0; i < taskCount; i++ {
-			result, err := s.matchingEngine.PollWorkflowTaskQueue(context.Background(), &matchingservice.PollWorkflowTaskQueueRequest{
-				NamespaceId: namespaceId,
-				PollRequest: &workflowservice.PollWorkflowTaskQueueRequest{
-					TaskQueue: taskQueue,
-					Identity:  "nobody",
-				},
-			}, metrics.NoopMetricsHandler)
-			if err != nil {
-				panic(err)
-			}
-			s.NotNil(result)
+		for i := 0; i < numPollers*taskCount; i++ {
+			s.createPollWorkflowTaskRequestAndPoll(taskQueue)
 			tasksCompleted += 1
 			s.EqualValues(tlMgr.backlogMgr.db.getApproximateBacklogCount(), int64(taskCount-tasksCompleted))
 		}
@@ -2901,7 +2892,7 @@ func (s *matchingEngineSuite) TestAddConsumeWorkflowTasksValidateBacklogCount() 
 	taskQueue, ptq := s.createTQAndPTQForBacklogTests()
 
 	const taskCount = 100
-	s.addWorkflowTasks(1, taskCount, taskQueue, workflowExecution, nil)
+	s.addWorkflowTasks(false, 1, taskCount, taskQueue, workflowExecution, nil)
 	s.EqualValues(taskCount, s.taskManager.getTaskCount(ptq))
 
 	// Extracting the tlMgr for validating approximateBacklogCounter
@@ -2910,7 +2901,7 @@ func (s *matchingEngineSuite) TestAddConsumeWorkflowTasksValidateBacklogCount() 
 
 	s.mockHistoryWhilePolling(workflowType)
 
-	s.pollWorkflowTasks(1, taskCount, tlMgr, taskQueue, nil)
+	s.pollWorkflowTasks(false, 1, taskCount, tlMgr, taskQueue, nil)
 	// All tasks should have been completed
 	s.EqualValues(tlMgr.backlogMgr.db.getApproximateBacklogCount(), int64(0))
 }
@@ -2929,7 +2920,7 @@ func (s *matchingEngineSuite) TestCheckPreventionOfNegativeBacklogCounter() {
 	const taskID = 11
 
 	taskQueue, ptq := s.createTQAndPTQForBacklogTests()
-	s.addWorkflowTasks(1, taskCount, taskQueue, workflowExecution, nil)
+	s.addWorkflowTasks(false, 1, taskCount, taskQueue, workflowExecution, nil)
 	s.EqualValues(taskCount, s.taskManager.getTaskCount(ptq))
 
 	// validating the approximateBacklogCounter
@@ -2972,7 +2963,7 @@ func (s *matchingEngineSuite) TestUnloadingTQMValidateBacklogCounter() {
 	taskQueue, ptq := s.createTQAndPTQForBacklogTests()
 	const taskCount = 20
 
-	s.addWorkflowTasks(1, taskCount, taskQueue, workflowExecution, nil)
+	s.addWorkflowTasks(false, 1, taskCount, taskQueue, workflowExecution, nil)
 	s.EqualValues(taskCount, s.taskManager.getTaskCount(ptq))
 
 	tlMgr := s.getPhysicalTaskQueueManagerImpl(ptq)
@@ -2994,7 +2985,7 @@ func (s *matchingEngineSuite) TestUnloadingTQMValidateBacklogCounter() {
 	s.EqualValues(tlMgr.backlogMgr.db.getApproximateBacklogCount(), int64(taskCount))
 
 	// Adding a new task which should persist the backlog count and the ackLevel
-	s.addWorkflowTasks(1, 1, taskQueue, workflowExecution, nil)
+	s.addWorkflowTasks(false, 1, 1, taskQueue, workflowExecution, nil)
 
 	// unloading the TQM which also stops the backlogManager; set backlogManager.skipFinalUpdate to true to not persist
 	// the latest ackLevel
@@ -3029,7 +3020,7 @@ func (s *matchingEngineSuite) TestConcurrentAddWorkflowTasksValidateBacklogCount
 	var wg sync.WaitGroup
 	wg.Add(workerCount)
 
-	s.addWorkflowTasks(workerCount, taskCount, taskQueue, workflowExecution, &wg)
+	s.addWorkflowTasks(true, workerCount, taskCount, taskQueue, workflowExecution, &wg)
 	wg.Wait()
 
 	// validating the approximateBacklogCounter
@@ -3047,9 +3038,9 @@ func (s *matchingEngineSuite) TestConcurrentAddCompleteWorkflowTasksValidateBack
 	var wg sync.WaitGroup
 	wg.Add(2 * workerCount)
 
-	s.addWorkflowTasks(workerCount, taskCount, taskQueue, workflowExecution, &wg)
+	s.addWorkflowTasks(true, workerCount, taskCount, taskQueue, workflowExecution, &wg)
 	s.mockHistoryWhilePolling(workflowType)
-	s.pollWorkflowTasks(workerCount, taskCount, nil, taskQueue, &wg)
+	s.pollWorkflowTasks(true, workerCount, taskCount, nil, taskQueue, &wg)
 
 	wg.Wait()
 	s.EqualValues(0, s.taskManager.getTaskCount(ptq))
@@ -3060,6 +3051,30 @@ func (s *matchingEngineSuite) TestConcurrentAddCompleteWorkflowTasksValidateBack
 	// validating the approximateBacklogCounter
 	tlMgr := s.getPhysicalTaskQueueManagerImpl(ptq)
 	s.EqualValues(tlMgr.backlogMgr.db.getApproximateBacklogCount(), int64(0))
+}
+
+func (s *matchingEngineSuite) TestLesserNumberOfPollersThanTasks() {
+	workflowType, workflowExecution := s.generateWorkflowExecution()
+	taskQueue, ptq := s.createTQAndPTQForBacklogTests()
+
+	const workerCount = 1
+	const taskCount = 5
+	const polledTasks = 4
+
+	var wg sync.WaitGroup
+	wg.Add(2 * workerCount)
+
+	s.addWorkflowTasks(true, workerCount, taskCount, taskQueue, workflowExecution, &wg)
+	s.mockHistoryWhilePolling(workflowType)
+	s.pollWorkflowTasks(true, workerCount, polledTasks, nil, taskQueue, &wg)
+
+	wg.Wait()
+	s.EqualValues(taskCount-polledTasks, s.taskManager.getTaskCount(ptq))
+
+	// validating the approximateBacklogCounter
+	// Extracting the tlMgr for validating approximateBacklogCounter
+	tlMgr := s.getPhysicalTaskQueueManagerImpl(ptq)
+	s.EqualValues(tlMgr.backlogMgr.db.getApproximateBacklogCount(), int64(taskCount-polledTasks))
 }
 
 func (s *matchingEngineSuite) setupRecordActivityTaskStartedMock(tlName string) {
