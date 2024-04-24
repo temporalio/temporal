@@ -154,6 +154,7 @@ func (s *transactionMgrSuite) TestBackfillWorkflow_CurrentWorkflow_Active_Open()
 	targetWorkflow := NewMockWorkflow(s.controller)
 	weContext := workflow.NewMockContext(s.controller)
 	mutableState := workflow.NewMockMutableState(s.controller)
+	mutableState.EXPECT().VisitUpdates(gomock.Any()).Return()
 	updateRegistry := update.NewRegistry(func() update.Store { return mutableState })
 	var releaseFn wcache.ReleaseCacheFunc = func(error) { releaseCalled = true }
 

@@ -98,8 +98,8 @@ func (s *nDCEventReapplicationSuite) TestReapplyEvents_AppliedEvent_Signal() {
 	attr := event.GetWorkflowExecutionSignaledEventAttributes()
 
 	msCurrent := workflow.NewMockMutableState(s.controller)
+	msCurrent.EXPECT().VisitUpdates(gomock.Any()).Return()
 	updateRegistry := update.NewRegistry(func() update.Store { return msCurrent })
-
 	msCurrent.EXPECT().IsWorkflowExecutionRunning().Return(true)
 	msCurrent.EXPECT().GetLastWriteVersion().Return(int64(1), nil).AnyTimes()
 	msCurrent.EXPECT().GetExecutionInfo().Return(execution).AnyTimes()
@@ -147,6 +147,7 @@ func (s *nDCEventReapplicationSuite) TestReapplyEvents_AppliedEvent_Update() {
 	} {
 
 		msCurrent := workflow.NewMockMutableState(s.controller)
+		msCurrent.EXPECT().VisitUpdates(gomock.Any()).Return()
 		updateRegistry := update.NewRegistry(func() update.Store { return msCurrent })
 		msCurrent.EXPECT().IsWorkflowExecutionRunning().Return(true)
 		msCurrent.EXPECT().GetLastWriteVersion().Return(int64(1), nil).AnyTimes()
@@ -192,6 +193,7 @@ func (s *nDCEventReapplicationSuite) TestReapplyEvents_Noop() {
 	}
 
 	msCurrent := workflow.NewMockMutableState(s.controller)
+	msCurrent.EXPECT().VisitUpdates(gomock.Any()).Return()
 	updateRegistry := update.NewRegistry(func() update.Store { return msCurrent })
 	dedupResource := definition.NewEventReappliedID(runID, event.GetEventId(), event.GetVersion())
 	msCurrent.EXPECT().IsResourceDuplicated(dedupResource).Return(true)
@@ -233,6 +235,7 @@ func (s *nDCEventReapplicationSuite) TestReapplyEvents_PartialAppliedEvent() {
 	attr1 := event1.GetWorkflowExecutionSignaledEventAttributes()
 
 	msCurrent := workflow.NewMockMutableState(s.controller)
+	msCurrent.EXPECT().VisitUpdates(gomock.Any()).Return()
 	updateRegistry := update.NewRegistry(func() update.Store { return msCurrent })
 	msCurrent.EXPECT().IsWorkflowExecutionRunning().Return(true)
 	msCurrent.EXPECT().GetLastWriteVersion().Return(int64(1), nil).AnyTimes()
@@ -278,6 +281,7 @@ func (s *nDCEventReapplicationSuite) TestReapplyEvents_Error() {
 	attr := event.GetWorkflowExecutionSignaledEventAttributes()
 
 	msCurrent := workflow.NewMockMutableState(s.controller)
+	msCurrent.EXPECT().VisitUpdates(gomock.Any()).Return()
 	updateRegistry := update.NewRegistry(func() update.Store { return msCurrent })
 	msCurrent.EXPECT().IsWorkflowExecutionRunning().Return(true)
 	msCurrent.EXPECT().GetLastWriteVersion().Return(int64(1), nil).AnyTimes()

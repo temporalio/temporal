@@ -603,6 +603,7 @@ func (s *workflowResetterSuite) TestReapplyContinueAsNewWorkflowEvents_WithOutCo
 	}, nil)
 
 	mutableState := workflow.NewMockMutableState(s.controller)
+	mutableState.EXPECT().VisitUpdates(gomock.Any()).Return()
 	updateRegistry := update.NewRegistry(func() update.Store { return mutableState })
 
 	lastVisitedRunID, err := s.workflowResetter.reapplyContinueAsNewWorkflowEvents(
@@ -723,6 +724,7 @@ func (s *workflowResetterSuite) TestReapplyContinueAsNewWorkflowEvents_WithConti
 	_, _ = s.workflowResetter.workflowCache.(*wcache.CacheImpl).PutIfNotExist(resetContextCacheKey, resetContext)
 
 	mutableState := workflow.NewMockMutableState(s.controller)
+	mutableState.EXPECT().VisitUpdates(gomock.Any()).Return()
 	updateRegistry := update.NewRegistry(func() update.Store { return mutableState })
 
 	lastVisitedRunID, err := s.workflowResetter.reapplyContinueAsNewWorkflowEvents(
@@ -789,6 +791,7 @@ func (s *workflowResetterSuite) TestReapplyWorkflowEvents() {
 	}, nil)
 
 	mutableState := workflow.NewMockMutableState(s.controller)
+	mutableState.EXPECT().VisitUpdates(gomock.Any()).Return()
 	updateRegistry := update.NewRegistry(func() update.Store { return mutableState })
 
 	nextRunID, err := s.workflowResetter.reapplyWorkflowEvents(
