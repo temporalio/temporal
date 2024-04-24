@@ -2342,6 +2342,8 @@ func (s *FunctionalSuite) TestUpdateWorkflow_FailSpeculativeWorkflowTask() {
 	s.Contains(err.Error(), "not found")
 	// New normal (but transient) WT will be created but not returned.
 
+	runtime.WaitGoRoutineWithFn(s.T(), ((*update.Update)(nil)).WaitLifecycleStage, 1*time.Second)
+
 	// Try to accept update in workflow 2nd time: get error. Poller will fail WT.
 	_, err = poller.PollAndProcessWorkflowTask()
 	// The error is from RespondWorkflowTaskFailed, which should go w/o error.
@@ -2838,6 +2840,9 @@ func (s *FunctionalSuite) TestUpdateWorkflow_ScheduleToStartTimeoutSpeculativeWo
 	// Wait for sticky timeout to fire.
 	time.Sleep(poller.StickyScheduleToStartTimeout + 100*time.Millisecond)
 
+	// time.Sleep(time.Second)
+	// runtime.WaitGoRoutineWithFn(s.T(), ((*update.Update)(nil)).WaitLifecycleStage, 1*time.Second)
+
 	// Try to process update in workflow, poll from normal task queue.
 	res, err := poller.PollAndProcessWorkflowTask(WithRetries(1), WithForceNewWorkflowTask)
 	s.NoError(err)
@@ -2949,17 +2954,20 @@ func (s *FunctionalSuite) TestUpdateWorkflow_ScheduleToStartTimeoutSpeculativeWo
 	s.NoError(err)
 
 	// Now send an update. It will create a speculative WT on normal task queue,
-	// which will time out in 10 seconds and create new normal WT.
+	// which will time out in 5 seconds and create new normal WT.
 	updateResultCh := make(chan *workflowservice.UpdateWorkflowExecutionResponse)
 	go func() {
 		updateResultCh <- s.sendUpdateNoError(tv, "1")
 	}()
 
+	// To make sure that update got to the server before test start to wait for SpeculativeWorkflowTaskScheduleToStartTimeout.
+	runtime.WaitGoRoutineWithFn(s.T(), ((*update.Update)(nil)).WaitLifecycleStage, 1*time.Second)
+
 	// TODO: it would be nice to shutdown matching before sending an update to emulate case which is actually being tested here.
-	//  But test infrastructure doesn't support it. 10 seconds sleep will cause same observable effect.
-	s.Logger.Info("Sleep 10 seconds to make sure tasks.SpeculativeWorkflowTaskScheduleToStartTimeout time has passed.")
-	time.Sleep(10 * time.Second)
-	s.Logger.Info("Sleep 10 seconds is done.")
+	//  But test infrastructure doesn't support it. 5 seconds sleep will cause same observable effect.
+	s.Logger.Info("Sleep 5+ seconds to make sure tasks.SpeculativeWorkflowTaskScheduleToStartTimeout time has passed.")
+	time.Sleep(5*time.Second + 100*time.Millisecond)
+	s.Logger.Info("Sleep 5+ seconds is done.")
 
 	// Process update in workflow.
 	res, err := poller.PollAndProcessWorkflowTask(WithRetries(1), WithForceNewWorkflowTask)
@@ -4645,7 +4653,7 @@ func (s *FunctionalSuite) TestUpdateWorkflow_StaleSpeculativeWorkflowTask_ClearM
 	/*
 		Test scenario:
 		An update created a speculative WT and WT is dispatched to the worker (started).
-		Mutable state cleared, speculative WT is disappeared from server but update registry stays as is.
+		Mutable state cleared, speculative WT and update registry are disappeared from server.
 		Another update come in, and second speculative WT is dispatched to worker with same WT scheduled/started Id but different update Id.
 		The first speculative WT responds back, server rejected it (different start time).
 		The second speculative WT responds back, server accepted it.
@@ -4731,14 +4739,17 @@ func (s *FunctionalSuite) TestUpdateWorkflow_StaleSpeculativeWorkflowTask_ClearM
 	  9 WorkflowTaskScheduled
 	 10 WorkflowTaskStarted`, wt3.History)
 
-	// DescribeMutableState will clear MS, cause the speculative WT to disappear but the registry for update "1" will stay.
+	// DescribeMutableState will clear MS, cause the speculative WT and update registry to disappear.
 	_, err = s.adminClient.DescribeMutableState(testCtx, &adminservice.DescribeMutableStateRequest{
 		Namespace: s.namespace,
 		Execution: tv.WorkflowExecution(),
 	})
 	s.NoError(err)
 
-	// Send 2nd update (with DIFFERENT updateId). This will create a 4th WT as speculative.
+	// Make sure UpdateWorkflowExecution call for the update "1" is retried and new (4th) WFT is created as speculative.
+	runtime.WaitGoRoutineWithFn(s.T(), ((*update.Update)(nil)).WaitLifecycleStage, 1*time.Second)
+
+	// Send 2nd update (with DIFFERENT updateId). It re-use already create 4th WFT.
 	go func() {
 		_, _ = s.sendUpdate(tv, "2")
 	}()

@@ -127,6 +127,8 @@ func (u *Updater) ApplyRequest(
 	ctx context.Context,
 	workflowLease api.WorkflowLease,
 ) (*api.UpdateWorkflowAction, error) {
+	println("QQQ update.ApplyRequest is called. UpdateID=", u.req.GetRequest().GetRequest().GetMeta().GetUpdateId())
+
 	ms := workflowLease.GetMutableState()
 	if !ms.IsWorkflowExecutionRunning() {
 		return nil, consts.ErrWorkflowCompleted
@@ -167,6 +169,7 @@ func (u *Updater) ApplyRequest(
 	// If WT has already started, new speculative WT will be created when started WT completes.
 	// If update is duplicate, then WT for this update was already created.
 	if alreadyExisted || ms.HasPendingWorkflowTask() {
+		println("QQQ alreadyExisted=", alreadyExisted, "ms.HasPendingWorkflowTask()=", ms.HasPendingWorkflowTask(), "Type=", ms.GetExecutionInfo().WorkflowTaskType.String(), "ScheduledEventID=", ms.GetExecutionInfo().WorkflowTaskScheduledEventId, "StartedEventID=", ms.GetExecutionInfo().WorkflowTaskStartedEventId)
 		return &api.UpdateWorkflowAction{
 			Noop:               true,
 			CreateWorkflowTask: false,
@@ -182,6 +185,7 @@ func (u *Updater) ApplyRequest(
 	// In this case difference between NextEventID and LastWorkflowTaskStartedEventID is 2.
 	// If there are other events after WTCompleted event, then difference is > 2 and speculative WT can't be created.
 	canCreateSpeculativeWT := ms.GetNextEventID() == ms.GetLastWorkflowTaskStartedEventID()+2
+	println("QQQ canCreateSpeculativeWT=", canCreateSpeculativeWT)
 	if !canCreateSpeculativeWT {
 		return &api.UpdateWorkflowAction{
 			Noop:               false,
@@ -215,6 +219,7 @@ func (u *Updater) ApplyRequest(
 		ms.GetLastWorkflowTaskStartedEventID(),
 	)
 
+	println("QQQ Speculative WFT created")
 	return &api.UpdateWorkflowAction{
 		Noop:               true,
 		CreateWorkflowTask: false,
@@ -282,8 +287,12 @@ func (u *Updater) OnSuccess(
 	waitStage := u.req.GetRequest().GetWaitPolicy().GetLifecycleStage()
 	// If the long-poll times out due to serverTimeout then return a non-error empty response.
 	status, err := u.upd.WaitLifecycleStage(ctx, waitStage, serverTimeout)
+	println("")
 	if err != nil {
+		println("QQQ callers unblocked with error", err.Error())
 		return nil, err
+	} else {
+		println("QQQ callers unblocked with outcome", status.Outcome.String(), "stage", status.Stage.String())
 	}
 	resp := u.createResponse(u.wfKey, status.Outcome, status.Stage)
 	return resp, nil

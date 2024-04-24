@@ -211,6 +211,7 @@ func (handler *workflowTaskHandlerCallbacksImpl) handleWorkflowTaskStarted(
 			}
 
 			workflowTask := mutableState.GetWorkflowTaskByID(scheduledEventID)
+			println("QQQ RecordWorkflowTaskStarted scheduledEventID=", scheduledEventID, "wft==nil?", workflowTask == nil)
 			metricsScope := handler.metricsHandler.WithTags(metrics.OperationTag(metrics.HistoryRecordWorkflowTaskStartedScope))
 
 			// First check to see if cache needs to be refreshed as we could potentially have stale workflow execution in
@@ -296,6 +297,7 @@ func (handler *workflowTaskHandlerCallbacksImpl) handleWorkflowTaskStarted(
 			if err != nil {
 				return nil, err
 			}
+			println("QQQ RecordWorkflowTaskStarted scheduledEventID=", scheduledEventID, "msg.len=", len(resp.GetMessages()))
 
 			return updateAction, nil
 		},
