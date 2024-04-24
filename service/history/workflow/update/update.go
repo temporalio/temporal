@@ -102,7 +102,7 @@ type (
 )
 
 var (
-	abortWaiterErr = errors.New("workflow update lifecycle stage waiter is aborted")
+	abortWaiterErr = errors.New("workflow update lifecycle stage waiter was aborted")
 )
 
 // New creates a new Update instance with the provided ID that will call the
@@ -245,12 +245,12 @@ func (u *Update) WaitLifecycleStage(
 			// Workflow Update uses abortWaiterErr to abort waiter. This error uses special handling here:
 			// abort waiting for ACCEPTED stage and return Unavailable (retryable) error to the caller.
 			// This error will be retried (by history service handler, or history service client in frontend,
-			// or worker) and it will recreate update in the registry.
+			// or SDK, or user client) and it will recreate update in the registry.
 			// All other errors are returned to the caller (not currently happens).
 			if !errors.Is(err, abortWaiterErr) {
 				return nil, err
 			}
-			return nil, serviceerror.NewUnavailable("Workflow Update is aborted.")
+			return nil, serviceerror.NewUnavailable("Workflow Update was aborted.")
 		}
 
 		if ctx.Err() != nil {
@@ -264,7 +264,7 @@ func (u *Update) WaitLifecycleStage(
 	}
 
 	// Only get here if waitStage=ADMITTED or UNSPECIFIED and neither ACCEPTED nor COMPLETED are reached.
-	// Return ADMITTED (as the most reached stage) and empty outcome.
+	// Return ADMITTED (as the most advanced stage reached) and empty outcome.
 	return statusAdmitted(), nil
 }
 

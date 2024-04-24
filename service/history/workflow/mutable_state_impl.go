@@ -918,7 +918,7 @@ func (ms *MutableStateImpl) TaskQueueScheduleToStartTimeout(tqName string) (*tas
 		// See comment in GenerateScheduleSpeculativeWorkflowTaskTasks for details.
 		return normalTq, durationpb.New(tasks.SpeculativeWorkflowTaskScheduleToStartTimeout)
 	}
-	// No WFT ScheduleToStart timeout for normal task queue.
+	// No WFT ScheduleToStart timeout for normal WFT on normal task queue.
 	return normalTq, ms.executionInfo.WorkflowRunTimeout
 }
 
