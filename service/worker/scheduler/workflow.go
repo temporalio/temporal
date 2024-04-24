@@ -25,6 +25,7 @@
 package scheduler
 
 import (
+	"bytes"
 	"errors"
 	"fmt"
 	"time"
@@ -857,6 +858,8 @@ func (s *scheduler) processUpdate(req *schedspb.FullUpdateRequest) {
 	s.ensureFields()
 	s.compileSpec()
 
+	s.updateCustomSearchAttributes(req.SearchAttributes)
+
 	if s.hasMinVersion(UpdateFromPrevious) {
 		// We need to start re-processing from the last event, so that we catch actions whose
 		// nominal time is before now but actual time (with jitter) is after now. Logic in
@@ -985,6 +988,51 @@ func (s *scheduler) getListInfo(inWorkflowContext bool) *schedpb.ScheduleListInf
 		Paused:            s.Schedule.State.Paused,
 		RecentActions:     util.SliceTail(s.Info.RecentActions, s.tweakables.RecentActionCountForList),
 		FutureActionTimes: s.getFutureActionTimes(inWorkflowContext, s.tweakables.FutureActionCountForList),
+	}
+}
+
+func (s *scheduler) updateCustomSearchAttributes(searchAttributes *commonpb.SearchAttributes) {
+	// We want to distinguish nil value from an empty object value.
+	// When it is nil, then it's a no-op. Otherwise, it will overwrite the search attributes.
+	// That is, if it is an empty map, it will unset all search attributes.
+	if searchAttributes == nil {
+		return
+	}
+
+	upsertMap := map[string]any{}
+	for key, valuePayload := range searchAttributes.GetIndexedFields() {
+		var value any
+		if err := payload.Decode(valuePayload, &value); err != nil {
+			s.logger.Error("error updating search attributes of the scheule", "error", err)
+			return
+		}
+		upsertMap[key] = value
+	}
+
+	//nolint:staticcheck // SA1019 Use untyped version for backwards compatibility.
+	currentSearchAttributes := workflow.GetInfo(s.ctx).SearchAttributes
+	for key, currentValuePayload := range currentSearchAttributes.GetIndexedFields() {
+		// This might violate determinism when a new system search attribute is added
+		// and the user already had a custom search attribute with same name. This is
+		// a general issue in the system, and it will be fixed when we introduce
+		// a system prefix to fix those conflicts.
+		if searchattribute.IsReserved(key) {
+			continue
+		}
+		if newValuePayload, exists := searchAttributes.GetIndexedFields()[key]; !exists {
+			// Key is not set, so needs to be deleted.
+			upsertMap[key] = nil
+		} else if bytes.Equal(currentValuePayload.Data, newValuePayload.Data) {
+			// If the payloads data are the same, then we don't need to update the value.
+			delete(upsertMap, key)
+		}
+	}
+	if len(upsertMap) == 0 {
+		return
+	}
+	//nolint:staticcheck // SA1019 The untyped function here is more convenient.
+	if err := workflow.UpsertSearchAttributes(s.ctx, upsertMap); err != nil {
+		s.logger.Error("error updating search attributes of the scheule", "error", err)
 	}
 }
 

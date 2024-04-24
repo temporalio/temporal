@@ -82,7 +82,7 @@ func NewValidator(
 // Validate search attributes are valid for writing.
 // The search attributes must be unaliased before calling validation.
 func (v *Validator) Validate(searchAttributes *commonpb.SearchAttributes, namespace string) error {
-	if searchAttributes == nil {
+	if len(searchAttributes.GetIndexedFields()) == 0 {
 		return nil
 	}
 
