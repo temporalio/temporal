@@ -326,6 +326,7 @@ func NewClusterWithPersistenceTestBaseFactory(t *testing.T, options *TestCluster
 	if err := cluster.Start(); err != nil {
 		return nil, err
 	}
+	cluster.logger.Info(fmt.Sprintf("Test temporal cluster started, cluster: %+v", cluster))
 
 	return &TestCluster{testBase: testBase, archiverBase: archiverBase, host: cluster}, nil
 }
@@ -487,6 +488,7 @@ func (tc *TestCluster) SetFaultInjectionRate(rate float64) {
 // TearDownCluster tears down the test cluster
 func (tc *TestCluster) TearDownCluster() error {
 	errs := tc.host.Stop()
+	tc.host.logger.Info(fmt.Sprintf("Test temporal cluster stopped, cluster: %+v", tc.host))
 	tc.testBase.TearDownWorkflowStore()
 	if !UsingSQLAdvancedVisibility() && tc.host.esConfig != nil {
 		if err := deleteIndex(tc.host.esConfig, tc.host.logger); err != nil {

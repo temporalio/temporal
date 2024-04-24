@@ -44,6 +44,10 @@ jobs:
 
       - uses: arduino/setup-protoc@v3
 
+      - run: sudo apt update
+
+      - run: sudo apt install -y shellcheck
+
       - run: make ci-build-misc
 
       - run: make build-tests
@@ -248,6 +252,9 @@ jobs:
         run: |
           docker compose -f ${{ env.DOCKER_COMPOSE_FILE }} up -d ${{ join(matrix.containers, ' ') }}
 
+      - name: Wait dependencies to be ready
+        run: sleep 30
+
       - name: Run functional test xdc
         timeout-minutes: 15
         run: make functional-test-xdc-coverage
@@ -309,6 +316,9 @@ jobs:
         if: ${{ toJson(matrix.containers) != '[]' }}
         run: |
           docker compose -f ${{ env.DOCKER_COMPOSE_FILE }} up -d ${{ join(matrix.containers, ' ') }}
+
+      - name: Wait dependencies to be ready
+        run: sleep 30
 
       - name: Run functional test ndc
         timeout-minutes: 15
