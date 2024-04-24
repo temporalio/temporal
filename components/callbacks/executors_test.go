@@ -142,7 +142,7 @@ func TestProcessInvocationTask_Outcomes(t *testing.T) {
 				CallerProvider: func(nid queues.NamespaceIDAndDestination) callbacks.HTTPCaller {
 					return tc.caller
 				},
-			}, &callbacks.Config{InvocationTaskTimeout: func() time.Duration { return time.Second }}))
+			}, &callbacks.Config{RequestTimeout: func() time.Duration { return time.Second }}))
 
 			err = hsm.Execute(context.Background(), reg, env,
 				hsm.Ref{
@@ -198,7 +198,7 @@ func TestProcessBackoffTask(t *testing.T) {
 		CallerProvider: func(nid queues.NamespaceIDAndDestination) callbacks.HTTPCaller {
 			return nil
 		},
-	}, &callbacks.Config{InvocationTaskTimeout: func() time.Duration { return time.Second }}))
+	}, &callbacks.Config{RequestTimeout: func() time.Duration { return time.Second }}))
 
 	err = hsm.Execute(context.Background(), reg, env,
 		hsm.Ref{
