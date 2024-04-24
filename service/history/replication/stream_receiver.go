@@ -32,6 +32,8 @@ import (
 	"time"
 
 	"go.temporal.io/server/api/adminservice/v1"
+	"google.golang.org/protobuf/types/known/timestamppb"
+
 	repicationpb "go.temporal.io/server/api/replication/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/channel"
@@ -39,8 +41,6 @@ import (
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/primitives/timestamp"
-	ctasks "go.temporal.io/server/common/tasks"
-	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
 type (
@@ -290,14 +290,3 @@ func (p *streamClientProvider) Get(
 		p.processToolBox.ClientBean,
 	).Get(ctx, p.clientShardKey, p.serverShardKey)
 }
-
-type noopSchedulerMonitor struct {
-}
-
-func newNoopSchedulerMonitor() *noopSchedulerMonitor {
-	return &noopSchedulerMonitor{}
-}
-
-func (m *noopSchedulerMonitor) Start()                    {}
-func (m *noopSchedulerMonitor) Stop()                     {}
-func (m *noopSchedulerMonitor) RecordStart(_ ctasks.Task) {}
