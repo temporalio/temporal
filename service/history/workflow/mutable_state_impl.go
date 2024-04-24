@@ -898,9 +898,9 @@ func (ms *MutableStateImpl) IsStickyTaskQueueSet() bool {
 // Task queue kind (sticky or normal) is set based on comparison of normal task queue name
 // in mutable state and provided name.
 // ScheduleToStartTimeout is set based on queue kind and workflow task type.
-func (ms *MutableStateImpl) TaskQueueScheduleToStartTimeout(name string) (*taskqueuepb.TaskQueue, *durationpb.Duration) {
-	// If name is sticky task queue name.
-	if ms.executionInfo.TaskQueue != name {
+func (ms *MutableStateImpl) TaskQueueScheduleToStartTimeout(tqName string) (*taskqueuepb.TaskQueue, *durationpb.Duration) {
+	isStickyTq := ms.executionInfo.StickyTaskQueue == tqName
+	if isStickyTq {
 		return &taskqueuepb.TaskQueue{
 			Name:       ms.executionInfo.StickyTaskQueue,
 			Kind:       enumspb.TASK_QUEUE_KIND_STICKY,
@@ -908,16 +908,18 @@ func (ms *MutableStateImpl) TaskQueueScheduleToStartTimeout(name string) (*taskq
 		}, ms.executionInfo.StickyScheduleToStartTimeout
 	}
 
-	// If name is normal task queue name.
+	// If tqName is normal task queue name.
 	normalTq := &taskqueuepb.TaskQueue{
 		Name: ms.executionInfo.TaskQueue,
 		Kind: enumspb.TASK_QUEUE_KIND_NORMAL,
 	}
 	if ms.executionInfo.WorkflowTaskType == enumsspb.WORKFLOW_TASK_TYPE_SPECULATIVE {
 		// Speculative WFT has ScheduleToStartTimeout even on normal task queue.
+		// See comment in GenerateScheduleSpeculativeWorkflowTaskTasks for details.
 		return normalTq, durationpb.New(tasks.SpeculativeWorkflowTaskScheduleToStartTimeout)
 	}
-	return normalTq, ms.executionInfo.WorkflowRunTimeout // No WT ScheduleToStart timeout for normal WFT on normal task queue.
+	// No WFT ScheduleToStart timeout for normal WFT on normal task queue.
+	return normalTq, ms.executionInfo.WorkflowRunTimeout
 }
 
 func (ms *MutableStateImpl) GetWorkflowType() *commonpb.WorkflowType {
