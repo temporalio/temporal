@@ -28,12 +28,12 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
-	"net/url"
 	"testing"
 	"time"
 
 	"github.com/google/uuid"
 	"github.com/nexus-rpc/sdk-go/nexus"
+	"github.com/stretchr/testify/require"
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	nexuspb "go.temporal.io/api/nexus/v1"
@@ -42,7 +42,6 @@ import (
 	"go.temporal.io/api/workflowservice/v1"
 	sdkclient "go.temporal.io/sdk/client"
 	"go.temporal.io/sdk/converter"
-	"google.golang.org/protobuf/types/known/structpb"
 
 	tokenspb "go.temporal.io/server/api/token/v1"
 	"go.temporal.io/server/common/authorization"
@@ -66,7 +65,7 @@ func (s *ClientFunctionalSuite) TestNexusStartOperation_Outcomes() {
 		outcome         string
 		incomingService *nexuspb.IncomingService
 		handler         func(*workflowservice.PollNexusTaskQueueResponse) (*nexuspb.Response, *nexuspb.HandlerError)
-		assertion       func(*nexus.ClientStartOperationResult[string], error)
+		assertion       func(*testing.T, *nexus.ClientStartOperationResult[string], error)
 	}
 
 	testCases := []testcase{
@@ -74,9 +73,9 @@ func (s *ClientFunctionalSuite) TestNexusStartOperation_Outcomes() {
 			outcome:         "sync_success",
 			incomingService: s.createNexusIncomingService(s.randomizeStr("test-service"), s.randomizeStr("task-queue")),
 			handler:         nexusEchoHandler,
-			assertion: func(res *nexus.ClientStartOperationResult[string], err error) {
-				s.NoError(err)
-				s.Equal("input", res.Successful)
+			assertion: func(t *testing.T, res *nexus.ClientStartOperationResult[string], err error) {
+				require.NoError(t, err)
+				require.Equal(t, "input", res.Successful)
 			},
 		},
 		{
@@ -102,9 +101,9 @@ func (s *ClientFunctionalSuite) TestNexusStartOperation_Outcomes() {
 					},
 				}, nil
 			},
-			assertion: func(res *nexus.ClientStartOperationResult[string], err error) {
-				s.NoError(err)
-				s.Equal("test-id", res.Pending.ID)
+			assertion: func(t *testing.T, res *nexus.ClientStartOperationResult[string], err error) {
+				require.NoError(t, err)
+				require.Equal(t, "test-id", res.Pending.ID)
 			},
 		},
 		{
@@ -120,7 +119,7 @@ func (s *ClientFunctionalSuite) TestNexusStartOperation_Outcomes() {
 									Failure: &nexuspb.Failure{
 										Message:  "deliberate test failure",
 										Metadata: map[string]string{"k": "v"},
-										Details:  structpb.NewStringValue("details"),
+										Details:  []byte(`"details"`),
 									},
 								},
 							},
@@ -128,16 +127,16 @@ func (s *ClientFunctionalSuite) TestNexusStartOperation_Outcomes() {
 					},
 				}, nil
 			},
-			assertion: func(res *nexus.ClientStartOperationResult[string], err error) {
+			assertion: func(t *testing.T, res *nexus.ClientStartOperationResult[string], err error) {
 				var operationError *nexus.UnsuccessfulOperationError
-				s.ErrorAs(err, &operationError)
-				s.Equal(nexus.OperationStateFailed, operationError.State)
-				s.Equal("deliberate test failure", operationError.Failure.Message)
-				s.Equal(map[string]string{"k": "v"}, operationError.Failure.Metadata)
+				require.ErrorAs(t, err, &operationError)
+				require.Equal(t, nexus.OperationStateFailed, operationError.State)
+				require.Equal(t, "deliberate test failure", operationError.Failure.Message)
+				require.Equal(t, map[string]string{"k": "v"}, operationError.Failure.Metadata)
 				var details string
 				err = json.Unmarshal(operationError.Failure.Details, &details)
-				s.NoError(err)
-				s.Equal("details", details)
+				require.NoError(t, err)
+				require.Equal(t, "details", details)
 			},
 		},
 		{
@@ -149,12 +148,12 @@ func (s *ClientFunctionalSuite) TestNexusStartOperation_Outcomes() {
 					Failure:   &nexuspb.Failure{Message: "deliberate internal failure"},
 				}
 			},
-			assertion: func(res *nexus.ClientStartOperationResult[string], err error) {
+			assertion: func(t *testing.T, res *nexus.ClientStartOperationResult[string], err error) {
 				var unexpectedError *nexus.UnexpectedResponseError
-				s.ErrorAs(err, &unexpectedError)
+				require.ErrorAs(t, err, &unexpectedError)
 				// TODO: nexus should export this
-				s.Equal(520, unexpectedError.Response.StatusCode)
-				s.Equal("deliberate internal failure", unexpectedError.Failure.Message)
+				require.Equal(t, 520, unexpectedError.Response.StatusCode)
+				require.Equal(t, "deliberate internal failure", unexpectedError.Failure.Message)
 			},
 		},
 		// TODO: This can't be tested without the test taking over a minute since this is the default matching
@@ -178,7 +177,7 @@ func (s *ClientFunctionalSuite) TestNexusStartOperation_Outcomes() {
 		ctx := NewContext()
 
 		client, err := nexus.NewClient(nexus.ClientOptions{ServiceBaseURL: dispatchURL})
-		s.NoError(err)
+		require.NoError(t, err)
 		capture := s.testCluster.host.captureMetricsHandler.StartCapture()
 		defer s.testCluster.host.captureMetricsHandler.StopCapture(capture)
 
@@ -189,20 +188,20 @@ func (s *ClientFunctionalSuite) TestNexusStartOperation_Outcomes() {
 			RequestID:   "request-id",
 			Header:      nexus.Header{"key": "value"},
 		})
-		tc.assertion(result, err)
+		tc.assertion(t, result, err)
 
 		snap := capture.Snapshot()
 
-		s.Equal(1, len(snap["nexus_requests"]))
-		s.Subset(snap["nexus_requests"][0].Tags, map[string]string{"namespace": s.namespace, "method": "StartOperation", "outcome": tc.outcome})
-		s.Contains(snap["nexus_requests"][0].Tags, "service")
-		s.Equal(int64(1), snap["nexus_requests"][0].Value)
-		s.Equal(metrics.MetricUnit(""), snap["nexus_requests"][0].Unit)
+		require.Equal(t, 1, len(snap["nexus_requests"]))
+		require.Subset(t, snap["nexus_requests"][0].Tags, map[string]string{"namespace": s.namespace, "method": "StartOperation", "outcome": tc.outcome})
+		require.Contains(t, snap["nexus_requests"][0].Tags, "service")
+		require.Equal(t, int64(1), snap["nexus_requests"][0].Value)
+		require.Equal(t, metrics.MetricUnit(""), snap["nexus_requests"][0].Unit)
 
-		s.Equal(1, len(snap["nexus_latency"]))
-		s.Subset(snap["nexus_latency"][0].Tags, map[string]string{"namespace": s.namespace, "method": "StartOperation", "outcome": tc.outcome})
-		s.Contains(snap["nexus_latency"][0].Tags, "service")
-		s.Equal(metrics.MetricUnit(metrics.Milliseconds), snap["nexus_latency"][0].Unit)
+		require.Equal(t, 1, len(snap["nexus_latency"]))
+		require.Subset(t, snap["nexus_latency"][0].Tags, map[string]string{"namespace": s.namespace, "method": "StartOperation", "outcome": tc.outcome})
+		require.Contains(t, snap["nexus_latency"][0].Tags, "service")
+		require.Equal(t, metrics.MetricUnit(metrics.Milliseconds), snap["nexus_latency"][0].Unit)
 	}
 
 	// Wait to make sure all incoming services are loaded into memory before starting tests.
@@ -323,22 +322,22 @@ func (s *ClientFunctionalSuite) TestNexusStartOperation_Forbidden() {
 
 	testFn := func(t *testing.T, tc testcase, dispatchURL string) {
 		client, err := nexus.NewClient(nexus.ClientOptions{ServiceBaseURL: dispatchURL})
-		s.NoError(err)
+		require.NoError(t, err)
 		ctx := NewContext()
 
 		capture := s.testCluster.host.captureMetricsHandler.StartCapture()
 		defer s.testCluster.host.captureMetricsHandler.StopCapture(capture)
 		_, err = nexus.StartOperation(ctx, client, op, "input", nexus.StartOperationOptions{})
 		var unexpectedResponse *nexus.UnexpectedResponseError
-		s.ErrorAs(err, &unexpectedResponse)
-		s.Equal(http.StatusForbidden, unexpectedResponse.Response.StatusCode)
-		s.Equal(tc.failureMessage, unexpectedResponse.Failure.Message)
+		require.ErrorAs(t, err, &unexpectedResponse)
+		require.Equal(t, http.StatusForbidden, unexpectedResponse.Response.StatusCode)
+		require.Equal(t, tc.failureMessage, unexpectedResponse.Failure.Message)
 
 		snap := capture.Snapshot()
 
-		s.Equal(1, len(snap["nexus_requests"]))
-		s.Subset(snap["nexus_requests"][0].Tags, map[string]string{"namespace": s.namespace, "method": "StartOperation", "outcome": "unauthorized"})
-		s.Equal(int64(1), snap["nexus_requests"][0].Value)
+		require.Equal(t, 1, len(snap["nexus_requests"]))
+		require.Subset(t, snap["nexus_requests"][0].Tags, map[string]string{"namespace": s.namespace, "method": "StartOperation", "outcome": "unauthorized"})
+		require.Equal(t, int64(1), snap["nexus_requests"][0].Value)
 	}
 
 	// Wait to make sure all incoming services are loaded into memory before starting tests.
@@ -368,17 +367,17 @@ func (s *ClientFunctionalSuite) TestNexusStartOperation_Claims() {
 		name      string
 		header    nexus.Header
 		handler   func(*workflowservice.PollNexusTaskQueueResponse) (*nexuspb.Response, *nexuspb.HandlerError)
-		assertion func(*nexus.ClientStartOperationResult[string], error, map[string][]*metricstest.CapturedRecording)
+		assertion func(*testing.T, *nexus.ClientStartOperationResult[string], error, map[string][]*metricstest.CapturedRecording)
 	}
 	testCases := []testcase{
 		{
 			name: "no header",
-			assertion: func(res *nexus.ClientStartOperationResult[string], err error, snap map[string][]*metricstest.CapturedRecording) {
+			assertion: func(t *testing.T, res *nexus.ClientStartOperationResult[string], err error, snap map[string][]*metricstest.CapturedRecording) {
 				var unexpectedResponse *nexus.UnexpectedResponseError
-				s.ErrorAs(err, &unexpectedResponse)
-				s.Equal(http.StatusForbidden, unexpectedResponse.Response.StatusCode)
-				s.Equal("permission denied", unexpectedResponse.Failure.Message)
-				s.Equal(0, len(snap["nexus_request_preprocess_errors"]))
+				require.ErrorAs(t, err, &unexpectedResponse)
+				require.Equal(t, http.StatusForbidden, unexpectedResponse.Response.StatusCode)
+				require.Equal(t, "permission denied", unexpectedResponse.Failure.Message)
+				require.Equal(t, 0, len(snap["nexus_request_preprocess_errors"]))
 			},
 		},
 		{
@@ -386,12 +385,12 @@ func (s *ClientFunctionalSuite) TestNexusStartOperation_Claims() {
 			header: nexus.Header{
 				"authorization": "Bearer invalid",
 			},
-			assertion: func(res *nexus.ClientStartOperationResult[string], err error, snap map[string][]*metricstest.CapturedRecording) {
+			assertion: func(t *testing.T, res *nexus.ClientStartOperationResult[string], err error, snap map[string][]*metricstest.CapturedRecording) {
 				var unexpectedResponse *nexus.UnexpectedResponseError
-				s.ErrorAs(err, &unexpectedResponse)
-				s.Equal(http.StatusUnauthorized, unexpectedResponse.Response.StatusCode)
-				s.Equal("unauthorized", unexpectedResponse.Failure.Message)
-				s.Equal(1, len(snap["nexus_request_preprocess_errors"]))
+				require.ErrorAs(t, err, &unexpectedResponse)
+				require.Equal(t, http.StatusUnauthorized, unexpectedResponse.Response.StatusCode)
+				require.Equal(t, "unauthorized", unexpectedResponse.Failure.Message)
+				require.Equal(t, 1, len(snap["nexus_request_preprocess_errors"]))
 			},
 		},
 		{
@@ -400,10 +399,10 @@ func (s *ClientFunctionalSuite) TestNexusStartOperation_Claims() {
 				"authorization": "Bearer test",
 			},
 			handler: nexusEchoHandler,
-			assertion: func(res *nexus.ClientStartOperationResult[string], err error, snap map[string][]*metricstest.CapturedRecording) {
-				s.NoError(err)
-				s.Equal("input", res.Successful)
-				s.Equal(0, len(snap["nexus_request_preprocess_errors"]))
+			assertion: func(t *testing.T, res *nexus.ClientStartOperationResult[string], err error, snap map[string][]*metricstest.CapturedRecording) {
+				require.NoError(t, err)
+				require.Equal(t, "input", res.Successful)
+				require.Equal(t, 0, len(snap["nexus_request_preprocess_errors"]))
 			},
 		},
 	}
@@ -446,7 +445,7 @@ func (s *ClientFunctionalSuite) TestNexusStartOperation_Claims() {
 		})
 
 		snap := capture.Snapshot()
-		tc.assertion(result, err, snap)
+		tc.assertion(t, result, err, snap)
 	}
 
 	// Wait to make sure all incoming services are loaded into memory before starting tests.
@@ -470,7 +469,7 @@ func (s *ClientFunctionalSuite) TestNexusCancelOperation_Outcomes() {
 		outcome         string
 		incomingService *nexuspb.IncomingService
 		handler         func(*workflowservice.PollNexusTaskQueueResponse) (*nexuspb.Response, *nexuspb.HandlerError)
-		assertion       func(error)
+		assertion       func(*testing.T, error)
 	}
 
 	testCases := []testcase{
@@ -490,8 +489,8 @@ func (s *ClientFunctionalSuite) TestNexusCancelOperation_Outcomes() {
 					},
 				}, nil
 			},
-			assertion: func(err error) {
-				s.NoError(err)
+			assertion: func(t *testing.T, err error) {
+				require.NoError(t, err)
 			},
 		},
 		{
@@ -503,12 +502,12 @@ func (s *ClientFunctionalSuite) TestNexusCancelOperation_Outcomes() {
 					Failure:   &nexuspb.Failure{Message: "deliberate internal failure"},
 				}
 			},
-			assertion: func(err error) {
+			assertion: func(t *testing.T, err error) {
 				var unexpectedError *nexus.UnexpectedResponseError
-				s.ErrorAs(err, &unexpectedError)
+				require.ErrorAs(t, err, &unexpectedError)
 				// TODO: nexus should export this
-				s.Equal(520, unexpectedError.Response.StatusCode)
-				s.Equal("deliberate internal failure", unexpectedError.Failure.Message)
+				require.Equal(t, 520, unexpectedError.Response.StatusCode)
+				require.Equal(t, "deliberate internal failure", unexpectedError.Failure.Message)
 			},
 		},
 		// TODO: This can't be tested without the test taking over a minute since this is the default matching
@@ -534,29 +533,29 @@ func (s *ClientFunctionalSuite) TestNexusCancelOperation_Outcomes() {
 		ctx := NewContext()
 
 		client, err := nexus.NewClient(nexus.ClientOptions{ServiceBaseURL: dispatchURL})
-		s.NoError(err)
+		require.NoError(t, err)
 		capture := s.testCluster.host.captureMetricsHandler.StartCapture()
 		defer s.testCluster.host.captureMetricsHandler.StopCapture(capture)
 
 		go s.nexusTaskPoller(ctx, tc.incomingService.Spec.TaskQueue, tc.handler)
 
 		handle, err := client.NewHandle("operation", "id")
-		s.NoError(err)
+		require.NoError(t, err)
 		err = handle.Cancel(ctx, nexus.CancelOperationOptions{Header: nexus.Header{"key": "value"}})
-		tc.assertion(err)
+		tc.assertion(t, err)
 
 		snap := capture.Snapshot()
 
-		s.Equal(1, len(snap["nexus_requests"]))
-		s.Subset(snap["nexus_requests"][0].Tags, map[string]string{"namespace": s.namespace, "method": "CancelOperation", "outcome": tc.outcome})
-		s.Contains(snap["nexus_requests"][0].Tags, "service")
-		s.Equal(int64(1), snap["nexus_requests"][0].Value)
-		s.Equal(metrics.MetricUnit(""), snap["nexus_requests"][0].Unit)
+		require.Equal(t, 1, len(snap["nexus_requests"]))
+		require.Subset(t, snap["nexus_requests"][0].Tags, map[string]string{"namespace": s.namespace, "method": "CancelOperation", "outcome": tc.outcome})
+		require.Contains(t, snap["nexus_requests"][0].Tags, "service")
+		require.Equal(t, int64(1), snap["nexus_requests"][0].Value)
+		require.Equal(t, metrics.MetricUnit(""), snap["nexus_requests"][0].Unit)
 
-		s.Equal(1, len(snap["nexus_latency"]))
-		s.Subset(snap["nexus_latency"][0].Tags, map[string]string{"namespace": s.namespace, "method": "CancelOperation", "outcome": tc.outcome})
-		s.Contains(snap["nexus_latency"][0].Tags, "service")
-		s.Equal(metrics.MetricUnit(metrics.Milliseconds), snap["nexus_latency"][0].Unit)
+		require.Equal(t, 1, len(snap["nexus_latency"]))
+		require.Subset(t, snap["nexus_latency"][0].Tags, map[string]string{"namespace": s.namespace, "method": "CancelOperation", "outcome": tc.outcome})
+		require.Contains(t, snap["nexus_latency"][0].Tags, "service")
+		require.Equal(t, metrics.MetricUnit(metrics.Milliseconds), snap["nexus_latency"][0].Unit)
 	}
 
 	// Wait to make sure all incoming services are loaded into memory before starting tests.
@@ -735,7 +734,7 @@ func getDispatchByNsAndTqURL(address string, namespace string, taskQueue string)
 		address,
 		cnexus.RouteDispatchNexusTaskByNamespaceAndTaskQueue.
 			Path(cnexus.NamespaceAndTaskQueue{
-				Namespace: url.PathEscape(namespace),
+				Namespace: namespace,
 				TaskQueue: taskQueue,
 			}),
 	)

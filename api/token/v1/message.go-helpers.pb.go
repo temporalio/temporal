@@ -213,3 +213,77 @@ func (this *NexusTask) Equal(that interface{}) bool {
 
 	return proto.Equal(this, that1)
 }
+
+// Marshal an object of type HistoryEventRef to the protobuf v3 wire format
+func (val *HistoryEventRef) Marshal() ([]byte, error) {
+	return proto.Marshal(val)
+}
+
+// Unmarshal an object of type HistoryEventRef from the protobuf v3 wire format
+func (val *HistoryEventRef) Unmarshal(buf []byte) error {
+	return proto.Unmarshal(buf, val)
+}
+
+// Size returns the size of the object, in bytes, once serialized
+func (val *HistoryEventRef) Size() int {
+	return proto.Size(val)
+}
+
+// Equal returns whether two HistoryEventRef values are equivalent by recursively
+// comparing the message's fields.
+// For more information see the documentation for
+// https://pkg.go.dev/google.golang.org/protobuf/proto#Equal
+func (this *HistoryEventRef) Equal(that interface{}) bool {
+	if that == nil {
+		return this == nil
+	}
+
+	var that1 *HistoryEventRef
+	switch t := that.(type) {
+	case *HistoryEventRef:
+		that1 = t
+	case HistoryEventRef:
+		that1 = &t
+	default:
+		return false
+	}
+
+	return proto.Equal(this, that1)
+}
+
+// Marshal an object of type NexusOperationCompletion to the protobuf v3 wire format
+func (val *NexusOperationCompletion) Marshal() ([]byte, error) {
+	return proto.Marshal(val)
+}
+
+// Unmarshal an object of type NexusOperationCompletion from the protobuf v3 wire format
+func (val *NexusOperationCompletion) Unmarshal(buf []byte) error {
+	return proto.Unmarshal(buf, val)
+}
+
+// Size returns the size of the object, in bytes, once serialized
+func (val *NexusOperationCompletion) Size() int {
+	return proto.Size(val)
+}
+
+// Equal returns whether two NexusOperationCompletion values are equivalent by recursively
+// comparing the message's fields.
+// For more information see the documentation for
+// https://pkg.go.dev/google.golang.org/protobuf/proto#Equal
+func (this *NexusOperationCompletion) Equal(that interface{}) bool {
+	if that == nil {
+		return this == nil
+	}
+
+	var that1 *NexusOperationCompletion
+	switch t := that.(type) {
+	case *NexusOperationCompletion:
+		that1 = t
+	case NexusOperationCompletion:
+		that1 = &t
+	default:
+		return false
+	}
+
+	return proto.Equal(this, that1)
+}

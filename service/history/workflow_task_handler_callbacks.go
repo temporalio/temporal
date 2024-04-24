@@ -100,6 +100,7 @@ type (
 		searchAttributesMapperProvider searchattribute.MapperProvider
 		searchAttributesValidator      *searchattribute.Validator
 		persistenceVisibilityMgr       manager.VisibilityManager
+		commandHandlerRegistry         *workflow.CommandHandlerRegistry
 	}
 )
 
@@ -124,6 +125,7 @@ func newWorkflowTaskHandlerCallback(historyEngine *historyEngineImpl) *workflowT
 		searchAttributesMapperProvider: historyEngine.shardContext.GetSearchAttributesMapperProvider(),
 		searchAttributesValidator:      historyEngine.searchAttributesValidator,
 		persistenceVisibilityMgr:       historyEngine.persistenceVisibilityMgr,
+		commandHandlerRegistry:         historyEngine.commandHandlerRegistry,
 	}
 }
 
@@ -592,6 +594,7 @@ func (handler *workflowTaskHandlerCallbacksImpl) handleWorkflowTaskCompleted(
 			handler.shardContext,
 			handler.searchAttributesMapperProvider,
 			hasBufferedEvents,
+			handler.commandHandlerRegistry,
 		)
 
 		if responseMutations, err = workflowTaskHandler.handleCommands(
