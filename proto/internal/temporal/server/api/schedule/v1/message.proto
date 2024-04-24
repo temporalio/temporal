@@ -74,6 +74,7 @@ message StartScheduleArgs {
 message FullUpdateRequest {
     temporal.api.schedule.v1.Schedule schedule = 1;
     int64 conflict_token = 2;
+    temporal.api.common.v1.SearchAttributes search_attributes = 3;
 }
 
 message DescribeResponse {

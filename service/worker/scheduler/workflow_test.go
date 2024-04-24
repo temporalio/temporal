@@ -1577,6 +1577,11 @@ func (s *workflowSuite) TestUpdate() {
 							},
 							Action: s.defaultAction("newid"),
 						},
+						SearchAttributes: &commonpb.SearchAttributes{
+							IndexedFields: map[string]*commonpb.Payload{
+								"myfield": payload.EncodeString("another value"),
+							},
+						},
 					})
 				},
 			},
