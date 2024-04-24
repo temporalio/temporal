@@ -81,6 +81,7 @@ type (
 		//   - updates in stateCompleted are ignored.
 		CancelIncomplete(ctx context.Context, reason CancelReason, eventStore EventStore) error
 
+		// Clear registry and abort all waiters.
 		Clear()
 
 		// UpdateFromStore adds updates to the registry from the update store.
@@ -331,6 +332,7 @@ func (r *registry) Send(
 	return outgoingMessages
 }
 
+// Clear registry and abort all waiters.
 func (r *registry) Clear() {
 	r.mu.Lock()
 	defer r.mu.Unlock()

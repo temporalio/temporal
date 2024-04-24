@@ -101,6 +101,10 @@ type (
 	updateOpt func(*Update)
 )
 
+var (
+	abortWaiterErr = errors.New("workflow update lifecycle stage waiter is aborted")
+)
+
 // New creates a new Update instance with the provided ID that will call the
 // onComplete callback when it completes.
 func New(id string, opts ...updateOpt) *Update {
@@ -205,11 +209,11 @@ func (u *Update) WaitLifecycleStage(
 
 		// If err is not nil (checked above), and is not coming from context,
 		// then it means that the error is from the future itself.
-		// Update doesn't set error on the future, therefore this should never happen.
-		// But if it ever does, this error should be returned to the caller.
-		// TODO: besides aborted....
 		if ctx.Err() == nil && stCtx.Err() == nil {
-			if !errors.Is(err, abortWaitersErr) {
+			// Workflow Update uses abortWaiterErr to abort waiter. This error uses special handling here:
+			// abort waiting for COMPLETED stage and check if update has reached ACCEPTED stage.
+			// All other errors are returned to the caller (not currently happens).
+			if !errors.Is(err, abortWaiterErr) {
 				return nil, err
 			}
 		}
@@ -219,10 +223,8 @@ func (u *Update) WaitLifecycleStage(
 			return nil, ctx.Err()
 		}
 
-		// Only get here if there is an error and this error is stCtx.Err().
-		// Which means that softTimeout has expired => check if update has reached ACCEPTED state.
-
-		// TODO: ...and aborted
+		// Only get here if there is an error and this error is stCtx.Err() (softTimeout has expired) or abortWaiterErr.
+		// In both cases check if update has reached ACCEPTED stage.
 	}
 
 	// Update is not completed but maybe it is accepted.
@@ -237,10 +239,15 @@ func (u *Update) WaitLifecycleStage(
 			return statusAccepted(), nil
 		}
 
-		// See comment for the same check in "completed" branch.
-		// TODO: WorkflowUpdateAborted goes to the caller
+		// If err is not nil (checked above), and is not coming from context,
+		// then it means that the error is from the future itself.
 		if ctx.Err() == nil && stCtx.Err() == nil {
-			if !errors.Is(err, abortWaitersErr) {
+			// Workflow Update uses abortWaiterErr to abort waiter. This error uses special handling here:
+			// abort waiting for ACCEPTED stage and return Unavailable (retryable) error to the caller.
+			// This error will be retried (by history service handler, or history service client in frontend,
+			// or worker) and it will recreate update in the registry.
+			// All other errors are returned to the caller (not currently happens).
+			if !errors.Is(err, abortWaiterErr) {
 				return nil, err
 			}
 			return nil, serviceerror.NewUnavailable("Workflow Update is aborted.")
@@ -257,26 +264,22 @@ func (u *Update) WaitLifecycleStage(
 	}
 
 	// Only get here if waitStage=ADMITTED or UNSPECIFIED and neither ACCEPTED nor COMPLETED are reached.
-	// Return ADMITTED (as the most reached state) and empty outcome.
+	// Return ADMITTED (as the most reached stage) and empty outcome.
 	return statusAdmitted(), nil
 }
 
-var (
-	abortWaitersErr = errors.New("lifecycle stage waiter is aborted")
-)
-
-// abort fails update futures with WorkflowUpdateAborted error and set state to stateCompleted.
+// abortWaiters fails update futures with abortWaiterErr error and set state to stateCompleted.
 func (u *Update) abortWaiters() {
 	if u.state.Matches(stateSet(stateCreated | stateProvisionallyAdmitted | stateAdmitted | stateProvisionallySent | stateSent)) {
-		u.accepted.(*future.FutureImpl[*failurepb.Failure]).Set(nil, abortWaitersErr)
-		u.outcome.(*future.FutureImpl[*updatepb.Outcome]).Set(nil, abortWaitersErr)
+		u.accepted.(*future.FutureImpl[*failurepb.Failure]).Set(nil, abortWaiterErr)
+		u.outcome.(*future.FutureImpl[*updatepb.Outcome]).Set(nil, abortWaiterErr)
 	}
 
 	if u.state.Matches(stateSet(stateProvisionallyAccepted | stateAccepted)) {
 		// Accepted updates can't be aborted because they are already persisted and
 		// will be recreated in the registry after reload from the store.
-		// Set error to WorkflowUpdateAborted to unify handling logic on waiter side (WaitLifecycleStage).
-		u.outcome.(*future.FutureImpl[*updatepb.Outcome]).Set(nil, abortWaitersErr)
+		// Set error to abortWaiterErr to unify handling logic on waiter side (WaitLifecycleStage).
+		u.outcome.(*future.FutureImpl[*updatepb.Outcome]).Set(nil, abortWaiterErr)
 	}
 
 	// To protect futures from being set twice.
