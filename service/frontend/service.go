@@ -196,6 +196,7 @@ type Config struct {
 	// EnableCallbackAttachment enables attaching callbacks to workflows.
 	EnableCallbackAttachment    dynamicconfig.BoolPropertyFnWithNamespaceFilter
 	CallbackURLMaxLength        dynamicconfig.IntPropertyFnWithNamespaceFilter
+	MaxCallbacksPerWorkflow     dynamicconfig.IntPropertyFnWithNamespaceFilter
 	AdminEnableListHistoryTasks dynamicconfig.BoolPropertyFn
 }
 
@@ -299,6 +300,7 @@ func NewConfig(
 		EnableNexusAPIs:             dc.GetBoolProperty(dynamicconfig.FrontendEnableNexusAPIs, false),
 		EnableCallbackAttachment:    dc.GetBoolPropertyFnWithNamespaceFilter(dynamicconfig.FrontendEnableCallbackAttachment, false),
 		CallbackURLMaxLength:        dc.GetIntPropertyFilteredByNamespace(dynamicconfig.FrontendCallbackURLMaxLength, 1000),
+		MaxCallbacksPerWorkflow:     dc.GetIntPropertyFilteredByNamespace(dynamicconfig.FrontendMaxCallbacksPerWorkflow, 32),
 		AdminEnableListHistoryTasks: dc.GetBoolProperty(dynamicconfig.AdminEnableListHistoryTasks, true),
 	}
 }

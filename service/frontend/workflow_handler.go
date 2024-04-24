@@ -4334,6 +4334,16 @@ func (wh *WorkflowHandler) validateWorkflowCompletionCallbacks(
 		)
 	}
 
+	if len(callbacks) > wh.config.MaxCallbacksPerWorkflow(ns.String()) {
+		return status.Error(
+			codes.InvalidArgument,
+			fmt.Sprintf(
+				"cannot attach more than %d callbacks to a workflow",
+				wh.config.MaxCallbacksPerWorkflow(ns.String()),
+			),
+		)
+	}
+
 	for _, callback := range callbacks {
 		switch cb := callback.GetVariant().(type) {
 		case *commonpb.Callback_Nexus_:
