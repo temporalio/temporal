@@ -28,6 +28,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"math"
 	"sync"
 	"testing"
 	"time"
@@ -2761,157 +2762,184 @@ func (s *matchingEngineSuite) TestUpdatePhysicalTaskQueueGauge_BuildID() {
 
 }
 
-func (s *matchingEngineSuite) TestAddConsumeWorkflowTasksValidateBacklogCount() {
-	s.matchingEngine.config.LongPollExpirationInterval = dynamicconfig.GetDurationPropertyFnFilteredByTaskQueueInfo(10 * time.Millisecond)
-
+// generateWorkflowExecution is a helper to make a sample workflowExecution and WorkflowType for the required tests
+func (s *matchingEngineSuite) generateWorkflowExecution() (*commonpb.WorkflowType, *commonpb.WorkflowExecution) {
 	runID := uuid.NewRandom().String()
 	workflowID := "workflow1"
 	workflowType := &commonpb.WorkflowType{
 		Name: "workflow",
 	}
 	workflowExecution := &commonpb.WorkflowExecution{RunId: runID, WorkflowId: workflowID}
+	return workflowType, workflowExecution
+}
 
-	const taskCount = 100
-	// TODO: Understand why publish is low when rangeSize is 3
+func (s *matchingEngineSuite) mockHistoryWhilePolling(workflowType *commonpb.WorkflowType) {
+	s.mockHistoryClient.EXPECT().RecordWorkflowTaskStarted(gomock.Any(), gomock.Any(), gomock.Any()).DoAndReturn(
+		func(ctx context.Context, taskRequest *historyservice.RecordWorkflowTaskStartedRequest, arg2 ...interface{}) (*historyservice.RecordWorkflowTaskStartedResponse, error) {
+			return &historyservice.RecordWorkflowTaskStartedResponse{
+				PreviousStartedEventId: 1,
+				StartedEventId:         1,
+				ScheduledEventId:       1,
+				WorkflowType:           workflowType,
+				Attempt:                1,
+				History:                &historypb.History{Events: []*historypb.HistoryEvent{}},
+				NextPageToken:          nil,
+			}, nil
+		}).AnyTimes()
+}
 
-	namespaceId := uuid.New()
-	tl := "approximateBacklogCounter"
-	tlID := newUnversionedRootQueueKey(namespaceId, tl, enumspb.TASK_QUEUE_TYPE_WORKFLOW)
-	s.taskManager.getQueueManager(tlID).rangeID = initialRangeID
-	s.matchingEngine.config.RangeSize = 20
+func (s *matchingEngineSuite) createTQAndPTQForBacklogTests() (*taskqueuepb.TaskQueue, *PhysicalTaskQueueKey) {
+	tq := "approximateBacklogCounter"
+	ptq := newUnversionedRootQueueKey(namespaceId, tq, enumspb.TASK_QUEUE_TYPE_WORKFLOW)
+	s.taskManager.getQueueManager(ptq).rangeID = 1
+	s.matchingEngine.config.RangeSize = 10
 
 	taskQueue := &taskqueuepb.TaskQueue{
-		Name: tl,
+		Name: tq,
 		Kind: enumspb.TASK_QUEUE_KIND_NORMAL,
 	}
 
-	for i := int64(0); i < taskCount; i++ {
-		scheduledEventID := i * 3
-		addRequest := matchingservice.AddWorkflowTaskRequest{
-			NamespaceId:            namespaceId,
-			Execution:              workflowExecution,
-			ScheduledEventId:       scheduledEventID,
-			TaskQueue:              taskQueue,
-			ScheduleToStartTimeout: timestamp.DurationFromSeconds(10),
-		}
+	return taskQueue, ptq
+}
 
-		// History service is using mock
-		s.mockHistoryClient.EXPECT().RecordWorkflowTaskStarted(gomock.Any(), gomock.Any(), gomock.Any()).DoAndReturn(
-			func(ctx context.Context, taskRequest *historyservice.RecordWorkflowTaskStartedRequest, arg2 ...interface{}) (*historyservice.RecordWorkflowTaskStartedResponse, error) {
-				s.logger.Debug("Mock Received RecordWorkflowTaskStartedRequest")
-				response := &historyservice.RecordWorkflowTaskStartedResponse{
-					WorkflowType:               workflowType,
-					PreviousStartedEventId:     scheduledEventID,
-					ScheduledEventId:           scheduledEventID + 1,
-					Attempt:                    1,
-					StickyExecutionEnabled:     true,
-					WorkflowExecutionTaskQueue: &taskqueuepb.TaskQueue{Name: tl, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
-					History:                    &historypb.History{Events: []*historypb.HistoryEvent{}},
-					NextPageToken:              nil,
+// addWorkflowTasks is a helper that adds taskCount number of tasks for each numWorker
+func (s *matchingEngineSuite) addWorkflowTasks(numWorkers int, taskCount int,
+	taskQueue *taskqueuepb.TaskQueue, workflowExecution *commonpb.WorkflowExecution, wg *sync.WaitGroup) {
+	if numWorkers > 1 {
+		for p := 0; p < numWorkers; p++ {
+			go func() {
+				for i := 0; i < taskCount; i++ {
+					addRequest := matchingservice.AddWorkflowTaskRequest{
+						NamespaceId:            namespaceId,
+						Execution:              workflowExecution,
+						ScheduledEventId:       1,
+						TaskQueue:              taskQueue,
+						ScheduleToStartTimeout: timestamp.DurationFromSeconds(100),
+					}
+					_, _, err := s.matchingEngine.AddWorkflowTask(context.Background(), &addRequest)
+					if err != nil {
+						panic(err)
+					}
 				}
-				return response, nil
-			}).AnyTimes()
-
-		_, _, err := s.matchingEngine.AddWorkflowTask(context.Background(), &addRequest)
-		s.NoError(err)
+				wg.Done()
+			}()
+		}
+	} else {
+		// Add tasks using the same goroutine since we have one worker
+		for i := 0; i < taskCount; i++ {
+			addRequest := matchingservice.AddWorkflowTaskRequest{
+				NamespaceId:            namespaceId,
+				Execution:              workflowExecution,
+				ScheduledEventId:       1,
+				TaskQueue:              taskQueue,
+				ScheduleToStartTimeout: timestamp.DurationFromSeconds(10),
+			}
+			_, _, err := s.matchingEngine.AddWorkflowTask(context.Background(), &addRequest)
+			s.NoError(err)
+		}
 	}
-	s.EqualValues(taskCount, s.taskManager.getTaskCount(tlID))
+}
 
-	// Checking the approximateBacklogCounter
-	tlMgr, ok := s.matchingEngine.partitions[tlID.Partition().Key()].(*taskQueuePartitionManagerImpl).defaultQueue.(*physicalTaskQueueManagerImpl)
+// pollWorkflowTasks polls tasks using numWorkers
+func (s *matchingEngineSuite) pollWorkflowTasks(numPollers int, taskCount int, tlMgr *physicalTaskQueueManagerImpl,
+	taskQueue *taskqueuepb.TaskQueue, wg *sync.WaitGroup) {
+
+	if numPollers > 1 {
+		for p := 0; p < numPollers; p++ {
+			go func() {
+				for i := 0; i < taskCount; {
+					result, err := s.matchingEngine.PollWorkflowTaskQueue(context.Background(), &matchingservice.PollWorkflowTaskQueueRequest{
+						NamespaceId: namespaceId,
+						PollRequest: &workflowservice.PollWorkflowTaskQueueRequest{
+							TaskQueue: taskQueue,
+							Identity:  "nobody",
+						},
+					}, metrics.NoopMetricsHandler)
+					if err != nil {
+						panic(err)
+					}
+					s.NotNil(result)
+					if len(result.TaskToken) == 0 {
+						s.logger.Debug("empty poll returned")
+						continue
+					}
+					i++
+				}
+				wg.Done()
+			}()
+		}
+	} else {
+		tasksCompleted := 0
+		for i := 0; i < taskCount; i++ {
+			result, err := s.matchingEngine.PollWorkflowTaskQueue(context.Background(), &matchingservice.PollWorkflowTaskQueueRequest{
+				NamespaceId: namespaceId,
+				PollRequest: &workflowservice.PollWorkflowTaskQueueRequest{
+					TaskQueue: taskQueue,
+					Identity:  "nobody",
+				},
+			}, metrics.NoopMetricsHandler)
+			if err != nil {
+				panic(err)
+			}
+			s.NotNil(result)
+			tasksCompleted += 1
+			s.EqualValues(tlMgr.backlogMgr.db.getApproximateBacklogCount(), int64(taskCount-tasksCompleted))
+		}
+	}
+}
+
+// getPhysicalTaskQueueManagerImpl extracts the physicalTaskQueueManagerImpl for the given PhysicalTaskQueueKey
+func (s *matchingEngineSuite) getPhysicalTaskQueueManagerImpl(ptq *PhysicalTaskQueueKey) *physicalTaskQueueManagerImpl {
+	tlMgr, ok := s.matchingEngine.partitions[ptq.Partition().Key()].(*taskQueuePartitionManagerImpl).defaultQueue.(*physicalTaskQueueManagerImpl)
 	s.True(ok, "taskQueueManger doesn't implement taskQueuePartitionManager interface")
+	return tlMgr
+}
+
+func (s *matchingEngineSuite) TestAddConsumeWorkflowTasksValidateBacklogCount() {
+	s.matchingEngine.config.LongPollExpirationInterval = dynamicconfig.GetDurationPropertyFnFilteredByTaskQueueInfo(10 * time.Millisecond)
+	workflowType, workflowExecution := s.generateWorkflowExecution()
+	taskQueue, ptq := s.createTQAndPTQForBacklogTests()
+
+	const taskCount = 100
+	s.addWorkflowTasks(1, taskCount, taskQueue, workflowExecution, nil)
+	s.EqualValues(taskCount, s.taskManager.getTaskCount(ptq))
+
+	// Extracting the tlMgr for validating approximateBacklogCounter
+	tlMgr := s.getPhysicalTaskQueueManagerImpl(ptq)
 	s.EqualValues(tlMgr.backlogMgr.db.getApproximateBacklogCount(), int64(taskCount))
 
-	// Completing each workflow task
-	identity := "nobody"
-	tasksCompleted := 0
-	for i := int64(0); i < taskCount; i++ {
-		result, err := s.matchingEngine.PollWorkflowTaskQueue(context.Background(), &matchingservice.PollWorkflowTaskQueueRequest{
-			NamespaceId: namespaceId,
-			PollRequest: &workflowservice.PollWorkflowTaskQueueRequest{
-				TaskQueue: taskQueue,
-				Identity:  identity,
-			},
-		}, metrics.NoopMetricsHandler)
-		if err != nil {
-			panic(err)
-		}
-		s.NotNil(result)
-		tasksCompleted += 1
-		s.EqualValues(tlMgr.backlogMgr.db.getApproximateBacklogCount(), int64(taskCount-tasksCompleted))
-	}
+	s.mockHistoryWhilePolling(workflowType)
+
+	s.pollWorkflowTasks(1, taskCount, tlMgr, taskQueue, nil)
 	// All tasks should have been completed
 	s.EqualValues(tlMgr.backlogMgr.db.getApproximateBacklogCount(), int64(0))
 }
 
 // TestResettingBacklogCounter tests the scenario where approximateBacklogCounter undercounts and resets it accordingly
-func (s *matchingEngineSuite) TestResettingBacklogCounter() {
+func (s *matchingEngineSuite) TestCheckPreventionOfNegativeBacklogCounter() {
 	// The backlogCounter is decreased only when CompleteTask is called on the AckManager.
 	// We shall manually remove the task from the testTaskManager and then call AckManager.CompleteTask(TaskID) to see the resetting take place
 
-	s.matchingEngine.config.LongPollExpirationInterval = dynamicconfig.GetDurationPropertyFnFilteredByTaskQueueInfo(10 * time.Millisecond)
+	// TODO Shivam - This should fail with the current implementation. Have a skip or something.
 
-	runID := uuid.NewRandom().String()
-	workflowID := "workflow1"
-	workflowType := &commonpb.WorkflowType{
-		Name: "workflow",
-	}
-	workflowExecution := &commonpb.WorkflowExecution{RunId: runID, WorkflowId: workflowID}
+	s.matchingEngine.config.LongPollExpirationInterval = dynamicconfig.GetDurationPropertyFnFilteredByTaskQueueInfo(10 * time.Millisecond)
+	_, workflowExecution := s.generateWorkflowExecution()
 
 	const taskCount = 1
-	// TODO: Understand why publish is low when rangeSize is 3
-
-	namespaceId := uuid.New()
-	tl := "approximateBacklogCounter"
-	tlID := newUnversionedRootQueueKey(namespaceId, tl, enumspb.TASK_QUEUE_TYPE_WORKFLOW)
-	s.taskManager.getQueueManager(tlID).rangeID = initialRangeID
-	s.matchingEngine.config.RangeSize = 10
 	const taskID = 11
 
-	taskQueue := &taskqueuepb.TaskQueue{
-		Name: tl,
-		Kind: enumspb.TASK_QUEUE_KIND_NORMAL,
-	}
+	taskQueue, ptq := s.createTQAndPTQForBacklogTests()
+	s.addWorkflowTasks(1, taskCount, taskQueue, workflowExecution, nil)
+	s.EqualValues(taskCount, s.taskManager.getTaskCount(ptq))
 
-	for i := int64(0); i < taskCount; i++ {
-		scheduledEventID := i * 3
-		addRequest := matchingservice.AddWorkflowTaskRequest{
-			NamespaceId:            namespaceId,
-			Execution:              workflowExecution,
-			ScheduledEventId:       scheduledEventID,
-			TaskQueue:              taskQueue,
-			ScheduleToStartTimeout: timestamp.DurationFromSeconds(10),
-		}
-
-		// History service is using mock
-		s.mockHistoryClient.EXPECT().RecordWorkflowTaskStarted(gomock.Any(), gomock.Any(), gomock.Any()).DoAndReturn(
-			func(ctx context.Context, taskRequest *historyservice.RecordWorkflowTaskStartedRequest, arg2 ...interface{}) (*historyservice.RecordWorkflowTaskStartedResponse, error) {
-				s.logger.Debug("Mock Received RecordWorkflowTaskStartedRequest")
-				response := &historyservice.RecordWorkflowTaskStartedResponse{
-					WorkflowType:               workflowType,
-					PreviousStartedEventId:     scheduledEventID,
-					ScheduledEventId:           scheduledEventID + 1,
-					Attempt:                    1,
-					StickyExecutionEnabled:     true,
-					WorkflowExecutionTaskQueue: &taskqueuepb.TaskQueue{Name: tl, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
-					History:                    &historypb.History{Events: []*historypb.HistoryEvent{}},
-					NextPageToken:              nil,
-				}
-				return response, nil
-			}).AnyTimes()
-
-		_, _, err := s.matchingEngine.AddWorkflowTask(context.Background(), &addRequest)
-		s.NoError(err)
-	}
-	s.EqualValues(taskCount, s.taskManager.getTaskCount(tlID))
-	tlMgr, ok := s.matchingEngine.partitions[tlID.Partition().Key()].(*taskQueuePartitionManagerImpl).defaultQueue.(*physicalTaskQueueManagerImpl)
-	s.True(ok, "taskQueueManger doesn't implement taskQueuePartitionManager interface")
+	// validating the approximateBacklogCounter
+	tlMgr := s.getPhysicalTaskQueueManagerImpl(ptq)
 	s.EqualValues(tlMgr.backlogMgr.db.getApproximateBacklogCount(), int64(1))
 
 	// Remove the task from testTaskManager but not from db/AckManager
 	request := &persistence.CompleteTasksLessThanRequest{
 		NamespaceID:        namespaceId,
-		TaskQueueName:      tl,
+		TaskQueueName:      taskQueue.Name,
 		TaskType:           enumspb.TASK_QUEUE_TYPE_WORKFLOW,
 		ExclusiveMaxTaskID: taskID + 1,
 		Limit:              100,
@@ -2921,12 +2949,12 @@ func (s *matchingEngineSuite) TestResettingBacklogCounter() {
 	// Decreasing the backlogCounter since a task has been removed in theory
 	tlMgr.backlogMgr.db.updateApproximateBacklogCount(int64(-1))
 
-	// overriding DB's logger to catch ERROR's when we under-count
+	// overriding DB's logger to catch ERROR's
 	mockLogger := log.NewMockLogger(s.controller)
-	mockLogger.EXPECT().Error("ApproximateBacklogCounter could have under-counted",
+	mockLogger.EXPECT().Error("ApproximateBacklogCounter could have under-counted. This should never happen",
 		tag.WorkerBuildId(tlMgr.backlogMgr.db.queue.BuildId()), tag.WorkerBuildId(tlMgr.backlogMgr.db.queue.Partition().NamespaceId().String()))
 	tlMgr.backlogMgr.db.logger = mockLogger
-	_, ok = tlMgr.backlogMgr.db.logger.(*log.MockLogger)
+	_, ok := tlMgr.backlogMgr.db.logger.(*log.MockLogger)
 	s.Equal(ok, true)
 
 	// Call AckManager.CompleteTasks with the same TaskID
@@ -2940,66 +2968,19 @@ func (s *matchingEngineSuite) TestResettingBacklogCounter() {
 func (s *matchingEngineSuite) TestUnloadingTQMValidateBacklogCounter() {
 
 	s.matchingEngine.config.LongPollExpirationInterval = dynamicconfig.GetDurationPropertyFnFilteredByTaskQueueInfo(10 * time.Millisecond)
+	_, workflowExecution := s.generateWorkflowExecution()
+	taskQueue, ptq := s.createTQAndPTQForBacklogTests()
+	const taskCount = 20
 
-	runID := uuid.NewRandom().String()
-	workflowID := "workflow1"
-	workflowType := &commonpb.WorkflowType{
-		Name: "workflow",
-	}
-	workflowExecution := &commonpb.WorkflowExecution{RunId: runID, WorkflowId: workflowID}
+	s.addWorkflowTasks(1, taskCount, taskQueue, workflowExecution, nil)
+	s.EqualValues(taskCount, s.taskManager.getTaskCount(ptq))
 
-	const taskCount = 10
-	// TODO: Understand why publish is low when rangeSize is 3
-
-	namespaceId := uuid.New()
-	tl := "approximateBacklogCounter"
-	tlID := newUnversionedRootQueueKey(namespaceId, tl, enumspb.TASK_QUEUE_TYPE_WORKFLOW)
-	s.taskManager.getQueueManager(tlID).rangeID = initialRangeID
-	s.matchingEngine.config.RangeSize = 10
-
-	taskQueue := &taskqueuepb.TaskQueue{
-		Name: tl,
-		Kind: enumspb.TASK_QUEUE_KIND_NORMAL,
-	}
-
-	for i := int64(0); i < taskCount; i++ {
-		scheduledEventID := i * 3
-		addRequest := matchingservice.AddWorkflowTaskRequest{
-			NamespaceId:            namespaceId,
-			Execution:              workflowExecution,
-			ScheduledEventId:       scheduledEventID,
-			TaskQueue:              taskQueue,
-			ScheduleToStartTimeout: timestamp.DurationFromSeconds(10),
-		}
-
-		// History service is using mock
-		s.mockHistoryClient.EXPECT().RecordWorkflowTaskStarted(gomock.Any(), gomock.Any(), gomock.Any()).DoAndReturn(
-			func(ctx context.Context, taskRequest *historyservice.RecordWorkflowTaskStartedRequest, arg2 ...interface{}) (*historyservice.RecordWorkflowTaskStartedResponse, error) {
-				s.logger.Debug("Mock Received RecordWorkflowTaskStartedRequest")
-				response := &historyservice.RecordWorkflowTaskStartedResponse{
-					WorkflowType:               workflowType,
-					PreviousStartedEventId:     scheduledEventID,
-					ScheduledEventId:           scheduledEventID + 1,
-					Attempt:                    1,
-					StickyExecutionEnabled:     true,
-					WorkflowExecutionTaskQueue: &taskqueuepb.TaskQueue{Name: tl, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
-					History:                    &historypb.History{Events: []*historypb.HistoryEvent{}},
-					NextPageToken:              nil,
-				}
-				return response, nil
-			}).AnyTimes()
-
-		_, _, err := s.matchingEngine.AddWorkflowTask(context.Background(), &addRequest)
-		s.NoError(err)
-	}
-	s.EqualValues(taskCount, s.taskManager.getTaskCount(tlID))
-	tlMgr, ok := s.matchingEngine.partitions[tlID.Partition().Key()].(*taskQueuePartitionManagerImpl).defaultQueue.(*physicalTaskQueueManagerImpl)
-	s.True(ok, "taskQueueManger doesn't implement taskQueuePartitionManager interface")
+	tlMgr := s.getPhysicalTaskQueueManagerImpl(ptq)
 	s.EqualValues(tlMgr.backlogMgr.db.getApproximateBacklogCount(), taskCount)
 
 	tm, ok := tlMgr.backlogMgr.db.store.(*testTaskManager)
 	s.EqualValues(ok, true)
-	s.EqualValues(tm.getUpdateCount(tlID), int64(1))
+	s.EqualValues(tm.getUpdateCount(ptq), math.Ceil(float64(taskCount)/float64(s.matchingEngine.config.RangeSize)))
 
 	// Completing the workflow tasks by directly calling AckManager.CompleteTask(TaskID) - doing this for the purpose of
 	// this test case. We shall complete all tasks that were added except the first one so that the AckLevel does not
@@ -3013,26 +2994,17 @@ func (s *matchingEngineSuite) TestUnloadingTQMValidateBacklogCounter() {
 	s.EqualValues(tlMgr.backlogMgr.db.getApproximateBacklogCount(), int64(taskCount))
 
 	// Adding a new task which should persist the backlog count and the ackLevel
-	scheduledEventID := int64(11)
-	addRequest := matchingservice.AddWorkflowTaskRequest{
-		NamespaceId:            namespaceId,
-		Execution:              workflowExecution,
-		ScheduledEventId:       scheduledEventID,
-		TaskQueue:              taskQueue,
-		ScheduleToStartTimeout: timestamp.DurationFromSeconds(10),
-	}
-	_, _, err := s.matchingEngine.AddWorkflowTask(context.Background(), &addRequest)
-	s.NoError(err)
+	s.addWorkflowTasks(1, 1, taskQueue, workflowExecution, nil)
 
 	// unloading the TQM which also stops the backlogManager; set backlogManager.skipFinalUpdate to true to not persist
 	// the latest ackLevel
 	tlMgr.backlogMgr.skipFinalUpdate.Store(true)
-	tqm, err := s.matchingEngine.getTaskQueuePartitionManager(context.Background(), tlID.Partition(), false)
+	tqm, err := s.matchingEngine.getTaskQueuePartitionManager(context.Background(), ptq.Partition(), false)
 	s.NoError(err)
 	s.matchingEngine.unloadTaskQueuePartition(tqm)
 
 	// Loading the TQM for the same TQ partition
-	tqm_loaded, err := s.matchingEngine.getTaskQueuePartitionManager(context.Background(), tlID.Partition(), true)
+	tqm_loaded, err := s.matchingEngine.getTaskQueuePartitionManager(context.Background(), ptq.Partition(), true)
 	s.NoError(err)
 	tqm_loaded_Impl, ok := tqm_loaded.(*taskQueuePartitionManagerImpl)
 	s.Equal(ok, true)
@@ -3048,174 +3020,45 @@ func (s *matchingEngineSuite) TestUnloadingTQMValidateBacklogCounter() {
 // TestConcurrentAddWorkflowTasksValidateBacklogCounter adds multiple workflow tasks concurrently to
 // persistence and checks if the backlog counter was updated accordingly.
 func (s *matchingEngineSuite) TestConcurrentAddWorkflowTasksValidateBacklogCounter() {
-	runID := uuid.NewRandom().String()
-	workflowID := "workflow1"
-	workflowExecution := &commonpb.WorkflowExecution{RunId: runID, WorkflowId: workflowID}
+	_, workflowExecution := s.generateWorkflowExecution()
+	taskQueue, ptq := s.createTQAndPTQForBacklogTests()
 
 	const workerCount = 20
 	const taskCount = 100
-	const initialRangeID = 0
-	const rangeSize = 5
-	var scheduledEventID int64 = 123
-
-	namespaceId := uuid.New()
-	tl := "makeToast"
-	tlID := newUnversionedRootQueueKey(namespaceId, tl, enumspb.TASK_QUEUE_TYPE_WORKFLOW)
-	s.taskManager.getQueueManager(tlID).rangeID = initialRangeID
-	s.matchingEngine.config.RangeSize = rangeSize // override to low number for the test
-
-	taskQueue := &taskqueuepb.TaskQueue{
-		Name: tl,
-		Kind: enumspb.TASK_QUEUE_KIND_NORMAL,
-	}
 
 	var wg sync.WaitGroup
 	wg.Add(workerCount)
 
-	// Adding Workflow tasks concurrently
-	for p := 0; p < workerCount; p++ {
-		go func() {
-			for i := int64(0); i < taskCount; i++ {
-				addRequest := matchingservice.AddWorkflowTaskRequest{
-					NamespaceId:            namespaceId,
-					Execution:              workflowExecution,
-					ScheduledEventId:       scheduledEventID,
-					TaskQueue:              taskQueue,
-					ScheduleToStartTimeout: timestamp.DurationFromSeconds(100),
-				}
-
-				_, _, err := s.matchingEngine.AddWorkflowTask(context.Background(), &addRequest)
-				if err != nil {
-					panic(err)
-				}
-			}
-			wg.Done()
-		}()
-	}
+	s.addWorkflowTasks(workerCount, taskCount, taskQueue, workflowExecution, &wg)
 	wg.Wait()
 
-	// Checking the approximateBacklogCounter
-	tlMgr, ok := s.matchingEngine.partitions[tlID.Partition().Key()].(*taskQueuePartitionManagerImpl).defaultQueue.(*physicalTaskQueueManagerImpl)
-	s.True(ok, "taskQueueManger doesn't implement taskQueuePartitionManager interface")
+	// validating the approximateBacklogCounter
+	tlMgr := s.getPhysicalTaskQueueManagerImpl(ptq)
 	s.EqualValues(tlMgr.backlogMgr.db.getApproximateBacklogCount(), int64(taskCount*workerCount))
 }
 
 func (s *matchingEngineSuite) TestConcurrentAddCompleteWorkflowTasksValidateBacklogCounter() {
-	runID := uuid.NewRandom().String()
-	workflowID := "workflow1"
-	workflowExecution := &commonpb.WorkflowExecution{RunId: runID, WorkflowId: workflowID}
+	workflowType, workflowExecution := s.generateWorkflowExecution()
+	taskQueue, ptq := s.createTQAndPTQForBacklogTests()
 
 	const workerCount = 20
 	const taskCount = 100
-	const initialRangeID = 0
-	const rangeSize = 5
-	var scheduledEventID int64 = 123
-	var startedEventID int64 = 1412
-
-	namespaceId := uuid.New()
-	tl := "makeToast"
-	tlID := newUnversionedRootQueueKey(namespaceId, tl, enumspb.TASK_QUEUE_TYPE_WORKFLOW)
-	s.taskManager.getQueueManager(tlID).rangeID = initialRangeID
-	s.matchingEngine.config.RangeSize = rangeSize // override to low number for the test
-
-	taskQueue := &taskqueuepb.TaskQueue{
-		Name: tl,
-		Kind: enumspb.TASK_QUEUE_KIND_NORMAL,
-	}
 
 	var wg sync.WaitGroup
 	wg.Add(2 * workerCount)
 
-	for p := 0; p < workerCount; p++ {
-		go func() {
-			for i := int64(0); i < taskCount; i++ {
-				addRequest := matchingservice.AddWorkflowTaskRequest{
-					NamespaceId:            namespaceId,
-					Execution:              workflowExecution,
-					ScheduledEventId:       scheduledEventID,
-					TaskQueue:              taskQueue,
-					ScheduleToStartTimeout: timestamp.DurationFromSeconds(100),
-				}
+	s.addWorkflowTasks(workerCount, taskCount, taskQueue, workflowExecution, &wg)
+	s.mockHistoryWhilePolling(workflowType)
+	s.pollWorkflowTasks(workerCount, taskCount, nil, taskQueue, &wg)
 
-				_, _, err := s.matchingEngine.AddWorkflowTask(context.Background(), &addRequest)
-				if err != nil {
-					panic(err)
-				}
-			}
-			wg.Done()
-		}()
-	}
-	workflowTypeName := "workflowType1"
-	workflowType := &commonpb.WorkflowType{Name: workflowTypeName}
-
-	identity := "nobody"
-
-	// History service is using mock
-	s.mockHistoryClient.EXPECT().RecordWorkflowTaskStarted(gomock.Any(), gomock.Any(), gomock.Any()).DoAndReturn(
-		func(ctx context.Context, taskRequest *historyservice.RecordWorkflowTaskStartedRequest, arg2 ...interface{}) (*historyservice.RecordWorkflowTaskStartedResponse, error) {
-			s.logger.Debug("Mock Received RecordWorkflowTaskStartedRequest")
-			return &historyservice.RecordWorkflowTaskStartedResponse{
-				PreviousStartedEventId: startedEventID,
-				StartedEventId:         startedEventID,
-				ScheduledEventId:       scheduledEventID,
-				WorkflowType:           workflowType,
-				Attempt:                1,
-				History:                &historypb.History{Events: []*historypb.HistoryEvent{}},
-				NextPageToken:          nil,
-			}, nil
-		}).AnyTimes()
-
-	// Completing tasks
-	for p := 0; p < workerCount; p++ {
-		go func() {
-			for i := int64(0); i < taskCount; {
-				result, err := s.matchingEngine.PollWorkflowTaskQueue(context.Background(), &matchingservice.PollWorkflowTaskQueueRequest{
-					NamespaceId: namespaceId,
-					PollRequest: &workflowservice.PollWorkflowTaskQueueRequest{
-						TaskQueue: taskQueue,
-						Identity:  identity,
-					},
-				}, metrics.NoopMetricsHandler)
-				if err != nil {
-					panic(err)
-				}
-				s.NotNil(result)
-				if len(result.TaskToken) == 0 {
-					s.logger.Debug("empty poll returned")
-					continue
-				}
-				s.EqualValues(workflowExecution, result.WorkflowExecution)
-				s.EqualValues(workflowType, result.WorkflowType)
-				s.EqualValues(startedEventID, result.StartedEventId)
-				s.EqualValues(workflowExecution, result.WorkflowExecution)
-				taskToken := &tokenspb.Task{
-					Attempt:          1,
-					NamespaceId:      namespaceId,
-					WorkflowId:       workflowID,
-					RunId:            runID,
-					ScheduledEventId: scheduledEventID,
-					StartedEventId:   startedEventID,
-				}
-				resultToken, err := s.matchingEngine.tokenSerializer.Deserialize(result.TaskToken)
-				if err != nil {
-					panic(err)
-				}
-
-				s.EqualValues(taskToken, resultToken, fmt.Sprintf("%v!=%v", taskToken, resultToken))
-				i++
-			}
-			wg.Done()
-		}()
-	}
 	wg.Wait()
-	s.EqualValues(0, s.taskManager.getTaskCount(tlID))
+	s.EqualValues(0, s.taskManager.getTaskCount(ptq))
 	totalTasks := taskCount * workerCount
-	persisted := s.taskManager.getCreateTaskCount(tlID)
+	persisted := s.taskManager.getCreateTaskCount(ptq)
 	s.True(persisted < totalTasks)
 
-	// Checking the approximateBacklogCounter
-	tlMgr, ok := s.matchingEngine.partitions[tlID.Partition().Key()].(*taskQueuePartitionManagerImpl).defaultQueue.(*physicalTaskQueueManagerImpl)
-	s.True(ok, "taskQueueManger doesn't implement taskQueuePartitionManager interface")
+	// validating the approximateBacklogCounter
+	tlMgr := s.getPhysicalTaskQueueManagerImpl(ptq)
 	s.EqualValues(tlMgr.backlogMgr.db.getApproximateBacklogCount(), int64(0))
 }
 
