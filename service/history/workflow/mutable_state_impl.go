@@ -895,9 +895,11 @@ func (ms *MutableStateImpl) IsStickyTaskQueueSet() bool {
 }
 
 // TaskQueueScheduleToStartTimeout returns TaskQueue struct and corresponding StartToClose timeout.
-// Task queue kind (sticky or normal) and timeout are set based on comparison of normal task queue name
+// Task queue kind (sticky or normal) is set based on comparison of normal task queue name
 // in mutable state and provided name.
+// ScheduleToStartTimeout is set based on queue kind and workflow task type.
 func (ms *MutableStateImpl) TaskQueueScheduleToStartTimeout(name string) (*taskqueuepb.TaskQueue, *durationpb.Duration) {
+	// If name is sticky task queue name.
 	if ms.executionInfo.TaskQueue != name {
 		return &taskqueuepb.TaskQueue{
 			Name:       ms.executionInfo.StickyTaskQueue,
@@ -905,17 +907,17 @@ func (ms *MutableStateImpl) TaskQueueScheduleToStartTimeout(name string) (*taskq
 			NormalName: ms.executionInfo.TaskQueue,
 		}, ms.executionInfo.StickyScheduleToStartTimeout
 	}
-	if ms.executionInfo.WorkflowTaskType == enumsspb.WORKFLOW_TASK_TYPE_SPECULATIVE {
-		// Speculative WFT has ScheduleToStartTimeout even on normal task queue.
-		return &taskqueuepb.TaskQueue{
-			Name: ms.executionInfo.TaskQueue,
-			Kind: enumspb.TASK_QUEUE_KIND_NORMAL,
-		}, durationpb.New(tasks.SpeculativeWorkflowTaskScheduleToStartTimeout)
-	}
-	return &taskqueuepb.TaskQueue{
+
+	// If name is normal task queue name.
+	normalTq := &taskqueuepb.TaskQueue{
 		Name: ms.executionInfo.TaskQueue,
 		Kind: enumspb.TASK_QUEUE_KIND_NORMAL,
-	}, ms.executionInfo.WorkflowRunTimeout // No WT ScheduleToStart timeout for normal WFT on normal task queue.
+	}
+	if ms.executionInfo.WorkflowTaskType == enumsspb.WORKFLOW_TASK_TYPE_SPECULATIVE {
+		// Speculative WFT has ScheduleToStartTimeout even on normal task queue.
+		return normalTq, durationpb.New(tasks.SpeculativeWorkflowTaskScheduleToStartTimeout)
+	}
+	return normalTq, ms.executionInfo.WorkflowRunTimeout // No WT ScheduleToStart timeout for normal WFT on normal task queue.
 }
 
 func (ms *MutableStateImpl) GetWorkflowType() *commonpb.WorkflowType {
