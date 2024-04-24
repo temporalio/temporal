@@ -332,7 +332,6 @@ func (r *registry) Send(
 }
 
 func (r *registry) Clear() {
-	println("QQQ Registry clear started")
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	for _, upd := range r.updates {
@@ -340,7 +339,6 @@ func (r *registry) Clear() {
 	}
 	r.updates = nil
 	r.completedUpdates = nil
-	println("QQQ Registry clear completed")
 }
 
 func (r *registry) Len() int {

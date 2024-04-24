@@ -404,12 +404,9 @@ func (t *timerQueueActiveTaskExecutor) executeWorkflowTaskTimeoutTask(
 			return err
 		}
 		scheduleWorkflowTask = true
-		println("QQQ SchedToStart timeout timer task. Type=", workflowTask.Type.String(), "ScheduledEventID=", workflowTask.ScheduledEventID)
 	}
 
-	err = t.updateWorkflowExecution(ctx, weContext, mutableState, scheduleWorkflowTask)
-	println("QQQ Timeout timer task processed new ScheduledEventID=", mutableState.GetExecutionInfo().GetWorkflowTaskScheduledEventId())
-	return err
+	return t.updateWorkflowExecution(ctx, weContext, mutableState, scheduleWorkflowTask)
 }
 
 func (t *timerQueueActiveTaskExecutor) executeWorkflowBackoffTimerTask(
