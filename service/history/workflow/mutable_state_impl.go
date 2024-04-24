@@ -905,10 +905,17 @@ func (ms *MutableStateImpl) TaskQueueScheduleToStartTimeout(name string) (*taskq
 			NormalName: ms.executionInfo.TaskQueue,
 		}, ms.executionInfo.StickyScheduleToStartTimeout
 	}
+	if ms.executionInfo.WorkflowTaskType == enumsspb.WORKFLOW_TASK_TYPE_SPECULATIVE {
+		// Speculative WFT has ScheduleToStartTimeout even on normal task queue.
+		return &taskqueuepb.TaskQueue{
+			Name: ms.executionInfo.TaskQueue,
+			Kind: enumspb.TASK_QUEUE_KIND_NORMAL,
+		}, durationpb.New(tasks.SpeculativeWorkflowTaskScheduleToStartTimeout)
+	}
 	return &taskqueuepb.TaskQueue{
 		Name: ms.executionInfo.TaskQueue,
 		Kind: enumspb.TASK_QUEUE_KIND_NORMAL,
-	}, ms.executionInfo.WorkflowRunTimeout // No WT ScheduleToStart timeout for normal task queue.
+	}, ms.executionInfo.WorkflowRunTimeout // No WT ScheduleToStart timeout for normal WFT on normal task queue.
 }
 
 func (ms *MutableStateImpl) GetWorkflowType() *commonpb.WorkflowType {
