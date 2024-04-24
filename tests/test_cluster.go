@@ -188,6 +188,8 @@ func (f *defaultPersistenceTestBaseFactory) NewTestBase(options *persistencetest
 }
 
 func NewClusterWithPersistenceTestBaseFactory(t *testing.T, options *TestClusterConfig, logger log.Logger, tbFactory PersistenceTestBaseFactory) (*TestCluster, error) {
+	logger.Info(fmt.Sprintf("NewClusterWithPersistenceTestBaseFactory options: %+v", options))
+
 	clusterMetadataConfig := cluster.NewTestClusterMetadataConfig(
 		options.ClusterMetadata.EnableGlobalNamespace,
 		options.IsMasterCluster,
