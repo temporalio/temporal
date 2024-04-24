@@ -538,6 +538,13 @@ pollLoop:
 			return task.pollWorkflowTaskQueueResponse(), nil
 		}
 
+		// if task.event != nil && IsTaskExpired(task.event.AllocatedTaskInfo) {
+		// 	// TODO: get the right metric tags here
+		// 	// metrics.ExpiredTasksPerTaskQueueCounter.With(tr.taggedMetricsHandler()).Record(1)
+		// 	task.finish(nil)
+		// 	continue pollLoop
+		// }
+
 		if task.isQuery() {
 			task.finish(nil) // this only means query task sync match succeed.
 

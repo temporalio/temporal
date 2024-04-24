@@ -41,6 +41,7 @@ import (
 	updatepb "go.temporal.io/api/update/v1"
 	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/server/common/dynamicconfig"
+	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/testing/protoutils"
 	"go.temporal.io/server/common/testing/runtime"
 	"go.temporal.io/server/service/history/workflow/update"
@@ -1494,9 +1495,9 @@ func (s *FunctionalSuite) TestUpdateWorkflow_NewStickySpeculativeWorkflowTask_Ac
 	_, err := poller.PollAndProcessWorkflowTask(WithRespondSticky, WithRetries(1))
 	s.NoError(err)
 
-	s.Logger.Info("Sleep 10 seconds to make sure stickyPollerUnavailableWindow time has passed.")
-	time.Sleep(10 * time.Second)
-	s.Logger.Info("Sleep 10 seconds is done.")
+	s.Logger.Info("Sleep 10+ seconds to make sure stickyPollerUnavailableWindow time has passed.")
+	time.Sleep(10*time.Second + 100*time.Millisecond)
+	s.Logger.Info("Sleep 10+ seconds is done.")
 
 	// Now send an update. It should try sticky task queue first, but got "StickyWorkerUnavailable" error
 	// and resend it to normal.
@@ -2837,11 +2838,12 @@ func (s *FunctionalSuite) TestUpdateWorkflow_ScheduleToStartTimeoutSpeculativeWo
 		updateResultCh <- s.sendUpdateNoError(tv, "1")
 	}()
 
-	// Wait for sticky timeout to fire.
-	time.Sleep(poller.StickyScheduleToStartTimeout + 100*time.Millisecond)
+	// To make sure that update got to the server before test start to wait for StickyScheduleToStartTimeout.
+	runtime.WaitGoRoutineWithFn(s.T(), ((*update.Update)(nil)).WaitLifecycleStage, 1*time.Second)
 
-	// time.Sleep(time.Second)
-	// runtime.WaitGoRoutineWithFn(s.T(), ((*update.Update)(nil)).WaitLifecycleStage, 1*time.Second)
+	s.Logger.Info("Wait for sticky timeout to fire. Sleep poller.StickyScheduleToStartTimeout+ seconds.", tag.NewDurationTag("StickyScheduleToStartTimeout", poller.StickyScheduleToStartTimeout))
+	time.Sleep(poller.StickyScheduleToStartTimeout + 100*time.Millisecond)
+	s.Logger.Info("Sleep is done.")
 
 	// Try to process update in workflow, poll from normal task queue.
 	res, err := poller.PollAndProcessWorkflowTask(WithRetries(1), WithForceNewWorkflowTask)

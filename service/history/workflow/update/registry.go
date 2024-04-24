@@ -339,7 +339,7 @@ func (r *registry) Clear() {
 		upd.abortWaiters()
 	}
 	r.updates = nil
-	r.completedCount = 0
+	r.completedUpdates = nil
 	println("QQQ Registry clear completed")
 }
 
