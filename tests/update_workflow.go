@@ -2861,7 +2861,6 @@ func (s *FunctionalSuite) TestUpdateWorkflow_ScheduleToStartTimeoutSpeculativeWo
 	s.Equal(3, msgHandlerCalls)
 
 	events := s.getHistory(s.namespace, tv.WorkflowExecution())
-
 	s.EqualHistoryEvents(`
   1 WorkflowExecutionStarted
   2 WorkflowTaskScheduled

@@ -270,22 +270,19 @@ func (u *Update) WaitLifecycleStage(
 
 // abortWaiters fails update futures with abortWaiterErr error and set state to stateCompleted.
 func (u *Update) abortWaiters() {
-	if u.state.Matches(stateSet(stateCreated | stateProvisionallyAdmitted | stateAdmitted | stateProvisionallySent | stateSent)) {
+	if u.state.Matches(stateSet(stateCreated | stateProvisionallyAdmitted | stateAdmitted | stateProvisionallySent | stateSent | stateProvisionallyAccepted)) {
 		u.accepted.(*future.FutureImpl[*failurepb.Failure]).Set(nil, abortWaiterErr)
 		u.outcome.(*future.FutureImpl[*updatepb.Outcome]).Set(nil, abortWaiterErr)
 	}
 
-	if u.state.Matches(stateSet(stateProvisionallyAccepted | stateAccepted)) {
+	if u.state.Matches(stateSet(stateAccepted | stateProvisionallyCompleted)) {
 		// Accepted updates can't be aborted because they are already persisted and
 		// will be recreated in the registry after reload from the store.
 		// Set error to abortWaiterErr to unify handling logic on waiter side (WaitLifecycleStage).
 		u.outcome.(*future.FutureImpl[*updatepb.Outcome]).Set(nil, abortWaiterErr)
 	}
 
-	// To protect futures from being set twice.
-	if !u.state.Matches(stateSet(stateCompleted)) {
-		u.setState(stateCompleted)
-	}
+	u.setState(stateAborted)
 }
 
 // Admit works if the Update is in any state but if the state is anything
@@ -610,7 +607,7 @@ func (u *Update) onResponseMsg(
 
 // isIncomplete checks if update is already completed (rejected or processed).
 func (u *Update) isIncomplete() bool {
-	return !u.state.Matches(stateSet(stateProvisionallyCompleted | stateCompleted))
+	return !u.state.Matches(stateSet(stateProvisionallyCompleted | stateCompleted | stateAborted))
 }
 
 // CancelIncomplete cancels update if it wasn't completed yet:
