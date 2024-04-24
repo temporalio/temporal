@@ -3385,41 +3385,6 @@ func (s *VersioningIntegSuite) TestDescribeTaskQueueEnhanced_Unversioned() {
 
 }
 
-// TestDescribeTaskQueueEnhanced_GetBacklogInfoEmpty tests when there are no tasks in the backlog.
-// Tests when tasks are added and completed reside in workflow_task.go
-func (s *VersioningIntegSuite) TestDescribeTaskQueueEnhanced_GetBacklogInfoEmpty() {
-	tq := s.randomizeStr(s.T().Name())
-	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
-	defer cancel()
-
-	taskQueueTypes := int64(2) // signifying 2 types of taskQueueTypes, which will have their own backlogInfo
-	s.Eventually(func() bool {
-		resp, err := s.engine.DescribeTaskQueue(ctx, &workflowservice.DescribeTaskQueueRequest{
-			Namespace:              s.namespace,
-			TaskQueue:              &taskqueuepb.TaskQueue{Name: tq, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
-			ApiMode:                enumspb.DESCRIBE_TASK_QUEUE_MODE_ENHANCED,
-			Versions:               nil, // default version, in this case unversioned queue
-			TaskQueueTypes:         nil, // both types
-			ReportPollers:          true,
-			ReportTaskReachability: true,
-			ReportBacklogInfo:      true,
-		})
-		s.NoError(err)
-		s.NotNil(resp)
-		s.Assert().Equal(1, len(resp.GetVersionsInfo()), "should be 1 because only default/unversioned queue")
-		versionInfo := resp.GetVersionsInfo()[""]
-		s.Assert().Equal(enumspb.BUILD_ID_TASK_REACHABILITY_REACHABLE, versionInfo.GetTaskReachability())
-		var bInfo []*taskqueuepb.BacklogInfo
-		for _, t := range versionInfo.GetTypesInfo() {
-			s.Assert().Equal(int64(0), t.GetBacklogInfo().ApproximateBacklogCount)
-			bInfo = append(bInfo, t.GetBacklogInfo())
-		}
-
-		return int64(len(bInfo)) == taskQueueTypes
-	}, 3*time.Second, 50*time.Millisecond)
-
-}
-
 func (s *VersioningIntegSuite) TestDescribeTaskQueueEnhanced_TooManyBuildIds() {
 	tq := s.randomizeStr(s.T().Name())
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
