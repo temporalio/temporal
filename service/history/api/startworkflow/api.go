@@ -101,11 +101,8 @@ func NewStarter(
 	tokenSerializer common.TaskTokenSerializer,
 	visibilityManager manager.VisibilityManager,
 	request *historyservice.StartWorkflowExecutionRequest,
-) (*Starter, error) {
-	namespaceEntry, err := api.GetActiveNamespace(shardContext, namespace.ID(request.GetNamespaceId()))
-	if err != nil {
-		return nil, err
-	}
+	namespaceEntry *namespace.Namespace,
+) *Starter {
 	return &Starter{
 		shardContext:               shardContext,
 		workflowConsistencyChecker: workflowConsistencyChecker,
@@ -113,7 +110,7 @@ func NewStarter(
 		visibilityManager:          visibilityManager,
 		request:                    request,
 		namespace:                  namespaceEntry,
-	}, nil
+	}
 }
 
 // prepare applies request overrides, validates the request, and records eager execution metrics.

@@ -379,16 +379,19 @@ func (e *historyEngineImpl) StartWorkflowExecution(
 	ctx context.Context,
 	startRequest *historyservice.StartWorkflowExecutionRequest,
 ) (resp *historyservice.StartWorkflowExecutionResponse, retError error) {
-	starter, err := startworkflow.NewStarter(
+	namespaceEntry, err := api.GetActiveNamespace(e.shardContext, namespace.ID(startRequest.GetNamespaceId()))
+	if err != nil {
+		return nil, err
+	}
+
+	starter := startworkflow.NewStarter(
 		e.shardContext,
 		e.workflowConsistencyChecker,
 		e.tokenSerializer,
 		e.persistenceVisibilityMgr,
 		startRequest,
+		namespaceEntry,
 	)
-	if err != nil {
-		return nil, err
-	}
 	return starter.Invoke(ctx, nil)
 }
 
