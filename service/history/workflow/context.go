@@ -919,13 +919,20 @@ func (c *ContextImpl) ReapplyEvents(
 
 // TODO: remove `ms` parameter again (added since it's not possible to initialize a new Context with a specific MutableState)
 func (c *ContextImpl) UpdateRegistry(ctx context.Context, ms MutableState) update.Registry {
+	var ns *namespace.Namespace
+	if c.MutableState != nil {
+		ns = c.MutableState.GetNamespaceEntry()
+	} else {
+		ns = ms.GetNamespaceEntry()
+	}
+
+	if c.updateRegistry != nil && c.updateRegistry.FailoverVersion() != ns.FailoverVersion() {
+		c.updateRegistry.Clear()
+		c.updateRegistry = nil
+	}
+
 	if c.updateRegistry == nil {
-		var nsIDStr string
-		if c.MutableState != nil {
-			nsIDStr = c.MutableState.GetNamespaceEntry().ID().String()
-		} else {
-			nsIDStr = ms.GetNamespaceEntry().ID().String()
-		}
+		nsID := ns.ID()
 		c.updateRegistry = update.NewRegistry(
 			func() update.Store {
 				if c.MutableState != nil {
@@ -938,17 +945,15 @@ func (c *ContextImpl) UpdateRegistry(ctx context.Context, ms MutableState) updat
 			update.WithTracerProvider(trace.SpanFromContext(ctx).TracerProvider()),
 			update.WithInFlightLimit(
 				func() int {
-					return c.config.WorkflowExecutionMaxInFlightUpdates(nsIDStr)
+					return c.config.WorkflowExecutionMaxInFlightUpdates(nsID.String())
 				},
 			),
 			update.WithTotalLimit(
 				func() int {
-					return c.config.WorkflowExecutionMaxTotalUpdates(nsIDStr)
+					return c.config.WorkflowExecutionMaxTotalUpdates(nsID.String())
 				},
 			),
 		)
-	} else {
-		c.updateRegistry.UpdateFromStore()
 	}
 	return c.updateRegistry
 }
