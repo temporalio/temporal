@@ -868,7 +868,6 @@ func (s *workflowResetterSuite) TestReapplyEvents() {
 	events := []*historypb.HistoryEvent{event1, event2, event3, event4, event5, event6}
 
 	ms := workflow.NewMockMutableState(s.controller)
-	updateRegistry := update.NewRegistry(func() update.Store { return ms })
 
 	for _, event := range events {
 		switch event.GetEventType() {
@@ -896,7 +895,7 @@ func (s *workflowResetterSuite) TestReapplyEvents() {
 		}
 	}
 
-	_, err := reapplyEvents(ms, updateRegistry, events, nil, "")
+	_, err := reapplyEvents(ms, nil, events, nil, "")
 	s.NoError(err)
 }
 

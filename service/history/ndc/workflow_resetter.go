@@ -175,7 +175,7 @@ func (r *workflowResetterImpl) ResetWorkflow(
 
 			if lastVisitedRunID == currentMutableState.GetExecutionState().RunId {
 				for _, event := range currentWorkflowEventsSeq {
-					if _, err := reapplyEvents(resetMutableState, currentUpdateRegistry, event.Events, resetReapplyExcludeTypes, ""); err != nil {
+					if _, err := reapplyEvents(resetMutableState, nil, event.Events, resetReapplyExcludeTypes, ""); err != nil {
 						return err
 					}
 				}
@@ -222,7 +222,7 @@ func (r *workflowResetterImpl) ResetWorkflow(
 	if err := reapplyEventsFn(ctx, resetMS); err != nil {
 		return err
 	}
-	if _, err := reapplyEvents(resetMS, currentUpdateRegistry, additionalReapplyEvents, nil, ""); err != nil {
+	if _, err := reapplyEvents(resetMS, nil, additionalReapplyEvents, nil, ""); err != nil {
 		return err
 	}
 
@@ -689,7 +689,7 @@ func (r *workflowResetterImpl) reapplyWorkflowEvents(
 			return "", err
 		}
 		lastEvents = batch.Events
-		if _, err := reapplyEvents(mutableState, currentUpdateRegistry, lastEvents, resetReapplyExcludeTypes, ""); err != nil {
+		if _, err := reapplyEvents(mutableState, nil, lastEvents, resetReapplyExcludeTypes, ""); err != nil {
 			return "", err
 		}
 	}
@@ -705,7 +705,7 @@ func (r *workflowResetterImpl) reapplyWorkflowEvents(
 
 func reapplyEvents(
 	mutableState workflow.MutableState,
-	updateRegistry update.Registry,
+	targetBranchUpdateRegistry *update.Registry,
 	events []*historypb.HistoryEvent,
 	resetReapplyExcludeTypes map[enumspb.ResetReapplyExcludeType]bool,
 	runIdForDeduplication string,
@@ -756,7 +756,7 @@ func reapplyEvents(
 				continue
 			}
 			attr := event.GetWorkflowExecutionUpdateAcceptedEventAttributes()
-			if updateRegistry.Contains(attr.ProtocolInstanceId) {
+			if targetBranchUpdateRegistry != nil && (*targetBranchUpdateRegistry).Contains(attr.ProtocolInstanceId) {
 				continue
 			}
 			request := attr.GetAcceptedRequest()
