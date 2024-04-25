@@ -35,7 +35,6 @@ import (
 	"time"
 
 	"github.com/pborman/uuid"
-
 	batchpb "go.temporal.io/api/batch/v1"
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
@@ -496,14 +495,18 @@ func (wh *WorkflowHandler) ExecuteMultiOperation(
 		return nil, errMultiOperationAPINotAllowed
 	}
 
-	if len(request.Operations) == 0 {
-		return nil, errMissingOperations
+	// as a temporary limitation, the only allowed list of operations is exactly [Start, Update]
+	if len(request.Operations) != 2 {
+		return nil, errMultiOpNotStartAndUpdate
+	}
+	if request.Operations[0].GetStartWorkflow() == nil {
+		return nil, errMultiOpNotStartAndUpdate
+	}
+	if request.Operations[1].GetUpdateWorkflow() == nil {
+		return nil, errMultiOpNotStartAndUpdate
 	}
 
-	// TODO: validation
-
-	workflowId := request.Operations[0].GetStartWorkflow().WorkflowId
-	historyReq, err := convertToHistoryMultiOperation(namespaceID, workflowId, request)
+	historyReq, err := wh.convertToHistoryMultiOperationRequest(namespaceID, request)
 	if err != nil {
 		return nil, err
 	}
@@ -520,45 +523,97 @@ func (wh *WorkflowHandler) ExecuteMultiOperation(
 	return response, nil
 }
 
-func convertToHistoryMultiOperation(
+func (wh *WorkflowHandler) convertToHistoryMultiOperationRequest(
 	namespaceID namespace.ID,
-	workflowId string,
 	request *workflowservice.ExecuteMultiOperationRequest,
 ) (*historyservice.ExecuteMultiOperationRequest, error) {
-	historyReq := &historyservice.ExecuteMultiOperationRequest{
-		NamespaceId: namespaceID.String(),
-		WorkflowId:  workflowId,
-		Operations:  make([]*historyservice.ExecuteMultiOperationRequest_Operation, len(request.Operations)),
-	}
+	var lastWorkflowID string
+	ops := make([]*historyservice.ExecuteMultiOperationRequest_Operation, len(request.Operations))
+
+	var hasError bool
+	errs := make([]error, len(request.Operations))
+
 	for i, op := range request.Operations {
-		var opReq *historyservice.ExecuteMultiOperationRequest_Operation
-		if startReq := op.GetStartWorkflow(); startReq != nil {
-			opReq = &historyservice.ExecuteMultiOperationRequest_Operation{
-				Operation: &historyservice.ExecuteMultiOperationRequest_Operation_StartWorkflow{
-					StartWorkflow: common.CreateHistoryStartWorkflowRequest(
-						namespaceID.String(),
-						startReq,
-						nil,
-						nil,
-						time.Now().UTC(),
-					),
-				},
-			}
-		} else if updateReq := op.GetUpdateWorkflow(); updateReq != nil {
-			opReq = &historyservice.ExecuteMultiOperationRequest_Operation{
-				Operation: &historyservice.ExecuteMultiOperationRequest_Operation_UpdateWorkflow{
-					UpdateWorkflow: &historyservice.UpdateWorkflowExecutionRequest{
-						NamespaceId: namespaceID.String(),
-						Request:     updateReq,
-					},
-				},
-			}
+		convertedOp, opWorkflowID, err := wh.convertToHistoryMultiOperationItem(namespaceID, op)
+		if err != nil {
+			hasError = true
 		} else {
-			return nil, serviceerror.NewInternal(fmt.Sprintf("unsupported operation: %T", op.Operation))
+			// set to default in case the whole MultOp request
+			err = serviceerror.NewMultiOperationAborted("Operation was aborted.")
+
+			switch {
+			case lastWorkflowID == "":
+				lastWorkflowID = opWorkflowID
+			case lastWorkflowID != opWorkflowID:
+				err = errMultiOpWorkflowIdInconsistent
+				hasError = true
+			}
 		}
-		historyReq.Operations[i] = opReq
+		errs[i] = err
+		ops[i] = convertedOp
 	}
-	return historyReq, nil
+
+	if hasError {
+		return nil, serviceerror.NewMultiOperationExecution("MultiOperation could not be executed.", errs)
+	}
+
+	return &historyservice.ExecuteMultiOperationRequest{
+		NamespaceId: namespaceID.String(),
+		WorkflowId:  lastWorkflowID,
+		Operations:  ops,
+	}, nil
+}
+
+func (wh *WorkflowHandler) convertToHistoryMultiOperationItem(
+	namespaceID namespace.ID,
+	op *workflowservice.ExecuteMultiOperationRequest_Operation,
+) (*historyservice.ExecuteMultiOperationRequest_Operation, string, error) {
+	var workflowId string
+	var opReq *historyservice.ExecuteMultiOperationRequest_Operation
+
+	if startReq := op.GetStartWorkflow(); startReq != nil {
+		var err error
+		if startReq, err = wh.prepareStartWorkflowRequest(startReq); err != nil {
+			return nil, "", err
+		}
+		if len(startReq.CronSchedule) > 0 {
+			return nil, "", errMultiOpStartCronSchedule
+		}
+		if startReq.RequestEagerExecution {
+			return nil, "", errMultiOpEagerWorkflow
+		}
+
+		workflowId = startReq.WorkflowId
+		opReq = &historyservice.ExecuteMultiOperationRequest_Operation{
+			Operation: &historyservice.ExecuteMultiOperationRequest_Operation_StartWorkflow{
+				StartWorkflow: common.CreateHistoryStartWorkflowRequest(
+					namespaceID.String(),
+					startReq,
+					nil,
+					nil,
+					time.Now().UTC(),
+				),
+			},
+		}
+	} else if updateReq := op.GetUpdateWorkflow(); updateReq != nil {
+		if err := wh.prepareUpdateWorkflowRequest(updateReq); err != nil {
+			return nil, "", err
+		}
+
+		workflowId = updateReq.WorkflowExecution.WorkflowId
+		opReq = &historyservice.ExecuteMultiOperationRequest_Operation{
+			Operation: &historyservice.ExecuteMultiOperationRequest_Operation_UpdateWorkflow{
+				UpdateWorkflow: &historyservice.UpdateWorkflowExecutionRequest{
+					NamespaceId: namespaceID.String(),
+					Request:     updateReq,
+				},
+			},
+		}
+	} else {
+		return nil, "", serviceerror.NewInternal(fmt.Sprintf("unsupported operation: %T", op.Operation))
+	}
+
+	return opReq, workflowId, nil
 }
 
 func convertToMultiOperationResponse(
