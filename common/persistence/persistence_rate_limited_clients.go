@@ -1055,15 +1055,6 @@ func (p *nexusIncomingServiceRateLimitedPersistenceClient) Close() {
 	p.persistence.Close()
 }
 
-func (p *nexusIncomingServiceRateLimitedPersistenceClient) GetNexusIncomingServicesTableVersion(
-	ctx context.Context,
-) (int64, error) {
-	if err := allow(ctx, "ListNexusIncomingServices", CallerSegmentMissing, p.systemRateLimiter, p.namespaceRateLimiter); err != nil {
-		return 0, err
-	}
-	return p.persistence.GetNexusIncomingServicesTableVersion(ctx)
-}
-
 func (p *nexusIncomingServiceRateLimitedPersistenceClient) GetNexusIncomingService(
 	ctx context.Context,
 	request *GetNexusIncomingServiceRequest,

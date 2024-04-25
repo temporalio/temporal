@@ -129,6 +129,6 @@ func TestNewRoute(t *testing.T) {
 			"namespace":  "TEST-NAMESPACE",
 			"workflowID": "TEST-WORKFLOW-ID",
 		})
-		assert.Equal(t, &QualifiedWorkflow{Namespace: "TEST-NAMESPACE", WorkflowID: "TEST-WORKFLOW-ID"}, params)
+		assert.Equal(t, QualifiedWorkflow{Namespace: "TEST-NAMESPACE", WorkflowID: "TEST-WORKFLOW-ID"}, params)
 	})
 }

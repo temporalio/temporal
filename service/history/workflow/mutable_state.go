@@ -53,7 +53,7 @@ import (
 	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence"
-	"go.temporal.io/server/plugins/callbacks"
+	"go.temporal.io/server/components/callbacks"
 	"go.temporal.io/server/service/history/historybuilder"
 	"go.temporal.io/server/service/history/hsm"
 	"go.temporal.io/server/service/history/tasks"
@@ -138,6 +138,8 @@ type (
 
 	MutableState interface {
 		callbacks.CanGetNexusCompletion
+		AddHistoryEvent(t enumspb.EventType, setAttributes func(*historypb.HistoryEvent)) *historypb.HistoryEvent
+		GenerateEventLoadToken(event *historypb.HistoryEvent) ([]byte, error)
 
 		AddActivityTaskCancelRequestedEvent(int64, int64, string) (*historypb.HistoryEvent, *persistencespb.ActivityInfo, error)
 		AddActivityTaskCanceledEvent(int64, int64, int64, *commonpb.Payloads, string) (*historypb.HistoryEvent, error)

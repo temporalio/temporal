@@ -38,6 +38,7 @@ import (
 	"go.temporal.io/server/common/persistence/client"
 	"go.temporal.io/server/common/persistence/mock"
 	"go.temporal.io/server/common/persistence/serialization"
+	"go.temporal.io/server/common/quotas"
 )
 
 func TestRateLimitedPersistenceClients(t *testing.T) {
@@ -129,12 +130,18 @@ func TestRateLimitedPersistenceClients(t *testing.T) {
 			burstRatioFn := func() float64 {
 				return 1.0
 			}
-			systemRequestRateLimiter := client.NewNoopPriorityRateLimiter(func() int {
-				return tc.systemRPS
-			}, burstRatioFn)
-			namespaceRequestRateLimiter := client.NewNoopPriorityRateLimiter(func() int {
-				return tc.namespaceRPS
-			}, burstRatioFn)
+			systemRequestRateLimiter := quotas.NewRequestRateLimiterAdapter(
+				quotas.NewDefaultRateLimiter(
+					func() float64 { return float64(tc.systemRPS) },
+					burstRatioFn,
+				),
+			)
+			namespaceRequestRateLimiter := quotas.NewRequestRateLimiterAdapter(
+				quotas.NewDefaultRateLimiter(
+					func() float64 { return float64(tc.namespaceRPS) },
+					burstRatioFn,
+				),
+			)
 			factory := client.NewFactory(
 				dataStoreFactory,
 				&config.Persistence{

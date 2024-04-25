@@ -45,6 +45,7 @@ const (
 	OpenAPIV2APIName                                = "/temporal.api.openapi.v1.OpenAPIService/GetOpenAPIV2Docs"
 	DispatchNexusTaskByNamespaceAndTaskQueueAPIName = "/temporal.api.nexusservice.v1.NexusService/DispatchByNamespaceAndTaskQueue"
 	DispatchNexusTaskByServiceAPIName               = "/temporal.api.nexusservice.v1.NexusService/DispatchByService"
+	CompleteNexusOperation                          = "/temporal.api.nexusservice.v1.NexusService/CompleteNexusOperation"
 )
 
 var (
@@ -108,7 +109,6 @@ var (
 
 		// P3: Status Querying APIs
 		"/temporal.api.workflowservice.v1.WorkflowService/DescribeWorkflowExecution":     3,
-		"/temporal.api.workflowservice.v1.WorkflowService/DescribeTaskQueue":             3,
 		"/temporal.api.workflowservice.v1.WorkflowService/GetWorkerBuildIdCompatibility": 3,
 		"/temporal.api.workflowservice.v1.WorkflowService/GetWorkerVersioningRules":      3,
 		"/temporal.api.workflowservice.v1.WorkflowService/ListTaskQueuePartitions":       3,
@@ -131,6 +131,7 @@ var (
 		"/temporal.api.workflowservice.v1.WorkflowService/RespondQueryTaskCompleted":        4,
 		"/temporal.api.workflowservice.v1.WorkflowService/RespondNexusTaskCompleted":        4,
 		"/temporal.api.workflowservice.v1.WorkflowService/RespondNexusTaskFailed":           4,
+		CompleteNexusOperation: 4,
 
 		// P5: Poll APIs and other low priority APIs
 		"/temporal.api.workflowservice.v1.WorkflowService/PollWorkflowTaskQueue":              5,
@@ -159,6 +160,7 @@ var (
 		"/temporal.api.workflowservice.v1.WorkflowService/GetWorkerTaskReachability": 1,
 		"/temporal.api.workflowservice.v1.WorkflowService/ListSchedules":             1,
 		"/temporal.api.workflowservice.v1.WorkflowService/ListBatchOperations":       1,
+		"/temporal.api.workflowservice.v1.WorkflowService/DescribeTaskQueue":         1,
 	}
 
 	VisibilityAPIPrioritiesOrdered = []int{0, 1}

@@ -46,6 +46,7 @@ import (
 	replicationpb "go.temporal.io/api/replication/v1"
 	"go.temporal.io/api/serviceerror"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
+	updatepb "go.temporal.io/api/update/v1"
 	workflowpb "go.temporal.io/api/workflow/v1"
 	"go.temporal.io/api/workflowservice/v1"
 	"google.golang.org/grpc"
@@ -76,6 +77,7 @@ import (
 	"go.temporal.io/server/common/resourcetest"
 	"go.temporal.io/server/common/rpc/interceptor"
 	"go.temporal.io/server/common/searchattribute"
+	e "go.temporal.io/server/service/history/events"
 	"go.temporal.io/server/service/worker/batcher"
 	"go.temporal.io/server/service/worker/scheduler"
 )
@@ -159,7 +161,8 @@ func (s *workflowHandlerSuite) SetupTest() {
 
 	s.tokenSerializer = common.NewProtoTaskTokenSerializer()
 
-	s.mockVisibilityMgr.EXPECT().GetStoreNames().Return([]string{elasticsearch.PersistenceName})
+	s.mockVisibilityMgr.EXPECT().GetStoreNames().Return([]string{elasticsearch.PersistenceName}).AnyTimes()
+	s.mockExecutionManager.EXPECT().GetName().Return("mock-execution-manager").AnyTimes()
 }
 
 func (s *workflowHandlerSuite) TearDownTest() {
@@ -176,7 +179,7 @@ func (s *workflowHandlerSuite) getWorkflowHandler(config *Config) *WorkflowHandl
 		s.mockResource.GetVisibilityManager(),
 		s.mockResource.GetLogger(),
 		s.mockResource.GetThrottledLogger(),
-		s.mockResource.GetExecutionManager(),
+		s.mockResource.GetExecutionManager().GetName(),
 		s.mockResource.GetClusterMetadataManager(),
 		s.mockResource.GetMetadataManager(),
 		s.mockResource.GetHistoryClient(),
@@ -1740,8 +1743,6 @@ func (s *workflowHandlerSuite) TestCountWorkflowExecutions() {
 }
 
 func (s *workflowHandlerSuite) TestVerifyHistoryIsComplete() {
-	wh := s.getWorkflowHandler(s.newConfig())
-
 	events := make([]*historypb.HistoryEvent, 50)
 	for i := 0; i < len(events); i++ {
 		events[i] = &historypb.HistoryEvent{EventId: int64(i + 1)}
@@ -1785,7 +1786,7 @@ func (s *workflowHandlerSuite) TestVerifyHistoryIsComplete() {
 	}
 
 	for i, tc := range testCases {
-		err := wh.verifyHistoryIsComplete(tc.events, tc.firstEventID, tc.lastEventID, tc.isFirstPage, tc.isLastPage, tc.pageSize)
+		err := e.VerifyHistoryIsComplete(tc.events, tc.firstEventID, tc.lastEventID, tc.isFirstPage, tc.isLastPage, tc.pageSize)
 		if tc.isResultErr {
 			s.Error(err, "testcase %v failed", i)
 		} else {
@@ -2737,4 +2738,209 @@ func (s *workflowHandlerSuite) Test_ValidateTaskQueue() {
 	err = wh.validateTaskQueue(&tq)
 	s.Error(err)
 	s.Contains(err.Error(), "is not a valid UTF-8 string")
+}
+
+func (s *workflowHandlerSuite) TestExecuteMultiOperation() {
+	ctx := context.Background()
+	config := s.newConfig()
+	config.EnableExecuteMultiOperation = func(string) bool { return true }
+	config.EnableUpdateWorkflowExecution = func(string) bool { return true }
+	wh := s.getWorkflowHandler(config)
+
+	s.mockResource.NamespaceCache.EXPECT().
+		GetNamespaceID(namespace.Name(s.testNamespace.String())).Return(s.testNamespaceID, nil).AnyTimes()
+	s.mockSearchAttributesMapperProvider.EXPECT().
+		GetMapper(gomock.Any()).Return(nil, nil).AnyTimes()
+
+	newStartOp := func(op *workflowservice.StartWorkflowExecutionRequest) *workflowservice.ExecuteMultiOperationRequest_Operation {
+		return &workflowservice.ExecuteMultiOperationRequest_Operation{
+			Operation: &workflowservice.ExecuteMultiOperationRequest_Operation_StartWorkflow{
+				StartWorkflow: op,
+			},
+		}
+	}
+	validStartReq := func() *workflowservice.StartWorkflowExecutionRequest {
+		return &workflowservice.StartWorkflowExecutionRequest{
+			Namespace:    s.testNamespace.String(),
+			WorkflowId:   "WORKFLOW_ID",
+			WorkflowType: &commonpb.WorkflowType{Name: "workflow-type"},
+			TaskQueue:    &taskqueuepb.TaskQueue{Name: "task-queue"},
+		}
+	}
+	newUpdateOp := func(op *workflowservice.UpdateWorkflowExecutionRequest) *workflowservice.ExecuteMultiOperationRequest_Operation {
+		return &workflowservice.ExecuteMultiOperationRequest_Operation{
+			Operation: &workflowservice.ExecuteMultiOperationRequest_Operation_UpdateWorkflow{
+				UpdateWorkflow: op,
+			},
+		}
+	}
+	validUpdateReq := func() *workflowservice.UpdateWorkflowExecutionRequest {
+		return &workflowservice.UpdateWorkflowExecutionRequest{
+			Namespace:         s.testNamespace.String(),
+			WorkflowExecution: &commonpb.WorkflowExecution{WorkflowId: "WORKFLOW_ID"},
+			Request: &updatepb.Request{
+				Meta:  &updatepb.Meta{UpdateId: "UPDATE_ID"},
+				Input: &updatepb.Input{Name: "NAME"},
+			},
+		}
+	}
+
+	// NOTE: functional tests are testing the happy case
+
+	s.Run("operations list that is not [Start, Update] is invalid", func() {
+		// empty list
+		resp, err := wh.ExecuteMultiOperation(ctx, &workflowservice.ExecuteMultiOperationRequest{
+			Namespace: s.testNamespace.String(),
+		})
+
+		s.Nil(resp)
+		s.Equal(errMultiOpNotStartAndUpdate, err)
+
+		// 1 item
+		resp, err = wh.ExecuteMultiOperation(ctx, &workflowservice.ExecuteMultiOperationRequest{
+			Namespace:  s.testNamespace.String(),
+			Operations: []*workflowservice.ExecuteMultiOperationRequest_Operation{newStartOp(nil)},
+		})
+
+		s.Nil(resp)
+		s.Equal(errMultiOpNotStartAndUpdate, err)
+
+		// 3 items
+		resp, err = wh.ExecuteMultiOperation(ctx, &workflowservice.ExecuteMultiOperationRequest{
+			Namespace: s.testNamespace.String(),
+			Operations: []*workflowservice.ExecuteMultiOperationRequest_Operation{
+				newStartOp(nil), newStartOp(nil), newStartOp(nil),
+			},
+		})
+
+		s.Nil(resp)
+		s.Equal(errMultiOpNotStartAndUpdate, err)
+
+		// 2 undefined operations
+		resp, err = wh.ExecuteMultiOperation(ctx, &workflowservice.ExecuteMultiOperationRequest{
+			Namespace: s.testNamespace.String(),
+			Operations: []*workflowservice.ExecuteMultiOperationRequest_Operation{
+				{},
+				{},
+			},
+		})
+
+		s.Nil(resp)
+		s.Equal(errMultiOpNotStartAndUpdate, err)
+
+		// 2 Starts
+		resp, err = wh.ExecuteMultiOperation(ctx, &workflowservice.ExecuteMultiOperationRequest{
+			Namespace: s.testNamespace.String(),
+			Operations: []*workflowservice.ExecuteMultiOperationRequest_Operation{
+				newStartOp(validStartReq()), newStartOp(validStartReq()),
+			},
+		})
+
+		s.Nil(resp)
+		s.Equal(errMultiOpNotStartAndUpdate, err)
+
+		// 2 Updates
+		resp, err = wh.ExecuteMultiOperation(ctx, &workflowservice.ExecuteMultiOperationRequest{
+			Namespace: s.testNamespace.String(),
+			Operations: []*workflowservice.ExecuteMultiOperationRequest_Operation{
+				newUpdateOp(validUpdateReq()), newUpdateOp(validUpdateReq()),
+			},
+		})
+
+		s.Nil(resp)
+		s.Equal(errMultiOpNotStartAndUpdate, err)
+	})
+
+	assertMultiOpsErr := func(expectedErrs []error, actual error) {
+		s.Equal("MultiOperation could not be executed.", actual.Error())
+		s.EqualValues(expectedErrs, actual.(*serviceerror.MultiOperationExecution).OperationErrors())
+	}
+
+	s.Run("operation with different workflow ID as previous operation is invalid", func() {
+		updateReq := validUpdateReq()
+		updateReq.WorkflowExecution.WorkflowId = "foo"
+
+		resp, err := wh.ExecuteMultiOperation(ctx, &workflowservice.ExecuteMultiOperationRequest{
+			Namespace: s.testNamespace.String(),
+			Operations: []*workflowservice.ExecuteMultiOperationRequest_Operation{
+				newStartOp(validStartReq()),
+				newUpdateOp(updateReq),
+			},
+		})
+
+		s.Nil(resp)
+		assertMultiOpsErr([]error{errMultiOpAborted, errMultiOpWorkflowIdInconsistent}, err)
+	})
+
+	s.Run("Start operation is validated", func() {
+		// expecting the same validation as for standalone Start operation; only testing one here:
+		s.Run("requires workflow id", func() {
+			startReq := validStartReq()
+			startReq.WorkflowId = ""
+
+			resp, err := wh.ExecuteMultiOperation(ctx, &workflowservice.ExecuteMultiOperationRequest{
+				Namespace: s.testNamespace.String(),
+				Operations: []*workflowservice.ExecuteMultiOperationRequest_Operation{
+					newStartOp(startReq),
+					newUpdateOp(validUpdateReq()),
+				},
+			})
+
+			s.Nil(resp)
+			assertMultiOpsErr([]error{errWorkflowIDNotSet, errMultiOpAborted}, err)
+		})
+
+		// unique to MultiOperation:
+		s.Run("`cron_schedule` is invalid", func() {
+			startReq := validStartReq()
+			startReq.CronSchedule = "0 */12 * * *"
+
+			resp, err := wh.ExecuteMultiOperation(ctx, &workflowservice.ExecuteMultiOperationRequest{
+				Namespace: s.testNamespace.String(),
+				Operations: []*workflowservice.ExecuteMultiOperationRequest_Operation{
+					newStartOp(startReq),
+					newUpdateOp(validUpdateReq()),
+				},
+			})
+
+			s.Nil(resp)
+			assertMultiOpsErr([]error{errMultiOpStartCronSchedule, errMultiOpAborted}, err)
+		})
+
+		// unique to MultiOperation:
+		s.Run("`request_eager_execution` is invalid", func() {
+			startReq := validStartReq()
+			startReq.RequestEagerExecution = true
+
+			resp, err := wh.ExecuteMultiOperation(ctx, &workflowservice.ExecuteMultiOperationRequest{
+				Namespace: s.testNamespace.String(),
+				Operations: []*workflowservice.ExecuteMultiOperationRequest_Operation{
+					newStartOp(startReq),
+					newUpdateOp(validUpdateReq()),
+				},
+			})
+
+			s.Nil(resp)
+			assertMultiOpsErr([]error{errMultiOpEagerWorkflow, errMultiOpAborted}, err)
+		})
+	})
+
+	s.Run("Update operation is validated", func() {
+		// expecting the same validation as for standalone Update operation; only testing a few of the validations here
+		s.Run("requires workflow id", func() {
+			updateReq := validUpdateReq()
+			updateReq.Request.Input = nil
+
+			resp, err := wh.ExecuteMultiOperation(ctx, &workflowservice.ExecuteMultiOperationRequest{
+				Namespace: s.testNamespace.String(),
+				Operations: []*workflowservice.ExecuteMultiOperationRequest_Operation{
+					newStartOp(validStartReq()),
+					newUpdateOp(updateReq),
+				},
+			})
+
+			s.Nil(resp)
+			assertMultiOpsErr([]error{errMultiOpAborted, errUpdateInputNotSet}, err)
+		})
+	})
 }

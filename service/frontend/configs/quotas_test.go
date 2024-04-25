@@ -121,6 +121,7 @@ func (s *quotasSuite) TestVisibilityAPIs() {
 		"/temporal.api.workflowservice.v1.WorkflowService/GetWorkerTaskReachability": {},
 		"/temporal.api.workflowservice.v1.WorkflowService/ListSchedules":             {},
 		"/temporal.api.workflowservice.v1.WorkflowService/ListBatchOperations":       {},
+		"/temporal.api.workflowservice.v1.WorkflowService/DescribeTaskQueue":         {},
 	}
 
 	var service workflowservice.WorkflowServiceServer
@@ -175,6 +176,8 @@ func (s *quotasSuite) TestAllAPIs() {
 	s.Truef(ok, "missing priority for API: %q", DispatchNexusTaskByNamespaceAndTaskQueueAPIName)
 	_, ok = apisWithPriority[DispatchNexusTaskByServiceAPIName]
 	s.Truef(ok, "missing priority for API: %q", DispatchNexusTaskByServiceAPIName)
+	_, ok = apisWithPriority[CompleteNexusOperation]
+	s.Truef(ok, "missing priority for API: %q", CompleteNexusOperation)
 }
 
 func (s *quotasSuite) TestOperatorPriority_Execution() {

@@ -28,6 +28,7 @@ import (
 	"context"
 	"fmt"
 	"math/rand"
+	"reflect"
 	"time"
 
 	"github.com/nexus-rpc/sdk-go/nexus"
@@ -36,6 +37,7 @@ import (
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	failurepb "go.temporal.io/api/failure/v1"
+	"go.temporal.io/api/history/v1"
 	historypb "go.temporal.io/api/history/v1"
 	"go.temporal.io/api/serviceerror"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
@@ -53,6 +55,7 @@ import (
 	historyspb "go.temporal.io/server/api/history/v1"
 	"go.temporal.io/server/api/historyservice/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
+	tokenspb "go.temporal.io/server/api/token/v1"
 	updatespb "go.temporal.io/server/api/update/v1"
 	workflowspb "go.temporal.io/server/api/workflow/v1"
 	"go.temporal.io/server/common"
@@ -75,7 +78,7 @@ import (
 	"go.temporal.io/server/common/searchattribute"
 	"go.temporal.io/server/common/util"
 	"go.temporal.io/server/common/worker_versioning"
-	"go.temporal.io/server/plugins/callbacks"
+	"go.temporal.io/server/components/callbacks"
 	"go.temporal.io/server/service/history/configs"
 	"go.temporal.io/server/service/history/consts"
 	"go.temporal.io/server/service/history/events"
@@ -209,6 +212,9 @@ type (
 		logger           log.Logger
 		metricsHandler   metrics.Handler
 		stateMachineNode *hsm.Node
+
+		// Tracks all events added via the AddHistoryEvent method that is used by the state machine framework.
+		currentTransactionAddedStateMachineEventTypes []enumspb.EventType
 	}
 )
 
@@ -494,7 +500,7 @@ func NewMutableStateInChain(
 
 func (ms *MutableStateImpl) mustInitHSM() {
 	// Error only occurs if some initialization path forgets to register the workflow state machine.
-	stateMachineNode, err := hsm.NewRoot(ms.shard.StateMachineRegistry(), StateMachineType.ID, ms, ms.executionInfo.SubStateMachinesByType)
+	stateMachineNode, err := hsm.NewRoot(ms.shard.StateMachineRegistry(), StateMachineType.ID, ms, ms.executionInfo.SubStateMachinesByType, ms)
 	if err != nil {
 		panic(err)
 	}
@@ -800,6 +806,66 @@ func (ms *MutableStateImpl) GetNamespaceEntry() *namespace.Namespace {
 	return ms.namespaceEntry
 }
 
+// AddHistoryEvent adds any history event to this workflow execution.
+// The provided setAttributes function should be used to set the attributes on the event.
+func (ms *MutableStateImpl) AddHistoryEvent(t enumspb.EventType, setAttributes func(*history.HistoryEvent)) *history.HistoryEvent {
+	event := ms.hBuilder.AddHistoryEvent(t, setAttributes)
+	ms.writeEventToCache(event)
+	ms.currentTransactionAddedStateMachineEventTypes = append(ms.currentTransactionAddedStateMachineEventTypes, t)
+	return event
+}
+
+func (ms *MutableStateImpl) GenerateEventLoadToken(event *history.HistoryEvent) ([]byte, error) {
+	attrs := reflect.ValueOf(event.Attributes).Elem()
+
+	// Attributes is always a struct with a single field (e.g: HistoryEvent_NexusOperationScheduledEventAttributes)
+	if attrs.Kind() != reflect.Struct || attrs.NumField() != 1 {
+		return nil, serviceerror.NewInternal(fmt.Sprintf("got an invalid event structure: %v", event.EventType))
+	}
+
+	f := attrs.Field(0).Interface()
+
+	var eventBatchID int64
+	if getter, ok := f.(interface{ GetWorkflowTaskCompletedEventId() int64 }); ok {
+		// Command-Events always have a WorkflowTaskCompletedEventId field that is equal to the batch ID.
+		eventBatchID = getter.GetWorkflowTaskCompletedEventId()
+	} else if attrs := event.GetWorkflowExecutionStartedEventAttributes(); attrs != nil {
+		// WFEStarted is always stored in the first batch of events.
+		eventBatchID = 1
+	} else {
+		// By default events aren't referenceable as they may end up buffered.
+		// This limitation may be relaxed later and the platform would need a way to fix references to buffered events.
+		return nil, serviceerror.NewInternal(fmt.Sprintf("cannot reference event: %v", event.EventType))
+	}
+	ref := &tokenspb.HistoryEventRef{
+		EventId:      event.EventId,
+		EventBatchId: eventBatchID,
+	}
+	return proto.Marshal(ref)
+}
+
+func (ms *MutableStateImpl) LoadHistoryEvent(ctx context.Context, token []byte) (*historypb.HistoryEvent, error) {
+	ref := &tokenspb.HistoryEventRef{}
+	err := proto.Unmarshal(token, ref)
+	if err != nil {
+		return nil, err
+	}
+	branchToken, version, err := ms.getCurrentBranchTokenAndEventVersion(ref.EventId)
+	if err != nil {
+		return nil, err
+	}
+	wfKey := ms.GetWorkflowKey()
+	eventKey := events.EventKey{
+		NamespaceID: namespace.ID(wfKey.NamespaceID),
+		WorkflowID:  wfKey.WorkflowID,
+		RunID:       wfKey.RunID,
+		EventID:     ref.EventId,
+		Version:     version,
+	}
+
+	return ms.eventsCache.GetEvent(ctx, ms.shard.GetShardID(), eventKey, ref.EventBatchId, branchToken)
+}
+
 func (ms *MutableStateImpl) CurrentTaskQueue() *taskqueuepb.TaskQueue {
 	if ms.IsStickyTaskQueueSet() {
 		return &taskqueuepb.TaskQueue{
@@ -829,20 +895,31 @@ func (ms *MutableStateImpl) IsStickyTaskQueueSet() bool {
 }
 
 // TaskQueueScheduleToStartTimeout returns TaskQueue struct and corresponding StartToClose timeout.
-// Task queue kind (sticky or normal) and timeout are set based on comparison of normal task queue name
+// Task queue kind (sticky or normal) is set based on comparison of normal task queue name
 // in mutable state and provided name.
-func (ms *MutableStateImpl) TaskQueueScheduleToStartTimeout(name string) (*taskqueuepb.TaskQueue, *durationpb.Duration) {
-	if ms.executionInfo.TaskQueue != name {
+// ScheduleToStartTimeout is set based on queue kind and workflow task type.
+func (ms *MutableStateImpl) TaskQueueScheduleToStartTimeout(tqName string) (*taskqueuepb.TaskQueue, *durationpb.Duration) {
+	isStickyTq := ms.executionInfo.StickyTaskQueue == tqName
+	if isStickyTq {
 		return &taskqueuepb.TaskQueue{
 			Name:       ms.executionInfo.StickyTaskQueue,
 			Kind:       enumspb.TASK_QUEUE_KIND_STICKY,
 			NormalName: ms.executionInfo.TaskQueue,
 		}, ms.executionInfo.StickyScheduleToStartTimeout
 	}
-	return &taskqueuepb.TaskQueue{
+
+	// If tqName is normal task queue name.
+	normalTq := &taskqueuepb.TaskQueue{
 		Name: ms.executionInfo.TaskQueue,
 		Kind: enumspb.TASK_QUEUE_KIND_NORMAL,
-	}, ms.executionInfo.WorkflowRunTimeout // No WT ScheduleToStart timeout for normal task queue.
+	}
+	if ms.executionInfo.WorkflowTaskType == enumsspb.WORKFLOW_TASK_TYPE_SPECULATIVE {
+		// Speculative WFT has ScheduleToStartTimeout even on normal task queue.
+		// See comment in GenerateScheduleSpeculativeWorkflowTaskTasks for details.
+		return normalTq, durationpb.New(tasks.SpeculativeWorkflowTaskScheduleToStartTimeout)
+	}
+	// No WFT ScheduleToStart timeout for normal WFT on normal task queue.
+	return normalTq, ms.executionInfo.WorkflowRunTimeout
 }
 
 func (ms *MutableStateImpl) GetWorkflowType() *commonpb.WorkflowType {
@@ -3790,10 +3867,10 @@ func (ms *MutableStateImpl) ApplyWorkflowExecutionUpdateAdmittedEvent(event *his
 		ms.executionInfo.UpdateInfos = make(map[string]*updatespb.UpdateInfo, 1)
 	}
 	updateID := attrs.GetRequest().GetMeta().GetUpdateId()
-	request := &updatespb.UpdateInfo_Request{
-		Request: &updatespb.RequestInfo{
-			Location: &updatespb.RequestInfo_HistoryPointer_{
-				HistoryPointer: &updatespb.RequestInfo_HistoryPointer{
+	admission := &updatespb.UpdateInfo_Admission{
+		Admission: &updatespb.AdmissionInfo{
+			Location: &updatespb.AdmissionInfo_HistoryPointer_{
+				HistoryPointer: &updatespb.AdmissionInfo_HistoryPointer{
 					EventId:      event.EventId,
 					EventBatchId: batchId,
 				},
@@ -3801,9 +3878,9 @@ func (ms *MutableStateImpl) ApplyWorkflowExecutionUpdateAdmittedEvent(event *his
 		},
 	}
 	if _, ok := ms.executionInfo.UpdateInfos[updateID]; ok {
-		return serviceerror.NewInternal(fmt.Sprintf("Update ID %s is already present in registry", updateID))
+		return serviceerror.NewInternal(fmt.Sprintf("Update ID %s is already present in mutable state", updateID))
 	}
-	ui := updatespb.UpdateInfo{Value: request}
+	ui := updatespb.UpdateInfo{Value: admission}
 	ms.executionInfo.UpdateInfos[updateID] = &ui
 	ms.executionInfo.UpdateCount++
 	sizeDelta := ui.Size() + len(updateID)
@@ -4995,8 +5072,24 @@ func (ms *MutableStateImpl) prepareCloseTransaction(
 	if err := ms.taskGenerator.GenerateDirtySubStateMachineTasks(ms.shard.StateMachineRegistry()); err != nil {
 		return err
 	}
-	// Clear outputs for the next transaction.
-	ms.stateMachineNode.ClearTransactionState()
+
+	for _, t := range ms.currentTransactionAddedStateMachineEventTypes {
+		def, ok := ms.shard.StateMachineRegistry().EventDefinition(t)
+		if !ok {
+			return serviceerror.NewInternal(fmt.Sprintf("no event definition registered for %v", t))
+		}
+		if def.IsWorkflowTaskTrigger() {
+			if !ms.HasPendingWorkflowTask() {
+				if _, err := ms.AddWorkflowTaskScheduledEvent(
+					false,
+					enumsspb.WORKFLOW_TASK_TYPE_NORMAL,
+				); err != nil {
+					return err
+				}
+			}
+			break
+		}
+	}
 
 	ms.closeTransactionCollapseVisibilityTasks()
 
@@ -5011,7 +5104,6 @@ func (ms *MutableStateImpl) prepareCloseTransaction(
 func (ms *MutableStateImpl) cleanupTransaction(
 	_ TransactionPolicy,
 ) error {
-
 	ms.updateActivityInfos = make(map[int64]*persistencespb.ActivityInfo)
 	ms.deleteActivityInfos = make(map[int64]struct{})
 	ms.syncActivityTasks = make(map[int64]struct{})
@@ -5045,6 +5137,11 @@ func (ms *MutableStateImpl) cleanupTransaction(
 	)
 
 	ms.InsertTasks = make(map[tasks.Category][]tasks.Task)
+
+	// Clear outputs for the next transaction.
+	ms.stateMachineNode.ClearTransactionState()
+	// Clear out transient state machine state.
+	ms.currentTransactionAddedStateMachineEventTypes = nil
 
 	return nil
 }

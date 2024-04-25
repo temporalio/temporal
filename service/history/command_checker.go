@@ -45,6 +45,7 @@ import (
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/primitives/timestamp"
+	"go.temporal.io/server/common/retrypolicy"
 	"go.temporal.io/server/common/searchattribute"
 	"go.temporal.io/server/common/timer"
 	"go.temporal.io/server/service/history/configs"
@@ -849,9 +850,9 @@ func (v *commandAttrValidator) validateActivityRetryPolicy(
 		attributes.RetryPolicy = &commonpb.RetryPolicy{}
 	}
 
-	defaultActivityRetrySettings := common.FromConfigToDefaultRetrySettings(v.getDefaultActivityRetrySettings(namespaceID.String()))
-	common.EnsureRetryPolicyDefaults(attributes.RetryPolicy, defaultActivityRetrySettings)
-	return common.ValidateRetryPolicy(attributes.RetryPolicy)
+	defaultActivityRetrySettings := retrypolicy.FromConfigToDefault(v.getDefaultActivityRetrySettings(namespaceID.String()))
+	retrypolicy.EnsureDefaults(attributes.RetryPolicy, defaultActivityRetrySettings)
+	return retrypolicy.Validate(attributes.RetryPolicy)
 }
 
 func (v *commandAttrValidator) validateWorkflowRetryPolicy(
@@ -864,9 +865,9 @@ func (v *commandAttrValidator) validateWorkflowRetryPolicy(
 	}
 
 	// Otherwise, for any unset fields on the retry policy, set with defaults
-	defaultWorkflowRetrySettings := common.FromConfigToDefaultRetrySettings(v.getDefaultWorkflowRetrySettings(namespaceName.String()))
-	common.EnsureRetryPolicyDefaults(retryPolicy, defaultWorkflowRetrySettings)
-	return common.ValidateRetryPolicy(retryPolicy)
+	defaultWorkflowRetrySettings := retrypolicy.FromConfigToDefault(v.getDefaultWorkflowRetrySettings(namespaceName.String()))
+	retrypolicy.EnsureDefaults(retryPolicy, defaultWorkflowRetrySettings)
+	return retrypolicy.Validate(retryPolicy)
 }
 
 func (v *commandAttrValidator) validateCrossNamespaceCall(
@@ -943,7 +944,9 @@ func (v *commandAttrValidator) validateCommandSequence(
 			enumspb.COMMAND_TYPE_START_CHILD_WORKFLOW_EXECUTION,
 			enumspb.COMMAND_TYPE_UPSERT_WORKFLOW_SEARCH_ATTRIBUTES,
 			enumspb.COMMAND_TYPE_MODIFY_WORKFLOW_PROPERTIES,
-			enumspb.COMMAND_TYPE_PROTOCOL_MESSAGE:
+			enumspb.COMMAND_TYPE_PROTOCOL_MESSAGE,
+			enumspb.COMMAND_TYPE_SCHEDULE_NEXUS_OPERATION,
+			enumspb.COMMAND_TYPE_REQUEST_CANCEL_NEXUS_OPERATION:
 			// noop
 		case enumspb.COMMAND_TYPE_CONTINUE_AS_NEW_WORKFLOW_EXECUTION,
 			enumspb.COMMAND_TYPE_COMPLETE_WORKFLOW_EXECUTION,
@@ -951,6 +954,8 @@ func (v *commandAttrValidator) validateCommandSequence(
 			enumspb.COMMAND_TYPE_CANCEL_WORKFLOW_EXECUTION:
 			closeCommand = command.GetCommandType()
 		default:
+			// The default is to fail with invalid argument to force authors of new commands to consider whether it's a
+			// close command however unlikely that may be.
 			return serviceerror.NewInvalidArgument(fmt.Sprintf("unknown command type: %v", command.GetCommandType()))
 		}
 	}

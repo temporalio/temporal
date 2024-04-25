@@ -25,9 +25,6 @@
 package dynamicconfig
 
 import (
-	"math/rand"
-
-	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/primitives"
 )
 
@@ -76,7 +73,7 @@ var defaultNumTaskQueuePartitions = []ConstrainedValue{
 	},
 }
 
-var DefaultPerShardNamespaceRPSMax = GetIntPropertyFilteredByNamespace(0)
+var DefaultPerShardNamespaceRPSMax = GetIntPropertyFnFilteredByNamespace(0)
 
 const (
 	// dynamic config map keys and defaults for client.DynamicRateLimitingParams for controlling dynamic rate limiting options
@@ -116,15 +113,4 @@ var DefaultDynamicRateLimitingParams = map[string]interface{}{
 	dynamicRateLimitIncreaseStepSizeKey: dynamicRateLimitIncreaseStepSizeDefault,
 	dynamicRateLimitMultiMinKey:         dynamicRateLimitMultiMinDefault,
 	dynamicRateLimitMultiMaxKey:         dynamicRateLimitMultiMaxDefault,
-}
-
-// AccessHistory is an interim config helper for dialing fraction of FE->History calls
-// DEPRECATED: Remove once migration is complete
-func AccessHistory(accessHistoryFraction FloatPropertyFn, metricsHandler metrics.Handler) bool {
-	if rand.Float64() < accessHistoryFraction() {
-		metricsHandler.Counter(metrics.AccessHistoryNew).Record(1)
-		return true
-	}
-	metricsHandler.Counter(metrics.AccessHistoryOld).Record(1)
-	return false
 }

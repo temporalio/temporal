@@ -65,6 +65,21 @@ func (c *retryableClient) CloseShard(
 	return resp, err
 }
 
+func (c *retryableClient) CompleteNexusOperation(
+	ctx context.Context,
+	request *historyservice.CompleteNexusOperationRequest,
+	opts ...grpc.CallOption,
+) (*historyservice.CompleteNexusOperationResponse, error) {
+	var resp *historyservice.CompleteNexusOperationResponse
+	op := func(ctx context.Context) error {
+		var err error
+		resp, err = c.client.CompleteNexusOperation(ctx, request, opts...)
+		return err
+	}
+	err := backoff.ThrottleRetryContext(ctx, op, c.policy, c.isRetryable)
+	return resp, err
+}
+
 func (c *retryableClient) DeleteDLQTasks(
 	ctx context.Context,
 	request *historyservice.DeleteDLQTasksRequest,

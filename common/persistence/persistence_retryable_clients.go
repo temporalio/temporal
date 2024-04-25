@@ -1220,19 +1220,6 @@ func (p *nexusIncomingServiceRetryablePersistenceClient) Close() {
 	p.persistence.Close()
 }
 
-func (p *nexusIncomingServiceRetryablePersistenceClient) GetNexusIncomingServicesTableVersion(
-	ctx context.Context,
-) (int64, error) {
-	var response int64
-	op := func(ctx context.Context) error {
-		var err error
-		response, err = p.persistence.GetNexusIncomingServicesTableVersion(ctx)
-		return err
-	}
-	err := backoff.ThrottleRetryContext(ctx, op, p.policy, p.isRetryable)
-	return response, err
-}
-
 func (p *nexusIncomingServiceRetryablePersistenceClient) GetNexusIncomingService(
 	ctx context.Context,
 	request *GetNexusIncomingServiceRequest,

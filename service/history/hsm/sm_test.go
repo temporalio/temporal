@@ -53,7 +53,7 @@ func (d *data) SetState(s state) {
 	d.state = s
 }
 
-func (d *data) RegenerateTasks() ([]hsm.Task, error) {
+func (d *data) RegenerateTasks(*hsm.Node) ([]hsm.Task, error) {
 	panic("not implemented")
 }
 

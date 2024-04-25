@@ -38,7 +38,7 @@ import (
 )
 
 type outboundQueueActiveTaskExecutor struct {
-	taskExecutor
+	stateMachineEnvironment
 }
 
 var _ queues.Executor = &outboundQueueActiveTaskExecutor{}
@@ -50,7 +50,7 @@ func newOutboundQueueActiveTaskExecutor(
 	metricsHandler metrics.Handler,
 ) *outboundQueueActiveTaskExecutor {
 	return &outboundQueueActiveTaskExecutor{
-		taskExecutor: taskExecutor{
+		stateMachineEnvironment: stateMachineEnvironment{
 			shardContext:   shardCtx,
 			cache:          workflowCache,
 			logger:         logger,

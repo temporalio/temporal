@@ -35,7 +35,4 @@ const (
 	// namespaces. Allow short values but disallow zero to avoid confusion with
 	// interpreting zero as infinite.
 	MinRetentionLocal = 1 * time.Hour
-
-	// MaxBadBinaries is the maximal number of bad client binaries stored in a namespace
-	MaxBadBinaries = 10
 )

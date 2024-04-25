@@ -23,6 +23,9 @@
 package history
 
 import (
+	"fmt"
+
+	"github.com/sony/gobreaker"
 	"go.uber.org/fx"
 
 	"go.temporal.io/server/common/collection"
@@ -50,6 +53,8 @@ type groupLimiter struct {
 	key queues.StateMachineTaskTypeNamespaceIDAndDestination
 }
 
+var _ ctasks.DynamicWorkerPoolLimiter = (*groupLimiter)(nil)
+
 func (groupLimiter) BufferSize() int {
 	return 100
 }
@@ -57,8 +62,6 @@ func (groupLimiter) BufferSize() int {
 func (groupLimiter) Concurrency() int {
 	return 100
 }
-
-var _ ctasks.DynamicWorkerPoolLimiter = groupLimiter{}
 
 type outboundQueueFactory struct {
 	outboundQueueFactoryParams
@@ -70,10 +73,27 @@ type outboundQueueFactory struct {
 }
 
 func NewOutboundQueueFactory(params outboundQueueFactoryParams) QueueFactory {
-	rateLimiterPool := collection.NewOnceMap(func(queues.StateMachineTaskTypeNamespaceIDAndDestination) quotas.RateLimiter {
-		// TODO: get this value from dynamic config.
-		return quotas.NewDefaultOutgoingRateLimiter(func() float64 { return 100.0 })
-	})
+	rateLimiterPool := collection.NewOnceMap(
+		func(queues.StateMachineTaskTypeNamespaceIDAndDestination) quotas.RateLimiter {
+			// TODO: get this value from dynamic config.
+			return quotas.NewDefaultOutgoingRateLimiter(func() float64 { return 100.0 })
+		},
+	)
+	circuitBreakerPool := collection.NewOnceMap(
+		func(key queues.StateMachineTaskTypeNamespaceIDAndDestination) *gobreaker.TwoStepCircuitBreaker {
+			// TODO: get circuit breaker settings from dynamic config.
+			return gobreaker.NewTwoStepCircuitBreaker(
+				gobreaker.Settings{
+					Name: fmt.Sprintf(
+						"circuit_breaker:%d.%s.%s",
+						key.StateMachineTaskType,
+						key.NamespaceID,
+						key.Destination,
+					),
+				},
+			)
+		},
+	)
 	grouper := queues.GrouperStateMachineNamespaceIDAndDestination{}
 	f := &outboundQueueFactory{
 		outboundQueueFactoryParams: params,
@@ -86,19 +106,27 @@ func NewOutboundQueueFactory(params outboundQueueFactoryParams) QueueFactory {
 			int64(params.Config.OutboundQueueMaxReaderCount()),
 		),
 		hostScheduler: &queues.CommonSchedulerWrapper{
-			Scheduler: ctasks.NewGroupByScheduler[queues.StateMachineTaskTypeNamespaceIDAndDestination, queues.Executable](
-				ctasks.GroupBySchedulerOptions[queues.StateMachineTaskTypeNamespaceIDAndDestination, queues.Executable]{
+			Scheduler: ctasks.NewGroupByScheduler(
+				ctasks.GroupBySchedulerOptions[
+					queues.StateMachineTaskTypeNamespaceIDAndDestination,
+					queues.Executable,
+				]{
 					Logger: params.Logger,
 					KeyFn: func(e queues.Executable) queues.StateMachineTaskTypeNamespaceIDAndDestination {
 						return grouper.KeyTyped(e.GetTask())
 					},
 					RunnableFactory: func(e queues.Executable) ctasks.Runnable {
+						key := grouper.KeyTyped(e.GetTask())
 						return ctasks.RateLimitedTaskRunnable{
-							Limiter:  rateLimiterPool.Get(grouper.KeyTyped(e.GetTask())),
-							Runnable: ctasks.RunnableTask{Task: e},
+							Limiter: rateLimiterPool.Get(key),
+							Runnable: ctasks.RunnableTask{
+								Task: queues.NewCircuitBreakerExecutable(e, circuitBreakerPool.Get(key)),
+							},
 						}
 					},
-					SchedulerFactory: func(key queues.StateMachineTaskTypeNamespaceIDAndDestination) ctasks.RunnableScheduler {
+					SchedulerFactory: func(
+						key queues.StateMachineTaskTypeNamespaceIDAndDestination,
+					) ctasks.RunnableScheduler {
 						return ctasks.NewDynamicWorkerPoolScheduler(groupLimiter{key})
 					},
 				},
