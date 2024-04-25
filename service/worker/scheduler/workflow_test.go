@@ -2040,6 +2040,67 @@ func (s *workflowSuite) TestCANBySuggested() {
 	s.True(workflow.IsContinueAsNewError(s.env.GetWorkflowError()))
 }
 
+func (s *workflowSuite) TestCANBySuggestedWithSignals() {
+	// TODO: remove once default version is UpdateFromPrevious
+	prevTweakables := currentTweakablePolicies
+	currentTweakablePolicies.Version = CANAfterSignals
+	defer func() { currentTweakablePolicies = prevTweakables }()
+
+	// written using low-level mocks so we can control iteration count
+
+	runs := []time.Duration{
+		1 * time.Minute,
+		2 * time.Minute,
+		3 * time.Minute,
+		5 * time.Minute, // suggestCAN will be true for this signal
+		8 * time.Minute, // this one won't be reached
+	}
+	suggestCANAt := 4 * time.Minute
+	for _, d := range runs {
+		t := baseStartTime.Add(d)
+		s.expectStart(func(req *schedspb.StartWorkflowRequest) (*schedspb.StartWorkflowResponse, error) {
+			s.Equal("myid-"+t.Format(time.RFC3339), req.Request.WorkflowId)
+			return nil, nil
+		})
+		if d > suggestCANAt {
+			// the first one after the CAN flag is flipped will run, further ones will not
+			break
+		}
+	}
+	s.expectStart(func(req *schedspb.StartWorkflowRequest) (*schedspb.StartWorkflowResponse, error) {
+		s.Fail("too many starts", req.Request.WorkflowId)
+		return nil, nil
+	}).Times(0).Maybe()
+
+	s.env.RegisterDelayedCallback(func() {
+		s.env.SetContinueAsNewSuggested(true)
+	}, suggestCANAt)
+
+	for _, d := range runs {
+		s.env.RegisterDelayedCallback(func() {
+			s.env.SignalWorkflow(SignalNamePatch, &schedpb.SchedulePatch{
+				TriggerImmediately: &schedpb.TriggerImmediatelyRequest{},
+			})
+		}, d)
+	}
+
+	s.run(&schedpb.Schedule{
+		Spec: &schedpb.ScheduleSpec{
+			Interval: []*schedpb.IntervalSpec{{
+				Interval: durationpb.New(100 * time.Minute),
+			}},
+		},
+		Policies: &schedpb.SchedulePolicies{
+			OverlapPolicy: enumspb.SCHEDULE_OVERLAP_POLICY_ALLOW_ALL,
+		},
+		State: &schedpb.ScheduleState{
+			Paused: true,
+		},
+	}, 0) // 0 means use suggested
+	s.True(s.env.IsWorkflowCompleted())
+	s.True(workflow.IsContinueAsNewError(s.env.GetWorkflowError()))
+}
+
 func (s *workflowSuite) TestCANBySignal() {
 	// written using low-level mocks so we can control iteration count
 
