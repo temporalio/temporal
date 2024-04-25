@@ -165,7 +165,11 @@ func (r *StreamReceiverImpl) sendEventLoop() error {
 		case <-timer.C:
 			timer.Reset(r.Config.ReplicationStreamSyncStatusDuration())
 			if err := r.ackMessage(r.stream); err != nil {
-				r.logger.Error("StreamReceiver exit send loop", tag.Error(err))
+				if IsStreamError(err) {
+					r.logger.Error("ReplicationStreamError StreamReceiver exit send loop", tag.Error(err))
+				} else {
+					r.logger.Error("ReplicationServiceError StreamReceiver exit send loop", tag.Error(err))
+				}
 				return err
 			}
 		case <-r.shutdownChan.Channel():
@@ -184,8 +188,14 @@ func (r *StreamReceiverImpl) recvEventLoop() error {
 	defer log.CapturePanic(r.logger, &panicErr)
 
 	err := r.processMessages(r.stream)
-
-	r.logger.Error("StreamReceiver exit recv loop", tag.Error(err))
+	if err == nil {
+		return nil
+	}
+	if IsStreamError(err) {
+		r.logger.Error("ReplicationStreamError StreamReceiver exit recv loop", tag.Error(err))
+	} else {
+		r.logger.Error("ReplicationServiceError StreamReceiver exit recv loop", tag.Error(err))
+	}
 	return err
 }
 
