@@ -40,6 +40,8 @@ import (
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	"go.temporal.io/api/workflowservice/v1"
 
+	"go.temporal.io/server/common/dynamicconfig"
+
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/api/matchingservice/v1"
@@ -306,8 +308,10 @@ func (handler *workflowTaskHandlerCallbacksImpl) handleWorkflowTaskStarted(
 		return nil, err
 	}
 
-	maxHistoryPageSize := int32(handler.config.HistoryMaxPageSize(namespaceEntry.Name().String()))
-	err = handler.setHistoryForRecordWfTaskStartedResp(ctx, workflowKey, maxHistoryPageSize, resp)
+	if dynamicconfig.AccessHistory(handler.config.FrontendAccessHistoryFraction, handler.metricsHandler.WithTags(metrics.OperationTag(metrics.HistoryHandleWorkflowTaskStartedTag))) {
+		maxHistoryPageSize := int32(handler.config.HistoryMaxPageSize(namespaceEntry.Name().String()))
+		err = handler.setHistoryForRecordWfTaskStartedResp(ctx, workflowKey, maxHistoryPageSize, resp)
+	}
 	if err != nil {
 		return nil, err
 	}
