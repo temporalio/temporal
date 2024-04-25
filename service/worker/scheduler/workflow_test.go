@@ -2041,7 +2041,7 @@ func (s *workflowSuite) TestCANBySuggested() {
 }
 
 func (s *workflowSuite) TestCANBySuggestedWithSignals() {
-	// TODO: remove once default version is UpdateFromPrevious
+	// TODO: remove once default version is CANAfterSignals
 	prevTweakables := currentTweakablePolicies
 	currentTweakablePolicies.Version = CANAfterSignals
 	defer func() { currentTweakablePolicies = prevTweakables }()
