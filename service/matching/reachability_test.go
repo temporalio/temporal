@@ -26,8 +26,6 @@ package matching
 
 import (
 	"context"
-	"go.temporal.io/server/common/metrics"
-	"go.temporal.io/server/common/metrics/metricstest"
 	"slices"
 	"testing"
 	"time"
@@ -39,6 +37,8 @@ import (
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	commonclock "go.temporal.io/server/common/clock"
 	hlc "go.temporal.io/server/common/clock/hybrid_logical_clock"
+	"go.temporal.io/server/common/metrics"
+	"go.temporal.io/server/common/metrics/metricstest"
 	"go.temporal.io/server/common/persistence/visibility/manager"
 )
 
@@ -322,7 +322,7 @@ func checkReachability(ctx context.Context,
 	counterRecordings := snapshot[metrics.ReachabilityExitPointCounter.Name()]
 	assert.Equal(t, len(counterRecordings), 1)
 	assert.Equal(t, int64(1), counterRecordings[0].Value.(int64))
-	assert.Equal(t, reachabilityExitPoint2TagValue[exitPoint], counterRecordings[0].Tags[reachabilityExitPointTagName])
+	assert.Equal(t, reachabilityExitPoint2TagValue[expectedExitPoint], counterRecordings[0].Tags[reachabilityExitPointTagName])
 }
 
 func setVisibilityExpect(t *testing.T,
