@@ -42,3 +42,10 @@ var RouteDispatchNexusTaskByService = routing.NewBuilder[string]().
 	StringVariable("service", func(service *string) *string { return service }).
 	Constant("operations").
 	Build()
+
+// RouteCompletionCallback is an HTTP route for completing a Nexus operation via callback.
+var RouteCompletionCallback = routing.NewBuilder[string]().
+	Constant("api", "v1", "namespaces").
+	StringVariable("namespace", func(namespace *string) *string { return namespace }).
+	Constant("nexus", "callback").
+	Build()

@@ -423,7 +423,15 @@ func (t *serializerImpl) WorkflowExecutionInfoToBlob(info *persistencespb.Workfl
 
 func (t *serializerImpl) WorkflowExecutionInfoFromBlob(data *commonpb.DataBlob) (*persistencespb.WorkflowExecutionInfo, error) {
 	result := &persistencespb.WorkflowExecutionInfo{}
-	return result, ProtoDecodeBlob(data, result)
+	err := ProtoDecodeBlob(data, result)
+	if err != nil {
+		return nil, err
+	}
+	// Proto serialization replaces empty maps with nils, ensure this map is never nil.
+	if result.SubStateMachinesByType == nil {
+		result.SubStateMachinesByType = make(map[int32]*persistencespb.StateMachineMap)
+	}
+	return result, nil
 }
 
 func (t *serializerImpl) WorkflowExecutionStateToBlob(info *persistencespb.WorkflowExecutionState, encodingType enumspb.EncodingType) (*commonpb.DataBlob, error) {

@@ -101,6 +101,26 @@ func (mr *MockHistoryServiceClientMockRecorder) CloseShard(ctx, in interface{}, 
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CloseShard", reflect.TypeOf((*MockHistoryServiceClient)(nil).CloseShard), varargs...)
 }
 
+// CompleteNexusOperation mocks base method.
+func (m *MockHistoryServiceClient) CompleteNexusOperation(ctx context.Context, in *historyservice.CompleteNexusOperationRequest, opts ...grpc.CallOption) (*historyservice.CompleteNexusOperationResponse, error) {
+	m.ctrl.T.Helper()
+	varargs := []interface{}{ctx, in}
+	for _, a := range opts {
+		varargs = append(varargs, a)
+	}
+	ret := m.ctrl.Call(m, "CompleteNexusOperation", varargs...)
+	ret0, _ := ret[0].(*historyservice.CompleteNexusOperationResponse)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// CompleteNexusOperation indicates an expected call of CompleteNexusOperation.
+func (mr *MockHistoryServiceClientMockRecorder) CompleteNexusOperation(ctx, in interface{}, opts ...interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	varargs := append([]interface{}{ctx, in}, opts...)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CompleteNexusOperation", reflect.TypeOf((*MockHistoryServiceClient)(nil).CompleteNexusOperation), varargs...)
+}
+
 // DeleteDLQTasks mocks base method.
 func (m *MockHistoryServiceClient) DeleteDLQTasks(ctx context.Context, in *historyservice.DeleteDLQTasksRequest, opts ...grpc.CallOption) (*historyservice.DeleteDLQTasksResponse, error) {
 	m.ctrl.T.Helper()
@@ -1489,6 +1509,21 @@ func (m *MockHistoryServiceServer) CloseShard(arg0 context.Context, arg1 *histor
 func (mr *MockHistoryServiceServerMockRecorder) CloseShard(arg0, arg1 interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CloseShard", reflect.TypeOf((*MockHistoryServiceServer)(nil).CloseShard), arg0, arg1)
+}
+
+// CompleteNexusOperation mocks base method.
+func (m *MockHistoryServiceServer) CompleteNexusOperation(arg0 context.Context, arg1 *historyservice.CompleteNexusOperationRequest) (*historyservice.CompleteNexusOperationResponse, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "CompleteNexusOperation", arg0, arg1)
+	ret0, _ := ret[0].(*historyservice.CompleteNexusOperationResponse)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// CompleteNexusOperation indicates an expected call of CompleteNexusOperation.
+func (mr *MockHistoryServiceServerMockRecorder) CompleteNexusOperation(arg0, arg1 interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CompleteNexusOperation", reflect.TypeOf((*MockHistoryServiceServer)(nil).CompleteNexusOperation), arg0, arg1)
 }
 
 // DeleteDLQTasks mocks base method.
