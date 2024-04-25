@@ -438,6 +438,8 @@ func (s *streamBasedReplicationTestSuite) TestForceReplicateResetWorkflow_BaseWo
 	})
 	s.NoError(err)
 
+	time.Sleep(time.Second)
+
 	_, err = client2.DescribeWorkflowExecution(tests.NewContext(), &workflowservice.DescribeWorkflowExecutionRequest{
 		Namespace: ns,
 		Execution: &commonpb.WorkflowExecution{
