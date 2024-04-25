@@ -26,6 +26,8 @@ package matching
 
 import (
 	"context"
+	"go.temporal.io/server/common/metrics"
+	"go.temporal.io/server/common/metrics/metricstest"
 	"slices"
 	"testing"
 	"time"
@@ -302,12 +304,25 @@ func checkReachability(ctx context.Context,
 	rc *reachabilityCalculator,
 	buildId string,
 	expectedReachability enumspb.BuildIdTaskReachability,
-	expectedCalcStage reachabilityCalcStage,
+	expectedExitPoint reachabilityExitPoint,
 ) {
-	reachability, calcStage, err := rc.run(ctx, buildId)
+	// check that rc.run works, and returns expected exit point
+	reachability, exitPoint, err := rc.run(ctx, buildId)
 	assert.Nil(t, err)
 	assert.Equal(t, expectedReachability, reachability)
-	assert.Equal(t, expectedCalcStage, calcStage)
+	assert.Equal(t, expectedExitPoint, exitPoint)
+
+	// check that getBuildIdTaskReachability works for getting snapshots of metrics
+	captureHandler := metricstest.NewCaptureHandler()
+	capture := captureHandler.StartCapture()
+	reachability, err = getBuildIdTaskReachability(ctx, rc, captureHandler, buildId)
+	assert.Nil(t, err)
+	assert.Equal(t, expectedReachability, reachability)
+	snapshot := capture.Snapshot()
+	counterRecordings := snapshot[metrics.ReachabilityExitPointCounter.Name()]
+	assert.Equal(t, len(counterRecordings), 1)
+	assert.Equal(t, int64(1), counterRecordings[0].Value.(int64))
+	assert.Equal(t, reachabilityExitPoint2TagValue[exitPoint], counterRecordings[0].Tags[reachabilityExitPointTagName])
 }
 
 func setVisibilityExpect(t *testing.T,
@@ -315,8 +330,8 @@ func setVisibilityExpect(t *testing.T,
 	buildIdsOfInterest []string,
 	countOpen, countClosed int64) {
 	vm := manager.NewMockVisibilityManager(gomock.NewController(t))
-	vm.EXPECT().CountWorkflowExecutions(gomock.Any(), rc.makeBuildIdCountRequest(buildIdsOfInterest, true)).MaxTimes(1).Return(mkCountResponse(countOpen))
-	vm.EXPECT().CountWorkflowExecutions(gomock.Any(), rc.makeBuildIdCountRequest(buildIdsOfInterest, false)).MaxTimes(1).Return(mkCountResponse(countClosed))
+	vm.EXPECT().CountWorkflowExecutions(gomock.Any(), rc.makeBuildIdCountRequest(buildIdsOfInterest, true)).MaxTimes(2).Return(mkCountResponse(countOpen))
+	vm.EXPECT().CountWorkflowExecutions(gomock.Any(), rc.makeBuildIdCountRequest(buildIdsOfInterest, false)).MaxTimes(2).Return(mkCountResponse(countClosed))
 	rc.visibilityMgr = vm
 }
 

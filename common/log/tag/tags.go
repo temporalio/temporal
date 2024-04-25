@@ -347,6 +347,16 @@ func WorkflowEventCount(eventCount int) ZapTag {
 	return NewInt("wf-event-count", eventCount)
 }
 
+// WorkerVersioningAssignmentRuleCount returns tag for AssignmentRuleCount
+func WorkerVersioningAssignmentRuleCount(assignmentRuleCount int) ZapTag {
+	return NewInt("worker-versioning-assignment-rule-count", assignmentRuleCount)
+}
+
+// WorkerVersioningRedirectRuleCount returns tag for RedirectRuleCount
+func WorkerVersioningRedirectRuleCount(redirectRuleCount int) ZapTag {
+	return NewInt("worker-versioning-redirect-rule-count", redirectRuleCount)
+}
+
 // ScheduleID returns tag for ScheduleID
 func ScheduleID(scheduleID string) ZapTag {
 	return NewStringTag("schedule-id", scheduleID)

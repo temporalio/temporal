@@ -938,14 +938,17 @@ func (e *matchingEngineImpl) DescribeTaskQueue(
 				}
 			}
 			reachability, err := getBuildIdTaskReachability(ctx,
-				userData.GetVersioningData(),
-				e.visibilityManager,
+				newReachabilityCalculator(
+					userData.GetVersioningData(),
+					e.visibilityManager,
+					request.GetNamespaceId(),
+					req.GetNamespace(),
+					req.GetTaskQueue().GetName(),
+					e.config.ReachabilityBuildIdVisibilityGracePeriod(req.GetNamespace()),
+				),
 				e.metricsHandler,
-				request.GetNamespaceId(),
-				req.GetNamespace(),
-				req.GetTaskQueue().GetName(),
 				bid,
-				e.config.ReachabilityBuildIdVisibilityGracePeriod(req.GetNamespace()))
+			)
 			if err != nil {
 				return nil, err
 			}
@@ -1175,11 +1178,12 @@ func (e *matchingEngineImpl) UpdateWorkerVersioningRules(
 		return nil, err
 	}
 
-	// record metrics
+	// log resulting rule counts
 	assignmentRules := getResp.GetResponse().GetAssignmentRules()
 	redirectRules := getResp.GetResponse().GetCompatibleRedirectRules()
-	metrics.VersioningAssignmentRuleCounter.With(e.metricsHandler).Record(float64(len(assignmentRules)))
-	metrics.VersioningRedirectRuleCounter.With(e.metricsHandler).Record(float64(len(redirectRules)))
+	e.logger.Info("UpdateWorkerVersioningRules completed",
+		tag.WorkerVersioningRedirectRuleCount(len(redirectRules)),
+		tag.WorkerVersioningAssignmentRuleCount(len(assignmentRules)))
 
 	return &matchingservice.UpdateWorkerVersioningRulesResponse{Response: &workflowservice.UpdateWorkerVersioningRulesResponse{
 		AssignmentRules:         assignmentRules,
