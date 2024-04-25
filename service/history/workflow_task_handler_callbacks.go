@@ -542,8 +542,10 @@ func (handler *workflowTaskHandlerCallbacksImpl) handleWorkflowTaskCompleted(
 		newMutableState             workflow.MutableState
 		responseMutations           []workflowTaskResponseMutation
 	)
-	// hasBufferedEvents indicates if there are any buffered events which should generate a new workflow task
-	hasBufferedEvents := ms.HasBufferedEvents()
+	updateRegistry := weContext.UpdateRegistry(ctx, nil)
+	// hasBufferedEventsOrMessages indicates if there are any buffered events or admitted updates which should generate a new
+	// workflow task.
+	hasBufferedEventsOrMessages := ms.HasBufferedEvents() || updateRegistry.HasOutgoingMessages(false)
 	if err := namespaceEntry.VerifyBinaryChecksum(request.GetBinaryChecksum()); err != nil {
 		wtFailedCause = newWorkflowTaskFailedCause(
 			enumspb.WORKFLOW_TASK_FAILED_CAUSE_BAD_BINARY,
@@ -578,7 +580,7 @@ func (handler *workflowTaskHandlerCallbacksImpl) handleWorkflowTaskCompleted(
 			request.GetIdentity(),
 			completedEvent.GetEventId(), // If completedEvent is nil, then GetEventId() returns 0 and this value shouldn't be used in workflowTaskHandler.
 			ms,
-			weContext.UpdateRegistry(ctx, nil),
+			updateRegistry,
 			&effects,
 			handler.commandAttrValidator,
 			workflowSizeChecker,
@@ -588,7 +590,7 @@ func (handler *workflowTaskHandlerCallbacksImpl) handleWorkflowTaskCompleted(
 			handler.config,
 			handler.shardContext,
 			handler.searchAttributesMapperProvider,
-			hasBufferedEvents,
+			hasBufferedEventsOrMessages,
 			handler.commandHandlerRegistry,
 		)
 
@@ -644,7 +646,7 @@ func (handler *workflowTaskHandlerCallbacksImpl) handleWorkflowTaskCompleted(
 
 		newMutableState = workflowTaskHandler.newMutableState
 
-		hasBufferedEvents = workflowTaskHandler.hasBufferedEvents
+		hasBufferedEventsOrMessages = workflowTaskHandler.hasBufferedEventsOrMessages
 	}
 
 	wtFailedShouldCreateNewTask := false
@@ -684,8 +686,8 @@ func (handler *workflowTaskHandlerCallbacksImpl) handleWorkflowTaskCompleted(
 		}
 	}
 
-	bufferedEventShouldCreateNewTask := hasBufferedEvents && ms.HasAnyBufferedEvent(eventShouldGenerateNewTaskFilter)
-	if hasBufferedEvents && !bufferedEventShouldCreateNewTask {
+	bufferedEventShouldCreateNewTask := hasBufferedEventsOrMessages && ms.HasAnyBufferedEvent(eventShouldGenerateNewTaskFilter)
+	if hasBufferedEventsOrMessages && !bufferedEventShouldCreateNewTask {
 		// Make sure tasks that should not create a new event don't get stuck in ms forever
 		ms.FlushBufferedEvents()
 	}
