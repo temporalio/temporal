@@ -409,6 +409,8 @@ const (
 	FrontendEnableCallbackAttachment = "frontend.enableCallbackAttachment"
 	// FrontendCallbackURLMaxLength is the maximum length of callback URL
 	FrontendCallbackURLMaxLength = "frontend.callbackURLMaxLength"
+	// FrontendMaxCallbacksPerWorkflow is the maximum number of callbacks that can be attached to a workflow.
+	FrontendMaxCallbacksPerWorkflow = "frontend.maxCallbacksPerWorkflow"
 	// FrontendMaxConcurrentBatchOperationPerNamespace is the max concurrent batch operation job count per namespace
 	FrontendMaxConcurrentBatchOperationPerNamespace = "frontend.MaxConcurrentBatchOperationPerNamespace"
 	// FrontendMaxExecutionCountBatchOperationPerNamespace is the max execution count batch operation supports per namespace
