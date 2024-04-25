@@ -78,6 +78,8 @@ const (
 	IncrementalBackfill = 5
 	// update from previous action instead of current time
 	UpdateFromPrevious = 6
+	// do continue-as-new after pending signals
+	CANAfterSignals = 7
 )
 
 const (
@@ -323,6 +325,13 @@ func (s *scheduler) run() error {
 		// if schedule is not paused and out of actions or do not have anything scheduled, exit the schedule workflow after retention period has passed
 		if exp := s.getRetentionExpiration(nextWakeup); !exp.IsZero() && !exp.After(s.now()) {
 			return nil
+		}
+		if suggestContinueAsNew && s.pendingUpdate == nil && s.pendingPatch == nil && s.hasMinVersion(CANAfterSignals) {
+			// If suggestContinueAsNew was true but we had a pending update or patch, we would
+			// not break above, but process the update/patch. Now that we're done, we should
+			// break here to do CAN. (pendingUpdate and pendingPatch should always nil here,
+			// the check check above is just being defensive.)
+			break
 		}
 
 		// sleep returns on any of:
