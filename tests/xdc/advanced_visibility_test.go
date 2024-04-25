@@ -153,7 +153,6 @@ func (s *AdvVisCrossDCTestSuite) SetupSuite() {
 	s.Require().NoError(err)
 	// Wait for cluster metadata to refresh new added clusters
 	time.Sleep(time.Millisecond * 200)
-	time.Sleep(time.Second * 10)
 
 	s.testSearchAttributeKey = "CustomTextField"
 	s.testSearchAttributeVal = "test value"
