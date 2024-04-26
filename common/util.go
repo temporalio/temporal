@@ -48,7 +48,6 @@ import (
 	"go.temporal.io/server/api/matchingservice/v1"
 	workflowspb "go.temporal.io/server/api/workflow/v1"
 	"go.temporal.io/server/common/backoff"
-	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
@@ -678,7 +677,7 @@ func OverrideWorkflowTaskTimeout(
 	namespace string,
 	taskStartToCloseTimeout time.Duration,
 	workflowRunTimeout time.Duration,
-	getDefaultTimeoutFunc dynamicconfig.DurationPropertyFnWithNamespaceFilter,
+	getDefaultTimeoutFunc func(namespace string) time.Duration,
 ) time.Duration {
 
 	if taskStartToCloseTimeout == 0 {
