@@ -97,8 +97,8 @@ func TestHistoryReplicationConflictTestSuite(t *testing.T) {
 }
 
 func (s *historyReplicationConflictTestSuite) SetupSuite() {
-	s.dynamicConfigOverrides = map[dynamicconfig.Key]interface{}{
-		dynamicconfig.EnableReplicationStream: true,
+	s.dynamicConfigOverrides = map[dynamicconfig.Key]any{
+		dynamicconfig.EnableReplicationStream.Key(): true,
 	}
 	s.logger = log.NewNoopLogger()
 	s.setupSuite(

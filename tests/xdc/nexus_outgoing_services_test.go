@@ -57,10 +57,10 @@ func TestNexusOutgoingServicesTestSuite(t *testing.T) {
 }
 
 func (s *NexusOutgoingServicesTestSuite) SetupSuite() {
-	s.dynamicConfigOverrides = map[dynamicconfig.Key]interface{}{
+	s.dynamicConfigOverrides = map[dynamicconfig.Key]any{
 		// Make sure we don't hit the rate limiter in tests
-		dynamicconfig.FrontendGlobalNamespaceNamespaceReplicationInducingAPIsRPS: 1000,
-		dynamicconfig.FrontendEnableNexusAPIs:                                    true,
+		dynamicconfig.FrontendGlobalNamespaceNamespaceReplicationInducingAPIsRPS.Key(): 1000,
+		dynamicconfig.FrontendEnableNexusAPIs.Key():                                    true,
 	}
 	s.setupSuite([]string{"nexus_outgoing_services_active", "nexus_outgoing_services_standby"})
 }
