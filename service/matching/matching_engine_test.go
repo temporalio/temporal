@@ -2833,12 +2833,10 @@ func (s *matchingEngineSuite) createPollWorkflowTaskRequestAndPoll(taskQueue *ta
 			},
 		}, metrics.NoopMetricsHandler)
 		if len(result.TaskToken) == 0 {
-			//fmt.Printf("Empty poll with tasks: %d \n", s.taskManager.getTaskCount(ptq))
 			continue
 		}
 		if err != nil {
 			// DB could have failed while fetching tasks; try again
-			//fmt.Printf("Poll error: %s\n", err)
 			continue
 		}
 		s.NoError(err)
