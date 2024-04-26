@@ -34,6 +34,7 @@ import (
 	enumspb "go.temporal.io/api/enums/v1"
 	namespacepb "go.temporal.io/api/namespace/v1"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
+	updatepb "go.temporal.io/api/update/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/primitives/timestamp"
@@ -160,6 +161,13 @@ func (tv *TestVars) WorkflowExecution(key ...string) *commonpb.WorkflowExecution
 	return &commonpb.WorkflowExecution{
 		WorkflowId: tv.WorkflowID(key...),
 		RunId:      tv.RunID(key...),
+	}
+}
+
+func (tv *TestVars) UpdateRef() *updatepb.UpdateRef {
+	return &updatepb.UpdateRef{
+		UpdateId:          tv.UpdateID(),
+		WorkflowExecution: tv.WorkflowExecution(),
 	}
 }
 

@@ -1046,6 +1046,7 @@ func (s *FunctionalSuite) TestExecuteMultiOperation() {
 						{
 							Operation: &workflowservice.ExecuteMultiOperationRequest_Operation_StartWorkflow{
 								StartWorkflow: &workflowservice.StartWorkflowExecutionRequest{
+									Namespace:    s.namespace,
 									RequestId:    uuid.New(),
 									WorkflowId:   tv.WorkflowID(),
 									WorkflowType: tv.WorkflowType(),
@@ -1057,6 +1058,7 @@ func (s *FunctionalSuite) TestExecuteMultiOperation() {
 						{
 							Operation: &workflowservice.ExecuteMultiOperationRequest_Operation_UpdateWorkflow{
 								UpdateWorkflow: &workflowservice.UpdateWorkflowExecutionRequest{
+									Namespace: s.namespace,
 									Request: &updatepb.Request{
 										Meta: &updatepb.Meta{UpdateId: tv.UpdateID("1")},
 										Input: &updatepb.Input{
@@ -1095,6 +1097,7 @@ func (s *FunctionalSuite) TestExecuteMultiOperation() {
 						{
 							Operation: &workflowservice.ExecuteMultiOperationRequest_Operation_StartWorkflow{
 								StartWorkflow: &workflowservice.StartWorkflowExecutionRequest{
+									Namespace:    s.namespace,
 									RequestId:    uuid.New(),
 									WorkflowId:   tv.WorkflowID(),
 									WorkflowType: tv.WorkflowType(),
@@ -1106,6 +1109,7 @@ func (s *FunctionalSuite) TestExecuteMultiOperation() {
 						{
 							Operation: &workflowservice.ExecuteMultiOperationRequest_Operation_UpdateWorkflow{
 								UpdateWorkflow: &workflowservice.UpdateWorkflowExecutionRequest{
+									Namespace: s.namespace,
 									Request: &updatepb.Request{
 										Meta:  &updatepb.Meta{UpdateId: "UPDATE_ID"},
 										Input: &updatepb.Input{Name: "UPDATE"},

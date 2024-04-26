@@ -60,17 +60,18 @@ func RandomSnapshot(
 	namespaceID string,
 	workflowID string,
 	runID string,
+	eventID int64,
 	lastWriteVersion int64,
 	state enumsspb.WorkflowExecutionState,
 	status enumspb.WorkflowExecutionStatus,
 	dbRecordVersion int64,
-	historyBranchUtil p.HistoryBranchUtil,
-) *p.WorkflowSnapshot {
-	return &p.WorkflowSnapshot{
-		ExecutionInfo:  RandomExecutionInfo(namespaceID, workflowID, lastWriteVersion, historyBranchUtil),
+	branchToken []byte,
+) (*p.WorkflowSnapshot, []*p.WorkflowEvents) {
+	snapshot := &p.WorkflowSnapshot{
+		ExecutionInfo:  RandomExecutionInfo(namespaceID, workflowID, eventID, lastWriteVersion, branchToken),
 		ExecutionState: RandomExecutionState(runID, state, status),
 
-		NextEventID: rand.Int63(),
+		NextEventID: eventID + 1, // NOTE: RandomSnapshot generates a single history event, hence NextEventID is plus 1
 
 		ActivityInfos:       RandomInt64ActivityInfoMap(),
 		TimerInfos:          RandomStringTimerInfoMap(),
@@ -89,23 +90,33 @@ func RandomSnapshot(
 		Condition:       rand.Int63(),
 		DBRecordVersion: dbRecordVersion,
 	}
+	history := snapshot.ExecutionInfo.VersionHistories.Histories[0]
+	events := &p.WorkflowEvents{
+		NamespaceID: namespaceID,
+		WorkflowID:  workflowID,
+		RunID:       runID,
+		BranchToken: history.BranchToken,
+		Events:      []*historypb.HistoryEvent{RandomHistoryEvent(eventID, lastWriteVersion)},
+	}
+	return snapshot, []*p.WorkflowEvents{events}
 }
 
 func RandomMutation(
 	namespaceID string,
 	workflowID string,
 	runID string,
+	eventID int64,
 	lastWriteVersion int64,
 	state enumsspb.WorkflowExecutionState,
 	status enumspb.WorkflowExecutionStatus,
 	dbRecordVersion int64,
-	historyBranchUtil p.HistoryBranchUtil,
-) *p.WorkflowMutation {
+	branchToken []byte,
+) (*p.WorkflowMutation, []*p.WorkflowEvents) {
 	mutation := &p.WorkflowMutation{
-		ExecutionInfo:  RandomExecutionInfo(namespaceID, workflowID, lastWriteVersion, historyBranchUtil),
+		ExecutionInfo:  RandomExecutionInfo(namespaceID, workflowID, eventID, lastWriteVersion, branchToken),
 		ExecutionState: RandomExecutionState(runID, state, status),
 
-		NextEventID: rand.Int63(),
+		NextEventID: eventID + 1, // NOTE: RandomMutation generates a single history event, hence NextEventID is plus 1
 
 		UpsertActivityInfos:       RandomInt64ActivityInfoMap(),
 		DeleteActivityInfos:       map[int64]struct{}{rand.Int63(): {}},
@@ -142,24 +153,35 @@ func RandomMutation(
 		mutation.NewBufferedEvents = nil
 	case 2:
 		mutation.ClearBufferedEvents = false
-		mutation.NewBufferedEvents = []*historypb.HistoryEvent{RandomHistoryEvent()}
+		mutation.NewBufferedEvents = []*historypb.HistoryEvent{RandomHistoryEvent(eventID, lastWriteVersion)}
 	default:
 		panic("broken test")
 	}
-	return mutation
+
+	history := mutation.ExecutionInfo.VersionHistories.Histories[0]
+	events := &p.WorkflowEvents{
+		NamespaceID: namespaceID,
+		WorkflowID:  workflowID,
+		RunID:       runID,
+		BranchToken: history.BranchToken,
+		Events:      []*historypb.HistoryEvent{RandomHistoryEvent(eventID, lastWriteVersion)},
+	}
+
+	return mutation, []*p.WorkflowEvents{events}
 }
 
 func RandomExecutionInfo(
 	namespaceID string,
 	workflowID string,
+	eventID int64,
 	lastWriteVersion int64,
-	historyBranchUtil p.HistoryBranchUtil,
+	branchToken []byte,
 ) *persistencespb.WorkflowExecutionInfo {
 	var executionInfo persistencespb.WorkflowExecutionInfo
 	_ = fakedata.FakeStruct(&executionInfo)
 	executionInfo.NamespaceId = namespaceID
 	executionInfo.WorkflowId = workflowID
-	executionInfo.VersionHistories = RandomVersionHistory(lastWriteVersion, historyBranchUtil)
+	executionInfo.VersionHistories = RandomVersionHistory(eventID, lastWriteVersion, branchToken)
 	return &executionInfo
 }
 
@@ -236,9 +258,11 @@ func RandomSignalInfo() *persistencespb.SignalInfo {
 	return &signalInfo
 }
 
-func RandomHistoryEvent() *historypb.HistoryEvent {
+func RandomHistoryEvent(eventID int64, version int64) *historypb.HistoryEvent {
 	var historyEvent historypb.HistoryEvent
 	_ = fakedata.FakeStruct(&historyEvent)
+	historyEvent.EventId = eventID
+	historyEvent.Version = version
 	return &historyEvent
 }
 
@@ -266,13 +290,32 @@ func RandomPayload() *commonpb.Payload {
 }
 
 func RandomVersionHistory(
+	eventID int64,
 	lastWriteVersion int64,
-	historyBranchUtil p.HistoryBranchUtil,
+	branchToken []byte,
 ) *historyspb.VersionHistories {
-	randomBranchToken, _ := historyBranchUtil.NewHistoryBranch(
-		uuid.NewString(),
-		uuid.NewString(),
-		uuid.NewString(),
+	return &historyspb.VersionHistories{
+		CurrentVersionHistoryIndex: 0,
+		Histories: []*historyspb.VersionHistory{{
+			BranchToken: branchToken,
+			Items: []*historyspb.VersionHistoryItem{{
+				EventId: eventID,
+				Version: lastWriteVersion,
+			}},
+		}},
+	}
+}
+
+func RandomBranchToken(
+	namespaceID string,
+	workflowID string,
+	runID string,
+	historyBranchUtil p.HistoryBranchUtil,
+) []byte {
+	branchToken, _ := historyBranchUtil.NewHistoryBranch(
+		namespaceID,
+		workflowID,
+		runID,
 		uuid.NewString(),
 		nil,
 		nil,
@@ -280,16 +323,7 @@ func RandomVersionHistory(
 		0,
 		0,
 	)
-	return &historyspb.VersionHistories{
-		CurrentVersionHistoryIndex: 0,
-		Histories: []*historyspb.VersionHistory{{
-			BranchToken: randomBranchToken,
-			Items: []*historyspb.VersionHistoryItem{{
-				EventId: rand.Int63(),
-				Version: lastWriteVersion,
-			}},
-		}},
-	}
+	return branchToken
 }
 
 func RandomTime() *timestamppb.Timestamp {
