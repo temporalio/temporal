@@ -43,6 +43,7 @@ import (
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	updatepb "go.temporal.io/api/update/v1"
 	"go.temporal.io/api/workflowservice/v1"
+	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/testing/testvars"
 	"google.golang.org/protobuf/types/known/durationpb"
 
@@ -985,38 +986,9 @@ func (s *FunctionalSuite) TestWorkflowRetryFailures() {
 }
 
 func (s *FunctionalSuite) TestExecuteMultiOperation() {
-	s.Run("Start Workflow and send Update", func() {
-		tv := testvars.New(s.T().Name())
-
-		request := &workflowservice.ExecuteMultiOperationRequest{
-			Namespace: s.namespace,
-			Operations: []*workflowservice.ExecuteMultiOperationRequest_Operation{
-				{
-					Operation: &workflowservice.ExecuteMultiOperationRequest_Operation_StartWorkflow{
-						StartWorkflow: &workflowservice.StartWorkflowExecutionRequest{
-							RequestId:    uuid.New(),
-							WorkflowId:   tv.WorkflowID(),
-							WorkflowType: tv.WorkflowType(),
-							TaskQueue:    tv.TaskQueue(),
-							Input:        nil,
-							Identity:     tv.WorkerIdentity(),
-						},
-					},
-				},
-				{
-					Operation: &workflowservice.ExecuteMultiOperationRequest_Operation_UpdateWorkflow{
-						UpdateWorkflow: &workflowservice.UpdateWorkflowExecutionRequest{
-							Request: &updatepb.Request{
-								Meta:  &updatepb.Meta{UpdateId: "UPDATE_ID"},
-								Input: &updatepb.Input{Name: "UPDATE"},
-							},
-							WorkflowExecution: &commonpb.WorkflowExecution{WorkflowId: tv.WorkflowID()},
-							WaitPolicy:        &updatepb.WaitPolicy{LifecycleStage: enumspb.UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_COMPLETED},
-						},
-					},
-				},
-			},
-		}
+	run := func(tv *testvars.TestVars, request *workflowservice.ExecuteMultiOperationRequest) {
+		capture := s.testCluster.host.captureMetricsHandler.StartCapture()
+		defer s.testCluster.host.captureMetricsHandler.StopCapture(capture)
 
 		poller := &TaskPoller{
 			Engine:    s.engine,
@@ -1044,7 +1016,7 @@ func (s *FunctionalSuite) TestExecuteMultiOperation() {
 		_, err := poller.PollAndProcessWorkflowTask(WithDumpHistory)
 		s.NoError(err)
 
-		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 		defer cancel()
 		select {
 		case <-ctx.Done():
@@ -1057,6 +1029,94 @@ func (s *FunctionalSuite) TestExecuteMultiOperation() {
 
 			updateRes := resp.Responses[1].Response.(*workflowservice.ExecuteMultiOperationResponse_Response_UpdateWorkflow).UpdateWorkflow
 			s.NotZero(updateRes.Outcome.String())
+
+			// make sure there's no lock contention
+			s.Empty(capture.Snapshot()[metrics.TaskWorkflowBusyCounter.Name()])
 		}
+	}
+
+	s.Run("StartWorkflow + UpdateWorkflow", func() {
+		s.Run("workflow is not running", func() {
+			tv := testvars.New(s.T().Name())
+
+			run(tv,
+				&workflowservice.ExecuteMultiOperationRequest{
+					Namespace: s.namespace,
+					Operations: []*workflowservice.ExecuteMultiOperationRequest_Operation{
+						{
+							Operation: &workflowservice.ExecuteMultiOperationRequest_Operation_StartWorkflow{
+								StartWorkflow: &workflowservice.StartWorkflowExecutionRequest{
+									RequestId:    uuid.New(),
+									WorkflowId:   tv.WorkflowID(),
+									WorkflowType: tv.WorkflowType(),
+									TaskQueue:    tv.TaskQueue(),
+									Identity:     tv.WorkerIdentity(),
+								},
+							},
+						},
+						{
+							Operation: &workflowservice.ExecuteMultiOperationRequest_Operation_UpdateWorkflow{
+								UpdateWorkflow: &workflowservice.UpdateWorkflowExecutionRequest{
+									Request: &updatepb.Request{
+										Meta: &updatepb.Meta{UpdateId: tv.UpdateID("1")},
+										Input: &updatepb.Input{
+											Name: tv.Any().String(),
+											Args: tv.Any().Payloads(),
+										},
+									},
+									WorkflowExecution: &commonpb.WorkflowExecution{WorkflowId: tv.WorkflowID()},
+									WaitPolicy:        &updatepb.WaitPolicy{LifecycleStage: enumspb.UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_COMPLETED},
+								},
+							},
+						},
+					},
+				})
+		})
+
+		s.Run("workflow is running", func() {
+			tv := testvars.New(s.T().Name())
+
+			// start Workflow first
+			startWorkflowReq := &workflowservice.StartWorkflowExecutionRequest{
+				Namespace:    s.namespace,
+				RequestId:    uuid.New(),
+				WorkflowId:   tv.WorkflowID(),
+				WorkflowType: tv.WorkflowType(),
+				TaskQueue:    tv.TaskQueue(),
+				Identity:     tv.WorkerIdentity(),
+			}
+			_, err := s.engine.StartWorkflowExecution(NewContext(), startWorkflowReq)
+			s.NoError(err)
+
+			run(tv,
+				&workflowservice.ExecuteMultiOperationRequest{
+					Namespace: s.namespace,
+					Operations: []*workflowservice.ExecuteMultiOperationRequest_Operation{
+						{
+							Operation: &workflowservice.ExecuteMultiOperationRequest_Operation_StartWorkflow{
+								StartWorkflow: &workflowservice.StartWorkflowExecutionRequest{
+									RequestId:    uuid.New(),
+									WorkflowId:   tv.WorkflowID(),
+									WorkflowType: tv.WorkflowType(),
+									TaskQueue:    tv.TaskQueue(),
+									Identity:     tv.WorkerIdentity(),
+								},
+							},
+						},
+						{
+							Operation: &workflowservice.ExecuteMultiOperationRequest_Operation_UpdateWorkflow{
+								UpdateWorkflow: &workflowservice.UpdateWorkflowExecutionRequest{
+									Request: &updatepb.Request{
+										Meta:  &updatepb.Meta{UpdateId: "UPDATE_ID"},
+										Input: &updatepb.Input{Name: "UPDATE"},
+									},
+									WorkflowExecution: &commonpb.WorkflowExecution{WorkflowId: tv.WorkflowID()},
+									WaitPolicy:        &updatepb.WaitPolicy{LifecycleStage: enumspb.UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_COMPLETED},
+								},
+							},
+						},
+					},
+				})
+		})
 	})
 }

@@ -145,6 +145,8 @@ func ToPersistencePredicate(
 		return ToPersistenceTaskTypePredicate(predicate)
 	case *tasks.DestinationPredicate:
 		return ToPersistenceDestinationPredicate(predicate)
+	case *tasks.StateMachineTaskTypePredicate:
+		return ToPersistenceStateMachineTaskTypePredicate(predicate)
 	default:
 		panic(fmt.Sprintf("unknown task predicate type: %T", predicate))
 	}
@@ -170,6 +172,8 @@ func FromPersistencePredicate(
 		return FromPersistenceTaskTypePredicate(predicate.GetTaskTypePredicateAttributes())
 	case enumsspb.PREDICATE_TYPE_DESTINATION:
 		return FromPersistenceDestinationPredicate(predicate.GetDestinationPredicateAttributes())
+	case enumsspb.PREDICATE_TYPE_STATE_MACHINE_TASK_TYPE:
+		return FromPersistenceStateMachineTypePredicate(predicate.GetStateMachineTaskTypePredicateAttributes())
 	default:
 		panic(fmt.Sprintf("unknown persistence task predicate type: %v", predicate.GetPredicateType()))
 	}
@@ -337,4 +341,23 @@ func FromPersistenceDestinationPredicate(
 	attributes *persistencespb.DestinationPredicateAttributes,
 ) tasks.Predicate {
 	return tasks.NewDestinationPredicate(attributes.Destinations)
+}
+
+func ToPersistenceStateMachineTaskTypePredicate(
+	pred *tasks.StateMachineTaskTypePredicate,
+) *persistencespb.Predicate {
+	return &persistencespb.Predicate{
+		PredicateType: enumsspb.PREDICATE_TYPE_STATE_MACHINE_TASK_TYPE,
+		Attributes: &persistencespb.Predicate_StateMachineTaskTypePredicateAttributes{
+			StateMachineTaskTypePredicateAttributes: &persistencespb.StateMachineTaskTypePredicateAttributes{
+				TaskTypes: maps.Keys(pred.Types),
+			},
+		},
+	}
+}
+
+func FromPersistenceStateMachineTypePredicate(
+	attributes *persistencespb.StateMachineTaskTypePredicateAttributes,
+) tasks.Predicate {
+	return tasks.NewStateMachineTaskTypePredicate(attributes.TaskTypes)
 }
