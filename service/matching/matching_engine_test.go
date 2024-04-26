@@ -167,6 +167,7 @@ func (s *matchingEngineSuite) SetupTest() {
 	s.mockMatchingClient.EXPECT().ReplicateTaskQueueUserData(gomock.Any(), gomock.Any()).
 		Return(&matchingservice.ReplicateTaskQueueUserDataResponse{}, nil).AnyTimes()
 	s.taskManager = newTestTaskManager(s.logger)
+	s.taskManager.dbError = false // set to true when you want db to throw errors randomly
 	s.ns, s.mockNamespaceCache = createMockNamespaceCache(s.controller, matchingTestNamespace)
 	s.mockVisibilityManager = manager.NewMockVisibilityManager(s.controller)
 	s.mockVisibilityManager.EXPECT().Close().AnyTimes()
@@ -2821,7 +2822,7 @@ func (s *matchingEngineSuite) addWorkflowTask(workflowExecution *commonpb.Workfl
 	}
 }
 
-func (s *matchingEngineSuite) createPollWorkflowTaskRequestAndPoll(taskQueue *taskqueuepb.TaskQueue, ptq *PhysicalTaskQueueKey) {
+func (s *matchingEngineSuite) createPollWorkflowTaskRequestAndPoll(taskQueue *taskqueuepb.TaskQueue) {
 	var donePolling bool
 	for !donePolling {
 		result, err := s.matchingEngine.PollWorkflowTaskQueue(context.Background(), &matchingservice.PollWorkflowTaskQueueRequest{
@@ -2852,7 +2853,6 @@ func (s *matchingEngineSuite) addWorkflowTasks(concurrently bool, numWorkers int
 		for p := 0; p < numWorkers; p++ {
 			go func() {
 				for i := 0; i < taskCount; i++ {
-					//fmt.Printf("Adding %d\n", i)
 					s.addWorkflowTask(workflowExecution, taskQueue)
 				}
 				wg.Done()
@@ -2876,8 +2876,7 @@ func (s *matchingEngineSuite) pollWorkflowTasks(concurrently bool, workflowType 
 		for p := 0; p < numPollers; p++ {
 			go func() {
 				for i := 0; i < taskCount; i++ {
-					//fmt.Printf("Polling %d\n", i)
-					s.createPollWorkflowTaskRequestAndPoll(taskQueue, ptq)
+					s.createPollWorkflowTaskRequestAndPoll(taskQueue)
 				}
 				wg.Done()
 			}()
@@ -2885,7 +2884,7 @@ func (s *matchingEngineSuite) pollWorkflowTasks(concurrently bool, workflowType 
 	} else {
 		tasksPolled := 0
 		for i := 0; i < numPollers*taskCount; i++ {
-			s.createPollWorkflowTaskRequestAndPoll(taskQueue, ptq)
+			s.createPollWorkflowTaskRequestAndPoll(taskQueue)
 			tasksPolled += 1
 
 			// PartitionManager could have been unloaded; fetch the latest copy
@@ -2902,38 +2901,51 @@ func (s *matchingEngineSuite) getPhysicalTaskQueueManagerImpl(ptq *PhysicalTaskQ
 	return pgMgr
 }
 
-func (s *matchingEngineSuite) TestAddConsumeWorkflowTasksValidateBacklogCount() {
+func (s *matchingEngineSuite) addConsumeAllWorkflowTasksNonConcurrently(taskCount int, numWorkers int, numPollers int) {
 	s.matchingEngine.config.LongPollExpirationInterval = dynamicconfig.GetDurationPropertyFnFilteredByTaskQueueInfo(10 * time.Millisecond)
 	workflowType, workflowExecution := s.generateWorkflowExecution()
 	taskQueue, ptq := s.createTQAndPTQForBacklogTests()
 
-	const taskCount = 100
-	s.addWorkflowTasks(false, 1, taskCount, taskQueue, workflowExecution, nil)
-	s.EqualValues(taskCount, s.taskManager.getTaskCount(ptq))
+	s.addWorkflowTasks(false, numWorkers, taskCount, taskQueue, workflowExecution, nil)
+	s.EqualValues(taskCount*numWorkers, s.taskManager.getCreateTaskCount(ptq))
+	s.EqualValues(taskCount*numWorkers, s.taskManager.getTaskCount(ptq))
 
 	// Extracting the pgMgr for validating approximateBacklogCounter
 	pgMgr := s.getPhysicalTaskQueueManagerImpl(ptq)
-	s.EqualValues(pgMgr.backlogMgr.db.getApproximateBacklogCount(), int64(taskCount))
+	s.EqualValues(int64(taskCount*numWorkers), pgMgr.backlogMgr.db.getApproximateBacklogCount())
 
-	s.pollWorkflowTasks(false, workflowType, 1, taskCount, ptq, taskQueue, nil)
-	// All tasks should have been completed
-	s.EqualValues(pgMgr.backlogMgr.db.getApproximateBacklogCount(), int64(0))
+	s.pollWorkflowTasks(false, workflowType, numPollers, taskCount, ptq, taskQueue, nil)
+
+	s.LessOrEqual(int64(0), pgMgr.backlogMgr.db.getApproximateBacklogCount())
 }
 
-// TestResettingBacklogCounter tests the scenario where approximateBacklogCounter over-counts and resets it accordingly
-func (s *matchingEngineSuite) TestResetBacklogCounter() {
-	// We shall manually remove the task from the testTaskManager,
+func (s *matchingEngineSuite) TestAddConsumeWorkflowTasksNoDBErrors() {
+	s.addConsumeAllWorkflowTasksNonConcurrently(100, 1, 1)
+}
 
+func (s *matchingEngineSuite) TestAddConsumeWorkflowTasksDBErrors() {
+	s.taskManager.dbError = true
+	s.addConsumeAllWorkflowTasksNonConcurrently(100, 1, 1)
+}
+
+func (s *matchingEngineSuite) TestMultipleWorkersAddConsumeWorkflowTasksNoDBErrors() {
+	s.addConsumeAllWorkflowTasksNonConcurrently(100, 5, 5)
+}
+
+func (s *matchingEngineSuite) TestMultipleWorkersAddConsumeWorkflowTasksDBErrors() {
+	s.taskManager.dbError = true
+	s.addConsumeAllWorkflowTasksNonConcurrently(100, 5, 5)
+}
+
+func (s *matchingEngineSuite) resetBacklogCounter(numWorkers int, taskCount int, rangeSize int) {
 	s.matchingEngine.config.LongPollExpirationInterval = dynamicconfig.GetDurationPropertyFnFilteredByTaskQueueInfo(1 * time.Millisecond)
 	s.matchingEngine.config.UpdateAckInterval = dynamicconfig.GetDurationPropertyFnFilteredByTaskQueueInfo(1 * time.Millisecond)
 
 	workflowType, workflowExecution := s.generateWorkflowExecution()
 	taskQueue, ptq := s.createTQAndPTQForBacklogTests()
-	s.matchingEngine.config.RangeSize = 2
+	s.matchingEngine.config.RangeSize = int64(rangeSize)
 
-	const taskCount = 2
-
-	s.addWorkflowTasks(false, 1, taskCount, taskQueue, workflowExecution, nil)
+	s.addWorkflowTasks(false, numWorkers, taskCount, taskQueue, workflowExecution, nil)
 
 	// TaskID of the first task to be added
 	minTaskID, done := s.taskManager.minTaskID(ptq)
@@ -2943,9 +2955,9 @@ func (s *matchingEngineSuite) TestResetBacklogCounter() {
 	s.NoError(err)
 	pgMgr := s.getPhysicalTaskQueueManagerImpl(ptq)
 
-	s.EqualValues(taskCount, s.taskManager.getTaskCount(ptq))
+	s.EqualValues(taskCount*numWorkers, s.taskManager.getTaskCount(ptq))
 	// validating the approximateBacklogCounter
-	s.EqualValues(pgMgr.backlogMgr.db.getApproximateBacklogCount(), taskCount)
+	s.EqualValues(taskCount*numWorkers, pgMgr.backlogMgr.db.getApproximateBacklogCount())
 
 	// Unloading the PQM
 	s.matchingEngine.unloadTaskQueuePartition(partitionManager)
@@ -2963,16 +2975,34 @@ func (s *matchingEngineSuite) TestResetBacklogCounter() {
 	}
 	_, err = s.taskManager.CompleteTasksLessThan(context.Background(), request)
 	s.NoError(err)
-	s.EqualValues(taskCount-1, s.taskManager.getTaskCount(ptq))
+	s.EqualValues((taskCount*numWorkers)-1, s.taskManager.getTaskCount(ptq))
 
-	// adding pollers to load the fresher version of tqm
-	s.pollWorkflowTasks(false, workflowType, 1, taskCount-1, ptq, taskQueue, nil)
+	// adding pollers which shall also load the fresher version of tqm
+	s.pollWorkflowTasks(false, workflowType, 1, (taskCount*numWorkers)-1, ptq, taskQueue, nil)
 
 	// Updating pgMgr to have the latest pgMgr
 	pgMgr = s.getPhysicalTaskQueueManagerImpl(ptq)
 	time.Sleep(time.Second)
-	s.EqualValues(pgMgr.backlogMgr.db.getApproximateBacklogCount(), int64(0))
+	s.EqualValues(int64(0), pgMgr.backlogMgr.db.getApproximateBacklogCount())
+}
 
+// TestResettingBacklogCounter tests the scenario where approximateBacklogCounter over-counts and resets it accordingly
+func (s *matchingEngineSuite) TestResetBacklogCounterNoDBErrors() {
+	s.resetBacklogCounter(2, 2, 2)
+}
+
+func (s *matchingEngineSuite) TestResetBacklogCounterDBErrors() {
+	s.taskManager.dbError = true
+	s.resetBacklogCounter(2, 2, 2)
+}
+
+func (s *matchingEngineSuite) TestMoreTasksResetBacklogCounterNoDBErrors() {
+	s.resetBacklogCounter(10, 20, 2)
+}
+
+func (s *matchingEngineSuite) TestMoreTasksResetBacklogCounterDBErrors() {
+	s.taskManager.dbError = true
+	s.resetBacklogCounter(10, 20, 2)
 }
 
 func (s *matchingEngineSuite) TestUnloadingTQMValidateBacklogCounter() {
@@ -3025,9 +3055,12 @@ func (s *matchingEngineSuite) TestUnloadingTQMValidateBacklogCounter() {
 
 // Concurrent tests for testing approximateBacklogCounter
 
-func (s *matchingEngineSuite) concurrentPublishAndConsume(numWorkers int, tasksToAdd int, tasksToPoll int) {
+func (s *matchingEngineSuite) concurrentPublishAndConsumeValidateBacklogCounter(numWorkers int, tasksToAdd int, tasksToPoll int) {
 	workflowType, workflowExecution := s.generateWorkflowExecution()
 	taskQueue, ptq := s.createTQAndPTQForBacklogTests()
+
+	s.matchingEngine.config.LongPollExpirationInterval = dynamicconfig.GetDurationPropertyFnFilteredByTaskQueueInfo(10 * time.Millisecond)
+	s.matchingEngine.config.UpdateAckInterval = dynamicconfig.GetDurationPropertyFnFilteredByTaskQueueInfo(1 * time.Millisecond)
 
 	var wg sync.WaitGroup
 	wg.Add(2 * numWorkers)
@@ -3042,91 +3075,40 @@ func (s *matchingEngineSuite) concurrentPublishAndConsume(numWorkers int, tasksT
 	s.LessOrEqual(int64(s.taskManager.getTaskCount(ptq)), pgMgr.backlogMgr.db.getApproximateBacklogCount())
 }
 
-// TestConcurrentAddWorkflowTasksValidateBacklogCounter adds multiple workflow tasks concurrently to
-// persistence and checks if the backlog counter was updated accordingly.
-func (s *matchingEngineSuite) TestConcurrentAddWorkflowTasksValidateBacklogCounter() {
-	//_, workflowExecution := s.generateWorkflowExecution()
-	//taskQueue, ptq := s.createTQAndPTQForBacklogTests()
-	//
-	//const workerCount = 200
-	//const taskCount = 50
-	//
-	//var wg sync.WaitGroup
-	//wg.Add(workerCount)
-	//
-	//s.addWorkflowTasks(true, workerCount, taskCount, taskQueue, workflowExecution, &wg)
-	//wg.Wait()
-	//
-	//s.Equal(taskCount*workerCount, s.taskManager.getTaskCount(ptq))
-	//
-	//// validating the approximateBacklogCounter
-	//pgMgr := s.getPhysicalTaskQueueManagerImpl(ptq)
-	//s.LessOrEqual(int64(s.taskManager.getTaskCount(ptq)), pgMgr.backlogMgr.db.getApproximateBacklogCount())
-
-	const workerCount = 150
-	const taskCount = 100
-	s.concurrentPublishAndConsume(workerCount, taskCount, 0)
+func (s *matchingEngineSuite) TestConcurrentAddWorkflowTasksNoDBErrors() {
+	s.concurrentPublishAndConsumeValidateBacklogCounter(150, 100, 0)
 }
 
-func (s *matchingEngineSuite) TestConcurrentAddCompleteWorkflowTasksValidateBacklogCounter() {
-	//workflowType, workflowExecution := s.generateWorkflowExecution()
-	//taskQueue, ptq := s.createTQAndPTQForBacklogTests()
-	//s.matchingEngine.config.UpdateAckInterval = dynamicconfig.GetDurationPropertyFnFilteredByTaskQueueInfo(1 * time.Millisecond)
-	//
-	//const workerCount = 20
-	//const taskCount = 100
-	//
-	//var wg sync.WaitGroup
-	//wg.Add(2 * workerCount)
-	//
-	//s.addWorkflowTasks(true, workerCount, taskCount, taskQueue, workflowExecution, &wg)
-	//s.pollWorkflowTasks(true, workflowType, workerCount, taskCount, ptq, taskQueue, &wg)
-	//
-	//wg.Wait()
-	//time.Sleep(1 * time.Second)
-	//
-	//totalTasks := taskCount * workerCount
-	//persisted := s.taskManager.getCreateTaskCount(ptq)
-	//s.True(persisted < totalTasks)
-	//
-	//// validating the approximateBacklogCounter
-	//pgMgr := s.getPhysicalTaskQueueManagerImpl(ptq)
-	//s.LessOrEqual(int64(s.taskManager.getTaskCount(ptq)), pgMgr.backlogMgr.db.getApproximateBacklogCount())
-
-	s.matchingEngine.config.UpdateAckInterval = dynamicconfig.GetDurationPropertyFnFilteredByTaskQueueInfo(1 * time.Millisecond)
-	const workerCount = 20
-	const taskCount = 100
-
-	s.concurrentPublishAndConsume(workerCount, taskCount, taskCount)
+func (s *matchingEngineSuite) TestConcurrentAddWorkflowTasksDBErrors() {
+	s.taskManager.dbError = true
+	s.concurrentPublishAndConsumeValidateBacklogCounter(150, 100, 0)
 }
 
-func (s *matchingEngineSuite) TestLesserNumberOfPollersThanTasks() {
-	//s.matchingEngine.config.LongPollExpirationInterval = dynamicconfig.GetDurationPropertyFnFilteredByTaskQueueInfo(10 * time.Millisecond)
-	//workflowType, workflowExecution := s.generateWorkflowExecution()
-	//taskQueue, ptq := s.createTQAndPTQForBacklogTests()
-	//
-	//const workerCount = 1
-	//const taskCount = 500
-	//const polledTasks = 200
-	//
-	//var wg sync.WaitGroup
-	//wg.Add(2 * workerCount)
-	//
-	//s.addWorkflowTasks(true, workerCount, taskCount, taskQueue, workflowExecution, &wg)
-	//s.pollWorkflowTasks(true, workflowType, workerCount, polledTasks, ptq, taskQueue, &wg)
-	//
-	//wg.Wait()
-	//s.EqualValues(taskCount-polledTasks, s.taskManager.getTaskCount(ptq))
-	//
-	//// validating the approximateBacklogCounter
-	//pgMgr := s.getPhysicalTaskQueueManagerImpl(ptq)
-	//s.LessOrEqual(int64(taskCount-polledTasks), pgMgr.backlogMgr.db.getApproximateBacklogCount())
-	s.matchingEngine.config.UpdateAckInterval = dynamicconfig.GetDurationPropertyFnFilteredByTaskQueueInfo(1 * time.Millisecond)
-	const workerCount = 1
-	const taskCount = 500
-	const polledTasks = 200
-	s.concurrentPublishAndConsume(workerCount, taskCount, polledTasks)
+func (s *matchingEngineSuite) TestConcurrentAdd_PollWorkflowTasksNoDBErrors() {
+	s.concurrentPublishAndConsumeValidateBacklogCounter(20, 100, 100)
+}
 
+func (s *matchingEngineSuite) TestConcurrentAdd_PollWorkflowTasksDBErrors() {
+	s.taskManager.dbError = true
+	s.concurrentPublishAndConsumeValidateBacklogCounter(20, 100, 100)
+}
+
+func (s *matchingEngineSuite) TestLesserNumberOfPollersThanTasksNoDBErrors() {
+	s.concurrentPublishAndConsumeValidateBacklogCounter(1, 500, 200)
+}
+
+func (s *matchingEngineSuite) TestLesserNumberOfPollersThanTasksDBErrors() {
+	s.taskManager.dbError = true
+	s.concurrentPublishAndConsumeValidateBacklogCounter(1, 500, 200)
+}
+
+func (s *matchingEngineSuite) TestMultipleWorkersLesserNumberOfPollersThanTasksNoDBErrors() {
+	s.concurrentPublishAndConsumeValidateBacklogCounter(5, 500, 200)
+}
+
+func (s *matchingEngineSuite) TestMultipleWorkersLesserNumberOfPollersThanTasksDBErrors() {
+	s.taskManager.dbError = true
+	s.concurrentPublishAndConsumeValidateBacklogCounter(5, 500, 200)
 }
 
 func (s *matchingEngineSuite) setupRecordActivityTaskStartedMock(tlName string) {
@@ -3203,8 +3185,9 @@ var _ persistence.TaskManager = (*testTaskManager)(nil) // Asserts that interfac
 
 type testTaskManager struct {
 	sync.Mutex
-	queues map[dbTaskQueueKey]*testPhysicalTaskQueueManager
-	logger log.Logger
+	queues  map[dbTaskQueueKey]*testPhysicalTaskQueueManager
+	logger  log.Logger
+	dbError bool
 }
 
 type dbTaskQueueKey struct {
@@ -3415,14 +3398,16 @@ func (m *testTaskManager) DeleteTaskQueue(
 
 // generateErrorRandomly states if a taskManager's operation should return an error or not
 func (m *testTaskManager) generateErrorRandomly() bool {
-	threshold := 10
+	if m.dbError {
+		threshold := 10
 
-	// Seed the random number generator
-	r := rand.New(rand.NewSource(time.Now().UnixNano()))
-	// Generate a random number between 0 and 99
-	randomNumber := r.Intn(100)
-	if randomNumber < threshold {
-		return true
+		// Seed the random number generator
+		r := rand.New(rand.NewSource(time.Now().UnixNano()))
+		// Generate a random number between 0 and 99
+		randomNumber := r.Intn(100)
+		if randomNumber < threshold {
+			return true
+		}
 	}
 	return false
 }
