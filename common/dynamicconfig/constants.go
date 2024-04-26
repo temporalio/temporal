@@ -2235,10 +2235,15 @@ Should be at least WorkerESProcessorFlushInterval+<time to process request>.`,
 		`HistoryScannerVerifyRetention indicates the history scanner verify data retention.
 If the service configures with archival feature enabled, update worker.historyScannerVerifyRetention to be double of the data retention.`,
 	)
-	EnableBatcher = NewGlobalBoolSetting(
+	EnableBatcherGlobal = NewGlobalBoolSetting(
 		"worker.enableBatcher",
 		true,
-		`EnableBatcher decides whether to start batcher in our worker`,
+		`EnableBatcher decides whether to start old (system namespace) batcher in our worker`,
+	)
+	EnableBatcherNamespace = NewNamespaceBoolSetting(
+		"worker.enableNamespaceBatcher",
+		true,
+		`EnableBatcher decides whether to start new (per-namespace) batcher in our worker`,
 	)
 	BatcherRPS = NewNamespaceIntSetting(
 		"worker.batcherRPS",
