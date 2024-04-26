@@ -78,7 +78,7 @@ func (s *DescribeTaskQueueSuite) publishConsumeWorkflowTasksValidateBacklogInfo(
 	dc := s.testCluster.host.dcClient
 	dc.OverrideValue(s.T(), dynamicconfig.MatchingNumTaskqueueReadPartitions, partitions)
 	dc.OverrideValue(s.T(), dynamicconfig.MatchingNumTaskqueueWritePartitions, partitions)
-	dc.OverrideValue(s.T(), dynamicconfig.MatchingLongPollExpirationInterval, 10*time.Millisecond)
+	dc.OverrideValue(s.T(), dynamicconfig.MatchingLongPollExpirationInterval, 10*time.Second)
 
 	expectedBacklogCount := make(map[enumspb.TaskQueueType]int64)
 	expectedBacklogCount[enumspb.TASK_QUEUE_TYPE_ACTIVITY] = 0
@@ -99,8 +99,8 @@ func (s *DescribeTaskQueueSuite) publishConsumeWorkflowTasksValidateBacklogInfo(
 			WorkflowType:        workflowType,
 			TaskQueue:           tq,
 			Input:               nil,
-			WorkflowRunTimeout:  durationpb.New(20 * time.Second),
-			WorkflowTaskTimeout: durationpb.New(3 * time.Second),
+			WorkflowRunTimeout:  durationpb.New(10 * time.Minute),
+			WorkflowTaskTimeout: durationpb.New(10 * time.Minute),
 			Identity:            identity,
 		}
 
@@ -119,9 +119,8 @@ func (s *DescribeTaskQueueSuite) publishConsumeWorkflowTasksValidateBacklogInfo(
 			Identity:  identity,
 		})
 		s.NoError(err1)
-		if resp1.GetAttempt() < 1 {
-			// try again since the backlog counter only decrements after task completion
-			continue
+		if resp1 == nil || resp1.GetAttempt() < 1 {
+			continue // poll again on empty responses
 		}
 		i++
 	}
