@@ -1314,11 +1314,16 @@ func (s *ClientFunctionalSuite) Test_BufferedSignalCausesUnhandledCommandAndSche
 
 // Analogous to Test_BufferedSignalCausesUnhandledCommandAndSchedulesNewTask
 //
-// 1. The worker starts executing the first WFT, before any update is sent.
-// 2. While the first WFT is being executed, an update is sent.
-// 3. Once the server has received the update, the workflow completes.
-// 4. The server fails the complete request because there is an admitted update and schedules a new workflow task.
-// 5. This time the workflow accepts the update and completes the workflow.
+//  1. The worker starts executing the first WFT, before any update is sent.
+//  2. While the first WFT is being executed, an update is sent.
+//  3. Once the server has received the update, the workflow tries to complete itself.
+//  4. The server fails the complete request (and WFT) because there is an admitted update,
+//     clears workflow context, mutable state, and update registry and schedules a new workflow task.
+//  5. Now there is a race:
+//     - worker completes WFT w/o updates in it and updates in the registry,
+//     - history handler retries UpdateWorkflowExecution call and recreates update in the registry.
+//  6. In first case, workflow completes successfully after 2nd attempt, and call to UpdateWorkflowExecution
+//     returns "workflow execution already completed" error. This is what this test asserts.
 func (s *ClientFunctionalSuite) Test_AdmittedUpdateCausesUnhandledCommandAndSchedulesNewTask() {
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
@@ -1367,8 +1372,8 @@ func (s *ClientFunctionalSuite) Test_AdmittedUpdateCausesUnhandledCommandAndSche
 
 	// Send update and wait until it is admitted. This isn't convenient: since Admitted is non-durable, we do not expose
 	// an API for doing it directly. Instead we send the update and poll until it's reported to be in admitted state.
-	updateHandle := make(chan sdkclient.WorkflowUpdateHandle)
-	updateErr := make(chan error)
+	updateHandleCh := make(chan sdkclient.WorkflowUpdateHandle)
+	updateErrCh := make(chan error)
 	go func() {
 		handle, err := s.sdkClient.UpdateWorkflowWithOptions(ctx, &sdkclient.UpdateWorkflowWithOptionsRequest{
 			UpdateID:   tv.UpdateID(),
@@ -1377,8 +1382,8 @@ func (s *ClientFunctionalSuite) Test_AdmittedUpdateCausesUnhandledCommandAndSche
 			RunID:      tv.RunID(),
 			Args:       []interface{}{"update-value"},
 		})
-		updateErr <- err
-		updateHandle <- handle
+		updateErrCh <- err
+		updateHandleCh <- handle
 	}()
 	for {
 		time.Sleep(10 * time.Millisecond)
@@ -1391,6 +1396,7 @@ func (s *ClientFunctionalSuite) Test_AdmittedUpdateCausesUnhandledCommandAndSche
 			},
 		})
 		if err == nil {
+			// Update is admitted but will be lost after WFT is failed.
 			close(updateHasBeenAdmitted)
 			break
 		}
@@ -1398,11 +1404,16 @@ func (s *ClientFunctionalSuite) Test_AdmittedUpdateCausesUnhandledCommandAndSche
 
 	err = workflowRun.Get(ctx, nil)
 	s.NoError(err)
-	s.NoError(<-updateErr)
-	var updateResult string
-	err = (<-updateHandle).Get(ctx, &updateResult)
-	s.NoError(err)
-	s.Equal("my-update-result", updateResult)
+	updateErr := <-updateErrCh
+	s.Error(updateErr)
+	s.Equal("workflow execution already completed", updateErr.Error())
+	updateHandle := <-updateHandleCh
+	s.Nil(updateHandle)
+	// Uncomment the following when durable admitted is implemented.
+	// var updateResult string
+	// err = updateHandle.Get(ctx, &updateResult)
+	// s.NoError(err)
+	// s.Equal("my-update-result", updateResult)
 
 	s.HistoryRequire.EqualHistoryEvents(`
 	1 WorkflowExecutionStarted
@@ -1412,10 +1423,8 @@ func (s *ClientFunctionalSuite) Test_AdmittedUpdateCausesUnhandledCommandAndSche
 	5 WorkflowTaskScheduled
 	6 WorkflowTaskStarted
 	7 WorkflowTaskCompleted
-	8 WorkflowExecutionUpdateAccepted
-	9 WorkflowExecutionUpdateCompleted
-	10 MarkerRecorded
-	11 WorkflowExecutionCompleted`,
+	8 MarkerRecorded
+	9 WorkflowExecutionCompleted`,
 		s.getHistory(s.namespace, tv.WorkflowExecution()))
 }
 
