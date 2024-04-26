@@ -278,7 +278,9 @@ func (s *workflowHandlerSuite) TestGetWorkflowExecutionHistory() {
 	s.mockExecutionManager.EXPECT().TrimHistoryBranch(gomock.Any(), gomock.Any()).Return(nil, nil).AnyTimes()
 	s.mockSearchAttributesProvider.EXPECT().GetSearchAttributes(gomock.Any(), false).Return(searchattribute.TestNameTypeMap, nil).AnyTimes()
 
-	wh := s.getWorkflowHandler(s.newConfig())
+	config := s.newConfig()
+	config.AccessHistoryFraction = dc.GetFloatPropertyFn(0.0)
+	wh := s.getWorkflowHandler(config)
 
 	oldGoSDKVersion := "1.9.1"
 	newGoSDKVersion := "1.10.1"
@@ -318,6 +320,7 @@ func (s *workflowHandlerSuite) TestGetWorkflowExecutionHistory_RawHistoryWithTra
 	we := &commonpb.WorkflowExecution{WorkflowId: "wid1", RunId: uuid.New()}
 
 	config := s.newConfig()
+	config.AccessHistoryFraction = dc.GetFloatPropertyFn(0.0)
 	config.SendRawWorkflowHistory = dc.GetBoolPropertyFnFilteredByNamespace(true)
 	wh := s.getWorkflowHandler(config)
 
