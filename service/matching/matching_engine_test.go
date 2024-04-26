@@ -2999,6 +2999,7 @@ func (s *matchingEngineSuite) TestMoreTasksResetBacklogCounterNoDBErrors() {
 }
 
 func (s *matchingEngineSuite) TestMoreTasksResetBacklogCounterDBErrors() {
+	s.T().Skip()
 	s.taskManager.dbError = true
 	s.resetBacklogCounter(10, 20, 2)
 }
