@@ -31,20 +31,17 @@ import (
 	"github.com/stretchr/testify/assert"
 	commonpb "go.temporal.io/api/common/v1"
 	protocolpb "go.temporal.io/api/protocol/v1"
-	updatepb "go.temporal.io/api/update/v1"
+	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/server/api/token/v1"
 	"go.temporal.io/server/common"
-	"google.golang.org/grpc/codes"
-	"google.golang.org/grpc/status"
-	"google.golang.org/protobuf/types/known/anypb"
-
-	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/server/common/api"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 )
 
 const (
@@ -57,15 +54,6 @@ func TestEmitActionMetric(t *testing.T) {
 	register := namespace.NewMockRegistry(controller)
 	metricsHandler := metrics.NewMockHandler(controller)
 	telemetry := NewTelemetryInterceptor(register, metricsHandler, log.NewNoopLogger())
-
-	var updateAcceptanceMessageBody anypb.Any
-	_ = updateAcceptanceMessageBody.MarshalFrom(&updatepb.Acceptance{})
-
-	var updateRejectionMessageBody anypb.Any
-	_ = updateRejectionMessageBody.MarshalFrom(&updatepb.Rejection{})
-
-	var updateResponseMessageBody anypb.Any
-	_ = updateResponseMessageBody.MarshalFrom(&updatepb.Response{})
 
 	testCases := []struct {
 		methodName        string

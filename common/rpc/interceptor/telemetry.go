@@ -37,6 +37,7 @@ import (
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
+	"google.golang.org/protobuf/types/known/anypb"
 
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/api"
@@ -72,6 +73,15 @@ type (
 
 var (
 	metricsCtxKey = metricsContextKey{}
+
+	updateAcceptanceMessageBody anypb.Any
+	_                           = updateAcceptanceMessageBody.MarshalFrom(&updatepb.Acceptance{})
+
+	updateRejectionMessageBody anypb.Any
+	_                          = updateRejectionMessageBody.MarshalFrom(&updatepb.Rejection{})
+
+	updateResponseMessageBody anypb.Any
+	_                         = updateResponseMessageBody.MarshalFrom(&updatepb.Response{})
 
 	_ grpc.UnaryServerInterceptor  = (*TelemetryInterceptor)(nil).UnaryIntercept
 	_ grpc.StreamServerInterceptor = (*TelemetryInterceptor)(nil).StreamIntercept
@@ -274,26 +284,18 @@ func (ti *TelemetryInterceptor) emitActionMetric(
 			metrics.ActionCounter.With(metricsHandler).Record(1, metrics.ActionType("command_BatchMarkers"))
 		}
 
-		var updates int64
 		for _, msg := range completedRequest.Messages {
 			if msg == nil || msg.Body == nil {
 				continue
 			}
-			body, err := msg.Body.UnmarshalNew()
-			if err != nil {
-				continue
-			}
-			switch body.(type) {
-			case *updatepb.Acceptance:
-				updates += 1
-			case *updatepb.Rejection:
-				updates += 1
-			case *updatepb.Response:
+			switch msg.Body.GetTypeUrl() {
+			case updateAcceptanceMessageBody.TypeUrl:
+				metrics.ActionCounter.With(metricsHandler).Record(1, metrics.ActionType("message_UpdateWorkflowExecution:Acceptance"))
+			case updateRejectionMessageBody.TypeUrl:
+				metrics.ActionCounter.With(metricsHandler).Record(1, metrics.ActionType("message_UpdateWorkflowExecution:Rejection"))
+			case updateResponseMessageBody.TypeUrl:
 				// not billed
 			}
-		}
-		if updates > 0 {
-			metrics.ActionCounter.With(metricsHandler).Record(updates, metrics.ActionType("command_UpdateWorkflowExecution"))
 		}
 
 	case pollActivityTaskQueue:
