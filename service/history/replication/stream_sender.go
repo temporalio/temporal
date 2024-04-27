@@ -153,6 +153,8 @@ func (s *StreamSenderImpl) recvEventLoop() (retErr error) {
 
 	defer log.CapturePanic(s.logger, &panicErr)
 
+	var inclusiveLowWatermark int64
+
 	for !s.shutdownChan.IsShutdown() {
 		req, err := s.server.Recv()
 		if err != nil {
@@ -161,6 +163,10 @@ func (s *StreamSenderImpl) recvEventLoop() (retErr error) {
 		}
 		switch attr := req.GetAttributes().(type) {
 		case *historyservice.StreamWorkflowReplicationMessagesRequest_SyncReplicationState:
+			if attr.SyncReplicationState.GetInclusiveLowWatermark() != inclusiveLowWatermark {
+				inclusiveLowWatermark = attr.SyncReplicationState.GetInclusiveLowWatermark()
+				s.logger.Debug(fmt.Sprintf("StreamSender received new inclusiveLowWatermark: %v", inclusiveLowWatermark))
+			}
 			if err := s.recvSyncReplicationState(attr.SyncReplicationState); err != nil {
 				s.logger.Error("ReplicationServiceError StreamSender unable to handle SyncReplicationState", tag.Error(err))
 				return err
@@ -201,6 +207,7 @@ func (s *StreamSenderImpl) sendEventLoop() (retErr error) {
 		s.logger.Error("ReplicationServiceError StreamSender unable to catch up replication tasks", tag.Error(err))
 		return err
 	}
+	s.logger.Debug(fmt.Sprintf("StreamSender sendCatchUp finished with catchupEndExclusiveWatermark %v", catchupEndExclusiveWatermark))
 	if err := s.sendLive(
 		newTaskNotificationChan,
 		catchupEndExclusiveWatermark,
@@ -256,21 +263,24 @@ func (s *StreamSenderImpl) sendCatchUp() (int64, error) {
 		s.clientShardKey.ShardID,
 	)
 
+	catchupEndExclusiveWatermark := s.shardContext.GetQueueExclusiveHighReadWatermark(tasks.CategoryReplication).TaskID
+
 	var catchupBeginInclusiveWatermark int64
 	queueState, ok := s.shardContext.GetQueueState(
 		tasks.CategoryReplication,
 	)
 	if !ok {
-		catchupBeginInclusiveWatermark = 0
+		s.logger.Debug("StreamSender queueState not found")
+		catchupBeginInclusiveWatermark = catchupEndExclusiveWatermark
 	} else {
 		readerState, ok := queueState.ReaderStates[readerID]
 		if !ok {
-			catchupBeginInclusiveWatermark = 0
+			s.logger.Debug(fmt.Sprintf("StreamSender readerState not found, readerID %v", readerID))
+			catchupBeginInclusiveWatermark = catchupEndExclusiveWatermark
 		} else {
 			catchupBeginInclusiveWatermark = readerState.Scopes[0].Range.InclusiveMin.TaskId
 		}
 	}
-	catchupEndExclusiveWatermark := s.shardContext.GetQueueExclusiveHighReadWatermark(tasks.CategoryReplication).TaskID
 	if err := s.sendTasks(
 		catchupBeginInclusiveWatermark,
 		catchupEndExclusiveWatermark,
@@ -305,6 +315,7 @@ func (s *StreamSenderImpl) sendTasks(
 	beginInclusiveWatermark int64,
 	endExclusiveWatermark int64,
 ) error {
+	s.logger.Debug(fmt.Sprintf("StreamSender sendTasks [%v, %v)", beginInclusiveWatermark, endExclusiveWatermark))
 	if beginInclusiveWatermark > endExclusiveWatermark {
 		err := serviceerror.NewInternal(fmt.Sprintf("StreamWorkflowReplication encountered invalid task range [%v, %v)",
 			beginInclusiveWatermark,
@@ -354,6 +365,7 @@ Loop:
 		if task == nil {
 			continue Loop
 		}
+		s.logger.Debug("StreamSender send replication task", tag.TaskID(task.SourceTaskId))
 		if err := s.sendToStream(&historyservice.StreamWorkflowReplicationMessagesResponse{
 			Attributes: &historyservice.StreamWorkflowReplicationMessagesResponse_Messages{
 				Messages: &replicationspb.WorkflowReplicationMessages{

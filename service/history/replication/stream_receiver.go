@@ -28,6 +28,7 @@ package replication
 
 import (
 	"context"
+	"fmt"
 	"sync/atomic"
 	"time"
 
@@ -160,17 +161,24 @@ func (r *StreamReceiverImpl) sendEventLoop() error {
 	timer := time.NewTicker(r.Config.ReplicationStreamSyncStatusDuration())
 	defer timer.Stop()
 
+	var inclusiveLowWatermark int64
+
 	for {
 		select {
 		case <-timer.C:
 			timer.Reset(r.Config.ReplicationStreamSyncStatusDuration())
-			if err := r.ackMessage(r.stream); err != nil {
+			watermark, err := r.ackMessage(r.stream)
+			if err != nil {
 				if IsStreamError(err) {
 					r.logger.Error("ReplicationStreamError StreamReceiver exit send loop", tag.Error(err))
 				} else {
 					r.logger.Error("ReplicationServiceError StreamReceiver exit send loop", tag.Error(err))
 				}
 				return err
+			}
+			if watermark != inclusiveLowWatermark {
+				inclusiveLowWatermark = watermark
+				r.logger.Debug(fmt.Sprintf("StreamReceiver acked inclusiveLowWatermark %d", inclusiveLowWatermark))
 			}
 		case <-r.shutdownChan.Channel():
 			return nil
@@ -199,13 +207,14 @@ func (r *StreamReceiverImpl) recvEventLoop() error {
 	return err
 }
 
+// ackMessage returns the inclusive low watermark if present.
 func (r *StreamReceiverImpl) ackMessage(
 	stream Stream,
-) error {
+) (int64, error) {
 	watermarkInfo := r.taskTracker.LowWatermark()
 	size := r.taskTracker.Size()
 	if watermarkInfo == nil {
-		return nil
+		return 0, nil
 	}
 	if err := stream.Send(&adminservice.StreamWorkflowReplicationMessagesRequest{
 		Attributes: &adminservice.StreamWorkflowReplicationMessagesRequest_SyncReplicationState{
@@ -215,7 +224,7 @@ func (r *StreamReceiverImpl) ackMessage(
 			},
 		},
 	}); err != nil {
-		return err
+		return 0, err
 	}
 	metrics.ReplicationTasksRecvBacklog.With(r.MetricsHandler).Record(
 		int64(size),
@@ -228,7 +237,7 @@ func (r *StreamReceiverImpl) ackMessage(
 		metrics.ToClusterIDTag(r.serverShardKey.ClusterID),
 		metrics.OperationTag(metrics.SyncWatermarkScope),
 	)
-	return nil
+	return watermarkInfo.Watermark, nil
 }
 
 func (r *StreamReceiverImpl) processMessages(
@@ -256,6 +265,7 @@ func (r *StreamReceiverImpl) processMessages(
 		)
 		exclusiveHighWatermark := streamResp.Resp.GetMessages().ExclusiveHighWatermark
 		exclusiveHighWatermarkTime := timestamp.TimeValue(streamResp.Resp.GetMessages().ExclusiveHighWatermarkTime)
+		r.logger.Debug(fmt.Sprintf("StreamReceiver processMessages received %d tasks with exclusiveHighWatermark %d", len(tasks), exclusiveHighWatermark))
 		for _, task := range r.taskTracker.TrackTasks(WatermarkInfo{
 			Watermark: exclusiveHighWatermark,
 			Timestamp: exclusiveHighWatermarkTime,
