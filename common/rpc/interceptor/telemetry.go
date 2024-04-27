@@ -288,6 +288,8 @@ func (ti *TelemetryInterceptor) emitActionMetric(
 				updates += 1
 			case *updatepb.Rejection:
 				updates += 1
+			case *updatepb.Response:
+				// not billed
 			}
 		}
 		if updates > 0 {

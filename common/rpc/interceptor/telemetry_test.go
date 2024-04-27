@@ -64,8 +64,8 @@ func TestEmitActionMetric(t *testing.T) {
 	var updateRejectionMessageBody anypb.Any
 	_ = updateRejectionMessageBody.MarshalFrom(&updatepb.Rejection{})
 
-	var updateCompletionMessageBody anypb.Any
-	_ = updateCompletionMessageBody.MarshalFrom(&updatepb.Outcome{})
+	var updateResponseMessageBody anypb.Any
+	_ = updateResponseMessageBody.MarshalFrom(&updatepb.Response{})
 
 	testCases := []struct {
 		methodName        string
@@ -134,7 +134,7 @@ func TestEmitActionMetric(t *testing.T) {
 				Messages: []*protocolpb.Message{
 					{
 						Id:   "MESSAGE_ID",
-						Body: &updateCompletionMessageBody,
+						Body: &updateResponseMessageBody,
 					},
 				},
 			},
