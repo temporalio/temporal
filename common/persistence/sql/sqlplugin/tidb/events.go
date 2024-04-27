@@ -1,0 +1,233 @@
+// The MIT License
+//
+// Copyright (c) 2020 Temporal Technologies Inc.  All rights reserved.
+//
+// Copyright (c) 2020 Uber Technologies, Inc.
+//
+// Permission is hereby granted, free of charge, to any person obtaining a copy
+// of this software and associated documentation files (the "Software"), to deal
+// in the Software without restriction, including without limitation the rights
+// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+// copies of the Software, and to permit persons to whom the Software is
+// furnished to do so, subject to the following conditions:
+//
+// The above copyright notice and this permission notice shall be included in
+// all copies or substantial portions of the Software.
+//
+// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
+// THE SOFTWARE.
+
+package tidb
+
+import (
+	"context"
+	"database/sql"
+
+	"go.temporal.io/server/common/persistence/sql/sqlplugin"
+)
+
+const (
+	// below are templates for history_node table
+	addHistoryNodesQuery = `INSERT INTO history_node (` +
+		`shard_id, tree_id, branch_id, node_id, prev_txn_id, txn_id, data, data_encoding) ` +
+		`VALUES (:shard_id, :tree_id, :branch_id, :node_id, :prev_txn_id, :txn_id, :data, :data_encoding) ` +
+		`ON DUPLICATE KEY UPDATE prev_txn_id=:prev_txn_id, data=:data, data_encoding=:data_encoding `
+
+	getHistoryNodesQuery = `SELECT node_id, prev_txn_id, txn_id, data, data_encoding FROM history_node ` +
+		`WHERE shard_id = ? AND tree_id = ? AND branch_id = ? AND ((node_id = ? AND txn_id > ?) OR node_id > ?) AND node_id < ? ` +
+		`ORDER BY shard_id, tree_id, branch_id, node_id, txn_id LIMIT ? `
+
+	getHistoryNodesReverseQuery = `SELECT node_id, prev_txn_id, txn_id, data, data_encoding FROM history_node ` +
+		`WHERE shard_id = ? AND tree_id = ? AND branch_id = ? AND node_id >= ? AND ((node_id = ? AND txn_id < ?) OR node_id < ?) ` +
+		`ORDER BY shard_id, tree_id, branch_id DESC, node_id DESC, txn_id DESC LIMIT ? `
+
+	getHistoryNodeMetadataQuery = `SELECT node_id, prev_txn_id, txn_id FROM history_node ` +
+		`WHERE shard_id = ? AND tree_id = ? AND branch_id = ? AND ((node_id = ? AND txn_id > ?) OR node_id > ?) AND node_id < ? ` +
+		`ORDER BY shard_id, tree_id, branch_id, node_id, txn_id LIMIT ? `
+
+	deleteHistoryNodeQuery = `DELETE FROM history_node WHERE shard_id = ? AND tree_id = ? AND branch_id = ? AND node_id = ? AND txn_id = ? `
+
+	deleteHistoryNodesQuery = `DELETE FROM history_node WHERE shard_id = ? AND tree_id = ? AND branch_id = ? AND node_id >= ? `
+
+	// below are templates for history_tree table
+	addHistoryTreeQuery = `INSERT INTO history_tree (` +
+		`shard_id, tree_id, branch_id, data, data_encoding) ` +
+		`VALUES (:shard_id, :tree_id, :branch_id, :data, :data_encoding) ` +
+		`ON DUPLICATE KEY UPDATE data=VALUES(data), data_encoding=VALUES(data_encoding)`
+
+	getHistoryTreeQuery = `SELECT branch_id, data, data_encoding FROM history_tree WHERE shard_id = ? AND tree_id = ? `
+
+	// conceptually this query is WHERE (shard_id, tree_id, branch_id) > (?, ?, ?)
+	// but mysql doesn't execute it efficiently unless it's spelled out like this
+	paginateBranchesQuery = `SELECT shard_id, tree_id, branch_id, data, data_encoding
+		FROM history_tree
+		WHERE (shard_id = ? AND ((tree_id = ? AND branch_id > ?) OR tree_id > ?)) OR shard_id > ?
+		ORDER BY shard_id, tree_id, branch_id
+		LIMIT ?`
+
+	deleteHistoryTreeQuery = `DELETE FROM history_tree WHERE shard_id = ? AND tree_id = ? AND branch_id = ? `
+)
+
+// For history_node table:
+
+// InsertIntoHistoryNode inserts a row into history_node table
+func (tidb *db) InsertIntoHistoryNode(
+	ctx context.Context,
+	row *sqlplugin.HistoryNodeRow,
+) (sql.Result, error) {
+	// NOTE: txn_id is *= -1 within DB
+	row.TxnID = -row.TxnID
+	return tidb.conn.NamedExecContext(ctx,
+		addHistoryNodesQuery,
+		row,
+	)
+}
+
+// DeleteFromHistoryNode delete a row from history_node table
+func (tidb *db) DeleteFromHistoryNode(
+	ctx context.Context,
+	row *sqlplugin.HistoryNodeRow,
+) (sql.Result, error) {
+	// NOTE: txn_id is *= -1 within DB
+	row.TxnID = -row.TxnID
+	return tidb.conn.ExecContext(ctx,
+		deleteHistoryNodeQuery,
+		row.ShardID,
+		row.TreeID,
+		row.BranchID,
+		row.NodeID,
+		row.TxnID,
+	)
+}
+
+// SelectFromHistoryNode reads one or more rows from history_node table
+func (tidb *db) RangeSelectFromHistoryNode(
+	ctx context.Context,
+	filter sqlplugin.HistoryNodeSelectFilter,
+) ([]sqlplugin.HistoryNodeRow, error) {
+	var query string
+	if filter.MetadataOnly {
+		query = getHistoryNodeMetadataQuery
+	} else if filter.ReverseOrder {
+		query = getHistoryNodesReverseQuery
+	} else {
+		query = getHistoryNodesQuery
+	}
+
+	var args []interface{}
+	if filter.ReverseOrder {
+		args = []interface{}{
+			filter.ShardID,
+			filter.TreeID,
+			filter.BranchID,
+			filter.MinNodeID,
+			filter.MaxTxnID,
+			-filter.MaxTxnID,
+			filter.MaxNodeID,
+			filter.PageSize,
+		}
+	} else {
+		args = []interface{}{
+			filter.ShardID,
+			filter.TreeID,
+			filter.BranchID,
+			filter.MinNodeID,
+			-filter.MinTxnID, // NOTE: transaction ID is *= -1 when stored
+			filter.MinNodeID,
+			filter.MaxNodeID,
+			filter.PageSize,
+		}
+	}
+
+	var rows []sqlplugin.HistoryNodeRow
+	if err := tidb.conn.SelectContext(ctx, &rows, query, args...); err != nil {
+		return nil, err
+	}
+
+	// NOTE: since we let txn_id multiple by -1 when inserting, we have to revert it back here
+	for index := range rows {
+		rows[index].TxnID = -rows[index].TxnID
+	}
+	return rows, nil
+}
+
+// DeleteFromHistoryNode deletes one or more rows from history_node table
+func (tidb *db) RangeDeleteFromHistoryNode(
+	ctx context.Context,
+	filter sqlplugin.HistoryNodeDeleteFilter,
+) (sql.Result, error) {
+	return tidb.conn.ExecContext(ctx,
+		deleteHistoryNodesQuery,
+		filter.ShardID,
+		filter.TreeID,
+		filter.BranchID,
+		filter.MinNodeID,
+	)
+}
+
+// For history_tree table:
+
+// InsertIntoHistoryTree inserts a row into history_tree table
+func (tidb *db) InsertIntoHistoryTree(
+	ctx context.Context,
+	row *sqlplugin.HistoryTreeRow,
+) (sql.Result, error) {
+	return tidb.conn.NamedExecContext(ctx,
+		addHistoryTreeQuery,
+		row,
+	)
+}
+
+// SelectFromHistoryTree reads one or more rows from history_tree table
+func (tidb *db) SelectFromHistoryTree(
+	ctx context.Context,
+	filter sqlplugin.HistoryTreeSelectFilter,
+) ([]sqlplugin.HistoryTreeRow, error) {
+	var rows []sqlplugin.HistoryTreeRow
+	err := tidb.conn.SelectContext(ctx,
+		&rows,
+		getHistoryTreeQuery,
+		filter.ShardID,
+		filter.TreeID,
+	)
+	return rows, err
+}
+
+// PaginateBranchesFromHistoryTree reads up to page.Limit rows from the history_tree table sorted by their primary key,
+// while skipping the first page.Offset rows.
+func (tidb *db) PaginateBranchesFromHistoryTree(
+	ctx context.Context,
+	page sqlplugin.HistoryTreeBranchPage,
+) ([]sqlplugin.HistoryTreeRow, error) {
+	var rows []sqlplugin.HistoryTreeRow
+	err := tidb.conn.SelectContext(
+		ctx,
+		&rows,
+		paginateBranchesQuery,
+		page.ShardID,
+		page.TreeID,
+		page.BranchID,
+		page.TreeID,
+		page.ShardID,
+		page.Limit,
+	)
+	return rows, err
+}
+
+// DeleteFromHistoryTree deletes one or more rows from history_tree table
+func (tidb *db) DeleteFromHistoryTree(
+	ctx context.Context,
+	filter sqlplugin.HistoryTreeDeleteFilter,
+) (sql.Result, error) {
+	return tidb.conn.ExecContext(ctx,
+		deleteHistoryTreeQuery,
+		filter.ShardID,
+		filter.TreeID,
+		filter.BranchID,
+	)
+}

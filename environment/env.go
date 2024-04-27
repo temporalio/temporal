@@ -68,6 +68,13 @@ const (
 	PostgresPort = "POSTGRES_PORT"
 	// PostgresDefaultPort Postgres default port
 	PostgresDefaultPort = 5432
+
+	// TiDBSeeds env
+	TiDBSeeds = "TIDB_SEEDS"
+	// TiDBPort env
+	TiDBPort = "TIDB_PORT"
+	// TiDBDefaultPort TiDB default port
+	TiDBDefaultPort = 4000
 )
 
 type varSpec struct {
@@ -181,7 +188,7 @@ func GetCassandraPort() int {
 	return p
 }
 
-// GetMySQLAddress return the cassandra address
+// GetMySQLAddress return the mysql address
 func GetMySQLAddress() string {
 	addr := os.Getenv(MySQLSeeds)
 	if addr == "" {
@@ -221,6 +228,28 @@ func GetPostgreSQLPort() int {
 	p, err := strconv.Atoi(port)
 	if err != nil {
 		panic(fmt.Sprintf("error getting env %v", PostgresPort))
+	}
+	return p
+}
+
+// GetTiDBAddress return the TiDB address
+func GetTiDBAddress() string {
+	addr := os.Getenv(TiDBSeeds)
+	if addr == "" {
+		addr = GetLocalhostIP()
+	}
+	return addr
+}
+
+// GetTiDBPort return the TiDB port
+func GetTiDBPort() int {
+	port := os.Getenv(TiDBPort)
+	if port == "" {
+		return TiDBDefaultPort
+	}
+	p, err := strconv.Atoi(port)
+	if err != nil {
+		panic(fmt.Sprintf("error getting env %v", TiDBPort))
 	}
 	return p
 }

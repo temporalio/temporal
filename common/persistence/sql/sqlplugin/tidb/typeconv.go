@@ -22,35 +22,44 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-package sql
+package tidb
 
-import (
-	"go.temporal.io/server/common/namespace"
-	"go.temporal.io/server/common/persistence/sql/sqlplugin/mysql"
-	"go.temporal.io/server/common/persistence/sql/sqlplugin/postgresql"
-	"go.temporal.io/server/common/persistence/sql/sqlplugin/sqlite"
-	"go.temporal.io/server/common/persistence/sql/sqlplugin/tidb"
-	"go.temporal.io/server/common/searchattribute"
+import "time"
+
+var (
+	minMySQLDateTime = getMinMySQLDateTime()
 )
 
-func NewQueryConverter(
-	pluginName string,
-	namespaceName namespace.Name,
-	namespaceID namespace.ID,
-	saTypeMap searchattribute.NameTypeMap,
-	saMapper searchattribute.Mapper,
-	queryString string,
-) *QueryConverter {
-	switch pluginName {
-	case mysql.PluginName:
-		return newMySQLQueryConverter(namespaceName, namespaceID, saTypeMap, saMapper, queryString)
-	case postgresql.PluginName, postgresql.PluginNamePGX:
-		return newPostgreSQLQueryConverter(namespaceName, namespaceID, saTypeMap, saMapper, queryString)
-	case sqlite.PluginName:
-		return newSqliteQueryConverter(namespaceName, namespaceID, saTypeMap, saMapper, queryString)
-	case tidb.PluginName:
-		return newTiDBQueryConverter(namespaceName, namespaceID, saTypeMap, saMapper, queryString)
-	default:
-		return nil
+type (
+	// DataConverter defines the API for conversions to/from
+	// go types to mysql datatypes
+	DataConverter interface {
+		ToMySQLDateTime(t time.Time) time.Time
+		FromMySQLDateTime(t time.Time) time.Time
 	}
+	converter struct{}
+)
+
+// ToMySQLDateTime converts to time to MySQL datetime
+func (c *converter) ToMySQLDateTime(t time.Time) time.Time {
+	if t.IsZero() {
+		return minMySQLDateTime
+	}
+	return t.UTC().Truncate(time.Microsecond)
+}
+
+// FromMySQLDateTime converts mysql datetime and returns go time
+func (c *converter) FromMySQLDateTime(t time.Time) time.Time {
+	if t.Equal(minMySQLDateTime) {
+		return time.Time{}.UTC()
+	}
+	return t.UTC()
+}
+
+func getMinMySQLDateTime() time.Time {
+	t, err := time.Parse(time.RFC3339, "1000-01-01T00:00:00Z")
+	if err != nil {
+		return time.Unix(0, 0).UTC()
+	}
+	return t.UTC()
 }

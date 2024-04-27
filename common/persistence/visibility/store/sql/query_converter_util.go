@@ -59,6 +59,8 @@ type (
 
 const (
 	coalesceFuncName = "coalesce"
+	ifFuncName       = "if"
+	isNullFuncName   = "isnull"
 )
 
 var _ sqlparser.Expr = (*unsafeSQLString)(nil)

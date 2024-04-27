@@ -1,0 +1,9 @@
+{
+    "CurrVersion": "1.8",
+    "MinCompatibleVersion": "1.0",
+    "Description": "drop unused tasks table; expand VARCHAR columns governed by maxIDLength to VARCHAR(255)",
+    "SchemaUpdateCqlFiles": [
+        "drop_unused_tasks_table.sql",
+        "alter_columns.sql"
+    ]
+}

@@ -1,0 +1,10 @@
+{
+  "CurrVersion": "1.7",
+  "MinCompatibleVersion": "1.0",
+  "Description": "create cluster metadata info table to store cluster information and executions to store tiered storage queue",
+  "SchemaUpdateCqlFiles": [
+    "cluster_metadata_info.sql",
+    "no_start_version.sql",
+    "tiered_storage_tasks.sql"
+  ]
+}
