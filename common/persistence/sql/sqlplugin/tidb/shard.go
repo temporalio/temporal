@@ -93,17 +93,12 @@ func (tidb *db) SelectFromShards(
 }
 
 // ReadLockShards acquires a read lock on a single row in shards table
+// TiDB doesn't support read(shared) lock now, upgrade it to write lock
 func (tidb *db) ReadLockShards(
 	ctx context.Context,
 	filter sqlplugin.ShardsFilter,
 ) (int64, error) {
-	var rangeID int64
-	err := tidb.conn.GetContext(ctx,
-		&rangeID,
-		readLockShardQry,
-		filter.ShardID,
-	)
-	return rangeID, err
+	return tidb.WriteLockShards(ctx, filter)
 }
 
 // WriteLockShards acquires a write lock on a single row in shards table

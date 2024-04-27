@@ -51,8 +51,6 @@ const (
  WHERE shard_id = ? AND namespace_id = ? AND workflow_id = ? AND run_id = ?`
 
 	writeLockExecutionQuery = lockExecutionQueryBase + ` FOR UPDATE`
-	// TiDB doesn't support read(shared) lock now, upgrade it to write lock
-	readLockExecutionQuery = lockExecutionQueryBase + ` FOR UPDATE`
 
 	createCurrentExecutionQuery = `INSERT INTO current_executions
 (shard_id, namespace_id, workflow_id, run_id, create_request_id, state, status, last_write_version) VALUES
