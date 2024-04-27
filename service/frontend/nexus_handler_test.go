@@ -140,7 +140,7 @@ func TestNexusInterceptRequeset_InvalidNamespaceState_ResultsInBadRequest(t *tes
 	var handlerError *nexus.HandlerError
 	require.ErrorAs(t, err, &handlerError)
 	require.Equal(t, nexus.HandlerErrorTypeBadRequest, handlerError.Type)
-	require.Equal(t, "Internal error", handlerError.Failure.Message)
+	require.Equal(t, "bad request", handlerError.Failure.Message)
 	mh := oc.metricsHandler.(*metricstest.CaptureHandler) //nolint:revive
 	capture := mh.StartCapture()
 	oc.metricsHandler.Counter("test").Record(1)
@@ -164,7 +164,7 @@ func TestNexusInterceptRequeset_NamespaceConcurrencyLimited_ResultsInResourceExh
 	var handlerError *nexus.HandlerError
 	require.ErrorAs(t, err, &handlerError)
 	require.Equal(t, nexus.HandlerErrorTypeResourceExhausted, handlerError.Type)
-	require.Equal(t, "Internal error", handlerError.Failure.Message)
+	require.Equal(t, "resource exhausted", handlerError.Failure.Message)
 	mh := oc.metricsHandler.(*metricstest.CaptureHandler) //nolint:revive
 	capture := mh.StartCapture()
 	oc.metricsHandler.Counter("test").Record(1)

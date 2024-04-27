@@ -23,7 +23,9 @@ jobs:
     needs: build-docker-image
     uses: temporalio/features/.github/workflows/typescript.yaml@main
     with:
-      version: 1.5.2
+      # This field is not actually used by these workflow if docker-image-artifact-name
+      # is set, but it's marked as required, so supply some string.
+      version: __latest_features_docker_image__
       version-is-repo-ref: false
       docker-image-artifact-name: temporal-server-docker
 
@@ -31,15 +33,15 @@ jobs:
     needs: build-docker-image
     uses: temporalio/features/.github/workflows/go.yaml@main
     with:
-      version: f9d73bfdf7c8d3ec0311306140fbfafa7fb6f9cf
-      version-is-repo-ref: true
+      version: __latest_features_docker_image__
+      version-is-repo-ref: false
       docker-image-artifact-name: temporal-server-docker
 
   feature-tests-python:
     needs: build-docker-image
     uses: temporalio/features/.github/workflows/python.yaml@main
     with:
-      version: 0.1b4
+      version: __latest_features_docker_image__
       version-is-repo-ref: false
       docker-image-artifact-name: temporal-server-docker
 
@@ -47,7 +49,7 @@ jobs:
     needs: build-docker-image
     uses: temporalio/features/.github/workflows/java.yaml@main
     with:
-      version: v1.17.0
+      version: __latest_features_docker_image__
       version-is-repo-ref: false
       docker-image-artifact-name: temporal-server-docker
 
@@ -55,6 +57,6 @@ jobs:
     needs: build-docker-image
     uses: temporalio/features/.github/workflows/dotnet.yaml@main
     with:
-      version: 1.0.0
+      version: __latest_features_docker_image__
       version-is-repo-ref: false
       docker-image-artifact-name: temporal-server-docker

@@ -886,7 +886,7 @@ func (s *visibilityStore) convertQuery(
 		return nil, serviceerror.NewUnavailable(fmt.Sprintf("Unable to read search attribute types: %v", err))
 	}
 	nameInterceptor := newNameInterceptor(namespace, s.index, saTypeMap, s.searchAttributesMapperProvider)
-	queryConverter := newQueryConverter(
+	queryConverter := NewQueryConverter(
 		nameInterceptor,
 		NewValuesInterceptor(namespace, saTypeMap, s.searchAttributesMapperProvider),
 	)

@@ -1,8 +1,6 @@
 // The MIT License
 //
-// Copyright (c) 2020 Temporal Technologies Inc.  All rights reserved.
-//
-// Copyright (c) 2020 Uber Technologies, Inc.
+// Copyright (c) 2024 Temporal Technologies Inc.  All rights reserved.
 //
 // Permission is hereby granted, free of charge, to any person obtaining a copy
 // of this software and associated documentation files (the "Software"), to deal
@@ -22,16 +20,23 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-package common
+package callbacks
 
-import "time"
+import (
+	"time"
 
-// DefaultRetrySettings indicates what the "default" retry settings
-// are if it is not specified on an Activity or for any unset fields
-// if a policy is explicitly set on a workflow
-type DefaultRetrySettings struct {
-	InitialInterval            time.Duration
-	MaximumIntervalCoefficient float64
-	BackoffCoefficient         float64
-	MaximumAttempts            int32
+	"go.temporal.io/server/common/dynamicconfig"
+)
+
+// InvocationTaskTimeout is the timeout for executing a single callback invocation task.
+const InvocationTaskTimeout = dynamicconfig.Key("component.callbacks.invocation.taskTimeout")
+
+type Config struct {
+	InvocationTaskTimeout dynamicconfig.DurationPropertyFn
+}
+
+func ConfigProvider(dc *dynamicconfig.Collection) *Config {
+	return &Config{
+		InvocationTaskTimeout: dc.GetDurationProperty(InvocationTaskTimeout, time.Second*10),
+	}
 }

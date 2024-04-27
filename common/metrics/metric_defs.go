@@ -683,9 +683,21 @@ var (
 		"nexus_request_preprocess_errors",
 		WithDescription("The number of Nexus requests for which pre-processing failed."),
 	)
-	NexusLatencyHistogram = NewCounterDef(
+	NexusLatencyHistogram = NewTimerDef(
 		"nexus_latency",
 		WithDescription("Latency histogram of Nexus requests."),
+	)
+	NexusCompletionRequests = NewCounterDef(
+		"nexus_completion_requests",
+		WithDescription("The number of Nexus completion (callback) requests received by the service."),
+	)
+	NexusCompletionLatencyHistogram = NewTimerDef(
+		"nexus_completion_latency",
+		WithDescription("Latency histogram of Nexus completion (callback) requests."),
+	)
+	NexusCompletionRequestPreProcessErrors = NewCounterDef(
+		"nexus_completion_request_preprocess_errors",
+		WithDescription("The number of Nexus completion requests for which pre-processing failed."),
 	)
 	HostRPSLimit          = NewGaugeDef("host_rps_limit")
 	NamespaceHostRPSLimit = NewGaugeDef("namespace_host_rps_limit")
@@ -918,6 +930,7 @@ var (
 	WorkflowContinuedAsNewCount           = NewCounterDef("workflow_continued_as_new")
 	ReplicationStreamPanic                = NewCounterDef("replication_stream_panic")
 	ReplicationStreamError                = NewCounterDef("replication_stream_error")
+	ReplicationServiceError               = NewCounterDef("replication_service_error")
 	ReplicationTasksSend                  = NewCounterDef("replication_tasks_send")
 	ReplicationTasksRecv                  = NewCounterDef("replication_tasks_recv")
 	ReplicationTasksRecvBacklog           = NewDimensionlessHistogramDef("replication_tasks_recv_backlog")

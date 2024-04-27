@@ -20,7 +20,7 @@ jobs:
       - name: Get git branch name
         id: get_branch
         run: |
-          echo "::set-output name=branch::${GITHUB_REF#refs/heads/}"
+          echo branch="${GITHUB_REF#refs/heads/}" >> "$GITHUB_OUTPUT"
 
       - name: Generate a token
         id: generate_token

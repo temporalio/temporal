@@ -94,6 +94,16 @@ func (e *RetryReplication) Status() *status.Status {
 	return st
 }
 
+func (e *RetryReplication) Equal(err *RetryReplication) bool {
+	return e.NamespaceId == err.NamespaceId &&
+		e.WorkflowId == err.WorkflowId &&
+		e.RunId == err.RunId &&
+		e.StartEventId == err.StartEventId &&
+		e.StartEventVersion == err.StartEventVersion &&
+		e.EndEventId == err.EndEventId &&
+		e.EndEventVersion == err.EndEventVersion
+}
+
 func newRetryReplication(
 	st *status.Status,
 	errDetails *errordetails.RetryReplicationFailure,

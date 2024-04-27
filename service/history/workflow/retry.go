@@ -45,9 +45,9 @@ import (
 	"go.temporal.io/server/api/clock/v1"
 	"go.temporal.io/server/api/historyservice/v1"
 	workflowspb "go.temporal.io/server/api/workflow/v1"
-	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/backoff"
 	"go.temporal.io/server/common/primitives/timestamp"
+	"go.temporal.io/server/common/retrypolicy"
 	"go.temporal.io/server/common/worker_versioning"
 )
 
@@ -138,7 +138,7 @@ func isRetryable(failure *failurepb.Failure, nonRetryableTypes []string) bool {
 			timeoutType == enumspb.TIMEOUT_TYPE_HEARTBEAT {
 			return !slices.Contains(
 				nonRetryableTypes,
-				common.TimeoutFailureTypePrefix+timeoutType.String(),
+				retrypolicy.TimeoutFailureTypePrefix+timeoutType.String(),
 			)
 		}
 

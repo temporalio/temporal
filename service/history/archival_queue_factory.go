@@ -94,8 +94,8 @@ func newHostScheduler(params ArchivalQueueFactoryParams) queues.Scheduler {
 		params.ClusterMetadata.GetCurrentClusterName(),
 		queues.SchedulerOptions{
 			WorkerCount:             params.Config.ArchivalProcessorSchedulerWorkerCount,
-			ActiveNamespaceWeights:  dynamicconfig.GetMapPropertyFnWithNamespaceFilter(ArchivalTaskPriorities),
-			StandbyNamespaceWeights: dynamicconfig.GetMapPropertyFnWithNamespaceFilter(ArchivalTaskPriorities),
+			ActiveNamespaceWeights:  dynamicconfig.GetMapPropertyFnFilteredByNamespace(ArchivalTaskPriorities),
+			StandbyNamespaceWeights: dynamicconfig.GetMapPropertyFnFilteredByNamespace(ArchivalTaskPriorities),
 		},
 		params.NamespaceRegistry,
 		params.Logger,

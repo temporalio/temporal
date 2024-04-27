@@ -49,9 +49,10 @@ import (
 // cases. There's also functional tests.
 
 const (
-	testNamespace   = "test-namespace"
-	testServiceName = "test-service"
-	testServiceURL  = "http://localhost/"
+	testNamespace         = "test-namespace"
+	testServiceName       = "test-service"
+	testServiceURL        = "http://localhost/"
+	testPublicCallbackURL = "http://localhost/callback"
 )
 
 func TestGet_NoNamespace(t *testing.T) {
@@ -129,7 +130,8 @@ func TestGet_Ok(t *testing.T) {
 						Version: 1,
 						Name:    testServiceName,
 						Spec: &nexuspb.OutgoingServiceSpec{
-							Url: testServiceURL,
+							Url:               testServiceURL,
+							PublicCallbackUrl: testPublicCallbackURL,
 						},
 					},
 				},
@@ -150,7 +152,8 @@ func TestGet_Ok(t *testing.T) {
 		Version: 1,
 		Name:    testServiceName,
 		Spec: &nexuspb.OutgoingServiceSpec{
-			Url: testServiceURL,
+			Url:               testServiceURL,
+			PublicCallbackUrl: testPublicCallbackURL,
 		},
 	}, res.Service)
 }
@@ -163,7 +166,8 @@ func TestUpdate_NoNamespace(t *testing.T) {
 		&operatorservice.UpdateNexusOutgoingServiceRequest{
 			Name: testServiceName,
 			Spec: &nexuspb.OutgoingServiceSpec{
-				Url: testServiceURL,
+				Url:               testServiceURL,
+				PublicCallbackUrl: testPublicCallbackURL,
 			},
 		},
 	)
@@ -178,7 +182,8 @@ func TestUpdate_NoServiceName(t *testing.T) {
 		&operatorservice.UpdateNexusOutgoingServiceRequest{
 			Namespace: testNamespace,
 			Spec: &nexuspb.OutgoingServiceSpec{
-				Url: testServiceURL,
+				Url:               testServiceURL,
+				PublicCallbackUrl: testPublicCallbackURL,
 			},
 		},
 	)
@@ -202,7 +207,8 @@ func TestUpdate_NotFound(t *testing.T) {
 			Name:      testServiceName + "x",
 			Version:   1,
 			Spec: &nexuspb.OutgoingServiceSpec{
-				Url: testServiceURL + "x",
+				Url:               testServiceURL + "x",
+				PublicCallbackUrl: testPublicCallbackURL,
 			},
 		},
 	)
@@ -221,7 +227,8 @@ func TestUpdate_VersionMismatch(t *testing.T) {
 						Version: 1,
 						Name:    testServiceName,
 						Spec: &nexuspb.OutgoingServiceSpec{
-							Url: testServiceURL,
+							Url:               testServiceURL,
+							PublicCallbackUrl: testPublicCallbackURL,
 						},
 					},
 				},
@@ -237,7 +244,8 @@ func TestUpdate_VersionMismatch(t *testing.T) {
 			Name:      testServiceName,
 			Version:   2,
 			Spec: &nexuspb.OutgoingServiceSpec{
-				Url: testServiceURL + "x",
+				Url:               testServiceURL + "x",
+				PublicCallbackUrl: testPublicCallbackURL,
 			},
 		},
 	)
@@ -254,7 +262,8 @@ func TestUpdate_Ok(t *testing.T) {
 				Version: 1,
 				Name:    testServiceName,
 				Spec: &nexuspb.OutgoingServiceSpec{
-					Url: testServiceURL,
+					Url:               testServiceURL,
+					PublicCallbackUrl: testPublicCallbackURL,
 				},
 			},
 		},
@@ -277,7 +286,8 @@ func TestUpdate_Ok(t *testing.T) {
 			Name:      testServiceName,
 			Version:   1,
 			Spec: &nexuspb.OutgoingServiceSpec{
-				Url: testServiceURL + "x",
+				Url:               testServiceURL + "x",
+				PublicCallbackUrl: testPublicCallbackURL,
 			},
 		},
 	)
@@ -294,7 +304,8 @@ func TestUpdate_Ok(t *testing.T) {
 		Version: 2,
 		Name:    testServiceName,
 		Spec: &nexuspb.OutgoingServiceSpec{
-			Url: testServiceURL + "x",
+			Url:               testServiceURL + "x",
+			PublicCallbackUrl: testPublicCallbackURL,
 		},
 	}, res.Service)
 }
@@ -310,7 +321,8 @@ func TestCreate_NameTooLong(t *testing.T) {
 			Namespace: testNamespace,
 			Name:      name,
 			Spec: &nexuspb.OutgoingServiceSpec{
-				Url: testServiceURL,
+				Url:               testServiceURL,
+				PublicCallbackUrl: testPublicCallbackURL,
 			},
 		},
 	)
@@ -328,7 +340,8 @@ func TestCreate_NameInvalidFormat(t *testing.T) {
 			Namespace: testNamespace,
 			Name:      "!@&#%^$",
 			Spec: &nexuspb.OutgoingServiceSpec{
-				Url: testServiceURL,
+				Url:               testServiceURL,
+				PublicCallbackUrl: testPublicCallbackURL,
 			},
 		},
 	)
@@ -337,7 +350,7 @@ func TestCreate_NameInvalidFormat(t *testing.T) {
 	assert.ErrorContains(t, err, "a-z")
 }
 
-func TestCreate_NoURL(t *testing.T) {
+func TestCreate_NoSpec(t *testing.T) {
 	t.Parallel()
 	registry := nexus.NewOutgoingServiceRegistry(nil, nil, newConfig())
 	_, err := registry.Create(
@@ -347,10 +360,42 @@ func TestCreate_NoURL(t *testing.T) {
 			Name:      testServiceName,
 		},
 	)
+	require.ErrorContains(t, err, nexus.IssueSpecNotSet)
+}
+
+func TestCreate_FailsWhen_NoURL(t *testing.T) {
+	t.Parallel()
+	registry := nexus.NewOutgoingServiceRegistry(nil, nil, newConfig())
+	_, err := registry.Create(
+		context.Background(),
+		&operatorservice.CreateNexusOutgoingServiceRequest{
+			Namespace: testNamespace,
+			Name:      testServiceName,
+			Spec: &nexuspb.OutgoingServiceSpec{
+				PublicCallbackUrl: testPublicCallbackURL,
+			},
+		},
+	)
 	require.ErrorContains(t, err, nexus.IssueURLNotSet)
 }
 
-func TestCreate_URLTooLong(t *testing.T) {
+func TestCreate_FailsWhen_NoPublicCallbackURL(t *testing.T) {
+	t.Parallel()
+	registry := nexus.NewOutgoingServiceRegistry(nil, nil, newConfig())
+	_, err := registry.Create(
+		context.Background(),
+		&operatorservice.CreateNexusOutgoingServiceRequest{
+			Namespace: testNamespace,
+			Name:      testServiceName,
+			Spec: &nexuspb.OutgoingServiceSpec{
+				Url: testServiceURL,
+			},
+		},
+	)
+	require.ErrorContains(t, err, nexus.IssueURLNotSet)
+}
+
+func TestCreate_FailsWhen_URLTooLong(t *testing.T) {
 	t.Parallel()
 	config := newConfig()
 	registry := nexus.NewOutgoingServiceRegistry(nil, nil, config)
@@ -362,7 +407,30 @@ func TestCreate_URLTooLong(t *testing.T) {
 			Namespace: testNamespace,
 			Name:      testServiceName,
 			Spec: &nexuspb.OutgoingServiceSpec{
-				Url: u,
+				Url:               u,
+				PublicCallbackUrl: testPublicCallbackURL,
+			},
+		},
+	)
+	require.Error(t, err)
+	assert.Equal(t, codes.InvalidArgument, serviceerror.ToStatus(err).Code(), err)
+	assert.ErrorContains(t, err, strconv.Itoa(config.MaxURLLength()))
+}
+
+func TestCreate_FailsWhen_PublicCallbackURLTooLong(t *testing.T) {
+	t.Parallel()
+	config := newConfig()
+	registry := nexus.NewOutgoingServiceRegistry(nil, nil, config)
+	u := testPublicCallbackURL + "/"
+	u += strings.Repeat("x", config.MaxURLLength()-len(u)+1)
+	_, err := registry.Create(
+		context.Background(),
+		&operatorservice.CreateNexusOutgoingServiceRequest{
+			Namespace: testNamespace,
+			Name:      testServiceName,
+			Spec: &nexuspb.OutgoingServiceSpec{
+				Url:               testServiceURL,
+				PublicCallbackUrl: u,
 			},
 		},
 	)
@@ -381,7 +449,8 @@ func TestCreate_URLMalformed(t *testing.T) {
 			Namespace: testNamespace,
 			Name:      testServiceName,
 			Spec: &nexuspb.OutgoingServiceSpec{
-				Url: u,
+				Url:               u,
+				PublicCallbackUrl: testPublicCallbackURL,
 			},
 		},
 	)
@@ -427,7 +496,8 @@ func TestCreate_GetNamespaceErr(t *testing.T) {
 			Namespace: testNamespace,
 			Name:      testServiceName,
 			Spec: &nexuspb.OutgoingServiceSpec{
-				Url: testServiceURL,
+				Url:               testServiceURL,
+				PublicCallbackUrl: testPublicCallbackURL,
 			},
 		},
 	)
@@ -455,7 +525,8 @@ func TestCreate_UpdateNamespaceErr(t *testing.T) {
 					Version: 1,
 					Name:    testServiceName,
 					Spec: &nexuspb.OutgoingServiceSpec{
-						Url: testServiceURL,
+						Url:               testServiceURL,
+						PublicCallbackUrl: testPublicCallbackURL,
 					},
 				},
 			},
@@ -469,7 +540,8 @@ func TestCreate_UpdateNamespaceErr(t *testing.T) {
 			Namespace: testNamespace,
 			Name:      testServiceName,
 			Spec: &nexuspb.OutgoingServiceSpec{
-				Url: testServiceURL,
+				Url:               testServiceURL,
+				PublicCallbackUrl: testPublicCallbackURL,
 			},
 		},
 	)
@@ -487,7 +559,8 @@ func TestCreate_NameAlreadyTaken(t *testing.T) {
 						Version: 1,
 						Name:    testServiceName,
 						Spec: &nexuspb.OutgoingServiceSpec{
-							Url: testServiceURL,
+							Url:               testServiceURL,
+							PublicCallbackUrl: testPublicCallbackURL,
 						},
 					},
 				},
@@ -503,7 +576,8 @@ func TestCreate_NameAlreadyTaken(t *testing.T) {
 			Namespace: testNamespace,
 			Name:      testServiceName,
 			Spec: &nexuspb.OutgoingServiceSpec{
-				Url: testServiceURL,
+				Url:               testServiceURL,
+				PublicCallbackUrl: testPublicCallbackURL,
 			},
 		},
 	)
@@ -531,7 +605,8 @@ func TestCreate_Ok(t *testing.T) {
 			Namespace: testNamespace,
 			Name:      testServiceName,
 			Spec: &nexuspb.OutgoingServiceSpec{
-				Url: testServiceURL,
+				Url:               testServiceURL,
+				PublicCallbackUrl: testPublicCallbackURL,
 			},
 		},
 	)
@@ -540,7 +615,8 @@ func TestCreate_Ok(t *testing.T) {
 		Version: 1,
 		Name:    testServiceName,
 		Spec: &nexuspb.OutgoingServiceSpec{
-			Url: testServiceURL,
+			Url:               testServiceURL,
+			PublicCallbackUrl: testPublicCallbackURL,
 		},
 	}, res.Service)
 }
@@ -554,14 +630,16 @@ func TestCreate_RemainsSorted(t *testing.T) {
 				Version: 1,
 				Name:    "service1",
 				Spec: &nexuspb.OutgoingServiceSpec{
-					Url: testServiceURL,
+					Url:               testServiceURL,
+					PublicCallbackUrl: testPublicCallbackURL,
 				},
 			},
 			{
 				Version: 1,
 				Name:    "service3",
 				Spec: &nexuspb.OutgoingServiceSpec{
-					Url: testServiceURL,
+					Url:               testServiceURL,
+					PublicCallbackUrl: testPublicCallbackURL,
 				},
 			},
 		},
@@ -582,7 +660,8 @@ func TestCreate_RemainsSorted(t *testing.T) {
 			Namespace: testNamespace,
 			Name:      "service2",
 			Spec: &nexuspb.OutgoingServiceSpec{
-				Url: testServiceURL,
+				Url:               testServiceURL,
+				PublicCallbackUrl: testPublicCallbackURL,
 			},
 		},
 	)
@@ -676,21 +755,24 @@ func TestDelete_UpdateNamespaceErr(t *testing.T) {
 						Version: 1,
 						Name:    "service1",
 						Spec: &nexuspb.OutgoingServiceSpec{
-							Url: testServiceURL,
+							Url:               testServiceURL,
+							PublicCallbackUrl: testPublicCallbackURL,
 						},
 					},
 					{
 						Version: 1,
 						Name:    "service2",
 						Spec: &nexuspb.OutgoingServiceSpec{
-							Url: testServiceURL,
+							Url:               testServiceURL,
+							PublicCallbackUrl: testPublicCallbackURL,
 						},
 					},
 					{
 						Version: 1,
 						Name:    "service3",
 						Spec: &nexuspb.OutgoingServiceSpec{
-							Url: testServiceURL,
+							Url:               testServiceURL,
+							PublicCallbackUrl: testPublicCallbackURL,
 						},
 					},
 				},
@@ -708,14 +790,16 @@ func TestDelete_UpdateNamespaceErr(t *testing.T) {
 						Version: 1,
 						Name:    "service1",
 						Spec: &nexuspb.OutgoingServiceSpec{
-							Url: testServiceURL,
+							Url:               testServiceURL,
+							PublicCallbackUrl: testPublicCallbackURL,
 						},
 					},
 					{
 						Version: 1,
 						Name:    "service3",
 						Spec: &nexuspb.OutgoingServiceSpec{
-							Url: testServiceURL,
+							Url:               testServiceURL,
+							PublicCallbackUrl: testPublicCallbackURL,
 						},
 					},
 				},

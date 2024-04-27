@@ -185,7 +185,6 @@ func initSystemNamespaces(
 		Cfg:                        cfg,
 		PersistenceMaxQPS:          nil,
 		PersistenceNamespaceMaxQPS: nil,
-		EnablePriorityRateLimiting: nil,
 		ClusterName:                persistenceClient.ClusterName(currentClusterName),
 		MetricsHandler:             metricsHandler,
 		Logger:                     logger,
