@@ -163,7 +163,7 @@ func Invoke(
 		p := &workflowpb.PendingActivityInfo{
 			ActivityId: ai.ActivityId,
 		}
-		if ai.GetUseWorkflowBuildId() != nil {
+		if ai.GetUseWorkflowBuildIdInfo() != nil {
 			p.AssignedBuildId = &workflowpb.PendingActivityInfo_UseWorkflowBuildId{UseWorkflowBuildId: &emptypb.Empty{}}
 		} else if ai.GetLastIndependentlyAssignedBuildId() != "" {
 			p.AssignedBuildId = &workflowpb.PendingActivityInfo_LastIndependentlyAssignedBuildId{

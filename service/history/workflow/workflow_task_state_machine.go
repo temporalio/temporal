@@ -116,7 +116,7 @@ func (m *workflowTaskStateMachine) ApplyWorkflowTaskScheduledEvent(
 	return workflowTask, nil
 }
 
-// if this is a transient WF task (attempt > 1), we make sure to keep the following from the previous attempt:
+// if this is a transient WFT (attempt > 1), we make sure to keep the following from the previous attempt:
 //   - BuildId of the previous attempt to be able to compare it with next attempt and renew tasks if it changes
 //   - BuildIdRedirectCounter so add the right BuildIdRedirectCounter to the WFT started event that will be
 //     created at WFT completion time
@@ -555,8 +555,8 @@ func (m *workflowTaskStateMachine) AddWorkflowTaskStartedEvent(
 }
 
 // applyBuildIdRedirect applies redirect based on the versioningStamp (if applicable).
-// Returns a possibly new workflowTaskInfo and a boolean indicating if transient wf task was failed and a new wf task
-// scheduled event is created.
+// Returns a possibly new workflowTaskInfo and a boolean indicating if transient WFT was converted to normal and
+// a new WFT scheduled event is created.
 func (m *workflowTaskStateMachine) applyBuildIdRedirect(
 	versioningStamp *commonpb.WorkerVersionStamp,
 	workflowTask *WorkflowTaskInfo,
@@ -576,11 +576,15 @@ func (m *workflowTaskStateMachine) applyBuildIdRedirect(
 		scheduledEvent := m.ms.hBuilder.AddWorkflowTaskScheduledEvent(
 			m.ms.CurrentTaskQueue(),
 			durationpb.New(workflowTask.WorkflowTaskTimeout),
-			1,
+			// Preserving the number of previous attempts.
+			workflowTask.Attempt,
 			workflowTask.ScheduledTime,
 		)
 		newWorkflowTask := m.getWorkflowTaskInfo()
 		newWorkflowTask.ScheduledEventID = scheduledEvent.GetEventId()
+		// Using 1 as the attempt in MS. it's needed so that the new WFT is not considered transient.
+		// TODO: maybe add a separate field in MS for flagging transient WFT instead of relying on attempt so that we
+		// can put real attempt here?
 		newWorkflowTask.Attempt = 1
 		m.UpdateWorkflowTask(newWorkflowTask)
 		return newWorkflowTask, true, nil

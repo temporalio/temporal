@@ -383,18 +383,19 @@ message ActivityInfo {
     // Absence of `assigned_build_id` generally means this task is on an "unversioned" task queue.
     // In rare cases, it can also mean that the task queue is versioned but we failed to write activity's
     // independently-assigned build ID to the database. This case heals automatically once the task is dispatched.
-    oneof assigned_build_id {
-        // When true, it means this activity is assigned to the build ID of its workflow.
-        UseWorkflowBuildId use_workflow_build_id = 35;
+    oneof build_id_info {
+        // When present, it means this activity is assigned to the build ID of its workflow.
+        UseWorkflowBuildIdInfo use_workflow_build_id_info = 35;
         // This means the activity is independently versioned and not bound to the build ID of its workflow.
         // If the task fails and is scheduled again, the assigned build ID may change according to the latest versioning
-        // rules.
+        // rules. This value also updates if a redirect rule is applied to the activity task to reflect the build ID
+        // of the worker who received the task.
         string last_independently_assigned_build_id = 36;
     }
     // The version stamp of the worker to whom this activity was most-recently dispatched
     temporal.api.common.v1.WorkerVersionStamp last_worker_version_stamp = 37;
 
-    message UseWorkflowBuildId {
+    message UseWorkflowBuildIdInfo {
         // build ID of the wf when this activity started last time (which is the build ID of
         // the worker who received this activity)
         string last_used_build_id = 1;

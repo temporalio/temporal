@@ -426,14 +426,6 @@ func (handler *workflowTaskHandlerCallbacksImpl) handleWorkflowTaskCompleted(
 	weContext := workflowLease.GetContext()
 	ms := workflowLease.GetMutableState()
 
-	workflowTaskStartedAndCompletedBuildIdMatch := true
-	if assignedBuildId := ms.GetAssignedBuildId(); assignedBuildId != "" {
-		// worker versioning is used, make sure the task was completed by the right build ID
-		wftStartedBuildId := ms.GetExecutionInfo().GetWorkflowTaskBuildId()
-		wftCompletedBuildId := request.GetWorkerVersionStamp().GetBuildId()
-		workflowTaskStartedAndCompletedBuildIdMatch = wftCompletedBuildId == wftStartedBuildId
-	}
-
 	currentWorkflowTask := ms.GetWorkflowTaskByID(token.GetScheduledEventId())
 	if !ms.IsWorkflowExecutionRunning() ||
 		currentWorkflowTask == nil ||
@@ -441,11 +433,19 @@ func (handler *workflowTaskHandlerCallbacksImpl) handleWorkflowTaskCompleted(
 		(token.StartedEventId != common.EmptyEventID && token.StartedEventId != currentWorkflowTask.StartedEventID) ||
 		(token.StartedTime != nil && !currentWorkflowTask.StartedTime.IsZero() && !token.StartedTime.AsTime().Equal(currentWorkflowTask.StartedTime)) ||
 		currentWorkflowTask.Attempt != token.Attempt ||
-		(token.Version != common.EmptyVersion && token.Version != currentWorkflowTask.Version) ||
-		!workflowTaskStartedAndCompletedBuildIdMatch {
+		(token.Version != common.EmptyVersion && token.Version != currentWorkflowTask.Version) {
 		// we have not alter mutable state yet, so release with it with nil to avoid clear MS.
 		workflowLease.GetReleaseFn()(nil)
 		return nil, serviceerror.NewNotFound("Workflow task not found.")
+	}
+
+	if assignedBuildId := ms.GetAssignedBuildId(); assignedBuildId != "" {
+		// worker versioning is used, make sure the task was completed by the right build ID
+		wftStartedBuildId := ms.GetExecutionInfo().GetWorkflowTaskBuildId()
+		wftCompletedBuildId := request.GetWorkerVersionStamp().GetBuildId()
+		if wftCompletedBuildId != wftStartedBuildId {
+			return nil, serviceerror.NewNotFound("this workflow task was not dispatched to this Build ID")
+		}
 	}
 
 	defer func() { workflowLease.GetReleaseFn()(retError) }()
