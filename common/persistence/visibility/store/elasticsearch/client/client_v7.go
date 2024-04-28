@@ -322,6 +322,7 @@ func (c *clientImpl) GetMapping(ctx context.Context, index string) (map[string]s
 	if err != nil {
 		return nil, err
 	}
+	defer res.Body.Close()
 
 	// Decode body
 	var body map[string]interface{}
