@@ -1320,7 +1320,7 @@ func (s *ClientFunctionalSuite) Test_BufferedSignalCausesUnhandledCommandAndSche
 //  4. The server fails the complete request (and WFT) because there is an admitted update,
 //     clears workflow context, mutable state, and update registry and schedules a new workflow task.
 //  5. Now there is a race:
-//     - worker completes WFT w/o updates in it and updates in the registry,
+//     - worker starts WFT w/o update and even completes it while update is still not in the registry,
 //     - history handler retries UpdateWorkflowExecution call and recreates update in the registry.
 //  6. In first case, workflow completes successfully after 2nd attempt, and call to UpdateWorkflowExecution
 //     returns "workflow execution already completed" error. This is what this test asserts.
