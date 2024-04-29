@@ -820,6 +820,11 @@ of Timeout and if no activity is seen even after that the connection is closed.`
 		5*time.Minute,
 		`FrontendRefreshNexusIncomingServicesLongPollTimeout is the maximum duration of background long poll requests to update Nexus incoming services.`,
 	)
+	FrontendRefreshNexusIncomingServicesMinWait = NewGlobalDurationSetting(
+		"frontend.refreshNexusIncomingServicesMinWait",
+		1*time.Second,
+		`FrontendRefreshNexusIncomingServicesMinWait is the minimum wait time between background long poll requests to update Nexus incoming services.`,
+	)
 	FrontendEnableCallbackAttachment = NewNamespaceBoolSetting(
 		"frontend.enableCallbackAttachment",
 		false,
