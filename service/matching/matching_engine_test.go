@@ -2832,7 +2832,7 @@ func (s *matchingEngineSuite) createPollWorkflowTaskRequestAndPoll(taskQueue *ta
 				Identity:  "nobody",
 			},
 		}, metrics.NoopMetricsHandler)
-		if len(result.TaskToken) == 0 {
+		if len(result.TaskToken) == 0 || result.GetAttempt() == 0 {
 			continue
 		}
 		if err != nil {
@@ -2937,7 +2937,7 @@ func (s *matchingEngineSuite) TestMultipleWorkersAddConsumeWorkflowTasksDBErrors
 
 func (s *matchingEngineSuite) resetBacklogCounter(numWorkers int, taskCount int, rangeSize int) {
 	s.matchingEngine.config.LongPollExpirationInterval = dynamicconfig.GetDurationPropertyFnFilteredByTaskQueueInfo(1 * time.Millisecond)
-	s.matchingEngine.config.UpdateAckInterval = dynamicconfig.GetDurationPropertyFnFilteredByTaskQueueInfo(1 * time.Millisecond)
+	s.matchingEngine.config.UpdateAckInterval = dynamicconfig.GetDurationPropertyFnFilteredByTaskQueueInfo(100 * time.Millisecond)
 
 	workflowType, workflowExecution := s.generateWorkflowExecution()
 	taskQueue, ptq := s.createTQAndPTQForBacklogTests()
@@ -2954,6 +2954,11 @@ func (s *matchingEngineSuite) resetBacklogCounter(numWorkers int, taskCount int,
 	pgMgr := s.getPhysicalTaskQueueManagerImpl(ptq)
 
 	s.EqualValues(taskCount*numWorkers, s.taskManager.getTaskCount(ptq))
+
+	// Checking the maxReadLevel with the value of task stored in db
+	maxTaskId, _ := s.taskManager.maxTaskID(ptq)
+	s.EqualValues(maxTaskId, pgMgr.backlogMgr.db.maxReadLevel.Load())
+
 	// validating the approximateBacklogCounter
 	s.EqualValues(taskCount*numWorkers, pgMgr.backlogMgr.db.getApproximateBacklogCount())
 
@@ -2980,7 +2985,16 @@ func (s *matchingEngineSuite) resetBacklogCounter(numWorkers int, taskCount int,
 
 	// Updating pgMgr to have the latest pgMgr
 	pgMgr = s.getPhysicalTaskQueueManagerImpl(ptq)
-	time.Sleep(time.Second)
+
+	// overwriting the maxReadLevel since it could have increased if the previous taskWriter was stopped (which would not result in resetting);
+	// This should never be called and is only being done here for test purposes
+	pgMgr.backlogMgr.db.SetMaxReadLevel(maxTaskId)
+
+	s.EqualValues(0, s.taskManager.getTaskCount(ptq))
+	s.Eventually(func() bool {
+		return int64(0) == pgMgr.backlogMgr.db.getApproximateBacklogCount()
+	}, 3*time.Second, 10*time.Millisecond, "backlog counter should have been reset")
+
 	s.EqualValues(int64(0), pgMgr.backlogMgr.db.getApproximateBacklogCount())
 }
 
@@ -2999,9 +3013,8 @@ func (s *matchingEngineSuite) TestMoreTasksResetBacklogCounterNoDBErrors() {
 }
 
 func (s *matchingEngineSuite) TestMoreTasksResetBacklogCounterDBErrors() {
-	s.T().Skip()
 	s.taskManager.dbError = true
-	s.resetBacklogCounter(10, 20, 2)
+	s.resetBacklogCounter(10, 50, 5)
 }
 
 func (s *matchingEngineSuite) TestUnloadingTQMValidateBacklogCounter() {
@@ -3356,6 +3369,19 @@ func (m *testTaskManager) minTaskID(dbq *PhysicalTaskQueueKey) (int64, bool) {
 	return key, true
 }
 
+// minTaskID is a helper to return the maximum value of the TaskID present in testTaskManager
+func (m *testTaskManager) maxTaskID(dbq *PhysicalTaskQueueKey) (int64, bool) {
+	tlm := m.getQueueManager(dbq)
+	tlm.Lock()
+	defer tlm.Unlock()
+	maxKey, _ := tlm.tasks.Max()
+	key, ok := maxKey.(int64)
+	if ok == false {
+		return -1, ok
+	}
+	return key, true
+}
+
 func (m *testTaskManager) CompleteTasksLessThan(
 	_ context.Context,
 	request *persistence.CompleteTasksLessThanRequest,
@@ -3484,6 +3510,8 @@ func (m *testTaskManager) GetTasks(
 	}
 
 	dbq, err := ParsePhysicalTaskQueueKey(request.TaskQueue, request.NamespaceID, request.TaskType)
+	maxReadLevel, _ := m.maxTaskID(dbq)
+
 	if err != nil {
 		return nil, err
 	}
