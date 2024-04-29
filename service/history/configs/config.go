@@ -416,7 +416,7 @@ func NewConfig(
 		QueuePendingTaskMaxCount:         dc.GetIntProperty(dynamicconfig.QueuePendingTaskMaxCount, 10000),
 
 		TaskDLQEnabled:                 dc.GetBoolProperty(dynamicconfig.HistoryTaskDLQEnabled, true),
-		TaskDLQUnexpectedErrorAttempts: dc.GetIntProperty(dynamicconfig.HistoryTaskDLQUnexpectedErrorAttempts, 100),
+		TaskDLQUnexpectedErrorAttempts: dc.GetIntProperty(dynamicconfig.HistoryTaskDLQUnexpectedErrorAttempts, 50),
 		TaskDLQInternalErrors:          dc.GetBoolProperty(dynamicconfig.HistoryTaskDLQInternalErrors, false),
 		TaskDLQErrorPattern:            dc.GetStringProperty(dynamicconfig.HistoryTaskDLQErrorPattern, ""),
 
