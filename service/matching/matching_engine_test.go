@@ -3510,7 +3510,6 @@ func (m *testTaskManager) GetTasks(
 	}
 
 	dbq, err := ParsePhysicalTaskQueueKey(request.TaskQueue, request.NamespaceID, request.TaskType)
-	maxReadLevel, _ := m.maxTaskID(dbq)
 
 	if err != nil {
 		return nil, err
