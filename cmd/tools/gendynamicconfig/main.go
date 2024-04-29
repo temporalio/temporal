@@ -79,34 +79,28 @@ var (
 	}
 	precedences = []*settingPrecedence{
 		{
-			Name:       "Global",
-			GoArgs:     "()",
-			GoArgNames: "()",
+			Name:   "Global",
+			GoArgs: "",
 		},
 		{
-			Name:       "Namespace",
-			GoArgs:     "(namespace string)",
-			GoArgNames: "(namespace)",
+			Name:   "Namespace",
+			GoArgs: "namespace string",
 		},
 		{
-			Name:       "NamespaceID",
-			GoArgs:     "(namespaceID string)",
-			GoArgNames: "(namespaceID)",
+			Name:   "NamespaceID",
+			GoArgs: "namespaceID string",
 		},
 		{
-			Name:       "TaskQueue",
-			GoArgs:     "(namespace string, taskQueue string, taskQueueType enumspb.TaskQueueType)",
-			GoArgNames: "(namespace, taskQueue, taskQueueType)",
+			Name:   "TaskQueue",
+			GoArgs: "namespace string, taskQueue string, taskQueueType enumspb.TaskQueueType",
 		},
 		{
-			Name:       "ShardID",
-			GoArgs:     "(shardID int32)",
-			GoArgNames: "(shardID)",
+			Name:   "ShardID",
+			GoArgs: "shardID int32",
 		},
 		{
-			Name:       "TaskType",
-			GoArgs:     "(taskType enumsspb.TaskType)",
-			GoArgNames: "(taskType)",
+			Name:   "TaskType",
+			GoArgs: "taskType enumsspb.TaskType",
 		},
 	}
 )
@@ -135,7 +129,7 @@ const Precedence{{.Name}} Precedence = {{.Index}}
 
 func generateType(w io.Writer, tp *settingType, prec *settingPrecedence) {
 	writeTemplatedCode(w, `
-type {{.P.Name}}{{.T.Name}}Setting setting[{{.T.GoType}}, func{{.P.GoArgs}}]
+type {{.P.Name}}{{.T.Name}}Setting setting[{{.T.GoType}}, func({{.P.GoArgs}})]
 
 func New{{.P.Name}}{{.T.Name}}Setting(key Key, def {{.T.GoType}}, description string) {{.P.Name}}{{.T.Name}}Setting {
 	s := {{.P.Name}}{{.T.Name}}Setting{
@@ -166,9 +160,9 @@ func (s {{.P.Name}}{{.T.Name}}Setting) WithDefault(v {{.T.GoType}}) {{.P.Name}}{
 }
 
 {{if eq .P.Name "Global" -}}
-type {{.T.Name}}PropertyFn func{{.P.GoArgs}} {{.T.GoType}}
+type {{.T.Name}}PropertyFn func({{.P.GoArgs}}) {{.T.GoType}}
 {{- else -}}
-type {{.T.Name}}PropertyFnWith{{.P.Name}}Filter func{{.P.GoArgs}} {{.T.GoType}}
+type {{.T.Name}}PropertyFnWith{{.P.Name}}Filter func({{.P.GoArgs}}) {{.T.GoType}}
 {{- end}}
 
 {{if eq .P.Name "Global" -}}
@@ -176,11 +170,11 @@ func (s {{.P.Name}}{{.T.Name}}Setting) Get(c *Collection) {{.T.Name}}PropertyFn 
 {{- else -}}
 func (s {{.P.Name}}{{.T.Name}}Setting) Get(c *Collection) {{.T.Name}}PropertyFnWith{{.P.Name}}Filter {
 {{- end}}
-	return func{{.P.GoArgs}} {{.T.GoType}} {
+	return func({{.P.GoArgs}}) {{.T.GoType}} {
 		return matchAndConvert(
 			c,
-			(setting[{{.T.GoType}}, func{{.P.GoArgs}}])(s),
-			precedence{{.P.Name}}{{.P.GoArgNames}},
+			(setting[{{.T.GoType}}, func({{.P.GoArgs}})])(s),
+			precedence{{.P.Name}}({{.P.GoArgNames}}),
 			convert{{.T.Name}},
 		)
 	}
@@ -191,7 +185,7 @@ func Get{{.T.Name}}PropertyFn(value {{.T.GoType}}) {{.T.Name}}PropertyFn {
 {{- else -}}
 func Get{{.T.Name}}PropertyFnFilteredBy{{.P.Name}}(value {{.T.GoType}}) {{.T.Name}}PropertyFnWith{{.P.Name}}Filter {
 {{- end}}
-	return func{{.P.GoArgs}} {{.T.GoType}} {
+	return func({{.P.GoArgs}}) {{.T.GoType}} {
 		return value
 	}
 }
@@ -210,11 +204,18 @@ import (
 )
 `, nil)
 	for idx, tp := range types {
+		// fill in Index
 		tp.Index = idx
 		generateTypeEnum(w, tp)
 	}
 	for idx, prec := range precedences {
+		// fill in Index and GoArgNames
 		prec.Index = idx
+		var argNames []string
+		for _, argAndType := range strings.Split(prec.GoArgs, ",") {
+			argNames = append(argNames, strings.Split(strings.TrimSpace(argAndType), " ")[0])
+		}
+		prec.GoArgNames = strings.Join(argNames, ", ")
 		generatePrecEnum(w, prec)
 	}
 	for _, tp := range types {
