@@ -26,6 +26,7 @@ package history
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"time"
 
@@ -72,7 +73,7 @@ type (
 		workflowTaskCompletedID int64
 
 		// internal state
-		hasBufferedEvents               bool
+		hasBufferedEventsOrMessages     bool
 		workflowTaskFailedCause         *workflowTaskFailedCause
 		activityNotStartedCancelled     bool
 		newMutableState                 workflow.MutableState
@@ -87,12 +88,13 @@ type (
 		sizeLimitChecker               *workflowSizeChecker
 		searchAttributesMapperProvider searchattribute.MapperProvider
 
-		logger            log.Logger
-		namespaceRegistry namespace.Registry
-		metricsHandler    metrics.Handler
-		config            *configs.Config
-		shard             shard.Context
-		tokenSerializer   common.TaskTokenSerializer
+		logger                 log.Logger
+		namespaceRegistry      namespace.Registry
+		metricsHandler         metrics.Handler
+		config                 *configs.Config
+		shard                  shard.Context
+		tokenSerializer        common.TaskTokenSerializer
+		commandHandlerRegistry *workflow.CommandHandlerRegistry
 	}
 
 	workflowTaskFailedCause struct {
@@ -129,14 +131,15 @@ func newWorkflowTaskHandler(
 	config *configs.Config,
 	shard shard.Context,
 	searchAttributesMapperProvider searchattribute.MapperProvider,
-	hasBufferedEvents bool,
+	hasBufferedEventsOrMessages bool,
+	commandHandlerRegistry *workflow.CommandHandlerRegistry,
 ) *workflowTaskHandlerImpl {
 	return &workflowTaskHandlerImpl{
 		identity:                identity,
 		workflowTaskCompletedID: workflowTaskCompletedID,
 
 		// internal state
-		hasBufferedEvents:               hasBufferedEvents,
+		hasBufferedEventsOrMessages:     hasBufferedEventsOrMessages,
 		workflowTaskFailedCause:         nil,
 		activityNotStartedCancelled:     false,
 		newMutableState:                 nil,
@@ -157,9 +160,10 @@ func newWorkflowTaskHandler(
 			metrics.OperationTag(metrics.HistoryRespondWorkflowTaskCompletedScope),
 			metrics.NamespaceTag(mutableState.GetNamespaceEntry().Name().String()),
 		),
-		config:          config,
-		shard:           shard,
-		tokenSerializer: common.NewProtoTaskTokenSerializer(),
+		config:                 config,
+		shard:                  shard,
+		tokenSerializer:        common.NewProtoTaskTokenSerializer(),
+		commandHandlerRegistry: commandHandlerRegistry,
 	}
 }
 
@@ -326,7 +330,20 @@ func (handler *workflowTaskHandlerImpl) handleCommand(
 		return nil, handler.handleCommandProtocolMessage(ctx, command.GetProtocolMessageCommandAttributes(), msgs)
 
 	default:
-		return nil, serviceerror.NewInvalidArgument(fmt.Sprintf("Unknown command type: %v", command.GetCommandType()))
+		ch, ok := handler.commandHandlerRegistry.Handler(command.GetCommandType())
+		if !ok {
+			return nil, serviceerror.NewInvalidArgument(fmt.Sprintf("Unknown command type: %v", command.GetCommandType()))
+		}
+		validator := commandValidator{sizeChecker: handler.sizeLimitChecker, commandType: command.GetCommandType()}
+		err := ch(handler.mutableState, validator, handler.workflowTaskCompletedID, command)
+		var failWFTErr workflow.FailWorkflowTaskError
+		if errors.As(err, &failWFTErr) {
+			if failWFTErr.FailWorkflow {
+				return nil, handler.failWorkflow(failWFTErr.Cause, failWFTErr)
+			}
+			return nil, handler.failWorkflowTask(failWFTErr.Cause, failWFTErr)
+		}
+		return nil, err
 	}
 }
 
@@ -643,7 +660,7 @@ func (handler *workflowTaskHandlerImpl) handleCommandCompleteWorkflow(
 ) error {
 	metrics.CommandTypeCompleteWorkflowCounter.With(handler.metricsHandler).Record(1)
 
-	if handler.hasBufferedEvents {
+	if handler.hasBufferedEventsOrMessages {
 		return handler.failWorkflowTask(enumspb.WORKFLOW_TASK_FAILED_CAUSE_UNHANDLED_COMMAND, nil)
 	}
 
@@ -700,7 +717,7 @@ func (handler *workflowTaskHandlerImpl) handleCommandFailWorkflow(
 ) error {
 	metrics.CommandTypeFailWorkflowCounter.With(handler.metricsHandler).Record(1)
 
-	if handler.hasBufferedEvents {
+	if handler.hasBufferedEventsOrMessages {
 		return handler.failWorkflowTask(enumspb.WORKFLOW_TASK_FAILED_CAUSE_UNHANDLED_COMMAND, nil)
 	}
 
@@ -790,7 +807,7 @@ func (handler *workflowTaskHandlerImpl) handleCommandCancelTimer(
 
 	// In case the timer was cancelled and its TimerFired event was deleted from buffered events, attempt
 	// to unset hasBufferedEvents to allow the workflow to complete.
-	handler.hasBufferedEvents = handler.hasBufferedEvents && handler.mutableState.HasBufferedEvents()
+	handler.hasBufferedEventsOrMessages = handler.hasBufferedEventsOrMessages && handler.mutableState.HasBufferedEvents()
 	return nil
 }
 
@@ -800,7 +817,7 @@ func (handler *workflowTaskHandlerImpl) handleCommandCancelWorkflow(
 ) error {
 	metrics.CommandTypeCancelWorkflowCounter.With(handler.metricsHandler).Record(1)
 
-	if handler.hasBufferedEvents {
+	if handler.hasBufferedEventsOrMessages {
 		return handler.failWorkflowTask(enumspb.WORKFLOW_TASK_FAILED_CAUSE_UNHANDLED_COMMAND, nil)
 	}
 
@@ -900,7 +917,7 @@ func (handler *workflowTaskHandlerImpl) handleCommandContinueAsNewWorkflow(
 ) error {
 	metrics.CommandTypeContinueAsNewCounter.With(handler.metricsHandler).Record(1)
 
-	if handler.hasBufferedEvents {
+	if handler.hasBufferedEventsOrMessages {
 		return handler.failWorkflowTask(enumspb.WORKFLOW_TASK_FAILED_CAUSE_UNHANDLED_COMMAND, nil)
 	}
 
@@ -1468,4 +1485,15 @@ func (c *workflowTaskFailedCause) Message() string {
 	}
 
 	return fmt.Sprintf("%v: %v", c.failedCause, c.causeErr.Error())
+}
+
+// commandValidator implements [workflow.CommandValidator] for use in registered command handlers.
+type commandValidator struct {
+	sizeChecker *workflowSizeChecker
+	commandType enumspb.CommandType
+}
+
+func (v commandValidator) IsValidPayloadSize(size int) bool {
+	err := v.sizeChecker.checkIfPayloadSizeExceedsLimit(metrics.CommandTypeTag(v.commandType.String()), size, "")
+	return err == nil
 }

@@ -2239,6 +2239,8 @@ func (s *historyBuilderSuite) TestBufferEvent() {
 		enumspb.EVENT_TYPE_SIGNAL_EXTERNAL_WORKFLOW_EXECUTION_INITIATED:         true,
 		enumspb.EVENT_TYPE_UPSERT_WORKFLOW_SEARCH_ATTRIBUTES:                    true,
 		enumspb.EVENT_TYPE_WORKFLOW_PROPERTIES_MODIFIED:                         true,
+		enumspb.EVENT_TYPE_NEXUS_OPERATION_SCHEDULED:                            true,
+		enumspb.EVENT_TYPE_NEXUS_OPERATION_CANCEL_REQUESTED:                     true,
 	}
 
 	// events corresponding to message from client will be assigned an event ID immediately
@@ -2312,6 +2314,11 @@ func (s *historyBuilderSuite) TestReorder() {
 		enumspb.EVENT_TYPE_CHILD_WORKFLOW_EXECUTION_TIMED_OUT:  {},
 		enumspb.EVENT_TYPE_CHILD_WORKFLOW_EXECUTION_CANCELED:   {},
 		enumspb.EVENT_TYPE_CHILD_WORKFLOW_EXECUTION_TERMINATED: {},
+		enumspb.EVENT_TYPE_NEXUS_OPERATION_STARTED:             {},
+		enumspb.EVENT_TYPE_NEXUS_OPERATION_COMPLETED:           {},
+		enumspb.EVENT_TYPE_NEXUS_OPERATION_FAILED:              {},
+		enumspb.EVENT_TYPE_NEXUS_OPERATION_CANCELED:            {},
+		enumspb.EVENT_TYPE_NEXUS_OPERATION_TIMED_OUT:           {},
 	}
 	var reorderEvents []*historypb.HistoryEvent
 	for eventType := range reorderEventTypes {

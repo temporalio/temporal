@@ -54,6 +54,10 @@ func (t InvocationTask) Kind() hsm.TaskKind {
 	return hsm.TaskKindOutbound{Destination: t.Destination}
 }
 
+func (InvocationTask) Concurrent() bool {
+	return false
+}
+
 type InvocationTaskSerializer struct{}
 
 func (InvocationTaskSerializer) Deserialize(data []byte, kind hsm.TaskKind) (hsm.Task, error) {
@@ -81,6 +85,10 @@ func (t BackoffTask) Kind() hsm.TaskKind {
 	return hsm.TaskKindTimer{Deadline: t.Deadline}
 }
 
+func (BackoffTask) Concurrent() bool {
+	return false
+}
+
 type BackoffTaskSerializer struct{}
 
 func (BackoffTaskSerializer) Deserialize(data []byte, kind hsm.TaskKind) (hsm.Task, error) {
@@ -94,7 +102,7 @@ func (BackoffTaskSerializer) Serialize(hsm.Task) ([]byte, error) {
 	return nil, nil
 }
 
-func RegisterTaskSerializer(reg *hsm.Registry) error {
+func RegisterTaskSerializers(reg *hsm.Registry) error {
 	if err := reg.RegisterTaskSerializer(TaskTypeInvocation.ID, InvocationTaskSerializer{}); err != nil {
 		return err
 	}

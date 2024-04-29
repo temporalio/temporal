@@ -31,6 +31,7 @@ import (
 	"sync"
 	"sync/atomic"
 
+	"github.com/nexus-rpc/sdk-go/nexus"
 	"github.com/pborman/uuid"
 	"go.opentelemetry.io/otel/trace"
 	commonpb "go.temporal.io/api/common/v1"
@@ -49,17 +50,20 @@ import (
 	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/convert"
+	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/membership"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
+	commonnexus "go.temporal.io/server/common/nexus"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/persistence/serialization"
 	"go.temporal.io/server/common/persistence/visibility/manager"
 	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/common/searchattribute"
 	serviceerrors "go.temporal.io/server/common/serviceerror"
+	"go.temporal.io/server/components/nexusoperations"
 	"go.temporal.io/server/service/history/api"
 	"go.temporal.io/server/service/history/api/deletedlqtasks"
 	"go.temporal.io/server/service/history/api/forcedeleteworkflowexecution"
@@ -67,6 +71,7 @@ import (
 	"go.temporal.io/server/service/history/api/listqueues"
 	"go.temporal.io/server/service/history/configs"
 	"go.temporal.io/server/service/history/events"
+	"go.temporal.io/server/service/history/hsm"
 	"go.temporal.io/server/service/history/replication"
 	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/tasks"
@@ -632,7 +637,18 @@ func (h *Handler) ExecuteMultiOperation(
 	if err != nil {
 		return nil, h.convertError(err)
 	}
-	// TODO: shardContext.NewVectorClock()
+
+	for _, opResp := range response.Responses {
+		if startResp := opResp.GetStartWorkflow(); startResp != nil {
+			if startResp.Clock == nil {
+				startResp.Clock, err = shardContext.NewVectorClock()
+				if err != nil {
+					return nil, h.convertError(err)
+				}
+			}
+		}
+	}
+
 	return response, nil
 }
 
@@ -2257,6 +2273,42 @@ func (h *Handler) ListTasks(
 	}
 
 	return resp, nil
+}
+
+func (h *Handler) CompleteNexusOperation(ctx context.Context, request *historyservice.CompleteNexusOperationRequest) (_ *historyservice.CompleteNexusOperationResponse, retErr error) {
+	defer metrics.CapturePanic(h.logger, h.metricsHandler, &retErr)
+	h.startWG.Wait()
+
+	if h.isStopped() {
+		return nil, errShuttingDown
+	}
+
+	shardContext, err := h.controller.GetShardByNamespaceWorkflow(namespace.ID(request.Completion.NamespaceId), request.Completion.WorkflowId)
+	if err != nil {
+		return nil, h.convertError(err)
+	}
+
+	engine, err := shardContext.GetEngine(ctx)
+	if err != nil {
+		return nil, h.convertError(err)
+	}
+
+	ref := hsm.Ref{
+		WorkflowKey:     definition.NewWorkflowKey(request.Completion.NamespaceId, request.Completion.WorkflowId, request.Completion.RunId),
+		StateMachineRef: request.Completion.Ref,
+	}
+	var opErr *nexus.UnsuccessfulOperationError
+	if request.State != string(nexus.OperationStateSucceeded) {
+		opErr = &nexus.UnsuccessfulOperationError{
+			State:   nexus.OperationState(request.GetState()),
+			Failure: *commonnexus.ProtoFailureToNexusFailure(request.GetFailure()),
+		}
+	}
+	err = nexusoperations.CompletionHandler(ctx, engine.StateMachineEnvironment(), ref, request.GetSuccess(), opErr)
+	if err != nil {
+		return nil, h.convertError(err)
+	}
+	return &historyservice.CompleteNexusOperationResponse{}, nil
 }
 
 // convertError is a helper method to convert ShardOwnershipLostError from persistence layer returned by various

@@ -115,9 +115,10 @@ func (s *NDCReplicationTaskBatchingTestSuite) SetupSuite() {
 	passiveClusterConfig := clusterConfigs[1]
 	passiveClusterConfig.WorkerConfig = &tests.WorkerConfig{}
 	passiveClusterConfig.DynamicConfigOverrides = map[dynamicconfig.Key]any{
-		dynamicconfig.EnableReplicationStream.Key():       true,
-		dynamicconfig.EnableEagerNamespaceRefresher.Key(): true,
-		dynamicconfig.EnableReplicationTaskBatching.Key(): true,
+		dynamicconfig.EnableReplicationStream.Key():             true,
+		dynamicconfig.EnableEagerNamespaceRefresher.Key():       true,
+		dynamicconfig.EnableReplicationTaskBatching.Key():       true,
+		dynamicconfig.EnableReplicateLocalGeneratedEvents.Key(): true,
 	}
 	s.controller = gomock.NewController(s.T())
 	mockActiveStreamClient := adminservicemock.NewMockAdminService_StreamWorkflowReplicationMessagesClient(s.controller)

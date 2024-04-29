@@ -50,15 +50,14 @@ import (
 
 // Config represents configuration for frontend service
 type Config struct {
-	NumHistoryShards                      int32
-	PersistenceMaxQPS                     dynamicconfig.IntPropertyFn
-	PersistenceGlobalMaxQPS               dynamicconfig.IntPropertyFn
-	PersistenceNamespaceMaxQPS            dynamicconfig.IntPropertyFnWithNamespaceFilter
-	PersistenceGlobalNamespaceMaxQPS      dynamicconfig.IntPropertyFnWithNamespaceFilter
-	PersistencePerShardNamespaceMaxQPS    dynamicconfig.IntPropertyFnWithNamespaceFilter
-	EnablePersistencePriorityRateLimiting dynamicconfig.BoolPropertyFn
-	PersistenceDynamicRateLimitingParams  dynamicconfig.MapPropertyFn
-	PersistenceQPSBurstRatio              dynamicconfig.FloatPropertyFn
+	NumHistoryShards                     int32
+	PersistenceMaxQPS                    dynamicconfig.IntPropertyFn
+	PersistenceGlobalMaxQPS              dynamicconfig.IntPropertyFn
+	PersistenceNamespaceMaxQPS           dynamicconfig.IntPropertyFnWithNamespaceFilter
+	PersistenceGlobalNamespaceMaxQPS     dynamicconfig.IntPropertyFnWithNamespaceFilter
+	PersistencePerShardNamespaceMaxQPS   dynamicconfig.IntPropertyFnWithNamespaceFilter
+	PersistenceDynamicRateLimitingParams dynamicconfig.MapPropertyFn
+	PersistenceQPSBurstRatio             dynamicconfig.FloatPropertyFn
 
 	VisibilityPersistenceMaxReadQPS       dynamicconfig.IntPropertyFn
 	VisibilityPersistenceMaxWriteQPS      dynamicconfig.IntPropertyFn
@@ -197,6 +196,7 @@ type Config struct {
 	// EnableCallbackAttachment enables attaching callbacks to workflows.
 	EnableCallbackAttachment    dynamicconfig.BoolPropertyFnWithNamespaceFilter
 	CallbackURLMaxLength        dynamicconfig.IntPropertyFnWithNamespaceFilter
+	MaxCallbacksPerWorkflow     dynamicconfig.IntPropertyFnWithNamespaceFilter
 	AdminEnableListHistoryTasks dynamicconfig.BoolPropertyFn
 }
 
@@ -206,15 +206,14 @@ func NewConfig(
 	numHistoryShards int32,
 ) *Config {
 	return &Config{
-		NumHistoryShards:                      numHistoryShards,
-		PersistenceMaxQPS:                     dynamicconfig.FrontendPersistenceMaxQPS.Get(dc),
-		PersistenceGlobalMaxQPS:               dynamicconfig.FrontendPersistenceGlobalMaxQPS.Get(dc),
-		PersistenceNamespaceMaxQPS:            dynamicconfig.FrontendPersistenceNamespaceMaxQPS.Get(dc),
-		PersistenceGlobalNamespaceMaxQPS:      dynamicconfig.FrontendPersistenceGlobalNamespaceMaxQPS.Get(dc),
-		PersistencePerShardNamespaceMaxQPS:    dynamicconfig.DefaultPerShardNamespaceRPSMax,
-		EnablePersistencePriorityRateLimiting: dynamicconfig.FrontendEnablePersistencePriorityRateLimiting.Get(dc),
-		PersistenceDynamicRateLimitingParams:  dynamicconfig.FrontendPersistenceDynamicRateLimitingParams.Get(dc),
-		PersistenceQPSBurstRatio:              dynamicconfig.PersistenceQPSBurstRatio.Get(dc),
+		NumHistoryShards:                     numHistoryShards,
+		PersistenceMaxQPS:                    dynamicconfig.FrontendPersistenceMaxQPS.Get(dc),
+		PersistenceGlobalMaxQPS:              dynamicconfig.FrontendPersistenceGlobalMaxQPS.Get(dc),
+		PersistenceNamespaceMaxQPS:           dynamicconfig.FrontendPersistenceNamespaceMaxQPS.Get(dc),
+		PersistenceGlobalNamespaceMaxQPS:     dynamicconfig.FrontendPersistenceGlobalNamespaceMaxQPS.Get(dc),
+		PersistencePerShardNamespaceMaxQPS:   dynamicconfig.DefaultPerShardNamespaceRPSMax,
+		PersistenceDynamicRateLimitingParams: dynamicconfig.FrontendPersistenceDynamicRateLimitingParams.Get(dc),
+		PersistenceQPSBurstRatio:             dynamicconfig.PersistenceQPSBurstRatio.Get(dc),
 
 		VisibilityPersistenceMaxReadQPS:       visibility.GetVisibilityPersistenceMaxReadQPS(dc),
 		VisibilityPersistenceMaxWriteQPS:      visibility.GetVisibilityPersistenceMaxWriteQPS(dc),
@@ -304,6 +303,7 @@ func NewConfig(
 		EnableNexusAPIs:             dynamicconfig.FrontendEnableNexusAPIs.Get(dc),
 		EnableCallbackAttachment:    dynamicconfig.FrontendEnableCallbackAttachment.Get(dc),
 		CallbackURLMaxLength:        dynamicconfig.FrontendCallbackURLMaxLength.Get(dc),
+		MaxCallbacksPerWorkflow:     dynamicconfig.FrontendMaxCallbacksPerWorkflow.Get(dc),
 		AdminEnableListHistoryTasks: dynamicconfig.AdminEnableListHistoryTasks.Get(dc),
 	}
 }

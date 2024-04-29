@@ -96,7 +96,7 @@ func NewHTTPAPIServer(
 	operatorHandler *OperatorHandlerImpl,
 	interceptors []grpc.UnaryServerInterceptor,
 	metricsHandler metrics.Handler,
-	additionalRouteRegistrationFuncs []func(*mux.Router),
+	router *mux.Router,
 	namespaceRegistry namespace.Registry,
 	logger log.Logger,
 ) (*HTTPAPIServer, error) {
@@ -188,16 +188,10 @@ func NewHTTPAPIServer(
 		return nil, fmt.Errorf("failed registering operatorservice HTTP API handler: %w", err)
 	}
 
-	// Instantiate a router to support additional route prefixes.
-	r := mux.NewRouter().UseEncodedPath()
-	for _, f := range additionalRouteRegistrationFuncs {
-		f(r)
-	}
-
 	// Set the / handler as our function that wraps serve mux.
-	r.PathPrefix("/").HandlerFunc(h.serveHTTP)
+	router.PathPrefix("/").HandlerFunc(h.serveHTTP)
 	// Register the router as the HTTP server handler.
-	h.server.Handler = r
+	h.server.Handler = router
 
 	// Put the remote address on the context
 	h.server.ConnContext = func(ctx context.Context, c net.Conn) context.Context {

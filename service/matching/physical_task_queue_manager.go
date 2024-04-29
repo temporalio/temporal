@@ -317,14 +317,28 @@ func (c *physicalTaskQueueManagerImpl) PollTask(
 		return c.matcher.PollForQuery(ctx, pollMetadata)
 	}
 
-	task, err := c.matcher.Poll(ctx, pollMetadata)
-	if err != nil {
-		return nil, err
-	}
+	for {
+		task, err := c.matcher.Poll(ctx, pollMetadata)
+		if err != nil {
+			return nil, err
+		}
 
-	task.namespace = c.partitionMgr.ns.Name()
-	task.backlogCountHint = c.backlogMgr.BacklogCountHint
-	return task, nil
+		// It's possible to get an expired task here: taskReader checks for expiration when
+		// reading from persistence, and physicalTaskQueueManager checks for expiration in
+		// ProcessSpooledTask, but the one task blocked in the matcher could expire while it's
+		// there. In that case, go back for another task.
+		// If we didn't do this, the task would be rejected when we call RecordXTaskStarted on
+		// history, but this is more efficient.
+		if task.event != nil && IsTaskExpired(task.event.AllocatedTaskInfo) {
+			c.taggedMetricsHandler.Counter(metrics.ExpiredTasksPerTaskQueueCounter.Name()).Record(1)
+			task.finish(nil)
+			continue
+		}
+
+		task.namespace = c.partitionMgr.ns.Name()
+		task.backlogCountHint = c.backlogMgr.BacklogCountHint
+		return task, nil
+	}
 }
 
 func (c *physicalTaskQueueManagerImpl) MarkAlive() {

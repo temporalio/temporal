@@ -31,10 +31,10 @@ import (
 )
 
 var Module = fx.Module(
-	"plugin.callbacks",
+	"component.callbacks",
 	fx.Provide(ConfigProvider),
 	fx.Provide(CallbackExecutorOptionsProvider),
-	fx.Invoke(RegisterTaskSerializer),
+	fx.Invoke(RegisterTaskSerializers),
 	fx.Invoke(RegisterStateMachine),
 	fx.Invoke(RegisterExecutor),
 )

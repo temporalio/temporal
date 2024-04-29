@@ -102,6 +102,7 @@ type (
 		searchAttributesMapperProvider searchattribute.MapperProvider
 		searchAttributesValidator      *searchattribute.Validator
 		persistenceVisibilityMgr       manager.VisibilityManager
+		commandHandlerRegistry         *workflow.CommandHandlerRegistry
 	}
 )
 
@@ -126,6 +127,7 @@ func newWorkflowTaskHandlerCallback(historyEngine *historyEngineImpl) *workflowT
 		searchAttributesMapperProvider: historyEngine.shardContext.GetSearchAttributesMapperProvider(),
 		searchAttributesValidator:      historyEngine.searchAttributesValidator,
 		persistenceVisibilityMgr:       historyEngine.persistenceVisibilityMgr,
+		commandHandlerRegistry:         historyEngine.commandHandlerRegistry,
 	}
 }
 
@@ -453,6 +455,11 @@ func (handler *workflowTaskHandlerCallbacksImpl) handleWorkflowTaskCompleted(
 		// about the way this function exits so while we have this defer here
 		// there is _also_ code to call effects.Cancel at key points.
 		if retError != nil {
+			handler.logger.Info("Cancel effects due to error.",
+				tag.Error(retError),
+				tag.WorkflowID(token.GetWorkflowId()),
+				tag.WorkflowRunID(token.GetRunId()),
+				tag.WorkflowNamespaceID(namespaceEntry.ID().String()))
 			effects.Cancel(ctx)
 		}
 	}()
@@ -535,8 +542,10 @@ func (handler *workflowTaskHandlerCallbacksImpl) handleWorkflowTaskCompleted(
 		newMutableState             workflow.MutableState
 		responseMutations           []workflowTaskResponseMutation
 	)
-	// hasBufferedEvents indicates if there are any buffered events which should generate a new workflow task
-	hasBufferedEvents := ms.HasBufferedEvents()
+	updateRegistry := weContext.UpdateRegistry(ctx, nil)
+	// hasBufferedEventsOrMessages indicates if there are any buffered events or admitted updates which should generate a new
+	// workflow task.
+	hasBufferedEventsOrMessages := ms.HasBufferedEvents() || updateRegistry.HasOutgoingMessages(false)
 	if err := namespaceEntry.VerifyBinaryChecksum(request.GetBinaryChecksum()); err != nil {
 		wtFailedCause = newWorkflowTaskFailedCause(
 			enumspb.WORKFLOW_TASK_FAILED_CAUSE_BAD_BINARY,
@@ -571,7 +580,7 @@ func (handler *workflowTaskHandlerCallbacksImpl) handleWorkflowTaskCompleted(
 			request.GetIdentity(),
 			completedEvent.GetEventId(), // If completedEvent is nil, then GetEventId() returns 0 and this value shouldn't be used in workflowTaskHandler.
 			ms,
-			weContext.UpdateRegistry(ctx, nil),
+			updateRegistry,
 			&effects,
 			handler.commandAttrValidator,
 			workflowSizeChecker,
@@ -581,7 +590,8 @@ func (handler *workflowTaskHandlerCallbacksImpl) handleWorkflowTaskCompleted(
 			handler.config,
 			handler.shardContext,
 			handler.searchAttributesMapperProvider,
-			hasBufferedEvents,
+			hasBufferedEventsOrMessages,
+			handler.commandHandlerRegistry,
 		)
 
 		if responseMutations, err = workflowTaskHandler.handleCommands(
@@ -636,7 +646,7 @@ func (handler *workflowTaskHandlerCallbacksImpl) handleWorkflowTaskCompleted(
 
 		newMutableState = workflowTaskHandler.newMutableState
 
-		hasBufferedEvents = workflowTaskHandler.hasBufferedEvents
+		hasBufferedEventsOrMessages = workflowTaskHandler.hasBufferedEventsOrMessages
 	}
 
 	wtFailedShouldCreateNewTask := false
@@ -676,8 +686,8 @@ func (handler *workflowTaskHandlerCallbacksImpl) handleWorkflowTaskCompleted(
 		}
 	}
 
-	bufferedEventShouldCreateNewTask := hasBufferedEvents && ms.HasAnyBufferedEvent(eventShouldGenerateNewTaskFilter)
-	if hasBufferedEvents && !bufferedEventShouldCreateNewTask {
+	bufferedEventShouldCreateNewTask := hasBufferedEventsOrMessages && ms.HasAnyBufferedEvent(eventShouldGenerateNewTaskFilter)
+	if hasBufferedEventsOrMessages && !bufferedEventShouldCreateNewTask {
 		// Make sure tasks that should not create a new event don't get stuck in ms forever
 		ms.FlushBufferedEvents()
 	}

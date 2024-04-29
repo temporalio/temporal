@@ -38,17 +38,16 @@ type Config struct {
 	EnableReplicationStream dynamicconfig.BoolPropertyFn
 	HistoryReplicationDLQV2 dynamicconfig.BoolPropertyFn
 
-	RPS                                   dynamicconfig.IntPropertyFn
-	OperatorRPSRatio                      dynamicconfig.FloatPropertyFn
-	MaxIDLengthLimit                      dynamicconfig.IntPropertyFn
-	PersistenceMaxQPS                     dynamicconfig.IntPropertyFn
-	PersistenceGlobalMaxQPS               dynamicconfig.IntPropertyFn
-	PersistenceNamespaceMaxQPS            dynamicconfig.IntPropertyFnWithNamespaceFilter
-	PersistenceGlobalNamespaceMaxQPS      dynamicconfig.IntPropertyFnWithNamespaceFilter
-	PersistencePerShardNamespaceMaxQPS    dynamicconfig.IntPropertyFnWithNamespaceFilter
-	EnablePersistencePriorityRateLimiting dynamicconfig.BoolPropertyFn
-	PersistenceDynamicRateLimitingParams  dynamicconfig.MapPropertyFn
-	PersistenceQPSBurstRatio              dynamicconfig.FloatPropertyFn
+	RPS                                  dynamicconfig.IntPropertyFn
+	OperatorRPSRatio                     dynamicconfig.FloatPropertyFn
+	MaxIDLengthLimit                     dynamicconfig.IntPropertyFn
+	PersistenceMaxQPS                    dynamicconfig.IntPropertyFn
+	PersistenceGlobalMaxQPS              dynamicconfig.IntPropertyFn
+	PersistenceNamespaceMaxQPS           dynamicconfig.IntPropertyFnWithNamespaceFilter
+	PersistenceGlobalNamespaceMaxQPS     dynamicconfig.IntPropertyFnWithNamespaceFilter
+	PersistencePerShardNamespaceMaxQPS   dynamicconfig.IntPropertyFnWithNamespaceFilter
+	PersistenceDynamicRateLimitingParams dynamicconfig.MapPropertyFn
+	PersistenceQPSBurstRatio             dynamicconfig.FloatPropertyFn
 
 	VisibilityPersistenceMaxReadQPS       dynamicconfig.IntPropertyFn
 	VisibilityPersistenceMaxWriteQPS      dynamicconfig.IntPropertyFn
@@ -347,22 +346,21 @@ func NewConfig(
 		EnableReplicationStream: dynamicconfig.EnableReplicationStream.Get(dc),
 		HistoryReplicationDLQV2: dynamicconfig.EnableHistoryReplicationDLQV2.Get(dc),
 
-		RPS:                                   dynamicconfig.HistoryRPS.Get(dc),
-		OperatorRPSRatio:                      dynamicconfig.OperatorRPSRatio.Get(dc),
-		MaxIDLengthLimit:                      dynamicconfig.MaxIDLengthLimit.Get(dc),
-		PersistenceMaxQPS:                     dynamicconfig.HistoryPersistenceMaxQPS.Get(dc),
-		PersistenceGlobalMaxQPS:               dynamicconfig.HistoryPersistenceGlobalMaxQPS.Get(dc),
-		PersistenceNamespaceMaxQPS:            dynamicconfig.HistoryPersistenceNamespaceMaxQPS.Get(dc),
-		PersistenceGlobalNamespaceMaxQPS:      dynamicconfig.HistoryPersistenceGlobalNamespaceMaxQPS.Get(dc),
-		PersistencePerShardNamespaceMaxQPS:    dynamicconfig.HistoryPersistencePerShardNamespaceMaxQPS.Get(dc),
-		EnablePersistencePriorityRateLimiting: dynamicconfig.HistoryEnablePersistencePriorityRateLimiting.Get(dc),
-		PersistenceDynamicRateLimitingParams:  dynamicconfig.HistoryPersistenceDynamicRateLimitingParams.Get(dc),
-		PersistenceQPSBurstRatio:              dynamicconfig.PersistenceQPSBurstRatio.Get(dc),
-		ShutdownDrainDuration:                 dynamicconfig.HistoryShutdownDrainDuration.Get(dc),
-		StartupMembershipJoinDelay:            dynamicconfig.HistoryStartupMembershipJoinDelay.Get(dc),
-		MaxAutoResetPoints:                    dynamicconfig.HistoryMaxAutoResetPoints.Get(dc),
-		DefaultWorkflowTaskTimeout:            dynamicconfig.DefaultWorkflowTaskTimeout.Get(dc),
-		ContinueAsNewMinInterval:              dynamicconfig.ContinueAsNewMinInterval.Get(dc),
+		RPS:                                  dynamicconfig.HistoryRPS.Get(dc),
+		OperatorRPSRatio:                     dynamicconfig.OperatorRPSRatio.Get(dc),
+		MaxIDLengthLimit:                     dynamicconfig.MaxIDLengthLimit.Get(dc),
+		PersistenceMaxQPS:                    dynamicconfig.HistoryPersistenceMaxQPS.Get(dc),
+		PersistenceGlobalMaxQPS:              dynamicconfig.HistoryPersistenceGlobalMaxQPS.Get(dc),
+		PersistenceNamespaceMaxQPS:           dynamicconfig.HistoryPersistenceNamespaceMaxQPS.Get(dc),
+		PersistenceGlobalNamespaceMaxQPS:     dynamicconfig.HistoryPersistenceGlobalNamespaceMaxQPS.Get(dc),
+		PersistencePerShardNamespaceMaxQPS:   dynamicconfig.HistoryPersistencePerShardNamespaceMaxQPS.Get(dc),
+		PersistenceDynamicRateLimitingParams: dynamicconfig.HistoryPersistenceDynamicRateLimitingParams.Get(dc),
+		PersistenceQPSBurstRatio:             dynamicconfig.PersistenceQPSBurstRatio.Get(dc),
+		ShutdownDrainDuration:                dynamicconfig.HistoryShutdownDrainDuration.Get(dc),
+		StartupMembershipJoinDelay:           dynamicconfig.HistoryStartupMembershipJoinDelay.Get(dc),
+		MaxAutoResetPoints:                   dynamicconfig.HistoryMaxAutoResetPoints.Get(dc),
+		DefaultWorkflowTaskTimeout:           dynamicconfig.DefaultWorkflowTaskTimeout.Get(dc),
+		ContinueAsNewMinInterval:             dynamicconfig.ContinueAsNewMinInterval.Get(dc),
 
 		VisibilityPersistenceMaxReadQPS:       visibility.GetVisibilityPersistenceMaxReadQPS(dc),
 		VisibilityPersistenceMaxWriteQPS:      visibility.GetVisibilityPersistenceMaxWriteQPS(dc),

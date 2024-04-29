@@ -225,7 +225,9 @@ func (r *IncomingServiceRegistry) refreshServices(ctx context.Context) error {
 		Wait:                  true,
 	})
 	if err != nil {
-		r.logger.Error("long poll to refresh Nexus incoming services returned error", tag.Error(err))
+		if ctx.Err() == nil {
+			r.logger.Error("long poll to refresh Nexus incoming services returned error", tag.Error(err))
+		}
 		return err
 	}
 

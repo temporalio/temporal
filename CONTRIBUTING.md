@@ -125,8 +125,11 @@ When you are done, press `Ctrl+C` to stop the server. Don't forget to stop depen
 make stop-dependencies
 ```
 
-## Working with pending API changes
-If you need to make changes to the gRPC definitions while also working on code in this repo, do the following:
+## Working with merged API changes
+gRPC / protobuf changes merged to the [api](https://github.com/temporalio/api) repo automatically trigger a commit in [api-go](https://github.com/temporalio/api-go). To bring such changes into your feature branch, use `make update-go-api update-proto`.
+
+## Working with local API changes
+If you need to make changes to the gRPC / protobuf definitions while also working on code in this repo, do the following:
 
 1. Checkout [api](https://github.com/temporalio/api), [api-go](https://github.com/temporalio/api-go), and [sdk-go](https://github.com/temporalio/sdk-go)
 2. Make your changes to `api`, commit to a branch.

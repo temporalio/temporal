@@ -322,6 +322,11 @@ func (r *TaskGeneratorImpl) GenerateDirtySubStateMachineTasks(
 						Id:   k.ID,
 					}
 				}
+				// Only set transition count if a task is non-concurrent.
+				transitionCount := int64(0)
+				if !task.Concurrent() {
+					transitionCount = node.TransitionCount()
+				}
 				smt := tasks.StateMachineTask{
 					WorkflowKey: r.mutableState.GetWorkflowKey(),
 					Info: &persistencespb.StateMachineTaskInfo{
@@ -329,7 +334,7 @@ func (r *TaskGeneratorImpl) GenerateDirtySubStateMachineTasks(
 							Path:                                 ppath,
 							MutableStateNamespaceFailoverVersion: versionedTransition.NamespaceFailoverVersion,
 							MutableStateTransitionCount:          versionedTransition.MaxTransitionCount,
-							MachineTransitionCount:               node.TransitionCount(),
+							MachineTransitionCount:               transitionCount,
 						},
 						Type: task.Type().ID,
 						Data: data,

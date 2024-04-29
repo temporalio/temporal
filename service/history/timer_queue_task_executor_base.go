@@ -53,7 +53,7 @@ var (
 
 type (
 	timerQueueTaskExecutorBase struct {
-		taskExecutor
+		stateMachineEnvironment
 		currentClusterName string
 		registry           namespace.Registry
 		deleteManager      deletemanager.DeleteManager
@@ -73,7 +73,7 @@ func newTimerQueueTaskExecutorBase(
 	config *configs.Config,
 ) *timerQueueTaskExecutorBase {
 	return &timerQueueTaskExecutorBase{
-		taskExecutor: taskExecutor{
+		stateMachineEnvironment: stateMachineEnvironment{
 			shardContext:   shardContext,
 			cache:          workflowCache,
 			logger:         logger,

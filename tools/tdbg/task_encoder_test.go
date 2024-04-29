@@ -119,6 +119,7 @@ func TestPredefinedTasks(t *testing.T) {
 		&tasks.CloseExecutionVisibilityTask{},
 		&tasks.HistoryReplicationTask{},
 		&tasks.ArchiveExecutionTask{},
+		&tasks.StateMachineOutboundTask{},
 	}
 	serializer := serialization.NewTaskSerializer()
 	expectedTaskTypes := make([]string, len(historyTasks))

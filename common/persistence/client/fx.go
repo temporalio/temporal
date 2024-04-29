@@ -44,7 +44,6 @@ type (
 	PersistenceMaxQps                  dynamicconfig.IntPropertyFn
 	PersistenceNamespaceMaxQps         dynamicconfig.IntPropertyFnWithNamespaceFilter
 	PersistencePerShardNamespaceMaxQPS dynamicconfig.IntPropertyFnWithNamespaceFilter
-	EnablePriorityRateLimiting         dynamicconfig.BoolPropertyFn
 	OperatorRPSRatio                   dynamicconfig.FloatPropertyFn
 	PersistenceBurstRatio              dynamicconfig.FloatPropertyFn
 
@@ -61,7 +60,6 @@ type (
 		PersistenceMaxQPS                  PersistenceMaxQps
 		PersistenceNamespaceMaxQPS         PersistenceNamespaceMaxQps
 		PersistencePerShardNamespaceMaxQPS PersistencePerShardNamespaceMaxQPS
-		EnablePriorityRateLimiting         EnablePriorityRateLimiting
 		OperatorRPSRatio                   OperatorRPSRatio
 		PersistenceBurstRatio              PersistenceBurstRatio
 		ClusterName                        ClusterName
@@ -101,29 +99,24 @@ func FactoryProvider(
 ) Factory {
 	var systemRequestRateLimiter, namespaceRequestRateLimiter quotas.RequestRateLimiter
 	if params.PersistenceMaxQPS != nil && params.PersistenceMaxQPS() > 0 {
-		if params.EnablePriorityRateLimiting != nil && params.EnablePriorityRateLimiting() {
-			systemRequestRateLimiter = NewPriorityRateLimiter(
-				params.PersistenceMaxQPS,
-				RequestPriorityFn,
-				params.OperatorRPSRatio,
-				params.PersistenceBurstRatio,
-				params.HealthSignals,
-				params.DynamicRateLimitingParams,
-				params.MetricsHandler,
-				params.Logger,
-			)
-			namespaceRequestRateLimiter = NewPriorityNamespaceRateLimiter(
-				params.PersistenceMaxQPS,
-				params.PersistenceNamespaceMaxQPS,
-				params.PersistencePerShardNamespaceMaxQPS,
-				RequestPriorityFn,
-				params.OperatorRPSRatio,
-				params.PersistenceBurstRatio,
-			)
-		} else {
-			systemRequestRateLimiter = NewNoopPriorityRateLimiter(params.PersistenceMaxQPS, params.PersistenceBurstRatio)
-			namespaceRequestRateLimiter = NewNoopPriorityRateLimiter(params.PersistenceMaxQPS, params.PersistenceBurstRatio)
-		}
+		systemRequestRateLimiter = NewPriorityRateLimiter(
+			params.PersistenceMaxQPS,
+			RequestPriorityFn,
+			params.OperatorRPSRatio,
+			params.PersistenceBurstRatio,
+			params.HealthSignals,
+			params.DynamicRateLimitingParams,
+			params.MetricsHandler,
+			params.Logger,
+		)
+		namespaceRequestRateLimiter = NewPriorityNamespaceRateLimiter(
+			params.PersistenceMaxQPS,
+			params.PersistenceNamespaceMaxQPS,
+			params.PersistencePerShardNamespaceMaxQPS,
+			RequestPriorityFn,
+			params.OperatorRPSRatio,
+			params.PersistenceBurstRatio,
+		)
 	}
 
 	return NewFactory(

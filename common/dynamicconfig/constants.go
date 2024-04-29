@@ -510,7 +510,7 @@ is currently processing a task.
 	NexusOutgoingServiceURLMaxLength = NewGlobalIntSetting(
 		"limit.outgoingServiceURLMaxLength",
 		1000,
-		`NexusOutgoingServiceURLMaxLength is the maximum length of an outgoing service URL.`,
+		`NexusOutgoingServiceURLMaxLength is the maximum length of an outgoing service URL and public callback URL.`,
 	)
 	NexusOutgoingServiceNameMaxLength = NewGlobalIntSetting(
 		"limit.outgoingServiceNameMaxLength",
@@ -566,11 +566,6 @@ is currently processing a task.
 		"frontend.persistenceGlobalNamespaceMaxQPS",
 		0,
 		`FrontendPersistenceGlobalNamespaceMaxQPS is the max qps each namespace in frontend cluster can query DB`,
-	)
-	FrontendEnablePersistencePriorityRateLimiting = NewGlobalBoolSetting(
-		"frontend.enablePersistencePriorityRateLimiting",
-		true,
-		`FrontendEnablePersistencePriorityRateLimiting indicates if priority rate limiting is enabled in frontend persistence client`,
 	)
 	FrontendPersistenceDynamicRateLimitingParams = NewGlobalMapSetting(
 		"frontend.persistenceDynamicRateLimitingParams",
@@ -835,6 +830,11 @@ of Timeout and if no activity is seen even after that the connection is closed.`
 		1000,
 		`FrontendCallbackURLMaxLength is the maximum length of callback URL`,
 	)
+	FrontendMaxCallbacksPerWorkflow = NewNamespaceIntSetting(
+		"frontend.maxCallbacksPerWorkflow",
+		32,
+		`FrontendMaxCallbacksPerWorkflow is the maximum number of callbacks that can be attached to a workflow.`,
+	)
 	FrontendMaxConcurrentBatchOperationPerNamespace = NewNamespaceIntSetting(
 		"frontend.MaxConcurrentBatchOperationPerNamespace",
 		1,
@@ -852,14 +852,14 @@ of Timeout and if no activity is seen even after that the connection is closed.`
 	)
 	FrontendAccessHistoryFraction = NewGlobalFloatSetting(
 		"frontend.accessHistoryFraction",
-		0.0,
+		1.0,
 		`FrontendAccessHistoryFraction (0.0~1.0) is the fraction of history operations that are sent to the history
 service using the new RPCs. The remaining access history via the existing implementation.
 TODO: remove once migration completes.`,
 	)
 	FrontendAdminDeleteAccessHistoryFraction = NewGlobalFloatSetting(
 		"frontend.adminDeleteAccessHistoryFraction",
-		0.0,
+		1.0,
 		`FrontendAdminDeleteAccessHistoryFraction (0.0~1.0) is the fraction of admin DeleteWorkflowExecution requests
 that are sent to the history service using the new RPCs. The remaining access history via the existing implementation.
 TODO: remove once migration completes.`,
@@ -964,11 +964,6 @@ Default is 0, means, namespace will be deleted immediately.`,
 		"matching.persistenceGlobalNamespaceMaxQPS",
 		0,
 		`MatchingPersistenceNamespaceMaxQPS is the max qps each namespace in matching cluster can query DB`,
-	)
-	MatchingEnablePersistencePriorityRateLimiting = NewGlobalBoolSetting(
-		"matching.enablePersistencePriorityRateLimiting",
-		true,
-		`MatchingEnablePersistencePriorityRateLimiting indicates if priority rate limiting is enabled in matching persistence client`,
 	)
 	MatchingPersistenceDynamicRateLimitingParams = NewGlobalMapSetting(
 		"matching.persistenceDynamicRateLimitingParams",
@@ -1155,7 +1150,7 @@ these log lines can be noisy, we want to be able to turn on and sample selective
 
 	EnableReplicationStream = NewGlobalBoolSetting(
 		"history.enableReplicationStream",
-		false,
+		true,
 		`EnableReplicationStream turn on replication stream`,
 	)
 	EnableHistoryReplicationDLQV2 = NewGlobalBoolSetting(
@@ -1196,11 +1191,6 @@ If value less or equal to 0, will fall back to HistoryPersistenceMaxQPS`,
 		"history.persistencePerShardNamespaceMaxQPS",
 		0,
 		`HistoryPersistencePerShardNamespaceMaxQPS is the max qps each namespace on a shard can query DB`,
-	)
-	HistoryEnablePersistencePriorityRateLimiting = NewGlobalBoolSetting(
-		"history.enablePersistencePriorityRateLimiting",
-		true,
-		`HistoryEnablePersistencePriorityRateLimiting indicates if priority rate limiting is enabled in history persistence client`,
 	)
 	HistoryPersistenceDynamicRateLimitingParams = NewGlobalMapSetting(
 		"history.persistenceDynamicRateLimitingParams",
@@ -2106,11 +2096,6 @@ that task will be sent to DLQ.`,
 		"worker.persistenceGlobalNamespaceMaxQPS",
 		0,
 		`WorkerPersistenceNamespaceMaxQPS is the max qps each namespace in worker cluster can query DB`,
-	)
-	WorkerEnablePersistencePriorityRateLimiting = NewGlobalBoolSetting(
-		"worker.enablePersistencePriorityRateLimiting",
-		true,
-		`WorkerEnablePersistencePriorityRateLimiting indicates if priority rate limiting is enabled in worker persistence client`,
 	)
 	WorkerPersistenceDynamicRateLimitingParams = NewGlobalMapSetting(
 		"worker.persistenceDynamicRateLimitingParams",

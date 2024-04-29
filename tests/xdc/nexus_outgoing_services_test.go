@@ -91,7 +91,8 @@ func (s *NexusOutgoingServicesTestSuite) TestOutgoingServicesAreReplicatedFromAc
 		Namespace: namespace,
 		Name:      "test",
 		Spec: &nexus.OutgoingServiceSpec{
-			Url: "http://dont-care",
+			Url:               "http://dont-care",
+			PublicCallbackUrl: "http://dont-care/callback",
 		},
 	})
 	s.NoError(err)

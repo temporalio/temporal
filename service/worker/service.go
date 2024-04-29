@@ -91,25 +91,24 @@ type (
 
 	// Config contains all the service config for worker
 	Config struct {
-		ScannerCfg                            *scanner.Config
-		ParentCloseCfg                        *parentclosepolicy.Config
-		ThrottledLogRPS                       dynamicconfig.IntPropertyFn
-		PersistenceMaxQPS                     dynamicconfig.IntPropertyFn
-		PersistenceGlobalMaxQPS               dynamicconfig.IntPropertyFn
-		PersistenceNamespaceMaxQPS            dynamicconfig.IntPropertyFnWithNamespaceFilter
-		PersistenceGlobalNamespaceMaxQPS      dynamicconfig.IntPropertyFnWithNamespaceFilter
-		PersistencePerShardNamespaceMaxQPS    dynamicconfig.IntPropertyFnWithNamespaceFilter
-		EnablePersistencePriorityRateLimiting dynamicconfig.BoolPropertyFn
-		PersistenceDynamicRateLimitingParams  dynamicconfig.MapPropertyFn
-		PersistenceQPSBurstRatio              dynamicconfig.FloatPropertyFn
-		OperatorRPSRatio                      dynamicconfig.FloatPropertyFn
-		EnableBatcher                         dynamicconfig.BoolPropertyFn
-		BatcherRPS                            dynamicconfig.IntPropertyFnWithNamespaceFilter
-		BatcherConcurrency                    dynamicconfig.IntPropertyFnWithNamespaceFilter
-		EnableParentClosePolicyWorker         dynamicconfig.BoolPropertyFn
-		PerNamespaceWorkerCount               dynamicconfig.IntPropertyFnWithNamespaceFilter
-		PerNamespaceWorkerOptions             dynamicconfig.MapPropertyFnWithNamespaceFilter
-		PerNamespaceWorkerStartRate           dynamicconfig.FloatPropertyFn
+		ScannerCfg                           *scanner.Config
+		ParentCloseCfg                       *parentclosepolicy.Config
+		ThrottledLogRPS                      dynamicconfig.IntPropertyFn
+		PersistenceMaxQPS                    dynamicconfig.IntPropertyFn
+		PersistenceGlobalMaxQPS              dynamicconfig.IntPropertyFn
+		PersistenceNamespaceMaxQPS           dynamicconfig.IntPropertyFnWithNamespaceFilter
+		PersistenceGlobalNamespaceMaxQPS     dynamicconfig.IntPropertyFnWithNamespaceFilter
+		PersistencePerShardNamespaceMaxQPS   dynamicconfig.IntPropertyFnWithNamespaceFilter
+		PersistenceDynamicRateLimitingParams dynamicconfig.MapPropertyFn
+		PersistenceQPSBurstRatio             dynamicconfig.FloatPropertyFn
+		OperatorRPSRatio                     dynamicconfig.FloatPropertyFn
+		EnableBatcher                        dynamicconfig.BoolPropertyFn
+		BatcherRPS                           dynamicconfig.IntPropertyFnWithNamespaceFilter
+		BatcherConcurrency                   dynamicconfig.IntPropertyFnWithNamespaceFilter
+		EnableParentClosePolicyWorker        dynamicconfig.BoolPropertyFn
+		PerNamespaceWorkerCount              dynamicconfig.IntPropertyFnWithNamespaceFilter
+		PerNamespaceWorkerOptions            dynamicconfig.MapPropertyFnWithNamespaceFilter
+		PerNamespaceWorkerStartRate          dynamicconfig.FloatPropertyFn
 
 		VisibilityPersistenceMaxReadQPS   dynamicconfig.IntPropertyFn
 		VisibilityPersistenceMaxWriteQPS  dynamicconfig.IntPropertyFn
@@ -215,23 +214,22 @@ func NewConfig(
 			RemovableBuildIdDurationSinceDefault:    dynamicconfig.RemovableBuildIdDurationSinceDefault.Get(dc),
 			BuildIdScavengerVisibilityRPS:           dynamicconfig.BuildIdScavengerVisibilityRPS.Get(dc),
 		},
-		EnableBatcher:                         dynamicconfig.EnableBatcherGlobal.Get(dc),
-		BatcherRPS:                            dynamicconfig.BatcherRPS.Get(dc),
-		BatcherConcurrency:                    dynamicconfig.BatcherConcurrency.Get(dc),
-		EnableParentClosePolicyWorker:         dynamicconfig.EnableParentClosePolicyWorker.Get(dc),
-		PerNamespaceWorkerCount:               dynamicconfig.WorkerPerNamespaceWorkerCount.Get(dc),
-		PerNamespaceWorkerOptions:             dynamicconfig.WorkerPerNamespaceWorkerOptions.Get(dc),
-		PerNamespaceWorkerStartRate:           dynamicconfig.WorkerPerNamespaceWorkerStartRate.Get(dc),
-		ThrottledLogRPS:                       dynamicconfig.WorkerThrottledLogRPS.Get(dc),
-		PersistenceMaxQPS:                     dynamicconfig.WorkerPersistenceMaxQPS.Get(dc),
-		PersistenceGlobalMaxQPS:               dynamicconfig.WorkerPersistenceGlobalMaxQPS.Get(dc),
-		PersistenceNamespaceMaxQPS:            dynamicconfig.WorkerPersistenceNamespaceMaxQPS.Get(dc),
-		PersistenceGlobalNamespaceMaxQPS:      dynamicconfig.WorkerPersistenceGlobalNamespaceMaxQPS.Get(dc),
-		PersistencePerShardNamespaceMaxQPS:    dynamicconfig.DefaultPerShardNamespaceRPSMax,
-		EnablePersistencePriorityRateLimiting: dynamicconfig.WorkerEnablePersistencePriorityRateLimiting.Get(dc),
-		PersistenceDynamicRateLimitingParams:  dynamicconfig.WorkerPersistenceDynamicRateLimitingParams.Get(dc),
-		PersistenceQPSBurstRatio:              dynamicconfig.PersistenceQPSBurstRatio.Get(dc),
-		OperatorRPSRatio:                      dynamicconfig.OperatorRPSRatio.Get(dc),
+		EnableBatcher:                        dynamicconfig.EnableBatcherGlobal.Get(dc),
+		BatcherRPS:                           dynamicconfig.BatcherRPS.Get(dc),
+		BatcherConcurrency:                   dynamicconfig.BatcherConcurrency.Get(dc),
+		EnableParentClosePolicyWorker:        dynamicconfig.EnableParentClosePolicyWorker.Get(dc),
+		PerNamespaceWorkerCount:              dynamicconfig.WorkerPerNamespaceWorkerCount.Get(dc),
+		PerNamespaceWorkerOptions:            dynamicconfig.WorkerPerNamespaceWorkerOptions.Get(dc),
+		PerNamespaceWorkerStartRate:          dynamicconfig.WorkerPerNamespaceWorkerStartRate.Get(dc),
+		ThrottledLogRPS:                      dynamicconfig.WorkerThrottledLogRPS.Get(dc),
+		PersistenceMaxQPS:                    dynamicconfig.WorkerPersistenceMaxQPS.Get(dc),
+		PersistenceGlobalMaxQPS:              dynamicconfig.WorkerPersistenceGlobalMaxQPS.Get(dc),
+		PersistenceNamespaceMaxQPS:           dynamicconfig.WorkerPersistenceNamespaceMaxQPS.Get(dc),
+		PersistenceGlobalNamespaceMaxQPS:     dynamicconfig.WorkerPersistenceGlobalNamespaceMaxQPS.Get(dc),
+		PersistencePerShardNamespaceMaxQPS:   dynamicconfig.DefaultPerShardNamespaceRPSMax,
+		PersistenceDynamicRateLimitingParams: dynamicconfig.WorkerPersistenceDynamicRateLimitingParams.Get(dc),
+		PersistenceQPSBurstRatio:             dynamicconfig.PersistenceQPSBurstRatio.Get(dc),
+		OperatorRPSRatio:                     dynamicconfig.OperatorRPSRatio.Get(dc),
 
 		VisibilityPersistenceMaxReadQPS:   visibility.GetVisibilityPersistenceMaxReadQPS(dc),
 		VisibilityPersistenceMaxWriteQPS:  visibility.GetVisibilityPersistenceMaxWriteQPS(dc),

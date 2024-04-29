@@ -36,7 +36,7 @@ import (
 	workflowpb "go.temporal.io/api/workflow/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common/definition"
-	"go.temporal.io/server/plugins/callbacks"
+	"go.temporal.io/server/components/callbacks"
 	"go.temporal.io/server/service/history/hsm"
 	"go.temporal.io/server/service/history/queues"
 	"go.temporal.io/server/service/history/workflow"
@@ -66,15 +66,17 @@ func (ms mutableState) GetNexusCompletion(ctx context.Context) (nexus.OperationC
 
 func TestProcessInvocationTask_Outcomes(t *testing.T) {
 	cases := []struct {
-		name          string
-		caller        callbacks.HTTPCaller
-		assertOutcome func(*testing.T, callbacks.Callback)
+		name            string
+		caller          callbacks.HTTPCaller
+		destinationDown bool
+		assertOutcome   func(*testing.T, callbacks.Callback)
 	}{
 		{
 			name: "success",
 			caller: func(r *http.Request) (*http.Response, error) {
 				return &http.Response{StatusCode: 200, Body: http.NoBody}, nil
 			},
+			destinationDown: false,
 			assertOutcome: func(t *testing.T, cb callbacks.Callback) {
 				require.Equal(t, enumspb.CALLBACK_STATE_SUCCEEDED, cb.PublicInfo.State)
 			},
@@ -84,6 +86,7 @@ func TestProcessInvocationTask_Outcomes(t *testing.T) {
 			caller: func(r *http.Request) (*http.Response, error) {
 				return nil, errors.New("fake failure")
 			},
+			destinationDown: true,
 			assertOutcome: func(t *testing.T, cb callbacks.Callback) {
 				require.Equal(t, enumspb.CALLBACK_STATE_BACKING_OFF, cb.PublicInfo.State)
 			},
@@ -93,6 +96,7 @@ func TestProcessInvocationTask_Outcomes(t *testing.T) {
 			caller: func(r *http.Request) (*http.Response, error) {
 				return &http.Response{StatusCode: 500, Body: http.NoBody}, nil
 			},
+			destinationDown: true,
 			assertOutcome: func(t *testing.T, cb callbacks.Callback) {
 				require.Equal(t, enumspb.CALLBACK_STATE_BACKING_OFF, cb.PublicInfo.State)
 			},
@@ -102,11 +106,13 @@ func TestProcessInvocationTask_Outcomes(t *testing.T) {
 			caller: func(r *http.Request) (*http.Response, error) {
 				return &http.Response{StatusCode: 400, Body: http.NoBody}, nil
 			},
+			destinationDown: false,
 			assertOutcome: func(t *testing.T, cb callbacks.Callback) {
 				require.Equal(t, enumspb.CALLBACK_STATE_FAILED, cb.PublicInfo.State)
 			},
 		},
 	}
+
 	for _, tc := range cases {
 		tc := tc
 		t.Run(tc.name, func(t *testing.T) {
@@ -152,7 +158,12 @@ func TestProcessInvocationTask_Outcomes(t *testing.T) {
 				},
 				callbacks.InvocationTask{Destination: "dont-care"},
 			)
-			require.NoError(t, err)
+
+			if tc.destinationDown {
+				require.IsType(t, &queues.DestinationDownError{}, err)
+			} else {
+				require.NoError(t, err)
+			}
 
 			cb, err = coll.Data("ID")
 			require.NoError(t, err)
@@ -223,7 +234,8 @@ func newRoot(t *testing.T) *hsm.Node {
 	require.NoError(t, callbacks.RegisterStateMachine(reg))
 	mutableState := newMutableState(t)
 
-	root, err := hsm.NewRoot(reg, workflow.StateMachineType.ID, mutableState, make(map[int32]*persistencespb.StateMachineMap))
+	// Backend is nil because we don't need to generate history events for this test.
+	root, err := hsm.NewRoot(reg, workflow.StateMachineType.ID, mutableState, make(map[int32]*persistencespb.StateMachineMap), nil)
 	require.NoError(t, err)
 	return root
 }
