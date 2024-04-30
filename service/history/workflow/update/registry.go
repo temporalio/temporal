@@ -225,7 +225,7 @@ func (r *registry) FindOrCreate(ctx context.Context, id string) (*Update, bool, 
 	if upd, found := r.findLocked(ctx, id); found {
 		return upd, true, nil
 	}
-	if err := r.admit(ctx); err != nil {
+	if err := r.checkLimits(ctx); err != nil {
 		return nil, false, err
 	}
 	upd := New(id, r.remover(id), withInstrumentation(&r.instrumentation))
@@ -342,7 +342,7 @@ func (r *registry) remover(id string) updateOpt {
 	)
 }
 
-func (r *registry) admit(ctx context.Context) error {
+func (r *registry) checkLimits(_ context.Context) error {
 	if len(r.updates) >= r.maxInFlight() {
 		return &serviceerror.ResourceExhausted{
 			Cause:   enumspb.RESOURCE_EXHAUSTED_CAUSE_CONCURRENT_LIMIT,

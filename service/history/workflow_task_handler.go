@@ -73,7 +73,7 @@ type (
 		workflowTaskCompletedID int64
 
 		// internal state
-		hasBufferedEvents               bool
+		hasBufferedEventsOrMessages     bool
 		workflowTaskFailedCause         *workflowTaskFailedCause
 		activityNotStartedCancelled     bool
 		newMutableState                 workflow.MutableState
@@ -131,7 +131,7 @@ func newWorkflowTaskHandler(
 	config *configs.Config,
 	shard shard.Context,
 	searchAttributesMapperProvider searchattribute.MapperProvider,
-	hasBufferedEvents bool,
+	hasBufferedEventsOrMessages bool,
 	commandHandlerRegistry *workflow.CommandHandlerRegistry,
 ) *workflowTaskHandlerImpl {
 	return &workflowTaskHandlerImpl{
@@ -139,7 +139,7 @@ func newWorkflowTaskHandler(
 		workflowTaskCompletedID: workflowTaskCompletedID,
 
 		// internal state
-		hasBufferedEvents:               hasBufferedEvents,
+		hasBufferedEventsOrMessages:     hasBufferedEventsOrMessages,
 		workflowTaskFailedCause:         nil,
 		activityNotStartedCancelled:     false,
 		newMutableState:                 nil,
@@ -660,7 +660,7 @@ func (handler *workflowTaskHandlerImpl) handleCommandCompleteWorkflow(
 ) error {
 	metrics.CommandTypeCompleteWorkflowCounter.With(handler.metricsHandler).Record(1)
 
-	if handler.hasBufferedEvents {
+	if handler.hasBufferedEventsOrMessages {
 		return handler.failWorkflowTask(enumspb.WORKFLOW_TASK_FAILED_CAUSE_UNHANDLED_COMMAND, nil)
 	}
 
@@ -717,7 +717,7 @@ func (handler *workflowTaskHandlerImpl) handleCommandFailWorkflow(
 ) error {
 	metrics.CommandTypeFailWorkflowCounter.With(handler.metricsHandler).Record(1)
 
-	if handler.hasBufferedEvents {
+	if handler.hasBufferedEventsOrMessages {
 		return handler.failWorkflowTask(enumspb.WORKFLOW_TASK_FAILED_CAUSE_UNHANDLED_COMMAND, nil)
 	}
 
@@ -807,7 +807,7 @@ func (handler *workflowTaskHandlerImpl) handleCommandCancelTimer(
 
 	// In case the timer was cancelled and its TimerFired event was deleted from buffered events, attempt
 	// to unset hasBufferedEvents to allow the workflow to complete.
-	handler.hasBufferedEvents = handler.hasBufferedEvents && handler.mutableState.HasBufferedEvents()
+	handler.hasBufferedEventsOrMessages = handler.hasBufferedEventsOrMessages && handler.mutableState.HasBufferedEvents()
 	return nil
 }
 
@@ -817,7 +817,7 @@ func (handler *workflowTaskHandlerImpl) handleCommandCancelWorkflow(
 ) error {
 	metrics.CommandTypeCancelWorkflowCounter.With(handler.metricsHandler).Record(1)
 
-	if handler.hasBufferedEvents {
+	if handler.hasBufferedEventsOrMessages {
 		return handler.failWorkflowTask(enumspb.WORKFLOW_TASK_FAILED_CAUSE_UNHANDLED_COMMAND, nil)
 	}
 
@@ -917,7 +917,7 @@ func (handler *workflowTaskHandlerImpl) handleCommandContinueAsNewWorkflow(
 ) error {
 	metrics.CommandTypeContinueAsNewCounter.With(handler.metricsHandler).Record(1)
 
-	if handler.hasBufferedEvents {
+	if handler.hasBufferedEventsOrMessages {
 		return handler.failWorkflowTask(enumspb.WORKFLOW_TASK_FAILED_CAUSE_UNHANDLED_COMMAND, nil)
 	}
 
