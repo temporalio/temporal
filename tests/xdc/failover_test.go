@@ -2368,7 +2368,7 @@ func (s *FunctionalClustersTestSuite) TestActivityHeartbeatFailover() {
 	s.NotNil(shard.RemoteClusters)
 	standbyAckInfo, ok := shard.RemoteClusters[s.clusterNames[1]]
 	s.True(ok)
-	s.Equal(shard.MaxReplicationTaskId+1, standbyAckInfo.AckedTaskId)
+	s.Equal(shard.MaxReplicationTaskId, standbyAckInfo.AckedTaskId)
 	s.NotNil(standbyAckInfo.AckedTaskVisibilityTime)
 	s.True(standbyAckInfo.AckedTaskVisibilityTime.AsTime().Before(time.Now()))
 	s.True(standbyAckInfo.AckedTaskVisibilityTime.AsTime().After(startTime))
