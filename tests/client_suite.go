@@ -43,6 +43,7 @@ import (
 	enumspb "go.temporal.io/api/enums/v1"
 	historypb "go.temporal.io/api/history/v1"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
+	updatepb "go.temporal.io/api/update/v1"
 	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/sdk/activity"
 	sdkclient "go.temporal.io/sdk/client"
@@ -51,6 +52,7 @@ import (
 	"go.temporal.io/sdk/worker"
 	"go.temporal.io/sdk/workflow"
 	"go.temporal.io/server/common/testing/historyrequire"
+	"go.temporal.io/server/common/testing/testvars"
 	"go.temporal.io/server/components/nexusoperations"
 	"go.uber.org/multierr"
 
@@ -1212,7 +1214,7 @@ func (s *ClientFunctionalSuite) Test_ActivityTimeouts() {
 //	Server rescheduled a new workflow task.
 //	Workflow runs the local activity again and drain the signal chan (with one signal) and complete workflow.
 //	Server complete workflow as requested.
-func (s *ClientFunctionalSuite) Test_UnhandledCommandAndNewTask() {
+func (s *ClientFunctionalSuite) Test_BufferedSignalCausesUnhandledCommandAndSchedulesNewTask() {
 	sigReadyToSendChan := make(chan struct{}, 1)
 	sigSendDoneChan := make(chan struct{})
 	localActivityFn := func(ctx context.Context) error {
@@ -1308,6 +1310,113 @@ func (s *ClientFunctionalSuite) Test_UnhandledCommandAndNewTask() {
 		enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_COMPLETED,
 	}
 	s.assertHistory(id, workflowRun.GetRunID(), expectedHistory)
+}
+
+// Analogous to Test_BufferedSignalCausesUnhandledCommandAndSchedulesNewTask
+//
+// 1. The worker starts executing the first WFT, before any update is sent.
+// 2. While the first WFT is being executed, an update is sent.
+// 3. Once the server has received the update, the workflow completes.
+// 4. The server fails the complete request because there is an admitted update and schedules a new workflow task.
+// 5. This time the workflow accepts the update and completes the workflow.
+func (s *ClientFunctionalSuite) Test_AdmittedUpdateCausesUnhandledCommandAndSchedulesNewTask() {
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+
+	tv := testvars.New(s.T().Name()).WithTaskQueue(s.taskQueue)
+
+	readyToSendUpdate := make(chan bool, 1)
+	updateHasBeenAdmitted := make(chan bool)
+
+	localActivityFn := func(ctx context.Context) error {
+		readyToSendUpdate <- true // Ensure update is sent after first WFT has started.
+		<-updateHasBeenAdmitted   // Ensure WF completion is not attempted until after update has been admitted.
+		return nil
+	}
+
+	workflowFn := func(ctx workflow.Context) error {
+		err := workflow.SetUpdateHandler(ctx, tv.HandlerName(), func(arg string) (string, error) {
+			return "my-update-result", nil
+		})
+		if err != nil {
+			return err
+		}
+		laCtx := workflow.WithLocalActivityOptions(ctx, workflow.LocalActivityOptions{
+			StartToCloseTimeout: 10 * time.Second,
+			RetryPolicy:         &temporal.RetryPolicy{MaximumAttempts: 1},
+		})
+		return workflow.ExecuteLocalActivity(laCtx, localActivityFn).Get(laCtx, nil)
+	}
+
+	s.worker.RegisterWorkflow(workflowFn)
+
+	workflowRun, err := s.sdkClient.ExecuteWorkflow(ctx, sdkclient.StartWorkflowOptions{
+		ID:                  tv.WorkflowID(),
+		TaskQueue:           tv.TaskQueue().Name,
+		WorkflowTaskTimeout: 10 * time.Second,
+		WorkflowRunTimeout:  10 * time.Second,
+	}, workflowFn)
+	if err != nil {
+		s.Logger.Fatal("Start workflow failed with err", tag.Error(err))
+	}
+
+	// Block until first workflow task started.
+	<-readyToSendUpdate
+
+	tv = tv.WithRunID(workflowRun.GetRunID())
+
+	// Send update and wait until it is admitted. This isn't convenient: since Admitted is non-durable, we do not expose
+	// an API for doing it directly. Instead we send the update and poll until it's reported to be in admitted state.
+	updateHandle := make(chan sdkclient.WorkflowUpdateHandle)
+	updateErr := make(chan error)
+	go func() {
+		handle, err := s.sdkClient.UpdateWorkflowWithOptions(ctx, &sdkclient.UpdateWorkflowWithOptionsRequest{
+			UpdateID:   tv.UpdateID(),
+			UpdateName: tv.HandlerName(),
+			WorkflowID: tv.WorkflowID(),
+			RunID:      tv.RunID(),
+			Args:       []interface{}{"update-value"},
+		})
+		updateErr <- err
+		updateHandle <- handle
+	}()
+	for {
+		time.Sleep(10 * time.Millisecond)
+		_, err = s.sdkClient.WorkflowService().PollWorkflowExecutionUpdate(ctx, &workflowservice.PollWorkflowExecutionUpdateRequest{
+			Namespace: s.namespace,
+			UpdateRef: tv.UpdateRef(),
+			Identity:  "my-identity",
+			WaitPolicy: &updatepb.WaitPolicy{
+				LifecycleStage: enumspb.UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_UNSPECIFIED,
+			},
+		})
+		if err == nil {
+			close(updateHasBeenAdmitted)
+			break
+		}
+	}
+
+	err = workflowRun.Get(ctx, nil)
+	s.NoError(err)
+	s.NoError(<-updateErr)
+	var updateResult string
+	err = (<-updateHandle).Get(ctx, &updateResult)
+	s.NoError(err)
+	s.Equal("my-update-result", updateResult)
+
+	s.HistoryRequire.EqualHistoryEvents(`
+	1 WorkflowExecutionStarted
+	2 WorkflowTaskScheduled
+	3 WorkflowTaskStarted
+	4 WorkflowTaskFailed // Admitted update prevented workflow completion
+	5 WorkflowTaskScheduled
+	6 WorkflowTaskStarted
+	7 WorkflowTaskCompleted
+	8 WorkflowExecutionUpdateAccepted
+	9 WorkflowExecutionUpdateCompleted
+	10 MarkerRecorded
+	11 WorkflowExecutionCompleted`,
+		s.getHistory(s.namespace, tv.WorkflowExecution()))
 }
 
 func (s *ClientFunctionalSuite) Test_CancelActivityAndTimerBeforeComplete() {

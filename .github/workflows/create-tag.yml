@@ -16,6 +16,10 @@ on:
       base_tag:
         description: "Base tag to generate commit list for release notes"
         required: false
+      update_deps:
+        type: boolean
+        description: "Create PR updating dependencies post-release"
+        default: false
 
 jobs:
   create-tag:
@@ -131,3 +135,15 @@ jobs:
 
           gh repo set-default ${{ github.repository }}
           gh release create "$TAG" --verify-tag --draft --title "$TAG" -F "$TEMPFILE"
+
+      - name: Create PR updating dependencies
+        if: ${{ github.event.inputs.update_deps == 'true' }}
+        run: |
+          make update-dependencies
+          make go-generate
+          BRANCH="temporal-data/update-dependencies-$(git rev-parse --short HEAD)"
+          git checkout -b "${BRANCH}"
+          git add .
+          git commit -m "Update dependencies" --author ${{ github.actor }}
+          git push origin "${BRANCH}"
+          gh pr create --fill --reviewer ${{ github.actor }},${{ github.triggering_actor }}

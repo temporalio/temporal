@@ -108,6 +108,8 @@ func (s *localEventsHandlerSuite) TestHandleLocalHistoryEvents_AlreadyExist() {
 	namespaceId := uuid.NewString()
 	workflowId := uuid.NewString()
 	runId := uuid.NewString()
+	s.clusterMetadata.EXPECT().GetClusterID().Return(int64(1))
+	s.clusterMetadata.EXPECT().GetFailoverVersionIncrement().Return(int64(1000))
 
 	versionHistory := &historyspb.VersionHistory{
 		Items: []*historyspb.VersionHistoryItem{
@@ -149,6 +151,13 @@ func (s *localEventsHandlerSuite) TestHandleLocalHistoryEvents_AlreadyExist() {
 		VersionHistory: versionHistory,
 		Token:          nil,
 	}
+	engine.EXPECT().GetMutableState(gomock.Any(), &historyservice.GetMutableStateRequest{
+		NamespaceId: namespaceId,
+		Execution: &commonpb.WorkflowExecution{
+			WorkflowId: workflowId,
+			RunId:      runId,
+		},
+	}).Return(nil, nil).Times(1)
 	engine.EXPECT().ImportWorkflowExecution(gomock.Any(), &ImportWorkflowExecutionRequestMatcher{request}).Return(
 		&historyservice.ImportWorkflowExecutionResponse{
 			Token:         nil,
@@ -210,6 +219,13 @@ func (s *localEventsHandlerSuite) TestHandleLocalHistoryEvents_IncludeLastEvent_
 	batch, _ := s.eventSerializer.SerializeEvents(historyEvents, enumspb.ENCODING_TYPE_PROTO3)
 	returnToken1 := []byte{1, 0, 0, 1, 1, 1, 1, 0}
 	gomock.InOrder(
+		engine.EXPECT().GetMutableState(gomock.Any(), &historyservice.GetMutableStateRequest{
+			NamespaceId: namespaceId,
+			Execution: &commonpb.WorkflowExecution{
+				WorkflowId: workflowId,
+				RunId:      runId,
+			},
+		}).Return(nil, nil).Times(1),
 		engine.EXPECT().ImportWorkflowExecution(gomock.Any(), &ImportWorkflowExecutionRequestMatcher{
 			&historyservice.ImportWorkflowExecutionRequest{
 				NamespaceId: namespaceId,
@@ -264,19 +280,19 @@ func (s *localEventsHandlerSuite) TestHandleHistoryEvents_LocalOnly_ImportAllLoc
 	versionHistory := &historyspb.VersionHistory{
 		Items: []*historyspb.VersionHistoryItem{
 			{EventId: 5, Version: 3},
-			{EventId: 20, Version: 1},
-			{EventId: 25, Version: 2},
+			{EventId: 20, Version: 1001},
+			{EventId: 25, Version: 2002},
 		},
 	}
 	initialHistoryEvents := [][]*historypb.HistoryEvent{
 		{
 			{
 				EventId: 7,
-				Version: 1,
+				Version: 1001,
 			},
 			{
 				EventId: 8,
-				Version: 1,
+				Version: 1001,
 			},
 		},
 	}
@@ -293,21 +309,13 @@ func (s *localEventsHandlerSuite) TestHandleHistoryEvents_LocalOnly_ImportAllLoc
 		workflowId,
 	).Return(shardContext, nil).Times(1)
 	shardContext.EXPECT().GetEngine(gomock.Any()).Return(engine, nil).Times(1)
-
-	dataBlob1 := &commonpb.DataBlob{
-		EncodingType: enumspb.ENCODING_TYPE_PROTO3,
-		Data:         []byte{1, 0, 1},
-	}
-	dataBlob2 := &commonpb.DataBlob{
-		EncodingType: enumspb.ENCODING_TYPE_PROTO3,
-		Data:         []byte{1, 1, 0},
-	}
+	batch := serializeEvents(s.eventSerializer, initialHistoryEvents)
 	historyBatch1 := HistoryBatch{
-		RawEventBatch:  dataBlob1,
+		RawEventBatch:  batch[0],
 		VersionHistory: versionHistory,
 	}
 	historyBatch2 := HistoryBatch{
-		RawEventBatch:  dataBlob2,
+		RawEventBatch:  batch[0],
 		VersionHistory: versionHistory,
 	}
 
@@ -320,18 +328,24 @@ func (s *localEventsHandlerSuite) TestHandleHistoryEvents_LocalOnly_ImportAllLoc
 		return []HistoryBatch{historyBatch2}, nil, nil
 	})
 
-	batch := serializeEvents(s.eventSerializer, initialHistoryEvents)
 	returnToken1 := []byte{1, 0, 0, 1, 1, 1, 1, 0}
 	returnToken2 := []byte{1, 0, 0, 1, 1, 1, 1, 1}
 	returnToken3 := []byte{1, 1, 0, 1, 1, 1, 1, 1}
 
 	fetchedBlob1 := []*commonpb.DataBlob{}
 	for i := 0; i < historyImportBlobSize; i++ {
-		fetchedBlob1 = append(fetchedBlob1, dataBlob1)
+		fetchedBlob1 = append(fetchedBlob1, batch[0])
 	}
-	fetchedBlob2 := []*commonpb.DataBlob{dataBlob2}
+	fetchedBlob2 := []*commonpb.DataBlob{batch[0]}
 
 	gomock.InOrder(
+		engine.EXPECT().GetMutableState(gomock.Any(), &historyservice.GetMutableStateRequest{
+			NamespaceId: namespaceId,
+			Execution: &commonpb.WorkflowExecution{
+				WorkflowId: workflowId,
+				RunId:      runId,
+			},
+		}).Return(nil, nil).Times(1),
 		// import the initial events
 		engine.EXPECT().ImportWorkflowExecution(gomock.Any(), &ImportWorkflowExecutionRequestMatcher{
 			ExpectedRequest: &historyservice.ImportWorkflowExecutionRequest{
@@ -356,10 +370,10 @@ func (s *localEventsHandlerSuite) TestHandleHistoryEvents_LocalOnly_ImportAllLoc
 			namespace.ID(namespaceId),
 			workflowId,
 			runId,
-			int64(8),
-			int64(1),
+			int64(9),
+			int64(1001),
 			int64(20),
-			int64(1),
+			int64(1001),
 		).Return(fetcher).Times(1),
 
 		// import the fetched events inside the fetch loop
