@@ -160,6 +160,8 @@ type (
 		namespaceUpdateLockMap map[string]*namespaceUpdateLocks
 		// Serializes access to the per namespace lock map
 		namespaceUpdateLockMapLock sync.Mutex
+		// Stores results of reachability queries to visibility
+		reachabilityCache reachabilityCache
 	}
 )
 
@@ -194,6 +196,7 @@ func NewEngine(
 	visibilityManager manager.VisibilityManager,
 	nexusIncomingServiceManager persistence.NexusIncomingServiceManager,
 ) Engine {
+	scopedMetricsHandler := metricsHandler.WithTags(metrics.OperationTag(metrics.MatchingEngineScope))
 	return &matchingEngineImpl{
 		status:                common.DaemonStatusInitialized,
 		taskManager:           taskManager,
@@ -211,7 +214,7 @@ func NewEngine(
 		timeSource:            clock.NewRealTimeSource(), // No need to mock this at the moment
 		visibilityManager:     visibilityManager,
 		incomingServiceClient: newIncomingServiceClient(nexusIncomingServiceManager),
-		metricsHandler:        metricsHandler.WithTags(metrics.OperationTag(metrics.MatchingEngineScope)),
+		metricsHandler:        scopedMetricsHandler,
 		partitions:            make(map[tqid.PartitionKey]taskQueuePartitionManager),
 		gaugeMetrics: gaugeMetrics{
 			loadedTaskQueueFamilyCount:    make(map[taskQueueCounterKey]int),
@@ -225,6 +228,7 @@ func NewEngine(
 		outstandingPollers:        collection.NewSyncMap[string, context.CancelFunc](),
 		namespaceReplicationQueue: namespaceReplicationQueue,
 		namespaceUpdateLockMap:    make(map[string]*namespaceUpdateLocks),
+		reachabilityCache:         newReachabilityCache(scopedMetricsHandler),
 	}
 }
 
@@ -934,6 +938,7 @@ func (e *matchingEngineImpl) DescribeTaskQueue(
 			reachability, err := getBuildIdTaskReachability(ctx,
 				userData.GetVersioningData(),
 				e.visibilityManager,
+				e.reachabilityCache,
 				request.GetNamespaceId(),
 				req.GetNamespace(),
 				req.GetTaskQueue().GetName(),

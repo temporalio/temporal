@@ -36,7 +36,9 @@ import (
 
 	"go.temporal.io/server/api/clock/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
+	"go.temporal.io/server/common/cache"
 	hlc "go.temporal.io/server/common/clock/hybrid_logical_clock"
+	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence/visibility/manager"
 	"go.temporal.io/server/common/searchattribute"
@@ -44,8 +46,15 @@ import (
 	"go.temporal.io/server/common/worker_versioning"
 )
 
+const (
+	reachabilityCacheOpenWFExecutionTTL   = time.Minute
+	reachabilityCacheClosedWFExecutionTTL = 5 * time.Minute
+	reachabilityCacheMaxSize              = 100
+)
+
 type reachabilityCalculator struct {
 	visibilityMgr                manager.VisibilityManager
+	cache                        reachabilityCache
 	nsID                         namespace.ID
 	nsName                       namespace.Name
 	taskQueue                    string
@@ -58,14 +67,16 @@ func getBuildIdTaskReachability(
 	ctx context.Context,
 	data *persistencespb.VersioningData,
 	visibilityMgr manager.VisibilityManager,
+	cache reachabilityCache,
 	nsID,
 	nsName,
 	taskQueue,
 	buildId string,
 	buildIdVisibilityGracePeriod time.Duration,
 ) (enumspb.BuildIdTaskReachability, error) {
-	rc := &reachabilityCalculator{
+	rc := reachabilityCalculator{
 		visibilityMgr:                visibilityMgr,
+		cache:                        cache,
 		nsID:                         namespace.ID(nsID),
 		nsName:                       namespace.Name(nsName),
 		taskQueue:                    taskQueue,
@@ -107,7 +118,7 @@ func (rc *reachabilityCalculator) run(ctx context.Context, buildId string) (enum
 	buildIdsOfInterest = rc.getBuildIdsOfInterest(buildId, rc.buildIdVisibilityGracePeriod)
 
 	// 2c. If buildId is assignable to tasks from open workflows
-	existsOpenWFAssignedToBuildId, err := rc.existsWFAssignedToAny(ctx, rc.makeBuildIdCountRequest(buildIdsOfInterest, true))
+	existsOpenWFAssignedToBuildId, err := rc.existsWFAssignedToAny(ctx, buildIdsOfInterest, true)
 	if err != nil {
 		return enumspb.BUILD_ID_TASK_REACHABILITY_UNSPECIFIED, err
 	}
@@ -116,7 +127,7 @@ func (rc *reachabilityCalculator) run(ctx context.Context, buildId string) (enum
 	}
 
 	// 3. Cases for CLOSED_WORKFLOWS_ONLY
-	existsClosedWFAssignedToBuildId, err := rc.existsWFAssignedToAny(ctx, rc.makeBuildIdCountRequest(buildIdsOfInterest, false))
+	existsClosedWFAssignedToBuildId, err := rc.existsWFAssignedToAny(ctx, buildIdsOfInterest, false)
 	if err != nil {
 		return enumspb.BUILD_ID_TASK_REACHABILITY_UNSPECIFIED, err
 	}
@@ -175,24 +186,32 @@ func (rc *reachabilityCalculator) isReachableActiveAssignmentRuleTargetOrDefault
 
 func (rc *reachabilityCalculator) existsWFAssignedToAny(
 	ctx context.Context,
-	countRequest *manager.CountWorkflowExecutionsRequest,
+	buildIdsOfInterest []string,
+	open bool,
 ) (bool, error) {
-	countResponse, err := rc.visibilityMgr.CountWorkflowExecutions(ctx, countRequest)
+	query := rc.makeBuildIdQuery(buildIdsOfInterest, open)
+
+	// try cache
+	exists, ok := rc.cache.Get(query, open)
+	if ok {
+		return exists, nil
+	}
+
+	// cache was cold, ask visibility and put result in cache
+	countResponse, err := rc.visibilityMgr.CountWorkflowExecutions(ctx, rc.makeBuildIdCountRequest(query))
 	if err != nil {
 		return false, err
 	}
-	return countResponse.Count > 0, nil
+	exists = countResponse.Count > 0
+	rc.cache.Put(query, exists, open)
+	return exists, nil
 }
 
-func (rc *reachabilityCalculator) makeBuildIdCountRequest(
-	buildIdsOfInterest []string,
-	open bool,
-) *manager.CountWorkflowExecutionsRequest {
-	slices.Sort(buildIdsOfInterest)
+func (rc *reachabilityCalculator) makeBuildIdCountRequest(query string) *manager.CountWorkflowExecutionsRequest {
 	return &manager.CountWorkflowExecutionsRequest{
 		NamespaceID: rc.nsID,
 		Namespace:   rc.nsName,
-		Query:       rc.makeBuildIdQuery(buildIdsOfInterest, open),
+		Query:       query,
 	}
 }
 
@@ -200,6 +219,7 @@ func (rc *reachabilityCalculator) makeBuildIdQuery(
 	buildIdsOfInterest []string,
 	open bool,
 ) string {
+	slices.Sort(buildIdsOfInterest)
 	escapedTaskQueue := sqlparser.String(sqlparser.NewStrVal([]byte(rc.taskQueue)))
 	var statusFilter string
 	var escapedBuildIds []string
@@ -250,4 +270,47 @@ func getDefaultBuildId(assignmentRules []*persistencespb.AssignmentRule) string 
 		}
 	}
 	return ""
+}
+
+/*
+In-memory Reachability Cache of Visibility Queries and Results
+*/
+
+type reachabilityCache struct {
+	openWFCache    cache.Cache
+	closedWFCache  cache.Cache // these are separate due to allow for different TTL
+	metricsHandler metrics.Handler
+}
+
+func newReachabilityCache(handler metrics.Handler) reachabilityCache {
+	return reachabilityCache{
+		openWFCache:    cache.New(reachabilityCacheMaxSize, &cache.Options{TTL: reachabilityCacheOpenWFExecutionTTL}, handler),
+		closedWFCache:  cache.New(reachabilityCacheMaxSize, &cache.Options{TTL: reachabilityCacheClosedWFExecutionTTL}, handler),
+		metricsHandler: handler,
+	}
+}
+
+// Get retrieves the Workflow Count existence value based on the query-string key.
+// It returns !ok if the requested element is not in the cache, or if the cached value is not a boolean.
+func (c *reachabilityCache) Get(queryKey string, open bool) (exists bool, ok bool) {
+	var result interface{}
+	if open {
+		result = c.openWFCache.Get(queryKey)
+	} else {
+		result = c.closedWFCache.Get(queryKey)
+	}
+	if result == nil {
+		return false, false
+	}
+	exists, ok = result.(bool)
+	return exists, ok
+}
+
+// Put adds an element to the cache.
+func (c *reachabilityCache) Put(queryKey string, exists, open bool) {
+	if open {
+		c.openWFCache.Put(queryKey, exists)
+	} else {
+		c.closedWFCache.Put(queryKey, exists)
+	}
 }

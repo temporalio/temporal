@@ -26,6 +26,7 @@ package matching
 
 import (
 	"context"
+	"go.temporal.io/server/common/metrics/metricstest"
 	"slices"
 	"testing"
 	"time"
@@ -42,9 +43,15 @@ import (
 
 const testBuildIdVisibilityGracePeriod = 2 * time.Minute
 
+type testReachabilityCalculator struct {
+	rc      *reachabilityCalculator
+	capture *metricstest.Capture
+}
+
 func TestGetBuildIdsOfInterest(t *testing.T) {
 	t.Parallel()
-	rc := mkTestReachabilityCalculator()
+	trc := mkTestReachabilityCalculator()
+	rc := trc.rc
 
 	// start time 3x rc.buildIdVisibilityGracePeriod ago
 	timesource := commonclock.NewEventTimeSource().Update(time.Now().Add(-3*rc.buildIdVisibilityGracePeriod + time.Second))
@@ -156,11 +163,11 @@ func TestMakeBuildIdQuery(t *testing.T) {
 
 	buildIdsOfInterest := []string{"0", "1", "2", ""}
 	query := rc.makeBuildIdQuery(buildIdsOfInterest, true)
-	expectedQuery := "TaskQueue = 'test-query-tq' AND (BuildIds IS NULL OR BuildIds IN ('assigned:0','assigned:1','assigned:2','unversioned')) AND ExecutionStatus = \"Running\""
+	expectedQuery := "TaskQueue = 'test-query-tq' AND (BuildIds IS NULL OR BuildIds IN ('unversioned','assigned:0','assigned:1','assigned:2')) AND ExecutionStatus = \"Running\""
 	assert.Equal(t, expectedQuery, query)
 
 	query = rc.makeBuildIdQuery(buildIdsOfInterest, false)
-	expectedQuery = "TaskQueue = 'test-query-tq' AND (BuildIds IS NULL OR BuildIds IN ('versioned:0','versioned:1','versioned:2','unversioned')) AND ExecutionStatus != \"Running\""
+	expectedQuery = "TaskQueue = 'test-query-tq' AND (BuildIds IS NULL OR BuildIds IN ('unversioned','versioned:0','versioned:1','versioned:2')) AND ExecutionStatus != \"Running\""
 	assert.Equal(t, expectedQuery, query)
 
 	buildIdsOfInterest = []string{"0", "1", "2"}
@@ -178,7 +185,8 @@ func TestGetReachability_WithVisibility_WithoutRules(t *testing.T) {
 	// Visibility: [ (NULL, closed), (A, open) ]
 	t.Parallel()
 	ctx := context.Background()
-	rc := mkTestReachabilityCalculator()
+	trc := mkTestReachabilityCalculator()
+	rc := trc.rc
 
 	// reachability("") --> reachable (it's the default build id)
 	checkReachability(ctx, t, rc, "", enumspb.BUILD_ID_TASK_REACHABILITY_REACHABLE)
@@ -204,7 +212,8 @@ func TestGetReachability_WithoutVisibility_WithRules(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
 	createTs := hlc.Zero(1)
-	rc := mkTestReachabilityCalculator()
+	trc := mkTestReachabilityCalculator()
+	rc := trc.rc
 	rc.assignmentRules = []*persistencespb.AssignmentRule{
 		mkAssignmentRulePersistence(mkAssignmentRule("D", mkNewAssignmentPercentageRamp(50)), createTs, nil),
 		mkAssignmentRulePersistence(mkAssignmentRule("A", nil), createTs, nil),
@@ -236,7 +245,8 @@ func TestGetReachability_WithVisibility_WithRules(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
 	createTs := hlc.Zero(1)
-	rc := mkTestReachabilityCalculator()
+	trc := mkTestReachabilityCalculator()
+	rc := trc.rc
 	rc.redirectRules = []*persistencespb.RedirectRule{
 		mkRedirectRulePersistence(mkRedirectRule("A", "C"), createTs, nil),
 		mkRedirectRulePersistence(mkRedirectRule("B", "D"), createTs, nil),
@@ -258,7 +268,8 @@ func TestGetReachability_WithVisibility_WithDeletedRules(t *testing.T) {
 	// Redirect: (A->C, recently-deleted), (B->D, recently-deleted), (X->Z, deleted), (Y->ZZ, deleted)
 	t.Parallel()
 	ctx := context.Background()
-	rc := mkTestReachabilityCalculator()
+	trc := mkTestReachabilityCalculator()
+	rc := trc.rc
 
 	// start time 3x rc.buildIdVisibilityGracePeriod ago
 	timesource := commonclock.NewEventTimeSource().Update(time.Now().Add(-3*rc.buildIdVisibilityGracePeriod + time.Second))
@@ -311,9 +322,11 @@ func setVisibilityExpect(t *testing.T,
 	rc *reachabilityCalculator,
 	buildIdsOfInterest []string,
 	countOpen, countClosed int64) {
+	queryOpen := rc.makeBuildIdQuery(buildIdsOfInterest, true)
+	queryClosed := rc.makeBuildIdQuery(buildIdsOfInterest, false)
 	vm := manager.NewMockVisibilityManager(gomock.NewController(t))
-	vm.EXPECT().CountWorkflowExecutions(gomock.Any(), rc.makeBuildIdCountRequest(buildIdsOfInterest, true)).MaxTimes(1).Return(mkCountResponse(countOpen))
-	vm.EXPECT().CountWorkflowExecutions(gomock.Any(), rc.makeBuildIdCountRequest(buildIdsOfInterest, false)).MaxTimes(1).Return(mkCountResponse(countClosed))
+	vm.EXPECT().CountWorkflowExecutions(gomock.Any(), rc.makeBuildIdCountRequest(queryOpen)).MaxTimes(1).Return(mkCountResponse(countOpen))
+	vm.EXPECT().CountWorkflowExecutions(gomock.Any(), rc.makeBuildIdCountRequest(queryClosed)).MaxTimes(1).Return(mkCountResponse(countClosed))
 	rc.visibilityMgr = vm
 }
 
@@ -331,11 +344,17 @@ func mkCountResponse(count int64) (*manager.CountWorkflowExecutionsResponse, err
 	}, nil
 }
 
-func mkTestReachabilityCalculator() *reachabilityCalculator {
-	return &reachabilityCalculator{
-		nsID:                         "test-namespace-id",
-		nsName:                       "test-namespace",
-		taskQueue:                    "test-reachability-tq",
-		buildIdVisibilityGracePeriod: testBuildIdVisibilityGracePeriod,
+func mkTestReachabilityCalculator() *testReachabilityCalculator {
+	cacheMetricsHandler := metricstest.NewCaptureHandler()
+
+	return &testReachabilityCalculator{
+		rc: &reachabilityCalculator{
+			nsID:                         "test-namespace-id",
+			nsName:                       "test-namespace",
+			taskQueue:                    "test-reachability-tq",
+			buildIdVisibilityGracePeriod: testBuildIdVisibilityGracePeriod,
+			cache:                        newReachabilityCache(cacheMetricsHandler),
+		},
+		capture: cacheMetricsHandler.StartCapture(),
 	}
 }
