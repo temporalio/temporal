@@ -93,6 +93,7 @@ type (
 		// GetSize returns the size of the update object
 		GetSize() int
 
+		// FailoverVersion of mutable state at the time of registry creation.
 		FailoverVersion() int64
 	}
 
