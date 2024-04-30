@@ -468,10 +468,10 @@ func (s *executableTaskSuite) TestResend_SecondResendError_SameWorkflowRun() {
 		NamespaceId:       resendErr.NamespaceId,
 		WorkflowId:        resendErr.WorkflowId,
 		RunId:             resendErr.RunId,
-		StartEventId:      rand.Int63(),
-		StartEventVersion: rand.Int63(),
-		EndEventId:        rand.Int63(),
-		EndEventVersion:   rand.Int63(),
+		StartEventId:      resendErr.StartEventId,
+		StartEventVersion: resendErr.StartEventVersion,
+		EndEventId:        resendErr.EndEventId,
+		EndEventVersion:   resendErr.EndEventVersion,
 	}
 
 	s.ndcHistoryResender.EXPECT().SendSingleWorkflowHistory(

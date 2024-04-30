@@ -28,10 +28,13 @@ package replication
 
 import (
 	"context"
+	"fmt"
 	"sync/atomic"
 	"time"
 
 	"go.temporal.io/server/api/adminservice/v1"
+	"google.golang.org/protobuf/types/known/timestamppb"
+
 	repicationpb "go.temporal.io/server/api/replication/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/channel"
@@ -39,8 +42,6 @@ import (
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/primitives/timestamp"
-	ctasks "go.temporal.io/server/common/tasks"
-	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
 type (
@@ -160,17 +161,24 @@ func (r *StreamReceiverImpl) sendEventLoop() error {
 	timer := time.NewTicker(r.Config.ReplicationStreamSyncStatusDuration())
 	defer timer.Stop()
 
+	var inclusiveLowWatermark int64
+
 	for {
 		select {
 		case <-timer.C:
 			timer.Reset(r.Config.ReplicationStreamSyncStatusDuration())
-			if err := r.ackMessage(r.stream); err != nil {
+			watermark, err := r.ackMessage(r.stream)
+			if err != nil {
 				if IsStreamError(err) {
 					r.logger.Error("ReplicationStreamError StreamReceiver exit send loop", tag.Error(err))
 				} else {
 					r.logger.Error("ReplicationServiceError StreamReceiver exit send loop", tag.Error(err))
 				}
 				return err
+			}
+			if watermark != inclusiveLowWatermark {
+				inclusiveLowWatermark = watermark
+				r.logger.Debug(fmt.Sprintf("StreamReceiver acked inclusiveLowWatermark %d", inclusiveLowWatermark))
 			}
 		case <-r.shutdownChan.Channel():
 			return nil
@@ -199,13 +207,14 @@ func (r *StreamReceiverImpl) recvEventLoop() error {
 	return err
 }
 
+// ackMessage returns the inclusive low watermark if present.
 func (r *StreamReceiverImpl) ackMessage(
 	stream Stream,
-) error {
+) (int64, error) {
 	watermarkInfo := r.taskTracker.LowWatermark()
 	size := r.taskTracker.Size()
 	if watermarkInfo == nil {
-		return nil
+		return 0, nil
 	}
 	if err := stream.Send(&adminservice.StreamWorkflowReplicationMessagesRequest{
 		Attributes: &adminservice.StreamWorkflowReplicationMessagesRequest_SyncReplicationState{
@@ -215,7 +224,7 @@ func (r *StreamReceiverImpl) ackMessage(
 			},
 		},
 	}); err != nil {
-		return err
+		return 0, err
 	}
 	metrics.ReplicationTasksRecvBacklog.With(r.MetricsHandler).Record(
 		int64(size),
@@ -228,7 +237,7 @@ func (r *StreamReceiverImpl) ackMessage(
 		metrics.ToClusterIDTag(r.serverShardKey.ClusterID),
 		metrics.OperationTag(metrics.SyncWatermarkScope),
 	)
-	return nil
+	return watermarkInfo.Watermark, nil
 }
 
 func (r *StreamReceiverImpl) processMessages(
@@ -256,6 +265,7 @@ func (r *StreamReceiverImpl) processMessages(
 		)
 		exclusiveHighWatermark := streamResp.Resp.GetMessages().ExclusiveHighWatermark
 		exclusiveHighWatermarkTime := timestamp.TimeValue(streamResp.Resp.GetMessages().ExclusiveHighWatermarkTime)
+		r.logger.Debug(fmt.Sprintf("StreamReceiver processMessages received %d tasks with exclusiveHighWatermark %d", len(tasks), exclusiveHighWatermark))
 		for _, task := range r.taskTracker.TrackTasks(WatermarkInfo{
 			Watermark: exclusiveHighWatermark,
 			Timestamp: exclusiveHighWatermarkTime,
@@ -300,14 +310,3 @@ func (p *streamClientProvider) Get(
 		p.processToolBox.ClientBean,
 	).Get(ctx, p.clientShardKey, p.serverShardKey)
 }
-
-type noopSchedulerMonitor struct {
-}
-
-func newNoopSchedulerMonitor() *noopSchedulerMonitor {
-	return &noopSchedulerMonitor{}
-}
-
-func (m *noopSchedulerMonitor) Start()                    {}
-func (m *noopSchedulerMonitor) Stop()                     {}
-func (m *noopSchedulerMonitor) RecordStart(_ ctasks.Task) {}

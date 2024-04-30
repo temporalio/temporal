@@ -637,7 +637,18 @@ func (h *Handler) ExecuteMultiOperation(
 	if err != nil {
 		return nil, h.convertError(err)
 	}
-	// TODO: shardContext.NewVectorClock()
+
+	for _, opResp := range response.Responses {
+		if startResp := opResp.GetStartWorkflow(); startResp != nil {
+			if startResp.Clock == nil {
+				startResp.Clock, err = shardContext.NewVectorClock()
+				if err != nil {
+					return nil, h.convertError(err)
+				}
+			}
+		}
+	}
+
 	return response, nil
 }
 
