@@ -25,8 +25,6 @@ syntax = "proto3";
 package temporal.server.api.matchingservice.v1;
 option go_package = "go.temporal.io/server/api/matchingservice/v1;matchingservice";
 
-import "google/api/annotations.proto";
-
 import "temporal/server/api/matchingservice/v1/request_response.proto";
 
 // MatchingService API is exposed to provide support for polling from long running applications.
@@ -124,9 +122,6 @@ service MatchingService {
     // (-- api-linter: core::0131::http-uri-name=disabled
     //     aip.dev/not-precedent: GetWorkerVersioningRulesRequest RPC doesn't follow Google API format. --)
     rpc GetWorkerVersioningRules (GetWorkerVersioningRulesRequest) returns (GetWorkerVersioningRulesResponse) {
-        option (google.api.http) = {
-            get: "/api/v1/namespaces/{namespace}/task-queues/{task_queue}/worker-versioning-rules"
-        };
     }
 
     // Apply a user data replication event.
