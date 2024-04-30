@@ -3881,7 +3881,7 @@ func (s *VersioningIntegSuite) getBuildIdReachability(
 	for buildId, vi := range resp.GetVersionsInfo() {
 		expected, ok := expectedReachability[buildId]
 		s.Assert().True(ok, "build id %s was not expected", buildId)
-		s.Assert().Equal(expected, vi.GetTaskReachability())
+		s.Assert().Equal(expected, vi.GetTaskReachability(), "build id %s has unexpected reachability", buildId)
 	}
 }
 
