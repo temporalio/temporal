@@ -155,8 +155,6 @@ func (s *StreamSenderImpl) recvEventLoop() (retErr error) {
 
 	var inclusiveLowWatermark int64
 
-	var inclusiveLowWatermark int64
-
 	for !s.shutdownChan.IsShutdown() {
 		req, err := s.server.Recv()
 		if err != nil {
@@ -268,8 +266,6 @@ func (s *StreamSenderImpl) sendCatchUp() (int64, error) {
 	catchupEndExclusiveWatermark := s.shardContext.GetQueueExclusiveHighReadWatermark(tasks.CategoryReplication).TaskID
 
 	var catchupBeginInclusiveWatermark int64
-
-	catchupEndExclusiveWatermark := s.shardContext.GetQueueExclusiveHighReadWatermark(tasks.CategoryReplication).TaskID
 
 	queueState, ok := s.shardContext.GetQueueState(
 		tasks.CategoryReplication,

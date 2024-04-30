@@ -29,7 +29,6 @@ package replication
 import (
 	"context"
 	"fmt"
-	"fmt"
 	"sync/atomic"
 	"time"
 
