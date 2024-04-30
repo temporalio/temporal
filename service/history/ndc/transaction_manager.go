@@ -203,6 +203,7 @@ func (r *transactionMgrImpl) CreateWorkflow(
 	ctx context.Context,
 	targetWorkflow Workflow,
 ) error {
+	r.logger.Debug("REMOVEME transactionMgrImpl.CreateWorkflow")
 
 	return r.createMgr.dispatchForNewWorkflow(
 		ctx,
@@ -216,6 +217,7 @@ func (r *transactionMgrImpl) UpdateWorkflow(
 	targetWorkflow Workflow,
 	newWorkflow Workflow,
 ) error {
+	r.logger.Debug("REMOVEME transactionMgrImpl.UpdateWorkflow")
 
 	return r.updateMgr.dispatchForExistingWorkflow(
 		ctx,
@@ -230,6 +232,7 @@ func (r *transactionMgrImpl) BackfillWorkflow(
 	targetWorkflow Workflow,
 	targetWorkflowEventsSlice ...*persistence.WorkflowEvents,
 ) (retError error) {
+	r.logger.Debug("REMOVEME transactionMgrImpl.BackfillWorkflow")
 
 	defer func() {
 		if rec := recover(); rec != nil {

@@ -189,7 +189,7 @@ func (s *historyReplicationDLQSuite) SetupSuite() {
 	// We also don't escape this string in many places, so it can't contain any dashes.
 	format := strings.Replace(uuid.New(), "-", "", -1) + "_%s"
 	taskExecutorDecorator := s.getTaskExecutorDecorator()
-	s.logger = log.NewNoopLogger()
+	// s.logger = log.NewNoopLogger()
 	s.setupSuite(
 		[]string{
 			fmt.Sprintf(format, "active"),

@@ -155,6 +155,8 @@ func (s *StreamSenderImpl) recvEventLoop() (retErr error) {
 
 	var inclusiveLowWatermark int64
 
+	var inclusiveLowWatermark int64
+
 	for !s.shutdownChan.IsShutdown() {
 		req, err := s.server.Recv()
 		if err != nil {
@@ -266,6 +268,9 @@ func (s *StreamSenderImpl) sendCatchUp() (int64, error) {
 	catchupEndExclusiveWatermark := s.shardContext.GetQueueExclusiveHighReadWatermark(tasks.CategoryReplication).TaskID
 
 	var catchupBeginInclusiveWatermark int64
+
+	catchupEndExclusiveWatermark := s.shardContext.GetQueueExclusiveHighReadWatermark(tasks.CategoryReplication).TaskID
+
 	queueState, ok := s.shardContext.GetQueueState(
 		tasks.CategoryReplication,
 	)
@@ -365,7 +370,7 @@ Loop:
 		if task == nil {
 			continue Loop
 		}
-		s.logger.Debug("StreamSender send replication task", tag.TaskID(task.SourceTaskId))
+		s.logger.Debug(fmt.Sprintf("REMOVEME StreamSender send replication task, task: %+v", task), tag.TaskID(task.SourceTaskId))
 		if err := s.sendToStream(&historyservice.StreamWorkflowReplicationMessagesResponse{
 			Attributes: &historyservice.StreamWorkflowReplicationMessagesResponse_Messages{
 				Messages: &replicationspb.WorkflowReplicationMessages{
