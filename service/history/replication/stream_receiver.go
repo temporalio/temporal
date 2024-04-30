@@ -164,8 +164,6 @@ func (r *StreamReceiverImpl) sendEventLoop() error {
 
 	var inclusiveLowWatermark int64
 
-	var inclusiveLowWatermark int64
-
 	for {
 		select {
 		case <-timer.C:
@@ -181,7 +179,7 @@ func (r *StreamReceiverImpl) sendEventLoop() error {
 			}
 			if watermark != inclusiveLowWatermark {
 				inclusiveLowWatermark = watermark
-				r.logger.Debug(fmt.Sprintf("REMOVEME StreamReceiver acked inclusiveLowWatermark %d", inclusiveLowWatermark))
+				r.logger.Debug(fmt.Sprintf("StreamReceiver acked inclusiveLowWatermark %d", inclusiveLowWatermark))
 			}
 		case <-r.shutdownChan.Channel():
 			return nil
