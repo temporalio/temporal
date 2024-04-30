@@ -87,6 +87,8 @@ func (s *VersioningIntegSuite) SetupSuite() {
 		dynamicconfig.MatchingDeletedRuleRetentionTime:         24 * time.Hour,
 		dynamicconfig.ReachabilityBuildIdVisibilityGracePeriod: 3 * time.Minute,
 		dynamicconfig.ReachabilityQueryBuildIdLimit:            4,
+		dynamicconfig.ReachabilityCacheOpenWFsTTL:              2 * time.Millisecond,
+		dynamicconfig.ReachabilityCacheClosedWFsTTL:            4 * time.Millisecond,
 
 		// Make sure we don't hit the rate limiter in tests
 		dynamicconfig.FrontendGlobalNamespaceNamespaceReplicationInducingAPIsRPS:                1000,

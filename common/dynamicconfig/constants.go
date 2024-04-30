@@ -223,6 +223,10 @@ const (
 	// ReachabilityQueryBuildIdLimit limits the number of build ids that can be requested in a single call to the
 	// DescribeTaskQueue API with ReportTaskQueueReachability==true, or to the GetWorkerTaskReachability API.
 	ReachabilityQueryBuildIdLimit = "limit.reachabilityQueryBuildIds"
+	// 	ReachabilityCacheOpenWFsTTL is the TTL for the reachability open workflows cache.
+	ReachabilityCacheOpenWFsTTL = "matching.wv.reachabilityCacheOpenWFsTTL"
+	//	ReachabilityCacheClosedWFsTTL is the TTL for the reachability closed workflows cache.
+	ReachabilityCacheClosedWFsTTL = "matching.wv.reachabilityCacheClosedWFsTTL"
 	// ReachabilityQuerySetDurationSinceDefault is the minimum period since a version set was demoted from being the
 	// queue default before it is considered unreachable by new workflows.
 	// This setting allows some propagation delay of versioning data for the reachability queries, which may happen for

@@ -197,7 +197,7 @@ func NewEngine(
 	nexusIncomingServiceManager persistence.NexusIncomingServiceManager,
 ) Engine {
 	scopedMetricsHandler := metricsHandler.WithTags(metrics.OperationTag(metrics.MatchingEngineScope))
-	return &matchingEngineImpl{
+	e := &matchingEngineImpl{
 		status:                common.DaemonStatusInitialized,
 		taskManager:           taskManager,
 		historyClient:         historyClient,
@@ -228,8 +228,9 @@ func NewEngine(
 		outstandingPollers:        collection.NewSyncMap[string, context.CancelFunc](),
 		namespaceReplicationQueue: namespaceReplicationQueue,
 		namespaceUpdateLockMap:    make(map[string]*namespaceUpdateLocks),
-		reachabilityCache:         newReachabilityCache(scopedMetricsHandler),
 	}
+	e.reachabilityCache = newReachabilityCache(scopedMetricsHandler, e.config.ReachabilityCacheOpenWFsTTL(), e.config.ReachabilityCacheClosedWFsTTL())
+	return e
 }
 
 func (e *matchingEngineImpl) Start() {

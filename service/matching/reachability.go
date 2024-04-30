@@ -47,9 +47,7 @@ import (
 )
 
 const (
-	reachabilityCacheOpenWFExecutionTTL   = time.Minute
-	reachabilityCacheClosedWFExecutionTTL = 5 * time.Minute
-	reachabilityCacheMaxSize              = 100
+	reachabilityCacheMaxSize = 100
 )
 
 type reachabilityCalculator struct {
@@ -282,7 +280,10 @@ type reachabilityCache struct {
 	metricsHandler metrics.Handler
 }
 
-func newReachabilityCache(handler metrics.Handler) reachabilityCache {
+func newReachabilityCache(
+	handler metrics.Handler,
+	reachabilityCacheOpenWFExecutionTTL,
+	reachabilityCacheClosedWFExecutionTTL time.Duration) reachabilityCache {
 	return reachabilityCache{
 		openWFCache:    cache.New(reachabilityCacheMaxSize, &cache.Options{TTL: reachabilityCacheOpenWFExecutionTTL}, handler),
 		closedWFCache:  cache.New(reachabilityCacheMaxSize, &cache.Options{TTL: reachabilityCacheClosedWFExecutionTTL}, handler),
