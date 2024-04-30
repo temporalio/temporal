@@ -58,6 +58,7 @@ message ReplicationTask {
     // The task_type + data provide more flexibility in future use cases.
     temporal.api.common.v1.DataBlob data = 12;
     google.protobuf.Timestamp visibility_time = 9;
+    int32 priority = 13;
 }
 
 message ReplicationToken {
