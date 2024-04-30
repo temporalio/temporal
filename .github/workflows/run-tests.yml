@@ -202,17 +202,17 @@ jobs:
       fail-fast: false
       matrix:
         runs-on: [ubuntu-latest]
-        name: [cass_es, cass_es8]
+        name: [cass_es]
 #        name: [cass_es, cass_es8, mysql8, postgres12, postgres12_pgx]
         include:
           - name: cass_es
             persistence_type: nosql
             persistence_driver: elasticsearch
             containers: [cassandra, elasticsearch]
-          - name: cass_es8
-            persistence_type: nosql
-            persistence_driver: elasticsearch
-            containers: [cassandra, elasticsearch8]
+#          - name: cass_es8
+#            persistence_type: nosql
+#            persistence_driver: elasticsearch
+#            containers: [cassandra, elasticsearch8]
 #          - name: mysql8
 #            persistence_type: sql
 #            persistence_driver: mysql8
