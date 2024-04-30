@@ -1313,6 +1313,7 @@ func (s *ClientFunctionalSuite) Test_BufferedSignalCausesUnhandledCommandAndSche
 }
 
 // Analogous to Test_BufferedSignalCausesUnhandledCommandAndSchedulesNewTask
+// TODO: rename to previous name (Test_AdmittedUpdateCausesUnhandledCommandAndSchedulesNewTask) when/if admitted updates start to block workflow from completing.
 //
 //  1. The worker starts executing the first WFT, before any update is sent.
 //  2. While the first WFT is being executed, an update is sent.
@@ -1324,7 +1325,7 @@ func (s *ClientFunctionalSuite) Test_BufferedSignalCausesUnhandledCommandAndSche
 //     - history handler retries UpdateWorkflowExecution call and recreates update in the registry.
 //  6. In first case, workflow completes successfully after 2nd attempt, and call to UpdateWorkflowExecution
 //     returns "workflow execution already completed" error. This is what this test asserts.
-func (s *ClientFunctionalSuite) Test_AdmittedUpdateCausesUnhandledCommandAndSchedulesNewTask() {
+func (s *ClientFunctionalSuite) Test_WorkflowCanBeCompletedDespiteAdmittedUpdate() {
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 

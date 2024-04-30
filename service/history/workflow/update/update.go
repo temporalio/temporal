@@ -268,14 +268,16 @@ func (u *Update) WaitLifecycleStage(
 	return statusAdmitted(), nil
 }
 
-// abortWaiters fails update futures with abortWaiterErr error and set state to stateCompleted.
+// abortWaiters fails update futures with abortWaiterErr error and set state to stateAborted.
 func (u *Update) abortWaiters() {
-	if u.state.Matches(stateSet(stateCreated | stateProvisionallyAdmitted | stateAdmitted | stateProvisionallySent | stateSent | stateProvisionallyAccepted)) {
+	const preAcceptedStates = stateSet(stateCreated | stateProvisionallyAdmitted | stateAdmitted | stateProvisionallySent | stateSent | stateProvisionallyAccepted)
+	if u.state.Matches(preAcceptedStates) {
 		u.accepted.(*future.FutureImpl[*failurepb.Failure]).Set(nil, abortWaiterErr)
 		u.outcome.(*future.FutureImpl[*updatepb.Outcome]).Set(nil, abortWaiterErr)
 	}
 
-	if u.state.Matches(stateSet(stateAccepted | stateProvisionallyCompleted)) {
+	const preCompletedStates = stateSet(stateAccepted | stateProvisionallyCompleted)
+	if u.state.Matches(preCompletedStates) {
 		// Accepted updates can't be aborted because they are already persisted and
 		// will be recreated in the registry after reload from the store.
 		// Set error to abortWaiterErr to unify handling logic on waiter side (WaitLifecycleStage).

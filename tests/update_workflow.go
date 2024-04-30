@@ -5295,7 +5295,9 @@ func (s *FunctionalSuite) TestUpdateWorkflow_NewSpeculativeWorkflowTask_QueryFai
 	}
 	queryFn := func(resCh chan<- QueryResult) {
 		// There is no query handler, and query timeout is ok for this test.
-		// But first query must not time out before 2nd query is made.
+		// But first query must not time out before 2nd query reached server,
+		// because 2 queries overflow the query buffer (default size 1),
+		// which leads to clearing of WF context.
 		shortCtx, cancel := context.WithTimeout(NewContext(), 100*time.Millisecond)
 		defer cancel()
 		queryResp, err := s.engine.QueryWorkflow(shortCtx, &workflowservice.QueryWorkflowRequest{
@@ -5361,7 +5363,7 @@ func (s *FunctionalSuite) TestUpdateWorkflow_NewSpeculativeWorkflowTask_QueryFai
   5 WorkflowTaskScheduled // Was speculative WT...
   6 WorkflowTaskStarted
   7 WorkflowTaskCompleted // ...and events were written to the history when WT completes.  
-  8 WorkflowExecutionUpdateAccepted {"AcceptedRequestSequencingEventId": 5} // WTScheduled event which delivered update to the worker.
-  9 WorkflowExecutionUpdateCompleted {"AcceptedEventId": 8}
+  8 WorkflowExecutionUpdateAccepted
+  9 WorkflowExecutionUpdateCompleted
 `, events)
 }
