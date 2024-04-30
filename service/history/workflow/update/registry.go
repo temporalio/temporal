@@ -200,7 +200,9 @@ func (r *registry) UpdateFromStore() {
 			)
 		} else if acc := updInfo.GetAcceptance(); acc != nil {
 			if upd := r.updates[updID]; upd != nil {
-				_ = upd.advanceTo(stateAccepted)
+				if upd.state != stateProvisionallyAccepted {
+					_ = upd.advanceTo(stateAccepted)
+				}
 				return
 			}
 			r.updates[updID] = newAccepted(
@@ -211,7 +213,9 @@ func (r *registry) UpdateFromStore() {
 			)
 		} else if updInfo.GetCompletion() != nil {
 			if upd := r.updates[updID]; upd != nil {
-				_ = upd.advanceTo(stateCompleted)
+				if upd.state != stateProvisionallyCompleted {
+					_ = upd.advanceTo(stateCompleted)
+				}
 				return
 			}
 			r.completedUpdates[updID] = struct{}{}
