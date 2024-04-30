@@ -246,11 +246,11 @@ func (t *transferQueueStandbyTaskExecutor) processCloseExecution(
 
 		executionInfo := mutableState.GetExecutionInfo()
 
-		lastWriteVersion, err := mutableState.GetLastWriteVersion()
+		closeVersion, err := mutableState.GetCloseVersion()
 		if err != nil {
 			return nil, err
 		}
-		err = CheckTaskVersion(t.shardContext, t.logger, mutableState.GetNamespaceEntry(), lastWriteVersion, transferTask.Version, transferTask)
+		err = CheckTaskVersion(t.shardContext, t.logger, mutableState.GetNamespaceEntry(), closeVersion, transferTask.Version, transferTask)
 		if err != nil {
 			return nil, err
 		}

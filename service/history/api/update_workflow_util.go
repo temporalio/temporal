@@ -96,6 +96,9 @@ func UpdateWorkflowWithNew(
 		if err != nil {
 			return err
 		}
+		// if current workflow gets an update with a higher version than
+		// the version of the new workflow, it means failover has happened,
+		// and the new workflow creation should be failed
 		lastWriteVersion, err := mutableState.GetLastWriteVersion()
 		if err != nil {
 			return err

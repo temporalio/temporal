@@ -352,7 +352,7 @@ func (r *workflowResetterImpl) persistToDB(
 
 	currentMutableState := currentWorkflow.GetMutableState()
 	currentRunID := currentMutableState.GetExecutionState().GetRunId()
-	currentLastWriteVersion, err := currentMutableState.GetLastWriteVersion()
+	currentCloseVersion, err := currentMutableState.GetCloseVersion()
 	if err != nil {
 		return err
 	}
@@ -362,7 +362,9 @@ func (r *workflowResetterImpl) persistToDB(
 		r.shardContext,
 		persistence.CreateWorkflowModeUpdateCurrent,
 		currentRunID,
-		currentLastWriteVersion,
+		// we stop updating last write version in the current record after workflow is closed
+		// so workflow close version is the last write version for the current record
+		currentCloseVersion,
 		resetWorkflow.GetMutableState(),
 		resetWorkflowSnapshot,
 		resetWorkflowEventsSeq,

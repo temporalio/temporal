@@ -240,6 +240,7 @@ type (
 		GetStartVersion() (int64, error)
 		GetCloseVersion() (int64, error)
 		GetLastWriteVersion() (int64, error)
+		GetLastEventVersion() (int64, error)
 		GetExecutionInfo() *persistencespb.WorkflowExecutionInfo
 		GetExecutionState() *persistencespb.WorkflowExecutionState
 		GetStartedWorkflowTask() *WorkflowTaskInfo

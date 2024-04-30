@@ -768,11 +768,18 @@ func (ms *MutableStateImpl) GetCloseVersion() (int64, error) {
 	return ms.GetLastWriteVersion()
 }
 
-// NOTE: this method does not take into account events added in the current transaction
-// because versionHistory is only updated when closing a transaction
-// TODO: this method should take into account state only changes
 func (ms *MutableStateImpl) GetLastWriteVersion() (int64, error) {
+	if ms.config.EnableMutableStateTransitionHistory() &&
+		len(ms.executionInfo.TransitionHistory) != 0 {
 
+		lastVersionedTransition := ms.executionInfo.TransitionHistory[len(ms.executionInfo.TransitionHistory)-1]
+		return lastVersionedTransition.NamespaceFailoverVersion, nil
+	}
+
+	return ms.GetLastEventVersion()
+}
+
+func (ms *MutableStateImpl) GetLastEventVersion() (int64, error) {
 	if ms.executionInfo.VersionHistories != nil {
 		versionHistory, err := versionhistory.GetCurrentVersionHistory(ms.executionInfo.VersionHistories)
 		if err != nil {
@@ -5484,6 +5491,9 @@ func (ms *MutableStateImpl) startTransactionHandleNamespaceMigration(
 	// * flush buffered events as if namespace is still local
 	// * use updated namespace for actual call
 
+	// - we want to catch if namespace promotion happens, which applies to both
+	// events and state only changes
+	// - also ms only has started workflow task when it's still running
 	lastWriteVersion, err := ms.GetLastWriteVersion()
 	if err != nil {
 		return nil, err
@@ -5517,16 +5527,30 @@ func (ms *MutableStateImpl) startTransactionHandleWorkflowTaskFailover() (bool, 
 		return false, nil
 	}
 
+	lastEventVersion, err := ms.GetLastEventVersion()
+	if err != nil {
+		return false, err
+	}
+	if lastEventVersion != workflowTask.Version {
+		return false, serviceerror.NewInternal(fmt.Sprintf("MutableStateImpl encountered mismatch version, workflow task: %v, last event version %v", workflowTask.Version, lastEventVersion))
+	}
+
+	// workflow must be running, checked at the beginning of the func
 	currentVersion := ms.GetCurrentVersion()
+	// NOTE: if lastEventVersion is used here then the version transition history could decrecase
+	//
+	// TODO: Today's replication task processing logic won't flush buffered events when applying state only changes.
+	// As a result, when using lastWriteVersion, which takes state only change into account, here, we could still
+	// have buffered events, but lastWriteSourceCluster will no longer be current cluster and the be treated as case 4
+	// and fail on the sanity check.
+	// We need to change replication task processing logic to always flush buffered events on all replication task types.
+	// State transition history is not enabled today so we are safe and LastWriteVersion == LastEventVersion
 	lastWriteVersion, err := ms.GetLastWriteVersion()
 	if err != nil {
 		return false, err
 	}
-	if lastWriteVersion != workflowTask.Version {
-		return false, serviceerror.NewInternal(fmt.Sprintf("MutableStateImpl encountered mismatch version, workflow task: %v, last write version %v", workflowTask.Version, lastWriteVersion))
-	}
 
-	lastWriteSourceCluster := ms.clusterMetadata.ClusterNameForFailoverVersion(ms.namespaceEntry.IsGlobalNamespace(), lastWriteVersion)
+	lastWriteCluster := ms.clusterMetadata.ClusterNameForFailoverVersion(ms.namespaceEntry.IsGlobalNamespace(), lastWriteVersion)
 	currentVersionCluster := ms.clusterMetadata.ClusterNameForFailoverVersion(ms.namespaceEntry.IsGlobalNamespace(), currentVersion)
 	currentCluster := ms.clusterMetadata.GetCurrentClusterName()
 
@@ -5540,7 +5564,7 @@ func (ms *MutableStateImpl) startTransactionHandleWorkflowTaskFailover() (bool, 
 	// 4. passive -> passive => no buffered events, since always passive, nothing to be done
 
 	// handle case 4
-	if lastWriteSourceCluster != currentCluster && currentVersionCluster != currentCluster {
+	if lastWriteCluster != currentCluster && currentVersionCluster != currentCluster {
 		// do a sanity check on buffered events
 		if ms.HasBufferedEvents() {
 			return false, serviceerror.NewInternal("MutableStateImpl encountered previous passive workflow with buffered events")
@@ -5552,7 +5576,7 @@ func (ms *MutableStateImpl) startTransactionHandleWorkflowTaskFailover() (bool, 
 	var flushBufferVersion = lastWriteVersion
 
 	// handle case 3
-	if lastWriteSourceCluster != currentCluster && currentVersionCluster == currentCluster {
+	if lastWriteCluster != currentCluster && currentVersionCluster == currentCluster {
 		// do a sanity check on buffered events
 		if ms.HasBufferedEvents() {
 			return false, serviceerror.NewInternal("MutableStateImpl encountered previous passive workflow with buffered events")

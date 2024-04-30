@@ -108,7 +108,6 @@ func (s *bufferEventFlusherSuite) TearDownTest() {
 
 func (s *bufferEventFlusherSuite) TestClearTransientWorkflowTask() {
 
-	lastWriteVersion := int64(300)
 	versionHistory := versionhistory.NewVersionHistory([]byte("some random base branch token"), []*historyspb.VersionHistoryItem{
 		versionhistory.NewVersionHistoryItem(10, 0),
 		versionhistory.NewVersionHistoryItem(50, 100),
@@ -124,7 +123,6 @@ func (s *bufferEventFlusherSuite) TestClearTransientWorkflowTask() {
 	)
 	s.NoError(err)
 
-	s.mockMutableState.EXPECT().GetLastWriteVersion().Return(lastWriteVersion, nil).AnyTimes()
 	s.mockMutableState.EXPECT().HasBufferedEvents().Return(false).AnyTimes()
 	s.mockMutableState.EXPECT().HasStartedWorkflowTask().Return(true).AnyTimes()
 	s.mockMutableState.EXPECT().IsTransientWorkflowTask().Return(true).AnyTimes()
@@ -145,7 +143,7 @@ func (s *bufferEventFlusherSuite) TestClearTransientWorkflowTask() {
 
 func (s *bufferEventFlusherSuite) TestFlushBufferedEvents() {
 
-	lastWriteVersion := int64(300)
+	lastEventVersion := int64(300)
 	versionHistory := versionhistory.NewVersionHistory([]byte("some random base branch token"), []*historyspb.VersionHistoryItem{
 		versionhistory.NewVersionHistoryItem(10, 0),
 		versionhistory.NewVersionHistoryItem(50, 100),
@@ -161,10 +159,10 @@ func (s *bufferEventFlusherSuite) TestFlushBufferedEvents() {
 	)
 	s.NoError(err)
 
-	s.mockMutableState.EXPECT().GetLastWriteVersion().Return(lastWriteVersion, nil).AnyTimes()
+	s.mockMutableState.EXPECT().GetLastEventVersion().Return(lastEventVersion, nil).AnyTimes()
 	s.mockMutableState.EXPECT().HasBufferedEvents().Return(true).AnyTimes()
 	s.mockMutableState.EXPECT().IsWorkflowExecutionRunning().Return(true).AnyTimes()
-	s.mockMutableState.EXPECT().UpdateCurrentVersion(lastWriteVersion, true).Return(nil)
+	s.mockMutableState.EXPECT().UpdateCurrentVersion(lastEventVersion, true).Return(nil)
 	workflowTask := &workflow.WorkflowTaskInfo{
 		ScheduledEventID: 1234,
 		StartedEventID:   2345,
@@ -189,7 +187,7 @@ func (s *bufferEventFlusherSuite) TestFlushBufferedEvents() {
 		enumsspb.WORKFLOW_TASK_TYPE_NORMAL,
 	).Return(&workflow.WorkflowTaskInfo{}, nil)
 	s.mockMutableState.EXPECT().FlushBufferedEvents()
-	s.mockClusterMetadata.EXPECT().ClusterNameForFailoverVersion(true, lastWriteVersion).Return(cluster.TestCurrentClusterName).AnyTimes()
+	s.mockClusterMetadata.EXPECT().ClusterNameForFailoverVersion(true, lastEventVersion).Return(cluster.TestCurrentClusterName).AnyTimes()
 	s.mockClusterMetadata.EXPECT().GetCurrentClusterName().Return(cluster.TestCurrentClusterName).AnyTimes()
 
 	s.mockContext.EXPECT().UpdateWorkflowExecutionAsActive(gomock.Any(), s.mockShard).Return(nil)

@@ -1975,6 +1975,21 @@ func (mr *MockMutableStateMockRecorder) GetInheritedBuildId() *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetInheritedBuildId", reflect.TypeOf((*MockMutableState)(nil).GetInheritedBuildId))
 }
 
+// GetLastEventVersion mocks base method.
+func (m *MockMutableState) GetLastEventVersion() (int64, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetLastEventVersion")
+	ret0, _ := ret[0].(int64)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// GetLastEventVersion indicates an expected call of GetLastEventVersion.
+func (mr *MockMutableStateMockRecorder) GetLastEventVersion() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetLastEventVersion", reflect.TypeOf((*MockMutableState)(nil).GetLastEventVersion))
+}
+
 // GetLastFirstEventIDTxnID mocks base method.
 func (m *MockMutableState) GetLastFirstEventIDTxnID() (int64, int64) {
 	m.ctrl.T.Helper()

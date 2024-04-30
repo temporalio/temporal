@@ -63,6 +63,7 @@ func Invoke(
 		return err
 	}
 	namespaceID := namespaceEntry.ID()
+	isGlobalNamespace := namespaceEntry.IsGlobalNamespace()
 
 	return api.GetAndUpdateWorkflowWithNew(
 		ctx,
@@ -78,13 +79,15 @@ func Invoke(
 			mutableState := workflowLease.GetMutableState()
 			// Filter out reapply event from the same cluster
 			toReapplyEvents := make([]*historypb.HistoryEvent, 0, len(reapplyEvents))
-			lastWriteVersion, err := mutableState.GetLastWriteVersion()
-			if err != nil {
-				return nil, err
-			}
+
+			clusterMetadata := shard.GetClusterMetadata()
+			currentCluster := clusterMetadata.GetCurrentClusterName()
 
 			for _, event := range reapplyEvents {
-				if event.GetVersion() == lastWriteVersion {
+				if clusterMetadata.ClusterNameForFailoverVersion(
+					isGlobalNamespace,
+					event.GetVersion(),
+				) == currentCluster {
 					// The reapply is from the same cluster. Ignoring.
 					continue
 				}
