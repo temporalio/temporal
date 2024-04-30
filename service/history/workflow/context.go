@@ -919,20 +919,26 @@ func (c *ContextImpl) ReapplyEvents(
 
 // TODO: remove `ms` parameter again (added since it's not possible to initialize a new Context with a specific MutableState)
 func (c *ContextImpl) UpdateRegistry(ctx context.Context, ms MutableState) update.Registry {
-	var ns *namespace.Namespace
+	var currentVersion int64
 	if c.MutableState != nil {
-		ns = c.MutableState.GetNamespaceEntry()
+		currentVersion = c.MutableState.GetCurrentVersion()
 	} else {
-		ns = ms.GetNamespaceEntry()
+		currentVersion = ms.GetCurrentVersion()
 	}
 
-	if c.updateRegistry != nil && c.updateRegistry.FailoverVersion() != ns.FailoverVersion() {
+	if c.updateRegistry != nil && c.updateRegistry.FailoverVersion() != currentVersion {
 		c.updateRegistry.Clear()
 		c.updateRegistry = nil
 	}
 
 	if c.updateRegistry == nil {
-		nsID := ns.ID()
+		var nsID namespace.ID
+		if c.MutableState != nil {
+			nsID = c.MutableState.GetNamespaceEntry().ID()
+		} else {
+			nsID = ms.GetNamespaceEntry().ID()
+		}
+
 		c.updateRegistry = update.NewRegistry(
 			func() update.Store {
 				if c.MutableState != nil {
