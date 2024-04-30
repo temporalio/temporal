@@ -61,6 +61,7 @@ var (
 		dynamicconfig.ValidateUTF8FailRPCResponse:                         true,
 		dynamicconfig.ValidateUTF8FailPersistence:                         true,
 		dynamicconfig.EnableWorkflowExecutionTimeoutTimer:                 true,
+		dynamicconfig.ShardUpdateMinInterval:                              1 * time.Second,
 	}
 )
 
