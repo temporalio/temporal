@@ -407,7 +407,7 @@ func (e activeExecutor) executeCancelationTask(ctx context.Context, env hsm.Envi
 	return e.saveCancelationResult(ctx, env, ref, callErr)
 }
 
-// loadOperationIDFromCancelation loads the operation ID from the operation state machine that's the parent of the
+// loadArgsForCancelation loads the operation name and ID from the operation state machine that's the parent of the
 // cancelation machine the given reference is pointing to.
 func (e activeExecutor) loadArgsForCancelation(ctx context.Context, env hsm.Environment, ref hsm.Ref) (operation, operationID string, err error) {
 	err = env.Access(ctx, ref, hsm.AccessRead, func(n *hsm.Node) error {

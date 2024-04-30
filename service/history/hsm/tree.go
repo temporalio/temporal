@@ -415,7 +415,7 @@ func (c Collection[T]) Transition(stateMachineID string, transitionFn func(T) (T
 }
 
 // GenerateEventLoadToken generates a token for loading a history event from an [Environment].
-// Must be called within an [Environment.Access] function block with either read or write access.
+// Events should typically be immutable making this function safe to call outside of an [Environment.Access] call.
 func GenerateEventLoadToken(event *historypb.HistoryEvent) ([]byte, error) {
 	attrs := reflect.ValueOf(event.Attributes).Elem()
 
