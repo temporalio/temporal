@@ -1619,6 +1619,61 @@ func (s *VersioningIntegSuite) dispatchUnversionedRemainsUnversioned() {
 	s.validateWorkflowBuildId(ctx, run.GetID(), run.GetRunID(), "", false, "binary-checksum", "", nil)
 }
 
+func (s *VersioningIntegSuite) TestEagerWorkflowRemainsUnversioned() {
+	tq := s.randomizeStr(s.T().Name())
+	v1 := s.prefixed("v1")
+
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+
+	s.addNewDefaultBuildId(ctx, tq, v1)
+	s.waitForVersionSetPropagation(ctx, tq, v1)
+
+	act := func() (string, error) {
+		return "act done", nil
+	}
+
+	wf := func(ctx workflow.Context) (string, error) {
+		// Adding an activity to have more than one step in the WF
+		var ret any
+		err := workflow.ExecuteActivity(workflow.WithActivityOptions(ctx, workflow.ActivityOptions{
+			StartToCloseTimeout: 1 * time.Second,
+			RetryPolicy: &temporal.RetryPolicy{
+				InitialInterval:    1 * time.Second,
+				BackoffCoefficient: 1,
+			},
+		}), "act").Get(ctx, &ret)
+		s.NoError(err)
+		return "done!", nil
+	}
+
+	w0 := worker.New(s.sdkClient, tq, worker.Options{
+		// no build id, not using versioning.
+	})
+	w0.RegisterWorkflowWithOptions(wf, workflow.RegisterOptions{Name: "wf"})
+	w0.RegisterActivityWithOptions(act, activity.RegisterOptions{Name: "act"})
+	s.NoError(w0.Start())
+	defer w0.Stop()
+
+	w1 := worker.New(s.sdkClient, tq, worker.Options{
+		BuildID: v1,
+		UseBuildIDForVersioning: true,
+	})
+	w1.RegisterWorkflowWithOptions(wf, workflow.RegisterOptions{Name: "wf"})
+	w1.RegisterActivityWithOptions(act, activity.RegisterOptions{Name: "act"})
+	s.NoError(w1.Start())
+	defer w1.Stop()
+
+	run, err := s.sdkClient.ExecuteWorkflow(ctx, sdkclient.StartWorkflowOptions{TaskQueue: tq, E}, "wf")
+	s.NoError(err)
+
+	var out string
+	s.NoError(run.Get(ctx, &out))
+	s.Equal("done!", out)
+
+	s.validateWorkflowBuildId(ctx, run.GetID(), run.GetRunID(), "", false, "binary-checksum", "", nil)
+}
+
 func (s *VersioningIntegSuite) TestDispatchUpgradeStopOldOld() {
 	s.testWithMatchingBehavior(func() { s.dispatchUpgrade(false, true) })
 }
