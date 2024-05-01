@@ -71,10 +71,30 @@ var (
 	defaultAllowedNamespaceStates = []enumspb.NamespaceState{enumspb.NAMESPACE_STATE_REGISTERED, enumspb.NAMESPACE_STATE_DEPRECATED}
 
 	allowedMethodsDuringHandover = map[string]struct{}{
-		"UpdateNamespace":                  {},
-		"GetReplicationMessages":           {},
-		"ReplicateEventsV2":                {},
-		"GetWorkflowExecutionRawHistoryV2": {},
+		"DescribeNamespace":                  {},
+		"UpdateNamespace":                    {},
+		"GetReplicationMessages":             {},
+		"ReplicateEventsV2":                  {},
+		"GetWorkflowExecutionRawHistoryV2":   {},
+		"GetWorkflowExecutionHistory":        {},
+		"GetWorkflowExecutionHistoryReverse": {},
+		"DescribeWorkflowExecution":          {},
+		"DescribeTaskQueue":                  {},
+		"ListTaskQueuePartitions":            {},
+		"ListOpenWorkflowExecutions":         {},
+		"ListClosedWorkflowExecutions":       {},
+		"ListWorkflowExecutions":             {},
+		"ListArchivedWorkflowExecutions":     {},
+		"ScanWorkflowExecutions":             {},
+		"CountWorkflowExecutions":            {},
+		"DescribeSchedule":                   {},
+		"ListScheduleMatchingTimes":          {},
+		"ListSchedules":                      {},
+		"GetWorkerBuildIdCompatibility":      {},
+		"GetWorkerVersioningRules":           {},
+		"GetWorkerTaskReachability":          {},
+		"DescribeBatchOperation":             {},
+		"ListBatchOperations":                {},
 	}
 )
 
