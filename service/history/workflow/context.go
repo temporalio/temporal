@@ -917,46 +917,38 @@ func (c *ContextImpl) ReapplyEvents(
 	return err
 }
 
-// TODO: remove `ms` parameter again (added since it's not possible to initialize a new Context with a specific MutableState)
-func (c *ContextImpl) UpdateRegistry(ctx context.Context, ms MutableState) update.Registry {
-	var currentVersion int64
-	if c.MutableState != nil {
-		currentVersion = c.MutableState.GetCurrentVersion()
-	} else {
-		currentVersion = ms.GetCurrentVersion()
+// TODO: remove `fallbackMutableState` parameter again (added since it's not possible to initialize a new Context with a specific MutableState)
+func (c *ContextImpl) UpdateRegistry(ctx context.Context, fallbackMutableState MutableState) update.Registry {
+	ms := func() MutableState {
+		if c.MutableState != nil {
+			return c.MutableState
+		}
+		return fallbackMutableState
 	}
 
-	if c.updateRegistry != nil && c.updateRegistry.FailoverVersion() != currentVersion {
+	if c.updateRegistry != nil && c.updateRegistry.FailoverVersion() != ms().GetCurrentVersion() {
 		c.updateRegistry.Clear()
 		c.updateRegistry = nil
 	}
 
 	if c.updateRegistry == nil {
-		var nsID namespace.ID
-		if c.MutableState != nil {
-			nsID = c.MutableState.GetNamespaceEntry().ID()
-		} else {
-			nsID = ms.GetNamespaceEntry().ID()
-		}
+		nsIDStr := ms().GetNamespaceEntry().ID().String()
 
 		c.updateRegistry = update.NewRegistry(
-			func() update.Store {
-				if c.MutableState != nil {
-					return c.MutableState
-				}
-				return ms
-			},
+			// It is important to use `ms()` function here (not `fallbackMutableState` value)
+			// to prevent creating a closure of possible state value of `fallbackMutableState`.
+			func() update.Store { return ms() },
 			update.WithLogger(c.logger),
 			update.WithMetrics(c.metricsHandler),
 			update.WithTracerProvider(trace.SpanFromContext(ctx).TracerProvider()),
 			update.WithInFlightLimit(
 				func() int {
-					return c.config.WorkflowExecutionMaxInFlightUpdates(nsID.String())
+					return c.config.WorkflowExecutionMaxInFlightUpdates(nsIDStr)
 				},
 			),
 			update.WithTotalLimit(
 				func() int {
-					return c.config.WorkflowExecutionMaxTotalUpdates(nsID.String())
+					return c.config.WorkflowExecutionMaxTotalUpdates(nsIDStr)
 				},
 			),
 		)
