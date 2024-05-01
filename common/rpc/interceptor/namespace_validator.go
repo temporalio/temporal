@@ -75,6 +75,7 @@ var (
 		"UpdateNamespace":                    {},
 		"GetReplicationMessages":             {},
 		"ReplicateEventsV2":                  {},
+		"GetWorkflowExecutionRawHistory":     {},
 		"GetWorkflowExecutionRawHistoryV2":   {},
 		"GetWorkflowExecutionHistory":        {},
 		"GetWorkflowExecutionHistoryReverse": {},
