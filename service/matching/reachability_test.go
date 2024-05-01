@@ -200,16 +200,16 @@ func TestGetReachability_WithVisibility_WithoutRules(t *testing.T) {
 	// reachability("") --> closed_workflows_only (now that "" is not default)
 	rc.assignmentRules = []*persistencespb.AssignmentRule{mkAssignmentRulePersistence(mkAssignmentRule("A", nil), nil, nil)}
 	setVisibilityExpect(t, rc, []string{""}, 0, 1)
-	checkReachability(ctx, t, rc, "", enumspb.BUILD_ID_TASK_REACHABILITY_CLOSED_WORKFLOWS_ONLY, checkedClosedWorkflowExecutionsForUpstream)
+	checkReachability(ctx, t, rc, "", enumspb.BUILD_ID_TASK_REACHABILITY_CLOSED_WORKFLOWS_ONLY, checkedClosedWorkflowExecutionsForUpstreamMiss)
 	rc.assignmentRules = nil // remove rule for rest of test
 
 	// reachability(A) --> reachable (open workflow in visibility)
 	setVisibilityExpect(t, rc, []string{"A"}, 1, 0)
-	checkReachability(ctx, t, rc, "A", enumspb.BUILD_ID_TASK_REACHABILITY_REACHABLE, checkedOpenWorkflowExecutionsForUpstream)
+	checkReachability(ctx, t, rc, "A", enumspb.BUILD_ID_TASK_REACHABILITY_REACHABLE, checkedOpenWorkflowExecutionsForUpstreamMiss)
 
 	// reachability(B) --> unreachable (not mentioned in rules or visibility)
 	setVisibilityExpect(t, rc, []string{"B"}, 0, 0)
-	checkReachability(ctx, t, rc, "B", enumspb.BUILD_ID_TASK_REACHABILITY_UNREACHABLE, checkedClosedWorkflowExecutionsForUpstream)
+	checkReachability(ctx, t, rc, "B", enumspb.BUILD_ID_TASK_REACHABILITY_UNREACHABLE, checkedClosedWorkflowExecutionsForUpstreamMiss)
 }
 
 func TestGetReachability_WithoutVisibility_WithRules(t *testing.T) {
@@ -240,7 +240,7 @@ func TestGetReachability_WithoutVisibility_WithRules(t *testing.T) {
 	checkReachability(ctx, t, rc, "D", enumspb.BUILD_ID_TASK_REACHABILITY_REACHABLE, checkedRuleTargetsForUpstream)
 
 	// reachability(G) --> unreachable (redirect rule target of unreachable source [F not reachable by rules or visibility])
-	checkReachability(ctx, t, rc, "G", enumspb.BUILD_ID_TASK_REACHABILITY_UNREACHABLE, checkedClosedWorkflowExecutionsForUpstream)
+	checkReachability(ctx, t, rc, "G", enumspb.BUILD_ID_TASK_REACHABILITY_UNREACHABLE, checkedClosedWorkflowExecutionsForUpstreamMiss)
 }
 
 // test reachability of build ids that are only reachable by the buildIdsOfInterest list + visibility
@@ -259,11 +259,11 @@ func TestGetReachability_WithVisibility_WithRules(t *testing.T) {
 
 	// reachability(C) --> closed_workflows_only (via upstream closed wf execution A)
 	setVisibilityExpect(t, rc, []string{"C", "A"}, 0, 1)
-	checkReachability(ctx, t, rc, "C", enumspb.BUILD_ID_TASK_REACHABILITY_CLOSED_WORKFLOWS_ONLY, checkedClosedWorkflowExecutionsForUpstream)
+	checkReachability(ctx, t, rc, "C", enumspb.BUILD_ID_TASK_REACHABILITY_CLOSED_WORKFLOWS_ONLY, checkedClosedWorkflowExecutionsForUpstreamMiss)
 
 	// reachability(D) --> reachable (via upstream running wf execution B)
 	setVisibilityExpect(t, rc, []string{"D", "B"}, 1, 0)
-	checkReachability(ctx, t, rc, "D", enumspb.BUILD_ID_TASK_REACHABILITY_REACHABLE, checkedOpenWorkflowExecutionsForUpstream)
+	checkReachability(ctx, t, rc, "D", enumspb.BUILD_ID_TASK_REACHABILITY_REACHABLE, checkedOpenWorkflowExecutionsForUpstreamMiss)
 }
 
 // test reachability of build ids that are only reachable by buildIdsOfInterest + visibility
@@ -292,19 +292,19 @@ func TestGetReachability_WithVisibility_WithDeletedRules(t *testing.T) {
 
 	// reachability(C) --> closed_workflows_only (via upstream closed wf execution A, rule included due to recent delete)
 	setVisibilityExpect(t, rc, []string{"C", "A"}, 0, 1)
-	checkReachability(ctx, t, rc, "C", enumspb.BUILD_ID_TASK_REACHABILITY_CLOSED_WORKFLOWS_ONLY, checkedClosedWorkflowExecutionsForUpstream)
+	checkReachability(ctx, t, rc, "C", enumspb.BUILD_ID_TASK_REACHABILITY_CLOSED_WORKFLOWS_ONLY, checkedClosedWorkflowExecutionsForUpstreamMiss)
 
 	// reachability(D) --> reachable (via upstream running wf execution B, rule included due to recent delete)
 	setVisibilityExpect(t, rc, []string{"D", "B"}, 1, 0)
-	checkReachability(ctx, t, rc, "D", enumspb.BUILD_ID_TASK_REACHABILITY_REACHABLE, checkedOpenWorkflowExecutionsForUpstream)
+	checkReachability(ctx, t, rc, "D", enumspb.BUILD_ID_TASK_REACHABILITY_REACHABLE, checkedOpenWorkflowExecutionsForUpstreamMiss)
 
 	// reachability(Z) --> unreachable (despite upstream closed wf execution X, rule excluded due to old delete)
 	setVisibilityExpect(t, rc, []string{"Z"}, 0, 0)
-	checkReachability(ctx, t, rc, "Z", enumspb.BUILD_ID_TASK_REACHABILITY_UNREACHABLE, checkedClosedWorkflowExecutionsForUpstream)
+	checkReachability(ctx, t, rc, "Z", enumspb.BUILD_ID_TASK_REACHABILITY_UNREACHABLE, checkedClosedWorkflowExecutionsForUpstreamMiss)
 
 	// reachability(ZZ) --> unreachable (despite upstream running wf execution Y, rule excluded due to recent delete)
 	setVisibilityExpect(t, rc, []string{"ZZ"}, 0, 0)
-	checkReachability(ctx, t, rc, "ZZ", enumspb.BUILD_ID_TASK_REACHABILITY_UNREACHABLE, checkedClosedWorkflowExecutionsForUpstream)
+	checkReachability(ctx, t, rc, "ZZ", enumspb.BUILD_ID_TASK_REACHABILITY_UNREACHABLE, checkedClosedWorkflowExecutionsForUpstreamMiss)
 }
 
 // test reachability via deleted rules within the rule propagation delay
@@ -320,17 +320,11 @@ func checkReachability(ctx context.Context,
 	expectedReachability enumspb.BuildIdTaskReachability,
 	expectedExitPoint reachabilityExitPoint,
 ) {
-	// check that rc.run works, and returns expected exit point
-	reachability, exitPoint, err := rc.run(ctx, buildId)
-	assert.Nil(t, err)
-	assert.Equal(t, expectedReachability, reachability)
-	assert.Equal(t, expectedExitPoint, exitPoint)
-
-	// check that getBuildIdTaskReachability works for getting snapshots of metrics
+	// check that getBuildIdTaskReachability works (generates expected reachability and logs expected exit point)
 	metricsHandler := metricstest.NewCaptureHandler()
 	metricsCapture := metricsHandler.StartCapture()
 	logger := log.NewTestLogger()
-	reachability, err = getBuildIdTaskReachability(ctx, rc, metricsHandler, logger, buildId)
+	reachability, err := getBuildIdTaskReachability(ctx, rc, metricsHandler, logger, buildId)
 	assert.Nil(t, err)
 	assert.Equal(t, expectedReachability, reachability)
 	snapshot := metricsCapture.Snapshot()
@@ -338,6 +332,11 @@ func checkReachability(ctx context.Context,
 	assert.Equal(t, len(counterRecordings), 1)
 	assert.Equal(t, int64(1), counterRecordings[0].Value.(int64))
 	assert.Equal(t, reachabilityExitPoint2TagValue[expectedExitPoint], counterRecordings[0].Tags[reachabilityExitPointTagName])
+
+	// check that rc.run works (don't check exit point this time because cache will be warm)
+	reachability, _, err = rc.run(ctx, buildId)
+	assert.Nil(t, err)
+	assert.Equal(t, expectedReachability, reachability)
 }
 
 // setVisibilityExpect resets the cache and sets the expected visibility results for the mock visibility inside it

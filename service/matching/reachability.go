@@ -55,21 +55,25 @@ const (
 type reachabilityExitPoint int32
 
 const (
-	checkedRuleSourcesForInput                 reachabilityExitPoint = 0
-	checkedRuleTargetsForUpstream              reachabilityExitPoint = 1
-	checkedBacklogForUpstream                  reachabilityExitPoint = 2
-	checkedOpenWorkflowExecutionsForUpstream   reachabilityExitPoint = 3
-	checkedClosedWorkflowExecutionsForUpstream reachabilityExitPoint = 4
-	reachabilityExitPointTagName                                     = "reachability_exit_point"
+	checkedRuleSourcesForInput                     reachabilityExitPoint = 0
+	checkedRuleTargetsForUpstream                  reachabilityExitPoint = 1
+	checkedBacklogForUpstream                      reachabilityExitPoint = 2
+	checkedOpenWorkflowExecutionsForUpstreamHit    reachabilityExitPoint = 3
+	checkedOpenWorkflowExecutionsForUpstreamMiss   reachabilityExitPoint = 4
+	checkedClosedWorkflowExecutionsForUpstreamHit  reachabilityExitPoint = 5
+	checkedClosedWorkflowExecutionsForUpstreamMiss reachabilityExitPoint = 6
+	reachabilityExitPointTagName                                         = "reachability_exit_point"
 )
 
 var (
 	reachabilityExitPoint2TagValue = map[reachabilityExitPoint]string{
-		checkedRuleSourcesForInput:                 "checked_rule_sources_for_input",
-		checkedRuleTargetsForUpstream:              "checked_rule_targets_for_upstream",
-		checkedBacklogForUpstream:                  "checked_backlog_for_upstream",
-		checkedOpenWorkflowExecutionsForUpstream:   "checked_open_wf_executions_for_upstream",
-		checkedClosedWorkflowExecutionsForUpstream: "checked_closed_wf_executions_for_upstream",
+		checkedRuleSourcesForInput:                     "checked_rule_sources_for_input",
+		checkedRuleTargetsForUpstream:                  "checked_rule_targets_for_upstream",
+		checkedBacklogForUpstream:                      "checked_backlog_for_upstream",
+		checkedOpenWorkflowExecutionsForUpstreamHit:    "checked_open_wf_executions_for_upstream_hit",
+		checkedOpenWorkflowExecutionsForUpstreamMiss:   "checked_open_wf_executions_for_upstream_miss",
+		checkedClosedWorkflowExecutionsForUpstreamHit:  "checked_closed_wf_executions_for_upstream_hit",
+		checkedClosedWorkflowExecutionsForUpstreamMiss: "checked_closed_wf_executions_for_upstream_miss",
 	}
 )
 
@@ -154,25 +158,41 @@ func (rc *reachabilityCalculator) run(ctx context.Context, buildId string) (enum
 	buildIdsOfInterest = rc.getBuildIdsOfInterest(buildId, rc.buildIdVisibilityGracePeriod)
 
 	// 2c. If buildId is assignable to tasks from open workflows
-	existsOpenWFAssignedToBuildId, err := rc.existsWFAssignedToAny(ctx, buildIdsOfInterest, true)
+	existsOpenWFAssignedToBuildId, hit, err := rc.existsWFAssignedToAny(ctx, buildIdsOfInterest, true)
 	if err != nil {
-		return enumspb.BUILD_ID_TASK_REACHABILITY_UNSPECIFIED, checkedOpenWorkflowExecutionsForUpstream, err
+		return enumspb.BUILD_ID_TASK_REACHABILITY_UNSPECIFIED, checkedOpenWorkflowExecutionsForUpstreamMiss, err
 	}
 	if existsOpenWFAssignedToBuildId {
-		return enumspb.BUILD_ID_TASK_REACHABILITY_REACHABLE, checkedOpenWorkflowExecutionsForUpstream, nil
+		return enumspb.BUILD_ID_TASK_REACHABILITY_REACHABLE, getCacheExitPoint(true, hit), nil
 	}
 
 	// 3. Cases for CLOSED_WORKFLOWS_ONLY
-	existsClosedWFAssignedToBuildId, err := rc.existsWFAssignedToAny(ctx, buildIdsOfInterest, false)
+	existsClosedWFAssignedToBuildId, hit, err := rc.existsWFAssignedToAny(ctx, buildIdsOfInterest, false)
 	if err != nil {
-		return enumspb.BUILD_ID_TASK_REACHABILITY_UNSPECIFIED, checkedClosedWorkflowExecutionsForUpstream, err
+		return enumspb.BUILD_ID_TASK_REACHABILITY_UNSPECIFIED, checkedClosedWorkflowExecutionsForUpstreamMiss, err
 	}
 	if existsClosedWFAssignedToBuildId {
-		return enumspb.BUILD_ID_TASK_REACHABILITY_CLOSED_WORKFLOWS_ONLY, checkedClosedWorkflowExecutionsForUpstream, nil
+		return enumspb.BUILD_ID_TASK_REACHABILITY_CLOSED_WORKFLOWS_ONLY, getCacheExitPoint(false, hit), nil
 	}
 
 	// 4. Otherwise, UNREACHABLE
-	return enumspb.BUILD_ID_TASK_REACHABILITY_UNREACHABLE, checkedClosedWorkflowExecutionsForUpstream, nil
+	return enumspb.BUILD_ID_TASK_REACHABILITY_UNREACHABLE, getCacheExitPoint(false, hit), nil
+}
+
+func getCacheExitPoint(open, hit bool) reachabilityExitPoint {
+	if open {
+		if hit {
+			return checkedOpenWorkflowExecutionsForUpstreamHit
+		} else {
+			return checkedOpenWorkflowExecutionsForUpstreamMiss
+		}
+	} else {
+		if hit {
+			return checkedClosedWorkflowExecutionsForUpstreamHit
+		} else {
+			return checkedClosedWorkflowExecutionsForUpstreamMiss
+		}
+	}
 }
 
 // getBuildIdsOfInterest returns a list of build ids that point to the given buildId in the graph
@@ -224,7 +244,7 @@ func (rc *reachabilityCalculator) existsWFAssignedToAny(
 	ctx context.Context,
 	buildIdsOfInterest []string,
 	open bool,
-) (bool, error) {
+) (exists, hit bool, err error) {
 	query := rc.makeBuildIdQuery(buildIdsOfInterest, open)
 	return rc.cache.Get(ctx, *rc.makeBuildIdCountRequest(query), open)
 }
@@ -320,7 +340,7 @@ func newReachabilityCache(
 }
 
 // Get retrieves the Workflow Count existence value based on the query-string key.
-func (c *reachabilityCache) Get(ctx context.Context, countRequest manager.CountWorkflowExecutionsRequest, open bool) (bool, error) {
+func (c *reachabilityCache) Get(ctx context.Context, countRequest manager.CountWorkflowExecutionsRequest, open bool) (exists, hit bool, err error) {
 	// try cache
 	var result interface{}
 	if open {
@@ -329,20 +349,20 @@ func (c *reachabilityCache) Get(ctx context.Context, countRequest manager.CountW
 		result = c.closedWFCache.Get(countRequest)
 	}
 	if result != nil {
-		exists, ok := result.(bool)
-		if ok {
-			return exists, nil
+		exists, hit = result.(bool)
+		if hit {
+			return exists, hit, nil
 		}
 	}
 
 	// cache was cold, ask visibility and put result in cache
 	countResponse, err := c.visibilityMgr.CountWorkflowExecutions(ctx, &countRequest)
 	if err != nil {
-		return false, err
+		return false, hit, err
 	}
-	exists := countResponse.Count > 0
+	exists = countResponse.Count > 0
 	c.Put(countRequest, exists, open)
-	return exists, nil
+	return exists, hit, nil
 }
 
 // Put adds an element to the cache.
