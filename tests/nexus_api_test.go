@@ -690,9 +690,6 @@ func (s *ClientFunctionalSuite) versionedNexusTaskPoller(ctx context.Context, ta
 	if err != nil {
 		panic(err)
 	}
-	if res == nil {
-		return
-	}
 	response, handlerError := handler(res)
 	if handlerError != nil {
 		_, err = s.testCluster.GetFrontendClient().RespondNexusTaskFailed(ctx, &workflowservice.RespondNexusTaskFailedRequest{
