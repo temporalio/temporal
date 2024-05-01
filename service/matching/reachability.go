@@ -47,7 +47,7 @@ import (
 )
 
 const (
-	reachabilityCacheMaxSize = 100
+	reachabilityCacheMaxSize = 10000
 )
 
 type reachabilityCalculator struct {

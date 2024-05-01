@@ -26,7 +26,6 @@ package matching
 
 import (
 	"context"
-	"go.temporal.io/server/common/metrics/metricstest"
 	"slices"
 	"testing"
 	"time"
@@ -38,10 +37,15 @@ import (
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	commonclock "go.temporal.io/server/common/clock"
 	hlc "go.temporal.io/server/common/clock/hybrid_logical_clock"
+	"go.temporal.io/server/common/metrics/metricstest"
 	"go.temporal.io/server/common/persistence/visibility/manager"
 )
 
-const testBuildIdVisibilityGracePeriod = 2 * time.Minute
+const (
+	testBuildIdVisibilityGracePeriod  = 2 * time.Minute
+	testReachabilityCacheOpenWFsTTL   = 2 * time.Millisecond
+	testReachabilityCacheClosedWFsTTL = 4 * time.Millisecond
+)
 
 type testReachabilityCalculator struct {
 	rc      *reachabilityCalculator
@@ -353,7 +357,7 @@ func mkTestReachabilityCalculator() *testReachabilityCalculator {
 			nsName:                       "test-namespace",
 			taskQueue:                    "test-reachability-tq",
 			buildIdVisibilityGracePeriod: testBuildIdVisibilityGracePeriod,
-			cache:                        newReachabilityCache(cacheMetricsHandler),
+			cache:                        newReachabilityCache(cacheMetricsHandler, testReachabilityCacheOpenWFsTTL, testReachabilityCacheClosedWFsTTL),
 		},
 		capture: cacheMetricsHandler.StartCapture(),
 	}
