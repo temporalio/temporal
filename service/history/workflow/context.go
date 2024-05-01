@@ -919,25 +919,24 @@ func (c *ContextImpl) ReapplyEvents(
 
 // TODO: remove `fallbackMutableState` parameter again (added since it's not possible to initialize a new Context with a specific MutableState)
 func (c *ContextImpl) UpdateRegistry(ctx context.Context, fallbackMutableState MutableState) update.Registry {
-	ms := func() MutableState {
-		if c.MutableState != nil {
-			return c.MutableState
+	ms := c.MutableState
+	if ms == nil {
+		if fallbackMutableState == nil {
+			panic("both c.MutableState and fallbackMutableState are nil")
 		}
-		return fallbackMutableState
+		ms = fallbackMutableState
 	}
 
-	if c.updateRegistry != nil && c.updateRegistry.FailoverVersion() != ms().GetCurrentVersion() {
+	if c.updateRegistry != nil && c.updateRegistry.FailoverVersion() != ms.GetCurrentVersion() {
 		c.updateRegistry.Clear()
 		c.updateRegistry = nil
 	}
 
 	if c.updateRegistry == nil {
-		nsIDStr := ms().GetNamespaceEntry().ID().String()
+		nsIDStr := ms.GetNamespaceEntry().ID().String()
 
 		c.updateRegistry = update.NewRegistry(
-			// It is important to use `ms()` function here (not `fallbackMutableState` value)
-			// to prevent creating a closure of possible state value of `fallbackMutableState`.
-			func() update.Store { return ms() },
+			ms,
 			update.WithLogger(c.logger),
 			update.WithMetrics(c.metricsHandler),
 			update.WithTracerProvider(trace.SpanFromContext(ctx).TracerProvider()),

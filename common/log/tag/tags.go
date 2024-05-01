@@ -310,6 +310,16 @@ func WorkerBuildId(buildId string) ZapTag {
 	return NewStringTag("worker-build-id", buildId)
 }
 
+// ReachabilityExitPointTag returns tag for reachabilityExitPoint
+func ReachabilityExitPointTag(reachabilityExitPoint string) ZapTag {
+	return NewStringTag("reachability-exit-point", reachabilityExitPoint)
+}
+
+// BuildIdTaskReachabilityTag returns tag for build id task reachability
+func BuildIdTaskReachabilityTag(buildIdReachability string) ZapTag {
+	return NewStringTag("build-id-reachability", buildIdReachability)
+}
+
 // size limit
 
 // BlobSize returns tag for BlobSize
@@ -345,6 +355,16 @@ func WorkflowMutableStateSize(mutableStateSize int) ZapTag {
 // WorkflowEventCount returns tag for EventCount
 func WorkflowEventCount(eventCount int) ZapTag {
 	return NewInt("wf-event-count", eventCount)
+}
+
+// WorkerVersioningAssignmentRuleCount returns tag for AssignmentRuleCount
+func WorkerVersioningAssignmentRuleCount(assignmentRuleCount int) ZapTag {
+	return NewInt("worker-versioning-assignment-rule-count", assignmentRuleCount)
+}
+
+// WorkerVersioningRedirectRuleCount returns tag for RedirectRuleCount
+func WorkerVersioningRedirectRuleCount(redirectRuleCount int) ZapTag {
+	return NewInt("worker-versioning-redirect-rule-count", redirectRuleCount)
 }
 
 // ScheduleID returns tag for ScheduleID

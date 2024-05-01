@@ -89,7 +89,7 @@ func TestCommandProtocolMessage(t *testing.T) {
 		out.ms.EXPECT().GetNamespaceEntry().Return(tests.LocalNamespaceEntry)
 		out.ms.EXPECT().GetCurrentVersion().Return(tests.LocalNamespaceEntry.FailoverVersion())
 
-		out.updates = update.NewRegistry(func() update.Store { return out.ms })
+		out.updates = update.NewRegistry(out.ms)
 		var effects effect.Buffer
 		config := configs.NewConfig(
 			dynamicconfig.NewCollection(
