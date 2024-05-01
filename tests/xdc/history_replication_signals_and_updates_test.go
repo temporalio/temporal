@@ -83,8 +83,7 @@ type (
 	}
 	// Each test starts its own workflow, in its own namespace.
 	hrsuTest struct {
-		runId string
-		tv    *testvars.TestVars
+		tv *testvars.TestVars
 		// Per-test buffer of namespace replication tasks.
 		// TODO (dan): buffer namespace replication tasks from each cluster separately, as we do for history replication
 		// tasks.
@@ -212,7 +211,7 @@ func (t *hrsuTest) newHrsuTestCluster(ns string, name string, cluster *tests.Tes
 func (s *hrsuTestSuite) TestAcceptedUpdateCanBeCompletedAfterFailoverAndFailback() {
 	t, ctx, cancel := s.startHrsuTest()
 	defer cancel()
-	t.runId = t.cluster1.startWorkflow(ctx, func(workflow.Context) error { return nil })
+	t.cluster1.startWorkflow(ctx, func(workflow.Context) error { return nil })
 
 	// Cluster 1 is active initially. We start an update in cluster 1, run it through to acceptance, and replicate the
 	// history to cluster 2. Then we failover to cluster 2 (where the update registry is empty) and confirm that the update
@@ -228,7 +227,7 @@ func (s *hrsuTestSuite) TestAcceptedUpdateCanBeCompletedAfterFailoverAndFailback
 func (s *hrsuTestSuite) TestUpdateCompletedAfterFailoverCannotBeCompletedAgainAfterFailback() {
 	t, ctx, cancel := s.startHrsuTest()
 	defer cancel()
-	t.runId = t.cluster1.startWorkflow(ctx, func(workflow.Context) error { return nil })
+	t.cluster1.startWorkflow(ctx, func(workflow.Context) error { return nil })
 	// Cluster 1 is active initially. We start an update in cluster 1, run it through to acceptance, and replicate the
 	// history to cluster 2. Then we failover to cluster 2 (where the update registry is empty) and confirm that the update
 	// can be completed in the new active cluster.
@@ -237,7 +236,7 @@ func (s *hrsuTestSuite) TestUpdateCompletedAfterFailoverCannotBeCompletedAgainAf
 	// nevertheless, it should not be possible to complete it, since it is already completed.
 	t.cluster1.executeHistoryReplicationTasksUntil(enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_UPDATE_COMPLETED)
 	t.failover2To1(ctx)
-	s.NoError(t.cluster1.client.SignalWorkflow(ctx, t.tv.WorkflowID(), t.runId, "my-signal", "cluster1-signal"))
+	s.NoError(t.cluster1.client.SignalWorkflow(ctx, t.tv.WorkflowID(), t.tv.RunID(), "my-signal", "cluster1-signal"))
 	s.Error(t.cluster1.pollAndCompleteUpdate("cluster1-update-id"))
 }
 
@@ -247,15 +246,15 @@ func (s *hrsuTestSuite) TestUpdateCompletedAfterFailoverCannotBeCompletedAgainAf
 func (s *hrsuTestSuite) TestConflictResolutionReappliesSignals() {
 	t, ctx, cancel := s.startHrsuTest()
 	defer cancel()
-	t.runId = t.cluster1.startWorkflow(ctx, func(workflow.Context) error { return nil })
+	t.cluster1.startWorkflow(ctx, func(workflow.Context) error { return nil })
 
 	t.enterSplitBrainState(ctx)
 
 	// Both clusters now believe they are active and hence both will accept a signal.
 
 	// Send signals
-	s.NoError(t.cluster1.client.SignalWorkflow(ctx, t.tv.WorkflowID(), t.runId, "my-signal", "cluster1-signal"))
-	s.NoError(t.cluster2.client.SignalWorkflow(ctx, t.tv.WorkflowID(), t.runId, "my-signal", "cluster2-signal"))
+	s.NoError(t.cluster1.client.SignalWorkflow(ctx, t.tv.WorkflowID(), t.tv.RunID(), "my-signal", "cluster1-signal"))
+	s.NoError(t.cluster2.client.SignalWorkflow(ctx, t.tv.WorkflowID(), t.tv.RunID(), "my-signal", "cluster2-signal"))
 
 	// cluster1 has accepted a signal
 	s.HistoryRequire.EqualHistoryEventsAndVersions(`
@@ -304,7 +303,7 @@ func (s *hrsuTestSuite) TestConflictResolutionReappliesSignals() {
 func (s *hrsuTestSuite) TestConflictResolutionReappliesUpdates() {
 	t, ctx, cancel := s.startHrsuTest()
 	defer cancel()
-	t.runId = t.cluster1.startWorkflow(ctx, func(workflow.Context) error { return nil })
+	t.cluster1.startWorkflow(ctx, func(workflow.Context) error { return nil })
 
 	cluster1UpdateId := "cluster1-update-id"
 	cluster2UpdateId := "cluster2-update-id"
@@ -365,7 +364,7 @@ func (s *hrsuTestSuite) TestConflictResolutionReappliesUpdatesSameIds() {
 	s.T().SkipNow()
 	t, ctx, cancel := s.startHrsuTest()
 	defer cancel()
-	t.runId = t.cluster1.startWorkflow(ctx, func(workflow.Context) error { return nil })
+	t.cluster1.startWorkflow(ctx, func(workflow.Context) error { return nil })
 
 	// Both clusters accept an update with the same ID.
 	t.enterSplitBrainStateAndAcceptUpdatesInBothClusters(ctx, "update-id", "update-id")
@@ -397,7 +396,7 @@ func (t *hrsuTest) startAndAcceptUpdateInCluster1ThenFailoverTo2AndCompleteUpdat
 	// the handler must have scheduled something (e.g. a timer, an activity, a child workflow), and we need to do
 	// something to create another WorkflowTaskScheduled event, so that the worker can send the update completion
 	// message. We use a signal for that purpose.
-	t.s.NoError(t.cluster2.client.SignalWorkflow(ctx, t.tv.WorkflowID(), t.runId, "my-signal", "cluster2-signal"))
+	t.s.NoError(t.cluster2.client.SignalWorkflow(ctx, t.tv.WorkflowID(), t.tv.RunID(), "my-signal", "cluster2-signal"))
 
 	// Complete the update in  cluster 2 after the failover.
 	t.s.NoError(t.cluster2.pollAndCompleteUpdate("cluster1-update-id"))
@@ -443,7 +442,7 @@ func (t *hrsuTest) startAndAcceptUpdateInCluster2ThenFailoverTo1AndCompleteUpdat
 	t.failover2To1(ctx)
 
 	// As above, send a signal to create a WorkflowTaskScheduled event.
-	t.s.NoError(t.cluster1.client.SignalWorkflow(ctx, t.tv.WorkflowID(), t.runId, "my-signal", "cluster1-signal"))
+	t.s.NoError(t.cluster1.client.SignalWorkflow(ctx, t.tv.WorkflowID(), t.tv.RunID(), "my-signal", "cluster1-signal"))
 	t.s.NoError(t.cluster1.pollAndCompleteUpdate("cluster2-update-id"))
 
 	t.s.HistoryRequire.EqualHistoryEventsAndVersions(`
@@ -648,7 +647,7 @@ func (c *hrsuTestCluster) sendUpdateAndWaitUntilAccepted(ctx context.Context, up
 		_, err := c.client.UpdateWorkflowWithOptions(ctx, &sdkclient.UpdateWorkflowWithOptionsRequest{
 			UpdateID:   updateId,
 			WorkflowID: c.t.tv.WorkflowID(),
-			RunID:      c.t.runId,
+			RunID:      c.t.tv.RunID(),
 			UpdateName: "the-test-doesn't-use-this",
 			Args:       []interface{}{arg},
 			WaitPolicy: &updatepb.WaitPolicy{
@@ -835,13 +834,13 @@ func (t *hrsuTest) getActiveClusters(ctx context.Context) []string {
 }
 
 // startWorkflow starts a workflow in the cluster and replicates the initial workflow events to the other cluster.
-func (c *hrsuTestCluster) startWorkflow(ctx context.Context, workflowFn any) string {
+func (c *hrsuTestCluster) startWorkflow(ctx context.Context, workflowFn any) {
 	run, err := c.client.ExecuteWorkflow(ctx, sdkclient.StartWorkflowOptions{
 		TaskQueue: c.t.tv.TaskQueue().Name,
 		ID:        c.t.tv.WorkflowID(),
 	}, workflowFn)
 	c.t.s.NoError(err)
-	runId := run.GetRunID()
+	c.t.tv = c.t.tv.WithRunID(run.GetRunID())
 
 	// Process history replication tasks in the other cluster until the initial workflow events are replicated.
 	c.otherCluster().executeHistoryReplicationTasksUntil(enumspb.EVENT_TYPE_WORKFLOW_TASK_SCHEDULED)
@@ -852,7 +851,6 @@ func (c *hrsuTestCluster) startWorkflow(ctx context.Context, workflowFn any) str
 		2 WorkflowTaskScheduled
 		  `, []int{1, 1}, cluster.getHistory(ctx))
 	}
-	return runId
 }
 
 func (c *hrsuTestCluster) setActive(ctx context.Context, clusterName string) {
@@ -870,7 +868,7 @@ func (c *hrsuTestCluster) getHistory(ctx context.Context) []*historypb.HistoryEv
 		Namespace: c.t.tv.NamespaceName().String(),
 		Execution: &commonpb.WorkflowExecution{
 			WorkflowId: c.t.tv.WorkflowID(),
-			RunId:      c.t.runId,
+			RunId:      c.t.tv.RunID(),
 		},
 	})
 	c.t.s.NoError(err)
