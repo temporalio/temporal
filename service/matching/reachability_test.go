@@ -26,6 +26,7 @@ package matching
 
 import (
 	"context"
+	"go.temporal.io/server/common/log"
 	"slices"
 	"testing"
 	"time"
@@ -313,12 +314,13 @@ func checkReachability(ctx context.Context,
 	assert.Equal(t, expectedExitPoint, exitPoint)
 
 	// check that getBuildIdTaskReachability works for getting snapshots of metrics
-	captureHandler := metricstest.NewCaptureHandler()
-	capture := captureHandler.StartCapture()
-	reachability, err = getBuildIdTaskReachability(ctx, rc, captureHandler, buildId)
+	metricsHandler := metricstest.NewCaptureHandler()
+	metricsCapture := metricsHandler.StartCapture()
+	logger := log.NewTestLogger()
+	reachability, err = getBuildIdTaskReachability(ctx, rc, metricsHandler, logger, buildId)
 	assert.Nil(t, err)
 	assert.Equal(t, expectedReachability, reachability)
-	snapshot := capture.Snapshot()
+	snapshot := metricsCapture.Snapshot()
 	counterRecordings := snapshot[metrics.ReachabilityExitPointCounter.Name()]
 	assert.Equal(t, len(counterRecordings), 1)
 	assert.Equal(t, int64(1), counterRecordings[0].Value.(int64))

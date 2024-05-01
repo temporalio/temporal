@@ -310,6 +310,16 @@ func WorkerBuildId(buildId string) ZapTag {
 	return NewStringTag("worker-build-id", buildId)
 }
 
+// ReachabilityExitPointTag returns tag for reachabilityExitPoint
+func ReachabilityExitPointTag(reachabilityExitPoint string) ZapTag {
+	return NewStringTag("reachability-exit-point", reachabilityExitPoint)
+}
+
+// BuildIdTaskReachabilityTag returns tag for build id task reachability
+func BuildIdTaskReachabilityTag(buildIdReachability string) ZapTag {
+	return NewStringTag("build-id-reachability", buildIdReachability)
+}
+
 // size limit
 
 // BlobSize returns tag for BlobSize

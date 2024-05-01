@@ -941,6 +941,7 @@ func (e *matchingEngineImpl) DescribeTaskQueue(
 					e.config.ReachabilityBuildIdVisibilityGracePeriod(req.GetNamespace()),
 				),
 				e.metricsHandler,
+				e.logger,
 				bid,
 			)
 			if err != nil {

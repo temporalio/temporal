@@ -27,6 +27,8 @@ package matching
 import (
 	"context"
 	"fmt"
+	"go.temporal.io/server/common/log"
+	"go.temporal.io/server/common/log/tag"
 	"slices"
 	"strings"
 	"time"
@@ -99,6 +101,7 @@ func getBuildIdTaskReachability(
 	ctx context.Context,
 	rc *reachabilityCalculator,
 	metricsHandler metrics.Handler,
+	logger log.Logger,
 	buildId string,
 ) (enumspb.BuildIdTaskReachability, error) {
 	reachability, exitPoint, err := rc.run(ctx, buildId)
@@ -106,6 +109,13 @@ func getBuildIdTaskReachability(
 		metrics.NamespaceTag(rc.nsName.String()),
 		metrics.TaskQueueTag(rc.taskQueue)),
 	).Record(1, metrics.StringTag(reachabilityExitPointTagName, reachabilityExitPoint2TagValue[exitPoint]))
+	logger.Debug("Calculated reachability for build id",
+		tag.WorkerBuildId(buildId),
+		tag.BuildIdTaskReachabilityTag(reachability.String()),
+		tag.ReachabilityExitPointTag(reachabilityExitPoint2TagValue[exitPoint]),
+		tag.WorkflowNamespace(rc.nsName.String()),
+		tag.WorkflowTaskQueueName(rc.taskQueue),
+	)
 	return reachability, err
 }
 
