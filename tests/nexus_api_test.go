@@ -33,6 +33,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/nexus-rpc/sdk-go/nexus"
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
@@ -183,12 +184,15 @@ func (s *ClientFunctionalSuite) TestNexusStartOperation_Outcomes() {
 
 		go s.nexusTaskPoller(ctx, tc.incomingService.Spec.TaskQueue, tc.handler)
 
-		result, err := nexus.StartOperation(ctx, client, op, "input", nexus.StartOperationOptions{
-			CallbackURL: "http://localhost/callback",
-			RequestID:   "request-id",
-			Header:      nexus.Header{"key": "value"},
-		})
-		tc.assertion(t, result, err)
+		s.EventuallyWithT(func(c *assert.CollectT) {
+			// Use EventuallyWithT to retry if incoming service has not been loaded into memory when the test starts.
+			result, err := nexus.StartOperation(ctx, client, op, "input", nexus.StartOperationOptions{
+				CallbackURL: "http://localhost/callback",
+				RequestID:   "request-id",
+				Header:      nexus.Header{"key": "value"},
+			})
+			tc.assertion(t, result, err)
+		}, 10*time.Second, 1*time.Second)
 
 		snap := capture.Snapshot()
 
@@ -203,9 +207,6 @@ func (s *ClientFunctionalSuite) TestNexusStartOperation_Outcomes() {
 		require.Contains(t, snap["nexus_latency"][0].Tags, "service")
 		require.Equal(t, metrics.MetricUnit(metrics.Milliseconds), snap["nexus_latency"][0].Unit)
 	}
-
-	// Wait to make sure all incoming services are loaded into memory before starting tests.
-	time.Sleep(2 * time.Second)
 
 	for _, tc := range testCases {
 		tc := tc
@@ -327,11 +328,15 @@ func (s *ClientFunctionalSuite) TestNexusStartOperation_Forbidden() {
 
 		capture := s.testCluster.host.captureMetricsHandler.StartCapture()
 		defer s.testCluster.host.captureMetricsHandler.StopCapture(capture)
-		_, err = nexus.StartOperation(ctx, client, op, "input", nexus.StartOperationOptions{})
-		var unexpectedResponse *nexus.UnexpectedResponseError
-		require.ErrorAs(t, err, &unexpectedResponse)
-		require.Equal(t, http.StatusForbidden, unexpectedResponse.Response.StatusCode)
-		require.Equal(t, tc.failureMessage, unexpectedResponse.Failure.Message)
+
+		s.EventuallyWithT(func(c *assert.CollectT) {
+			// Use EventuallyWithT to retry if incoming service has not been loaded into memory when the test starts.
+			_, err = nexus.StartOperation(ctx, client, op, "input", nexus.StartOperationOptions{})
+			var unexpectedResponse *nexus.UnexpectedResponseError
+			require.ErrorAs(t, err, &unexpectedResponse)
+			require.Equal(t, http.StatusForbidden, unexpectedResponse.Response.StatusCode)
+			require.Equal(t, tc.failureMessage, unexpectedResponse.Failure.Message)
+		}, 10*time.Second, 1*time.Second)
 
 		snap := capture.Snapshot()
 
@@ -339,9 +344,6 @@ func (s *ClientFunctionalSuite) TestNexusStartOperation_Forbidden() {
 		require.Subset(t, snap["nexus_requests"][0].Tags, map[string]string{"namespace": s.namespace, "method": "StartOperation", "outcome": "unauthorized"})
 		require.Equal(t, int64(1), snap["nexus_requests"][0].Value)
 	}
-
-	// Wait to make sure all incoming services are loaded into memory before starting tests.
-	time.Sleep(2 * time.Second)
 
 	for _, tc := range testCases {
 		tc := tc
@@ -440,16 +442,15 @@ func (s *ClientFunctionalSuite) TestNexusStartOperation_Claims() {
 		capture := s.testCluster.host.captureMetricsHandler.StartCapture()
 		defer s.testCluster.host.captureMetricsHandler.StopCapture(capture)
 
-		result, err := nexus.StartOperation(ctx, client, op, "input", nexus.StartOperationOptions{
-			Header: tc.header,
-		})
-
-		snap := capture.Snapshot()
-		tc.assertion(t, result, err, snap)
+		s.EventuallyWithT(func(c *assert.CollectT) {
+			// Use EventuallyWithT to retry if incoming service has not been loaded into memory when the test starts.
+			result, err := nexus.StartOperation(ctx, client, op, "input", nexus.StartOperationOptions{
+				Header: tc.header,
+			})
+			snap := capture.Snapshot()
+			tc.assertion(t, result, err, snap)
+		}, 10*time.Second, 1*time.Second)
 	}
-
-	// Wait to make sure all incoming services are loaded into memory before starting tests.
-	time.Sleep(2 * time.Second)
 
 	for _, tc := range testCases {
 		tc := tc
@@ -541,8 +542,12 @@ func (s *ClientFunctionalSuite) TestNexusCancelOperation_Outcomes() {
 
 		handle, err := client.NewHandle("operation", "id")
 		require.NoError(t, err)
-		err = handle.Cancel(ctx, nexus.CancelOperationOptions{Header: nexus.Header{"key": "value"}})
-		tc.assertion(t, err)
+
+		s.EventuallyWithT(func(c *assert.CollectT) {
+			// Use EventuallyWithT to retry if incoming service has not been loaded into memory when the test starts.
+			err = handle.Cancel(ctx, nexus.CancelOperationOptions{Header: nexus.Header{"key": "value"}})
+			tc.assertion(t, err)
+		}, 10*time.Second, 1*time.Second)
 
 		snap := capture.Snapshot()
 
@@ -557,9 +562,6 @@ func (s *ClientFunctionalSuite) TestNexusCancelOperation_Outcomes() {
 		require.Contains(t, snap["nexus_latency"][0].Tags, "service")
 		require.Equal(t, metrics.MetricUnit(metrics.Milliseconds), snap["nexus_latency"][0].Unit)
 	}
-
-	// Wait to make sure all incoming services are loaded into memory before starting tests.
-	time.Sleep(2 * time.Second)
 
 	for _, tc := range testCases {
 		tc := tc
@@ -687,6 +689,9 @@ func (s *ClientFunctionalSuite) versionedNexusTaskPoller(ctx context.Context, ta
 	// There's no clean way to propagate this error back to the test that's worthwhile. Panic is good enough.
 	if err != nil {
 		panic(err)
+	}
+	if res == nil {
+		return
 	}
 	response, handlerError := handler(res)
 	if handlerError != nil {
