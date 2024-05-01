@@ -358,7 +358,9 @@ type SyncReplicationState struct {
 	sizeCache     protoimpl.SizeCache
 	unknownFields protoimpl.UnknownFields
 
-	InclusiveLowWatermark     int64                  `protobuf:"varint,1,opt,name=inclusive_low_watermark,json=inclusiveLowWatermark,proto3" json:"inclusive_low_watermark,omitempty"`
+	// deprecated in favor of using ReplicationState object
+	InclusiveLowWatermark int64 `protobuf:"varint,1,opt,name=inclusive_low_watermark,json=inclusiveLowWatermark,proto3" json:"inclusive_low_watermark,omitempty"`
+	// deprecated in favor of using ReplicationState object
 	InclusiveLowWatermarkTime *timestamppb.Timestamp `protobuf:"bytes,2,opt,name=inclusive_low_watermark_time,json=inclusiveLowWatermarkTime,proto3" json:"inclusive_low_watermark_time,omitempty"`
 	HighPriorityState         *ReplicationState      `protobuf:"bytes,3,opt,name=high_priority_state,json=highPriorityState,proto3" json:"high_priority_state,omitempty"`
 	LowPriorityState          *ReplicationState      `protobuf:"bytes,4,opt,name=low_priority_state,json=lowPriorityState,proto3" json:"low_priority_state,omitempty"`
