@@ -32,6 +32,7 @@ import (
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
+	"go.temporal.io/server/service/history/tasks"
 
 	"go.temporal.io/server/api/adminservice/v1"
 	"go.temporal.io/server/common/cluster"
@@ -98,7 +99,17 @@ func WrapEventLoop(
 		time.Sleep(retryInterval)
 	}
 }
+
 func IsStreamError(err error) bool {
 	var streamError *StreamError
 	return errors.As(err, &streamError)
+}
+
+func GetTaskPriority(task tasks.Task) tasks.ReplicationTaskPriority {
+	switch task := task.(type) {
+	case *tasks.SyncWorkflowStateTask:
+		return task.Priority
+	default:
+		return tasks.ReplicationTaskPriorityHigh
+	}
 }
