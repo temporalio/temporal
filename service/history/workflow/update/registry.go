@@ -92,12 +92,16 @@ type (
 
 		// GetSize returns the size of the update object
 		GetSize() int
+
+		// FailoverVersion of mutable state at the time of registry creation.
+		FailoverVersion() int64
 	}
 
 	// Store represents the update package's requirements for reading updates from the store.
 	Store interface {
 		VisitUpdates(visitor func(updID string, updInfo *updatespb.UpdateInfo))
 		GetUpdateOutcome(ctx context.Context, updateID string) (*updatepb.Outcome, error)
+		GetCurrentVersion() int64
 	}
 
 	registry struct {
@@ -108,6 +112,7 @@ type (
 		maxInFlight      func() int
 		maxTotal         func() int
 		completedUpdates map[string]struct{}
+		failoverVersion  int64
 	}
 
 	Option func(*registry)
@@ -165,6 +170,7 @@ func NewRegistry(
 		maxInFlight:      func() int { return math.MaxInt },
 		maxTotal:         func() int { return math.MaxInt },
 		completedUpdates: make(map[string]struct{}),
+		failoverVersion:  getStoreFn().GetCurrentVersion(),
 	}
 	for _, opt := range opts {
 		opt(r)
@@ -427,4 +433,8 @@ func (r *registry) GetSize() int {
 		size += len(key) + update.GetSize()
 	}
 	return size
+}
+
+func (r *registry) FailoverVersion() int64 {
+	return r.failoverVersion
 }

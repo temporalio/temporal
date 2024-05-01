@@ -85,8 +85,10 @@ func TestCommandProtocolMessage(t *testing.T) {
 		metricsHandler := metrics.NoopMetricsHandler
 		out.conf = map[dynamicconfig.Key]any{}
 		out.ms = workflow.NewMockMutableState(gomock.NewController(t))
-		out.ms.EXPECT().VisitUpdates(gomock.Any()).Times(1)
-		out.ms.EXPECT().GetNamespaceEntry().Return(tests.LocalNamespaceEntry).Times(1)
+		out.ms.EXPECT().VisitUpdates(gomock.Any())
+		out.ms.EXPECT().GetNamespaceEntry().Return(tests.LocalNamespaceEntry)
+		out.ms.EXPECT().GetCurrentVersion().Return(tests.LocalNamespaceEntry.FailoverVersion())
+
 		out.updates = update.NewRegistry(func() update.Store { return out.ms })
 		var effects effect.Buffer
 		config := configs.NewConfig(

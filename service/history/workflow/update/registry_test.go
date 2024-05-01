@@ -44,8 +44,9 @@ import (
 
 type mockUpdateStore struct {
 	update.Store
-	VisitUpdatesFunc     func(visitor func(updID string, updInfo *updatespb.UpdateInfo))
-	GetUpdateOutcomeFunc func(context.Context, string) (*updatepb.Outcome, error)
+	VisitUpdatesFunc      func(visitor func(updID string, updInfo *updatespb.UpdateInfo))
+	GetUpdateOutcomeFunc  func(context.Context, string) (*updatepb.Outcome, error)
+	GetCurrentVersionFunc func() int64
 }
 
 func (m mockUpdateStore) VisitUpdates(
@@ -59,6 +60,13 @@ func (m mockUpdateStore) GetUpdateOutcome(
 	updateID string,
 ) (*updatepb.Outcome, error) {
 	return m.GetUpdateOutcomeFunc(ctx, updateID)
+}
+
+func (m mockUpdateStore) GetCurrentVersion() int64 {
+	if m.GetCurrentVersionFunc == nil {
+		return 0
+	}
+	return m.GetCurrentVersionFunc()
 }
 
 var emptyUpdateStore = mockUpdateStore{
