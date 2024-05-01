@@ -76,6 +76,9 @@ type (
 		Start()
 		Stop()
 		WaitUntilInitialized(context.Context) error
+		// PollTask blocks waiting for a task Returns error when context deadline is exceeded
+		// maxDispatchPerSecond is the max rate at which tasks are allowed to be dispatched
+		// from this task queue to pollers
 		PollTask(ctx context.Context, pollMetadata *pollMetadata) (*internalTask, error)
 		// MarkAlive updates the liveness timer to keep this physicalTaskQueueManager alive.
 		MarkAlive()

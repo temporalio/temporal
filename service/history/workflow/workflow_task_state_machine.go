@@ -39,7 +39,6 @@ import (
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	updatepb "go.temporal.io/api/update/v1"
 	"go.temporal.io/api/workflowservice/v1"
-	"go.temporal.io/server/common/worker_versioning"
 	"google.golang.org/protobuf/types/known/durationpb"
 	"google.golang.org/protobuf/types/known/timestamppb"
 
@@ -51,6 +50,7 @@ import (
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/common/tqid"
+	"go.temporal.io/server/common/worker_versioning"
 )
 
 type (
@@ -224,7 +224,7 @@ func (m *workflowTaskStateMachine) ApplyWorkflowTaskStartedEvent(
 		BuildIdRedirectCounter: redirectCounter,
 	}
 
-	if buildId := worker_versioning.StampIfUsingVersioning(versioningStamp).GetBuildId(); buildId != "" {
+	if buildId := worker_versioning.BuildIdIfUsingVersioning(versioningStamp); buildId != "" {
 		if redirectCounter == 0 {
 			// this is the initial build ID, it should normally be persisted after scheduling the wf task,
 			// but setting it here again in case it failed to be persisted before.
@@ -576,7 +576,8 @@ func (m *workflowTaskStateMachine) applyBuildIdRedirect(
 		scheduledEvent := m.ms.hBuilder.AddWorkflowTaskScheduledEvent(
 			m.ms.CurrentTaskQueue(),
 			durationpb.New(workflowTask.WorkflowTaskTimeout),
-			// Preserving the number of previous attempts.
+			// Preserving the number of previous attempts. This value shows the number of attempts made on the last
+			// build ID + 1 (because it's being reset to 1 for the next build ID. See bellow.)
 			workflowTask.Attempt,
 			workflowTask.ScheduledTime,
 		)
@@ -584,7 +585,7 @@ func (m *workflowTaskStateMachine) applyBuildIdRedirect(
 		newWorkflowTask.ScheduledEventID = scheduledEvent.GetEventId()
 		// Using 1 as the attempt in MS. it's needed so that the new WFT is not considered transient.
 		// TODO: maybe add a separate field in MS for flagging transient WFT instead of relying on attempt so that we
-		// can put real attempt here?
+		// can put total attempt count (across all build IDs) here?
 		newWorkflowTask.Attempt = 1
 		m.UpdateWorkflowTask(newWorkflowTask)
 		return newWorkflowTask, true, nil

@@ -2380,8 +2380,10 @@ func (ms *MutableStateImpl) addResetPointFromCompletion(
 // ApplyBuildIdRedirect used for applying redirects from History events when rebuilding MS
 func (ms *MutableStateImpl) ApplyBuildIdRedirect(buildId string, redirectCounter int64) error {
 	if ms.GetExecutionInfo().GetBuildIdRedirectCounter() >= redirectCounter {
-		// existing redirect counter is more than the given one so, this redirect or a one more recent
-		// than it is already applied
+		// Existing redirect counter is more than the given one, so ignore this redirect because
+		// this or a more recent one has already been applied. This can happen when replaying
+		// history because redirects can be applied at activity started time, but we don't record
+		// the actual order of activity started events in history (they're transient tasks).
 		return nil
 	}
 	err := ms.UpdateBuildIdAssignment(buildId)
@@ -2759,13 +2761,13 @@ func (ms *MutableStateImpl) AddActivityTaskStartedEvent(
 		return nil, err
 	}
 
-	if versioningStamp.GetUseVersioning() && versioningStamp.GetBuildId() != "" {
+	if buildId := worker_versioning.BuildIdIfUsingVersioning(versioningStamp); buildId != "" {
 		// note that if versioningStamp.BuildId is present we know it's not an old versioning worker because matching
 		// does not pass build id for old versioning workers to Record*TaskStart.
 		// TODO: cleanup this comment [cleanup-old-wv]
 		if useWf := ai.GetUseWorkflowBuildIdInfo(); useWf != nil {
 			// when a dependent activity is redirected, we update workflow's assigned build ID as well
-			err := ms.UpdateBuildIdAssignment(versioningStamp.GetBuildId())
+			err := ms.UpdateBuildIdAssignment(buildId)
 			if err != nil {
 				return nil, err
 			}
@@ -2775,7 +2777,7 @@ func (ms *MutableStateImpl) AddActivityTaskStartedEvent(
 			// Storing that in activity info. (normaly, LastIndependentlyAssignedBuildId should be present already,
 			// but setting it here again, in case the persistence call after AddTask was failed)
 			ai.BuildIdInfo = &persistencespb.ActivityInfo_LastIndependentlyAssignedBuildId{
-				LastIndependentlyAssignedBuildId: versioningStamp.GetBuildId(),
+				LastIndependentlyAssignedBuildId: buildId,
 			}
 		}
 	}
@@ -2833,7 +2835,7 @@ func (ms *MutableStateImpl) ApplyActivityTaskStartedEvent(
 	ms.updateActivityInfos[ai.ScheduledEventId] = ai
 	ms.approximateSize += ai.Size()
 
-	if buildId := attributes.GetWorkerVersion().GetBuildId(); buildId != "" && attributes.GetWorkerVersion().GetUseVersioning() {
+	if buildId := worker_versioning.BuildIdIfUsingVersioning(attributes.GetWorkerVersion()); buildId != "" {
 		if ai.GetUseWorkflowBuildIdInfo() != nil {
 			// when a dependent activity is redirected, we update workflow's assigned build ID as well
 			err := ms.ApplyBuildIdRedirect(buildId, attributes.GetBuildIdRedirectCounter())

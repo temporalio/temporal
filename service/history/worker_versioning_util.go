@@ -233,7 +233,7 @@ func MakeDirectiveForActivityTask(mutableState workflow.MutableState, activityIn
 		return worker_versioning.MakeUseAssignmentRulesDirective()
 	} else if id := mutableState.GetAssignedBuildId(); id != "" {
 		return worker_versioning.MakeBuildIdDirective(id)
-	} else if id := worker_versioning.StampIfUsingVersioning(mutableState.GetMostRecentWorkerVersionStamp()).GetBuildId(); id != "" {
+	} else if id := worker_versioning.BuildIdIfUsingVersioning(mutableState.GetMostRecentWorkerVersionStamp()); id != "" {
 		// TODO: old versioning only [cleanup-old-wv]
 		return worker_versioning.MakeBuildIdDirective(id)
 	}
