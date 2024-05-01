@@ -395,9 +395,10 @@ type TaskForwardInfo struct {
 
 	// RPC name of the partition forwarded the task.
 	// In case of multiple hops, this is the source partition of the last hop.
-	SourcePartition string               `protobuf:"bytes,1,opt,name=source_partition,json=sourcePartition,proto3" json:"source_partition,omitempty"`
-	TaskSource      v12.TaskSource       `protobuf:"varint,2,opt,name=task_source,json=taskSource,proto3,enum=temporal.server.api.enums.v1.TaskSource" json:"task_source,omitempty"`
-	RedirectInfo    *BuildIdRedirectInfo `protobuf:"bytes,3,opt,name=redirect_info,json=redirectInfo,proto3" json:"redirect_info,omitempty"`
+	SourcePartition string         `protobuf:"bytes,1,opt,name=source_partition,json=sourcePartition,proto3" json:"source_partition,omitempty"`
+	TaskSource      v12.TaskSource `protobuf:"varint,2,opt,name=task_source,json=taskSource,proto3,enum=temporal.server.api.enums.v1.TaskSource" json:"task_source,omitempty"`
+	// Redirect info is not present for Query and Nexus tasks.
+	RedirectInfo *BuildIdRedirectInfo `protobuf:"bytes,3,opt,name=redirect_info,json=redirectInfo,proto3" json:"redirect_info,omitempty"`
 	// Build ID that should be used to dispatch the task to.
 	DispatchBuildId string `protobuf:"bytes,4,opt,name=dispatch_build_id,json=dispatchBuildId,proto3" json:"dispatch_build_id,omitempty"`
 	// Only used for old versioning. [cleanup-old-wv]
