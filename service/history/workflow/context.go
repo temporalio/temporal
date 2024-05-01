@@ -917,22 +917,27 @@ func (c *ContextImpl) ReapplyEvents(
 	return err
 }
 
-// TODO: remove `ms` parameter again (added since it's not possible to initialize a new Context with a specific MutableState)
-func (c *ContextImpl) UpdateRegistry(ctx context.Context, ms MutableState) update.Registry {
-	if c.updateRegistry == nil {
-		var nsIDStr string
+// TODO: remove `fallbackMutableState` parameter again (added since it's not possible to initialize a new Context with a specific MutableState)
+func (c *ContextImpl) UpdateRegistry(ctx context.Context, fallbackMutableState MutableState) update.Registry {
+	ms := func() MutableState {
 		if c.MutableState != nil {
-			nsIDStr = c.MutableState.GetNamespaceEntry().ID().String()
-		} else {
-			nsIDStr = ms.GetNamespaceEntry().ID().String()
+			return c.MutableState
 		}
+		return fallbackMutableState
+	}
+
+	if c.updateRegistry != nil && c.updateRegistry.FailoverVersion() != ms().GetCurrentVersion() {
+		c.updateRegistry.Clear()
+		c.updateRegistry = nil
+	}
+
+	if c.updateRegistry == nil {
+		nsIDStr := ms().GetNamespaceEntry().ID().String()
+
 		c.updateRegistry = update.NewRegistry(
-			func() update.Store {
-				if c.MutableState != nil {
-					return c.MutableState
-				}
-				return ms
-			},
+			// It is important to use `ms()` function here (not `fallbackMutableState` value)
+			// to prevent creating a closure of possible state value of `fallbackMutableState`.
+			func() update.Store { return ms() },
 			update.WithLogger(c.logger),
 			update.WithMetrics(c.metricsHandler),
 			update.WithTracerProvider(trace.SpanFromContext(ctx).TracerProvider()),
@@ -947,8 +952,6 @@ func (c *ContextImpl) UpdateRegistry(ctx context.Context, ms MutableState) updat
 				},
 			),
 		)
-	} else {
-		c.updateRegistry.UpdateFromStore()
 	}
 	return c.updateRegistry
 }
