@@ -150,23 +150,23 @@ func (s *NexusRequestForwardingSuite) TestStartOperationForwardedFromStandbyToAc
 
 	activeSnap := activeCapture.Snapshot()
 	s.Equal(1, len(activeSnap["nexus_requests"]))
-	s.Subset(activeSnap["nexus_requests"][0].Tags, map[string]string{"namespace": namespace, "method": "StartOperation", "outcome": "request_forwarded"})
+	s.Subset(activeSnap["nexus_requests"][0].Tags, map[string]string{"namespace": namespace, "method": "StartOperation", "outcome": "sync_success"})
 	s.Contains(activeSnap["nexus_requests"][0].Tags, "service")
 	s.Equal(int64(1), activeSnap["nexus_requests"][0].Value)
 	s.Equal(metrics.MetricUnit(""), activeSnap["nexus_requests"][0].Unit)
 	s.Equal(1, len(activeSnap["nexus_latency"]))
-	s.Subset(activeSnap["nexus_latency"][0].Tags, map[string]string{"namespace": namespace, "method": "StartOperation", "outcome": "request_forwarded"})
+	s.Subset(activeSnap["nexus_latency"][0].Tags, map[string]string{"namespace": namespace, "method": "StartOperation", "outcome": "sync_success"})
 	s.Contains(activeSnap["nexus_latency"][0].Tags, "service")
 	s.Equal(metrics.MetricUnit(metrics.Milliseconds), activeSnap["nexus_latency"][0].Unit)
 
 	passiveSnap := passiveCapture.Snapshot()
 	s.Equal(1, len(passiveSnap["nexus_requests"]))
-	s.Subset(passiveSnap["nexus_requests"][0].Tags, map[string]string{"namespace": namespace, "method": "StartOperation", "outcome": "sync_success"})
+	s.Subset(passiveSnap["nexus_requests"][0].Tags, map[string]string{"namespace": namespace, "method": "StartOperation", "outcome": "request_forwarded"})
 	s.Contains(passiveSnap["nexus_requests"][0].Tags, "service")
 	s.Equal(int64(1), passiveSnap["nexus_requests"][0].Value)
 	s.Equal(metrics.MetricUnit(""), passiveSnap["nexus_requests"][0].Unit)
 	s.Equal(1, len(passiveSnap["nexus_latency"]))
-	s.Subset(passiveSnap["nexus_latency"][0].Tags, map[string]string{"namespace": namespace, "method": "StartOperation", "outcome": "sync_success"})
+	s.Subset(passiveSnap["nexus_latency"][0].Tags, map[string]string{"namespace": namespace, "method": "StartOperation", "outcome": "request_forwarded"})
 	s.Contains(passiveSnap["nexus_latency"][0].Tags, "service")
 	s.Equal(metrics.MetricUnit(metrics.Milliseconds), passiveSnap["nexus_latency"][0].Unit)
 }
@@ -191,8 +191,12 @@ func (s *NexusRequestForwardingSuite) nexusTaskPoller(frontendClient tests.Front
 		Namespace: namespace,
 		Identity:  uuid.NewString(),
 		TaskToken: res.TaskToken,
-		Response: &nexuspb.Response{Variant: &nexuspb.Response_StartOperation{StartOperation: &nexuspb.StartOperationResponse{Variant: &nexuspb.StartOperationResponse_SyncSuccess{SyncSuccess: &nexuspb.StartOperationResponse_Sync{
-			Payload: res.Request.GetStartOperation().GetPayload()}}}},
+		Response: &nexuspb.Response{
+			Variant: &nexuspb.Response_StartOperation{
+				StartOperation: &nexuspb.StartOperationResponse{
+					Variant: &nexuspb.StartOperationResponse_SyncSuccess{
+						SyncSuccess: &nexuspb.StartOperationResponse_Sync{
+							Payload: res.Request.GetStartOperation().GetPayload()}}}},
 		},
 	})
 	s.NoError(err)
