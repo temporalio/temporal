@@ -606,3 +606,21 @@ func calcRampThreshold(id string) float64 {
 	h := farm.Fingerprint32([]byte(id))
 	return 100 * (float64(h) / (float64(math.MaxUint32) + 1))
 }
+
+// FindRedirectBuildId follows chain of redirect rules starting from the given sourceBuildId and returns the final
+// target build id that should be used for redirect. Returns sourceBuildId if no applicable redirect rules exist.
+func FindRedirectBuildId(sourceBuildId string, rules []*persistencespb.RedirectRule) string {
+outer:
+	for {
+		for _, r := range rules {
+			if r.GetDeleteTimestamp() != nil {
+				continue
+			}
+			if r.GetRule().GetSourceBuildId() == sourceBuildId {
+				sourceBuildId = r.GetRule().GetTargetBuildId()
+				continue outer
+			}
+		}
+		return sourceBuildId
+	}
+}

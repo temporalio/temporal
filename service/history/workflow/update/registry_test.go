@@ -44,8 +44,9 @@ import (
 
 type mockUpdateStore struct {
 	update.Store
-	VisitUpdatesFunc     func(visitor func(updID string, updInfo *updatespb.UpdateInfo))
-	GetUpdateOutcomeFunc func(context.Context, string) (*updatepb.Outcome, error)
+	VisitUpdatesFunc      func(visitor func(updID string, updInfo *updatespb.UpdateInfo))
+	GetUpdateOutcomeFunc  func(context.Context, string) (*updatepb.Outcome, error)
+	GetCurrentVersionFunc func() int64
 }
 
 func (m mockUpdateStore) VisitUpdates(
@@ -59,6 +60,13 @@ func (m mockUpdateStore) GetUpdateOutcome(
 	updateID string,
 ) (*updatepb.Outcome, error) {
 	return m.GetUpdateOutcomeFunc(ctx, updateID)
+}
+
+func (m mockUpdateStore) GetCurrentVersion() int64 {
+	if m.GetCurrentVersionFunc == nil {
+		return 0
+	}
+	return m.GetCurrentVersionFunc()
 }
 
 var emptyUpdateStore = mockUpdateStore{
@@ -81,7 +89,7 @@ func TestFind(t *testing.T) {
 				return nil, serviceerror.NewNotFound("not found")
 			},
 		}
-		reg = update.NewRegistry(func() update.Store { return store })
+		reg = update.NewRegistry(store)
 	)
 	_, ok := reg.Find(ctx, updateID)
 	require.False(t, ok)
@@ -106,7 +114,7 @@ func TestHasOutgoingMessages(t *testing.T) {
 				return nil, serviceerror.NewNotFound("not found")
 			},
 		}
-		reg     = update.NewRegistry(func() update.Store { return store })
+		reg     = update.NewRegistry(store)
 		evStore = mockEventStore{Controller: effect.Immediate(ctx)}
 	)
 
@@ -179,7 +187,7 @@ func TestFindOrCreate(t *testing.T) {
 				return nil, serviceerror.NewNotFound("not found")
 			},
 		}
-		reg = update.NewRegistry(func() update.Store { return store })
+		reg = update.NewRegistry(store)
 	)
 
 	t.Run("new update", func(t *testing.T) {
@@ -235,7 +243,7 @@ func TestUpdateRemovalFromRegistry(t *testing.T) {
 				visitor(storedAcceptedUpdateID, storedAcceptedUpdateInfo)
 			},
 		}
-		reg     = update.NewRegistry(func() update.Store { return regStore })
+		reg     = update.NewRegistry(regStore)
 		effects = effect.Buffer{}
 		evStore = mockEventStore{Controller: &effects}
 	)
@@ -264,7 +272,7 @@ func TestSendMessageGathering(t *testing.T) {
 	var (
 		ctx     = context.Background()
 		evStore = mockEventStore{Controller: effect.Immediate(ctx)}
-		reg     = update.NewRegistry(func() update.Store { return emptyUpdateStore })
+		reg     = update.NewRegistry(emptyUpdateStore)
 	)
 	updateID1, updateID2 := t.Name()+"-update-id-1", t.Name()+"-update-id-2"
 	upd1, _, err := reg.FindOrCreate(ctx, updateID1)
@@ -331,7 +339,7 @@ func TestInFlightLimit(t *testing.T) {
 		ctx   = context.Background()
 		limit = 1
 		reg   = update.NewRegistry(
-			func() update.Store { return emptyUpdateStore },
+			emptyUpdateStore,
 			update.WithInFlightLimit(
 				func() int { return limit },
 			),
@@ -411,7 +419,7 @@ func TestTotalLimit(t *testing.T) {
 		ctx   = context.Background()
 		limit = 1
 		reg   = update.NewRegistry(
-			func() update.Store { return emptyUpdateStore },
+			emptyUpdateStore,
 			update.WithTotalLimit(
 				func() int { return limit },
 			),
@@ -505,7 +513,7 @@ func TestStorageErrorWhenLookingUpCompletedOutcome(t *testing.T) {
 				return nil, expectError
 			},
 		}
-		reg = update.NewRegistry(func() update.Store { return regStore })
+		reg = update.NewRegistry(regStore)
 	)
 
 	upd, found := reg.Find(ctx, completedUpdateID)
@@ -519,7 +527,7 @@ func TestRejectUnprocessed(t *testing.T) {
 	var (
 		ctx          = context.Background()
 		evStore      = mockEventStore{Controller: effect.Immediate(ctx)}
-		reg          = update.NewRegistry(func() update.Store { return emptyUpdateStore })
+		reg          = update.NewRegistry(emptyUpdateStore)
 		sequencingID = &protocolpb.Message_EventId{EventId: testSequencingEventID}
 	)
 	updateID1, updateID2, updateID3 := t.Name()+"-update-id-1", t.Name()+"-update-id-2", t.Name()+"-update-id-3"
@@ -576,7 +584,7 @@ func TestCancelIncomplete(t *testing.T) {
 	var (
 		ctx          = context.Background()
 		evStore      = mockEventStore{Controller: effect.Immediate(ctx)}
-		reg          = update.NewRegistry(func() update.Store { return emptyUpdateStore })
+		reg          = update.NewRegistry(emptyUpdateStore)
 		sequencingID = &protocolpb.Message_EventId{EventId: testSequencingEventID}
 	)
 	updateID1, updateID2, updateID3, updateID4, updateID5 := t.Name()+"-update-id-1", t.Name()+"-update-id-2", t.Name()+"-update-id-3", t.Name()+"-update-id-4", t.Name()+"-update-id-5"

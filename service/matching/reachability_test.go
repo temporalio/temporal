@@ -26,6 +26,7 @@ package matching
 
 import (
 	"context"
+	"go.temporal.io/server/common/log"
 	"slices"
 	"testing"
 	"time"
@@ -37,6 +38,8 @@ import (
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	commonclock "go.temporal.io/server/common/clock"
 	hlc "go.temporal.io/server/common/clock/hybrid_logical_clock"
+	"go.temporal.io/server/common/metrics"
+	"go.temporal.io/server/common/metrics/metricstest"
 	"go.temporal.io/server/common/persistence/visibility/manager"
 )
 
@@ -181,21 +184,21 @@ func TestGetReachability_WithVisibility_WithoutRules(t *testing.T) {
 	rc := mkTestReachabilityCalculator()
 
 	// reachability("") --> reachable (it's the default build id)
-	checkReachability(ctx, t, rc, "", enumspb.BUILD_ID_TASK_REACHABILITY_REACHABLE)
+	checkReachability(ctx, t, rc, "", enumspb.BUILD_ID_TASK_REACHABILITY_REACHABLE, checkedRuleTargetsForUpstream)
 
 	// reachability("") --> closed_workflows_only (now that "" is not default)
 	rc.assignmentRules = []*persistencespb.AssignmentRule{mkAssignmentRulePersistence(mkAssignmentRule("A", nil), nil, nil)}
 	setVisibilityExpect(t, rc, []string{""}, 0, 1)
-	checkReachability(ctx, t, rc, "", enumspb.BUILD_ID_TASK_REACHABILITY_CLOSED_WORKFLOWS_ONLY)
+	checkReachability(ctx, t, rc, "", enumspb.BUILD_ID_TASK_REACHABILITY_CLOSED_WORKFLOWS_ONLY, checkedClosedWorkflowExecutionsForUpstream)
 	rc.assignmentRules = nil // remove rule for rest of test
 
 	// reachability(A) --> reachable (open workflow in visibility)
 	setVisibilityExpect(t, rc, []string{"A"}, 1, 0)
-	checkReachability(ctx, t, rc, "A", enumspb.BUILD_ID_TASK_REACHABILITY_REACHABLE)
+	checkReachability(ctx, t, rc, "A", enumspb.BUILD_ID_TASK_REACHABILITY_REACHABLE, checkedOpenWorkflowExecutionsForUpstream)
 
 	// reachability(B) --> unreachable (not mentioned in rules or visibility)
 	setVisibilityExpect(t, rc, []string{"B"}, 0, 0)
-	checkReachability(ctx, t, rc, "B", enumspb.BUILD_ID_TASK_REACHABILITY_UNREACHABLE)
+	checkReachability(ctx, t, rc, "B", enumspb.BUILD_ID_TASK_REACHABILITY_UNREACHABLE, checkedClosedWorkflowExecutionsForUpstream)
 }
 
 func TestGetReachability_WithoutVisibility_WithRules(t *testing.T) {
@@ -217,16 +220,16 @@ func TestGetReachability_WithoutVisibility_WithRules(t *testing.T) {
 	setVisibilityExpectEmptyAlways(t, rc)
 
 	// reachability(A) --> unreachable (assignment rule target, and also redirect rule source)
-	checkReachability(ctx, t, rc, "A", enumspb.BUILD_ID_TASK_REACHABILITY_UNREACHABLE)
+	checkReachability(ctx, t, rc, "A", enumspb.BUILD_ID_TASK_REACHABILITY_UNREACHABLE, checkedRuleSourcesForInput)
 
 	// reachability(C) --> reachable (redirect rule target of reachable source)
-	checkReachability(ctx, t, rc, "C", enumspb.BUILD_ID_TASK_REACHABILITY_REACHABLE)
+	checkReachability(ctx, t, rc, "C", enumspb.BUILD_ID_TASK_REACHABILITY_REACHABLE, checkedRuleTargetsForUpstream)
 
 	// reachability(D) --> reachable (assignment rule target, nothing else)
-	checkReachability(ctx, t, rc, "D", enumspb.BUILD_ID_TASK_REACHABILITY_REACHABLE)
+	checkReachability(ctx, t, rc, "D", enumspb.BUILD_ID_TASK_REACHABILITY_REACHABLE, checkedRuleTargetsForUpstream)
 
 	// reachability(G) --> unreachable (redirect rule target of unreachable source [F not reachable by rules or visibility])
-	checkReachability(ctx, t, rc, "G", enumspb.BUILD_ID_TASK_REACHABILITY_UNREACHABLE)
+	checkReachability(ctx, t, rc, "G", enumspb.BUILD_ID_TASK_REACHABILITY_UNREACHABLE, checkedClosedWorkflowExecutionsForUpstream)
 }
 
 // test reachability of build ids that are only reachable by the buildIdsOfInterest list + visibility
@@ -244,11 +247,11 @@ func TestGetReachability_WithVisibility_WithRules(t *testing.T) {
 
 	// reachability(C) --> closed_workflows_only (via upstream closed wf execution A)
 	setVisibilityExpect(t, rc, []string{"C", "A"}, 0, 1)
-	checkReachability(ctx, t, rc, "C", enumspb.BUILD_ID_TASK_REACHABILITY_CLOSED_WORKFLOWS_ONLY)
+	checkReachability(ctx, t, rc, "C", enumspb.BUILD_ID_TASK_REACHABILITY_CLOSED_WORKFLOWS_ONLY, checkedClosedWorkflowExecutionsForUpstream)
 
 	// reachability(D) --> reachable (via upstream running wf execution B)
 	setVisibilityExpect(t, rc, []string{"D", "B"}, 1, 0)
-	checkReachability(ctx, t, rc, "D", enumspb.BUILD_ID_TASK_REACHABILITY_REACHABLE)
+	checkReachability(ctx, t, rc, "D", enumspb.BUILD_ID_TASK_REACHABILITY_REACHABLE, checkedOpenWorkflowExecutionsForUpstream)
 }
 
 // test reachability of build ids that are only reachable by buildIdsOfInterest + visibility
@@ -276,19 +279,19 @@ func TestGetReachability_WithVisibility_WithDeletedRules(t *testing.T) {
 
 	// reachability(C) --> closed_workflows_only (via upstream closed wf execution A, rule included due to recent delete)
 	setVisibilityExpect(t, rc, []string{"C", "A"}, 0, 1)
-	checkReachability(ctx, t, rc, "C", enumspb.BUILD_ID_TASK_REACHABILITY_CLOSED_WORKFLOWS_ONLY)
+	checkReachability(ctx, t, rc, "C", enumspb.BUILD_ID_TASK_REACHABILITY_CLOSED_WORKFLOWS_ONLY, checkedClosedWorkflowExecutionsForUpstream)
 
 	// reachability(D) --> reachable (via upstream running wf execution B, rule included due to recent delete)
 	setVisibilityExpect(t, rc, []string{"D", "B"}, 1, 0)
-	checkReachability(ctx, t, rc, "D", enumspb.BUILD_ID_TASK_REACHABILITY_REACHABLE)
+	checkReachability(ctx, t, rc, "D", enumspb.BUILD_ID_TASK_REACHABILITY_REACHABLE, checkedOpenWorkflowExecutionsForUpstream)
 
 	// reachability(Z) --> unreachable (despite upstream closed wf execution X, rule excluded due to old delete)
 	setVisibilityExpect(t, rc, []string{"Z"}, 0, 0)
-	checkReachability(ctx, t, rc, "Z", enumspb.BUILD_ID_TASK_REACHABILITY_UNREACHABLE)
+	checkReachability(ctx, t, rc, "Z", enumspb.BUILD_ID_TASK_REACHABILITY_UNREACHABLE, checkedClosedWorkflowExecutionsForUpstream)
 
 	// reachability(ZZ) --> unreachable (despite upstream running wf execution Y, rule excluded due to recent delete)
 	setVisibilityExpect(t, rc, []string{"ZZ"}, 0, 0)
-	checkReachability(ctx, t, rc, "ZZ", enumspb.BUILD_ID_TASK_REACHABILITY_UNREACHABLE)
+	checkReachability(ctx, t, rc, "ZZ", enumspb.BUILD_ID_TASK_REACHABILITY_UNREACHABLE, checkedClosedWorkflowExecutionsForUpstream)
 }
 
 // test reachability via deleted rules within the rule propagation delay
@@ -301,10 +304,27 @@ func checkReachability(ctx context.Context,
 	t *testing.T,
 	rc *reachabilityCalculator,
 	buildId string,
-	expectedReachability enumspb.BuildIdTaskReachability) {
-	reachability, err := rc.run(ctx, buildId)
+	expectedReachability enumspb.BuildIdTaskReachability,
+	expectedExitPoint reachabilityExitPoint,
+) {
+	// check that rc.run works, and returns expected exit point
+	reachability, exitPoint, err := rc.run(ctx, buildId)
 	assert.Nil(t, err)
 	assert.Equal(t, expectedReachability, reachability)
+	assert.Equal(t, expectedExitPoint, exitPoint)
+
+	// check that getBuildIdTaskReachability works for getting snapshots of metrics
+	metricsHandler := metricstest.NewCaptureHandler()
+	metricsCapture := metricsHandler.StartCapture()
+	logger := log.NewTestLogger()
+	reachability, err = getBuildIdTaskReachability(ctx, rc, metricsHandler, logger, buildId)
+	assert.Nil(t, err)
+	assert.Equal(t, expectedReachability, reachability)
+	snapshot := metricsCapture.Snapshot()
+	counterRecordings := snapshot[metrics.ReachabilityExitPointCounter.Name()]
+	assert.Equal(t, len(counterRecordings), 1)
+	assert.Equal(t, int64(1), counterRecordings[0].Value.(int64))
+	assert.Equal(t, reachabilityExitPoint2TagValue[expectedExitPoint], counterRecordings[0].Tags[reachabilityExitPointTagName])
 }
 
 func setVisibilityExpect(t *testing.T,
@@ -312,8 +332,8 @@ func setVisibilityExpect(t *testing.T,
 	buildIdsOfInterest []string,
 	countOpen, countClosed int64) {
 	vm := manager.NewMockVisibilityManager(gomock.NewController(t))
-	vm.EXPECT().CountWorkflowExecutions(gomock.Any(), rc.makeBuildIdCountRequest(buildIdsOfInterest, true)).MaxTimes(1).Return(mkCountResponse(countOpen))
-	vm.EXPECT().CountWorkflowExecutions(gomock.Any(), rc.makeBuildIdCountRequest(buildIdsOfInterest, false)).MaxTimes(1).Return(mkCountResponse(countClosed))
+	vm.EXPECT().CountWorkflowExecutions(gomock.Any(), rc.makeBuildIdCountRequest(buildIdsOfInterest, true)).MaxTimes(2).Return(mkCountResponse(countOpen))
+	vm.EXPECT().CountWorkflowExecutions(gomock.Any(), rc.makeBuildIdCountRequest(buildIdsOfInterest, false)).MaxTimes(2).Return(mkCountResponse(countClosed))
 	rc.visibilityMgr = vm
 }
 

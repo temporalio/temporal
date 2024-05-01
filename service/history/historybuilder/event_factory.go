@@ -131,16 +131,18 @@ func (b *EventFactory) CreateWorkflowTaskStartedEvent(
 	suggestContinueAsNew bool,
 	historySizeBytes int64,
 	versioningStamp *commonpb.WorkerVersionStamp,
+	buildIdRedirectCounter int64,
 ) *historypb.HistoryEvent {
 	event := b.createHistoryEvent(enumspb.EVENT_TYPE_WORKFLOW_TASK_STARTED, startTime)
 	event.Attributes = &historypb.HistoryEvent_WorkflowTaskStartedEventAttributes{
 		WorkflowTaskStartedEventAttributes: &historypb.WorkflowTaskStartedEventAttributes{
-			ScheduledEventId:     scheduledEventID,
-			Identity:             identity,
-			RequestId:            requestID,
-			SuggestContinueAsNew: suggestContinueAsNew,
-			HistorySizeBytes:     historySizeBytes,
-			WorkerVersion:        versioningStamp,
+			ScheduledEventId:       scheduledEventID,
+			Identity:               identity,
+			RequestId:              requestID,
+			SuggestContinueAsNew:   suggestContinueAsNew,
+			HistorySizeBytes:       historySizeBytes,
+			WorkerVersion:          versioningStamp,
+			BuildIdRedirectCounter: buildIdRedirectCounter,
 		},
 	}
 
@@ -248,16 +250,18 @@ func (b *EventFactory) CreateActivityTaskStartedEvent(
 	identity string,
 	lastFailure *failurepb.Failure,
 	versioningStamp *commonpb.WorkerVersionStamp,
+	redirectCounter int64,
 ) *historypb.HistoryEvent {
 	event := b.createHistoryEvent(enumspb.EVENT_TYPE_ACTIVITY_TASK_STARTED, b.timeSource.Now())
 	event.Attributes = &historypb.HistoryEvent_ActivityTaskStartedEventAttributes{
 		ActivityTaskStartedEventAttributes: &historypb.ActivityTaskStartedEventAttributes{
-			ScheduledEventId: scheduledEventID,
-			Attempt:          attempt,
-			Identity:         identity,
-			RequestId:        requestID,
-			LastFailure:      lastFailure,
-			WorkerVersion:    versioningStamp,
+			ScheduledEventId:       scheduledEventID,
+			Attempt:                attempt,
+			Identity:               identity,
+			RequestId:              requestID,
+			LastFailure:            lastFailure,
+			WorkerVersion:          versioningStamp,
+			BuildIdRedirectCounter: redirectCounter,
 		},
 	}
 	return event

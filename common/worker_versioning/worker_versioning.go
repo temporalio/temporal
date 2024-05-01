@@ -121,13 +121,22 @@ func StampIfUsingVersioning(stamp *commonpb.WorkerVersionStamp) *commonpb.Worker
 	return nil
 }
 
+// BuildIdIfUsingVersioning returns the given WorkerVersionStamp if it is using versioning,
+// otherwise returns nil.
+func BuildIdIfUsingVersioning(stamp *commonpb.WorkerVersionStamp) string {
+	if stamp.GetUseVersioning() {
+		return stamp.GetBuildId()
+	}
+	return ""
+}
+
 // MakeDirectiveForWorkflowTask returns a versioning directive based on the following parameters:
 // - inheritedBuildId: build ID inherited from a past/previous wf execution (for Child WF or CaN)
 // - assignedBuildId: the build id to which the WF is currently assigned (i.e. mutable state's AssginedBuildId)
 // - stamp: the latest versioning stamp of the execution (only needed for old versioning)
-// - lastWorkflowTaskStartedEventID: to determine if this is the first WF task
+// - lastWorkflowTaskStartedEventID: to determine if this is the first WFT
 func MakeDirectiveForWorkflowTask(inheritedBuildId string, assignedBuildId string, stamp *commonpb.WorkerVersionStamp, lastWorkflowTaskStartedEventID int64) *taskqueuespb.TaskVersionDirective {
-	if id := StampIfUsingVersioning(stamp).GetBuildId(); id != "" && assignedBuildId == "" {
+	if id := BuildIdIfUsingVersioning(stamp); id != "" && assignedBuildId == "" {
 		// TODO: old versioning only [cleanup-old-wv]
 		return MakeBuildIdDirective(id)
 	} else if lastWorkflowTaskStartedEventID == common.EmptyEventID && inheritedBuildId == "" {

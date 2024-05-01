@@ -36,12 +36,11 @@ import (
 	protocolpb "go.temporal.io/api/protocol/v1"
 	"go.temporal.io/api/serviceerror"
 	updatepb "go.temporal.io/api/update/v1"
-	"google.golang.org/protobuf/types/known/anypb"
-
 	updatespb "go.temporal.io/server/api/update/v1"
 	"go.temporal.io/server/common/future"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
+	"google.golang.org/protobuf/types/known/anypb"
 )
 
 type (
@@ -81,30 +80,35 @@ type (
 		//   - updates in stateCompleted are ignored.
 		CancelIncomplete(ctx context.Context, reason CancelReason, eventStore EventStore) error
 
-		// UpdateFromStore adds updates to the registry from the update store.
-		UpdateFromStore()
+		// Clear registry and abort all waiters.
+		Clear()
 
 		// Len observes the number of incomplete updates in this Registry.
 		Len() int
 
 		// GetSize returns the size of the update object
 		GetSize() int
+
+		// FailoverVersion of mutable state at the time of registry creation.
+		FailoverVersion() int64
 	}
 
 	// Store represents the update package's requirements for reading updates from the store.
 	Store interface {
 		VisitUpdates(visitor func(updID string, updInfo *updatespb.UpdateInfo))
 		GetUpdateOutcome(ctx context.Context, updateID string) (*updatepb.Outcome, error)
+		GetCurrentVersion() int64
 	}
 
 	registry struct {
-		mu               sync.RWMutex
-		updates          map[string]*Update
-		getStoreFn       func() Store
-		instrumentation  instrumentation
-		maxInFlight      func() int
-		maxTotal         func() int
-		completedUpdates map[string]struct{}
+		mu              sync.RWMutex
+		updates         map[string]*Update
+		store           Store
+		instrumentation instrumentation
+		maxInFlight     func() int
+		maxTotal        func() int
+		completedCount  int
+		failoverVersion int64
 	}
 
 	Option func(*registry)
@@ -152,37 +156,23 @@ func WithTracerProvider(t trace.TracerProvider) Option {
 var _ Registry = (*registry)(nil)
 
 func NewRegistry(
-	getStoreFn func() Store,
+	store Store,
 	opts ...Option,
 ) Registry {
 	r := &registry{
-		updates:          make(map[string]*Update),
-		getStoreFn:       getStoreFn,
-		instrumentation:  noopInstrumentation,
-		maxInFlight:      func() int { return math.MaxInt },
-		maxTotal:         func() int { return math.MaxInt },
-		completedUpdates: make(map[string]struct{}),
+		updates:         make(map[string]*Update),
+		store:           store,
+		instrumentation: noopInstrumentation,
+		maxInFlight:     func() int { return math.MaxInt },
+		maxTotal:        func() int { return math.MaxInt },
+		failoverVersion: store.GetCurrentVersion(),
 	}
 	for _, opt := range opts {
 		opt(r)
 	}
-	r.UpdateFromStore()
-	return r
-}
 
-// updateFromStore performs a unidirectional sync from store to registry. Specifically, for every update that is in the
-// store, we do the following:
-// - if the update is not in the registry then we create an entry in the registry,
-// - alternatively, if the update is in the registry and the state in the store is more advanced, then we advance the update in the registry.
-//
-//nolint:revive // cognitive complexity 27 (> max enabled 25)
-func (r *registry) UpdateFromStore() {
-	r.getStoreFn().VisitUpdates(func(updID string, updInfo *updatespb.UpdateInfo) {
+	r.store.VisitUpdates(func(updID string, updInfo *updatespb.UpdateInfo) {
 		if updInfo.GetAdmission() != nil {
-			if upd := r.updates[updID]; upd != nil {
-				_ = upd.advanceTo(stateAdmitted)
-				return
-			}
 			// An update entry in the registry may have a request payload: we use this to write the payload to an
 			// UpdateAccepted event, in the event that the update is accepted. However, when populating the registry
 			// from mutable state, we do not have access to update request payloads. In this situation it is correct
@@ -199,10 +189,6 @@ func (r *registry) UpdateFromStore() {
 				withInstrumentation(&r.instrumentation),
 			)
 		} else if acc := updInfo.GetAcceptance(); acc != nil {
-			if upd := r.updates[updID]; upd != nil {
-				_ = upd.advanceTo(stateAccepted)
-				return
-			}
 			r.updates[updID] = newAccepted(
 				updID,
 				acc.EventId,
@@ -210,13 +196,10 @@ func (r *registry) UpdateFromStore() {
 				withInstrumentation(&r.instrumentation),
 			)
 		} else if updInfo.GetCompletion() != nil {
-			if upd := r.updates[updID]; upd != nil {
-				_ = upd.advanceTo(stateCompleted)
-				return
-			}
-			r.completedUpdates[updID] = struct{}{}
+			r.completedCount++
 		}
 	})
+	return r
 }
 
 func (r *registry) FindOrCreate(ctx context.Context, id string) (*Update, bool, error) {
@@ -325,6 +308,17 @@ func (r *registry) Send(
 	return outgoingMessages
 }
 
+// Clear registry and abort all waiters.
+func (r *registry) Clear() {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	for _, upd := range r.updates {
+		upd.abortWaiters()
+	}
+	r.updates = nil
+	r.completedCount = 0
+}
+
 func (r *registry) Len() int {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
@@ -337,7 +331,7 @@ func (r *registry) remover(id string) updateOpt {
 			r.mu.Lock()
 			defer r.mu.Unlock()
 			delete(r.updates, id)
-			r.completedUpdates[id] = struct{}{}
+			r.completedCount++
 		},
 	)
 }
@@ -351,7 +345,7 @@ func (r *registry) checkLimits(_ context.Context) error {
 		}
 	}
 
-	if len(r.updates)+len(r.completedUpdates) >= r.maxTotal() {
+	if len(r.updates)+r.completedCount >= r.maxTotal() {
 		return serviceerror.NewFailedPrecondition(
 			fmt.Sprintf("limit on number of total updates has been reached (%v)", r.maxTotal()),
 		)
@@ -367,7 +361,7 @@ func (r *registry) findLocked(ctx context.Context, id string) (*Update, bool) {
 
 	// update not found in ephemeral state, but could have already completed so
 	// check in registry storage
-	updOutcome, err := r.getStoreFn().GetUpdateOutcome(ctx, id)
+	updOutcome, err := r.store.GetUpdateOutcome(ctx, id)
 
 	// Swallow NotFound error because it means that update doesn't exist.
 	var notFound *serviceerror.NotFound
@@ -409,4 +403,8 @@ func (r *registry) GetSize() int {
 		size += len(key) + update.GetSize()
 	}
 	return size
+}
+
+func (r *registry) FailoverVersion() int64 {
+	return r.failoverVersion
 }
