@@ -84,6 +84,7 @@ message SyncReplicationState {
 }
 message ReplicationState {
     int64 inclusive_low_watermark = 1;
+    google.protobuf.Timestamp  inclusive_low_watermark_time = 2;
 }
 
 message ReplicationMessages {
