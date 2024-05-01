@@ -146,7 +146,7 @@ func (t *transferQueueTaskExecutorBase) pushActivity(
 	}
 
 	if directive.GetUseAssignmentRules() == nil {
-		// activity is not getting a new build id, so no need to update MS
+		// activity is not getting a new build ID, so no need to update MS
 		return nil
 	}
 

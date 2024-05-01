@@ -118,7 +118,7 @@ type BuildId struct {
 	//
 	//	aip.dev/not-precedent: Using HLC instead of wall clock. --)
 	StateUpdateTimestamp *v1.HybridLogicalClock `protobuf:"bytes,3,opt,name=state_update_timestamp,json=stateUpdateTimestamp,proto3" json:"state_update_timestamp,omitempty"`
-	// HLC timestamp representing when this build id was last made default in its version set.
+	// HLC timestamp representing when this build ID was last made default in its version set.
 	// (-- api-linter: core::0142::time-field-type=disabled
 	//
 	//	aip.dev/not-precedent: Using HLC instead of wall clock. --)
@@ -200,7 +200,7 @@ type CompatibleVersionSet struct {
 	//   - Cross-task-queue activities/child workflows/CAN where the user has not set up parallel
 	//     versioning data
 	//
-	// we have to guess the set id for a build id. If that happens, and then the build id is
+	// we have to guess the set id for a build ID. If that happens, and then the build ID is
 	// discovered to be in a different set, then the sets will be merged and both (or more)
 	// build ids will be preserved, so that we don't lose tasks.
 	// The first set id is considered the "primary", and the others are "demoted". Once a build

@@ -135,8 +135,8 @@ func updateIndependentActivityBuildId(
 	)
 }
 
-// initializeWorkflowAssignedBuildId sets the wf assigned build id after scheduling the first workflow task, based on
-// the build id returned by matching.
+// initializeWorkflowAssignedBuildId sets the wf assigned build ID after scheduling the first workflow task, based on
+// the build ID returned by matching.
 func initializeWorkflowAssignedBuildId(
 	ctx context.Context,
 	transferTask *tasks.WorkflowTask,
@@ -198,7 +198,7 @@ func initializeWorkflowAssignedBuildId(
 
 	if mutableState.HasCompletedAnyWorkflowTask() {
 		// workflow has already completed a wft. buildId is stale and useless.
-		// workflow's assigned build id should be already updated via RecordWorkflowTaskStarted
+		// workflow's assigned build ID should be already updated via RecordWorkflowTaskStarted
 		return nil
 	}
 

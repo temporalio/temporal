@@ -30,7 +30,7 @@ import (
 )
 
 type (
-	// InvalidDispatchBuildId happens when matching wants to dispatch task to a wrong build id
+	// InvalidDispatchBuildId happens when matching wants to dispatch task to a wrong build ID
 	InvalidDispatchBuildId struct {
 		Message string
 		st      *status.Status
@@ -39,7 +39,7 @@ type (
 
 func NewInvalidDispatchBuildId() error {
 	return &InvalidDispatchBuildId{
-		Message: "dispatch build id is not the workflows current build id",
+		Message: "dispatch build ID is not the workflows current build ID",
 	}
 }
 

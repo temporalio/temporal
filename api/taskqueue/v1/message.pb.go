@@ -131,7 +131,7 @@ type TaskVersionDirective_UseAssignmentRules struct {
 type TaskVersionDirective_AssignedBuildId struct {
 	// This means the task is already assigned to `build_id`
 	// WV1: If assigned_build_id is present, use the default version in the compatible set
-	// containing this build id. [cleanup-old-wv]
+	// containing this build ID. [cleanup-old-wv]
 	AssignedBuildId string `protobuf:"bytes,2,opt,name=assigned_build_id,json=assignedBuildId,proto3,oneof"`
 }
 
@@ -341,9 +341,9 @@ type BuildIdRedirectInfo struct {
 	sizeCache     protoimpl.SizeCache
 	unknownFields protoimpl.UnknownFields
 
-	// build id asked by History in the directive or the one calculated based on the assignment rules.
+	// build ID asked by History in the directive or the one calculated based on the assignment rules.
 	// this is the source of the redirect rule chain applied. (the target of the redirect rule chain is
-	// the poller's build id reported in WorkerVersionCapabilities)
+	// the poller's build ID reported in WorkerVersionCapabilities)
 	AssignedBuildId string `protobuf:"bytes,1,opt,name=assigned_build_id,json=assignedBuildId,proto3" json:"assigned_build_id,omitempty"`
 }
 
@@ -394,13 +394,13 @@ type TaskForwardInfo struct {
 	unknownFields protoimpl.UnknownFields
 
 	// RPC name of the partition forwarded the task.
-	// In case of multiple hops, this is the source partition of the last hop
+	// In case of multiple hops, this is the source partition of the last hop.
 	SourcePartition string               `protobuf:"bytes,1,opt,name=source_partition,json=sourcePartition,proto3" json:"source_partition,omitempty"`
 	TaskSource      v12.TaskSource       `protobuf:"varint,2,opt,name=task_source,json=taskSource,proto3,enum=temporal.server.api.enums.v1.TaskSource" json:"task_source,omitempty"`
 	RedirectInfo    *BuildIdRedirectInfo `protobuf:"bytes,3,opt,name=redirect_info,json=redirectInfo,proto3" json:"redirect_info,omitempty"`
-	// build id that should be used to dispatch the task to
+	// Build ID that should be used to dispatch the task to.
 	DispatchBuildId string `protobuf:"bytes,4,opt,name=dispatch_build_id,json=dispatchBuildId,proto3" json:"dispatch_build_id,omitempty"`
-	// only used for old versioning [cleanup-old-wv]
+	// Only used for old versioning. [cleanup-old-wv]
 	DispatchVersionSet string `protobuf:"bytes,5,opt,name=dispatch_version_set,json=dispatchVersionSet,proto3" json:"dispatch_version_set,omitempty"`
 }
 

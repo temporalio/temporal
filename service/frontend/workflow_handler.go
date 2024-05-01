@@ -3778,7 +3778,7 @@ func (wh *WorkflowHandler) GetWorkerTaskReachability(ctx context.Context, reques
 	}
 
 	if len(request.GetBuildIds()) == 0 {
-		return nil, serviceerror.NewInvalidArgument("Must query at least one build id (or empty string for unversioned worker)")
+		return nil, serviceerror.NewInvalidArgument("Must query at least one build ID (or empty string for unversioned worker)")
 	}
 	if len(request.GetBuildIds()) > wh.config.ReachabilityQueryBuildIdLimit() {
 		return nil, serviceerror.NewInvalidArgument(fmt.Sprintf("Too many build ids queried at once, limit: %d", wh.config.ReachabilityQueryBuildIdLimit()))
@@ -3793,7 +3793,7 @@ func (wh *WorkflowHandler) GetWorkerTaskReachability(ctx context.Context, reques
 		}
 	}
 	if gotUnversionedRequest && len(request.GetTaskQueues()) == 0 {
-		return nil, serviceerror.NewInvalidArgument("Cannot get reachability of an unversioned worker without specifying at least one task queue (empty build id is interpereted as unversioned)")
+		return nil, serviceerror.NewInvalidArgument("Cannot get reachability of an unversioned worker without specifying at least one task queue (empty build ID is interpereted as unversioned)")
 	}
 
 	for _, taskQueue := range request.GetTaskQueues() {
@@ -4490,7 +4490,7 @@ func (wh *WorkflowHandler) validateVersioningInfo(nsName string, id buildIdAndFl
 func (wh *WorkflowHandler) validateBuildIdCompatibilityUpdate(
 	req *workflowservice.UpdateWorkerBuildIdCompatibilityRequest,
 ) error {
-	errDeets := []string{"request to update worker build id compatability requires: "}
+	errDeets := []string{"request to update worker build ID compatability requires: "}
 
 	checkIdLen := func(id string) {
 		if len(id) > wh.config.WorkerBuildIdSizeLimit() {

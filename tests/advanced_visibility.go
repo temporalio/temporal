@@ -99,7 +99,7 @@ func (s *AdvancedVisibilitySuite) SetupSuite() {
 		dynamicconfig.ReachabilityTaskQueueScanLimit:             2,
 		dynamicconfig.ReachabilityQueryBuildIdLimit:              1,
 		dynamicconfig.BuildIdScavengerEnabled:                    true,
-		// Allow the scavenger to remove any build id regardless of when it was last default for a set.
+		// Allow the scavenger to remove any build ID regardless of when it was last default for a set.
 		dynamicconfig.RemovableBuildIdDurationSinceDefault: time.Microsecond,
 	}
 
@@ -2347,7 +2347,7 @@ func (s *AdvancedVisibilitySuite) Test_BuildIdIndexedOnRetry() {
 		if err != nil {
 			return false
 		}
-		// Both runs should be associated with this build id
+		// Both runs should be associated with this build ID
 		if len(response.Executions) != 2 {
 			return false
 		}
@@ -2656,7 +2656,7 @@ func (s *AdvancedVisibilitySuite) TestBuildIdScavenger_DeletesUnusedBuildId() {
 	s.Require().NoError(err)
 	s.Require().Equal(1, len(compatibility.Sets))
 	s.Require().Equal([]string{v1}, compatibility.Sets[0].BuildIDs)
-	// Make sure the build ID was removed from the build id->task queue mapping
+	// Make sure the build ID was removed from the build ID->task queue mapping
 	res, err := s.sdkClient.WorkflowService().GetWorkerTaskReachability(ctx, &workflowservice.GetWorkerTaskReachabilityRequest{
 		Namespace: s.namespace,
 		BuildIds:  []string{v0},

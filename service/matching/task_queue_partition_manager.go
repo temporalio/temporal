@@ -206,7 +206,7 @@ func (pm *taskQueuePartitionManagerImpl) AddTask(
 	if syncMatchTask.isForwarded() {
 		// forwarded from child partition - only do sync match
 		// child partition will persist the task when sync match fails
-		// no need to calculate build id, just dispatch based on source partition's instruction
+		// no need to calculate build ID, just dispatch based on source partition's instruction
 		syncMatchQueue, err = pm.getVersionedQueue(ctx, syncMatchTask.forwardInfo.DispatchVersionSet, syncMatchTask.forwardInfo.DispatchBuildId, true)
 		if err != nil {
 			return "", false, err
@@ -342,7 +342,7 @@ func (pm *taskQueuePartitionManagerImpl) ProcessSpooledTask(
 	// TODO: in WV2 we should not look at a spooled task directive anymore [cleanup-old-wv]
 	directive := taskInfo.GetVersionDirective()
 	if assignedBuildId != "" {
-		// construct directive based on the build id of the spool queue
+		// construct directive based on the build ID of the spool queue
 		directive = worker_versioning.MakeBuildIdDirective(assignedBuildId)
 	}
 	// Redirect and re-resolve if we're blocked in matcher and user data changes.
@@ -778,11 +778,11 @@ func (pm *taskQueuePartitionManagerImpl) getVersionSetForAdd(directive *taskqueu
 }
 
 func (pm *taskQueuePartitionManagerImpl) recordUnknownBuildPoll(buildId string) {
-	pm.logger.Warn("unknown build id in poll", tag.BuildId(buildId))
+	pm.logger.Warn("unknown build ID in poll", tag.BuildId(buildId))
 	pm.taggedMetricsHandler.Counter(metrics.UnknownBuildPollsCounter.Name()).Record(1)
 }
 
 func (pm *taskQueuePartitionManagerImpl) recordUnknownBuildTask(buildId string) {
-	pm.logger.Warn("unknown build id in task", tag.BuildId(buildId))
+	pm.logger.Warn("unknown build ID in task", tag.BuildId(buildId))
 	pm.taggedMetricsHandler.Counter(metrics.UnknownBuildTasksCounter.Name()).Record(1)
 }

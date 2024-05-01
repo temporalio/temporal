@@ -742,7 +742,7 @@ func (handler *workflowTaskHandlerCallbacksImpl) handleWorkflowTaskCompleted(
 				// TODO: remove this block when deleting old wv [cleanup-old-wv]
 				versioningStamp = nil
 			} else {
-				// new versioning is used. do not return new wft to worker if stamp build id does not match wf build id
+				// new versioning is used. do not return new wft to worker if stamp build ID does not match wf build ID
 				// let the task go through matching and get dispatched to the right worker
 				if versioningStamp.GetBuildId() != ms.GetAssignedBuildId() {
 					bypassTaskGeneration = false

@@ -173,7 +173,7 @@ func (s *PartitionManagerTestSuite) TestAddTaskWithAssignmentRulesAndVersionSets
 	s.Assert().Nil(s.partitionMgr.versionedQueues[vs.SetIds[0]])
 	s.validatePollTask(taskBld, true)
 
-	// now use the version set build id
+	// now use the version set build ID
 	s.validateAddTask("", false, versioningData, worker_versioning.MakeBuildIdDirective(vs.BuildIds[0].Id))
 	// make sure version set queue is loaded
 	s.Assert().NotNil(s.partitionMgr.versionedQueues[vs.SetIds[0]])

@@ -558,7 +558,7 @@ func (m *workflowTaskStateMachine) AddWorkflowTaskStartedEvent(
 
 // applyBuildIdRedirect applies redirect, if applicable, based on the versioningStamp and redirectInfo.
 // Returns a possibly new workflowTaskInfo and a boolean indicating if transient WFT was converted to normal and
-// scheduled event is created due to build id being changed by the current WFT.
+// scheduled event is created due to build ID being changed by the current WFT.
 func (m *workflowTaskStateMachine) applyBuildIdRedirect(
 	versioningStamp *commonpb.WorkerVersionStamp,
 	workflowTask *WorkflowTaskInfo,
@@ -575,7 +575,7 @@ func (m *workflowTaskStateMachine) applyBuildIdRedirect(
 	}
 
 	if m.ms.IsTransientWorkflowTask() && m.ms.GetExecutionInfo().GetWorkflowTaskBuildId() != buildId {
-		// we're retrying a workflow task and this attempt is on a different build id, converting the transient wf task
+		// we're retrying a workflow task and this attempt is on a different build ID, converting the transient wf task
 		// to a normal wf task by creating a scheduled event for it and setting its attempt to 1.
 		scheduledEvent := m.ms.hBuilder.AddWorkflowTaskScheduledEvent(
 			m.ms.CurrentTaskQueue(),

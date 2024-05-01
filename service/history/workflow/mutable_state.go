@@ -130,11 +130,11 @@ type (
 		// in history.
 		SuggestContinueAsNew bool
 		HistorySizeBytes     int64
-		// BuildIdRedirectCounter tracks the started build id redirect counter for transient/speculative WFT. This
+		// BuildIdRedirectCounter tracks the started build ID redirect counter for transient/speculative WFT. This
 		// info is to make sure the right redirect counter is used in the WFT started event created later
 		// for a transient/speculative WFT.
 		BuildIdRedirectCounter int64
-		// BuildId tracks the started build id for transient/speculative WFT. This info is used for two purposes:
+		// BuildId tracks the started build ID for transient/speculative WFT. This info is used for two purposes:
 		// - verify WFT completes by the same Build ID that started in the latest attempt
 		// - when persisting transient/speculative WFT, the right Build ID is used in the WFT started event
 		BuildId string

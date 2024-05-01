@@ -3207,7 +3207,7 @@ func (*testTaskManager) GetTaskQueuesByBuildId(context.Context, *persistence.Get
 
 // CountTaskQueuesByBuildId implements persistence.TaskManager
 func (*testTaskManager) CountTaskQueuesByBuildId(context.Context, *persistence.CountTaskQueuesByBuildIdRequest) (int, error) {
-	// This is only used to validate that the build id to task queue mapping is enforced (at the time of writing), report 0.
+	// This is only used to validate that the build ID to task queue mapping is enforced (at the time of writing), report 0.
 	return 0, nil
 }
 

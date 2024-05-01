@@ -633,15 +633,15 @@ func TestAddRedirectRuleMaxRules(t *testing.T) {
 func TestAddRedirectRuleInVersionSet(t *testing.T) {
 	t.Parallel()
 	clock := hlc.Zero(1)
-	// make version set with build id "0" in it
+	// make version set with build ID "0" in it
 	initialData := mkInitialData(1, clock)
 
-	// insert with source build id "0" --> failure
+	// insert with source build ID "0" --> failure
 	_, err := insertRedirectRule(mkRedirectRule("0", "1"), initialData, clock, ignoreMaxRules, ignoreMaxChain)
 	assert.Error(t, err)
 	assert.Equal(t, errSourceIsVersionSetMember, err)
 
-	// insert with target build id "0" --> failure
+	// insert with target build ID "0" --> failure
 	_, err = insertRedirectRule(mkRedirectRule("1", "0"), initialData, clock, ignoreMaxRules, ignoreMaxChain)
 	assert.Error(t, err)
 	assert.Equal(t, errTargetIsVersionSetMember, err)
@@ -667,11 +667,11 @@ func TestAddRedirectRuleAlreadyExists(t *testing.T) {
 	clock := hlc.Zero(1)
 	initialData := mkInitialData(0, clock)
 
-	// insert with source build id "0"
+	// insert with source build ID "0"
 	data, err := insertRedirectRule(mkRedirectRule("0", "1"), initialData, clock, ignoreMaxRules, ignoreMaxChain)
 	assert.NoError(t, err)
 
-	// insert with source build id "0" --> failure
+	// insert with source build ID "0" --> failure
 	_, err = insertRedirectRule(mkRedirectRule("0", "6"), data, clock, ignoreMaxRules, ignoreMaxChain)
 	assert.Error(t, err)
 	assert.Equal(t, errSourceAlreadyExists("0", "1"), err)
@@ -691,7 +691,7 @@ func TestAddRedirectRuleCreateCycle(t *testing.T) {
 	data, err := insertRedirectRule(mkRedirectRule("0", "1"), initialData, clock, ignoreMaxRules, ignoreMaxChain)
 	assert.NoError(t, err)
 
-	// insert with source build id "1" -> "0" --> failure
+	// insert with source build ID "1" -> "0" --> failure
 	_, err = insertRedirectRule(mkRedirectRule("1", "0"), data, clock, ignoreMaxRules, ignoreMaxChain)
 	assert.Error(t, err)
 	assert.Equal(t, errIsCyclic, err)
@@ -767,7 +767,7 @@ func TestReplaceRedirectRuleBasic(t *testing.T) {
 func TestReplaceRedirectRuleInVersionSet(t *testing.T) {
 	t.Parallel()
 	clock := hlc.Zero(1)
-	// make a version set with build id 0
+	// make a version set with build ID 0
 	data := mkInitialData(1, clock)
 	data.RedirectRules = []*persistencepb.RedirectRule{
 		mkRedirectRulePersistence(mkRedirectRule("1", "2"), clock, nil),

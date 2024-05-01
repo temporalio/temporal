@@ -340,15 +340,15 @@ func (s *VersioningIntegSuite) TestCommitBuildID() {
 	s.Equal("1", res.GetAssignmentRules()[0].GetRule().GetTargetBuildId())
 	s.Equal(nil, res.GetAssignmentRules()[0].GetRule().GetRamp())
 
-	// recent versioned poller on wrong build id --> failure
+	// recent versioned poller on wrong build ID --> failure
 	s.registerWorkflowAndPollVersionedTaskQueue(tq, "3", true)
 	s.commitBuildId(ctx, tq, "2", false, cT, false)
 
-	// recent unversioned poller on build id 2 --> failure
+	// recent unversioned poller on build ID 2 --> failure
 	s.registerWorkflowAndPollVersionedTaskQueue(tq, "2", false)
 	s.commitBuildId(ctx, tq, "2", false, cT, false)
 
-	// recent versioned poller on build id 2 --> success
+	// recent versioned poller on build ID 2 --> success
 	s.registerWorkflowAndPollVersionedTaskQueue(tq, "2", true)
 	s.commitBuildId(ctx, tq, "2", false, cT, true)
 	res = s.getVersioningRules(ctx, tq)
@@ -460,7 +460,7 @@ func (s *VersioningIntegSuite) TestVersioningChangesPropagate() {
 func (s *VersioningIntegSuite) TestMaxTaskQueuesPerBuildIdEnforced() {
 	ctx := NewContext()
 	buildId := fmt.Sprintf("b-%s", s.T().Name())
-	// Map a 3 task queues to this build id and verify success
+	// Map a 3 task queues to this build ID and verify success
 	for i := 1; i <= 3; i++ {
 		taskQueue := fmt.Sprintf("q-%s-%d", s.T().Name(), i)
 		_, err := s.engine.UpdateWorkerBuildIdCompatibility(ctx, &workflowservice.UpdateWorkerBuildIdCompatibilityRequest{
@@ -473,7 +473,7 @@ func (s *VersioningIntegSuite) TestMaxTaskQueuesPerBuildIdEnforced() {
 		s.NoError(err)
 	}
 
-	// Map a fourth task queue to this build id and verify it errors
+	// Map a fourth task queue to this build ID and verify it errors
 	taskQueue := fmt.Sprintf("q-%s-%d", s.T().Name(), 4)
 	_, err := s.engine.UpdateWorkerBuildIdCompatibility(ctx, &workflowservice.UpdateWorkerBuildIdCompatibilityRequest{
 		Namespace: s.namespace,
@@ -484,7 +484,7 @@ func (s *VersioningIntegSuite) TestMaxTaskQueuesPerBuildIdEnforced() {
 	})
 	var failedPreconditionError *serviceerror.FailedPrecondition
 	s.ErrorAs(err, &failedPreconditionError)
-	s.Equal("Exceeded max task queues allowed to be mapped to a single build id: 3", failedPreconditionError.Message)
+	s.Equal("Exceeded max task queues allowed to be mapped to a single build ID: 3", failedPreconditionError.Message)
 }
 
 func (s *VersioningIntegSuite) testWithMatchingBehavior(subtest func()) {
@@ -1477,7 +1477,7 @@ func (s *VersioningIntegSuite) testWorkflowTaskRedirectInRetry(firstTask bool) {
 			v1,  // activity task
 			v1,  // failed wf task on sticky queue
 			v1,  // failed wf task on normal queue
-			v11, // timed out wf task show up in history because they happened on a different build id
+			v11, // timed out wf task show up in history because they happened on a different build ID
 			v12, // succeeded wf task
 		}
 	}
@@ -1600,7 +1600,7 @@ func (s *VersioningIntegSuite) dispatchUnversionedRemainsUnversioned() {
 	}
 
 	w1 := worker.New(s.sdkClient, tq, worker.Options{
-		// no build id
+		// no build ID
 	})
 	w1.RegisterWorkflow(wf)
 	s.NoError(w1.Start())
@@ -2032,7 +2032,7 @@ func (s *VersioningIntegSuite) TestDispatchActivityUpgrade() {
 	proceedWf <- struct{}{}
 
 	s.waitForChan(ctx, started11)
-	// wf assigned build id should be updated by activity redirect
+	// wf assigned build ID should be updated by activity redirect
 	s.validateWorkflowBuildId(ctx, run.GetID(), run.GetRunID(), v11, true, v1, "", []string{v1})
 	// let activity finish
 	proceed11 <- struct{}{}
@@ -2047,7 +2047,7 @@ func (s *VersioningIntegSuite) TestDispatchActivityUpgrade() {
 	proceedWf <- struct{}{}
 
 	s.waitForChan(ctx, started12)
-	// wf assigned build id should not be updated by independent activity redirect
+	// wf assigned build ID should not be updated by independent activity redirect
 	s.validateWorkflowBuildId(ctx, run.GetID(), run.GetRunID(), v11, true, v11, "", []string{v1})
 	// let activity finish
 	proceed12 <- struct{}{}
@@ -3915,7 +3915,7 @@ func (s *VersioningIntegSuite) TestDescribeTaskQueueEnhanced_Versioned_BasicReac
 		return len(listResp.GetExecutions()) > 0
 	}, 3*time.Second, 50*time.Millisecond)
 
-	// commit a different build id --> A should now only be reachable via visibility query, B reachable as default
+	// commit a different build ID --> A should now only be reachable via visibility query, B reachable as default
 	s.commitBuildId(ctx, tq, "B", true, s.getVersioningRules(ctx, tq).GetConflictToken(), true)
 	s.getBuildIdReachability(ctx, tq, nil, map[string]enumspb.BuildIdTaskReachability{
 		"B": enumspb.BUILD_ID_TASK_REACHABILITY_REACHABLE, // reachable by default assignment rule
@@ -4136,7 +4136,7 @@ func (s *VersioningIntegSuite) TestDescribeWorkflowExecution() {
 	// wait for it to start on v1
 	s.waitForChan(ctx, started1)
 
-	// describe and check build id
+	// describe and check build ID
 	s.Eventually(func() bool {
 		resp, err := s.sdkClient.DescribeWorkflowExecution(ctx, run.GetID(), "")
 		s.NoError(err)
@@ -4178,7 +4178,7 @@ func (s *VersioningIntegSuite) TestDescribeWorkflowExecution() {
 	s.Equal("ok", out)
 }
 
-// Add a per test prefix to avoid hitting the namespace limit of mapped task queue per build id
+// Add a per test prefix to avoid hitting the namespace limit of mapped task queue per build ID
 func (s *VersioningIntegSuite) prefixed(buildId string) string {
 	return fmt.Sprintf("t%x:%s", 0xffff&farm.Hash32([]byte(s.T().Name())), buildId)
 }
@@ -4493,12 +4493,12 @@ func (s *VersioningIntegSuite) getBuildIdReachability(
 	s.NotNil(resp)
 	for buildId, vi := range resp.GetVersionsInfo() {
 		expected, ok := expectedReachability[buildId]
-		s.Assert().True(ok, "build id %s was not expected", buildId)
+		s.Assert().True(ok, "build ID %s was not expected", buildId)
 		s.Assert().Equal(expected, vi.GetTaskReachability())
 	}
 }
 
-// addNewDefaultBuildId updates build id info on a task queue with a new build id in a new default set.
+// addNewDefaultBuildId updates build ID info on a task queue with a new build ID in a new default set.
 func (s *VersioningIntegSuite) addNewDefaultBuildId(ctx context.Context, tq, newBuildId string) {
 	res, err := s.engine.UpdateWorkerBuildIdCompatibility(ctx, &workflowservice.UpdateWorkerBuildIdCompatibilityRequest{
 		Namespace: s.namespace,
@@ -4584,7 +4584,7 @@ func (s *VersioningIntegSuite) removeRedirectRule(ctx context.Context, tq, sourc
 	s.NotNil(res)
 }
 
-// addCompatibleBuildId updates build id info on a task queue with a new compatible build id.
+// addCompatibleBuildId updates build ID info on a task queue with a new compatible build ID.
 func (s *VersioningIntegSuite) addCompatibleBuildId(ctx context.Context, tq, newBuildId, existing string, makeSetDefault bool) {
 	res, err := s.engine.UpdateWorkerBuildIdCompatibility(ctx, &workflowservice.UpdateWorkerBuildIdCompatibilityRequest{
 		Namespace: s.namespace,

@@ -2361,11 +2361,11 @@ func (ms *MutableStateImpl) addResetPointFromCompletion(
 	return true
 }
 
-// processBuildIdRedirect validates build id for the task being dispatched and applies possible redirect to
+// processBuildIdRedirect validates build ID for the task being dispatched and applies possible redirect to
 // mutable state.
-// If a valid redirect is happening, assigned build id of the wf will be updated and all scheduled but not
-// started tasks will be rescheduled to be put on the matching queue of the right build id.
-// If the given versioning stamp and redirect info is not valid based on the wf's assigned build id
+// If a valid redirect is happening, assigned build ID of the wf will be updated and all scheduled but not
+// started tasks will be rescheduled to be put on the matching queue of the right build ID.
+// If the given versioning stamp and redirect info is not valid based on the wf's assigned build ID
 // InvalidDispatchBuildId error will be returned.
 func (ms *MutableStateImpl) processBuildIdRedirect(
 	startingTaskScheduledEventId int64,
@@ -2374,16 +2374,16 @@ func (ms *MutableStateImpl) processBuildIdRedirect(
 ) error {
 	assignedBuildId := ms.GetAssignedBuildId()
 	if !versioningStamp.GetUseVersioning() || versioningStamp.GetBuildId() == assignedBuildId {
-		// dispatch build id is the same as wf assigned build id, hence noop.
+		// dispatch build ID is the same as wf assigned build ID, hence noop.
 		return nil
 	}
 
 	if (assignedBuildId != "" || ms.HasCompletedAnyWorkflowTask()) &&
 		(redirectInfo == nil || redirectInfo.GetAssignedBuildId() != assignedBuildId) {
 		// Workflow is already assigned to a build ID (or completed tasks by unversioned workers) but no redirect
-		// or a redirect based on a wrong assigned build id is reported. This must be a task
-		// backlogged on an old build id. rejecting this task, there should be another task scheduled on
-		// the right build id.
+		// or a redirect based on a wrong assigned build ID is reported. This must be a task
+		// backlogged on an old build ID. rejecting this task, there should be another task scheduled on
+		// the right build ID.
 		return serviceerrors.NewInvalidDispatchBuildId()
 	}
 
@@ -2410,8 +2410,8 @@ func (ms *MutableStateImpl) processBuildIdRedirect(
 		if ai.ScheduledEventId == startingTaskScheduledEventId ||
 			// activity already started
 			ai.StartedEventId != common.EmptyEventID ||
-			// activity does not depend on wf build id
-			ai.GetUseWorkflowBuildId() == nil {
+			// activity does not depend on wf build ID
+			ai.GetUseWorkflowBuildIdInfo() == nil {
 			continue
 		}
 		// we only need to resend the activities to matching, no need to update timer tasks.
@@ -2452,7 +2452,7 @@ func (ms *MutableStateImpl) UpdateBuildIdAssignment(buildId string) error {
 		ms.GetExecutionInfo().BuildIdRedirectCounter++
 	}
 	ms.executionInfo.AssignedBuildId = buildId
-	// because build id is changed, we clear sticky queue so to make sure the next wf task does not go to old version.
+	// because build ID is changed, we clear sticky queue so to make sure the next wf task does not go to old version.
 	ms.ClearStickyTaskQueue()
 	limit := ms.config.SearchAttributesSizeOfValueLimit(ms.namespaceEntry.Name().String())
 	return ms.updateBuildIdsSearchAttribute(&commonpb.WorkerVersionStamp{UseVersioning: true, BuildId: buildId}, limit)
@@ -2811,7 +2811,7 @@ func (ms *MutableStateImpl) AddActivityTaskStartedEvent(
 
 	if buildId := worker_versioning.BuildIdIfUsingVersioning(versioningStamp); buildId != "" {
 		// note that if versioningStamp.BuildId is present we know it's not an old versioning worker because matching
-		// does not pass build id for old versioning workers to Record*TaskStart.
+		// does not pass build ID for old versioning workers to Record*TaskStart.
 		// TODO: cleanup this comment [cleanup-old-wv]
 		if useWf := ai.GetUseWorkflowBuildIdInfo(); useWf != nil {
 			// when a dependent activity is redirected, we update workflow's assigned build ID as well

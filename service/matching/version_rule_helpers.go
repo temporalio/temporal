@@ -50,9 +50,9 @@ const (
 var (
 	errInvalidNegativeIndex                     = serviceerror.NewInvalidArgument("rule index cannot be negative")
 	errInvalidRampPercentage                    = serviceerror.NewInvalidArgument("ramp percentage must be in range [0, 100)")
-	errTargetIsVersionSetMember                 = serviceerror.NewFailedPrecondition("update breaks requirement, target build id is already a member of a version set")
-	errSourceIsVersionSetMember                 = serviceerror.NewFailedPrecondition("update breaks requirement, source build id is already a member of a version set")
-	errRampedAssignmentRuleIsRedirectRuleSource = serviceerror.NewFailedPrecondition("update breaks requirement, this target build id cannot have a ramp because it is the source of a redirect rule")
+	errTargetIsVersionSetMember                 = serviceerror.NewFailedPrecondition("update breaks requirement, target build ID is already a member of a version set")
+	errSourceIsVersionSetMember                 = serviceerror.NewFailedPrecondition("update breaks requirement, source build ID is already a member of a version set")
+	errRampedAssignmentRuleIsRedirectRuleSource = serviceerror.NewFailedPrecondition("update breaks requirement, this target build ID cannot have a ramp because it is the source of a redirect rule")
 	errAssignmentRuleIndexOutOfBounds           = func(idx, length int) error {
 		return serviceerror.NewInvalidArgument(fmt.Sprintf("rule index %d is out of bounds for assignment rule list of length %d", idx, length))
 	}
@@ -77,7 +77,7 @@ var (
 	errExceedsMaxRuleChain = func(cnt, max int) error {
 		return serviceerror.NewFailedPrecondition(fmt.Sprintf("update exceeds number of chained redirect rules permitted in namespace (%v/%v)", cnt, max))
 	}
-	errUnversionedRedirectRuleTarget = serviceerror.NewInvalidArgument("the unversioned build id cannot be the target of a redirect rule")
+	errUnversionedRedirectRuleTarget = serviceerror.NewInvalidArgument("the unversioned build ID cannot be the target of a redirect rule")
 )
 
 func cloneOrMkData(data *persistencespb.VersioningData) *persistencespb.VersioningData {
@@ -271,7 +271,7 @@ func CleanupRuleTombstones(versioningData *persistencespb.VersioningData,
 }
 
 // CommitBuildID makes the following changes. If no worker that can accept tasks for the
-// target build id has been seen recently, the operation will fail.
+// target build ID has been seen recently, the operation will fail.
 // To override this check, set the force flag:
 //  1. Adds an unconditional assignment rule for the target Build ID at the
 //     end of the list. An unconditional assignment rule:
@@ -445,7 +445,7 @@ func containsUnconditional(rules []*persistencespb.AssignmentRule) bool {
 	return found
 }
 
-// isInVersionSets returns true if the given build id is in any of the listed version sets
+// isInVersionSets returns true if the given build ID is in any of the listed version sets
 func isInVersionSets(id string, sets []*persistencespb.CompatibleVersionSet) bool {
 	for _, set := range sets {
 		for _, bid := range set.BuildIds {
@@ -608,7 +608,7 @@ func calcRampThreshold(id string) float64 {
 }
 
 // FindRedirectBuildId follows chain of redirect rules starting from the given sourceBuildId and returns the final
-// target build id that should be used for redirect. Returns sourceBuildId if no applicable redirect rules exist.
+// target build ID that should be used for redirect. Returns sourceBuildId if no applicable redirect rules exist.
 func FindRedirectBuildId(sourceBuildId string, rules []*persistencespb.RedirectRule) string {
 outer:
 	for {

@@ -173,14 +173,14 @@ func TestMakeBuildIdQuery(t *testing.T) {
 	assert.Equal(t, expectedQuery, query)
 }
 
-// nothing in assignment rules for this test --> buildIdsOfInterest list will always just contain the original build id
+// nothing in assignment rules for this test --> buildIdsOfInterest list will always just contain the original build ID
 func TestGetReachability_WithVisibility_WithoutRules(t *testing.T) {
 	// Visibility: [ (NULL, closed), (A, open) ]
 	t.Parallel()
 	ctx := context.Background()
 	rc := mkTestReachabilityCalculator()
 
-	// reachability("") --> reachable (it's the default build id)
+	// reachability("") --> reachable (it's the default build ID)
 	checkReachability(ctx, t, rc, "", enumspb.BUILD_ID_TASK_REACHABILITY_REACHABLE)
 
 	// reachability("") --> closed_workflows_only (now that "" is not default)

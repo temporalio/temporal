@@ -186,7 +186,7 @@ const (
 	// MaxIDLengthLimit is the length limit for various IDs, including: Namespace, TaskQueue, WorkflowID, ActivityID, TimerID,
 	// WorkflowType, ActivityType, SignalName, MarkerName, ErrorReason/FailureReason/CancelCause, Identity, RequestID
 	MaxIDLengthLimit = "limit.maxIDLength"
-	// WorkerBuildIdSizeLimit is the byte length limit for a worker build id as used in the rpc methods for updating
+	// WorkerBuildIdSizeLimit is the byte length limit for a worker build ID as used in the rpc methods for updating
 	// the version sets for a task queue.
 	// Do not set this to a value higher than 255 for clusters using SQL based persistence due to predefined VARCHAR
 	// column width.
@@ -215,7 +215,7 @@ const (
 	// Deleted Redirect Rules will be kept in the DB (with DeleteTimestamp). After this time, the tombstones are deleted at the next time update of versioning data for the task queue.
 	MatchingDeletedRuleRetentionTime = "matching.wv.DeletedRuleRetentionTime"
 	// ReachabilityBuildIdVisibilityGracePeriod is the time period for which deleted versioning rules are still considered active
-	// to account for the delay in updating the build id field in visibility.
+	// to account for the delay in updating the build ID field in visibility.
 	ReachabilityBuildIdVisibilityGracePeriod = "matching.wv.ReachabilityBuildIdVisibilityGracePeriod"
 	// ReachabilityTaskQueueScanLimit limits the number of task queues to scan when responding to a
 	// GetWorkerTaskReachability query.
@@ -232,7 +232,7 @@ const (
 	// 2. There are delays in the visibility task processor (which is asynchronous).
 	// 3. There's propagation delay of the versioning data between matching nodes.
 	ReachabilityQuerySetDurationSinceDefault = "frontend.reachabilityQuerySetDurationSinceDefault"
-	// TaskQueuesPerBuildIdLimit limits the number of task queue names that can be mapped to a single build id.
+	// TaskQueuesPerBuildIdLimit limits the number of task queue names that can be mapped to a single build ID.
 	TaskQueuesPerBuildIdLimit = "limit.taskQueuesPerBuildId"
 
 	// NexusIncomingServiceNameMaxLength is the maximum length of a Nexus incoming service name.
@@ -252,15 +252,15 @@ const (
 	// NexusOutgoingServiceListMaxPageSize is the maximum page size for listing outgoing services.
 	NexusOutgoingServiceListMaxPageSize = "limit.outgoingServiceListMaxPageSize"
 
-	// RemovableBuildIdDurationSinceDefault is the minimum duration since a build id was last default in its containing
-	// set for it to be considered for removal, used by the build id scavenger.
+	// RemovableBuildIdDurationSinceDefault is the minimum duration since a build ID was last default in its containing
+	// set for it to be considered for removal, used by the build ID scavenger.
 	// This setting allows some propagation delay of versioning data, which may happen for the following reasons:
 	// 1. There are no workflows currently marked as open in the visibility store but a worker for the demoted version
 	// is currently processing a task.
 	// 2. There are delays in the visibility task processor (which is asynchronous).
 	// 3. There's propagation delay of the versioning data between matching nodes.
 	RemovableBuildIdDurationSinceDefault = "worker.removableBuildIdDurationSinceDefault"
-	// BuildIdScavengerVisibilityRPS is the rate limit for visibility calls from the build id scavenger
+	// BuildIdScavengerVisibilityRPS is the rate limit for visibility calls from the build ID scavenger
 	BuildIdScavengerVisibilityRPS = "worker.buildIdScavengerVisibilityRPS"
 
 	// keys for frontend
@@ -1022,7 +1022,7 @@ const (
 	ExecutionScannerHistoryEventIdValidator = "worker.executionEnableHistoryEventIdValidator"
 	// TaskQueueScannerEnabled indicates if task queue scanner should be started as part of worker.Scanner
 	TaskQueueScannerEnabled = "worker.taskQueueScannerEnabled"
-	// BuildIdScavengerEnabled indicates if the build id scavenger should be started as part of worker.Scanner
+	// BuildIdScavengerEnabled indicates if the build ID scavenger should be started as part of worker.Scanner
 	BuildIdScavengerEnabled = "worker.buildIdScavengerEnabled"
 	// HistoryScannerEnabled indicates if history scanner should be started as part of worker.Scanner
 	HistoryScannerEnabled = "worker.historyScannerEnabled"
