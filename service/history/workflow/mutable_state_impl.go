@@ -2830,6 +2830,27 @@ func (ms *MutableStateImpl) AddActivityTaskStartedEvent(
 		}
 	}
 
+	if buildId := worker_versioning.BuildIdIfUsingVersioning(versioningStamp); buildId != "" {
+		// note that if versioningStamp.BuildId is present we know it's not an old versioning worker because matching
+		// does not pass build id for old versioning workers to Record*TaskStart.
+		// TODO: cleanup this comment [cleanup-old-wv]
+		if useWf := ai.GetUseWorkflowBuildIdInfo(); useWf != nil {
+			// when a dependent activity is redirected, we update workflow's assigned build ID as well
+			err := ms.UpdateBuildIdAssignment(buildId)
+			if err != nil {
+				return nil, err
+			}
+			useWf.LastRedirectCounter = ms.GetExecutionInfo().GetBuildIdRedirectCounter()
+		} else if !ai.UseCompatibleVersion {
+			// this activity is using new versioning and is independently assigned to a build ID.
+			// Storing that in activity info. (normaly, LastIndependentlyAssignedBuildId should be present already,
+			// but setting it here again, in case the persistence call after AddTask was failed)
+			ai.BuildIdInfo = &persistencespb.ActivityInfo_LastIndependentlyAssignedBuildId{
+				LastIndependentlyAssignedBuildId: buildId,
+			}
+		}
+	}
+
 	if !ai.HasRetryPolicy {
 		event := ms.hBuilder.AddActivityTaskStartedEvent(
 			scheduledEventID,

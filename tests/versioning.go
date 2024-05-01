@@ -4635,7 +4635,6 @@ func (s *VersioningIntegSuite) waitForRedirectRulePropagation(ctx context.Contex
 				return true
 			}
 		}
-		fmt.Printf("shahab> Rule not present yet!\n")
 		return false
 	})
 }
@@ -4654,7 +4653,6 @@ func (s *VersioningIntegSuite) waitForRedirectRulePropagationUpToPartition(
 				return true
 			}
 		}
-		fmt.Printf("shahab> Rule not present yet!\n")
 		return false
 	})
 }
