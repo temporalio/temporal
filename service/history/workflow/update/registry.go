@@ -103,10 +103,10 @@ type (
 	registry struct {
 		mu              sync.RWMutex
 		updates         map[string]*Update
-		store            Store
-		instrumentation  instrumentation
-		maxInFlight      func() int
-		maxTotal         func() int
+		store           Store
+		instrumentation instrumentation
+		maxInFlight     func() int
+		maxTotal        func() int
 		completedCount  int
 		failoverVersion int64
 	}
@@ -161,7 +161,7 @@ func NewRegistry(
 ) Registry {
 	r := &registry{
 		updates:         make(map[string]*Update),
-		store:            store,
+		store:           store,
 		instrumentation: noopInstrumentation,
 		maxInFlight:     func() int { return math.MaxInt },
 		maxTotal:        func() int { return math.MaxInt },
