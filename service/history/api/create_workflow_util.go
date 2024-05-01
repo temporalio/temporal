@@ -114,6 +114,7 @@ func NewWorkflowWithSignal(
 
 	// If first workflow task should back off (e.g. cron or workflow retry) a workflow task will not be scheduled.
 	if requestEagerExecution && newMutableState.HasPendingWorkflowTask() {
+		// TODO: get build id from Starter so eager workflows can be versioned
 		_, _, err = newMutableState.AddWorkflowTaskStartedEvent(
 			scheduledEventID,
 			startRequest.StartRequest.RequestId,
