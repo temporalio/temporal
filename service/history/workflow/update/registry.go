@@ -36,12 +36,11 @@ import (
 	protocolpb "go.temporal.io/api/protocol/v1"
 	"go.temporal.io/api/serviceerror"
 	updatepb "go.temporal.io/api/update/v1"
-	"google.golang.org/protobuf/types/known/anypb"
-
 	updatespb "go.temporal.io/server/api/update/v1"
 	"go.temporal.io/server/common/future"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
+	"google.golang.org/protobuf/types/known/anypb"
 )
 
 type (
@@ -84,9 +83,6 @@ type (
 		// Clear registry and abort all waiters.
 		Clear()
 
-		// UpdateFromStore adds updates to the registry from the update store.
-		UpdateFromStore()
-
 		// Len observes the number of incomplete updates in this Registry.
 		Len() int
 
@@ -105,14 +101,14 @@ type (
 	}
 
 	registry struct {
-		mu               sync.RWMutex
-		updates          map[string]*Update
-		getStoreFn       func() Store // TODO: revert it back to Store
-		instrumentation  instrumentation
-		maxInFlight      func() int
-		maxTotal         func() int
-		completedUpdates map[string]struct{}
-		failoverVersion  int64
+		mu              sync.RWMutex
+		updates         map[string]*Update
+		getStoreFn      func() Store // TODO: revert it back to Store
+		instrumentation instrumentation
+		maxInFlight     func() int
+		maxTotal        func() int
+		completedCount  int
+		failoverVersion int64
 	}
 
 	Option func(*registry)
@@ -164,34 +160,19 @@ func NewRegistry(
 	opts ...Option,
 ) Registry {
 	r := &registry{
-		updates:          make(map[string]*Update),
-		getStoreFn:       getStoreFn,
-		instrumentation:  noopInstrumentation,
-		maxInFlight:      func() int { return math.MaxInt },
-		maxTotal:         func() int { return math.MaxInt },
-		completedUpdates: make(map[string]struct{}),
-		failoverVersion:  getStoreFn().GetCurrentVersion(),
+		updates:         make(map[string]*Update),
+		getStoreFn:      getStoreFn,
+		instrumentation: noopInstrumentation,
+		maxInFlight:     func() int { return math.MaxInt },
+		maxTotal:        func() int { return math.MaxInt },
+		failoverVersion: getStoreFn().GetCurrentVersion(),
 	}
 	for _, opt := range opts {
 		opt(r)
 	}
-	r.UpdateFromStore()
-	return r
-}
 
-// updateFromStore performs a unidirectional sync from store to registry. Specifically, for every update that is in the
-// store, we do the following:
-// - if the update is not in the registry then we create an entry in the registry,
-// - alternatively, if the update is in the registry and the state in the store is more advanced, then we advance the update in the registry.
-//
-//nolint:revive // cognitive complexity 27 (> max enabled 25)
-func (r *registry) UpdateFromStore() {
 	r.getStoreFn().VisitUpdates(func(updID string, updInfo *updatespb.UpdateInfo) {
 		if updInfo.GetAdmission() != nil {
-			if upd := r.updates[updID]; upd != nil {
-				_ = upd.advanceTo(stateAdmitted)
-				return
-			}
 			// An update entry in the registry may have a request payload: we use this to write the payload to an
 			// UpdateAccepted event, in the event that the update is accepted. However, when populating the registry
 			// from mutable state, we do not have access to update request payloads. In this situation it is correct
@@ -208,12 +189,6 @@ func (r *registry) UpdateFromStore() {
 				withInstrumentation(&r.instrumentation),
 			)
 		} else if acc := updInfo.GetAcceptance(); acc != nil {
-			if upd := r.updates[updID]; upd != nil {
-				if upd.state != stateProvisionallyAccepted {
-					_ = upd.advanceTo(stateAccepted)
-				}
-				return
-			}
 			r.updates[updID] = newAccepted(
 				updID,
 				acc.EventId,
@@ -221,15 +196,10 @@ func (r *registry) UpdateFromStore() {
 				withInstrumentation(&r.instrumentation),
 			)
 		} else if updInfo.GetCompletion() != nil {
-			if upd := r.updates[updID]; upd != nil {
-				if upd.state != stateProvisionallyCompleted {
-					_ = upd.advanceTo(stateCompleted)
-				}
-				return
-			}
-			r.completedUpdates[updID] = struct{}{}
+			r.completedCount++
 		}
 	})
+	return r
 }
 
 func (r *registry) FindOrCreate(ctx context.Context, id string) (*Update, bool, error) {
@@ -346,7 +316,7 @@ func (r *registry) Clear() {
 		upd.abortWaiters()
 	}
 	r.updates = nil
-	r.completedUpdates = nil
+	r.completedCount = 0
 }
 
 func (r *registry) Len() int {
@@ -361,7 +331,7 @@ func (r *registry) remover(id string) updateOpt {
 			r.mu.Lock()
 			defer r.mu.Unlock()
 			delete(r.updates, id)
-			r.completedUpdates[id] = struct{}{}
+			r.completedCount++
 		},
 	)
 }
@@ -375,7 +345,7 @@ func (r *registry) checkLimits(_ context.Context) error {
 		}
 	}
 
-	if len(r.updates)+len(r.completedUpdates) >= r.maxTotal() {
+	if len(r.updates)+r.completedCount >= r.maxTotal() {
 		return serviceerror.NewFailedPrecondition(
 			fmt.Sprintf("limit on number of total updates has been reached (%v)", r.maxTotal()),
 		)
