@@ -373,6 +373,20 @@ func (mr *MockMutableStateMockRecorder) AddFirstWorkflowTaskScheduled(parentCloc
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "AddFirstWorkflowTaskScheduled", reflect.TypeOf((*MockMutableState)(nil).AddFirstWorkflowTaskScheduled), parentClock, event, bypassTaskGeneration)
 }
 
+// AddHistoryEvent mocks base method.
+func (m *MockMutableState) AddHistoryEvent(t v11.EventType, setAttributes func(*v13.HistoryEvent)) *v13.HistoryEvent {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "AddHistoryEvent", t, setAttributes)
+	ret0, _ := ret[0].(*v13.HistoryEvent)
+	return ret0
+}
+
+// AddHistoryEvent indicates an expected call of AddHistoryEvent.
+func (mr *MockMutableStateMockRecorder) AddHistoryEvent(t, setAttributes interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "AddHistoryEvent", reflect.TypeOf((*MockMutableState)(nil).AddHistoryEvent), t, setAttributes)
+}
+
 // AddHistorySize mocks base method.
 func (m *MockMutableState) AddHistorySize(size int64) {
 	m.ctrl.T.Helper()
@@ -2676,6 +2690,21 @@ func (m *MockMutableState) IsWorkflowPendingOnWorkflowTaskBackoff() bool {
 func (mr *MockMutableStateMockRecorder) IsWorkflowPendingOnWorkflowTaskBackoff() *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "IsWorkflowPendingOnWorkflowTaskBackoff", reflect.TypeOf((*MockMutableState)(nil).IsWorkflowPendingOnWorkflowTaskBackoff))
+}
+
+// LoadHistoryEvent mocks base method.
+func (m *MockMutableState) LoadHistoryEvent(ctx context.Context, token []byte) (*v13.HistoryEvent, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "LoadHistoryEvent", ctx, token)
+	ret0, _ := ret[0].(*v13.HistoryEvent)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// LoadHistoryEvent indicates an expected call of LoadHistoryEvent.
+func (mr *MockMutableStateMockRecorder) LoadHistoryEvent(ctx, token interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "LoadHistoryEvent", reflect.TypeOf((*MockMutableState)(nil).LoadHistoryEvent), ctx, token)
 }
 
 // PopTasks mocks base method.

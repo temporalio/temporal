@@ -54,15 +54,14 @@ import (
 
 // Config represents configuration for frontend service
 type Config struct {
-	NumHistoryShards                      int32
-	PersistenceMaxQPS                     dynamicconfig.IntPropertyFn
-	PersistenceGlobalMaxQPS               dynamicconfig.IntPropertyFn
-	PersistenceNamespaceMaxQPS            dynamicconfig.IntPropertyFnWithNamespaceFilter
-	PersistenceGlobalNamespaceMaxQPS      dynamicconfig.IntPropertyFnWithNamespaceFilter
-	PersistencePerShardNamespaceMaxQPS    dynamicconfig.IntPropertyFnWithNamespaceFilter
-	EnablePersistencePriorityRateLimiting dynamicconfig.BoolPropertyFn
-	PersistenceDynamicRateLimitingParams  dynamicconfig.MapPropertyFn
-	PersistenceQPSBurstRatio              dynamicconfig.FloatPropertyFn
+	NumHistoryShards                     int32
+	PersistenceMaxQPS                    dynamicconfig.IntPropertyFn
+	PersistenceGlobalMaxQPS              dynamicconfig.IntPropertyFn
+	PersistenceNamespaceMaxQPS           dynamicconfig.IntPropertyFnWithNamespaceFilter
+	PersistenceGlobalNamespaceMaxQPS     dynamicconfig.IntPropertyFnWithNamespaceFilter
+	PersistencePerShardNamespaceMaxQPS   dynamicconfig.IntPropertyFnWithNamespaceFilter
+	PersistenceDynamicRateLimitingParams dynamicconfig.MapPropertyFn
+	PersistenceQPSBurstRatio             dynamicconfig.FloatPropertyFn
 
 	VisibilityPersistenceMaxReadQPS       dynamicconfig.IntPropertyFn
 	VisibilityPersistenceMaxWriteQPS      dynamicconfig.IntPropertyFn
@@ -190,6 +189,10 @@ type Config struct {
 	EnableWorkerVersioningWorkflow dynamicconfig.BoolPropertyFnWithNamespaceFilter
 	EnableWorkerVersioningRules    dynamicconfig.BoolPropertyFnWithNamespaceFilter
 
+	// AccessHistoryFraction are interim flags across 2 minor releases and will be removed once fully enabled.
+	AccessHistoryFraction            dynamicconfig.FloatPropertyFn
+	AdminDeleteAccessHistoryFraction dynamicconfig.FloatPropertyFn
+
 	// EnableNexusAPIs controls whether to allow invoking Nexus related APIs and whether to register a handler for Nexus
 	// HTTP requests.
 	EnableNexusAPIs dynamicconfig.BoolPropertyFn
@@ -197,6 +200,7 @@ type Config struct {
 	// EnableCallbackAttachment enables attaching callbacks to workflows.
 	EnableCallbackAttachment    dynamicconfig.BoolPropertyFnWithNamespaceFilter
 	CallbackURLMaxLength        dynamicconfig.IntPropertyFnWithNamespaceFilter
+	MaxCallbacksPerWorkflow     dynamicconfig.IntPropertyFnWithNamespaceFilter
 	AdminEnableListHistoryTasks dynamicconfig.BoolPropertyFn
 }
 
@@ -206,15 +210,14 @@ func NewConfig(
 	numHistoryShards int32,
 ) *Config {
 	return &Config{
-		NumHistoryShards:                      numHistoryShards,
-		PersistenceMaxQPS:                     dc.GetIntProperty(dynamicconfig.FrontendPersistenceMaxQPS, 2000),
-		PersistenceGlobalMaxQPS:               dc.GetIntProperty(dynamicconfig.FrontendPersistenceGlobalMaxQPS, 0),
-		PersistenceNamespaceMaxQPS:            dc.GetIntPropertyFilteredByNamespace(dynamicconfig.FrontendPersistenceNamespaceMaxQPS, 0),
-		PersistenceGlobalNamespaceMaxQPS:      dc.GetIntPropertyFilteredByNamespace(dynamicconfig.FrontendPersistenceGlobalNamespaceMaxQPS, 0),
-		PersistencePerShardNamespaceMaxQPS:    dynamicconfig.DefaultPerShardNamespaceRPSMax,
-		EnablePersistencePriorityRateLimiting: dc.GetBoolProperty(dynamicconfig.FrontendEnablePersistencePriorityRateLimiting, true),
-		PersistenceDynamicRateLimitingParams:  dc.GetMapProperty(dynamicconfig.FrontendPersistenceDynamicRateLimitingParams, dynamicconfig.DefaultDynamicRateLimitingParams),
-		PersistenceQPSBurstRatio:              dc.GetFloat64Property(dynamicconfig.PersistenceQPSBurstRatio, 1),
+		NumHistoryShards:                     numHistoryShards,
+		PersistenceMaxQPS:                    dc.GetIntProperty(dynamicconfig.FrontendPersistenceMaxQPS, 2000),
+		PersistenceGlobalMaxQPS:              dc.GetIntProperty(dynamicconfig.FrontendPersistenceGlobalMaxQPS, 0),
+		PersistenceNamespaceMaxQPS:           dc.GetIntPropertyFilteredByNamespace(dynamicconfig.FrontendPersistenceNamespaceMaxQPS, 0),
+		PersistenceGlobalNamespaceMaxQPS:     dc.GetIntPropertyFilteredByNamespace(dynamicconfig.FrontendPersistenceGlobalNamespaceMaxQPS, 0),
+		PersistencePerShardNamespaceMaxQPS:   dynamicconfig.DefaultPerShardNamespaceRPSMax,
+		PersistenceDynamicRateLimitingParams: dc.GetMapProperty(dynamicconfig.FrontendPersistenceDynamicRateLimitingParams, dynamicconfig.DefaultDynamicRateLimitingParams),
+		PersistenceQPSBurstRatio:             dc.GetFloat64Property(dynamicconfig.PersistenceQPSBurstRatio, 1),
 
 		VisibilityPersistenceMaxReadQPS:       visibility.GetVisibilityPersistenceMaxReadQPS(dc),
 		VisibilityPersistenceMaxWriteQPS:      visibility.GetVisibilityPersistenceMaxWriteQPS(dc),
@@ -298,9 +301,13 @@ func NewConfig(
 		EnableWorkerVersioningWorkflow: dc.GetBoolPropertyFnWithNamespaceFilter(dynamicconfig.FrontendEnableWorkerVersioningWorkflowAPIs, false),
 		EnableWorkerVersioningRules:    dc.GetBoolPropertyFnWithNamespaceFilter(dynamicconfig.FrontendEnableWorkerVersioningRuleAPIs, false),
 
+		AccessHistoryFraction:            dc.GetFloat64Property(dynamicconfig.FrontendAccessHistoryFraction, 1.0),
+		AdminDeleteAccessHistoryFraction: dc.GetFloat64Property(dynamicconfig.FrontendAdminDeleteAccessHistoryFraction, 1.0),
+
 		EnableNexusAPIs:             dc.GetBoolProperty(dynamicconfig.FrontendEnableNexusAPIs, false),
 		EnableCallbackAttachment:    dc.GetBoolPropertyFnWithNamespaceFilter(dynamicconfig.FrontendEnableCallbackAttachment, false),
 		CallbackURLMaxLength:        dc.GetIntPropertyFilteredByNamespace(dynamicconfig.FrontendCallbackURLMaxLength, 1000),
+		MaxCallbacksPerWorkflow:     dc.GetIntPropertyFilteredByNamespace(dynamicconfig.FrontendMaxCallbacksPerWorkflow, 32),
 		AdminEnableListHistoryTasks: dc.GetBoolProperty(dynamicconfig.AdminEnableListHistoryTasks, true),
 	}
 }

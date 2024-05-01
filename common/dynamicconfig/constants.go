@@ -243,7 +243,7 @@ const (
 	NexusIncomingServiceListDefaultPageSize = "limit.incomingServiceListDefaultPageSize"
 	// NexusIncomingServiceListMaxPageSize is the maximum page size for listing Nexus incoming services.
 	NexusIncomingServiceListMaxPageSize = "limit.incomingServiceListMaxPageSize"
-	// NexusOutgoingServiceURLMaxLength is the maximum length of an outgoing service URL.
+	// NexusOutgoingServiceURLMaxLength is the maximum length of an outgoing service URL and public callback URL.
 	NexusOutgoingServiceURLMaxLength = "limit.outgoingServiceURLMaxLength"
 	// NexusOutgoingServiceNameMaxLength is the maximum length of an outgoing service name.
 	NexusOutgoingServiceNameMaxLength = "limit.outgoingServiceNameMaxLength"
@@ -273,8 +273,6 @@ const (
 	FrontendPersistenceNamespaceMaxQPS = "frontend.persistenceNamespaceMaxQPS"
 	// FrontendPersistenceGlobalNamespaceMaxQPS is the max qps each namespace in frontend cluster can query DB
 	FrontendPersistenceGlobalNamespaceMaxQPS = "frontend.persistenceGlobalNamespaceMaxQPS"
-	// FrontendEnablePersistencePriorityRateLimiting indicates if priority rate limiting is enabled in frontend persistence client
-	FrontendEnablePersistencePriorityRateLimiting = "frontend.enablePersistencePriorityRateLimiting"
 	// FrontendPersistenceDynamicRateLimitingParams is a map that contains all adjustable dynamic rate limiting params
 	// see DefaultDynamicRateLimitingParams for available options and defaults
 	FrontendPersistenceDynamicRateLimitingParams = "frontend.persistenceDynamicRateLimitingParams"
@@ -411,12 +409,22 @@ const (
 	FrontendEnableCallbackAttachment = "frontend.enableCallbackAttachment"
 	// FrontendCallbackURLMaxLength is the maximum length of callback URL
 	FrontendCallbackURLMaxLength = "frontend.callbackURLMaxLength"
+	// FrontendMaxCallbacksPerWorkflow is the maximum number of callbacks that can be attached to a workflow.
+	FrontendMaxCallbacksPerWorkflow = "frontend.maxCallbacksPerWorkflow"
 	// FrontendMaxConcurrentBatchOperationPerNamespace is the max concurrent batch operation job count per namespace
 	FrontendMaxConcurrentBatchOperationPerNamespace = "frontend.MaxConcurrentBatchOperationPerNamespace"
 	// FrontendMaxExecutionCountBatchOperationPerNamespace is the max execution count batch operation supports per namespace
 	FrontendMaxExecutionCountBatchOperationPerNamespace = "frontend.MaxExecutionCountBatchOperationPerNamespace"
 	// FrontendEnableBatcher enables batcher-related RPCs in the frontend
 	FrontendEnableBatcher = "frontend.enableBatcher"
+	// FrontendAccessHistoryFraction (0.0~1.0) is the fraction of history operations that are sent to the history
+	// service using the new RPCs. The remaining access history via the existing implementation.
+	// TODO: remove once migration completes.
+	FrontendAccessHistoryFraction = "frontend.accessHistoryFraction"
+	// FrontendAdminDeleteAccessHistoryFraction (0.0~1.0) is the fraction of admin DeleteWorkflowExecution requests
+	// that are sent to the history service using the new RPCs. The remaining access history via the existing implementation.
+	// TODO: remove once migration completes.
+	FrontendAdminDeleteAccessHistoryFraction = "frontend.adminDeleteAccessHistoryFraction"
 
 	// FrontendEnableUpdateWorkflowExecution enables UpdateWorkflowExecution API in the frontend.
 	// The UpdateWorkflowExecution API has gone through rigorous testing efforts but this config's default is `false` until the
@@ -470,8 +478,6 @@ const (
 	MatchingPersistenceNamespaceMaxQPS = "matching.persistenceNamespaceMaxQPS"
 	// MatchingPersistenceNamespaceMaxQPS is the max qps each namespace in matching cluster can query DB
 	MatchingPersistenceGlobalNamespaceMaxQPS = "matching.persistenceGlobalNamespaceMaxQPS"
-	// MatchingEnablePersistencePriorityRateLimiting indicates if priority rate limiting is enabled in matching persistence client
-	MatchingEnablePersistencePriorityRateLimiting = "matching.enablePersistencePriorityRateLimiting"
 	// MatchingPersistenceDynamicRateLimitingParams is a map that contains all adjustable dynamic rate limiting params
 	// see DefaultDynamicRateLimitingParams for available options and defaults
 	MatchingPersistenceDynamicRateLimitingParams = "matching.persistenceDynamicRateLimitingParams"
@@ -570,8 +576,6 @@ const (
 	HistoryPersistenceGlobalNamespaceMaxQPS = "history.persistenceGlobalNamespaceMaxQPS"
 	// HistoryPersistencePerShardNamespaceMaxQPS is the max qps each namespace on a shard can query DB
 	HistoryPersistencePerShardNamespaceMaxQPS = "history.persistencePerShardNamespaceMaxQPS"
-	// HistoryEnablePersistencePriorityRateLimiting indicates if priority rate limiting is enabled in history persistence client
-	HistoryEnablePersistencePriorityRateLimiting = "history.enablePersistencePriorityRateLimiting"
 	// HistoryPersistenceDynamicRateLimitingParams is a map that contains all adjustable dynamic rate limiting params
 	// see DefaultDynamicRateLimitingParams for available options and defaults
 	HistoryPersistenceDynamicRateLimitingParams = "history.persistenceDynamicRateLimitingParams"
@@ -978,8 +982,6 @@ const (
 	WorkerPersistenceNamespaceMaxQPS = "worker.persistenceNamespaceMaxQPS"
 	// WorkerPersistenceNamespaceMaxQPS is the max qps each namespace in worker cluster can query DB
 	WorkerPersistenceGlobalNamespaceMaxQPS = "worker.persistenceGlobalNamespaceMaxQPS"
-	// WorkerEnablePersistencePriorityRateLimiting indicates if priority rate limiting is enabled in worker persistence client
-	WorkerEnablePersistencePriorityRateLimiting = "worker.enablePersistencePriorityRateLimiting"
 	// WorkerPersistenceDynamicRateLimitingParams is a map that contains all adjustable dynamic rate limiting params
 	// see DefaultDynamicRateLimitingParams for available options and defaults
 	WorkerPersistenceDynamicRateLimitingParams = "worker.persistenceDynamicRateLimitingParams"

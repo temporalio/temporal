@@ -88,57 +88,68 @@ func (s *FunctionalSuite) TestWorkflowCallbacks_InvalidArgument() {
 	workflowType := "test"
 
 	cases := []struct {
-		name, url, message string
-		allow              bool
+		name    string
+		urls    []string
+		message string
+		allow   bool
 	}{
 		{
 			name:    "disabled",
-			url:     "http://some-ignored-address",
+			urls:    []string{"http://some-ignored-address"},
 			allow:   false,
 			message: "attaching workflow callbacks is disabled for this namespace",
 		},
 		{
 			name:    "invalid-scheme",
-			url:     "invalid",
+			urls:    []string{"invalid"},
 			allow:   true,
 			message: "invalid url: unknown scheme: invalid",
 		},
 		{
 			name:    "url-length-too-long",
-			url:     "http://some-very-very-very-very-very-very-very-long-url",
+			urls:    []string{"http://some-very-very-very-very-very-very-very-long-url"},
 			allow:   true,
 			message: "invalid url: url length longer than max length allowed of 50",
+		},
+		{
+			name:    "too many callbacks",
+			urls:    []string{"http://url-1", "http://url-2", "http://url-3"},
+			allow:   true,
+			message: "cannot attach more than 2 callbacks to a workflow",
 		},
 	}
 
 	dc := s.testCluster.host.dcClient
 	dc.OverrideValue(s.T(), dynamicconfig.FrontendCallbackURLMaxLength, 50)
+	dc.OverrideValue(s.T(), dynamicconfig.FrontendMaxCallbacksPerWorkflow, 2)
 	defer dc.RemoveOverride(dynamicconfig.FrontendEnableCallbackAttachment)
 	defer dc.RemoveOverride(dynamicconfig.FrontendCallbackURLMaxLength)
+	defer dc.RemoveOverride(dynamicconfig.FrontendMaxCallbacksPerWorkflow)
 
 	for _, tc := range cases {
 		tc := tc
-		// TODO: use sdkClient when callbacks are exposed
 		s.T().Run(tc.name, func(t *testing.T) {
 			dc.OverrideValue(s.T(), dynamicconfig.FrontendEnableCallbackAttachment, tc.allow)
-			request := &workflowservice.StartWorkflowExecutionRequest{
-				RequestId:          uuid.New(),
-				Namespace:          s.namespace,
-				WorkflowId:         s.randomizeStr(s.T().Name()),
-				WorkflowType:       &commonpb.WorkflowType{Name: workflowType},
-				TaskQueue:          &taskqueuepb.TaskQueue{Name: taskQueue, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
-				Input:              nil,
-				WorkflowRunTimeout: durationpb.New(100 * time.Second),
-				Identity:           s.T().Name(),
-				CompletionCallbacks: []*commonpb.Callback{
-					{
-						Variant: &commonpb.Callback_Nexus_{
-							Nexus: &commonpb.Callback_Nexus{
-								Url: tc.url,
-							},
+			cbs := make([]*commonpb.Callback, 0, len(tc.urls))
+			for _, url := range tc.urls {
+				cbs = append(cbs, &commonpb.Callback{
+					Variant: &commonpb.Callback_Nexus_{
+						Nexus: &commonpb.Callback_Nexus{
+							Url: url,
 						},
 					},
-				},
+				})
+			}
+			request := &workflowservice.StartWorkflowExecutionRequest{
+				RequestId:           uuid.New(),
+				Namespace:           s.namespace,
+				WorkflowId:          s.randomizeStr(s.T().Name()),
+				WorkflowType:        &commonpb.WorkflowType{Name: workflowType},
+				TaskQueue:           &taskqueuepb.TaskQueue{Name: taskQueue, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
+				Input:               nil,
+				WorkflowRunTimeout:  durationpb.New(100 * time.Second),
+				Identity:            s.T().Name(),
+				CompletionCallbacks: cbs,
 			}
 
 			_, err := s.engine.StartWorkflowExecution(ctx, request)

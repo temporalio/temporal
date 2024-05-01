@@ -40,6 +40,8 @@ import (
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	"go.temporal.io/api/workflowservice/v1"
 
+	"go.temporal.io/server/common/dynamicconfig"
+
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/api/matchingservice/v1"
@@ -100,6 +102,7 @@ type (
 		searchAttributesMapperProvider searchattribute.MapperProvider
 		searchAttributesValidator      *searchattribute.Validator
 		persistenceVisibilityMgr       manager.VisibilityManager
+		commandHandlerRegistry         *workflow.CommandHandlerRegistry
 	}
 )
 
@@ -124,6 +127,7 @@ func newWorkflowTaskHandlerCallback(historyEngine *historyEngineImpl) *workflowT
 		searchAttributesMapperProvider: historyEngine.shardContext.GetSearchAttributesMapperProvider(),
 		searchAttributesValidator:      historyEngine.searchAttributesValidator,
 		persistenceVisibilityMgr:       historyEngine.persistenceVisibilityMgr,
+		commandHandlerRegistry:         historyEngine.commandHandlerRegistry,
 	}
 }
 
@@ -306,8 +310,10 @@ func (handler *workflowTaskHandlerCallbacksImpl) handleWorkflowTaskStarted(
 		return nil, err
 	}
 
-	maxHistoryPageSize := int32(handler.config.HistoryMaxPageSize(namespaceEntry.Name().String()))
-	err = handler.setHistoryForRecordWfTaskStartedResp(ctx, workflowKey, maxHistoryPageSize, resp)
+	if dynamicconfig.AccessHistory(handler.config.FrontendAccessHistoryFraction, handler.metricsHandler.WithTags(metrics.OperationTag(metrics.HistoryHandleWorkflowTaskStartedTag))) {
+		maxHistoryPageSize := int32(handler.config.HistoryMaxPageSize(namespaceEntry.Name().String()))
+		err = handler.setHistoryForRecordWfTaskStartedResp(ctx, workflowKey, maxHistoryPageSize, resp)
+	}
 	if err != nil {
 		return nil, err
 	}
@@ -426,14 +432,6 @@ func (handler *workflowTaskHandlerCallbacksImpl) handleWorkflowTaskCompleted(
 	weContext := workflowLease.GetContext()
 	ms := workflowLease.GetMutableState()
 
-	workflowTaskStartedAndCompletedBuildIdMatch := true
-	if assignedBuildId := ms.GetAssignedBuildId(); assignedBuildId != "" {
-		// worker versioning is used, make sure the task was completed by the right build ID
-		wftStartedBuildId := ms.GetExecutionInfo().GetWorkflowTaskBuildId()
-		wftCompletedBuildId := request.GetWorkerVersionStamp().GetBuildId()
-		workflowTaskStartedAndCompletedBuildIdMatch = wftCompletedBuildId == wftStartedBuildId
-	}
-
 	currentWorkflowTask := ms.GetWorkflowTaskByID(token.GetScheduledEventId())
 	if !ms.IsWorkflowExecutionRunning() ||
 		currentWorkflowTask == nil ||
@@ -441,11 +439,19 @@ func (handler *workflowTaskHandlerCallbacksImpl) handleWorkflowTaskCompleted(
 		(token.StartedEventId != common.EmptyEventID && token.StartedEventId != currentWorkflowTask.StartedEventID) ||
 		(token.StartedTime != nil && !currentWorkflowTask.StartedTime.IsZero() && !token.StartedTime.AsTime().Equal(currentWorkflowTask.StartedTime)) ||
 		currentWorkflowTask.Attempt != token.Attempt ||
-		(token.Version != common.EmptyVersion && token.Version != currentWorkflowTask.Version) ||
-		!workflowTaskStartedAndCompletedBuildIdMatch {
+		(token.Version != common.EmptyVersion && token.Version != currentWorkflowTask.Version) {
 		// we have not alter mutable state yet, so release with it with nil to avoid clear MS.
 		workflowLease.GetReleaseFn()(nil)
 		return nil, serviceerror.NewNotFound("Workflow task not found.")
+	}
+
+	if assignedBuildId := ms.GetAssignedBuildId(); assignedBuildId != "" {
+		// worker versioning is used, make sure the task was completed by the right build ID
+		wftStartedBuildId := ms.GetExecutionInfo().GetWorkflowTaskBuildId()
+		wftCompletedBuildId := request.GetWorkerVersionStamp().GetBuildId()
+		if wftCompletedBuildId != wftStartedBuildId {
+			return nil, serviceerror.NewNotFound("this workflow task was not dispatched to this Build ID")
+		}
 	}
 
 	defer func() { workflowLease.GetReleaseFn()(retError) }()
@@ -547,8 +553,10 @@ func (handler *workflowTaskHandlerCallbacksImpl) handleWorkflowTaskCompleted(
 		newMutableState             workflow.MutableState
 		responseMutations           []workflowTaskResponseMutation
 	)
-	// hasBufferedEvents indicates if there are any buffered events which should generate a new workflow task
-	hasBufferedEvents := ms.HasBufferedEvents()
+	updateRegistry := weContext.UpdateRegistry(ctx, nil)
+	// hasBufferedEventsOrMessages indicates if there are any buffered events or admitted updates which should generate a new
+	// workflow task.
+	hasBufferedEventsOrMessages := ms.HasBufferedEvents() || updateRegistry.HasOutgoingMessages(false)
 	if err := namespaceEntry.VerifyBinaryChecksum(request.GetBinaryChecksum()); err != nil {
 		wtFailedCause = newWorkflowTaskFailedCause(
 			enumspb.WORKFLOW_TASK_FAILED_CAUSE_BAD_BINARY,
@@ -583,7 +591,7 @@ func (handler *workflowTaskHandlerCallbacksImpl) handleWorkflowTaskCompleted(
 			request.GetIdentity(),
 			completedEvent.GetEventId(), // If completedEvent is nil, then GetEventId() returns 0 and this value shouldn't be used in workflowTaskHandler.
 			ms,
-			weContext.UpdateRegistry(ctx, nil),
+			updateRegistry,
 			&effects,
 			handler.commandAttrValidator,
 			workflowSizeChecker,
@@ -593,7 +601,8 @@ func (handler *workflowTaskHandlerCallbacksImpl) handleWorkflowTaskCompleted(
 			handler.config,
 			handler.shardContext,
 			handler.searchAttributesMapperProvider,
-			hasBufferedEvents,
+			hasBufferedEventsOrMessages,
+			handler.commandHandlerRegistry,
 		)
 
 		if responseMutations, err = workflowTaskHandler.handleCommands(
@@ -648,7 +657,7 @@ func (handler *workflowTaskHandlerCallbacksImpl) handleWorkflowTaskCompleted(
 
 		newMutableState = workflowTaskHandler.newMutableState
 
-		hasBufferedEvents = workflowTaskHandler.hasBufferedEvents
+		hasBufferedEventsOrMessages = workflowTaskHandler.hasBufferedEventsOrMessages
 	}
 
 	wtFailedShouldCreateNewTask := false
@@ -688,8 +697,8 @@ func (handler *workflowTaskHandlerCallbacksImpl) handleWorkflowTaskCompleted(
 		}
 	}
 
-	bufferedEventShouldCreateNewTask := hasBufferedEvents && ms.HasAnyBufferedEvent(eventShouldGenerateNewTaskFilter)
-	if hasBufferedEvents && !bufferedEventShouldCreateNewTask {
+	bufferedEventShouldCreateNewTask := hasBufferedEventsOrMessages && ms.HasAnyBufferedEvent(eventShouldGenerateNewTaskFilter)
+	if hasBufferedEventsOrMessages && !bufferedEventShouldCreateNewTask {
 		// Make sure tasks that should not create a new event don't get stuck in ms forever
 		ms.FlushBufferedEvents()
 	}

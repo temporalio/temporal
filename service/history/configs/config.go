@@ -44,17 +44,16 @@ type Config struct {
 	EnableReplicationStream dynamicconfig.BoolPropertyFn
 	HistoryReplicationDLQV2 dynamicconfig.BoolPropertyFn
 
-	RPS                                   dynamicconfig.IntPropertyFn
-	OperatorRPSRatio                      dynamicconfig.FloatPropertyFn
-	MaxIDLengthLimit                      dynamicconfig.IntPropertyFn
-	PersistenceMaxQPS                     dynamicconfig.IntPropertyFn
-	PersistenceGlobalMaxQPS               dynamicconfig.IntPropertyFn
-	PersistenceNamespaceMaxQPS            dynamicconfig.IntPropertyFnWithNamespaceFilter
-	PersistenceGlobalNamespaceMaxQPS      dynamicconfig.IntPropertyFnWithNamespaceFilter
-	PersistencePerShardNamespaceMaxQPS    dynamicconfig.IntPropertyFnWithNamespaceFilter
-	EnablePersistencePriorityRateLimiting dynamicconfig.BoolPropertyFn
-	PersistenceDynamicRateLimitingParams  dynamicconfig.MapPropertyFn
-	PersistenceQPSBurstRatio              dynamicconfig.FloatPropertyFn
+	RPS                                  dynamicconfig.IntPropertyFn
+	OperatorRPSRatio                     dynamicconfig.FloatPropertyFn
+	MaxIDLengthLimit                     dynamicconfig.IntPropertyFn
+	PersistenceMaxQPS                    dynamicconfig.IntPropertyFn
+	PersistenceGlobalMaxQPS              dynamicconfig.IntPropertyFn
+	PersistenceNamespaceMaxQPS           dynamicconfig.IntPropertyFnWithNamespaceFilter
+	PersistenceGlobalNamespaceMaxQPS     dynamicconfig.IntPropertyFnWithNamespaceFilter
+	PersistencePerShardNamespaceMaxQPS   dynamicconfig.IntPropertyFnWithNamespaceFilter
+	PersistenceDynamicRateLimitingParams dynamicconfig.MapPropertyFn
+	PersistenceQPSBurstRatio             dynamicconfig.FloatPropertyFn
 
 	VisibilityPersistenceMaxReadQPS       dynamicconfig.IntPropertyFn
 	VisibilityPersistenceMaxWriteQPS      dynamicconfig.IntPropertyFn
@@ -337,6 +336,9 @@ type Config struct {
 	WorkflowExecutionMaxTotalUpdates    dynamicconfig.IntPropertyFnWithNamespaceFilter
 
 	SendRawWorkflowHistory dynamicconfig.BoolPropertyFnWithNamespaceFilter
+
+	// FrontendAccessHistoryFraction is an interim flag across 2 minor releases and will be removed once fully enabled.
+	FrontendAccessHistoryFraction dynamicconfig.FloatPropertyFn
 }
 
 // NewConfig returns new service config with default values
@@ -350,22 +352,21 @@ func NewConfig(
 		EnableReplicationStream: dc.GetBoolProperty(dynamicconfig.EnableReplicationStream, true),
 		HistoryReplicationDLQV2: dc.GetBoolProperty(dynamicconfig.EnableHistoryReplicationDLQV2, false),
 
-		RPS:                                   dc.GetIntProperty(dynamicconfig.HistoryRPS, 3000),
-		OperatorRPSRatio:                      dc.GetFloat64Property(dynamicconfig.OperatorRPSRatio, common.DefaultOperatorRPSRatio),
-		MaxIDLengthLimit:                      dc.GetIntProperty(dynamicconfig.MaxIDLengthLimit, 1000),
-		PersistenceMaxQPS:                     dc.GetIntProperty(dynamicconfig.HistoryPersistenceMaxQPS, 9000),
-		PersistenceGlobalMaxQPS:               dc.GetIntProperty(dynamicconfig.HistoryPersistenceGlobalMaxQPS, 0),
-		PersistenceNamespaceMaxQPS:            dc.GetIntPropertyFilteredByNamespace(dynamicconfig.HistoryPersistenceNamespaceMaxQPS, 0),
-		PersistenceGlobalNamespaceMaxQPS:      dc.GetIntPropertyFilteredByNamespace(dynamicconfig.HistoryPersistenceGlobalNamespaceMaxQPS, 0),
-		PersistencePerShardNamespaceMaxQPS:    dc.GetIntPropertyFilteredByNamespace(dynamicconfig.HistoryPersistencePerShardNamespaceMaxQPS, 0),
-		EnablePersistencePriorityRateLimiting: dc.GetBoolProperty(dynamicconfig.HistoryEnablePersistencePriorityRateLimiting, true),
-		PersistenceDynamicRateLimitingParams:  dc.GetMapProperty(dynamicconfig.HistoryPersistenceDynamicRateLimitingParams, dynamicconfig.DefaultDynamicRateLimitingParams),
-		PersistenceQPSBurstRatio:              dc.GetFloat64Property(dynamicconfig.PersistenceQPSBurstRatio, 1.0),
-		ShutdownDrainDuration:                 dc.GetDurationProperty(dynamicconfig.HistoryShutdownDrainDuration, 0*time.Second),
-		StartupMembershipJoinDelay:            dc.GetDurationProperty(dynamicconfig.HistoryStartupMembershipJoinDelay, 0*time.Second),
-		MaxAutoResetPoints:                    dc.GetIntPropertyFilteredByNamespace(dynamicconfig.HistoryMaxAutoResetPoints, primitives.DefaultHistoryMaxAutoResetPoints),
-		DefaultWorkflowTaskTimeout:            dc.GetDurationPropertyFilteredByNamespace(dynamicconfig.DefaultWorkflowTaskTimeout, primitives.DefaultWorkflowTaskTimeout),
-		ContinueAsNewMinInterval:              dc.GetDurationPropertyFilteredByNamespace(dynamicconfig.ContinueAsNewMinInterval, time.Second),
+		RPS:                                  dc.GetIntProperty(dynamicconfig.HistoryRPS, 3000),
+		OperatorRPSRatio:                     dc.GetFloat64Property(dynamicconfig.OperatorRPSRatio, common.DefaultOperatorRPSRatio),
+		MaxIDLengthLimit:                     dc.GetIntProperty(dynamicconfig.MaxIDLengthLimit, 1000),
+		PersistenceMaxQPS:                    dc.GetIntProperty(dynamicconfig.HistoryPersistenceMaxQPS, 9000),
+		PersistenceGlobalMaxQPS:              dc.GetIntProperty(dynamicconfig.HistoryPersistenceGlobalMaxQPS, 0),
+		PersistenceNamespaceMaxQPS:           dc.GetIntPropertyFilteredByNamespace(dynamicconfig.HistoryPersistenceNamespaceMaxQPS, 0),
+		PersistenceGlobalNamespaceMaxQPS:     dc.GetIntPropertyFilteredByNamespace(dynamicconfig.HistoryPersistenceGlobalNamespaceMaxQPS, 0),
+		PersistencePerShardNamespaceMaxQPS:   dc.GetIntPropertyFilteredByNamespace(dynamicconfig.HistoryPersistencePerShardNamespaceMaxQPS, 0),
+		PersistenceDynamicRateLimitingParams: dc.GetMapProperty(dynamicconfig.HistoryPersistenceDynamicRateLimitingParams, dynamicconfig.DefaultDynamicRateLimitingParams),
+		PersistenceQPSBurstRatio:             dc.GetFloat64Property(dynamicconfig.PersistenceQPSBurstRatio, 1.0),
+		ShutdownDrainDuration:                dc.GetDurationProperty(dynamicconfig.HistoryShutdownDrainDuration, 0*time.Second),
+		StartupMembershipJoinDelay:           dc.GetDurationProperty(dynamicconfig.HistoryStartupMembershipJoinDelay, 0*time.Second),
+		MaxAutoResetPoints:                   dc.GetIntPropertyFilteredByNamespace(dynamicconfig.HistoryMaxAutoResetPoints, primitives.DefaultHistoryMaxAutoResetPoints),
+		DefaultWorkflowTaskTimeout:           dc.GetDurationPropertyFilteredByNamespace(dynamicconfig.DefaultWorkflowTaskTimeout, primitives.DefaultWorkflowTaskTimeout),
+		ContinueAsNewMinInterval:             dc.GetDurationPropertyFilteredByNamespace(dynamicconfig.ContinueAsNewMinInterval, time.Second),
 
 		VisibilityPersistenceMaxReadQPS:       visibility.GetVisibilityPersistenceMaxReadQPS(dc),
 		VisibilityPersistenceMaxWriteQPS:      visibility.GetVisibilityPersistenceMaxWriteQPS(dc),
@@ -415,7 +416,7 @@ func NewConfig(
 		QueuePendingTaskMaxCount:         dc.GetIntProperty(dynamicconfig.QueuePendingTaskMaxCount, 10000),
 
 		TaskDLQEnabled:                 dc.GetBoolProperty(dynamicconfig.HistoryTaskDLQEnabled, true),
-		TaskDLQUnexpectedErrorAttempts: dc.GetIntProperty(dynamicconfig.HistoryTaskDLQUnexpectedErrorAttempts, 100),
+		TaskDLQUnexpectedErrorAttempts: dc.GetIntProperty(dynamicconfig.HistoryTaskDLQUnexpectedErrorAttempts, 70), // 70 attempts takes about an hour
 		TaskDLQInternalErrors:          dc.GetBoolProperty(dynamicconfig.HistoryTaskDLQInternalErrors, false),
 		TaskDLQErrorPattern:            dc.GetStringProperty(dynamicconfig.HistoryTaskDLQErrorPattern, ""),
 
@@ -608,6 +609,8 @@ func NewConfig(
 		WorkflowExecutionMaxTotalUpdates:    dc.GetIntPropertyFilteredByNamespace(dynamicconfig.WorkflowExecutionMaxTotalUpdates, 2000),
 
 		SendRawWorkflowHistory: dc.GetBoolPropertyFnWithNamespaceFilter(dynamicconfig.SendRawWorkflowHistory, false),
+
+		FrontendAccessHistoryFraction: dc.GetFloat64Property(dynamicconfig.FrontendAccessHistoryFraction, 1.0),
 	}
 
 	return cfg

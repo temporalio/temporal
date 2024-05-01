@@ -290,9 +290,28 @@ func (fwdr *Forwarder) ForwardPoll(ctx context.Context, pollMetadata *pollMetada
 			return nil, fwdr.handleErr(err)
 		}
 		return newInternalStartedTask(&startedTaskInfo{activityTaskInfo: resp}), nil
+	case enumspb.TASK_QUEUE_TYPE_NEXUS:
+		resp, err := fwdr.client.PollNexusTaskQueue(ctx, &matchingservice.PollNexusTaskQueueRequest{
+			NamespaceId: fwdr.partition.TaskQueue().NamespaceId().String(),
+			PollerId:    pollerID,
+			Request: &workflowservice.PollNexusTaskQueueRequest{
+				TaskQueue: &taskqueuepb.TaskQueue{
+					Name: target.RpcName(),
+					Kind: fwdr.partition.Kind(),
+				},
+				Identity:                  identity,
+				WorkerVersionCapabilities: pollMetadata.workerVersionCapabilities,
+				// Namespace is ignored here.
+			},
+			ForwardedSource: fwdr.partition.RpcName(),
+		})
+		if err != nil {
+			return nil, fwdr.handleErr(err)
+		}
+		return newInternalStartedTask(&startedTaskInfo{nexusTaskInfo: resp}), nil
+	default:
+		return nil, errInvalidTaskQueueType
 	}
-
-	return nil, errInvalidTaskQueueType
 }
 
 // AddReqTokenC returns a channel that can be used to wait for a token

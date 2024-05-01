@@ -39,19 +39,19 @@ import (
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	updatepb "go.temporal.io/api/update/v1"
 	"go.temporal.io/api/workflowservice/v1"
-	taskqueuespb "go.temporal.io/server/api/taskqueue/v1"
-	"go.temporal.io/server/common/worker_versioning"
 	"google.golang.org/protobuf/types/known/durationpb"
 	"google.golang.org/protobuf/types/known/timestamppb"
 
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	historyspb "go.temporal.io/server/api/history/v1"
+	taskqueuespb "go.temporal.io/server/api/taskqueue/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/backoff"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/common/tqid"
+	"go.temporal.io/server/common/worker_versioning"
 )
 
 type (
@@ -117,7 +117,7 @@ func (m *workflowTaskStateMachine) ApplyWorkflowTaskScheduledEvent(
 	return workflowTask, nil
 }
 
-// if this is a transient WF task (attempt > 1), we make sure to keep the following from the previous attempt:
+// if this is a transient WFT (attempt > 1), we make sure to keep the following from the previous attempt:
 //   - BuildId of the previous attempt to be able to compare it with next attempt and renew tasks if it changes
 //   - BuildIdRedirectCounter so add the right BuildIdRedirectCounter to the WFT started event that will be
 //     created at WFT completion time
@@ -225,7 +225,7 @@ func (m *workflowTaskStateMachine) ApplyWorkflowTaskStartedEvent(
 		BuildIdRedirectCounter: redirectCounter,
 	}
 
-	if buildId := worker_versioning.StampIfUsingVersioning(versioningStamp).GetBuildId(); buildId != "" {
+	if buildId := worker_versioning.BuildIdIfUsingVersioning(versioningStamp); buildId != "" {
 		if redirectCounter == 0 {
 			// this is the initial build ID, it should normally be persisted after scheduling the wf task,
 			// but setting it here again in case it failed to be persisted before.
@@ -557,8 +557,8 @@ func (m *workflowTaskStateMachine) AddWorkflowTaskStartedEvent(
 }
 
 // applyBuildIdRedirect applies redirect, if applicable, based on the versioningStamp and redirectInfo.
-// Returns a possibly new workflowTaskInfo and a boolean indicating if transient wf task was failed and a new wf task
-// scheduled event is created due to build id being changed by the current wft.
+// Returns a possibly new workflowTaskInfo and a boolean indicating if transient WFT was converted to normal and
+// scheduled event is created due to build id being changed by the current WFT.
 func (m *workflowTaskStateMachine) applyBuildIdRedirect(
 	versioningStamp *commonpb.WorkerVersionStamp,
 	workflowTask *WorkflowTaskInfo,
@@ -580,11 +580,16 @@ func (m *workflowTaskStateMachine) applyBuildIdRedirect(
 		scheduledEvent := m.ms.hBuilder.AddWorkflowTaskScheduledEvent(
 			m.ms.CurrentTaskQueue(),
 			durationpb.New(workflowTask.WorkflowTaskTimeout),
-			1,
+			// Preserving the number of previous attempts. This value shows the number of attempts made on the last
+			// build ID + 1 (because it's being reset to 1 for the next build ID. See bellow.)
+			workflowTask.Attempt,
 			workflowTask.ScheduledTime,
 		)
 		newWorkflowTask := m.getWorkflowTaskInfo()
 		newWorkflowTask.ScheduledEventID = scheduledEvent.GetEventId()
+		// Using 1 as the attempt in MS. it's needed so that the new WFT is not considered transient.
+		// TODO: maybe add a separate field in MS for flagging transient WFT instead of relying on attempt so that we
+		// can put total attempt count (across all build IDs) here?
 		newWorkflowTask.Attempt = 1
 		m.UpdateWorkflowTask(newWorkflowTask)
 		return newWorkflowTask, true, nil

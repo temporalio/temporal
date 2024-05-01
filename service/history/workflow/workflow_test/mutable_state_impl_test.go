@@ -165,10 +165,10 @@ func startWorkflowExecution(
 	t *testing.T,
 	ms *workflow.MutableStateImpl,
 	nsEntry *namespace.Namespace,
-) {
+) *historypb.HistoryEvent {
 	t.Helper()
 
-	_, err := ms.AddWorkflowExecutionStartedEvent(
+	event, err := ms.AddWorkflowExecutionStartedEvent(
 		&commonpb.WorkflowExecution{
 			WorkflowId: ms.GetWorkflowKey().WorkflowID,
 			RunId:      ms.GetWorkflowKey().RunID,
@@ -184,9 +184,8 @@ func startWorkflowExecution(
 			},
 		},
 	)
-	if err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, err)
+	return event
 }
 
 func addWorkflowExecutionSignaled(t *testing.T, i int, ms *workflow.MutableStateImpl) {
@@ -477,4 +476,30 @@ func TestGetNexusCompletion(t *testing.T) {
 			tc.verifyCompletion(t, completion)
 		})
 	}
+}
+
+func TestLoadHistoryEventFromToken(t *testing.T) {
+	nsEntry := tests.LocalNamespaceEntry
+	ms, evs := createMutableState(t, nsEntry, tests.NewDynamicConfig())
+	event := startWorkflowExecution(t, ms, nsEntry)
+	branchToken, err := ms.GetCurrentBranchToken()
+	require.NoError(t, err)
+	firstEventID := event.EventId
+
+	token, err := hsm.GenerateEventLoadToken(event)
+	require.NoError(t, err)
+
+	wfKey := ms.GetWorkflowKey()
+	eventKey := events.EventKey{
+		NamespaceID: nsEntry.ID(),
+		WorkflowID:  wfKey.WorkflowID,
+		RunID:       wfKey.RunID,
+		EventID:     event.EventId,
+		Version:     0,
+	}
+	evs.EXPECT().GetEvent(gomock.Any(), gomock.Any(), eventKey, firstEventID, branchToken).Return(event, nil)
+
+	loaded, err := ms.LoadHistoryEvent(context.Background(), token)
+	require.NoError(t, err)
+	require.Equal(t, event, loaded)
 }

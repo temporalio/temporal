@@ -39,21 +39,20 @@ import (
 type (
 	// Config represents configuration for matching service
 	Config struct {
-		PersistenceMaxQPS                     dynamicconfig.IntPropertyFn
-		PersistenceGlobalMaxQPS               dynamicconfig.IntPropertyFn
-		PersistenceNamespaceMaxQPS            dynamicconfig.IntPropertyFnWithNamespaceFilter
-		PersistenceGlobalNamespaceMaxQPS      dynamicconfig.IntPropertyFnWithNamespaceFilter
-		PersistencePerShardNamespaceMaxQPS    dynamicconfig.IntPropertyFnWithNamespaceFilter
-		EnablePersistencePriorityRateLimiting dynamicconfig.BoolPropertyFn
-		PersistenceDynamicRateLimitingParams  dynamicconfig.MapPropertyFn
-		PersistenceQPSBurstRatio              dynamicconfig.FloatPropertyFn
-		SyncMatchWaitDuration                 dynamicconfig.DurationPropertyFnWithTaskQueueFilter
-		TestDisableSyncMatch                  dynamicconfig.BoolPropertyFn
-		RPS                                   dynamicconfig.IntPropertyFn
-		OperatorRPSRatio                      dynamicconfig.FloatPropertyFn
-		AlignMembershipChange                 dynamicconfig.DurationPropertyFn
-		ShutdownDrainDuration                 dynamicconfig.DurationPropertyFn
-		HistoryMaxPageSize                    dynamicconfig.IntPropertyFnWithNamespaceFilter
+		PersistenceMaxQPS                    dynamicconfig.IntPropertyFn
+		PersistenceGlobalMaxQPS              dynamicconfig.IntPropertyFn
+		PersistenceNamespaceMaxQPS           dynamicconfig.IntPropertyFnWithNamespaceFilter
+		PersistenceGlobalNamespaceMaxQPS     dynamicconfig.IntPropertyFnWithNamespaceFilter
+		PersistencePerShardNamespaceMaxQPS   dynamicconfig.IntPropertyFnWithNamespaceFilter
+		PersistenceDynamicRateLimitingParams dynamicconfig.MapPropertyFn
+		PersistenceQPSBurstRatio             dynamicconfig.FloatPropertyFn
+		SyncMatchWaitDuration                dynamicconfig.DurationPropertyFnWithTaskQueueFilter
+		TestDisableSyncMatch                 dynamicconfig.BoolPropertyFn
+		RPS                                  dynamicconfig.IntPropertyFn
+		OperatorRPSRatio                     dynamicconfig.FloatPropertyFn
+		AlignMembershipChange                dynamicconfig.DurationPropertyFn
+		ShutdownDrainDuration                dynamicconfig.DurationPropertyFn
+		HistoryMaxPageSize                   dynamicconfig.IntPropertyFnWithNamespaceFilter
 
 		// task queue configuration
 
@@ -105,6 +104,9 @@ type (
 		LoadUserData dynamicconfig.BoolPropertyFnWithTaskQueueFilter
 
 		ListNexusIncomingServicesLongPollTimeout dynamicconfig.DurationPropertyFn
+
+		// FrontendAccessHistoryFraction is an interim flag across 2 minor releases and will be removed once fully enabled.
+		FrontendAccessHistoryFraction dynamicconfig.FloatPropertyFn
 	}
 
 	forwarderConfig struct {
@@ -172,7 +174,6 @@ func NewConfig(
 		PersistenceNamespaceMaxQPS:               dc.GetIntPropertyFilteredByNamespace(dynamicconfig.MatchingPersistenceNamespaceMaxQPS, 0),
 		PersistenceGlobalNamespaceMaxQPS:         dc.GetIntPropertyFilteredByNamespace(dynamicconfig.MatchingPersistenceGlobalNamespaceMaxQPS, 0),
 		PersistencePerShardNamespaceMaxQPS:       dynamicconfig.DefaultPerShardNamespaceRPSMax,
-		EnablePersistencePriorityRateLimiting:    dc.GetBoolProperty(dynamicconfig.MatchingEnablePersistencePriorityRateLimiting, true),
 		PersistenceDynamicRateLimitingParams:     dc.GetMapProperty(dynamicconfig.MatchingPersistenceDynamicRateLimitingParams, dynamicconfig.DefaultDynamicRateLimitingParams),
 		PersistenceQPSBurstRatio:                 dc.GetFloat64Property(dynamicconfig.PersistenceQPSBurstRatio, 1),
 		SyncMatchWaitDuration:                    dc.GetDurationPropertyFilteredByTaskQueueInfo(dynamicconfig.MatchingSyncMatchWaitDuration, 200*time.Millisecond),
@@ -224,6 +225,8 @@ func NewConfig(
 		VisibilityEnableManualPagination:  dc.GetBoolPropertyFnWithNamespaceFilter(dynamicconfig.VisibilityEnableManualPagination, true),
 
 		ListNexusIncomingServicesLongPollTimeout: dc.GetDurationProperty(dynamicconfig.MatchingListNexusIncomingServicesLongPollTimeout, 5*time.Minute-10*time.Second), // Use -10 seconds so that we send back empty response instead of timeout
+
+		FrontendAccessHistoryFraction: dc.GetFloat64Property(dynamicconfig.FrontendAccessHistoryFraction, 1.0),
 	}
 }
 

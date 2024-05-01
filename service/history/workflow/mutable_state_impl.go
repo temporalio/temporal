@@ -36,6 +36,7 @@ import (
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	failurepb "go.temporal.io/api/failure/v1"
+	"go.temporal.io/api/history/v1"
 	historypb "go.temporal.io/api/history/v1"
 	"go.temporal.io/api/serviceerror"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
@@ -54,6 +55,7 @@ import (
 	historyspb "go.temporal.io/server/api/history/v1"
 	"go.temporal.io/server/api/historyservice/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
+	tokenspb "go.temporal.io/server/api/token/v1"
 	updatespb "go.temporal.io/server/api/update/v1"
 	workflowspb "go.temporal.io/server/api/workflow/v1"
 	"go.temporal.io/server/common"
@@ -76,7 +78,7 @@ import (
 	"go.temporal.io/server/common/searchattribute"
 	"go.temporal.io/server/common/util"
 	"go.temporal.io/server/common/worker_versioning"
-	"go.temporal.io/server/plugins/callbacks"
+	"go.temporal.io/server/components/callbacks"
 	"go.temporal.io/server/service/history/configs"
 	"go.temporal.io/server/service/history/consts"
 	"go.temporal.io/server/service/history/events"
@@ -210,6 +212,9 @@ type (
 		logger           log.Logger
 		metricsHandler   metrics.Handler
 		stateMachineNode *hsm.Node
+
+		// Tracks all events added via the AddHistoryEvent method that is used by the state machine framework.
+		currentTransactionAddedStateMachineEventTypes []enumspb.EventType
 	}
 )
 
@@ -495,7 +500,7 @@ func NewMutableStateInChain(
 
 func (ms *MutableStateImpl) mustInitHSM() {
 	// Error only occurs if some initialization path forgets to register the workflow state machine.
-	stateMachineNode, err := hsm.NewRoot(ms.shard.StateMachineRegistry(), StateMachineType.ID, ms, ms.executionInfo.SubStateMachinesByType)
+	stateMachineNode, err := hsm.NewRoot(ms.shard.StateMachineRegistry(), StateMachineType.ID, ms, ms.executionInfo.SubStateMachinesByType, ms)
 	if err != nil {
 		panic(err)
 	}
@@ -801,6 +806,37 @@ func (ms *MutableStateImpl) GetNamespaceEntry() *namespace.Namespace {
 	return ms.namespaceEntry
 }
 
+// AddHistoryEvent adds any history event to this workflow execution.
+// The provided setAttributes function should be used to set the attributes on the event.
+func (ms *MutableStateImpl) AddHistoryEvent(t enumspb.EventType, setAttributes func(*history.HistoryEvent)) *history.HistoryEvent {
+	event := ms.hBuilder.AddHistoryEvent(t, setAttributes)
+	ms.writeEventToCache(event)
+	ms.currentTransactionAddedStateMachineEventTypes = append(ms.currentTransactionAddedStateMachineEventTypes, t)
+	return event
+}
+
+func (ms *MutableStateImpl) LoadHistoryEvent(ctx context.Context, token []byte) (*historypb.HistoryEvent, error) {
+	ref := &tokenspb.HistoryEventRef{}
+	err := proto.Unmarshal(token, ref)
+	if err != nil {
+		return nil, err
+	}
+	branchToken, version, err := ms.getCurrentBranchTokenAndEventVersion(ref.EventId)
+	if err != nil {
+		return nil, err
+	}
+	wfKey := ms.GetWorkflowKey()
+	eventKey := events.EventKey{
+		NamespaceID: namespace.ID(wfKey.NamespaceID),
+		WorkflowID:  wfKey.WorkflowID,
+		RunID:       wfKey.RunID,
+		EventID:     ref.EventId,
+		Version:     version,
+	}
+
+	return ms.eventsCache.GetEvent(ctx, ms.shard.GetShardID(), eventKey, ref.EventBatchId, branchToken)
+}
+
 func (ms *MutableStateImpl) CurrentTaskQueue() *taskqueuepb.TaskQueue {
 	if ms.IsStickyTaskQueueSet() {
 		return &taskqueuepb.TaskQueue{
@@ -830,20 +866,31 @@ func (ms *MutableStateImpl) IsStickyTaskQueueSet() bool {
 }
 
 // TaskQueueScheduleToStartTimeout returns TaskQueue struct and corresponding StartToClose timeout.
-// Task queue kind (sticky or normal) and timeout are set based on comparison of normal task queue name
+// Task queue kind (sticky or normal) is set based on comparison of normal task queue name
 // in mutable state and provided name.
-func (ms *MutableStateImpl) TaskQueueScheduleToStartTimeout(name string) (*taskqueuepb.TaskQueue, *durationpb.Duration) {
-	if ms.executionInfo.TaskQueue != name {
+// ScheduleToStartTimeout is set based on queue kind and workflow task type.
+func (ms *MutableStateImpl) TaskQueueScheduleToStartTimeout(tqName string) (*taskqueuepb.TaskQueue, *durationpb.Duration) {
+	isStickyTq := ms.executionInfo.StickyTaskQueue == tqName
+	if isStickyTq {
 		return &taskqueuepb.TaskQueue{
 			Name:       ms.executionInfo.StickyTaskQueue,
 			Kind:       enumspb.TASK_QUEUE_KIND_STICKY,
 			NormalName: ms.executionInfo.TaskQueue,
 		}, ms.executionInfo.StickyScheduleToStartTimeout
 	}
-	return &taskqueuepb.TaskQueue{
+
+	// If tqName is normal task queue name.
+	normalTq := &taskqueuepb.TaskQueue{
 		Name: ms.executionInfo.TaskQueue,
 		Kind: enumspb.TASK_QUEUE_KIND_NORMAL,
-	}, ms.executionInfo.WorkflowRunTimeout // No WT ScheduleToStart timeout for normal task queue.
+	}
+	if ms.executionInfo.WorkflowTaskType == enumsspb.WORKFLOW_TASK_TYPE_SPECULATIVE {
+		// Speculative WFT has ScheduleToStartTimeout even on normal task queue.
+		// See comment in GenerateScheduleSpeculativeWorkflowTaskTasks for details.
+		return normalTq, durationpb.New(tasks.SpeculativeWorkflowTaskScheduleToStartTimeout)
+	}
+	// No WFT ScheduleToStart timeout for normal WFT on normal task queue.
+	return normalTq, ms.executionInfo.WorkflowRunTimeout
 }
 
 func (ms *MutableStateImpl) GetWorkflowType() *commonpb.WorkflowType {
@@ -2380,8 +2427,10 @@ func (ms *MutableStateImpl) processBuildIdRedirect(
 // ApplyBuildIdRedirect used for applying redirects from History events when rebuilding MS
 func (ms *MutableStateImpl) ApplyBuildIdRedirect(buildId string, redirectCounter int64) error {
 	if ms.GetExecutionInfo().GetBuildIdRedirectCounter() >= redirectCounter {
-		// existing redirect counter is more than the given one so, this redirect or a one more recent
-		// than it is already applied
+		// Existing redirect counter is more than the given one, so ignore this redirect because
+		// this or a more recent one has already been applied. This can happen when replaying
+		// history because redirects can be applied at activity started time, but we don't record
+		// the actual order of activity started events in history (they're transient tasks).
 		return nil
 	}
 	err := ms.UpdateBuildIdAssignment(buildId)
@@ -2669,8 +2718,8 @@ func (ms *MutableStateImpl) ApplyActivityTaskScheduledEvent(
 	if attributes.UseWorkflowBuildId {
 		if ms.GetAssignedBuildId() != "" {
 			// only set when using new versioning
-			ai.AssignedBuildId = &persistencespb.ActivityInfo_UseWorkflowBuildId_{
-				UseWorkflowBuildId: &persistencespb.ActivityInfo_UseWorkflowBuildId{},
+			ai.BuildIdInfo = &persistencespb.ActivityInfo_UseWorkflowBuildIdInfo_{
+				UseWorkflowBuildIdInfo: &persistencespb.ActivityInfo_UseWorkflowBuildIdInfo{},
 			}
 		} else {
 			// only set when using old versioning
@@ -2720,7 +2769,7 @@ func (ms *MutableStateImpl) addStartedEventForTransientActivity(
 		// Find the build ID of the worker to whom the task was dispatched base on whether it was an independently-
 		// assigned activity or not.
 		startedBuildId := ai.GetLastIndependentlyAssignedBuildId()
-		if useWf := ai.GetUseWorkflowBuildId(); useWf != nil {
+		if useWf := ai.GetUseWorkflowBuildIdInfo(); useWf != nil {
 			startedBuildId = useWf.GetLastUsedBuildId()
 		}
 		if startedBuildId != "" {
@@ -2737,7 +2786,7 @@ func (ms *MutableStateImpl) addStartedEventForTransientActivity(
 		ai.StartedIdentity,
 		ai.RetryLastFailure,
 		versioningStamp,
-		ai.GetUseWorkflowBuildId().GetLastRedirectCounter(),
+		ai.GetUseWorkflowBuildIdInfo().GetLastRedirectCounter(),
 	)
 	if ai.StartedTime != nil {
 		// overwrite started event time to the one recorded in ActivityInfo
@@ -2760,11 +2809,11 @@ func (ms *MutableStateImpl) AddActivityTaskStartedEvent(
 		return nil, err
 	}
 
-	if versioningStamp.GetUseVersioning() && versioningStamp.GetBuildId() != "" {
+	if buildId := worker_versioning.BuildIdIfUsingVersioning(versioningStamp); buildId != "" {
 		// note that if versioningStamp.BuildId is present we know it's not an old versioning worker because matching
 		// does not pass build id for old versioning workers to Record*TaskStart.
 		// TODO: cleanup this comment [cleanup-old-wv]
-		if useWf := ai.GetUseWorkflowBuildId(); useWf != nil {
+		if useWf := ai.GetUseWorkflowBuildIdInfo(); useWf != nil {
 			// when a dependent activity is redirected, we update workflow's assigned build ID as well
 			err := ms.processBuildIdRedirect(scheduledEventID, versioningStamp, redirectInfo)
 			if err != nil {
@@ -2775,8 +2824,8 @@ func (ms *MutableStateImpl) AddActivityTaskStartedEvent(
 			// this activity is using new versioning and is independently assigned to a build ID.
 			// Storing that in activity info. (normaly, LastIndependentlyAssignedBuildId should be present already,
 			// but setting it here again, in case the persistence call after AddTask was failed)
-			ai.AssignedBuildId = &persistencespb.ActivityInfo_LastIndependentlyAssignedBuildId{
-				LastIndependentlyAssignedBuildId: versioningStamp.GetBuildId(),
+			ai.BuildIdInfo = &persistencespb.ActivityInfo_LastIndependentlyAssignedBuildId{
+				LastIndependentlyAssignedBuildId: buildId,
 			}
 		}
 	}
@@ -2834,8 +2883,8 @@ func (ms *MutableStateImpl) ApplyActivityTaskStartedEvent(
 	ms.updateActivityInfos[ai.ScheduledEventId] = ai
 	ms.approximateSize += ai.Size()
 
-	if buildId := attributes.GetWorkerVersion().GetBuildId(); buildId != "" && attributes.GetWorkerVersion().GetUseVersioning() {
-		if ai.GetUseWorkflowBuildId() != nil {
+	if buildId := worker_versioning.BuildIdIfUsingVersioning(attributes.GetWorkerVersion()); buildId != "" {
+		if ai.GetUseWorkflowBuildIdInfo() != nil {
 			// when a dependent activity is redirected, we update workflow's assigned build ID as well
 			err := ms.ApplyBuildIdRedirect(buildId, attributes.GetBuildIdRedirectCounter())
 			if err != nil {
@@ -2843,7 +2892,7 @@ func (ms *MutableStateImpl) ApplyActivityTaskStartedEvent(
 			}
 		} else {
 			// This activity is not attached to the wf build ID so we store its build ID in activity info.
-			ai.AssignedBuildId = &persistencespb.ActivityInfo_LastIndependentlyAssignedBuildId{LastIndependentlyAssignedBuildId: buildId}
+			ai.BuildIdInfo = &persistencespb.ActivityInfo_LastIndependentlyAssignedBuildId{LastIndependentlyAssignedBuildId: buildId}
 		}
 	}
 
@@ -3916,7 +3965,7 @@ func (ms *MutableStateImpl) ApplyWorkflowExecutionUpdateAdmittedEvent(event *his
 		},
 	}
 	if _, ok := ms.executionInfo.UpdateInfos[updateID]; ok {
-		return serviceerror.NewInternal(fmt.Sprintf("Update ID %s is already present in registry", updateID))
+		return serviceerror.NewInternal(fmt.Sprintf("Update ID %s is already present in mutable state", updateID))
 	}
 	ui := updatespb.UpdateInfo{Value: admission}
 	ms.executionInfo.UpdateInfos[updateID] = &ui
@@ -5110,8 +5159,24 @@ func (ms *MutableStateImpl) prepareCloseTransaction(
 	if err := ms.taskGenerator.GenerateDirtySubStateMachineTasks(ms.shard.StateMachineRegistry()); err != nil {
 		return err
 	}
-	// Clear outputs for the next transaction.
-	ms.stateMachineNode.ClearTransactionState()
+
+	for _, t := range ms.currentTransactionAddedStateMachineEventTypes {
+		def, ok := ms.shard.StateMachineRegistry().EventDefinition(t)
+		if !ok {
+			return serviceerror.NewInternal(fmt.Sprintf("no event definition registered for %v", t))
+		}
+		if def.IsWorkflowTaskTrigger() {
+			if !ms.HasPendingWorkflowTask() {
+				if _, err := ms.AddWorkflowTaskScheduledEvent(
+					false,
+					enumsspb.WORKFLOW_TASK_TYPE_NORMAL,
+				); err != nil {
+					return err
+				}
+			}
+			break
+		}
+	}
 
 	ms.closeTransactionCollapseVisibilityTasks()
 
@@ -5126,7 +5191,6 @@ func (ms *MutableStateImpl) prepareCloseTransaction(
 func (ms *MutableStateImpl) cleanupTransaction(
 	_ TransactionPolicy,
 ) error {
-
 	ms.updateActivityInfos = make(map[int64]*persistencespb.ActivityInfo)
 	ms.deleteActivityInfos = make(map[int64]struct{})
 	ms.syncActivityTasks = make(map[int64]struct{})
@@ -5160,6 +5224,11 @@ func (ms *MutableStateImpl) cleanupTransaction(
 	)
 
 	ms.InsertTasks = make(map[tasks.Category][]tasks.Task)
+
+	// Clear outputs for the next transaction.
+	ms.stateMachineNode.ClearTransactionState()
+	// Clear out transient state machine state.
+	ms.currentTransactionAddedStateMachineEventTypes = nil
 
 	return nil
 }

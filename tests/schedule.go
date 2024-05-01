@@ -32,6 +32,7 @@ import (
 	"time"
 
 	"github.com/pborman/uuid"
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
@@ -130,13 +131,17 @@ func (s *ScheduleFunctionalSuite) TestBasics() {
 	wt2 := "sched-test-basics-wt2"
 
 	// switch this to test with search attribute mapper:
-	// csa := "AliasForCustomKeywordField"
-	csa := "CustomKeywordField"
+	// csaKeyword := "AliasForCustomKeywordField"
+	csaKeyword := "CustomKeywordField"
+	csaInt := "CustomIntField"
+	csaBool := "CustomBoolField"
 
 	wfMemo := payload.EncodeString("workflow memo")
 	wfSAValue := payload.EncodeString("workflow sa value")
 	schMemo := payload.EncodeString("schedule memo")
 	schSAValue := payload.EncodeString("schedule sa value")
+	schSAIntValue, _ := payload.Encode(123)
+	schSABoolValue, _ := payload.Encode(true)
 
 	schedule := &schedulepb.Schedule{
 		Spec: &schedulepb.ScheduleSpec{
@@ -158,7 +163,7 @@ func (s *ScheduleFunctionalSuite) TestBasics() {
 						Fields: map[string]*commonpb.Payload{"wfmemo1": wfMemo},
 					},
 					SearchAttributes: &commonpb.SearchAttributes{
-						IndexedFields: map[string]*commonpb.Payload{csa: wfSAValue},
+						IndexedFields: map[string]*commonpb.Payload{csaKeyword: wfSAValue},
 					},
 				},
 			},
@@ -174,7 +179,11 @@ func (s *ScheduleFunctionalSuite) TestBasics() {
 			Fields: map[string]*commonpb.Payload{"schedmemo1": schMemo},
 		},
 		SearchAttributes: &commonpb.SearchAttributes{
-			IndexedFields: map[string]*commonpb.Payload{csa: schSAValue},
+			IndexedFields: map[string]*commonpb.Payload{
+				csaKeyword: schSAValue,
+				csaInt:     schSAIntValue,
+				csaBool:    schSABoolValue,
+			},
 		},
 	}
 
@@ -244,13 +253,14 @@ func (s *ScheduleFunctionalSuite) TestBasics() {
 	s.Equal(enumspb.SCHEDULE_OVERLAP_POLICY_SKIP, describeResp.Schedule.Policies.OverlapPolicy)     // set to default value
 	s.EqualValues(365*24*3600, describeResp.Schedule.Policies.CatchupWindow.AsDuration().Seconds()) // set to default value
 
-	s.Equal(schSAValue.Data, describeResp.SearchAttributes.IndexedFields[csa].Data)
+	s.Equal(schSAValue.Data, describeResp.SearchAttributes.IndexedFields[csaKeyword].Data)
+	s.Equal(schSAIntValue.Data, describeResp.SearchAttributes.IndexedFields[csaInt].Data)
+	s.Equal(schSABoolValue.Data, describeResp.SearchAttributes.IndexedFields[csaBool].Data)
 	s.Nil(describeResp.SearchAttributes.IndexedFields[searchattribute.BinaryChecksums])
 	s.Nil(describeResp.SearchAttributes.IndexedFields[searchattribute.BuildIds])
 	s.Nil(describeResp.SearchAttributes.IndexedFields[searchattribute.TemporalNamespaceDivision])
 	s.Equal(schMemo.Data, describeResp.Memo.Fields["schedmemo1"].Data)
-	fmt.Printf("StartWorkflowAction: %x", describeResp)
-	s.Equal(wfSAValue.Data, describeResp.Schedule.Action.GetStartWorkflow().SearchAttributes.IndexedFields[csa].Data)
+	s.Equal(wfSAValue.Data, describeResp.Schedule.Action.GetStartWorkflow().SearchAttributes.IndexedFields[csaKeyword].Data)
 	s.Equal(wfMemo.Data, describeResp.Schedule.Action.GetStartWorkflow().Memo.Fields["wfmemo1"].Data)
 
 	s.DurationNear(describeResp.Info.CreateTime.AsTime().Sub(createTime), 0, 3*time.Second)
@@ -268,7 +278,9 @@ func (s *ScheduleFunctionalSuite) TestBasics() {
 
 	visibilityResponse := s.getScheduleEntryFomVisibility(sid)
 	s.Equal(sid, visibilityResponse.ScheduleId)
-	s.Equal(schSAValue.Data, visibilityResponse.SearchAttributes.IndexedFields[csa].Data)
+	s.Equal(schSAValue.Data, visibilityResponse.SearchAttributes.IndexedFields[csaKeyword].Data)
+	s.Equal(schSAIntValue.Data, describeResp.SearchAttributes.IndexedFields[csaInt].Data)
+	s.Equal(schSABoolValue.Data, describeResp.SearchAttributes.IndexedFields[csaBool].Data)
 	s.Nil(visibilityResponse.SearchAttributes.IndexedFields[searchattribute.BinaryChecksums])
 	s.Nil(visibilityResponse.SearchAttributes.IndexedFields[searchattribute.BuildIds])
 	s.Nil(visibilityResponse.SearchAttributes.IndexedFields[searchattribute.TemporalNamespaceDivision])
@@ -297,7 +309,7 @@ func (s *ScheduleFunctionalSuite) TestBasics() {
 	s.Equal(wt, ex0.Type.Name)
 	s.Nil(ex0.ParentExecution) // not a child workflow
 	s.Equal(wfMemo.Data, ex0.Memo.Fields["wfmemo1"].Data)
-	s.Equal(wfSAValue.Data, ex0.SearchAttributes.IndexedFields[csa].Data)
+	s.Equal(wfSAValue.Data, ex0.SearchAttributes.IndexedFields[csaKeyword].Data)
 	s.Equal(payload.EncodeString(sid).Data, ex0.SearchAttributes.IndexedFields[searchattribute.TemporalScheduledById].Data)
 	var ex0StartTime time.Time
 	s.NoError(payload.Decode(ex0.SearchAttributes.IndexedFields[searchattribute.TemporalScheduledStartTime], &ex0StartTime))
@@ -353,7 +365,7 @@ func (s *ScheduleFunctionalSuite) TestBasics() {
 	})
 	s.Error(err)
 
-	// update
+	// update schedule, no updates to search attributes
 
 	schedule.Spec.Interval[0].Phase = durationpb.New(1 * time.Second)
 	schedule.Action.GetStartWorkflow().WorkflowType.Name = wt2
@@ -369,23 +381,111 @@ func (s *ScheduleFunctionalSuite) TestBasics() {
 	s.NoError(err)
 
 	// wait for one new run
-	s.Eventually(func() bool { return atomic.LoadInt32(&runs2) == 1 }, 7*time.Second, 500*time.Millisecond)
+	s.Eventually(
+		func() bool { return atomic.LoadInt32(&runs2) == 1 },
+		7*time.Second,
+		500*time.Millisecond,
+	)
 
 	// describe again
-	describeResp, err = s.engine.DescribeSchedule(NewContext(), &workflowservice.DescribeScheduleRequest{
-		Namespace:  s.namespace,
-		ScheduleId: sid,
-	})
+	describeResp, err = s.engine.DescribeSchedule(
+		NewContext(),
+		&workflowservice.DescribeScheduleRequest{
+			Namespace:  s.namespace,
+			ScheduleId: sid,
+		},
+	)
 	s.NoError(err)
 
-	s.Equal(schSAValue.Data, describeResp.SearchAttributes.IndexedFields[csa].Data)
+	s.Len(describeResp.SearchAttributes.GetIndexedFields(), 3)
+	s.Equal(schSAValue.Data, describeResp.SearchAttributes.IndexedFields[csaKeyword].Data)
+	s.Equal(schSAIntValue.Data, describeResp.SearchAttributes.IndexedFields[csaInt].Data)
+	s.Equal(schSABoolValue.Data, describeResp.SearchAttributes.IndexedFields[csaBool].Data)
 	s.Equal(schMemo.Data, describeResp.Memo.Fields["schedmemo1"].Data)
-	s.Equal(wfSAValue.Data, describeResp.Schedule.Action.GetStartWorkflow().SearchAttributes.IndexedFields[csa].Data)
+	s.Equal(wfSAValue.Data, describeResp.Schedule.Action.GetStartWorkflow().SearchAttributes.IndexedFields[csaKeyword].Data)
 	s.Equal(wfMemo.Data, describeResp.Schedule.Action.GetStartWorkflow().Memo.Fields["wfmemo1"].Data)
 
 	s.DurationNear(describeResp.Info.UpdateTime.AsTime().Sub(updateTime), 0, 3*time.Second)
 	lastAction := describeResp.Info.RecentActions[len(describeResp.Info.RecentActions)-1]
 	s.True(lastAction.ScheduleTime.AsTime().UnixNano()%int64(5*time.Second) == 1000000000, lastAction.ScheduleTime.AsTime().UnixNano())
+
+	// update schedule and search attributes
+
+	schedule.Spec.Interval[0].Phase = durationpb.New(1 * time.Second)
+	schedule.Action.GetStartWorkflow().WorkflowType.Name = wt2
+
+	csaDouble := "CustomDoubleField"
+	schSADoubleValue, _ := payload.Encode(3.14)
+	schSAIntValue, _ = payload.Encode(321)
+	_, err = s.engine.UpdateSchedule(NewContext(), &workflowservice.UpdateScheduleRequest{
+		Namespace:  s.namespace,
+		ScheduleId: sid,
+		Schedule:   schedule,
+		Identity:   "test",
+		RequestId:  uuid.New(),
+		SearchAttributes: &commonpb.SearchAttributes{
+			IndexedFields: map[string]*commonpb.Payload{
+				csaKeyword: schSAValue,       // same key, same value
+				csaInt:     schSAIntValue,    // same key, new value
+				csaDouble:  schSADoubleValue, // new key
+				// csaBool is removed
+			},
+		},
+	})
+	s.NoError(err)
+
+	// wait until search attributes are updated
+	s.EventuallyWithT(
+		func(c *assert.CollectT) {
+			describeResp, err = s.engine.DescribeSchedule(
+				NewContext(),
+				&workflowservice.DescribeScheduleRequest{
+					Namespace:  s.namespace,
+					ScheduleId: sid,
+				},
+			)
+			assert.NoError(c, err)
+			assert.Len(c, describeResp.SearchAttributes.GetIndexedFields(), 3)
+			assert.Equal(c, schSAValue.Data, describeResp.SearchAttributes.IndexedFields[csaKeyword].Data)
+			assert.Equal(c, schSAIntValue.Data, describeResp.SearchAttributes.IndexedFields[csaInt].Data)
+			assert.Equal(c, schSADoubleValue.Data, describeResp.SearchAttributes.IndexedFields[csaDouble].Data)
+			assert.NotContains(c, describeResp.SearchAttributes.IndexedFields, csaBool)
+		},
+		2*time.Second,
+		500*time.Millisecond,
+	)
+
+	// update schedule and unset search attributes
+
+	schedule.Spec.Interval[0].Phase = durationpb.New(1 * time.Second)
+	schedule.Action.GetStartWorkflow().WorkflowType.Name = wt2
+
+	_, err = s.engine.UpdateSchedule(NewContext(), &workflowservice.UpdateScheduleRequest{
+		Namespace:        s.namespace,
+		ScheduleId:       sid,
+		Schedule:         schedule,
+		Identity:         "test",
+		RequestId:        uuid.New(),
+		SearchAttributes: &commonpb.SearchAttributes{},
+	})
+	s.NoError(err)
+
+	// wait until search attributes are updated
+	s.EventuallyWithT(
+		func(c *assert.CollectT) {
+			describeResp, err = s.engine.DescribeSchedule(
+				NewContext(),
+				&workflowservice.DescribeScheduleRequest{
+					Namespace:  s.namespace,
+					ScheduleId: sid,
+				},
+			)
+			assert.NoError(c, err)
+			assert.Empty(c, describeResp.SearchAttributes.GetIndexedFields())
+		},
+		2*time.Second,
+		500*time.Millisecond,
+	)
 
 	// pause
 

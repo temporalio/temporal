@@ -3070,7 +3070,6 @@ func (m *testTaskManager) GetTasks(
 	_ context.Context,
 	request *persistence.GetTasksRequest,
 ) (*persistence.GetTasksResponse, error) {
-	fmt.Printf("shahab> gettasks called\n")
 	m.logger.Debug("testTaskManager.GetTasks", tag.MinLevel(request.InclusiveMinTaskID), tag.MaxLevel(request.ExclusiveMaxTaskID))
 
 	dbq, err := ParsePhysicalTaskQueueKey(request.TaskQueue, request.NamespaceID, request.TaskType)
@@ -3226,6 +3225,7 @@ func defaultTestConfig() *Config {
 	config := NewConfig(dynamicconfig.NewNoopCollection())
 	config.LongPollExpirationInterval = dynamicconfig.GetDurationPropertyFnFilteredByTaskQueueInfo(100 * time.Millisecond)
 	config.MaxTaskDeleteBatchSize = dynamicconfig.GetIntPropertyFnFilteredByTaskQueue(1)
+	config.FrontendAccessHistoryFraction = dynamicconfig.GetFloatPropertyFn(1.0)
 	return config
 }
 

@@ -28,7 +28,7 @@ import (
 	"github.com/stretchr/testify/require"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common/testing/protorequire"
-	"go.temporal.io/server/service/history/queues"
+	"go.temporal.io/server/service/history/consts"
 	"go.temporal.io/server/service/history/workflow"
 )
 
@@ -62,20 +62,20 @@ func TestTransitionHistoryStalenessCheck(t *testing.T) {
 	}
 
 	// sv == tv, range(sc) < tc
-	require.ErrorAs(t, workflow.TransitionHistoryStalenessCheck(hist, 3, 7), new(queues.StaleStateError))
+	require.ErrorIs(t, workflow.TransitionHistoryStalenessCheck(hist, 3, 7), consts.ErrStaleState)
 	// sv == tv, range(sc) contains tc
 	require.NoError(t, workflow.TransitionHistoryStalenessCheck(hist, 3, 4))
 	// sv == tv, range(sc) > tc
-	require.ErrorIs(t, workflow.TransitionHistoryStalenessCheck(hist, 3, 3), queues.ErrStaleTask)
+	require.ErrorIs(t, workflow.TransitionHistoryStalenessCheck(hist, 3, 3), consts.ErrStaleReference)
 
 	// sv < tv
-	require.ErrorAs(t, workflow.TransitionHistoryStalenessCheck(hist, 4, 4), new(queues.StaleStateError))
+	require.ErrorIs(t, workflow.TransitionHistoryStalenessCheck(hist, 4, 4), consts.ErrStaleState)
 
 	// sv does not contain tv
-	require.ErrorIs(t, workflow.TransitionHistoryStalenessCheck(hist, 2, 4), queues.ErrStaleTask)
+	require.ErrorIs(t, workflow.TransitionHistoryStalenessCheck(hist, 2, 4), consts.ErrStaleReference)
 
 	// sv > tv, range(sc) does not contain tc
-	require.ErrorIs(t, workflow.TransitionHistoryStalenessCheck(hist, 1, 4), queues.ErrStaleTask)
+	require.ErrorIs(t, workflow.TransitionHistoryStalenessCheck(hist, 1, 4), consts.ErrStaleReference)
 	// sv > tv, range(sc) contains tc
 	require.NoError(t, workflow.TransitionHistoryStalenessCheck(hist, 1, 3))
 }

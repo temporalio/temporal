@@ -818,3 +818,13 @@ func (b *HistoryBuilder) AddChildWorkflowExecutionTimedOutEvent(
 	event, _ = b.EventStore.add(event)
 	return event
 }
+
+func (b *HistoryBuilder) AddHistoryEvent(
+	eventType enumspb.EventType,
+	setAttributes func(*historypb.HistoryEvent),
+) *historypb.HistoryEvent {
+	event := b.EventFactory.createHistoryEvent(eventType, b.EventFactory.timeSource.Now())
+	setAttributes(event)
+	event, _ = b.EventStore.add(event)
+	return event
+}

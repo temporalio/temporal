@@ -118,7 +118,7 @@ func updateIndependentActivityBuildId(
 		return err
 	}
 
-	ai.AssignedBuildId = &persistencespb.ActivityInfo_LastIndependentlyAssignedBuildId{LastIndependentlyAssignedBuildId: buildId}
+	ai.BuildIdInfo = &persistencespb.ActivityInfo_LastIndependentlyAssignedBuildId{LastIndependentlyAssignedBuildId: buildId}
 	err = mutableState.UpdateActivity(ai)
 	if err != nil {
 		return err
@@ -228,11 +228,11 @@ func MakeDirectiveForWorkflowTask(ms workflow.MutableState) *taskqueuespb.TaskVe
 }
 
 func MakeDirectiveForActivityTask(mutableState workflow.MutableState, activityInfo *persistencespb.ActivityInfo) *taskqueuespb.TaskVersionDirective {
-	if !activityInfo.UseCompatibleVersion && activityInfo.GetUseWorkflowBuildId() == nil {
+	if !activityInfo.UseCompatibleVersion && activityInfo.GetUseWorkflowBuildIdInfo() == nil {
 		return worker_versioning.MakeUseAssignmentRulesDirective()
 	} else if id := mutableState.GetAssignedBuildId(); id != "" {
 		return worker_versioning.MakeBuildIdDirective(id)
-	} else if id := worker_versioning.StampIfUsingVersioning(mutableState.GetMostRecentWorkerVersionStamp()).GetBuildId(); id != "" {
+	} else if id := worker_versioning.BuildIdIfUsingVersioning(mutableState.GetMostRecentWorkerVersionStamp()); id != "" {
 		// TODO: old versioning only [cleanup-old-wv]
 		return worker_versioning.MakeBuildIdDirective(id)
 	}
