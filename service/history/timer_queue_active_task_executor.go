@@ -511,7 +511,7 @@ func (t *timerQueueActiveTaskExecutor) executeActivityRetryTimerTask(
 	}
 	scheduleToStartTimeout := timestamp.DurationValue(activityInfo.ScheduleToStartTimeout)
 	directive := MakeDirectiveForActivityTask(mutableState, activityInfo)
-	useWfBuildId := activityInfo.GetUseWorkflowBuildId() != nil
+	useWfBuildId := activityInfo.GetUseWorkflowBuildIdInfo() != nil
 
 	// NOTE: do not access anything related mutable state after this lock release
 	release(nil) // release earlier as we don't need the lock anymore

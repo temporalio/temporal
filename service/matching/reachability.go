@@ -27,6 +27,8 @@ package matching
 import (
 	"context"
 	"fmt"
+	"go.temporal.io/server/common/log"
+	"go.temporal.io/server/common/log/tag"
 	"slices"
 	"strings"
 	"time"
@@ -50,8 +52,28 @@ const (
 	reachabilityCacheMaxSize = 10000
 )
 
+type reachabilityExitPoint int32
+
+const (
+	checkedRuleSourcesForInput                 reachabilityExitPoint = 0
+	checkedRuleTargetsForUpstream              reachabilityExitPoint = 1
+	checkedBacklogForUpstream                  reachabilityExitPoint = 2
+	checkedOpenWorkflowExecutionsForUpstream   reachabilityExitPoint = 3
+	checkedClosedWorkflowExecutionsForUpstream reachabilityExitPoint = 4
+	reachabilityExitPointTagName                                     = "reachability_exit_point"
+)
+
+var (
+	reachabilityExitPoint2TagValue = map[reachabilityExitPoint]string{
+		checkedRuleSourcesForInput:                 "checked_rule_sources_for_input",
+		checkedRuleTargetsForUpstream:              "checked_rule_targets_for_upstream",
+		checkedBacklogForUpstream:                  "checked_backlog_for_upstream",
+		checkedOpenWorkflowExecutionsForUpstream:   "checked_open_wf_executions_for_upstream",
+		checkedClosedWorkflowExecutionsForUpstream: "checked_closed_wf_executions_for_upstream",
+	}
+)
+
 type reachabilityCalculator struct {
-	visibilityMgr                manager.VisibilityManager
 	cache                        reachabilityCache
 	nsID                         namespace.ID
 	nsName                       namespace.Name
@@ -61,19 +83,15 @@ type reachabilityCalculator struct {
 	buildIdVisibilityGracePeriod time.Duration
 }
 
-func getBuildIdTaskReachability(
-	ctx context.Context,
+func newReachabilityCalculator(
 	data *persistencespb.VersioningData,
-	visibilityMgr manager.VisibilityManager,
 	cache reachabilityCache,
 	nsID,
 	nsName,
-	taskQueue,
-	buildId string,
+	taskQueue string,
 	buildIdVisibilityGracePeriod time.Duration,
-) (enumspb.BuildIdTaskReachability, error) {
-	rc := reachabilityCalculator{
-		visibilityMgr:                visibilityMgr,
+) *reachabilityCalculator {
+	return &reachabilityCalculator{
 		cache:                        cache,
 		nsID:                         namespace.ID(nsID),
 		nsName:                       namespace.Name(nsName),
@@ -82,14 +100,34 @@ func getBuildIdTaskReachability(
 		redirectRules:                data.GetRedirectRules(),
 		buildIdVisibilityGracePeriod: buildIdVisibilityGracePeriod,
 	}
-
-	return rc.run(ctx, buildId)
 }
 
-func (rc *reachabilityCalculator) run(ctx context.Context, buildId string) (enumspb.BuildIdTaskReachability, error) {
+func getBuildIdTaskReachability(
+	ctx context.Context,
+	rc *reachabilityCalculator,
+	metricsHandler metrics.Handler,
+	logger log.Logger,
+	buildId string,
+) (enumspb.BuildIdTaskReachability, error) {
+	reachability, exitPoint, err := rc.run(ctx, buildId)
+	metrics.ReachabilityExitPointCounter.With(metricsHandler.WithTags(
+		metrics.NamespaceTag(rc.nsName.String()),
+		metrics.TaskQueueTag(rc.taskQueue)),
+	).Record(1, metrics.StringTag(reachabilityExitPointTagName, reachabilityExitPoint2TagValue[exitPoint]))
+	logger.Info("Calculated reachability for build id",
+		tag.WorkerBuildId(buildId),
+		tag.BuildIdTaskReachabilityTag(reachability.String()),
+		tag.ReachabilityExitPointTag(reachabilityExitPoint2TagValue[exitPoint]),
+		tag.WorkflowNamespace(rc.nsName.String()),
+		tag.WorkflowTaskQueueName(rc.taskQueue),
+	)
+	return reachability, err
+}
+
+func (rc *reachabilityCalculator) run(ctx context.Context, buildId string) (enumspb.BuildIdTaskReachability, reachabilityExitPoint, error) {
 	// 1. Easy UNREACHABLE case
 	if isActiveRedirectRuleSource(buildId, rc.redirectRules) {
-		return enumspb.BUILD_ID_TASK_REACHABILITY_UNREACHABLE, nil
+		return enumspb.BUILD_ID_TASK_REACHABILITY_UNREACHABLE, checkedRuleSourcesForInput, nil
 	}
 
 	// Gather list of all build ids that could point to buildId
@@ -99,15 +137,15 @@ func (rc *reachabilityCalculator) run(ctx context.Context, buildId string) (enum
 	// 2a. If buildId is assignable to new tasks
 	for _, bid := range buildIdsOfInterest {
 		if rc.isReachableActiveAssignmentRuleTargetOrDefault(bid) {
-			return enumspb.BUILD_ID_TASK_REACHABILITY_REACHABLE, nil
+			return enumspb.BUILD_ID_TASK_REACHABILITY_REACHABLE, checkedRuleTargetsForUpstream, nil
 		}
 	}
 
 	// 2b. If buildId could be reached from the backlog
 	if existsBacklog, err := rc.existsBackloggedActivityOrWFTaskAssignedToAny(ctx, buildIdsOfInterest); err != nil {
-		return enumspb.BUILD_ID_TASK_REACHABILITY_UNSPECIFIED, err
+		return enumspb.BUILD_ID_TASK_REACHABILITY_UNSPECIFIED, checkedBacklogForUpstream, err
 	} else if existsBacklog {
-		return enumspb.BUILD_ID_TASK_REACHABILITY_REACHABLE, nil
+		return enumspb.BUILD_ID_TASK_REACHABILITY_REACHABLE, checkedBacklogForUpstream, nil
 	}
 
 	// Note: The below cases are not applicable to activity-only task queues, since we don't record those in visibility
@@ -118,23 +156,23 @@ func (rc *reachabilityCalculator) run(ctx context.Context, buildId string) (enum
 	// 2c. If buildId is assignable to tasks from open workflows
 	existsOpenWFAssignedToBuildId, err := rc.existsWFAssignedToAny(ctx, buildIdsOfInterest, true)
 	if err != nil {
-		return enumspb.BUILD_ID_TASK_REACHABILITY_UNSPECIFIED, err
+		return enumspb.BUILD_ID_TASK_REACHABILITY_UNSPECIFIED, checkedOpenWorkflowExecutionsForUpstream, err
 	}
 	if existsOpenWFAssignedToBuildId {
-		return enumspb.BUILD_ID_TASK_REACHABILITY_REACHABLE, nil
+		return enumspb.BUILD_ID_TASK_REACHABILITY_REACHABLE, checkedOpenWorkflowExecutionsForUpstream, nil
 	}
 
 	// 3. Cases for CLOSED_WORKFLOWS_ONLY
 	existsClosedWFAssignedToBuildId, err := rc.existsWFAssignedToAny(ctx, buildIdsOfInterest, false)
 	if err != nil {
-		return enumspb.BUILD_ID_TASK_REACHABILITY_UNSPECIFIED, err
+		return enumspb.BUILD_ID_TASK_REACHABILITY_UNSPECIFIED, checkedClosedWorkflowExecutionsForUpstream, err
 	}
 	if existsClosedWFAssignedToBuildId {
-		return enumspb.BUILD_ID_TASK_REACHABILITY_CLOSED_WORKFLOWS_ONLY, nil
+		return enumspb.BUILD_ID_TASK_REACHABILITY_CLOSED_WORKFLOWS_ONLY, checkedClosedWorkflowExecutionsForUpstream, nil
 	}
 
 	// 4. Otherwise, UNREACHABLE
-	return enumspb.BUILD_ID_TASK_REACHABILITY_UNREACHABLE, nil
+	return enumspb.BUILD_ID_TASK_REACHABILITY_UNREACHABLE, checkedClosedWorkflowExecutionsForUpstream, nil
 }
 
 // getBuildIdsOfInterest returns a list of build ids that point to the given buildId in the graph
@@ -188,11 +226,11 @@ func (rc *reachabilityCalculator) existsWFAssignedToAny(
 	open bool,
 ) (bool, error) {
 	query := rc.makeBuildIdQuery(buildIdsOfInterest, open)
-	return rc.cache.Get(ctx, rc.makeBuildIdCountRequest(query), open)
+	return rc.cache.Get(ctx, *rc.makeBuildIdCountRequest(query), open)
 }
 
-func (rc *reachabilityCalculator) makeBuildIdCountRequest(query string) manager.CountWorkflowExecutionsRequest {
-	return manager.CountWorkflowExecutionsRequest{
+func (rc *reachabilityCalculator) makeBuildIdCountRequest(query string) *manager.CountWorkflowExecutionsRequest {
+	return &manager.CountWorkflowExecutionsRequest{
 		NamespaceID: rc.nsID,
 		Namespace:   rc.nsName,
 		Query:       query,

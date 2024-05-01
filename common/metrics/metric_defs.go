@@ -930,6 +930,7 @@ var (
 	WorkflowContinuedAsNewCount           = NewCounterDef("workflow_continued_as_new")
 	ReplicationStreamPanic                = NewCounterDef("replication_stream_panic")
 	ReplicationStreamError                = NewCounterDef("replication_stream_error")
+	ReplicationServiceError               = NewCounterDef("replication_service_error")
 	ReplicationTasksSend                  = NewCounterDef("replication_tasks_send")
 	ReplicationTasksRecv                  = NewCounterDef("replication_tasks_recv")
 	ReplicationTasksRecvBacklog           = NewDimensionlessHistogramDef("replication_tasks_recv_backlog")
@@ -1023,6 +1024,9 @@ var (
 	UnknownBuildPollsCounter                  = NewCounterDef("unknown_build_polls")
 	UnknownBuildTasksCounter                  = NewCounterDef("unknown_build_tasks")
 	TaskDispatchLatencyPerTaskQueue           = NewTimerDef("task_dispatch_latency")
+
+	// Versioning and Reachability
+	ReachabilityExitPointCounter = NewCounterDef("reachability_exit_point_count")
 
 	// Worker
 	ExecutorTasksDoneCount                          = NewCounterDef("executor_done")
@@ -1181,4 +1185,18 @@ var (
 	MemoryStackGauge     = NewGaugeDef("memory_stack")
 	NumGCCounter         = NewBytesHistogramDef("memory_num_gc")
 	GcPauseMsTimer       = NewTimerDef("memory_gc_pause_ms")
+)
+
+// DEPRECATED: remove interim metric names for tracking fraction of FE->History calls during migration
+const (
+	AccessHistoryOld = "AccessHistoryOld"
+	AccessHistoryNew = "AccessHistoryNew"
+
+	AdminGetWorkflowExecutionRawHistoryV2Tag      = "GetWorkflowExecutionRawHistoryV2"
+	AdminDeleteWorkflowExecutionTag               = "DeleteWorkflowExecution"
+	FrontendGetWorkflowExecutionHistoryTag        = "GetWorkflowExecutionHistory"
+	FrontendGetWorkflowExecutionHistoryReverseTag = "GetWorkflowExecutionHistoryReverse"
+	FrontendRespondWorkflowTaskCompletedTag       = "RespondWorkflowTaskCompleted"
+	MatchingPollWorkflowTaskQueueTag              = "PollWorkflowTaskQueue"
+	HistoryHandleWorkflowTaskStartedTag           = "HandleWorkflowTaskStarted"
 )

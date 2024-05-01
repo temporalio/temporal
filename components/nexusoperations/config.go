@@ -31,9 +31,8 @@ import (
 // Enabled toggles accepting of API requests and workflow commands that create or modify Nexus operations.
 const Enabled = dynamicconfig.Key("component.nexusoperations.enabled")
 
-// InvocationTaskTimeout is the timeout for executing a single nexus invocation task (controls both cancel and start
-// requests).
-const InvocationTaskTimeout = dynamicconfig.Key("component.nexusoperations.invocation.taskTimeout")
+// RequestTimeout is the timeout for making a single nexus start or cancel request.
+const RequestTimeout = dynamicconfig.Key("component.nexusoperations.request.timeout")
 
 // MaxConcurrentOperations limits the maximum allowed concurrent Nexus Operations for a given workflow execution.
 // Once the limit is reached, ScheduleNexusOperation commands will be rejected.
@@ -46,15 +45,16 @@ const MaxOperationNameLength = dynamicconfig.Key("component.nexusoperations.limi
 
 type Config struct {
 	Enabled                 dynamicconfig.BoolPropertyFnWithNamespaceFilter
-	InvocationTaskTimeout   dynamicconfig.DurationPropertyFnWithNamespaceFilter
+	RequestTimeout          dynamicconfig.DurationPropertyFnWithNamespaceFilter
 	MaxConcurrentOperations dynamicconfig.IntPropertyFnWithNamespaceFilter
 	MaxOperationNameLength  dynamicconfig.IntPropertyFnWithNamespaceFilter
 }
 
 func ConfigProvider(dc *dynamicconfig.Collection) *Config {
 	return &Config{
-		Enabled:                 dc.GetBoolPropertyFnWithNamespaceFilter(Enabled, false),
-		InvocationTaskTimeout:   dc.GetDurationPropertyFilteredByNamespace(InvocationTaskTimeout, time.Second*10),
+		Enabled: dc.GetBoolPropertyFnWithNamespaceFilter(Enabled, false),
+		// TODO(bergundy): This should be controllable per namespace + destination.
+		RequestTimeout:          dc.GetDurationPropertyFilteredByNamespace(RequestTimeout, time.Second*10),
 		MaxConcurrentOperations: dc.GetIntPropertyFilteredByNamespace(MaxConcurrentOperations, 1000),
 		MaxOperationNameLength:  dc.GetIntPropertyFilteredByNamespace(MaxOperationNameLength, 1000),
 	}

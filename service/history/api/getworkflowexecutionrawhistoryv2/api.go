@@ -27,6 +27,8 @@ package getworkflowexecutionrawhistoryv2
 import (
 	"context"
 
+	"github.com/pborman/uuid"
+
 	commonpb "go.temporal.io/api/common/v1"
 	"go.temporal.io/api/serviceerror"
 
@@ -179,6 +181,37 @@ func Invoke(
 	return &historyservice.GetWorkflowExecutionRawHistoryV2Response{
 		Response: result,
 	}, nil
+}
+
+func validateGetWorkflowExecutionRawHistoryV2Request(
+	request *historyservice.GetWorkflowExecutionRawHistoryV2Request,
+) error {
+
+	req := request.Request
+	execution := req.Execution
+	if execution.GetWorkflowId() == "" {
+		return consts.ErrWorkflowIDNotSet
+	}
+	// TODO currently, this API is only going to be used by re-send history events
+	// to remote cluster if kafka is lossy again, in the future, this API can be used
+	// by CLI and client, then empty runID (meaning the current workflow) should be allowed
+	if execution.GetRunId() == "" || uuid.Parse(execution.GetRunId()) == nil {
+		return consts.ErrInvalidRunID
+	}
+
+	pageSize := int(req.GetMaximumPageSize())
+	if pageSize <= 0 {
+		return consts.ErrInvalidPageSize
+	}
+
+	if req.GetStartEventId() == common.EmptyEventID &&
+		req.GetStartEventVersion() == common.EmptyVersion &&
+		req.GetEndEventId() == common.EmptyEventID &&
+		req.GetEndEventVersion() == common.EmptyVersion {
+		return consts.ErrInvalidEventQueryRange
+	}
+
+	return nil
 }
 
 func SetRequestDefaultValueAndGetTargetVersionHistory(

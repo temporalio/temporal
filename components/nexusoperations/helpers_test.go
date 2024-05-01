@@ -88,7 +88,7 @@ func newOperationNode(t *testing.T, backend *nodeBackend, schedTime time.Time, t
 			},
 		},
 	}
-	token, err := root.GenerateEventLoadToken(event)
+	token, err := hsm.GenerateEventLoadToken(event)
 	require.NoError(t, err)
 	node, err := nexusoperations.AddChild(root, "test-id", event, token, false)
 	require.NoError(t, err)

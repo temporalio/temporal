@@ -254,6 +254,7 @@ func (b *MutableStateRebuilderImpl) applyEvents(
 				attributes.GetSuggestContinueAsNew(),
 				attributes.GetHistorySizeBytes(),
 				attributes.GetWorkerVersion(),
+				attributes.GetBuildIdRedirectCounter(),
 			)
 			if err != nil {
 				return nil, err

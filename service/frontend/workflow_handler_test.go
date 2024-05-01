@@ -77,7 +77,6 @@ import (
 	"go.temporal.io/server/common/resourcetest"
 	"go.temporal.io/server/common/rpc/interceptor"
 	"go.temporal.io/server/common/searchattribute"
-	e "go.temporal.io/server/service/history/events"
 	"go.temporal.io/server/service/worker/batcher"
 	"go.temporal.io/server/service/worker/scheduler"
 )
@@ -161,8 +160,7 @@ func (s *workflowHandlerSuite) SetupTest() {
 
 	s.tokenSerializer = common.NewProtoTaskTokenSerializer()
 
-	s.mockVisibilityMgr.EXPECT().GetStoreNames().Return([]string{elasticsearch.PersistenceName}).AnyTimes()
-	s.mockExecutionManager.EXPECT().GetName().Return("mock-execution-manager").AnyTimes()
+	s.mockVisibilityMgr.EXPECT().GetStoreNames().Return([]string{elasticsearch.PersistenceName})
 }
 
 func (s *workflowHandlerSuite) TearDownTest() {
@@ -179,7 +177,7 @@ func (s *workflowHandlerSuite) getWorkflowHandler(config *Config) *WorkflowHandl
 		s.mockResource.GetVisibilityManager(),
 		s.mockResource.GetLogger(),
 		s.mockResource.GetThrottledLogger(),
-		s.mockResource.GetExecutionManager().GetName(),
+		s.mockResource.GetExecutionManager(),
 		s.mockResource.GetClusterMetadataManager(),
 		s.mockResource.GetMetadataManager(),
 		s.mockResource.GetHistoryClient(),
@@ -1743,6 +1741,8 @@ func (s *workflowHandlerSuite) TestCountWorkflowExecutions() {
 }
 
 func (s *workflowHandlerSuite) TestVerifyHistoryIsComplete() {
+	wh := s.getWorkflowHandler(s.newConfig())
+
 	events := make([]*historypb.HistoryEvent, 50)
 	for i := 0; i < len(events); i++ {
 		events[i] = &historypb.HistoryEvent{EventId: int64(i + 1)}
@@ -1786,7 +1786,7 @@ func (s *workflowHandlerSuite) TestVerifyHistoryIsComplete() {
 	}
 
 	for i, tc := range testCases {
-		err := e.VerifyHistoryIsComplete(tc.events, tc.firstEventID, tc.lastEventID, tc.isFirstPage, tc.isLastPage, tc.pageSize)
+		err := wh.verifyHistoryIsComplete(tc.events, tc.firstEventID, tc.lastEventID, tc.isFirstPage, tc.isLastPage, tc.pageSize)
 		if tc.isResultErr {
 			s.Error(err, "testcase %v failed", i)
 		} else {

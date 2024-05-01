@@ -31,6 +31,7 @@ import (
 	"time"
 
 	"github.com/nexus-rpc/sdk-go/nexus"
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	commandpb "go.temporal.io/api/command/v1"
 	commonpb "go.temporal.io/api/common/v1"
@@ -52,19 +53,52 @@ import (
 	"google.golang.org/protobuf/types/known/durationpb"
 )
 
-// TestNexusScheduleAndCancelCommands verifies that ScheduleNexusOperation and CancelNexusOperation commands can be
-// processed on workflow task completion.
-// No further assertions are made. When the task executors for nexus operations are implemented this test will be extended.
-func (s *ClientFunctionalSuite) TestNexusScheduleAndCancelCommands() {
-	taskQueue := s.randomizeStr(s.T().Name())
+func (s *ClientFunctionalSuite) TestNexusOperationCancelation() {
 	ctx := NewContext()
+	namespace := s.randomizeStr(s.T().Name())
+	taskQueue := s.randomizeStr(s.T().Name())
+	serviceName := s.randomizeStr(s.T().Name())
 
-	run, err := s.sdkClient.ExecuteWorkflow(ctx, client.StartWorkflowOptions{
+	h := nexustest.Handler{
+		OnStartOperation: func(ctx context.Context, operation string, input *nexus.LazyValue, options nexus.StartOperationOptions) (nexus.HandlerStartOperationResult[any], error) {
+			return &nexus.HandlerStartOperationResultAsync{OperationID: "test"}, nil
+		},
+		OnCancelOperation: func(ctx context.Context, operation, operationID string, options nexus.CancelOperationOptions) error {
+			return nil
+		},
+	}
+	listenAddr := nexustest.AllocListenAddress(s.T())
+	nexustest.NewNexusServer(s.T(), listenAddr, h)
+
+	_, err := s.engine.RegisterNamespace(ctx, &workflowservice.RegisterNamespaceRequest{
+		Namespace:                        namespace,
+		WorkflowExecutionRetentionPeriod: durationpb.New(time.Hour * 24),
+	})
+	s.NoError(err)
+
+	_, err = s.operatorClient.CreateNexusOutgoingService(ctx, &operatorservice.CreateNexusOutgoingServiceRequest{
+		Namespace: namespace,
+		Name:      serviceName,
+		Spec: &nexuspb.OutgoingServiceSpec{
+			Url:               "http://" + listenAddr,
+			PublicCallbackUrl: "http://" + s.httpAPIAddress + "/" + commonnexus.RouteCompletionCallback.Path(namespace),
+		},
+	})
+	s.NoError(err)
+
+	sdkClient, err := client.Dial(client.Options{
+		HostPort:  s.hostPort,
+		Namespace: namespace,
+	})
+	s.NoError(err)
+
+	run, err := sdkClient.ExecuteWorkflow(ctx, client.StartWorkflowOptions{
 		TaskQueue: taskQueue,
 	}, "workflow")
 	s.NoError(err)
+
 	pollResp, err := s.engine.PollWorkflowTaskQueue(ctx, &workflowservice.PollWorkflowTaskQueueRequest{
-		Namespace: s.namespace,
+		Namespace: namespace,
 		TaskQueue: &taskqueue.TaskQueue{
 			Name: taskQueue,
 			Kind: enumspb.TASK_QUEUE_KIND_NORMAL,
@@ -80,26 +114,19 @@ func (s *ClientFunctionalSuite) TestNexusScheduleAndCancelCommands() {
 				CommandType: enumspb.COMMAND_TYPE_SCHEDULE_NEXUS_OPERATION,
 				Attributes: &commandpb.Command_ScheduleNexusOperationCommandAttributes{
 					ScheduleNexusOperationCommandAttributes: &commandpb.ScheduleNexusOperationCommandAttributes{
-						Service:   "service",
+						Service:   serviceName,
 						Operation: "operation",
-					},
-				},
-			},
-			{
-				// Start a timer to get a new workflow task.
-				CommandType: enumspb.COMMAND_TYPE_START_TIMER,
-				Attributes: &commandpb.Command_StartTimerCommandAttributes{
-					StartTimerCommandAttributes: &commandpb.StartTimerCommandAttributes{
-						TimerId:            "1",
-						StartToFireTimeout: durationpb.New(time.Millisecond),
+						Input:     s.mustToPayload("input"),
 					},
 				},
 			},
 		},
 	})
 	s.NoError(err)
+
+	// Poll and wait for the "started" event to be recorded.
 	pollResp, err = s.engine.PollWorkflowTaskQueue(ctx, &workflowservice.PollWorkflowTaskQueueRequest{
-		Namespace: s.namespace,
+		Namespace: namespace,
 		TaskQueue: &taskqueue.TaskQueue{
 			Name: taskQueue,
 			Kind: enumspb.TASK_QUEUE_KIND_NORMAL,
@@ -107,6 +134,13 @@ func (s *ClientFunctionalSuite) TestNexusScheduleAndCancelCommands() {
 		Identity: "test",
 	})
 	s.NoError(err)
+
+	startedEventIdx := slices.IndexFunc(pollResp.History.Events, func(e *historypb.HistoryEvent) bool {
+		return e.GetNexusOperationStartedEventAttributes() != nil
+	})
+	s.Greater(startedEventIdx, 0)
+
+	// Get the scheduleEventId to issue the cancel command.
 	scheduledEventIdx := slices.IndexFunc(pollResp.History.Events, func(e *historypb.HistoryEvent) bool {
 		return e.GetNexusOperationScheduledEventAttributes() != nil
 	})
@@ -127,15 +161,20 @@ func (s *ClientFunctionalSuite) TestNexusScheduleAndCancelCommands() {
 		},
 	})
 	s.NoError(err)
-	desc, err := s.sdkClient.DescribeWorkflowExecution(ctx, run.GetID(), run.GetRunID())
-	s.NoError(err)
-	s.Equal(1, len(desc.PendingNexusOperations))
-	op := desc.PendingNexusOperations[0]
-	s.Equal("service", op.Service)
-	s.Equal("operation", op.Operation)
-	s.True(op.State == enumspb.PENDING_NEXUS_OPERATION_STATE_BACKING_OFF || op.State == enumspb.PENDING_NEXUS_OPERATION_STATE_SCHEDULED)
-	s.True(op.CancellationInfo.State == enumspb.NEXUS_OPERATION_CANCELLATION_STATE_BACKING_OFF || op.State == enumspb.PENDING_NEXUS_OPERATION_STATE_SCHEDULED)
-	err = s.sdkClient.TerminateWorkflow(ctx, run.GetID(), run.GetRunID(), "test")
+	// Poll and wait for the cancelation request to go through.
+	s.EventuallyWithT(func(t *assert.CollectT) {
+		desc, err := sdkClient.DescribeWorkflowExecution(ctx, run.GetID(), run.GetRunID())
+		require.NoError(t, err)
+		require.Equal(t, 1, len(desc.PendingNexusOperations))
+		op := desc.PendingNexusOperations[0]
+		require.Equal(t, serviceName, op.Service)
+		require.Equal(t, "operation", op.Operation)
+		require.Equal(t, enumspb.PENDING_NEXUS_OPERATION_STATE_STARTED, op.State)
+		assert.Equal(t, enumspb.NEXUS_OPERATION_CANCELLATION_STATE_SUCCEEDED, op.CancellationInfo.State)
+
+	}, time.Second*10, time.Millisecond*30)
+
+	err = sdkClient.TerminateWorkflow(ctx, run.GetID(), run.GetRunID(), "test")
 	s.NoError(err)
 }
 
@@ -286,6 +325,7 @@ func (s *ClientFunctionalSuite) TestNexusOperationAsyncCompletion() {
 		TaskQueue: taskQueue,
 	}, "workflow")
 	s.NoError(err)
+
 	pollResp, err := s.engine.PollWorkflowTaskQueue(ctx, &workflowservice.PollWorkflowTaskQueueRequest{
 		Namespace: namespace,
 		TaskQueue: &taskqueue.TaskQueue{

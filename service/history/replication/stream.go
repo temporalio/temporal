@@ -25,12 +25,14 @@
 package replication
 
 import (
+	"errors"
 	"fmt"
 	"time"
 
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
+	"go.temporal.io/server/service/history/tasks"
 
 	"go.temporal.io/server/api/adminservice/v1"
 	"go.temporal.io/server/common/cluster"
@@ -71,7 +73,7 @@ func WrapEventLoop(
 ) {
 	defer streamStopper()
 
-	for retryCount := 0; retryCount < 11; retryCount++ {
+	for {
 		err := originalEventLoop()
 
 		if err == nil { // shutdown case
@@ -87,6 +89,27 @@ func WrapEventLoop(
 			)
 			return
 		}
+		metrics.ReplicationServiceError.With(metricsHandler).Record(
+			int64(1),
+			metrics.ServiceErrorTypeTag(err),
+			metrics.FromClusterIDTag(fromClusterKey.ClusterID),
+			metrics.ToClusterIDTag(toClusterKey.ClusterID),
+		)
+
 		time.Sleep(retryInterval)
+	}
+}
+
+func IsStreamError(err error) bool {
+	var streamError *StreamError
+	return errors.As(err, &streamError)
+}
+
+func GetTaskPriority(task tasks.Task) tasks.ReplicationTaskPriority {
+	switch task := task.(type) {
+	case *tasks.SyncWorkflowStateTask:
+		return task.Priority
+	default:
+		return tasks.ReplicationTaskPriorityHigh
 	}
 }
