@@ -1025,6 +1025,9 @@ var (
 	UnknownBuildTasksCounter                  = NewCounterDef("unknown_build_tasks")
 	TaskDispatchLatencyPerTaskQueue           = NewTimerDef("task_dispatch_latency")
 
+	// Versioning and Reachability
+	ReachabilityExitPointCounter = NewCounterDef("reachability_exit_point_count")
+
 	// Worker
 	ExecutorTasksDoneCount                          = NewCounterDef("executor_done")
 	ExecutorTasksErrCount                           = NewCounterDef("executor_err")
