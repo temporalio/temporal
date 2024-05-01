@@ -109,7 +109,7 @@ func getBuildIdTaskReachability(
 		metrics.NamespaceTag(rc.nsName.String()),
 		metrics.TaskQueueTag(rc.taskQueue)),
 	).Record(1, metrics.StringTag(reachabilityExitPointTagName, reachabilityExitPoint2TagValue[exitPoint]))
-	logger.Debug("Calculated reachability for build id",
+	logger.Info("Calculated reachability for build id",
 		tag.WorkerBuildId(buildId),
 		tag.BuildIdTaskReachabilityTag(reachability.String()),
 		tag.ReachabilityExitPointTag(reachabilityExitPoint2TagValue[exitPoint]),
