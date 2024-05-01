@@ -188,25 +188,11 @@ func (rc *reachabilityCalculator) existsWFAssignedToAny(
 	open bool,
 ) (bool, error) {
 	query := rc.makeBuildIdQuery(buildIdsOfInterest, open)
-
-	// try cache
-	exists, ok := rc.cache.Get(query, open)
-	if ok {
-		return exists, nil
-	}
-
-	// cache was cold, ask visibility and put result in cache
-	countResponse, err := rc.visibilityMgr.CountWorkflowExecutions(ctx, rc.makeBuildIdCountRequest(query))
-	if err != nil {
-		return false, err
-	}
-	exists = countResponse.Count > 0
-	rc.cache.Put(query, exists, open)
-	return exists, nil
+	return rc.cache.Get(ctx, rc.makeBuildIdCountRequest(query), open)
 }
 
-func (rc *reachabilityCalculator) makeBuildIdCountRequest(query string) *manager.CountWorkflowExecutionsRequest {
-	return &manager.CountWorkflowExecutionsRequest{
+func (rc *reachabilityCalculator) makeBuildIdCountRequest(query string) manager.CountWorkflowExecutionsRequest {
+	return manager.CountWorkflowExecutionsRequest{
 		NamespaceID: rc.nsID,
 		Namespace:   rc.nsName,
 		Query:       query,
@@ -278,40 +264,54 @@ type reachabilityCache struct {
 	openWFCache    cache.Cache
 	closedWFCache  cache.Cache // these are separate due to allow for different TTL
 	metricsHandler metrics.Handler
+	visibilityMgr  manager.VisibilityManager
 }
 
 func newReachabilityCache(
 	handler metrics.Handler,
+	visibilityMgr manager.VisibilityManager,
 	reachabilityCacheOpenWFExecutionTTL,
-	reachabilityCacheClosedWFExecutionTTL time.Duration) reachabilityCache {
+	reachabilityCacheClosedWFExecutionTTL time.Duration,
+) reachabilityCache {
 	return reachabilityCache{
 		openWFCache:    cache.New(reachabilityCacheMaxSize, &cache.Options{TTL: reachabilityCacheOpenWFExecutionTTL}, handler),
 		closedWFCache:  cache.New(reachabilityCacheMaxSize, &cache.Options{TTL: reachabilityCacheClosedWFExecutionTTL}, handler),
 		metricsHandler: handler,
+		visibilityMgr:  visibilityMgr,
 	}
 }
 
 // Get retrieves the Workflow Count existence value based on the query-string key.
-// It returns !ok if the requested element is not in the cache, or if the cached value is not a boolean.
-func (c *reachabilityCache) Get(queryKey string, open bool) (exists bool, ok bool) {
+func (c *reachabilityCache) Get(ctx context.Context, countRequest manager.CountWorkflowExecutionsRequest, open bool) (bool, error) {
+	// try cache
 	var result interface{}
 	if open {
-		result = c.openWFCache.Get(queryKey)
+		result = c.openWFCache.Get(countRequest)
 	} else {
-		result = c.closedWFCache.Get(queryKey)
+		result = c.closedWFCache.Get(countRequest)
 	}
-	if result == nil {
-		return false, false
+	if result != nil {
+		exists, ok := result.(bool)
+		if ok {
+			return exists, nil
+		}
 	}
-	exists, ok = result.(bool)
-	return exists, ok
+
+	// cache was cold, ask visibility and put result in cache
+	countResponse, err := c.visibilityMgr.CountWorkflowExecutions(ctx, &countRequest)
+	if err != nil {
+		return false, err
+	}
+	exists := countResponse.Count > 0
+	c.Put(countRequest, exists, open)
+	return exists, nil
 }
 
 // Put adds an element to the cache.
-func (c *reachabilityCache) Put(queryKey string, exists, open bool) {
+func (c *reachabilityCache) Put(countRequest manager.CountWorkflowExecutionsRequest, exists, open bool) {
 	if open {
-		c.openWFCache.Put(queryKey, exists)
+		c.openWFCache.Put(countRequest, exists)
 	} else {
-		c.closedWFCache.Put(queryKey, exists)
+		c.closedWFCache.Put(countRequest, exists)
 	}
 }

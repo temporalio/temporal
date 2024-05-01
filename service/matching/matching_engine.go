@@ -229,7 +229,11 @@ func NewEngine(
 		namespaceReplicationQueue: namespaceReplicationQueue,
 		namespaceUpdateLockMap:    make(map[string]*namespaceUpdateLocks),
 	}
-	e.reachabilityCache = newReachabilityCache(scopedMetricsHandler, e.config.ReachabilityCacheOpenWFsTTL(), e.config.ReachabilityCacheClosedWFsTTL())
+	e.reachabilityCache = newReachabilityCache(
+		scopedMetricsHandler,
+		visibilityManager,
+		e.config.ReachabilityCacheOpenWFsTTL(),
+		e.config.ReachabilityCacheClosedWFsTTL())
 	return e
 }
 
