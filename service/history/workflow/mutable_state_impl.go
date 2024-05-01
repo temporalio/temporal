@@ -28,7 +28,6 @@ import (
 	"context"
 	"fmt"
 	"math/rand"
-	"reflect"
 	"time"
 
 	"github.com/nexus-rpc/sdk-go/nexus"
@@ -814,35 +813,6 @@ func (ms *MutableStateImpl) AddHistoryEvent(t enumspb.EventType, setAttributes f
 	return event
 }
 
-func (ms *MutableStateImpl) GenerateEventLoadToken(event *history.HistoryEvent) ([]byte, error) {
-	attrs := reflect.ValueOf(event.Attributes).Elem()
-
-	// Attributes is always a struct with a single field (e.g: HistoryEvent_NexusOperationScheduledEventAttributes)
-	if attrs.Kind() != reflect.Struct || attrs.NumField() != 1 {
-		return nil, serviceerror.NewInternal(fmt.Sprintf("got an invalid event structure: %v", event.EventType))
-	}
-
-	f := attrs.Field(0).Interface()
-
-	var eventBatchID int64
-	if getter, ok := f.(interface{ GetWorkflowTaskCompletedEventId() int64 }); ok {
-		// Command-Events always have a WorkflowTaskCompletedEventId field that is equal to the batch ID.
-		eventBatchID = getter.GetWorkflowTaskCompletedEventId()
-	} else if attrs := event.GetWorkflowExecutionStartedEventAttributes(); attrs != nil {
-		// WFEStarted is always stored in the first batch of events.
-		eventBatchID = 1
-	} else {
-		// By default events aren't referenceable as they may end up buffered.
-		// This limitation may be relaxed later and the platform would need a way to fix references to buffered events.
-		return nil, serviceerror.NewInternal(fmt.Sprintf("cannot reference event: %v", event.EventType))
-	}
-	ref := &tokenspb.HistoryEventRef{
-		EventId:      event.EventId,
-		EventBatchId: eventBatchID,
-	}
-	return proto.Marshal(ref)
-}
-
 func (ms *MutableStateImpl) LoadHistoryEvent(ctx context.Context, token []byte) (*historypb.HistoryEvent, error) {
 	ref := &tokenspb.HistoryEventRef{}
 	err := proto.Unmarshal(token, ref)
@@ -894,20 +864,31 @@ func (ms *MutableStateImpl) IsStickyTaskQueueSet() bool {
 }
 
 // TaskQueueScheduleToStartTimeout returns TaskQueue struct and corresponding StartToClose timeout.
-// Task queue kind (sticky or normal) and timeout are set based on comparison of normal task queue name
+// Task queue kind (sticky or normal) is set based on comparison of normal task queue name
 // in mutable state and provided name.
-func (ms *MutableStateImpl) TaskQueueScheduleToStartTimeout(name string) (*taskqueuepb.TaskQueue, *durationpb.Duration) {
-	if ms.executionInfo.TaskQueue != name {
+// ScheduleToStartTimeout is set based on queue kind and workflow task type.
+func (ms *MutableStateImpl) TaskQueueScheduleToStartTimeout(tqName string) (*taskqueuepb.TaskQueue, *durationpb.Duration) {
+	isStickyTq := ms.executionInfo.StickyTaskQueue == tqName
+	if isStickyTq {
 		return &taskqueuepb.TaskQueue{
 			Name:       ms.executionInfo.StickyTaskQueue,
 			Kind:       enumspb.TASK_QUEUE_KIND_STICKY,
 			NormalName: ms.executionInfo.TaskQueue,
 		}, ms.executionInfo.StickyScheduleToStartTimeout
 	}
-	return &taskqueuepb.TaskQueue{
+
+	// If tqName is normal task queue name.
+	normalTq := &taskqueuepb.TaskQueue{
 		Name: ms.executionInfo.TaskQueue,
 		Kind: enumspb.TASK_QUEUE_KIND_NORMAL,
-	}, ms.executionInfo.WorkflowRunTimeout // No WT ScheduleToStart timeout for normal task queue.
+	}
+	if ms.executionInfo.WorkflowTaskType == enumsspb.WORKFLOW_TASK_TYPE_SPECULATIVE {
+		// Speculative WFT has ScheduleToStartTimeout even on normal task queue.
+		// See comment in GenerateScheduleSpeculativeWorkflowTaskTasks for details.
+		return normalTq, durationpb.New(tasks.SpeculativeWorkflowTaskScheduleToStartTimeout)
+	}
+	// No WFT ScheduleToStart timeout for normal WFT on normal task queue.
+	return normalTq, ms.executionInfo.WorkflowRunTimeout
 }
 
 func (ms *MutableStateImpl) GetWorkflowType() *commonpb.WorkflowType {

@@ -58,6 +58,7 @@ import (
 	hlc "go.temporal.io/server/common/clock/hybrid_logical_clock"
 	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/collection"
+	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/membership"
@@ -560,7 +561,12 @@ pollLoop:
 			// we return full history.
 			isStickyEnabled := taskQueueName == mutableStateResp.StickyTaskQueue.GetName()
 
-			hist, nextPageToken, err := e.getHistoryForQueryTask(ctx, namespaceID, task, isStickyEnabled)
+			var hist *history.History
+			var nextPageToken []byte
+			if dynamicconfig.AccessHistory(e.config.FrontendAccessHistoryFraction, e.metricsHandler.WithTags(metrics.OperationTag(metrics.MatchingPollWorkflowTaskQueueTag))) {
+				hist, nextPageToken, err = e.getHistoryForQueryTask(ctx, namespaceID, task, isStickyEnabled)
+			}
+
 			if err != nil {
 				// will notify query client that the query task failed
 				_ = e.deliverQueryResult(task.query.taskID, &queryResult{internalError: err})
@@ -1818,7 +1824,9 @@ func (e *matchingEngineImpl) unloadTaskQueuePartitionByKey(partition tqid.Partit
 	foundTQM, ok := e.partitions[key]
 	if !ok || (unloadPM != nil && foundTQM != unloadPM) {
 		e.partitionsLock.Unlock()
-		unloadPM.Stop()
+		if unloadPM != nil {
+			unloadPM.Stop()
+		}
 		return false
 	}
 	delete(e.partitions, key)

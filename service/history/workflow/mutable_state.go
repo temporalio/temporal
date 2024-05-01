@@ -147,7 +147,7 @@ type (
 	MutableState interface {
 		callbacks.CanGetNexusCompletion
 		AddHistoryEvent(t enumspb.EventType, setAttributes func(*historypb.HistoryEvent)) *historypb.HistoryEvent
-		GenerateEventLoadToken(event *historypb.HistoryEvent) ([]byte, error)
+		LoadHistoryEvent(ctx context.Context, token []byte) (*historypb.HistoryEvent, error)
 
 		AddActivityTaskCancelRequestedEvent(int64, int64, string) (*historypb.HistoryEvent, *persistencespb.ActivityInfo, error)
 		AddActivityTaskCanceledEvent(int64, int64, int64, *commonpb.Payloads, string) (*historypb.HistoryEvent, error)

@@ -112,7 +112,7 @@ func (ch *commandHandler) HandleScheduleCommand(
 			},
 		}
 	})
-	token, err := ms.GenerateEventLoadToken(event)
+	token, err := hsm.GenerateEventLoadToken(event)
 	if err != nil {
 		return err
 	}
@@ -149,10 +149,25 @@ func (ch *commandHandler) HandleCancelCommand(
 			return workflow.FailWorkflowTaskError{
 				Cause:   enumspb.WORKFLOW_TASK_FAILED_CAUSE_BAD_REQUEST_CANCEL_NEXUS_OPERATION_ATTRIBUTES,
 				Message: fmt.Sprintf("requested cancelation for a non-existing operation with scheduled event ID of %d", attrs.ScheduledEventId),
+				// TODO(bergundy): Message: fmt.Sprintf("requested cancelation for a non-existing or already completed operation with scheduled event ID of %d", attrs.ScheduledEventId),
 			}
 		}
 		return err
 	}
+	// TODO(bergundy): Remove this when operation auto-deletes itself on terminal state.
+	// Operation may already be in a terminal state because it doesn't yet delete itself. We don't want to accept
+	// cancelation in this case.
+	op, err := hsm.MachineData[nexusoperations.Operation](node)
+	if err != nil {
+		return err
+	}
+	if !nexusoperations.TransitionCanceled.Possible(op) {
+		return workflow.FailWorkflowTaskError{
+			Cause:   enumspb.WORKFLOW_TASK_FAILED_CAUSE_BAD_REQUEST_CANCEL_NEXUS_OPERATION_ATTRIBUTES,
+			Message: fmt.Sprintf("requested cancelation for an already complete operation with scheduled event ID of %d", attrs.ScheduledEventId),
+		}
+	}
+
 	event := ms.AddHistoryEvent(enumspb.EVENT_TYPE_NEXUS_OPERATION_CANCEL_REQUESTED, func(he *historypb.HistoryEvent) {
 		he.Attributes = &historypb.HistoryEvent_NexusOperationCancelRequestedEventAttributes{
 			NexusOperationCancelRequestedEventAttributes: &historypb.NexusOperationCancelRequestedEventAttributes{

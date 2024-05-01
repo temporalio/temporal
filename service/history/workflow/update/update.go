@@ -26,12 +26,14 @@ package update
 
 import (
 	"context"
+	"errors"
 	"time"
 
 	enumspb "go.temporal.io/api/enums/v1"
 	failurepb "go.temporal.io/api/failure/v1"
 	historypb "go.temporal.io/api/history/v1"
 	protocolpb "go.temporal.io/api/protocol/v1"
+	"go.temporal.io/api/serviceerror"
 	updatepb "go.temporal.io/api/update/v1"
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/anypb"
@@ -97,6 +99,10 @@ type (
 	}
 
 	updateOpt func(*Update)
+)
+
+var (
+	abortWaiterErr = errors.New("workflow update lifecycle stage waiter was aborted")
 )
 
 // New creates a new Update instance with the provided ID that will call the
@@ -203,10 +209,13 @@ func (u *Update) WaitLifecycleStage(
 
 		// If err is not nil (checked above), and is not coming from context,
 		// then it means that the error is from the future itself.
-		// Update doesn't set error on the future, therefore this should never happen.
-		// But if it ever does, this error should be returned to the caller.
 		if ctx.Err() == nil && stCtx.Err() == nil {
-			return nil, err
+			// Workflow Update uses abortWaiterErr to abort waiter. This error uses special handling here:
+			// abort waiting for COMPLETED stage and check if update has reached ACCEPTED stage.
+			// All other errors are returned to the caller (not currently happens).
+			if !errors.Is(err, abortWaiterErr) {
+				return nil, err
+			}
 		}
 
 		if ctx.Err() != nil {
@@ -214,8 +223,8 @@ func (u *Update) WaitLifecycleStage(
 			return nil, ctx.Err()
 		}
 
-		// Only get here if there is an error and this error is stCtx.Err().
-		// Which means that softTimeout has expired => check if update has reached ACCEPTED state.
+		// Only get here if there is an error and this error is stCtx.Err() (softTimeout has expired) or abortWaiterErr.
+		// In both cases check if update has reached ACCEPTED stage.
 	}
 
 	// Update is not completed but maybe it is accepted.
@@ -230,9 +239,18 @@ func (u *Update) WaitLifecycleStage(
 			return statusAccepted(), nil
 		}
 
-		// See comment for the same check in "completed" branch.
+		// If err is not nil (checked above), and is not coming from context,
+		// then it means that the error is from the future itself.
 		if ctx.Err() == nil && stCtx.Err() == nil {
-			return nil, err
+			// Workflow Update uses abortWaiterErr to abort waiter. This error uses special handling here:
+			// abort waiting for ACCEPTED stage and return Unavailable (retryable) error to the caller.
+			// This error will be retried (by history service handler, or history service client in frontend,
+			// or SDK, or user client) and it will recreate update in the registry.
+			// All other errors are returned to the caller (not currently happens).
+			if !errors.Is(err, abortWaiterErr) {
+				return nil, err
+			}
+			return nil, serviceerror.NewUnavailable("Workflow Update was aborted.")
 		}
 
 		if ctx.Err() != nil {
@@ -246,8 +264,27 @@ func (u *Update) WaitLifecycleStage(
 	}
 
 	// Only get here if waitStage=ADMITTED or UNSPECIFIED and neither ACCEPTED nor COMPLETED are reached.
-	// Return ADMITTED (as the most reached state) and empty outcome.
+	// Return ADMITTED (as the most advanced stage reached) and empty outcome.
 	return statusAdmitted(), nil
+}
+
+// abortWaiters fails update futures with abortWaiterErr error and set state to stateAborted.
+func (u *Update) abortWaiters() {
+	const preAcceptedStates = stateSet(stateCreated | stateProvisionallyAdmitted | stateAdmitted | stateProvisionallySent | stateSent | stateProvisionallyAccepted)
+	if u.state.Matches(preAcceptedStates) {
+		u.accepted.(*future.FutureImpl[*failurepb.Failure]).Set(nil, abortWaiterErr)
+		u.outcome.(*future.FutureImpl[*updatepb.Outcome]).Set(nil, abortWaiterErr)
+	}
+
+	const preCompletedStates = stateSet(stateAccepted | stateProvisionallyCompleted)
+	if u.state.Matches(preCompletedStates) {
+		// Accepted updates can't be aborted because they are already persisted and
+		// will be recreated in the registry after reload from the store.
+		// Set error to abortWaiterErr to unify handling logic on waiter side (WaitLifecycleStage).
+		u.outcome.(*future.FutureImpl[*updatepb.Outcome]).Set(nil, abortWaiterErr)
+	}
+
+	u.setState(stateAborted)
 }
 
 // Admit works if the Update is in any state but if the state is anything
@@ -281,9 +318,19 @@ func (u *Update) Admit(
 		return invalidArgf("unable to marshal request: %v", err)
 	}
 	u.request = reqAny
-	u.setState(stateProvisionallyAdmitted)
-	eventStore.OnAfterCommit(func(context.Context) { u.setState(stateAdmitted) })
-	eventStore.OnAfterRollback(func(context.Context) { u.setState(stateCreated) })
+	prevState := u.setState(stateProvisionallyAdmitted)
+	eventStore.OnAfterCommit(func(context.Context) {
+		if u.state != stateProvisionallyAdmitted {
+			return
+		}
+		u.setState(stateAdmitted)
+	})
+	eventStore.OnAfterRollback(func(context.Context) {
+		if u.state != stateProvisionallyAdmitted {
+			return
+		}
+		u.setState(prevState)
+	})
 	return nil
 }
 
@@ -365,9 +412,19 @@ func (u *Update) Send(
 	}
 
 	if u.state == stateAdmitted {
-		u.setState(stateProvisionallySent)
-		eventStore.OnAfterCommit(func(context.Context) { u.setState(stateSent) })
-		eventStore.OnAfterRollback(func(context.Context) { u.setState(stateAdmitted) })
+		prevState := u.setState(stateProvisionallySent)
+		eventStore.OnAfterCommit(func(context.Context) {
+			if u.state != stateProvisionallySent {
+				return
+			}
+			u.setState(stateSent)
+		})
+		eventStore.OnAfterRollback(func(context.Context) {
+			if u.state != stateProvisionallySent {
+				return
+			}
+			u.setState(prevState)
+		})
 	}
 
 	if u.request == nil {
@@ -443,15 +500,21 @@ func (u *Update) onAcceptanceMsg(
 		return err
 	}
 	u.acceptedEventID = event.EventId
-	u.setState(stateProvisionallyAccepted)
+	prevState := u.setState(stateProvisionallyAccepted)
 	eventStore.OnAfterCommit(func(context.Context) {
+		if !u.state.Matches(stateSet(stateProvisionallyAccepted | stateProvisionallyCompleted)) {
+			return
+		}
 		u.request = nil
 		u.setState(stateAccepted)
 		u.accepted.(*future.FutureImpl[*failurepb.Failure]).Set(nil, nil)
 	})
 	eventStore.OnAfterRollback(func(context.Context) {
+		if !u.state.Matches(stateSet(stateProvisionallyAccepted | stateProvisionallyCompleted)) {
+			return
+		}
 		u.acceptedEventID = common.EmptyEventID
-		u.setState(stateSent)
+		u.setState(prevState)
 	})
 	return nil
 }
@@ -482,8 +545,12 @@ func (u *Update) reject(
 	rejectionFailure *failurepb.Failure,
 	eventStore EventStore,
 ) error {
-	u.setState(stateProvisionallyCompleted)
+	prevState := u.setState(stateProvisionallyCompleted)
 	eventStore.OnAfterCommit(func(context.Context) {
+		if u.state != stateProvisionallyCompleted {
+			return
+		}
+
 		u.request = nil
 		u.setState(stateCompleted)
 		outcome := updatepb.Outcome{
@@ -493,7 +560,12 @@ func (u *Update) reject(
 		u.outcome.(*future.FutureImpl[*updatepb.Outcome]).Set(&outcome, nil)
 		u.onComplete()
 	})
-	eventStore.OnAfterRollback(func(context.Context) { u.setState(stateSent) })
+	eventStore.OnAfterRollback(func(context.Context) {
+		if u.state != stateProvisionallyCompleted {
+			return
+		}
+		u.setState(prevState)
+	})
 	return nil
 }
 
@@ -519,17 +591,25 @@ func (u *Update) onResponseMsg(
 	u.instrumentation.CountResponseMsg()
 	prevState := u.setState(stateProvisionallyCompleted)
 	eventStore.OnAfterCommit(func(context.Context) {
+		if !u.state.Matches(stateSet(stateAccepted | stateProvisionallyCompleted)) {
+			return
+		}
 		u.setState(stateCompleted)
 		u.outcome.(*future.FutureImpl[*updatepb.Outcome]).Set(res.GetOutcome(), nil)
 		u.onComplete()
 	})
-	eventStore.OnAfterRollback(func(context.Context) { u.setState(prevState) })
+	eventStore.OnAfterRollback(func(context.Context) {
+		if !u.state.Matches(stateSet(stateAccepted | stateProvisionallyCompleted)) {
+			return
+		}
+		u.setState(prevState)
+	})
 	return nil
 }
 
 // isIncomplete checks if update is already completed (rejected or processed).
 func (u *Update) isIncomplete() bool {
-	return !u.state.Matches(stateSet(stateProvisionallyCompleted | stateCompleted))
+	return !u.state.Matches(stateSet(stateProvisionallyCompleted | stateCompleted | stateAborted))
 }
 
 // CancelIncomplete cancels update if it wasn't completed yet:
