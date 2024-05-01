@@ -171,7 +171,7 @@ func (s *hrsuTestSuite) TearDownSuite() {
 	s.tearDownSuite()
 }
 
-func (s *hrsuTestSuite) startHrsuTest() (hrsuTest, context.Context, context.CancelFunc) {
+func (s *hrsuTestSuite) startHrsuTest() (*hrsuTest, context.Context, context.CancelFunc) {
 	ctx, cancel := context.WithTimeout(context.Background(), testTimeout)
 	tv := testvars.New(s.T().Name())
 	ns := tv.NamespaceName().String()
@@ -187,7 +187,7 @@ func (s *hrsuTestSuite) startHrsuTest() (hrsuTest, context.Context, context.Canc
 	t.cluster1 = t.newHrsuTestCluster(ns, s.clusterNames[0], s.cluster1)
 	t.cluster2 = t.newHrsuTestCluster(ns, s.clusterNames[1], s.cluster2)
 	t.registerMultiRegionNamespace(ctx)
-	return t, ctx, cancel
+	return &t, ctx, cancel
 }
 
 func (t *hrsuTest) newHrsuTestCluster(ns string, name string, cluster *tests.TestCluster) hrsuTestCluster {
