@@ -1221,13 +1221,16 @@ func (s *ClientFunctionalSuite) Test_BufferedSignalCausesUnhandledCommandAndSche
 	defer cancel()
 	tv := testvars.New(s.T().Name()).WithTaskQueue(s.taskQueue)
 
-	sigReadyToSendChan := make(chan bool, 1)
-	sigSendDoneChan := make(chan bool)
+	sigReadyToSendChan := make(chan struct{}, 1)
+	sigSendDoneChan := make(chan struct{})
 	localActivityFn := func(ctx context.Context) error {
 		// Unblock signal sending, so it is sent after first workflow task started.
-		sigReadyToSendChan <- true
+		sigReadyToSendChan <- struct{}{}
 		// Block workflow task and cause the signal to become buffered event.
-		<-sigSendDoneChan
+		select {
+		case <-sigSendDoneChan:
+		case <-ctx.Done():
+		}
 		return nil
 	}
 
