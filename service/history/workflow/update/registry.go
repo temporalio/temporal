@@ -103,7 +103,7 @@ type (
 	registry struct {
 		mu              sync.RWMutex
 		updates         map[string]*Update
-		getStoreFn      func() Store // TODO: revert it back to Store
+		store           Store
 		instrumentation instrumentation
 		maxInFlight     func() int
 		maxTotal        func() int
@@ -156,22 +156,22 @@ func WithTracerProvider(t trace.TracerProvider) Option {
 var _ Registry = (*registry)(nil)
 
 func NewRegistry(
-	getStoreFn func() Store,
+	store Store,
 	opts ...Option,
 ) Registry {
 	r := &registry{
 		updates:         make(map[string]*Update),
-		getStoreFn:      getStoreFn,
+		store:           store,
 		instrumentation: noopInstrumentation,
 		maxInFlight:     func() int { return math.MaxInt },
 		maxTotal:        func() int { return math.MaxInt },
-		failoverVersion: getStoreFn().GetCurrentVersion(),
+		failoverVersion: store.GetCurrentVersion(),
 	}
 	for _, opt := range opts {
 		opt(r)
 	}
 
-	r.getStoreFn().VisitUpdates(func(updID string, updInfo *updatespb.UpdateInfo) {
+	r.store.VisitUpdates(func(updID string, updInfo *updatespb.UpdateInfo) {
 		if updInfo.GetAdmission() != nil {
 			// An update entry in the registry may have a request payload: we use this to write the payload to an
 			// UpdateAccepted event, in the event that the update is accepted. However, when populating the registry
@@ -361,7 +361,7 @@ func (r *registry) findLocked(ctx context.Context, id string) (*Update, bool) {
 
 	// update not found in ephemeral state, but could have already completed so
 	// check in registry storage
-	updOutcome, err := r.getStoreFn().GetUpdateOutcome(ctx, id)
+	updOutcome, err := r.store.GetUpdateOutcome(ctx, id)
 
 	// Swallow NotFound error because it means that update doesn't exist.
 	var notFound *serviceerror.NotFound
