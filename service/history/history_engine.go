@@ -392,7 +392,7 @@ func (e *historyEngineImpl) StartWorkflowExecution(
 		startRequest,
 		namespaceEntry,
 	)
-	return starter.Invoke(ctx, nil)
+	return starter.Invoke(ctx, startworkflow.BeforeCreateHookNoop)
 }
 
 func (e *historyEngineImpl) ExecuteMultiOperation(

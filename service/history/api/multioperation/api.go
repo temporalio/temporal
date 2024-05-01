@@ -46,6 +46,7 @@ import (
 )
 
 var (
+	multiOpRetryErr   = fmt.Errorf("retry")
 	multiOpAbortedErr = serviceerror.NewMultiOperationAborted("Operation was aborted.")
 )
 
@@ -96,6 +97,33 @@ func Invoke(
 		return startAndUpdateWorkflow(ctx, shardContext, workflowConsistencyChecker, starter, updater)
 	}
 
+	for {
+		select {
+		case <-ctx.Done():
+			return nil, ctx.Err()
+		default:
+			resp, err := execute(ctx, workflowConsistencyChecker, namespaceEntry, startReq, shardContext, updater, starter)
+
+			// A retry is needed.
+			// For example, when a workflow could not be started since it's already running.
+			if errors.Is(err, multiOpRetryErr) {
+				continue
+			}
+
+			return resp, err
+		}
+	}
+}
+
+func execute(
+	ctx context.Context,
+	workflowConsistencyChecker api.WorkflowConsistencyChecker,
+	namespaceEntry *namespace.Namespace,
+	startReq *historyservice.StartWorkflowExecutionRequest,
+	shardContext shard.Context,
+	updater *updateworkflow.Updater,
+	starter *startworkflow.Starter,
+) (*historyservice.ExecuteMultiOperationResponse, error) {
 	currentWorkflowLease, err := workflowConsistencyChecker.GetWorkflowLease(
 		ctx,
 		nil,
@@ -145,7 +173,13 @@ func Invoke(
 	}
 
 	// workflow hasn't been started yet: start and then apply update
-	return startAndUpdateWorkflow(ctx, shardContext, workflowConsistencyChecker, starter, updater)
+	return startAndUpdateWorkflow(
+		ctx,
+		shardContext,
+		workflowConsistencyChecker,
+		starter,
+		updater,
+	)
 }
 
 func updateWorkflow(
@@ -237,6 +271,12 @@ func startAndUpdateWorkflow(
 		return nil, newMultiOpError(err, multiOpAbortedErr)
 	}
 
+	if !startResp.Started {
+		// The workflow was not started, but the update was already applied there.
+		// The best way forward is to exit here and retry from the top.
+		return nil, multiOpRetryErr
+	}
+
 	// without this, there's no Update registry on the call from Matching back to History
 	// TODO: eventually, we'll want to put the MS into the cache as well
 	workflowCache := workflowConsistencyChecker.GetWorkflowCache()
@@ -247,14 +287,12 @@ func startAndUpdateWorkflow(
 		workflowCtx,
 		shardContext.GetMetricsHandler(),
 	); err != nil {
-		// TODO: error
 		return nil, err
 	}
 
 	// wait for the update to complete
 	updateResp, err := updater.OnSuccess(ctx)
 	if err != nil {
-		// TODO: send Update outcome failure instead
 		return nil, serviceerror.NewUnavailable(fmt.Errorf("failed to complete Workflow Update: %w", err).Error())
 	}
 
