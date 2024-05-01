@@ -199,7 +199,6 @@ func (s *timerSequenceSuite) TestCreateNextUserTimer_NotCreated_BeforeWorkflowEx
 		WorkflowKey:         s.workflowKey,
 		VisibilityTimestamp: timerExpiry.AsTime(),
 		EventID:             timerInfo.GetStartedEventId(),
-		Version:             currentVersion,
 	})
 
 	modified, err := s.timerSequence.CreateNextUserTimer()
@@ -234,7 +233,6 @@ func (s *timerSequenceSuite) TestCreateNextUserTimer_NotCreated_NoWorkflowExpiry
 		WorkflowKey:         s.workflowKey,
 		VisibilityTimestamp: timerExpiry.AsTime(),
 		EventID:             timerInfo.GetStartedEventId(),
-		Version:             currentVersion,
 	})
 
 	modified, err := s.timerSequence.CreateNextUserTimer()
@@ -390,7 +388,6 @@ func (s *timerSequenceSuite) TestCreateNextActivityTimer_NotCreated_BeforeWorkfl
 		TimeoutType:         enumspb.TIMEOUT_TYPE_SCHEDULE_TO_START,
 		EventID:             activityInfo.ScheduledEventId,
 		Attempt:             activityInfo.Attempt,
-		Version:             currentVersion,
 	})
 
 	modified, err := s.timerSequence.CreateNextActivityTimer()
@@ -434,7 +431,6 @@ func (s *timerSequenceSuite) TestCreateNextActivityTimer_NotCreated_NoWorkflowEx
 		TimeoutType:         enumspb.TIMEOUT_TYPE_SCHEDULE_TO_START,
 		EventID:             activityInfo.ScheduledEventId,
 		Attempt:             activityInfo.Attempt,
-		Version:             currentVersion,
 	})
 
 	modified, err := s.timerSequence.CreateNextActivityTimer()
@@ -508,7 +504,6 @@ func (s *timerSequenceSuite) TestCreateNextActivityTimer_HeartbeatTimer_BeforeWo
 		TimeoutType:         enumspb.TIMEOUT_TYPE_HEARTBEAT,
 		EventID:             activityInfo.ScheduledEventId,
 		Attempt:             activityInfo.Attempt,
-		Version:             currentVersion,
 	})
 
 	modified, err := s.timerSequence.CreateNextActivityTimer()
@@ -554,7 +549,6 @@ func (s *timerSequenceSuite) TestCreateNextActivityTimer_HeartbeatTimer_NoWorkfl
 		TimeoutType:         enumspb.TIMEOUT_TYPE_HEARTBEAT,
 		EventID:             activityInfo.ScheduledEventId,
 		Attempt:             activityInfo.Attempt,
-		Version:             currentVersion,
 	})
 
 	modified, err := s.timerSequence.CreateNextActivityTimer()

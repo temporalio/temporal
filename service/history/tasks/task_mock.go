@@ -143,20 +143,6 @@ func (mr *MockTaskMockRecorder) GetType() *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetType", reflect.TypeOf((*MockTask)(nil).GetType))
 }
 
-// GetVersion mocks base method.
-func (m *MockTask) GetVersion() int64 {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "GetVersion")
-	ret0, _ := ret[0].(int64)
-	return ret0
-}
-
-// GetVersion indicates an expected call of GetVersion.
-func (mr *MockTaskMockRecorder) GetVersion() *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetVersion", reflect.TypeOf((*MockTask)(nil).GetVersion))
-}
-
 // GetVisibilityTime mocks base method.
 func (m *MockTask) GetVisibilityTime() time.Time {
 	m.ctrl.T.Helper()

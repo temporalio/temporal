@@ -115,7 +115,6 @@ func Invoke(
 			RunId:      request.GetWorkflowExecution().GetRunId(),
 		},
 		workflowLease.GetMutableState(),
-		request.GetWorkflowVersion(),
 	); err != nil {
 		return nil, err
 	}
