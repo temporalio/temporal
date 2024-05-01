@@ -284,7 +284,7 @@ func onUpdateError(
 	updater *updateworkflow.Updater,
 	startOpResp *historyservice.ExecuteMultiOperationResponse_Response,
 ) (*historyservice.ExecuteMultiOperationResponse, error) {
-	updateResp := updater.OnError(updateErr)
+	updateResp, updateErr := updater.OnError(updateErr)
 	if updateResp != nil {
 		return &historyservice.ExecuteMultiOperationResponse{
 			Responses: []*historyservice.ExecuteMultiOperationResponse_Response{

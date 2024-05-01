@@ -552,9 +552,15 @@ func (handler *workflowTaskHandlerCallbacksImpl) handleWorkflowTaskCompleted(
 		responseMutations           []workflowTaskResponseMutation
 	)
 	updateRegistry := weContext.UpdateRegistry(ctx, nil)
-	// hasBufferedEventsOrMessages indicates if there are any buffered events or admitted updates which should generate a new
-	// workflow task.
-	hasBufferedEventsOrMessages := ms.HasBufferedEvents() || updateRegistry.HasOutgoingMessages(false)
+	// hasBufferedEventsOrMessages indicates if there are any buffered events
+	// or admitted updates which should generate a new workflow task.
+
+	// TODO: HasOutgoingMessages call (=check for admitted updates) is comment out
+	//   because non-durable admitted updates can't block WF from closing,
+	//   because everytime WFT is failing, WF context is cleared together with update registry
+	//   and admitted updates are lost. Uncomment this check when durable admitted is implemented
+	//   or updates stay in the registry after WFT is failed.
+	hasBufferedEventsOrMessages := ms.HasBufferedEvents() // || updateRegistry.HasOutgoingMessages(false)
 	if err := namespaceEntry.VerifyBinaryChecksum(request.GetBinaryChecksum()); err != nil {
 		wtFailedCause = newWorkflowTaskFailedCause(
 			enumspb.WORKFLOW_TASK_FAILED_CAUSE_BAD_BINARY,
@@ -626,23 +632,6 @@ func (handler *workflowTaskHandlerCallbacksImpl) handleWorkflowTaskCompleted(
 			request.GetIdentity(),
 		); err != nil {
 			return nil, err
-		}
-
-		if !ms.IsWorkflowExecutionRunning() {
-			// If workflow competed itself with one of the completion command, cancel all incomplete updates in the registry.
-			// Because all unprocessed updates were already rejected, incomplete updates in the registry are:
-			// - updates that were received while this WT was running,
-			// - updates that were accepted but not completed by this WT.
-			err = updateRegistry.CancelIncomplete(ctx, update.CancelReasonWorkflowCompleted, workflow.WithEffects(&effects, ms))
-			if err != nil {
-				// Just log error here because it is more important to complete workflow than canceling updates.
-				handler.logger.Warn("Unable to cancel incomplete updates while completing the workflow.",
-					tag.WorkflowNamespaceID(weContext.GetWorkflowKey().NamespaceID),
-					tag.WorkflowID(weContext.GetWorkflowKey().WorkflowID),
-					tag.WorkflowRunID(weContext.GetWorkflowKey().RunID),
-					tag.WorkflowEventID(currentWorkflowTask.ScheduledEventID),
-					tag.Error(err))
-			}
 		}
 
 		// set the vars used by following logic
@@ -842,6 +831,16 @@ func (handler *workflowTaskHandlerCallbacksImpl) handleWorkflowTaskCompleted(
 	// If mutable state was persisted successfully (or persistence was skipped),
 	// then effects needs to be applied immediately to keep registry and mutable state in sync.
 	effects.Apply(ctx)
+
+	if !ms.IsWorkflowExecutionRunning() {
+		// If workflow competed itself with one of the completion command,
+		// abort all waiters with "workflow completed" error.
+		// Because all unprocessed updates were already rejected, incomplete updates in the registry are:
+		// - updates that were received while this WFT was running,
+		// - updates that were accepted but not completed by this WFT.
+		// It is important to call this after applying effects to be sure there are no unprocessed effects.
+		updateRegistry.AbortWaiters(update.AbortWaiterReasonWorkflowCompleted)
+	}
 
 	// Create speculative workflow task after mutable state is persisted.
 	if newWorkflowTaskType == enumsspb.WORKFLOW_TASK_TYPE_SPECULATIVE {

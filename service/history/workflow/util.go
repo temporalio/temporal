@@ -151,7 +151,7 @@ func TerminateWorkflow(
 		deleteAfterTerminate,
 	)
 
-	// err = updateRegistry.CancelIncomplete(ctx, update.CancelReasonWorkflowTerminated, WithEffects(effects, mutableState))
+	// err = updateRegistry.AbortWaiters(update.AbortWaiterReasonWorkflowTerminated)
 
 	return err
 }

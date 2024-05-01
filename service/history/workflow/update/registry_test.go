@@ -36,6 +36,7 @@ import (
 	protocolpb "go.temporal.io/api/protocol/v1"
 	"go.temporal.io/api/serviceerror"
 	updatepb "go.temporal.io/api/update/v1"
+	"go.temporal.io/server/service/history/consts"
 
 	updatespb "go.temporal.io/server/api/update/v1"
 	"go.temporal.io/server/internal/effect"
@@ -580,7 +581,7 @@ func TestRejectUnprocessed(t *testing.T) {
 	require.Len(t, rejectedIDs, 0, "rejected updates shouldn't be rejected again")
 }
 
-func TestCancelIncomplete(t *testing.T) {
+func TestAbortWaiters(t *testing.T) {
 	var (
 		ctx          = context.Background()
 		evStore      = mockEventStore{Controller: effect.Immediate(ctx)}
@@ -633,29 +634,26 @@ func TestCancelIncomplete(t *testing.T) {
 		&protocolpb.Message{Body: mustMarshalAny(t, &updatepb.Response{Meta: &updatepb.Meta{UpdateId: updateID5}, Outcome: successOutcome(t, "update completed")})},
 		evStore)
 
-	err := reg.CancelIncomplete(ctx, update.CancelReasonWorkflowCompleted, evStore)
-	require.NoError(t, err)
+	reg.AbortWaiters(update.AbortWaiterReasonWorkflowCompleted)
 
 	status, err := updCreated.WaitLifecycleStage(ctx, enumspb.UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_COMPLETED, 1*time.Second)
-	require.NoError(t, err)
-	require.Equal(t, enumspb.UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_COMPLETED, status.Stage)
-	require.Equal(t, "Workflow Update is rejected because Workflow Execution is completed.", status.Outcome.GetFailure().GetMessage())
+	require.Error(t, err)
+	require.ErrorIs(t, err, consts.ErrWorkflowCompleted)
+	require.Nil(t, status)
 
 	status, err = updAdmitted.WaitLifecycleStage(ctx, enumspb.UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_COMPLETED, 1*time.Second)
-	require.NoError(t, err)
-	require.Equal(t, enumspb.UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_COMPLETED, status.Stage)
-	require.Equal(t, "Workflow Update is rejected because Workflow Execution is completed.", status.Outcome.GetFailure().GetMessage())
+	require.Error(t, err)
+	require.ErrorIs(t, err, consts.ErrWorkflowCompleted)
+	require.Nil(t, status)
 
 	status, err = updSent.WaitLifecycleStage(ctx, enumspb.UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_COMPLETED, 1*time.Second)
-	require.NoError(t, err)
-	require.Equal(t, enumspb.UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_COMPLETED, status.Stage)
-	require.Equal(t, "Workflow Update is rejected because Workflow Execution is completed.", status.Outcome.GetFailure().GetMessage())
+	require.Error(t, err)
+	require.ErrorIs(t, err, consts.ErrWorkflowCompleted)
+	require.Nil(t, status)
 
-	oneMsCtx, cancel := context.WithTimeout(ctx, 1*time.Millisecond)
-	defer cancel()
-	status, err = updAccepted.WaitLifecycleStage(oneMsCtx, enumspb.UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_COMPLETED, 1*time.Second)
-	require.ErrorIs(t, err, context.DeadlineExceeded,
-		"expected DeadlineExceeded error when workflow is completed and update is in Accepted state")
+	status, err = updAccepted.WaitLifecycleStage(ctx, enumspb.UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_COMPLETED, 1*time.Second)
+	require.Error(t, err)
+	require.ErrorIs(t, err, consts.ErrWorkflowCompleted)
 	require.Nil(t, status)
 
 	status, err = updCompleted.WaitLifecycleStage(ctx, enumspb.UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_COMPLETED, 1*time.Second)
