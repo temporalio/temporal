@@ -201,27 +201,19 @@ func (pm *taskQueuePartitionManagerImpl) AddTask(
 	params addTaskParams,
 ) (buildId string, syncMatched bool, err error) {
 	var spoolQueue, syncMatchQueue physicalTaskQueueManager
-	syncMatchTask := newInternalTaskForSyncMatch(params.taskInfo, params.forwardInfo)
 
-	if syncMatchTask.isForwarded() {
-		// forwarded from child partition - only do sync match
-		// child partition will persist the task when sync match fails
-		// no need to calculate build ID, just dispatch based on source partition's instruction
-		syncMatchQueue, err = pm.getVersionedQueue(ctx, syncMatchTask.forwardInfo.DispatchVersionSet, syncMatchTask.forwardInfo.DispatchBuildId, true)
-		if err != nil {
-			return "", false, err
-		}
-	} else {
-		// task is not forwarded. calculate the spool and sync-match physical queues base in the directive
-		spoolQueue, syncMatchQueue, _, err = pm.getPhysicalQueuesForAdd(ctx, params.directive, params.taskInfo.GetRunId())
-		if err != nil {
-			return "", false, err
-		}
-		// set redirect info if spoolQueue and syncMatchQueue build ids are different
-		if spoolQueue.QueueKey().BuildId() != syncMatchQueue.QueueKey().BuildId() {
-			syncMatchTask.redirectInfo = &taskqueuespb.BuildIdRedirectInfo{
-				AssignedBuildId: spoolQueue.QueueKey().BuildId(),
-			}
+	// spoolQueue will be nil iff task is forwarded.
+	spoolQueue, syncMatchQueue, _, err = pm.getPhysicalQueuesForAdd(ctx, params.directive, params.forwardInfo, params.taskInfo.GetRunId())
+	if err != nil {
+		return "", false, err
+	}
+
+	syncMatchTask := newInternalTaskForSyncMatch(params.taskInfo, params.forwardInfo)
+	if spoolQueue != nil && spoolQueue.QueueKey().BuildId() != syncMatchQueue.QueueKey().BuildId() {
+		// Task is not forwarded and build ID is different on the two queues -> redirect rule is being applied.
+		// Set redirectInfo in the task as it will be needed if we have to forward the task.
+		syncMatchTask.redirectInfo = &taskqueuespb.BuildIdRedirectInfo{
+			AssignedBuildId: spoolQueue.QueueKey().BuildId(),
 		}
 	}
 
@@ -251,7 +243,8 @@ func (pm *taskQueuePartitionManagerImpl) AddTask(
 		}
 	}
 
-	if syncMatchTask.isForwarded() {
+	if spoolQueue == nil {
+		// This means the task is being forwarded. Child partition will persist the task when sync match fails.
 		return "", false, errRemoteSyncMatchFailed
 	}
 
@@ -347,7 +340,7 @@ func (pm *taskQueuePartitionManagerImpl) ProcessSpooledTask(
 	}
 	// Redirect and re-resolve if we're blocked in matcher and user data changes.
 	for {
-		_, syncMatchQueue, userDataChanged, err := pm.getPhysicalQueuesForAdd(ctx, directive, taskInfo.GetRunId())
+		_, syncMatchQueue, userDataChanged, err := pm.getPhysicalQueuesForAdd(ctx, directive, nil, taskInfo.GetRunId())
 		if err != nil {
 			return err
 		}
@@ -372,7 +365,12 @@ func (pm *taskQueuePartitionManagerImpl) DispatchQueryTask(
 	taskID string,
 	request *matchingservice.QueryWorkflowRequest,
 ) (*matchingservice.QueryWorkflowResponse, error) {
-	_, syncMatchQueue, _, err := pm.getPhysicalQueuesForAdd(ctx, request.VersionDirective, request.GetQueryRequest().GetExecution().GetRunId())
+	_, syncMatchQueue, _, err := pm.getPhysicalQueuesForAdd(
+		ctx,
+		request.VersionDirective,
+		request.GetForwardInfo(),
+		request.GetQueryRequest().GetExecution().GetRunId(),
+	)
 	if err != nil {
 		return nil, err
 	}
@@ -392,9 +390,8 @@ func (pm *taskQueuePartitionManagerImpl) DispatchNexusTask(
 ) (*matchingservice.DispatchNexusTaskResponse, error) {
 	_, syncMatchQueue, _, err := pm.getPhysicalQueuesForAdd(
 		ctx,
-		// Nexus tasks always use assignment rules (if present) because they don't have a workflow.
 		worker_versioning.MakeUseAssignmentRulesDirective(),
-		// There is no run ID, each request is mapped to a random ramp threshold.
+		request.GetForwardInfo(),
 		"",
 	)
 	if err != nil {
@@ -656,13 +653,22 @@ func (pm *taskQueuePartitionManagerImpl) loadDemotedSetIds(demotedSetIds []strin
 }
 
 // getPhysicalQueuesForAdd returns two physical queues, first one for spooling the task, second one for sync-match
+// spoolQueue will be nil iff the task is forwarded (forwardInfo is nil).
 //
 //nolint:revive // cognitive complexity will be reduced once old versioning is deleted [cleanup-old-wv]
 func (pm *taskQueuePartitionManagerImpl) getPhysicalQueuesForAdd(
 	ctx context.Context,
 	directive *taskqueuespb.TaskVersionDirective,
+	forwardInfo *taskqueuespb.TaskForwardInfo,
 	runId string,
 ) (spoolQueue physicalTaskQueueManager, syncMatchQueue physicalTaskQueueManager, userDataChanged <-chan struct{}, err error) {
+	if forwardInfo != nil {
+		// Forwarded from child partition - only do sync match.
+		// No need to calculate build ID, just dispatch based on source partition's instructions.
+		syncMatchQueue, err = pm.getVersionedQueue(ctx, forwardInfo.DispatchVersionSet, forwardInfo.DispatchBuildId, true)
+		return nil, syncMatchQueue, nil, err
+	}
+
 	if directive.GetBuildId() == nil {
 		// This means the tasks is a middle task belonging to an unversioned execution. Keep using unversioned.
 		return pm.defaultQueue, pm.defaultQueue, nil, nil
