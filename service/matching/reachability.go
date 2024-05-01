@@ -89,14 +89,14 @@ type reachabilityCalculator struct {
 
 func newReachabilityCalculator(
 	data *persistencespb.VersioningData,
-	cache reachabilityCache,
+	rCache reachabilityCache,
 	nsID,
 	nsName,
 	taskQueue string,
 	buildIdVisibilityGracePeriod time.Duration,
 ) *reachabilityCalculator {
 	return &reachabilityCalculator{
-		cache:                        cache,
+		cache:                        rCache,
 		nsID:                         namespace.ID(nsID),
 		nsName:                       namespace.Name(nsName),
 		taskQueue:                    taskQueue,
@@ -183,16 +183,13 @@ func getCacheExitPoint(open, hit bool) reachabilityExitPoint {
 	if open {
 		if hit {
 			return checkedOpenWorkflowExecutionsForUpstreamHit
-		} else {
-			return checkedOpenWorkflowExecutionsForUpstreamMiss
 		}
-	} else {
-		if hit {
-			return checkedClosedWorkflowExecutionsForUpstreamHit
-		} else {
-			return checkedClosedWorkflowExecutionsForUpstreamMiss
-		}
+		return checkedOpenWorkflowExecutionsForUpstreamMiss
 	}
+	if hit {
+		return checkedClosedWorkflowExecutionsForUpstreamHit
+	}
+	return checkedClosedWorkflowExecutionsForUpstreamMiss
 }
 
 // getBuildIdsOfInterest returns a list of build ids that point to the given buildId in the graph
