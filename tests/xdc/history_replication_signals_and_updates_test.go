@@ -188,7 +188,6 @@ func (s *hrsuTestSuite) startHrsuTest() (hrsuTest, context.Context, context.Canc
 	t.cluster1 = t.newHrsuTestCluster(ns, s.clusterNames[0], s.cluster1)
 	t.cluster2 = t.newHrsuTestCluster(ns, s.clusterNames[1], s.cluster2)
 	t.registerMultiRegionNamespace(ctx)
-	t.runId = t.cluster1.startWorkflow(ctx)
 	return t, ctx, cancel
 }
 
@@ -213,6 +212,7 @@ func (t *hrsuTest) newHrsuTestCluster(ns string, name string, cluster *tests.Tes
 func (s *hrsuTestSuite) TestAcceptedUpdateCanBeCompletedAfterFailoverAndFailback() {
 	t, ctx, cancel := s.startHrsuTest()
 	defer cancel()
+	t.runId = t.cluster1.startWorkflow(ctx, func(workflow.Context) error { return nil })
 
 	// Cluster 1 is active initially. We start an update in cluster 1, run it through to acceptance, and replicate the
 	// history to cluster 2. Then we failover to cluster 2 (where the update registry is empty) and confirm that the update
@@ -228,6 +228,7 @@ func (s *hrsuTestSuite) TestAcceptedUpdateCanBeCompletedAfterFailoverAndFailback
 func (s *hrsuTestSuite) TestUpdateCompletedAfterFailoverCannotBeCompletedAgainAfterFailback() {
 	t, ctx, cancel := s.startHrsuTest()
 	defer cancel()
+	t.runId = t.cluster1.startWorkflow(ctx, func(workflow.Context) error { return nil })
 	// Cluster 1 is active initially. We start an update in cluster 1, run it through to acceptance, and replicate the
 	// history to cluster 2. Then we failover to cluster 2 (where the update registry is empty) and confirm that the update
 	// can be completed in the new active cluster.
@@ -246,6 +247,7 @@ func (s *hrsuTestSuite) TestUpdateCompletedAfterFailoverCannotBeCompletedAgainAf
 func (s *hrsuTestSuite) TestConflictResolutionReappliesSignals() {
 	t, ctx, cancel := s.startHrsuTest()
 	defer cancel()
+	t.runId = t.cluster1.startWorkflow(ctx, func(workflow.Context) error { return nil })
 
 	t.enterSplitBrainState(ctx)
 
@@ -302,6 +304,7 @@ func (s *hrsuTestSuite) TestConflictResolutionReappliesSignals() {
 func (s *hrsuTestSuite) TestConflictResolutionReappliesUpdates() {
 	t, ctx, cancel := s.startHrsuTest()
 	defer cancel()
+	t.runId = t.cluster1.startWorkflow(ctx, func(workflow.Context) error { return nil })
 
 	cluster1UpdateId := "cluster1-update-id"
 	cluster2UpdateId := "cluster2-update-id"
@@ -362,6 +365,7 @@ func (s *hrsuTestSuite) TestConflictResolutionReappliesUpdatesSameIds() {
 	s.T().SkipNow()
 	t, ctx, cancel := s.startHrsuTest()
 	defer cancel()
+	t.runId = t.cluster1.startWorkflow(ctx, func(workflow.Context) error { return nil })
 
 	// Both clusters accept an update with the same ID.
 	t.enterSplitBrainStateAndAcceptUpdatesInBothClusters(ctx, "update-id", "update-id")
@@ -831,12 +835,11 @@ func (t *hrsuTest) getActiveClusters(ctx context.Context) []string {
 }
 
 // startWorkflow starts a workflow in the cluster and replicates the initial workflow events to the other cluster.
-func (c *hrsuTestCluster) startWorkflow(ctx context.Context) string {
-	myWorkflow := func(ctx workflow.Context) error { return nil }
+func (c *hrsuTestCluster) startWorkflow(ctx context.Context, workflowFn any) string {
 	run, err := c.client.ExecuteWorkflow(ctx, sdkclient.StartWorkflowOptions{
 		TaskQueue: c.t.tv.TaskQueue().Name,
 		ID:        c.t.tv.WorkflowID(),
-	}, myWorkflow)
+	}, workflowFn)
 	c.t.s.NoError(err)
 	runId := run.GetRunID()
 
