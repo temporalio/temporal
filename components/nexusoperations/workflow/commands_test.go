@@ -72,10 +72,9 @@ func newTestContext(t *testing.T, cfg *nexusoperations.Config) testContext {
 	require.NoError(t, workflow.RegisterStateMachine(smReg))
 	require.NoError(t, nexusoperations.RegisterStateMachines(smReg))
 	require.NoError(t, nexusoperations.RegisterEventDefinitions(smReg))
-	// Backend is nil because we don't need to generate history events for this test.
-	node, err := hsm.NewRoot(smReg, workflow.StateMachineType.ID, nil, make(map[int32]*persistencespb.StateMachineMap), nil)
-	require.NoError(t, err)
 	ms := workflow.NewMockMutableState(gomock.NewController(t))
+	node, err := hsm.NewRoot(smReg, workflow.StateMachineType.ID, ms, make(map[int32]*persistencespb.StateMachineMap), ms)
+	require.NoError(t, err)
 	ms.EXPECT().HSM().Return(node).AnyTimes()
 	lastEventID := int64(4)
 	history := &historypb.History{}
@@ -90,7 +89,6 @@ func newTestContext(t *testing.T, cfg *nexusoperations.Config) testContext {
 		history.Events = append(history.Events, e)
 		return e
 	}).AnyTimes()
-	ms.EXPECT().GenerateEventLoadToken(gomock.Any()).Return([]byte("token"), nil).AnyTimes()
 	ms.EXPECT().GetNamespaceEntry().Return(tests.GlobalNamespaceEntry).AnyTimes()
 	ms.EXPECT().GetExecutionInfo().Return(&persistencespb.WorkflowExecutionInfo{}).AnyTimes()
 	scheduleHandler, ok := chReg.Handler(enumspb.COMMAND_TYPE_SCHEDULE_NEXUS_OPERATION)
@@ -318,6 +316,44 @@ func TestHandleCancelCommand(t *testing.T) {
 		require.Equal(t, 0, len(tcx.history.Events))
 	})
 
+	t.Run("operation already completed", func(t *testing.T) {
+		tcx := newTestContext(t, defaultConfig)
+		err := tcx.scheduleHandler(tcx.ms, commandValidator{maxPayloadSize: 1}, 1, &commandpb.Command{
+			Attributes: &commandpb.Command_ScheduleNexusOperationCommandAttributes{
+				ScheduleNexusOperationCommandAttributes: &commandpb.ScheduleNexusOperationCommandAttributes{
+					Service:   "service",
+					Operation: "op",
+				},
+			},
+		})
+		require.NoError(t, err)
+		require.Equal(t, 1, len(tcx.history.Events))
+		event := tcx.history.Events[0]
+
+		coll := nexusoperations.MachineCollection(tcx.ms.HSM())
+		node, err := coll.Node(strconv.FormatInt(event.EventId, 10))
+		require.NoError(t, err)
+		op, err := coll.Data(strconv.FormatInt(event.EventId, 10))
+		require.NoError(t, err)
+		_, err = nexusoperations.TransitionSucceeded.Apply(op, nexusoperations.EventSucceeded{
+			Node: node,
+		})
+		require.NoError(t, err)
+
+		err = tcx.cancelHandler(tcx.ms, commandValidator{maxPayloadSize: 1}, 1, &commandpb.Command{
+			Attributes: &commandpb.Command_RequestCancelNexusOperationCommandAttributes{
+				RequestCancelNexusOperationCommandAttributes: &commandpb.RequestCancelNexusOperationCommandAttributes{
+					ScheduledEventId: event.EventId,
+				},
+			},
+		})
+		var failWFTErr workflow.FailWorkflowTaskError
+		require.ErrorAs(t, err, &failWFTErr)
+		require.False(t, failWFTErr.FailWorkflow)
+		require.Equal(t, enumspb.WORKFLOW_TASK_FAILED_CAUSE_BAD_REQUEST_CANCEL_NEXUS_OPERATION_ATTRIBUTES, failWFTErr.Cause)
+		require.Equal(t, 1, len(tcx.history.Events)) // Only scheduled event should be recorded.
+	})
+
 	t.Run("sets event attributes and spawns cancelation child machine", func(t *testing.T) {
 		tcx := newTestContext(t, defaultConfig)
 		err := tcx.scheduleHandler(tcx.ms, commandValidator{maxPayloadSize: 1}, 1, &commandpb.Command{
@@ -345,10 +381,15 @@ func TestHandleCancelCommand(t *testing.T) {
 		require.NoError(t, err)
 		require.NotNil(t, child)
 
-		require.Equal(t, 2, len(tcx.history.Events))
-		attrs := tcx.history.Events[1].GetNexusOperationCancelRequestedEventAttributes()
-		require.Equal(t, event.EventId, attrs.ScheduledEventId)
-		require.Equal(t, int64(1), attrs.WorkflowTaskCompletedEventId)
+		require.Equal(t, 3, len(tcx.history.Events))
+		crAttrs := tcx.history.Events[1].GetNexusOperationCancelRequestedEventAttributes()
+		require.Equal(t, event.EventId, crAttrs.ScheduledEventId)
+		require.Equal(t, int64(1), crAttrs.WorkflowTaskCompletedEventId)
+
+		cAttrs := tcx.history.Events[2].GetNexusOperationCanceledEventAttributes()
+		require.Equal(t, event.EventId, cAttrs.ScheduledEventId)
+		require.Equal(t, "operation canceled before started", cAttrs.Failure.Cause.Message)
+		require.NotNil(t, cAttrs.Failure.Cause.GetCanceledFailureInfo())
 
 		child, err = child.Child([]hsm.Key{nexusoperations.CancelationMachineKey})
 		require.NoError(t, err)

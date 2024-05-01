@@ -104,14 +104,12 @@ func TestRegenerateTasks(t *testing.T) {
 		name        string
 		timeout     time.Duration
 		state       enumsspb.NexusOperationState
-		canceled    bool
 		assertTasks func(t *testing.T, tasks []hsm.Task)
 	}{
 		{
-			name:     "scheduled | with timeout | not canceled",
-			timeout:  time.Hour,
-			canceled: false,
-			state:    enumsspb.NEXUS_OPERATION_STATE_SCHEDULED,
+			name:    "scheduled | with timeout",
+			timeout: time.Hour,
+			state:   enumsspb.NEXUS_OPERATION_STATE_SCHEDULED,
 			assertTasks: func(t *testing.T, tasks []hsm.Task) {
 				require.Equal(t, 2, len(tasks))
 				require.Equal(t, nexusoperations.TaskTypeInvocation, tasks[0].Type())
@@ -119,29 +117,18 @@ func TestRegenerateTasks(t *testing.T) {
 			},
 		},
 		{
-			name:     "scheduled | without timeout | not canceled",
-			timeout:  0,
-			canceled: false,
-			state:    enumsspb.NEXUS_OPERATION_STATE_SCHEDULED,
+			name:    "scheduled | without timeout",
+			timeout: 0,
+			state:   enumsspb.NEXUS_OPERATION_STATE_SCHEDULED,
 			assertTasks: func(t *testing.T, tasks []hsm.Task) {
 				require.Equal(t, 1, len(tasks))
 				require.Equal(t, nexusoperations.TaskTypeInvocation, tasks[0].Type())
 			},
 		},
 		{
-			name:     "scheduled | with timeout | canceled",
-			timeout:  time.Hour,
-			canceled: true,
-			state:    enumsspb.NEXUS_OPERATION_STATE_SCHEDULED,
-			assertTasks: func(t *testing.T, tasks []hsm.Task) {
-				require.Equal(t, 0, len(tasks))
-			},
-		},
-		{
-			name:     "backing off | with timeout | not canceled",
-			timeout:  time.Hour,
-			canceled: false,
-			state:    enumsspb.NEXUS_OPERATION_STATE_BACKING_OFF,
+			name:    "backing off | with timeout",
+			timeout: time.Hour,
+			state:   enumsspb.NEXUS_OPERATION_STATE_BACKING_OFF,
 			assertTasks: func(t *testing.T, tasks []hsm.Task) {
 				require.Equal(t, 2, len(tasks))
 				require.Equal(t, nexusoperations.TaskTypeBackoff, tasks[0].Type())
@@ -149,22 +136,12 @@ func TestRegenerateTasks(t *testing.T) {
 			},
 		},
 		{
-			name:     "backing off | without timeout | not canceled",
-			timeout:  0,
-			canceled: false,
-			state:    enumsspb.NEXUS_OPERATION_STATE_BACKING_OFF,
+			name:    "backing off | without timeout",
+			timeout: 0,
+			state:   enumsspb.NEXUS_OPERATION_STATE_BACKING_OFF,
 			assertTasks: func(t *testing.T, tasks []hsm.Task) {
 				require.Equal(t, 1, len(tasks))
 				require.Equal(t, nexusoperations.TaskTypeBackoff, tasks[0].Type())
-			},
-		},
-		{
-			name:     "backing off | with timeout | canceled",
-			timeout:  time.Hour,
-			canceled: true,
-			state:    enumsspb.NEXUS_OPERATION_STATE_BACKING_OFF,
-			assertTasks: func(t *testing.T, tasks []hsm.Task) {
-				require.Equal(t, 0, len(tasks))
 			},
 		},
 	}
@@ -183,12 +160,6 @@ func TestRegenerateTasks(t *testing.T) {
 						},
 						Node: node,
 					})
-				}))
-			}
-
-			if tc.canceled {
-				require.NoError(t, hsm.MachineTransition(node, func(op nexusoperations.Operation) (hsm.TransitionOutput, error) {
-					return op.Cancel(node, time.Now())
 				}))
 			}
 
@@ -465,9 +436,59 @@ func TestCompleteExternally(t *testing.T) {
 	}
 }
 
+func TestCancel(t *testing.T) {
+	t.Run("before started", func(t *testing.T) {
+		backend := &nodeBackend{}
+		root := newOperationNode(t, backend, time.Now(), time.Hour)
+		op, err := hsm.MachineData[nexusoperations.Operation](root)
+		require.NoError(t, err)
+		_, err = op.Cancel(root, time.Now())
+		require.NoError(t, err)
+		require.Equal(t, enumsspb.NEXUS_OPERATION_STATE_CANCELED, op.State())
+		require.Equal(t, 1, len(backend.events))
+		attrs := backend.events[0].GetNexusOperationCanceledEventAttributes()
+		require.Equal(t, int64(1), attrs.ScheduledEventId)
+		require.Equal(t, "operation canceled before started", attrs.Failure.Cause.Message)
+		require.NotNil(t, attrs.Failure.Cause.GetCanceledFailureInfo())
+	})
+
+	t.Run("after started", func(t *testing.T) {
+		backend := &nodeBackend{}
+		root := newOperationNode(t, backend, time.Now(), time.Hour)
+		op, err := hsm.MachineData[nexusoperations.Operation](root)
+		require.NoError(t, err)
+		_, err = nexusoperations.TransitionStarted.Apply(op, nexusoperations.EventStarted{
+			Time: time.Now(),
+			Attributes: &historypb.NexusOperationStartedEventAttributes{
+				OperationId: "op-id",
+			},
+			Node: root,
+		})
+		require.NoError(t, err)
+		_, err = op.Cancel(root, time.Now())
+		require.NoError(t, err)
+		require.Equal(t, enumsspb.NEXUS_OPERATION_STATE_STARTED, op.State())
+		node, err := root.Child([]hsm.Key{nexusoperations.CancelationMachineKey})
+		require.NoError(t, err)
+		cancelation, err := hsm.MachineData[nexusoperations.Cancelation](node)
+		require.NoError(t, err)
+		require.Equal(t, enumspb.NEXUS_OPERATION_CANCELLATION_STATE_SCHEDULED, cancelation.State())
+	})
+}
+
 func TestCancelationValidTransitions(t *testing.T) {
 	// Setup
 	root := newOperationNode(t, &nodeBackend{}, time.Now(), time.Hour)
+	// We don't support cancel before started. Mark the operation as started.
+	require.NoError(t, hsm.MachineTransition(root, func(op nexusoperations.Operation) (hsm.TransitionOutput, error) {
+		return nexusoperations.TransitionStarted.Apply(op, nexusoperations.EventStarted{
+			Time: time.Now(),
+			Node: root,
+			Attributes: &historypb.NexusOperationStartedEventAttributes{
+				OperationId: "test-operation-id",
+			},
+		})
+	}))
 	require.NoError(t, hsm.MachineTransition(root, func(op nexusoperations.Operation) (hsm.TransitionOutput, error) {
 		return op.Cancel(root, time.Now())
 	}))
@@ -496,7 +517,7 @@ func TestCancelationValidTransitions(t *testing.T) {
 
 	// Assert backoff task is generated
 	require.Equal(t, 1, len(out.Tasks))
-	boTask := out.Tasks[0].(nexusoperations.CancelationBackedTask) // nolint:revive
+	boTask := out.Tasks[0].(nexusoperations.CancelationBackoffTask) // nolint:revive
 	require.Equal(t, cancelation.NextAttemptScheduleTime.AsTime(), boTask.Deadline)
 
 	// Rescheduled

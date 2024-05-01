@@ -459,6 +459,8 @@ func (r *workflowResetterImpl) failWorkflowTask(
 			workflowTask.RequestID,
 			workflowTask.TaskQueue,
 			consts.IdentityHistoryService,
+			// Passing nil versioning stamp means we want to skip versioning considerations because this task
+			// is not actually dispatched but will fail immediately.
 			nil,
 		)
 		if err != nil {

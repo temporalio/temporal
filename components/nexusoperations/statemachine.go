@@ -27,6 +27,7 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/nexus-rpc/sdk-go/nexus"
 	enumspb "go.temporal.io/api/enums/v1"
 	failurepb "go.temporal.io/api/failure/v1"
 	historypb "go.temporal.io/api/history/v1"
@@ -402,9 +403,16 @@ func (o Operation) Cancel(node *hsm.Node, t time.Time) (hsm.TransitionOutput, er
 		NexusOperationCancellationInfo: &persistencespb.NexusOperationCancellationInfo{},
 	})
 	if err != nil {
-		// TODO(bergundy): should AlreadyExists errors be ignored to make cancelation idempotent?
 		// This function should be called as part of command/event handling and it should not called more than once.
 		return hsm.TransitionOutput{}, err
+	}
+	// TODO(bergundy): Support cancel before started. We need to transmit this intent to cancel to the handler because
+	// we don't know for sure that the operation hasn't been started.
+	if o.State() == enumsspb.NEXUS_OPERATION_STATE_BACKING_OFF || o.State() == enumsspb.NEXUS_OPERATION_STATE_SCHEDULED {
+		return handleUnsuccessfulOperationError(node, o, &nexus.UnsuccessfulOperationError{
+			State:   nexus.OperationStateCanceled,
+			Failure: nexus.Failure{Message: "operation canceled before started"},
+		}, nil)
 	}
 	return hsm.TransitionOutput{}, hsm.MachineTransition(child, func(c Cancelation) (hsm.TransitionOutput, error) {
 		return TranstionCancelationScheduled.Apply(c, EventCancelationScheduled{
@@ -460,7 +468,7 @@ func (c Cancelation) RegenerateTasks(node *hsm.Node) ([]hsm.Task, error) {
 	case enumspb.NEXUS_OPERATION_CANCELLATION_STATE_SCHEDULED:
 		return []hsm.Task{CancelationTask{Destination: op.Service}}, nil
 	case enumspb.NEXUS_OPERATION_CANCELLATION_STATE_BACKING_OFF:
-		return []hsm.Task{CancelationBackedTask{Deadline: c.NextAttemptScheduleTime.AsTime()}}, nil
+		return []hsm.Task{CancelationBackoffTask{Deadline: c.NextAttemptScheduleTime.AsTime()}}, nil
 	default:
 		return nil, nil
 	}

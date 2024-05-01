@@ -76,16 +76,14 @@ type (
 		Start()
 		Stop()
 		WaitUntilInitialized(context.Context) error
-		// AddTask adds a task to the task queue. This method will first attempt a synchronous
-		// match with a poller. When that fails, task will be written to database and later
-		// asynchronously matched with a poller
-		AddTask(ctx context.Context, params addTaskParams) (syncMatch bool, err error)
 		// PollTask blocks waiting for a task Returns error when context deadline is exceeded
 		// maxDispatchPerSecond is the max rate at which tasks are allowed to be dispatched
 		// from this task queue to pollers
 		PollTask(ctx context.Context, pollMetadata *pollMetadata) (*internalTask, error)
 		// MarkAlive updates the liveness timer to keep this physicalTaskQueueManager alive.
 		MarkAlive()
+		// TrySyncMatch tries to match task to a local or remote poller. If not possible, returns false.
+		TrySyncMatch(ctx context.Context, params addTaskParams) (bool, error)
 		// SpoolTask spools a task to persistence to be matched asynchronously when a poller is available.
 		SpoolTask(params addTaskParams) error
 		ProcessSpooledTask(ctx context.Context, task *internalTask) error
@@ -237,54 +235,11 @@ func (c *physicalTaskQueueManagerImpl) WaitUntilInitialized(ctx context.Context)
 	return c.backlogMgr.WaitUntilInitialized(ctx)
 }
 
-// AddTask adds a task to the task queue. This method will first attempt a synchronous
-// match with a poller. When there are no pollers or if ratelimit is exceeded, task will
-// be written to database and later asynchronously matched with a poller
-func (c *physicalTaskQueueManagerImpl) AddTask(
-	ctx context.Context,
-	params addTaskParams,
-) (bool, error) {
+func (c *physicalTaskQueueManagerImpl) SpoolTask(params addTaskParams) error {
 	if params.forwardedFrom == "" {
 		// request sent by history service
 		c.liveness.markAlive()
 	}
-
-	taskInfo := params.taskInfo
-	namespaceEntry, err := c.namespaceRegistry.GetNamespaceByID(namespace.ID(taskInfo.GetNamespaceId()))
-	if err != nil {
-		return false, err
-	}
-
-	if namespaceEntry.ActiveInCluster(c.clusterMeta.GetCurrentClusterName()) {
-		syncMatch, err := c.trySyncMatch(ctx, params)
-		if syncMatch {
-			return syncMatch, err
-		}
-	}
-
-	if params.forwardedFrom != "" {
-		// forwarded from child partition - only do sync match
-		// child partition will persist the task when sync match fails
-		return false, errRemoteSyncMatchFailed
-	}
-
-	// Ensure that tasks with the "default" versioning directive get spooled in the unversioned queue as they are not
-	// associated with any version set until their execution is touched by a version specific worker.
-	// "compatible" tasks OTOH are associated with a specific version set and should be stored along with all tasks for
-	// that version set.
-	// The task queue default set is dynamic and applies only at dispatch time. Putting "default" tasks into version set
-	// specific queues could cause them to get stuck behind "compatible" tasks when they should be able to progress
-	// independently.
-	// TODO: [old-wv-cleanup]
-	if c.queue.VersionSet() != "" && taskInfo.VersionDirective.GetUseAssignmentRules() != nil {
-		err = c.partitionMgr.defaultQueue.SpoolTask(params)
-	} else {
-		err = c.SpoolTask(params)
-	}
-	return false, err
-}
-
-func (c *physicalTaskQueueManagerImpl) SpoolTask(params addTaskParams) error {
 	return c.backlogMgr.SpoolTask(params.taskInfo)
 }
 
@@ -317,14 +272,28 @@ func (c *physicalTaskQueueManagerImpl) PollTask(
 		return c.matcher.PollForQuery(ctx, pollMetadata)
 	}
 
-	task, err := c.matcher.Poll(ctx, pollMetadata)
-	if err != nil {
-		return nil, err
-	}
+	for {
+		task, err := c.matcher.Poll(ctx, pollMetadata)
+		if err != nil {
+			return nil, err
+		}
 
-	task.namespace = c.partitionMgr.ns.Name()
-	task.backlogCountHint = c.backlogMgr.BacklogCountHint
-	return task, nil
+		// It's possible to get an expired task here: taskReader checks for expiration when
+		// reading from persistence, and physicalTaskQueueManager checks for expiration in
+		// ProcessSpooledTask, but the one task blocked in the matcher could expire while it's
+		// there. In that case, go back for another task.
+		// If we didn't do this, the task would be rejected when we call RecordXTaskStarted on
+		// history, but this is more efficient.
+		if task.event != nil && IsTaskExpired(task.event.AllocatedTaskInfo) {
+			c.taggedMetricsHandler.Counter(metrics.ExpiredTasksPerTaskQueueCounter.Name()).Record(1)
+			task.finish(nil)
+			continue
+		}
+
+		task.namespace = c.partitionMgr.ns.Name()
+		task.backlogCountHint = c.backlogMgr.BacklogCountHint
+		return task, nil
+	}
 }
 
 func (c *physicalTaskQueueManagerImpl) MarkAlive() {
@@ -432,9 +401,13 @@ func (c *physicalTaskQueueManagerImpl) String() string {
 	return buf.String()
 }
 
-func (c *physicalTaskQueueManagerImpl) trySyncMatch(ctx context.Context, params addTaskParams) (bool, error) {
-	if params.forwardedFrom == "" && c.config.TestDisableSyncMatch() {
-		return false, nil
+func (c *physicalTaskQueueManagerImpl) TrySyncMatch(ctx context.Context, params addTaskParams) (bool, error) {
+	if params.forwardedFrom == "" {
+		// request sent by history service
+		c.liveness.markAlive()
+		if c.config.TestDisableSyncMatch() {
+			return false, nil
+		}
 	}
 	childCtx, cancel := newChildContext(ctx, c.config.SyncMatchWaitDuration(), time.Second)
 	defer cancel()
