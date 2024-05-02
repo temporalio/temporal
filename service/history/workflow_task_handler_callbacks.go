@@ -443,16 +443,20 @@ func (handler *workflowTaskHandlerCallbacksImpl) handleWorkflowTaskCompleted(
 		return nil, serviceerror.NewNotFound("Workflow task not found.")
 	}
 
-	if assignedBuildId := ms.GetAssignedBuildId(); assignedBuildId != "" {
-		// worker versioning is used, make sure the task was completed by the right build ID
-		wftStartedBuildId := ms.GetExecutionInfo().GetWorkflowTaskBuildId()
-		wftCompletedBuildId := request.GetWorkerVersionStamp().GetBuildId()
-		if wftCompletedBuildId != wftStartedBuildId {
-			return nil, serviceerror.NewNotFound("this workflow task was not dispatched to this Build ID")
-		}
-	}
-
 	defer func() { workflowLease.GetReleaseFn()(retError) }()
+
+	wftStartedBuildId := ms.GetExecutionInfo().GetWorkflowTaskBuildId()
+	wftCompletedBuildId := worker_versioning.BuildIdIfUsingVersioning(request.GetWorkerVersionStamp())
+	if wftCompletedBuildId != wftStartedBuildId {
+		if assignedBuildId := ms.GetAssignedBuildId(); assignedBuildId != "" {
+			// Worker versioning is used, but task was not completed by the build ID who started it.
+			return nil, serviceerror.NewNotFound("workflow task was not dispatched to this Build ID")
+		}
+		// Mutable State does not have an assigned build ID, but the worker completing WFT is using versioning.
+		// This probably means WF was started Eagerly. Error until we add proper support for Eager Start
+		// compatibility with Versioning.
+		return nil, serviceerror.NewInvalidArgument("workflow is not versioned but worker uses versioning. Worker Versioning does not currently support Eager WF Start.")
+	}
 
 	var effects effect.Buffer
 	defer func() {

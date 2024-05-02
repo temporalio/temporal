@@ -107,6 +107,8 @@ func (s *VersioningIntegSuite) SetupSuite() {
 		// this is overridden for tests using testWithMatchingBehavior
 		dynamicconfig.MatchingNumTaskqueueReadPartitions:  4,
 		dynamicconfig.MatchingNumTaskqueueWritePartitions: 4,
+
+		dynamicconfig.EnableEagerWorkflowStart: true,
 	}
 	s.setupSuite("testdata/es_cluster.yaml")
 }
@@ -634,6 +636,7 @@ func (s *VersioningIntegSuite) workflowStaysInBuildId() {
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
+	var run sdkclient.WorkflowRun
 	act1Done := make(chan struct{})
 	rulesUpdated := make(chan struct{})
 
@@ -643,25 +646,29 @@ func (s *VersioningIntegSuite) workflowStaysInBuildId() {
 	}
 
 	act2 := func() (string, error) {
-		s.waitForChan(ctx, rulesUpdated)
+		dw, err := s.sdkClient.DescribeWorkflowExecution(ctx, run.GetID(), run.GetRunID())
+		s.NoError(err)
+		s.Equal(1, len(dw.GetPendingActivities()))
+		s.NotNil(dw.GetPendingActivities()[0].GetUseWorkflowBuildId())
 		return "act2 done!", nil
 	}
 
-	wf := func(ctx workflow.Context) (string, error) {
+	wf := func(wfCtx workflow.Context) (string, error) {
 		var ret string
-		err := workflow.ExecuteActivity(workflow.WithActivityOptions(ctx, workflow.ActivityOptions{
+		err := workflow.ExecuteActivity(workflow.WithActivityOptions(wfCtx, workflow.ActivityOptions{
 			DisableEagerExecution: true,
 			StartToCloseTimeout:   1 * time.Second,
-		}), act1).Get(ctx, &ret)
+		}), act1).Get(wfCtx, &ret)
 		s.NoError(err)
 		s.Equal("act1 done!", ret)
 
 		// assignment rules change in here
+		s.waitForChan(ctx, rulesUpdated)
 
-		err = workflow.ExecuteActivity(workflow.WithActivityOptions(ctx, workflow.ActivityOptions{
+		err = workflow.ExecuteActivity(workflow.WithActivityOptions(wfCtx, workflow.ActivityOptions{
 			DisableEagerExecution: true,
 			StartToCloseTimeout:   1 * time.Second,
-		}), act2).Get(ctx, &ret)
+		}), act2).Get(wfCtx, &ret)
 		s.NoError(err)
 		s.Equal("act2 done!", ret)
 		return "done!", nil
@@ -681,6 +688,17 @@ func (s *VersioningIntegSuite) workflowStaysInBuildId() {
 	s.NoError(w1.Start())
 	defer w1.Stop()
 
+	w2 := worker.New(s.sdkClient, tq, worker.Options{
+		BuildID:                          v2,
+		UseBuildIDForVersioning:          true,
+		MaxConcurrentWorkflowTaskPollers: numPollers,
+	})
+	w2.RegisterWorkflow(wf)
+	w2.RegisterActivity(act1)
+	w2.RegisterActivity(act2)
+	s.NoError(w2.Start())
+	defer w2.Stop()
+
 	run, err := s.sdkClient.ExecuteWorkflow(ctx, sdkclient.StartWorkflowOptions{TaskQueue: tq}, wf)
 	s.NoError(err)
 
@@ -690,13 +708,8 @@ func (s *VersioningIntegSuite) workflowStaysInBuildId() {
 	// update rules with v2 as the default build
 	rule = s.addAssignmentRule(ctx, tq, v2)
 	s.waitForAssignmentRulePropagation(ctx, tq, rule)
-
-	dw, err := s.sdkClient.DescribeWorkflowExecution(ctx, run.GetID(), run.GetRunID())
-	s.NoError(err)
-	s.Equal(1, len(dw.GetPendingActivities()))
-	s.NotNil(dw.GetPendingActivities()[0].GetUseWorkflowBuildId())
-
 	close(rulesUpdated)
+
 	var out string
 	s.NoError(run.Get(ctx, &out))
 	s.Equal("done!", out)
@@ -715,6 +728,7 @@ func (s *VersioningIntegSuite) unversionedWorkflowStaysUnversioned() {
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
+	var run sdkclient.WorkflowRun
 	act1Done := make(chan struct{})
 	rulesUpdated := make(chan struct{})
 
@@ -724,31 +738,46 @@ func (s *VersioningIntegSuite) unversionedWorkflowStaysUnversioned() {
 	}
 
 	act2 := func() (string, error) {
-		s.waitForChan(ctx, rulesUpdated)
+		dw, err := s.sdkClient.DescribeWorkflowExecution(ctx, run.GetID(), run.GetRunID())
+		s.NoError(err)
+		s.Equal(1, len(dw.GetPendingActivities()))
+		s.Nil(dw.GetPendingActivities()[0].GetAssignedBuildId())
 		return "act2 done!", nil
 	}
 
-	wf := func(ctx workflow.Context) (string, error) {
+	wf := func(wfCtx workflow.Context) (string, error) {
 		var ret string
-		err := workflow.ExecuteActivity(workflow.WithActivityOptions(ctx, workflow.ActivityOptions{
+		err := workflow.ExecuteActivity(workflow.WithActivityOptions(wfCtx, workflow.ActivityOptions{
 			DisableEagerExecution: true,
 			StartToCloseTimeout:   1 * time.Second,
-		}), act1).Get(ctx, &ret)
+		}), act1).Get(wfCtx, &ret)
 		s.NoError(err)
 		s.Equal("act1 done!", ret)
 
 		// assignment rules change in here
+		s.waitForChan(ctx, rulesUpdated)
 
-		err = workflow.ExecuteActivity(workflow.WithActivityOptions(ctx, workflow.ActivityOptions{
+		err = workflow.ExecuteActivity(workflow.WithActivityOptions(wfCtx, workflow.ActivityOptions{
 			DisableEagerExecution: true,
 			StartToCloseTimeout:   1 * time.Second,
-		}), act2).Get(ctx, &ret)
+		}), act2).Get(wfCtx, &ret)
 		s.NoError(err)
 		s.Equal("act2 done!", ret)
 		return "done!", nil
 	}
 
+	w0 := worker.New(s.sdkClient, tq, worker.Options{
+		MaxConcurrentWorkflowTaskPollers: numPollers,
+	})
+	w0.RegisterWorkflow(wf)
+	w0.RegisterActivity(act1)
+	w0.RegisterActivity(act2)
+	s.NoError(w0.Start())
+	defer w0.Stop()
+
 	w1 := worker.New(s.sdkClient, tq, worker.Options{
+		BuildID:                          v1,
+		UseBuildIDForVersioning:          true,
 		MaxConcurrentWorkflowTaskPollers: numPollers,
 	})
 	w1.RegisterWorkflow(wf)
@@ -766,11 +795,6 @@ func (s *VersioningIntegSuite) unversionedWorkflowStaysUnversioned() {
 	// update rules with v1 as the default build
 	rule := s.addAssignmentRule(ctx, tq, v1)
 	s.waitForAssignmentRulePropagation(ctx, tq, rule)
-
-	dw, err := s.sdkClient.DescribeWorkflowExecution(ctx, run.GetID(), run.GetRunID())
-	s.NoError(err)
-	s.Equal(1, len(dw.GetPendingActivities()))
-	s.Nil(dw.GetPendingActivities()[0].GetAssignedBuildId())
 	close(rulesUpdated)
 
 	var out string
@@ -1619,15 +1643,42 @@ func (s *VersioningIntegSuite) dispatchUnversionedRemainsUnversioned() {
 	s.validateWorkflowBuildId(ctx, run.GetID(), run.GetRunID(), "", false, "binary-checksum", "", nil)
 }
 
-func (s *VersioningIntegSuite) TestEagerWorkflowRemainsUnversioned() {
+func (s *VersioningIntegSuite) TestEagerWorkflowAndVersioned() {
+	// This test verified the following behavior concerning Eager WF Start when WV assignment rules are present. This
+	// is a temporary behavior until SDK starts sending build ID with the ExecuteWorkflow request s we can validate
+	// build ID and honor Eager Start only if the build ID is consistent with Versioning Rules.
+	// - Case 1: eager worker is unversioned -> Eager Start is honored and WF is successfully completed by the
+	//           unversioned worker and assignment rules are ignored.
+	// - Case 2: eager worker is versioned -> Eagerly dispatched WFT fails to complete, but the second attempt goes to
+	//           matching and uses the rules. Eventually WF gets completed by the workers of the build ID dictated by
+	//           the rules, which may or may not be the build ID of the "starter" worker.
+
 	tq := s.randomizeStr(s.T().Name())
 	v1 := s.prefixed("v1")
+	v2 := s.prefixed("v2")
+
+	// We need multiple clients for this test, two with versioned workers (v1 and v2) and one with an unversioned
+	// worker. If we put multiple workers in the same client we'd give away control on which worker gets the Eager WFT.
+	sdkClientV1, err := sdkclient.Dial(sdkclient.Options{
+		HostPort:  s.hostPort,
+		Namespace: s.namespace,
+	})
+	if err != nil {
+		s.Logger.Fatal("Error when creating SDK client", tag.Error(err))
+	}
+	sdkClientV2, err := sdkclient.Dial(sdkclient.Options{
+		HostPort:  s.hostPort,
+		Namespace: s.namespace,
+	})
+	if err != nil {
+		s.Logger.Fatal("Error when creating SDK client", tag.Error(err))
+	}
 
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
-	s.addNewDefaultBuildId(ctx, tq, v1)
-	s.waitForVersionSetPropagation(ctx, tq, v1)
+	rule := s.addAssignmentRule(ctx, tq, v1)
+	s.waitForAssignmentRulePropagation(ctx, tq, rule)
 
 	act := func() (string, error) {
 		return "act done", nil
@@ -1637,17 +1688,15 @@ func (s *VersioningIntegSuite) TestEagerWorkflowRemainsUnversioned() {
 		// Adding an activity to have more than one step in the WF
 		var ret any
 		err := workflow.ExecuteActivity(workflow.WithActivityOptions(ctx, workflow.ActivityOptions{
-			StartToCloseTimeout: 1 * time.Second,
-			RetryPolicy: &temporal.RetryPolicy{
-				InitialInterval:    1 * time.Second,
-				BackoffCoefficient: 1,
-			},
+			DisableEagerExecution: true,
+			StartToCloseTimeout:   1 * time.Second,
 		}), "act").Get(ctx, &ret)
 		s.NoError(err)
 		return "done!", nil
 	}
 
 	w0 := worker.New(s.sdkClient, tq, worker.Options{
+		//MaxConcurrentWorkflowTaskExecutionSize:
 		// no build id, not using versioning.
 	})
 	w0.RegisterWorkflowWithOptions(wf, workflow.RegisterOptions{Name: "wf"})
@@ -1655,8 +1704,8 @@ func (s *VersioningIntegSuite) TestEagerWorkflowRemainsUnversioned() {
 	s.NoError(w0.Start())
 	defer w0.Stop()
 
-	w1 := worker.New(s.sdkClient, tq, worker.Options{
-		BuildID: v1,
+	w1 := worker.New(sdkClientV1, tq, worker.Options{
+		BuildID:                 v1,
 		UseBuildIDForVersioning: true,
 	})
 	w1.RegisterWorkflowWithOptions(wf, workflow.RegisterOptions{Name: "wf"})
@@ -1664,14 +1713,57 @@ func (s *VersioningIntegSuite) TestEagerWorkflowRemainsUnversioned() {
 	s.NoError(w1.Start())
 	defer w1.Stop()
 
-	run, err := s.sdkClient.ExecuteWorkflow(ctx, sdkclient.StartWorkflowOptions{TaskQueue: tq, E}, "wf")
+	w2 := worker.New(sdkClientV1, tq, worker.Options{
+		BuildID:                 v2,
+		UseBuildIDForVersioning: true,
+	})
+	w2.RegisterWorkflowWithOptions(wf, workflow.RegisterOptions{Name: "wf"})
+	w2.RegisterActivityWithOptions(act, activity.RegisterOptions{Name: "act"})
+	s.NoError(w2.Start())
+	defer w2.Stop()
+
+	// Starting WF eagerly on the unversioned worker. WF should run to completion and remain unversioned.
+	run, err := s.sdkClient.ExecuteWorkflow(ctx, sdkclient.StartWorkflowOptions{TaskQueue: tq, EnableEagerStart: true}, "wf")
 	s.NoError(err)
 
 	var out string
 	s.NoError(run.Get(ctx, &out))
 	s.Equal("done!", out)
 
+	// Only expecting two task started events with version stamp because the first WFT started event is eager and
+	// doesn't have a stamp.
+	s.validateWorkflowEventsVersionStamps(ctx, run.GetID(), run.GetRunID(), []string{"", ""}, "")
 	s.validateWorkflowBuildId(ctx, run.GetID(), run.GetRunID(), "", false, "binary-checksum", "", nil)
+
+	// Now starting the WF eagerly on the v1 worker. Although the first WFT fails due to being Eager and using
+	// versioning, the next WFT would be sent to matching and use assignment rules, allowing the WF to complete
+	// normally in build ID v1.
+	run, err = sdkClientV1.ExecuteWorkflow(ctx, sdkclient.StartWorkflowOptions{
+		TaskQueue:           tq,
+		EnableEagerStart:    true,
+		WorkflowTaskTimeout: time.Millisecond,
+	}, "wf")
+	s.NoError(err)
+
+	s.NoError(run.Get(ctx, &out))
+	s.Equal("done!", out)
+	s.validateWorkflowEventsVersionStamps(ctx, run.GetID(), run.GetRunID(), []string{v1, v1, v1}, "")
+	s.validateWorkflowBuildId(ctx, run.GetID(), run.GetRunID(), v1, true, v1, "", nil)
+
+	// Now starting the WF eagerly on the v2 worker. The first WFT fails due to being Eager and using versioning,
+	// the next WFT would be sent to matching and use assignment rules, allowing the WF to complete
+	// normally in build ID v1 (not v2).
+	run, err = sdkClientV2.ExecuteWorkflow(ctx, sdkclient.StartWorkflowOptions{
+		TaskQueue:           tq,
+		EnableEagerStart:    true,
+		WorkflowTaskTimeout: time.Millisecond,
+	}, "wf")
+	s.NoError(err)
+
+	s.NoError(run.Get(ctx, &out))
+	s.Equal("done!", out)
+	s.validateWorkflowEventsVersionStamps(ctx, run.GetID(), run.GetRunID(), []string{v1, v1, v1}, "")
+	s.validateWorkflowBuildId(ctx, run.GetID(), run.GetRunID(), v1, true, v1, "", nil)
 }
 
 func (s *VersioningIntegSuite) TestDispatchUpgradeStopOldOld() {
@@ -4628,6 +4720,7 @@ func (s *VersioningIntegSuite) validateWorkflowEventsVersionStamps(
 			taskStartedStamp = wfStarted.GetWorkerVersion()
 		}
 		if taskStartedStamp != nil {
+			fmt.Printf("shahab> %s\n", taskStartedStamp.String())
 			if counter >= len(expectedBuildIds) {
 				s.Fail("found more task started events than expected")
 			}
