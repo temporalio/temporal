@@ -44,81 +44,97 @@ import (
 )
 
 type (
-	IncomingServiceRegistryConfig struct {
-		nexusAPIsEnabled       dynamicconfig.BoolPropertyFn
+	EndpointRegistryConfig struct {
+		refreshEnabled         dynamicconfig.BoolPropertyFn
 		refreshLongPollTimeout dynamicconfig.DurationPropertyFn
 		refreshPageSize        dynamicconfig.IntPropertyFn
 		refreshMinWait         dynamicconfig.DurationPropertyFn
 		refreshRetryPolicy     backoff.RetryPolicy
 	}
 
-	// IncomingServiceRegistry manages a cached view of Nexus incoming services.
-	// Services are lazily-loaded into memory on the first read. Thereafter, service data is kept up to date by
-	// background long polling on matching service ListNexusIncomingServices.
-	IncomingServiceRegistry struct {
-		config *IncomingServiceRegistryConfig
+	// EndpointRegistry manages a cached view of Nexus endpoints.
+	// Endpoints are lazily-loaded into memory on the first read. Thereafter, endpoint data is kept up to date by
+	// background long polling on matching service ListNexusEndpoints.
+	EndpointRegistry struct {
+		config *EndpointRegistryConfig
 
-		serviceDataReady chan struct{}
+		dataReady chan struct{}
 
-		dataLock     sync.RWMutex // Protects tableVersion and services.
-		tableVersion int64
-		services     map[string]*nexus.IncomingService // Mapping of service ID -> service.
+		dataLock        sync.RWMutex // Protects tableVersion and endpoints.
+		tableVersion    int64
+		endpointsByID   map[string]*nexus.Endpoint // Mapping of endpoint ID -> endpoint.
+		endpointsByName map[string]*nexus.Endpoint // Mapping of endpoint name -> endpoint.
 
 		refreshPoller *goro.Handle
 
 		matchingClient matchingservice.MatchingServiceClient
-		persistence    p.NexusIncomingServiceManager
+		persistence    p.NexusEndpointManager
 		logger         log.Logger
 	}
 )
 
-func NewIncomingServiceRegistryConfig(dc *dynamicconfig.Collection) *IncomingServiceRegistryConfig {
-	config := &IncomingServiceRegistryConfig{
-		nexusAPIsEnabled:       dynamicconfig.FrontendEnableNexusAPIs.Get(dc),
-		refreshLongPollTimeout: dynamicconfig.FrontendRefreshNexusIncomingServicesLongPollTimeout.Get(dc),
-		refreshPageSize:        dynamicconfig.NexusIncomingServiceListDefaultPageSize.Get(dc),
-		refreshMinWait:         dynamicconfig.FrontendRefreshNexusIncomingServicesMinWait.Get(dc),
+func NewEndpointRegistryConfig(dc *dynamicconfig.Collection) *EndpointRegistryConfig {
+	config := &EndpointRegistryConfig{
+		refreshEnabled:         dynamicconfig.EnableNexusEndpointRegistryBackgroundRefresh.Get(dc),
+		refreshLongPollTimeout: dynamicconfig.RefreshNexusEndpointsLongPollTimeout.Get(dc),
+		refreshPageSize:        dynamicconfig.NexusEndpointListDefaultPageSize.Get(dc),
+		refreshMinWait:         dynamicconfig.RefreshNexusEndpointsMinWait.Get(dc),
 	}
 	config.refreshRetryPolicy = backoff.NewExponentialRetryPolicy(config.refreshMinWait()).WithMaximumInterval(config.refreshLongPollTimeout())
 	return config
 }
 
-func NewIncomingServiceRegistry(
-	config *IncomingServiceRegistryConfig,
+func NewEndpointRegistry(
+	config *EndpointRegistryConfig,
 	matchingClient matchingservice.MatchingServiceClient,
-	persistence p.NexusIncomingServiceManager,
+	persistence p.NexusEndpointManager,
 	logger log.Logger,
-) *IncomingServiceRegistry {
-	return &IncomingServiceRegistry{
-		config:           config,
-		serviceDataReady: make(chan struct{}),
-		services:         make(map[string]*nexus.IncomingService),
-		matchingClient:   matchingClient,
-		persistence:      persistence,
-		logger:           logger,
+) *EndpointRegistry {
+	return &EndpointRegistry{
+		config:          config,
+		dataReady:       make(chan struct{}),
+		endpointsByID:   make(map[string]*nexus.Endpoint),
+		endpointsByName: make(map[string]*nexus.Endpoint),
+		matchingClient:  matchingClient,
+		persistence:     persistence,
+		logger:          logger,
 	}
 }
 
 // StartLifecycle starts this component. It should only be invoked by an fx lifecycle hook.
 // Should not be called multiple times or concurrently with StopLifecycle()
-func (r *IncomingServiceRegistry) StartLifecycle() {
+func (r *EndpointRegistry) StartLifecycle() {
 	backgroundCtx := headers.SetCallerInfo(
 		context.Background(),
 		headers.SystemBackgroundCallerInfo,
 	)
-	r.refreshPoller = goro.NewHandle(backgroundCtx).Go(r.refreshServicesLoop)
+	r.refreshPoller = goro.NewHandle(backgroundCtx).Go(r.refreshEndpointsLoop)
 }
 
 // StopLifecycle stops this component. It should only be invoked by an fx lifecycle hook.
 // Should not be called multiple times or concurrently with StartLifecycle()
-func (r *IncomingServiceRegistry) StopLifecycle() {
+func (r *EndpointRegistry) StopLifecycle() {
 	if r.refreshPoller != nil {
 		r.refreshPoller.Cancel()
 		<-r.refreshPoller.Done()
 	}
 }
 
-func (r *IncomingServiceRegistry) Get(ctx context.Context, id string) (*nexus.IncomingService, error) {
+func (r *EndpointRegistry) GetByName(ctx context.Context, endpointName string) (*nexus.Endpoint, error) {
+	if err := r.waitUntilInitialized(ctx); err != nil {
+		return nil, err
+	}
+	r.dataLock.RLock()
+	defer r.dataLock.RUnlock()
+
+	endpoint, ok := r.endpointsByName[endpointName]
+	if !ok {
+		return nil, serviceerror.NewNotFound(fmt.Sprintf("could not find Nexus endpoint by name: %v", endpointName))
+	}
+	return endpoint, nil
+}
+
+func (r *EndpointRegistry) GetByID(ctx context.Context, id string) (*nexus.Endpoint, error) {
 	if err := r.waitUntilInitialized(ctx); err != nil {
 		return nil, err
 	}
@@ -126,54 +142,53 @@ func (r *IncomingServiceRegistry) Get(ctx context.Context, id string) (*nexus.In
 	r.dataLock.RLock()
 	defer r.dataLock.RUnlock()
 
-	service, ok := r.services[id]
+	endpoint, ok := r.endpointsByID[id]
 	if !ok {
-		return nil, serviceerror.NewNotFound(fmt.Sprintf("could not find Nexus incoming service with ID: %v", id))
+		return nil, serviceerror.NewNotFound(fmt.Sprintf("could not find Nexus endpoint with ID: %v", id))
 	}
 
-	return service, nil
+	return endpoint, nil
 }
 
-func (r *IncomingServiceRegistry) waitUntilInitialized(ctx context.Context) error {
+func (r *EndpointRegistry) waitUntilInitialized(ctx context.Context) error {
 	select {
-	case <-r.serviceDataReady:
+	case <-r.dataReady:
 		return nil
 	case <-ctx.Done():
 		return ctx.Err()
 	}
 }
 
-func (r *IncomingServiceRegistry) refreshServicesLoop(ctx context.Context) error {
-	hasLoadedServiceData := false
+func (r *EndpointRegistry) refreshEndpointsLoop(ctx context.Context) error {
+	hasLoadedEndpointData := false
 	minWaitTime := r.config.refreshMinWait()
 
 	for ctx.Err() == nil {
-		// Wait for Nexus APIs to be enabled.
-		if !r.config.nexusAPIsEnabled() {
-			if hasLoadedServiceData {
-				// Nexus APIs were previously enabled and service data loaded, so make future requests wait for
+		if !r.config.refreshEnabled() {
+			if hasLoadedEndpointData {
+				// Nexus APIs were previously enabled and endpoint data loaded, so make future requests wait for
 				// reload once the FF is re-enabled.
-				r.serviceDataReady = make(chan struct{})
+				r.dataReady = make(chan struct{})
 			}
-			hasLoadedServiceData = false
+			hasLoadedEndpointData = false
 			common.InterruptibleSleep(ctx, r.config.refreshMinWait())
 			continue
 		}
 
 		start := time.Now()
-		if !hasLoadedServiceData {
-			// Loading services for the first time after being (re)enabled, so load with fallback to persistence
-			// and unblock any threads waiting on r.serviceDataReady if successful.
-			err := backoff.ThrottleRetryContext(ctx, r.loadServices, r.config.refreshRetryPolicy, nil)
+		if !hasLoadedEndpointData {
+			// Loading endpoints for the first time after being (re)enabled, so load with fallback to persistence
+			// and unblock any threads waiting on r.dataReady if successful.
+			err := backoff.ThrottleRetryContext(ctx, r.loadEndpoints, r.config.refreshRetryPolicy, nil)
 			if err == nil {
-				hasLoadedServiceData = true
-				close(r.serviceDataReady)
+				hasLoadedEndpointData = true
+				close(r.dataReady)
 			}
 		} else {
-			// Services have previously been loaded, so just keep them up to date with long poll requests to
+			// Endpoints have previously been loaded, so just keep them up to date with long poll requests to
 			// matching, without fallback to persistence. Ignoring long poll errors since we will just retry
 			// on next loop iteration.
-			_ = backoff.ThrottleRetryContext(ctx, r.refreshServices, r.config.refreshRetryPolicy, nil)
+			_ = backoff.ThrottleRetryContext(ctx, r.refreshEndpoints, r.config.refreshRetryPolicy, nil)
 		}
 		elapsed := time.Since(start)
 
@@ -194,31 +209,38 @@ func (r *IncomingServiceRegistry) refreshServicesLoop(ctx context.Context) error
 	return ctx.Err()
 }
 
-// loadServices initializes the in-memory view of service data.
+// loadEndpoints initializes the in-memory view of endpoints data.
 // It first tries to load from matching service and falls back to querying persistence directly if matching is unavailable.
-func (r *IncomingServiceRegistry) loadServices(ctx context.Context) error {
-	tableVersion, services, err := r.getAllServicesMatching(ctx)
+func (r *EndpointRegistry) loadEndpoints(ctx context.Context) error {
+	tableVersion, endpoints, err := r.getAllEndpointsMatching(ctx)
 	if err != nil {
 		// Fallback to persistence on matching error during initial load.
-		r.logger.Error("error from matching when initializing Nexus incoming service cache", tag.Error(err))
-		tableVersion, services, err = r.getAllServicesPersistence(ctx)
+		r.logger.Error("error from matching when initializing Nexus endpoint cache", tag.Error(err))
+		tableVersion, endpoints, err = r.getAllEndpointsPersistence(ctx)
 		if err != nil {
 			return err
 		}
 	}
+	endpointsByID := make(map[string]*nexus.Endpoint, len(endpoints))
+	endpointsByName := make(map[string]*nexus.Endpoint, len(endpoints))
+	for _, endpoint := range endpoints {
+		endpointsByID[endpoint.Id] = endpoint
+		endpointsByName[endpoint.Spec.Name] = endpoint
+	}
 
 	r.tableVersion = tableVersion
-	r.services = services
+	r.endpointsByID = endpointsByID
+	r.endpointsByName = endpointsByName
 	return nil
 }
 
-// refreshServices sends long-poll requests to matching to check for any updates to service data.
-func (r *IncomingServiceRegistry) refreshServices(ctx context.Context) error {
+// refreshEndpoints sends long-poll requests to matching to check for any updates to endpoint data.
+func (r *EndpointRegistry) refreshEndpoints(ctx context.Context) error {
 	r.dataLock.RLock()
 	currentTableVersion := r.tableVersion
 	r.dataLock.RUnlock()
 
-	resp, err := r.matchingClient.ListNexusIncomingServices(ctx, &matchingservice.ListNexusIncomingServicesRequest{
+	resp, err := r.matchingClient.ListNexusEndpoints(ctx, &matchingservice.ListNexusEndpointsRequest{
 		NextPageToken:         nil,
 		PageSize:              int32(r.config.refreshPageSize()),
 		LastKnownTableVersion: currentTableVersion,
@@ -226,7 +248,7 @@ func (r *IncomingServiceRegistry) refreshServices(ctx context.Context) error {
 	})
 	if err != nil {
 		if ctx.Err() == nil {
-			r.logger.Error("long poll to refresh Nexus incoming services returned error", tag.Error(err))
+			r.logger.Error("long poll to refresh Nexus endpoints returned error", tag.Error(err))
 		}
 		return err
 	}
@@ -237,14 +259,11 @@ func (r *IncomingServiceRegistry) refreshServices(ctx context.Context) error {
 	}
 
 	currentTableVersion = resp.TableVersion
-	services := make(map[string]*nexus.IncomingService, len(resp.Services))
-	for _, service := range resp.Services {
-		services[service.Id] = service
-	}
+	endpoints := resp.Endpoints
 
 	currentPageToken := resp.NextPageToken
 	for currentPageToken != nil {
-		resp, err = r.matchingClient.ListNexusIncomingServices(ctx, &matchingservice.ListNexusIncomingServicesRequest{
+		resp, err = r.matchingClient.ListNexusEndpoints(ctx, &matchingservice.ListNexusEndpointsRequest{
 			NextPageToken:         currentPageToken,
 			PageSize:              int32(r.config.refreshPageSize()),
 			LastKnownTableVersion: currentTableVersion,
@@ -254,9 +273,9 @@ func (r *IncomingServiceRegistry) refreshServices(ctx context.Context) error {
 		if err != nil {
 			if errors.Is(err, p.ErrNexusTableVersionConflict) {
 				// Indicates table was updated during paging, so reset and start from the beginning.
-				currentTableVersion, services, err = r.getAllServicesMatching(ctx)
+				currentTableVersion, endpoints, err = r.getAllEndpointsMatching(ctx)
 				if err != nil {
-					r.logger.Error("error during background refresh of Nexus incoming services", tag.Error(err))
+					r.logger.Error("error during background refresh of Nexus endpoints", tag.Error(err))
 					return err
 				}
 				break
@@ -268,31 +287,35 @@ func (r *IncomingServiceRegistry) refreshServices(ctx context.Context) error {
 			return ctx.Err()
 		}
 
-		for _, service := range resp.Services {
-			services[service.Id] = service
-		}
-
 		currentPageToken = resp.NextPageToken
+		endpoints = append(endpoints, resp.Endpoints...)
+	}
+
+	endpointsByID := make(map[string]*nexus.Endpoint, len(endpoints))
+	endpointsByName := make(map[string]*nexus.Endpoint, len(endpoints))
+	for _, endpoint := range endpoints {
+		endpointsByID[endpoint.Id] = endpoint
+		endpointsByName[endpoint.Spec.Name] = endpoint
 	}
 
 	r.dataLock.Lock()
 	defer r.dataLock.Unlock()
 
 	r.tableVersion = currentTableVersion
-	r.services = services
+	r.endpointsByID = endpointsByID
+	r.endpointsByName = endpointsByName
 
 	return nil
 }
 
-// getAllServicesMatching paginates over all services returned by matching. It always does a simple get.
-func (r *IncomingServiceRegistry) getAllServicesMatching(ctx context.Context) (int64, map[string]*nexus.IncomingService, error) {
+// getAllEndpointsMatching paginates over all endpoints returned by matching. It always does a simple get.
+func (r *EndpointRegistry) getAllEndpointsMatching(ctx context.Context) (int64, []*nexus.Endpoint, error) {
 	var currentPageToken []byte
-
 	currentTableVersion := int64(0)
-	services := make(map[string]*nexus.IncomingService)
+	endpoints := make([]*nexus.Endpoint, 0)
 
 	for ctx.Err() == nil {
-		resp, err := r.matchingClient.ListNexusIncomingServices(ctx, &matchingservice.ListNexusIncomingServicesRequest{
+		resp, err := r.matchingClient.ListNexusEndpoints(ctx, &matchingservice.ListNexusEndpointsRequest{
 			NextPageToken:         currentPageToken,
 			PageSize:              int32(r.config.refreshPageSize()),
 			LastKnownTableVersion: currentTableVersion,
@@ -303,19 +326,17 @@ func (r *IncomingServiceRegistry) getAllServicesMatching(ctx context.Context) (i
 				// indicates table was updated during paging, so reset and start from the beginning.
 				currentPageToken = nil
 				currentTableVersion = 0
-				services = make(map[string]*nexus.IncomingService)
+				endpoints = make([]*nexus.Endpoint, 0, len(endpoints))
 				continue
 			}
 			return 0, nil, err
 		}
 
 		currentTableVersion = resp.TableVersion
-		for _, service := range resp.Services {
-			services[service.Id] = service
-		}
+		endpoints = append(endpoints, resp.Endpoints...)
 
 		if resp.NextPageToken == nil {
-			return currentTableVersion, services, nil
+			return currentTableVersion, endpoints, nil
 		}
 
 		currentPageToken = resp.NextPageToken
@@ -324,16 +345,16 @@ func (r *IncomingServiceRegistry) getAllServicesMatching(ctx context.Context) (i
 	return 0, nil, ctx.Err()
 }
 
-// getAllServicesPersistence paginates over all services returned by persistence.
+// getAllEndpointsPersistence paginates over all endpoints returned by persistence.
 // Should only be used as a fall-back if matching service is unavailable during initial load.
-func (r *IncomingServiceRegistry) getAllServicesPersistence(ctx context.Context) (int64, map[string]*nexus.IncomingService, error) {
+func (r *EndpointRegistry) getAllEndpointsPersistence(ctx context.Context) (int64, []*nexus.Endpoint, error) {
 	var currentPageToken []byte
 
 	currentTableVersion := int64(0)
-	services := make(map[string]*nexus.IncomingService)
+	endpoints := make([]*nexus.Endpoint, 0)
 
 	for ctx.Err() == nil {
-		resp, err := r.persistence.ListNexusIncomingServices(ctx, &p.ListNexusIncomingServicesRequest{
+		resp, err := r.persistence.ListNexusEndpoints(ctx, &p.ListNexusEndpointsRequest{
 			LastKnownTableVersion: currentTableVersion,
 			NextPageToken:         currentPageToken,
 			PageSize:              r.config.refreshPageSize(),
@@ -343,7 +364,7 @@ func (r *IncomingServiceRegistry) getAllServicesPersistence(ctx context.Context)
 				// indicates table was updated during paging, so reset and start from the beginning.
 				currentPageToken = nil
 				currentTableVersion = 0
-				services = make(map[string]*nexus.IncomingService)
+				endpoints = make([]*nexus.Endpoint, 0, len(endpoints))
 				continue
 			}
 			return 0, nil, err
@@ -351,11 +372,11 @@ func (r *IncomingServiceRegistry) getAllServicesPersistence(ctx context.Context)
 
 		currentTableVersion = resp.TableVersion
 		for _, entry := range resp.Entries {
-			services[entry.Id] = IncomingServicePersistedEntryToExternalAPI(entry)
+			endpoints = append(endpoints, EndpointPersistedEntryToExternalAPI(entry))
 		}
 
 		if resp.NextPageToken == nil {
-			return currentTableVersion, services, nil
+			return currentTableVersion, endpoints, nil
 		}
 
 		currentPageToken = resp.NextPageToken

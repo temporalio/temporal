@@ -82,6 +82,7 @@ func newOperationNode(t *testing.T, backend *nodeBackend, schedTime time.Time, t
 		EventTime: timestamppb.New(schedTime),
 		Attributes: &historypb.HistoryEvent_NexusOperationScheduledEventAttributes{
 			NexusOperationScheduledEventAttributes: &historypb.NexusOperationScheduledEventAttributes{
+				Endpoint:               "endpoint",
 				Service:                "service",
 				Operation:              "operation",
 				ScheduleToCloseTimeout: durationpb.New(timeout),

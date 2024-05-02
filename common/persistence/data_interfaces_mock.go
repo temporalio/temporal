@@ -1224,72 +1224,72 @@ func (mr *MockClusterMetadataManagerMockRecorder) UpsertClusterMembership(ctx, r
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpsertClusterMembership", reflect.TypeOf((*MockClusterMetadataManager)(nil).UpsertClusterMembership), ctx, request)
 }
 
-// MockNexusIncomingServiceManager is a mock of NexusIncomingServiceManager interface.
-type MockNexusIncomingServiceManager struct {
+// MockNexusEndpointManager is a mock of NexusEndpointManager interface.
+type MockNexusEndpointManager struct {
 	ctrl     *gomock.Controller
-	recorder *MockNexusIncomingServiceManagerMockRecorder
+	recorder *MockNexusEndpointManagerMockRecorder
 }
 
-// MockNexusIncomingServiceManagerMockRecorder is the mock recorder for MockNexusIncomingServiceManager.
-type MockNexusIncomingServiceManagerMockRecorder struct {
-	mock *MockNexusIncomingServiceManager
+// MockNexusEndpointManagerMockRecorder is the mock recorder for MockNexusEndpointManager.
+type MockNexusEndpointManagerMockRecorder struct {
+	mock *MockNexusEndpointManager
 }
 
-// NewMockNexusIncomingServiceManager creates a new mock instance.
-func NewMockNexusIncomingServiceManager(ctrl *gomock.Controller) *MockNexusIncomingServiceManager {
-	mock := &MockNexusIncomingServiceManager{ctrl: ctrl}
-	mock.recorder = &MockNexusIncomingServiceManagerMockRecorder{mock}
+// NewMockNexusEndpointManager creates a new mock instance.
+func NewMockNexusEndpointManager(ctrl *gomock.Controller) *MockNexusEndpointManager {
+	mock := &MockNexusEndpointManager{ctrl: ctrl}
+	mock.recorder = &MockNexusEndpointManagerMockRecorder{mock}
 	return mock
 }
 
 // EXPECT returns an object that allows the caller to indicate expected use.
-func (m *MockNexusIncomingServiceManager) EXPECT() *MockNexusIncomingServiceManagerMockRecorder {
+func (m *MockNexusEndpointManager) EXPECT() *MockNexusEndpointManagerMockRecorder {
 	return m.recorder
 }
 
 // Close mocks base method.
-func (m *MockNexusIncomingServiceManager) Close() {
+func (m *MockNexusEndpointManager) Close() {
 	m.ctrl.T.Helper()
 	m.ctrl.Call(m, "Close")
 }
 
 // Close indicates an expected call of Close.
-func (mr *MockNexusIncomingServiceManagerMockRecorder) Close() *gomock.Call {
+func (mr *MockNexusEndpointManagerMockRecorder) Close() *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Close", reflect.TypeOf((*MockNexusIncomingServiceManager)(nil).Close))
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Close", reflect.TypeOf((*MockNexusEndpointManager)(nil).Close))
 }
 
-// CreateOrUpdateNexusIncomingService mocks base method.
-func (m *MockNexusIncomingServiceManager) CreateOrUpdateNexusIncomingService(ctx context.Context, request *CreateOrUpdateNexusIncomingServiceRequest) (*CreateOrUpdateNexusIncomingServiceResponse, error) {
+// CreateOrUpdateNexusEndpoint mocks base method.
+func (m *MockNexusEndpointManager) CreateOrUpdateNexusEndpoint(ctx context.Context, request *CreateOrUpdateNexusEndpointRequest) (*CreateOrUpdateNexusEndpointResponse, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "CreateOrUpdateNexusIncomingService", ctx, request)
-	ret0, _ := ret[0].(*CreateOrUpdateNexusIncomingServiceResponse)
+	ret := m.ctrl.Call(m, "CreateOrUpdateNexusEndpoint", ctx, request)
+	ret0, _ := ret[0].(*CreateOrUpdateNexusEndpointResponse)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
-// CreateOrUpdateNexusIncomingService indicates an expected call of CreateOrUpdateNexusIncomingService.
-func (mr *MockNexusIncomingServiceManagerMockRecorder) CreateOrUpdateNexusIncomingService(ctx, request interface{}) *gomock.Call {
+// CreateOrUpdateNexusEndpoint indicates an expected call of CreateOrUpdateNexusEndpoint.
+func (mr *MockNexusEndpointManagerMockRecorder) CreateOrUpdateNexusEndpoint(ctx, request interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CreateOrUpdateNexusIncomingService", reflect.TypeOf((*MockNexusIncomingServiceManager)(nil).CreateOrUpdateNexusIncomingService), ctx, request)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CreateOrUpdateNexusEndpoint", reflect.TypeOf((*MockNexusEndpointManager)(nil).CreateOrUpdateNexusEndpoint), ctx, request)
 }
 
-// DeleteNexusIncomingService mocks base method.
-func (m *MockNexusIncomingServiceManager) DeleteNexusIncomingService(ctx context.Context, request *DeleteNexusIncomingServiceRequest) error {
+// DeleteNexusEndpoint mocks base method.
+func (m *MockNexusEndpointManager) DeleteNexusEndpoint(ctx context.Context, request *DeleteNexusEndpointRequest) error {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "DeleteNexusIncomingService", ctx, request)
+	ret := m.ctrl.Call(m, "DeleteNexusEndpoint", ctx, request)
 	ret0, _ := ret[0].(error)
 	return ret0
 }
 
-// DeleteNexusIncomingService indicates an expected call of DeleteNexusIncomingService.
-func (mr *MockNexusIncomingServiceManagerMockRecorder) DeleteNexusIncomingService(ctx, request interface{}) *gomock.Call {
+// DeleteNexusEndpoint indicates an expected call of DeleteNexusEndpoint.
+func (mr *MockNexusEndpointManagerMockRecorder) DeleteNexusEndpoint(ctx, request interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DeleteNexusIncomingService", reflect.TypeOf((*MockNexusIncomingServiceManager)(nil).DeleteNexusIncomingService), ctx, request)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DeleteNexusEndpoint", reflect.TypeOf((*MockNexusEndpointManager)(nil).DeleteNexusEndpoint), ctx, request)
 }
 
 // GetName mocks base method.
-func (m *MockNexusIncomingServiceManager) GetName() string {
+func (m *MockNexusEndpointManager) GetName() string {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "GetName")
 	ret0, _ := ret[0].(string)
@@ -1297,39 +1297,39 @@ func (m *MockNexusIncomingServiceManager) GetName() string {
 }
 
 // GetName indicates an expected call of GetName.
-func (mr *MockNexusIncomingServiceManagerMockRecorder) GetName() *gomock.Call {
+func (mr *MockNexusEndpointManagerMockRecorder) GetName() *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetName", reflect.TypeOf((*MockNexusIncomingServiceManager)(nil).GetName))
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetName", reflect.TypeOf((*MockNexusEndpointManager)(nil).GetName))
 }
 
-// GetNexusIncomingService mocks base method.
-func (m *MockNexusIncomingServiceManager) GetNexusIncomingService(ctx context.Context, request *GetNexusIncomingServiceRequest) (*v1.NexusIncomingServiceEntry, error) {
+// GetNexusEndpoint mocks base method.
+func (m *MockNexusEndpointManager) GetNexusEndpoint(ctx context.Context, request *GetNexusEndpointRequest) (*v1.NexusEndpointEntry, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "GetNexusIncomingService", ctx, request)
-	ret0, _ := ret[0].(*v1.NexusIncomingServiceEntry)
+	ret := m.ctrl.Call(m, "GetNexusEndpoint", ctx, request)
+	ret0, _ := ret[0].(*v1.NexusEndpointEntry)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
-// GetNexusIncomingService indicates an expected call of GetNexusIncomingService.
-func (mr *MockNexusIncomingServiceManagerMockRecorder) GetNexusIncomingService(ctx, request interface{}) *gomock.Call {
+// GetNexusEndpoint indicates an expected call of GetNexusEndpoint.
+func (mr *MockNexusEndpointManagerMockRecorder) GetNexusEndpoint(ctx, request interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetNexusIncomingService", reflect.TypeOf((*MockNexusIncomingServiceManager)(nil).GetNexusIncomingService), ctx, request)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetNexusEndpoint", reflect.TypeOf((*MockNexusEndpointManager)(nil).GetNexusEndpoint), ctx, request)
 }
 
-// ListNexusIncomingServices mocks base method.
-func (m *MockNexusIncomingServiceManager) ListNexusIncomingServices(ctx context.Context, request *ListNexusIncomingServicesRequest) (*ListNexusIncomingServicesResponse, error) {
+// ListNexusEndpoints mocks base method.
+func (m *MockNexusEndpointManager) ListNexusEndpoints(ctx context.Context, request *ListNexusEndpointsRequest) (*ListNexusEndpointsResponse, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "ListNexusIncomingServices", ctx, request)
-	ret0, _ := ret[0].(*ListNexusIncomingServicesResponse)
+	ret := m.ctrl.Call(m, "ListNexusEndpoints", ctx, request)
+	ret0, _ := ret[0].(*ListNexusEndpointsResponse)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
-// ListNexusIncomingServices indicates an expected call of ListNexusIncomingServices.
-func (mr *MockNexusIncomingServiceManagerMockRecorder) ListNexusIncomingServices(ctx, request interface{}) *gomock.Call {
+// ListNexusEndpoints indicates an expected call of ListNexusEndpoints.
+func (mr *MockNexusEndpointManagerMockRecorder) ListNexusEndpoints(ctx, request interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ListNexusIncomingServices", reflect.TypeOf((*MockNexusIncomingServiceManager)(nil).ListNexusIncomingServices), ctx, request)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ListNexusEndpoints", reflect.TypeOf((*MockNexusEndpointManager)(nil).ListNexusEndpoints), ctx, request)
 }
 
 // MockHistoryTaskQueueManager is a mock of HistoryTaskQueueManager interface.

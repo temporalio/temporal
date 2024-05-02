@@ -30,19 +30,19 @@ import (
 	hlc "go.temporal.io/server/common/clock/hybrid_logical_clock"
 )
 
-func IncomingServicePersistedEntryToExternalAPI(entry *persistencepb.NexusIncomingServiceEntry) *nexus.IncomingService {
+func EndpointPersistedEntryToExternalAPI(entry *persistencepb.NexusEndpointEntry) *nexus.Endpoint {
 	var lastModifiedTime *timestamppb.Timestamp
 	// Only set last modified if there were modifications as stated in the UI contract.
 	if entry.Version > 1 {
-		lastModifiedTime = timestamppb.New(hlc.UTC(entry.Service.Clock))
+		lastModifiedTime = timestamppb.New(hlc.UTC(entry.Endpoint.Clock))
 	}
 
-	return &nexus.IncomingService{
+	return &nexus.Endpoint{
 		Version:          entry.Version,
 		Id:               entry.Id,
-		Spec:             entry.Service.Spec,
-		CreatedTime:      entry.Service.CreatedTime,
+		Spec:             entry.Endpoint.Spec,
+		CreatedTime:      entry.Endpoint.CreatedTime,
 		LastModifiedTime: lastModifiedTime,
-		UrlPrefix:        "/" + RouteDispatchNexusTaskByService.Path(entry.Id),
+		UrlPrefix:        "/" + RouteDispatchNexusTaskByEndpoint.Path(entry.Id),
 	}
 }

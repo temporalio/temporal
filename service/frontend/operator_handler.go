@@ -35,8 +35,6 @@ import (
 	healthpb "google.golang.org/grpc/health/grpc_health_v1"
 	"google.golang.org/grpc/status"
 
-	cnexus "go.temporal.io/server/common/nexus"
-
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	namespacepb "go.temporal.io/api/namespace/v1"
@@ -80,37 +78,35 @@ type (
 
 		status int32
 
-		logger                  log.Logger
-		config                  *Config
-		esClient                esclient.Client
-		sdkClientFactory        sdk.ClientFactory
-		metricsHandler          metrics.Handler
-		visibilityMgr           manager.VisibilityManager
-		saManager               searchattribute.Manager
-		healthServer            *health.Server
-		historyClient           resource.HistoryClient
-		clusterMetadataManager  persistence.ClusterMetadataManager
-		clusterMetadata         clustermetadata.Metadata
-		clientFactory           svc.Factory
-		incomingServiceClient   *NexusIncomingServiceClient
-		outgoingServiceRegistry *cnexus.OutgoingServiceRegistry
+		logger                 log.Logger
+		config                 *Config
+		esClient               esclient.Client
+		sdkClientFactory       sdk.ClientFactory
+		metricsHandler         metrics.Handler
+		visibilityMgr          manager.VisibilityManager
+		saManager              searchattribute.Manager
+		healthServer           *health.Server
+		historyClient          resource.HistoryClient
+		clusterMetadataManager persistence.ClusterMetadataManager
+		clusterMetadata        clustermetadata.Metadata
+		clientFactory          svc.Factory
+		endpointsClient        *NexusEndpointClient
 	}
 
 	NewOperatorHandlerImplArgs struct {
-		config                  *Config
-		EsClient                esclient.Client
-		Logger                  log.Logger
-		sdkClientFactory        sdk.ClientFactory
-		MetricsHandler          metrics.Handler
-		VisibilityMgr           manager.VisibilityManager
-		SaManager               searchattribute.Manager
-		healthServer            *health.Server
-		historyClient           resource.HistoryClient
-		clusterMetadataManager  persistence.ClusterMetadataManager
-		clusterMetadata         clustermetadata.Metadata
-		clientFactory           svc.Factory
-		incomingServiceClient   *NexusIncomingServiceClient
-		outgoingServiceRegistry *cnexus.OutgoingServiceRegistry
+		config                 *Config
+		EsClient               esclient.Client
+		Logger                 log.Logger
+		sdkClientFactory       sdk.ClientFactory
+		MetricsHandler         metrics.Handler
+		VisibilityMgr          manager.VisibilityManager
+		SaManager              searchattribute.Manager
+		healthServer           *health.Server
+		historyClient          resource.HistoryClient
+		clusterMetadataManager persistence.ClusterMetadataManager
+		clusterMetadata        clustermetadata.Metadata
+		clientFactory          svc.Factory
+		nexusEndpointClient    *NexusEndpointClient
 	}
 )
 
@@ -126,21 +122,20 @@ func NewOperatorHandlerImpl(
 ) *OperatorHandlerImpl {
 
 	handler := &OperatorHandlerImpl{
-		logger:                  args.Logger,
-		status:                  common.DaemonStatusInitialized,
-		config:                  args.config,
-		esClient:                args.EsClient,
-		sdkClientFactory:        args.sdkClientFactory,
-		metricsHandler:          args.MetricsHandler,
-		visibilityMgr:           args.VisibilityMgr,
-		saManager:               args.SaManager,
-		healthServer:            args.healthServer,
-		historyClient:           args.historyClient,
-		clusterMetadataManager:  args.clusterMetadataManager,
-		clusterMetadata:         args.clusterMetadata,
-		clientFactory:           args.clientFactory,
-		incomingServiceClient:   args.incomingServiceClient,
-		outgoingServiceRegistry: args.outgoingServiceRegistry,
+		logger:                 args.Logger,
+		status:                 common.DaemonStatusInitialized,
+		config:                 args.config,
+		esClient:               args.EsClient,
+		sdkClientFactory:       args.sdkClientFactory,
+		metricsHandler:         args.MetricsHandler,
+		visibilityMgr:          args.VisibilityMgr,
+		saManager:              args.SaManager,
+		healthServer:           args.healthServer,
+		historyClient:          args.historyClient,
+		clusterMetadataManager: args.clusterMetadataManager,
+		clusterMetadata:        args.clusterMetadata,
+		clientFactory:          args.clientFactory,
+		endpointsClient:        args.nexusEndpointClient,
 	}
 
 	return handler
@@ -833,112 +828,57 @@ func (h *OperatorHandlerImpl) validateRemoteClusterMetadata(metadata *adminservi
 	return nil
 }
 
-func (h *OperatorHandlerImpl) CreateNexusIncomingService(
+func (h *OperatorHandlerImpl) CreateNexusEndpoint(
 	ctx context.Context,
-	request *operatorservice.CreateNexusIncomingServiceRequest,
-) (_ *operatorservice.CreateNexusIncomingServiceResponse, retErr error) {
+	request *operatorservice.CreateNexusEndpointRequest,
+) (_ *operatorservice.CreateNexusEndpointResponse, retErr error) {
 	defer log.CapturePanic(h.logger, &retErr)
 	if !h.config.EnableNexusAPIs() {
 		return nil, status.Error(codes.NotFound, "Nexus APIs are disabled")
 	}
-	return h.incomingServiceClient.Create(ctx, request)
+	return h.endpointsClient.Create(ctx, request)
 }
 
-func (h *OperatorHandlerImpl) UpdateNexusIncomingService(
+func (h *OperatorHandlerImpl) UpdateNexusEndpoint(
 	ctx context.Context,
-	request *operatorservice.UpdateNexusIncomingServiceRequest,
-) (_ *operatorservice.UpdateNexusIncomingServiceResponse, retErr error) {
+	request *operatorservice.UpdateNexusEndpointRequest,
+) (_ *operatorservice.UpdateNexusEndpointResponse, retErr error) {
 	defer log.CapturePanic(h.logger, &retErr)
 	if !h.config.EnableNexusAPIs() {
 		return nil, status.Error(codes.NotFound, "Nexus APIs are disabled")
 	}
-	return h.incomingServiceClient.Update(ctx, request)
+	return h.endpointsClient.Update(ctx, request)
 }
 
-func (h *OperatorHandlerImpl) DeleteNexusIncomingService(
+func (h *OperatorHandlerImpl) DeleteNexusEndpoint(
 	ctx context.Context,
-	request *operatorservice.DeleteNexusIncomingServiceRequest,
-) (_ *operatorservice.DeleteNexusIncomingServiceResponse, retErr error) {
+	request *operatorservice.DeleteNexusEndpointRequest,
+) (_ *operatorservice.DeleteNexusEndpointResponse, retErr error) {
 	defer log.CapturePanic(h.logger, &retErr)
 	if !h.config.EnableNexusAPIs() {
 		return nil, status.Error(codes.NotFound, "Nexus APIs are disabled")
 	}
-	return h.incomingServiceClient.Delete(ctx, request)
+	return h.endpointsClient.Delete(ctx, request)
 }
 
-func (h *OperatorHandlerImpl) GetNexusIncomingService(
+func (h *OperatorHandlerImpl) GetNexusEndpoint(
 	ctx context.Context,
-	request *operatorservice.GetNexusIncomingServiceRequest,
-) (_ *operatorservice.GetNexusIncomingServiceResponse, retErr error) {
+	request *operatorservice.GetNexusEndpointRequest,
+) (_ *operatorservice.GetNexusEndpointResponse, retErr error) {
 	defer log.CapturePanic(h.logger, &retErr)
 	if !h.config.EnableNexusAPIs() {
 		return nil, status.Error(codes.NotFound, "Nexus APIs are disabled")
 	}
-	return h.incomingServiceClient.Get(ctx, request)
+	return h.endpointsClient.Get(ctx, request)
 }
 
-func (h *OperatorHandlerImpl) ListNexusIncomingServices(
+func (h *OperatorHandlerImpl) ListNexusEndpoints(
 	ctx context.Context,
-	request *operatorservice.ListNexusIncomingServicesRequest,
-) (_ *operatorservice.ListNexusIncomingServicesResponse, retErr error) {
+	request *operatorservice.ListNexusEndpointsRequest,
+) (_ *operatorservice.ListNexusEndpointsResponse, retErr error) {
 	defer log.CapturePanic(h.logger, &retErr)
 	if !h.config.EnableNexusAPIs() {
 		return nil, status.Error(codes.NotFound, "Nexus APIs are disabled")
 	}
-	return h.incomingServiceClient.List(ctx, request)
-}
-
-func (h *OperatorHandlerImpl) GetNexusOutgoingService(
-	ctx context.Context,
-	req *operatorservice.GetNexusOutgoingServiceRequest,
-) (_ *operatorservice.GetNexusOutgoingServiceResponse, retErr error) {
-	defer log.CapturePanic(h.logger, &retErr)
-	if !h.config.EnableNexusAPIs() {
-		return nil, status.Error(codes.NotFound, "Nexus APIs are disabled")
-	}
-	return h.outgoingServiceRegistry.Get(ctx, req)
-}
-
-func (h *OperatorHandlerImpl) CreateNexusOutgoingService(
-	ctx context.Context,
-	req *operatorservice.CreateNexusOutgoingServiceRequest,
-) (_ *operatorservice.CreateNexusOutgoingServiceResponse, retErr error) {
-	defer log.CapturePanic(h.logger, &retErr)
-	if !h.config.EnableNexusAPIs() {
-		return nil, status.Error(codes.NotFound, "Nexus APIs are disabled")
-	}
-	return h.outgoingServiceRegistry.Create(ctx, req)
-}
-
-func (h *OperatorHandlerImpl) UpdateNexusOutgoingService(
-	ctx context.Context,
-	req *operatorservice.UpdateNexusOutgoingServiceRequest,
-) (_ *operatorservice.UpdateNexusOutgoingServiceResponse, retErr error) {
-	defer log.CapturePanic(h.logger, &retErr)
-	if !h.config.EnableNexusAPIs() {
-		return nil, status.Error(codes.NotFound, "Nexus APIs are disabled")
-	}
-	return h.outgoingServiceRegistry.Update(ctx, req)
-}
-
-func (h *OperatorHandlerImpl) DeleteNexusOutgoingService(
-	ctx context.Context,
-	req *operatorservice.DeleteNexusOutgoingServiceRequest,
-) (_ *operatorservice.DeleteNexusOutgoingServiceResponse, retErr error) {
-	defer log.CapturePanic(h.logger, &retErr)
-	if !h.config.EnableNexusAPIs() {
-		return nil, status.Error(codes.NotFound, "Nexus APIs are disabled")
-	}
-	return h.outgoingServiceRegistry.Delete(ctx, req)
-}
-
-func (h *OperatorHandlerImpl) ListNexusOutgoingServices(
-	ctx context.Context,
-	req *operatorservice.ListNexusOutgoingServicesRequest,
-) (_ *operatorservice.ListNexusOutgoingServicesResponse, retErr error) {
-	defer log.CapturePanic(h.logger, &retErr)
-	if !h.config.EnableNexusAPIs() {
-		return nil, status.Error(codes.NotFound, "Nexus APIs are disabled")
-	}
-	return h.outgoingServiceRegistry.List(ctx, req)
+	return h.endpointsClient.List(ctx, request)
 }
