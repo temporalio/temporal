@@ -44,16 +44,13 @@ import (
 
 func TestNexusIncomingServicesFunctionalSuite(t *testing.T) {
 	t.Run("Common", func(t *testing.T) {
-		s := new(CommonSuite)
-		suite.Run(t, s)
+		suite.Run(t, new(CommonSuite))
 	})
 	t.Run("Matching", func(t *testing.T) {
-		s := new(MatchingSuite)
-		suite.Run(t, s)
+		suite.Run(t, new(MatchingSuite))
 	})
 	t.Run("Operator", func(t *testing.T) {
-		s := new(OperatorSuite)
-		suite.Run(t, s)
+		suite.Run(t, new(OperatorSuite))
 	})
 }
 
@@ -81,6 +78,18 @@ func (s *NexusIncomingServiceFunctionalSuite) SetupTest() {
 
 type CommonSuite struct {
 	NexusIncomingServiceFunctionalSuite
+}
+
+func (s *CommonSuite) SetupSuite() {
+	s.NexusIncomingServiceFunctionalSuite.SetupSuite()
+}
+
+func (s *CommonSuite) TearDownSuite() {
+	s.NexusIncomingServiceFunctionalSuite.TearDownSuite()
+}
+
+func (s *CommonSuite) SetupTest() {
+	s.NexusIncomingServiceFunctionalSuite.SetupTest()
 }
 
 func (s *CommonSuite) TestListOrdering() {
@@ -159,6 +168,18 @@ func (s *CommonSuite) TestListOrdering() {
 
 type MatchingSuite struct {
 	NexusIncomingServiceFunctionalSuite
+}
+
+func (s *MatchingSuite) SetupSuite() {
+	s.NexusIncomingServiceFunctionalSuite.SetupSuite()
+}
+
+func (s *MatchingSuite) TearDownSuite() {
+	s.NexusIncomingServiceFunctionalSuite.TearDownSuite()
+}
+
+func (s *MatchingSuite) SetupTest() {
+	s.NexusIncomingServiceFunctionalSuite.SetupTest()
 }
 
 func (s *MatchingSuite) TestCreate() {
@@ -438,6 +459,18 @@ func (s *MatchingSuite) TestList() {
 
 type OperatorSuite struct {
 	NexusIncomingServiceFunctionalSuite
+}
+
+func (s *OperatorSuite) SetupSuite() {
+	s.NexusIncomingServiceFunctionalSuite.SetupSuite()
+}
+
+func (s *OperatorSuite) TearDownSuite() {
+	s.NexusIncomingServiceFunctionalSuite.TearDownSuite()
+}
+
+func (s *OperatorSuite) SetupTest() {
+	s.NexusIncomingServiceFunctionalSuite.SetupTest()
 }
 
 func (s *OperatorSuite) TestCreate() {
