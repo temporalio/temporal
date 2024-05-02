@@ -115,7 +115,7 @@ func (c *operationContext) matchingRequest(req *nexuspb.Request) *matchingservic
 func (c *operationContext) interceptRequest(ctx context.Context, request *matchingservice.DispatchNexusTaskRequest, header nexus.Header) error {
 	err := c.auth.Authorize(ctx, c.claims, &authorization.CallTarget{
 		APIName:   c.apiName,
-		Namespace: c.namespace.Name().String(),
+		Namespace: c.namespaceName,
 		Request:   request,
 	})
 	if err != nil {
@@ -131,7 +131,7 @@ func (c *operationContext) interceptRequest(ctx context.Context, request *matchi
 	if !c.namespace.ActiveInCluster(c.clusterMetadata.GetCurrentClusterName()) {
 		notActiveErr := serviceerror.NewNamespaceNotActive(c.namespaceName, c.clusterMetadata.GetCurrentClusterName(), c.namespace.ActiveClusterName())
 		if c.shouldForwardRequest(ctx) {
-			// Handler methods should have special logic to forward requests if this method returns a NamespaceNotActive error.
+			// Handler methods should have special logic to forward requests if this method returns a serviceerror.NamespaceNotActive error.
 			c.metricsHandler = c.metricsHandler.WithTags(metrics.NexusOutcomeTag("request_forwarded"))
 			var forwardStartTime time.Time
 			c.metricsHandlerForInterceptors, forwardStartTime = c.redirectionInterceptor.beforeCall(c.apiName)
@@ -262,8 +262,7 @@ func (h *nexusHandler) StartOperation(ctx context.Context, operation string, inp
 	if err := oc.interceptRequest(ctx, request, options.Header); err != nil {
 		var notActiveErr *serviceerror.NamespaceNotActive
 		if errors.As(err, &notActiveErr) {
-			result, retErr = h.forwardStartOperation(ctx, operation, input, options, oc)
-			return
+			return h.forwardStartOperation(ctx, operation, input, options, oc)
 		}
 		return nil, err
 	}
@@ -333,7 +332,9 @@ func (h *nexusHandler) forwardStartOperation(
 
 	resp, err := client.StartOperation(ctx, operation, input.Reader, options)
 	if err != nil {
-		return nil, err
+		oc.logger.Error("received error from remote cluster for forwarded Nexus start operation request.", tag.Error(err))
+		oc.metricsHandler = oc.metricsHandler.WithTags(metrics.NexusOutcomeTag("forwarded_request_error"))
+		return nil, commonnexus.ConvertClientError(err)
 	}
 
 	if resp.Successful != nil {
@@ -406,10 +407,18 @@ func (h *nexusHandler) forwardCancelOperation(ctx context.Context, operation str
 
 	handle, err := client.NewHandle(operation, id)
 	if err != nil {
-		return err
+		oc.logger.Warn("invalid Nexus cancel operation.", tag.Error(err))
+		return nexus.HandlerErrorf(nexus.HandlerErrorTypeBadRequest, "invalid operation")
 	}
 
-	return handle.Cancel(ctx, options)
+	err = handle.Cancel(ctx, options)
+	if err != nil {
+		oc.logger.Error("received error from remote cluster for forwarded Nexus cancel operation request.", tag.Error(err))
+		oc.metricsHandler = oc.metricsHandler.WithTags(metrics.NexusOutcomeTag("forwarded_request_error"))
+		return commonnexus.ConvertClientError(err)
+	}
+
+	return nil
 }
 
 func setHeadersForForwardedRequest(headers nexus.Header) nexus.Header {
@@ -424,6 +433,7 @@ func (h *nexusHandler) nexusClientForActiveCluster(oc *operationContext) (*nexus
 	httpClient, err := h.forwardingClients.Get(oc.namespace.ActiveClusterName())
 	if err != nil {
 		oc.logger.Error("failed to forward Nexus request. error creating HTTP client", tag.Error(err), tag.SourceCluster(oc.namespace.ActiveClusterName()), tag.TargetCluster(oc.namespace.ActiveClusterName()))
+		oc.metricsHandler = oc.metricsHandler.WithTags(metrics.NexusOutcomeTag("request_forwarding_failed"))
 		return nil, nexus.HandlerErrorf(nexus.HandlerErrorTypeInternal, "request forwarding failed")
 	}
 
@@ -434,7 +444,8 @@ func (h *nexusHandler) nexusClientForActiveCluster(oc *operationContext) (*nexus
 			TaskQueue: oc.taskQueue,
 		}))
 	if err != nil {
-		oc.logger.Error("failed to forward Nexus request. error constructing ServiceBaseURL", tag.Error(err))
+		oc.logger.Error(fmt.Sprintf("failed to forward Nexus request. error constructing ServiceBaseURL. address=%s namespace=%s task_queue=%s", httpClient.Address, oc.namespaceName, oc.taskQueue), tag.Error(err))
+		oc.metricsHandler = oc.metricsHandler.WithTags(metrics.NexusOutcomeTag("request_forwarding_failed"))
 		return nil, nexus.HandlerErrorf(nexus.HandlerErrorTypeInternal, "request forwarding failed")
 	}
 

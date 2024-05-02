@@ -23,6 +23,7 @@
 package xdc
 
 import (
+	"encoding/json"
 	"flag"
 	"fmt"
 	"testing"
@@ -31,10 +32,10 @@ import (
 	"github.com/google/uuid"
 	"github.com/nexus-rpc/sdk-go/nexus"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	enumspb "go.temporal.io/api/enums/v1"
 	nexuspb "go.temporal.io/api/nexus/v1"
-	"go.temporal.io/api/operatorservice/v1"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	"go.temporal.io/api/workflowservice/v1"
 	"google.golang.org/protobuf/types/known/durationpb"
@@ -42,6 +43,7 @@ import (
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/metrics/metricstest"
+	"go.temporal.io/server/common/namespace"
 	cnexus "go.temporal.io/server/common/nexus"
 	"go.temporal.io/server/components/nexusoperations"
 	"go.temporal.io/server/tests"
@@ -77,105 +79,196 @@ func (s *NexusRequestForwardingSuite) TearDownSuite() {
 	s.tearDownSuite()
 }
 
+// Only tests dispatch by namespace+task_queue.
+// TODO: Add test cases for dispatch by incoming service ID once incoming services support replication.
 func (s *NexusRequestForwardingSuite) TestStartOperationForwardedFromStandbyToActive() {
-	ctx := tests.NewContext()
-	namespace := fmt.Sprintf("%v-%v", "test-namespace", uuid.New())
-	taskQueue := fmt.Sprintf("%v-%v", "test-task-queue", uuid.New())
-	serviceName := fmt.Sprintf("%v-%v", "test-service", uuid.New())
+	ns := s.createNexusRequestForwardingNamespace()
 
-	activeFrontendClient := s.cluster1.GetFrontendClient()
-	regReq := &workflowservice.RegisterNamespaceRequest{
-		Namespace:                        namespace,
-		IsGlobalNamespace:                true,
-		Clusters:                         s.clusterReplicationConfig(),
-		ActiveClusterName:                s.clusterNames[0],
-		WorkflowExecutionRetentionPeriod: durationpb.New(7 * time.Hour * 24),
-	}
-	_, err := activeFrontendClient.RegisterNamespace(ctx, regReq)
-	s.NoError(err)
-
-	passiveFrontendClient := s.cluster2.GetFrontendClient()
-	s.EventuallyWithT(func(t *assert.CollectT) {
-		// Wait for namespace record to be replicated.
-		_, err := passiveFrontendClient.DescribeNamespace(ctx, &workflowservice.DescribeNamespaceRequest{Namespace: namespace})
-		assert.NoError(t, err)
-	}, 15*time.Second, 500*time.Millisecond)
-
-	activeOperatorClient := s.cluster1.GetOperatorClient()
-	_, err = activeOperatorClient.CreateNexusIncomingService(ctx, &operatorservice.CreateNexusIncomingServiceRequest{
-		Spec: &nexuspb.IncomingServiceSpec{
-			Name:      serviceName,
-			Namespace: namespace,
-			TaskQueue: taskQueue,
-		},
-	})
-	s.NoError(err)
-
-	passiveOperatorClient := s.cluster2.GetOperatorClient()
-	s.EventuallyWithT(func(t *assert.CollectT) {
-		_, err = passiveOperatorClient.CreateNexusIncomingService(ctx, &operatorservice.CreateNexusIncomingServiceRequest{
-			Spec: &nexuspb.IncomingServiceSpec{
-				Name:      serviceName,
-				Namespace: namespace,
-				TaskQueue: taskQueue,
+	testCases := []struct {
+		name      string
+		taskQueue string
+		handler   func(*workflowservice.PollNexusTaskQueueResponse) (*nexuspb.Response, *nexuspb.HandlerError)
+		assertion func(*testing.T, *nexus.ClientStartOperationResult[string], error, map[string][]*metricstest.CapturedRecording, map[string][]*metricstest.CapturedRecording)
+	}{
+		{
+			name:      "success",
+			taskQueue: fmt.Sprintf("%v-%v", "test-task-queue", uuid.New()),
+			handler: func(res *workflowservice.PollNexusTaskQueueResponse) (*nexuspb.Response, *nexuspb.HandlerError) {
+				s.Equal("true", res.Request.Header["xdc-redirection-api"])
+				return &nexuspb.Response{
+					Variant: &nexuspb.Response_StartOperation{
+						StartOperation: &nexuspb.StartOperationResponse{
+							Variant: &nexuspb.StartOperationResponse_SyncSuccess{
+								SyncSuccess: &nexuspb.StartOperationResponse_Sync{
+									Payload: res.Request.GetStartOperation().GetPayload()}}}},
+				}, nil
 			},
+			assertion: func(t *testing.T, result *nexus.ClientStartOperationResult[string], retErr error, activeSnap map[string][]*metricstest.CapturedRecording, passiveSnap map[string][]*metricstest.CapturedRecording) {
+				require.NoError(t, retErr)
+				require.Equal(t, "input", result.Successful)
+				requireExpectedMetricsCaptured(t, activeSnap, ns, "StartOperation", "sync_success")
+				requireExpectedMetricsCaptured(t, passiveSnap, ns, "StartOperation", "request_forwarded")
+			},
+		},
+		{
+			name:      "operation_error",
+			taskQueue: fmt.Sprintf("%v-%v", "test-task-queue", uuid.New()),
+			handler: func(res *workflowservice.PollNexusTaskQueueResponse) (*nexuspb.Response, *nexuspb.HandlerError) {
+				s.Equal("true", res.Request.Header["xdc-redirection-api"])
+				return &nexuspb.Response{
+					Variant: &nexuspb.Response_StartOperation{
+						StartOperation: &nexuspb.StartOperationResponse{
+							Variant: &nexuspb.StartOperationResponse_OperationError{
+								OperationError: &nexuspb.UnsuccessfulOperationError{
+									OperationState: string(nexus.OperationStateFailed),
+									Failure: &nexuspb.Failure{
+										Message:  "deliberate test failure",
+										Metadata: map[string]string{"k": "v"},
+										Details:  []byte(`"details"`),
+									}}}}},
+				}, nil
+			},
+			assertion: func(t *testing.T, result *nexus.ClientStartOperationResult[string], retErr error, activeSnap map[string][]*metricstest.CapturedRecording, passiveSnap map[string][]*metricstest.CapturedRecording) {
+				var operationError *nexus.UnsuccessfulOperationError
+				require.ErrorAs(t, retErr, &operationError)
+				require.Equal(t, nexus.OperationStateFailed, operationError.State)
+				require.Equal(t, "deliberate test failure", operationError.Failure.Message)
+				require.Equal(t, map[string]string{"k": "v"}, operationError.Failure.Metadata)
+				var details string
+				err := json.Unmarshal(operationError.Failure.Details, &details)
+				require.NoError(t, err)
+				require.Equal(t, "details", details)
+				requireExpectedMetricsCaptured(t, activeSnap, ns, "StartOperation", "operation_error")
+				requireExpectedMetricsCaptured(t, passiveSnap, ns, "StartOperation", "forwarded_request_error")
+			},
+		},
+		{
+			name:      "handler_error",
+			taskQueue: fmt.Sprintf("%v-%v", "test-task-queue", uuid.New()),
+			handler: func(res *workflowservice.PollNexusTaskQueueResponse) (*nexuspb.Response, *nexuspb.HandlerError) {
+				s.Equal("true", res.Request.Header["xdc-redirection-api"])
+				return nil, &nexuspb.HandlerError{
+					ErrorType: string(nexus.HandlerErrorTypeInternal),
+					Failure:   &nexuspb.Failure{Message: "deliberate internal failure"},
+				}
+			},
+			assertion: func(t *testing.T, result *nexus.ClientStartOperationResult[string], retErr error, activeSnap map[string][]*metricstest.CapturedRecording, passiveSnap map[string][]*metricstest.CapturedRecording) {
+				var unexpectedError *nexus.UnexpectedResponseError
+				require.ErrorAs(t, retErr, &unexpectedError)
+				// TODO: nexus should export this
+				require.Equal(t, 520, unexpectedError.Response.StatusCode)
+				require.Equal(t, "deliberate internal failure", unexpectedError.Failure.Message)
+				requireExpectedMetricsCaptured(t, activeSnap, ns, "StartOperation", "handler_error")
+				requireExpectedMetricsCaptured(t, passiveSnap, ns, "StartOperation", "forwarded_request_error")
+			},
+		},
+	}
+
+	for _, tc := range testCases {
+		tc := tc
+		s.T().Run(tc.name, func(t *testing.T) {
+			dispatchURL := fmt.Sprintf("http://%s/%s", s.cluster2.GetHost().FrontendHTTPAddress(), cnexus.RouteDispatchNexusTaskByNamespaceAndTaskQueue.Path(cnexus.NamespaceAndTaskQueue{Namespace: ns, TaskQueue: tc.taskQueue}))
+			nexusClient, err := nexus.NewClient(nexus.ClientOptions{ServiceBaseURL: dispatchURL})
+			s.NoError(err)
+
+			activeMetricsHandler := s.cluster1.GetHost().GetMetricsHandler().(*metricstest.CaptureHandler)
+			activeCapture := activeMetricsHandler.StartCapture()
+			defer activeMetricsHandler.StopCapture(activeCapture)
+
+			passiveMetricsHandler := s.cluster2.GetHost().GetMetricsHandler().(*metricstest.CaptureHandler)
+			passiveCapture := passiveMetricsHandler.StartCapture()
+			defer passiveMetricsHandler.StopCapture(passiveCapture)
+
+			go s.nexusTaskPoller(s.cluster1.GetFrontendClient(), ns, tc.taskQueue, tc.handler)
+
+			ctx := tests.NewContext()
+			startResult, err := nexus.StartOperation(ctx, nexusClient, op, "input", nexus.StartOperationOptions{
+				CallbackURL: "http://localhost/callback",
+				RequestID:   "request-id",
+				Header:      nexus.Header{"key": "value"},
+			})
+			tc.assertion(t, startResult, err, activeCapture.Snapshot(), passiveCapture.Snapshot())
 		})
-		assert.NoError(t, err)
-	}, 15*time.Second, 500*time.Millisecond)
-
-	dispatchURL := fmt.Sprintf("http://%s/%s", s.cluster2.GetHost().FrontendHTTPAddress(), cnexus.RouteDispatchNexusTaskByNamespaceAndTaskQueue.Path(cnexus.NamespaceAndTaskQueue{Namespace: namespace, TaskQueue: taskQueue}))
-	nexusClient, err := nexus.NewClient(nexus.ClientOptions{ServiceBaseURL: dispatchURL})
-	s.NoError(err)
-
-	activeMetricsHandler := s.cluster1.GetHost().GetMetricsHandler().(*metricstest.CaptureHandler)
-	activeCapture := activeMetricsHandler.StartCapture()
-	defer activeMetricsHandler.StopCapture(activeCapture)
-
-	passiveMetricsHandler := s.cluster2.GetHost().GetMetricsHandler().(*metricstest.CaptureHandler)
-	passiveCapture := passiveMetricsHandler.StartCapture()
-	defer passiveMetricsHandler.StopCapture(passiveCapture)
-
-	go s.nexusTaskPoller(activeFrontendClient, namespace, taskQueue)
-
-	var startResult *nexus.ClientStartOperationResult[string]
-	s.EventuallyWithT(func(t *assert.CollectT) {
-		startResult, err = nexus.StartOperation(ctx, nexusClient, op, "input", nexus.StartOperationOptions{
-			CallbackURL: "http://localhost/callback",
-			RequestID:   "request-id",
-			Header:      nexus.Header{"key": "value"},
-		})
-		assert.NoError(t, err)
-	}, 15*time.Second, 500*time.Millisecond)
-	s.Equal("input", startResult.Successful)
-
-	activeSnap := activeCapture.Snapshot()
-	s.Equal(1, len(activeSnap["nexus_requests"]))
-	s.Subset(activeSnap["nexus_requests"][0].Tags, map[string]string{"namespace": namespace, "method": "StartOperation", "outcome": "sync_success"})
-	s.Contains(activeSnap["nexus_requests"][0].Tags, "service")
-	s.Equal(int64(1), activeSnap["nexus_requests"][0].Value)
-	s.Equal(metrics.MetricUnit(""), activeSnap["nexus_requests"][0].Unit)
-	s.Equal(1, len(activeSnap["nexus_latency"]))
-	s.Subset(activeSnap["nexus_latency"][0].Tags, map[string]string{"namespace": namespace, "method": "StartOperation", "outcome": "sync_success"})
-	s.Contains(activeSnap["nexus_latency"][0].Tags, "service")
-	s.Equal(metrics.MetricUnit(metrics.Milliseconds), activeSnap["nexus_latency"][0].Unit)
-
-	passiveSnap := passiveCapture.Snapshot()
-	s.Equal(1, len(passiveSnap["nexus_requests"]))
-	s.Subset(passiveSnap["nexus_requests"][0].Tags, map[string]string{"namespace": namespace, "method": "StartOperation", "outcome": "request_forwarded"})
-	s.Contains(passiveSnap["nexus_requests"][0].Tags, "service")
-	s.Equal(int64(1), passiveSnap["nexus_requests"][0].Value)
-	s.Equal(metrics.MetricUnit(""), passiveSnap["nexus_requests"][0].Unit)
-	s.Equal(1, len(passiveSnap["nexus_latency"]))
-	s.Subset(passiveSnap["nexus_latency"][0].Tags, map[string]string{"namespace": namespace, "method": "StartOperation", "outcome": "request_forwarded"})
-	s.Contains(passiveSnap["nexus_latency"][0].Tags, "service")
-	s.Equal(metrics.MetricUnit(metrics.Milliseconds), passiveSnap["nexus_latency"][0].Unit)
+	}
 }
 
+// Only tests dispatch by namespace+task_queue.
+// TODO: Add test cases for dispatch by incoming service ID once incoming services support replication.
 func (s *NexusRequestForwardingSuite) TestCancelOperationForwardedFromStandbyToActive() {
+	ns := s.createNexusRequestForwardingNamespace()
 
+	testCases := []struct {
+		name      string
+		taskQueue string
+		handler   func(*workflowservice.PollNexusTaskQueueResponse) (*nexuspb.Response, *nexuspb.HandlerError)
+		assertion func(*testing.T, error, map[string][]*metricstest.CapturedRecording, map[string][]*metricstest.CapturedRecording)
+	}{
+		{
+			name:      "success",
+			taskQueue: fmt.Sprintf("%v-%v", "test-task-queue", uuid.New()),
+			handler: func(res *workflowservice.PollNexusTaskQueueResponse) (*nexuspb.Response, *nexuspb.HandlerError) {
+				s.Equal("true", res.Request.Header["xdc-redirection-api"])
+				return &nexuspb.Response{
+					Variant: &nexuspb.Response_CancelOperation{
+						CancelOperation: &nexuspb.CancelOperationResponse{},
+					},
+				}, nil
+			},
+			assertion: func(t *testing.T, retErr error, activeSnap map[string][]*metricstest.CapturedRecording, passiveSnap map[string][]*metricstest.CapturedRecording) {
+				require.NoError(t, retErr)
+				requireExpectedMetricsCaptured(t, activeSnap, ns, "CancelOperation", "success")
+				requireExpectedMetricsCaptured(t, passiveSnap, ns, "CancelOperation", "request_forwarded")
+			},
+		},
+		{
+			name:      "handler_error",
+			taskQueue: fmt.Sprintf("%v-%v", "test-task-queue", uuid.New()),
+			handler: func(res *workflowservice.PollNexusTaskQueueResponse) (*nexuspb.Response, *nexuspb.HandlerError) {
+				s.Equal("true", res.Request.Header["xdc-redirection-api"])
+				return nil, &nexuspb.HandlerError{
+					ErrorType: string(nexus.HandlerErrorTypeInternal),
+					Failure:   &nexuspb.Failure{Message: "deliberate internal failure"},
+				}
+			},
+			assertion: func(t *testing.T, retErr error, activeSnap map[string][]*metricstest.CapturedRecording, passiveSnap map[string][]*metricstest.CapturedRecording) {
+				var unexpectedError *nexus.UnexpectedResponseError
+				require.ErrorAs(t, retErr, &unexpectedError)
+				// TODO: nexus should export this
+				require.Equal(t, 520, unexpectedError.Response.StatusCode)
+				require.Equal(t, "deliberate internal failure", unexpectedError.Failure.Message)
+				requireExpectedMetricsCaptured(t, activeSnap, ns, "CancelOperation", "handler_error")
+				requireExpectedMetricsCaptured(t, passiveSnap, ns, "CancelOperation", "forwarded_request_error")
+			},
+		},
+	}
+
+	for _, tc := range testCases {
+		tc := tc
+		s.T().Run(tc.name, func(t *testing.T) {
+			dispatchURL := fmt.Sprintf("http://%s/%s", s.cluster2.GetHost().FrontendHTTPAddress(), cnexus.RouteDispatchNexusTaskByNamespaceAndTaskQueue.Path(cnexus.NamespaceAndTaskQueue{Namespace: ns, TaskQueue: tc.taskQueue}))
+			nexusClient, err := nexus.NewClient(nexus.ClientOptions{ServiceBaseURL: dispatchURL})
+			s.NoError(err)
+
+			activeMetricsHandler := s.cluster1.GetHost().GetMetricsHandler().(*metricstest.CaptureHandler)
+			activeCapture := activeMetricsHandler.StartCapture()
+			defer activeMetricsHandler.StopCapture(activeCapture)
+
+			passiveMetricsHandler := s.cluster2.GetHost().GetMetricsHandler().(*metricstest.CaptureHandler)
+			passiveCapture := passiveMetricsHandler.StartCapture()
+			defer passiveMetricsHandler.StopCapture(passiveCapture)
+
+			go s.nexusTaskPoller(s.cluster1.GetFrontendClient(), ns, tc.taskQueue, tc.handler)
+
+			ctx := tests.NewContext()
+			handle, err := nexusClient.NewHandle("operation", "id")
+			require.NoError(t, err)
+			err = handle.Cancel(ctx, nexus.CancelOperationOptions{})
+			tc.assertion(t, err, activeCapture.Snapshot(), passiveCapture.Snapshot())
+		})
+	}
 }
 
-func (s *NexusRequestForwardingSuite) nexusTaskPoller(frontendClient tests.FrontendClient, namespace string, taskQueue string) {
+func (s *NexusRequestForwardingSuite) nexusTaskPoller(frontendClient tests.FrontendClient, namespace string, taskQueue string, handler func(*workflowservice.PollNexusTaskQueueResponse) (*nexuspb.Response, *nexuspb.HandlerError)) {
 	ctx := tests.NewContext()
 	res, err := frontendClient.PollNexusTaskQueue(ctx, &workflowservice.PollNexusTaskQueueRequest{
 		Namespace: namespace,
@@ -187,17 +280,56 @@ func (s *NexusRequestForwardingSuite) nexusTaskPoller(frontendClient tests.Front
 	})
 	s.NoError(err)
 
-	_, err = frontendClient.RespondNexusTaskCompleted(ctx, &workflowservice.RespondNexusTaskCompletedRequest{
-		Namespace: namespace,
-		Identity:  uuid.NewString(),
-		TaskToken: res.TaskToken,
-		Response: &nexuspb.Response{
-			Variant: &nexuspb.Response_StartOperation{
-				StartOperation: &nexuspb.StartOperationResponse{
-					Variant: &nexuspb.StartOperationResponse_SyncSuccess{
-						SyncSuccess: &nexuspb.StartOperationResponse_Sync{
-							Payload: res.Request.GetStartOperation().GetPayload()}}}},
-		},
-	})
+	response, handlerErr := handler(res)
+
+	if handlerErr != nil {
+		_, err = frontendClient.RespondNexusTaskFailed(ctx, &workflowservice.RespondNexusTaskFailedRequest{
+			Namespace: namespace,
+			Identity:  uuid.NewString(),
+			TaskToken: res.TaskToken,
+			Error:     handlerErr,
+		})
+	} else if response != nil {
+		_, err = frontendClient.RespondNexusTaskCompleted(ctx, &workflowservice.RespondNexusTaskCompletedRequest{
+			Namespace: namespace,
+			Identity:  uuid.NewString(),
+			TaskToken: res.TaskToken,
+			Response:  response,
+		})
+	}
+
 	s.NoError(err)
+}
+
+func (s *NexusRequestForwardingSuite) createNexusRequestForwardingNamespace() string {
+	ctx := tests.NewContext()
+	ns := fmt.Sprintf("%v-%v", "test-namespace", uuid.New())
+
+	regReq := &workflowservice.RegisterNamespaceRequest{
+		Namespace:                        ns,
+		IsGlobalNamespace:                true,
+		Clusters:                         s.clusterReplicationConfig(),
+		ActiveClusterName:                s.clusterNames[0],
+		WorkflowExecutionRetentionPeriod: durationpb.New(7 * time.Hour * 24),
+	}
+	_, err := s.cluster1.GetFrontendClient().RegisterNamespace(ctx, regReq)
+	s.NoError(err)
+
+	s.EventuallyWithT(func(t *assert.CollectT) {
+		// Wait for namespace record to be replicated and loaded into memory.
+		_, err := s.cluster2.GetHost().GetFrontendNamespaceRegistry().GetNamespace(namespace.Name(ns))
+		assert.NoError(t, err)
+	}, 15*time.Second, 500*time.Millisecond)
+
+	return ns
+}
+
+func requireExpectedMetricsCaptured(t *testing.T, snap map[string][]*metricstest.CapturedRecording, ns string, method string, expectedOutcome string) {
+	require.Equal(t, 1, len(snap["nexus_requests"]))
+	require.Subset(t, snap["nexus_requests"][0].Tags, map[string]string{"namespace": ns, "method": method, "outcome": expectedOutcome})
+	require.Equal(t, int64(1), snap["nexus_requests"][0].Value)
+	require.Equal(t, metrics.MetricUnit(""), snap["nexus_requests"][0].Unit)
+	require.Equal(t, 1, len(snap["nexus_latency"]))
+	require.Subset(t, snap["nexus_latency"][0].Tags, map[string]string{"namespace": ns, "method": method, "outcome": expectedOutcome})
+	require.Equal(t, metrics.MetricUnit(metrics.Milliseconds), snap["nexus_latency"][0].Unit)
 }

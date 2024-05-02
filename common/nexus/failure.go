@@ -192,3 +192,15 @@ func AdaptAuthorizeError(err error) error {
 	}
 	return nexus.HandlerErrorf(nexus.HandlerErrorTypeUnauthorized, "permission denied")
 }
+
+func ConvertClientError(err error) error {
+	var unexpectedRespErr *nexus.UnexpectedResponseError
+	if errors.As(err, &unexpectedRespErr) {
+		return &nexus.HandlerError{
+			Type:    nexus.HandlerErrorTypeDownstreamError,
+			Failure: unexpectedRespErr.Failure,
+		}
+	}
+
+	return ConvertGRPCError(err, false)
+}

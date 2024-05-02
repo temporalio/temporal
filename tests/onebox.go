@@ -36,14 +36,16 @@ import (
 	"time"
 
 	otelsdktrace "go.opentelemetry.io/otel/sdk/trace"
-	"go.temporal.io/server/common/membership/static"
 	"go.uber.org/fx"
 	"go.uber.org/multierr"
 	"golang.org/x/exp/maps"
 	"google.golang.org/grpc"
 
+	"go.temporal.io/server/common/membership/static"
+
 	"go.temporal.io/api/operatorservice/v1"
 	"go.temporal.io/api/workflowservice/v1"
+
 	"go.temporal.io/server/api/adminservice/v1"
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/api/matchingservice/v1"
@@ -396,6 +398,10 @@ func (c *temporalImpl) GetMatchingClient() matchingservice.MatchingServiceClient
 	// Note that this matching client does not do routing. But it doesn't matter since we have
 	// only one matching node in testing.
 	return c.matchingClient
+}
+
+func (c *temporalImpl) GetFrontendNamespaceRegistry() namespace.Registry {
+	return c.frontendNamespaceRegistry
 }
 
 func (c *temporalImpl) startFrontend(
