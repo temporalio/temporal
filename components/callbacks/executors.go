@@ -79,15 +79,15 @@ func (e activeExecutor) executeInvocationTask(
 	ref hsm.Ref,
 	task InvocationTask,
 ) error {
-	ctx, cancel := context.WithTimeout(ctx, e.config.InvocationTaskTimeout())
-	defer cancel()
-
 	url, completion, err := e.loadUrlAndCallback(ctx, env, ref)
 	if err != nil {
 		return err
 	}
 
-	request, err := nexus.NewCompletionHTTPRequest(ctx, url, completion)
+	callCtx, cancel := context.WithTimeout(ctx, e.config.RequestTimeout())
+	defer cancel()
+
+	request, err := nexus.NewCompletionHTTPRequest(callCtx, url, completion)
 	if err != nil {
 		return queues.NewUnprocessableTaskError(
 			fmt.Sprintf("failed to construct Nexus request: %v", err),

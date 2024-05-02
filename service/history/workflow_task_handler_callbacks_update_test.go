@@ -404,7 +404,7 @@ func (s *WorkflowTaskHandlerCallbacksUpdateSuite) createSentUpdate(tv *testvars.
 	s.NoError(err)
 
 	seqID := &protocolpb.Message_EventId{EventId: tv.Any().EventID()}
-	msg := upd.Send(ctx, false, seqID, eventStore)
+	msg := upd.Send(ctx, false, seqID)
 	s.NotNil(msg)
 
 	updRequestMsg := &protocolpb.Message{

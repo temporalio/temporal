@@ -938,13 +938,18 @@ func (e *matchingEngineImpl) DescribeTaskQueue(
 				}
 			}
 			reachability, err := getBuildIdTaskReachability(ctx,
-				userData.GetVersioningData(),
-				e.visibilityManager,
-				request.GetNamespaceId(),
-				req.GetNamespace(),
-				req.GetTaskQueue().GetName(),
+				newReachabilityCalculator(
+					userData.GetVersioningData(),
+					e.visibilityManager,
+					request.GetNamespaceId(),
+					req.GetNamespace(),
+					req.GetTaskQueue().GetName(),
+					e.config.ReachabilityBuildIdVisibilityGracePeriod(req.GetNamespace()),
+				),
+				e.metricsHandler,
+				e.logger,
 				bid,
-				e.config.ReachabilityBuildIdVisibilityGracePeriod(req.GetNamespace()))
+			)
 			if err != nil {
 				return nil, err
 			}
@@ -1174,9 +1179,16 @@ func (e *matchingEngineImpl) UpdateWorkerVersioningRules(
 		return nil, err
 	}
 
+	// log resulting rule counts
+	assignmentRules := getResp.GetResponse().GetAssignmentRules()
+	redirectRules := getResp.GetResponse().GetCompatibleRedirectRules()
+	e.logger.Info("UpdateWorkerVersioningRules completed",
+		tag.WorkerVersioningRedirectRuleCount(len(redirectRules)),
+		tag.WorkerVersioningAssignmentRuleCount(len(assignmentRules)))
+
 	return &matchingservice.UpdateWorkerVersioningRulesResponse{Response: &workflowservice.UpdateWorkerVersioningRulesResponse{
-		AssignmentRules:         getResp.GetResponse().GetAssignmentRules(),
-		CompatibleRedirectRules: getResp.GetResponse().GetCompatibleRedirectRules(),
+		AssignmentRules:         assignmentRules,
+		CompatibleRedirectRules: redirectRules,
 		ConflictToken:           getResp.GetResponse().GetConflictToken(),
 	}}, nil
 }
@@ -1824,7 +1836,9 @@ func (e *matchingEngineImpl) unloadTaskQueuePartitionByKey(partition tqid.Partit
 	foundTQM, ok := e.partitions[key]
 	if !ok || (unloadPM != nil && foundTQM != unloadPM) {
 		e.partitionsLock.Unlock()
-		unloadPM.Stop()
+		if unloadPM != nil {
+			unloadPM.Stop()
+		}
 		return false
 	}
 	delete(e.partitions, key)

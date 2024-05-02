@@ -84,6 +84,18 @@ func (s *PartitionManagerTestSuite) SetupTest() {
 	s.Assert().NoError(err)
 }
 
+func (s *PartitionManagerTestSuite) TestAddTask_Forwarded() {
+	_, _, err := s.partitionMgr.AddTask(context.Background(), addTaskParams{
+		taskInfo: &persistence.TaskInfo{
+			NamespaceId: namespaceId,
+			RunId:       "run",
+			WorkflowId:  "wf",
+		},
+		forwardedFrom: "another-partition",
+	})
+	s.Assert().Equal(errRemoteSyncMatchFailed, err)
+}
+
 func (s *PartitionManagerTestSuite) TestAddTaskNoRules_NoVersionDirective() {
 	s.validateAddTask("", false, nil, nil)
 	s.validatePollTask("", false)
