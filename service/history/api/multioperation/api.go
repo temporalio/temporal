@@ -66,18 +66,16 @@ func Invoke(
 	if startReq == nil {
 		return nil, serviceerror.NewInternal("expected first operation to be Start Workflow")
 	}
-	namespaceEntry, err := api.GetActiveNamespace(shardContext, namespace.ID(req.GetNamespaceId()))
-	if err != nil {
-		return nil, newMultiOpError(err, multiOpAbortedErr)
-	}
-	starter := startworkflow.NewStarter(
+	starter, err := startworkflow.NewStarter(
 		shardContext,
 		workflowConsistencyChecker,
 		tokenSerializer,
 		visibilityManager,
 		startReq,
-		namespaceEntry,
 	)
+	if err != nil {
+		return nil, newMultiOpError(err, multiOpAbortedErr)
+	}
 
 	updateReq := req.Operations[1].GetUpdateWorkflow()
 	if updateReq == nil {
@@ -100,7 +98,7 @@ func Invoke(
 		ctx,
 		nil,
 		api.BypassMutableStateConsistencyPredicate,
-		definition.NewWorkflowKey(string(namespaceEntry.ID()), startReq.StartRequest.WorkflowId, ""),
+		definition.NewWorkflowKey(req.NamespaceId, startReq.StartRequest.WorkflowId, ""),
 		workflow.LockPriorityHigh,
 	)
 	var notFound *serviceerror.NotFound
