@@ -29,10 +29,12 @@
 package xdc
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"time"
 
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	replicationpb "go.temporal.io/api/replication/v1"
@@ -40,6 +42,7 @@ import (
 	"gopkg.in/yaml.v3"
 
 	"go.temporal.io/server/api/adminservice/v1"
+	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
@@ -150,6 +153,28 @@ func (s *xdcBaseSuite) setupSuite(clusterNames []string, opts ...tests.Option) {
 	s.Require().NoError(err)
 	// Wait for cluster metadata to refresh new added clusters
 	time.Sleep(time.Millisecond * 200)
+
+	// s.waitForClusterSynced(startTime)
+}
+
+func (s *xdcBaseSuite) waitForClusterSynced() {
+	s.EventuallyWithT(func(c *assert.CollectT) {
+		resp, err := s.cluster1.GetHistoryClient().GetReplicationStatus(context.Background(), &historyservice.GetReplicationStatusRequest{})
+		s.NoError(err)
+		s.Equal(1, len(resp.Shards)) // test cluster has only one history shard
+		shard := resp.Shards[0]
+		s.True(shard.MaxReplicationTaskId > 0)
+		s.NotNil(shard.ShardLocalTime)
+		s.True(shard.ShardLocalTime.AsTime().Before(time.Now()))
+		// s.True(shard.ShardLocalTime.AsTime().After(startTime))
+		s.NotNil(shard.RemoteClusters)
+		standbyAckInfo, ok := shard.RemoteClusters[s.clusterNames[1]]
+		s.True(ok)
+		s.Equal(shard.MaxReplicationTaskId, standbyAckInfo.AckedTaskId)
+		s.NotNil(standbyAckInfo.AckedTaskVisibilityTime)
+		s.True(standbyAckInfo.AckedTaskVisibilityTime.AsTime().Before(time.Now()))
+		// s.True(standbyAckInfo.AckedTaskVisibilityTime.AsTime().After(startTime))
+	}, 60*time.Second, 1*time.Second)
 }
 
 func (s *xdcBaseSuite) tearDownSuite() {
