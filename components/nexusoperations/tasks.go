@@ -194,21 +194,21 @@ func (CancelationTaskSerializer) Serialize(hsm.Task) ([]byte, error) {
 	return nil, nil
 }
 
-type CancelationBackedTask struct {
+type CancelationBackoffTask struct {
 	Deadline time.Time
 }
 
-var _ hsm.Task = CancelationBackedTask{}
+var _ hsm.Task = CancelationBackoffTask{}
 
-func (CancelationBackedTask) Type() hsm.TaskType {
+func (CancelationBackoffTask) Type() hsm.TaskType {
 	return TaskTypeCancelationBackoff
 }
 
-func (t CancelationBackedTask) Kind() hsm.TaskKind {
+func (t CancelationBackoffTask) Kind() hsm.TaskKind {
 	return hsm.TaskKindTimer{Deadline: t.Deadline}
 }
 
-func (CancelationBackedTask) Concurrent() bool {
+func (CancelationBackoffTask) Concurrent() bool {
 	return false
 }
 
@@ -216,7 +216,7 @@ type CancelationBackoffTaskSerializer struct{}
 
 func (CancelationBackoffTaskSerializer) Deserialize(data []byte, kind hsm.TaskKind) (hsm.Task, error) {
 	if kind, ok := kind.(hsm.TaskKindTimer); ok {
-		return CancelationBackedTask{Deadline: kind.Deadline}, nil
+		return CancelationBackoffTask{Deadline: kind.Deadline}, nil
 	}
 	return nil, fmt.Errorf("%w: expected timer", hsm.ErrInvalidTaskKind)
 }

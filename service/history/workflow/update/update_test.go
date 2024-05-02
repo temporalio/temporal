@@ -209,7 +209,7 @@ func TestRequestSendAcceptComplete(t *testing.T) {
 		t.Log("update state should now be Requested")
 	})
 
-	msg := upd.Send(ctx, false, sequencingID, store)
+	msg := upd.Send(ctx, false, sequencingID)
 	require.NotNil(t, msg)
 	effects.Apply(ctx)
 
@@ -290,7 +290,7 @@ func TestRequestSendReject(t *testing.T) {
 		t.Log("update state should now be Requested")
 	})
 
-	msg := upd.Send(ctx, false, sequencingID, store)
+	msg := upd.Send(ctx, false, sequencingID)
 	require.NotNil(t, msg)
 	effects.Apply(ctx)
 
@@ -381,7 +381,7 @@ func TestSend(t *testing.T) {
 
 	t.Run("before request received", func(t *testing.T) {
 		require.False(t, upd.NeedToSend(false))
-		msg := upd.Send(ctx, false, sequencingID, store)
+		msg := upd.Send(ctx, false, sequencingID)
 		require.Nil(t, msg)
 		require.False(t, upd.IsSent())
 	})
@@ -389,7 +389,7 @@ func TestSend(t *testing.T) {
 		require.NoError(t, upd.Admit(ctx, &req, store))
 		effects.Apply(ctx)
 		require.True(t, upd.NeedToSend(false))
-		msg := upd.Send(ctx, false, sequencingID, store)
+		msg := upd.Send(ctx, false, sequencingID)
 		effects.Apply(ctx)
 		require.NotNil(t, msg)
 		require.Equal(t, msg.GetEventId(), testSequencingEventID)
@@ -397,12 +397,12 @@ func TestSend(t *testing.T) {
 	})
 	t.Run("sent", func(t *testing.T) {
 		require.False(t, upd.NeedToSend(false))
-		msg := upd.Send(ctx, false, sequencingID, store)
+		msg := upd.Send(ctx, false, sequencingID)
 		effects.Apply(ctx)
 		require.Nil(t, msg)
 		require.True(t, upd.IsSent())
 		require.True(t, upd.NeedToSend(true))
-		msg = upd.Send(ctx, true, sequencingID, store)
+		msg = upd.Send(ctx, true, sequencingID)
 		effects.Apply(ctx)
 		require.NotNil(t, msg)
 		require.Equal(t, msg.GetEventId(), testSequencingEventID)
@@ -411,12 +411,12 @@ func TestSend(t *testing.T) {
 	t.Run("after requested", func(t *testing.T) {
 		updAccepted1 := update.NewAccepted(updateID, testAcceptedEventID)
 		require.False(t, upd.NeedToSend(false))
-		msg := updAccepted1.Send(ctx, false, sequencingID, store)
+		msg := updAccepted1.Send(ctx, false, sequencingID)
 		require.Nil(t, msg)
 		require.False(t, updAccepted1.IsSent())
 
 		updAccepted2 := update.NewAccepted(updateID, testAcceptedEventID)
-		msg = updAccepted2.Send(ctx, true, sequencingID, store)
+		msg = updAccepted2.Send(ctx, true, sequencingID)
 		require.Nil(t, msg)
 		require.False(t, updAccepted2.IsSent())
 	})
@@ -463,7 +463,7 @@ func TestAcceptanceAndResponseInSameMessageBatch(t *testing.T) {
 	require.NoError(t, upd.Admit(ctx, &req, store))
 	effects.Apply(ctx)
 
-	_ = upd.Send(ctx, false, sequencingID, store)
+	_ = upd.Send(ctx, false, sequencingID)
 	effects.Apply(ctx)
 
 	require.NoError(t, upd.OnProtocolMessage(ctx, &acpt, store))
@@ -480,8 +480,6 @@ func TestDuplicateRequestNoError(t *testing.T) {
 		ctx          = context.Background()
 		updateID     = t.Name() + "-update-id"
 		sequencingID = &protocolpb.Message_EventId{EventId: testSequencingEventID}
-		effects      = effect.Buffer{}
-		store        = mockEventStore{Controller: &effects}
 		upd          = update.NewAccepted(updateID, testAcceptedEventID)
 	)
 
@@ -489,7 +487,7 @@ func TestDuplicateRequestNoError(t *testing.T) {
 	require.NoError(t, err,
 		"a second request message should be ignored, not cause an error")
 
-	msg := upd.Send(ctx, false, sequencingID, store)
+	msg := upd.Send(ctx, false, sequencingID)
 	require.Nil(t, msg)
 }
 
@@ -515,7 +513,7 @@ func TestMessageValidation(t *testing.T) {
 		upd := update.New(updateID)
 		err := upd.Admit(ctx, &req, store)
 		require.NoError(t, err)
-		_ = upd.Send(ctx, true, sequencingID, store)
+		_ = upd.Send(ctx, true, sequencingID)
 
 		err = upd.OnProtocolMessage(
 			ctx,
@@ -572,7 +570,7 @@ func TestDoubleRollback(t *testing.T) {
 	require.NoError(t, upd.Admit(ctx, &req, store))
 	effects.Apply(ctx)
 
-	_ = upd.Send(ctx, false, sequencingID, store)
+	_ = upd.Send(ctx, false, sequencingID)
 	effects.Apply(ctx)
 
 	require.NoError(t, upd.OnProtocolMessage(ctx, &acpt, store))
@@ -673,7 +671,7 @@ func TestRejectionWithAcceptanceWaiter(t *testing.T) {
 	t.Log("deliver request and rejection messages")
 	require.NoError(t, upd.Admit(ctx, &req, store))
 
-	_ = upd.Send(ctx, false, sequencingID, store)
+	_ = upd.Send(ctx, false, sequencingID)
 
 	require.NoError(t, upd.OnProtocolMessage(ctx, &rej, store))
 
@@ -729,7 +727,7 @@ func TestAcceptEventIDInCompletedEvent(t *testing.T) {
 
 	require.NoError(t, upd.Admit(ctx, &req, store))
 	effects.Apply(ctx)
-	_ = upd.Send(ctx, false, sequencingID, store)
+	_ = upd.Send(ctx, false, sequencingID)
 	effects.Apply(ctx)
 	require.NoError(t, upd.OnProtocolMessage(ctx, &acpt, store))
 	require.NoError(t, upd.OnProtocolMessage(ctx, &resp, store))
@@ -885,7 +883,7 @@ func TestWaitLifecycleStage(t *testing.T) {
 	}
 
 	send := func(ctx context.Context, upd *update.Update) {
-		_ = upd.Send(ctx, false, sequencingID, store)
+		_ = upd.Send(ctx, false, sequencingID)
 		effects.Apply(ctx)
 	}
 
@@ -1044,7 +1042,7 @@ func TestCompletedWorkflow(t *testing.T) {
 	t.Run("sent update is rejected if completed workflow tries to accept it", func(t *testing.T) {
 		upd := update.New(meta.UpdateId)
 		_ = upd.Admit(ctx, &req, store)
-		upd.Send(ctx, false, &protocolpb.Message_EventId{EventId: testSequencingEventID}, store)
+		upd.Send(ctx, false, &protocolpb.Message_EventId{EventId: testSequencingEventID})
 
 		acpt := protocolpb.Message{Body: mustMarshalAny(t, &updatepb.Acceptance{AcceptedRequestSequencingEventId: 2208})}
 		err := upd.OnProtocolMessage(ctx, &acpt, roStore)
@@ -1062,7 +1060,7 @@ func TestCompletedWorkflow(t *testing.T) {
 	t.Run("sent update is rejected with user rejection if completed workflow rejects it", func(t *testing.T) {
 		upd := update.New(meta.UpdateId)
 		_ = upd.Admit(ctx, &req, store)
-		upd.Send(ctx, false, &protocolpb.Message_EventId{EventId: testSequencingEventID}, store)
+		upd.Send(ctx, false, &protocolpb.Message_EventId{EventId: testSequencingEventID})
 
 		rej := protocolpb.Message{Body: mustMarshalAny(t, &updatepb.Rejection{
 			RejectedRequest: &req,

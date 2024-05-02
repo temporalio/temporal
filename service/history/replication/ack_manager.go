@@ -235,6 +235,7 @@ func (p *ackMgrImpl) GetTask(
 			VisibilityTimestamp: time.Unix(0, 0),
 			TaskID:              taskInfo.TaskId,
 			Version:             taskInfo.Version,
+			Priority:            tasks.ReplicationTaskPriority(taskInfo.GetPriority()),
 		})
 	default:
 		return nil, serviceerror.NewInternal(fmt.Sprintf("Unknown replication task type: %v", taskInfo.TaskType))
