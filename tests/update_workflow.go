@@ -5367,3 +5367,52 @@ func (s *FunctionalSuite) TestUpdateWorkflow_NewSpeculativeWorkflowTask_QueryFai
   9 WorkflowExecutionUpdateCompleted
 `, events)
 }
+
+func (s *FunctionalSuite) TestUpdateWorkflow_AdmittedUpdatesAreSentToWorkerInOrderOfAdmission() {
+	// If our implementation is not in fact ordering updates correctly, then it may be ordering them
+	// non-deterministically. This number should be high enough that the false-negative rate of the test is low, but
+	// must not exceed our limit on number of in-flight updates. If we were picking a random ordering then the
+	// false-negative rate would be 1/(nUpdates!).
+	nUpdates := 20
+	s.testCluster.host.dcClient.OverrideValue(s.T(), dynamicconfig.WorkflowExecutionMaxInFlightUpdates, nUpdates)
+
+	tv := testvars.New(s.T().Name())
+	tv = s.startWorkflow(tv)
+	for i := 0; i < nUpdates; i++ {
+		updateId := fmt.Sprint(i)
+		go s.sendUpdate(tv, updateId)
+		for {
+			resp, err := s.pollUpdate(tv, updateId, &updatepb.WaitPolicy{LifecycleStage: enumspb.UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_UNSPECIFIED})
+			if err == nil {
+				s.Equal(enumspb.UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_ADMITTED, resp.Stage)
+				break
+			}
+			var notFoundErr *serviceerror.NotFound
+			s.ErrorAs(err, &notFoundErr) // poll beat send in race; poll again
+		}
+	}
+
+	nCalls := 0
+	poller := &TaskPoller{
+		Engine:    s.engine,
+		Namespace: s.namespace,
+		TaskQueue: tv.TaskQueue(),
+		Identity:  tv.WorkerIdentity(),
+		WorkflowTaskHandler: func(*commonpb.WorkflowExecution, *commonpb.WorkflowType, int64, int64, *historypb.History) ([]*commandpb.Command, error) {
+			return []*commandpb.Command{}, nil
+		},
+		MessageHandler: func(task *workflowservice.PollWorkflowTaskQueueResponse) ([]*protocolpb.Message, error) {
+			s.Len(task.Messages, nUpdates)
+			for i, m := range task.Messages {
+				s.Equal(tv.UpdateID(fmt.Sprint(i)), m.ProtocolInstanceId)
+			}
+			nCalls++
+			return []*protocolpb.Message{}, nil
+		},
+		Logger: s.Logger,
+		T:      s.T(),
+	}
+	_, err := poller.PollAndProcessWorkflowTask(WithRetries(1))
+	s.NoError(err)
+	s.Equal(1, nCalls)
+}
