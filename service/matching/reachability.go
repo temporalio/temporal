@@ -346,6 +346,7 @@ func (c *reachabilityCache) Get(ctx context.Context, countRequest manager.CountW
 		result = c.closedWFCache.Get(countRequest)
 	}
 	if result != nil {
+		// there's no reason that the cache would ever contain a non-bool, but just in case, treat non-bool as a miss
 		exists, hit = result.(bool)
 		if hit {
 			return exists, hit, nil
