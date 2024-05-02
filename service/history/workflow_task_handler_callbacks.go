@@ -448,6 +448,7 @@ func (handler *workflowTaskHandlerCallbacksImpl) handleWorkflowTaskCompleted(
 		wftStartedBuildId := ms.GetExecutionInfo().GetWorkflowTaskBuildId()
 		wftCompletedBuildId := request.GetWorkerVersionStamp().GetBuildId()
 		if wftCompletedBuildId != wftStartedBuildId {
+			workflowLease.GetReleaseFn()(nil)
 			return nil, serviceerror.NewNotFound("this workflow task was not dispatched to this Build ID")
 		}
 	}
