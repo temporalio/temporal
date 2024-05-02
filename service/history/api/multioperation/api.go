@@ -134,13 +134,13 @@ func Invoke(
 		case enumspb.WORKFLOW_ID_CONFLICT_POLICY_TERMINATE_EXISTING:
 			currentWorkflowLease.GetReleaseFn()(nil) // nil since nothing was modified
 
-			return nil, serviceerror.NewInternal("unhandled workflow id policy: terminate-existing")
+			return nil, serviceerror.NewInternal("unhandled workflow id conflict policy: terminate-existing")
 
 		// ... fail since this policy is invalid
 		case enumspb.WORKFLOW_ID_CONFLICT_POLICY_UNSPECIFIED:
 			currentWorkflowLease.GetReleaseFn()(nil) // nil since nothing was modified
 
-			return nil, serviceerror.NewInternal("unhandled workflow id policy: unspecified")
+			return nil, serviceerror.NewInternal("unhandled workflow id conflict policy: unspecified")
 		}
 	}
 
