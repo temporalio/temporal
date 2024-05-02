@@ -125,6 +125,9 @@ func (m *taskKeyManager) getExclusiveReaderHighWatermark(
 	)
 
 	nextTaskKey := m.generator.peekTaskKey(category)
+	if category.ID() == tasks.CategoryIDReplication {
+		nextTaskKey = tasks.NewImmediateKey(m.generator.maxAssignedTaskID(category) + 1)
+	}
 
 	exclusiveReaderHighWatermark := tasks.MinKey(
 		minTaskKey,
