@@ -56,7 +56,14 @@ var Module = fx.Provide(
 	NewExecutionManagerDLQWriter,
 	replicationTaskConverterFactoryProvider,
 	replicationTaskExecutorProvider,
-	replicationStreamSchedulerProvider,
+	fx.Annotated{
+		Name:   "HighPriorityTaskScheduler",
+		Target: replicationStreamHighPrioritySchedulerProvider,
+	},
+	fx.Annotated{
+		Name:   "LowPriorityTaskScheduler",
+		Target: replicationStreamLowPrioritySchedulerProvider,
+	},
 	executableTaskConverterProvider,
 	streamReceiverMonitorProvider,
 	ndcHistoryResenderProvider,
@@ -122,7 +129,7 @@ func replicationTaskExecutorProvider() TaskExecutorProvider {
 	}
 }
 
-func replicationStreamSchedulerProvider(
+func replicationStreamHighPrioritySchedulerProvider(
 	config *configs.Config,
 	logger log.Logger,
 	queueFactory ctasks.SequentialTaskQueueFactory[TrackableExecutableTask],
@@ -134,6 +141,27 @@ func replicationStreamSchedulerProvider(
 			WorkerCount: config.ReplicationProcessorSchedulerWorkerCount,
 		},
 		WorkflowKeyHashFn,
+		queueFactory,
+		logger,
+	)
+	lc.Append(fx.StartStopHook(scheduler.Start, scheduler.Stop))
+	return scheduler
+}
+
+func replicationStreamLowPrioritySchedulerProvider(
+	config *configs.Config,
+	logger log.Logger,
+	lc fx.Lifecycle,
+) ctasks.Scheduler[TrackableExecutableTask] {
+	queueFactory := func(task TrackableExecutableTask) ctasks.SequentialTaskQueue[TrackableExecutableTask] {
+		return NewSequentialTaskQueue(task)
+	}
+	scheduler := ctasks.NewSequentialScheduler[TrackableExecutableTask](
+		&ctasks.SequentialSchedulerOptions{
+			QueueSize:   config.ReplicationProcessorSchedulerQueueSize(),
+			WorkerCount: config.ReplicationProcessorSchedulerWorkerCount,
+		},
+		WorkflowKeyHashFnByNamespaceIdWorkflowId,
 		queueFactory,
 		logger,
 	)

@@ -44,18 +44,19 @@ type (
 	ProcessToolBox struct {
 		fx.In
 
-		Config                  *configs.Config
-		ClusterMetadata         cluster.Metadata
-		ClientBean              client.Bean
-		ShardController         shard.Controller
-		NamespaceCache          namespace.Registry
-		EagerNamespaceRefresher EagerNamespaceRefresher
-		NDCHistoryResender      xdc.NDCHistoryResender
-		TaskScheduler           ctasks.Scheduler[TrackableExecutableTask]
-		MetricsHandler          metrics.Handler
-		Logger                  log.Logger
-		EventSerializer         serialization.Serializer
-		DLQWriter               DLQWriter
-		HistoryEventsHandler    eventhandler.HistoryEventsHandler
+		Config                    *configs.Config
+		ClusterMetadata           cluster.Metadata
+		ClientBean                client.Bean
+		ShardController           shard.Controller
+		NamespaceCache            namespace.Registry
+		EagerNamespaceRefresher   EagerNamespaceRefresher
+		NDCHistoryResender        xdc.NDCHistoryResender
+		HighPriorityTaskScheduler ctasks.Scheduler[TrackableExecutableTask] `name:"HighPriorityTaskScheduler"`
+		LowPriorityTaskScheduler  ctasks.Scheduler[TrackableExecutableTask] `name:"LowPriorityTaskScheduler"`
+		MetricsHandler            metrics.Handler
+		Logger                    log.Logger
+		EventSerializer           serialization.Serializer
+		DLQWriter                 DLQWriter
+		HistoryEventsHandler      eventhandler.HistoryEventsHandler
 	}
 )

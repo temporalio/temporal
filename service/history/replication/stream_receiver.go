@@ -29,13 +29,17 @@ package replication
 import (
 	"context"
 	"fmt"
+	"math"
 	"sync/atomic"
 	"time"
 
 	"go.temporal.io/server/api/adminservice/v1"
+	ctasks "go.temporal.io/server/common/tasks"
+	"go.temporal.io/server/service/history/tasks"
+	"golang.org/x/crypto/openpgp/errors"
 	"google.golang.org/protobuf/types/known/timestamppb"
 
-	repicationpb "go.temporal.io/server/api/replication/v1"
+	replicationpb "go.temporal.io/server/api/replication/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/channel"
 	"go.temporal.io/server/common/log"
@@ -53,14 +57,15 @@ type (
 	StreamReceiverImpl struct {
 		ProcessToolBox
 
-		status         int32
-		clientShardKey ClusterShardKey
-		serverShardKey ClusterShardKey
-		taskTracker    ExecutableTaskTracker
-		shutdownChan   channel.ShutdownOnce
-		logger         log.Logger
-		stream         Stream
-		taskConverter  ExecutableTaskConverter
+		status                  int32
+		clientShardKey          ClusterShardKey
+		serverShardKey          ClusterShardKey
+		highPriorityTaskTracker ExecutableTaskTracker
+		lowPriorityTaskTracker  ExecutableTaskTracker
+		shutdownChan            channel.ShutdownOnce
+		logger                  log.Logger
+		stream                  Stream
+		taskConverter           ExecutableTaskConverter
 	}
 )
 
@@ -86,16 +91,16 @@ func NewStreamReceiver(
 		tag.SourceShardID(serverShardKey.ShardID),
 		tag.ShardID(clientShardKey.ShardID), // client is the local cluster (target cluster, passive cluster)
 	)
-	taskTracker := NewExecutableTaskTracker(logger, processToolBox.MetricsHandler)
 	return &StreamReceiverImpl{
 		ProcessToolBox: processToolBox,
 
-		status:         common.DaemonStatusInitialized,
-		clientShardKey: clientShardKey,
-		serverShardKey: serverShardKey,
-		taskTracker:    taskTracker,
-		shutdownChan:   channel.NewShutdownOnce(),
-		logger:         logger,
+		status:                  common.DaemonStatusInitialized,
+		clientShardKey:          clientShardKey,
+		serverShardKey:          serverShardKey,
+		highPriorityTaskTracker: NewExecutableTaskTracker(logger, processToolBox.MetricsHandler),
+		lowPriorityTaskTracker:  NewExecutableTaskTracker(logger, processToolBox.MetricsHandler),
+		shutdownChan:            channel.NewShutdownOnce(),
+		logger:                  logger,
 		stream: newStream(
 			processToolBox,
 			clientShardKey,
@@ -133,7 +138,8 @@ func (r *StreamReceiverImpl) Stop() {
 
 	r.shutdownChan.Shutdown()
 	r.stream.Close()
-	r.taskTracker.Cancel()
+	r.highPriorityTaskTracker.Cancel()
+	r.lowPriorityTaskTracker.Cancel()
 
 	r.logger.Info("StreamReceiver shutting down.")
 }
@@ -211,16 +217,44 @@ func (r *StreamReceiverImpl) recvEventLoop() error {
 func (r *StreamReceiverImpl) ackMessage(
 	stream Stream,
 ) (int64, error) {
-	watermarkInfo := r.taskTracker.LowWatermark()
-	size := r.taskTracker.Size()
-	if watermarkInfo == nil {
+	highPriorityWaterMarkInfo := r.highPriorityTaskTracker.LowWatermark()
+	lowPriorityWaterMarkInfo := r.lowPriorityTaskTracker.LowWatermark()
+	size := r.highPriorityTaskTracker.Size() + r.lowPriorityTaskTracker.Size()
+
+	if highPriorityWaterMarkInfo == nil && lowPriorityWaterMarkInfo == nil {
 		return 0, nil
+	}
+
+	inclusiveLowWaterMark := int64(math.MaxInt64)
+	var inclusiveLowWaterMarkTime time.Time
+	var highPriorityWatermark, lowPriorityWatermark *replicationpb.ReplicationState
+	if highPriorityWaterMarkInfo != nil {
+		highPriorityWatermark = &replicationpb.ReplicationState{
+			InclusiveLowWatermark:     highPriorityWaterMarkInfo.Watermark,
+			InclusiveLowWatermarkTime: timestamppb.New(highPriorityWaterMarkInfo.Timestamp),
+		}
+		if inclusiveLowWaterMark > highPriorityWaterMarkInfo.Watermark {
+			inclusiveLowWaterMark = highPriorityWaterMarkInfo.Watermark
+			inclusiveLowWaterMarkTime = highPriorityWaterMarkInfo.Timestamp
+		}
+	}
+	if lowPriorityWaterMarkInfo != nil {
+		lowPriorityWatermark = &replicationpb.ReplicationState{
+			InclusiveLowWatermark:     lowPriorityWaterMarkInfo.Watermark,
+			InclusiveLowWatermarkTime: timestamppb.New(lowPriorityWaterMarkInfo.Timestamp),
+		}
+		if inclusiveLowWaterMark > lowPriorityWaterMarkInfo.Watermark {
+			inclusiveLowWaterMark = lowPriorityWaterMarkInfo.Watermark
+			inclusiveLowWaterMarkTime = lowPriorityWaterMarkInfo.Timestamp
+		}
 	}
 	if err := stream.Send(&adminservice.StreamWorkflowReplicationMessagesRequest{
 		Attributes: &adminservice.StreamWorkflowReplicationMessagesRequest_SyncReplicationState{
-			SyncReplicationState: &repicationpb.SyncReplicationState{
-				InclusiveLowWatermark:     watermarkInfo.Watermark,
-				InclusiveLowWatermarkTime: timestamppb.New(watermarkInfo.Timestamp),
+			SyncReplicationState: &replicationpb.SyncReplicationState{
+				InclusiveLowWatermark:     inclusiveLowWaterMark,
+				InclusiveLowWatermarkTime: timestamppb.New(inclusiveLowWaterMarkTime),
+				HighPriorityState:         highPriorityWatermark,
+				LowPriorityState:          lowPriorityWatermark,
 			},
 		},
 	}); err != nil {
@@ -237,7 +271,7 @@ func (r *StreamReceiverImpl) ackMessage(
 		metrics.ToClusterIDTag(r.serverShardKey.ClusterID),
 		metrics.OperationTag(metrics.SyncWatermarkScope),
 	)
-	return watermarkInfo.Watermark, nil
+	return inclusiveLowWaterMark, nil
 }
 
 func (r *StreamReceiverImpl) processMessages(
@@ -257,7 +291,12 @@ func (r *StreamReceiverImpl) processMessages(
 		if streamResp.Err != nil {
 			return streamResp.Err
 		}
-		tasks := r.taskConverter.Convert(
+		// This should not happen because source side is sending task 1 by 1. Validate here just in case.
+		if err = ValidateTasksHaveSamePriority(streamResp.Resp.GetMessages().Priority, streamResp.Resp.GetMessages().ReplicationTasks...); err != nil {
+			r.logger.Error("ReplicationTask priority check failed", tag.Error(err))
+			break // exit loop and let stream reconnect to retry
+		}
+		convertedTasks := r.taskConverter.Convert(
 			clusterName,
 			r.clientShardKey,
 			r.serverShardKey,
@@ -265,15 +304,38 @@ func (r *StreamReceiverImpl) processMessages(
 		)
 		exclusiveHighWatermark := streamResp.Resp.GetMessages().ExclusiveHighWatermark
 		exclusiveHighWatermarkTime := timestamp.TimeValue(streamResp.Resp.GetMessages().ExclusiveHighWatermarkTime)
-		r.logger.Debug(fmt.Sprintf("StreamReceiver processMessages received %d tasks with exclusiveHighWatermark %d", len(tasks), exclusiveHighWatermark))
-		for _, task := range r.taskTracker.TrackTasks(WatermarkInfo{
+		taskTracker, taskScheduler := r.getTrackerAndSchedulerByPriority(tasks.ReplicationTaskPriority(streamResp.Resp.GetMessages().Priority))
+		for _, task := range taskTracker.TrackTasks(WatermarkInfo{
 			Watermark: exclusiveHighWatermark,
 			Timestamp: exclusiveHighWatermarkTime,
-		}, tasks...) {
-			r.ProcessToolBox.TaskScheduler.Submit(task)
+		}, convertedTasks...) {
+			taskScheduler.Submit(task)
 		}
 	}
 	r.logger.Error("StreamReceiver encountered channel close")
+	return nil
+}
+
+func (r *StreamReceiverImpl) getTrackerAndSchedulerByPriority(priority tasks.ReplicationTaskPriority) (ExecutableTaskTracker, ctasks.Scheduler[TrackableExecutableTask]) {
+	switch priority {
+	case tasks.ReplicationTaskPriorityHigh:
+		return r.highPriorityTaskTracker, r.ProcessToolBox.HighPriorityTaskScheduler
+	case tasks.ReplicationTaskPriorityLow:
+		return r.lowPriorityTaskTracker, r.ProcessToolBox.LowPriorityTaskScheduler
+	default:
+		panic(fmt.Sprintf("unknown priority %v", priority))
+	}
+}
+
+func ValidateTasksHaveSamePriority(messageBatchPriority int32, tasks ...*replicationpb.ReplicationTask) error {
+	if len(tasks) == 0 {
+		return nil
+	}
+	for _, task := range tasks {
+		if task.Priority != messageBatchPriority {
+			return errors.InvalidArgumentError(fmt.Sprintf("Task priority does not match batch priority: %v, %v", task.Priority, messageBatchPriority))
+		}
+	}
 	return nil
 }
 

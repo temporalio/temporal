@@ -96,11 +96,11 @@ func (s *streamReceiverSuite) SetupTest() {
 	}
 
 	processToolBox := ProcessToolBox{
-		ClusterMetadata: s.clusterMetadata,
-		TaskScheduler:   s.taskScheduler,
-		MetricsHandler:  metrics.NoopMetricsHandler,
-		Logger:          log.NewTestLogger(),
-		DLQWriter:       NoopDLQWriter{},
+		ClusterMetadata:           s.clusterMetadata,
+		HighPriorityTaskScheduler: s.taskScheduler,
+		MetricsHandler:            metrics.NoopMetricsHandler,
+		Logger:                    log.NewTestLogger(),
+		DLQWriter:                 NoopDLQWriter{},
 	}
 	s.clusterMetadata.EXPECT().ClusterNameForFailoverVersion(true, gomock.Any()).Return("some-cluster-name").AnyTimes()
 	s.streamReceiver = NewStreamReceiver(
@@ -121,7 +121,7 @@ func (s *streamReceiverSuite) SetupTest() {
 			},
 		},
 	).AnyTimes()
-	s.streamReceiver.taskTracker = s.taskTracker
+	s.streamReceiver.highPriorityTaskTracker = s.taskTracker
 }
 
 func (s *streamReceiverSuite) TearDownTest() {
