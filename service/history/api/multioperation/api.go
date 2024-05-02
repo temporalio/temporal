@@ -247,7 +247,7 @@ func startAndUpdateWorkflow(
 		// The workflow was meant to be started - but was actually not started since it's already running.
 		// The best way forward is to exit and retry from the top.
 		// By returning an Unavailable service error, the entire MultiOperation will be retried.
-		return nil, serviceerror.NewInvalidArgument("Workflow is ")
+		return nil, serviceerror.NewUnavailable("Workflow could not be started as it is already running")
 	}
 
 	// without this, there's no Update registry on the call from Matching back to History
