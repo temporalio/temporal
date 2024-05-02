@@ -305,7 +305,7 @@ func (r *registry) Send(
 	for _, upd := range r.updates {
 		updates = append(updates, upd)
 	}
-	slices.SortFunc(updates, func(u1, u2 *Update) int { return u1.admittedTime.Compare(u2.admittedTime) })
+	slices.SortStableFunc(updates, func(u1, u2 *Update) int { return u1.admittedTime.Compare(u2.admittedTime) })
 
 	for _, upd := range updates {
 		outgoingMessage := upd.Send(ctx, includeAlreadySent, sequencingEventID)
