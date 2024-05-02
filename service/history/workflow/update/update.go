@@ -295,7 +295,7 @@ func (u *Update) abortWaiters() {
 func (u *Update) Admit(
 	ctx context.Context,
 	req *updatepb.Request,
-	eventStore EventStore,
+	eventStore EventStore, // Will be useful for durable admitted.
 ) error {
 	if u.state != stateCreated {
 		return nil
