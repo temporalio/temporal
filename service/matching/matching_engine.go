@@ -1093,6 +1093,7 @@ func (e *matchingEngineImpl) UpdateWorkerVersioningRules(
 	updateOptions := UserDataUpdateOptions{}
 	cT := req.GetConflictToken()
 	var getResp *matchingservice.GetWorkerVersioningRulesResponse
+	var maxRedirectRuleChainLength int
 
 	err = tqMgr.GetUserDataManager().UpdateUserData(ctx, updateOptions, func(data *persistencespb.TaskQueueUserData) (*persistencespb.TaskQueueUserData, bool, error) {
 		clk := data.GetClock()
@@ -1172,6 +1173,15 @@ func (e *matchingEngineImpl) UpdateWorkerVersioningRules(
 		if err != nil {
 			return nil, false, err
 		}
+		// Get max redirect rule chain (min chain is 1, because we count vertices not edges)
+		maxRedirectRuleChainLength = 1
+		activeRedirectRules := getActiveRedirectRules(versioningData.GetRedirectRules())
+		for _, rule := range activeRedirectRules {
+			upstream := getUpstreamBuildIds(rule.GetRule().GetTargetBuildId(), activeRedirectRules)
+			if len(upstream)+1 > maxRedirectRuleChainLength {
+				maxRedirectRuleChainLength = len(upstream) + 1
+			}
+		}
 
 		// Clean up tombstones after all fallible tasks are complete, once we know we are committing and replicating the changes.
 		// We can replicate tombstone cleanup, because it's just based on DeletionTimestamp, so no need to only do it locally.
@@ -1191,9 +1201,11 @@ func (e *matchingEngineImpl) UpdateWorkerVersioningRules(
 	// log resulting rule counts
 	assignmentRules := getResp.GetResponse().GetAssignmentRules()
 	redirectRules := getResp.GetResponse().GetCompatibleRedirectRules()
+
 	e.logger.Info("UpdateWorkerVersioningRules completed",
 		tag.WorkerVersioningRedirectRuleCount(len(redirectRules)),
-		tag.WorkerVersioningAssignmentRuleCount(len(assignmentRules)))
+		tag.WorkerVersioningAssignmentRuleCount(len(assignmentRules)),
+		tag.WorkerVersioningMaxRedirectRuleChain(maxRedirectRuleChainLength))
 
 	return &matchingservice.UpdateWorkerVersioningRulesResponse{Response: &workflowservice.UpdateWorkerVersioningRulesResponse{
 		AssignmentRules:         assignmentRules,

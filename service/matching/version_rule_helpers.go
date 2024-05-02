@@ -366,9 +366,10 @@ func checkAssignmentConditions(g *persistencespb.VersioningData, maxARs int, req
 
 // checkRedirectConditions checks for validity conditions that must be assessed by looking at the entire set of rules.
 // It returns an error if the new set of redirect rules don't meet the following requirements:
-// - No more rules than dynamicconfig.VersionRedirectRuleLimitPerQueue
-// - The DAG of redirect rules must not contain a cycle
-// - The DAG of redirect rules must not contain a chain of connected rules longer than dynamicconfig.VersionRedirectRuleChainLimitPerQueue
+//   - No more rules than dynamicconfig.VersionRedirectRuleLimitPerQueue
+//   - The DAG of redirect rules must not contain a cycle
+//   - The DAG of redirect rules must not contain a chain of connected rules longer than dynamicconfig.VersionRedirectRuleChainLimitPerQueue
+//     (Here, a "chain" counts the # of vertices, not the # of edges. So 3 ---> 4 ---> 5 has a chain length of 3)
 func checkRedirectConditions(g *persistencespb.VersioningData, maxRRs, maxChain int) error {
 	activeRules := getActiveRedirectRules(g.GetRedirectRules())
 	if maxRRs > 0 && len(activeRules) > maxRRs {
