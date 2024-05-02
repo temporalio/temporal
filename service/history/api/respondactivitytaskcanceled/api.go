@@ -28,7 +28,6 @@ import (
 	"context"
 	"time"
 
-	"github.com/google/uuid"
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/definition"
@@ -81,9 +80,7 @@ func Invoke(
 			}
 
 			scheduledEventID := token.GetScheduledEventId()
-			isCalledCompleteActivityById := false
 			if scheduledEventID == common.EmptyEventID { // client call CompleteActivityById, so get scheduledEventID by activityID
-				isCalledCompleteActivityById = true
 				scheduledEventID, err0 = api.GetActivityScheduledEventID(token.GetActivityId(), mutableState)
 				if err0 != nil {
 					return nil, err0
@@ -101,7 +98,7 @@ func Invoke(
 			}
 
 			if !isRunning ||
-				(!isCalledCompleteActivityById && ai.StartedEventId == common.EmptyEventID) ||
+				ai.StartedEventId == common.EmptyEventID ||
 				(token.GetScheduledEventId() != common.EmptyEventID && token.Attempt != ai.Attempt) ||
 				(token.GetVersion() != common.EmptyVersion && token.Version != ai.Version) {
 				return nil, consts.ErrActivityTaskNotFound
@@ -110,18 +107,6 @@ func Invoke(
 			// sanity check if activity is requested to be cancelled
 			if !ai.CancelRequested {
 				return nil, consts.ErrActivityTaskNotCancelRequested
-			}
-
-			// We fabricate a started event only when the activity is not started yet and
-			// we need to force cancel an activity
-			if isCalledCompleteActivityById && ai.GetRetryLastFailure() != nil {
-				_, err := mutableState.AddActivityTaskStartedEvent(ai, scheduledEventID,
-					uuid.New().String(),
-					req.GetCancelRequest().GetIdentity(),
-					mutableState.GetMostRecentWorkerVersionStamp())
-				if err != nil {
-					return nil, err
-				}
 			}
 
 			if _, err := mutableState.AddActivityTaskCanceledEvent(

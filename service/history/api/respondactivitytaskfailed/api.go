@@ -28,7 +28,6 @@ import (
 	"context"
 	"time"
 
-	"github.com/google/uuid"
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/workflowservice/v1"
 
@@ -84,9 +83,9 @@ func Invoke(
 			}
 
 			scheduledEventID := token.GetScheduledEventId()
-			isCalledCompleteActivityById := false
+			isCompletedByID := false
 			if scheduledEventID == common.EmptyEventID { // client call CompleteActivityById, so get scheduledEventID by activityID
-				isCalledCompleteActivityById = true
+				isCompletedByID = true
 				scheduledEventID, err0 = api.GetActivityScheduledEventID(token.GetActivityId(), mutableState)
 				if err0 != nil {
 					return nil, err0
@@ -104,7 +103,7 @@ func Invoke(
 			}
 
 			if !activityRunning ||
-				(!isCalledCompleteActivityById && ai.StartedEventId == common.EmptyEventID) ||
+				(!isCompletedByID && ai.StartedEventId == common.EmptyEventID) ||
 				(token.GetScheduledEventId() != common.EmptyEventID && token.Attempt != ai.Attempt) ||
 				(token.GetVersion() != common.EmptyVersion && token.Version != ai.Version) {
 				return nil, consts.ErrActivityTaskNotFound
@@ -129,15 +128,16 @@ func Invoke(
 			if retryState != enumspb.RETRY_STATE_IN_PROGRESS {
 				// We fabricate a started event only when the activity is not started yet and
 				// we need to force fail an activity
-				if isCalledCompleteActivityById && ai.GetRetryLastFailure() != nil {
+				if isCompletedByID && ai.StartedEventId == common.EmptyEventID {
 					_, err := mutableState.AddActivityTaskStartedEvent(ai, scheduledEventID,
-						uuid.New().String(),
+						"",
 						req.GetFailedRequest().GetIdentity(),
 						mutableState.GetMostRecentWorkerVersionStamp())
 					if err != nil {
 						return nil, err
 					}
 				}
+				ai, _ = mutableState.GetActivityInfo(scheduledEventID)
 				// no more retry, and we want to record the failure event
 				if _, err := mutableState.AddActivityTaskFailedEvent(scheduledEventID, ai.StartedEventId, failure, retryState, request.GetIdentity(), request.GetWorkerVersion()); err != nil {
 					// Unable to add ActivityTaskFailed event to history

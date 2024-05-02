@@ -40,7 +40,6 @@ import (
 	workflowpb "go.temporal.io/api/workflow/v1"
 	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/sdk/client"
-	"go.temporal.io/sdk/temporal"
 	"go.temporal.io/sdk/worker"
 	"go.temporal.io/sdk/workflow"
 	"go.temporal.io/server/common/dynamicconfig"
@@ -257,63 +256,3 @@ func (s *FunctionalSuite) TestWorkflowNexusCallbacks_CarriedOverContinueAsNew() 
 		}
 	}
 }
-
-func (s *FunctionalSuite) TestWorkflowCallbacks_ForceActivityComplete() {
-	dc := s.testCluster.host.dcClient
-	dc.OverrideValue(s.T(), dynamicconfig.FrontendEnableCallbackAttachment, true)
-	defer dc.RemoveOverride(dynamicconfig.FrontendEnableCallbackAttachment)
-
-	sdkClient, err := client.Dial(client.Options{
-		HostPort:  s.testCluster.GetHost().FrontendGRPCAddress(),
-		Namespace: s.namespace,
-	})
-	s.NoError(err)
-
-	activityErrCh := make(chan error, 1)
-	mockErrorActivity := func(ctx context.Context) error {
-		err = errors.New("mock error")
-		activityErrCh <- err
-		return err
-	}
-	wf := func(ctx workflow.Context) error {
-		ao := workflow.ActivityOptions{
-			StartToCloseTimeout: 3 * time.Minute,
-			RetryPolicy: &temporal.RetryPolicy{
-				InitialInterval: 2 * time.Minute,
-			},
-		}
-		ctx2 := workflow.WithActivityOptions(ctx, ao)
-		var err error
-		workflow.ExecuteActivity(ctx2, mockErrorActivity).Get(ctx2, &err)
-		return err
-	}
-
-	taskQueue := s.randomizeStr(s.T().Name())
-	workflowType := "test"
-	s.NoError(err)
-
-	w := worker.New(sdkClient, taskQueue, worker.Options{})
-	w.RegisterWorkflowWithOptions(wf, workflow.RegisterOptions{Name: workflowType})
-	w.RegisterActivity(mockErrorActivity)
-	s.NoError(w.Start())
-	defer w.Stop()
-
-	ctx := NewContext()
-	workflowOptions := client.StartWorkflowOptions{
-		ID:        uuid.New(),
-		TaskQueue: taskQueue,
-	}
-	_, err = sdkClient.ExecuteWorkflow(ctx, workflowOptions, wf)
-	s.NoError(err)
- 	<-activityErrCh
-	description, err := sdkClient.DescribeWorkflowExecution(ctx, workflowOptions.ID, "")
-	s.Equal("mock error", description.PendingActivities[0].LastFailure.Message)
-	activityId := description.PendingActivities[0].ActivityId
-	run := sdkClient.GetWorkflow(ctx, workflowOptions.ID, "")
-	
-	err = sdkClient.CompleteActivityByID(ctx, s.namespace, run.GetID(), run.GetRunID(), activityId, nil, nil)
-	s.NoError(err)
-	description, err = sdkClient.DescribeWorkflowExecution(ctx, workflowOptions.ID, "")
-	s.NoError(err)
-}
-
