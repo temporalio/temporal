@@ -46,7 +46,6 @@ import (
 )
 
 var (
-	multiOpRetryErr   = fmt.Errorf("retry")
 	multiOpAbortedErr = serviceerror.NewMultiOperationAborted("Operation was aborted.")
 )
 
@@ -97,33 +96,6 @@ func Invoke(
 		return startAndUpdateWorkflow(ctx, shardContext, workflowConsistencyChecker, starter, updater)
 	}
 
-	for {
-		select {
-		case <-ctx.Done():
-			return nil, ctx.Err()
-		default:
-			resp, err := execute(ctx, workflowConsistencyChecker, namespaceEntry, startReq, shardContext, updater, starter)
-
-			// A retry is needed.
-			// For example, when a workflow could not be started since it's already running.
-			if errors.Is(err, multiOpRetryErr) {
-				continue
-			}
-
-			return resp, err
-		}
-	}
-}
-
-func execute(
-	ctx context.Context,
-	workflowConsistencyChecker api.WorkflowConsistencyChecker,
-	namespaceEntry *namespace.Namespace,
-	startReq *historyservice.StartWorkflowExecutionRequest,
-	shardContext shard.Context,
-	updater *updateworkflow.Updater,
-	starter *startworkflow.Starter,
-) (*historyservice.ExecuteMultiOperationResponse, error) {
 	currentWorkflowLease, err := workflowConsistencyChecker.GetWorkflowLease(
 		ctx,
 		nil,
@@ -272,9 +244,10 @@ func startAndUpdateWorkflow(
 	}
 
 	if !startResp.Started {
-		// The workflow was not started, but the update was already applied there.
-		// The best way forward is to exit here and retry from the top.
-		return nil, multiOpRetryErr
+		// The workflow was meant to be started - but was actually not started since it's already running.
+		// The best way forward is to exit and retry from the top.
+		// By returning an Unavailable service error, the entire MultiOperation will be retried.
+		return nil, serviceerror.NewInvalidArgument("Workflow is ")
 	}
 
 	// without this, there's no Update registry on the call from Matching back to History
