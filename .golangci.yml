@@ -12,11 +12,6 @@ linters:
     - forbidigo
     - exhaustive
     - godox
-run:
-  skip-dirs:
-    - ^api
-    - ^proto
-    - ^.git
 linters-settings:
   godox:
     keywords:
@@ -25,6 +20,8 @@ linters-settings:
     fieldalignment: 0
   forbidigo:
     forbid:
+      - p: time.Sleep
+        msg: "Please use require.Eventually or assert.Eventually instead unless you've no other option"
       - p: ^time\.After$
         msg: "time.After may leak resources. Use time.NewTimer instead."
   revive:
@@ -106,7 +103,15 @@ linters-settings:
           - "bytes.Buffer.*"
           - "strings.Builder.*"
 issues:
+  exclude-dirs:
+    - ^api
+    - ^proto
+    - ^.git
   exclude-rules:
+    - path-except: _test\.go|tests/.+\.go
+      text: "time.Sleep"
+      linters:
+        - forbidigo
     - path: _test\.go|tests/.+\.go
       text: "(cyclomatic|cognitive)"  # false positives when using subtests
       linters:
