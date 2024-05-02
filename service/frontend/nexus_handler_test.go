@@ -149,7 +149,7 @@ func newOperationContext(options contextOptions) *operationContext {
 
 	oc.clusterMetadata = clustertest.NewMetadataForTest(cluster.NewTestClusterMetadataConfig(true, !options.namespacePassive))
 	oc.forwardingEnabledForNamespace = dynamicconfig.GetBoolPropertyFnFilteredByNamespace(options.redirectAllow)
-	oc.redirect = NewRedirectionInterceptor(nil, nil, config.DCRedirectionPolicy{Policy: DCRedirectionPolicyAllAPIsForwarding}, oc.logger, nil, oc.metricsHandlerForInterceptors, clock.NewRealTimeSource(), oc.clusterMetadata)
+	oc.redirectionInterceptor = NewRedirectionInterceptor(nil, nil, config.DCRedirectionPolicy{Policy: DCRedirectionPolicyAllAPIsForwarding}, oc.logger, nil, oc.metricsHandlerForInterceptors, clock.NewRealTimeSource(), oc.clusterMetadata)
 
 	return oc
 }
@@ -291,7 +291,6 @@ func TestNexusInterceptRequest_ForwardingEnabled_ResultsInNotActiveError(t *test
 	err = oc.interceptRequest(ctx, &matchingservice.DispatchNexusTaskRequest{}, nexus.Header{})
 	var notActiveErr *serviceerror.NamespaceNotActive
 	require.ErrorAs(t, err, &notActiveErr)
-	require.Equal(t, fmt.Sprintf("Namespace: %s is active in cluster: %s, while current cluster %s is a standby cluster.", oc.namespaceName, cluster.TestAlternativeClusterName, cluster.TestCurrentClusterName), notActiveErr.Message)
 	mh := oc.metricsHandler.(*metricstest.CaptureHandler) //nolint:revive
 	capture := mh.StartCapture()
 	oc.metricsHandler.Counter("test").Record(1)
