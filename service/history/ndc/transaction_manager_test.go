@@ -49,6 +49,7 @@ import (
 	"go.temporal.io/server/service/history/tests"
 	"go.temporal.io/server/service/history/workflow"
 	wcache "go.temporal.io/server/service/history/workflow/cache"
+	"go.temporal.io/server/service/history/workflow/update"
 )
 
 type (
@@ -153,6 +154,9 @@ func (s *transactionMgrSuite) TestBackfillWorkflow_CurrentWorkflow_Active_Open()
 	targetWorkflow := NewMockWorkflow(s.controller)
 	weContext := workflow.NewMockContext(s.controller)
 	mutableState := workflow.NewMockMutableState(s.controller)
+	mutableState.EXPECT().VisitUpdates(gomock.Any()).Return()
+	mutableState.EXPECT().GetCurrentVersion().Return(int64(0))
+	updateRegistry := update.NewRegistry(mutableState)
 	var releaseFn wcache.ReleaseCacheFunc = func(error) { releaseCalled = true }
 
 	workflowEvents := &persistence.WorkflowEvents{
@@ -167,7 +171,7 @@ func (s *transactionMgrSuite) TestBackfillWorkflow_CurrentWorkflow_Active_Open()
 	s.mockClusterMetadata.EXPECT().GetCurrentClusterName().Return(cluster.TestCurrentClusterName).AnyTimes()
 	s.mockClusterMetadata.EXPECT().ClusterNameForFailoverVersion(s.namespaceEntry.IsGlobalNamespace(), s.namespaceEntry.FailoverVersion()).Return(cluster.TestCurrentClusterName).AnyTimes()
 
-	s.mockEventsReapplier.EXPECT().ReapplyEvents(ctx, mutableState, workflowEvents.Events, runID).Return(workflowEvents.Events, nil)
+	s.mockEventsReapplier.EXPECT().ReapplyEvents(ctx, mutableState, updateRegistry, workflowEvents.Events, runID).Return(workflowEvents.Events, nil)
 
 	mutableState.EXPECT().IsCurrentWorkflowGuaranteed().Return(true).AnyTimes()
 	mutableState.EXPECT().IsWorkflowExecutionRunning().Return(true).AnyTimes()
@@ -178,6 +182,7 @@ func (s *transactionMgrSuite) TestBackfillWorkflow_CurrentWorkflow_Active_Open()
 	weContext.EXPECT().UpdateWorkflowExecutionWithNew(
 		gomock.Any(), s.mockShard, persistence.UpdateWorkflowModeUpdateCurrent, nil, nil, workflow.TransactionPolicyActive, (*workflow.TransactionPolicy)(nil),
 	).Return(nil)
+	weContext.EXPECT().UpdateRegistry(ctx, mutableState).Return(updateRegistry)
 	err := s.transactionMgr.BackfillWorkflow(ctx, targetWorkflow, workflowEvents)
 	s.NoError(err)
 	s.True(releaseCalled)

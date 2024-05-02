@@ -37,7 +37,7 @@ import (
 	enumspb "go.temporal.io/api/enums/v1"
 	historypb "go.temporal.io/api/history/v1"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
-	"go.temporal.io/api/update/v1"
+	updatepb "go.temporal.io/api/update/v1"
 	"google.golang.org/protobuf/types/known/timestamppb"
 
 	historyspb "go.temporal.io/server/api/history/v1"
@@ -58,6 +58,7 @@ import (
 	"go.temporal.io/server/service/history/tests"
 	"go.temporal.io/server/service/history/workflow"
 	wcache "go.temporal.io/server/service/history/workflow/cache"
+	"go.temporal.io/server/service/history/workflow/update"
 )
 
 type (
@@ -602,10 +603,13 @@ func (s *workflowResetterSuite) TestReapplyContinueAsNewWorkflowEvents_WithOutCo
 	}, nil)
 
 	mutableState := workflow.NewMockMutableState(s.controller)
+	mutableState.EXPECT().VisitUpdates(gomock.Any()).Return()
+	updateRegistry := update.NewRegistry(mutableState)
 
 	lastVisitedRunID, err := s.workflowResetter.reapplyContinueAsNewWorkflowEvents(
 		ctx,
 		mutableState,
+		updateRegistry,
 		s.namespaceID,
 		s.workflowID,
 		s.baseRunID,
@@ -720,10 +724,13 @@ func (s *workflowResetterSuite) TestReapplyContinueAsNewWorkflowEvents_WithConti
 	_, _ = s.workflowResetter.workflowCache.(*wcache.CacheImpl).PutIfNotExist(resetContextCacheKey, resetContext)
 
 	mutableState := workflow.NewMockMutableState(s.controller)
+	mutableState.EXPECT().VisitUpdates(gomock.Any()).Return()
+	updateRegistry := update.NewRegistry(mutableState)
 
 	lastVisitedRunID, err := s.workflowResetter.reapplyContinueAsNewWorkflowEvents(
 		ctx,
 		mutableState,
+		updateRegistry,
 		s.namespaceID,
 		s.workflowID,
 		s.baseRunID,
@@ -784,10 +791,13 @@ func (s *workflowResetterSuite) TestReapplyWorkflowEvents() {
 	}, nil)
 
 	mutableState := workflow.NewMockMutableState(s.controller)
+	mutableState.EXPECT().VisitUpdates(gomock.Any()).Return()
+	updateRegistry := update.NewRegistry(mutableState)
 
-	nextRunID, err := s.workflowResetter.reapplyWorkflowEvents(
+	nextRunID, err := s.workflowResetter.reapplyEventsFromBranch(
 		context.Background(),
 		mutableState,
+		updateRegistry,
 		firstEventID,
 		nextEventID,
 		branchToken,
@@ -833,7 +843,7 @@ func (s *workflowResetterSuite) TestReapplyEvents() {
 		EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_UPDATE_ADMITTED,
 		Attributes: &historypb.HistoryEvent_WorkflowExecutionUpdateAdmittedEventAttributes{
 			WorkflowExecutionUpdateAdmittedEventAttributes: &historypb.WorkflowExecutionUpdateAdmittedEventAttributes{
-				Request: &update.Request{Input: &update.Input{Args: payloads.EncodeString("update-request-payload-1")}},
+				Request: &updatepb.Request{Input: &updatepb.Input{Args: payloads.EncodeString("update-request-payload-1")}},
 				Origin:  enumspb.UPDATE_ADMITTED_EVENT_ORIGIN_UNSPECIFIED,
 			},
 		},
@@ -843,7 +853,7 @@ func (s *workflowResetterSuite) TestReapplyEvents() {
 		EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_UPDATE_ACCEPTED,
 		Attributes: &historypb.HistoryEvent_WorkflowExecutionUpdateAcceptedEventAttributes{
 			WorkflowExecutionUpdateAcceptedEventAttributes: &historypb.WorkflowExecutionUpdateAcceptedEventAttributes{
-				AcceptedRequest: &update.Request{Input: &update.Input{Args: payloads.EncodeString("update-request-payload-1")}},
+				AcceptedRequest: &updatepb.Request{Input: &updatepb.Input{Args: payloads.EncodeString("update-request-payload-1")}},
 			},
 		},
 	}
@@ -885,7 +895,7 @@ func (s *workflowResetterSuite) TestReapplyEvents() {
 		}
 	}
 
-	_, err := reapplyEvents(ms, events, nil, "")
+	_, err := reapplyEvents(ms, nil, events, nil, "")
 	s.NoError(err)
 }
 

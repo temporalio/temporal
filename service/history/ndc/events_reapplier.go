@@ -37,6 +37,7 @@ import (
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/service/history/workflow"
+	"go.temporal.io/server/service/history/workflow/update"
 )
 
 type (
@@ -44,6 +45,7 @@ type (
 		ReapplyEvents(
 			ctx context.Context,
 			ms workflow.MutableState,
+			updateRegistry update.Registry,
 			historyEvents []*historypb.HistoryEvent,
 			runID string,
 		) ([]*historypb.HistoryEvent, error)
@@ -69,6 +71,7 @@ func NewEventsReapplier(
 func (r *EventsReapplierImpl) ReapplyEvents(
 	ctx context.Context,
 	ms workflow.MutableState,
+	updateRegistry update.Registry,
 	historyEvents []*historypb.HistoryEvent,
 	runID string,
 ) ([]*historypb.HistoryEvent, error) {
@@ -76,7 +79,7 @@ func (r *EventsReapplierImpl) ReapplyEvents(
 	if !ms.IsWorkflowExecutionRunning() {
 		return nil, serviceerror.NewInternal("unable to reapply events to closed workflow.")
 	}
-	reappliedEvents, err := reapplyEvents(ms, historyEvents, nil, runID)
+	reappliedEvents, err := reapplyEvents(ms, &updateRegistry, historyEvents, nil, runID)
 	if err != nil {
 		return nil, err
 	}

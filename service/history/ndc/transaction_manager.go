@@ -304,6 +304,7 @@ func (r *transactionMgrImpl) backfillWorkflowEventsReapply(
 			if _, err := r.eventsReapplier.ReapplyEvents(
 				ctx,
 				targetWorkflow.GetMutableState(),
+				targetWorkflow.GetContext().UpdateRegistry(ctx, targetWorkflow.GetMutableState()),
 				totalEvents,
 				targetWorkflow.GetMutableState().GetExecutionState().GetRunId(),
 			); err != nil {
