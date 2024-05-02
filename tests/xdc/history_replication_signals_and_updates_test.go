@@ -386,6 +386,72 @@ func (s *hrsuTestSuite) TestConflictResolutionDoesNotReapplyAcceptedUpdateWithCo
 	}
 }
 
+// TestConflictResolutionDoesNotReapplyAdmittedUpdateWithConflictingId creates a split-brain scenario in which both
+// clusters believe they are active. Both clusters then accept an update and write it to their own history, but those
+// updates have the same update ID. This time however, we perform a WorkflowReset in one of the clusters, creating an
+// UpdateAdmitted event. The test confirms that when the conflict is resolved, we do not reapply the UpdateAdmitted
+// event, since it has a conflicting ID.
+func (s *hrsuTestSuite) TestConflictResolutionDoesNotReapplyAdmittedUpdateWithConflictingId() {
+	t, ctx, cancel := s.startHrsuTest()
+	defer cancel()
+	t.cluster1.startWorkflow(ctx, func(workflow.Context) error { return nil })
+
+	// Both clusters accept an update with the same ID.
+	t.enterSplitBrainStateAndAcceptUpdatesInBothClusters(ctx, "update-id", "update-id")
+	for i, c := range []hrsuTestCluster{t.cluster1, t.cluster2} {
+		clusterId := i + 1
+		expectedVersions := []int{1, 1, 1, 1, 1}
+		if clusterId == 2 {
+			expectedVersions = []int{1, 1, 2, 2, 2}
+		}
+		t.s.HistoryRequire.EqualHistoryEventsAndVersions(fmt.Sprintf(`
+	1 WorkflowExecutionStarted
+	2 WorkflowTaskScheduled
+	3 WorkflowTaskStarted
+	4 WorkflowTaskCompleted
+	5 WorkflowExecutionUpdateAccepted {"ProtocolInstanceId": "update-id", "AcceptedRequest": {"Input": {"Args": {"Payloads": [{"Data": "\"cluster%d-update-input\""}]}}}}
+	`, clusterId), expectedVersions, c.getHistory(ctx))
+	}
+	// Perform a reset in each cluster; this converts the UpdateAccepted events to UpdateAdmitted events.
+	workflowTaskCompletedId := 4
+	var resetRunIds []string
+	for i, c := range []hrsuTestCluster{t.cluster1, t.cluster2} {
+		clusterId := i + 1
+		resetRunIds = append(resetRunIds, c.resetWorkflow(ctx, int64(workflowTaskCompletedId)))
+		t.s.HistoryRequire.EqualHistoryEventsAndVersions(fmt.Sprintf(`
+	1 WorkflowExecutionStarted
+	2 WorkflowTaskScheduled
+	3 WorkflowTaskStarted
+	4 WorkflowTaskFailed
+	5 WorkflowExecutionUpdateAdmitted {"Request": {"Meta": {"UpdateId": "update-id"}, "Input": {"Args": {"Payloads": [{"Data": "\"cluster%d-update-input\""}]}}}}
+	6 WorkflowTaskScheduled
+	`, clusterId), []int{1, 1, clusterId, clusterId, clusterId, clusterId}, c.getHistoryForRunId(ctx, resetRunIds[i]))
+	}
+	// Execute pending history replication tasks. Each cluster sends its update to the other, triggering conflict
+	// resolution.
+	t.cluster1.executeHistoryReplicationTasksUntil(enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_UPDATE_ADMITTED)
+	t.cluster2.executeHistoryReplicationTasksUntil(enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_UPDATE_ADMITTED)
+
+	// Cluster 2 has the higher failover version, so its history branch is chosen in the conflict resolution.
+	activeRunId := resetRunIds[1]
+
+	for _, c := range []hrsuTestCluster{t.cluster1, t.cluster2} {
+		// Cluster1 has received an admitted update with failover version 2, which superseded its own update. Cluster2 has
+		// received an admitted update from cluster 1 with a lower failover version. Normally, such an update would be
+		// reapplied. But since it has the same update ID as the cluster 1 update, and since that update is not completed,
+		// we must not reapply it. The result is that both clusters have the same history; the update admitted in cluster 1
+		// has been dropped.
+		t.s.HistoryRequire.EqualHistoryEventsAndVersions(`
+	1 WorkflowExecutionStarted
+	2 WorkflowTaskScheduled
+	3 WorkflowTaskStarted
+	4 WorkflowTaskFailed
+	5 WorkflowExecutionUpdateAdmitted {"Request": {"Meta": {"UpdateId": "update-id"}, "Input": {"Args": {"Payloads": [{"Data": "\"cluster2-update-input\""}]}}}}
+	6 WorkflowTaskScheduled
+	`, []int{1, 1, 2, 2, 2, 2}, c.getHistoryForRunId(ctx, activeRunId))
+	}
+}
+
 // Start update in cluster 1, run it through to acceptance, replicate it to cluster 2, then failover to 2 and complete
 // the update there.
 func (t *hrsuTest) startAndAcceptUpdateInCluster1ThenFailoverTo2AndCompleteUpdate(ctx context.Context) {
@@ -689,7 +755,7 @@ func (c *hrsuTestCluster) pollAndAcceptUpdate() error {
 		Logger:              c.t.s.logger,
 		T:                   c.t.s.T(),
 	}
-	_, err := poller.PollAndProcessWorkflowTask(tests.WithDumpHistory)
+	_, err := poller.PollAndProcessWorkflowTask()
 	return err
 }
 
@@ -704,7 +770,7 @@ func (c *hrsuTestCluster) pollAndCompleteUpdate(updateId string) error {
 		Logger:              c.t.s.logger,
 		T:                   c.t.s.T(),
 	}
-	_, err := poller.PollAndProcessWorkflowTask(tests.WithDumpHistory)
+	_, err := poller.PollAndProcessWorkflowTask()
 	return err
 }
 
@@ -719,7 +785,7 @@ func (c *hrsuTestCluster) pollAndErrorWhileProcessingWorkflowTask() error {
 		Logger:              c.t.s.logger,
 		T:                   c.t.s.T(),
 	}
-	_, err := poller.PollAndProcessWorkflowTask(tests.WithDumpHistory)
+	_, err := poller.PollAndProcessWorkflowTask()
 	return err
 }
 
@@ -865,6 +931,18 @@ func (c *hrsuTestCluster) startWorkflow(ctx context.Context, workflowFn any) {
 	}
 }
 
+func (c *hrsuTestCluster) resetWorkflow(ctx context.Context, workflowTaskFinishEventId int64) string {
+	resp, err := c.client.ResetWorkflowExecution(ctx, &workflowservice.ResetWorkflowExecutionRequest{
+		Namespace:                 c.t.tv.NamespaceName().String(),
+		WorkflowExecution:         c.t.tv.WorkflowExecution(),
+		Reason:                    "reset",
+		WorkflowTaskFinishEventId: workflowTaskFinishEventId,
+		ResetReapplyType:          enumspb.RESET_REAPPLY_TYPE_ALL_ELIGIBLE,
+	})
+	c.t.s.NoError(err)
+	return resp.RunId
+}
+
 func (c *hrsuTestCluster) setActive(ctx context.Context, clusterName string) {
 	_, err := c.testCluster.GetFrontendClient().UpdateNamespace(ctx, &workflowservice.UpdateNamespaceRequest{
 		Namespace: c.t.tv.NamespaceName().String(),
@@ -876,11 +954,15 @@ func (c *hrsuTestCluster) setActive(ctx context.Context, clusterName string) {
 }
 
 func (c *hrsuTestCluster) getHistory(ctx context.Context) []*historypb.HistoryEvent {
+	return c.getHistoryForRunId(ctx, c.t.tv.RunID())
+}
+
+func (c *hrsuTestCluster) getHistoryForRunId(ctx context.Context, runId string) []*historypb.HistoryEvent {
 	historyResponse, err := c.testCluster.GetFrontendClient().GetWorkflowExecutionHistory(ctx, &workflowservice.GetWorkflowExecutionHistoryRequest{
 		Namespace: c.t.tv.NamespaceName().String(),
 		Execution: &commonpb.WorkflowExecution{
 			WorkflowId: c.t.tv.WorkflowID(),
-			RunId:      c.t.tv.RunID(),
+			RunId:      runId,
 		},
 	})
 	c.t.s.NoError(err)
