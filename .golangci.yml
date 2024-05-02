@@ -12,11 +12,6 @@ linters:
     - forbidigo
     - exhaustive
     - godox
-run:
-  skip-dirs:
-    - ^api
-    - ^proto
-    - ^.git
 linters-settings:
   godox:
     keywords:
@@ -108,6 +103,10 @@ linters-settings:
           - "bytes.Buffer.*"
           - "strings.Builder.*"
 issues:
+  exclude-dirs:
+    - ^api
+    - ^proto
+    - ^.git
   exclude-rules:
     - path-except: _test\.go|tests/.+\.go
       text: "time.Sleep"
