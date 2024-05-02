@@ -5380,7 +5380,7 @@ func (s *FunctionalSuite) TestUpdateWorkflow_AdmittedUpdatesAreSentToWorkerInOrd
 	tv = s.startWorkflow(tv)
 	for i := 0; i < nUpdates; i++ {
 		updateId := fmt.Sprint(i)
-		go s.sendUpdate(tv, updateId)
+		go func() { _, _ = s.sendUpdate(tv, updateId) }()
 		for {
 			resp, err := s.pollUpdate(tv, updateId, &updatepb.WaitPolicy{LifecycleStage: enumspb.UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_UNSPECIFIED})
 			if err == nil {
