@@ -347,20 +347,20 @@ func (c *reachabilityCache) Get(ctx context.Context, countRequest manager.CountW
 	}
 	if result != nil {
 		// there's no reason that the cache would ever contain a non-bool, but just in case, treat non-bool as a miss
-		exists, hit = result.(bool)
-		if hit {
-			return exists, hit, nil
+		exists, ok := result.(bool)
+		if ok {
+			return exists, true, nil
 		}
 	}
 
 	// cache was cold, ask visibility and put result in cache
 	countResponse, err := c.visibilityMgr.CountWorkflowExecutions(ctx, &countRequest)
 	if err != nil {
-		return false, hit, err
+		return false, false, err
 	}
 	exists = countResponse.Count > 0
 	c.Put(countRequest, exists, open)
-	return exists, hit, nil
+	return exists, false, nil
 }
 
 // Put adds an element to the cache.
