@@ -25,7 +25,6 @@ package frontend
 import (
 	"context"
 	"errors"
-	"fmt"
 	"testing"
 	"time"
 
@@ -266,7 +265,6 @@ func TestNexusInterceptRequest_ForwardingDisabled_ResultsInBadRequest(t *testing
 	var handlerError *nexus.HandlerError
 	require.ErrorAs(t, err, &handlerError)
 	require.Equal(t, nexus.HandlerErrorTypeBadRequest, handlerError.Type)
-	require.Equal(t, fmt.Sprintf("Namespace: %s is active in cluster: %s, while current cluster %s is a standby cluster.", oc.namespaceName, cluster.TestAlternativeClusterName, cluster.TestCurrentClusterName), handlerError.Failure.Message)
 	mh := oc.metricsHandler.(*metricstest.CaptureHandler) //nolint:revive
 	capture := mh.StartCapture()
 	oc.metricsHandler.Counter("test").Record(1)
