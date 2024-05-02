@@ -73,3 +73,9 @@ enum TaskType {
     // Timeout task for the entire workflow execution chain.
     TASK_TYPE_WORKFLOW_EXECUTION_TIMEOUT = 29;
 }
+
+enum TaskPriority {
+    TASK_PRIORITY_UNSPECIFIED = 0;
+    TASK_PRIORITY_HIGH = 1;
+    TASK_PRIORITY_LOW = 2;
+}

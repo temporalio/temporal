@@ -765,7 +765,7 @@ func (r *TaskGeneratorImpl) GenerateMigrationTasks() ([]tasks.Task, int64, error
 			// TaskID, VisibilityTimestamp is set by shard
 			WorkflowKey: workflowKey,
 			Version:     lastItem.GetVersion(),
-			Priority:    tasks.ReplicationTaskPriorityLow,
+			Priority:    enumsspb.TASK_PRIORITY_LOW,
 		}}, 1, nil
 	}
 
