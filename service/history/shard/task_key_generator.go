@@ -140,7 +140,11 @@ func (a *taskKeyGenerator) setTaskKeys(
 func (a *taskKeyGenerator) maxAssignedTaskID(
 	category tasks.Category,
 ) int64 {
-	return a.maxAssignedTaskIDs[category]
+	v, ok := a.maxAssignedTaskIDs[category]
+	if !ok {
+		return a.nextTaskID - 1
+	}
+	return v
 }
 
 func (a *taskKeyGenerator) peekTaskKey(
