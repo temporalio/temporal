@@ -97,6 +97,7 @@ type (
 		VisitUpdates(visitor func(updID string, updInfo *updatespb.UpdateInfo))
 		GetUpdateOutcome(ctx context.Context, updateID string) (*updatepb.Outcome, error)
 		GetCurrentVersion() int64
+		IsWorkflowExecutionRunning() bool
 	}
 
 	registry struct {
@@ -188,12 +189,18 @@ func NewRegistry(
 				withInstrumentation(&r.instrumentation),
 			)
 		} else if acc := updInfo.GetAcceptance(); acc != nil {
-			r.updates[updID] = newAccepted(
+			uc := newAccepted(
 				updID,
 				acc.EventId,
 				r.remover(updID),
 				withInstrumentation(&r.instrumentation),
 			)
+			if !r.store.IsWorkflowExecutionRunning() {
+				// If workflow is completed, accepted update will never be completed.
+				// This will return "workflow completed" error to the pollers of outcome of accepted updates.
+				uc.abort(AbortReasonWorkflowCompleted)
+			}
+			r.updates[updID] = uc
 		} else if updInfo.GetCompletion() != nil {
 			r.completedCount++
 		}
