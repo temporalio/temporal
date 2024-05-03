@@ -37,6 +37,7 @@ import (
 	protocolpb "go.temporal.io/api/protocol/v1"
 	"go.temporal.io/api/serviceerror"
 	updatepb "go.temporal.io/api/update/v1"
+	"go.temporal.io/server/service/history/consts"
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/anypb"
 
@@ -1025,21 +1026,21 @@ func TestCompletedWorkflow(t *testing.T) {
 	)
 	roStore.CanAddEventFunc = func() bool { return false }
 
-	t.Run("new update is rejected if workflow is completed", func(t *testing.T) {
+	t.Run("admit returns error if workflow is completed", func(t *testing.T) {
 		upd := update.New(meta.UpdateId)
 		err := upd.Admit(ctx, &req, roStore)
-		require.NoError(t, err)
+		require.Error(t, err)
+		require.ErrorIs(t, err, consts.ErrWorkflowCompleted)
 
 		oneMsCtx, cancel := context.WithTimeout(ctx, 1*time.Millisecond)
 		defer cancel()
 		status, err := upd.WaitLifecycleStage(oneMsCtx, enumspb.UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_COMPLETED, 1*time.Second)
-		require.NoError(t, err)
-		require.Equal(t, enumspb.UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_COMPLETED, status.Stage)
-		require.Equal(t, "Workflow Update is rejected because Workflow Execution is completed.", status.Outcome.GetFailure().GetMessage())
-		require.Equal(t, "CanceledUpdate", status.Outcome.GetFailure().GetApplicationFailureInfo().Type)
+		require.Error(t, err)
+		require.ErrorIs(t, err, consts.ErrWorkflowCompleted)
+		require.Nil(t, status)
 	})
 
-	t.Run("sent update is rejected if completed workflow tries to accept it", func(t *testing.T) {
+	t.Run("sent update is aborted if completed workflow tries to accept it", func(t *testing.T) {
 		upd := update.New(meta.UpdateId)
 		_ = upd.Admit(ctx, &req, store)
 		upd.Send(ctx, false, &protocolpb.Message_EventId{EventId: testSequencingEventID})
@@ -1048,13 +1049,10 @@ func TestCompletedWorkflow(t *testing.T) {
 		err := upd.OnProtocolMessage(ctx, &acpt, roStore)
 		require.NoError(t, err)
 
-		oneMsCtx, cancel := context.WithTimeout(ctx, 1*time.Millisecond)
-		defer cancel()
-		status, err := upd.WaitLifecycleStage(oneMsCtx, enumspb.UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_COMPLETED, 1*time.Second)
-		require.NoError(t, err)
-		require.Equal(t, enumspb.UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_COMPLETED, status.Stage)
-		require.Equal(t, "Workflow Update is rejected because Workflow Execution is completed.", status.Outcome.GetFailure().GetMessage())
-		require.Equal(t, "CanceledUpdate", status.Outcome.GetFailure().GetApplicationFailureInfo().Type)
+		status, err := upd.WaitLifecycleStage(ctx, enumspb.UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_COMPLETED, 1*time.Second)
+		require.Error(t, err)
+		require.ErrorIs(t, err, consts.ErrWorkflowCompleted)
+		require.Nil(t, status)
 	})
 
 	t.Run("sent update is rejected with user rejection if completed workflow rejects it", func(t *testing.T) {
@@ -1077,20 +1075,16 @@ func TestCompletedWorkflow(t *testing.T) {
 		require.Equal(t, "An intentional failure", status.Outcome.GetFailure().GetMessage())
 	})
 
-	t.Run("accepted update is timed out if completed workflow completes it", func(t *testing.T) {
+	t.Run("accepted update is rejected if completed workflow completes it", func(t *testing.T) {
 		upd := update.NewAccepted(meta.UpdateId, testAcceptedEventID)
 
 		resp := protocolpb.Message{Body: mustMarshalAny(t, &updatepb.Response{Meta: &meta, Outcome: successOutcome(t, "success!")})}
 		err := upd.OnProtocolMessage(ctx, &resp, roStore)
 		require.NoError(t, err)
 
-		oneMsCtx, cancel := context.WithTimeout(ctx, 1*time.Millisecond)
-		defer cancel()
-		status, err := upd.WaitLifecycleStage(oneMsCtx, enumspb.UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_COMPLETED, 1*time.Second)
+		status, err := upd.WaitLifecycleStage(ctx, enumspb.UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_COMPLETED, 1*time.Second)
 		require.Error(t, err)
-
-		require.ErrorIs(t, err, context.DeadlineExceeded,
-			"expected DeadlineExceeded error when workflow is completed and update is in Accepted state")
+		require.ErrorIs(t, err, consts.ErrWorkflowCompleted)
 		require.Nil(t, status)
 	})
 }
