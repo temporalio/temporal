@@ -2751,8 +2751,8 @@ func (ms *MutableStateImpl) ApplyActivityTaskScheduledEvent(
 	if attributes.UseWorkflowBuildId {
 		if ms.GetAssignedBuildId() != "" {
 			// only set when using new versioning
-			ai.BuildIdInfo = &persistencespb.ActivityInfo_UseWorkflowBuildIdInfo {
-				UseWorkflowBuildIdInfo: &persistencespb.UseWorkflowBuildIdInfo{},
+			ai.BuildIdInfo = &persistencespb.ActivityInfo_UseWorkflowBuildIdInfo_ {
+				UseWorkflowBuildIdInfo: &persistencespb.ActivityInfo_UseWorkflowBuildIdInfo{},
 			}
 		} else {
 			// only set when using old versioning
