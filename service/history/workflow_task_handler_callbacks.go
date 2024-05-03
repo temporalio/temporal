@@ -757,13 +757,6 @@ func (handler *workflowTaskHandlerCallbacksImpl) handleWorkflowTaskCompleted(
 
 		// skip transfer task for workflow task if request asking to return new workflow task
 		if bypassTaskGeneration {
-			versioningStamp := request.WorkerVersionStamp
-			if versioningStamp.GetUseVersioning() && ms.GetAssignedBuildId() == "" {
-				// old versioning is used. making sure the versioning stamp does not go through otherwise the
-				// workflow will start using new versioning which may surprise users.
-				// TODO: remove this block when deleting old wv [cleanup-old-wv]
-				versioningStamp = nil
-			}
 			// start the new workflow task if request asked to do so
 			// TODO: replace the poll request
 			_, newWorkflowTask, err = ms.AddWorkflowTaskStartedEvent(
