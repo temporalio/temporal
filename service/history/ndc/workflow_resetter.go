@@ -757,6 +757,9 @@ func reapplyEvents(
 				continue
 			}
 			attr := event.GetWorkflowExecutionUpdateAdmittedEventAttributes()
+			if targetBranchUpdateRegistry != nil && (*targetBranchUpdateRegistry).Contains(attr.Request.Meta.UpdateId) {
+				continue
+			}
 			if _, err := mutableState.AddWorkflowExecutionUpdateAdmittedEvent(
 				attr.GetRequest(),
 				attr.Origin,
