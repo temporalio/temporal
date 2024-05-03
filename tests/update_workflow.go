@@ -3226,7 +3226,7 @@ func (s *FunctionalSuite) TestUpdateWorkflow_ScheduledSpeculativeWorkflowTask_Te
 	s.EqualValues(5, msResp.GetDatabaseMutableState().GetExecutionInfo().GetCompletionEventBatchId(), "completion_event_batch_id should point to WFTerminated event")
 }
 
-func (s *FunctionalSuite) TestUpdateWorkflow_CompleteWorkflow_CancelUpdate() {
+func (s *FunctionalSuite) TestUpdateWorkflow_CompleteWorkflow_AbortUpdates() {
 	type testCase struct {
 		Name          string
 		Description   string
@@ -3237,17 +3237,17 @@ func (s *FunctionalSuite) TestUpdateWorkflow_CompleteWorkflow_CancelUpdate() {
 	}
 	testCases := []testCase{
 		{
-			Name:          "requested",
-			Description:   "update in stateRequested must be rejected by server with server generated rejection failure",
-			UpdateErr:     "",
-			UpdateFailure: "Workflow Update is rejected because Workflow Execution is completed.",
+			Name:          "admitted",
+			Description:   "update in stateAdmitted must get an error",
+			UpdateErr:     "workflow execution already completed",
+			UpdateFailure: "",
 			Commands:      func(_ *testvars.TestVars) []*commandpb.Command { return nil },
 			Messages:      func(_ *testvars.TestVars, _ *protocolpb.Message) []*protocolpb.Message { return nil },
 		},
 		{
 			Name:          "accepted",
-			Description:   "update in stateAccepted must get an error because there is no way for workflow to complete it and already accepted update can't be rejected",
-			UpdateErr:     "context deadline exceeded",
+			Description:   "update in stateAccepted must get an error",
+			UpdateErr:     "workflow execution already completed",
 			UpdateFailure: "",
 			Commands:      func(tv *testvars.TestVars) []*commandpb.Command { return s.UpdateAcceptCommands(tv, "1") },
 			Messages: func(tv *testvars.TestVars, updRequestMsg *protocolpb.Message) []*protocolpb.Message {
@@ -5366,4 +5366,54 @@ func (s *FunctionalSuite) TestUpdateWorkflow_NewSpeculativeWorkflowTask_QueryFai
   8 WorkflowExecutionUpdateAccepted
   9 WorkflowExecutionUpdateCompleted
 `, events)
+}
+
+func (s *FunctionalSuite) TestUpdateWorkflow_AdmittedUpdatesAreSentToWorkerInOrderOfAdmission() {
+	// If our implementation is not in fact ordering updates correctly, then it may be ordering them
+	// non-deterministically. This number should be high enough that the false-negative rate of the test is low, but
+	// must not exceed our limit on number of in-flight updates. If we were picking a random ordering then the
+	// false-negative rate would be 1/(nUpdates!).
+	nUpdates := 20
+	s.testCluster.host.dcClient.OverrideValue(s.T(), dynamicconfig.WorkflowExecutionMaxInFlightUpdates, nUpdates)
+
+	tv := testvars.New(s.T().Name())
+	tv = s.startWorkflow(tv)
+	for i := 0; i < nUpdates; i++ {
+		updateId := fmt.Sprint(i)
+		go func() { _, _ = s.sendUpdate(tv, updateId) }()
+		s.Eventually(func() bool {
+			resp, err := s.pollUpdate(tv, updateId, &updatepb.WaitPolicy{LifecycleStage: enumspb.UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_UNSPECIFIED})
+			if err == nil {
+				s.Equal(enumspb.UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_ADMITTED, resp.Stage)
+				return true
+			}
+			var notFoundErr *serviceerror.NotFound
+			s.ErrorAs(err, &notFoundErr) // poll beat send in race
+			return false
+		}, time.Second, 10*time.Millisecond, fmt.Sprintf("update %s did not reach Admitted stage", updateId))
+	}
+
+	nCalls := 0
+	poller := &TaskPoller{
+		Engine:    s.engine,
+		Namespace: s.namespace,
+		TaskQueue: tv.TaskQueue(),
+		Identity:  tv.WorkerIdentity(),
+		WorkflowTaskHandler: func(*commonpb.WorkflowExecution, *commonpb.WorkflowType, int64, int64, *historypb.History) ([]*commandpb.Command, error) {
+			return []*commandpb.Command{}, nil
+		},
+		MessageHandler: func(task *workflowservice.PollWorkflowTaskQueueResponse) ([]*protocolpb.Message, error) {
+			s.Len(task.Messages, nUpdates)
+			for i, m := range task.Messages {
+				s.Equal(tv.UpdateID(fmt.Sprint(i)), m.ProtocolInstanceId)
+			}
+			nCalls++
+			return []*protocolpb.Message{}, nil
+		},
+		Logger: s.Logger,
+		T:      s.T(),
+	}
+	_, err := poller.PollAndProcessWorkflowTask(WithRetries(1))
+	s.NoError(err)
+	s.Equal(1, nCalls)
 }

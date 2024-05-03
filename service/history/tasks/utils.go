@@ -32,15 +32,6 @@ import (
 	"go.temporal.io/server/common/log/tag"
 )
 
-const (
-	ReplicationTaskPriorityHigh ReplicationTaskPriority = 0
-	ReplicationTaskPriorityLow  ReplicationTaskPriority = 1
-)
-
-type (
-	ReplicationTaskPriority int32
-)
-
 func Tags(
 	task Task,
 ) []tag.Tag {
