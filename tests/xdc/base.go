@@ -68,6 +68,8 @@ type (
 		cluster2               *tests.TestCluster
 		logger                 log.Logger
 		dynamicConfigOverrides map[dynamicconfig.Key]interface{}
+
+		startTime time.Time
 	}
 )
 
@@ -132,6 +134,8 @@ func (s *xdcBaseSuite) setupSuite(clusterNames []string, opts ...tests.Option) {
 	s.Require().NoError(err)
 	s.cluster2 = c
 
+	s.startTime = time.Now()
+
 	cluster1Info := clusterConfigs[0].ClusterMetadata.ClusterInformation[clusterConfigs[0].ClusterMetadata.CurrentClusterName]
 	cluster2Info := clusterConfigs[1].ClusterMetadata.ClusterInformation[clusterConfigs[1].ClusterMetadata.CurrentClusterName]
 	_, err = s.cluster1.GetAdminClient().AddOrUpdateRemoteCluster(
@@ -169,6 +173,7 @@ func (s *xdcBaseSuite) waitForClusterConnected() {
 			assert.True(c, shard.MaxReplicationTaskId > 0) &&
 			assert.NotNil(c, shard.ShardLocalTime) &&
 			assert.True(c, shard.ShardLocalTime.AsTime().Before(time.Now())) &&
+			assert.True(c, shard.ShardLocalTime.AsTime().After(s.startTime)) &&
 			assert.NotNil(c, shard.RemoteClusters)) {
 			return
 		}
@@ -176,7 +181,8 @@ func (s *xdcBaseSuite) waitForClusterConnected() {
 		if !(assert.True(c, ok) &&
 			assert.NotNil(c, standbyAckInfo) &&
 			assert.NotNil(c, standbyAckInfo.AckedTaskVisibilityTime) &&
-			assert.True(c, standbyAckInfo.AckedTaskVisibilityTime.AsTime().Before(time.Now()))) {
+			assert.True(c, standbyAckInfo.AckedTaskVisibilityTime.AsTime().Before(time.Now())) &&
+			assert.True(c, standbyAckInfo.AckedTaskVisibilityTime.AsTime().After(s.startTime))) {
 			return
 		}
 		s.logger.Debug("cluster connected")
