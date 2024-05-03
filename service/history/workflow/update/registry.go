@@ -78,6 +78,8 @@ type (
 		// Abort all incomplete updates in the registry.
 		Abort(reason AbortReason)
 
+		Contains(protocolInstanceID string) bool
+
 		// Clear registry and abort all waiters.
 		Clear()
 
@@ -223,6 +225,11 @@ func (r *registry) Abort(reason AbortReason) {
 	for _, upd := range r.updates {
 		upd.abort(reason)
 	}
+}
+
+// Contains returns true iff the update ID exists in the registry.
+func (r *registry) Contains(id string) bool {
+	return r.updates[id] != nil
 }
 
 // RejectUnprocessed reject all updates that are waiting for workflow task to be completed.
