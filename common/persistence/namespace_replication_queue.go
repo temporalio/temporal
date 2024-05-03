@@ -245,13 +245,9 @@ func (q *namespaceReplicationQueueImpl) updateAckLevel(
 	}
 
 	// Ignore possibly delayed message
-	if ack, ok := ackLevels[clusterName]; ok && ack > lastProcessedMessageID {
+	if ack, ok := ackLevels[clusterName]; ok && ack >= lastProcessedMessageID {
 		return nil
 	}
-
-	// TODO remove this block in 1.12.x
-	delete(ackLevels, "")
-	// TODO remove this block in 1.12.x
 
 	// update ack level
 	ackLevels[clusterName] = lastProcessedMessageID

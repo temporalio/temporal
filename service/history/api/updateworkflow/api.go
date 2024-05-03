@@ -26,7 +26,6 @@ package updateworkflow
 
 import (
 	"context"
-	"errors"
 	"time"
 
 	commonpb "go.temporal.io/api/common/v1"
@@ -110,24 +109,28 @@ func (u *Updater) Invoke(
 		nil,
 		api.BypassMutableStateConsistencyPredicate,
 		wfKey,
-		func(lease api.WorkflowLease) (*api.UpdateWorkflowAction, error) { return u.ApplyRequest(ctx, lease) },
+		func(lease api.WorkflowLease) (*api.UpdateWorkflowAction, error) {
+			ms := lease.GetMutableState()
+			updateReg := lease.GetContext().UpdateRegistry(ctx, ms)
+			return u.ApplyRequest(ctx, updateReg, ms)
+		},
 		nil,
 		u.shardCtx,
 		u.workflowConsistencyChecker,
 	)
 
 	if err != nil {
-		rejResp := u.OnError(err)
-		return rejResp, err
+		return nil, err
 	}
+
 	return u.OnSuccess(ctx)
 }
 
 func (u *Updater) ApplyRequest(
 	ctx context.Context,
-	workflowLease api.WorkflowLease,
+	updateReg update.Registry,
+	ms workflow.MutableState,
 ) (*api.UpdateWorkflowAction, error) {
-	ms := workflowLease.GetMutableState()
 	if !ms.IsWorkflowExecutionRunning() {
 		return nil, consts.ErrWorkflowCompleted
 	}
@@ -150,8 +153,19 @@ func (u *Updater) ApplyRequest(
 		return nil, serviceerror.NewWorkflowNotReady("Unable to perform workflow execution update due to Workflow Task in failed state.")
 	}
 
+	// If workflow attempted to close itself on previous WFT completion,
+	// and has another WFT running, which most likely will try to complete workflow again,
+	// then don't admit new updates.
+	if ms.IsWorkflowCloseAttempted() && ms.HasStartedWorkflowTask() {
+		u.shardCtx.GetLogger().Info("Fail update because workflow is closing.",
+			tag.WorkflowNamespace(u.req.Request.Namespace),
+			tag.WorkflowNamespaceID(u.wfKey.NamespaceID),
+			tag.WorkflowID(u.wfKey.WorkflowID),
+			tag.WorkflowRunID(u.wfKey.RunID))
+		return nil, consts.ErrWorkflowClosing
+	}
+
 	updateID := u.req.GetRequest().GetRequest().GetMeta().GetUpdateId()
-	updateReg := workflowLease.GetContext().UpdateRegistry(ctx, ms)
 	var (
 		alreadyExisted bool
 		err            error
@@ -219,22 +233,6 @@ func (u *Updater) ApplyRequest(
 		Noop:               true,
 		CreateWorkflowTask: false,
 	}, nil
-}
-
-func (u *Updater) OnError(
-	err error,
-) *historyservice.UpdateWorkflowExecutionResponse {
-	// Special handling for consts.ErrWorkflowCompleted here is needed for consistency with the case when update is received while WFT is running and this WFT completes workflow. In this case update is rejected (see update.CancelIncomplete).
-	if errors.Is(err, consts.ErrWorkflowCompleted) {
-		rejectionResp := u.createResponse(
-			u.wfKey,
-			&updatepb.Outcome{
-				Value: &updatepb.Outcome_Failure{Failure: update.CancelReasonWorkflowCompleted.RejectionFailure()},
-			},
-			enumspb.UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_COMPLETED)
-		return rejectionResp
-	}
-	return nil
 }
 
 func (u *Updater) OnSuccess(

@@ -33,7 +33,6 @@ const (
 	stateCreated state = 1 << iota
 	stateProvisionallyAdmitted
 	stateAdmitted
-	stateProvisionallySent
 	stateSent
 	stateProvisionallyAccepted
 	stateAccepted
@@ -50,8 +49,6 @@ func (s state) String() string {
 		return "ProvisionallyAdmitted"
 	case stateAdmitted:
 		return "Admitted"
-	case stateProvisionallySent:
-		return "ProvisionallySent"
 	case stateSent:
 		return "Sent"
 	case stateProvisionallyAccepted:

@@ -42,6 +42,7 @@ import (
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	historypb "go.temporal.io/api/history/v1"
+	"go.temporal.io/api/serviceerror"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	updatepb "go.temporal.io/api/update/v1"
 	"go.temporal.io/api/workflowservice/v1"
@@ -1217,39 +1218,33 @@ func (s *ClientFunctionalSuite) Test_ActivityTimeouts() {
 //	Workflow runs the local activity again and drain the signal chan (with one signal) and complete workflow.
 //	Server complete workflow as requested.
 func (s *ClientFunctionalSuite) Test_BufferedSignalCausesUnhandledCommandAndSchedulesNewTask() {
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+	tv := testvars.New(s.T().Name()).WithTaskQueue(s.taskQueue)
+
 	sigReadyToSendChan := make(chan struct{}, 1)
 	sigSendDoneChan := make(chan struct{})
 	localActivityFn := func(ctx context.Context) error {
-		// to unblock signal sending, so signal is send after first workflow task started.
-		select {
-		case sigReadyToSendChan <- struct{}{}:
-		default:
-		}
-
-		// this will block workflow task and cause the signal to become buffered event
+		// Unblock signal sending, so it is sent after first workflow task started.
+		sigReadyToSendChan <- struct{}{}
+		// Block workflow task and cause the signal to become buffered event.
 		select {
 		case <-sigSendDoneChan:
 		case <-ctx.Done():
 		}
-
 		return nil
 	}
 
-	var err1 error
 	var receivedSig string
 	workflowFn := func(ctx workflow.Context) error {
 		ctx1 := workflow.WithLocalActivityOptions(ctx, workflow.LocalActivityOptions{
 			StartToCloseTimeout: 10 * time.Second,
 			RetryPolicy:         &temporal.RetryPolicy{MaximumAttempts: 1},
 		})
-		f1 := workflow.ExecuteLocalActivity(ctx1, localActivityFn)
-		err1 = f1.Get(ctx1, nil)
-		if err1 != nil {
-			return err1
+		if err := workflow.ExecuteLocalActivity(ctx1, localActivityFn).Get(ctx1, nil); err != nil {
+			return err
 		}
-
-		sigCh := workflow.GetSignalChannel(ctx, "signal-name")
-
+		sigCh := workflow.GetSignalChannel(ctx, tv.HandlerName())
 		for {
 			var sigVal string
 			ok := sigCh.ReceiveAsync(&sigVal)
@@ -1258,23 +1253,19 @@ func (s *ClientFunctionalSuite) Test_BufferedSignalCausesUnhandledCommandAndSche
 			}
 			receivedSig = sigVal
 		}
-
 		return nil
 	}
 
 	s.worker.RegisterWorkflow(workflowFn)
 
-	id := "functional-test-unhandled-command-new-task"
 	workflowOptions := sdkclient.StartWorkflowOptions{
-		ID:        id,
-		TaskQueue: s.taskQueue,
+		ID:        tv.WorkflowID(),
+		TaskQueue: tv.TaskQueue().Name,
 		// Intentionally use same timeout for WorkflowTaskTimeout and WorkflowRunTimeout so if workflow task is not
 		// correctly dispatched, it would time out which would fail the workflow and cause test to fail.
 		WorkflowTaskTimeout: 10 * time.Second,
 		WorkflowRunTimeout:  10 * time.Second,
 	}
-	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
-	defer cancel()
 	workflowRun, err := s.sdkClient.ExecuteWorkflow(ctx, workflowOptions, workflowFn)
 	if err != nil {
 		s.Logger.Fatal("Start workflow failed with err", tag.Error(err))
@@ -1282,14 +1273,12 @@ func (s *ClientFunctionalSuite) Test_BufferedSignalCausesUnhandledCommandAndSche
 
 	s.NotNil(workflowRun)
 	s.True(workflowRun.GetRunID() != "")
+	tv = tv.WithRunID(workflowRun.GetRunID())
 
 	// block until first workflow task started
-	select {
-	case <-sigReadyToSendChan:
-	case <-ctx.Done():
-	}
+	<-sigReadyToSendChan
 
-	err = s.sdkClient.SignalWorkflow(ctx, id, workflowRun.GetRunID(), "signal-name", "signal-value")
+	err = s.sdkClient.SignalWorkflow(ctx, tv.WorkflowID(), tv.RunID(), tv.HandlerName(), "signal-value")
 	s.NoError(err)
 
 	close(sigSendDoneChan)
@@ -1298,20 +1287,18 @@ func (s *ClientFunctionalSuite) Test_BufferedSignalCausesUnhandledCommandAndSche
 	s.NoError(err) // if new workflow task is not correctly dispatched, it would cause timeout error here
 	s.Equal("signal-value", receivedSig)
 
-	// verify event sequence
-	expectedHistory := []enumspb.EventType{
-		enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_STARTED,
-		enumspb.EVENT_TYPE_WORKFLOW_TASK_SCHEDULED,
-		enumspb.EVENT_TYPE_WORKFLOW_TASK_STARTED,
-		enumspb.EVENT_TYPE_WORKFLOW_TASK_FAILED,        // due to unhandled signal
-		enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_SIGNALED, // this is the buffered signal
-		enumspb.EVENT_TYPE_WORKFLOW_TASK_SCHEDULED,
-		enumspb.EVENT_TYPE_WORKFLOW_TASK_STARTED,
-		enumspb.EVENT_TYPE_WORKFLOW_TASK_COMPLETED,
-		enumspb.EVENT_TYPE_MARKER_RECORDED,
-		enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_COMPLETED,
-	}
-	s.assertHistory(id, workflowRun.GetRunID(), expectedHistory)
+	s.HistoryRequire.EqualHistoryEvents(`
+	1 WorkflowExecutionStarted
+	2 WorkflowTaskScheduled
+	3 WorkflowTaskStarted
+	4 WorkflowTaskFailed        // Unhandled signal prevented workflow completion
+	5 WorkflowExecutionSignaled // This is the buffered signal
+	6 WorkflowTaskScheduled
+	7 WorkflowTaskStarted
+	8 WorkflowTaskCompleted
+	9 MarkerRecorded
+	10 WorkflowExecutionCompleted`,
+		s.getHistory(s.namespace, tv.WorkflowExecution()))
 }
 
 // Analogous to Test_BufferedSignalCausesUnhandledCommandAndSchedulesNewTask
@@ -1320,13 +1307,7 @@ func (s *ClientFunctionalSuite) Test_BufferedSignalCausesUnhandledCommandAndSche
 //  1. The worker starts executing the first WFT, before any update is sent.
 //  2. While the first WFT is being executed, an update is sent.
 //  3. Once the server has received the update, the workflow tries to complete itself.
-//  4. The server fails the complete request (and WFT) because there is an admitted update,
-//     clears workflow context, mutable state, and update registry and schedules a new workflow task.
-//  5. Now there is a race:
-//     - worker starts WFT w/o update and even completes it while update is still not in the registry,
-//     - history handler retries UpdateWorkflowExecution call and recreates update in the registry.
-//  6. In first case, workflow completes successfully after 2nd attempt, and call to UpdateWorkflowExecution
-//     returns "workflow execution already completed" error. This is what this test asserts.
+//  4. The server fails update request with error and completes WF.
 func (s *ClientFunctionalSuite) Test_WorkflowCanBeCompletedDespiteAdmittedUpdate() {
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
@@ -1395,11 +1376,11 @@ func (s *ClientFunctionalSuite) Test_WorkflowCanBeCompletedDespiteAdmittedUpdate
 			UpdateRef: tv.UpdateRef(),
 			Identity:  "my-identity",
 			WaitPolicy: &updatepb.WaitPolicy{
-				LifecycleStage: enumspb.UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_UNSPECIFIED,
+				LifecycleStage: enumspb.UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_ADMITTED,
 			},
 		})
 		if err == nil {
-			// Update is admitted but will be lost after WFT is failed.
+			// Update is admitted but doesn't block WF from completion.
 			close(updateHasBeenAdmitted)
 			break
 		}
@@ -1409,6 +1390,8 @@ func (s *ClientFunctionalSuite) Test_WorkflowCanBeCompletedDespiteAdmittedUpdate
 	s.NoError(err)
 	updateErr := <-updateErrCh
 	s.Error(updateErr)
+	var notFound *serviceerror.NotFound
+	s.ErrorAs(updateErr, &notFound)
 	s.Equal("workflow execution already completed", updateErr.Error())
 	updateHandle := <-updateHandleCh
 	s.Nil(updateHandle)
@@ -1422,12 +1405,9 @@ func (s *ClientFunctionalSuite) Test_WorkflowCanBeCompletedDespiteAdmittedUpdate
 	1 WorkflowExecutionStarted
 	2 WorkflowTaskScheduled
 	3 WorkflowTaskStarted
-	4 WorkflowTaskFailed // Admitted update prevented workflow completion
-	5 WorkflowTaskScheduled
-	6 WorkflowTaskStarted
-	7 WorkflowTaskCompleted
-	8 MarkerRecorded
-	9 WorkflowExecutionCompleted`,
+	4 WorkflowTaskCompleted
+	5 MarkerRecorded
+	6 WorkflowExecutionCompleted`,
 		s.getHistory(s.namespace, tv.WorkflowExecution()))
 }
 

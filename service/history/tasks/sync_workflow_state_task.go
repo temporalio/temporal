@@ -39,7 +39,7 @@ type (
 		VisibilityTimestamp time.Time
 		TaskID              int64
 		Version             int64
-		Priority            ReplicationTaskPriority
+		Priority            enumsspb.TaskPriority
 	}
 )
 

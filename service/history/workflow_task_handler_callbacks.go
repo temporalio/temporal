@@ -192,7 +192,6 @@ func (handler *workflowTaskHandlerCallbacksImpl) handleWorkflowTaskStarted(
 
 	var workflowKey definition.WorkflowKey
 	var resp *historyservice.RecordWorkflowTaskStartedResponse
-	var updateRegistry update.Registry
 
 	err = api.GetAndUpdateWorkflowWithNew(
 		ctx,
@@ -205,7 +204,7 @@ func (handler *workflowTaskHandlerCallbacksImpl) handleWorkflowTaskStarted(
 		),
 		func(workflowLease api.WorkflowLease) (*api.UpdateWorkflowAction, error) {
 			mutableState := workflowLease.GetMutableState()
-			updateRegistry = workflowLease.GetContext().UpdateRegistry(ctx, nil)
+			updateRegistry := workflowLease.GetContext().UpdateRegistry(ctx, nil)
 			if !mutableState.IsWorkflowExecutionRunning() {
 				return nil, consts.ErrWorkflowCompleted
 			}
@@ -448,6 +447,7 @@ func (handler *workflowTaskHandlerCallbacksImpl) handleWorkflowTaskCompleted(
 		wftStartedBuildId := ms.GetExecutionInfo().GetWorkflowTaskBuildId()
 		wftCompletedBuildId := request.GetWorkerVersionStamp().GetBuildId()
 		if wftCompletedBuildId != wftStartedBuildId {
+			workflowLease.GetReleaseFn()(nil)
 			return nil, serviceerror.NewNotFound("this workflow task was not dispatched to this Build ID")
 		}
 	}
@@ -552,9 +552,15 @@ func (handler *workflowTaskHandlerCallbacksImpl) handleWorkflowTaskCompleted(
 		responseMutations           []workflowTaskResponseMutation
 	)
 	updateRegistry := weContext.UpdateRegistry(ctx, nil)
-	// hasBufferedEventsOrMessages indicates if there are any buffered events or admitted updates which should generate a new
-	// workflow task.
-	hasBufferedEventsOrMessages := ms.HasBufferedEvents() || updateRegistry.HasOutgoingMessages(false)
+	// hasBufferedEventsOrMessages indicates if there are any buffered events
+	// or admitted updates which should generate a new workflow task.
+
+	// TODO: HasOutgoingMessages call (=check for admitted updates) is comment out
+	//   because non-durable admitted updates can't block WF from closing,
+	//   because everytime WFT is failing, WF context is cleared together with update registry
+	//   and admitted updates are lost. Uncomment this check when durable admitted is implemented
+	//   or updates stay in the registry after WFT is failed.
+	hasBufferedEventsOrMessages := ms.HasBufferedEvents() // || updateRegistry.HasOutgoingMessages(false)
 	if err := namespaceEntry.VerifyBinaryChecksum(request.GetBinaryChecksum()); err != nil {
 		wtFailedCause = newWorkflowTaskFailedCause(
 			enumspb.WORKFLOW_TASK_FAILED_CAUSE_BAD_BINARY,
@@ -628,23 +634,6 @@ func (handler *workflowTaskHandlerCallbacksImpl) handleWorkflowTaskCompleted(
 			return nil, err
 		}
 
-		if !ms.IsWorkflowExecutionRunning() {
-			// If workflow competed itself with one of the completion command, cancel all incomplete updates in the registry.
-			// Because all unprocessed updates were already rejected, incomplete updates in the registry are:
-			// - updates that were received while this WT was running,
-			// - updates that were accepted but not completed by this WT.
-			err = weContext.UpdateRegistry(ctx, nil).CancelIncomplete(ctx, update.CancelReasonWorkflowCompleted, workflow.WithEffects(&effects, ms))
-			if err != nil {
-				// Just log error here because it is more important to complete workflow than canceling updates.
-				handler.logger.Warn("Unable to cancel incomplete updates while completing the workflow.",
-					tag.WorkflowNamespaceID(weContext.GetWorkflowKey().NamespaceID),
-					tag.WorkflowID(weContext.GetWorkflowKey().WorkflowID),
-					tag.WorkflowRunID(weContext.GetWorkflowKey().RunID),
-					tag.WorkflowEventID(currentWorkflowTask.ScheduledEventID),
-					tag.Error(err))
-			}
-		}
-
 		// set the vars used by following logic
 		// further refactor should also clean up the vars used below
 		wtFailedCause = workflowTaskHandler.workflowTaskFailedCause
@@ -711,7 +700,7 @@ func (handler *workflowTaskHandlerCallbacksImpl) handleWorkflowTaskCompleted(
 			// There shouldn't be any sent updates in the registry because
 			// all sent but not processed updates were rejected by server.
 			// Therefore, it doesn't matter if to includeAlreadySent or not.
-		} else if weContext.UpdateRegistry(ctx, nil).HasOutgoingMessages(true) {
+		} else if updateRegistry.HasOutgoingMessages(true) {
 			if completedEvent == nil || ms.GetNextEventID() == completedEvent.GetEventId()+1 {
 				newWorkflowTaskType = enumsspb.WORKFLOW_TASK_TYPE_SPECULATIVE
 			} else {
@@ -843,6 +832,16 @@ func (handler *workflowTaskHandlerCallbacksImpl) handleWorkflowTaskCompleted(
 	// then effects needs to be applied immediately to keep registry and mutable state in sync.
 	effects.Apply(ctx)
 
+	if !ms.IsWorkflowExecutionRunning() {
+		// If the workflow completed itself with one of the completion commands,
+		// abort all waiters with "workflow completed" error.
+		// Because all unprocessed updates were already rejected, incomplete updates in the registry are:
+		// - updates that were received while this WFT was running,
+		// - updates that were accepted but not completed by this WFT.
+		// It is important to call this after applying effects to be sure there are no unprocessed effects.
+		updateRegistry.Abort(update.AbortReasonWorkflowCompleted)
+	}
+
 	// Create speculative workflow task after mutable state is persisted.
 	if newWorkflowTaskType == enumsspb.WORKFLOW_TASK_TYPE_SPECULATIVE {
 		newWorkflowTask, err = ms.AddWorkflowTaskScheduledEvent(bypassTaskGeneration, newWorkflowTaskType)
@@ -886,7 +885,7 @@ func (handler *workflowTaskHandlerCallbacksImpl) handleWorkflowTaskCompleted(
 	resp := &historyservice.RespondWorkflowTaskCompletedResponse{}
 	//nolint:staticcheck
 	if request.GetReturnNewWorkflowTask() && newWorkflowTask != nil {
-		resp.StartedResponse, err = handler.createRecordWorkflowTaskStartedResponse(ctx, ms, weContext.UpdateRegistry(ctx, nil), newWorkflowTask, request.GetIdentity(), request.GetForceCreateNewWorkflowTask())
+		resp.StartedResponse, err = handler.createRecordWorkflowTaskStartedResponse(ctx, ms, updateRegistry, newWorkflowTask, request.GetIdentity(), request.GetForceCreateNewWorkflowTask())
 		if err != nil {
 			return nil, err
 		}
@@ -1012,7 +1011,7 @@ func (handler *workflowTaskHandlerCallbacksImpl) createRecordWorkflowTaskStarted
 	// deliver those updates failed, got timed out, or got lost.
 	// Resend these updates if this is not a heartbeat WT (includeAlreadySent = !wtHeartbeat).
 	// Heartbeat WT delivers only new updates that come while this WT was running (similar to queries and buffered events).
-	response.Messages = updateRegistry.Send(ctx, !wtHeartbeat, workflowTask.StartedEventID, workflow.WithEffects(effect.Immediate(ctx), ms))
+	response.Messages = updateRegistry.Send(ctx, !wtHeartbeat, workflowTask.StartedEventID)
 
 	if workflowTask.Type == enumsspb.WORKFLOW_TASK_TYPE_SPECULATIVE && len(response.GetMessages()) == 0 {
 		return nil, serviceerror.NewNotFound("No messages for speculative workflow task.")
