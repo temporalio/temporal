@@ -348,7 +348,7 @@ type (
 		UpdateCurrentVersion(version int64, forceUpdate bool) error
 		UpdateWorkflowStateStatus(state enumsspb.WorkflowExecutionState, status enumspb.WorkflowExecutionStatus) error
 		UpdateBuildIdAssignment(buildId string) error
-		ApplyBuildIdRedirect(buildId string, redirectCounter int64) error
+		ApplyBuildIdRedirect(startingTaskScheduledEventId int64, buildId string, redirectCounter int64) error
 
 		GetHistorySize() int64
 		AddHistorySize(size int64)

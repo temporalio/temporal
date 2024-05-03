@@ -26,7 +26,6 @@ package matching
 
 import (
 	"context"
-	"go.temporal.io/server/common/log"
 	"slices"
 	"testing"
 	"time"

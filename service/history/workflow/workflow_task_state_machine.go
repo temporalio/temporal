@@ -235,7 +235,7 @@ func (m *workflowTaskStateMachine) ApplyWorkflowTaskStartedEvent(
 			}
 		} else {
 			// apply redirect if applicable
-			err := m.ms.ApplyBuildIdRedirect(buildId, redirectCounter)
+			err := m.ms.ApplyBuildIdRedirect(scheduledEventID, buildId, redirectCounter)
 			if err != nil {
 				return nil, err
 			}
@@ -485,7 +485,7 @@ func (m *workflowTaskStateMachine) AddWorkflowTaskStartedEvent(
 	// that resulted in the successful completion.
 	suggestContinueAsNew, historySizeBytes := m.getHistorySizeInfo()
 
-	workflowTask, scheduledEventCreatedForRedirect, err := m.applyBuildIdRedirect(versioningStamp, workflowTask, redirectInfo)
+	workflowTask, scheduledEventCreatedForRedirect, redirectCounter, err := m.processBuildIdRedirectInfo(versioningStamp, workflowTask, redirectInfo)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -512,7 +512,6 @@ func (m *workflowTaskStateMachine) AddWorkflowTaskStartedEvent(
 		scheduledEventID = scheduledEvent.GetEventId()
 	}
 
-	redirectCounter := m.ms.GetExecutionInfo().GetBuildIdRedirectCounter()
 	// Create WorkflowTaskStartedEvent only if WorkflowTaskScheduledEvent was created.
 	// (it wasn't created for transient/speculative WT).
 	var startedEvent *historypb.HistoryEvent
@@ -556,22 +555,24 @@ func (m *workflowTaskStateMachine) AddWorkflowTaskStartedEvent(
 	return startedEvent, workflowTask, err
 }
 
-// applyBuildIdRedirect applies redirect, if applicable, based on the versioningStamp and redirectInfo.
-// Returns a possibly new workflowTaskInfo and a boolean indicating if transient WFT was converted to normal and
-// scheduled event is created due to build ID being changed by the current WFT.
-func (m *workflowTaskStateMachine) applyBuildIdRedirect(
+// processBuildIdRedirectInfo validated possible build ID redirect based on the versioningStamp and redirectInfo.
+// If a valid redirect is being applied to a transient WFT, the transient WFT is converted to normal and a
+// scheduled event is created. In this case, the returned workflow info will be different from the given one and
+// `converted` will be true.
+// Also returns redirect counter that shall be used in the WFT started event.
+func (m *workflowTaskStateMachine) processBuildIdRedirectInfo(
 	versioningStamp *commonpb.WorkerVersionStamp,
 	workflowTask *WorkflowTaskInfo,
 	redirectInfo *taskqueuespb.BuildIdRedirectInfo,
-) (*WorkflowTaskInfo, bool, error) {
+) (newWorkflowTask *WorkflowTaskInfo, converted bool, redirectCounter int64, err error) {
 	if !versioningStamp.GetUseVersioning() || versioningStamp.GetBuildId() == "" {
-		return workflowTask, false, nil
+		return workflowTask, false, 0,nil
 	}
 	buildId := versioningStamp.GetBuildId()
 
-	err := m.ms.processBuildIdRedirect(workflowTask.ScheduledEventID, versioningStamp, redirectInfo)
+	redirectCounter, err = m.ms.validateBuildIdRedirectInfo(versioningStamp, redirectInfo)
 	if err != nil {
-		return nil, false, err
+		return nil, false, redirectCounter, err
 	}
 
 	if m.ms.IsTransientWorkflowTask() && m.ms.GetExecutionInfo().GetWorkflowTaskBuildId() != buildId {
@@ -585,16 +586,16 @@ func (m *workflowTaskStateMachine) applyBuildIdRedirect(
 			workflowTask.Attempt,
 			workflowTask.ScheduledTime,
 		)
-		newWorkflowTask := m.getWorkflowTaskInfo()
+		newWorkflowTask = m.getWorkflowTaskInfo()
 		newWorkflowTask.ScheduledEventID = scheduledEvent.GetEventId()
 		// Using 1 as the attempt in MS. it's needed so that the new WFT is not considered transient.
 		// TODO: maybe add a separate field in MS for flagging transient WFT instead of relying on attempt so that we
 		// can put total attempt count (across all build IDs) here?
 		newWorkflowTask.Attempt = 1
 		m.UpdateWorkflowTask(newWorkflowTask)
-		return newWorkflowTask, true, nil
+		return newWorkflowTask, true, redirectCounter, nil
 	}
-	return workflowTask, false, nil
+	return workflowTask, false, redirectCounter, nil
 }
 
 func (m *workflowTaskStateMachine) skipWorkflowTaskCompletedEvent(workflowTaskType enumsspb.WorkflowTaskType, request *workflowservice.RespondWorkflowTaskCompletedRequest) bool {

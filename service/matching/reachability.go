@@ -27,8 +27,6 @@ package matching
 import (
 	"context"
 	"fmt"
-	"go.temporal.io/server/common/log"
-	"go.temporal.io/server/common/log/tag"
 	"slices"
 	"strings"
 	"time"

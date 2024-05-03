@@ -93,6 +93,8 @@ func NewExecutableActivityStateTask(
 			Attempt:            task.Attempt,
 			LastFailure:        task.LastFailure,
 			LastWorkerIdentity: task.LastWorkerIdentity,
+			LastStartedBuildId: task.LastStartedBuildId,
+			LastStartedRedirectCounter: task.LastStartedRedirectCounter,
 			BaseExecutionInfo:  task.BaseExecutionInfo,
 			VersionHistory:     task.VersionHistory,
 		},
@@ -110,6 +112,8 @@ func NewExecutableActivityStateTask(
 			LastFailure:        task.LastFailure,
 			LastWorkerIdentity: task.LastWorkerIdentity,
 			VersionHistory:     task.VersionHistory,
+			LastStartedBuildId: task.LastStartedBuildId,
+			LastStartedRedirectCounter: task.LastStartedRedirectCounter,
 		}),
 	}
 }
