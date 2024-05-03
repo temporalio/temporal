@@ -604,6 +604,7 @@ func (s *workflowResetterSuite) TestReapplyContinueAsNewWorkflowEvents_WithOutCo
 
 	mutableState := workflow.NewMockMutableState(s.controller)
 	mutableState.EXPECT().VisitUpdates(gomock.Any()).Return()
+	mutableState.EXPECT().GetCurrentVersion().Return(int64(0))
 	updateRegistry := update.NewRegistry(mutableState)
 
 	lastVisitedRunID, err := s.workflowResetter.reapplyContinueAsNewWorkflowEvents(
@@ -725,6 +726,7 @@ func (s *workflowResetterSuite) TestReapplyContinueAsNewWorkflowEvents_WithConti
 
 	mutableState := workflow.NewMockMutableState(s.controller)
 	mutableState.EXPECT().VisitUpdates(gomock.Any()).Return()
+	mutableState.EXPECT().GetCurrentVersion().Return(int64(0))
 	updateRegistry := update.NewRegistry(mutableState)
 
 	lastVisitedRunID, err := s.workflowResetter.reapplyContinueAsNewWorkflowEvents(
@@ -791,7 +793,6 @@ func (s *workflowResetterSuite) TestReapplyWorkflowEvents() {
 	}, nil)
 
 	mutableState := workflow.NewMockMutableState(s.controller)
-	mutableState.EXPECT().VisitUpdates(gomock.Any()).Return()
 
 	nextRunID, err := s.workflowResetter.reapplyEventsFromBranch(
 		context.Background(),
