@@ -33,6 +33,7 @@ import (
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	updatepb "go.temporal.io/api/update/v1"
 	"go.temporal.io/api/workflowservice/v1"
+	"go.temporal.io/server/common/metrics"
 	"google.golang.org/protobuf/types/known/durationpb"
 
 	enumspb "go.temporal.io/api/enums/v1"
@@ -238,7 +239,10 @@ func (u *Updater) OnSuccess(
 	// Speculative WT was created and needs to be added directly to matching w/o transfer task.
 	// TODO (alex): This code is copied from transferQueueActiveTaskExecutor.processWorkflowTask.
 	//   Helper function needs to be extracted to avoid code duplication.
-	if u.scheduledEventID != common.EmptyEventID {
+	usesSpeculativeWFT := u.scheduledEventID != common.EmptyEventID
+	if usesSpeculativeWFT {
+		metrics.WorkflowExecutionUpdateSpeculativeWorkflowTask.With(u.shardCtx.GetMetricsHandler()).Record(1)
+
 		err := u.addWorkflowTaskToMatching(ctx, u.wfKey, u.taskQueue, u.scheduledEventID, u.scheduleToStartTimeout, u.directive)
 
 		if _, isStickyWorkerUnavailable := err.(*serviceerrors.StickyWorkerUnavailable); isStickyWorkerUnavailable {
@@ -266,6 +270,8 @@ func (u *Updater) OnSuccess(
 			// If subsequent attempt succeeds within current context timeout, caller of this API will get a valid response.
 			err = nil
 		}
+	} else {
+		metrics.WorkflowExecutionUpdateNormalWorkflowTask.With(u.shardCtx.GetMetricsHandler()).Record(1)
 	}
 
 	namespaceID := namespace.ID(u.req.GetNamespaceId())
