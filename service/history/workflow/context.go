@@ -35,6 +35,7 @@ import (
 	enumspb "go.temporal.io/api/enums/v1"
 	historypb "go.temporal.io/api/history/v1"
 	"go.temporal.io/api/serviceerror"
+
 	enumsspb "go.temporal.io/server/api/enums/v1"
 
 	"go.temporal.io/server/api/adminservice/v1"
@@ -1097,7 +1098,8 @@ func (c *ContextImpl) forceTerminateWorkflow(
 	}
 
 	// Abort updates before clearing context.
-	// TODO: ms is not persisted yet, but this is critical case anyway
+	// MS is not persisted yet, but this code is executed only when something
+	// really bad happened with workflow, and it won't make any progress anyway.
 	c.UpdateRegistry(ctx, nil).Abort(update.AbortReasonWorkflowCompleted)
 
 	// Discard pending changes in MutableState so we can apply terminate state transition

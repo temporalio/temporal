@@ -32,6 +32,7 @@ import (
 	enumspb "go.temporal.io/api/enums/v1"
 	historypb "go.temporal.io/api/history/v1"
 	"go.temporal.io/api/serviceerror"
+
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/payloads"
@@ -300,7 +301,10 @@ func (r *WorkflowImpl) terminateWorkflow(
 		false,
 	)
 
-	// TODO: abort updates here?
+	// Don't abort updates here for a few reasons:
+	//   1. There probably no update waiters for Wf which is about to be terminated,
+	//   2. MS is not persisted yet, and updates should be aborted after MS is persisted, which is not trivial in this case,
+	//   3. New replication version will force update registry reload and waiters will get errors.
 	// r.GetContext().UpdateRegistry(context.Background(), nil).Abort(update.AbortReasonWorkflowTerminated)
 
 	return err

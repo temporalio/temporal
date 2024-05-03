@@ -114,9 +114,13 @@ func UpdateWorkflowWithNew(
 		updateErr = workflowLease.GetContext().UpdateWorkflowExecutionAsActive(ctx, shardContext)
 	}
 
-	if updateErr != nil && postActions.AbortUpdates {
+	if updateErr != nil {
+		return updateErr
+	}
+
+	if postActions.AbortUpdates {
 		workflowLease.GetContext().UpdateRegistry(ctx, nil).Abort(update.AbortReasonWorkflowCompleted)
 	}
 
-	return updateErr
+	return nil
 }
