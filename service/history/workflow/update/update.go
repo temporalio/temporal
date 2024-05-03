@@ -144,7 +144,7 @@ func newAdmitted(id string, request *anypb.Any, opts ...updateOpt) *Update {
 		instrumentation: &noopInstrumentation,
 		accepted:        future.NewFuture[*failurepb.Failure](),
 		outcome:         future.NewFuture[*updatepb.Outcome](),
-		admittedTime:    time.Now(),
+		admittedTime:    time.Now().UTC(),
 	}
 	for _, opt := range opts {
 		opt(upd)
@@ -326,7 +326,7 @@ func (u *Update) Admit(
 			return
 		}
 		u.setState(stateAdmitted)
-		u.admittedTime = time.Now()
+		u.admittedTime = time.Now().UTC()
 	})
 	eventStore.OnAfterRollback(func(context.Context) {
 		if u.state != stateProvisionallyAdmitted {
