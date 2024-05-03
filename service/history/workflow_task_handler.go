@@ -250,7 +250,7 @@ func (handler *workflowTaskHandlerImpl) rejectUnprocessedUpdates(
 
 	rejectedUpdateIDs, err := handler.updateRegistry.RejectUnprocessed(
 		ctx,
-		workflow.WithEffects(handler.effects, handler.mutableState))
+		handler.effects)
 
 	if err != nil {
 		return err
