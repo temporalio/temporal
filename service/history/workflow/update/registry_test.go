@@ -45,9 +45,10 @@ import (
 
 type mockUpdateStore struct {
 	update.Store
-	VisitUpdatesFunc      func(visitor func(updID string, updInfo *updatespb.UpdateInfo))
-	GetUpdateOutcomeFunc  func(context.Context, string) (*updatepb.Outcome, error)
-	GetCurrentVersionFunc func() int64
+	VisitUpdatesFunc               func(visitor func(updID string, updInfo *updatespb.UpdateInfo))
+	GetUpdateOutcomeFunc           func(context.Context, string) (*updatepb.Outcome, error)
+	GetCurrentVersionFunc          func() int64
+	IsWorkflowExecutionRunningFunc func() bool
 }
 
 func (m mockUpdateStore) VisitUpdates(
@@ -68,6 +69,13 @@ func (m mockUpdateStore) GetCurrentVersion() int64 {
 		return 0
 	}
 	return m.GetCurrentVersionFunc()
+}
+
+func (m mockUpdateStore) IsWorkflowExecutionRunning() bool {
+	if m.IsWorkflowExecutionRunningFunc == nil {
+		return true
+	}
+	return m.IsWorkflowExecutionRunningFunc()
 }
 
 var emptyUpdateStore = mockUpdateStore{
@@ -266,6 +274,54 @@ func TestUpdateRemovalFromRegistry(t *testing.T) {
 	require.Equal(t, 1, reg.Len(), "update should still be present in map")
 	effects.Apply(ctx)
 	require.Equal(t, 0, reg.Len(), "update should have been removed")
+}
+
+func TestUpdateAccepted_WorkflowCompleted(t *testing.T) {
+	t.Parallel()
+	var (
+		ctx                    = context.Background()
+		storedAcceptedUpdateID = t.Name() + "-accepted-update-id"
+		regStore               = mockUpdateStore{
+			VisitUpdatesFunc: func(visitor func(updID string, updInfo *updatespb.UpdateInfo)) {
+				storedAcceptedUpdateInfo := &updatespb.UpdateInfo{
+					Value: &updatespb.UpdateInfo_Acceptance{
+						Acceptance: &updatespb.AcceptanceInfo{
+							EventId: 22,
+						},
+					},
+				}
+				visitor(storedAcceptedUpdateID, storedAcceptedUpdateInfo)
+			},
+			IsWorkflowExecutionRunningFunc: func() bool {
+				return false
+			},
+		}
+		reg     = update.NewRegistry(regStore)
+		effects = effect.Buffer{}
+		evStore = mockEventStore{Controller: &effects}
+	)
+
+	upd, found, err := reg.FindOrCreate(ctx, storedAcceptedUpdateID)
+	require.NoError(t, err)
+	require.True(t, found)
+
+	// Even timeout is very short, it won't fire but error will be returned right away.
+	s, err := upd.WaitLifecycleStage(ctx, enumspb.UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_COMPLETED, 100*time.Millisecond)
+	require.Error(t, err)
+	require.Nil(t, s)
+	var notFound *serviceerror.NotFound
+	require.ErrorAs(t, err, &notFound)
+	require.Equal(t, "workflow execution already completed", err.Error())
+
+	meta := updatepb.Meta{UpdateId: storedAcceptedUpdateID}
+	outcome := successOutcome(t, "success!")
+	err = upd.OnProtocolMessage(
+		ctx,
+		&protocolpb.Message{Body: mustMarshalAny(t, &updatepb.Response{Meta: &meta, Outcome: outcome})},
+		evStore,
+	)
+	require.Error(t, err, "should not be able to completed update for completed workflow")
+	require.Equal(t, 1, reg.Len(), "update should still be present in map")
 }
 
 func TestSendMessageGathering(t *testing.T) {
