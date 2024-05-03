@@ -149,6 +149,18 @@ func (u *Updater) ApplyRequest(
 		return nil, serviceerror.NewWorkflowNotReady("Unable to perform workflow execution update due to Workflow Task in failed state.")
 	}
 
+	// If workflow attempted to close itself on previous WFT completion,
+	// and has another WFT running, which most likely will try to complete workflow again,
+	// then don't admit new updates.
+	if ms.IsWorkflowCloseAttempted() && ms.HasStartedWorkflowTask() {
+		u.shardCtx.GetLogger().Info("Fail update because workflow is closing.",
+			tag.WorkflowNamespace(u.req.Request.Namespace),
+			tag.WorkflowNamespaceID(u.wfKey.NamespaceID),
+			tag.WorkflowID(u.wfKey.WorkflowID),
+			tag.WorkflowRunID(u.wfKey.RunID))
+		return nil, consts.ErrWorkflowClosing
+	}
+
 	updateID := u.req.GetRequest().GetRequest().GetMeta().GetUpdateId()
 	updateReg := workflowLease.GetContext().UpdateRegistry(ctx, ms)
 	var (
