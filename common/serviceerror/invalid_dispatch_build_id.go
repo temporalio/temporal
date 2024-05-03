@@ -30,7 +30,11 @@ import (
 )
 
 type (
-	// InvalidDispatchBuildId happens when matching wants to dispatch task to a wrong build ID
+	// InvalidDispatchBuildId happens when matching wants to dispatch task to a wrong build ID. This is expected to
+	// happen when a workflow has concurrent tasks (and in some other edge cases) and redirect rules apply to the WF.
+	// In that case, tasks already scheduled but not started will become invalid and History reschedules them in the
+	// new build ID. Matching will still try dispatching the old tasks but it will face this error.
+	// Matching can safely drop tasks which face this error.
 	InvalidDispatchBuildId struct {
 		Message string
 		st      *status.Status
