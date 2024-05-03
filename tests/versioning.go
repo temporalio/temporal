@@ -72,8 +72,8 @@ const (
 	// use > 2 pollers by default to expose more timing situations
 	numPollers = 4
 	// These TTLs need to be greater than the time it takes for a workflow execution status change to show up in visibility
-	testReachabilityCacheOpenWFsTTL   = 4 * time.Second
-	testReachabilityCacheClosedWFsTTL = 4 * time.Second
+	testReachabilityCacheOpenWFsTTL   = 10 * time.Second
+	testReachabilityCacheClosedWFsTTL = 10 * time.Second
 )
 
 func (s *VersioningIntegSuite) SetupSuite() {
@@ -3694,7 +3694,7 @@ func (s *VersioningIntegSuite) TestDescribeTaskQueueEnhanced_Versioned_Reachabil
 		})
 		s.Nil(err)
 		return len(listResp.GetExecutions()) > 0
-	}, 3*time.Second, 50*time.Millisecond)
+	}, 5*time.Second, 50*time.Millisecond)
 
 	// 3. Commit a different build id --> A should now only be reachable via visibility query
 	s.commitBuildId(ctx, tq, "B", true, s.getVersioningRules(ctx, tq).GetConflictToken(), true)
@@ -3720,7 +3720,7 @@ func (s *VersioningIntegSuite) TestDescribeTaskQueueEnhanced_Versioned_Reachabil
 			wfExec = listResp.GetExecutions()[0].GetExecution()
 		}
 		return len(listResp.GetExecutions()) > 0
-	}, 2*time.Second, 50*time.Millisecond)
+	}, 5*time.Second, 50*time.Millisecond)
 
 	// 7. Query reachability(A) --> reachable by reachability cache
 	s.getBuildIdReachability(ctx, tq, &taskqueuepb.TaskQueueVersionSelection{BuildIds: []string{"A"}}, map[string]enumspb.BuildIdTaskReachability{
@@ -3749,7 +3749,7 @@ func (s *VersioningIntegSuite) TestDescribeTaskQueueEnhanced_Versioned_Reachabil
 		})
 		s.Nil(err)
 		return len(listResp.GetExecutions()) == 0
-	}, 2*time.Second, 50*time.Millisecond)
+	}, 5*time.Second, 50*time.Millisecond)
 
 	// 11. Query reachability(A) --> closed_only by reachability cache
 	s.getBuildIdReachability(ctx, tq, &taskqueuepb.TaskQueueVersionSelection{BuildIds: []string{"A"}}, map[string]enumspb.BuildIdTaskReachability{
