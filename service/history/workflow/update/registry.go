@@ -301,13 +301,13 @@ func (r *registry) Send(
 
 	var outgoingMessages []*protocolpb.Message
 
-	var updates []*Update
+	var sortedUpdates []*Update
 	for _, upd := range r.updates {
-		updates = append(updates, upd)
+		sortedUpdates = append(sortedUpdates, upd)
 	}
-	slices.SortStableFunc(updates, func(u1, u2 *Update) int { return u1.admittedTime.Compare(u2.admittedTime) })
+	slices.SortStableFunc(sortedUpdates, func(u1, u2 *Update) int { return u1.admittedTime.Compare(u2.admittedTime) })
 
-	for _, upd := range updates {
+	for _, upd := range sortedUpdates {
 		outgoingMessage := upd.Send(ctx, includeAlreadySent, sequencingEventID)
 		if outgoingMessage != nil {
 			outgoingMessages = append(outgoingMessages, outgoingMessage)
