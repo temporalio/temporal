@@ -1096,6 +1096,10 @@ func (c *ContextImpl) forceTerminateWorkflow(
 		return nil
 	}
 
+	// Abort updates before clearing context.
+	// TODO: ms is not persisted yet, but this is critical case anyway
+	c.UpdateRegistry(ctx, nil).Abort(update.AbortReasonWorkflowCompleted)
+
 	// Discard pending changes in MutableState so we can apply terminate state transition
 	c.Clear()
 

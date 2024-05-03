@@ -35,6 +35,7 @@ import (
 	enumspb "go.temporal.io/api/enums/v1"
 	historypb "go.temporal.io/api/history/v1"
 	"go.temporal.io/api/serviceerror"
+	"go.temporal.io/server/service/history/workflow/update"
 	"google.golang.org/protobuf/types/known/timestamppb"
 
 	"go.temporal.io/server/common"
@@ -155,6 +156,8 @@ func (r *workflowResetterImpl) ResetWorkflow(
 		if err != nil {
 			return err
 		}
+
+		currentWorkflow.GetContext().UpdateRegistry(ctx, nil).Abort(update.AbortReasonWorkflowCompleted)
 
 		reapplyEventsFn = func(ctx context.Context, resetMutableState workflow.MutableState) error {
 			lastVisitedRunID, err := r.reapplyContinueAsNewWorkflowEvents(

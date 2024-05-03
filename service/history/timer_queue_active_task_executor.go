@@ -29,6 +29,7 @@ import (
 	"fmt"
 
 	"github.com/pborman/uuid"
+	"go.temporal.io/server/service/history/workflow/update"
 	"google.golang.org/protobuf/types/known/durationpb"
 
 	commonpb "go.temporal.io/api/common/v1"
@@ -659,7 +660,7 @@ func (t *timerQueueActiveTaskExecutor) executeWorkflowRunTimeoutTask(
 
 	newExecutionInfo := newMutableState.GetExecutionInfo()
 	newExecutionState := newMutableState.GetExecutionState()
-	return weContext.UpdateWorkflowExecutionWithNewAsActive(
+	updateErr := weContext.UpdateWorkflowExecutionWithNewAsActive(
 		ctx,
 		t.shardContext,
 		workflow.NewContext(
@@ -675,6 +676,13 @@ func (t *timerQueueActiveTaskExecutor) executeWorkflowRunTimeoutTask(
 		),
 		newMutableState,
 	)
+
+	if updateErr != nil {
+		return updateErr
+	}
+
+	weContext.UpdateRegistry(ctx, nil).Abort(update.AbortReasonWorkflowCompleted)
+	return nil
 }
 
 func (t *timerQueueActiveTaskExecutor) executeWorkflowExecutionTimeoutTask(
@@ -706,7 +714,13 @@ func (t *timerQueueActiveTaskExecutor) executeWorkflowExecutionTimeoutTask(
 		return err
 	}
 
-	return t.updateWorkflowExecution(ctx, weContext, mutableState, false)
+	updateErr := t.updateWorkflowExecution(ctx, weContext, mutableState, false)
+	if updateErr != nil {
+		return updateErr
+	}
+
+	weContext.UpdateRegistry(ctx, nil).Abort(update.AbortReasonWorkflowCompleted)
+	return nil
 }
 
 func (t *timerQueueActiveTaskExecutor) getTimerSequence(

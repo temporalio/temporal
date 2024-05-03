@@ -44,6 +44,7 @@ type workflowLease struct {
 type UpdateWorkflowAction struct {
 	Noop               bool
 	CreateWorkflowTask bool
+	AbortUpdates       bool
 }
 
 var (
@@ -52,6 +53,10 @@ var (
 	}
 	UpdateWorkflowWithoutWorkflowTask = &UpdateWorkflowAction{
 		CreateWorkflowTask: false,
+	}
+	UpdateWorkflowTerminate = &UpdateWorkflowAction{
+		CreateWorkflowTask: false,
+		AbortUpdates:       true,
 	}
 )
 
