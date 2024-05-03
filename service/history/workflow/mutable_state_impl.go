@@ -25,6 +25,7 @@
 package workflow
 
 import (
+	"cmp"
 	"context"
 	"fmt"
 	"math/rand"
@@ -902,9 +903,34 @@ func (ms *MutableStateImpl) GetQueryRegistry() QueryRegistry {
 	return ms.QueryRegistry
 }
 
+// VisitUpdates visits mutable state update entries, ordered by the ID of the history event pointed to by the mutable
+// state entry. Thus, for example, updates entries in Admitted state will be visited in the order that their Admitted
+// events were added to history.
 func (ms *MutableStateImpl) VisitUpdates(visitor func(updID string, updInfo *updatespb.UpdateInfo)) {
+	type updateEvent struct {
+		updId   string
+		updInfo *updatespb.UpdateInfo
+		eventId int64
+	}
+	var updateEvents []updateEvent
 	for updID, updInfo := range ms.executionInfo.GetUpdateInfos() {
-		visitor(updID, updInfo)
+		u := updateEvent{
+			updId:   updID,
+			updInfo: updInfo,
+		}
+		if adm := updInfo.GetAdmission(); adm != nil {
+			u.eventId = adm.GetHistoryPointer().EventId
+		} else if acc := updInfo.GetAcceptance(); acc != nil {
+			u.eventId = acc.EventId
+		} else if com := updInfo.GetCompletion(); com != nil {
+			u.eventId = com.EventId
+		}
+		updateEvents = append(updateEvents, u)
+	}
+	slices.SortFunc(updateEvents, func(u1, u2 updateEvent) int { return cmp.Compare(u1.eventId, u2.eventId) })
+
+	for _, u := range updateEvents {
+		visitor(u.updId, u.updInfo)
 	}
 }
 

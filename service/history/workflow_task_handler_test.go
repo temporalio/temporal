@@ -312,7 +312,7 @@ func TestCommandProtocolMessage(t *testing.T) {
 		require.NoError(t, err)
 		err = upd.Admit(context.Background(), req, workflow.WithEffects(effect.Immediate(context.Background()), tc.handler.mutableState))
 		require.NoError(t, err)
-		_ = upd.Send(context.Background(), true, &protocolpb.Message_EventId{EventId: 2208}, workflow.WithEffects(effect.Immediate(context.Background()), tc.handler.mutableState))
+		_ = upd.Send(context.Background(), true, &protocolpb.Message_EventId{EventId: 2208})
 
 		_, err = tc.handler.handleCommand(context.Background(), command, msgs)
 		require.NoError(t, err,
