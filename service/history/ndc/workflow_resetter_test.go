@@ -792,12 +792,10 @@ func (s *workflowResetterSuite) TestReapplyWorkflowEvents() {
 
 	mutableState := workflow.NewMockMutableState(s.controller)
 	mutableState.EXPECT().VisitUpdates(gomock.Any()).Return()
-	updateRegistry := update.NewRegistry(mutableState)
 
 	nextRunID, err := s.workflowResetter.reapplyEventsFromBranch(
 		context.Background(),
 		mutableState,
-		updateRegistry,
 		firstEventID,
 		nextEventID,
 		branchToken,

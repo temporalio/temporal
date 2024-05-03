@@ -583,7 +583,6 @@ func (r *workflowResetterImpl) reapplyContinueAsNewWorkflowEvents(
 	nextRunID, err := r.reapplyEventsFromBranch(
 		ctx,
 		resetMutableState,
-		currentUpdateRegistry,
 		baseRebuildNextEventID,
 		baseNextEventID,
 		baseBranchToken,
@@ -641,7 +640,6 @@ func (r *workflowResetterImpl) reapplyContinueAsNewWorkflowEvents(
 		nextRunID, err = r.reapplyEventsFromBranch(
 			ctx,
 			resetMutableState,
-			currentUpdateRegistry,
 			common.FirstEventID,
 			nextWorkflowNextEventID,
 			nextWorkflowBranchToken,
@@ -664,7 +662,6 @@ func (r *workflowResetterImpl) reapplyContinueAsNewWorkflowEvents(
 func (r *workflowResetterImpl) reapplyEventsFromBranch(
 	ctx context.Context,
 	mutableState workflow.MutableState,
-	currentUpdateRegistry update.Registry,
 	firstEventID int64,
 	nextEventID int64,
 	branchToken []byte,
