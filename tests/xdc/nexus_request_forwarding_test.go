@@ -171,11 +171,13 @@ func (s *NexusRequestForwardingSuite) TestStartOperationForwardedFromStandbyToAc
 			nexusClient, err := nexus.NewClient(nexus.ClientOptions{ServiceBaseURL: dispatchURL})
 			s.NoError(err)
 
-			activeMetricsHandler := s.cluster1.GetHost().GetMetricsHandler().(*metricstest.CaptureHandler)
+			activeMetricsHandler, ok := s.cluster1.GetHost().GetMetricsHandler().(*metricstest.CaptureHandler)
+			s.True(ok)
 			activeCapture := activeMetricsHandler.StartCapture()
 			defer activeMetricsHandler.StopCapture(activeCapture)
 
-			passiveMetricsHandler := s.cluster2.GetHost().GetMetricsHandler().(*metricstest.CaptureHandler)
+			passiveMetricsHandler, ok := s.cluster2.GetHost().GetMetricsHandler().(*metricstest.CaptureHandler)
+			s.True(ok)
 			passiveCapture := passiveMetricsHandler.StartCapture()
 			defer passiveMetricsHandler.StopCapture(passiveCapture)
 
@@ -249,11 +251,13 @@ func (s *NexusRequestForwardingSuite) TestCancelOperationForwardedFromStandbyToA
 			nexusClient, err := nexus.NewClient(nexus.ClientOptions{ServiceBaseURL: dispatchURL})
 			s.NoError(err)
 
-			activeMetricsHandler := s.cluster1.GetHost().GetMetricsHandler().(*metricstest.CaptureHandler)
+			activeMetricsHandler, ok := s.cluster1.GetHost().GetMetricsHandler().(*metricstest.CaptureHandler)
+			s.True(ok)
 			activeCapture := activeMetricsHandler.StartCapture()
 			defer activeMetricsHandler.StopCapture(activeCapture)
 
-			passiveMetricsHandler := s.cluster2.GetHost().GetMetricsHandler().(*metricstest.CaptureHandler)
+			passiveMetricsHandler, ok := s.cluster2.GetHost().GetMetricsHandler().(*metricstest.CaptureHandler)
+			s.True(ok)
 			passiveCapture := passiveMetricsHandler.StartCapture()
 			defer passiveMetricsHandler.StopCapture(passiveCapture)
 
@@ -268,10 +272,10 @@ func (s *NexusRequestForwardingSuite) TestCancelOperationForwardedFromStandbyToA
 	}
 }
 
-func (s *NexusRequestForwardingSuite) nexusTaskPoller(frontendClient tests.FrontendClient, namespace string, taskQueue string, handler func(*workflowservice.PollNexusTaskQueueResponse) (*nexuspb.Response, *nexuspb.HandlerError)) {
+func (s *NexusRequestForwardingSuite) nexusTaskPoller(frontendClient tests.FrontendClient, ns string, taskQueue string, handler func(*workflowservice.PollNexusTaskQueueResponse) (*nexuspb.Response, *nexuspb.HandlerError)) {
 	ctx := tests.NewContext()
 	res, err := frontendClient.PollNexusTaskQueue(ctx, &workflowservice.PollNexusTaskQueueRequest{
-		Namespace: namespace,
+		Namespace: ns,
 		Identity:  uuid.NewString(),
 		TaskQueue: &taskqueuepb.TaskQueue{
 			Name: taskQueue,
@@ -284,14 +288,14 @@ func (s *NexusRequestForwardingSuite) nexusTaskPoller(frontendClient tests.Front
 
 	if handlerErr != nil {
 		_, err = frontendClient.RespondNexusTaskFailed(ctx, &workflowservice.RespondNexusTaskFailedRequest{
-			Namespace: namespace,
+			Namespace: ns,
 			Identity:  uuid.NewString(),
 			TaskToken: res.TaskToken,
 			Error:     handlerErr,
 		})
 	} else if response != nil {
 		_, err = frontendClient.RespondNexusTaskCompleted(ctx, &workflowservice.RespondNexusTaskCompletedRequest{
-			Namespace: namespace,
+			Namespace: ns,
 			Identity:  uuid.NewString(),
 			TaskToken: res.TaskToken,
 			Response:  response,
