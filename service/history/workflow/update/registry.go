@@ -29,6 +29,7 @@ import (
 	"errors"
 	"fmt"
 	"math"
+	"slices"
 	"sync"
 
 	"go.opentelemetry.io/otel/trace"
@@ -75,11 +76,8 @@ type (
 		// that worker processed (rejected or accepted) all updates that were delivered on the workflow task.
 		RejectUnprocessed(ctx context.Context, effects effect.Controller) ([]string, error)
 
-		// CancelIncomplete cancels all incomplete updates in the registry:
-		//   - updates in stateCreated, stateAdmitted, or stateSent are rejected,
-		//   - updates in stateAccepted are ignored (see CancelIncomplete() in update.go for details),
-		//   - updates in stateCompleted are ignored.
-		CancelIncomplete(ctx context.Context, reason CancelReason, eventStore EventStore) error
+		// Abort all incomplete updates in the registry.
+		Abort(reason AbortReason)
 
 		// Clear registry and abort all waiters.
 		Clear()
@@ -223,18 +221,13 @@ func (r *registry) Find(ctx context.Context, id string) (*Update, bool) {
 	return r.findLocked(ctx, id)
 }
 
-// CancelIncomplete cancels all incomplete updates in the registry:
-//   - updates in stateCreated, stateAdmitted, or stateSent are rejected,
-//   - updates in stateAccepted are ignored (see CancelIncomplete() in update.go for details),
-//   - updates in stateCompleted are ignored.
-func (r *registry) CancelIncomplete(ctx context.Context, reason CancelReason, eventStore EventStore) error {
-	incompleteUpdates := r.filter(func(u *Update) bool { return u.isIncomplete() })
-	for _, upd := range incompleteUpdates {
-		if err := upd.CancelIncomplete(ctx, reason, eventStore); err != nil {
-			return err
-		}
+// Abort all incomplete updates in the registry.
+func (r *registry) Abort(reason AbortReason) {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	for _, upd := range r.updates {
+		upd.abort(reason)
 	}
-	return nil
 }
 
 // RejectUnprocessed reject all updates that are waiting for workflow task to be completed.
@@ -299,7 +292,14 @@ func (r *registry) Send(
 	sequencingEventID := &protocolpb.Message_EventId{EventId: workflowTaskStartedEventID - 1}
 
 	var outgoingMessages []*protocolpb.Message
+
+	var sortedUpdates []*Update
 	for _, upd := range r.updates {
+		sortedUpdates = append(sortedUpdates, upd)
+	}
+	slices.SortStableFunc(sortedUpdates, func(u1, u2 *Update) int { return u1.admittedTime.Compare(u2.admittedTime) })
+
+	for _, upd := range sortedUpdates {
 		outgoingMessage := upd.Send(ctx, includeAlreadySent, sequencingEventID)
 		if outgoingMessage != nil {
 			outgoingMessages = append(outgoingMessages, outgoingMessage)
@@ -310,11 +310,8 @@ func (r *registry) Send(
 
 // Clear registry and abort all waiters.
 func (r *registry) Clear() {
-	r.mu.Lock()
-	defer r.mu.Unlock()
-	for _, upd := range r.updates {
-		upd.abortWaiters()
-	}
+	r.Abort(AbortReasonRegistryCleared)
+
 	r.updates = nil
 	r.completedCount = 0
 }
