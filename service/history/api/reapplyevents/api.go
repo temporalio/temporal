@@ -177,7 +177,7 @@ func Invoke(
 			reappliedEvents, err := eventsReapplier.ReapplyEvents(
 				ctx,
 				mutableState,
-				context.UpdateRegistry(ctx, mutableState),
+				context.UpdateRegistry(ctx, nil),
 				toReapplyEvents,
 				runID,
 			)
