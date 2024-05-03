@@ -25,25 +25,29 @@
 package update
 
 import (
-	failurepb "go.temporal.io/api/failure/v1"
+	"go.temporal.io/server/service/history/consts"
 )
 
 type (
-	CancelReason uint32
+	AbortReason uint32
 )
 
 const (
-	CancelReasonWorkflowCompleted CancelReason = iota + 1
-	CancelReasonWorkflowTerminated
+	AbortReasonRegistryCleared AbortReason = iota + 1
+	AbortReasonWorkflowCompleted
+	AbortReasonWorkflowTerminated
 )
 
-func (r CancelReason) RejectionFailure() *failurepb.Failure {
+// Error returns an error which will be set to update futures while aborting waiters.
+func (r AbortReason) Error() error {
 	switch r {
-	case CancelReasonWorkflowCompleted:
-		return completedWorkflowFailure
-	case CancelReasonWorkflowTerminated:
-		return terminatedWorkflowFailure
+	case AbortReasonRegistryCleared:
+		return registryClearedErr
+	case AbortReasonWorkflowCompleted:
+		return consts.ErrWorkflowCompleted
+	case AbortReasonWorkflowTerminated:
+		return consts.ErrWorkflowCompleted
 	default:
-		panic("unknown cancel reason")
+		panic("unknown abort reason")
 	}
 }

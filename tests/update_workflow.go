@@ -3226,7 +3226,7 @@ func (s *FunctionalSuite) TestUpdateWorkflow_ScheduledSpeculativeWorkflowTask_Te
 	s.EqualValues(5, msResp.GetDatabaseMutableState().GetExecutionInfo().GetCompletionEventBatchId(), "completion_event_batch_id should point to WFTerminated event")
 }
 
-func (s *FunctionalSuite) TestUpdateWorkflow_CompleteWorkflow_CancelUpdate() {
+func (s *FunctionalSuite) TestUpdateWorkflow_CompleteWorkflow_AbortUpdates() {
 	type testCase struct {
 		Name          string
 		Description   string
@@ -3237,17 +3237,17 @@ func (s *FunctionalSuite) TestUpdateWorkflow_CompleteWorkflow_CancelUpdate() {
 	}
 	testCases := []testCase{
 		{
-			Name:          "requested",
-			Description:   "update in stateRequested must be rejected by server with server generated rejection failure",
-			UpdateErr:     "",
-			UpdateFailure: "Workflow Update is rejected because Workflow Execution is completed.",
+			Name:          "admitted",
+			Description:   "update in stateAdmitted must get an error",
+			UpdateErr:     "workflow execution already completed",
+			UpdateFailure: "",
 			Commands:      func(_ *testvars.TestVars) []*commandpb.Command { return nil },
 			Messages:      func(_ *testvars.TestVars, _ *protocolpb.Message) []*protocolpb.Message { return nil },
 		},
 		{
 			Name:          "accepted",
-			Description:   "update in stateAccepted must get an error because there is no way for workflow to complete it and already accepted update can't be rejected",
-			UpdateErr:     "context deadline exceeded",
+			Description:   "update in stateAccepted must get an error",
+			UpdateErr:     "workflow execution already completed",
 			UpdateFailure: "",
 			Commands:      func(tv *testvars.TestVars) []*commandpb.Command { return s.UpdateAcceptCommands(tv, "1") },
 			Messages: func(tv *testvars.TestVars, updRequestMsg *protocolpb.Message) []*protocolpb.Message {
