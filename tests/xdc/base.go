@@ -155,23 +155,31 @@ func (s *xdcBaseSuite) setupSuite(clusterNames []string, opts ...tests.Option) {
 	time.Sleep(time.Millisecond * 200)
 }
 
-func (s *xdcBaseSuite) waitForClusterSynced() {
+func (s *xdcBaseSuite) waitForClusterConnected() {
+	s.logger.Debug("wait for cluster to be connected")
 	s.EventuallyWithT(func(c *assert.CollectT) {
+		s.logger.Debug("check if stream is established")
 		resp, err := s.cluster1.GetHistoryClient().GetReplicationStatus(context.Background(), &historyservice.GetReplicationStatusRequest{})
-		s.NoError(err)
-		s.Equal(1, len(resp.Shards)) // test cluster has only one history shard
+		if !(assert.NoError(c, err) &&
+			assert.Equal(c, 1, len(resp.Shards))) { // test cluster has only one history shard
+			return
+		}
 		shard := resp.Shards[0]
-		s.True(shard.MaxReplicationTaskId > 0)
-		s.NotNil(shard.ShardLocalTime)
-		s.True(shard.ShardLocalTime.AsTime().Before(time.Now()))
-		// s.True(shard.ShardLocalTime.AsTime().After(startTime))
-		s.NotNil(shard.RemoteClusters)
+		if !(assert.NotNil(c, shard) &&
+			assert.True(c, shard.MaxReplicationTaskId > 0) &&
+			assert.NotNil(c, shard.ShardLocalTime) &&
+			assert.True(c, shard.ShardLocalTime.AsTime().Before(time.Now())) &&
+			assert.NotNil(c, shard.RemoteClusters)) {
+			return
+		}
 		standbyAckInfo, ok := shard.RemoteClusters[s.clusterNames[1]]
-		s.True(ok)
-		s.Equal(shard.MaxReplicationTaskId, standbyAckInfo.AckedTaskId)
-		s.NotNil(standbyAckInfo.AckedTaskVisibilityTime)
-		s.True(standbyAckInfo.AckedTaskVisibilityTime.AsTime().Before(time.Now()))
-		// s.True(standbyAckInfo.AckedTaskVisibilityTime.AsTime().After(startTime))
+		if !(assert.True(c, ok) &&
+			assert.NotNil(c, standbyAckInfo) &&
+			assert.NotNil(c, standbyAckInfo.AckedTaskVisibilityTime) &&
+			assert.True(c, standbyAckInfo.AckedTaskVisibilityTime.AsTime().Before(time.Now()))) {
+			return
+		}
+		s.logger.Debug("cluster connected")
 	}, 60*time.Second, 1*time.Second)
 }
 

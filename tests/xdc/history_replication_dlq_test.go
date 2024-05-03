@@ -240,7 +240,7 @@ func (s *historyReplicationDLQSuite) TestWorkflowReplicationTaskFailure() {
 	ctx, cancel := context.WithTimeout(ctx, testTimeout)
 	defer cancel()
 
-	s.waitForClusterSynced()
+	s.waitForClusterConnected()
 
 	// Register a namespace.
 	ns := "history-replication-dlq-test-namespace"
