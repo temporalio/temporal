@@ -833,13 +833,13 @@ func (handler *workflowTaskHandlerCallbacksImpl) handleWorkflowTaskCompleted(
 	effects.Apply(ctx)
 
 	if !ms.IsWorkflowExecutionRunning() {
-		// If workflow competed itself with one of the completion command,
+		// If the workflow completed itself with one of the completion commands,
 		// abort all waiters with "workflow completed" error.
 		// Because all unprocessed updates were already rejected, incomplete updates in the registry are:
 		// - updates that were received while this WFT was running,
 		// - updates that were accepted but not completed by this WFT.
 		// It is important to call this after applying effects to be sure there are no unprocessed effects.
-		updateRegistry.AbortWaiters(update.AbortWaiterReasonWorkflowCompleted)
+		updateRegistry.Abort(update.AbortReasonWorkflowCompleted)
 	}
 
 	// Create speculative workflow task after mutable state is persisted.

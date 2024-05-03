@@ -208,9 +208,9 @@ func (u *Update) WaitLifecycleStage(
 		// If err is not nil (checked above), and is not coming from context,
 		// then it means that the error is from the future itself.
 		if ctx.Err() == nil && stCtx.Err() == nil {
-			// Workflow Update uses registryClearedErr to abort waiter. This error uses special handling here:
-			// abort waiting for COMPLETED stage and check if update has reached ACCEPTED stage.
-			// All other errors are returned to the caller (not currently happens).
+			// Update uses registryClearedErr when registry is cleared. This error has special handling here:
+			//   abort waiting for COMPLETED stage and check if update has reached ACCEPTED stage.
+			// All other errors are returned to the caller.
 			if !errors.Is(err, registryClearedErr) {
 				return nil, err
 			}
@@ -240,11 +240,11 @@ func (u *Update) WaitLifecycleStage(
 		// If err is not nil (checked above), and is not coming from context,
 		// then it means that the error is from the future itself.
 		if ctx.Err() == nil && stCtx.Err() == nil {
-			// Workflow Update uses registryClearedErr to abort waiter. This error uses special handling here:
-			// abort waiting for ACCEPTED stage and return Unavailable (retryable) error to the caller.
+			// Update uses registryClearedErr when registry is cleared. This error has special handling here:
+			//   abort waiting for ACCEPTED stage and return Unavailable (retryable) error to the caller.
 			// This error will be retried (by history service handler, or history service client in frontend,
-			// or SDK, or user client) and it will recreate update in the registry.
-			// All other errors are returned to the caller (not currently happens).
+			// or SDK, or user client). This will recreate update in the registry.
+			// All other errors are returned to the caller.
 			if !errors.Is(err, registryClearedErr) {
 				return nil, err
 			}
@@ -266,8 +266,9 @@ func (u *Update) WaitLifecycleStage(
 	return statusAdmitted(), nil
 }
 
-// abortWaiters fails update futures with reason.Error() error and set state to stateAborted.
-func (u *Update) abortWaiters(reason AbortWaiterReason) {
+// abort fails update futures with reason.Error() error (which will notify all waiters with error)
+// and set state to stateAborted. It is a terminal state. Update can't be changed after it is aborted.
+func (u *Update) abort(reason AbortReason) {
 
 	const preAcceptedStates = stateSet(stateCreated | stateProvisionallyAdmitted | stateAdmitted | stateSent | stateProvisionallyAccepted)
 	if u.state.Matches(preAcceptedStates) {
@@ -302,9 +303,9 @@ func (u *Update) Admit(
 
 	if !eventStore.CanAddEvent() {
 		// There shouldn't be any waiters before update is admitted (this func returns).
-		// Call abortWaiters to seal futures and set state to stateAborted.
-		u.abortWaiters(AbortWaiterReasonWorkflowCompleted)
-		return AbortWaiterReasonWorkflowCompleted.Error()
+		// Call abort to seal the update.
+		u.abort(AbortReasonWorkflowCompleted)
+		return AbortReasonWorkflowCompleted.Error()
 	}
 
 	u.instrumentation.CountRequestMsg()
@@ -370,11 +371,11 @@ func (u *Update) OnProtocolMessage(
 
 	// If no new events can be added to the event store (e.g. workflow is completed),
 	// then only Rejection messages can be processed, because they don't create new events in the history.
-	// All other message types abort waiters and set state to stateAborted.
+	// All other message types abort update.
 	_, isRejection := body.(*updatepb.Rejection)
 	shouldAbort := !(eventStore.CanAddEvent() || isRejection)
 	if shouldAbort {
-		u.abortWaiters(AbortWaiterReasonWorkflowCompleted)
+		u.abort(AbortReasonWorkflowCompleted)
 		return nil
 	}
 

@@ -1380,7 +1380,7 @@ func (s *ClientFunctionalSuite) Test_WorkflowCanBeCompletedDespiteAdmittedUpdate
 			},
 		})
 		if err == nil {
-			// Update is admitted but doesn't block WF from competition.
+			// Update is admitted but doesn't block WF from completion.
 			close(updateHasBeenAdmitted)
 			break
 		}

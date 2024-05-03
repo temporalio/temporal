@@ -29,23 +29,23 @@ import (
 )
 
 type (
-	AbortWaiterReason uint32
+	AbortReason uint32
 )
 
 const (
-	AbortWaiterReasonRegistryCleared AbortWaiterReason = iota + 1
-	AbortWaiterReasonWorkflowCompleted
-	AbortWaiterReasonWorkflowTerminated
+	AbortReasonRegistryCleared AbortReason = iota + 1
+	AbortReasonWorkflowCompleted
+	AbortReasonWorkflowTerminated
 )
 
 // Error returns an error which will be set to update futures while aborting waiters.
-func (r AbortWaiterReason) Error() error {
+func (r AbortReason) Error() error {
 	switch r {
-	case AbortWaiterReasonRegistryCleared:
+	case AbortReasonRegistryCleared:
 		return registryClearedErr
-	case AbortWaiterReasonWorkflowCompleted:
+	case AbortReasonWorkflowCompleted:
 		return consts.ErrWorkflowCompleted
-	case AbortWaiterReasonWorkflowTerminated:
+	case AbortReasonWorkflowTerminated:
 		return consts.ErrWorkflowCompleted
 	default:
 		panic("unknown abort reason")

@@ -581,7 +581,7 @@ func TestRejectUnprocessed(t *testing.T) {
 	require.Len(t, rejectedIDs, 0, "rejected updates shouldn't be rejected again")
 }
 
-func TestAbortWaiters(t *testing.T) {
+func TestAbort(t *testing.T) {
 	var (
 		ctx          = context.Background()
 		evStore      = mockEventStore{Controller: effect.Immediate(ctx)}
@@ -634,7 +634,7 @@ func TestAbortWaiters(t *testing.T) {
 		&protocolpb.Message{Body: mustMarshalAny(t, &updatepb.Response{Meta: &updatepb.Meta{UpdateId: updateID5}, Outcome: successOutcome(t, "update completed")})},
 		evStore)
 
-	reg.AbortWaiters(update.AbortWaiterReasonWorkflowCompleted)
+	reg.Abort(update.AbortReasonWorkflowCompleted)
 
 	status, err := updCreated.WaitLifecycleStage(ctx, enumspb.UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_COMPLETED, 1*time.Second)
 	require.Error(t, err)

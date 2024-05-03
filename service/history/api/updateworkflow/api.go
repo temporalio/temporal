@@ -116,8 +116,9 @@ func (u *Updater) Invoke(
 	)
 
 	if err != nil {
-		return u.OnError(err)
+		return nil, err
 	}
+
 	return u.OnSuccess(ctx)
 }
 
@@ -217,12 +218,6 @@ func (u *Updater) ApplyRequest(
 		Noop:               true,
 		CreateWorkflowTask: false,
 	}, nil
-}
-
-func (u *Updater) OnError(
-	err error,
-) (*historyservice.UpdateWorkflowExecutionResponse, error) {
-	return nil, err
 }
 
 func (u *Updater) OnSuccess(
