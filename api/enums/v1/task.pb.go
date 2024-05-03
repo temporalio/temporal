@@ -234,6 +234,8 @@ func (x TaskType) String() string {
 	case TASK_TYPE_TRANSFER_SIGNAL_EXECUTION:
 		return "TransferSignalExecution"
 	case TASK_TYPE_TRANSFER_RESET_WORKFLOW:
+
+		// TaskPriority is only used for replication task as of May 2024
 		return "TransferResetWorkflow"
 	case TASK_TYPE_WORKFLOW_TASK_TIMEOUT:
 		return "WorkflowTaskTimeout"
@@ -242,11 +244,13 @@ func (x TaskType) String() string {
 	case TASK_TYPE_USER_TIMER:
 		return "UserTimer"
 
-		// Enum value maps for TaskPriority.
+		// gap between index can be used for future priority levels if needed
 	case TASK_TYPE_WORKFLOW_RUN_TIMEOUT:
 		return "WorkflowRunTimeout"
 	case TASK_TYPE_DELETE_HISTORY_EVENT:
 		return "DeleteHistoryEvent"
+
+		// Enum value maps for TaskPriority.
 	case TASK_TYPE_ACTIVITY_RETRY_TIMER:
 		return "ActivityRetryTimer"
 	case TASK_TYPE_WORKFLOW_BACKOFF_TIMER:
@@ -269,8 +273,6 @@ func (x TaskType) String() string {
 		return "StateMachineOutbound"
 	case TASK_TYPE_STATE_MACHINE_TIMER:
 		return "StateMachineTimer"
-
-		// Deprecated: Use TaskPriority.Descriptor instead.
 	case TASK_TYPE_WORKFLOW_EXECUTION_TIMEOUT:
 		return "WorkflowExecutionTimeout"
 	default:
@@ -300,19 +302,20 @@ type TaskPriority int32
 const (
 	TASK_PRIORITY_UNSPECIFIED TaskPriority = 0
 	TASK_PRIORITY_HIGH        TaskPriority = 1
-	TASK_PRIORITY_LOW         TaskPriority = 2
+
+	TASK_PRIORITY_LOW TaskPriority = 10
 )
 
 var (
 	TaskPriority_name = map[int32]string{
-		0: "TASK_PRIORITY_UNSPECIFIED",
-		1: "TASK_PRIORITY_HIGH",
-		2: "TASK_PRIORITY_LOW",
+		0:  "TASK_PRIORITY_UNSPECIFIED",
+		1:  "TASK_PRIORITY_HIGH",
+		10: "TASK_PRIORITY_LOW",
 	}
 	TaskPriority_value = map[string]int32{
 		"TASK_PRIORITY_UNSPECIFIED": 0,
 		"TASK_PRIORITY_HIGH":        1,
-		"TASK_PRIORITY_LOW":         2,
+		"TASK_PRIORITY_LOW":         10,
 	}
 )
 
@@ -348,6 +351,7 @@ func (x TaskPriority) Number() protoreflect.EnumNumber {
 	return protoreflect.EnumNumber(x)
 }
 
+// Deprecated: Use TaskPriority.Descriptor instead.
 func (TaskPriority) EnumDescriptor() ([]byte, []int) {
 	return file_temporal_server_api_enums_v1_task_proto_rawDescGZIP(), []int{2}
 }
@@ -438,7 +442,7 @@ var file_temporal_server_api_enums_v1_task_proto_rawDesc = []byte{
 	0x49, 0x46, 0x49, 0x45, 0x44, 0x10, 0x00, 0x12, 0x16, 0x0a, 0x12, 0x54, 0x41, 0x53, 0x4b, 0x5f,
 	0x50, 0x52, 0x49, 0x4f, 0x52, 0x49, 0x54, 0x59, 0x5f, 0x48, 0x49, 0x47, 0x48, 0x10, 0x01, 0x12,
 	0x15, 0x0a, 0x11, 0x54, 0x41, 0x53, 0x4b, 0x5f, 0x50, 0x52, 0x49, 0x4f, 0x52, 0x49, 0x54, 0x59,
-	0x5f, 0x4c, 0x4f, 0x57, 0x10, 0x02, 0x42, 0x2a, 0x5a, 0x28, 0x67, 0x6f, 0x2e, 0x74, 0x65, 0x6d,
+	0x5f, 0x4c, 0x4f, 0x57, 0x10, 0x0a, 0x42, 0x2a, 0x5a, 0x28, 0x67, 0x6f, 0x2e, 0x74, 0x65, 0x6d,
 	0x70, 0x6f, 0x72, 0x61, 0x6c, 0x2e, 0x69, 0x6f, 0x2f, 0x73, 0x65, 0x72, 0x76, 0x65, 0x72, 0x2f,
 	0x61, 0x70, 0x69, 0x2f, 0x65, 0x6e, 0x75, 0x6d, 0x73, 0x2f, 0x76, 0x31, 0x3b, 0x65, 0x6e, 0x75,
 	0x6d, 0x73, 0x62, 0x06, 0x70, 0x72, 0x6f, 0x74, 0x6f, 0x33,
