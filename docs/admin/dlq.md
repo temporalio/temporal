@@ -16,7 +16,7 @@ You can specify the maximum number of task execution attempts with unexpected er
 If you need to capture tasks that fail with specific errors, you can utilize the config flag `history.TaskDLQErrorPattern`. 
 This allows you to define a regular expression that will match one or more errors. However, exercise caution when 
 specifying the regular expression to avoid unintended matches. Once configured, all task processing errors will be 
-compared against this pattern, which could affect performance. Therefore, use this flag only when absolutely necessary.
+compared against this pattern, which could affect performance. Therefore, use this flag only when necessary.
 
 ## Detection
 There is a metric `dlq_writes`, which is incremented each time a message is enqueued to the DLQ.
