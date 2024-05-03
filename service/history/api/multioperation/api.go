@@ -182,7 +182,7 @@ func updateWorkflow(
 	currentWorkflowLease.GetReleaseFn()(err)
 
 	if err != nil {
-		return onUpdateError(err, updater, startOpResp)
+		return nil, newMultiOpError(multiOpAbortedErr, err)
 	}
 
 	// wait for the update to complete
@@ -234,7 +234,7 @@ func startAndUpdateWorkflow(
 	if err != nil {
 		// an update error occurred
 		if updateErr != nil {
-			return onUpdateError(updateErr, updater, startOpResp)
+			return nil, newMultiOpError(multiOpAbortedErr, updateErr)
 		}
 
 		// a start error occurred
@@ -277,27 +277,6 @@ func startAndUpdateWorkflow(
 			},
 		},
 	}, nil
-}
-
-func onUpdateError(
-	updateErr error,
-	updater *updateworkflow.Updater,
-	startOpResp *historyservice.ExecuteMultiOperationResponse_Response,
-) (*historyservice.ExecuteMultiOperationResponse, error) {
-	updateResp := updater.OnError(updateErr)
-	if updateResp != nil {
-		return &historyservice.ExecuteMultiOperationResponse{
-			Responses: []*historyservice.ExecuteMultiOperationResponse_Response{
-				startOpResp,
-				{
-					Response: &historyservice.ExecuteMultiOperationResponse_Response_UpdateWorkflow{
-						UpdateWorkflow: updateResp,
-					},
-				},
-			},
-		}, nil
-	}
-	return nil, newMultiOpError(multiOpAbortedErr, updateErr)
 }
 
 func newMultiOpError(errs ...error) error {

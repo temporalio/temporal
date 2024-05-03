@@ -26,7 +26,6 @@ package updateworkflow
 
 import (
 	"context"
-	"errors"
 	"time"
 
 	commonpb "go.temporal.io/api/common/v1"
@@ -117,9 +116,9 @@ func (u *Updater) Invoke(
 	)
 
 	if err != nil {
-		rejResp := u.OnError(err)
-		return rejResp, err
+		return nil, err
 	}
+
 	return u.OnSuccess(ctx)
 }
 
@@ -219,22 +218,6 @@ func (u *Updater) ApplyRequest(
 		Noop:               true,
 		CreateWorkflowTask: false,
 	}, nil
-}
-
-func (u *Updater) OnError(
-	err error,
-) *historyservice.UpdateWorkflowExecutionResponse {
-	// Special handling for consts.ErrWorkflowCompleted here is needed for consistency with the case when update is received while WFT is running and this WFT completes workflow. In this case update is rejected (see update.CancelIncomplete).
-	if errors.Is(err, consts.ErrWorkflowCompleted) {
-		rejectionResp := u.createResponse(
-			u.wfKey,
-			&updatepb.Outcome{
-				Value: &updatepb.Outcome_Failure{Failure: update.CancelReasonWorkflowCompleted.RejectionFailure()},
-			},
-			enumspb.UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_COMPLETED)
-		return rejectionResp
-	}
-	return nil
 }
 
 func (u *Updater) OnSuccess(
