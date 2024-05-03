@@ -189,7 +189,7 @@ func NewRegistry(
 				withInstrumentation(&r.instrumentation),
 			)
 		} else if acc := updInfo.GetAcceptance(); acc != nil {
-			uc := newAccepted(
+			u := newAccepted(
 				updID,
 				acc.EventId,
 				r.remover(updID),
@@ -198,9 +198,9 @@ func NewRegistry(
 			if !r.store.IsWorkflowExecutionRunning() {
 				// If workflow is completed, accepted update will never be completed.
 				// This will return "workflow completed" error to the pollers of outcome of accepted updates.
-				uc.abort(AbortReasonWorkflowCompleted)
+				u.abort(AbortReasonWorkflowCompleted)
 			}
-			r.updates[updID] = uc
+			r.updates[updID] = u
 		} else if updInfo.GetCompletion() != nil {
 			r.completedCount++
 		}
