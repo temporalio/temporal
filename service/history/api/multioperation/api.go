@@ -271,7 +271,7 @@ func startAndUpdateWorkflow(
 	// wait for the update to complete
 	updateResp, err := updater.OnSuccess(ctx)
 	if err != nil {
-		return nil, serviceerror.NewUnavailable(fmt.Errorf("failed to complete Workflow Update: %w", err).Error())
+		return nil, newMultiOpError(nil, err) // `nil` for start since it succeeded
 	}
 
 	return &historyservice.ExecuteMultiOperationResponse{
