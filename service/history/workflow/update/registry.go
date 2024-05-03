@@ -170,12 +170,10 @@ func NewRegistry(
 	return r
 }
 
-// updateFromStore performs a unidirectional sync from store to registry. Specifically, for every update that is in the
+// UpdateFromStore performs a unidirectional sync from store to registry. Specifically, for every update that is in the
 // store, we do the following:
 // - if the update is not in the registry then we create an entry in the registry,
 // - alternatively, if the update is in the registry and the state in the store is more advanced, then we advance the update in the registry.
-//
-//nolint:revive // cognitive complexity 27 (> max enabled 25)
 func (r *registry) UpdateFromStore() {
 	r.getStoreFn().VisitUpdates(func(updID string, updInfo *updatespb.UpdateInfo) {
 		if updInfo.GetAdmission() != nil {
