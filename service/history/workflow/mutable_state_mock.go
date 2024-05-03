@@ -982,17 +982,17 @@ func (mr *MockMutableStateMockRecorder) ApplyActivityTaskTimedOutEvent(arg0 inte
 }
 
 // ApplyBuildIdRedirect mocks base method.
-func (m *MockMutableState) ApplyBuildIdRedirect(buildId string, redirectCounter int64) error {
+func (m *MockMutableState) ApplyBuildIdRedirect(startingTaskScheduledEventId int64, buildId string, redirectCounter int64) error {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "ApplyBuildIdRedirect", buildId, redirectCounter)
+	ret := m.ctrl.Call(m, "ApplyBuildIdRedirect", startingTaskScheduledEventId, buildId, redirectCounter)
 	ret0, _ := ret[0].(error)
 	return ret0
 }
 
 // ApplyBuildIdRedirect indicates an expected call of ApplyBuildIdRedirect.
-func (mr *MockMutableStateMockRecorder) ApplyBuildIdRedirect(buildId, redirectCounter interface{}) *gomock.Call {
+func (mr *MockMutableStateMockRecorder) ApplyBuildIdRedirect(startingTaskScheduledEventId, buildId, redirectCounter interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ApplyBuildIdRedirect", reflect.TypeOf((*MockMutableState)(nil).ApplyBuildIdRedirect), buildId, redirectCounter)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ApplyBuildIdRedirect", reflect.TypeOf((*MockMutableState)(nil).ApplyBuildIdRedirect), startingTaskScheduledEventId, buildId, redirectCounter)
 }
 
 // ApplyChildWorkflowExecutionCanceledEvent mocks base method.

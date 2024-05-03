@@ -2451,7 +2451,8 @@ func (ms *MutableStateImpl) ApplyBuildIdRedirect(
 	// Re-scheduling pending WF and activity tasks which are not started yet.
 	if ms.HasPendingWorkflowTask() && !ms.HasStartedWorkflowTask() &&
 		ms.GetPendingWorkflowTask().ScheduledEventID != startingTaskScheduledEventId &&
-		// speculative tasks do not go to matching
+		// TODO: something special may need to be done for speculative tasks as GenerateScheduleWorkflowTaskTasks
+		// does not support them.
 		ms.GetPendingWorkflowTask().Type != enumsspb.WORKFLOW_TASK_TYPE_SPECULATIVE {
 		// sticky queue should be cleared by UpdateBuildIdAssignment already, so the following call only generates
 		// a WorkflowTask, not a WorkflowTaskTimeoutTask.
@@ -2467,6 +2468,7 @@ func (ms *MutableStateImpl) ApplyBuildIdRedirect(
 			ai.StartedEventId != common.EmptyEventID ||
 			// activity does not depend on wf build ID
 			ai.GetUseWorkflowBuildIdInfo() == nil {
+			// TODO: skip task generation also when activity is in backoff period
 			continue
 		}
 		// we only need to resend the activities to matching, no need to update timer tasks.
