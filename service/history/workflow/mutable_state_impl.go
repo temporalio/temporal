@@ -912,7 +912,7 @@ func (ms *MutableStateImpl) VisitUpdates(visitor func(updID string, updInfo *upd
 		updInfo *updatespb.UpdateInfo
 		eventId int64
 	}
-	updateEvents := []updateEvent{}
+	var updateEvents []updateEvent
 	for updID, updInfo := range ms.executionInfo.GetUpdateInfos() {
 		u := updateEvent{
 			updId:   updID,
