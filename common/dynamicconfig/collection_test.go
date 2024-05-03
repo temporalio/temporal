@@ -54,6 +54,7 @@ const (
 	testGetBoolPropertyFilteredByNamespaceIDKey       = "testGetBoolPropertyFilteredByNamespaceIDKey"
 	testGetBoolPropertyFilteredByTaskQueueInfoKey     = "testGetBoolPropertyFilteredByTaskQueueInfoKey"
 	testGetStringPropertyFilteredByNamespaceIDKey     = "testGetStringPropertyFilteredByNamespaceIDKey"
+	testGetIntPropertyFilteredByDestinationKey        = "testGetIntPropertyFilteredByDestinationKey"
 )
 
 // Note: fileBasedClientSuite also heavily tests Collection, since some tests are easier with data
@@ -260,6 +261,46 @@ func (s *collectionSuite) TestGetMapProperty() {
 	s.client[testGetMapPropertyKey] = val
 	s.Equal(val, value())
 	s.Equal("321", value()["testKey"])
+}
+
+func (s *collectionSuite) TestGetIntPropertyFilteredByDestination() {
+	namespaceID := "testNamespaceID"
+	destination1 := "testDestination1"
+	destination2 := "testDestination2"
+	value := s.cln.GetIntPropertyFilteredByDestination(testGetIntPropertyFilteredByDestinationKey, 10)
+	s.Equal(10, value(namespaceID, destination1))
+	s.client[testGetIntPropertyFilteredByDestinationKey] = []ConstrainedValue{
+		{
+			Constraints: Constraints{
+				NamespaceID: namespaceID,
+				Destination: destination1,
+			},
+			Value: 50,
+		},
+		{
+			Constraints: Constraints{
+				NamespaceID: namespaceID,
+			},
+			Value: 75,
+		},
+		{
+			Constraints: Constraints{
+				Destination: destination1,
+			},
+			Value: 90,
+		},
+		{
+			Constraints: Constraints{
+				Destination: destination2,
+			},
+			Value: 100,
+		},
+	}
+	s.Equal(50, value(namespaceID, destination1))
+	s.Equal(75, value(namespaceID, "testAnotherDestination"))
+	s.Equal(90, value("testAnotherNamespaceID", destination1))
+	s.Equal(100, value(namespaceID, destination2)) // priority: destination >>> namespace
+	s.Equal(10, value("testAnotherNamespaceID", "testAnotherDestination"))
 }
 
 func (s *collectionSuite) TestFindMatch() {

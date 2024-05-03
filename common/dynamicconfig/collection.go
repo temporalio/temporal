@@ -68,25 +68,31 @@ type (
 	BoolPropertyFnWithNamespaceFilter       func(namespace string) bool
 	BoolPropertyFnWithNamespaceIDFilter     func(namespaceID string) bool
 	BoolPropertyFnWithTaskQueueFilter       func(namespace string, taskQueue string, taskType enumspb.TaskQueueType) bool
+	BoolPropertyFnWithDestinationFilter     func(namespaceID string, destination string) bool
 	DurationPropertyFn                      func() time.Duration
 	DurationPropertyFnWithNamespaceFilter   func(namespace string) time.Duration
 	DurationPropertyFnWithNamespaceIDFilter func(namespaceID string) time.Duration
 	DurationPropertyFnWithShardIDFilter     func(shardID int32) time.Duration
 	DurationPropertyFnWithTaskQueueFilter   func(namespace string, taskQueue string, taskType enumspb.TaskQueueType) time.Duration
 	DurationPropertyFnWithTaskTypeFilter    func(task enumsspb.TaskType) time.Duration
+	DurationPropertyFnWithDestinationFilter func(namespaceID string, destination string) time.Duration
 	FloatPropertyFn                         func() float64
 	FloatPropertyFnWithNamespaceFilter      func(namespace string) float64
 	FloatPropertyFnWithShardIDFilter        func(shardID int32) float64
 	FloatPropertyFnWithTaskQueueFilter      func(namespace string, taskQueue string, taskType enumspb.TaskQueueType) float64
+	FloatPropertyFnWithDestinationFilter    func(namespaceID string, destination string) float64
 	IntPropertyFn                           func() int
 	IntPropertyFnWithNamespaceFilter        func(namespace string) int
 	IntPropertyFnWithShardIDFilter          func(shardID int32) int
 	IntPropertyFnWithTaskQueueFilter        func(namespace string, taskQueue string, taskType enumspb.TaskQueueType) int
+	IntPropertyFnWithDestinationFilter      func(namespaceID string, destination string) int
 	MapPropertyFn                           func() map[string]any
 	MapPropertyFnWithNamespaceFilter        func(namespace string) map[string]any
+	MapPropertyFnWithDestinationFilter      func(namespaceID string, destination string) map[string]any
 	StringPropertyFn                        func() string
 	StringPropertyFnWithNamespaceFilter     func(namespace string) string
 	StringPropertyFnWithNamespaceIDFilter   func(namespaceID string) string
+	StringPropertyFnWithDestinationFilter   func(namespaceID string, destination string) string
 )
 
 const (
@@ -414,6 +420,84 @@ func (c *Collection) GetBoolPropertyFilteredByTaskQueueInfo(key Key, defaultValu
 	}
 }
 
+// GetBoolPropertyFilteredByDestination gets property with destination as filter and asserts that it's a bool
+func (c *Collection) GetBoolPropertyFilteredByDestination(key Key, defaultValue any) BoolPropertyFnWithDestinationFilter {
+	return func(namespaceID string, destination string) bool {
+		return matchAndConvert(
+			c,
+			key,
+			defaultValue,
+			destinationPrecedence(namespaceID, destination),
+			convertBool,
+		)
+	}
+}
+
+// GetDurationPropertyFilteredByDestination gets property with destination as filter and asserts that it's a duration
+func (c *Collection) GetDurationPropertyFilteredByDestination(key Key, defaultValue any) DurationPropertyFnWithDestinationFilter {
+	return func(namespaceID string, destination string) time.Duration {
+		return matchAndConvert(
+			c,
+			key,
+			defaultValue,
+			destinationPrecedence(namespaceID, destination),
+			convertDuration,
+		)
+	}
+}
+
+// GetFloatPropertyFilteredByDestination gets property with destination as filter and asserts that it's a float64
+func (c *Collection) GetFloatPropertyFilteredByDestination(key Key, defaultValue any) FloatPropertyFnWithDestinationFilter {
+	return func(namespaceID string, destination string) float64 {
+		return matchAndConvert(
+			c,
+			key,
+			defaultValue,
+			destinationPrecedence(namespaceID, destination),
+			convertFloat,
+		)
+	}
+}
+
+// GetIntPropertyFilteredByDestination gets property with destination as filter and asserts that it's a integer
+func (c *Collection) GetIntPropertyFilteredByDestination(key Key, defaultValue any) IntPropertyFnWithDestinationFilter {
+	return func(namespaceID string, destination string) int {
+		return matchAndConvert(
+			c,
+			key,
+			defaultValue,
+			destinationPrecedence(namespaceID, destination),
+			convertInt,
+		)
+	}
+}
+
+// GetMapPropertyFilteredByDestination gets property with destination as filter and asserts that it's a map
+func (c *Collection) GetMapPropertyFilteredByDestination(key Key, defaultValue any) MapPropertyFnWithDestinationFilter {
+	return func(namespaceID string, destination string) map[string]any {
+		return matchAndConvert(
+			c,
+			key,
+			defaultValue,
+			destinationPrecedence(namespaceID, destination),
+			convertMap,
+		)
+	}
+}
+
+// GetStringPropertyFilteredByDestination gets property with destination as filter and asserts that it's a string
+func (c *Collection) GetStringPropertyFilteredByDestination(key Key, defaultValue any) StringPropertyFnWithDestinationFilter {
+	return func(namespaceID string, destination string) string {
+		return matchAndConvert(
+			c,
+			key,
+			defaultValue,
+			destinationPrecedence(namespaceID, destination),
+			convertString,
+		)
+	}
+}
+
 // Task queue partitions use a dedicated function to handle defaults.
 func (c *Collection) GetTaskQueuePartitionsProperty(key Key) IntPropertyFnWithTaskQueueFilter {
 	return c.GetIntPropertyFilteredByTaskQueueInfo(key, defaultNumTaskQueuePartitions)
@@ -517,6 +601,15 @@ func taskQueuePrecedence(namespace string, taskQueue string, taskType enumspb.Ta
 		// be used by defaultNumTaskQueuePartitions and is probably not useful otherwise.
 		{TaskQueueName: taskQueue},
 		{Namespace: namespace},
+		{},
+	}
+}
+
+func destinationPrecedence(namespaceID string, destination string) []Constraints {
+	return []Constraints{
+		{NamespaceID: namespaceID, Destination: destination},
+		{Destination: destination},
+		{NamespaceID: namespaceID},
 		{},
 	}
 }
