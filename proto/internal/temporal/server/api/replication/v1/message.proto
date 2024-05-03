@@ -58,7 +58,7 @@ message ReplicationTask {
     // The task_type + data provide more flexibility in future use cases.
     temporal.api.common.v1.DataBlob data = 12;
     google.protobuf.Timestamp visibility_time = 9;
-    int32 priority = 13;
+    temporal.server.api.enums.v1.TaskPriority priority = 13;
 }
 
 message ReplicationToken {
@@ -115,7 +115,7 @@ message ReplicationTaskInfo {
     int64 first_event_id = 7;
     int64 next_event_id = 8;
     int64 scheduled_event_id = 9;
-    int32 priority = 10;
+    temporal.server.api.enums.v1.TaskPriority priority = 10;
 }
 
 message NamespaceTaskAttributes {
