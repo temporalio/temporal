@@ -260,8 +260,10 @@ func (u *Update) WaitLifecycleStage(
 		}
 	}
 
+	// If waitStage=COMPLETED or ACCEPTED and neither has been reached before the softTimeout has expired.
 	if stCtx.Err() != nil {
 		metrics.WorkflowExecutionUpdateServerTimeout.With(u.instrumentation.metrics).Record(1)
+		return statusAdmitted(), nil
 	}
 
 	// Only get here if waitStage=ADMITTED or UNSPECIFIED and neither ACCEPTED nor COMPLETED are reached.
