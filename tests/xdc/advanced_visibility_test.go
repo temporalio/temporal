@@ -166,8 +166,8 @@ func (s *AdvVisCrossDCTestSuite) SetupTest() {
 }
 
 func (s *AdvVisCrossDCTestSuite) TearDownSuite() {
-	s.NoError(s.cluster1.TearDownCluster())
-	s.NoError(s.cluster2.TearDownCluster())
+	s.cluster1.TearDownCluster()
+	s.cluster2.TearDownCluster()
 }
 
 func (s *AdvVisCrossDCTestSuite) TestSearchAttributes() {

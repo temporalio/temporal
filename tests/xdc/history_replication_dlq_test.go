@@ -28,13 +28,16 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"flag"
 	"fmt"
 	"math"
 	"strconv"
 	"strings"
+	"testing"
 	"time"
 
 	"github.com/pborman/uuid"
+	"github.com/stretchr/testify/suite"
 	"github.com/urfave/cli/v2"
 	"go.temporal.io/api/enums/v1"
 	historypb "go.temporal.io/api/history/v1"
@@ -128,44 +131,44 @@ type (
 	}
 )
 
-// func TestHistoryReplicationDLQSuite(t *testing.T) {
-// 	flag.Parse()
-// 	for _, tc := range []struct {
-// 		name                    string
-// 		enableQueueV2           bool
-// 		enableReplicationStream bool
-// 	}{
-// 		{
-// 			name:                    "QueueV1ReplicationStreamEnabled",
-// 			enableQueueV2:           false,
-// 			enableReplicationStream: true,
-// 		},
-// 		{
-// 			name:                    "QueueV1ReplicationStreamDisabled",
-// 			enableQueueV2:           false,
-// 			enableReplicationStream: false,
-// 		},
-// 		{
-// 			name:                    "QueueV2ReplicationStreamEnabled",
-// 			enableQueueV2:           true,
-// 			enableReplicationStream: true,
-// 		},
-// 		{
-// 			name:                    "QueueV2ReplicationStreamDisabled",
-// 			enableQueueV2:           true,
-// 			enableReplicationStream: false,
-// 		},
-// 	} {
-// 		tc := tc
-// 		t.Run(tc.name, func(t *testing.T) {
-// 			s := &historyReplicationDLQSuite{
-// 				enableReplicationStream: tc.enableReplicationStream,
-// 				enableQueueV2:           tc.enableQueueV2,
-// 			}
-// 			suite.Run(t, s)
-// 		})
-// 	}
-// }
+func TestHistoryReplicationDLQSuite(t *testing.T) {
+	flag.Parse()
+	for _, tc := range []struct {
+		name                    string
+		enableQueueV2           bool
+		enableReplicationStream bool
+	}{
+		{
+			name:                    "QueueV1ReplicationStreamEnabled",
+			enableQueueV2:           false,
+			enableReplicationStream: true,
+		},
+		{
+			name:                    "QueueV1ReplicationStreamDisabled",
+			enableQueueV2:           false,
+			enableReplicationStream: false,
+		},
+		{
+			name:                    "QueueV2ReplicationStreamEnabled",
+			enableQueueV2:           true,
+			enableReplicationStream: true,
+		},
+		{
+			name:                    "QueueV2ReplicationStreamDisabled",
+			enableQueueV2:           true,
+			enableReplicationStream: false,
+		},
+	} {
+		tc := tc
+		t.Run(tc.name, func(t *testing.T) {
+			s := &historyReplicationDLQSuite{
+				enableReplicationStream: tc.enableReplicationStream,
+				enableQueueV2:           tc.enableQueueV2,
+			}
+			suite.Run(t, s)
+		})
+	}
+}
 
 func (s *historyReplicationDLQSuite) SetupSuite() {
 	s.dynamicConfigOverrides = map[dynamicconfig.Key]interface{}{

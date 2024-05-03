@@ -2439,7 +2439,6 @@ func (s *FunctionalClustersTestSuite) TestLocalNamespaceMigration() {
 
 	worker1.RegisterWorkflow(testWorkflowFn)
 	s.NoError(worker1.Start())
-	defer worker1.Stop()
 
 	// Start wf1 (in local ns)
 	workflowID := "local-ns-wf-1"
@@ -2799,7 +2798,6 @@ func (s *FunctionalClustersTestSuite) TestForceMigration_ClosedWorkflow() {
 
 	worker1.RegisterWorkflow(testWorkflowFn)
 	s.NoError(worker1.Start())
-	defer worker1.Stop()
 
 	// Start wf1
 	workflowID := "force-replication-test-wf-1"
@@ -2885,7 +2883,6 @@ func (s *FunctionalClustersTestSuite) TestForceMigration_ClosedWorkflow() {
 
 	worker2.RegisterWorkflow(testWorkflowFn)
 	s.NoError(worker2.Start())
-	defer worker2.Stop()
 
 	// Test reset workflow in cluster 2
 	resetResp, err := client2.ResetWorkflowExecution(testCtx, &workflowservice.ResetWorkflowExecutionRequest{
@@ -2929,7 +2926,6 @@ func (s *FunctionalClustersTestSuite) TestForceMigration_ResetWorkflow() {
 
 	worker1.RegisterWorkflow(testWorkflowFn)
 	s.NoError(worker1.Start())
-	defer worker1.Stop()
 
 	// Start wf1
 	workflowID := "force-replication-test-reset-wf-1"
