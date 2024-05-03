@@ -29,6 +29,7 @@ import (
 	"errors"
 	"fmt"
 	"math"
+	"slices"
 	"sync"
 
 	"go.opentelemetry.io/otel/trace"
@@ -40,6 +41,7 @@ import (
 	"go.temporal.io/server/common/future"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
+	"go.temporal.io/server/internal/effect"
 	"google.golang.org/protobuf/types/known/anypb"
 )
 
@@ -67,12 +69,12 @@ type (
 		// Send returns messages for all Updates that need to be sent to the worker.
 		// If includeAlreadySent is set to true then messages will be created even
 		// for updates which were already sent but not processed by worker.
-		Send(ctx context.Context, includeAlreadySent bool, workflowTaskStartedEventID int64, eventStore EventStore) []*protocolpb.Message
+		Send(ctx context.Context, includeAlreadySent bool, workflowTaskStartedEventID int64) []*protocolpb.Message
 
 		// RejectUnprocessed reject all updates that are waiting for workflow task to be completed.
 		// This method should be called after all messages from worker are handled to make sure
 		// that worker processed (rejected or accepted) all updates that were delivered on the workflow task.
-		RejectUnprocessed(ctx context.Context, eventStore EventStore) ([]string, error)
+		RejectUnprocessed(ctx context.Context, effects effect.Controller) ([]string, error)
 
 		// CancelIncomplete cancels all incomplete updates in the registry:
 		//   - updates in stateCreated, stateAdmitted, or stateSent are rejected,
@@ -241,7 +243,7 @@ func (r *registry) CancelIncomplete(ctx context.Context, reason CancelReason, ev
 // that worker processed (rejected or accepted) all updates that were delivered on specific workflow task.
 func (r *registry) RejectUnprocessed(
 	ctx context.Context,
-	eventStore EventStore,
+	effects effect.Controller,
 ) ([]string, error) {
 
 	// Iterate over updates in the registry while holding read lock.
@@ -254,7 +256,7 @@ func (r *registry) RejectUnprocessed(
 
 	var rejectedUpdateIDs []string
 	for _, upd := range updatesToReject {
-		if err := upd.reject(ctx, unprocessedUpdateFailure, eventStore); err != nil {
+		if err := upd.reject(ctx, unprocessedUpdateFailure, effects); err != nil {
 			return nil, err
 		}
 		rejectedUpdateIDs = append(rejectedUpdateIDs, upd.id)
@@ -284,7 +286,6 @@ func (r *registry) Send(
 	ctx context.Context,
 	includeAlreadySent bool,
 	workflowTaskStartedEventID int64,
-	eventStore EventStore,
 ) []*protocolpb.Message {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
@@ -299,8 +300,15 @@ func (r *registry) Send(
 	sequencingEventID := &protocolpb.Message_EventId{EventId: workflowTaskStartedEventID - 1}
 
 	var outgoingMessages []*protocolpb.Message
+
+	var sortedUpdates []*Update
 	for _, upd := range r.updates {
-		outgoingMessage := upd.Send(ctx, includeAlreadySent, sequencingEventID, eventStore)
+		sortedUpdates = append(sortedUpdates, upd)
+	}
+	slices.SortStableFunc(sortedUpdates, func(u1, u2 *Update) int { return u1.admittedTime.Compare(u2.admittedTime) })
+
+	for _, upd := range sortedUpdates {
+		outgoingMessage := upd.Send(ctx, includeAlreadySent, sequencingEventID)
 		if outgoingMessage != nil {
 			outgoingMessages = append(outgoingMessages, outgoingMessage)
 		}
