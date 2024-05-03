@@ -213,8 +213,6 @@ func (r *registry) FindOrCreate(ctx context.Context, id string) (*Update, bool, 
 
 // Abort all incomplete updates in the registry.
 func (r *registry) Abort(reason AbortReason) {
-	r.mu.RLock()
-	defer r.mu.RUnlock()
 	for _, upd := range r.updates {
 		upd.abort(reason)
 	}
