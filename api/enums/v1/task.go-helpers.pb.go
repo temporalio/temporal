@@ -90,3 +90,22 @@ func TaskTypeFromString(s string) (TaskType, error) {
 	}
 	return TaskType(0), fmt.Errorf("%s is not a valid TaskType", s)
 }
+
+var (
+	TaskPriority_shorthandValue = map[string]int32{
+		"Unspecified": 0,
+		"High":        1,
+		"Low":         10,
+	}
+)
+
+// TaskPriorityFromString parses a TaskPriority value from  either the protojson
+// canonical SCREAMING_CASE enum or the traditional temporal PascalCase enum to TaskPriority
+func TaskPriorityFromString(s string) (TaskPriority, error) {
+	if v, ok := TaskPriority_value[s]; ok {
+		return TaskPriority(v), nil
+	} else if v, ok := TaskPriority_shorthandValue[s]; ok {
+		return TaskPriority(v), nil
+	}
+	return TaskPriority(0), fmt.Errorf("%s is not a valid TaskPriority", s)
+}
