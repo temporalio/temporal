@@ -29,6 +29,7 @@ import (
 	"errors"
 	"fmt"
 	"math"
+	"slices"
 	"sync"
 
 	"go.opentelemetry.io/otel/trace"
@@ -299,7 +300,14 @@ func (r *registry) Send(
 	sequencingEventID := &protocolpb.Message_EventId{EventId: workflowTaskStartedEventID - 1}
 
 	var outgoingMessages []*protocolpb.Message
+
+	var sortedUpdates []*Update
 	for _, upd := range r.updates {
+		sortedUpdates = append(sortedUpdates, upd)
+	}
+	slices.SortStableFunc(sortedUpdates, func(u1, u2 *Update) int { return u1.admittedTime.Compare(u2.admittedTime) })
+
+	for _, upd := range sortedUpdates {
 		outgoingMessage := upd.Send(ctx, includeAlreadySent, sequencingEventID)
 		if outgoingMessage != nil {
 			outgoingMessages = append(outgoingMessages, outgoingMessage)
