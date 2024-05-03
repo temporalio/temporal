@@ -222,7 +222,7 @@ func (r *workflowResetterImpl) ResetWorkflow(
 	if err := reapplyEventsFn(ctx, resetMS); err != nil {
 		return err
 	}
-	if _, err := reapplyEvents(resetMS, nil, additionalReapplyEvents, nil, ""); err != nil {
+	if _, err := r.reapplyEvents(resetMS, additionalReapplyEvents, nil); err != nil {
 		return err
 	}
 
