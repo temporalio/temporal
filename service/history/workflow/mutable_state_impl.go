@@ -2421,7 +2421,7 @@ func (ms *MutableStateImpl) validateBuildIdRedirectInfo(
 	}
 
 	// Valid redirect is happening.
-	return redirectCounter+1, nil
+	return redirectCounter + 1, nil
 }
 
 // ApplyBuildIdRedirect applies possible redirect to mutable state based on versioning stamp of a starting task.
@@ -2753,7 +2753,7 @@ func (ms *MutableStateImpl) ApplyActivityTaskScheduledEvent(
 	if attributes.UseWorkflowBuildId {
 		if ms.GetAssignedBuildId() != "" {
 			// only set when using new versioning
-			ai.BuildIdInfo = &persistencespb.ActivityInfo_UseWorkflowBuildIdInfo_ {
+			ai.BuildIdInfo = &persistencespb.ActivityInfo_UseWorkflowBuildIdInfo_{
 				UseWorkflowBuildIdInfo: &persistencespb.ActivityInfo_UseWorkflowBuildIdInfo{},
 			}
 		} else {
@@ -2874,12 +2874,12 @@ func (ms *MutableStateImpl) AddActivityTaskStartedEvent(
 			return nil, err
 		}
 		return event, nil
-	} else {
-		// This is a transient start so no events is being created for it. But we still need to process possible build
-		// ID redirect.
-		if err := ms.applyActivityBuildIdRedirect(ai, buildId, redirectCounter); err != nil {
-			return nil, err
-		}
+	}
+
+	// This is a transient start so no events is being created for it. But we still need to process possible build
+	// ID redirect.
+	if err := ms.applyActivityBuildIdRedirect(ai, buildId, redirectCounter); err != nil {
+		return nil, err
 	}
 
 	// we might need to retry, so do not append started event just yet,

@@ -566,7 +566,7 @@ func (m *workflowTaskStateMachine) processBuildIdRedirectInfo(
 	redirectInfo *taskqueuespb.BuildIdRedirectInfo,
 ) (newWorkflowTask *WorkflowTaskInfo, converted bool, redirectCounter int64, err error) {
 	if !versioningStamp.GetUseVersioning() || versioningStamp.GetBuildId() == "" {
-		return workflowTask, false, 0,nil
+		return workflowTask, false, 0, nil
 	}
 	buildId := versioningStamp.GetBuildId()
 

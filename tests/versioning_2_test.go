@@ -2126,6 +2126,7 @@ func (s *VersioningIntegSuite) TestRedirectWithConcurrentActivities() {
 			lastRedirectTarget.CompareAndSwap(version+" observed", version+" redirect cleaned")
 		}
 		// Add random sleep to simulate network delay
+		//nolint:forbidigo
 		time.Sleep(time.Duration(int64(rand.Intn(50)) * int64(time.Millisecond)))
 		if rand.Float64() < activityErrorRate {
 			return "", errors.New("intentionally failing activity")
