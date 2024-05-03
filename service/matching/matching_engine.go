@@ -231,7 +231,7 @@ func NewEngine(
 		namespaceUpdateLockMap:    make(map[string]*namespaceUpdateLocks),
 	}
 	e.reachabilityCache = newReachabilityCache(
-		scopedMetricsHandler,
+		metricsHandler.WithTags(metrics.CacheTypeTag(metrics.ReachabilityCacheTypeTagValue)),
 		visibilityManager,
 		e.config.ReachabilityCacheOpenWFsTTL(),
 		e.config.ReachabilityCacheClosedWFsTTL())

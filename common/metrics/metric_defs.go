@@ -59,6 +59,7 @@ const (
 
 	MutableStateCacheTypeTagValue = "mutablestate"
 	EventsCacheTypeTagValue       = "events"
+	ReachabilityCacheTypeTagValue = "reachability"
 
 	InvalidHistoryURITagValue    = "invalid_history_uri"
 	InvalidVisibilityURITagValue = "invalid_visibility_uri"
