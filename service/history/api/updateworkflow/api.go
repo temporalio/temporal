@@ -109,7 +109,11 @@ func (u *Updater) Invoke(
 		nil,
 		api.BypassMutableStateConsistencyPredicate,
 		wfKey,
-		func(lease api.WorkflowLease) (*api.UpdateWorkflowAction, error) { return u.ApplyRequest(ctx, lease) },
+		func(lease api.WorkflowLease) (*api.UpdateWorkflowAction, error) {
+			ms := lease.GetMutableState()
+			updateReg := lease.GetContext().UpdateRegistry(ctx, ms)
+			return u.ApplyRequest(ctx, updateReg, ms)
+		},
 		nil,
 		u.shardCtx,
 		u.workflowConsistencyChecker,
@@ -124,9 +128,9 @@ func (u *Updater) Invoke(
 
 func (u *Updater) ApplyRequest(
 	ctx context.Context,
-	workflowLease api.WorkflowLease,
+	updateReg update.Registry,
+	ms workflow.MutableState,
 ) (*api.UpdateWorkflowAction, error) {
-	ms := workflowLease.GetMutableState()
 	if !ms.IsWorkflowExecutionRunning() {
 		return nil, consts.ErrWorkflowCompleted
 	}
@@ -162,7 +166,6 @@ func (u *Updater) ApplyRequest(
 	}
 
 	updateID := u.req.GetRequest().GetRequest().GetMeta().GetUpdateId()
-	updateReg := workflowLease.GetContext().UpdateRegistry(ctx, ms)
 	var (
 		alreadyExisted bool
 		err            error
