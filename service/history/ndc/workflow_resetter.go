@@ -718,7 +718,7 @@ func (r *workflowResetterImpl) reapplyEvents(
 
 func reapplyEvents(
 	mutableState workflow.MutableState,
-	targetBranchUpdateRegistry *update.Registry,
+	targetBranchUpdateRegistry update.Registry,
 	events []*historypb.HistoryEvent,
 	resetReapplyExcludeTypes map[enumspb.ResetReapplyExcludeType]bool,
 	runIdForDeduplication string,
@@ -757,7 +757,7 @@ func reapplyEvents(
 				continue
 			}
 			attr := event.GetWorkflowExecutionUpdateAdmittedEventAttributes()
-			if targetBranchUpdateRegistry != nil && (*targetBranchUpdateRegistry).Contains(attr.Request.Meta.UpdateId) {
+			if targetBranchUpdateRegistry != nil && targetBranchUpdateRegistry.Contains(attr.Request.Meta.UpdateId) {
 				continue
 			}
 			if _, err := mutableState.AddWorkflowExecutionUpdateAdmittedEvent(
@@ -772,7 +772,7 @@ func reapplyEvents(
 				continue
 			}
 			attr := event.GetWorkflowExecutionUpdateAcceptedEventAttributes()
-			if targetBranchUpdateRegistry != nil && (*targetBranchUpdateRegistry).Contains(attr.ProtocolInstanceId) {
+			if targetBranchUpdateRegistry != nil && targetBranchUpdateRegistry.Contains(attr.ProtocolInstanceId) {
 				continue
 			}
 			request := attr.GetAcceptedRequest()
