@@ -5381,15 +5381,16 @@ func (s *FunctionalSuite) TestUpdateWorkflow_AdmittedUpdatesAreSentToWorkerInOrd
 	for i := 0; i < nUpdates; i++ {
 		updateId := fmt.Sprint(i)
 		go func() { _, _ = s.sendUpdate(tv, updateId) }()
-		for {
+		s.Eventually(func() bool {
 			resp, err := s.pollUpdate(tv, updateId, &updatepb.WaitPolicy{LifecycleStage: enumspb.UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_UNSPECIFIED})
 			if err == nil {
 				s.Equal(enumspb.UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_ADMITTED, resp.Stage)
-				break
+				return true
 			}
 			var notFoundErr *serviceerror.NotFound
-			s.ErrorAs(err, &notFoundErr) // poll beat send in race; poll again
-		}
+			s.ErrorAs(err, &notFoundErr) // poll beat send in race
+			return false
+		}, time.Second, 10*time.Millisecond, fmt.Sprintf("update %s did not reach Admitted stage", updateId))
 	}
 
 	nCalls := 0
