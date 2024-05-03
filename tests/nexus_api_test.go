@@ -167,7 +167,7 @@ func (s *ClientFunctionalSuite) TestNexusStartOperation_Outcomes() {
 				s.True(set)
 				timeout, err := time.ParseDuration(timeoutStr)
 				s.NoError(err)
-				time.Sleep(timeout)
+				time.Sleep(timeout) //nolint:forbidigo // Allow time.Sleep for timeout tests
 				return nil, nil
 			},
 			assertion: func(t *testing.T, res *nexus.ClientStartOperationResult[string], err error) {
@@ -534,7 +534,7 @@ func (s *ClientFunctionalSuite) TestNexusCancelOperation_Outcomes() {
 				s.True(set)
 				timeout, err := time.ParseDuration(timeoutStr)
 				s.NoError(err)
-				time.Sleep(timeout)
+				time.Sleep(timeout) //nolint:forbidigo // Allow time.Sleep for timeout tests
 				return nil, nil
 			},
 			assertion: func(t *testing.T, err error) {
