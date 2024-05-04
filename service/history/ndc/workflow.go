@@ -301,6 +301,12 @@ func (r *WorkflowImpl) terminateWorkflow(
 		false,
 	)
 
+	// Don't abort updates here for a few reasons:
+	//   1. There probably no update waiters for Wf which is about to be terminated,
+	//   2. MS is not persisted yet, and updates should be aborted after MS is persisted, which is not trivial in this case,
+	//   3. New replication version will force update registry reload and waiters will get errors.
+	// r.GetContext().UpdateRegistry(context.Background(), nil).Abort(update.AbortReasonWorkflowTerminated)
+
 	return err
 }
 
