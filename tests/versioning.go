@@ -3709,16 +3709,12 @@ func (s *VersioningIntegSuite) TestDescribeTaskQueueEnhanced_Versioned_Reachabil
 	s.NoError(s.sdkClient.SignalWorkflow(ctx, run.GetID(), "", "wait", nil))
 
 	// 6. Wait for A to show up as closed in visibility db (cache TTL must be longer than this wait time)
-	var wfExec *commonpb.WorkflowExecution
 	s.Eventually(func() bool {
 		listResp, err := s.engine.ListClosedWorkflowExecutions(ctx, &workflowservice.ListClosedWorkflowExecutionsRequest{
 			Namespace:       s.namespace,
 			MaximumPageSize: 10,
 		})
 		s.Nil(err)
-		if len(listResp.GetExecutions()) > 0 {
-			wfExec = listResp.GetExecutions()[0].GetExecution()
-		}
 		return len(listResp.GetExecutions()) > 0
 	}, 5*time.Second, 50*time.Millisecond)
 
