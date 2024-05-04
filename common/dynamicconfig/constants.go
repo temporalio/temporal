@@ -438,10 +438,10 @@ will fail with a FailedPrecondition error.`,
 in the versioning data for a task queue. Update requests which would cause the versioning data to exceed this
 number will fail with a FailedPrecondition error.`,
 	)
-	RedirectRuleChainLimitPerQueue = NewNamespaceIntSetting(
-		"limit.wv.RedirectRuleChainLimitPerQueue",
+	RedirectRuleMaxUpstreamBuildIDsPerQueue = NewNamespaceIntSetting(
+		"limit.wv.RedirectRuleMaxUpstreamBuildIDsPerQueue",
 		50,
-		`RedirectRuleChainLimitPerQueue is the max number of compatible redirect rules allowed to be connected
+		`RedirectRuleMaxUpstreamBuildIDsPerQueue is the max number of compatible redirect rules allowed to be connected
 in one chain in the versioning data for a task queue. Update requests which would cause the versioning data
 to exceed this number will fail with a FailedPrecondition error.`,
 	)
@@ -468,6 +468,16 @@ GetWorkerTaskReachability query.`,
 		5,
 		`ReachabilityQueryBuildIdLimit limits the number of build ids that can be requested in a single call to the
 DescribeTaskQueue API with ReportTaskQueueReachability==true, or to the GetWorkerTaskReachability API.`,
+	)
+	ReachabilityCacheOpenWFsTTL = NewGlobalDurationSetting(
+		"matching.wv.reachabilityCacheOpenWFsTTL",
+		time.Minute,
+		`ReachabilityCacheOpenWFsTTL is the TTL for the reachability open workflows cache.`,
+	)
+	ReachabilityCacheClosedWFsTTL = NewGlobalDurationSetting(
+		"matching.wv.reachabilityCacheClosedWFsTTL",
+		10*time.Minute,
+		`ReachabilityCacheClosedWFsTTL is the TTL for the reachability closed workflows cache.`,
 	)
 	ReachabilityQuerySetDurationSinceDefault = NewGlobalDurationSetting(
 		"frontend.reachabilityQuerySetDurationSinceDefault",

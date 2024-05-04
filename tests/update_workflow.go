@@ -41,12 +41,13 @@ import (
 	"go.temporal.io/api/serviceerror"
 	updatepb "go.temporal.io/api/update/v1"
 	"go.temporal.io/api/workflowservice/v1"
+	"google.golang.org/protobuf/types/known/durationpb"
+
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/testing/protoutils"
 	"go.temporal.io/server/common/testing/runtime"
 	"go.temporal.io/server/service/history/workflow/update"
-	"google.golang.org/protobuf/types/known/durationpb"
 
 	"go.temporal.io/server/api/adminservice/v1"
 	"go.temporal.io/server/common"
@@ -3089,7 +3090,9 @@ func (s *FunctionalSuite) TestUpdateWorkflow_StartedSpeculativeWorkflowTask_Term
 			},
 		})
 		assert.Error(s.T(), err1)
-		assert.True(s.T(), common.IsContextDeadlineExceededErr(err1), err1)
+		var notFound *serviceerror.NotFound
+		assert.ErrorAs(s.T(), err1, &notFound)
+		assert.Equal(s.T(), "workflow execution already completed", err1.Error())
 		assert.Nil(s.T(), updateResponse)
 		updateResultCh <- struct{}{}
 	}
@@ -3187,7 +3190,9 @@ func (s *FunctionalSuite) TestUpdateWorkflow_ScheduledSpeculativeWorkflowTask_Te
 			},
 		})
 		assert.Error(s.T(), err1)
-		assert.True(s.T(), common.IsContextDeadlineExceededErr(err1), err1)
+		var notFound *serviceerror.NotFound
+		assert.ErrorAs(s.T(), err1, &notFound)
+		assert.Equal(s.T(), "workflow execution already completed", err1.Error())
 		assert.Nil(s.T(), updateResponse)
 		updateResultCh <- struct{}{}
 	}

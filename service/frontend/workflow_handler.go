@@ -3514,6 +3514,13 @@ func (wh *WorkflowHandler) UpdateWorkflowExecution(
 		return nil, err
 	}
 
+	switch request.WaitPolicy.LifecycleStage { // nolint:exhaustive
+	case enumspb.UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_ACCEPTED:
+		metrics.WorkflowExecutionUpdateWaitStageAccepted.With(wh.metricsScope(ctx)).Record(1)
+	case enumspb.UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_COMPLETED:
+		metrics.WorkflowExecutionUpdateWaitStageCompleted.With(wh.metricsScope(ctx)).Record(1)
+	}
+
 	histResp, err := wh.historyClient.UpdateWorkflowExecution(ctx, &historyservice.UpdateWorkflowExecutionRequest{
 		NamespaceId: nsID.String(),
 		Request:     request,

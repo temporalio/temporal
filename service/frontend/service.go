@@ -90,6 +90,8 @@ type Config struct {
 	WorkerBuildIdSizeLimit                                            dynamicconfig.IntPropertyFn
 	ReachabilityTaskQueueScanLimit                                    dynamicconfig.IntPropertyFn
 	ReachabilityQueryBuildIdLimit                                     dynamicconfig.IntPropertyFn
+	ReachabilityCacheOpenWFsTTL                                       dynamicconfig.DurationPropertyFn
+	ReachabilityCacheClosedWFsTTL                                     dynamicconfig.DurationPropertyFn
 	ReachabilityQuerySetDurationSinceDefault                          dynamicconfig.DurationPropertyFn
 	DisallowQuery                                                     dynamicconfig.BoolPropertyFnWithNamespaceFilter
 	ShutdownDrainDuration                                             dynamicconfig.DurationPropertyFn
@@ -249,6 +251,8 @@ func NewConfig(
 		WorkerBuildIdSizeLimit:                   dynamicconfig.WorkerBuildIdSizeLimit.Get(dc),
 		ReachabilityTaskQueueScanLimit:           dynamicconfig.ReachabilityTaskQueueScanLimit.Get(dc),
 		ReachabilityQueryBuildIdLimit:            dynamicconfig.ReachabilityQueryBuildIdLimit.Get(dc),
+		ReachabilityCacheOpenWFsTTL:              dynamicconfig.ReachabilityCacheOpenWFsTTL.Get(dc),
+		ReachabilityCacheClosedWFsTTL:            dynamicconfig.ReachabilityCacheClosedWFsTTL.Get(dc),
 		ReachabilityQuerySetDurationSinceDefault: dynamicconfig.ReachabilityQuerySetDurationSinceDefault.Get(dc),
 		MaxBadBinaries:                           dynamicconfig.FrontendMaxBadBinaries.Get(dc),
 		DisableListVisibilityByFilter:            dynamicconfig.DisableListVisibilityByFilter.Get(dc),

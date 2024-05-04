@@ -327,6 +327,7 @@ func (r *registry) remover(id string) updateOpt {
 
 func (r *registry) checkLimits(_ context.Context) error {
 	if len(r.updates) >= r.maxInFlight() {
+		r.instrumentation.countRateLimited()
 		return &serviceerror.ResourceExhausted{
 			Cause:   enumspb.RESOURCE_EXHAUSTED_CAUSE_CONCURRENT_LIMIT,
 			Scope:   enumspb.RESOURCE_EXHAUSTED_SCOPE_NAMESPACE,
@@ -335,6 +336,7 @@ func (r *registry) checkLimits(_ context.Context) error {
 	}
 
 	if len(r.updates)+r.completedCount >= r.maxTotal() {
+		r.instrumentation.countTooMany()
 		return serviceerror.NewFailedPrecondition(
 			fmt.Sprintf("limit on number of total updates has been reached (%v)", r.maxTotal()),
 		)
@@ -388,6 +390,7 @@ func (r *registry) GetSize() int {
 	for key, update := range r.updates {
 		size += len(key) + update.GetSize()
 	}
+	r.instrumentation.updateRegistrySize(size)
 	return size
 }
 

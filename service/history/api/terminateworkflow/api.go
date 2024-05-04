@@ -89,7 +89,7 @@ func Invoke(
 				}
 			}
 
-			return api.UpdateWorkflowWithoutWorkflowTask, workflow.TerminateWorkflow(
+			return api.UpdateWorkflowTerminate, workflow.TerminateWorkflow(
 				mutableState,
 				request.GetReason(),
 				request.GetDetails(),
