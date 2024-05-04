@@ -367,9 +367,9 @@ func WorkerVersioningRedirectRuleCount(redirectRuleCount int) ZapTag {
 	return NewInt("worker-versioning-redirect-rule-count", redirectRuleCount)
 }
 
-// WorkerVersioningMaxRedirectRuleChain returns tag for RedirectRuleCount
-func WorkerVersioningMaxRedirectRuleChain(maxChainLen int) ZapTag {
-	return NewInt("worker-versioning-max-redirect-rule-chain", maxChainLen)
+// WorkerVersioningMaxUpstreamBuildIDs returns tag for RedirectRuleCount
+func WorkerVersioningMaxUpstreamBuildIDs(maxUpstreamBuildIDs int) ZapTag {
+	return NewInt("worker-versioning-max-upstream-build-ids", maxUpstreamBuildIDs)
 }
 
 // ScheduleID returns tag for ScheduleID

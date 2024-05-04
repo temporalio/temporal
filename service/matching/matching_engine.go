@@ -1093,7 +1093,7 @@ func (e *matchingEngineImpl) UpdateWorkerVersioningRules(
 	updateOptions := UserDataUpdateOptions{}
 	cT := req.GetConflictToken()
 	var getResp *matchingservice.GetWorkerVersioningRulesResponse
-	var maxRedirectRuleChainLength int
+	var maxUpstreamBuildIDs int
 
 	err = tqMgr.GetUserDataManager().UpdateUserData(ctx, updateOptions, func(data *persistencespb.TaskQueueUserData) (*persistencespb.TaskQueueUserData, bool, error) {
 		clk := data.GetClock()
@@ -1139,14 +1139,14 @@ func (e *matchingEngineImpl) UpdateWorkerVersioningRules(
 				data.GetVersioningData(),
 				req.GetAddCompatibleRedirectRule(),
 				e.config.RedirectRuleLimitPerQueue(ns.Name().String()),
-				e.config.RedirectRuleChainLimitPerQueue(ns.Name().String()),
+				e.config.RedirectRuleMaxUpstreamBuildIDsPerQueue(ns.Name().String()),
 			)
 		case *workflowservice.UpdateWorkerVersioningRulesRequest_ReplaceCompatibleRedirectRule:
 			versioningData, err = ReplaceCompatibleRedirectRule(
 				updatedClock,
 				data.GetVersioningData(),
 				req.GetReplaceCompatibleRedirectRule(),
-				e.config.RedirectRuleChainLimitPerQueue(ns.Name().String()),
+				e.config.RedirectRuleMaxUpstreamBuildIDsPerQueue(ns.Name().String()),
 			)
 		case *workflowservice.UpdateWorkerVersioningRulesRequest_DeleteCompatibleRedirectRule:
 			versioningData, err = DeleteCompatibleRedirectRule(
@@ -1173,13 +1173,12 @@ func (e *matchingEngineImpl) UpdateWorkerVersioningRules(
 		if err != nil {
 			return nil, false, err
 		}
-		// Get max redirect rule chain (min chain is 1, because we count vertices not edges)
-		maxRedirectRuleChainLength = 1
+		// Get max upstream build IDs (min is 0, because we count number of upstream nodes)
 		activeRedirectRules := getActiveRedirectRules(versioningData.GetRedirectRules())
 		for _, rule := range activeRedirectRules {
 			upstream := getUpstreamBuildIds(rule.GetRule().GetTargetBuildId(), activeRedirectRules)
-			if len(upstream)+1 > maxRedirectRuleChainLength {
-				maxRedirectRuleChainLength = len(upstream) + 1
+			if len(upstream)+1 > maxUpstreamBuildIDs {
+				maxUpstreamBuildIDs = len(upstream) + 1
 			}
 		}
 
@@ -1205,7 +1204,7 @@ func (e *matchingEngineImpl) UpdateWorkerVersioningRules(
 	e.logger.Info("UpdateWorkerVersioningRules completed",
 		tag.WorkerVersioningRedirectRuleCount(len(redirectRules)),
 		tag.WorkerVersioningAssignmentRuleCount(len(assignmentRules)),
-		tag.WorkerVersioningMaxRedirectRuleChain(maxRedirectRuleChainLength))
+		tag.WorkerVersioningMaxUpstreamBuildIDs(maxUpstreamBuildIDs))
 
 	return &matchingservice.UpdateWorkerVersioningRulesResponse{Response: &workflowservice.UpdateWorkerVersioningRulesResponse{
 		AssignmentRules:         assignmentRules,
