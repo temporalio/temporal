@@ -320,10 +320,14 @@ func (s *collectionSuite) TestGetMapProperty() {
 }
 
 func (s *collectionSuite) TestGetIntPropertyFilteredByDestination() {
+	setting := DestinationIntSetting{
+		key: testGetIntPropertyFilteredByDestinationKey,
+		def: 10,
+	}
 	namespaceID := "testNamespaceID"
 	destination1 := "testDestination1"
 	destination2 := "testDestination2"
-	value := s.cln.GetIntPropertyFilteredByDestination(testGetIntPropertyFilteredByDestinationKey, 10)
+	value := setting.Get(s.cln)
 	s.Equal(10, value(namespaceID, destination1))
 	s.client[testGetIntPropertyFilteredByDestinationKey] = []ConstrainedValue{
 		{

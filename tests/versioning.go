@@ -86,7 +86,7 @@ func (s *VersioningIntegSuite) SetupSuite() {
 
 		dynamicconfig.AssignmentRuleLimitPerQueue.Key():              10,
 		dynamicconfig.RedirectRuleLimitPerQueue.Key():                10,
-		dynamicconfig.RedirectRuleChainLimitPerQueue.Key():           10,
+		dynamicconfig.RedirectRuleMaxUpstreamBuildIDsPerQueue.Key():  10,
 		dynamicconfig.MatchingDeletedRuleRetentionTime.Key():         24 * time.Hour,
 		dynamicconfig.ReachabilityBuildIdVisibilityGracePeriod.Key(): 3 * time.Minute,
 		dynamicconfig.ReachabilityQueryBuildIdLimit.Key():            4,

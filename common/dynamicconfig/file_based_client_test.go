@@ -168,7 +168,7 @@ func (s *fileBasedClientSuite) TestGetIntValue_FilterByTQ_MatchFallback() {
 }
 
 func (s *fileBasedClientSuite) TestGetIntValue_FilterByDestination() {
-	dc := s.collection.GetIntPropertyFilteredByDestination(testGetIntPropertyFilteredByDestinationKey, 5)
+	dc := DestinationIntSetting{key: testGetIntPropertyFilteredByDestinationKey, def: 5}.Get(s.collection)
 	s.Equal(10, dc("foo", "bar"))
 	s.Equal(20, dc("test-namespace-id", "test-destination-1"))
 	s.Equal(30, dc("test-namespace-id", "random-destination"))
