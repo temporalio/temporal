@@ -92,6 +92,7 @@ type (
 		acceptedEventID int64
 		onComplete      func()
 		instrumentation *instrumentation
+		admittedTime    time.Time
 
 		// these fields might be accessed while not holding the workflow lock
 		accepted future.Future[*failurepb.Failure]
@@ -143,6 +144,7 @@ func newAdmitted(id string, request *anypb.Any, opts ...updateOpt) *Update {
 		instrumentation: &noopInstrumentation,
 		accepted:        future.NewFuture[*failurepb.Failure](),
 		outcome:         future.NewFuture[*updatepb.Outcome](),
+		admittedTime:    time.Now().UTC(),
 	}
 	for _, opt := range opts {
 		opt(upd)
@@ -270,7 +272,7 @@ func (u *Update) WaitLifecycleStage(
 
 // abortWaiters fails update futures with abortWaiterErr error and set state to stateAborted.
 func (u *Update) abortWaiters() {
-	const preAcceptedStates = stateSet(stateCreated | stateProvisionallyAdmitted | stateAdmitted | stateProvisionallySent | stateSent | stateProvisionallyAccepted)
+	const preAcceptedStates = stateSet(stateCreated | stateProvisionallyAdmitted | stateAdmitted | stateSent | stateProvisionallyAccepted)
 	if u.state.Matches(preAcceptedStates) {
 		u.accepted.(*future.FutureImpl[*failurepb.Failure]).Set(nil, abortWaiterErr)
 		u.outcome.(*future.FutureImpl[*updatepb.Outcome]).Set(nil, abortWaiterErr)
@@ -295,7 +297,7 @@ func (u *Update) abortWaiters() {
 func (u *Update) Admit(
 	ctx context.Context,
 	req *updatepb.Request,
-	eventStore EventStore,
+	eventStore EventStore, // Will be useful for durable admitted.
 ) error {
 	if u.state != stateCreated {
 		return nil
@@ -324,12 +326,15 @@ func (u *Update) Admit(
 			return
 		}
 		u.setState(stateAdmitted)
+		u.admittedTime = time.Now().UTC()
 	})
 	eventStore.OnAfterRollback(func(context.Context) {
 		if u.state != stateProvisionallyAdmitted {
 			return
 		}
 		u.setState(prevState)
+		var timeZero time.Time
+		u.admittedTime = timeZero
 	})
 	return nil
 }
@@ -391,7 +396,7 @@ func (u *Update) OnProtocolMessage(
 // If includeAlreadySent is set to true then it will return true even if update was already sent but not processed by worker.
 func (u *Update) needToSend(includeAlreadySent bool) bool {
 	if includeAlreadySent {
-		return u.state.Matches(stateSet(stateAdmitted | stateProvisionallySent | stateSent))
+		return u.state.Matches(stateSet(stateAdmitted | stateSent))
 	}
 	return u.state.Matches(stateSet(stateAdmitted))
 }
@@ -405,26 +410,13 @@ func (u *Update) Send(
 	_ context.Context,
 	includeAlreadySent bool,
 	sequencingID *protocolpb.Message_EventId,
-	eventStore EventStore,
 ) *protocolpb.Message {
 	if !u.needToSend(includeAlreadySent) {
 		return nil
 	}
 
 	if u.state == stateAdmitted {
-		prevState := u.setState(stateProvisionallySent)
-		eventStore.OnAfterCommit(func(context.Context) {
-			if u.state != stateProvisionallySent {
-				return
-			}
-			u.setState(stateSent)
-		})
-		eventStore.OnAfterRollback(func(context.Context) {
-			if u.state != stateProvisionallySent {
-				return
-			}
-			u.setState(prevState)
-		})
+		u.setState(stateSent)
 	}
 
 	if u.request == nil {
@@ -442,7 +434,7 @@ func (u *Update) Send(
 
 // isSent checks if update was sent to worker.
 func (u *Update) isSent() bool {
-	return u.state.Matches(stateSet(stateProvisionallySent | stateSent))
+	return u.state.Matches(stateSet(stateSent))
 }
 
 // outgoingMessageID returns the ID of the message that is used to Send the Update to the worker.
@@ -527,7 +519,7 @@ func (u *Update) onAcceptanceMsg(
 func (u *Update) onRejectionMsg(
 	ctx context.Context,
 	rej *updatepb.Rejection,
-	eventStore EventStore,
+	effects effect.Controller,
 ) error {
 	if err := u.checkState(rej, stateSent); err != nil {
 		return err
@@ -536,17 +528,17 @@ func (u *Update) onRejectionMsg(
 		return err
 	}
 	u.instrumentation.CountRejectionMsg()
-	return u.reject(ctx, rej.Failure, eventStore)
+	return u.reject(ctx, rej.Failure, effects)
 }
 
 // reject an update with provided failure.
 func (u *Update) reject(
 	_ context.Context,
 	rejectionFailure *failurepb.Failure,
-	eventStore EventStore,
+	effects effect.Controller,
 ) error {
 	prevState := u.setState(stateProvisionallyCompleted)
-	eventStore.OnAfterCommit(func(context.Context) {
+	effects.OnAfterCommit(func(context.Context) {
 		if u.state != stateProvisionallyCompleted {
 			return
 		}
@@ -560,7 +552,7 @@ func (u *Update) reject(
 		u.outcome.(*future.FutureImpl[*updatepb.Outcome]).Set(&outcome, nil)
 		u.onComplete()
 	})
-	eventStore.OnAfterRollback(func(context.Context) {
+	effects.OnAfterRollback(func(context.Context) {
 		if u.state != stateProvisionallyCompleted {
 			return
 		}
@@ -617,7 +609,7 @@ func (u *Update) isIncomplete() bool {
 //   - if in stateAccepted -> do nothing,
 //   - if in stateCompleted -> do nothing.
 func (u *Update) CancelIncomplete(ctx context.Context, reason CancelReason, eventStore EventStore) error {
-	if u.state.Matches(stateSet(stateCreated | stateProvisionallyAdmitted | stateAdmitted | stateProvisionallySent | stateSent)) {
+	if u.state.Matches(stateSet(stateCreated | stateProvisionallyAdmitted | stateAdmitted | stateSent)) {
 		return u.reject(ctx, reason.RejectionFailure(), eventStore)
 	}
 

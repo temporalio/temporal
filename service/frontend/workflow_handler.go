@@ -541,7 +541,7 @@ func (wh *WorkflowHandler) convertToHistoryMultiOperationRequest(
 			hasError = true
 		} else {
 			// set to default in case the whole MultOp request
-			err = serviceerror.NewMultiOperationAborted("Operation was aborted.")
+			err = errMultiOpAborted
 
 			switch {
 			case lastWorkflowID == "":
