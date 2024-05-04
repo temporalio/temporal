@@ -240,8 +240,6 @@ func (s *historyReplicationDLQSuite) TestWorkflowReplicationTaskFailure() {
 	ctx, cancel := context.WithTimeout(ctx, testTimeout)
 	defer cancel()
 
-	s.waitForClusterConnected()
-
 	// Register a namespace.
 	ns := "history-replication-dlq-test-namespace"
 	_, err := s.cluster1.GetFrontendClient().RegisterNamespace(ctx, &workflowservice.RegisterNamespaceRequest{

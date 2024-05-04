@@ -199,4 +199,6 @@ func (s *xdcBaseSuite) setupTest() {
 	s.Assertions = require.New(s.T())
 	s.ProtoAssertions = protorequire.New(s.T())
 	s.HistoryRequire = historyrequire.New(s.T())
+
+	s.waitForClusterConnected()
 }
