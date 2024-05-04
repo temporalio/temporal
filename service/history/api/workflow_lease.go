@@ -44,7 +44,8 @@ type workflowLease struct {
 type UpdateWorkflowAction struct {
 	Noop               bool
 	CreateWorkflowTask bool
-	AbortUpdates       bool
+	// Abort all "Workflow Updates" (not persistence updates) after persistence operation is succeeded but WF lock is not released.
+	AbortUpdates bool
 }
 
 var (

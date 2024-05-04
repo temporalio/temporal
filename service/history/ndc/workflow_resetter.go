@@ -156,8 +156,6 @@ func (r *workflowResetterImpl) ResetWorkflow(
 			return err
 		}
 
-		currentWorkflow.GetContext().UpdateRegistry(ctx, nil).Abort(update.AbortReasonWorkflowCompleted)
-
 		reapplyEventsFn = func(ctx context.Context, resetMutableState workflow.MutableState) error {
 			lastVisitedRunID, err := r.reapplyContinueAsNewWorkflowEvents(
 				ctx,
@@ -232,13 +230,19 @@ func (r *workflowResetterImpl) ResetWorkflow(
 		return err
 	}
 
-	return r.persistToDB(
+	if err = r.persistToDB(
 		ctx,
 		currentWorkflow,
 		currentWorkflowMutation,
 		currentWorkflowEventsSeq,
 		resetWorkflow,
-	)
+	); err != nil {
+		return err
+	}
+
+	currentWorkflow.GetContext().UpdateRegistry(ctx, nil).Abort(update.AbortReasonWorkflowCompleted)
+
+	return nil
 }
 
 func (r *workflowResetterImpl) prepareResetWorkflow(
