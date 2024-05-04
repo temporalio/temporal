@@ -281,9 +281,19 @@ func (u *Update) Admit(
 		return invalidArgf("unable to marshal request: %v", err)
 	}
 	u.request = reqAny
-	u.setState(stateProvisionallyAdmitted)
-	eventStore.OnAfterCommit(func(context.Context) { u.setState(stateAdmitted) })
-	eventStore.OnAfterRollback(func(context.Context) { u.setState(stateCreated) })
+	prevState := u.setState(stateProvisionallyAdmitted)
+	eventStore.OnAfterCommit(func(context.Context) {
+		if u.state != stateProvisionallyAdmitted {
+			return
+		}
+		u.setState(stateAdmitted)
+	})
+	eventStore.OnAfterRollback(func(context.Context) {
+		if u.state != stateProvisionallyAdmitted {
+			return
+		}
+		u.setState(prevState)
+	})
 	return nil
 }
 
@@ -365,9 +375,19 @@ func (u *Update) Send(
 	}
 
 	if u.state == stateAdmitted {
-		u.setState(stateProvisionallySent)
-		eventStore.OnAfterCommit(func(context.Context) { u.setState(stateSent) })
-		eventStore.OnAfterRollback(func(context.Context) { u.setState(stateAdmitted) })
+		prevState := u.setState(stateProvisionallySent)
+		eventStore.OnAfterCommit(func(context.Context) {
+			if u.state != stateProvisionallySent {
+				return
+			}
+			u.setState(stateSent)
+		})
+		eventStore.OnAfterRollback(func(context.Context) {
+			if u.state != stateProvisionallySent {
+				return
+			}
+			u.setState(prevState)
+		})
 	}
 
 	if u.request == nil {
@@ -443,15 +463,21 @@ func (u *Update) onAcceptanceMsg(
 		return err
 	}
 	u.acceptedEventID = event.EventId
-	u.setState(stateProvisionallyAccepted)
+	prevState := u.setState(stateProvisionallyAccepted)
 	eventStore.OnAfterCommit(func(context.Context) {
+		if !u.state.Matches(stateSet(stateProvisionallyAccepted | stateProvisionallyCompleted)) {
+			return
+		}
 		u.request = nil
 		u.setState(stateAccepted)
 		u.accepted.(*future.FutureImpl[*failurepb.Failure]).Set(nil, nil)
 	})
 	eventStore.OnAfterRollback(func(context.Context) {
+		if !u.state.Matches(stateSet(stateProvisionallyAccepted | stateProvisionallyCompleted)) {
+			return
+		}
 		u.acceptedEventID = common.EmptyEventID
-		u.setState(stateSent)
+		u.setState(prevState)
 	})
 	return nil
 }
@@ -482,8 +508,12 @@ func (u *Update) reject(
 	rejectionFailure *failurepb.Failure,
 	eventStore EventStore,
 ) error {
-	u.setState(stateProvisionallyCompleted)
+	prevState := u.setState(stateProvisionallyCompleted)
 	eventStore.OnAfterCommit(func(context.Context) {
+		if u.state != stateProvisionallyCompleted {
+			return
+		}
+
 		u.request = nil
 		u.setState(stateCompleted)
 		outcome := updatepb.Outcome{
@@ -493,7 +523,12 @@ func (u *Update) reject(
 		u.outcome.(*future.FutureImpl[*updatepb.Outcome]).Set(&outcome, nil)
 		u.onComplete()
 	})
-	eventStore.OnAfterRollback(func(context.Context) { u.setState(stateSent) })
+	eventStore.OnAfterRollback(func(context.Context) {
+		if u.state != stateProvisionallyCompleted {
+			return
+		}
+		u.setState(prevState)
+	})
 	return nil
 }
 
@@ -519,11 +554,19 @@ func (u *Update) onResponseMsg(
 	u.instrumentation.CountResponseMsg()
 	prevState := u.setState(stateProvisionallyCompleted)
 	eventStore.OnAfterCommit(func(context.Context) {
+		if !u.state.Matches(stateSet(stateAccepted | stateProvisionallyCompleted)) {
+			return
+		}
 		u.setState(stateCompleted)
 		u.outcome.(*future.FutureImpl[*updatepb.Outcome]).Set(res.GetOutcome(), nil)
 		u.onComplete()
 	})
-	eventStore.OnAfterRollback(func(context.Context) { u.setState(prevState) })
+	eventStore.OnAfterRollback(func(context.Context) {
+		if !u.state.Matches(stateSet(stateAccepted | stateProvisionallyCompleted)) {
+			return
+		}
+		u.setState(prevState)
+	})
 	return nil
 }
 

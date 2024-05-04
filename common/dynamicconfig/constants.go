@@ -2033,7 +2033,7 @@ Do not turn this on if you aren't using Cassandra as the history task DLQ is not
 	)
 	HistoryTaskDLQUnexpectedErrorAttempts = NewGlobalIntSetting(
 		"history.TaskDLQUnexpectedErrorAttempts",
-		100,
+		70, // 70 attempts takes about an hour
 		`HistoryTaskDLQUnexpectedErrorAttempts is the number of task execution attempts before sending the task to DLQ.`,
 	)
 	HistoryTaskDLQInternalErrors = NewGlobalBoolSetting(
