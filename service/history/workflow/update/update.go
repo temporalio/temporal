@@ -35,6 +35,7 @@ import (
 	protocolpb "go.temporal.io/api/protocol/v1"
 	"go.temporal.io/api/serviceerror"
 	updatepb "go.temporal.io/api/update/v1"
+	"go.temporal.io/server/common/metrics"
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/anypb"
 
@@ -218,6 +219,7 @@ func (u *Update) WaitLifecycleStage(
 
 		if ctx.Err() != nil {
 			// Handle root context deadline expiry as normal error which is returned to the caller.
+			metrics.WorkflowExecutionUpdateClientTimeout.With(u.instrumentation.metrics).Record(1)
 			return nil, ctx.Err()
 		}
 
@@ -253,12 +255,15 @@ func (u *Update) WaitLifecycleStage(
 
 		if ctx.Err() != nil {
 			// Handle root context deadline expiry as normal error which is returned to the caller.
+			metrics.WorkflowExecutionUpdateClientTimeout.With(u.instrumentation.metrics).Record(1)
 			return nil, ctx.Err()
 		}
+	}
 
-		if stCtx.Err() != nil {
-			return statusAdmitted(), nil
-		}
+	// If waitStage=COMPLETED or ACCEPTED and neither has been reached before the softTimeout has expired.
+	if stCtx.Err() != nil {
+		metrics.WorkflowExecutionUpdateServerTimeout.With(u.instrumentation.metrics).Record(1)
+		return statusAdmitted(), nil
 	}
 
 	// Only get here if waitStage=ADMITTED or UNSPECIFIED and neither ACCEPTED nor COMPLETED are reached.
@@ -269,6 +274,7 @@ func (u *Update) WaitLifecycleStage(
 // abort fails update futures with reason.Error() error (which will notify all waiters with error)
 // and set state to stateAborted. It is a terminal state. Update can't be changed after it is aborted.
 func (u *Update) abort(reason AbortReason) {
+	u.instrumentation.countAborted()
 
 	const preAcceptedStates = stateSet(stateCreated | stateProvisionallyAdmitted | stateAdmitted | stateSent | stateProvisionallyAccepted)
 	if u.state.Matches(preAcceptedStates) {
@@ -300,7 +306,6 @@ func (u *Update) Admit(
 	if err := validateRequestMsg(u.id, req); err != nil {
 		return err
 	}
-
 	if !eventStore.CanAddEvent() {
 		// There shouldn't be any waiters before update is admitted (this func returns).
 		// Call abort to seal the update.
@@ -308,7 +313,7 @@ func (u *Update) Admit(
 		return AbortReasonWorkflowCompleted.Error()
 	}
 
-	u.instrumentation.CountRequestMsg()
+	u.instrumentation.countRequestMsg()
 	// Marshal update request here to return InvalidArgument to the API caller if it can't be marshaled.
 	if err := utf8validator.Validate(req, utf8validator.SourceRPCRequest); err != nil {
 		return invalidArgf("unable to marshal request: %v", err)
@@ -414,6 +419,11 @@ func (u *Update) Send(
 		return nil
 	}
 
+	u.instrumentation.countSent()
+	if u.state == stateSent {
+		u.instrumentation.countSentAgain()
+	}
+
 	if u.state == stateAdmitted {
 		u.setState(stateSent)
 	}
@@ -456,7 +466,7 @@ func (u *Update) onAcceptanceMsg(
 	if err := validateAcceptanceMsg(acpt); err != nil {
 		return err
 	}
-	u.instrumentation.CountAcceptanceMsg()
+	u.instrumentation.countAcceptanceMsg()
 
 	// The accepted request payload is not sent back by the worker to the server. Instead, the server stores it in the
 	// update registry and it is written to the event here. It could make sense to obtain it from the worker, in order
@@ -526,7 +536,7 @@ func (u *Update) onRejectionMsg(
 	if err := validateRejectionMsg(rej); err != nil {
 		return err
 	}
-	u.instrumentation.CountRejectionMsg()
+	u.instrumentation.countRejectionMsg()
 	return u.reject(ctx, rej.Failure, effects)
 }
 
@@ -579,7 +589,7 @@ func (u *Update) onResponseMsg(
 	if _, err := eventStore.AddWorkflowExecutionUpdateCompletedEvent(u.acceptedEventID, res); err != nil {
 		return err
 	}
-	u.instrumentation.CountResponseMsg()
+	u.instrumentation.countResponseMsg()
 	prevState := u.setState(stateProvisionallyCompleted)
 	eventStore.OnAfterCommit(func(context.Context) {
 		if !u.state.Matches(stateSet(stateAccepted | stateProvisionallyCompleted)) {
@@ -611,7 +621,7 @@ func (u *Update) checkStateSet(msg proto.Message, allowed stateSet) error {
 	if u.state.Matches(allowed) {
 		return nil
 	}
-	u.instrumentation.CountInvalidStateTransition()
+	u.instrumentation.invalidStateTransition(u.id, msg, u.state)
 	return invalidArgf("invalid state transition attempted for Update %s: "+
 		"received %T message while in state %q", u.id, msg, u.state)
 }
@@ -620,7 +630,7 @@ func (u *Update) checkStateSet(msg proto.Message, allowed stateSet) error {
 func (u *Update) setState(newState state) state {
 	prevState := u.state
 	u.state = newState
-	u.instrumentation.StateChange(u.id, prevState, newState)
+	u.instrumentation.stateChange(u.id, prevState, newState)
 	return prevState
 }
 
