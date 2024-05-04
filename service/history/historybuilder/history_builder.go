@@ -182,6 +182,7 @@ func (b *HistoryBuilder) AddWorkflowTaskStartedEvent(
 	suggestContinueAsNew bool,
 	historySizeBytes int64,
 	versioningStamp *commonpb.WorkerVersionStamp,
+	buildIdRedirectCounter int64,
 ) *historypb.HistoryEvent {
 	event := b.EventFactory.CreateWorkflowTaskStartedEvent(
 		scheduledEventID,
@@ -191,6 +192,7 @@ func (b *HistoryBuilder) AddWorkflowTaskStartedEvent(
 		suggestContinueAsNew,
 		historySizeBytes,
 		versioningStamp,
+		buildIdRedirectCounter,
 	)
 	event, _ = b.EventStore.add(event)
 	return event
@@ -270,8 +272,9 @@ func (b *HistoryBuilder) AddActivityTaskStartedEvent(
 	identity string,
 	lastFailure *failurepb.Failure,
 	versioningStamp *commonpb.WorkerVersionStamp,
+	redirectCounter int64,
 ) *historypb.HistoryEvent {
-	event := b.EventFactory.CreateActivityTaskStartedEvent(scheduledEventID, attempt, requestID, identity, lastFailure, versioningStamp)
+	event := b.EventFactory.CreateActivityTaskStartedEvent(scheduledEventID, attempt, requestID, identity, lastFailure, versioningStamp, redirectCounter)
 	event, _ = b.EventStore.add(event)
 	return event
 }

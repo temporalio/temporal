@@ -51,10 +51,11 @@ import (
 	"go.temporal.io/sdk/temporal"
 	"go.temporal.io/sdk/worker"
 	"go.temporal.io/sdk/workflow"
+	"go.uber.org/multierr"
+
 	"go.temporal.io/server/common/testing/historyrequire"
 	"go.temporal.io/server/common/testing/testvars"
 	"go.temporal.io/server/components/nexusoperations"
-	"go.uber.org/multierr"
 
 	"go.temporal.io/server/api/adminservice/v1"
 	"go.temporal.io/server/common"
@@ -108,6 +109,7 @@ func (s *ClientFunctionalSuite) SetupSuite() {
 		nexusoperations.Enabled.Key():                                       true,
 		dynamicconfig.OutboundProcessorEnabled.Key():                        true,
 		dynamicconfig.EnableMutableStateTransitionHistory.Key():             true,
+		dynamicconfig.FrontendRefreshNexusIncomingServicesMinWait.Key():     1 * time.Millisecond,
 	}
 	s.setupSuite("testdata/client_cluster.yaml")
 }
