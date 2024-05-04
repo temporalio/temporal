@@ -191,6 +191,15 @@ func precedenceTaskQueue(namespace string, taskQueue string, taskType enumspb.Ta
 	}
 }
 
+func precedenceDestination(namespaceID string, destination string) []Constraints {
+	return []Constraints{
+		{NamespaceID: namespaceID, Destination: destination},
+		{Destination: destination},
+		{NamespaceID: namespaceID},
+		{},
+	}
+}
+
 func precedenceShardID(shardID int32) []Constraints {
 	return []Constraints{
 		{ShardID: shardID},

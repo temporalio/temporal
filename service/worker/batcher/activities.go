@@ -296,11 +296,13 @@ func startTaskProcessor(
 						var eventId int64
 						var err error
 						var resetReapplyType enumspb.ResetReapplyType
+						var resetReapplyExcludeTypes []enumspb.ResetReapplyExcludeType
 						if batchParams.ResetParams.resetOptions != nil {
 							// Using ResetOptions
 							// Note: getResetEventIDByOptions may modify workflowExecution.RunId, if reset should be to a prior run
 							eventId, err = getResetEventIDByOptions(ctx, batchParams.ResetParams.resetOptions, batchParams.Namespace, workflowExecution, frontendClient, logger)
 							resetReapplyType = batchParams.ResetParams.resetOptions.ResetReapplyType
+							resetReapplyExcludeTypes = batchParams.ResetParams.resetOptions.ResetReapplyExcludeTypes
 						} else {
 							// Old fields
 							eventId, err = getResetEventIDByType(ctx, batchParams.ResetParams.ResetType, batchParams.Namespace, workflowExecution, frontendClient, logger)
@@ -316,6 +318,7 @@ func startTaskProcessor(
 							RequestId:                 uuid.New(),
 							WorkflowTaskFinishEventId: eventId,
 							ResetReapplyType:          resetReapplyType,
+							ResetReapplyExcludeTypes:  resetReapplyExcludeTypes,
 						})
 						return err
 					})

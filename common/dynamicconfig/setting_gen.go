@@ -57,6 +57,8 @@ const PrecedenceShardID Precedence = 4
 
 const PrecedenceTaskType Precedence = 5
 
+const PrecedenceDestination Precedence = 6
+
 type GlobalBoolSetting setting[bool, func()]
 
 func NewGlobalBoolSetting(key Key, def bool, description string) GlobalBoolSetting {
@@ -347,6 +349,55 @@ func (s TaskTypeBoolSetting) Get(c *Collection) BoolPropertyFnWithTaskTypeFilter
 
 func GetBoolPropertyFnFilteredByTaskType(value bool) BoolPropertyFnWithTaskTypeFilter {
 	return func(taskType enumsspb.TaskType) bool {
+		return value
+	}
+}
+
+type DestinationBoolSetting setting[bool, func(namespaceID string, destination string)]
+
+func NewDestinationBoolSetting(key Key, def bool, description string) DestinationBoolSetting {
+	s := DestinationBoolSetting{
+		key:         key,
+		def:         def,
+		description: description,
+	}
+	return s
+}
+
+func NewDestinationBoolSettingWithConstrainedDefault(key Key, cdef []TypedConstrainedValue[bool], description string) DestinationBoolSetting {
+	s := DestinationBoolSetting{
+		key:         key,
+		cdef:        cdef,
+		description: description,
+	}
+	return s
+}
+
+func (s DestinationBoolSetting) Key() Key               { return s.key }
+func (s DestinationBoolSetting) Type() Type             { return TypeBool }
+func (s DestinationBoolSetting) Precedence() Precedence { return PrecedenceDestination }
+
+func (s DestinationBoolSetting) WithDefault(v bool) DestinationBoolSetting {
+	newS := s
+	newS.def = v
+	return newS
+}
+
+type BoolPropertyFnWithDestinationFilter func(namespaceID string, destination string) bool
+
+func (s DestinationBoolSetting) Get(c *Collection) BoolPropertyFnWithDestinationFilter {
+	return func(namespaceID string, destination string) bool {
+		return matchAndConvert(
+			c,
+			(setting[bool, func(namespaceID string, destination string)])(s),
+			precedenceDestination(namespaceID, destination),
+			convertBool,
+		)
+	}
+}
+
+func GetBoolPropertyFnFilteredByDestination(value bool) BoolPropertyFnWithDestinationFilter {
+	return func(namespaceID string, destination string) bool {
 		return value
 	}
 }
@@ -645,6 +696,55 @@ func GetIntPropertyFnFilteredByTaskType(value int) IntPropertyFnWithTaskTypeFilt
 	}
 }
 
+type DestinationIntSetting setting[int, func(namespaceID string, destination string)]
+
+func NewDestinationIntSetting(key Key, def int, description string) DestinationIntSetting {
+	s := DestinationIntSetting{
+		key:         key,
+		def:         def,
+		description: description,
+	}
+	return s
+}
+
+func NewDestinationIntSettingWithConstrainedDefault(key Key, cdef []TypedConstrainedValue[int], description string) DestinationIntSetting {
+	s := DestinationIntSetting{
+		key:         key,
+		cdef:        cdef,
+		description: description,
+	}
+	return s
+}
+
+func (s DestinationIntSetting) Key() Key               { return s.key }
+func (s DestinationIntSetting) Type() Type             { return TypeInt }
+func (s DestinationIntSetting) Precedence() Precedence { return PrecedenceDestination }
+
+func (s DestinationIntSetting) WithDefault(v int) DestinationIntSetting {
+	newS := s
+	newS.def = v
+	return newS
+}
+
+type IntPropertyFnWithDestinationFilter func(namespaceID string, destination string) int
+
+func (s DestinationIntSetting) Get(c *Collection) IntPropertyFnWithDestinationFilter {
+	return func(namespaceID string, destination string) int {
+		return matchAndConvert(
+			c,
+			(setting[int, func(namespaceID string, destination string)])(s),
+			precedenceDestination(namespaceID, destination),
+			convertInt,
+		)
+	}
+}
+
+func GetIntPropertyFnFilteredByDestination(value int) IntPropertyFnWithDestinationFilter {
+	return func(namespaceID string, destination string) int {
+		return value
+	}
+}
+
 type GlobalFloatSetting setting[float64, func()]
 
 func NewGlobalFloatSetting(key Key, def float64, description string) GlobalFloatSetting {
@@ -935,6 +1035,55 @@ func (s TaskTypeFloatSetting) Get(c *Collection) FloatPropertyFnWithTaskTypeFilt
 
 func GetFloatPropertyFnFilteredByTaskType(value float64) FloatPropertyFnWithTaskTypeFilter {
 	return func(taskType enumsspb.TaskType) float64 {
+		return value
+	}
+}
+
+type DestinationFloatSetting setting[float64, func(namespaceID string, destination string)]
+
+func NewDestinationFloatSetting(key Key, def float64, description string) DestinationFloatSetting {
+	s := DestinationFloatSetting{
+		key:         key,
+		def:         def,
+		description: description,
+	}
+	return s
+}
+
+func NewDestinationFloatSettingWithConstrainedDefault(key Key, cdef []TypedConstrainedValue[float64], description string) DestinationFloatSetting {
+	s := DestinationFloatSetting{
+		key:         key,
+		cdef:        cdef,
+		description: description,
+	}
+	return s
+}
+
+func (s DestinationFloatSetting) Key() Key               { return s.key }
+func (s DestinationFloatSetting) Type() Type             { return TypeFloat }
+func (s DestinationFloatSetting) Precedence() Precedence { return PrecedenceDestination }
+
+func (s DestinationFloatSetting) WithDefault(v float64) DestinationFloatSetting {
+	newS := s
+	newS.def = v
+	return newS
+}
+
+type FloatPropertyFnWithDestinationFilter func(namespaceID string, destination string) float64
+
+func (s DestinationFloatSetting) Get(c *Collection) FloatPropertyFnWithDestinationFilter {
+	return func(namespaceID string, destination string) float64 {
+		return matchAndConvert(
+			c,
+			(setting[float64, func(namespaceID string, destination string)])(s),
+			precedenceDestination(namespaceID, destination),
+			convertFloat,
+		)
+	}
+}
+
+func GetFloatPropertyFnFilteredByDestination(value float64) FloatPropertyFnWithDestinationFilter {
+	return func(namespaceID string, destination string) float64 {
 		return value
 	}
 }
@@ -1233,6 +1382,55 @@ func GetStringPropertyFnFilteredByTaskType(value string) StringPropertyFnWithTas
 	}
 }
 
+type DestinationStringSetting setting[string, func(namespaceID string, destination string)]
+
+func NewDestinationStringSetting(key Key, def string, description string) DestinationStringSetting {
+	s := DestinationStringSetting{
+		key:         key,
+		def:         def,
+		description: description,
+	}
+	return s
+}
+
+func NewDestinationStringSettingWithConstrainedDefault(key Key, cdef []TypedConstrainedValue[string], description string) DestinationStringSetting {
+	s := DestinationStringSetting{
+		key:         key,
+		cdef:        cdef,
+		description: description,
+	}
+	return s
+}
+
+func (s DestinationStringSetting) Key() Key               { return s.key }
+func (s DestinationStringSetting) Type() Type             { return TypeString }
+func (s DestinationStringSetting) Precedence() Precedence { return PrecedenceDestination }
+
+func (s DestinationStringSetting) WithDefault(v string) DestinationStringSetting {
+	newS := s
+	newS.def = v
+	return newS
+}
+
+type StringPropertyFnWithDestinationFilter func(namespaceID string, destination string) string
+
+func (s DestinationStringSetting) Get(c *Collection) StringPropertyFnWithDestinationFilter {
+	return func(namespaceID string, destination string) string {
+		return matchAndConvert(
+			c,
+			(setting[string, func(namespaceID string, destination string)])(s),
+			precedenceDestination(namespaceID, destination),
+			convertString,
+		)
+	}
+}
+
+func GetStringPropertyFnFilteredByDestination(value string) StringPropertyFnWithDestinationFilter {
+	return func(namespaceID string, destination string) string {
+		return value
+	}
+}
+
 type GlobalDurationSetting setting[time.Duration, func()]
 
 func NewGlobalDurationSetting(key Key, def time.Duration, description string) GlobalDurationSetting {
@@ -1527,6 +1725,55 @@ func GetDurationPropertyFnFilteredByTaskType(value time.Duration) DurationProper
 	}
 }
 
+type DestinationDurationSetting setting[time.Duration, func(namespaceID string, destination string)]
+
+func NewDestinationDurationSetting(key Key, def time.Duration, description string) DestinationDurationSetting {
+	s := DestinationDurationSetting{
+		key:         key,
+		def:         def,
+		description: description,
+	}
+	return s
+}
+
+func NewDestinationDurationSettingWithConstrainedDefault(key Key, cdef []TypedConstrainedValue[time.Duration], description string) DestinationDurationSetting {
+	s := DestinationDurationSetting{
+		key:         key,
+		cdef:        cdef,
+		description: description,
+	}
+	return s
+}
+
+func (s DestinationDurationSetting) Key() Key               { return s.key }
+func (s DestinationDurationSetting) Type() Type             { return TypeDuration }
+func (s DestinationDurationSetting) Precedence() Precedence { return PrecedenceDestination }
+
+func (s DestinationDurationSetting) WithDefault(v time.Duration) DestinationDurationSetting {
+	newS := s
+	newS.def = v
+	return newS
+}
+
+type DurationPropertyFnWithDestinationFilter func(namespaceID string, destination string) time.Duration
+
+func (s DestinationDurationSetting) Get(c *Collection) DurationPropertyFnWithDestinationFilter {
+	return func(namespaceID string, destination string) time.Duration {
+		return matchAndConvert(
+			c,
+			(setting[time.Duration, func(namespaceID string, destination string)])(s),
+			precedenceDestination(namespaceID, destination),
+			convertDuration,
+		)
+	}
+}
+
+func GetDurationPropertyFnFilteredByDestination(value time.Duration) DurationPropertyFnWithDestinationFilter {
+	return func(namespaceID string, destination string) time.Duration {
+		return value
+	}
+}
+
 type GlobalMapSetting setting[map[string]any, func()]
 
 func NewGlobalMapSetting(key Key, def map[string]any, description string) GlobalMapSetting {
@@ -1817,6 +2064,55 @@ func (s TaskTypeMapSetting) Get(c *Collection) MapPropertyFnWithTaskTypeFilter {
 
 func GetMapPropertyFnFilteredByTaskType(value map[string]any) MapPropertyFnWithTaskTypeFilter {
 	return func(taskType enumsspb.TaskType) map[string]any {
+		return value
+	}
+}
+
+type DestinationMapSetting setting[map[string]any, func(namespaceID string, destination string)]
+
+func NewDestinationMapSetting(key Key, def map[string]any, description string) DestinationMapSetting {
+	s := DestinationMapSetting{
+		key:         key,
+		def:         def,
+		description: description,
+	}
+	return s
+}
+
+func NewDestinationMapSettingWithConstrainedDefault(key Key, cdef []TypedConstrainedValue[map[string]any], description string) DestinationMapSetting {
+	s := DestinationMapSetting{
+		key:         key,
+		cdef:        cdef,
+		description: description,
+	}
+	return s
+}
+
+func (s DestinationMapSetting) Key() Key               { return s.key }
+func (s DestinationMapSetting) Type() Type             { return TypeMap }
+func (s DestinationMapSetting) Precedence() Precedence { return PrecedenceDestination }
+
+func (s DestinationMapSetting) WithDefault(v map[string]any) DestinationMapSetting {
+	newS := s
+	newS.def = v
+	return newS
+}
+
+type MapPropertyFnWithDestinationFilter func(namespaceID string, destination string) map[string]any
+
+func (s DestinationMapSetting) Get(c *Collection) MapPropertyFnWithDestinationFilter {
+	return func(namespaceID string, destination string) map[string]any {
+		return matchAndConvert(
+			c,
+			(setting[map[string]any, func(namespaceID string, destination string)])(s),
+			precedenceDestination(namespaceID, destination),
+			convertMap,
+		)
+	}
+}
+
+func GetMapPropertyFnFilteredByDestination(value map[string]any) MapPropertyFnWithDestinationFilter {
+	return func(namespaceID string, destination string) map[string]any {
 		return value
 	}
 }

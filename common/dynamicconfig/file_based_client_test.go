@@ -167,6 +167,15 @@ func (s *fileBasedClientSuite) TestGetIntValue_FilterByTQ_MatchFallback() {
 	s.Equal(v1, v2)
 }
 
+func (s *fileBasedClientSuite) TestGetIntValue_FilterByDestination() {
+	dc := s.collection.GetIntPropertyFilteredByDestination(testGetIntPropertyFilteredByDestinationKey, 5)
+	s.Equal(10, dc("foo", "bar"))
+	s.Equal(20, dc("test-namespace-id", "test-destination-1"))
+	s.Equal(30, dc("test-namespace-id", "random-destination"))
+	s.Equal(40, dc("random-namespace-id", "test-destination-1"))
+	s.Equal(50, dc("test-namespace-id", "test-destination-2"))
+}
+
 func (s *fileBasedClientSuite) TestGetFloatValue() {
 	v := GlobalFloatSetting{key: testGetFloat64PropertyKey, def: 1}.Get(s.collection)()
 	s.Equal(12.0, v)

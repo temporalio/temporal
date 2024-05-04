@@ -102,6 +102,10 @@ var (
 			Name:   "TaskType",
 			GoArgs: "taskType enumsspb.TaskType",
 		},
+		{
+			Name:   "Destination",
+			GoArgs: "namespaceID string, destination string",
+		},
 	}
 )
 

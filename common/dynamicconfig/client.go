@@ -102,6 +102,7 @@ type (
 		TaskQueueType enumspb.TaskQueueType
 		ShardID       int32
 		TaskType      enumsspb.TaskType
+		Destination   string
 	}
 )
 
